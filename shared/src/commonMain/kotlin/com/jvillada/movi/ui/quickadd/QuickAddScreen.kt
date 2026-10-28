@@ -2197,6 +2197,50 @@ private fun EncabezadoDeLaCategoria(sugerencia: String?, onTodas: () -> Unit) {
  * con relleno de lista, así que el margen de la pantalla lo pone la fila, adentro del desplazamiento
  * (las píldoras se deslizan hasta el borde de la tarjeta).
  */
+/**
+ * **Cuánto correr la fila de pastillas para que la elegida se vea entera**, o `null` si ya se ve.
+ * Pura: la prueba `LaFilaDePastillasNoCortaTest`.
+ *
+ * Todo en píxeles. [lugar] y [pastillas] se miden adentro del margen de la fila (el de la pantalla, que
+ * en el desplazamiento va antes de la primera pastilla); [pastillas] son TODAS, «Nueva» incluida.
+ *
+ * - Si la elegida quedó a la izquierda, la fila se corre hasta que la elegida arranca en el margen.
+ * - Si quedó a la derecha (vuelta 45), **ninguna pastilla queda a medias contra el borde izquierdo**: la
+ *   fila se corre lo mínimo para ver la elegida entera y, si eso partía una pastilla, hasta esconderla
+ *   entera. Antes se corría lo justo para la elegida y a 360 dp «+ Nueva» quedaba partida. Como el aire
+ *   entre pastillas es menor que el margen, la primera que se ve puede quedar un poco más cerca del
+ *   borde que el margen, pero entera.
+ *
+ * El resultado puede pasar del máximo del desplazamiento (la elegida es de las últimas): ahí la fila
+ * agrega aire al final para poder llegar ([CategoriaChipsRow]) en vez de quedarse corta.
+ */
+internal fun desplazamientoParaLaElegida(
+    lugar: IntRange,
+    pastillas: List<IntRange>,
+    desde: Int,
+    ventana: Int,
+    margen: Int,
+): Int? {
+    // En el desplazamiento, el margen va antes de la primera pastilla.
+    val izquierda = lugar.first + margen
+    val derecha = lugar.last + margen
+    val destino = when {
+        izquierda < desde -> lugar.first
+        derecha > desde + ventana -> {
+            // Lo mínimo que hay que correr para ver la elegida entera, con su margen a la derecha.
+            val minimo = derecha - ventana + margen
+            // Si en ese punto una pastilla queda partida en el borde izquierdo, se corre hasta su final.
+            val partida = pastillas.firstOrNull { it.first + margen < minimo && it.last + margen > minimo }
+            if (partida != null) partida.last + margen else minimo
+        }
+        else -> return null
+    }
+    return destino.coerceAtLeast(0)
+}
+
+/** La clave de «Nueva» entre los lugares de las pastillas: ninguna categoría se llama así. */
+private const val CLAVE_DE_NUEVA = "\u0000nueva"
+
 @Composable
 private fun CategoriaChipsRow(
     categorias: List<String>,
@@ -2210,19 +2254,27 @@ private fun CategoriaChipsRow(
     val margen = with(LocalDensity.current) { Medida.margenDePantalla.roundToPx() }
     val reducido = LocalMovimientoReducido.current
     val lugarDeLaElegida = lugares[categoriaElegida]
-    LaunchedEffect(categoriaElegida, lugarDeLaElegida, desplazamiento.viewportSize) {
+    // Vuelta 45: el aire que se agrega al final para que la fila pueda correrse hasta el borde de una
+    // pastilla aunque la elegida sea la última (ver [desplazamientoParaLaElegida]). En píxeles.
+    var colaExtra by remember { mutableStateOf(0) }
+    LaunchedEffect(categoriaElegida, lugarDeLaElegida, desplazamiento.viewportSize, desplazamiento.maxValue) {
         val lugar = lugarDeLaElegida ?: return@LaunchedEffect
         val ventana = desplazamiento.viewportSize
         if (ventana <= 0) return@LaunchedEffect
-        // `lugar` se mide adentro del margen de la fila; en el desplazamiento, el margen va antes.
-        val izquierda = lugar.first + margen
-        val derecha = lugar.last + margen
-        val desde = desplazamiento.value
-        val destino = when {
-            izquierda < desde -> izquierda - margen
-            derecha > desde + ventana -> derecha - ventana + margen
-            else -> return@LaunchedEffect
-        }.coerceIn(0, desplazamiento.maxValue)
+        val destino = desplazamientoParaLaElegida(
+            lugar = lugar,
+            pastillas = lugares.values.toList(),
+            desde = desplazamiento.value,
+            ventana = ventana,
+            margen = margen,
+        ) ?: return@LaunchedEffect
+        if (destino > desplazamiento.maxValue) {
+            // La elegida es de las últimas: sin aire al final la fila no llega al borde de la pastilla
+            // y la primera visible quedaría cortada. Se agrega lo que falta; con el máximo nuevo este
+            // efecto vuelve a correr y ahí sí se desplaza.
+            colaExtra += destino - desplazamiento.maxValue
+            return@LaunchedEffect
+        }
         if (reducido) desplazamiento.scrollTo(destino) else desplazamiento.animateScrollTo(destino)
     }
     Row(
@@ -2241,7 +2293,14 @@ private fun CategoriaChipsRow(
             onClick = onNueva,
             icono = Icons.Rounded.Add,
             descripcion = "Nueva categoría",
-            modifier = Modifier.testTag(TAG_PASTILLA_NUEVA_CATEGORIA_AGREGAR),
+            modifier = Modifier
+                .testTag(TAG_PASTILLA_NUEVA_CATEGORIA_AGREGAR)
+                // Vuelta 45: también cuenta para no dejarla partida contra el borde (su clave no es un
+                // nombre de categoría posible: lleva un carácter de control).
+                .onPlaced { lugar ->
+                    val x = lugar.positionInParent().x.toInt()
+                    lugares[CLAVE_DE_NUEVA] = x..(x + lugar.size.width)
+                },
         )
         categorias.forEach { nombre ->
             PildoraDeFiltro(
@@ -2256,6 +2315,9 @@ private fun CategoriaChipsRow(
                     lugares[nombre] = x..(x + lugar.size.width)
                 },
             )
+        }
+        if (colaExtra > 0) {
+            Spacer(Modifier.width(with(LocalDensity.current) { colaExtra.toDp() }))
         }
     }
 }
