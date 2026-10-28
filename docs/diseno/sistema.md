@@ -575,25 +575,27 @@ CampoDeBusqueda(busqueda, { busqueda = it }, guia = "Buscar o crear categoría",
    nuevo (la prueba lo exige).
 4. Mirarla después. Casi cada pantalla migrada tuvo un defecto visible.
 
-## 10. El Inicio (ola R1)
+## 10. El Inicio (vuelta 39: la opción 3)
 
-El Inicio se arma desde la definición del server (`DashboardDefaults`, generación 9) con las
+El Inicio se arma desde la definición del server (`DashboardDefaults`, **generación 10**) con las
 preferencias del dueño («Editar inicio»). Cada bloque contesta una sola pregunta, con los componentes de
-arriba:
+arriba. De arriba abajo:
 
 | bloque | tipo SDUI | componente | lleva a |
 |---|---|---|---|
-| encabezado | — (chrome) | `Encabezado`: avatar, «Hola, Juan» con el período, lupa y campana | Ajustes, Buscar |
-| héroe | `HERO_BALANCE` | `Cifra.Heroe` «Te quedan», el ojo, «para N días · $X por día» (lo que queda entre los días que faltan), el veredicto | Tus períodos |
-| acciones | `ACCIONES` | `CuadriculaDeAcciones` 4 × 2 | Agregar, papeles, Por revisar, Movi AI; «Repartir» abre la hoja «Pagó otro» del espacio (vuelta 7: elige el espacio si hay varios, lo crea si no hay) |
-| Movi propone hoy | `PROPUESTAS` | `TarjetaDePropuesta`, una por tipo, tope 4; sin nada, no se pinta (vuelta 11) | su acción; «Ver todo» → Por revisar |
+| banda | — (chrome) | amarilla (`marca`), `Medida.altoDeLaBandaDelInicio` 168 con `Radio.xxl` 28 abajo; la pinta el scroll (`SduiRenderer(conBanda = true)`) y detrás de la barra del sistema la cáscara | — |
+| encabezado | — (chrome) | `EncabezadoDelInicio`: avatar blanco con iniciales, «Hola, Juan» (`saludo`) con el período (`apoyoMedio`, `sobreMarcaMedio`), ocultar saldos y campana en círculos `marcaSuave` de 44 (`Medida.circuloDeLaBanda`); la campana con punto solo si hay algo vencido o urgente | Tú, Notificaciones |
+| héroe | `HERO_BALANCE` | `Superficie(destacada = true)`: «Te quedan» con el enlace «Tu plata $X», `Cifra.Heroe`, «Para N días · $X por día»; abajo, con el hilo y en `capa2`, la franja «Por confirmar» con `Pildora` «N avisos» (solo si hay algo) | «¿De dónde sale?»; Patrimonio; Por revisar |
+| acciones | `ACCIONES` | `CuadriculaDeAcciones` 4 × 2, rótulos `RenglonesDelRotulo.Dos` en `rotuloDeAccion` | los atajos del «+» (`LocalAtajosDeAgregar`), Por revisar, Movi AI |
+| próximo pago | `PROXIMO_PAGO` | `Superficie`: «Próximo pago · vence …», ícono, nombre, `Cifra`, `Pildora` de vencimiento, `Boton` «Anotar pago»; «y N más» | Agregar con el pago; Pagos |
+| Movi propone hoy | `PROPUESTAS` | `TarjetaDePropuesta`, una por tipo, tope 4, **sin el pago** cuando hay `PROXIMO_PAGO`; sin nada, no se pinta | su acción; «Ver todo» → Por revisar |
+| últimos movimientos | `ULTIMOS_MOVIMIENTOS` | `Superficie` de lista con 3 `MovementSingleRow`/`TransferRow` (la fila de Actividad) | la hoja del movimiento; «Ver toda la actividad» → Actividad |
 | tus cuentas | `CUENTAS` | `TarjetaDeCuenta` en carrusel (en grilla fuera del teléfono) | el detalle de la cuenta; «Ver todo» → Patrimonio |
-| widgets | `CHECKLIST_DEL_PERIODO`, `GASTO_POR_CATEGORIA` | `ParDeWidgets` | Plan, En qué se va |
+| widgets | `CHECKLIST_DEL_PERIODO`, `GASTO_POR_CATEGORIA` | `ParDeWidgets` | Pagos, En qué se va |
 
-`DISPONIBLE_DEL_PERIODO` y `PATRIMONIO` ya no vienen por defecto (repetían Plan y Patrimonio): son
-`SECCIONES_OPCIONALES` que el dueño prende en «Editar inicio». La barra Entró/Salió y el desglose de
-«Tu plata» salieron del héroe. ALERTS y el BANNER siguen al final de la definición solo para los APK
-viejos; este cliente no los pinta.
+`DISPONIBLE_DEL_PERIODO` y `PATRIMONIO` no vienen por defecto (repetían el héroe y Patrimonio): son
+`SECCIONES_OPCIONALES` que el dueño prende en «Editar inicio». ALERTS y el BANNER siguen al final de la
+definición solo para los APK viejos; este cliente no los pinta. Ver §43.
 
 ## 11. Movimientos y los avisos (ola R4a)
 
@@ -1931,7 +1933,7 @@ Esta vuelta cambia la navegación; Inicio con sus 8 acciones es la 39, Actividad
 | aviso `plan`, `periodo:<id>` | Pagos / el detalle del período, marcando Pagos |
 | aviso `captura` | Captura del banco, marcando Tú |
 | atajos del ícono `agregar:gasto`, `agregar:traspaso` | la hoja de Agregar encima de Inicio |
-| el «+» de la barra y sus atajos | Inicio: Gasto e Ingreso en las acciones, el resto en «Más formas de anotar»; el rail conserva el «+» |
+| el «+» de la barra y sus atajos | Inicio: las 8 acciones (vuelta 39; en la 38 iba «Más formas de anotar»); el rail conserva el «+» |
 
 **Las líneas base** no cambian: `dp_sueltos` 118, `radios_con_numero` 3, y las guardas en 0 siguen en
 0. Lo vigilan `LasCuatroPestanasTest` y `LasCuatroPestanasA360Test` (Robolectric, motor de texto real:
@@ -1940,4 +1942,70 @@ las cuatro con su rótulo entero a 390 y a 360, con la letra ×1,3, la barra de 
 formas de anotar desde «Más formas de anotar»), `MasScreenTest` (lo tuyo con su cifra, cada fila abre
 su pantalla, Tú sin flecha), y en `commonTest` `NavStackTest`, `MinNavRailTest` (el amarillo suave del
 rail), `ResumenDePersonasTest` y **`LasRutasViejasLleganTest`**, que recorre la tabla de arriba.
+
+## 43. Vuelta 39: Inicio de la opción 3 — banda, héroe en tarjeta, 8 acciones, próximo pago y últimos movimientos
+
+El dueño volvió a la opción 3 y eligió **las 8 acciones**. Esta vuelta rediseña solo Inicio (la tabla
+de §10). Sin reglas de plata nuevas: cada cifra sale de una función de siempre.
+
+- **La banda amarilla** va detrás del encabezado y de la mitad de arriba de la tarjeta héroe, que se
+  monta encima. El encabezado es fijo, en `marca`; el resto de la banda lo dibuja el scroll
+  (`Modifier.bandaDelInicio`: lo que le falta de 168 al encabezado, con `Radio.xxl` abajo) y se va con
+  él. Detrás de la barra del sistema va el mismo amarillo (`App.kt`, solo en `Screen.Dashboard`, del
+  ancho del contenido y nunca detrás del rail), con los íconos oscuros de siempre: arriba no queda una
+  franja crema. En pantalla ancha la banda va solo detrás de Inicio.
+- **El encabezado** (`EncabezadoDelInicio`): avatar blanco con las iniciales (`inicialesDelDueno`, abre
+  Tú), «Hola, Juan» y el período; recargando con cifras a la vista, «Actualizando…» toma el lugar del
+  período (mismo alto). Los dos botones de la maqueta: **ocultar los saldos** (el ojo salió de la línea
+  del rótulo del héroe; mismo `SaldosOcultosStore`, rótulo y tag) y la campana. La lupa salió de Inicio:
+  Buscar sigue en Actividad.
+- **El héroe es una tarjeta** (`Superficie(destacada = true)`, radio 22, la sombra suave): «Te quedan»
+  (no «Disponible»: un nombre por concepto, vuelta 28) con el enlace «Tu plata $X» (`heroBalance` →
+  `patrimonioDe`) que abre Patrimonio; la cifra (`teQuedanDelInicio`), que abre «¿De dónde sale?»; y
+  «Para N días · $X por día». El veredicto («Gastaste $X · lo que más…») salió de la tarjeta. **La franja
+  «Por confirmar»** cuenta lo que espera en Por revisar (`conteoPorRevisarDelInicio`, el número de la
+  insignia de «Revisar avisos»); la maqueta dice además cuánta plata espera, y ese total no lo calcula
+  ninguna función de Movi: va el conteo.
+- **Nada dice $0 mientras carga.** Al recargar la web el héroe decía «Te quedan $0 · para 4 días ·
+  $696.137 por día» varios segundos: la cifra entraba contando desde cero (`rememberProgresoDeEntrada`)
+  y en la web los cuadros no llegaban mientras se leían las diez lecturas. Ahora la cifra se muestra
+  tal cual llega —la de la instantánea o la de la carga— y solo un cambio posterior se anima, de una
+  cifra real a otra (`rememberCifraQueCambia`, `cifraEntre`). Sin instantánea, el esqueleto de siempre.
+- **Las 8 acciones** (`AccionDelInicio`): Anotar gasto · Anotar ingreso · Traspasar · Pagar tarjeta ·
+  Repartir · Subir comprobante · Revisar avisos (con la insignia de `ConteoPorRevisar`) · Preguntar a
+  Movi. Las seis de anotar son `DestinoDeLaAccion.Atajo`: la cuadrícula le pide el atajo a la cáscara
+  (`LocalAtajosDeAgregar` → `hacerElAtajo`), así que abren **exactamente** lo que abre el menú del «+».
+  Los rótulos van en dos renglones de alto fijo en `rotuloDeAccion` (12/600 efectivos, sin espaciado); a
+  360 dp ninguno parte una palabra (`partePalabras`). Salió «Más formas de anotar»; el «+» con su menú
+  queda en el rail de pantalla ancha.
+- **«Próximo pago»** (`proximoPagoDelInicio`): el primero de `pagosEnOrdenDeUrgencia` —lo vencido
+  primero y el monto más grande, la regla del widget y de la cola—, con su fecha (`fechaDeLaFila`), su
+  ícono de categoría, `cifraDelPago`, la pastilla «Vencido»/«Hoy»/«Mañana» y el botón «Anotar pago»
+  (`accionDelPago`, el mismo de «Movi propone hoy»: con candidatos, «Revisar» en Pagos). «y N más» abre
+  Pagos. Sin pendientes, no está. **«Movi propone hoy» no lo repite** cuando la definición trae
+  `PROXIMO_PAGO` (`propuestasDelInicio(conElPago = false)`).
+- **«Últimos movimientos»**: las tres primeras filas de Actividad (`ultimosMovimientosDe` sobre
+  `getEventsByDay`, con `diasVisibles` en «Todo» y `collapseTransfers`), pintadas con la misma
+  `MovementSingleRow`/`TransferRow` —tu parte primero, «−» en un gasto, «+» verde en un ingreso— y la
+  misma `HojaDelMovimiento` al tocarlas; si se edita o anula ahí, Inicio recarga. Viajan en la
+  instantánea (`DashboardData.ultimosMovimientos`).
+- **Pantalla ancha** (`columnasDelInicio`, `TIPOS_DE_LA_COLUMNA_IZQUIERDA`): a la izquierda el héroe, el
+  próximo pago y «Movi propone hoy»; a la derecha las acciones —arriba, al lado del héroe—, los últimos
+  movimientos y lo demás.
+- **SDUI, generación 10**: entran `PROXIMO_PAGO` y `ULTIMOS_MOVIMIENTOS`. Un APK de la generación 9 los
+  descarta (`renderableSections`) y ve su Inicio de siempre, con el pago dentro de su «Movi propone
+  hoy» y sus cuatro acciones (la cuadrícula viaja en el binario). Las preferencias guardadas siguen
+  valiendo (`versionConPreferencias` cambia con la generación).
+- **12 px efectivos como piso**: ningún texto de Inicio queda por debajo (lo mide
+  `ElInicioDeLaOpcion3Test`).
+
+**Las líneas base** no cambian: `dp_sueltos` 118, `radios_con_numero` 3, y las guardas en 0 siguen en 0.
+Lo vigilan `LasOchoAccionesDelInicioTest` (las 8 en orden, dos filas, ninguna palabra partida a 360 dp,
+una prueba por acción), `ElInicioDeLaOpcion3Test` (el orden de arriba abajo, la franja con y sin avisos,
+el próximo pago con «Anotar pago» e «y N más», tres últimos movimientos en orden y «Ver toda la
+actividad», el piso de 12 px), `InicioDeUnVistazoEnPantallaTest` (la cifra nunca arranca en $0; las dos
+columnas), `EsqueletosDelInicioTest`, `AtajosDelMasTest`, `RepartirDesdeElMasTest` y en `commonTest`
+`InicioDelRedisenoTest` (el próximo pago es el vencido mayor, «Movi propone hoy» sin el pago, los últimos
+movimientos, `cifraEntre`, las iniciales) e `InicioDeUnVistazoTest` (las columnas). En `:core`,
+`DashboardDefaultsTest` (la generación 10 y lo que ve un APK de la 9).
 
