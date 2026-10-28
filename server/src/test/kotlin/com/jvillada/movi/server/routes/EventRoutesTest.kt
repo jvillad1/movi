@@ -1594,6 +1594,55 @@ class EventRoutesTest {
         assertEquals(AppClock.today(), epochMillisToAppDate(timestampDe("ev-sin-fecha")))
     }
 
+    // ── Vuelta 39 · `?ultimos=N`: solo los días de los últimos movimientos ──────
+
+    private suspend fun ApplicationTestBuilder.porDia(userId: String, consulta: String = ""): List<kotlinx.serialization.json.JsonObject> {
+        val res = client.get("/api/events/by-day$consulta") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userId)}")
+        }
+        assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
+        return Json.parseToJsonElement(res.bodyAsText()).jsonArray.map { it.jsonObject }
+    }
+
+    private fun idsDe(dia: kotlinx.serialization.json.JsonObject): List<String> =
+        dia["items"]!!.jsonArray.map { it.jsonObject["id"]!!.jsonPrimitive.content }
+
+    /**
+     * «Últimos movimientos» de Inicio pide `?ultimos=3` en vez de la historia entera. Vuelven los días
+     * que hacen falta, **enteros**, en el mismo orden y con el mismo total que sin el parámetro; los
+     * anulados no cuentan ni aparecen; y sin el parámetro, lo de siempre (un APK viejo no cambia).
+     */
+    @Test
+    fun `by-day con ultimos devuelve solo los dias de los ultimos movimientos, enteros y sin anulados`() = testApplication {
+        wireApp()
+        val dia = 86_400_000L
+        seedEvent("ev-anteayer", userAId, savingsAccountId, "EXPENSE", "Pan", "Comida", timestamp = hoyALas(9) - 2 * dia)
+        seedEvent("ev-ayer-1", userAId, savingsAccountId, "EXPENSE", "Taxi", "Transporte", timestamp = hoyALas(9) - dia)
+        seedEvent("ev-ayer-2", userAId, savingsAccountId, "EXPENSE", "Café", "Comida", timestamp = hoyALas(18) - dia)
+        seedEvent("ev-hoy-anulado", userAId, savingsAccountId, "EXPENSE", "Error", "Comida", timestamp = hoyALas(20))
+        seedEvent("ev-hoy", userAId, savingsAccountId, "EXPENSE", "Mercado", "Mercado", timestamp = hoyALas(10))
+        voidEvent("ev-hoy-anulado", userAId)
+
+        val todos = porDia(userAId)
+        assertEquals(3, todos.size, "sin el parámetro, la historia entera")
+        val ultimos = porDia(userAId, "?ultimos=2")
+        // Hoy tiene uno (el anulado no cuenta); hace falta ayer, entero; anteayer no.
+        assertEquals(listOf(listOf("ev-hoy"), listOf("ev-ayer-2", "ev-ayer-1")), ultimos.map(::idsDe))
+        assertEquals(todos.take(2), ultimos, "los mismos días, con el mismo orden y el mismo total")
+        // Un parámetro que no es un número es como no mandarlo.
+        assertEquals(todos, porDia(userAId, "?ultimos=muchos"))
+        assertEquals(emptyList(), porDia(userAId, "?ultimos=0"))
+    }
+
+    @Test
+    fun `by-day con ultimos solo trae lo del usuario que pregunta`() = testApplication {
+        wireApp()
+        seedEvent("ev-de-a", userAId, savingsAccountId, "EXPENSE", "Mercado", "Mercado", timestamp = hoyALas(10))
+        seedEvent("ev-de-b", userBId, savingsAccountId, "EXPENSE", "Ajeno", "Comida", timestamp = hoyALas(11))
+        assertEquals(listOf(listOf("ev-de-a")), porDia(userAId, "?ultimos=3").map(::idsDe))
+        assertEquals(listOf(listOf("ev-de-b")), porDia(userBId, "?ultimos=3").map(::idsDe))
+    }
+
     // ── Ola 10 · El orden DENTRO de cada día ────────────────────────────────
 
     /**

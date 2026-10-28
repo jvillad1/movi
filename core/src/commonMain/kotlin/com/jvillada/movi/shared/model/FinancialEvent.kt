@@ -365,3 +365,25 @@ data class EventDay(
     val total: Long,
     val items: List<FinancialEvent>,
 )
+
+/**
+ * **Solo los días que hacen falta para los [ultimos] movimientos más recientes** (vuelta 39,
+ * `GET /api/events/by-day?ultimos=N`): «Últimos movimientos» de Inicio no necesita bajarse la historia
+ * entera en cada carga de la web.
+ *
+ * [dias] vienen como los arma `/by-day` —el día más reciente primero y, adentro, el movimiento más
+ * reciente primero—, y se devuelven **enteros**, con el mismo orden y el mismo total del día: no se
+ * recorta ningún día. Se cuentan movimientos como renglones de Actividad: las dos patas de un traspaso
+ * (mismo `transferId`) son uno. Con [ultimos] ≤ 0, nada.
+ */
+fun diasConLosUltimos(dias: List<EventDay>, ultimos: Int): List<EventDay> {
+    if (ultimos <= 0) return emptyList()
+    val vistos = mutableSetOf<String>()
+    val resultado = mutableListOf<EventDay>()
+    for (dia in dias) {
+        if (vistos.size >= ultimos) break
+        resultado += dia
+        dia.items.forEach { vistos += it.transferId ?: it.id }
+    }
+    return resultado
+}

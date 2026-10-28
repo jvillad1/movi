@@ -453,10 +453,11 @@ fun DashboardScreen(
                 runCatching { Repositories.wallets.getCierreDelPeriodo() }
                     .onSuccess { c -> data = data.copy(cierre = c) }
             }
-            // Vuelta 39 · «Últimos movimientos»: las primeras filas de Actividad, de la misma historia
-            // (en el teléfono es local). Secundario: si falla, la sección no se pinta esta vez.
+            // Vuelta 39 · «Últimos movimientos»: las primeras filas de Actividad. Solo los días de los
+            // últimos movimientos (`/by-day?ultimos=N`), no la historia entera en cada carga de la web;
+            // en el teléfono sale de lo local. Secundario: si falla, la sección no se pinta esta vez.
             launch {
-                runCatching { Repositories.wallets.getEventsByDay() }.onSuccess { dias ->
+                runCatching { Repositories.wallets.getUltimosDias(FILAS_DE_ULTIMOS_MOVIMIENTOS) }.onSuccess { dias ->
                     val ultimos = ultimosMovimientosDe(dias)
                     data = data.copy(ultimosMovimientos = ultimos)
                     llegado = llegado.copy(ultimosMovimientos = ultimos)

@@ -2005,8 +2005,12 @@ de §10). Sin reglas de plata nuevas: cada cifra sale de una función de siempre
   (`accionDelPago`, el mismo de «Movi propone hoy»: con candidatos, «Revisar» en Pagos). «y N más» abre
   Pagos. Sin pendientes, no está. **«Movi propone hoy» no lo repite** cuando la definición trae
   `PROXIMO_PAGO` (`propuestasDelInicio(conElPago = false)`).
-- **«Últimos movimientos»**: las tres primeras filas de Actividad (`ultimosMovimientosDe` sobre
-  `getEventsByDay`, con `diasVisibles` en «Todo» y `collapseTransfers`), pintadas con la misma
+- **«Últimos movimientos»**: las tres primeras filas de Actividad (`ultimosMovimientosDe`, con
+  `diasVisibles` en «Todo» y `collapseTransfers`) sobre `getUltimosDias(3)`: en la web
+  `GET /api/events/by-day?ultimos=3`, que devuelve solo los días de los últimos movimientos —enteros,
+  en el mismo orden, con el mismo total y sin anulados (`diasConLosUltimos`, un traspaso cuenta una
+  vez)—; sin el parámetro la ruta responde como siempre; en el teléfono sale de lo local. Inicio no se
+  baja la historia entera en cada carga. Se pintan con la misma
   `MovementSingleRow`/`TransferRow` —tu parte primero, «−» en un gasto, «+» verde en un ingreso— y la
   misma `HojaDelMovimiento` al tocarlas; si se edita o anula ahí, Inicio recarga. Viajan en la
   instantánea (`DashboardData.ultimosMovimientos`).
@@ -2028,5 +2032,7 @@ actividad», el piso de 12 px), `InicioDeUnVistazoEnPantallaTest` (la cifra nunc
 columnas), `EsqueletosDelInicioTest`, `AtajosDelMasTest`, `RepartirDesdeElMasTest` y en `commonTest`
 `InicioDelRedisenoTest` (el próximo pago es el vencido mayor, «Movi propone hoy» sin el pago, los últimos
 movimientos, `cifraEntre`, las iniciales) e `InicioDeUnVistazoTest` (las columnas). En `:core`,
-`DashboardDefaultsTest` (la generación 10 y lo que ve un APK de la 9).
+`DashboardDefaultsTest` (la generación 10 y lo que ve un APK de la 9) y `DiasConLosUltimosTest`; en el
+server, `EventRoutesTest` (`?ultimos` con y sin el parámetro, anulados fuera, por usuario); y
+`LosUltimosMovimientosPidenSoloLoUltimoTest` (Inicio pide con el límite, nunca la historia).
 
