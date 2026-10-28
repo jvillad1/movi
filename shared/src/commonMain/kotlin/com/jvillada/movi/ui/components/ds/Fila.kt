@@ -319,9 +319,6 @@ fun AvatarDePersona(
     }
 }
 
-/** Tag estable de una [FilaDeNavegacion]. */
-const val TAG_FILA_DE_NAVEGACION: String = "ds-fila-de-navegacion"
-
 /**
  * **Una fila que lleva a otra pantalla** (vuelta 42): una [Fila] sola en su [Superficie] de lista,
  * con su ícono en el **círculo neutro** (`capa3` y el ícono en la tinta), el título, una línea de apoyo
@@ -355,7 +352,7 @@ fun FilaDeNavegacion(
         Fila(
             titulo = titulo,
             subtitulo = subtitulo,
-            modifier = Modifier.testTag(TAG_FILA_DE_NAVEGACION),
+            // Sin un tag propio: la fila lleva el de toda [Fila] (`TAG_FILA`), que cuentan las guardas.
             inicio = { IconoEnCirculo(icono, tono = tonoDeLaFilaDeNavegacion(aviso)) },
             final = { Chevron() },
             onClick = onClick,

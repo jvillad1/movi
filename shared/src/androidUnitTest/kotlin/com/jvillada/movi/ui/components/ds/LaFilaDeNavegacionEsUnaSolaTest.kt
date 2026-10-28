@@ -53,7 +53,8 @@ class LaFilaDeNavegacionEsUnaSolaTest {
             }
         }
         assertEquals(listOf(TonoDeIcono.Neutro, TonoDeIcono.Aviso), tonos(TAG_ICONO_EN_CIRCULO))
-        assertEquals(2, composeRule.onAllNodesWithTag(TAG_FILA_DE_NAVEGACION, useUnmergedTree = true).fetchSemanticsNodes().size)
+        // Las dos son una Fila del sistema (con su tag, el que cuentan las guardas).
+        assertEquals(2, composeRule.onAllNodesWithTag(TAG_FILA, useUnmergedTree = true).fetchSemanticsNodes().size)
         composeRule.onNodeWithText("Tus períodos").performClick()
         assertTrue(abierta)
         // El neutro es la capa 3 con la tinta; el aviso, el tinte con el ocre. Ninguno es la marca.
