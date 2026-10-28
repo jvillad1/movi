@@ -48,6 +48,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
+import com.jvillada.movi.ui.espacios.TITULO_DE_PERSONAS
 import kotlin.test.assertTrue
 
 /**
@@ -58,6 +59,9 @@ import kotlin.test.assertTrue
  * sus filas, en un orden fijo; «Perfil» dejó de ser una pantalla (`Screen.Profile` no existe, así
  * que el compilador ya prueba que nadie navega ahí; el destino SDUI `"profile"` lleva acá, ver
  * `SduiRendererTest`).
+ *
+ * Vuelta 38: es la pestaña **«Tú»**. Arriba del todo, después del perfil, «Lo tuyo» (Tu patrimonio,
+ * Personas y Cuadre de saldos); debajo, las secciones de Ajustes tal cual.
  *
  * Se monta alto (3200 dp) para que la `LazyColumn` componga todas las secciones.
  */
@@ -142,12 +146,14 @@ class MasScreenTest {
 
         val vistas = secciones()
         // En Android de prueba no hay lector de huella ni es administrador: sin «Entrar» ni «Administración».
-        assertEquals(listOf("Tu plata", "Movi", "Cómo se ve", "Avisos", "Tus datos", "Cuenta"), vistas.map { it.first })
-        assertEquals(SECCIONES_DE_AJUSTES.filter { it in vistas.map { v -> v.first } }, vistas.map { it.first }, "el orden de SECCIONES_DE_AJUSTES")
+        // Vuelta 38: «Lo tuyo» primero, y después las de Ajustes.
+        assertEquals(listOf(SECCION_LO_TUYO, "Tu plata", "Movi", "Cómo se ve", "Avisos", "Tus datos", "Cuenta"), vistas.map { it.first })
+        assertEquals(SECCIONES_DE_AJUSTES.filter { it in vistas.map { v -> v.first } }, vistas.drop(1).map { it.first }, "el orden de SECCIONES_DE_AJUSTES")
         assertTrue(tarjeta.boundsInRoot.bottom <= vistas.first().second, "el perfil va arriba de todo")
 
         // Cada fila en su sección, en el orden pedido.
         val enOrden = listOf(
+            FILA_TU_PATRIMONIO, TITULO_DE_PERSONAS, FILA_CUADRE_DE_SALDOS,
             "Inicio del período", "Ahorro de cada período", "Categorías", "Captura del banco",
             "Movi AI", "Lo que Movi sabe de ti", "Editar inicio",
             "Ocultar los saldos",
@@ -223,25 +229,27 @@ class MasScreenTest {
     }
 
     @Test
-    fun `Ajustes no ofrece lo que ya es una pestana ni Metas ni Extractos`() {
+    fun `Tu no repite lo que vive en Pagos ni Metas ni Extractos`() {
         montar()
-        listOf("Cuentas", "Cuadre de saldos", "Presupuestos", "Créditos", "Recurrentes", "Metas", "Extractos")
+        // Vuelta 38: Patrimonio, Personas y el cuadre SÍ están (son de Tú); lo de Pagos, no.
+        listOf("Cuentas", "Presupuestos", "Créditos", "Recurrentes", "Metas", "Extractos")
             .forEach { composeRule.onNodeWithText(it, useUnmergedTree = true).assertDoesNotExist() }
     }
 
     /** Ola C: en pantalla ancha y mediana tampoco se esconde nada. */
     @Test
-    fun `en pantalla ancha y mediana Ajustes muestra lo mismo`() {
+    fun `en pantalla ancha y mediana Tu muestra lo mismo`() {
         montar(WindowWidthClass.Expanded)
-        assertEquals(6, secciones().size)
+        assertEquals(7, secciones().size)
     }
 
-    /** Ajustes no es pestaña: lleva flecha (vuelve a donde se estaba), no el avatar que la abrió. */
+    /** Vuelta 38: «Tú» es la raíz de su pestaña: ni flecha ni avatar (sería ella misma). */
     @Test
-    fun `Ajustes lleva flecha de volver`() {
+    fun `Tu es la raiz de su pestana, sin flecha ni avatar`() {
         montar()
-        composeRule.onNodeWithText(TITULO_DE_AJUSTES, useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("Volver", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText(TITULO_DE_TU, useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Volver", useUnmergedTree = true).assertDoesNotExist()
+        composeRule.onNodeWithText(TITULO_DE_AJUSTES, useUnmergedTree = true).assertDoesNotExist()
     }
 
     /**
@@ -359,5 +367,68 @@ class MasScreenTest {
     fun `en Android no ofrece el correo porque ahi se leen los mensajes`() {
         montar()
         composeRule.onNodeWithText(RECIBE_TUS_ALERTAS_POR_CORREO, useUnmergedTree = true).assertDoesNotExist()
+    }
+
+    // ── Vuelta 38: «Lo tuyo», arriba de Tú ─────────────────────────────────────
+
+    private val conPlata = object : RepositorioDePrueba() {
+        override suspend fun getUserProfile(): UserProfile = perfilDelDueno
+        override suspend fun isScreenAdmin(): Boolean = false
+        override suspend fun getAccounts(): List<Account> = listOf(
+            Account(id = "a1", name = "Nu", type = AccountType.SAVINGS, balance = 2_500_000L),
+            Account(id = "a2", name = "Bancolombia", type = AccountType.CHECKING, balance = 1_000_000L),
+        )
+        override suspend fun getEspacios(): List<com.jvillada.movi.shared.model.Espacio> = listOf(casa)
+        override suspend fun getDetalleDelEspacio(id: String): com.jvillada.movi.shared.model.DetalleDelEspacio {
+            val gastos = listOf(
+                com.jvillada.movi.shared.model.GastoDelEspacio(
+                    id = "g1", espacioId = casa.id, pagadoPor = com.jvillada.movi.shared.model.MIEMBRO_YO, monto = 780_000L,
+                    partes = mapOf(com.jvillada.movi.shared.model.MIEMBRO_YO to 390_000L, "dst_caro" to 390_000L),
+                ),
+            )
+            val saldo = com.jvillada.movi.shared.model.saldoDelEspacio(casa, gastos, emptyList())
+            return com.jvillada.movi.shared.model.DetalleDelEspacio(espacio = casa, saldo = saldo, delPeriodo = saldo, gastos = gastos)
+        }
+    }
+
+    private val casa = com.jvillada.movi.shared.model.Espacio(
+        id = "esp_casa",
+        nombre = "Casa con Caro",
+        miembros = listOf(
+            com.jvillada.movi.shared.model.MiembroDelEspacio(com.jvillada.movi.shared.model.MIEMBRO_YO, "Juan"),
+            com.jvillada.movi.shared.model.MiembroDelEspacio("dst_caro", "Caro"),
+        ),
+    )
+
+    @Test
+    fun `Tu muestra el patrimonio neto, el saldo con las personas y el cuadre`() {
+        Repositories.sustitutoDePrueba = conPlata
+        composeRule.setContent {
+            MoviTheme { Box(Modifier.fillMaxSize()) { MasScreen(onNavigate = { navegoA = it }) } }
+        }
+        composeRule.waitUntil(5_000) { hay("Caro te debe") && hay("3.500.000") }
+
+        assertTrue(hay(FILA_TU_PATRIMONIO))
+        // La MISMA cifra de Patrimonio: `patrimonioDe` de las dos cuentas.
+        assertTrue(hay("3.500.000"), "el neto de las dos cuentas")
+        assertTrue(hay(TITULO_DE_PERSONAS))
+        assertTrue(hay("390.000"), "lo que Caro debe para quedar 50/50")
+        assertTrue(hay(FILA_CUADRE_DE_SALDOS))
+        // Y lo tuyo va antes que lo que era Ajustes.
+        assertTrue(arribaDe(FILA_CUADRE_DE_SALDOS) < arribaDe("Inicio del período"))
+    }
+
+    @Test
+    fun `cada fila de lo tuyo abre su pantalla`() {
+        montar()
+        listOf(
+            FILA_TU_PATRIMONIO to Screen.Accounts,
+            TITULO_DE_PERSONAS to Screen.Espacios,
+            FILA_CUADRE_DE_SALDOS to Screen.CuadreDeSaldos,
+        ).forEach { (fila, destino) ->
+            navegoA = null
+            tocarFila(fila)
+            assertEquals(destino, navegoA, "«$fila»")
+        }
     }
 }
