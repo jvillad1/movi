@@ -97,15 +97,54 @@ class TeQuedanEnHoyTest {
         assertEquals(NivelDelGasto.PASADO, cifra.nivelDelDetalle)
     }
 
+    /**
+     * Vuelta 45: **una sola alarma.** La semana pasada ya no va en el detalle de la cifra —que es el
+     * mismo en el héroe del Inicio y en Pagos—: la dice una vez la alarma de Pagos, con qué hacer.
+     */
     @Test
-    fun `la semana pasada se dice despues de los dias, con la cifra de la columna Semana`() {
+    fun `la semana pasada no va en el detalle - la dice una vez la alarma de Pagos`() {
         val (cifra, plan) = lasDos(datos(gasto = mapOf("2026-09-21" to 1_000_000L)))
 
         assertEquals(5_900_000, cifra.teQuedan)
         assertEquals(890_320, plan.semana.meta)
-        assertEquals("para 4 días · esta semana te pasaste de la meta por \$109.680", cifra.detalle)
-        assertEquals(NivelDelGasto.PASADO, cifra.nivelDelDetalle)
+        assertEquals("para 4 días · \$1,5M por día", cifra.detalle)
+        assertFalse("meta" in cifra.detalle, "el detalle no repite la alarma de la semana")
         assertFalse(cifra.enRojo, "el período no está pasado: la cifra grande no va en rojo")
+        assertEquals(
+            AlertaDelDisponible("Esta semana te pasaste de la meta por \$109.680."),
+            alertaDelDisponible(plan),
+        )
+        // Ninguna barra en alerta: el período no se pasó.
+        assertFalse(barraEnAlerta(plan, delPeriodo = true))
+        assertFalse(barraEnAlerta(plan, delPeriodo = false))
+    }
+
+    @Test
+    fun `hoy pasado - la alarma lo dice con la cifra de la columna de hoy`() {
+        // $300.000 hoy contra una meta de $222.580.
+        val (cifra, plan) = lasDos(datos(gasto = mapOf("2026-09-21" to 300_000L)))
+
+        assertFalse("meta" in cifra.detalle)
+        assertEquals(AlertaDelDisponible("Hoy te pasaste de la meta por \$77.420."), alertaDelDisponible(plan))
+    }
+
+    @Test
+    fun `periodo pasado - la cifra ya lo dice, la alarma es solo que hacer, y una sola barra en alerta`() {
+        val (cifra, plan) = lasDos(datos(gasto = mapOf("2026-09-01" to 7_000_000L)))
+
+        assertEquals(ROTULO_TE_PASASTE, cifra.rotulo)
+        assertEquals(AlertaDelDisponible(texto = null), alertaDelDisponible(plan))
+        assertTrue(barraEnAlerta(plan, delPeriodo = true))
+        assertFalse(barraEnAlerta(plan, delPeriodo = false), "la semana y hoy no van en alerta")
+    }
+
+    @Test
+    fun `vas bien o sin margen - no hay alarma aparte`() {
+        val (_, bien) = lasDos(datos(gasto = mapOf("2026-08-26" to 100_000L)))
+        assertNull(alertaDelDisponible(bien))
+        val (_, sinMargen) = lasDos(datos(gasto = mapOf("2026-09-10" to 200_000L), arriendo = 12_000_000))
+        assertNull(alertaDelDisponible(sinMargen), "sin margen lo explica el detalle de la cifra")
+        assertFalse(barraEnAlerta(sinMargen, delPeriodo = true))
     }
 
     @Test

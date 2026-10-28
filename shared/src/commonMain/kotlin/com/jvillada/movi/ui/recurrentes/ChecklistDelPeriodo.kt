@@ -246,6 +246,7 @@ fun SeccionChecklistDelPeriodo(
             onAnotarMovimiento(pago)
         },
         onQuitarLaMarca = onQuitarLaMarca,
+        onVerMovimiento = onVerMovimiento,
     )
 
     // Vuelta 40: cuántas facturas se ven antes de «Ver los N pagos del período».
@@ -612,7 +613,30 @@ internal data class AccionesDelChecklist(
     val onNoFueEste: (pago: PagoDelPeriodo, eventId: String) -> Unit,
     val onAnotarMovimiento: (pago: PagoDelPeriodo) -> Unit,
     val onQuitarLaMarca: (pago: PagoDelPeriodo) -> Unit,
+    /** Vuelta 45: «Ver movimiento» de una factura que saldó el dueño. `null` no lo ofrece. */
+    val onVerMovimiento: ((eventId: String) -> Unit)? = null,
 )
+
+/** Lo que puede ofrecer una fila pagada (vuelta 45). */
+enum class AccionDeLaFilaPagada { NO_FUE_ESTE, VER_MOVIMIENTO, QUITAR_LA_MARCA }
+
+/**
+ * **Lo que ofrece una factura pagada, según QUIÉN la dio por pagada** (vuelta 45).
+ *
+ * - **La emparejó Movi sola** (`automatica`): «No fue este» —la salida de cuando Movi dedujo mal—.
+ * - **La selló el dueño con un movimiento** —desde «Anotar pago» o con «Sí, fue este»—: «Ver
+ *   movimiento» y «Quitar la marca». Antes ofrecía «No fue este», como si Movi la hubiera emparejado:
+ *   el dueño no tiene a quién decirle «no fue este» de un pago que él mismo anotó.
+ * - Lo derivado de una deuda (la cuota que bajó el crédito) y lo que no está pagado: nada.
+ *
+ * El sello viejo sin movimiento ([EstadoDeLaFila.MARCADA_A_MANO]) sigue con su «Quitar la marca».
+ */
+fun accionesDeLaFilaPagada(pago: PagoDelPeriodo): List<AccionDeLaFilaPagada> = when {
+    pago.estado != EstadoDeLaFila.LISTO -> emptyList()
+    pago.automatica -> listOf(AccionDeLaFilaPagada.NO_FUE_ESTE)
+    pago.eventId != null && !pago.derivado -> listOf(AccionDeLaFilaPagada.VER_MOVIMIENTO, AccionDeLaFilaPagada.QUITAR_LA_MARCA)
+    else -> emptyList()
+}
 
 /**
  * **La propuesta que toca mostrar en esta fila**, o `null` si no queda ninguna.
@@ -680,12 +704,23 @@ private fun LoQueOfreceLaFila(
     }
     Column(modifier = Modifier.fillMaxWidth()) {
         when (pago.estado) {
+            // Vuelta 45: lo que ofrece depende de quién la dio por pagada (ver [accionesDeLaFilaPagada]).
             EstadoDeLaFila.LISTO -> AccionesDeLaFila(
-                acciones = listOf(
-                    AccionDeOcurrencia(ETIQUETA_NO_FUE_ESTE, primary = false) {
-                        pago.eventId?.let { acciones.onNoFueEste(pago, it) }
-                    },
-                ),
+                acciones = accionesDeLaFilaPagada(pago).mapNotNull { accion ->
+                    when (accion) {
+                        AccionDeLaFilaPagada.NO_FUE_ESTE -> AccionDeOcurrencia(ETIQUETA_NO_FUE_ESTE, primary = false) {
+                            pago.eventId?.let { acciones.onNoFueEste(pago, it) }
+                        }
+                        AccionDeLaFilaPagada.VER_MOVIMIENTO -> {
+                            val ver = acciones.onVerMovimiento
+                            val id = pago.eventId
+                            if (ver != null && id != null) AccionDeOcurrencia(ETIQUETA_VER_MOVIMIENTO, primary = false) { ver(id) } else null
+                        }
+                        AccionDeLaFilaPagada.QUITAR_LA_MARCA -> AccionDeOcurrencia(ETIQUETA_QUITAR_LA_MARCA, primary = false) {
+                            acciones.onQuitarLaMarca(pago)
+                        }
+                    }
+                },
                 enVuelo = enVuelo,
             )
             EstadoDeLaFila.MARCADA_A_MANO -> AccionesDeLaFila(

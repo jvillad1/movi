@@ -179,6 +179,8 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
         SeccionCuantoPuedesGastar(
             disponible = disponible,
             onReintentar = { pagos.estado.recargar() },
+            // Vuelta 45: la alarma de la tarjeta dice qué hacer: «Mira en qué se fue ›».
+            onVerEnQueSeVa = { onNavigate(Screen.EnQueSeVa()) },
         )
     }
     // Ola 4: lo que viene. **El orden de Plan (ola R4)**: «Cuánto puedes gastar» → «Pagos del
@@ -402,7 +404,11 @@ const val TITULO_CUANTO_PUEDES_GASTAR = "Cuánto puedes gastar"
  *   `disponibleDelPeriodo`): lo dice y dice qué falta, en vez de un disponible negativo que asuste.
  */
 @Composable
-private fun SeccionCuantoPuedesGastar(disponible: DisponibleDelPlan, onReintentar: () -> Unit) {
+private fun SeccionCuantoPuedesGastar(
+    disponible: DisponibleDelPlan,
+    onReintentar: () -> Unit,
+    onVerEnQueSeVa: (() -> Unit)? = null,
+) {
     val data = disponible.data
     val alcanza = alcanzaParaElDisponible(data)
     when {
@@ -410,7 +416,7 @@ private fun SeccionCuantoPuedesGastar(disponible: DisponibleDelPlan, onReintenta
         alcanza -> {
             val cifras = disponibleDelInicio(data)
             if (cifras != null) {
-                TarjetaDelDisponible(titulo = TITULO_CUANTO_PUEDES_GASTAR, disponible = cifras)
+                TarjetaDelDisponible(titulo = TITULO_CUANTO_PUEDES_GASTAR, disponible = cifras, onVerEnQueSeVa = onVerEnQueSeVa)
             } else {
                 Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla)) {
                     Seccion(titulo = TITULO_CUANTO_PUEDES_GASTAR)

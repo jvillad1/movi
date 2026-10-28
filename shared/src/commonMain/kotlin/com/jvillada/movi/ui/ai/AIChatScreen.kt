@@ -54,6 +54,7 @@ import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.dashboard.DashboardData
 import com.jvillada.movi.ui.dashboard.DashboardDataCache
+import com.jvillada.movi.ui.dashboard.teQuedanDelInicio
 import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.extractos.TiposDeArchivo
 import com.jvillada.movi.ui.extractos.rememberFilePicker
@@ -220,7 +221,20 @@ fun AIChatScreen(
 
     // Vuelta de diseño 30: la lista pinta piezas (los separadores de día y los mensajes), no los
     // mensajes sueltos: el último índice sale de ellas.
-    val piezas = piezasDelChat(messages, hoy)
+    // Vuelta 45: una respuesta de HOY también se pone vieja —«Esto era a las 9:40; ahora te quedan
+    // $773.950»— si pasó más de una hora o si su «Te quedan» ya no es el del Inicio (ver
+    // [loQueDiceLaRespuestaVieja]). El momento es el de abrir: lo que llega después no se juzga.
+    val abiertoEn = remember { Clock.System.now().toEpochMilliseconds() }
+    val teQuedanAhora = remember { DashboardDataCache.data?.let { teQuedanDelInicio(it) }?.teQuedan }
+    val datosDelInicioDe = remember { DashboardDataCache.cargadoEn.takeIf { it > 0L } }
+    val piezas = piezasDelChat(
+        messages,
+        hoy,
+        ahora = abiertoEn,
+        teQuedanAhora = teQuedanAhora,
+        datosDe = datosDelInicioDe,
+        cifra = ::formatCOP,
+    )
     LaunchedEffect(messages.size, loading) {
         val target = piezas.size + if (loading) 1 else 0
         if (target > 0) listState.animateScrollToItem(target - 1)
@@ -303,12 +317,13 @@ fun AIChatScreen(
                     AIMsgUser(msg.content, hasImage = msg.imageBase64 != null || msg.teniaImagen)
                 } else {
                     AIMsgAI(msg.content, apagado = pieza.deOtroDia)
-                    if (pieza.deOtroDia && pieza.cifrasDe != null) {
+                    val loQueEra = pieza.vieja ?: pieza.cifrasDe?.let(::textoDeLasCifrasViejas)
+                    if (pieza.deOtroDia && loQueEra != null) {
                         // «Preguntar de nuevo» solo si se puede contestar: una pregunta libre sin la IA
                         // daría el aviso otra vez.
                         val repetir = pieza.pregunta?.takeIf { iaDisponible || it.preguntaSugerida != null }
                         LasCifrasEranDeOtroDia(
-                            deCuando = pieza.cifrasDe,
+                            texto = loQueEra,
                             onPreguntarDeNuevo = repetir?.let { p -> { preguntaParaRepetir(p).let { enviar(it.texto, it.sugerida) } } },
                             habilitado = !loading,
                         )
@@ -472,7 +487,7 @@ internal const val TAG_CONVERSACION_DE_OTRO_DIA: String = "ai-conversacion-de-ot
  * nuevo» (un [Boton] de texto). Alineado con el texto de la respuesta, después del ícono.
  */
 @Composable
-private fun LasCifrasEranDeOtroDia(deCuando: String, onPreguntarDeNuevo: (() -> Unit)?, habilitado: Boolean) {
+private fun LasCifrasEranDeOtroDia(texto: String, onPreguntarDeNuevo: (() -> Unit)?, habilitado: Boolean) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -482,7 +497,7 @@ private fun LasCifrasEranDeOtroDia(deCuando: String, onPreguntarDeNuevo: (() -> 
         horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
     ) {
         Text(
-            text = textoDeLasCifrasViejas(deCuando),
+            text = texto,
             style = Movi.textos.apoyo,
             color = Movi.colores.textoMedio,
             modifier = Modifier.weight(1f),

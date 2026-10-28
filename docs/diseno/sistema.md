@@ -2475,3 +2475,59 @@ vigilan `ElOtrosSeResuelveEnLaTarjetaTest` (la tarjeta, los toques, la hoja con 
 «Todas ›» arriba de las pastillas a 360), `RepartirEnAgregarTest` (la categoría y la fecha en la hoja),
 `ElAvisoDelBancoElegisTusCategoriasTest` («Todas ›» en el renglón del rótulo en Revisar aviso),
 `PagoOtroConNotaTest` y, en `commonTest`, `LoQueMoviNoEntendioSePideTest`.
+
+## 50. Vuelta 45: una sola cifra, una sola alarma y un emparejamiento que pregunta más
+
+Lo que quedó de la revisión de «un día del dueño» (28-oct, capturas `dia-*.png` y `r43-*.png`). **Sin
+reglas de plata nuevas**: las cifras salen de las funciones de siempre y el emparejamiento solo propone.
+Ningún valor suelto nuevo; las guardas en 0 siguen en 0.
+
+1. **Pagos dice lo mismo que el Inicio.** Pagos encabezaba la tarjeta del Disponible con «Disponible del
+   período $4.536.800» en grande y dejaba «al período le quedan $773.950» en la letra chica; el Inicio
+   decía «Te quedan $773.950». Ahora la protagonista de la tarjeta de Pagos (`TarjetaDelDisponible(comoEnPagos
+   = true)`, `ui/sdui/SeccionDisponible.kt`) es **«Te quedan» / «Te pasaste por»**, de `teQuedanDeHoy` sobre el
+   MISMO `disponibleDelInicio` que el héroe, en `Cifra` `Grande` (la héroe de Pagos sigue siendo «Falta por
+   pagar»), con el mismo detalle («Para 4 días · $1,7M por día»). El total del período baja a un renglón,
+   `CifraConRotulo` `Chica` `EnRenglon`, con el nombre de la vuelta 28: **«Disponible del período»**
+   (`ROTULO_DISPONIBLE_DEL_PERIODO`). La sección opcional del Inicio (`comoEnPagos = false`) sigue como antes:
+   el total y las tres columnas, sin frase. El esqueleto reserva el renglón nuevo.
+2. **Una sola alarma, y que diga qué hacer.** «Te pasaste de la meta por $1,3M» salía en el héroe y en la
+   frase de Pagos, y Pagos pintaba tres barras rojas.
+   - `teQuedanDeHoy` ya no dice la semana ni el día pasados: el detalle del héroe (y de Pagos) es «Para N
+     días · $X por día» (o el ritmo, el período pasado, sin margen, como siempre).
+   - La alarma sale **una vez, en Pagos** (`alertaDelDisponible`, `AlertaDeLaTarjeta`): «Esta semana te pasaste
+     de la meta por $1,3M.» u «Hoy te pasaste…» en `sale`, y debajo **«Mira en qué se fue ›»** (`Boton`
+     `Fantasma` `S`, `MIRA_EN_QUE_SE_FUE`) que abre «En qué se va». Con el período pasado la cifra ya dice «Te
+     pasaste por $X»: la alarma es solo el enlace. Sin margen no hay alarma aparte (lo explica el detalle).
+   - **Las barras van en tinta** (`tonoDeLaBarra`: `TonoDeBarra.Marca`, la tinta desde la vuelta 29); solo
+     la del período pasado va en `Peligro` (`barraEnAlerta`, tag `TAG_BARRA_EN_ALERTA`). Las cifras de la
+     semana y de hoy van en tinta aunque estén pasadas: su «−» ya lo dice.
+3. **Movi AI no abre con cifras viejas** (`ui/ai/LoQueEraDeOtroDia.kt`, `loQueDiceLaRespuestaVieja`). Una
+   respuesta **de hoy** que cita cifras se atenúa como la de otro día si pasó más de una hora
+   (`VIGENCIA_DE_UNA_RESPUESTA_MS`) o si su «Te quedan $X» ya no es el del Inicio (`DashboardDataCache`,
+   solo si se leyó después de la respuesta). Debajo, «Esto era a las 9:40; ahora te quedan $773.950» y
+   «Preguntar de nuevo». Lo que llega después de abrir el chat nunca se juzga.
+4. **«En qué se va» abre sin elegir** (`Modifier.graficaQueSeToca`, `elMouseSeMovio`). Abría con «25 oct ·
+   $0 · período pasado $0»: el clic que la abrió dejó el puntero sobre la gráfica y el movimiento sintético
+   de un puntero quieto la elegía. Sin botón apretado, ahora solo elige un movimiento que mueve el puntero;
+   la leyenda abre con su texto de siempre. Vale para todas las gráficas que se tocan.
+5. **El emparejamiento pregunta más, sin tildar** (`:core` `HastaDondeSePropone.kt`, `ultimoDiaParaProponer`;
+   `:server` `ventanaParaProponer`). Pasados los 10 días de la ventana, un movimiento se sigue proponiendo
+   («¿Es este?») hasta el último día del período del dueño en que vence. Fuera de la ventana angosta nunca es
+   concluyente ni identidad fuerte (`CandidatoPuntuado.enLaVentana`): no se tilda solo ni absorbe el fijo en
+   el Disponible. Una regla sin cuenta con la misma categoría y el monto exacto ya era candidata (la fila
+   pregunta; no se tilda porque falta la cuenta): ahora lo fija una prueba.
+6. **Una factura pagada por el dueño no ofrece «No fue este»** (`accionesDeLaFilaPagada`). Lo que Movi
+   emparejó solo: «No fue este». Lo que el dueño selló —«Anotar pago» o «Sí, fue este»—: **«Ver movimiento»**
+   (`ETIQUETA_VER_MOVIMIENTO`, abre su hoja) y **«Quitar la marca»**.
+7. **Agregar a 360: los chips no se cortan** (`desplazamientoParaLaElegida`, en `ds/FilaDeCategorias.kt` desde la vuelta 46: vale también para Revisar aviso). La fila se corría lo justo
+   para la elegida y dejaba «+ Nueva» partida contra el borde. Ahora, si correr lo justo parte una pastilla,
+   se corre hasta esconderla entera (la primera visible queda entera, a un aire del borde); si la elegida es
+   la última, la fila agrega aire al final para poder llegar.
+
+Lo vigilan, en `commonTest`, `TeQuedanEnHoyTest` (la alarma y las barras, puras),
+`LasRespuestasDeHoySePonenViejasTest`, `LaFacturaPagadaOfreceLoQueEsTest` y `LaFilaDePastillasNoCortaTest`;
+en Robolectric, `UnaSolaAlarmaTest` (una alarma, a lo sumo una barra en alerta, el enlace a «En qué se
+va»), `TeQuedanEnHoyEnPantallaTest` (Pagos y el Inicio, la misma cifra), `LaGraficaAbreSinElegirTest` y
+`LosChipsNoSeCortanA360Test`; en `:core`, `HastaDondeSeProponeTest`; y en `:server`,
+`ElEmparejamientoPreguntaMasTest` (uno, dos, tarde, fuera del período, otra categoría).

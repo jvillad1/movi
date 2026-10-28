@@ -416,8 +416,13 @@ const val ROTULO_TE_PASASTE: String = "Te pasaste por"
  *
  * 1. sin margen: la frase de la tarjeta ([sinMargen]), porque es la explicación de por qué no queda;
  * 2. el período pasado: cuántos días faltan todavía para el corte;
- * 3. la semana o el día pasados, o el ritmo por encima de lo previsto: lo dice después de los días;
+ * 3. el ritmo por encima de lo previsto: lo dice después de los días;
  * 4. lo demás: para cuántos días y cuánto da por día; el último día, «para hoy».
+ *
+ * **La semana o el día pasados ya no van acá** (vuelta 45: una sola alarma). «Esta semana te pasaste
+ * de la meta por $1,3M» salía en el héroe del Inicio Y en la frase de Pagos, y Pagos además pintaba
+ * tres barras rojas. Ahora esa alarma sale una vez, en Pagos, con qué hacer ([alertaDelDisponible]):
+ * el detalle dice lo de siempre —para cuántos días y cuánto da por día— en Inicio y en Pagos.
  */
 fun teQuedanDeHoy(d: DisponibleDelPeriodo): TeQuedanDeHoy {
     val periodo = d.periodo
@@ -432,11 +437,6 @@ fun teQuedanDeHoy(d: DisponibleDelPeriodo): TeQuedanDeHoy {
             else "del disponible del período · faltan ${d.diasQueQuedan} días para el corte"
             ) to NivelDelGasto.PASADO
         periodo.teQuedan == 0L -> "Ya usaste todo el disponible del período" to NivelDelGasto.CERCA
-        d.semana.nivel == NivelDelGasto.PASADO ->
-            "$dias · esta semana te pasaste de la meta por ${formatMoneyCompact(-d.semana.teQuedan)}" to
-                NivelDelGasto.PASADO
-        d.hoy.nivel == NivelDelGasto.PASADO ->
-            "$dias · hoy te pasaste de la meta por ${formatMoneyCompact(-d.hoy.teQuedan)}" to NivelDelGasto.PASADO
         periodo.contraElRitmo > 0L ->
             "$dias · vas ${formatMoneyCompact(periodo.contraElRitmo)} por encima de lo previsto a hoy" to
                 NivelDelGasto.CERCA
@@ -451,6 +451,51 @@ fun teQuedanDeHoy(d: DisponibleDelPeriodo): TeQuedanDeHoy {
         nivelDelDetalle = nivel,
     )
 }
+
+// ── La alarma del disponible: una vez, en Pagos, y con qué hacer ─────────────
+
+/** El enlace de la alarma: abre «En qué se va» (vuelta 45). */
+const val MIRA_EN_QUE_SE_FUE: String = "Mira en qué se fue"
+
+/**
+ * **La alarma de la tarjeta del disponible en Pagos** (vuelta 45): una frase de qué pasó —o ninguna,
+ * si ya la dice la cifra de arriba— y el enlace [MIRA_EN_QUE_SE_FUE], que abre «En qué se va».
+ *
+ * @property texto «Esta semana te pasaste de la meta por $1,3M.», o `null` cuando la cifra protagonista
+ *   ya lo dice («Te pasaste por $X»): ahí la alarma es solo qué hacer.
+ */
+data class AlertaDelDisponible(val texto: String?)
+
+/**
+ * **Una sola alarma, y que diga qué hacer** (vuelta 45). Antes «Te pasaste de la meta por $1,3M»
+ * salía en el héroe del Inicio y en la frase de Pagos, y Pagos pintaba además tres barras rojas
+ * (período, semana y meta de hoy). Ahora:
+ *
+ * - **sin margen**: no hay alarma aparte; el detalle de la cifra ya explica por qué no queda
+ *   ([sinMargen]) y no hay meta contra qué pasarse;
+ * - **el período pasado**: la cifra dice «Te pasaste por $X» en rojo; la alarma es solo el enlace;
+ * - **la semana o el día pasados** (el período no): «Esta semana te pasaste de la meta por $1,3M.» o
+ *   «Hoy te pasaste de la meta por $64.268.», con el enlace;
+ * - lo demás: `null`.
+ *
+ * El Inicio no la repite: su héroe dice la cifra y, si el período se pasó, «Te pasaste por…».
+ */
+fun alertaDelDisponible(d: DisponibleDelPeriodo): AlertaDelDisponible? = when {
+    !d.hayMargen -> null
+    d.periodo.teQuedan < 0L -> AlertaDelDisponible(texto = null)
+    d.semana.nivel == NivelDelGasto.PASADO ->
+        AlertaDelDisponible("Esta semana te pasaste de la meta por ${formatMoneyCompact(-d.semana.teQuedan)}.")
+    d.hoy.nivel == NivelDelGasto.PASADO ->
+        AlertaDelDisponible("Hoy te pasaste de la meta por ${formatMoneyCompact(-d.hoy.teQuedan)}.")
+    else -> null
+}
+
+/**
+ * **Qué barra de las tres va en alerta** (vuelta 45): la del período si te pasaste del período; si no,
+ * ninguna. Las demás van en tinta: una barra llena dice que se gastó la meta, sin otro color.
+ */
+fun barraEnAlerta(d: DisponibleDelPeriodo, delPeriodo: Boolean): Boolean =
+    delPeriodo && d.hayMargen && d.periodo.nivel == NivelDelGasto.PASADO
 
 /**
  * [teQuedanDeHoy] con lo que el Inicio ya cargó, o `null` si la tarjeta del disponible no se puede

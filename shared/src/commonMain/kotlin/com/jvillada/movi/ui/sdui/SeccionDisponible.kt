@@ -49,7 +49,20 @@ import com.jvillada.movi.ui.dashboard.VentanaDelDisponible
 import com.jvillada.movi.ui.dashboard.CascadaDelDisponibleEnPantalla
 import com.jvillada.movi.ui.dashboard.DE_DONDE_SALE
 import com.jvillada.movi.ui.dashboard.disponibleDelInicio
-import com.jvillada.movi.ui.dashboard.fraseDelDisponible
+import com.jvillada.movi.ui.dashboard.AlertaDelDisponible
+import com.jvillada.movi.ui.dashboard.MIRA_EN_QUE_SE_FUE
+import com.jvillada.movi.ui.dashboard.ROTULO_TE_QUEDAN
+import com.jvillada.movi.ui.dashboard.ROTULO_DISPONIBLE_DEL_PERIODO
+import com.jvillada.movi.ui.dashboard.alertaDelDisponible
+import com.jvillada.movi.ui.dashboard.barraEnAlerta
+import com.jvillada.movi.ui.dashboard.teQuedanDeHoy
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.CifraConRotulo
+import com.jvillada.movi.ui.components.ds.DisposicionDeCifraConRotulo
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import com.jvillada.movi.ui.dashboard.rememberProgresoDeEntrada
 import com.jvillada.movi.ui.dashboard.rotuloDeLaSemana
 import com.jvillada.movi.ui.dashboard.CajaEnHoy
@@ -93,7 +106,7 @@ internal fun DisponibleDelPeriodoSection(
         // la que mande: te pasaste, sin margen…) ya la dice el héroe de arriba con la MISMA cuenta
         // (`teQuedanDeHoy` sobre el mismo `disponibleDelInicio`), y la sección solo se pinta cuando
         // el héroe la tiene. En Hoy quedan la cifra y las tres columnas; en Plan, la frase sigue.
-        TarjetaDelDisponible(titulo = section.title ?: "Disponible", disponible = disponible, conFrase = false)
+        TarjetaDelDisponible(titulo = section.title ?: "Disponible", disponible = disponible, comoEnPagos = false)
         // Después de cuánto puedes gastar, cómo llegas al cierre: el día más justo de la caja
         // proyectada de Plan, con la MISMA cuenta (ver `CajaEnHoy`).
         Spacer(Modifier.height(Movi.espacios.medio))
@@ -118,6 +131,9 @@ const val TAG_ESQUELETO_DEL_DISPONIBLE: String = "esqueleto-del-disponible"
 /** La barra de una columna (período, semana, hoy): está solo cuando hay margen contra qué medir. */
 const val TAG_BARRA_DE_VENTANA: String = "barra-de-ventana"
 
+/** La barra en alerta (vuelta 45): a lo sumo una, la del período pasado. */
+const val TAG_BARRA_EN_ALERTA: String = "barra-de-ventana-en-alerta"
+
 /**
  * **La tarjeta del disponible**, con su título arriba. La pinta el Inicio (ver
  * [DisponibleDelPeriodoSection]) y la pestaña Plan, que la tiene de protagonista con otro título
@@ -135,8 +151,16 @@ internal fun TarjetaDelDisponible(
     titulo: String,
     disponible: DisponibleDelPeriodo?,
     modifier: Modifier = Modifier,
-    // La frase de [fraseDelDisponible]. Hoy la saca: la dice su héroe (ver [DisponibleDelPeriodoSection]).
-    conFrase: Boolean = true,
+    /**
+     * Vuelta 45: **Pagos dice lo mismo que el Inicio.** `true` (Pagos): la cifra protagonista es «Te
+     * quedan» —la del héroe, de [teQuedanDeHoy] sobre el mismo disponible— con su detalle, el total del
+     * período baja a un renglón («Disponible del período», el nombre de la vuelta 28) y la alarma sale
+     * acá, una vez, con «Mira en qué se fue ›» ([alertaDelDisponible]). `false` (el Inicio, que ya
+     * tiene el héroe arriba): el total del período como cifra y las tres columnas, sin frase ni alarma.
+     */
+    comoEnPagos: Boolean = true,
+    /** «Mira en qué se fue ›»: abre «En qué se va». `null` no pinta el enlace. */
+    onVerEnQueSeVa: (() -> Unit)? = null,
 ) {
     val entrada = rememberProgresoDeEntrada("disponible", listo = disponible != null)
     var verDeDondeSale by rememberSaveable { mutableStateOf(false) }
@@ -155,27 +179,70 @@ internal fun TarjetaDelDisponible(
             if (disponible == null) {
                 CuerpoDelDisponibleEsqueleto()
             } else {
-                CuerpoDelDisponible(disponible, verDeDondeSale, entrada, conFrase)
+                CuerpoDelDisponible(disponible, verDeDondeSale, entrada, comoEnPagos, onVerEnQueSeVa)
             }
         }
     }
 }
 
+/** La cifra «Te quedan» de la tarjeta de Pagos: la misma del héroe del Inicio. */
+const val TAG_CIFRA_TE_QUEDAN_EN_PAGOS: String = "cifra-te-quedan-en-pagos"
+
+/** La alarma de la tarjeta de Pagos (vuelta 45). */
+const val TAG_ALERTA_DEL_DISPONIBLE: String = "alerta-del-disponible"
+
 @Composable
-private fun CuerpoDelDisponible(disponible: DisponibleDelPeriodo, verDeDondeSale: Boolean, entrada: Float, conFrase: Boolean) {
-    val frase = fraseDelDisponible(disponible)
-    // Ola R4b: la cifra principal es la `Cifra.Grande` del sistema, entera («$3.240.000», no «$3,2M»)
-    // y con «Ocultar los saldos» incluido; el rótulo va arriba, como en el camino 1. En rojo
-    // (`Alerta`) solo sin margen: gastar no es una alarma, pasarse sí.
-    Text(text = "Disponible del período", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
-    CifraDelSistema(
-        disponible.disponible,
-        VarianteDeCifra.Grande,
-        tono = if (disponible.hayMargen) TonoDeCifra.Neutro else TonoDeCifra.Alerta,
-    )
-    if (conFrase) {
+private fun CuerpoDelDisponible(
+    disponible: DisponibleDelPeriodo,
+    verDeDondeSale: Boolean,
+    entrada: Float,
+    comoEnPagos: Boolean,
+    onVerEnQueSeVa: (() -> Unit)?,
+) {
+    if (comoEnPagos) {
+        // Vuelta 45: la protagonista es «Te quedan», la MISMA cifra del héroe del Inicio, con la MISMA
+        // función ([teQuedanDeHoy]) sobre el MISMO disponible. Pagos encabezaba con el total del
+        // período ($4.536.800) y dejaba lo que queda en la letra chica de la frase; el dueño leía dos
+        // cifras distintas para «¿cuánto me queda?» en Inicio y en Pagos. Entera, en `Grande`: la héroe
+        // de Pagos es «Falta por pagar» (una sola héroe por pantalla).
+        val teQuedan = teQuedanDeHoy(disponible)
+        Text(text = teQuedan.rotulo, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
+        CifraDelSistema(
+            teQuedan.monto,
+            VarianteDeCifra.Grande,
+            tono = if (teQuedan.enRojo) TonoDeCifra.Alerta else TonoDeCifra.Neutro,
+            modifier = Modifier.testTag(TAG_CIFRA_TE_QUEDAN_EN_PAGOS),
+        )
         Spacer(Modifier.height(Movi.espacios.minimo))
-        Text(text = frase.texto, style = Movi.textos.apoyo, color = colorDeLaFrase(frase.nivel))
+        Text(
+            text = teQuedan.detalle.replaceFirstChar { it.uppercase() },
+            style = Movi.textos.apoyo,
+            color = colorDeLaFrase(teQuedan.nivelDelDetalle),
+        )
+        Spacer(Modifier.height(Movi.espacios.minimo))
+        // El total del período, en su renglón: es el punto de partida, no la noticia. Con el nombre que
+        // le fijó la vuelta 28 («un nombre por concepto»), el mismo de la cascada.
+        CifraConRotulo(
+            rotulo = ROTULO_DISPONIBLE_DEL_PERIODO,
+            monto = disponible.disponible,
+            variante = VarianteDeCifra.Chica,
+            tono = if (disponible.disponible < 0L) TonoDeCifra.Alerta else TonoDeCifra.Neutro,
+            disposicion = DisposicionDeCifraConRotulo.EnRenglon,
+        )
+        alertaDelDisponible(disponible)?.let { alerta ->
+            Spacer(Modifier.height(Movi.espacios.minimo))
+            AlertaDeLaTarjeta(alerta, onVerEnQueSeVa)
+        }
+    } else {
+        // Ola R4b: la cifra principal es la `Cifra.Grande` del sistema, entera («$3.240.000», no «$3,2M»)
+        // y con «Ocultar los saldos» incluido; el rótulo va arriba, como en el camino 1. En rojo
+        // (`Alerta`) solo sin margen: gastar no es una alarma, pasarse sí.
+        Text(text = ROTULO_DISPONIBLE_DEL_PERIODO, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
+        CifraDelSistema(
+            disponible.disponible,
+            VarianteDeCifra.Grande,
+            tono = if (disponible.hayMargen) TonoDeCifra.Neutro else TonoDeCifra.Alerta,
+        )
     }
     if (verDeDondeSale) {
         Spacer(Modifier.height(Espacio.s))
@@ -190,9 +257,29 @@ private fun CuerpoDelDisponible(disponible: DisponibleDelPeriodo, verDeDondeSale
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(Movi.espacios.medio),
     ) {
-        ColumnaDeVentana("Período", disponible.periodo, disponible.hayMargen, entrada, Modifier.weight(1f), delPeriodo = true)
-        ColumnaDeVentana(rotuloDeLaSemana(disponible), disponible.semana, disponible.hayMargen, entrada, Modifier.weight(1f))
-        ColumnaDeVentana(ROTULO_META_DE_HOY, disponible.hoy, disponible.hayMargen, entrada, Modifier.weight(1f))
+        ColumnaDeVentana("Período", disponible.periodo, disponible, entrada, Modifier.weight(1f), delPeriodo = true)
+        ColumnaDeVentana(rotuloDeLaSemana(disponible), disponible.semana, disponible, entrada, Modifier.weight(1f))
+        ColumnaDeVentana(ROTULO_META_DE_HOY, disponible.hoy, disponible, entrada, Modifier.weight(1f))
+    }
+}
+
+/**
+ * **La alarma, una vez y con qué hacer** (vuelta 45): la frase de qué pasó en `sale` —si la cifra de
+ * arriba no lo dice ya— y el enlace «Mira en qué se fue ›», que abre «En qué se va».
+ */
+@Composable
+private fun AlertaDeLaTarjeta(alerta: AlertaDelDisponible, onVerEnQueSeVa: (() -> Unit)?) {
+    Column(modifier = Modifier.fillMaxWidth().testTag(TAG_ALERTA_DEL_DISPONIBLE)) {
+        alerta.texto?.let { Text(text = it, style = Movi.textos.apoyo, color = Movi.colores.sale) }
+        if (onVerEnQueSeVa != null) {
+            Boton(
+                MIRA_EN_QUE_SE_FUE,
+                onClick = onVerEnQueSeVa,
+                variante = VarianteDeBoton.Fantasma,
+                tamano = TamanoDeBoton.S,
+                icono = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+            )
+        }
     }
 }
 
@@ -205,7 +292,8 @@ private fun CuerpoDelDisponible(disponible: DisponibleDelPeriodo, verDeDondeSale
  */
 @Composable
 private fun CuerpoDelDisponibleEsqueleto() {
-    Text(text = "Disponible del período", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
+    // Vuelta 45: el rótulo de la cifra es «Te quedan» (en Pagos, el único lugar que pinta esqueleto).
+    Text(text = ROTULO_TE_QUEDAN, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
     BloqueEsqueleto(
         alto = altoDeUnRenglon(Movi.textos.cifraDeTarjeta),
         ancho = Medida.avatar * 4,
@@ -213,6 +301,9 @@ private fun CuerpoDelDisponibleEsqueleto() {
     )
     Spacer(Modifier.height(Movi.espacios.minimo))
     LineaEsqueleto(fraccionDelAncho = 0.75f, estilo = Movi.textos.apoyo)
+    Spacer(Modifier.height(Movi.espacios.minimo))
+    // El renglón «Disponible del período … $X».
+    LineaEsqueleto(fraccionDelAncho = 1f, estilo = Movi.textos.apoyo)
     Spacer(Modifier.height(Movi.espacios.medio))
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -258,20 +349,25 @@ private fun CuerpoDelDisponibleEsqueleto() {
 private fun ColumnaDeVentana(
     rotulo: String,
     ventana: VentanaDelDisponible,
-    hayMargen: Boolean,
+    disponible: DisponibleDelPeriodo,
     entrada: Float,
     modifier: Modifier,
     delPeriodo: Boolean = false,
 ) {
+    val hayMargen = disponible.hayMargen
+    // Vuelta 45: **solo lo que de verdad importa va en alerta**: la columna del período si te pasaste
+    // del período. La semana y la meta de hoy van en tinta aunque estén pasadas (su «−$1,3M» ya lo
+    // dice el signo, y la alarma, con qué hacer, sale una vez arriba).
+    val enAlerta = barraEnAlerta(disponible, delPeriodo) ||
+        (delPeriodo && !hayMargen && ventana.nivel == NivelDelGasto.PASADO)
     Column(modifier = modifier) {
         Text(text = rotulo, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, maxLines = 1)
-        // Rojo cuando la ventana está PASADA, que es exactamente cuando lo que queda es negativo
-        // (sin margen: gastó algo contra una meta de cero). En el período la cifra es lo gastado, y
-        // va en rojo con el mismo criterio: gastaste más de lo que había.
-        // Vuelta de diseño 19: la `Cifra` del sistema, compacta porque son tres columnas (§6).
+        // En el período la cifra es lo gastado, y va en rojo si gastaste más de lo que había (vuelta
+        // 45: solo esa; la semana y hoy, en tinta). Vuelta de diseño 19: la `Cifra` del sistema,
+        // compacta porque son tres columnas (§6).
         CifraDelSistema(
             if (delPeriodo) ventana.gastado else ventana.teQuedan,
-            tono = if (ventana.nivel == NivelDelGasto.PASADO) TonoDeCifra.Alerta else TonoDeCifra.Neutro,
+            tono = if (enAlerta) TonoDeCifra.Alerta else TonoDeCifra.Neutro,
             forma = FormaDeCifra.Compacta,
         )
         // «gastaste» y la cifra en dos renglones, no en uno: «gastaste $440.000» no entra en su
@@ -296,18 +392,23 @@ private fun ColumnaDeVentana(
             } else {
                 0f
             }
-            Box(modifier = Modifier.fillMaxWidth().testTag(TAG_BARRA_DE_VENTANA)) {
-                BarraDeProgreso(fraccion = relleno, tono = tonoDelNivel(ventana.nivel))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag(if (enAlerta) TAG_BARRA_EN_ALERTA else TAG_BARRA_DE_VENTANA),
+            ) {
+                BarraDeProgreso(fraccion = relleno, tono = tonoDeLaBarra(enAlerta))
             }
         }
     }
 }
 
-private fun tonoDelNivel(nivel: NivelDelGasto): TonoDeBarra = when (nivel) {
-    NivelDelGasto.BIEN -> TonoDeBarra.Marca
-    NivelDelGasto.CERCA -> TonoDeBarra.Aviso
-    NivelDelGasto.PASADO -> TonoDeBarra.Peligro
-}
+/**
+ * Vuelta 45: las barras van **en tinta** ([TonoDeBarra.Marca], que desde la vuelta 29 es la tinta) y solo
+ * la del período pasado va en peligro. Antes cada una tenía el color de su nivel y con la semana y el día
+ * pasados se veían tres barras rojas.
+ */
+internal fun tonoDeLaBarra(enAlerta: Boolean): TonoDeBarra = if (enAlerta) TonoDeBarra.Peligro else TonoDeBarra.Marca
 
 @Composable
 private fun colorDeLaFrase(nivel: NivelDelGasto): Color = when (nivel) {
