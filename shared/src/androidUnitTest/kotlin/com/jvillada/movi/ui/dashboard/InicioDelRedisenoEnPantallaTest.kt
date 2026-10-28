@@ -82,7 +82,6 @@ class InicioDelRedisenoEnPantallaTest {
     @get:Rule val composeRule = createComposeRule()
 
     private val navegado = mutableListOf<Screen>()
-    private var subioComprobante = false
     private val cierresDescartados = mutableListOf<String>()
 
     @org.junit.Before
@@ -153,7 +152,6 @@ class InicioDelRedisenoEnPantallaTest {
 
     private fun montar(data: DashboardData, cargando: Boolean = false) {
         navegado.clear()
-        subioComprobante = false
         composeRule.setContent {
             MoviTheme {
                 CompositionLocalProvider(LocalCargandoElInicio provides cargando) {
@@ -163,7 +161,6 @@ class InicioDelRedisenoEnPantallaTest {
                             data = data,
                             modifier = Modifier.fillMaxSize(),
                             onNavigate = { navegado += it },
-                            onSubirComprobante = { subioComprobante = true },
                             onDescartarCierre = { cierresDescartados += it },
                         )
                     }
@@ -290,25 +287,16 @@ class InicioDelRedisenoEnPantallaTest {
         assertEquals(Screen.QuickAdd(presetPestana = PestanaDeAgregar.GASTO), navegado.last())
         composeRule.onNodeWithContentDescription("Anotar un ingreso", useUnmergedTree = true).performClick()
         assertEquals(Screen.QuickAdd(presetEsIngreso = true, presetPestana = PestanaDeAgregar.INGRESO), navegado.last())
-        composeRule.onNodeWithContentDescription("Anotar un traspaso", useUnmergedTree = true).performClick()
-        assertEquals(Screen.QuickAdd(presetPestana = PestanaDeAgregar.TRASPASO), navegado.last())
-        composeRule.onNodeWithContentDescription("Pagar una tarjeta", useUnmergedTree = true).performClick()
-        assertEquals(Screen.QuickAdd(presetPestana = PestanaDeAgregar.PAGO_DE_TARJETA), navegado.last())
         // La insignia dice cuánto espera en Por revisar, y de qué es (vuelta de diseño 22): 3 avisos y 1 débito.
         composeRule.onNodeWithContentDescription("Revisar los avisos (3 avisos · 1 débito automático), 4", useUnmergedTree = true).performClick()
         assertEquals(Screen.PorRevisar, navegado.last())
         composeRule.onNodeWithContentDescription("Preguntarle a Movi", useUnmergedTree = true).performClick()
         assertEquals(Screen.AIChat(), navegado.last())
-        composeRule.onNodeWithContentDescription("Subir un comprobante", useUnmergedTree = true).performClick()
-        assertTrue(subioComprobante, "elige un archivo en vez de navegar")
-        // Vuelta de diseño 7 · «Repartir» abre la hoja del gasto compartido; sin espacios, la creación
-        // del espacio (los demás casos, en `RepartirDesdeElInicioTest`).
-        val antes = navegado.size
-        composeRule.onNodeWithContentDescription("Repartir un gasto", useUnmergedTree = true).performClick()
-        composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithText("¿Con quién compartes?", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        // Vuelta de diseño 26: Traspaso, Pagar tarjeta, Repartir y Comprobante ya no están en Hoy (viven
+        // en el menú del «+», ver `AtajosDelMasTest`).
+        listOf("Anotar un traspaso", "Pagar una tarjeta", "Repartir un gasto", "Subir un comprobante").forEach {
+            composeRule.onNodeWithContentDescription(it, useUnmergedTree = true).assertDoesNotExist()
         }
-        assertEquals(antes, navegado.size, "no cambia de pestaña")
     }
 
     // ── Ocultar los saldos ───────────────────────────────────────────────────

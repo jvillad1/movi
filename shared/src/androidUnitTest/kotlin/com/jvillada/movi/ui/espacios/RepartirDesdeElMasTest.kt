@@ -2,6 +2,17 @@ package com.jvillada.movi.ui.espacios
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performTouchInput
+import com.jvillada.movi.ui.components.LocalWindowWidthClass
+import com.jvillada.movi.ui.components.MinBottomNav
+import com.jvillada.movi.ui.components.NavTab
+import com.jvillada.movi.ui.components.WindowWidthClass
+import com.jvillada.movi.ui.quickadd.AtajoDeAgregar
+import com.jvillada.movi.ui.quickadd.hacerElAtajo
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -26,8 +37,6 @@ import com.jvillada.movi.shared.model.saldoDelEspacio
 import com.jvillada.movi.shared.repository.ApiException
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.Screen
-import com.jvillada.movi.ui.dashboard.DashboardData
-import com.jvillada.movi.ui.sdui.AccionesDelInicioSection
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
@@ -37,15 +46,17 @@ import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
 
 /**
- * # «Repartir» en la cuadrícula del Inicio abre la hoja (vuelta de diseño 7)
+ * # «Repartir» desde el menú del «+» abre la hoja (vuelta de diseño 7, mudada en la 26)
  *
- * Antes solo cambiaba a la pestaña Espacios. Ahora: con un espacio, la hoja «Pagó otro» sobre ese; con
- * varios, primero se elige; sin ninguno, la creación del espacio. Se monta la cuadrícula como la monta
- * el Inicio, y la pantalla a la que navega, como lo haría la app.
+ * Vuelta 7: con un espacio, la hoja «Pagó otro» sobre ese; con varios, primero se elige; sin ninguno,
+ * la creación del espacio. Vuelta 26: «Repartir» salió de la cuadrícula del Inicio y vive en el menú
+ * del «+»; abre **lo mismo que antes**. Se monta la barra con el «+» y sus atajos como la monta la
+ * cáscara (`App.kt`: [hacerElAtajo] con un [EstadoDeRepartir] y sus [HojasDeRepartir]), y la pantalla
+ * a la que navega, como lo haría la app.
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(qualifiers = "w390dp-h844dp-xhdpi")
-class RepartirDesdeElInicioTest {
+@Config(sdk = [34], qualifiers = "w390dp-h844dp-xhdpi")
+class RepartirDesdeElMasTest {
 
     @get:Rule val composeRule = createComposeRule()
 
@@ -75,22 +86,29 @@ class RepartirDesdeElInicioTest {
     private val navegado = mutableListOf<Screen>()
     private var pantalla by mutableStateOf<Screen?>(null)
 
-    /** El Inicio con su cuadrícula; al navegar a un espacio, la pantalla del espacio (como la app). */
+    /** La barra con el «+» y sus atajos; al navegar a un espacio, la pantalla del espacio (como la app). */
     private fun montar(espacios: List<Espacio>?) {
         Repositories.sustitutoDePrueba = ConEspacios(espacios)
         composeRule.setContent {
-            MoviTheme {
-                Box(Modifier.fillMaxSize()) {
-                    when (val p = pantalla) {
-                        is Screen.Espacio -> EspacioScreen(p.id, pagoOtro = p.pagoOtro)
-                        else -> AccionesDelInicioSection(
-                            data = DashboardData(),
-                            onNavigate = {
-                                navegado += it
-                                pantalla = it
-                            },
-                            onSubirComprobante = {},
-                        )
+            CompositionLocalProvider(LocalWindowWidthClass provides WindowWidthClass.Compact) {
+                MoviTheme {
+                    val onNavigate: (Screen) -> Unit = {
+                        navegado += it
+                        pantalla = it
+                    }
+                    val repartir = rememberEstadoDeRepartir(onNavigate)
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+                        when (val p = pantalla) {
+                            is Screen.Espacio -> EspacioScreen(p.id, pagoOtro = p.pagoOtro)
+                            else -> MinBottomNav(
+                                active = NavTab.HOY,
+                                onTabSelected = {},
+                                onAtajo = { atajo ->
+                                    hacerElAtajo(atajo, navegar = onNavigate, repartir = repartir::tocar, elegirComprobante = {})
+                                },
+                            )
+                        }
+                        HojasDeRepartir(repartir)
                     }
                 }
             }
@@ -108,13 +126,16 @@ class RepartirDesdeElInicioTest {
 
     private fun esperar(condicion: () -> Boolean) = composeRule.waitUntil(timeoutMillis = 5_000, condicion)
 
+    /** Mantener presionado el «+» y elegir «Repartir» en su menú. */
     private fun tocarRepartir() {
-        composeRule.onNodeWithContentDescription("Repartir un gasto").performClick()
+        composeRule.onNodeWithContentDescription("Agregar", useUnmergedTree = true).performTouchInput { longClick() }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText(AtajoDeAgregar.REPARTIR.rotulo, useUnmergedTree = true).performClick()
         composeRule.waitForIdle()
     }
 
     @Test
-    fun `con un espacio, Repartir abre la hoja de anotar lo que pago otro sobre ese`() {
+    fun `con un espacio, Repartir desde el mas abre la hoja de anotar lo que pago otro sobre ese`() {
         montar(listOf(casa))
         tocarRepartir()
         esperar { navegado.isNotEmpty() }

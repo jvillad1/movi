@@ -95,9 +95,6 @@ fun SduiRenderer(
     // Lo que va al final del scroll, debajo de la última sección: «Editar inicio» (Ola 3). Chrome
     // nativo como [header], fuera del schema a propósito: así existe en cualquier definición.
     footer: (@Composable () -> Unit)? = null,
-    // Ola R1: «Subir comprobante» de la cuadrícula elige un archivo, y el selector vive en la pantalla
-    // (como el atajo del «+» vive en App.kt). Sin operación por default, para las pruebas.
-    onSubirComprobante: () -> Unit = {},
     // «Ya lo vi» del cierre del período, que ahora es una tarjeta de «Movi propone hoy»: el estado
     // (`data`) vive en `DashboardScreen`.
     onDescartarCierre: (String) -> Unit = {},
@@ -105,7 +102,7 @@ fun SduiRenderer(
     val uriHandler = LocalUriHandler.current
     val sections = visibleSections(definition, data)
     val acciones = AccionesDelRenderer(
-        onNavigate, onShowCreateSheet, onSubirComprobante, onDescartarCierre, uriHandler,
+        onNavigate, onShowCreateSheet, onDescartarCierre, uriHandler,
         hayPropuestas = sections.any { it.type == "PROPUESTAS" },
     )
     val scroll = rememberScrollState()
@@ -167,7 +164,6 @@ fun SduiRenderer(
 private class AccionesDelRenderer(
     val onNavigate: (Screen) -> Unit,
     val onShowCreateSheet: () -> Unit,
-    val onSubirComprobante: () -> Unit,
     val onDescartarCierre: (String) -> Unit,
     val uriHandler: UriHandler,
     /**
@@ -222,7 +218,7 @@ private fun SduiSection(
         // cambia: es lo único que un APK viejo entiende, y él sigue pintando su héroe de siempre.
         "HERO_BALANCE" -> HeroDeUnVistazo(section, data, onNavigate, acciones.onShowCreateSheet)
         // Generación 9 (ola R1): la cuadrícula, «Movi propone hoy» y el carrusel de cuentas.
-        "ACCIONES" -> AccionesDelInicioSection(data, onNavigate, acciones.onSubirComprobante)
+        "ACCIONES" -> AccionesDelInicioSection(data, onNavigate)
         "PROPUESTAS" -> PropuestasDelInicioSection(data, onNavigate, acciones.onDescartarCierre)
         "CUENTAS" -> CuentasDelInicioSection(data, onNavigate)
         "PREGUNTALE_A_MOVI" -> PreguntaleAMoviSection(section, data, onNavigate)

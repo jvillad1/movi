@@ -26,7 +26,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
+import androidx.compose.material.icons.automirrored.rounded.Send
+import com.jvillada.movi.platform.ComoSalioElMensaje
+import com.jvillada.movi.platform.hojaDeCompartir
+import com.jvillada.movi.ui.components.ConfirmarEnHoja
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
 import com.jvillada.movi.data.ClaveDeLectura
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.rememberLectura
@@ -73,6 +79,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 /** Tags para las pruebas. */
 const val TAG_SALDO_DEL_ESPACIO: String = "espacios:saldo"
 const val TAG_MARCAR_COMO_SALDADO: String = "espacios:marcar-como-saldado"
+const val TAG_PEDIRLE: String = "espacios:pedirle"
+const val TAG_MENSAJE_COPIADO: String = "espacios:mensaje-copiado"
 const val TAG_GASTO_DEL_ESPACIO: String = "espacios:gasto"
 const val TAG_LO_QUE_PAGA_OTRA_PERSONA: String = "espacios:lo-que-paga-otra-persona"
 
@@ -260,6 +268,12 @@ internal fun CuerpoDelEspacio(
     var pagoOtro by remember(espacio.id) { mutableStateOf(pagoOtroDeEntrada) }
     var descartadas by remember(espacio.id) { mutableStateOf(emptySet<String>()) }
     var errorDePropuesta by remember { mutableStateOf<String?>(null) }
+    // Vuelta de diseño 26 · «Pedirle a Caro» y saldar con confirmación.
+    var confirmandoSaldado by remember(espacio.id) { mutableStateOf(false) }
+    var saldandoSinVincular by remember(espacio.id) { mutableStateOf(false) }
+    var mensajeCopiado by remember(espacio.id) { mutableStateOf<String?>(null) }
+    val hoja = hojaDeCompartir()
+    val uriHandler = LocalUriHandler.current
 
     // ── Lo que Movi propone: vincular una transferencia que salda. ──
     val propuestas = detalle.propuestas.filterNot { it.eventoId in descartadas }
@@ -290,7 +304,20 @@ internal fun CuerpoDelEspacio(
 
     EncabezadoDelEspacio(detalle)
     QuienPusoQue(detalle)
-    SaldoDelEspacioTarjeta(detalle, onSaldar = { saldando = true })
+    SaldoDelEspacioTarjeta(
+        detalle,
+        onPedir = {
+            mensajeParaPedir(detalle)?.let { mensaje ->
+                mensajeCopiado = if (hoja.mandarMensaje(mensaje) == ComoSalioElMensaje.COPIADO) mensaje else null
+            }
+        },
+        onSaldar = { saldando = true },
+        // Con transferencias que pueden ser el pago, la hoja de siempre (se elige cuál vincular); sin
+        // ninguna, la pregunta antes de dejar el espacio en cero.
+        onSaldadoSecundario = { if (detalle.propuestas.isEmpty()) confirmandoSaldado = true else saldando = true },
+        mensajeCopiado = mensajeCopiado,
+        onAbrirWhatsApp = { mensajeCopiado?.let { runCatching { uriHandler.openUri(enlaceDeWhatsApp(it)) } } },
+    )
     GastosDelEspacio(detalle, onPagoOtro = { pagoOtro = true }, onVerTodo = onVerTodo)
 
     if (saldando) {
@@ -300,6 +327,53 @@ internal fun CuerpoDelEspacio(
             onSaldado = {
                 saldando = false
                 onCambio()
+            },
+        )
+    }
+    val confirmacion = confirmacionDeSaldado(espacio, detalle.saldo)
+    val reembolso = fraseDelSaldo(espacio, detalle.saldo).reembolso
+    if (confirmandoSaldado && confirmacion != null && reembolso != null) {
+        // El id se elige al abrir la pregunta, como en [HojaSaldar]: dos toques son un saldado, y
+        // un saldado de otro día es otra liquidación (no pisa esta).
+        val idDelSaldado = remember { newId("liq") }
+        ConfirmarEnHoja(
+            pregunta = confirmacion.first,
+            detalle = confirmacion.second,
+            textoConfirmar = "Sí, ya me pagó",
+            ocupado = saldandoSinVincular,
+            varianteConfirmar = VarianteDeBoton.Principal,
+            onCancelar = { if (!saldandoSinVincular) confirmandoSaldado = false },
+            // La misma operación de siempre: la liquidación del reembolso, sin vincular movimiento
+            // (como «Marcar como saldado» sin elegir transferencia).
+            onConfirmar = {
+                if (!saldandoSinVincular) {
+                    saldandoSinVincular = true
+                    errorDePropuesta = null
+                    coroutine.launch {
+                        try {
+                            Repositories.wallets.liquidarEspacio(
+                                espacio.id,
+                                LiquidacionDelEspacio(
+                                    id = idDelSaldado,
+                                    de = reembolso.de,
+                                    a = reembolso.a,
+                                    monto = reembolso.monto,
+                                    fecha = kotlinx.datetime.Clock.System.now().toEpochMilliseconds(),
+                                ),
+                            )
+                            confirmandoSaldado = false
+                            mensajeCopiado = null
+                            onCambio()
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Throwable) {
+                            errorDePropuesta = mensajeDelEspacio(e)
+                            confirmandoSaldado = false
+                        } finally {
+                            saldandoSinVincular = false
+                        }
+                    }
+                }
             },
         )
     }
@@ -383,22 +457,66 @@ private fun QuienPusoQue(detalle: DetalleDelEspacio) {
     }
 }
 
-/** «Caro te debe $390.000 para quedar 50/50» y «Marcar como saldado». */
+/**
+ * «Caro te debe $390.000 para quedar 50/50» y lo que se hace con eso (vuelta de diseño 26, ver
+ * [PrincipalDelSaldo]): si el otro te debe, «Pedirle a Caro» arma el mensaje y «Marcar como saldado»
+ * queda de secundario (`Fantasma`), con confirmación; si tú le debes, «Marcar como saldado» sigue
+ * siendo el principal. En la web sin hoja de compartir, el mensaje se copia: «Mensaje copiado» y
+ * «Abrir WhatsApp».
+ */
 @Composable
-private fun SaldoDelEspacioTarjeta(detalle: DetalleDelEspacio, onSaldar: () -> Unit) {
+private fun SaldoDelEspacioTarjeta(
+    detalle: DetalleDelEspacio,
+    onPedir: () -> Unit,
+    onSaldar: () -> Unit,
+    onSaldadoSecundario: () -> Unit,
+    mensajeCopiado: String?,
+    onAbrirWhatsApp: () -> Unit,
+) {
     val frase = fraseDelSaldo(detalle.espacio, detalle.saldo)
     Superficie(modifier = Modifier.testTag(TAG_SALDO_DEL_ESPACIO)) {
         Text(frase.titulo, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
         if (frase.monto > 0L) Cifra(frase.monto, VarianteDeCifra.Grande)
         frase.apoyo?.let { Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio) }
-        if (frase.reembolso != null) {
-            Spacer(Modifier.height(Medida.dentroDeSeccion))
-            Boton(
-                texto = "Marcar como saldado",
-                onClick = onSaldar,
-                anchoCompleto = true,
-                modifier = Modifier.testTag(TAG_MARCAR_COMO_SALDADO),
-            )
+        when (val principal = principalDelSaldo(detalle.espacio, detalle.saldo)) {
+            is PrincipalDelSaldo.Pedir -> {
+                Spacer(Modifier.height(Medida.dentroDeSeccion))
+                Boton(
+                    texto = principal.texto,
+                    onClick = onPedir,
+                    icono = Icons.AutoMirrored.Rounded.Send,
+                    anchoCompleto = true,
+                    modifier = Modifier.testTag(TAG_PEDIRLE),
+                )
+                if (mensajeCopiado != null) {
+                    Spacer(Modifier.height(EspacioDeDiseno.xs))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(EspacioDeDiseno.xs),
+                        modifier = Modifier.fillMaxWidth().testTag(TAG_MENSAJE_COPIADO),
+                    ) {
+                        Text("Mensaje copiado", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.weight(1f))
+                        Boton("Abrir WhatsApp", onClick = onAbrirWhatsApp, variante = VarianteDeBoton.Fantasma, tamano = TamanoDeBoton.S)
+                    }
+                }
+                Spacer(Modifier.height(EspacioDeDiseno.xs))
+                Boton(
+                    texto = "Marcar como saldado",
+                    onClick = onSaldadoSecundario,
+                    variante = VarianteDeBoton.Fantasma,
+                    modifier = Modifier.align(Alignment.CenterHorizontally).testTag(TAG_MARCAR_COMO_SALDADO),
+                )
+            }
+            PrincipalDelSaldo.MarcarPagado -> {
+                Spacer(Modifier.height(Medida.dentroDeSeccion))
+                Boton(
+                    texto = "Marcar como saldado",
+                    onClick = onSaldar,
+                    anchoCompleto = true,
+                    modifier = Modifier.testTag(TAG_MARCAR_COMO_SALDADO),
+                )
+            }
+            PrincipalDelSaldo.Nada -> Unit
         }
     }
 }

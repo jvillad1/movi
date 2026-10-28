@@ -2,7 +2,16 @@ package com.jvillada.movi.ui.espacios
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
+import com.jvillada.movi.platform.ComoSalioElMensaje
+import com.jvillada.movi.platform.HojaDeCompartir
+import com.jvillada.movi.platform.LocalHojaDeCompartir
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import com.jvillada.movi.ui.components.ds.VarianteDeBotonKey
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasAnyChild
@@ -44,11 +53,13 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * # Espacios en pantalla (R3)
  *
- * La pantalla del espacio dice el saldo con «Marcar como saldado» y saldar llama al repositorio;
+ * La pantalla del espacio dice el saldo con «Pedirle a Caro» (vuelta de diseño 26) y «Marcar como
+ * saldado», que pregunta antes y llama al repositorio; cada gasto dice su fecha;
  * «Repartir» desde el detalle de un movimiento lo manda al espacio; y la fila de un movimiento
  * repartido dice «Tu parte» bajo el monto entero.
  */
@@ -114,22 +125,67 @@ class EspaciosEnPantallaTest {
             liquidacion.also { liquidaciones += it }
     }
 
+    /**
+     * El texto de cada botón a la vista (lo tocable con un texto adentro), con su variante (la dice su
+     * semántica, `VarianteDeBotonKey`; `null` si no es un `Boton`). Se busca por el toque y no por el
+     * `testTag` del sistema: un `Boton` con su propio tag ya no lleva `TAG_BOTON`.
+     */
+    private fun botones(): Map<String, VarianteDeBoton?> =
+        composeRule.onAllNodes(hasClickAction(), useUnmergedTree = true).fetchSemanticsNodes()
+            .filter { it.config.getOrNull(VarianteDeBotonKey) != null }
+            .associate { nodo ->
+                val texto = nodo.children.flatMap { it.config.getOrNull(SemanticsProperties.Text).orEmpty() }.joinToString("") { it.text }
+                texto to nodo.config.getOrNull(VarianteDeBotonKey)
+            }
+
+    /** Una hoja de compartir de mentira: guarda lo que se le mandó y dice que se copió (la web sin `navigator.share`). */
+    private class HojaDePrueba(private val como: ComoSalioElMensaje) : HojaDeCompartir {
+        val mandados = mutableListOf<String>()
+        override val abreLaHojaDelSistema: Boolean = como == ComoSalioElMensaje.POR_LA_HOJA
+        override fun compartir(texto: String) { mandados += texto }
+        override fun copiar(texto: String) { mandados += texto }
+        override fun mandarMensaje(texto: String): ComoSalioElMensaje = como.also { mandados += texto }
+    }
+
+    private fun montarLaPestana(hoja: HojaDeCompartir? = null) {
+        composeRule.setContent {
+            CompositionLocalProvider(LocalHojaDeCompartir provides hoja) {
+                MoviTheme { Box(Modifier.fillMaxSize()) { EspaciosScreen(onNavigate = {}) } }
+            }
+        }
+    }
+
+    /**
+     * Vuelta de diseño 26: con Caro debiendo, el principal es «Pedirle a Caro» y «Marcar como saldado»
+     * pasa a `Fantasma`; saldar pregunta antes («¿Caro ya te pagó $390.000?») y después hace lo de
+     * siempre: la liquidación de Caro al dueño, sin vincular movimiento.
+     */
     @Test
     fun `la pantalla del espacio dice quien debe, cuanto y deja marcar como saldado`() {
         val repo = ConLaCasa()
         Repositories.sustitutoDePrueba = repo
-        composeRule.setContent { MoviTheme { Box(Modifier.fillMaxSize()) { EspaciosScreen(onNavigate = {}) } } }
+        montarLaPestana()
 
         esperarTexto("Caro te debe")
         esperarTexto("para quedar 50/50")
         esperarTexto("Quién puso qué")
         esperarTexto("Mitad")
         esperarTexto("Mercado del sábado")
-        esperarTexto("Marcar como saldado")
+        esperarTexto("Pedirle a Caro")
+        assertEquals(VarianteDeBoton.Principal, botones()["Pedirle a Caro"])
+        assertEquals(VarianteDeBoton.Fantasma, botones()["Marcar como saldado"])
+
+        // Antes de saldar, la pregunta. «Cancelar» no salda nada.
+        tocarBoton("Marcar como saldado")
+        esperarTexto("¿Caro ya te pagó \$390.000?")
+        esperarTexto("Esto deja el espacio en cero.")
+        tocarBoton("Cancelar")
+        composeRule.waitForIdle()
+        assertEquals(emptyList(), repo.liquidaciones, "cancelar no salda")
 
         tocarBoton("Marcar como saldado")
-        esperarTexto("Caro te paga")
-        tocarBoton("Marcar como saldado")
+        esperarTexto("¿Caro ya te pagó \$390.000?")
+        tocarBoton("Sí, ya me pagó")
         composeRule.waitUntil(timeoutMillis = 5_000) { repo.liquidaciones.isNotEmpty() }
 
         val l = repo.liquidaciones.single()
@@ -137,6 +193,64 @@ class EspaciosEnPantallaTest {
         assertEquals(MIEMBRO_YO, l.a)
         assertEquals(390_000L, l.monto)
         assertNull(l.eventoId, "sin una transferencia elegida, no se vincula ninguna")
+    }
+
+    /** «Pedirle a Caro» manda el mensaje; en la web sin hoja, dice «Mensaje copiado» y ofrece WhatsApp. */
+    @Test
+    fun `Pedirle a Caro manda el mensaje y, si se copio, lo dice`() {
+        Repositories.sustitutoDePrueba = ConLaCasa()
+        val hoja = HojaDePrueba(ComoSalioElMensaje.COPIADO)
+        montarLaPestana(hoja)
+        esperarTexto("Pedirle a Caro")
+        composeRule.onAllNodesWithTag(TAG_MENSAJE_COPIADO, useUnmergedTree = true).fetchSemanticsNodes()
+            .let { assertEquals(0, it.size, "antes de pedir no dice nada") }
+
+        tocarBoton("Pedirle a Caro")
+        val mensaje = hoja.mandados.single()
+        assertTrue(mensaje.startsWith("Hola, Caro. Me debes \$390.000 de Casa con Caro:"), mensaje)
+        assertTrue("Mercado Éxito · 20 oct · tu parte \$1.050.000" in mensaje, mensaje)
+        esperarTexto("Mensaje copiado")
+        esperarTexto("Abrir WhatsApp")
+    }
+
+    /** Con la hoja del sistema (Android, iOS, `navigator.share`) no hay aviso: la hoja ya se ve. */
+    @Test
+    fun `con la hoja del sistema no dice Mensaje copiado`() {
+        Repositories.sustitutoDePrueba = ConLaCasa()
+        val hoja = HojaDePrueba(ComoSalioElMensaje.POR_LA_HOJA)
+        montarLaPestana(hoja)
+        esperarTexto("Pedirle a Caro")
+        tocarBoton("Pedirle a Caro")
+        assertEquals(1, hoja.mandados.size)
+        composeRule.onAllNodesWithText("Mensaje copiado", useUnmergedTree = true).fetchSemanticsNodes()
+            .let { assertEquals(0, it.size) }
+    }
+
+    /** Cuando tú le debes, no hay nada que pedir: el principal sigue siendo marcar que pagaste. */
+    @Test
+    fun `cuando tu le debes, el principal es marcar como saldado`() {
+        val alReves = listOf(gasto("g1", MIEMBRO_YO, 1_320_000, "e1"), gasto("g2", "dst_caro", 2_100_000))
+        Repositories.sustitutoDePrueba = object : ConLaCasa() {
+            override suspend fun getDetalleDelEspacio(id: String): DetalleDelEspacio = detalle.copy(
+                saldo = saldoDelEspacio(casa, alReves, emptyList()),
+                delPeriodo = saldoDelEspacio(casa, alReves, emptyList()),
+                gastos = alReves,
+            )
+        }
+        montarLaPestana()
+        esperarTexto("Le debes a Caro")
+        esperarTexto("Marcar como saldado")
+        assertEquals(VarianteDeBoton.Principal, botones()["Marcar como saldado"])
+        assertNull(botones()["Pedirle a Caro"], "no hay nada que pedir")
+    }
+
+    /** Vuelta de diseño 26: cada gasto dice su fecha en el subtítulo. */
+    @Test
+    fun `cada gasto del espacio dice su fecha`() {
+        Repositories.sustitutoDePrueba = ConLaCasa()
+        montarLaPestana()
+        esperarTexto("Pagó Caro · Mercado · 20 oct")
+        esperarTexto("Pagaste tú · Mercado · 20 oct")
     }
 
     private val bancolombia = Account("acc-banco", "Bancolombia", AccountType.SAVINGS, 1_000_000L, "COP")

@@ -592,7 +592,7 @@ fun DashboardScreen(
                 DashboardDataCache.data = DashboardDataCache.data?.copy(cierre = null)
                 alcanceDelCierre.launch { runCatching { Repositories.wallets.descartarCierre(periodo) } }
             }
-            // «Subir comprobante» de la cuadrícula: elige el archivo y lo deja en [PapelesCompartidos],
+            // «Subir un papel» de «Primeros pasos»: elige el archivo y lo deja en [PapelesCompartidos],
             // la misma puerta que el atajo del «+» (la hoja «Movi está leyendo…» lo toma).
             val elegirComprobante = rememberFilePicker(TiposDeArchivo.EXTRACTOS) { nombre, bytes, mime ->
                 PapelesCompartidos.recibir(listOf(ArchivoCompartido(nombre, bytes, mime)))
@@ -634,7 +634,6 @@ fun DashboardScreen(
                     // Ola 3: qué secciones se ven y en qué orden lo elige el dueño (ver
                     // [EditarInicioScreen]). Al final, siempre, para no competir con lo que Hoy dice.
                     footer = { BotonEditarInicio { onNavigate(Screen.EditarInicio) } },
-                    onSubirComprobante = elegirComprobante,
                     onDescartarCierre = descartarCierre,
                 )
                 } // TirarParaActualizar

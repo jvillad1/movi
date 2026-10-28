@@ -10,6 +10,13 @@ import com.jvillada.movi.shared.model.SaldoDelEspacio
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.idsDeMiembros
 import com.jvillada.movi.shared.model.netoDe
+import com.jvillada.movi.shared.model.DetalleDelEspacio
+import com.jvillada.movi.ui.analisis.fechaCorta
+import com.jvillada.movi.ui.components.formatCOPSinOcultar
+import com.jvillada.movi.ui.fecha.fechaDeEpoch
+import com.jvillada.movi.shared.time.AppTimeZone
+import kotlinx.datetime.TimeZone
+import io.ktor.http.encodeURLParameter
 
 /**
  * # Lo que dice la pantalla de un espacio (R3)
@@ -73,11 +80,126 @@ fun quienesComparten(espacio: Espacio): String {
 fun rotuloDeTuParte(espacio: Espacio): String =
     if (espacio.reparto == RepartoDelEspacio.PARTES_IGUALES && idsDeMiembros(espacio).size == 2) "Mitad" else "Te toca"
 
-/** El subtítulo de un gasto del espacio: «Pagaste tú · Mercado» o «Pagó Caro · Mercado». */
-fun quienPagoElGasto(espacio: Espacio, gasto: GastoDelEspacio): String {
+/**
+ * El subtítulo de un gasto del espacio: «Pagaste tú · Mercado · 18 oct» o «Pagó Caro · Mercado ·
+ * 18 oct». La fecha la pidió la revisión de la vuelta de diseño 26: sin ella, dos mercados del mismo
+ * monto no se distinguían. Sin fecha (un gasto viejo con 0), sin ese tramo.
+ */
+fun quienPagoElGasto(espacio: Espacio, gasto: GastoDelEspacio, zona: TimeZone = AppTimeZone.zone): String {
     val quien = if (gasto.pagadoPor == MIEMBRO_YO) "Pagaste tú" else "Pagó ${nombreEnElEspacio(espacio, gasto.pagadoPor)}"
-    return if (gasto.categoria.isBlank()) quien else "$quien · ${gasto.categoria}"
+    return listOfNotNull(
+        quien,
+        gasto.categoria.takeIf { it.isNotBlank() },
+        fechaDelGasto(gasto, zona),
+    ).joinToString(" · ")
 }
+
+/** «18 oct»: el día de [gasto] en la zona de la app, o `null` si no tiene fecha. */
+internal fun fechaDelGasto(gasto: GastoDelEspacio, zona: TimeZone = AppTimeZone.zone): String? =
+    gasto.fecha.takeIf { it > 0L }?.let { fechaCorta(fechaDeEpoch(it, zona)) }
+
+// ── «Pedirle a Caro» (vuelta de diseño 26) ───────────────────────────────────
+
+/**
+ * El botón principal de la tarjeta del saldo, según quién debe (decisión del dueño, «Pedirle a
+ * Caro»):
+ * - **El otro te debe** → [Pedir]: «Pedirle a Caro» arma un mensaje para mandarlo por WhatsApp, y
+ *   «Marcar como saldado» queda de secundario, con confirmación.
+ * - **Tú le debes** → [MarcarPagado]: no hay nada que pedir; el principal sigue siendo marcar que
+ *   pagaste.
+ * - **A mano** → [Nada].
+ */
+sealed interface PrincipalDelSaldo {
+    data class Pedir(val aQuien: String) : PrincipalDelSaldo {
+        val texto: String get() = "Pedirle a $aQuien"
+    }
+    data object MarcarPagado : PrincipalDelSaldo
+    data object Nada : PrincipalDelSaldo
+}
+
+/** Ver [PrincipalDelSaldo]. */
+fun principalDelSaldo(espacio: Espacio, saldo: SaldoDelEspacio): PrincipalDelSaldo {
+    val reembolso = fraseDelSaldo(espacio, saldo).reembolso ?: return PrincipalDelSaldo.Nada
+    return if (reembolso.a == MIEMBRO_YO) PrincipalDelSaldo.Pedir(nombreEnElEspacio(espacio, reembolso.de))
+    else PrincipalDelSaldo.MarcarPagado
+}
+
+/** Cuántos gastos nombra el mensaje antes de «y N más». */
+const val GASTOS_EN_EL_MENSAJE: Int = 3
+
+/**
+ * Los gastos que componen lo que [deudor] le debe al dueño: los que **pagó el dueño** y en los que a
+ * [deudor] le tocaba algo, **desde el último saldado** (una liquidación deja el espacio a mano; lo de
+ * antes ya se pagó), del más reciente al más viejo.
+ */
+internal fun gastosQueLoComponen(detalle: DetalleDelEspacio, deudor: String): List<GastoDelEspacio> {
+    val desde = detalle.liquidaciones.filter { it.monto > 0L }.maxOfOrNull { it.fecha } ?: Long.MIN_VALUE
+    return detalle.gastos
+        .filter { it.pagadoPor == MIEMBRO_YO && (it.partes[deudor] ?: 0L) > 0L && it.fecha > desde }
+        .sortedByDescending { it.fecha }
+}
+
+/**
+ * **El mensaje de «Pedirle a Caro»**: corto, amable, en tuteo, para mandarlo por WhatsApp.
+ *
+ * ```
+ * Hola, Caro. Me debes $76.050 de Casa con Caro:
+ * • Mercado Éxito · 18 oct · tu parte $40.000
+ * • Gas · 15 oct · tu parte $20.000
+ * • Internet · 10 oct · tu parte $16.050
+ * y 2 más.
+ * ¿Me lo pasas cuando puedas? ¡Gracias!
+ * ```
+ *
+ * El monto es el del pago que deja el espacio a mano (el mismo de «Marcar como saldado»); los gastos,
+ * los [GASTOS_EN_EL_MENSAJE] más recientes de [gastosQueLoComponen] con la parte de quien lee. Las
+ * cifras van **siempre** enteras, aunque el dueño tenga los saldos ocultos: el mensaje es para otra
+ * persona. [enlace] es el de solo lectura del espacio, si existe (hoy los espacios no tienen uno: el
+ * enlace de «Compartir» es del resumen del dueño, y su token no se puede volver a leer). `null` si
+ * nadie le debe al dueño.
+ */
+fun mensajeParaPedir(
+    detalle: DetalleDelEspacio,
+    enlace: String? = null,
+    zona: TimeZone = AppTimeZone.zone,
+): String? {
+    val espacio = detalle.espacio
+    val reembolso = fraseDelSaldo(espacio, detalle.saldo).reembolso?.takeIf { it.a == MIEMBRO_YO } ?: return null
+    val nombre = nombreEnElEspacio(espacio, reembolso.de)
+    val gastos = gastosQueLoComponen(detalle, reembolso.de)
+    return buildString {
+        append("Hola, $nombre. Me debes ${formatCOPSinOcultar(reembolso.monto)} de ${espacio.nombre}")
+        append(if (gastos.isEmpty()) "." else ":")
+        gastos.take(GASTOS_EN_EL_MENSAJE).forEach { g ->
+            val renglon = listOfNotNull(
+                g.descripcion.ifBlank { g.categoria }.ifBlank { null },
+                fechaDelGasto(g, zona),
+                "tu parte ${formatCOPSinOcultar(g.partes[reembolso.de] ?: 0L)}",
+            ).joinToString(" · ")
+            append("\n• ").append(renglon)
+        }
+        val mas = gastos.size - GASTOS_EN_EL_MENSAJE
+        if (mas > 0) append("\ny ").append(mas).append(" más.")
+        enlace?.takeIf { it.isNotBlank() }?.let { append("\nEl detalle: ").append(it) }
+        append("\n¿Me lo pasas cuando puedas? ¡Gracias!")
+    }
+}
+
+/**
+ * La confirmación antes de «Marcar como saldado» cuando el otro te debe: «¿Caro ya te pagó
+ * $76.050?» y «Esto deja el espacio en cero.». Con más de un pago pendiente (tres o más miembros),
+ * saldar uno no deja el espacio en cero: lo dice.
+ */
+fun confirmacionDeSaldado(espacio: Espacio, saldo: SaldoDelEspacio): Pair<String, String>? {
+    val reembolso = fraseDelSaldo(espacio, saldo).reembolso?.takeIf { it.a == MIEMBRO_YO } ?: return null
+    val nombre = nombreEnElEspacio(espacio, reembolso.de)
+    val pregunta = "¿$nombre ya te pagó ${formatCOPSinOcultar(reembolso.monto)}?"
+    val detalle = if (saldo.reembolsos.size == 1) "Esto deja el espacio en cero." else "Esto salda lo de $nombre."
+    return pregunta to detalle
+}
+
+/** El enlace de WhatsApp que abre un chat con [mensaje] escrito (sin destinatario: se elige allá). */
+fun enlaceDeWhatsApp(mensaje: String): String = "https://wa.me/?text=" + mensaje.encodeURLParameter()
 
 /** La propuesta de vincular una transferencia: «¿Esta transferencia de Caro es para saldar la casa?». */
 fun preguntaDeSaldar(espacio: Espacio, deOtro: String, entra: Boolean): String {

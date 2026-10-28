@@ -24,14 +24,10 @@ import androidx.compose.material.icons.automirrored.rounded.TrendingUp
 import androidx.compose.material.icons.rounded.AccountBalance
 import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.AutoAwesome
-import androidx.compose.material.icons.rounded.CreditCard
 import androidx.compose.material.icons.rounded.Edit
-import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.Inbox
 import androidx.compose.material.icons.rounded.Schedule
-import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material.icons.rounded.Tune
-import androidx.compose.material.icons.rounded.UploadFile
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
@@ -82,8 +78,6 @@ import com.jvillada.movi.ui.dashboard.categoriasDelPeriodo
 import com.jvillada.movi.ui.dashboard.checklistDelPeriodoDe
 import com.jvillada.movi.ui.dashboard.cuentasDelCarrusel
 import com.jvillada.movi.ui.dashboard.destinoDeLaAccion
-import com.jvillada.movi.ui.espacios.HojasDeRepartir
-import com.jvillada.movi.ui.espacios.rememberEstadoDeRepartir
 import com.jvillada.movi.ui.dashboard.CONTRA_EL_PERIODO_PASADO
 import com.jvillada.movi.ui.dashboard.DiferenciaDeLaCategoria
 import com.jvillada.movi.ui.dashboard.diferenciaDeLaCategoria
@@ -142,40 +136,28 @@ const val TITULO_DE_LOS_WIDGETS: String = "Tus widgets"
 private fun iconoDe(accion: AccionDelInicio): ImageVector = when (accion) {
     AccionDelInicio.ANOTAR_GASTO -> Icons.Rounded.Edit
     AccionDelInicio.ANOTAR_INGRESO -> Icons.Rounded.ArrowDownward
-    AccionDelInicio.TRASPASAR -> Icons.Rounded.SwapHoriz
-    AccionDelInicio.PAGAR_TARJETA -> Icons.Rounded.CreditCard
-    AccionDelInicio.REPARTIR -> Icons.Rounded.Groups
-    AccionDelInicio.SUBIR_COMPROBANTE -> Icons.Rounded.UploadFile
     AccionDelInicio.REVISAR_AVISOS -> Icons.Rounded.Inbox
     AccionDelInicio.PREGUNTAR_A_MOVI -> Icons.Rounded.AutoAwesome
 }
 
 /**
- * **La cuadrícula de acciones** (camino 3): cuatro columnas, dos filas. «Anotar gasto» es la destacada
- * —lo que más se hace— y «Revisar avisos» lleva la insignia de lo que espera en Por revisar. Cada una
- * abre lo que ya existe (ver `destinoDeLaAccion`); «Subir comprobante» elige el archivo, y «Repartir»
- * abre la hoja del gasto compartido (`RepartirDesdeElInicio.kt`).
+ * **La cuadrícula de acciones** (camino 3): cuatro columnas, **una fila** (vuelta de diseño 26).
+ * «Anotar gasto» es la destacada —lo que más se hace— y «Avisos» lleva la insignia de lo que espera en
+ * Por revisar. Cada una abre lo que ya existe (ver `destinoDeLaAccion`). Traspaso, Pagar tarjeta,
+ * Repartir y Comprobante viven en el menú del «+» (ver `AccionDelInicio`).
  */
 @Composable
 internal fun AccionesDelInicioSection(
     data: DashboardData,
     onNavigate: (Screen) -> Unit,
-    onSubirComprobante: () -> Unit,
 ) {
     val insignia = pendientesPorRevisar(data)
-    // Vuelta de diseño 7: «Repartir» abre directo la hoja de anotar el gasto compartido (o elige el
-    // espacio, o lo crea) en vez de solo cambiar de pestaña. Ver `RepartirDesdeElInicio.kt`.
-    val repartir = rememberEstadoDeRepartir(onNavigate)
-    HojasDeRepartir(repartir)
     CuadriculaDeAcciones(
         acciones = accionesDelInicio().map { accion ->
             Accion(
                 rotulo = accion.rotulo,
                 icono = iconoDe(accion),
-                onClick = {
-                    if (accion == AccionDelInicio.REPARTIR) repartir.tocar()
-                    else destinoDeLaAccion(accion)?.let(onNavigate) ?: onSubirComprobante()
-                },
+                onClick = { onNavigate(destinoDeLaAccion(accion)) },
                 destacada = accion == AccionDelInicio.ANOTAR_GASTO,
                 insignia = if (accion == AccionDelInicio.REVISAR_AVISOS) insignia else null,
                 // Vuelta de diseño 22: la insignia dice de qué es su número («2 avisos · 1 movimiento»).
