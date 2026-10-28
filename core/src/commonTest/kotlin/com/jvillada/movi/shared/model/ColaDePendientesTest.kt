@@ -144,4 +144,20 @@ class ColaDePendientesTest {
         assertEquals(3, renglonesPorConfirmar(patas))
         assertEquals(0, renglonesPorConfirmar(emptyList()))
     }
+
+    /**
+     * Vuelta 49: la cuota que el banco cobra sola, vencida, es un fijo pendiente del checklist Y la
+     * pregunta de «Lo que el banco cobró solo». En la cola entra una vez: la pregunta.
+     */
+    @Test
+    fun `una cuota que el banco cobra sola entra una vez, como la pregunta del debito`() {
+        val cuota = pago("Cuota Vehículo 4083", 980_000, dias = -23).copy(ruleId = "d-Cuota Vehículo 4083", seCobraSola = true)
+        val cola = colaDePendientes(
+            checklist = listOf(cuota, pago("Arriendo", 1_800_000, dias = -2)),
+            debitos = listOf(debito("Cuota Vehículo 4083", 980_000)),
+        )
+        assertEquals(listOf("Arriendo", "débito Cuota Vehículo 4083"), nombres(cola))
+        // Sin la pregunta (la deuda en $0, o «No se cobró»), la cuota sigue en la cola como vencida.
+        assertEquals(listOf("Arriendo", "Cuota Vehículo 4083"), nombres(colaDePendientes(listOf(cuota, pago("Arriendo", 1_800_000, dias = -2)))))
+    }
 }
