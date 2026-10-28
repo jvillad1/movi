@@ -80,15 +80,70 @@ private fun palabrasOriginales(texto: String): List<String> {
     return palabras
 }
 
+/**
+ * Las siglas que llevan vocal y no se reconocerían por la regla de «sin vocales» («DIAN», «SOAT»):
+ * en minúscula, sin tildes, como las da [palabrasDeMarca]. Las de una marca del catálogo («EPM»,
+ * «ETB», «KFC») no hace falta ponerlas acá: salen de [ESCRITURA_DE_LAS_MARCAS].
+ */
+private val SIGLAS_CONOCIDAS: Set<String> = setOf(
+    "dian", "soat", "iva", "gmf", "pse", "eps", "ips", "icbf", "sena", "runt", "cdt", "afc", "ach", "atm",
+    "nit", "eds", "sas",
+)
+
+/**
+ * **Cómo escribe el catálogo cada palabra de sus marcas**, para devolverle a un texto en mayúsculas las
+ * tildes y las mayúsculas de la marca: «EXITO» → «Éxito», «OLIMPICA» → «Olímpica», «MCDONALDS» →
+ * «McDonald's», «EPM» → «EPM», «ITAU» → «Itaú». Palabra por palabra de [Marca.nombre] (solo las que
+ * no van todas en minúscula, como el «de» de «Metro de Medellín», y sin signos: «Disney+» no le pone
+ * el «+» a un «DISNEY»), con la llave como la da [palabrasDeMarca]. La primera marca del catálogo gana.
+ */
+private val ESCRITURA_DE_LAS_MARCAS: Map<String, String> = buildMap {
+    for (marca in MARCAS_CONOCIDAS) {
+        for (palabra in marca.nombre.split(' ')) {
+            if (palabra.length < 2 || palabra == palabra.lowercase()) continue
+            if (!palabra.all { it.isLetterOrDigit() || it == '\'' || it == '’' }) continue
+            val llave = palabrasDeMarca(palabra).singleOrNull() ?: continue
+            if (llave !in this) put(llave, palabra)
+        }
+    }
+}
+
 /** Una palabra en «Tipo Título»: siglas y números en mayúscula, conectores en minúscula. */
 private fun enTitulo(palabra: String, primera: Boolean): String {
     val minuscula = palabra.lowercase()
+    val llave = palabrasDeMarca(palabra).singleOrNull()
     return when {
         palabra.any { it.isDigit() } -> palabra.uppercase()
-        palabra.length in 2..3 && palabra.all { it.isLetter() } && minuscula.none { it in VOCALES } -> palabra.uppercase()
+        llave != null && llave in ESCRITURA_DE_LAS_MARCAS -> ESCRITURA_DE_LAS_MARCAS.getValue(llave)
+        palabra.length in 2..4 && palabra.all { it.isLetter() } && minuscula.none { it in VOCALES } -> palabra.uppercase()
+        llave != null && llave in SIGLAS_CONOCIDAS -> palabra.uppercase()
         !primera && minuscula in CONECTORES -> minuscula
         else -> minuscula.replaceFirstChar { it.uppercaseChar() }
     }
+}
+
+/**
+ * **Lo que el banco escribió en MAYÚSCULAS, en forma de título** (vuelta de diseño 32): «EXITO SUBA» →
+ * «Éxito Suba», «PAGO EPM» → «Pago EPM», «DIAN» → «DIAN», «TIENDA D1 CALLE 80» → «Tienda D1 Calle 80».
+ * La descripción de un movimiento que llegó del banco se veía así, gritando, en Movimientos, en su
+ * detalle, en Buscar y en el detalle de la cuenta.
+ *
+ * A diferencia de [nombreParaMostrar] **no quita nada** —ni la pasarela ni lo que sigue a la marca—:
+ * es la descripción entera, solo que escrita como se lee. Es la misma regla de las palabras (siglas de
+ * 2 a 4 letras sin vocales o conocidas, números, conectores en minúscula y la escritura de las marcas
+ * del catálogo, con sus tildes).
+ *
+ * - Un texto con alguna minúscula lo escribió alguien (el dueño, Movi al nombrar un tercero): **se
+ *   devuelve tal cual**.
+ * - Sin letras («123456»), tal cual.
+ *
+ * Pura y solo para mostrar: **nunca** para guardar ni para comparar.
+ */
+fun enFormaDeTitulo(texto: String): String {
+    val letras = texto.filter { it.isLetter() }
+    if (letras.isEmpty() || letras.any { it.isLowerCase() }) return texto
+    val limpio = texto.replace('\u00A0', ' ').trim().replace(Regex("\\s+"), " ")
+    return enTituloConservandoSeparadores(limpio)
 }
 
 /**

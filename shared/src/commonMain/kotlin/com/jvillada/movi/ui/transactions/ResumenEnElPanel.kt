@@ -1,6 +1,7 @@
 package com.jvillada.movi.ui.transactions
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FilaDelAnalisis
@@ -49,6 +51,7 @@ import com.jvillada.movi.ui.components.ds.TonoDeCifra
 import com.jvillada.movi.ui.components.ds.VarianteDeCifra
 import com.jvillada.movi.ui.components.ds.colorDeLaCifra
 import com.jvillada.movi.ui.components.ds.estiloDeLaCifra
+import com.jvillada.movi.ui.components.ds.rememberFormaComunDeLasCifras
 import com.jvillada.movi.ui.dashboard.CONTRA_EL_PERIODO_PASADO
 import com.jvillada.movi.ui.dashboard.CategoriaDelPeriodo
 import com.jvillada.movi.ui.dashboard.DiferenciaDeLaCategoria
@@ -176,9 +179,11 @@ fun muestraElResumenEnElTelefono(conPanel: Boolean, hayFiltro: Boolean, busqueda
     !conPanel && !hayFiltro && busqueda.isBlank()
 
 /**
- * La franja: «Entró · Salió · Neto», cada uno con su [CifraConRotulo] en forma compacta (es una
- * columna de tres: «$15,6M»). [resumen] `null` = todavía no se sabe: el esqueleto de las tres, del
- * mismo alto.
+ * La franja: «Entró · Salió · Neto», cada uno con su [CifraConRotulo]. Vuelta de diseño 32: las tres
+ * en la misma forma —enteras si caben, abreviadas las tres si una no cabe («+$850 mil · $1,8M ·
+ * −$902 mil»)—; antes iban en `Compacta`, que solo abrevia del millón para arriba, y a 390 px decía
+ * «+$850.000 · $1,8M · −$902.250». [resumen] `null` = todavía no se sabe: el esqueleto de las tres,
+ * del mismo alto.
  */
 @Composable
 internal fun ResumenDelPeriodoEnElTelefono(
@@ -187,29 +192,47 @@ internal fun ResumenDelPeriodoEnElTelefono(
     /** Su lugar en la lista: el margen y el aire de lo que va arriba de las filas. */
     modifier: Modifier = Modifier,
 ) {
-    Row(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = Medida.objetivoTactil)
             .renglonTocable(onClickLabel = VER_EN_QUE_SE_VA, onClick = onVerEnQueSeVa)
             .testTag(TAG_RESUMEN_EN_EL_TELEFONO),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Espacio.s),
+        contentAlignment = Alignment.CenterStart,
     ) {
-        if (resumen == null) {
-            EsqueletoDeCifraConRotulo(Modifier.weight(1f))
-            EsqueletoDeCifraConRotulo(Modifier.weight(1f))
-            EsqueletoDeCifraConRotulo(Modifier.weight(1f), alFinal = true)
-        } else {
-            CifraConRotulo("Entró", resumen.entro, Modifier.weight(1f), tono = TonoDeCifra.Ingreso, forma = FormaDeCifra.Compacta)
-            CifraConRotulo("Salió", resumen.salio, Modifier.weight(1f), forma = FormaDeCifra.Compacta)
-            CifraConRotulo(
-                "Neto", resumen.neto, Modifier.weight(1f),
-                tono = tonoDelNeto(resumen.neto), forma = FormaDeCifra.Compacta, alFinal = true,
-            )
+        val anchoDeCadaUna = anchoDeCadaCifra(maxWidth)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Espacio.s),
+        ) {
+            if (resumen == null) {
+                EsqueletoDeCifraConRotulo(Modifier.weight(1f))
+                EsqueletoDeCifraConRotulo(Modifier.weight(1f))
+                EsqueletoDeCifraConRotulo(Modifier.weight(1f), alFinal = true)
+            } else {
+                // Vuelta de diseño 32: las tres en la MISMA forma (ver [formaComunDeLasCifras]).
+                val forma = rememberFormaComunDeLasCifras(cifrasDelResumen(resumen), VarianteDeCifra.Fila, anchoDeCadaUna)
+                CifraConRotulo("Entró", resumen.entro, Modifier.weight(1f), tono = TonoDeCifra.Ingreso, forma = forma)
+                CifraConRotulo("Salió", resumen.salio, Modifier.weight(1f), forma = forma)
+                CifraConRotulo(
+                    "Neto", resumen.neto, Modifier.weight(1f),
+                    tono = tonoDelNeto(resumen.neto), forma = forma, alFinal = true,
+                )
+            }
         }
     }
 }
+
+/** Entró, Salió y Neto con su tono, en el orden en que se pintan: lo que mide la forma común. */
+fun cifrasDelResumen(resumen: ResumenDelPanel): List<Pair<Long, TonoDeCifra>> = listOf(
+    resumen.entro to TonoDeCifra.Ingreso,
+    resumen.salio to TonoDeCifra.Neutro,
+    resumen.neto to tonoDelNeto(resumen.neto),
+)
+
+/** Lo que tiene cada una de [cuantas] cifras lado a lado en [ancho], con [Espacio.s] entre ellas. */
+private fun anchoDeCadaCifra(ancho: Dp, cuantas: Int = 3): Dp = (ancho - Espacio.s * (cuantas - 1)) / cuantas
 
 /**
  * La diferencia de una fila contra el período pasado, dicha como en el widget «En qué se va» del
@@ -247,13 +270,18 @@ internal fun ResumenDelPeriodoEnElPanel(
     ) {
         Seccion(titulo = tituloDelPeriodo(resumen.periodo))
         Superficie(modifier = Modifier.fillMaxWidth()) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(Espacio.s),
-            ) {
-                CifraDelResumen("Entró", resumen.entro, TonoDeCifra.Ingreso, Modifier.weight(1f))
-                CifraDelResumen("Salió", resumen.salio, TonoDeCifra.Neutro, Modifier.weight(1f))
-                CifraDelResumen("Neto", resumen.neto, tonoDelNeto(resumen.neto), Modifier.weight(1f))
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                // Vuelta de diseño 32: la misma regla que la franja del teléfono. Si una no cabe
+                // entera, las tres van abreviadas (antes cada una se achicaba por su cuenta).
+                val forma = rememberFormaComunDeLasCifras(cifrasDelResumen(resumen), VarianteDeCifra.Grande, anchoDeCadaCifra(maxWidth))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(Espacio.s),
+                ) {
+                    CifraDelResumen("Entró", resumen.entro, TonoDeCifra.Ingreso, forma, Modifier.weight(1f))
+                    CifraDelResumen("Salió", resumen.salio, TonoDeCifra.Neutro, forma, Modifier.weight(1f))
+                    CifraDelResumen("Neto", resumen.neto, tonoDelNeto(resumen.neto), forma, Modifier.weight(1f))
+                }
             }
         }
 
@@ -282,10 +310,10 @@ internal fun ResumenDelPeriodoEnElPanel(
 
 /** Un rótulo («Entró») y su cifra, en un tercio de la superficie. */
 @Composable
-private fun CifraDelResumen(rotulo: String, monto: Long, tono: TonoDeCifra, modifier: Modifier) {
+private fun CifraDelResumen(rotulo: String, monto: Long, tono: TonoDeCifra, forma: FormaDeCifra, modifier: Modifier) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
         Text(rotulo, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, maxLines = 1)
-        Cifra(monto, VarianteDeCifra.Grande, tono = tono)
+        Cifra(monto, VarianteDeCifra.Grande, tono = tono, forma = forma)
     }
 }
 

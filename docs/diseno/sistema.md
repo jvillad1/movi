@@ -280,6 +280,18 @@ a lado o el patrimonio de Hoy van enteras: «$1,5M» al lado de un héroe entero
 Cifra(resumen.entradas, tono = TonoDeCifra.Ingreso, forma = FormaDeCifra.Compacta)   // +$15,6M
 ```
 
+**`FormaDeCifra.Abreviada`** (vuelta de diseño 32) — abreviada en **todas** las escalas: «$850 mil»
+(con espacio duro), «$1,8M», «$500». No se elige a mano: la decide **`formaComunDeLasCifras`** para un
+renglón de cifras que tienen que leerse en la misma forma (la franja Entró · Salió · Neto de
+Movimientos y su panel de escritorio). Si **todas** caben enteras en su lugar van `Entera`; si una no
+cabe, van `Abreviada` **las tres**. Nunca una entera al lado de una abreviada. Se mide de verdad con
+`rememberFormaComunDeLasCifras` (el texto entero de cada una con la letra de su variante; una que se
+achica, en su tamaño más chico: `pisoDeLaCifra`).
+```kotlin
+val forma = rememberFormaComunDeLasCifras(cifrasDelResumen(resumen), VarianteDeCifra.Fila, anchoDeCadaUna)
+CifraConRotulo("Entró", resumen.entro, Modifier.weight(1f), tono = TonoDeCifra.Ingreso, forma = forma)
+```
+
 **`CifraConRotulo`** (vuelta de diseño 19, `ds/CifraConRotulo.kt`) — una cifra con su nombre:
 «Tienes $1.528.700.000», «Entró +$15,6M», «Tuyo $1.250.000». El rótulo en `apoyo`, `textoMedio` y
 como se escribe (nunca en mayúsculas); la cifra es la `Cifra` del sistema, con su variante, tono,
@@ -1371,3 +1383,41 @@ Sin componentes nuevos en `ds/` (solo el tag `TAG_ICONO_EN_CIRCULO` de `IconoEnC
 Lo vigilan `LaDeudaEnSuDetalleTest`, `LaListaDeCreditosEsDeFilasTest`, `EspaciosEnPantallaTest`,
 `LosGastosDelEspacioSeLeenTest` (360 dp, motor de texto real), `ElCuadreDiceLoMismoTest`,
 `MasScreenTest` y `LosAvisosApagadosSeVenTest`.
+
+## 34. Vuelta de diseño 32: las cifras hablan igual en toda la pantalla
+
+Revisado en la vista previa de las vueltas 30 y 31 (3995d638) con la cuenta demo, a 390 px. Sin
+componentes nuevos en `ds/`: una forma más de `Cifra` (`FormaDeCifra.Abreviada`) y su regla.
+
+- **El total del día dice lo mismo que sus filas** (`totalDelDiaComoSusFilas`, `ui/accounts/ElTotalDelDia.kt`).
+  En el detalle de la tarjeta «Nu» el día decía «+$42.000» y su fila «−$42.000»: el total salía de
+  `accountDayTotal` (`:core`, ya borrada), con la convención de la deuda —una compra la sube—, y la fila
+  pinta el signo del gasto. Ahora, en **toda** cuenta, el total es la suma de sus filas con la
+  convención de Movimientos: lo que entró suma, todo lo demás resta. Se pinta como el de Movimientos:
+  `Cifra` `Chica`, `Ingreso` si es positivo. En una cuenta de dinero da lo mismo que antes. El saldo no
+  cambia: sigue saliendo del server con `signedDelta`.
+- **Una franja, una forma** (ver `FormaDeCifra.Abreviada` en §6): «Entró +$850.000 · Salió $1,8M · Neto
+  −$902.250» pasó a ser enteras las tres si caben, y abreviadas las tres si una no cabe. Lo mismo en el
+  panel de escritorio, donde antes cada cifra se achicaba por su cuenta.
+- **Lo que el banco manda en MAYÚSCULAS se lee en forma de título** (`enFormaDeTitulo`, `:core`
+  `NombreParaMostrar.kt`): «EXITO SUBA» → «Éxito Suba» (las tildes y mayúsculas salen del catálogo de
+  `MarcasConocidas`, palabra por palabra), «PAGO EPM» → «Pago EPM», «DIAN» → «DIAN». Respeta lo que trae
+  minúsculas, las siglas de 2 a 4 letras (sin vocales, del catálogo o conocidas) y los números; a
+  diferencia de `nombreParaMostrar` no quita nada. **Solo presentación**: lo guardado no cambia. La usan
+  la fila de un movimiento (`textosDeLaFila`, también en el detalle de una cuenta), su detalle
+  (`descripcionParaMostrar`), Buscar y el título de un gasto de un espacio.
+- **En Espacios el subtítulo de un gasto cabe en un renglón** a 360 dp: «26 oct · Caro · Mercado» (antes
+  «Pagó Caro» / «Pagaste tú»; el avatar ya dice quién pagó), sin la categoría cuando el título ya la
+  dice por palabras («Mercado del sábado»), y de un renglón: si aun así no cabe, la `Fila` corta la
+  categoría con «…» al final, nunca la fecha.
+- **La tarjeta también tiene «Qué puedes hacer»**, con o sin sus datos: «Registrar un pago» abre
+  «Agregar» en la pestaña del pago con la tarjeta en «Hacia» (`Screen.QuickAdd(presetDeudaId)`, la misma
+  hoja de «Anotar este pago»), y con datos, «Editar las condiciones». **«Ajustar saldo» no**: para una
+  tarjeta no existe en la app ni en el server (las dos rutas de ajuste la rechazan), y la vuelta no crea
+  flujos nuevos.
+
+**Las líneas base** no cambian: `dp_sueltos` 119, `radios_con_numero` 3, y las guardas en 0 siguen en 0.
+Lo vigilan `ElTotalDelDiaTest`, `LasCifrasDeUnRenglonHablanIgualTest`, `LaFilaDelMovimientoTest`,
+`PedirleACaroTest` y `NombreParaMostrarTest` (puras), y `LaTarjetaEnSuDetalleTest`,
+`LaFranjaHablaEnUnaFormaTest` y `LosGastosDelEspacioSeLeenTest` (Robolectric; las dos últimas a 360 dp con
+el motor de texto real).

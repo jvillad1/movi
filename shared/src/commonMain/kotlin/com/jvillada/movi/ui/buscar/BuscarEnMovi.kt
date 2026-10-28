@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.buscar
 
+import com.jvillada.movi.shared.model.enFormaDeTitulo
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.DestinoConocido
 import com.jvillada.movi.shared.model.FinancialEvent
@@ -75,7 +76,8 @@ sealed class ResultadoDeBusqueda {
     data class Movimiento(val evento: FinancialEvent) : ResultadoDeBusqueda() {
         override val tipo get() = TipoDeResultado.MOVIMIENTO
         override val clave get() = "mov:${evento.id}"
-        override val titulo get() = evento.description.ifBlank { evento.merchant ?: evento.category }
+        // Vuelta de diseño 32: lo que el banco mandó en mayúsculas, en forma de título (solo se pinta así).
+        override val titulo get() = enFormaDeTitulo(evento.description.ifBlank { evento.merchant ?: evento.category })
         override val destino: Screen? get() = null
     }
 
@@ -89,7 +91,7 @@ sealed class ResultadoDeBusqueda {
     ) : ResultadoDeBusqueda() {
         override val tipo get() = TipoDeResultado.COMERCIO
         override val clave get() = "com:${claveDeComercio(ejemplo) ?: nombre}"
-        override val titulo get() = nombre
+        override val titulo get() = enFormaDeTitulo(nombre)
         override val destino: Screen get() = Screen.Transactions(consultaInicial = nombre)
     }
 

@@ -524,8 +524,8 @@ private fun SaldoDelEspacioTarjeta(
 
 /**
  * La lista de gastos del espacio, con «Pagó otro» para anotar lo que pagó Caro. Vuelta 31: cada gasto
- * se toca y abre su detalle ([AlTocarUnGasto]); el subtítulo empieza por la fecha y va en hasta dos
- * renglones, así que nunca se corta.
+ * se toca y abre su detalle ([AlTocarUnGasto]). Vuelta 32: el subtítulo empieza por la fecha y cabe en
+ * un renglón ([quienPagoElGasto]); si no cabe, lo que se corta es la categoría, al final.
  */
 @Composable
 private fun GastosDelEspacio(
@@ -557,8 +557,8 @@ private fun GastosDelEspacio(
                     if (i > 0) Separador()
                     Fila(
                         titulo = tituloDelGasto(g),
+                        // Vuelta de diseño 32: un renglón; si no cabe, se corta la categoría (va al final).
                         subtitulo = quienPagoElGasto(espacio, g),
-                        lineasDelSubtitulo = 2,
                         inicio = { AvatarDePersona(nombreDelPagador(espacio, g.pagadoPor), tono = tonoDe(g.pagadoPor)) },
                         final = { MontoYTuParte(g.monto, g.partes[MIEMBRO_YO] ?: 0L) },
                         onClick = { abierto = g },

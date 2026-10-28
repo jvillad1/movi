@@ -67,4 +67,15 @@ class LaFilaDelMovimientoTest {
         assertEquals(TextosDeLaFila("Nu", "Mercado"), textosDeLaFila(gasto(merchant = "MERCADO"), "Nu"), "un comercio igual a la categoría no sirve")
         assertEquals(TextosDeLaFila("Mercado", null), textosDeLaFila(gasto(), null))
     }
+
+    /** Vuelta de diseño 32: lo que el banco manda en mayúsculas se lee en forma de título; lo guardado no cambia. */
+    @Test
+    fun `el comercio en mayusculas se lee en forma de titulo, y lo guardado no cambia`() {
+        val exito = gasto("EXITO SUBA", "Mercado")
+        assertEquals(TextosDeLaFila("Éxito Suba", "Mercado · Nu"), textosDeLaFila(exito, "Nu"))
+        assertEquals("EXITO SUBA", exito.description, "es solo presentación")
+        assertEquals(TextosDeLaFila("Éxito Suba", "Mercado · Nu"), textosDeLaFila(gasto(merchant = "EXITO SUBA"), "Nu"))
+        assertEquals("Pago EPM", descripcionParaMostrar(gasto("PAGO EPM", "Servicios")))
+        assertEquals("Almuerzo con el equipo", descripcionParaMostrar(gasto("Almuerzo con el equipo", "Comida")))
+    }
 }

@@ -14,6 +14,7 @@ import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.theme.MoviTheme
+import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.accounts.AccountDetailScreen
 
 /**
@@ -28,13 +29,15 @@ internal class RepositorioDeLaDeuda(
     private val creditos: List<CreditSummary> = emptyList(),
     private val tarjetas: List<CardSummary> = emptyList(),
     private val perfil: UserProfile? = null,
+    /** Los movimientos de la cuenta que se abre (vuelta de diseño 32: el total del día). */
+    private val eventos: List<FinancialEvent> = emptyList(),
 ) : RepositorioDePrueba() {
     val registrados = mutableListOf<String>()
     override suspend fun getCredits(): List<CreditSummary> = creditos
     override suspend fun getCards(): List<CardSummary> = tarjetas
     override suspend fun getAccount(id: String): Account =
         (creditos.map { it.account } + tarjetas.map { it.account }).first { it.id == id }
-    override suspend fun getEvents(accountId: String?): List<FinancialEvent> = emptyList()
+    override suspend fun getEvents(accountId: String?): List<FinancialEvent> = eventos.filter { accountId == null || it.accountId == accountId }
     override suspend fun getUserProfile(): UserProfile = perfil ?: error("sin perfil")
     override suspend fun registerPayrollDeduction(accountId: String): CreditSummary {
         registrados += accountId
@@ -43,16 +46,20 @@ internal class RepositorioDeLaDeuda(
 }
 
 /** Monta el detalle de [cuenta] con [repo] y espera a que la sección de la deuda (o su aviso) llegue. */
-internal fun ComposeContentTestRule.montarElDetalleDe(cuenta: Account, repo: RepositorioDeLaDeuda) {
+internal fun ComposeContentTestRule.montarElDetalleDe(
+    cuenta: Account,
+    repo: RepositorioDeLaDeuda,
+    onNavigate: (Screen) -> Unit = {},
+) {
     Repositories.sustitutoDePrueba = repo
     setContent {
         MoviTheme {
             Box(Modifier.fillMaxSize()) {
-                AccountDetailScreen(onNavigate = {}, accountId = cuenta.id, group = cuenta.type.group)
+                AccountDetailScreen(onNavigate = onNavigate, accountId = cuenta.id, group = cuenta.type.group)
             }
         }
     }
-    // Una tarjeta sin términos no tiene sección (nada que decir ni que hacer): solo el aviso de arriba.
+    // Un préstamo sin términos ni acciones no tendría sección: se espera la sección o el aviso de arriba.
     waitUntil(timeoutMillis = 5_000) {
         onAllNodesWithTag(TAG_SECCION_DE_LA_DEUDA, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() ||
             onAllNodesWithTag(TAG_FALTAN_DATOS_DE_LA_DEUDA, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
