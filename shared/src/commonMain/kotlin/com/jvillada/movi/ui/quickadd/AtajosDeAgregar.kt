@@ -17,28 +17,53 @@ enum class PestanaDeAgregar(internal val indice: Int) {
  * # Ola 5 · los atajos del «+»
  *
  * **Mantener presionado** el «+» (la barra del teléfono y el rail) abre un menú corto con lo que se
- * anota casi siempre. Cada uno abre «Agregar» en su pestaña, y «Subir comprobante» va al flujo de
- * papeles de siempre («Compartir con Movi», ver `PapelesCompartidos`). **Tocar** el «+» sigue
- * abriendo la hoja como antes.
+ * anota casi siempre; en la web y el escritorio también el clic derecho, y en el rail ancho la flecha
+ * de «Agregar» (vuelta de diseño 26, ver `BotonDeAgregarConAtajos`). Cada uno abre «Agregar» en su
+ * pestaña, «Repartir» abre la hoja del gasto compartido (la de la vuelta 7, `EstadoDeRepartir`) y
+ * «Subir comprobante» va al flujo de papeles de siempre («Compartir con Movi», ver
+ * `PapelesCompartidos`). **Tocar** el «+» sigue abriendo la hoja como antes.
+ *
+ * Vuelta de diseño 26: la cuadrícula del Inicio quedó en cuatro acciones, y Traspaso, Pagar tarjeta,
+ * Repartir y Comprobante viven acá. Tres ya estaban; «Repartir» llegó de la cuadrícula.
  */
 enum class AtajoDeAgregar(val rotulo: String) {
     GASTO("Gasto"),
     INGRESO("Ingreso"),
     TRASPASO("Traspaso"),
     PAGO_DE_TARJETA("Pago de tarjeta"),
+    REPARTIR("Repartir"),
     SUBIR_COMPROBANTE("Subir comprobante"),
 }
 
 /**
- * La hoja que abre [atajo], o `null` para «Subir comprobante», que no es la hoja: es elegir un
- * archivo y dejarlo en `PapelesCompartidos`.
+ * La hoja de «Agregar» que abre [atajo], o `null` para «Repartir» y «Subir comprobante», que no son
+ * esa hoja: uno lee los espacios y abre la suya, el otro elige un archivo y lo deja en
+ * `PapelesCompartidos`.
  */
 fun pantallaDelAtajo(atajo: AtajoDeAgregar): Screen.QuickAdd? = when (atajo) {
     AtajoDeAgregar.GASTO -> Screen.QuickAdd(presetPestana = PestanaDeAgregar.GASTO)
     AtajoDeAgregar.INGRESO -> Screen.QuickAdd(presetEsIngreso = true, presetPestana = PestanaDeAgregar.INGRESO)
     AtajoDeAgregar.TRASPASO -> Screen.QuickAdd(presetPestana = PestanaDeAgregar.TRASPASO)
     AtajoDeAgregar.PAGO_DE_TARJETA -> Screen.QuickAdd(presetPestana = PestanaDeAgregar.PAGO_DE_TARJETA)
-    AtajoDeAgregar.SUBIR_COMPROBANTE -> null
+    AtajoDeAgregar.REPARTIR, AtajoDeAgregar.SUBIR_COMPROBANTE -> null
+}
+
+/**
+ * **Lo que hace elegir [atajo]** en el menú del «+»: abrir su hoja de «Agregar» ([pantallaDelAtajo]),
+ * [repartir] (tocar «Repartir», `EstadoDeRepartir.tocar`) o [elegirComprobante]. Lo llama la cáscara
+ * (`App.kt`), que es dueña de los tres.
+ */
+fun hacerElAtajo(
+    atajo: AtajoDeAgregar,
+    navegar: (Screen) -> Unit,
+    repartir: () -> Unit,
+    elegirComprobante: () -> Unit,
+) {
+    when (atajo) {
+        AtajoDeAgregar.REPARTIR -> repartir()
+        AtajoDeAgregar.SUBIR_COMPROBANTE -> elegirComprobante()
+        else -> pantallaDelAtajo(atajo)?.let(navegar)
+    }
 }
 
 /**

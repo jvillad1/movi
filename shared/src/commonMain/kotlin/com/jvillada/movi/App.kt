@@ -36,7 +36,9 @@ import com.jvillada.movi.ui.buscar.BuscarScreen
 import com.jvillada.movi.ui.extractos.TiposDeArchivo
 import com.jvillada.movi.ui.extractos.rememberFilePicker
 import com.jvillada.movi.ui.quickadd.AtajoDeAgregar
-import com.jvillada.movi.ui.quickadd.pantallaDelAtajo
+import com.jvillada.movi.ui.quickadd.hacerElAtajo
+import com.jvillada.movi.ui.espacios.HojasDeRepartir
+import com.jvillada.movi.ui.espacios.rememberEstadoDeRepartir
 import com.jvillada.movi.ui.papeles.EscucharArchivosSoltados
 import com.jvillada.movi.ui.papeles.HojaLeyendoElPapel
 import com.jvillada.movi.ui.papeles.PapelesCompartidos
@@ -380,12 +382,14 @@ fun App() {
                 // Ola 5 · los atajos del «+» (mantenerlo presionado): cada uno abre «Agregar» en su
                 // pestaña; «Subir comprobante» elige el archivo y lo deja en [PapelesCompartidos],
                 // la misma puerta que Por revisar y Agregar (la hoja «Movi está leyendo…» lo toma).
+                // Vuelta de diseño 26: «Repartir» llegó acá desde la cuadrícula del Inicio, con la
+                // misma hoja de la vuelta 7 (sus hojas se pintan abajo, en el hueco de la pantalla).
                 val elegirComprobante = rememberFilePicker(TiposDeArchivo.EXTRACTOS) { nombre, bytes, mime ->
                     PapelesCompartidos.recibir(listOf(ArchivoCompartido(nombre, bytes, mime)))
                 }
+                val repartir = rememberEstadoDeRepartir(navigate)
                 val onAtajo: (AtajoDeAgregar) -> Unit = { atajo ->
-                    val hoja = pantallaDelAtajo(atajo)
-                    if (hoja != null) navigate(hoja) else elegirComprobante()
+                    hacerElAtajo(atajo, navegar = navigate, repartir = repartir::tocar, elegirComprobante = elegirComprobante)
                 }
 
                 // Los márgenes a los lados de la columna reenvían la rueda del mouse a la lista de
@@ -588,6 +592,10 @@ fun App() {
                         },
                         prefill = propuesta,
                     )
+                }
+                // «Repartir» desde el menú del «+»: elegir el espacio o crearlo (vuelta de diseño 26).
+                CompositionLocalProvider(LocalGoBack provides goBackTo, LocalNavigate provides navigate) {
+                    HojasDeRepartir(repartir)
                 }
                 } // EsqueletoDeLaCascara (el hueco de la pantalla)
                 } // CompositionLocalProvider

@@ -65,51 +65,36 @@ fun elHeroePideLaCuenta(data: DashboardData): Boolean = data.accounts?.isEmpty()
 // ── La cuadrícula de acciones ────────────────────────────────────────────────
 
 /**
- * **«Repartir» ya se muestra** (ola R3, Espacios). R1 la dejó apagada porque abría «Agregar» con un
- * «Pronto». Desde la vuelta de diseño 7 abre directo la hoja «Pagó otro» del espacio (o elige el
- * espacio, o lo crea): ver `ui/espacios/RepartirDesdeElInicio.kt`. Un gasto propio se reparte desde su
- * detalle en Movimientos.
- */
-const val REPARTIR_ESTA_LISTO: Boolean = true
-
-/**
  * Las acciones de la cuadrícula del Inicio (camino 3), en su orden.
  *
+ * **Cuatro, en una fila** (vuelta de diseño 26, decisión del dueño «Dejar 4»): Gasto, Ingreso,
+ * Avisos (con su insignia) y Preguntar. Eran ocho en dos filas; **Traspaso, Pagar tarjeta, Repartir y
+ * Comprobante** se mudaron al menú del «+» (`AtajoDeAgregar`: mantenerlo presionado en el teléfono, o
+ * el clic derecho y la flecha de «Agregar» en la web y el escritorio, ver `BotonDeAgregarConAtajos`).
+ * Ninguno perdió su camino: es el mismo destino de antes, desde otro gesto.
+ *
  * [rotulo] es lo que se lee debajo del círculo: **una palabra o dos, en un renglón** (vuelta de diseño
- * 2: «Anotar ingreso», «Subir comprobante» y «Preguntar a Movi» iban en dos renglones y el resto en
- * uno, y la cuadrícula quedaba despareja). [descripcion] es la frase entera, la que dice el lector de
- * pantalla. Los pinta el cliente: la definición SDUI solo trae la sección `ACCIONES`, no los rótulos.
+ * 2). [descripcion] es la frase entera, la que dice el lector de pantalla. Los pinta el cliente: la
+ * definición SDUI solo trae la sección `ACCIONES`, no los rótulos, así que un APK viejo sigue con sus
+ * ocho y el server no cambia.
  */
 enum class AccionDelInicio(val rotulo: String, val descripcion: String) {
     ANOTAR_GASTO("Gasto", "Anotar un gasto"),
     ANOTAR_INGRESO("Ingreso", "Anotar un ingreso"),
-    TRASPASAR("Traspaso", "Anotar un traspaso"),
-    PAGAR_TARJETA("Pagar tarjeta", "Pagar una tarjeta"),
-    REPARTIR("Repartir", "Repartir un gasto"),
-    SUBIR_COMPROBANTE("Comprobante", "Subir un comprobante"),
     REVISAR_AVISOS("Avisos", "Revisar los avisos"),
     PREGUNTAR_A_MOVI("Preguntar", "Preguntarle a Movi"),
 }
 
-/** Las acciones que se ven: todas (con [REPARTIR_ESTA_LISTO] en `false`, todas menos «Repartir»). */
-fun accionesDelInicio(repartirListo: Boolean = REPARTIR_ESTA_LISTO): List<AccionDelInicio> =
-    AccionDelInicio.entries.filter { it != AccionDelInicio.REPARTIR || repartirListo }
+/** Las acciones que se ven, en su orden. */
+fun accionesDelInicio(): List<AccionDelInicio> = AccionDelInicio.entries
 
 /**
  * A dónde lleva cada acción: **lo que ya existe**. Las de anotar son los atajos del «+» (la hoja de
  * «Agregar» en su pestaña, `pantallaDelAtajo`); revisar es Por revisar; preguntar es Movi AI.
- * «Repartir» lo resuelve la pantalla (lee los espacios y abre la hoja que toca); Espacios es a donde va
- * si no se pudieron leer.
- * «Subir comprobante» devuelve `null`: no es una pantalla, es elegir un archivo y dejarlo en el flujo
- * de papeles (lo hace la pantalla, como el atajo del «+»).
  */
-fun destinoDeLaAccion(accion: AccionDelInicio): Screen? = when (accion) {
-    AccionDelInicio.ANOTAR_GASTO -> pantallaDelAtajo(AtajoDeAgregar.GASTO)
-    AccionDelInicio.ANOTAR_INGRESO -> pantallaDelAtajo(AtajoDeAgregar.INGRESO)
-    AccionDelInicio.TRASPASAR -> pantallaDelAtajo(AtajoDeAgregar.TRASPASO)
-    AccionDelInicio.PAGAR_TARJETA -> pantallaDelAtajo(AtajoDeAgregar.PAGO_DE_TARJETA)
-    AccionDelInicio.REPARTIR -> Screen.Espacios
-    AccionDelInicio.SUBIR_COMPROBANTE -> null
+fun destinoDeLaAccion(accion: AccionDelInicio): Screen = when (accion) {
+    AccionDelInicio.ANOTAR_GASTO -> pantallaDelAtajo(AtajoDeAgregar.GASTO)!!
+    AccionDelInicio.ANOTAR_INGRESO -> pantallaDelAtajo(AtajoDeAgregar.INGRESO)!!
     AccionDelInicio.REVISAR_AVISOS -> Screen.PorRevisar
     AccionDelInicio.PREGUNTAR_A_MOVI -> Screen.AIChat()
 }

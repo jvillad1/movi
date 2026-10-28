@@ -66,6 +66,10 @@ fun ConfirmacionEnLinea(
 /**
  * La confirmación como hoja propia. La pregunta y su detalle son el [EncabezadoDeHoja] (vuelta de
  * diseño 18): «¿Borrar el enlace?» en `titulo` y lo que se borra y lo que no, debajo, en `cuerpo`.
+ *
+ * [varianteConfirmar] es `Peligro` para lo que se borra. Vuelta de diseño 26: lo que se confirma sin
+ * destruir nada («¿Caro ya te pagó $76.050?» antes de saldar un espacio) va en `Principal`: el rojo es
+ * para lo que no tiene vuelta, no para un pago.
  */
 @Composable
 fun ConfirmarEnHoja(
@@ -75,6 +79,7 @@ fun ConfirmarEnHoja(
     ocupado: Boolean,
     onConfirmar: () -> Unit,
     onCancelar: () -> Unit,
+    varianteConfirmar: VarianteDeBoton = VarianteDeBoton.Peligro,
 ) {
     MarcoDeHoja(
         onDismiss = onCancelar,
@@ -84,7 +89,7 @@ fun ConfirmarEnHoja(
     ) {
         EncabezadoDeHoja(pregunta, subtitulo = detalle)
         Spacer(Modifier.height(Medida.entreSecciones))
-        BotonesDeConfirmar(textoConfirmar, ocupado, onConfirmar, onCancelar, TamanoDeBoton.M)
+        BotonesDeConfirmar(textoConfirmar, ocupado, onConfirmar, onCancelar, TamanoDeBoton.M, varianteConfirmar)
     }
 }
 
@@ -105,6 +110,7 @@ private fun BotonesDeConfirmar(
     onConfirmar: () -> Unit,
     onCancelar: () -> Unit,
     tamano: TamanoDeBoton,
+    variante: VarianteDeBoton = VarianteDeBoton.Peligro,
 ) {
     Row(
         horizontalArrangement = Arrangement.spacedBy(Espacio.xs, Alignment.End),
@@ -121,7 +127,7 @@ private fun BotonesDeConfirmar(
         Boton(
             textoConfirmar,
             onClick = onConfirmar,
-            variante = VarianteDeBoton.Peligro,
+            variante = variante,
             tamano = tamano,
             cargando = ocupado,
         )
