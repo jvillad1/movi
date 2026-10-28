@@ -4,6 +4,10 @@ import com.jvillada.movi.ui.components.ds.coloresDeLoElegido
 import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.ui.components.ds.BotonDeIcono
 import com.jvillada.movi.ui.components.ds.PildoraDeAccion
+import com.jvillada.movi.ui.components.ds.FilaDeCategorias
+import com.jvillada.movi.ui.components.ds.ROTULO_DE_LA_FILA_DE_CATEGORIAS
+import com.jvillada.movi.ui.components.ds.TODAS_LAS_CATEGORIAS_EN_LA_FILA
+import com.jvillada.movi.ui.components.ds.TagsDeLaFilaDeCategorias
 import com.jvillada.movi.ui.components.ds.AltoDePildora
 import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
 import com.jvillada.movi.ui.components.ds.AltoDeFiltro
@@ -125,17 +129,6 @@ import com.jvillada.movi.ui.fecha.hoyEnAppZone
 import kotlinx.datetime.Clock
 import kotlinx.datetime.LocalDate
 import com.jvillada.movi.ui.fecha.timestampParaFecha
-
-/**
- * El alto MÍNIMO de la fila de chips de categorías frecuentes (ver [CategoriaChipsRow]): a letra
- * normal la fila mide esto y nada más, así que no se mueve bajo el dedo; con la escala de letra de
- * Movi agrandada crece lo justo para que el chip entre entero (ver el porqué en
- * [CategoriaChipsRow]). No hay un token de
- * `Movi.*` para alturas de fila (`Tokens.kt` solo tiene `espacios`, `formas`, `textos` y
- * `colores`): es un tamaño de componente, no un espacio ni una forma, así que queda como literal
- * — mismo criterio que `ALTO_BARRA_INFERIOR` en los tests de esta hoja.
- */
-private val ALTO_FILA_DE_CHIPS = 40.dp
 
 /** La flecha «‹» del encabezado de un sub-editor, que vuelve al formulario. Ver [PickerHeader]. */
 internal const val TAG_VOLVER_DEL_SUB_EDITOR = "quickadd:volver-del-sub-editor"
@@ -1666,6 +1659,12 @@ fun QuickAddScreen(
                 ),
                 // El campo de la hoja es el monto de Agregar, no una copia.
                 onMonto = { amount = it?.toString().orEmpty() },
+                // Vuelta 46: la categoría y la fecha también: los mismos datos de Agregar.
+                categorias = pastillasDeLaCategoria(categoriasFrecuentesDelTipo, category),
+                onCategoria = ::elegirCategoriaAMano,
+                fecha = fecha,
+                hoy = hoy,
+                onFecha = { fecha = it },
                 onDismiss = { repartiendo = false },
                 onListo = { guardado ->
                     repartiendo = false
@@ -1711,7 +1710,7 @@ private fun EditorBody(
     /**
      * Task 5: `"Movi la reconoce: <nombre>"` cuando la categoría de arriba la puso una sugerencia
      * automática — `null` el resto del tiempo, incluido mientras el dueño elige a mano. Va en el
-     * renglón del rótulo «Categoría», a la derecha (ver [EncabezadoDeLaCategoria]).
+     * renglón del rótulo «Categoría», a la derecha (ver [FilaDeCategorias]).
      */
     categoriaSugeridaHint: String? = null,
     /**
@@ -1848,12 +1847,16 @@ private fun EditorBody(
         // «Categoría · Restaurantes ›» y, justo debajo, los chips con «Restaurantes» marcado: lo mismo
         // dos veces. Queda el rótulo, en la letra de las filas de «Cuenta» y «Nota», con «Todas ›» a
         // la derecha —el selector entero—, y los chips con la elegida marcada.
-        EncabezadoDeLaCategoria(sugerencia = categoriaSugeridaHint, onTodas = onPickCategory)
-        CategoriaChipsRow(
+        // Vuelta 46: el componente del sistema (`FilaDeCategorias`), el mismo de Revisar aviso, la
+        // tarjeta de Por revisar, «Repartir este gasto» y «Pagó otro».
+        FilaDeCategorias(
             categorias = pastillasDeLaCategoria(categoriasFrecuentes, category),
-            categoriaElegida = category,
-            onPick = onPickCategoriaFrecuente,
+            elegida = category,
+            onElegir = onPickCategoriaFrecuente,
+            onTodas = onPickCategory,
             onNueva = onNuevaCategoria,
+            sugerencia = categoriaSugeridaHint,
+            tags = TAGS_DE_LA_CATEGORIA_EN_AGREGAR,
         )
         Separador(SangriaDeSeparador.Margen)
         // Ola 11 — DE DÓNDE SALIÓ LA CUENTA QUE DICE AL LADO, Y POR QUÉ ESTE RENGLÓN
@@ -2122,209 +2125,12 @@ private fun EditorBody(
 internal fun pastillasDeLaCategoria(frecuentes: List<String>, elegida: String): List<String> =
     if (frecuentes.isEmpty() && elegida.isNotBlank()) listOf(elegida) else frecuentes
 
-/**
- * **El rótulo de la fila de chips: «Categoría ……… Todas ›»** (vuelta 34). «Categoría» va en la letra
- * de los títulos de las filas «Cuenta» y «Nota» ([FilaDeLaHoja]); «Todas ›» a la derecha, como el
- * «Ver todo» de una [com.jvillada.movi.ui.components.ds.Seccion] (en la marca, en `cuerpo`) más el
- * [Chevron] de lo que se abre, y abre el selector entero. Va acá y no al final de los chips porque
- * ahí quedaba fuera de la pantalla en el teléfono y en el computador, y desplazar de lado con el
- * mouse es incómodo: en este renglón **siempre se ve**.
- *
- * Entre los dos, «Movi la reconoce: …» cuando la categoría la puso una sugerencia: es lo único que
- * cede, y se corta con «…»; ni el rótulo ni «Todas ›» se cortan nunca. Antes era un renglón propio
- * que aparecía y se iba al elegir otra a mano, y la hoja cambiaba de alto bajo el dedo; ahora el
- * renglón está siempre.
- *
- * **Mide el objetivo táctil (48)**, que es lo que mide el toque de «Todas ›» y lo que medía la fila
- * «Categoría ›» que reemplaza: la tarjeta queda del alto de antes de la vuelta 34, menos un separador.
- */
-@Composable
-internal fun EncabezadoDeLaCategoria(sugerencia: String?, onTodas: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = Medida.margenDePantalla, end = Medida.margenDePantalla - Espacio.xs)
-            .testTag(TAG_ENCABEZADO_DE_LA_CATEGORIA),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Espacio.s),
-    ) {
-        Text(ROTULO_CATEGORIA_EN_AGREGAR, style = Movi.textos.cuerpo, color = Movi.colores.texto, maxLines = 1, softWrap = false)
-        Text(
-            text = sugerencia.orEmpty(),
-            style = Movi.textos.apoyo,
-            color = Movi.colores.textoMedio,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = androidx.compose.ui.text.style.TextAlign.End,
-            modifier = Modifier.weight(1f),
-        )
-        Row(
-            modifier = Modifier
-                .heightIn(min = Medida.objetivoTactil)
-                .clip(RoundedCornerShape(Radio.s))
-                .clickable(role = Role.Button, onClickLabel = "Ver todas las categorías", onClick = onTodas)
-                .padding(horizontal = Espacio.xs)
-                .testTag(TAG_PASTILLA_TODAS_LAS_CATEGORIAS_AGREGAR),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(TODAS_LAS_CATEGORIAS, style = Movi.textos.cuerpo, color = Movi.colores.enlace, maxLines = 1, softWrap = false)
-            Icon(
-                Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-                contentDescription = null,
-                tint = Movi.colores.enlace,
-                modifier = Modifier.size(Icono.m),
-            )
-        }
-    }
-}
-
-/**
- * «Nueva» y las categorías que más se usan para este tipo — ver
- * [categoriasParaLasPastillasDeAgregar], que decide cuáles y en qué orden (Ola A). Tocar una la elige
- * sin abrir el selector; la elegida se ve activa, y **es el único lugar donde se ve** (vuelta 34).
- *
- * **Vuelta de diseño 20: las píldoras del sistema.** Cada categoría es un [PildoraDeFiltro] —llena de
- * marca la elegida, en la capa 2 las demás, que sobre la capa 1 de la tarjeta sí se ven— y «Nueva»
- * es un [PildoraDeAccion]: hace algo, no se elige. El selector entero lo abre «Todas ›», en el
- * renglón del rótulo ([EncabezadoDeLaCategoria]).
- *
- * **La elegida siempre a la vista.** Si queda fuera del desplazamiento —se eligió en el selector una
- * que es la sexta, o la fila volvió al principio al cerrarlo—, la fila se corre lo justo para
- * mostrarla entera. Solo la fila, en horizontal: un `bringIntoView` también correría la hoja hacia
- * arriba o hacia abajo, y la hoja no se mueve bajo el dedo. Tocar una que ya se ve entera no mueve
- * nada (lo cuida `HojaAgregarCategoriasFrecuentesTest`).
- *
- * **Alto mínimo, no fijo.** Las píldoras miden [Medida.altoChico] (36) y entran con aire en los 40 dp
- * de [ALTO_FILA_DE_CHIPS]; si el dueño agranda la escala de letra la fila crece lo justo para que el
- * texto se lea entero (lo mide `HojaAgregarChipsSeLeenEnterosTest`). Una sola fila con
- * desplazamiento horizontal propio: no empuja el resto del formulario. Va dentro de una `Superficie`
- * con relleno de lista, así que el margen de la pantalla lo pone la fila, adentro del desplazamiento
- * (las píldoras se deslizan hasta el borde de la tarjeta).
- */
-/**
- * **Cuánto correr la fila de pastillas para que la elegida se vea entera**, o `null` si ya se ve.
- * Pura: la prueba `LaFilaDePastillasNoCortaTest`.
- *
- * Todo en píxeles. [lugar] y [pastillas] se miden adentro del margen de la fila (el de la pantalla, que
- * en el desplazamiento va antes de la primera pastilla); [pastillas] son TODAS, «Nueva» incluida.
- *
- * - Si la elegida quedó a la izquierda, la fila se corre hasta que la elegida arranca en el margen.
- * - Si quedó a la derecha (vuelta 45), **ninguna pastilla queda a medias contra el borde izquierdo**: la
- *   fila se corre lo mínimo para ver la elegida entera y, si eso partía una pastilla, hasta esconderla
- *   entera. Antes se corría lo justo para la elegida y a 360 dp «+ Nueva» quedaba partida. Como el aire
- *   entre pastillas es menor que el margen, la primera que se ve puede quedar un poco más cerca del
- *   borde que el margen, pero entera.
- *
- * El resultado puede pasar del máximo del desplazamiento (la elegida es de las últimas): ahí la fila
- * agrega aire al final para poder llegar ([CategoriaChipsRow]) en vez de quedarse corta.
- */
-internal fun desplazamientoParaLaElegida(
-    lugar: IntRange,
-    pastillas: List<IntRange>,
-    desde: Int,
-    ventana: Int,
-    margen: Int,
-): Int? {
-    // En el desplazamiento, el margen va antes de la primera pastilla.
-    val izquierda = lugar.first + margen
-    val derecha = lugar.last + margen
-    val destino = when {
-        izquierda < desde -> lugar.first
-        derecha > desde + ventana -> {
-            // Lo mínimo que hay que correr para ver la elegida entera, con su margen a la derecha.
-            val minimo = derecha - ventana + margen
-            // Si en ese punto una pastilla queda partida en el borde izquierdo, se corre hasta su final.
-            val partida = pastillas.firstOrNull { it.first + margen < minimo && it.last + margen > minimo }
-            if (partida != null) partida.last + margen else minimo
-        }
-        else -> return null
-    }
-    return destino.coerceAtLeast(0)
-}
-
-/** La clave de «Nueva» entre los lugares de las pastillas: ninguna categoría se llama así. */
-private const val CLAVE_DE_NUEVA = "\u0000nueva"
-
-@Composable
-internal fun CategoriaChipsRow(
-    categorias: List<String>,
-    categoriaElegida: String,
-    onPick: (String) -> Unit,
-    onNueva: () -> Unit,
-) {
-    val desplazamiento = rememberScrollState()
-    // Dónde quedó cada pastilla, en píxeles de la fila (lo que no cambia al desplazar).
-    val lugares = remember { mutableStateMapOf<String, IntRange>() }
-    val margen = with(LocalDensity.current) { Medida.margenDePantalla.roundToPx() }
-    val reducido = LocalMovimientoReducido.current
-    val lugarDeLaElegida = lugares[categoriaElegida]
-    // Vuelta 45: el aire que se agrega al final para que la fila pueda correrse hasta el borde de una
-    // pastilla aunque la elegida sea la última (ver [desplazamientoParaLaElegida]). En píxeles.
-    var colaExtra by remember { mutableStateOf(0) }
-    LaunchedEffect(categoriaElegida, lugarDeLaElegida, desplazamiento.viewportSize, desplazamiento.maxValue) {
-        val lugar = lugarDeLaElegida ?: return@LaunchedEffect
-        val ventana = desplazamiento.viewportSize
-        if (ventana <= 0) return@LaunchedEffect
-        val destino = desplazamientoParaLaElegida(
-            lugar = lugar,
-            pastillas = lugares.values.toList(),
-            desde = desplazamiento.value,
-            ventana = ventana,
-            margen = margen,
-        ) ?: return@LaunchedEffect
-        if (destino > desplazamiento.maxValue) {
-            // La elegida es de las últimas: sin aire al final la fila no llega al borde de la pastilla
-            // y la primera visible quedaría cortada. Se agrega lo que falta; con el máximo nuevo este
-            // efecto vuelve a correr y ahí sí se desplaza.
-            colaExtra += destino - desplazamiento.maxValue
-            return@LaunchedEffect
-        }
-        if (reducido) desplazamiento.scrollTo(destino) else desplazamiento.animateScrollTo(destino)
-    }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = ALTO_FILA_DE_CHIPS)
-            .horizontalScroll(desplazamiento)
-            .padding(horizontal = Medida.margenDePantalla),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
-    ) {
-        // Ola L: «Nueva», PRIMERA de la fila: al final quedaba detrás de los chips, fuera de pantalla
-        // en un teléfono. Abre el selector con el cursor en «Buscar o crear categoría».
-        PildoraDeAccion(
-            texto = "Nueva",
-            onClick = onNueva,
-            icono = Icons.Rounded.Add,
-            descripcion = "Nueva categoría",
-            modifier = Modifier
-                .testTag(TAG_PASTILLA_NUEVA_CATEGORIA_AGREGAR)
-                // Vuelta 45: también cuenta para no dejarla partida contra el borde (su clave no es un
-                // nombre de categoría posible: lleva un carácter de control).
-                .onPlaced { lugar ->
-                    val x = lugar.positionInParent().x.toInt()
-                    lugares[CLAVE_DE_NUEVA] = x..(x + lugar.size.width)
-                },
-        )
-        categorias.forEach { nombre ->
-            PildoraDeFiltro(
-                texto = nombre,
-                seleccionada = nombre == categoriaElegida,
-                onClick = { onPick(nombre) },
-                // Compacto, como «Nueva» al lado (36): la hoja está anclada abajo y con 44 el pie
-                // «Guardar movimiento» se salía a 360 × 740 (vuelta 29).
-                alto = AltoDeFiltro.Compacto,
-                modifier = Modifier.onPlaced { lugar ->
-                    val x = lugar.positionInParent().x.toInt()
-                    lugares[nombre] = x..(x + lugar.size.width)
-                },
-            )
-        }
-        if (colaExtra > 0) {
-            Spacer(Modifier.width(with(LocalDensity.current) { colaExtra.toDp() }))
-        }
-    }
-}
+/** Los `testTag` de la fila de la categoría en Agregar (los de siempre, ver [FilaDeCategorias]). */
+internal val TAGS_DE_LA_CATEGORIA_EN_AGREGAR = TagsDeLaFilaDeCategorias(
+    encabezado = TAG_ENCABEZADO_DE_LA_CATEGORIA,
+    todas = TAG_PASTILLA_TODAS_LAS_CATEGORIAS_AGREGAR,
+    nueva = TAG_PASTILLA_NUEVA_CATEGORIA_AGREGAR,
+)
 
 /**
  * **El cursor del monto** (vuelta 34): una raya de la marca, del alto de la letra de la cifra, que
@@ -2364,10 +2170,10 @@ private fun CursorDelMonto() {
 }
 
 /** El rótulo de la fila de chips de la categoría. */
-internal const val ROTULO_CATEGORIA_EN_AGREGAR: String = "Categoría"
+internal const val ROTULO_CATEGORIA_EN_AGREGAR: String = ROTULO_DE_LA_FILA_DE_CATEGORIAS
 
 /** «Todas ›», a la derecha del rótulo: abre el selector entero. */
-internal const val TODAS_LAS_CATEGORIAS: String = "Todas"
+internal const val TODAS_LAS_CATEGORIAS: String = TODAS_LAS_CATEGORIAS_EN_LA_FILA
 
 /** El renglón «Categoría» de arriba de los chips. */
 internal const val TAG_ENCABEZADO_DE_LA_CATEGORIA: String = "agregar:encabezado-categoria"

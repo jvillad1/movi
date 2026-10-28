@@ -97,6 +97,15 @@ import com.jvillada.movi.ui.extractos.rememberFilePicker
 import com.jvillada.movi.ui.papeles.ArchivoCompartido
 import com.jvillada.movi.ui.papeles.PapelesCompartidos
 import com.jvillada.movi.ui.transactions.AvisosPorConfirmar
+import com.jvillada.movi.data.UsedCategoriesCache
+import com.jvillada.movi.ui.components.MarcoDeHoja
+import com.jvillada.movi.ui.components.SelectorDeCategoria
+import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
+import com.jvillada.movi.ui.quickadd.categoriasParaLasPastillasDeAgregar
+import com.jvillada.movi.ui.sms.EligeLaCategoria
+import com.jvillada.movi.shared.model.SmsMessage
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import com.jvillada.movi.ui.transactions.HojaDeConfirmarLosAvisos
 import com.jvillada.movi.ui.transactions.TarjetaDeAvisosDelBanco
 import com.jvillada.movi.ui.transactions.avisosPorConfirmar
@@ -274,22 +283,55 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
     }
     val destinosParaGuardar = rememberDestinosParaGuardar(hacenFalta = aQuienFue.isNotEmpty())
     /** Cabeza de cada pago → lo que Movi va a anotar, para los pagos que entendió (ver [loQueMoviEntendio]). */
-    val entendimientos: Map<String, LoQueMoviEntendio> = remember(mensajes, propuestas, cuentas, fallaronAca) {
+    // Vuelta 46: la categoría que el dueño eligió en la tarjeta de un aviso al que solo le faltaba
+    // esa (cabeza del pago → categoría). Con ella el aviso queda confirmable ahí mismo y en el lote.
+    var categoriasElegidasAca by remember { mutableStateOf(emptyMap<String, String>()) }
+    // La cabeza del aviso cuyo «Todas ›» abrió el selector completo.
+    var todasLasCategoriasPara by remember { mutableStateOf<String?>(null) }
+    val entendimientos: Map<String, LoQueMoviEntendio> = remember(mensajes, propuestas, cuentas, fallaronAca, categoriasElegidasAca) {
         val todos = mensajes ?: return@remember emptyMap()
         val leidas = propuestas ?: return@remember emptyMap()
         val ahora = Clock.System.now().toEpochMilliseconds()
         pagosPorRevisar(todos)
             .filter { it.id !in fallaronAca }
-            .associate { cabeza -> cabeza.id to loQueMoviEntendio(cabeza, todos, leidas, cuentas, ahora) }
+            .associate { cabeza -> cabeza.id to loQueMoviEntendio(cabeza, todos, leidas, cuentas, ahora, categoriasElegidasAca[cabeza.id]) }
     }
     val entendidos: Map<String, AnotacionEntendida> =
         entendimientos.mapNotNull { (id, e) -> e.anotacion?.let { id to it } }.toMap()
     /** Vuelta 44: «Transporte · Bancolombia Ahorros», lo que Movi entendió de cada pago, entendido o no. */
     val lineas: Map<String, String> = entendimientos.mapNotNull { (id, e) -> e.linea?.let { id to it } }.toMap()
     /** Lo que pinta la tarjeta de «Confirmar los N» y lo que confirma su hoja: lo de Actividad. */
-    val avisosDelLote: AvisosPorConfirmar? = remember(mensajes, propuestas, cuentas, fallaronAca) {
+    val avisosDelLote: AvisosPorConfirmar? = remember(mensajes, propuestas, cuentas, fallaronAca, categoriasElegidasAca) {
         val todos = mensajes ?: return@remember null
-        avisosPorConfirmar(todos, propuestas, cuentas, Clock.System.now().toEpochMilliseconds(), fallaronAca)
+        avisosPorConfirmar(todos, propuestas, cuentas, Clock.System.now().toEpochMilliseconds(), fallaronAca, categoriasElegidasAca)
+    }
+    /**
+     * Vuelta 46: **las pastillas de una tarjeta que pide la categoría** —las frecuentes del tipo, como
+     * en Agregar; sin el uso del Inicio a mano, las que el dueño usa (`categoriasDelDueno`)—, o `null`
+     * si a ese aviso le falta algo más que la categoría.
+     */
+    fun eligeLaCategoriaDe(cabeza: SmsMessage): EligeLaCategoria? {
+        val entendimiento = entendimientos[cabeza.id] ?: return null
+        val elegida = categoriasElegidasAca[cabeza.id]
+        if (!entendimiento.faltaSoloLaCategoria && elegida == null) return null
+        val tipo = propuestaDelPago(propuestas, cabeza)?.leido?.type ?: com.jvillada.movi.shared.model.TransactionType.EXPENSE
+        val frecuentes = categoriasParaLasPastillasDeAgregar(
+            categoriaActual = elegida.orEmpty(),
+            tipo = tipo,
+            usadas = UsedCategoriesCache.used,
+            prefs = UsedCategoriesCache.prefs,
+            usos = UsedCategoriesCache.usosRecientes,
+        ).ifEmpty {
+            propuestas?.categoriasDelDueno.orEmpty()
+                .filterNot { com.jvillada.movi.shared.model.categoriaQueNoDiceNada(it) }
+                .take(CATEGORIAS_EN_LA_TARJETA)
+        }
+        return EligeLaCategoria(
+            categorias = frecuentes,
+            elegida = elegida,
+            onElegir = { categoriasElegidasAca = categoriasElegidasAca + (cabeza.id to it) },
+            onTodas = { todasLasCategoriasPara = cabeza.id },
+        )
     }
     /** Vuelta de diseño 23: la cuenta que propone Movi es de otro banco que el del aviso. */
     val advertencias: Map<String, String> =
@@ -514,6 +556,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                             conPildoraDePendiente = false,
                             advertencia = advertencias[sms.id],
                             loEntendido = lineas[sms.id],
+                            eligeLaCategoria = eligeLaCategoriaDe(sms),
                             // El otro aviso puede estar ya confirmado: se busca en la lista
                             // entera, no solo entre los pendientes.
                             parecidoA = sms.parecidoA?.let { id -> mensajes.firstOrNull { it.id == id } },
@@ -709,6 +752,29 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
     )
     }
 
+    // Vuelta 46: «Todas ›» de la tarjeta que pide la categoría: el selector completo, en una hoja.
+    todasLasCategoriasPara?.let { cabezaId ->
+        val cabeza = mensajes?.firstOrNull { it.id == cabezaId }
+        MarcoDeHoja(onDismiss = { todasLasCategoriasPara = null }) {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+                EncabezadoDeHoja("Categoría")
+                Spacer(Modifier.height(Medida.dentroDeSeccion))
+                SelectorDeCategoria(
+                    elegida = categoriasElegidasAca[cabezaId].orEmpty(),
+                    onElegir = {
+                        categoriasElegidasAca = categoriasElegidasAca + (cabezaId to it)
+                        todasLasCategoriasPara = null
+                    },
+                    tipo = cabeza?.let { propuestaDelPago(propuestas, it)?.leido?.type },
+                    usadas = UsedCategoriesCache.used,
+                    prefs = UsedCategoriesCache.prefs,
+                    usos = UsedCategoriesCache.usosRecientes,
+                )
+                Spacer(Modifier.height(Medida.margenDePantalla))
+            }
+        }
+    }
+
     // Vuelta 44: la pregunta de «Confirmar los N», la de Actividad. Lo confirmado se va enseguida; lo
     // que falló vuelve a «Revisar».
     HojaDeConfirmarLosAvisos(confirmarLosAvisos, avisosDelLote) { resultado ->
@@ -852,3 +918,6 @@ internal fun propuestaDelPago(
     return (if (grupo != null) todas.firstOrNull { it.grupoId == grupo } else null)
         ?: todas.firstOrNull { it.avisoId == cabeza.id }
 }
+
+/** Cuántas pastillas lleva la tarjeta que pide la categoría cuando no hay uso a mano (vuelta 46). */
+const val CATEGORIAS_EN_LA_TARJETA: Int = 8

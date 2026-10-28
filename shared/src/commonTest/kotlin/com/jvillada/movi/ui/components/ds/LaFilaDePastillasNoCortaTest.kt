@@ -1,4 +1,4 @@
-package com.jvillada.movi.ui.quickadd
+package com.jvillada.movi.ui.components.ds
 
 import kotlin.test.Test
 import kotlin.test.assertEquals

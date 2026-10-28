@@ -9,6 +9,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import com.jvillada.movi.ui.components.ConfirmarEnHoja
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import com.jvillada.movi.shared.model.nombreParaMostrar
+import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.ui.components.ds.Cifra
+import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.NivelDeSuperficie
+import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
+import com.jvillada.movi.ui.components.ds.Separador
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.TonoDeCifra
 import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import com.jvillada.movi.ui.porrevisar.AnotacionEntendida
 import com.jvillada.movi.ui.porrevisar.ResultadoDelLote
@@ -27,6 +39,9 @@ import kotlinx.datetime.Clock
  * los dos usan esto: el estado de la pregunta y la hoja. Quien lo usa decide qué hacer al terminar
  * (mostrar lo confirmado, vibrar, avisar abajo).
  */
+
+/** El tag de la lista de avisos de la hoja de «Confirmar los N» (vuelta 46). */
+const val TAG_LISTA_DE_LA_CONFIRMACION: String = "confirmar-los-avisos:lista"
 
 /** Si la hoja de «Confirmar los N» está abierta y si el lote está corriendo. */
 @Stable
@@ -68,8 +83,8 @@ fun rememberConfirmarLosAvisos(): ConfirmarLosAvisos {
 }
 
 /**
- * **La pregunta de «Confirmar los N»** (vuelta 40): «¿Confirmar estos 3 avisos?», cada movimiento en
- * una línea, el total y cuántos quedan ([detalleDeLaConfirmacion]). Solo con algo que confirmar; si
+ * **La pregunta de «Confirmar los N»** (vuelta 40): «¿Confirmar estos 3 avisos?», cada aviso en una
+ * [Fila] (vuelta 46), el total y cuántos quedan ([detalleDeLaConfirmacion]). Solo con algo que confirmar; si
  * la hoja quedó pedida y ya no hay nada (se confirmaron desde la fila), se cierra sola.
  */
 @Composable
@@ -88,6 +103,31 @@ fun HojaDeConfirmarLosAvisos(
             varianteConfirmar = VarianteDeBoton.Principal,
             onCancelar = { estado.cancelar() },
             onConfirmar = { estado.confirmar(lote, alTerminar) },
+            // Vuelta 46: cada aviso, una fila del sistema —el comercio, «Categoría · Cuenta» y el
+            // monto—; era un texto corrido.
+            lista = {
+                Superficie(
+                    modifier = Modifier.fillMaxWidth().testTag(TAG_LISTA_DE_LA_CONFIRMACION),
+                    nivel = NivelDeSuperficie.Capa2,
+                    relleno = RellenoDeSuperficie.Lista,
+                ) {
+                    lote.forEachIndexed { i, anotacion ->
+                        if (i > 0) Separador()
+                        val ingreso = anotacion.leido.type == TransactionType.INCOME
+                        Fila(
+                            titulo = nombreParaMostrar(anotacion.leido.merchant),
+                            subtitulo = categoriaYCuentaDe(anotacion),
+                            final = {
+                                Cifra(
+                                    if (ingreso) anotacion.monto else -anotacion.monto,
+                                    tono = if (ingreso) TonoDeCifra.Ingreso else TonoDeCifra.Neutro,
+                                    moneda = anotacion.leido.currency,
+                                )
+                            },
+                        )
+                    }
+                }
+            },
         )
     } else if (estado.pidiendo && !estado.confirmando) {
         SideEffect { estado.pidiendo = false }

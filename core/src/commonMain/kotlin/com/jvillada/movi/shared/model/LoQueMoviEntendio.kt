@@ -109,6 +109,10 @@ val CATEGORIAS_DE_DOS_PATAS: Set<String> =
 /** «Otros» es la ausencia de categoría (ver `SIN_CATEGORIA` del parser): nunca cuenta como entendida. */
 private val CATEGORIAS_QUE_NO_DICEN_NADA: Set<String> = setOf("otros", "otro", "")
 
+/** ¿[categoria] no dice nada —«Otros», o vacía—? Vuelta 46: Revisar aviso la pide en vez de mostrarla. */
+fun categoriaQueNoDiceNada(categoria: String?): Boolean =
+    categoria == null || claveComparableDeNombre(categoria.trim()) in CATEGORIAS_QUE_NO_DICEN_NADA
+
 /**
  * **¿La categoría de [leido] la decidió algo que sabe del dueño?** Sí cuando la propuso su memoria
  * (`aprendidoDe`: «Así lo anotaste 4 veces», o el motivo de un envío), y sí cuando una regla

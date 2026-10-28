@@ -55,8 +55,8 @@ import com.jvillada.movi.theme.Espacio as EspacioDeDiseno
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.components.SelectorDeCategoria
-import com.jvillada.movi.ui.quickadd.CategoriaChipsRow
-import com.jvillada.movi.ui.quickadd.EncabezadoDeLaCategoria
+import com.jvillada.movi.ui.components.ds.FilaDeCategorias
+import com.jvillada.movi.ui.components.ds.TagsDeLaFilaDeCategorias
 import com.jvillada.movi.ui.quickadd.categoriasParaLasPastillasDeAgregar
 import com.jvillada.movi.ui.quickadd.pastillasDeLaCategoria
 import com.jvillada.movi.ui.components.MarcoDeHoja
@@ -343,8 +343,7 @@ fun HojaPagoOtro(
                 nivel = NivelDeSuperficie.Capa2,
                 relleno = RellenoDeSuperficie.Lista,
             ) {
-                EncabezadoDeLaCategoria(sugerencia = null, onTodas = { pedidosDeFoco = 0; hojaDeCategorias = true })
-                CategoriaChipsRow(
+                FilaDeCategorias(
                     categorias = pastillasDeLaCategoria(
                         categoriasParaLasPastillasDeAgregar(
                             categoriaActual = categoria,
@@ -355,9 +354,11 @@ fun HojaPagoOtro(
                         ),
                         categoria,
                     ),
-                    categoriaElegida = categoria,
-                    onPick = { categoria = it },
+                    elegida = categoria,
+                    onElegir = { categoria = it },
+                    onTodas = { pedidosDeFoco = 0; hojaDeCategorias = true },
                     onNueva = { pedidosDeFoco += 1; hojaDeCategorias = true },
+                    tags = TagsDeLaFilaDeCategorias(todas = TAG_TODAS_PAGO_OTRO),
                 )
             }
             Spacer(Modifier.height(Medida.dentroDeSeccion))
@@ -408,6 +409,9 @@ fun HojaPagoOtro(
         }
     }
 }
+
+/** El «Todas ›» de «Pagó otro» (vuelta 46: el de [FilaDeCategorias]). */
+const val TAG_TODAS_PAGO_OTRO: String = "espacios:todas-pago-otro"
 
 /** El tag del selector de categoría de «Pagó otro» (vuelta 44). */
 const val TAG_CATEGORIA_PAGO_OTRO: String = "espacios:categoria-pago-otro"

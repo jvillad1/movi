@@ -40,6 +40,18 @@ import com.jvillada.movi.ui.components.ds.RotuloDeCampo
 import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.ui.components.toUserMessage
 import kotlinx.coroutines.launch
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Event
+import com.jvillada.movi.data.UsedCategoriesCache
+import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.ui.components.SelectorDeCategoria
+import com.jvillada.movi.ui.components.ds.AltoDePildora
+import com.jvillada.movi.ui.components.ds.FilaDeCategorias
+import com.jvillada.movi.ui.components.ds.PildoraDeAccion
+import com.jvillada.movi.ui.components.ds.RellenoDeLaFilaDeCategorias
+import com.jvillada.movi.ui.components.ds.TagsDeLaFilaDeCategorias
+import com.jvillada.movi.ui.fecha.SelectorDeFecha
+import kotlinx.datetime.LocalDate
 
 /*
  * # «Repartir este gasto» desde Agregar (vuelta de diseño 23)
@@ -199,6 +211,11 @@ const val TAG_CONFIRMAR_REPARTIR_ESTE_GASTO: String = "espacios:confirmar-repart
 /** El título de la hoja. */
 const val TITULO_REPARTIR_ESTE_GASTO: String = "Repartir este gasto"
 
+/** Vuelta 46: la píldora de la fecha, las pastillas de la categoría y su «Todas ›» en la hoja. */
+const val TAG_FECHA_EN_REPARTIR: String = "espacios:repartir:fecha"
+const val TAG_CATEGORIAS_EN_REPARTIR: String = "espacios:repartir:categorias"
+const val TAG_TODAS_EN_REPARTIR: String = "espacios:repartir:todas"
+
 /**
  * **La hoja «Repartir este gasto».** [onMonto] escribe el monto en Agregar (el campo es el mismo dato,
  * no una copia). [onListo] recibe el movimiento guardado si pagaste tú, o `null` si pagó otro.
@@ -212,8 +229,21 @@ fun HojaRepartirEsteGasto(
     onMonto: (Long?) -> Unit,
     onDismiss: () -> Unit,
     onListo: (FinancialEvent?) -> Unit,
+    /**
+     * Vuelta 46 · **los mismos campos que Agregar**: la categoría (las pastillas de [categorias], con
+     * «Todas ›» en el renglón del rótulo) y la fecha (la píldora, que abre el selector). Escriben en
+     * Agregar —son el mismo dato, como el monto—. Sin [onCategoria], la línea «Mercado · Hoy» de antes.
+     */
+    categorias: List<String> = emptyList(),
+    onCategoria: ((String) -> Unit)? = null,
+    fecha: LocalDate? = null,
+    hoy: LocalDate? = null,
+    onFecha: ((LocalDate) -> Unit)? = null,
 ) {
     val primero = espacios.firstOrNull() ?: return
+    var eligiendoFecha by remember { mutableStateOf(false) }
+    var todasLasCategorias by remember { mutableStateOf(false) }
+    var pedidosDeFoco by remember { mutableStateOf(0) }
     val coroutine = rememberCoroutineScope()
     val idDelGastoDeOtro = remember { newId("gde") }
     var espacioId by remember { mutableStateOf(primero.id) }
@@ -260,11 +290,41 @@ fun HojaRepartirEsteGasto(
             Spacer(Modifier.height(Medida.dentroDeSeccion))
             CampoDeMonto(gasto.monto.takeIf { it > 0L }, onMonto, rotulo = "Monto", habilitado = !bloqueado)
             Spacer(Modifier.height(EspacioDeDiseno.xxs))
-            Text(
-                listOfNotNull(gasto.categoria.trim().ifBlank { null }, gasto.fecha).joinToString(" · "),
-                style = Movi.textos.apoyo,
-                color = Movi.colores.textoMedio,
-            )
+            if (onCategoria != null && onFecha != null && fecha != null && hoy != null) {
+                // La fecha, como en Agregar: la píldora junto al monto, que abre el selector.
+                PildoraDeAccion(
+                    texto = gasto.fecha,
+                    onClick = { if (!bloqueado) eligiendoFecha = !eligiendoFecha },
+                    icono = Icons.Rounded.Event,
+                    descripcion = "Fecha: ${gasto.fecha}. Cambiar la fecha",
+                    alto = AltoDePildora.Compacta,
+                    modifier = Modifier.testTag(TAG_FECHA_EN_REPARTIR),
+                )
+                if (eligiendoFecha) {
+                    Spacer(Modifier.height(EspacioDeDiseno.xs))
+                    SelectorDeFecha(seleccionada = fecha, hoy = hoy, onPick = { onFecha(it); eligiendoFecha = false })
+                }
+                Spacer(Modifier.height(Medida.dentroDeSeccion))
+                FilaDeCategorias(
+                    categorias = categorias,
+                    elegida = gasto.categoria,
+                    onElegir = { if (!bloqueado) onCategoria(it) },
+                    onTodas = { if (!bloqueado) { pedidosDeFoco = 0; todasLasCategorias = true } },
+                    onNueva = { if (!bloqueado) { pedidosDeFoco += 1; todasLasCategorias = true } },
+                    relleno = RellenoDeLaFilaDeCategorias.Ninguno,
+                    tags = TagsDeLaFilaDeCategorias(
+                        todas = TAG_TODAS_EN_REPARTIR,
+                        pastillas = TAG_CATEGORIAS_EN_REPARTIR,
+                        pastilla = { "espacios:repartir:categoria:$it" },
+                    ),
+                )
+            } else {
+                Text(
+                    listOfNotNull(gasto.categoria.trim().ifBlank { null }, gasto.fecha).joinToString(" · "),
+                    style = Movi.textos.apoyo,
+                    color = Movi.colores.textoMedio,
+                )
+            }
             if (espacios.size > 1) {
                 Spacer(Modifier.height(Medida.dentroDeSeccion))
                 RotuloDeCampo(TITULO_ELEGIR_ESPACIO)
@@ -327,6 +387,28 @@ fun HojaRepartirEsteGasto(
                 onSecundaria = { yaGuardado?.let(onListo) },
             )
             Spacer(Modifier.height(Medida.entreSecciones))
+        }
+    }
+    // «Todas ›» y «Nueva»: el selector completo, en una hoja encima (como en Agregar y Revisar aviso).
+    if (todasLasCategorias && onCategoria != null) {
+        MarcoDeHoja(onDismiss = { todasLasCategorias = false }) {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+                EncabezadoDeHoja("Categoría")
+                Spacer(Modifier.height(Medida.dentroDeSeccion))
+                SelectorDeCategoria(
+                    elegida = gasto.categoria,
+                    onElegir = {
+                        onCategoria(it)
+                        todasLasCategorias = false
+                    },
+                    tipo = TransactionType.EXPENSE,
+                    usadas = UsedCategoriesCache.used,
+                    prefs = UsedCategoriesCache.prefs,
+                    usos = UsedCategoriesCache.usosRecientes,
+                    pedidosDeFoco = pedidosDeFoco,
+                )
+                Spacer(Modifier.height(Medida.margenDePantalla))
+            }
         }
     }
 }
