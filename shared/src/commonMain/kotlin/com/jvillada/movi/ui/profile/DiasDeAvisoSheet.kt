@@ -1,35 +1,25 @@
 package com.jvillada.movi.ui.profile
 
-import com.jvillada.movi.ui.components.ds.coloresDeLoElegido
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.unit.dp
-import com.jvillada.movi.theme.*
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.ui.components.MarcoDeHoja
-import com.jvillada.movi.ui.recurrentes.reminderLeadHint
 import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
+import com.jvillada.movi.ui.components.ds.PieDeHoja
+import com.jvillada.movi.ui.components.ds.PildoraDeFiltro
+import com.jvillada.movi.ui.recurrentes.reminderLeadHint
 
 /**
  * Con cuántos días de anticipación avisar un vencimiento.
@@ -41,6 +31,9 @@ import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
  * El **0 es una opción legítima**, no un caso de borde: hay quien quiere el aviso el mismo día y
  * no antes. Por eso la frase cambia entera en vez de decir «0 días antes».
  */
+/** Los días que se ofrecen. */
+private val DIAS_DE_AVISO: List<Int> = listOf(0, 1, 2, 3, 5, 7)
+
 @Composable
 fun DiasDeAvisoSheet(
     diasActuales: Int,
@@ -71,56 +64,33 @@ fun DiasDeAvisoSheet(
                 .weight(1f, fill = false),
         ) {
 
+            // El subtítulo es la frase de lo que va a pasar («Te avisamos 3 días antes del
+            // vencimiento»): cambia con el día elegido.
             EncabezadoDeHoja(
                 "¿Con cuánta anticipación te avisamos?",
                 subtitulo = reminderLeadHint(dias),
-                modifier = Modifier.padding(top = Espacio.xxs, bottom = Espacio.m),
             )
+            Spacer(Modifier.height(Medida.entreSecciones))
 
-            Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs), modifier = Modifier.fillMaxWidth()) {
-                listOf(0, 1, 2, 3, 5, 7).forEach { d ->
-                    val elegido = d == dias
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(Medida.objetivoTactil)
-                            .clip(RoundedCornerShape(Radio.m))
-                            .background(if (elegido) coloresDeLoElegido(Movi.colores).first else Movi.colores.tarjeta)
-                            .clickable(enabled = !saving) { dias = d },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = d.toString(),
-                            style = if (elegido) Movi.textos.cuerpoFuerte else Movi.textos.cuerpoRegular,
-                            color = if (elegido) coloresDeLoElegido(Movi.colores).second else Movi.colores.texto,
-                        )
-                    }
+            // Vuelta 41: los días son píldoras del sistema (antes cajas blancas sobre la hoja blanca).
+            Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
+                DIAS_DE_AVISO.forEach { d ->
+                    PildoraDeFiltro(
+                        texto = d.toString(),
+                        seleccionada = d == dias,
+                        onClick = { if (!saving) dias = d },
+                    )
                 }
             }
 
-            if (error != null) {
-                Spacer(Modifier.height(Espacio.s))
-                Text(text = error, style = Movi.textos.apoyo, color = Movi.colores.sale)
-            }
-
             Spacer(Modifier.height(Espacio.l))
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(Radio.m))
-                    .background(if (saving) Movi.colores.tarjeta else Movi.colores.marca)
-                    .clickable(enabled = !saving) { onSave(dias) }
-                    .padding(vertical = Espacio.m),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = if (saving) "Guardando…" else "Guardar",
-                    color = if (saving) Movi.colores.textoMedio else Movi.colores.sobreMarca,
-                    style = Movi.textos.cuerpo,
-                )
-            }
-
+            // Vuelta 41: el pie del sistema (era una caja amarilla con «Guardando…» hecha a mano).
+            PieDeHoja(
+                texto = "Guardar",
+                onClick = { onSave(dias) },
+                cargando = saving,
+                error = error,
+            )
             Spacer(Modifier.height(Espacio.xl))
         }
     }

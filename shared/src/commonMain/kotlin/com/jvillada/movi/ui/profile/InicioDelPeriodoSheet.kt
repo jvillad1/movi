@@ -1,22 +1,10 @@
 package com.jvillada.movi.ui.profile
 
-import com.jvillada.movi.ui.components.ds.coloresDeLoElegido
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -24,28 +12,30 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
+import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.PeriodSettings
-import com.jvillada.movi.shared.model.diaLegible
 import com.jvillada.movi.shared.model.PeriodoFinanciero
 import com.jvillada.movi.shared.model.UpdateProfileRequest
 import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.shared.model.ajustesDelPeriodo
 import com.jvillada.movi.shared.model.conInicioPropio
+import com.jvillada.movi.shared.model.diaLegible
 import com.jvillada.movi.shared.model.inicioDelPeriodo
 import com.jvillada.movi.shared.model.nombreDe
-import com.jvillada.movi.shared.model.rangoLegibleDe
-import com.jvillada.movi.data.Repositories
-import com.jvillada.movi.theme.*
+import com.jvillada.movi.shared.model.rangoDelPeriodo
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.ui.components.MarcoDeHoja
-import kotlinx.datetime.LocalDate
-import kotlinx.datetime.number
-import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
 import com.jvillada.movi.ui.components.ds.Boton
-import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
+import com.jvillada.movi.ui.components.ds.PieDeHoja
 import com.jvillada.movi.ui.components.ds.TamanoDeBoton
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import com.jvillada.movi.ui.components.ds.VistaPrevia
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.minus
+import kotlinx.datetime.number
 
 /**
  * **La única escritura de los arranques propios**: vuelve a leer el perfil, le aplica [cambio] a
@@ -129,66 +119,32 @@ fun InicioDelPeriodoSheet(
     val elegido = remember(dia, natural, diasDelMes) {
         LocalDate(natural.year, natural.month.number, dia.coerceIn(1, diasDelMes))
     }
-    /** El rango que quedaría, calculado con la misma función que después lo pinta en Movimientos. */
-    val previsualizacion = remember(elegido, periodo, ajustes) {
-        rangoLegibleDe(periodo, ajustes.conInicioPropio(periodo, elegido.toString()))
-    }
 
     MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !saving) {
         Column(
             modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false),
         ) {
+            // Vuelta 41: una frase corta; lo de «el anterior se cierra solo» lo dice la vista previa,
+            // con la fecha.
             EncabezadoDeHoja(
                 "¿Cuándo empezó ${nombreDe(periodo)}?",
-                subtitulo = "Normalmente arranca el ${diaLegible(deSiempre)}. Si este mes tu sueldo entró " +
-                    "antes o después, dilo aquí: el mes anterior se cierra solo ese mismo día.",
+                subtitulo = "Normalmente arranca el ${diaLegible(deSiempre)}.",
             )
-            Spacer(Modifier.height(Espacio.m))
+            Spacer(Modifier.height(Medida.entreSecciones))
 
             // Solo los días del mes en que ESTE período puede arrancar. Ver el KDoc.
-            (1..diasDelMes).chunked(7).forEach { fila ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
-                ) {
-                    fila.forEach { d ->
-                        val esElElegido = d == dia
-                        Box(
-                            modifier = Modifier
-                                .size(Medida.avatar)
-                                .clip(CircleShape)
-                                .background(if (esElElegido) coloresDeLoElegido(Movi.colores).first else Movi.colores.tarjeta)
-                                .clickable(enabled = !saving) { dia = d },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                text = d.toString(),
-                                style = if (esElElegido) Movi.textos.cuerpoFuerte else Movi.textos.cuerpoRegular,
-                                color = if (esElElegido) coloresDeLoElegido(Movi.colores).second else Movi.colores.texto,
-                                textAlign = TextAlign.Center,
-                            )
-                        }
-                    }
-                }
-                Spacer(Modifier.height(Espacio.xs))
-            }
+            CalendarioDeDias(
+                dias = diasDelMes,
+                elegido = dia,
+                habilitado = !saving,
+                onElegir = { dia = it },
+            )
 
-            previsualizacion?.let {
-                Spacer(Modifier.height(Espacio.s))
-                Text(text = it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-            }
-            error?.let {
-                Spacer(Modifier.height(Espacio.s))
-                Text(text = it, style = Movi.textos.apoyo, color = Movi.colores.sale)
-            }
-
-            Spacer(Modifier.height(Espacio.m))
-            // Vuelta de diseño 18: era una píldora con el lavado de la marca hecha a mano.
-            Boton(
-                "Este mes empezó el $dia",
-                onClick = { onSave(elegido.toString()) },
-                cargando = saving,
-                anchoCompleto = true,
+            // Lo que va a pasar: el rango que quedaría y dónde se cierra el anterior.
+            Spacer(Modifier.height(Medida.entreSecciones))
+            VistaPrevia(
+                vistaPreviaDelInicio(periodo, ajustes, elegido),
+                detalle = "El período anterior se cierra el ${diaLegible(elegido.minus(1, DateTimeUnit.DAY))}.",
             )
 
             // La vuelta atrás, y solo cuando hay algo que deshacer: quitar la excepción es tan
@@ -206,9 +162,17 @@ fun InicioDelPeriodoSheet(
                 )
             }
 
-            // Quien se pregunta «¿de cuándo a cuándo va este mes?» —la
-            // pregunta que abrió esta hoja— es quien más puede querer comparar con los
-            // anteriores.
+            Spacer(Modifier.height(Espacio.l))
+            // Vuelta 41: el pie del sistema, con el error encima del botón.
+            PieDeHoja(
+                texto = "Este mes empezó el $dia",
+                onClick = { onSave(elegido.toString()) },
+                cargando = saving,
+                error = error,
+            )
+
+            // Quien se pregunta «¿de cuándo a cuándo va este mes?» —la pregunta que abrió esta hoja—
+            // es quien más puede querer comparar con los anteriores. Un enlace, debajo del pie.
             if (onVerPeriodos != null) {
                 Spacer(Modifier.height(Espacio.s))
                 Boton(
@@ -223,4 +187,14 @@ fun InicioDelPeriodoSheet(
             Spacer(Modifier.height(Espacio.xl))
         }
     }
+}
+
+/**
+ * **La vista previa de «¿Cuándo empezó…?»**: «Octubre: del 24 de septiembre al 24 de octubre», el rango
+ * que quedaría con [elegido], calculado con la misma función que después lo pinta en Movimientos. Pura.
+ */
+fun vistaPreviaDelInicio(periodo: PeriodoFinanciero, ajustes: PeriodSettings, elegido: LocalDate): String {
+    val conElInicio = ajustes.conInicioPropio(periodo, elegido.toString())
+    val mes = nombreDe(periodo).substringBefore(" de ").replaceFirstChar { it.uppercase() }
+    return "$mes: " + rangoDelPeriodo(periodo, conElInicio).replaceFirstChar { it.lowercase() }
 }

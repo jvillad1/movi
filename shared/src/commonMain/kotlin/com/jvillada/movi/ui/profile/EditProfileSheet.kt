@@ -16,16 +16,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Color
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.AvatarPalette
 import com.jvillada.movi.shared.model.UpdateProfileRequest
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.components.MarcoDeHoja
-import com.jvillada.movi.ui.credits.FieldBox
-import com.jvillada.movi.ui.components.SheetHandleWithClose
+import com.jvillada.movi.ui.components.ds.Campo
 import com.jvillada.movi.ui.components.avatarColorOrDefault
 import com.jvillada.movi.ui.components.toUserMessage
 import kotlinx.coroutines.launch
@@ -36,8 +34,8 @@ import com.jvillada.movi.ui.components.ds.RotuloDeCampo
 /**
  * F42 · F46 — editar alias y color de avatar. Se abre desde el "Editar" del encabezado de
  * Ajustes ([com.jvillada.movi.ui.mas.MasScreen]). Mismo patrón que las hojas de Créditos ([com.jvillada.movi.ui.credits.CardTermsSheet]):
- * scrim + hoja, `SheetHandleWithClose`, botón que nunca se apaga en silencio (dice la primera
- * cosa que falta debajo).
+ * `MarcoDeHoja`, `EncabezadoDeHoja`, `Campo` y `PieDeHoja`: el botón nunca se apaga en silencio
+ * (dice la primera cosa que falta debajo).
  */
 @Composable
 fun EditProfileSheet(
@@ -79,13 +77,8 @@ fun EditProfileSheet(
             // rótulo suelto que hacía de título.
             EncabezadoDeHoja("Tu perfil", subtitulo = "Cómo te llama Movi y el color de tu avatar.")
             Spacer(Modifier.height(Medida.entreSecciones))
-            FieldBox(
-                placeholder = "Tu nombre",
-                value = name,
-                onValueChange = { name = it },
-                keyboardType = KeyboardType.Text,
-                rotulo = "Alias",
-            )
+            // Vuelta 41: el campo del sistema (era `FieldBox`, el de las hojas de Créditos).
+            Campo(name, { name = it }, rotulo = "Alias", guia = "Tu nombre", habilitado = !saving)
 
             Spacer(Modifier.height(Espacio.l))
             RotuloDeCampo("Color del avatar")
@@ -101,11 +94,6 @@ fun EditProfileSheet(
                 }
                 Spacer(Modifier.height(Espacio.s))
             }
-
-            error?.let {
-                Spacer(Modifier.height(Espacio.xs))
-                Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
-            }
         }
 
         Spacer(Modifier.height(Espacio.m))
@@ -116,6 +104,7 @@ fun EditProfileSheet(
             habilitado = missingFieldMessage == null,
             razon = missingFieldMessage,
             cargando = saving,
+            error = error,
         )
         Spacer(Modifier.height(Espacio.l))
     }
