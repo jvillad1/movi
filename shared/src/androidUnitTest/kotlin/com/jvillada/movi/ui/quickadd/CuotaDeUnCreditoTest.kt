@@ -90,11 +90,13 @@ class CuotaDeUnCreditoTest {
         id = id, accountId = cuenta, type = tipo, amount = monto, category = "Traspaso", description = "", timestamp = 0L,
     )
 
-    private fun montar(pestana: String) {
+    private val navegado = mutableListOf<com.jvillada.movi.ui.Screen>()
+
+    private fun montar(pestana: String, credito: Account = libre) {
         Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
-            override suspend fun getAccounts(): List<Account> = listOf(ahorros, nuAhorros, nuTarjeta, libre)
+            override suspend fun getAccounts(): List<Account> = listOf(ahorros, nuAhorros, nuTarjeta, credito)
             override suspend fun getCredits(): List<CreditSummary> =
-                listOf(CreditSummary(account = libre, terms = condiciones, paidPct = null))
+                listOf(CreditSummary(account = credito, terms = condiciones, paidPct = null))
             override suspend fun createTransfer(request: CreateTransferRequest): TransferResult {
                 traspasos += request
                 return TransferResult(
@@ -110,7 +112,7 @@ class CuotaDeUnCreditoTest {
         composeRule.setContent {
             MoviTheme {
                 Column(Modifier.fillMaxSize()) {
-                    Box(Modifier.fillMaxWidth().weight(1f)) { QuickAddScreen(onDismiss = {}) }
+                    Box(Modifier.fillMaxWidth().weight(1f)) { QuickAddScreen(onDismiss = {}, onNavigate = { navegado += it }) }
                     Spacer(Modifier.height(Medida.altoDeBarraDePestanas))
                 }
             }
@@ -174,6 +176,26 @@ class CuotaDeUnCreditoTest {
         assertEquals(libre.id, pago.debtAccountId)
         assertEquals(nuAhorros.id, pago.fromAccountId)
         assertTrue(traspasos.isEmpty(), "la cuota es el pago de cuota de siempre, no un traspaso")
+    }
+
+    /**
+     * Vuelta 49 · el crédito de la demo tenía términos pero ningún movimiento: su deuda en Movi es $0,
+     * y la hoja decía «Deuda de Vehículo 4083: $0 pasa a −$980.000». Una deuda nunca se muestra
+     * negativa: el renglón dice que Movi no tiene el saldo y lleva a cuadrarlo.
+     */
+    @Test
+    fun `un credito sin saldo en Movi no muestra una deuda negativa y ofrece cuadrarlo`() {
+        montar("Cuota", credito = libre.copy(balance = 0L))
+        elegirLaDeuda(libre.name)
+        esperar("\$1.204.064")
+
+        esperar(SIN_EL_SALDO_DEL_CREDITO)
+        assertTrue(hay("$SIN_EL_SALDO_DEL_CREDITO · $CUADRAR_EL_CREDITO"))
+        assertFalse(hay("pasa a"), "sin la cuenta que daría una deuda negativa")
+        assertFalse(hay("−\$"), "ninguna cifra negativa")
+
+        tocar("$SIN_EL_SALDO_DEL_CREDITO · $CUADRAR_EL_CREDITO")
+        assertEquals(listOf<com.jvillada.movi.ui.Screen>(com.jvillada.movi.ui.Screen.Credits), navegado)
     }
 
     @Test

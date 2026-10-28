@@ -464,6 +464,29 @@ fun deudaDespuesDelPago(deuda: Account?, desglose: DesgloseDeCuota?): String? {
         "pasa a ${signedMoney(actual - desglose.capital, moneda)}"
 }
 
+/**
+ * **Vuelta 49 · Movi no sabe cuánto se debe de este crédito**: su saldo en Movi es $0 (o a favor), o el
+ * pago lo dejaría por debajo de cero. Pasaba con la demo: un crédito con términos pero sin
+ * movimientos decía «Deuda de Vehículo 4083: $0 pasa a −$980.000». Una deuda nunca se muestra
+ * negativa: en vez de la cuenta, el renglón dice [SIN_EL_SALDO_DEL_CREDITO] y ofrece cuadrarlo.
+ *
+ * Solo un préstamo: abonarle de más a una tarjeta sí la deja a favor, y eso es un dato real.
+ *
+ * @param bajaLaDeuda lo que el pago le quita a la deuda —el capital de la cuota, o el abono entero—, o
+ *   `null` si todavía no se sabe (entonces solo cuenta el saldo de hoy).
+ */
+fun creditoSinSaldoEnMovi(deuda: Account?, bajaLaDeuda: Long?): Boolean {
+    if (deuda == null || deuda.type != AccountType.LOAN) return false
+    val actual = saldoEnSuMoneda(deuda)
+    return actual <= 0L || (bajaLaDeuda != null && bajaLaDeuda > 0L && actual - bajaLaDeuda < 0L)
+}
+
+/** Lo que dice el renglón de la deuda cuando Movi no tiene su saldo (vuelta 49). */
+const val SIN_EL_SALDO_DEL_CREDITO: String = "Movi no tiene el saldo de este crédito"
+
+/** La acción de ese renglón: abre Créditos, donde está «Ajustar saldo» del crédito. */
+const val CUADRAR_EL_CREDITO: String = "Cuadrar ›"
+
 /** «Deuda de Nu: $1.683.000» — la deuda de hoy, antes de que haya monto con qué decir en qué queda. */
 fun deudaDeHoy(deuda: Account?): String? {
     if (deuda == null) return null
@@ -660,6 +683,11 @@ internal fun TransferBody(
      * que vive en [QuickAddScreen] como los dígitos tecleados.
      */
     onMontoPropuesto: (String) -> Unit = {},
+    /**
+     * Vuelta 49 · «Cuadrar ›» del renglón de un crédito cuyo saldo Movi no tiene: lleva a donde se
+     * ajusta (Créditos). `null` deja el renglón sin acción.
+     */
+    onCuadrarElCredito: (() -> Unit)? = null,
     onSaved: () -> Unit,
 ) {
     val coroutine = rememberCoroutineScope()
@@ -1400,20 +1428,31 @@ internal fun TransferBody(
             }
 
             // El renglón de la deuda, siempre, con su alto reservado (ver arriba).
+            // Vuelta 49: si Movi no tiene el saldo del crédito (o el pago lo dejaría negativo), no se
+            // hace la cuenta: se dice y se ofrece cuadrarlo. Una deuda nunca se muestra negativa.
+            val sinSaldo = creditoSinSaldoEnMovi(to, bajaLaDeuda = if (esAbono) amount else desglose?.capital)
             val renglonDeLaDeuda = when {
                 to == null -> null
+                sinSaldo -> SIN_EL_SALDO_DEL_CREDITO
                 esAbono -> deudaDespuesDelTraspaso(from, to, amount) ?: deudaDeHoy(to)
                 to.type == AccountType.LOAN && (!terminosCargados || falloCargarTerminos || errorDeInteres != null) -> deudaDeHoy(to)
                 else -> deudaDespuesDelPago(to, desglose) ?: deudaDeHoy(to)
             }
             Text(
-                renglonDeLaDeuda.orEmpty(),
+                if (sinSaldo && onCuadrarElCredito != null) "$SIN_EL_SALDO_DEL_CREDITO · $CUADRAR_EL_CREDITO" else renglonDeLaDeuda.orEmpty(),
                 style = Movi.textos.apoyoMedio,
-                color = Movi.colores.texto,
+                color = if (sinSaldo && onCuadrarElCredito != null) Movi.colores.enlace else Movi.colores.texto,
                 minLines = 2,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.fillMaxWidth().testTag(TAG_RENGLON_DE_LA_DEUDA),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(
+                        if (sinSaldo && onCuadrarElCredito != null) {
+                            Modifier.clickable(onClickLabel = "Cuadrar el saldo de ${to?.name.orEmpty()}", onClick = onCuadrarElCredito)
+                        } else Modifier,
+                    )
+                    .testTag(TAG_RENGLON_DE_LA_DEUDA),
             )
 
             // **El abono extra, como opción secundaria** de la misma hoja: un enlace, no una pestaña.
