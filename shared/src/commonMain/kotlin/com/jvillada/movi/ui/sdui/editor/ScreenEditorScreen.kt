@@ -510,7 +510,7 @@ private fun CardEditor(index: Int, card: ScreenCard, onUpdate: (ScreenCard) -> U
 @Composable
 private fun ActionEditor(action: ScreenAction?, onChange: (ScreenAction?) -> Unit) {
     Column {
-        Text("ACCIÓN", style = Movi.textos.apoyoMedio, color = Movi.colores.textoMedio, letterSpacing = 0.4.sp)
+        Text("Acción", style = Movi.textos.apoyoMedio, color = Movi.colores.textoMedio, letterSpacing = 0.4.sp)
         Spacer(Modifier.height(6.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
             ActionModeChip("Ninguna", action == null) { onChange(null) }

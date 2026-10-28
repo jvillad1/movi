@@ -15,6 +15,11 @@ import kotlin.test.assertTrue
  *
  * Falla si vuelve a aparecer una función `…SectionLabel` en `ui/`, o si un título o rótulo del
  * sistema recibe un texto escrito entero en mayúsculas.
+ *
+ * **Vuelta 47: también un `Text` suelto.** «NOTA (OPCIONAL)» en la hoja de Traspaso se le escapó: era
+ * un `Text("NOTA (OPCIONAL)", …)` a mano, y el detector solo miraba los componentes de rótulo
+ * (`Seccion`, `GrupoDeCampos`, `RotuloDeCampo`) y los parámetros `rotulo`/`label`. Ahora mira además
+ * el texto literal de un `Text(…)` y los parámetros `text`, `texto`, `titulo` y `subtitulo`.
  */
 class LosRotulosNoGritanTest {
 
@@ -22,7 +27,7 @@ class LosRotulosNoGritanTest {
 
     /** El texto literal que recibe un título o un rótulo del sistema. */
     private val rotuloLiteral = Regex(
-        """(?:\b(?:Seccion|GrupoDeCampos|RotuloDeCampo)\(\s*(?:titulo\s*=\s*|texto\s*=\s*)?|\b(?:rotulo|label)\s*=\s*)"([^"$]*)"""",
+        """(?:\b(?:Seccion|GrupoDeCampos|RotuloDeCampo|Text)\(\s*(?:titulo\s*=\s*|texto\s*=\s*|text\s*=\s*)?|\b(?:rotulo|label|text|texto|titulo|subtitulo)\s*=\s*)"([^"$]*)"""",
     )
 
     private fun gritan(texto: String): Boolean {
@@ -76,10 +81,17 @@ class LosRotulosNoGritanTest {
             Seccion("Cómo lo reconoce Movi")
             Campo(v, {}, rotulo = "Escribe ${'$'}PALABRA para confirmar")
             // GrupoDeCampos("EN UN COMENTARIO") no cuenta
+            Text("NOTA (OPCIONAL)", style = Movi.textos.apoyoMedio)
+            Text(text = "ACCIÓN")
+            Fila(titulo = "CUENTA")
+            Text("Nota")
+            Text("·")
+            Text(moneda)
             """.trimIndent(),
         )
         val archivo = mapOf("Prueba.kt" to codigo)
         assertEquals(2, LecturaDelCodigo.dondeAparece(archivo, definicionDeSectionLabel).size)
-        assertEquals(4, rotulosQueGritan(archivo).size, rotulosQueGritan(archivo).toString())
+        // Los cuatro de siempre y, desde la vuelta 47, los `Text` sueltos y el `titulo` de una fila.
+        assertEquals(7, rotulosQueGritan(archivo).size, rotulosQueGritan(archivo).toString())
     }
 }
