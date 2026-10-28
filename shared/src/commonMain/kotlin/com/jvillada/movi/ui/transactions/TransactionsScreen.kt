@@ -1309,15 +1309,6 @@ fun TransactionsScreen(
             }
         }
 
-        // Vuelta de diseño 30: en el teléfono, Entró · Salió · Neto del período debajo del selector
-        // (en pantalla ancha lo dice el panel). Con un filtro que recorta la lista no va.
-        if (muestraElResumenEnElTelefono(conPanel, hayFiltro = filtro != null, busqueda = searchQuery)) {
-            ResumenDelPeriodoEnElTelefono(
-                resumen = resumen,
-                onVerEnQueSeVa = { onNavigate(Screen.EnQueSeVa(periodoVisible.prefijo)) },
-            )
-        }
-
         // Los filtros: el tipo, y lo que pidió otra pantalla (una búsqueda de «Buscar» o «En este
         // comercio», una categoría de «En qué se va»), cada uno con su × para quitarlo.
         Row(
@@ -1407,6 +1398,18 @@ fun TransactionsScreen(
             // El aire de abajo deja la última fila por encima del botón de Agregar.
             contentPadding = PaddingValues(bottom = Medida.botonFlotante + Medida.margenDePantalla),
         ) {
+            // Vuelta de diseño 30: en el teléfono, Entró · Salió · Neto del período (en pantalla ancha
+            // lo dice el panel). **El primer ítem de la lista**, antes de «N por revisar»: se va con el
+            // scroll, como todo lo de arriba de las filas. Con un filtro que recorta la lista no va.
+            if (muestraElResumenEnElTelefono(conPanel, hayFiltro = filtro != null, busqueda = searchQuery)) {
+                item(contentType = "arriba") {
+                    ResumenDelPeriodoEnElTelefono(
+                        resumen = resumen,
+                        onVerEnQueSeVa = { onNavigate(Screen.EnQueSeVa(periodoVisible.prefijo)) },
+                        modifier = arribaDeLaLista,
+                    )
+                }
+            }
             if (textoDeLosRechazados != null) {
                 item(contentType = "arriba") {
                     Superficie(modifier = arribaDeLaLista.fillMaxWidth()) {

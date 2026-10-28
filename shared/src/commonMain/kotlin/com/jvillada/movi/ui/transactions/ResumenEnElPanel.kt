@@ -156,6 +156,10 @@ fun resumenDelPanel(
  * selector del período los dice con [CifraConRotulo] y **el mismo [resumenDelPanel]** del panel:
  * las mismas cifras en los dos anchos. Tocarla abre «En qué se va» de ese período.
  *
+ * **Es el primer ítem de la lista y se va con el scroll** (decisión del coordinador), antes de la
+ * tarjeta «N por revisar»: fijos quedan solo el encabezado, el selector del período y los chips, la
+ * regla de la vuelta de diseño 1 (`LoDeArribaSeVaConElScrollTest`).
+ *
  * - Mientras no hay historia o perfil, el esqueleto de las tres (sin «$0»).
  * - Con «Ocultar los saldos», las cifras del sistema se tapan solas.
  * - **Con un filtro que recorta la lista** (una categoría, un comercio o una búsqueda) no se pinta:
@@ -177,11 +181,14 @@ fun muestraElResumenEnElTelefono(conPanel: Boolean, hayFiltro: Boolean, busqueda
  * mismo alto.
  */
 @Composable
-internal fun ResumenDelPeriodoEnElTelefono(resumen: ResumenDelPanel?, onVerEnQueSeVa: () -> Unit) {
+internal fun ResumenDelPeriodoEnElTelefono(
+    resumen: ResumenDelPanel?,
+    onVerEnQueSeVa: () -> Unit,
+    /** Su lugar en la lista: el margen y el aire de lo que va arriba de las filas. */
+    modifier: Modifier = Modifier,
+) {
     Row(
-        modifier = Modifier
-            .padding(horizontal = Medida.margenDePantalla)
-            .padding(top = Espacio.xxs)
+        modifier = modifier
             .fillMaxWidth()
             .heightIn(min = Medida.objetivoTactil)
             .renglonTocable(onClickLabel = VER_EN_QUE_SE_VA, onClick = onVerEnQueSeVa)

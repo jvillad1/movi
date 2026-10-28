@@ -1307,8 +1307,9 @@ Revisado en producción (6ce5327e) con la cuenta demo, a 390 px.
   (`preguntasQueSePuedenHacer`). La respuesta sin clave ahora trae `codigo = IA_NO_DISPONIBLE`.
 - **El encabezado de Movi AI va en su capa**, con `fondo` opaco y encima de la lista; la lista recorta
   lo suyo (`clipToBounds`).
-- **Movimientos en el teléfono tiene su resumen** (`ResumenDelPeriodoEnElTelefono`): debajo del selector
-  del período, Entró · Salió · Neto con `CifraConRotulo` en forma `Compacta` (columna de tres), con
+- **Movimientos en el teléfono tiene su resumen** (`ResumenDelPeriodoEnElTelefono`): el **primer ítem
+  de la lista** —se va con el scroll, antes de «N por revisar»; fijos siguen solo el encabezado, el
+  selector y los chips (§11)—, Entró · Salió · Neto con `CifraConRotulo` en forma `Compacta` (columna de tres), con
   **la misma `resumenDelPanel`** del panel de escritorio, y tocarla abre «En qué se va». Mientras no
   hay historia, `EsqueletoDeCifraConRotulo` (sin «$0»). Con un filtro que recorta la lista (categoría,
   comercio, búsqueda) no va: el resumen es del período entero y encima de lo filtrado se leería como
