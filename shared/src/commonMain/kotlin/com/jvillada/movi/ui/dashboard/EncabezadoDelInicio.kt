@@ -52,20 +52,10 @@ const val TAG_PUNTO_DE_LA_CAMPANA: String = "inicio-punto-de-la-campana"
 const val ROTULO_DE_LA_CAMPANA: String = "Notificaciones"
 
 /**
- * Las iniciales del avatar del Inicio: las del primer nombre y el primer apellido («Juan Villada» →
- * «JV»), o la del nombre solo; «?» sin nombre. Pura.
- */
-fun inicialesDelDueno(nombre: String?): String {
-    val palabras = nombre?.trim()?.split(' ')?.filter { it.isNotBlank() }.orEmpty()
-    if (palabras.isEmpty()) return "?"
-    return palabras.take(2).joinToString("") { it.first().uppercase() }
-}
-
-/**
  * **El encabezado del Inicio de la opción 3** (vuelta 39): va sobre la banda amarilla, del alto de
  * cualquier encabezado ([Medida.altoDeEncabezado]).
  *
- * - El avatar blanco con las iniciales ([inicialesDelDueno]) abre «Tú».
+ * - El avatar blanco con las iniciales ([com.jvillada.movi.ui.components.inicialesDelUsuario]) abre «Tú».
  * - «Hola, Juan» en `saludo` y, debajo, el período (o «Actualizando…» mientras se recarga con cifras ya
  *   pintadas) en `apoyoMedio` y `sobreMarcaMedio`.
  * - Dos botones redondos en `marcaSuave`, como en la maqueta: **ocultar los saldos** (el ojo que antes
