@@ -227,6 +227,9 @@ class RepartirEnReconciliarTest {
         assertEquals(listOf(4_000_000L, 273_333L), partes.map { it.monto })
         assertEquals(listOf(QueFueLaParte.GASTO, QueFueLaParte.GASTO), partes.map { it.tipo })
         assertEquals(listOf("Familia", "Familia"), partes.map { it.evento?.category })
+        // El texto de cada parte es el del aviso (su comercio), no la categoría.
+        assertEquals(listOf("Transferencia a Papá", "Transferencia a Papá"), partes.map { it.evento?.description })
+        assertEquals(listOf("Transferencia a Papá", "Transferencia a Papá"), partes.map { it.evento?.merchant })
     }
 
     @Test

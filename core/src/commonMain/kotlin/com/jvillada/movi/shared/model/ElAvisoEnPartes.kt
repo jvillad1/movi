@@ -328,13 +328,33 @@ fun enumerar(nombres: List<String>): String = when (nombres.size) {
 // ── Lo que viaja al server ────────────────────────────────────────────────────────────────────
 
 /**
+ * **«Éxito Suba · mercado del mes»**: el texto de un movimiento con lo que el aviso dijo de para qué
+ * fue ([nota], la «Descripción» de PSE), si lo dijo y no repite el nombre. La regla de siempre de un
+ * aviso confirmado como un solo movimiento (`movimientoConfirmadoDelSms`).
+ */
+fun descripcionConLaNota(comercio: String, nota: String?): String {
+    val n = nota?.trim().orEmpty()
+    return if (n.isEmpty() || n.equals(comercio.trim(), ignoreCase = true)) comercio else "$comercio · $n"
+}
+
+/**
  * **La parte que viaja al server** ([ParteDelReparto]), con ids nuevos: un reintento con los mismos
  * ids no duplica nada. Todas salen de [origen], en el momento del aviso y con su texto
  * ([textoDelAviso]), que en una transferencia a un tercero es lo que la liga a su número.
  *
- * - Cuota, tarjeta, traspaso: [DosPatasDelAviso] con su operación (las escribe la misma
- *   `escribirLasPatasDelAviso` de un aviso suelto).
- * - Gasto y transferencia a un tercero: un [FinancialEvent] EXPENSE con su categoría.
+ * **El texto de cada parte es el del aviso**, como si se confirmara como un solo movimiento:
+ *
+ * - **Un gasto** lleva el comercio del aviso ([comercio], «Éxito Suba») como `merchant` y como
+ *   descripción, con la [nota] del aviso por la regla de siempre ([descripcionConLaNota]). La
+ *   categoría es lo único que cambia entre partes. Si la parte salda un pago del período
+ *   ([ParteElegida.ruleId]), la descripción es el nombre de ese pago («Mesada tía»): así lo reconoce
+ *   el checklist cuando el sello no se pudo poner. Al repartir un movimiento ya anotado, cada gasto
+ *   hereda su descripción ([descripcionHeredada]) y su comercio.
+ * - **Una transferencia a un tercero** lleva «Transferencia a Papá» ([ParteElegida.nombre], el nombre
+ *   que le pone al tercero la regla de `NombreDelTercero.kt`), con la nota.
+ * - **Cuota, tarjeta, traspaso**: [DosPatasDelAviso] con su operación; las descripciones las arman sus
+ *   funciones de siempre (`pagoDeCuotaLegs`, `transferLegsFor`) a partir de la nota, que es el nombre
+ *   del pago del período si la parte salió de uno, o la [nota] del aviso, igual que `pedidoDeDosPatas`.
  */
 fun aParteDelReparto(
     elegida: ParteElegida,
@@ -344,8 +364,12 @@ fun aParteDelReparto(
     comercio: String?,
     fuente: EventSource,
     nuevoId: (String) -> String,
+    nota: String? = null,
+    /** El texto que hereda un gasto, si ya existe (repartir un movimiento anotado: su descripción tal cual). */
+    descripcionHeredada: String? = null,
 ): ParteDelReparto {
     val operacion = elegida.tipo.operacion
+    val notaDelAviso = nota?.trim()?.takeIf { it.isNotEmpty() }
     if (operacion != null) {
         return ParteDelReparto(
             ruleId = elegida.ruleId,
@@ -361,12 +385,23 @@ fun aParteDelReparto(
                 transferId = nuevoId("tr"),
                 origenEventId = nuevoId("ev"),
                 destinoEventId = nuevoId("ev"),
-                nota = elegida.nombre?.takeIf { it.isNotBlank() },
+                nota = elegida.nombre?.takeIf { it.isNotBlank() } ?: notaDelAviso,
             ),
         )
     }
     val esDelTercero = elegida.tipo == QueFueLaParte.A_UN_TERCERO
     val categoria = elegida.categoria.orEmpty()
+    val delComercio = comercio?.trim()?.takeIf { it.isNotEmpty() }
+    val (descripcion, merchant) = when {
+        esDelTercero -> {
+            val nombre = elegida.nombre?.trim()?.takeIf { it.isNotEmpty() } ?: delComercio ?: categoria
+            descripcionConLaNota(nombre, notaDelAviso) to nombre
+        }
+        elegida.ruleId.isNotBlank() && !elegida.nombre.isNullOrBlank() -> elegida.nombre to delComercio
+        !descripcionHeredada.isNullOrBlank() -> descripcionHeredada to delComercio
+        delComercio != null -> descripcionConLaNota(delComercio, notaDelAviso) to delComercio
+        else -> (notaDelAviso ?: categoria) to null
+    }
     return ParteDelReparto(
         ruleId = elegida.ruleId,
         periodo = elegida.periodo,
@@ -379,8 +414,8 @@ fun aParteDelReparto(
             amount = elegida.monto,
             currency = origen.currency,
             category = categoria,
-            description = elegida.nombre?.takeIf { it.isNotBlank() } ?: categoria,
-            merchant = if (esDelTercero) elegida.nombre else comercio,
+            description = descripcion,
+            merchant = merchant,
             timestamp = momento,
             source = fuente,
             rawPayload = textoDelAviso.ifBlank { null },
@@ -404,7 +439,12 @@ fun parteParaRecordar(parte: ParteDelReparto): ParteElegida? {
     return ParteElegida(
         tipo,
         categoria = evento.category,
-        nombre = if (tipo == QueFueLaParte.A_UN_TERCERO) evento.merchant ?: evento.description else evento.description,
+        // El nombre de un gasto solo se recuerda si es el de su pago del período: el comercio es el del aviso de ese día.
+        nombre = when {
+            tipo == QueFueLaParte.A_UN_TERCERO -> evento.merchant ?: evento.description
+            parte.ruleId.isNotBlank() -> evento.description
+            else -> null
+        },
         monto = parte.monto,
         ruleId = parte.ruleId,
     )

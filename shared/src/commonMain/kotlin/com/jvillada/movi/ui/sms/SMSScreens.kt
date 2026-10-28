@@ -1124,9 +1124,12 @@ fun SMSReconcileScreen(
                 val momento = momentoDelMovimientoDelAviso(sms, pagoActual, p, ahora = Clock.System.now().toEpochMilliseconds())
                 val texto = (avisoDeLaPropuesta ?: sms)?.text.orEmpty()
                 val partes = elegidas.map { elegida ->
+                    // El texto de cada parte es el del aviso: el comercio («Éxito Suba») y su nota,
+                    // como al confirmarlo como un solo movimiento. Solo la categoría cambia.
                     com.jvillada.movi.shared.model.aParteDelReparto(
                         elegida, acct, momento, texto, comercio,
                         if (esComprobante) EventSource.OCR else EventSource.SMS, ::newId,
+                        nota = p.nota,
                     )
                 }
                 val elPago = pagoActual

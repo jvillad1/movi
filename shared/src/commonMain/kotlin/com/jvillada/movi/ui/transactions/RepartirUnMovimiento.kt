@@ -147,7 +147,11 @@ internal fun SeccionDeRepartirEnPartes(
                 coroutine.launch {
                     intentar {
                         val enPartes = elegidas.map {
-                            aParteDelReparto(it, desde, evento.timestamp, evento.rawPayload.orEmpty(), evento.merchant, evento.source, ::newId)
+                            // Cada parte hereda el texto del original: su descripción y su comercio.
+                            aParteDelReparto(
+                                it, desde, evento.timestamp, evento.rawPayload.orEmpty(), evento.merchant,
+                                evento.source, ::newId, descripcionHeredada = evento.description,
+                            )
                         }
                         Repositories.wallets.repartirElMovimiento(evento.id, PartesDelAviso(enPartes))
                     }.onSuccess {

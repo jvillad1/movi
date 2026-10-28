@@ -195,6 +195,55 @@ class ElAvisoEnPartesTest {
     }
 
     @Test
+    fun `cada gasto lleva el comercio del aviso, no la categoria, y la nota por la regla de siempre`() {
+        var n = 0
+        fun id(prefijo: String) = "${prefijo}_${n++}"
+        val texto = "Bancolombia: Compraste \$85.000 en EXITO SUBA"
+        fun gasto(categoria: String, monto: Long, nota: String? = null) = aParteDelReparto(
+            ParteElegida(QueFueLaParte.GASTO, categoria = categoria, monto = monto),
+            ahorros, 1_000L, texto, "Éxito Suba", EventSource.SMS, ::id, nota = nota,
+        ).evento!!
+        val mercado = gasto("Mercado", 50_000L)
+        val restaurantes = gasto("Restaurantes", 35_000L)
+        assertEquals(listOf("Éxito Suba", "Éxito Suba"), listOf(mercado.description, restaurantes.description))
+        assertEquals(listOf("Éxito Suba", "Éxito Suba"), listOf(mercado.merchant, restaurantes.merchant))
+        assertEquals(listOf("Mercado", "Restaurantes"), listOf(mercado.category, restaurantes.category))
+        assertEquals(texto, mercado.rawPayload)
+        // Con la nota del aviso (la «Descripción» de PSE): «Éxito Suba · mercado del mes».
+        assertEquals("Éxito Suba · mercado del mes", gasto("Mercado", 50_000L, nota = "mercado del mes").description)
+        // Un gasto que salda un pago del período lleva el nombre del pago (así lo reconoce el checklist).
+        val mesada = aParteDelReparto(
+            ParteElegida(QueFueLaParte.GASTO, categoria = "Tía", nombre = "Mesada tía", monto = 500_000L, ruleId = "rr-tia", periodo = "2026-10"),
+            ahorros, 1_000L, texto, "Éxito Suba", EventSource.SMS, ::id,
+        ).evento!!
+        assertEquals("Mesada tía" to "Éxito Suba", mesada.description to mesada.merchant)
+        // Una cuota usa la nota del aviso si no salió de un pago: la descripción la arma `pagoDeCuotaLegs`.
+        val cuota = aParteDelReparto(
+            ParteElegida(QueFueLaParte.CUOTA, destinoId = "acc_libranza", monto = 1_900_000L),
+            ahorros, 1_000L, texto, "Éxito Suba", EventSource.SMS, ::id, nota = "octubre",
+        )
+        assertEquals("octubre", cuota.patas?.nota)
+    }
+
+    @Test
+    fun `repartir un movimiento ya anotado - cada gasto hereda su descripcion y su comercio`() {
+        var n = 0
+        fun id(prefijo: String) = "${prefijo}_${n++}"
+        val parte = aParteDelReparto(
+            ParteElegida(QueFueLaParte.GASTO, categoria = "Restaurantes", monto = 35_000L),
+            ahorros, 1_000L, "texto del banco", "Éxito Suba", EventSource.SMS, ::id,
+            descripcionHeredada = "Éxito Suba · cumpleaños",
+        ).evento!!
+        assertEquals("Éxito Suba · cumpleaños" to "Éxito Suba", parte.description to parte.merchant)
+        // Sin comercio en el original, queda sin comercio, con su descripción.
+        val sinComercio = aParteDelReparto(
+            ParteElegida(QueFueLaParte.GASTO, categoria = "Mercado", monto = 50_000L),
+            ahorros, 1_000L, "", null, EventSource.MANUAL, ::id, descripcionHeredada = "Mercado del mes",
+        ).evento!!
+        assertEquals("Mercado del mes" to null, sinComercio.description to sinComercio.merchant)
+    }
+
+    @Test
     fun `nombres para la pregunta`() {
         assertEquals("Libranza Papá", nombreSinCuota("Cuota Libranza Papá"))
         assertEquals("Hipoteca", nombreSinCuota("Cuota de Hipoteca"))
