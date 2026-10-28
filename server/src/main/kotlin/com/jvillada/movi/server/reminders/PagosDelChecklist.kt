@@ -221,6 +221,8 @@ fun parteFijaDelChecklist(
     val pares = falta.keys.flatMap { ruleId ->
         val regla = reglaPorId.getValue(ruleId)
         val candidatos = candidatosPuntuados(regla, vencimientos.getValue(ruleId), elegibles, usados, zone, settings = settings, destinos = destinos)
+            // Vuelta 45: lo que solo se propone (pasada la ventana, hasta el cierre) no es evidencia acá.
+            .filter { it.enLaVentana }
             // El dueño ya dijo «no fue este» para este par exacto: no puede absorber el ítem, ni
             // siquiera por nombre. Antes del filtro de `identidadFuerte` para que tampoco cuente
             // como evidencia de que el pago «ya se ve» (yaSeVeElPago, más abajo).

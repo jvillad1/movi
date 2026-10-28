@@ -92,6 +92,8 @@ const val ETIQUETA_ANOTAR_INGRESO = "Anotar ingreso"
 /** El rótulo de la salida «Anotar…» según sea un pago o un ingreso. */
 internal fun etiquetaDeAnotar(esIngreso: Boolean): String = if (esIngreso) ETIQUETA_ANOTAR_INGRESO else ETIQUETA_ANOTAR
 const val ETIQUETA_QUITAR_LA_MARCA = "Quitar la marca"
+/** Vuelta 45: abre el movimiento con que el dueño saldó la factura («Anotar pago» o «Sí, fue este»). */
+const val ETIQUETA_VER_MOVIMIENTO = "Ver movimiento"
 
 /** Una acción ofrecida sobre una ocurrencia: qué dice, si es la principal, y qué hace. */
 internal data class AccionDeOcurrencia(

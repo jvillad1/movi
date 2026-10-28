@@ -205,7 +205,7 @@ class DisponibleEnInicioTest {
     }
 
     /**
-     * Te pasaste solo hoy, con el período holgado: la columna de hoy dice cuánto de más en rojo, y
+     * Te pasaste solo hoy, con el período holgado: la columna de hoy dice cuánto de más (vuelta 45: en tinta), y
      * la frase lo cuenta con la misma cifra.
      */
     @Test
@@ -213,7 +213,8 @@ class DisponibleEnInicioTest {
         // $300.000 hoy contra una meta de $222.580.
         montar(datos(ingresos = 10_000_000, arriendo = 3_100_000, gasto = mapOf("2026-09-21" to 300_000L)))
 
-        assertCifras("−\$77.420", 1, rojo)
+        // Vuelta 45: en tinta. La alarma, con qué hacer, sale una vez en Pagos (`UnaSolaAlarmaTest`).
+        assertCifras("−\$77.420", 1, normal)
         assertCifras("\$590.320", 1, normal)
         // El período: lo gastado en grande (no en rojo: al período le sobra) y de cuánto.
         assertCifras("\$300.000", 1, normal)
@@ -261,11 +262,11 @@ class DisponibleEnInicioTest {
             useUnmergedTree = true,
         ).assertDoesNotExist()
         // Sin margen la meta de cada ventana es cero, y lo que queda es menos lo gastado: las tres
-        // columnas lo siguen diciendo —en rojo, porque ya gastaste algo sin tener de dónde— con lo
-        // gastado abajo. Lo que se va es la barra: contra cero no hay nada que medir. El período dice
-        // lo gastado en rojo «de $0».
+        // columnas lo siguen diciendo con lo gastado abajo. Lo que se va es la barra: contra cero no
+        // hay nada que medir. El período dice lo gastado en rojo «de $0»; vuelta 45: la semana y hoy,
+        // en tinta (solo lo que importa va en alerta, y su «−» ya lo dice).
         composeRule.onNodeWithText("Período", useUnmergedTree = true).assertIsDisplayed()
-        assertCifras("−\$90.000", 2, rojo)
+        assertCifras("−\$90.000", 2, normal)
         assertCifras("\$90.000", 1, rojo)
         assertGastaste("\$90.000", 2)
         composeRule.onNodeWithText("de \$0", useUnmergedTree = true).assertIsDisplayed()

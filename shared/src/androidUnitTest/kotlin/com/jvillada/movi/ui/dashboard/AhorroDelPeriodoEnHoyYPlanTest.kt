@@ -94,6 +94,9 @@ class AhorroDelPeriodoEnHoyYPlanTest {
         composeRule.onNodeWithTag(TAG_CIFRA_TE_QUEDAN, useUnmergedTree = true).fetchSemanticsNode()
             .config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }.orEmpty()
 
+    private fun cuantos(texto: String) =
+        composeRule.onAllNodesWithText(texto, useUnmergedTree = true).fetchSemanticsNodes().size
+
     private fun hay(texto: String) =
         composeRule.onAllNodesWithText(texto, substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
 
@@ -102,7 +105,8 @@ class AhorroDelPeriodoEnHoyYPlanTest {
     fun `sin ahorro Hoy y Plan dicen lo de siempre`() {
         montar(datos(ahorro = 0))
         assertEquals("\$6.800.000", cifraDeHoy())
-        composeRule.onNodeWithText("Te quedan \$6,8M para 4 días · \$1,7M por día", useUnmergedTree = true).assertIsDisplayed()
+        // Vuelta 45: Pagos dice la misma cifra y el mismo detalle que el héroe.
+        assertEquals(2, cuantos("Para 4 días · \$1,7M por día"))
         // Y es la misma cifra que con un server que no manda el campo (sin `plataDelDisponible` el
         // disponible es «ingresos menos fijos»: 10M − 3,1M, igual que acá).
         assertEquals(
@@ -122,10 +126,10 @@ class AhorroDelPeriodoEnHoyYPlanTest {
 
         // Hoy: la cifra entera, y debajo los días y lo que da por día, sin texto nuevo.
         assertEquals("\$4.800.000", cifraDeHoy())
-        composeRule.onNodeWithText(ROTULO_TE_QUEDAN, useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithText("Para 4 días · \$1,2M por día", useUnmergedTree = true).assertIsDisplayed()
-        // Plan: la misma cifra en su frase, y el mismo «por día».
-        composeRule.onNodeWithText("Te quedan \$4,8M para 4 días · \$1,2M por día", useUnmergedTree = true).assertIsDisplayed()
+        // Vuelta 45: Pagos lleva la misma cifra entera y el mismo detalle (el rótulo, dos veces).
+        assertEquals(2, cuantos(ROTULO_TE_QUEDAN))
+        assertEquals(2, cuantos("Para 4 días · \$1,2M por día"))
+        assertEquals(2, cuantos("\$4.800.000"))
         assertTrue(!hay("ahorro"), "el ahorro no se nombra hasta abrir «¿De dónde sale?»")
     }
 
@@ -153,8 +157,8 @@ class AhorroDelPeriodoEnHoyYPlanTest {
             fraseDelDisponible(d).texto,
         )
         montar(datos(ahorro = 9_000_000))
-        // El héroe dice lo de siempre sin margen: «Te pasaste por» lo gastado.
-        composeRule.onNodeWithText(ROTULO_TE_PASASTE, useUnmergedTree = true).assertIsDisplayed()
+        // El héroe dice lo de siempre sin margen: «Te pasaste por» lo gastado (y Pagos, lo mismo).
+        assertEquals(2, cuantos(ROTULO_TE_PASASTE))
         assertEquals("\$100.000", cifraDeHoy())
     }
 }

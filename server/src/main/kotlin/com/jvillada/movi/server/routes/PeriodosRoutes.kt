@@ -25,7 +25,7 @@ import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.db.toFinancialEvent
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.server.reminders.MONEDA_DE_LAS_REGLAS
-import com.jvillada.movi.server.reminders.occurrenceWindow
+import com.jvillada.movi.server.reminders.ventanaParaProponer
 import com.jvillada.movi.server.reminders.ruleIsActiveOn
 import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.server.time.ajustesDePeriodoDe
@@ -416,7 +416,8 @@ private fun Transaction.leerOcurrenciasDe(
     pares: List<Pair<RecurringRule, LocalDate>>,
     ajustes: PeriodSettings,
 ): LecturaDeOcurrencias {
-    val ventanas = pares.map { (_, vencimiento) -> occurrenceWindow(vencimiento, settings = ajustes) }
+    // Vuelta 45: la de proponer, que llega hasta el cierre del período (ver `ventanaParaProponer`).
+    val ventanas = pares.map { (_, vencimiento) -> ventanaParaProponer(vencimiento, settings = ajustes) }
     return leerOcurrencias(uid, ventanas.minOf { it.start }, ventanas.maxOf { it.endInclusive })
 }
 

@@ -4,6 +4,7 @@ import com.jvillada.movi.shared.model.ChatMessage
 import com.jvillada.movi.shared.model.ChatRole
 import com.jvillada.movi.shared.model.PreguntaSugerida
 import com.jvillada.movi.shared.time.AppTimeZone
+import com.jvillada.movi.ui.dashboard.deCuandoEs
 import com.jvillada.movi.ui.fecha.etiquetaCortaDeFecha
 import com.jvillada.movi.ui.fecha.fechaCortaDelDia
 import com.jvillada.movi.ui.fecha.fechaDeEpoch
@@ -45,7 +46,57 @@ internal sealed interface PiezaDelChat {
         val deOtroDia: Boolean = false,
         val cifrasDe: String? = null,
         val pregunta: ChatMessage? = null,
+        /**
+         * Vuelta 45: lo que va debajo de una respuesta de HOY que ya no vale —«Esto era a las 9:40; ahora
+         * te quedan $773.950»—, o `null`. Con él, [deOtroDia] también es `true` (se atenúa igual).
+         */
+        val vieja: String? = null,
     ) : PiezaDelChat
+}
+
+// ── Vuelta 45: una respuesta de hoy también se pone vieja ─────────────────────
+
+/** Pasada esta hora, una respuesta de hoy que cita cifras ya no se muestra como actual. */
+internal const val VIGENCIA_DE_UNA_RESPUESTA_MS: Long = 60L * 60L * 1000L
+
+/** ¿El texto cita alguna cifra en pesos? «$773.950», «$1,8M». */
+internal fun citaCifras(texto: String): Boolean = Regex("""\$\s?\d""").containsMatchIn(texto)
+
+/**
+ * La cifra de «Te quedan $2.784.550» en una respuesta (la de «¿Cómo voy?» y la que copia al héroe), en
+ * pesos, o `null` si no la dice. Solo la forma entera con puntos de miles: la que escribe el server.
+ */
+internal fun teQuedanCitado(texto: String): Long? =
+    Regex("""[Tt]e quedan \$(\d{1,3}(?:\.\d{3})*)(?![\d,])""").find(texto)
+        ?.groupValues?.get(1)?.replace(".", "")?.toLongOrNull()
+
+/**
+ * **¿Esta respuesta de hoy ya no vale?** (vuelta 45) Al abrir el chat a las 3 p. m. se leía, como de
+ * hoy, la respuesta de las 9:40 —«Te quedan $2.784.550»— cuando ya quedaban $773.950, y el chip de abajo
+ * decía otra cifra. Se pone vieja si cita cifras y pasó más de [VIGENCIA_DE_UNA_RESPUESTA_MS], o si su
+ * «Te quedan» ya no es el de ahora ([teQuedanAhora], el del Inicio). `null` = sigue valiendo.
+ *
+ * El «Te quedan» de ahora solo cuenta si se leyó **después** de la respuesta ([datosDe], cuándo cargó
+ * el Inicio): una lectura de la mañana no puede desmentir una respuesta del mediodía. Una respuesta
+ * dicha después de [ahora] (recién llegada) nunca es vieja.
+ *
+ * @return «Esto era a las 9:40», y si cambió lo que queda, «…; ahora te quedan $773.950».
+ */
+internal fun loQueDiceLaRespuestaVieja(
+    mensaje: ChatMessage,
+    ahora: Long,
+    teQuedanAhora: Long?,
+    datosDe: Long?,
+    cifra: (Long) -> String,
+): String? {
+    val dicha = mensaje.enviadoEn ?: return null
+    if (dicha >= ahora || !citaCifras(mensaje.content)) return null
+    val citado = teQuedanCitado(mensaje.content)
+    val actual = teQuedanAhora?.takeIf { datosDe != null && datosDe > dicha }
+    val cambio = citado != null && actual != null && citado != actual
+    if (ahora - dicha <= VIGENCIA_DE_UNA_RESPUESTA_MS && !cambio) return null
+    val cuando = "Esto era ${deCuandoEs(dicha, ahora)}"
+    return if (cambio && actual != null && actual >= 0L) "$cuando; ahora te quedan ${cifra(actual)}" else cuando
 }
 
 /** El día de [mensaje] en la zona de la app, o `null` si no trae fecha. */
@@ -71,6 +122,12 @@ internal fun piezasDelChat(
     mensajes: List<ChatMessage>,
     hoy: LocalDate,
     zona: TimeZone = AppTimeZone.zone,
+    /** Vuelta 45: el momento de ahora, para saber si una respuesta de HOY ya no vale. `null` no mira. */
+    ahora: Long? = null,
+    /** El «Te quedan» de ahora (el del Inicio), si se sabe, y cuándo se leyó. */
+    teQuedanAhora: Long? = null,
+    datosDe: Long? = null,
+    cifra: (Long) -> String = { it.toString() },
 ): List<PiezaDelChat> {
     val dias = mensajes.map { diaDelMensaje(it, zona) }
     val conSeparadores = dias.any { it != null && it != hoy }
@@ -87,13 +144,21 @@ internal fun piezasDelChat(
                 ultimaPregunta = mensaje
                 add(PiezaDelChat.Mensaje(mensaje))
             } else {
-                val vieja = dia != null && dia < hoy
+                val deOtroDia = dia != null && dia < hoy
+                // Vuelta 45: una de hoy también se pone vieja (ver [loQueDiceLaRespuestaVieja]).
+                val viejaDeHoy = if (!deOtroDia && ahora != null) {
+                    loQueDiceLaRespuestaVieja(mensaje, ahora, teQuedanAhora, datosDe, cifra)
+                } else {
+                    null
+                }
+                val vieja = deOtroDia || viejaDeHoy != null
                 add(
                     PiezaDelChat.Mensaje(
                         mensaje = mensaje,
                         deOtroDia = vieja,
-                        cifrasDe = if (vieja && dia != null) deCuandoEranLasCifras(dia, hoy) else null,
+                        cifrasDe = if (deOtroDia && dia != null) deCuandoEranLasCifras(dia, hoy) else null,
                         pregunta = if (vieja) ultimaPregunta?.takeIf { it.content.isNotBlank() } else null,
+                        vieja = viejaDeHoy,
                     ),
                 )
             }

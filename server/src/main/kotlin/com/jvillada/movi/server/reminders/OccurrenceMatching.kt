@@ -10,6 +10,7 @@ import com.jvillada.movi.shared.model.claveComparableDeNombre
 import com.jvillada.movi.shared.model.isReservedCategory
 import com.jvillada.movi.shared.model.nombreDeMovimientoPegaConRegla
 import com.jvillada.movi.shared.model.nombraAlDestino
+import com.jvillada.movi.shared.model.ultimoDiaParaProponer
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
@@ -149,6 +150,30 @@ fun sostieneLaOcurrencia(
     settings: PeriodSettings = PeriodSettings(),
 ): Boolean = fecha in occurrenceWindow(dueDate, windowDays, settings)
 
+/**
+ * **Hasta dónde se PROPONE** (vuelta 45): la ventana de [occurrenceWindow] estirada hasta el último día
+ * del período del dueño en que vence ([ultimoDiaParaProponer] en `:core`, pura y probada allá).
+ *
+ * El caso: el arriendo del 5 pagado el 28, 23 días tarde. Pasados los 10 días de la ventana la fila
+ * dejaba de preguntar y decía «Movi no encontró el movimiento de este pago» con el movimiento a la
+ * vista. Ahora lo sigue proponiendo («¿Es este?») hasta el cierre del período. **Solo propone**: lo que
+ * cae fuera de [occurrenceWindow] nunca es concluyente ni identidad fuerte (ver [candidatosPuntuados]),
+ * así que Movi no lo tilda solo ni lo absorbe en el Disponible. Y la ventana que sostiene un sello ya
+ * puesto ([sostieneLaOcurrencia]) sigue siendo la angosta.
+ */
+fun ventanaParaProponer(
+    dueDate: LocalDate,
+    windowDays: Long = OCCURRENCE_WINDOW_DAYS,
+    settings: PeriodSettings = PeriodSettings(),
+): ClosedRange<LocalDate> {
+    val angosta = occurrenceWindow(dueDate, windowDays, settings)
+    // Por ISO: el server no ve los tipos de `kotlinx-datetime` (ver `fechaEsperada`).
+    val hasta = ultimoDiaParaProponer(dueDate.toString(), settings, windowDays.toInt())
+        ?.let(LocalDate::parse)
+        ?: return angosta
+    return angosta.start..maxOf(angosta.endInclusive, hasta)
+}
+
 /** Cuántas propuestas se le muestran al dueño. Más de tres es una lista, no una propuesta. */
 const val MAX_OCCURRENCE_CANDIDATES: Int = 3
 
@@ -261,6 +286,9 @@ fun candidatosPuntuados(
     // La ventana (con su piso en el primer día del mes del vencimiento) sale de
     // [occurrenceWindow]: es la MISMA que decide si un sello ya puesto sigue teniendo evidencia.
     val ventana = occurrenceWindow(dueDate, windowDays, settings)
+    // Vuelta 45: se PROPONE hasta el cierre del período (ver [ventanaParaProponer]); lo que cae entre
+    // el fin de [ventana] y ese cierre solo pregunta: nunca es concluyente ni identidad fuerte.
+    val paraProponer = ventanaParaProponer(dueDate, windowDays, settings)
 
     return events
         .asSequence()
@@ -277,7 +305,8 @@ fun candidatosPuntuados(
         .filter { it.currency == MONEDA_DE_LAS_REGLAS }
         .mapNotNull { event ->
             val fecha = epochMillisToAppDate(event.timestamp, zone)
-            if (fecha !in ventana) return@mapNotNull null
+            if (fecha !in paraProponer) return@mapNotNull null
+            val enLaVentana = fecha in ventana
             val dias = ChronoUnit.DAYS.between(dueDate, fecha)
             val nombrePega = nombrePegaCon(rule, event)
             val categoriaPega = claveCategoria.isNotEmpty() &&
@@ -305,7 +334,9 @@ fun candidatosPuntuados(
             // dueño recibe el mercado, la cuota de un crédito compartido y la mesada de la tía,
             // los tres a la MISMA cuenta). Por eso nunca decide con el peso puro del nombre: hace
             // falta ADEMÁS el monto exacto — la misma exigencia que ya tenía categoría+cuenta.
-            val identidadFuerte = nombrePega || (destinoPega && montoExacto)
+            // Vuelta 45: fuera de la ventana angosta solo se propone — ni identidad fuerte (no absorbe
+            // un fijo del Disponible) ni concluyente (no se empareja solo).
+            val identidadFuerte = enLaVentana && (nombrePega || (destinoPega && montoExacto))
             CandidatoPuntuado(
                 event = event,
                 senas = senas,
@@ -313,7 +344,8 @@ fun candidatosPuntuados(
                 distanciaDias = abs(dias),
                 identidadFuerte = identidadFuerte,
                 // Las TRES puertas de «sin lugar a dudas» — ver el KDoc de [ocurrenciaConcluyente].
-                concluyente = identidadFuerte || (categoriaPega && laCuentaPega && montoExacto),
+                concluyente = enLaVentana && (identidadFuerte || (categoriaPega && laCuentaPega && montoExacto)),
+                enLaVentana = enLaVentana,
             )
         }
         .sortedWith(ORDEN_DE_CANDIDATOS)
@@ -374,6 +406,12 @@ data class CandidatoPuntuado(
      * [ocurrenciaConcluyente] para las tres puertas completas.
      */
     val concluyente: Boolean,
+    /**
+     * Vuelta 45: ¿cae en la ventana angosta ([occurrenceWindow])? Lo que no —pasados los 10 días, hasta
+     * el cierre del período ([ventanaParaProponer])— solo se propone: ni [identidadFuerte] ni
+     * [concluyente], y el gasto variable del Inicio no lo mira (ver `PagosDelChecklist.kt`).
+     */
+    val enLaVentana: Boolean = true,
 )
 
 /**
