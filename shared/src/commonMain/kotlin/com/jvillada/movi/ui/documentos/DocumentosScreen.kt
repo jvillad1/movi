@@ -834,7 +834,7 @@ private fun FilaElegible(
             Icon(
                 Icons.Rounded.Check,
                 contentDescription = null,
-                tint = Movi.colores.marca,
+                tint = Movi.colores.texto,
                 modifier = Modifier.size(Icono.s),
             )
         }

@@ -132,7 +132,7 @@ internal fun PropuestaDelAsistente(
     ) {
       Column(verticalArrangement = Arrangement.spacedBy(Espacio.xs)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = Movi.colores.marca, modifier = Modifier.size(Icono.s))
+            Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = Movi.colores.enlace, modifier = Modifier.size(Icono.s))
             Spacer(Modifier.width(Espacio.xs))
             Text(ROTULO_DE_LA_PROPUESTA, style = Movi.textos.apoyoMedio, color = Movi.colores.textoMedio)
         }

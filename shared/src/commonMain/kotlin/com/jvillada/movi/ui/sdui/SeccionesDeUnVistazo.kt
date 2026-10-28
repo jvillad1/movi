@@ -546,7 +546,7 @@ private fun CampoParaPreguntar(onClick: () -> Unit) {
         Icon(
             Icons.AutoMirrored.Rounded.Send,
             contentDescription = null,
-            tint = Movi.colores.marca,
+            tint = Movi.colores.enlace,
             modifier = Modifier.size(Icono.m),
         )
     }

@@ -151,7 +151,7 @@ fun Application.configureRouting() {
             // que hace que la petición condicional se conteste 304 sin cuerpo cuando nada cambió.
             //
             // Va parejo para todo, fuentes incluidas: viven en una ruta fija
-            // (`composeResources/…/font/space_grotesk_regular.ttf`), sin hash de contenido, así
+            // (`composeResources/…/font/figtree_regular.ttf`), sin hash de contenido, así
             // que un `immutable` de un año dejaría clavada la fuente vieja el día que cambie. Un
             // 304 de cinco archivos es un precio bajo por no tener esa trampa.
             cacheControl { listOf(CacheControl.NoCache(null)) }

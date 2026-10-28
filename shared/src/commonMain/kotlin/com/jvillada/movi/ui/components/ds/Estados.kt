@@ -57,7 +57,7 @@ fun Vacio(
 }
 
 /**
- * **Una [Fila] que todavía no llegó**: mide lo mismo que la fila real (56, o 64 con subtítulo), con
+ * **Una [Fila] que todavía no llegó**: mide lo mismo que la fila real (56, o 58 con subtítulo), con
  * el círculo del inicio, los renglones y el monto en su lugar, para que nada salte cuando llega el
  * dato. Reusa los bloques de `Esqueleto.kt` (mismo pulso y mismo color).
  */
@@ -73,7 +73,7 @@ fun EsqueletoDeFila(
             .fillMaxWidth()
             .heightIn(min = if (conSubtitulo) Medida.altoDeFilaDoble else Medida.altoDeFila)
             .testTag(TAG_ESQUELETO_DE_FILA)
-            .padding(horizontal = Medida.margenDePantalla, vertical = Espacio.xs),
+            .padding(horizontal = Medida.margenDePantalla, vertical = Espacio.xxs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // Los mismos aires que la [Fila]: 12 después del inicio, 8 antes del final (vuelta 15).

@@ -1830,7 +1830,7 @@ private fun ComercioQueSeEdita(
                 },
             )
         }
-        Text("Editar", style = Movi.textos.cuerpo, color = Movi.colores.marca)
+        Text("Editar", style = Movi.textos.cuerpo, color = Movi.colores.enlace)
     }
 }
 
@@ -1864,7 +1864,7 @@ private fun Detail(
             if (ok) IconoEnCirculo(Icons.Rounded.Check, tono = TonoDeIcono.Exito)
             else IconoEnCirculo(Icons.Rounded.QuestionMark, tono = TonoDeIcono.Aviso)
         },
-        final = action?.let { texto -> { Text(texto, style = Movi.textos.cuerpo, color = Movi.colores.marca) } },
+        final = action?.let { texto -> { Text(texto, style = Movi.textos.cuerpo, color = Movi.colores.enlace) } },
         onClick = onClick,
     )
 }

@@ -1,5 +1,8 @@
 package com.jvillada.movi.ui.plan
 
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.padding
+import com.jvillada.movi.ui.recurrentes.SANGRIA_DEL_TEXTO_DE_LA_FILA
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Medida
 import androidx.compose.foundation.background
@@ -958,16 +961,27 @@ fun LazyListScope.tableroDeRecurrentes(
  */
 @Composable
 internal fun FilaDeRecordatoriosSinCanal(bloqueadas: Boolean, onActivar: () -> Unit, onAhoraNo: () -> Unit) {
-    Fila(
-        titulo = TITULO_RECORDATORIOS_SIN_CANAL,
-        subtitulo = if (bloqueadas) SUBTITULO_RECORDATORIOS_BLOQUEADOS else SUBTITULO_RECORDATORIOS_APAGADOS,
-        tonoDelSubtitulo = TonoDeSubtitulo.Aviso,
-        inicio = { IconoEnCirculo(Icons.Rounded.NotificationsOff, tono = TonoDeIcono.Aviso) },
-        final = { Boton(AHORA_NO, onClick = onAhoraNo, variante = VarianteDeBoton.Fantasma, tamano = TamanoDeBoton.S) },
-        onClick = onActivar,
-        onClickLabel = if (bloqueadas) "Ver tus avisos" else "Activar notificaciones",
-        modifier = Modifier.testTag(TAG_FILA_DE_RECORDATORIOS),
-    )
+    // Vuelta 29: «Ahora no» baja debajo del texto, con su sangría. Al final de la fila le quitaba
+    // ~100 dp al título y con Figtree el título se partía y el subtítulo se cortaba en «…notifi…».
+    // El subtítulo va en hasta dos renglones (el bloqueado es largo). Lo vigila `LoQueSeVeEnteroTest`.
+    Column(modifier = Modifier.testTag(TAG_FILA_DE_RECORDATORIOS)) {
+        Fila(
+            titulo = TITULO_RECORDATORIOS_SIN_CANAL,
+            subtitulo = if (bloqueadas) SUBTITULO_RECORDATORIOS_BLOQUEADOS else SUBTITULO_RECORDATORIOS_APAGADOS,
+            tonoDelSubtitulo = TonoDeSubtitulo.Aviso,
+            lineasDelSubtitulo = 2,
+            inicio = { IconoEnCirculo(Icons.Rounded.NotificationsOff, tono = TonoDeIcono.Aviso) },
+            onClick = onActivar,
+            onClickLabel = if (bloqueadas) "Ver tus avisos" else "Activar notificaciones",
+        )
+        Boton(
+            AHORA_NO,
+            onClick = onAhoraNo,
+            variante = VarianteDeBoton.Fantasma,
+            tamano = TamanoDeBoton.S,
+            modifier = Modifier.padding(start = SANGRIA_DEL_TEXTO_DE_LA_FILA - Espacio.s),
+        )
+    }
 }
 
 /** Lo que dice la fila cuando las notificaciones están apagadas: qué pasa al tocarla. */
@@ -989,7 +1003,7 @@ const val TAG_FILA_DE_RECORDATORIOS: String = "fila-de-recordatorios-sin-canal"
 internal fun claveDeRecordatoriosAhoraNo(periodo: PeriodoFinanciero): String = "recordatorios-sin-canal:${periodo.prefijo}"
 
 /** El título de la fila de los recordatorios sin canal. */
-const val TITULO_RECORDATORIOS_SIN_CANAL: String = "Tus recordatorios no te van a llegar"
+const val TITULO_RECORDATORIOS_SIN_CANAL: String = "Tus recordatorios no llegan"
 
 /**
  * **Las hojas que abren las filas del tablero.** Van afuera de la `LazyColumn` —en el `Box` de la

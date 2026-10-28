@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.credits
 
+import com.jvillada.movi.ui.components.ds.coloresDeLoElegido
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.ui.components.ds.Campo
@@ -300,7 +301,7 @@ private fun RowScope.CurrencyChip(label: String, selected: Boolean, onClick: () 
         modifier = Modifier
             .weight(1f)
             .clip(RoundedCornerShape(Radio.m))
-            .background(if (selected) Movi.colores.lavado(Movi.colores.marca) else Movi.colores.tarjeta)
+            .background(if (selected) coloresDeLoElegido(Movi.colores).first else Movi.colores.tarjeta)
             .then(
                 if (!selected) Modifier.border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.m)) else Modifier,
             )
@@ -311,7 +312,7 @@ private fun RowScope.CurrencyChip(label: String, selected: Boolean, onClick: () 
         Text(
             text = label,
             style = if (selected) Movi.textos.cuerpo else Movi.textos.cuerpoRegular,
-            color = if (selected) Movi.colores.marca else Movi.colores.textoMedio,
+            color = if (selected) coloresDeLoElegido(Movi.colores).second else Movi.colores.textoMedio,
         )
     }
 }

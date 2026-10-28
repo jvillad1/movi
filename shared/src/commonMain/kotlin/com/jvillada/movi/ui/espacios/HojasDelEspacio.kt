@@ -236,7 +236,7 @@ fun HojaSaldar(detalle: DetalleDelEspacio, onDismiss: () -> Unit, onSaldado: () 
                             titulo = p.descripcion,
                             subtitulo = formatCOP(p.monto),
                             final = if (vinculada == p.eventoId) {
-                                { Icon(Icons.Rounded.Check, contentDescription = "Elegida", tint = Movi.colores.marca) }
+                                { Icon(Icons.Rounded.Check, contentDescription = "Elegida", tint = Movi.colores.texto) }
                             } else {
                                 null
                             },
@@ -511,7 +511,7 @@ internal fun SeccionDeRepartir(
                     },
                     inicio = { IconoEnCirculo(Icons.Rounded.Groups) },
                     final = {
-                        Text("Repartir", style = Movi.textos.cuerpo, color = Movi.colores.marca)
+                        Text("Repartir", style = Movi.textos.cuerpo, color = Movi.colores.enlace)
                     },
                     onClick = { escritura.repartir(espacio) },
                     onClickLabel = "Repartir en ${espacio.nombre}",

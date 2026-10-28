@@ -23,7 +23,7 @@ import com.jvillada.movi.shared.model.ParsedTransaction
 import com.jvillada.movi.shared.model.ReconciliationMatch
 import com.jvillada.movi.shared.model.StatementParseResult
 import com.jvillada.movi.shared.model.TransactionType
-import com.jvillada.movi.theme.COLORES_OSCUROS
+import com.jvillada.movi.theme.COLORES_CLAROS
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.components.ds.TAG_BOTON
 import com.jvillada.movi.ui.components.ds.TAG_CASILLA
@@ -49,13 +49,13 @@ import kotlin.test.assertTrue
  * Era el archivo más fuera del sistema de la app, y se usa cada mes: dos `Button` y dos
  * `OutlinedButton` de Material, el texto del botón principal en `Color.White` (que sobre la lavanda
  * del tema oscuro no se leía), un ícono de casilla de Material para tildar cada fila y los montos en
- * `Text` sueltos. Lo que se fija acá, en el tema oscuro:
+ * `Text` sueltos. Lo que se fija acá:
  *
  * - **cada botón es un `Boton`** (su variante viaja en la semántica): «Importar» principal, «Anotar
  *   los N» y «No son el mismo» secundarios, «Sí, es el mismo» principal;
  * - **cada fila lleva la `Casilla` del sistema**, que dice su estado, y tocar la fila la destilda;
  * - **los montos son `Cifra`**;
- * - **el texto del botón principal se lee en el tema oscuro** (≥ 4,5:1), y el blanco de antes no.
+ * - **el texto del botón principal se lee** (≥ 4,5:1), y el blanco de antes no.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "w411dp-h2400dp-xhdpi")
@@ -98,7 +98,7 @@ class LaRevisionDelExtractoEsDelSistemaTest {
             matches = listOf(coincidencia),
         )
         composeRule.setContent {
-            MoviTheme(oscuro = true) { Box(Modifier.fillMaxSize()) { StatementReviewScreen(onNavigate = {}, result = result) } }
+            MoviTheme { Box(Modifier.fillMaxSize()) { StatementReviewScreen(onNavigate = {}, result = result) } }
         }
         composeRule.waitForIdle()
     }
@@ -148,12 +148,13 @@ class LaRevisionDelExtractoEsDelSistemaTest {
     }
 
     @Test
-    fun el_texto_del_boton_principal_se_lee_en_el_tema_oscuro() {
-        val (fondo, texto) = coloresDelBoton(VarianteDeBoton.Principal, COLORES_OSCUROS)
+    fun el_texto_del_boton_principal_se_lee() {
+        val (fondo, texto) = coloresDelBoton(VarianteDeBoton.Principal, COLORES_CLAROS)
         val conElSistema = contraste(texto, fondo)
-        assertTrue(conElSistema >= 4.5, "el texto del botón principal da ${conElSistema}:1 en oscuro")
-        // El porqué: el blanco que tenía a mano no pasa sobre la lavanda.
-        assertTrue(contraste(Color.White, fondo) < 4.5, "el blanco sobre la marca oscura no debería pasar AA")
+        assertTrue(conElSistema >= 4.5, "el texto del botón principal da ${conElSistema}:1")
+        // El porqué: el blanco que tenía a mano no pasa sobre la marca (era la lavanda del tema
+        // oscuro; desde la vuelta 29 es el amarillo de la opción 3, y tampoco).
+        assertTrue(contraste(Color.White, fondo) < 4.5, "el blanco sobre la marca no debería pasar AA")
     }
 
     // WCAG 2.2, como en `ContrasteDeLosTokensTest`.

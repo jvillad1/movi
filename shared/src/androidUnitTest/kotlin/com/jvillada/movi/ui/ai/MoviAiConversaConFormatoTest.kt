@@ -23,11 +23,9 @@ import com.jvillada.movi.shared.model.ChatRole
 import com.jvillada.movi.shared.model.ConversacionDelAsistente
 import com.jvillada.movi.shared.model.PreguntaSugerida
 import com.jvillada.movi.theme.COLORES_CLAROS
-import com.jvillada.movi.theme.COLORES_OSCUROS
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.components.ds.TAG_PILDORA_DE_ACCION
 import com.jvillada.movi.ui.dashboard.DashboardDataCache
-import androidx.compose.runtime.mutableStateOf
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.After
 import org.junit.Rule
@@ -70,8 +68,6 @@ class MoviAiConversaConFormatoTest {
         ChatMessage(ChatRole.ASSISTANT, respuestaConLista),
     )
 
-    private val oscuro = mutableStateOf(false)
-
     private fun montar(
         mensajes: List<ChatMessage>,
         contestar: suspend (AiChatRequest) -> AiChatResponse = { AiChatResponse(text = "Listo.") },
@@ -83,7 +79,7 @@ class MoviAiConversaConFormatoTest {
                 return contestar(request)
             }
         }
-        composeRule.setContent { MoviTheme(oscuro = oscuro.value) { Box(Modifier.fillMaxSize()) { AIChatScreen(onNavigate = {}) } } }
+        composeRule.setContent { MoviTheme { Box(Modifier.fillMaxSize()) { AIChatScreen(onNavigate = {}) } } }
         composeRule.waitUntil(5_000) { textos().any { "Arriendo" in it } || textos().any { "Vas bien" in it } }
     }
 
@@ -117,17 +113,17 @@ class MoviAiConversaConFormatoTest {
     }
 
     @Test
-    fun `la burbuja del dueno usa los tokens, en los dos temas`() {
+    fun `la burbuja del dueno usa los tokens`() {
         montar(yaPreguntada)
-        for ((enOscuro, colores) in listOf(false to COLORES_CLAROS, true to COLORES_OSCUROS)) {
-            oscuro.value = enOscuro
-            composeRule.waitForIdle()
+        for (colores in listOf(COLORES_CLAROS)) {
             val texto = composeRule.onAllNodes(
                 hasText(PreguntaSugerida.COMO_VOY.texto) and hasAnyAncestor(hasTestTag(TAG_BURBUJA_DEL_DUENO)),
                 useUnmergedTree = true,
             ).fetchSemanticsNodes().single()
             assertEquals(textoDeLaBurbujaDelDueno(colores), medidaDe(texto).layoutInput.style.color)
+            // El lavado de la marca es el tinte de la opción 3 (vuelta 29): una burbuja amarilla clara.
             assertEquals(colores.lavado(colores.marca), fondoDeLaBurbujaDelDueno(colores))
+            assertEquals(colores.tinte, fondoDeLaBurbujaDelDueno(colores))
             assertTrue(fondoDeLaBurbujaDelDueno(colores) != colores.texto, "ya no es la burbuja del color del texto")
         }
     }

@@ -13,7 +13,6 @@ import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.isCashFlow
 import com.jvillada.movi.theme.COLORES_CLAROS
-import com.jvillada.movi.theme.COLORES_OSCUROS
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -132,7 +131,7 @@ class ColorYEntreCuentasTest {
      */
     @Test
     fun `gasto, ingreso y entre cuentas son tres colores distintos`() {
-        for ((tema, colores) in listOf("oscuro" to COLORES_OSCUROS, "claro" to COLORES_CLAROS)) {
+        for ((tema, colores) in listOf("claro" to COLORES_CLAROS)) {
             val gastoColor = colorDelTono(TonoDelMonto.GASTO, colores)
             val ingresoColor = colorDelTono(TonoDelMonto.INGRESO, colores)
             val entreCuentasColor = colorDelTono(TonoDelMonto.ENTRE_CUENTAS, colores)

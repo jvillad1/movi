@@ -492,7 +492,7 @@ fun CategoryField(
                 .testTag(TAG_CAMPO_DE_CATEGORIA)
                 .clip(forma)
                 .background(Movi.colores.tarjeta)
-                .border(Medida.trazo, if (abierto) Movi.colores.marca else Movi.colores.borde, forma)
+                .border(Medida.trazo, if (abierto) Movi.colores.enlace else Movi.colores.borde, forma)
                 .clickable { abierto = !abierto }
                 .padding(horizontal = Movi.espacios.medio, vertical = Movi.espacios.medio),
             verticalAlignment = Alignment.CenterVertically,
@@ -563,7 +563,7 @@ fun EnlaceAdministrarCategorias() {
     Text(
         text = "Administrar categorías",
         style = Movi.textos.apoyoMedio,
-        color = Movi.colores.marca,
+        color = Movi.colores.enlace,
         modifier = Modifier
             .clip(RoundedCornerShape(Movi.formas.minima))
             .clickable { navegar(Screen.Categorias) }

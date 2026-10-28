@@ -6,16 +6,13 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.res.Configuration
 import android.view.View
 import android.widget.RemoteViews
 import androidx.compose.ui.graphics.toArgb
 import com.jvillada.movi.MainActivity
 import com.jvillada.movi.app.R
 import com.jvillada.movi.data.SessionManager
-import com.jvillada.movi.data.TemaStore
 import com.jvillada.movi.theme.COLORES_CLAROS
-import com.jvillada.movi.theme.COLORES_OSCUROS
 import com.jvillada.movi.ui.dashboard.InstantaneaDelInicio
 import com.jvillada.movi.ui.dashboard.TextoDelWidget
 import com.jvillada.movi.ui.dashboard.textoDelWidget
@@ -38,8 +35,8 @@ import com.jvillada.movi.ui.dashboard.textoDelWidget
  * mostrar nada. El widget no es más que lo que el dueño ya dejó a la vista en su pantalla de inicio.
  *
  * Con `AppWidgetProvider` + `RemoteViews` y sin dependencias nuevas (Glance sumaría una librería y un
- * runtime de Compose aparte para tres renglones de texto). Los colores salen de `Tokens.kt` en el tema
- * que el dueño eligió en la app.
+ * runtime de Compose aparte para tres renglones de texto). Los colores salen de `Tokens.kt`, del único
+ * tema que hay desde la vuelta 29 (opción 3): claro, también con el teléfono en modo oscuro.
  */
 class WidgetTeQuedan : AppWidgetProvider() {
 
@@ -67,24 +64,19 @@ class WidgetTeQuedan : AppWidgetProvider() {
                     ahora = System.currentTimeMillis(),
                 )
             }.getOrElse { textoDelWidget(null, null, haySesion = false, ahora = 0L) }
-            // El tema elegido en Ajustes; «Igual que el teléfono» se resuelve con la configuración
-            // del sistema, que es lo único que un widget puede mirar (no hay composición acá).
-            val oscuro = runCatching {
-                val modoNoche = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
-                TemaStore.oscuroCon(sistemaOscuro = modoNoche == Configuration.UI_MODE_NIGHT_YES)
-            }.getOrDefault(true)
-            manager.updateAppWidget(ids, vistas(context, texto, oscuro))
+            manager.updateAppWidget(ids, vistas(context, texto))
         }
 
-        internal fun vistas(context: Context, texto: TextoDelWidget, oscuro: Boolean): RemoteViews {
-            val colores = if (oscuro) COLORES_OSCUROS else COLORES_CLAROS
+        internal fun vistas(context: Context, texto: TextoDelWidget): RemoteViews {
+            val colores = COLORES_CLAROS
             return RemoteViews(context.packageName, R.layout.widget_te_quedan).apply {
                 setInt(R.id.widget_fondo, "setColorFilter", colores.tarjeta.toArgb())
                 if (texto.cifra == null) {
-                    // «Abre Movi» en el lugar de la cifra, y sin rótulo encima.
+                    // «Abre Movi» en el lugar de la cifra, y sin rótulo encima. En el color del
+                    // enlace: el amarillo de la marca no se lee como letra sobre el blanco.
                     setViewVisibility(R.id.widget_rotulo, View.GONE)
                     setTextViewText(R.id.widget_cifra, texto.rotulo)
-                    setTextColor(R.id.widget_cifra, colores.marca.toArgb())
+                    setTextColor(R.id.widget_cifra, colores.enlace.toArgb())
                 } else {
                     setViewVisibility(R.id.widget_rotulo, View.VISIBLE)
                     setTextViewText(R.id.widget_rotulo, texto.rotulo)

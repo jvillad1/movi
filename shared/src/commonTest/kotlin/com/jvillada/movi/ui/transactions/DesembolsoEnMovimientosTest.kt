@@ -9,7 +9,6 @@ import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.theme.COLORES_CLAROS
-import com.jvillada.movi.theme.COLORES_OSCUROS
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
@@ -65,7 +64,6 @@ class DesembolsoEnMovimientosTest {
         assertEquals("Desembolso", transferRowTitle(desembolso, tipos))
         assertEquals(TonoDelMonto.INGRESO, tonoDelRenglon(desembolso, tipos))
         assertEquals(COLORES_CLAROS.entra, colorDelTono(tonoDelRenglon(desembolso, tipos), COLORES_CLAROS))
-        assertEquals(COLORES_OSCUROS.entra, colorDelTono(tonoDelRenglon(desembolso, tipos), COLORES_OSCUROS))
         assertTrue(textoDelMontoDeTraspaso(desembolso, tipos).startsWith("+"), textoDelMontoDeTraspaso(desembolso, tipos))
         assertTrue(textoDelMontoDeTraspaso(desembolso, tipos).contains("10.000.000"))
         assertEquals("Crédito · plata prestada que entró a tu cuenta", NOTA_DE_DESEMBOLSO)

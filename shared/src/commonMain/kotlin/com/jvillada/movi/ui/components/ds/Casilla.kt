@@ -26,7 +26,7 @@ const val TAG_CASILLA: String = "ds-casilla"
 /**
  * **Una casilla de marcar** (vuelta de diseño 14). La caja mide [Icono.l] con radio [Radio.s]:
  *
- * - **marcada**: rellena de la marca, con el visto en `sobreMarca`. Se distingue de lejos, no por un
+ * - **marcada**: rellena de tinta, con el visto en blanco (vuelta 29; antes, de la marca). Se distingue de lejos, no por un
  *   lavado de 16 % (la de antes, `CasillaDeSeleccion` —ya borrada—, era un cuadrado lavanda chico
  *   que marcada y desmarcada casi no cambiaba);
  * - **sin marcar**: vacía, con el borde en `textoMedio` (el `borde` de un campo no se veía sobre la
@@ -75,7 +75,9 @@ private fun CajaDeLaCasilla(marcada: Boolean) {
             .clip(forma)
             .then(
                 if (marcada) {
-                    Modifier.background(Movi.colores.marca, forma)
+                    // En tinta, como el filtro elegido (vuelta 29): el amarillo no se despega del
+                    // blanco lo bastante para decir «marcada» (1,6:1, y un control pide 3:1).
+                    Modifier.background(Movi.colores.texto, forma)
                 } else {
                     Modifier.border(Medida.trazo, Movi.colores.textoMedio, forma)
                 },
@@ -84,7 +86,7 @@ private fun CajaDeLaCasilla(marcada: Boolean) {
     ) {
         if (marcada) {
             // Ícono y no «✓»: la fuente del canvas web no trae el carácter (se vio en la PWA, en «Nuevo recurrente»).
-            Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.sobreMarca, modifier = Modifier.size(Icono.s))
+            Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.tarjeta, modifier = Modifier.size(Icono.s))
         }
     }
 }

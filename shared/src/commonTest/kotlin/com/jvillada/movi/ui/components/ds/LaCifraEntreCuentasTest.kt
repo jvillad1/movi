@@ -1,7 +1,6 @@
 package com.jvillada.movi.ui.components.ds
 
 import com.jvillada.movi.theme.COLORES_CLAROS
-import com.jvillada.movi.theme.COLORES_OSCUROS
 import com.jvillada.movi.ui.components.PLATA_OCULTA
 import com.jvillada.movi.ui.transactions.TonoDelMonto
 import com.jvillada.movi.ui.transactions.colorDelTono
@@ -22,7 +21,7 @@ class LaCifraEntreCuentasTest {
 
     @Test
     fun `entre cuentas va en su color en los dos temas, distinto del gasto, el ingreso y lo apagado`() {
-        for (colores in listOf(COLORES_OSCUROS, COLORES_CLAROS)) {
+        for (colores in listOf(COLORES_CLAROS)) {
             val entreCuentas = colorDeLaCifra(TonoDeCifra.EntreCuentas, colores)
             assertEquals(colores.entreCuentas, entreCuentas)
             for (otro in listOf(TonoDeCifra.Neutro, TonoDeCifra.Ingreso, TonoDeCifra.Apagado, TonoDeCifra.Alerta)) {
@@ -49,7 +48,7 @@ class LaCifraEntreCuentasTest {
         assertEquals("+\$27.500", textoDeLaCifra(montoParaLaCifra(TonoDelMonto.INGRESO, 27_500), "COP", TonoDeCifra.Ingreso, false))
         // Y el color de una fila sale de la Cifra del sistema, no de una tabla aparte.
         for (tono in TonoDelMonto.entries) {
-            assertEquals(colorDeLaCifra(tonoDeCifraDelTono(tono), COLORES_OSCUROS), colorDelTono(tono, COLORES_OSCUROS))
+            assertEquals(colorDeLaCifra(tonoDeCifraDelTono(tono), COLORES_CLAROS), colorDelTono(tono, COLORES_CLAROS))
         }
     }
 }

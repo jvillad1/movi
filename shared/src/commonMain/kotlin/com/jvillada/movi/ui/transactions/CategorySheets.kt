@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.transactions
 
+import com.jvillada.movi.ui.components.ds.fondoDeLaFilaElegida
 import kotlin.math.abs
 import com.jvillada.movi.ui.components.ds.TonoDeCifra
 import com.jvillada.movi.ui.components.ds.Cifra
@@ -176,7 +177,7 @@ private fun CategoryRow(
                 Text(subtitle, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
             }
         }
-        if (selected) Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.marca, modifier = Modifier.size(Icono.s))
+        if (selected) Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.texto, modifier = Modifier.size(Icono.s))
     }
 }
 
@@ -1226,7 +1227,7 @@ private fun NombreQueSeEdita(nombre: String, evento: FinancialEvent? = null, onE
             color = Movi.colores.texto,
             modifier = Modifier.weight(1f),
         )
-        Text("Editar", style = Movi.textos.cuerpo, color = Movi.colores.marca)
+        Text("Editar", style = Movi.textos.cuerpo, color = Movi.colores.enlace)
     }
 }
 
@@ -1346,7 +1347,7 @@ private fun SeccionDelMovimiento(
         Text(
             text = if (abierto) "Cerrar" else "Cambiar",
             style = Movi.textos.cuerpo,
-            color = Movi.colores.marca,
+            color = Movi.colores.enlace,
         )
     }
 
@@ -1595,7 +1596,7 @@ private fun SeccionEstoSeRepite(
     Text(
         text = if (marcando) "Guardando…" else "No, este no se repite",
         style = Movi.textos.apoyoMedio,
-        color = if (marcando) Movi.colores.textoApagado else Movi.colores.marca,
+        color = if (marcando) Movi.colores.textoApagado else Movi.colores.enlace,
         modifier = Modifier.clickable(enabled = !marcando && !consultando) { marcarQueSeRepite(false) },
     )
     // No es un error: es la respuesta correcta a la pregunta que acaba de hacer. Va acá, pegada
@@ -1612,7 +1613,7 @@ private fun SeccionEstoSeRepite(
             Text(
                 text = "Editar este recurrente",
                 style = Movi.textos.apoyoMedio,
-                color = Movi.colores.marca,
+                color = Movi.colores.enlace,
                 modifier = Modifier.clickable { onEditarRecurrente(regla) },
             )
         }
@@ -1697,10 +1698,10 @@ private fun SelectorDeCuentaDelMovimiento(
                 Text(
                     text = cuenta.name,
                     style = if (elegida) Movi.textos.cuerpo else Movi.textos.cuerpoRegular,
-                    color = if (elegida) Movi.colores.marca else Movi.colores.texto,
+                    color = Movi.colores.texto,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .then(if (elegida) Modifier.background(Movi.colores.lavado(Movi.colores.marca)) else Modifier)
+                        .then(if (elegida) Modifier.background(fondoDeLaFilaElegida(Movi.colores)) else Modifier)
                         .clickable { onPick(cuenta.id) }
                         .heightIn(min = Medida.objetivoTactil)
                         .padding(horizontal = Espacio.s, vertical = Espacio.s),
@@ -1805,7 +1806,7 @@ private fun SeccionDeFecha(
         Text(
             text = if (abierto) "Cerrar" else "Cambiar",
             style = Movi.textos.cuerpo,
-            color = Movi.colores.marca,
+            color = Movi.colores.enlace,
         )
     }
 

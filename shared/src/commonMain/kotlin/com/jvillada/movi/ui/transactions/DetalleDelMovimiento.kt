@@ -1,5 +1,9 @@
 package com.jvillada.movi.ui.transactions
 
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.foundation.text.BasicText
+import com.jvillada.movi.ui.components.ds.coloresDeLoElegido
 import com.jvillada.movi.ui.components.ds.PildoraDeAccion
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -295,6 +299,12 @@ internal fun PreguntaDelTercero(pregunta: String, onAbrir: () -> Unit) {
     }
 }
 
+/** El `testTag` del rótulo de una acción de [FilaDeAcciones]. */
+const val TAG_ROTULO_DE_ACCION_DEL_MOVIMIENTO: String = "detalle:rotulo-de-accion"
+
+/** Hasta dónde se achica el rótulo de una acción antes de recortarse: el 85 % de `apoyo`. */
+private const val PISO_DEL_ROTULO_DE_ACCION = 0.85f
+
 /**
  * La fila de acciones: un ícono en un círculo y un rótulo corto. La abierta se marca (y lo declara
  * con `selected`); tocarla otra vez la cierra.
@@ -319,27 +329,38 @@ internal fun FilaDeAcciones(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(Espacio.xxs),
             ) {
-                // El círculo de una acción: la capa 2 sin elegir, el lavado de la marca elegida. Sin
+                // El círculo de una acción: la capa 3 sin elegir, la tinta elegida (vuelta 29). Sin
                 // bordes (superficies por capas).
                 Box(
                     modifier = Modifier
                         .size(Medida.avatar)
-                        .background(if (elegida) Movi.colores.lavado(Movi.colores.marca) else Movi.colores.capa2, CircleShape),
+                        .background(if (elegida) coloresDeLoElegido(Movi.colores).first else Movi.colores.capa3, CircleShape),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
                         imageVector = accion.icono,
                         contentDescription = null,
-                        tint = if (elegida) Movi.colores.marca else Movi.colores.texto,
+                        tint = if (elegida) coloresDeLoElegido(Movi.colores).second else Movi.colores.texto,
                         modifier = Modifier.size(Icono.m),
                     )
                 }
-                Text(
+                // Vuelta 29: con Figtree, «Categoría» se recortaba en el borde de su columna a 360 dp
+                // (un sexto del ancho). Un renglón siempre, y si no entra se achica un poco antes de
+                // recortarse; lo vigila `LosRotulosDeLasAccionesDelMovimientoEntranTest`.
+                val estiloDelRotulo = (if (elegida) Movi.textos.apoyoMedio else Movi.textos.apoyo).copy(
+                    color = if (elegida) Movi.colores.texto else Movi.colores.textoMedio,
+                    textAlign = TextAlign.Center,
+                )
+                BasicText(
                     accion.rotulo,
-                    style = if (elegida) Movi.textos.apoyoMedio else Movi.textos.apoyo,
-                    color = if (elegida) Movi.colores.marca else Movi.colores.textoMedio,
+                    modifier = Modifier.fillMaxWidth().testTag(TAG_ROTULO_DE_ACCION_DEL_MOVIMIENTO),
+                    style = estiloDelRotulo,
                     maxLines = 1,
                     softWrap = false,
+                    autoSize = TextAutoSize.StepBased(
+                        minFontSize = estiloDelRotulo.fontSize * PISO_DEL_ROTULO_DE_ACCION,
+                        maxFontSize = estiloDelRotulo.fontSize,
+                    ),
                 )
             }
         }

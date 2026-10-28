@@ -1,6 +1,7 @@
 package com.jvillada.movi.ui.components.ds
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -40,6 +41,7 @@ import com.jvillada.movi.theme.Icono
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.theme.Radio
+import com.jvillada.movi.theme.TextosDeMovi
 
 /** Tag estable del [Encabezado] de una pantalla. */
 const val TAG_ENCABEZADO: String = "ds-encabezado"
@@ -54,9 +56,10 @@ const val TAG_BOTON_DE_ICONO: String = "ds-boton-de-icono"
  * **Cómo se ve un [BotonDeIcono]** (vuelta de diseño 20).
  *
  * - [Plano]: solo el ícono, en un círculo de toque. El de un encabezado (la flecha, la lupa).
- * - [Secundario]: el ícono sobre la capa 2, en un cuadrado de [Medida.objetivoTactil] con el radio de
- *   un [Boton] ([Radio.m]): es el [VarianteDeBoton.Secundario] sin texto, para ir al lado de un
- *   [Boton] de alto `M` («Pagó otro» y «Subir comprobante» junto a «Guardar movimiento» en Agregar).
+ * - [Secundario]: el ícono en un **círculo blanco con borde** de [Medida.objetivoTactil] (vuelta 29:
+ *   el botón redondo de la lupa en la opción 3): es el [VarianteDeBoton.Secundario] sin texto, para ir
+ *   al lado de un [Boton] de alto `M` («Pagó otro» y «Subir comprobante» junto a «Guardar movimiento»
+ *   en Agregar).
  */
 enum class VarianteDeBotonDeIcono { Plano, Secundario }
 
@@ -75,15 +78,18 @@ fun BotonDeIcono(
     variante: VarianteDeBotonDeIcono = VarianteDeBotonDeIcono.Plano,
     habilitado: Boolean = true,
 ) {
-    val forma = when (variante) {
-        VarianteDeBotonDeIcono.Plano -> CircleShape
-        VarianteDeBotonDeIcono.Secundario -> RoundedCornerShape(Radio.m)
-    }
+    val forma = CircleShape
     Box(
         modifier = modifier
             .size(Medida.objetivoTactil)
             .clip(forma)
-            .then(if (variante == VarianteDeBotonDeIcono.Secundario) Modifier.background(Movi.colores.capa2) else Modifier)
+            .then(
+                if (variante == VarianteDeBotonDeIcono.Secundario) {
+                    Modifier.background(Movi.colores.tarjeta).border(Medida.trazo, Movi.colores.borde, forma)
+                } else {
+                    Modifier
+                },
+            )
             .clickable(enabled = habilitado, role = Role.Button, onClickLabel = descripcion, onClick = onClick)
             .testTag(TAG_BOTON_DE_ICONO),
         contentAlignment = Alignment.Center,
@@ -103,7 +109,7 @@ const val TAG_ACCION_DEL_ENCABEZADO: String = "ds-accion-del-encabezado"
 /**
  * **La acción principal de un encabezado**: lo que se crea o se hace desde esa pantalla («Nueva
  * cuenta», «Nuevo crédito», «Subir archivo»). Viaja como dato para que [Encabezado] la pinte siempre
- * igual —texto con ícono, en la marca, [AccionDelEncabezado]— y ninguna pantalla elija otro botón
+ * igual —texto con ícono, en el azul del enlace, [AccionDelEncabezado]— y ninguna pantalla elija otro botón
  * (vuelta de diseño 4: Patrimonio la tenía como texto morado y Créditos como botón tonal relleno).
  */
 data class AccionDeEncabezado(
@@ -115,7 +121,7 @@ data class AccionDeEncabezado(
 
 /**
  * **La forma de la [AccionDeEncabezado]**: un [Boton] [VarianteDeBoton.Fantasma] tamaño
- * [TamanoDeBoton.S] con su ícono (texto e ícono en la marca, sin relleno; el toque llega a 48).
+ * [TamanoDeBoton.S] con su ícono (texto e ícono en el azul del enlace, sin relleno; el toque llega a 48).
  * Solo la pinta [Encabezado].
  */
 @Composable
@@ -132,17 +138,21 @@ internal fun AccionDelEncabezado(accion: AccionDeEncabezado, modifier: Modifier 
 }
 
 /**
- * **La [AccionDeEncabezado] cuando el título no deja lugar para su texto** (vuelta de diseño 8): solo
- * el ícono, en la marca, en un área de [Medida.objetivoTactil]. El texto no se pierde: es lo que dice
- * el lector de pantalla. Lleva el mismo tag que [AccionDelEncabezado].
+ * **La [AccionDeEncabezado] solo con su ícono**: en una pestaña siempre (vuelta 29), y en una pantalla
+ * con flecha cuando el título no deja lugar para su texto (vuelta de diseño 8). Es el botón redondo de
+ * la opción 3 —blanco con borde y el ícono en tinta, como la lupa de Actividad—, en un área de
+ * [Medida.objetivoTactil]. El texto no se pierde: es lo que dice el lector de pantalla. Lleva el mismo
+ * tag que [AccionDelEncabezado].
  */
 @Composable
 internal fun AccionDelEncabezadoSoloIcono(accion: AccionDeEncabezado, modifier: Modifier = Modifier) {
-    val color = if (accion.habilitado) Movi.colores.marca else Movi.colores.textoApagado
+    val color = if (accion.habilitado) Movi.colores.texto else Movi.colores.textoApagado
     Box(
         modifier = modifier
             .size(Medida.objetivoTactil)
             .clip(CircleShape)
+            .background(Movi.colores.tarjeta)
+            .border(Medida.trazo, Movi.colores.borde, CircleShape)
             .clickable(
                 enabled = accion.habilitado,
                 role = Role.Button,
@@ -192,7 +202,8 @@ fun laAccionVaConTexto(
  * - Margen [Medida.margenDePantalla] a los dos lados. Con [onVolver], la flecha va en un área de
  *   toque de 48 y el margen se corre lo justo para que **el dibujo** de la flecha quede en el
  *   margen, alineado con todo lo de abajo.
- * - El título en `titular`. **Nunca se corta** (vuelta de diseño 8: «Personas y comerc…»): si no
+ * - El título según [TamanoDelTitulo] (vuelta 29): `titular` (28 a la vista) en una pestaña —con el
+ *   avatar—, `titularDePantalla` (22) en una pantalla con flecha y `saludo` (17/700) en Hoy. **Nunca se corta** (vuelta de diseño 8: «Personas y comerc…»): si no
  *   cabe al lado de la acción con texto, la acción pasa a solo ícono ([AccionDelEncabezadoSoloIcono],
  *   con su texto para el lector de pantalla y el mismo tag); si ni así cabe, baja a dos renglones.
  *   El subtítulo opcional, en `apoyo`, tampoco se corta (vuelta de diseño 12): también hace ceder
@@ -224,6 +235,7 @@ fun Encabezado(
     inicio: (@Composable () -> Unit)? = null,
     acciones: (@Composable RowScope.() -> Unit)? = null,
     accion: AccionDeEncabezado? = null,
+    tamanoDelTitulo: TamanoDelTitulo = if (onVolver != null) TamanoDelTitulo.Pantalla else TamanoDelTitulo.Pestana,
 ) {
     // La flecha dibuja 24 en un área de 48: el margen se achica en la mitad de la diferencia para
     // que el dibujo, no el área, quede alineado con el resto de la pantalla.
@@ -247,12 +259,40 @@ fun Encabezado(
         }
         TituloYAcciones(
             titulo = titulo,
+            estiloDelTitulo = estiloDelTitulo(tamanoDelTitulo, Movi.textos),
+            // Vuelta 29: en una pestaña la acción va siempre en su botón redondo («+» en Patrimonio
+            // y en Espacios por igual); con el título de 28, que cupiera o no dependía del largo del
+            // nombre de la pestaña, y dos pestañas vecinas se veían distintas.
+            accionSiempreSoloIcono = tamanoDelTitulo != TamanoDelTitulo.Pantalla,
             subtitulo = subtitulo,
             acciones = acciones,
             accion = accion,
             modifier = Modifier.weight(1f),
         )
     }
+}
+
+/**
+ * **El tamaño del título de un [Encabezado]** (vuelta 29). El de 28 de la opción 3 es solo para el
+ * título de una pestaña; una pantalla con flecha lleva uno más chico, y Hoy no lleva título sino el
+ * saludo, que es un nombre.
+ */
+enum class TamanoDelTitulo {
+    /** Una pestaña (el encabezado con el avatar): `titular`. */
+    Pestana,
+
+    /** Una pantalla con flecha: `titularDePantalla`. */
+    Pantalla,
+
+    /** «Hola, Juan» con la fecha debajo: `saludo`. */
+    Saludo,
+}
+
+/** El estilo de un [TamanoDelTitulo], en la escala de textos. Pura. */
+fun estiloDelTitulo(tamano: TamanoDelTitulo, textos: TextosDeMovi): TextStyle = when (tamano) {
+    TamanoDelTitulo.Pestana -> textos.titular
+    TamanoDelTitulo.Pantalla -> textos.titularDePantalla
+    TamanoDelTitulo.Saludo -> textos.saludo
 }
 
 /** Las piezas de [TituloYAcciones], por nombre: cada una se compone una sola vez por medida. */
@@ -268,6 +308,8 @@ private enum class PiezaDelEncabezado { Titulo, Subtitulo, Acciones, AccionConTe
 @Composable
 private fun TituloYAcciones(
     titulo: String,
+    estiloDelTitulo: TextStyle,
+    accionSiempreSoloIcono: Boolean,
     subtitulo: String?,
     acciones: (@Composable RowScope.() -> Unit)?,
     accion: AccionDeEncabezado?,
@@ -275,7 +317,6 @@ private fun TituloYAcciones(
 ) {
     val medidor = rememberTextMeasurer()
     val estiloDelBoton = Movi.textos.cuerpoFuerte
-    val estiloDelTitulo = Movi.textos.titular
     val colorDelTitulo = Movi.colores.texto
     val estiloDelSubtitulo = Movi.textos.apoyo
     val colorDelSubtitulo = Movi.colores.textoMedio
@@ -322,7 +363,7 @@ private fun TituloYAcciones(
         val anchoDelSubtitulo = subtituloMedible?.maxIntrinsicWidth(constraints.maxHeight) ?: 0
 
         val accionMedida = accion?.let { a ->
-            val conTexto = laAccionVaConTexto(
+            val conTexto = !accionSiempreSoloIcono && laAccionVaConTexto(
                 anchoDelTitulo = anchoDelTitulo,
                 anchoDeLaAccion = anchoDeLaAccionConTexto(medidor, a.texto, estiloDelBoton, this),
                 separacion = separacion,

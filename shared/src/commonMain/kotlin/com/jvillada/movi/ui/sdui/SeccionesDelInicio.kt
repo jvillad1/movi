@@ -404,6 +404,9 @@ internal fun WidgetsDelInicio(
 /** Lo que dice el widget de «Falta por pagar» cuando ya salió todo. */
 const val TODO_PAGADO: String = "Ya salió todo lo del período"
 
+/** El `testTag` del nombre de un pago en el widget «Falta por pagar». */
+const val TAG_NOMBRE_EN_EL_WIDGET_FALTA_POR_PAGAR: String = "widget-falta:nombre"
+
 /** «Faltan 2 de 3 pagos», «Falta 1 de 3 pagos»: lo que lista el widget es lo pendiente. */
 internal fun lineaCortaDeLoQueFalta(pendientes: Int, total: Int): String =
     if (pendientes == 1) "Falta 1 de $total pagos" else "Faltan $pendientes de $total pagos"
@@ -439,19 +442,20 @@ internal fun WidgetFaltaPorPagar(
         Text(lineaCortaDeLoQueFalta(pendientes.size, total), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
         lista.filas.forEach { pago ->
             Column {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
-                    Text(
-                        text = pago.nombre,
-                        style = Movi.textos.cuerpo,
-                        color = Movi.colores.texto,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
-                    )
-                    // Una tarjeta no tiene cuota: su monto es el saldo, y no se muestra como un pago.
-                    val monto = cifraDelPago(pago)
-                    if (monto != null) Cifra(monto, VarianteDeCifra.Chica, moneda = pago.moneda)
-                }
+                // Vuelta 29: el nombre en su renglón y el monto debajo, como en «En qué se va». Al lado
+                // del monto, a media pantalla, el nombre se cortaba en «Arrie…» con Figtree (lo vigila
+                // `LoQueSeVeEnteroTest`).
+                Text(
+                    text = pago.nombre,
+                    style = Movi.textos.cuerpo,
+                    color = Movi.colores.texto,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.testTag(TAG_NOMBRE_EN_EL_WIDGET_FALTA_POR_PAGAR),
+                )
+                // Una tarjeta no tiene cuota: su monto es el saldo, y no se muestra como un pago.
+                val monto = cifraDelPago(pago)
+                if (monto != null) Cifra(monto, VarianteDeCifra.Chica, moneda = pago.moneda)
                 Text(
                     text = dueLabel(pago.diasParaVencer),
                     style = Movi.textos.apoyo,

@@ -86,10 +86,12 @@ fun VacioQueEnsena(
                 Box(
                     modifier = Modifier
                         .size(Medida.avatarGrande)
-                        .background(Movi.colores.lavado(Movi.colores.marca), CircleShape),
+                        // El círculo amarillo con la tinta encima, como el ícono de la tarjeta de
+                        // avisos de la opción 3 (vuelta 29).
+                        .background(Movi.colores.marca, CircleShape),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(icono, contentDescription = null, tint = Movi.colores.marca)
+                    Icon(icono, contentDescription = null, tint = Movi.colores.sobreMarca)
                 }
                 Spacer(Modifier.height(Movi.espacios.medio))
             }
@@ -98,7 +100,9 @@ fun VacioQueEnsena(
                 style = Movi.textos.titulo,
                 color = Movi.colores.texto,
                 textAlign = TextAlign.Center,
-                modifier = lados,
+                // A todo el ancho, centrado por el párrafo: del ancho de su texto, un renglón medía
+                // fracciones de píxel más que su caja y se leía como recortado (vuelta 29).
+                modifier = lados.fillMaxWidth(),
             )
             if (detalle != null) {
                 Spacer(Modifier.height(Movi.espacios.corto))
@@ -107,7 +111,7 @@ fun VacioQueEnsena(
                     style = Movi.textos.cuerpo,
                     color = Movi.colores.textoMedio,
                     textAlign = TextAlign.Center,
-                    modifier = lados,
+                    modifier = lados.fillMaxWidth(),
                 )
             }
             if (contenido != null) {

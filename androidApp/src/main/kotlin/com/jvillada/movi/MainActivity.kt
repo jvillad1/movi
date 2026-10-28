@@ -37,10 +37,10 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge(
-            // El tema de la app es oscuro (MinBg) en todas las plataformas: barras
-            // transparentes con iconos claros.
-            statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
-            navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+            // Movi es clara siempre desde la vuelta 29 (opción 3): barras transparentes con
+            // íconos oscuros, también con el teléfono en modo oscuro.
+            statusBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT),
         )
         // El repositorio offline-first de :core (LocalRepository + SQLDelight) necesita el
         // contexto antes del primer createRepository() — igual que hace la web/iOS con sus

@@ -29,12 +29,11 @@ import kotlinx.serialization.json.Json
  * La clave lleva el id del usuario ([SessionManager.userId][com.jvillada.movi.data.SessionManager]):
  * en un aparato compartido, el que entra no puede ver ni por un cuadro la plata del anterior. Sin
  * usuario no se lee ni se escribe nada. `SessionManager.clear()` la borra con el id que se va —
- * **antes** de borrar el id, que si no ya no sabría cuál—. El cambio de tema no la toca: es del
- * aparato, no de la sesión.
+ * **antes** de borrar el id, que si no ya no sabría cuál—.
  *
  * ## Lo que no puede pasar
  *
- * Lo mismo que en `TemaStore` y `LastAccountStore` (leer sus KDoc): `Settings()` explota **al
+ * Lo mismo que en `LastAccountStore` (leer su KDoc): `Settings()` explota **al
  * construirse** en una JVM sin contexto o en un navegador con el almacenamiento bloqueado, así que
  * va `by lazy` y todo acceso adentro de un `runCatching`. Y una instantánea que no deserializa —la
  * escribió una versión anterior de la app y el modelo cambió— vale `null`: el Inicio arranca como

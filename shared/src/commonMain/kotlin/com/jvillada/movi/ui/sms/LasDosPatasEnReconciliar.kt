@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.sms
 
+import androidx.compose.foundation.background
+import com.jvillada.movi.ui.components.ds.fondoDeLaFilaElegida
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.wrapContentHeight
 import com.jvillada.movi.theme.Espacio
@@ -273,7 +275,7 @@ internal fun LasDosPatasEnElResumen(
             Text(
                 if (eligiendo) "Cerrar" else if (destino == null) "Elegir" else "Cambiar",
                 style = Movi.textos.apoyoMedio,
-                color = Movi.colores.marca,
+                color = Movi.colores.enlace,
                 modifier = Modifier
                     .clickable(enabled = habilitado, role = Role.Button) { onCambiar() }
                     .testTag(TAG_CAMBIAR_EL_DESTINO)
@@ -290,9 +292,11 @@ internal fun LasDosPatasEnElResumen(
             Text(
                 cuenta.name,
                 style = if (esLaElegida) Movi.textos.cuerpo else Movi.textos.cuerpoRegular,
-                color = if (esLaElegida) Movi.colores.marca else Movi.colores.texto,
+                color = Movi.colores.texto,
+                // Lo elegido va en tinta (vuelta 29): el peso de `cuerpo` y el fondo de la fila elegida.
                 modifier = Modifier
                     .fillMaxWidth()
+                    .then(if (esLaElegida) Modifier.background(fondoDeLaFilaElegida(Movi.colores)) else Modifier)
                     .clickable(enabled = habilitado, role = Role.Button) { onElegir(cuenta) }
                     .testTag(tagDelDestinoElegible(cuenta.id))
                     .heightIn(min = Medida.objetivoTactil)

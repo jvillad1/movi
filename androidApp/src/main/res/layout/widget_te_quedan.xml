@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
     El widget «Te quedan hoy» (ver com.jvillada.movi.widget.WidgetTeQuedan). Los colores no van acá:
-    los pone el código desde Tokens.kt, en el tema que el dueño eligió en la app; los de acá (colors.xml)
+    los pone el código desde Tokens.kt, del único tema de Movi (el claro); los de acá (colors.xml)
     son solo los de la vista previa y el primer cuadro. El fondo es una forma blanca que se tiñe con
     `setColorFilter` (RemoteViews no deja cambiar el color de un shape).
 -->

@@ -255,7 +255,7 @@ fun ScreenEditorScreen(onNavigate: (Screen) -> Unit) {
         if (loading) {
             LinearProgressIndicator(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = Espacio.l),
-                color = Movi.colores.marca,
+                color = Movi.colores.enlace,
                 trackColor = Movi.colores.tarjeta,
             )
             return@Column
@@ -305,7 +305,7 @@ fun ScreenEditorScreen(onNavigate: (Screen) -> Unit) {
                 } else {
                     Text(
                         "+ Agregar sección",
-                        style = Movi.textos.cuerpo, color = Movi.colores.marca,
+                        style = Movi.textos.cuerpo, color = Movi.colores.enlace,
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(Radio.m))
@@ -440,7 +440,7 @@ private fun SectionBody(section: ScreenSection, onUpdate: (ScreenSection) -> Uni
             Spacer(Modifier.height(if (section.cards.isEmpty()) 0.dp else 10.dp))
             Text(
                 "+ Agregar tarjeta",
-                style = Movi.textos.cuerpo, color = Movi.colores.marca,
+                style = Movi.textos.cuerpo, color = Movi.colores.enlace,
                 modifier = Modifier.clickable { onUpdate(section.copy(cards = section.cards + ScreenCard(title = ""))) }.padding(vertical = 6.dp),
             )
         }

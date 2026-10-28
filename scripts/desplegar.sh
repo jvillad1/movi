@@ -21,7 +21,7 @@ PROYECTO="a0e6fd4a-60e8-479b-bf11-70f10a8991b9"
 SERVICIO="movi-project"
 ENTORNO="production"
 URL="https://movi-project-production.up.railway.app"
-FUENTE="$URL/composeResources/com.jvillada.movi.resources/font/space_grotesk_regular.ttf"
+FUENTE="$URL/composeResources/com.jvillada.movi.resources/font/figtree_regular.ttf"
 
 cd "$(dirname "$0")/.."
 git fetch -q origin master

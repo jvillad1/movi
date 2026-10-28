@@ -116,18 +116,18 @@ class PaginaCompartidaTest {
      * tiene que cambiar con él.
      */
     @Test
-    fun `los colores de la pagina son los de Tokens kt, en los dos temas`() {
+    fun `los colores de la pagina son los de Tokens kt`() {
         val tokens = File("../shared/src/commonMain/kotlin/com/jvillada/movi/theme/Tokens.kt").readText()
         val cascara = PaginaCompartida.cascara
-        val oscuro = cascara.substringBefore("@media (prefers-color-scheme: light)")
-        val claro = cascara.substringAfter("@media (prefers-color-scheme: light)").substringBefore("color-scheme: light")
+        // Vuelta 29: un solo tema. La página no se pone oscura con el teléfono de quien mira.
+        assertFalse("prefers-color-scheme" in cascara, "la página todavía cambia de tema con el teléfono")
 
         val roles = mapOf(
             "fondo" to "--fondo", "tarjeta" to "--tarjeta", "borde" to "--borde", "hilo" to "--hilo",
             "texto" to "--texto", "textoMedio" to "--texto-medio", "textoApagado" to "--texto-apagado",
             "marca" to "--marca", "entra" to "--entra", "sale" to "--sale", "neutro" to "--neutro",
         )
-        listOf("COLORES_OSCUROS" to oscuro, "COLORES_CLAROS" to claro).forEach { (tema, css) ->
+        listOf("COLORES_CLAROS" to cascara).forEach { (tema, css) ->
             val bloque = tokens.substringAfter("val $tema = ColoresDeMovi(").substringBefore("\n)")
             roles.forEach { (rol, variable) ->
                 val hex = Regex("""\b$rol\s*=\s*Color\(0xFF([0-9A-Fa-f]{6})\)""").find(bloque)?.groupValues?.get(1)

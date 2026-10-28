@@ -62,9 +62,13 @@ fun Separador(sangria: SangriaDeSeparador = SangriaDeSeparador.ConInicio, modifi
 /** **De qué color se llena una barra.** Marca para un avance propio; un estado solo si es estado. */
 enum class TonoDeBarra { Marca, Neutro, Aviso, Peligro, Exito }
 
-/** El color del relleno, en la paleta del tema. Pura. */
+/**
+ * El color del relleno, en la paleta del tema. Pura. El avance propio ([TonoDeBarra.Marca]) va **en
+ * tinta** desde la vuelta 29, como la barra de «Falta por pagar» de la opción 3: el amarillo sobre
+ * la pista clara no se ve (1,4:1).
+ */
 fun colorDeLaBarra(tono: TonoDeBarra, colores: ColoresDeMovi): Color = when (tono) {
-    TonoDeBarra.Marca -> colores.marca
+    TonoDeBarra.Marca -> colores.texto
     TonoDeBarra.Neutro -> colores.textoMedio
     TonoDeBarra.Aviso -> colores.aviso
     TonoDeBarra.Peligro -> colores.sale

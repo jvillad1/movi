@@ -24,10 +24,11 @@ import com.russhwolf.settings.set
  *
  * ### Por qué en el aparato
  *
- * Por lo mismo que el tema ([TemaStore]): es del lugar donde se está mirando. Ocultar en el
+ * Porque es del lugar donde se está mirando (como lo era el tema, hasta que la vuelta 29 dejó uno
+ * solo). Ocultar en el
  * teléfono no tiene por qué ocultar en el escritorio.
  *
- * ### Por qué sí se limpia al cerrar sesión (a diferencia del tema)
+ * ### Por qué sí se limpia al cerrar sesión
  *
  * El brief lo pide así y tiene sentido: es una preferencia que acompaña a la plata de quien la
  * puso. El siguiente que entre en este aparato arranca viendo sus cifras, como en una instalación
@@ -35,7 +36,7 @@ import com.russhwolf.settings.set
  *
  * ### Lo que no puede pasar
  *
- * Lo mismo que en [TemaStore]: `Settings()` explota al construirse en una JVM sin contexto o en
+ * Lo mismo que en `LastAccountStore`: `Settings()` explota al construirse en una JVM sin contexto o en
  * un navegador con el almacenamiento bloqueado. Construcción diferida y todo en `runCatching`:
  * sin dónde guardar, el ojo sigue andando durante la sesión.
  */

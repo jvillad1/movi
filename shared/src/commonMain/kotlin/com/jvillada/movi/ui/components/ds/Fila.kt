@@ -48,7 +48,7 @@ val ESPACIO_ANTES_DEL_TEXTO_DE_FILA = Espacio.s
  * «$13.845.800» se partía en dos renglones con la fila medio vacía: con la letra de la app (×1,12)
  * el título pide ~154 dp y le quedaban ~155 en Android, y en la web, un par de px menos. Los px no
  * estaban en el relleno de la fila (16, el margen de la pantalla, el mismo de toda lista), ni en el
- * avatar (40, el de toda fila) ni en la [Cifra] (Martian Mono, que no se recorta): estaban en el aire
+ * avatar (40, el de toda fila) ni en la [Cifra] (que no se recorta): estaban en el aire
  * entre el título y el monto, que se lee igual de separado con 8. El avatar sigue a 12 del texto:
  * esa sangría la usan las líneas que cuelgan de una fila (`SANGRIA_DEL_TEXTO_DE_LA_FILA`).
  */
@@ -76,7 +76,7 @@ enum class TonoDeFila {
 /**
  * **Qué tan alta es una [Fila]** (vuelta de diseño 20).
  *
- * - [Normal]: [Medida.altoDeFila] (56), [Medida.altoDeFilaDoble] (64) con subtítulo. Toda lista.
+ * - [Normal]: [Medida.altoDeFila] (56), [Medida.altoDeFilaDoble] (58, vuelta 29) con subtítulo. Toda lista.
  * - [Compacta]: [Medida.objetivoTactil] (48) con o sin subtítulo —crece si el texto lo pide—. Solo
  *   para el formulario de una hoja anclada abajo donde cada dp de más mueve un teclado numérico bajo
  *   el dedo y empuja el botón de guardar fuera de la pantalla (las filas de Agregar). Sigue siendo la
@@ -104,7 +104,7 @@ fun colorDelTituloDeFila(tono: TonoDeFila, colores: ColoresDeMovi): Color = when
  * 13 y 14 dp) y sin alto mínimo. Las de Movimientos, Plan, Patrimonio, Por revisar y Ajustes
  * convergen acá en las olas siguientes.
  *
- * - **Alto**: [Medida.altoDeFila] (56) con un renglón, [Medida.altoDeFilaDoble] (64) con
+ * - **Alto**: [Medida.altoDeFila] (56) con un renglón, [Medida.altoDeFilaDoble] (58, vuelta 29) con
  *   [subtitulo]. Es un mínimo: con la letra del sistema agrandada la fila crece en vez de cortar.
  * - **Relleno**: [Medida.margenDePantalla] a los lados, siempre. Por eso va en una [Superficie]
  *   con [RellenoDeSuperficie.Lista] o directo sobre el fondo, nunca dentro de otro relleno.
@@ -158,7 +158,9 @@ fun Fila(
             .heightIn(min = altoMinimoDeFila(densidad, conSubtitulo = subtitulo != null))
             .then(if (onClick != null) Modifier.clickable(onClickLabel = onClickLabel, onClick = onClick) else Modifier)
             .testTag(TAG_FILA)
-            .padding(horizontal = Medida.margenDePantalla, vertical = Espacio.xs),
+            // Vuelta 29: 4 arriba y abajo (era 8). La fila de la opción 3 mide 58 con el texto
+            // centrado; con 8, el título a 15 y el subtítulo a 12,5 la empujaban por encima del alto.
+            .padding(horizontal = Medida.margenDePantalla, vertical = Espacio.xxs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (inicio != null) {
@@ -196,14 +198,27 @@ fun Fila(
 /** **El tono de un [IconoEnCirculo]**: la marca para lo que es de Movi, un estado para un estado. */
 enum class TonoDeIcono { Marca, Neutro, Info, Aviso, Peligro, Exito }
 
-/** El color de un tono, en la paleta del tema. Pura. */
+/**
+ * El color del ícono (o la inicial) de un tono, en la paleta del tema. Pura. La marca (vuelta 29) es
+ * la tinta: va sobre el círculo amarillo ([fondoDelTonoDeIcono]), porque el amarillo no se lee
+ * como trazo sobre el blanco.
+ */
 fun colorDelTonoDeIcono(tono: TonoDeIcono, colores: ColoresDeMovi): Color = when (tono) {
-    TonoDeIcono.Marca -> colores.marca
+    TonoDeIcono.Marca -> colores.sobreMarca
     TonoDeIcono.Neutro -> colores.textoMedio
     TonoDeIcono.Info -> colores.entreCuentas
     TonoDeIcono.Aviso -> colores.aviso
     TonoDeIcono.Peligro -> colores.sale
     TonoDeIcono.Exito -> colores.entra
+}
+
+/**
+ * El círculo de detrás de un tono. Pura. La marca va **llena de amarillo** (el ícono de la tarjeta de
+ * avisos de la opción 3); el aviso, en el tinte (`lavado` ya lo da); lo demás, el lavado de su color.
+ */
+fun fondoDelTonoDeIcono(tono: TonoDeIcono, colores: ColoresDeMovi): Color = when (tono) {
+    TonoDeIcono.Marca -> colores.marca
+    else -> colores.lavado(colorDelTonoDeIcono(tono, colores))
 }
 
 /** Tag estable de un [IconoEnCirculo] (vuelta 31: para probar que cada fila de Ajustes lleva el suyo). */
@@ -224,7 +239,7 @@ fun IconoEnCirculo(
         modifier = modifier
             .testTag(TAG_ICONO_EN_CIRCULO)
             .size(Medida.avatar)
-            .background(Movi.colores.lavado(color), CircleShape),
+            .background(fondoDelTonoDeIcono(tono, Movi.colores), CircleShape),
         contentAlignment = Alignment.Center,
     ) {
         Icon(icono, contentDescription = null, tint = color, modifier = Modifier.size(Icono.m))
@@ -262,7 +277,7 @@ fun AvatarDePersona(
     Box(
         modifier = modifier
             .size(Medida.avatar)
-            .background(Movi.colores.lavado(color), CircleShape)
+            .background(fondoDelTonoDeIcono(tono, Movi.colores), CircleShape)
             .testTag(TAG_AVATAR_DE_PERSONA),
         contentAlignment = Alignment.Center,
     ) {

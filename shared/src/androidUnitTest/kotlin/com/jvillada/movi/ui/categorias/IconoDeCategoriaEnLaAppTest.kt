@@ -46,6 +46,8 @@ import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.budgets.PresupuestosScreen
 import com.jvillada.movi.ui.components.TAG_TITULO_DE_FILA_ESQUELETO
+import com.jvillada.movi.ui.components.ds.Cifra
+import com.jvillada.movi.ui.components.ds.Fila
 import com.jvillada.movi.ui.components.ds.TAG_ESQUELETO_DE_FILA
 import com.jvillada.movi.ui.transactions.TAG_FILA_DE_MOVIMIENTO_SUELTO
 import com.jvillada.movi.ui.dashboard.DashboardData
@@ -169,10 +171,9 @@ class IconoDeCategoriaEnLaAppTest {
     }
 
     /**
-     * **El renglón de Movimientos no puede crecer.** Se compara contra una reconstrucción exacta
-     * de la misma fila SIN el ícono —mismo `Row`, mismo `padding(vertical = 14.dp)`, mismos
-     * estilos de `Movi.textos`—, así la comparación no depende de recordar cuánto medía antes de
-     * esta tarea: si algún día esos tokens cambian, la referencia cambia con ellos.
+     * **El renglón de Movimientos no puede crecer.** Se compara contra la misma `Fila` del sistema
+     * SIN el ícono, así la comparación no depende de recordar cuánto medía antes de esta tarea: si
+     * algún día esos tokens cambian, la referencia cambia con ellos.
      *
      * Las dos filas van en la MISMA composición (no se puede llamar `setContent` dos veces en una
      * prueba), una arriba de la otra, con el mismo ancho — igual que ya hace `EsqueletosDelInicioTest`
@@ -289,56 +290,18 @@ private const val TAG_REFERENCIA_SIN_ICONO = "referencia-fila-sin-icono"
 private val HOY_ISO: String = epochMillisToAppDate(Clock.System.now().toEpochMilliseconds()).toString()
 
 /**
- * Copia exacta de la geometría de `MovementSingleRow` (mismo `Row`, mismo padding, mismos
- * `Movi.textos`) pero **sin** el `IconoDeCategoria` que esta tarea agregó — la referencia contra
- * la que se mide que el renglón real no creció.
+ * **La misma fila sin el ícono.** Movimientos pinta cada movimiento con la `Fila` del sistema y el
+ * ícono de la categoría en su `inicio`; esta es esa `Fila` con el mismo título, subtítulo y monto pero
+ * **sin** `inicio`. Vuelta 29: era una copia a mano de la geometría vieja (`padding(vertical = 14.dp)`,
+ * `titulo` en Medium) que medía 64 —el alto de la fila de dos renglones de antes— y dejó de parecerse
+ * a la fila real cuando la opción 3 la llevó a 58.
  */
 @Composable
 private fun FilaDeReferenciaSinIcono() {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag(TAG_REFERENCIA_SIN_ICONO)
-            .padding(vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(
-                    text = "Café",
-                    style = Movi.textos.titulo,
-                    fontWeight = FontWeight.Medium,
-                    color = Movi.colores.texto,
-                    letterSpacing = (-0.1).sp,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-            }
-            Spacer(Modifier.height(2.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Text(
-                    text = "Comida · Casa",
-                    style = Movi.textos.apoyo,
-                    color = Movi.colores.textoMedio,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-            }
-        }
-        Text(
-            text = "−$18.500",
-            style = Movi.textos.monto,
-            fontWeight = FontWeight.Medium,
-            color = Movi.colores.sale,
-        )
-    }
+    Fila(
+        titulo = "Café",
+        subtitulo = "Comida · Casa",
+        final = { Cifra(-18_500) },
+        modifier = Modifier.testTag(TAG_REFERENCIA_SIN_ICONO),
+    )
 }

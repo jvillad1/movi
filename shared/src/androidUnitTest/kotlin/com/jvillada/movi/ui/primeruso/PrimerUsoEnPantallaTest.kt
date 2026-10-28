@@ -35,7 +35,6 @@ import com.jvillada.movi.shared.model.UpdateProfileRequest
 import com.jvillada.movi.shared.model.UserProfile
 import androidx.compose.ui.graphics.Color
 import com.jvillada.movi.theme.COLORES_CLAROS
-import com.jvillada.movi.theme.COLORES_OSCUROS
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.components.ds.VarianteDeBoton
@@ -416,7 +415,7 @@ class PrimerUsoEnPantallaTest {
         // Centrado bajo la fila «Atrás · Siguiente», que tiene el mismo margen a los dos lados.
         assertEquals(ancho / 2f, saltar.center.x, densidad, "centrado")
         // El botón de texto no tiene fondo, ni siquiera apagado.
-        assertEquals(Color.Transparent, coloresDelBoton(VarianteDeBoton.Fantasma, COLORES_OSCUROS).first)
+        assertEquals(Color.Transparent, coloresDelBoton(VarianteDeBoton.Fantasma, COLORES_CLAROS).first)
         assertEquals(Color.Transparent, coloresDelBotonApagado(VarianteDeBoton.Fantasma, COLORES_CLAROS).first)
     }
 

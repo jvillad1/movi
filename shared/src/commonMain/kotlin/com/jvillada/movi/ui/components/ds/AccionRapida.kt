@@ -1,6 +1,7 @@
 package com.jvillada.movi.ui.components.ds
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,7 +28,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import com.jvillada.movi.theme.Espacio
@@ -84,9 +84,11 @@ data class Accion(
  * `rotulo`, y recién ahí se corta con «…». Con [RenglonesDelRotulo.Dos], dos renglones como mucho y
  * siempre el alto de dos.
  *
- * El círculo va en la capa 2 con el ícono en marca; la destacada, lleno de marca con el ícono en
- * `sobreMarca`. El toque es la acción entera (círculo y rótulo), y el lector de pantalla dice la
- * [descripcion] (o el rótulo) y el conteo una sola vez.
+ * Opción 3 (vuelta 29): el círculo va **blanco con el borde** y el ícono en la tinta; la destacada,
+ * lleno del amarillo de la marca con el ícono en `sobreMarca`. La insignia, en tinta con el número
+ * en blanco y un aro del fondo que la recorta del círculo. El rótulo, en `apoyoMedio` (12,5/600). El
+ * toque es la acción entera (círculo y rótulo), y el lector de pantalla dice la [descripcion] (o el
+ * rótulo) y el conteo una sola vez.
  *
  * ```
  * AccionRapida("Gasto", Icons.Rounded.Edit, onClick = ::anotar, destacada = true, descripcion = "Anotar un gasto")
@@ -103,8 +105,8 @@ fun AccionRapida(
     descripcion: String? = null,
     renglones: RenglonesDelRotulo = RenglonesDelRotulo.Uno,
 ) {
-    val fondo = if (destacada) Movi.colores.marca else Movi.colores.capa2
-    val tinte = if (destacada) Movi.colores.sobreMarca else Movi.colores.marca
+    val fondo = if (destacada) Movi.colores.marca else Movi.colores.tarjeta
+    val tinte = if (destacada) Movi.colores.sobreMarca else Movi.colores.texto
     val conInsignia = insignia != null && insignia > 0
     Column(
         modifier = modifier
@@ -120,7 +122,10 @@ fun AccionRapida(
     ) {
         Box {
             Box(
-                modifier = Modifier.size(Medida.accionRapida).background(fondo, CircleShape),
+                modifier = Modifier
+                    .size(Medida.accionRapida)
+                    .background(fondo, CircleShape)
+                    .then(if (destacada) Modifier else Modifier.border(Medida.trazo, Movi.colores.borde, CircleShape)),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(icono, contentDescription = null, tint = tinte, modifier = Modifier.size(Icono.l))
@@ -130,15 +135,15 @@ fun AccionRapida(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .defaultMinSize(minWidth = Medida.insignia, minHeight = Medida.insignia)
-                        .background(Movi.colores.marca, CircleShape)
+                        .border(Medida.trazoDeInsignia, Movi.colores.fondo, CircleShape)
+                        .background(Movi.colores.texto, CircleShape)
                         .padding(horizontal = Espacio.xxs),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         text = insignia.toString(),
-                        style = Movi.textos.apoyo,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Movi.colores.sobreMarca,
+                        style = Movi.textos.apoyoMedio,
+                        color = Movi.colores.tarjeta,
                         maxLines = 1,
                     )
                 }

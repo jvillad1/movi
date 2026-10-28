@@ -16,7 +16,8 @@ import kotlin.test.fail
  * copia se separa sola el día que alguien retoca un color de un lado. Hasta este cambio ya estaba
  * separada del todo: #121212 y un lavanda propio, la única pantalla de la app que no parecía Movi.
  *
- * Se lee el archivo de verdad y se compara cada variable, en los dos temas, contra la paleta.
+ * Se lee el archivo de verdad y se compara cada variable contra la paleta del único tema (la opción
+ * 3, vuelta 29). Y no queda rastro del tema que elegía el dueño: ni `data-tema` ni la clave `tema`.
  * Corre en la JVM de las pruebas de Android porque es la que puede abrir un archivo del repo.
  */
 class ElIngresoHablaLosTokensTest {
@@ -42,17 +43,20 @@ class ElIngresoHablaLosTokensTest {
     private fun paletaEnCss(c: ColoresDeMovi) = mapOf(
         "fondo" to c.fondo, "tarjeta" to c.tarjeta, "borde" to c.borde,
         "texto" to c.texto, "textoMedio" to c.textoMedio, "textoApagado" to c.textoApagado,
-        "marca" to c.marca, "sobreMarca" to c.sobreMarca, "entra" to c.entra, "sale" to c.sale,
+        "marca" to c.marca, "sobreMarca" to c.sobreMarca, "enlace" to c.enlace, "entra" to c.entra, "sale" to c.sale,
     ).mapValues { hex(it.value) }
 
     @Test
-    fun `el tema oscuro del ingreso es el de los tokens`() {
-        assertEquals(paletaEnCss(COLORES_OSCUROS), variablesDe(":root"))
+    fun `los colores del ingreso son los de los tokens`() {
+        assertEquals(paletaEnCss(COLORES_CLAROS), variablesDe(":root"))
     }
 
     @Test
-    fun `el tema claro del ingreso es el de los tokens`() {
-        assertEquals(paletaEnCss(COLORES_CLAROS), variablesDe(""":root[data-tema="claro"]"""))
+    fun `el ingreso tiene un solo tema y la letra de la app`() {
+        assertTrue("data-tema" !in html, "index.html todavía elige entre temas")
+        assertTrue("localStorage.getItem(\"tema\")" !in html, "index.html todavía lee el tema guardado")
+        assertTrue("font-family: \"Figtree\"" in html, "el ingreso no declara Figtree")
+        assertTrue("Space Grotesk" !in html, "el ingreso todavía nombra la letra de antes")
     }
 
     @Test

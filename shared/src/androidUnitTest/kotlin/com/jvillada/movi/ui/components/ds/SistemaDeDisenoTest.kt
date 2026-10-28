@@ -39,7 +39,6 @@ import androidx.compose.ui.unit.dp
 import com.jvillada.movi.shared.model.marcaDelBanco
 import androidx.compose.ui.graphics.Color
 import com.jvillada.movi.theme.COLORES_CLAROS
-import com.jvillada.movi.theme.COLORES_OSCUROS
 import com.jvillada.movi.theme.Icono
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.MoviTheme
@@ -50,6 +49,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -63,9 +63,9 @@ class SistemaDeDisenoTest {
 
     @get:Rule val composeRule = createComposeRule()
 
-    private fun montar(oscuro: Boolean = true, ocultos: Boolean = false, contenido: @Composable () -> Unit) {
+    private fun montar(ocultos: Boolean = false, contenido: @Composable () -> Unit) {
         composeRule.setContent {
-            MoviTheme(oscuro = oscuro) {
+            MoviTheme {
                 CompositionLocalProvider(LocalSaldosOcultos provides ocultos) {
                     Box(Modifier.fillMaxSize()) { contenido() }
                 }
@@ -136,23 +136,71 @@ class SistemaDeDisenoTest {
         }
     }
 
+    /** Vuelta 29: un solo tema, el claro de la opción 3. Todo el sistema se compone en él. */
     @Test
-    fun `todo el sistema se compone en el tema oscuro`() {
-        montar(oscuro = true) { TodoElSistema() }
+    fun `todo el sistema se compone en el tema de Movi`() {
+        montar { TodoElSistema() }
         composeRule.onNodeWithText("Llegaron 3 avisos del banco").assertExists()
         composeRule.onNodeWithTag(TAG_ENCABEZADO).assertExists()
         composeRule.onNodeWithTag(TAG_CUADRICULA_DE_ACCIONES).assertExists()
-    }
-
-    @Test
-    fun `todo el sistema se compone en el tema claro`() {
-        montar(oscuro = false) { TodoElSistema() }
         composeRule.onNodeWithText("Tarjetas").assertExists()
         composeRule.onNodeWithTag(TAG_BARRA_DE_PROGRESO).assertExists()
     }
 
+    /**
+     * **Vuelta 29: la sombra solo donde la maqueta la pone.** La propuesta (la tarjeta de avisos) y la
+     * superficie destacada (el héroe) la llevan; una lista y una superficie común, no.
+     */
     @Test
-    fun `la fila mide 56 con un renglon y 64 con dos, y su esqueleto lo mismo`() {
+    fun `la sombra va en la propuesta y en la destacada, nunca en una lista`() {
+        montar {
+            Column {
+                Superficie(relleno = RellenoDeSuperficie.Lista, modifier = Modifier.testTag("lista")) { Text("Lista") }
+                Superficie(modifier = Modifier.testTag("comun")) { Text("Común") }
+                Superficie(destacada = true, modifier = Modifier.testTag("heroe")) { Text("Héroe") }
+                TarjetaDePropuesta(Icons.Rounded.Inbox, "Avisos", accion = "Ver", onAccion = {})
+            }
+        }
+        val destacadas = composeRule.onAllNodes(SemanticsMatcher.expectValue(SuperficieDestacadaKey, true), useUnmergedTree = true)
+            .fetchSemanticsNodes()
+        assertEquals(2, destacadas.size, "la propuesta y el héroe")
+        assertTrue(laSuperficieLlevaSombra(NivelDeSuperficie.Propuesta, destacada = false))
+        assertFalse(laSuperficieLlevaSombra(NivelDeSuperficie.Capa1, destacada = false))
+    }
+
+    /**
+     * **Vuelta 29: los componentes hablan la opción 3.** El botón principal es amarillo con la tinta
+     * encima; el secundario, blanco con el borde de botón; el de texto, en el azul del enlace. El
+     * filtro elegido va en tinta con la letra blanca. La píldora de aviso, en el tinte.
+     */
+    @Test
+    fun `los colores de los componentes son los de la opcion 3`() {
+        val c = COLORES_CLAROS
+        assertEquals(c.marca to c.sobreMarca, coloresDelBoton(VarianteDeBoton.Principal, c))
+        assertEquals(c.tarjeta to c.texto, coloresDelBoton(VarianteDeBoton.Secundario, c))
+        assertEquals(c.bordeDeBoton, bordeDelBoton(VarianteDeBoton.Secundario, c))
+        assertEquals(null, bordeDelBoton(VarianteDeBoton.Principal, c))
+        assertEquals(Color.Transparent to c.enlace, coloresDelBoton(VarianteDeBoton.Fantasma, c))
+        assertEquals(c.tinte to c.aviso, coloresDeLaPildora(TonoDePildora.Aviso, c))
+        assertEquals(c.marca, fondoDelTonoDeIcono(TonoDeIcono.Marca, c))
+        assertEquals(c.sobreMarca, colorDelTonoDeIcono(TonoDeIcono.Marca, c))
+    }
+
+    /** Vuelta 29: el filtro mide 44, el de la maqueta, elegido o no. */
+    @Test
+    fun `el filtro mide 44 elegido y sin elegir`() {
+        montar {
+            Column {
+                PildoraDeFiltro("Todo", seleccionada = true, onClick = {})
+                PildoraDeFiltro("Gastos", seleccionada = false, onClick = {})
+            }
+        }
+        assertEquals(Medida.altoDeFiltro, altoDe(TAG_PILDORA_DE_FILTRO, 0))
+        assertEquals(Medida.altoDeFiltro, altoDe(TAG_PILDORA_DE_FILTRO, 1))
+    }
+
+    @Test
+    fun `la fila mide 56 con un renglon y 58 con dos, y su esqueleto lo mismo`() {
         montar {
             Column {
                 Fila(titulo = "Un renglón")
@@ -270,21 +318,21 @@ class SistemaDeDisenoTest {
 
     /** Vuelta de diseño 5: el tono del título de una fila sale del tema, nunca de un `Color` suelto. */
     @Test
-    fun `el titulo de la fila toma su tono del tema, en los dos`() {
-        listOf(COLORES_OSCUROS, COLORES_CLAROS).forEach { c ->
+    fun `el titulo de la fila toma su tono del tema`() {
+        listOf(COLORES_CLAROS).forEach { c ->
             assertEquals(c.texto, colorDelTituloDeFila(TonoDeFila.Normal, c))
             assertEquals(c.sale, colorDelTituloDeFila(TonoDeFila.Alerta, c))
             assertEquals(c.textoMedio, colorDelTituloDeFila(TonoDeFila.Apagado, c))
         }
     }
 
-    /** El botón de texto no se rellena al apagarse; los demás sí, con la capa 2. */
+    /** El botón de texto no se rellena al apagarse; los demás sí, con la capa 3 (vuelta 29). */
     @Test
     fun `el boton de texto apagado sigue sin fondo`() {
-        listOf(COLORES_OSCUROS, COLORES_CLAROS).forEach { c ->
+        listOf(COLORES_CLAROS).forEach { c ->
             assertEquals(Color.Transparent, coloresDelBotonApagado(VarianteDeBoton.Fantasma, c).first)
             assertEquals(c.textoApagado, coloresDelBotonApagado(VarianteDeBoton.Fantasma, c).second)
-            assertEquals(c.capa2, coloresDelBotonApagado(VarianteDeBoton.Principal, c).first)
+            assertEquals(c.capa3, coloresDelBotonApagado(VarianteDeBoton.Principal, c).first)
         }
     }
 
@@ -353,16 +401,16 @@ class SistemaDeDisenoTest {
         assertEquals(1, tocada)
     }
 
-    /** Los colores de una tarjeta con marca: los del banco, y el texto de apoyo igual que el principal. */
+    /**
+     * **Vuelta 29: la tarjeta de cuenta es blanca con marca y sin ella.** El color del banco va solo en
+     * el avatar: el amarillo de Bancolombia de fondo se confundía con el de la marca de Movi.
+     */
     @Test
-    fun `la tarjeta de cuenta toma los colores de la marca`() {
+    fun `la tarjeta de cuenta es blanca, con marca o sin ella`() {
         val nu = marcaDelBanco("Nu")!!
-        val conMarca = coloresDeLaTarjetaDeCuenta(nu, com.jvillada.movi.theme.COLORES_OSCUROS)
-        assertEquals(androidx.compose.ui.graphics.Color(nu.fondo), conMarca.tarjeta)
-        assertEquals(androidx.compose.ui.graphics.Color(nu.texto), conMarca.texto)
-        assertEquals(conMarca.texto, conMarca.textoMedio)
-        val sinMarca = coloresDeLaTarjetaDeCuenta(null, com.jvillada.movi.theme.COLORES_OSCUROS)
-        assertEquals(com.jvillada.movi.theme.COLORES_OSCUROS.capa2, sinMarca.tarjeta)
+        assertEquals(COLORES_CLAROS, coloresDeLaTarjetaDeCuenta(nu, COLORES_CLAROS))
+        assertEquals(COLORES_CLAROS.tarjeta, coloresDeLaTarjetaDeCuenta(nu, COLORES_CLAROS).tarjeta)
+        assertEquals(COLORES_CLAROS.tarjeta, coloresDeLaTarjetaDeCuenta(null, COLORES_CLAROS).tarjeta)
     }
 
     /** Dos widgets lado a lado miden lo mismo aunque uno tenga más adentro, y cada uno se toca entero. */

@@ -85,7 +85,7 @@ fun ImportDetailScreen(onNavigate: (Screen) -> Unit, importId: String) {
         when {
             loading -> LinearProgressIndicator(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = Medida.margenDePantalla),
-                color = Movi.colores.marca,
+                color = Movi.colores.enlace,
                 trackColor = Movi.colores.tarjeta,
             )
             error != null -> Text(

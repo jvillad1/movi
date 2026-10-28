@@ -5,7 +5,6 @@ import com.jvillada.movi.ui.components.LocalSaldosOcultos
 
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -22,13 +21,19 @@ import androidx.compose.runtime.CompositionLocalProvider
  * Los roles de Material que Movi no usa se dejan en su default: rellenarlos todos con valores
  * inventados sería peor que no tocarlos.
  */
-private fun esquemaDe(c: ColoresDeMovi, oscuro: Boolean): ColorScheme {
-    val base = if (oscuro) darkColorScheme() else lightColorScheme()
-    return base.copy(
-        primary = c.marca,
-        onPrimary = c.sobreMarca,
-        primaryContainer = c.marca.copy(alpha = 0.16f),
-        onPrimaryContainer = c.marca,
+internal fun esquemaDe(c: ColoresDeMovi): ColorScheme {
+    return lightColorScheme().copy(
+        // Vuelta 29: lo que Material pinta «en el primario» —una casilla, un interruptor, la ruedita,
+        // el cursor y las manijas de la selección— es lo elegido o el foco, no la acción: va en tinta.
+        // El amarillo de la marca lo pone a mano el `Boton` principal, y nada más.
+        primary = c.texto,
+        onPrimary = c.tarjeta,
+        primaryContainer = c.tinte,
+        onPrimaryContainer = c.aviso,
+        // El amarillo no se lee como letra (vuelta 29): lo que Material pinta «en el color
+        // secundario» va en el del enlace.
+        secondary = c.enlace,
+        onSecondary = c.tarjeta,
         background = c.fondo,
         onBackground = c.texto,
         surface = c.tarjeta,
@@ -53,31 +58,27 @@ private fun esquemaDe(c: ColoresDeMovi, oscuro: Boolean): ColorScheme {
  * tipografía— y además el `colorScheme` de Material armado con esos mismos colores, para que los
  * componentes que Movi no dibuja a mano hablen el mismo idioma.
  *
- * ### Por qué el default es oscuro
+ * ### Un solo tema (vuelta 29)
  *
- * Porque es el único tema que Movi tuvo siempre. Quién lo elige de verdad es `TemaStore`, que lo
- * guarda en el aparato; este default es para las vistas previas y las pruebas, que tienen que ver
- * lo mismo que ve la app recién instalada.
- *
- * @param oscuro qué juego de colores se provee.
+ * La opción 3 es clara y nada más: no hay parámetro, ni preferencia, ni pregunta al sistema. Con el
+ * teléfono en modo oscuro, Movi se ve igual (lo vigila `SoloHayUnTemaTest`).
  */
 @Composable
-fun MoviTheme(oscuro: Boolean = true, content: @Composable () -> Unit) {
-    val colores = if (oscuro) COLORES_OSCUROS else COLORES_CLAROS
-    val interfaz = familiaDeLaInterfaz()
-    val cifras = familiaDeLasCifras()
+fun MoviTheme(content: @Composable () -> Unit) {
+    val colores = COLORES_CLAROS
+    val familia = familiaDeMovi()
     CompositionLocalProvider(
         LocalColores provides colores,
         LocalEspacios provides EspaciosDeMovi(),
         LocalFormas provides FormasDeMovi(),
-        LocalTextos provides TextosDeMovi().conFamilias(interfaz, cifras),
+        LocalTextos provides TextosDeMovi().conFamilia(familia),
         // «Ocultar los saldos»: acá y no en App() para que toda pantalla montada con el tema —la
         // app, y cada prueba— lo vea. Es `mutableStateOf`: alternarlo recompone lo que lo lee.
         LocalSaldosOcultos provides SaldosOcultosStore.ocultos,
     ) {
         MaterialTheme(
-            colorScheme = esquemaDe(colores, oscuro),
-            typography = tipografiaDeMaterial(interfaz),
+            colorScheme = esquemaDe(colores),
+            typography = tipografiaDeMaterial(familia),
             content = content,
         )
     }

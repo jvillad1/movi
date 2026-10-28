@@ -70,7 +70,7 @@ fun BotonReintentar(onReintentar: () -> Unit, modifier: Modifier = Modifier) {
             // radio 999 y rellenos de 20 y 10 dp): alto de un botón chico, relleno de un botón.
             .heightIn(min = Medida.altoChico)
             .clip(RoundedCornerShape(Radio.pill))
-            .background(Movi.colores.lavado(Movi.colores.marca))
+            .background(Movi.colores.lavado(Movi.colores.enlace))
             .clickable(onClick = onReintentar)
             .padding(horizontal = Espacio.l),
         contentAlignment = Alignment.Center,
@@ -78,7 +78,7 @@ fun BotonReintentar(onReintentar: () -> Unit, modifier: Modifier = Modifier) {
         Text(
             text = "Reintentar",
             style = Movi.textos.cuerpo,
-            color = Movi.colores.marca,
+            color = Movi.colores.enlace,
         )
     }
 }

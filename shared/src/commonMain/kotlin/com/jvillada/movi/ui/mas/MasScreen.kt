@@ -24,7 +24,6 @@ import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Fingerprint
 import androidx.compose.material.icons.rounded.Flag
 import androidx.compose.material.icons.rounded.Inbox
-import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Password
 import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material.icons.rounded.Savings
@@ -57,7 +56,6 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.ResultadoDeHuella
 import com.jvillada.movi.data.SaldosOcultosStore
 import com.jvillada.movi.data.SessionManager
-import com.jvillada.movi.data.TemaStore
 import com.jvillada.movi.data.isAndroid
 import com.jvillada.movi.data.motivoDeLaHuella
 import com.jvillada.movi.platform.Huella
@@ -148,7 +146,8 @@ val SECCIONES_DE_AJUSTES: List<String> =
  * - **Tu plata**: Inicio del período, Ahorro de cada período, Categorías, Captura (o Mensajes) del banco
  *   y, donde no se leen SMS, «Recibe tus alertas por correo»;
  * - **Movi**: Movi AI, Lo que Movi sabe de ti, Editar inicio (y Primeros pasos, mientras falte algo);
- * - **Cómo se ve**: el tema (una fila que abre su hoja) y «Ocultar los saldos» (de este aparato);
+ * - **Cómo se ve**: «Ocultar los saldos» (de este aparato). El tema se fue en la vuelta 29: la opción 3
+ *   es clara y nada más;
  * - **Avisos**: las notificaciones con un solo «Activar avisos», cuántos días antes avisar y el resumen por correo;
  * - **Tus datos**: Documentos, Descargar tus datos, Compartir;
  * - **Entrar** (solo con lector de huella) y **Cuenta**: la contraseña y cerrar la sesión;
@@ -160,7 +159,7 @@ val SECCIONES_DE_AJUSTES: List<String> =
  *
  * `Screen.Profile` dejó de existir: quien navegaba a Perfil llega acá (el destino SDUI `"profile"`
  * también). **Es una reubicación**: cada interruptor y cada acción usa la MISMA lógica y el mismo
- * store que tenía en Perfil (`TemaStore`, `SaldosOcultosStore`, `updateUserProfile`, las hojas de
+ * store que tenía en Perfil (`SaldosOcultosStore`, `updateUserProfile`, las hojas de
  * `ui/profile/`).
  *
  * Sigue llamándose `MasScreen` / `Screen.Mas` porque el destino SDUI `"mas"` y las pilas ya lo
@@ -192,7 +191,6 @@ fun MasScreen(
     var errorCierre by remember { mutableStateOf<String?>(null) }
     var errorPeriodo by remember { mutableStateOf<String?>(null) }
     var showAhorro by remember { mutableStateOf(false) }
-    var showTema by remember { mutableStateOf(false) }
     var showCorreo by remember { mutableStateOf(false) }
     var guardandoAhorro by remember { mutableStateOf(false) }
     var errorAhorro by remember { mutableStateOf<String?>(null) }
@@ -341,21 +339,13 @@ fun MasScreen(
                     }
                 }
 
-                // ── Cómo se ve: es de ESTE aparato, no del dueño (ver el KDoc de TemaStore) ──
+                // ── Cómo se ve: es de ESTE aparato, no del dueño ──
+                // Vuelta 29: sin la fila del tema. La opción 3 es clara y nada más, así que queda
+                // solo «Ocultar los saldos».
                 item(key = "como-se-ve") {
                     Column {
                         Seccion(titulo = "Cómo se ve")
                         Superficie(relleno = RellenoDeSuperficie.Lista) {
-                            // Vuelta 31: una fila con su valor; las tres opciones viven en su hoja
-                            // ([HojaDelTema]). La primera sigue al teléfono ([PreferenciaDeTema]).
-                            Fila(
-                                titulo = TITULO_DEL_TEMA,
-                                subtitulo = TemaStore.preferencia.titulo,
-                                inicio = { IconoDeAjuste(Icons.Rounded.Palette) },
-                                final = { Chevron() },
-                                onClick = { showTema = true },
-                            )
-                            Separador()
                             // «Ocultar los saldos»: lo mismo que el ojo de Hoy. También de este aparato.
                             val ocultos = LocalSaldosOcultos.current
                             Fila(
@@ -579,10 +569,6 @@ fun MasScreen(
                 onSaved = { showEditProfile = false; profileReloadKey++ },
             )
         }
-        if (showTema) {
-            AtrasCierraEstaHoja { showTema = false }
-            HojaDelTema(onDismiss = { showTema = false })
-        }
         if (showCorreo) {
             AtrasCierraEstaHoja { showCorreo = false }
             HojaDeAlertasPorCorreo(direccionDeMovi, onDismiss = { showCorreo = false })
@@ -750,7 +736,8 @@ private fun TarjetaDelPerfil(profile: UserProfile?, onEditar: () -> Unit) {
                 Text(initials.ifEmpty { "U" }, style = Movi.textos.tituloMedio, color = Movi.colores.sobreAvatar)
             }
             Column(modifier = Modifier.weight(1f)) {
-                Text(displayName, style = Movi.textos.titular, color = Movi.colores.texto, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                // Vuelta 29: el nombre en `saludo` (17/700 a la vista), con el correo debajo, como en la opción 3.
+                Text(displayName, style = Movi.textos.saludo, color = Movi.colores.texto, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(SessionManager.userEmail ?: "", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Boton("Editar", onClick = onEditar, variante = VarianteDeBoton.Fantasma, tamano = TamanoDeBoton.S)

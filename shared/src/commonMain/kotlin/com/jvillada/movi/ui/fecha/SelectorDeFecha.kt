@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.fecha
 
+import com.jvillada.movi.ui.components.ds.coloresDeLoElegido
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Icono
 import com.jvillada.movi.theme.Medida
@@ -218,7 +219,7 @@ private fun CasillaDeDia(
             modifier = Modifier
                 .size(34.dp)
                 .clip(CircleShape)
-                .background(if (seleccionada) Movi.colores.lavado(Movi.colores.marca) else Color.Transparent)
+                .background(if (seleccionada) coloresDeLoElegido(Movi.colores).first else Color.Transparent)
                 .then(
                     if (esHoy && !seleccionada) Modifier.border(Medida.trazo, Movi.colores.borde, CircleShape)
                     else Modifier,
@@ -230,7 +231,7 @@ private fun CasillaDeDia(
                 text = dia.dayOfMonth.toString(),
                 style = Movi.textos.cuerpo,
                 color = when {
-                    seleccionada -> Movi.colores.marca
+                    seleccionada -> coloresDeLoElegido(Movi.colores).second
                     !habilitado -> Movi.colores.textoApagado
                     else -> Movi.colores.textoMedio
                 },

@@ -213,7 +213,7 @@ fun Campo(
                     value = campo.valor,
                     onValueChange = campo::alCambiar,
                     textStyle = Movi.textos.cuerpo.copy(color = Movi.colores.texto),
-                    cursorBrush = SolidColor(Movi.colores.marca),
+                    cursorBrush = SolidColor(Movi.colores.enlace),
                     keyboardOptions = if (secreto && teclado == KeyboardOptions.Default) {
                         KeyboardOptions(keyboardType = KeyboardType.Password)
                     } else {
@@ -259,7 +259,7 @@ fun Campo(
  * **El campo de un monto.** Vuelta de diseño 6.
  *
  * La misma anatomía que [Campo], con tres diferencias: el valor escrito va en la letra de las cifras
- * (`monto`, Martian Mono), el símbolo de la moneda ([moneda], «$» o «US$») se pinta aparte —no es
+ * (`monto`, Figtree tabular), el símbolo de la moneda ([moneda], «$» o «US$») se pinta aparte —no es
  * parte del texto, el cursor nunca se para antes de él— y el texto guía va en la letra de cuerpo,
  * sin la moneda adentro («Capital original», no «$ Capital original (COP)»). Sin guía, la moneda
  * sola (hasta la vuelta de diseño 17 era un «0», que parecía un monto cargado); si el campo necesita
@@ -399,7 +399,7 @@ fun CampoDeMonto(
                         alCambiar(parseMoneyDigits(siguiente.text))
                     },
                     textStyle = Movi.textos.monto.copy(color = Movi.colores.texto),
-                    cursorBrush = SolidColor(Movi.colores.marca),
+                    cursorBrush = SolidColor(Movi.colores.enlace),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
                     enabled = habilitado,
@@ -615,7 +615,7 @@ fun AyudaDeCampo(
                     Text(
                         text = if (ayudaAbierta) TEXTO_OCULTAR_AYUDA else TEXTO_QUE_ES_ESTO,
                         style = Movi.textos.apoyoMedio,
-                        color = Movi.colores.marca,
+                        color = Movi.colores.enlace,
                         maxLines = 1,
                         modifier = Modifier
                             .testTag(TAG_QUE_ES_ESTO)
@@ -652,7 +652,8 @@ private fun MarcoDeCampo(
     val forma = RoundedCornerShape(Radio.s)
     val colorDelBorde: Color = when {
         error != null -> Movi.colores.sale
-        enfocado -> Movi.colores.marca
+        // El foco en el azul del enlace (vuelta 29): el amarillo sobre el blanco no se ve como borde.
+        enfocado -> Movi.colores.enlace
         else -> Movi.colores.borde
     }
     Column(modifier = modifier.fillMaxWidth()) {

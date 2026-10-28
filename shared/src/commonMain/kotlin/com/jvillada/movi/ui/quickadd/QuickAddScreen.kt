@@ -1,10 +1,12 @@
 package com.jvillada.movi.ui.quickadd
 
+import com.jvillada.movi.ui.components.ds.coloresDeLoElegido
 import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.ui.components.ds.BotonDeIcono
 import com.jvillada.movi.ui.components.ds.PildoraDeAccion
 import com.jvillada.movi.ui.components.ds.AltoDePildora
 import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
+import com.jvillada.movi.ui.components.ds.AltoDeFiltro
 import com.jvillada.movi.ui.components.ds.PildoraDeFiltro
 import com.jvillada.movi.ui.components.ds.TamanoDeBoton
 import com.jvillada.movi.ui.components.ds.VarianteDeBoton
@@ -1853,7 +1855,7 @@ private fun EditorBody(
                 horizontalArrangement = Arrangement.spacedBy(Movi.espacios.minimo),
                 modifier = Modifier.testTag(TAG_CONFIRMACION_DE_LO_ANOTADO),
             ) {
-                Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.marca, modifier = Modifier.size(Icono.s))
+                Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.enlace, modifier = Modifier.size(Icono.s))
                 Text(
                     ultimoAnotado,
                     style = Movi.textos.apoyo,
@@ -2079,11 +2081,11 @@ private fun EncabezadoDeLaCategoria(sugerencia: String?, onTodas: () -> Unit) {
                 .testTag(TAG_PASTILLA_TODAS_LAS_CATEGORIAS_AGREGAR),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(TODAS_LAS_CATEGORIAS, style = Movi.textos.cuerpo, color = Movi.colores.marca, maxLines = 1, softWrap = false)
+            Text(TODAS_LAS_CATEGORIAS, style = Movi.textos.cuerpo, color = Movi.colores.enlace, maxLines = 1, softWrap = false)
             Icon(
                 Icons.AutoMirrored.Rounded.KeyboardArrowRight,
                 contentDescription = null,
-                tint = Movi.colores.marca,
+                tint = Movi.colores.enlace,
                 modifier = Modifier.size(Icono.m),
             )
         }
@@ -2164,6 +2166,9 @@ private fun CategoriaChipsRow(
                 texto = nombre,
                 seleccionada = nombre == categoriaElegida,
                 onClick = { onPick(nombre) },
+                // Compacto, como «Nueva» al lado (36): la hoja está anclada abajo y con 44 el pie
+                // «Guardar movimiento» se salía a 360 × 740 (vuelta 29).
+                alto = AltoDeFiltro.Compacto,
                 modifier = Modifier.onPlaced { lugar ->
                     val x = lugar.positionInParent().x.toInt()
                     lugares[nombre] = x..(x + lugar.size.width)
@@ -2204,7 +2209,8 @@ private fun CursorDelMonto() {
             .width(Medida.anchoDelCursor)
             .height(alto)
             .graphicsLayer { alpha = if ((fase?.value ?: 0f) < 0.5f) 1f else 0f }
-            .background(Movi.colores.marca)
+            // El cursor en el azul del enlace (vuelta 29): el amarillo no se ve sobre el blanco.
+            .background(Movi.colores.enlace)
             .testTag(TAG_CURSOR_DEL_MONTO),
     )
 }
@@ -2401,11 +2407,11 @@ internal fun FilaDeCuentaEnAgregar(
                             .align(Alignment.BottomEnd)
                             .size(Medida.insignia)
                             .border(Medida.trazoDeCarga, Movi.colores.capa2, CircleShape)
-                            .background(Movi.colores.marca, CircleShape)
+                            .background(coloresDeLoElegido(Movi.colores).first, CircleShape)
                             .testTag(TAG_CUENTA_ELEGIDA),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.sobreMarca, modifier = Modifier.size(Icono.s))
+                        Icon(Icons.Rounded.Check, contentDescription = null, tint = coloresDeLoElegido(Movi.colores).second, modifier = Modifier.size(Icono.s))
                     }
                 }
             }

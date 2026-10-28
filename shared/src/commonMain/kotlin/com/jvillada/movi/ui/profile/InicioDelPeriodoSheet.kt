@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.profile
 
+import com.jvillada.movi.ui.components.ds.coloresDeLoElegido
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -156,14 +157,14 @@ fun InicioDelPeriodoSheet(
                             modifier = Modifier
                                 .size(Medida.avatar)
                                 .clip(CircleShape)
-                                .background(if (esElElegido) Movi.colores.marca else Movi.colores.tarjeta)
+                                .background(if (esElElegido) coloresDeLoElegido(Movi.colores).first else Movi.colores.tarjeta)
                                 .clickable(enabled = !saving) { dia = d },
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
                                 text = d.toString(),
                                 style = if (esElElegido) Movi.textos.cuerpoFuerte else Movi.textos.cuerpoRegular,
-                                color = if (esElElegido) Movi.colores.fondo else Movi.colores.texto,
+                                color = if (esElElegido) coloresDeLoElegido(Movi.colores).second else Movi.colores.texto,
                                 textAlign = TextAlign.Center,
                             )
                         }

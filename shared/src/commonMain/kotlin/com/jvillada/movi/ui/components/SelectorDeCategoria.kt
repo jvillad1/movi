@@ -496,7 +496,7 @@ private fun CeldaDeLaCuadricula(
         modifier = modifier
             .testTag(tag)
             .clip(forma)
-            .then(if (elegida) Modifier.border(2.dp, Movi.colores.marca, forma) else Modifier)
+            .then(if (elegida) Modifier.border(2.dp, Movi.colores.texto, forma) else Modifier)
             .selectable(selected = elegida, role = Role.Button, onClick = onClick)
             .padding(vertical = Movi.espacios.corto, horizontal = Movi.espacios.minimo),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -505,10 +505,10 @@ private fun CeldaDeLaCuadricula(
             Box(
                 modifier = Modifier
                     .size(TamanoDeIconoDeCategoria.Normal.circulo)
-                    .border(Medida.trazo, Movi.colores.marca, RoundedCornerShape(Movi.formas.pleno)),
+                    .border(Medida.trazo, Movi.colores.enlace, RoundedCornerShape(Movi.formas.pleno)),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Rounded.Add, contentDescription = null, tint = Movi.colores.marca, modifier = Modifier.size(TamanoDeIconoDeCategoria.Normal.icono))
+                Icon(Icons.Rounded.Add, contentDescription = null, tint = Movi.colores.enlace, modifier = Modifier.size(TamanoDeIconoDeCategoria.Normal.icono))
             }
         } else {
             // Con las preferencias que recibió el selector, no las del caché: las dos son la misma
@@ -517,7 +517,8 @@ private fun CeldaDeLaCuadricula(
             IconoDeCategoria(apariencia = apariencia)
         }
         Spacer(Modifier.height(Movi.espacios.minimo))
-        val colorDelRotulo = if (elegida || celda !is CeldaDeCategoria.Existente) Movi.colores.marca else Movi.colores.texto
+        // Vuelta 29: la elegida en tinta (con su borde); «Crear»/«Usar» son una acción, en el enlace.
+        val colorDelRotulo = if (celda !is CeldaDeCategoria.Existente) Movi.colores.enlace else Movi.colores.texto
         // Vuelta de diseño 13: **todas a la misma letra** (`apoyo`), en hasta dos renglones y con
         // dos renglones reservados siempre, así las celdas de un renglón miden lo mismo y el borde de
         // la elegida no queda más bajo que sus vecinas. Que una palabra no se parta a la mitad lo

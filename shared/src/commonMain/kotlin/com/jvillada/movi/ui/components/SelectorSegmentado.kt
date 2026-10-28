@@ -16,10 +16,18 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jvillada.movi.theme.ColoresDeMovi
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Radio
 import com.jvillada.movi.theme.Medida
+
+/**
+ * **Los colores de un segmento** (vuelta 29): elegido, la tinta con la letra blanca —el único
+ * «seleccionado» de Movi—; sin elegir, transparente sobre el riel con el texto medio. Pura.
+ */
+fun colorDelSegmento(elegido: Boolean, colores: ColoresDeMovi): Pair<Color, Color> =
+    if (elegido) colores.texto to colores.tarjeta else Color.Transparent to colores.textoMedio
 
 /**
  * **El selector segmentado de Movi**: una fila de pastillas a todo el ancho, una elegida.
@@ -50,12 +58,12 @@ fun SelectorSegmentado(
                 modifier = Modifier
                     .weight(1f)
                     .clip(RoundedCornerShape(Radio.pill))
-                    // El elegido es una pastilla llena de marca, no solo otro color de letra: en
-                    // Plan es el control principal, y con el fondo igual al del contenedor no se
-                    // veía cuál estaba elegido. `sobreMarca` sobre `marca` y `marca` sobre
-                    // `tarjeta` ya los vigila `ContrasteDeLosTokensTest` en los dos temas. Solo
-                    // cambian colores: el alto es el mismo, nada salta al elegir.
-                    .background(if (isActive) Movi.colores.marca else Color.Transparent)
+                    // El elegido es una pastilla llena, no solo otro color de letra: en Plan es el
+                    // control principal. Vuelta 29: **en tinta con la letra blanca**, el mismo
+                    // «seleccionado» del filtro elegido y de la casilla; el amarillo queda solo para la
+                    // acción principal. El blanco sobre la tinta lo mide `ContrasteDeLosTokensTest`.
+                    // Solo cambian colores: el alto es el mismo, nada salta al elegir.
+                    .background(colorDelSegmento(isActive, Movi.colores).first)
                     .clickable(enabled = enabled) { onSelect(i) }
                     .padding(vertical = Espacio.xs),
                 contentAlignment = Alignment.Center,
@@ -63,7 +71,7 @@ fun SelectorSegmentado(
                 Text(
                     text = label,
                     style = Movi.textos.cuerpo,
-                    color = if (isActive) Movi.colores.sobreMarca else Movi.colores.textoMedio,
+                    color = colorDelSegmento(isActive, Movi.colores).second,
                     letterSpacing = 0.1.sp,
                     // Una sola línea SIEMPRE. Con cuatro segmentos, cada uno se queda con ~82 dp
                     // en un teléfono de 375 px: «Traspaso» a 13 sp mide ~55, pero con la escala de

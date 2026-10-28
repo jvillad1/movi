@@ -16,7 +16,7 @@ import com.russhwolf.settings.set
  * en Plan, una clave por período (`recordatorios-sin-canal:2026-10`, ver
  * `claveDeRecordatoriosAhoraNo`): el período que viene vuelve a avisar.
  *
- * **Es del usuario, no del aparato** (a diferencia de `TemaStore`): un «Ahora no» a una propuesta
+ * **Es del usuario, no del aparato** (a diferencia de `LastAccountStore`): un «Ahora no» a una propuesta
  * sobre SUS categorías no significa nada para otra cuenta que entre en este mismo teléfono. Por
  * eso se limpia en `SessionManager.clear()`, y `ElForkLlegaLimpioTest` lo prueba.
  *

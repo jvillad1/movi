@@ -1,6 +1,7 @@
 package com.jvillada.movi.ui.components.ds
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -30,6 +31,21 @@ import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.theme.Radio
 
+/**
+ * **Lo elegido, en todo Movi** (vuelta 29): la tinta de fondo y la letra blanca. Lo usan el filtro
+ * elegido, el segmentado, la casilla y cada selector armado en una pantalla (el día, la moneda, la
+ * opción de una hoja): un solo lenguaje para «seleccionado». El amarillo es solo de la acción
+ * principal y el azul, de un enlace. Pura.
+ */
+fun coloresDeLoElegido(colores: ColoresDeMovi): Pair<Color, Color> = colores.texto to colores.tarjeta
+
+/**
+ * **El fondo de una fila elegida en una lista** (la cuenta elegida de una lista, el movimiento abierto
+ * al lado en pantalla ancha): el lavado de la tinta, con el texto en tinta encima. Una fila entera en
+ * tinta pesaría demasiado. Pura.
+ */
+fun fondoDeLaFilaElegida(colores: ColoresDeMovi): Color = colores.lavado(colores.texto)
+
 /** Tag estable de una [Pildora]. */
 const val TAG_PILDORA: String = "ds-pildora"
 
@@ -46,15 +62,21 @@ const val TAG_PILDORA_DE_ACCION: String = "ds-pildora-de-accion"
  */
 enum class TonoDePildora { Neutra, Info, Aviso, Peligro, Exito, Marca }
 
-/** El fondo y el texto de un tono, en la paleta del tema. Pura, para probarla en los dos. */
+/**
+ * El fondo y el texto de un tono, en la paleta del tema. Pura, para probarla.
+ *
+ * Opción 3 (vuelta 29): la neutra en la capa 3 (`#F1EDE6` en la maqueta); la de aviso en el tinte
+ * con su ocre (`#FFF2C6` / `#6B4A00`, «Vence el martes»); la de marca, llena de amarillo con la tinta
+ * encima. Las demás, el color sobre su lavado.
+ */
 fun coloresDeLaPildora(tono: TonoDePildora, colores: ColoresDeMovi): Pair<Color, Color> {
     val color = when (tono) {
-        TonoDePildora.Neutra -> return colores.capa2 to colores.textoMedio
+        TonoDePildora.Neutra -> return colores.capa3 to colores.textoMedio
+        TonoDePildora.Marca -> return colores.marca to colores.sobreMarca
         TonoDePildora.Info -> colores.entreCuentas
         TonoDePildora.Aviso -> colores.aviso
         TonoDePildora.Peligro -> colores.sale
         TonoDePildora.Exito -> colores.entra
-        TonoDePildora.Marca -> colores.marca
     }
     return colores.lavado(color) to color
 }
@@ -88,11 +110,20 @@ fun Pildora(
 }
 
 /**
- * **Un filtro que se elige** (un chip): «Todo · Gastos · Ingresos». Elegido va lleno de marca
- * —es una acción, y la marca es el color de la acción—; sin elegir, en la capa 2.
+ * **El alto de un [PildoraDeFiltro]** (vuelta 29). [Normal] es [Medida.altoDeFiltro] (44, el de la
+ * opción 3); [Compacto] es [Medida.altoChico] (36) para una fila de chips **dentro de una hoja anclada
+ * abajo**, donde cada dp de más empuja el pie fuera de la pantalla (las categorías de Agregar, a 360 ×
+ * 740). El toque llega a 48 en los dos.
+ */
+enum class AltoDeFiltro { Normal, Compacto }
+
+/**
+ * **Un filtro que se elige** (un chip): «Todo · Gastos · Ingresos». Opción 3 (vuelta 29): elegido
+ * va **lleno de tinta con la letra blanca**; sin elegir, blanco con el borde de píldora.
  *
- * Alto [Medida.altoChico], con el toque extendido a [Medida.objetivoTactil]. El ancho no cambia al
- * elegirlo (solo cambian los colores), así que una fila de filtros no baila.
+ * Alto [Medida.altoDeFiltro] (44, el de la maqueta), con el toque extendido a
+ * [Medida.objetivoTactil]. El ancho no cambia al elegirlo (cambian los colores y el peso, y el
+ * peso cambia poco el ancho de Figtree), así que una fila de filtros no baila.
  *
  * ```
  * PildoraDeFiltro("Gastos", seleccionada = filtro == Gastos, onClick = { filtro = Gastos })
@@ -111,14 +142,18 @@ fun PildoraDeFiltro(
     modifier: Modifier = Modifier,
     icono: ImageVector? = null,
     inicio: (@Composable () -> Unit)? = null,
+    alto: AltoDeFiltro = AltoDeFiltro.Normal,
 ) {
-    val fondo = if (seleccionada) Movi.colores.marca else Movi.colores.capa2
-    val color = if (seleccionada) Movi.colores.sobreMarca else Movi.colores.texto
+    val fondo = if (seleccionada) Movi.colores.texto else Movi.colores.tarjeta
+    // El blanco de la tarjeta sobre la tinta: `ContrasteDeLosTokensTest` mide el par.
+    val color = if (seleccionada) Movi.colores.tarjeta else Movi.colores.texto
+    val forma = RoundedCornerShape(Radio.pill)
     Row(
         modifier = modifier
-            .height(Medida.altoChico)
-            .clip(RoundedCornerShape(Radio.pill))
+            .height(if (alto == AltoDeFiltro.Compacto) Medida.altoChico else Medida.altoDeFiltro)
+            .clip(forma)
             .background(fondo)
+            .then(if (seleccionada) Modifier else Modifier.border(Medida.trazo, Movi.colores.bordeDePildora, forma))
             .clickable(role = Role.Tab, onClick = onClick)
             .semantics { selected = seleccionada }
             .testTag(TAG_PILDORA_DE_FILTRO)
@@ -130,15 +165,15 @@ fun PildoraDeFiltro(
     ) {
         inicio?.invoke()
         if (icono != null) Icon(icono, contentDescription = null, tint = color, modifier = Modifier.size(Icono.s))
-        Text(text = texto, style = Movi.textos.cuerpo, color = color, maxLines = 1)
+        Text(text = texto, style = if (seleccionada) Movi.textos.cuerpoFuerte else Movi.textos.cuerpo, color = color, maxLines = 1)
     }
 }
 
 /**
  * **Una píldora que hace algo al tocarla** (vuelta de diseño 12): las preguntas para seguir la
- * conversación debajo de una respuesta de Movi AI. Se ve como un [PildoraDeFiltro] sin elegir —capa
- * 2, el texto en `cuerpo`, ícono opcional en la marca— pero es un botón, no algo que se elige: no
- * dice «elegido» ni «pestaña».
+ * conversación debajo de una respuesta de Movi AI. Se ve como un [PildoraDeFiltro] sin elegir —blanca
+ * con el borde de píldora, el texto en `cuerpo`, ícono opcional en el azul del enlace— pero es un
+ * botón, no algo que se elige: no dice «elegido» ni «pestaña».
  *
  * Alto mínimo [Medida.altoChico]; un texto largo baja a un segundo renglón en vez de cortarse (la
  * píldora crece). [descripcion] es lo que oye el lector de pantalla cuando el texto es una versión
@@ -177,11 +212,13 @@ fun PildoraDeAccion(
 ) {
     val compacta = alto == AltoDePildora.Compacta
     val horizontal = if (compacta) Espacio.s else Espacio.m
+    val forma = RoundedCornerShape(Radio.pill)
     Row(
         modifier = modifier
             .heightIn(min = if (compacta) Medida.altoDePildora else Medida.altoChico)
-            .clip(RoundedCornerShape(Radio.pill))
-            .background(Movi.colores.capa2)
+            .clip(forma)
+            .background(Movi.colores.tarjeta)
+            .border(Medida.trazo, Movi.colores.bordeDePildora, forma)
             .clickable(enabled = habilitada, role = Role.Button, onClick = onClick)
             .then(if (descripcion != null && descripcion != texto) Modifier.semantics { contentDescription = descripcion } else Modifier)
             .testTag(TAG_PILDORA_DE_ACCION)
@@ -191,7 +228,7 @@ fun PildoraDeAccion(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         inicio?.invoke()
-        if (icono != null) Icon(icono, contentDescription = null, tint = Movi.colores.marca, modifier = Modifier.size(Icono.s))
+        if (icono != null) Icon(icono, contentDescription = null, tint = Movi.colores.enlace, modifier = Modifier.size(Icono.s))
         // Sin `weight`: dentro de una fila con desplazamiento horizontal (los chips de Agregar) el
         // ancho máximo es infinito, y un hijo con peso se quedaba en cero —«+ Nueva» se veía como
         // un «+» y una «N»—. El texto mide lo suyo, como el de [PildoraDeFiltro].

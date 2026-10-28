@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.profile
 
+import com.jvillada.movi.ui.components.ds.coloresDeLoElegido
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -84,14 +85,14 @@ fun DiasDeAvisoSheet(
                             .weight(1f)
                             .height(Medida.objetivoTactil)
                             .clip(RoundedCornerShape(Radio.m))
-                            .background(if (elegido) Movi.colores.marca else Movi.colores.tarjeta)
+                            .background(if (elegido) coloresDeLoElegido(Movi.colores).first else Movi.colores.tarjeta)
                             .clickable(enabled = !saving) { dias = d },
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
                             text = d.toString(),
                             style = if (elegido) Movi.textos.cuerpoFuerte else Movi.textos.cuerpoRegular,
-                            color = if (elegido) Movi.colores.fondo else Movi.colores.texto,
+                            color = if (elegido) coloresDeLoElegido(Movi.colores).second else Movi.colores.texto,
                         )
                     }
                 }
@@ -115,7 +116,7 @@ fun DiasDeAvisoSheet(
             ) {
                 Text(
                     text = if (saving) "Guardando…" else "Guardar",
-                    color = if (saving) Movi.colores.textoMedio else Movi.colores.fondo,
+                    color = if (saving) Movi.colores.textoMedio else Movi.colores.sobreMarca,
                     style = Movi.textos.cuerpo,
                 )
             }

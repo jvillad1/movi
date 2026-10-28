@@ -1183,7 +1183,7 @@ private fun CeldaDeIcono(item: IconoDelCatalogo, elegido: Boolean, onClick: () -
         modifier = modifier
             .testTag(tagDeIconoDelCatalogo(item.clave))
             .clip(forma)
-            .then(if (elegido) Modifier.border(Medida.trazoDeCarga, Movi.colores.marca, forma) else Modifier)
+            .then(if (elegido) Modifier.border(Medida.trazoDeCarga, Movi.colores.texto, forma) else Modifier)
             .clickable(onClick = onClick)
             .padding(vertical = Movi.espacios.corto, horizontal = Movi.espacios.minimo),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -1197,14 +1197,14 @@ private fun CeldaDeIcono(item: IconoDelCatalogo, elegido: Boolean, onClick: () -
             Icon(
                 item.imagen,
                 contentDescription = null,
-                tint = if (elegido) Movi.colores.marca else Movi.colores.textoMedio,
+                tint = if (elegido) Movi.colores.texto else Movi.colores.textoMedio,
                 modifier = Modifier.size(TamanoDeIconoDeCategoria.Normal.icono),
             )
         }
         Text(
             item.rotulo,
             style = Movi.textos.apoyo,
-            color = if (elegido) Movi.colores.marca else Movi.colores.texto,
+            color = Movi.colores.texto,
             textAlign = TextAlign.Center,
             minLines = 2,
             maxLines = 2,
@@ -1398,7 +1398,7 @@ private fun HojaUnificar(
                             Text(resumenDeUso(c), color = Movi.colores.textoApagado, style = Movi.textos.apoyo)
                         }
                         if (elegida?.name == c.name) {
-                            Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.marca, modifier = Modifier.size(Icono.s))
+                            Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.texto, modifier = Modifier.size(Icono.s))
                         }
                     }
                     Box(modifier = Modifier.fillMaxWidth().height(Medida.trazo).background(Movi.colores.hilo))

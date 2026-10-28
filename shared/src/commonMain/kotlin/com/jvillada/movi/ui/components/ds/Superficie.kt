@@ -10,12 +10,17 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.SemanticsPropertyKey
+import androidx.compose.ui.semantics.SemanticsPropertyReceiver
+import androidx.compose.ui.semantics.semantics
 import com.jvillada.movi.theme.ColoresDeMovi
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.theme.Radio
+import com.jvillada.movi.theme.Sombra
 
 /**
  * # El sistema de diseño de Movi, en componentes (`ui/components/ds/`)
@@ -29,8 +34,9 @@ import com.jvillada.movi.theme.Radio
  */
 
 /**
- * **La altura de una superficie.** Superficies por capas y sin bordes duros (camino 1): una
- * superficie se distingue de lo de abajo por su color, no por una línea.
+ * **La altura de una superficie.** Superficies por capas y sin bordes duros: una superficie se
+ * distingue de lo de abajo por su color (el blanco sobre el crema, en la opción 3) y, si es
+ * destacada, por su sombra; no por una línea.
  */
 enum class NivelDeSuperficie {
     /** Sobre el fondo: tarjetas, listas agrupadas. Lo normal. */
@@ -42,7 +48,10 @@ enum class NivelDeSuperficie {
     /** Encima de una capa 2. Rara vez hace falta. */
     Capa3,
 
-    /** Una propuesta de Movi: el tinte de la marca. Ver [TarjetaDePropuesta]. */
+    /**
+     * Una propuesta de Movi: blanca como una tarjeta, con el radio grande y la sombra suave de la
+     * opción 3 (la tarjeta de avisos de la maqueta). Ver [TarjetaDePropuesta].
+     */
     Propuesta,
 }
 
@@ -65,13 +74,30 @@ enum class RellenoDeSuperficie {
     Ninguno,
 }
 
-/** El color de cada nivel en la paleta del tema. Pura, para poder probarla en los dos temas. */
+/** El color de cada nivel en la paleta del tema. Pura, para poder probarla. */
 fun colorDeLaSuperficie(nivel: NivelDeSuperficie, colores: ColoresDeMovi): Color = when (nivel) {
     NivelDeSuperficie.Capa1 -> colores.capa1
     NivelDeSuperficie.Capa2 -> colores.capa2
     NivelDeSuperficie.Capa3 -> colores.capa3
     NivelDeSuperficie.Propuesta -> colores.propuesta
 }
+
+/**
+ * **¿Esta superficie lleva sombra?** Las propuestas siempre, y la que la pantalla marca como
+ * [destacada]; nada más. Pura.
+ */
+fun laSuperficieLlevaSombra(nivel: NivelDeSuperficie, destacada: Boolean): Boolean =
+    destacada || nivel == NivelDeSuperficie.Propuesta
+
+/**
+ * **Si una superficie va destacada (con sombra), en su semántica**, como `VarianteDeCifraKey`: deja
+ * vigilar que las listas vayan sin sombra y las propuestas con ella sin leer píxeles. Solo la llevan
+ * las destacadas; una superficie común no suma ningún nodo.
+ */
+val SuperficieDestacadaKey: SemanticsPropertyKey<Boolean> = SemanticsPropertyKey("SuperficieDestacada")
+
+/** Ver [SuperficieDestacadaKey]. */
+var SemanticsPropertyReceiver.superficieDestacada: Boolean by SuperficieDestacadaKey
 
 private fun rellenoDe(relleno: RellenoDeSuperficie): PaddingValues = when (relleno) {
     RellenoDeSuperficie.Normal -> PaddingValues(Medida.rellenoDeSuperficie)
@@ -83,7 +109,10 @@ private fun rellenoDe(relleno: RellenoDeSuperficie): PaddingValues = when (relle
  * **Una superficie**: el contenedor de toda tarjeta de la app. Reemplazó a `MinCard`, que se borró
  * en la vuelta de diseño 21 con su última llamada.
  *
- * Radio [Radio.l] siempre, sin borde, con el color de su [nivel].
+ * Radio [Radio.l] (18, las listas y tarjetas de la opción 3), sin borde, con el color de su [nivel].
+ * **Destacada** —[destacada], o el nivel [NivelDeSuperficie.Propuesta]— va con [Radio.xl] (22) y la
+ * sombra suave ([Sombra.destacada], [ColoresDeMovi.sombra]): el héroe, una propuesta. Las listas,
+ * nunca: una pantalla llena de sombras no destaca nada (ver [laSuperficieLlevaSombra]).
  *
  * ```
  * Superficie {
@@ -98,6 +127,7 @@ private fun rellenoDe(relleno: RellenoDeSuperficie): PaddingValues = when (relle
  * ```
  *
  * @param onClick si la superficie entera se toca (una tarjeta que abre un detalle).
+ * @param destacada la tarjeta principal de la pantalla (el héroe de Hoy): radio grande y sombra.
  */
 @Composable
 fun Superficie(
@@ -106,11 +136,13 @@ fun Superficie(
     relleno: RellenoDeSuperficie = RellenoDeSuperficie.Normal,
     onClick: (() -> Unit)? = null,
     onClickLabel: String? = null,
+    destacada: Boolean = false,
     contenido: @Composable ColumnScope.() -> Unit,
 ) {
     SuperficieConRellenoLibre(
         modifier = modifier,
         nivel = nivel,
+        destacada = laSuperficieLlevaSombra(nivel, destacada),
         relleno = rellenoDe(relleno),
         onClick = onClick,
         onClickLabel = onClickLabel,
@@ -127,14 +159,25 @@ fun Superficie(
 private fun SuperficieConRellenoLibre(
     modifier: Modifier,
     nivel: NivelDeSuperficie,
+    destacada: Boolean,
     relleno: PaddingValues,
     onClick: (() -> Unit)?,
     onClickLabel: String?,
     contenido: @Composable ColumnScope.() -> Unit,
 ) {
-    val forma = RoundedCornerShape(Radio.l)
+    val forma = RoundedCornerShape(if (destacada) Radio.xl else Radio.l)
+    val sombra = Movi.colores.sombra
     Column(
         modifier = modifier
+            .then(
+                if (destacada) {
+                    Modifier
+                        .shadow(Sombra.destacada, forma, clip = false, ambientColor = sombra, spotColor = sombra)
+                        .semantics { superficieDestacada = true }
+                } else {
+                    Modifier
+                },
+            )
             .clip(forma)
             .background(colorDeLaSuperficie(nivel, Movi.colores))
             .then(if (onClick != null) Modifier.clickable(onClickLabel = onClickLabel, onClick = onClick) else Modifier)

@@ -9,6 +9,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 
 /**
@@ -31,7 +32,8 @@ import androidx.compose.ui.unit.sp
  *
  * ## Qué cambia
  *
- * Cuatro escalas cortas y dos temas. Una pantalla nueva **no decide nada**: elige de una lista.
+ * Cuatro escalas cortas y un tema (desde la vuelta 29, el claro de la opción 3; ver [COLORES_CLAROS]).
+ * Una pantalla nueva **no decide nada**: elige de una lista.
  *
  * ## Y ya no hay otro juego de colores
  *
@@ -60,103 +62,129 @@ import androidx.compose.ui.unit.sp
 /**
  * Los colores de Movi **por lo que significan**, no por cómo se ven.
  *
- * ### Dos capas, no tres
+ * ## La opción 3 «Acción primero» (vuelta 29, 28-oct-2026)
  *
- * [marca] hace de identidad **y** de acción: es el color de los botones, de la pestaña activa y de
- * los enlaces. Los colores de plata ([entra], [sale], [capital], [entreCuentas]) son otra cosa y
- * nunca se cruzan con él.
+ * El dueño eligió la opción 3 del lienzo «Movi · 5 caminos» —«me encantó a mí y a mi esposa mucho
+ * más que 1, 2 y 4»— y con ella **un solo tema, claro**: fondo crema, tarjetas blancas, tinta casi
+ * negra y un amarillo que es la acción. Reemplaza al camino 1 («Noche premium», oscuro con lavanda)
+ * y al tema oscuro entero: ya no hay `COLORES_OSCUROS`, ni preferencia de tema en Ajustes.
  *
- * Eso sale de mirar cómo lo resuelven los que lo tienen escrito en sus tokens. Wise usa **dos
- * verdes deliberados**, uno de marca y otro de «entró plata». Nubank separa marca de semántico en
- * el código, y su morado nunca significa dinero. Monzo lo explica mejor que nadie: su marca es un
- * coral rojizo, y en la interfaz «los rojos suelen significar que algo salió horriblemente mal»,
- * así que necesitan **tres** capas — marca, acción y dinero.
+ * ### La marca ya no es texto
  *
- * Movi necesita dos porque su lavanda no choca con ningún color de plata. Y tiene la ventaja de que
- * el lavanda ya es el color que la app tiene hoy: esto no cambia la identidad, la ordena.
+ * Hasta acá [marca] (el lavanda) era identidad, acción **y** el color de los enlaces. El amarillo
+ * `#FFC21A` no puede ser texto: da 1,6:1 contra el blanco. Así que la marca es **un relleno** —el
+ * botón principal, la acción destacada, la píldora de la pestaña activa— con [sobreMarca] (la
+ * tinta) encima, y lo que antes era «texto en la marca» (un enlace, «Ver todo», un botón de texto,
+ * la acción de un encabezado) pasa a [enlace], el azul de la maqueta. La regla para una pantalla:
+ * **la marca va de fondo, nunca de letra.** `ContrasteDeLosTokensTest` lo sostiene: mide la tinta
+ * sobre la marca y el enlace sobre cada superficie, y la marca ya no está en la lista de textos.
  *
  * ### Tres niveles de texto, no cuatro
  *
- * El tema actual tiene cuatro y el cuarto no pasa accesibilidad. Al armar esta paleta apareció el
- * mismo problema: un cuarto nivel daba 4,29:1 sobre tarjeta. En vez de maquillarlo se sacó.
- * **Tres niveles que dicen la verdad valen más que cuatro donde uno miente.**
+ * [texto] (`#1F1B16`), [textoMedio] (`#5C554C`, el apoyo de la maqueta) y [textoApagado], el más
+ * tenue que **pasa** 4,5:1 sobre todas las capas. Un cuarto nivel no pasaba; no lo hay.
  *
  * ### El color nunca es la única pista
  *
  * Un monto lleva signo solo cuando **entra** plata, y el subtítulo de cada fila dice el verbo
- * («Gastado», «Recibido», «abona tanto a capital»). Es la lección de Wise, y es lo que hace que
- * esto funcione para alguien que no distingue el lavanda del azul — los dos tokens tienen
- * luminancia parecida a propósito, porque nunca compiten en el mismo lugar.
+ * («Gastado», «Recibido», «abona tanto a capital»). Es la lección de Wise.
  */
 @Immutable
 data class ColoresDeMovi(
-    /** El lienzo de la app: la capa 0. */
+    /** El lienzo de la app: la capa 0. El crema de la maqueta. */
     val fondo: Color,
     /**
      * Un plano por encima del fondo: tarjetas, hojas, filas agrupadas. **Es la capa 1** (ver
-     * [capa1]): se sigue llamando así porque lo nombran cientos de llamadas.
+     * [capa1]): se sigue llamando así porque lo nombran cientos de llamadas. Blanco.
      */
     val tarjeta: Color,
     /**
-     * **La capa 2**: lo que va encima de una tarjeta o se distingue del fondo sin ser una tarjeta —
-     * chips y filtros sin elegir, campos, botones secundarios, una superficie anidada—. Ver
-     * «Superficies por capas» en `docs/diseno/sistema.md`.
+     * **La capa 2, «la superficie suave»**: lo que va dentro de una tarjeta y se distingue de ella sin
+     * ser otra tarjeta —la franja de abajo de una tarjeta («Por confirmar» debajo del Disponible), un
+     * campo—. En la opción 3 casi no se despega del blanco: lo que la separa es el [hilo] de arriba.
      */
     val capa2: Color,
     /**
-     * **La capa 3**: la pista de una barra de progreso, lo apretado, una tercera altura. Se lee texto
-     * encima (la prueba de contraste lo mide), pero es raro que lo lleve.
+     * **La capa 3**: la pista de una barra de progreso, una píldora neutra, un botón apagado. Se lee
+     * texto encima (la prueba de contraste lo mide).
      */
     val capa3: Color,
     /**
-     * **La superficie de una propuesta de Movi**: una tarjeta con un tinte de la marca. Es la única
-     * superficie con color; dice «esto lo propone Movi, tú decides» sin necesitar un rótulo. No es
-     * un color de acción: el botón de adentro sí lo es.
+     * **La superficie de una propuesta de Movi.** En la opción 3 es blanca como una tarjeta y la
+     * distingue la **sombra** (la de la tarjeta de avisos de la maqueta), que `Superficie` le pone sola
+     * (`NivelDeSuperficie.Propuesta`), y el ícono en un círculo amarillo. No es un color de acción: el
+     * botón de adentro sí lo es.
      */
     val propuesta: Color,
-    /** El borde que de verdad separa los planos. Ver el KDoc de [COLORES_OSCUROS]. */
+    /**
+     * El borde de lo que se recorta contra el fondo sin ser una tarjeta: el círculo de una acción
+     * rápida, un botón redondo de encabezado, el borde de arriba de la barra de pestañas.
+     */
     val borde: Color,
+    /** El borde de una píldora o un filtro sin elegir. Un paso más firme que [borde]. */
+    val bordeDePildora: Color,
+    /** El borde de un botón secundario. El más firme de los tres: es un control. */
+    val bordeDeBoton: Color,
     /** El separador entre filas de una misma tarjeta. */
     val hilo: Color,
-    /** Texto principal. */
+    /** Texto principal: la tinta. También el fondo de un filtro elegido y de una insignia. */
     val texto: Color,
-    /** Texto de apoyo que igual se lee cómodo: montos secundarios, descripciones. */
+    /** Texto de apoyo que igual se lee cómodo: subtítulos, montos secundarios, descripciones. */
     val textoMedio: Color,
     /** El nivel más tenue que **pasa**. No hay un cuarto. */
     val textoApagado: Color,
-    /** Identidad y acción a la vez. **Nunca significa plata.** */
+    /**
+     * **Identidad y acción, como relleno.** El botón principal, la acción destacada, la píldora de la
+     * pestaña activa, el botón flotante. **Nunca va de texto** (ver [enlace]) **y nunca significa
+     * plata.**
+     */
     val marca: Color,
-    /** Lo que va encima de [marca]: el ícono del botón flotante, el texto del chip activo. */
+    /** Lo que va encima de [marca] (y de [marcaSuave]): la tinta. */
     val sobreMarca: Color,
+    /** El texto secundario sobre la marca: la fecha bajo el saludo, «de $X · quedan 4 de 7 pagos». */
+    val sobreMarcaMedio: Color,
+    /** El amarillo claro: los botones redondos del encabezado sobre la franja amarilla. */
+    val marcaSuave: Color,
+    /**
+     * **El tinte**: el fondo de un aviso y de «por confirmar», con [aviso] encima. Es también el
+     * [lavado] de [marca] y de [aviso].
+     */
+    val tinte: Color,
+    /** Enlaces y acciones de texto: «Ver toda la actividad», «Tu plata $X», un botón fantasma. */
+    val enlace: Color,
     /** Plata que entró al bolsillo. */
     val entra: Color,
-    /** Plata que salió, y el interés de una cuota. */
+    /** Plata que salió y se pasó, y lo que no tiene vuelta: la alerta. Nunca un gasto común. */
     val sale: Color,
     /** La parte de una cuota que sí baja la deuda. */
     val capital: Color,
-    /** Algo por vencer o por confirmar. */
+    /** Algo por vencer o por confirmar: el texto sobre el [tinte]. */
     val aviso: Color,
-    /** Plata que fue de una cuenta suya a otra: traspaso, cuota, pago de tarjeta. */
+    /**
+     * Plata que fue de una cuenta suya a otra: traspaso, cuota, pago de tarjeta. Vuelta 29: un gris
+     * azulado (`#556372`) y no un azul: el `#1F5B96` de antes se leía como el [enlace].
+     */
     val entreCuentas: Color,
     /** Relleno de gráficos para lo que no tiene color propio. */
     val neutro: Color,
     /** Los diez colores con los que se pinta una categoría. Ver [ColoresDeCategoria]. */
     val categorias: ColoresDeCategoria,
     /**
-     * **Cuánto color lleva un lavado** (ver [lavado]). Más alto en oscuro que en claro, por lo
-     * mismo que [ColoresDeCategoria.alfaDelCirculo]: el 16 % que en oscuro apenas se nota, en
-     * claro le come el contraste al texto de encima (el `sale` sobre su lavado en la propuesta caía
-     * a 4,35:1).
+     * **Cuánto color lleva un lavado** (ver [lavado]). Con el 10 % el verde de [entra] sobre su
+     * lavado encima de la capa 2 daba 4,47:1 con el `#14794A` de la maqueta; por eso [entra] está un
+     * paso más oscuro (ver [COLORES_CLAROS]).
      */
     val alfaDelLavado: Float,
     /**
+     * **El color de la sombra** de una superficie destacada (el héroe, una propuesta): la tinta. La
+     * sombra la dibuja la plataforma con su propia opacidad, así que va sin alfa.
+     */
+    val sombra: Color,
+    /**
      * **Lo que va encima del círculo de un avatar** (vuelta de diseño 18): las iniciales y la
-     * verificación del color elegido. Blanco **en los dos temas**, a propósito: el color del círculo
-     * no es del tema sino del dueño (`AvatarPalette`, en `:core`), y esa paleta se armó entera con
-     * tonos «600» para llevar blanco encima. [sobreMarca] no sirve: en oscuro es casi negro y sobre
-     * el índigo de la paleta daba 2,3:1. Eran tres `Color.White` sueltos (Ajustes, editar el
-     * perfil, el botón del avatar); `ContrasteDeLosTokensTest` mide cada color de la paleta contra
-     * este.
+     * verificación del color elegido. Blanco, a propósito: el color del círculo no es del tema sino
+     * del dueño (`AvatarPalette`, en `:core`), y esa paleta se armó entera con tonos «600» para llevar
+     * blanco encima. `ContrasteDeLosTokensTest` mide cada color de la paleta contra este.
      */
     val sobreAvatar: Color = Color(0xFFFFFFFF),
 ) {
@@ -171,17 +199,18 @@ data class ColoresDeMovi(
     fun circuloDeCategoria(clave: String?): Color = categorias.circulo(clave)
 
     /**
-     * **El fondo lavado de un color**: la píldora de la pestaña activa, una píldora de estado, el
-     * círculo de un ícono de marca, el botón de peligro. Antes era `marca.copy(alpha = 0.16f)`
-     * escrito a mano en cada lugar. Encima va el mismo color entero, y `ContrasteDeLosTokensTest`
-     * mide que se lea.
+     * **El fondo lavado de un color**: una píldora de estado, el círculo de un ícono, el botón de
+     * peligro. Encima va el mismo color entero, y `ContrasteDeLosTokensTest` mide que se lea.
+     *
+     * La [marca] y el [aviso] no se lavan con alfa: su fondo es el [tinte] de la maqueta (`#FFF2C6`),
+     * que es lo que un amarillo al 10 % habría querido ser.
      */
-    fun lavado(color: Color): Color = color.copy(alpha = alfaDelLavado)
+    fun lavado(color: Color): Color =
+        if (color == marca || color == aviso) tinte else color.copy(alpha = alfaDelLavado)
 
     /**
      * **La capa 1, con el nombre del sistema de capas.** Es [tarjeta] y nada más: un solo valor con
-     * dos nombres, para que no puedan separarse. Las superficies nuevas (`ui/components/ds/`) dicen
-     * `capa1`; lo existente sigue diciendo `tarjeta`.
+     * dos nombres, para que no puedan separarse.
      */
     val capa1: Color get() = tarjeta
 }
@@ -190,8 +219,8 @@ data class ColoresDeMovi(
 // CATEGORÍAS — diez colores con nombre
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Antes de los temas y no después: son `val` de nivel superior del mismo archivo, que se
-// inicializan en orden de aparición. Declaradas más abajo, `COLORES_OSCUROS` las leería en `null`.
+// Antes del tema y no después: son `val` de nivel superior del mismo archivo, que se inicializan en
+// orden de aparición. Declaradas más abajo, `COLORES_CLAROS` las leería en `null`.
 
 /** Un color del catálogo de categorías, como lo guarda el server y como lo lee el dueño. */
 @Immutable
@@ -208,8 +237,8 @@ const val COLOR_DE_CATEGORIA_RESPALDO = "gris"
 /**
  * Los diez colores que el dueño puede elegir para una categoría, **en el orden del selector**.
  *
- * Son claves y no colores porque el color depende del tema y la clave no: el dueño elige
- * «naranja» una vez y lo ve naranja en los dos. Por eso lo que se guarda en el server es la clave.
+ * Son claves y no colores porque lo que se guarda en el server es la clave: el dueño elige
+ * «naranja» una vez, y si mañana el tono cambia, su categoría lo sigue.
  */
 val COLORES_DEL_CATALOGO: List<ColorDelCatalogo> = listOf(
     ColorDelCatalogo("naranja", "Naranja"),
@@ -228,16 +257,15 @@ val COLORES_DEL_CATALOGO: List<ColorDelCatalogo> = listOf(
 fun esColorDelCatalogo(clave: String?): Boolean = COLORES_DEL_CATALOGO.any { it.clave == clave }
 
 /**
- * Los colores de las categorías en un tema.
+ * Los colores de las categorías.
  *
  * ### Pensados para un solo dibujo
  *
  * Un ícono pintado con el color, sobre un círculo **del mismo color con alfa bajo**
  * ([alfaDelCirculo]), encima de la tarjeta o del fondo. Es el dibujo que usa `IconoDeCategoria`, y
  * `ContrasteDeLosTokensTest` mide exactamente eso: el ícono contra la tarjeta, contra el fondo y
- * contra el círculo ya compuesto sobre cada uno, en los dos temas, con el 3:1 que WCAG pide para
- * gráficos que no son texto. Hoy el par más justo es el naranja del tema claro contra su círculo
- * sobre el fondo (3,99:1): margen hay, pero no para aclarar ese naranja a ojo.
+ * contra el círculo ya compuesto sobre cada uno, con el 3:1 que WCAG pide para gráficos que no son
+ * texto.
  *
  * ### No son colores de plata
  *
@@ -248,8 +276,8 @@ fun esColorDelCatalogo(clave: String?): Boolean = COLORES_DEL_CATALOGO.any { it.
  *
  * ### Por qué un `when` y no un mapa
  *
- * Diez campos con nombre hacen que olvidarse un color en un tema sea un error de compilación, no
- * un gris que aparece en silencio. El `when` de [color] es la única traducción de clave a campo.
+ * Diez campos con nombre hacen que olvidarse un color sea un error de compilación, no un gris que
+ * aparece en silencio. El `when` de [color] es la única traducción de clave a campo.
  */
 @Immutable
 data class ColoresDeCategoria(
@@ -263,10 +291,7 @@ data class ColoresDeCategoria(
     val lima: Color,
     val ambar: Color,
     val gris: Color,
-    /**
-     * Cuánto del color lleva el círculo de detrás del ícono. Más alto en oscuro que en claro: el
-     * mismo 12 % que en blanco ya se nota, sobre `#161D25` casi no se ve.
-     */
+    /** Cuánto del color lleva el círculo de detrás del ícono. */
     val alfaDelCirculo: Float,
 ) {
     /** El color de una clave del catálogo. Una clave desconocida —o `null`— da [gris]. */
@@ -287,26 +312,11 @@ data class ColoresDeCategoria(
     fun circulo(clave: String?): Color = color(clave).copy(alpha = alfaDelCirculo)
 }
 
-/** Claros y poco saturados: sobre la tarjeta oscura el más apagado da 6,76:1. */
-val CATEGORIAS_OSCURAS = ColoresDeCategoria(
-    naranja = Color(0xFFF2A365),
-    rojo    = Color(0xFFEF8585),
-    rosa    = Color(0xFFF09AC6),
-    violeta = Color(0xFFC3A2F2),
-    azul    = Color(0xFF80AEF0),
-    celeste = Color(0xFF6FCCE0),
-    verde   = Color(0xFF74CF98),
-    lima    = Color(0xFFB3D56E),
-    ambar   = Color(0xFFE5BC55),
-    gris    = Color(0xFFA2ACB7),
-    alfaDelCirculo = 0.18f,
-)
-
 /**
  * Oscuros, porque el ícono va sobre blanco **y** sobre su círculo teñido: el círculo lo aclara
  * todo un poco, así que un color que pasa raspando contra el blanco deja de pasar contra él. Lima
  * y ámbar son los que más lo sienten — un lima o un ámbar «de verdad» no llega a 3:1 sobre blanco,
- * y por eso acá son un oliva y un ocre.
+ * y por eso acá son un oliva y un ocre. El gris es cálido, como el resto de la paleta.
  */
 val CATEGORIAS_CLARAS = ColoresDeCategoria(
     naranja = Color(0xFFA94E12),
@@ -318,108 +328,60 @@ val CATEGORIAS_CLARAS = ColoresDeCategoria(
     verde   = Color(0xFF1E7445),
     lima    = Color(0xFF4B6614),
     ambar   = Color(0xFF835A06),
-    gris    = Color(0xFF5A6571),
+    gris    = Color(0xFF6A6257),
     alfaDelCirculo = 0.12f,
 )
 
 /**
- * El tema oscuro, que es el de todos los días.
+ * **El tema de Movi, el único** (opción 3, vuelta 29). Los valores son los de la maqueta tal cual
+ * (`project/p3/`, las cuatro `.dc.html` del lienzo «Movi · 5 caminos»), salvo donde la prueba de contraste pidió
+ * otra cosa:
  *
- * ## Ola R0 (26-oct-2026): las capas del camino 1
+ * - **[ColoresDeMovi.entra] `#147849`** y no el `#14794A` de la maqueta: sobre su lavado encima de la
+ *   capa 2 daba 4,47:1. Un paso más oscuro da 4,53. (El par de la maqueta —el verde sobre
+ *   `#E3F1E8`— daba 4,66 y sigue pasando.)
+ * - **[ColoresDeMovi.sale] `#B3261E`**: la maqueta no trae rojo. Es solo para alertas, 6,54:1 sobre
+ *   blanco y 5,80 sobre el crema.
+ * - **[ColoresDeMovi.entreCuentas] `#556372`**: un gris azulado, porque el azul de antes se confundía
+ *   con el enlace (5,27:1 en la superficie más difícil).
+ * - **[ColoresDeMovi.textoApagado] `#6E665B`**: la maqueta tiene dos niveles de texto; el tercero es
+ *   el más claro de la misma familia que pasa sobre la capa 3 (4,84:1).
  *
- * El rediseño eligió «Noche premium»: superficies por capas, casi sin bordes. La referencia era
- * `#0A0B10 / #12141C / #1A1D28 / #232737`, y **la prueba de contraste la rechazó**: la capa 1 daba
- * 1,07:1 contra el fondo, más plana que el 1,15:1 que Movi exige desde que existe este archivo. Se
- * bajó el fondo a `#08090D` y se subió cada capa lo justo: 1,16 · 1,12 · 1,15 entre capas
- * consecutivas. La propuesta es la marca al 10 % sobre el fondo, como en la maqueta. El hue pasó del
- * azul petróleo de antes al neutro violáceo del camino 1; el borde y el hilo lo siguieron.
+ * ### Planos con sombra, no con luminancia
  *
- * **La tarjeta está en `#161D25` y no en algo más oscuro por una medición.** La primera versión de
- * esta paleta la puso en `#0D1116`, que da 1,05:1 contra el fondo — o sea **más plana que el
- * 1,15:1 que ya tenía Movi**. Subirla a `#161D25` la lleva a 1,17:1, y el borde a 1,49:1 termina de
- * separar los planos.
- *
- * Eso deja una lección que vale escribir: en una paleta de poco contraste **la profundidad no la da
- * la luminancia de la superficie, la dan la superficie y el borde juntos**. Un solo hexadecimal no
- * alcanza.
- */
-val COLORES_OSCUROS = ColoresDeMovi(
-    fondo         = Color(0xFF08090D),
-    tarjeta       = Color(0xFF191B25),
-    capa2         = Color(0xFF222530),
-    capa3         = Color(0xFF2B2F3D),
-    propuesta     = Color(0xFF1D1A31),
-    borde         = Color(0xFF2E3242),
-    hilo          = Color(0xFF21242E),
-    texto         = Color(0xFFEAEEF2),
-    textoMedio    = Color(0xFFB4BEC9),
-    textoApagado  = Color(0xFF95A0AD),
-    marca         = Color(0xFFB9A0FF),
-    sobreMarca    = Color(0xFF140F26),
-    entra         = Color(0xFF7FD4A8),
-    sale          = Color(0xFFF08A7C),
-    capital       = Color(0xFFE8A96A),
-    aviso         = Color(0xFFE8C06A),
-    entreCuentas  = Color(0xFF8FB8E8),
-    neutro        = Color(0xFF4A5763),
-    categorias    = CATEGORIAS_OSCURAS,
-    alfaDelLavado = 0.16f,
-)
-
-/**
- * El tema claro, **que hoy no existe** y es el hueco más grande del diseño actual: `MoviTheme`
- * arranca un `darkColorScheme` y punto.
- *
- * No es un tema aparte: son los mismos roles con otros valores. Que se pueda generar así es lo que
- * prueba que esto es un sistema y no dos diseños.
- *
- * La lección viene de Bancolombia: su marca se ancla en blanco y negro con el amarillo como
- * **acento**, y por eso pudieron sumar modo oscuro sin rediseñar nada. Una identidad construida
- * sobre un color saturado de fondo no se puede invertir; una construida sobre neutros sí.
- *
- * ## Las capas en claro (ola R0)
-
-La misma lógica que en oscuro, al revés en luminancia: la capa 1 es el blanco de siempre y cada capa
-de arriba se distingue de la anterior por un paso de gris (1,10 y 1,13), lo justo para que **todo
-texto del sistema siga pasando 4,5:1 sobre la capa 3** —con un gris más marcado el apagado caía a
-4,43—. La propuesta es un blanco lavanda: en claro el tinte es lo que la separa (1,10:1 contra el
-fondo), porque más saturada el texto apagado deja de leerse encima.
-
-## Cuatro valores que los puso la prueba, no el ojo
- *
- * `ContrasteDeLosTokensTest` rechazó la primera versión de este tema y por eso el fondo es más
- * oscuro de lo que uno elegiría mirando:
- *
- * - **fondo `#E9ECF1`** — con el `#F2F4F7` original, la tarjeta blanca daba 1,1:1 contra el fondo,
- *   o sea *más plana* que el tema oscuro que ya existe. Ahora da 1,18:1. Es el mismo error que
- *   cometió la primera dirección B en oscuro, repetido del otro lado.
- * - **borde `#CCD3DC`** — daba 1,14:1 contra el fondo nuevo. Un borde que no se ve no separa nada.
- * - **hilo `#DDE2E9`** — bajó con el borde, para que la jerarquía se mantenga: el hilo es más
- *   callado que el borde, no igual de callado que el fondo.
- * - **aviso `#7F5D0F`** — el `#8A6410` pasaba por 0,03. Pasar raspando no es pasar: cualquier
- *   retoque futuro del fondo lo tumbaba.
+ * El blanco sobre el crema da 1,13:1 —menos que el 1,15 que exigía el camino 1—, y la capa 2
+ * (`#FBF8F3`) apenas 1,06 sobre el blanco. Es la decisión de la maqueta: lo que despega una tarjeta
+ * destacada es la **sombra** suave (el héroe y la tarjeta de avisos) y lo que separa la franja de
+ * abajo de una tarjeta es el [ColoresDeMovi.hilo]. `ContrasteDeLosTokensTest` mide esos pisos nuevos.
  */
 val COLORES_CLAROS = ColoresDeMovi(
-    fondo         = Color(0xFFE9ECF1),
-    tarjeta       = Color(0xFFFFFFFF),
-    capa2         = Color(0xFFF2F4F7),
-    capa3         = Color(0xFFE3E7EC),
-    propuesta     = Color(0xFFF8F5FF),
-    borde         = Color(0xFFCCD3DC),
-    hilo          = Color(0xFFDDE2E9),
-    texto         = Color(0xFF0D1218),
-    textoMedio    = Color(0xFF3D4752),
-    textoApagado  = Color(0xFF5C6873),
-    marca         = Color(0xFF5636B8),
-    sobreMarca    = Color(0xFFFFFFFF),
-    entra         = Color(0xFF117050),
-    sale          = Color(0xFFB3392A),
-    capital       = Color(0xFF8A5A18),
-    aviso         = Color(0xFF7F5D0F),
-    entreCuentas  = Color(0xFF1F5B96),
-    neutro        = Color(0xFF98A3AE),
-    categorias    = CATEGORIAS_CLARAS,
-    alfaDelLavado = 0.10f,
+    fondo          = Color(0xFFF4F1EC),
+    tarjeta        = Color(0xFFFFFFFF),
+    capa2          = Color(0xFFFBF8F3),
+    capa3          = Color(0xFFF1EDE6),
+    propuesta      = Color(0xFFFFFFFF),
+    borde          = Color(0xFFE7E1D7),
+    bordeDePildora = Color(0xFFE0D9CD),
+    bordeDeBoton   = Color(0xFFD9D1C3),
+    hilo           = Color(0xFFEFEAE1),
+    texto          = Color(0xFF1F1B16),
+    textoMedio     = Color(0xFF5C554C),
+    textoApagado   = Color(0xFF6E665B),
+    marca          = Color(0xFFFFC21A),
+    sobreMarca     = Color(0xFF1F1B16),
+    sobreMarcaMedio = Color(0xFF3D3220),
+    marcaSuave     = Color(0xFFFFE08A),
+    tinte          = Color(0xFFFFF2C6),
+    enlace         = Color(0xFF1D4E9E),
+    entra          = Color(0xFF147849),
+    sale           = Color(0xFFB3261E),
+    capital        = Color(0xFF8A5A18),
+    aviso          = Color(0xFF6B4A00),
+    entreCuentas   = Color(0xFF556372),
+    neutro         = Color(0xFFA39A8C),
+    categorias     = CATEGORIAS_CLARAS,
+    alfaDelLavado  = 0.10f,
+    sombra         = Color(0xFF1F1B16),
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -484,178 +446,227 @@ data class FormasDeMovi(
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TIPOGRAFÍA — de 25 tamaños a 7
+// TIPOGRAFÍA — de 25 tamaños a 11
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Los siete estilos de texto, contra los 25 tamaños sueltos que hay hoy — y desde la ola R0 un
- * octavo, [cifraDeTarjeta], el único que el camino 1 necesitaba y no estaba. Desde la vuelta de
- * diseño 3, un noveno: [portada], el título de una pantalla de una sola cosa.
+ * **Un renglón mide su interlineado, entero** (vuelta 29): `Trim.None`, centrado. Era la regla del
+ * `monto` y pasó a todos los estilos: sin recorte, un texto de N renglones mide N × `lineHeight` con
+ * cualquier letra, que es exactamente lo que reservan los esqueletos (`LineaEsqueleto`,
+ * `altoDeUnRenglon`). Con Figtree y los tamaños nuevos, el recorte de siempre hacía que lo cargado y su
+ * esqueleto difirieran de a unos dp por renglón, y lo de abajo saltaba al llegar el dato.
+ */
+val RENGLON_ENTERO: LineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.None)
+
+/**
+ * Los estilos de texto, contra los 25 tamaños sueltos que había: los siete de siempre, más
+ * [cifraDeTarjeta] (ola R0), [portada] (vuelta de diseño 3) y, desde la vuelta 29, [titularDePantalla]
+ * y [saludo].
  *
- * ### Las cifras van tabulares, no monoespaciadas
+ * ### Figtree para todo, también las cifras (vuelta 29)
  *
- * Hoy Movi pone **todos** los números en monoespaciada, y eso es lo que le da aire de terminal en
- * vez de producto de plata. Monoespaciada y tabular no son lo mismo: para que una columna de montos
- * alinee alcanza con cifras tabulares, que casi toda tipografía moderna trae. Eso es
- * `fontFeatureSettings = "tnum"`, y va en [monto] y en [cifra].
+ * La opción 3 escribe todo en **Figtree**, de 400 a 800, y las cifras en la misma letra con
+ * **números tabulares** (`fontFeatureSettings = "tnum"`): una columna de montos alinea sin la
+ * monoespaciada (Martian Mono) que el camino 1 ponía en cada cifra.
  *
- * Copilot Money —el referente de oficio del sector— las declara explícitamente; de las otras tres
- * apps de finanzas personales del benchmark, **ninguna** lo hace, incluida YNAB, cuya pantalla
- * central es literalmente una tabla de montos.
+ * ### En sp, la maqueta dividida por 1,12
+ *
+ * `App()` agranda toda la letra ×1,12 (`fontScale * 1.12f`, en las tres plataformas). La primera
+ * versión de esta vuelta escribió acá los px de la maqueta tal cual, y en pantalla todo salía 12 %
+ * más grande que en ella: «Bancolombia Ahorros» y «Mercado del sábado» en dos renglones, «Arrie…» en
+ * el widget, «Hola, Demo» del tamaño de un título. Cada estilo es **la maqueta ÷ 1,12**, redondeada al
+ * medio punto, para que **lo que se ve** mida lo de la maqueta (lo fija `TipografiaTest`):
+ *
+ * | estilo | sp | se ve como | maqueta |
+ * |---|---|---|---|
+ * | [cifra] | 36 / 800 | 40,3 | el héroe: 40/800, tracking −1,2 |
+ * | [titular] | 25 / 800 | 28 | el título de una pestaña: 28/800 |
+ * | [titularDePantalla] | 19,5 / 800 | 21,8 | el título de una pantalla con flecha: 22/800 |
+ * | [saludo] | 15 / 700 | 16,8 | «Hola, Juan» y el nombre del perfil: 17/700 |
+ * | [titulo] | 14,5 / 700 | 16,2 | el título de una sección: 16/700 |
+ * | [cuerpo] | 13,5 / 600 | 15,1 | el título de una fila: 15/600 |
+ * | [monto] | 13,5 / 700 | 15,1 | el monto de una fila: 15/700 |
+ * | [apoyo] | 11 / 400 | 12,3 | el subtítulo: 12,5 |
+ * | [rotulo] / [pestana] | 12 | 13,4 | (la barra de pestañas no se tocó: la rehace la vuelta 38) |
  *
  * ### La familia se pone en el tema, no acá
  *
  * Estos estilos no fijan `fontFamily` porque cargar una fuente es `@Composable`. `MoviTheme` se
- * las pone con `conFamilias` (ver `Tipografia.kt`): Space Grotesk en todos, Martian Mono en
- * [cifra]. Leídos fuera del tema —una prueba pura— no tienen familia, y es a propósito.
+ * la pone con `conFamilia` (ver `Tipografia.kt`). Leídos fuera del tema —una prueba pura— no tienen
+ * familia, y es a propósito.
  */
 @Immutable
 data class TextosDeMovi(
     /** El número protagonista de una pantalla. Uno por pantalla, o ninguno. */
     val cifra: TextStyle = TextStyle(
-        fontSize = 42.sp,
-        lineHeight = 46.sp,
-        fontWeight = FontWeight.SemiBold,
-        letterSpacing = (-0.9).sp,
+        fontSize = 36.sp,
+        lineHeight = 41.sp,
+        // La única sin `RENGLON_ENTERO`: a 36 sp la letra es más alta que su interlineado, y con el
+        // recorte de siempre el renglón mide la letra. Es la que dibuja la hoja de Agregar, anclada
+        // abajo: con el renglón entero el pie se salía a 360 × 740.
+        fontWeight = FontWeight.ExtraBold,
+        letterSpacing = (-1.1).sp,
         fontFeatureSettings = "tnum",
     ),
     /**
-     * **La cifra de una tarjeta de cuenta** (camino 1): el saldo dentro de la tarjeta de color de un
-     * banco, la cifra de un widget. Martian Mono como [cifra], a 24 sp — el piso al que se achica
-     * la cifra héroe antes de dejar de ser protagonista (`CifraProtagonista`, `ds.Cifra`).
+     * **La cifra de una tarjeta** (camino 1): el saldo dentro de la tarjeta de un banco, la cifra de un
+     * widget, «Falta por pagar». El piso al que se achica la cifra héroe antes de dejar de ser
+     * protagonista (`CifraProtagonista`, `ds.Cifra`).
      */
     val cifraDeTarjeta: TextStyle = TextStyle(
-        fontSize = 24.sp,
-        lineHeight = 30.sp,
-        fontWeight = FontWeight.Medium,
-        letterSpacing = (-0.6).sp,
+        fontSize = 21.5.sp,
+        lineHeight = 27.sp,
+        lineHeightStyle = RENGLON_ENTERO,
+        fontWeight = FontWeight.ExtraBold,
+        letterSpacing = (-0.5).sp,
         fontFeatureSettings = "tnum",
     ),
     /**
      * **El título de una pantalla de una sola cosa** (vuelta de diseño 3): el logotipo de la
-     * entrada («Movi») y la bienvenida de la guía de primer uso («Te damos la bienvenida a Movi»).
-     * Era el `fontSize = 32.sp` suelto de `LoginScreen`; la bienvenida, en [titular], se veía chica
-     * en media pantalla vacía. No es para una cifra —eso es [cifra]— ni para el título de una
-     * pantalla con contenido —eso es [titular]—.
+     * entrada («Movi») y la bienvenida de la guía de primer uso. No es para una cifra —eso es
+     * [cifra]— ni para el título de una pantalla con contenido —eso es [titular]—.
      */
     val portada: TextStyle = TextStyle(
-        fontSize = 32.sp,
-        lineHeight = 38.sp,
-        fontWeight = FontWeight.Bold,
-        letterSpacing = (-0.6).sp,
+        fontSize = 28.5.sp,
+        lineHeight = 34.sp,
+        lineHeightStyle = RENGLON_ENTERO,
+        fontWeight = FontWeight.ExtraBold,
+        letterSpacing = (-0.7).sp,
     ),
-    /** El título de una pantalla. */
+    /**
+     * **El título de una pestaña** («Actividad», «Pagos», «Patrimonio»): el encabezado con el avatar.
+     * Interlineado justo (30, no los 36 de la maqueta): en un renglón no se nota, y deja el encabezado
+     * en 56 con el aire de abajo que pide `PlanScreenTest`.
+     */
     val titular: TextStyle = TextStyle(
-        fontSize = 19.sp,
+        fontSize = 25.sp,
+        lineHeight = 30.sp,
+        lineHeightStyle = RENGLON_ENTERO,
+        fontWeight = FontWeight.ExtraBold,
+        letterSpacing = (-0.5).sp,
+    ),
+    /**
+     * **El título de una pantalla con flecha** (vuelta 29, «Personas» en la maqueta): más chico que el
+     * de una pestaña. El de 28 solo va en las cinco raíces.
+     */
+    val titularDePantalla: TextStyle = TextStyle(
+        fontSize = 19.5.sp,
         lineHeight = 24.sp,
-        fontWeight = FontWeight.SemiBold,
-        letterSpacing = (-0.45).sp,
+        lineHeightStyle = RENGLON_ENTERO,
+        fontWeight = FontWeight.ExtraBold,
+        letterSpacing = (-0.4).sp,
     ),
-    /** El título de una tarjeta o de un bloque. */
+    /**
+     * **El saludo** (vuelta 29): «Hola, Juan» arriba de Hoy y el nombre en la tarjeta del perfil, con
+     * la fecha o el correo debajo en `apoyo`. Es un nombre, no el título de una pestaña.
+     */
+    val saludo: TextStyle = TextStyle(
+        fontSize = 15.sp,
+        lineHeight = 19.sp,
+        lineHeightStyle = RENGLON_ENTERO,
+        fontWeight = FontWeight.Bold,
+    ),
+    /** El título de una sección, de una tarjeta o de un bloque: «Últimos movimientos». */
     val titulo: TextStyle = TextStyle(
-        fontSize = 15.5.sp,
-        lineHeight = 20.sp,
-        fontWeight = FontWeight.SemiBold,
-        letterSpacing = (-0.3).sp,
+        fontSize = 14.5.sp,
+        lineHeight = 18.sp,
+        lineHeightStyle = RENGLON_ENTERO,
+        fontWeight = FontWeight.Bold,
     ),
-    /** El texto de una fila. */
+    /** El texto de una fila —su título—, un filtro sin elegir, un enlace. */
     val cuerpo: TextStyle = TextStyle(
         fontSize = 13.5.sp,
         lineHeight = 18.sp,
-        fontWeight = FontWeight.Medium,
+        lineHeightStyle = RENGLON_ENTERO,
+        fontWeight = FontWeight.SemiBold,
     ),
     /**
-     * Un monto en una fila. Tabular, para que la columna no baile.
-     *
-     * **Ola R1: en Martian Mono, como la cifra héroe y la de tarjeta.** El camino 1 pone toda cifra de
-     * plata en la misma familia —las de las filas, las propuestas y los widgets también—, así un monto
-     * se reconoce como monto en cualquier pantalla. Un punto más chico que el cuerpo (12,5 contra
-     * 13,5): la monoespaciada es más ancha y a igual tamaño se ve más grande que el texto de al lado.
+     * Un monto en una fila. Tabular, para que la columna no baile, y en la letra de todo lo demás.
      */
     val monto: TextStyle = TextStyle(
-        fontSize = 12.5.sp,
+        fontSize = 13.5.sp,
         lineHeight = 18.sp,
-        fontWeight = FontWeight.Normal,
-        letterSpacing = (-0.3).sp,
+        fontWeight = FontWeight.Bold,
         fontFeatureSettings = "tnum",
-        // Sin recorte: un renglón de monto mide su `lineHeight` (18) con cualquier fuente. Martian
-        // Mono a 12,5 sp es más baja que Space Grotesk a 13,5, y con el recorte de siempre cada fila
-        // con un monto se achicaba unos dp — lo que miden los esqueletos y el alto del MoneyField.
-        lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.None),
+        // Sin recorte: un renglón de monto mide su `lineHeight` con cualquier fuente —lo que miden
+        // los esqueletos y el alto del MoneyField—.
+        lineHeightStyle = RENGLON_ENTERO,
     ),
     /** El subtítulo de una fila, que dice algo que no está en ninguna otra parte. */
     val apoyo: TextStyle = TextStyle(
-        fontSize = 11.5.sp,
-        lineHeight = 16.sp,
+        fontSize = 11.sp,
+        lineHeight = 15.sp,
+        lineHeightStyle = RENGLON_ENTERO,
         fontWeight = FontWeight.Normal,
     ),
-    /** El rótulo de una sección, en mayúsculas y espaciado. */
+    /** Un rótulo chico y espaciado. La base de las pestañas. */
     val rotulo: TextStyle = TextStyle(
-        fontSize = 10.5.sp,
-        lineHeight = 14.sp,
-        fontWeight = FontWeight.Medium,
-        letterSpacing = 1.7.sp,
+        fontSize = 12.sp,
+        lineHeight = 16.sp,
+        lineHeightStyle = RENGLON_ENTERO,
+        fontWeight = FontWeight.SemiBold,
+        letterSpacing = 0.4.sp,
     ),
 ) {
     // ── Los pesos con nombre (vuelta de diseño 21) ───────────────────────────────────────────────
     //
     // Una pantalla no escribe `fontWeight =`: elige uno de estos. Son los mismos estilos de arriba
-    // con OTRO de los pesos que la escala ya usa (Normal, Medium, SemiBold) —ningún peso nuevo—, y
-    // salen de su base en el cuerpo de la clase, no en el constructor: así `conFamilias` les pone la
-    // familia sin nombrarlos (el `copy` de la clase los vuelve a calcular) y nunca se separan de su
-    // base en tamaño o interlineado.
+    // con otro de los pesos de Figtree (400 a 800), y salen de su base en el cuerpo de la clase, no
+    // en el constructor: así `conFamilia` les pone la familia sin nombrarlos (el `copy` de la clase
+    // los vuelve a calcular) y nunca se separan de su base en tamaño o interlineado.
 
     /**
-     * **`apoyo` en Medium: el mini-título.** El rótulo de un dato arriba de su valor («Desde»,
-     * «Cuota»), el nombre en una fila apretada, el número dentro de un círculo. Es la letra de
-     * `RotuloDeCampo`, que además trae su color y su margen; esto es solo la letra.
+     * **`apoyo` con peso: el mini-título.** El rótulo de un dato arriba de su valor («Desde»,
+     * «Cuota»), el texto de una píldora, el rótulo de una acción rápida (12,5/600 en la maqueta).
      */
-    val apoyoMedio: TextStyle = apoyo.copy(fontWeight = FontWeight.Medium)
+    val apoyoMedio: TextStyle = apoyo.copy(fontWeight = FontWeight.SemiBold)
 
     /**
-     * **`titulo` en Medium: un nombre que encabeza sin gritar** (vuelta de diseño 4): el de una
-     * cuenta, una categoría o un tercero arriba de su detalle, el título de una tarjeta de
-     * formulario. `titulo` a secas (SemiBold) queda para el título de una sección o de un bloque.
+     * **`titulo` en SemiBold: un nombre que encabeza sin gritar** (vuelta de diseño 4): el de una
+     * cuenta, una categoría o un tercero arriba de su detalle, el título de una hoja. `titulo` a secas
+     * (Bold) queda para el título de una sección o de un bloque.
      */
-    val tituloMedio: TextStyle = titulo.copy(fontWeight = FontWeight.Medium)
+    val tituloMedio: TextStyle = titulo.copy(fontWeight = FontWeight.SemiBold)
 
     /**
      * **`titulo` en Normal: lo que acompaña a un título en su mismo renglón** —«· 3 movimientos»
-     * junto a la fecha de un día plegado, el conteo de una `Seccion`—, del tamaño del título pero sin
-     * su peso, para que se lea como dato y no como otro título.
+     * junto a la fecha de un día plegado, el conteo de una `Seccion`—.
      */
     val tituloRegular: TextStyle = titulo.copy(fontWeight = FontWeight.Normal)
 
     /**
-     * **`cuerpo` en SemiBold: lo elegido y lo que se toca.** La opción elegida de un selector, el
-     * texto de un botón, las iniciales de un avatar. La no elegida va en `cuerpo` (o en
-     * [cuerpoRegular] si así iba): `if (elegido) cuerpoFuerte else cuerpo`.
+     * **`cuerpo` en Bold: lo elegido y lo que se toca.** El texto de un botón (15/700 en la maqueta),
+     * el filtro elegido, las iniciales de un avatar: `if (elegido) cuerpoFuerte else cuerpo`.
      */
-    val cuerpoFuerte: TextStyle = cuerpo.copy(fontWeight = FontWeight.SemiBold)
+    val cuerpoFuerte: TextStyle = cuerpo.copy(fontWeight = FontWeight.Bold)
 
     /**
      * **`cuerpo` en Normal: un párrafo.** Una explicación de varios renglones, la respuesta de Movi
-     * AI: `cuerpo` (Medium) es para el texto de una fila, y a lo largo de un párrafo pesa.
+     * AI: `cuerpo` (SemiBold) es para el texto de una fila, y a lo largo de un párrafo pesa.
      */
     val cuerpoRegular: TextStyle = cuerpo.copy(fontWeight = FontWeight.Normal)
 
-    /**
-     * **El rótulo de una pestaña** (la barra del teléfono, el riel compacto): `rotulo` en frase, casi
-     * sin espaciado (en mayúsculas espaciadas cinco no entran), en Normal; la activa en SemiBold.
-     */
-    val pestana: TextStyle = rotulo.copy(letterSpacing = 0.2.sp, fontWeight = FontWeight.Normal)
+    /** **El rótulo de una pestaña sin elegir**: 12/500, sin espaciado. */
+    val pestana: TextStyle = rotulo.copy(letterSpacing = 0.sp, fontWeight = FontWeight.Medium)
 
-    /** [pestana] activa. */
-    val pestanaActiva: TextStyle = pestana.copy(fontWeight = FontWeight.SemiBold)
+    /** [pestana] activa: 12/700. */
+    val pestanaActiva: TextStyle = pestana.copy(fontWeight = FontWeight.Bold)
 
     /**
      * **El énfasis dentro de una frase**: el nombre o la cifra que se resalta en medio de un texto
      * corrido (el «**así**» de Movi AI, lo que un aviso del banco dice que es el monto). Un
      * `SpanStyle`, para un `AnnotatedString`: `withStyle(Movi.textos.enfasis) { append(nombre) }`.
-     * SemiBold, el peso más firme que la letra de la interfaz trae (un Bold sin su fuente se dibuja
-     * igual que este).
+     * Bold, como el «<strong>» de la maqueta.
      */
-    val enfasis: SpanStyle = SpanStyle(fontWeight = FontWeight.SemiBold)
+    val enfasis: SpanStyle = SpanStyle(fontWeight = FontWeight.Bold)
+
+    /**
+     * **El menos pegado al «$»** (vuelta 29). El `−` (U+2212) de Figtree es del ancho de un dígito
+     * (632 de 1000) con el trazo centrado, así que entre él y el «$» quedaba un hueco y «−$85.000» se
+     * leía «- $85.000», un guion suelto. Este `SpanStyle` va solo sobre el menos y le quita el aire de
+     * su derecha (123 de 1000 ≈ 0,12 em). Lo pone `Cifra` (`conElMenosPegado`).
+     */
+    val menosPegado: SpanStyle = SpanStyle(letterSpacing = (-0.12).em)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -663,16 +674,15 @@ data class TextosDeMovi(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * `staticCompositionLocalOf` y no `compositionLocalOf`: estos valores cambian **una vez**, cuando
- * el dueño alterna el tema. La variante estática no instala lectores, así que leerla en una fila de
- * una lista de trescientos movimientos no cuesta nada; la dinámica recompondría a cada lector ante
- * cualquier cambio, que es justo lo que no hace falta acá.
+ * `staticCompositionLocalOf` y no `compositionLocalOf`: estos valores no cambian mientras la app
+ * corre (desde la vuelta 29 hay un solo tema). La variante estática no instala lectores, así que
+ * leerla en una fila de una lista de trescientos movimientos no cuesta nada.
  *
- * El default es el tema oscuro porque es el único que Movi tiene hoy: si alguien lee esto fuera de
- * [MoviTheme] —una vista previa, una prueba— ve lo mismo que ve la app.
+ * El default es el único tema que hay: si alguien lee esto fuera de [MoviTheme] —una vista previa,
+ * una prueba— ve lo mismo que ve la app.
  */
 val LocalColores: ProvidableCompositionLocal<ColoresDeMovi> =
-    staticCompositionLocalOf { COLORES_OSCUROS }
+    staticCompositionLocalOf { COLORES_CLAROS }
 
 val LocalEspacios: ProvidableCompositionLocal<EspaciosDeMovi> =
     staticCompositionLocalOf { EspaciosDeMovi() }
