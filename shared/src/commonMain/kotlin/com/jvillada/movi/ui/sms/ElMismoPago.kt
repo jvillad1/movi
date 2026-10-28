@@ -276,6 +276,10 @@ internal fun TarjetaDelMismoPago(
  * marca del comercio, o el ícono), el título (el comercio, en hasta dos renglones) con el subtítulo
  * (banco · hora) debajo, y a la derecha la [cifra] y, debajo de ella, el [estado] —solo si dice algo:
  * «Pendiente» en la bandeja sobra, porque ahí todo lo está—.
+ *
+ * **Vuelta 42: [destacada].** En la bandeja el aviso es la propuesta (con sombra); en Reconciliar es
+ * el papel que se está revisando, y la propuesta es «Movi sugiere», justo debajo: dos tarjetas con
+ * sombra seguidas no destacaban ninguna. Ahí va plano (`destacada = false`, la capa 1 sin sombra).
  */
 @Composable
 internal fun TarjetaDeAviso(
@@ -285,6 +289,8 @@ internal fun TarjetaDeAviso(
     inicio: (@Composable () -> Unit)? = null,
     estado: Pair<String, TonoDePildora>? = null,
     pideDecision: Boolean = true,
+    /** Con la sombra de una propuesta. Por defecto, si [pideDecision]; Reconciliar la pide plana. */
+    destacada: Boolean = pideDecision,
     /** El monto, a la derecha de la cabeza: una [com.jvillada.movi.ui.components.ds.Cifra]. */
     cifra: (@Composable () -> Unit)? = null,
     acciones: (@Composable RowScope.() -> Unit)? = null,
@@ -293,7 +299,7 @@ internal fun TarjetaDeAviso(
 ) {
     Superficie(
         modifier = modifier.fillMaxWidth(),
-        nivel = if (pideDecision) NivelDeSuperficie.Propuesta else NivelDeSuperficie.Capa1,
+        nivel = if (destacada) NivelDeSuperficie.Propuesta else NivelDeSuperficie.Capa1,
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,

@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.sms
 
+import com.jvillada.movi.shared.model.enFormaDeTitulo
 import com.jvillada.movi.shared.model.nombreParaMostrar
 import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.ui.components.ds.BotonDeIcono
@@ -37,6 +38,7 @@ import androidx.compose.material.icons.rounded.QuestionMark
 import com.jvillada.movi.ui.components.ds.Cifra
 import com.jvillada.movi.ui.components.ds.Fila
 import com.jvillada.movi.ui.components.ds.IconoEnCirculo
+import com.jvillada.movi.ui.recurrentes.BajoLaFila
 import com.jvillada.movi.ui.components.ds.NivelDeSuperficie
 import com.jvillada.movi.ui.components.ds.PildoraDeFiltro
 import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
@@ -1239,6 +1241,8 @@ fun SMSReconcileScreen(
                         subtitulo = canalesDelMismoPago(pagoActual.miembros),
                         modifier = Modifier.testTag(TAG_AVISOS_DEL_PAGO_EN_RECONCILIAR),
                         pideDecision = pendiente,
+                        // Vuelta 42: plano; la sombra es de «Movi sugiere», la propuesta de abajo.
+                        destacada = false,
                     ) {
                         if (yaAnotadoCon != null) {
                             Text(avisoYaAnotado(yaAnotadoCon), style = Movi.textos.cuerpo, color = Movi.colores.aviso)
@@ -1267,6 +1271,9 @@ fun SMSReconcileScreen(
                         titulo = elSms?.bank ?: if (esComprobante) "Lo que Movi leyó del papel" else "Aviso del banco",
                         subtitulo = elSms?.let { "${if (esComprobante) "Comprobante" else "SMS"} · ${fechaLegibleDeSms(it.time)}" },
                         pideDecision = pendiente,
+                        // Vuelta 42: plano; la sombra es de «Movi sugiere», la propuesta de abajo.
+                        destacada = false,
+                        modifier = Modifier.testTag(TAG_AVISO_EN_RECONCILIAR),
                     ) {
                         if (elSms == null) {
                             Text("Cargando…", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
@@ -1492,8 +1499,10 @@ fun SMSReconcileScreen(
                             Detail(ok = false, label = "Comercio", value = "—")
                         } else {
                             ComercioQueSeEdita(
-                                leido = leido.merchant,
-                                valor = comercioEditado ?: leido.merchant,
+                                // Vuelta 42: «RAPPI» → «Rappi», como en las filas (vuelta 32). Solo se
+                                // muestra así: si no lo toca, se guarda lo que leyó Movi.
+                                leido = enFormaDeTitulo(leido.merchant),
+                                valor = comercioEditado ?: enFormaDeTitulo(leido.merchant),
                                 enabled = !working && pendiente,
                                 onCambio = { comercioEditado = it },
                             )
@@ -1505,17 +1514,19 @@ fun SMSReconcileScreen(
                             value = resolvedAccount?.name ?: "Sin cuenta elegida",
                             // Lo que Movi haya adivinado se dice acá, antes de guardar: un SMS no trae
                             // la cuenta escrita, la pone la app, y eso hay que confesarlo.
-                            // Vuelta de diseño 23: con bancos distintos, el porqué y el «Ojo», juntos.
-                            hint = listOfNotNull(
-                                if (cuentaDelSms.origen == OrigenDeLaCuentaDelBanco.SUGERIDA_POR_MOVI) {
-                                    parsed?.cuentaSugeridaPor ?: avisoDeLaCuentaDelBanco(cuentaDelSms.origen)
-                                } else avisoDeLaCuentaDelBanco(cuentaDelSms.origen),
-                                advertenciaDeLaCuenta,
-                            ).joinToString(" · ").ifEmpty { null },
-                            hintEsAviso = advertenciaDeLaCuenta != null,
+                            hint = if (cuentaDelSms.origen == OrigenDeLaCuentaDelBanco.SUGERIDA_POR_MOVI) {
+                                parsed?.cuentaSugeridaPor ?: avisoDeLaCuentaDelBanco(cuentaDelSms.origen)
+                            } else avisoDeLaCuentaDelBanco(cuentaDelSms.origen),
                             action = if (eligiendoCuenta) "Cerrar" else "Cambiar",
                             onClick = { eligiendoCuenta = !eligiendoCuenta },
                         )
+                        // Vuelta 42: el «Ojo: el aviso es de Falabella y la cuenta es de
+                        // Bancolombia», **una vez y entero**, debajo de la fila de la cuenta. Iba
+                        // pegado al porqué («La puso Movi · Ojo: …») en el subtítulo de dos renglones
+                        // y se cortaba en «…de Bancolo…».
+                        advertenciaDeLaCuenta?.let { advertencia ->
+                            BajoLaFila { LineaDeAdvertenciaDeBancos(advertencia) }
+                        }
                         // El selector, en el mismo lugar donde antes había un dato de solo lectura:
                         // cuando ninguna cuenta califica —o Movi eligió mal— este es el camino.
                         if (eligiendoCuenta) {
@@ -1552,6 +1563,44 @@ fun SMSReconcileScreen(
                                 }
                             },
                         )
+                        // Vuelta 42: las pastillas van **debajo de la fila «Categoría» y solo al tocar
+                        // «Cambiar»**. Iban siempre a la vista, sueltas entre la lista y los botones,
+                        // y la fila ya dice la categoría elegida. Sin la lectura no se sabe de qué
+                        // lado es el movimiento (gasto o ingreso): «Cambiar» y «+ Nueva» esperan.
+                        if (eligiendoCategoria && parsed != null && categoryOptions.isNotEmpty()) {
+                            // **Rueda en horizontal, no se parte ni se corta**: son hasta doce y a 375
+                            // dp no entran. Los filtros del sistema, como en Movimientos y Categorías.
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag(TAG_PASTILLAS_DE_CATEGORIA_DEL_SMS)
+                                    .horizontalScroll(rememberScrollState())
+                                    .padding(horizontal = Medida.margenDePantalla)
+                                    .padding(bottom = Espacio.s),
+                                horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
+                            ) {
+                                // «+ Nueva», PRIMERA de la fila: detrás de doce pastillas nadie la veía.
+                                // Pone el cursor en la búsqueda del selector, donde «Crear "…"» crea.
+                                PildoraDeFiltro(
+                                    texto = "Nueva",
+                                    seleccionada = false,
+                                    icono = Icons.Rounded.Add,
+                                    onClick = { pedidosDeFoco += 1 },
+                                    modifier = Modifier.testTag(TAG_PASTILLA_NUEVA_CATEGORIA),
+                                )
+                                categoryOptions.forEach { opt ->
+                                    PildoraDeFiltro(
+                                        texto = opt,
+                                        seleccionada = opt == selectedCategory,
+                                        onClick = {
+                                            selectedCategory = opt
+                                            eligiendoCategoria = false
+                                        },
+                                        modifier = Modifier.testTag(tagDePastillaDeCategoriaDelSms(opt)),
+                                    )
+                                }
+                            }
+                        }
                     }
 
                     if (eligiendoCategoria) {
@@ -1578,41 +1627,6 @@ fun SMSReconcileScreen(
                                 usos = UsedCategoriesCache.usosRecientes,
                                 pedidosDeFoco = pedidosDeFoco,
                             )
-                        }
-                    }
-
-                    // Sin la lectura no se sabe de qué lado es el movimiento (gasto o ingreso): las
-                    // pastillas, «Cambiar» y «+ Nueva» esperan a que llegue.
-                    if (parsed != null && categoryOptions.isNotEmpty()) {
-                        // **Rueda en horizontal, no se parte ni se corta**: son hasta doce y a 375 dp
-                        // no entran. Los filtros del sistema, como en Movimientos y Categorías.
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = Medida.dentroDeSeccion)
-                                .horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
-                        ) {
-                            // «+ Nueva», PRIMERA de la fila: detrás de doce pastillas nadie la veía.
-                            // Abre el selector con el cursor en la búsqueda, donde «Crear "…"» crea.
-                            PildoraDeFiltro(
-                                texto = "Nueva",
-                                seleccionada = false,
-                                icono = Icons.Rounded.Add,
-                                onClick = {
-                                    pedidosDeFoco += 1
-                                    eligiendoCategoria = true
-                                },
-                                modifier = Modifier.testTag(TAG_PASTILLA_NUEVA_CATEGORIA),
-                            )
-                            categoryOptions.forEach { opt ->
-                                PildoraDeFiltro(
-                                    texto = opt,
-                                    seleccionada = opt == selectedCategory,
-                                    onClick = { selectedCategory = opt },
-                                    modifier = Modifier.testTag(tagDePastillaDeCategoriaDelSms(opt)),
-                                )
-                            }
                         }
                     }
 
@@ -1802,6 +1816,7 @@ private fun ComercioQueSeEdita(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = Medida.altoDeFilaDoble)
+            .testTag(TAG_CONFIRMA_O_AJUSTA_COMERCIO)
             .clickable(enabled = enabled) { foco.requestFocus() }
             .padding(horizontal = Medida.margenDePantalla, vertical = Espacio.xs),
         verticalAlignment = Alignment.CenterVertically,
@@ -1848,8 +1863,6 @@ private fun Detail(
     label: String,
     value: String,
     hint: String? = null,
-    /** El [hint] pide atención («Ojo: el aviso es de Falabella…»): en el tono de aviso y en dos renglones. */
-    hintEsAviso: Boolean = false,
     action: String? = null,
     onClick: (() -> Unit)? = null,
 ) {
@@ -1857,8 +1870,6 @@ private fun Detail(
         titulo = value,
         // El porqué, cuando lo puso Movi («La puso Movi», «Así lo anotaste 4 veces»); si no, qué es.
         subtitulo = hint ?: label,
-        tonoDelSubtitulo = if (hintEsAviso) TonoDeSubtitulo.Aviso else TonoDeSubtitulo.Normal,
-        lineasDelSubtitulo = if (hintEsAviso) 2 else 1,
         modifier = Modifier.testTag(tagDeFilaDelSms(label)),
         inicio = {
             if (ok) IconoEnCirculo(Icons.Rounded.Check, tono = TonoDeIcono.Exito)
@@ -1927,6 +1938,15 @@ fun tagDePastillaDeCategoriaDelSms(nombre: String): String = "sms:pastilla:$nomb
 
 /** El `testTag` de una fila del resumen «Confirma o ajusta» que se puede tocar: «Cuenta», «Categoría». */
 fun tagDeFilaDelSms(rotulo: String): String = "sms:fila:$rotulo"
+
+/** La fila de pastillas de categoría de Reconciliar: solo existe con «Cambiar» abierto (vuelta 42). */
+const val TAG_PASTILLAS_DE_CATEGORIA_DEL_SMS: String = "sms:pastillas-de-categoria"
+
+/** La fila «Comercio» de «Confirma o ajusta», que se edita (vuelta 42: en forma de título). */
+const val TAG_CONFIRMA_O_AJUSTA_COMERCIO: String = "sms:comercio"
+
+/** La tarjeta del aviso en Reconciliar (vuelta 42: plana, sin la sombra de una propuesta). */
+const val TAG_AVISO_EN_RECONCILIAR: String = "sms:aviso-en-reconciliar"
 
 /** La pastilla «+ Nueva» del detalle de un SMS. */
 const val TAG_PASTILLA_NUEVA_CATEGORIA: String = "sms:pastilla-nueva-categoria"

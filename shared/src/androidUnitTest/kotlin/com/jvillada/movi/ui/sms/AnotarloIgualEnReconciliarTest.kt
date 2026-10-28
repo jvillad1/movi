@@ -126,6 +126,8 @@ class AnotarloIgualEnReconciliarTest {
         montar(repo)
 
         tocar(ANOTARLO_IGUAL)
+        // Vuelta 42: las pastillas salen al tocar «Cambiar» en la fila «Categoría».
+        tocarTag(tagDeFilaDelSms("Categoría"))
         tocarTag(tagDePastillaDeCategoriaDelSms("Comida"))
         tocar("Confirmar")
 
@@ -152,6 +154,7 @@ class AnotarloIgualEnReconciliarTest {
             .performTextReplacement("1200")
         composeRule.waitForIdle()
         tocarTag(tagDelTipoDeAnotarloIgual(TransactionType.INCOME))
+        tocarTag(tagDeFilaDelSms("Categoría"))
         tocarTag(tagDePastillaDeCategoriaDelSms("Salario"))
         tocar("Confirmar")
 

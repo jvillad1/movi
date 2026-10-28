@@ -121,13 +121,15 @@ class LoQueLlegaDelBancoEligeLaCuentaTest {
     /**
      * Cuando la cuenta la puso Movi por descarte, la pantalla lo dice antes de guardar. Vuelta de
      * diseño 23: y como el aviso es de Falabella y la cuenta de Bancolombia, también dice «Ojo».
+     * Vuelta 42: el «Ojo» en su propia línea, debajo de la fila (pegado al porqué se cortaba).
      */
     @Test
     fun un_sms_de_un_banco_desconocido_avisa_que_la_cuenta_la_puso_movi() {
         montarSms(cuentas = todas, banco = "Falabella")
 
+        composeRule.onNodeWithText("La puso Movi").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText(
-            "La puso Movi · Ojo: el aviso es de Falabella y la cuenta es de Bancolombia",
+            "Ojo: el aviso es de Falabella y la cuenta es de Bancolombia",
         ).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Revisar aviso").assertIsDisplayed()
     }

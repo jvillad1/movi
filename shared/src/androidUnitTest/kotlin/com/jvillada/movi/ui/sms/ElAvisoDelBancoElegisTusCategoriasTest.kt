@@ -7,6 +7,9 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
@@ -116,22 +119,52 @@ class ElAvisoDelBancoElegisTusCategoriasTest {
         composeRule.waitForIdle()
     }
 
+    /** Una pastilla, por su tag: con «Cambiar» abierto el nombre también está en la cuadrícula. */
+    private fun tocarPastilla(nombre: String) {
+        composeRule.onNodeWithTag(tagDePastillaDeCategoriaDelSms(nombre)).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+    }
+
     @Test
     fun las_pastillas_traen_hija_y_futbol_sin_buscarlas() {
         montar()
+        cambiarLaCategoria()
 
-        composeRule.onNodeWithText("Hija").assertIsDisplayed()
-        composeRule.onNodeWithText("Fútbol").assertIsDisplayed()
+        composeRule.onNodeWithTag(tagDePastillaDeCategoriaDelSms("Hija")).assertIsDisplayed()
+        composeRule.onNodeWithTag(tagDePastillaDeCategoriaDelSms("Fútbol")).assertIsDisplayed()
     }
 
     @Test
     fun tocar_la_pastilla_de_hija_es_la_que_se_guarda() {
         montar()
 
-        tocar("Hija")
+        cambiarLaCategoria()
+        tocarPastilla("Hija")
         tocar("Confirmar")
 
         assertEquals("Hija", publicados.single().category)
+    }
+
+    /**
+     * **Vuelta 42: las pastillas solo con «Cambiar».** Iban siempre a la vista, sueltas entre la
+     * lista y los botones; ahora la fila dice la categoría elegida y las pastillas aparecen debajo de
+     * ella al tocar «Cambiar». Elegir una la pone en la fila y las guarda otra vez.
+     */
+    @Test
+    fun las_pastillas_aparecen_debajo_de_la_fila_solo_al_tocar_cambiar() {
+        montar()
+
+        composeRule.onNodeWithTag(TAG_PASTILLAS_DE_CATEGORIA_DEL_SMS).assertDoesNotExist()
+        composeRule.onNodeWithTag(tagDePastillaDeCategoriaDelSms("Hija")).assertDoesNotExist()
+
+        cambiarLaCategoria()
+        val fila = composeRule.onNodeWithTag(tagDeFilaDelSms("Categoría")).getUnclippedBoundsInRoot()
+        val pastillas = composeRule.onNodeWithTag(TAG_PASTILLAS_DE_CATEGORIA_DEL_SMS).getUnclippedBoundsInRoot()
+        assertTrue(pastillas.top >= fila.bottom - 0.5.dp, "las pastillas van debajo de la fila «Categoría»")
+
+        tocarPastilla("Fútbol")
+        composeRule.onNodeWithTag(TAG_PASTILLAS_DE_CATEGORIA_DEL_SMS).assertDoesNotExist()
+        composeRule.onNodeWithTag(tagDeFilaDelSms("Categoría")).assert(hasText("Fútbol"))
     }
 
     @Test
@@ -177,6 +210,7 @@ class ElAvisoDelBancoElegisTusCategoriasTest {
     fun la_pastilla_nueva_abre_el_selector_con_el_cursor_en_la_busqueda() {
         montar()
 
+        cambiarLaCategoria()
         tocar("Nueva")
 
         composeRule.onNodeWithTag(TAG_BUSCAR_CATEGORIA).assertIsDisplayed().assertIsFocused()
@@ -194,6 +228,7 @@ class ElAvisoDelBancoElegisTusCategoriasTest {
     @Test
     fun la_propuesta_de_movi_es_la_primera_pastilla_aunque_no_este_en_ningun_catalogo() {
         montar(propuesta = "Colegio La Salle")
+        cambiarLaCategoria()
 
         assertEquals("Colegio La Salle", pastillas().first())
         // Y «Hija», la más usada, viene enseguida.
@@ -204,7 +239,9 @@ class ElAvisoDelBancoElegisTusCategoriasTest {
     fun elegir_otra_no_pierde_la_propuesta_de_movi() {
         montar(propuesta = "Colegio La Salle")
 
-        tocar("Fútbol")
+        cambiarLaCategoria()
+        tocarPastilla("Fútbol")
+        cambiarLaCategoria()
 
         assertEquals(listOf("Colegio La Salle", "Fútbol"), pastillas().take(2))
     }
@@ -212,6 +249,7 @@ class ElAvisoDelBancoElegisTusCategoriasTest {
     @Test
     fun la_pastilla_nueva_es_la_primera_de_la_fila() {
         montar()
+        cambiarLaCategoria()
 
         composeRule.onNodeWithTag(TAG_PASTILLA_NUEVA_CATEGORIA).assertIsDisplayed()
         val primera = composeRule.onNodeWithTag(TAG_PASTILLA_NUEVA_CATEGORIA).getUnclippedBoundsInRoot()
@@ -231,8 +269,10 @@ class ElAvisoDelBancoElegisTusCategoriasTest {
         lectura.complete(Unit)
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithTag(TAG_PASTILLA_NUEVA_CATEGORIA).assertIsDisplayed()
         composeRule.onAllNodesWithText("Cambiar").assertCountEquals(2)
+        // Vuelta 42: «+ Nueva» va con las pastillas, que salen al tocar «Cambiar».
+        cambiarLaCategoria()
+        composeRule.onNodeWithTag(TAG_PASTILLA_NUEVA_CATEGORIA).assertIsDisplayed()
     }
 
     /** Ola L, revisión: crear «Colegio» en un aviso la deja conocida para el siguiente. */
