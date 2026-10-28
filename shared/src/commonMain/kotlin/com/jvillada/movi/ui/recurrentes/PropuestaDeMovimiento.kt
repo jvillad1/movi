@@ -82,9 +82,10 @@ internal fun PropuestaDeMovimiento(
 /** Los rótulos que la pantalla y sus pruebas tienen que nombrar igual. */
 const val ETIQUETA_SI_FUE_ESTE = "Sí, fue este"
 const val ETIQUETA_NO_FUE_ESTE = "No fue este"
-const val ETIQUETA_ANOTAR = "Anotar este pago"
+/** Vuelta 40: «Anotar pago», el botón de la fila de una factura (era «Anotar este pago»). */
+const val ETIQUETA_ANOTAR = "Anotar pago"
 /** Un ingreso no se paga: llega (mismo criterio que `tituloPropuesta`). */
-const val ETIQUETA_ANOTAR_INGRESO = "Anotar este ingreso"
+const val ETIQUETA_ANOTAR_INGRESO = "Anotar ingreso"
 
 /** El rótulo de la salida «Anotar…» según sea un pago o un ingreso. */
 internal fun etiquetaDeAnotar(esIngreso: Boolean): String = if (esIngreso) ETIQUETA_ANOTAR_INGRESO else ETIQUETA_ANOTAR

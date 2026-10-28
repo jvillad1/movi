@@ -16,6 +16,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ErrorOutline
@@ -33,6 +36,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -204,6 +208,8 @@ fun SeccionChecklistDelPeriodo(
     planesDeCuotas: Map<String, PlanDelCredito> = emptyMap(),
     descartadas: Set<String> = emptySet(),
     debajoDelResumen: (@Composable () -> Unit)? = null,
+    /** Vuelta 40: tocar «Movimiento del 25 oct» de una factura pagada abre ese movimiento. */
+    onVerMovimiento: ((eventId: String) -> Unit)? = null,
 ) {
     // ── El momento de celebrar (Ola 1 · «Que Movi se sienta viva») ──────────────────────────────
     // Cuando el dueño completa la lista —pasa de «falta 1» a «todo pagado» por algo que hizo acá:
@@ -242,84 +248,133 @@ fun SeccionChecklistDelPeriodo(
         onQuitarLaMarca = onQuitarLaMarca,
     )
 
-    Column(modifier = modifier) {
-        Seccion(
-            titulo = TITULO_CHECKLIST_DEL_PERIODO,
-            // Cuántos pagos fijos tiene ESTE período — lo de períodos anteriores no cuenta acá.
-            conteo = if (pudoLeer && !cargando && checklist.isNotEmpty()) checklist.size else null,
+    // Vuelta 40: cuántas facturas se ven antes de «Ver los N pagos del período».
+    var todasALaVista by rememberSaveable { mutableStateOf(false) }
+    val facturas = enOrdenDeFacturas(checklist.filter { !it.esIngreso })
+    val ingresos = enOrdenDeFacturas(checklist.filter { it.esIngreso })
+    val urgente = laMasUrgente(facturas)
+    @Composable
+    fun FilaDe(pago: PagoDelPeriodo, conAnotar: Boolean = true) {
+        val propuesta = propuestaDeLaFila(pago, descartadas)
+        val conPropuesta = pago.estado == EstadoDeLaFila.CON_DUDAS && propuesta != null
+        val enVuelo = pago.ruleId in marcando
+        val estimacion = estimacionDeLaFila(pago, planesDeCuotas)?.takeIf { !enVuelo && !pago.pagado }
+        FilaDeFactura(
+            pago = pago,
+            principal = pago == urgente,
+            enVuelo = enVuelo,
+            conPropuesta = conPropuesta,
+            onAnotar = if (conAnotar) ({ acciones.onAnotarMovimiento(pago) }) else null,
+            onVerMovimiento = onVerMovimiento,
+            onAbrir = onAbrir?.let { abrir -> { abrir(pago) } },
+            etiquetaDeAbrir = etiquetaDeAbrir(pago.ruleId),
+            evidencia = evidenciaDeLaFila(pago),
+            debajo = if (estimacion != null || ofreceAlgoDebajo(pago, conPropuesta)) {
+                {
+                    if (estimacion != null) Text(text = estimacion, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                    LoQueOfreceLaFila(pago, propuesta, enVuelo, acciones, conBotonDeAnotar = false)
+                }
+            } else null,
         )
+    }
+
+    Column(modifier = modifier) {
         when {
-            cargando -> Unit
-            !pudoLeer -> NoSePudoLeer(
-                texto = "No se pudieron leer los pagos de este período",
-                onReintentar = onReintentar,
-            )
-            checklist.isEmpty() && anteriores.isEmpty() -> Superficie(modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    text = "Este período no tiene pagos anotados",
-                    style = Movi.textos.cuerpo,
-                    color = Movi.colores.textoMedio,
+            cargando -> Seccion(titulo = TITULO_TUS_FACTURAS)
+            !pudoLeer -> {
+                Seccion(titulo = TITULO_TUS_FACTURAS)
+                NoSePudoLeer(
+                    texto = "No se pudieron leer los pagos de este período",
+                    onReintentar = onReintentar,
                 )
             }
-            else -> Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
-                val filas = FilasDelChecklist(marcando, descartadas, acciones, planesDeCuotas, onAbrir)
-                if (celebrar) {
-                    Box(Modifier.padding(horizontal = Medida.margenDePantalla).padding(top = Espacio.s)) {
-                        MomentoDeCelebracion(FRASE_DEL_CHECKLIST_COMPLETO)
-                    }
-                }
-                if (checklist.isNotEmpty()) {
-                    ResumenDeLaLista(
-                        izquierda = TITULO_FALTA_POR_PAGAR to faltaPorPagar(checklist),
-                        derecha = TITULO_YA_PAGASTE to yaPagadoEnElPeriodo(checklist),
-                    )
-                    debajoDelResumen?.invoke()
-                    GrupoDePagos(
-                        titulo = TITULO_GRUPO_POR_PAGAR,
-                        icono = Icons.Rounded.Schedule,
-                        colorDelIcono = Movi.colores.textoMedio,
-                        // Sin total: es la cifra de «Falta por pagar» del resumen, un renglón arriba.
-                        total = null,
-                        // Sin nada pendiente el grupo no desaparece: dice que ya salió todo, que es
-                        // la respuesta a la pregunta que el dueño vino a hacer.
-                        vacio = lineaDeLoQueFalta(checklist),
-                        // Vuelta de diseño 22: en el orden de la cola de lo pendiente (lo vencido
-                        // primero y el monto más grande primero), el mismo de la campana, «Movi propone
-                        // hoy» y el widget del Inicio. Lo que vence más adelante, por fecha.
-                        filas = pagosEnOrdenDeUrgencia(checklist),
-                        // De dónde salen las estimaciones de las cuotas: una vez por grupo, debajo de
-                        // las filas que las muestran, y solo si alguna la muestra.
-                        pie = ESTIMADO_SOBRE_LA_DEUDA_DE_HOY.takeIf {
-                            pagosPendientes(checklist).any { estimacionDeLaFila(it, planesDeCuotas) != null }
-                        },
-                    ) { filas.Fila(it) }
-                    // Sin total, por lo mismo: «Ya pagaste» ya está en el resumen.
-                    OtroGrupo(TITULO_YA_PAGASTE, Icons.Rounded.CheckCircle, Movi.colores.entra, null, pagosHechos(checklist)) { filas.Fila(it) }
-                    // Un sueldo no se paga: llega. Mismo criterio que el título de la propuesta
-                    // («¿Ya te llegó?»).
-                    OtroGrupo(TITULO_POR_COBRAR, Icons.Rounded.Schedule, Movi.colores.textoMedio, faltaPorCobrar(checklist), ingresosPendientes(checklist)) { filas.Fila(it) }
-                    OtroGrupo(TITULO_YA_RECIBISTE, Icons.Rounded.CheckCircle, Movi.colores.entra, yaRecibidoEnElPeriodo(checklist), ingresosRecibidos(checklist)) { filas.Fila(it) }
-                } else {
-                    debajoDelResumen?.invoke()
+            checklist.isEmpty() && anteriores.isEmpty() -> {
+                Seccion(titulo = TITULO_TUS_FACTURAS)
+                Superficie(modifier = Modifier.fillMaxWidth()) {
                     Text(
                         text = "Este período no tiene pagos anotados",
                         style = Movi.textos.cuerpo,
                         color = Movi.colores.textoMedio,
-                        modifier = Modifier.padding(Medida.rellenoDeSuperficie),
+                    )
+                    debajoDelResumen?.invoke()
+                }
+            }
+            else -> {
+                // ── La tarjeta amarilla: cuánto falta, de cuánto, y cuánto llevas ──────────────
+                if (facturas.isNotEmpty()) {
+                    TarjetaFaltaPorPagar(resumenDeFacturas(checklist))
+                    Spacer(Modifier.height(Medida.entreSecciones))
+                }
+                // ── Tus facturas del período ─────────────────────────────────────────────────
+                Seccion(titulo = TITULO_TUS_FACTURAS)
+                Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
+                    if (celebrar) {
+                        Box(Modifier.padding(horizontal = Medida.margenDePantalla).padding(top = Espacio.s)) {
+                            MomentoDeCelebracion(FRASE_DEL_CHECKLIST_COMPLETO)
+                        }
+                    }
+                    // «Tus recordatorios no llegan» (vuelta de diseño 28): arriba de la lista, debajo
+                    // de lo que falta.
+                    debajoDelResumen?.invoke()
+                    val aLaVista = if (todasALaVista) facturas else facturas.take(FACTURAS_A_LA_VISTA)
+                    if (facturas.isEmpty()) {
+                        Text(
+                            text = lineaDeLoQueFalta(checklist) ?: "Este período no tiene pagos anotados",
+                            style = Movi.textos.cuerpo,
+                            color = Movi.colores.textoMedio,
+                            modifier = Modifier.padding(Medida.rellenoDeSuperficie),
+                        )
+                    }
+                    aLaVista.forEachIndexed { i, pago ->
+                        if (i > 0) Separador(SangriaDeSeparador.ConInicio)
+                        FilaDe(pago)
+                    }
+                    // De dónde salen las estimaciones de las cuotas: una vez, si alguna fila la muestra.
+                    if (aLaVista.any { !it.pagado && estimacionDeLaFila(it, planesDeCuotas) != null }) {
+                        Text(
+                            text = ESTIMADO_SOBRE_LA_DEUDA_DE_HOY,
+                            style = Movi.textos.apoyo,
+                            color = Movi.colores.textoApagado,
+                            modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(bottom = Espacio.s),
+                        )
+                    }
+                }
+                if (facturas.size > FACTURAS_A_LA_VISTA) {
+                    Boton(
+                        if (todasALaVista) "Ver menos" else textoDeVerTodas(facturas.size),
+                        onClick = { todasALaVista = !todasALaVista },
+                        modifier = Modifier.align(Alignment.CenterHorizontally).testTag(TAG_VER_TODAS_LAS_FACTURAS),
+                        variante = VarianteDeBoton.Fantasma,
+                        icono = if (todasALaVista) null else Icons.AutoMirrored.Rounded.KeyboardArrowRight,
                     )
                 }
+                // ── Los ingresos fijos (el sueldo): no se pagan, llegan ───────────────────────
+                if (ingresos.isNotEmpty()) {
+                    Spacer(Modifier.height(Medida.entreSecciones))
+                    Seccion(titulo = TITULO_TUS_INGRESOS)
+                    Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
+                        ingresos.forEachIndexed { i, pago ->
+                            if (i > 0) Separador(SangriaDeSeparador.ConInicio)
+                            FilaDe(pago)
+                        }
+                    }
+                }
+                // ── Lo que un período anterior dejó abierto: aparte y al final ────────────────
                 if (anteriores.isNotEmpty()) {
-                    Separador(SangriaDeSeparador.Ninguna)
-                    GrupoDePagos(
-                        titulo = tituloDeLosAnteriores(anteriores),
-                        icono = Icons.Rounded.History,
-                        colorDelIcono = Movi.colores.aviso,
-                        // Sin total: no es plata de este período, y sumarla al lado de las de
-                        // arriba invitaría a leerla como parte de lo que falta.
-                        total = null,
-                        explicacion = EXPLICACION_DE_LOS_ANTERIORES,
-                        filas = anteriores,
-                    ) { filas.Fila(it) }
+                    Spacer(Modifier.height(Medida.entreSecciones))
+                    Seccion(titulo = tituloDeLosAnteriores(anteriores), conteo = anteriores.size)
+                    Text(
+                        EXPLICACION_DE_LOS_ANTERIORES,
+                        style = Movi.textos.apoyo,
+                        color = Movi.colores.textoMedio,
+                        modifier = Modifier.padding(bottom = Espacio.xs),
+                    )
+                    Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
+                        anteriores.forEachIndexed { i, pago ->
+                            if (i > 0) Separador(SangriaDeSeparador.ConInicio)
+                            FilaDe(pago)
+                        }
+                    }
                 }
             }
         }
@@ -340,44 +395,6 @@ internal fun tituloDeLosAnteriores(anteriores: List<PagoDelPeriodo>): String {
 /** Lo que dice debajo del título de los anteriores: por qué están acá y qué se espera. */
 const val EXPLICACION_DE_LOS_ANTERIORES =
     "No son de este período: Movi todavía no sabe si los pagaste. Confírmalo o anota el pago."
-
-/**
- * Lo que una fila del checklist necesita además de su pago, en un solo paquete: así [GrupoDePagos]
- * no repite seis parámetros en cada llamada.
- */
-private class FilasDelChecklist(
-    val marcando: Set<String>,
-    val descartadas: Set<String>,
-    val acciones: AccionesDelChecklist,
-    val planesDeCuotas: Map<String, PlanDelCredito>,
-    val onAbrir: ((PagoDelPeriodo) -> Unit)?,
-) {
-    @Composable
-    fun Fila(pago: PagoDelPeriodo) {
-        FilaDelChecklistCompleto(
-            pago = pago,
-            enVuelo = pago.ruleId in marcando,
-            estimacion = estimacionDeLaFila(pago, planesDeCuotas),
-            propuesta = propuestaDeLaFila(pago, descartadas),
-            acciones = acciones,
-            onAbrir = onAbrir?.let { abrir -> { abrir(pago) } },
-        )
-    }
-}
-
-/** Un grupo que solo aparece si tiene filas, precedido de su aire. */
-@Composable
-private fun OtroGrupo(
-    titulo: String,
-    icono: ImageVector,
-    colorDelIcono: Color,
-    total: Long?,
-    filas: List<PagoDelPeriodo>,
-    fila: @Composable (PagoDelPeriodo) -> Unit,
-) {
-    if (filas.isEmpty()) return
-    GrupoDePagos(titulo = titulo, icono = icono, colorDelIcono = colorDelIcono, total = total, filas = filas, fila = fila)
-}
 
 /**
  * **Lo que el dueño vino a preguntar, arriba de todo**: cuánto falta y cuánto ya pagó en el
@@ -610,56 +627,6 @@ internal fun etiquetaDeAbrir(ruleId: String): String =
     else "Editar el pago fijo"
 
 /**
- * Una fila de Plan: [FilaDePagoDelPeriodo] con lo que [PagoDelPeriodo] sabe, y debajo lo único que
- * esa fila puede ofrecer sin mentir.
- *
- * @param estimacion el reparto que Movi estima para esta cuota (ver [estimacionDeLaFila]). Va
- *   debajo, no al lado del monto: el monto es la cuota registrada y la estimación es otra cosa.
- */
-@Composable
-private fun FilaDelChecklistCompleto(
-    pago: PagoDelPeriodo,
-    enVuelo: Boolean,
-    acciones: AccionesDelChecklist,
-    propuesta: FinancialEvent? = null,
-    estimacion: String? = null,
-    onAbrir: (() -> Unit)? = null,
-) {
-    val estado = estadoVisualDe(pago)
-    FilaDePagoDelPeriodo(
-        estado = estado,
-        esIngreso = pago.esIngreso,
-        nombre = pago.nombre,
-        fecha = if (enVuelo) "Guardando…" else fechaDeLaFila(pago),
-        monto = textoDelMontoDelChecklist(pago),
-        montoChico = pago.montoEsSaldo && !pago.pagado,
-        colorDelMonto = when {
-            pago.pagado -> Movi.colores.textoMedio
-            pago.montoEsSaldo -> Movi.colores.textoApagado
-            pago.esIngreso -> Movi.colores.entra
-            pago.vencido -> Movi.colores.sale
-            else -> Movi.colores.texto
-        },
-        evidencia = evidenciaDeLaFila(pago),
-        onAbrir = onAbrir,
-        etiquetaDeAbrir = etiquetaDeAbrir(pago.ruleId),
-        pildora = pildoraDeLaFila(pago, conPropuesta = pago.estado == EstadoDeLaFila.CON_DUDAS && propuesta != null),
-        debajo = if ((estimacion != null && !enVuelo) || hayQueOfrecer(pago)) {
-            {
-                // **Lo que Movi estima que trae esta cuota.** No va con el color de vencido: es una
-                // cuenta sobre el crédito, no un aviso sobre la fecha.
-                if (estimacion != null && !enVuelo) {
-                    Text(text = estimacion, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                }
-                LoQueOfreceLaFila(pago, propuesta, enVuelo, acciones)
-            }
-        } else {
-            null
-        },
-    )
-}
-
-/**
  * Si la fila tiene algo que ofrecer debajo. Una fila sin nada no deja ni un hueco: la mayoría son
  * cuotas que el movimiento ya probó.
  */
@@ -688,8 +655,15 @@ private fun LoQueOfreceLaFila(
     propuesta: FinancialEvent?,
     enVuelo: Boolean,
     acciones: AccionesDelChecklist,
+    /**
+     * Vuelta 40: en una [FilaDeFactura] «Anotar pago» ya está a la derecha de la fila; debajo no se
+     * repite (ni «Movi no encontró…»: la pastilla ya dice que venció).
+     */
+    conBotonDeAnotar: Boolean = true,
 ) {
     if (!hayQueOfrecer(pago)) return
+    if (!conBotonDeAnotar && (pago.estado == EstadoDeLaFila.SIN_MOVIMIENTO || pago.estado == EstadoDeLaFila.AUN_NO_VENCE)) return
+    if (!conBotonDeAnotar && pago.estado == EstadoDeLaFila.CON_DUDAS && propuesta == null) return
     Column(modifier = Modifier.fillMaxWidth()) {
         when (pago.estado) {
             EstadoDeLaFila.LISTO -> AccionesDeLaFila(

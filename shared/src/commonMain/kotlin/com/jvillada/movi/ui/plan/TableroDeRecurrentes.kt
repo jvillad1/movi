@@ -31,6 +31,9 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.intentar
 import com.jvillada.movi.platform.PushOptIn
 import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.group
+import com.jvillada.movi.ui.transactions.HojaDelMovimiento
 import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
 import com.jvillada.movi.shared.model.OccurrenceState
@@ -259,6 +262,23 @@ class EstadoDelTableroDeRecurrentes internal constructor(
      * `Boolean` y no una tercera variable de edición porque acá no hay nada que prellenar.
      */
     internal var nuevoRecurrenteAbierto by mutableStateOf(false)
+
+    /**
+     * **El movimiento que pagó una factura, abierto** (vuelta 40): «Movimiento del 25 oct» en la fila
+     * de una factura pagada abre su hoja, la misma de Actividad. Se busca por id en la historia que
+     * ya lee Actividad (`getEventsByDay`, que sale del teléfono primero); si no está, no se abre nada.
+     */
+    internal var movimientoAbierto by mutableStateOf<FinancialEvent?>(null)
+    internal var cuentasDelMovimiento by mutableStateOf<List<Account>>(emptyList())
+
+    internal fun abrirMovimiento(eventId: String) {
+        alcance.launch {
+            val evento = intentar { Repositories.wallets.getEventsByDay() }.getOrNull()
+                ?.flatMap { it.items }?.firstOrNull { it.id == eventId } ?: return@launch
+            cuentasDelMovimiento = intentar { Repositories.wallets.getAccounts() }.getOrDefault(emptyList())
+            movimientoAbierto = evento
+        }
+    }
 
     /**
      * Con qué tipo abre la hoja de alta: Gasto, salvo «Agregar mi salario» del flujo libre (vuelta de
@@ -845,6 +865,7 @@ fun LazyListScope.tableroDeRecurrentes(
                 modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(bottom = Medida.entreSecciones),
                 planesDeCuotas = estado.planesDeCuotas,
                 debajoDelResumen = if (avisarRecordatorios) filaDeRecordatorios else null,
+                onVerMovimiento = { estado.abrirMovimiento(it) },
             )
         }
     }
@@ -1010,7 +1031,20 @@ const val TITULO_RECORDATORIOS_SIN_CANAL: String = "Tus recordatorios no llegan"
  * pantalla, junto a las demás hojas— porque una hoja no es un renglón.
  */
 @Composable
-fun HojasDelTableroDeRecurrentes(estado: EstadoDelTableroDeRecurrentes) {
+fun HojasDelTableroDeRecurrentes(estado: EstadoDelTableroDeRecurrentes, onNavigate: (Screen) -> Unit = {}) {
+    // Vuelta 40: «Movimiento del 25 oct» de una factura pagada — la hoja de siempre del movimiento.
+    estado.movimientoAbierto?.let { evento ->
+        val tipos = estado.cuentasDelMovimiento.associate { it.id to it.type }
+        HojaDelMovimiento(
+            event = evento,
+            cuentas = estado.cuentasDelMovimiento,
+            onDismiss = { estado.movimientoAbierto = null },
+            onCambiado = { estado.movimientoAbierto = null; estado.recargar() },
+            onVerCuenta = tipos[evento.accountId]?.let { tipo ->
+                { estado.movimientoAbierto = null; onNavigate(Screen.AccountDetail(evento.accountId, tipo.group)) }
+            },
+        )
+    }
     estado.suscripcionPorQuitar?.let { sub ->
         ConfirmarEnHoja(
             pregunta = "¿Quitar «${sub.displayName}»?",
