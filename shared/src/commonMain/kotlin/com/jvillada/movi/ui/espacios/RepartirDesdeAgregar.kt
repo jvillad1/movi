@@ -267,7 +267,7 @@ fun HojaRepartirEsteGasto(
             )
             if (espacios.size > 1) {
                 Spacer(Modifier.height(Medida.dentroDeSeccion))
-                RotuloDeCampo("¿En qué espacio?")
+                RotuloDeCampo(TITULO_ELEGIR_ESPACIO)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(EspacioDeDiseno.xs),
                     verticalArrangement = Arrangement.spacedBy(EspacioDeDiseno.xs),

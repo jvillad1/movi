@@ -407,8 +407,8 @@ fun App() {
                     // Para que cualquier pantalla pueda anotar su hoja sin que App.kt tenga que
                     // conocerla (Perfil y sus cuatro overlays). Ver [PilaDeHojas].
                     LocalPilaDeHojas provides pilaDeHojas,
-                    // Vuelta 38: sin «+» en el teléfono, «Más formas de anotar» de Inicio abre el MISMO
-                    // menú de atajos (Traspaso, Pago de tarjeta, Repartir, Subir comprobante).
+                    // Vuelta 39: sin «+» en el teléfono, las acciones de anotar de Inicio hacen los MISMOS
+                    // atajos del menú del «+» (ver `hacerLaAccion`).
                     LocalAtajosDeAgregar provides onAtajo,
                 ) {
                 EsqueletoDeLaCascara(

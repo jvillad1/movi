@@ -216,7 +216,7 @@ fun confirmacionDeSaldado(espacio: Espacio, saldo: SaldoDelEspacio): Pair<String
     val reembolso = fraseDelSaldo(espacio, saldo).reembolso?.takeIf { it.a == MIEMBRO_YO } ?: return null
     val nombre = nombreEnElEspacio(espacio, reembolso.de)
     val pregunta = "¿$nombre ya te pagó ${formatCOPSinOcultar(reembolso.monto)}?"
-    val detalle = if (saldo.reembolsos.size == 1) "Esto deja el espacio en cero." else "Esto salda lo de $nombre."
+    val detalle = if (saldo.reembolsos.size == 1) "Esto deja el grupo en cero." else "Esto salda lo de $nombre."
     return pregunta to detalle
 }
 

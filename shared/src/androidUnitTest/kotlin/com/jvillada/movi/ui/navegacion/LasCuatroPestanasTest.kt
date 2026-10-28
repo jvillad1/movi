@@ -216,17 +216,17 @@ class LasCuatroPestanasTest {
     }
 
     /**
-     * Solo la pantalla principal de una pestaña lleva avatar; «Tú» no lleva nada (sería ella misma).
-     * Presupuestos suelto, Créditos, Patrimonio y Personas se abren desde Pagos y desde Tú, así que
-     * llevan flecha — en el teléfono y en la web por igual.
+     * **El avatar va solo en Inicio**, como en la maqueta (revisión de la vuelta 38): Inicio lo pinta en
+     * su propio encabezado; Actividad, Pagos y Tú, raíces, no llevan nada a la izquierda. Presupuestos
+     * suelto, Créditos, Patrimonio y Personas se abren desde Pagos y desde Tú, así que llevan flecha —
+     * en el teléfono y en la web por igual.
      */
     @Test
     fun `avatar solo en la pantalla principal de cada pestana`() {
         val ir: (Screen) -> Unit = {}
-        listOf(Screen.Dashboard, Screen.Transactions(), Screen.Plan()).forEach {
-            assertIs<HeaderLeading.Avatar>(leadingFor(it, ir, fallback = Screen.Dashboard), "$it")
+        listOf(Screen.Transactions(), Screen.Plan(), Screen.Tu).forEach {
+            assertEquals(HeaderLeading.Ninguno, leadingFor(it, ir, fallback = Screen.Dashboard), "$it")
         }
-        assertEquals(HeaderLeading.Ninguno, leadingFor(Screen.Tu, ir, fallback = Screen.Dashboard))
         assertEquals(
             HeaderLeading.Back(Screen.Plan(SEGMENTO_PRESUPUESTOS)),
             leadingFor(Screen.Budgets, ir, fallback = Screen.Plan(SEGMENTO_PRESUPUESTOS)),

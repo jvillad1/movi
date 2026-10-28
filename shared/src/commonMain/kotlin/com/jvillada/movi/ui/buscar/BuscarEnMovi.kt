@@ -154,7 +154,7 @@ internal val PANTALLAS_BUSCABLES: List<PantallaBuscable> = listOf(
     PantallaBuscable("Créditos", "Patrimonio", Screen.Credits, listOf("deudas", "tarjetas", "prestamos")),
     PantallaBuscable("Cómo salir de tus deudas", "Créditos", Screen.SalidaDeDeudas, listOf("abono", "avalancha", "bola de nieve")),
     PantallaBuscable("Cuadre de saldos", TITULO_DE_TU, Screen.CuadreDeSaldos, listOf("cuadrar", "ajustar saldo")),
-    PantallaBuscable(TITULO_DE_PERSONAS, TITULO_DE_TU, Screen.Espacios, listOf("espacios", "hogar", "repartir", "casa")),
+    PantallaBuscable(TITULO_DE_PERSONAS, TITULO_DE_TU, Screen.Espacios, listOf("grupos", "espacios", "hogar", "repartir", "casa")),
     // Ola R4: su casa es Personas (antes Espacios).
     PantallaBuscable(PERSONAS_Y_COMERCIOS, TITULO_DE_PERSONAS, Screen.Destinos(), listOf("terceros", "cuentas de otros", "hogar")),
     PantallaBuscable("Categorías", TITULO_DE_TU, Screen.Categorias),

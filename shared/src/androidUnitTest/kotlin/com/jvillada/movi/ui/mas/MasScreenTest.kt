@@ -431,4 +431,30 @@ class MasScreenTest {
             assertEquals(destino, navegoA, "«$fila»")
         }
     }
+
+    /**
+     * **A 1.280 las dos columnas de Tú terminan parejas** (revisión de la vuelta 38): lo tuyo, «Tu plata»
+     * y «Movi» a la izquierda; desde «Cómo se ve», a la derecha. Antes todos los ajustes iban a la
+     * derecha y la izquierda acababa a los 390 px.
+     */
+    @Test
+    @Config(qualifiers = "w1064dp-h3200dp-mdpi")
+    fun `a 1280 las dos columnas de Tu terminan parejas`() {
+        montar(WindowWidthClass.Expanded)
+        val izquierda = composeRule.onNodeWithTag(TAG_COLUMNA_DE_LO_TUYO, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val derecha = composeRule.onNodeWithTag(TAG_COLUMNA_DE_LOS_AJUSTES, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        fun columnaDe(texto: String): String {
+            val x = composeRule.onNode(hasText(texto), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.center.x
+            return if (x < izquierda.right) "izquierda" else if (x > derecha.left) "derecha" else "?"
+        }
+        listOf(FILA_TU_PATRIMONIO, "Inicio del período", "Movi AI", "Editar inicio").forEach { assertEquals("izquierda", columnaDe(it), it) }
+        listOf("Ocultar los saldos", "Documentos", CERRAR_SESION, BORRAR_MI_CUENTA).forEach { assertEquals("derecha", columnaDe(it), it) }
+
+        // Lo que ocupa cada columna: del primer texto al último de cada una.
+        val finIzquierda = arribaDe("Editar inicio")
+        val finDerecha = arribaDe(BORRAR_MI_CUENTA)
+        val corta = minOf(finIzquierda, finDerecha)
+        val larga = maxOf(finIzquierda, finDerecha)
+        assertTrue(corta >= larga * 0.7f, "columnas disparejas: termina una en $finIzquierda y la otra en $finDerecha")
+    }
 }

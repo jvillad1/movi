@@ -464,7 +464,7 @@ internal fun BloqueDeRepartido(
     Superficie(nivel = NivelDeSuperficie.Capa2, modifier = Modifier.fillMaxWidth().testTag(TAG_REPARTIR)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(EspacioDeDiseno.s)) {
             Column(modifier = Modifier.weight(1f)) {
-                Text("Repartido en ${actual?.nombre ?: "un espacio"}", style = Movi.textos.cuerpo, color = Movi.colores.texto)
+                Text("Repartido en ${actual?.nombre ?: "un grupo"}", style = Movi.textos.cuerpo, color = Movi.colores.texto)
                 Text("Tu parte ${formatCOP(montoContado(evento))}", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
             }
             Boton(
