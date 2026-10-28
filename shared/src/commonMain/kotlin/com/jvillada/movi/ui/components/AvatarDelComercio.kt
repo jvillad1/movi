@@ -132,11 +132,10 @@ fun AvatarDeLaCuenta(
 fun CirculoDeMarca(marca: Marca, modifier: Modifier = Modifier, tamano: TamanoDeAvatar = TamanoDeAvatar.Fila) {
     // En dp y no en sp: el logotipo es un dibujo del tamaño del círculo, no texto que deba crecer
     // con la letra del sistema (con letra grande, tres letras se salían del círculo).
-    val fraccion = when (marca.corta.length) {
-        1 -> 0.46f
-        2 -> 0.38f
-        else -> 0.29f
-    }
+    //
+    // Vuelta 40: tres letras o más van a 0,34 del círculo (era 0,29): en el círculo de una fila (36)
+    // daba 10,4 px, por debajo del mínimo de 12 que se ve en Actividad y Pagos; ahora 12,2.
+    val fraccion = fraccionDeLaMarca(marca.corta.length)
     val tamanoDeLetra = with(LocalDensity.current) { (tamano.circulo * fraccion).toSp() }
     Box(
         modifier = modifier
@@ -160,6 +159,13 @@ fun CirculoDeMarca(marca: Marca, modifier: Modifier = Modifier, tamano: TamanoDe
             softWrap = false,
         )
     }
+}
+
+/** Cuánto del círculo mide la letra de una marca de [letras] letras (una se ve más grande que tres). */
+internal fun fraccionDeLaMarca(letras: Int): Float = when (letras) {
+    1 -> 0.46f
+    2 -> 0.38f
+    else -> 0.34f
 }
 
 /** El ícono de siempre de cada tipo de cuenta, con su nombre para el lector de pantalla. */

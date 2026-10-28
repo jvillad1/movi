@@ -131,4 +131,25 @@ class TipografiaTest {
             t.labelLarge, t.labelMedium, t.labelSmall,
         ).forEach { assertEquals(familia, it.fontFamily) }
     }
+
+    /**
+     * **Ningún texto se ve por debajo de 12 px** (vuelta 40). `App()` agranda la letra ×1,12 y los
+     * estilos son la maqueta ÷ 1,12: el más chico, `apoyo` (11 sp), se ve a 12,3. Si alguien agrega un
+     * estilo más chico, Actividad y Pagos (y todo lo demás) quedarían con letra ilegible: lo atrapa esto.
+     */
+    @Test
+    fun `ningun estilo se ve por debajo de 12 px`() {
+        val escalaDeLaApp = 1.12f
+        mapOf(
+            "cifra" to textos.cifra, "cifraDeTarjeta" to textos.cifraDeTarjeta, "portada" to textos.portada,
+            "titular" to textos.titular, "titularDePantalla" to textos.titularDePantalla, "saludo" to textos.saludo,
+            "titulo" to textos.titulo, "tituloMedio" to textos.tituloMedio, "tituloRegular" to textos.tituloRegular,
+            "cuerpo" to textos.cuerpo, "cuerpoFuerte" to textos.cuerpoFuerte, "cuerpoRegular" to textos.cuerpoRegular,
+            "monto" to textos.monto, "apoyo" to textos.apoyo, "apoyoMedio" to textos.apoyoMedio,
+            "rotulo" to textos.rotulo, "pestana" to textos.pestana, "pestanaActiva" to textos.pestanaActiva,
+        ).forEach { (nombre, estilo) ->
+            val seVe = estilo.fontSize.value * escalaDeLaApp
+            assertTrue(seVe >= LETRA_MINIMA_QUE_SE_VE, "«$nombre» se ve a $seVe px, por debajo de $LETRA_MINIMA_QUE_SE_VE")
+        }
+    }
 }
