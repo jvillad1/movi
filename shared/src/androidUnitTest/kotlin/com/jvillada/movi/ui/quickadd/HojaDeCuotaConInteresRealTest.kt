@@ -21,6 +21,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.data.Repositories
@@ -101,7 +102,9 @@ class HojaDeCuotaConInteresRealTest {
         composeRule.waitForIdle()
         tocar("Cuota")
         // La deuda que se paga la elige el dueño con el dedo: no hay preselección en un pago.
-        tocar("Hacia")
+        // Vuelta 47: la fila «Pagas» (era «Hacia»), por su tag.
+        composeRule.onNodeWithTag(TAG_FILA_HACIA).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
         tocar("Libre inversión 9695")
         // Las condiciones llegan por corrutina; el campo aparece cuando llegaron.
         composeRule.waitUntil(5_000) {
@@ -118,9 +121,9 @@ class HojaDeCuotaConInteresRealTest {
     private fun campo(tag: String): SemanticsNodeInteraction =
         composeRule.onNode(hasSetTextAction() and hasAnyAncestor(hasTestTag(tag)), useUnmergedTree = true)
 
+    /** Vuelta 47: el monto se escribe con el teclado de Agregar, como en Gasto. */
     private fun escribirElMonto() {
-        campo(TAG_CAMPO_DE_MONTO).performTextInput("1204064")
-        composeRule.waitForIdle()
+        "1204064".forEach { tocar(it.toString()) }
     }
 
     /** El defecto que abrió la rama, afirmado desde la hoja de verdad. */

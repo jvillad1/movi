@@ -109,7 +109,7 @@ class SelectoresDeTraspasoTest {
     fun desde_y_hacia_de_traspaso_pintan_una_fila_con_cifra_por_cuenta() {
         montar("Traspaso")
 
-        tocar("Desde")
+        tocarLaFila(TAG_FILA_DESDE)
         cadaCuentaEsUnaFilaConSuCifra(listOf(ahorros, nu, libre))
         fila(ahorros).assert(hasText("$13.845.800"))
         // Un crédito dice lo que se debe, sin signo.
@@ -126,7 +126,7 @@ class SelectoresDeTraspasoTest {
         fila(otra).performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
 
-        tocar("Hacia")
+        tocarLaFila(TAG_FILA_HACIA)
         cadaCuentaEsUnaFilaConSuCifra(listOf(ahorros, nu, libre))
     }
 
@@ -134,7 +134,7 @@ class SelectoresDeTraspasoTest {
     fun la_cuota_elige_la_deuda_con_la_misma_fila() {
         montar("Cuota")
 
-        tocar("Hacia")
+        tocarLaFila(TAG_FILA_HACIA)
         fila(libre).performScrollTo().assertIsDisplayed()
             .assert(hasText("Debes")).assert(hasText("$40.710.555")).assertIsNotSelected()
         composeRule.onAllNodes(
@@ -144,7 +144,13 @@ class SelectoresDeTraspasoTest {
 
         fila(libre).performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
-        tocar("Desde")
+        tocarLaFila(TAG_FILA_DESDE)
         cadaCuentaEsUnaFilaConSuCifra(listOf(ahorros, nu))
+    }
+
+    /** Vuelta 47: «Desde» y «Hacia» son filas con la cuenta de título; se tocan por su tag. */
+    private fun tocarLaFila(tag: String) {
+        composeRule.onNodeWithTag(tag).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
     }
 }
