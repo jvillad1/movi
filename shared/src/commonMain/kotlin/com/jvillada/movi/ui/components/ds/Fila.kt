@@ -22,6 +22,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsPropertyKey
+import androidx.compose.ui.semantics.SemanticsPropertyReceiver
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import com.jvillada.movi.theme.ColoresDeMovi
@@ -195,17 +198,30 @@ fun Fila(
     }
 }
 
-/** **El tono de un [IconoEnCirculo]**: la marca para lo que es de Movi, un estado para un estado. */
-enum class TonoDeIcono { Marca, Neutro, Info, Aviso, Peligro, Exito }
+/**
+ * **El tono de un [IconoEnCirculo] o de un [AvatarDePersona].**
+ *
+ * - [Neutro] (el de siempre, vuelta 42): el círculo en `capa3` con el ícono en la tinta. Es el de
+ *   **toda fila que lleva a otro lado** ([FilaDeNavegacion]) y el de Ajustes.
+ * - [Tinta]: la tinta llena con la letra blanca. Lo propio: «Tú» entre los miembros de un grupo.
+ * - [Aviso]: el tinte con el ocre. Una fila que avisa algo; el amarillo suave es solo para eso.
+ * - [Info], [Peligro], [Exito]: un estado, sobre el lavado de su color.
+ * - [Marca]: el círculo **lleno de amarillo**. Solo el ícono de una propuesta de Movi
+ *   ([TarjetaDePropuesta], la tarjeta de los avisos del banco en Actividad): el amarillo lleno es de la
+ *   acción, nunca de una fila, una persona ni un estado (`ElAmarilloEsDeLaAccionTest`).
+ */
+enum class TonoDeIcono { Marca, Neutro, Tinta, Info, Aviso, Peligro, Exito }
 
 /**
  * El color del ícono (o la inicial) de un tono, en la paleta del tema. Pura. La marca (vuelta 29) es
  * la tinta: va sobre el círculo amarillo ([fondoDelTonoDeIcono]), porque el amarillo no se lee
- * como trazo sobre el blanco.
+ * como trazo sobre el blanco. El neutro, la tinta sobre la capa 3 (vuelta 42; era el texto medio
+ * sobre su lavado); la tinta, el blanco de la tarjeta.
  */
 fun colorDelTonoDeIcono(tono: TonoDeIcono, colores: ColoresDeMovi): Color = when (tono) {
     TonoDeIcono.Marca -> colores.sobreMarca
-    TonoDeIcono.Neutro -> colores.textoMedio
+    TonoDeIcono.Neutro -> colores.texto
+    TonoDeIcono.Tinta -> colores.tarjeta
     TonoDeIcono.Info -> colores.entreCuentas
     TonoDeIcono.Aviso -> colores.aviso
     TonoDeIcono.Peligro -> colores.sale
@@ -213,31 +229,46 @@ fun colorDelTonoDeIcono(tono: TonoDeIcono, colores: ColoresDeMovi): Color = when
 }
 
 /**
- * El círculo de detrás de un tono. Pura. La marca va **llena de amarillo** (el ícono de la tarjeta de
- * avisos de la opción 3); el aviso, en el tinte (`lavado` ya lo da); lo demás, el lavado de su color.
+ * El círculo de detrás de un tono. Pura. La marca va **llena de amarillo** (el ícono de una propuesta
+ * de la opción 3); el neutro, en la capa 3; la tinta, llena de tinta; el aviso, en el tinte (`lavado`
+ * ya lo da); lo demás, el lavado de su color.
  */
 fun fondoDelTonoDeIcono(tono: TonoDeIcono, colores: ColoresDeMovi): Color = when (tono) {
     TonoDeIcono.Marca -> colores.marca
+    TonoDeIcono.Neutro -> colores.capa3
+    TonoDeIcono.Tinta -> colores.texto
     else -> colores.lavado(colorDelTonoDeIcono(tono, colores))
 }
+
+/**
+ * **El tono de un [IconoEnCirculo] o un [AvatarDePersona], en su semántica** (vuelta 42), como
+ * `VarianteDeCifraKey`: deja vigilar que una fila de navegación vaya en el círculo neutro y que
+ * ninguna persona vaya en amarillo, sin leer píxeles.
+ */
+val TonoDeIconoKey: SemanticsPropertyKey<TonoDeIcono> = SemanticsPropertyKey("TonoDeIcono")
+
+/** Ver [TonoDeIconoKey]. */
+var SemanticsPropertyReceiver.tonoDeIcono: TonoDeIcono by TonoDeIconoKey
 
 /** Tag estable de un [IconoEnCirculo] (vuelta 31: para probar que cada fila de Ajustes lleva el suyo). */
 const val TAG_ICONO_EN_CIRCULO: String = "ds-icono-en-circulo"
 
 /**
  * **Un ícono en un círculo lavado de su color**: el inicio de una [Fila] que no tiene comercio, y
- * el de una [TarjetaDePropuesta]. Mide [Medida.avatar], con el ícono a [Icono.m].
+ * el de una [TarjetaDePropuesta]. Mide [Medida.avatar], con el ícono a [Icono.m]. **Neutro por
+ * defecto** (vuelta 42; era la marca, y cada fila que no decía su tono salía con un círculo amarillo).
  */
 @Composable
 fun IconoEnCirculo(
     icono: ImageVector,
     modifier: Modifier = Modifier,
-    tono: TonoDeIcono = TonoDeIcono.Marca,
+    tono: TonoDeIcono = TonoDeIcono.Neutro,
 ) {
     val color = colorDelTonoDeIcono(tono, Movi.colores)
     Box(
         modifier = modifier
             .testTag(TAG_ICONO_EN_CIRCULO)
+            .semantics { tonoDeIcono = tono }
             .size(Medida.avatar)
             .background(fondoDelTonoDeIcono(tono, Movi.colores), CircleShape),
         contentAlignment = Alignment.Center,
@@ -264,23 +295,75 @@ fun inicialDe(nombre: String): String = nombre.trim().firstOrNull()?.uppercase()
 const val TAG_AVATAR_DE_PERSONA: String = "ds:avatar-de-persona"
 
 /**
- * **Una persona**: su inicial en un círculo de [Medida.avatar], en el lavado de su [tono]. Para los
- * miembros de un espacio («J» y «C» en «Casa con Caro») y quien pagó un gasto.
+ * **Una persona**: su inicial en un círculo de [Medida.avatar], en el fondo de su [tono]. Para los
+ * miembros de un espacio («J» y «C» en «Casa con Caro») y quien pagó un gasto. Neutro por defecto;
+ * «Tú» va en [TonoDeIcono.Tinta] (vuelta 42: iba lleno de amarillo, y una lista de gastos tuyos era
+ * una columna de círculos amarillos). Una persona **nunca** va en [TonoDeIcono.Marca].
  */
 @Composable
 fun AvatarDePersona(
     nombre: String,
     modifier: Modifier = Modifier,
-    tono: TonoDeIcono = TonoDeIcono.Marca,
+    tono: TonoDeIcono = TonoDeIcono.Neutro,
 ) {
     val color = colorDelTonoDeIcono(tono, Movi.colores)
     Box(
         modifier = modifier
             .size(Medida.avatar)
             .background(fondoDelTonoDeIcono(tono, Movi.colores), CircleShape)
-            .testTag(TAG_AVATAR_DE_PERSONA),
+            .testTag(TAG_AVATAR_DE_PERSONA)
+            .semantics { tonoDeIcono = tono },
         contentAlignment = Alignment.Center,
     ) {
         Text(inicialDe(nombre), style = Movi.textos.titulo, color = color, maxLines = 1)
     }
 }
+
+/** Tag estable de una [FilaDeNavegacion]. */
+const val TAG_FILA_DE_NAVEGACION: String = "ds-fila-de-navegacion"
+
+/**
+ * **Una fila que lleva a otra pantalla** (vuelta 42): una [Fila] sola en su [Superficie] de lista,
+ * con su ícono en el **círculo neutro** (`capa3` y el ícono en la tinta), el título, una línea de apoyo
+ * y la flecha. «Cómo salir de tus deudas» en Créditos, «Tus períodos» en Pagos, «Subir comprobante o
+ * extracto» en Por revisar, «Personas y comercios» en Grupos, «Para qué es esta plata» en una cuenta.
+ *
+ * Antes cada pantalla la armaba a mano y el ícono salía lleno de amarillo en unas (el tono por
+ * defecto de [IconoEnCirculo] era la marca) y en gris en Tú: el mismo gesto con dos caras. Ahora es
+ * una sola. Con [aviso] (algo que pide atención: «La captura dejó de andar») el ícono y el subtítulo
+ * van en el tono de aviso, el tinte con el ocre: **el amarillo suave es solo para eso**, y el lleno,
+ * para la acción principal.
+ *
+ * ```
+ * FilaDeNavegacion("Tus períodos", Icons.Rounded.History, onClick = ::abrir, subtitulo = "Cómo te fue en cada ciclo")
+ * ```
+ *
+ * @param modifier va en la superficie (el ancho, el espacio de abajo, el `testTag` de la pantalla).
+ * @param lineasDelSubtitulo como en [Fila]: 2 solo si el subtítulo es la razón de la fila.
+ */
+@Composable
+fun FilaDeNavegacion(
+    titulo: String,
+    icono: ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    subtitulo: String? = null,
+    aviso: Boolean = false,
+    lineasDelSubtitulo: Int = 1,
+) {
+    Superficie(modifier = modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
+        Fila(
+            titulo = titulo,
+            subtitulo = subtitulo,
+            modifier = Modifier.testTag(TAG_FILA_DE_NAVEGACION),
+            inicio = { IconoEnCirculo(icono, tono = tonoDeLaFilaDeNavegacion(aviso)) },
+            final = { Chevron() },
+            onClick = onClick,
+            lineasDelSubtitulo = lineasDelSubtitulo,
+            tonoDelSubtitulo = if (aviso) TonoDeSubtitulo.Aviso else TonoDeSubtitulo.Normal,
+        )
+    }
+}
+
+/** El tono del ícono de una [FilaDeNavegacion]: el neutro, o el de aviso si la fila avisa algo. Pura. */
+fun tonoDeLaFilaDeNavegacion(aviso: Boolean): TonoDeIcono = if (aviso) TonoDeIcono.Aviso else TonoDeIcono.Neutro

@@ -57,22 +57,24 @@ const val TAG_PILDORA_DE_ACCION: String = "ds-pildora-de-accion"
 
 /**
  * **Qué dice una píldora.** Los colores de estado van **solo** para estado: una píldora en `Aviso`
- * dice «por vencer» o «por confirmar», no «esto es importante». La marca va solo para lo que es de
- * Movi (una propuesta, algo nuevo).
+ * dice «por vencer», «por confirmar» o «en curso», no «esto es importante».
+ *
+ * **No hay píldora amarilla** (vuelta 42). Había un tono `Marca`, lleno de amarillo, que terminó
+ * pintando estados («En curso» en Tus períodos, «Por confirmar» en Pagos): el amarillo lleno es solo
+ * de la acción principal (el `Boton` `Principal`). Lo que iba ahí va en [Aviso] (el tinte con el ocre).
+ * Lo vigila `ElAmarilloEsDeLaAccionTest`.
  */
-enum class TonoDePildora { Neutra, Info, Aviso, Peligro, Exito, Marca }
+enum class TonoDePildora { Neutra, Info, Aviso, Peligro, Exito }
 
 /**
  * El fondo y el texto de un tono, en la paleta del tema. Pura, para probarla.
  *
  * Opción 3 (vuelta 29): la neutra en la capa 3 (`#F1EDE6` en la maqueta); la de aviso en el tinte
- * con su ocre (`#FFF2C6` / `#6B4A00`, «Vence el martes»); la de marca, llena de amarillo con la tinta
- * encima. Las demás, el color sobre su lavado.
+ * con su ocre (`#FFF2C6` / `#6B4A00`, «Vence el martes»). Las demás, el color sobre su lavado.
  */
 fun coloresDeLaPildora(tono: TonoDePildora, colores: ColoresDeMovi): Pair<Color, Color> {
     val color = when (tono) {
         TonoDePildora.Neutra -> return colores.capa3 to colores.textoMedio
-        TonoDePildora.Marca -> return colores.marca to colores.sobreMarca
         TonoDePildora.Info -> colores.entreCuentas
         TonoDePildora.Aviso -> colores.aviso
         TonoDePildora.Peligro -> colores.sale

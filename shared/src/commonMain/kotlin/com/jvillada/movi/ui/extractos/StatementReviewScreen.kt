@@ -227,7 +227,7 @@ fun StatementReviewScreen(
                 // con peso: un segundo hijo pesado le recortaría el ancho a la mitad de la fila.
                 Pildora(
                     destinationAccount?.name ?: "Elige la cuenta",
-                    tono = if (sinCuenta) TonoDePildora.Aviso else TonoDePildora.Marca,
+                    tono = if (sinCuenta) TonoDePildora.Aviso else TonoDePildora.Neutra,
                     modifier = Modifier.weight(1f, fill = false),
                 )
                 Text(

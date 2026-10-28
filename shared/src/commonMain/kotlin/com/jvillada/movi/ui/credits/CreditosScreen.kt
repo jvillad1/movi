@@ -58,6 +58,7 @@ import com.jvillada.movi.ui.components.ds.Chevron
 import com.jvillada.movi.ui.components.ds.Cifra
 import com.jvillada.movi.ui.components.ds.EsqueletoDeFila
 import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.FilaDeNavegacion
 import com.jvillada.movi.ui.components.ds.IconoEnCirculo
 import com.jvillada.movi.ui.components.ds.Pildora
 import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
@@ -886,17 +887,13 @@ const val TAG_FILA_COMO_SALIR_DE_TUS_DEUDAS: String = "fila-como-salir-de-tus-de
 private fun FilaComoSalirDeTusDeudas(onClick: () -> Unit) {
     Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla)) {
         Spacer(Modifier.height(Medida.dentroDeSeccion))
-        Superficie(
-            modifier = Modifier.fillMaxWidth().testTag(TAG_FILA_COMO_SALIR_DE_TUS_DEUDAS),
-            relleno = RellenoDeSuperficie.Lista,
-        ) {
-            Fila(
-                titulo = TITULO_SALIDA_DE_DEUDAS,
-                subtitulo = "En qué orden abonar y cuánto interés te ahorras",
-                inicio = { IconoEnCirculo(Icons.AutoMirrored.Rounded.TrendingDown) },
-                final = { Chevron() },
-                onClick = onClick,
-            )
-        }
+        // Vuelta 42: la fila de navegación del sistema (el círculo neutro, no el amarillo).
+        FilaDeNavegacion(
+            titulo = TITULO_SALIDA_DE_DEUDAS,
+            icono = Icons.AutoMirrored.Rounded.TrendingDown,
+            onClick = onClick,
+            subtitulo = "En qué orden abonar y cuánto interés te ahorras",
+            modifier = Modifier.testTag(TAG_FILA_COMO_SALIR_DE_TUS_DEUDAS),
+        )
     }
 }

@@ -26,6 +26,7 @@ import com.jvillada.movi.ui.components.ds.BotonDeIcono
 import com.jvillada.movi.ui.components.ds.Chevron
 import com.jvillada.movi.ui.components.ds.EsqueletoDeFila
 import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.FilaDeNavegacion
 import com.jvillada.movi.ui.components.ds.IconoEnCirculo
 import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
 import com.jvillada.movi.ui.components.ds.Seccion
@@ -633,9 +634,9 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
 }
 
 /**
- * Una fila que lleva a otro lado: una [Fila] del sistema en su superficie, con su ícono, el texto,
- * una línea de apoyo y la flecha. La usan «Subir comprobante o extracto», el aviso de la captura y la
- * entrada a los pagos de tarjeta.
+ * Una fila que lleva a otro lado: la [FilaDeNavegacion] del sistema (vuelta 42: el círculo neutro;
+ * era amarillo lleno). La usan «Subir comprobante o extracto», el aviso de la captura (en tono de
+ * aviso) y la entrada a los pagos de tarjeta.
  */
 @Composable
 private fun FilaQueLleva(
@@ -646,15 +647,14 @@ private fun FilaQueLleva(
     detalle: String? = null,
     esAlerta: Boolean = false,
 ) {
-    Superficie(modifier = modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
-        Fila(
-            titulo = texto,
-            subtitulo = detalle,
-            inicio = { IconoEnCirculo(icono, tono = if (esAlerta) TonoDeIcono.Aviso else TonoDeIcono.Marca) },
-            final = { Chevron() },
-            onClick = onClick,
-        )
-    }
+    FilaDeNavegacion(
+        titulo = texto,
+        icono = icono,
+        onClick = onClick,
+        modifier = modifier,
+        subtitulo = detalle,
+        aviso = esAlerta,
+    )
 }
 
 /** Una fuente que no contestó: se dice en el lugar de su sección, con su «Reintentar». */

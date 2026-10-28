@@ -1,6 +1,5 @@
 package com.jvillada.movi.ui.destinos
 
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.runtime.Composable
@@ -9,12 +8,7 @@ import androidx.compose.ui.platform.testTag
 import com.jvillada.movi.shared.model.DestinoConocido
 import com.jvillada.movi.shared.model.PERSONAS_Y_COMERCIOS
 import com.jvillada.movi.shared.model.nombresDeLasCuentasDeOtros
-import com.jvillada.movi.ui.components.ds.Chevron
-import com.jvillada.movi.ui.components.ds.Fila
-import com.jvillada.movi.ui.components.ds.IconoEnCirculo
-import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
-import com.jvillada.movi.ui.components.ds.Superficie
-import com.jvillada.movi.ui.components.ds.TonoDeIcono
+import com.jvillada.movi.ui.components.ds.FilaDeNavegacion
 
 /** El tag de la fila que abre «Personas y comercios» (al final de Espacios). */
 const val TAG_ACCESO_A_PERSONAS_Y_COMERCIOS: String = "acceso-personas-y-comercios"
@@ -48,14 +42,12 @@ fun RenglonDePersonasYComercios(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Superficie(modifier = modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
-        Fila(
-            titulo = PERSONAS_Y_COMERCIOS,
-            subtitulo = resumenDelAcceso(destinos),
-            inicio = { IconoEnCirculo(Icons.Rounded.Groups, tono = TonoDeIcono.Info) },
-            final = { Chevron() },
-            onClick = onClick,
-            modifier = Modifier.testTag(TAG_ACCESO_A_PERSONAS_Y_COMERCIOS),
-        )
-    }
+    // Vuelta 42: la fila de navegación del sistema, con el mismo círculo neutro que todas.
+    FilaDeNavegacion(
+        titulo = PERSONAS_Y_COMERCIOS,
+        icono = Icons.Rounded.Groups,
+        onClick = onClick,
+        subtitulo = resumenDelAcceso(destinos),
+        modifier = modifier.testTag(TAG_ACCESO_A_PERSONAS_Y_COMERCIOS),
+    )
 }

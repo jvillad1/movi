@@ -794,7 +794,7 @@ private fun Herramientas(atrasadas: String?, onCuadre: () -> Unit, onEntreCuenta
                 inicio = {
                     IconoEnCirculo(
                         Icons.Rounded.FactCheck,
-                        tono = if (atrasadas == null) TonoDeIcono.Marca else TonoDeIcono.Aviso,
+                        tono = if (atrasadas == null) TonoDeIcono.Neutro else TonoDeIcono.Aviso,
                     )
                 },
                 final = { Chevron() },

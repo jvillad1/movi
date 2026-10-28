@@ -520,7 +520,7 @@ private fun EncabezadoDelEspacio(detalle: DetalleDelEspacio) {
 }
 
 /** El dueño en la marca; los demás en neutro. */
-private fun tonoDe(miembroId: String): TonoDeIcono = if (miembroId == MIEMBRO_YO) TonoDeIcono.Marca else TonoDeIcono.Info
+private fun tonoDe(miembroId: String): TonoDeIcono = if (miembroId == MIEMBRO_YO) TonoDeIcono.Tinta else TonoDeIcono.Info
 
 /** «Quién puso qué»: una barra por miembro, con la marca de lo que le tocaba. */
 @Composable

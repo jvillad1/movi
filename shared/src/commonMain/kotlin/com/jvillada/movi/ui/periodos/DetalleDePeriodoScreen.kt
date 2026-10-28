@@ -609,7 +609,7 @@ private fun Cabecera(detalle: DetalleDePeriodo, ajustes: PeriodSettings?) {
         }
         if (resumen.enCurso) {
             Spacer(Modifier.height(Espacio.xs))
-            Pildora("En curso", TonoDePildora.Marca)
+            Pildora("En curso", TonoDePildora.Aviso)
         }
         CifrasDelPeriodo(resumen)
         LineaDeCreditosDesembolsados(resumen)

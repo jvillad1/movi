@@ -118,7 +118,7 @@ internal fun CajaEnHoy(
             inicio = {
                 IconoEnCirculo(
                     Icons.AutoMirrored.Rounded.TrendingDown,
-                    tono = if (fila?.enRojo == true) TonoDeIcono.Peligro else TonoDeIcono.Marca,
+                    tono = if (fila?.enRojo == true) TonoDeIcono.Peligro else TonoDeIcono.Neutro,
                 )
             },
             final = {

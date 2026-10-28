@@ -1,0 +1,107 @@
+package com.jvillada.movi.shared.quality
+
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+
+/**
+ * # El amarillo lleno es de la acción (vuelta 42)
+ *
+ * La opción 3 pinta de amarillo lleno (`marca`) **solo la acción principal**: el `Boton` `Principal`,
+ * la acción destacada de Inicio, la píldora de la pestaña activa. La revisión del 28-oct encontró el
+ * amarillo lleno usado como identidad o estado: el avatar de «Tú» en los gastos de un grupo (cinco
+ * círculos amarillos), la píldora «En curso» de Tus períodos, y el ícono de las filas que llevan a otra
+ * pantalla en Créditos, Pagos, Por revisar y Captura (mientras en Tú iba en gris).
+ *
+ * Esta guarda, sobre el código de `ui/` sin comentarios, falla si vuelve:
+ *
+ * - **una píldora amarilla**: `TonoDePildora.Marca` ya no existe; nadie puede nombrarlo.
+ * - **una persona en amarillo**: ningún `AvatarDePersona(` recibe `TonoDeIcono.Marca`, y su tono por
+ *   defecto no es la marca.
+ * - **un círculo amarillo en una fila**: `IconoEnCirculo` es neutro por defecto, y `TonoDeIcono.Marca`
+ *   solo aparece fuera de `ds/` en las propuestas de Movi que la maqueta pinta así (la tarjeta de los
+ *   avisos del banco en Actividad y «Movi propone hoy» en Inicio), con nombre en [PROPUESTAS].
+ * - **una fila de navegación armada a mano**: las cinco que había usan `FilaDeNavegacion`.
+ */
+class ElAmarilloEsDeLaAccionTest {
+
+    /** Los únicos archivos de `ui/` (fuera de `ds/`) que pueden pintar un ícono en el círculo amarillo. */
+    private val PROPUESTAS = setOf(
+        "transactions/TarjetaDeAvisosDelBanco.kt",
+        "sdui/SeccionesDelInicio.kt",
+    )
+
+    private val ui by lazy { LecturaDelCodigo.archivos(LecturaDelCodigo.UI, LecturaDelCodigo.DS) }
+    private val ds by lazy { LecturaDelCodigo.archivos(LecturaDelCodigo.DS) }
+
+    private fun nombre(ruta: String) = ruta.substringAfter("/ui/")
+
+    @Test
+    fun `ninguna pildora es amarilla`() {
+        val todo = LecturaDelCodigo.archivos(LecturaDelCodigo.COMMON_MAIN)
+        val donde = LecturaDelCodigo.dondeAparece(todo, Regex("""TonoDePildora\.Marca\b"""))
+        assertTrue(donde.isEmpty(), "Una píldora en amarillo lleno (es un estado: va en Aviso):\n" + donde.joinToString("\n"))
+        val pildora = ds.entries.single { it.key.endsWith("/Pildora.kt") }.value
+        val enum = Regex("""enum class TonoDePildora\s*\{([^}]*)\}""").find(pildora)?.groupValues?.get(1).orEmpty()
+        assertTrue(enum.isNotBlank(), "No encontré el enum TonoDePildora")
+        assertTrue("Marca" !in enum, "TonoDePildora volvió a tener un tono Marca: $enum")
+    }
+
+    @Test
+    fun `ninguna persona va en amarillo`() {
+        val donde = ui.flatMap { (ruta, codigo) ->
+            codigo.lines().mapIndexedNotNull { n, linea ->
+                if ("AvatarDePersona(" in linea && "TonoDeIcono.Marca" in linea) "${nombre(ruta)}:${n + 1}" else null
+            }
+        }
+        assertTrue(donde.isEmpty(), "Un avatar de persona en amarillo lleno («Tú» va en Tinta):\n" + donde.joinToString("\n"))
+    }
+
+    @Test
+    fun `los circulos de ds no son amarillos por defecto`() {
+        val fila = ds.entries.single { it.key.endsWith("/Fila.kt") }.value
+        for (componente in listOf("IconoEnCirculo", "AvatarDePersona")) {
+            val firma = Regex("""fun $componente\(([^)]*)\)""").find(fila)?.groupValues?.get(1)
+                ?: error("No encontré $componente en Fila.kt")
+            assertTrue("tono: TonoDeIcono = TonoDeIcono.Neutro" in firma, "$componente tiene que ser neutro por defecto: $firma")
+        }
+    }
+
+    @Test
+    fun `el circulo amarillo solo va en una propuesta de Movi`() {
+        val donde = ui.filterKeys { nombre(it) !in PROPUESTAS }
+            .let { LecturaDelCodigo.dondeAparece(it, Regex("""TonoDeIcono\.Marca\b""")) }
+        assertTrue(
+            donde.isEmpty(),
+            "Un ícono en el círculo amarillo fuera de una propuesta. Una fila que lleva a otro lado va en " +
+                "FilaDeNavegacion (el círculo neutro); una que avisa, en TonoDeIcono.Aviso:\n" + donde.joinToString("\n"),
+        )
+    }
+
+    @Test
+    fun `las filas que llevan a otra pantalla son la del sistema`() {
+        val esperadas = mapOf(
+            "credits/CreditosScreen.kt" to "TITULO_SALIDA_DE_DEUDAS",
+            "plan/PlanScreen.kt" to "\"Tus períodos\"",
+            "porrevisar/PorRevisarScreen.kt" to "FilaQueLleva",
+            "destinos/AccesoAPersonasYComercios.kt" to "PERSONAS_Y_COMERCIOS",
+        )
+        esperadas.forEach { (archivo, donde) ->
+            val codigo = ui.entries.single { nombre(it.key) == archivo }.value
+            assertTrue("FilaDeNavegacion(" in codigo, "$archivo ($donde) tiene que usar FilaDeNavegacion")
+        }
+    }
+
+    @Test
+    fun `el detector ve un amarillo y deja pasar los demas tonos`() {
+        val codigo = LecturaDelCodigo.sinComentarios(
+            """
+            IconoEnCirculo(Icons.Rounded.Inbox, tono = TonoDeIcono.Marca)
+            IconoEnCirculo(Icons.Rounded.Inbox, tono = TonoDeIcono.Neutro)
+            // IconoEnCirculo(Icons.Rounded.Inbox, tono = TonoDeIcono.Marca) en un comentario no cuenta
+            """.trimIndent(),
+        )
+        val donde = LecturaDelCodigo.dondeAparece(mapOf("x.kt" to codigo), Regex("""TonoDeIcono\.Marca\b"""))
+        assertEquals(listOf("x.kt:1"), donde)
+    }
+}

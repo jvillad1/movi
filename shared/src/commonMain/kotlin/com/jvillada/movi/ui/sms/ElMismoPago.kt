@@ -299,7 +299,7 @@ internal fun TarjetaDeAviso(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(Espacio.s),
         ) {
-            inicio?.invoke() ?: IconoEnCirculo(Icons.Rounded.Inbox, tono = if (pideDecision) TonoDeIcono.Marca else TonoDeIcono.Neutro)
+            inicio?.invoke() ?: IconoEnCirculo(Icons.Rounded.Inbox, tono = if (pideDecision) TonoDeIcono.Aviso else TonoDeIcono.Neutro)
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     titulo,

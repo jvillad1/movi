@@ -250,7 +250,7 @@ fun CapturaDelBancoScreen(onNavigate: (Screen) -> Unit) {
                             inicio = {
                                 IconoEnCirculo(
                                     Icons.Rounded.Inbox,
-                                    tono = if (ultimo.esAlerta) TonoDeIcono.Aviso else TonoDeIcono.Marca,
+                                    tono = if (ultimo.esAlerta) TonoDeIcono.Aviso else TonoDeIcono.Neutro,
                                 )
                             },
                             modifier = Modifier.testTag(TAG_ULTIMO_MENSAJE),

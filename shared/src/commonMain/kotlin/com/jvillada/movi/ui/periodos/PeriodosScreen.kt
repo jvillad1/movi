@@ -424,7 +424,7 @@ private fun FilaDePeriodo(resumen: ResumenDePeriodo, elegida: Boolean, onClick: 
                 if (marcas.isNotEmpty()) {
                     Spacer(Modifier.height(Espacio.xs))
                     Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
-                        marcas.forEach { Pildora(it, if (it == "En curso") TonoDePildora.Marca else TonoDePildora.Neutra) }
+                        marcas.forEach { Pildora(it, if (it == "En curso") TonoDePildora.Aviso else TonoDePildora.Neutra) }
                     }
                 }
             }
