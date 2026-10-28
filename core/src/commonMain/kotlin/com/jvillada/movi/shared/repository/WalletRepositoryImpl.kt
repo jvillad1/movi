@@ -906,6 +906,9 @@ class WalletRepositoryImpl(
     override suspend fun getEventsByDay(): List<EventDay> =
         client.get("$baseUrl/api/events/by-day").body()
 
+    override suspend fun getUltimosDias(ultimos: Int): List<EventDay> =
+        client.get("$baseUrl/api/events/by-day?ultimos=$ultimos").body()
+
     // Mismo idioma que updateEventCategory/adjustCreditBalance: el server puede rechazar con
     // 422 (una validación de validateTransfer, con su texto en español ya listo para mostrar),
     // 404 (cuenta inexistente o de otro usuario) o 409 (traspaso repetido), y ese texto se

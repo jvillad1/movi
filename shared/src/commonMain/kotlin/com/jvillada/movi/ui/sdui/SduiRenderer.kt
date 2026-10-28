@@ -12,6 +12,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Size
+import com.jvillada.movi.shared.model.renderableSections
 import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -26,7 +30,11 @@ import com.jvillada.movi.shared.model.ScreenSection
 import com.jvillada.movi.ui.components.ScrollDesdeLosMargenes
 import com.jvillada.movi.ui.components.SubirAlRetocarLaPestana
 import com.jvillada.movi.ui.components.ANCHO_DE_UNA_COLUMNA
-import com.jvillada.movi.ui.dashboard.columnasDelInicio
+import com.jvillada.movi.ui.dashboard.inicioEnDosColumnas
+import com.jvillada.movi.ui.dashboard.repartoEnDosColumnas
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.plan.SEGMENTO_PAGOS
@@ -68,9 +76,9 @@ const val TAG_GUIA_EN_LA_COLUMNA_IZQUIERDA: String = "inicio-guia-en-la-columna-
  *
  * ### Una columna en el teléfono, dos en escritorio
  *
- * Generación 8. El ancho decide ([columnasDelInicio]): por debajo de ~900 dp, una columna en el
+ * Generación 8. El ancho decide ([inicioEnDosColumnas]): por debajo de ~900 dp, una columna en el
  * orden de la definición —el del teléfono—, con el ancho de la columna de lectura (720 dp desde la
- * Ola W1, el mismo que cualquier otra pantalla); desde ahí, dos columnas repartidas por tipo. En
+ * Ola W1, el mismo que cualquier otra pantalla); desde ahí, dos columnas parejas (vuelta 39: cada bloque a la más corta, ver [repartoEnDosColumnas]). En
  * escritorio el Inicio era una tira de 500 px en el medio de un lienzo de 1.400. El umbral mira el
  * ancho que le deja la cáscara (ya sin el rail), y el tope de ese ancho es el de un
  * `Disposicion.Tablero`: 840 dp en una ventana mediana (una columna) y 1.280 en escritorio.
@@ -98,10 +106,21 @@ fun SduiRenderer(
     // «Ya lo vi» del cierre del período, que ahora es una tarjeta de «Movi propone hoy»: el estado
     // (`data`) vive en `DashboardScreen`.
     onDescartarCierre: (String) -> Unit = {},
+    // Vuelta 39: algo cambió desde el Inicio mismo (un movimiento de «Últimos movimientos» editado o
+    // anulado en su hoja): `DashboardScreen` vuelve a pedir las cifras.
+    onRecargar: () -> Unit = {},
+    // Vuelta 39: la banda amarilla detrás de lo de arriba (el Inicio de la opción 3). La pinta el
+    // scroll, así que se va con él; el encabezado, fijo arriba, lleva el mismo amarillo.
+    conBanda: Boolean = false,
 ) {
     val uriHandler = LocalUriHandler.current
     val sections = visibleSections(definition, data)
-    val acciones = AccionesDelRenderer(onNavigate, onShowCreateSheet, onDescartarCierre, uriHandler)
+    val acciones = AccionesDelRenderer(
+        onNavigate, onShowCreateSheet, onDescartarCierre, uriHandler, onRecargar,
+        // Con «Próximo pago» en la definición, «Movi propone hoy» no repite el pago.
+        conElPagoEnLasPropuestas = renderableSections(definition).none { it.type == "PROXIMO_PAGO" },
+    )
+    val colorDeLaBanda = Movi.colores.marca
     val scroll = rememberScrollState()
     // La rueda del mouse sobre los márgenes mueve esta pantalla (ver [ScrollDesdeLosMargenes]).
     ScrollDesdeLosMargenes(scroll)
@@ -116,37 +135,52 @@ fun SduiRenderer(
     val guiaDespuesDelHeroe = header.takeIf { guiaDebajoDelHeroe }
 
     BoxWithConstraints(modifier = modifier) {
-        val columnas = columnasDelInicio(sections, maxWidth)
+        val bloques = bloquesDelInicio(sections)
+        val sonDos = inicioEnDosColumnas(bloques.size, maxWidth)
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(scroll)
+                // Después del scroll: la banda se dibuja en el contenido y sube con él.
+                .then(if (conBanda) Modifier.bandaDelInicio(colorDeLaBanda) else Modifier)
                 .padding(bottom = Movi.espacios.seccion),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            // En una columna, la guía va arriba con el ancho de la columna. En dos (Ola W3) va arriba
-            // de la IZQUIERDA —la del estado, la que se lee primero—, alineada con sus bordes: centrada
-            // en 720 encima de dos columnas que suman 1.064 no caía sobre ninguna de las dos.
-            if (guiaArriba != null && !columnas.sonDos) {
-                Box(Modifier.widthIn(max = ANCHO_DE_UNA_COLUMNA)) { guiaArriba() }
-                Spacer(Modifier.height(Movi.espacios.margen))
-            }
-            if (columnas.sonDos) {
-                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        if (guiaArriba != null) {
-                            Box(Modifier.fillMaxWidth().testTag(TAG_GUIA_EN_LA_COLUMNA_IZQUIERDA)) { guiaArriba() }
-                            Spacer(Modifier.height(Movi.espacios.margen))
-                        }
-                        ColumnaDeSecciones(columnas.izquierda, data, acciones, Modifier.fillMaxWidth(), guiaDespuesDelHeroe)
+            if (sonDos) {
+                // Vuelta 39: dos columnas parejas. El héroe (y la guía, si va arriba) a la izquierda; los
+                // demás bloques, a la columna más corta (`repartoEnDosColumnas`), y la derecha arranca
+                // debajo de la banda: la cuadrícula nunca queda sobre el amarillo.
+                val fijos = buildSet {
+                    if (guiaArriba != null) add(0)
+                    val heroe = bloques.indexOfFirst { b -> b.any { it.type == "HERO_BALANCE" } }
+                    if (heroe >= 0) add(heroe + if (guiaArriba != null) 1 else 0)
+                }
+                DosColumnasParejas(
+                    fijosALaIzquierda = fijos,
+                    arribaDeLaDerecha = if (conBanda) ALTO_DE_LA_BANDA_EN_EL_SCROLL + Medida.dentroDeSeccion else Dp(0f),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    if (guiaArriba != null) {
+                        Box(Modifier.fillMaxWidth().testTag(TAG_GUIA_EN_LA_COLUMNA_IZQUIERDA)) { guiaArriba() }
                     }
-                    ColumnaDeSecciones(columnas.derecha, data, acciones, Modifier.weight(1f), guiaDespuesDelHeroe)
+                    bloques.forEach { bloque ->
+                        Box(Modifier.fillMaxWidth()) {
+                            BloqueDelInicio(bloque, data, acciones, guiaDespuesDelHeroe, conBanda = false)
+                        }
+                    }
                 }
             } else {
+                // En una columna, la guía va arriba con el ancho de la columna.
+                if (guiaArriba != null) {
+                    Box(Modifier.widthIn(max = ANCHO_DE_UNA_COLUMNA)) { guiaArriba() }
+                    Spacer(Modifier.height(Movi.espacios.margen))
+                }
                 ColumnaDeSecciones(
-                    columnas.izquierda, data, acciones,
+                    bloques, data, acciones,
                     Modifier.fillMaxWidth().widthIn(max = ANCHO_DE_UNA_COLUMNA),
                     guiaDespuesDelHeroe,
+                    // Con la guía arriba, el héroe ya no arranca en lo alto de la banda.
+                    conBanda = conBanda && guiaArriba == null,
                 )
             }
             if (footer != null) {
@@ -157,13 +191,86 @@ fun SduiRenderer(
     }
 }
 
+/**
+ * Lo que la banda amarilla ocupa dentro del scroll: [Medida.altoDeLaBandaDelInicio] menos el encabezado,
+ * que va fijo arriba en el mismo amarillo. Hasta la mitad de la tarjeta héroe, más o menos.
+ */
+val ALTO_DE_LA_BANDA_EN_EL_SCROLL: Dp = Medida.altoDeLaBandaDelInicio - Medida.altoDeEncabezado
+
+/**
+ * **Dos columnas parejas** (vuelta 39): cada hijo de [contenido] es un bloque; se miden todos al ancho
+ * de una columna y [repartoEnDosColumnas] decide de qué lado va cada uno. Entre bloques
+ * [Medida.entreSecciones]; entre columnas [Medida.margenDePantalla] (las secciones ya traen su margen).
+ */
+@Composable
+private fun DosColumnasParejas(
+    fijosALaIzquierda: Set<Int>,
+    arribaDeLaDerecha: Dp,
+    modifier: Modifier = Modifier,
+    contenido: @Composable () -> Unit,
+) {
+    Layout(content = contenido, modifier = modifier.testTag(TAG_DOS_COLUMNAS_DEL_INICIO)) { medibles, limites ->
+        val ancho = limites.maxWidth / 2
+        val medidos = medibles.map { it.measure(Constraints(minWidth = ancho, maxWidth = ancho)) }
+        val separacion = Medida.entreSecciones.roundToPx()
+        val lados = repartoEnDosColumnas(
+            altos = medidos.map { it.height },
+            fijosALaIzquierda = fijosALaIzquierda,
+            arribaDeLaDerecha = arribaDeLaDerecha.roundToPx(),
+            separacion = separacion,
+        )
+        var yIzquierda = 0
+        var yDerecha = arribaDeLaDerecha.roundToPx()
+        var hayIzquierda = false
+        var hayDerecha = false
+        val posiciones = medidos.mapIndexed { i, medido ->
+            if (lados[i]) {
+                if (medido.height > 0 && hayIzquierda) yIzquierda += separacion
+                val y = yIzquierda
+                if (medido.height > 0) { yIzquierda += medido.height; hayIzquierda = true }
+                0 to y
+            } else {
+                if (medido.height > 0 && hayDerecha) yDerecha += separacion
+                val y = yDerecha
+                if (medido.height > 0) { yDerecha += medido.height; hayDerecha = true }
+                ancho to y
+            }
+        }
+        layout(limites.maxWidth, maxOf(yIzquierda, if (hayDerecha) yDerecha else 0)) {
+            medidos.forEachIndexed { i, medido -> medido.place(posiciones[i].first, posiciones[i].second) }
+        }
+    }
+}
+
+/** Las dos columnas del Inicio en pantalla ancha. */
+const val TAG_DOS_COLUMNAS_DEL_INICIO: String = "inicio-dos-columnas"
+
 /** Lo que una sección puede pedirle a la pantalla, junto, para no pasarlo de a uno por cada nivel. */
 private class AccionesDelRenderer(
     val onNavigate: (Screen) -> Unit,
     val onShowCreateSheet: () -> Unit,
     val onDescartarCierre: (String) -> Unit,
     val uriHandler: UriHandler,
+    val onRecargar: () -> Unit,
+    val conElPagoEnLasPropuestas: Boolean,
 )
+
+/** El tag del scroll del Inicio cuando lleva la banda amarilla (vuelta 39). */
+const val TAG_BANDA_DEL_INICIO: String = "inicio-banda"
+
+/**
+ * **La banda amarilla del Inicio** (vuelta 39, la opción 3), dibujada detrás del contenido del scroll:
+ * lo que le falta de [Medida.altoDeLaBandaDelInicio] al encabezado (que va fijo arriba, en el mismo
+ * amarillo), con [Radio.xxl] en las esquinas de abajo. La tarjeta héroe se monta encima: la banda le
+ * llega a la mitad. Va a todo el ancho del Inicio, nunca detrás del rail.
+ */
+private fun Modifier.bandaDelInicio(color: androidx.compose.ui.graphics.Color): Modifier =
+    this.testTag(TAG_BANDA_DEL_INICIO).drawBehind {
+        val alto = (Medida.altoDeLaBandaDelInicio - Medida.altoDeEncabezado).toPx()
+        val radio = Radio.xxl.toPx().coerceAtMost(alto)
+        drawRect(color, size = Size(size.width, alto - radio))
+        drawRoundRect(color, size = Size(size.width, alto), cornerRadius = CornerRadius(radio, radio))
+    }
 
 /**
  * Una columna de secciones, con [com.jvillada.movi.theme.Medida.entreSecciones] entre bloques: el
@@ -175,24 +282,44 @@ private class AccionesDelRenderer(
  */
 @Composable
 private fun ColumnaDeSecciones(
-    sections: List<ScreenSection>,
+    bloques: List<List<ScreenSection>>,
     data: DashboardData,
     acciones: AccionesDelRenderer,
     modifier: Modifier,
     despuesDelHeroe: (@Composable () -> Unit)? = null,
+    conBanda: Boolean = false,
 ) {
     Column(modifier = modifier) {
-        bloquesDelInicio(sections).forEachIndexed { index, bloque ->
+        bloques.forEachIndexed { index, bloque ->
             if (index > 0) Spacer(Modifier.height(Medida.entreSecciones))
-            if (bloque.all { it.type in TIPOS_DE_WIDGET }) {
-                WidgetsDelInicio(bloque.map { it.type }, data, acciones.onNavigate)
-            } else {
-                SduiSection(bloque.single(), data, acciones)
-            }
-            if (despuesDelHeroe != null && bloque.any { it.type == "HERO_BALANCE" }) {
-                Spacer(Modifier.height(Medida.entreSecciones))
-                despuesDelHeroe()
-            }
+            BloqueDelInicio(bloque, data, acciones, despuesDelHeroe, conBanda)
+        }
+    }
+}
+
+/**
+ * Un bloque del Inicio: una sección, o dos widgets lado a lado. El del héroe lleva debajo
+ * [despuesDelHeroe] (la guía sin cuentas) y, con [conBanda], **mide al menos lo que la banda**: lo que
+ * viene después —la cuadrícula, con su círculo amarillo— arranca siempre sobre el crema (vuelta 39).
+ */
+@Composable
+private fun BloqueDelInicio(
+    bloque: List<ScreenSection>,
+    data: DashboardData,
+    acciones: AccionesDelRenderer,
+    despuesDelHeroe: (@Composable () -> Unit)?,
+    conBanda: Boolean,
+) {
+    val esElHeroe = bloque.any { it.type == "HERO_BALANCE" }
+    Column(modifier = if (esElHeroe && conBanda) Modifier.heightIn(min = ALTO_DE_LA_BANDA_EN_EL_SCROLL) else Modifier) {
+        if (bloque.all { it.type in TIPOS_DE_WIDGET }) {
+            WidgetsDelInicio(bloque.map { it.type }, data, acciones.onNavigate)
+        } else {
+            SduiSection(bloque.single(), data, acciones)
+        }
+        if (despuesDelHeroe != null && esElHeroe) {
+            Spacer(Modifier.height(Medida.entreSecciones))
+            despuesDelHeroe()
         }
     }
 }
@@ -211,7 +338,10 @@ private fun SduiSection(
         "HERO_BALANCE" -> HeroDeUnVistazo(section, data, onNavigate, acciones.onShowCreateSheet)
         // Generación 9 (ola R1): la cuadrícula, «Movi propone hoy» y el carrusel de cuentas.
         "ACCIONES" -> AccionesDelInicioSection(data, onNavigate)
-        "PROPUESTAS" -> PropuestasDelInicioSection(data, onNavigate, acciones.onDescartarCierre)
+        "PROPUESTAS" -> PropuestasDelInicioSection(data, onNavigate, acciones.onDescartarCierre, acciones.conElPagoEnLasPropuestas)
+        // Generación 10 (vuelta 39): el próximo pago y los últimos movimientos.
+        "PROXIMO_PAGO" -> ProximoPagoSection(data, onNavigate)
+        "ULTIMOS_MOVIMIENTOS" -> UltimosMovimientosSection(data, onNavigate, acciones.onRecargar)
         "CUENTAS" -> CuentasDelInicioSection(data, onNavigate)
         "PREGUNTALE_A_MOVI" -> PreguntaleAMoviSection(section, data, onNavigate)
         "PATRIMONIO" -> PatrimonioSection(section, data, onNavigate)

@@ -29,21 +29,21 @@ class PreferenciasDelInicioTest {
         val hoy = inicioConPreferencias(porDefecto, elegido)
         assertEquals(
             listOf(
-                "HERO_BALANCE", "ACCIONES", "PROPUESTAS", "GASTO_POR_CATEGORIA", "CUENTAS", "CHECKLIST_DEL_PERIODO",
+                "HERO_BALANCE", "ACCIONES", "PROXIMO_PAGO", "PROPUESTAS", "ULTIMOS_MOVIMIENTOS", "GASTO_POR_CATEGORIA", "CUENTAS", "CHECKLIST_DEL_PERIODO",
                 "ALERTS", "BANNER",
             ),
             tipos(hoy),
         )
         // Nombrar al héroe o a las propuestas no los mueve: no son configurables.
         val conFijos = inicioConPreferencias(porDefecto, elegido.copy(orden = listOf("PROPUESTAS", "CUENTAS", "HERO_BALANCE")))
-        assertEquals(listOf("HERO_BALANCE", "ACCIONES", "PROPUESTAS"), tipos(conFijos).take(3))
+        assertEquals(listOf("HERO_BALANCE", "ACCIONES", "PROXIMO_PAGO", "PROPUESTAS", "ULTIMOS_MOVIMIENTOS"), tipos(conFijos).take(5))
     }
 
     @Test
     fun `las ocultas salen, y lo que ya no es configurable no se puede esconder`() {
         val hoy = inicioConPreferencias(porDefecto, PreferenciasDelInicio(ocultas = listOf("CUENTAS", "ALERTS", "PROPUESTAS")))
         assertEquals(
-            listOf("HERO_BALANCE", "ACCIONES", "PROPUESTAS", "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA", "ALERTS", "BANNER"),
+            listOf("HERO_BALANCE", "ACCIONES", "PROXIMO_PAGO", "PROPUESTAS", "ULTIMOS_MOVIMIENTOS", "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA", "ALERTS", "BANNER"),
             tipos(hoy),
         )
         // La línea compacta de «Para revisar» sigue siendo un tipo personal: se pinta si llega, y
@@ -65,7 +65,7 @@ class PreferenciasDelInicioTest {
         val conDisponible = inicioConPreferencias(porDefecto, PreferenciasDelInicio(visibles = listOf("DISPONIBLE_DEL_PERIODO")))
         assertEquals(
             listOf(
-                "HERO_BALANCE", "ACCIONES", "PROPUESTAS", "CUENTAS", "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA",
+                "HERO_BALANCE", "ACCIONES", "PROXIMO_PAGO", "PROPUESTAS", "ULTIMOS_MOVIMIENTOS", "CUENTAS", "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA",
                 "DISPONIBLE_DEL_PERIODO", "ALERTS", "BANNER",
             ),
             tipos(conDisponible),
@@ -80,7 +80,7 @@ class PreferenciasDelInicioTest {
         )
         assertEquals(
             listOf(
-                "HERO_BALANCE", "ACCIONES", "PROPUESTAS", "PATRIMONIO", "CUENTAS", "DISPONIBLE_DEL_PERIODO",
+                "HERO_BALANCE", "ACCIONES", "PROXIMO_PAGO", "PROPUESTAS", "ULTIMOS_MOVIMIENTOS", "PATRIMONIO", "CUENTAS", "DISPONIBLE_DEL_PERIODO",
                 "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA", "ALERTS", "BANNER",
             ),
             tipos(lasDosArriba),
@@ -97,7 +97,7 @@ class PreferenciasDelInicioTest {
         val hoy = inicioConPreferencias(porDefecto, elegido)
         // CUENTAS conserva su lugar, y las nombradas se reparten los demás lugares.
         assertEquals(
-            listOf("HERO_BALANCE", "ACCIONES", "PROPUESTAS", "CUENTAS", "GASTO_POR_CATEGORIA", "CHECKLIST_DEL_PERIODO", "ALERTS", "BANNER"),
+            listOf("HERO_BALANCE", "ACCIONES", "PROXIMO_PAGO", "PROPUESTAS", "ULTIMOS_MOVIMIENTOS", "CUENTAS", "GASTO_POR_CATEGORIA", "CHECKLIST_DEL_PERIODO", "ALERTS", "BANNER"),
             tipos(hoy),
         )
         // Lo mismo con un tipo del Editor que la preferencia nunca nombra.
@@ -143,6 +143,6 @@ class PreferenciasDelInicioTest {
         assertEquals(SECCIONES_CONFIGURABLES.keys.toList() - SECCIONES_OPCIONALES.toSet(), seccionesConfigurablesDe(porDefecto))
         assertTrue(SECCIONES_OPCIONALES.all { it in SECCIONES_CONFIGURABLES })
         // Lo fijo arriba no se configura: el héroe, la cuadrícula y las propuestas.
-        assertTrue(listOf("HERO_BALANCE", "ACCIONES", "PROPUESTAS").none { it in SECCIONES_CONFIGURABLES })
+        assertTrue(listOf("HERO_BALANCE", "ACCIONES", "PROXIMO_PAGO", "PROPUESTAS", "ULTIMOS_MOVIMIENTOS").none { it in SECCIONES_CONFIGURABLES })
     }
 }

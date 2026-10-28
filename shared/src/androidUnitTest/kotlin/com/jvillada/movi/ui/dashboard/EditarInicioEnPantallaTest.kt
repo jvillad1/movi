@@ -224,7 +224,7 @@ class EditarInicioEnPantallaTest {
         val filaCuentas = composeRule.onNodeWithTag(tagDeLaFilaDelEditor("CUENTAS"), useUnmergedTree = true).getUnclippedBoundsInRoot().top
         assertTrue(filaGasto < filaCuentas)
         // Lo fijo no se mueve: el héroe, la cuadrícula y las propuestas siguen arriba.
-        assertEquals(listOf("HERO_BALANCE", "ACCIONES", "PROPUESTAS"), server.hoyServido.value.sections.take(3).map { it.type })
+        assertEquals(listOf("HERO_BALANCE", "ACCIONES", "PROXIMO_PAGO", "PROPUESTAS", "ULTIMOS_MOVIMIENTOS"), server.hoyServido.value.sections.take(5).map { it.type })
     }
 
     @Test

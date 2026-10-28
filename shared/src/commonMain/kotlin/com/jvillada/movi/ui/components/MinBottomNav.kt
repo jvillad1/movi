@@ -87,7 +87,7 @@ val destinosDelRail: List<DestinoPrincipal> = destinosPrincipales + destinoMoviA
  * a 360 dp también (cada una se lleva un cuarto del ancho). La activa lleva la píldora amarilla de
  * 56 × 30 detrás del ícono y el rótulo en 12/700; las demás, 12/500 en el texto medio.
  *
- * **Sin «+».** Anotar vive en las acciones de Inicio (y en «Más formas de anotar»); el «+» con su
+ * **Sin «+».** Anotar vive en las 8 acciones de Inicio (vuelta 39); el «+» con su
  * menú queda en el rail, donde no hay un Inicio siempre a la vista.
  */
 @Composable

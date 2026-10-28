@@ -20,10 +20,13 @@ import com.jvillada.movi.ui.components.TAG_FLECHA_DE_AGREGAR
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.components.LocalWindowWidthClass
 import com.jvillada.movi.ui.components.MinBottomNav
-import com.jvillada.movi.ui.components.ATAJOS_FUERA_DEL_INICIO
 import com.jvillada.movi.ui.components.LocalAtajosDeAgregar
-import com.jvillada.movi.ui.components.MAS_FORMAS_DE_ANOTAR
-import com.jvillada.movi.ui.components.MasFormasDeAnotar
+import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.dashboard.AccionDelInicio
+import com.jvillada.movi.ui.dashboard.DashboardData
+import com.jvillada.movi.ui.dashboard.DestinoDeLaAccion
+import com.jvillada.movi.ui.quickadd.PestanaDeAgregar
+import com.jvillada.movi.ui.sdui.AccionesDelInicioSection
 import com.jvillada.movi.ui.components.MinNavRail
 import com.jvillada.movi.ui.components.NavTab
 import com.jvillada.movi.ui.components.WindowWidthClass
@@ -44,8 +47,8 @@ import kotlin.test.assertTrue
  * sigue abriendo «Agregar» sin menú. En los dos rails. Qué hoja abre cada atajo lo fija
  * `BuscarEnMoviTest` ([com.jvillada.movi.ui.quickadd.pantallaDelAtajo]).
  *
- * Vuelta 38: la barra del teléfono ya no tiene «+». Ahí, Traspaso, Pago de tarjeta, Repartir y Subir
- * comprobante se abren desde «Más formas de anotar» de Inicio ([MasFormasDeAnotar]), con el mismo menú.
+ * Vuelta 38: la barra del teléfono ya no tiene «+». Vuelta 39: los seis atajos son acciones de Inicio
+ * ([AccionesDelInicioSection]), que los hacen con la misma cáscara (`LocalAtajosDeAgregar`).
  *
  * Vuelta de diseño 26: el menú tiene las cuatro acciones que salieron de la cuadrícula de Hoy
  * (Traspaso, Pago de tarjeta, Repartir, Subir comprobante), y en la web y el escritorio se abre
@@ -60,7 +63,9 @@ class AtajosDelMasTest {
     private var elegida: NavTab? = null
     private var atajo: AtajoDeAgregar? = null
 
-    /** La barra del teléfono y, encima, «Más formas de anotar» como lo pone Inicio. */
+    private val navegado = mutableListOf<Screen>()
+
+    /** La barra del teléfono y, encima, las acciones de Inicio como las pone la cáscara. */
     private fun montarElTelefono() {
         composeRule.setContent {
             CompositionLocalProvider(
@@ -69,7 +74,7 @@ class AtajosDelMasTest {
             ) {
                 MoviTheme {
                     Box(Modifier.fillMaxSize()) {
-                        MasFormasDeAnotar(modifier = Modifier.align(Alignment.Center))
+                        Box(Modifier.align(Alignment.Center)) { AccionesDelInicioSection(DashboardData(), onNavigate = { navegado += it }) }
                         Box(Modifier.align(Alignment.BottomCenter)) {
                             MinBottomNav(active = NavTab.HOY, onTabSelected = { elegida = it })
                         }
@@ -103,38 +108,32 @@ class AtajosDelMasTest {
     }
 
     /**
-     * Sin «+», las cuatro formas de anotar que no son acciones de Inicio siguen a un toque en el
-     * teléfono: «Más formas de anotar» abre el menú con Traspaso, Pago de tarjeta, Repartir y Subir
-     * comprobante, y elegir una la avisa a la cáscara (que la hace con `hacerElAtajo`).
+     * Sin «+», las seis formas de anotar siguen a un toque en el teléfono: son acciones de Inicio, y cada
+     * una le pide a la cáscara su atajo (que lo hace con `hacerElAtajo`, lo mismo que el menú del «+»).
      */
     @Test
-    fun `en el telefono Mas formas de anotar abre las cuatro que no estan en Inicio`() {
+    fun `en el telefono cada accion de anotar de Inicio hace su atajo`() {
         montarElTelefono()
-        composeRule.onNodeWithText(MAS_FORMAS_DE_ANOTAR, useUnmergedTree = true).performClick()
-        composeRule.waitForIdle()
-
-        ATAJOS_FUERA_DEL_INICIO.forEach { assertTrue(hay(it.rotulo), "falta «${it.rotulo}»") }
-        assertEquals(
-            listOf(AtajoDeAgregar.TRASPASO, AtajoDeAgregar.PAGO_DE_TARJETA, AtajoDeAgregar.REPARTIR, AtajoDeAgregar.SUBIR_COMPROBANTE),
-            ATAJOS_FUERA_DEL_INICIO,
-        )
-        ATAJOS_FUERA_DEL_INICIO.forEach { elegido ->
-            if (!hay(elegido.rotulo)) {
-                composeRule.onNodeWithText(MAS_FORMAS_DE_ANOTAR, useUnmergedTree = true).performClick()
-                composeRule.waitForIdle()
-            }
-            composeRule.onNodeWithText(elegido.rotulo, useUnmergedTree = true).performClick()
+        AccionDelInicio.entries.forEach { accion ->
+            val destino = accion.destino
+            if (destino !is DestinoDeLaAccion.Atajo) return@forEach
+            atajo = null
+            composeRule.onNodeWithContentDescription(accion.descripcion, useUnmergedTree = true).performClick()
             composeRule.waitForIdle()
-            assertEquals(elegido, atajo)
-            assertTrue(!hay(elegido.rotulo), "el menú se cierra")
+            assertEquals(destino.atajo, atajo, "«${accion.rotulo}»")
         }
+        assertEquals(6, AccionDelInicio.entries.count { it.destino is DestinoDeLaAccion.Atajo })
+        assertTrue(navegado.isEmpty(), "los atajos los hace la cáscara, no la cuadrícula")
         assertNull(elegida, "ninguna pestaña se tocó")
     }
 
+    /** Sin la cáscara (una prueba que monta el Inicio solo), «Anotar gasto» igual abre su hoja. */
     @Test
-    fun `sin la cascara Mas formas de anotar no se pinta`() {
-        composeRule.setContent { MoviTheme { MasFormasDeAnotar() } }
-        assertTrue(!hay(MAS_FORMAS_DE_ANOTAR))
+    fun `sin la cascara anotar gasto abre la hoja de Agregar`() {
+        composeRule.setContent { MoviTheme { AccionesDelInicioSection(DashboardData(), onNavigate = { navegado += it }) } }
+        composeRule.onNodeWithContentDescription(AccionDelInicio.ANOTAR_GASTO.descripcion, useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+        assertEquals(listOf<Screen>(Screen.QuickAdd(presetPestana = PestanaDeAgregar.GASTO)), navegado)
     }
 
     @Test

@@ -169,7 +169,7 @@ class InicioRoutesTest {
         assertEquals(HttpStatusCode.OK, res.status)
         val def = res.definicion()
         assertEquals(
-            listOf("HERO_BALANCE", "ACCIONES", "PROPUESTAS", "GASTO_POR_CATEGORIA", "PATRIMONIO", "CHECKLIST_DEL_PERIODO", "ALERTS", "BANNER"),
+            listOf("HERO_BALANCE", "ACCIONES", "PROXIMO_PAGO", "PROPUESTAS", "ULTIMOS_MOVIMIENTOS", "GASTO_POR_CATEGORIA", "PATRIMONIO", "CHECKLIST_DEL_PERIODO", "ALERTS", "BANNER"),
             def.sections.map { it.type },
         )
         assertNotEquals(DASHBOARD_LAYOUT_VERSION, def.version, "la versión cambia: el 304 no puede dejar el Hoy viejo")
@@ -197,7 +197,7 @@ class InicioRoutesTest {
         }
         guardar(userA, PreferenciasDelInicio(orden = listOf("GASTO_POR_CATEGORIA", "CHECKLIST_DEL_PERIODO", "CUENTAS")))
         assertEquals(
-            listOf("HERO_BALANCE", "LINK_LIST", "ACCIONES", "PROPUESTAS", "GASTO_POR_CATEGORIA", "CHECKLIST_DEL_PERIODO", "CUENTAS", "ALERTS", "BANNER"),
+            listOf("HERO_BALANCE", "LINK_LIST", "ACCIONES", "PROXIMO_PAGO", "PROPUESTAS", "ULTIMOS_MOVIMIENTOS", "GASTO_POR_CATEGORIA", "CHECKLIST_DEL_PERIODO", "CUENTAS", "ALERTS", "BANNER"),
             hoy(userA).definicion().sections.map { it.type },
         )
     }

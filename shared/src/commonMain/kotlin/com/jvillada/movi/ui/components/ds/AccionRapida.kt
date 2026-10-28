@@ -28,6 +28,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import com.jvillada.movi.theme.Espacio
@@ -173,18 +174,37 @@ fun AccionRapida(
                     )
                 }
             }
-            RenglonesDelRotulo.Dos -> Text(
-                text = rotulo,
-                style = Movi.textos.apoyoMedio,
-                color = Movi.colores.texto,
-                textAlign = TextAlign.Center,
-                maxLines = 2,
-                minLines = 2,
-                modifier = Modifier.testTag(TAG_ROTULO_DE_ACCION),
-            )
+            RenglonesDelRotulo.Dos -> {
+                // Vuelta 39: las 8 acciones del Inicio, en 12/600 efectivos y dos renglones de alto
+                // fijo. No se achica: 12 px es el piso de lo legible en el Inicio, y a 360 dp cada palabra
+                // entra entera en su columna (lo mide `LasOchoAccionesDelInicioTest` con [partePalabras]).
+                val estilo = Movi.textos.rotuloDeAccion.copy(color = Movi.colores.texto, textAlign = TextAlign.Center)
+                val altoDeDos = with(LocalDensity.current) { estilo.lineHeight.toDp() } * RENGLONES_DEL_ROTULO_LARGO
+                BasicText(
+                    text = rotulo,
+                    modifier = Modifier.fillMaxWidth().height(altoDeDos).testTag(TAG_ROTULO_DE_ACCION),
+                    style = estilo,
+                    maxLines = RENGLONES_DEL_ROTULO_LARGO,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }
+
+/** Cuántos renglones lleva un rótulo [RenglonesDelRotulo.Dos]. */
+const val RENGLONES_DEL_ROTULO_LARGO: Int = 2
+
+/**
+ * **¿Algún renglón corta una palabra por la mitad?** Un renglón que termina sin espacio, seguido de
+ * otro que no empieza con espacio, es una palabra partida («comproban» / «te»). Pura sobre la
+ * disposición del texto.
+ */
+fun partePalabras(disposicion: TextLayoutResult, texto: String): Boolean =
+    (0 until disposicion.lineCount - 1).any { renglon ->
+        val fin = disposicion.getLineEnd(renglon)
+        fin in 1 until texto.length && !texto[fin - 1].isWhitespace() && !texto[fin].isWhitespace()
+    }
 
 /** Tag estable del rótulo de una [AccionRapida]. */
 const val TAG_ROTULO_DE_ACCION: String = "ds-rotulo-de-accion"

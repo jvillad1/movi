@@ -11,7 +11,6 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.ui.sdui.TAG_GUIA_EN_LA_COLUMNA_IZQUIERDA
-import com.jvillada.movi.ui.sdui.TAG_VEREDICTO_DEL_HERO
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -127,13 +126,8 @@ class InicioDeUnVistazoEnPantallaTest {
     private fun cuantas(texto: String): Int =
         composeRule.onAllNodesWithText(texto, useUnmergedTree = true).fetchSemanticsNodes().size
 
-    /**
-     * El veredicto es único en la pantalla: sirve para ubicar el hero. Ola 3: en pantalla va la línea
-     * corta; la frase larga es su `contentDescription` (ver la prueba del veredicto corto, abajo).
-     */
-    private val veredicto = "Salió \$11,7M más de lo que entró · cuotas de crédito: \$12,9M"
-    private val veredictoLargo =
-        "Este período salieron \$11,7M más de los que entraron — las cuotas de crédito fueron \$12,9M"
+    /** Dónde está el cuerpo de la tarjeta héroe (vuelta 39: el veredicto salió de ella). */
+    private fun heroe() = composeRule.onNodeWithTag(TAG_TARJETA_DEL_HERO, useUnmergedTree = true).getUnclippedBoundsInRoot()
 
     private fun izquierda(texto: String): Dp =
         composeRule.onNodeWithText(texto, useUnmergedTree = true).getUnclippedBoundsInRoot().left
@@ -149,13 +143,13 @@ class InicioDeUnVistazoEnPantallaTest {
         montar()
 
         primero("\$558.350").assertIsDisplayed()
-        composeRule.onNodeWithText(veredicto, useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithTag(TAG_TARJETA_DEL_HERO, useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("Entró", useUnmergedTree = true).assertDoesNotExist()
         composeRule.onNodeWithText("Salió", useUnmergedTree = true).assertDoesNotExist()
         composeRule.onNodeWithText("Flujo del mes", useUnmergedTree = true).assertDoesNotExist()
 
-        val hero = arriba(veredicto)
-        val acciones = arriba("Gasto")
+        val hero = heroe().top
+        val acciones = arriba("Anotar gasto")
         val propuestas = arriba("Movi propone hoy")
         val cuentas = arriba("Tus cuentas")
         val widgets = arriba(com.jvillada.movi.ui.sdui.TITULO_DE_LOS_WIDGETS)
@@ -171,15 +165,14 @@ class InicioDeUnVistazoEnPantallaTest {
 
     @Test
     @Config(qualifiers = "w1400dp-h1200dp-mdpi")
-    fun `en escritorio dos columnas, las cuentas y los widgets a la derecha`() {
+    fun `en escritorio dos columnas, el heroe a la izquierda y la cuadricula a su lado`() {
         montar()
 
-        val heroIzq = izquierda(veredicto)
-        val cuentasIzq = izquierda("Tus cuentas")
-        assertTrue(cuentasIzq.value > heroIzq.value + 300f, "las cuentas van en la columna derecha")
-        assertTrue(arriba("Tus cuentas") < arriba("Movi propone hoy"), "la derecha no empieza debajo del héroe")
-        assertEquals(cuentasIzq, izquierda(com.jvillada.movi.ui.sdui.TITULO_DE_LOS_WIDGETS))
-        assertTrue(izquierda("Movi propone hoy").value < cuentasIzq.value, "las propuestas a la izquierda")
+        // Vuelta 39: dos columnas parejas. El héroe a la izquierda y la cuadrícula arriba de la derecha,
+        // a la altura del héroe (debajo de la banda); lo demás, a la columna más corta.
+        val heroIzq = heroe().left
+        assertTrue(izquierda("Anotar gasto").value > heroIzq.value + 300f, "las acciones a la derecha del héroe")
+        assertTrue(arriba("Anotar gasto") < heroe().bottom, "y a su misma altura")
     }
 
     /**
@@ -192,8 +185,8 @@ class InicioDeUnVistazoEnPantallaTest {
         montarEnLaCascara()
 
         assertTrue(
-            izquierda("Tus cuentas").value > izquierda(veredicto).value + 300f,
-            "las cuentas van en la columna derecha",
+            izquierda("Anotar gasto").value > heroe().left.value + 300f,
+            "la cuadrícula va en la columna derecha",
         )
     }
 
@@ -207,7 +200,7 @@ class InicioDeUnVistazoEnPantallaTest {
         montarEnLaCascara()
 
         assertEquals(izquierda("Movi propone hoy"), izquierda("Tus cuentas"))
-        assertTrue(arriba(veredicto) < arriba("Tus cuentas"), "las cuentas van debajo del héroe")
+        assertTrue(heroe().top < arriba("Tus cuentas"), "las cuentas van debajo del héroe")
     }
 
     /** Un lugar para la guía de primeros pasos: lo que importa acá es dónde cae, no qué dice. */
@@ -228,12 +221,12 @@ class InicioDeUnVistazoEnPantallaTest {
         montarEnLaCascara(header = guia)
 
         val laGuia = limitesDeLaGuia()
-        val derecha = izquierda("Tus cuentas")
+        val derecha = izquierda("Anotar gasto")
         assertEquals(216f, laGuia.left.value, 0.5f, "empieza en el borde izquierdo del panel, junto al rail")
         assertTrue(laGuia.right <= derecha, "no se mete en la columna derecha: ${laGuia.right} / $derecha")
-        assertTrue(laGuia.bottom <= arriba(veredicto), "va arriba del hero")
+        assertTrue(laGuia.bottom <= heroe().top, "va arriba del hero")
         // La derecha arranca arriba, sin esperar a la guía.
-        assertTrue(arriba("Tus cuentas") < laGuia.bottom, "la columna derecha no baja por la guía")
+        assertTrue(arriba("Anotar gasto") < laGuia.bottom, "la columna derecha (las acciones) no baja por la guía")
     }
 
     /** En una columna la guía sigue como siempre: arriba de todo, con el ancho de la columna. */
@@ -243,7 +236,7 @@ class InicioDeUnVistazoEnPantallaTest {
         montarEnLaCascara(header = guia)
 
         val laGuia = limitesDeLaGuia()
-        assertTrue(laGuia.bottom <= arriba(veredicto))
+        assertTrue(laGuia.bottom <= heroe().top)
         // 768 − 80 del rail compacto = 688, menos que la columna de 720: la guía llena el panel.
         assertEquals(80f, laGuia.left.value, 0.5f)
         assertEquals(688f, (laGuia.right - laGuia.left).value, 0.5f)
@@ -302,24 +295,6 @@ class InicioDeUnVistazoEnPantallaTest {
         assertTrue(deRespaldo.sugerida?.id != null)
     }
 
-    /**
-     * **Ola 3 · Hoy en una mirada**: el héroe dice el veredicto en una línea corta con cifras, y la
-     * frase larga de siempre queda como `contentDescription` para el lector de pantalla.
-     */
-    @Test
-    @Config(qualifiers = "w390dp-h2400dp-xhdpi")
-    fun `el heroe muestra el veredicto corto y su descripcion larga`() {
-        montar()
-        val linea = composeRule.onNodeWithTag(TAG_VEREDICTO_DEL_HERO, useUnmergedTree = true)
-        linea.assertTextEquals(veredicto)
-        linea.assert(SemanticsMatcher.expectValue(SemanticsProperties.ContentDescription, listOf(veredictoLargo)))
-        // La larga ya no se pinta como texto.
-        composeRule.onNodeWithText(veredictoLargo, useUnmergedTree = true).assertDoesNotExist()
-        // Tocarla abre el detalle del período.
-        linea.performClick()
-        assertEquals(Screen.Periodos, navegoA)
-    }
-
     @Test
     @Config(qualifiers = "w390dp-h2400dp-xhdpi")
     fun `el patrimonio honesto con sus tramos`() {
@@ -352,20 +327,16 @@ class InicioDeUnVistazoEnPantallaTest {
     }
 
     /**
-     * **Todo el héroe lleva a un solo lugar, «Tus períodos».** Se toca la cifra y el veredicto, y en
-     * ningún caso el destino es Patrimonio (Patrimonio tiene su pestaña y el carrusel su «Ver todo»).
+     * **Sin «Te quedan», la cifra («Tu plata») lleva a «Tus períodos»**, y en ningún caso a Patrimonio
+     * (Patrimonio tiene su lugar en «Tú» y el carrusel su «Ver todo»).
      */
     @Test
     @Config(qualifiers = "w390dp-h2400dp-xhdpi")
-    fun `la cifra y el veredicto del heroe llevan a Tus periodos y no a Patrimonio`() {
+    fun `la cifra del heroe lleva a Tus periodos y no a Patrimonio`() {
         montar()
 
         // «$558.350» también está en la tarjeta de la cuenta, más abajo: el primero es el héroe.
         primero("\$558.350").performClick()
-        assertEquals(Screen.Periodos, navegoA)
-
-        navegoA = null
-        composeRule.onNodeWithText(veredicto, useUnmergedTree = true).performClick()
         assertEquals(Screen.Periodos, navegoA)
     }
 
@@ -400,25 +371,18 @@ class InicioDeUnVistazoEnPantallaTest {
     }
 
     /**
-     * La cifra grande entra contando, **una vez**: con el reloj quieto arranca en $0; al dejarlo
-     * correr termina exacta; y si el Inicio se vuelve a montar (volver desde Movimientos), ya está
-     * donde tiene que estar, sin volver a contar.
+     * **Vuelta 39: la cifra grande nunca arranca en $0.** Antes entraba contando desde cero, y en la web
+     * el héroe decía «$0» varios segundos al recargar. Ahora, con el reloj quieto, el primer cuadro ya
+     * tiene la cifra entera.
      */
     @Test
     @Config(qualifiers = "w390dp-h2400dp-xhdpi")
-    fun `la cifra entra contando una sola vez`() {
+    fun `la cifra nunca arranca en cero`() {
         composeRule.mainClock.autoAdvance = false
         montar()
         composeRule.mainClock.advanceTimeByFrame()
-        primero("\$0").assertIsDisplayed()
-        // «$558.350» ya está en otros lados (la tarjeta de la cuenta en el carrusel), pero todavía no
-        // en el héroe, que cuenta.
-        val antes = cuantas("\$558.350")
-
-        composeRule.mainClock.advanceTimeBy(DURACION_DE_LA_ENTRADA_MS.toLong() + 100L)
-        assertEquals(antes + 1, cuantas("\$558.350"), "el hero terminó de contar, exacto")
-        assertEquals(0, cuantas("\$0"))
-        assertTrue("hero.cifra" in DashboardDataCache.entradasHechas)
+        assertEquals(0, cuantas("\$0"), "ni un cuadro con $0")
+        primero("\$558.350").assertIsDisplayed()
     }
 
     @Test

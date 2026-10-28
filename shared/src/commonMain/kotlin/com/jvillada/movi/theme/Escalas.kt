@@ -64,6 +64,7 @@ object Espacio {
  * - [m] filas destacadas y botones.
  * - [l] superficies: tarjetas, listas agrupadas, propuestas.
  * - [xl] hojas y tarjetas de cuenta.
+ * - [xxl] el borde de abajo de la banda amarilla del Inicio (vuelta 39, la opción 3).
  * - [pill] píldoras, filtros y círculos. 999 y no un porcentaje: en Compose un radio mayor que medio
  *   lado se recorta al lado, así que siempre da la píldora completa sin saber el alto.
  */
@@ -72,6 +73,7 @@ object Radio {
     val m: Dp = 12.dp
     val l: Dp = 18.dp
     val xl: Dp = 22.dp
+    val xxl: Dp = 28.dp
     val pill: Dp = 999.dp
 }
 
@@ -153,6 +155,20 @@ object Medida {
 
     /** El círculo de una acción rápida (la cuadrícula del camino 3). */
     val accionRapida: Dp = 56.dp
+
+    /**
+     * **La banda amarilla del Inicio** (vuelta 39, la opción 3): de arriba de la pantalla —debajo de la
+     * barra del sistema— hasta la mitad de la tarjeta héroe, que se monta encima. El encabezado
+     * ([altoDeEncabezado]) va sobre ella y el resto lo dibuja el scroll, con [Radio.xxl] abajo.
+     */
+    val altoDeLaBandaDelInicio: Dp = 168.dp
+
+    /**
+     * Los círculos del encabezado del Inicio, sobre la banda: el avatar blanco y los dos botones en
+     * `marcaSuave` (ocultar los saldos y la campana). 44, como en la maqueta: el encabezado de 64 deja
+     * diez arriba y abajo.
+     */
+    val circuloDeLaBanda: Dp = 44.dp
 
     /**
      * El alto de una tarjeta de cuenta del carrusel «Tus cuentas» (ola R1): el nombre arriba y el

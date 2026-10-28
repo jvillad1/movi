@@ -1,5 +1,7 @@
 package com.jvillada.movi.shared.repository
 
+import com.jvillada.movi.shared.model.diasConLosUltimos
+
 import com.jvillada.movi.shared.model.ConfirmarElMismoPago
 import com.jvillada.movi.shared.model.GrupoDeAvisos
 import com.jvillada.movi.shared.model.MismoPagoConfirmado
@@ -542,6 +544,13 @@ interface WalletRepository {
     suspend fun postEvent(event: FinancialEvent): FinancialEvent
     suspend fun getEvents(accountId: String? = null): List<FinancialEvent>
     suspend fun getEventsByDay(): List<EventDay>
+
+    /**
+     * **Los días de los [ultimos] movimientos más recientes**, enteros (`/by-day?ultimos=N`, ver
+     * `diasConLosUltimos`). Lo pide «Últimos movimientos» de Inicio para no bajarse la historia entera.
+     * Por defecto, la historia de [getEventsByDay] recortada igual: el teléfono la tiene en disco.
+     */
+    suspend fun getUltimosDias(ultimos: Int): List<EventDay> = diasConLosUltimos(getEventsByDay(), ultimos)
     /**
      * Anula un movimiento. Si es una **pata de traspaso**, anula también la otra — un traspaso
      * anulado a medias deja el saldo de una de las dos cuentas mintiendo. El server lo resuelve
