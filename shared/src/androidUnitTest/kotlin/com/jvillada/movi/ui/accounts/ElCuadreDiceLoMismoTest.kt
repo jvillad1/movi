@@ -19,7 +19,11 @@ import com.jvillada.movi.shared.model.DestinoConocido
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.HACE_MAS_DE_UN_MES_QUE_NO_LA_CUADRAS
 import com.jvillada.movi.shared.model.NUNCA_LA_HAS_CUADRADO
+import com.jvillada.movi.shared.time.AppTimeZone
 import com.jvillada.movi.theme.MoviTheme
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
+import kotlinx.datetime.toLocalDateTime
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
@@ -64,14 +68,18 @@ class ElCuadreDiceLoMismoTest {
         composeRule.waitUntil(timeoutMillis = 5_000) { hay(texto) }
     }
 
-    /** Monta Patrimonio, espera la frase con el nombre, pasa al detalle y espera la misma frase. */
-    private fun lasDosDicen(cuenta: Account, frase: String) {
+    /**
+     * Monta Patrimonio y espera «[nombre] · [enPatrimonio]»; pasa al detalle y espera [enElDetalle],
+     * que contiene el mismo tramo.
+     */
+    private fun lasDosDicen(cuenta: Account, enPatrimonio: String, enElDetalle: String) {
+        assertTrue(enPatrimonio in enElDetalle, "la versión con nombre es la misma frase, más corta")
         Repositories.sustitutoDePrueba = repo(cuenta)
-        var enElDetalle by mutableStateOf(false)
+        var enElDetalleAhora by mutableStateOf(false)
         composeRule.setContent {
             MoviTheme {
                 Box(Modifier.fillMaxSize()) {
-                    if (enElDetalle) {
+                    if (enElDetalleAhora) {
                         AccountDetailScreen(onNavigate = {}, accountId = cuenta.id, group = AccountGroup.DINERO)
                     } else {
                         AccountsScreen(onNavigate = {})
@@ -79,32 +87,38 @@ class ElCuadreDiceLoMismoTest {
                 }
             }
         }
-        esperar("${cuenta.name} · $frase")
+        esperar("${cuenta.name} · $enPatrimonio")
 
-        enElDetalle = true
+        enElDetalleAhora = true
         composeRule.waitForIdle()
         esperar("Cuadrar con el banco")
-        assertTrue(hay(frase), "el detalle de «${cuenta.name}» dice «$frase», como Patrimonio")
-        val otra = if (frase == NUNCA_LA_HAS_CUADRADO) HACE_MAS_DE_UN_MES_QUE_NO_LA_CUADRAS else NUNCA_LA_HAS_CUADRADO
-        assertTrue(!hay(otra), "el detalle no puede decir «$otra»")
+        assertTrue(hay(enElDetalle), "el detalle de «${cuenta.name}» dice «$enElDetalle»")
+        if (enElDetalle != NUNCA_LA_HAS_CUADRADO) assertTrue(!hay(NUNCA_LA_HAS_CUADRADO), "el detalle no puede decir «nunca»")
     }
 
     @Test
     fun `una cuenta que nunca se cuadro dice nunca en las dos pantallas`() {
         lasDosDicen(
             Account("acc-bc", "Bancolombia Ahorros", AccountType.SAVINGS, 13_845_800L, firstEventAt = haceDosMeses),
-            NUNCA_LA_HAS_CUADRADO,
+            enPatrimonio = NUNCA_LA_HAS_CUADRADO,
+            enElDetalle = NUNCA_LA_HAS_CUADRADO,
         )
     }
 
+    /** Cuadrada hace 60 días: las dos dicen cuándo fue la última vez, con la misma fecha. */
     @Test
-    fun `una cuenta cuadrada hace mas de un mes dice lo mismo en las dos pantallas`() {
-        lasDosDicen(
-            Account(
-                "acc-bc", "Bancolombia Ahorros", AccountType.SAVINGS, 13_845_800L,
-                firstEventAt = haceDosMeses, lastAdjustmentAt = haceDosMeses,
-            ),
-            HACE_MAS_DE_UN_MES_QUE_NO_LA_CUADRAS,
+    fun `una cuenta cuadrada hace 60 dias dice la misma fecha en las dos pantallas`() {
+        val cuenta = Account(
+            "acc-bc", "Bancolombia Ahorros", AccountType.SAVINGS, 13_845_800L,
+            firstEventAt = haceDosMeses, lastAdjustmentAt = haceDosMeses,
         )
+        val dia = Instant.fromEpochMilliseconds(haceDosMeses).toLocalDateTime(AppTimeZone.zone).date
+        val ultima = "última el ${dia.dayOfMonth} ${MESES[dia.monthNumber - 1]}" +
+            if (dia.year != Clock.System.now().toLocalDateTime(AppTimeZone.zone).year) " ${dia.year}" else ""
+        lasDosDicen(cuenta, enPatrimonio = ultima, enElDetalle = "$HACE_MAS_DE_UN_MES_QUE_NO_LA_CUADRAS · $ultima")
+    }
+
+    private companion object {
+        val MESES = listOf("ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic")
     }
 }

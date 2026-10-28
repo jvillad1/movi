@@ -1304,11 +1304,13 @@ Sin componentes nuevos en `ds/` (solo el tag `TAG_ICONO_EN_CIRCULO` de `IconoEnC
   `DELETE /api/espacios/{id}/gastos/{gastoId}` que el server ya tenía (sin cambios de server). El
   subtítulo **empieza por la fecha** («21 oct · Pagó Caro · Mercado»), no repite la categoría si ya es
   el título, y va en dos renglones antes de cortarse.
-- **Una sola frase del cuadre de una cuenta**: `fraseDelCuadre` (`:core` `CuadreDeSaldos.kt`) decide
-  «Nunca la has cuadrado» / «Hace más de un mes que no la cuadras» / «Sin movimientos todavía»; la usan
-  el detalle de la cuenta y Cuadre de saldos (`textoDelUltimoCuadre`) y el aviso de Patrimonio, Hoy y
-  Movi AI (`textoDelAvisoDeCuadre`: «Bancolombia Ahorros · Nunca la has cuadrado», con el nombre y la
-  misma frase).
+- **Una sola frase del cuadre de una cuenta**: `fraseDelCuadre` (`:core` `CuadreDeSaldos.kt`) la decide
+  y **nunca pierde la fecha** si hubo un cuadre: «Sin movimientos todavía», «Nunca la has cuadrado»,
+  «Cuadrada el 3 oct» (o «hoy», «ayer») hasta 45 días, y después «Hace más de un mes que no la cuadras ·
+  última el 3 ago» (con el año si es de otro). La dicen el detalle de la cuenta y Cuadre de saldos
+  (`textoDelUltimoCuadre`); Patrimonio, Hoy y Movi AI dicen su versión con nombre y la misma regla, más
+  corta (`textoDelAvisoDeCuadre`: «Bancolombia Ahorros · Nunca la has cuadrado», «Bancolombia Ahorros ·
+  última el 3 ago»). Donde un largo no cabe, baja a dos renglones antes que cortarse.
 - **Ajustes, más corto y con íconos**: cada fila lleva su `IconoEnCirculo` neutro (`IconoDeAjuste`;
   «Borrar mi cuenta» sigue en peligro). El tema es **una fila «Tema» con su valor** que abre
   `HojaDelTema` con las tres opciones. En Avisos hay **un solo «Activar avisos»** (en la fila de las

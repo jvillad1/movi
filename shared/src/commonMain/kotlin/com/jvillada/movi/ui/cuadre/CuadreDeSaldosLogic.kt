@@ -170,26 +170,19 @@ fun cuentasSinCuadrar(cuentas: List<Account>, ahora: Long): List<Account> =
  * Lo usan el Inicio (sección «Para revisar») y la pantalla de Cuentas. La misma frase en los dos
  * lados: dos avisos sobre el mismo hecho, escritos distinto, se leen como dos problemas.
  */
-fun textoDelAvisoDeCuadre(atrasadas: List<Account>): String? = com.jvillada.movi.shared.model.textoDelAvisoDeCuadre(atrasadas)
+fun textoDelAvisoDeCuadre(atrasadas: List<Account>, ahora: Long = Clock.System.now().toEpochMilliseconds()): String? =
+    com.jvillada.movi.shared.model.textoDelAvisoDeCuadre(atrasadas, ahora)
 
 /**
  * **Desde cuándo nadie mira esta cuenta**, para el renglón de cada fila y el encabezado de su detalle:
- * «Cuadrada hoy», «Cuadrada el 3 de agosto», «Nunca la has cuadrado», «Hace más de un mes que no la
- * cuadras». Lo que no es una fecha sale de [fraseDelCuadre] (`:core`), la misma frase que Patrimonio
- * y Hoy dicen de esa cuenta (vuelta 31: decían «hace más de un mes» y el detalle «nunca»).
- *
- * La fecha se escribe con [etiquetaDeFecha], la misma forma que usan Movimientos y el selector de
- * fecha: si dos pantallas nombraran el mismo día distinto, parecería otro día.
+ * «Cuadrada el 3 oct», «Nunca la has cuadrado», «Hace más de un mes que no la cuadras · última el 3
+ * ago». Es [fraseDelCuadre] (`:core`), la misma regla con que Patrimonio y Hoy nombran esa cuenta
+ * (vuelta 31: decían «hace más de un mes» y el detalle «nunca»). [hoy] queda por compatibilidad: la
+ * fecha sale de [ahora] en la zona de la app.
  */
-fun textoDelUltimoCuadre(cuenta: Account, hoy: LocalDate, ahora: Long = Clock.System.now().toEpochMilliseconds()): String {
-    com.jvillada.movi.shared.model.fraseDelCuadre(cuenta, ahora)?.let { return it }
-    val cuadre = cuenta.lastAdjustmentAt ?: return com.jvillada.movi.shared.model.NUNCA_LA_HAS_CUADRADO
-    return when (val etiqueta = etiquetaDeFecha(fechaDeEpoch(cuadre), hoy)) {
-        "Hoy" -> "Cuadrada hoy"
-        "Ayer" -> "Cuadrada ayer"
-        else -> "Cuadrada el $etiqueta"
-    }
-}
+@Suppress("UNUSED_PARAMETER")
+fun textoDelUltimoCuadre(cuenta: Account, hoy: LocalDate, ahora: Long = Clock.System.now().toEpochMilliseconds()): String =
+    com.jvillada.movi.shared.model.fraseDelCuadre(cuenta, ahora)
 
 /**
  * **La propuesta de un aviso que trajo el saldo, en una línea**: «El banco dice $138.407 y Movi

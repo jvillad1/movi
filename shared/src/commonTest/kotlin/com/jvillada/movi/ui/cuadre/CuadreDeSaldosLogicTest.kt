@@ -179,9 +179,10 @@ class CuadreDeSaldosLogicTest {
             "Nu · Nunca la has cuadrado",
             textoDelAvisoDeCuadre(listOf(cuenta(primerEvento = AHORA - 60 * UN_DIA))),
         )
+        // 60 días antes del 20-sep: el 22 de julio. La versión con nombre, corta y con la fecha.
         assertEquals(
-            "Nu · Hace más de un mes que no la cuadras",
-            textoDelAvisoDeCuadre(listOf(cuenta(ultimoAjuste = AHORA - 60 * UN_DIA))),
+            "Nu · última el 22 jul",
+            textoDelAvisoDeCuadre(listOf(cuenta(ultimoAjuste = AHORA - 60 * UN_DIA)), AHORA),
         )
         assertEquals(
             "2 cuentas nunca se han cuadrado",
@@ -202,10 +203,23 @@ class CuadreDeSaldosLogicTest {
         assertEquals("Sin movimientos todavía", textoDelUltimoCuadre(cuenta(), hoy, AHORA))
         // 1-sep-2026 12:00 en Bogotá (la zona de la app) — se escribe como lo escribe Movimientos.
         val primeroDeSeptiembre = 1_788_282_000_000L
-        assertEquals("Cuadrada el 1 de septiembre", textoDelUltimoCuadre(cuenta(ultimoAjuste = primeroDeSeptiembre), hoy, AHORA))
-        // 1-ago-2026: 50 días antes, pasó el plazo. Dice lo mismo que Patrimonio y Hoy de esa cuenta.
+        assertEquals("Cuadrada el 1 sep", textoDelUltimoCuadre(cuenta(ultimoAjuste = primeroDeSeptiembre), hoy, AHORA))
+        assertEquals("Cuadrada hoy", textoDelUltimoCuadre(cuenta(ultimoAjuste = AHORA), hoy, AHORA))
+        assertEquals("Cuadrada ayer", textoDelUltimoCuadre(cuenta(ultimoAjuste = AHORA - UN_DIA), hoy, AHORA))
+        // 1-ago-2026: 50 días antes, pasó el plazo. Sin perder la fecha.
         val primeroDeAgosto = 1_785_603_600_000L
-        assertEquals("Hace más de un mes que no la cuadras", textoDelUltimoCuadre(cuenta(ultimoAjuste = primeroDeAgosto), hoy, AHORA))
+        assertEquals(
+            "Hace más de un mes que no la cuadras · última el 1 ago",
+            textoDelUltimoCuadre(cuenta(ultimoAjuste = primeroDeAgosto), hoy, AHORA),
+        )
+        // 45 días justos ya es «hace más de un mes»; 44, todavía con su fecha.
+        assertEquals("Cuadrada el 7 ago", textoDelUltimoCuadre(cuenta(ultimoAjuste = AHORA - 45 * UN_DIA + UN_DIA), hoy, AHORA))
+        assertTrue(textoDelUltimoCuadre(cuenta(ultimoAjuste = AHORA - 45 * UN_DIA), hoy, AHORA).startsWith("Hace más de un mes"))
+        // De otro año, con el año.
+        assertEquals(
+            "Hace más de un mes que no la cuadras · última el 21 sep 2025",
+            textoDelUltimoCuadre(cuenta(ultimoAjuste = AHORA - 364 * UN_DIA), hoy, AHORA),
+        )
     }
 
     /** Vuelta 31: la frase de una cuenta es una sola, la de su detalle y la del aviso de Patrimonio. */
@@ -218,7 +232,10 @@ class CuadreDeSaldosLogicTest {
         ).forEach { c ->
             assertEquals(listOf(c), cuentasSinCuadrar(listOf(c), AHORA))
             val delDetalle = textoDelUltimoCuadre(c, hoy, AHORA)
-            assertEquals("Bancolombia Ahorros · $delDetalle", textoDelAvisoDeCuadre(listOf(c)))
+            val conNombre = textoDelAvisoDeCuadre(listOf(c), AHORA)!!
+            // La versión con nombre dice lo mismo, más corta: su tramo después del nombre está en la del detalle.
+            assertTrue(conNombre.startsWith("Bancolombia Ahorros · "), conNombre)
+            assertTrue(conNombre.removePrefix("Bancolombia Ahorros · ") in delDetalle, "«$conNombre» contra «$delDetalle»")
         }
     }
 

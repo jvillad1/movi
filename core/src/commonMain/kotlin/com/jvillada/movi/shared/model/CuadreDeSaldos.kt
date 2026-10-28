@@ -1,5 +1,14 @@
 package com.jvillada.movi.shared.model
 
+import com.jvillada.movi.shared.time.AppTimeZone
+import kotlinx.datetime.Clock
+import kotlinx.datetime.DatePeriod
+import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.minus
+import kotlinx.datetime.toLocalDateTime
+
 /**
  * # Cuadrar saldos: cuándo una cuenta lleva demasiado sin mirarse
  *
@@ -47,36 +56,60 @@ const val HACE_MAS_DE_UN_MES_QUE_NO_LA_CUADRAS: String = "Hace más de un mes qu
 /** Lo que se dice de una cuenta sin un solo movimiento: no hay nada que cuadrar. */
 const val SIN_MOVIMIENTOS_TODAVIA: String = "Sin movimientos todavía"
 
+private val MESES_CORTOS = listOf("ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic")
+
+private fun diaDe(ms: Long, zona: TimeZone): LocalDate = Instant.fromEpochMilliseconds(ms).toLocalDateTime(zona).date
+
+/** «3 oct»: el día del último cuadre, corto (con el año solo si no es el de [hoy]). */
+private fun fechaCortaDelCuadre(dia: LocalDate, hoy: LocalDate): String =
+    "${dia.dayOfMonth} ${MESES_CORTOS[dia.monthNumber - 1]}" + if (dia.year != hoy.year) " ${dia.year}" else ""
+
+/** «última el 3 ago»: el tramo que dice cuándo se cuadró una cuenta atrasada. */
+private fun ultimaEl(ajuste: Long, ahora: Long, zona: TimeZone): String =
+    "última el ${fechaCortaDelCuadre(diaDe(ajuste, zona), diaDe(ahora, zona))}"
+
 /**
  * **La frase del cuadre de UNA cuenta**, la misma en todas las pantallas (vuelta 31). Patrimonio
  * decía «Hace más de un mes que no cuadras Bancolombia Ahorros» y el detalle de esa cuenta «Nunca la
- * has cuadrado»: dos frases para un mismo hecho se leen como una contradicción. Ahora las dos —y Hoy,
- * Cuadre de saldos y Movi AI— salen de acá:
+ * has cuadrado»: dos frases para un mismo hecho se leen como una contradicción. Ahora el detalle y
+ * Cuadre de saldos dicen esta, y Patrimonio, Hoy y Movi AI su versión con nombre
+ * ([textoDelAvisoDeCuadre]), con la misma regla. **Nunca pierde la fecha** si hubo un cuadre:
  * - sin movimientos → [SIN_MOVIMIENTOS_TODAVIA];
  * - con movimientos y sin un solo ajuste → [NUNCA_LA_HAS_CUADRADO];
- * - cuadrada, pero hace [DIAS_PARA_VOLVER_A_CUADRAR] días o más → [HACE_MAS_DE_UN_MES_QUE_NO_LA_CUADRAS];
- * - cuadrada hace poco → `null`: la pantalla dice cuándo («Cuadrada el 3 de agosto»), con su fecha.
+ * - cuadrada hace [DIAS_PARA_VOLVER_A_CUADRAR] días o menos → «Cuadrada el 3 oct» («Cuadrada hoy»,
+ *   «Cuadrada ayer»);
+ * - más → «Hace más de un mes que no la cuadras · última el 3 ago».
  */
-fun fraseDelCuadre(cuenta: Account, ahora: Long): String? = when {
-    cuenta.lastAdjustmentAt == null && cuenta.firstEventAt == null -> SIN_MOVIMIENTOS_TODAVIA
-    cuenta.lastAdjustmentAt == null -> NUNCA_LA_HAS_CUADRADO
-    estaSinCuadrar(cuenta, ahora) -> HACE_MAS_DE_UN_MES_QUE_NO_LA_CUADRAS
-    else -> null
+fun fraseDelCuadre(cuenta: Account, ahora: Long, zona: TimeZone = AppTimeZone.zone): String {
+    val ajuste = cuenta.lastAdjustmentAt
+        ?: return if (cuenta.firstEventAt == null) SIN_MOVIMIENTOS_TODAVIA else NUNCA_LA_HAS_CUADRADO
+    if (estaSinCuadrar(cuenta, ahora)) return "$HACE_MAS_DE_UN_MES_QUE_NO_LA_CUADRAS · ${ultimaEl(ajuste, ahora, zona)}"
+    val dia = diaDe(ajuste, zona)
+    val hoy = diaDe(ahora, zona)
+    return when (dia) {
+        hoy -> "Cuadrada hoy"
+        hoy.minus(DatePeriod(days = 1)) -> "Cuadrada ayer"
+        else -> "Cuadrada el ${fechaCortaDelCuadre(dia, hoy)}"
+    }
 }
 
 /**
  * **El aviso, en una línea**, o `null` cuando no hay nada que decir. Sin cifras: no se saben.
  *
- * Con una sola cuenta, su nombre y la MISMA frase que dice su detalle ([fraseDelCuadre]): «Bancolombia
- * Ahorros · Nunca la has cuadrado». Con varias, cuántas («2 cuentas nunca se han cuadrado» si ninguna
- * se cuadró nunca).
+ * Con una sola cuenta, su nombre y la regla de [fraseDelCuadre], más corta: «Bancolombia Ahorros ·
+ * Nunca la has cuadrado», «Bancolombia Ahorros · última el 3 ago». Con varias, cuántas («2 cuentas
+ * nunca se han cuadrado» si ninguna se cuadró nunca). [ahora] y [zona] solo nombran el año de la fecha.
  */
-fun textoDelAvisoDeCuadre(atrasadas: List<Account>): String? = when {
+fun textoDelAvisoDeCuadre(
+    atrasadas: List<Account>,
+    ahora: Long = Clock.System.now().toEpochMilliseconds(),
+    zona: TimeZone = AppTimeZone.zone,
+): String? = when {
     atrasadas.isEmpty() -> null
     atrasadas.size == 1 -> {
         val cuenta = atrasadas.first()
-        val frase = if (cuenta.lastAdjustmentAt == null) NUNCA_LA_HAS_CUADRADO else HACE_MAS_DE_UN_MES_QUE_NO_LA_CUADRAS
-        "${cuenta.name} · $frase"
+        val ajuste = cuenta.lastAdjustmentAt
+        "${cuenta.name} · ${if (ajuste == null) NUNCA_LA_HAS_CUADRADO else ultimaEl(ajuste, ahora, zona)}"
     }
     atrasadas.all { it.lastAdjustmentAt == null } -> "${atrasadas.size} cuentas nunca se han cuadrado"
     else -> "${atrasadas.size} cuentas llevan más de un mes sin cuadrar"
