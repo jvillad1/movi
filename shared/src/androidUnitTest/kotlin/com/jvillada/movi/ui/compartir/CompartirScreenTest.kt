@@ -16,6 +16,7 @@ import org.junit.After
 import org.junit.Rule
 import org.junit.Test
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import org.junit.runner.RunWith
 import kotlin.test.assertTrue
 
@@ -28,6 +29,10 @@ import kotlin.test.assertTrue
  * pantalla (crear, revocar) queda para otra tanda.
  */
 @RunWith(RobolectricTestRunner::class)
+// Alta, para que la `LazyColumn` componga la sección «Enlaces activos»: con la opción 3 (vuelta 29) el
+// encabezado, los filtros de días y los botones crecieron y en la pantalla por defecto de Robolectric el
+// vacío quedaba debajo del borde, sin componerse.
+@Config(qualifiers = "w390dp-h1400dp-xhdpi")
 class CompartirScreenTest {
 
     @get:Rule val composeRule = createComposeRule()
