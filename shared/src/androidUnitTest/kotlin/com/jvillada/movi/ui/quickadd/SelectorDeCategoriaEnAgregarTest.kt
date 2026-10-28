@@ -80,7 +80,7 @@ class SelectorDeCategoriaEnAgregarTest {
     @Test
     fun al_abrir_la_busqueda_no_tiene_el_foco() {
         montarHoja()
-        tocar("Categoría")
+        tocar(TODAS_LAS_CATEGORIAS)
 
         composeRule.onNodeWithTag(TAG_BUSCAR_CATEGORIA).assertIsNotFocused()
         assertEquals(
@@ -94,7 +94,7 @@ class SelectorDeCategoriaEnAgregarTest {
     @Test
     fun la_categoria_puesta_se_marca_en_la_cuadricula() {
         montarHoja()
-        tocar("Categoría")
+        tocar(TODAS_LAS_CATEGORIAS)
 
         // Sin usos, «Agregar» arranca en «Comida» (la primera del catálogo de gastos).
         composeRule.onNodeWithTag(tagDeCeldaDeCategoria("Comida")).assertIsSelected()
@@ -114,7 +114,7 @@ class SelectorDeCategoriaEnAgregarTest {
             ),
         )
         montarHoja()
-        tocar("Categoría")
+        tocar(TODAS_LAS_CATEGORIAS)
 
         val vivienda = posicion("Vivienda")
         val salud = posicion("Salud")
@@ -127,7 +127,7 @@ class SelectorDeCategoriaEnAgregarTest {
     @Test
     fun escribir_filtra_y_ofrece_crear() {
         montarHoja()
-        tocar("Categoría")
+        tocar(TODAS_LAS_CATEGORIAS)
 
         composeRule.onNodeWithTag(TAG_BUSCAR_CATEGORIA).performTextInput("Tra")
         composeRule.waitForIdle()
@@ -141,7 +141,7 @@ class SelectorDeCategoriaEnAgregarTest {
     @Test
     fun tocar_una_celda_elige_y_cierra() {
         montarHoja()
-        tocar("Categoría")
+        tocar(TODAS_LAS_CATEGORIAS)
 
         composeRule.onNodeWithTag(tagDeCeldaDeCategoria("Salud")).performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
@@ -155,7 +155,7 @@ class SelectorDeCategoriaEnAgregarTest {
     @Test
     fun crear_una_categoria_nueva_la_elige() {
         montarHoja()
-        tocar("Categoría")
+        tocar(TODAS_LAS_CATEGORIAS)
 
         composeRule.onNodeWithTag(TAG_BUSCAR_CATEGORIA).performTextInput("Plata de la tía")
         composeRule.waitForIdle()
@@ -176,7 +176,7 @@ class SelectorDeCategoriaEnAgregarTest {
             listOf(UsedCategory(TRANSFER_CATEGORY, listOf(TransactionType.EXPENSE), usosRecientes = 40)),
         )
         montarHoja()
-        tocar("Categoría")
+        tocar(TODAS_LAS_CATEGORIAS)
 
         composeRule.onNodeWithTag(tagDeCeldaDeCategoria(CARD_PAYMENT_CATEGORY)).assertDoesNotExist()
         composeRule.onNodeWithTag(tagDeCeldaDeCategoria(TRANSFER_CATEGORY)).assertDoesNotExist()

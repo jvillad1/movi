@@ -247,7 +247,7 @@ class HojaAgregarGeometriaTest {
         montarHoja()
         val enReposo = tecla9SinRecortar()
 
-        tocar("Categoría")
+        tocar(TODAS_LAS_CATEGORIAS)
         // Bajar hasta la última categoría de la lista: eso desplaza la HOJA (el panel ya no
         // tiene scroll propio), que es exactamente lo que hace el dedo del dueño.
         //
@@ -334,7 +334,7 @@ class HojaAgregarGeometriaTest {
     @Test
     fun lasCategoriasSeVenEnElSubPickerDelTelefono() {
         montarHoja()
-        tocar("Categoría")
+        tocar(TODAS_LAS_CATEGORIAS)
         val visibles = CATEGORIAS_OFRECIDAS.filter { seVeEntera(it) }
         assertTrue(
             "Solo se ven ${visibles.size} de ${CATEGORIAS_OFRECIDAS.size} categorías sin mover " +
@@ -370,7 +370,7 @@ class HojaAgregarGeometriaTest {
         val propias = listOf("Mercado", "Carro") + CATEGORIAS_PROPIAS_DE_RELLENO
         propias.forEach { UsedCategoriesCache.record(it, TransactionType.EXPENSE) }
         montarHoja()
-        tocar("Categoría")
+        tocar(TODAS_LAS_CATEGORIAS)
 
         val ofrecidas = CATEGORIAS_OFRECIDAS + propias
         val fondoDeLaHoja = composeRule.onRoot().getUnclippedBoundsInRoot().bottom - ALTO_BARRA_INFERIOR
@@ -573,7 +573,7 @@ private const val TOLERANCIA_DP = 0.5f
 private val SUB_PICKERS = listOf(
     "Hoy" to "Fecha",
     "Agregar nota…" to "Nota",
-    "Categoría" to "Categoría",
+    TODAS_LAS_CATEGORIAS to "Categoría",
 )
 
 /**

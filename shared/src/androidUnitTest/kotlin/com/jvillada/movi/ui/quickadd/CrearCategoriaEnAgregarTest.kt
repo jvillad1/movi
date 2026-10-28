@@ -93,7 +93,7 @@ class CrearCategoriaEnAgregarTest {
     fun crear_una_categoria_nueva_la_elige_y_se_guarda_con_ella() {
         montar()
 
-        tocar("Categoría")
+        tocar(TODAS_LAS_CATEGORIAS)
         composeRule.onNodeWithTag(TAG_BUSCAR_CATEGORIA).performTextInput("Colegio de Hija")
         composeRule.waitForIdle()
         composeRule.onNodeWithTag(TAG_CREAR_CATEGORIA).performSemanticsAction(SemanticsActions.OnClick)
@@ -157,7 +157,7 @@ class CrearCategoriaEnAgregarTest {
     fun la_fila_categoria_sigue_abriendo_sin_teclado() {
         montar(conFrecuentes = true)
 
-        tocar("Categoría")
+        tocar(TODAS_LAS_CATEGORIAS)
 
         composeRule.onNodeWithTag(TAG_BUSCAR_CATEGORIA).assertIsNotFocused()
     }

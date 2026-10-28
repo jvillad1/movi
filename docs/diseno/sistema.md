@@ -1459,3 +1459,50 @@ abajo, sin ensuciar el período, un ajuste anulado no cuenta, la de otro usuario
 a Créditos); `MoviAiComoRaizTest` (pura); y `LaTarjetaEnSuDetalleTest`, `ElEncabezadoDeMoviAiTest`,
 `EspaciosEnDosColumnasTest` y `LaCuentaEnDosColumnasTest` (Robolectric; las dos últimas dentro de la
 cáscara, a 1.280 y a 390 dp).
+
+## 36. Vuelta 34: Agregar con teclado de verdad
+
+Revisado en la vista previa de la vuelta 33 (aa82588a) con la cuenta demo, a 1.280 y a 390 px. Sin
+componentes nuevos en `ds/`; dos tokens: `Medida.anchoDelCursor` (2 dp) y
+`Movimiento.PARPADEO_DEL_CURSOR_MS` (530, lo único que se repite: no es una transición).
+
+- **Frente a un computador, Agregar no dibuja el teclado numérico.** A 1.280 px la hoja medía
+  600 × 720 y casi la mitad eran las teclas 1–9, 000, 0 y ⌫, con un teclado físico al lado. **La señal
+  es el puntero principal** (`LocalPunteroFino`, `platform/PunteroPrincipal.kt`): en la web,
+  `matchMedia("(pointer: fine)")` —un mouse o un trackpad—; en Android e iOS, siempre `false`. No es la
+  clase de ancho: una tablet es mediana o expandida y se toca (ahí el teclado se queda), y una ventana
+  de escritorio angosta es compacta y tiene teclado. Tampoco `LocalHayTecladoFisico`, que es
+  `!isAndroid` y vale también en un iPhone. Sin teclado en pantalla:
+  - el monto se escribe con el teclado físico por el camino que ya existía (`alTeclear` →
+    `accionDeTecla` → el mismo `onKey` de los botones): los dígitos suman, Retroceso borra, Enter
+    guarda si se puede, ⇧Enter guarda y deja anotar otro; Escape lo sigue atendiendo el marco;
+  - al abrir, el foco ya es de la hoja (el velo de la centrada, el panel de la de abajo), así que la
+    primera tecla va al monto sin hacer clic;
+  - la cifra sigue siendo la protagonista, con un **cursor** de la marca pegado a su derecha, del alto
+    de la letra de la cifra, que parpadea (fijo si el sistema pide menos movimiento);
+  - la hoja se acorta a lo que tiene (~212 dp: cuatro filas de 50 y su respiro) y va del ancho de las
+    demás hojas (560): los 600 eran para que el teclado respirara.
+  En el teléfono y en una tablet que se toca no cambia nada.
+- **La categoría se lee en un solo lugar.** Debajo del monto había una fila «Categoría · Restaurantes ›»
+  y, justo debajo, los chips con «Restaurantes» marcado. La fila se fue: queda el rótulo «Categoría»
+  (en `cuerpo`, la letra de los títulos de «Cuenta» y «Nota») encima de los chips, y al final de los
+  chips una `PildoraDeAccion` **«Todas ›»** (el `KeyboardArrowRight` de las filas que abren algo) que
+  abre el selector entero, sin teclado, como lo abría la fila. La elegida va marcada; si no está entre
+  las frecuentes va primera (lo hacía ya `categoriasParaLasPastillasDeAgregar`), y sin datos de uso es
+  la única pastilla (`pastillasDeLaCategoria`): sin eso quien recién empieza no la vería en ningún
+  lado. Si la elegida queda fuera del desplazamiento de la fila, la fila se corre lo justo para
+  mostrarla, solo en horizontal (un `bringIntoView` también correría la hoja). «Movi la reconoce: …» va
+  a la derecha del rótulo, en el mismo renglón: antes era un renglón propio que se iba al elegir otra
+  a mano y movía el teclado.
+- **A 360 dp** la tarjeta mide menos que antes (el rótulo es más bajo que una fila de 48), nada se
+  corta, y elegir un chip, una categoría en el selector u otra cuenta no mueve el teclado.
+
+**Las líneas base** no cambian: `dp_sueltos` 119, `radios_con_numero` 3, y las guardas en 0 siguen en 0.
+Lo vigilan `AgregarConElTecladoDeVerdadTest` (a 1.280 sin teclas ni «⌫» y con el cursor a la derecha
+de la cifra; 4-2-0-0-0 deja $42.000, Retroceso deja $4.200 y Enter lo guarda; la hoja ≥ 200 dp más
+corta; a 1.280 con tacto y a 390 el teclado sigue y escribe) y `UnaSolaCategoriaEnAgregarTest` (a 360:
+la elegida una sola vez y marcada, «Categoría» no es una `Fila`, «Todas» al final abre el selector, la
+elegida en el selector vuelve primera y entera, y elegir chip, categoría o cuenta no mueve el teclado
+ni corta «Guardar movimiento»), más un caso en `HojaAgregarSugerenciaDeCategoriaTest` (la sugerencia
+aparece y se va sin mover el teclado). Las pruebas que abrían el selector tocando la fila ahora tocan
+«Todas».

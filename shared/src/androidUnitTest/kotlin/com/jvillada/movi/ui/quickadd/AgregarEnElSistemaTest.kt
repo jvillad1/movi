@@ -52,7 +52,8 @@ import kotlin.test.assertTrue
  *   fecha son `PildoraDeAccion`;
  * - **«Guardar y anotar otro» es un `Boton` `Fantasma`** (era un `Text` tocable) y no le cambia el
  *   alto a la hoja: su renglón reservado mide lo mismo con el botón o con «Falta el monto»;
- * - **«Categoría», «Cuenta» y «Nota» son `Fila`** compactas, de al menos el objetivo táctil;
+ * - **«Cuenta» y «Nota» son `Fila`** compactas, de al menos el objetivo táctil (desde la vuelta 34
+ *   la categoría no es una fila: la dicen los chips, ver `UnaSolaCategoriaEnAgregarTest`);
  * - **«Subir comprobante» es un `BotonDeIcono`** de 48 × 48 con su descripción.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -137,9 +138,9 @@ class AgregarEnElSistemaTest {
     }
 
     @Test
-    fun categoria_cuenta_y_nota_son_filas_del_sistema() {
+    fun cuenta_y_nota_son_filas_del_sistema() {
         montarHoja()
-        listOf("Categoría", "Cuenta", "Nota").forEach { titulo ->
+        listOf("Cuenta", "Nota").forEach { titulo ->
             val fila = composeRule.onNode(hasTestTag(TAG_FILA) and hasText(titulo)).fetchSemanticsNode()
             val alto = with(composeRule.density) { fila.size.height.toDp() }
             // Compacta (48, lo que medían los `CardRow` de antes): la hoja no puede crecer (ver

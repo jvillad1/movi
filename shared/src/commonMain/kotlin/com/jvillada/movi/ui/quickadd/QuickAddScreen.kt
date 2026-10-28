@@ -40,6 +40,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.Backspace
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Event
 import androidx.compose.material.icons.rounded.Check
@@ -1082,6 +1089,14 @@ fun QuickAddScreen(
     }
 
     /**
+     * **Vuelta 34: frente a un computador no se dibuja el teclado numérico.** Lo decide el puntero
+     * principal ([LocalPunteroFino]): un mouse o un trackpad. En el teléfono y en una tablet que se
+     * toca, el teclado en pantalla sigue como siempre. Sin él, el monto se escribe con el teclado
+     * físico por [alTeclear] —el mismo [onKey] de las teclas en pantalla— y la hoja se acorta.
+     */
+    val conTecladoEnPantalla = !LocalPunteroFino.current
+
+    /**
      * **El teclado físico** (web y escritorio): los dígitos escriben el monto por el mismo camino
      * que el teclado en pantalla ([onKey]), Backspace borra y Enter guarda si el botón está
      * habilitado. Escape lo atiende el `onEscape` de más abajo.
@@ -1129,11 +1144,13 @@ fun QuickAddScreen(
         // de abajo): en iOS la X es la única salida de esta hoja —no hay botón atrás, y el gesto de
         // atrás cierra la hoja entera perdiendo lo escrito— así que no puede irse de la pantalla solo
         // porque el dueño bajó hasta el botón de guardar. En la web la hoja va centrada y un poco
-        // más ancha que las demás (600 dp): el teclado numérico respira mejor.
+        // más ancha que las demás (600 dp): el teclado numérico respira mejor. Sin teclado en
+        // pantalla (vuelta 34: frente a un computador) no hay nada que respire, y va del ancho de
+        // las demás hojas.
         MarcoDeHoja(
             onDismiss = onDismiss,
             dismissEnabled = !saving,
-            anchoMaximo = ANCHO_DE_LA_HOJA_DE_AGREGAR,
+            anchoMaximo = if (conTecladoEnPantalla) ANCHO_DE_LA_HOJA_DE_AGREGAR else ANCHO_DE_HOJA,
             // Escape (la web) sale del sub-editor abierto —Nota, Categoría, Cuenta, Fecha o los de
             // Traspaso— y solo sin ninguno cierra la hoja: cerrarla desde la Nota perdía el
             // movimiento entero. Mismo destino que la X de cada sub-editor.
@@ -1465,6 +1482,7 @@ fun QuickAddScreen(
                         amount = amount,
                         moneda = monedaDeLaCuenta(accounts, selectedAccountId),
                         onKey = ::onKey,
+                        conTecladoEnPantalla = conTecladoEnPantalla,
                         category = category,
                         // Task 5: solo se muestra la sugerencia que Movi puso, no cualquier
                         // "Movi la reconoce" persistente — desaparece apenas el dueño elige a
@@ -1489,6 +1507,8 @@ fun QuickAddScreen(
                         note = note,
                         dateLabel = etiquetaDeFecha(fecha, hoy),
                         onPickDate = { pasarA(pickers.abrir(Picker.Date)) },
+                        // «Todas ›», al final de los chips (vuelta 34): el selector entero, sin
+                        // teclado, como lo abría la fila «Categoría» que había antes.
                         onPickCategory = {
                             pedidosDeFocoDeCategoria = 0
                             pasarA(pickers.abrir(Picker.Category))
@@ -1604,20 +1624,24 @@ private fun EditorBody(
      */
     moneda: String,
     onKey: (String) -> Unit,
+    /**
+     * Vuelta 34: `false` frente a un computador —ver `conTecladoEnPantalla` en [QuickAddScreen]—.
+     * Sin teclado en pantalla el monto lleva un cursor que parpadea: es lo que el teclado físico
+     * escribe.
+     */
+    conTecladoEnPantalla: Boolean = true,
     category: String,
     /**
      * Task 5: `"Movi la reconoce: <nombre>"` cuando la categoría de arriba la puso una sugerencia
-     * automática — `null` el resto del tiempo, incluido mientras el dueño elige a mano. Se pasa
-     * como `sub` de la fila «Categoría» (ver [FilaDeLaHoja]), con el mismo estilo que cualquier otro
-     * texto de apoyo de esta hoja.
+     * automática — `null` el resto del tiempo, incluido mientras el dueño elige a mano. Va en el
+     * renglón del rótulo «Categoría», a la derecha (ver [EncabezadoDeLaCategoria]).
      */
     categoriaSugeridaHint: String? = null,
     /**
      * Ola A: hasta 6 categorías, las que más se usan para este tipo — ver [categoriasFrecuentes].
-     * Vacía = la fila de chips no se dibuja y no ocupa lugar (a diferencia de la fila «Cuenta»,
-     * que sí reserva su alto: acá no hace falta, porque esta fila no aparece y desaparece por su
-     * cuenta en la misma sesión — el tipo elegido no cambia salvo que el dueño toque el segmento
-     * de arriba, y ESE toque ya mueve todo el formulario).
+     * Vacía (sin datos de uso), la fila lleva solo la elegida, «Nueva» y «Todas» (ver
+     * [pastillasDeLaCategoria]): desde la vuelta 34 los chips son el único lugar donde se lee la
+     * categoría elegida.
      */
     categoriasFrecuentes: List<String> = emptyList(),
     onPickCategoriaFrecuente: (String) -> Unit = {},
@@ -1631,6 +1655,7 @@ private fun EditorBody(
     /** «Hoy», «Ayer» o «23 de agosto» — ver `etiquetaDeFecha`. Se muestra debajo del monto. */
     dateLabel: String,
     onPickDate: () -> Unit,
+    /** «Todas ›», al final de los chips: abre el selector entero. */
     onPickCategory: () -> Unit,
     onPickWallet: () -> Unit,
     onEditNote: () -> Unit,
@@ -1694,7 +1719,17 @@ private fun EditorBody(
         // La protagonista de la hoja, como «Tu plata» y lo gastado en Presupuestos. Antes iba a
         // 56 sp en una sola línea sin achique: un monto de nueve cifras se salía del ancho del
         // teléfono. CifraProtagonista baja de tamaño hasta que entra.
-        CifraProtagonista(simboloDeMoneda(moneda) + formatAmountKeypadDisplay(amount), color = Movi.colores.texto)
+        val montoEscrito = simboloDeMoneda(moneda) + formatAmountKeypadDisplay(amount)
+        if (conTecladoEnPantalla) {
+            CifraProtagonista(montoEscrito, color = Movi.colores.texto)
+        } else {
+            // Vuelta 34: sin teclado en pantalla, el cursor dice dónde va lo que se teclee. La cifra
+            // sigue siendo la protagonista; el cursor va pegado a su derecha.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CifraProtagonista(montoEscrito, color = Movi.colores.texto, modifier = Modifier.weight(1f, fill = false))
+                CursorDelMonto()
+            }
+        }
         Spacer(Modifier.height(Espacio.xxs))
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -1729,40 +1764,17 @@ private fun EditorBody(
     // Vuelta de diseño 20: una `Superficie` con relleno de lista y las `Fila` del sistema (ver
     // [FilaDeLaHoja]). Eran una `MinCard` con `CardRow` de 48 dp y `Hairline`.
     Superficie(modifier = Modifier.fillMaxWidth().testTag(TAG_TARJETA_DE_AGREGAR), relleno = RellenoDeSuperficie.Lista) {
-        FilaDeLaHoja(
-            titulo = "Categoría",
-            valor = category,
-            // Una categoría propia larga («Mantenimiento del carro») se corta con «…» en vez de
-            // llevarse la fila entera (ver [FRACCION_DEL_VALOR_DE_LA_HOJA]).
-            onClick = onPickCategory,
-        )
-        // Task 5: «Movi la reconoce: <nombre>» cuando lo de arriba lo puso una sugerencia
-        // automática. Va en su propio renglón, a lo ancho de la tarjeta, y no como subtítulo de
-        // «Categoría»: ahí le tocaba la columna izquierda (el valor se lleva el 55 %) y en el
-        // Pixel del dueño «Movi la reconoce: Señor Gol + Mora Soccer» se leía «Movi la
-        // reconoce: P…». Un renglón, con «…» si aun así no entra.
-        if (categoriaSugeridaHint != null) {
-            Text(
-                text = categoriaSugeridaHint,
-                style = Movi.textos.apoyo,
-                color = Movi.colores.textoMedio,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = Medida.margenDePantalla).padding(bottom = Espacio.xs),
-            )
-        }
-        // Ola A: los chips de frecuentes, entre «Categoría» y «Cuenta» — justo debajo de la
-        // categoría que resumen, y antes de la fila que decide dónde sale la plata.
-        // Ola L: la fila se dibuja SIEMPRE porque lleva «Nueva», la puerta a crear una categoría.
-        // Sin datos de uso solo tiene esa pastilla.
-        // Las líneas entre las filas, como antes (eran los `Hairline` de los `CardRow`): con ellas
-        // la tarjeta mide lo mismo que en master, y sin ellas la fila de chips flotaba.
-        if (categoriaSugeridaHint == null) Separador(SangriaDeSeparador.Margen)
+        // Vuelta 34: **la categoría se lee en un solo lugar, los chips.** Hasta acá había una fila
+        // «Categoría · Restaurantes ›» y, justo debajo, los chips con «Restaurantes» marcado: lo mismo
+        // dos veces. Queda el rótulo, en la letra de las filas de «Cuenta» y «Nota», y los chips con
+        // la elegida marcada; el selector entero lo abre «Todas ›», al final.
+        EncabezadoDeLaCategoria(sugerencia = categoriaSugeridaHint)
         CategoriaChipsRow(
-            categorias = categoriasFrecuentes,
+            categorias = pastillasDeLaCategoria(categoriasFrecuentes, category),
             categoriaElegida = category,
             onPick = onPickCategoriaFrecuente,
             onNueva = onNuevaCategoria,
+            onTodas = onPickCategory,
         )
         Separador(SangriaDeSeparador.Margen)
         // Ola 11 — DE DÓNDE SALIÓ LA CUENTA QUE DICE AL LADO, Y POR QUÉ ESTE RENGLÓN
@@ -1853,47 +1865,50 @@ private fun EditorBody(
 
     Spacer(Modifier.height(Espacio.s))
 
-    // Cada tecla vibra apenas, como un teclado de verdad (ver [Vibrador.tecla]).
-    val vibrador = rememberVibrador()
-    Column {
-        listOf(
-            listOf("1", "2", "3"),
-            listOf("4", "5", "6"),
-            listOf("7", "8", "9"),
-            // Sin tecla decimal: en COP no hay centavos, y «2500.5» pasaba la validación como 2500.5
-            // pero se guardaba como $0 (toLongOrNull). Ver revisión de la Ola 1.
-            listOf("000", "0", "⌫"),
-        ).forEach { row ->
-            Row(modifier = Modifier.fillMaxWidth()) {
-                row.forEach { key ->
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(50.dp)
-                            .clickable {
-                                vibrador.tecla()
-                                onKey(key)
-                            },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        if (key == "⌫") {
-                            Icon(Icons.AutoMirrored.Rounded.Backspace, contentDescription = "Borrar", tint = Movi.colores.texto, modifier = Modifier.size(Icono.l))
-                        } else {
-                            Text(
-                                text = key,
-                                // Sin estilo a propósito: tecla del teclado numérico; `titular` (19) la achica y `cifra` (42) no cabe.
-                                fontSize = 22.sp,
-                                style = Movi.textos.monto,
-                                color = Movi.colores.texto,
-                            )
+    // Vuelta 34: frente a un computador no hay teclado en pantalla (ver [conTecladoEnPantalla]).
+    if (conTecladoEnPantalla) {
+        // Cada tecla vibra apenas, como un teclado de verdad (ver [Vibrador.tecla]).
+        val vibrador = rememberVibrador()
+        Column {
+            listOf(
+                listOf("1", "2", "3"),
+                listOf("4", "5", "6"),
+                listOf("7", "8", "9"),
+                // Sin tecla decimal: en COP no hay centavos, y «2500.5» pasaba la validación como 2500.5
+                // pero se guardaba como $0 (toLongOrNull). Ver revisión de la Ola 1.
+                listOf("000", "0", "⌫"),
+            ).forEach { row ->
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    row.forEach { key ->
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(50.dp)
+                                .clickable {
+                                    vibrador.tecla()
+                                    onKey(key)
+                                },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (key == "⌫") {
+                                Icon(Icons.AutoMirrored.Rounded.Backspace, contentDescription = "Borrar", tint = Movi.colores.texto, modifier = Modifier.size(Icono.l))
+                            } else {
+                                Text(
+                                    text = key,
+                                    // Sin estilo a propósito: tecla del teclado numérico; `titular` (19) la achica y `cifra` (42) no cabe.
+                                    fontSize = 22.sp,
+                                    style = Movi.textos.monto,
+                                    color = Movi.colores.texto,
+                                )
+                            }
                         }
                     }
                 }
             }
         }
-    }
 
-    Spacer(Modifier.height(Espacio.s))
+        Spacer(Modifier.height(Espacio.s))
+    }
 
     if (hasNoAccounts) {
         Column(
@@ -1998,14 +2013,63 @@ private fun EditorBody(
 }
 
 /**
- * «Nueva» y hasta 6 chips con las categorías que más se usan para este tipo — ver
- * [categoriasFrecuentes], que es la que decide cuáles y en qué orden (Ola A). Tocar uno la elige sin
- * abrir el sub-picker de «Categoría»; la elegida se ve activa.
+ * **Las pastillas que dibuja la fila de la categoría** (vuelta 34): las frecuentes
+ * ([categoriasParaLasPastillasDeAgregar], que ya pone primera a la elegida si no está entre ellas)
+ * y, sin datos de uso —cuando esa lista viene vacía—, la elegida sola. Desde que la fila
+ * «Categoría ›» se fue, los chips son el único lugar donde se lee qué categoría se va a guardar: sin
+ * esto, quien recién empieza no la vería en ningún lado. Sin categoría elegida no hay pastilla
+ * que marcar.
+ */
+internal fun pastillasDeLaCategoria(frecuentes: List<String>, elegida: String): List<String> =
+    if (frecuentes.isEmpty() && elegida.isNotBlank()) listOf(elegida) else frecuentes
+
+/**
+ * **El rótulo de la fila de chips: «Categoría»** (vuelta 34), en la letra de los títulos de las filas
+ * «Cuenta» y «Nota» ([FilaDeLaHoja]). A la derecha, en el mismo renglón, «Movi la reconoce: …»
+ * cuando la categoría la puso una sugerencia: antes era un renglón propio que aparecía y se iba al
+ * elegir otra a mano, y la hoja cambiaba de alto bajo el dedo. Ahora el renglón está siempre.
+ */
+@Composable
+private fun EncabezadoDeLaCategoria(sugerencia: String?) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Medida.margenDePantalla)
+            .padding(top = Espacio.s)
+            .testTag(TAG_ENCABEZADO_DE_LA_CATEGORIA),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Espacio.s),
+    ) {
+        Text(ROTULO_CATEGORIA_EN_AGREGAR, style = Movi.textos.cuerpo, color = Movi.colores.texto, maxLines = 1)
+        if (sugerencia != null) {
+            Text(
+                text = sugerencia,
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoMedio,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+/**
+ * «Nueva», las categorías que más se usan para este tipo y «Todas ›» — ver
+ * [categoriasParaLasPastillasDeAgregar], que decide cuáles y en qué orden (Ola A). Tocar una la elige
+ * sin abrir el selector; la elegida se ve activa, y **es el único lugar donde se ve** (vuelta 34).
  *
  * **Vuelta de diseño 20: las píldoras del sistema.** Cada categoría es un [PildoraDeFiltro] —llena de
  * marca la elegida, en la capa 2 las demás, que sobre la capa 1 de la tarjeta sí se ven— y «Nueva»
- * es un [PildoraDeAccion] con el «+» como ícono en la marca: hace algo, no se elige. Eran cajas
- * armadas a mano con `border` y `clickable`, con el borde de la marca o del `borde`.
+ * y «Todas» son [PildoraDeAccion]: hacen algo, no se eligen. «Todas» lleva el [Chevron] de las filas
+ * que abren algo, al final, y abre el selector entero (lo que abría la fila «Categoría ›»).
+ *
+ * **La elegida siempre a la vista.** Si queda fuera del desplazamiento —se eligió en el selector una
+ * que es la sexta, o la fila volvió al principio al cerrarlo—, la fila se corre lo justo para
+ * mostrarla entera. Solo la fila, en horizontal: un `bringIntoView` también correría la hoja hacia
+ * arriba o hacia abajo, y la hoja no se mueve bajo el dedo. Tocar una que ya se ve entera no mueve
+ * nada (lo cuida `HojaAgregarCategoriasFrecuentesTest`).
  *
  * **Alto mínimo, no fijo.** Las píldoras miden [Medida.altoChico] (36) y entran con aire en los 40 dp
  * de [ALTO_FILA_DE_CHIPS]; si el dueño agranda la escala de letra la fila crece lo justo para que el
@@ -2020,12 +2084,34 @@ private fun CategoriaChipsRow(
     categoriaElegida: String,
     onPick: (String) -> Unit,
     onNueva: () -> Unit,
+    onTodas: () -> Unit,
 ) {
+    val desplazamiento = rememberScrollState()
+    // Dónde quedó cada pastilla, en píxeles de la fila (lo que no cambia al desplazar).
+    val lugares = remember { mutableStateMapOf<String, IntRange>() }
+    val margen = with(LocalDensity.current) { Medida.margenDePantalla.roundToPx() }
+    val reducido = LocalMovimientoReducido.current
+    val lugarDeLaElegida = lugares[categoriaElegida]
+    LaunchedEffect(categoriaElegida, lugarDeLaElegida, desplazamiento.viewportSize) {
+        val lugar = lugarDeLaElegida ?: return@LaunchedEffect
+        val ventana = desplazamiento.viewportSize
+        if (ventana <= 0) return@LaunchedEffect
+        // `lugar` se mide adentro del margen de la fila; en el desplazamiento, el margen va antes.
+        val izquierda = lugar.first + margen
+        val derecha = lugar.last + margen
+        val desde = desplazamiento.value
+        val destino = when {
+            izquierda < desde -> izquierda - margen
+            derecha > desde + ventana -> derecha - ventana + margen
+            else -> return@LaunchedEffect
+        }.coerceIn(0, desplazamiento.maxValue)
+        if (reducido) desplazamiento.scrollTo(destino) else desplazamiento.animateScrollTo(destino)
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = ALTO_FILA_DE_CHIPS)
-            .horizontalScroll(rememberScrollState())
+            .horizontalScroll(desplazamiento)
             .padding(horizontal = Medida.margenDePantalla),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
@@ -2044,10 +2130,72 @@ private fun CategoriaChipsRow(
                 texto = nombre,
                 seleccionada = nombre == categoriaElegida,
                 onClick = { onPick(nombre) },
+                modifier = Modifier.onPlaced { lugar ->
+                    val x = lugar.positionInParent().x.toInt()
+                    lugares[nombre] = x..(x + lugar.size.width)
+                },
             )
         }
+        PildoraDeAccion(
+            texto = TODAS_LAS_CATEGORIAS,
+            onClick = onTodas,
+            iconoFinal = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+            descripcion = "Ver todas las categorías",
+            modifier = Modifier.testTag(TAG_PASTILLA_TODAS_LAS_CATEGORIAS_AGREGAR),
+        )
     }
 }
+
+/**
+ * **El cursor del monto** (vuelta 34): una raya de la marca, del alto de la letra de la cifra, que
+ * parpadea a [Movimiento.PARPADEO_DEL_CURSOR_MS] —o queda fija si el sistema pide menos
+ * movimiento—. Solo frente a un computador, donde no hay teclado en pantalla: dice que lo que se
+ * teclee va al monto. El parpadeo se lee en la capa de dibujo: no recompone nada.
+ */
+@Composable
+private fun CursorDelMonto() {
+    val reducido = LocalMovimientoReducido.current
+    val alto = with(LocalDensity.current) { Movi.textos.cifra.fontSize.toDp() }
+    val fase = if (reducido) {
+        null
+    } else {
+        rememberInfiniteTransition(label = "cursor-del-monto").animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = androidx.compose.animation.core.tween(
+                    durationMillis = Movimiento.PARPADEO_DEL_CURSOR_MS * 2,
+                    easing = androidx.compose.animation.core.LinearEasing,
+                ),
+            ),
+            label = "cursor-del-monto",
+        )
+    }
+    Box(
+        modifier = Modifier
+            .padding(start = Espacio.xxs)
+            .width(Medida.anchoDelCursor)
+            .height(alto)
+            .graphicsLayer { alpha = if ((fase?.value ?: 0f) < 0.5f) 1f else 0f }
+            .background(Movi.colores.marca)
+            .testTag(TAG_CURSOR_DEL_MONTO),
+    )
+}
+
+/** El rótulo de la fila de chips de la categoría. */
+internal const val ROTULO_CATEGORIA_EN_AGREGAR: String = "Categoría"
+
+/** La pastilla del final de los chips, que abre el selector entero. */
+internal const val TODAS_LAS_CATEGORIAS: String = "Todas"
+
+/** El renglón «Categoría» de arriba de los chips. */
+internal const val TAG_ENCABEZADO_DE_LA_CATEGORIA: String = "agregar:encabezado-categoria"
+
+/** La pastilla «Todas ›». */
+internal const val TAG_PASTILLA_TODAS_LAS_CATEGORIAS_AGREGAR: String = "agregar:pastilla-todas"
+
+/** El cursor del monto, que solo se dibuja sin teclado en pantalla. */
+internal const val TAG_CURSOR_DEL_MONTO: String = "agregar:cursor-del-monto"
 
 /** La tarjeta de Categoría · Cuenta · Nota de «Agregar»: la mide `HojaAgregarGeometriaTest`. */
 internal const val TAG_TARJETA_DE_AGREGAR: String = "agregar:tarjeta"

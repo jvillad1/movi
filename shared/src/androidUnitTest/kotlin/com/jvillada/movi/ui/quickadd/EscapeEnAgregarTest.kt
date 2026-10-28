@@ -97,7 +97,7 @@ class EscapeEnAgregarTest {
     @Test
     fun `Escape con el sub-picker de Categoria abierto lo cierra y deja la hoja`() {
         montar()
-        tocar("Categoría")
+        tocar(TODAS_LAS_CATEGORIAS)
         composeRule.onNodeWithText("9").assertDoesNotExist()
 
         composeRule.onRoot().performKeyInput { pressKey(Key.Escape) }
