@@ -245,7 +245,8 @@ class LasCifrasDelSistemaSeOcultanTest {
                 onDismissedCandidate = {},
             )
         }
-        esperar("PAGO TARJETA MASTER")
+        // Vuelta 36: la lista dice el título de la fila, lo del banco en forma de título.
+        esperar("Pago Tarjeta Master")
     }
 
     @Test
