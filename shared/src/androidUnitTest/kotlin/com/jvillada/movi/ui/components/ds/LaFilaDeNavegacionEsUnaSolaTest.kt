@@ -69,11 +69,11 @@ class LaFilaDeNavegacionEsUnaSolaTest {
             Column {
                 IconoEnCirculo(Icons.Rounded.Inbox)
                 AvatarDePersona("Caro")
-                AvatarDePersona("Juan", tono = TonoDeIcono.Tinta)
+                AvatarDePersona("Juan", tono = TonoDeIcono.Propio)
             }
         }
         assertEquals(listOf(TonoDeIcono.Neutro), tonos(TAG_ICONO_EN_CIRCULO))
-        assertEquals(listOf(TonoDeIcono.Neutro, TonoDeIcono.Tinta), tonos(TAG_AVATAR_DE_PERSONA))
+        assertEquals(listOf(TonoDeIcono.Neutro, TonoDeIcono.Propio), tonos(TAG_AVATAR_DE_PERSONA))
     }
 
     @Test

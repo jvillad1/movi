@@ -161,7 +161,7 @@ internal fun HojaDelGasto(espacio: Espacio, gasto: GastoDelEspacio, onCerrar: ()
                 Fila(
                     titulo = if (pagoOtro) "Pagó $quien" else "Pagaste tú",
                     subtitulo = if (pagoOtro) "No salió de tus cuentas" else null,
-                    inicio = { AvatarDePersona(quien, tono = if (pagoOtro) TonoDeIcono.Info else TonoDeIcono.Tinta) },
+                    inicio = { AvatarDePersona(quien, tono = if (pagoOtro) TonoDeIcono.Info else TonoDeIcono.Propio) },
                 )
                 Separador()
                 Fila(

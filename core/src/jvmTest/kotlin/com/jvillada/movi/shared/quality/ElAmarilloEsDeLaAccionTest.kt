@@ -16,11 +16,13 @@ import kotlin.test.assertTrue
  * Esta guarda, sobre el código de `ui/` sin comentarios, falla si vuelve:
  *
  * - **una píldora amarilla**: `TonoDePildora.Marca` ya no existe; nadie puede nombrarlo.
- * - **una persona en amarillo**: ningún `AvatarDePersona(` recibe `TonoDeIcono.Marca`, y su tono por
- *   defecto no es la marca.
+ * - **una persona en amarillo lleno**: ningún `AvatarDePersona(` recibe `TonoDeIcono.Marca`, y su tono
+ *   por defecto no es la marca. El amarillo **suave** sí se permite: «Tú» va en `TonoDeIcono.Propio`
+ *   (el `tinte` con la letra en `aviso`); lo prohibido es el **lleno** (`marca`).
  * - **un círculo amarillo en una fila**: `IconoEnCirculo` es neutro por defecto, y `TonoDeIcono.Marca`
- *   solo aparece fuera de `ds/` en las propuestas de Movi que la maqueta pinta así (la tarjeta de los
- *   avisos del banco en Actividad y «Movi propone hoy» en Inicio), con nombre en [PROPUESTAS].
+ *   solo aparece fuera de `ds/` en **las dos únicas excepciones**, las propuestas que la maqueta pinta
+ *   así: la campana de la tarjeta de los avisos del banco en Actividad y el ícono de «Movi propone hoy»
+ *   en Inicio. Están con nombre en [PROPUESTAS], y la guarda falla si sobra o falta alguna.
  * - **una fila de navegación armada a mano**: las cinco que había usan `FilaDeNavegacion`.
  */
 class ElAmarilloEsDeLaAccionTest {
@@ -54,7 +56,7 @@ class ElAmarilloEsDeLaAccionTest {
                 if ("AvatarDePersona(" in linea && "TonoDeIcono.Marca" in linea) "${nombre(ruta)}:${n + 1}" else null
             }
         }
-        assertTrue(donde.isEmpty(), "Un avatar de persona en amarillo lleno («Tú» va en Tinta):\n" + donde.joinToString("\n"))
+        assertTrue(donde.isEmpty(), "Un avatar de persona en amarillo lleno («Tú» va en Propio, el tinte):\n" + donde.joinToString("\n"))
     }
 
     @Test
@@ -65,6 +67,18 @@ class ElAmarilloEsDeLaAccionTest {
                 ?: error("No encontré $componente en Fila.kt")
             assertTrue("tono: TonoDeIcono = TonoDeIcono.Neutro" in firma, "$componente tiene que ser neutro por defecto: $firma")
         }
+    }
+
+    @Test
+    fun `las dos excepciones siguen siendo amarillas, y son solo dos`() {
+        val conMarca = ui.filterValues { Regex("""TonoDeIcono\.Marca\b""").containsMatchIn(it) }.keys.map(::nombre).toSet()
+        assertEquals(PROPUESTAS, conMarca, "las únicas que pintan el círculo amarillo lleno fuera de ds/")
+    }
+
+    @Test
+    fun `el amarillo suave se permite en una persona`() {
+        val fila = ds.entries.single { it.key.endsWith("/Fila.kt") }.value
+        assertTrue("TonoDeIcono.Propio -> colores.tinte" in fila, "«Tú» va en el tinte, el amarillo suave")
     }
 
     @Test

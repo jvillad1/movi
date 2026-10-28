@@ -203,25 +203,27 @@ fun Fila(
  *
  * - [Neutro] (el de siempre, vuelta 42): el círculo en `capa3` con el ícono en la tinta. Es el de
  *   **toda fila que lleva a otro lado** ([FilaDeNavegacion]) y el de Ajustes.
- * - [Tinta]: la tinta llena con la letra blanca. Lo propio: «Tú» entre los miembros de un grupo.
+ * - [Propio]: el tinte (el amarillo **suave**) con la letra en el ocre del aviso. Lo propio: «Tú»
+ *   entre los miembros de un grupo, que se distingue de Caro sin pesar (en la tinta llena, cuatro
+ *   gastos tuyos seguidos eran cuatro círculos negros).
  * - [Aviso]: el tinte con el ocre. Una fila que avisa algo; el amarillo suave es solo para eso.
  * - [Info], [Peligro], [Exito]: un estado, sobre el lavado de su color.
  * - [Marca]: el círculo **lleno de amarillo**. Solo el ícono de una propuesta de Movi
  *   ([TarjetaDePropuesta], la tarjeta de los avisos del banco en Actividad): el amarillo lleno es de la
  *   acción, nunca de una fila, una persona ni un estado (`ElAmarilloEsDeLaAccionTest`).
  */
-enum class TonoDeIcono { Marca, Neutro, Tinta, Info, Aviso, Peligro, Exito }
+enum class TonoDeIcono { Marca, Neutro, Propio, Info, Aviso, Peligro, Exito }
 
 /**
  * El color del ícono (o la inicial) de un tono, en la paleta del tema. Pura. La marca (vuelta 29) es
  * la tinta: va sobre el círculo amarillo ([fondoDelTonoDeIcono]), porque el amarillo no se lee
  * como trazo sobre el blanco. El neutro, la tinta sobre la capa 3 (vuelta 42; era el texto medio
- * sobre su lavado); la tinta, el blanco de la tarjeta.
+ * sobre su lavado); lo propio, el ocre del aviso sobre el tinte.
  */
 fun colorDelTonoDeIcono(tono: TonoDeIcono, colores: ColoresDeMovi): Color = when (tono) {
     TonoDeIcono.Marca -> colores.sobreMarca
     TonoDeIcono.Neutro -> colores.texto
-    TonoDeIcono.Tinta -> colores.tarjeta
+    TonoDeIcono.Propio -> colores.aviso
     TonoDeIcono.Info -> colores.entreCuentas
     TonoDeIcono.Aviso -> colores.aviso
     TonoDeIcono.Peligro -> colores.sale
@@ -230,13 +232,13 @@ fun colorDelTonoDeIcono(tono: TonoDeIcono, colores: ColoresDeMovi): Color = when
 
 /**
  * El círculo de detrás de un tono. Pura. La marca va **llena de amarillo** (el ícono de una propuesta
- * de la opción 3); el neutro, en la capa 3; la tinta, llena de tinta; el aviso, en el tinte (`lavado`
- * ya lo da); lo demás, el lavado de su color.
+ * de la opción 3); el neutro, en la capa 3; lo propio y el aviso, en el tinte (el amarillo suave);
+ * lo demás, el lavado de su color.
  */
 fun fondoDelTonoDeIcono(tono: TonoDeIcono, colores: ColoresDeMovi): Color = when (tono) {
     TonoDeIcono.Marca -> colores.marca
     TonoDeIcono.Neutro -> colores.capa3
-    TonoDeIcono.Tinta -> colores.texto
+    TonoDeIcono.Propio -> colores.tinte
     else -> colores.lavado(colorDelTonoDeIcono(tono, colores))
 }
 
@@ -297,8 +299,9 @@ const val TAG_AVATAR_DE_PERSONA: String = "ds:avatar-de-persona"
 /**
  * **Una persona**: su inicial en un círculo de [Medida.avatar], en el fondo de su [tono]. Para los
  * miembros de un espacio («J» y «C» en «Casa con Caro») y quien pagó un gasto. Neutro por defecto;
- * «Tú» va en [TonoDeIcono.Tinta] (vuelta 42: iba lleno de amarillo, y una lista de gastos tuyos era
- * una columna de círculos amarillos). Una persona **nunca** va en [TonoDeIcono.Marca].
+ * «Tú» va en [TonoDeIcono.Propio], el tinte con el ocre (vuelta 42: iba lleno de amarillo, y una
+ * lista de gastos tuyos era una columna de círculos amarillos). Una persona **nunca** va en
+ * [TonoDeIcono.Marca]: el amarillo lleno es de la acción; el suave, sí.
  */
 @Composable
 fun AvatarDePersona(
