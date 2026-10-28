@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
@@ -34,6 +36,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
  * Task 5 — «Escribir el nombre sugiere la categoría», ejercida desde la hoja de «Agregar» de
@@ -102,6 +106,31 @@ class HojaAgregarSugerenciaDeCategoriaTest {
 
         composeRule.onNodeWithText("Fútbol").assertExists()
         composeRule.onNodeWithText("Movi la reconoce: Mora Soccer").assertExists()
+    }
+
+    /**
+     * Vuelta 34: «Movi la reconoce: …» va en el renglón del rótulo «Categoría», que está siempre.
+     * Antes era un renglón propio que se iba al elegir otra a mano, y la hoja —anclada abajo—
+     * movía el teclado bajo el dedo.
+     */
+    @Test
+    fun la_sugerencia_aparece_y_se_va_sin_mover_el_teclado() {
+        montarHoja()
+        val tecla = { composeRule.onNodeWithText("9").getUnclippedBoundsInRoot() }
+        val sinSugerencia = tecla()
+
+        escribirLaNota("Mora")
+        composeRule.onNodeWithText("Movi la reconoce: Mora Soccer").assertExists()
+        assertEquals(sinSugerencia, tecla(), "aparecer la sugerencia movió el teclado")
+        // La sugerencia va entre el rótulo y «Todas ›», y es la que cede: «Todas» sigue entera.
+        val todas = composeRule.onNodeWithTag(TAG_PASTILLA_TODAS_LAS_CATEGORIAS_AGREGAR)
+        assertEquals(todas.getUnclippedBoundsInRoot(), todas.getBoundsInRoot(), "«Todas ›» no se corta")
+        val sugerencia = composeRule.onNodeWithText("Movi la reconoce: Mora Soccer", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        assertTrue(sugerencia.right <= todas.getUnclippedBoundsInRoot().left, "la sugerencia va antes de «Todas»")
+
+        elegirCategoriaAMano("Transporte")
+        composeRule.onNodeWithText("Movi la reconoce: Mora Soccer").assertDoesNotExist()
+        assertEquals(sinSugerencia, tecla(), "irse la sugerencia movió el teclado")
     }
 
     /** Si la nota se borra después, la sugerencia se deshace y vuelve a lo que había antes. */
@@ -301,7 +330,7 @@ class HojaAgregarSugerenciaDeCategoriaTest {
      * Tocar una celda elige y cierra el sub-picker solo (Ola B: la cuadrícula).
      */
     private fun elegirCategoriaAMano(nombre: String) {
-        tocar("Categoría")
+        tocar(TODAS_LAS_CATEGORIAS)
         composeRule.onNodeWithTag(TAG_BUSCAR_CATEGORIA).performTextInput(nombre)
         composeRule.waitForIdle()
         val existe = composeRule.onAllNodesWithTag(tagDeCeldaDeCategoria(nombre)).fetchSemanticsNodes().isNotEmpty()
