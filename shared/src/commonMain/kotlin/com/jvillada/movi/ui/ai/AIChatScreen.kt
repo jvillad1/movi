@@ -1,6 +1,15 @@
 package com.jvillada.movi.ui.ai
 
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.History
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.zIndex
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
+import com.jvillada.movi.ui.components.ds.TarjetaDePropuesta
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import com.jvillada.movi.ui.fecha.hoyEnAppZone
+import kotlinx.datetime.Clock
 import com.jvillada.movi.ui.components.ds.AccionDeEncabezado
 import com.jvillada.movi.ui.components.ds.Pildora
 import com.jvillada.movi.ui.components.ds.Seccion
@@ -84,7 +93,16 @@ fun AIChatScreen(
     // Las sugerencias salen de lo que el Inicio dejó en su caché: el chat no pide nada nuevo para
     // armarlas (ver [preguntasSugeridas], que tampoco llama al modelo). Sin caché —se abrió el chat
     // antes que el Inicio— salen las de respaldo, que valen para cualquiera.
-    val sugeridas = remember { preguntasParaTocar(DashboardDataCache.data ?: DashboardData()) }
+    val todasLasSugeridas = remember { preguntasParaTocar(DashboardDataCache.data ?: DashboardData()) }
+    // Vuelta de diseño 30: ¿la IA contesta preguntas libres? Lo dice la conversación al llegar
+    // (`iaDisponible`) y lo corrige cada respuesta: un aviso de «no disponible» la apaga, una del
+    // modelo la prende. Sin ella, solo se ofrecen las tres que Movi contesta sin el modelo.
+    var iaDisponible by remember { mutableStateOf(true) }
+    val sugeridas = preguntasQueSePuedenHacer(todasLasSugeridas, iaDisponible)
+    // «Empezar una conversación nueva» arriba, si la guardada es de otro día y el dueño no dijo
+    // «Seguir con esta».
+    var seguirConLaVieja by remember { mutableStateOf(false) }
+    val hoy = remember { hoyEnAppZone() }
     // La última respuesta dijo que la IA no está disponible: debajo van las tres que Movi contesta
     // sin ella, para que «sí funcionan» se pueda tocar (ver [MOVI_AI_NO_DISPONIBLE]).
     var ofrecerLasQueFuncionan by remember { mutableStateOf(false) }
@@ -133,6 +151,7 @@ fun AIChatScreen(
                 imageBase64 = image?.let { Base64.encode(it.bytes) },
                 imageMime = image?.mimeType,
                 preguntaSugerida = sugerida?.id,
+                enviadoEn = Clock.System.now().toEpochMilliseconds(),
             ),
         )
         input = ""
@@ -145,8 +164,17 @@ fun AIChatScreen(
             val history = mensajesParaEnviar(messages)
             val reply = runCatching { Repositories.wallets.chatAi(AiChatRequest(history)) }
             val replyText = textoDeLaRespuesta(reply.getOrNull(), reply.exceptionOrNull())
-            messages.add(ChatMessage(ChatRole.ASSISTANT, replyText, propuestas = reply.getOrNull()?.propuestas.orEmpty()))
+            messages.add(
+                ChatMessage(
+                    ChatRole.ASSISTANT, replyText, propuestas = reply.getOrNull()?.propuestas.orEmpty(),
+                    enviadoEn = Clock.System.now().toEpochMilliseconds(),
+                ),
+            )
             ofrecerLasQueFuncionan = esCodigoDeIaNoDisponible(reply.getOrNull()?.codigo)
+            // Lo que contestó dice si la IA anda: el aviso la apaga; una respuesta del modelo (no una
+            // de las tres sin IA, que contestan igual sin crédito) la prende.
+            if (ofrecerLasQueFuncionan) iaDisponible = false
+            else if (reply.isSuccess && sugerida == null) iaDisponible = true
             loading = false
         }
     }
@@ -163,6 +191,7 @@ fun AIChatScreen(
         // al final de la conversación y no antes de lo que se recarga.
         val guardada = runCatching { Repositories.wallets.getConversacionDelAsistente() }.getOrNull()
         if (guardada != null && messages.isEmpty()) messages.addAll(guardada.mensajes)
+        if (guardada != null) iaDisponible = guardada.iaDisponible
         historialCargado = true
         if (!yaSeMandoLaInicial && !preguntaInicial.isNullOrBlank()) {
             yaSeMandoLaInicial = true
@@ -183,8 +212,11 @@ fun AIChatScreen(
         }
     }
 
+    // Vuelta de diseño 30: la lista pinta piezas (los separadores de día y los mensajes), no los
+    // mensajes sueltos: el último índice sale de ellas.
+    val piezas = piezasDelChat(messages, hoy)
     LaunchedEffect(messages.size, loading) {
-        val target = messages.size + if (loading) 1 else 0
+        val target = piezas.size + if (loading) 1 else 0
         if (target > 0) listState.animateScrollToItem(target - 1)
     }
     // **Y al abrir el teclado también.** La lista encoge por el `imePadding()` de la raíz, así que
@@ -192,12 +224,21 @@ fun AIChatScreen(
     // — el mismo síntoma que el teclado encima del campo, un renglón más arriba.
     val tecladoALaVista = elTecladoEstaALaVista()
     LaunchedEffect(tecladoALaVista) {
-        if (tecladoALaVista && messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
+        if (tecladoALaVista && piezas.isNotEmpty()) listState.animateScrollToItem(piezas.size - 1)
     }
 
     Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         // F60 · F22: encabezado único; Movi AI se abre desde Más — destino de reserva si no
         // hay historial. El «BETA» pasa a la derecha, como marca, no como parte del título.
+        // Vuelta de diseño 30: **con fondo opaco y encima de la lista**. Al hacer scroll el texto de
+        // la conversación se veía por detrás del título.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .zIndex(1f)
+                .background(Movi.colores.fondo)
+                .testTag(TAG_ENCABEZADO_DE_MOVI_AI),
+        ) {
         MinScreenHeader(
             title = "Movi AI",
             leading = HeaderLeading.Back(fallback = Screen.Mas),
@@ -211,9 +252,28 @@ fun AIChatScreen(
                 AccionDeEncabezado(NUEVA_CONVERSACION, Icons.Rounded.Add, onClick = { nuevaConversacion() }, habilitado = !loading)
             } else null,
         )
+        }
+
+        // La conversación guardada es de otro día: se ofrece empezar otra, sin borrar nada sola.
+        val tituloDeLaVieja = if (seguirConLaVieja || loading) null else tituloDeLaConversacionVieja(messages, hoy)
+        if (tituloDeLaVieja != null) {
+            TarjetaDePropuesta(
+                icono = Icons.Rounded.History,
+                titulo = tituloDeLaVieja,
+                cuerpo = CUERPO_DE_LA_CONVERSACION_VIEJA,
+                accion = EMPEZAR_UNA_CONVERSACION_NUEVA,
+                onAccion = { nuevaConversacion() },
+                accionSecundaria = SEGUIR_ESTA,
+                onAccionSecundaria = { seguirConLaVieja = true },
+                modifier = Modifier
+                    .padding(horizontal = Medida.margenDePantalla)
+                    .padding(bottom = Espacio.xs)
+                    .testTag(TAG_CONVERSACION_DE_OTRO_DIA),
+            )
+        }
 
         LazyColumn(
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).clipToBounds(),
             state = listState,
             contentPadding = PaddingValues(Espacio.m),
         ) {
@@ -226,17 +286,34 @@ fun AIChatScreen(
                     )
                 }
             }
-            items(messages) { msg ->
+            // Vuelta de diseño 30: los días separados, y lo de otro día atenuado y con su fecha.
+            items(piezas) { pieza ->
+                when (pieza) {
+                    is PiezaDelChat.Dia -> Seccion(titulo = pieza.rotulo, modifier = Modifier.testTag(TAG_DIA_DEL_CHAT))
+                    is PiezaDelChat.Mensaje -> {
+                val msg = pieza.mensaje
                 if (msg.role == ChatRole.USER) {
                     AIMsgUser(msg.content, hasImage = msg.imageBase64 != null || msg.teniaImagen)
                 } else {
-                    AIMsgAI(msg.content)
+                    AIMsgAI(msg.content, apagado = pieza.deOtroDia)
+                    if (pieza.deOtroDia && pieza.cifrasDe != null) {
+                        // «Preguntar de nuevo» solo si se puede contestar: una pregunta libre sin la IA
+                        // daría el aviso otra vez.
+                        val repetir = pieza.pregunta?.takeIf { iaDisponible || it.preguntaSugerida != null }
+                        LasCifrasEranDeOtroDia(
+                            deCuando = pieza.cifrasDe,
+                            onPreguntarDeNuevo = repetir?.let { p -> { preguntaParaRepetir(p).let { enviar(it.texto, it.sugerida) } } },
+                            habilitado = !loading,
+                        )
+                    }
                     msg.propuestas.forEach { propuesta ->
                         PropuestaDelAsistente(
                             propuesta = propuesta,
                             estado = estadosDePropuestas[propuesta.id] ?: propuesta.estado,
                             onEstado = { estadosDePropuestas[propuesta.id] = it },
                         )
+                    }
+                }
                     }
                 }
             }
@@ -371,6 +448,50 @@ fun AIChatScreen(
     }
 }
 
+/** Tag del encabezado de Movi AI, con su fondo opaco. */
+internal const val TAG_ENCABEZADO_DE_MOVI_AI: String = "ai-encabezado"
+
+/** Tag de cada separador de día del chat. */
+internal const val TAG_DIA_DEL_CHAT: String = "ai-dia-del-chat"
+
+/** Tag de la línea «Estas cifras eran de ayer» de una respuesta de otro día. */
+internal const val TAG_CIFRAS_DE_OTRO_DIA: String = "ai-cifras-de-otro-dia"
+
+/** Tag de la tarjeta que ofrece empezar otra conversación. */
+internal const val TAG_CONVERSACION_DE_OTRO_DIA: String = "ai-conversacion-de-otro-dia"
+
+/**
+ * Debajo de una respuesta de otro día: «Estas cifras eran de ayer» y, si se puede, «Preguntar de
+ * nuevo» (un [Boton] de texto). Alineado con el texto de la respuesta, después del ícono.
+ */
+@Composable
+private fun LasCifrasEranDeOtroDia(deCuando: String, onPreguntarDeNuevo: (() -> Unit)?, habilitado: Boolean) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = Icono.l + Espacio.s, bottom = Espacio.s)
+            .testTag(TAG_CIFRAS_DE_OTRO_DIA),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
+    ) {
+        Text(
+            text = textoDeLasCifrasViejas(deCuando),
+            style = Movi.textos.apoyo,
+            color = Movi.colores.textoMedio,
+            modifier = Modifier.weight(1f),
+        )
+        if (onPreguntarDeNuevo != null) {
+            Boton(
+                PREGUNTAR_DE_NUEVO,
+                onClick = onPreguntarDeNuevo,
+                variante = VarianteDeBoton.Fantasma,
+                tamano = TamanoDeBoton.S,
+                habilitado = habilitado,
+            )
+        }
+    }
+}
+
 /** Tag estable de la burbuja de lo que escribió el dueño. */
 internal const val TAG_BURBUJA_DEL_DUENO: String = "ai-burbuja-del-dueno"
 
@@ -419,7 +540,7 @@ private fun AIMsgUser(text: String, hasImage: Boolean = false) {
 }
 
 @Composable
-private fun AIMsgAI(text: String) {
+private fun AIMsgAI(text: String, apagado: Boolean = false) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(bottom = Espacio.s),
         horizontalArrangement = Arrangement.Start,
@@ -437,7 +558,7 @@ private fun AIMsgAI(text: String) {
         Spacer(Modifier.width(Espacio.s))
         // Vuelta de diseño 12: con formato (párrafos, listas, negrita, cifras) y a todo el ancho que
         // queda; antes era un solo texto plano de 290 dp como mucho.
-        TextoDelAsistente(text, modifier = Modifier.weight(1f))
+        TextoDelAsistente(text, modifier = Modifier.weight(1f), apagado = apagado)
     }
 }
 

@@ -30,7 +30,11 @@ import java.util.Date
  * llama a Anthropic— junto a las rutas de siempre (`/api/events`, `/api/recurring-rules`…), que
  * son las que confirman una propuesta.
  */
-internal class AndamioDelAsistente(nombreDeLaBase: String) {
+internal class AndamioDelAsistente(
+    nombreDeLaBase: String,
+    /** Las que una prueba necesita además (los espacios, para «solo tu parte»). */
+    tablasDeMas: Array<Table> = emptyArray(),
+) {
     val secreto = "secreto-de-prueba-de-la-ola-3-con-32-caracteres"
     val duenoA = "user-a-ola3"
     val duenoB = "user-b-ola3"
@@ -38,7 +42,7 @@ internal class AndamioDelAsistente(nombreDeLaBase: String) {
     val cuentaDeB = "acc-nu-b"
 
     /** Todas las tablas que tocan el chat y las rutas que confirman. */
-    private val tablas: Array<Table> = arrayOf(
+    private val tablasDeSiempre: Array<Table> = arrayOf(
         Apartados, Users, Accounts, StatementImports, Events, VoidEvents, Budgets, RecurringRules,
         RecurringOccurrences, OccurrenceRejections, SmsMessages, Credits, Cards, Subscriptions,
         PushSubscriptions, Screens, PasswordResetTokens, CardPaymentDismissals, Goals, CategoryPrefs,
@@ -47,6 +51,8 @@ internal class AndamioDelAsistente(nombreDeLaBase: String) {
         // Las que leen las tres preguntas que Movi contesta sin el modelo (`LasPreguntasSugeridas.kt`).
         AnomaliasDescartadas, DestinosDescartados, DebitosDescartados, ReglasDeComercio,
     )
+
+    private val tablas: Array<Table> = tablasDeSiempre + tablasDeMas
 
     init {
         Database.connect(
