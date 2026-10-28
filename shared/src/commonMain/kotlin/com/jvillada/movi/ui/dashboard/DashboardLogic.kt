@@ -122,6 +122,11 @@ data class DashboardData(
     val cardCandidates: Int = 0,
     val pendingSms: Int = 0,
     /**
+     * Vuelta 44: cuánto dicen los avisos por confirmar, en pesos (`DashboardSummary.porConfirmarSuman`);
+     * `null` si alguno no se lee entero o el server no lo manda. La franja «Por confirmar» lo dice.
+     */
+    val porConfirmarSuman: Long? = null,
+    /**
      * Vuelta de diseño 22: los movimientos que entraron solos y esperan en «Por confirmar», contados
      * como renglones (`DashboardSummary.movimientosPorConfirmar`). Con esto el Inicio cuenta «Por
      * revisar» igual que Movimientos (ver [conteoPorRevisarDelInicio]).
@@ -1287,6 +1292,7 @@ internal fun DashboardData.conResumenDelInicio(s: DashboardSummary): DashboardDa
     spentByCategory = s.spentByCategory,
     cardCandidates = s.cardPaymentCandidates,
     pendingSms = s.pendingSms,
+    porConfirmarSuman = s.porConfirmarSuman,
     movimientosPorConfirmar = s.movimientosPorConfirmar,
     // Lo que se sabe de la captura de SMS. Viene en esta MISMA respuesta —no es una llamada
     // nueva— y es lo que le permite al Inicio decir «Movi nunca ha recibido un mensaje de tu
