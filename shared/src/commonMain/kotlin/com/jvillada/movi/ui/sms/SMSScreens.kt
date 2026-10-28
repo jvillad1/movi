@@ -97,6 +97,7 @@ import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.CUOTA_CATEGORY
+import com.jvillada.movi.shared.model.ParteElegida
 import com.jvillada.movi.shared.model.UpdateProfileRequest
 import com.jvillada.movi.shared.model.avisoDeCaptura
 import com.jvillada.movi.shared.model.capturaDeSms
@@ -1065,47 +1066,74 @@ fun SMSReconcileScreen(
         }
     }
 
-    // ── Repartir un envío entre varios pagos fijos (ver `RepartirEnReconciliar.kt`) ──────────────
-    // Solo para lo que salió: el server dice qué pagos del período puede saldar y si la suma es exacta.
+    // ── Un aviso que pagó varias cosas (vuelta 27, ver `RepartirEnPartes.kt`) ────────────────────
+    // Solo para lo que salió: el server dice qué pagos del período puede saldar, la suma exacta y el
+    // reparto de la última vez; Movi propone de entrada ([repartoDeEntrada]) y el dueño reparte en
+    // partes. **Nada se confirma solo**: «Repartir así» abre el editor ya lleno.
     var reparto by remember { mutableStateOf<com.jvillada.movi.shared.model.PropuestaDeReparto?>(null) }
     LaunchedEffect(idDeLaPropuesta, parsed?.type) {
         reparto = if (parsed?.type == TransactionType.EXPENSE) {
             intentar { Repositories.wallets.getRepartoDelAviso(idDeLaPropuesta) }.getOrNull()
         } else null
     }
+    var enPartes by remember { mutableStateOf(false) }
+    var partesEnPantalla by remember { mutableStateOf(emptyList<ParteEnPantalla>()) }
+    val totalDelAviso = parsed?.amount?.roundToLong() ?: 0L
+    // La persona del aviso: la que Movi conoce, o el nombre que dice el banco si nombra una cuenta.
+    val terceroDelAviso: TerceroDelAviso? = reparto?.destinoNombre?.let { nombre ->
+        TerceroDelAviso(nombre = "Transferencia a $nombre", corto = nombre, destinoId = reparto?.destinoId)
+    } ?: comercio?.trim()?.takeIf { identificador != null && it.isNotEmpty() }?.let { TerceroDelAviso(it, it) }
+    val categoriaParaLasPartes = categoriaDeGastoOAnada(selectedCategory ?: parsed?.category)
+    val repartoPropuesto = reparto?.let { r ->
+        com.jvillada.movi.shared.model.repartoDeEntrada(r, resolvedAccount?.id, terceroDelAviso?.nombre, categoriaParaLasPartes)
+    }
+    val categoriasParaLasPartes = categoriasParaElegirEnElSms(
+        propuesta = categoriaParaLasPartes,
+        tipo = TransactionType.EXPENSE,
+        usadas = UsedCategoriesCache.used,
+        prefs = UsedCategoriesCache.prefs,
+        usos = UsedCategoriesCache.usosRecientes,
+        cuantas = CATEGORIAS_EN_LAS_PARTES,
+    ).filter { esCategoriaDeGastoSuelta(it) }
 
-    /** Un movimiento por pago, en una transacción del server: el mismo `…/confirmar` de siempre, con `reparto`. */
-    fun repartir(elegidos: List<Pair<com.jvillada.movi.shared.model.PagoParaRepartir, Long>>, recordar: Boolean) {
+    /** La primera parte al abrir «Esto pagó varias cosas»: lo que Movi proponía como un solo movimiento, sin monto. */
+    fun primeraParte(): ParteElegida {
+        val patas = lasDosPatas
+        val tipo = patas?.operacion?.let { com.jvillada.movi.shared.model.queFueLaOperacion(it) }
+        return if (patas != null && tipo != null) ParteElegida(tipo, destinoId = patas.destino.id)
+        else ParteElegida(com.jvillada.movi.shared.model.QueFueLaParte.GASTO, categoria = categoriaParaLasPartes)
+    }
+
+    /**
+     * **Confirmar las N partes**: todas en una transacción del server, con la suma exacta del aviso.
+     * Un aviso suelto va por `POST /api/sms/{id}/confirm` con `partes`; un pago avisado varias veces,
+     * por `…/grupo/{id}/confirmar` con `reparto`. Las dos terminan en la misma escritura.
+     */
+    fun confirmarLasPartes() {
         if (working) return
         if (sms?.state.let { it != null && it != SMS_STATE_PENDING }) return
         val p = parsed ?: return
         val acct = resolvedAccount ?: return
-        val destinoARecordar = reparto?.destinoId?.takeIf { recordar }
+        val elegidas = partesEnPantalla.map { it.parte }
+        if (!com.jvillada.movi.shared.model.sePuedenConfirmar(totalDelAviso, elegidas)) return
         working = true
         error = null
         coroutine.launch {
             intentar {
                 val momento = momentoDelMovimientoDelAviso(sms, pagoActual, p, ahora = Clock.System.now().toEpochMilliseconds())
-                val partes = partesDelReparto(
-                    elegidos = elegidos,
-                    cuenta = acct,
-                    leido = p,
-                    momento = momento,
-                    textoDelAviso = (avisoDeLaPropuesta ?: sms)?.text.orEmpty(),
-                    esComprobante = esComprobante,
-                    nuevoId = ::newId,
-                )
-                // Un aviso suelto va por la misma ruta con un solo miembro: el server lo bloquea y lo
-                // marca igual que a un pago avisado varias veces.
+                val texto = (avisoDeLaPropuesta ?: sms)?.text.orEmpty()
+                val partes = elegidas.map { elegida ->
+                    com.jvillada.movi.shared.model.aParteDelReparto(
+                        elegida, acct, momento, texto, comercio,
+                        if (esComprobante) EventSource.OCR else EventSource.SMS, ::newId,
+                    )
+                }
                 val elPago = pagoActual
-                Repositories.wallets.confirmarElMismoPago(
-                    elPago?.grupoId ?: smsId,
-                    ConfirmarElMismoPago(
-                        miembros = if (elPago != null) idsDelPago else listOf(smsId),
-                        reparto = partes,
-                        recordarDestinoId = destinoARecordar,
-                    ),
-                )
+                if (elPago != null) {
+                    Repositories.wallets.confirmarElMismoPago(elPago.grupoId, ConfirmarElMismoPago(miembros = idsDelPago, reparto = partes))
+                } else {
+                    Repositories.wallets.confirmarEnPartes(smsId, com.jvillada.movi.shared.model.PartesDelAviso(partes))
+                }
             }.onSuccess {
                 working = false
                 sms = sms?.copy(state = SMS_STATE_CONFIRMED)
@@ -1296,14 +1324,18 @@ fun SMSReconcileScreen(
                 }
             }
 
-            // «Son 2 pagos: Hipoteca Papá $2.228.152 + Libranza Papá $2.051.848», o repartir a mano.
-            val elReparto = reparto
-            if (elReparto != null && yaAnotadoCon == null && pendiente) {
+            // «¿Pagaste las cuotas de Libranza Papá y Hipoteca Papá? Suman … · sobran …»: abre el editor lleno.
+            val propuestoDeEntrada = repartoPropuesto
+            if (propuestoDeEntrada != null && yaAnotadoCon == null && pendiente && !enPartes) {
                 item(key = "reparto") {
                     TarjetaDelReparto(
-                        propuesta = elReparto,
+                        entrada = propuestoDeEntrada,
+                        moneda = parsed?.currency ?: "COP",
                         habilitado = !working && resolvedAccount != null,
-                        onRepartir = { elegidos, recordar -> repartir(elegidos, recordar) },
+                        onRepartir = {
+                            partesEnPantalla = enPantalla(propuestoDeEntrada.partes)
+                            enPartes = true
+                        },
                     )
                 }
             }
@@ -1408,8 +1440,46 @@ fun SMSReconcileScreen(
                 }
             }
 
+            // ── Esto pagó varias cosas: «Repartir en partes» (vuelta 27) ─────────────────────────
+            val sePuedeRepartir = parsed?.type == TransactionType.EXPENSE && totalDelAviso > 0L && yaAnotadoCon == null && pendiente
+            if (sePuedeRepartir) {
+                item(key = "partes") {
+                    if (enPartes) {
+                        EditorDePartes(
+                            total = totalDelAviso,
+                            moneda = parsed?.currency ?: "COP",
+                            origen = resolvedAccount,
+                            partes = partesEnPantalla,
+                            onPartes = { partesEnPantalla = it },
+                            cuentas = accounts,
+                            categorias = categoriasParaLasPartes,
+                            pagos = reparto?.pagos.orEmpty(),
+                            tercero = terceroDelAviso,
+                            categoriaDelAviso = categoriaParaLasPartes,
+                            habilitado = !working,
+                            onVolver = { enPartes = false },
+                        )
+                        if (error != null) {
+                            Text(error!!, style = Movi.textos.apoyo, color = Movi.colores.sale, modifier = Modifier.padding(top = Medida.dentroDeSeccion))
+                        }
+                    } else {
+                        Boton(
+                            texto = ESTO_PAGO_VARIAS_COSAS,
+                            onClick = {
+                                partesEnPantalla = enPantalla(listOf(primeraParte()))
+                                enPartes = true
+                            },
+                            variante = VarianteDeBoton.Fantasma,
+                            tamano = TamanoDeBoton.S,
+                            habilitado = !working && resolvedAccount != null,
+                        )
+                    }
+                }
+            }
+
             // ── Confirma o ajusta ────────────────────────────────────────────────────────────
-            item(key = "ajusta") {
+            // En partes, cada parte dice lo suyo: la categoría y el destino de un solo movimiento sobran.
+            if (!enPartes) item(key = "ajusta") {
                 Column {
                     Seccion(titulo = "Confirma o ajusta")
                     Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
@@ -1657,9 +1727,14 @@ fun SMSReconcileScreen(
                         categoriaParaAnotar != null && (parsed?.amount ?: 0.0) > 0.0
                     )
                 )
+            // En partes, el botón confirma las partes: solo cuando cuadran con el aviso.
+            val enPartesYa = enPartes && !soloCerrar && !alreadyResolved
+            val partesListas = enPartesYa && resolvedAccount != null && revisionContesto &&
+                com.jvillada.movi.shared.model.sePuedenConfirmar(totalDelAviso, partesEnPantalla.map { it.parte })
             Boton(
                 texto = when {
                     working -> "Guardando…"
+                    enPartesYa -> botonDeConfirmarLasPartes(partesEnPantalla.size)
                     soloCerrar -> "Cerrar los avisos"
                     ofreceAnotarloIgual -> ANOTARLO_IGUAL
                     anotarSinRevisar -> "Anotar de todas formas"
@@ -1667,6 +1742,7 @@ fun SMSReconcileScreen(
                 },
                 onClick = {
                     when {
+                        enPartesYa -> confirmarLasPartes()
                         ofreceAnotarloIgual -> sinLeer?.let { trae ->
                             parsed = trae.comoLectura()
                             selectedCategory = trae.categoria
@@ -1677,7 +1753,7 @@ fun SMSReconcileScreen(
                     }
                 },
                 modifier = Modifier.weight(1.7f),
-                habilitado = canConfirm,
+                habilitado = if (enPartesYa) !working && partesListas else canConfirm,
                 anchoCompleto = true,
             )
         }

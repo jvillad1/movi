@@ -82,6 +82,10 @@ internal class InvalidaElInicioAlEscribir(
         trasEscribir { delegado.confirmarElMismoPago(grupoId, pedido) }
     override suspend fun confirmarConLasDosPatas(smsId: String, patas: com.jvillada.movi.shared.model.DosPatasDelAviso): MismoPagoConfirmado =
         trasEscribir { delegado.confirmarConLasDosPatas(smsId, patas) }
+    override suspend fun confirmarEnPartes(smsId: String, partes: com.jvillada.movi.shared.model.PartesDelAviso): MismoPagoConfirmado =
+        trasEscribir { delegado.confirmarEnPartes(smsId, partes) }
+    override suspend fun repartirElMovimiento(eventoId: String, partes: com.jvillada.movi.shared.model.PartesDelAviso): MismoPagoConfirmado =
+        trasEscribir { delegado.repartirElMovimiento(eventoId, partes) }
     override suspend fun ignorarElMismoPago(grupoId: String, miembros: List<String>): Unit = trasEscribir { delegado.ignorarElMismoPago(grupoId, miembros) }
     override suspend fun noSonElMismoPago(grupoId: String, miembros: List<String>): Unit = trasEscribir { delegado.noSonElMismoPago(grupoId, miembros) }
     override suspend fun esteEsOtroPago(id: String): Unit = trasEscribir { delegado.esteEsOtroPago(id) }
