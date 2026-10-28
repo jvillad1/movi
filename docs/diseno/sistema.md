@@ -2445,7 +2445,7 @@ de plata nuevas**: confirmar sigue por `confirmarLoEntendido`.
 3. **Un aviso al que solo le falta la categoría se resuelve en su tarjeta.** `LoQueMoviEntendio.faltaSoloLaCategoria`
    (las dudas son solo `SIN_CATEGORIA` y la cuenta es segura): el botón principal es **«Elegir
    categoría»** (`ELEGIR_CATEGORIA`), que abre en la tarjeta las frecuentes del tipo con «Todas ›»
-   (`FilaDeCategorias`, relleno `Ninguno`; sin el uso del Inicio a mano, las que el dueño usa —
+   (`FilaDeCategorias`, relleno `Ninguno`, la fila de `Medida.altoDeFilaDePastillas`; sin el uso del Inicio a mano, las que el dueño usa —
    `PropuestasDeLaBandeja.categoriasDelDueno`—); «Todas ›» abre el selector completo en una hoja. Al
    elegir, la bandeja pasa la elegida a `loQueMoviEntendio(categoriaElegida = …)` —como si la hubiera
    elegido en Revisar aviso: cuenta como decidida, `ELEGIDA_EN_LA_TARJETA`— y la tarjeta queda
