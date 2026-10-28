@@ -12,7 +12,17 @@ import com.jvillada.movi.ui.components.WindowWidthClass
 import com.jvillada.movi.ui.dashboard.CuentaDelCarrusel
 import com.jvillada.movi.ui.dashboard.tarjetasPorRenglon
 import androidx.compose.foundation.layout.Column
-import com.jvillada.movi.ui.components.MasFormasDeAnotar
+import com.jvillada.movi.ui.components.LocalAtajosDeAgregar
+import com.jvillada.movi.ui.quickadd.AtajoDeAgregar
+import com.jvillada.movi.ui.quickadd.pantallaDelAtajo
+import com.jvillada.movi.ui.dashboard.DestinoDeLaAccion
+import com.jvillada.movi.ui.components.ds.RenglonesDelRotulo
+import androidx.compose.material.icons.rounded.NorthEast
+import androidx.compose.material.icons.rounded.SouthWest
+import androidx.compose.material.icons.rounded.SwapHoriz
+import androidx.compose.material.icons.rounded.CreditCard
+import androidx.compose.material.icons.rounded.Group
+import androidx.compose.material.icons.rounded.Receipt
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -23,9 +33,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.EventNote
 import androidx.compose.material.icons.automirrored.rounded.TrendingUp
 import androidx.compose.material.icons.rounded.AccountBalance
-import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.AutoAwesome
-import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Inbox
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Tune
@@ -78,7 +86,6 @@ import com.jvillada.movi.ui.dashboard.avanceDelChecklist
 import com.jvillada.movi.ui.dashboard.categoriasDelPeriodo
 import com.jvillada.movi.ui.dashboard.checklistDelPeriodoDe
 import com.jvillada.movi.ui.dashboard.cuentasDelCarrusel
-import com.jvillada.movi.ui.dashboard.destinoDeLaAccion
 import com.jvillada.movi.ui.dashboard.CONTRA_EL_PERIODO_PASADO
 import com.jvillada.movi.ui.dashboard.DiferenciaDeLaCategoria
 import com.jvillada.movi.ui.dashboard.diferenciaDeLaCategoria
@@ -95,6 +102,27 @@ import com.jvillada.movi.ui.dashboard.filasDelWidgetDeFalta
 import com.jvillada.movi.ui.dashboard.yNMas
 import com.jvillada.movi.shared.model.cifraDelPago
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.EsqueletoDeFila
+import com.jvillada.movi.ui.components.ds.Pildora
+import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
+import com.jvillada.movi.ui.components.ds.Separador
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
+import com.jvillada.movi.ui.components.ds.TonoDePildora
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import com.jvillada.movi.ui.dashboard.FILAS_DE_ULTIMOS_MOVIMIENTOS
+import com.jvillada.movi.ui.dashboard.filasDeUltimosMovimientos
+import com.jvillada.movi.ui.dashboard.pastillaDelVencimiento
+import com.jvillada.movi.ui.dashboard.proximoPagoDelInicio
+import com.jvillada.movi.ui.transactions.HojaDelMovimiento
+import com.jvillada.movi.ui.transactions.MovementRow
+import com.jvillada.movi.ui.transactions.MovementSingleRow
+import com.jvillada.movi.ui.transactions.TransferRow
 
 /**
  * # Las secciones del Inicio del rediseño (ola R1, generación 9)
@@ -132,20 +160,41 @@ const val TITULO_DE_LOS_WIDGETS: String = "Tus widgets"
 
 // ── La cuadrícula de acciones ────────────────────────────────────────────────
 
-/** El ícono de cada acción de la cuadrícula. */
+/** El ícono de cada acción de la cuadrícula: los de la maqueta de la opción 3. */
 private fun iconoDe(accion: AccionDelInicio): ImageVector = when (accion) {
-    AccionDelInicio.ANOTAR_GASTO -> Icons.Rounded.Edit
-    AccionDelInicio.ANOTAR_INGRESO -> Icons.Rounded.ArrowDownward
+    AccionDelInicio.ANOTAR_GASTO -> Icons.Rounded.NorthEast
+    AccionDelInicio.ANOTAR_INGRESO -> Icons.Rounded.SouthWest
+    AccionDelInicio.TRASPASAR -> Icons.Rounded.SwapHoriz
+    AccionDelInicio.PAGAR_TARJETA -> Icons.Rounded.CreditCard
+    AccionDelInicio.REPARTIR -> Icons.Rounded.Group
+    AccionDelInicio.SUBIR_COMPROBANTE -> Icons.Rounded.Receipt
     AccionDelInicio.REVISAR_AVISOS -> Icons.Rounded.Inbox
     AccionDelInicio.PREGUNTAR_A_MOVI -> Icons.Rounded.AutoAwesome
 }
 
 /**
- * **La cuadrícula de acciones** (camino 3): cuatro columnas, **una fila** (vuelta de diseño 26).
- * «Anotar gasto» es la destacada —lo que más se hace— y «Avisos» lleva la insignia de lo que espera en
- * Por revisar. Cada una abre lo que ya existe (ver `destinoDeLaAccion`). Traspaso, Pagar tarjeta,
- * Repartir y Comprobante viven en el menú de atajos: debajo, «Más formas de anotar» (vuelta 38, el
- * teléfono ya no tiene «+») y el «+» del rail.
+ * **Hace [accion]**: una pantalla se abre; un atajo de anotar lo hace la cáscara ([hacerElAtajo], por
+ * `LocalAtajosDeAgregar`), igual que desde el menú del «+». Fuera de la app (una prueba que monta el
+ * Inicio solo) los atajos que son una pantalla igual navegan; «Repartir» y «Subir comprobante», que
+ * son hojas de la cáscara, no hacen nada.
+ */
+internal fun hacerLaAccion(
+    accion: AccionDelInicio,
+    onNavigate: (Screen) -> Unit,
+    hacerElAtajo: ((AtajoDeAgregar) -> Unit)?,
+) {
+    when (val destino = accion.destino) {
+        is DestinoDeLaAccion.Pantalla -> onNavigate(destino.pantalla)
+        is DestinoDeLaAccion.Atajo ->
+            if (hacerElAtajo != null) hacerElAtajo(destino.atajo) else pantallaDelAtajo(destino.atajo)?.let(onNavigate)
+    }
+}
+
+/**
+ * **La cuadrícula de acciones** (camino 3): **ocho, en dos filas de cuatro** (vuelta 39, la opción 3).
+ * «Anotar gasto» es la destacada —lo que más se hace— y «Revisar avisos» lleva la insignia de lo que
+ * espera en Por revisar. Cada una abre lo que ya existe (ver [hacerLaAccion]). Los rótulos van en dos
+ * renglones de alto fijo y nunca parten una palabra ([RenglonesDelRotulo.Dos]).
  */
 @Composable
 internal fun AccionesDelInicioSection(
@@ -153,13 +202,13 @@ internal fun AccionesDelInicioSection(
     onNavigate: (Screen) -> Unit,
 ) {
     val insignia = pendientesPorRevisar(data)
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    val atajos = LocalAtajosDeAgregar.current
     CuadriculaDeAcciones(
         acciones = accionesDelInicio().map { accion ->
             Accion(
                 rotulo = accion.rotulo,
                 icono = iconoDe(accion),
-                onClick = { onNavigate(destinoDeLaAccion(accion)) },
+                onClick = { hacerLaAccion(accion, onNavigate, atajos) },
                 destacada = accion == AccionDelInicio.ANOTAR_GASTO,
                 insignia = if (accion == AccionDelInicio.REVISAR_AVISOS) insignia else null,
                 // Vuelta de diseño 22: la insignia dice de qué es su número («2 avisos · 1 movimiento»).
@@ -167,11 +216,8 @@ internal fun AccionesDelInicioSection(
             )
         },
         modifier = Modifier.padding(horizontal = Medida.margenDePantalla),
+        renglones = RenglonesDelRotulo.Dos,
     )
-    // Vuelta 38: sin «+» en la barra del teléfono, el resto de las formas de anotar (Traspaso, Pago de
-    // tarjeta, Repartir, Subir comprobante) se abre de aquí. La vuelta 39 lo cambia por las 8 acciones.
-    MasFormasDeAnotar()
-    }
 }
 
 // ── Movi propone hoy ─────────────────────────────────────────────────────────
@@ -196,8 +242,10 @@ internal fun PropuestasDelInicioSection(
     data: DashboardData,
     onNavigate: (Screen) -> Unit,
     onDescartarCierre: (String) -> Unit,
+    /** Vuelta 39: `false` cuando «Próximo pago» ya lo dice arriba (ver `visibleSections`). */
+    conElPago: Boolean = true,
 ) {
-    val todas = propuestasDelInicio(data)
+    val todas = propuestasDelInicio(data, conElPago)
     val aLaVista = propuestasALaVista(todas)
     val cargando = LocalCargandoElInicio.current
     val alcance = rememberCoroutineScope()
@@ -266,6 +314,155 @@ private fun EsqueletoDePropuesta() {
             LineaEsqueleto(fraccionDelAncho = 0.45f, estilo = Movi.textos.cuerpo)
             BloqueEsqueleto(alto = Medida.altoChico, ancho = Medida.avatarGrande * 2)
         }
+    }
+}
+
+// ── Próximo pago ─────────────────────────────────────────────────────────────
+
+/** La tarjeta «Próximo pago» del Inicio. */
+const val TAG_PROXIMO_PAGO: String = "inicio-proximo-pago"
+
+/** El esqueleto de «Próximo pago», mientras los vencimientos no llegan. */
+const val TAG_ESQUELETO_DEL_PROXIMO_PAGO: String = "inicio-esqueleto-del-proximo-pago"
+
+/**
+ * **«Próximo pago»** (vuelta 39, la opción 3): el pago pendiente más urgente del período en una
+ * tarjeta blanca —«Próximo pago · vence el 22 de octubre», su ícono, su nombre y su cifra (la de
+ * siempre: `cifraDelPago`, el mínimo en una tarjeta), la pastilla si ya venció o vence hoy o mañana—
+ * con el botón amarillo «Anotar pago», que hace lo mismo que el de «Movi propone hoy»
+ * ([proximoPagoDelInicio], `accionDelPago`). «y N más» lleva a Pagos. Sin pagos pendientes no se pinta
+ * (`visibleSections`); mientras los vencimientos no llegan, un esqueleto del mismo alto.
+ */
+@Composable
+internal fun ProximoPagoSection(data: DashboardData, onNavigate: (Screen) -> Unit) {
+    val proximo = proximoPagoDelInicio(data)
+    if (proximo == null) {
+        if (LocalCargandoElInicio.current) {
+            BloqueEsqueleto(
+                alto = Medida.altoDeFilaDoble + Medida.objetivoTactil,
+                modifier = Modifier.padding(horizontal = Medida.margenDePantalla).testTag(TAG_ESQUELETO_DEL_PROXIMO_PAGO),
+            )
+        }
+        return
+    }
+    val pago = proximo.pago
+    Superficie(
+        modifier = Modifier.padding(horizontal = Medida.margenDePantalla).fillMaxWidth().testTag(TAG_PROXIMO_PAGO),
+    ) {
+        Text(
+            text = proximo.titulo,
+            style = Movi.textos.apoyoMedio,
+            color = if (proximo.urgente) Movi.colores.aviso else Movi.colores.textoMedio,
+        )
+        Spacer(Modifier.height(Espacio.xs))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.s)) {
+            IconoDeCategoria(pago.categoria.ifBlank { pago.nombre })
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
+                    Text(
+                        text = pago.nombre,
+                        style = Movi.textos.titulo,
+                        color = Movi.colores.texto,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    pastillaDelVencimiento(pago.diasParaVencer)?.let { texto ->
+                        Pildora(texto, tono = if (pago.diasParaVencer < 0) TonoDePildora.Peligro else TonoDePildora.Aviso)
+                    }
+                }
+                // Una tarjeta sin mínimo conocido no tiene cifra que decir: su «monto» es el saldo.
+                cifraDelPago(pago)?.let { Cifra(it, VarianteDeCifra.Fila, moneda = pago.moneda) }
+            }
+            Boton(proximo.accion, onClick = { onNavigate(proximo.alTocar) }, tamano = TamanoDeBoton.S)
+        }
+        yNMas(proximo.masPagos)?.let { mas ->
+            Boton(
+                texto = mas,
+                onClick = { onNavigate(Screen.Plan(com.jvillada.movi.ui.plan.SEGMENTO_PAGOS)) },
+                variante = VarianteDeBoton.Fantasma,
+                tamano = TamanoDeBoton.S,
+            )
+        }
+    }
+}
+
+// ── Últimos movimientos ──────────────────────────────────────────────────────
+
+/** La lista «Últimos movimientos» del Inicio. */
+const val TAG_ULTIMOS_MOVIMIENTOS: String = "inicio-ultimos-movimientos"
+
+/** Lo que dice el enlace de «Últimos movimientos» que abre Actividad. */
+const val VER_TODA_LA_ACTIVIDAD: String = "Ver toda la actividad"
+
+/**
+ * **«Últimos movimientos»** (vuelta 39, la opción 3): las [FILAS_DE_ULTIMOS_MOVIMIENTOS] filas más
+ * recientes de Actividad en una lista blanca, con **la misma fila** ([MovementSingleRow], y
+ * [TransferRow] para un traspaso): la misma cifra —tu parte primero, «−» en un gasto, «+» verde en un
+ * ingreso—, el mismo subtítulo y el mismo ícono. Tocar una abre su detalle ([HojaDelMovimiento], la de
+ * Actividad); «Ver toda la actividad» abre Actividad. Mientras no llegaron, tres filas esqueleto.
+ */
+@Composable
+internal fun UltimosMovimientosSection(
+    data: DashboardData,
+    onNavigate: (Screen) -> Unit,
+    onCambiado: () -> Unit,
+) {
+    val eventos = data.ultimosMovimientos
+    if (eventos == null && !LocalCargandoElInicio.current) return
+    if (eventos != null && eventos.isEmpty()) return
+    val cuentas = data.accounts.orEmpty()
+    val nombres = remember(cuentas) { cuentas.associate { it.id to it.name } }
+    val tipos = remember(cuentas) { cuentas.associate { it.id to it.type } }
+    var abierto by remember { mutableStateOf<FinancialEvent?>(null) }
+    Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla).testTag(TAG_ULTIMOS_MOVIMIENTOS)) {
+        Seccion(
+            titulo = "Últimos movimientos",
+            accion = VER_TODA_LA_ACTIVIDAD,
+            onAccion = { onNavigate(Screen.Transactions()) },
+        )
+        Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
+            if (eventos == null) {
+                repeat(FILAS_DE_ULTIMOS_MOVIMIENTOS) { i ->
+                    EsqueletoDeFila()
+                    if (i < FILAS_DE_ULTIMOS_MOVIMIENTOS - 1) Separador()
+                }
+            } else {
+                val filas = filasDeUltimosMovimientos(eventos)
+                filas.forEachIndexed { i, fila ->
+                    key(fila.key) {
+                        when (fila) {
+                            is MovementRow.Single -> MovementSingleRow(
+                                tx = fila.event,
+                                accountNames = nombres,
+                                onClick = { abierto = fila.event },
+                            )
+                            is MovementRow.Transfer -> TransferRow(
+                                row = fila,
+                                accountNames = nombres,
+                                accountTypes = tipos,
+                                onClick = { abierto = fila.out },
+                            )
+                            is MovementRow.Ajustes -> fila.events.forEach { ajuste ->
+                                MovementSingleRow(tx = ajuste, accountNames = nombres, onClick = { abierto = ajuste })
+                            }
+                        }
+                    }
+                    if (i < filas.lastIndex) Separador()
+                }
+            }
+        }
+    }
+    abierto?.let { evento ->
+        HojaDelMovimiento(
+            event = evento,
+            cuentas = cuentas,
+            onDismiss = { abierto = null },
+            onCambiado = {
+                abierto = null
+                onCambiado()
+            },
+        )
     }
 }
 

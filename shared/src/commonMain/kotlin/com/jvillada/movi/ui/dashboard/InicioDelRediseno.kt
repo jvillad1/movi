@@ -15,11 +15,18 @@ import androidx.compose.ui.unit.Dp
 import com.jvillada.movi.ui.plan.SEGMENTO_PAGOS
 import com.jvillada.movi.ui.quickadd.AtajoDeAgregar
 import com.jvillada.movi.ui.quickadd.pantallaDelAtajo
+import com.jvillada.movi.ui.recurrentes.fechaDeLaFila
 import com.jvillada.movi.ui.recurrentes.hojaParaAnotar
 import com.jvillada.movi.shared.model.Pendiente
 import com.jvillada.movi.shared.model.cifraDelPago
 import com.jvillada.movi.shared.model.colaDePendientes
 import com.jvillada.movi.shared.model.pagosEnOrdenDeUrgencia
+import com.jvillada.movi.shared.model.EventDay
+import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.ui.transactions.CHIP_TODO
+import com.jvillada.movi.ui.transactions.MovementRow
+import com.jvillada.movi.ui.transactions.collapseTransfers
+import com.jvillada.movi.ui.transactions.diasVisibles
 import com.jvillada.movi.ui.porrevisar.ConteoPorRevisar
 import com.jvillada.movi.ui.porrevisar.desgloseDePorRevisar
 import com.jvillada.movi.ui.porrevisar.textoDePorRevisar
@@ -67,36 +74,49 @@ fun elHeroePideLaCuenta(data: DashboardData): Boolean = data.accounts?.isEmpty()
 /**
  * Las acciones de la cuadrícula del Inicio (camino 3), en su orden.
  *
- * **Cuatro, en una fila** (vuelta de diseño 26, decisión del dueño «Dejar 4»): Gasto, Ingreso,
- * Avisos (con su insignia) y Preguntar. Eran ocho en dos filas; **Traspaso, Pagar tarjeta, Repartir y
- * Comprobante** se mudaron al menú del «+» (`AtajoDeAgregar`: mantenerlo presionado en el teléfono, o
- * el clic derecho y la flecha de «Agregar» en la web y el escritorio, ver `BotonDeAgregarConAtajos`).
- * Ninguno perdió su camino: es el mismo destino de antes, desde otro gesto.
+ * **Ocho, en dos filas de cuatro** (vuelta 39, la opción 3: el dueño eligió las 8). La vuelta 26 las
+ * había dejado en cuatro y mandado Traspaso, Pagar tarjeta, Repartir y Comprobante al menú del «+»;
+ * la vuelta 38 sacó el «+» del teléfono y puso «Más formas de anotar» de provisional. Ahora vuelven a
+ * la cuadrícula, y el «+» con su menú queda solo en el rail de pantalla ancha.
  *
- * [rotulo] es lo que se lee debajo del círculo: **una palabra o dos, en un renglón** (vuelta de diseño
- * 2). [descripcion] es la frase entera, la que dice el lector de pantalla. Los pinta el cliente: la
- * definición SDUI solo trae la sección `ACCIONES`, no los rótulos, así que un APK viejo sigue con sus
- * ocho y el server no cambia.
+ * [rotulo] es lo que se lee debajo del círculo, en **dos renglones de alto fijo** («Anotar / gasto»):
+ * a 360 dp ninguno parte una palabra (ver `SinPartirPalabras`). [descripcion] es la frase entera que
+ * dice el lector de pantalla. Los pinta el cliente: la definición SDUI solo trae la sección
+ * `ACCIONES`, así que un APK viejo sigue con las suyas y el server no cambia.
  */
-enum class AccionDelInicio(val rotulo: String, val descripcion: String) {
-    ANOTAR_GASTO("Gasto", "Anotar un gasto"),
-    ANOTAR_INGRESO("Ingreso", "Anotar un ingreso"),
-    REVISAR_AVISOS("Avisos", "Revisar los avisos"),
-    PREGUNTAR_A_MOVI("Preguntar", "Preguntarle a Movi"),
+enum class AccionDelInicio(val rotulo: String, val descripcion: String, val destino: DestinoDeLaAccion) {
+    ANOTAR_GASTO("Anotar gasto", "Anotar un gasto", DestinoDeLaAccion.Atajo(AtajoDeAgregar.GASTO)),
+    ANOTAR_INGRESO("Anotar ingreso", "Anotar un ingreso", DestinoDeLaAccion.Atajo(AtajoDeAgregar.INGRESO)),
+    TRASPASAR("Traspasar", "Anotar un traspaso entre tus cuentas", DestinoDeLaAccion.Atajo(AtajoDeAgregar.TRASPASO)),
+    PAGAR_TARJETA("Pagar tarjeta", "Anotar el pago de una tarjeta", DestinoDeLaAccion.Atajo(AtajoDeAgregar.PAGO_DE_TARJETA)),
+    REPARTIR("Repartir", "Repartir un gasto con alguien", DestinoDeLaAccion.Atajo(AtajoDeAgregar.REPARTIR)),
+    SUBIR_COMPROBANTE("Subir comprobante", "Subir un comprobante para que Movi lo lea", DestinoDeLaAccion.Atajo(AtajoDeAgregar.SUBIR_COMPROBANTE)),
+    REVISAR_AVISOS("Revisar avisos", "Revisar los avisos", DestinoDeLaAccion.Pantalla(Screen.PorRevisar)),
+    PREGUNTAR_A_MOVI("Preguntar a Movi", "Preguntarle a Movi", DestinoDeLaAccion.Pantalla(Screen.AIChat())),
+}
+
+/**
+ * **A dónde lleva una acción: a lo que ya existe.** Las seis de anotar son los atajos del menú del «+»
+ * ([AtajoDeAgregar]): la cáscara sabe hacerlos (`hacerElAtajo`: la hoja de «Agregar» en su pestaña, las
+ * hojas de «Repartir», el selector del comprobante), así que la cuadrícula abre exactamente lo mismo.
+ * Revisar y preguntar son pantallas.
+ */
+sealed interface DestinoDeLaAccion {
+    data class Atajo(val atajo: AtajoDeAgregar) : DestinoDeLaAccion
+    data class Pantalla(val pantalla: Screen) : DestinoDeLaAccion
 }
 
 /** Las acciones que se ven, en su orden. */
 fun accionesDelInicio(): List<AccionDelInicio> = AccionDelInicio.entries
 
 /**
- * A dónde lleva cada acción: **lo que ya existe**. Las de anotar son los atajos del «+» (la hoja de
- * «Agregar» en su pestaña, `pantallaDelAtajo`); revisar es Por revisar; preguntar es Movi AI.
+ * La pantalla a la que lleva una acción, cuando es una pantalla: las de anotar en la hoja de «Agregar»
+ * (`pantallaDelAtajo`), revisar y preguntar. `null` para «Repartir» y «Subir comprobante», que no son
+ * una pantalla sino lo que hace la cáscara con su atajo.
  */
-fun destinoDeLaAccion(accion: AccionDelInicio): Screen = when (accion) {
-    AccionDelInicio.ANOTAR_GASTO -> pantallaDelAtajo(AtajoDeAgregar.GASTO)!!
-    AccionDelInicio.ANOTAR_INGRESO -> pantallaDelAtajo(AtajoDeAgregar.INGRESO)!!
-    AccionDelInicio.REVISAR_AVISOS -> Screen.PorRevisar
-    AccionDelInicio.PREGUNTAR_A_MOVI -> Screen.AIChat()
+fun destinoDeLaAccion(accion: AccionDelInicio): Screen? = when (val destino = accion.destino) {
+    is DestinoDeLaAccion.Pantalla -> destino.pantalla
+    is DestinoDeLaAccion.Atajo -> pantallaDelAtajo(destino.atajo)
 }
 
 /**
@@ -235,8 +255,10 @@ data class PropuestaDelInicio(
  * un contador no lo es. Lo que espera en «Por revisar» queda en la insignia de «Avisos» (siempre en la
  * cuadrícula) y en la campana.
  */
-fun propuestasDelInicio(data: DashboardData): List<PropuestaDelInicio> = buildList {
-    propuestaDePago(data)?.let(::add)
+fun propuestasDelInicio(data: DashboardData, conElPago: Boolean = true): List<PropuestaDelInicio> = buildList {
+    // Vuelta 39: con «Próximo pago» en la definición, el pago ya está arriba, con su «Anotar pago»; acá
+    // solo lo que no es un pago (`conElPago = false`, lo decide `visibleSections`).
+    if (conElPago) propuestaDePago(data)?.let(::add)
     propuestaDeDebitos(data)?.let(::add)
     propuestaDeCuadre(data)?.let(::add)
     propuestaDeAnomalia(data)?.let(::add)
@@ -260,9 +282,8 @@ private fun propuestaDePago(data: DashboardData): PropuestaDelInicio? {
     val otros = porVencer.size - 1
     // Una tarjeta no tiene cuota: su «monto» es el saldo. Va el mínimo si se sabe; si no, sin cifra.
     val cifra = cifraDelPago(pago)
-    // Con candidatos Movi ya encontró movimientos que podrían ser este pago: anotar otro lo
-    // duplicaría. Se lleva a Plan, donde se elige «Fue este».
     val conCandidatos = pago.candidatos.isNotEmpty()
+    val (accion, destino) = accionDelPago(pago)
     return PropuestaDelInicio(
         tipo = TipoDePropuesta.PAGO,
         titulo = "${pago.nombre} $cuando",
@@ -275,8 +296,8 @@ private fun propuestaDePago(data: DashboardData): PropuestaDelInicio? {
             pago.montoEsSaldo && cifra != null -> "pago mínimo"
             else -> null
         },
-        accion = if (conCandidatos) "Revisar" else "Anotar pago",
-        alTocar = AccionDeLaPropuesta.Ir(if (conCandidatos) Screen.Plan(SEGMENTO_PAGOS) else hojaParaAnotar(pago)),
+        accion = accion,
+        alTocar = AccionDeLaPropuesta.Ir(destino),
         accionSecundaria = if (conCandidatos) null else "Ver pagos",
         alTocarSecundaria = if (conCandidatos) null else AccionDeLaPropuesta.Ir(Screen.Plan(SEGMENTO_PAGOS)),
         urgente = pago.diasParaVencer <= 0,
@@ -299,6 +320,63 @@ private fun propuestaDeDebitos(data: DashboardData): PropuestaDelInicio? {
         urgente = true,
         rango = 1,
     )
+}
+
+/**
+ * **Lo que hace el botón de un pago pendiente**: «Anotar pago» abre «Agregar» con lo que el recurrente
+ * ya sabe ([hojaParaAnotar]). Con candidatos, Movi ya encontró movimientos que podrían ser este pago:
+ * anotar otro lo duplicaría, así que es «Revisar» y lleva a Pagos, donde se elige «Fue este». Lo usan
+ * «Movi propone hoy» y «Próximo pago»: el mismo botón hace lo mismo en los dos.
+ */
+fun accionDelPago(pago: PagoDelPeriodo): Pair<String, Screen> =
+    if (pago.candidatos.isNotEmpty()) "Revisar" to Screen.Plan(SEGMENTO_PAGOS) else "Anotar pago" to hojaParaAnotar(pago)
+
+// ── Próximo pago ─────────────────────────────────────────────────────────────
+
+/**
+ * **El próximo pago del Inicio** (vuelta 39): el pago pendiente más urgente del período —lo vencido
+ * primero, y dentro de cada grupo el de más monto; después lo que vence antes— con la regla de
+ * siempre ([pagosEnOrdenDeUrgencia], la del widget «Falta por pagar» y de la cola). [masPagos] son los
+ * demás pendientes, que «y N más» lleva a Pagos.
+ */
+data class ProximoPagoDelInicio(
+    val pago: PagoDelPeriodo,
+    /** «vence el 22 de octubre», «venció hace 3 días»: la fecha de la fila de Pagos (`fechaDeLaFila`). */
+    val cuando: String,
+    val masPagos: Int,
+    val accion: String,
+    val alTocar: Screen,
+) {
+    /** Lo que se lee arriba de la tarjeta: «Próximo pago · vence el 22 de octubre». */
+    val titulo: String get() = "Próximo pago · $cuando"
+
+    /** Vencido o vence hoy: el título va en el color de aviso. */
+    val urgente: Boolean get() = pago.diasParaVencer <= 0
+}
+
+/** [ProximoPagoDelInicio], o `null` sin pagos pendientes en el período (la sección no se pinta). */
+fun proximoPagoDelInicio(data: DashboardData): ProximoPagoDelInicio? {
+    val pendientes = pagosEnOrdenDeUrgencia(checklistDelPeriodoDe(data))
+    val pago = pendientes.firstOrNull() ?: return null
+    val (accion, destino) = accionDelPago(pago)
+    return ProximoPagoDelInicio(
+        pago = pago,
+        cuando = fechaDeLaFila(pago),
+        masPagos = pendientes.size - 1,
+        accion = accion,
+        alTocar = destino,
+    )
+}
+
+/**
+ * La pastilla del vencimiento del próximo pago: «Vencido», «Hoy» o «Mañana»; `null` si vence más
+ * adelante (la fecha ya la dice el título).
+ */
+fun pastillaDelVencimiento(diasParaVencer: Int): String? = when {
+    diasParaVencer < 0 -> "Vencido"
+    diasParaVencer == 0 -> "Hoy"
+    diasParaVencer == 1 -> "Mañana"
+    else -> null
 }
 
 /**
@@ -406,6 +484,36 @@ private fun propuestaDeCierre(data: DashboardData): PropuestaDelInicio? {
         rango = 6,
     )
 }
+
+// ── Últimos movimientos ──────────────────────────────────────────────────────
+
+/** Cuántas filas lleva «Últimos movimientos» (vuelta 39, la maqueta de la opción 3). */
+const val FILAS_DE_ULTIMOS_MOVIMIENTOS: Int = 3
+
+/**
+ * **Los movimientos de las primeras [FILAS_DE_ULTIMOS_MOVIMIENTOS] filas de Actividad**, sobre la misma
+ * historia (`getEventsByDay`, el más reciente primero) y con la misma regla de lo que se lista en
+ * «Todo» ([diasVisibles]: sin la apertura de una cuenta). Un traspaso es una fila con sus dos patas
+ * ([collapseTransfers]), así que se guardan las dos. Lo que se guarda va a la instantánea del Inicio.
+ */
+fun ultimosMovimientosDe(dias: List<EventDay>, cuantas: Int = FILAS_DE_ULTIMOS_MOVIMIENTOS): List<FinancialEvent> {
+    val filas = diasVisibles(dias, CHIP_TODO, query = "")
+        .asSequence()
+        .flatMap { collapseTransfers(it.items) }
+        .take(cuantas)
+        .toList()
+    return filas.flatMap { fila ->
+        when (fila) {
+            is MovementRow.Single -> listOf(fila.event)
+            is MovementRow.Transfer -> listOf(fila.out, fila.into)
+            is MovementRow.Ajustes -> fila.events
+        }
+    }
+}
+
+/** Las filas de «Últimos movimientos», en su orden: las de Actividad ([collapseTransfers]). */
+fun filasDeUltimosMovimientos(eventos: List<FinancialEvent>): List<MovementRow> =
+    collapseTransfers(eventos).take(FILAS_DE_ULTIMOS_MOVIMIENTOS)
 
 // ── Tus cuentas ──────────────────────────────────────────────────────────────
 

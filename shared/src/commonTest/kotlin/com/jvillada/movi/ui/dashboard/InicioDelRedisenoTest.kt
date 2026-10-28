@@ -21,9 +21,11 @@ import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.defaultDashboardDefinition
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.plan.SEGMENTO_PAGOS
+import com.jvillada.movi.ui.quickadd.AtajoDeAgregar
 import com.jvillada.movi.ui.quickadd.PestanaDeAgregar
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -150,19 +152,22 @@ class InicioDelRedisenoTest {
     // ── La cuadrícula ────────────────────────────────────────────────────────
 
     /**
-     * Vuelta de diseño 26 (decisión del dueño, «Dejar 4»): Gasto, Ingreso, Avisos y Preguntar. Las
-     * otras cuatro están en el menú del «+» (ver `BuscarEnMoviTest`).
+     * Vuelta 39 (la opción 3, decisión del dueño: las 8): en dos filas de cuatro y en este orden. El
+     * rótulo va en dos renglones; la frase entera es la del lector de pantalla.
      */
     @Test
-    fun `Hoy tiene cuatro acciones, en su orden`() {
-        assertEquals(listOf("Gasto", "Ingreso", "Avisos", "Preguntar"), accionesDelInicio().map { it.rotulo })
-        // Vuelta de diseño 2: el rótulo es corto; la frase entera es la del lector de pantalla.
+    fun `Inicio tiene ocho acciones, en el orden de la maqueta`() {
         assertEquals(
-            listOf("Anotar un gasto", "Anotar un ingreso", "Revisar los avisos", "Preguntarle a Movi"),
-            accionesDelInicio().map { it.descripcion },
+            listOf(
+                "Anotar gasto", "Anotar ingreso", "Traspasar", "Pagar tarjeta",
+                "Repartir", "Subir comprobante", "Revisar avisos", "Preguntar a Movi",
+            ),
+            accionesDelInicio().map { it.rotulo },
         )
+        assertEquals(8, accionesDelInicio().map { it.descripcion }.distinct().size, "cada una dice qué hace")
     }
 
+    /** Cada acción abre lo mismo que su atajo del menú del «+» (o su pantalla de siempre). */
     @Test
     fun `cada accion abre lo que ya existe`() {
         assertEquals(Screen.QuickAdd(presetPestana = PestanaDeAgregar.GASTO), destinoDeLaAccion(AccionDelInicio.ANOTAR_GASTO))
@@ -170,8 +175,101 @@ class InicioDelRedisenoTest {
             Screen.QuickAdd(presetEsIngreso = true, presetPestana = PestanaDeAgregar.INGRESO),
             destinoDeLaAccion(AccionDelInicio.ANOTAR_INGRESO),
         )
+        assertEquals(Screen.QuickAdd(presetPestana = PestanaDeAgregar.TRASPASO), destinoDeLaAccion(AccionDelInicio.TRASPASAR))
+        assertEquals(Screen.QuickAdd(presetPestana = PestanaDeAgregar.PAGO_DE_TARJETA), destinoDeLaAccion(AccionDelInicio.PAGAR_TARJETA))
+        // Repartir y el comprobante no son una pantalla: son las hojas de la cáscara, por su atajo.
+        assertEquals(DestinoDeLaAccion.Atajo(AtajoDeAgregar.REPARTIR), AccionDelInicio.REPARTIR.destino)
+        assertEquals(DestinoDeLaAccion.Atajo(AtajoDeAgregar.SUBIR_COMPROBANTE), AccionDelInicio.SUBIR_COMPROBANTE.destino)
+        assertNull(destinoDeLaAccion(AccionDelInicio.REPARTIR))
+        assertNull(destinoDeLaAccion(AccionDelInicio.SUBIR_COMPROBANTE))
         assertEquals(Screen.PorRevisar, destinoDeLaAccion(AccionDelInicio.REVISAR_AVISOS))
         assertEquals(Screen.AIChat(), destinoDeLaAccion(AccionDelInicio.PREGUNTAR_A_MOVI))
+    }
+
+    // ── Próximo pago (vuelta 39) ─────────────────────────────────────────────
+
+    /** Lo vencido primero, y entre lo vencido el de más monto (la regla de la cola y del widget). */
+    @Test
+    fun `el proximo pago es el vencido mayor, y despues el que vence antes`() {
+        val datos = todoPendiente.copy(
+            upcoming = listOf(
+                pago("r_cel", "Celular", 53_000, 1),
+                pago("r_int", "Internet", 90_000, -2),
+                pago("r_arr", "Arriendo", 1_850_000, -22),
+                pago("r_gym", "Gimnasio", 139_900, 12),
+            ),
+        )
+        val proximo = assertNotNull(proximoPagoDelInicio(datos))
+        assertEquals("Arriendo", proximo.pago.nombre)
+        assertEquals(3, proximo.masPagos)
+        assertEquals("Anotar pago", proximo.accion)
+        assertTrue(proximo.urgente)
+        assertTrue(proximo.titulo.startsWith("Próximo pago · venció"), proximo.titulo)
+        assertEquals("Vencido", pastillaDelVencimiento(proximo.pago.diasParaVencer))
+        // Sin vencidos, el que vence antes.
+        val sinVencidos = datos.copy(upcoming = listOf(pago("r_gym", "Gimnasio", 139_900, 12), pago("r_cel", "Celular", 53_000, 1)))
+        assertEquals("Celular", proximoPagoDelInicio(sinVencidos)?.pago?.nombre)
+        assertEquals("Mañana", pastillaDelVencimiento(1))
+        assertNull(pastillaDelVencimiento(12))
+        // Sin pagos pendientes, no hay próximo pago.
+        assertNull(proximoPagoDelInicio(datos.copy(upcoming = emptyList())))
+    }
+
+    /** «Movi propone hoy» no repite el pago que ya está en «Próximo pago». */
+    @Test
+    fun `con el proximo pago arriba las propuestas no traen el pago`() {
+        val sinPago = propuestasDelInicio(todoPendiente, conElPago = false)
+        assertTrue(sinPago.none { it.tipo == TipoDePropuesta.PAGO })
+        assertEquals(
+            listOf(TipoDePropuesta.DEBITO, TipoDePropuesta.CUADRE, TipoDePropuesta.ANOMALIA, TipoDePropuesta.CIERRE),
+            sinPago.map { it.tipo },
+        )
+        // Y `visibleSections` lo decide por la definición: con PROXIMO_PAGO, sin el pago.
+        val soloElPago = todoPendiente.copy(debitosPorConfirmar = emptyList(), cuadresPorAviso = emptyList(), anomalias = emptyList(), cierre = null,
+            accounts = emptyList(), summary = com.jvillada.movi.shared.model.FinanceSummary(scope = com.jvillada.movi.shared.model.Scope.SELF, balance = 0, ingresos = 0, egresos = 0),
+            credits = emptyList(), cards = emptyList())
+        val tipos = visibleSections(com.jvillada.movi.shared.model.defaultDashboardDefinition(), soloElPago).map { it.type }
+        assertTrue("PROXIMO_PAGO" in tipos)
+        assertTrue("PROPUESTAS" !in tipos, "el único pendiente es el pago, y ya está arriba")
+    }
+
+    // ── Últimos movimientos (vuelta 39) ──────────────────────────────────────
+
+    private fun evento(id: String, dia: String, monto: Long, tipo: TransactionType = TransactionType.EXPENSE, traspaso: String? = null) =
+        com.jvillada.movi.shared.model.FinancialEvent(
+            id = id, accountId = "a1", type = tipo, amount = monto, currency = "COP", category = "Mercado",
+            description = id, timestamp = 0L, transferId = traspaso,
+        )
+
+    @Test
+    fun `los ultimos movimientos son las tres primeras filas de Actividad`() {
+        val dias = listOf(
+            com.jvillada.movi.shared.model.EventDay("2026-10-27", 0, listOf(evento("rappi", "27", 27_500), evento("sale", "27", 500_000, traspaso = "t1"), evento("entra", "27", 500_000, TransactionType.INCOME, traspaso = "t1"))),
+            com.jvillada.movi.shared.model.EventDay("2026-10-26", 0, listOf(evento("d1", "26", 64_300), evento("uber", "26", 18_700))),
+        )
+        val ultimos = ultimosMovimientosDe(dias)
+        // Rappi, el traspaso (sus dos patas) y D1: tres filas.
+        assertEquals(listOf("rappi", "sale", "entra", "d1"), ultimos.map { it.id })
+        val filas = filasDeUltimosMovimientos(ultimos)
+        assertEquals(3, filas.size)
+        assertTrue(filas[1] is com.jvillada.movi.ui.transactions.MovementRow.Transfer)
+        assertEquals(emptyList(), ultimosMovimientosDe(emptyList()))
+    }
+
+    @Test
+    fun `la cifra del heroe va de una cifra real a otra, nunca desde cero`() {
+        assertEquals(3_240_000L, cifraEntre(3_240_000, 3_240_000, 0f))
+        assertEquals(3_000_000L, cifraEntre(3_000_000, 3_400_000, 0f))
+        assertEquals(3_200_000L, cifraEntre(3_000_000, 3_400_000, 0.5f))
+        assertEquals(3_400_000L, cifraEntre(3_000_000, 3_400_000, 1f))
+    }
+
+    @Test
+    fun `las iniciales del avatar son las del nombre y el apellido`() {
+        assertEquals("JV", inicialesDelDueno("Juan Villada"))
+        assertEquals("JV", inicialesDelDueno("  juan   villada restrepo "))
+        assertEquals("C", inicialesDelDueno("Caro"))
+        assertEquals("?", inicialesDelDueno(null))
     }
 
     @Test
@@ -238,7 +336,7 @@ class InicioDelRedisenoTest {
         val bloques = bloquesDelInicio(defaultDashboardDefinition().sections)
         assertEquals(
             listOf(
-                listOf("HERO_BALANCE"), listOf("ACCIONES"), listOf("PROPUESTAS"), listOf("CUENTAS"),
+                listOf("HERO_BALANCE"), listOf("ACCIONES"), listOf("PROXIMO_PAGO"), listOf("PROPUESTAS"), listOf("ULTIMOS_MOVIMIENTOS"), listOf("CUENTAS"),
                 listOf("CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA"), listOf("ALERTS"), listOf("BANNER"),
             ),
             bloques.map { b -> b.map { it.type } },
