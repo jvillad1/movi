@@ -1216,3 +1216,31 @@ primero, lo rechazado dice por qué), `RepartirEnElTelefonoTest` (la hoja contra
 cierra sin «Reintentar», y sin señal dice el mensaje y el reintento no guarda otra vez),
 `RepartirDesdeAgregarTest` y `ElEfectivoEnNegativoSeLeeEnteroTest` (360 dp ×1,3 entero; 390 dp ×1,12 en
 un renglón).
+
+## 30. Vuelta 27: un aviso que pagó varias cosas
+
+El giro al papá que paga dos cuotas y sobra un poco se reparte en Reconciliar, sin componentes nuevos
+en `ds/` (`ui/sms/RepartirEnPartes.kt`, `ui/sms/RepartirEnReconciliar.kt`):
+
+- **La propuesta de entrada es una `TarjetaDePropuesta`** arriba, con las demás propuestas: «¿Pagaste
+  las cuotas de Libranza Papá y Hipoteca Papá? Suman $4.250.000 · sobran $23.333», el cuerpo que dice
+  qué se anota y «Repartir así», que **abre el editor lleno, no confirma**. Reemplaza a la tarjeta de
+  #447 («Son 2 pagos…» con su lista a mano, en la que el último pago tomaba el resto).
+- **«Esto pagó varias cosas»** es un `Boton` `Fantasma` `S` debajo de «Movi sugiere». Abre «Repartir en
+  partes» (`Seccion`) y esconde «Confirma o ajusta»: en partes, cada parte dice lo suyo.
+- **Cada parte es una `Superficie` `Capa2`**: «Parte N» en `apoyoMedio` con «Quitar» (`Fantasma` `S`),
+  qué fue en `PildoraDeFiltro` (Cuota · Pago de tarjeta · Traspaso · Gasto · A Papá), a dónde o en qué
+  en otra fila de píldoras —las cuentas que `operacionEntre` acepta, o los pagos del período y las
+  categorías— y el monto en `CampoDeMonto`. **Las filas de píldoras ruedan en horizontal**: no se
+  parten ni se cortan a 360 dp. Lo que le falta a la parte, en una línea de `apoyo`.
+- **La línea en vivo** va en `cuerpoFuerte`: «Faltan $23.333» en `texto`, «Te pasaste por $X» en `sale`,
+  «Cuadra con el aviso» en `entra`. Debajo, cuando falta, «El resto a Papá» / «El resto como gasto» en
+  `PildoraDeAccion`, y «Agregar otra parte» y «Volver a un solo movimiento» en `Fantasma` `S`.
+- **Un solo botón confirma**: el principal de la pantalla dice «Confirmar las N partes» y se prende solo
+  cuando cuadran (`sePuedenConfirmar`).
+- **Un movimiento ya anotado** usa el mismo editor dentro de «Más» de su detalle («Repartir en partes»,
+  `Secundario` a todo el ancho; al abrirlo, «Confirmar las N partes» `Principal` a todo el ancho).
+
+**Las líneas base** no cambian: `dp_sueltos` 119, `radios_con_numero` 3, y las guardas en 0 siguen en 0.
+Lo vigila `RepartirEnReconciliarTest` (la propuesta del caso del dueño con cifras de prueba, «Faltan»,
+el botón que se prende solo si cuadra, y nada recortado a 360 dp).
