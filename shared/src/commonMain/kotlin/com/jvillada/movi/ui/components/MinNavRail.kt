@@ -1,6 +1,9 @@
 package com.jvillada.movi.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.runtime.remember
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -264,7 +267,12 @@ private fun RailItem(
             // solo de «Agregar», y dos bloques amarillos iguales competían en el rail.
             .clip(RoundedCornerShape(Radio.pill))
             .background(fondoDelDestinoDelRailAncho(isActive, Movi.colores))
-            .clickable { onTabSelected(tab) }
+            // Revisión de la vuelta 38: sobre el activo, el velo del hover (la tinta con alfa) volvía el
+            // amarillo suave un beige oliva. El activo no lleva hover —ya dice dónde estás—; los demás sí.
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = if (elHoverSeVeEnElDestino(isActive)) LocalIndication.current else null,
+            ) { onTabSelected(tab) }
             .padding(horizontal = Espacio.s),
     ) {
         Icon(
@@ -288,3 +296,9 @@ private fun RailItem(
  */
 fun fondoDelDestinoDelRailAncho(activo: Boolean, colores: ColoresDeMovi): Color =
     if (activo) colores.tinte else Color.Transparent
+
+/**
+ * **¿El destino del rail ancho muestra el velo del hover (y el de la pulsación)?** Solo el que no está
+ * activo: sobre el amarillo suave del activo, el velo en tinta lo ensuciaba (beige oliva).
+ */
+fun elHoverSeVeEnElDestino(activo: Boolean): Boolean = !activo
