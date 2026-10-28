@@ -66,7 +66,7 @@ class CuadreDeSaldosLogicTest {
         val diferencia = diferenciaDelCuadre(saldoEnMovi = 352_082L, saldoDelBanco = 352_082L)
         assertEquals(0L, diferencia)
         assertFalse(hayAjusteQueAnotar(diferencia))
-        assertTrue("no hay nada que anotar" in textoDelCuadre(352_082L, 352_082L, "COP"))
+        assertTrue("no hay nada que anotar" in textoDelCuadre(352_082L, 352_082L, "COP")!!)
     }
 
     /**
@@ -91,25 +91,42 @@ class CuadreDeSaldosLogicTest {
     /** En dólares el símbolo cambia: «US$» — en Colombia «$20» se lee veinte pesos. */
     @Test
     fun `una cuenta en dolares se dice en dolares`() {
-        val texto = textoDelCuadre(saldoEnMovi = 100L, saldoDelBanco = 250L, moneda = "USD")
+        val texto = textoDelCuadre(saldoEnMovi = 100L, saldoDelBanco = 250L, moneda = "USD")!!
         assertTrue("US\$100" in texto && "US\$250" in texto && "+US\$150" in texto, texto)
     }
 
-    /** Sin cifra escrita, el texto pide la cifra en vez de afirmar nada sobre la plata. */
+    /**
+     * Sin cifra escrita no se dice nada (vuelta de diseño 37): la ayuda «Escribe el saldo que te
+     * muestra el banco hoy.» se repetía debajo de cada cuenta, y el rótulo del campo ya lo dice.
+     */
     @Test
-    fun `sin cifra escrita el texto solo pide el saldo del banco`() {
-        assertEquals("Escribe el saldo que te muestra el banco hoy.", textoDelCuadre(352_082L, null, "COP"))
+    fun `sin cifra escrita no hay texto que repetir`() {
+        assertNull(textoDelCuadre(352_082L, null, "COP"))
+        assertNull(textoDelCuadre(2_000_000L, null, "COP", esDeuda = true))
+    }
+
+    /** Una tarjeta se dice como su hoja «Ajustar saldo»: subir lo que se debe es un cargo. */
+    @Test
+    fun `en una tarjeta el ajuste se dice cargo o abono`() {
+        assertEquals(
+            "Movi dice \$2.000.000, tú dices \$2.100.000: se va a anotar un cargo de \$100.000.",
+            textoDelCuadre(2_000_000L, 2_100_000L, "COP", esDeuda = true),
+        )
+        assertEquals(
+            "Movi dice \$2.000.000, tú dices \$1.950.000: se va a anotar un abono de \$50.000.",
+            textoDelCuadre(2_000_000L, 1_950_000L, "COP", esDeuda = true),
+        )
+        assertEquals("Coincide con Movi: no hay nada que anotar.", textoDelCuadre(2_000_000L, 2_000_000L, "COP", esDeuda = true))
     }
 
     // ── Qué cuentas entran ───────────────────────────────────────────────────
 
     /**
-     * Dinero e Inversión sí; tarjetas y préstamos no. La razón completa está en [sePuedeCuadrar]:
-     * el banco no muestra UN número para una tarjeta, y un préstamo se cuadra en Créditos, donde
-     * al lado se ven la cuota y los intereses que explican la diferencia.
+     * Dinero, Inversión y, desde la vuelta de diseño 37, tarjetas; préstamos no: un préstamo se
+     * cuadra en Créditos, donde al lado se ven la cuota y los intereses que explican la diferencia.
      */
     @Test
-    fun `solo se cuadran las cuentas de dinero e inversion`() {
+    fun `se cuadran dinero, inversion y tarjetas, no los prestamos`() {
         val todas = listOf(
             cuenta(id = "a", tipo = AccountType.SAVINGS),
             cuenta(id = "b", tipo = AccountType.CASH),
@@ -118,7 +135,51 @@ class CuadreDeSaldosLogicTest {
             cuenta(id = "e", tipo = AccountType.CREDIT_CARD),
             cuenta(id = "f", tipo = AccountType.LOAN),
         )
-        assertEquals(listOf("a", "b", "c", "d"), cuentasParaCuadrar(todas).map { it.id })
+        assertEquals(listOf("a", "b", "c", "d", "e"), cuentasParaCuadrar(todas).map { it.id })
+        // `sePuedeCuadrar` (`:core`) no cambió: la usan el server y los avisos de «sin cuadrar», que
+        // siguen sin tarjetas.
+        assertEquals(listOf("a", "b", "c", "d"), todas.filter { sePuedeCuadrar(it) }.map { it.id })
+        assertFalse(estaSinCuadrar(cuenta(id = "e", tipo = AccountType.CREDIT_CARD, primerEvento = AHORA - 400 * UN_DIA), AHORA))
+    }
+
+    /** Cada cuenta bajo su sección, en el orden Dinero · Inversión · Tarjetas, sin secciones vacías. */
+    @Test
+    fun `las cuentas van agrupadas por seccion`() {
+        val todas = listOf(
+            cuenta(id = "tarjeta", tipo = AccountType.CREDIT_CARD),
+            cuenta(id = "fondo", tipo = AccountType.INVESTMENT),
+            cuenta(id = "nu", tipo = AccountType.SAVINGS),
+            cuenta(id = "efectivo", tipo = AccountType.CASH),
+            cuenta(id = "prestamo", tipo = AccountType.LOAN),
+        )
+        val secciones = seccionesDelCuadre(cuentasParaCuadrar(todas))
+        assertEquals(
+            listOf(
+                SeccionDelCuadre.DINERO to listOf("nu", "efectivo"),
+                SeccionDelCuadre.INVERSION to listOf("fondo"),
+                SeccionDelCuadre.TARJETAS to listOf("tarjeta"),
+            ),
+            secciones.map { (s, cuentas) -> s to cuentas.map { it.id } },
+        )
+        assertEquals(listOf("Dinero", "Inversión", "Tarjetas"), secciones.map { it.first.titulo })
+        // Sin inversiones, no hay sección vacía.
+        assertEquals(
+            listOf(SeccionDelCuadre.DINERO),
+            seccionesDelCuadre(listOf(cuenta(id = "nu"))).map { it.first },
+        )
+        // La cuenta pedida arriba («Cuadrar efectivo») queda primera de la suya.
+        assertEquals(
+            listOf("efectivo", "nu"),
+            seccionesDelCuadre(cuentasConLaPrimera(cuentasParaCuadrar(todas), "efectivo")).first().second.map { it.id },
+        )
+    }
+
+    /** El rótulo del campo basta, y en una tarjeta pide la deuda. */
+    @Test
+    fun `el rotulo del campo de una tarjeta pide la deuda`() {
+        assertEquals("Cuánto debes según el banco", rotuloDelCampoDelCuadre(cuenta(tipo = AccountType.CREDIT_CARD)))
+        assertEquals("Lo que dice el banco", rotuloDelCampoDelCuadre(cuenta(tipo = AccountType.SAVINGS)))
+        assertEquals("Lo que dice el banco", rotuloDelCampoDelCuadre(cuenta(tipo = AccountType.INVESTMENT)))
     }
 
     // ── Desde cuándo nadie la mira ───────────────────────────────────────────

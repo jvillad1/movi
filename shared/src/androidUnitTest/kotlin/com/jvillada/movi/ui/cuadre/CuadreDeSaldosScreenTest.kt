@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.hasAnyChild
+import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
@@ -18,6 +20,7 @@ import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.AdjustAccountBalanceResponse
 import com.jvillada.movi.theme.MoviTheme
+import com.jvillada.movi.ui.components.ds.TAG_SECCION
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.After
 import org.junit.Rule
@@ -66,19 +69,28 @@ class CuadreDeSaldosScreenTest {
         type = AccountType.CREDIT_CARD,
         balance = 2_000_000L,
         balancesByCurrency = mapOf("COP" to 2_000_000L),
+        firstEventAt = 1_700_000_000_000L,
+    )
+    private val prestamo = Account(
+        id = "acc-loan",
+        name = "Crédito del carro",
+        type = AccountType.LOAN,
+        balance = 30_000_000L,
+        balancesByCurrency = mapOf("COP" to 30_000_000L),
     )
 
     /** Lo que llegó al repositorio: (cuenta, saldo objetivo). Vacío = no se escribió nada. */
     private val anotados = mutableListOf<Pair<String, Long>>()
 
     private open inner class ConDosCuentas : RepositorioDePrueba() {
-        override suspend fun getAccounts(): List<Account> = listOf(nu, fiducuenta, masterBlack)
+        override suspend fun getAccounts(): List<Account> = listOf(nu, masterBlack, prestamo, fiducuenta)
         override suspend fun adjustAccountBalance(
             accountId: String,
             targetBalance: Long,
         ): AdjustAccountBalanceResponse {
             anotados += accountId to targetBalance
-            val cuenta = listOf(nu, fiducuenta).first { it.id == accountId }
+            // La tarjeta va por la MISMA ruta que su hoja «Ajustar saldo» (`CardBalanceSheet`).
+            val cuenta = listOf(nu, fiducuenta, masterBlack).first { it.id == accountId }
             return AdjustAccountBalanceResponse(
                 account = cuenta.copy(
                     balance = targetBalance,
@@ -126,19 +138,82 @@ class CuadreDeSaldosScreenTest {
     }
 
     @Test
-    fun `lista las cuentas de dinero con lo que cree Movi, y deja las deudas afuera`() {
+    fun `lista las cuentas de dinero y las tarjetas con lo que cree Movi, y deja los prestamos afuera`() {
         montar()
 
         esperarTexto("Nu")
         esperarTexto("Fiducuenta")
         esperarTexto("352.082")
-        // La tarjeta no se cuadra acá: el banco no muestra UN número para una tarjeta, y su deuda
-        // ya la concilian el extracto y la captura de mensajes.
+        // Vuelta de diseño 37: la tarjeta también se cuadra acá, en su sección.
+        esperarTexto("Master Black")
+        // El préstamo no: se cuadra en Créditos.
         assertEquals(
             0,
-            composeRule.onAllNodesWithText("Master Black", substring = true, useUnmergedTree = true)
+            composeRule.onAllNodesWithText("Crédito del carro", substring = true, useUnmergedTree = true)
                 .fetchSemanticsNodes().size,
         )
+    }
+
+    private fun arriba(tag: String): Float =
+        composeRule.onNode(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.top
+
+    private fun arribaDeLaSeccion(titulo: String): Float =
+        composeRule.onNode(hasTestTag(TAG_SECCION) and hasAnyDescendant(hasText(titulo)), useUnmergedTree = true)
+            .fetchSemanticsNode().boundsInRoot.top
+
+    /**
+     * **Vuelta de diseño 37: cada cuenta queda bajo su sección, y ninguna ayuda se repite.** Antes
+     * cada tarjeta repetía «Escribe el saldo que te muestra el banco hoy.» y cerraba con un rótulo
+     * «Dinero» suelto. Ahora «Dinero» es el título de la sección (una vez), y el rótulo del campo basta.
+     */
+    @Test
+    @Config(qualifiers = AVD_MOVI_CUADRE_ALTO)
+    fun `cada cuenta queda bajo su seccion y ninguna frase de ayuda se repite por cuenta`() {
+        montar()
+        esperarTexto("Master Black")
+        composeRule.waitForIdle()
+
+        // Las secciones, en orden, y cada cuenta debajo de la suya y antes de la siguiente.
+        val dinero = arribaDeLaSeccion("Dinero")
+        val tarjetas = arribaDeLaSeccion("Tarjetas")
+        assertTrue(dinero < arriba(TAG_FILA_DE_CUADRE + nu.id), "Nu va bajo «Dinero»")
+        assertTrue(arriba(TAG_FILA_DE_CUADRE + nu.id) < tarjetas, "Nu va antes de «Tarjetas»")
+        assertTrue(arriba(TAG_FILA_DE_CUADRE + fiducuenta.id) < tarjetas, "Fiducuenta va antes de «Tarjetas»")
+        assertTrue(tarjetas < arriba(TAG_FILA_DE_CUADRE + masterBlack.id), "Master Black va bajo «Tarjetas»")
+        // Sin inversiones, no hay sección «Inversión».
+        assertTrue(!hay("Inversión"))
+
+        // «Dinero» se dice una vez: el título. Ningún rótulo suelto en las tarjetas.
+        assertEquals(1, composeRule.onAllNodesWithText("Dinero", useUnmergedTree = true).fetchSemanticsNodes().size)
+        // La ayuda repetida se fue; la explicación va una vez, debajo del botón.
+        assertTrue(!hay("Escribe el saldo que te muestra el banco"))
+        assertEquals(1, composeRule.onAllNodesWithText(NOTA_DEL_CUADRE, useUnmergedTree = true).fetchSemanticsNodes().size)
+        assertEquals(1, composeRule.onAllNodesWithText(QUE_ES_EL_CUADRE, useUnmergedTree = true).fetchSemanticsNodes().size)
+        // Cada cuenta sigue diciendo «Movi dice» y su estado.
+        assertEquals(3, composeRule.onAllNodesWithText("Movi dice", useUnmergedTree = true).fetchSemanticsNodes().size)
+        assertEquals(3, composeRule.onAllNodesWithText("Nunca la has cuadrado", substring = true, useUnmergedTree = true).fetchSemanticsNodes().size)
+    }
+
+    /**
+     * **La tarjeta se cuadra acá** (vuelta de diseño 37): el campo pide la deuda, el texto dice el
+     * cargo y el ajuste manda el monto objetivo por la ruta de cuentas, la de `CardBalanceSheet`.
+     */
+    @Test
+    @Config(qualifiers = AVD_MOVI_CUADRE_ALTO)
+    fun `la tarjeta se cuadra con lo que debes y manda el monto objetivo por la ruta de cuentas`() {
+        montar()
+        esperarTexto("Master Black")
+        esperarTexto("Cuánto debes según el banco")
+
+        // Nu (0), Fiducuenta (1), Master Black (2): el orden de las secciones.
+        escribir(fila = 2, digitos = "2100000")
+        esperarTexto("Movi dice \$2.000.000, tú dices \$2.100.000: se va a anotar un cargo de \$100.000.")
+        assertTrue(anotados.isEmpty(), "nada se escribe hasta confirmar: $anotados")
+
+        tocar("Anotar el ajuste")
+        composeRule.waitUntil(timeoutMillis = 5_000) { anotados.isNotEmpty() }
+
+        assertEquals(listOf("acc-card" to 2_100_000L), anotados)
     }
 
     /**
@@ -229,7 +304,7 @@ class CuadreDeSaldosScreenTest {
     }
 
     /**
-     * Sin una sola cuenta de Dinero o Inversión, el vacío que enseña — título, detalle y el botón
+     * Sin una sola cuenta de Dinero, Inversión o tarjeta, el vacío que enseña — título, detalle y el botón
      * que abre la MISMA hoja de crear cuenta que «Nueva cuenta» en Patrimonio.
      */
     @Test
@@ -239,7 +314,7 @@ class CuadreDeSaldosScreenTest {
         })
         esperarTexto("Todavía no hay nada que cuadrar")
 
-        assertTrue(hay("El cuadre compara el saldo de cada cuenta de Dinero o Inversión"))
+        assertTrue(hay("El cuadre compara el saldo de cada cuenta de Dinero, Inversión o tarjeta"))
         assertTrue(hay("Crear una cuenta"))
 
         tocar("Crear una cuenta")
@@ -248,3 +323,6 @@ class CuadreDeSaldosScreenTest {
 }
 
 private const val AVD_MOVI_CUADRE = "w411dp-h731dp-xhdpi"
+
+/** Alto de sobra para que las tres cuentas y sus secciones estén compuestas a la vez. */
+private const val AVD_MOVI_CUADRE_ALTO = "w411dp-h1600dp-xhdpi"
