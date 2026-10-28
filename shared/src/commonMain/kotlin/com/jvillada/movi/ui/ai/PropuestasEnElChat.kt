@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
@@ -35,7 +34,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.unit.dp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.AccionPropuesta
 import com.jvillada.movi.shared.model.EstadoDePropuesta
@@ -122,11 +120,12 @@ internal fun PropuestaDelAsistente(
     var trabajando by remember(propuesta.id) { mutableStateOf(false) }
     var error by remember(propuesta.id) { mutableStateOf<String?>(null) }
 
-    // Ola R4: una propuesta de Movi va en la superficie de propuesta (el tinte de la marca).
+    // Ola R4: una propuesta de Movi va en la superficie de propuesta. Vuelta 42: a todo el ancho de
+    // la conversación (desde la sangría de la respuesta), como el texto de Movi. Tenía un tope de
+    // 320 dp suelto que a 1.280 la dejaba diminuta en una columna de 720.
     Superficie(
         modifier = Modifier
             .padding(start = Espacio.xxl, bottom = Espacio.s)
-            .widthIn(max = 320.dp)
             .fillMaxWidth(),
         nivel = NivelDeSuperficie.Propuesta,
     ) {
