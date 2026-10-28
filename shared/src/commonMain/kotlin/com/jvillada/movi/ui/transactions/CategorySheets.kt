@@ -543,7 +543,10 @@ internal fun ContenidoDelMovimiento(
                         else -> "Traspaso"
                     },
                 )
-                NombreQueSeEdita(event.description) { edicionAbierta = true }
+                // Vuelta de diseño 36: el título de su fila; al editar, el campo trae lo guardado.
+                NombreQueSeEdita(tituloDelMovimiento(event, cuentas.firstOrNull { it.id == event.accountId }?.name)) {
+                    edicionAbierta = true
+                }
                 Spacer(Modifier.height(Espacio.s))
                 PorConfirmar(event, onError = { errorDeEdicion = it }, onConfirmado = onEventChanged)
                 Spacer(Modifier.height(Espacio.m))
@@ -636,7 +639,11 @@ internal fun ContenidoDelMovimiento(
         MarcoDelMovimiento(lugar, onDismiss = onDismiss, dismissEnabled = true) {
             Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
                 SheetLabel("Saldo inicial")
-                Text(event.description, style = Movi.textos.tituloMedio, color = Movi.colores.texto)
+                Text(
+                    tituloDelMovimiento(event, cuentas.firstOrNull { it.id == event.accountId }?.name),
+                    style = Movi.textos.tituloMedio,
+                    color = Movi.colores.texto,
+                )
                 Spacer(Modifier.height(Espacio.m))
                 Text(OPENING_BALANCE_EXPLAINER, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
                 if (onVerCuenta != null) {
@@ -690,7 +697,7 @@ internal fun ContenidoDelMovimiento(
                 o.otros.forEach { otro ->
                     Row(modifier = Modifier.fillMaxWidth().padding(vertical = Espacio.xs)) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(otro.description, style = Movi.textos.cuerpo, color = Movi.colores.texto, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(tituloDelMovimiento(otro), style = Movi.textos.cuerpo, color = Movi.colores.texto, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(
                                 "${etiquetaDeFecha(fechaDeEpoch(otro.timestamp), hoyEnAppZone())} · ${otro.category}",
                                 style = Movi.textos.apoyo,
@@ -1120,7 +1127,7 @@ fun CardPaymentCandidatesSheet(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            event.description,
+                            tituloDelMovimiento(event),
                             style = Movi.textos.cuerpo,
                             color = Movi.colores.texto,
                         )

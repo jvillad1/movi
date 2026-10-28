@@ -58,6 +58,15 @@ fun textosDeLaFila(tx: FinancialEvent, nombreDeLaCuenta: String?): TextosDeLaFil
 }
 
 /**
+ * **El título de [tx] donde se lo nombre** (vuelta de diseño 36): el mismo de su fila en Movimientos
+ * ([textosDeLaFila]). La fila decía «Éxito Suba» y, al tocarla, el detalle se titulaba «Mercado»: el
+ * detalle, la confirmación de anular y las listas de una hoja lo piden acá para decir lo mismo.
+ * Al **editar** la nota, el campo sigue mostrando lo guardado (`description`), no esto.
+ */
+fun tituloDelMovimiento(tx: FinancialEvent, nombreDeLaCuenta: String? = null): String =
+    textosDeLaFila(tx, nombreDeLaCuenta).titulo
+
+/**
  * **La descripción de [tx] como se pinta** (vuelta de diseño 32): [enFormaDeTitulo] de `:core`, que
  * pasa a forma de título lo que el banco mandó todo en MAYÚSCULAS («EXITO SUBA» → «Éxito Suba») y
  * deja quieto lo que trae minúsculas. La usan la fila, el detalle, Buscar y el detalle de la cuenta.

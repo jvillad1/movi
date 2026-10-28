@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.destinos
 
+import com.jvillada.movi.ui.transactions.tituloDelMovimiento
 import com.jvillada.movi.ui.components.ds.Superficie
 import com.jvillada.movi.theme.Espacio
 import androidx.compose.foundation.clickable
@@ -264,7 +265,7 @@ fun DetalleDelDestinoSheet(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(ev.description, style = Movi.textos.cuerpo, color = Movi.colores.texto, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(tituloDelMovimiento(ev), style = Movi.textos.cuerpo, color = Movi.colores.texto, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Text(
                                     (if (entro) "Te envió · " else "") + etiquetaDeFecha(fechaDeEpoch(ev.timestamp), hoy),
                                     style = Movi.textos.apoyo,

@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.extractos
 
+import com.jvillada.movi.ui.transactions.tituloDelMovimiento
 import com.jvillada.movi.ui.components.ds.Cifra
 import com.jvillada.movi.ui.components.ds.Fila
 import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
@@ -195,7 +196,7 @@ private fun ImportSummaryHeader(imp: StatementImport) {
 private fun ImportEventRow(event: FinancialEvent) {
     val isIncome = event.type == TransactionType.INCOME
     Fila(
-        titulo = event.description.ifBlank { event.merchant ?: "Sin descripción" },
+        titulo = if (event.description.isBlank()) event.merchant ?: "Sin descripción" else tituloDelMovimiento(event),
         subtitulo = "${event.category} · ${epochToShortDate(event.timestamp)}",
         final = {
             // Ola 2a: el gasto en el color del texto; el signo «−» ya lo dice.

@@ -184,8 +184,9 @@ internal fun EncabezadoDelMovimiento(
         Box(modifier = Modifier.size(TamanoDeAvatar.Encabezado.circulo), contentAlignment = Alignment.Center) {
             AvatarDelComercio(evento, tamano = TamanoDeAvatar.Encabezado)
         }
+        // Vuelta de diseño 36: el mismo título que su fila («Éxito Suba», no «Mercado»).
         Text(
-            descripcionParaMostrar(evento),
+            tituloDelMovimiento(evento, cuenta),
             style = Movi.textos.tituloMedio,
             color = Movi.colores.texto,
             maxLines = 2,

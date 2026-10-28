@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.papeles
 
+import com.jvillada.movi.ui.transactions.tituloDelMovimiento
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -179,7 +180,7 @@ private fun TarjetaDelResultado(
                 val hoy = hoyEnAppZone()
                 resultado.lectura.yaAnotado.forEach { ev ->
                     Text(
-                        "${ev.description} · ${etiquetaDeFecha(fechaDeEpoch(ev.timestamp), hoy)} · ${formatMoney(ev.amount, ev.currency)}",
+                        "${tituloDelMovimiento(ev)} · ${etiquetaDeFecha(fechaDeEpoch(ev.timestamp), hoy)} · ${formatMoney(ev.amount, ev.currency)}",
                         style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,
                     )

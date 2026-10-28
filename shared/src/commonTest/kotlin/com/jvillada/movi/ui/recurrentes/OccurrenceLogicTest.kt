@@ -204,6 +204,19 @@ class OccurrenceLogicTest {
     }
 
     /**
+     * Vuelta de diseño 36: una nota que es la misma categoría tampoco distingue; va el comercio, como
+     * en la fila de Movimientos, y sin comercio no va nada.
+     */
+    @Test fun `una nota que es la categoria cede al comercio, como la fila`() {
+        val conComercio = evento("ev_1").copy(merchant = "EXITO SUBA", timestamp = 1_787_677_200_000)
+        assertEquals("Movimiento del 25 de agosto · Éxito Suba", descripcionPropuesta(conComercio))
+        val sinComercio = evento("ev_1").copy(merchant = null, timestamp = 1_787_677_200_000)
+        assertEquals("Movimiento del 25 de agosto", descripcionPropuesta(sinComercio))
+        val conNota = evento("ev_1", description = "Nómina octubre").copy(merchant = "EMPRESA", timestamp = 1_787_677_200_000)
+        assertEquals("Movimiento del 25 de agosto · Nómina octubre", descripcionPropuesta(conNota))
+    }
+
+    /**
      * «Movimiento del 25» a secas era indistinguible entre el 25 de este mes y el del anterior —
      * la ambigüedad que dejaba pasar el emparejamiento del mes equivocado sin que nada en pantalla
      * lo delatara. El mes va siempre.
