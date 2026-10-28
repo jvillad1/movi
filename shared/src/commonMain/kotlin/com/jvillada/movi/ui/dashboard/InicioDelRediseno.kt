@@ -353,17 +353,29 @@ private fun propuestaDeAnomalia(data: DashboardData): PropuestaDelInicio? {
     return PropuestaDelInicio(
         tipo = TipoDePropuesta.ANOMALIA,
         titulo = anomalia.titulo,
-        cuerpo = anomalia.detalle + when {
-            otras == 1 -> " · y 1 aviso más"
-            otras > 1 -> " · y $otras avisos más"
-            else -> ""
-        },
+        cuerpo = cuerpoDeLaAnomalia(anomalia.detalle, otras),
         accion = "Ver",
         alTocar = AccionDeLaPropuesta.Ir(destinoDeLaAnomalia(anomalia)),
         accionSecundaria = "Está bien",
         alTocarSecundaria = AccionDeLaPropuesta.DescartarAnomalia(anomalia.huella),
         rango = 5,
     )
+}
+
+/**
+ * **El cuerpo de la tarjeta de una anomalía**: su detalle y, si hay más, «y N avisos más» después de
+ * « · ». El detalle viene como frase, con su punto final («… (el promedio de los 3 anteriores).»), y
+ * pegado a « · » quedaba «…anteriores). · y 1 aviso más»: el punto final se saca antes de unir
+ * (vuelta de diseño 28). Solo, el detalle queda tal cual.
+ */
+internal fun cuerpoDeLaAnomalia(detalle: String, otras: Int): String {
+    val mas = when {
+        otras == 1 -> "y 1 aviso más"
+        otras > 1 -> "y $otras avisos más"
+        else -> return detalle
+    }
+    val sinPunto = detalle.trimEnd().removeSuffix(".").trimEnd()
+    return if (sinPunto.isEmpty()) mas.replaceFirstChar { it.uppercase() } else "$sinPunto · $mas"
 }
 
 /**

@@ -1699,6 +1699,9 @@ reglas de plata nuevas: la cascada y los rótulos usan las funciones de siempre.
   debajo del resumen (`SeccionChecklistDelPeriodo(debajoDelResumen = …)`). Y en ese resumen una cifra en
   cero va apagada (`tonoDelResumen`): «Ya pagaste $0» ya no pesa lo mismo que lo que falta.
 
+- **La tarjeta de una anomalía no deja «). ·» pegados.** El detalle viene con su punto final y el «y N
+  avisos más» se le pegaba después de « · »; `cuerpoDeLaAnomalia` saca el punto antes de unir.
+
 **Las líneas base** no cambian: `dp_sueltos` 118 (lo que dejó la vuelta 34), `radios_con_numero` 3, y las
 guardas en 0 siguen en 0.
 
