@@ -2475,3 +2475,45 @@ vigilan `ElOtrosSeResuelveEnLaTarjetaTest` (la tarjeta, los toques, la hoja con 
 «Todas ›» arriba de las pastillas a 360), `RepartirEnAgregarTest` (la categoría y la fecha en la hoja),
 `ElAvisoDelBancoElegisTusCategoriasTest` («Todas ›» en el renglón del rótulo en Revisar aviso),
 `PagoOtroConNotaTest` y, en `commonTest`, `LoQueMoviNoEntendioSePideTest`.
+
+## 50. Vuelta 47: Traspaso y Cuota hablan como Gasto, y dos arreglos de la 46
+
+La revisión de la 46 (r46-10): Traspaso y Cuota eran otra hoja dentro de Agregar —«NOTA (OPCIONAL)» en
+mayúsculas, el monto en un campo chico, la fecha en una caja «Hoy», «Bancolombia Ahorros …» cortado al
+lado de «Desde» y dos líneas de ayuda debajo del botón—. **Sin tocar las dos patas** ni lo que se
+guarda (`transferRequestFor`, `pagoRequestFor`, los mismos ids del borrador).
+
+1. **La misma estructura que Gasto e Ingreso** (`ui/quickadd/TransferForm.kt`):
+   - **La cifra protagonista y la píldora de la fecha**: `CabezaDelMonto`, la cabeza de Agregar, ahora
+     compartida (con el cursor de la vuelta 34 sin teclado en pantalla). La fecha abre el mismo
+     selector.
+   - **El teclado de Gasto**: `TecladoNumericoDeAgregar`, compartido. El monto de Traspaso y Cuota vive
+     ahora en la hoja (`montoDelTraspaso`, como el de Gasto), así que **el teclado físico** también lo
+     escribe (`alTeclear`: dígitos, borrar y Enter, que guarda si el botón se puede tocar); un campo de
+     texto propio con el foco —el interés, lo que bajó la deuda en otra moneda— se queda con sus teclas
+     (`onCampoDeTextoConFoco`). `conLaTecla` es la regla de una tecla, la misma para los dos montos.
+   - **Las dos puntas** (`FilaDeCuentaDelTraspaso`): una `Fila` con la marca de la cuenta, **su nombre
+     entero de título** (dos renglones si hace falta) y el rótulo con su porqué debajo —«Desde · Por
+     defecto»—; en Cuota, «Sale de» y «Pagas». El selector es el de siempre, con la fila de cuenta de
+     Agregar. Sin «Desde:» pegado al valor.
+   - **La nota**: la fila «Nota · Agregar nota…» de Gasto, con su sub-editor (`NoteEditor`).
+   - **Una sola línea de ayuda** debajo del botón: lo que falta o, con todo listo, «Se guarda en línea:
+     las dos puntas, juntas.» (`ayudaDelTraspaso`), con su alto reservado.
+   - **Cuota conserva lo suyo** con los mismos componentes: lo que bajó la deuda en otra moneda, el
+     interés de este mes y el desglose, debajo de la tarjeta.
+   - **`LosRotulosNoGritanTest` no atrapó «NOTA (OPCIONAL)»** porque solo miraba los componentes de
+     rótulo (`Seccion`, `GrupoDeCampos`, `RotuloDeCampo`) y los parámetros `rotulo`/`label`, y ese era un
+     `Text(…)` a mano. Ahora mira también el texto literal de un `Text(…)` y los parámetros `text`,
+     `texto`, `titulo` y `subtitulo`; atrapó otro, «ACCIÓN» en el editor de pantallas (ahora «Acción»).
+2. **La hoja del lote**: «Total $57.100 · 2 avisos quedan para revisar uno por uno» (`detalleDeLaConfirmacion`,
+   con su separador; iban pegados).
+3. **La tarjeta de «Otros» con las pastillas abiertas**: «Elegir categoría» pasa a **«Cerrar»**
+   (`CERRAR_LAS_CATEGORIAS`) y deja el amarillo de la acción (`Secundario`), como «Cambiar» → «Cerrar»
+   en Revisar aviso.
+
+Lo vigilan `TraspasoYCuotaComoGastoTest` (la cifra, la píldora, las filas con el nombre entero, la nota
+y una sola ayuda; Traspaso y Cuota caben a 360; guardan lo mismo: el traspaso con su monto y sus dos
+cuentas, la cuota con su deuda y sin interés escrito), `LosRotulosNoGritanTest` (los `Text` sueltos),
+`ActividadPorDentroTest` (el separador) y `ElOtrosSeResuelveEnLaTarjetaTest` («Cerrar», `Secundario`);
+`HojaDeCuotaConInteresRealTest`, `SelectoresDeTraspasoTest` y `PagarUnaCuotaDesdeElChecklistTest`
+escriben ahora el monto con el teclado y tocan las filas por su tag.
