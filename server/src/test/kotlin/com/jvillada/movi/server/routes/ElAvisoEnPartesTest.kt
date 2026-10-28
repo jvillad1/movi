@@ -490,6 +490,37 @@ class ElAvisoEnPartesTest {
     }
 
     @Test
+    fun `un giro anotado como un traspaso se reparte desde cualquiera de sus patas, y se anulan las dos`() = testApplication {
+        application { testModule() }
+        transaction {
+            listOf("ev-tr-sale" to (ahorros to "EXPENSE"), "ev-tr-entra" to (nu to "INCOME")).forEach { (id, cuentaYTipo) ->
+                Events.insert {
+                    it[Events.id] = id
+                    it[userId] = uid
+                    it[accountId] = cuentaYTipo.first
+                    it[type] = cuentaYTipo.second
+                    it[amount] = giro
+                    it[category] = "Traspaso"
+                    it[description] = "Traspaso"
+                    it[timestamp] = momento
+                    it[eventSource] = "MANUAL"
+                    it[reconciliationStatus] = "RECONCILED"
+                    it[transferId] = "tr-anotado"
+                }
+            }
+        }
+        val respuesta = repartirElMovimiento("ev-tr-entra", lasTres())
+        assertEquals(HttpStatusCode.OK, respuesta.status)
+        assertTrue(setOf("ev-tr-sale", "ev-tr-entra").all { it in anulados() })
+        assertEquals(saldoInicial - giro, saldoDeAhorros())
+        // Partes que no salen de la cuenta del giro: no.
+        transaction { evento("ev-otro-giro", ahorros, "EXPENSE", giro, "Familia", hoy) }
+        val deNu = PartesDelAviso(listOf(cuota(libranza, cuotaLibranza, "l2", origen = nu), cuota(hipoteca, cuotaHipoteca, "h2", origen = nu), alTercero(sobra, "p2", cuenta = nu)))
+        assertEquals(HttpStatusCode.UnprocessableEntity, repartirElMovimiento("ev-otro-giro", deNu).status)
+        assertTrue("ev-otro-giro" !in anulados())
+    }
+
+    @Test
     fun `un movimiento de otro usuario no se reparte`() = testApplication {
         application { testModule() }
         transaction { evento("ev-giro-anotado", ahorros, "EXPENSE", giro, "Familia", hoy, raw = alPapa) }
