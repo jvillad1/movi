@@ -153,6 +153,8 @@ fun avisosPorConfirmar(
     cuentas: List<Account>,
     ahora: Long,
     fallaron: Set<String> = emptySet(),
+    /** Vuelta 46: cabeza del pago → la categoría que el dueño eligió en su tarjeta de Por revisar. */
+    categoriasElegidas: Map<String, String> = emptyMap(),
 ): AvisosPorConfirmar {
     val pagos = pagosPorRevisar(mensajes)
     val leidos = pagos.map { propuestaDelPago(propuestas, it)?.leido }
@@ -161,7 +163,7 @@ fun avisosPorConfirmar(
     val nombres = leidos.mapNotNull { leido -> leido?.merchant?.takeIf { it.isNotBlank() }?.let(::nombreParaMostrar) }.distinct()
     val confirmables = if (propuestas == null) emptyList() else pagos
         .filter { it.id !in fallaron }
-        .mapNotNull { loQueMoviEntendio(it, mensajes, propuestas, cuentas, ahora).anotacion }
+        .mapNotNull { loQueMoviEntendio(it, mensajes, propuestas, cuentas, ahora, categoriasElegidas[it.id]).anotacion }
     return AvisosPorConfirmar(
         cuantos = pagos.size,
         suman = suman,
@@ -207,14 +209,18 @@ fun botonDeConfirmarLosAvisos(avisos: AvisosPorConfirmar): String? {
  * $27.500») y el total. Lo que no se anota también se dice.
  */
 fun detalleDeLaConfirmacion(avisos: AvisosPorConfirmar): String {
-    val lineas = avisos.confirmables.map { "${nombreParaMostrar(it.leido.merchant)}: ${it.linea}" }
     val enPesos = avisos.confirmables.filter { it.leido.currency == "COP" }
     val total = if (enPesos.size == avisos.confirmables.size) "Total ${formatCOP(enPesos.sumOf { it.monto })}" else null
     val quedan = (avisos.cuantos - avisos.confirmables.size).takeIf { it > 0 }?.let {
         if (it == 1) "1 aviso queda para revisar uno por uno." else "$it avisos quedan para revisar uno por uno."
     }
-    return (lineas + listOfNotNull(total, quedan)).joinToString("\n")
+    // Vuelta 46: los avisos van como filas en la hoja (ver `HojaDeConfirmarLosAvisos`); acá, el total
+    // y lo que queda.
+    return listOfNotNull(total, quedan).joinToString(" ")
 }
+
+/** «Comida · Bancolombia Ahorros»: lo que dice cada fila de la hoja de «Confirmar los N», sin el monto. */
+fun categoriaYCuentaDe(anotacion: AnotacionEntendida): String = "${anotacion.categoria} · ${anotacion.cuenta.name}"
 
 /**
  * **El botón que abre «Por revisar»**: «Revisar uno por uno» solo cuando al lado hay un «Confirmar»

@@ -80,6 +80,8 @@ fun ConfirmarEnHoja(
     onConfirmar: () -> Unit,
     onCancelar: () -> Unit,
     varianteConfirmar: VarianteDeBoton = VarianteDeBoton.Peligro,
+    /** Vuelta 46: lo que se confirma, como filas (los avisos de «Confirmar los N»), entre el detalle y los botones. */
+    lista: (@Composable () -> Unit)? = null,
 ) {
     MarcoDeHoja(
         onDismiss = onCancelar,
@@ -88,6 +90,10 @@ fun ConfirmarEnHoja(
         conCierre = false,
     ) {
         EncabezadoDeHoja(pregunta, subtitulo = detalle)
+        if (lista != null) {
+            Spacer(Modifier.height(Medida.dentroDeSeccion))
+            lista()
+        }
         Spacer(Modifier.height(Medida.entreSecciones))
         BotonesDeConfirmar(textoConfirmar, ocupado, onConfirmar, onCancelar, TamanoDeBoton.M, varianteConfirmar)
     }

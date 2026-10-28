@@ -89,7 +89,16 @@ data class LoQueMoviEntendio(
      * sin abrir el aviso, y así el mal categorizado salta a la vista. `null` sin lectura.
      */
     val linea: String? = null,
+    /**
+     * **Vuelta 46: lo único que falta es la categoría** («Otros», o una que el dueño nunca usó) —con el
+     * monto, la cuenta segura y nada más que revisar—. La tarjeta la pide ahí mismo («Elegir
+     * categoría») y, elegida ([loQueMoviEntendio] con `categoriaElegida`), queda confirmable.
+     */
+    val faltaSoloLaCategoria: Boolean = false,
 )
+
+/** El porqué de una categoría que el dueño eligió en la tarjeta de Por revisar (vuelta 46). */
+const val ELEGIDA_EN_LA_TARJETA: String = "La elegiste aquí"
 
 /** «Transporte · Bancolombia Ahorros», lo que haya de las dos; `null` sin ninguna. */
 fun lineaDeLoEntendido(categoria: String?, cuenta: String?): String? =
@@ -119,6 +128,11 @@ fun loQueMoviEntendio(
     propuestas: PropuestasDeLaBandeja,
     cuentas: List<Account>,
     ahora: Long,
+    /**
+     * Vuelta 46: la categoría que el dueño eligió en la tarjeta (cuando [LoQueMoviEntendio.faltaSoloLaCategoria]).
+     * Manda sobre la que leyó Movi, como si la hubiera elegido en Revisar aviso.
+     */
+    categoriaElegida: String? = null,
 ): LoQueMoviEntendio {
     val noSe = LoQueMoviEntendio(null, setOf(DudaDelAviso.NO_SE_LEYO))
     if (cabeza.state != SMS_STATE_PENDING || cuentas.isEmpty()) return noSe
@@ -139,7 +153,11 @@ fun loQueMoviEntendio(
             propuestaDe = delQueSale.id,
         )
     } else null
-    val leido = propuesta.leido ?: return noSe
+    val leidoPorMovi = propuesta.leido ?: return noSe
+    // La elegida a mano cuenta como una categoría que el dueño decidió (ver `categoriaEntendida`).
+    val leido = categoriaElegida?.takeIf { it.isNotBlank() }
+        ?.let { leidoPorMovi.copy(category = it, aprendidoDe = leidoPorMovi.aprendidoDe ?: ELEGIDA_EN_LA_TARJETA) }
+        ?: leidoPorMovi
 
     val uso = if (leido.type == TransactionType.INCOME) UsoDeCuenta.DESTINO_DE_INGRESO else UsoDeCuenta.ORIGEN_DE_GASTO
     val resuelta = conLaCuentaQueSugiereMovi(
@@ -166,7 +184,8 @@ fun loQueMoviEntendio(
         seReparte = propuesta.seReparte,
     )
     val linea = lineaDeLoEntendido(leido.category, resuelta.cuenta?.name)
-    if (dudas.isNotEmpty() || cuenta == null) return LoQueMoviEntendio(null, dudas, advertencia, linea)
+    val faltaSoloLaCategoria = dudas == setOf(DudaDelAviso.SIN_CATEGORIA) && cuenta != null
+    if (dudas.isNotEmpty() || cuenta == null) return LoQueMoviEntendio(null, dudas, advertencia, linea, faltaSoloLaCategoria)
     return LoQueMoviEntendio(
         AnotacionEntendida(cabezaId = cabeza.id, sms = delQueSale, pago = pago, leido = leido, cuenta = cuenta, categoria = leido.category),
         emptySet(),
