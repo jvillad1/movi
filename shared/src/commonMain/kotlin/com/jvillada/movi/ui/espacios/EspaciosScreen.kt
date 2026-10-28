@@ -563,7 +563,8 @@ private fun SaldoDelEspacioTarjeta(
     onAbrirWhatsApp: () -> Unit,
 ) {
     val frase = fraseDelSaldo(detalle.espacio, detalle.saldo)
-    Superficie(modifier = Modifier.testTag(TAG_SALDO_DEL_ESPACIO)) {
+    // Ancho completo: sin él la tarjeta medía lo que su botón, que fuera del teléfono va con tope.
+    Superficie(modifier = Modifier.fillMaxWidth().testTag(TAG_SALDO_DEL_ESPACIO)) {
         Text(frase.titulo, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
         if (frase.monto > 0L) Cifra(frase.monto, VarianteDeCifra.Grande)
         frase.apoyo?.let { Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio) }

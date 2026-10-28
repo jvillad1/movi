@@ -126,6 +126,11 @@ class EspaciosEnDosColumnasTest {
 
         assertTrue(dentro(limites(TAG_SALDO_DEL_ESPACIO), izquierda), "el saldo con «Pedirle a Caro» va a la izquierda")
         assertTrue(dentro(limites(TAG_PEDIRLE), izquierda))
+        // La tarjeta llena su columna aunque su botón tenga tope: antes medía lo que el botón.
+        assertTrue(
+            limites(TAG_SALDO_DEL_ESPACIO).width > Medida.anchoMaximoDeBoton.value + 2 * Medida.rellenoDeSuperficie.value + 0.5f,
+            "la tarjeta del saldo mide ${limites(TAG_SALDO_DEL_ESPACIO).width}",
+        )
         val primerGasto = composeRule.onAllNodesWithTag(TAG_GASTO_DEL_ESPACIO, useUnmergedTree = true).fetchSemanticsNodes().first().boundsInRoot
         assertTrue(dentro(primerGasto, derecha), "los gastos van a la derecha")
         assertTrue(dentro(limites(TAG_ANOTAR_LO_QUE_PAGO_OTRO), derecha), "con «Anotar lo que pagó Caro»")
