@@ -157,7 +157,7 @@ fun SduiRenderer(
                 }
                 DosColumnasParejas(
                     fijosALaIzquierda = fijos,
-                    arribaDeLaDerecha = if (conBanda) ALTO_DE_LA_BANDA_EN_EL_SCROLL + Medida.dentroDeSeccion else 0.dp,
+                    arribaDeLaDerecha = if (conBanda) ALTO_DE_LA_BANDA_EN_EL_SCROLL + Medida.dentroDeSeccion else Dp(0f),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     if (guiaArriba != null) {
