@@ -119,7 +119,7 @@ class ElAvisoDelBancoElegisTusCategoriasTest {
         composeRule.waitForIdle()
     }
 
-    /** Vuelta 42: el selector completo se abre con «Todas ›», al final de las pastillas, en una hoja. */
+    /** Vuelta 42: el selector completo se abre con «Todas ›» (vuelta 46: en el renglón del rótulo), en una hoja. */
     private fun abrirTodas() {
         cambiarLaCategoria()
         composeRule.onNodeWithTag(TAG_PASTILLA_TODAS_LAS_CATEGORIAS_DEL_SMS).performSemanticsAction(SemanticsActions.OnClick)
@@ -222,12 +222,13 @@ class ElAvisoDelBancoElegisTusCategoriasTest {
     }
 
     /**
-     * **Vuelta 42, el patrón de Agregar.** «Cambiar» muestra las frecuentes con la elegida marcada y,
-     * al final, «Todas ›»; la cuadrícula de 18 íconos ya no se abre en línea (empujaba «Confirma o
-     * ajusta» fuera de la vista).
+     * **Vuelta 42, el patrón de Agregar.** «Cambiar» muestra las frecuentes con la elegida marcada; la
+     * cuadrícula de 18 íconos ya no se abre en línea (empujaba «Confirma o ajusta» fuera de la vista).
+     * **Vuelta 46:** «Todas ›» va en el renglón del rótulo, arriba de las pastillas (`FilaDeCategorias`):
+     * al final había que deslizar para encontrarlo en el teléfono.
      */
     @Test
-    fun cambiar_muestra_las_frecuentes_con_la_elegida_y_todas_al_final() {
+    fun cambiar_muestra_las_frecuentes_con_la_elegida_y_todas_en_el_renglon_del_rotulo() {
         montar(propuesta = "Fútbol")
 
         cambiarLaCategoria()
@@ -239,7 +240,7 @@ class ElAvisoDelBancoElegisTusCategoriasTest {
         val todas = composeRule.onNodeWithTag(TAG_PASTILLA_TODAS_LAS_CATEGORIAS_DEL_SMS).getUnclippedBoundsInRoot()
         pastillas().forEach { nombre ->
             val pastilla = composeRule.onNodeWithTag(tagDePastillaDeCategoriaDelSms(nombre)).getUnclippedBoundsInRoot()
-            assertTrue(pastilla.left < todas.left, "«Todas ›» va al final, después de «$nombre»")
+            assertTrue(todas.bottom <= pastilla.top, "«Todas ›» va arriba, en el renglón del rótulo, no después de «$nombre»")
         }
         // Nada de la cuadrícula en línea, y la fila de la cuenta sigue en su lugar.
         composeRule.onNodeWithTag(TAG_BUSCAR_CATEGORIA).assertDoesNotExist()

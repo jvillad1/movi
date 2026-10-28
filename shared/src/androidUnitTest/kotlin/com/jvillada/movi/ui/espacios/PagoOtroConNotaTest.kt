@@ -104,7 +104,7 @@ class PagoOtroConNotaTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithTag(TAG_CATEGORIA_PAGO_OTRO, useUnmergedTree = true).assertExists()
         assertEquals(0, composeRule.onAllNodes(hasText("Administrar categorías"), useUnmergedTree = true).fetchSemanticsNodes().size)
-        composeRule.onNodeWithTag(com.jvillada.movi.ui.quickadd.TAG_PASTILLA_TODAS_LAS_CATEGORIAS_AGREGAR, useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithTag(TAG_TODAS_PAGO_OTRO, useUnmergedTree = true).assertExists()
         // La elegida, marcada.
         val mercado = composeRule.onNode(
             hasText("Mercado") and androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag(TAG_CATEGORIA_PAGO_OTRO)),

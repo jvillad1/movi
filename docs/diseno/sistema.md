@@ -2418,3 +2418,60 @@ los 3» con su hoja y los tres toques desde el Inicio, el mal categorizado), `Po
 (las pastillas), `ElRecurrenteSoloCuandoSeRepiteTest` (el gate), y en `commonTest`/`:core`
 `LosAvisosDeUnVistazoLogicaTest`, `LaCabezaDelAvisoTest`, `LoQueSumanLosAvisosTest` y
 `ElRecurrenteQueSeRepiteTest`; en el server, `DashboardRoutesTest` (la suma, entera o nada).
+
+## 49. Vuelta 46: lo que Movi no entendió se pide, y «Todas ›» siempre en el renglón del rótulo
+
+La revisión de la vuelta 44 con datos reales: tres avisos entendidos se confirman en 3 toques, pero
+con uno en «Otros» eran 7 (8 si la categoría no estaba entre las frecuentes), «Otros» llevaba en
+Revisar aviso el mismo ✓ verde de lo confirmado, «Repartir» no dejaba cambiar la categoría ni la
+fecha, y «Todas ›» quedaba al final de las pastillas, fuera de la pantalla del teléfono. **Sin reglas
+de plata nuevas**: confirmar sigue por `confirmarLoEntendido`.
+
+1. **Un solo componente para elegir categoría: `FilaDeCategorias`** (`ui/components/ds/FilaDeCategorias.kt`).
+   Es el de Agregar (vuelta 34), movido **tal cual** —el desplazamiento de las pastillas no cambió—:
+   «Categoría … [sugerencia] … **Todas ›**» en un renglón de 48 y debajo las pastillas («Nueva»
+   primera, la elegida marcada y siempre a la vista). `RellenoDeLaFilaDeCategorias.Lista` pone el
+   margen (dentro de una superficie de lista) y `Ninguno` no (dentro de una tarjeta o una hoja);
+   `TagsDeLaFilaDeCategorias` deja a cada pantalla sus `testTag`. Lo usan **Agregar, Revisar aviso, la
+   tarjeta de Por revisar, «Repartir este gasto» y «Pagó otro»**. En Revisar aviso «Todas ›» iba al
+   final de las pastillas (r44-08); ahora va en el renglón del rótulo, como en todas partes.
+2. **Revisar aviso no le pone ✓ a lo que Movi no entendió.** La fila «Categoría» con «Otros» (o vacía)
+   dice **«Elige la categoría»** con «Movi no la entendió» debajo, el ícono de pregunta en el `tinte` con
+   `aviso` y el subtítulo en `aviso` (`TonoDeSubtitulo.Aviso`); una del catálogo que el dueño nunca usó,
+   igual pero con su nombre y «Revísala: Movi la propone»; la que él elige a mano en la pantalla, con ✓
+   (`categoriaEnReconciliar`, `categoriaQueNoDiceNada` en `:core`). Lo mismo **la cuenta** que Movi puso
+   por defecto («La puso Movi», `cuentaEntendidaEnReconciliar`) y **el comercio** que no se leyó
+   («Movimiento»: «Escribe el comercio», `comercioEntendidoEnReconciliar`).
+3. **Un aviso al que solo le falta la categoría se resuelve en su tarjeta.** `LoQueMoviEntendio.faltaSoloLaCategoria`
+   (las dudas son solo `SIN_CATEGORIA` y la cuenta es segura): el botón principal es **«Elegir
+   categoría»** (`ELEGIR_CATEGORIA`), que abre en la tarjeta las frecuentes del tipo con «Todas ›»
+   (`FilaDeCategorias`, relleno `Ninguno`, la fila de `Medida.altoDeFilaDePastillas`; sin el uso del Inicio a mano, las que el dueño usa —
+   `PropuestasDeLaBandeja.categoriasDelDueno`—); «Todas ›» abre el selector completo en una hoja. Al
+   elegir, la bandeja pasa la elegida a `loQueMoviEntendio(categoriaElegida = …)` —como si la hubiera
+   elegido en Revisar aviso: cuenta como decidida, `ELEGIDA_EN_LA_TARJETA`— y la tarjeta queda
+   **confirmable ahí mismo** («Confirmar», con «Papelería · Bancolombia Ahorros 4057» arriba); también
+   entra en «Confirmar los N» (`avisosPorConfirmar(categoriasElegidas = …)`). Si la elegida pide dos
+   patas (un pago de tarjeta), vuelve a «Revisar». El pago avisado varias veces
+   (`TarjetaDelMismoPago`) sigue yendo a Revisar aviso.
+4. **«Repartir este gasto» tiene los campos de Agregar.** La línea de texto «Restaurantes · Hoy» (r44-09)
+   pasó a la píldora de la fecha (abre `SelectorDeFecha` en la hoja) y a `FilaDeCategorias` con «Todas ›»
+   (el selector completo, en una hoja encima). Escriben en Agregar —son el mismo dato, como el monto—,
+   así que lo guardado y repartido lleva lo elegido.
+5. **La hoja de «Confirmar los N»** lista los avisos como `Fila` del sistema —el comercio, «Categoría ·
+   Cuenta» y la `Cifra`— en una superficie de capa 2 (`ConfirmarEnHoja(lista = …)`); el detalle quedó
+   en el total y cuántos quedan. **«N confirmados» sigue sin «Deshacer»**: no existe una vuelta limpia
+   —no hay una ruta que devuelva un aviso confirmado a pendiente junto con anular su movimiento, y un
+   pago avisado varias veces o repartido en partes deja más de un movimiento—. Inventarla sería una
+   regla de plata nueva.
+
+**Los toques**, medidos en `ElOtrosSeResuelveEnLaTarjetaTest` con cuatro avisos (tres entendidos y uno
+en «Otros»), desde el Inicio: **5** (la franja, «Elegir categoría», la pastilla, «Confirmar los 4» y el
+«Confirmar» de la hoja; eran 7). El de «Otros» se resuelve en **2** («Elegir categoría» y la pastilla).
+Si la categoría no está entre las frecuentes, uno más («Todas ›» y elegirla en la hoja): 6 (eran 8).
+Tres entendidos, como en la vuelta 44: 3.
+
+**Las líneas base**: `dp_sueltos` baja a 116; `radios_con_numero` 3, y las guardas en 0 siguen en 0. Lo
+vigilan `ElOtrosSeResuelveEnLaTarjetaTest` (la tarjeta, los toques, la hoja con filas, sin «Deshacer»,
+«Todas ›» arriba de las pastillas a 360), `RepartirEnAgregarTest` (la categoría y la fecha en la hoja),
+`ElAvisoDelBancoElegisTusCategoriasTest` («Todas ›» en el renglón del rótulo en Revisar aviso),
+`PagoOtroConNotaTest` y, en `commonTest`, `LoQueMoviNoEntendioSePideTest`.
