@@ -38,10 +38,47 @@ fun estaSinCuadrar(cuenta: Account, ahora: Long): Boolean =
 fun cuentasSinCuadrar(cuentas: List<Account>, ahora: Long): List<Account> =
     cuentas.filter { estaSinCuadrar(it, ahora) }
 
-/** **El aviso, en una línea**, o `null` cuando no hay nada que decir. Sin cifras: no se saben. */
+/** Lo que se dice de una cuenta que tiene movimientos y nunca se cuadró. */
+const val NUNCA_LA_HAS_CUADRADO: String = "Nunca la has cuadrado"
+
+/** Lo que se dice de una cuenta que se cuadró alguna vez y ya pasó [DIAS_PARA_VOLVER_A_CUADRAR]. */
+const val HACE_MAS_DE_UN_MES_QUE_NO_LA_CUADRAS: String = "Hace más de un mes que no la cuadras"
+
+/** Lo que se dice de una cuenta sin un solo movimiento: no hay nada que cuadrar. */
+const val SIN_MOVIMIENTOS_TODAVIA: String = "Sin movimientos todavía"
+
+/**
+ * **La frase del cuadre de UNA cuenta**, la misma en todas las pantallas (vuelta 31). Patrimonio
+ * decía «Hace más de un mes que no cuadras Bancolombia Ahorros» y el detalle de esa cuenta «Nunca la
+ * has cuadrado»: dos frases para un mismo hecho se leen como una contradicción. Ahora las dos —y Hoy,
+ * Cuadre de saldos y Movi AI— salen de acá:
+ * - sin movimientos → [SIN_MOVIMIENTOS_TODAVIA];
+ * - con movimientos y sin un solo ajuste → [NUNCA_LA_HAS_CUADRADO];
+ * - cuadrada, pero hace [DIAS_PARA_VOLVER_A_CUADRAR] días o más → [HACE_MAS_DE_UN_MES_QUE_NO_LA_CUADRAS];
+ * - cuadrada hace poco → `null`: la pantalla dice cuándo («Cuadrada el 3 de agosto»), con su fecha.
+ */
+fun fraseDelCuadre(cuenta: Account, ahora: Long): String? = when {
+    cuenta.lastAdjustmentAt == null && cuenta.firstEventAt == null -> SIN_MOVIMIENTOS_TODAVIA
+    cuenta.lastAdjustmentAt == null -> NUNCA_LA_HAS_CUADRADO
+    estaSinCuadrar(cuenta, ahora) -> HACE_MAS_DE_UN_MES_QUE_NO_LA_CUADRAS
+    else -> null
+}
+
+/**
+ * **El aviso, en una línea**, o `null` cuando no hay nada que decir. Sin cifras: no se saben.
+ *
+ * Con una sola cuenta, su nombre y la MISMA frase que dice su detalle ([fraseDelCuadre]): «Bancolombia
+ * Ahorros · Nunca la has cuadrado». Con varias, cuántas («2 cuentas nunca se han cuadrado» si ninguna
+ * se cuadró nunca).
+ */
 fun textoDelAvisoDeCuadre(atrasadas: List<Account>): String? = when {
     atrasadas.isEmpty() -> null
-    atrasadas.size == 1 -> "Hace más de un mes que no cuadras ${atrasadas.first().name}"
+    atrasadas.size == 1 -> {
+        val cuenta = atrasadas.first()
+        val frase = if (cuenta.lastAdjustmentAt == null) NUNCA_LA_HAS_CUADRADO else HACE_MAS_DE_UN_MES_QUE_NO_LA_CUADRAS
+        "${cuenta.name} · $frase"
+    }
+    atrasadas.all { it.lastAdjustmentAt == null } -> "${atrasadas.size} cuentas nunca se han cuadrado"
     else -> "${atrasadas.size} cuentas llevan más de un mes sin cuadrar"
 }
 

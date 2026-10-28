@@ -7,6 +7,7 @@ import com.jvillada.movi.ui.components.saldoEnSuMoneda
 import com.jvillada.movi.ui.components.signedMoney
 import com.jvillada.movi.ui.fecha.etiquetaDeFecha
 import com.jvillada.movi.ui.fecha.fechaDeEpoch
+import kotlinx.datetime.Clock
 import kotlinx.datetime.LocalDate
 
 /**
@@ -172,15 +173,17 @@ fun cuentasSinCuadrar(cuentas: List<Account>, ahora: Long): List<Account> =
 fun textoDelAvisoDeCuadre(atrasadas: List<Account>): String? = com.jvillada.movi.shared.model.textoDelAvisoDeCuadre(atrasadas)
 
 /**
- * **Desde cuándo nadie mira esta cuenta**, para el renglón de cada fila: «Cuadrada hoy»,
- * «Cuadrada el 3 de agosto», «Nunca la has cuadrado».
+ * **Desde cuándo nadie mira esta cuenta**, para el renglón de cada fila y el encabezado de su detalle:
+ * «Cuadrada hoy», «Cuadrada el 3 de agosto», «Nunca la has cuadrado», «Hace más de un mes que no la
+ * cuadras». Lo que no es una fecha sale de [fraseDelCuadre] (`:core`), la misma frase que Patrimonio
+ * y Hoy dicen de esa cuenta (vuelta 31: decían «hace más de un mes» y el detalle «nunca»).
  *
  * La fecha se escribe con [etiquetaDeFecha], la misma forma que usan Movimientos y el selector de
  * fecha: si dos pantallas nombraran el mismo día distinto, parecería otro día.
  */
-fun textoDelUltimoCuadre(cuenta: Account, hoy: LocalDate): String {
-    val cuadre = cuenta.lastAdjustmentAt
-        ?: return if (cuenta.firstEventAt == null) "Sin movimientos todavía" else "Nunca la has cuadrado"
+fun textoDelUltimoCuadre(cuenta: Account, hoy: LocalDate, ahora: Long = Clock.System.now().toEpochMilliseconds()): String {
+    com.jvillada.movi.shared.model.fraseDelCuadre(cuenta, ahora)?.let { return it }
+    val cuadre = cuenta.lastAdjustmentAt ?: return com.jvillada.movi.shared.model.NUNCA_LA_HAS_CUADRADO
     return when (val etiqueta = etiquetaDeFecha(fechaDeEpoch(cuadre), hoy)) {
         "Hoy" -> "Cuadrada hoy"
         "Ayer" -> "Cuadrada ayer"

@@ -174,13 +174,22 @@ class CuadreDeSaldosLogicTest {
     @Test
     fun `el aviso nombra la cuenta cuando es una sola y cuenta cuando son varias`() {
         assertNull(textoDelAvisoDeCuadre(emptyList()))
+        // Vuelta 31: con una sola, su nombre y la MISMA frase que dice su detalle.
         assertEquals(
-            "Hace más de un mes que no cuadras Nu",
-            textoDelAvisoDeCuadre(listOf(cuenta())),
+            "Nu · Nunca la has cuadrado",
+            textoDelAvisoDeCuadre(listOf(cuenta(primerEvento = AHORA - 60 * UN_DIA))),
+        )
+        assertEquals(
+            "Nu · Hace más de un mes que no la cuadras",
+            textoDelAvisoDeCuadre(listOf(cuenta(ultimoAjuste = AHORA - 60 * UN_DIA))),
+        )
+        assertEquals(
+            "2 cuentas nunca se han cuadrado",
+            textoDelAvisoDeCuadre(listOf(cuenta(), cuenta(id = "b", nombre = "Fiducuenta"))),
         )
         assertEquals(
             "2 cuentas llevan más de un mes sin cuadrar",
-            textoDelAvisoDeCuadre(listOf(cuenta(), cuenta(id = "b", nombre = "Fiducuenta"))),
+            textoDelAvisoDeCuadre(listOf(cuenta(ultimoAjuste = AHORA - 60 * UN_DIA), cuenta(id = "b", nombre = "Fiducuenta"))),
         )
     }
 
@@ -189,11 +198,28 @@ class CuadreDeSaldosLogicTest {
     @Test
     fun `cada fila dice cuando se cuadro, o que nunca se cuadro`() {
         val hoy = LocalDate(2026, 9, 20)
-        assertEquals("Nunca la has cuadrado", textoDelUltimoCuadre(cuenta(primerEvento = AHORA), hoy))
-        assertEquals("Sin movimientos todavía", textoDelUltimoCuadre(cuenta(), hoy))
-        // 1-ago-2026 12:00 en Bogotá (la zona de la app) — se escribe como lo escribe Movimientos.
+        assertEquals("Nunca la has cuadrado", textoDelUltimoCuadre(cuenta(primerEvento = AHORA), hoy, AHORA))
+        assertEquals("Sin movimientos todavía", textoDelUltimoCuadre(cuenta(), hoy, AHORA))
+        // 1-sep-2026 12:00 en Bogotá (la zona de la app) — se escribe como lo escribe Movimientos.
+        val primeroDeSeptiembre = 1_788_282_000_000L
+        assertEquals("Cuadrada el 1 de septiembre", textoDelUltimoCuadre(cuenta(ultimoAjuste = primeroDeSeptiembre), hoy, AHORA))
+        // 1-ago-2026: 50 días antes, pasó el plazo. Dice lo mismo que Patrimonio y Hoy de esa cuenta.
         val primeroDeAgosto = 1_785_603_600_000L
-        assertEquals("Cuadrada el 1 de agosto", textoDelUltimoCuadre(cuenta(ultimoAjuste = primeroDeAgosto), hoy))
+        assertEquals("Hace más de un mes que no la cuadras", textoDelUltimoCuadre(cuenta(ultimoAjuste = primeroDeAgosto), hoy, AHORA))
+    }
+
+    /** Vuelta 31: la frase de una cuenta es una sola, la de su detalle y la del aviso de Patrimonio. */
+    @Test
+    fun `el aviso y el detalle dicen la misma frase de la misma cuenta`() {
+        val hoy = LocalDate(2026, 9, 20)
+        listOf(
+            cuenta(nombre = "Bancolombia Ahorros", primerEvento = AHORA - 60 * UN_DIA),
+            cuenta(nombre = "Bancolombia Ahorros", ultimoAjuste = AHORA - 60 * UN_DIA),
+        ).forEach { c ->
+            assertEquals(listOf(c), cuentasSinCuadrar(listOf(c), AHORA))
+            val delDetalle = textoDelUltimoCuadre(c, hoy, AHORA)
+            assertEquals("Bancolombia Ahorros · $delDetalle", textoDelAvisoDeCuadre(listOf(c)))
+        }
     }
 
     private fun propuesta(banco: Long, movi: Long) = com.jvillada.movi.shared.model.PropuestaDeCuadrePorAviso(
