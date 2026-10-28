@@ -1596,3 +1596,51 @@ el título) y `LosRotulosDeIconosNoSePartenTest` (con la hoja de una categoría 
 motor de texto real —`NATIVE`, sdk 34— y la escala de letra de la app, ningún renglón termina entre dos
 letras ni con «…», a 360, 364 y 390 dp; y las cinco claves siguen siendo las de antes), más el caso
 nuevo de `descripcionPropuesta` en `OccurrenceLogicTest`.
+
+## 39. Vuelta 37: Cuadre de saldos se lee de una pasada, y «Entre cuentas» es un modo claro
+
+Revisado en la vista previa de la vuelta 36 (0b84be13) con la cuenta demo, a 390 px. Ningún componente
+ni token nuevo. Sin cambios de server ni de reglas de plata: el ajuste de una tarjeta ya existía
+(vuelta 33).
+
+- **Cuadre de saldos tiene menos texto que formulario.** Arriba había un párrafo de seis renglones en
+  su superficie, el encabezado repetía «Compara con lo que dice tu banco hoy», y cada cuenta repetía
+  «Escribe el saldo que te muestra el banco hoy.» y cerraba con un rótulo «Dinero» suelto. Ahora:
+  - la entrada es una frase sin superficie, «Escribe lo que dice tu banco y Movi anota la diferencia.»
+    (`QUE_ES_EL_CUADRE`), y el encabezado va sin subtítulo;
+  - lo que el párrafo explicaba va en una nota debajo del botón (`NOTA_DEL_CUADRE`): que el ajuste
+    queda como un movimiento visible, que no cuenta como gasto ni ingreso, y que lo que quede en
+    blanco no se toca;
+  - las cuentas van bajo su `Seccion` —«Dinero», «Inversión», «Tarjetas», en ese orden, sin secciones
+    vacías (`seccionesDelCuadre`)— y el rótulo suelto se fue. Con avisos que traen el saldo, «Lo que
+    dijo el banco» va primero y las secciones siguen; el «O escribe tú el saldo» de entre medio salió
+    (eran dos títulos seguidos);
+  - el rótulo del campo basta: `textoDelCuadre` es `null` con el campo vacío y solo habla cuando hay
+    una cifra («Movi dice … tú dices …: se va a anotar …»);
+  - cada cuenta sigue con «Movi dice» y su estado («Nunca la has cuadrado», «Cuadrada el …»). El
+    esqueleto perdió las dos líneas de abajo y ganó el título de la sección, para que nada salte.
+- **Las tarjetas también se cuadran ahí.** La sección «Tarjetas» lista las `CREDIT_CARD`: el campo
+  dice «Cuánto debes según el banco», «Movi dice» muestra la deuda, y el texto dice **cargo** o
+  **abono** como la hoja «Ajustar saldo» de la tarjeta. Al anotar va por la misma ruta que
+  `CardBalanceSheet` (`adjustAccountBalance`, `POST /api/accounts/{id}/balance-adjustment`). Lo decide
+  un predicado propio de la pantalla, `seccionDelCuadre`; **`sePuedeCuadrar` de `:core` no cambió**: el
+  server, Movi AI y los avisos de «sin cuadrar» siguen sin tarjetas, así que una tarjeta nunca sale en
+  ámbar ni se reclama como atrasada. Los préstamos siguen fuera (se cuadran en Créditos).
+- **«Entre cuentas» es un modo claro.** Desde Patrimonio → Herramientas → «Movimientos entre
+  cuentas», Movimientos abría sin ningún chip marcado, con la franja Entró · Salió · Neto de todo el
+  período, la tarjeta «N por revisar» y un encabezado «Entre cuentas · Ver todos». Ahora el modo es un
+  chip marcado **«Entre cuentas ×»** (`TAG_CHIP_DEL_MODO`), el patrón del «Solo …» de la ola 4: lo
+  dice y lo quita (vuelve a «Todo»). El encabezado con «Ver todos» se fue. En el modo no van la franja
+  ni «por revisar», ni el resumen del período en el panel de pantalla ancha (`loDeArribaEnElModo`).
+  **Se eligió ocultar la franja** y no cambiarla por «Movido entre cuentas $X»: lo que se mueve entre
+  cuentas propias no es plata que entró ni que salió, y sumar patas —con tarjetas en dólares y cuotas
+  que bajan una deuda— sería una cifra nueva sin regla de plata detrás.
+
+**Las líneas base** no cambian: `dp_sueltos` 118, `radios_con_numero` 3, y las guardas en 0 siguen en 0.
+Lo vigilan `CuadreDeSaldosScreenTest` (cada cuenta bajo su sección, «Dinero» una sola vez, ninguna ayuda
+repetida, la frase y la nota una vez, «Movi dice» y el estado en cada cuenta; la tarjeta pide la deuda,
+dice el cargo y manda 2.100.000 por `adjustAccountBalance`; el préstamo no aparece) y
+`EntreCuentasEsUnModoClaroTest` (en el modo, el chip marcado con «Salir de Entre cuentas», sin franja,
+sin «por revisar» y sin «Ver todos»; la × vuelve a «Todo» con las dos), más los casos puros de
+`CuadreDeSaldosLogicTest` (secciones, rótulos, cargo/abono, `sePuedeCuadrar` sin tarjetas) y de
+`EntreCuentasFueraDeLosChipsTest`.
