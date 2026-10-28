@@ -6,6 +6,12 @@ import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
 import com.jvillada.movi.ui.components.ds.Separador
 import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
 import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.Chevron
+import com.jvillada.movi.ui.components.ds.DensidadDeFila
+import com.jvillada.movi.ui.components.AvatarDeLaCuenta
+import com.jvillada.movi.ui.components.formatAmountKeypadDisplay
+import androidx.compose.ui.focus.onFocusChanged
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Radio
 import com.jvillada.movi.theme.Medida
@@ -553,8 +559,19 @@ internal fun TransferBody(
      * como siempre.
      */
     presetDestinoId: String? = null,
-    /** El monto con el que arranca el campo, en la moneda de la cuenta de origen. */
-    presetMonto: Long? = null,
+    /**
+     * Vuelta 47 · **el monto, como en Gasto**: los dígitos escritos (los guarda la hoja, que los
+     * escribe con [onKey] desde el teclado en pantalla y el físico), en la moneda de la cuenta de
+     * origen. Era un campo de texto chico.
+     */
+    monto: String = "",
+    onKey: (String) -> Unit = {},
+    /** Sin teclado en pantalla (frente a un computador): la cifra con el cursor, como en Gasto. */
+    conTecladoEnPantalla: Boolean = true,
+    /** Sube con cada Enter del teclado físico: guarda, si se puede (como el botón). */
+    pedidosDeGuardar: Int = 0,
+    /** Un campo de texto de esta hoja (el interés, el monto en la moneda de la deuda) tomó o soltó el foco. */
+    onCampoDeTextoConFoco: (Boolean) -> Unit = {},
     onSaved: () -> Unit,
 ) {
     val coroutine = rememberCoroutineScope()
@@ -671,7 +688,7 @@ internal fun TransferBody(
         terminosCargados = true
     }
 
-    var amount by remember { mutableStateOf(presetMonto?.takeIf { it > 0 }) }
+    val amount: Long? = monto.toLongOrNull()?.takeIf { it > 0 }
     /** Lo que bajó la deuda en su moneda, cuando se paga una tarjeta desde una cuenta de otra moneda. */
     var montoEnLaDeuda by remember { mutableStateOf<Long?>(null) }
     // Ola 13 — LA FECHA DEL TRASPASO SE ELIGE, NO SE ESCRIBE.
@@ -690,6 +707,8 @@ internal fun TransferBody(
     val hoy = remember { hoyEnAppZone() }
     var fecha by remember { mutableStateOf(hoy) }
     var note by remember { mutableStateOf("") }
+    // Vuelta 47: la nota se escribe en su sub-editor, como en Gasto (la fila «Nota · Agregar nota…»).
+    var editandoNota by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var picking by remember { mutableStateOf<TransferSide?>(null) }
@@ -725,6 +744,16 @@ internal fun TransferBody(
         onPickerAbierto(false)
     }
 
+    fun abrirNota() {
+        onPickerAbierto(true)
+        editandoNota = true
+    }
+
+    fun cerrarNota() {
+        editandoNota = false
+        onPickerAbierto(false)
+    }
+
     // ── El segundo cerrojo: si este cuerpo desaparece, su picker desaparece con él ──────
     //
     // `picking` muere cuando este `@Composable` sale de composición, pero el reflejo que
@@ -743,6 +772,7 @@ internal fun TransferBody(
         when {
             picking != null -> cerrarPicker()
             pickingDate -> cerrarFecha()
+            editandoNota -> cerrarNota()
         }
     }
 
@@ -884,6 +914,11 @@ internal fun TransferBody(
         }
     }
 
+    // Vuelta 47: Enter del teclado físico guarda, como el botón (y solo si el botón se puede tocar).
+    LaunchedEffect(pedidosDeGuardar) {
+        if (pedidosDeGuardar > 0 && canSave && avisoDelDesglose == null) save()
+    }
+
     // Ola 8 · V2 (N4 de la revisión) — la pestaña Traspaso recibe LOS MISMOS DOS ARREGLOS.
     //
     // Se los había perdido por un detalle de estructura: este `TransferAccountPicker` y su
@@ -907,7 +942,7 @@ internal fun TransferBody(
         modifier = Modifier
             .fillMaxWidth()
             .then(
-                if (picking == null && !pickingDate) Modifier
+                if (picking == null && !pickingDate && !editandoNota) Modifier
                 else Modifier.heightIn(min = altoFijado),
             ),
     ) {
@@ -923,6 +958,12 @@ internal fun TransferBody(
                 Boton("Entendido", onClick = { avisoDelDesglose = null; onSaved() }, anchoCompleto = true)
                 Spacer(Modifier.height(Espacio.m))
             }
+        } else if (editandoNota) {
+            NoteEditor(
+                initial = note,
+                onSave = { note = it; cerrarNota() },
+                onVolver = { cerrarNota() },
+            )
         } else if (pickingDate) {
             // Mismo sub-picker que la pestaña Gasto/Ingreso, adentro del mismo Box de alto
             // fijado: abrirlo no cambia el alto de la hoja.
@@ -1022,49 +1063,55 @@ internal fun TransferBody(
 
         Spacer(Modifier.height(Espacio.m))
 
-        // Vuelta de diseño 20: las `Fila` del sistema (ver [FilaDeLaHoja]), como «Cuenta» en la hoja de
-        // un movimiento. Eran `CardRow` de 48 dp en una `MinCard`.
-        Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
-            // Ola 11: mismo aviso que la fila «Cuenta» del editor y por el mismo motivo —el valor por
-            // defecto es una decisión de la app y tiene que poder leerse antes de guardar—, con el
-            // mismo alto reservado para que elegir una cuenta no mueva el formulario bajo el dedo.
-            // Ver [avisoDeCuenta].
-            FilaDeLaHoja(
-                titulo = "Desde",
-                valor = from?.name ?: "Elegir cuenta",
-                valorVacio = from == null,
-                aviso = avisoDeCuenta(origenFrom, elegibles.size),
-                reservarAviso = elegibles.size > 1,
-                fraccionDelValor = FRACCION_VALOR_FILA_TRASPASO,
-                onClick = { abrirPicker(TransferSide.FROM) },
-            )
-            Separador(SangriaDeSeparador.Margen)
-            // Menos una: el destino no puede ser el origen, así que con dos cuentas el destino no
-            // tiene alternativa y no hay ninguna decisión que confesar — misma regla que «con una
-            // sola cuenta el aviso no dice nada».
-            FilaDeLaHoja(
-                titulo = "Hacia",
-                valor = to?.name ?: "Elegir cuenta",
-                valorVacio = to == null,
-                aviso = avisoDeCuenta(origenTo, elegibles.size - 1),
-                reservarAviso = elegibles.size - 1 > 1,
-                fraccionDelValor = FRACCION_VALOR_FILA_TRASPASO,
-                onClick = { abrirPicker(TransferSide.TO) },
-            )
-        }
-
-        Spacer(Modifier.height(Espacio.m))
         // Entre monedas (pagar la tarjeta en dólares desde pesos) el monto es lo que SALIÓ de la
         // cuenta, en su moneda, y abajo se pide lo que bajó la deuda. La app no convierte: el tipo
         // de cambio lo puso el banco. Ver `CreatePagoDeCuotaRequest.montoEnLaMonedaDeLaDeuda`.
         val pagoEntreMonedas = esPago && from != null && to != null && from.currency != to.currency
-        MoneyField(
-            value = amount,
-            onValueChange = { amount = it },
-            label = if (pagoEntreMonedas) "Lo que salió de ${from!!.name}" else "Monto",
-            prefix = simboloDeMoneda(if (pagoEntreMonedas) from!!.currency else "COP"),
-            modifier = Modifier.testTag(TAG_CAMPO_DE_MONTO),
+        // Vuelta 47 · **la cifra protagonista y la píldora de la fecha, como en Gasto** (la cabeza
+        // de Agregar, [CabezaDelMonto]). Eran un campo de monto chico y una caja «Hoy».
+        val monedaDelMonto = from?.currency ?: "COP"
+        CabezaDelMonto(
+            montoEscrito = simboloDeMoneda(monedaDelMonto) + formatAmountKeypadDisplay(monto),
+            moneda = monedaDelMonto,
+            conTecladoEnPantalla = conTecladoEnPantalla,
+            dateLabel = etiquetaDeFecha(fecha, hoy),
+            onPickDate = { if (!saving) abrirFecha() },
+            tagDeLaFecha = TAG_FECHA_DEL_TRASPASO,
         )
+        Spacer(Modifier.height(Espacio.m))
+
+        // Vuelta 47 · «Desde» y «Hacia» con la marca de la cuenta y su nombre entero (dos renglones
+        // si hace falta), y el rótulo con su porqué debajo —«Desde · Por defecto»—: el nombre ya no
+        // compite con el rótulo por el renglón y no se corta en «Bancolombia Ahorros …». Y la nota,
+        // la fila de Gasto. Todo en la superficie de Agregar.
+        Superficie(modifier = Modifier.fillMaxWidth().testTag(TAG_TARJETA_DEL_TRASPASO), relleno = RellenoDeSuperficie.Lista) {
+            // Ola 11: mismo aviso que la fila «Cuenta» del editor (ver [avisoDeCuenta]): el valor por
+            // defecto es una decisión de la app y tiene que poder leerse antes de guardar.
+            FilaDeCuentaDelTraspaso(
+                rotulo = if (esPago) ROTULO_SALE_DE else "Desde",
+                cuenta = from,
+                aviso = avisoDeCuenta(origenFrom, elegibles.size),
+                onClick = { abrirPicker(TransferSide.FROM) },
+                modifier = Modifier.testTag(TAG_FILA_DESDE),
+            )
+            Separador(SangriaDeSeparador.Margen)
+            // Menos una: el destino no puede ser el origen (con dos cuentas no hay decisión que confesar).
+            FilaDeCuentaDelTraspaso(
+                rotulo = if (esPago) ROTULO_PAGAS else "Hacia",
+                cuenta = to,
+                aviso = avisoDeCuenta(origenTo, elegibles.size - 1),
+                onClick = { abrirPicker(TransferSide.TO) },
+                modifier = Modifier.testTag(TAG_FILA_HACIA),
+            )
+            Separador(SangriaDeSeparador.Margen)
+            FilaDeLaHoja(
+                titulo = "Nota",
+                valor = note.ifBlank { "Agregar nota…" },
+                valorVacio = note.isBlank(),
+                onClick = { if (!saving) abrirNota() },
+            )
+        }
+
         if (pagoEntreMonedas) {
             Spacer(Modifier.height(Espacio.s))
             MoneyField(
@@ -1072,12 +1119,11 @@ internal fun TransferBody(
                 onValueChange = { montoEnLaDeuda = it },
                 label = "Lo que bajó la deuda",
                 prefix = simboloDeMoneda(to!!.currency),
-                modifier = Modifier.testTag(TAG_CAMPO_DE_MONTO_EN_LA_DEUDA),
+                modifier = Modifier.testTag(TAG_CAMPO_DE_MONTO_EN_LA_DEUDA).onFocusChanged { onCampoDeTextoConFoco(it.hasFocus) },
             )
             Spacer(Modifier.height(Espacio.xs))
             Text(
-                "La cuenta y la tarjeta están en monedas distintas. Escribe los dos montos como aparecen " +
-                    "en el banco: Movi no convierte.",
+                "Arriba va lo que salió de ${from!!.name}. Escribe los dos montos como aparecen en el banco: Movi no convierte.",
                 style = Movi.textos.apoyo,
                 color = Movi.colores.textoMedio,
             )
@@ -1172,7 +1218,7 @@ internal fun TransferBody(
                     onValueChange = { interesTocado = true; interesEscrito = it },
                     label = "Intereses de este mes",
                     prefix = when (to.currency) { "COP" -> "$"; "USD" -> "US$"; else -> to.currency },
-                    modifier = Modifier.testTag(TAG_CAMPO_DE_INTERES),
+                    modifier = Modifier.testTag(TAG_CAMPO_DE_INTERES).onFocusChanged { onCampoDeTextoConFoco(it.hasFocus) },
                 )
                 Spacer(Modifier.height(Espacio.xs))
                 Text(
@@ -1224,35 +1270,6 @@ internal fun TransferBody(
             }
         }
 
-        Spacer(Modifier.height(Espacio.s))
-        Text("Fecha", style = Movi.textos.apoyoMedio, color = Movi.colores.textoMedio)
-        Spacer(Modifier.height(Espacio.xs))
-        // Misma caja que tenía el campo de texto (mismo alto, mismo borde, mismo lugar) pero se
-        // toca en vez de escribirse: así el formulario no cambia de alto respecto de master y el
-        // dedo la encuentra donde ya estaba.
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(Radio.m))
-                .background(Movi.colores.tarjeta)
-                .border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.m))
-                .clickable(enabled = !saving) { abrirFecha() }
-                .padding(horizontal = Espacio.s, vertical = Espacio.s),
-        ) {
-            Text(
-                text = etiquetaDeFecha(fecha, hoy),
-                style = Movi.textos.cuerpo,
-                color = Movi.colores.texto,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-
-        Spacer(Modifier.height(Espacio.s))
-        Text("NOTA (OPCIONAL)", style = Movi.textos.apoyoMedio, color = Movi.colores.textoMedio)
-        Spacer(Modifier.height(Espacio.xs))
-        FieldBox(if (esPago) "Concepto del pago" else "Concepto del traspaso", note, onValueChange = { note = it })
-
         // Ola 8 · V2 (N4): igual que el error del editor de un movimiento — alto reservado,
         // dos renglones, para que un fallo de red no corra el botón de guardar bajo el dedo.
         // Mínimo y no fijo: el 422 del interés que no cabe trae tres cifras y ocupa tres
@@ -1265,7 +1282,13 @@ internal fun TransferBody(
             }
         }
 
-        Spacer(Modifier.height(Espacio.m))
+        // Vuelta 47: el teclado de Gasto (sin teclado en pantalla, el físico escribe el monto).
+        if (conTecladoEnPantalla) {
+            TecladoNumericoDeAgregar(onKey)
+            Spacer(Modifier.height(Espacio.s))
+        } else {
+            Spacer(Modifier.height(Espacio.m))
+        }
         Boton(
             texto = when {
                 saving -> "Guardando…"
@@ -1277,38 +1300,21 @@ internal fun TransferBody(
             anchoCompleto = true,
         )
 
-        // Ola 8 · V2 (N4): este renglón vive DEBAJO del botón y aparecía/desaparecía al
-        // escribir el monto, bajando el formulario entero ~40 dp en una hoja anclada abajo.
-        // Mismo criterio que «Falta el monto» en el editor de un movimiento: reserva su alto.
+        // Vuelta 47 · **una sola línea de ayuda** debajo del botón: lo que falta, o —con todo listo—
+        // que se guarda en línea. Eran dos renglones, uno de ellos de dos líneas. Reserva su alto
+        // (Ola 8 · V2): aparecer al escribir el monto no puede correr el botón bajo el dedo.
         Spacer(Modifier.height(Espacio.xs))
-        Box(modifier = Modifier.fillMaxWidth().height(16.dp)) {
-            if (!saving && missing != null) {
-                Text(
-                    text = missing,
-                    style = Movi.textos.apoyo,
-                    color = Movi.colores.textoMedio,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
+        Box(modifier = Modifier.fillMaxWidth().height(16.dp).testTag(TAG_AYUDA_DEL_TRASPASO)) {
+            Text(
+                text = if (!saving && missing != null) missing else ayudaDelTraspaso(esPago),
+                style = Movi.textos.apoyo,
+                color = if (!saving && missing != null) Movi.colores.textoMedio else Movi.colores.textoApagado,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
-
-        // Un traspaso exige conexión (ver LocalRepository.createTransfer): las dos patas nacen juntas
-        // en la transacción del server o no nacen. Decirlo acá, antes de intentarlo, es más honesto
-        // que dejar que falle y mostrar "revisa tu conexión" como si fuera un imprevisto.
-        Spacer(Modifier.height(Espacio.s))
-        Text(
-            text = if (esPago) {
-                "El pago se guarda en línea: la salida de tu cuenta y la baja de la deuda se " +
-                    "registran juntas o no se registra ninguna."
-            } else {
-                "El traspaso se guarda en línea: las dos puntas se registran juntas o no se registra ninguna."
-            },
-            style = Movi.textos.apoyo,
-            color = Movi.colores.textoApagado,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth(),
-        )
         } // Column del formulario
         } // else de `picking != null`
     } // Box del alto fijado
@@ -1430,3 +1436,47 @@ internal fun simboloDeMoneda(moneda: String): String = when (moneda) { "COP" -> 
 internal const val TAG_CAMPO_DE_MONTO = "campo_de_monto_del_traspaso"
 internal const val TAG_CAMPO_DE_INTERES = "campo_de_interes_de_la_cuota"
 internal const val TAG_CAMPO_DE_MONTO_EN_LA_DEUDA = "campo_de_monto_en_la_moneda_de_la_deuda"
+
+/**
+ * **La línea de ayuda de Traspaso y Cuota con todo listo** (vuelta 47): un traspaso exige conexión
+ * (ver `LocalRepository.createTransfer`) —las dos patas nacen juntas en el server o no nacen—, y
+ * decirlo antes es más honesto que un «revisa tu conexión» después. Corta, para un renglón a 360.
+ */
+internal fun ayudaDelTraspaso(esPago: Boolean): String =
+    if (esPago) "Se guarda en línea: la salida y el pago, juntos." else "Se guarda en línea: las dos puntas, juntas."
+
+/** «Sale de» y «Pagas»: los rótulos de las dos filas en Cuota. */
+internal const val ROTULO_SALE_DE: String = "Sale de"
+internal const val ROTULO_PAGAS: String = "Pagas"
+
+/** Las filas de las dos cuentas, la tarjeta, la fecha y la ayuda de Traspaso y Cuota (vuelta 47). */
+internal const val TAG_FILA_DESDE = "traspaso:fila-desde"
+internal const val TAG_FILA_HACIA = "traspaso:fila-hacia"
+internal const val TAG_TARJETA_DEL_TRASPASO = "traspaso:tarjeta"
+internal const val TAG_FECHA_DEL_TRASPASO = "traspaso:fecha"
+internal const val TAG_AYUDA_DEL_TRASPASO = "traspaso:ayuda"
+
+/**
+ * **Una punta del traspaso** (vuelta 47): la marca de la cuenta, su **nombre entero** como título (dos
+ * renglones si hace falta, como cualquier [Fila]) y debajo el rótulo con su porqué —«Desde · Por
+ * defecto»—. Sin cuenta, «Elegir cuenta». El selector es el de siempre (`TransferAccountPicker`, con la
+ * fila de cuenta de Agregar).
+ */
+@Composable
+internal fun FilaDeCuentaDelTraspaso(
+    rotulo: String,
+    cuenta: Account?,
+    aviso: String?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Fila(
+        titulo = cuenta?.name ?: "Elegir cuenta",
+        subtitulo = listOfNotNull(rotulo, aviso).joinToString(" · "),
+        inicio = cuenta?.let { c -> { AvatarDeLaCuenta(nombre = c.name, tipo = c.type) } },
+        final = { Chevron() },
+        onClick = onClick,
+        modifier = modifier,
+        densidad = DensidadDeFila.Compacta,
+    )
+}
