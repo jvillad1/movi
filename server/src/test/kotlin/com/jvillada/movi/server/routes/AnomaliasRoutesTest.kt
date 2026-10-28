@@ -35,6 +35,9 @@ import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
+import com.jvillada.movi.server.db.OccurrenceRejections
+import com.jvillada.movi.server.db.RecurringOccurrences
+import com.jvillada.movi.server.db.RecurringRules
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.time.LocalDate
@@ -70,8 +73,8 @@ class AnomaliasRoutesTest {
             driver = "org.h2.Driver",
         )
         transaction {
-            SchemaUtils.drop(AnomaliasDescartadas, Subscriptions, VoidEvents, Events, Accounts, Users)
-            SchemaUtils.create(Users, Accounts, Events, VoidEvents, Subscriptions, AnomaliasDescartadas)
+            SchemaUtils.drop(OccurrenceRejections, RecurringOccurrences, RecurringRules, AnomaliasDescartadas, Subscriptions, VoidEvents, Events, Accounts, Users)
+            SchemaUtils.create(Users, Accounts, Events, VoidEvents, Subscriptions, AnomaliasDescartadas, RecurringRules, RecurringOccurrences, OccurrenceRejections)
             listOf(duenoId, otroId).forEach { uid ->
                 Users.insert { it[id] = uid; it[email] = "$uid@anomalias.test"; it[name] = uid; it[passwordHash] = "hash" }
                 Accounts.insert { it[id] = "acc_$uid"; it[userId] = uid; it[name] = "Bancolombia"; it[type] = "SAVINGS"; it[balance] = 0L }

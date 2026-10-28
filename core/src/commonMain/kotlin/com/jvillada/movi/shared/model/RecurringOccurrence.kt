@@ -79,6 +79,36 @@ data class MarkOccurrenceRequest(
 )
 
 /**
+ * Body de `POST /api/recurring-rules/{id}/occurrence/pago`: **«Anotar pago» desde la fila de una
+ * factura** (vuelta 43). El movimiento nuevo y el sello de la ocurrencia que paga, en una sola
+ * transacción del server: o quedan los dos, o ninguno.
+ *
+ * Antes la hoja de Agregar guardaba un gasto suelto y confiaba en que el emparejamiento automático lo
+ * reconociera en la lectura siguiente. No lo reconocía cuando el pago llegaba tarde (fuera de la
+ * ventana de 10 días del vencimiento) ni cuando el dueño cambiaba el nombre: la fila seguía pendiente
+ * y «Te quedan» restaba la plata dos veces —el fijo pendiente y el gasto variable—. La liga explícita
+ * es la que ya hacía «Sí, fue este» (`MarkOccurrenceRequest` con `eventId`); acá viaja con el
+ * movimiento que la prueba, así que no hay un instante en que exista uno sin el otro.
+ */
+@Serializable
+data class AnotarElPagoDeLaOcurrencia(
+    /**
+     * El `"YYYY-MM"` del sello (`PagoDelPeriodo.periodoDelSello`). `null` = el vencimiento que está en
+     * juego hoy, que el server sabe calcular: una fila que todavía no vence no trae período.
+     */
+    val periodo: String? = null,
+    /** El movimiento que la hoja armó, con el id del borrador: un reintento manda el mismo. */
+    val movimiento: FinancialEvent,
+)
+
+/** Lo que contesta `POST /api/recurring-rules/{id}/occurrence/pago`: lo que quedó escrito. */
+@Serializable
+data class PagoDeLaOcurrenciaAnotado(
+    val movimiento: FinancialEvent,
+    val ocurrencia: RecurringOccurrence,
+)
+
+/**
  * Body de `POST /api/recurring-rules/{id}/occurrence/rechazo`: **«no, ese movimiento no es esto»**.
  *
  * ## Por qué el «no fue este» dejó de vivir en la pantalla

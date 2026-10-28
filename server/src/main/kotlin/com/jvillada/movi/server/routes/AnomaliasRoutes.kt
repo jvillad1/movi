@@ -26,6 +26,8 @@ import com.jvillada.movi.shared.model.DescartarAnomaliaRequest
 import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.PeriodoFinanciero
 import com.jvillada.movi.shared.model.categoriasPorEncima
+import com.jvillada.movi.server.reminders.emparejadasComoSellos
+import com.jvillada.movi.server.reminders.loadOccurrenceRows
 import com.jvillada.movi.shared.model.cobrosDuplicados
 import com.jvillada.movi.shared.model.comerciosNuevosConMontoAlto
 import com.jvillada.movi.shared.model.periodoAnterior
@@ -140,6 +142,14 @@ internal fun Transaction.loQueSeSaleDeLoNormalDe(
     )
     val historia = loadEventsBetween(uid, desdeLaHistoria, ventana.first)
     val tuParteDeOtros = loCompartidoDelUsuario(uid).tuParteDeOtros
+    // Vuelta 43: **el pago de una factura no es consumo nuevo.** El arriendo anotado con «Anotar
+    // pago» salía en «Movi propone» como «Gasto nuevo en Otros $1.800.000»: es un fijo del período,
+    // ya contado como fijo, y lo prueba su sello. Lo ligado a una ocurrencia —sellado por el dueño o
+    // emparejado solo— no entra a «categoría por encima» ni a «comercio nuevo», ni como gasto de
+    // este período ni como «lo normal» de los anteriores. El cobro duplicado sí lo sigue mirando: un
+    // arriendo pagado dos veces es justo lo que tiene que avisar.
+    val pagosDeFacturas = pagosDeFacturasDe(uid, hoy, ajustes)
+    val delConsumo = delPeriodo.filterNot { it.id in pagosDeFacturas }
 
     val suscripciones = Subscriptions.selectAll().where { Subscriptions.userId eq uid }.map { it.toSubscription() }
     val periodoDeUnInstante: (Long) -> String = { ts ->
@@ -156,13 +166,15 @@ internal fun Transaction.loQueSeSaleDeLoNormalDe(
         ) +
         categoriasPorEncima(
             // R3: tu parte de lo que pagó otro también es gasto de su categoría.
-            actual = delPeriodo + tuParteDeOtros.filter { it.timestamp in ventana },
-            anteriores = anteriores.map { (_, v) -> (historia + tuParteDeOtros).filter { it.timestamp in v } },
+            actual = delConsumo + tuParteDeOtros.filter { it.timestamp in ventana },
+            anteriores = anteriores.map { (_, v) ->
+                (historia.filterNot { it.id in pagosDeFacturas } + tuParteDeOtros).filter { it.timestamp in v }
+            },
             periodoActual = actual.prefijo,
             nombreDeCuenta = nombreDeCuenta,
             diaDe = diaDe,
         ) +
-        comerciosNuevosConMontoAlto(delPeriodo, historia, primerMovimiento, nombreDeCuenta, diaDe) +
+        comerciosNuevosConMontoAlto(delConsumo, historia, primerMovimiento, nombreDeCuenta, diaDe) +
         (if (conDeudas) loDeLasDeudas(uid, hoy, previo, ventanaPrevia, diaDe) else emptyList())
 
     val descartadas = AnomaliasDescartadas.selectAll()
@@ -173,6 +185,13 @@ internal fun Transaction.loQueSeSaleDeLoNormalDe(
 }
 
 private const val MEDIO_DIA_MS = 12L * 60 * 60 * 1000
+
+/**
+ * Los movimientos que pagan una factura del checklist: los de un sello (`recurring_occurrences`, de
+ * cualquier período: «Sí, fue este», «Anotar pago») y los que Movi emparejó solo en este período.
+ */
+private fun Transaction.pagosDeFacturasDe(uid: String, hoy: LocalDate, ajustes: PeriodSettings): Set<String> =
+    (loadOccurrenceRows(uid) + emparejadasComoSellos(uid, hoy, ajustes)).mapNotNull { it.eventId }.toSet()
 
 /**
  * Las dos de las deudas: la que creció entre el cierre del período anterior y el de antes

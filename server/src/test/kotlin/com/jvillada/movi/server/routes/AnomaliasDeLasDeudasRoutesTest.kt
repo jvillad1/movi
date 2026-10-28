@@ -37,6 +37,9 @@ import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
+import com.jvillada.movi.server.db.OccurrenceRejections
+import com.jvillada.movi.server.db.RecurringOccurrences
+import com.jvillada.movi.server.db.RecurringRules
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.time.LocalDate
@@ -69,8 +72,8 @@ class AnomaliasDeLasDeudasRoutesTest {
             driver = "org.h2.Driver",
         )
         transaction {
-            SchemaUtils.drop(AnomaliasDescartadas, Credits, Subscriptions, VoidEvents, Events, Accounts, Users)
-            SchemaUtils.create(Users, Accounts, Events, VoidEvents, Subscriptions, Credits, AnomaliasDescartadas)
+            SchemaUtils.drop(OccurrenceRejections, RecurringOccurrences, RecurringRules, AnomaliasDescartadas, Credits, Subscriptions, VoidEvents, Events, Accounts, Users)
+            SchemaUtils.create(Users, Accounts, Events, VoidEvents, Subscriptions, Credits, AnomaliasDescartadas, RecurringRules, RecurringOccurrences, OccurrenceRejections)
             Users.insert { it[id] = duenoId; it[email] = "$duenoId@deudas.test"; it[name] = duenoId; it[passwordHash] = "hash" }
             Accounts.insert { it[id] = "lib"; it[userId] = duenoId; it[name] = "Libranza 4818"; it[type] = "LOAN" }
             Accounts.insert { it[id] = "c9695"; it[userId] = duenoId; it[name] = "Libre inversión 9695"; it[type] = "LOAN" }

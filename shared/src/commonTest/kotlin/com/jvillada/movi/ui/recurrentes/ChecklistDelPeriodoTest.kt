@@ -28,6 +28,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -623,6 +624,21 @@ class ChecklistDelPeriodoTest {
         assertEquals("acc_1", hoja.presetAccountId)
         assertNull(hoja.presetFecha, "la fecha es hoy: el dueño a veces paga tarde y el vencimiento la dejaba mal")
         assertFalse(hoja.presetEsIngreso)
+        // Vuelta 43: la hoja abre en MODO PAGO de esa ocurrencia — el guardado la salda.
+        val pago = assertNotNull(hoja.presetPago, "sin la ocurrencia, el guardado era un gasto suelto")
+        assertEquals("rr_gym", pago.ruleId)
+        assertEquals("2026-09", pago.periodo, "el período con que se sella")
+        assertEquals("acc_1", pago.cuentaDeLaRegla)
+        assertEquals("Pago de Gimnasio · septiembre", com.jvillada.movi.ui.quickadd.encabezadoDelPago(pago))
+    }
+
+    /** Vuelta 43: una regla en «Otros» se queda en «Otros», pero el título es el nombre de la regla. */
+    @Test
+    fun anotar_una_regla_en_Otros_lleva_el_nombre_de_la_regla() {
+        val hoja = assertIs<Screen.QuickAdd>(hojaDe(regla("rr_arr", "Arriendo", 1_800_000, 5).copy(category = "Otros"), "2026-09-05"))
+        assertEquals("Otros", hoja.presetCategoria)
+        assertEquals("Arriendo", hoja.presetNota)
+        assertEquals("Arriendo", hoja.presetPago?.nombre)
     }
 
     /** Un sueldo no se paga: llega. La hoja abre en «Ingreso» o el signo queda al revés. */
@@ -646,12 +662,14 @@ class ChecklistDelPeriodoTest {
         assertEquals(4_101_123, cuota.presetMonto, "la cuota pactada")
         assertNull(cuota.presetFecha, "hoy")
         assertNull(cuota.presetCategoria, "el pago de cuota pone sus propias categorías")
+        assertNull(cuota.presetPago, "una cuota no es un gasto que se sella: la salda la pata que baja la deuda")
 
         val tarjeta = assertIs<Screen.QuickAdd>(
             hojaDe(regla("card_1", "Master Black", 27_501_150, 18, saldo = true), "2026-09-18"),
         )
         assertEquals("1", tarjeta.presetDeudaId)
         assertNull(tarjeta.presetMonto, "el saldo de la tarjeta no es lo que se va a pagar")
+        assertNull(tarjeta.presetPago)
     }
 
     @Test

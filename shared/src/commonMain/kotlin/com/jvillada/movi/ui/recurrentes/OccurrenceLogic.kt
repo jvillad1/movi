@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.recurrentes
 
+import com.jvillada.movi.ui.quickadd.PagoDeLaFactura
 import com.jvillada.movi.shared.model.normalizarParaBuscar
 import com.jvillada.movi.ui.transactions.laDescripcionEsLaCategoria
 import com.jvillada.movi.ui.transactions.tituloDelMovimiento
@@ -223,9 +224,17 @@ fun avisoDeMontoDistinto(esperado: Long, montoEsSaldo: Boolean, event: Financial
  *
  * Es la salida que el dueño eligió para la fila sin ninguna evidencia —pagó en efectivo, pagó desde
  * una cuenta que Movi no lleva, o el banco nunca avisó—: en vez de dejarlo tildar sin movimiento,
- * la app lo lleva a **crear el movimiento que falta**. Al guardarlo, el emparejamiento automático
- * del server lo reconoce en la siguiente lectura y la fila se tilda sola; por eso los datos van
- * prellenados y no es comodidad: la categoría y la cuenta son justo lo que `esConcluyente` compara.
+ * la app lo lleva a **crear el movimiento que falta**.
+ *
+ * ## Vuelta 43: la hoja abre en modo pago, y el guardado SALDA la fila
+ *
+ * Hasta acá la hoja guardaba un gasto suelto y confiaba en que el emparejamiento automático lo
+ * reconociera en la lectura siguiente. Fallaba en producción: un pago anotado hoy por un vencimiento
+ * de hace 23 días queda fuera de la ventana del emparejador (10 días), así que la fila seguía
+ * pendiente y «Te quedan» restaba el arriendo dos veces —el fijo y el gasto—. Ahora la pantalla lleva
+ * un [PagoDeLaFactura] (la regla y el período del sello) y la hoja guarda el movimiento JUNTO con la
+ * ocurrencia que paga (`anotarElPagoDeLaOcurrencia`, una transacción del server). La liga es
+ * explícita: el movimiento es la evidencia, y la hoja sabe de qué es.
  *
  * ## La cuota de un crédito y el pago de una tarjeta abren la pestaña «Cuota», ya llena
  *
@@ -256,6 +265,13 @@ fun hojaParaAnotar(
     categoria: String,
     cuentaId: String?,
     esIngreso: Boolean,
+    /**
+     * Vuelta 43: la ocurrencia que se paga (`PagoDelPeriodo.periodoDelSello`) y el mes con que se
+     * nombra. Con [ruleId] arman el modo pago de la hoja: el guardado SALDA la fila. Ver
+     * `AgregarEnModoPago.kt`.
+     */
+    periodoDelSello: String? = null,
+    mes: String = "",
 ): Screen {
     // El «monto» de una tarjeta es su SALDO, no lo que se va a pagar (ver
     // `RecurringRule.montoEsSaldo`): prellenarlo sería escribirle $27.501.150 en la caja del monto
@@ -272,10 +288,19 @@ fun hojaParaAnotar(
     }
     return Screen.QuickAdd(
         presetAccountId = cuentaId,
+        // El título es el nombre de la regla, también cuando la categoría es «Otros».
         presetNota = nombre,
         presetMonto = montoHonesto,
         presetCategoria = categoria,
         presetEsIngreso = esIngreso,
+        presetPago = PagoDeLaFactura(
+            ruleId = ruleId,
+            periodo = periodoDelSello,
+            nombre = nombre,
+            mes = mes,
+            cuentaDeLaRegla = cuentaId,
+            esIngreso = esIngreso,
+        ),
     )
 }
 
@@ -298,4 +323,7 @@ fun hojaParaAnotar(pago: PagoDelPeriodo): Screen = hojaParaAnotar(
     categoria = pago.categoria,
     cuentaId = pago.cuentaId,
     esIngreso = pago.esIngreso,
+    periodoDelSello = pago.periodoDelSello,
+    // El mes del período del dueño («el de octubre»), como lo dice la fila; sin él, el del vencimiento.
+    mes = nombreDelMes(pago.periodoDelDueno ?: pago.periodoDelSello ?: pago.vence),
 )

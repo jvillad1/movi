@@ -2304,3 +2304,42 @@ columnas a 1.280 y una a 390), `ElTipoDeLaCuentaConSuRotuloTest`, `LaGuiaDelAbon
 `SalidaDeDeudasLogicTest`, `TarjetaDePropuestaTest` (la propuesta a todo el ancho de la columna), y en
 `commonTest` `ActividadPorDentroTest` («Compartidos»), `BuscarEnMoviTest` («Grupos» por sus tres
 nombres) y `DisposicionTest`.
+
+## 47. Vuelta 43: «Anotar pago» salda la factura, y la cuenta dice por qué
+
+El día del dueño (28-oct): «Pago vencido · hace 23 días» → «Anotar pago» abría un Agregar genérico —la
+categoría de la regla, la cuenta «Más usada» (Nu, la tarjeta)— y guardaba un gasto suelto. La fila seguía
+en «Movi no encontró el movimiento de este pago» y «Te quedan» bajaba dos veces.
+
+1. **Agregar en modo pago** (`ui/quickadd/AgregarEnModoPago.kt`, `Screen.QuickAdd.presetPago`). Todo
+   «Anotar pago» de una factura —Pagos, «Próximo pago» / «Pago vencido» de Inicio, «Movi propone hoy»—
+   pasa por `hojaParaAnotar` y abre la hoja con la factura:
+   - **donde van las pestañas, el encabezado** «Pago de Arriendo · octubre» (`EncabezadoDelPago`:
+     `tituloMedio`, centrado, `heading()`; «Ingreso de Salario · octubre» en un ingreso). Sin pestañas:
+     cambiar a Traspaso o Cuota no tiene sentido cuando el guardado salda ESTA factura;
+   - el monto de la regla (se puede cambiar), su categoría (también «Otros» si es la de la regla) y su
+     nombre como título; la fecha, hoy;
+   - **sin «Guardar y anotar otro» ni «Repartir»**: cada pago es de su factura;
+   - **Guardar** manda el movimiento con la ocurrencia que paga (`anotarElPagoDeLaOcurrencia`). La fila
+     pasa a «Pagado» con el enlace al movimiento.
+   La cuota de un crédito y el pago de una tarjeta siguen abriendo la pestaña «Cuota» (dos patas).
+2. **La cuenta que propone Agregar** (`resolverCuentaDelMovimiento`, `CuentaPorDefecto.kt`), y **el
+   renglón bajo «Cuenta» dice por qué**:
+   - modo pago, la de la regla → «La de la regla»;
+   - modo pago, la regla sin cuenta → **no elige**: el valor dice «Elige la cuenta» apagado
+     (`ELIGE_LA_CUENTA`), el renglón «Elige de dónde sale», y el selector pone **la sugerida arriba**
+     (`conLaSugeridaArriba`). Con una sola cuenta, esa;
+   - «Efectivo» en la categoría o el título → la cuenta de efectivo → «Es en efectivo»;
+   - la última cuenta con ese nombre o esa categoría (`GET /api/cuentas/de-cada-uso`, la huella de la
+     memoria de categorías) → «La que usas para Rappi», «La que usas para Mercado»;
+   - después, como antes: «Última usada», «Más usada», «Por defecto».
+   «La que usas para Mercado» es una frase: con un rótulo de más de 14 letras el nombre de la cuenta cede
+   ancho (`FRACCION_DEL_VALOR_CON_ROTULO_LARGO`, 42 %) y, si ni así entra, se corta con «…»; la fila no se
+   parte. La cuenta se vuelve a decidir al cambiar la categoría o la nota, salvo que el dueño la haya
+   elegido; «Guardar y anotar otro» la conserva.
+
+Lo vigilan `AnotarPagoSaldaLaFacturaTest` (Robolectric: desde Pagos, Próximo pago y Movi propone, el
+encabezado, la cuenta pedida y el pago con su ocurrencia; nunca un `postEvent` suelto),
+`LaCuentaQueProponeAgregarTest` (cada caso del orden y su rótulo) y, en `:server`,
+`AnotarPagoSaldaLaFacturaTest` / `AnotarPagoDesdeLaFilaRutasTest` («Te quedan» igual, o por la diferencia).
+Las guardas en 0 siguen en 0.
