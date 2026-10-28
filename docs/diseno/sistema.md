@@ -585,9 +585,9 @@ arriba. De arriba abajo:
 |---|---|---|---|
 | banda | — (chrome) | amarilla (`marca`), `Medida.altoDeLaBandaDelInicio` 168 con `Radio.xxl` 28 abajo; la pinta el scroll (`SduiRenderer(conBanda = true)`) y detrás de la barra del sistema la cáscara | — |
 | encabezado | — (chrome) | `EncabezadoDelInicio`: avatar blanco con iniciales, «Hola, Juan» (`saludo`) con el período (`apoyoMedio`, `sobreMarcaMedio`), ocultar saldos y campana en círculos `marcaSuave` de 44 (`Medida.circuloDeLaBanda`); la campana con punto solo si hay algo vencido o urgente | Tú, Notificaciones |
-| héroe | `HERO_BALANCE` | `Superficie(destacada = true)`: «Te quedan» con el enlace «Tu plata $X», `Cifra.Heroe`, «Para N días · $X por día»; abajo, con el hilo y en `capa2`, la franja «Por confirmar» con `Pildora` «N avisos» (solo si hay algo) | «¿De dónde sale?»; Patrimonio; Por revisar |
+| héroe | `HERO_BALANCE` | `Superficie(destacada = true)`: «Te quedan» con el enlace «Tu plata $X», `Cifra.Heroe`, «Para N días · $X por día»; abajo, con el hilo y en `capa2`, la franja «Por confirmar» con `Pildora` «N por revisar» (solo si hay algo) | «¿De dónde sale?»; Patrimonio; Por revisar |
 | acciones | `ACCIONES` | `CuadriculaDeAcciones` 4 × 2, rótulos `RenglonesDelRotulo.Dos` en `rotuloDeAccion` | los atajos del «+» (`LocalAtajosDeAgregar`), Por revisar, Movi AI |
-| próximo pago | `PROXIMO_PAGO` | `Superficie`: «Próximo pago · vence …», ícono, nombre, `Cifra`, `Pildora` de vencimiento, `Boton` «Anotar pago»; «y N más» | Agregar con el pago; Pagos |
+| próximo pago | `PROXIMO_PAGO` | `Superficie`: «Próximo pago · vence …» (o «Pago vencido · hace N días»), el nombre y la `Cifra` en texto, `Boton` «Anotar pago» a la derecha; «y N más» | Agregar con el pago; Pagos |
 | Movi propone hoy | `PROPUESTAS` | `TarjetaDePropuesta`, una por tipo, tope 4, **sin el pago** cuando hay `PROXIMO_PAGO`; sin nada, no se pinta | su acción; «Ver todo» → Por revisar |
 | últimos movimientos | `ULTIMOS_MOVIMIENTOS` | `Superficie` de lista con 3 `MovementSingleRow`/`TransferRow` (la fila de Actividad) | la hoja del movimiento; «Ver toda la actividad» → Actividad |
 | tus cuentas | `CUENTAS` | `TarjetaDeCuenta` en carrusel (en grilla fuera del teléfono) | el detalle de la cuenta; «Ver todo» → Patrimonio |
@@ -1974,7 +1974,11 @@ de §10). Sin reglas de plata nuevas: cada cifra sale de una función de siempre
   (`Modifier.bandaDelInicio`: lo que le falta de 168 al encabezado, con `Radio.xxl` abajo) y se va con
   él. Detrás de la barra del sistema va el mismo amarillo (`App.kt`, solo en `Screen.Dashboard`, del
   ancho del contenido y nunca detrás del rail), con los íconos oscuros de siempre: arriba no queda una
-  franja crema. En pantalla ancha la banda va solo detrás de Inicio.
+  franja crema. En pantalla ancha la banda va solo detrás de Inicio. **La banda llega hasta media
+  tarjeta héroe y las acciones van siempre sobre el crema** (la revisión: a 1.280 la primera fila de la
+  cuadrícula caía sobre el amarillo y el círculo de «Anotar gasto» desaparecía): en una columna el bloque
+  del héroe mide al menos lo que la banda (`ALTO_DE_LA_BANDA_EN_EL_SCROLL`), y en dos la derecha arranca
+  debajo de ella. En ningún ancho un círculo `marca` queda sobre `marca`.
 - **El encabezado** (`EncabezadoDelInicio`): avatar blanco con las iniciales (`inicialesDelDueno`, abre
   Tú), «Hola, Juan» y el período; recargando con cifras a la vista, «Actualizando…» toma el lugar del
   período (mismo alto). Los dos botones de la maqueta: **ocultar los saldos** (el ojo salió de la línea
@@ -1985,8 +1989,9 @@ de §10). Sin reglas de plata nuevas: cada cifra sale de una función de siempre
   `patrimonioDe`) que abre Patrimonio; la cifra (`teQuedanDelInicio`), que abre «¿De dónde sale?»; y
   «Para N días · $X por día». El veredicto («Gastaste $X · lo que más…») salió de la tarjeta. **La franja
   «Por confirmar»** cuenta lo que espera en Por revisar (`conteoPorRevisarDelInicio`, el número de la
-  insignia de «Revisar avisos»); la maqueta dice además cuánta plata espera, y ese total no lo calcula
-  ninguna función de Movi: va el conteo.
+  insignia de «Revisar avisos») en la pastilla «N por revisar» —«2 avisos» contradecía el desglose «1
+  aviso · 1 movimiento» de debajo—; la maqueta dice además cuánta plata espera, y la franja va solo con
+  el conteo (decisión del coordinador).
 - **Nada dice $0 mientras carga.** Al recargar la web el héroe decía «Te quedan $0 · para 4 días ·
   $696.137 por día» varios segundos: la cifra entraba contando desde cero (`rememberProgresoDeEntrada`)
   y en la web los cuadros no llegaban mientras se leían las diez lecturas. Ahora la cifra se muestra
@@ -2000,8 +2005,10 @@ de §10). Sin reglas de plata nuevas: cada cifra sale de una función de siempre
   360 dp ninguno parte una palabra (`partePalabras`). Salió «Más formas de anotar»; el «+» con su menú
   queda en el rail de pantalla ancha.
 - **«Próximo pago»** (`proximoPagoDelInicio`): el primero de `pagosEnOrdenDeUrgencia` —lo vencido
-  primero y el monto más grande, la regla del widget y de la cola—, con su fecha (`fechaDeLaFila`), su
-  ícono de categoría, `cifraDelPago`, la pastilla «Vencido»/«Hoy»/«Mañana» y el botón «Anotar pago»
+  primero y el monto más grande, la regla del widget y de la cola—: arriba «Próximo pago · vence …»
+  (`fechaDeLaFila`), o **«Pago vencido · hace 23 días»** si ya venció (un pago vencido no es
+  «próximo»); el nombre (un renglón) y `cifraDelPago` en texto, y el botón «Anotar pago» a la derecha.
+  Sin ícono ni pastilla: a 360 «Arriendo» se partía en «Arrien / do». El botón
   (`accionDelPago`, el mismo de «Movi propone hoy»: con candidatos, «Revisar» en Pagos). «y N más» abre
   Pagos. Sin pendientes, no está. **«Movi propone hoy» no lo repite** cuando la definición trae
   `PROXIMO_PAGO` (`propuestasDelInicio(conElPago = false)`).
@@ -2014,9 +2021,15 @@ de §10). Sin reglas de plata nuevas: cada cifra sale de una función de siempre
   `MovementSingleRow`/`TransferRow` —tu parte primero, «−» en un gasto, «+» verde en un ingreso— y la
   misma `HojaDelMovimiento` al tocarlas; si se edita o anula ahí, Inicio recarga. Viajan en la
   instantánea (`DashboardData.ultimosMovimientos`).
-- **Pantalla ancha** (`columnasDelInicio`, `TIPOS_DE_LA_COLUMNA_IZQUIERDA`): a la izquierda el héroe, el
-  próximo pago y «Movi propone hoy»; a la derecha las acciones —arriba, al lado del héroe—, los últimos
-  movimientos y lo demás.
+- **Pantalla ancha: dos columnas parejas** (`repartoEnDosColumnas`, `DosColumnasParejas`): el héroe a la
+  izquierda y cada bloque siguiente a la columna más corta, con la derecha arrancando debajo de la banda
+  —así la cuadrícula queda arriba a la derecha, sobre el crema—. Con los datos de todos los días la más
+  corta mide al menos el 70 % de la más larga (la revisión: la izquierda acababa en ~600 px). Un bloque
+  que no pintó nada no suma separación.
+- **Sin saltos con la instantánea**: con la definición y los datos de la generación 10 en el aparato,
+  «Próximo pago» se pinta desde el primer cuadro (sale de los vencimientos que la instantánea ya
+  guarda) y no se mueve al llegar lo nuevo. El salto que vio la revisión era la instantánea de la
+  generación 9 (sin `PROXIMO_PAGO`): pasa una vez, el primer arranque después del despliegue.
 - **SDUI, generación 10**: entran `PROXIMO_PAGO` y `ULTIMOS_MOVIMIENTOS`. Un APK de la generación 9 los
   descarta (`renderableSections`) y ve su Inicio de siempre, con el pago dentro de su «Movi propone
   hoy» y sus cuatro acciones (la cuadrícula viaja en el binario). Las preferencias guardadas siguen
@@ -2034,5 +2047,7 @@ columnas), `EsqueletosDelInicioTest`, `AtajosDelMasTest`, `RepartirDesdeElMasTes
 movimientos, `cifraEntre`, las iniciales) e `InicioDeUnVistazoTest` (las columnas). En `:core`,
 `DashboardDefaultsTest` (la generación 10 y lo que ve un APK de la 9) y `DiasConLosUltimosTest`; en el
 server, `EventRoutesTest` (`?ultimos` con y sin el parámetro, anulados fuera, por usuario); y
-`LosUltimosMovimientosPidenSoloLoUltimoTest` (Inicio pide con el límite, nunca la historia).
+`LosUltimosMovimientosPidenSoloLoUltimoTest` (Inicio pide con el límite, nunca la historia);
+`ElInicioEnPantallaAnchaYAngostaTest` (ninguna acción sobre la banda a 360, 390 y 1.280; las columnas
+parejas al 70 % a 1.280; «Arriendo» entero a 360) y `ElInicioNoSaltaConLaInstantaneaTest`.
 
