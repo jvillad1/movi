@@ -18,6 +18,10 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
+import com.jvillada.movi.ui.components.ds.PildoraDeAccion
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.text.BasicTextField
@@ -681,11 +685,15 @@ fun SMSReconcileScreen(
     // —ver [resolverCuentaDelBanco]— y por eso vive acá y no adentro del cálculo.
     var cuentaElegida by remember { mutableStateOf<String?>(null) }
     var eligiendoCuenta by remember { mutableStateOf(false) }
-    // Ola L: «Cambiar» en la fila Categoría abre el mismo selector de todas las pantallas
-    // ([SelectorDeCategoria]). `pedidosDeFoco` distingue quién lo abrió: «+ Nueva» viene a
-    // escribir un nombre y lo abre con el cursor en la búsqueda (y cada toque suma uno, así que un
-    // segundo toque vuelve a enfocar aunque el teclado ya esté abajo); «Cambiar», a mirar.
+    // Vuelta 42, el patrón de Agregar (vuelta 34): «Cambiar» en la fila Categoría abre las
+    // pastillas de las frecuentes debajo de la fila, con la elegida marcada, y al final «Todas ›»,
+    // que abre el selector completo ([SelectorDeCategoria]) en una hoja. Antes «Cambiar» desplegaba
+    // la cuadrícula entera en línea y empujaba «Confirma o ajusta» fuera de la vista.
+    // `pedidosDeFoco` distingue quién abrió la hoja: «+ Nueva» viene a escribir un nombre y la abre
+    // con el cursor en la búsqueda (y cada toque suma uno, así que un segundo toque vuelve a enfocar
+    // aunque el teclado ya esté abajo); «Todas ›», a mirar.
     var eligiendoCategoria by remember { mutableStateOf(false) }
+    var hojaDeCategorias by remember { mutableStateOf(false) }
     // Ola 5: se abre una sola vez, cuando la lectura llegó (antes la fila «Categoría» no tiene con qué).
     var yaSeAbrioLaCategoria by remember { mutableStateOf(false) }
     LaunchedEffect(parsed != null) {
@@ -695,12 +703,9 @@ fun SMSReconcileScreen(
         }
     }
     var pedidosDeFoco by remember { mutableStateOf(0) }
-    // Ola Q: el dueño tocaba «Cambiar» y el selector se abría debajo de la fila, empujando
-    // «Ignorar»/«Confirmar» fuera de lo visible sin que nada le avisara que había más abajo.
-    // Este `BringIntoViewRequester` se ancla a la tarjeta del selector (ver más abajo) y el
-    // `LaunchedEffect` de [eligiendoCategoria] lo dispara SOLO al abrirse — nunca al escribir en
-    // la búsqueda ni en cada recomposición, porque la clave es el booleano, no algo que cambie con
-    // cada letra.
+    // Ola Q: lo que «Cambiar» abre debajo de la fila puede quedar bajo el pliegue. Este
+    // `BringIntoViewRequester` se ancla a las pastillas (vuelta 42; antes, a la cuadrícula) y el
+    // `LaunchedEffect` de [eligiendoCategoria] lo dispara SOLO al abrirse.
     val categoriaBringIntoViewRequester = remember { BringIntoViewRequester() }
     var working by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -1567,25 +1572,31 @@ fun SMSReconcileScreen(
                         // «Cambiar»**. Iban siempre a la vista, sueltas entre la lista y los botones,
                         // y la fila ya dice la categoría elegida. Sin la lectura no se sabe de qué
                         // lado es el movimiento (gasto o ingreso): «Cambiar» y «+ Nueva» esperan.
-                        if (eligiendoCategoria && parsed != null && categoryOptions.isNotEmpty()) {
+                        if (eligiendoCategoria && parsed != null) {
+                            LaunchedEffect(eligiendoCategoria) { categoriaBringIntoViewRequester.bringIntoView() }
                             // **Rueda en horizontal, no se parte ni se corta**: son hasta doce y a 375
                             // dp no entran. Los filtros del sistema, como en Movimientos y Categorías.
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .bringIntoViewRequester(categoriaBringIntoViewRequester)
                                     .testTag(TAG_PASTILLAS_DE_CATEGORIA_DEL_SMS)
                                     .horizontalScroll(rememberScrollState())
                                     .padding(horizontal = Medida.margenDePantalla)
                                     .padding(bottom = Espacio.s),
                                 horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
+                                verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 // «+ Nueva», PRIMERA de la fila: detrás de doce pastillas nadie la veía.
-                                // Pone el cursor en la búsqueda del selector, donde «Crear "…"» crea.
+                                // Abre la hoja con el cursor en la búsqueda, donde «Crear "…"» crea.
                                 PildoraDeFiltro(
                                     texto = "Nueva",
                                     seleccionada = false,
                                     icono = Icons.Rounded.Add,
-                                    onClick = { pedidosDeFoco += 1 },
+                                    onClick = {
+                                        pedidosDeFoco += 1
+                                        hojaDeCategorias = true
+                                    },
                                     modifier = Modifier.testTag(TAG_PASTILLA_NUEVA_CATEGORIA),
                                 )
                                 categoryOptions.forEach { opt ->
@@ -1599,34 +1610,18 @@ fun SMSReconcileScreen(
                                         modifier = Modifier.testTag(tagDePastillaDeCategoriaDelSms(opt)),
                                     )
                                 }
+                                // «Todas ›», AL FINAL: el selector completo, en una hoja (vuelta 42).
+                                PildoraDeAccion(
+                                    texto = TODAS_LAS_CATEGORIAS_DEL_SMS,
+                                    onClick = {
+                                        pedidosDeFoco = 0
+                                        hojaDeCategorias = true
+                                    },
+                                    iconoFinal = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                                    descripcion = "Ver todas las categorías",
+                                    modifier = Modifier.testTag(TAG_PASTILLA_TODAS_LAS_CATEGORIAS_DEL_SMS),
+                                )
                             }
-                        }
-                    }
-
-                    if (eligiendoCategoria) {
-                        // Se dispara una sola vez al abrirse (la clave es el booleano): sin esto, cada
-                        // letra de la búsqueda recompondría este bloque y saltaría el scroll.
-                        LaunchedEffect(eligiendoCategoria) {
-                            categoriaBringIntoViewRequester.bringIntoView()
-                        }
-                        Superficie(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = Medida.dentroDeSeccion)
-                                .bringIntoViewRequester(categoriaBringIntoViewRequester),
-                        ) {
-                            SelectorDeCategoria(
-                                elegida = selectedCategory ?: "",
-                                onElegir = {
-                                    selectedCategory = it
-                                    eligiendoCategoria = false
-                                },
-                                tipo = parsed?.type,
-                                usadas = UsedCategoriesCache.used,
-                                prefs = UsedCategoriesCache.prefs,
-                                usos = UsedCategoriesCache.usosRecientes,
-                                pedidosDeFoco = pedidosDeFoco,
-                            )
                         }
                     }
 
@@ -1791,6 +1786,36 @@ fun SMSReconcileScreen(
             }
         }
     }
+
+    // Vuelta 42: el selector completo, en una hoja («Todas ›» o «+ Nueva» en las pastillas), como en
+    // Agregar. En línea, la cuadrícula ocupaba la pantalla entera.
+    if (hojaDeCategorias) {
+        MarcoDeHoja(onDismiss = { hojaDeCategorias = false }) {
+            Column(
+                modifier = Modifier
+                    .verticalScroll(rememberScrollState())
+                    .weight(1f, fill = false)
+                    .testTag(TAG_HOJA_DE_CATEGORIAS_DEL_SMS),
+            ) {
+                EncabezadoDeHoja("Categoría")
+                Spacer(Modifier.height(Medida.dentroDeSeccion))
+                SelectorDeCategoria(
+                    elegida = selectedCategory ?: "",
+                    onElegir = {
+                        selectedCategory = it
+                        hojaDeCategorias = false
+                        eligiendoCategoria = false
+                    },
+                    tipo = parsed?.type,
+                    usadas = UsedCategoriesCache.used,
+                    prefs = UsedCategoriesCache.prefs,
+                    usos = UsedCategoriesCache.usosRecientes,
+                    pedidosDeFoco = pedidosDeFoco,
+                )
+                Spacer(Modifier.height(Medida.margenDePantalla))
+            }
+        }
+    }
 }
 
 /**
@@ -1938,6 +1963,15 @@ fun tagDePastillaDeCategoriaDelSms(nombre: String): String = "sms:pastilla:$nomb
 
 /** El `testTag` de una fila del resumen «Confirma o ajusta» que se puede tocar: «Cuenta», «Categoría». */
 fun tagDeFilaDelSms(rotulo: String): String = "sms:fila:$rotulo"
+
+/** «Todas ›», al final de las pastillas de Reconciliar: abre el selector completo en una hoja. */
+internal const val TODAS_LAS_CATEGORIAS_DEL_SMS: String = "Todas"
+
+/** El toque de «Todas ›» en Reconciliar. */
+const val TAG_PASTILLA_TODAS_LAS_CATEGORIAS_DEL_SMS: String = "sms:pastilla-todas"
+
+/** La hoja del selector completo de categorías en Reconciliar (vuelta 42). */
+const val TAG_HOJA_DE_CATEGORIAS_DEL_SMS: String = "sms:hoja-de-categorias"
 
 /** La fila de pastillas de categoría de Reconciliar: solo existe con «Cambiar» abierto (vuelta 42). */
 const val TAG_PASTILLAS_DE_CATEGORIA_DEL_SMS: String = "sms:pastillas-de-categoria"

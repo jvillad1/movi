@@ -3,6 +3,8 @@ package com.jvillada.movi.ui.sms
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -97,8 +99,14 @@ class ReconciliarMovimientoScrollAlAbrirSelectorTest {
         composeRule.onNodeWithTag(tagDeFilaDelSms("Categoría")).performClick()
         composeRule.waitForIdle()
 
-        // Sin `performScrollTo`: si la pantalla no se hubiera desplazado sola, en 653 dp de alto
-        // el buscador habría quedado debajo del pliegue, tapado por el recorte de la lista.
+        // Vuelta 42: «Cambiar» abre las pastillas debajo de la fila. Sin `performScrollTo`: si la
+        // pantalla no se hubiera desplazado sola, en 653 dp de alto quedarían debajo del pliegue.
+        composeRule.onNodeWithTag(TAG_PASTILLAS_DE_CATEGORIA_DEL_SMS).assertIsDisplayed()
+        composeRule.onNodeWithTag(TAG_BUSCAR_CATEGORIA).assertDoesNotExist()
+
+        // Y el selector completo, en su hoja, con el buscador a la vista.
+        composeRule.onNodeWithTag(TAG_PASTILLA_TODAS_LAS_CATEGORIAS_DEL_SMS).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
         composeRule.onNodeWithTag(TAG_BUSCAR_CATEGORIA).assertIsDisplayed()
     }
 }
