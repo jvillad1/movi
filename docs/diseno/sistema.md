@@ -2052,3 +2052,25 @@ Lo vigilan `ActividadPorDentroTest` y `FacturasDelPeriodoTest` (`commonTest`),
 entendido, «Revisar uno por uno», «Gastaste» y «Personas») y las pruebas de Plan y del tablero,
 ajustadas.
 
+### La revisión de la vuelta 40 (a 390 y 360), y lo que cambió
+
+1. **El período no salía en Pagos con el usuario demo.** No esperaba un dato ni se escondía al cargar:
+   el demo no tiene corte (`period_cutoff_day` nulo = el 1) y `rangoLegibleDe` se calla con el mes de
+   calendario por diseño. Pagos usa ahora `rangoDelPeriodo` (`:core`), que lo dice siempre: «Del 1 de
+   octubre al 31 de octubre». Mientras el perfil viaja, la línea se reserva. Lo cubre `PlanScreenTest`
+   con un perfil sin corte.
+2. **«Por confirmar» ya no va llena de amarillo**: es una píldora de estado, en el `tinte` con `aviso`.
+   El amarillo lleno queda para la acción principal.
+3. **«Llevas $0 pagados» → «Aún no pagas nada de esto»** (`AUN_NO_PAGAS_NADA`, la frase de la vuelta 28).
+4. **«¿Ya pagaste el de octubre?» dentro de la lista** es un bloque plano en la capa 2, sin sombra, con
+   «Sí, fue este» y «No fue este» adentro (fuera de la lista, en una hoja, sigue siendo una propuesta).
+5. **«Tus recordatorios no llegan» salió de la lista**: es una `Fila` compacta en tono de aviso, con
+   «Ahora no», en su propia superficie entre la tarjeta amarilla y «Tus facturas del período».
+6. **La pastilla de vencimiento va en su renglón**, a todo el ancho desde el texto: al lado de «Anotar
+   pago», a 360 dp, «Venció hace 23 días» se cortaba. Lo mide `LaPastillaCabeEnteraTest`.
+7. **Actividad con un solo aviso, o sin ninguno que Movi entienda**: el botón dice «Revisar» a secas
+   (`botonDeRevisarLosAvisos`); «Revisar uno por uno» solo al lado de un «Confirmar» de varios.
+8. **Arriendo con la casa**: la palabra «arriendo» (y «alquiler») va a la casa —la llave queda para
+   «Arriendo recibido»—, y una factura en «Otros» toma el ícono de su nombre
+   (`nombreParaElIconoDeLaFactura`): el arriendo del demo está en «Otros».
+
