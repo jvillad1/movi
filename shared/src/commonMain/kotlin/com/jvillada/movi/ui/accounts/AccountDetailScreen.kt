@@ -5,6 +5,7 @@ import com.jvillada.movi.data.SaldosOcultosStore
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
@@ -252,6 +253,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
     }
 
     Box(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
+        PanelDeTablero(enDosColumnas = ::cuentaEnDosColumnas) { dosColumnas ->
         Column(modifier = Modifier.fillMaxSize()) {
 
             // Header
@@ -292,21 +294,16 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
             // queda escondido arriba (en la web, con la red de por medio, abría así siempre). La
             // primera vez que la cuenta llega, la lista vuelve al principio.
             val lista = rememberLazyListState()
+            val listaDeMovimientos = rememberLazyListState()
             val cuentaLlego = account != null
             LaunchedEffect(cuentaLlego) {
                 if (cuentaLlego) lista.scrollToItem(0)
             }
 
-            LazyColumn(
-                state = lista,
-                modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(
-                    start = Medida.margenDePantalla,
-                    end = Medida.margenDePantalla,
-                    top = Medida.dentroDeSeccion,
-                    bottom = Medida.botonFlotante + Medida.entreSecciones,
-                ),
-            ) {
+            // Vuelta 33: en pantalla ancha, la cuenta (saldo, deuda, para qué es, apartados) a la
+            // izquierda y sus movimientos a la derecha, cada columna con su scroll (ver
+            // [cuentaEnDosColumnas]). En el teléfono, una sola lista, en el mismo orden de siempre.
+            fun LazyListScope.laCuenta() {
                 // **El saldo arriba** (Ola 2a). Antes el detalle abría casi directo en la lista y el
                 // dueño tenía que leer una tarjeta genérica para saber de qué cuenta se trataba: ahora
                 // el encabezado dice la cuenta (su marca), cuánto hay, desde cuándo nadie la cuadra y
@@ -382,6 +379,9 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                     }
                 }
 
+            }
+
+            fun LazyListScope.losMovimientos() {
                 // Section header
                 item(key = "section-header") {
                     Seccion(titulo = "Movimientos", conteo = totalEvents.takeIf { it > 0 })
@@ -471,6 +471,9 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                     }
                 }
 
+            }
+
+            fun LazyListScope.borrarLaCuenta() {
                 // F55: al final de la pantalla, en rojo — mismo lugar donde el dueño esperaba
                 // encontrarlo cuando pidió "ayúdame a eliminarla" y no había nada acá. Solo
                 // aparece una vez que la cuenta cargó (necesita accountName real para la hoja).
@@ -486,7 +489,43 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                     }
                 }
             }
+
+            val alPie = Medida.botonFlotante + Medida.entreSecciones
+            if (dosColumnas) {
+                // Los rellenos suman los 48 de [RELLENO_DE_DOS_COLUMNAS], como Patrimonio.
+                Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    LazyColumn(
+                        state = lista,
+                        modifier = Modifier.weight(1f).fillMaxHeight().testTag(TAG_COLUMNA_DE_LA_CUENTA),
+                        contentPadding = PaddingValues(start = Medida.margenDePantalla, end = Medida.margenDePantalla / 2, top = Medida.dentroDeSeccion, bottom = alPie),
+                    ) {
+                        laCuenta()
+                        borrarLaCuenta()
+                    }
+                    LazyColumn(
+                        state = listaDeMovimientos,
+                        modifier = Modifier.weight(1f).fillMaxHeight().testTag(TAG_COLUMNA_DE_LOS_MOVIMIENTOS_DE_LA_CUENTA),
+                        contentPadding = PaddingValues(start = Medida.margenDePantalla / 2, end = Medida.margenDePantalla, top = Medida.dentroDeSeccion, bottom = alPie),
+                    ) { losMovimientos() }
+                }
+            } else {
+                LazyColumn(
+                    state = lista,
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(
+                        start = Medida.margenDePantalla,
+                        end = Medida.margenDePantalla,
+                        top = Medida.dentroDeSeccion,
+                        bottom = Medida.botonFlotante + Medida.entreSecciones,
+                    ),
+                ) {
+                    laCuenta()
+                    losMovimientos()
+                    borrarLaCuenta()
+                }
+            }
         }
+        } // PanelDeTablero
 
         SnackbarHost(
             hostState = snackbarHostState,

@@ -1421,3 +1421,41 @@ Lo vigilan `ElTotalDelDiaTest`, `LasCifrasDeUnRenglonHablanIgualTest`, `LaFilaDe
 `PedirleACaroTest` y `NombreParaMostrarTest` (puras), y `LaTarjetaEnSuDetalleTest`,
 `LaFranjaHablaEnUnaFormaTest` y `LosGastosDelEspacioSeLeenTest` (Robolectric; las dos últimas a 360 dp con
 el motor de texto real).
+
+## 35. Vuelta 33: la tarjeta se cuadra, y la pantalla ancha se aprovecha
+
+Revisado en la vista previa de la vuelta 32 (2208acaf) con la cuenta demo, a 390 y a 1.280 px. Sin
+componentes nuevos en `ds/`: un token, `Medida.anchoMaximoDeBoton` (360 dp).
+
+- **Una tarjeta se cuadra contra el banco.** No había dónde: `POST /api/credits/{id}/balance-adjustment`
+  solo acepta préstamos y `POST /api/accounts/{id}/balance-adjustment` rechazaba toda deuda. Ahora la
+  de **cuentas** acepta `CREDIT_CARD` (es la que menos duplica: misma respuesta `AdjustAccountBalanceResponse`
+  que el teléfono ya espeja, el saldo en la moneda de la cuenta —una tarjeta en dólares también— y el
+  mismo `balanceAdjustmentEventFor`, que pone el signo de la deuda: subir lo que se debe es un cargo).
+  Un préstamo sigue yendo a Créditos («El saldo de un préstamo se cuadra en Créditos»). Sin columnas
+  nuevas. En la app, el detalle de la tarjeta suma «Ajustar saldo» a «Qué puedes hacer» (con o sin sus
+  datos), con la MISMA hoja que el préstamo (`CardBalanceSheet`, que comparte el cuerpo con
+  `CreditBalanceSheet`): «Cuánto debes hoy según el banco» y la ayuda «la deuda total de hoy, no el pago
+  mínimo ni el cupo disponible». Movi calcula la diferencia contra el saldo sin anulados; nunca se ajusta
+  solo. Patrimonio lee el saldo nuevo (sale de los movimientos), el ajuste no cuenta como gasto
+  (`ADJUSTMENT_CATEGORY`), y Cuadre de saldos sigue siendo de Dinero e Inversión (`sePuedeCuadrar` no
+  cambió: una tarjeta no se «atrasa» en el aviso de cuadre).
+- **Movi AI en el rail es una raíz.** Tocada en el rail deja la pila como cualquier pestaña (`[Hoy, Movi
+  AI]`, `NavStack.navegarALaPestana`) y su encabezado lleva el avatar (`moviAiEsLaRaizDeSuPestana`). En
+  el teléfono —sin pestaña de Movi AI— y con el rail apilada encima de Ajustes, conserva la «←».
+- **Espacios, el detalle de un espacio y el de una cuenta son tableros** (`disposicionDe`). Con un
+  espacio, a la izquierda el espacio con su total, «Quién puso qué» y el saldo con «Pedirle a Caro»; a la
+  derecha «Gastos» con «Anotar lo que pagó Caro», «Lo que paga otra persona» y «Personas y comercios»
+  (`espacioEnDosColumnas`). En el detalle de una cuenta, la cuenta (saldo, deuda, para qué es, apartados,
+  «Eliminar cuenta») a la izquierda y sus movimientos a la derecha (`cuentaEnDosColumnas`). Las cuentas
+  del ancho son las de Patrimonio: columnas de 420 dp, cada una con su scroll. Con varios espacios o sin
+  ninguno, una columna de lectura centrada. Fuera del teléfono, los botones de ancho completo de Espacios
+  no pasan de `Medida.anchoMaximoDeBoton`; en el teléfono no cambia nada.
+- **Créditos no se tocó**: desde la Ola W3 ya va en dos columnas a 1.280 (con dos deudas o más).
+
+**Las líneas base** no cambian: `dp_sueltos` 119, `radios_con_numero` 3, y las guardas en 0 siguen en 0.
+Lo vigilan, en el server, los casos de tarjeta de `AccountRoutesTest` (de $1.499.000 a $1.520.000, hacia
+abajo, sin ensuciar el período, un ajuste anulado no cuenta, la de otro usuario es 404, el préstamo manda
+a Créditos); `MoviAiComoRaizTest` (pura); y `LaTarjetaEnSuDetalleTest`, `ElEncabezadoDeMoviAiTest`,
+`EspaciosEnDosColumnasTest` y `LaCuentaEnDosColumnasTest` (Robolectric; las dos últimas dentro de la
+cáscara, a 1.280 y a 390 dp).

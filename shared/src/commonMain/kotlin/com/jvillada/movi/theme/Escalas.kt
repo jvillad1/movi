@@ -156,6 +156,13 @@ object Medida {
 
     /** El trazo de la ruedita de un botón que está cargando. */
     val trazoDeCarga: Dp = 2.dp
+
+    /**
+     * Lo más que se estira un botón de ancho completo **fuera del teléfono** (vuelta 33): el ancho de
+     * un teléfono grande. A 1.280 px «Pedirle a Caro» medía 656 dp: un botón que cruza media pantalla
+     * no se lee como un botón. En el teléfono nunca llega a este tope (390 − 64 = 326).
+     */
+    val anchoMaximoDeBoton: Dp = 360.dp
 }
 
 /**
