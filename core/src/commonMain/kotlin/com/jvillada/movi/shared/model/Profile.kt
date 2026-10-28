@@ -69,6 +69,14 @@ data class UserProfile(
      * en otro aparato. Ver [debeAbrirseLaGuiaDePrimerUso] para quién la ve.
      */
     val primerUsoEn: Long? = null,
+    /**
+     * **El ahorro de cada período** (ver `AhorroDelPeriodo.kt`): el nombre de un [TipoDeAhorro].
+     * `String` y no el enum, como [periodWeekendRule]: un valor que un APK viejo no conozca no le
+     * revienta el perfil. Se lee con [tipoDeAhorroDe]; sin elegir, `NINGUNO`.
+     */
+    val ahorroDelPeriodoTipo: String = TipoDeAhorro.NINGUNO.name,
+    /** Pesos con `MONTO`, porcentaje entero con `PORCENTAJE`, 0 con `NINGUNO`. */
+    val ahorroDelPeriodoValor: Long = 0L,
 )
 
 /**
@@ -143,6 +151,14 @@ data class UpdateProfileRequest(
     val diasParaBancoMudo: Int? = null,
     /** Mandar (o no) el resumen de cierre del período por correo. `null` = no tocar. */
     val cierrePorCorreo: Boolean? = null,
+    /**
+     * El ahorro de cada período: el nombre de un [TipoDeAhorro]. `null` = no tocar. Va **junto con**
+     * [ahorroDelPeriodoValor] (con `NINGUNO` el valor se ignora y se guarda 0); lo valida
+     * [problemaDelAhorro].
+     */
+    val ahorroDelPeriodoTipo: String? = null,
+    /** Pesos o porcentaje, según [ahorroDelPeriodoTipo]. Solo se lee junto con él. */
+    val ahorroDelPeriodoValor: Long? = null,
 )
 
 /**

@@ -4,6 +4,7 @@ import com.jvillada.movi.server.db.AiTurns
 import com.jvillada.movi.server.db.Apartados
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.RecurringRules
+import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.routes.FabricaDeModelos
 import com.jvillada.movi.server.routes.cajaProyectadaDe
 import com.jvillada.movi.server.routes.aiRoutes
@@ -46,6 +47,7 @@ import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
+import org.jetbrains.exposed.sql.update
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.time.LocalDate
 import kotlin.test.BeforeTest
@@ -296,6 +298,70 @@ class LasPreguntasSugeridasTest {
         val texto = respuesta(a.duenoA, PreguntaSugerida.COMO_VOY)
         assertTrue(pesosDelCierre(despues) in texto, "te quedan $despues:\n$texto")
         assertEquals(0, llamadasAlModelo)
+    }
+
+    /**
+     * **El ahorro del período** (27-oct-2026): el dueño eligió apartar el 20 % de lo que entra. El
+     * resumen del Inicio trae ese 20 % de lo que entró en pesos, «Te quedan» baja exactamente eso, y
+     * «¿Cómo voy?» dice la misma cifra que el héroe. Tu plata no cambia, y el otro usuario tampoco.
+     */
+    @Test
+    fun `como voy descuenta el ahorro del periodo igual que Hoy`() = testApplication {
+        with(a) { application { modulo { aiRoutes(fabricaQueCuenta); dashboardRoutes(); reminderRoutes() } } }
+        val hoy = AppClock.today()
+        periodoDeA(hoy)
+        anotar(a.duenoB, a.cuentaDeB, hoy.withDayOfMonth(1).minusDays(45), 5_000_000, OPENING_CATEGORY, "Saldo inicial", tipo = "INCOME")
+        anotar(a.duenoB, a.cuentaDeB, hoy, 3_000_000, "Salario", "Sueldo", tipo = "INCOME")
+
+        suspend fun resumen(uid: String) = json.decodeFromString(DashboardSummary.serializer(), get(uid, "/api/dashboard/summary"))
+        suspend fun teQuedan(uid: String): Long {
+            val resumen = resumen(uid)
+            val upcoming = json.decodeFromString(ListSerializer(UpcomingPayment.serializer()), get(uid, "/api/payments/upcoming"))
+            val ocurrencias = json.decodeFromString(ListSerializer(OccurrenceState.serializer()), get(uid, "/api/payments/occurrences"))
+            val ajustes = PeriodSettings()
+            val periodo = periodoDe(appDateToEpochMillis(hoy) + 12 * 3_600_000L, ajustes)
+            val ventana = ventanaDe(periodo, ajustes)
+            return assertNotNull(
+                disponibleAlDia(
+                    ingresosRecibidos = resumen.monthIncome,
+                    pagos = checklistDelPeriodo(upcoming, ocurrencias, periodo, ajustes),
+                    gastoVariablePorDia = resumen.gastoVariablePorDia.orEmpty(),
+                    desde = epochMillisToAppDate(ventana.first).toString(),
+                    hasta = epochMillisToAppDate(ventana.last).toString(),
+                    hoy = hoy.toString(),
+                    plata = plataDelDisponibleDe(resumen),
+                ),
+            ).periodo.teQuedan
+        }
+
+        // Sin elegir nada, el resumen no trae el campo: todo da como antes.
+        val sinAhorro = resumen(a.duenoA)
+        assertEquals(null, sinAhorro.ahorroDelPeriodo)
+        val antes = teQuedan(a.duenoA)
+        val antesDeB = teQuedan(a.duenoB)
+
+        transaction {
+            Users.update({ Users.id eq a.duenoA }) {
+                it[ahorroDelPeriodoTipo] = "PORCENTAJE"
+                it[ahorroDelPeriodoValor] = 20L
+            }
+        }
+        val con = resumen(a.duenoA)
+        assertEquals(10_000_000L, con.monthIncome)
+        assertEquals(2_000_000L, con.ahorroDelPeriodo, "el 20 % de lo que entró")
+        assertEquals(sinAhorro.patrimonio, con.patrimonio, "Tu plata y el patrimonio no cambian")
+        assertEquals(sinAhorro.saldoTuPlataAlInicio, con.saldoTuPlataAlInicio)
+        val despues = teQuedan(a.duenoA)
+        assertEquals(antes - 2_000_000L, despues)
+
+        val texto = respuesta(a.duenoA, PreguntaSugerida.COMO_VOY)
+        assertTrue(pesosDelCierre(despues) in texto, "te quedan $despues:\n$texto")
+        assertFalse(pesosDelCierre(antes) in texto, "no puede decir la cifra sin el ahorro:\n$texto")
+        assertEquals(0, llamadasAlModelo)
+
+        // El ahorro es de A: B sigue igual.
+        assertEquals(null, resumen(a.duenoB).ahorroDelPeriodo)
+        assertEquals(antesDeB, teQuedan(a.duenoB))
     }
 
     /**

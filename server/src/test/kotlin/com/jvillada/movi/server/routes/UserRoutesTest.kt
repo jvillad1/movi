@@ -250,6 +250,71 @@ class UserRoutesTest {
         assertEquals(true, transaction { Users.selectAll().where { Users.id eq userId }.single()[Users.cierrePorCorreo] })
     }
 
+    // ── El ahorro de cada período ────────────────────────────────────────────
+
+    private suspend fun ApplicationTestBuilder.getProfileDe(uid: String, email: String) =
+        client.get("/api/users/me") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(uid, email)}") }
+
+    private fun campo(body: String, nombre: String): String? =
+        Json.parseToJsonElement(body).jsonObject[nombre]?.jsonPrimitive?.content
+
+    /**
+     * «Te quedan» resta el ahorro que el dueño elige en Ajustes. Sin elegir, nada (el Json del server
+     * no manda los valores por defecto, así que falta = NINGUNO / 0); se guarda tipo y valor juntos,
+     * es de **su** cuenta y no de otra, y volver a «Nada» guarda 0.
+     */
+    @Test
+    fun `PUT guarda el ahorro del periodo por usuario, con aislamiento`() = testApplication {
+        wireApp()
+        val otro = "user-b-profile"
+        transaction {
+            Users.insert {
+                it[id] = otro
+                it[email] = "b@profile.test"
+                it[name] = "Caro"
+                it[passwordHash] = "x"
+            }
+        }
+        assertEquals("NINGUNO", campo(getProfile().bodyAsText(), "ahorroDelPeriodoTipo") ?: "NINGUNO")
+
+        val res = putProfile("""{"ahorroDelPeriodoTipo":"PORCENTAJE","ahorroDelPeriodoValor":20}""")
+        assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
+        assertEquals("PORCENTAJE", campo(res.bodyAsText(), "ahorroDelPeriodoTipo"))
+        assertEquals("20", campo(getProfile().bodyAsText(), "ahorroDelPeriodoValor"))
+        transaction {
+            val fila = Users.selectAll().where { Users.id eq userId }.single()
+            assertEquals("PORCENTAJE", fila[Users.ahorroDelPeriodoTipo])
+            assertEquals(20L, fila[Users.ahorroDelPeriodoValor])
+        }
+
+        // El otro usuario no ve nada de esto.
+        val delOtro = getProfileDe(otro, "b@profile.test").bodyAsText()
+        assertEquals("NINGUNO", campo(delOtro, "ahorroDelPeriodoTipo") ?: "NINGUNO")
+        assertEquals(null, transaction { Users.selectAll().where { Users.id eq otro }.single()[Users.ahorroDelPeriodoTipo] })
+
+        // Un monto, y después «Nada»: se guarda 0, no queda el valor viejo.
+        assertEquals(HttpStatusCode.OK, putProfile("""{"ahorroDelPeriodoTipo":"MONTO","ahorroDelPeriodoValor":500000}""").status)
+        assertEquals("500000", campo(getProfile().bodyAsText(), "ahorroDelPeriodoValor"))
+        assertEquals(HttpStatusCode.OK, putProfile("""{"ahorroDelPeriodoTipo":"NINGUNO"}""").status)
+        assertEquals(0L, transaction { Users.selectAll().where { Users.id eq userId }.single()[Users.ahorroDelPeriodoValor] })
+    }
+
+    @Test
+    fun `PUT rechaza un ahorro que no se puede guardar`() = testApplication {
+        wireApp()
+        listOf(
+            """{"ahorroDelPeriodoTipo":"PORCENTAJE","ahorroDelPeriodoValor":91}""",
+            """{"ahorroDelPeriodoTipo":"PORCENTAJE","ahorroDelPeriodoValor":0}""",
+            """{"ahorroDelPeriodoTipo":"MONTO"}""",
+            """{"ahorroDelPeriodoTipo":"MONTO","ahorroDelPeriodoValor":-5}""",
+            """{"ahorroDelPeriodoTipo":"TODO"}""",
+            """{"ahorroDelPeriodoValor":20}""",
+        ).forEach { cuerpo ->
+            assertEquals(HttpStatusCode.BadRequest, putProfile(cuerpo).status, cuerpo)
+        }
+        assertEquals(null, transaction { Users.selectAll().where { Users.id eq userId }.single()[Users.ahorroDelPeriodoTipo] })
+    }
+
     // ── La guía «Primer uso» ─────────────────────────────────────────────────
 
     private suspend fun ApplicationTestBuilder.marcarPrimerUso(tokenDe: String = token) =

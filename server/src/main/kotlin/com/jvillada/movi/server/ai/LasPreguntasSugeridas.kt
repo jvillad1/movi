@@ -17,6 +17,7 @@ import com.jvillada.movi.server.routes.cardPaymentCandidateCount
 import com.jvillada.movi.server.routes.cuadresPorAvisoDe
 import com.jvillada.movi.server.routes.debitosPorConfirmar
 import com.jvillada.movi.server.routes.disponibleDelServidor
+import com.jvillada.movi.server.routes.montoDelAhorroDe
 import com.jvillada.movi.server.routes.flujoDeCaja
 import com.jvillada.movi.server.routes.gastoDelAnteriorAMismaAltura
 import com.jvillada.movi.server.routes.loQueSeSaleDeLoNormalDe
@@ -218,6 +219,8 @@ internal suspend fun datosDeLasSugeridas(
                     guardado = servidor.plata.guardado,
                     otrosPagosDeDeuda = servidor.pagosDeDeudaFueraDelChecklist,
                     apartado = servidor.apartado,
+                    // El ahorro que eligió en Ajustes, sobre el mismo «Entró» que el resumen del Inicio.
+                    ahorroDelPeriodo = montoDelAhorroDe(uid, entro),
                 ),
             )
         }
@@ -340,7 +343,13 @@ private fun sinMargen(d: DisponibleDelPeriodo): String {
         return if (d.disponible < 0L) "Los fijos del período superan tus ingresos por ${pesosDelCierre(-d.disponible)}."
         else "Los fijos del período se llevan todos tus ingresos."
     }
-    val quienes = if (plata.otrosPagosDeDeuda > 0L) "Los fijos y los otros pagos de deuda" else "Los fijos del período"
+    // Como en Hoy: si sin el ahorro que eligió sí quedaría margen, se nombra al ahorro.
+    val otros = listOfNotNull(
+        "los otros pagos de deuda".takeIf { plata.otrosPagosDeDeuda > 0L },
+        "tu ahorro del período".takeIf { d.ahorroDelPeriodo > 0L && d.disponible + d.ahorroDelPeriodo > 0L },
+    )
+    val quienes = if (otros.isEmpty()) "Los fijos del período"
+    else "Los fijos" + otros.dropLast(1).joinToString("") { ", $it" } + " y " + otros.last()
     return if (d.disponible < 0L) "$quienes superan lo que tenías y lo que entró por ${pesosDelCierre(-d.disponible)}."
     else "$quienes se llevan todo lo que tenías y lo que entró."
 }

@@ -229,6 +229,9 @@ fun Route.dashboardRoutes() {
                 // saldos que esa lista (ver `cuentasConSaldo`). No hay una segunda cuenta acá.
                 patrimonio = patrimonio,
                 apartado = disponible.apartado,
+                // El ahorro que eligió en Ajustes, en pesos: un monto, o un porcentaje de `income` (lo
+                // que «Entró»). Sin elegir nada no viaja (nulo = cero) y la respuesta queda como antes.
+                ahorroDelPeriodo = montoDelAhorroDe(uid, income).takeIf { it > 0L },
                 // La cuenta que «Agregar» debería sugerir primero, en vez de la primera por orden
                 // alfabético. Ver `cuentaMasUsada` acá abajo.
                 cuentaMasUsada = cuentaMasUsada(uid, ahora, voidedIds),
