@@ -42,11 +42,13 @@ class ScreenEditorScreenTest {
     @Test
     fun los_rotulos_nombran_los_lugares_de_la_ola_C() {
         assertEquals("Inicio", NAVIGATE_TARGET_LABELS["dashboard"])
-        assertEquals("Ajustes", NAVIGATE_TARGET_LABELS["mas"])
+        // Vuelta 38: las pestañas de la opción 3.
+        assertEquals("Actividad", NAVIGATE_TARGET_LABELS["transactions"])
+        assertEquals("Tú", NAVIGATE_TARGET_LABELS["mas"])
         assertEquals("Patrimonio", NAVIGATE_TARGET_LABELS["accounts"])
-        assertTrue(NAVIGATE_TARGET_LABELS.getValue("budgets").startsWith("Plan"))
-        assertTrue(NAVIGATE_TARGET_LABELS.getValue("recurrentes").startsWith("Plan"))
-        assertTrue(NAVIGATE_TARGET_LABELS.getValue("subscriptions").startsWith("Plan"))
+        assertTrue(NAVIGATE_TARGET_LABELS.getValue("budgets").startsWith("Pagos"))
+        assertTrue(NAVIGATE_TARGET_LABELS.getValue("recurrentes").startsWith("Pagos"))
+        assertTrue(NAVIGATE_TARGET_LABELS.getValue("subscriptions").startsWith("Pagos"))
         // Y todo target que el Editor ofrece tiene rótulo propio.
         NAVEGABLES_DESDE_EL_EDITOR.forEach { assertTrue(it in NAVIGATE_TARGET_LABELS, it) }
     }

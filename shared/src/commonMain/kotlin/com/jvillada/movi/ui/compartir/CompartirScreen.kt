@@ -152,7 +152,7 @@ fun CompartirScreen(onNavigate: (Screen) -> Unit) {
         Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
             MinScreenHeader(
                 title = "Compartir",
-                leading = HeaderLeading.Back(fallback = Screen.Mas),
+                leading = HeaderLeading.Back(fallback = Screen.Tu),
             )
 
             LazyColumn(

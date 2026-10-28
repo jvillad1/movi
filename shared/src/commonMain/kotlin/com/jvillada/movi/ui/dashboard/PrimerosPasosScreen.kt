@@ -152,7 +152,7 @@ fun PrimerosPasosScreen(onNavigate: (Screen) -> Unit) {
     ) {
         MinScreenHeader(
             title = "Primeros pasos",
-            leading = HeaderLeading.Back(fallback = Screen.Mas),
+            leading = HeaderLeading.Back(fallback = Screen.Tu),
         )
         Column(
             modifier = Modifier

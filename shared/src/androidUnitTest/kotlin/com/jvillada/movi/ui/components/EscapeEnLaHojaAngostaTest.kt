@@ -64,7 +64,7 @@ class EscapeEnLaHojaAngostaTest {
                 ConClaseDeAncho {
                     EsqueletoDeLaCascara(
                         pantalla = Screen.Accounts,
-                        activeTab = NavTab.PATRIMONIO,
+                        activeTab = NavTab.TU,
                         conNavegacion = true,
                         onTabSelected = {},
                         relevoDeScroll = remember { RelevoDeScroll() },

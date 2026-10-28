@@ -1,6 +1,9 @@
 package com.jvillada.movi.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.runtime.remember
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -12,6 +15,7 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.Text
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
@@ -30,10 +34,15 @@ import com.jvillada.movi.theme.*
 
 /**
  * Contraparte de [MinBottomNav] desde 600 dp: un rail a la izquierda, pintado una vez en la raíz de
- * App.kt — ancho (216 dp) en escritorio y [compacto] (80 dp) en una ventana mediana. Ola C:
- * muestra **las mismas cuatro pestañas** que la barra del teléfono ([destinosPrincipales]) y
- * «Agregar» — sin Créditos, Presupuestos ni Más, que ahora viven adentro de Patrimonio, de Plan y
- * del avatar. Y debajo de las cuatro, **Movi AI** ([destinoMoviAi]), que solo el rail tiene.
+ * App.kt — ancho (216 dp) en escritorio y [compacto] (80 dp) en una ventana mediana. Vuelta 38:
+ * muestra **las mismas cuatro pestañas** que la barra del teléfono ([destinosPrincipales]: Inicio ·
+ * Actividad · Pagos · Tú), debajo **Movi AI** ([destinoMoviAi]), que solo el rail tiene, y
+ * «Agregar» con su menú: en el escritorio no hay un Inicio siempre a la vista con sus acciones, y el
+ * teclado físico de Agregar (vuelta 34) se usa ahí.
+ *
+ * **Un solo amarillo lleno**: «Agregar». El destino activo del rail ancho va en el amarillo suave
+ * (`tinte`, `#FFF2C6`) con la tinta encima; el del rail compacto, con la píldora chica detrás del
+ * ícono, como la barra.
  */
 @Composable
 fun MinNavRail(
@@ -51,6 +60,7 @@ fun MinNavRail(
         modifier = Modifier
             .width(ANCHO_DEL_RAIL_ANCHO)
             .fillMaxHeight()
+            .testTag(TAG_RAIL_DE_NAVEGACION)
             .background(Movi.colores.tarjeta)
             .windowInsetsPadding(barrasDelSistemaDelRail)
             .padding(horizontal = Movi.espacios.medio, vertical = Movi.espacios.margen),
@@ -118,6 +128,9 @@ fun MinNavRail(
 private val barrasDelSistemaDelRail: WindowInsets
     @Composable get() = WindowInsets.systemBars.only(WindowInsetsSides.Vertical + WindowInsetsSides.Start)
 
+/** El `testTag` del rail (ancho y compacto). */
+const val TAG_RAIL_DE_NAVEGACION: String = "rail-de-navegacion"
+
 /** El ancho del rail compacto de una ventana mediana. */
 val ANCHO_DEL_RAIL_COMPACTO = 80.dp
 
@@ -140,6 +153,7 @@ private fun RailCompacto(
     Column(
         modifier = Modifier
             .fillMaxHeight()
+            .testTag(TAG_RAIL_DE_NAVEGACION)
             .background(Movi.colores.tarjeta)
             // Afuera del ancho: la barra de navegación en horizontal (a la izquierda) ensancha el
             // fondo en vez de comerse los 80 dp del rail.
@@ -216,7 +230,8 @@ internal val RELLENO_DEL_ITEM_DEL_RAIL_COMPACTO = 2.dp
  * El rótulo de un ítem del rail compacto. **Nunca se parte ni se corta**: en un renglón y, si no
  * entra —«Patrimonio» con la letra del sistema al 130 % mide ~87 dp contra 76—, se achica de a
  * cuartos de punto hasta que entre. Es el mismo modo de falla que `LasCuatroPestanasTest` protege en
- * la barra del teléfono; ahí sobra lugar, acá no.
+ * la barra del teléfono; ahí sobra lugar, acá no (con «Actividad» ya no hace falta, pero un rótulo
+ * nuevo no tiene por qué saberlo).
  */
 @Composable
 internal fun RotuloDelRailCompacto(texto: String, activo: Boolean, modifier: Modifier = Modifier) {
@@ -248,10 +263,16 @@ private fun RailItem(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = Medida.objetivoTactil)
-            // La activa, en la píldora amarilla de la opción 3 con la tinta encima (vuelta 29).
+            // La activa, en el amarillo SUAVE con la tinta encima (vuelta 38): el amarillo lleno es
+            // solo de «Agregar», y dos bloques amarillos iguales competían en el rail.
             .clip(RoundedCornerShape(Radio.pill))
-            .background(if (isActive) Movi.colores.marca else Color.Transparent)
-            .clickable { onTabSelected(tab) }
+            .background(fondoDelDestinoDelRailAncho(isActive, Movi.colores))
+            // Revisión de la vuelta 38: sobre el activo, el velo del hover (la tinta con alfa) volvía el
+            // amarillo suave un beige oliva. El activo no lleva hover —ya dice dónde estás—; los demás sí.
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = if (elHoverSeVeEnElDestino(isActive)) LocalIndication.current else null,
+            ) { onTabSelected(tab) }
             .padding(horizontal = Espacio.s),
     ) {
         Icon(
@@ -263,7 +284,21 @@ private fun RailItem(
         Text(
             text = label,
             style = if (isActive) Movi.textos.cuerpoFuerte else Movi.textos.cuerpoRegular,
-            color = if (isActive) Movi.colores.sobreMarca else Movi.colores.textoMedio,
+            color = if (isActive) Movi.colores.texto else Movi.colores.textoMedio,
         )
     }
 }
+
+/**
+ * **El fondo de un destino del rail ancho** (vuelta 38): el activo en el amarillo suave ([ColoresDeMovi.tinte],
+ * `#FFF2C6`), los demás sin fondo. El amarillo lleno ([ColoresDeMovi.marca]) es solo de «Agregar»: con
+ * los dos en la marca, dos bloques amarillos iguales competían en el rail.
+ */
+fun fondoDelDestinoDelRailAncho(activo: Boolean, colores: ColoresDeMovi): Color =
+    if (activo) colores.tinte else Color.Transparent
+
+/**
+ * **¿El destino del rail ancho muestra el velo del hover (y el de la pulsación)?** Solo el que no está
+ * activo: sobre el amarillo suave del activo, el velo en tinta lo ensuciaba (beige oliva).
+ */
+fun elHoverSeVeEnElDestino(activo: Boolean): Boolean = !activo

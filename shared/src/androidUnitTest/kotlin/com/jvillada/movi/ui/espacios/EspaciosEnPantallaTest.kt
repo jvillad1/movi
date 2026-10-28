@@ -179,7 +179,7 @@ class EspaciosEnPantallaTest {
         // Antes de saldar, la pregunta. «Cancelar» no salda nada.
         tocarBoton("Marcar como saldado")
         esperarTexto("¿Caro ya te pagó \$390.000?")
-        esperarTexto("Esto deja el espacio en cero.")
+        esperarTexto("Esto deja el grupo en cero.")
         tocarBoton("Cancelar")
         composeRule.waitForIdle()
         assertEquals(emptyList(), repo.liquidaciones, "cancelar no salda")
@@ -278,7 +278,7 @@ class EspaciosEnPantallaTest {
         gastos.forEach { assertTrue(it.config.contains(SemanticsActions.OnClick), "un gasto que no responde al tocarlo") }
     }
 
-    /** Un gasto que pagó Caro no tiene movimiento: abre su hoja, y «Quitar del espacio» pregunta y lo quita. */
+    /** Un gasto que pagó Caro no tiene movimiento: abre su hoja, y «Quitar del grupo» pregunta y lo quita. */
     @Test
     fun `un gasto que pago otro abre su hoja y se puede quitar`() {
         val quitados = mutableListOf<Pair<String, String>>()

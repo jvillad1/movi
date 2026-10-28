@@ -260,7 +260,7 @@ class LaAccionDelEncabezadoCedeAlTituloTest {
     fun `Espacios`() {
         Repositories.sustitutoDePrueba = repo
         montar { EspaciosScreen(onNavigate = {}) }
-        revisar("Espacios", "Nuevo espacio")
+        revisar("Personas", "Nuevo grupo")
     }
 
     // ── La regla, en el componente ─────────────────────────────────────────────────────

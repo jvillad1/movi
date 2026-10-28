@@ -46,6 +46,8 @@ fun disposicionDe(pantalla: Screen): Disposicion = when (pantalla) {
     Screen.Dashboard, Screen.Accounts, Screen.Credits, is Screen.Plan, is Screen.EnQueSeVa -> Disposicion.Tablero
     // Vuelta 33: un espacio va en dos columnas en pantalla ancha (ver `espacioEnDosColumnas`).
     Screen.Espacios, is Screen.Espacio -> Disposicion.Tablero
+    // Vuelta 38: «Tú» va en dos columnas en pantalla ancha, lo tuyo y los ajustes (ver `tuEnDosColumnas`).
+    Screen.Tu, Screen.Mas -> Disposicion.Tablero
     // Vuelta 33: la cuenta a la izquierda y sus movimientos a la derecha (ver `cuentaEnDosColumnas`).
     is Screen.AccountDetail -> Disposicion.Tablero
     Screen.Periodos, is Screen.DetalleDePeriodo, is Screen.Transactions -> Disposicion.ListaYDetalle

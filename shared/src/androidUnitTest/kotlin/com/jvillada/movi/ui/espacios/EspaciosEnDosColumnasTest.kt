@@ -79,7 +79,7 @@ class EspaciosEnDosColumnasTest {
             ConClaseDeAncho {
                 EsqueletoDeLaCascara(
                     pantalla = Screen.Espacios,
-                    activeTab = NavTab.ESPACIOS,
+                    activeTab = NavTab.TU,
                     conNavegacion = true,
                     onTabSelected = {},
                     relevoDeScroll = remember { RelevoDeScroll() },

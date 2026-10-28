@@ -149,7 +149,7 @@ fun BorrarLaCuentaScreen(onNavigate: (Screen) -> Unit) {
     }
 
     Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
-        MinScreenHeader(title = BORRAR_MI_CUENTA, leading = HeaderLeading.Back(fallback = Screen.Mas))
+        MinScreenHeader(title = BORRAR_MI_CUENTA, leading = HeaderLeading.Back(fallback = Screen.Tu))
         Column(
             modifier = Modifier
                 .weight(1f)

@@ -75,7 +75,7 @@ const val TAG_HOJA_ELEGIR_ESPACIO: String = "espacios:elegir-para-repartir"
 const val TAG_FILA_ELEGIR_ESPACIO: String = "espacios:fila-elegir-para-repartir"
 
 /** El título de la hoja que elige el espacio. */
-const val TITULO_ELEGIR_ESPACIO: String = "¿En qué espacio?"
+const val TITULO_ELEGIR_ESPACIO: String = "¿En qué grupo?"
 
 /**
  * Lo que «Repartir» tiene abierto: nada, la hoja de elegir el espacio o la de crearlo. Vive en el

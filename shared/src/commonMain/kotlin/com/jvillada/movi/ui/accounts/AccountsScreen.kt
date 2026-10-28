@@ -196,11 +196,11 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
         // lo mide el panel, ya sin el rail — ver [patrimonioEnDosColumnas] para la cuenta completa.
         PanelDeTablero(enDosColumnas = { patrimonioEnDosColumnas(it) && hayCuentasParaLaDerecha(accounts, loading) }) { dosColumnas ->
         Column(modifier = Modifier.fillMaxSize()) {
-            // La raíz de la pestaña Patrimonio: avatar y el MISMO rótulo que la pestaña. «Cuadrar» no
+            // Vuelta 38: Patrimonio ya no es pestaña; vive en «Tú» y su flecha vuelve ahí. «Cuadrar» no
             // va acá: es la fila «Cuadre de saldos» de Herramientas.
             MinScreenHeader(
                 title = "Patrimonio",
-                leading = HeaderLeading.Avatar(onNavigate),
+                leading = HeaderLeading.Back(fallback = Screen.Tu),
                 // Mientras dice «Actualizando…» no lleva «Nueva cuenta»: las dos juntas no entran a
                 // 390 dp sin cortar el título en «Patr…». El botón vuelve apenas la lectura contesta.
                 action = if (actualizandoConAlgoALaVista) {

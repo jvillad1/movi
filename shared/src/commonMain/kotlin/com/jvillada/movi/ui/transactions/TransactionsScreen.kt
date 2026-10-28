@@ -123,6 +123,12 @@ import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.shared.model.normalizarParaBuscar
 
 /**
+ * El título de la pestaña Actividad (antes «Movimientos»; vuelta 38, la opción 3). El rótulo de la
+ * pestaña es el mismo (`destinosPrincipales`).
+ */
+const val TITULO_DE_ACTIVIDAD: String = "Actividad"
+
+/**
  * F13: filtro puro detrás de la búsqueda de Movimientos, separado del `@Composable` para poder
  * testearlo en `:shared:commonTest` sin arrancar Compose. Compara sin acentos ni mayúsculas
  * (mismo criterio que `CategoryField`, ver [normalizeForMatch]) contra descripción, comercio
@@ -1244,8 +1250,9 @@ fun TransactionsScreen(
         // la lupa abre «Buscar», que encuentra movimientos, comercios, personas, cuentas y
         // pantallas. Lo que «Buscar» o «En este comercio» piden filtrar llega acá como un chip.
         MinScreenHeader(
-            title = "Movimientos",
-            leading = HeaderLeading.Avatar(onNavigate),
+            title = TITULO_DE_ACTIVIDAD,
+            // Vuelta 38: el avatar va solo en Inicio, como en la maqueta.
+            leading = HeaderLeading.Ninguno,
             action = {
                 // Se está pintando algo que esta visita todavía no confirmó (lo recordado, o la lista
                 // de antes de un «Reintentar»). Sin nada pintado lo dice el esqueleto.

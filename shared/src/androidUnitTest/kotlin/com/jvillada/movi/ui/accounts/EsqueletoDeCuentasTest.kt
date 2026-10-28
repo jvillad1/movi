@@ -1,5 +1,9 @@
 package com.jvillada.movi.ui.accounts
 
+import androidx.compose.ui.test.hasText
+
+import androidx.compose.ui.test.hasContentDescription
+
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -122,8 +126,9 @@ class EsqueletoDeCuentasTest {
         assertTrue(!hay("Sin cuentas"))
         assertTrue(!hay("Aquí vive lo que tienes y lo que debes"))
         assertTrue(!hay("No pudimos cargar"), "el primer cuadro no puede decir que falló una lectura que ni empezó")
-        // Vuelta 29: en una pestaña la acción va en su botón redondo, con su nombre.
-        assertTrue(composeRule.onAllNodesWithContentDescription("Nueva cuenta", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
+        // Vuelta 38: Patrimonio ya no es pestaña (vive en Tú, con flecha), así que «Nueva cuenta» va con
+        // su texto si cabe y, si no, en su botón redondo con ese nombre (vuelta 29).
+        assertTrue(composeRule.onAllNodes(hasText("Nueva cuenta") or hasContentDescription("Nueva cuenta"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
     }
 
     @Test

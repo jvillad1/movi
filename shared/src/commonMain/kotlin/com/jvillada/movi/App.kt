@@ -27,6 +27,7 @@ import com.jvillada.movi.platform.movimientoReducidoDelSistema
 import com.jvillada.movi.ui.direccionDe
 import com.jvillada.movi.ui.transicionEntrePantallas
 import com.jvillada.movi.ui.components.LocalRetoqueDePestana
+import com.jvillada.movi.ui.components.LocalAtajosDeAgregar
 import com.jvillada.movi.ui.components.RetoqueDePestana
 import com.jvillada.movi.avisos.DestinoDesdeAfuera
 import com.jvillada.movi.ui.papeles.ArchivoCompartido
@@ -403,6 +404,9 @@ fun App() {
                     // Para que cualquier pantalla pueda anotar su hoja sin que App.kt tenga que
                     // conocerla (Perfil y sus cuatro overlays). Ver [PilaDeHojas].
                     LocalPilaDeHojas provides pilaDeHojas,
+                    // Vuelta 38: sin «+» en el teléfono, «Más formas de anotar» de Inicio abre el MISMO
+                    // menú de atajos (Traspaso, Pago de tarjeta, Repartir, Subir comprobante).
+                    LocalAtajosDeAgregar provides onAtajo,
                 ) {
                 EsqueletoDeLaCascara(
                     pantalla = currentScreen,
@@ -472,9 +476,10 @@ fun App() {
                 Screen.PorRevisar        -> PorRevisarScreen(navigate)
                 Screen.CapturaDelBanco   -> CapturaDelBancoScreen(navigate)
                 is Screen.SMSReconcile   -> SMSReconcileScreen(navigate, pantalla.smsId, abrirCategoria = pantalla.abrirCategoria)
-                // Vuelta de diseño 3: Ajustes es una sola pantalla (Perfil se mudó adentro), y cerrar
-                // la sesión desde ahí hace lo que hacía desde Perfil.
-                Screen.Mas               -> MasScreen(
+                // Vuelta 38: «Tú» lleva todo lo que era Ajustes (Perfil se mudó adentro en la vuelta de
+                // diseño 3), y cerrar la sesión desde ahí hace lo que hacía desde Perfil. `Screen.Mas`
+                // ya no llega a la pila (ver `destinoVigente`), salvo como destino de reserva viejo.
+                Screen.Tu, Screen.Mas    -> MasScreen(
                     onNavigate = navigate,
                     onLogout = {
                         SessionManager.clear()
@@ -625,7 +630,7 @@ fun App() {
  * Lee la clase de ancho que decidió [CascaraDeAncho] y arma alrededor de [contenido] (la pantalla
  * activa y las hojas que App.kt dibuja encima):
  *
- * - **Compacto** (< 600 dp): la columna va llena y [MinBottomNav] debajo.
+ * - **Compacto** (< 600 dp): la columna va llena y [MinBottomNav] debajo (sus cuatro pestañas, sin «+»).
  * - **Mediano** (600–999 dp): [MinNavRail] compacto a la izquierda, sin barra inferior.
  * - **Expandido** (≥ 1000 dp): el rail ancho de siempre.
  *
@@ -641,7 +646,7 @@ internal fun EsqueletoDeLaCascara(
     conNavegacion: Boolean,
     onTabSelected: (NavTab) -> Unit,
     relevoDeScroll: RelevoDeScroll,
-    /** Ola 5: los atajos del «+» (mantenerlo presionado). `null` = el «+» solo se toca. */
+    /** Ola 5: los atajos del «+» del rail (mantenerlo presionado). `null` = el «+» solo se toca. */
     onAtajo: ((AtajoDeAgregar) -> Unit)? = null,
     contenido: @Composable BoxScope.() -> Unit,
 ) {
@@ -692,7 +697,7 @@ internal fun EsqueletoDeLaCascara(
                 // escribe, y son 60 dp de los pocos que quedan — con ella puesta, en un teléfono
                 // chico el campo de texto queda a un renglón del borde.
                 if (showBottomNav && !tecladoALaVista) {
-                    MinBottomNav(active = activeTab, onTabSelected = onTabSelected, onAtajo = onAtajo)
+                    MinBottomNav(active = activeTab, onTabSelected = onTabSelected)
                 }
             }
         }

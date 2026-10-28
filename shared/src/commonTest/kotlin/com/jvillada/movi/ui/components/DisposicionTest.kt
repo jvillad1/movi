@@ -46,10 +46,11 @@ class DisposicionTest {
 
     @Test
     fun `Hoy, Patrimonio, Creditos y Plan son tableros y lo que no se adapto todavia se lee en columna`() {
-        listOf(Screen.Dashboard, Screen.Accounts, Screen.Credits, Screen.Plan())
+        // Vuelta 38: «Tú» (y Ajustes, que lleva ahí) es un tablero: lo tuyo y los ajustes en dos columnas.
+        listOf(Screen.Dashboard, Screen.Accounts, Screen.Credits, Screen.Plan(), Screen.Tu, Screen.Mas)
             .forEach { assertEquals(Disposicion.Tablero, disposicionDe(it), "$it") }
         listOf(
-            Screen.Mas, Screen.BorrarLaCuenta, Screen.Categorias, Screen.Login, Screen.PorRevisar,
+            Screen.BorrarLaCuenta, Screen.Categorias, Screen.Login, Screen.PorRevisar,
         ).forEach { assertEquals(Disposicion.Lectura, disposicionDe(it), "$it") }
     }
 

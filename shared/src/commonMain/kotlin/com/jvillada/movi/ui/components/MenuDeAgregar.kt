@@ -16,6 +16,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -30,6 +31,8 @@ import com.jvillada.movi.theme.Icono
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.quickadd.AtajoDeAgregar
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 
 /** El `testTag` del menú de atajos del «+». */
 const val TAG_MENU_DE_AGREGAR: String = "menu-de-agregar"
@@ -51,8 +54,8 @@ const val ROTULO_ATAJOS_DE_AGREGAR: String = "Atajos para agregar"
  * otro: lo que se elige hace lo mismo desde cualquier gesto.
  *
  * [modifier] es el del botón (tamaño, forma, fondo), y [contenido] lo que va adentro (el ícono, o el
- * ícono y «Agregar» en el rail ancho). Lo usan la barra del teléfono y los dos rails: el mismo menú en
- * los tres lugares donde está el «+».
+ * ícono y «Agregar» en el rail ancho). Lo usan los dos rails (vuelta 38: la barra del teléfono ya no
+ * tiene «+»; ahí el mismo menú lo abre «Más formas de anotar» de Inicio, [MasFormasDeAnotar]).
  */
 @Composable
 fun BotonDeAgregarConAtajos(
@@ -82,25 +85,90 @@ fun BotonDeAgregarConAtajos(
             Box(modifier = modifier.then(gestos), contentAlignment = Alignment.Center) { contenido() }
         }
         if (alElegirAtajo != null) {
-            DropdownMenu(
-                expanded = abierto,
-                onDismissRequest = { abierto = false },
-                modifier = Modifier.testTag(TAG_MENU_DE_AGREGAR),
-                containerColor = Movi.colores.tarjeta,
-            ) {
-                AtajoDeAgregar.entries.forEach { atajo ->
-                    DropdownMenuItem(
-                        text = { Text(atajo.rotulo, style = Movi.textos.cuerpo, color = Movi.colores.texto) },
-                        onClick = {
-                            abierto = false
-                            alElegirAtajo(atajo)
-                        },
-                    )
-                }
-            }
+            MenuDeAtajosDeAgregar(abierto = abierto, alCerrar = { abierto = false }, alElegir = alElegirAtajo)
         }
     }
 }
+
+/**
+ * **El menú de los atajos de «Agregar»**: una fila por [atajos], y elegir una cierra el menú y hace
+ * [alElegir]. Es el mismo en el «+» del rail ([BotonDeAgregarConAtajos]) y en «Más formas de anotar»
+ * de Inicio ([MasFormasDeAnotar]).
+ */
+@Composable
+fun MenuDeAtajosDeAgregar(
+    abierto: Boolean,
+    alCerrar: () -> Unit,
+    alElegir: (AtajoDeAgregar) -> Unit,
+    atajos: List<AtajoDeAgregar> = AtajoDeAgregar.entries,
+) {
+    DropdownMenu(
+        expanded = abierto,
+        onDismissRequest = alCerrar,
+        modifier = Modifier.testTag(TAG_MENU_DE_AGREGAR),
+        containerColor = Movi.colores.tarjeta,
+    ) {
+        atajos.forEach { atajo ->
+            DropdownMenuItem(
+                text = { Text(atajo.rotulo, style = Movi.textos.cuerpo, color = Movi.colores.texto) },
+                onClick = {
+                    alCerrar()
+                    alElegir(atajo)
+                },
+            )
+        }
+    }
+}
+
+/**
+ * Lo que hace elegir un atajo de «Agregar», puesto por la cáscara (App.kt es dueña de las hojas de
+ * «Repartir» y del selector del comprobante, ver `hacerElAtajo`). `null` fuera de la app (una prueba
+ * que monta una pantalla sola): ahí «Más formas de anotar» no se pinta.
+ */
+val LocalAtajosDeAgregar = staticCompositionLocalOf<((AtajoDeAgregar) -> Unit)?> { null }
+
+/** Lo que dice el enlace de Inicio que abre los atajos de anotar (vuelta 38). */
+const val MAS_FORMAS_DE_ANOTAR: String = "Más formas de anotar"
+
+/**
+ * Las formas de anotar que **no** están en las acciones de Inicio: Traspaso, Pago de tarjeta, Repartir
+ * y Subir comprobante (Gasto e Ingreso ya son acciones).
+ */
+val ATAJOS_FUERA_DEL_INICIO: List<AtajoDeAgregar> = listOf(
+    AtajoDeAgregar.TRASPASO,
+    AtajoDeAgregar.PAGO_DE_TARJETA,
+    AtajoDeAgregar.REPARTIR,
+    AtajoDeAgregar.SUBIR_COMPROBANTE,
+)
+
+/**
+ * **«Más formas de anotar»** (vuelta 38): sin el «+» de la barra del teléfono, Traspaso, Pago de
+ * tarjeta, Repartir y Subir comprobante se alcanzan desde aquí, debajo de las acciones de Inicio. Un
+ * botón de texto que abre el mismo menú de atajos del «+». La vuelta 39 lo reemplaza por las 8
+ * acciones de la maqueta. Sin [LocalAtajosDeAgregar] (fuera de la app) no se pinta.
+ */
+@Composable
+fun MasFormasDeAnotar(modifier: Modifier = Modifier) {
+    val alElegir = LocalAtajosDeAgregar.current ?: return
+    var abierto by remember { mutableStateOf(false) }
+    Box(modifier = modifier) {
+        Boton(
+            texto = MAS_FORMAS_DE_ANOTAR,
+            onClick = { abierto = true },
+            variante = VarianteDeBoton.Fantasma,
+            modifier = Modifier.testTag(TAG_MAS_FORMAS_DE_ANOTAR),
+        )
+        MenuDeAtajosDeAgregar(
+            abierto = abierto,
+            alCerrar = { abierto = false },
+            alElegir = alElegir,
+            atajos = ATAJOS_FUERA_DEL_INICIO,
+        )
+    }
+}
+
+/** El `testTag` de «Más formas de anotar». */
+const val TAG_MAS_FORMAS_DE_ANOTAR: String = "mas-formas-de-anotar"
 
 /** La flecha «▾» al final de «Agregar»: abre los atajos de un clic. */
 @Composable

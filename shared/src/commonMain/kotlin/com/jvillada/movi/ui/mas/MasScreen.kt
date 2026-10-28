@@ -7,6 +7,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import com.jvillada.movi.ui.components.SubirAlRetocarLaPestana
+import com.jvillada.movi.ui.components.ScrollDesdeLosMargenes
+import com.jvillada.movi.ui.components.PanelDeTablero
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -117,7 +123,10 @@ import com.jvillada.movi.ui.profile.textoDelInicioDelMes
 import com.jvillada.movi.ui.sms.tituloDeCapturaDelBanco
 import kotlinx.coroutines.launch
 
-/** El título de la pantalla que abre el avatar. Ver [MasScreen]. */
+/**
+ * Lo que se llamaba la pantalla que abría el avatar. Vuelta 38: sus secciones viven en «Tú»
+ * ([TITULO_DE_TU]); el nombre queda para la búsqueda («ajustes» encuentra Tú) y lo que lo cite.
+ */
 const val TITULO_DE_AJUSTES: String = "Ajustes"
 
 /** La tarjeta del perfil, arriba de todo en Ajustes. Para las pruebas. */
@@ -127,14 +136,22 @@ const val TAG_TARJETA_DEL_PERFIL: String = "ajustes:tarjeta-del-perfil"
 const val CERRAR_SESION: String = "Cerrar sesión"
 
 /**
- * Las secciones de Ajustes, en el orden en que se ven. «Entrar» (la huella) solo existe donde hay
+ * Las secciones de Ajustes, en el orden en que se ven (en «Tú», debajo de «Lo tuyo»). «Entrar» (la huella) solo existe donde hay
  * lector, y «Administración» solo para quien administra el Inicio; las demás están siempre.
  */
 val SECCIONES_DE_AJUSTES: List<String> =
     listOf("Tu plata", "Movi", "Cómo se ve", "Avisos", "Tus datos", "Entrar", "Cuenta", "Administración")
 
 /**
- * # Ajustes — la pantalla que abre el avatar
+ * # «Tú» — la cuarta pestaña (vuelta 38), con todo lo que era Ajustes
+ *
+ * **Vuelta 38 (la opción 3):** la pestaña **Tú** es el centro de lo personal. Arriba, la tarjeta del
+ * perfil (avatar, nombre y correo); después «Lo tuyo» ([LoTuyo]: Tu patrimonio con la cifra neta,
+ * Personas con su saldo y Cuadre de saldos); y debajo, **las secciones de Ajustes tal cual**, en
+ * `Fila`s del sistema. Es la raíz de su pestaña: sin avatar ni flecha. En pantalla ancha, lo tuyo a la
+ * izquierda y los ajustes a la derecha ([tuEnDosColumnas]). `Screen.Mas` (Ajustes) lleva acá.
+ *
+ * Lo que sigue es la historia de Ajustes, que vale igual para sus secciones:
  *
  * **Vuelta de diseño 3: una sola pantalla.** Hasta acá había dos para lo mismo: el avatar abría
  * «Ajustes», una cuadrícula de ocho íconos y un botón rojo «Borrar mi cuenta», y la configuración de
@@ -162,9 +179,8 @@ val SECCIONES_DE_AJUSTES: List<String> =
  * store que tenía en Perfil (`SaldosOcultosStore`, `updateUserProfile`, las hojas de
  * `ui/profile/`).
  *
- * Sigue llamándose `MasScreen` / `Screen.Mas` porque el destino SDUI `"mas"` y las pilas ya lo
- * nombran así; lo que el dueño ve es «Ajustes». No es una pestaña, así que lleva flecha y no avatar:
- * se vuelve a donde se estaba, o al Hoy si no hay historial.
+ * Sigue llamándose `MasScreen` porque las pruebas y las pilas ya la nombran así; la pinta
+ * `Screen.Tu` (y `Screen.Mas`, que lleva acá). Lo que el dueño ve es «Tú».
  */
 @Composable
 fun MasScreen(
@@ -234,327 +250,381 @@ fun MasScreen(
     // Vuelta 31: la dirección de Movi para reenviar los correos del banco, solo donde no se leen SMS.
     val direccionDeMovi = if (!esAndroid) rememberDireccionDeMovi() else remember { DireccionDeMovi() }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
-            MinScreenHeader(
-                title = TITULO_DE_AJUSTES,
-                leading = HeaderLeading.Back(fallback = Screen.Dashboard),
-            )
-            LazyColumn(
-                modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(
-                    start = Medida.margenDePantalla,
-                    end = Medida.margenDePantalla,
-                    top = Medida.dentroDeSeccion,
-                    bottom = Medida.botonFlotante + Medida.entreSecciones,
-                ),
-                verticalArrangement = Arrangement.spacedBy(Medida.entreSecciones),
-            ) {
-                // Quién eres: el avatar, el nombre y el correo, con «Editar» (alias y color).
-                item(key = "perfil") {
-                    TarjetaDelPerfil(profile = profile, onEditar = { showEditProfile = true })
-                }
+    // Vuelta 38: «Tú» es la raíz de su pestaña. Re-tocarla sube al principio (las dos columnas en la
+    // pantalla ancha), y la rueda del mouse sobre los márgenes mueve la lista.
+    val estadoDeLoTuyo = rememberLazyListState()
+    val estadoDeLosAjustes = rememberLazyListState()
+    ScrollDesdeLosMargenes(estadoDeLoTuyo)
+    SubirAlRetocarLaPestana(estadoDeLoTuyo, estadoDeLosAjustes)
 
-                // Lo que no se pudo leer se dice, con su reintento, arriba de las filas que dependen
-                // del perfil para que se lea antes de tocarlas.
-                if (falloElPerfil) {
-                    item(key = "fallo") {
-                        NoSePudoLeer(texto = AJUSTES_NO_LEIDOS, onReintentar = { profileReloadKey++ })
-                    }
-                }
+    // Lo tuyo: quién eres, tu patrimonio, las personas y el cuadre. En dos columnas va a la izquierda.
+    val loTuyo: LazyListScope.() -> Unit = {
+        // Quién eres: el avatar, el nombre y el correo, con «Editar» (alias y color).
+        item(key = "perfil") {
+            TarjetaDelPerfil(profile = profile, onEditar = { showEditProfile = true })
+        }
 
-                // ── Tu plata ─────────────────────────────────────────────────────────────────
-                item(key = "tu-plata") {
-                    Column {
-                        Seccion(titulo = "Tu plata")
-                        Superficie(relleno = RellenoDeSuperficie.Lista) {
-                            // El día en que arranca el período: cambia el significado de TODAS las
-                            // cifras. Mientras no se sepa, la fila no dice «Mes de calendario» ni se
-                            // deja tocar: ese texto era el valor por defecto disfrazado del suyo.
-                            val cutoff = profile?.periodCutoffDay
-                            Fila(
-                                titulo = INICIO_DEL_PERIODO,
-                                inicio = { IconoDeAjuste(Icons.Rounded.CalendarMonth) },
-                                subtitulo = cutoff?.let { d ->
-                                    textoDelInicioDelMes(d, siElCorteCaeEnFinDeSemanaDe(profile?.periodWeekendRule))
-                                } ?: if (falloElPerfil) NO_PUDIMOS_LEERLO else CARGANDO,
-                                final = if (cutoff != null) ({ Chevron() }) else null,
-                                onClick = if (cutoff == null) null else ({ errorPeriodo = null; showPeriodo = true }),
-                            )
-                            Separador()
-                            // Lo que «Te quedan» resta antes de decirte cuánto puedes gastar. Mismo
-                            // cuidado que «Inicio del período»: sin perfil no dice «No apartas nada».
-                            val ahorro = profile?.ahorroDelPeriodo()
-                            Fila(
-                                titulo = AHORRO_DE_CADA_PERIODO,
-                                inicio = { IconoDeAjuste(Icons.Rounded.Savings) },
-                                subtitulo = ahorro?.let(::textoDelAhorro) ?: if (falloElPerfil) NO_PUDIMOS_LEERLO else CARGANDO,
-                                final = if (ahorro != null) ({ Chevron() }) else null,
-                                onClick = if (ahorro == null) null else ({ errorAhorro = null; showAhorro = true }),
-                            )
-                            Separador()
-                            FilaQueLleva("Categorías", Icons.Rounded.Category, Screen.Categorias, onNavigate)
-                            // Vuelta 31: «Personas y comercios» vive en Espacios —su pestaña, la de lo que
-                            // tienes con los demás, y donde se elige con quién se comparte—, no también acá.
-                            Separador()
-                            // «Captura del banco» en Android, «Mensajes del banco» donde no hay captura.
-                            FilaQueLleva(
-                                tituloDeCapturaDelBanco,
-                                if (esAndroid) Icons.Rounded.Sms else Icons.Rounded.Inbox,
-                                Screen.CapturaDelBanco,
-                                onNavigate,
-                            )
-                            // Donde no se leen SMS, la captura es reenviar los correos del banco: la
-                            // dirección y el paso a paso, con la misma pieza de la guía de primer uso.
-                            if (!esAndroid) {
-                                Separador()
-                                FilaDeAlertasPorCorreo(direccionDeMovi, onAbrir = { showCorreo = true })
-                            }
-                        }
-                    }
-                }
+        // Lo que no se pudo leer se dice, con su reintento, arriba de las filas que dependen
+        // del perfil para que se lea antes de tocarlas.
+        if (falloElPerfil) {
+            item(key = "fallo") {
+                NoSePudoLeer(texto = AJUSTES_NO_LEIDOS, onReintentar = { profileReloadKey++ })
+            }
+        }
 
-                // ── Movi ─────────────────────────────────────────────────────────────────────
-                item(key = "movi") {
-                    Column {
-                        Seccion(titulo = "Movi")
-                        Superficie(relleno = RellenoDeSuperficie.Lista) {
-                            FilaQueLleva("Movi AI", Icons.Rounded.AutoAwesome, Screen.AIChat(), onNavigate)
-                            Separador()
-                            FilaQueLleva(TITULO_LO_QUE_MOVI_SABE, Icons.Rounded.Psychology, Screen.LoQueMoviSabe, onNavigate)
-                            Separador()
-                            // Ola 3 · «Editar inicio»: es del dueño (se guarda en el server).
-                            FilaQueLleva(
-                                TITULO_EDITAR_INICIO,
-                                Icons.Rounded.DashboardCustomize,
-                                Screen.EditarInicio,
-                                onNavigate,
-                                subtitulo = "Qué secciones ves en Hoy y en qué orden",
-                            )
-                            if (guiaIncompleta) {
-                                Separador()
-                                FilaQueLleva("Primeros pasos", Icons.Rounded.Flag, Screen.PrimerosPasos, onNavigate)
-                            }
-                        }
+        // Vuelta 38: lo que eran las pestañas Patrimonio y Espacios, como acceso, con su cifra.
+        item(key = "lo-tuyo") { LoTuyo(onNavigate) }
+    }
+
+    // Lo que era Ajustes, con sus secciones en el mismo orden, en dos partes: «Tu plata» y «Movi»
+    // van debajo de lo tuyo, y desde «Cómo se ve» lo demás. En dos columnas, la primera parte va a la
+    // izquierda y la segunda a la derecha, para que las dos columnas terminen parejas (revisión de la
+    // vuelta 38: con todos los ajustes a la derecha, la izquierda acababa a los 390 px).
+    val ajustesDeLaPlata: LazyListScope.() -> Unit = {
+        // ── Tu plata ─────────────────────────────────────────────────────────────────
+        item(key = "tu-plata") {
+            Column {
+                Seccion(titulo = "Tu plata")
+                Superficie(relleno = RellenoDeSuperficie.Lista) {
+                    // El día en que arranca el período: cambia el significado de TODAS las
+                    // cifras. Mientras no se sepa, la fila no dice «Mes de calendario» ni se
+                    // deja tocar: ese texto era el valor por defecto disfrazado del suyo.
+                    val cutoff = profile?.periodCutoffDay
+                    Fila(
+                        titulo = INICIO_DEL_PERIODO,
+                        inicio = { IconoDeAjuste(Icons.Rounded.CalendarMonth) },
+                        subtitulo = cutoff?.let { d ->
+                            textoDelInicioDelMes(d, siElCorteCaeEnFinDeSemanaDe(profile?.periodWeekendRule))
+                        } ?: if (falloElPerfil) NO_PUDIMOS_LEERLO else CARGANDO,
+                        final = if (cutoff != null) ({ Chevron() }) else null,
+                        onClick = if (cutoff == null) null else ({ errorPeriodo = null; showPeriodo = true }),
+                    )
+                    Separador()
+                    // Lo que «Te quedan» resta antes de decirte cuánto puedes gastar. Mismo
+                    // cuidado que «Inicio del período»: sin perfil no dice «No apartas nada».
+                    val ahorro = profile?.ahorroDelPeriodo()
+                    Fila(
+                        titulo = AHORRO_DE_CADA_PERIODO,
+                        inicio = { IconoDeAjuste(Icons.Rounded.Savings) },
+                        subtitulo = ahorro?.let(::textoDelAhorro) ?: if (falloElPerfil) NO_PUDIMOS_LEERLO else CARGANDO,
+                        final = if (ahorro != null) ({ Chevron() }) else null,
+                        onClick = if (ahorro == null) null else ({ errorAhorro = null; showAhorro = true }),
+                    )
+                    Separador()
+                    FilaQueLleva("Categorías", Icons.Rounded.Category, Screen.Categorias, onNavigate)
+                    // Vuelta 31: «Personas y comercios» vive en Espacios —su pestaña, la de lo que
+                    // tienes con los demás, y donde se elige con quién se comparte—, no también acá.
+                    Separador()
+                    // «Captura del banco» en Android, «Mensajes del banco» donde no hay captura.
+                    FilaQueLleva(
+                        tituloDeCapturaDelBanco,
+                        if (esAndroid) Icons.Rounded.Sms else Icons.Rounded.Inbox,
+                        Screen.CapturaDelBanco,
+                        onNavigate,
+                    )
+                    // Donde no se leen SMS, la captura es reenviar los correos del banco: la
+                    // dirección y el paso a paso, con la misma pieza de la guía de primer uso.
+                    if (!esAndroid) {
+                        Separador()
+                        FilaDeAlertasPorCorreo(direccionDeMovi, onAbrir = { showCorreo = true })
                     }
                 }
+            }
+        }
 
-                // ── Cómo se ve: es de ESTE aparato, no del dueño ──
-                // Vuelta 29: sin la fila del tema. La opción 3 es clara y nada más, así que queda
-                // solo «Ocultar los saldos».
-                item(key = "como-se-ve") {
-                    Column {
-                        Seccion(titulo = "Cómo se ve")
-                        Superficie(relleno = RellenoDeSuperficie.Lista) {
-                            // «Ocultar los saldos»: lo mismo que el ojo de Hoy. También de este aparato.
-                            val ocultos = LocalSaldosOcultos.current
-                            Fila(
-                                titulo = ROTULO_OCULTAR_LOS_SALDOS,
-                                subtitulo = "Tus cifras se ven como $PLATA_OCULTA en este aparato",
-                                inicio = { IconoDeAjuste(Icons.Rounded.VisibilityOff) },
-                                final = { Interruptor(ocultos, onCambio = { SaldosOcultosStore.poner(it) }) },
-                                onClick = { SaldosOcultosStore.alternar() },
-                            )
-                        }
+        // ── Movi ─────────────────────────────────────────────────────────────────────
+        item(key = "movi") {
+            Column {
+                Seccion(titulo = "Movi")
+                Superficie(relleno = RellenoDeSuperficie.Lista) {
+                    FilaQueLleva("Movi AI", Icons.Rounded.AutoAwesome, Screen.AIChat(), onNavigate)
+                    Separador()
+                    FilaQueLleva(TITULO_LO_QUE_MOVI_SABE, Icons.Rounded.Psychology, Screen.LoQueMoviSabe, onNavigate)
+                    Separador()
+                    // Ola 3 · «Editar inicio»: es del dueño (se guarda en el server).
+                    FilaQueLleva(
+                        TITULO_EDITAR_INICIO,
+                        Icons.Rounded.DashboardCustomize,
+                        Screen.EditarInicio,
+                        onNavigate,
+                        subtitulo = "Qué secciones ves en Hoy y en qué orden",
+                    )
+                    if (guiaIncompleta) {
+                        Separador()
+                        FilaQueLleva("Primeros pasos", Icons.Rounded.Flag, Screen.PrimerosPasos, onNavigate)
                     }
                 }
+            }
+        }
+    }
+    val ajustesDelAparatoYLaCuenta: LazyListScope.() -> Unit = {
+        // ── Cómo se ve: es de ESTE aparato, no del dueño ──
+        // Vuelta 29: sin la fila del tema. La opción 3 es clara y nada más, así que queda
+        // solo «Ocultar los saldos».
+        item(key = "como-se-ve") {
+            Column {
+                Seccion(titulo = "Cómo se ve")
+                Superficie(relleno = RellenoDeSuperficie.Lista) {
+                    // «Ocultar los saldos»: lo mismo que el ojo de Hoy. También de este aparato.
+                    val ocultos = LocalSaldosOcultos.current
+                    Fila(
+                        titulo = ROTULO_OCULTAR_LOS_SALDOS,
+                        subtitulo = "Tus cifras se ven como $PLATA_OCULTA en este aparato",
+                        inicio = { IconoDeAjuste(Icons.Rounded.VisibilityOff) },
+                        final = { Interruptor(ocultos, onCambio = { SaldosOcultosStore.poner(it) }) },
+                        onClick = { SaldosOcultosStore.alternar() },
+                    )
+                }
+            }
+        }
 
-                // ── Avisos: lo que era Perfil → Avisos y Perfil → Notificaciones ───────────
-                item(key = "avisos") {
-                    // El flujo JS del permiso es async: se relee el estado unas veces tras cada toque.
-                    var pushStatus by remember { mutableStateOf(PushOptIn.status()) }
-                    var refreshTick by remember { mutableStateOf(0) }
-                    if (PushOptIn.supported) {
-                        LaunchedEffect(refreshTick) {
-                            repeat(20) {
-                                kotlinx.coroutines.delay(600)
-                                pushStatus = PushOptIn.status()
-                            }
-                        }
-                    }
-                    // Qué canales tiene el server para los recordatorios (correo): una lectura por sesión.
-                    LaunchedEffect(Unit) { ReminderChannelsCache.cargar() }
-                    val cierrePorCorreo = profile?.cierrePorCorreo
-                    val alternarCierre: () -> Unit = alternarCierre@{
-                        val actual = cierrePorCorreo ?: return@alternarCierre
-                        if (guardandoCierre) return@alternarCierre
-                        guardandoCierre = true
-                        errorCierre = null
-                        alcance.launch {
-                            runCatching { Repositories.wallets.updateUserProfile(UpdateProfileRequest(cierrePorCorreo = !actual)) }
-                                .onSuccess { profile = it; guardandoCierre = false }
-                                .onFailure {
-                                    guardandoCierre = false
-                                    errorCierre = "No pudimos guardar el cambio. Revisa tu conexión e inténtalo de nuevo."
-                                }
-                        }
-                    }
-                    Column {
-                        Seccion(titulo = "Avisos")
-                        Superficie(relleno = RellenoDeSuperficie.Lista) {
-                            // Las notificaciones push del navegador, donde se pueden pedir, con un solo
-                            // «Activar avisos» (vuelta 31), y cuántos días antes avisar.
-                            FilasDeAvisos(
-                                pushSoportado = PushOptIn.supported,
-                                pushStatus = pushStatus,
-                                canales = ReminderChannelsCache.canales,
-                                diasDeAviso = profile?.reminderLeadDays,
-                                falloElPerfil = falloElPerfil,
-                                onActivar = {
-                                    PushOptIn.enable()
-                                    refreshTick++
-                                },
-                                onDesactivar = {
-                                    PushOptIn.disable()
-                                    refreshTick++
-                                },
-                                onElegirDias = { errorAviso = null; showAviso = true },
-                            )
-                            Separador()
-                            // «Cerró tu período» por correo: de la cuenta (sale del server), no del
-                            // teléfono. Sin el perfil no se afirma si está encendido.
-                            Fila(
-                                titulo = "Resumen del período por correo",
-                                inicio = { IconoDeAjuste(Icons.Rounded.Summarize) },
-                                subtitulo = when (cierrePorCorreo) {
-                                    null -> if (falloElPerfil) NO_PUDIMOS_LEERLO else CARGANDO
-                                    true -> "El día siguiente al corte"
-                                    false -> "Apagado"
-                                },
-                                final = {
-                                    Interruptor(
-                                        cierrePorCorreo == true,
-                                        onCambio = { alternarCierre() },
-                                        habilitado = cierrePorCorreo != null && !guardandoCierre,
-                                    )
-                                },
-                                onClick = alternarCierre,
-                            )
-                        }
-                        NotaDeSeccion(
-                            errorCierre ?: when (profile?.cierrePorCorreo) {
-                                // Encendido, la fila ya dice cuándo llega: la nota lo repetía.
-                                true -> null
-                                false -> "El resumen sigue en Hoy y en «Tus períodos»."
-                                null -> null
-                            },
-                            esError = errorCierre != null,
-                        )
-                        // En un iPhone, Safari solo avisa con Movi en la pantalla de inicio.
-                        if (!PushOptIn.supported && PushOptIn.necesitaInstalar) {
-                            Box(modifier = Modifier.padding(top = Medida.dentroDeSeccion)) { AvisosEnElIphone() }
-                        }
+        // ── Avisos: lo que era Perfil → Avisos y Perfil → Notificaciones ───────────
+        item(key = "avisos") {
+            // El flujo JS del permiso es async: se relee el estado unas veces tras cada toque.
+            var pushStatus by remember { mutableStateOf(PushOptIn.status()) }
+            var refreshTick by remember { mutableStateOf(0) }
+            if (PushOptIn.supported) {
+                LaunchedEffect(refreshTick) {
+                    repeat(20) {
+                        kotlinx.coroutines.delay(600)
+                        pushStatus = PushOptIn.status()
                     }
                 }
+            }
+            // Qué canales tiene el server para los recordatorios (correo): una lectura por sesión.
+            LaunchedEffect(Unit) { ReminderChannelsCache.cargar() }
+            val cierrePorCorreo = profile?.cierrePorCorreo
+            val alternarCierre: () -> Unit = alternarCierre@{
+                val actual = cierrePorCorreo ?: return@alternarCierre
+                if (guardandoCierre) return@alternarCierre
+                guardandoCierre = true
+                errorCierre = null
+                alcance.launch {
+                    runCatching { Repositories.wallets.updateUserProfile(UpdateProfileRequest(cierrePorCorreo = !actual)) }
+                        .onSuccess { profile = it; guardandoCierre = false }
+                        .onFailure {
+                            guardandoCierre = false
+                            errorCierre = "No pudimos guardar el cambio. Revisa tu conexión e inténtalo de nuevo."
+                        }
+                }
+            }
+            Column {
+                Seccion(titulo = "Avisos")
+                Superficie(relleno = RellenoDeSuperficie.Lista) {
+                    // Las notificaciones push del navegador, donde se pueden pedir, con un solo
+                    // «Activar avisos» (vuelta 31), y cuántos días antes avisar.
+                    FilasDeAvisos(
+                        pushSoportado = PushOptIn.supported,
+                        pushStatus = pushStatus,
+                        canales = ReminderChannelsCache.canales,
+                        diasDeAviso = profile?.reminderLeadDays,
+                        falloElPerfil = falloElPerfil,
+                        onActivar = {
+                            PushOptIn.enable()
+                            refreshTick++
+                        },
+                        onDesactivar = {
+                            PushOptIn.disable()
+                            refreshTick++
+                        },
+                        onElegirDias = { errorAviso = null; showAviso = true },
+                    )
+                    Separador()
+                    // «Cerró tu período» por correo: de la cuenta (sale del server), no del
+                    // teléfono. Sin el perfil no se afirma si está encendido.
+                    Fila(
+                        titulo = "Resumen del período por correo",
+                        inicio = { IconoDeAjuste(Icons.Rounded.Summarize) },
+                        subtitulo = when (cierrePorCorreo) {
+                            null -> if (falloElPerfil) NO_PUDIMOS_LEERLO else CARGANDO
+                            true -> "El día siguiente al corte"
+                            false -> "Apagado"
+                        },
+                        final = {
+                            Interruptor(
+                                cierrePorCorreo == true,
+                                onCambio = { alternarCierre() },
+                                habilitado = cierrePorCorreo != null && !guardandoCierre,
+                            )
+                        },
+                        onClick = alternarCierre,
+                    )
+                }
+                NotaDeSeccion(
+                    errorCierre ?: when (profile?.cierrePorCorreo) {
+                        // Encendido, la fila ya dice cuándo llega: la nota lo repetía.
+                        true -> null
+                        false -> "El resumen sigue en Hoy y en «Tus períodos»."
+                        null -> null
+                    },
+                    esError = errorCierre != null,
+                )
+                // En un iPhone, Safari solo avisa con Movi en la pantalla de inicio.
+                if (!PushOptIn.supported && PushOptIn.necesitaInstalar) {
+                    Box(modifier = Modifier.padding(top = Medida.dentroDeSeccion)) { AvisosEnElIphone() }
+                }
+            }
+        }
 
-                // ── Tus datos ────────────────────────────────────────────────────────────────
-                item(key = "tus-datos") {
-                    Column {
-                        Seccion(titulo = "Tus datos")
-                        Superficie(relleno = RellenoDeSuperficie.Lista) {
-                            // Ola 18: los papeles. Absorbió a «Extractos».
-                            FilaQueLleva("Documentos", Icons.Rounded.Description, Screen.Documentos, onNavigate)
-                            Separador()
-                            Fila(
-                                titulo = DESCARGAR_TUS_DATOS,
-                                inicio = { IconoDeAjuste(Icons.Rounded.Download) },
-                                subtitulo = if (bajandoDatos) "Preparando el archivo…" else "Un ZIP en CSV y JSON",
-                                final = { Chevron() },
-                                onClick = {
-                                    if (!bajandoDatos) {
-                                        bajandoDatos = true
-                                        errorDatos = null
-                                        alcance.launch {
-                                            runCatching { Repositories.wallets.getExportLink() }
-                                                .onSuccess { enlace ->
-                                                    runCatching { uriHandler.openUri(enlace.url) }
-                                                        .onFailure { errorDatos = "No pudimos abrir la descarga en este aparato." }
-                                                }
-                                                .onFailure {
-                                                    errorDatos = "No pudimos preparar la descarga. Revisa tu conexión e inténtalo de nuevo."
-                                                }
-                                            bajandoDatos = false
+        // ── Tus datos ────────────────────────────────────────────────────────────────
+        item(key = "tus-datos") {
+            Column {
+                Seccion(titulo = "Tus datos")
+                Superficie(relleno = RellenoDeSuperficie.Lista) {
+                    // Ola 18: los papeles. Absorbió a «Extractos».
+                    FilaQueLleva("Documentos", Icons.Rounded.Description, Screen.Documentos, onNavigate)
+                    Separador()
+                    Fila(
+                        titulo = DESCARGAR_TUS_DATOS,
+                        inicio = { IconoDeAjuste(Icons.Rounded.Download) },
+                        subtitulo = if (bajandoDatos) "Preparando el archivo…" else "Un ZIP en CSV y JSON",
+                        final = { Chevron() },
+                        onClick = {
+                            if (!bajandoDatos) {
+                                bajandoDatos = true
+                                errorDatos = null
+                                alcance.launch {
+                                    runCatching { Repositories.wallets.getExportLink() }
+                                        .onSuccess { enlace ->
+                                            runCatching { uriHandler.openUri(enlace.url) }
+                                                .onFailure { errorDatos = "No pudimos abrir la descarga en este aparato." }
                                         }
-                                    }
-                                },
-                            )
-                            Separador()
-                            // El enlace de solo lectura para Caro o un asesor.
-                            FilaQueLleva("Compartir", Icons.Rounded.Share, Screen.Compartir, onNavigate)
-                        }
-                        NotaDeSeccion(
-                            errorDatos ?: "La descarga trae tus cuentas, movimientos, créditos y mensajes del banco.",
-                            esError = errorDatos != null,
-                        )
-                    }
-                }
-
-                // ── Entrar: la huella, solo donde hay lector (en iOS y la web no dibuja nada) ──
-                item(key = "entrar") { SeccionEntrarConHuella() }
-
-                // ── Cuenta ───────────────────────────────────────────────────────────────────
-                item(key = "cuenta") {
-                    Column {
-                        Seccion(titulo = "Cuenta")
-                        Superficie(relleno = RellenoDeSuperficie.Lista) {
-                            Fila(
-                                titulo = "Cambiar contraseña",
-                                inicio = { IconoDeAjuste(Icons.Rounded.Password) },
-                                final = { Chevron() },
-                                onClick = { showChangePassword = true },
-                            )
-                            Separador()
-                            Fila(
-                                titulo = CERRAR_SESION,
-                                inicio = { IconoDeAjuste(Icons.AutoMirrored.Rounded.Logout) },
-                                onClick = onLogout,
-                            )
-                            Separador()
-                            // Para el teléfono perdido: pide confirmación antes.
-                            Fila(
-                                titulo = CERRAR_SESION_EN_TODOS,
-                                inicio = { IconoDeAjuste(Icons.Rounded.Devices) },
-                                subtitulo = if (cerrandoTodas) "Cerrando…" else null,
-                                onClick = if (cerrandoTodas) null else ({ errorCierreTotal = null; confirmarCierreTotal = true }),
-                            )
-                        }
-                        NotaDeSeccion(errorCierreTotal, esError = true)
-                    }
-                }
-
-                // `isAdmin` llega async: va después de todo lo de uso diario para no empujarlo.
-                if (isAdmin == true) {
-                    item(key = "administracion") {
-                        Column {
-                            Seccion(titulo = "Administración")
-                            Superficie(relleno = RellenoDeSuperficie.Lista) {
-                                FilaQueLleva(
-                                    "Editor de pantallas",
-                                    Icons.Rounded.Tune,
-                                    Screen.ScreenEditor,
-                                    onNavigate,
-                                    subtitulo = "Reordena y edita las secciones de Hoy",
-                                )
+                                        .onFailure {
+                                            errorDatos = "No pudimos preparar la descarga. Revisa tu conexión e inténtalo de nuevo."
+                                        }
+                                    bajandoDatos = false
+                                }
                             }
-                        }
-                    }
+                        },
+                    )
+                    Separador()
+                    // El enlace de solo lectura para Caro o un asesor.
+                    FilaQueLleva("Compartir", Icons.Rounded.Share, Screen.Compartir, onNavigate)
                 }
+                NotaDeSeccion(
+                    errorDatos ?: "La descarga trae tus cuentas, movimientos, créditos y mensajes del banco.",
+                    esError = errorDatos != null,
+                )
+            }
+        }
 
-                // Al final y aparte: se usa una vez, si es que se usa, y no puede quedar a un toque
-                // distraído de nada. Sin relleno rojo: una fila más, con el ícono y el título en el
-                // color de alerta (vuelta de diseño 5: `Fila` ya deja elegir el tono del título).
-                item(key = "borrar") {
+        // ── Entrar: la huella, solo donde hay lector (en iOS y la web no dibuja nada) ──
+        item(key = "entrar") { SeccionEntrarConHuella() }
+
+        // ── Cuenta ───────────────────────────────────────────────────────────────────
+        item(key = "cuenta") {
+            Column {
+                Seccion(titulo = "Cuenta")
+                Superficie(relleno = RellenoDeSuperficie.Lista) {
+                    Fila(
+                        titulo = "Cambiar contraseña",
+                        inicio = { IconoDeAjuste(Icons.Rounded.Password) },
+                        final = { Chevron() },
+                        onClick = { showChangePassword = true },
+                    )
+                    Separador()
+                    Fila(
+                        titulo = CERRAR_SESION,
+                        inicio = { IconoDeAjuste(Icons.AutoMirrored.Rounded.Logout) },
+                        onClick = onLogout,
+                    )
+                    Separador()
+                    // Para el teléfono perdido: pide confirmación antes.
+                    Fila(
+                        titulo = CERRAR_SESION_EN_TODOS,
+                        inicio = { IconoDeAjuste(Icons.Rounded.Devices) },
+                        subtitulo = if (cerrandoTodas) "Cerrando…" else null,
+                        onClick = if (cerrandoTodas) null else ({ errorCierreTotal = null; confirmarCierreTotal = true }),
+                    )
+                }
+                NotaDeSeccion(errorCierreTotal, esError = true)
+            }
+        }
+
+        // `isAdmin` llega async: va después de todo lo de uso diario para no empujarlo.
+        if (isAdmin == true) {
+            item(key = "administracion") {
+                Column {
+                    Seccion(titulo = "Administración")
                     Superficie(relleno = RellenoDeSuperficie.Lista) {
-                        Fila(
-                            titulo = BORRAR_MI_CUENTA,
-                            tonoDelTitulo = TonoDeFila.Alerta,
-                            inicio = { IconoEnCirculo(Icons.Rounded.DeleteForever, tono = TonoDeIcono.Peligro) },
-                            final = { Chevron() },
-                            onClick = { onNavigate(Screen.BorrarLaCuenta) },
+                        FilaQueLleva(
+                            "Editor de pantallas",
+                            Icons.Rounded.Tune,
+                            Screen.ScreenEditor,
+                            onNavigate,
+                            subtitulo = "Reordena y edita las secciones de Hoy",
                         )
                     }
                 }
             }
+        }
+
+        // Al final y aparte: se usa una vez, si es que se usa, y no puede quedar a un toque
+        // distraído de nada. Sin relleno rojo: una fila más, con el ícono y el título en el
+        // color de alerta (vuelta de diseño 5: `Fila` ya deja elegir el tono del título).
+        item(key = "borrar") {
+            Superficie(relleno = RellenoDeSuperficie.Lista) {
+                Fila(
+                    titulo = BORRAR_MI_CUENTA,
+                    tonoDelTitulo = TonoDeFila.Alerta,
+                    inicio = { IconoEnCirculo(Icons.Rounded.DeleteForever, tono = TonoDeIcono.Peligro) },
+                    final = { Chevron() },
+                    onClick = { onNavigate(Screen.BorrarLaCuenta) },
+                )
+            }
+        }
+    }
+
+    // Lo que queda libre abajo: el aire de una sección más un margen, como en las demás listas.
+    val alPie = Medida.botonFlotante + Medida.entreSecciones
+    Box(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
+        // En pantalla ancha, lo tuyo a la izquierda y los ajustes a la derecha (las mismas columnas que
+        // Patrimonio, ver [tuEnDosColumnas]); en el teléfono y en una ventana mediana, una lista.
+        PanelDeTablero(enDosColumnas = ::tuEnDosColumnas) { dosColumnas ->
+        Column(modifier = Modifier.fillMaxSize()) {
+            MinScreenHeader(
+                title = TITULO_DE_TU,
+                // La raíz de su pestaña, sin avatar: el avatar llevaría a esta misma pantalla, y la
+                // tarjeta de arriba ya es el avatar con el nombre y el correo.
+                leading = HeaderLeading.Ninguno,
+            )
+            if (dosColumnas) {
+                Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    LazyColumn(
+                        state = estadoDeLoTuyo,
+                        modifier = Modifier.weight(1f).fillMaxHeight().testTag(TAG_COLUMNA_DE_LO_TUYO),
+                        contentPadding = PaddingValues(start = Medida.margenDePantalla, end = Medida.margenDePantalla / 2, top = Medida.dentroDeSeccion, bottom = alPie),
+                        verticalArrangement = Arrangement.spacedBy(Medida.entreSecciones),
+                    ) {
+                        loTuyo()
+                        ajustesDeLaPlata()
+                    }
+                    LazyColumn(
+                        state = estadoDeLosAjustes,
+                        modifier = Modifier.weight(1f).fillMaxHeight().testTag(TAG_COLUMNA_DE_LOS_AJUSTES),
+                        contentPadding = PaddingValues(start = Medida.margenDePantalla / 2, end = Medida.margenDePantalla, top = Medida.dentroDeSeccion, bottom = alPie),
+                        verticalArrangement = Arrangement.spacedBy(Medida.entreSecciones),
+                        content = ajustesDelAparatoYLaCuenta,
+                    )
+                }
+            } else {
+                LazyColumn(
+                    state = estadoDeLoTuyo,
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(
+                        start = Medida.margenDePantalla,
+                        end = Medida.margenDePantalla,
+                        top = Medida.dentroDeSeccion,
+                        bottom = alPie,
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(Medida.entreSecciones),
+                ) {
+                    loTuyo()
+                    ajustesDeLaPlata()
+                    ajustesDelAparatoYLaCuenta()
+                }
+            }
+        }
         }
 
         // Las hojas de esta pantalla se anotan en la pila de hojas: el «atrás» del teléfono cierra la

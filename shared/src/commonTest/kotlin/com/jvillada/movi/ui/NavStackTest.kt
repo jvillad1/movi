@@ -100,9 +100,9 @@ class NavStackTest {
     @Test
     fun `desde el Inicio para adelante se apila como siempre`() {
         val pila = mutableListOf<Screen>(Screen.Dashboard)
-        NavStack.navegar(pila, Screen.Mas)
+        NavStack.navegar(pila, Screen.PorRevisar)
         NavStack.navegar(pila, Screen.Credits)
-        assertEquals(listOf<Screen>(Screen.Dashboard, Screen.Mas, Screen.Credits), pila.toList())
+        assertEquals(listOf<Screen>(Screen.Dashboard, Screen.PorRevisar, Screen.Credits), pila.toList())
 
         NavStack.navegar(pila, Screen.Credits)
         assertEquals(3, pila.size, "no se duplica la de arriba")
@@ -140,27 +140,33 @@ class NavStackTest {
         Screen.Plan() to NavTab.PLAN,
         Screen.Plan(SEGMENTO_PRESUPUESTOS) to NavTab.PLAN,
         Screen.Budgets to NavTab.PLAN,
-        Screen.Accounts to NavTab.PATRIMONIO,
-        Screen.Credits to NavTab.PATRIMONIO,
-        Screen.SalidaDeDeudas to NavTab.PATRIMONIO,
-        Screen.CuadreDeSaldos to NavTab.PATRIMONIO,
-        // 4-oct-2026: «Personas y comercios» se abre desde Movimientos (a quién le mandaste plata).
-        Screen.Destinos() to NavTab.ESPACIOS,
-        Screen.Destinos(abrir = "dst_1") to NavTab.ESPACIOS,
-        Screen.AccountDetail("acc-1", AccountGroup.DINERO) to NavTab.PATRIMONIO,
-        Screen.AccountDetail("acc-2", AccountGroup.INVERSION) to NavTab.PATRIMONIO,
-        Screen.AccountDetail("acc-3", AccountGroup.DEUDA) to NavTab.PATRIMONIO,
-        // Ajustes y lo que se abre desde ahí: por el avatar, sin pestaña marcada.
-        Screen.Mas to null,
-        Screen.Categorias to null,
-        Screen.Documentos to null,
-        Screen.Compartir to null,
-        Screen.LoQueMoviSabe to null,
-        Screen.EditarInicio to null,
-        Screen.BorrarLaCuenta to null,
+        Screen.Periodos to NavTab.PLAN,
+        Screen.DetalleDePeriodo("2026-10") to NavTab.PLAN,
+        // Vuelta 38: lo que eran las pestañas Patrimonio y Espacios, y lo que era Ajustes, es «Tú».
+        Screen.Tu to NavTab.TU,
+        Screen.Accounts to NavTab.TU,
+        Screen.Credits to NavTab.TU,
+        Screen.SalidaDeDeudas to NavTab.TU,
+        Screen.CuadreDeSaldos to NavTab.TU,
+        Screen.CuadrarLaCuenta("acc-1") to NavTab.TU,
+        Screen.Espacios to NavTab.TU,
+        Screen.Espacio("esp-1") to NavTab.TU,
+        Screen.Destinos() to NavTab.TU,
+        Screen.Destinos(abrir = "dst_1") to NavTab.TU,
+        Screen.AccountDetail("acc-1", AccountGroup.DINERO) to NavTab.TU,
+        Screen.AccountDetail("acc-2", AccountGroup.INVERSION) to NavTab.TU,
+        Screen.AccountDetail("acc-3", AccountGroup.DEUDA) to NavTab.TU,
+        Screen.Mas to NavTab.TU,
+        Screen.Categorias to NavTab.TU,
+        Screen.Documentos to NavTab.TU,
+        Screen.Compartir to NavTab.TU,
+        Screen.LoQueMoviSabe to NavTab.TU,
+        Screen.EditarInicio to NavTab.TU,
+        Screen.BorrarLaCuenta to NavTab.TU,
+        Screen.CapturaDelBanco to NavTab.TU,
+        Screen.PrimerosPasos to NavTab.TU,
+        // Movi AI: sin pestaña en el teléfono (en el rail tiene su lugar, ver `destinoResaltado`).
         Screen.AIChat() to null,
-        Screen.CapturaDelBanco to null,
-        Screen.PrimerosPasos to null,
         // Sin navegación: autenticación, la guía de primer uso y flujos a pantalla completa.
         Screen.PrimerUso to null,
         // Sin navegación: autenticación y flujos a pantalla completa.
@@ -185,26 +191,28 @@ class NavStackTest {
         assertEquals(Screen.Transactions(), screenForTab(NavTab.MOVIMIENTOS))
         assertEquals(Screen.Plan(), screenForTab(NavTab.PLAN))
         assertEquals(Screen.Plan(SEGMENTO_PAGOS), screenForTab(NavTab.PLAN))
-        assertEquals(Screen.Accounts, screenForTab(NavTab.PATRIMONIO))
+        assertEquals(Screen.Tu, screenForTab(NavTab.TU))
         assertEquals(Screen.QuickAdd(), screenForTab(NavTab.ADD))
         assertEquals(Screen.AIChat(), screenForTab(NavTab.MOVI_AI))
     }
 
     @Test
-    fun `Ajustes no marca pestana pero sigue con la barra abajo`() {
+    fun `lo que era Ajustes marca Tu, Movi AI ninguna, y todo sigue con la barra abajo`() {
         listOf(Screen.Mas, Screen.BorrarLaCuenta, Screen.Categorias, Screen.Documentos, Screen.Compartir,
-            Screen.AIChat(), Screen.CapturaDelBanco, Screen.PrimerosPasos, Screen.LoQueMoviSabe,
+            Screen.CapturaDelBanco, Screen.PrimerosPasos, Screen.LoQueMoviSabe,
             Screen.BorrarLaCuenta, Screen.EditarInicio)
             .forEach {
-                assertNull(navTabFor(it), "$it")
-                assertTrue(esDeAjustes(it), "$it")
+                assertEquals(NavTab.TU, navTabFor(it), "$it")
                 assertTrue(muestraLaNavegacion(it), "$it")
             }
+        assertNull(navTabFor(Screen.AIChat()))
+        assertTrue(esDeAjustes(Screen.AIChat()))
+        assertTrue(muestraLaNavegacion(Screen.AIChat()))
     }
 
     @Test
     fun `las cuatro pestanas llevan la barra y los flujos a pantalla completa no`() {
-        listOf(Screen.Dashboard, Screen.Transactions(), Screen.Plan(), Screen.Accounts, Screen.Credits)
+        listOf(Screen.Dashboard, Screen.Transactions(), Screen.Plan(), Screen.Tu, Screen.Accounts, Screen.Espacios, Screen.Credits)
             .forEach { assertTrue(muestraLaNavegacion(it), "$it") }
         listOf(Screen.Login, Screen.Register, Screen.QuickAdd(), Screen.ScreenEditor,
             Screen.StatementReview("{}"), Screen.ImportDetail("i1"))
@@ -239,7 +247,9 @@ class NavStackTest {
         // El resto de Movimientos no se toca.
         assertEquals(Screen.Transactions(), destinoVigente(Screen.Transactions()))
         assertEquals(Screen.Transactions(CHIP_ENTRE_CUENTAS), destinoVigente(Screen.Transactions(CHIP_ENTRE_CUENTAS)))
-        assertEquals(Screen.Mas, destinoVigente(Screen.Mas))
+        // Vuelta 38: Ajustes se mudó a «Tú».
+        assertEquals(Screen.Tu, destinoVigente(Screen.Mas))
+        assertEquals(Screen.Tu, destinoVigente(Screen.Tu))
     }
 
     /**
@@ -283,8 +293,8 @@ class NavStackTest {
 
         NavStack.navegar(pila, screenForTab(NavTab.MOVIMIENTOS))
         NavStack.navegar(pila, screenForTab(NavTab.PLAN))
-        NavStack.navegar(pila, screenForTab(NavTab.PATRIMONIO))
-        assertEquals(listOf(Screen.Dashboard, Screen.Accounts), pila, "una pestaña reemplaza a la otra")
+        NavStack.navegar(pila, screenForTab(NavTab.TU))
+        assertEquals(listOf(Screen.Dashboard, Screen.Tu), pila, "una pestaña reemplaza a la otra")
     }
 
     @Test
@@ -300,13 +310,16 @@ class NavStackTest {
     @Test
     fun `atras desde una pantalla apilada vuelve a su pestana`() {
         val pila = mutableListOf<Screen>(Screen.Dashboard)
-        NavStack.navegar(pila, screenForTab(NavTab.PATRIMONIO))
+        NavStack.navegar(pila, screenForTab(NavTab.TU))
+        NavStack.navegar(pila, Screen.Accounts)
         NavStack.navegar(pila, Screen.Credits)
-        assertEquals(listOf(Screen.Dashboard, Screen.Accounts, Screen.Credits), pila, "dentro de la pestaña sí se apila")
+        assertEquals(listOf(Screen.Dashboard, Screen.Tu, Screen.Accounts, Screen.Credits), pila, "dentro de la pestaña sí se apila")
 
         atras(PilaDeHojas(), pila)
-        assertEquals(Screen.Accounts, pila.last(), "atrás vuelve a la raíz de su pestaña")
-        assertEquals(NavTab.PATRIMONIO, navTabFor(pila.last()))
+        assertEquals(Screen.Accounts, pila.last(), "atrás vuelve a Patrimonio")
+        atras(PilaDeHojas(), pila)
+        assertEquals(Screen.Tu, pila.last(), "y a la raíz de su pestaña")
+        assertEquals(NavTab.TU, navTabFor(pila.last()))
 
         atras(PilaDeHojas(), pila)
         assertEquals(listOf<Screen>(Screen.Dashboard), pila, "y desde otra pestaña, a Hoy")
@@ -315,9 +328,11 @@ class NavStackTest {
 
     @Test
     fun `las raices son las cuatro pestanas, sin filtros`() {
-        listOf(Screen.Dashboard, Screen.Transactions(), Screen.Plan(), Screen.Accounts)
+        listOf(Screen.Dashboard, Screen.Transactions(), Screen.Plan(), Screen.Tu)
             .forEach { assertTrue(NavStack.esRaizDePestana(it), "$it") }
         listOf(
+            // Vuelta 38: Patrimonio, Personas (Espacios) y Ajustes dejaron de ser raíces.
+            Screen.Accounts, Screen.Espacios, Screen.Mas,
             Screen.Transactions(CHIP_ENTRE_CUENTAS), Screen.Plan(SEGMENTO_PRESUPUESTOS), Screen.Credits,
             Screen.PorRevisar, Screen.AIChat(), Screen.QuickAdd(), Screen.BorrarLaCuenta,
         ).forEach { assertFalse(NavStack.esRaizDePestana(it), "$it") }
@@ -384,5 +399,57 @@ class NavStackTest {
         // Y terminarla deja solo el Inicio: «atrás» no vuelve a la guía.
         NavStack.navegar(pila, Screen.Dashboard)
         assertEquals(listOf<Screen>(Screen.Dashboard), pila)
+    }
+
+    // ── Vuelta 38: Patrimonio, Personas y Ajustes viven en «Tú» ───────────────
+
+    @Test
+    fun `Patrimonio y Personas pedidos desde fuera de Tu se abren encima de Tu, con su volver`() {
+        listOf(Screen.Accounts, Screen.Espacios).forEach { destino ->
+            listOf(
+                listOf<Screen>(Screen.Dashboard),
+                listOf(Screen.Dashboard, Screen.Transactions()),
+                listOf(Screen.Dashboard, Screen.Plan(), Screen.Periodos),
+            ).forEach { antes ->
+                val pila = antes.toMutableList()
+                NavStack.navegar(pila, destino)
+                assertEquals(listOf(Screen.Dashboard, Screen.Tu, destino), pila, "$destino desde $antes")
+                assertEquals(NavTab.TU, destinoResaltadoDeLaPila(pila))
+                atras(PilaDeHojas(), pila)
+                assertEquals(listOf(Screen.Dashboard, Screen.Tu), pila, "volver de $destino lleva a Tú")
+            }
+        }
+    }
+
+    @Test
+    fun `desde dentro de Tu, Patrimonio y Personas se apilan como cualquier pantalla`() {
+        val pila = mutableListOf<Screen>(Screen.Dashboard, Screen.Tu)
+        NavStack.navegar(pila, Screen.Accounts)
+        NavStack.navegar(pila, Screen.AccountDetail("acc-1", AccountGroup.DINERO))
+        NavStack.navegar(pila, Screen.Espacios)
+        assertEquals(
+            listOf(Screen.Dashboard, Screen.Tu, Screen.Accounts, Screen.AccountDetail("acc-1", AccountGroup.DINERO), Screen.Espacios),
+            pila,
+        )
+    }
+
+    @Test
+    fun `pedir Ajustes lleva a la pestana Tu`() {
+        val pila = mutableListOf<Screen>(Screen.Dashboard, Screen.Transactions())
+        NavStack.navegar(pila, Screen.Mas)
+        assertEquals(listOf(Screen.Dashboard, Screen.Tu), pila)
+    }
+
+    @Test
+    fun `entre cuentas y el cuadre con Tarjetas siguen alcanzables desde Tu`() {
+        val pila = mutableListOf<Screen>(Screen.Dashboard)
+        NavStack.navegarALaPestana(pila, NavTab.TU)
+        NavStack.navegar(pila, Screen.Accounts)
+        NavStack.navegar(pila, Screen.Transactions(CHIP_ENTRE_CUENTAS))
+        assertEquals(listOf(Screen.Dashboard, Screen.Tu, Screen.Accounts, Screen.Transactions(CHIP_ENTRE_CUENTAS)), pila)
+        val otra = mutableListOf<Screen>(Screen.Dashboard, Screen.Tu)
+        NavStack.navegar(otra, Screen.CuadreDeSaldos)
+        assertEquals(listOf(Screen.Dashboard, Screen.Tu, Screen.CuadreDeSaldos), otra)
+        assertEquals(NavTab.TU, destinoResaltadoDeLaPila(otra))
     }
 }

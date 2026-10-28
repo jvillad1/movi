@@ -128,8 +128,13 @@ class BuscarEnMoviTest {
         assertTrue(Screen.Categorias in pantallas("categorias"))
         assertTrue(Screen.BorrarLaCuenta in pantallas("borrar mi cuenta"))
         assertTrue(Screen.Compartir in pantallas("Compartir"))
-        assertTrue(Screen.Mas in pantallas("huella"), "Perfil se mudó dentro de Ajustes")
-        assertTrue(Screen.Mas in pantallas("perfil"))
+        // Vuelta 38: Perfil y Ajustes viven en «Tú»; los nombres viejos lo siguen encontrando.
+        assertTrue(Screen.Tu in pantallas("huella"), "Perfil se mudó dentro de Tú")
+        assertTrue(Screen.Tu in pantallas("perfil"))
+        assertTrue(Screen.Tu in pantallas("ajustes"))
+        assertTrue(Screen.Transactions() in pantallas("movimientos"))
+        assertTrue(Screen.Plan() in pantallas("plan"))
+        assertTrue(Screen.Espacios in pantallas("espacios"))
         // Un número no es el nombre de ninguna pantalla.
         assertTrue(pantallas("27500").isEmpty())
     }
@@ -199,7 +204,7 @@ class BuscarEnMoviTest {
     @Test
     fun `Personas y comercios ya no se nombra desde Movimientos`() {
         val personas = PANTALLAS_BUSCABLES.single { it.destino == com.jvillada.movi.ui.Screen.Destinos() }
-        kotlin.test.assertEquals("Espacios", personas.donde)
+        kotlin.test.assertEquals("Personas", personas.donde)
     }
     /** Vuelta 35: el título de un movimiento es el mismo que en Movimientos, no la categoría repetida. */
     @Test

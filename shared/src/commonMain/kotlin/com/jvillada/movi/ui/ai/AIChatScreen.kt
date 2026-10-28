@@ -247,7 +247,8 @@ fun AIChatScreen(
         ) {
         MinScreenHeader(
             title = "Movi AI",
-            leading = if (comoRaiz) HeaderLeading.Avatar(onNavigate) else HeaderLeading.Back(fallback = Screen.Mas),
+            // Vuelta 38: como raíz del rail, sin avatar (va solo en Inicio) ni flecha.
+            leading = if (comoRaiz) HeaderLeading.Ninguno else HeaderLeading.Back(fallback = Screen.Tu),
             subtitle = "Conoce tus finanzas",
             // Con conversación, la acción es empezar otra (con la forma de toda acción de encabezado);
             // sin conversación no hay nada que limpiar y queda la marca «Beta», una [Pildora].

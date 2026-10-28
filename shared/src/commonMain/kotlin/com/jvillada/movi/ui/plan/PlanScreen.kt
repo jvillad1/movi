@@ -63,6 +63,12 @@ import com.jvillada.movi.ui.sdui.encabezadoDelPeriodo
 import kotlinx.datetime.Clock
 
 /**
+ * El título de la pestaña Pagos (antes «Plan»; vuelta 38, la opción 3). Por dentro sigue igual: Pagos
+ * del mes, Presupuestos, el Disponible y Tus períodos.
+ */
+const val TITULO_DE_PAGOS: String = "Pagos"
+
+/**
  * # Plan: ¿cuánto puedo gastar y qué me falta pagar?
  *
  * Ola C de «Movi sin grasa». Hasta acá esas dos preguntas vivían en tres lugares: el disponible en el
@@ -239,8 +245,9 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
             // `EstadoDePresupuestos.nuevoEnElEncabezado`). El avatar tiene el alto del encabezado,
             // así que ponerlo o sacarlo no mueve nada.
             MinScreenHeader(
-                title = "Plan",
-                leading = HeaderLeading.Avatar(onNavigate),
+                title = TITULO_DE_PAGOS,
+                // Vuelta 38: el avatar va solo en Inicio, como en la maqueta.
+                leading = HeaderLeading.Ninguno,
                 action = {
                     // Va en la cabecera, cuyo alto fija el avatar: aparecer y desaparecer no mueve
                     // nada de lo de abajo. Mismo texto y estilo que el Inicio. También cuando lo que

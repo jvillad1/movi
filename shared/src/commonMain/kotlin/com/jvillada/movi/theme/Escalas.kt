@@ -130,8 +130,8 @@ object Medida {
      */
     val altoDeEncabezado: Dp = 56.dp
 
-    /** El alto de la barra de pestañas del teléfono. */
-    val altoDeBarraDePestanas: Dp = 64.dp
+    /** El alto de la barra de pestañas del teléfono: 76, el de la opción 3 (vuelta 38; era 64). */
+    val altoDeBarraDePestanas: Dp = 76.dp
 
     /**
      * La píldora amarilla detrás del ícono de la pestaña activa (opción 3, vuelta 29): 56 × 30, en la

@@ -1,5 +1,10 @@
 package com.jvillada.movi.ui.plan
 
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.isHeading
+import com.jvillada.movi.ui.components.TAG_BARRA_DE_PESTANAS
+import com.jvillada.movi.ui.components.TAG_RAIL_DE_NAVEGACION
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
@@ -102,6 +107,16 @@ import kotlin.test.assertTrue
 class PlanScreenTest {
 
     @get:Rule val composeRule = createComposeRule()
+
+    /**
+     * El segmento «Pagos» del selector. Vuelta 38: la pestaña también se llama «Pagos», así que se
+     * descartan el título (encabezado) y el rótulo de la barra y del rail.
+     */
+    private fun selectorDePagos() = composeRule.onNode(
+        hasText("Pagos") and !isHeading() and
+            !hasAnyAncestor(hasTestTag(TAG_BARRA_DE_PESTANAS) or hasTestTag(TAG_RAIL_DE_NAVEGACION)),
+        useUnmergedTree = true,
+    )
 
     private val ajustes = PeriodSettings(cutoffDay = 25)
 
@@ -248,7 +263,7 @@ class PlanScreenTest {
         puerta.complete(Unit)
         montar()
 
-        assertTrue(hay("Plan"))
+        assertTrue(hay(TITULO_DE_PAGOS))
         // Ola D, Task 3: sin reglas, sin suscripciones y sin candidatas, el tablero ya no pinta el
         // checklist vacío ni «Flujo libre» en $0 — un solo vacío que enseña los reemplaza.
         assertTrue(hay("Aquí van tus pagos fijos"))
@@ -358,7 +373,7 @@ class PlanScreenTest {
         assertTrue(ofreceNuevo())
         assertTrue(!hay(tituloDelChecklist))
 
-        composeRule.onNodeWithText("Pagos", useUnmergedTree = true).performClick()
+        selectorDePagos().performClick()
         composeRule.waitForIdle()
         assertTrue(hay("Aquí van tus pagos fijos"))
         assertTrue(!hay("Gastado en", substring = true))
@@ -377,7 +392,7 @@ class PlanScreenTest {
         montar()
         composeRule.waitUntil(timeoutMillis = 5_000) { hay("Aquí van tus pagos fijos") }
 
-        val selector = composeRule.onNodeWithText("Pagos", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val selector = selectorDePagos().getUnclippedBoundsInRoot()
         val vacioDePagos = composeRule.onNodeWithText("Aquí van tus pagos fijos", useUnmergedTree = true).getUnclippedBoundsInRoot()
         val aireDePagos = vacioDePagos.top - selector.bottom
 
@@ -424,7 +439,7 @@ class PlanScreenTest {
         assertTrue(!hay(tituloDelChecklist))
         assertEquals(1, lecturasDelResumen)
         val altoCargando = composeRule.onNodeWithTag(TAG_TARJETA_DEL_DISPONIBLE).getUnclippedBoundsInRoot().height
-        val selectorCargando = composeRule.onNodeWithText("Pagos", useUnmergedTree = true).getUnclippedBoundsInRoot().top
+        val selectorCargando = selectorDePagos().getUnclippedBoundsInRoot().top
 
         puerta.complete(Unit)
         composeRule.waitForIdle()
@@ -445,7 +460,7 @@ class PlanScreenTest {
             "La tarjeta del disponible mide ${altoCargando.value} dp cargando y ${altoCargado.value} dp cargada — " +
                 "diferencia de $diferencia dp, el máximo son 8 dp",
         )
-        val selectorCargado = composeRule.onNodeWithText("Pagos", useUnmergedTree = true).getUnclippedBoundsInRoot().top
+        val selectorCargado = selectorDePagos().getUnclippedBoundsInRoot().top
         val corrimiento = abs(selectorCargado.value - selectorCargando.value)
         assertTrue(
             corrimiento <= 8f,
@@ -463,7 +478,7 @@ class PlanScreenTest {
         montar(segmento = SEGMENTO_PRESUPUESTOS)
         assertEquals(1, contarTag(TAG_ESQUELETO_DEL_GASTO_DEL_PERIODO))
 
-        composeRule.onNodeWithText("Pagos", useUnmergedTree = true).performClick()
+        selectorDePagos().performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Presupuestos", useUnmergedTree = true).performClick()
         composeRule.waitForIdle()
@@ -553,7 +568,7 @@ class PlanScreenTest {
 
     private fun comprobarElAire() {
         val espacios = EspaciosDeMovi()
-        val titulo = composeRule.onNodeWithText("Plan", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val titulo = composeRule.onNode(hasText(TITULO_DE_PAGOS) and isHeading(), useUnmergedTree = true).getUnclippedBoundsInRoot()
         val linea = composeRule.onNodeWithTag(TAG_LINEA_DEL_PERIODO_DE_PLAN, useUnmergedTree = true).getUnclippedBoundsInRoot()
         val tarjeta = composeRule.onNodeWithTag(TAG_TARJETA_DEL_DISPONIBLE, useUnmergedTree = true).getUnclippedBoundsInRoot()
         val periodos = composeRule.onNodeWithTag(TAG_FILA_DE_TUS_PERIODOS, useUnmergedTree = true).getUnclippedBoundsInRoot()
@@ -646,7 +661,7 @@ class PlanScreenTest {
         assertEquals(disponible.top, pagos.top, 0.5f)
         assertTrue(limites(TAG_TARJETA_DEL_DISPONIBLE).right <= disponible.right + 0.5f)
         assertTrue(limites(TAG_FILA_DE_TUS_PERIODOS).right <= disponible.right + 0.5f)
-        val selector = composeRule.onNodeWithText("Pagos", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val selector = selectorDePagos().fetchSemanticsNode().boundsInRoot
         assertTrue(selector.left >= pagos.left, "el selector va con los pagos: $selector")
         assertTrue(selector.top < limites(TAG_TARJETA_DEL_DISPONIBLE).top, "el selector va arriba, a la altura de la línea del período")
         val vacio = composeRule.onNodeWithText("Aquí van tus pagos fijos", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
@@ -715,7 +730,7 @@ class PlanScreenTest {
         assertTrue(esqueletoDelTablero.left >= pagos.left, "el esqueleto del tablero va con los pagos")
         val tarjetaCargando = limites(TAG_TARJETA_DEL_DISPONIBLE)
         val periodosCargando = limites(TAG_FILA_DE_TUS_PERIODOS)
-        val selectorCargando = composeRule.onNodeWithText("Pagos", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val selectorCargando = selectorDePagos().fetchSemanticsNode().boundsInRoot
 
         puerta.complete(Unit)
         composeRule.waitUntil(timeoutMillis = 5_000) { hay("Aquí van tus pagos fijos") }
@@ -725,7 +740,7 @@ class PlanScreenTest {
         assertEquals(tarjetaCargando.top, tarjetaCargada.top, 8f)
         assertEquals(periodosCargando.left, limites(TAG_FILA_DE_TUS_PERIODOS).left, 0.5f)
         assertTrue(abs(periodosCargando.top - limites(TAG_FILA_DE_TUS_PERIODOS).top) <= 8f)
-        val selectorCargado = composeRule.onNodeWithText("Pagos", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val selectorCargado = selectorDePagos().fetchSemanticsNode().boundsInRoot
         assertEquals(selectorCargando.left, selectorCargado.left, 0.5f)
         assertTrue(abs(selectorCargando.top - selectorCargado.top) <= 8f)
     }
@@ -752,7 +767,7 @@ class PlanScreenTest {
         assertEquals(1, contarTag(TAG_ESQUELETO_DEL_DISPONIBLE))
         val periodosCargando = composeRule.onNodeWithTag(TAG_FILA_DE_TUS_PERIODOS, useUnmergedTree = true)
             .getUnclippedBoundsInRoot().top
-        val selectorCargando = composeRule.onNodeWithText("Pagos", useUnmergedTree = true)
+        val selectorCargando = selectorDePagos()
             .getUnclippedBoundsInRoot().top
 
         puerta.complete(Unit)
@@ -761,7 +776,7 @@ class PlanScreenTest {
 
         val periodosCargado = composeRule.onNodeWithTag(TAG_FILA_DE_TUS_PERIODOS, useUnmergedTree = true)
             .getUnclippedBoundsInRoot().top
-        val selectorCargado = composeRule.onNodeWithText("Pagos", useUnmergedTree = true)
+        val selectorCargado = selectorDePagos()
             .getUnclippedBoundsInRoot().top
         assertTrue(
             abs(periodosCargado.value - periodosCargando.value) <= 8f,

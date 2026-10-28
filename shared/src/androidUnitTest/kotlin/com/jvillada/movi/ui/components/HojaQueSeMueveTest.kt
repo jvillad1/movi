@@ -206,7 +206,7 @@ class HojaQueSeMueveTest {
     @Test
     fun `guardando, con el velo apagado, la barra de pestanas tampoco recibe toques`() {
         montarEnLaCascara(dismissEnabled = false)
-        val plan = composeRule.onAllNodesWithText("Plan", useUnmergedTree = true).fetchSemanticsNodes().first().boundsInRoot
+        val plan = composeRule.onAllNodesWithText("Pagos", useUnmergedTree = true).fetchSemanticsNodes().first().boundsInRoot
         val hoy = composeRule.onAllNodesWithText("Inicio", useUnmergedTree = true).fetchSemanticsNodes().first().boundsInRoot
         composeRule.onRoot().performTouchInput {
             click(plan.center)
@@ -244,9 +244,9 @@ class HojaQueSeMueveTest {
 
         // La hoja llega al borde de abajo de la ventana: por encima de la barra, no arriba de ella.
         assertEquals(raiz().bottom, panel().bottom, 1f)
-        val plan = composeRule.onAllNodesWithText("Plan", useUnmergedTree = true).fetchSemanticsNodes()
+        val plan = composeRule.onAllNodesWithText("Pagos", useUnmergedTree = true).fetchSemanticsNodes()
             .first().boundsInRoot
-        assertTrue(plan.top >= panel().top, "la pestaña Plan queda debajo de la hoja")
+        assertTrue(plan.top >= panel().top, "la pestaña Pagos queda debajo de la hoja")
 
         // Un toque donde está la pestaña cae en la hoja, no en la barra.
         composeRule.onRoot().performTouchInput { click(plan.center) }

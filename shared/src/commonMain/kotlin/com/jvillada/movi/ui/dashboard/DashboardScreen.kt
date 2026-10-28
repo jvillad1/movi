@@ -535,7 +535,8 @@ fun DashboardScreen(
                 // Vuelta 29: el saludo es un nombre (17/700 a la vista, como en la opción 3), no el
                 // título de una pestaña.
                 tamanoDelTitulo = TamanoDelTitulo.Saludo,
-                inicio = { AvatarButton(onClick = { onNavigate(Screen.Mas) }) },
+                // Vuelta 38: el avatar abre «Tú».
+                inicio = { AvatarButton(onClick = { onNavigate(Screen.Tu) }) },
                 acciones = {
                     // Recargando con cifras ya pintadas (la caché o la instantánea): una línea discreta
                     // en vez de la barra de ancho completo. El alto del encabezado lo fija su mínimo,

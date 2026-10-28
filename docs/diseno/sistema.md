@@ -47,6 +47,7 @@ Las reglas que se repiten tienen nombre propio (`Medida`), y se usa el nombre, n
 | `Medida.altoChico` | 36 — botón chico, solo dentro de una tarjeta |
 | `Medida.altoDeFiltro` | 44 — un filtro (`PildoraDeFiltro`), el de la opción 3 |
 | `Medida.anchoDePildoraDePestana` × `altoDePildoraDePestana` | 56 × 30 — la píldora amarilla de la pestaña activa |
+| `Medida.altoDeBarraDePestanas` | 76 (era 64; vuelta 38) — la barra de 4 pestañas del teléfono |
 | `Medida.altoDeEncabezado` | 56 |
 | `Medida.avatar` / `avatarGrande` / `accionRapida` | 40 / 48 / 56 |
 | `Medida.altoDeMarcaDeBarra` | 12 — la marca sobre una `BarraDeProgreso` («la mitad» en Espacios) |
@@ -1865,4 +1866,99 @@ y los componentes de `ds/`. La navegación de 4 pestañas y las 8 acciones de Ho
    igual. Con flecha, la regla de la vuelta 8 de siempre (con texto si cabe).
 6. **El menos pegado al «$»** (§5).
 7. **`entreCuentas` gris azulado** `#556372` (§4); `ContrasteDeLosTokensTest` pide que se despegue del enlace.
+
+## 42. Vuelta 38: la navegación de la opción 3 — Inicio · Actividad · Pagos · Tú
+
+El dueño eligió las **4 pestañas de la opción 3**, con Patrimonio, Personas y Ajustes dentro de «Tú».
+Esta vuelta cambia la navegación; Inicio con sus 8 acciones es la 39, Actividad y Pagos por dentro la
+40. Sin componentes nuevos en `ds/`; un token cambió: `Medida.altoDeBarraDePestanas` 64 → 76.
+
+- **La barra del teléfono** (`MinBottomNav`): blanca, 76 de alto con el borde de arriba en `borde`,
+  **cuatro pestañas de un cuarto del ancho cada una**, con los íconos de la maqueta (casa, lista,
+  calendario con visto, persona). La activa lleva la píldora `marca` de 56 × 30 detrás del ícono y el
+  rótulo en `pestanaActiva` (12/700, tinta); las demás `pestana` (12/500, `textoMedio`). **Las cuatro
+  llevan su rótulo siempre, también a 360 dp y con la letra del sistema al 130 %**: se fue la regla de
+  la R3 que, con cinco y el «+», dejaba solo el de la activa (`rotulosQueEntran` ya no existe).
+- **Sin «+» en el teléfono.** Anotar vive en las acciones de Inicio. Mientras la vuelta 39 no ponga las
+  8, Traspaso, Pago de tarjeta, Repartir y Subir comprobante se abren con **«Más formas de anotar»**
+  (`MasFormasDeAnotar`, un `Boton` `Fantasma` debajo de las acciones), que abre el MISMO menú del «+»
+  (`MenuDeAtajosDeAgregar`) con esas cuatro (`ATAJOS_FUERA_DEL_INICIO`). La cáscara pone lo que hace
+  cada atajo en `LocalAtajosDeAgregar` (`hacerElAtajo`: la hoja de Agregar, las hojas de Repartir, el
+  selector del comprobante); sin ella, el botón no se pinta.
+- **El rail** (`MinNavRail`) lleva las mismas cuatro, Movi AI y «Agregar» con su menú (en el escritorio
+  no hay un Inicio siempre a la vista, y el teclado físico de Agregar de la vuelta 34 se usa ahí). **Un
+  solo amarillo lleno: «Agregar».** El destino activo del rail ancho va en el amarillo suave (`tinte`,
+  `#FFF2C6`) con la tinta encima (`fondoDelDestinoDelRailAncho`); el del rail compacto, con la píldora
+  chica detrás del ícono, como la barra.
+- **Los títulos**: Movimientos se titula «Actividad» (`TITULO_DE_ACTIVIDAD`), Plan «Pagos»
+  (`TITULO_DE_PAGOS`, por dentro igual: el selector sigue diciendo «Pagos | Presupuestos» hasta la 40) y
+  Espacios «Personas» (`TITULO_DE_PERSONAS`, la palabra de la maqueta; un espacio —«Casa con Caro»—
+  sigue llamándose espacio). En el código los nombres viejos se quedaron (`NavTab.MOVIMIENTOS`,
+  `Screen.Plan`, `Screen.Espacios`): renombrarlos no le cambiaba nada al dueño.
+- **«Tú»** (`Screen.Tu`, `MasScreen` + `LoTuyo`): arriba la tarjeta del perfil (avatar, nombre y
+  correo, «Editar»); después **«Lo tuyo»**: «Tu patrimonio» con la cifra neta (`heroBalance` →
+  `patrimonioDe`, la misma de Patrimonio) que abre Patrimonio; «Personas» con el saldo pendiente
+  (`resumenDePersonas` sobre `fraseDelSaldo`: «Caro te debe $390.000», o cuántos espacios tienen saldo,
+  o «Gastos compartidos y personas») que abre Personas; y «Cuadre de saldos» (con su modo «Tarjetas»).
+  Debajo, **las secciones de Ajustes tal cual**, en `Fila`s con su `IconoEnCirculo`. Es raíz: sin avatar
+  ni flecha (`HeaderLeading.Ninguno`), y re-tocar la pestaña sube. En pantalla ancha es un tablero de
+  dos columnas —lo tuyo a la izquierda, los ajustes a la derecha— con el mismo mínimo por columna que
+  Patrimonio (`tuEnDosColumnas`); Patrimonio, Personas y el detalle de una cuenta conservan sus columnas
+  de la vuelta 33, ahora apiladas sobre Tú.
+- **El avatar** del encabezado de Inicio, Actividad y Pagos abre «Tú».
+- **Ninguna ruta se pierde.** Las raíces son las cuatro (`NavStack.esRaizDePestana`). Patrimonio y
+  Personas, pedidos desde fuera de Tú (el tramo del patrimonio de Inicio, «Repartir» sin espacios, un
+  destino SDUI), se abren **encima de Tú**: la pila queda `[Inicio, Tú, X]`, la barra marca Tú y volver
+  lleva a Tú (`NavStack.seAbreSobreTu`); desde dentro de Tú se apilan como cualquiera. `Screen.Mas`
+  (Ajustes) lleva a Tú (`destinoVigente`), así que el destino SDUI `"mas"` y `"profile"`, las pilas
+  viejas y las flechas que volvían a Ajustes llegan ahí. Patrimonio, Créditos, el cuadre, cualquier
+  cuenta, Personas, «Personas y comercios» y lo que era Ajustes marcan Tú (`navTabFor`); Movi AI no
+  marca ninguna en el teléfono y tiene su lugar en el rail. «Entre cuentas» sigue en Patrimonio →
+  Herramientas, y el cuadre con «Tarjetas» en Tú y en Patrimonio. `direccionDe` no cambió: abrir
+  Patrimonio desde Inicio apila (`[Inicio]` → `[Inicio, Tú, Patrimonio]`), volver a Tú vuelve.
+
+| destino viejo | ahora |
+|---|---|
+| pestaña Hoy | pestaña **Inicio** (la misma `Screen.Dashboard`) |
+| pestaña Movimientos | pestaña **Actividad** (`Screen.Transactions`) |
+| pestaña Plan | pestaña **Pagos** (`Screen.Plan`) |
+| pestaña Patrimonio (`Screen.Accounts`) | Tú → «Tu patrimonio»; pedida de afuera, `[Inicio, Tú, Patrimonio]` |
+| pestaña Espacios (`Screen.Espacios`) | Tú → «Personas»; pedida de afuera, `[Inicio, Tú, Personas]` |
+| Ajustes por el avatar (`Screen.Mas`) | pestaña **Tú** (`Screen.Tu`); el avatar abre Tú |
+| SDUI `"mas"`, `"profile"` | Tú |
+| SDUI `"accounts"`, `"goals"`, `"investments"` | Patrimonio sobre Tú |
+| avisos `por_revisar`, `aviso:<id>`, `aviso-categoria:<id>` | Por revisar / Reconciliar, marcando Actividad |
+| aviso `plan`, `periodo:<id>` | Pagos / el detalle del período, marcando Pagos |
+| aviso `captura` | Captura del banco, marcando Tú |
+| atajos del ícono `agregar:gasto`, `agregar:traspaso` | la hoja de Agregar encima de Inicio |
+| el «+» de la barra y sus atajos | Inicio: Gasto e Ingreso en las acciones, el resto en «Más formas de anotar»; el rail conserva el «+» |
+
+**Las líneas base** no cambian: `dp_sueltos` 118, `radios_con_numero` 3, y las guardas en 0 siguen en
+0. Lo vigilan `LasCuatroPestanasTest` y `LasCuatroPestanasA360Test` (Robolectric, motor de texto real:
+las cuatro con su rótulo entero a 390 y a 360, con la letra ×1,3, la barra de 76, la activa
+`selected`, sin «+»; el rail con las cuatro, Movi AI y «Agregar»), `AtajosDelMasTest` (las cuatro
+formas de anotar desde «Más formas de anotar»), `MasScreenTest` (lo tuyo con su cifra, cada fila abre
+su pantalla, Tú sin flecha), y en `commonTest` `NavStackTest`, `MinNavRailTest` (el amarillo suave del
+rail), `ResumenDePersonasTest` y **`LasRutasViejasLleganTest`**, que recorre la tabla de arriba.
+
+**La revisión de la vuelta 38** (aca3f04b, a 390, 360 y 1.280), y lo que cambió:
+
+1. **El avatar va solo en Inicio**, como en la maqueta. Actividad, Pagos, Tú y Movi AI como raíz del
+   rail no llevan nada a la izquierda del título (`leadingFor` da `HeaderLeading.Ninguno` en una raíz);
+   desde Inicio el avatar sigue abriendo Tú.
+2. **Personas no habla de espacios**: lo que el dueño lee dice **grupo** —«+ Nuevo grupo», «Crear
+   grupo», «Crea un grupo, como «Casa con Caro»…», «¿En qué grupo?», «Quitar del grupo», «Esto deja el
+   grupo en cero», «2 grupos con saldo pendiente»—. Los nombres internos (`Espacio*`, `Screen.Espacios`,
+   las rutas y el server) no cambian.
+3. **«Tu patrimonio» en Tú va sin subtítulo**: «Lo que tienes menos lo q…» se cortaba a 390 al lado de
+   la cifra, que ya lo dice. El del cuadre es «Contra lo que dice el banco» (`SUBTITULO_DEL_CUADRE`).
+   `LoTuyoA360Test` mide que nada de «Lo tuyo» se corte a 360 con una cifra de diez dígitos.
+4. **El activo del rail ancho no lleva hover** (`elHoverSeVeEnElDestino`): el velo en tinta volvía el
+   amarillo suave un beige oliva. Los demás destinos sí lo llevan.
+5. **Las dos columnas de Tú, parejas**: a la izquierda lo tuyo, «Tu plata» y «Movi»; desde «Cómo se ve»,
+   a la derecha (antes todos los ajustes iban a la derecha y la izquierda acababa a los 390 px). Lo mide
+   `MasScreenTest` a 1.064 dp de panel (1.280 de ventana con el rail).
+
+Que el rail tenga Movi AI y la barra no es a propósito: en el teléfono va en la acción «Preguntar a
+Movi» de las 8 acciones (vuelta 39).
 

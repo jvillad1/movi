@@ -10,7 +10,10 @@ import com.jvillada.movi.shared.model.claveDeComercio
 import com.jvillada.movi.shared.model.normalizarParaBuscar
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.shared.model.PERSONAS_Y_COMERCIOS
-import com.jvillada.movi.ui.mas.TITULO_DE_AJUSTES
+import com.jvillada.movi.ui.mas.TITULO_DE_TU
+import com.jvillada.movi.ui.espacios.TITULO_DE_PERSONAS
+import com.jvillada.movi.ui.plan.TITULO_DE_PAGOS
+import com.jvillada.movi.ui.transactions.TITULO_DE_ACTIVIDAD
 import com.jvillada.movi.ui.sms.tituloDeCapturaDelBanco
 import com.jvillada.movi.ui.transactions.textosDeLaFila
 import com.jvillada.movi.ui.transactions.isTransferLeg
@@ -138,29 +141,31 @@ data class GrupoDeResultados(val tipo: TipoDeResultado, val resultados: List<Res
 internal data class PantallaBuscable(val nombre: String, val donde: String, val destino: Screen, val tambien: List<String> = emptyList())
 
 internal val PANTALLAS_BUSCABLES: List<PantallaBuscable> = listOf(
+    // Vuelta 38: las cuatro pestañas de la opción 3. Los nombres viejos («movimientos», «plan»,
+    // «ajustes», «espacios») siguen encontrando su pantalla.
     PantallaBuscable("Inicio", "Pestaña", Screen.Dashboard, listOf("hoy", "te quedan")),
-    PantallaBuscable("Movimientos", "Pestaña", Screen.Transactions(), listOf("gastos", "ingresos")),
-    PantallaBuscable("Por revisar", "Movimientos", Screen.PorRevisar, listOf("pendientes", "confirmar", "avisos del banco")),
-    PantallaBuscable("Plan", "Pestaña", Screen.Plan(), listOf("pagos del mes", "disponible")),
-    PantallaBuscable("Presupuestos", "Plan", Screen.Budgets),
-    PantallaBuscable("Tus períodos", "Plan", Screen.Periodos, listOf("periodos", "como me fue")),
-    PantallaBuscable("Patrimonio", "Pestaña", Screen.Accounts, listOf("cuentas", "tu plata")),
+    PantallaBuscable(TITULO_DE_ACTIVIDAD, "Pestaña", Screen.Transactions(), listOf("movimientos", "gastos", "ingresos")),
+    PantallaBuscable("Por revisar", TITULO_DE_ACTIVIDAD, Screen.PorRevisar, listOf("pendientes", "confirmar", "avisos del banco")),
+    PantallaBuscable(TITULO_DE_PAGOS, "Pestaña", Screen.Plan(), listOf("plan", "pagos del mes", "disponible")),
+    PantallaBuscable("Presupuestos", TITULO_DE_PAGOS, Screen.Budgets),
+    PantallaBuscable("Tus períodos", TITULO_DE_PAGOS, Screen.Periodos, listOf("periodos", "como me fue")),
+    PantallaBuscable(TITULO_DE_TU, "Pestaña", Screen.Tu, listOf("ajustes", "perfil", "huella", "ocultar los saldos", "tema", "como se ve", "avisos por correo", "corte del periodo", "contrasena", "cerrar sesion", "descargar tus datos")),
+    PantallaBuscable("Patrimonio", TITULO_DE_TU, Screen.Accounts, listOf("cuentas", "tu plata")),
     PantallaBuscable("Créditos", "Patrimonio", Screen.Credits, listOf("deudas", "tarjetas", "prestamos")),
     PantallaBuscable("Cómo salir de tus deudas", "Créditos", Screen.SalidaDeDeudas, listOf("abono", "avalancha", "bola de nieve")),
-    PantallaBuscable("Cuadre de saldos", "Patrimonio", Screen.CuadreDeSaldos, listOf("cuadrar", "ajustar saldo")),
-    // Ola R4: su casa es Espacios (y Ajustes); Movimientos ya no tiene su fila.
-    PantallaBuscable(PERSONAS_Y_COMERCIOS, "Espacios", Screen.Destinos(), listOf("terceros", "cuentas de otros", "hogar")),
-    // Vuelta de diseño 3: Perfil se mudó dentro de Ajustes, y lo que se buscaba ahí lleva acá.
-    PantallaBuscable(TITULO_DE_AJUSTES, "El avatar", Screen.Mas, listOf("perfil", "huella", "ocultar los saldos", "tema", "como se ve", "avisos por correo", "corte del periodo", "contrasena", "cerrar sesion", "descargar tus datos")),
-    PantallaBuscable("Categorías", TITULO_DE_AJUSTES, Screen.Categorias),
-    PantallaBuscable("Documentos", TITULO_DE_AJUSTES, Screen.Documentos, listOf("extractos", "comprobantes", "papeles")),
-    PantallaBuscable("Compartir", TITULO_DE_AJUSTES, Screen.Compartir, listOf("enlace")),
-    PantallaBuscable("Movi AI", TITULO_DE_AJUSTES, Screen.AIChat(), listOf("asistente", "preguntar")),
-    PantallaBuscable("Lo que Movi sabe de ti", TITULO_DE_AJUSTES, Screen.LoQueMoviSabe, listOf("memoria")),
-    PantallaBuscable("Editar inicio", TITULO_DE_AJUSTES, Screen.EditarInicio, listOf("hoy", "secciones", "orden", "ocultar")),
-    PantallaBuscable(tituloDeCapturaDelBanco, TITULO_DE_AJUSTES, Screen.CapturaDelBanco, listOf("captura del banco", "mensajes del banco", "sms", "notificaciones", "banco mudo", "correo")),
-    PantallaBuscable("Borrar mi cuenta", TITULO_DE_AJUSTES, Screen.BorrarLaCuenta, listOf("eliminar cuenta")),
-    PantallaBuscable("Primeros pasos", TITULO_DE_AJUSTES, Screen.PrimerosPasos),
+    PantallaBuscable("Cuadre de saldos", TITULO_DE_TU, Screen.CuadreDeSaldos, listOf("cuadrar", "ajustar saldo")),
+    PantallaBuscable(TITULO_DE_PERSONAS, TITULO_DE_TU, Screen.Espacios, listOf("grupos", "espacios", "hogar", "repartir", "casa")),
+    // Ola R4: su casa es Personas (antes Espacios).
+    PantallaBuscable(PERSONAS_Y_COMERCIOS, TITULO_DE_PERSONAS, Screen.Destinos(), listOf("terceros", "cuentas de otros", "hogar")),
+    PantallaBuscable("Categorías", TITULO_DE_TU, Screen.Categorias),
+    PantallaBuscable("Documentos", TITULO_DE_TU, Screen.Documentos, listOf("extractos", "comprobantes", "papeles")),
+    PantallaBuscable("Compartir", TITULO_DE_TU, Screen.Compartir, listOf("enlace")),
+    PantallaBuscable("Movi AI", TITULO_DE_TU, Screen.AIChat(), listOf("asistente", "preguntar")),
+    PantallaBuscable("Lo que Movi sabe de ti", TITULO_DE_TU, Screen.LoQueMoviSabe, listOf("memoria")),
+    PantallaBuscable("Editar inicio", TITULO_DE_TU, Screen.EditarInicio, listOf("hoy", "secciones", "orden", "ocultar")),
+    PantallaBuscable(tituloDeCapturaDelBanco, TITULO_DE_TU, Screen.CapturaDelBanco, listOf("captura del banco", "mensajes del banco", "sms", "notificaciones", "banco mudo", "correo")),
+    PantallaBuscable("Borrar mi cuenta", TITULO_DE_TU, Screen.BorrarLaCuenta, listOf("eliminar cuenta")),
+    PantallaBuscable("Primeros pasos", TITULO_DE_TU, Screen.PrimerosPasos),
 )
 
 /** Cuántos movimientos sueltos se listan, como mucho: los más recientes. El resto, en Movimientos. */

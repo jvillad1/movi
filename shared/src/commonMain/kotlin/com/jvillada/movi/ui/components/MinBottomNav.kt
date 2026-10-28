@@ -3,53 +3,49 @@ package com.jvillada.movi.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.EventNote
-import androidx.compose.material.icons.rounded.AccountBalance
-import androidx.compose.material.icons.rounded.Groups
-import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.automirrored.rounded.FormatListBulleted
 import androidx.compose.material.icons.rounded.AutoAwesome
-import androidx.compose.material.icons.rounded.SwapVert
+import androidx.compose.material.icons.rounded.EventAvailable
 import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import com.jvillada.movi.theme.*
 import androidx.compose.material3.HorizontalDivider
 
 /**
  * Los destinos de la navegación principal.
  *
- * Ola C (2026-09): **cuatro lugares y el botón de agregar**, los mismos en el teléfono y en la web.
- * Hasta acá la barra del teléfono decía «Inicio · Movs · + · Cuentas · Más» y el rail de la web
- * agregaba Créditos y Presupuestos, así que la misma pantalla se resaltaba distinto según el ancho y
- * «Más» era un cajón de todo lo que no entraba. Ahora cada pestaña contesta una pregunta (ver
- * `navTabFor` en Navigation.kt) y lo que antes vivía en «Más» se abre tocando el avatar (Ajustes).
+ * Vuelta 38 (la opción 3): **cuatro lugares**, los mismos en el teléfono y en la web — Inicio ·
+ * Actividad · Pagos · Tú. Cada pestaña contesta una pregunta (ver `navTabFor` en Navigation.kt). Lo que
+ * eran las pestañas Patrimonio y Espacios, y lo que abría el avatar (Ajustes), vive en «Tú».
  *
- * [ADD] no es un lugar: es la hoja de «Agregar», que se abre encima de la pantalla actual.
+ * Los nombres del enum son los de siempre (`MOVIMIENTOS` es Actividad, `PLAN` es Pagos) para no
+ * renombrar cada pila, prueba y destino que ya los nombra; lo que se lee sale de [destinosPrincipales].
+ *
+ * [ADD] no es un lugar: es la hoja de «Agregar», que se abre encima de la pantalla actual. Desde la
+ * vuelta 38 solo la ofrece el rail: en el teléfono no hay «+», anotar vive en las acciones de Inicio.
  *
  * [MOVI_AI] es un destino **solo del rail** (desde 600 dp, ver [destinosDelRail]): en el teléfono la
- * barra sigue con sus cuatro y Movi AI se abre desde Hoy.
+ * barra sigue con sus cuatro y Movi AI se abre desde Inicio.
  */
-enum class NavTab { HOY, MOVIMIENTOS, ADD, PLAN, ESPACIOS, PATRIMONIO, MOVI_AI }
+enum class NavTab { HOY, MOVIMIENTOS, ADD, PLAN, TU, MOVI_AI }
 
 /**
  * Un destino principal: pestaña + rótulo + ícono. [rotuloCorto] es el del rail compacto de una
- * ventana mediana (80 dp de ancho, ver [MinNavRail]): ahí «Movimientos» no entra.
+ * ventana mediana (80 dp de ancho, ver [MinNavRail]); con los rótulos de la opción 3 todos entran.
  */
 data class DestinoPrincipal(
     val tab: NavTab,
@@ -59,34 +55,25 @@ data class DestinoPrincipal(
 )
 
 /**
- * Las cuatro pestañas, en orden. Es la ÚNICA fuente: la barra del teléfono ([MinBottomNav]) pinta
- * las dos primeras, el «+» y las dos últimas; el rail de la web ([MinNavRail]) las cuatro y debajo
- * «Agregar». Que las dos lean esta lista es lo que garantiza que no vuelvan a separarse.
- *
- * «Movimientos» va entero también en el teléfono (antes «Movs»): entra a 390 dp junto a las otras
- * tres y el «+», medido con el motor de texto real en `LasCuatroPestanasTest`.
+ * Las cuatro pestañas, en orden, con los íconos de la maqueta (la casa, la lista, el calendario con
+ * el visto y la persona). Es la ÚNICA fuente: la barra del teléfono ([MinBottomNav]) y el rail de la
+ * web ([MinNavRail]) pintan las cuatro. Que las dos lean esta lista es lo que garantiza que no
+ * vuelvan a separarse.
  */
 val destinosPrincipales: List<DestinoPrincipal> = listOf(
-    // Ola R1: «Hoy» pasa a llamarse «Inicio», como en las maquetas del camino 1.
     DestinoPrincipal(NavTab.HOY, "Inicio", Icons.Rounded.Home),
-    DestinoPrincipal(NavTab.MOVIMIENTOS, "Movimientos", Icons.Rounded.SwapVert, rotuloCorto = "Movs"),
-    DestinoPrincipal(NavTab.PLAN, "Plan", Icons.AutoMirrored.Rounded.EventNote),
-    // R3 · lo grupal («Casa con Caro») tiene casa propia, entre Plan y Patrimonio.
-    DestinoPrincipal(NavTab.ESPACIOS, "Espacios", Icons.Rounded.Groups),
-    DestinoPrincipal(NavTab.PATRIMONIO, "Patrimonio", Icons.Rounded.AccountBalance),
+    DestinoPrincipal(NavTab.MOVIMIENTOS, "Actividad", Icons.AutoMirrored.Rounded.FormatListBulleted),
+    DestinoPrincipal(NavTab.PLAN, "Pagos", Icons.Rounded.EventAvailable),
+    DestinoPrincipal(NavTab.TU, "Tú", Icons.Rounded.Person),
 )
-
-/** Cuántas pestañas van antes del «+» en la barra del teléfono: Inicio y Movimientos. */
-const val PESTANAS_ANTES_DEL_MAS: Int = 2
 
 /**
  * **Movi AI, como destino propio del rail.** La promesa central del producto —preguntarle a Movi— no
- * tenía lugar en la navegación ancha: en la web había que volver a Hoy o abrir Ajustes para llegar.
- * Lleva las chispas que ya usa Hoy en «Pregúntale a Movi».
+ * tenía lugar en la navegación ancha: en la web había que volver a Inicio para llegar. Lleva las
+ * chispas que ya usa Inicio en «Pregúntale a Movi».
  *
- * **Solo en el rail** (mediano y expandido): la barra del teléfono se queda con sus cuatro y el «+»
- * —un quinto lugar ahí apretaría los rótulos que `LasCuatroPestanasTest` mide—, y en el teléfono
- * Movi AI se sigue abriendo desde Hoy.
+ * **Solo en el rail** (mediano y expandido): la barra del teléfono se queda con sus cuatro, y en el
+ * teléfono Movi AI se sigue abriendo desde Inicio.
  */
 val destinoMoviAi: DestinoPrincipal =
     DestinoPrincipal(NavTab.MOVI_AI, "Movi AI", Icons.Rounded.AutoAwesome)
@@ -94,76 +81,50 @@ val destinoMoviAi: DestinoPrincipal =
 /** Lo que pinta el rail, en orden: las cuatro pestañas y Movi AI. La barra del teléfono, no. */
 val destinosDelRail: List<DestinoPrincipal> = destinosPrincipales + destinoMoviAi
 
+/**
+ * **La barra de pestañas del teléfono** (vuelta 38, la de la opción 3): blanca, de
+ * [Medida.altoDeBarraDePestanas] (76) con el borde de arriba, y **las cuatro con su rótulo siempre**,
+ * a 360 dp también (cada una se lleva un cuarto del ancho). La activa lleva la píldora amarilla de
+ * 56 × 30 detrás del ícono y el rótulo en 12/700; las demás, 12/500 en el texto medio.
+ *
+ * **Sin «+».** Anotar vive en las acciones de Inicio (y en «Más formas de anotar»); el «+» con su
+ * menú queda en el rail, donde no hay un Inicio siempre a la vista.
+ */
 @Composable
 fun MinBottomNav(
     active: NavTab?,
     onTabSelected: (NavTab) -> Unit,
-    /** Ola 5: mantener presionado el «+» abre sus atajos (ver [BotonDeAgregarConAtajos]). */
-    onAtajo: ((com.jvillada.movi.ui.quickadd.AtajoDeAgregar) -> Unit)? = null,
 ) {
     // Desde 600 dp el rail de la raíz (MinNavRail, compacto en una ventana mediana) toma el lugar
     // de la barra: la barra es solo del teléfono (Ola W1).
     // Desde la Ola 4 esta barra la pinta SOLO App.kt, una vez, debajo de la pantalla activa;
     // ninguna pantalla la llama por su cuenta.
     if (LocalWindowWidthClass.current != WindowWidthClass.Compact) return
-    val antes = destinosPrincipales.take(PESTANAS_ANTES_DEL_MAS)
-    val despues = destinosPrincipales.drop(PESTANAS_ANTES_DEL_MAS)
-    // R3 · con Espacios son cinco pestañas y el «+»: a 390 dp entran todas con su rótulo, a 360 dp
-    // (o con la letra del sistema grande) no. Los rótulos NUNCA se achican por debajo del token:
-    // si no entran todos, se ve solo el de la pestaña activa y las demás quedan con su ícono (su
-    // nombre lo sigue diciendo el lector de pantalla). Ver [rotulosQueEntran].
-    val medidor = rememberTextMeasurer()
-    val estilo = estiloDelRotulo(activo = true)
-    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-        val densidad = LocalDensity.current
-        val anchos = destinosPrincipales.map { d ->
-            with(densidad) { medidor.measure(d.label, estilo, maxLines = 1).size.width.toDp() }
-        }
-        val todos = rotulosQueEntran(anchos, maxWidth)
-        Column(
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Movi.colores.tarjeta)
+            .navigationBarsPadding(),
+    ) {
+        // La barra se despega del contenido con un BORDE, no con otro gris: blanca con el borde
+        // de arriba en `borde`, como la de la opción 3 (vuelta 29).
+        HorizontalDivider(thickness = Medida.trazo, color = Movi.colores.borde)
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Movi.colores.tarjeta)
-                .navigationBarsPadding(),
+                .height(Medida.altoDeBarraDePestanas)
+                .testTag(TAG_BARRA_DE_PESTANAS),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            // La barra se despega del contenido con un BORDE, no con otro gris: blanca con el borde
-            // de arriba en `borde`, como la de la opción 3 (vuelta 29).
-            HorizontalDivider(thickness = Medida.trazo, color = Movi.colores.borde)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(Medida.altoDeBarraDePestanas),
-                horizontalArrangement = Arrangement.SpaceAround,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                antes.forEach { NavItem(it.tab, it.label, it.icon, active, onTabSelected, conRotulo = todos || it.tab == active) }
-
-                // Center FAB. Tocarlo abre «Agregar»; mantenerlo presionado, sus atajos (Ola 5).
-                BotonDeAgregarConAtajos(
-                    alTocar = { onTabSelected(NavTab.ADD) },
-                    alElegirAtajo = onAtajo,
-                    modifier = Modifier
-                        .size(Medida.botonFlotante)
-                        .shadow(Espacio.xs, CircleShape)
-                        .clip(CircleShape)
-                        .background(Movi.colores.marca),
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Add,
-                        contentDescription = "Agregar",
-                        // Era un lila oscuro escrito a mano acá, el único lugar de la app que lo
-                        // decía. Ese valor ES el rol `sobreMarca`, y ahora se llama así: da 8,47:1
-                        // contra el lavanda, y la prueba de contraste no deja que baje.
-                        tint = Movi.colores.sobreMarca,
-                        modifier = Modifier.size(Icono.l),
-                    )
-                }
-
-                despues.forEach { NavItem(it.tab, it.label, it.icon, active, onTabSelected, conRotulo = todos || it.tab == active) }
+            destinosPrincipales.forEach {
+                NavItem(it.tab, it.label, it.icon, active, onTabSelected, modifier = Modifier.weight(1f))
             }
         }
     }
 }
+
+/** El `testTag` de la barra de pestañas del teléfono. */
+const val TAG_BARRA_DE_PESTANAS: String = "barra-de-pestanas"
 
 @Composable
 private fun NavItem(
@@ -172,18 +133,17 @@ private fun NavItem(
     icon: ImageVector,
     active: NavTab?,
     onTabSelected: (NavTab) -> Unit,
-    /** `false`: solo el ícono, y el lugar del rótulo queda vacío (los íconos no saltan). */
-    conRotulo: Boolean = true,
+    modifier: Modifier = Modifier,
 ) {
     val isActive = tab == active
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(Espacio.xxs),
-        modifier = Modifier
-            .clickable { onTabSelected(tab) }
-            // Sin relleno a los lados: la píldora de 56 ya le da el ancho a cada pestaña, y la fila
-            // reparte lo que sobra (`SpaceAround`). Con relleno, las cinco y el «+» no entraban a 390.
-            .padding(vertical = Espacio.xxs),
+        verticalArrangement = Arrangement.spacedBy(Espacio.xxs, Alignment.CenterVertically),
+        modifier = modifier
+            .fillMaxHeight()
+            // Un lector de pantalla oye el rótulo (el ícono no dice nada) y sabe cuál está elegida.
+            .clickable(role = Role.Tab) { onTabSelected(tab) }
+            .semantics { selected = isActive },
     ) {
         Box(
             contentAlignment = Alignment.Center,
@@ -197,40 +157,18 @@ private fun NavItem(
         ) {
             Icon(
                 imageVector = icon,
-                contentDescription = label,
+                contentDescription = null,
                 tint = if (isActive) Movi.colores.sobreMarca else Movi.colores.textoMedio,
                 modifier = Modifier.size(Icono.m),
             )
         }
-        if (conRotulo) {
-            Text(
-                text = label,
-                // Un renglón siempre: un rótulo que se partiera en dos haría esa pestaña más alta que
-                // las otras y correría su ícono hacia arriba. Ver [destinosPrincipales].
-                maxLines = 1,
-                style = estiloDelRotulo(isActive),
-                color = if (isActive) Movi.colores.texto else Movi.colores.textoMedio,
-            )
-        } else {
-            Spacer(Modifier.height(with(LocalDensity.current) { estiloDelRotulo(false).lineHeight.toDp() }))
-        }
+        Text(
+            text = label,
+            // Un renglón siempre: un rótulo que se partiera en dos haría esa pestaña más alta que
+            // las otras y correría su ícono hacia arriba.
+            maxLines = 1,
+            style = if (isActive) Movi.textos.pestanaActiva else Movi.textos.pestana,
+            color = if (isActive) Movi.colores.texto else Movi.colores.textoMedio,
+        )
     }
-}
-
-/** El estilo del rótulo de una pestaña: el `rotulo` del sistema, más firme si está activa. */
-@Composable
-private fun estiloDelRotulo(activo: Boolean): TextStyle =
-    if (activo) Movi.textos.pestanaActiva else Movi.textos.pestana
-
-/**
- * **¿Entran los cinco rótulos enteros en [ancho]?** Cada pestaña ocupa lo más ancho entre su rótulo
- * ([anchosDeRotulos], medidos con el motor de texto) y la píldora del ícono, más su relleno; el «+»,
- * su botón. Si no entran, la barra muestra solo el rótulo de la activa (ver [MinBottomNav]).
- * Pura, para probar el umbral sin montar la barra.
- */
-fun rotulosQueEntran(anchosDeRotulos: List<Dp>, ancho: Dp): Boolean {
-    val pildora = Medida.anchoDePildoraDePestana
-    var suma = Medida.botonFlotante
-    anchosDeRotulos.forEach { rotulo -> suma += maxOf(rotulo, pildora) }
-    return suma <= ancho
 }

@@ -11,6 +11,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.performTouchInput
+import com.jvillada.movi.ui.components.TAG_BARRA_DE_PESTANAS
 import com.jvillada.movi.ui.components.ANCHO_DEL_RAIL_COMPACTO
 import com.jvillada.movi.ui.components.RELLENO_DEL_ITEM_DEL_RAIL_COMPACTO
 import com.jvillada.movi.ui.components.RotuloDelRailCompacto
@@ -85,9 +86,9 @@ class EsqueletoResponsivoTest {
 
     private var clase: WindowWidthClass? = null
 
-    // Una pantalla de lectura de la pestaña Patrimonio (Cuentas de otros). Patrimonio misma es un
-    // tablero desde la Ola W3.
-    private fun montar(pantalla: Screen = Screen.Destinos(), tab: NavTab? = NavTab.PATRIMONIO) {
+    // Una pantalla de lectura de la pestaña Tú (Personas y comercios). Tú misma es un tablero desde
+    // la vuelta 38.
+    private fun montar(pantalla: Screen = Screen.Destinos(), tab: NavTab? = NavTab.TU) {
         composeRule.setContent {
             ConClaseDeAncho {
                 clase = LocalWindowWidthClass.current
@@ -119,8 +120,8 @@ class EsqueletoResponsivoTest {
         montar()
 
         assertEquals(WindowWidthClass.Compact, clase)
-        // La barra inferior dice «Movimientos» entero; y sin rail el contenido arranca en 0.
-        composeRule.onNodeWithText("Movimientos", useUnmergedTree = true).assertIsDisplayed()
+        // La barra inferior dice «Actividad» entero; y sin rail el contenido arranca en 0.
+        composeRule.onNodeWithText("Actividad", useUnmergedTree = true).assertIsDisplayed()
         val contenido = limites("contenido")
         assertEquals(0f, contenido.left)
         assertEquals(raiz().right, contenido.right)
@@ -137,8 +138,8 @@ class EsqueletoResponsivoTest {
             composeRule.onNodeWithContentDescription(it.label, useUnmergedTree = true).assertIsDisplayed()
         }
         composeRule.onNodeWithContentDescription("Agregar", useUnmergedTree = true).assertIsDisplayed()
-        // Ni la barra del teléfono («Movimientos» escrito) ni el rail ancho («Agregar» escrito).
-        assertFalse(hay("Movimientos"), "la barra inferior es solo del teléfono")
+        // Ni la barra del teléfono ni el rail ancho («Agregar» escrito).
+        composeRule.onNodeWithTag(TAG_BARRA_DE_PESTANAS, useUnmergedTree = true).assertDoesNotExist()
         assertFalse(hay("Agregar"), "el rail ancho es del escritorio")
 
         val contenido = limites("contenido")
@@ -158,7 +159,7 @@ class EsqueletoResponsivoTest {
                 Column {
                     destinosDelRail.forEach { dest ->
                         Box(Modifier.width(ANCHO_DEL_RAIL_COMPACTO - RELLENO_DEL_ITEM_DEL_RAIL_COMPACTO * 2)) {
-                            RotuloDelRailCompacto(dest.rotuloCorto, activo = dest.tab == NavTab.PATRIMONIO)
+                            RotuloDelRailCompacto(dest.rotuloCorto, activo = dest.tab == NavTab.TU)
                         }
                     }
                 }
@@ -187,7 +188,7 @@ class EsqueletoResponsivoTest {
         comprobarQueLosRotulosEntran(letraDelSistema = 1f)
     }
 
-    /** Con la letra del sistema al 130 % «Patrimonio» ya no entra a su tamaño: se achica, no se corta. */
+    /** Con la letra del sistema al 130 % un rótulo que no entre a su tamaño se achica, no se corta. */
     @Test
     @Config(qualifiers = "w768dp-h1024dp-mdpi")
     fun `con la letra del sistema al 130 por ciento ningun rotulo del rail se corta`() {
@@ -329,7 +330,7 @@ class EsqueletoResponsivoTest {
                 var abierta by remember { mutableStateOf(true) }
                 EsqueletoDeLaCascara(
                     pantalla = Screen.Accounts,
-                    activeTab = NavTab.PATRIMONIO,
+                    activeTab = NavTab.TU,
                     conNavegacion = true,
                     onTabSelected = { pestanaElegida = it },
                     relevoDeScroll = remember { RelevoDeScroll() },
@@ -426,7 +427,7 @@ class EsqueletoResponsivoTest {
             ConClaseDeAncho {
                 EsqueletoDeLaCascara(
                     pantalla = Screen.Accounts,
-                    activeTab = NavTab.PATRIMONIO,
+                    activeTab = NavTab.TU,
                     conNavegacion = true,
                     onTabSelected = {},
                     relevoDeScroll = remember { RelevoDeScroll() },
