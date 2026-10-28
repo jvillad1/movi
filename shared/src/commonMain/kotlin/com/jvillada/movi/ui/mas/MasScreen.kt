@@ -92,6 +92,11 @@ import com.jvillada.movi.ui.profile.Interruptor
 import com.jvillada.movi.ui.profile.NO_PUDIMOS_LEERLO
 import com.jvillada.movi.ui.profile.NotaDeSeccion
 import com.jvillada.movi.ui.profile.PeriodoSheet
+import com.jvillada.movi.ui.profile.AHORRO_DE_CADA_PERIODO
+import com.jvillada.movi.ui.profile.AhorroDelPeriodoSheet
+import com.jvillada.movi.ui.profile.guardarElAhorroDelPeriodo
+import com.jvillada.movi.ui.profile.textoDelAhorro
+import com.jvillada.movi.shared.model.ahorroDelPeriodo
 import com.jvillada.movi.ui.profile.guardarElInicioDelMes
 import com.jvillada.movi.ui.profile.textoDelInicioDelMes
 import com.jvillada.movi.ui.sms.tituloDeCapturaDelBanco
@@ -123,7 +128,7 @@ val SECCIONES_DE_AJUSTES: List<String> =
  * se usan bien (Revolut, Nubank): arriba la tarjeta del perfil y debajo las secciones, cada una con
  * su [Seccion] y sus [Fila]s, en este orden:
  *
- * - **Tu plata**: Inicio del mes, Categorías, Personas y comercios, Captura (o Mensajes) del banco;
+ * - **Tu plata**: Inicio del mes, Ahorro de cada período, Categorías, Personas y comercios, Captura (o Mensajes) del banco;
  * - **Movi**: Movi AI, Lo que Movi sabe de ti, Editar inicio (y Primeros pasos, mientras falte algo);
  * - **Cómo se ve**: el tema y «Ocultar los saldos» (de este aparato);
  * - **Avisos**: las notificaciones, cuántos días antes avisar y el resumen por correo;
@@ -159,6 +164,9 @@ fun MasScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit = {}) {
     var guardandoCierre by remember { mutableStateOf(false) }
     var errorCierre by remember { mutableStateOf<String?>(null) }
     var errorPeriodo by remember { mutableStateOf<String?>(null) }
+    var showAhorro by remember { mutableStateOf(false) }
+    var guardandoAhorro by remember { mutableStateOf(false) }
+    var errorAhorro by remember { mutableStateOf<String?>(null) }
     var profileReloadKey by remember { mutableStateOf(0) }
     // «Cerrar sesión en todos los aparatos»: pide confirmación y, si sale bien, cierra también la de
     // este (el token de acá tampoco sirve después). Ver `POST /api/users/me/cerrar-sesiones`.
@@ -241,6 +249,16 @@ fun MasScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit = {}) {
                                 } ?: if (falloElPerfil) NO_PUDIMOS_LEERLO else CARGANDO,
                                 final = if (cutoff != null) ({ Chevron() }) else null,
                                 onClick = if (cutoff == null) null else ({ errorPeriodo = null; showPeriodo = true }),
+                            )
+                            Separador(SangriaDeSeparador.Margen)
+                            // Lo que «Te quedan» resta antes de decirte cuánto puedes gastar. Mismo
+                            // cuidado que «Inicio del mes»: sin perfil no dice «No apartas nada».
+                            val ahorro = profile?.ahorroDelPeriodo()
+                            Fila(
+                                titulo = AHORRO_DE_CADA_PERIODO,
+                                subtitulo = ahorro?.let(::textoDelAhorro) ?: if (falloElPerfil) NO_PUDIMOS_LEERLO else CARGANDO,
+                                final = if (ahorro != null) ({ Chevron() }) else null,
+                                onClick = if (ahorro == null) null else ({ errorAhorro = null; showAhorro = true }),
                             )
                             Separador(SangriaDeSeparador.Margen)
                             FilaQueLleva("Categorías", Screen.Categorias, onNavigate)
@@ -582,6 +600,33 @@ fun MasScreen(onNavigate: (Screen) -> Unit, onLogout: () -> Unit = {}) {
                             .onFailure {
                                 guardandoAviso = false
                                 errorAviso = "No pudimos guardar el cambio. Revisa tu conexión e inténtalo de nuevo."
+                            }
+                    }
+                },
+            )
+        }
+        if (showAhorro && perfil != null) {
+            AtrasCierraEstaHoja { showAhorro = false; errorAhorro = null }
+            AhorroDelPeriodoSheet(
+                actual = perfil.ahorroDelPeriodo(),
+                saving = guardandoAhorro,
+                error = errorAhorro,
+                onDismiss = { showAhorro = false; errorAhorro = null },
+                onSave = { elegido ->
+                    guardandoAhorro = true
+                    errorAhorro = null
+                    alcance.launch {
+                        runCatching { guardarElAhorroDelPeriodo(elegido) }
+                            .onSuccess {
+                                guardandoAhorro = false
+                                showAhorro = false
+                                // «Te quedan» cambia: guardar el perfil ya invalida el Inicio
+                                // (`InvalidaElInicioAlEscribir`), así que Hoy y Plan lo vuelven a pedir.
+                                profileReloadKey++
+                            }
+                            .onFailure {
+                                guardandoAhorro = false
+                                errorAhorro = "No pudimos guardar el cambio. Revisa tu conexión e inténtalo de nuevo."
                             }
                     }
                 },

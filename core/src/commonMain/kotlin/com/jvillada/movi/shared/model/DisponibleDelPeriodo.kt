@@ -54,6 +54,13 @@ import kotlinx.serialization.Serializable
  *
  * Con un server anterior a esos campos se sigue usando «ingresos menos fijos».
  *
+ * **Y el ahorro que el dueño elige** (27-oct-2026, ver `AhorroDelPeriodo.kt`): *«"Te quedan" es lo
+ * libre después de fijos y ese ahorro»*. Entra acá y en ningún otro lado, como un tramo más de
+ * [PlataDelDisponible] ([PlataDelDisponible.ahorroDelPeriodo]): Disponible = lo de arriba − ahorro.
+ * Hoy, Plan, el widget, los avisos y Movi AI salen de esta cuenta, así que dicen la misma cifra. Si el
+ * ahorro deja el Disponible en negativo, la tarjeta dice lo de siempre cuando no hay margen («Te
+ * pasaste por…»): no hay un estado nuevo.
+ *
  * Todo es puro: el «hoy» y los bordes del período entran por parámetro.
  */
 
@@ -79,8 +86,19 @@ data class PlataDelDisponible(
      * pendiente del checklist ya resta como fijo ([apartadoFueraDeLosFijos]). Cero si no hay.
      */
     val apartado: Long = 0L,
+    /**
+     * **El ahorro del período** que el dueño eligió en Ajustes, en pesos (ver `AhorroDelPeriodo.kt` y
+     * `DashboardSummary.ahorroDelPeriodo`). No sale de Tu plata —no mueve nada—: solo deja de contar
+     * como gastable. Cero sin elegir nada, y entonces todo da lo de siempre.
+     *
+     * **No entra en [neto]** a propósito: [neto] decide si hay algo honesto que decir (sin plata ni
+     * ingresos la tarjeta no se pinta), y un ahorro grande no puede esconder la tarjeta —tiene que
+     * decir «Te pasaste por…», como cuando los fijos se llevan todo—. Lo resta
+     * [DisponibleDelPeriodo.disponible], después de los fijos.
+     */
+    val ahorroDelPeriodo: Long = 0L,
 ) {
-    /** Lo que hubo para el período antes de los fijos y de lo que falta por recibir. */
+    /** Lo que hubo para el período antes de los fijos, del ahorro y de lo que falta por recibir. */
     val neto: Long get() = saldoAlInicio + entradas - guardado - otrosPagosDeDeuda - apartado
 }
 
@@ -94,6 +112,7 @@ fun plataDelDisponibleDe(summary: DashboardSummary): PlataDelDisponible? {
         guardado = summary.guardadoDelPeriodo ?: 0L,
         otrosPagosDeDeuda = summary.pagosDeDeudaFueraDelChecklist ?: 0L,
         apartado = summary.apartado ?: 0L,
+        ahorroDelPeriodo = summary.ahorroDelPeriodo ?: 0L,
     )
 }
 
@@ -176,7 +195,14 @@ data class DisponibleDelPeriodo(
         if (plata == null) ingresos
         else plata.neto + ingresosPorRecibir
 
-    val disponible: Long get() = recursos - fijos
+    /**
+     * El ahorro del período que se resta (ver [PlataDelDisponible.ahorroDelPeriodo]); cero con un
+     * server viejo o sin elegir nada.
+     */
+    val ahorroDelPeriodo: Long get() = plata?.ahorroDelPeriodo?.coerceAtLeast(0L) ?: 0L
+
+    /** Lo libre: lo que hubo, menos los fijos, menos el ahorro del período. */
+    val disponible: Long get() = recursos - fijos - ahorroDelPeriodo
     val hayMargen: Boolean get() = disponible > 0L
 
     /** La meta de un día cualquiera del período. Cero sin margen. */
@@ -254,7 +280,9 @@ fun disponibleDelPeriodo(
     else plata.neto + porRecibir
     if (recursos <= 0L) return null
     val fijos = fijosDelPeriodo(checklist)
-    val disponible = recursos - fijos
+    // El ahorro se resta después de la guarda de arriba: uno grande deja la tarjeta sin margen
+    // («Te pasaste por…»), no la esconde. La misma cuenta que [DisponibleDelPeriodo.disponible].
+    val disponible = recursos - fijos - (plata?.ahorroDelPeriodo?.coerceAtLeast(0L) ?: 0L)
 
     val ultimoDia = finExclusivo.minus(1, DateTimeUnit.DAY)
     val gastoPorFecha: Map<LocalDate, Long> = gastoVariablePorDia.mapNotNull { (dia, monto) ->
