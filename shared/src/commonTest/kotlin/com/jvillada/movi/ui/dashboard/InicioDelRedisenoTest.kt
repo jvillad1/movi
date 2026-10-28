@@ -80,7 +80,7 @@ class InicioDelRedisenoTest {
         val propuestas = propuestasDelInicio(todoPendiente)
         assertEquals(
             listOf(
-                TipoDePropuesta.PAGO, TipoDePropuesta.DEBITO, TipoDePropuesta.AVISOS,
+                TipoDePropuesta.PAGO, TipoDePropuesta.DEBITO,
                 TipoDePropuesta.CUADRE, TipoDePropuesta.ANOMALIA, TipoDePropuesta.CIERRE,
             ),
             propuestas.map { it.tipo },
@@ -91,13 +91,14 @@ class InicioDelRedisenoTest {
         assertEquals(1_850_000L, pago.cifra)
         assertEquals("y 1 pago más por vencer", pago.cuerpo)
         assertTrue(pago.urgente)
-        assertEquals("Llegaron 3 avisos del banco", propuestas[2].titulo)
+        // Vuelta de diseño 28: los 3 avisos por confirmar no son una tarjeta; los cuenta «Avisos».
+        assertTrue(propuestas.none { "avisos" in it.titulo })
     }
 
     @Test
     fun `el tope son cuatro, y el resto queda para Ver todo`() {
         val todas = propuestasDelInicio(todoPendiente)
-        assertEquals(6, todas.size)
+        assertEquals(5, todas.size)
         assertEquals(TOPE_DE_PROPUESTAS, propuestasALaVista(todas).size)
         assertEquals(todas.take(4), propuestasALaVista(todas))
     }
@@ -114,7 +115,6 @@ class InicioDelRedisenoTest {
         val anotar = (porTipo.getValue(TipoDePropuesta.PAGO).alTocar as AccionDeLaPropuesta.Ir).pantalla
         assertTrue(anotar is Screen.QuickAdd && anotar.presetNota == "Arriendo" && anotar.presetMonto == 1_850_000L)
         assertEquals(AccionDeLaPropuesta.Ir(Screen.PorRevisar), porTipo.getValue(TipoDePropuesta.DEBITO).alTocar)
-        assertEquals(AccionDeLaPropuesta.Ir(Screen.PorRevisar), porTipo.getValue(TipoDePropuesta.AVISOS).alTocar)
         assertEquals(AccionDeLaPropuesta.Ir(Screen.CuadreDeSaldos), porTipo.getValue(TipoDePropuesta.CUADRE).alTocar)
         assertEquals(40_000L, porTipo.getValue(TipoDePropuesta.CUADRE).cifra, "la diferencia que ya trae el cuadre")
         assertEquals(AccionDeLaPropuesta.Ir(Screen.Transactions(consultaInicial = "RAPPI")), porTipo.getValue(TipoDePropuesta.ANOMALIA).alTocar)
@@ -130,10 +130,10 @@ class InicioDelRedisenoTest {
     }
 
     @Test
-    fun `un pago que vence manana va despues de los avisos`() {
+    fun `un pago que vence manana va despues de lo que el banco cobro solo`() {
         val data = todoPendiente.copy(upcoming = listOf(pago("r_cel", "Celular", 53_000, 1)))
         val tipos = propuestasDelInicio(data).map { it.tipo }
-        assertTrue(tipos.indexOf(TipoDePropuesta.AVISOS) < tipos.indexOf(TipoDePropuesta.PAGO))
+        assertTrue(tipos.indexOf(TipoDePropuesta.DEBITO) < tipos.indexOf(TipoDePropuesta.PAGO))
         assertEquals("Celular vence mañana", propuestasDelInicio(data).first { it.tipo == TipoDePropuesta.PAGO }.titulo)
     }
 
@@ -256,5 +256,28 @@ class InicioDelRedisenoTest {
         assertEquals("Anotar pago", pago.accion)
         assertNull(pago.cuerpo)
         assertEquals(AccionDeLaPropuesta.Ir(Screen.Plan(SEGMENTO_PAGOS)), pago.alTocarSecundaria)
+    }
+
+    /**
+     * Vuelta de diseño 28: el detalle de una anomalía es una frase con su punto, y pegado a « · y 1
+     * aviso más» quedaba «…anteriores). · y 1 aviso más». Se une sin el punto final.
+     */
+    @Test
+    fun `el cuerpo de la anomalia une el detalle y el y N mas sin el punto final`() {
+        val detalle = "Llevas \$480.000 en Restaurantes (el promedio de los 3 anteriores)."
+        assertEquals(
+            "Llevas \$480.000 en Restaurantes (el promedio de los 3 anteriores) · y 1 aviso más",
+            cuerpoDeLaAnomalia(detalle, 1),
+        )
+        assertEquals("2 cobros de \$45.900 · y 3 avisos más", cuerpoDeLaAnomalia("2 cobros de \$45.900", 3))
+        // Solo, el detalle queda como viene, con su punto.
+        assertEquals(detalle, cuerpoDeLaAnomalia(detalle, 0))
+        assertTrue(listOf(1, 2).none { ". ·" in cuerpoDeLaAnomalia(detalle, it) })
+        // Y en la tarjeta de verdad.
+        val dos = todoPendiente.copy(anomalias = listOf(anomalia.copy(detalle = detalle), anomalia.copy(huella = "otra")))
+        assertEquals(
+            "Llevas \$480.000 en Restaurantes (el promedio de los 3 anteriores) · y 1 aviso más",
+            propuestasDelInicio(dos).single { it.tipo == TipoDePropuesta.ANOMALIA }.cuerpo,
+        )
     }
 }

@@ -526,8 +526,8 @@ fun DashboardScreen(
         Column(modifier = Modifier.fillMaxSize()) {
             // Ola R1: el encabezado del camino 1 — el avatar (lleva a Ajustes), el saludo con el período
             // y dos íconos, la lupa y la campana. «Compartir» salió del encabezado y vive en Ajustes:
-            // tres íconos más el avatar sobrecargaban la línea. La campana tiene su punto solo cuando
-            // `notifications` no está vacío.
+            // tres íconos más el avatar sobrecargaban la línea. La campana tiene su punto solo con algo
+            // vencido o urgente (vuelta de diseño 28, ver [campanaConPunto]).
             Encabezado(
                 titulo = saludoDelInicio(SessionManager.userName),
                 subtitulo = periodoDelEncabezado(data),
@@ -548,7 +548,7 @@ fun DashboardScreen(
                     BotonDeIcono(Icons.Rounded.Search, "Buscar", onClick = { onNavigate(Screen.Buscar) })
                     Box {
                         BotonDeIcono(Icons.Rounded.Notifications, "Notificaciones", onClick = { showNotifications = true })
-                        if (notifications.isNotEmpty()) {
+                        if (campanaConPunto(notifications)) {
                             StatusDot(
                                 color = Movi.colores.sale,
                                 modifier = Modifier.align(Alignment.TopEnd).padding(Espacio.s),

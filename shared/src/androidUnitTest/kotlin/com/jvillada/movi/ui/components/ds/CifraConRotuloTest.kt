@@ -76,7 +76,7 @@ class CifraConRotuloTest {
                 Row(Modifier.fillMaxWidth()) {
                     CifraConRotulo("Entró", 15_600_000, Modifier.weight(1f), tono = TonoDeCifra.Ingreso, forma = FormaDeCifra.Compacta)
                     CifraConRotulo("Salió", 17_200_000, Modifier.weight(1f), forma = FormaDeCifra.Compacta)
-                    CifraConRotulo("Te quedó", -1_600_000, tono = TonoDeCifra.Alerta, forma = FormaDeCifra.Compacta, alFinal = true)
+                    CifraConRotulo("Neto del período", -1_600_000, forma = FormaDeCifra.Compacta, alFinal = true)
                 }
                 Row(Modifier.fillMaxWidth()) {
                     CifraConRotulo("Ingresos recurrentes", 15_600_000, Modifier.weight(1f), tono = TonoDeCifra.Ingreso)
@@ -94,7 +94,7 @@ class CifraConRotuloTest {
     @Test
     fun `el rotulo va como se escribe, nunca en mayusculas`() {
         montar { LasCuatro() }
-        listOf("Patrimonio neto", "Tienes", "Entró", "Te quedó", "Ingresos recurrentes").forEach { rotulo ->
+        listOf("Patrimonio neto", "Tienes", "Entró", "Neto del período", "Ingresos recurrentes").forEach { rotulo ->
             assertEquals(1, composeRule.onAllNodesWithText(rotulo, useUnmergedTree = true).fetchSemanticsNodes().size, rotulo)
             assertTrue(
                 composeRule.onAllNodesWithText(rotulo.uppercase(), useUnmergedTree = true).fetchSemanticsNodes().isEmpty(),

@@ -31,6 +31,7 @@ import com.jvillada.movi.shared.model.ScreenSection
 import com.jvillada.movi.shared.time.epochMillisToAppDate
 import kotlinx.datetime.Clock
 import kotlinx.datetime.LocalDate
+import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.components.ds.BarraDeProgreso
@@ -45,7 +46,8 @@ import com.jvillada.movi.ui.components.formatMoneyCompact
 import com.jvillada.movi.ui.dashboard.DashboardData
 import com.jvillada.movi.ui.dashboard.NivelDelGasto
 import com.jvillada.movi.ui.dashboard.VentanaDelDisponible
-import com.jvillada.movi.ui.dashboard.desgloseDelDisponible
+import com.jvillada.movi.ui.dashboard.CascadaDelDisponibleEnPantalla
+import com.jvillada.movi.ui.dashboard.DE_DONDE_SALE
 import com.jvillada.movi.ui.dashboard.disponibleDelInicio
 import com.jvillada.movi.ui.dashboard.fraseDelDisponible
 import com.jvillada.movi.ui.dashboard.rememberProgresoDeEntrada
@@ -69,7 +71,8 @@ import com.jvillada.movi.ui.Screen
  * cosas opuestas.
  *
  * De dónde sale el disponible —lo que tenías el 25, lo que entró, los fijos— queda detrás de «¿De
- * dónde sale?»: es la explicación, no la noticia.
+ * dónde sale?»: es la explicación, no la noticia. Desde la vuelta de diseño 28 es la cascada de
+ * [CascadaDelDisponibleEnPantalla], la misma que abre el héroe de Hoy.
  *
  * **Cuando los fijos superan lo que hay lo dice con todas las letras** y no dibuja barras: una
  * barra contra un disponible negativo no tiene largo que signifique algo. Las columnas se siguen
@@ -97,6 +100,14 @@ internal fun DisponibleDelPeriodoSection(
         CajaEnHoy(data = data, hoy = hoy, onNavigate = onNavigate)
     }
 }
+
+/**
+ * **El rótulo de la columna de hoy** (vuelta de diseño 28). Decía «Hoy», y su cifra —lo que queda de la
+ * meta diaria, el disponible entre los días del período— competía con la otra cifra «por día» de la
+ * app, la del héroe y la frase de Plan («$2,2M por día»: lo que queda entre los días que faltan,
+ * `porDiaParaLoQueQueda`). Con su nombre ya no se confunden: esa es la única «por día»; esta es la meta.
+ */
+const val ROTULO_META_DE_HOY: String = "Meta de hoy"
 
 /** La tarjeta del disponible, cargando o cargada: el mismo tag en las dos para medir que no salte. */
 const val TAG_TARJETA_DEL_DISPONIBLE: String = "tarjeta-del-disponible"
@@ -137,7 +148,7 @@ internal fun TarjetaDelDisponible(
         // su esqueleto.
         Seccion(
             titulo = titulo,
-            accion = if (verDeDondeSale) "Ocultar" else "¿De dónde sale?",
+            accion = if (verDeDondeSale) "Ocultar" else DE_DONDE_SALE,
             onAccion = { if (disponible != null) verDeDondeSale = !verDeDondeSale },
         )
         Superficie(modifier = Modifier.fillMaxWidth().testTag(TAG_TARJETA_DEL_DISPONIBLE)) {
@@ -167,12 +178,12 @@ private fun CuerpoDelDisponible(disponible: DisponibleDelPeriodo, verDeDondeSale
         Text(text = frase.texto, style = Movi.textos.apoyo, color = colorDeLaFrase(frase.nivel))
     }
     if (verDeDondeSale) {
-        Spacer(Modifier.height(Movi.espacios.minimo))
-        // «Tenías $X el 25 · entraron $Y» y abajo los fijos: dos líneas cortas y no una
-        // larga, para que quepan a 390 px con la letra grande del teléfono.
-        desgloseDelDisponible(disponible).forEach { linea ->
-            Text(text = linea, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
-        }
+        Spacer(Modifier.height(Espacio.s))
+        // Vuelta de diseño 28: la cascada renglón por renglón —lo que tenías, lo que entró, los fijos,
+        // el ahorro, «Disponible del período», lo gastado y «Te quedan»—, el MISMO componente que abre
+        // el héroe de Hoy. Eran dos líneas de texto («Tenías $X el 25 · entraron $Y») que no sumaban
+        // a la vista.
+        CascadaDelDisponibleEnPantalla(disponible)
     }
     Spacer(Modifier.height(Movi.espacios.medio))
     Row(
@@ -181,7 +192,7 @@ private fun CuerpoDelDisponible(disponible: DisponibleDelPeriodo, verDeDondeSale
     ) {
         ColumnaDeVentana("Período", disponible.periodo, disponible.hayMargen, entrada, Modifier.weight(1f), delPeriodo = true)
         ColumnaDeVentana(rotuloDeLaSemana(disponible), disponible.semana, disponible.hayMargen, entrada, Modifier.weight(1f))
-        ColumnaDeVentana("Hoy", disponible.hoy, disponible.hayMargen, entrada, Modifier.weight(1f))
+        ColumnaDeVentana(ROTULO_META_DE_HOY, disponible.hoy, disponible.hayMargen, entrada, Modifier.weight(1f))
     }
 }
 

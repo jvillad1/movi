@@ -101,10 +101,7 @@ fun SduiRenderer(
 ) {
     val uriHandler = LocalUriHandler.current
     val sections = visibleSections(definition, data)
-    val acciones = AccionesDelRenderer(
-        onNavigate, onShowCreateSheet, onDescartarCierre, uriHandler,
-        hayPropuestas = sections.any { it.type == "PROPUESTAS" },
-    )
+    val acciones = AccionesDelRenderer(onNavigate, onShowCreateSheet, onDescartarCierre, uriHandler)
     val scroll = rememberScrollState()
     // La rueda del mouse sobre los márgenes mueve esta pantalla (ver [ScrollDesdeLosMargenes]).
     ScrollDesdeLosMargenes(scroll)
@@ -166,11 +163,6 @@ private class AccionesDelRenderer(
     val onShowCreateSheet: () -> Unit,
     val onDescartarCierre: (String) -> Unit,
     val uriHandler: UriHandler,
-    /**
-     * «Movi propone hoy» está en este Inicio (vuelta de diseño 22): el widget «Falta por pagar» no
-     * repite como fila el pago que la propuesta ya muestra.
-     */
-    val hayPropuestas: Boolean = false,
 )
 
 /**
@@ -193,7 +185,7 @@ private fun ColumnaDeSecciones(
         bloquesDelInicio(sections).forEachIndexed { index, bloque ->
             if (index > 0) Spacer(Modifier.height(Medida.entreSecciones))
             if (bloque.all { it.type in TIPOS_DE_WIDGET }) {
-                WidgetsDelInicio(bloque.map { it.type }, data, acciones.onNavigate, acciones.hayPropuestas)
+                WidgetsDelInicio(bloque.map { it.type }, data, acciones.onNavigate)
             } else {
                 SduiSection(bloque.single(), data, acciones)
             }
@@ -229,7 +221,7 @@ private fun SduiSection(
         "ALERTS" -> ParaRevisarSection(section, data, onNavigate)
         PARA_REVISAR_COMPACTO -> ParaRevisarCompactoSection(section, data, onNavigate)
         // Sueltos, sin el otro al lado (el Editor de pantallas los separó): el widget a todo el ancho.
-        "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA" -> WidgetsDelInicio(listOf(section.type), data, onNavigate, acciones.hayPropuestas)
+        "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA" -> WidgetsDelInicio(listOf(section.type), data, onNavigate)
         "DISPONIBLE_DEL_PERIODO" -> DisponibleDelPeriodoSection(section, data, onNavigate = onNavigate)
         "QUICK_LINKS_WITH_TOTALS" -> QuickLinksSection(section, data, onNavigate, uriHandler)
         "CARD_ROW" -> CardRowSection(section, onNavigate, uriHandler)

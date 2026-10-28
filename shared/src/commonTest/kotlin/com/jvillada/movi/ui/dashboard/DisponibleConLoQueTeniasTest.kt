@@ -242,8 +242,8 @@ class DisponibleConLoQueTeniasTest {
         assertEquals(3_673_000, d.fijos)
         assertEquals(1_386_694 + 33_930_447 - 500_000 - 3_673_000, d.disponible)
         assertEquals(
-            listOf("Tenías \$1,4M el 25 · entraron \$33,9M", "Guardaste \$500.000 · fijos \$3,7M"),
-            desgloseDelDisponible(d),
+            listOf("Tenías el 25" to 1_386_694L, "Lo que entró" to 33_930_447L, "Guardaste en un ahorro" to -500_000L, "Fijos del período" to -3_673_000L),
+            desglose(d),
         )
     }
 
@@ -267,7 +267,7 @@ class DisponibleConLoQueTeniasTest {
             disponibleDelPeriodo(10_000_000, checklist.take(1), emptyMap(), inicio, finExclusivo, hoy, plata = null),
         )
         assertEquals(9_880_000, viejo.disponible)
-        assertEquals(listOf("Ingresos \$10M menos fijos \$120.000"), desgloseDelDisponible(viejo))
+        assertEquals(listOf("Lo que entró" to 10_000_000L, "Fijos del período" to -120_000L), desglose(viejo))
     }
 
     @Test
@@ -287,7 +287,7 @@ class DisponibleConLoQueTeniasTest {
         // Con lo que tenías al empezar, aunque no haya entrado nada, la tarjeta se afirma.
         val d = assertNotNull(disponibleDelInicio(datos.copy(plataDelDisponible = PlataDelDisponible(2_000_000, 0, 0)), hoy))
         assertEquals(2_000_000, d.disponible)
-        assertEquals(listOf("Tenías \$2M el 25 · entraron \$0", "Fijos \$0"), desgloseDelDisponible(d))
+        assertEquals(listOf("Tenías el 25" to 2_000_000L, "Lo que entró" to 0L, "Fijos del período" to 0L), desglose(d))
     }
 
     @Test
@@ -302,7 +302,7 @@ class DisponibleConLoQueTeniasTest {
             "Los fijos del período superan lo que tenías y lo que entró por \$1,1M",
             sinMargen(d),
         )
-        assertEquals(listOf("Tenías \$500.000 el 25 · entraron \$1M", "Fijos \$2,6M"), desgloseDelDisponible(d))
+        assertEquals(listOf("Tenías el 25" to 500_000L, "Lo que entró" to 1_000_000L, "Fijos del período" to -d.fijos), desglose(d))
     }
 
     // ── Los pagos de deuda que ni los fijos ni el gasto variable contaban ────────────
@@ -428,8 +428,11 @@ class DisponibleConLoQueTeniasTest {
         assertEquals(14_912L + 34_040_000L - 13_760_000L - 6_704_015L, d.disponible)
         assertEquals(13_590_897, d.disponible)
         assertEquals(
-            listOf("Tenías \$14.912 el 25 · entraron \$34M", "Fijos \$13,8M · otros pagos de deuda \$6,7M"),
-            desgloseDelDisponible(d),
+            listOf(
+                "Tenías el 25" to 14_912L, "Lo que entró" to 34_040_000L,
+                "Otros pagos de deuda" to -6_704_015L, "Fijos del período" to -13_760_000L,
+            ),
+            desglose(d),
         )
     }
 
@@ -480,7 +483,10 @@ class DisponibleConLoQueTeniasTest {
             ),
         )
         assertEquals(10_000_000 - 4_000_000 - d.fijos, d.disponible)
-        assertEquals(listOf("Tenías \$10M el 25 · entraron \$0", "Apartaste \$4M · fijos \$2,6M"), desgloseDelDisponible(d))
+        assertEquals(
+            listOf("Tenías el 25" to 10_000_000L, "Lo que entró" to 0L, "Apartaste" to -4_000_000L, "Fijos del período" to -d.fijos),
+            desglose(d),
+        )
     }
 
     @Test
@@ -514,5 +520,13 @@ class DisponibleConLoQueTeniasTest {
             "Los fijos, los otros pagos de deuda y lo que apartaste superan lo que tenías y lo que entró por \$120.000",
             sinMargen(tres),
         )
+    }
+
+    /** Los renglones de «¿De dónde sale?» hasta «Disponible del período» (vuelta de diseño 28). */
+    private fun desglose(d: DisponibleDelPeriodo): List<Pair<String, Long>> {
+        val cascada = cascadaDelDisponible(d)
+        // Los renglones suman la cifra de la tarjeta, siempre.
+        assertEquals(d.disponible, cascada.deDondeSale.sumOf { it.monto })
+        return cascada.deDondeSale.map { it.rotulo to it.monto }
     }
 }

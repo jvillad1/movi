@@ -128,9 +128,9 @@ class ResumenDelPanelTest {
     }
 
     @Test
-    fun `el neto en entra si quedo plata y en sale si se paso`() {
+    fun `el neto en entra si quedo plata, neutro si salio mas (no es una alerta)`() {
         assertEquals(TonoDeCifra.Ingreso, tonoDelNeto(1))
-        assertEquals(TonoDeCifra.Alerta, tonoDelNeto(-1))
+        assertEquals(TonoDeCifra.Neutro, tonoDelNeto(-1))
         assertEquals(TonoDeCifra.Apagado, tonoDelNeto(0))
     }
 

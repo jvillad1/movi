@@ -33,6 +33,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.layout.Layout
@@ -106,7 +107,10 @@ import com.jvillada.movi.ui.dashboard.TAG_CIFRA_TE_QUEDAN
 import com.jvillada.movi.ui.dashboard.TAG_ESQUELETO_DETALLE_DEL_HERO
 import com.jvillada.movi.ui.dashboard.TeQuedanDeHoy
 import com.jvillada.movi.ui.dashboard.alcanzaParaElDisponible
-import com.jvillada.movi.ui.dashboard.teQuedanDelInicio
+import com.jvillada.movi.ui.dashboard.HojaDeDondeSale
+import com.jvillada.movi.ui.dashboard.VER_TUS_PERIODOS
+import com.jvillada.movi.ui.dashboard.disponibleDelInicio
+import com.jvillada.movi.ui.dashboard.teQuedanDeHoy
 import com.jvillada.movi.ui.dashboard.elHeroePideLaCuenta
 import kotlinx.datetime.Clock
 import kotlinx.datetime.LocalDate
@@ -142,7 +146,8 @@ internal const val DETALLE_DEL_HEROE_VACIO: String =
  * cifras tienen casa —el flujo en Plan y en «Tus períodos», Tu plata en Patrimonio— y en el Inicio se
  * repetían. Tampoco va en una tarjeta: el héroe va sobre el fondo, como en la maqueta del camino 1.
  *
- * Todo el héroe se toca y lleva a «Tus períodos».
+ * Todo el héroe se toca y abre «¿De dónde sale?» ([HojaDeDondeSale], vuelta de diseño 28): la cascada de
+ * cómo se llega a «Te quedan», con «Ver tus períodos» abajo. Sin «Te quedan» lleva a «Tus períodos».
  *
  * Cuando el disponible no se puede afirmar (sin ingresos ni plata anotados, o la carga terminó sin sus
  * lecturas) la cifra grande es «Tu plata» (`heroBalance`): es lo único honesto que hay para decir.
@@ -179,7 +184,22 @@ internal fun HeroDeUnVistazo(
         return
     }
 
-    val teQuedan = teQuedanDelInicio(data, hoy)
+    // Vuelta de diseño 28: el héroe se explica en la misma pantalla. Con «Te quedan», tocarlo abre
+    // «¿De dónde sale?» (la cascada del MISMO disponible); sin él —«Tu plata»— lleva a «Tus períodos»
+    // como siempre, y la hoja también lo ofrece abajo.
+    val disponible = disponibleDelInicio(data, hoy)
+    val teQuedan = disponible?.let(::teQuedanDeHoy)
+    var verDeDondeSale by rememberSaveable { mutableStateOf(false) }
+    if (verDeDondeSale && disponible != null) {
+        HojaDeDondeSale(
+            disponible = disponible,
+            onDismiss = { verDeDondeSale = false },
+            onVerTusPeriodos = {
+                verDeDondeSale = false
+                onNavigate(Screen.Periodos)
+            },
+        )
+    }
     val entradaDeLaCifra = rememberProgresoDeEntrada("hero.cifra", listo = teQuedan != null || data.accounts != null)
     // Vuelta de diseño 22: la frase de abajo dice lo que gastaste con la MISMA cifra que Plan (ver
     // [fraseDelHeroe]); la larga, que dice lo mismo, es para el lector de pantalla. Con «Te pasaste
@@ -197,7 +217,13 @@ internal fun HeroDeUnVistazo(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClickLabel = "Ver tus períodos") { onNavigate(Screen.Periodos) }
+            .then(
+                if (disponible != null) {
+                    Modifier.clickable(onClickLabel = "Ver de dónde sale") { verDeDondeSale = true }
+                } else {
+                    Modifier.clickable(onClickLabel = VER_TUS_PERIODOS) { onNavigate(Screen.Periodos) }
+                },
+            )
             .padding(horizontal = Medida.margenDePantalla)
             .testTag(TAG_TARJETA_DEL_HERO),
     ) {

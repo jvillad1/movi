@@ -48,6 +48,7 @@ import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.theme.Radio
 import com.jvillada.movi.ui.components.ds.Cifra
+import com.jvillada.movi.ui.components.ds.TonoDeCifra
 import com.jvillada.movi.ui.components.ds.Fila
 import com.jvillada.movi.ui.components.ds.IconoEnCirculo
 import com.jvillada.movi.ui.components.ds.NivelDeSuperficie
@@ -182,6 +183,9 @@ const val TITULO_NO_LLEGO = "No llegó"
  *   deja sin toque.
  * @param planesDeCuotas el plan de cada crédito, por id de regla (ver [planesDeLasCuotas]). Vacío
  *   deja las filas sin estimación.
+ * @param debajoDelResumen una fila que va justo debajo del resumen («Falta por pagar · Ya pagaste»),
+ *   dentro de la lista: en Plan, «Tus recordatorios no te van a llegar» (vuelta de diseño 28). Era una
+ *   tarjeta de propuesta encima de toda la sección, la segunda más grande de la pantalla.
  */
 @Composable
 fun SeccionChecklistDelPeriodo(
@@ -199,6 +203,7 @@ fun SeccionChecklistDelPeriodo(
     onAbrir: ((PagoDelPeriodo) -> Unit)? = null,
     planesDeCuotas: Map<String, PlanDelCredito> = emptyMap(),
     descartadas: Set<String> = emptySet(),
+    debajoDelResumen: (@Composable () -> Unit)? = null,
 ) {
     // ── El momento de celebrar (Ola 1 · «Que Movi se sienta viva») ──────────────────────────────
     // Cuando el dueño completa la lista —pasa de «falta 1» a «todo pagado» por algo que hizo acá:
@@ -268,6 +273,7 @@ fun SeccionChecklistDelPeriodo(
                         izquierda = TITULO_FALTA_POR_PAGAR to faltaPorPagar(checklist),
                         derecha = TITULO_YA_PAGASTE to yaPagadoEnElPeriodo(checklist),
                     )
+                    debajoDelResumen?.invoke()
                     GrupoDePagos(
                         titulo = TITULO_GRUPO_POR_PAGAR,
                         icono = Icons.Rounded.Schedule,
@@ -294,6 +300,7 @@ fun SeccionChecklistDelPeriodo(
                     OtroGrupo(TITULO_POR_COBRAR, Icons.Rounded.Schedule, Movi.colores.textoMedio, faltaPorCobrar(checklist), ingresosPendientes(checklist)) { filas.Fila(it) }
                     OtroGrupo(TITULO_YA_RECIBISTE, Icons.Rounded.CheckCircle, Movi.colores.entra, yaRecibidoEnElPeriodo(checklist), ingresosRecibidos(checklist)) { filas.Fila(it) }
                 } else {
+                    debajoDelResumen?.invoke()
                     Text(
                         text = "Este período no tiene pagos anotados",
                         style = Movi.textos.cuerpo,
@@ -375,6 +382,9 @@ private fun OtroGrupo(
 /**
  * **Lo que el dueño vino a preguntar, arriba de todo**: cuánto falta y cuánto ya pagó en el
  * período, en pesos. Las dos cifras son la suma de los grupos de abajo — ni más ni menos.
+ *
+ * **Una cifra en cero va apagada** (vuelta de diseño 28): «Ya pagaste $0» en la letra grande pesaba lo
+ * mismo que lo que falta, y no dice nada que haya que mirar ([tonoDelResumen]).
  */
 @Composable
 internal fun ResumenDeLaLista(izquierda: Pair<String, Long>, derecha: Pair<String, Long>) {
@@ -387,14 +397,17 @@ internal fun ResumenDeLaLista(izquierda: Pair<String, Long>, derecha: Pair<Strin
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(izquierda.first, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-            Cifra(izquierda.second, VarianteDeCifra.Grande)
+            Cifra(izquierda.second, VarianteDeCifra.Grande, tono = tonoDelResumen(izquierda.second))
         }
         Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
             Text(derecha.first, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-            Cifra(derecha.second, VarianteDeCifra.Grande)
+            Cifra(derecha.second, VarianteDeCifra.Grande, tono = tonoDelResumen(derecha.second))
         }
     }
 }
+
+/** El tono de una cifra del resumen: apagada en cero, en el color del texto si no (vuelta de diseño 28). */
+internal fun tonoDelResumen(monto: Long): TonoDeCifra = if (monto == 0L) TonoDeCifra.Apagado else TonoDeCifra.Neutro
 
 /**
  * **Un grupo de la lista**: ícono, título y total, y debajo sus filas separadas por un hilo.

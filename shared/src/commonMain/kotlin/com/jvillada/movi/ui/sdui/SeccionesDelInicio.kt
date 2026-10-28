@@ -89,7 +89,6 @@ import com.jvillada.movi.ui.dashboard.pagosPendientes
 import com.jvillada.movi.ui.dashboard.pendientesPorRevisar
 import com.jvillada.movi.ui.dashboard.propuestasALaVista
 import com.jvillada.movi.ui.dashboard.propuestasDelInicio
-import com.jvillada.movi.ui.dashboard.EL_PAGO_ESTA_ARRIBA
 import com.jvillada.movi.ui.dashboard.descripcionDeLaInsignia
 import com.jvillada.movi.ui.dashboard.filasDelWidgetDeFalta
 import com.jvillada.movi.ui.dashboard.yNMas
@@ -173,7 +172,6 @@ internal fun AccionesDelInicioSection(
 private fun iconoDe(tipo: TipoDePropuesta): ImageVector = when (tipo) {
     TipoDePropuesta.PAGO -> Icons.Rounded.Schedule
     TipoDePropuesta.DEBITO -> Icons.Rounded.AccountBalance
-    TipoDePropuesta.AVISOS -> Icons.Rounded.Inbox
     TipoDePropuesta.CUADRE -> Icons.Rounded.Tune
     TipoDePropuesta.ANOMALIA -> Icons.AutoMirrored.Rounded.TrendingUp
     TipoDePropuesta.CIERRE -> Icons.AutoMirrored.Rounded.EventNote
@@ -383,12 +381,10 @@ internal fun WidgetsDelInicio(
     tipos: List<String>,
     data: DashboardData,
     onNavigate: (Screen) -> Unit,
-    /** «Movi propone hoy» está en el Inicio: el widget no repite su pago (ver [filasDelWidgetDeFalta]). */
-    conPropuestas: Boolean = false,
 ) {
     @Composable
     fun Uno(tipo: String, modifier: Modifier) = when (tipo) {
-        "CHECKLIST_DEL_PERIODO" -> WidgetFaltaPorPagar(data, onNavigate, modifier, conPropuestas)
+        "CHECKLIST_DEL_PERIODO" -> WidgetFaltaPorPagar(data, onNavigate, modifier)
         else -> WidgetEnQueSeVa(data, onNavigate, modifier)
     }
     Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla)) {
@@ -414,20 +410,20 @@ internal fun lineaCortaDeLoQueFalta(pendientes: Int, total: Int): String =
 
 /**
  * **«Falta por pagar»** compacto: cuánto falta (`faltaPorPagar`, la misma de Plan), de cuántos pagos es
- * eso y los dos primeros de la cola —sin el que ya está en «Movi propone hoy»—, con «y N más» si quedan
- * sin fila (vuelta de diseño 22, ver [filasDelWidgetDeFalta]). Lleva a Plan · Pagos del mes.
+ * eso y los dos más urgentes de la cola —aunque uno también esté en «Movi propone hoy» (vuelta de
+ * diseño 28)—, con «y N más» si quedan sin fila (ver [filasDelWidgetDeFalta]). Lo vencido lleva su
+ * marca: «Vencido hace 22 días» en el color de aviso. Lleva a Plan · Pagos del mes.
  */
 @Composable
 internal fun WidgetFaltaPorPagar(
     data: DashboardData,
     onNavigate: (Screen) -> Unit,
     modifier: Modifier = Modifier,
-    conPropuestas: Boolean = false,
 ) {
     val checklist = checklistDelPeriodoDe(data)
     val total = avanceDelChecklist(checklist).second
     val pendientes = pagosPendientes(checklist)
-    val lista = filasDelWidgetDeFalta(data, conPropuestas)
+    val lista = filasDelWidgetDeFalta(data)
     Widget(
         titulo = "Falta por pagar",
         onClick = { onNavigate(Screen.Plan(com.jvillada.movi.ui.plan.SEGMENTO_PAGOS)) },
@@ -465,7 +461,7 @@ internal fun WidgetFaltaPorPagar(
             }
         }
         // Las filas más este renglón dan lo que dice «Faltan N»: ninguna lista se recorta callada.
-        val resto = if (lista.soloElDeArriba) EL_PAGO_ESTA_ARRIBA else yNMas(lista.masSinFila)
+        val resto = yNMas(lista.masSinFila)
         if (resto != null) {
             Text(
                 text = resto,

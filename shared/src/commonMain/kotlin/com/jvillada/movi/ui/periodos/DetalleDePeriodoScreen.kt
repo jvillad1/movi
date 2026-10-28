@@ -631,7 +631,7 @@ private fun Cabecera(detalle: DetalleDePeriodo, ajustes: PeriodSettings?) {
  * que vienen en cero: la tarjeta no dice «$0» ni nombra un tipo que no sabe leer. Los créditos ya no
  * son una fila: el desembolso suma en «Entró» y se dice bajo el encabezado.
  *
- * Existe porque «Te quedó −$11,5M» se lee como si se hubiera gastado de más, cuando lo que faltó lo
+ * Existe porque «Neto del período −$11,5M» (antes «Te quedó») se lee como si se hubiera gastado de más, cuando lo que faltó lo
  * pagó un saldo que ya estaba en las cuentas. Las cifras de arriba no cambian: esto
  * solo cuenta de dónde salió la diferencia (ver [DetalleDePeriodo.fuentesQueNoSonIngreso]).
  */
