@@ -127,6 +127,12 @@ object Medida {
     val altoDeFiltro: Dp = 44.dp
 
     /**
+     * El alto mínimo de la fila de pastillas de `FilaDeCategorias`: 40, lo que medía en Agregar (vuelta
+     * 46: el componente pasó a `ds/`, que no lleva valores sueltos).
+     */
+    val altoDeFilaDePastillas: Dp = 40.dp
+
+    /**
      * El alto del encabezado de una pantalla, igual en todas. Vuelta 29: siguió en 56 (una primera
      * versión lo subió a 64 por el título de pestaña, hasta que su interlineado bajó a 30).
      */

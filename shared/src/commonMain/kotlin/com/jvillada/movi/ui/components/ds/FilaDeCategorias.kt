@@ -30,7 +30,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Icono
 import com.jvillada.movi.theme.LocalMovimientoReducido
@@ -54,13 +53,6 @@ const val ROTULO_DE_LA_FILA_DE_CATEGORIAS: String = "Categoría"
 
 /** «Todas ›», a la derecha del rótulo: abre el selector entero. */
 const val TODAS_LAS_CATEGORIAS_EN_LA_FILA: String = "Todas"
-
-/**
- * El alto MÍNIMO de la fila de pastillas: a letra normal mide esto y nada más, así que no se mueve
- * bajo el dedo; con la escala de letra agrandada crece lo justo para que la pastilla entre entera. Es
- * un tamaño de componente, no un espacio: queda como literal (vino de Agregar).
- */
-private val ALTO_FILA_DE_CHIPS = 40.dp
 
 /** Dónde va la fila: en una superficie de lista (pone el margen) o adentro de algo que ya lo tiene. */
 enum class RellenoDeLaFilaDeCategorias { Lista, Ninguno }
@@ -188,7 +180,7 @@ private fun PastillasDeLaFilaDeCategorias(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = ALTO_FILA_DE_CHIPS)
+            .heightIn(min = Medida.altoDeFilaDePastillas)
             .then(if (tags.pastillas != null) Modifier.testTag(tags.pastillas) else Modifier)
             .horizontalScroll(desplazamiento)
             .then(if (relleno == RellenoDeLaFilaDeCategorias.Lista) Modifier.padding(horizontal = Medida.margenDePantalla) else Modifier),
