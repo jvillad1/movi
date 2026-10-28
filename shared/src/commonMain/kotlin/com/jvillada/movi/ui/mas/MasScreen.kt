@@ -83,6 +83,7 @@ import com.jvillada.movi.ui.components.NoSePudoLeer
 import com.jvillada.movi.ui.components.PLATA_OCULTA
 import com.jvillada.movi.ui.components.ROTULO_OCULTAR_LOS_SALDOS
 import com.jvillada.movi.ui.components.avatarColorOrDefault
+import com.jvillada.movi.ui.components.inicialesDelUsuario
 import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.ui.components.ds.Chevron
 import com.jvillada.movi.ui.components.ds.Fila
@@ -794,8 +795,6 @@ private fun TarjetaDelPerfil(profile: UserProfile?, onEditar: () -> Unit) {
             // F42 · F46: mientras `profile` no llegó se usa lo que SessionManager tenía del login.
             val displayName = profile?.name ?: SessionManager.userName ?: "Usuario"
             val avatarColor = avatarColorOrDefault(profile?.avatarColor ?: SessionManager.avatarColor)
-            val initials = displayName.split(" ").take(2)
-                .mapNotNull { it.firstOrNull()?.uppercaseChar() }.joinToString("")
             Box(
                 modifier = Modifier
                     .size(Medida.avatarGrande)
@@ -803,7 +802,8 @@ private fun TarjetaDelPerfil(profile: UserProfile?, onEditar: () -> Unit) {
                     .background(avatarColor),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(initials.ifEmpty { "U" }, style = Movi.textos.tituloMedio, color = Movi.colores.sobreAvatar)
+                // Vuelta 41: las mismas iniciales que el avatar del Inicio (`inicialesDelUsuario`).
+                Text(inicialesDelUsuario(displayName), style = Movi.textos.tituloMedio, color = Movi.colores.sobreAvatar)
             }
             Column(modifier = Modifier.weight(1f)) {
                 // Vuelta 29: el nombre en `saludo` (17/700 a la vista), con el correo debajo, como en la opción 3.

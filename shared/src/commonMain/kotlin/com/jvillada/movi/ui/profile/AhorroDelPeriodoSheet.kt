@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -20,13 +19,14 @@ import com.jvillada.movi.shared.model.AhorroDelPeriodo
 import com.jvillada.movi.shared.model.TipoDeAhorro
 import com.jvillada.movi.shared.model.problemaDelAhorro
 import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.ui.components.MarcoDeHoja
 import com.jvillada.movi.ui.components.ds.Campo
 import com.jvillada.movi.ui.components.ds.CampoDeMonto
 import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
 import com.jvillada.movi.ui.components.ds.PieDeHoja
 import com.jvillada.movi.ui.components.ds.PildoraDeFiltro
-import com.jvillada.movi.ui.components.ds.RotuloDeCampo
+import com.jvillada.movi.ui.components.ds.GrupoDeCampos
 import com.jvillada.movi.ui.components.formatCOP
 
 /*
@@ -94,39 +94,33 @@ fun AhorroDelPeriodoSheet(
                 .verticalScroll(rememberScrollState())
                 .weight(1f, fill = false),
         ) {
+            // Vuelta 41: una frase; que no mueve plata lo dice la ayuda de cada campo.
             EncabezadoDeHoja(
                 AHORRO_DE_CADA_PERIODO,
-                subtitulo = "Movi lo resta de «Te quedan» antes de decirte cuánto puedes gastar. " +
-                    "No mueve plata en tu banco ni cambia «Tu plata».",
-                modifier = Modifier.padding(top = Espacio.xxs, bottom = Espacio.m),
+                subtitulo = "Movi lo resta de «Te quedan» antes de decirte cuánto puedes gastar.",
             )
+            Spacer(Modifier.height(Medida.entreSecciones))
 
-            RotuloDeCampo("Cuánto apartas")
-            Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
-                TipoDeAhorro.entries.forEach { opcion ->
-                    PildoraDeFiltro(
-                        opcionDelAhorro(opcion),
-                        seleccionada = tipo == opcion,
-                        onClick = { if (!saving) tipo = opcion },
-                    )
+            GrupoDeCampos("Cuánto apartas") {
+                Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
+                    TipoDeAhorro.entries.forEach { opcion ->
+                        PildoraDeFiltro(
+                            opcionDelAhorro(opcion),
+                            seleccionada = tipo == opcion,
+                            onClick = { if (!saving) tipo = opcion },
+                        )
+                    }
                 }
-            }
-
-            when (tipo) {
-                TipoDeAhorro.NINGUNO -> Unit
-                TipoDeAhorro.MONTO -> {
-                    Spacer(Modifier.height(Espacio.m))
-                    CampoDeMonto(
+                when (tipo) {
+                    TipoDeAhorro.NINGUNO -> Unit
+                    TipoDeAhorro.MONTO -> CampoDeMonto(
                         monto, { monto = it },
                         rotulo = "Cada período",
                         ejemplo = "500.000",
-                        ayuda = "Se resta entero, haya entrado tu sueldo o no.",
+                        ayuda = "Se resta entero, haya entrado tu sueldo o no. No mueve plata en tu banco.",
                         habilitado = !saving,
                     )
-                }
-                TipoDeAhorro.PORCENTAJE -> {
-                    Spacer(Modifier.height(Espacio.m))
-                    Campo(
+                    TipoDeAhorro.PORCENTAJE -> Campo(
                         porcentaje, { porcentaje = it.filter(Char::isDigit).take(2) },
                         rotulo = "De lo que entra en el período",
                         ejemplo = "20",
@@ -139,6 +133,7 @@ fun AhorroDelPeriodoSheet(
             }
 
             Spacer(Modifier.height(Espacio.l))
+            // Vuelta 41: una sola acción. «Cancelar» repetía lo que ya hacen la × y el arrastre.
             PieDeHoja(
                 texto = "Guardar",
                 onClick = { if (problema == null && valor != null) onSave(AhorroDelPeriodo(tipo, valor)) },
@@ -146,9 +141,6 @@ fun AhorroDelPeriodoSheet(
                 razon = problema,
                 cargando = saving,
                 error = error,
-                secundaria = "Cancelar",
-                onSecundaria = onDismiss,
-                secundariaHabilitada = !saving,
             )
             Spacer(Modifier.height(Espacio.xl))
         }

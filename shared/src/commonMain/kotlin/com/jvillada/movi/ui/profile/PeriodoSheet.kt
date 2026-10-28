@@ -1,26 +1,15 @@
 package com.jvillada.movi.ui.profile
 
-import com.jvillada.movi.ui.components.ds.coloresDeLoElegido
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,26 +17,34 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
 import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.PeriodoFinanciero
 import com.jvillada.movi.shared.model.SiElCorteCaeEnFinDeSemana
 import com.jvillada.movi.shared.model.diaLegible
 import com.jvillada.movi.shared.model.inicioDelPeriodo
-import com.jvillada.movi.shared.model.nombreDe
 import com.jvillada.movi.shared.model.periodoDe
 import com.jvillada.movi.shared.model.periodoSiguiente
 import com.jvillada.movi.shared.model.porQueNoEsHabil
-import com.jvillada.movi.shared.model.rangoLegibleDe
-import com.jvillada.movi.theme.*
-import com.jvillada.movi.ui.components.CardRow
+import com.jvillada.movi.shared.model.rangoDelPeriodo
+import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Icono
+import com.jvillada.movi.theme.Medida
+import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.components.MarcoDeHoja
-import kotlinx.datetime.Clock
 import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
+import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.GrupoDeCampos
+import com.jvillada.movi.ui.components.ds.NivelDeSuperficie
+import com.jvillada.movi.ui.components.ds.PieDeHoja
+import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
+import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
+import com.jvillada.movi.ui.components.ds.Separador
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.VistaPrevia
+import kotlinx.datetime.Clock
+import kotlinx.datetime.LocalDate
 
 /** La fila de Ajustes que abre esta hoja: «período», como en el resto de la app (vuelta 31). */
 const val INICIO_DEL_PERIODO: String = "Inicio del período"
@@ -87,191 +84,101 @@ fun PeriodoSheet(
     var regla by remember(reglaActual) { mutableStateOf(reglaActual) }
     val settings = remember(dia, regla) { PeriodSettings(cutoffDay = dia, siCaeEnFinDeSemana = regla) }
     val hoy = remember(settings) { periodoDe(Clock.System.now().toEpochMilliseconds(), settings) }
-    val ejemplo = remember(settings, hoy) { proximoCorteCorrido(hoy, settings) }
+    val ejemplo = remember(settings, hoy) { ejemploCortoDelCorte(hoy, settings) }
 
     MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !saving) {
-        // El contenido de la hoja se desplaza.
-        //
-        // Estas hojas nacieron sin `verticalScroll` y funcionaban de casualidad: con el teclado
-        // abierto en un teléfono chico, o con la lista un poco más larga, el contenido se salía por
-        // abajo y el botón de guardar quedaba fuera de la pantalla, recortado por el `clip` de la
-        // propia hoja. Sin manera de llegar a él.
-        //
-        // `weight(1f, fill = false)` es lo que hace que la hoja **crezca con su contenido** hasta el
-        // borde de la pantalla y recién ahí desplace, en vez de ocupar siempre todo el alto. Mismo
-        // patrón que las hojas de `CategorySheets.kt`, que ya lo tenían.
+        // El contenido se desplaza y la hoja crece con él hasta el borde (`weight(1f, fill = false)`):
+        // sin eso, con el teclado abierto en un teléfono chico, «Guardar» quedaba recortado por el
+        // `clip` de la hoja. Mismo patrón que las hojas de `CategorySheets.kt`.
         Column(
             modifier = Modifier
                 .verticalScroll(rememberScrollState())
                 .weight(1f, fill = false),
         ) {
-
+            // Vuelta 41: una frase, no dos; y el título es lo más grande de la hoja.
             EncabezadoDeHoja(
                 PREGUNTA_DEL_INICIO_DEL_PERIODO,
-                subtitulo = "Movi cuenta tus ingresos, gastos y presupuestos sobre esta ventana. " +
-                    "Si te pagan el 26, elige 26 y el período te va a cuadrar con el sueldo.",
-                modifier = Modifier.padding(top = Espacio.xxs, bottom = Espacio.m),
+                subtitulo = "Movi cuenta tus gastos, ingresos y presupuestos desde ese día.",
+            )
+            Spacer(Modifier.height(Medida.entreSecciones))
+
+            // Cinco filas de siete, no un `LazyVerticalGrid`: el grid tenía un alto fijo de 196 dp
+            // para un contenido de 224 y cortaba el 29, el 30 y el 31 (ver [CalendarioDeDias]).
+            CalendarioDeDias(
+                dias = 31,
+                elegido = dia,
+                habilitado = !saving,
+                onElegir = { dia = it },
             )
 
-            // La consecuencia, en vivo: sin esto «26» es un número sin significado.
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(Radio.m))
-                    .background(Movi.colores.tarjeta)
-                    .padding(horizontal = Espacio.m, vertical = Espacio.s),
-            ) {
-                Text(
-                    text = "Hoy estarías en ${nombreDe(hoy)}",
-                    style = Movi.textos.titulo,
-                    color = Movi.colores.texto,
-                )
-                Spacer(Modifier.height(Espacio.xxs))
-                Text(
-                    text = rangoLegibleDe(hoy, settings) ?: "Del 1 al último día del mes",
-                    style = Movi.textos.apoyo,
-                    color = Movi.colores.textoMedio,
-                )
-                if (settings.esMesDeCalendario) {
-                    Spacer(Modifier.height(Espacio.xs))
-                    Text(
-                        text = "Es el mes de calendario, como viene por defecto.",
-                        style = Movi.textos.apoyo,
-                        color = Movi.colores.textoApagado,
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(Espacio.m))
-
-            // Cinco filas de siete, no un `LazyVerticalGrid`.
-            //
-            // El grid tenía `.height(196.dp)` fija y su contenido mide **224**: cinco filas de
-            // 40 dp con 6 de separación. La revisión lo midió a 411×731, o sea con espacio de
-            // sobra en la pantalla: el «31» se dibujaba solo 4 de sus 24 dp — **los días 29,
-            // 30 y 31 quedaban cortados**, justo los que esta hoja se toma el trabajo de
-            // explicar en el aviso de abajo.
-            //
-            // Y el scroll nuevo de la hoja no podía revelarlos, porque el alto del grid es
-            // fijo: había que arrastrar dentro de una ventanita de 196 dp en el medio. Es el
-            // mismo anti-patrón que `HojaAgregarGeometriaTest` ya documenta — dos áreas
-            // desplazables anidadas peleándose el gesto del dedo.
-            //
-            // 31 celdas de tamaño conocido no ganan nada con ser lazy. Con filas normales el
-            // calendario entero se ve, la hoja tiene un solo desplazamiento, y desaparece el
-            // alto mágico que había que mantener a mano cada vez que cambiara el tamaño de una
-            // celda.
-            (1..31).chunked(7).forEach { fila ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
-                ) {
-                    fila.forEach { d ->
-                        val elegido = d == dia
-                        Box(
-                            modifier = Modifier
-                                .size(Medida.avatar)
-                                .clip(CircleShape)
-                                .background(if (elegido) coloresDeLoElegido(Movi.colores).first else Movi.colores.tarjeta)
-                                .clickable(enabled = !saving) { dia = d },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                text = d.toString(),
-                                style = if (elegido) Movi.textos.cuerpoFuerte else Movi.textos.cuerpoRegular,
-                                color = if (elegido) coloresDeLoElegido(Movi.colores).second else Movi.colores.texto,
-                                textAlign = TextAlign.Center,
-                            )
-                        }
+            Spacer(Modifier.height(Medida.entreSecciones))
+            GrupoDeCampos(SI_CAE_EN_FIN_DE_SEMANA) {
+                Superficie(nivel = NivelDeSuperficie.Capa2, relleno = RellenoDeSuperficie.Lista) {
+                    SiElCorteCaeEnFinDeSemana.entries.forEachIndexed { i, opcion ->
+                        val elegida = opcion == regla
+                        Fila(
+                            titulo = tituloDeLaRegla(opcion),
+                            // El check en tinta: lo elegido (vuelta 29).
+                            final = {
+                                Box(modifier = Modifier.size(Icono.l), contentAlignment = Alignment.Center) {
+                                    if (elegida) {
+                                        Icon(
+                                            Icons.Rounded.Check,
+                                            contentDescription = "Elegido",
+                                            tint = Movi.colores.texto,
+                                            modifier = Modifier.size(Icono.m),
+                                        )
+                                    }
+                                }
+                            },
+                            onClick = if (saving) null else ({ regla = opcion }),
+                            modifier = Modifier.semantics { selected = elegida },
+                        )
+                        if (i < SiElCorteCaeEnFinDeSemana.entries.lastIndex) Separador(SangriaDeSeparador.Margen)
                     }
                 }
-                Spacer(Modifier.height(Espacio.xs))
             }
 
-            // Un 29, 30 o 31 no existe en todos los meses. Se dice ANTES de guardar, porque es la
-            // duda que aparece justo al tocar ese número.
-            if (dia > 28) {
-                Spacer(Modifier.height(Espacio.s))
-                Text(
-                    text = "En los meses que no tienen día $dia, el corte cae el último día del mes.",
-                    style = Movi.textos.apoyo,
-                    color = Movi.colores.textoMedio,
-                )
-            }
-
-            Spacer(Modifier.height(Espacio.m))
-            Text(
-                text = SI_CAE_EN_FIN_DE_SEMANA,
-                style = Movi.textos.titulo,
-                color = Movi.colores.texto,
-                modifier = Modifier.padding(bottom = Espacio.xs),
+            // Lo que va a pasar, en dos renglones como mucho: el período de hoy con lo elegido y, si
+            // hace falta, la excepción que se ve justo al tocar (un 29-31, o un corte que la regla corre).
+            Spacer(Modifier.height(Medida.entreSecciones))
+            VistaPrevia(
+                vistaPreviaDelPeriodo(hoy, settings),
+                detalle = detalleDelInicioDelPeriodo(dia, ejemplo),
             )
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(Radio.m))
-                    .background(Movi.colores.tarjeta)
-                    .padding(horizontal = Espacio.m, vertical = Espacio.xxs),
-            ) {
-                SiElCorteCaeEnFinDeSemana.entries.forEachIndexed { i, opcion ->
-                    val elegida = opcion == regla
-                    CardRow(
-                        left = { Text(tituloDeLaRegla(opcion), style = Movi.textos.cuerpo, color = Movi.colores.texto) },
-                        right = {
-                            // El check en tinta: lo elegido (vuelta 29).
-                            Box(modifier = Modifier.size(Icono.l), contentAlignment = Alignment.Center) {
-                                if (elegida) {
-                                    Icon(
-                                        Icons.Rounded.Check,
-                                        contentDescription = "Elegido",
-                                        tint = Movi.colores.texto,
-                                        modifier = Modifier.size(Icono.m),
-                                    )
-                                }
-                            }
-                        },
-                        isLast = i == SiElCorteCaeEnFinDeSemana.entries.lastIndex,
-                        onClick = if (saving) null else ({ regla = opcion }),
-                        modifier = Modifier.semantics { selected = elegida },
-                    )
-                }
-            }
-            // El ejemplo concreto: «el 25 de octubre es domingo» dice más que la regla en abstracto.
-            if (ejemplo != null) {
-                Spacer(Modifier.height(Espacio.xs))
-                Text(text = ejemplo, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-            }
-
-            if (error != null) {
-                Spacer(Modifier.height(Espacio.s))
-                Text(text = error, style = Movi.textos.apoyo, color = Movi.colores.sale)
-            }
 
             Spacer(Modifier.height(Espacio.l))
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(Radio.m))
-                    .background(if (saving) Movi.colores.tarjeta else Movi.colores.marca)
-                    .clickable(enabled = !saving) { onSave(dia, regla) }
-                    .padding(vertical = Espacio.m),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = if (saving) "Guardando…" else "Guardar",
-                    color = if (saving) Movi.colores.textoMedio else Movi.colores.sobreMarca,
-                    style = Movi.textos.cuerpo,
-                )
-            }
-
+            PieDeHoja(
+                texto = "Guardar",
+                onClick = { onSave(dia, regla) },
+                cargando = saving,
+                error = error,
+            )
             Spacer(Modifier.height(Espacio.xl))
         }
     }
 }
 
-/** El título de la elección, en la hoja y en la fila de Ajustes. */
-const val SI_CAE_EN_FIN_DE_SEMANA: String = "Si ese día cae en fin de semana o festivo"
+/**
+ * **La vista previa de «Inicio del período»**: «Tu período: del 25 de octubre al 24 de noviembre», el
+ * período de hoy con el día y la regla elegidos (también con el mes de calendario: «del 1 al 31 de
+ * octubre»). Pura.
+ */
+fun vistaPreviaDelPeriodo(hoy: PeriodoFinanciero, settings: PeriodSettings): String =
+    "Tu período: " + rangoDelPeriodo(hoy, settings).replaceFirstChar { it.lowercase() }
+
+/**
+ * El segundo renglón de la vista previa, si hace falta: un día que no todos los meses tienen, o el
+ * próximo corte que la regla corre ([ejemploCortoDelCorte]). `null` si no hay nada que aclarar. Pura.
+ */
+fun detalleDelInicioDelPeriodo(dia: Int, ejemplo: String?): String? =
+    if (dia > 28) "En los meses sin día $dia, empieza el último día del mes." else ejemplo
+
+/**
+ * El título del grupo de la elección. Vuelta 41: era «Si ese día cae en fin de semana o festivo», y a
+ * 360 dp no entraba en el renglón de un `GrupoDeCampos`.
+ */
+const val SI_CAE_EN_FIN_DE_SEMANA: String = "Si cae en fin de semana o festivo"
 
 /** Cómo se dice cada regla. */
 fun tituloDeLaRegla(regla: SiElCorteCaeEnFinDeSemana): String = when (regla) {
@@ -283,9 +190,25 @@ fun tituloDeLaRegla(regla: SiElCorteCaeEnFinDeSemana): String = when (regla) {
 /**
  * «Por ejemplo, el 25 de octubre es domingo: ese período empieza el 23 de octubre.» — el próximo corte (desde el
  * período de [desde]) que la regla de [settings] corre, en el próximo año; `null` si la regla es
- * «ese mismo día» o ninguno cae en fin de semana.
+ * «ese mismo día» o ninguno cae en fin de semana. Lo dice la guía de primer uso.
  */
-fun proximoCorteCorrido(desde: PeriodoFinanciero, settings: PeriodSettings): String? {
+fun proximoCorteCorrido(desde: PeriodoFinanciero, settings: PeriodSettings): String? =
+    corteCorrido(desde, settings)?.let { (natural, corrido, nombreDelDia) ->
+        "Por ejemplo, el ${diaLegible(natural)} es $nombreDelDia: ese período empieza el ${diaLegible(corrido)}."
+    }
+
+/**
+ * Lo mismo, en un renglón, para la vista previa de la hoja (vuelta 41): «El 25 de octubre es domingo:
+ * empieza el 23.» Pura.
+ */
+fun ejemploCortoDelCorte(desde: PeriodoFinanciero, settings: PeriodSettings): String? =
+    corteCorrido(desde, settings)?.let { (natural, corrido, nombreDelDia) ->
+        val empieza = if (corrido.month == natural.month) "el ${corrido.dayOfMonth}" else "el ${diaLegible(corrido)}"
+        "El ${diaLegible(natural)} es $nombreDelDia: empieza $empieza."
+    }
+
+/** El próximo corte que la regla corre: el día natural, el corrido y por qué no es hábil. */
+private fun corteCorrido(desde: PeriodoFinanciero, settings: PeriodSettings): Triple<LocalDate, LocalDate, String>? {
     if (settings.siCaeEnFinDeSemana == SiElCorteCaeEnFinDeSemana.ESE_DIA) return null
     val sinCorrer = settings.copy(siCaeEnFinDeSemana = SiElCorteCaeEnFinDeSemana.ESE_DIA, iniciosPropios = emptyMap())
     val conLaRegla = settings.copy(iniciosPropios = emptyMap())
@@ -295,7 +218,7 @@ fun proximoCorteCorrido(desde: PeriodoFinanciero, settings: PeriodSettings): Str
         val corrido = inicioDelPeriodo(periodo, conLaRegla)
         if (natural != corrido) {
             val nombreDelDia = porQueNoEsHabil(natural) ?: return null
-            return "Por ejemplo, el ${diaLegible(natural)} es $nombreDelDia: ese período empieza el ${diaLegible(corrido)}."
+            return Triple(natural, corrido, nombreDelDia)
         }
         periodo = periodoSiguiente(periodo)
     }
