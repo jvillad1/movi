@@ -36,12 +36,14 @@ import org.robolectric.annotation.GraphicsMode
 import kotlin.test.assertTrue
 
 /**
- * # La fecha de un gasto del espacio se lee entera (vuelta 31)
+ * # La fecha de un gasto del espacio se lee entera (vuelta 31), en un renglón (vuelta 32)
  *
  * En producción, a 360 dp, el subtítulo «Pagó Caro · Mercado · 21 …» cortaba justo la fecha, que es
- * lo que distingue dos mercados del mismo monto. Ahora la fecha va primero y el subtítulo baja a un
- * segundo renglón antes de cortarse. Con el motor de texto de verdad (`sdk = [34]`, `NATIVE`), como
- * `LaListaDeCreditosEsDeFilasTest`.
+ * lo que distingue dos mercados del mismo monto. La vuelta 31 puso la fecha primero y dejó bajar a un
+ * segundo renglón, donde «Mercado» quedaba solo. Ahora el subtítulo es un renglón: «Tú» y «Caro» en vez
+ * de «Pagaste tú» y «Pagó Caro», sin la categoría que el título ya dice, y si aun así no cabe se corta
+ * la categoría, al final; la fecha y quién pagó se leen enteros. Con el motor de texto de verdad
+ * (`sdk = [34]`, `NATIVE`), como `LaListaDeCreditosEsDeFilasTest`.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -98,27 +100,34 @@ class LosGastosDelEspacioSeLeenTest {
     private fun textosDentro(nodo: SemanticsNode): List<SemanticsNode> =
         listOf(nodo).filter { texto(it).isNotEmpty() } + nodo.children.flatMap(::textosDentro)
 
-    /** El texto se dibuja entero: sin «…» y cada renglón cabe en el ancho del nodo. */
-    private fun seVeEntero(nodo: SemanticsNode): Boolean {
+    /**
+     * [prefijo] se dibuja entero en el único renglón de [nodo]: el subtítulo es de un renglón, y si se
+     * corta con «…» (siempre al final) el corte cae después de [prefijo], con lugar para el «…».
+     */
+    private fun unRenglonConElPrefijoEntero(nodo: SemanticsNode, prefijo: String): Boolean {
         val resultados = mutableListOf<TextLayoutResult>()
         nodo.config[SemanticsActions.GetTextLayoutResult].action?.invoke(resultados)
         val d = resultados.single()
         val ancho = nodo.size.width + 0.5f
-        return (0 until d.lineCount).all { linea ->
-            !d.isLineEllipsized(linea) && d.getLineRight(linea) - d.getLineLeft(linea) <= ancho
-        } && !d.multiParagraph.didExceedMaxLines
+        if (d.lineCount != 1) return false
+        val finDelPrefijo = d.getHorizontalPosition(prefijo.length, usePrimaryDirection = true)
+        // El «…» mide menos que dos letras de la misma letra.
+        val lugarParaElCorte = if (d.isLineEllipsized(0)) 2 * d.getBoundingBox(prefijo.length - 1).width else 0f
+        return finDelPrefijo + lugarParaElCorte <= ancho
     }
 
     @Test
-    fun `a 360 dp la fecha va primero y el subtitulo no se corta`() {
+    fun `a 360 dp el subtitulo es un renglon con la fecha y quien pago enteros`() {
         montar()
         val subtitulos = composeRule.onAllNodesWithTag(TAG_GASTO_DEL_ESPACIO, useUnmergedTree = true).fetchSemanticsNodes()
             .flatMap(::textosDentro)
             .filter { texto(it).contains(" · ") }
         assertTrue(subtitulos.size == 2, "un subtítulo por gasto: ${subtitulos.map(::texto)}")
+        val esperados = mapOf("21 oct · Carolina" to "21 oct · Carolina", "21 oct · Tú · Vivienda y servicios" to "21 oct · Tú")
         subtitulos.forEach { nodo ->
-            assertTrue(texto(nodo).startsWith("21 oct · "), "la fecha va primero: «${texto(nodo)}»")
-            assertTrue(seVeEntero(nodo), "«${texto(nodo)}» se corta a 360 dp")
+            val prefijo = esperados[texto(nodo)]
+            assertTrue(prefijo != null, "subtítulo inesperado: «${texto(nodo)}»")
+            assertTrue(unRenglonConElPrefijoEntero(nodo, prefijo), "«${texto(nodo)}»: la fecha y quién pagó no caben en un renglón")
         }
     }
 }

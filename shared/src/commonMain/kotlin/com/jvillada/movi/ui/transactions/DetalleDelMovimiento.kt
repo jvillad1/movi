@@ -185,7 +185,7 @@ internal fun EncabezadoDelMovimiento(
             AvatarDelComercio(evento, tamano = TamanoDeAvatar.Encabezado)
         }
         Text(
-            evento.description,
+            descripcionParaMostrar(evento),
             style = Movi.textos.tituloMedio,
             color = Movi.colores.texto,
             maxLines = 2,

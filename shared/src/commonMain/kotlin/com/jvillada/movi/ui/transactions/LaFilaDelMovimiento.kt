@@ -4,6 +4,7 @@ import com.jvillada.movi.shared.model.Espacio
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.MIEMBRO_YO
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.enFormaDeTitulo
 import com.jvillada.movi.shared.model.montoContado
 import com.jvillada.movi.shared.model.normalizarParaBuscar
 import com.jvillada.movi.ui.components.formatMoney
@@ -42,17 +43,27 @@ fun laDescripcionEsLaCategoria(tx: FinancialEvent): Boolean {
  */
 fun textosDeLaFila(tx: FinancialEvent, nombreDeLaCuenta: String?): TextosDeLaFila {
     val cuenta = nombreDeLaCuenta?.takeIf { it.isNotBlank() }
-    val deSiempre = TextosDeLaFila(tx.description, cuenta?.let { "${tx.category} · $it" } ?: tx.category)
+    // Vuelta de diseño 32: lo que el banco mandó en mayúsculas se lee en forma de título.
+    val descripcion = descripcionParaMostrar(tx)
+    val deSiempre = TextosDeLaFila(descripcion, cuenta?.let { "${tx.category} · $it" } ?: tx.category)
     if (!laDescripcionEsLaCategoria(tx)) return deSiempre
     val comercio = tx.merchant?.trim()?.takeIf {
         it.isNotEmpty() && normalizarParaBuscar(it) != normalizarParaBuscar(tx.category)
     }
     return when {
-        comercio != null -> TextosDeLaFila(comercio, deSiempre.subtitulo)
+        comercio != null -> TextosDeLaFila(enFormaDeTitulo(comercio), deSiempre.subtitulo)
         cuenta != null -> TextosDeLaFila(cuenta, tx.category)
-        else -> TextosDeLaFila(tx.description, null)
+        else -> TextosDeLaFila(descripcion, null)
     }
 }
+
+/**
+ * **La descripción de [tx] como se pinta** (vuelta de diseño 32): [enFormaDeTitulo] de `:core`, que
+ * pasa a forma de título lo que el banco mandó todo en MAYÚSCULAS («EXITO SUBA» → «Éxito Suba») y
+ * deja quieto lo que trae minúsculas. La usan la fila, el detalle, Buscar y el detalle de la cuenta.
+ * Lo guardado no cambia.
+ */
+fun descripcionParaMostrar(tx: FinancialEvent): String = enFormaDeTitulo(tx.description)
 
 /** ¿[tx] es un gasto repartido en un espacio, con una parte de otros? */
 fun esGastoRepartido(tx: FinancialEvent): Boolean = tx.type == TransactionType.EXPENSE && tx.parteAjena > 0L

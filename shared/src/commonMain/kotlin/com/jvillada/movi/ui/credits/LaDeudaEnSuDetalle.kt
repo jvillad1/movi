@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountBalanceWallet
 import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.Payments
 import androidx.compose.material.icons.rounded.Event
 import androidx.compose.material.icons.rounded.Savings
 import androidx.compose.material.icons.rounded.Tune
@@ -80,6 +81,9 @@ const val EDITAR_LAS_CONDICIONES: String = "Editar las condiciones"
 
 /** El título de la acción que abre la hoja de ajustar el saldo de un préstamo. */
 const val AJUSTAR_EL_SALDO: String = "Ajustar saldo"
+
+/** La acción de la tarjeta que abre «Agregar» para anotar su pago (vuelta de diseño 32). */
+const val REGISTRAR_UN_PAGO_DE_LA_TARJETA: String = "Registrar un pago"
 
 /** El botón del aviso de arriba del detalle cuando a la deuda le faltan sus datos (vuelta 31). */
 const val COMPLETAR_DATOS: String = "Completar datos"
@@ -158,11 +162,19 @@ fun rememberDeudaDelDetalle(accountId: String, tipo: AccountType?, reintento: In
  * [Fila]. Nada si la deuda todavía no llegó.
  */
 @Composable
-fun SeccionDeLaDeuda(deuda: DeudaDelDetalle, modifier: Modifier = Modifier) {
+fun SeccionDeLaDeuda(
+    deuda: DeudaDelDetalle,
+    modifier: Modifier = Modifier,
+    /**
+     * Vuelta de diseño 32: abre «Agregar» en la pestaña del pago con esta tarjeta en «Hacia» (lo que
+     * ya hace «Anotar este pago» desde Plan). `null` = sin esa acción.
+     */
+    onRegistrarPagoDeLaTarjeta: (() -> Unit)? = null,
+) {
     val prestamo = deuda.prestamo
     val tarjeta = deuda.tarjeta
     if (prestamo == null && tarjeta == null) return
-    val acciones = accionesDeLaDeuda(deuda)
+    val acciones = accionesDeLaDeuda(deuda, onRegistrarPagoDeLaTarjeta)
     val conCondiciones = !faltanLosDatos(deuda)
     if (!conCondiciones && acciones.isEmpty()) return
     Column(modifier = modifier.fillMaxWidth().testTag(TAG_SECCION_DE_LA_DEUDA)) {
@@ -201,7 +213,12 @@ private class AccionDeLaDeuda(
     val onClick: () -> Unit,
 )
 
-private fun accionesDeLaDeuda(deuda: DeudaDelDetalle): List<AccionDeLaDeuda> = buildList {
+private fun accionesDeLaDeuda(deuda: DeudaDelDetalle, onRegistrarPagoDeLaTarjeta: (() -> Unit)?): List<AccionDeLaDeuda> = buildList {
+    // Vuelta de diseño 32: la tarjeta también tiene «Qué puedes hacer», empezando por anotar lo que le
+    // pagaste (el traspaso de dos patas de la pestaña del pago de Agregar). Con o sin sus datos.
+    if (deuda.tarjeta != null && onRegistrarPagoDeLaTarjeta != null) {
+        add(AccionDeLaDeuda(REGISTRAR_UN_PAGO_DE_LA_TARJETA, "Lo que le pagaste desde otra cuenta", Icons.Rounded.Payments, onRegistrarPagoDeLaTarjeta))
+    }
     val prestamo = deuda.prestamo
     val terms = prestamo?.terms
     if (prestamo != null) {

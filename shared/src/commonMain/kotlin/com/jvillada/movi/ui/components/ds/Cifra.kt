@@ -3,19 +3,25 @@ package com.jvillada.movi.ui.components.ds
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.semantics.SemanticsPropertyReceiver
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.text.font.FontWeight
 import com.jvillada.movi.theme.ColoresDeMovi
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.theme.TextosDeMovi
 import com.jvillada.movi.ui.components.LocalSaldosOcultos
 import com.jvillada.movi.ui.components.PLATA_OCULTA
+import com.jvillada.movi.ui.components.formatMoneyAbreviadaSinOcultar
 import com.jvillada.movi.ui.components.formatMoneyCompactSinOcultar
 import com.jvillada.movi.ui.components.signedMoneySinOcultar
 import kotlin.math.abs
@@ -71,7 +77,58 @@ enum class TonoDeCifra {
  *   360 dp deja ~90 dp, y Martian Mono pide ~9,5 dp por carácter con la letra de la app, así que
  *   «$15.600.000» no entra. Solo pesos: en otra moneda va [Entera].
  */
-enum class FormaDeCifra { Entera, Compacta }
+enum class FormaDeCifra {
+    Entera,
+    Compacta,
+
+    /**
+     * Vuelta de diseño 32: abreviada en **todas** las escalas —«$850 mil», «$1,8M», «$500»—. Solo
+     * la elige [formaComunDeLasCifras] para un renglón de cifras que tienen que leerse en la misma
+     * forma (la franja Entró · Salió · Neto de Movimientos y su panel): si una no cabe entera, las
+     * tres van así. Solo pesos, como [Compacta].
+     */
+    Abreviada,
+}
+
+/**
+ * **La forma de un renglón de cifras** (vuelta de diseño 32): [FormaDeCifra.Entera] si **todas**
+ * caben enteras en su lugar; si una no cabe, [FormaDeCifra.Abreviada] para todas. Nunca una entera
+ * al lado de una abreviada. [anchosEnteros] es lo que mide cada una escrita entera y [anchoDeCadaUna]
+ * lo que tiene cada una (en la misma unidad). Pura.
+ */
+fun formaComunDeLasCifras(anchosEnteros: List<Int>, anchoDeCadaUna: Int): FormaDeCifra =
+    if (anchosEnteros.all { it <= anchoDeCadaUna }) FormaDeCifra.Entera else FormaDeCifra.Abreviada
+
+/**
+ * [formaComunDeLasCifras] medida de verdad: escribe cada una de [cifras] (monto y tono) entera con la
+ * letra de [variante] —en su tamaño más chico si es una que se achica ([pisoDeLaCifra])— y mira si
+ * cabe en [anchoDeCadaUna]. Con «Ocultar los saldos» se mide igual el
+ * texto de la cifra: al mostrarlos, la forma no cambia de golpe por haberlos tapado.
+ */
+@Composable
+fun rememberFormaComunDeLasCifras(
+    cifras: List<Pair<Long, TonoDeCifra>>,
+    variante: VarianteDeCifra,
+    anchoDeCadaUna: Dp,
+): FormaDeCifra {
+    val medidor = rememberTextMeasurer()
+    // Una cifra que se achica «cabe» si cabe en su tamaño más chico: hasta ahí la deja ir el achique.
+    val estilo = estiloDeLaCifra(variante, Movi.textos).let { e ->
+        pisoDeLaCifra(variante, Movi.textos)?.let { e.copy(fontSize = it) } ?: e
+    }
+    val ancho = with(LocalDensity.current) { anchoDeCadaUna.roundToPx() }
+    return remember(cifras, estilo, ancho) {
+        val anchos = cifras.map { (monto, tono) ->
+            medidor.measure(
+                text = textoDeLaCifra(monto, "COP", tono, ocultos = false),
+                style = estilo,
+                maxLines = 1,
+                softWrap = false,
+            ).size.width
+        }
+        formaComunDeLasCifras(anchos, ancho)
+    }
+}
 
 /**
  * **La variante de una [Cifra], en su semántica** (vuelta de diseño 14). La regla «una sola
@@ -103,6 +160,16 @@ fun estiloDeLaCifra(variante: VarianteDeCifra, textos: TextosDeMovi): TextStyle 
     VarianteDeCifra.Chica -> textos.apoyo.copy(fontFeatureSettings = "tnum")
 }
 
+/**
+ * Hasta dónde se achica una cifra que no entra en su renglón: la héroe hasta la de tarjeta, la grande
+ * hasta un monto de fila; las demás no se achican (`null`). Pura.
+ */
+fun pisoDeLaCifra(variante: VarianteDeCifra, textos: TextosDeMovi): TextUnit? = when (variante) {
+    VarianteDeCifra.Heroe -> textos.cifraDeTarjeta.fontSize
+    VarianteDeCifra.Grande -> textos.monto.fontSize
+    else -> null
+}
+
 /** El color de un tono, en la paleta del tema. Pura. */
 fun colorDeLaCifra(tono: TonoDeCifra, colores: ColoresDeMovi): Color = when (tono) {
     TonoDeCifra.Neutro -> colores.texto
@@ -124,10 +191,11 @@ fun textoDeLaCifra(
     forma: FormaDeCifra = FormaDeCifra.Entera,
 ): String {
     if (ocultos) return PLATA_OCULTA
-    val escrita: (Long) -> String = if (forma == FormaDeCifra.Compacta && moneda == "COP") {
-        ::formatMoneyCompactSinOcultar
-    } else {
-        { signedMoneySinOcultar(it, moneda) }
+    val escrita: (Long) -> String = when {
+        moneda != "COP" -> { m -> signedMoneySinOcultar(m, moneda) }
+        forma == FormaDeCifra.Compacta -> ::formatMoneyCompactSinOcultar
+        forma == FormaDeCifra.Abreviada -> ::formatMoneyAbreviadaSinOcultar
+        else -> { m -> signedMoneySinOcultar(m, moneda) }
     }
     return when {
         tono == TonoDeCifra.Ingreso && monto > 0 -> "+" + escrita(monto)
@@ -171,11 +239,7 @@ fun Cifra(
     // Un renglón siempre: Martian Mono es ancha y a 42 sp «$8.550.000» se partía en un teléfono de
     // 390 dp. La héroe se achica hasta el tamaño de la cifra de tarjeta, no más; la grande (ola R1),
     // hasta el de un monto de fila, porque va en un widget de media pantalla.
-    val piso = when (variante) {
-        VarianteDeCifra.Heroe -> Movi.textos.cifraDeTarjeta.fontSize
-        VarianteDeCifra.Grande -> Movi.textos.monto.fontSize
-        else -> null
-    }
+    val piso = pisoDeLaCifra(variante, Movi.textos)
     if (piso != null) {
         BasicText(
             text = texto,

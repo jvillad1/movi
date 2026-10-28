@@ -245,13 +245,16 @@ class EspaciosEnPantallaTest {
         assertNull(botones()["Pedirle a Caro"], "no hay nada que pedir")
     }
 
-    /** Vuelta de diseño 26: cada gasto dice su fecha en el subtítulo; desde la vuelta 31, primero. */
+    /**
+     * Vuelta de diseño 26: cada gasto dice su fecha en el subtítulo; desde la vuelta 31, primero. Vuelta
+     * 32: quién pagó es solo el nombre, y «Mercado del sábado» / «Mercado Éxito» ya dicen la categoría.
+     */
     @Test
     fun `cada gasto del espacio dice su fecha`() {
         Repositories.sustitutoDePrueba = ConLaCasa()
         montarLaPestana()
-        esperarTexto("20 oct · Pagó Caro · Mercado")
-        esperarTexto("20 oct · Pagaste tú · Mercado")
+        esperarTexto("20 oct · Caro")
+        esperarTexto("20 oct · Tú")
     }
 
     // ── Vuelta 31: los gastos se tocan ───────────────────────────────────────

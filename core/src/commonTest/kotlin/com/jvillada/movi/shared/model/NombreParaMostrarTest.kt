@@ -45,4 +45,42 @@ class NombreParaMostrarTest {
         assertEquals("Rappi · Las Doce", nombreParaMostrar("  Rappi · Las Doce "))
         assertEquals("", nombreParaMostrar("   "))
     }
+
+    // ── enFormaDeTitulo (vuelta de diseño 32) ───────────────────────────────────────────────
+
+    @Test
+    fun `lo que llega en mayusculas pasa a forma de titulo, con las tildes de la marca`() {
+        assertEquals("Éxito Suba", enFormaDeTitulo("EXITO SUBA"))
+        assertEquals("Olímpica Calle 80", enFormaDeTitulo("OLIMPICA CALLE 80"))
+        assertEquals("Compra en McDonald's Andino", enFormaDeTitulo("COMPRA EN MCDONALDS ANDINO"))
+        assertEquals("Drogueria de La 80", enFormaDeTitulo("DROGUERIA DE LA 80"))
+    }
+
+    @Test
+    fun `no quita nada de la descripcion, a diferencia de nombreParaMostrar`() {
+        assertEquals("Payu Netflix", enFormaDeTitulo("PAYU*NETFLIX"))
+        assertEquals("Uber Trip", enFormaDeTitulo("UBER *TRIP"))
+        assertEquals("Tienda D1 Calle 80", enFormaDeTitulo("TIENDA D1 CALLE 80"))
+    }
+
+    @Test
+    fun `las siglas cortas y los numeros se quedan como estan`() {
+        assertEquals("D1", enFormaDeTitulo("D1"))
+        assertEquals("EPM", enFormaDeTitulo("EPM"))
+        assertEquals("DIAN", enFormaDeTitulo("DIAN"))
+        assertEquals("Pago PSE EPM", enFormaDeTitulo("PAGO PSE EPM"))
+        assertEquals("Impuesto DIAN 2026", enFormaDeTitulo("IMPUESTO DIAN 2026"))
+        assertEquals("CRV Motors", enFormaDeTitulo("CRV MOTORS"))
+        assertEquals("BBVA", enFormaDeTitulo("BBVA"))
+        assertEquals("123456", enFormaDeTitulo("123456"))
+    }
+
+    @Test
+    fun `lo que trae minusculas no se toca`() {
+        assertEquals("Almuerzo con el equipo", enFormaDeTitulo("Almuerzo con el equipo"))
+        assertEquals("mercado del sábado", enFormaDeTitulo("mercado del sábado"))
+        assertEquals("Pago a EXITO", enFormaDeTitulo("Pago a EXITO"))
+        assertEquals("iPhone", enFormaDeTitulo("iPhone"))
+        assertEquals("", enFormaDeTitulo(""))
+    }
 }

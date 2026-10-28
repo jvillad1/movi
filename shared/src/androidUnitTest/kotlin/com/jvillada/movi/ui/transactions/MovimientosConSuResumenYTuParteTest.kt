@@ -141,9 +141,11 @@ class MovimientosConSuResumenYTuParteTest {
         assertEquals(2_500_000, esperado.entro)
 
         esperar { enLaFranja("Entró") }
-        assertTrue(enLaFranja("+\$2,5M"), "Entró, compacta: es una columna de tres")
-        assertTrue(enLaFranja("\$75.300"), "Salió: solo tu parte")
-        assertTrue(enLaFranja("+\$2,4M"), "el neto")
+        // Vuelta de diseño 32: las tres en la misma forma —enteras si caben, abreviadas si una no
+        // cabe—; antes decía «+$2,5M · $75.300 · +$2,4M». Salió es solo tu parte.
+        val enteras = listOf("+\$2.500.000", "\$75.300", "+\$2.424.700")
+        val abreviadas = listOf("+\$2,5M", "\$75\u00A0mil", "+\$2,4M")
+        assertTrue(enteras.all(::enLaFranja) || abreviadas.all(::enLaFranja), "las tres en la misma forma")
         assertEquals(3, composeRule.onAllNodes(hasTestTag(TAG_CIFRA_CON_ROTULO) and hasAnyAncestor(hasTestTag(TAG_RESUMEN_EN_EL_TELEFONO)), useUnmergedTree = true).fetchSemanticsNodes().size)
 
         composeRule.onNodeWithTag(TAG_RESUMEN_EN_EL_TELEFONO).performSemanticsAction(SemanticsActions.OnClick)
