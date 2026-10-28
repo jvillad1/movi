@@ -311,8 +311,9 @@ private fun FilaDelEditor(
                     onCheckedChange = onMostrar,
                     modifier = Modifier.semantics { contentDescription = rotuloDeMostrar(seccion.nombre) },
                     colors = SwitchDefaults.colors(
-                        checkedThumbColor = Movi.colores.sobreMarca,
-                        checkedTrackColor = Movi.colores.marca,
+                        checkedThumbColor = Movi.colores.tarjeta,
+                        // Encendido en tinta, el «seleccionado» de toda la app (vuelta 29).
+                        checkedTrackColor = Movi.colores.texto,
                         uncheckedThumbColor = Movi.colores.textoApagado,
                         uncheckedTrackColor = Movi.colores.tarjeta,
                         uncheckedBorderColor = Movi.colores.borde,

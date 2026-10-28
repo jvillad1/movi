@@ -236,7 +236,7 @@ fun HojaSaldar(detalle: DetalleDelEspacio, onDismiss: () -> Unit, onSaldado: () 
                             titulo = p.descripcion,
                             subtitulo = formatCOP(p.monto),
                             final = if (vinculada == p.eventoId) {
-                                { Icon(Icons.Rounded.Check, contentDescription = "Elegida", tint = Movi.colores.enlace) }
+                                { Icon(Icons.Rounded.Check, contentDescription = "Elegida", tint = Movi.colores.texto) }
                             } else {
                                 null
                             },

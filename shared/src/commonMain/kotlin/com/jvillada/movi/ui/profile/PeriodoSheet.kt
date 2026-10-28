@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.profile
 
+import com.jvillada.movi.ui.components.ds.coloresDeLoElegido
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -171,14 +172,14 @@ fun PeriodoSheet(
                             modifier = Modifier
                                 .size(Medida.avatar)
                                 .clip(CircleShape)
-                                .background(if (elegido) Movi.colores.marca else Movi.colores.tarjeta)
+                                .background(if (elegido) coloresDeLoElegido(Movi.colores).first else Movi.colores.tarjeta)
                                 .clickable(enabled = !saving) { dia = d },
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
                                 text = d.toString(),
                                 style = if (elegido) Movi.textos.cuerpoFuerte else Movi.textos.cuerpoRegular,
-                                color = if (elegido) Movi.colores.sobreMarca else Movi.colores.texto,
+                                color = if (elegido) coloresDeLoElegido(Movi.colores).second else Movi.colores.texto,
                                 textAlign = TextAlign.Center,
                             )
                         }
@@ -217,13 +218,13 @@ fun PeriodoSheet(
                     CardRow(
                         left = { Text(tituloDeLaRegla(opcion), style = Movi.textos.cuerpo, color = Movi.colores.texto) },
                         right = {
-                            // El check en el color de la marca, como el tema en Ajustes.
+                            // El check en tinta: lo elegido (vuelta 29).
                             Box(modifier = Modifier.size(Icono.l), contentAlignment = Alignment.Center) {
                                 if (elegida) {
                                     Icon(
                                         Icons.Rounded.Check,
                                         contentDescription = "Elegido",
-                                        tint = Movi.colores.enlace,
+                                        tint = Movi.colores.texto,
                                         modifier = Modifier.size(Icono.m),
                                     )
                                 }

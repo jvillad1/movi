@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.quickadd
 
+import com.jvillada.movi.ui.components.ds.coloresDeLoElegido
 import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.ui.components.ds.BotonDeIcono
 import com.jvillada.movi.ui.components.ds.PildoraDeAccion
@@ -2406,11 +2407,11 @@ internal fun FilaDeCuentaEnAgregar(
                             .align(Alignment.BottomEnd)
                             .size(Medida.insignia)
                             .border(Medida.trazoDeCarga, Movi.colores.capa2, CircleShape)
-                            .background(Movi.colores.marca, CircleShape)
+                            .background(coloresDeLoElegido(Movi.colores).first, CircleShape)
                             .testTag(TAG_CUENTA_ELEGIDA),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.sobreMarca, modifier = Modifier.size(Icono.s))
+                        Icon(Icons.Rounded.Check, contentDescription = null, tint = coloresDeLoElegido(Movi.colores).second, modifier = Modifier.size(Icono.s))
                     }
                 }
             }
