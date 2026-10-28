@@ -155,7 +155,7 @@ fun EspaciosScreen(onNavigate: (Screen) -> Unit) {
             title = TITULO_DE_PERSONAS,
             leading = HeaderLeading.Back(fallback = Screen.Tu),
             accion = if (lectura?.detalles?.isNotEmpty() == true) {
-                AccionDeEncabezado("Nuevo espacio", Icons.Rounded.Add, onClick = { creando = true })
+                AccionDeEncabezado("Nuevo grupo", Icons.Rounded.Add, onClick = { creando = true })
             } else null,
         )
         // Lo que va al final, debajo del espacio (en dos columnas, al final de la derecha).
@@ -188,7 +188,7 @@ fun EspaciosScreen(onNavigate: (Screen) -> Unit) {
             ) {
                 when {
                     actual == null && error != null -> Vacio(
-                        titulo = "No pudimos leer tus espacios",
+                        titulo = "No pudimos leer tus grupos",
                         detalle = error,
                         accion = "Reintentar",
                         onAccion = { reintento++ },
@@ -196,8 +196,8 @@ fun EspaciosScreen(onNavigate: (Screen) -> Unit) {
                     actual == null -> Column { repeat(3) { EsqueletoDeFila() } }
                     actual.detalles.isEmpty() -> Vacio(
                         titulo = "Comparte gastos con alguien",
-                        detalle = "Crea un espacio, como «Casa con Caro»: cuenta solo tu parte y Movi lleva quién le debe a quién.",
-                        accion = "Crear espacio",
+                        detalle = "Crea un grupo, como «Casa con Caro»: cuenta solo tu parte y Movi lleva quién le debe a quién.",
+                        accion = "Crear grupo",
                         onAccion = { creando = true },
                         icono = Icons.Rounded.Groups,
                     )
@@ -255,7 +255,7 @@ fun EspacioScreen(id: String, pagoOtro: Boolean) {
     Box(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
     PanelDeTablero(enDosColumnas = { espacioEnDosColumnas(it) && detalle != null }) { dosColumnas ->
     Column(modifier = Modifier.fillMaxSize()) {
-        MinScreenHeader(title = detalle?.espacio?.nombre ?: "Espacio", leading = HeaderLeading.Back(fallback = Screen.Espacios))
+        MinScreenHeader(title = detalle?.espacio?.nombre ?: "Grupo", leading = HeaderLeading.Back(fallback = Screen.Espacios))
         val actual = detalle
         if (dosColumnas && actual != null) {
             CuerpoDelEspacio(
@@ -277,7 +277,7 @@ fun EspacioScreen(id: String, pagoOtro: Boolean) {
             ) {
                 when {
                     actual == null && error != null -> Vacio(
-                        titulo = "No pudimos leer este espacio",
+                        titulo = "No pudimos leer este grupo",
                         detalle = error,
                         accion = "Reintentar",
                         onAccion = { reintento++ },

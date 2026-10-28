@@ -276,8 +276,11 @@ fun MasScreen(
         item(key = "lo-tuyo") { LoTuyo(onNavigate) }
     }
 
-    // Lo que era Ajustes, con sus secciones en el mismo orden. En dos columnas va a la derecha.
-    val ajustes: LazyListScope.() -> Unit = {
+    // Lo que era Ajustes, con sus secciones en el mismo orden, en dos partes: «Tu plata» y «Movi»
+    // van debajo de lo tuyo, y desde «Cómo se ve» lo demás. En dos columnas, la primera parte va a la
+    // izquierda y la segunda a la derecha, para que las dos columnas terminen parejas (revisión de la
+    // vuelta 38: con todos los ajustes a la derecha, la izquierda acababa a los 390 px).
+    val ajustesDeLaPlata: LazyListScope.() -> Unit = {
         // ── Tu plata ─────────────────────────────────────────────────────────────────
         item(key = "tu-plata") {
             Column {
@@ -353,7 +356,8 @@ fun MasScreen(
                 }
             }
         }
-
+    }
+    val ajustesDelAparatoYLaCuenta: LazyListScope.() -> Unit = {
         // ── Cómo se ve: es de ESTE aparato, no del dueño ──
         // Vuelta 29: sin la fila del tema. La opción 3 es clara y nada más, así que queda
         // solo «Ocultar los saldos».
@@ -591,14 +595,16 @@ fun MasScreen(
                         modifier = Modifier.weight(1f).fillMaxHeight().testTag(TAG_COLUMNA_DE_LO_TUYO),
                         contentPadding = PaddingValues(start = Medida.margenDePantalla, end = Medida.margenDePantalla / 2, top = Medida.dentroDeSeccion, bottom = alPie),
                         verticalArrangement = Arrangement.spacedBy(Medida.entreSecciones),
-                        content = loTuyo,
-                    )
+                    ) {
+                        loTuyo()
+                        ajustesDeLaPlata()
+                    }
                     LazyColumn(
                         state = estadoDeLosAjustes,
                         modifier = Modifier.weight(1f).fillMaxHeight().testTag(TAG_COLUMNA_DE_LOS_AJUSTES),
                         contentPadding = PaddingValues(start = Medida.margenDePantalla / 2, end = Medida.margenDePantalla, top = Medida.dentroDeSeccion, bottom = alPie),
                         verticalArrangement = Arrangement.spacedBy(Medida.entreSecciones),
-                        content = ajustes,
+                        content = ajustesDelAparatoYLaCuenta,
                     )
                 }
             } else {
@@ -614,7 +620,8 @@ fun MasScreen(
                     verticalArrangement = Arrangement.spacedBy(Medida.entreSecciones),
                 ) {
                     loTuyo()
-                    ajustes()
+                    ajustesDeLaPlata()
+                    ajustesDelAparatoYLaCuenta()
                 }
             }
         }

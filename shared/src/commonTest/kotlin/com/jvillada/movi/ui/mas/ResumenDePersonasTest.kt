@@ -56,6 +56,6 @@ class ResumenDePersonasTest {
                 detalle(espacio("e2", "Ana"), pagadoPorMi = 100_000L),
             ),
         )
-        assertEquals(ResumenDePersonas("2 espacios con saldo pendiente", null), resumen)
+        assertEquals(ResumenDePersonas("2 grupos con saldo pendiente", null), resumen)
     }
 }

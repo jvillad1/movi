@@ -95,15 +95,16 @@ class ElEncabezadoDeMoviAiTest {
     }
 
     /**
-     * Vuelta 33: **como raíz de su pestaña** (el rail de una ventana ancha) el encabezado lleva el
-     * avatar, como Espacios o Patrimonio; **apilada** encima de otra pantalla, la flecha.
+     * Vuelta 33: **como raíz de su pestaña** (el rail de una ventana ancha) el encabezado no lleva la
+     * flecha; **apilada** encima de otra pantalla, sí. Revisión de la vuelta 38: tampoco lleva el
+     * avatar, que va solo en Inicio, como en la maqueta.
      */
     @Test
-    fun `como raiz de su pestana, sin flecha y con el avatar`() {
+    fun `como raiz de su pestana, sin flecha ni avatar`() {
         montar(comoRaiz = true)
         val textos = textosDentro(nodos(TAG_ENCABEZADO).single())
         assertTrue(ROTULO_VOLVER !in textos, "sin «←»: $textos")
-        assertTrue("U" in textos, "el avatar con la inicial: $textos")
+        assertTrue("U" !in textos, "sin avatar: $textos")
     }
 
     @Test

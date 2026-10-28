@@ -73,4 +73,10 @@ class MinNavRailTest {
         assertEquals(androidx.compose.ui.graphics.Color.Transparent, fondoDelDestinoDelRailAncho(activo = false, colores))
         kotlin.test.assertNotEquals(colores.marca, fondoDelDestinoDelRailAncho(activo = true, colores))
     }
+
+    @Test
+    fun `sobre el destino activo del rail no se pinta el hover`() {
+        kotlin.test.assertFalse(elHoverSeVeEnElDestino(activo = true), "el velo ensuciaba el amarillo suave")
+        kotlin.test.assertTrue(elHoverSeVeEnElDestino(activo = false))
+    }
 }

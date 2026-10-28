@@ -66,7 +66,7 @@ import kotlinx.coroutines.launch
 const val TAG_DETALLE_DEL_GASTO: String = "espacios:detalle-del-gasto"
 
 /** El botón que saca un gasto del espacio, en su hoja. */
-const val QUITAR_DEL_ESPACIO: String = "Quitar del espacio"
+const val QUITAR_DEL_ESPACIO: String = "Quitar del grupo"
 
 /**
  * Lo que se abre al tocar [gasto]: el detalle de su movimiento si lo tiene, o [HojaDelGasto]. [onCambio]

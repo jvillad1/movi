@@ -11,7 +11,8 @@ import com.jvillada.movi.ui.screenForTab
 
 /**
  * Qué va a la izquierda del título (F60):
- * - [Avatar] en las pantallas RAÍZ (Inicio, Actividad y Pagos; «Tú» no lo lleva: ya es Tú).
+ * - [Ninguno] en las pantallas RAÍZ (Actividad, Pagos y Tú). Vuelta 38: el avatar va **solo en
+ *   Inicio**, como en la maqueta, y lo pinta Inicio en su propio encabezado (abre «Tú»).
  * - [Back] en las SUBPANTALLAS (todo lo que se abre desde una raíz): la flecha usa la pila
  *   real (F22) y cae a [fallback] si no hay historial (deep link, recarga de la web).
  */
@@ -38,12 +39,13 @@ sealed class HeaderLeading {
  * pantalla principal de una pestaña; si no, flecha atrás hacia [fallback]. Ola C: la barra del
  * teléfono y el rail muestran las mismas cuatro pestañas, así que la regla ya no depende del ancho
  * — Presupuestos (Pagos) y Créditos (Tú) llevan flecha en los dos. Vuelta 38: «Tú» no lleva nada (el
- * avatar llevaría a sí misma; su tarjeta de arriba ya es el avatar).
+ * avatar llevaría a sí misma; su tarjeta de arriba ya es el avatar). Revisión de la vuelta 38: ninguna
+ * raíz lleva avatar, salvo Inicio (como en la maqueta).
  */
 fun leadingFor(screen: Screen, onNavigate: (Screen) -> Unit, fallback: Screen): HeaderLeading {
-    if (screen == Screen.Tu) return HeaderLeading.Ninguno
     val tab = navTabFor(screen) ?: return HeaderLeading.Back(fallback)
-    return if (screenForTab(tab) == screen) HeaderLeading.Avatar(onNavigate) else HeaderLeading.Back(fallback)
+    // Vuelta 38: una raíz no lleva avatar (solo Inicio, que arma su encabezado aparte) ni flecha.
+    return if (screenForTab(tab) == screen) HeaderLeading.Ninguno else HeaderLeading.Back(fallback)
 }
 
 /**

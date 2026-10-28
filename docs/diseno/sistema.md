@@ -1941,3 +1941,24 @@ formas de anotar desde «Más formas de anotar»), `MasScreenTest` (lo tuyo con 
 su pantalla, Tú sin flecha), y en `commonTest` `NavStackTest`, `MinNavRailTest` (el amarillo suave del
 rail), `ResumenDePersonasTest` y **`LasRutasViejasLleganTest`**, que recorre la tabla de arriba.
 
+**La revisión de la vuelta 38** (aca3f04b, a 390, 360 y 1.280), y lo que cambió:
+
+1. **El avatar va solo en Inicio**, como en la maqueta. Actividad, Pagos, Tú y Movi AI como raíz del
+   rail no llevan nada a la izquierda del título (`leadingFor` da `HeaderLeading.Ninguno` en una raíz);
+   desde Inicio el avatar sigue abriendo Tú.
+2. **Personas no habla de espacios**: lo que el dueño lee dice **grupo** —«+ Nuevo grupo», «Crear
+   grupo», «Crea un grupo, como «Casa con Caro»…», «¿En qué grupo?», «Quitar del grupo», «Esto deja el
+   grupo en cero», «2 grupos con saldo pendiente»—. Los nombres internos (`Espacio*`, `Screen.Espacios`,
+   las rutas y el server) no cambian.
+3. **«Tu patrimonio» en Tú va sin subtítulo**: «Lo que tienes menos lo q…» se cortaba a 390 al lado de
+   la cifra, que ya lo dice. El del cuadre es «Contra lo que dice el banco» (`SUBTITULO_DEL_CUADRE`).
+   `LoTuyoA360Test` mide que nada de «Lo tuyo» se corte a 360 con una cifra de diez dígitos.
+4. **El activo del rail ancho no lleva hover** (`elHoverSeVeEnElDestino`): el velo en tinta volvía el
+   amarillo suave un beige oliva. Los demás destinos sí lo llevan.
+5. **Las dos columnas de Tú, parejas**: a la izquierda lo tuyo, «Tu plata» y «Movi»; desde «Cómo se ve»,
+   a la derecha (antes todos los ajustes iban a la derecha y la izquierda acababa a los 390 px). Lo mide
+   `MasScreenTest` a 1.064 dp de panel (1.280 de ventana con el rail).
+
+Que el rail tenga Movi AI y la barra no es a propósito: en el teléfono va en la acción «Preguntar a
+Movi» de las 8 acciones (vuelta 39).
+
