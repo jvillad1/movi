@@ -81,10 +81,19 @@ import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 
 /**
- * El título de la pantalla de los espacios (antes «Espacios»; vuelta 38): «Personas», la palabra de
- * la maqueta. Un espacio («Casa con Caro») sigue llamándose espacio: es uno de los grupos de Personas.
+ * El título de la pantalla de los espacios: **«Grupos»** (vuelta 42). Fue «Espacios» y en la vuelta 38
+ * «Personas», la palabra de la maqueta; pero al final de esa misma pantalla se abre «Personas y
+ * comercios» (los terceros), y dos pantallas con casi el mismo nombre se confundían. Todo lo que el
+ * dueño lee ya decía «grupo» («+ Nuevo grupo», «¿En qué grupo?»): el título también. Los nombres
+ * internos (`Espacio*`, `Screen.Espacios`, las rutas y el server) no cambian.
  */
-const val TITULO_DE_PERSONAS: String = "Personas"
+const val TITULO_DE_GRUPOS: String = "Grupos"
+
+/**
+ * El nombre de antes de [TITULO_DE_GRUPOS], que todavía nombran «Tú» y sus pruebas (`ui/mas`). Es el
+ * mismo texto: «Grupos».
+ */
+const val TITULO_DE_PERSONAS: String = TITULO_DE_GRUPOS
 
 /** Tags para las pruebas. */
 const val TAG_SALDO_DEL_ESPACIO: String = "espacios:saldo"
@@ -150,9 +159,10 @@ fun EspaciosScreen(onNavigate: (Screen) -> Unit) {
     Column(modifier = Modifier.fillMaxSize()) {
         // Con un espacio o más, crear otro va arriba (antes solo se podía desde el vacío: con uno ya
         // creado no había cómo hacer el segundo). Sin ninguno, el vacío ya lo ofrece.
-        // Vuelta 38: «Personas», como en la maqueta; ya no es pestaña, vive en «Tú» y vuelve ahí.
+        // Vuelta 42: «Grupos» (era «Personas», que se confundía con «Personas y comercios»); ya
+        // no es pestaña, vive en «Tú» y vuelve ahí.
         MinScreenHeader(
-            title = TITULO_DE_PERSONAS,
+            title = TITULO_DE_GRUPOS,
             leading = HeaderLeading.Back(fallback = Screen.Tu),
             accion = if (lectura?.detalles?.isNotEmpty() == true) {
                 AccionDeEncabezado("Nuevo grupo", Icons.Rounded.Add, onClick = { creando = true })

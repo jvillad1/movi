@@ -412,9 +412,10 @@ const val CHIP_ENTRE_CUENTAS = 4
 const val CHIP_RECURRENTES = 5
 
 /**
- * **«Personas»** (vuelta 40, la opción 3): los gastos repartidos con otra persona en un espacio
- * ([esConOtrasPersonas]). Índice nuevo, al final: los de antes no se renumeran (ver
- * [CHIPS_VISIBLES]).
+ * **«Compartidos»** (vuelta 40, la opción 3; se llamó «Personas» hasta la vuelta 42, que lo cambió
+ * porque filtra lo compartido en un grupo y no a las personas de «Personas y comercios»): los gastos
+ * repartidos con otra persona en un espacio ([esConOtrasPersonas]). Índice nuevo, al final: los de
+ * antes no se renumeran (ver [CHIPS_VISIBLES]). El nombre de la constante no cambió.
  */
 const val CHIP_PERSONAS = 6
 
@@ -509,7 +510,7 @@ internal fun aireArribaDelDia(indice: Int): Dp =
  * Los rótulos de los chips, en el orden de sus índices. «Recurrentes» ya no se dibuja (ver
  * [CHIP_RECURRENTES]) pero su rótulo se queda en su lugar: sacarlo correría los índices.
  */
-val CHIPS_DE_MOVIMIENTOS = listOf("Todo", "Gastos", "Ingresos", "Por confirmar", "Entre cuentas", "Recurrentes", "Personas")
+val CHIPS_DE_MOVIMIENTOS = listOf("Todo", "Gastos", "Ingresos", "Por confirmar", "Entre cuentas", "Recurrentes", "Compartidos")
 
 /**
  * **Los chips que se dibujan**, que ya no son todos.
@@ -725,7 +726,7 @@ fun vacioDeMovimientos(chip: Int, hayMovimientos: Boolean): VacioDeMovimientos =
         ofreceRegistrar = false,
     )
     chip == CHIP_PERSONAS -> VacioDeMovimientos(
-        titulo = "Nada con otras personas",
+        titulo = "Nada compartido",
         detalle = "Aquí van los gastos que repartes con alguien en un grupo, como el mercado con Caro.",
         ofreceRegistrar = false,
     )

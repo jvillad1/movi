@@ -27,7 +27,7 @@ import kotlin.math.roundToLong
  * # Actividad por dentro (vuelta 40, la opción 3)
  *
  * Lo que la pestaña Actividad (antes Movimientos) decide sin dibujar: el encabezado de cada día
- * («Hoy · martes 28» y «Gastaste $X»), el chip «Personas» y la tarjeta de los avisos del banco con
+ * («Hoy · martes 28» y «Gastaste $X»), el chip «Compartidos» y la tarjeta de los avisos del banco con
  * «Confirmar los N». Todo puro, para probarlo sin Compose.
  *
  * **Sin reglas de plata nuevas.** «Gastaste» es la regla de «Gastos» de siempre ([esGastoDelPeriodo]
@@ -110,12 +110,12 @@ fun cifraDelDia(resumen: ResumenDelDia): Pair<RotuloDelDia, Long>? = when {
     else -> null
 }
 
-// ── El chip «Personas» ───────────────────────────────────────────────────────────────────────────
+// ── El chip «Compartidos» ────────────────────────────────────────────────────────────────────────
 
 /**
  * **¿Este movimiento es con otras personas?** Un gasto repartido en un espacio (`espacioId`, el
  * mismo dato que pinta «de $88.600 · con Caro» debajo del monto). Es lo que filtra el chip
- * «Personas» ([CHIP_PERSONAS]). Una transferencia a un tercero guardado no entra: es plata que se
+ * «Compartidos» ([CHIP_PERSONAS]). Una transferencia a un tercero guardado no entra: es plata que se
  * le mandó, no un gasto que se comparte con él.
  */
 fun esConOtrasPersonas(evento: FinancialEvent): Boolean = evento.espacioId != null

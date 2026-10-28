@@ -204,8 +204,24 @@ class BuscarEnMoviTest {
     @Test
     fun `Personas y comercios ya no se nombra desde Movimientos`() {
         val personas = PANTALLAS_BUSCABLES.single { it.destino == com.jvillada.movi.ui.Screen.Destinos() }
-        kotlin.test.assertEquals("Personas", personas.donde)
+        kotlin.test.assertEquals("Grupos", personas.donde)
     }
+    /**
+     * Vuelta 42: la pantalla de los grupos se llama «Grupos» (era «Personas», que se confundía con
+     * «Personas y comercios»). La encuentra su nombre y también los dos de antes.
+     */
+    @Test
+    fun `Grupos se encuentra por grupos, por espacios y por personas`() {
+        fun pantallas(q: String) = grupo(buscarEnMovi(q, datos), TipoDeResultado.PANTALLA).map { it.destino }
+        val grupos = PANTALLAS_BUSCABLES.single { it.destino == com.jvillada.movi.ui.Screen.Espacios }
+        kotlin.test.assertEquals("Grupos", grupos.nombre)
+        assertTrue(Screen.Espacios in pantallas("grupos"))
+        assertTrue(Screen.Espacios in pantallas("espacios"))
+        assertTrue(Screen.Espacios in pantallas("personas"), "el nombre de la vuelta 38")
+        // «Personas y comercios» sigue siendo la casa de los terceros.
+        assertTrue(Screen.Destinos() in pantallas("personas"))
+    }
+
     /** Vuelta 35: el título de un movimiento es el mismo que en Movimientos, no la categoría repetida. */
     @Test
     fun `un movimiento cuya descripcion es la categoria se titula con el comercio, como en Movimientos`() {
