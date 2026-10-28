@@ -2001,8 +2001,8 @@ pagar») y `LETRA_MINIMA_QUE_SE_VE` (12 px); `BarraDeProgreso` ganó `fondo = Fo
    **«Gastaste $110.500»** en texto medio (`resumenDelDia`: `esGastoDelPeriodo` + tu parte con
    `montoContado`, la regla de «Gastos» y de «En qué se va»). Si ese día solo entró plata, **«Entró
    +$6.200.000»** en verde; sin nada que cuente (un traspaso, un pago de tarjeta), nada. Cuando la fecha
-   y la cifra no caben con «Gastaste» al lado (360 dp con la letra al 130 %), cede **el rótulo**, nunca la
-   fecha ni la cifra. Era «Flujo del día», que sumaba el pago de tarjeta: ahora esa plata la dice la
+   y la cifra no caben con «Gastaste» al lado (360 dp con la letra al 130 %), cede **el rótulo** (el
+   lector de pantalla lo sigue oyendo) y después el conteo de un día plegado, nunca la fecha ni la cifra. Era «Flujo del día», que sumaba el pago de tarjeta: ahora esa plata la dice la
    línea de abajo, que pasó de «De eso, $X fueron a pagar tarjeta…» a «**Además**, $X fueron a pagar
    tarjeta…». Se sigue plegando tocando el renglón.
 6. Las filas siguen como en la 29: 58 de alto en la lista blanca, ingreso en verde con «+», tu parte
@@ -2030,7 +2030,9 @@ pagar») y `LETRA_MINIMA_QUE_SE_VE` (12 px); `BarraDeProgreso` ganó `fondo = Fo
    **«Movimiento del 25 oct»** que abre la hoja de ese movimiento (`HojasDelTableroDeRecurrentes`). Orden
    (`enOrdenDeFacturas`): vencidas, por vencer por fecha, pagadas al final. Desde la sexta, **«Ver los N
    pagos del período ›»**. Lo que la lista ofrecía sigue colgando de su fila (`LoQueOfreceLaFila`): «¿Ya
-   pagaste …? Sí, fue este / No fue este», «No fue este», «Quitar la marca» y la estimación de una cuota.
+   pagaste …? Sí, fue este / No fue este», «No fue este», «Quitar la marca», «Movi no encontró el
+   movimiento de este pago.» y la estimación de una cuota. Lo que abre la regla (o Créditos) es el ícono
+   con los textos, no la fila entera: el botón de la derecha es otro control.
    Los ingresos fijos van aparte en «Tus ingresos del período» («Anotar ingreso», «Recibido»), y lo que
    un período anterior dejó abierto, al final, como antes.
 5. **Lo demás se queda, debajo**: el Disponible con «¿De dónde sale?», «Tus períodos», la caja «Tu
