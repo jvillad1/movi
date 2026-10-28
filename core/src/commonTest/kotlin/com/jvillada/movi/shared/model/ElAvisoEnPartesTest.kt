@@ -51,7 +51,7 @@ class ElAvisoEnPartesTest {
     }
 
     @Test
-    fun `el resto como una parte mas, o sumado a la ultima si es la misma`() {
+    fun `el resto es siempre una parte mas, y las que estaban no cambian`() {
         val a = ParteElegida(QueFueLaParte.CUOTA, destinoId = "acc_libranza", monto = 1_900_000L)
         val b = ParteElegida(QueFueLaParte.CUOTA, destinoId = "acc_hipoteca", monto = 2_350_000L)
         val alPapa = ParteElegida(QueFueLaParte.A_UN_TERCERO, categoria = "Familia", nombre = "Transferencia a Papá")
@@ -59,9 +59,12 @@ class ElAvisoEnPartesTest {
         assertEquals(listOf(a, b, alPapa.copy(monto = 23_333L)), con)
         // Ya cuadra: no hay resto.
         assertNull(conElResto(giro, con, alPapa))
-        // Si la última ya es al papá, se le suma.
-        val conMenos = listOf(a, b.copy(monto = 2_300_000L), alPapa.copy(monto = 23_333L))
-        assertEquals(listOf(a, b.copy(monto = 2_300_000L), alPapa.copy(monto = 73_333L)), conElResto(giro, conMenos, alPapa))
+        // Aunque la última sea igual (un gasto en Mercado y el resto como gasto en Mercado), va aparte.
+        val mercado = ParteElegida(QueFueLaParte.GASTO, categoria = "Mercado", monto = 50_000L)
+        assertEquals(
+            listOf(mercado, mercado.copy(monto = 35_000L)),
+            conElResto(85_000L, listOf(mercado), ParteElegida(QueFueLaParte.GASTO, categoria = "Mercado")),
+        )
     }
 
     // ── La propuesta de entrada ──────────────────────────────────────────────────────────────

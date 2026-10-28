@@ -33,8 +33,9 @@ import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.Campo
 import com.jvillada.movi.ui.components.ds.CampoDeMonto
-import com.jvillada.movi.ui.components.ds.NivelDeSuperficie
+import com.jvillada.movi.ui.components.ds.RotuloDeCampo
 import com.jvillada.movi.ui.components.ds.PildoraDeAccion
 import com.jvillada.movi.ui.components.ds.PildoraDeFiltro
 import com.jvillada.movi.ui.components.ds.Seccion
@@ -112,14 +113,58 @@ fun textoDelCuadre(cuadre: CuadreDeLasPartes, moneda: String): String = when (cu
     is CuadreDeLasPartes.TePasaste -> "Te pasaste por ${formatMoney(cuadre.monto, moneda)}"
 }
 
-/** Cómo se nombra cada tipo en su píldora. */
-fun nombreDelTipoDeParte(tipo: QueFueLaParte, tercero: TerceroDelAviso?): String = when (tipo) {
+/** Cómo se nombra cada tipo en su píldora de «Qué fue». */
+fun nombreDelTipoDeParte(tipo: QueFueLaParte): String = when (tipo) {
     QueFueLaParte.CUOTA -> "Cuota"
     QueFueLaParte.PAGO_DE_TARJETA -> "Pago de tarjeta"
     QueFueLaParte.TRASPASO -> "Traspaso"
     QueFueLaParte.GASTO -> "Gasto"
-    QueFueLaParte.A_UN_TERCERO -> tercero?.let { "A ${it.corto}" } ?: "A un tercero"
+    QueFueLaParte.A_UN_TERCERO -> "A un tercero"
 }
+
+/** El rótulo de la fila de «Qué fue». */
+const val ROTULO_QUE_FUE: String = "Qué fue"
+
+/** El rótulo de la fila que cada tipo necesita: la categoría de un gasto, el crédito de una cuota… */
+fun rotuloDelDetalle(tipo: QueFueLaParte): String = when (tipo) {
+    QueFueLaParte.GASTO -> "Categoría"
+    QueFueLaParte.CUOTA -> "Crédito"
+    QueFueLaParte.PAGO_DE_TARJETA -> "Tarjeta"
+    QueFueLaParte.TRASPASO -> "Cuenta"
+    QueFueLaParte.A_UN_TERCERO -> "Persona"
+}
+
+/** El tag de la fila de «Qué fue» de la parte [i], y el de la fila de su detalle. */
+fun tagDelTipoDeLaParte(i: Int): String = "partes:tipo:$i"
+fun tagDelDetalleDeLaParte(i: Int): String = "partes:detalle:$i"
+fun tagDeLaPersonaDeLaParte(i: Int): String = "partes:persona:$i"
+
+/** El tag de la razón de «Confirmar las partes» apagado. */
+const val TAG_RAZON_DE_LAS_PARTES: String = "partes:razon"
+
+/** «Transferencia a Papá» → «Papá»: la persona, para el campo de «A un tercero». */
+fun personaDeLaParte(nombre: String?): String = nombre?.removePrefix(TRANSFERENCIA_A)?.trim().orEmpty()
+
+/** «Papá» → «Transferencia a Papá», el texto del movimiento; vacío, nada. */
+fun nombreDeLaTransferencia(persona: String): String? = persona.trim().takeIf { it.isNotEmpty() }?.let { "$TRANSFERENCIA_A$it" }
+
+private const val TRANSFERENCIA_A = "Transferencia a "
+
+/**
+ * **Por qué «Confirmar las partes» está apagado**, en una línea, como la razón de `PieDeHoja`. `null`
+ * si se puede confirmar. Una sola parte no es un reparto; después, lo que le falta a la primera parte
+ * incompleta; y si no cuadra, cuánto falta o sobra.
+ */
+fun razonDeLasPartes(total: Long, partes: List<ParteElegida>, moneda: String): String? {
+    if (com.jvillada.movi.shared.model.sePuedenConfirmar(total, partes)) return null
+    if (partes.size < 2) return UNA_SOLA_PARTE
+    partes.forEachIndexed { i, parte -> loQueLeFaltaALaParte(parte)?.let { return "Parte ${i + 1}: ${it.replaceFirstChar { c -> c.lowercase() }}" } }
+    val cuadre = cuadreDeLasPartes(total, partes.map { it.monto })
+    return if (cuadre == CuadreDeLasPartes.Cuadra) null else textoDelCuadre(cuadre, moneda)
+}
+
+/** La razón con una sola parte: no es un reparto. */
+const val UNA_SOLA_PARTE: String = "Una sola parte no es un reparto: agrega otra o vuelve a un solo movimiento"
 
 /** Lo que le falta a una parte, en una línea: «Elige el crédito», «Escribe el monto». `null` si está completa. */
 fun loQueLeFaltaALaParte(parte: ParteElegida): String? = when {
@@ -127,6 +172,7 @@ fun loQueLeFaltaALaParte(parte: ParteElegida): String? = when {
     parte.destinoId.isNullOrBlank() && parte.tipo == QueFueLaParte.CUOTA -> "Elige el crédito"
     parte.destinoId.isNullOrBlank() && parte.tipo == QueFueLaParte.PAGO_DE_TARJETA -> "Elige la tarjeta"
     parte.destinoId.isNullOrBlank() && parte.tipo == QueFueLaParte.TRASPASO -> "Elige la cuenta"
+    parte.nombre.isNullOrBlank() && parte.tipo == QueFueLaParte.A_UN_TERCERO -> "Escribe a quién fue"
     parte.categoria.isNullOrBlank() && (parte.tipo == QueFueLaParte.GASTO || parte.tipo == QueFueLaParte.A_UN_TERCERO) -> "Elige la categoría"
     else -> "Escribe el monto"
 }
@@ -142,9 +188,10 @@ fun cuentasParaLaParte(tipo: QueFueLaParte, origen: Account?, cuentas: List<Acco
     return cuentas.filter { it.currency == origen.currency && operacionEntre(origen, it) == operacion }
 }
 
-/** Los tipos que se ofrecen: «A …» solo si el aviso nombra a alguien. */
-fun tiposDeParte(tercero: TerceroDelAviso?): List<QueFueLaParte> =
-    QueFueLaParte.entries.filter { it != QueFueLaParte.A_UN_TERCERO || tercero != null }
+/** Los tipos de «Qué fue», en su orden: lo más común primero. Siempre los cinco. */
+val TIPOS_DE_PARTE: List<QueFueLaParte> = listOf(
+    QueFueLaParte.GASTO, QueFueLaParte.CUOTA, QueFueLaParte.PAGO_DE_TARJETA, QueFueLaParte.TRASPASO, QueFueLaParte.A_UN_TERCERO,
+)
 
 /** La parte de [tipo] recién elegida: conserva el monto y propone lo obvio (la categoría del aviso, el tercero). */
 fun parteDeTipo(tipo: QueFueLaParte, antes: ParteElegida, tercero: TerceroDelAviso?, categoriaDelAviso: String?): ParteElegida {
@@ -182,8 +229,9 @@ fun EditorDePartes(
     onVolver: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
-    val conMargen = Modifier.padding(horizontal = Medida.margenDePantalla)
     val cuadre = cuadreDeLasPartes(total, partes.map { it.parte.monto })
+    // La categoría de un gasto nuevo: la que propone Movi para el aviso, o la primera de las suyas.
+    val categoriaPropuesta = categoriaDeGastoOAnada(categoriaDelAviso) ?: categorias.firstOrNull { esCategoriaDeGastoSuelta(it) }
     fun cambiar(clave: Int, nueva: ParteElegida) = onPartes(partes.map { if (it.clave == clave) it.copy(parte = nueva) else it })
 
     Column(modifier = modifier.fillMaxWidth().testTag(TAG_EDITOR_DE_PARTES)) {
@@ -210,7 +258,7 @@ fun EditorDePartes(
                         categorias = categorias,
                         pagos = pagos,
                         tercero = tercero,
-                        categoriaDelAviso = categoriaDelAviso,
+                        categoriaPropuesta = categoriaPropuesta,
                         habilitado = habilitado,
                         onCambiar = { cambiar(enPantalla.clave, it) },
                         onQuitar = if (partes.size > 1) {
@@ -247,11 +295,11 @@ fun EditorDePartes(
                 }
                 if (tercero != null) {
                     PildoraDeAccion(elRestoA(tercero), habilitada = habilitado, onClick = {
-                        conResto(parteDeTipo(QueFueLaParte.A_UN_TERCERO, ParteElegida(QueFueLaParte.GASTO), tercero, categoriaDelAviso))
+                        conResto(parteDeTipo(QueFueLaParte.A_UN_TERCERO, ParteElegida(QueFueLaParte.GASTO), tercero, categoriaPropuesta))
                     })
                 }
                 PildoraDeAccion(EL_RESTO_COMO_GASTO, habilitada = habilitado, onClick = {
-                    conResto(parteDeTipo(QueFueLaParte.GASTO, ParteElegida(QueFueLaParte.CUOTA), tercero, categoriaDelAviso))
+                    conResto(parteDeTipo(QueFueLaParte.GASTO, ParteElegida(QueFueLaParte.CUOTA), tercero, categoriaPropuesta))
                 })
             }
         }
@@ -266,7 +314,7 @@ fun EditorDePartes(
                     texto = AGREGAR_OTRA_PARTE,
                     onClick = {
                         val falta = (cuadre as? CuadreDeLasPartes.Faltan)?.monto ?: 0L
-                        val nueva = parteDeTipo(QueFueLaParte.GASTO, ParteElegida(QueFueLaParte.CUOTA, monto = falta), tercero, categoriaDelAviso)
+                        val nueva = parteDeTipo(QueFueLaParte.GASTO, ParteElegida(QueFueLaParte.CUOTA, monto = falta), tercero, categoriaPropuesta)
                         onPartes(partes + ParteEnPantalla(partes.siguienteClave(), nueva))
                     },
                     variante = VarianteDeBoton.Fantasma,
@@ -287,7 +335,11 @@ fun EditorDePartes(
     }
 }
 
-/** Una parte: qué fue, a dónde o en qué, y cuánto. */
+/**
+ * **Una parte**: «Qué fue» (los cinco tipos, en una sola fila de `PildoraDeFiltro`), debajo solo lo que
+ * ese tipo necesita con su rótulo —la categoría de un gasto, el crédito de una cuota, la tarjeta, la
+ * cuenta del traspaso, la persona—, y el monto.
+ */
 @Composable
 private fun TarjetaDeLaParte(
     indice: Int,
@@ -298,18 +350,18 @@ private fun TarjetaDeLaParte(
     categorias: List<String>,
     pagos: List<PagoParaRepartir>,
     tercero: TerceroDelAviso?,
-    categoriaDelAviso: String?,
+    categoriaPropuesta: String?,
     habilitado: Boolean,
     onCambiar: (ParteElegida) -> Unit,
     onQuitar: (() -> Unit)?,
 ) {
-    Superficie(modifier = Modifier.fillMaxWidth(), nivel = NivelDeSuperficie.Capa2) {
-        Column(verticalArrangement = Arrangement.spacedBy(Espacio.xs)) {
+    Superficie(modifier = Modifier.fillMaxWidth()) {
+        Column(verticalArrangement = Arrangement.spacedBy(Espacio.s)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     "Parte ${indice + 1}",
-                    style = Movi.textos.apoyoMedio,
-                    color = Movi.colores.textoMedio,
+                    style = Movi.textos.cuerpoFuerte,
+                    color = Movi.colores.texto,
                     modifier = Modifier.weight(1f),
                 )
                 if (onQuitar != null) {
@@ -317,80 +369,96 @@ private fun TarjetaDeLaParte(
                 }
             }
             // Qué fue.
-            FilaDePildoras {
-                tiposDeParte(tercero).forEach { tipo ->
-                    PildoraDeFiltro(
-                        texto = nombreDelTipoDeParte(tipo, tercero),
-                        seleccionada = parte.tipo == tipo,
-                        onClick = { if (habilitado) onCambiar(parteDeTipo(tipo, parte, tercero, categoriaDelAviso)) },
-                    )
+            Column(modifier = Modifier.testTag(tagDelTipoDeLaParte(indice))) {
+                RotuloDeCampo(ROTULO_QUE_FUE)
+                FilaDePildoras {
+                    TIPOS_DE_PARTE.forEach { tipo ->
+                        PildoraDeFiltro(
+                            texto = nombreDelTipoDeParte(tipo),
+                            seleccionada = parte.tipo == tipo,
+                            onClick = { if (habilitado) onCambiar(parteDeTipo(tipo, parte, tercero, categoriaPropuesta)) },
+                        )
+                    }
                 }
             }
-            // A dónde, o en qué.
-            when (parte.tipo) {
-                QueFueLaParte.CUOTA, QueFueLaParte.PAGO_DE_TARJETA, QueFueLaParte.TRASPASO -> {
-                    val elegibles = cuentasParaLaParte(parte.tipo, origen, cuentas)
-                    if (elegibles.isEmpty()) {
-                        Text(sinCuentasParaLaParte(parte.tipo), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                    } else {
-                        FilaDePildoras {
-                            elegibles.forEach { cuenta ->
-                                PildoraDeFiltro(
-                                    texto = cuenta.name,
-                                    seleccionada = parte.destinoId == cuenta.id,
-                                    onClick = {
-                                        if (!habilitado) return@PildoraDeFiltro
-                                        // Una cuota con su pago del período pendiente toma su monto y lo salda.
-                                        val pago = pagos.firstOrNull { it.cuentaDeLaDeudaId == cuenta.id }
-                                        onCambiar(
-                                            if (parte.tipo == QueFueLaParte.CUOTA && pago != null) {
-                                                parteDelPago(pago, monto = parte.monto.takeIf { it > 0L } ?: pago.monto)
-                                            } else {
-                                                ParteElegida(parte.tipo, destinoId = cuenta.id, monto = parte.monto)
+            // Lo que ese tipo necesita, y nada más.
+            Column(modifier = Modifier.testTag(tagDelDetalleDeLaParte(indice)), verticalArrangement = Arrangement.spacedBy(Espacio.s)) {
+                when (parte.tipo) {
+                    QueFueLaParte.CUOTA, QueFueLaParte.PAGO_DE_TARJETA, QueFueLaParte.TRASPASO -> Column {
+                        RotuloDeCampo(rotuloDelDetalle(parte.tipo))
+                        val elegibles = cuentasParaLaParte(parte.tipo, origen, cuentas)
+                        if (elegibles.isEmpty()) {
+                            Text(sinCuentasParaLaParte(parte.tipo), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                        } else {
+                            FilaDePildoras {
+                                elegibles.forEach { cuenta ->
+                                    PildoraDeFiltro(
+                                        texto = cuenta.name,
+                                        seleccionada = parte.destinoId == cuenta.id,
+                                        onClick = {
+                                            if (!habilitado) return@PildoraDeFiltro
+                                            // Una cuota con su pago del período pendiente toma su monto y lo salda.
+                                            val pago = pagos.firstOrNull { it.cuentaDeLaDeudaId == cuenta.id }
+                                            onCambiar(
+                                                if (parte.tipo == QueFueLaParte.CUOTA && pago != null) {
+                                                    parteDelPago(pago, monto = parte.monto.takeIf { it > 0L } ?: pago.monto)
+                                                } else {
+                                                    ParteElegida(parte.tipo, destinoId = cuenta.id, monto = parte.monto)
+                                                },
+                                            )
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    QueFueLaParte.GASTO -> {
+                        // Un pago del período que no es una cuota (la mesada, el colegio): queda sellado.
+                        val delPeriodo = pagos.filter { it.cuentaDeLaDeudaId == null }
+                        if (delPeriodo.isNotEmpty()) {
+                            Column {
+                                RotuloDeCampo("Pago del período")
+                                FilaDePildoras {
+                                    delPeriodo.forEach { pago ->
+                                        PildoraDeFiltro(
+                                            texto = pago.nombre,
+                                            seleccionada = parte.ruleId == pago.ruleId,
+                                            onClick = {
+                                                if (habilitado) onCambiar(parteDelPago(pago, monto = parte.monto.takeIf { it > 0L } ?: pago.monto))
                                             },
                                         )
-                                    },
-                                )
+                                    }
+                                }
                             }
                         }
+                        FilaDeCategorias(parte, categorias, habilitado, onCambiar)
                     }
-                }
-                QueFueLaParte.GASTO, QueFueLaParte.A_UN_TERCERO -> {
-                    if (parte.tipo == QueFueLaParte.A_UN_TERCERO) {
-                        parte.nombre?.let { Text(it, style = Movi.textos.cuerpo, color = Movi.colores.texto) }
-                    }
-                    // Un pago del período que no es una cuota (la mesada, el colegio): queda sellado.
-                    val delPeriodo = if (parte.tipo == QueFueLaParte.GASTO) pagos.filter { it.cuentaDeLaDeudaId == null } else emptyList()
-                    if (delPeriodo.isNotEmpty()) {
-                        FilaDePildoras {
-                            delPeriodo.forEach { pago ->
-                                PildoraDeFiltro(
-                                    texto = pago.nombre,
-                                    seleccionada = parte.ruleId == pago.ruleId,
-                                    onClick = {
-                                        if (habilitado) onCambiar(parteDelPago(pago, monto = parte.monto.takeIf { it > 0L } ?: pago.monto))
-                                    },
-                                )
-                            }
-                        }
-                    }
-                    val opciones = (listOfNotNull(parte.categoria) + categorias).filter { esCategoriaDeGastoSuelta(it) }.distinct()
-                    FilaDePildoras {
-                        opciones.forEach { categoria ->
-                            PildoraDeFiltro(
-                                texto = categoria,
-                                seleccionada = parte.categoria == categoria,
-                                onClick = {
-                                    if (!habilitado) return@PildoraDeFiltro
-                                    // Elegir otra categoría suelta el pago del período: ya no es ese.
-                                    onCambiar(
-                                        if (parte.ruleId.isNotBlank() && parte.categoria != categoria) {
-                                            parte.copy(categoria = categoria, ruleId = "", periodo = "", nombre = if (parte.tipo == QueFueLaParte.A_UN_TERCERO) parte.nombre else null)
-                                        } else parte.copy(categoria = categoria),
+                    QueFueLaParte.A_UN_TERCERO -> {
+                        Column {
+                            RotuloDeCampo(rotuloDelDetalle(parte.tipo))
+                            if (tercero != null) {
+                                FilaDePildoras {
+                                    PildoraDeFiltro(
+                                        texto = tercero.corto,
+                                        seleccionada = parte.nombre == tercero.nombre,
+                                        onClick = {
+                                            if (habilitado) onCambiar(parte.copy(nombre = tercero.nombre, destinoId = tercero.destinoId))
+                                        },
                                     )
-                                },
-                            )
+                                }
+                            }
+                            if (tercero == null || parte.nombre != tercero.nombre) {
+                                Campo(
+                                    valor = personaDeLaParte(parte.nombre),
+                                    alCambiar = { escrito -> onCambiar(parte.copy(nombre = nombreDeLaTransferencia(escrito), destinoId = null)) },
+                                    guia = "¿A quién fue?",
+                                    habilitado = habilitado,
+                                    tag = tagDeLaPersonaDeLaParte(indice),
+                                    modifier = if (tercero != null) Modifier.padding(top = Espacio.xs) else Modifier,
+                                )
+                            }
                         }
+                        FilaDeCategorias(parte, categorias, habilitado, onCambiar)
                     }
                 }
             }
@@ -405,6 +473,32 @@ private fun TarjetaDeLaParte(
             )
             loQueLeFaltaALaParte(parte)?.let { falta ->
                 Text(falta, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+            }
+        }
+    }
+}
+
+/** «Categoría» y sus píldoras, para un gasto o lo que va a un tercero. */
+@Composable
+private fun FilaDeCategorias(parte: ParteElegida, categorias: List<String>, habilitado: Boolean, onCambiar: (ParteElegida) -> Unit) {
+    Column {
+        RotuloDeCampo(rotuloDelDetalle(QueFueLaParte.GASTO))
+        val opciones = (listOfNotNull(parte.categoria) + categorias).filter { esCategoriaDeGastoSuelta(it) }.distinct()
+        FilaDePildoras {
+            opciones.forEach { categoria ->
+                PildoraDeFiltro(
+                    texto = categoria,
+                    seleccionada = parte.categoria == categoria,
+                    onClick = {
+                        if (!habilitado) return@PildoraDeFiltro
+                        // Elegir otra categoría suelta el pago del período: ya no es ese.
+                        onCambiar(
+                            if (parte.ruleId.isNotBlank() && parte.categoria != categoria) {
+                                parte.copy(categoria = categoria, ruleId = "", periodo = "", nombre = if (parte.tipo == QueFueLaParte.A_UN_TERCERO) parte.nombre else null)
+                            } else parte.copy(categoria = categoria),
+                        )
+                    },
+                )
             }
         }
     }

@@ -1261,19 +1261,27 @@ en `ds/` (`ui/sms/RepartirEnPartes.kt`, `ui/sms/RepartirEnReconciliar.kt`):
   #447 («Son 2 pagos…» con su lista a mano, en la que el último pago tomaba el resto).
 - **«Esto pagó varias cosas»** es un `Boton` `Fantasma` `S` debajo de «Movi sugiere». Abre «Repartir en
   partes» (`Seccion`) y esconde «Confirma o ajusta»: en partes, cada parte dice lo suyo.
-- **Cada parte es una `Superficie` `Capa2`**: «Parte N» en `apoyoMedio` con «Quitar» (`Fantasma` `S`),
-  qué fue en `PildoraDeFiltro` (Cuota · Pago de tarjeta · Traspaso · Gasto · A Papá), a dónde o en qué
-  en otra fila de píldoras —las cuentas que `operacionEntre` acepta, o los pagos del período y las
-  categorías— y el monto en `CampoDeMonto`. **Las filas de píldoras ruedan en horizontal**: no se
-  parten ni se cortan a 360 dp. Lo que le falta a la parte, en una línea de `apoyo`.
+- **Cada parte es una `Superficie` de capa 1** (en una `Capa2` las píldoras sin elegir, que son de
+  capa 2, no se veían y la fila parecía texto suelto): «Parte N» en `cuerpoFuerte` con «Quitar»
+  (`Fantasma` `S`); **«Qué fue»** (`RotuloDeCampo`) con una sola fila de `PildoraDeFiltro`, siempre los
+  cinco tipos en este orden: Gasto · Cuota · Pago de tarjeta · Traspaso · A un tercero; y debajo **solo
+  lo que ese tipo necesita, con su rótulo**: «Categoría» si es un gasto (y «Pago del período» si hay
+  uno pendiente), «Crédito», «Tarjeta» o «Cuenta» con las cuentas que `operacionEntre` acepta, y
+  «Persona» (la del aviso, o un `Campo` para escribirla) más su «Categoría» si va a un tercero. El
+  monto en `CampoDeMonto`. **Las filas de píldoras ruedan en horizontal**: no se parten ni se cortan a
+  360 dp. Lo que le falta a la parte, en una línea de `apoyo`.
 - **La línea en vivo** va en `cuerpoFuerte`: «Faltan $23.333» en `texto`, «Te pasaste por $X» en `sale`,
   «Cuadra con el aviso» en `entra`. Debajo, cuando falta, «El resto a Papá» / «El resto como gasto» en
-  `PildoraDeAccion`, y «Agregar otra parte» y «Volver a un solo movimiento» en `Fantasma` `S`.
+  `PildoraDeAccion`: **siempre agregan una parte nueva por lo que falta** y no tocan las que estaban.
+  «Agregar otra parte» y «Volver a un solo movimiento» en `Fantasma` `S`.
 - **Un solo botón confirma**: el principal de la pantalla dice «Confirmar las N partes» y se prende solo
-  cuando cuadran (`sePuedenConfirmar`).
+  cuando cuadran (`sePuedenConfirmar`). **Apagado, dice por qué** en una línea centrada debajo, como
+  `PieDeHoja` (`razonDeLasPartes`): «Una sola parte no es un reparto: agrega otra o vuelve a un solo
+  movimiento», «Parte 2: elige el crédito», o cuánto falta o sobra.
 - **Un movimiento ya anotado** usa el mismo editor dentro de «Más» de su detalle («Repartir en partes»,
-  `Secundario` a todo el ancho; al abrirlo, «Confirmar las N partes» `Principal` a todo el ancho).
+  `Secundario` a todo el ancho; al abrirlo, «Confirmar las N partes» en un `PieDeHoja` con su razón).
 
 **Las líneas base** no cambian: `dp_sueltos` 119, `radios_con_numero` 3, y las guardas en 0 siguen en 0.
 Lo vigila `RepartirEnReconciliarTest` (la propuesta del caso del dueño con cifras de prueba, «Faltan»,
-el botón que se prende solo si cuadra, y nada recortado a 360 dp).
+el botón que se prende solo si cuadra y su razón, «El resto como gasto» que agrega la parte 2 sin tocar
+la 1, «Qué fue» con su detalle por tipo, y nada recortado a 360 dp).

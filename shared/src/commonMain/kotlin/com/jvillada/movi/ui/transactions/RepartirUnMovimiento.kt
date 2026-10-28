@@ -34,6 +34,7 @@ import com.jvillada.movi.shared.model.sePuedenConfirmar
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.PieDeHoja
 import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import com.jvillada.movi.ui.components.toUserMessage
 import com.jvillada.movi.ui.sms.CATEGORIAS_EN_LAS_PARTES
@@ -46,6 +47,7 @@ import com.jvillada.movi.ui.sms.categoriaDeGastoOAnada
 import com.jvillada.movi.ui.sms.categoriasParaElegirEnElSms
 import com.jvillada.movi.ui.sms.enPantalla
 import com.jvillada.movi.ui.sms.esCategoriaDeGastoSuelta
+import com.jvillada.movi.ui.sms.razonDeLasPartes
 import kotlinx.coroutines.launch
 
 /*
@@ -134,11 +136,12 @@ internal fun SeccionDeRepartirEnPartes(
         )
         Spacer(Modifier.height(Espacio.s))
         val elegidas = partes.map { it.parte }
-        Boton(
-            texto = if (guardando) "Guardando…" else botonDeConfirmarLasPartes(partes.size),
+        // El botón apagado dice por qué, debajo, como en toda hoja.
+        PieDeHoja(
+            texto = botonDeConfirmarLasPartes(partes.size),
             onClick = {
-                val desde = origen ?: return@Boton
-                if (guardando || !sePuedenConfirmar(evento.amount, elegidas)) return@Boton
+                val desde = origen ?: return@PieDeHoja
+                if (guardando || !sePuedenConfirmar(evento.amount, elegidas)) return@PieDeHoja
                 guardando = true
                 error = null
                 coroutine.launch {
@@ -157,11 +160,9 @@ internal fun SeccionDeRepartirEnPartes(
                 }
             },
             habilitado = !guardando && origen != null && sePuedenConfirmar(evento.amount, elegidas),
-            anchoCompleto = true,
+            razon = razonDeLasPartes(evento.amount, elegidas, evento.currency),
+            cargando = guardando,
+            error = error,
         )
-        error?.let {
-            Spacer(Modifier.height(Espacio.xs))
-            Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
-        }
     }
 }

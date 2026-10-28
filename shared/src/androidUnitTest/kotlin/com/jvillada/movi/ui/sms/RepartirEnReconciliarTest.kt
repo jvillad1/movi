@@ -12,7 +12,9 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
@@ -170,9 +172,10 @@ class RepartirEnReconciliarTest {
 
         tocar(ESTO_PAGO_VARIAS_COSAS)
         esperar { cuantos(REPARTIR_EN_PARTES) >= 1 }
-        // Una parte sin monto: falta todo el aviso.
+        // Una parte sin monto: falta todo el aviso, y el botón apagado dice por qué.
         assertEquals(1, cuantos("Faltan \$4.273.333"))
         botonDeConfirmar(botonDeConfirmarLasPartes(1)).assertIsNotEnabled()
+        composeRule.onNodeWithTag(TAG_RAZON_DE_LAS_PARTES).assert(hasText(UNA_SOLA_PARTE))
 
         // Una cuota a la Libranza por $4.000.000: faltan $273.333.
         tocar("Cuota", exacto = true)
@@ -189,9 +192,78 @@ class RepartirEnReconciliarTest {
         // Si se pasa, se apaga otra vez.
         composeRule.onNodeWithTag(tagDelMontoDeLaParte(0)).performScrollTo().performTextInput("0")
         composeRule.waitForIdle()
-        assertEquals(1, cuantos("Te pasaste por"))
+        // La línea en vivo y la razón del botón lo dicen las dos.
+        composeRule.onNodeWithTag(TAG_CUADRE_DE_LAS_PARTES).assert(hasText("Te pasaste por", substring = true))
+        composeRule.onNodeWithTag(TAG_RAZON_DE_LAS_PARTES).assert(hasText("Te pasaste por", substring = true))
         botonDeConfirmar(botonDeConfirmarLasPartes(2)).assertIsNotEnabled()
         assertTrue(enviadas.isEmpty())
+    }
+
+    @Test
+    fun `el resto como gasto agrega una parte nueva con lo que falta y la primera no cambia`() {
+        propuesta = propuesta.copy(pagos = emptyList())
+        montar()
+        esperar { cuantos(ESTO_PAGO_VARIAS_COSAS) == 1 }
+        tocar(ESTO_PAGO_VARIAS_COSAS)
+        esperar { cuantos(REPARTIR_EN_PARTES) >= 1 }
+        // La parte 1 es un gasto en Familia (la categoría del aviso) por $4.000.000.
+        composeRule.onNodeWithTag(tagDelMontoDeLaParte(0)).performScrollTo().performTextInput("4000000")
+        composeRule.waitForIdle()
+        assertEquals(0, composeRule.onAllNodesWithTag(tagDelMontoDeLaParte(1)).fetchSemanticsNodes().size)
+
+        tocar(EL_RESTO_COMO_GASTO)
+        // Aparece la parte 2 por lo que faltaba; la 1 sigue en $4.000.000.
+        esperar { composeRule.onAllNodesWithTag(tagDelMontoDeLaParte(1)).fetchSemanticsNodes().size == 1 }
+        composeRule.onNodeWithTag(tagDelMontoDeLaParte(0)).assert(hasText("4.000.000", substring = true))
+        composeRule.onNodeWithTag(tagDelMontoDeLaParte(1)).assert(hasText("273.333", substring = true))
+        assertEquals(1, cuantos("Parte 2"))
+        assertEquals(1, cuantos("Cuadra con el aviso"))
+        botonDeConfirmar(botonDeConfirmarLasPartes(2)).assertIsEnabled()
+        assertEquals(0, composeRule.onAllNodesWithTag(TAG_RAZON_DE_LAS_PARTES).fetchSemanticsNodes().size)
+
+        botonDeConfirmar(botonDeConfirmarLasPartes(2)).performSemanticsAction(SemanticsActions.OnClick)
+        esperar { enviadas.isNotEmpty() }
+        val partes = enviadas.single().second.partes
+        assertEquals(listOf(4_000_000L, 273_333L), partes.map { it.monto })
+        assertEquals(listOf(QueFueLaParte.GASTO, QueFueLaParte.GASTO), partes.map { it.tipo })
+        assertEquals(listOf("Familia", "Familia"), partes.map { it.evento?.category })
+    }
+
+    @Test
+    fun `cada parte dice que fue en una sola fila, y debajo solo lo que ese tipo necesita con su rotulo`() {
+        propuesta = propuesta.copy(pagos = emptyList())
+        montar()
+        esperar { cuantos(ESTO_PAGO_VARIAS_COSAS) == 1 }
+        tocar(ESTO_PAGO_VARIAS_COSAS)
+        esperar { cuantos(REPARTIR_EN_PARTES) >= 1 }
+
+        fun textosDe(tag: String): List<String> {
+            val raiz = composeRule.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode()
+            fun bajar(n: SemanticsNode): List<String> =
+                n.config.getOrNull(SemanticsProperties.Text)?.map { it.text }.orEmpty() + n.children.flatMap(::bajar)
+            return bajar(raiz)
+        }
+        // «Qué fue», con los cinco tipos en su orden, y el gasto elegido.
+        assertEquals(listOf(ROTULO_QUE_FUE, "Gasto", "Cuota", "Pago de tarjeta", "Traspaso", "A un tercero"), textosDe(tagDelTipoDeLaParte(0)))
+        // Un gasto: solo «Categoría» y sus categorías.
+        val delGasto = textosDe(tagDelDetalleDeLaParte(0))
+        assertEquals("Categoría", delGasto.first())
+        assertTrue("Familia" in delGasto)
+        assertTrue("Libranza Papá" !in delGasto)
+
+        // Una cuota: solo «Crédito» y los créditos.
+        tocar("Cuota", exacto = true)
+        assertEquals(listOf("Crédito", "Libranza Papá", "Hipoteca Papá"), textosDe(tagDelDetalleDeLaParte(0)))
+
+        // Un traspaso: «Cuenta» (no hay otra cuenta de dinero en esta prueba).
+        tocar("Traspaso", exacto = true)
+        assertEquals("Cuenta", textosDe(tagDelDetalleDeLaParte(0)).first())
+
+        // A un tercero: «Persona» con la del aviso, y su categoría.
+        tocar("A un tercero", exacto = true)
+        val delTercero = textosDe(tagDelDetalleDeLaParte(0))
+        assertEquals(listOf("Persona", "Papá"), delTercero.take(2))
+        assertTrue("Categoría" in delTercero)
     }
 
     @Test

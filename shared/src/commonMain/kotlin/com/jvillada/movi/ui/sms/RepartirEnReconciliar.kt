@@ -72,7 +72,7 @@ fun cuerpoDelReparto(entrada: RepartoDeEntrada, moneda: String): String {
 
 private fun nombreCortoDeLaParte(tipo: QueFueLaParte, nombre: String?): String =
     nombre?.let { if (tipo == QueFueLaParte.CUOTA) nombreSinCuota(it) else it }?.takeIf { it.isNotBlank() }
-        ?: nombreDelTipoDeParte(tipo, null)
+        ?: nombreDelTipoDeParte(tipo)
 
 /**
  * La propuesta de reparto en Reconciliar. [onRepartir] abre el editor con las partes propuestas: el

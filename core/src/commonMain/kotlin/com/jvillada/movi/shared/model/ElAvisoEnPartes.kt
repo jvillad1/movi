@@ -134,15 +134,11 @@ fun sePuedenConfirmar(total: Long, partes: List<ParteElegida>): Boolean =
         cuadreDeLasPartes(total, partes.map { it.monto }) == CuadreDeLasPartes.Cuadra
 
 /**
- * **«El resto como…»**: lo que falta, convertido en una parte más de [tipo]. `null` si no falta nada.
- * Si la última parte ya es de ese tipo y apunta a lo mismo, se le suma en vez de agregar otra.
+ * **«El resto como…»**: lo que falta, convertido en **una parte más** de [resto] (su tipo, su
+ * categoría o su persona), por el faltante. Las que ya estaban no cambian. `null` si no falta nada.
  */
 fun conElResto(total: Long, partes: List<ParteElegida>, resto: ParteElegida): List<ParteElegida>? {
     val falta = (cuadreDeLasPartes(total, partes.map { it.monto }) as? CuadreDeLasPartes.Faltan)?.monto ?: return null
-    val ultima = partes.lastOrNull()
-    if (ultima != null && ultima.copy(monto = 0L) == resto.copy(monto = 0L)) {
-        return partes.dropLast(1) + ultima.copy(monto = ultima.monto + falta)
-    }
     return partes + resto.copy(monto = falta)
 }
 

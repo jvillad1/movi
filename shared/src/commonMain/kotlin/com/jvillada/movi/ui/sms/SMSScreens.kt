@@ -65,6 +65,7 @@ import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.UsedCategoriesCache
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.semantics.Role
 import com.jvillada.movi.data.isAndroid
 import com.jvillada.movi.data.intentar
@@ -1756,6 +1757,21 @@ fun SMSReconcileScreen(
                 habilitado = if (enPartesYa) !working && partesListas else canConfirm,
                 anchoCompleto = true,
             )
+        }
+        // En partes, el botón apagado dice por qué, en una línea debajo (como `PieDeHoja`).
+        if (enPartes && !alreadyResolved && yaAnotadoCon == null && !working) {
+            val razon = if (resolvedAccount == null) "Elige de qué cuenta salió" else
+                razonDeLasPartes(totalDelAviso, partesEnPantalla.map { it.parte }, parsed?.currency ?: "COP")
+            if (razon != null) {
+                Text(
+                    razon,
+                    style = Movi.textos.apoyo,
+                    color = Movi.colores.textoMedio,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = Medida.margenDePantalla).padding(bottom = Espacio.s)
+                        .testTag(TAG_RAZON_DE_LAS_PARTES),
+                )
+            }
         }
     }
 }
