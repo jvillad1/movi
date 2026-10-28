@@ -8,13 +8,18 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.text.TextLayoutResult
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
@@ -31,6 +36,7 @@ import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.ui.components.ds.TAG_ENCABEZADO_DE_HOJA
 import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.ui.components.formatMoneyCompact
 import com.jvillada.movi.ui.plan.TITULO_CUANTO_PUEDES_GASTAR
@@ -188,13 +194,43 @@ class TeQuedanEnHoyEnPantallaTest {
         composeRule.onNodeWithContentDescription("Ver el detalle de tu plata", useUnmergedTree = true).assertDoesNotExist()
     }
 
+    /**
+     * **Vuelta de diseño 28: tocar el héroe explica la cifra en la misma pantalla.** Abre «¿De dónde
+     * sale?» con la cascada —cuyo total es la cifra del héroe— y «Ver tus períodos» abajo lleva a donde
+     * antes llevaba el toque.
+     */
     @Test
-    fun `todo el héroe lleva a Tus periodos`() {
-        montar(datos(gasto = emptyMap(), cuentas = unaCuenta))
-        composeRule.onNodeWithTag(TAG_CIFRA_TE_QUEDAN, useUnmergedTree = true).performClick()
-        assertEquals(Screen.Periodos, navegoA)
+    fun `tocar el heroe abre de donde sale, y ver tus periodos lleva a Tus periodos`() {
+        val data = datos(gasto = mapOf("2026-09-21" to 50_000L), cuentas = unaCuenta)
+        montar(data)
         // Sin «Tu plata» ni barra: el héroe es el rótulo, la cifra y para cuántos días.
         assertTrue(composeRule.onAllNodesWithText("para", substring = true, useUnmergedTree = true)
             .fetchSemanticsNodes().isNotEmpty(), "la línea de los días y lo que da por día")
+        composeRule.onNodeWithTag(TAG_CASCADA_DEL_DISPONIBLE, useUnmergedTree = true).assertDoesNotExist()
+
+        composeRule.onNodeWithTag(TAG_CIFRA_TE_QUEDAN, useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+        assertEquals(null, navegoA, "el toque ya no sale de Hoy")
+        // La hoja con su título (la tarjeta de Plan, montada abajo, tiene su propio «¿De dónde sale?»).
+        composeRule.onNodeWithTag(TAG_ENCABEZADO_DE_HOJA, useUnmergedTree = true).assert(hasAnyDescendant(hasText(DE_DONDE_SALE)))
+        composeRule.onNodeWithTag(TAG_CASCADA_DEL_DISPONIBLE, useUnmergedTree = true).assertIsDisplayed()
+        // El total de la cascada dice la cifra del héroe, entera, con su rótulo.
+        val heroe = texto(cifraDeHoy())
+        val total = composeRule.onNodeWithTag(TAG_TOTAL_DE_LA_CASCADA, useUnmergedTree = true)
+        total.assert(hasAnyDescendant(hasText(ROTULO_TE_QUEDAN)))
+        total.assert(hasAnyDescendant(hasText(heroe)))
+        // Y lo de arriba, con los nombres de las cifras de Plan.
+        listOf(ROTULO_FIJOS_DEL_PERIODO, ROTULO_DISPONIBLE_DEL_PERIODO, ROTULO_GASTASTE_EN_EL_PERIODO).forEach {
+            composeRule.onAllNodesWithText(it, useUnmergedTree = true).assertCountEquals(
+                if (it == ROTULO_DISPONIBLE_DEL_PERIODO) 2 else 1,
+            )
+        }
+
+        // El botón (árbol mezclado: su texto es parte de él), con la acción de semántica: la hoja entra
+        // animada desde abajo y un toque por coordenadas puede caer antes de que llegue.
+        composeRule.onNodeWithText(VER_TUS_PERIODOS).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        assertEquals(Screen.Periodos, navegoA)
+        composeRule.onNodeWithTag(TAG_CASCADA_DEL_DISPONIBLE, useUnmergedTree = true).assertDoesNotExist()
     }
 }

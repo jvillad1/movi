@@ -249,11 +249,14 @@ class EditarInicioEnPantallaTest {
      * propone hoy», fijo debajo del héroe—, así que el editor ya no la lista, y lo urgente se ve igual.
      */
     @Test
-    fun `Para revisar ya no se configura, lo urgente esta en Movi propone hoy`() {
+    fun `Para revisar ya no se configura, y lo que espera lo cuenta la insignia de Avisos`() {
         montar(datos(pendingSms = 12))
         assertTrue(!hayTag(tagDeLaFilaDelEditor("ALERTS")))
         assertTrue(!haySeccion("Para revisar"))
-        assertTrue(hayTexto("Llegaron 12 avisos del banco"))
+        // Vuelta de diseño 28: lo que entró solo no es una tarjeta de «Movi propone hoy»; lo cuenta la
+        // insignia de «Avisos», siempre en la cuadrícula.
+        assertTrue(!hayTexto("Llegaron 12 avisos del banco"))
+        assertTrue(hayTexto("12"), "la insignia de «Avisos»")
     }
 
     /**

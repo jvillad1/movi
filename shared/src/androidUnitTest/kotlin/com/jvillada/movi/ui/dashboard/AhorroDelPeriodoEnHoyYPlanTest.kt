@@ -135,7 +135,10 @@ class AhorroDelPeriodoEnHoyYPlanTest {
         composeRule.onNodeWithText("¿De dónde sale?", useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Fijos \$3,1M · ahorro del período \$2M", useUnmergedTree = true).assertIsDisplayed()
+        // Vuelta de diseño 28: la cascada, un renglón por tramo, con su cifra entera y su signo.
+        composeRule.onNodeWithText("Tu ahorro del período", useUnmergedTree = true).assertIsDisplayed()
+        assertTrue(hay("−\$2.000.000"), "el ahorro resta, con su «−»")
+        assertTrue(hay("−\$3.100.000"), "los fijos también")
         // Lo que tenías + lo que entró − fijos − ahorro = el Disponible de la tarjeta.
         val d = disponibleDelInicio(datos(2_000_000), hoy)!!
         assertEquals(d.plata!!.neto + d.ingresosPorRecibir - d.fijos - d.ahorroDelPeriodo, d.disponible)

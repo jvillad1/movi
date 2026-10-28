@@ -27,6 +27,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
  * **El widget «Falta por pagar» del Inicio dice que lo suyo es solo lo que falta.** (Ola R1: era una
@@ -61,12 +62,12 @@ class ChecklistEnInicioTest {
 
     private var navegoA: Screen? = null
 
-    private fun montar(data: DashboardData, conPropuestas: Boolean = false) {
+    private fun montar(data: DashboardData) {
         navegoA = null
         composeRule.setContent {
             MoviTheme {
                 Box(Modifier.fillMaxSize()) {
-                    WidgetFaltaPorPagar(data = data, onNavigate = { navegoA = it }, conPropuestas = conPropuestas)
+                    WidgetFaltaPorPagar(data = data, onNavigate = { navegoA = it })
                 }
             }
         }
@@ -195,14 +196,20 @@ class ChecklistEnInicioTest {
         composeRule.onNodeWithText("y 1 más", useUnmergedTree = true).assertIsDisplayed()
     }
 
+    /**
+     * Vuelta de diseño 28: el Arriendo vencido va primero en el widget, con su marca, aunque también
+     * sea el pago de «Movi propone hoy»: un resumen de lo que falta no esconde lo que más falta.
+     */
     @Test
-    fun `el pago de Movi propone hoy no se repite en el widget`() {
-        montar(conTresPendientes(), conPropuestas = true)
+    fun `el Arriendo vencido va primero aunque este en Movi propone hoy`() {
+        val data = conTresPendientes()
+        assertEquals("Arriendo", pagoPropuestoHoy(data)?.nombre)
+        montar(data)
 
-        // El Arriendo vencido es la propuesta de arriba: acá no tiene fila.
-        composeRule.onNodeWithText("Arriendo", useUnmergedTree = true).assertDoesNotExist()
-        composeRule.onNodeWithText("Gimnasio", useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithText("Celular", useUnmergedTree = true).assertIsDisplayed()
+        val arriendo = composeRule.onNodeWithText("Arriendo", useUnmergedTree = true).fetchSemanticsNode()
+        val gimnasio = composeRule.onNodeWithText("Gimnasio", useUnmergedTree = true).fetchSemanticsNode()
+        assertTrue(arriendo.boundsInRoot.top < gimnasio.boundsInRoot.top, "el Arriendo, primero")
+        composeRule.onNodeWithText("Vencido", substring = true, useUnmergedTree = true).assertIsDisplayed()
         // Las dos filas y «y 1 más» dan los tres de «Faltan 3 de 3 pagos».
         composeRule.onNodeWithText("y 1 más", useUnmergedTree = true).assertIsDisplayed()
     }

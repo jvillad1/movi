@@ -143,7 +143,9 @@ internal fun fraseDelDiaMasBajo(caja: CajaProyectada, hoy: LocalDate): String {
     val porque = bajo.pagoMasGrande?.let { "el día de ${it.nombre}" }
         ?: siguienteIngreso(caja, bajo.fecha)?.let { "un día antes de que llegue $it" }
         ?: if (bajo.fecha == caja.alCierre.fecha) "el último día del período" else null
-    return if (porque != null) "$cuando llegas a $cifra, $porque" else "$cuando llegas a $cifra, tu día más justo"
+    // Vuelta de diseño 28: «saldo proyectado», no «llegas a». Es el saldo que tendrías, no lo libre para
+    // gastar: «llegas a $11,9M» se leía como otra versión de «Te quedan».
+    return if (porque != null) "$cuando tu saldo proyectado es $cifra, $porque" else "$cuando tu saldo proyectado es $cifra, tu día más justo"
 }
 
 private fun siguienteIngreso(caja: CajaProyectada, fecha: String): String? {
@@ -159,15 +161,19 @@ internal fun fraseDelRojo(caja: CajaProyectada, hoy: LocalDate): String? {
     return "$cuando quedarías en ${formatMoneyCompact(rojo.saldo)} $porque"
 }
 
-/** **El supuesto**, dicho como supuesto, con de dónde sale. */
+/**
+ * **El supuesto**, dicho como supuesto, con de dónde sale. Vuelta de diseño 28: «gastas en promedio $X
+ * por día», no «unos $X por día»: la única cifra «por día» de la app sin su nombre es la del héroe
+ * (lo que queda entre los días que faltan); esta es tu promedio, y lo dice.
+ */
 internal fun fraseDelSupuesto(gasto: GastoDelDiaADia): String {
     val porDia = gasto.porDia
         ?: return "Todavía no hay un período cerrado para estimar tu gasto del día a día: la línea solo resta tus pagos del período."
     val deDonde = when (gasto.periodos.size) {
-        1 -> "tu promedio del período de ${nombreDelPeriodo(gasto.periodos.single().periodo)}"
-        else -> "tu promedio de los últimos ${gasto.periodos.size} períodos"
+        1 -> "en tu período de ${nombreDelPeriodo(gasto.periodos.single().periodo)}"
+        else -> "en tus últimos ${gasto.periodos.size} períodos"
     }
-    return "Suponiendo que gastas como siempre, unos ${formatMoneyCompact(porDia)} por día ($deDonde)."
+    return "Supone que sigues como siempre: $GASTAS_EN_PROMEDIO ${formatMoneyCompact(porDia)} por día ($deDonde)."
 }
 
 /** «2026-09» → «septiembre», o el prefijo tal cual si no se entiende. */
@@ -272,7 +278,7 @@ private fun CuerpoDeLaCaja(
         Text(fechaCorta(caja.dias.first().fecha), style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
         val dia = elegido?.let { caja.dias.getOrNull(it) }
         Text(
-            text = dia?.let(::leyendaDelDiaDeLaCaja) ?: "Al cierre: ${formatMoneyCompact(caja.alCierre.saldo)}",
+            text = dia?.let(::leyendaDelDiaDeLaCaja) ?: leyendaDelCierre(caja),
             style = Movi.textos.apoyo,
             color = when {
                 (dia?.saldo ?: caja.alCierre.saldo) < 0 -> Movi.colores.sale
@@ -282,7 +288,10 @@ private fun CuerpoDeLaCaja(
             textAlign = TextAlign.Center,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f).testTag(TAG_LEYENDA_DE_LA_CAJA),
+            modifier = Modifier
+                .weight(1f)
+                .testTag(TAG_LEYENDA_DE_LA_CAJA)
+                .then(if (dia == null) Modifier.semantics { contentDescription = descripcionDelCierre(caja) } else Modifier),
         )
         Text(fechaCorta(caja.dias.last().fecha), style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
     }
@@ -307,6 +316,27 @@ private fun CuerpoDeLaCaja(
         }
     }
 }
+
+/** El rótulo de lo que se gasta por día en la caja: un promedio, dicho como promedio. */
+const val GASTAS_EN_PROMEDIO: String = "gastas en promedio"
+
+/** El rótulo del renglón de abajo de la caja: el saldo del último día, que es una proyección. */
+const val SALDO_PROYECTADO: String = "Saldo proyectado"
+
+/**
+ * **El renglón de abajo de la caja**, sin un día elegido (vuelta de diseño 28): «Saldo proyectado:
+ * $11,9M», entre la fecha del primer día y la del cierre. Decía «Al cierre: $11,9M», y al lado de «Te
+ * quedan» en Hoy se leía como lo que queda para gastar; es el saldo que tendrías ese día si todo sale
+ * como supone la línea. «Saldo proyectado al cierre» no entra a 360 dp con las dos fechas
+ * (`UnNombrePorConceptoTest`): el cierre lo dice la fecha de la derecha, y el lector de pantalla lo oye
+ * entero ([descripcionDelCierre]).
+ */
+internal fun leyendaDelCierre(caja: CajaProyectada): String =
+    "$SALDO_PROYECTADO: ${formatMoneyCompact(caja.alCierre.saldo)}"
+
+/** Lo que oye el lector de pantalla en el renglón de abajo: con el día del cierre. */
+internal fun descripcionDelCierre(caja: CajaProyectada): String =
+    "$SALDO_PROYECTADO al cierre, el ${fechaCorta(caja.alCierre.fecha)}: ${formatMoneyCompact(caja.alCierre.saldo)}"
 
 /** «17 oct». */
 private fun fechaCorta(iso: String): String {

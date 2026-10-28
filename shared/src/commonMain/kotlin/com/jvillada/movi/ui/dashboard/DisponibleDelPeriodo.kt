@@ -47,31 +47,8 @@ fun disponibleDelPeriodo(
 //
 // Puro y aparte de la pantalla para que las pruebas lean las frases exactas. Todo en tuteo.
 
-/**
- * **De dónde sale el disponible**, en una o dos líneas que caben a 390 px.
- *
- * Con lo que manda el server: «Tenías $X el 25 · entraron $Y» y abajo los fijos, precedidos de lo
- * que falta por recibir, lo que guardaste y lo que apartaste cuando los hay, y seguidos del ahorro
- * del período que elegiste en Ajustes y de los otros pagos de deuda («Por recibir $P · guardaste $W ·
- * apartaste $A · fijos $Z · ahorro del período $S · otros pagos de deuda $D»). Con un server viejo, la
- * línea de siempre: «Ingresos $A menos fijos $B».
- */
-internal fun desgloseDelDisponible(d: DisponibleDelPeriodo): List<String> {
-    val plata = d.plata ?: return listOf("Ingresos ${formatMoneyCompact(d.ingresos)} menos fijos ${formatMoneyCompact(d.fijos)}")
-    val tenias = "Tenías ${formatMoneyCompact(plata.saldoAlInicio)} el ${d.diaDeInicio}"
-    val primera = "$tenias · entraron ${formatMoneyCompact(plata.entradas)}"
-    val segunda = listOfNotNull(
-        if (d.ingresosPorRecibir > 0L) "por recibir ${formatMoneyCompact(d.ingresosPorRecibir)}" else null,
-        if (plata.guardado > 0L) "guardaste ${formatMoneyCompact(plata.guardado)}" else null,
-        // Lo apartado también sale de lo que hubo: sin su parte, la línea no suma «Te quedan».
-        if (plata.apartado > 0L) "apartaste ${formatMoneyCompact(plata.apartado)}" else null,
-        "fijos ${formatMoneyCompact(d.fijos)}",
-        // El ahorro que elegiste en Ajustes: también sale de lo libre, y sin él la línea no suma.
-        if (d.ahorroDelPeriodo > 0L) "ahorro del período ${formatMoneyCompact(d.ahorroDelPeriodo)}" else null,
-        if (plata.otrosPagosDeDeuda > 0L) "otros pagos de deuda ${formatMoneyCompact(plata.otrosPagosDeDeuda)}" else null,
-    ).joinToString(" · ").replaceFirstChar { it.uppercase() }
-    return listOf(primera, segunda)
-}
+// «De dónde sale el disponible» ya no son dos líneas de texto: es la cascada de
+// `CascadaDelDisponible.kt` (vuelta de diseño 28), renglón por renglón y con el total.
 
 /** La frase cuando no hay margen: los fijos se llevan todo, o más de todo. */
 internal fun sinMargen(d: DisponibleDelPeriodo): String {

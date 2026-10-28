@@ -565,7 +565,7 @@ Plan es dueño de «¿cuánto puedo gastar y qué me falta pagar?», en este ord
 | Pagos del período | `Fila` + `Pildora` de estado (Pagado, Vencido, Por confirmar, Hoy, En N días, Falta) | «¿Ya pagaste…?» va en la superficie de las propuestas con `Boton` S; el resumen dice «Falta por pagar $X · Ya pagaste $Y» y los grupos («Por pagar · 3», «Ya pagaste · 2») van sin cifra |
 | Tu plata, día a día | `Seccion` + `Superficie` + `Grafica` | debajo de los pagos que la mueven |
 | Lo que se repite al mes, suscripciones | `Cifra.Grande`, `Fila` | |
-| Tus recordatorios no te van a llegar | `TarjetaDePropuesta`, al final | era un cartel en el medio de la lista |
+| Tus recordatorios no te van a llegar | `Fila` en tono de aviso, dentro de «Pagos del período», debajo del resumen | vuelta 28: era una `TarjetaDePropuesta`; «Ahora no» la descarta por el período |
 
 **Lo que cuelga de una fila** (`ui/recurrentes/BajoLaFila.kt`): una fila de Plan o de un período
 ofrece acciones («Anotar este pago») o trae una línea más (la evidencia, la barra de un presupuesto,
@@ -1171,7 +1171,7 @@ qué cuenta como plata ni qué es un pendiente: cambia el **orden**, el **origen
     `/api/payments/upcoming`, que rueda al período siguiente pasados los días de gracia (`dueDateFor`).
     Vencido hace 22 días, el Arriendo figuraba «vence en 9 días» y la ventana de 7 lo dejaba afuera; el
     checklist, donde manda la ocurrencia, sí lo veía. Ahora la campana sale del checklist.
-  - **Hoy no repite un pago**: el widget no lista como fila el pago que ya está en «Movi propone hoy»
+  - **Hoy no repite un pago** (deshecho en la vuelta 28, §40: el widget esconde así la deuda grande): el widget no lista como fila el pago que ya está en «Movi propone hoy»
     (`filasDelWidgetDeFalta`, solo si esa sección está en el Inicio) y dice «y N más» cuando recorta; las
     filas más ese número dan lo que dice «Faltan N». Si el único pendiente es el de arriba, lo dice
     («Está arriba, en «Movi propone hoy»»).
@@ -1644,3 +1644,74 @@ dice el cargo y manda 2.100.000 por `adjustAccountBalance`; el préstamo no apar
 sin «por revisar» y sin «Ver todos»; la × vuelve a «Todo» con las dos), más los casos puros de
 `CuadreDeSaldosLogicTest` (secciones, rótulos, cargo/abono, `sePuedeCuadrar` sin tarjetas) y de
 `EntreCuentasFueraDeLosChipsTest`.
+
+## 40. Vuelta de diseño 28: una cifra que se explica sola, y Hoy y Plan sin ruido
+
+Un segundo diseñador revisó la app sin sesgo (27-oct): «la plata disponible sale con cinco cifras
+distintas y una contradice a otra». Cada una era correcta para su concepto, pero no se distinguían. Sin
+reglas de plata nuevas: la cascada y los rótulos usan las funciones de siempre.
+
+- **Tocar el héroe explica la cifra en la misma pantalla.** Con «Te quedan», el héroe abre la hoja «¿De
+  dónde sale?» (`HojaDeDondeSale`, `ui/dashboard/HojaDeDondeSale.kt`) con la cascada de
+  `DisponibleDelPeriodo` (`cascadaDelDisponible`, pura): una `Fila` por renglón con su `Cifra` y su signo
+  —«Tenías el 25», «+ Lo que entró», «+ Por recibir», «− Guardaste en un ahorro», «− Apartaste», «− Otros
+  pagos de deuda», «− Fijos del período» (pagados y por pagar), «− Tu ahorro del período»—, un `Separador`
+  y **«Disponible del período»** (el nombre que Plan le da a esa cifra), «− Gastaste» (el día a día, sin
+  los fijos), otro `Separador` y el total con el rótulo del héroe («Te quedan» / «Te pasaste por»). Sin
+  margen, un renglón apagado «Sin margen, Movi cuenta desde $0» hace que la suma dé lo del héroe (la meta
+  del período nunca es negativa). Abajo, «Ver tus períodos» (`Boton` `Fantasma` `S`), lo que antes abría
+  el toque. **Un solo componente para los dos lugares**: `CascadaDelDisponibleEnPantalla`, una
+  `Superficie` en la capa 2 con relleno de lista, que también abre «¿De dónde sale?» en la tarjeta del
+  Disponible (Plan y Hoy): eran dos líneas de texto que no sumaban a la vista (`desgloseDelDisponible`,
+  borrada). Sin «Te quedan» (el héroe dice «Tu plata»), el toque sigue llevando a «Tus períodos».
+- **Un nombre por concepto.**
+
+  | dónde | antes | ahora |
+  |---|---|---|
+  | Hoy (héroe) y la frase de Plan | «Te quedan» | igual: lo libre para gastar hasta el cierre |
+  | Plan, la tarjeta | «Disponible del período» | igual: lo que había para gastar en todo el período |
+  | Plan (y Hoy), la columna de hoy | «Hoy» | «Meta de hoy» (`ROTULO_META_DE_HOY`) |
+  | Tu plata, día a día · el día más justo | «El 24 de octubre llegas a $11,9M» | «El 24 de octubre tu saldo proyectado es $11,9M» |
+  | Tu plata, día a día · el renglón de abajo | «Al cierre: $11,9M» | «Saldo proyectado: $11,9M» (el lector oye «… al cierre, el 24 oct») |
+  | Tu plata, día a día · el supuesto | «Suponiendo que gastas como siempre, unos $26.523 por día (tu promedio …)» | «Supone que sigues como siempre: gastas en promedio $26.523 por día (en tus últimos 3 períodos).» |
+  | Tus períodos | «Te quedó» (en `sale` si es negativo) | «Neto del período» (`ROTULO_NETO_DEL_PERIODO`), neutro si es negativo: no es una alerta |
+
+  El tono del neto es UNO para el mismo concepto: «Neto» de la franja de Movimientos (vuelta 30) y «Neto
+  del período» de Tus períodos salen de `tonoDelNeto` (en `entra` si quedó, en el color del texto si
+  salió más, apagado en cero); la franja lo pintaba en `sale`. La única cifra «por día» sin otro nombre es la del héroe y la frase de Plan (`porDiaParaLoQueQueda`).
+  «Saldo proyectado al cierre» no entra a 360 dp entre las dos fechas de la caja (lo mide
+  `UnNombrePorConceptoTest`): el cierre lo dice la fecha de la derecha.
+- **El widget «Falta por pagar» no esconde la deuda grande.** La vuelta 22 sacaba el pago de «Movi
+  propone hoy», y el Arriendo de $1,8M vencido hace 22 días quedaba en «y 1 más» mientras se veían Carro
+  $9.000 e Internet $3.000. Ahora lista lo más urgente primero (el orden de la cola: lo vencido, el monto
+  más grande), aunque también esté en la propuesta, con su «Vencido hace 22 días» en `aviso`
+  (`filasDelWidgetDeFalta` ya no recibe `conPropuestas`; `EL_PAGO_ESTA_ARRIBA` se fue).
+- **Lo pendiente se avisa una vez.** La tarjeta «N por revisar» sale de «Movi propone hoy» (era un
+  contador, no una decisión; `TipoDePropuesta.AVISOS` se fue): lo cuenta la insignia de «Avisos», siempre en
+  la cuadrícula. La campana sigue siendo la bandeja de todo, pero su punto rojo se prende solo con algo
+  vencido o urgente (`campanaConPunto`, `NotificationRow.urgente`: un pago vencido o que vence hoy, lo
+  que el banco cobró solo, un banco que se calló).
+- **Plan: los recordatorios van debajo de los pagos.** «Tus recordatorios no te van a llegar» es una
+  `Fila` compacta (`FilaDeRecordatoriosSinCanal`): el ícono en su círculo y el subtítulo en `aviso`, toda
+  la fila activa las notificaciones (o lleva a Ajustes si el navegador las bloqueó), y «Ahora no»
+  (`Fantasma` `S`) la descarta hasta el período que viene (`PropuestasDescartadasStore`, clave
+  `recordatorios-sin-canal:<período>`; se limpia al cerrar sesión). Va dentro de «Pagos del período»,
+  debajo del resumen (`SeccionChecklistDelPeriodo(debajoDelResumen = …)`). Y en ese resumen una cifra en
+  cero va apagada (`tonoDelResumen`): «Ya pagaste $0» ya no pesa lo mismo que lo que falta.
+
+- **La tarjeta de una anomalía no deja «). ·» pegados.** El detalle viene con su punto final y el «y N
+  avisos más» se le pegaba después de « · »; `cuerpoDeLaAnomalia` saca el punto antes de unir.
+
+**Las líneas base** no cambian: `dp_sueltos` 118 (lo que dejó la vuelta 34), `radios_con_numero` 3, y las
+guardas en 0 siguen en 0.
+
+Lo vigilan `CascadaDelDisponibleTest` (la suma da la cifra del héroe al peso: sin y con ahorro, con un
+apartado, lo guardado y otros pagos de deuda, con fijos pendientes, sin margen y con un server viejo),
+`TeQuedanEnHoyEnPantallaTest` (tocar el héroe abre la hoja, su total es la cifra del héroe y «Ver tus
+períodos» lleva allá), `DisponibleEnInicioTest` y `AhorroDelPeriodoEnHoyYPlanTest` (la cascada en la
+tarjeta), `UnNombrePorConceptoTest`, `CajaDelPeriodoTest` y `ElNetoDelPeriodoTest` y `ResumenDelPanelTest` (los rótulos y el tono del neto),
+`UnaSolaVerdadEnHoyTest` y `ChecklistEnInicioTest` (el Arriendo primero en el widget),
+`LoPendienteSeAvisaUnaVezTest` (con 3 por revisar y nada vencido, ni tarjeta ni punto) y
+`LosRecordatoriosVanDebajoDeLosPagosTest` (la fila debajo del resumen, «Ahora no» por período, el $0
+apagado).
+

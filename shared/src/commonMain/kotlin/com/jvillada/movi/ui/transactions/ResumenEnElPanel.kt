@@ -243,10 +243,16 @@ fun diferenciaDeLaFila(fila: FilaDelAnalisis): DiferenciaDeLaCategoria? =
         CategoriaDelPeriodo(nombre = fila.nombre, gastado = fila.gasto, fraccion = fila.fraccion, anterior = fila.anterior),
     )
 
-/** El tono del neto: en `entra` si quedó plata, en `sale` si salió más de lo que entró. */
+/**
+ * El tono del neto (entró − salió): en `entra` si quedó plata, **en el color del texto** si salió más
+ * de lo que entró, apagado en cero. La misma regla del «Neto del período» de Tus períodos.
+ *
+ * **Un neto negativo no es una alerta** (vuelta de diseño 28): un período en que salió más de lo que
+ * entró puede haberse pagado con lo que ya había; el rojo queda para lo que pide algo.
+ */
 fun tonoDelNeto(neto: Long): TonoDeCifra = when {
     neto > 0 -> TonoDeCifra.Ingreso
-    neto < 0 -> TonoDeCifra.Alerta
+    neto < 0 -> TonoDeCifra.Neutro
     else -> TonoDeCifra.Apagado
 }
 

@@ -198,15 +198,17 @@ class InicioDelRedisenoEnPantallaTest {
     @Test
     fun `el feed muestra una tarjeta por tipo pendiente y respeta el tope`() {
         montar(conTodoPendiente)
-        // Seis tipos pendientes, cuatro a la vista: los más urgentes.
+        // Cinco tipos pendientes, cuatro a la vista: los más urgentes.
         assertEquals(TOPE_DE_PROPUESTAS, cuantosTags(TAG_TARJETA_DE_PROPUESTA))
         composeRule.onNodeWithText("Arriendo vence hoy", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("¿Se cobró la cuota de Libre inversión 9695?", useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithText("Llegaron 3 avisos del banco", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("El saldo de Nu no cuadra con el banco", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("¿Cobro duplicado en RAPPI?", useUnmergedTree = true).assertIsDisplayed()
+        // Vuelta de diseño 28: los 3 avisos por confirmar no son una tarjeta (los cuenta «Avisos»).
+        composeRule.onNodeWithText("Llegaron 3 avisos del banco", useUnmergedTree = true).assertDoesNotExist()
         // Lo que no entra queda para «Ver todo», que lleva a Por revisar.
-        composeRule.onNodeWithText("¿Cobro duplicado en RAPPI?", useUnmergedTree = true).assertDoesNotExist()
-        composeRule.onNodeWithText(" · 6", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Resumen de agosto 2026", useUnmergedTree = true).assertDoesNotExist()
+        composeRule.onNodeWithText(" · 5", useUnmergedTree = true).assertIsDisplayed()
         // El primer «Ver todo» es el del feed (el segundo, el del carrusel).
         composeRule.onAllNodesWithText("Ver todo", useUnmergedTree = true)[0].performClick()
         assertEquals(Screen.PorRevisar, navegado.last())

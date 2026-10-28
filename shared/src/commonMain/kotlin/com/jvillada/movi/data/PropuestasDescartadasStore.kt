@@ -12,6 +12,10 @@ import com.russhwolf.settings.set
  * guarda la propuesta entera —ni hace falta, ni sobreviviría a un rename— solo que ESA combinación
  * ya se ofreció y se rechazó.
  *
+ * Desde la vuelta de diseño 28 guarda también el «Ahora no» de «Tus recordatorios no te van a llegar»
+ * en Plan, una clave por período (`recordatorios-sin-canal:2026-10`, ver
+ * `claveDeRecordatoriosAhoraNo`): el período que viene vuelve a avisar.
+ *
  * **Es del usuario, no del aparato** (a diferencia de `TemaStore`): un «Ahora no» a una propuesta
  * sobre SUS categorías no significa nada para otra cuenta que entre en este mismo teléfono. Por
  * eso se limpia en `SessionManager.clear()`, y `ElForkLlegaLimpioTest` lo prueba.
