@@ -401,17 +401,16 @@ class SistemaDeDisenoTest {
         assertEquals(1, tocada)
     }
 
-    /** Los colores de una tarjeta con marca: los del banco, y el texto de apoyo igual que el principal. */
+    /**
+     * **Vuelta 29: la tarjeta de cuenta es blanca con marca y sin ella.** El color del banco va solo en
+     * el avatar: el amarillo de Bancolombia de fondo se confundía con el de la marca de Movi.
+     */
     @Test
-    fun `la tarjeta de cuenta toma los colores de la marca`() {
+    fun `la tarjeta de cuenta es blanca, con marca o sin ella`() {
         val nu = marcaDelBanco("Nu")!!
-        val conMarca = coloresDeLaTarjetaDeCuenta(nu, COLORES_CLAROS)
-        assertEquals(androidx.compose.ui.graphics.Color(nu.fondo), conMarca.tarjeta)
-        assertEquals(androidx.compose.ui.graphics.Color(nu.texto), conMarca.texto)
-        assertEquals(conMarca.texto, conMarca.textoMedio)
-        // Vuelta 29: sin marca, el blanco de una tarjeta (era la capa 2).
-        val sinMarca = coloresDeLaTarjetaDeCuenta(null, COLORES_CLAROS)
-        assertEquals(COLORES_CLAROS.tarjeta, sinMarca.tarjeta)
+        assertEquals(COLORES_CLAROS, coloresDeLaTarjetaDeCuenta(nu, COLORES_CLAROS))
+        assertEquals(COLORES_CLAROS.tarjeta, coloresDeLaTarjetaDeCuenta(nu, COLORES_CLAROS).tarjeta)
+        assertEquals(COLORES_CLAROS.tarjeta, coloresDeLaTarjetaDeCuenta(null, COLORES_CLAROS).tarjeta)
     }
 
     /** Dos widgets lado a lado miden lo mismo aunque uno tenga más adentro, y cada uno se toca entero. */

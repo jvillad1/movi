@@ -43,6 +43,7 @@ import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.notifications.NotificationsPanel
 import com.jvillada.movi.ui.sdui.SduiRenderer
 import com.jvillada.movi.ui.components.ds.BotonDeIcono
+import com.jvillada.movi.ui.components.ds.TamanoDelTitulo
 import com.jvillada.movi.ui.components.ds.Chevron
 import com.jvillada.movi.ui.components.ds.Fila
 import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie

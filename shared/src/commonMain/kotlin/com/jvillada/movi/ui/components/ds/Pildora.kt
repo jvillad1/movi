@@ -31,6 +31,21 @@ import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.theme.Radio
 
+/**
+ * **Lo elegido, en todo Movi** (vuelta 29): la tinta de fondo y la letra blanca. Lo usan el filtro
+ * elegido, el segmentado, la casilla y cada selector armado en una pantalla (el día, la moneda, la
+ * opción de una hoja): un solo lenguaje para «seleccionado». El amarillo es solo de la acción
+ * principal y el azul, de un enlace. Pura.
+ */
+fun coloresDeLoElegido(colores: ColoresDeMovi): Pair<Color, Color> = colores.texto to colores.tarjeta
+
+/**
+ * **El fondo de una fila elegida en una lista** (la cuenta elegida de una lista, el movimiento abierto
+ * al lado en pantalla ancha): el lavado de la tinta, con el texto en tinta encima. Una fila entera en
+ * tinta pesaría demasiado. Pura.
+ */
+fun fondoDeLaFilaElegida(colores: ColoresDeMovi): Color = colores.lavado(colores.texto)
+
 /** Tag estable de una [Pildora]. */
 const val TAG_PILDORA: String = "ds-pildora"
 

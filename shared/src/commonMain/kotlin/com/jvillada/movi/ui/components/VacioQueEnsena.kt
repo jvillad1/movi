@@ -100,7 +100,9 @@ fun VacioQueEnsena(
                 style = Movi.textos.titulo,
                 color = Movi.colores.texto,
                 textAlign = TextAlign.Center,
-                modifier = lados,
+                // A todo el ancho, centrado por el párrafo: del ancho de su texto, un renglón medía
+                // fracciones de píxel más que su caja y se leía como recortado (vuelta 29).
+                modifier = lados.fillMaxWidth(),
             )
             if (detalle != null) {
                 Spacer(Modifier.height(Movi.espacios.corto))
@@ -109,7 +111,7 @@ fun VacioQueEnsena(
                     style = Movi.textos.cuerpo,
                     color = Movi.colores.textoMedio,
                     textAlign = TextAlign.Center,
-                    modifier = lados,
+                    modifier = lados.fillMaxWidth(),
                 )
             }
             if (contenido != null) {

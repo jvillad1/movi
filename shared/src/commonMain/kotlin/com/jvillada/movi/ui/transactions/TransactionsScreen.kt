@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.transactions
 
+import com.jvillada.movi.ui.components.ds.fondoDeLaFilaElegida
 import com.jvillada.movi.shared.model.montoContado
 import com.jvillada.movi.shared.model.Espacio as EspacioCompartido
 import androidx.compose.foundation.background
@@ -2149,7 +2150,7 @@ private fun Modifier.marcaDeElegido(elegido: Boolean): Modifier =
     else this
         .semantics { selected = true }
         .clip(RoundedCornerShape(Radio.s))
-        .background(Movi.colores.lavado(Movi.colores.enlace))
+        .background(fondoDeLaFilaElegida(Movi.colores))
 
 /**
  * Ola 4 · Ver la plata: [dias] con solo lo que deja pasar [filtro] (ver `FiltroDeMovimientos` en

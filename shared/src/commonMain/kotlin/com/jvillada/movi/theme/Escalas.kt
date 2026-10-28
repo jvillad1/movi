@@ -127,10 +127,10 @@ object Medida {
     val altoDeFiltro: Dp = 44.dp
 
     /**
-     * El alto del encabezado de una pantalla, igual en todas. Vuelta 29: 64 (era 56) para el título de
-     * 28/800 de la opción 3, con el mismo aire abajo que tenía el de 19.
+     * El alto del encabezado de una pantalla, igual en todas. Vuelta 29: siguió en 56 (una primera
+     * versión lo subió a 64 por el título de pestaña, hasta que su interlineado bajó a 30).
      */
-    val altoDeEncabezado: Dp = 64.dp
+    val altoDeEncabezado: Dp = 56.dp
 
     /** El alto de la barra de pestañas del teléfono: 76, el de la opción 3 (vuelta 38; era 64). */
     val altoDeBarraDePestanas: Dp = 76.dp

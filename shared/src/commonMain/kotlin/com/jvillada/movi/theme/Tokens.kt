@@ -9,6 +9,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 
 /**
@@ -159,7 +160,10 @@ data class ColoresDeMovi(
     val capital: Color,
     /** Algo por vencer o por confirmar: el texto sobre el [tinte]. */
     val aviso: Color,
-    /** Plata que fue de una cuenta suya a otra: traspaso, cuota, pago de tarjeta. */
+    /**
+     * Plata que fue de una cuenta suya a otra: traspaso, cuota, pago de tarjeta. Vuelta 29: un gris
+     * azulado (`#556372`) y no un azul: el `#1F5B96` de antes se leía como el [enlace].
+     */
     val entreCuentas: Color,
     /** Relleno de gráficos para lo que no tiene color propio. */
     val neutro: Color,
@@ -338,6 +342,8 @@ val CATEGORIAS_CLARAS = ColoresDeCategoria(
  *   `#E3F1E8`— daba 4,66 y sigue pasando.)
  * - **[ColoresDeMovi.sale] `#B3261E`**: la maqueta no trae rojo. Es solo para alertas, 6,54:1 sobre
  *   blanco y 5,80 sobre el crema.
+ * - **[ColoresDeMovi.entreCuentas] `#556372`**: un gris azulado, porque el azul de antes se confundía
+ *   con el enlace (5,27:1 en la superficie más difícil).
  * - **[ColoresDeMovi.textoApagado] `#6E665B`**: la maqueta tiene dos niveles de texto; el tercero es
  *   el más claro de la misma familia que pasa sobre la capa 3 (4,84:1).
  *
@@ -371,7 +377,7 @@ val COLORES_CLAROS = ColoresDeMovi(
     sale           = Color(0xFFB3261E),
     capital        = Color(0xFF8A5A18),
     aviso          = Color(0xFF6B4A00),
-    entreCuentas   = Color(0xFF1F5B96),
+    entreCuentas   = Color(0xFF556372),
     neutro         = Color(0xFFA39A8C),
     categorias     = CATEGORIAS_CLARAS,
     alfaDelLavado  = 0.10f,
@@ -407,7 +413,7 @@ data class EspaciosDeMovi(
     val margen: Dp = Medida.margenDePantalla,
     /** Entre dos secciones que hablan de cosas distintas: [Medida.entreSecciones] (era 32; ahora 24). */
     val seccion: Dp = Medida.entreSecciones,
-    /** El alto del encabezado de una pantalla: [Medida.altoDeEncabezado] (era 52; 56 en la R0; 64 desde la vuelta 29). */
+    /** El alto del encabezado de una pantalla: [Medida.altoDeEncabezado] (era 52; ahora 56). */
     val encabezado: Dp = Medida.altoDeEncabezado,
 )
 
@@ -440,30 +446,49 @@ data class FormasDeMovi(
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TIPOGRAFÍA — de 25 tamaños a 9
+// TIPOGRAFÍA — de 25 tamaños a 11
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
+ * **Un renglón mide su interlineado, entero** (vuelta 29): `Trim.None`, centrado. Era la regla del
+ * `monto` y pasó a todos los estilos: sin recorte, un texto de N renglones mide N × `lineHeight` con
+ * cualquier letra, que es exactamente lo que reservan los esqueletos (`LineaEsqueleto`,
+ * `altoDeUnRenglon`). Con Figtree y los tamaños nuevos, el recorte de siempre hacía que lo cargado y su
+ * esqueleto difirieran de a unos dp por renglón, y lo de abajo saltaba al llegar el dato.
+ */
+val RENGLON_ENTERO: LineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.None)
+
+/**
  * Los estilos de texto, contra los 25 tamaños sueltos que había: los siete de siempre, más
- * [cifraDeTarjeta] (ola R0) y [portada] (vuelta de diseño 3).
+ * [cifraDeTarjeta] (ola R0), [portada] (vuelta de diseño 3) y, desde la vuelta 29, [titularDePantalla]
+ * y [saludo].
  *
  * ### Figtree para todo, también las cifras (vuelta 29)
  *
  * La opción 3 escribe todo en **Figtree**, de 400 a 800, y las cifras en la misma letra con
  * **números tabulares** (`fontFeatureSettings = "tnum"`): una columna de montos alinea sin la
- * monoespaciada (Martian Mono) que el camino 1 ponía en cada cifra. Los tamaños y pesos son los de la
- * maqueta:
+ * monoespaciada (Martian Mono) que el camino 1 ponía en cada cifra.
  *
- * | estilo | maqueta |
- * |---|---|
- * | [cifra] | el héroe: 40/800, tracking −1,2 |
- * | [titular] | el título de una pantalla: 28/800, tracking −0,6 |
- * | [titulo] | el título de una sección: 16/700 |
- * | [cuerpo] | el título de una fila: 15/600 |
- * | [monto] | el monto de una fila: 15/700 |
- * | [apoyo] | el subtítulo: 12,5/400 |
- * | [cuerpoFuerte] | el rótulo de un botón: 15/700 |
- * | [pestana] / [pestanaActiva] | 12/500 y 12/700 |
+ * ### En sp, la maqueta dividida por 1,12
+ *
+ * `App()` agranda toda la letra ×1,12 (`fontScale * 1.12f`, en las tres plataformas). La primera
+ * versión de esta vuelta escribió acá los px de la maqueta tal cual, y en pantalla todo salía 12 %
+ * más grande que en ella: «Bancolombia Ahorros» y «Mercado del sábado» en dos renglones, «Arrie…» en
+ * el widget, «Hola, Demo» del tamaño de un título. Cada estilo es **la maqueta ÷ 1,12**, redondeada al
+ * medio punto, para que **lo que se ve** mida lo de la maqueta (lo fija `TipografiaTest`):
+ *
+ * | estilo | sp | se ve como | maqueta |
+ * |---|---|---|---|
+ * | [cifra] | 36 / 800 | 40,3 | el héroe: 40/800, tracking −1,2 |
+ * | [titular] | 25 / 800 | 28 | el título de una pestaña: 28/800 |
+ * | [titularDePantalla] | 19,5 / 800 | 21,8 | el título de una pantalla con flecha: 22/800 |
+ * | [saludo] | 15 / 700 | 16,8 | «Hola, Juan» y el nombre del perfil: 17/700 |
+ * | [titulo] | 14,5 / 700 | 16,2 | el título de una sección: 16/700 |
+ * | [cuerpo] | 13,5 / 600 | 15,1 | el título de una fila: 15/600 |
+ * | [monto] | 13,5 / 700 | 15,1 | el monto de una fila: 15/700 |
+ * | [apoyo] | 11 / 400 | 12,3 | el subtítulo: 12,5 |
+ * | [rotulo] / [pestana] | 12 | 13,4 | (la barra de pestañas no se tocó: la rehace la vuelta 38) |
+ * | [rotuloDeAccion] | 10,75 / 600 | 12 | el rótulo de una acción de Inicio: 12/600 (vuelta 39) |
  *
  * ### La familia se pone en el tema, no acá
  *
@@ -475,22 +500,26 @@ data class FormasDeMovi(
 data class TextosDeMovi(
     /** El número protagonista de una pantalla. Uno por pantalla, o ninguno. */
     val cifra: TextStyle = TextStyle(
-        fontSize = 40.sp,
-        lineHeight = 46.sp,
+        fontSize = 36.sp,
+        lineHeight = 41.sp,
+        // La única sin `RENGLON_ENTERO`: a 36 sp la letra es más alta que su interlineado, y con el
+        // recorte de siempre el renglón mide la letra. Es la que dibuja la hoja de Agregar, anclada
+        // abajo: con el renglón entero el pie se salía a 360 × 740.
         fontWeight = FontWeight.ExtraBold,
-        letterSpacing = (-1.2).sp,
+        letterSpacing = (-1.1).sp,
         fontFeatureSettings = "tnum",
     ),
     /**
-     * **La cifra de una tarjeta** (camino 1): el saldo dentro de la tarjeta de color de un banco, la
-     * cifra de un widget, «Falta por pagar». A 24 sp, el piso al que se achica la cifra héroe antes
-     * de dejar de ser protagonista (`CifraProtagonista`, `ds.Cifra`).
+     * **La cifra de una tarjeta** (camino 1): el saldo dentro de la tarjeta de un banco, la cifra de un
+     * widget, «Falta por pagar». El piso al que se achica la cifra héroe antes de dejar de ser
+     * protagonista (`CifraProtagonista`, `ds.Cifra`).
      */
     val cifraDeTarjeta: TextStyle = TextStyle(
-        fontSize = 24.sp,
-        lineHeight = 30.sp,
+        fontSize = 21.5.sp,
+        lineHeight = 27.sp,
+        lineHeightStyle = RENGLON_ENTERO,
         fontWeight = FontWeight.ExtraBold,
-        letterSpacing = (-0.6).sp,
+        letterSpacing = (-0.5).sp,
         fontFeatureSettings = "tnum",
     ),
     /**
@@ -499,52 +528,83 @@ data class TextosDeMovi(
      * [cifra]— ni para el título de una pantalla con contenido —eso es [titular]—.
      */
     val portada: TextStyle = TextStyle(
-        fontSize = 32.sp,
-        lineHeight = 38.sp,
-        fontWeight = FontWeight.ExtraBold,
-        letterSpacing = (-0.8).sp,
-    ),
-    /** El título de una pantalla: «Actividad», «Pagos». */
-    val titular: TextStyle = TextStyle(
-        fontSize = 28.sp,
+        fontSize = 28.5.sp,
         lineHeight = 34.sp,
+        lineHeightStyle = RENGLON_ENTERO,
         fontWeight = FontWeight.ExtraBold,
-        letterSpacing = (-0.6).sp,
+        letterSpacing = (-0.7).sp,
+    ),
+    /**
+     * **El título de una pestaña** («Actividad», «Pagos», «Patrimonio»): el encabezado con el avatar.
+     * Interlineado justo (30, no los 36 de la maqueta): en un renglón no se nota, y deja el encabezado
+     * en 56 con el aire de abajo que pide `PlanScreenTest`.
+     */
+    val titular: TextStyle = TextStyle(
+        fontSize = 25.sp,
+        lineHeight = 30.sp,
+        lineHeightStyle = RENGLON_ENTERO,
+        fontWeight = FontWeight.ExtraBold,
+        letterSpacing = (-0.5).sp,
+    ),
+    /**
+     * **El título de una pantalla con flecha** (vuelta 29, «Personas» en la maqueta): más chico que el
+     * de una pestaña. El de 28 solo va en las cinco raíces.
+     */
+    val titularDePantalla: TextStyle = TextStyle(
+        fontSize = 19.5.sp,
+        lineHeight = 24.sp,
+        lineHeightStyle = RENGLON_ENTERO,
+        fontWeight = FontWeight.ExtraBold,
+        letterSpacing = (-0.4).sp,
+    ),
+    /**
+     * **El saludo** (vuelta 29): «Hola, Juan» arriba de Hoy y el nombre en la tarjeta del perfil, con
+     * la fecha o el correo debajo en `apoyo`. Es un nombre, no el título de una pestaña.
+     */
+    val saludo: TextStyle = TextStyle(
+        fontSize = 15.sp,
+        lineHeight = 19.sp,
+        lineHeightStyle = RENGLON_ENTERO,
+        fontWeight = FontWeight.Bold,
     ),
     /** El título de una sección, de una tarjeta o de un bloque: «Últimos movimientos». */
     val titulo: TextStyle = TextStyle(
-        fontSize = 16.sp,
-        lineHeight = 20.sp,
+        fontSize = 14.5.sp,
+        lineHeight = 18.sp,
+        lineHeightStyle = RENGLON_ENTERO,
         fontWeight = FontWeight.Bold,
     ),
     /** El texto de una fila —su título—, un filtro sin elegir, un enlace. */
     val cuerpo: TextStyle = TextStyle(
-        fontSize = 15.sp,
-        lineHeight = 20.sp,
+        fontSize = 13.5.sp,
+        lineHeight = 18.sp,
+        lineHeightStyle = RENGLON_ENTERO,
         fontWeight = FontWeight.SemiBold,
     ),
     /**
      * Un monto en una fila. Tabular, para que la columna no baile, y en la letra de todo lo demás.
      */
     val monto: TextStyle = TextStyle(
-        fontSize = 15.sp,
-        lineHeight = 20.sp,
+        fontSize = 13.5.sp,
+        lineHeight = 18.sp,
         fontWeight = FontWeight.Bold,
         fontFeatureSettings = "tnum",
         // Sin recorte: un renglón de monto mide su `lineHeight` con cualquier fuente —lo que miden
         // los esqueletos y el alto del MoneyField—.
-        lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.None),
+        lineHeightStyle = RENGLON_ENTERO,
     ),
     /** El subtítulo de una fila, que dice algo que no está en ninguna otra parte. */
     val apoyo: TextStyle = TextStyle(
-        fontSize = 12.5.sp,
-        lineHeight = 16.sp,
+        fontSize = 11.sp,
+        lineHeight = 15.sp,
+        lineHeightStyle = RENGLON_ENTERO,
         fontWeight = FontWeight.Normal,
     ),
     /** Un rótulo chico y espaciado. La base de las pestañas. */
     val rotulo: TextStyle = TextStyle(
         fontSize = 12.sp,
         lineHeight = 16.sp,
+        lineHeightStyle = RENGLON_ENTERO,
         fontWeight = FontWeight.SemiBold,
         letterSpacing = 0.4.sp,
     ),
@@ -599,9 +659,6 @@ data class TextosDeMovi(
      * gasto», «Subir / comprobante»). Es el piso de lo legible en el Inicio: 12 px efectivos en la web.
      * A 360 dp ninguna palabra se parte (`LasOchoAccionesDelInicioTest`).
      */
-    /** «Hola, Juan» (TEMPORAL hasta mezclar master, que ya lo trae). */
-    val saludo: TextStyle = titulo.copy(fontSize = 15.sp, lineHeight = 19.sp)
-
     val rotuloDeAccion: TextStyle = rotulo.copy(fontSize = 10.75.sp, lineHeight = 14.sp, letterSpacing = 0.sp)
 
     /**
@@ -611,6 +668,14 @@ data class TextosDeMovi(
      * Bold, como el «<strong>» de la maqueta.
      */
     val enfasis: SpanStyle = SpanStyle(fontWeight = FontWeight.Bold)
+
+    /**
+     * **El menos pegado al «$»** (vuelta 29). El `−` (U+2212) de Figtree es del ancho de un dígito
+     * (632 de 1000) con el trazo centrado, así que entre él y el «$» quedaba un hueco y «−$85.000» se
+     * leía «- $85.000», un guion suelto. Este `SpanStyle` va solo sobre el menos y le quita el aire de
+     * su derecha (123 de 1000 ≈ 0,12 em). Lo pone `Cifra` (`conElMenosPegado`).
+     */
+    val menosPegado: SpanStyle = SpanStyle(letterSpacing = (-0.12).em)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

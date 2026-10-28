@@ -60,7 +60,7 @@ internal fun familiaDeMovi(): FontFamily {
 }
 
 /**
- * Los nueve estilos con su familia puesta. **Pura**, sin `@Composable`, para poder probarla.
+ * Los once estilos con su familia puesta. **Pura**, sin `@Composable`, para poder probarla.
  *
  * Una sola familia para todos desde la vuelta 29: las cifras se distinguen por sus números tabulares
  * (que ya traen sus estilos), no por otra letra.
@@ -70,6 +70,8 @@ internal fun TextosDeMovi.conFamilia(familia: FontFamily): TextosDeMovi = copy(
     cifraDeTarjeta = cifraDeTarjeta.copy(fontFamily = familia),
     portada = portada.copy(fontFamily = familia),
     titular = titular.copy(fontFamily = familia),
+    titularDePantalla = titularDePantalla.copy(fontFamily = familia),
+    saludo = saludo.copy(fontFamily = familia),
     titulo = titulo.copy(fontFamily = familia),
     cuerpo = cuerpo.copy(fontFamily = familia),
     monto = monto.copy(fontFamily = familia),

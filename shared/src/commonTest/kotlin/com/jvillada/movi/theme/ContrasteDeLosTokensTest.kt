@@ -199,6 +199,19 @@ class ContrasteDeLosTokensTest {
     }
 
     /**
+     * **Un traspaso no se lee como un enlace** (vuelta 29). `entreCuentas` era `#1F5B96`, casi el
+     * `#1D4E9E` del enlace (1,07:1 entre los dos): un monto entre cuentas parecía tocable. Ahora es un gris
+     * azulado y tiene que despegarse del enlace al menos lo que un borde se despega de la tarjeta.
+     */
+    @Test
+    fun `entre cuentas no se confunde con el enlace`() {
+        for ((tema, c) in temas) {
+            val r = contraste(c.entreCuentas, c.enlace)
+            assertTrue(r >= BORDE_MINIMO, "En el tema $tema entre cuentas y el enlace dan ${r.legible()}:1")
+        }
+    }
+
+    /**
      * **La marca no es letra** (vuelta 29). Si alguien vuelve a poner el amarillo en la lista de
      * textos, o el amarillo se oscurece hasta parecer otro color, esto lo dice: el amarillo sobre el
      * blanco no llega ni al piso de un gráfico, así que **no puede** ir de letra.

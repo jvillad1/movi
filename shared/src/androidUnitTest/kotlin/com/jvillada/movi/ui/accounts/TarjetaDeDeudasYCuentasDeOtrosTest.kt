@@ -1,5 +1,10 @@
 package com.jvillada.movi.ui.accounts
 
+import androidx.compose.ui.test.hasText
+
+import androidx.compose.ui.test.hasContentDescription
+
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.CompositionLocalProvider
@@ -273,9 +278,10 @@ class TarjetaDeDeudasYCuentasDeOtrosTest {
         montar()
         composeRule.waitForIdle()
 
-        // Con rótulo — `NewItemButton`, no un ícono solo — porque es la única puerta permanente
-        // para crear una cuenta una vez que los grupos ya tienen alguna.
-        composeRule.onNodeWithText("Nueva cuenta", useUnmergedTree = true).assertExists()
+        // Es la única puerta permanente para crear una cuenta una vez que los grupos ya tienen
+        // alguna. Vuelta 38: Patrimonio vive en Tú y lleva flecha, así que va con su texto si cabe y, si
+        // no, en su botón redondo con «Nueva cuenta» de nombre (vuelta 29).
+        composeRule.onNode(hasText("Nueva cuenta") or hasContentDescription("Nueva cuenta"), useUnmergedTree = true).assertExists()
     }
 
     // ── Error con reintento ───────────────────────────────────────────────────

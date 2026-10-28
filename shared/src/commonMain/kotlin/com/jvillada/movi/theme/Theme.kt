@@ -23,8 +23,11 @@ import androidx.compose.runtime.CompositionLocalProvider
  */
 internal fun esquemaDe(c: ColoresDeMovi): ColorScheme {
     return lightColorScheme().copy(
-        primary = c.marca,
-        onPrimary = c.sobreMarca,
+        // Vuelta 29: lo que Material pinta «en el primario» —una casilla, un interruptor, la ruedita,
+        // el cursor y las manijas de la selección— es lo elegido o el foco, no la acción: va en tinta.
+        // El amarillo de la marca lo pone a mano el `Boton` principal, y nada más.
+        primary = c.texto,
+        onPrimary = c.tarjeta,
         primaryContainer = c.tinte,
         onPrimaryContainer = c.aviso,
         // El amarillo no se lee como letra (vuelta 29): lo que Material pinta «en el color

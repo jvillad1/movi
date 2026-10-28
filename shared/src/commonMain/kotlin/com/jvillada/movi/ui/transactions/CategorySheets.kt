@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.transactions
 
+import com.jvillada.movi.ui.components.ds.fondoDeLaFilaElegida
 import kotlin.math.abs
 import com.jvillada.movi.ui.components.ds.TonoDeCifra
 import com.jvillada.movi.ui.components.ds.Cifra
@@ -176,7 +177,7 @@ private fun CategoryRow(
                 Text(subtitle, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
             }
         }
-        if (selected) Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.enlace, modifier = Modifier.size(Icono.s))
+        if (selected) Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.texto, modifier = Modifier.size(Icono.s))
     }
 }
 
@@ -1697,10 +1698,10 @@ private fun SelectorDeCuentaDelMovimiento(
                 Text(
                     text = cuenta.name,
                     style = if (elegida) Movi.textos.cuerpo else Movi.textos.cuerpoRegular,
-                    color = if (elegida) Movi.colores.enlace else Movi.colores.texto,
+                    color = Movi.colores.texto,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .then(if (elegida) Modifier.background(Movi.colores.lavado(Movi.colores.enlace)) else Modifier)
+                        .then(if (elegida) Modifier.background(fondoDeLaFilaElegida(Movi.colores)) else Modifier)
                         .clickable { onPick(cuenta.id) }
                         .heightIn(min = Medida.objetivoTactil)
                         .padding(horizontal = Espacio.s, vertical = Espacio.s),
