@@ -43,10 +43,12 @@ import kotlinx.datetime.LocalDate
 const val DIAS_PARA_VOLVER_A_CUADRAR = com.jvillada.movi.shared.model.DIAS_PARA_VOLVER_A_CUADRAR
 
 /**
- * **¿Esta cuenta se puede cuadrar contra el banco?** Solo Dinero e Inversión.
+ * **¿Esta cuenta entra en Cuadre de saldos?** Solo Dinero e Inversión.
  *
- * Es la misma regla que aplica el server (`POST /api/accounts/{id}/balance-adjustment`), y el
- * porqué está escrito allá con detalle. En corto: acá entran las cuentas donde «lo que dice el
+ * Desde la vuelta 33 el server también cuadra una **tarjeta** por la misma ruta
+ * (`POST /api/accounts/{id}/balance-adjustment`), pero solo desde su detalle («Ajustar saldo», con la
+ * hoja que pide la deuda total de hoy): esta pantalla y su aviso de «sin cuadrar» siguen sin ella,
+ * por lo de abajo. En corto: acá entran las cuentas donde «lo que dice el
  * banco» es **un** número. Una tarjeta no tiene esa propiedad —saldo actual, saldo a pagar, cupo
  * disponible y compras sin facturar son cuatro cifras distintas, y ninguna significa lo mismo que
  * la deuda que Movi acumula compra por compra—, y además ya tiene quién la concilie: el extracto y

@@ -163,6 +163,10 @@ data class Account(
  * devuelve la cuenta.
  *
  * En la **moneda de la cuenta**, igual que el saldo que muestra la pantalla.
+ *
+ * Desde la vuelta 33 también acepta una **tarjeta de crédito**: el objetivo es lo que se debe hoy
+ * según el banco (la deuda total, no el pago mínimo ni el cupo), y el server pone el signo de la
+ * deuda. Un préstamo sigue yendo por la ruta de créditos (422 acá).
  */
 @Serializable
 data class AdjustAccountBalanceRequest(val targetBalance: Long)

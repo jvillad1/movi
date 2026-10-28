@@ -79,7 +79,7 @@ enum class HojaDeLaDeuda { Condiciones, Saldo, Abono }
 /** El título de la acción que abre la hoja de condiciones. */
 const val EDITAR_LAS_CONDICIONES: String = "Editar las condiciones"
 
-/** El título de la acción que abre la hoja de ajustar el saldo de un préstamo. */
+/** El título de la acción que abre la hoja de ajustar el saldo de un préstamo o (vuelta 33) una tarjeta. */
 const val AJUSTAR_EL_SALDO: String = "Ajustar saldo"
 
 /** La acción de la tarjeta que abre «Agregar» para anotar su pago (vuelta de diseño 32). */
@@ -218,6 +218,11 @@ private fun accionesDeLaDeuda(deuda: DeudaDelDetalle, onRegistrarPagoDeLaTarjeta
     // pagaste (el traspaso de dos patas de la pestaña del pago de Agregar). Con o sin sus datos.
     if (deuda.tarjeta != null && onRegistrarPagoDeLaTarjeta != null) {
         add(AccionDeLaDeuda(REGISTRAR_UN_PAGO_DE_LA_TARJETA, "Lo que le pagaste desde otra cuenta", Icons.Rounded.Payments, onRegistrarPagoDeLaTarjeta))
+    }
+    // Vuelta 33: la tarjeta también se cuadra contra el banco, con la misma hoja que un préstamo
+    // ([CardBalanceSheet]). Con o sin sus datos: lo que se debe no depende del corte ni del cupo.
+    if (deuda.tarjeta != null) {
+        add(AccionDeLaDeuda(AJUSTAR_EL_SALDO, "Cuando no cuadra con lo que dice el banco", Icons.Rounded.Tune) { deuda.hoja = HojaDeLaDeuda.Saldo })
     }
     val prestamo = deuda.prestamo
     val terms = prestamo?.terms
@@ -380,9 +385,14 @@ fun HojasDeLaDeuda(deuda: DeudaDelDetalle, onCambiada: () -> Unit, onError: (Str
                 onSaved = { deuda.hoja = null; onCambiada() },
             )
         }
-        HojaDeLaDeuda.Saldo -> if (prestamo != null) {
-            CreditBalanceSheet(
+        HojaDeLaDeuda.Saldo -> when {
+            prestamo != null -> CreditBalanceSheet(
                 credit = prestamo,
+                onDismiss = { deuda.hoja = null },
+                onSaved = { deuda.hoja = null; onCambiada() },
+            )
+            tarjeta != null -> CardBalanceSheet(
+                card = tarjeta,
                 onDismiss = { deuda.hoja = null },
                 onSaved = { deuda.hoja = null; onCambiada() },
             )

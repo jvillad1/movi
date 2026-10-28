@@ -4,6 +4,9 @@ import androidx.compose.material.icons.rounded.Add
 import com.jvillada.movi.ui.components.ds.AccionDeEncabezado
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import com.jvillada.movi.ui.components.PanelDeTablero
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -84,6 +87,7 @@ const val TAG_PEDIRLE: String = "espacios:pedirle"
 const val TAG_MENSAJE_COPIADO: String = "espacios:mensaje-copiado"
 const val TAG_GASTO_DEL_ESPACIO: String = "espacios:gasto"
 const val TAG_LO_QUE_PAGA_OTRA_PERSONA: String = "espacios:lo-que-paga-otra-persona"
+const val TAG_ANOTAR_LO_QUE_PAGO_OTRO: String = "espacios:anotar-lo-que-pago-otro"
 
 /** Lo que una escritura falló, dicho para el dueño. */
 internal fun mensajeDelEspacio(e: Throwable): String = when {
@@ -132,7 +136,12 @@ fun EspaciosScreen(onNavigate: (Screen) -> Unit) {
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
+    // Vuelta 33: con un solo espacio a la vista, en pantalla ancha va en dos columnas (ver
+    // [espacioEnDosColumnas]); con varios, sin ninguno o sin poder leerlos, en una columna de lectura.
+    val unSoloEspacio = lectura?.detalles?.size == 1
+    Box(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
+    PanelDeTablero(enDosColumnas = { espacioEnDosColumnas(it) && unSoloEspacio }) { dosColumnas ->
+    Column(modifier = Modifier.fillMaxSize()) {
         // Con un espacio o más, crear otro va arriba (antes solo se podía desde el vacío: con uno ya
         // creado no había cómo hacer el segundo). Sin ninguno, el vacío ya lo ofrece.
         MinScreenHeader(
@@ -142,43 +151,61 @@ fun EspaciosScreen(onNavigate: (Screen) -> Unit) {
                 AccionDeEncabezado("Nuevo espacio", Icons.Rounded.Add, onClick = { creando = true })
             } else null,
         )
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = Medida.margenDePantalla)
-                .padding(bottom = Medida.entreSecciones),
-            verticalArrangement = Arrangement.spacedBy(Medida.entreSecciones),
-        ) {
+        // Lo que va al final, debajo del espacio (en dos columnas, al final de la derecha).
+        val alFinal: @Composable ColumnScope.() -> Unit = {
             val actual = lectura
-            when {
-                actual == null && error != null -> Vacio(
-                    titulo = "No pudimos leer tus espacios",
-                    detalle = error,
-                    accion = "Reintentar",
-                    onAccion = { reintento++ },
-                )
-                actual == null -> Column { repeat(3) { EsqueletoDeFila() } }
-                actual.detalles.isEmpty() -> Vacio(
-                    titulo = "Comparte gastos con alguien",
-                    detalle = "Crea un espacio, como «Casa con Caro»: cuenta solo tu parte y Movi lleva quién le debe a quién.",
-                    accion = "Crear espacio",
-                    onAccion = { creando = true },
-                    icono = Icons.Rounded.Groups,
-                )
-                actual.detalles.size == 1 -> CuerpoDelEspacio(
-                    detalle = actual.detalles.single(),
-                    onCambio = { reintento++ },
-                    onVerTodo = { onNavigate(Screen.Espacio(actual.detalles.single().espacio.id)) },
-                )
-                else -> ListaDeEspacios(actual.detalles, onAbrir = { onNavigate(Screen.Espacio(it)) })
-            }
             if (actual != null && actual.queOtroPaga.isNotEmpty()) LoQuePagaOtraPersona(actual.queOtroPaga)
             // Ola R4: la casa de los terceros. Al final, siempre: lo que tienes con los demás que no
             // está en un espacio (Caro, tu papá, los comercios). Desde la vuelta 31 es la única
             // puerta (Ajustes ya no la repite); ver [RenglonDePersonasYComercios].
             RenglonDePersonasYComercios(destinos = destinos.valor, onClick = { onNavigate(Screen.Destinos()) })
         }
+        val actual = lectura
+        if (dosColumnas && actual != null && actual.detalles.size == 1) {
+            CuerpoDelEspacio(
+                detalle = actual.detalles.single(),
+                onCambio = { reintento++ },
+                onVerTodo = { onNavigate(Screen.Espacio(actual.detalles.single().espacio.id)) },
+                enDosColumnas = true,
+                alFinalDeLaDerecha = alFinal,
+                modifier = Modifier.weight(1f),
+            )
+        } else {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = Medida.margenDePantalla)
+                    .padding(bottom = Medida.entreSecciones),
+                verticalArrangement = Arrangement.spacedBy(Medida.entreSecciones),
+            ) {
+                when {
+                    actual == null && error != null -> Vacio(
+                        titulo = "No pudimos leer tus espacios",
+                        detalle = error,
+                        accion = "Reintentar",
+                        onAccion = { reintento++ },
+                    )
+                    actual == null -> Column { repeat(3) { EsqueletoDeFila() } }
+                    actual.detalles.isEmpty() -> Vacio(
+                        titulo = "Comparte gastos con alguien",
+                        detalle = "Crea un espacio, como «Casa con Caro»: cuenta solo tu parte y Movi lleva quién le debe a quién.",
+                        accion = "Crear espacio",
+                        onAccion = { creando = true },
+                        icono = Icons.Rounded.Groups,
+                    )
+                    actual.detalles.size == 1 -> CuerpoDelEspacio(
+                        detalle = actual.detalles.single(),
+                        onCambio = { reintento++ },
+                        onVerTodo = { onNavigate(Screen.Espacio(actual.detalles.single().espacio.id)) },
+                    )
+                    else -> ListaDeEspacios(actual.detalles, onAbrir = { onNavigate(Screen.Espacio(it)) })
+                }
+                alFinal()
+            }
+        }
+    }
+    } // PanelDeTablero
     }
 
     if (creando) {
@@ -218,33 +245,48 @@ fun EspacioScreen(id: String, pagoOtro: Boolean) {
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
+    Box(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
+    PanelDeTablero(enDosColumnas = { espacioEnDosColumnas(it) && detalle != null }) { dosColumnas ->
+    Column(modifier = Modifier.fillMaxSize()) {
         MinScreenHeader(title = detalle?.espacio?.nombre ?: "Espacio", leading = HeaderLeading.Back(fallback = Screen.Espacios))
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = Medida.margenDePantalla)
-                .padding(bottom = Medida.entreSecciones),
-            verticalArrangement = Arrangement.spacedBy(Medida.entreSecciones),
-        ) {
-            val actual = detalle
-            when {
-                actual == null && error != null -> Vacio(
-                    titulo = "No pudimos leer este espacio",
-                    detalle = error,
-                    accion = "Reintentar",
-                    onAccion = { reintento++ },
-                )
-                actual == null -> Column { repeat(3) { EsqueletoDeFila() } }
-                else -> CuerpoDelEspacio(
-                    detalle = actual,
-                    onCambio = { reintento++ },
-                    onVerTodo = null,
-                    pagoOtroDeEntrada = pagoOtro,
-                )
+        val actual = detalle
+        if (dosColumnas && actual != null) {
+            CuerpoDelEspacio(
+                detalle = actual,
+                onCambio = { reintento++ },
+                onVerTodo = null,
+                pagoOtroDeEntrada = pagoOtro,
+                enDosColumnas = true,
+                modifier = Modifier.weight(1f),
+            )
+        } else {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = Medida.margenDePantalla)
+                    .padding(bottom = Medida.entreSecciones),
+                verticalArrangement = Arrangement.spacedBy(Medida.entreSecciones),
+            ) {
+                when {
+                    actual == null && error != null -> Vacio(
+                        titulo = "No pudimos leer este espacio",
+                        detalle = error,
+                        accion = "Reintentar",
+                        onAccion = { reintento++ },
+                    )
+                    actual == null -> Column { repeat(3) { EsqueletoDeFila() } }
+                    else -> CuerpoDelEspacio(
+                        detalle = actual,
+                        onCambio = { reintento++ },
+                        onVerTodo = null,
+                        pagoOtroDeEntrada = pagoOtro,
+                    )
+                }
             }
         }
+    }
+    } // PanelDeTablero
     }
 }
 
@@ -262,6 +304,15 @@ internal fun CuerpoDelEspacio(
     onCambio: () -> Unit,
     onVerTodo: (() -> Unit)?,
     pagoOtroDeEntrada: Boolean = false,
+    /**
+     * Vuelta 33: en pantalla ancha, el espacio, «Quién puso qué» y el saldo a la izquierda, y los
+     * gastos (más [alFinalDeLaDerecha]) a la derecha, cada columna con su scroll. `false` = una
+     * columna: lo emite todo en la columna de quien llama, como siempre.
+     */
+    enDosColumnas: Boolean = false,
+    alFinalDeLaDerecha: @Composable ColumnScope.() -> Unit = {},
+    /** El de las dos columnas (con `weight`): en una columna no se usa. */
+    modifier: Modifier = Modifier,
 ) {
     val espacio = detalle.espacio
     val coroutine = rememberCoroutineScope()
@@ -276,50 +327,87 @@ internal fun CuerpoDelEspacio(
     val hoja = hojaDeCompartir()
     val uriHandler = LocalUriHandler.current
 
-    // ── Lo que Movi propone: vincular una transferencia que salda. ──
-    val propuestas = detalle.propuestas.filterNot { it.eventoId in descartadas }
-    propuestas.forEach { p ->
-        TarjetaDePropuesta(
-            icono = Icons.Rounded.SwapHoriz,
-            titulo = preguntaDeSaldar(espacio, if (p.a == MIEMBRO_YO) p.de else p.a, entra = p.a == MIEMBRO_YO),
-            cifra = p.monto,
-            cuerpo = p.descripcion,
-            accion = "Sí, saldar",
-            onAccion = {
-                coroutine.launch {
-                    try {
-                        Repositories.wallets.liquidarEspacio(espacio.id, liquidacionDe(p))
-                        onCambio()
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Throwable) {
-                        errorDePropuesta = mensajeDelEspacio(e)
+    // ── Lo que Movi propone, el espacio, quién puso qué y el saldo: la izquierda en dos columnas. ──
+    val izquierda: @Composable ColumnScope.() -> Unit = {
+        // ── Lo que Movi propone: vincular una transferencia que salda. ──
+        val propuestas = detalle.propuestas.filterNot { it.eventoId in descartadas }
+        propuestas.forEach { p ->
+            TarjetaDePropuesta(
+                icono = Icons.Rounded.SwapHoriz,
+                titulo = preguntaDeSaldar(espacio, if (p.a == MIEMBRO_YO) p.de else p.a, entra = p.a == MIEMBRO_YO),
+                cifra = p.monto,
+                cuerpo = p.descripcion,
+                accion = "Sí, saldar",
+                onAccion = {
+                    coroutine.launch {
+                        try {
+                            Repositories.wallets.liquidarEspacio(espacio.id, liquidacionDe(p))
+                            onCambio()
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Throwable) {
+                            errorDePropuesta = mensajeDelEspacio(e)
+                        }
                     }
+                },
+                accionSecundaria = "No",
+                onAccionSecundaria = { descartadas = descartadas + p.eventoId },
+            )
+        }
+        errorDePropuesta?.let { Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale) }
+
+        EncabezadoDelEspacio(detalle)
+        QuienPusoQue(detalle)
+        SaldoDelEspacioTarjeta(
+            detalle,
+            onPedir = {
+                mensajeParaPedir(detalle)?.let { mensaje ->
+                    mensajeCopiado = if (hoja.mandarMensaje(mensaje) == ComoSalioElMensaje.COPIADO) mensaje else null
                 }
             },
-            accionSecundaria = "No",
-            onAccionSecundaria = { descartadas = descartadas + p.eventoId },
+            onSaldar = { saldando = true },
+            // Con transferencias que pueden ser el pago, la hoja de siempre (se elige cuál vincular); sin
+            // ninguna, la pregunta antes de dejar el espacio en cero.
+            onSaldadoSecundario = { if (detalle.propuestas.isEmpty()) confirmandoSaldado = true else saldando = true },
+            mensajeCopiado = mensajeCopiado,
+            onAbrirWhatsApp = { mensajeCopiado?.let { runCatching { uriHandler.openUri(enlaceDeWhatsApp(it)) } } },
         )
     }
-    errorDePropuesta?.let { Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale) }
-
-    EncabezadoDelEspacio(detalle)
-    QuienPusoQue(detalle)
-    SaldoDelEspacioTarjeta(
-        detalle,
-        onPedir = {
-            mensajeParaPedir(detalle)?.let { mensaje ->
-                mensajeCopiado = if (hoja.mandarMensaje(mensaje) == ComoSalioElMensaje.COPIADO) mensaje else null
+    val derecha: @Composable ColumnScope.() -> Unit = {
+        GastosDelEspacio(detalle, onPagoOtro = { pagoOtro = true }, onVerTodo = onVerTodo, onCambio = onCambio)
+    }
+    if (enDosColumnas) {
+        // Cada columna con su propio scroll, como Patrimonio: los rellenos suman los 48 de
+        // [RELLENO_DE_DOS_COLUMNAS] (16 afuera de cada una y 8 + 8 entre las dos).
+        Row(modifier = modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .verticalScroll(rememberScrollState())
+                    .padding(start = Medida.margenDePantalla, end = Medida.margenDePantalla / 2, bottom = Medida.entreSecciones)
+                    .testTag(TAG_COLUMNA_IZQUIERDA_DEL_ESPACIO),
+                verticalArrangement = Arrangement.spacedBy(Medida.entreSecciones),
+            ) { izquierda() }
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .verticalScroll(rememberScrollState())
+                    .padding(start = Medida.margenDePantalla / 2, end = Medida.margenDePantalla, bottom = Medida.entreSecciones)
+                    .testTag(TAG_COLUMNA_DERECHA_DEL_ESPACIO),
+                verticalArrangement = Arrangement.spacedBy(Medida.entreSecciones),
+            ) {
+                derecha()
+                alFinalDeLaDerecha()
             }
-        },
-        onSaldar = { saldando = true },
-        // Con transferencias que pueden ser el pago, la hoja de siempre (se elige cuál vincular); sin
-        // ninguna, la pregunta antes de dejar el espacio en cero.
-        onSaldadoSecundario = { if (detalle.propuestas.isEmpty()) confirmandoSaldado = true else saldando = true },
-        mensajeCopiado = mensajeCopiado,
-        onAbrirWhatsApp = { mensajeCopiado?.let { runCatching { uriHandler.openUri(enlaceDeWhatsApp(it)) } } },
-    )
-    GastosDelEspacio(detalle, onPagoOtro = { pagoOtro = true }, onVerTodo = onVerTodo, onCambio = onCambio)
+        }
+    } else {
+        Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Medida.entreSecciones)) {
+            izquierda()
+            derecha()
+        }
+    }
 
     if (saldando) {
         HojaSaldar(
@@ -475,7 +563,8 @@ private fun SaldoDelEspacioTarjeta(
     onAbrirWhatsApp: () -> Unit,
 ) {
     val frase = fraseDelSaldo(detalle.espacio, detalle.saldo)
-    Superficie(modifier = Modifier.testTag(TAG_SALDO_DEL_ESPACIO)) {
+    // Ancho completo: sin él la tarjeta medía lo que su botón, que fuera del teléfono va con tope.
+    Superficie(modifier = Modifier.fillMaxWidth().testTag(TAG_SALDO_DEL_ESPACIO)) {
         Text(frase.titulo, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
         if (frase.monto > 0L) Cifra(frase.monto, VarianteDeCifra.Grande)
         frase.apoyo?.let { Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio) }
@@ -487,7 +576,8 @@ private fun SaldoDelEspacioTarjeta(
                     onClick = onPedir,
                     icono = Icons.AutoMirrored.Rounded.Send,
                     anchoCompleto = true,
-                    modifier = Modifier.testTag(TAG_PEDIRLE),
+                    // Vuelta 33: fuera del teléfono no se estira más que un teléfono grande.
+                    modifier = topeDelBoton().align(Alignment.CenterHorizontally).testTag(TAG_PEDIRLE),
                 )
                 if (mensajeCopiado != null) {
                     Spacer(Modifier.height(EspacioDeDiseno.xs))
@@ -514,7 +604,7 @@ private fun SaldoDelEspacioTarjeta(
                     texto = "Marcar como saldado",
                     onClick = onSaldar,
                     anchoCompleto = true,
-                    modifier = Modifier.testTag(TAG_MARCAR_COMO_SALDADO),
+                    modifier = topeDelBoton().align(Alignment.CenterHorizontally).testTag(TAG_MARCAR_COMO_SALDADO),
                 )
             }
             PrincipalDelSaldo.Nada -> Unit
@@ -575,6 +665,7 @@ private fun GastosDelEspacio(
             onClick = onPagoOtro,
             variante = VarianteDeBoton.Secundario,
             anchoCompleto = true,
+            modifier = topeDelBoton().align(Alignment.CenterHorizontally).testTag(TAG_ANOTAR_LO_QUE_PAGO_OTRO),
         )
     }
 }

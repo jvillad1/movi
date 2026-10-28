@@ -19,6 +19,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.shared.model.CardSummary
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.MAX_CREDIT_DEBT_COP
 import com.jvillada.movi.theme.*
@@ -43,8 +44,69 @@ fun CreditBalanceSheet(
     onDismiss: () -> Unit,
     onSaved: () -> Unit,
 ) {
+    HojaDeAjustarLaDeuda(
+        nombre = credit.account.name,
+        deudaEnMovi = credit.account.balance,
+        moneda = "COP",
+        rotuloDelCampo = "Deuda real según el banco (COP)",
+        ayuda = "Copia el saldo que muestra la banca en línea hoy.",
+        ajustar = { objetivo -> Repositories.wallets.adjustCreditBalance(credit.account.id, objetivo) },
+        onDismiss = onDismiss,
+        onSaved = onSaved,
+    )
+}
+
+/** El rótulo del campo de la hoja de ajustar el saldo de una tarjeta (vuelta 33). */
+const val CUANTO_DEBES_HOY_SEGUN_EL_BANCO: String = "Cuánto debes hoy según el banco"
+
+/**
+ * **Cuadra la deuda de una tarjeta** con lo que dice el banco (vuelta 33). Hasta acá no había dónde:
+ * la ruta de Créditos solo acepta préstamos y la de cuentas rechazaba toda deuda. Ahora la de
+ * cuentas acepta tarjetas (`POST /api/accounts/{id}/balance-adjustment`, con la convención de la
+ * deuda), y esta es su hoja: la MISMA que la del préstamo, en la moneda de la tarjeta.
+ *
+ * La banca en línea muestra cuatro cifras de una tarjeta (saldo actual, saldo a pagar, cupo
+ * disponible, compras sin facturar); la ayuda dice cuál es la que va: **la deuda total de hoy**.
+ * Escribirla es todo lo que hace el dueño —Movi calcula la diferencia contra el saldo sin anulados—,
+ * y nunca se ajusta solo.
+ */
+@Composable
+fun CardBalanceSheet(
+    card: CardSummary,
+    onDismiss: () -> Unit,
+    onSaved: () -> Unit,
+) {
+    val (deuda, moneda) = saldoEnSuMoneda(card.account)
+    HojaDeAjustarLaDeuda(
+        nombre = card.account.name,
+        deudaEnMovi = deuda,
+        moneda = moneda,
+        rotuloDelCampo = if (moneda == "COP") CUANTO_DEBES_HOY_SEGUN_EL_BANCO else "$CUANTO_DEBES_HOY_SEGUN_EL_BANCO ($moneda)",
+        ayuda = "Escribe la deuda total de hoy, no el pago mínimo ni el cupo disponible.",
+        ajustar = { objetivo -> Repositories.wallets.adjustAccountBalance(card.account.id, objetivo) },
+        onDismiss = onDismiss,
+        onSaved = onSaved,
+    )
+}
+
+/**
+ * La hoja de ajustar el saldo de una deuda, préstamo o tarjeta: la deuda en Movi, el campo con lo que
+ * dice el banco, qué se va a registrar y «Registrar ajuste». [ajustar] manda el saldo objetivo; el
+ * server escribe la diferencia.
+ */
+@Composable
+private fun HojaDeAjustarLaDeuda(
+    nombre: String,
+    deudaEnMovi: Long,
+    moneda: String,
+    rotuloDelCampo: String,
+    ayuda: String,
+    ajustar: suspend (Long) -> Unit,
+    onDismiss: () -> Unit,
+    onSaved: () -> Unit,
+) {
     val coroutine = rememberCoroutineScope()
-    val current = credit.account.balance
+    val current = deudaEnMovi
 
     var target by remember { mutableStateOf<Long?>(null) }
     var saving by remember { mutableStateOf(false) }
@@ -63,9 +125,7 @@ fun CreditBalanceSheet(
         saving = true
         error = null
         coroutine.launch {
-            val result = runCatching {
-                Repositories.wallets.adjustCreditBalance(credit.account.id, parsed!!)
-            }
+            val result = runCatching { ajustar(parsed!!) }
             saving = false
             result.onSuccess { onSaved() }.onFailure { error = it.toUserMessage() }
         }
@@ -75,7 +135,7 @@ fun CreditBalanceSheet(
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
             // Vuelta de diseño 18: el nombre como título y qué es la hoja debajo (era un rótulo chico
             // arriba y el nombre debajo).
-            EncabezadoDeHoja(credit.account.name, subtitulo = "Ajustar saldo")
+            EncabezadoDeHoja(nombre, subtitulo = AJUSTAR_EL_SALDO)
             Spacer(Modifier.height(Espacio.m))
 
             Row(
@@ -84,24 +144,24 @@ fun CreditBalanceSheet(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text("Deuda en Movi", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
-                Cifra(current)
+                Cifra(current, moneda = moneda)
             }
             Spacer(Modifier.height(Espacio.s))
 
             MoneyField(
                 value = target,
                 onValueChange = { target = it },
-                placeholder = "Deuda real según el banco (COP)",
+                placeholder = rotuloDelCampo,
             )
 
             Spacer(Modifier.height(Espacio.xs))
             Text(
                 text = when {
                     overCap        -> "Saldo fuera de rango — revisa el monto."
-                    parsed == null -> "Copia el saldo que muestra la banca en línea hoy."
+                    parsed == null -> ayuda
                     delta == 0L    -> "Ya coincide con Movi — no hay nada que registrar."
-                    delta!! > 0L   -> "Se registrará un cargo de ${formatCOP(delta)} para subir la deuda."
-                    else           -> "Se registrará un abono de ${formatCOP(-delta)} para bajar la deuda."
+                    delta!! > 0L   -> "Se registrará un cargo de ${formatMoney(delta, moneda)} para subir la deuda."
+                    else           -> "Se registrará un abono de ${formatMoney(-delta, moneda)} para bajar la deuda."
                 },
                 style = Movi.textos.apoyo,
                 color = Movi.colores.textoMedio,
