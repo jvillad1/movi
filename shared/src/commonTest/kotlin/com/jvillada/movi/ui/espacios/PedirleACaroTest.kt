@@ -122,9 +122,9 @@ class PedirleACaroTest {
     }
 
     @Test
-    fun `antes de saldar se pregunta si ya pago y que deja el espacio en cero`() {
+    fun `antes de saldar se pregunta si ya pago y que deja el grupo en cero`() {
         assertEquals(
-            "¿Caro ya te pagó \$93.050?" to "Esto deja el espacio en cero.",
+            "¿Caro ya te pagó \$93.050?" to "Esto deja el grupo en cero.",
             confirmacionDeSaldado(casa, detalle(cinco).saldo),
         )
         val leDebes = detalle(listOf(gasto("g1", "Mercado", 80_000, dia(18), pagadoPor = "dst_caro")))
