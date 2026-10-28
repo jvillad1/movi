@@ -519,10 +519,11 @@ Box(Modifier.toggleable(marcada, role = Role.Checkbox, onValueChange = { alterna
 
 **`AvatarDePersona`** (R3) — una persona: su inicial en un círculo de `Medida.avatar`, en el fondo de
 su tono (`TonoDeIcono`). Los miembros de un espacio y quien pagó un gasto. Neutro por defecto; «Tú» en
-`TonoDeIcono.Tinta` (la tinta llena con la letra blanca); **nunca** en `Marca` (vuelta 42).
+`TonoDeIcono.Propio` (el `tinte`, el amarillo suave, con la letra en `aviso`); **nunca** en `Marca`, el
+amarillo lleno (vuelta 42).
 ```kotlin
 AvatarDePersona("Caro", tono = TonoDeIcono.Info)
-AvatarDePersona("Juan", tono = TonoDeIcono.Tinta)
+AvatarDePersona("Juan", tono = TonoDeIcono.Propio)
 ```
 
 **`FilaDeNavegacion`** (vuelta 42, `ds/Fila.kt`) — **la fila que lleva a otra pantalla**: una `Fila` sola
@@ -2183,7 +2184,7 @@ ajustadas.
 Una revisión fresca de toda la app (28-oct, capturas `full-*.png`) encontró el lenguaje viejo en
 pantallas de segundo nivel. **Sin reglas de plata nuevas** y sin tocar nombres internos (`Espacio*`,
 `Screen.Espacios`, rutas, server). Un componente nuevo en `ds/`, `FilaDeNavegacion`; un tono nuevo,
-`TonoDeIcono.Tinta`; uno que se va, `TonoDePildora.Marca`.
+`TonoDeIcono.Propio`; uno que se va, `TonoDePildora.Marca`.
 
 1. **«Grupos» y «Compartidos».** La pantalla de los espacios se llamaba «Personas» y al final abría
    «Personas y comercios» (los terceros): dos nombres casi iguales. Pasa a **«Grupos»**
@@ -2193,7 +2194,10 @@ pantallas de segundo nivel. **Sin reglas de plata nuevas** y sin tocar nombres i
 2. **El amarillo lleno es de la acción.** `TonoDeIcono.Neutro` es ahora el círculo de la opción 3 —la
    capa 3 con el ícono en la tinta (era el texto medio sobre su lavado)— y es el tono por defecto de
    `IconoEnCirculo` y `AvatarDePersona` (era la marca: cada fila que no decía su tono salía amarilla).
-   - **«Tú»** en los gastos de un grupo y en su detalle va en `TonoDeIcono.Tinta`.
+   - **«Tú»** en los gastos de un grupo y en su detalle va en `TonoDeIcono.Propio`: el `tinte` con la
+     letra en `aviso`. En la tinta llena (la primera versión de la vuelta) eran cuatro círculos negros
+     seguidos al lado del de Caro; el amarillo **suave** se distingue sin pesar. Lo prohibido es el
+     amarillo **lleno**.
    - **«En curso»** (Tus períodos y su detalle) y **«Por confirmar»** (una fila del checklist) van en
      `Aviso`, el tinte con el ocre; el destino elegido de un extracto, en `Neutra`.
    - **Las filas que llevan a otra pantalla** —«Cómo salir de tus deudas» en Créditos, «Tus períodos» en
@@ -2202,16 +2206,19 @@ pantallas de segundo nivel. **Sin reglas de plata nuevas** y sin tocar nombres i
      revisar, la misma fila con `aviso = true`. «Último mensaje» en Captura, el cuadre en Patrimonio, «Para
      revisar» y la caja: neutros (o en aviso, si avisan).
    - El ícono de un aviso del banco que pide decisión (sin marca ni categoría) va en `Aviso`.
-   - Quedan en el círculo amarillo solo las dos propuestas que la maqueta pinta así: la campana de la
-     tarjeta de avisos de Actividad y el ícono de «Movi propone hoy» en Inicio (`TarjetaDePropuesta`).
+   - Quedan en el círculo amarillo lleno **solo las dos excepciones** que la maqueta pinta así: la
+     campana de la tarjeta de avisos de Actividad y el ícono de «Movi propone hoy» en Inicio
+     (`TarjetaDePropuesta`). La guarda las nombra y falla si sobra o falta alguna.
    - Lo vigila `ElAmarilloEsDeLaAccionTest`; el componente, `LaFilaDeNavegacionEsUnaSolaTest`
      (`TonoDeIconoKey` dice el tono en la semántica).
 3. **«Revisar aviso» (Reconciliar).** El aviso va **plano** (`TarjetaDeAviso(destacada = false)`, la capa
    1 sin sombra) y la sombra queda solo en «Movi sugiere». El comercio de «Confirma o ajusta» va en forma
    de título (`enFormaDeTitulo`: «EXITO SUBA» → «Éxito Suba»; se muestra así, se guarda lo que leyó Movi
-   si no lo toca). **Las pastillas de categoría salen debajo de la fila «Categoría» solo al tocar
-   «Cambiar»** (con «+ Nueva» primera, y el selector completo debajo); elegir una la pone en la fila y las
-   guarda. **El «Ojo: el aviso es de Falabella y la cuenta es de Bancolombia» va una vez y entero**, en su
+   si no lo toca). **«Cambiar» sigue el patrón de Agregar (vuelta 34)**: debajo de la fila «Categoría»
+   salen las pastillas de las frecuentes, con la elegida marcada, «+ Nueva» primera y **«Todas ›» al
+   final**, que abre el selector completo **en una hoja** (`MarcoDeHoja`; «+ Nueva» la abre con el cursor
+   en la búsqueda). La cuadrícula en línea se fue: sus 18 íconos ocupaban la pantalla y empujaban
+   «Confirma o ajusta» fuera de vista. Elegir una pastilla o una celda la pone en la fila y cierra. **El «Ojo: el aviso es de Falabella y la cuenta es de Bancolombia» va una vez y entero**, en su
    línea debajo de la fila de la cuenta (`BajoLaFila`), y la fila dice solo su porqué («La puso Movi»):
    pegados en un subtítulo de dos renglones se cortaba en «…de Bancolo…».
 4. **Por revisar → «Entraron solos»**: el punto marrón delante de la cifra («• +$30.000») marcaba «por
