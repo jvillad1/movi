@@ -151,7 +151,8 @@ class ActividadPorDentroTest {
 
         val hoja = detalleDeLaConfirmacion(avisos)
         assertTrue(hoja.contains("Total \$55.000"), hoja)
-        assertTrue(hoja.contains("2 avisos quedan para revisar uno por uno."), hoja)
+        // Vuelta 47: el total y lo que queda, con su separador.
+        assertEquals("Total \$55.000 · 2 avisos quedan para revisar uno por uno", hoja)
         assertEquals("¿Confirmar estos 2 avisos?", preguntaDeConfirmarLosAvisos(avisos.confirmables.size))
     }
 

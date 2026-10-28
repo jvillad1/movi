@@ -939,10 +939,21 @@ fun QuickAddScreen(
     }
 
     fun onKey(key: String) {
-        amount = when (key) {
-            "⌫" -> if (amount.isNotEmpty()) amount.dropLast(1) else amount
-            else -> if (amount.length < 12) amount + key else amount
-        }
+        amount = conLaTecla(amount, key)
+    }
+
+    // Vuelta 47: **el monto de Traspaso y Cuota vive acá, como el de Gasto**, para que lo escriban el
+    // mismo teclado en pantalla y el físico (`alTeclear`). Era un campo de texto chico en la hoja de
+    // traspaso. Lo comparten las dos pestañas, como antes compartían el campo.
+    var montoDelTraspaso by remember {
+        mutableStateOf(presetMonto?.takeIf { it > 0 && presetDeudaId != null }?.toString() ?: "")
+    }
+    var pedidosDeGuardarElTraspaso by remember { mutableStateOf(0) }
+    // Un campo de texto de Cuota (el interés, lo que bajó la deuda en otra moneda) con el foco: sus
+    // dígitos son suyos, no del monto.
+    var campoDelTraspasoConFoco by remember { mutableStateOf(false) }
+    fun onKeyDelTraspaso(key: String) {
+        montoDelTraspaso = conLaTecla(montoDelTraspaso, key)
     }
 
     val parsedAmount = amount.toDoubleOrNull() ?: 0.0
@@ -1177,8 +1188,21 @@ fun QuickAddScreen(
             if (evento.type == KeyEventType.KeyDown) volverAlFormulario()
             return true
         }
+        // Vuelta 47: Traspaso y Cuota escriben su monto con las mismas teclas, salvo con un sub-editor
+        // abierto o un campo de texto propio con el foco. Enter guarda (no hay «y anotar otro»).
+        if (pickers.typeIndex >= TIPO_TRASPASO) {
+            if (pickers.hayPicker || campoDelTraspasoConFoco) return false
+            val conModificadorT = evento.isCtrlPressed || evento.isMetaPressed || evento.isAltPressed
+            return when (val accion = accionDeTecla(evento.key, evento.type, conModificadorT, conShift = evento.isShiftPressed)) {
+                null -> false
+                is AccionDeTecla.Digito -> { onKeyDelTraspaso(accion.digito); true }
+                AccionDeTecla.Borrar -> { onKeyDelTraspaso("⌫"); true }
+                AccionDeTecla.Guardar, AccionDeTecla.GuardarYOtro -> { pedidosDeGuardarElTraspaso++; true }
+                AccionDeTecla.Consumir -> true
+            }
+        }
         // Con «Repartir este gasto» abierta, las teclas son de esa hoja (su campo de monto, su botón).
-        if (pickers.typeIndex >= TIPO_TRASPASO || pickers.hayPicker || saving || repartiendo) return false
+        if (pickers.hayPicker || saving || repartiendo) return false
         val conModificador = evento.isCtrlPressed || evento.isMetaPressed || evento.isAltPressed
         return when (val accion = accionDeTecla(evento.key, evento.type, conModificador, conShift = evento.isShiftPressed)) {
             null -> false
@@ -1532,7 +1556,12 @@ fun QuickAddScreen(
                                 // «Anotar este pago» desde una cuota o una tarjeta del checklist:
                                 // la deuda en «Hacia» y la cuota como monto.
                                 presetDestinoId = presetDeudaId,
-                                presetMonto = presetMonto.takeIf { presetDeudaId != null },
+                                // Vuelta 47: el monto, la cifra y el teclado de Gasto.
+                                monto = montoDelTraspaso,
+                                onKey = ::onKeyDelTraspaso,
+                                conTecladoEnPantalla = conTecladoEnPantalla,
+                                pedidosDeGuardar = pedidosDeGuardarElTraspaso,
+                                onCampoDeTextoConFoco = { campoDelTraspasoConFoco = it },
                                 // La misma hoja sirve las dos pestañas: un pago de cuota es un
                                 // traspaso con otras categorías y otro endpoint. Ver
                                 // [ModoDeTraspaso].
@@ -1788,55 +1817,13 @@ private fun EditorBody(
     // no se midieron, se vieron. Lo medido es la comparación, y es la que decide.
     Spacer(Modifier.height(Espacio.m))
 
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        // F14: mismo arreglo que Presupuestos — separador de miles mientras se escribe,
-        // no solo al guardar (formatAmountKeypadDisplay respeta el "." decimal de este teclado).
-        //
-        // La protagonista de la hoja, como «Tu plata» y lo gastado en Presupuestos. Antes iba a
-        // 56 sp en una sola línea sin achique: un monto de nueve cifras se salía del ancho del
-        // teléfono. CifraProtagonista baja de tamaño hasta que entra.
-        val montoEscrito = simboloDeMoneda(moneda) + formatAmountKeypadDisplay(amount)
-        if (conTecladoEnPantalla) {
-            CifraProtagonista(montoEscrito, color = Movi.colores.texto)
-        } else {
-            // Vuelta 34: sin teclado en pantalla, el cursor dice dónde va lo que se teclee. La cifra
-            // sigue siendo la protagonista; el cursor va pegado a su derecha.
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                CifraProtagonista(montoEscrito, color = Movi.colores.texto, modifier = Modifier.weight(1f, fill = false))
-                CursorDelMonto()
-            }
-        }
-        Spacer(Modifier.height(Espacio.xxs))
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
-        ) {
-            // El rótulo de la moneda REAL, no un «COP» clavado. Ver el parámetro [moneda].
-            Text(moneda, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-            Text("·", style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
-            // La fecha, como pastilla tocable. Va acá y no en la tarjeta de abajo por el alto
-            // (ver arriba), pero además queda donde tiene sentido leerla: pegada al monto, que
-            // es lo primero que el ojo mira. Dice «Hoy» por defecto, así que quien anota en el
-            // momento no tiene ni que interpretarla.
-            //
-            // Vuelta de diseño 20: la `PildoraDeAccion` del sistema (capa 2, el ícono en la marca, 36
-            // de alto con el toque de 48). Era una píldora armada a mano de 24 dp, más chica que el
-            // mínimo táctil.
-            PildoraDeAccion(
-                texto = dateLabel,
-                onClick = onPickDate,
-                icono = Icons.Rounded.Event,
-                descripcion = "Fecha: $dateLabel. Cambiar la fecha",
-                // Compacta (24 dp, lo que medía la de antes): va pegada al renglón de la moneda, y
-                // de 36 la hoja crecía y el pie se cortaba a 360 × 740.
-                alto = AltoDePildora.Compacta,
-                modifier = Modifier.testTag(TAG_FECHA_EN_AGREGAR),
-            )
-        }
-    }
+    CabezaDelMonto(
+        montoEscrito = simboloDeMoneda(moneda) + formatAmountKeypadDisplay(amount),
+        moneda = moneda,
+        conTecladoEnPantalla = conTecladoEnPantalla,
+        dateLabel = dateLabel,
+        onPickDate = onPickDate,
+    )
 
     Spacer(Modifier.height(Espacio.m))
 
@@ -1969,46 +1956,7 @@ private fun EditorBody(
 
     // Vuelta 34: frente a un computador no hay teclado en pantalla (ver [conTecladoEnPantalla]).
     if (conTecladoEnPantalla) {
-        // Cada tecla vibra apenas, como un teclado de verdad (ver [Vibrador.tecla]).
-        val vibrador = rememberVibrador()
-        Column {
-            listOf(
-                listOf("1", "2", "3"),
-                listOf("4", "5", "6"),
-                listOf("7", "8", "9"),
-                // Sin tecla decimal: en COP no hay centavos, y «2500.5» pasaba la validación como 2500.5
-                // pero se guardaba como $0 (toLongOrNull). Ver revisión de la Ola 1.
-                listOf("000", "0", "⌫"),
-            ).forEach { row ->
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    row.forEach { key ->
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(50.dp)
-                                .clickable {
-                                    vibrador.tecla()
-                                    onKey(key)
-                                },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            if (key == "⌫") {
-                                Icon(Icons.AutoMirrored.Rounded.Backspace, contentDescription = "Borrar", tint = Movi.colores.texto, modifier = Modifier.size(Icono.l))
-                            } else {
-                                Text(
-                                    text = key,
-                                    // Sin estilo a propósito: tecla del teclado numérico; `titular` (19) la achica y `cifra` (42) no cabe.
-                                    fontSize = 22.sp,
-                                    style = Movi.textos.monto,
-                                    color = Movi.colores.texto,
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
+        TecladoNumericoDeAgregar(onKey)
         Spacer(Modifier.height(Espacio.s))
     }
 
@@ -2131,6 +2079,117 @@ internal val TAGS_DE_LA_CATEGORIA_EN_AGREGAR = TagsDeLaFilaDeCategorias(
     todas = TAG_PASTILLA_TODAS_LAS_CATEGORIAS_AGREGAR,
     nueva = TAG_PASTILLA_NUEVA_CATEGORIA_AGREGAR,
 )
+
+/**
+ * **El teclado numérico de Agregar** (1–9, «000», 0 y borrar). Vuelta 47: también el de Traspaso y
+ * Cuota, que escribían el monto en un campo de texto chico.
+ */
+@Composable
+internal fun TecladoNumericoDeAgregar(onKey: (String) -> Unit) {
+    // Cada tecla vibra apenas, como un teclado de verdad (ver [Vibrador.tecla]).
+    val vibrador = rememberVibrador()
+    Column {
+        listOf(
+            listOf("1", "2", "3"),
+            listOf("4", "5", "6"),
+            listOf("7", "8", "9"),
+            // Sin tecla decimal: en COP no hay centavos, y «2500.5» pasaba la validación como 2500.5
+            // pero se guardaba como $0 (toLongOrNull). Ver revisión de la Ola 1.
+            listOf("000", "0", "⌫"),
+        ).forEach { row ->
+            Row(modifier = Modifier.fillMaxWidth()) {
+                row.forEach { key ->
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(50.dp)
+                            .clickable {
+                                vibrador.tecla()
+                                onKey(key)
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (key == "⌫") {
+                            Icon(Icons.AutoMirrored.Rounded.Backspace, contentDescription = "Borrar", tint = Movi.colores.texto, modifier = Modifier.size(Icono.l))
+                        } else {
+                            Text(
+                                text = key,
+                                // Sin estilo a propósito: tecla del teclado numérico; `titular` (19) la achica y `cifra` (42) no cabe.
+                                fontSize = 22.sp,
+                                style = Movi.textos.monto,
+                                color = Movi.colores.texto,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * **La cabeza del monto de Agregar**: la cifra protagonista (con el cursor si no hay teclado en
+ * pantalla) y debajo «COP · [Hoy]», la moneda y la píldora de la fecha. Vuelta 47: la comparten
+ * Gasto, Ingreso, Traspaso y Cuota —Traspaso y Cuota tenían un campo chico de monto y una caja «Hoy»—.
+ */
+@Composable
+internal fun CabezaDelMonto(
+    montoEscrito: String,
+    moneda: String,
+    conTecladoEnPantalla: Boolean,
+    dateLabel: String,
+    onPickDate: () -> Unit,
+    tagDeLaFecha: String = TAG_FECHA_EN_AGREGAR,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        // F14: mismo arreglo que Presupuestos — separador de miles mientras se escribe,
+        // no solo al guardar (formatAmountKeypadDisplay respeta el "." decimal de este teclado).
+        //
+        // La protagonista de la hoja, como «Tu plata» y lo gastado en Presupuestos. Antes iba a
+        // 56 sp en una sola línea sin achique: un monto de nueve cifras se salía del ancho del
+        // teléfono. CifraProtagonista baja de tamaño hasta que entra.
+        if (conTecladoEnPantalla) {
+            CifraProtagonista(montoEscrito, color = Movi.colores.texto)
+        } else {
+            // Vuelta 34: sin teclado en pantalla, el cursor dice dónde va lo que se teclee. La cifra
+            // sigue siendo la protagonista; el cursor va pegado a su derecha.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CifraProtagonista(montoEscrito, color = Movi.colores.texto, modifier = Modifier.weight(1f, fill = false))
+                CursorDelMonto()
+            }
+        }
+        Spacer(Modifier.height(Espacio.xxs))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
+        ) {
+            // El rótulo de la moneda REAL, no un «COP» clavado. Ver el parámetro [moneda].
+            Text(moneda, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+            Text("·", style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
+            // La fecha, como pastilla tocable. Va acá y no en la tarjeta de abajo por el alto
+            // (ver arriba), pero además queda donde tiene sentido leerla: pegada al monto, que
+            // es lo primero que el ojo mira. Dice «Hoy» por defecto, así que quien anota en el
+            // momento no tiene ni que interpretarla.
+            //
+            // Vuelta de diseño 20: la `PildoraDeAccion` del sistema (capa 2, el ícono en la marca, 36
+            // de alto con el toque de 48). Era una píldora armada a mano de 24 dp, más chica que el
+            // mínimo táctil.
+            PildoraDeAccion(
+                texto = dateLabel,
+                onClick = onPickDate,
+                icono = Icons.Rounded.Event,
+                descripcion = "Fecha: $dateLabel. Cambiar la fecha",
+                // Compacta (24 dp, lo que medía la de antes): va pegada al renglón de la moneda, y
+                // de 36 la hoja crecía y el pie se cortaba a 360 × 740.
+                alto = AltoDePildora.Compacta,
+                modifier = Modifier.testTag(tagDeLaFecha),
+            )
+        }
+    }
+}
 
 /**
  * **El cursor del monto** (vuelta 34): una raya de la marca, del alto de la letra de la cifra, que
@@ -2464,7 +2523,7 @@ internal fun sePuedeGuardarLaNota(inicial: String, escrita: String): Boolean =
  * que entra.
  */
 @Composable
-private fun NoteEditor(initial: String, onSave: (String) -> Unit, onVolver: () -> Unit) {
+internal fun NoteEditor(initial: String, onSave: (String) -> Unit, onVolver: () -> Unit) {
     var texto by remember { mutableStateOf(initial) }
     val habilitado = sePuedeGuardarLaNota(initial, texto)
     val guardar = { if (sePuedeGuardarLaNota(initial, texto)) onSave(texto.trim()) }
@@ -2548,4 +2607,10 @@ internal fun categoriasParaLasPastillasDeAgregar(
         usos = usos,
         cuantas = cuantas,
     )
+}
+
+/** Lo que deja una tecla del teclado numérico sobre el monto escrito (hasta 12 dígitos). */
+internal fun conLaTecla(monto: String, tecla: String): String = when (tecla) {
+    "⌫" -> monto.dropLast(1)
+    else -> if (monto.length < 12) monto + tecla else monto
 }

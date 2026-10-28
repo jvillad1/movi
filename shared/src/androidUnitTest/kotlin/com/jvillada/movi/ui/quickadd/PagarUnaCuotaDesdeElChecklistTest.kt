@@ -167,12 +167,13 @@ class PagarUnaCuotaDesdeElChecklistTest {
         assertEquals(1_204_064L, hoja.presetMonto)
         assertNull(hoja.presetFecha, "la fecha es hoy, no el vencimiento")
 
-        // La pestaña «Cuota»: solo ella dice «Registrar pago» y «Concepto del pago».
+        // La pestaña «Cuota»: solo ella dice «Registrar pago» y «Pagas» (vuelta 47).
         assertTrue(hay("Registrar pago"), "abre en la pestaña Cuota")
-        assertTrue(hay("Concepto del pago"))
+        assertTrue(hay(ROTULO_PAGAS))
         assertTrue(hay(libre.name), "el crédito ya está en «Hacia»")
         assertTrue(hay(ahorros.name), "y la plata sale de una cuenta de dinero")
-        assertEquals("1.204.064", textoDelMonto().filter { it.isDigit() || it == '.' })
+        // Vuelta 47: la cifra protagonista, como en Gasto.
+        assertTrue(hay("\$1.204.064"), "el monto de la cuota, en la cifra")
         assertTrue(hay("Hoy"), "fechado hoy")
     }
 
@@ -196,6 +197,6 @@ class PagarUnaCuotaDesdeElChecklistTest {
 
         assertTrue(hay("Registrar pago"), "abre en la pestaña Cuota")
         assertTrue(hay(master.name), "la tarjeta ya está en «Hacia»")
-        assertEquals("", textoDelMonto(), "el campo del monto arranca vacío")
+        assertTrue(hay("\$0"), "el monto arranca vacío (la cifra en cero)")
     }
 }

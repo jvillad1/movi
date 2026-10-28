@@ -8,6 +8,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
@@ -203,6 +204,15 @@ class ElOtrosSeResuelveEnLaTarjetaTest {
 
         val antes = toques
         tocarElTag(TAG_ELEGIR_CATEGORIA_EN_LA_FILA)
+        // Vuelta 47: abiertas las pastillas, el botón dice «Cerrar» y deja de ser el principal.
+        assertEquals(0, cuantos(ELEGIR_CATEGORIA))
+        assertEquals(1, composeRule.onAllNodes(hasText(com.jvillada.movi.ui.sms.CERRAR_LAS_CATEGORIAS) and hasAnyAncestor(hasTestTag(TAG_ELEGIR_CATEGORIA_EN_LA_FILA)), useUnmergedTree = true).fetchSemanticsNodes().size)
+        composeRule.onNodeWithTag(TAG_ELEGIR_CATEGORIA_EN_LA_FILA, useUnmergedTree = true).assert(
+            androidx.compose.ui.test.SemanticsMatcher.expectValue(
+                com.jvillada.movi.ui.components.ds.VarianteDeBotonKey,
+                com.jvillada.movi.ui.components.ds.VarianteDeBoton.Secundario,
+            ),
+        )
         // Las frecuentes, y «Todas ›» en el renglón del rótulo, a la vista sin deslizar.
         composeRule.onNodeWithTag(TAG_CATEGORIAS_EN_LA_TARJETA, useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithTag(TAG_TODAS_EN_LA_TARJETA, useUnmergedTree = true).assertIsDisplayed()

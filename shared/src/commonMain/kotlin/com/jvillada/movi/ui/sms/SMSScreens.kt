@@ -634,8 +634,13 @@ internal fun TarjetaDeMensajeDelBanco(
             // Vuelta 46: solo falta la categoría — «Elegir categoría» abre las pastillas acá mismo.
             pideLaCategoria -> {
                 {
+                    // Vuelta 47: con las pastillas abiertas pasa a «Cerrar», sin el amarillo de la
+                    // acción —como «Cambiar» → «Cerrar» en Revisar aviso—: lo que se espera ahora es
+                    // tocar una pastilla.
                     PastillaDelPago(
-                        ELEGIR_CATEGORIA, principal = true, habilitada = !trabajando,
+                        if (eligiendoLaCategoria) CERRAR_LAS_CATEGORIAS else ELEGIR_CATEGORIA,
+                        principal = !eligiendoLaCategoria,
+                        habilitada = !trabajando,
                         onClick = { eligiendoLaCategoria = !eligiendoLaCategoria },
                         modifier = Modifier.testTag(TAG_ELEGIR_CATEGORIA_EN_LA_FILA),
                     )

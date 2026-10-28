@@ -24,6 +24,9 @@ class EligeLaCategoria(
 /** El botón principal de un aviso al que solo le falta la categoría. */
 const val ELEGIR_CATEGORIA: String = "Elegir categoría"
 
+/** Vuelta 47: «Elegir categoría» con las pastillas abiertas. */
+const val CERRAR_LAS_CATEGORIAS: String = "Cerrar"
+
 /** El tag de «Elegir categoría» en una tarjeta de Por revisar. */
 const val TAG_ELEGIR_CATEGORIA_EN_LA_FILA: String = "por-revisar:elegir-categoria"
 
