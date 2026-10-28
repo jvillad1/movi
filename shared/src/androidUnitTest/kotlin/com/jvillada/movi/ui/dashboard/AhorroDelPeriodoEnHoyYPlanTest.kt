@@ -123,7 +123,7 @@ class AhorroDelPeriodoEnHoyYPlanTest {
         // Hoy: la cifra entera, y debajo los días y lo que da por día, sin texto nuevo.
         assertEquals("\$4.800.000", cifraDeHoy())
         composeRule.onNodeWithText(ROTULO_TE_QUEDAN, useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithText("para 4 días · \$1,2M por día", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Para 4 días · \$1,2M por día", useUnmergedTree = true).assertIsDisplayed()
         // Plan: la misma cifra en su frase, y el mismo «por día».
         composeRule.onNodeWithText("Te quedan \$4,8M para 4 días · \$1,2M por día", useUnmergedTree = true).assertIsDisplayed()
         assertTrue(!hay("ahorro"), "el ahorro no se nombra hasta abrir «¿De dónde sale?»")

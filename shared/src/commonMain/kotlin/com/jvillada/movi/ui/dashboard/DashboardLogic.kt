@@ -215,6 +215,13 @@ data class DashboardData(
      * `patrimonioDelInicio`). `null` = no llegó (o falló): se toma como ninguno.
      */
     val apartados: List<Apartado>? = null,
+    /**
+     * **Los últimos movimientos** (vuelta 39): los de las primeras filas de Actividad —«Todo», el más
+     * reciente primero—, con las dos patas de un traspaso (ver [ultimosMovimientosDe]). Viajan en la
+     * instantánea, así que al abrir en frío ya están. `null` = no llegó: la sección pinta su esqueleto
+     * mientras carga y no se pinta si la lectura falló.
+     */
+    val ultimosMovimientos: List<com.jvillada.movi.shared.model.FinancialEvent>? = null,
 ) {
     val hasAccount: Boolean get() = !accounts.isNullOrEmpty()
     /**
@@ -1078,6 +1085,8 @@ fun visibleSections(def: ScreenDefinition, data: DashboardData): List<ScreenSect
     // con la cuadrícula, el BANNER sería una segunda puerta a Movi AI.
     val hayPropuestas = renderizables.any { it.type == "PROPUESTAS" }
     val hayAcciones = renderizables.any { it.type == "ACCIONES" }
+    // Vuelta 39 (generación 10): con «Próximo pago» en la definición, «Movi propone hoy» no lo repite.
+    val hayProximoPago = renderizables.any { it.type == "PROXIMO_PAGO" }
     return renderizables.filter { section ->
         when (section.type) {
             // Fijos: la cuadrícula siempre; el carrusel mientras las cuentas no contestan (su
@@ -1087,7 +1096,11 @@ fun visibleSections(def: ScreenDefinition, data: DashboardData): List<ScreenSect
             // (su esqueleto). Vuelta de diseño 11: sin nada, la sección sale entera —era un título y
             // «Nada por decidir hoy», una sección para decir que no había sección—. Por revisar sigue
             // a un toque, en «Avisos» de la cuadrícula.
-            "PROPUESTAS" -> !data.puedeAfirmarVacio || propuestasDelInicio(data).isNotEmpty()
+            "PROPUESTAS" -> !data.puedeAfirmarVacio || propuestasDelInicio(data, conElPago = !hayProximoPago).isNotEmpty()
+            // Vuelta 39: con un pago pendiente en el período; mientras no se sabe, su esqueleto.
+            "PROXIMO_PAGO" -> proximoPagoDelInicio(data) != null || (data.upcoming == null && !data.puedeAfirmarVacio)
+            // Con algo que mostrar, o su esqueleto mientras no llegó; sin movimientos, no ocupa lugar.
+            "ULTIMOS_MOVIMIENTOS" -> data.ultimosMovimientos?.isNotEmpty() ?: !data.puedeAfirmarVacio
             "CUENTAS" -> data.accounts == null || !cuentasDelCarrusel(data.accounts).isNullOrEmpty()
             "UPCOMING_PAYMENTS" -> upcomingPaymentsWithin(data.upcoming.orEmpty()).isNotEmpty()
             // «Para revisar» se pinta con lo mismo que antes eran las alertas, más lo que el

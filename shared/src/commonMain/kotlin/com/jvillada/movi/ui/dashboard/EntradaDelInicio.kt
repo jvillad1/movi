@@ -5,7 +5,11 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import com.jvillada.movi.theme.LocalMovimientoReducido
 
 /**
  * Cuánto dura la entrada del Inicio: la cifra grande contando desde cero y las barras creciendo.
@@ -54,3 +58,40 @@ fun rememberProgresoDeEntrada(clave: String, listo: Boolean = true): Float {
  */
 fun cifraContando(valor: Long, progreso: Float): Long =
     if (progreso >= 1f) valor else (valor * progreso.toDouble()).toLong()
+
+/**
+ * **La cifra del héroe nunca arranca en $0** (vuelta 39). Hasta acá entraba contando desde cero
+ * ([rememberProgresoDeEntrada]), y en la web, al recargar con la instantánea a la vista, el héroe decía
+ * «Te quedan $0 · para 4 días · $696.137 por día» varios segundos: la cuenta se quedaba esperando
+ * cuadros que la página, ocupada con las diez lecturas, no le daba. Un «$0» de 40 px es la afirmación
+ * más fuerte de la pantalla, y era falsa.
+ *
+ * Ahora la primera cifra se muestra **tal cual llega** (la de la instantánea o la de la carga), y solo
+ * un cambio después —la carga nueva que reemplaza a la de ayer— se anima, de la cifra vieja a la nueva:
+ * en el medio solo hay valores entre dos cifras reales. Con el sistema pidiendo menos movimiento
+ * ([LocalMovimientoReducido]) el cambio es inmediato.
+ */
+@Composable
+fun rememberCifraQueCambia(valor: Long): Long {
+    val reducido = LocalMovimientoReducido.current
+    var desde by remember { mutableStateOf(valor) }
+    var hasta by remember { mutableStateOf(valor) }
+    val progreso = remember { Animatable(1f) }
+    LaunchedEffect(valor) {
+        if (valor == hasta) return@LaunchedEffect
+        desde = cifraEntre(desde, hasta, progreso.value)
+        hasta = valor
+        if (reducido) {
+            progreso.snapTo(1f)
+        } else {
+            progreso.snapTo(0f)
+            progreso.animateTo(1f, tween(DURACION_DE_LA_ENTRADA_MS, easing = FastOutSlowInEasing))
+        }
+    }
+    // Antes de que el efecto corra (el primer cuadro después del cambio) se sigue viendo la de antes.
+    return cifraEntre(desde, hasta, progreso.value)
+}
+
+/** La cifra a [progreso] del camino de [desde] a [hasta]; exactamente [hasta] al terminar. Pura. */
+fun cifraEntre(desde: Long, hasta: Long, progreso: Float): Long =
+    if (progreso >= 1f) hasta else desde + ((hasta - desde) * progreso.toDouble()).toLong()

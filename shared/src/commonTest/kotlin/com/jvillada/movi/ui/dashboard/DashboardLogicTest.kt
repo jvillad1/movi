@@ -821,8 +821,11 @@ class DashboardLogicTest {
         // Generación 9 (ola R1): sin datos se pintan el héroe, la cuadrícula, «Movi propone hoy» (que
         // sin lecturas no afirma «nada por decidir») y el lugar del carrusel mientras las cuentas no
         // contestan. Ni «Para revisar» ni el BANNER: los dos quedan solo para los APK viejos.
+        //
+        // Generación 10 (vuelta 39): «Próximo pago» y «Últimos movimientos» también, con su esqueleto
+        // mientras no llegan.
         val visible = visibleSections(defaultDashboardDefinition(), DashboardData())
-        assertEquals(listOf("HERO_BALANCE", "ACCIONES", "PROPUESTAS", "CUENTAS"), visible.map { it.type })
+        assertEquals(listOf("HERO_BALANCE", "ACCIONES", "PROXIMO_PAGO", "PROPUESTAS", "ULTIMOS_MOVIMIENTOS", "CUENTAS"), visible.map { it.type })
     }
 
     /**
@@ -841,7 +844,7 @@ class DashboardLogicTest {
         )
         val visible = visibleSections(defaultDashboardDefinition(), conCosas)
         assertEquals(
-            listOf("HERO_BALANCE", "ACCIONES", "PROPUESTAS", "CUENTAS", "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA"),
+            listOf("HERO_BALANCE", "ACCIONES", "PROXIMO_PAGO", "PROPUESTAS", "ULTIMOS_MOVIMIENTOS", "CUENTAS", "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA"),
             visible.map { it.type },
         )
     }

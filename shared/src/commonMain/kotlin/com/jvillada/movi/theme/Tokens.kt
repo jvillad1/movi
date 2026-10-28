@@ -488,6 +488,7 @@ val RENGLON_ENTERO: LineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.
  * | [monto] | 13,5 / 700 | 15,1 | el monto de una fila: 15/700 |
  * | [apoyo] | 11 / 400 | 12,3 | el subtítulo: 12,5 |
  * | [rotulo] / [pestana] | 12 | 13,4 | (la barra de pestañas no se tocó: la rehace la vuelta 38) |
+ * | [rotuloDeAccion] | 10,75 / 600 | 12 | el rótulo de una acción de Inicio: 12/600 (vuelta 39) |
  *
  * ### La familia se pone en el tema, no acá
  *
@@ -658,6 +659,14 @@ data class TextosDeMovi(
 
     /** [pestana] activa: 12/700. */
     val pestanaActiva: TextStyle = pestana.copy(fontWeight = FontWeight.Bold)
+
+    /**
+     * **El rótulo de una acción de la cuadrícula del Inicio** (vuelta 39): 12/600 de la maqueta ÷ 1,12
+     * (la letra que la app le pone a todo), sin espaciado, en dos renglones de alto fijo («Anotar /
+     * gasto», «Subir / comprobante»). Es el piso de lo legible en el Inicio: 12 px efectivos en la web.
+     * A 360 dp ninguna palabra se parte (`LasOchoAccionesDelInicioTest`).
+     */
+    val rotuloDeAccion: TextStyle = rotulo.copy(fontSize = 10.75.sp, lineHeight = 14.sp, letterSpacing = 0.sp)
 
     /**
      * **El énfasis dentro de una frase**: el nombre o la cifra que se resalta en medio de un texto

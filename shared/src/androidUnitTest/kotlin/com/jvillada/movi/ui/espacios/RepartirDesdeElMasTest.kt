@@ -10,8 +10,8 @@ import androidx.compose.ui.test.performTouchInput
 import com.jvillada.movi.ui.components.LocalWindowWidthClass
 import com.jvillada.movi.ui.components.MinBottomNav
 import com.jvillada.movi.ui.components.LocalAtajosDeAgregar
-import com.jvillada.movi.ui.components.MAS_FORMAS_DE_ANOTAR
-import com.jvillada.movi.ui.components.MasFormasDeAnotar
+import com.jvillada.movi.ui.dashboard.DashboardData
+import com.jvillada.movi.ui.sdui.AccionesDelInicioSection
 import com.jvillada.movi.ui.components.NavTab
 import com.jvillada.movi.ui.components.WindowWidthClass
 import com.jvillada.movi.ui.quickadd.AtajoDeAgregar
@@ -53,8 +53,8 @@ import kotlin.test.assertEquals
  *
  * Vuelta 7: con un espacio, la hoja «Pagó otro» sobre ese; con varios, primero se elige; sin ninguno,
  * la creación del espacio. Vuelta 26: «Repartir» salió de la cuadrícula del Inicio y vive en el menú
- * del «+»; abre **lo mismo que antes**. Vuelta 38: el teléfono ya no tiene «+», y el mismo menú lo
- * abre «Más formas de anotar» de Inicio. Se monta como la monta la cáscara (`App.kt`: [hacerElAtajo]
+ * del «+»; abre **lo mismo que antes**. Vuelta 38: el teléfono ya no tiene «+». Vuelta 39: «Repartir»
+ * vuelve a ser una de las 8 acciones de Inicio, que hace el mismo atajo. Se monta como la monta la cáscara (`App.kt`: [hacerElAtajo]
  * con un [EstadoDeRepartir] y sus [HojasDeRepartir], puesto en `LocalAtajosDeAgregar`), y la pantalla
  * a la que navega, como lo haría la app.
  */
@@ -110,7 +110,7 @@ class RepartirDesdeElMasTest {
                                 },
                             ) {
                                 androidx.compose.foundation.layout.Column {
-                                    MasFormasDeAnotar()
+                                    AccionesDelInicioSection(DashboardData(), onNavigate)
                                     MinBottomNav(active = NavTab.HOY, onTabSelected = {})
                                 }
                             }
@@ -133,11 +133,9 @@ class RepartirDesdeElMasTest {
 
     private fun esperar(condicion: () -> Boolean) = composeRule.waitUntil(timeoutMillis = 5_000, condicion)
 
-    /** Tocar «Más formas de anotar» y elegir «Repartir» en su menú. */
+    /** Tocar la acción «Repartir» de Inicio. */
     private fun tocarRepartir() {
-        composeRule.onNodeWithText(MAS_FORMAS_DE_ANOTAR, useUnmergedTree = true).performClick()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithText(AtajoDeAgregar.REPARTIR.rotulo, useUnmergedTree = true).performClick()
+        composeRule.onNodeWithContentDescription("Repartir un gasto con alguien").performClick()
         composeRule.waitForIdle()
     }
 

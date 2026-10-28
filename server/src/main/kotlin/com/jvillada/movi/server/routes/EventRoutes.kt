@@ -449,7 +449,11 @@ fun Route.eventRoutes() {
                     )
                 }
                 .sortedByDescending { it.date }
-            call.respond(result)
+            // Vuelta 39: `?ultimos=N` devuelve solo los días con los N movimientos más recientes
+            // («Últimos movimientos» de Inicio), enteros y en el mismo orden. Sin el parámetro —o con
+            // uno que no es un número—, lo de siempre: un APK viejo no cambia.
+            val ultimos = call.request.queryParameters["ultimos"]?.toIntOrNull()
+            call.respond(if (ultimos != null) diasConLosUltimos(result, ultimos) else result)
         }
 
         // Candidatos a pago de tarjeta ya cargados con otra categoría (Task 2 de

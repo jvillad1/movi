@@ -465,33 +465,6 @@ class InicioDeUnVistazoTest {
 
     // ── Dos columnas en escritorio ───────────────────────────────────────────
 
-    private val todas = defaultDashboardDefinition().sections.filter { it.type != "BANNER" && it.type != "ALERTS" }
-
-    @Test
-    fun `en el telefono una columna en el orden de la definicion`() {
-        val c = columnasDelInicio(todas, 390.dp)
-        assertFalse(c.sonDos)
-        assertEquals(
-            listOf("HERO_BALANCE", "ACCIONES", "PROPUESTAS", "CUENTAS", "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA"),
-            c.izquierda.map { it.type },
-        )
-        assertFalse(columnasDelInicio(todas, 899.dp).sonDos, "por debajo de 900 dp sigue siendo una columna")
-    }
-
-    @Test
-    fun `en escritorio dos columnas, lo que se hace a la izquierda y lo que se mira a la derecha`() {
-        val c = columnasDelInicio(todas, 1_400.dp)
-        assertTrue(c.sonDos)
-        assertEquals(listOf("HERO_BALANCE", "ACCIONES", "PROPUESTAS"), c.izquierda.map { it.type })
-        assertEquals(listOf("CUENTAS", "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA"), c.derecha.map { it.type })
-        assertTrue(columnasDelInicio(todas, 900.dp).sonDos, "desde 900 dp, dos")
-    }
-
-    @Test
-    fun `con una sola columna llena no se deja un hueco al lado`() {
-        val soloElHero = todas.filter { it.type == "HERO_BALANCE" }
-        assertFalse(columnasDelInicio(soloElHero, 1_400.dp).sonDos)
-    }
 
     @Test
     fun `el Inicio se ensancha en escritorio y una pantalla de lectura no`() {

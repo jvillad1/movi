@@ -198,17 +198,17 @@ class InicioDelRedisenoEnPantallaTest {
     @Test
     fun `el feed muestra una tarjeta por tipo pendiente y respeta el tope`() {
         montar(conTodoPendiente)
-        // Cinco tipos pendientes, cuatro a la vista: los más urgentes.
+        // Vuelta 39: el pago va arriba, en «Próximo pago»; el feed tiene los otros cuatro tipos.
         assertEquals(TOPE_DE_PROPUESTAS, cuantosTags(TAG_TARJETA_DE_PROPUESTA))
-        composeRule.onNodeWithText("Arriendo vence hoy", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Arriendo vence hoy", useUnmergedTree = true).assertDoesNotExist()
+        composeRule.onNodeWithTag(com.jvillada.movi.ui.sdui.TAG_PROXIMO_PAGO, useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("¿Se cobró la cuota de Libre inversión 9695?", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("El saldo de Nu no cuadra con el banco", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("¿Cobro duplicado en RAPPI?", useUnmergedTree = true).assertIsDisplayed()
         // Vuelta de diseño 28: los 3 avisos por confirmar no son una tarjeta (los cuenta «Avisos»).
         composeRule.onNodeWithText("Llegaron 3 avisos del banco", useUnmergedTree = true).assertDoesNotExist()
-        // Lo que no entra queda para «Ver todo», que lleva a Por revisar.
-        composeRule.onNodeWithText("Resumen de agosto 2026", useUnmergedTree = true).assertDoesNotExist()
-        composeRule.onNodeWithText(" · 5", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Resumen de agosto 2026", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText(" · 4", useUnmergedTree = true).assertIsDisplayed()
         // El primer «Ver todo» es el del feed (el segundo, el del carrusel).
         composeRule.onAllNodesWithText("Ver todo", useUnmergedTree = true)[0].performClick()
         assertEquals(Screen.PorRevisar, navegado.last())
@@ -294,11 +294,9 @@ class InicioDelRedisenoEnPantallaTest {
         assertEquals(Screen.PorRevisar, navegado.last())
         composeRule.onNodeWithContentDescription("Preguntarle a Movi", useUnmergedTree = true).performClick()
         assertEquals(Screen.AIChat(), navegado.last())
-        // Vuelta de diseño 26: Traspaso, Pagar tarjeta, Repartir y Comprobante ya no están en Hoy (viven
-        // en el menú del «+», ver `AtajosDelMasTest`).
-        listOf("Anotar un traspaso", "Pagar una tarjeta", "Repartir un gasto", "Subir un comprobante").forEach {
-            composeRule.onNodeWithContentDescription(it, useUnmergedTree = true).assertDoesNotExist()
-        }
+        // Vuelta 39: las otras cuatro también están (una prueba por acción en `LasOchoAccionesDelInicioTest`).
+        composeRule.onNodeWithContentDescription("Anotar un traspaso entre tus cuentas", useUnmergedTree = true).performClick()
+        assertEquals(Screen.QuickAdd(presetPestana = PestanaDeAgregar.TRASPASO), navegado.last())
     }
 
     // ── Ocultar los saldos ───────────────────────────────────────────────────

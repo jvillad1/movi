@@ -55,7 +55,7 @@ const val ROTULO_ATAJOS_DE_AGREGAR: String = "Atajos para agregar"
  *
  * [modifier] es el del botón (tamaño, forma, fondo), y [contenido] lo que va adentro (el ícono, o el
  * ícono y «Agregar» en el rail ancho). Lo usan los dos rails (vuelta 38: la barra del teléfono ya no
- * tiene «+»; ahí el mismo menú lo abre «Más formas de anotar» de Inicio, [MasFormasDeAnotar]).
+ * tiene «+»; vuelta 39: ahí cada atajo es una de las 8 acciones de Inicio).
  */
 @Composable
 fun BotonDeAgregarConAtajos(
@@ -92,8 +92,7 @@ fun BotonDeAgregarConAtajos(
 
 /**
  * **El menú de los atajos de «Agregar»**: una fila por [atajos], y elegir una cierra el menú y hace
- * [alElegir]. Es el mismo en el «+» del rail ([BotonDeAgregarConAtajos]) y en «Más formas de anotar»
- * de Inicio ([MasFormasDeAnotar]).
+ * [alElegir]. Lo abre el «+» del rail ([BotonDeAgregarConAtajos]).
  */
 @Composable
 fun MenuDeAtajosDeAgregar(
@@ -123,52 +122,10 @@ fun MenuDeAtajosDeAgregar(
 /**
  * Lo que hace elegir un atajo de «Agregar», puesto por la cáscara (App.kt es dueña de las hojas de
  * «Repartir» y del selector del comprobante, ver `hacerElAtajo`). `null` fuera de la app (una prueba
- * que monta una pantalla sola): ahí «Más formas de anotar» no se pinta.
+ * que monta una pantalla sola): ahí las acciones de anotar del Inicio que no son una pantalla
+ * («Repartir», «Subir comprobante») no hacen nada.
  */
 val LocalAtajosDeAgregar = staticCompositionLocalOf<((AtajoDeAgregar) -> Unit)?> { null }
-
-/** Lo que dice el enlace de Inicio que abre los atajos de anotar (vuelta 38). */
-const val MAS_FORMAS_DE_ANOTAR: String = "Más formas de anotar"
-
-/**
- * Las formas de anotar que **no** están en las acciones de Inicio: Traspaso, Pago de tarjeta, Repartir
- * y Subir comprobante (Gasto e Ingreso ya son acciones).
- */
-val ATAJOS_FUERA_DEL_INICIO: List<AtajoDeAgregar> = listOf(
-    AtajoDeAgregar.TRASPASO,
-    AtajoDeAgregar.PAGO_DE_TARJETA,
-    AtajoDeAgregar.REPARTIR,
-    AtajoDeAgregar.SUBIR_COMPROBANTE,
-)
-
-/**
- * **«Más formas de anotar»** (vuelta 38): sin el «+» de la barra del teléfono, Traspaso, Pago de
- * tarjeta, Repartir y Subir comprobante se alcanzan desde aquí, debajo de las acciones de Inicio. Un
- * botón de texto que abre el mismo menú de atajos del «+». La vuelta 39 lo reemplaza por las 8
- * acciones de la maqueta. Sin [LocalAtajosDeAgregar] (fuera de la app) no se pinta.
- */
-@Composable
-fun MasFormasDeAnotar(modifier: Modifier = Modifier) {
-    val alElegir = LocalAtajosDeAgregar.current ?: return
-    var abierto by remember { mutableStateOf(false) }
-    Box(modifier = modifier) {
-        Boton(
-            texto = MAS_FORMAS_DE_ANOTAR,
-            onClick = { abierto = true },
-            variante = VarianteDeBoton.Fantasma,
-            modifier = Modifier.testTag(TAG_MAS_FORMAS_DE_ANOTAR),
-        )
-        MenuDeAtajosDeAgregar(
-            abierto = abierto,
-            alCerrar = { abierto = false },
-            alElegir = alElegir,
-            atajos = ATAJOS_FUERA_DEL_INICIO,
-        )
-    }
-}
-
-/** El `testTag` de «Más formas de anotar». */
-const val TAG_MAS_FORMAS_DE_ANOTAR: String = "mas-formas-de-anotar"
 
 /** La flecha «▾» al final de «Agregar»: abre los atajos de un clic. */
 @Composable

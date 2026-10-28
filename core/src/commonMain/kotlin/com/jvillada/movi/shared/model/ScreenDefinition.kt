@@ -62,6 +62,9 @@ object ScreenTaxonomy {
         // propone hoy» y el carrusel de cuentas. Un APK anterior no los conoce y los descarta; por eso
         // la generación 9 conserva ALERTS y el BANNER al final (ver `DASHBOARD_LAYOUT_VERSION`).
         "ACCIONES", "PROPUESTAS", "CUENTAS",
+        // Generación 10, el Inicio de la opción 3 (vuelta 39): el próximo pago y los últimos
+        // movimientos. Un APK anterior no los conoce y los descarta (ver `DASHBOARD_LAYOUT_VERSION`).
+        "PROXIMO_PAGO", "ULTIMOS_MOVIMIENTOS",
     )
 
     /**

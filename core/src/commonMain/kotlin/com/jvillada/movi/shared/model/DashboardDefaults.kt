@@ -118,7 +118,21 @@ package com.jvillada.movi.shared.model
 // pagar, en qué se va, «Para revisar» y el acceso a Movi AI —su Inicio de siempre, sin Disponible ni
 // patrimonio, que siguen a un toque en Plan y Patrimonio—. Este cliente no pinta ALERTS cuando la misma
 // definición trae PROPUESTAS, ni el BANNER de Movi AI cuando trae ACCIONES (ver `visibleSections`).
-const val DASHBOARD_LAYOUT_VERSION = 9
+//
+// Generación 10: el Inicio de la opción 3 (vuelta 39, 28-oct-2026: el dueño eligió la opción 3 «Acción
+// primero» y las 8 acciones). Entran dos tipos:
+//
+// - PROXIMO_PAGO, debajo de la cuadrícula: el pago más urgente del período (vencido primero, luego el
+//   que vence antes: `pagosEnOrdenDeUrgencia`, la misma regla del widget «Falta por pagar» y de la
+//   cola) con «Anotar pago». «Movi propone hoy» deja de repetirlo cuando la definición lo trae (ver
+//   `visibleSections` en el cliente).
+// - ULTIMOS_MOVIMIENTOS, debajo de «Movi propone hoy»: las tres filas más recientes de Actividad, con
+//   «Ver toda la actividad».
+//
+// Un APK de la generación 9 no los conoce y los descarta en silencio: ve el Inicio de siempre, con el
+// próximo pago dentro de su «Movi propone hoy» (su binario lo sigue proponiendo). La cuadrícula de 8 no
+// cambia la definición: los rótulos y los destinos de ACCIONES viajan en el binario.
+const val DASHBOARD_LAYOUT_VERSION = 10
 
 fun defaultDashboardDefinition(): ScreenDefinition = ScreenDefinition(
     slug = "dashboard",
@@ -126,7 +140,10 @@ fun defaultDashboardDefinition(): ScreenDefinition = ScreenDefinition(
     sections = listOf(
         ScreenSection(type = "HERO_BALANCE", title = "Balance neto"),  // rótulo inerte: el renderer usa HERO_BALANCE_TITLE
         ScreenSection(type = "ACCIONES", title = "Acciones"),
+        // Generación 10 (vuelta 39): el próximo pago y los últimos movimientos.
+        ScreenSection(type = "PROXIMO_PAGO", title = "Próximo pago"),
         ScreenSection(type = "PROPUESTAS", title = "Movi propone hoy"),
+        ScreenSection(type = "ULTIMOS_MOVIMIENTOS", title = "Últimos movimientos"),
         ScreenSection(type = "CUENTAS", title = "Tus cuentas"),
         ScreenSection(type = "CHECKLIST_DEL_PERIODO", title = "Falta por pagar"),
         ScreenSection(type = "GASTO_POR_CATEGORIA", title = "En qué se va"),

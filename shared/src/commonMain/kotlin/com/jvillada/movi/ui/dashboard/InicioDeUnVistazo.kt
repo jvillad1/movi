@@ -541,35 +541,47 @@ fun destinoDelTramo(tramo: TramoDelPatrimonio): Screen = if (tramo.esDeuda) Scre
 // Inicio es un `Disposicion.Tablero`, y lo que mide lo decide la cáscara con esa tabla.
 
 /**
- * Qué va en la columna derecha en escritorio: lo que **viene** y lo que se **pregunta**. La izquierda
- * se queda con el estado —¿cómo estoy? y ¿en qué se va?— y con «Para revisar». Todo tipo que no está
- * acá —los genéricos del Editor, un tipo nuevo— va a la izquierda: es la columna que se lee primero.
+ * **¿El Inicio va en dos columnas?** Desde [ANCHO_PARA_DOS_COLUMNAS], y solo si hay al menos dos
+ * bloques: una columna vacía al lado no es escritorio, es un hueco. Por debajo, una columna en el orden
+ * de la definición —el del teléfono—.
  */
-val TIPOS_DE_LA_COLUMNA_DERECHA: Set<String> = setOf(
-    "PREGUNTALE_A_MOVI", "CHECKLIST_DEL_PERIODO", "UPCOMING_PAYMENTS", "DISPONIBLE_DEL_PERIODO", "PATRIMONIO",
-    // Ola R1: a la izquierda va lo que se hace (el héroe, la cuadrícula, las propuestas); a la derecha
-    // lo que se mira (las cuentas y los dos widgets, que siguen juntos en su bloque).
-    "CUENTAS", "GASTO_POR_CATEGORIA",
-)
-
-/** Las secciones del Inicio repartidas en columnas. Con una sola, [derecha] va vacía. */
-data class ColumnasDelInicio(val izquierda: List<ScreenSection>, val derecha: List<ScreenSection>) {
-    val sonDos: Boolean get() = derecha.isNotEmpty()
-}
+fun inicioEnDosColumnas(bloques: Int, ancho: Dp): Boolean = ancho >= ANCHO_PARA_DOS_COLUMNAS && bloques >= 2
 
 /**
- * Reparte [secciones] (ya filtradas por [visibleSections]) según el [ancho] disponible.
+ * **Cómo se reparten los bloques del Inicio en dos columnas parejas** (vuelta 39). Devuelve, para cada
+ * bloque en el orden de la definición, `true` si va a la izquierda.
  *
- * - Menos de [ANCHO_PARA_DOS_COLUMNAS]: una columna, en el orden de la definición — el orden del
- *   teléfono, que es el que viaja en `screen_definitions`.
- * - Desde ahí: izquierda y derecha por tipo ([TIPOS_DE_LA_COLUMNA_DERECHA]), **conservando el orden
- *   de la definición dentro de cada una**. Si una de las dos quedaría vacía (una base recién
- *   estrenada tiene hero y poco más), se vuelve a una columna: una columna vacía al lado no es
- *   escritorio, es un hueco.
+ * Los de [fijosALaIzquierda] (el héroe y la guía) van a la izquierda; cada uno de los demás va a la
+ * columna que en ese momento es **más corta**, así las dos terminan parejas con los datos que haya (la
+ * revisión: la izquierda acababa en ~600 px y la derecha seguía con movimientos, cuentas y widgets). A
+ * igual alto, la izquierda. Dentro de cada columna se conserva el orden.
+ *
+ * La derecha arranca en [arribaDeLaDerecha]: debajo de la banda amarilla, que ocupa la parte de arriba
+ * de la izquierda junto con el héroe. Así lo que va a la derecha —la cuadrícula, con su círculo
+ * amarillo— nunca queda sobre el amarillo. Entre bloques, [separacion]; un bloque de alto cero (una
+ * sección que esta vez no pintó nada) no suma separación.
  */
-fun columnasDelInicio(secciones: List<ScreenSection>, ancho: Dp): ColumnasDelInicio {
-    if (ancho < ANCHO_PARA_DOS_COLUMNAS) return ColumnasDelInicio(secciones, emptyList())
-    val (derecha, izquierda) = secciones.partition { it.type in TIPOS_DE_LA_COLUMNA_DERECHA }
-    if (izquierda.isEmpty() || derecha.isEmpty()) return ColumnasDelInicio(secciones, emptyList())
-    return ColumnasDelInicio(izquierda, derecha)
+fun repartoEnDosColumnas(
+    altos: List<Int>,
+    fijosALaIzquierda: Set<Int>,
+    arribaDeLaDerecha: Int,
+    separacion: Int,
+): List<Boolean> {
+    var izquierda = 0
+    var derecha = arribaDeLaDerecha
+    var hayIzquierda = false
+    var hayDerecha = false
+    return altos.mapIndexed { i, alto ->
+        val aLaIzquierda = i in fijosALaIzquierda || izquierda <= derecha
+        if (alto > 0) {
+            if (aLaIzquierda) {
+                izquierda += alto + if (hayIzquierda) separacion else 0
+                hayIzquierda = true
+            } else {
+                derecha += alto + if (hayDerecha) separacion else 0
+                hayDerecha = true
+            }
+        }
+        aLaIzquierda
+    }
 }

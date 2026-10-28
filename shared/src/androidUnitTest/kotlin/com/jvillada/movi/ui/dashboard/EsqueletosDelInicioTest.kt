@@ -31,7 +31,6 @@ import com.jvillada.movi.ui.ai.PREGUNTAS_PARA_TOCAR_DE_RESPALDO
 import com.jvillada.movi.ui.ai.preguntasParaTocar
 import com.jvillada.movi.ui.sdui.SduiRenderer
 import com.jvillada.movi.ui.sdui.TAG_FILA_ESQUELETO_PREGUNTA
-import com.jvillada.movi.ui.sdui.TAG_VEREDICTO_DEL_HERO
 import kotlinx.datetime.Clock
 import org.junit.Rule
 import org.junit.Test
@@ -166,14 +165,12 @@ class EsqueletosDelInicioTest {
         }
         composeRule.waitForIdle()
 
-        // Las piezas del esqueleto están, ni una de menos (ola R1: rótulo, cifra, detalle y veredicto;
-        // la barra y la fila de «Tu plata» salieron del héroe).
+        // Las piezas del esqueleto están, ni una de menos (vuelta 39: rótulo, cifra y detalle; el
+        // veredicto salió de la tarjeta).
         assertEquals(1, contarTag(TAG_ESQUELETO_CIFRA_DEL_HERO))
         assertEquals(1, contarTag(TAG_ESQUELETO_DETALLE_DEL_HERO))
-        assertEquals(1, contarTag(TAG_ESQUELETO_VEREDICTO_DEL_HERO))
         // Y el lado cargado abre con «Te quedan», no con «Tu plata» de cifra grande.
         assertEquals(1, contarTag(TAG_CIFRA_TE_QUEDAN))
-        assertEquals(1, contarTag(TAG_VEREDICTO_DEL_HERO))
 
         val tarjetas = composeRule.onAllNodesWithTag(TAG_TARJETA_DEL_HERO)
         val altoCargando = tarjetas[0].getUnclippedBoundsInRoot().height
@@ -201,21 +198,21 @@ class EsqueletosDelInicioTest {
 
         assertEquals(1, contarTag(TAG_ESQUELETO_CIFRA_DEL_HERO))
         assertEquals(1, contarTag(TAG_ESQUELETO_DETALLE_DEL_HERO))
-        assertEquals(1, contarTag(TAG_ESQUELETO_VEREDICTO_DEL_HERO))
+        // Mientras carga, nada dice $0 (vuelta 39).
+        assertEquals(0, composeRule.onAllNodesWithText("\$0", useUnmergedTree = true).fetchSemanticsNodes().size)
         composeRule.onAllNodesWithText("\$500.000", useUnmergedTree = true).onFirst().assertIsDisplayed()
     }
 
-    /** Fix round 1, el caso reverso: resumen SÍ, cuentas NO. El veredicto es real; la cifra, esqueleto. */
+    /** Fix round 1, el caso reverso: resumen SÍ, cuentas NO. La cifra sigue esqueleto, nunca $0. */
     @Test
-    fun `con resumen pero sin cuentas, el veredicto es real y la cifra sigue esqueleto`() {
+    fun `con resumen pero sin cuentas, la cifra sigue esqueleto`() {
         val soloResumen = DashboardData(
             summary = FinanceSummary(scope = Scope.SELF, balance = 0, ingresos = 10_000_000, egresos = 15_000_000),
         )
         montarHero(soloResumen, cargando = true)
 
         assertEquals(1, contarTag(TAG_ESQUELETO_CIFRA_DEL_HERO))
-        assertEquals(0, contarTag(TAG_ESQUELETO_VEREDICTO_DEL_HERO))
-        assertEquals(1, contarTag(TAG_VEREDICTO_DEL_HERO))
+        assertEquals(0, composeRule.onAllNodesWithText("\$0", useUnmergedTree = true).fetchSemanticsNodes().size)
         // La barra Entró/Salió salió del Inicio (vive en Plan y en «Tus períodos»).
         composeRule.onNodeWithText("Entró", useUnmergedTree = true).assertDoesNotExist()
         composeRule.onNodeWithText("Salió", useUnmergedTree = true).assertDoesNotExist()
