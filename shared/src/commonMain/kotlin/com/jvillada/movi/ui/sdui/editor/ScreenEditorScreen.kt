@@ -76,15 +76,16 @@ private val SECTION_TYPE_LABELS = mapOf(
  *
  * Ola C: los rótulos nombran el LUGAR al que el dueño llega hoy, no la pantalla de antes — «Plan»,
  * «Patrimonio», «Ajustes». Los targets no cambian (viajan en definiciones guardadas, ver
- * `SduiRenderer.screenForTarget`); cambia lo que el selector dice de ellos.
+ * `SduiRenderer.screenForTarget`); cambia lo que el selector dice de ellos. Vuelta 38: las pestañas
+ * de la opción 3 — «Actividad», «Pagos», «Tú» (Ajustes vive ahí).
  */
 internal val NAVIGATE_TARGET_LABELS = mapOf(
     "dashboard" to "Inicio",
-    "transactions" to "Movimientos",
+    "transactions" to "Actividad",
     "quickadd" to "Agregar",
-    // Ola C: los tres abren Plan; el paréntesis dice en qué segmento.
-    "budgets" to "Plan (presupuestos)",
-    "mas" to "Ajustes",
+    // Ola C: los tres abren Plan (vuelta 38: «Pagos»); el paréntesis dice en qué segmento.
+    "budgets" to "Pagos (presupuestos)",
+    "mas" to "Tú",
     "accounts" to "Patrimonio",
     "credits" to "Créditos",
     // Ola B, tarea 7: Metas salió de la navegación y ya no se ofrece más abajo
@@ -95,8 +96,8 @@ internal val NAVIGATE_TARGET_LABELS = mapOf(
     "investments" to "Patrimonio (inversión)",
     // Ola 8 + ola C: ni las suscripciones ni los recurrentes tienen pantalla propia — el cliente
     // manda los dos targets a Plan · Pagos del mes (ver SduiRenderer.screenForTarget).
-    "subscriptions" to "Plan (suscripciones)",
-    "recurrentes" to "Plan (pagos del mes)",
+    "subscriptions" to "Pagos (suscripciones)",
+    "recurrentes" to "Pagos (del mes)",
     "categorias" to "Categorías",
     // Ola B, tarea 7: Extractos se unió a Documentos — el rótulo lo dice, mismo patrón que
     // "investments"/"subscriptions" acá arriba.
@@ -247,7 +248,7 @@ fun ScreenEditorScreen(onNavigate: (Screen) -> Unit) {
         // destino de reserva si no hay historial.
         MinScreenHeader(
             title = "Editor de pantallas",
-            leading = HeaderLeading.Back(fallback = Screen.Mas),
+            leading = HeaderLeading.Back(fallback = Screen.Tu),
             action = { if (saved) Text("Guardado", style = Movi.textos.apoyoMedio, color = Movi.colores.entra) },
         )
         Spacer(Modifier.height(Espacio.s))

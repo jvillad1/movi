@@ -80,6 +80,12 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 
+/**
+ * El título de la pantalla de los espacios (antes «Espacios»; vuelta 38): «Personas», la palabra de
+ * la maqueta. Un espacio («Casa con Caro») sigue llamándose espacio: es uno de los grupos de Personas.
+ */
+const val TITULO_DE_PERSONAS: String = "Personas"
+
 /** Tags para las pruebas. */
 const val TAG_SALDO_DEL_ESPACIO: String = "espacios:saldo"
 const val TAG_MARCAR_COMO_SALDADO: String = "espacios:marcar-como-saldado"
@@ -144,9 +150,10 @@ fun EspaciosScreen(onNavigate: (Screen) -> Unit) {
     Column(modifier = Modifier.fillMaxSize()) {
         // Con un espacio o más, crear otro va arriba (antes solo se podía desde el vacío: con uno ya
         // creado no había cómo hacer el segundo). Sin ninguno, el vacío ya lo ofrece.
+        // Vuelta 38: «Personas», como en la maqueta; ya no es pestaña, vive en «Tú» y vuelve ahí.
         MinScreenHeader(
-            title = "Espacios",
-            leading = HeaderLeading.Avatar(onNavigate),
+            title = TITULO_DE_PERSONAS,
+            leading = HeaderLeading.Back(fallback = Screen.Tu),
             accion = if (lectura?.detalles?.isNotEmpty() == true) {
                 AccionDeEncabezado("Nuevo espacio", Icons.Rounded.Add, onClick = { creando = true })
             } else null,
