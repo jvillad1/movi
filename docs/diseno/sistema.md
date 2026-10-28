@@ -1484,25 +1484,29 @@ componentes nuevos en `ds/`; dos tokens: `Medida.anchoDelCursor` (2 dp) y
     demás hojas (560): los 600 eran para que el teclado respirara.
   En el teléfono y en una tablet que se toca no cambia nada.
 - **La categoría se lee en un solo lugar.** Debajo del monto había una fila «Categoría · Restaurantes ›»
-  y, justo debajo, los chips con «Restaurantes» marcado. La fila se fue: queda el rótulo «Categoría»
-  (en `cuerpo`, la letra de los títulos de «Cuenta» y «Nota») encima de los chips, y al final de los
-  chips una `PildoraDeAccion` **«Todas ›»** (el `KeyboardArrowRight` de las filas que abren algo) que
-  abre el selector entero, sin teclado, como lo abría la fila. La elegida va marcada; si no está entre
+  y, justo debajo, los chips con «Restaurantes» marcado. La fila se fue: queda un renglón
+  **«Categoría ……… Todas ›»** encima de los chips —el rótulo en `cuerpo`, la letra de los títulos de
+  «Cuenta» y «Nota»; «Todas ›» a la derecha, como el «Ver todo» de una `Seccion` (en la marca) con el
+  `KeyboardArrowRight` de lo que se abre, y un toque de 48—, que abre el selector entero, sin teclado,
+  como lo abría la fila. «Todas» iba primero al final de los chips, pero ahí quedaba fuera de la
+  pantalla a 390 y a 1.280, y desplazar de lado con el mouse es incómodo: en el renglón del rótulo se
+  ve siempre. La elegida va marcada; si no está entre
   las frecuentes va primera (lo hacía ya `categoriasParaLasPastillasDeAgregar`), y sin datos de uso es
   la única pastilla (`pastillasDeLaCategoria`): sin eso quien recién empieza no la vería en ningún
   lado. Si la elegida queda fuera del desplazamiento de la fila, la fila se corre lo justo para
   mostrarla, solo en horizontal (un `bringIntoView` también correría la hoja). «Movi la reconoce: …» va
-  a la derecha del rótulo, en el mismo renglón: antes era un renglón propio que se iba al elegir otra
-  a mano y movía el teclado.
-- **A 360 dp** la tarjeta mide menos que antes (el rótulo es más bajo que una fila de 48), nada se
-  corta, y elegir un chip, una categoría en el selector u otra cuenta no mueve el teclado.
+  en el mismo renglón, entre el rótulo y «Todas ›», y es lo único que cede (se corta con «…»): antes era
+  un renglón propio que se iba al elegir otra a mano y movía el teclado.
+- **A 360 dp** la tarjeta mide lo de antes menos un separador (el renglón del rótulo mide 48, lo de la
+  fila que reemplaza), nada se corta, y elegir un chip, una categoría en el selector u otra cuenta no mueve el teclado.
 
 **Las líneas base** no cambian: `dp_sueltos` 119, `radios_con_numero` 3, y las guardas en 0 siguen en 0.
 Lo vigilan `AgregarConElTecladoDeVerdadTest` (a 1.280 sin teclas ni «⌫» y con el cursor a la derecha
 de la cifra; 4-2-0-0-0 deja $42.000, Retroceso deja $4.200 y Enter lo guarda; la hoja ≥ 200 dp más
 corta; a 1.280 con tacto y a 390 el teclado sigue y escribe) y `UnaSolaCategoriaEnAgregarTest` (a 360:
-la elegida una sola vez y marcada, «Categoría» no es una `Fila`, «Todas» al final abre el selector, la
+la elegida una sola vez y marcada, «Categoría» no es una `Fila`, «Todas» entero y sin desplazar en el
+renglón del rótulo —con seis frecuentes que desbordan los chips—, de 48 de toque, abre el selector, la
 elegida en el selector vuelve primera y entera, y elegir chip, categoría o cuenta no mueve el teclado
 ni corta «Guardar movimiento»), más un caso en `HojaAgregarSugerenciaDeCategoriaTest` (la sugerencia
-aparece y se va sin mover el teclado). Las pruebas que abrían el selector tocando la fila ahora tocan
+aparece y se va sin mover el teclado, y va antes de «Todas ›», que no se corta). Las pruebas que abrían el selector tocando la fila ahora tocan
 «Todas».

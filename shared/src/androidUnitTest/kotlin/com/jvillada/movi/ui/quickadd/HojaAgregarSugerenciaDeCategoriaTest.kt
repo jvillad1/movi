@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -36,6 +37,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
  * Task 5 — «Escribir el nombre sugiere la categoría», ejercida desde la hoja de «Agregar» de
@@ -120,6 +122,11 @@ class HojaAgregarSugerenciaDeCategoriaTest {
         escribirLaNota("Mora")
         composeRule.onNodeWithText("Movi la reconoce: Mora Soccer").assertExists()
         assertEquals(sinSugerencia, tecla(), "aparecer la sugerencia movió el teclado")
+        // La sugerencia va entre el rótulo y «Todas ›», y es la que cede: «Todas» sigue entera.
+        val todas = composeRule.onNodeWithTag(TAG_PASTILLA_TODAS_LAS_CATEGORIAS_AGREGAR)
+        assertEquals(todas.getUnclippedBoundsInRoot(), todas.getBoundsInRoot(), "«Todas ›» no se corta")
+        val sugerencia = composeRule.onNodeWithText("Movi la reconoce: Mora Soccer", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        assertTrue(sugerencia.right <= todas.getUnclippedBoundsInRoot().left, "la sugerencia va antes de «Todas»")
 
         elegirCategoriaAMano("Transporte")
         composeRule.onNodeWithText("Movi la reconoce: Mora Soccer").assertDoesNotExist()

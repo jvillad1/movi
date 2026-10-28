@@ -1507,8 +1507,8 @@ fun QuickAddScreen(
                         note = note,
                         dateLabel = etiquetaDeFecha(fecha, hoy),
                         onPickDate = { pasarA(pickers.abrir(Picker.Date)) },
-                        // «Todas ›», al final de los chips (vuelta 34): el selector entero, sin
-                        // teclado, como lo abría la fila «Categoría» que había antes.
+                        // «Todas ›», a la derecha del rótulo «Categoría» (vuelta 34): el selector
+                        // entero, sin teclado, como lo abría la fila «Categoría» que había antes.
                         onPickCategory = {
                             pedidosDeFocoDeCategoria = 0
                             pasarA(pickers.abrir(Picker.Category))
@@ -1639,7 +1639,7 @@ private fun EditorBody(
     categoriaSugeridaHint: String? = null,
     /**
      * Ola A: hasta 6 categorías, las que más se usan para este tipo — ver [categoriasFrecuentes].
-     * Vacía (sin datos de uso), la fila lleva solo la elegida, «Nueva» y «Todas» (ver
+     * Vacía (sin datos de uso), la fila lleva solo «Nueva» y la elegida (ver
      * [pastillasDeLaCategoria]): desde la vuelta 34 los chips son el único lugar donde se lee la
      * categoría elegida.
      */
@@ -1655,7 +1655,7 @@ private fun EditorBody(
     /** «Hoy», «Ayer» o «23 de agosto» — ver `etiquetaDeFecha`. Se muestra debajo del monto. */
     dateLabel: String,
     onPickDate: () -> Unit,
-    /** «Todas ›», al final de los chips: abre el selector entero. */
+    /** «Todas ›», a la derecha del rótulo «Categoría»: abre el selector entero. */
     onPickCategory: () -> Unit,
     onPickWallet: () -> Unit,
     onEditNote: () -> Unit,
@@ -1766,15 +1766,14 @@ private fun EditorBody(
     Superficie(modifier = Modifier.fillMaxWidth().testTag(TAG_TARJETA_DE_AGREGAR), relleno = RellenoDeSuperficie.Lista) {
         // Vuelta 34: **la categoría se lee en un solo lugar, los chips.** Hasta acá había una fila
         // «Categoría · Restaurantes ›» y, justo debajo, los chips con «Restaurantes» marcado: lo mismo
-        // dos veces. Queda el rótulo, en la letra de las filas de «Cuenta» y «Nota», y los chips con
-        // la elegida marcada; el selector entero lo abre «Todas ›», al final.
-        EncabezadoDeLaCategoria(sugerencia = categoriaSugeridaHint)
+        // dos veces. Queda el rótulo, en la letra de las filas de «Cuenta» y «Nota», con «Todas ›» a
+        // la derecha —el selector entero—, y los chips con la elegida marcada.
+        EncabezadoDeLaCategoria(sugerencia = categoriaSugeridaHint, onTodas = onPickCategory)
         CategoriaChipsRow(
             categorias = pastillasDeLaCategoria(categoriasFrecuentes, category),
             categoriaElegida = category,
             onPick = onPickCategoriaFrecuente,
             onNueva = onNuevaCategoria,
-            onTodas = onPickCategory,
         )
         Separador(SangriaDeSeparador.Margen)
         // Ola 11 — DE DÓNDE SALIÓ LA CUENTA QUE DICE AL LADO, Y POR QUÉ ESTE RENGLÓN
@@ -2024,46 +2023,70 @@ internal fun pastillasDeLaCategoria(frecuentes: List<String>, elegida: String): 
     if (frecuentes.isEmpty() && elegida.isNotBlank()) listOf(elegida) else frecuentes
 
 /**
- * **El rótulo de la fila de chips: «Categoría»** (vuelta 34), en la letra de los títulos de las filas
- * «Cuenta» y «Nota» ([FilaDeLaHoja]). A la derecha, en el mismo renglón, «Movi la reconoce: …»
- * cuando la categoría la puso una sugerencia: antes era un renglón propio que aparecía y se iba al
- * elegir otra a mano, y la hoja cambiaba de alto bajo el dedo. Ahora el renglón está siempre.
+ * **El rótulo de la fila de chips: «Categoría ……… Todas ›»** (vuelta 34). «Categoría» va en la letra
+ * de los títulos de las filas «Cuenta» y «Nota» ([FilaDeLaHoja]); «Todas ›» a la derecha, como el
+ * «Ver todo» de una [com.jvillada.movi.ui.components.ds.Seccion] (en la marca, en `cuerpo`) más el
+ * [Chevron] de lo que se abre, y abre el selector entero. Va acá y no al final de los chips porque
+ * ahí quedaba fuera de la pantalla en el teléfono y en el computador, y desplazar de lado con el
+ * mouse es incómodo: en este renglón **siempre se ve**.
+ *
+ * Entre los dos, «Movi la reconoce: …» cuando la categoría la puso una sugerencia: es lo único que
+ * cede, y se corta con «…»; ni el rótulo ni «Todas ›» se cortan nunca. Antes era un renglón propio
+ * que aparecía y se iba al elegir otra a mano, y la hoja cambiaba de alto bajo el dedo; ahora el
+ * renglón está siempre.
+ *
+ * **Mide el objetivo táctil (48)**, que es lo que mide el toque de «Todas ›» y lo que medía la fila
+ * «Categoría ›» que reemplaza: la tarjeta queda del alto de antes de la vuelta 34, menos un separador.
  */
 @Composable
-private fun EncabezadoDeLaCategoria(sugerencia: String?) {
+private fun EncabezadoDeLaCategoria(sugerencia: String?, onTodas: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = Medida.margenDePantalla)
-            .padding(top = Espacio.s)
+            .padding(start = Medida.margenDePantalla, end = Medida.margenDePantalla - Espacio.xs)
             .testTag(TAG_ENCABEZADO_DE_LA_CATEGORIA),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Espacio.s),
     ) {
-        Text(ROTULO_CATEGORIA_EN_AGREGAR, style = Movi.textos.cuerpo, color = Movi.colores.texto, maxLines = 1)
-        if (sugerencia != null) {
-            Text(
-                text = sugerencia,
-                style = Movi.textos.apoyo,
-                color = Movi.colores.textoMedio,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = androidx.compose.ui.text.style.TextAlign.End,
-                modifier = Modifier.weight(1f),
+        Text(ROTULO_CATEGORIA_EN_AGREGAR, style = Movi.textos.cuerpo, color = Movi.colores.texto, maxLines = 1, softWrap = false)
+        Text(
+            text = sugerencia.orEmpty(),
+            style = Movi.textos.apoyo,
+            color = Movi.colores.textoMedio,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = androidx.compose.ui.text.style.TextAlign.End,
+            modifier = Modifier.weight(1f),
+        )
+        Row(
+            modifier = Modifier
+                .heightIn(min = Medida.objetivoTactil)
+                .clip(RoundedCornerShape(Radio.s))
+                .clickable(role = Role.Button, onClickLabel = "Ver todas las categorías", onClick = onTodas)
+                .padding(horizontal = Espacio.xs)
+                .testTag(TAG_PASTILLA_TODAS_LAS_CATEGORIAS_AGREGAR),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(TODAS_LAS_CATEGORIAS, style = Movi.textos.cuerpo, color = Movi.colores.marca, maxLines = 1, softWrap = false)
+            Icon(
+                Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                contentDescription = null,
+                tint = Movi.colores.marca,
+                modifier = Modifier.size(Icono.m),
             )
         }
     }
 }
 
 /**
- * «Nueva», las categorías que más se usan para este tipo y «Todas ›» — ver
+ * «Nueva» y las categorías que más se usan para este tipo — ver
  * [categoriasParaLasPastillasDeAgregar], que decide cuáles y en qué orden (Ola A). Tocar una la elige
  * sin abrir el selector; la elegida se ve activa, y **es el único lugar donde se ve** (vuelta 34).
  *
  * **Vuelta de diseño 20: las píldoras del sistema.** Cada categoría es un [PildoraDeFiltro] —llena de
  * marca la elegida, en la capa 2 las demás, que sobre la capa 1 de la tarjeta sí se ven— y «Nueva»
- * y «Todas» son [PildoraDeAccion]: hacen algo, no se eligen. «Todas» lleva el [Chevron] de las filas
- * que abren algo, al final, y abre el selector entero (lo que abría la fila «Categoría ›»).
+ * es un [PildoraDeAccion]: hace algo, no se elige. El selector entero lo abre «Todas ›», en el
+ * renglón del rótulo ([EncabezadoDeLaCategoria]).
  *
  * **La elegida siempre a la vista.** Si queda fuera del desplazamiento —se eligió en el selector una
  * que es la sexta, o la fila volvió al principio al cerrarlo—, la fila se corre lo justo para
@@ -2084,7 +2107,6 @@ private fun CategoriaChipsRow(
     categoriaElegida: String,
     onPick: (String) -> Unit,
     onNueva: () -> Unit,
-    onTodas: () -> Unit,
 ) {
     val desplazamiento = rememberScrollState()
     // Dónde quedó cada pastilla, en píxeles de la fila (lo que no cambia al desplazar).
@@ -2136,13 +2158,6 @@ private fun CategoriaChipsRow(
                 },
             )
         }
-        PildoraDeAccion(
-            texto = TODAS_LAS_CATEGORIAS,
-            onClick = onTodas,
-            iconoFinal = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-            descripcion = "Ver todas las categorías",
-            modifier = Modifier.testTag(TAG_PASTILLA_TODAS_LAS_CATEGORIAS_AGREGAR),
-        )
     }
 }
 
@@ -2185,13 +2200,13 @@ private fun CursorDelMonto() {
 /** El rótulo de la fila de chips de la categoría. */
 internal const val ROTULO_CATEGORIA_EN_AGREGAR: String = "Categoría"
 
-/** La pastilla del final de los chips, que abre el selector entero. */
+/** «Todas ›», a la derecha del rótulo: abre el selector entero. */
 internal const val TODAS_LAS_CATEGORIAS: String = "Todas"
 
 /** El renglón «Categoría» de arriba de los chips. */
 internal const val TAG_ENCABEZADO_DE_LA_CATEGORIA: String = "agregar:encabezado-categoria"
 
-/** La pastilla «Todas ›». */
+/** El toque de «Todas ›». */
 internal const val TAG_PASTILLA_TODAS_LAS_CATEGORIAS_AGREGAR: String = "agregar:pastilla-todas"
 
 /** El cursor del monto, que solo se dibuja sin teclado en pantalla. */

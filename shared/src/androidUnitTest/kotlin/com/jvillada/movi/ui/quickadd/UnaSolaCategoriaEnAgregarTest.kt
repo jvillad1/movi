@@ -78,16 +78,27 @@ class UnaSolaCategoriaEnAgregarTest {
             .assertExists()
     }
 
+    /**
+     * **«Todas ›» se ve siempre, sin desplazar nada**: a la derecha del rótulo, no al final de los
+     * chips (ahí quedaba fuera de la pantalla). Con seis frecuentes los chips se pasan del ancho a
+     * 360 dp; «Todas» sigue entero en el renglón de «Categoría», y abre el selector.
+     */
     @Test
-    fun todas_va_al_final_de_los_chips_y_abre_el_selector() {
-        montarHoja()
-        val todas = composeRule.onNodeWithTag(TAG_PASTILLA_TODAS_LAS_CATEGORIAS_AGREGAR).getUnclippedBoundsInRoot()
-        listOf("Mercado", "Transporte").forEach { chip ->
-            val bordes = composeRule.onNodeWithText(chip).getUnclippedBoundsInRoot()
-            assertTrue(todas.left >= bordes.right, "«Todas» va después de «$chip»")
-        }
+    fun todas_se_ve_sin_desplazar_en_el_renglon_del_rotulo_y_abre_el_selector() {
+        montarHoja(usos = SEIS_FRECUENTES)
+        val todas = composeRule.onNodeWithTag(TAG_PASTILLA_TODAS_LAS_CATEGORIAS_AGREGAR)
+        todas.assertSeVeEntera("«Todas ›»")
+        val bordes = todas.getUnclippedBoundsInRoot()
+        val rotulo = composeRule.onNodeWithText(ROTULO_CATEGORIA_EN_AGREGAR, useUnmergedTree = true).getUnclippedBoundsInRoot()
+        assertTrue(bordes.left > rotulo.right, "«Todas» va a la derecha de «Categoría»: $bordes, $rotulo")
+        assertTrue(rotulo.top >= bordes.top && rotulo.bottom <= bordes.bottom, "y en su renglón")
+        val alto = (bordes.bottom - bordes.top).value
+        assertTrue(alto >= 48f - 0.5f, "el toque de «Todas» llega a 48: $alto")
+        // Ya no está al final de los chips: la última pastilla de la fila es una categoría.
+        val ultimoChip = composeRule.onNodeWithText(SEIS_FRECUENTES.last().name).getUnclippedBoundsInRoot()
+        assertTrue(ultimoChip.top >= bordes.bottom - 0.5f.dp, "los chips van debajo del renglón de «Todas»")
 
-        composeRule.onNodeWithTag(TAG_PASTILLA_TODAS_LAS_CATEGORIAS_AGREGAR).performSemanticsAction(SemanticsActions.OnClick)
+        todas.performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
 
         composeRule.onNodeWithTag(TAG_VOLVER_DEL_SUB_EDITOR).assertExists()
@@ -137,13 +148,8 @@ class UnaSolaCategoriaEnAgregarTest {
 
     // ── Andamio ─────────────────────────────────────────────────────────────────────────
 
-    private fun montarHoja(cuentas: List<Account> = listOf(ahorros)) {
-        UsedCategoriesCache.recordFromServer(
-            listOf(
-                UsedCategory("Mercado", listOf(TransactionType.EXPENSE), usosRecientes = 10),
-                UsedCategory("Transporte", listOf(TransactionType.EXPENSE), usosRecientes = 3),
-            ),
-        )
+    private fun montarHoja(cuentas: List<Account> = listOf(ahorros), usos: List<UsedCategory> = DOS_FRECUENTES) {
+        UsedCategoriesCache.recordFromServer(usos)
         Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
             override suspend fun getAccounts(): List<Account> = cuentas
         }
@@ -190,6 +196,14 @@ class UnaSolaCategoriaEnAgregarTest {
         )
     }
 }
+
+private val DOS_FRECUENTES = listOf(
+    UsedCategory("Mercado", listOf(TransactionType.EXPENSE), usosRecientes = 10),
+    UsedCategory("Transporte", listOf(TransactionType.EXPENSE), usosRecientes = 3),
+)
+
+private val SEIS_FRECUENTES = listOf("Mercado", "Transporte", "Restaurantes", "Salud", "Hogar", "Educación")
+    .mapIndexed { i, nombre -> UsedCategory(nombre, listOf(TransactionType.EXPENSE), usosRecientes = 20 - i) }
 
 private const val TELEFONO_CHICO = "w360dp-h740dp-xhdpi"
 private const val GUARDAR = "Guardar movimiento"
