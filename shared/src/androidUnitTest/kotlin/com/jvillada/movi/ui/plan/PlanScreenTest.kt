@@ -133,7 +133,7 @@ class PlanScreenTest {
     private var suscripcionesFallan = false
 
     /** El corte del perfil: 25 (el del dueño) salvo en la prueba del mes de calendario. */
-    private var corteDelPerfil: Int? = 25
+    private var corteDelPerfil: Int = 25
 
     /** Sin red: todo lo que la tarjeta y el tablero leen falla. */
     private var sinRed = false
@@ -823,12 +823,12 @@ class PlanScreenTest {
 
     /**
      * **Vuelta 40: el período va debajo del título también con el mes de calendario.** El usuario
-     * demo no tiene corte (`period_cutoff_day` nulo = el 1): la línea se callaba por diseño («no hay
+     * demo no tiene corte (`period_cutoff_day` nulo: el perfil dice 1): la línea se callaba por diseño («no hay
      * nada que aclarar») y Pagos quedaba sin fechas debajo de «Pagos». Con su perfil real, leído.
      */
     @Test
     fun `con el mes de calendario la linea del periodo tambien va`() {
-        corteDelPerfil = null
+        corteDelPerfil = 1
         montar()
         assertEquals(1, contarTag(TAG_LINEA_DEL_PERIODO_DE_PLAN_ESQUELETO), "mientras el perfil viaja, se reserva")
 
