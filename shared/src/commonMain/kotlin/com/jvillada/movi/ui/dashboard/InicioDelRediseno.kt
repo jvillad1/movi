@@ -145,7 +145,7 @@ fun colaDelInicio(data: DashboardData): List<Pendiente> = colaDePendientes(
 
 /**
  * **El pago que «Movi propone hoy» muestra**: el primero de la cola que vence a más tardar mañana
- * (vencido, hoy o mañana), o `null`. Lo usa también el widget «Falta por pagar» para no repetirlo.
+ * (vencido, hoy o mañana), o `null`.
  */
 fun pagoPropuestoHoy(data: DashboardData): PagoDelPeriodo? = pagosParaProponer(data).firstOrNull()
 
@@ -153,40 +153,30 @@ private fun pagosParaProponer(data: DashboardData): List<PagoDelPeriodo> =
     colaDelInicio(data).filterIsInstance<Pendiente.Pago>().map { it.pago }.filter { it.diasParaVencer <= 1 }
 
 /**
- * Lo que el widget «Falta por pagar» lista (vuelta de diseño 22): los pagos pendientes en el orden de
- * la cola, **sin el que ya está en «Movi propone hoy»**, hasta [PAGOS_EN_EL_WIDGET]; y cuántos quedan
- * sin fila, para decir «y N más». [masSinFila] cuenta todo lo pendiente que no tiene fila acá
- * —incluido el de la propuesta—, así las filas más ese número dan lo que dice «Faltan N».
+ * Lo que el widget «Falta por pagar» lista: los pagos pendientes **en el orden de la cola** —lo más
+ * urgente primero: lo vencido, y dentro de cada grupo el monto más grande—, hasta [PAGOS_EN_EL_WIDGET];
+ * y cuántos quedan sin fila, para decir «y N más». Las filas más ese número dan lo que dice «Faltan N».
  *
- * @param conPropuestas si «Movi propone hoy» está en el Inicio. Sin esa sección (una definición vieja
- *   del Editor de pantallas) el widget no tiene a quién dejarle el pago y lo lista.
+ * **Vuelta de diseño 28: ya no se salta el pago de «Movi propone hoy».** La vuelta 22 lo sacaba para no
+ * repetirlo, y con eso el Arriendo de $1,8M vencido hace 22 días quedaba en «y 1 más» mientras se veían
+ * Carro $9.000 e Internet $3.000. Un resumen de lo que falta no puede esconder lo que más falta.
  */
 data class FilasDelWidgetDeFalta(
     val filas: List<PagoDelPeriodo>,
     val masSinFila: Int,
-    /** El único pendiente es el de la propuesta: no hay filas que mostrar, se dice dónde está. */
-    val soloElDeArriba: Boolean,
 )
 
 /** Cuántos pagos lista el widget de «Falta por pagar». */
 const val PAGOS_EN_EL_WIDGET: Int = 2
 
-fun filasDelWidgetDeFalta(data: DashboardData, conPropuestas: Boolean): FilasDelWidgetDeFalta {
+fun filasDelWidgetDeFalta(data: DashboardData): FilasDelWidgetDeFalta {
     val pendientes = pagosEnOrdenDeUrgencia(checklistDelPeriodoDe(data))
-    val arriba = if (conPropuestas) pagoPropuestoHoy(data)?.ruleId else null
-    val filas = pendientes.filter { it.ruleId != arriba }.take(PAGOS_EN_EL_WIDGET)
-    return FilasDelWidgetDeFalta(
-        filas = filas,
-        masSinFila = pendientes.size - filas.size,
-        soloElDeArriba = filas.isEmpty() && pendientes.isNotEmpty(),
-    )
+    val filas = pendientes.take(PAGOS_EN_EL_WIDGET)
+    return FilasDelWidgetDeFalta(filas = filas, masSinFila = pendientes.size - filas.size)
 }
 
 /** «y 2 más»: lo pendiente que el widget no lista (ver [FilasDelWidgetDeFalta.masSinFila]). */
 fun yNMas(n: Int): String? = if (n > 0) "y $n más" else null
-
-/** Lo que dice el widget cuando su único pendiente ya está en «Movi propone hoy». */
-const val EL_PAGO_ESTA_ARRIBA: String = "Está arriba, en «Movi propone hoy»"
 
 // ── Movi propone hoy ─────────────────────────────────────────────────────────
 
@@ -194,7 +184,7 @@ const val EL_PAGO_ESTA_ARRIBA: String = "Está arriba, en «Movi propone hoy»"
 const val TOPE_DE_PROPUESTAS: Int = 4
 
 /** De qué es una propuesta. Una tarjeta por tipo: varias cosas del mismo tipo se dicen en una. */
-enum class TipoDePropuesta { PAGO, DEBITO, AVISOS, CUADRE, ANOMALIA, CIERRE }
+enum class TipoDePropuesta { PAGO, DEBITO, CUADRE, ANOMALIA, CIERRE }
 
 /** Lo que hace tocar un botón de una propuesta. */
 sealed interface AccionDeLaPropuesta {
@@ -232,18 +222,22 @@ data class PropuestaDelInicio(
  *
  * 1. un pago vencido o que vence hoy;
  * 2. lo que el banco cobró solo y falta confirmar;
- * 3. los avisos del banco por confirmar;
- * 4. un pago que vence mañana;
+ * 3. un pago que vence mañana;
  * 5. un saldo que no cuadra con el que dijo el banco;
  * 6. algo que se sale de lo normal;
  * 7. el cierre del período que terminó.
  *
  * Sin tope: el tope ([TOPE_DE_PROPUESTAS]) lo pone la pantalla, que además dice cuántas hay.
+ *
+ * **Lo que entró solo no es una propuesta** (vuelta de diseño 28). «3 por revisar» era una tarjeta más
+ * del feed, y Hoy decía lo mismo tres veces: el punto de la campana, la insignia «3» de la acción
+ * «Avisos» y esa tarjeta. Las propuestas son decisiones con contenido —un pago, un cobro, un saldo—;
+ * un contador no lo es. Lo que espera en «Por revisar» queda en la insignia de «Avisos» (siempre en la
+ * cuadrícula) y en la campana.
  */
 fun propuestasDelInicio(data: DashboardData): List<PropuestaDelInicio> = buildList {
     propuestaDePago(data)?.let(::add)
     propuestaDeDebitos(data)?.let(::add)
-    propuestaDeAvisos(data)?.let(::add)
     propuestaDeCuadre(data)?.let(::add)
     propuestaDeAnomalia(data)?.let(::add)
     propuestaDeCierre(data)?.let(::add)
@@ -307,24 +301,11 @@ private fun propuestaDeDebitos(data: DashboardData): PropuestaDelInicio? {
     )
 }
 
-private fun propuestaDeAvisos(data: DashboardData): PropuestaDelInicio? {
-    val conteo = conteoPorRevisarDelInicio(data)
-    val titulo = tituloDeLoQueEntroSolo(conteo) ?: return null
-    return PropuestaDelInicio(
-        tipo = TipoDePropuesta.AVISOS,
-        titulo = titulo,
-        cuerpo = cuerpoDeLoQueEntroSolo(conteo),
-        accion = "Revisar",
-        alTocar = AccionDeLaPropuesta.Ir(Screen.PorRevisar),
-        rango = 2,
-    )
-}
-
 /**
  * **Cómo se dice lo que entró solo** (vuelta de diseño 22), sin los débitos —que tienen su propia
  * tarjeta—: de una sola fuente, con su nombre («Llegaron 2 avisos del banco», «1 movimiento entró
  * solo»); de varias, el número de «Por revisar» y su desglose debajo ([cuerpoDeLoQueEntroSolo]).
- * `null` sin nada. Lo usan «Movi propone hoy» y la campana.
+ * `null` sin nada. Lo usa la campana.
  */
 fun tituloDeLoQueEntroSolo(conteo: ConteoPorRevisar): String? {
     val n = conteo.loQueEntroSolo

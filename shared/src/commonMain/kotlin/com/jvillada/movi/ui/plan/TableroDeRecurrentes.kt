@@ -58,8 +58,10 @@ import com.jvillada.movi.ui.components.ds.Seccion
 import com.jvillada.movi.ui.components.ds.Separador
 import com.jvillada.movi.ui.components.ds.Superficie
 import com.jvillada.movi.ui.components.ds.TamanoDeBoton
-import com.jvillada.movi.ui.components.ds.TarjetaDePropuesta
 import com.jvillada.movi.ui.components.ds.TonoDeIcono
+import com.jvillada.movi.ui.components.ds.IconoEnCirculo
+import com.jvillada.movi.ui.components.ds.TonoDeSubtitulo
+import com.jvillada.movi.data.PropuestasDescartadasStore
 import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import com.jvillada.movi.ui.components.ds.VarianteDeCifra
 import com.jvillada.movi.ui.recurrentes.BajoLaFila
@@ -330,6 +332,22 @@ class EstadoDelTableroDeRecurrentes internal constructor(
     // El aviso ámbar mira lo que se PIDIÓ, no lo que existe: promete una promesa rota, y sin
     // promesa no hay nada que anunciar. Ver [hayRecordatoriosPedidos].
     internal val pidieronRecordatorios by derivedStateOf { hayRecordatoriosPedidos(upcomingRecurrentes) }
+
+    /**
+     * Los «Ahora no» guardados (vuelta de diseño 28), como estado para que la fila de los recordatorios
+     * se vaya en el cuadro siguiente. Viven en [PropuestasDescartadasStore], del usuario y no del
+     * aparato: se limpian al cerrar sesión.
+     */
+    private var recordatoriosDescartados by mutableStateOf(PropuestasDescartadasStore.descartadas())
+
+    /** El dueño ya dijo «Ahora no» a los recordatorios sin canal en [periodo]. */
+    internal fun recordatoriosAhoraNo(periodo: PeriodoFinanciero): Boolean =
+        claveDeRecordatoriosAhoraNo(periodo) in recordatoriosDescartados
+
+    /** «Ahora no»: la fila de los recordatorios no vuelve hasta el período que viene. */
+    internal fun descartarRecordatorios(periodo: PeriodoFinanciero) {
+        recordatoriosDescartados = PropuestasDescartadasStore.marcar(claveDeRecordatoriosAhoraNo(periodo))
+    }
 
     /** Vuelve a traer todo lo del tablero, sin tocar lo de quien lo monta. */
     internal fun recargar() {
@@ -669,12 +687,28 @@ fun LazyListScope.tableroDeRecurrentes(
     despuesDeLaLista: (LazyListScope.() -> Unit)? = null,
 ) {
     // ── Aviso: pediste recordatorios y no hay por dónde mandártelos ──────────
-    // Ola R4 lo había llevado al FINAL del segmento, como propuesta (ver [propuestaDeRecordatorios]).
-    // Vuelta de diseño 22: ahí se descubría tarde —después de las suscripciones— y sube junto a
-    // «Pagos del período», justo encima, que es donde importa: son esos pagos los que no van a avisar.
-    // Una sola vez en Plan; Ajustes → Avisos lo dice en su fila («Apagado: no te va a llegar»).
+    // Ola R4 lo había llevado al FINAL del segmento, como propuesta. Vuelta de diseño 22: subió encima
+    // de «Pagos del período», como la segunda tarjeta más grande de la pantalla. Vuelta de diseño 28: es
+    // una fila compacta en tono de aviso, DENTRO de la lista, debajo del resumen de lo que falta, y se
+    // descarta por el período con «Ahora no» ([FilaDeRecordatoriosSinCanal]). Una sola vez en Plan;
+    // Ajustes → Avisos lo dice en su fila («Apagado: no te va a llegar»).
     val avisarRecordatorios =
-        shouldShowReminderWarning(estado.pushStatus, estado.pidieronRecordatorios, ReminderChannelsCache.canales)
+        shouldShowReminderWarning(estado.pushStatus, estado.pidieronRecordatorios, ReminderChannelsCache.canales) &&
+            !estado.recordatoriosAhoraNo(periodoDeHoy)
+    val filaDeRecordatorios: @Composable () -> Unit = {
+        FilaDeRecordatoriosSinCanal(
+            bloqueadas = estado.pushStatus == "denied",
+            onActivar = {
+                if (estado.pushStatus == "denied") {
+                    onNavigate(Screen.Mas)
+                } else {
+                    PushOptIn.enable()
+                    estado.pushRefreshTick++
+                }
+            },
+            onAhoraNo = { estado.descartarRecordatorios(periodoDeHoy) },
+        )
+    }
 
     // ── El vacío que enseña: nunca anotó un pago fijo ───────────────────────
     //
@@ -711,7 +745,14 @@ fun LazyListScope.tableroDeRecurrentes(
             )
         }
         despuesDeLaLista?.invoke(this)
-        if (avisarRecordatorios) propuestaDeRecordatorios(estado, onNavigate)
+        if (avisarRecordatorios) {
+            item(key = "recordatorios-sin-canal") {
+                Superficie(
+                    modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(bottom = Medida.entreSecciones),
+                    relleno = RellenoDeSuperficie.Lista,
+                ) { filaDeRecordatorios() }
+            }
+        }
         return
     }
 
@@ -726,7 +767,6 @@ fun LazyListScope.tableroDeRecurrentes(
     // `/api/payments/upcoming` y `/api/payments/occurrences` contestan sobre HOY: pintar sus filas
     // bajo el rótulo de agosto sería afirmar sobre un mes cerrado con los datos de otro. En un
     // período que no es el de hoy, el checklist no se pinta.
-    if (avisarRecordatorios) propuestaDeRecordatorios(estado, onNavigate)
     if (periodoVisible == periodoDeHoy) {
         item {
             /**
@@ -801,6 +841,7 @@ fun LazyListScope.tableroDeRecurrentes(
                 onReintentar = { estado.recargar() },
                 modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(bottom = Medida.entreSecciones),
                 planesDeCuotas = estado.planesDeCuotas,
+                debajoDelResumen = if (avisarRecordatorios) filaDeRecordatorios else null,
             )
         }
     }
@@ -908,41 +949,46 @@ fun LazyListScope.tableroDeRecurrentes(
 }
 
 /**
- * **«Tus recordatorios no te van a llegar»**, como propuesta (ola R4): pediste que te avisaran de un
- * pago y no hay canal por donde. Con las notificaciones apagadas, Movi propone prenderlas; si el
- * navegador las bloqueó no hay botón que lo arregle desde acá, y la propuesta lleva a Perfil, donde
- * están los avisos. Ver [shouldShowReminderWarning] para cuándo sale.
+ * **«Tus recordatorios no te van a llegar»** (vuelta de diseño 28): pediste que te avisaran de un pago
+ * y no hay canal por donde. Una [Fila] compacta en tono de aviso —el ícono y el subtítulo en `aviso`—,
+ * debajo del resumen de «Pagos del período»: tocarla prende las notificaciones (o, si el navegador las
+ * bloqueó, lleva a Ajustes, donde están los avisos), y «Ahora no» la descarta hasta el período que
+ * viene. Era una `TarjetaDePropuesta` encima de toda la lista. Ver [shouldShowReminderWarning] para
+ * cuándo sale.
  */
-private fun LazyListScope.propuestaDeRecordatorios(
-    estado: EstadoDelTableroDeRecurrentes,
-    onNavigate: (Screen) -> Unit,
-) {
-    item(key = "propuesta-de-recordatorios") {
-        val bloqueadas = estado.pushStatus == "denied"
-        TarjetaDePropuesta(
-            icono = Icons.Rounded.NotificationsOff,
-            titulo = TITULO_RECORDATORIOS_SIN_CANAL,
-            cuerpo = if (bloqueadas) {
-                "Bloqueaste las notificaciones de Movi en el navegador. Reactívalas desde la configuración del sitio."
-            } else {
-                "Las notificaciones están apagadas y no hay otro canal para avisarte de un vencimiento."
-            },
-            tono = TonoDeIcono.Aviso,
-            accion = if (bloqueadas) "Ver tus avisos" else "Activar notificaciones",
-            onAccion = {
-                if (bloqueadas) {
-                    onNavigate(Screen.Mas)
-                } else {
-                    PushOptIn.enable()
-                    estado.pushRefreshTick++
-                }
-            },
-            modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(bottom = Medida.entreSecciones),
-        )
-    }
+@Composable
+internal fun FilaDeRecordatoriosSinCanal(bloqueadas: Boolean, onActivar: () -> Unit, onAhoraNo: () -> Unit) {
+    Fila(
+        titulo = TITULO_RECORDATORIOS_SIN_CANAL,
+        subtitulo = if (bloqueadas) SUBTITULO_RECORDATORIOS_BLOQUEADOS else SUBTITULO_RECORDATORIOS_APAGADOS,
+        tonoDelSubtitulo = TonoDeSubtitulo.Aviso,
+        inicio = { IconoEnCirculo(Icons.Rounded.NotificationsOff, tono = TonoDeIcono.Aviso) },
+        final = { Boton(AHORA_NO, onClick = onAhoraNo, variante = VarianteDeBoton.Fantasma, tamano = TamanoDeBoton.S) },
+        onClick = onActivar,
+        onClickLabel = if (bloqueadas) "Ver tus avisos" else "Activar notificaciones",
+        modifier = Modifier.testTag(TAG_FILA_DE_RECORDATORIOS),
+    )
 }
 
-/** El título de la propuesta de los recordatorios sin canal. */
+/** Lo que dice la fila cuando las notificaciones están apagadas: qué pasa al tocarla. */
+const val SUBTITULO_RECORDATORIOS_APAGADOS: String = "Toca para activar las notificaciones"
+
+/** Lo que dice la fila cuando el navegador las bloqueó: desde acá no se pueden prender. */
+const val SUBTITULO_RECORDATORIOS_BLOQUEADOS: String = "Las bloqueaste en el navegador: toca para ver tus avisos"
+
+/** El descarte por el período. */
+const val AHORA_NO: String = "Ahora no"
+
+/** El tag de [FilaDeRecordatoriosSinCanal]. */
+const val TAG_FILA_DE_RECORDATORIOS: String = "fila-de-recordatorios-sin-canal"
+
+/**
+ * La clave de «Ahora no» de los recordatorios en [PropuestasDescartadasStore]: una por período, así el
+ * período que viene vuelve a avisar.
+ */
+internal fun claveDeRecordatoriosAhoraNo(periodo: PeriodoFinanciero): String = "recordatorios-sin-canal:${periodo.prefijo}"
+
+/** El título de la fila de los recordatorios sin canal. */
 const val TITULO_RECORDATORIOS_SIN_CANAL: String = "Tus recordatorios no te van a llegar"
 
 /**

@@ -931,7 +931,27 @@ data class NotificationRow(
     val monto: Long? = null,
     val moneda: String = "COP",
     val urgencia: Int = urgenciaDeLaNotificacion(tipo),
-)
+) {
+    /**
+     * **Vencido o urgente** (vuelta de diseño 28): un pago vencido o que vence hoy, lo que el banco
+     * cobró solo y falta confirmar, o un banco que se calló. Es lo único que prende el punto de la
+     * campana ([campanaConPunto]); lo demás —lo que espera en «Por revisar», un pago de la semana, un
+     * presupuesto pasado— sigue en la bandeja, sin punto.
+     */
+    val urgente: Boolean get() = when (tipo) {
+        TipoDeNotificacion.PagoVencido, TipoDeNotificacion.DebitoPorConfirmar, TipoDeNotificacion.BancoMudo -> true
+        TipoDeNotificacion.PagoPorVencer -> urgencia == urgenciaDeLaNotificacion(tipo, diasParaVencer = 0)
+        else -> false
+    }
+}
+
+/**
+ * **¿La campana lleva su punto rojo?** (vuelta de diseño 28). Solo con algo vencido o urgente
+ * ([NotificationRow.urgente]). Antes lo prendía cualquier aviso, y con «3 por revisar» Hoy lo decía
+ * tres veces: el punto, la insignia de «Avisos» y una tarjeta de «Movi propone hoy». La insignia ya
+ * cuenta lo que espera en «Por revisar»; el punto queda para lo que no puede esperar.
+ */
+fun campanaConPunto(rows: List<NotificationRow>): Boolean = rows.any { it.urgente }
 
 /**
  * **Qué tan urgente es un aviso**, menor primero: lo vencido, lo que vence hoy, el banco que se

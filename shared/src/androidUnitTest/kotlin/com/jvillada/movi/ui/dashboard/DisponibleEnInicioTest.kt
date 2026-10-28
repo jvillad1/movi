@@ -13,6 +13,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.text.TextLayoutResult
@@ -158,7 +159,8 @@ class DisponibleEnInicioTest {
         // gastado en grande y de cuánto.
         composeRule.onNodeWithText("Período", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("Semana · 4 días", useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithText("Hoy", useUnmergedTree = true).assertIsDisplayed()
+        // Vuelta de diseño 28: la columna de hoy dice que es la meta, no otra cifra «por día».
+        composeRule.onNodeWithText("Meta de hoy", useUnmergedTree = true).assertIsDisplayed()
         assertEquals(0, nodos("\$6,8M").size, "lo que le queda al período no se repite en su columna")
         assertCifras("\$150.000", 1, normal)
         composeRule.onNodeWithText("de \$6,9M", useUnmergedTree = true).assertIsDisplayed()
@@ -169,9 +171,13 @@ class DisponibleEnInicioTest {
         // Que las cifras entren en su columna lo mide `LasCifrasDelDisponibleEntranTest`, con el
         // motor de texto real: acá Robolectric mide con uno que no sirve para anchos.
         // De dónde sale, detrás de un toque.
-        composeRule.onNodeWithText("Ingresos \$10M menos fijos \$3,1M", useUnmergedTree = true).assertDoesNotExist()
+        composeRule.onNodeWithTag(TAG_CASCADA_DEL_DISPONIBLE, useUnmergedTree = true).assertDoesNotExist()
         composeRule.onNodeWithText("¿De dónde sale?", useUnmergedTree = true).performClick()
-        composeRule.onNodeWithText("Ingresos \$10M menos fijos \$3,1M", useUnmergedTree = true).assertIsDisplayed()
+        // Vuelta de diseño 28: la cascada, con un server viejo «lo que entró menos los fijos».
+        composeRule.onNodeWithTag(TAG_CASCADA_DEL_DISPONIBLE, useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Lo que entró", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("+\$10.000.000", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("−\$3.100.000", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("bien", substring = true, ignoreCase = true, useUnmergedTree = true).assertDoesNotExist()
     }
 
@@ -235,8 +241,12 @@ class DisponibleEnInicioTest {
 
         composeRule.onNodeWithText("\$31.717.141", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("¿De dónde sale?", useUnmergedTree = true).performClick()
-        composeRule.onNodeWithText("Tenías \$1,4M el 25 · entraron \$33,9M", useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithText("Guardaste \$500.000 · fijos \$3,1M", useUnmergedTree = true).assertIsDisplayed()
+        // Vuelta de diseño 28: un renglón por tramo, con la cifra entera y su signo.
+        composeRule.onNodeWithText("Tenías el 25", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("\$1.386.694", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("+\$33.930.447", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Guardaste en un ahorro", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("−\$500.000", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("Ingresos", substring = true, useUnmergedTree = true).assertDoesNotExist()
         composeRule.onNodeWithText("Semana · 4 días", useUnmergedTree = true).assertIsDisplayed()
     }

@@ -27,7 +27,7 @@ const val CIFRA_SIN_DATO: String = "—"
  * **Dónde va el rótulo de una [CifraConRotulo].**
  *
  * - [Apilada]: el rótulo arriba y la cifra debajo. Lo normal: dos o tres cifras lado a lado
- *   («Tienes · Debes», «Entró · Salió · Te quedó», «Ingresos recurrentes · Gastos recurrentes»).
+ *   («Tienes · Debes», «Entró · Salió · Neto del período», «Ingresos recurrentes · Gastos recurrentes»).
  * - [EnRenglon]: el rótulo a la izquierda y la cifra a la derecha, en un renglón: un desglose que
  *   se lee de arriba abajo, una cifra por renglón («Tuyo … $1.250.000» en Créditos). El rótulo se
  *   parte en dos renglones antes de empujar la cifra: la cifra se mide primero y nunca se recorta.
@@ -94,7 +94,7 @@ fun RotuloConValor(
  *     CifraConRotulo("Tienes", tienes, Modifier.weight(1f))
  *     CifraConRotulo("Debes", debes, alFinal = true)
  * }
- * CifraConRotulo("Te quedó", teQuedo, tono = TonoDeCifra.Ingreso, forma = FormaDeCifra.Compacta, alFinal = true)
+ * CifraConRotulo("Neto del período", neto, tono = TonoDeCifra.Ingreso, forma = FormaDeCifra.Compacta, alFinal = true)
  * CifraConRotulo("Tuyo", interes, disposicion = DisposicionDeCifraConRotulo.EnRenglon)
  * ```
  *

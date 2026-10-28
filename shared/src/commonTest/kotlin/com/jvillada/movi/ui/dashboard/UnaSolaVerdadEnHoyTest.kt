@@ -76,26 +76,31 @@ class UnaSolaVerdadEnHoyTest {
         assertEquals(propuesta.titulo, notificationRows(demo).first().titulo)
     }
 
+    /**
+     * **Vuelta de diseño 28: el widget no esconde la deuda grande.** La vuelta 22 sacaba del widget el
+     * pago de «Movi propone hoy», y el Arriendo de $1,8M vencido hace 22 días quedaba en «y 1 más»
+     * mientras se veían Carro $9.000 e Internet $3.000. Ahora lista lo más urgente primero, aunque
+     * también esté en la propuesta.
+     */
     @Test
-    fun `Hoy no lista el mismo pago dos veces`() {
+    fun `con el Arriendo vencido, el widget lo lista primero`() {
         val propuesto = pagoPropuestoHoy(demo)!!
-        val widget = filasDelWidgetDeFalta(demo, conPropuestas = true)
-        assertTrue(widget.filas.none { it.ruleId == propuesto.ruleId }, "el widget no repite el pago de la propuesta")
-        // Lo demás, en el orden de la cola (el monto más grande primero).
-        assertEquals(listOf("Carro", "Internet"), widget.filas.map { it.nombre })
+        assertEquals("Arriendo", propuesto.nombre)
+        val widget = filasDelWidgetDeFalta(demo)
+        assertEquals(listOf("Arriendo", "Carro"), widget.filas.map { it.nombre })
+        assertTrue(widget.filas.first().vencido, "con su marca de vencido")
+        assertEquals("Vencido hace 22 días", dueLabel(widget.filas.first().diasParaVencer))
         // Las filas más «y N más» dan lo que dice «Faltan 3 de 3 pagos».
         assertEquals(1, widget.masSinFila)
         assertEquals("y 1 más", yNMas(widget.masSinFila))
-        // Sin «Movi propone hoy» en el Inicio no hay a quién dejárselo: lo lista.
-        assertEquals(listOf("Arriendo", "Carro"), filasDelWidgetDeFalta(demo, conPropuestas = false).filas.map { it.nombre })
     }
 
     @Test
-    fun `si el unico pendiente esta en la propuesta, el widget dice donde esta`() {
+    fun `con un solo pendiente, el widget lo lista aunque este en la propuesta`() {
         val soloElArriendo = demo.copy(upcoming = demo.upcoming!!.take(1))
-        val widget = filasDelWidgetDeFalta(soloElArriendo, conPropuestas = true)
-        assertTrue(widget.filas.isEmpty())
-        assertTrue(widget.soloElDeArriba)
+        val widget = filasDelWidgetDeFalta(soloElArriendo)
+        assertEquals(listOf("Arriendo"), widget.filas.map { it.nombre })
+        assertEquals(0, widget.masSinFila)
     }
 
     @Test
@@ -106,7 +111,7 @@ class UnaSolaVerdadEnHoyTest {
                 UpcomingPayment(regla("rr_cel", "Celular", 53_000, 30), "2026-10-30", daysUntil = 3, status = PaymentStatus.DUE_SOON),
             ),
         )
-        val widget = filasDelWidgetDeFalta(cinco, conPropuestas = true)
+        val widget = filasDelWidgetDeFalta(cinco)
         assertEquals(2, widget.filas.size)
         assertEquals(3, widget.masSinFila, "5 pendientes − 2 filas")
         assertEquals(null, yNMas(0))
@@ -123,7 +128,7 @@ class UnaSolaVerdadEnHoyTest {
     )
 
     @Test
-    fun `con 2 avisos y 1 movimiento por confirmar, los tres lugares dicen lo mismo`() {
+    fun `con 2 avisos y 1 movimiento por confirmar, la insignia, Movimientos y la campana dicen lo mismo`() {
         // Lo que manda el resumen del server: 2 pagos avisados y 1 movimiento por confirmar.
         val inicio = DashboardData(pendingSms = 2, movimientosPorConfirmar = 1)
         // Lo que Movimientos cuenta sobre la bandeja que bajó.
@@ -146,10 +151,8 @@ class UnaSolaVerdadEnHoyTest {
         assertEquals("2 avisos · 1 movimiento", desgloseDePorRevisar(movimientos))
         assertEquals("Revisar los avisos (2 avisos · 1 movimiento)", descripcionDeLaInsignia(inicio))
 
-        // «Movi propone hoy» dice el mismo número, con el mismo desglose.
-        val propuesta = propuestasDelInicio(inicio).single { it.tipo == TipoDePropuesta.AVISOS }
-        assertEquals("3 por revisar", propuesta.titulo)
-        assertEquals("2 avisos · 1 movimiento", propuesta.cuerpo)
+        // Vuelta de diseño 28: «Movi propone hoy» ya no lo repite como tarjeta (la insignia lo cuenta).
+        assertTrue(propuestasDelInicio(inicio).isEmpty())
 
         // Y la campana, una sola fila con lo mismo.
         val campana = notificationRows(inicio.copy(periodoActual = octubre)).single { it.target == Screen.PorRevisar }
@@ -158,12 +161,11 @@ class UnaSolaVerdadEnHoyTest {
     }
 
     @Test
-    fun `de una sola fuente se dice con su nombre`() {
-        assertEquals("Llegaron 2 avisos del banco", propuestasDelInicio(DashboardData(pendingSms = 2)).single().titulo)
-        assertEquals("1 movimiento entró solo", propuestasDelInicio(DashboardData(movimientosPorConfirmar = 1)).single().titulo)
-        assertEquals(
-            "2 pagos de tarjeta por confirmar",
-            propuestasDelInicio(DashboardData(cardCandidates = 2)).single().titulo,
-        )
+    fun `de una sola fuente la campana lo dice con su nombre`() {
+        fun campana(data: DashboardData) =
+            notificationRows(data.copy(periodoActual = octubre)).single { it.target == Screen.PorRevisar }.titulo
+        assertEquals("Llegaron 2 avisos del banco", campana(DashboardData(pendingSms = 2)))
+        assertEquals("1 movimiento entró solo", campana(DashboardData(movimientosPorConfirmar = 1)))
+        assertEquals("2 pagos de tarjeta por confirmar", campana(DashboardData(cardCandidates = 2)))
     }
 }

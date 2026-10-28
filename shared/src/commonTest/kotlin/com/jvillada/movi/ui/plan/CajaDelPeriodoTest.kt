@@ -45,7 +45,7 @@ class CajaDelPeriodoTest {
                 dia("2026-10-20", 17_798_877L, "Sueldo" to 9_000_000L),
             ),
         )
-        assertEquals("El 17 de octubre llegas a \$8,8M, el día de Cuota Vehiculo 8761", fraseDelDiaMasBajo(caja, hoy))
+        assertEquals("El 17 de octubre tu saldo proyectado es \$8,8M, el día de Cuota Vehiculo 8761", fraseDelDiaMasBajo(caja, hoy))
         assertNull(fraseDelRojo(caja, hoy))
     }
 
@@ -83,14 +83,14 @@ class CajaDelPeriodoTest {
     fun `el supuesto dice de que periodos sale, y si no hay, que no hay`() {
         val uno = GastoDelDiaADia(100_000L, listOf(GastoVariableDeUnPeriodo("2026-09", 3_100_000L, 31)))
         assertEquals(
-            "Suponiendo que gastas como siempre, unos \$100.000 por día (tu promedio del período de septiembre).",
+            "Supone que sigues como siempre: gastas en promedio \$100.000 por día (en tu período de septiembre).",
             fraseDelSupuesto(uno),
         )
         val dos = GastoDelDiaADia(
             100_000L,
             listOf(GastoVariableDeUnPeriodo("2026-09", 3_100_000L, 31), GastoVariableDeUnPeriodo("2026-08", 2_900_000L, 29)),
         )
-        assertTrue("tu promedio de los últimos 2 períodos" in fraseDelSupuesto(dos))
+        assertTrue("gastas en promedio \$100.000 por día (en tus últimos 2 períodos)" in fraseDelSupuesto(dos))
         assertTrue(fraseDelSupuesto(GastoDelDiaADia()).startsWith("Todavía no hay un período cerrado"))
     }
 

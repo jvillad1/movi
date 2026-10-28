@@ -370,16 +370,28 @@ internal fun marcasDe(resumen: ResumenDePeriodo): List<String> = buildList {
     }
 }
 
-/** `entradas − salidas`: lo que le quedó al dueño en ese período. */
-internal fun teQuedoDe(resumen: ResumenDePeriodo): Long = resumen.entradas - resumen.salidas
+/**
+ * **El rótulo de `entradas − salidas`** (vuelta de diseño 28). Decía «Te quedó», y «Te quedó −$817.250»
+ * en rojo se leía como lo que quedó para gastar —otra versión de «Te quedan» de Hoy— o como una
+ * alarma. Es el neto del flujo del período: lo que entró menos lo que salió.
+ */
+const val ROTULO_NETO_DEL_PERIODO: String = "Neto del período"
+
+/** `entradas − salidas`: el neto del flujo del período. */
+internal fun netoDelPeriodoDe(resumen: ResumenDePeriodo): Long = resumen.entradas - resumen.salidas
 
 /**
- * El tono de «Te quedó»: «+$1,2M» en `entra` si quedó algo, «−$1,2M» en `sale` si no alcanzó, «$0»
- * apagado. El signo y el color los pone la [com.jvillada.movi.ui.components.ds.Cifra] con este tono.
+ * El tono del neto del período: «+$1,2M» en `entra` si entró más de lo que salió, «−$1,2M» **en el
+ * color del texto** si salió más, «$0» apagado. El signo y el color los pone la
+ * [com.jvillada.movi.ui.components.ds.Cifra] con este tono.
+ *
+ * **Un neto negativo no es una alerta** (vuelta de diseño 28): un período en que salió más de lo que
+ * entró puede haberse pagado con lo que ya había (ver [loQueCubrioLoDemas]); el rojo queda para lo
+ * que pide algo, como gastar más de lo que había para el período.
  */
-internal fun tonoDeTeQuedo(monto: Long): TonoDeCifra = when {
+internal fun tonoDelNetoDelPeriodo(monto: Long): TonoDeCifra = when {
     monto > 0 -> TonoDeCifra.Ingreso
-    monto < 0 -> TonoDeCifra.Alerta
+    monto < 0 -> TonoDeCifra.Neutro
     else -> TonoDeCifra.Apagado
 }
 
@@ -443,7 +455,7 @@ private fun FilaDePeriodo(resumen: ResumenDePeriodo, elegida: Boolean, onClick: 
  *
  * **La cifra es lo que faltó, como mucho:** `minOf(saldosIniciales, salidas − entradas)`. Los saldos
  * que Movi conoció en el período pueden ser muchísimo más que el hueco ($22,2M contra un faltante
- * de $1,5M), y decir «lo cubrieron $22,2M» al lado de «Te quedó −$1,5M» se lee como un hueco de
+ * de $1,5M), y decir «lo cubrieron $22,2M» al lado de «Neto del período −$1,5M» se lee como un hueco de
  * $22,2M. Los saldos no cubren más de lo que faltó. El detalle nombra las cuentas en «De dónde salió
  * lo que faltó» ([filasDeLoQueFalto]) con el mismo tope.
  *
@@ -482,7 +494,7 @@ internal fun LineaDeCreditosDesembolsados(resumen: ResumenDePeriodo) {
 }
 
 /**
- * Entró / salió / te quedó con la barra de dos tramos, o «Sin movimientos de flujo» con palabras.
+ * Entró / salió / neto del período con la barra de dos tramos, o «Sin movimientos de flujo» con palabras.
  * La misma pieza en la fila de la lista y arriba del detalle: un período se lee igual en los dos.
  */
 @Composable
@@ -496,13 +508,13 @@ internal fun CifrasDelPeriodo(resumen: ResumenDePeriodo) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             // Vuelta de diseño 19: `CifraConRotulo`, compacta porque son tres en un renglón (§6).
             CifraConRotulo("Entró", resumen.entradas, tono = TonoDeCifra.Ingreso, forma = FormaDeCifra.Compacta)
-            // Ola 2a: lo que salió en neutro; el rojo queda para «Te quedó» en negativo.
+            // Ola 2a: lo que salió en neutro. Vuelta de diseño 28: el neto negativo también.
             CifraConRotulo("Salió", resumen.salidas, forma = FormaDeCifra.Compacta)
-            val teQuedo = teQuedoDe(resumen)
+            val neto = netoDelPeriodoDe(resumen)
             CifraConRotulo(
-                "Te quedó",
-                teQuedo,
-                tono = tonoDeTeQuedo(teQuedo),
+                ROTULO_NETO_DEL_PERIODO,
+                neto,
+                tono = tonoDelNetoDelPeriodo(neto),
                 forma = FormaDeCifra.Compacta,
                 alFinal = true,
             )
