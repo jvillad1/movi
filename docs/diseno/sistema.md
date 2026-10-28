@@ -2573,3 +2573,51 @@ cuentas, la cuota con su deuda y sin interés escrito), `LosRotulosNoGritanTest`
 `ActividadPorDentroTest` (el separador) y `ElOtrosSeResuelveEnLaTarjetaTest` («Cerrar», `Secundario`);
 `HojaDeCuotaConInteresRealTest`, `SelectoresDeTraspasoTest` y `PagarUnaCuotaDesdeElChecklistTest`
 escriben ahora el monto con el teclado y tocan las filas por su tag.
+
+## 52. Vuelta 48: Cuota es para pagar la cuota, y una factura pagada no ocupa lugar
+
+Las revisiones de las vueltas 45 y 47 (28-oct, `r45-03`, `r47-04` contra `r47-06`). **Sin reglas de
+plata nuevas**: la cuota sigue siendo dos patas (`pagoDeCuotaLegs`), el abono un traspaso puro y el
+desembolso plata que entró.
+
+1. **En Cuota, tocar un crédito es pagar su cuota** (`ui/quickadd/TransferForm.kt`). La sección «Créditos»
+   de «¿Qué estás pagando?» decía «Elige uno para registrar el desembolso que te entró…» en una pestaña que
+   se llama Cuota, con un botón «Registrar pago».
+   - **El encabezado de la hoja** (`encabezadoDeLaCuota`, `cuerpoFuerte` centrado, un renglón): «Cuota de
+     Libre inversión 9695 · octubre», «Abono extra a …», «Pago de Nu · octubre», o sin nada elegido «La cuota
+     de un crédito o el pago de una tarjeta». El mes es el del período del dueño (`mesDelPeriodoDeHoy`) o,
+     desde Pagos, el de la fila (`presetMesDeLaCuota`).
+   - **La cifra es la cuota** (`cuotaPropuesta`, la de las condiciones del crédito), la fecha hoy, y «Sale de»
+     la cuenta del débito automático si la hay (rótulo «Sale de · Débito automático»). Lo que el dueño
+     escribió no se pisa.
+   - **El abono extra es la opción secundaria**: un `Boton` `Fantasma` `S` debajo del renglón de la deuda,
+     «Es un abono extra, no la cuota» (y de vuelta «Es la cuota del mes»). En abono la hoja dice qué es
+     (`QUE_ES_UN_ABONO_EXTRA`), sin el interés ni el desglose, y el botón es «Registrar abono».
+   - **El desembolso ya no se nombra en Cuota** (`AYUDA_DE_CREDITOS_EN_CUOTA`: «Elige el crédito para anotar
+     su cuota de este mes.»). Sigue en **Traspaso**, con el crédito en «Desde», donde la ayuda de «Créditos»
+     es la de siempre (`AYUDA_DE_CREDITOS_EN_TRASPASO`), y en el alta del crédito.
+   - **Desde Pagos**, «Anotar pago» de una cuota abre exactamente este modo (`hojaParaAnotar`), con el mes de
+     su fila.
+2. **La hoja de Cuota no salta.** El renglón «Deuda de X: $A pasa a $B» existía recién con una deuda elegida
+   y estiraba la hoja ~70 px. Ahora está **siempre** en Cuota, `apoyoMedio` con **dos renglones reservados**
+   (`minLines = 2`): vacío sin deuda, «Deuda de Nu: $1.683.000» al elegirla y «… pasa a $1.583.000» con el
+   monto. La frase del desglose de un crédito reserva tres (`minLines = 3`). Elegir un crédito suma lo suyo
+   —el interés y el enlace del abono—: es cambiar de modo, no escribir.
+3. **La factura pagada es compacta** (`FilaDeFacturaPagada`, `ui/recurrentes/FacturasDelPeriodo.kt`). Medía
+   más que una pendiente, con «Ver movimiento» y «Quitar la marca» como dos botones con borde apilados.
+   - Un renglón: el ícono de su categoría, el nombre y **«Pagado ✓ · $1.800.000 · 27 oct»** («Pagado» en
+     `apoyoMedio` color `entra` con el check, el resto `apoyo` `textoMedio`; `resumenDeLaFacturaPagada`).
+   - **Tocarla abre el movimiento** que la pagó (sin movimiento, la regla, como siempre).
+   - **El «⋯»** (`BotonDeIcono` `MoreHoriz`, «Más opciones de Arriendo») guarda «Quitar la marca» y, solo en
+     lo que Movi emparejó sola, «No fue este» (`accionesDelMenuDeLaFilaPagada`), con la frase de dónde salió
+     el «Pagado» arriba. Sin nada que ofrecer —la cuota que probó su pago—, no hay «⋯».
+   - Se fueron el enlace «Movimiento del 25 oct» y la píldora «Pagado» de la derecha.
+
+Lo vigilan `CuotaDeUnCreditoTest` (el modo «Cuota de X · mes» con su cuota y el débito automático; la
+ayuda sin desembolsos; el abono que guarda un traspaso; el desembolso en Traspaso; **el alto estable** al
+elegir la tarjeta, al llegar la cifra y al borrar y escribir el monto de un crédito, a 8 dp),
+`PagarUnaCuotaDesdeElChecklistTest` (desde Pagos, el mismo modo con el mes de la fila),
+`LaFacturaPagadaEsCompactaTest` (un renglón sin botones, que no mide más que una pendiente; tocarla abre
+el movimiento; «Quitar la marca» y «No fue este» en el «⋯»), en `commonTest` `LaCuotaDelCreditoTest` y
+`LaFacturaPagadaOfreceLoQueEsTest`, y en `:server` `PagoDeCuotaSaldaElPeriodoTest` (las dos patas saldan
+el período; el abono no). `HojaDeCuotaConInteresRealTest` ya no escribe la cuota: llega puesta.

@@ -284,6 +284,8 @@ fun hojaParaAnotar(
             presetAccountId = cuentaId,
             presetMonto = montoHonesto,
             presetDeudaId = deudaId,
+            // Vuelta 48: la hoja dice «Cuota de X · septiembre», el mes de ESTA fila.
+            presetMesDeLaCuota = mes.takeIf { it.isNotBlank() },
         )
     }
     return Screen.QuickAdd(

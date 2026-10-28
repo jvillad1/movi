@@ -208,7 +208,7 @@ fun SeccionChecklistDelPeriodo(
     planesDeCuotas: Map<String, PlanDelCredito> = emptyMap(),
     descartadas: Set<String> = emptySet(),
     debajoDelResumen: (@Composable () -> Unit)? = null,
-    /** Vuelta 40: tocar «Movimiento del 25 oct» de una factura pagada abre ese movimiento. */
+    /** Vuelta 48: tocar una factura pagada (compacta) abre el movimiento que la pagó. */
     onVerMovimiento: ((eventId: String) -> Unit)? = null,
 ) {
     // ── El momento de celebrar (Ola 1 · «Que Movi se sienta viva») ──────────────────────────────
@@ -270,7 +270,16 @@ fun SeccionChecklistDelPeriodo(
             onAbrir = onAbrir?.let { abrir -> { abrir(pago) } },
             etiquetaDeAbrir = etiquetaDeAbrir(pago.ruleId),
             evidencia = evidenciaDeLaFila(pago),
-            debajo = if (estimacion != null || ofreceAlgoDebajo(pago, conPropuesta)) {
+            // Vuelta 48: lo de una fila pagada va en su «⋯»; tocarla abre el movimiento.
+            accionesDelMenu = accionesDelMenuDeLaFilaPagada(pago).map { accion ->
+                when (accion) {
+                    AccionDeLaFilaPagada.NO_FUE_ESTE -> ETIQUETA_NO_FUE_ESTE to { pago.eventId?.let { acciones.onNoFueEste(pago, it) }; Unit }
+                    AccionDeLaFilaPagada.QUITAR_LA_MARCA -> ETIQUETA_QUITAR_LA_MARCA to { acciones.onQuitarLaMarca(pago) }
+                    // No llega: ver un movimiento es tocar la fila.
+                    AccionDeLaFilaPagada.VER_MOVIMIENTO -> ETIQUETA_VER_MOVIMIENTO to { pago.eventId?.let { onVerMovimiento?.invoke(it) }; Unit }
+                }
+            },
+            debajo = if (!pago.pagado && (estimacion != null || ofreceAlgoDebajo(pago, conPropuesta))) {
                 {
                     if (estimacion != null) Text(text = estimacion, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                     LoQueOfreceLaFila(pago, propuesta, enVuelo, acciones, conBotonDeAnotar = false)
@@ -635,6 +644,19 @@ fun accionesDeLaFilaPagada(pago: PagoDelPeriodo): List<AccionDeLaFilaPagada> = w
     pago.estado != EstadoDeLaFila.LISTO -> emptyList()
     pago.automatica -> listOf(AccionDeLaFilaPagada.NO_FUE_ESTE)
     pago.eventId != null && !pago.derivado -> listOf(AccionDeLaFilaPagada.VER_MOVIMIENTO, AccionDeLaFilaPagada.QUITAR_LA_MARCA)
+    else -> emptyList()
+}
+
+/**
+ * **Lo que va en el «⋯» de una factura pagada** (vuelta 48). La fila pagada es compacta —ícono, nombre,
+ * «Pagado ✓ · $1.800.000 · 27 oct»— y **tocarla abre el movimiento**, así que «Ver movimiento» deja de
+ * ser un botón. Lo demás se guarda en el menú: «Quitar la marca» (un sello del dueño, con movimiento o
+ * el viejo sin él) y «No fue este» (solo lo que Movi emparejó solo). Lo que prueba el pago de una deuda
+ * no ofrece nada: ahí lo que revierte es borrar el pago.
+ */
+fun accionesDelMenuDeLaFilaPagada(pago: PagoDelPeriodo): List<AccionDeLaFilaPagada> = when (pago.estado) {
+    EstadoDeLaFila.LISTO -> accionesDeLaFilaPagada(pago) - AccionDeLaFilaPagada.VER_MOVIMIENTO
+    EstadoDeLaFila.MARCADA_A_MANO -> listOf(AccionDeLaFilaPagada.QUITAR_LA_MARCA)
     else -> emptyList()
 }
 

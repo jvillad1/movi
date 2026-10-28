@@ -85,12 +85,12 @@ class FacturasDelPeriodoTest {
         assertEquals("Por confirmar" to TonoDePildora.Aviso, pastillaDeVencimiento(arriendo, conPropuesta = true))
     }
 
+    /** Vuelta 48: la factura pagada es un renglón, «Pagado ✓ · $138.600 · 25 oct». */
     @Test
-    fun `una factura pagada lleva al movimiento que la pago`() {
-        assertEquals("Movimiento del 25 oct", enlaceDelMovimiento(coomeva))
-        // Un sello viejo sin movimiento no tiene a dónde llevar; una sin pagar tampoco.
-        assertNull(enlaceDelMovimiento(coomeva.copy(eventId = null)))
-        assertNull(enlaceDelMovimiento(arriendo))
+    fun `una factura pagada dice cuanto salio y cuando, en un renglon`() {
+        assertEquals("\$138.600 · 25 oct", resumenDeLaFacturaPagada(coomeva))
+        // Un sello viejo, sin el día en que salió la plata: solo el monto.
+        assertEquals("\$138.600", resumenDeLaFacturaPagada(coomeva.copy(eventId = null, pagadoEl = null)))
     }
 
     @Test

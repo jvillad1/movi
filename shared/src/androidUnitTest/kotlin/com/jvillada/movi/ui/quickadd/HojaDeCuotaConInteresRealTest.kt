@@ -121,9 +121,14 @@ class HojaDeCuotaConInteresRealTest {
     private fun campo(tag: String): SemanticsNodeInteraction =
         composeRule.onNode(hasSetTextAction() and hasAnyAncestor(hasTestTag(tag)), useUnmergedTree = true)
 
-    /** Vuelta 47: el monto se escribe con el teclado de Agregar, como en Gasto. */
+    /**
+     * Vuelta 48: elegir el crédito ya pone su cuota del mes en la cifra (sus condiciones dicen
+     * $1.204.064). Antes había que escribirla con el teclado.
+     */
     private fun escribirElMonto() {
-        "1204064".forEach { tocar(it.toString()) }
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithText("\$1.204.064", substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        }
     }
 
     /** El defecto que abrió la rama, afirmado desde la hoja de verdad. */

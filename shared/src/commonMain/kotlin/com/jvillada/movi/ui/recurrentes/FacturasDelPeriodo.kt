@@ -16,7 +16,15 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.MoreHoriz
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import com.jvillada.movi.ui.components.ds.BotonDeIcono
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -62,13 +70,14 @@ import kotlinx.datetime.LocalDate
  *
  * La lista del período de Pagos, con la forma de la maqueta: arriba la **tarjeta amarilla «Falta por
  * pagar»** y debajo **una fila por factura** —ícono, nombre, cifra, la pastilla de vencimiento y el
- * botón «Anotar pago» a la derecha—; las pagadas dicen «Pagado» en verde y llevan el enlace al
- * movimiento que las pagó. El orden: lo vencido, lo que vence por fecha, lo pagado al final.
+ * botón «Anotar pago» a la derecha—; las pagadas son un renglón, «Pagado ✓ · $1.800.000 · 27 oct»,
+ * que al tocarlo abre el movimiento que las pagó, con «Quitar la marca» / «No fue este» en su «⋯»
+ * (vuelta 48). El orden: lo vencido, lo que vence por fecha, lo pagado al final.
  *
  * **Las cifras son las de siempre** (`checklistDelPeriodo`, [faltaPorPagar], [yaPagadoEnElPeriodo]):
- * esto solo cambia cómo se ven. Y lo que la lista ya ofrecía sigue colgando de su fila: «¿Ya pagaste
- * …? Sí, fue este / No fue este», «No fue este» sobre lo emparejado, «Quitar la marca» y la
- * estimación de una cuota (ver [SeccionChecklistDelPeriodo]).
+ * esto solo cambia cómo se ven. Y lo que la lista ya ofrecía sigue en su fila: «¿Ya pagaste …? Sí,
+ * fue este / No fue este» y la estimación de una cuota colgando de la pendiente; «No fue este» sobre
+ * lo emparejado y «Quitar la marca», en el «⋯» de la pagada (ver [SeccionChecklistDelPeriodo]).
  */
 
 /** El título de la lista de las facturas en Pagos (vuelta 40). */
@@ -85,9 +94,6 @@ const val TAG_TARJETA_FALTA_POR_PAGAR: String = "pagos:falta-por-pagar"
 
 /** El tag de una fila de factura. */
 const val TAG_FILA_DE_FACTURA: String = "pagos:fila-de-factura"
-
-/** El tag del enlace «Movimiento del 25 oct» de una factura pagada. */
-const val TAG_ENLACE_AL_MOVIMIENTO: String = "pagos:enlace-al-movimiento"
 
 /** El tag de «Ver los N pagos del período». */
 const val TAG_VER_TODAS_LAS_FACTURAS: String = "pagos:ver-todas-las-facturas"
@@ -184,16 +190,6 @@ fun pastillaDeVencimiento(pago: PagoDelPeriodo, conPropuesta: Boolean): Pair<Str
     }
 }
 
-/**
- * «Movimiento del 25 oct»: el enlace de una factura pagada al movimiento que la pagó, o `null` si no
- * hay un movimiento detrás (un sello viejo hecho a mano) o no se sabe el día.
- */
-fun enlaceDelMovimiento(pago: PagoDelPeriodo): String? {
-    if (!pago.pagado || pago.eventId == null) return null
-    val dia = pago.pagadoEl?.let(::fechaCortaDeFactura) ?: return null
-    return "Movimiento del $dia"
-}
-
 /** «Ver los 7 pagos del período». */
 fun textoDeVerTodas(cuantas: Int): String = "Ver los $cuantas pagos del período"
 
@@ -230,10 +226,10 @@ internal fun TarjetaFaltaPorPagar(resumen: ResumenDeFacturas, modifier: Modifier
 
 /**
  * **Una factura del período** (vuelta 40): ícono de su categoría, nombre, cifra y debajo la pastilla
- * de vencimiento —o, pagada, el enlace al movimiento que la pagó—; a la derecha «Anotar pago» (en
- * amarillo la más urgente, [principal]) o «Pagado» en verde. Tocar el resto de la fila abre la regla,
- * como siempre ([onAbrir]). [debajo] es lo que la fila ofrece además (la propuesta, «No fue este»,
- * «Quitar la marca», la estimación de una cuota).
+ * de vencimiento; a la derecha «Anotar pago» (en amarillo la más urgente, [principal]). Tocar el resto
+ * de la fila abre la regla, como siempre ([onAbrir]). [debajo] es lo que la fila ofrece además (la
+ * propuesta, la estimación de una cuota). **Pagada, es compacta** ([FilaDeFacturaPagada], vuelta 48):
+ * tocarla abre el movimiento ([onVerMovimiento]) y lo demás va en su «⋯» ([accionesDelMenu]).
  */
 @Composable
 internal fun FilaDeFactura(
@@ -247,7 +243,25 @@ internal fun FilaDeFactura(
     etiquetaDeAbrir: String?,
     evidencia: String?,
     debajo: (@Composable () -> Unit)? = null,
+    /**
+     * Vuelta 48 · lo que la fila pagada guarda en su «⋯» («Quitar la marca», «No fue este»), con su
+     * acción. Solo se mira en una fila pagada: ver [FilaDeFacturaPagada].
+     */
+    accionesDelMenu: List<Pair<String, () -> Unit>> = emptyList(),
 ) {
+    if (pago.pagado) {
+        FilaDeFacturaPagada(
+            pago = pago,
+            enVuelo = enVuelo,
+            onTocar = pago.eventId?.let { id -> onVerMovimiento?.let { ver -> { ver(id) } } } ?: onAbrir,
+            etiquetaDeTocar = if (pago.eventId != null && onVerMovimiento != null) "Ver el movimiento" else etiquetaDeAbrir,
+            accionesDelMenu = accionesDelMenu,
+            // Lo que Movi emparejó solo y el sello viejo sin movimiento dicen de dónde salió el
+            // «Pagado» arriba de su «⋯»: es justo lo que «No fue este» y «Quitar la marca» discuten.
+            notaDelMenu = evidencia.takeIf { pago.automatica || pago.eventId == null },
+        )
+        return
+    }
     // Lo que se toca para abrir la regla es el ícono con los textos, no la fila entera: el botón de la
     // derecha es otro control, y un botón adentro de otro tocable se lee mal (y se toca mal).
     Column(modifier = Modifier.fillMaxWidth().testTag(TAG_FILA_DE_FACTURA)) {
@@ -280,21 +294,17 @@ internal fun FilaDeFactura(
                         overflow = TextOverflow.Ellipsis,
                     )
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
-                        MontoDeFila(
-                            textoDelMontoDelChecklist(pago),
-                            color = if (pago.pagado) Movi.colores.textoMedio else Movi.colores.texto,
-                        )
+                        MontoDeFila(textoDelMontoDelChecklist(pago), color = Movi.colores.texto)
                         // Una tarjeta se paga con su mínimo o su saldo: el monto dice de cuál se habla.
-                        if (pago.montoEsSaldo && !pago.pagado) {
+                        if (pago.montoEsSaldo) {
                             Text("saldo", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                         }
                     }
                 }
             }
             Spacer(Modifier.width(ESPACIO_ANTES_DEL_FINAL_DE_FILA))
-            when {
-                pago.pagado -> PildoraDePagado(pago.esIngreso)
-                onAnotar != null && !conPropuesta -> Boton(
+            if (onAnotar != null && !conPropuesta) {
+                Boton(
                     if (pago.esIngreso) ETIQUETA_ANOTAR_INGRESO else ETIQUETA_ANOTAR,
                     onClick = onAnotar,
                     variante = if (principal) VarianteDeBoton.Principal else VarianteDeBoton.Secundario,
@@ -303,77 +313,141 @@ internal fun FilaDeFactura(
                 )
             }
         }
-        // **La pastilla (o el enlace) va en su renglón**, a todo el ancho desde el texto (vuelta 40,
-        // revisión): al lado de «Anotar pago», a 360 dp, «Venció hace 23 días» se cortaba en «Venció
-        // hace 23». Lo mide `LaPastillaCabeEnteraTest`.
-        val enlace = enlaceDelMovimiento(pago)
-        // El renglón de la pastilla también abre la regla (es parte de lo que se lee de la fila); el
-        // de un pago con enlace no, para no meter un tocable dentro de otro.
-        val abreLaRegla = onAbrir != null && (enlace == null || onVerMovimiento == null)
+        // **La pastilla va en su renglón**, a todo el ancho desde el texto (vuelta 40, revisión): al
+        // lado de «Anotar pago», a 360 dp, «Venció hace 23 días» se cortaba en «Venció hace 23». Lo
+        // mide `LaPastillaCabeEnteraTest`. El renglón también abre la regla (es parte de lo que se lee
+        // de la fila).
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .then(if (abreLaRegla) Modifier.clickable(onClickLabel = etiquetaDeAbrir, onClick = onAbrir!!) else Modifier)
+                .then(if (onAbrir != null) Modifier.clickable(onClickLabel = etiquetaDeAbrir, onClick = onAbrir) else Modifier)
                 .padding(start = SANGRIA_DEL_TEXTO_DE_LA_FILA, end = Medida.margenDePantalla, bottom = Espacio.s),
             verticalArrangement = Arrangement.spacedBy(Espacio.xxs),
         ) {
             when {
                 enVuelo -> Text("Guardando…", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                !pago.pagado -> {
+                else -> {
                     val (texto, tono) = pastillaDeVencimiento(pago, conPropuesta)
                     Pildora(texto, tono)
                 }
-                enlace != null && onVerMovimiento != null -> {
-                    EnlaceAlMovimiento(enlace) { onVerMovimiento(pago.eventId!!) }
-                    // Lo que Movi emparejó solo dice además que fue Movi: es lo que el «No fue este» de
-                    // abajo discute.
-                    if (pago.automatica && evidencia != null) {
-                        Text(evidencia, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                    }
-                }
-                evidencia != null -> Text(evidencia, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
             }
         }
     }
     debajo?.let { BajoLaFila { it() } }
 }
 
-/** «Movimiento del 25 oct», en el azul del enlace; abre ese movimiento. Toque de 48. */
-@Composable
-private fun EnlaceAlMovimiento(texto: String, onClick: () -> Unit) {
-    Text(
-        texto,
-        style = Movi.textos.apoyoMedio,
-        color = Movi.colores.enlace,
-        modifier = Modifier
-            .testTag(TAG_ENLACE_AL_MOVIMIENTO)
-            .clickable(role = Role.Button, onClickLabel = "Ver el movimiento", onClick = onClick),
-    )
-}
+/**
+ * «$1.800.000 · 27 oct»: lo que va después de «Pagado ✓» en una factura pagada (vuelta 48), con lo que de
+ * verdad salió ([textoDelMontoDelChecklist]) y el día en que salió, si se sabe. Pura.
+ */
+fun resumenDeLaFacturaPagada(pago: PagoDelPeriodo): String =
+    listOfNotNull(textoDelMontoDelChecklist(pago), pago.pagadoEl?.let(::fechaCortaDeFactura)).joinToString(" · ")
+
+/** El tag de una factura pagada (vuelta 48) y el de su «⋯». */
+const val TAG_FILA_PAGADA: String = "pagos:fila-pagada"
+const val TAG_MENU_DE_LA_FILA_PAGADA: String = "pagos:menu-de-la-fila-pagada"
+
+/** Lo que dice el «⋯» de una factura pagada al lector de pantalla. */
+fun descripcionDelMenuDeLaFila(nombre: String): String = "Más opciones de $nombre"
 
 /**
- * «Pagado ✓» en verde (el «✓» es un ícono: la letra del lienzo de la web no trae el carácter). Dice
- * «Pagado» al lector de pantalla —o «Recibido», en un ingreso—.
+ * **Una factura pagada, compacta** (vuelta 48): ícono, nombre y «Pagado ✓ · $1.800.000 · 27 oct» en un
+ * renglón. Tocarla abre el movimiento que la pagó ([onTocar]; sin movimiento, la regla). Lo que se
+ * puede hacer con ella —«Quitar la marca», «No fue este» en lo que Movi emparejó solo— va en el «⋯» de
+ * la derecha, no en dos botones con borde apilados: una lista de cosas resueltas no se llena de
+ * botones. **Nunca mide más que una pendiente** (lo mide `LaFacturaPagadaEsCompactaTest`).
  */
 @Composable
-private fun PildoraDePagado(esIngreso: Boolean) {
-    val texto = if (esIngreso) "Recibido" else "Pagado"
+private fun FilaDeFacturaPagada(
+    pago: PagoDelPeriodo,
+    enVuelo: Boolean,
+    onTocar: (() -> Unit)?,
+    etiquetaDeTocar: String?,
+    accionesDelMenu: List<Pair<String, () -> Unit>>,
+    notaDelMenu: String? = null,
+) {
+    Box(modifier = Modifier.fillMaxWidth().testTag(TAG_FILA_DE_FACTURA)) {
     Row(
         modifier = Modifier
-            .height(Medida.altoChico)
-            .clip(RoundedCornerShape(Radio.pill))
-            .background(Movi.colores.lavado(Movi.colores.entra))
-            .padding(horizontal = Espacio.s),
+            .fillMaxWidth()
+            .heightIn(min = Medida.altoDeFila)
+            .testTag(TAG_FILA_PAGADA),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Espacio.xxs),
     ) {
-        Text(texto, style = Movi.textos.cuerpoFuerte, color = Movi.colores.entra)
-        Icon(
-            Icons.Rounded.Check,
-            contentDescription = texto,
-            tint = Movi.colores.entra,
-            modifier = Modifier.size(Icono.s),
-        )
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .then(if (onTocar != null) Modifier.clickable(onClickLabel = etiquetaDeTocar, onClick = onTocar) else Modifier)
+                .padding(start = Medida.margenDePantalla, top = Espacio.s, bottom = Espacio.s),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(modifier = Modifier.size(Medida.avatar), contentAlignment = Alignment.Center) {
+                IconoDeCategoria(nombreParaElIconoDeLaFactura(pago.categoria, pago.nombre))
+            }
+            Spacer(Modifier.width(ESPACIO_ANTES_DEL_TEXTO_DE_FILA))
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
+                Text(
+                    pago.nombre,
+                    style = Movi.textos.cuerpoFuerte,
+                    color = Movi.colores.texto,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (enVuelo) {
+                    Text("Guardando…", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        val estado = if (pago.esIngreso) "Recibido" else "Pagado"
+                        Text(estado, style = Movi.textos.apoyoMedio, color = Movi.colores.entra)
+                        Icon(
+                            Icons.Rounded.Check,
+                            // Como la píldora de antes: el check dice «Pagado» (lo buscan las pruebas).
+                            contentDescription = estado,
+                            tint = Movi.colores.entra,
+                            modifier = Modifier.padding(start = Espacio.xxs).size(Icono.s),
+                        )
+                        Text(
+                            " · ${resumenDeLaFacturaPagada(pago)}",
+                            style = Movi.textos.apoyo,
+                            color = Movi.colores.textoMedio,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+        }
+        if (accionesDelMenu.isNotEmpty()) {
+            Box(modifier = Modifier.testTag(TAG_MENU_DE_LA_FILA_PAGADA)) {
+                var abierto by remember { mutableStateOf(false) }
+                BotonDeIcono(
+                    icono = Icons.Rounded.MoreHoriz,
+                    descripcion = descripcionDelMenuDeLaFila(pago.nombre),
+                    onClick = { abierto = true },
+                    habilitado = !enVuelo,
+                )
+                DropdownMenu(expanded = abierto, onDismissRequest = { abierto = false }, containerColor = Movi.colores.tarjeta) {
+                    if (notaDelMenu != null) {
+                        Text(
+                            notaDelMenu,
+                            style = Movi.textos.apoyo,
+                            color = Movi.colores.textoMedio,
+                            modifier = Modifier.padding(horizontal = Espacio.m, vertical = Espacio.xs),
+                        )
+                    }
+                    accionesDelMenu.forEach { (texto, accion) ->
+                        DropdownMenuItem(
+                            text = { Text(texto, style = Movi.textos.cuerpo, color = Movi.colores.texto) },
+                            onClick = { abierto = false; accion() },
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.width(Espacio.xs))
+        } else {
+            Spacer(Modifier.width(Medida.margenDePantalla))
+        }
+    }
     }
 }
 
