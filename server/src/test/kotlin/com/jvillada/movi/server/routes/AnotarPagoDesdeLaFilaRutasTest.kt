@@ -264,7 +264,13 @@ class AnotarPagoDesdeLaFilaRutasTest {
     @Test
     fun `la cuota de un credito desde su fila queda saldada con dos patas`() = testApplication {
         application { testModule() }
-        assertTrue(ocurrencias().none { it.ruleId == "$CREDIT_RULE_PREFIX$credito" }, "sin pago, sin ocurrencia")
+        // Vuelta 49: vencida y sin pago, la cuota sale ABIERTA (sin candidatos): así cuenta como
+        // pendiente en la lista y en el Disponible hasta que el movimiento la salde. Si todavía no
+        // vence, no sale (la lista la ve por su vencimiento).
+        assertTrue(
+            ocurrencias().none { it.ruleId == "$CREDIT_RULE_PREFIX$credito" && (it.occurred || it.candidates.isNotEmpty()) },
+            "sin pago, nada pagado ni propuesto",
+        )
 
         val res = pagarLaDeuda(credito, 1_204_064L, "tr-cuota")
         assertEquals(HttpStatusCode.Created, res.status, res.bodyAsText())

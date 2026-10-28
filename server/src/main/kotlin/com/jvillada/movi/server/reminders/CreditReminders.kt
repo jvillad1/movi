@@ -69,6 +69,13 @@ fun virtualRuleFor(terms: CreditTerms, accountName: String): RecurringRule =
         // El tercero al que le gira la cuota (el papá): con esto un envío a él se puede repartir
         // entre las cuotas que le corresponden (ver `RepartirUnEnvio.kt`).
         destinoConocidoId = terms.destinoConocidoId,
+        // **El banco la debita solo** (vuelta 49): la fila de «Pagos del período» lo dice («Se cobra
+        // sola el 5», «¿Se cobró?») en vez de pedir que se anote. Solo cambia CÓMO se salda —la
+        // confirmación va por «Por revisar → Lo que el banco cobró solo»—, no si cuenta: pendiente,
+        // la cuota se resta como cualquier fijo. `null` y no `false` cuando no se debita, para que la
+        // regla viaje igual que siempre. La cuenta del débito NO va en `accountId`: el emparejador
+        // de las reglas reales lee ese campo y una sintética no tiene por qué pasar por ahí.
+        seDebitaSolo = true.takeIf { !terms.debitoAutomaticoDesde.isNullOrBlank() },
     )
 
 /** Pares (regla virtual, lastRemindedPeriod) de todos los créditos del usuario. */

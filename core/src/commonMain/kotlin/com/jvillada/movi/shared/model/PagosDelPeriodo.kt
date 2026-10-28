@@ -140,6 +140,14 @@ data class PagoDelPeriodo(
      * es lo que le permite decir «Del período de septiembre» sin recalcular el corte.
      */
     val periodoDelDueno: String? = null,
+    /**
+     * **El banco lo debita solo** (vuelta 49): la cuota de un crédito con débito automático o un
+     * recurrente marcado «se debita solo» ([RecurringRule.seDebitaSolo]). Cuenta igual que cualquier
+     * pago —pendiente, se resta como fijo—; lo único que cambia es lo que dice la fila: «Se cobra
+     * sola el 5» antes de vencer y «¿Se cobró?» después, porque la confirmación vive en «Por
+     * revisar → Lo que el banco cobró solo».
+     */
+    val seCobraSola: Boolean = false,
 ) {
     val vencido: Boolean get() = !pagado && diasParaVencer < 0
 
@@ -343,6 +351,7 @@ private fun filaDelPago(
         ?.takeIf { it.occurred && it.derivadaDeUnMovimiento && it.confirmedAt > 0L }
         ?.let { epochMillisToAppDate(it.confirmedAt).toString() },
     periodoDelDueno = ocurrencia?.periodoDelDueno ?: ocurrencia?.period,
+    seCobraSola = pago.rule.seDebitaSolo == true && pago.rule.type == TransactionType.EXPENSE,
 )
 
 /**
