@@ -452,6 +452,15 @@ fun DashboardScreen(
                 runCatching { Repositories.wallets.getCierreDelPeriodo() }
                     .onSuccess { c -> data = data.copy(cierre = c) }
             }
+            // Vuelta 39 · «Últimos movimientos»: las primeras filas de Actividad, de la misma historia
+            // (en el teléfono es local). Secundario: si falla, la sección no se pinta esta vez.
+            launch {
+                runCatching { Repositories.wallets.getEventsByDay() }.onSuccess { dias ->
+                    val ultimos = ultimosMovimientosDe(dias)
+                    data = data.copy(ultimosMovimientos = ultimos)
+                    llegado = llegado.copy(ultimosMovimientos = ultimos)
+                }
+            }
             // El saldo que dijo un aviso del banco y no coincide: secundario, como los débitos.
             launch {
                 runCatching { Repositories.wallets.getCuadresPorAviso() }
@@ -524,40 +533,21 @@ fun DashboardScreen(
             .background(Movi.colores.fondo)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // Ola R1: el encabezado del camino 1 — el avatar (lleva a Ajustes), el saludo con el período
-            // y dos íconos, la lupa y la campana. «Compartir» salió del encabezado y vive en Ajustes:
-            // tres íconos más el avatar sobrecargaban la línea. La campana tiene su punto solo con algo
-            // vencido o urgente (vuelta de diseño 28, ver [campanaConPunto]).
-            Encabezado(
-                titulo = saludoDelInicio(SessionManager.userName),
-                subtitulo = periodoDelEncabezado(data),
-                inicio = { AvatarButton(onClick = { onNavigate(Screen.Tu) }) },
-                acciones = {
-                    // Recargando con cifras ya pintadas (la caché o la instantánea): una línea discreta
-                    // en vez de la barra de ancho completo. El alto del encabezado lo fija su mínimo,
-                    // así que aparecer y desaparecer no mueve nada de lo de abajo.
-                    if (actualizandoConDatos) {
-                        Text(
-                            "Actualizando…",
-                            style = Movi.textos.apoyo,
-                            color = Movi.colores.textoApagado,
-                            maxLines = 1,
-                        )
-                    }
-                    // Ola 5: buscar en toda la app (movimientos, comercios, personas, pantallas…).
-                    BotonDeIcono(Icons.Rounded.Search, "Buscar", onClick = { onNavigate(Screen.Buscar) })
-                    Box {
-                        BotonDeIcono(Icons.Rounded.Notifications, "Notificaciones", onClick = { showNotifications = true })
-                        if (campanaConPunto(notifications)) {
-                            StatusDot(
-                                color = Movi.colores.sale,
-                                modifier = Modifier.align(Alignment.TopEnd).padding(Espacio.s),
-                            )
-                        }
-                    }
-                },
+            // Vuelta 39 (la opción 3): el encabezado va sobre la banda amarilla —el avatar con las
+            // iniciales, «Hola, Juan» con el período y los dos botones redondos (ocultar los saldos y la
+            // campana)—. El amarillo sigue en el scroll de abajo hasta la mitad de la tarjeta héroe
+            // (`SduiRenderer(conBanda = true)`) y arriba, detrás de la barra del sistema, lo pone la
+            // cáscara (`BarraDelSistemaDelInicio`). Recargando con cifras ya pintadas, el período cede su
+            // lugar a «Actualizando…»: el alto no cambia y nada de lo de abajo se mueve.
+            EncabezadoDelInicio(
+                saludo = saludoDelInicio(SessionManager.userName),
+                subtitulo = if (actualizandoConDatos) "Actualizando…" else periodoDelEncabezado(data),
+                iniciales = inicialesDelDueno(SessionManager.userName),
+                conPunto = campanaConPunto(notifications),
+                onAvatar = { onNavigate(Screen.Tu) },
+                onCampana = { showNotifications = true },
+                modifier = Modifier.background(Movi.colores.marca),
             )
-
 
             // Sin nada pintado todavía (`loading && !actualizandoConDatos`), YA NO va la barra de
             // siempre: el hero y «Pregúntale a Movi» (Task 7) pintan su propio esqueleto con la
@@ -635,6 +625,13 @@ fun DashboardScreen(
                     // [EditarInicioScreen]). Al final, siempre, para no competir con lo que Hoy dice.
                     footer = { BotonEditarInicio { onNavigate(Screen.EditarInicio) } },
                     onDescartarCierre = descartarCierre,
+                    // Un movimiento de «Últimos movimientos» se editó o se anuló en su hoja: las cifras
+                    // de arriba ya no son las de antes.
+                    onRecargar = {
+                        DashboardDataCache.invalidar()
+                        refreshKey++
+                    },
+                    conBanda = true,
                 )
                 } // TirarParaActualizar
             }

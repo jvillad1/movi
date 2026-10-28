@@ -12,6 +12,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Size
+import com.jvillada.movi.shared.model.renderableSections
 import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -98,10 +102,21 @@ fun SduiRenderer(
     // «Ya lo vi» del cierre del período, que ahora es una tarjeta de «Movi propone hoy»: el estado
     // (`data`) vive en `DashboardScreen`.
     onDescartarCierre: (String) -> Unit = {},
+    // Vuelta 39: algo cambió desde el Inicio mismo (un movimiento de «Últimos movimientos» editado o
+    // anulado en su hoja): `DashboardScreen` vuelve a pedir las cifras.
+    onRecargar: () -> Unit = {},
+    // Vuelta 39: la banda amarilla detrás de lo de arriba (el Inicio de la opción 3). La pinta el
+    // scroll, así que se va con él; el encabezado, fijo arriba, lleva el mismo amarillo.
+    conBanda: Boolean = false,
 ) {
     val uriHandler = LocalUriHandler.current
     val sections = visibleSections(definition, data)
-    val acciones = AccionesDelRenderer(onNavigate, onShowCreateSheet, onDescartarCierre, uriHandler)
+    val acciones = AccionesDelRenderer(
+        onNavigate, onShowCreateSheet, onDescartarCierre, uriHandler, onRecargar,
+        // Con «Próximo pago» en la definición, «Movi propone hoy» no repite el pago.
+        conElPagoEnLasPropuestas = renderableSections(definition).none { it.type == "PROXIMO_PAGO" },
+    )
+    val colorDeLaBanda = Movi.colores.marca
     val scroll = rememberScrollState()
     // La rueda del mouse sobre los márgenes mueve esta pantalla (ver [ScrollDesdeLosMargenes]).
     ScrollDesdeLosMargenes(scroll)
@@ -121,6 +136,8 @@ fun SduiRenderer(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(scroll)
+                // Después del scroll: la banda se dibuja en el contenido y sube con él.
+                .then(if (conBanda) Modifier.bandaDelInicio(colorDeLaBanda) else Modifier)
                 .padding(bottom = Movi.espacios.seccion),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
@@ -163,7 +180,26 @@ private class AccionesDelRenderer(
     val onShowCreateSheet: () -> Unit,
     val onDescartarCierre: (String) -> Unit,
     val uriHandler: UriHandler,
+    val onRecargar: () -> Unit,
+    val conElPagoEnLasPropuestas: Boolean,
 )
+
+/** El tag del scroll del Inicio cuando lleva la banda amarilla (vuelta 39). */
+const val TAG_BANDA_DEL_INICIO: String = "inicio-banda"
+
+/**
+ * **La banda amarilla del Inicio** (vuelta 39, la opción 3), dibujada detrás del contenido del scroll:
+ * lo que le falta de [Medida.altoDeLaBandaDelInicio] al encabezado (que va fijo arriba, en el mismo
+ * amarillo), con [Radio.xxl] en las esquinas de abajo. La tarjeta héroe se monta encima: la banda le
+ * llega a la mitad. Va a todo el ancho del Inicio, nunca detrás del rail.
+ */
+private fun Modifier.bandaDelInicio(color: androidx.compose.ui.graphics.Color): Modifier =
+    this.testTag(TAG_BANDA_DEL_INICIO).drawBehind {
+        val alto = (Medida.altoDeLaBandaDelInicio - Medida.altoDeEncabezado).toPx()
+        val radio = Radio.xxl.toPx().coerceAtMost(alto)
+        drawRect(color, size = Size(size.width, alto - radio))
+        drawRoundRect(color, size = Size(size.width, alto), cornerRadius = CornerRadius(radio, radio))
+    }
 
 /**
  * Una columna de secciones, con [com.jvillada.movi.theme.Medida.entreSecciones] entre bloques: el
@@ -211,7 +247,10 @@ private fun SduiSection(
         "HERO_BALANCE" -> HeroDeUnVistazo(section, data, onNavigate, acciones.onShowCreateSheet)
         // Generación 9 (ola R1): la cuadrícula, «Movi propone hoy» y el carrusel de cuentas.
         "ACCIONES" -> AccionesDelInicioSection(data, onNavigate)
-        "PROPUESTAS" -> PropuestasDelInicioSection(data, onNavigate, acciones.onDescartarCierre)
+        "PROPUESTAS" -> PropuestasDelInicioSection(data, onNavigate, acciones.onDescartarCierre, acciones.conElPagoEnLasPropuestas)
+        // Generación 10 (vuelta 39): el próximo pago y los últimos movimientos.
+        "PROXIMO_PAGO" -> ProximoPagoSection(data, onNavigate)
+        "ULTIMOS_MOVIMIENTOS" -> UltimosMovimientosSection(data, onNavigate, acciones.onRecargar)
         "CUENTAS" -> CuentasDelInicioSection(data, onNavigate)
         "PREGUNTALE_A_MOVI" -> PreguntaleAMoviSection(section, data, onNavigate)
         "PATRIMONIO" -> PatrimonioSection(section, data, onNavigate)

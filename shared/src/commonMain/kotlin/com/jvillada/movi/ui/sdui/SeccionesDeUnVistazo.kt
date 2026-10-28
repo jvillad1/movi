@@ -81,13 +81,11 @@ import com.jvillada.movi.ui.components.TamanoDeAvatar
 import com.jvillada.movi.ui.components.Cifra
 import com.jvillada.movi.ui.components.CifraProtagonista
 import com.jvillada.movi.ui.components.LineaEsqueleto
-import com.jvillada.movi.ui.components.OjoDeLosSaldos
 import com.jvillada.movi.ui.components.conCifrasOcultas
 import com.jvillada.movi.ui.components.VacioQueEnsena
 import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.ui.dashboard.DashboardData
 import com.jvillada.movi.ui.dashboard.TramoDelPatrimonio
-import com.jvillada.movi.ui.dashboard.cifraContando
 import com.jvillada.movi.ui.dashboard.CuentaHero
 import com.jvillada.movi.ui.dashboard.cuentasDelHero
 import com.jvillada.movi.ui.dashboard.destinoDelTramo
@@ -98,16 +96,20 @@ import com.jvillada.movi.ui.dashboard.patrimonioDelInicio
 import com.jvillada.movi.ui.dashboard.patrimonioExplicacion
 import com.jvillada.movi.ui.dashboard.LocalCargandoElInicio
 import com.jvillada.movi.ui.dashboard.TAG_ESQUELETO_CIFRA_DEL_HERO
-import com.jvillada.movi.ui.dashboard.TAG_ESQUELETO_VEREDICTO_DEL_HERO
 import com.jvillada.movi.ui.dashboard.TAG_TARJETA_DEL_HERO
 import com.jvillada.movi.ui.dashboard.rememberProgresoDeEntrada
-import com.jvillada.movi.ui.dashboard.fraseDelHeroe
 import com.jvillada.movi.ui.dashboard.NivelDelGasto
 import com.jvillada.movi.ui.dashboard.TAG_CIFRA_TE_QUEDAN
 import com.jvillada.movi.ui.dashboard.TAG_ESQUELETO_DETALLE_DEL_HERO
 import com.jvillada.movi.ui.dashboard.TeQuedanDeHoy
 import com.jvillada.movi.ui.dashboard.alcanzaParaElDisponible
 import com.jvillada.movi.ui.dashboard.HojaDeDondeSale
+import com.jvillada.movi.ui.dashboard.conteoPorRevisarDelInicio
+import com.jvillada.movi.ui.dashboard.rememberCifraQueCambia
+import com.jvillada.movi.ui.porrevisar.desgloseDePorRevisar
+import com.jvillada.movi.ui.components.ds.Pildora
+import com.jvillada.movi.ui.components.ds.TonoDePildora
+import androidx.compose.material.icons.rounded.Schedule
 import com.jvillada.movi.ui.dashboard.VER_TUS_PERIODOS
 import com.jvillada.movi.ui.dashboard.disponibleDelInicio
 import com.jvillada.movi.ui.dashboard.teQuedanDeHoy
@@ -126,32 +128,40 @@ import kotlinx.datetime.LocalDate
 
 // ── ¿Cómo estoy? ─────────────────────────────────────────────────────────────
 
-/** La línea del veredicto del héroe (la corta en pantalla, la larga como `contentDescription`). */
-const val TAG_VEREDICTO_DEL_HERO: String = "veredicto-del-hero"
 
 /** Lo que dice el héroe cuando el dueño todavía no tiene ninguna cuenta. */
 internal const val DETALLE_DEL_HEROE_VACIO: String =
     "Crea la cuenta donde te llega la plata y Movi te dice cuánto te queda para el período."
 
+/** La tarjeta héroe entera (vuelta 39), con la franja «Por confirmar» si la hay. */
+const val TAG_HEROE_EN_TARJETA: String = "inicio-heroe-en-tarjeta"
+
+/** La franja «Por confirmar» de la tarjeta héroe. */
+const val TAG_FRANJA_POR_CONFIRMAR: String = "inicio-franja-por-confirmar"
+
+/** El enlace «Tu plata $X» de la tarjeta héroe. */
+const val TAG_ENLACE_TU_PLATA: String = "inicio-enlace-tu-plata"
+
 /**
- * **El héroe del Inicio: «Te quedan $X», para cuántos días y cuánto da por día** (ola R1, camino 1).
+ * **El héroe del Inicio, en su tarjeta** (vuelta 39, la opción 3): una [Superficie] destacada —blanca,
+ * radio 22, la sombra suave— montada sobre la banda amarilla.
  *
- * Contesta una sola pregunta —¿cuánto me queda para el período?— con la cifra de la columna «Período»
- * de la tarjeta Disponible de Plan ([teQuedanDelInicio], la misma función) en [VarianteDeCifra.Heroe],
- * el ojo de «Ocultar los saldos» junto al rótulo y, debajo, la línea «para N días · $X por día» (lo que
- * queda entre los días que faltan; vuelta de diseño 1).
- * El veredicto corto de la ola 3 va al final si existe.
+ * - Arriba, el rótulo «Te quedan» (o «Te pasaste por»; vuelta 28: un nombre por concepto) y a la
+ *   derecha el enlace **«Tu plata $X»** —la cifra de `patrimonioDe`, la misma de Patrimonio— que abre
+ *   Patrimonio, donde vive.
+ * - La cifra en [VarianteDeCifra.Heroe] ([teQuedanDelInicio], la de la columna «Período» de Plan) y
+ *   debajo «Para N días · $X por día» (la única cifra por día, `porDiaParaLoQueQueda`).
+ * - Tocar la cifra abre «¿De dónde sale?» ([HojaDeDondeSale], vuelta 28). Sin «Te quedan» la cifra es
+ *   «Tu plata» y el toque lleva a «Tus períodos», como siempre.
+ * - Abajo, separada por el hilo y en la capa 2, la franja **«Por confirmar»** con la pastilla «N
+ *   avisos» ([FranjaPorConfirmar]), solo si hay algo que espera en Por revisar.
  *
- * **Lo que salió** (ola R1): la barra Entró/Salió y la fila «Tu plata» con su desglose. Las dos
- * cifras tienen casa —el flujo en Plan y en «Tus períodos», Tu plata en Patrimonio— y en el Inicio se
- * repetían. Tampoco va en una tarjeta: el héroe va sobre el fondo, como en la maqueta del camino 1.
+ * **Mientras carga, nada dice $0**: sin instantánea, cada pieza es un esqueleto con su alto; con ella,
+ * su cifra, que cambia a la nueva sin pasar por cero ([rememberCifraQueCambia]).
  *
- * Todo el héroe se toca y abre «¿De dónde sale?» ([HojaDeDondeSale], vuelta de diseño 28): la cascada de
- * cómo se llega a «Te quedan», con «Ver tus períodos» abajo. Sin «Te quedan» lleva a «Tus períodos».
- *
- * Cuando el disponible no se puede afirmar (sin ingresos ni plata anotados, o la carga terminó sin sus
- * lecturas) la cifra grande es «Tu plata» (`heroBalance`): es lo único honesto que hay para decir.
- * Mientras cargan las lecturas de «Te quedan», cada pieza es un esqueleto con su alto.
+ * El ojo de «Ocultar los saldos» se mudó al encabezado, sobre la banda (como en la maqueta). La frase
+ * del veredicto («Gastaste $X · lo que más: Mercado») salió de la tarjeta: lo que se gastó está en «En
+ * qué se va» y en Pagos.
  */
 @Composable
 internal fun HeroDeUnVistazo(
@@ -161,32 +171,48 @@ internal fun HeroDeUnVistazo(
     onShowCreateSheet: () -> Unit = {},
     hoy: LocalDate = epochMillisToAppDate(Clock.System.now().toEpochMilliseconds()),
 ) {
-    // `accounts` CONTESTÓ vacía (no `null`, que es el esqueleto): un «$0» de 42 sp sería la afirmación
-    // más fuerte de la pantalla, y falsa para quien todavía no tiene ni una cuenta. El héroe entero se
-    // vuelve el vacío que enseña, con la misma acción que «Primeros pasos».
-    //
-    // Con la forma del héroe y no la de un vacío de pantalla entera: el héroe mide un renglón, una
-    // cifra, un detalle y el veredicto, y el vacío ocupa lo mismo (título, detalle y un botón chico),
-    // así ver que no hay cuentas no lo agranda (la regla de los 8 dp de `EsqueletosDelInicioTest`).
-    if (elHeroePideLaCuenta(data)) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = Medida.margenDePantalla)
-                .testTag(TAG_TARJETA_DEL_HERO),
-            verticalArrangement = Arrangement.spacedBy(Espacio.xxs),
-        ) {
-            Text("Aquí vas a ver tu plata", style = Movi.textos.titulo, color = Movi.colores.texto)
-            Text(DETALLE_DEL_HEROE_VACIO, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-            Spacer(Modifier.height(Espacio.xxs))
-            Boton("Crear mi primera cuenta", onClick = onShowCreateSheet, tamano = TamanoDeBoton.S)
+    Superficie(
+        modifier = Modifier
+            .padding(horizontal = Medida.margenDePantalla)
+            .fillMaxWidth()
+            .testTag(TAG_HEROE_EN_TARJETA),
+        destacada = true,
+        relleno = RellenoDeSuperficie.Ninguno,
+    ) {
+        if (elHeroePideLaCuenta(data)) {
+            // `accounts` CONTESTÓ vacía (no `null`, que es el esqueleto): un «$0» de 40 px sería la
+            // afirmación más fuerte de la pantalla, y falsa. La tarjeta es el vacío que enseña, con la
+            // misma acción que «Primeros pasos».
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(Medida.rellenoDeSuperficie)
+                    .testTag(TAG_TARJETA_DEL_HERO),
+                verticalArrangement = Arrangement.spacedBy(Espacio.xxs),
+            ) {
+                Text("Aquí vas a ver tu plata", style = Movi.textos.titulo, color = Movi.colores.texto)
+                Text(DETALLE_DEL_HEROE_VACIO, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                // Con el aire de un renglón más: la tarjeta vacía mide lo que mide cargando (rótulo,
+                // cifra y detalle), y ver que no hay cuentas no la achica (`EsqueletosDelInicioTest`).
+                Spacer(Modifier.height(Espacio.s))
+                Boton("Crear mi primera cuenta", onClick = onShowCreateSheet, tamano = TamanoDeBoton.S)
+            }
+            return@Superficie
         }
-        return
+        CuerpoDelHeroe(section, data, onNavigate, hoy)
+        FranjaPorConfirmar(data, onNavigate)
     }
+}
 
-    // Vuelta de diseño 28: el héroe se explica en la misma pantalla. Con «Te quedan», tocarlo abre
-    // «¿De dónde sale?» (la cascada del MISMO disponible); sin él —«Tu plata»— lleva a «Tus períodos»
-    // como siempre, y la hoja también lo ofrece abajo.
+@Composable
+private fun CuerpoDelHeroe(
+    section: ScreenSection,
+    data: DashboardData,
+    onNavigate: (Screen) -> Unit,
+    hoy: LocalDate,
+) {
+    // Vuelta de diseño 28: con «Te quedan», tocar la cifra abre «¿De dónde sale?» (la cascada del MISMO
+    // disponible); sin él —«Tu plata»— lleva a «Tus períodos» como siempre.
     val disponible = disponibleDelInicio(data, hoy)
     val teQuedan = disponible?.let(::teQuedanDeHoy)
     var verDeDondeSale by rememberSaveable { mutableStateOf(false) }
@@ -200,19 +226,12 @@ internal fun HeroDeUnVistazo(
             },
         )
     }
-    val entradaDeLaCifra = rememberProgresoDeEntrada("hero.cifra", listo = teQuedan != null || data.accounts != null)
-    // Vuelta de diseño 22: la frase de abajo dice lo que gastaste con la MISMA cifra que Plan (ver
-    // [fraseDelHeroe]); la larga, que dice lo mismo, es para el lector de pantalla. Con «Te pasaste
-    // por $X» ya arriba, no lo repite.
-    val frase = fraseDelHeroe(data, hoy, conAvisoDelDisponible = teQuedan == null)
-    // Cada pieza se gatilla con SU propio dato, y solo con una carga en vuelo ([LocalCargandoElInicio]):
-    // una carga en frío sin red que ya se rindió no puede quedar pulsando para siempre.
     val hayCargaEnVuelo = LocalCargandoElInicio.current
-    val resumenCargando = data.summary == null && hayCargaEnVuelo
     // «Te quedan» cuando ya se sabe, y también mientras sus lecturas vienen en camino: mostrar «Tu
     // plata» y cambiarla por otra cifra un segundo después sería un salto y dos respuestas a la misma
     // pregunta. Si las lecturas llegaron y no hay disponible que afirmar, vuelve «Tu plata».
     val modoTeQuedan = teQuedan != null || (hayCargaEnVuelo && !alcanzaParaElDisponible(data))
+    val tuPlata = data.accounts?.let { heroBalance(it, data.apartados.orEmpty()).tuPlata }
 
     Column(
         modifier = Modifier
@@ -224,27 +243,46 @@ internal fun HeroDeUnVistazo(
                     Modifier.clickable(onClickLabel = VER_TUS_PERIODOS) { onNavigate(Screen.Periodos) }
                 },
             )
-            .padding(horizontal = Medida.margenDePantalla)
+            .padding(Medida.rellenoDeSuperficie)
             .testTag(TAG_TARJETA_DEL_HERO),
     ) {
-        if (modoTeQuedan) {
-            RotuloConElOjo {
-                if (teQuedan != null) {
-                    Text(text = teQuedan.rotulo, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
-                } else {
-                    LineaEsqueleto(fraccionDelAncho = 0.3f, estilo = Movi.textos.cuerpo)
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Box(modifier = Modifier.weight(1f)) {
+                when {
+                    teQuedan != null -> Text(teQuedan.rotulo, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
+                    modoTeQuedan -> LineaEsqueleto(fraccionDelAncho = 0.4f, estilo = Movi.textos.cuerpo)
+                    // El rótulo viaja en el binario, no en la fila: ver [HERO_BALANCE_TITLE].
+                    else -> Text(heroBalanceTitle(section), style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
                 }
             }
+            // «Tu plata» se nombra con un enlace a su casa; si la cifra grande ya es «Tu plata», no.
+            if (modoTeQuedan && tuPlata != null) {
+                Text(
+                    text = conCifrasOcultas("Tu plata ${formatCOP(tuPlata)}"),
+                    style = Movi.textos.apoyoMedio,
+                    color = Movi.colores.enlace,
+                    maxLines = 1,
+                    modifier = Modifier
+                        .clickable(role = Role.Button, onClickLabel = "Ver tu plata") { onNavigate(Screen.Accounts) }
+                        .testTag(TAG_ENLACE_TU_PLATA),
+                )
+            }
+        }
+        if (modoTeQuedan) {
             if (teQuedan != null) {
-                // El MISMO valor que la frase del disponible de Plan, entero: es la cifra principal del
-                // dueño, «$4.963.400» y no «$5M». Sin signo: el rótulo ya dice de qué lado está.
+                // El MISMO valor que la frase del disponible de Plan, entero: «$4.963.400», no «$5M». Sin
+                // signo: el rótulo ya dice de qué lado está.
                 Cifra(
-                    cifraContando(teQuedan.monto, entradaDeLaCifra),
+                    rememberCifraQueCambia(teQuedan.monto),
                     VarianteDeCifra.Heroe,
                     tono = if (teQuedan.enRojo) TonoDeCifra.Alerta else TonoDeCifra.Neutro,
                     modifier = Modifier.testTag(TAG_CIFRA_TE_QUEDAN),
                 )
-                Text(text = teQuedan.detalle, style = Movi.textos.apoyo, color = colorDelDetalle(teQuedan.nivelDelDetalle))
+                Text(
+                    text = teQuedan.detalle.replaceFirstChar { it.uppercase() },
+                    style = Movi.textos.apoyo,
+                    color = colorDelDetalle(teQuedan.nivelDelDetalle),
+                )
             } else {
                 LineaEsqueleto(
                     fraccionDelAncho = 0.55f,
@@ -258,74 +296,55 @@ internal fun HeroDeUnVistazo(
                 )
             }
         } else {
-            // El rótulo viaja en el binario, no en la fila: ver [HERO_BALANCE_TITLE].
-            RotuloConElOjo {
-                Text(text = heroBalanceTitle(section), style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
-            }
-            val balance = heroBalance(data.accounts.orEmpty(), data.apartados.orEmpty())
-            if (data.accounts == null) {
+            if (tuPlata == null) {
                 // Un guion mientras las cuentas no contestan (ni vienen en camino): nunca un «$0».
                 Text(text = "—", style = Movi.textos.cifra, color = Movi.colores.texto)
             } else {
                 Cifra(
-                    cifraContando(balance.tuPlata, entradaDeLaCifra),
+                    rememberCifraQueCambia(tuPlata),
                     VarianteDeCifra.Heroe,
-                    tono = if (balance.tuPlata < 0) TonoDeCifra.Alerta else TonoDeCifra.Neutro,
+                    tono = if (tuPlata < 0) TonoDeCifra.Alerta else TonoDeCifra.Neutro,
                 )
             }
             encabezadoDelPeriodo(data, conDias = true)?.let { rango ->
                 Text(text = rango, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
             }
         }
-        if (resumenCargando) {
-            Spacer(Modifier.height(Espacio.xs))
-            LineaEsqueleto(
-                fraccionDelAncho = 0.65f,
-                estilo = Movi.textos.cuerpo,
-                modifier = Modifier.testTag(TAG_ESQUELETO_VEREDICTO_DEL_HERO),
-            )
-        } else if (frase != null) {
-            Spacer(Modifier.height(Espacio.xs))
-            Text(
-                text = frase.corta,
-                style = Movi.textos.cuerpo,
-                color = Movi.colores.texto,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .testTag(TAG_VEREDICTO_DEL_HERO)
-                    .semantics { contentDescription = frase.larga },
-            )
-        }
     }
 }
 
+/** «3 avisos», «1 aviso»: la pastilla de la franja «Por confirmar». */
+internal fun textoDeLaPastillaDeAvisos(n: Int): String = if (n == 1) "1 aviso" else "$n avisos"
+
 /**
- * **El rótulo del héroe con el ojo de «Ocultar los saldos» al final de su línea** (junto a «Te
- * quedan» o «Tu plata»). El ojo va siempre, también mientras el rótulo es un esqueleto: aparecer
- * después movería la línea.
+ * **La franja «Por confirmar»** de la tarjeta héroe (vuelta 39): debajo del hilo, en la capa 2, el reloj
+ * en el tinte, «Por confirmar», la pastilla «N avisos» —el mismo número de la insignia de «Revisar
+ * avisos» ([conteoPorRevisarDelInicio])— y la flecha; abre Por revisar. Con varias fuentes, de qué es el
+ * número va debajo («2 avisos · 1 movimiento»). Sin nada que confirmar, la franja no está (sin hueco).
  *
- * **La línea mide lo que mide el rótulo**, no el ojo: el ojo (24 dp) se centra sobre ella y puede
- * sobresalir un poco arriba y abajo. Con una `Row` la línea crecía al alto del ojo, más con el
- * esqueleto que con el texto, y el héroe cargando dejaba de medir lo que mide cargado
- * (`EsqueletosDelInicioTest`).
+ * La maqueta dice además cuánta plata espera («Por confirmar $186.400»): ese total no lo calcula ninguna
+ * función de Movi, y esta vuelta no inventa reglas de plata. Va el conteo.
  */
 @Composable
-private fun RotuloConElOjo(rotulo: @Composable () -> Unit) {
-    Layout(
-        content = {
-            Box { rotulo() }
-            OjoDeLosSaldos()
-        },
-        modifier = Modifier.fillMaxWidth(),
-    ) { medibles, limites ->
-        val ojo = medibles[1].measure(limites.copy(minWidth = 0, minHeight = 0))
-        val anchoDelRotulo = (limites.maxWidth - ojo.width).coerceAtLeast(0)
-        val texto = medibles[0].measure(limites.copy(minWidth = anchoDelRotulo, maxWidth = anchoDelRotulo, minHeight = 0))
-        layout(limites.maxWidth, texto.height) {
-            texto.place(0, 0)
-            ojo.place(limites.maxWidth - ojo.width, (texto.height - ojo.height) / 2)
-        }
+private fun FranjaPorConfirmar(data: DashboardData, onNavigate: (Screen) -> Unit) {
+    val conteo = conteoPorRevisarDelInicio(data)
+    if (conteo.total <= 0) return
+    Separador(SangriaDeSeparador.Ninguna)
+    Box(modifier = Modifier.fillMaxWidth().background(Movi.colores.capa2)) {
+        Fila(
+            titulo = "Por confirmar",
+            subtitulo = desgloseDePorRevisar(conteo)?.takeIf { it.contains(" · ") },
+            modifier = Modifier.testTag(TAG_FRANJA_POR_CONFIRMAR),
+            inicio = { IconoEnCirculo(Icons.Rounded.Schedule, tono = TonoDeIcono.Aviso) },
+            final = {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
+                    Pildora(textoDeLaPastillaDeAvisos(conteo.total), tono = TonoDePildora.Aviso)
+                    Chevron()
+                }
+            },
+            onClick = { onNavigate(Screen.PorRevisar) },
+            onClickLabel = "Revisar lo que está por confirmar",
+        )
     }
 }
 

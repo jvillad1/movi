@@ -11,6 +11,9 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -690,6 +693,18 @@ internal fun EsqueletoDeLaCascara(
             // Desde 600 dp no hay barra inferior que descuente la barra de navegación del sistema
             // (la de Android, abajo o al costado en horizontal): la descuenta la columna.
             val sinBarraInferior = if (widthClass == WindowWidthClass.Compact) Modifier else Modifier.navigationBarsPadding()
+            // Vuelta 39: en Inicio, detrás de la barra del sistema va el amarillo de la banda (con los
+            // íconos oscuros de siempre, `AjustarBarrasDelSistema`): sin esto quedaba una franja crema
+            // arriba del encabezado amarillo. Del ancho del contenido, nunca detrás del rail.
+            if (pantalla == Screen.Dashboard) {
+                Box(
+                    modifier = Modifier
+                        .widthIn(max = anchoMaximoDeLaPantalla(pantalla, widthClass))
+                        .fillMaxWidth()
+                        .windowInsetsTopHeight(WindowInsets.statusBars)
+                        .background(Movi.colores.marca),
+                )
+            }
             Column(modifier = Modifier.widthIn(max = anchoMaximoDeLaPantalla(pantalla, widthClass)).fillMaxSize().statusBarsPadding().then(sinBarraInferior).imePadding()) {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), content = contenido)
 

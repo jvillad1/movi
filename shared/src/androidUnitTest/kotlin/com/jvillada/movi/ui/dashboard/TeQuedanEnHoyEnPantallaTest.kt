@@ -157,7 +157,7 @@ class TeQuedanEnHoyEnPantallaTest {
         // La columna dice lo gastado y de cuánto.
         composeRule.onNodeWithText("de \$6,9M", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText(ROTULO_TE_QUEDAN, useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithText("para 4 días · \$1,7M por día", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Para 4 días · \$1,7M por día", useUnmergedTree = true).assertIsDisplayed()
         assertEquals(normal, color(cifraDeHoy()))
     }
 

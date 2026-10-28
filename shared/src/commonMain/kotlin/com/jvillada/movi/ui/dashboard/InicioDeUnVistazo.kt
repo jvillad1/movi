@@ -1,6 +1,7 @@
 package com.jvillada.movi.ui.dashboard
 
 import androidx.compose.ui.unit.Dp
+import com.jvillada.movi.shared.model.PARA_REVISAR_COMPACTO
 import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.Patrimonio
 import com.jvillada.movi.shared.model.ScreenSection
@@ -541,15 +542,13 @@ fun destinoDelTramo(tramo: TramoDelPatrimonio): Screen = if (tramo.esDeuda) Scre
 // Inicio es un `Disposicion.Tablero`, y lo que mide lo decide la cáscara con esa tabla.
 
 /**
- * Qué va en la columna derecha en escritorio: lo que **viene** y lo que se **pregunta**. La izquierda
- * se queda con el estado —¿cómo estoy? y ¿en qué se va?— y con «Para revisar». Todo tipo que no está
- * acá —los genéricos del Editor, un tipo nuevo— va a la izquierda: es la columna que se lee primero.
+ * **Qué va en la columna izquierda en escritorio** (vuelta 39, la opción 3): el héroe arriba y debajo
+ * lo que pide una decisión —el próximo pago, «Movi propone hoy», «Para revisar»—. La derecha arranca con
+ * la cuadrícula de acciones (así héroe y acciones quedan arriba, lado a lado) y sigue con los últimos
+ * movimientos y lo demás: las cuentas, los widgets, lo que el dueño prendió y los tipos del Editor.
  */
-val TIPOS_DE_LA_COLUMNA_DERECHA: Set<String> = setOf(
-    "PREGUNTALE_A_MOVI", "CHECKLIST_DEL_PERIODO", "UPCOMING_PAYMENTS", "DISPONIBLE_DEL_PERIODO", "PATRIMONIO",
-    // Ola R1: a la izquierda va lo que se hace (el héroe, la cuadrícula, las propuestas); a la derecha
-    // lo que se mira (las cuentas y los dos widgets, que siguen juntos en su bloque).
-    "CUENTAS", "GASTO_POR_CATEGORIA",
+val TIPOS_DE_LA_COLUMNA_IZQUIERDA: Set<String> = setOf(
+    "HERO_BALANCE", "PROXIMO_PAGO", "PROPUESTAS", "ALERTS", PARA_REVISAR_COMPACTO,
 )
 
 /** Las secciones del Inicio repartidas en columnas. Con una sola, [derecha] va vacía. */
@@ -562,14 +561,14 @@ data class ColumnasDelInicio(val izquierda: List<ScreenSection>, val derecha: Li
  *
  * - Menos de [ANCHO_PARA_DOS_COLUMNAS]: una columna, en el orden de la definición — el orden del
  *   teléfono, que es el que viaja en `screen_definitions`.
- * - Desde ahí: izquierda y derecha por tipo ([TIPOS_DE_LA_COLUMNA_DERECHA]), **conservando el orden
+ * - Desde ahí: izquierda y derecha por tipo ([TIPOS_DE_LA_COLUMNA_IZQUIERDA]), **conservando el orden
  *   de la definición dentro de cada una**. Si una de las dos quedaría vacía (una base recién
  *   estrenada tiene hero y poco más), se vuelve a una columna: una columna vacía al lado no es
  *   escritorio, es un hueco.
  */
 fun columnasDelInicio(secciones: List<ScreenSection>, ancho: Dp): ColumnasDelInicio {
     if (ancho < ANCHO_PARA_DOS_COLUMNAS) return ColumnasDelInicio(secciones, emptyList())
-    val (derecha, izquierda) = secciones.partition { it.type in TIPOS_DE_LA_COLUMNA_DERECHA }
+    val (izquierda, derecha) = secciones.partition { it.type in TIPOS_DE_LA_COLUMNA_IZQUIERDA }
     if (izquierda.isEmpty() || derecha.isEmpty()) return ColumnasDelInicio(secciones, emptyList())
     return ColumnasDelInicio(izquierda, derecha)
 }

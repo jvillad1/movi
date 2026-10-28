@@ -472,18 +472,23 @@ class InicioDeUnVistazoTest {
         val c = columnasDelInicio(todas, 390.dp)
         assertFalse(c.sonDos)
         assertEquals(
-            listOf("HERO_BALANCE", "ACCIONES", "PROPUESTAS", "CUENTAS", "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA"),
+            listOf("HERO_BALANCE", "ACCIONES", "PROXIMO_PAGO", "PROPUESTAS", "ULTIMOS_MOVIMIENTOS", "CUENTAS", "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA"),
             c.izquierda.map { it.type },
         )
         assertFalse(columnasDelInicio(todas, 899.dp).sonDos, "por debajo de 900 dp sigue siendo una columna")
     }
 
     @Test
-    fun `en escritorio dos columnas, lo que se hace a la izquierda y lo que se mira a la derecha`() {
+    fun `en escritorio dos columnas, lo que se decide a la izquierda y lo que se mira a la derecha`() {
+        // Vuelta 39: el héroe y las acciones arriba, lado a lado; debajo, el próximo pago y «Movi propone
+        // hoy» a la izquierda, y los últimos movimientos y lo demás a la derecha.
         val c = columnasDelInicio(todas, 1_400.dp)
         assertTrue(c.sonDos)
-        assertEquals(listOf("HERO_BALANCE", "ACCIONES", "PROPUESTAS"), c.izquierda.map { it.type })
-        assertEquals(listOf("CUENTAS", "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA"), c.derecha.map { it.type })
+        assertEquals(listOf("HERO_BALANCE", "PROXIMO_PAGO", "PROPUESTAS"), c.izquierda.map { it.type })
+        assertEquals(
+            listOf("ACCIONES", "ULTIMOS_MOVIMIENTOS", "CUENTAS", "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA"),
+            c.derecha.map { it.type },
+        )
         assertTrue(columnasDelInicio(todas, 900.dp).sonDos, "desde 900 dp, dos")
     }
 
