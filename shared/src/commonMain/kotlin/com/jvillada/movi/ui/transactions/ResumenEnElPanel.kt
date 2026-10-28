@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -35,6 +36,10 @@ import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.categorias.IconoDeCategoria
 import com.jvillada.movi.ui.components.ds.Cifra
+import com.jvillada.movi.ui.components.ds.CifraConRotulo
+import com.jvillada.movi.ui.components.ds.EsqueletoDeCifraConRotulo
+import com.jvillada.movi.ui.components.ds.FormaDeCifra
+import com.jvillada.movi.ui.components.ds.renglonTocable
 import com.jvillada.movi.ui.components.ds.Fila
 import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
 import com.jvillada.movi.ui.components.ds.Seccion
@@ -141,6 +146,62 @@ fun resumenDelPanel(
         salio = analisis.total,
         categorias = filasDelAnalisis(analisis, VistaDelAnalisis.CATEGORIA),
     )
+}
+
+/**
+ * # El resumen en el teléfono (vuelta de diseño 30)
+ *
+ * A 390 px Movimientos iba directo a la lista por día: lo que entró, lo que salió y el neto solo se
+ * veían en el panel de la pantalla ancha. Ahora, en el teléfono, una franja compacta debajo del
+ * selector del período los dice con [CifraConRotulo] y **el mismo [resumenDelPanel]** del panel:
+ * las mismas cifras en los dos anchos. Tocarla abre «En qué se va» de ese período.
+ *
+ * - Mientras no hay historia o perfil, el esqueleto de las tres (sin «$0»).
+ * - Con «Ocultar los saldos», las cifras del sistema se tapan solas.
+ * - **Con un filtro que recorta la lista** (una categoría, un comercio o una búsqueda) no se pinta:
+ *   el resumen es del período entero, y encima de una lista filtrada se leería como el total de lo
+ *   filtrado. Los chips de tipo («Gastos», «Ingresos») no lo esconden: no cambian qué entró y qué
+ *   salió en el período, solo qué filas se ven.
+ */
+
+/** El tag de la franja del resumen en el teléfono. */
+const val TAG_RESUMEN_EN_EL_TELEFONO: String = "movimientos-resumen-en-el-telefono"
+
+/** ¿Se pinta la franja? Sin panel al lado, y sin un filtro que recorte la lista. Pura. */
+fun muestraElResumenEnElTelefono(conPanel: Boolean, hayFiltro: Boolean, busqueda: String): Boolean =
+    !conPanel && !hayFiltro && busqueda.isBlank()
+
+/**
+ * La franja: «Entró · Salió · Neto», cada uno con su [CifraConRotulo] en forma compacta (es una
+ * columna de tres: «$15,6M»). [resumen] `null` = todavía no se sabe: el esqueleto de las tres, del
+ * mismo alto.
+ */
+@Composable
+internal fun ResumenDelPeriodoEnElTelefono(resumen: ResumenDelPanel?, onVerEnQueSeVa: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .padding(horizontal = Medida.margenDePantalla)
+            .padding(top = Espacio.xxs)
+            .fillMaxWidth()
+            .heightIn(min = Medida.objetivoTactil)
+            .renglonTocable(onClickLabel = VER_EN_QUE_SE_VA, onClick = onVerEnQueSeVa)
+            .testTag(TAG_RESUMEN_EN_EL_TELEFONO),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Espacio.s),
+    ) {
+        if (resumen == null) {
+            EsqueletoDeCifraConRotulo(Modifier.weight(1f))
+            EsqueletoDeCifraConRotulo(Modifier.weight(1f))
+            EsqueletoDeCifraConRotulo(Modifier.weight(1f), alFinal = true)
+        } else {
+            CifraConRotulo("Entró", resumen.entro, Modifier.weight(1f), tono = TonoDeCifra.Ingreso, forma = FormaDeCifra.Compacta)
+            CifraConRotulo("Salió", resumen.salio, Modifier.weight(1f), forma = FormaDeCifra.Compacta)
+            CifraConRotulo(
+                "Neto", resumen.neto, Modifier.weight(1f),
+                tono = tonoDelNeto(resumen.neto), forma = FormaDeCifra.Compacta, alFinal = true,
+            )
+        }
+    }
 }
 
 /**
