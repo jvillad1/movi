@@ -112,6 +112,10 @@ class SchemaDeArranqueTest {
         // El ahorro de cada período: `toProfile()` y el resumen del Inicio las nombran.
         "users" to "ahorro_del_periodo_tipo",
         "users" to "ahorro_del_periodo_valor",
+        // Ola R1 — las secciones opcionales del Inicio. `inicio_personalizado` ya existía en
+        // producción y `PUT /api/inicio/preferencias` la nombra: sin el ALTER, guardar en «Editar
+        // inicio» contestaba 500 (pasó de verdad, 28-oct-2026).
+        "inicio_personalizado" to "visibles",
     )
 
     /**
@@ -141,7 +145,7 @@ class SchemaDeArranqueTest {
         Users, Accounts, StatementImports, Events, VoidEvents, Budgets, RecurringRules,
         RecurringOccurrences, OccurrenceRejections, SmsMessages, Credits, Cards, Subscriptions, PushSubscriptions,
         Screens, PasswordResetTokens, CardPaymentDismissals, Goals, CategoryPrefs, Documents,
-        StatementImportMatches, KnownDestinations,
+        StatementImportMatches, KnownDestinations, InicioPersonalizado,
     )
 
     @BeforeTest
