@@ -42,7 +42,7 @@ internal class RepositorioDeLaDeuda(
     }
 }
 
-/** Monta el detalle de [cuenta] con [repo] y espera a que la sección de la deuda llegue. */
+/** Monta el detalle de [cuenta] con [repo] y espera a que la sección de la deuda (o su aviso) llegue. */
 internal fun ComposeContentTestRule.montarElDetalleDe(cuenta: Account, repo: RepositorioDeLaDeuda) {
     Repositories.sustitutoDePrueba = repo
     setContent {
@@ -52,8 +52,10 @@ internal fun ComposeContentTestRule.montarElDetalleDe(cuenta: Account, repo: Rep
             }
         }
     }
+    // Una tarjeta sin términos no tiene sección (nada que decir ni que hacer): solo el aviso de arriba.
     waitUntil(timeoutMillis = 5_000) {
-        onAllNodesWithTag(TAG_SECCION_DE_LA_DEUDA, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        onAllNodesWithTag(TAG_SECCION_DE_LA_DEUDA, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() ||
+            onAllNodesWithTag(TAG_FALTAN_DATOS_DE_LA_DEUDA, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
     }
     waitForIdle()
 }

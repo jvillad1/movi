@@ -189,7 +189,7 @@ class SimuladorDeAbonoEnPantallaTest {
         montar(listOf(sinTerminos))
 
         assertEquals(0, cuantasVeces(ACCION_SIMULAR_ABONO))
-        composeRule.onNodeWithText(FALTAN_LAS_CONDICIONES, useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithText(COMPLETAR_DATOS, useUnmergedTree = true).assertExists()
     }
 
     /**

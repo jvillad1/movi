@@ -9,9 +9,11 @@ import com.jvillada.movi.shared.model.PeriodoFinanciero
 import com.jvillada.movi.shared.model.PlanDelCredito
 import com.jvillada.movi.shared.model.QueLograElAbono
 import com.jvillada.movi.shared.model.ResumenDeDeudas
+import com.jvillada.movi.shared.model.RubroDeMarca
 import com.jvillada.movi.shared.model.SimulacionDeAbono
 import com.jvillada.movi.shared.model.abonoMinimoParaQueSeTermine
 import com.jvillada.movi.shared.model.deudaEnOtraMoneda
+import com.jvillada.movi.shared.model.marcaDelBanco
 import com.jvillada.movi.shared.model.mas
 import com.jvillada.movi.shared.model.nombreDe
 import com.jvillada.movi.shared.model.simularAbonoUnico
@@ -777,8 +779,9 @@ fun gruposDelResumen(resumen: ResumenDeDeudas): List<Int> = buildList {
 // ── La deuda como una fila de la lista (vuelta de diseño 4) ─────────────────────────────────────
 
 /**
- * Lo que dice una deuda sin términos en la lista de Créditos. Tocarla abre la hoja de completarlos.
- * Antes se leía «Sin términos registrados · $0 · 0% pagado», que se contradecía.
+ * Lo que dice una deuda sin términos en la lista de Créditos. Tocarla abre su detalle, que dice arriba
+ * que faltan datos y trae «Completar datos» (vuelta 31; antes abría el formulario directo). Antes se
+ * leía «Sin términos registrados · $0 · 0% pagado», que se contradecía.
  */
 const val FALTAN_DATOS_DE_LA_DEUDA: String = "Faltan datos: tócala para completarlos"
 
@@ -878,3 +881,20 @@ fun tarjetaEnLaLista(card: CardSummary, hoy: LocalDate): DeudaEnLaLista {
         subtitulo = if (minimo != null) "Pago mínimo ${formatMoney(minimo, moneda)} · $fecha" else "Fecha de pago · $fecha",
     )
 }
+
+// ── El banco que el nombre ya dice (vuelta 31) ──────────────────────────────────────────────────
+
+/** Las marcas del catálogo que son la red de la tarjeta y no el banco que la emite. */
+private val REDES_DE_TARJETA: Set<String> = setOf("visa", "mastercard", "amex")
+
+/**
+ * **El banco que ya dice el nombre de una deuda**, para que el formulario no lo pida otra vez: «Nu»
+ * → «Nu», «Bancolombia Libre inversión» → «Bancolombia». Sale del mismo catálogo que pinta la marca
+ * de la cuenta ([marcaDelBanco]), solo con los bancos y billeteras; una red («Visa», «Mastercard»,
+ * «AMEX») no es el banco que emite la tarjeta, así que no se propone. `null` si no nombra ninguno
+ * («Vehículo 4083»): el campo queda vacío, como siempre.
+ */
+fun bancoSugeridoPara(nombre: String): String? =
+    marcaDelBanco(nombre)
+        ?.takeIf { it.rubro == RubroDeMarca.BANCOS_Y_BILLETERAS && it.id !in REDES_DE_TARJETA }
+        ?.nombre

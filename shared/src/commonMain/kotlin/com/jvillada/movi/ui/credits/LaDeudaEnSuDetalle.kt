@@ -53,7 +53,7 @@ import com.jvillada.movi.ui.components.ds.Superficie
 import com.jvillada.movi.ui.components.ds.TonoDeBarra
 import com.jvillada.movi.ui.components.ds.TonoDeIcono
 import com.jvillada.movi.ui.components.ds.TonoDePildora
-import com.jvillada.movi.ui.components.ds.TonoDeSubtitulo
+import com.jvillada.movi.ui.components.ds.TarjetaDePropuesta
 import com.jvillada.movi.ui.components.formatMoney
 import com.jvillada.movi.ui.components.toUserMessage
 import com.jvillada.movi.ui.fecha.fechaEnPalabras
@@ -81,8 +81,11 @@ const val EDITAR_LAS_CONDICIONES: String = "Editar las condiciones"
 /** El título de la acción que abre la hoja de ajustar el saldo de un préstamo. */
 const val AJUSTAR_EL_SALDO: String = "Ajustar saldo"
 
-/** La fila de una deuda sin términos, en su detalle. */
-const val FALTAN_LAS_CONDICIONES: String = "Faltan las condiciones"
+/** El botón del aviso de arriba del detalle cuando a la deuda le faltan sus datos (vuelta 31). */
+const val COMPLETAR_DATOS: String = "Completar datos"
+
+/** El tag del aviso de que faltan datos, arriba del detalle de la deuda. */
+const val TAG_FALTAN_DATOS_DE_LA_DEUDA: String = "faltan-datos-de-la-deuda"
 
 /** El tag de la sección de la deuda en el detalle de la cuenta. */
 const val TAG_SECCION_DE_LA_DEUDA: String = "seccion-de-la-deuda"
@@ -159,16 +162,21 @@ fun SeccionDeLaDeuda(deuda: DeudaDelDetalle, modifier: Modifier = Modifier) {
     val prestamo = deuda.prestamo
     val tarjeta = deuda.tarjeta
     if (prestamo == null && tarjeta == null) return
+    val acciones = accionesDeLaDeuda(deuda)
+    val conCondiciones = !faltanLosDatos(deuda)
+    if (!conCondiciones && acciones.isEmpty()) return
     Column(modifier = modifier.fillMaxWidth().testTag(TAG_SECCION_DE_LA_DEUDA)) {
-        val completar = { deuda.hoja = HojaDeLaDeuda.Condiciones }
-        Seccion(titulo = if (prestamo != null) "El préstamo" else "La tarjeta")
-        Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
-            if (prestamo != null) LoQueDiceElPrestamo(prestamo, deuda.plan, deuda.periodoActual, completar)
-            if (tarjeta != null) LoQueDiceLaTarjeta(tarjeta, completar)
+        // Sin términos no hay nada que decir de la cuota ni del pago: lo dice el aviso de arriba del
+        // detalle ([AvisoDeFaltanDatos]) con «Completar datos», y acá queda lo que sí se puede hacer.
+        if (conCondiciones) {
+            Seccion(titulo = if (prestamo != null) "El préstamo" else "La tarjeta")
+            Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
+                if (prestamo != null) LoQueDiceElPrestamo(prestamo, deuda.plan, deuda.periodoActual)
+                if (tarjeta != null) LoQueDiceLaTarjeta(tarjeta)
+            }
         }
-        val acciones = accionesDeLaDeuda(deuda)
         if (acciones.isEmpty()) return@Column
-        Spacer(Modifier.height(Medida.entreSecciones))
+        if (conCondiciones) Spacer(Modifier.height(Medida.entreSecciones))
         Seccion(titulo = "Qué puedes hacer")
         Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
             acciones.forEachIndexed { i, accion ->
@@ -220,13 +228,8 @@ private fun LoQueDiceElPrestamo(
     credit: CreditSummary,
     plan: PlanDelCredito?,
     periodoActual: PeriodoFinanciero,
-    onCompletar: () -> Unit,
 ) {
-    val t = credit.terms
-    if (t == null) {
-        FilaDeFaltanLasCondiciones(onCompletar)
-        return
-    }
+    val t = credit.terms ?: return
     val hoy = hoyEnAppZone()
     val tasa = if (t.sinIntereses) "Sin intereses" else "${t.rateEa}% EA"
     Fila(
@@ -283,12 +286,8 @@ private fun LoQueDiceElPrestamo(
 
 /** Una tarjeta: el pago (mínimo y día), el corte y el cupo disponible, en su moneda. */
 @Composable
-private fun LoQueDiceLaTarjeta(card: CardSummary, onCompletar: () -> Unit) {
-    val t = card.terms
-    if (t == null) {
-        FilaDeFaltanLasCondiciones(onCompletar)
-        return
-    }
+private fun LoQueDiceLaTarjeta(card: CardSummary) {
+    val t = card.terms ?: return
     val hoy = hoyEnAppZone()
     val moneda = card.account.currency
     val pago = fechaEnPalabras(proximaFechaDelDia(t.paymentDay, hoy), hoy)
@@ -310,18 +309,34 @@ private fun LoQueDiceLaTarjeta(card: CardSummary, onCompletar: () -> Unit) {
     }
 }
 
-/** Sin términos: la fila que lleva a completarlos. La misma frase de aviso que la lista. */
+/** ¿A esta deuda le faltan sus términos? La misma condición que «Faltan datos» en la lista. */
+fun faltanLosDatos(deuda: DeudaDelDetalle): Boolean =
+    (deuda.prestamo != null && deuda.prestamo.terms == null) || (deuda.tarjeta != null && deuda.tarjeta.terms == null)
+
+/**
+ * **Faltan datos, arriba del detalle** (vuelta 31). Antes, tocar en Créditos una deuda sin términos
+ * («Nu», «Vehículo 4083») abría directo el formulario: era la única deuda que no se podía consultar.
+ * Ahora siempre se abre el detalle, y si faltan datos lo dice primero, como una propuesta de Movi en
+ * el tono de aviso, con «Completar datos» que abre el mismo formulario de siempre. Nada si no faltan.
+ */
 @Composable
-private fun FilaDeFaltanLasCondiciones(onCompletar: () -> Unit) {
-    Fila(
-        titulo = FALTAN_LAS_CONDICIONES,
-        subtitulo = FALTAN_DATOS_DE_LA_DEUDA,
-        tonoDelSubtitulo = TonoDeSubtitulo.Aviso,
-        lineasDelSubtitulo = 2,
-        inicio = { IconoEnCirculo(Icons.Rounded.Edit, tono = TonoDeIcono.Aviso) },
-        final = { Chevron() },
-        onClick = onCompletar,
-    )
+fun AvisoDeFaltanDatos(deuda: DeudaDelDetalle, modifier: Modifier = Modifier) {
+    if (!faltanLosDatos(deuda)) return
+    val esTarjeta = deuda.tarjeta != null
+    Box(modifier = modifier.fillMaxWidth().testTag(TAG_FALTAN_DATOS_DE_LA_DEUDA)) {
+        TarjetaDePropuesta(
+            icono = Icons.Rounded.Edit,
+            titulo = if (esTarjeta) "Faltan los datos de esta tarjeta" else "Faltan los datos de este préstamo",
+            cuerpo = if (esTarjeta) {
+                "Con el corte y el día de pago, Movi te dice cuándo vence y cuánto tienes disponible."
+            } else {
+                "Con la cuota, la tasa y el plazo, Movi te dice cuánto pagas de intereses y cuándo terminas."
+            },
+            accion = COMPLETAR_DATOS,
+            onAccion = { deuda.hoja = HojaDeLaDeuda.Condiciones },
+            tono = TonoDeIcono.Aviso,
+        )
+    }
 }
 
 /**
