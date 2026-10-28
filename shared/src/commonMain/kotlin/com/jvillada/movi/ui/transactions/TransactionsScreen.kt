@@ -22,7 +22,9 @@ import com.jvillada.movi.ui.components.ds.BotonDeIcono
 import com.jvillada.movi.ui.components.ds.VarianteDeBotonDeIcono
 import com.jvillada.movi.ui.components.ds.EsqueletoDeFila
 import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.Pildora
 import com.jvillada.movi.ui.components.ds.PildoraDeFiltro
+import com.jvillada.movi.ui.components.ds.TonoDePildora
 import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
 import com.jvillada.movi.ui.components.ds.Separador
 import com.jvillada.movi.ui.components.ds.Superficie
@@ -2095,9 +2097,10 @@ private fun CifraDelDia(cifra: Pair<RotuloDelDia, Long>?, conRotulo: Boolean) {
 }
 
 /**
- * Lo que va al final de una fila de movimiento: el punto de «por confirmar», el ícono de repetición
- * y el monto (con una línea debajo si el gasto se repartió: «de $88.600 · con Caro»). El punto y el
- * ícono dicen su nombre al lector de pantalla: el color nunca es la única pista.
+ * Lo que va al final de una fila de movimiento: el ícono de repetición y el monto, con la píldora
+ * «Sin confirmar» debajo si entró solo (vuelta 42; era un punto marrón delante de la cifra) y una
+ * línea si el gasto se repartió («de $88.600 · con Caro»). El ícono dice su nombre al lector de
+ * pantalla y la píldora lo dice en palabras: el color nunca es la única pista.
  */
 @Composable
 private fun FinalDeLaFila(
@@ -2112,9 +2115,6 @@ private fun FinalDeLaFila(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Espacio.xxs),
     ) {
-        if (porConfirmar) {
-            StatusDot(Movi.colores.aviso, modifier = Modifier.semantics { contentDescription = "Por confirmar" })
-        }
         if (esRecurrente) {
             Icon(
                 imageVector = Icons.Rounded.Repeat,
@@ -2125,6 +2125,11 @@ private fun FinalDeLaFila(
         }
         Column(horizontalAlignment = Alignment.End) {
             CifraDelMovimiento(monto, moneda, tono)
+            // Vuelta 42: «Sin confirmar» en una píldora suave, debajo del monto. Era un punto marrón
+            // delante de la cifra («• +$30.000») que nadie sabía leer.
+            if (porConfirmar) {
+                Pildora(SIN_CONFIRMAR, TonoDePildora.Aviso, modifier = Modifier.testTag(TAG_SIN_CONFIRMAR))
+            }
             if (debajo != null) {
                 Text(
                     text = debajo,
@@ -2222,7 +2227,7 @@ private fun RenglonDeAjustes(
  * ícono de la categoría), la descripción, «categoría · cuenta» y el monto.
  *
  * Ola 8 · V7: el subtítulo dice **de qué cuenta es el movimiento** (con dos cuentas abiertas había
- * dos «Saldo inicial» idénticos). El punto de «por confirmar» y el ícono de repetición van junto al
+ * dos «Saldo inicial» idénticos). La píldora «Sin confirmar» y el ícono de repetición van junto al
  * monto ([FinalDeLaFila]); no son botones: para editar el recurrente se abre el movimiento.
  *
  * `internal`: la bandeja «Por revisar» y el detalle de una cuenta pintan con este mismo renglón, para
@@ -2296,6 +2301,12 @@ internal fun MovementSingleRow(
         }
     }
 }
+
+/** Lo que dice la píldora de un movimiento que entró solo y espera confirmación (vuelta 42). */
+const val SIN_CONFIRMAR: String = "Sin confirmar"
+
+/** El `testTag` de la píldora [SIN_CONFIRMAR]. */
+const val TAG_SIN_CONFIRMAR: String = "movimiento:sin-confirmar"
 
 /**
  * El `testTag` de la línea bajo el monto de un movimiento repartido: «de $88.600 · con Caro» (vuelta

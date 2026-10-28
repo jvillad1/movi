@@ -3,16 +3,19 @@ package com.jvillada.movi.ui.porrevisar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CreditCard
 import androidx.compose.material.icons.rounded.Inbox
@@ -68,6 +71,7 @@ import com.jvillada.movi.ui.components.HeaderLeading
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.NoSePudoLeer
 import com.jvillada.movi.ui.components.NoSePudoActualizar
+import com.jvillada.movi.ui.components.PanelDeTablero
 import com.jvillada.movi.ui.components.ActualizandoEnLaCabecera
 import com.jvillada.movi.ui.components.RotuloDeSeccionEsqueleto
 import com.jvillada.movi.ui.components.VacioQueEnsena
@@ -315,7 +319,304 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
         onNavigate(Screen.SMSReconcile(id))
     }
 
-    Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
+    // Vuelta 42: las secciones de la bandeja, armadas una vez. En el teléfono (y en una columna) van en
+    // el orden de siempre; a partir del ancho en que Patrimonio y una cuenta pasan a dos columnas
+    // ([porRevisarEnDosColumnas]), «Mensajes del banco» va a la izquierda y lo demás a la derecha.
+    fun LazyListScope.noSePudoActualizarArriba() {
+        if (noSePudoActualizar) {
+            item {
+                NoSePudoActualizar(onReintentar = { recarga++ }, modifier = Modifier.padding(bottom = Medida.entreSecciones))
+            }
+        }
+    }
+
+    fun LazyListScope.subirYCaptura() {
+        // La puerta para lo que no llega solo: una captura de una transferencia, un recibo, un
+        // PDF del banco. Arriba y siempre, también con la bandeja al día.
+        item {
+            FilaQueLleva(
+                texto = "Subir comprobante o extracto",
+                detalle = "Movi lo lee y lo deja aquí",
+                icono = Icons.Rounded.UploadFile,
+                onClick = elegirPapel,
+                modifier = Modifier.padding(bottom = Medida.entreSecciones).testTag(TAG_SUBIR_PAPEL_EN_LA_BANDEJA),
+            )
+        }
+
+        avisoDeCapturaEnLaBandeja(mensajes, capturaSilenciada)?.let { aviso ->
+            item {
+                FilaQueLleva(
+                    texto = aviso,
+                    detalle = "Toca para ver cómo está la captura",
+                    icono = Icons.Rounded.WarningAmber,
+                    esAlerta = true,
+                    onClick = { onNavigate(Screen.CapturaDelBanco) },
+                    modifier = Modifier.padding(bottom = Medida.entreSecciones).testTag(TAG_AVISO_DE_CAPTURA_EN_LA_BANDEJA),
+                )
+            }
+        }
+    }
+
+    fun LazyListScope.elLote() {
+        // «Confirmar los N que Movi entendió»: arriba, con la lista de lo que va a anotar.
+        val delLote = mensajes?.let { m -> pagosPorRevisar(m).mapNotNull { entendidos[it.id] } }.orEmpty()
+        if (delLote.size >= MINIMO_PARA_EL_LOTE || lote !is EstadoDelLote.Cerrado) {
+            item(key = "lote") {
+                TarjetaDelLote(
+                    lote = delLote,
+                    estado = lote,
+                    habilitado = pagoEnCurso == null,
+                    onPedir = { lote = EstadoDelLote.Preguntando },
+                    onCancelar = { lote = EstadoDelLote.Cerrado },
+                    onConfirmar = {
+                        val estos = delLote
+                        if (pagoEnCurso != null || estos.isEmpty()) return@TarjetaDelLote
+                        lote = EstadoDelLote.Anotando(0, estos.size)
+                        // Mientras corre el lote, las filas no confirman ni ignoran nada.
+                        pagoEnCurso = CLAVE_DEL_LOTE
+                        alcance.launch {
+                            val resultado = confirmarElLote(estos, alAvanzar = { lote = EstadoDelLote.Anotando(it, estos.size) }) {
+                                confirmarLoEntendido(it, ahora = Clock.System.now().toEpochMilliseconds())
+                            }
+                            if (resultado.anotados.isNotEmpty()) vibrador.confirmar()
+                            avisosResueltos = avisosResueltos +
+                                resultado.anotados.flatMap { it.avisos }.associateWith { SMS_STATE_CONFIRMED }
+                            fallaronAca = fallaronAca + resultado.quedaron.map { it.first.cabezaId }
+                            lote = EstadoDelLote.Terminado(textoDelResultadoDelLote(resultado), quedaron = resultado.quedaron.isNotEmpty())
+                            pagoEnCurso = null
+                            recarga++
+                        }
+                    },
+                    onCerrar = { lote = EstadoDelLote.Cerrado },
+                )
+            }
+        }
+    }
+
+    /** Si la bandeja está al día: pinta el vacío (o nada, si no se pudo actualizar) y dice que sí. */
+    fun LazyListScope.alDia(): Boolean {
+        // «Todo al día» es un vacío: se afirma solo con lecturas que contestaron en esta visita.
+        if (bandejaAlDia(mensajes, dias, candidatos, debitos) && noSePudoActualizar) return true
+        if (bandejaAlDia(mensajes, dias, candidatos, debitos)) {
+            if (celebrar) {
+                item(key = "celebracion") {
+                    MomentoDeCelebracion(FRASE_DE_LA_BANDEJA_AL_DIA, Modifier.padding(bottom = Espacio.xs))
+                }
+            }
+            item { TodoAlDia() }
+            // `mensajes` no es `null` acá —[bandejaAlDia] lo exige— y contestó
+            // vacía de verdad: nunca llegó un mensaje del banco a esta cuenta. Es la misma
+            // condición que [avisoDeCapturaEnLaBandeja] usa arriba, pero SIN mirar si el dueño
+            // la silenció: ese renglón es un reclamo que se puede apagar, este es una
+            // invitación a configurar algo que todavía no existe, y silenciar el reclamo no
+            // debería apagar también la invitación.
+            if (mensajes != null && capturaDeSms(soloLoQueLlegoSolo(mensajes).map { it.time }).nuncaLlegoNada) {
+                item { VacioDeLaCapturaEnLaBandeja(onNavigate) }
+            }
+            return true
+        }
+        return false
+    }
+
+    fun LazyListScope.losDebitos() {
+        // ── Lo que el banco cobró solo ────────────────────────────────────────
+        // Cuotas (y recurrentes) con débito automático, vencidas y sin movimiento. Ver
+        // [TarjetaDelDebitoAutomatico]: nada se anota hasta que el dueño confirma.
+        if (debitos == null) {
+            if (!lecturas.leyendoDebitos) {
+                item { SeccionQueNoSeLeyo("No pudimos revisar lo que el banco cobra solo") { recarga++ } }
+            }
+        } else if (debitos.isNotEmpty()) {
+            item { Seccion(titulo = TITULO_DE_LOS_DEBITOS, conteo = debitos.size) }
+            debitos.forEach { debito ->
+                item(key = "debito-${debito.clave}") {
+                    TarjetaDelDebitoAutomatico(debito, onResuelto = {
+                        debitosResueltos = debitosResueltos + debito.clave
+                        recarga++
+                    })
+                }
+            }
+            item { Spacer(Modifier.height(Medida.entreSecciones - Medida.dentroDeSeccion)) }
+        }
+    }
+
+    fun LazyListScope.losMensajes() {
+        // ── Mensajes del banco ────────────────────────────────────────────────
+        if (mensajes == null) {
+            item { SeccionQueNoSeLeyo("No pudimos cargar tus mensajes del banco") { recarga++ } }
+        } else {
+            // Uno por pago: los avisos del mismo pago van en una sola tarjeta.
+            val pendientes = pagosPorRevisar(mensajes)
+            if (pendientes.isNotEmpty()) {
+                item { Seccion(titulo = "Mensajes del banco", conteo = pendientes.size) }
+                errorDeUnPago?.let { error ->
+                    item { Text(error, style = Movi.textos.apoyo, color = Movi.colores.sale, modifier = Modifier.padding(bottom = Medida.dentroDeSeccion)) }
+                }
+                pendientes.forEach { sms ->
+                    val grupoId = sms.grupoId
+                    if (grupoId != null) {
+                        item(key = "pago-$grupoId") {
+                            val avisos = avisosDelPago(sms, mensajes)
+                            val ids = avisos.map { it.id }
+                            val pendientesDelPago = avisos.filter { it.state == SMS_STATE_PENDING }.map { it.id }
+                            TarjetaDelMismoPago(
+                                modifier = Modifier.padding(bottom = Medida.dentroDeSeccion),
+                                avisos = avisos,
+                                trabajando = pagoEnCurso == grupoId,
+                                onRevisar = { revisarEnReconciliar(sms.id) },
+                                onIgnorar = {
+                                    sobreElPago(grupoId, { Repositories.wallets.ignorarElMismoPago(grupoId, ids) }) {
+                                        avisosResueltos = avisosResueltos + pendientesDelPago.associateWith { SMS_STATE_IGNORED }
+                                    }
+                                },
+                                onNoSonElMismoPago = {
+                                    sobreElPago(grupoId, { Repositories.wallets.noSonElMismoPago(grupoId, ids) }) {
+                                        avisosSeparados = avisosSeparados + ids
+                                    }
+                                },
+                                onCerrar = {
+                                    sobreElPago(grupoId, { Repositories.wallets.confirmarElMismoPago(grupoId, ConfirmarElMismoPago(ids)) }) {
+                                        avisosResueltos = avisosResueltos + pendientesDelPago.associateWith { SMS_STATE_CONFIRMED }
+                                    }
+                                },
+                                entendido = entendidos[sms.id]?.linea,
+                                onConfirmar = entendidos[sms.id]?.let { anotacion -> { confirmarDesdeLaFila(anotacion) } },
+                                leido = propuestaDelPago(propuestas, sms)?.leido,
+                                sinLeer = propuestaDelPago(propuestas, sms)?.sinLeer,
+                                advertencia = advertencias[sms.id],
+                            )
+                        }
+                        return@forEach
+                    }
+                    item(key = "sms-${sms.id}") {
+                        TarjetaDeMensajeDelBanco(
+                            sms,
+                            onRevisar = { revisarEnReconciliar(sms.id) },
+                            entendido = entendidos[sms.id]?.linea,
+                            onConfirmar = entendidos[sms.id]?.let { anotacion -> { confirmarDesdeLaFila(anotacion) } },
+                            onIgnorar = {
+                                sobreElPago(sms.id, { Repositories.wallets.ignoreSms(sms.id) }) {
+                                    avisosResueltos = avisosResueltos + (sms.id to SMS_STATE_IGNORED)
+                                }
+                            },
+                            trabajando = pagoEnCurso == sms.id,
+                            leido = propuestaDelPago(propuestas, sms)?.leido,
+                            sinLeer = propuestaDelPago(propuestas, sms)?.sinLeer,
+                            // En la bandeja todo está pendiente: la píldora no diría nada.
+                            conPildoraDePendiente = false,
+                            advertencia = advertencias[sms.id],
+                            // El otro aviso puede estar ya confirmado: se busca en la lista
+                            // entera, no solo entre los pendientes.
+                            parecidoA = sms.parecidoA?.let { id -> mensajes.firstOrNull { it.id == id } },
+                            pie = aQuienFue[sms.id]
+                                ?.takeIf { destinosParaGuardar.ofrece(it, cuentas) }
+                                ?.let { identificador ->
+                                    {
+                                        FilaGuardarElDestino(
+                                            identificador = identificador,
+                                            // La tarjeta no tiene el nombre que leyó Movi: se
+                                            // prellena con el que trae el texto del banco («… a
+                                            // MARTA RUIZ», «Te llegó dinero de …»). Hasta el
+                                            // 4-oct quedaba vacío aunque el banco lo dijera.
+                                            nombreSugerido = nombreParaLaFila(identificador, nombreDelBanco = null),
+                                            textoDelAviso = sms.text,
+                                            destinos = destinosParaGuardar.guardados.orEmpty(),
+                                            // Guardada, la fila se va sola; al tocar «Revisar»
+                                            // el server ya propone «Transferencia a <nombre>».
+                                            // Y la propuesta se relee: con el nombre, el aviso puede quedar entendido.
+                                            onGuardado = { guardado -> destinosParaGuardar.alGuardar(guardado); recarga++ },
+                                        )
+                                    }
+                                },
+                        )
+                    }
+                }
+                item { Spacer(Modifier.height(Medida.entreSecciones - Medida.dentroDeSeccion)) }
+            }
+        }
+    }
+
+    fun LazyListScope.entraronSolos() {
+        // ── Entraron solos ────────────────────────────────────────────────────
+        if (dias == null) {
+            item { SeccionQueNoSeLeyo("No pudimos cargar tus movimientos") { recarga++ } }
+        } else {
+            // Se cuentan los renglones, no los eventos: un traspaso es uno (ver
+            // [renglonesQueEntraronSolos]), el mismo número que el renglón de Movimientos.
+            val renglones = renglonesQueEntraronSolos(dias)
+            if (renglones.isNotEmpty()) {
+                item {
+                    Seccion(titulo = "Entraron solos", conteo = renglones.size)
+                    Text(
+                        "Llegaron por SMS, por un extracto o por una foto. Hasta confirmarlos no cuentan en " +
+                            "tus gastos ni ingresos: tócalos para revisar el monto y la categoría.",
+                        style = Movi.textos.apoyo,
+                        color = Movi.colores.textoMedio,
+                        modifier = Modifier.padding(bottom = Medida.dentroDeSeccion),
+                    )
+                    Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
+                        renglones.forEachIndexed { i, renglon ->
+                            when (renglon) {
+                                is MovementRow.Transfer -> TransferRow(
+                                    row = renglon,
+                                    accountNames = nombresDeCuentas,
+                                    accountTypes = tiposDeCuentas,
+                                    onClick = { movimientoAbierto = renglon.out },
+                                )
+                                is MovementRow.Single -> MovementSingleRow(
+                                    tx = renglon.event,
+                                    accountNames = nombresDeCuentas,
+                                    onClick = { movimientoAbierto = renglon.event },
+                                )
+                                // `collapseTransfers` no agrupa ajustes (eso lo hace
+                                // `agruparAjustesDeSaldo`, que acá no se llama); la rama está
+                                // para que el `when` siga siendo exhaustivo.
+                                is MovementRow.Ajustes -> renglon.events.forEach { ajuste ->
+                                    MovementSingleRow(
+                                        tx = ajuste,
+                                        accountNames = nombresDeCuentas,
+                                        onClick = { movimientoAbierto = ajuste },
+                                    )
+                                }
+                            }
+                            if (i < renglones.size - 1) Separador()
+                        }
+                    }
+                    Spacer(Modifier.height(Medida.entreSecciones))
+                }
+            }
+        }
+    }
+
+    fun LazyListScope.losPagosDeTarjeta() {
+        // ── Pagos de tarjeta ──────────────────────────────────────────────────
+        if (candidatos == null) {
+            item { SeccionQueNoSeLeyo("No pudimos cargar los pagos de tarjeta") { recarga++ } }
+        } else if (candidatos.isNotEmpty()) {
+            item {
+                Seccion(titulo = "Pagos de tarjeta", conteo = candidatos.size)
+                // Abre una lista donde cada uno se confirma por separado (ver
+                // CardPaymentCandidatesSheet) — nunca se marcan todos de una.
+                FilaQueLleva(
+                    texto = if (candidatos.size == 1) "1 pago de tarjeta sin marcar"
+                    else "${candidatos.size} pagos de tarjeta sin marcar",
+                    detalle = "Marcarlos evita contar la misma plata dos veces",
+                    icono = Icons.Rounded.CreditCard,
+                    onClick = { viendoCandidatos = true },
+                )
+            }
+        }
+    }
+
+    // Dos columnas solo con algo a cada lado: sin mensajes del banco por revisar, la izquierda
+    // quedaría vacía (un hueco, no un tablero), y la bandeja al día es un vacío de una columna.
+    val hayMensajesPorRevisar = mensajes?.let { pagosPorRevisar(it).isNotEmpty() } == true
+    val conDosLados = !cargando && hayMensajesPorRevisar && !bandejaAlDia(mensajes, dias, candidatos, debitos)
+    val alPie = Medida.botonFlotante + Medida.margenDePantalla
+
+    Box(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
+    PanelDeTablero(enDosColumnas = { porRevisarEnDosColumnas(it) && conDosLados }) { dosColumnas ->
+    Column(modifier = Modifier.fillMaxSize()) {
         MinScreenHeader(
             title = TITULO_DE_POR_REVISAR,
             leading = HeaderLeading.Back(fallback = Screen.Transactions()),
@@ -325,287 +626,63 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
             },
         )
 
-        LazyColumn(
-            modifier = Modifier.weight(1f),
-            contentPadding = PaddingValues(
-                start = Medida.margenDePantalla,
-                end = Medida.margenDePantalla,
-                top = Medida.dentroDeSeccion,
-                bottom = Medida.botonFlotante + Medida.margenDePantalla,
-            ),
-        ) {
-            if (cargando) {
-                item { EsqueletoDePorRevisar() }
-                return@LazyColumn
-            }
-
-            if (noSePudoActualizar) {
-                item {
-                    NoSePudoActualizar(onReintentar = { recarga++ }, modifier = Modifier.padding(bottom = Medida.entreSecciones))
+        if (dosColumnas) {
+            // Los rellenos suman los 48 de [RELLENO_DE_DOS_COLUMNAS], como Patrimonio y una cuenta.
+            Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                LazyColumn(
+                    modifier = Modifier.weight(1f).fillMaxHeight().testTag(TAG_COLUMNA_DE_LOS_MENSAJES),
+                    contentPadding = PaddingValues(
+                        start = Medida.margenDePantalla,
+                        end = Medida.margenDePantalla / 2,
+                        top = Medida.dentroDeSeccion,
+                        bottom = alPie,
+                    ),
+                ) {
+                    elLote()
+                    losMensajes()
+                }
+                LazyColumn(
+                    modifier = Modifier.weight(1f).fillMaxHeight().testTag(TAG_COLUMNA_DE_LO_DEMAS),
+                    contentPadding = PaddingValues(
+                        start = Medida.margenDePantalla / 2,
+                        end = Medida.margenDePantalla,
+                        top = Medida.dentroDeSeccion,
+                        bottom = alPie,
+                    ),
+                ) {
+                    noSePudoActualizarArriba()
+                    subirYCaptura()
+                    losDebitos()
+                    entraronSolos()
+                    losPagosDeTarjeta()
                 }
             }
-
-            // La puerta para lo que no llega solo: una captura de una transferencia, un recibo, un
-            // PDF del banco. Arriba y siempre, también con la bandeja al día.
-            item {
-                FilaQueLleva(
-                    texto = "Subir comprobante o extracto",
-                    detalle = "Movi lo lee y lo deja aquí",
-                    icono = Icons.Rounded.UploadFile,
-                    onClick = elegirPapel,
-                    modifier = Modifier.padding(bottom = Medida.entreSecciones).testTag(TAG_SUBIR_PAPEL_EN_LA_BANDEJA),
-                )
-            }
-
-            avisoDeCapturaEnLaBandeja(mensajes, capturaSilenciada)?.let { aviso ->
-                item {
-                    FilaQueLleva(
-                        texto = aviso,
-                        detalle = "Toca para ver cómo está la captura",
-                        icono = Icons.Rounded.WarningAmber,
-                        esAlerta = true,
-                        onClick = { onNavigate(Screen.CapturaDelBanco) },
-                        modifier = Modifier.padding(bottom = Medida.entreSecciones).testTag(TAG_AVISO_DE_CAPTURA_EN_LA_BANDEJA),
-                    )
+        } else {
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(
+                    start = Medida.margenDePantalla,
+                    end = Medida.margenDePantalla,
+                    top = Medida.dentroDeSeccion,
+                    bottom = alPie,
+                ),
+            ) {
+                if (cargando) {
+                    item { EsqueletoDePorRevisar() }
+                    return@LazyColumn
                 }
-            }
-
-            // «Confirmar los N que Movi entendió»: arriba, con la lista de lo que va a anotar.
-            val delLote = mensajes?.let { m -> pagosPorRevisar(m).mapNotNull { entendidos[it.id] } }.orEmpty()
-            if (delLote.size >= MINIMO_PARA_EL_LOTE || lote !is EstadoDelLote.Cerrado) {
-                item(key = "lote") {
-                    TarjetaDelLote(
-                        lote = delLote,
-                        estado = lote,
-                        habilitado = pagoEnCurso == null,
-                        onPedir = { lote = EstadoDelLote.Preguntando },
-                        onCancelar = { lote = EstadoDelLote.Cerrado },
-                        onConfirmar = {
-                            val estos = delLote
-                            if (pagoEnCurso != null || estos.isEmpty()) return@TarjetaDelLote
-                            lote = EstadoDelLote.Anotando(0, estos.size)
-                            // Mientras corre el lote, las filas no confirman ni ignoran nada.
-                            pagoEnCurso = CLAVE_DEL_LOTE
-                            alcance.launch {
-                                val resultado = confirmarElLote(estos, alAvanzar = { lote = EstadoDelLote.Anotando(it, estos.size) }) {
-                                    confirmarLoEntendido(it, ahora = Clock.System.now().toEpochMilliseconds())
-                                }
-                                if (resultado.anotados.isNotEmpty()) vibrador.confirmar()
-                                avisosResueltos = avisosResueltos +
-                                    resultado.anotados.flatMap { it.avisos }.associateWith { SMS_STATE_CONFIRMED }
-                                fallaronAca = fallaronAca + resultado.quedaron.map { it.first.cabezaId }
-                                lote = EstadoDelLote.Terminado(textoDelResultadoDelLote(resultado), quedaron = resultado.quedaron.isNotEmpty())
-                                pagoEnCurso = null
-                                recarga++
-                            }
-                        },
-                        onCerrar = { lote = EstadoDelLote.Cerrado },
-                    )
-                }
-            }
-            // «Todo al día» es un vacío: se afirma solo con lecturas que contestaron en esta visita.
-            if (bandejaAlDia(mensajes, dias, candidatos, debitos) && noSePudoActualizar) return@LazyColumn
-            if (bandejaAlDia(mensajes, dias, candidatos, debitos)) {
-                if (celebrar) {
-                    item(key = "celebracion") {
-                        MomentoDeCelebracion(FRASE_DE_LA_BANDEJA_AL_DIA, Modifier.padding(bottom = Espacio.xs))
-                    }
-                }
-                item { TodoAlDia() }
-                // `mensajes` no es `null` acá —[bandejaAlDia] lo exige— y contestó
-                // vacía de verdad: nunca llegó un mensaje del banco a esta cuenta. Es la misma
-                // condición que [avisoDeCapturaEnLaBandeja] usa arriba, pero SIN mirar si el dueño
-                // la silenció: ese renglón es un reclamo que se puede apagar, este es una
-                // invitación a configurar algo que todavía no existe, y silenciar el reclamo no
-                // debería apagar también la invitación.
-                if (mensajes != null && capturaDeSms(soloLoQueLlegoSolo(mensajes).map { it.time }).nuncaLlegoNada) {
-                    item { VacioDeLaCapturaEnLaBandeja(onNavigate) }
-                }
-                return@LazyColumn
-            }
-
-            // ── Lo que el banco cobró solo ────────────────────────────────────────
-            // Cuotas (y recurrentes) con débito automático, vencidas y sin movimiento. Ver
-            // [TarjetaDelDebitoAutomatico]: nada se anota hasta que el dueño confirma.
-            if (debitos == null) {
-                if (!lecturas.leyendoDebitos) {
-                    item { SeccionQueNoSeLeyo("No pudimos revisar lo que el banco cobra solo") { recarga++ } }
-                }
-            } else if (debitos.isNotEmpty()) {
-                item { Seccion(titulo = TITULO_DE_LOS_DEBITOS, conteo = debitos.size) }
-                debitos.forEach { debito ->
-                    item(key = "debito-${debito.clave}") {
-                        TarjetaDelDebitoAutomatico(debito, onResuelto = {
-                            debitosResueltos = debitosResueltos + debito.clave
-                            recarga++
-                        })
-                    }
-                }
-                item { Spacer(Modifier.height(Medida.entreSecciones - Medida.dentroDeSeccion)) }
-            }
-
-            // ── Mensajes del banco ────────────────────────────────────────────────
-            if (mensajes == null) {
-                item { SeccionQueNoSeLeyo("No pudimos cargar tus mensajes del banco") { recarga++ } }
-            } else {
-                // Uno por pago: los avisos del mismo pago van en una sola tarjeta.
-                val pendientes = pagosPorRevisar(mensajes)
-                if (pendientes.isNotEmpty()) {
-                    item { Seccion(titulo = "Mensajes del banco", conteo = pendientes.size) }
-                    errorDeUnPago?.let { error ->
-                        item { Text(error, style = Movi.textos.apoyo, color = Movi.colores.sale, modifier = Modifier.padding(bottom = Medida.dentroDeSeccion)) }
-                    }
-                    pendientes.forEach { sms ->
-                        val grupoId = sms.grupoId
-                        if (grupoId != null) {
-                            item(key = "pago-$grupoId") {
-                                val avisos = avisosDelPago(sms, mensajes)
-                                val ids = avisos.map { it.id }
-                                val pendientesDelPago = avisos.filter { it.state == SMS_STATE_PENDING }.map { it.id }
-                                TarjetaDelMismoPago(
-                                    modifier = Modifier.padding(bottom = Medida.dentroDeSeccion),
-                                    avisos = avisos,
-                                    trabajando = pagoEnCurso == grupoId,
-                                    onRevisar = { revisarEnReconciliar(sms.id) },
-                                    onIgnorar = {
-                                        sobreElPago(grupoId, { Repositories.wallets.ignorarElMismoPago(grupoId, ids) }) {
-                                            avisosResueltos = avisosResueltos + pendientesDelPago.associateWith { SMS_STATE_IGNORED }
-                                        }
-                                    },
-                                    onNoSonElMismoPago = {
-                                        sobreElPago(grupoId, { Repositories.wallets.noSonElMismoPago(grupoId, ids) }) {
-                                            avisosSeparados = avisosSeparados + ids
-                                        }
-                                    },
-                                    onCerrar = {
-                                        sobreElPago(grupoId, { Repositories.wallets.confirmarElMismoPago(grupoId, ConfirmarElMismoPago(ids)) }) {
-                                            avisosResueltos = avisosResueltos + pendientesDelPago.associateWith { SMS_STATE_CONFIRMED }
-                                        }
-                                    },
-                                    entendido = entendidos[sms.id]?.linea,
-                                    onConfirmar = entendidos[sms.id]?.let { anotacion -> { confirmarDesdeLaFila(anotacion) } },
-                                    leido = propuestaDelPago(propuestas, sms)?.leido,
-                                    sinLeer = propuestaDelPago(propuestas, sms)?.sinLeer,
-                                    advertencia = advertencias[sms.id],
-                                )
-                            }
-                            return@forEach
-                        }
-                        item(key = "sms-${sms.id}") {
-                            TarjetaDeMensajeDelBanco(
-                                sms,
-                                onRevisar = { revisarEnReconciliar(sms.id) },
-                                entendido = entendidos[sms.id]?.linea,
-                                onConfirmar = entendidos[sms.id]?.let { anotacion -> { confirmarDesdeLaFila(anotacion) } },
-                                onIgnorar = {
-                                    sobreElPago(sms.id, { Repositories.wallets.ignoreSms(sms.id) }) {
-                                        avisosResueltos = avisosResueltos + (sms.id to SMS_STATE_IGNORED)
-                                    }
-                                },
-                                trabajando = pagoEnCurso == sms.id,
-                                leido = propuestaDelPago(propuestas, sms)?.leido,
-                                sinLeer = propuestaDelPago(propuestas, sms)?.sinLeer,
-                                // En la bandeja todo está pendiente: la píldora no diría nada.
-                                conPildoraDePendiente = false,
-                                advertencia = advertencias[sms.id],
-                                // El otro aviso puede estar ya confirmado: se busca en la lista
-                                // entera, no solo entre los pendientes.
-                                parecidoA = sms.parecidoA?.let { id -> mensajes.firstOrNull { it.id == id } },
-                                pie = aQuienFue[sms.id]
-                                    ?.takeIf { destinosParaGuardar.ofrece(it, cuentas) }
-                                    ?.let { identificador ->
-                                        {
-                                            FilaGuardarElDestino(
-                                                identificador = identificador,
-                                                // La tarjeta no tiene el nombre que leyó Movi: se
-                                                // prellena con el que trae el texto del banco («… a
-                                                // MARTA RUIZ», «Te llegó dinero de …»). Hasta el
-                                                // 4-oct quedaba vacío aunque el banco lo dijera.
-                                                nombreSugerido = nombreParaLaFila(identificador, nombreDelBanco = null),
-                                                textoDelAviso = sms.text,
-                                                destinos = destinosParaGuardar.guardados.orEmpty(),
-                                                // Guardada, la fila se va sola; al tocar «Revisar»
-                                                // el server ya propone «Transferencia a <nombre>».
-                                                // Y la propuesta se relee: con el nombre, el aviso puede quedar entendido.
-                                                onGuardado = { guardado -> destinosParaGuardar.alGuardar(guardado); recarga++ },
-                                            )
-                                        }
-                                    },
-                            )
-                        }
-                    }
-                    item { Spacer(Modifier.height(Medida.entreSecciones - Medida.dentroDeSeccion)) }
-                }
-            }
-
-            // ── Entraron solos ────────────────────────────────────────────────────
-            if (dias == null) {
-                item { SeccionQueNoSeLeyo("No pudimos cargar tus movimientos") { recarga++ } }
-            } else {
-                // Se cuentan los renglones, no los eventos: un traspaso es uno (ver
-                // [renglonesQueEntraronSolos]), el mismo número que el renglón de Movimientos.
-                val renglones = renglonesQueEntraronSolos(dias)
-                if (renglones.isNotEmpty()) {
-                    item {
-                        Seccion(titulo = "Entraron solos", conteo = renglones.size)
-                        Text(
-                            "Llegaron por SMS, por un extracto o por una foto. Hasta confirmarlos no cuentan en " +
-                                "tus gastos ni ingresos: tócalos para revisar el monto y la categoría.",
-                            style = Movi.textos.apoyo,
-                            color = Movi.colores.textoMedio,
-                            modifier = Modifier.padding(bottom = Medida.dentroDeSeccion),
-                        )
-                        Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
-                            renglones.forEachIndexed { i, renglon ->
-                                when (renglon) {
-                                    is MovementRow.Transfer -> TransferRow(
-                                        row = renglon,
-                                        accountNames = nombresDeCuentas,
-                                        accountTypes = tiposDeCuentas,
-                                        onClick = { movimientoAbierto = renglon.out },
-                                    )
-                                    is MovementRow.Single -> MovementSingleRow(
-                                        tx = renglon.event,
-                                        accountNames = nombresDeCuentas,
-                                        onClick = { movimientoAbierto = renglon.event },
-                                    )
-                                    // `collapseTransfers` no agrupa ajustes (eso lo hace
-                                    // `agruparAjustesDeSaldo`, que acá no se llama); la rama está
-                                    // para que el `when` siga siendo exhaustivo.
-                                    is MovementRow.Ajustes -> renglon.events.forEach { ajuste ->
-                                        MovementSingleRow(
-                                            tx = ajuste,
-                                            accountNames = nombresDeCuentas,
-                                            onClick = { movimientoAbierto = ajuste },
-                                        )
-                                    }
-                                }
-                                if (i < renglones.size - 1) Separador()
-                            }
-                        }
-                        Spacer(Modifier.height(Medida.entreSecciones))
-                    }
-                }
-            }
-
-            // ── Pagos de tarjeta ──────────────────────────────────────────────────
-            if (candidatos == null) {
-                item { SeccionQueNoSeLeyo("No pudimos cargar los pagos de tarjeta") { recarga++ } }
-            } else if (candidatos.isNotEmpty()) {
-                item {
-                    Seccion(titulo = "Pagos de tarjeta", conteo = candidatos.size)
-                    // Abre una lista donde cada uno se confirma por separado (ver
-                    // CardPaymentCandidatesSheet) — nunca se marcan todos de una.
-                    FilaQueLleva(
-                        texto = if (candidatos.size == 1) "1 pago de tarjeta sin marcar"
-                        else "${candidatos.size} pagos de tarjeta sin marcar",
-                        detalle = "Marcarlos evita contar la misma plata dos veces",
-                        icono = Icons.Rounded.CreditCard,
-                        onClick = { viendoCandidatos = true },
-                    )
-                }
+                noSePudoActualizarArriba()
+                subirYCaptura()
+                elLote()
+                if (alDia()) return@LazyColumn
+                losDebitos()
+                losMensajes()
+                entraronSolos()
+                losPagosDeTarjeta()
             }
         }
+    }
+    } // PanelDeTablero
     }
 
     movimientoAbierto?.let { evento ->

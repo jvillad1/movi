@@ -47,10 +47,11 @@ class DisposicionTest {
     @Test
     fun `Hoy, Patrimonio, Creditos y Plan son tableros y lo que no se adapto todavia se lee en columna`() {
         // Vuelta 38: «Tú» (y Ajustes, que lleva ahí) es un tablero: lo tuyo y los ajustes en dos columnas.
-        listOf(Screen.Dashboard, Screen.Accounts, Screen.Credits, Screen.Plan(), Screen.Tu, Screen.Mas)
+        // Vuelta 42: «Por revisar» también, con «Mensajes del banco» a la izquierda.
+        listOf(Screen.Dashboard, Screen.Accounts, Screen.Credits, Screen.Plan(), Screen.Tu, Screen.Mas, Screen.PorRevisar)
             .forEach { assertEquals(Disposicion.Tablero, disposicionDe(it), "$it") }
         listOf(
-            Screen.BorrarLaCuenta, Screen.Categorias, Screen.Login, Screen.PorRevisar,
+            Screen.BorrarLaCuenta, Screen.Categorias, Screen.Login,
         ).forEach { assertEquals(Disposicion.Lectura, disposicionDe(it), "$it") }
     }
 
@@ -97,7 +98,9 @@ class DisposicionTest {
         assertEquals(840.dp, anchoMaximoDeLaPantalla(Screen.Dashboard, WindowWidthClass.Medium))
         // Ola W4: Movimientos pasó a lista y detalle (ver `MovimientosListaYDetalleTest`).
         assertEquals(1_440.dp, anchoMaximoDeLaPantalla(Screen.Transactions(), WindowWidthClass.Expanded))
-        assertEquals(720.dp, anchoMaximoDeLaPantalla(Screen.PorRevisar, WindowWidthClass.Expanded))
+        assertEquals(720.dp, anchoMaximoDeLaPantalla(Screen.Categorias, WindowWidthClass.Expanded))
+        // Vuelta 42: «Por revisar» es un tablero (los mensajes del banco a la izquierda).
+        assertEquals(1_280.dp, anchoMaximoDeLaPantalla(Screen.PorRevisar, WindowWidthClass.Expanded))
         assertEquals(720.dp, anchoMaximoDeLaPantalla(Screen.BorrarLaCuenta, WindowWidthClass.Medium))
         assertEquals(Dp.Infinity, anchoMaximoDeLaPantalla(Screen.Dashboard, WindowWidthClass.Compact))
     }

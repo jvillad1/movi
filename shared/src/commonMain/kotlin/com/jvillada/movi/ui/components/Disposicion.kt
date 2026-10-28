@@ -50,6 +50,8 @@ fun disposicionDe(pantalla: Screen): Disposicion = when (pantalla) {
     Screen.Tu, Screen.Mas -> Disposicion.Tablero
     // Vuelta 33: la cuenta a la izquierda y sus movimientos a la derecha (ver `cuentaEnDosColumnas`).
     is Screen.AccountDetail -> Disposicion.Tablero
+    // Vuelta 42: «Mensajes del banco» a la izquierda y lo demás a la derecha (ver `porRevisarEnDosColumnas`).
+    Screen.PorRevisar -> Disposicion.Tablero
     Screen.Periodos, is Screen.DetalleDePeriodo, is Screen.Transactions -> Disposicion.ListaYDetalle
     else -> Disposicion.Lectura
 }
