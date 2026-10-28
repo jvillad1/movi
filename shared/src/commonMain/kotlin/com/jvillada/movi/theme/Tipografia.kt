@@ -6,39 +6,39 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import com.jvillada.movi.resources.Res
-import com.jvillada.movi.resources.martian_mono_medium
-import com.jvillada.movi.resources.martian_mono_regular
-import com.jvillada.movi.resources.space_grotesk_medium
-import com.jvillada.movi.resources.space_grotesk_regular
-import com.jvillada.movi.resources.space_grotesk_semibold
+import com.jvillada.movi.resources.figtree_bold
+import com.jvillada.movi.resources.figtree_extrabold
+import com.jvillada.movi.resources.figtree_medium
+import com.jvillada.movi.resources.figtree_regular
+import com.jvillada.movi.resources.figtree_semibold
 import org.jetbrains.compose.resources.Font
 
 /**
  * # La letra de Movi
  *
- * **Space Grotesk lleva la interfaz. Martian Mono lleva las cifras de plata.** La dirección B la
- * dejaba solo en la cifra protagonista; el camino 1 del rediseño (ola R1, 26-oct-2026) la lleva
- * también al monto de una fila, de una propuesta y de un widget, para que toda cifra de la app se vea
- * de la misma familia.
+ * **Figtree para todo, también las cifras** (vuelta 29, la opción 3 «Acción primero»). Hasta acá
+ * eran dos: Space Grotesk en la interfaz y Martian Mono —una monoespaciada— en cada cifra de plata.
+ * La opción 3 escribe las cifras en la misma letra con **números tabulares** (`tnum`, en `cifra`,
+ * `cifraDeTarjeta` y `monto`): la columna de montos alinea igual, y la cifra se lee como parte de la
+ * frase y no como una terminal.
  *
  * ### Por qué fuente propia
  *
- * Cinco de los seis neobancos del benchmark la tienen, y Bancolombia fue más lejos: uno de los
- * cuatro cortes de su tipografía existe solo para los números. Con la del sistema, Movi se veía
- * distinta en cada plataforma —Roboto en Android, San Francisco en iOS, lo que tuviera el
- * navegador en la web— y en ninguna se veía como Movi.
+ * Cinco de los seis neobancos del benchmark la tienen. Con la del sistema, Movi se veía distinta en
+ * cada plataforma —Roboto en Android, San Francisco en iOS, lo que tuviera el navegador en la web— y
+ * en ninguna se veía como Movi.
  *
  * ### Los archivos
  *
  * **Android y la web, no iOS todavía**: ver [laPlataformaTraeLasFuentes].
  *
- * Cinco TTF estáticos, no las versiones variables: Compose en wasm e iOS no garantiza aplicar los
- * ejes de variación, y un peso que no se aplica cae en silencio al regular. Juntos pesan 300 KB.
- * Cubren todo el español y los signos que Movi escribe: tildes, eñe, «», el − de los montos, ≈ y
- * el $. Los dos son SIL Open Font License; los textos están en `docs/licencias/`.
+ * Cinco TTF estáticos —400, 500, 600, 700 y 800—, no la versión variable: Compose en wasm e iOS no
+ * garantiza aplicar los ejes de variación, y un peso que no se aplica cae en silencio al regular.
+ * Juntos pesan 200 KB. Cubren todo el español y los signos que Movi escribe: tildes, eñe, «», el −
+ * de los montos, ≈ y el $. SIL Open Font License; el texto está en `docs/licencias/OFL-Figtree.txt`.
  *
- * `Font(recurso)` es `@Composable` —en la web se carga por red— y por eso las familias se arman
- * acá y no como constantes en `Tokens.kt`.
+ * `Font(recurso)` es `@Composable` —en la web se carga por red— y por eso la familia se arma acá y
+ * no como constante en `Tokens.kt`.
  */
 /**
  * ¿Los archivos de fuente llegan al aparato? En Android y la web sí. En iOS todavía no: ver el
@@ -46,63 +46,50 @@ import org.jetbrains.compose.resources.Font
  */
 internal expect val laPlataformaTraeLasFuentes: Boolean
 
+/** Figtree en sus cinco pesos; sin fuentes propias, la del sistema (con sus cifras tabulares). */
 @Composable
-internal fun familiaDeLaInterfaz(): FontFamily {
+internal fun familiaDeMovi(): FontFamily {
     if (!laPlataformaTraeLasFuentes) return FontFamily.Default
     return FontFamily(
-        Font(Res.font.space_grotesk_regular, FontWeight.Normal),
-        Font(Res.font.space_grotesk_medium, FontWeight.Medium),
-        Font(Res.font.space_grotesk_semibold, FontWeight.SemiBold),
-    )
-}
-
-@Composable
-internal fun familiaDeLasCifras(): FontFamily {
-    // Sin fuentes propias, la cifra no cae a la monoespaciada del sistema: esa era justamente la
-    // terminal que el rediseño vino a sacar. Va en la de la interfaz, con sus cifras tabulares.
-    if (!laPlataformaTraeLasFuentes) return FontFamily.Default
-    return FontFamily(
-        Font(Res.font.martian_mono_regular, FontWeight.Normal),
-        Font(Res.font.martian_mono_medium, FontWeight.Medium),
-        // Martian Mono no tiene semibold en los archivos que trae Movi. Sin esta línea, el `cifra`
-        // semibold lo sintetizaría engrosando el trazo del medium, que es justo lo que se ve barato.
-        Font(Res.font.martian_mono_medium, FontWeight.SemiBold),
+        Font(Res.font.figtree_regular, FontWeight.Normal),
+        Font(Res.font.figtree_medium, FontWeight.Medium),
+        Font(Res.font.figtree_semibold, FontWeight.SemiBold),
+        Font(Res.font.figtree_bold, FontWeight.Bold),
+        Font(Res.font.figtree_extrabold, FontWeight.ExtraBold),
     )
 }
 
 /**
  * Los nueve estilos con su familia puesta. **Pura**, sin `@Composable`, para poder probarla.
  *
- * `cifra`, `cifraDeTarjeta` y `monto` van en la de cifras; los otros seis, en la de la interfaz. Ola R1:
- * `monto` pasó a Martian Mono —el camino 1 pone toda cifra de plata en la misma familia, también la de
- * una fila—; antes iba en la de la interfaz con `tnum`.
+ * Una sola familia para todos desde la vuelta 29: las cifras se distinguen por sus números tabulares
+ * (que ya traen sus estilos), no por otra letra.
  */
-internal fun TextosDeMovi.conFamilias(interfaz: FontFamily, cifras: FontFamily): TextosDeMovi = copy(
-    cifra = cifra.copy(fontFamily = cifras),
-    cifraDeTarjeta = cifraDeTarjeta.copy(fontFamily = cifras),
-    portada = portada.copy(fontFamily = interfaz),
-    titular = titular.copy(fontFamily = interfaz),
-    titulo = titulo.copy(fontFamily = interfaz),
-    cuerpo = cuerpo.copy(fontFamily = interfaz),
-    monto = monto.copy(fontFamily = cifras),
-    apoyo = apoyo.copy(fontFamily = interfaz),
-    rotulo = rotulo.copy(fontFamily = interfaz),
+internal fun TextosDeMovi.conFamilia(familia: FontFamily): TextosDeMovi = copy(
+    cifra = cifra.copy(fontFamily = familia),
+    cifraDeTarjeta = cifraDeTarjeta.copy(fontFamily = familia),
+    portada = portada.copy(fontFamily = familia),
+    titular = titular.copy(fontFamily = familia),
+    titulo = titulo.copy(fontFamily = familia),
+    cuerpo = cuerpo.copy(fontFamily = familia),
+    monto = monto.copy(fontFamily = familia),
+    apoyo = apoyo.copy(fontFamily = familia),
+    rotulo = rotulo.copy(fontFamily = familia),
 )
 
 /**
  * **La tipografía de Material con la familia de Movi.**
  *
- * No es un detalle. Todo `Text` que no pasa `style` —y en la app quedan cientos— hereda el
- * `LocalTextStyle`, que `MaterialTheme` llena con `bodyLarge`. Si esto no se toca, los estilos
- * del sistema salen en Space Grotesk y todo lo demás sigue en la letra del sistema: la misma
- * pantalla con dos tipografías.
+ * No es un detalle. Todo `Text` que no pasa `style` hereda el `LocalTextStyle`, que `MaterialTheme`
+ * llena con `bodyLarge`. Si esto no se toca, los estilos del sistema salen en Figtree y todo lo demás
+ * sigue en la letra del sistema: la misma pantalla con dos tipografías.
  *
  * Se cambia solo la familia, no los tamaños: los de Material siguen siendo los que esos textos
- * vienen usando, y unificarlos es la migración de los tamaños sueltos, que es otra entrega.
+ * vienen usando.
  */
-internal fun tipografiaDeMaterial(interfaz: FontFamily): Typography {
+internal fun tipografiaDeMaterial(familia: FontFamily): Typography {
     val base = Typography()
-    fun TextStyle.conLaFamilia() = copy(fontFamily = interfaz)
+    fun TextStyle.conLaFamilia() = copy(fontFamily = familia)
     return base.copy(
         displayLarge = base.displayLarge.conLaFamilia(),
         displayMedium = base.displayMedium.conLaFamilia(),

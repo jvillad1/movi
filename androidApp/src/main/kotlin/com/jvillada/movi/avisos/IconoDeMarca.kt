@@ -14,7 +14,7 @@ import com.jvillada.movi.shared.model.Marca
  *
  * 64 dp es el tamaño del ícono grande de una notificación; la letra se achica con el largo de la
  * marca corta, con las mismas proporciones que `CirculoDeMarca` en la app. La tipografía es la del
- * sistema en negrita: Space Grotesk vive en los recursos de Compose y no se carga en un Worker.
+ * sistema en negrita: Figtree vive en los recursos de Compose y no se carga en un Worker.
  */
 internal fun iconoDeMarca(context: Context, marca: Marca): Bitmap {
     val lado = (64 * context.resources.displayMetrics.density).toInt().coerceAtLeast(48)
