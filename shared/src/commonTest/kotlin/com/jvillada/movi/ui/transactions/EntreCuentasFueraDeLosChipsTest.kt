@@ -62,4 +62,16 @@ class EntreCuentasFueraDeLosChipsTest {
         assertNull(tituloDelModoSinChip(CHIP_TODO))
         assertNull(tituloDelModoSinChip(CHIP_GASTOS))
     }
+
+    /**
+     * Vuelta de diseño 37: en el modo no van la franja ni «por revisar» —hablan de todo el período—;
+     * en los chips de siempre, sí.
+     */
+    @Test
+    fun `en el modo no va lo de arriba que habla de todo el periodo`() {
+        assertFalse(loDeArribaEnElModo(CHIP_ENTRE_CUENTAS))
+        assertTrue(loDeArribaEnElModo(CHIP_TODO))
+        assertTrue(loDeArribaEnElModo(CHIP_GASTOS))
+        assertTrue(loDeArribaEnElModo(CHIP_INGRESOS))
+    }
 }

@@ -1,7 +1,10 @@
 package com.jvillada.movi.ui.cuadre
 
 import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.esBien
+import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.ui.components.formatMoney
 import com.jvillada.movi.ui.components.saldoEnSuMoneda
 import com.jvillada.movi.ui.components.signedMoney
@@ -43,24 +46,73 @@ import kotlinx.datetime.LocalDate
 const val DIAS_PARA_VOLVER_A_CUADRAR = com.jvillada.movi.shared.model.DIAS_PARA_VOLVER_A_CUADRAR
 
 /**
- * **¿Esta cuenta entra en Cuadre de saldos?** Solo Dinero e Inversión.
+ * **¿Esta cuenta se «atrasa» en el cuadre?** Solo Dinero e Inversión: es la regla de `:core` que usan
+ * el server, Movi AI y los avisos de «sin cuadrar». **No es la lista de la pantalla**: desde la vuelta
+ * de diseño 37 la pantalla también lista las tarjetas (ver [seccionDelCuadre]), pero ninguna se
+ * reclama como atrasada.
  *
- * Desde la vuelta 33 el server también cuadra una **tarjeta** por la misma ruta
- * (`POST /api/accounts/{id}/balance-adjustment`), pero solo desde su detalle («Ajustar saldo», con la
- * hoja que pide la deuda total de hoy): esta pantalla y su aviso de «sin cuadrar» siguen sin ella,
- * por lo de abajo. En corto: acá entran las cuentas donde «lo que dice el
- * banco» es **un** número. Una tarjeta no tiene esa propiedad —saldo actual, saldo a pagar, cupo
- * disponible y compras sin facturar son cuatro cifras distintas, y ninguna significa lo mismo que
- * la deuda que Movi acumula compra por compra—, y además ya tiene quién la concilie: el extracto y
- * la captura de mensajes. Un préstamo se cuadra en Créditos, donde al lado se ven la cuota, la
- * tasa y los intereses que explican la diferencia.
+ * Por qué una tarjeta no se reclama: «lo que dice el banco» de una tarjeta no es **un** número —saldo
+ * actual, saldo a pagar, cupo disponible y compras sin facturar son cuatro cifras distintas—, y ya
+ * tiene quién la concilie: el extracto y la captura de mensajes. Cuando el dueño sí quiere cuadrarla,
+ * la pantalla le pide la cifra que va («Cuánto debes según el banco», la deuda total de hoy). Un
+ * préstamo se cuadra en Créditos, donde al lado se ven la cuota, la tasa y los intereses que explican
+ * la diferencia.
  */
 fun sePuedeCuadrar(cuenta: Account): Boolean = com.jvillada.movi.shared.model.sePuedeCuadrar(cuenta)
 // ↑ Un bien tampoco: no tiene saldo que comparar contra un banco, tiene un avalúo, y se actualiza
 // en su propia hoja. El server lo rechaza igual (422), así que ofrecerlo acá sería un control muerto.
 
+/**
+ * **Las secciones de Cuadre de saldos** (vuelta de diseño 37), en el orden en que se ven. Cada cuenta
+ * va bajo su encabezado; antes llevaba un rótulo «Dinero» suelto al final de su tarjeta.
+ */
+enum class SeccionDelCuadre(val titulo: String) {
+    DINERO("Dinero"),
+    INVERSION("Inversión"),
+    TARJETAS("Tarjetas"),
+}
+
+/**
+ * **En qué sección de Cuadre de saldos va [cuenta]**, o `null` si no va en la pantalla.
+ *
+ * Dinero e Inversión por [sePuedeCuadrar]; las **tarjetas** (vuelta de diseño 37) por este predicado
+ * propio de la pantalla, sin tocar [sePuedeCuadrar] —que sigue sin tarjetas para el server y los
+ * avisos—. Su ajuste va por la misma ruta que la hoja «Ajustar saldo» del detalle de la tarjeta
+ * (`CardBalanceSheet`, `POST /api/accounts/{id}/balance-adjustment`, que acepta `CREDIT_CARD` desde
+ * la vuelta 33). Los préstamos no: se cuadran en Créditos. Un bien tampoco.
+ */
+fun seccionDelCuadre(cuenta: Account): SeccionDelCuadre? = when {
+    cuenta.esBien -> null
+    cuenta.type == AccountType.CREDIT_CARD -> SeccionDelCuadre.TARJETAS
+    !sePuedeCuadrar(cuenta) -> null
+    cuenta.type.group == AccountGroup.INVERSION -> SeccionDelCuadre.INVERSION
+    else -> SeccionDelCuadre.DINERO
+}
+
+/** ¿[cuenta] es una deuda que se cuadra acá (una tarjeta)? Cambia el rótulo y el texto del ajuste. */
+fun seCuadraComoDeuda(cuenta: Account): Boolean = seccionDelCuadre(cuenta) == SeccionDelCuadre.TARJETAS
+
 /** Las cuentas que la pantalla «Cuadre de saldos» lista, en el orden en que vienen. */
-fun cuentasParaCuadrar(cuentas: List<Account>): List<Account> = cuentas.filter { sePuedeCuadrar(it) }
+fun cuentasParaCuadrar(cuentas: List<Account>): List<Account> = cuentas.filter { seccionDelCuadre(it) != null }
+
+/**
+ * **Las cuentas agrupadas por sección**, en el orden de [SeccionDelCuadre] y, adentro, en el orden en
+ * que vienen (así la cuenta de [cuentasConLaPrimera] queda primera de la suya). Sin secciones vacías.
+ */
+fun seccionesDelCuadre(cuentas: List<Account>): List<Pair<SeccionDelCuadre, List<Account>>> =
+    SeccionDelCuadre.entries.mapNotNull { seccion ->
+        cuentas.filter { seccionDelCuadre(it) == seccion }.takeIf { it.isNotEmpty() }?.let { seccion to it }
+    }
+
+/** El rótulo del campo de una cuenta de Dinero o Inversión. */
+const val LO_QUE_DICE_EL_BANCO: String = "Lo que dice el banco"
+
+/** El rótulo del campo de una tarjeta: la deuda total, no el pago mínimo ni el cupo. */
+const val CUANTO_DEBES_SEGUN_EL_BANCO: String = "Cuánto debes según el banco"
+
+/** El rótulo del campo de [cuenta]. Basta: la pantalla no repite una ayuda debajo de cada campo. */
+fun rotuloDelCampoDelCuadre(cuenta: Account): String =
+    if (seCuadraComoDeuda(cuenta)) CUANTO_DEBES_SEGUN_EL_BANCO else LO_QUE_DICE_EL_BANCO
 
 /**
  * **Las cuentas del cuadre con [primeraId] arriba** (vuelta de diseño 23): «Cuadrar efectivo» abre el
@@ -130,14 +182,21 @@ fun montoDelAjuste(diferencia: Long, moneda: String): String =
  * La pantalla no escribe nada hasta que el dueño confirma, y este texto es la mitad que hace que
  * confirmar signifique algo: dice las dos cifras que se están comparando y el movimiento exacto
  * que va a quedar. «Movi dice $352.082, tú dices $270.730: se va a anotar un ajuste de −$81.352».
+ *
+ * `null` con el campo vacío (vuelta de diseño 37): antes decía «Escribe el saldo que te muestra el
+ * banco hoy.» debajo de **cada** cuenta; el rótulo del campo ya lo dice.
+ *
+ * Con [esDeuda] (una tarjeta) se dice como la hoja «Ajustar saldo» de la tarjeta: subir lo que se
+ * debe es un **cargo**, bajarlo un **abono**.
  */
-fun textoDelCuadre(saldoEnMovi: Long, saldoDelBanco: Long?, moneda: String): String {
-    val diferencia = diferenciaDelCuadre(saldoEnMovi, saldoDelBanco)
+fun textoDelCuadre(saldoEnMovi: Long, saldoDelBanco: Long?, moneda: String, esDeuda: Boolean = false): String? {
+    val diferencia = diferenciaDelCuadre(saldoEnMovi, saldoDelBanco) ?: return null
+    val dos = "Movi dice ${formatMoney(saldoEnMovi, moneda)}, tú dices ${formatMoney(saldoDelBanco!!, moneda)}"
     return when {
-        diferencia == null -> "Escribe el saldo que te muestra el banco hoy."
         diferencia == 0L -> "Coincide con Movi: no hay nada que anotar."
-        else -> "Movi dice ${formatMoney(saldoEnMovi, moneda)}, tú dices ${formatMoney(saldoDelBanco!!, moneda)}: " +
-            "se va a anotar un ajuste de ${montoDelAjuste(diferencia, moneda)}."
+        esDeuda && diferencia > 0L -> "$dos: se va a anotar un cargo de ${formatMoney(diferencia, moneda)}."
+        esDeuda -> "$dos: se va a anotar un abono de ${formatMoney(-diferencia, moneda)}."
+        else -> "$dos: se va a anotar un ajuste de ${montoDelAjuste(diferencia, moneda)}."
     }
 }
 
