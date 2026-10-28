@@ -1,6 +1,28 @@
 package com.jvillada.movi.server.routes
 
 import com.jvillada.movi.server.credits.toCreditTerms
+import com.jvillada.movi.server.db.Accounts
+import com.jvillada.movi.server.db.RecurringOccurrences
+import com.jvillada.movi.server.db.VoidEvents
+import com.jvillada.movi.server.db.toFinancialEvent
+import com.jvillada.movi.shared.model.MismoPagoConfirmado
+import com.jvillada.movi.shared.model.PartesDelAviso
+import com.jvillada.movi.shared.model.pataDelAviso
+import io.ktor.server.request.receive
+import io.ktor.server.routing.post
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
+import com.jvillada.movi.server.plugins.jsonDeLaApi
+import com.jvillada.movi.shared.model.MAXIMO_DE_PARTES_DEL_AVISO
+import com.jvillada.movi.shared.model.ParteElegida
+import com.jvillada.movi.shared.model.RepartoRecordado
+import com.jvillada.movi.shared.model.claveDelReparto
+import com.jvillada.movi.shared.model.operacion
+import com.jvillada.movi.shared.model.parteParaRecordar
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.serializer
+import org.jetbrains.exposed.sql.ResultRow
+import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.deleteWhere
 import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.RecurringRules
@@ -18,7 +40,6 @@ import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.DestinoConocido
 import com.jvillada.movi.shared.model.EL_REPARTO_NO_SUMA
 import com.jvillada.movi.shared.model.EventSource
-import com.jvillada.movi.shared.model.MAXIMO_DE_PARTES
 import com.jvillada.movi.shared.model.OperacionDelAviso
 import com.jvillada.movi.shared.model.PagoParaRepartir
 import com.jvillada.movi.shared.model.ParsedSms
@@ -74,7 +95,7 @@ private const val MEDIO_DIA_DEL_REPARTO = 12L * 60 * 60 * 1000
  * no dice la cuenta, el SMS sí.
  */
 internal suspend fun propuestaDeRepartoDe(uid: String, smsId: String, ahora: Long): PropuestaDeReparto? {
-    class Leido(val propuesta: SmsMessage, val parsed: ParsedSms?, val destino: DestinoConocido?, val nombraAAlguien: Boolean, val cuando: Long)
+    class Leido(val propuesta: SmsMessage, val parsed: ParsedSms?, val destino: DestinoConocido?, val nombraAAlguien: Boolean, val cuando: Long, val recordado: RepartoRecordado?)
     val leido = dbQuery {
         val fila = SmsMessages.selectAll()
             .where { (SmsMessages.id eq smsId) and (SmsMessages.userId eq uid) }
@@ -88,7 +109,8 @@ internal suspend fun propuestaDeRepartoDe(uid: String, smsId: String, ahora: Lon
         val destino = miembros.firstNotNullOfOrNull { destinoQueNombra(it.text, sabe.destinos) }
         val nombra = destino != null || miembros.any { identificadorDelDestinoEn(it.text) != null }
         val cuando = miembros.minOf { momentoDelSms(it.time, ahora) }
-        Leido(propuesta, parsed, destino, nombra, cuando)
+        val clave = miembros.firstNotNullOfOrNull { claveDelReparto(it.text, sabe.destinos) }
+        Leido(propuesta, parsed, destino, nombra, cuando, repartoRecordado(uid, clave, sabe.destinos))
     } ?: return null
     val parsed = leido.parsed
     val base = PropuestaDeReparto(avisoId = leido.propuesta.id, destinoId = leido.destino?.id, destinoNombre = leido.destino?.nombre)
@@ -100,6 +122,7 @@ internal suspend fun propuestaDeRepartoDe(uid: String, smsId: String, ahora: Lon
         moneda = parsed.currency,
         pagos = pagos,
         exacto = repartoExacto(monto, pagos)?.map { it.ruleId }.orEmpty(),
+        recordado = leido.recordado,
     )
 }
 
@@ -140,25 +163,15 @@ internal suspend fun pagosParaRepartir(uid: String, dia: LocalDate, destinoId: S
 
 /** Cómo terminó el reparto: con qué movimiento queda el aviso y todos los que se crearon, o por qué no. */
 internal sealed interface Repartido {
-    data class Hecho(val eventoDelAviso: String, val ids: List<String>) : Repartido
+    data class Hecho(val eventoDelAviso: String, val ids: List<String>, val moneda: String = "COP") : Repartido
     data class Rechazado(val estado: HttpStatusCode, val motivo: String) : Repartido
 }
 
 /**
  * **Escribe el reparto de [aviso]**, dentro de la transacción de [confirmarElMismoPago]: o todas las
- * partes, o ninguna (si una falla a mitad de camino, se deshace lo escrito).
- *
- * - Las partes suman **exactamente** lo que dice el aviso, cada pago va una sola vez y cada parte
- *   lleva su movimiento: [ParteDelReparto.patas] para la cuota de un crédito suyo que él paga,
- *   [ParteDelReparto.evento] para un recurrente común. Nada de un pago de tarjeta.
- * - Un recurrente queda sellado en su período con su movimiento ([sellarOcurrencia]). Si su
- *   vencimiento todavía no llegó, el sello solo se pone si cae en el período en curso (el techo de
- *   [sellarOcurrencia]: pagar antes es lo normal); si no, el pago se reconoce por el nombre cuando
- *   venza: el movimiento lleva el nombre del pago.
- * - [recordarDestinoId]: los pagos elegidos quedan asociados a ese tercero (si es del dueño y el pago
- *   no tenía uno), para que la próxima vez la suma exacta se proponga sola.
- *
- * Devuelve el movimiento con que queda el aviso: el de la primera parte (su pata del dinero).
+ * partes, o ninguna (si una falla a mitad de camino, se deshace lo escrito). Lee el aviso —tiene que
+ * ser plata que salió— y escribe con [escribirLasPartes], la misma que reparte un movimiento ya
+ * anotado ([repartirUnMovimiento]).
  */
 internal fun Transaction.escribirElReparto(
     uid: String,
@@ -167,55 +180,120 @@ internal fun Transaction.escribirElReparto(
     recordarDestinoId: String?,
     ahora: Long,
 ): Repartido {
-    fun no(motivo: String, estado: HttpStatusCode = HttpStatusCode.UnprocessableEntity) = Repartido.Rechazado(estado, motivo)
-    if (partes.isEmpty() || partes.size > MAXIMO_DE_PARTES) return no("Un reparto lleva entre 1 y $MAXIMO_DE_PARTES pagos.")
-    if (partes.map { it.ruleId }.distinct().size != partes.size) return no("Un pago no puede ir dos veces en el mismo reparto.")
     val leido = (if (esUnComprobante(aviso)) parsedDeUnComprobante(uid, aviso.id, aviso.text) else null)
         ?: parseSms(aviso.text, aviso.bank)
-        ?: return no(NO_TRAE_UN_MOVIMIENTO)
-    if (leido.type != TransactionType.EXPENSE) return no("Solo se reparte la plata que salió.")
-    if (partes.any { it.monto <= 0L } || partes.sumOf { it.monto } != leido.amount.roundToLong()) return no(EL_REPARTO_NO_SUMA)
+        ?: return Repartido.Rechazado(HttpStatusCode.UnprocessableEntity, NO_TRAE_UN_MOVIMIENTO)
+    if (leido.type != TransactionType.EXPENSE) return Repartido.Rechazado(HttpStatusCode.UnprocessableEntity, "Solo se reparte la plata que salió.")
+    val origen = if (esIdDeComprobante(aviso.id)) EventSource.OCR else EventSource.SMS
+    return escribirLasPartes(uid, leido.amount.roundToLong(), leido.currency, aviso.text, origen, partes, recordarDestinoId, ahora)
+}
+
+/**
+ * **Escribe las partes de una salida de [total] en [moneda]**, dentro de la transacción del llamador:
+ * o todas, o ninguna.
+ *
+ * - **Suman exactamente [total]**, cada una mayor que cero ([EL_REPARTO_NO_SUMA]), y **salen todas de la
+ *   misma cuenta**, que tiene que ser del dueño y estar en [moneda]: la cuenta de origen recibe N
+ *   salidas que suman el aviso.
+ * - **Cada parte es válida igual que una sola.** Con dos patas ([ParteDelReparto.patas]: una cuota, el
+ *   pago de una tarjeta, un traspaso) la escribe [escribirLasPatasDelAviso] —la misma de un aviso
+ *   suelto, con `validarDosPatas` y el desglose de la deuda—; un gasto ([ParteDelReparto.evento]) pasa
+ *   por [movimientoDelAviso], las reglas de `POST /api/events`. Un avance no se reparte.
+ * - **Un pago del período por parte, a lo sumo una vez** ([ParteDelReparto.ruleId]): la cuota de un
+ *   crédito que él paga (lo que paga otro no sale de esta plata) o un recurrente común, que queda
+ *   sellado en su período ([sellarOcurrencia]; si su vencimiento todavía no llegó, el sello solo se
+ *   pone si cae en el período en curso, el techo de [sellarOcurrencia]). Nada de un pago de tarjeta
+ *   del checklist. Una parte **suelta** ([ParteDelReparto.ruleId] vacío) no sella nada: una cuota igual
+ *   marca su período por la pata de la deuda (`pagoDeCuotaLegs`, lo que lee `PagosDeDeuda.kt`).
+ * - [recordarDestinoId]: los pagos elegidos quedan asociados a ese tercero (si es del dueño y el pago no
+ *   tenía uno), para que la próxima vez la suma exacta se proponga sola.
+ *
+ * Devuelve el movimiento con que queda el aviso —la pata del dinero de la primera parte— y todos los
+ * que se crearon, en orden.
+ */
+internal fun Transaction.escribirLasPartes(
+    uid: String,
+    total: Long,
+    moneda: String,
+    textoDelAviso: String?,
+    origen: EventSource,
+    partes: List<ParteDelReparto>,
+    recordarDestinoId: String?,
+    ahora: Long,
+): Repartido {
+    fun no(motivo: String, estado: HttpStatusCode = HttpStatusCode.UnprocessableEntity) = Repartido.Rechazado(estado, motivo)
+    if (partes.isEmpty() || partes.size > MAXIMO_DE_PARTES_DEL_AVISO) return no("Un reparto lleva entre 1 y $MAXIMO_DE_PARTES_DEL_AVISO partes.")
+    val conPago = partes.map { it.ruleId }.filter { it.isNotBlank() }
+    if (conPago.distinct().size != conPago.size) return no("Un pago no puede ir dos veces en el mismo reparto.")
+    if (partes.any { it.monto <= 0L } || partes.sumOf { it.monto } != total) return no(EL_REPARTO_NO_SUMA)
+
+    // Todas salen de la misma cuenta, del dueño y en la moneda del aviso.
+    val origenes = partes.map { it.patas?.origenId ?: it.evento?.accountId }
+    if (origenes.any { it == null }) return no("Cada parte lleva su movimiento, o las dos patas.", HttpStatusCode.BadRequest)
+    if (origenes.distinct().size != 1) return no("Todas las partes salen de la misma cuenta.")
+    val cuentaDeOrigen = Accounts.selectAll()
+        .where { (Accounts.userId eq uid) and (Accounts.id eq origenes.first()!!) }
+        .firstOrNull() ?: return no("Cuenta no encontrada", HttpStatusCode.NotFound)
+    if (cuentaDeOrigen[Accounts.currency] != moneda) return no("Las partes salen en $moneda, la moneda del aviso.")
 
     // Primero se valida todo lo que no depende de escribir.
     for (parte in partes) {
-        if ((parte.evento == null) == (parte.patas == null)) {
-            return no("Cada pago lleva su movimiento, o las dos patas si es una cuota.", HttpStatusCode.BadRequest)
-        }
-        if (parte.ruleId.startsWith(CARD_RULE_PREFIX)) return no("El pago de una tarjeta no se reparte: se anota con Reconciliar.")
         val patas = parte.patas
-        if (parte.ruleId.startsWith(CREDIT_RULE_PREFIX)) {
-            if (patas == null || patas.operacion != OperacionDelAviso.CUOTA ||
-                "$CREDIT_RULE_PREFIX${patas.destinoId}" != parte.ruleId || patas.monto != parte.monto
-            ) return no("La cuota de un crédito se reparte con sus dos patas, hacia ese crédito y por su parte.")
-            val terms = Credits.selectAll()
-                .where { (Credits.accountId eq patas.destinoId) and (Credits.userId eq uid) }
-                .firstOrNull()?.toCreditTerms() ?: return no("Ese crédito no existe.", HttpStatusCode.NotFound)
-            // La regla de plata de «¿Quién paga esta cuota?»: lo que paga otro no sale de este envío.
-            if (!entraAlBarridoDeAvisos(terms)) return no("Esa cuota la paga otro o se descuenta de la nómina: no sale de tu cuenta.")
-        } else {
-            val evento = parte.evento ?: return no("Cada pago lleva su movimiento.")
-            if (patas != null) return no("Solo la cuota de un crédito lleva dos patas.")
-            if (!PERIODO_DEL_REPARTO.matches(parte.periodo)) return no("Periodo inválido: usa \"YYYY-MM\".", HttpStatusCode.BadRequest)
-            if (evento.type != TransactionType.EXPENSE || evento.amount != parte.monto) {
-                return no("El movimiento de cada pago tiene que ser un gasto por su parte.")
+        val evento = parte.evento
+        if ((evento == null) == (patas == null)) {
+            return no("Cada parte lleva su movimiento, o las dos patas si es una cuota, un pago de tarjeta o un traspaso.", HttpStatusCode.BadRequest)
+        }
+        // Lo que dice la app que es, y lo que trae, tienen que ser lo mismo.
+        val tipo = parte.tipo
+        if (tipo != null && (if (patas != null) tipo.operacion != patas.operacion else tipo.operacion != null)) {
+            return no("Esa parte no es lo que dice ser. Revisa qué fue.")
+        }
+        if (parte.ruleId.startsWith(CARD_RULE_PREFIX)) return no("El pago de una tarjeta no se reparte como pago del período: elígelo como «Pago de tarjeta».")
+        when {
+            parte.ruleId.startsWith(CREDIT_RULE_PREFIX) -> {
+                if (patas == null || patas.operacion != OperacionDelAviso.CUOTA ||
+                    "$CREDIT_RULE_PREFIX${patas.destinoId}" != parte.ruleId || patas.monto != parte.monto
+                ) return no("La cuota de un crédito se reparte con sus dos patas, hacia ese crédito y por su parte.")
+                val terms = Credits.selectAll()
+                    .where { (Credits.accountId eq patas.destinoId) and (Credits.userId eq uid) }
+                    .firstOrNull()?.toCreditTerms() ?: return no("Ese crédito no existe.", HttpStatusCode.NotFound)
+                // La regla de plata de «¿Quién paga esta cuota?»: lo que paga otro no sale de este envío.
+                if (!entraAlBarridoDeAvisos(terms)) return no("Esa cuota la paga otro o se descuenta de la nómina: no sale de tu cuenta.")
             }
-            val existe = RecurringRules.selectAll()
-                .where { (RecurringRules.id eq parte.ruleId) and (RecurringRules.userId eq uid) }
-                .count() > 0
-            if (!existe) return no("Ese pago no existe.", HttpStatusCode.NotFound)
+            parte.ruleId.isNotBlank() -> {
+                if (evento == null) return no("Solo la cuota de un crédito lleva dos patas.")
+                if (!PERIODO_DEL_REPARTO.matches(parte.periodo)) return no("Periodo inválido: usa \"YYYY-MM\".", HttpStatusCode.BadRequest)
+                if (evento.type != TransactionType.EXPENSE || evento.amount != parte.monto) {
+                    return no("El movimiento de cada pago tiene que ser un gasto por su parte.")
+                }
+                val existe = RecurringRules.selectAll()
+                    .where { (RecurringRules.id eq parte.ruleId) and (RecurringRules.userId eq uid) }
+                    .count() > 0
+                if (!existe) return no("Ese pago no existe.", HttpStatusCode.NotFound)
+            }
+            // Una parte suelta: lo que el dueño eligió en «Repartir en partes».
+            patas != null -> {
+                if (patas.operacion == OperacionDelAviso.AVANCE) return no("Un avance no se reparte: es plata que entra.")
+                if (patas.monto != parte.monto) return no("Las dos patas de cada parte van por su monto.")
+            }
+            else -> {
+                if (evento!!.type != TransactionType.EXPENSE || evento.amount != parte.monto) {
+                    return no("El movimiento de cada parte tiene que ser un gasto por su monto.")
+                }
+                if (evento.currency != moneda) return no("Las partes salen en $moneda, la moneda del aviso.")
+            }
         }
     }
 
     val transaccion = this
     fun deshacer(rechazo: Repartido.Rechazado): Repartido.Rechazado = rechazo.also { transaccion.rollback() }
-    val origen = if (esIdDeComprobante(aviso.id)) EventSource.OCR else EventSource.SMS
     val hoy = AppClock.today()
     val ids = mutableListOf<String>()
     var delAviso: String? = null
     for (parte in partes) {
         val patas = parte.patas
         if (patas != null) {
-            when (val escritas = escribirLasPatasDelAviso(uid, patas, origen, aviso.text, ahora)) {
+            when (val escritas = escribirLasPatasDelAviso(uid, patas, origen, textoDelAviso, ahora)) {
                 is PatasDelAviso.Escritas -> {
                     ids += escritas.ids
                     if (delAviso == null) delAviso = escritas.pataDelAviso
@@ -234,6 +312,7 @@ internal fun Transaction.escribirElReparto(
         insertarMovimiento(uid, evento)
         ids += evento.id
         if (delAviso == null) delAviso = evento.id
+        if (parte.ruleId.isBlank()) continue
         val regla = RecurringRules.selectAll()
             .where { (RecurringRules.id eq parte.ruleId) and (RecurringRules.userId eq uid) }
             .first().toRule()
@@ -242,9 +321,142 @@ internal fun Transaction.escribirElReparto(
         sellarOcurrencia(uid, regla, parte.periodo, evento.id, hoy)
     }
 
-    recordarElTercero(uid, partes, recordarDestinoId)
-    return Repartido.Hecho(delAviso!!, ids)
+    recordarElTercero(uid, partes.filter { it.ruleId.isNotBlank() }, recordarDestinoId)
+    return Repartido.Hecho(delAviso!!, ids, moneda)
 }
+
+/**
+ * **Enlaza los avisos [smsIds] con todos los movimientos del reparto** (`sms_messages.partes_eventos`),
+ * en orden. `sms_messages.evento_id` lo pone [confirmarElMismoPago], como siempre, con el primero.
+ */
+internal fun Transaction.enlazarLasPartes(uid: String, smsIds: List<String>, eventoIds: List<String>) {
+    if (smsIds.isEmpty()) return
+    val json = jsonDeLaApi.encodeToString(ListSerializer(String.serializer()), eventoIds)
+    SmsMessages.update({ (SmsMessages.userId eq uid) and (SmsMessages.id inList smsIds) }) {
+        it[SmsMessages.partesEventos] = json
+    }
+}
+
+/** Todos los movimientos con que quedó repartido el aviso de [fila], en orden; vacía si no se repartió. */
+internal fun partesDeLaFila(fila: ResultRow): List<String> =
+    fila[SmsMessages.partesEventos]?.let { json ->
+        runCatching { jsonDeLaApi.decodeFromString(ListSerializer(String.serializer()), json) }.getOrNull()
+    }.orEmpty()
+
+/** Todos los movimientos con que quedó repartido el aviso [smsId], en orden; vacía si no se repartió. */
+internal fun Transaction.partesEnlazadas(uid: String, smsId: String): List<String> =
+    SmsMessages.selectAll()
+        .where { (SmsMessages.userId eq uid) and (SmsMessages.id eq smsId) }
+        .firstOrNull()?.let(::partesDeLaFila).orEmpty()
+
+/**
+ * **Recuerda el reparto** para proponerlo la próxima vez: lo guarda en los mismos avisos
+ * (`sms_messages.reparto`). Solo con dos partes o más. «La última vez» es el último aviso repartido a
+ * la misma persona ([repartoRecordado]): la memoria es el aviso, sin tabla aparte.
+ */
+internal fun Transaction.recordarElReparto(uid: String, smsIds: List<String>, partes: List<ParteDelReparto>, moneda: String) {
+    if (partes.size < 2 || smsIds.isEmpty()) return
+    val elegidas = partes.map { parteParaRecordar(it) ?: return }
+    val origenId = partes.first().let { it.patas?.origenId ?: it.evento?.accountId } ?: return
+    val recordado = RepartoRecordado(origenId = origenId, monto = partes.sumOf { it.monto }, moneda = moneda, partes = elegidas)
+    val json = jsonDeLaApi.encodeToString(RepartoRecordado.serializer(), recordado)
+    SmsMessages.update({ (SmsMessages.userId eq uid) and (SmsMessages.id inList smsIds) }) {
+        it[SmsMessages.reparto] = json
+    }
+}
+
+/**
+ * **El reparto de la última vez a [clave]** ([claveDelReparto]): el del aviso repartido más reciente
+ * que va a la misma persona. `null` si nunca se repartió uno así, o si no se puede leer.
+ */
+internal fun Transaction.repartoRecordado(uid: String, clave: String?, destinos: List<DestinoConocido>): RepartoRecordado? {
+    if (clave == null) return null
+    return SmsMessages.selectAll()
+        .where { (SmsMessages.userId eq uid) and SmsMessages.reparto.isNotNull() }
+        .sortedByDescending { it[SmsMessages.confirmadoEn] ?: 0L }
+        .firstOrNull { claveDelReparto(it[SmsMessages.text], destinos) == clave }
+        ?.let { fila -> runCatching { jsonDeLaApi.decodeFromString(RepartoRecordado.serializer(), fila[SmsMessages.reparto]!!) }.getOrNull() }
+}
+
+/**
+ * **Reparte en partes un movimiento ya anotado** (vuelta 27, punto 3): el giro que se confirmó antes
+ * como un solo gasto o un solo traspaso. En una transacción:
+ *
+ * 1. Se bloquea el movimiento (y su hermana si es una pata) y se anula con el mecanismo de siempre
+ *    (`void_events`, las dos patas juntas, como `POST /api/events/{id}/void`). Los sellos de recurrentes
+ *    que apuntaban a él se sueltan: las partes sellan lo suyo.
+ * 2. Se escriben las partes con [escribirLasPartes] —la misma del aviso— por el monto de la salida,
+ *    desde su cuenta, con su texto del banco y su origen. Si algo no pasa, se deshace todo (también la
+ *    anulación).
+ * 3. El aviso que estaba enlazado al original queda enlazado a la primera parte, y todas en
+ *    `partes_de_avisos`.
+ *
+ * **Idempotente**: si el original ya está anulado y la primera parte ya existe, contesta con las partes
+ * sin escribir nada.
+ */
+internal fun Transaction.repartirUnMovimiento(uid: String, eventoId: String, partes: List<ParteDelReparto>, ahora: Long): Repartido {
+    fun no(motivo: String, estado: HttpStatusCode = HttpStatusCode.UnprocessableEntity) = Repartido.Rechazado(estado, motivo)
+    val original = Events.selectAll()
+        .where { (Events.id eq eventoId) and (Events.userId eq uid) }
+        .forUpdate()
+        .firstOrNull()?.toFinancialEvent() ?: return no("Movimiento no encontrado", HttpStatusCode.NotFound)
+    val hermanas = original.transferId?.let { tr ->
+        Events.selectAll().where { (Events.userId eq uid) and (Events.transferId eq tr) }.forUpdate().map { it.toFinancialEvent() }
+    } ?: listOf(original)
+    val ids = hermanas.map { it.id }
+    val anulados = VoidEvents.selectAll()
+        .where { (VoidEvents.userId eq uid) and (VoidEvents.originalEventId inList ids) }
+        .map { it[VoidEvents.originalEventId] }.toSet()
+    val idsDeLasPartes = partes.flatMap { listOfNotNull(it.patas?.origenEventId, it.patas?.destinoEventId, it.evento?.id) }
+    if (anulados.isNotEmpty()) {
+        val yaEstan = idsDeLasPartes.isNotEmpty() &&
+            Events.selectAll().where { (Events.userId eq uid) and (Events.id inList idsDeLasPartes) }.count() == idsDeLasPartes.size.toLong()
+        if (yaEstan) {
+            val primera = partes.first().let { it.patas?.pataDelAviso ?: it.evento?.id }!!
+            return Repartido.Hecho(primera, idsDeLasPartes, original.currency)
+        }
+        return no("Ese movimiento está anulado.", HttpStatusCode.Conflict)
+    }
+    val salida = hermanas.singleOrNull { it.type == TransactionType.EXPENSE }
+        ?.takeIf { hermanas.size <= 2 }
+        ?: return no("Solo se reparte la plata que salió.")
+    val origenes = partes.map { it.patas?.origenId ?: it.evento?.accountId }.distinct()
+    if (origenes != listOf(salida.accountId)) return no("Las partes salen de la cuenta del movimiento.")
+
+    // 1. Anular, como siempre (antes de escribir: el desglose de una cuota no puede ver el original).
+    hermanas.forEach { pata ->
+        VoidEvents.insert {
+            it[VoidEvents.id] = "void_${java.util.UUID.randomUUID()}"
+            it[VoidEvents.userId] = uid
+            it[VoidEvents.originalEventId] = pata.id
+            it[VoidEvents.reason] = MOTIVO_DE_LA_ANULACION_AL_REPARTIR
+            it[VoidEvents.timestamp] = ahora
+        }
+    }
+    RecurringOccurrences.deleteWhere { (RecurringOccurrences.userId eq uid) and (RecurringOccurrences.eventId inList ids) }
+
+    // 2. Las partes, con la misma función del aviso.
+    val hecho = when (val escritas = escribirLasPartes(uid, salida.amount, salida.currency, salida.rawPayload, salida.source, partes, null, ahora)) {
+        is Repartido.Hecho -> escritas
+        is Repartido.Rechazado -> { rollback(); return escritas }
+    }
+
+    // 3. Los avisos que apuntaban al original, a la primera parte.
+    val avisos = SmsMessages.selectAll()
+        .where { (SmsMessages.userId eq uid) and (SmsMessages.eventoId inList ids) }
+        .map { it[SmsMessages.id] }
+    if (avisos.isNotEmpty()) {
+        SmsMessages.update({ (SmsMessages.userId eq uid) and (SmsMessages.id inList avisos) }) {
+            it[SmsMessages.eventoId] = hecho.eventoDelAviso
+        }
+        enlazarLasPartes(uid, avisos, hecho.ids)
+        recordarElReparto(uid, avisos, partes, hecho.moneda)
+    }
+    return hecho
+}
+
+/** El motivo que queda en `void_events` al repartir un movimiento ya anotado. */
+const val MOTIVO_DE_LA_ANULACION_AL_REPARTIR: String = "Repartido en partes"
 
 /** «YYYY-MM». */
 private val PERIODO_DEL_REPARTO = Regex("""\d{4}-\d{2}""")
@@ -276,6 +488,23 @@ private fun Transaction.recordarElTercero(uid: String, partes: List<ParteDelRepa
  * aviso no es del usuario.
  */
 fun Route.repartoRoutes() {
+    /**
+     * `POST /api/events/{id}/repartir` con [PartesDelAviso]: reparte un movimiento ya anotado (ver
+     * [repartirUnMovimiento]). 200 con [MismoPagoConfirmado] (`eventoId` = la primera parte, `patas` =
+     * todas); 404 si no es del usuario; 409 si ya estaba anulado; 422 si las partes no cuadran.
+     */
+    post("/api/events/{id}/repartir") {
+        val uid = call.userId()
+        val id = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
+        val pedido = runCatching { call.receive<PartesDelAviso>() }.getOrNull()
+            ?: return@post call.respond(HttpStatusCode.BadRequest)
+        val partes = pedido.partes.map { parte -> parte.copy(patas = conLaTasaDelDia(uid, parte.patas)) }
+        when (val hecho = dbQuery { repartirUnMovimiento(uid, id, partes, System.currentTimeMillis()) }) {
+            is Repartido.Hecho -> call.respond(MismoPagoConfirmado(eventoId = hecho.eventoDelAviso, creado = true, patas = hecho.ids))
+            is Repartido.Rechazado -> call.respond(hecho.estado, hecho.motivo)
+        }
+    }
+
     get("/api/sms/{id}/reparto") {
         val uid = call.userId()
         val id = call.parameters["id"] ?: return@get call.respond(HttpStatusCode.BadRequest)

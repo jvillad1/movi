@@ -2472,6 +2472,11 @@ class LocalRepository(
     // `vincularPagoDeDeuda`. El espejo local las trae en la próxima lectura de eventos.
     override suspend fun confirmarConLasDosPatas(smsId: String, patas: com.jvillada.movi.shared.model.DosPatasDelAviso) =
         remote.confirmarConLasDosPatas(smsId, patas)
+    // Varias partes, o repartir un movimiento ya anotado: directo al server, igual que las dos patas.
+    override suspend fun confirmarEnPartes(smsId: String, partes: com.jvillada.movi.shared.model.PartesDelAviso) =
+        remote.confirmarEnPartes(smsId, partes)
+    override suspend fun repartirElMovimiento(eventoId: String, partes: com.jvillada.movi.shared.model.PartesDelAviso) =
+        remote.repartirElMovimiento(eventoId, partes)
 
     override suspend fun getAvisosConfirmadosSinMovimiento() = remote.getAvisosConfirmadosSinMovimiento()
 

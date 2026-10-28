@@ -907,6 +907,21 @@ interface WalletRepository {
         throw UnsupportedOperationException("confirmarConLasDosPatas")
 
     /**
+     * `POST /api/sms/{id}/confirm` con **varias partes** (vuelta 27, `ElAvisoEnPartes.kt`): el aviso
+     * pagó varias cosas. El server escribe todas en una transacción, con la suma exacta del aviso, y
+     * contesta con todos los ids; un doble toque contesta lo mismo. Directo al server.
+     */
+    suspend fun confirmarEnPartes(smsId: String, partes: com.jvillada.movi.shared.model.PartesDelAviso): MismoPagoConfirmado =
+        throw UnsupportedOperationException("confirmarEnPartes")
+
+    /**
+     * `POST /api/events/{id}/repartir`: reparte en partes un movimiento ya anotado (lo anula y escribe
+     * las partes, en una transacción del server). Directo al server.
+     */
+    suspend fun repartirElMovimiento(eventoId: String, partes: com.jvillada.movi.shared.model.PartesDelAviso): MismoPagoConfirmado =
+        throw UnsupportedOperationException("repartirElMovimiento")
+
+    /**
      * `GET /api/sms/confirmados-sin-movimiento`: los avisos confirmados cuyo movimiento se anuló o
      * ya no existe. Ver `AvisoConfirmadoSinMovimiento`.
      */

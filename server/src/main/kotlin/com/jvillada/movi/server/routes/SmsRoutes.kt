@@ -53,6 +53,10 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.contentType
 import com.jvillada.movi.shared.model.ConfirmarElMismoPago
 import com.jvillada.movi.shared.model.DosPatasDelAviso
+import com.jvillada.movi.shared.model.PartesDelAviso
+import com.jvillada.movi.server.plugins.jsonDeLaApi
+import io.ktor.server.request.receiveText
+import kotlinx.serialization.json.jsonObject
 import com.jvillada.movi.shared.model.AVANCE_DE_TARJETA_CATEGORY
 import io.ktor.server.application.log
 import io.ktor.server.request.receive
@@ -739,12 +743,29 @@ fun Route.smsRoutes() {
         // avisado varias veces. Contesta [MismoPagoConfirmado] con los ids de las dos patas.
         //
         // **Sin cuerpo, lo de siempre**: el APK 1.69 crea su movimiento y confirma así, y no cambia nada.
+        //
+        // **Con `partes`, el aviso pagó varias cosas** (vuelta 27, `ElAvisoEnPartes.kt`): cada parte con
+        // sus patas o su gasto, escritas en la MISMA transacción de [confirmarElMismoPago] —el bloqueo,
+        // la idempotencia y `escribirLasPatasDelAviso` de siempre— y la suma exacta del aviso. El cuerpo
+        // de una sola parte ([DosPatasDelAviso]) sigue igual: el APK 1.77 no cambia nada.
         if (call.request.contentType().match(ContentType.Application.Json)) {
-            val patas = runCatching { call.receive<DosPatasDelAviso>() }.getOrNull()
+            val cuerpo = runCatching { jsonDeLaApi.parseToJsonElement(call.receiveText()).jsonObject }.getOrNull()
                 ?: return@post call.respond(HttpStatusCode.BadRequest)
-            val conTasa = conLaTasaDelDia(uid, patas)
+            val leido: Any = runCatching {
+                if ("partes" in cuerpo) jsonDeLaApi.decodeFromJsonElement(PartesDelAviso.serializer(), cuerpo)
+                else jsonDeLaApi.decodeFromJsonElement(DosPatasDelAviso.serializer(), cuerpo)
+            }.getOrNull() ?: return@post call.respond(HttpStatusCode.BadRequest)
+            // La TRM del día, si hace falta, antes de bloquear el aviso (ver [conLaTasaDelDia]).
+            val pedido = when (leido) {
+                is PartesDelAviso -> ConfirmarElMismoPago(
+                    listOf(id),
+                    reparto = leido.partes.map { parte -> parte.copy(patas = conLaTasaDelDia(uid, parte.patas)) },
+                    recordarDestinoId = leido.recordarDestinoId,
+                )
+                else -> ConfirmarElMismoPago(listOf(id), patas = conLaTasaDelDia(uid, leido as DosPatasDelAviso))
+            }
             val resultado = dbQuery {
-                val hecho = confirmarElMismoPago(uid, listOf(id), ConfirmarElMismoPago(listOf(id), patas = conTasa), System.currentTimeMillis())
+                val hecho = confirmarElMismoPago(uid, listOf(id), pedido, System.currentTimeMillis())
                 // Un comprobante, además, queda colgado de la cuenta de la pata del dinero.
                 if (hecho is Confirmacion.Hecha && esIdDeComprobante(id)) {
                     hecho.respuesta.eventoId?.let { enlazarElComprobante(uid, id, it) }

@@ -597,6 +597,13 @@ internal fun ContenidoDelMovimiento(
                 // `transferId` dentro de la misma transacción, así que no hay forma de dejar medio
                 // par anulado. Lo que se anula, y por cuánto en cada cuenta, lo dice la hoja de
                 // anular ([loQuePasaAlAnular]).
+                //
+                // Vuelta 27 · un traspaso o una cuota que en verdad pagó varias cosas se reparte desde
+                // la pata que sale: el server anula las dos y escribe las partes.
+                if (sePuedeRepartirEnPartes(event, cuentas)) {
+                    SeccionDeRepartirEnPartes(evento = event, cuentas = cuentas, onRepartido = onEventChanged)
+                    Spacer(Modifier.height(Espacio.m))
+                }
                 SeccionDeAnular(onAnular, habilitado = true)
                 Spacer(Modifier.height(Espacio.xl))
             }
@@ -739,11 +746,13 @@ internal fun ContenidoDelMovimiento(
     // categoría de cada gasto.
     val espacios = com.jvillada.movi.ui.espacios.rememberEspaciosParaRepartir(event)
     val ofreceRepartir = com.jvillada.movi.ui.espacios.ofreceRepartir(event, espacios)
+    // Vuelta 27 · «Repartir en partes»: un gasto que pagó varias cosas se anula y queda en partes.
+    val ofreceEnPartes = sePuedeRepartirEnPartes(event, cuentas)
     val acciones = accionesDelMovimiento(
         ofreceRepetir = ofreceRepetir,
         ofreceRepartir = ofreceRepartir,
         conTercero = tercero != null || ofreceGuardarElTercero,
-        conMas = onAnular != null || ofreceVincular,
+        conMas = onAnular != null || ofreceVincular || ofreceEnPartes,
     )
     val repartirEnMas = repartirVaEnMas(ofreceRepartir, acciones)
     val reducido = LocalMovimientoReducido.current
@@ -968,6 +977,12 @@ internal fun ContenidoDelMovimiento(
                                 Spacer(Modifier.height(Espacio.xs))
                                 Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
                             }
+                        }
+                        if (ofreceEnPartes) {
+                            Spacer(Modifier.height(Espacio.s))
+                            Separador(SangriaDeSeparador.Ninguna)
+                            Spacer(Modifier.height(Espacio.s))
+                            SeccionDeRepartirEnPartes(evento = event, cuentas = cuentas, onRepartido = onEventChanged)
                         }
                         SeccionDeAnular(onAnular, habilitado = !saving)
                     }

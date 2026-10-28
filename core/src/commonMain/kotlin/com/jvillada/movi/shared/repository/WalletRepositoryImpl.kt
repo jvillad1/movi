@@ -1238,6 +1238,18 @@ class WalletRepositoryImpl(
             setBody(patas)
         }.exigirExito().body()
 
+    override suspend fun confirmarEnPartes(smsId: String, partes: com.jvillada.movi.shared.model.PartesDelAviso): MismoPagoConfirmado =
+        client.post("$baseUrl/api/sms/$smsId/confirm") {
+            contentType(ContentType.Application.Json)
+            setBody(partes)
+        }.exigirExito().body()
+
+    override suspend fun repartirElMovimiento(eventoId: String, partes: com.jvillada.movi.shared.model.PartesDelAviso): MismoPagoConfirmado =
+        client.post("$baseUrl/api/events/$eventoId/repartir") {
+            contentType(ContentType.Application.Json)
+            setBody(partes)
+        }.exigirExito().body()
+
     override suspend fun getAvisosConfirmadosSinMovimiento(): List<com.jvillada.movi.shared.model.AvisoConfirmadoSinMovimiento> =
         client.get("$baseUrl/api/sms/confirmados-sin-movimiento").exigirExito().body()
 

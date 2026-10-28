@@ -25,6 +25,7 @@ import com.jvillada.movi.shared.model.SMS_STATE_CONFIRMED
 import com.jvillada.movi.shared.model.SMS_STATE_PENDING
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.repartoDeEntrada
 import com.jvillada.movi.shared.model.conElMotivoDelEnvio
 import com.jvillada.movi.shared.model.destinoQueNombra
 import com.jvillada.movi.shared.model.esUnComprobante
@@ -220,15 +221,19 @@ fun Route.bandejaQueSeVaciaRoutes() {
 }
 
 /**
- * Marca las propuestas que son **la suma exacta de varios pagos del período** del tercero al que
- * fueron ([PropuestaDelAviso.seReparte]): esas se reparten en Reconciliar, y la fila no las anota
- * como un solo movimiento. Solo mira las salidas; [propuestaDeRepartoDe] corta enseguida las que no
+ * Marca las propuestas que Movi propone **repartir** ([PropuestaDelAviso.seReparte]): la suma exacta de
+ * varios pagos del período del tercero al que fueron, las cuotas que el giro cubre con lo que sobra, o
+ * el reparto de la última vez (vuelta 27, [repartoDeEntrada]). Esas se reparten en Reconciliar, y la
+ * fila no las anota como un solo movimiento. Solo mira las salidas; [propuestaDeRepartoDe] corta enseguida las que no
  * van a nadie (una compra en un comercio).
  */
 internal suspend fun conLoQueSeReparte(uid: String, leidas: PropuestasDeLaBandeja, ahora: Long): PropuestasDeLaBandeja =
     leidas.copy(
         propuestas = leidas.propuestas.map { propuesta ->
             if (propuesta.leido?.type != TransactionType.EXPENSE) propuesta
-            else propuesta.copy(seReparte = propuestaDeRepartoDe(uid, propuesta.avisoId, ahora)?.exacto?.isNotEmpty() == true)
+            else propuesta.copy(
+                seReparte = propuestaDeRepartoDe(uid, propuesta.avisoId, ahora)
+                    ?.let { repartoDeEntrada(it, origenId = null, nombreDelTercero = null, categoriaDelAviso = null) } != null,
+            )
         },
     )

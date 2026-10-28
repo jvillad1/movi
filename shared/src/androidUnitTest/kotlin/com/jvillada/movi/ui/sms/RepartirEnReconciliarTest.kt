@@ -4,11 +4,22 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsNode
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.text.TextLayoutResult
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
 import com.jvillada.movi.shared.model.Account
@@ -21,7 +32,9 @@ import com.jvillada.movi.shared.model.MismoPagoConfirmado
 import com.jvillada.movi.shared.model.OperacionDelAviso
 import com.jvillada.movi.shared.model.PagoParaRepartir
 import com.jvillada.movi.shared.model.ParsedSms
+import com.jvillada.movi.shared.model.PartesDelAviso
 import com.jvillada.movi.shared.model.PropuestaDeReparto
+import com.jvillada.movi.shared.model.QueFueLaParte
 import com.jvillada.movi.shared.model.SMS_STATE_PENDING
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.TransactionType
@@ -33,15 +46,17 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
-import kotlin.test.assertNull
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 /**
- * # El giro del papá, repartido en Reconciliar
+ * # Un aviso que pagó varias cosas, en Reconciliar (vuelta 27)
  *
- * $4.280.000 a la cuenta del papá es exactamente la Libranza BBVA ($2.051.848) más la Hipoteca
- * Davibank ($2.228.152): Reconciliar lo dice arriba y «Repartir así» manda las dos cuotas, cada una
- * con sus dos patas. Sin suma exacta, «Repartir entre varios pagos…» deja elegirlos y el último toma
- * el resto.
+ * El caso del dueño con cifras de prueba: un giro de $4.273.333 a la cuenta del papá cubre la cuota
+ * de la Libranza ($1.900.000) y la de la Hipoteca ($2.350.000), y sobran $23.333. Reconciliar lo
+ * propone arriba; «Repartir así» abre «Repartir en partes» ya lleno, y nada se manda hasta tocar
+ * «Confirmar las 3 partes». Sin propuesta, «Esto pagó varias cosas» abre el editor vacío: la línea
+ * dice «Faltan $X» y el botón se prende solo cuando cuadra.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w411dp-h2400dp-xhdpi")
@@ -49,36 +64,41 @@ class RepartirEnReconciliarTest {
 
     @get:Rule val composeRule = createComposeRule()
 
-    private val texto = "Bancolombia: Transferiste \$4.280.000 desde tu cuenta *8133 a la cuenta *036200170136 el 27/09/2026 a las 10:00."
-    private val aviso = SmsMessage(id = "sms_papa", time = "2026-09-27 10:00", bank = "85540", text = texto, state = SMS_STATE_PENDING, det = "")
-    private val ahorros = Account("acc-8133", "Bancolombia Ahorros 8133 · 4057", AccountType.SAVINGS, 20_000_000L, "COP")
-    private val libranza = Account("acc_libranza_papa_bbva", "Libranza Papá (BBVA)", AccountType.LOAN, 97_718_920L, "COP")
-    private val hipoteca = Account("acc_hipoteca_papa_davibank", "Hipoteca Papá (Davibank)", AccountType.LOAN, 198_223_917L, "COP")
+    private val texto = "Bancolombia: Transferiste \$4.273.333 desde tu cuenta *8133 a la cuenta *0000111122 el 27/10/2026 a las 10:00."
+    private val aviso = SmsMessage(id = "sms_papa", time = "2026-10-27 10:00", bank = "85540", text = texto, state = SMS_STATE_PENDING, det = "")
+    private val ahorros = Account("acc-ahorros", "Ahorros", AccountType.SAVINGS, 20_000_000L, "COP")
+    private val libranza = Account("acc_libranza", "Libranza Papá", AccountType.LOAN, 90_000_000L, "COP")
+    private val hipoteca = Account("acc_hipoteca", "Hipoteca Papá", AccountType.LOAN, 190_000_000L, "COP")
 
     private fun pago(cuenta: Account, nombre: String, monto: Long) = PagoParaRepartir(
         ruleId = "$CREDIT_RULE_PREFIX${cuenta.id}", nombre = nombre, monto = monto, categoria = CUOTA_CATEGORY,
-        periodo = "2026-09", vence = "2026-09-27", cuentaDeLaDeudaId = cuenta.id, asociado = true,
+        periodo = "2026-10", vence = "2026-10-27", cuentaDeLaDeudaId = cuenta.id, asociado = true,
     )
-    private val bbva = pago(libranza, "Cuota Libranza Papá (BBVA)", 2_051_848L)
-    private val davibank = pago(hipoteca, "Cuota Hipoteca Papá (Davibank)", 2_228_152L)
+    private val cuotaLibranza = pago(libranza, "Cuota Libranza Papá", 1_900_000L)
+    private val cuotaHipoteca = pago(hipoteca, "Cuota Hipoteca Papá", 2_350_000L)
 
     private var propuesta = PropuestaDeReparto(
-        avisoId = "sms_papa", monto = 4_280_000L, destinoId = "dst_papa", destinoNombre = "Papá",
-        pagos = listOf(davibank, bbva), exacto = listOf(davibank.ruleId, bbva.ruleId),
+        avisoId = "sms_papa", monto = 4_273_333L, destinoId = "dst_papa", destinoNombre = "Papá",
+        pagos = listOf(cuotaLibranza, cuotaHipoteca),
     )
-    private val pedidos = mutableListOf<Pair<String, ConfirmarElMismoPago>>()
+    private val enviadas = mutableListOf<Pair<String, PartesDelAviso>>()
+    private val porGrupo = mutableListOf<ConfirmarElMismoPago>()
 
     private inner class Repo : RepositorioDePrueba() {
         override suspend fun getSms(id: String): SmsMessage = aviso
         override suspend fun parseSms(id: String): ParsedSms =
-            ParsedSms(4_280_000.0, "Transferencia a Papá", TransactionType.EXPENSE, "Otros")
+            ParsedSms(4_273_333.0, "Transferencia a Papá", TransactionType.EXPENSE, "Familia")
         override suspend fun getSmsCoincidencias(id: String): List<FinancialEvent> = emptyList()
         override suspend fun getAccounts(): List<Account> = listOf(ahorros, libranza, hipoteca)
         override suspend fun getEvents(accountId: String?): List<FinancialEvent> = emptyList()
         override suspend fun getRepartoDelAviso(id: String): PropuestaDeReparto = propuesta
+        override suspend fun confirmarEnPartes(smsId: String, partes: PartesDelAviso): MismoPagoConfirmado {
+            enviadas += smsId to partes
+            return MismoPagoConfirmado(eventoId = partes.partes.first().patas?.origenEventId, creado = true)
+        }
         override suspend fun confirmarElMismoPago(grupoId: String, pedido: ConfirmarElMismoPago): MismoPagoConfirmado {
-            pedidos += grupoId to pedido
-            return MismoPagoConfirmado(eventoId = pedido.reparto?.first()?.patas?.origenEventId, creado = true)
+            porGrupo += pedido
+            return MismoPagoConfirmado(creado = true)
         }
     }
 
@@ -95,10 +115,15 @@ class RepartirEnReconciliarTest {
         composeRule.waitForIdle()
     }
 
-    private fun tocar(texto: String) {
-        composeRule.onNodeWithText(texto, substring = true).performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
+    private fun tocar(texto: String, exacto: Boolean = false) {
+        val nodo = composeRule.onNode(hasText(texto, substring = !exacto) and hasClickAction())
+        // El botón de abajo no está dentro de la lista: no hay a dónde desplazarse.
+        runCatching { nodo.performScrollTo() }
+        nodo.performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
     }
+
+    private fun botonDeConfirmar(texto: String) = composeRule.onNode(hasText(texto) and hasClickAction())
 
     private fun montar() {
         Repositories.sustitutoDePrueba = Repo()
@@ -108,42 +133,175 @@ class RepartirEnReconciliarTest {
     }
 
     @Test
-    fun `Reconciliar propone los dos pagos y Repartir asi manda las dos cuotas con sus patas`() {
+    fun `la propuesta del caso del dueno - dos cuotas y lo que sobra, y nada se manda solo`() {
         montar()
-        esperar { cuantos("Son 2 pagos") == 1 }
-        assertEquals(1, cuantos("Son 2 pagos: Cuota Hipoteca Papá (Davibank) \$2.228.152 + Cuota Libranza Papá (BBVA) \$2.051.848"))
+        val pregunta = "¿Pagaste las cuotas de Libranza Papá y Hipoteca Papá? Suman \$4.250.000 · sobran \$23.333"
+        esperar { cuantos(pregunta) == 1 }
 
         tocar(REPARTIR_ASI)
-        esperar { pedidos.isNotEmpty() }
+        // El editor, lleno: las tres partes cuadran, pero no se mandó nada todavía.
+        esperar { cuantos("Cuadra con el aviso") == 1 }
+        assertTrue(enviadas.isEmpty())
+        botonDeConfirmar(botonDeConfirmarLasPartes(3)).assertIsEnabled()
 
-        val (grupo, pedido) = pedidos.single()
-        assertEquals("sms_papa", grupo)
-        assertEquals(listOf("sms_papa"), pedido.miembros)
-        assertNull(pedido.evento)
-        val partes = pedido.reparto!!
-        assertEquals(listOf(davibank.ruleId to 2_228_152L, bbva.ruleId to 2_051_848L), partes.map { it.ruleId to it.monto })
-        partes.forEach { parte ->
-            val patas = parte.patas!!
+        botonDeConfirmar(botonDeConfirmarLasPartes(3)).performSemanticsAction(SemanticsActions.OnClick)
+        esperar { enviadas.isNotEmpty() }
+        val (smsId, cuerpo) = enviadas.single()
+        assertEquals("sms_papa", smsId)
+        val partes = cuerpo.partes
+        assertEquals(listOf(QueFueLaParte.CUOTA, QueFueLaParte.CUOTA, QueFueLaParte.A_UN_TERCERO), partes.map { it.tipo })
+        assertEquals(4_273_333L, partes.sumOf { it.monto })
+        partes.take(2).forEach { parte ->
+            val patas = assertNotNull(parte.patas)
             assertEquals(OperacionDelAviso.CUOTA, patas.operacion)
-            assertEquals("acc-8133", patas.origenId)
+            assertEquals("acc-ahorros", patas.origenId)
             assertEquals(parte.ruleId.removePrefix(CREDIT_RULE_PREFIX), patas.destinoId)
         }
+        val alPapa = assertNotNull(partes.last().evento)
+        assertEquals(23_333L, alPapa.amount)
+        assertEquals("Transferencia a Papá", alPapa.description)
+        assertEquals(texto, alPapa.rawPayload)
     }
 
     @Test
-    fun `sin suma exacta, a mano, el ultimo toma el resto`() {
-        propuesta = propuesta.copy(monto = 4_300_000L, exacto = emptyList())
+    fun `sin propuesta, el modo partes dice Faltan y el boton se prende solo si cuadra`() {
+        propuesta = propuesta.copy(pagos = emptyList())
         montar()
-        esperar { cuantos(REPARTIR_A_MANO) == 1 }
-        assertEquals(0, cuantos("Son 2 pagos"))
+        esperar { cuantos(ESTO_PAGO_VARIAS_COSAS) == 1 }
+        assertEquals(0, cuantos(REPARTIR_ASI))
 
-        tocar(REPARTIR_A_MANO)
-        tocar("Cuota Libranza Papá (BBVA)")
-        tocar("Cuota Hipoteca Papá (Davibank)")
-        tocar(botonDeRepartirAMano(2))
-        esperar { pedidos.isNotEmpty() }
+        tocar(ESTO_PAGO_VARIAS_COSAS)
+        esperar { cuantos(REPARTIR_EN_PARTES) >= 1 }
+        // Una parte sin monto: falta todo el aviso, y el botón apagado dice por qué.
+        assertEquals(1, cuantos("Faltan \$4.273.333"))
+        botonDeConfirmar(botonDeConfirmarLasPartes(1)).assertIsNotEnabled()
+        composeRule.onNodeWithTag(TAG_RAZON_DE_LAS_PARTES).assert(hasText(UNA_SOLA_PARTE))
 
-        val partes = pedidos.single().second.reparto!!
-        assertEquals(listOf(bbva.ruleId to 2_051_848L, davibank.ruleId to 4_300_000L - 2_051_848L), partes.map { it.ruleId to it.monto })
+        // Una cuota a la Libranza por $4.000.000: faltan $273.333.
+        tocar("Cuota", exacto = true)
+        tocar("Libranza Papá", exacto = true)
+        composeRule.onNodeWithTag(tagDelMontoDeLaParte(0)).performScrollTo().performTextInput("4000000")
+        composeRule.waitForIdle()
+        assertEquals(1, cuantos("Faltan \$273.333"))
+
+        // «El resto a Papá»: una parte más por lo que falta, y ya cuadra.
+        tocar(elRestoA(TerceroDelAviso("Transferencia a Papá", "Papá")))
+        esperar { cuantos("Cuadra con el aviso") == 1 }
+        botonDeConfirmar(botonDeConfirmarLasPartes(2)).assertIsEnabled()
+
+        // Si se pasa, se apaga otra vez.
+        composeRule.onNodeWithTag(tagDelMontoDeLaParte(0)).performScrollTo().performTextInput("0")
+        composeRule.waitForIdle()
+        // La línea en vivo y la razón del botón lo dicen las dos.
+        composeRule.onNodeWithTag(TAG_CUADRE_DE_LAS_PARTES).assert(hasText("Te pasaste por", substring = true))
+        composeRule.onNodeWithTag(TAG_RAZON_DE_LAS_PARTES).assert(hasText("Te pasaste por", substring = true))
+        botonDeConfirmar(botonDeConfirmarLasPartes(2)).assertIsNotEnabled()
+        assertTrue(enviadas.isEmpty())
+    }
+
+    @Test
+    fun `el resto como gasto agrega una parte nueva con lo que falta y la primera no cambia`() {
+        propuesta = propuesta.copy(pagos = emptyList())
+        montar()
+        esperar { cuantos(ESTO_PAGO_VARIAS_COSAS) == 1 }
+        tocar(ESTO_PAGO_VARIAS_COSAS)
+        esperar { cuantos(REPARTIR_EN_PARTES) >= 1 }
+        // La parte 1 es un gasto en Familia (la categoría del aviso) por $4.000.000.
+        composeRule.onNodeWithTag(tagDelMontoDeLaParte(0)).performScrollTo().performTextInput("4000000")
+        composeRule.waitForIdle()
+        assertEquals(0, composeRule.onAllNodesWithTag(tagDelMontoDeLaParte(1)).fetchSemanticsNodes().size)
+
+        tocar(EL_RESTO_COMO_GASTO)
+        // Aparece la parte 2 por lo que faltaba; la 1 sigue en $4.000.000.
+        esperar { composeRule.onAllNodesWithTag(tagDelMontoDeLaParte(1)).fetchSemanticsNodes().size == 1 }
+        composeRule.onNodeWithTag(tagDelMontoDeLaParte(0)).assert(hasText("4.000.000", substring = true))
+        composeRule.onNodeWithTag(tagDelMontoDeLaParte(1)).assert(hasText("273.333", substring = true))
+        assertEquals(1, cuantos("Parte 2"))
+        assertEquals(1, cuantos("Cuadra con el aviso"))
+        botonDeConfirmar(botonDeConfirmarLasPartes(2)).assertIsEnabled()
+        assertEquals(0, composeRule.onAllNodesWithTag(TAG_RAZON_DE_LAS_PARTES).fetchSemanticsNodes().size)
+
+        botonDeConfirmar(botonDeConfirmarLasPartes(2)).performSemanticsAction(SemanticsActions.OnClick)
+        esperar { enviadas.isNotEmpty() }
+        val partes = enviadas.single().second.partes
+        assertEquals(listOf(4_000_000L, 273_333L), partes.map { it.monto })
+        assertEquals(listOf(QueFueLaParte.GASTO, QueFueLaParte.GASTO), partes.map { it.tipo })
+        assertEquals(listOf("Familia", "Familia"), partes.map { it.evento?.category })
+        // El texto de cada parte es el del aviso (su comercio), no la categoría.
+        assertEquals(listOf("Transferencia a Papá", "Transferencia a Papá"), partes.map { it.evento?.description })
+        assertEquals(listOf("Transferencia a Papá", "Transferencia a Papá"), partes.map { it.evento?.merchant })
+    }
+
+    @Test
+    fun `cada parte dice que fue en una sola fila, y debajo solo lo que ese tipo necesita con su rotulo`() {
+        propuesta = propuesta.copy(pagos = emptyList())
+        montar()
+        esperar { cuantos(ESTO_PAGO_VARIAS_COSAS) == 1 }
+        tocar(ESTO_PAGO_VARIAS_COSAS)
+        esperar { cuantos(REPARTIR_EN_PARTES) >= 1 }
+
+        fun textosDe(tag: String): List<String> {
+            val raiz = composeRule.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode()
+            fun bajar(n: SemanticsNode): List<String> =
+                n.config.getOrNull(SemanticsProperties.Text)?.map { it.text }.orEmpty() + n.children.flatMap(::bajar)
+            return bajar(raiz)
+        }
+        // «Qué fue», con los cinco tipos en su orden, y el gasto elegido.
+        assertEquals(listOf(ROTULO_QUE_FUE, "Gasto", "Cuota", "Pago de tarjeta", "Traspaso", "A un tercero"), textosDe(tagDelTipoDeLaParte(0)))
+        // Un gasto: solo «Categoría» y sus categorías.
+        val delGasto = textosDe(tagDelDetalleDeLaParte(0))
+        assertEquals("Categoría", delGasto.first())
+        assertTrue("Familia" in delGasto)
+        assertTrue("Libranza Papá" !in delGasto)
+
+        // Una cuota: solo «Crédito» y los créditos.
+        tocar("Cuota", exacto = true)
+        assertEquals(listOf("Crédito", "Libranza Papá", "Hipoteca Papá"), textosDe(tagDelDetalleDeLaParte(0)))
+
+        // Un traspaso: «Cuenta» (no hay otra cuenta de dinero en esta prueba).
+        tocar("Traspaso", exacto = true)
+        assertEquals("Cuenta", textosDe(tagDelDetalleDeLaParte(0)).first())
+
+        // A un tercero: «Persona» con la del aviso, y su categoría.
+        tocar("A un tercero", exacto = true)
+        val delTercero = textosDe(tagDelDetalleDeLaParte(0))
+        assertEquals(listOf("Persona", "Papá"), delTercero.take(2))
+        assertTrue("Categoría" in delTercero)
+    }
+
+    @Test
+    @Config(qualifiers = "w360dp-h3200dp-xhdpi")
+    fun `a 360 dp nada se recorta en la propuesta ni en el editor`() {
+        montar()
+        esperar { cuantos("¿Pagaste las cuotas") == 1 }
+        nadaSeRecortaEn(TAG_REPARTO_EN_RECONCILIAR)
+        tocar(REPARTIR_ASI)
+        esperar { cuantos("Cuadra con el aviso") == 1 }
+        nadaSeRecortaEn(TAG_EDITOR_DE_PARTES)
+    }
+
+    // ── Nada se recorta ──────────────────────────────────────────────────────────────────────
+
+    private fun texto(nodo: SemanticsNode): String =
+        nodo.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }.orEmpty()
+
+    private fun seVeEntero(nodo: SemanticsNode): Boolean {
+        val resultados = mutableListOf<TextLayoutResult>()
+        nodo.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(resultados)
+        val d = resultados.singleOrNull() ?: return true
+        val ancho = nodo.size.width + 0.5f
+        return (0 until d.lineCount).all { linea ->
+            !d.isLineEllipsized(linea) && d.getLineRight(linea) - d.getLineLeft(linea) <= ancho
+        } && !d.multiParagraph.didExceedMaxLines
+    }
+
+    private fun nadaSeRecortaEn(tag: String) {
+        val raiz = composeRule.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode()
+        fun bajar(n: SemanticsNode): List<SemanticsNode> =
+            (if (SemanticsActions.GetTextLayoutResult in n.config) listOf(n) else emptyList()) + n.children.flatMap(::bajar)
+        val nodos = bajar(raiz)
+        assertTrue(nodos.size > 2, "$tag pinta sus textos")
+        val recortados = nodos.filterNot(::seVeEntero).map(::texto)
+        assertTrue(recortados.isEmpty(), "$tag: se recortan $recortados")
     }
 }
