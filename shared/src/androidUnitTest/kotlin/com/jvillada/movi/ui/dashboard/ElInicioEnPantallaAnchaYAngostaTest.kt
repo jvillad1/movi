@@ -34,6 +34,8 @@ import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.components.ds.TAG_ACCION_RAPIDA
 import com.jvillada.movi.ui.components.ds.partePalabras
 import com.jvillada.movi.ui.sdui.ALTO_DE_LA_BANDA_EN_EL_SCROLL
+import com.jvillada.movi.ui.sdui.AnchoDeLaBandaKey
+import com.jvillada.movi.ui.sdui.TAG_BANDA_DEL_INICIO
 import com.jvillada.movi.ui.sdui.SduiRenderer
 import com.jvillada.movi.ui.sdui.TAG_DOS_COLUMNAS_DEL_INICIO
 import com.jvillada.movi.ui.sdui.TAG_NOMBRE_DEL_PROXIMO_PAGO
@@ -50,7 +52,8 @@ import kotlin.test.assertTrue
  * # El Inicio de la opción 3 a 360, 390 y 1.280 (la revisión de la vuelta 39)
  *
  * - Ningún círculo amarillo de la cuadrícula queda sobre la banda amarilla, en ningún ancho: la banda
- *   llega hasta media tarjeta héroe y las acciones van sobre el crema.
+ *   llega hasta media tarjeta héroe y las acciones van sobre el crema. A 1.280 la banda va solo detrás
+ *   del héroe y las acciones suben a su lado (vuelta 41).
  * - A 1.280 las dos columnas quedan parejas: la más corta mide al menos el 70 % de la más larga.
  * - A 360, el nombre del próximo pago no se parte («Arrien / do»).
  *
@@ -120,17 +123,60 @@ class ElInicioEnPantallaAnchaYAngostaTest {
         composeRule.waitForIdle()
     }
 
-    /** Ningún círculo de la cuadrícula —el amarillo de «Anotar gasto» incluido— empieza dentro de la banda. */
+    /** El ancho de la banda, en px, como lo declara su semántica (vuelta 41). */
+    private fun anchoDeLaBandaEnPx(): Float {
+        val banda = composeRule.onNodeWithTag(TAG_BANDA_DEL_INICIO).fetchSemanticsNode()
+        return with(composeRule.density) { banda.config[AnchoDeLaBandaKey].toPx() }
+    }
+
+    /**
+     * Ningún círculo de la cuadrícula —el amarillo de «Anotar gasto» incluido— queda dentro de la banda:
+     * o empieza debajo de ella, o a la derecha de donde termina (vuelta 41: en dos columnas la banda va
+     * solo detrás del héroe).
+     */
     private fun ningunaAccionSobreLaBanda() {
         val acciones = composeRule.onAllNodesWithTag(TAG_ACCION_RAPIDA).fetchSemanticsNodes()
         assertTrue(acciones.isNotEmpty())
         val finDeLaBanda = with(composeRule.density) { ALTO_DE_LA_BANDA_EN_EL_SCROLL.toPx() }
+        val bordeDeLaBanda = anchoDeLaBandaEnPx()
         acciones.forEach { accion ->
             assertTrue(
-                accion.boundsInRoot.top >= finDeLaBanda,
-                "una acción empieza a ${accion.boundsInRoot.top} px, dentro de la banda (que acaba en $finDeLaBanda px)",
+                accion.boundsInRoot.top >= finDeLaBanda || accion.boundsInRoot.left >= bordeDeLaBanda,
+                "una acción en (${accion.boundsInRoot.left}, ${accion.boundsInRoot.top}) px queda dentro de la " +
+                    "banda (que acaba en $finDeLaBanda px de alto y $bordeDeLaBanda px de ancho)",
             )
         }
+    }
+
+    /**
+     * Vuelta 41: a 1.280 la banda va solo detrás de la columna del héroe y la derecha sube a su lado. Antes
+     * cruzaba también la derecha y dejaba ~110 dp de amarillo vacío encima de las acciones.
+     */
+    @Test
+    @Config(qualifiers = "w1280dp-h3000dp-mdpi")
+    fun `a 1280 la banda no queda vacia sobre la columna derecha`() {
+        montar()
+        val columnas = composeRule.onNodeWithTag(TAG_DOS_COLUMNAS_DEL_INICIO).fetchSemanticsNode().boundsInRoot
+        val mitad = columnas.left + columnas.width / 2
+        assertTrue(anchoDeLaBandaEnPx() <= mitad + 1f, "la banda (${anchoDeLaBandaEnPx()} px) cruza la mitad ($mitad px)")
+        val acciones = composeRule.onAllNodesWithTag(TAG_ACCION_RAPIDA).fetchSemanticsNodes()
+        assertTrue(acciones.all { it.boundsInRoot.left >= mitad }, "las acciones van en la columna derecha")
+        val finDeLaBanda = with(composeRule.density) { ALTO_DE_LA_BANDA_EN_EL_SCROLL.toPx() }
+        val arribaDeLasAcciones = acciones.minOf { it.boundsInRoot.top }
+        assertTrue(
+            arribaDeLasAcciones < finDeLaBanda,
+            "las acciones arrancan a $arribaDeLasAcciones px: debajo de donde acaba la banda ($finDeLaBanda px) " +
+                "quedaría un hueco encima de ellas",
+        )
+    }
+
+    /** En una columna la banda sigue a todo el ancho. */
+    @Test
+    @Config(qualifiers = "w390dp-h3000dp-xhdpi")
+    fun `a 390 la banda va a todo el ancho`() {
+        montar()
+        val ancho = composeRule.onNodeWithTag(TAG_BANDA_DEL_INICIO).fetchSemanticsNode().boundsInRoot.width
+        assertTrue(anchoDeLaBandaEnPx() >= ancho - 1f, "la banda (${anchoDeLaBandaEnPx()} px) no llega al borde ($ancho px)")
     }
 
     @Test
