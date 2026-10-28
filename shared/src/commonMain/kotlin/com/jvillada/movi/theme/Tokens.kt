@@ -594,6 +594,17 @@ data class TextosDeMovi(
     val pestanaActiva: TextStyle = pestana.copy(fontWeight = FontWeight.Bold)
 
     /**
+     * **El rótulo de una acción de la cuadrícula del Inicio** (vuelta 39): 12/600 de la maqueta ÷ 1,12
+     * (la letra que la app le pone a todo), sin espaciado, en dos renglones de alto fijo («Anotar /
+     * gasto», «Subir / comprobante»). Es el piso de lo legible en el Inicio: 12 px efectivos en la web.
+     * A 360 dp ninguna palabra se parte (`LasOchoAccionesDelInicioTest`).
+     */
+    /** «Hola, Juan» (TEMPORAL hasta mezclar master, que ya lo trae). */
+    val saludo: TextStyle = titulo.copy(fontSize = 15.sp, lineHeight = 19.sp)
+
+    val rotuloDeAccion: TextStyle = rotulo.copy(fontSize = 10.75.sp, lineHeight = 14.sp, letterSpacing = 0.sp)
+
+    /**
      * **El énfasis dentro de una frase**: el nombre o la cifra que se resalta en medio de un texto
      * corrido (el «**así**» de Movi AI, lo que un aviso del banco dice que es el monto). Un
      * `SpanStyle`, para un `AnnotatedString`: `withStyle(Movi.textos.enfasis) { append(nombre) }`.
