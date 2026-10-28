@@ -43,6 +43,7 @@ import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.notifications.NotificationsPanel
 import com.jvillada.movi.ui.sdui.SduiRenderer
 import com.jvillada.movi.ui.components.ds.BotonDeIcono
+import com.jvillada.movi.ui.components.ds.TamanoDelTitulo
 import com.jvillada.movi.ui.components.ds.Chevron
 import com.jvillada.movi.ui.components.ds.Fila
 import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
@@ -531,6 +532,9 @@ fun DashboardScreen(
             Encabezado(
                 titulo = saludoDelInicio(SessionManager.userName),
                 subtitulo = periodoDelEncabezado(data),
+                // Vuelta 29: el saludo es un nombre (17/700 a la vista, como en la opción 3), no el
+                // título de una pestaña.
+                tamanoDelTitulo = TamanoDelTitulo.Saludo,
                 inicio = { AvatarButton(onClick = { onNavigate(Screen.Mas) }) },
                 acciones = {
                     // Recargando con cifras ya pintadas (la caché o la instantánea): una línea discreta

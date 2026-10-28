@@ -327,7 +327,11 @@ class PlanScreenTest {
 
         assertTrue(hay("Gastado en", substring = true))
         assertEquals(1, contarTag(TAG_TARJETA_DEL_GASTO_DEL_PERIODO))
-        assertTrue(hay("Nuevo"), "con Presupuestos elegido, el encabezado ofrece crear uno")
+        // Vuelta 29: en una pestaña la acción va en su botón redondo, con «Nuevo» de nombre.
+        assertTrue(
+            composeRule.onAllNodesWithContentDescription("Nuevo", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty(),
+            "con Presupuestos elegido, el encabezado ofrece crear uno",
+        )
         assertTrue(!hay(tituloDelChecklist))
     }
 
@@ -343,13 +347,15 @@ class PlanScreenTest {
     fun `cambiar de segmento pinta el contenido de cada uno`() {
         puerta.complete(Unit)
         montar()
-        assertTrue(!hay("Nuevo"), "«Nuevo» es de Presupuestos: con Pagos a la vista no se ofrece")
+        // Vuelta 29: en una pestaña la acción del encabezado va en su botón redondo, con «Nuevo» de nombre.
+        fun ofreceNuevo() = composeRule.onAllNodesWithContentDescription("Nuevo", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        assertTrue(!ofreceNuevo(), "«Nuevo» es de Presupuestos: con Pagos a la vista no se ofrece")
 
         composeRule.onNodeWithText("Presupuestos", useUnmergedTree = true).performClick()
         composeRule.waitForIdle()
         assertTrue(hay("Gastado en", substring = true))
         assertTrue(hay("Comida"))
-        assertTrue(hay("Nuevo"))
+        assertTrue(ofreceNuevo())
         assertTrue(!hay(tituloDelChecklist))
 
         composeRule.onNodeWithText("Pagos", useUnmergedTree = true).performClick()

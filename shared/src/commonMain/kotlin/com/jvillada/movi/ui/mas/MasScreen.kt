@@ -736,7 +736,8 @@ private fun TarjetaDelPerfil(profile: UserProfile?, onEditar: () -> Unit) {
                 Text(initials.ifEmpty { "U" }, style = Movi.textos.tituloMedio, color = Movi.colores.sobreAvatar)
             }
             Column(modifier = Modifier.weight(1f)) {
-                Text(displayName, style = Movi.textos.titular, color = Movi.colores.texto, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                // Vuelta 29: el nombre en `saludo` (17/700 a la vista), con el correo debajo, como en la opción 3.
+                Text(displayName, style = Movi.textos.saludo, color = Movi.colores.texto, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(SessionManager.userEmail ?: "", style = Movi.textos.apoyo, color = Movi.colores.textoMedio, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Boton("Editar", onClick = onEditar, variante = VarianteDeBoton.Fantasma, tamano = TamanoDeBoton.S)

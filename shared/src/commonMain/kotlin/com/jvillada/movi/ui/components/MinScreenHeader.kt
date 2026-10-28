@@ -52,7 +52,7 @@ fun leadingFor(screen: Screen, onNavigate: (Screen) -> Unit, fallback: Screen): 
  * el menú y acción propia a la derecha si la hay.
  *
  * **Ola R0:** delega en [com.jvillada.movi.ui.components.ds.Encabezado], que le pone el alto
- * (`Medida.altoDeEncabezado`, 64), los márgenes (`Medida.margenDePantalla`, 16) y la flecha en un
+ * (`Medida.altoDeEncabezado`, 56), los márgenes (`Medida.margenDePantalla`, 16) y la flecha en un
  * área de toque de 48. Ya no lleva la línea de abajo: superficies por capas, sin bordes duros.
  *
  * @param subtitle línea secundaria opcional (p.ej. «3 nuevas · 2 coincidencias» al revisar un extracto).

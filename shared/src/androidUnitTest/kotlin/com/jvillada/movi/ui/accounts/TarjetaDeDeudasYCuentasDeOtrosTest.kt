@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.accounts
 
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.CompositionLocalProvider
@@ -273,9 +274,9 @@ class TarjetaDeDeudasYCuentasDeOtrosTest {
         montar()
         composeRule.waitForIdle()
 
-        // Con rótulo — `NewItemButton`, no un ícono solo — porque es la única puerta permanente
-        // para crear una cuenta una vez que los grupos ya tienen alguna.
-        composeRule.onNodeWithText("Nueva cuenta", useUnmergedTree = true).assertExists()
+        // Es la única puerta permanente para crear una cuenta una vez que los grupos ya tienen
+        // alguna. Vuelta 29: en una pestaña va en su botón redondo, con «Nueva cuenta» de nombre.
+        composeRule.onNodeWithContentDescription("Nueva cuenta", useUnmergedTree = true).assertExists()
     }
 
     // ── Error con reintento ───────────────────────────────────────────────────

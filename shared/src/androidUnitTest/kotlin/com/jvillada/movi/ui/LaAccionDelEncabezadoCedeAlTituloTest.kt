@@ -268,15 +268,35 @@ class LaAccionDelEncabezadoCedeAlTituloTest {
     @Test
     fun `con lugar, la accion conserva su texto`() {
         montar(escala = 1f) {
-            Encabezado("Patrimonio", accion = AccionDeEncabezado("Nueva cuenta", Icons.Rounded.Add, onClick = {}))
+            Encabezado("Créditos", onVolver = {}, accion = AccionDeEncabezado("Nuevo crédito", Icons.Rounded.Add, onClick = {}))
         }
         val accion = nodos(TAG_ACCION_DEL_ENCABEZADO).single()
         // El texto es un nodo de texto, no solo una descripción: se ve.
         assertTrue(
-            accion.children.any { hijo -> hijo.config.getOrNull(SemanticsProperties.Text)?.any { it.text == "Nueva cuenta" } == true } ||
-                accion.config.getOrNull(SemanticsProperties.Text)?.any { it.text == "Nueva cuenta" } == true,
-            "«Nueva cuenta» se ve: ${textosDentro(accion)}",
+            accion.children.any { hijo -> hijo.config.getOrNull(SemanticsProperties.Text)?.any { it.text == "Nuevo crédito" } == true } ||
+                accion.config.getOrNull(SemanticsProperties.Text)?.any { it.text == "Nuevo crédito" } == true,
+            "«Nuevo crédito» se ve: ${textosDentro(accion)}",
         )
+    }
+
+    /**
+     * **Vuelta 29: en una pestaña la acción va siempre en su botón redondo**, con su nombre para el
+     * lector de pantalla y 48 de toque. Patrimonio quedaba con «+» y Espacios con «+ Nuevo espacio»
+     * según cupiera el título; ahora las dos van igual.
+     */
+    @Test
+    fun `en una pestana la accion va en su boton redondo aunque haya lugar`() {
+        montar(escala = 1f) {
+            Encabezado("Espacios", inicio = {}, accion = AccionDeEncabezado("Nuevo espacio", Icons.Rounded.Add, onClick = {}))
+        }
+        val accion = nodos(TAG_ACCION_DEL_ENCABEZADO).single()
+        assertTrue(
+            accion.children.none { hijo -> hijo.config.getOrNull(SemanticsProperties.Text)?.any { it.text == "Nuevo espacio" } == true },
+            "en una pestaña la acción no lleva texto",
+        )
+        assertTrue("Nuevo espacio" in textosDentro(accion), "la acción conserva su nombre: ${textosDentro(accion)}")
+        val densidad = composeRule.density.density
+        assertEquals(Medida.objetivoTactil.value, accion.size.width / densidad, 0.5f)
     }
 
     @Test

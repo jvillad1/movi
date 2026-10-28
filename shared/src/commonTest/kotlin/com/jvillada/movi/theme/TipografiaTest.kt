@@ -30,6 +30,8 @@ class TipografiaTest {
             "monto" to textos.monto,
             "portada" to textos.portada,
             "titular" to textos.titular,
+            "titularDePantalla" to textos.titularDePantalla,
+            "saludo" to textos.saludo,
             "titulo" to textos.titulo,
             "cuerpo" to textos.cuerpo,
             "apoyo" to textos.apoyo,
@@ -46,24 +48,38 @@ class TipografiaTest {
         }
     }
 
-    /** Los tamaños y pesos de la maqueta de la opción 3, los que el encargo de la vuelta 29 fija. */
+    /**
+     * **Lo que se ve mide lo de la maqueta.** `App()` agranda la letra ×1,12, así que cada estilo es la
+     * maqueta ÷ 1,12 (ver el KDoc de `TextosDeMovi`). Se mide lo que llega a la pantalla, con medio
+     * punto de tolerancia por el redondeo.
+     */
     @Test
-    fun `los tamanos y pesos son los de la maqueta`() {
-        assertEquals(40.sp, textos.cifra.fontSize)
+    fun `los tamanos que se ven son los de la maqueta`() {
+        val escalaDeLaApp = 1.12f
+        mapOf(
+            "cifra" to (textos.cifra to 40f),
+            "titular" to (textos.titular to 28f),
+            "titularDePantalla" to (textos.titularDePantalla to 22f),
+            "saludo" to (textos.saludo to 17f),
+            "titulo" to (textos.titulo to 16f),
+            "cuerpo" to (textos.cuerpo to 15f),
+            "monto" to (textos.monto to 15f),
+            "apoyo" to (textos.apoyo to 12.5f),
+        ).forEach { (nombre, par) ->
+            val (estilo, maqueta) = par
+            val seVe = estilo.fontSize.value * escalaDeLaApp
+            assertTrue(kotlin.math.abs(seVe - maqueta) <= 0.5f, "«$nombre» se ve a $seVe; la maqueta dice $maqueta")
+        }
         assertEquals(FontWeight.ExtraBold, textos.cifra.fontWeight)
-        assertEquals((-1.2).sp, textos.cifra.letterSpacing)
-        assertEquals(28.sp, textos.titular.fontSize)
         assertEquals(FontWeight.ExtraBold, textos.titular.fontWeight)
-        assertEquals(16.sp, textos.titulo.fontSize)
+        assertEquals(FontWeight.Bold, textos.saludo.fontWeight)
         assertEquals(FontWeight.Bold, textos.titulo.fontWeight)
-        assertEquals(15.sp, textos.cuerpo.fontSize)
         assertEquals(FontWeight.SemiBold, textos.cuerpo.fontWeight)
-        assertEquals(15.sp, textos.monto.fontSize)
         assertEquals(FontWeight.Bold, textos.monto.fontWeight)
         assertEquals(FontWeight.Bold, textos.cuerpoFuerte.fontWeight)
-        assertEquals(12.sp, textos.pestana.fontSize)
         assertEquals(FontWeight.Medium, textos.pestana.fontWeight)
         assertEquals(FontWeight.Bold, textos.pestanaActiva.fontWeight)
+        assertEquals(12.sp, textos.pestana.fontSize, "la barra de pestañas no se toca en esta vuelta")
     }
 
     @Test
