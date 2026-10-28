@@ -305,6 +305,8 @@ fun QuickAddScreen(
     presetDeudaId: String? = null,
     /** Ola 5 · los atajos del «+»: con qué pestaña abre. Ver [Screen.QuickAdd.presetPestana]. */
     presetPestana: PestanaDeAgregar? = null,
+    /** Vuelta 44: abre ya en «Repartir este gasto» (modo personas). Ver [Screen.QuickAdd.presetRepartir]. */
+    presetRepartir: Boolean = false,
     /**
      * Vuelta 43 · **modo pago**: la factura que se viene a pagar. La hoja dice «Pago de Arriendo ·
      * octubre» en vez de las pestañas, y al guardar el movimiento sale JUNTO con la ocurrencia que
@@ -644,7 +646,8 @@ fun QuickAddScreen(
     // Vuelta de diseño 23 · «Repartir este gasto»: con algún espacio, el gasto escrito se reparte en
     // él —lo hayas pagado tú o lo haya pagado otro— sin salir de la hoja. Sin espacios no aparece nada.
     var espaciosParaRepartir by remember { mutableStateOf<List<com.jvillada.movi.shared.model.Espacio>>(emptyList()) }
-    var repartiendo by remember { mutableStateOf(false) }
+    // Vuelta 44: «Repartir» del Inicio y del «+» abre Agregar ya en este modo («¿Quién pagó? Yo»).
+    var repartiendo by remember { mutableStateOf(presetRepartir) }
     LaunchedEffect(Unit) {
         espaciosParaRepartir = runCatching { Repositories.wallets.getEspacios() }.getOrDefault(emptyList())
     }
@@ -1666,7 +1669,8 @@ fun QuickAddScreen(
                 onDismiss = { repartiendo = false },
                 onListo = { guardado ->
                     repartiendo = false
-                    guardado?.let(onSavedEvent)
+                    // Vuelta 44: después de repartir no se pregunta «¿se repite todos los meses?»
+                    // (ver `seRepiteParaProponer`): el gasto no se avisa a App.kt para ofrecerlo.
                     onSaved()
                 },
             )
@@ -2135,7 +2139,7 @@ internal fun pastillasDeLaCategoria(frecuentes: List<String>, elegida: String): 
  * «Categoría ›» que reemplaza: la tarjeta queda del alto de antes de la vuelta 34, menos un separador.
  */
 @Composable
-private fun EncabezadoDeLaCategoria(sugerencia: String?, onTodas: () -> Unit) {
+internal fun EncabezadoDeLaCategoria(sugerencia: String?, onTodas: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -2242,7 +2246,7 @@ internal fun desplazamientoParaLaElegida(
 private const val CLAVE_DE_NUEVA = "\u0000nueva"
 
 @Composable
-private fun CategoriaChipsRow(
+internal fun CategoriaChipsRow(
     categorias: List<String>,
     categoriaElegida: String,
     onPick: (String) -> Unit,

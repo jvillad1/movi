@@ -54,7 +54,11 @@ import com.jvillada.movi.shared.model.tipoOPersona
 import com.jvillada.movi.theme.Espacio as EspacioDeDiseno
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
-import com.jvillada.movi.ui.components.CategoryField
+import com.jvillada.movi.ui.components.SelectorDeCategoria
+import com.jvillada.movi.ui.quickadd.CategoriaChipsRow
+import com.jvillada.movi.ui.quickadd.EncabezadoDeLaCategoria
+import com.jvillada.movi.ui.quickadd.categoriasParaLasPastillasDeAgregar
+import com.jvillada.movi.ui.quickadd.pastillasDeLaCategoria
 import com.jvillada.movi.ui.components.MarcoDeHoja
 import com.jvillada.movi.ui.components.MoneyField
 import com.jvillada.movi.ui.components.ds.AvatarDePersona
@@ -285,6 +289,9 @@ fun HojaPagoOtro(
     var nota by remember { mutableStateOf("") }
     var trabajando by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    // Vuelta 44: «Todas ›» y «Nueva» abren el selector completo en una hoja, como en Agregar.
+    var hojaDeCategorias by remember { mutableStateOf(false) }
+    var pedidosDeFoco by remember { mutableStateOf(0) }
     val pagador = quien
     val tuParte = if (pagador != null && (monto ?: 0L) > 0L) partesDelGasto(monto ?: 0L, espacio, pagador)[MIEMBRO_YO] ?: 0L else 0L
     val puede = pagador != null && (monto ?: 0L) > 0L && categoria.isNotBlank() && !trabajando
@@ -328,16 +335,31 @@ fun HojaPagoOtro(
             }
             CampoDeMonto(monto, { monto = it }, rotulo = "¿Cuánto pagó ${otros.firstOrNull { it.id == quien }?.nombre ?: "otra persona"}?")
             Spacer(Modifier.height(Medida.dentroDeSeccion))
-            CategoryField(
-                value = categoria,
-                onValueChange = { categoria = it },
-                type = TransactionType.EXPENSE,
-                usedCategories = UsedCategoriesCache.used,
-                prefs = UsedCategoriesCache.prefs,
-                usos = UsedCategoriesCache.usosRecientes,
-                label = "Categoría",
-                placeholder = "Mercado",
-            )
+            // Vuelta 44: el selector de categoría del sistema, el de Agregar —«Categoría … Todas ›» y las
+            // pastillas de las frecuentes con la elegida marcada—. Era el desplegable con «Administrar
+            // categorías», el único que quedaba.
+            Superficie(
+                modifier = Modifier.fillMaxWidth().testTag(TAG_CATEGORIA_PAGO_OTRO),
+                nivel = NivelDeSuperficie.Capa2,
+                relleno = RellenoDeSuperficie.Lista,
+            ) {
+                EncabezadoDeLaCategoria(sugerencia = null, onTodas = { pedidosDeFoco = 0; hojaDeCategorias = true })
+                CategoriaChipsRow(
+                    categorias = pastillasDeLaCategoria(
+                        categoriasParaLasPastillasDeAgregar(
+                            categoriaActual = categoria,
+                            tipo = TransactionType.EXPENSE,
+                            usadas = UsedCategoriesCache.used,
+                            prefs = UsedCategoriesCache.prefs,
+                            usos = UsedCategoriesCache.usosRecientes,
+                        ),
+                        categoria,
+                    ),
+                    categoriaElegida = categoria,
+                    onPick = { categoria = it },
+                    onNueva = { pedidosDeFoco += 1; hojaDeCategorias = true },
+                )
+            }
             Spacer(Modifier.height(Medida.dentroDeSeccion))
             Campo(
                 nota, { nota = it.take(MAX_NOTA_PAGO_OTRO) },
@@ -356,6 +378,7 @@ fun HojaPagoOtro(
                 "Guardar",
                 onClick = ::guardar,
                 habilitado = puede,
+                razon = if (categoria.isBlank() && (monto ?: 0L) > 0L) "Falta la categoría" else null,
                 cargando = trabajando,
                 error = error,
                 modifier = Modifier.testTag(TAG_GUARDAR_PAGO_OTRO),
@@ -363,7 +386,31 @@ fun HojaPagoOtro(
             Spacer(Modifier.height(Medida.entreSecciones))
         }
     }
+    if (hojaDeCategorias) {
+        MarcoDeHoja(onDismiss = { hojaDeCategorias = false }) {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+                EncabezadoDeHoja("Categoría")
+                Spacer(Modifier.height(Medida.dentroDeSeccion))
+                SelectorDeCategoria(
+                    elegida = categoria,
+                    onElegir = {
+                        categoria = it
+                        hojaDeCategorias = false
+                    },
+                    tipo = TransactionType.EXPENSE,
+                    usadas = UsedCategoriesCache.used,
+                    prefs = UsedCategoriesCache.prefs,
+                    usos = UsedCategoriesCache.usosRecientes,
+                    pedidosDeFoco = pedidosDeFoco,
+                )
+                Spacer(Modifier.height(Medida.margenDePantalla))
+            }
+        }
+    }
 }
+
+/** El tag del selector de categoría de «Pagó otro» (vuelta 44). */
+const val TAG_CATEGORIA_PAGO_OTRO: String = "espacios:categoria-pago-otro"
 
 /** El `testTag` de la sección que abre la acción «Repartir» del detalle de un movimiento. */
 const val TAG_SECCION_DE_REPARTIR: String = "espacios:seccion-de-repartir"

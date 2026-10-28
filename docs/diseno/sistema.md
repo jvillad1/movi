@@ -2344,7 +2344,82 @@ encabezado, la cuenta pedida y el pago con su ocurrencia; nunca un `postEvent` s
 `AnotarPagoSaldaLaFacturaTest` / `AnotarPagoDesdeLaFilaRutasTest` («Te quedan» igual, o por la diferencia).
 Las guardas en 0 siguen en 0.
 
-## 48. Vuelta 45: una sola cifra, una sola alarma y un emparejamiento que pregunta más
+## 48. Vuelta 44: los avisos se confirman de un vistazo, y «Repartir» abre el flujo bueno
+
+La revisión de «un día del dueño» (28-oct, la demo con tres SMS de Bancolombia: Uber, Farmatodo y Juan
+Valdez) encontró que confirmar avisos costaba dos toques cada uno sin ver lo que Movi entendió, que el
+título de Revisar aviso decía «85540», que «Repartir» suponía que pagó Caro y que «¿se repite todos los
+meses?» salía después de cada gasto. **Sin reglas de plata nuevas**: confirmar va siempre por el camino
+de la fila (`confirmarLoEntendido`).
+
+1. **Por revisar: cada aviso dice lo que Movi entendió.** La tarjeta (`TarjetaDeMensajeDelBanco` y
+   `TarjetaDelMismoPago` con `loEntendido`) lleva arriba el comercio en forma de título, el monto y, en
+   el lugar del subtítulo, **«Categoría · Cuenta»** (`LoQueMoviEntendio.linea`, `lineaDeLoEntendido`):
+   la categoría y la cuenta que propone Movi **entendidas o no** —son las que Revisar aviso va a
+   mostrar—, así el mal categorizado salta a la vista. «Banco · hora» baja junto al SMS crudo, que queda
+   en **un renglón** plegado (`LoQueDiceElBanco(renglones = 1)`). Con todo entendido, **«Confirmar»**
+   (principal, un toque) y **«Cambiar»** (`CAMBIAR_EN_LA_FILA`), que abre Revisar aviso **con las
+   categorías ya a la vista** (`Screen.SMSReconcile(abrirCategoria = true)`); si Movi duda,
+   **«Revisar»** es el principal. «Ignorar» sigue en todas. «Se anota: …» se fue: lo dice la línea de
+   arriba (`TAG_LINEA_DE_LO_ENTENDIDO` pasó a ella).
+2. **«Confirmar los N», arriba, es el de Actividad.** Desde dos que Movi entendió (`MINIMO_PARA_EL_LOTE`),
+   la tarjeta de los avisos de Actividad (`TarjetaDeAvisosDelBanco`, sin «Revisar uno por uno»: ya estás
+   ahí) y **la misma hoja** (`HojaDeConfirmarLosAvisos` + `rememberConfirmarLosAvisos`, en
+   `ui/transactions/ConfirmarLosAvisos.kt`, que ahora usan las dos pantallas). El lote propio de la
+   bandeja (`TarjetaDelLote`) se fue.
+3. **El banco por su nombre.** `bancoDelAviso` traduce el código del remitente con el mapeo que ya
+   existía en `:core` (`nombreDelOrigenDeCaptura`, el de «banco mudo»: 85540, 891333 y 87400 son
+   Bancolombia): «Bancolombia · 12:05 p. m.» en la tarjeta y **«Bancolombia» como título de Revisar
+   aviso** (`tituloDelAvisoEnReconciliar`). Un código que Movi no conoce no se adivina: «SMS» en la línea
+   y «Mensaje del banco» como título. Los códigos de Nu, Davivienda y AV Villas **no se agregaron**: no
+   hay un SMS suyo a la vista y el repo ya decidió no adivinarlos (`SmsFilterConfigRoutes`).
+4. **«Anotado».** Confirmar desde la fila dice abajo «Anotado · Uber Rides $18.300» (`textoDeAnotado`), y
+   el lote «3 confirmados». **Sin «Deshacer»**: confirmar un aviso no tiene una vuelta limpia en Movi (se
+   anula el movimiento, como siempre; vuelta 40).
+5. **Volver donde la dejaste.** La lista recuerda **por llave**, no por número de fila
+   (`ui/porrevisar/ElScrollQueSeConserva.kt`: `rememberListaQueSeConserva`, `fila`, `dondeVolver`): las
+   filas a la vista y el corrimiento de la primera, guardables. Al volver de Revisar aviso —con el
+   esqueleto de la relectura de por medio, que antes la mandaba arriba— vuelve a la primera de esas
+   filas que siga; si era el aviso confirmado, la siguiente queda arriba. Toda fila de la bandeja tiene
+   llave (`fila(llaves, …)`).
+6. **«Por confirmar $103.600» en el Inicio.** `DashboardSummary.porConfirmarSuman` (con default: un APK
+   viejo lo ignora, un server viejo no lo manda) es `sumaDeLoPorConfirmar` (`:core`
+   `LoQueSumanLosAvisos.kt`): el monto de cada pago pendiente —del aviso que lo propone, o la lectura del
+   comprobante— **entero o nada**: sin un monto legible o en otra moneda, `null`. La franja
+   (`textosDeLaFranjaPorConfirmar`) dice «Por confirmar $103.600» y debajo «En 3 avisos» (o «En 4 avisos
+   · y 1 movimiento»: la cifra dice de qué es); sin la suma, el conteo de la vuelta 39. La pastilla sigue
+   siendo «N por revisar». Actividad suma con la misma función.
+7. **«Repartir» abre Agregar en modo personas.** La acción de Inicio y la del «+» (`AtajoDeAgregar.REPARTIR`)
+   abren `Screen.QuickAdd(presetRepartir = true)` (`pantallaParaRepartir`): «Repartir este gasto ·
+   ¿Quién pagó? **Yo** | Caro», el monto en blanco. Con varios grupos la hoja pregunta en cuál; sin
+   ninguno, primero se crea. La hoja «¿En qué grupo?» de la vuelta 7 se fue. **«Pagó otro»** sigue en el
+   grupo («Caro pagó y yo le debo»), con el selector de Agregar —«Categoría … Todas ›» y las pastillas,
+   `EncabezadoDeLaCategoria`/`CategoriaChipsRow`, ahora `internal`— y el selector completo en una hoja;
+   el desplegable con «Administrar categorías» se fue de ahí.
+8. **«¿Se repite todos los meses?» solo cuando ya se repitió.** `seRepiteParaProponer` (`:core`
+   `ElRecurrenteQueSeRepite.kt`): el mismo comercio o título (`claveDeComercio`) con un monto ±15 %
+   (`MARGEN_DEL_MONTO_QUE_SE_REPITE`, elegido) en **2 o más períodos anteriores distintos** del dueño, sin
+   regla ni suscripción; **nunca** después de repartir, de un gasto en efectivo de menos de $50.000
+   (`EFECTIVO_QUE_NO_SE_PROPONE`, elegido) ni de un pago que saldó una ocurrencia (Agregar abierto desde
+   «Anotar pago» o con una deuda, `vieneDeUnPagoQueSeEspera`). `RecurringOfferGate` pide la historia, las
+   cuentas y el perfil solo cuando las guardas baratas pasaron; si alguna lectura falla, no ofrece.
+
+**Los toques** (desde el Inicio): tres avisos que Movi entendió, de 7 (la franja y «Revisar» +
+«Confirmar» por aviso) a **3** (la franja, «Confirmar los 3», el «Confirmar» de la hoja); con uno mal
+categorizado, de 9 a **6** (la franja, «Cambiar», la categoría y «Confirmar» en Revisar aviso, «Confirmar
+los 2» y la hoja). La meta de la revisión era 5 para ese caso: el sexto es la pregunta de la hoja, que
+esta vuelta reutiliza tal cual.
+
+**Las líneas base** no cambian (`dp_sueltos` 117, `radios_con_numero` 3) y las guardas en 0 siguen en 0.
+Lo vigilan `LosAvisosDeUnVistazoTest` (lo entendido arriba, el banco por nombre, «Anotado», «Confirmar
+los 3» con su hoja y los tres toques desde el Inicio, el mal categorizado), `PorRevisarVuelveDondeLaDejasteTest`
+(falla sin la vuelta por llave), `LaBandejaQueSeVaciaTest` (el lote nuevo), `RepartirDesdeElMasTest` y
+`RepartirEnAgregarTest` (modo personas con «Yo»; repartir no ofrece el recurrente), `PagoOtroConNotaTest`
+(las pastillas), `ElRecurrenteSoloCuandoSeRepiteTest` (el gate), y en `commonTest`/`:core`
+`LosAvisosDeUnVistazoLogicaTest`, `LaCabezaDelAvisoTest`, `LoQueSumanLosAvisosTest` y
+`ElRecurrenteQueSeRepiteTest`; en el server, `DashboardRoutesTest` (la suma, entera o nada).
+
+## 49. Vuelta 45: una sola cifra, una sola alarma y un emparejamiento que pregunta más
 
 Lo que quedó de la revisión de «un día del dueño» (28-oct, capturas `dia-*.png` y `r43-*.png`). **Sin
 reglas de plata nuevas**: las cifras salen de las funciones de siempre y el emparejamiento solo propone.

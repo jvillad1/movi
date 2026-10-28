@@ -117,7 +117,30 @@ class RepartirEnAgregarTest {
         assertEquals(listOf(casa.id to ev.id), repartidos, "se reparte el MISMO movimiento que se guardó")
         assertTrue(anotados.isEmpty(), "pagaste tú: no se anota como gasto de otro")
         composeRule.waitUntil(5_000) { cerrada == 1 }
-        assertEquals(listOf(ev), ofrecidos, "Agregar avisa el movimiento guardado, como siempre")
+        // Vuelta 44: después de repartir no se pregunta «¿se repite todos los meses?».
+        assertTrue(ofrecidos.isEmpty(), "un gasto repartido no se avisa para ofrecer el recurrente")
+    }
+
+    /**
+     * Vuelta 44 · **«Repartir» del Inicio abre Agregar en modo personas**: «Repartir este gasto», «¿Quién
+     * pagó? Yo | Caro» con «Yo» marcado, y el monto en blanco.
+     */
+    @Test
+    fun repartir_desde_el_inicio_abre_agregar_en_modo_personas_con_yo() {
+        montar(presetRepartir = true)
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodes(hasText(TITULO_REPARTIR_ESTE_GASTO), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText(TITULO_REPARTIR_ESTE_GASTO).assertIsDisplayed()
+        composeRule.onNodeWithText("¿Quién pagó?", useUnmergedTree = true).assertIsDisplayed()
+        assertEquals("", textoDelMontoDeLaHoja().filter(Char::isDigit), "el monto en blanco")
+        // «Yo» marcado: dice que se anota en tu cuenta y se reparte («Guardar y repartir»), no «Pagó otro».
+        composeRule.onNodeWithText("Guardar y repartir", useUnmergedTree = true).assertIsDisplayed()
+        val yo = composeRule.onNode(
+            hasClickAction() and hasAnyDescendant(hasText("Yo")) and hasAnyAncestor(hasTestTag(TAG_HOJA_REPARTIR_ESTE_GASTO)),
+            useUnmergedTree = true,
+        ).fetchSemanticsNode()
+        assertTrue(SemanticsProperties.Selected in yo.config && yo.config[SemanticsProperties.Selected], "«Yo» viene marcado")
     }
 
     @Test
@@ -197,6 +220,15 @@ class RepartirEnAgregarTest {
     private var fallosDelReparto = 0
 
     private fun montarYEscribir45000(tecladoFisico: Boolean = false) {
+        montar(tecladoFisico)
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodes(hasText(nu.name, substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() &&
+                composeRule.onAllNodes(hasTestTag(TAG_REPARTIR_EN_AGREGAR), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        }
+        tocar("4"); tocar("5"); tocar("000")
+    }
+
+    private fun montar(tecladoFisico: Boolean = false, presetRepartir: Boolean = false) {
         Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
             override suspend fun getAccounts(): List<Account> = listOf(nu)
             override suspend fun getEspacios(): List<Espacio> = listOf(casa).also { pedidosDeEspacios++ }
@@ -222,6 +254,8 @@ class RepartirEnAgregarTest {
                                 onDismiss = {},
                                 onSaved = { cerrada++ },
                                 onSavedEvent = { ofrecidos += it },
+                                presetPestana = if (presetRepartir) PestanaDeAgregar.GASTO else null,
+                                presetRepartir = presetRepartir,
                             )
                         }
                         Spacer(Modifier.height(64.dp))
@@ -230,11 +264,6 @@ class RepartirEnAgregarTest {
             } }
         }
         composeRule.waitForIdle()
-        composeRule.waitUntil(5_000) {
-            composeRule.onAllNodes(hasText(nu.name, substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() &&
-                composeRule.onAllNodes(hasTestTag(TAG_REPARTIR_EN_AGREGAR), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
-        }
-        tocar("4"); tocar("5"); tocar("000")
     }
 
     private fun abrirLaHoja() {

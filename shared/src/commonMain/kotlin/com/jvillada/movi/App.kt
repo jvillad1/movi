@@ -40,6 +40,8 @@ import com.jvillada.movi.ui.extractos.rememberFilePicker
 import com.jvillada.movi.ui.quickadd.AtajoDeAgregar
 import com.jvillada.movi.ui.quickadd.hacerElAtajo
 import com.jvillada.movi.ui.espacios.HojasDeRepartir
+import com.jvillada.movi.shared.model.ComoSeGuardo
+import com.jvillada.movi.ui.recurrentes.vieneDeUnPagoQueSeEspera
 import com.jvillada.movi.ui.espacios.rememberEstadoDeRepartir
 import com.jvillada.movi.ui.papeles.EscucharArchivosSoltados
 import com.jvillada.movi.ui.papeles.HojaLeyendoElPapel
@@ -191,6 +193,8 @@ fun App() {
             // movimiento ya está guardado y el ofrecimiento es independiente de todo lo demás:
             // ignorarlo, cerrarlo o irse a otra pantalla no pierde nada.
             var movimientoRecienGuardado by remember { mutableStateOf<FinancialEvent?>(null) }
+            // Vuelta 44: cómo se guardó (el pago de algo que se espera no se propone como recurrente).
+            var comoSeGuardo by remember { mutableStateOf(ComoSeGuardo()) }
             var ofrecimientoRecurrente by remember { mutableStateOf<RecurringPrefill?>(null) }
             var hojaRecurrentePrellenada by remember { mutableStateOf<RecurringPrefill?>(null) }
 
@@ -202,7 +206,7 @@ fun App() {
             LaunchedEffect(movimientoRecienGuardado?.id) {
                 val evento = movimientoRecienGuardado ?: return@LaunchedEffect
                 // Las guardas (traspaso, ya existe, ya se ofreció esta cosa) viven en el gate.
-                RecurringOfferGate.ofrecerPara(evento)?.let { ofrecimientoRecurrente = it }
+                RecurringOfferGate.ofrecerPara(evento, comoSeGuardo)?.let { ofrecimientoRecurrente = it }
             }
             // La barra se esconde mientras haya una hoja abierta encima (ver más abajo).
             val ofrecimientoALaVista = ofrecimientoRecurrente != null &&
@@ -548,9 +552,13 @@ fun App() {
                             presetPestana = request.presetPestana,
                             // Vuelta 43: «Anotar pago» desde una factura — el guardado la salda.
                             presetPago = request.presetPago,
+                            presetRepartir = request.presetRepartir,
                             // Ola 9 · B: el movimiento ya se guardó; recién ahora se evalúa si
                             // vale la pena ofrecer el recurrente.
-                            onSavedEvent = { movimientoRecienGuardado = it },
+                            onSavedEvent = {
+                                comoSeGuardo = ComoSeGuardo(saldoUnaOcurrencia = vieneDeUnPagoQueSeEspera(request))
+                                movimientoRecienGuardado = it
+                            },
                             // «Guardar y anotar otro»: guardó y la hoja sigue abierta. La pantalla de
                             // atrás vuelve a leer igual que con el «Guardar» de siempre.
                             onSavedSinCerrar = { refreshTick++ },

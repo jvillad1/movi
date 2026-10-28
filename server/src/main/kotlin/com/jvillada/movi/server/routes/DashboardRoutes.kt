@@ -46,6 +46,12 @@ import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.DashboardSummary
 import com.jvillada.movi.shared.model.SMS_STATE_PENDING
 import com.jvillada.movi.shared.model.cuantosPagosPorRevisar
+import com.jvillada.movi.shared.model.MontoDelAviso
+import com.jvillada.movi.shared.model.SmsMessage
+import com.jvillada.movi.shared.model.esUnComprobante
+import com.jvillada.movi.shared.model.sumaDeLoPorConfirmar
+import com.jvillada.movi.shared.model.unoPorPago
+import kotlin.math.roundToLong
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UsedCategory
@@ -177,6 +183,9 @@ fun Route.dashboardRoutes() {
                 .map { Triple(it[SmsMessages.id], it[SmsMessages.time], it[SmsMessages.state]) }
             // La captura mide lo que llegó SOLO: un comprobante que el dueño compartió no prueba que
             // el teléfono siga capturando (Ola 2, ver `soloLoQueLlegoSolo` en :core).
+            // La bandeja con los pagos marcados, solo si hay algo pendiente (agrupar lee el texto).
+            val bandejaPendiente = if (filasDeSms.none { (_, _, state) -> state == SMS_STATE_PENDING }) null
+            else bandejaConLosPagos(uid, ahora)
             val captura = capturaDeSms(filasDeSms.filterNot { esIdDeComprobante(it.first) }.map { it.second })
             // El patrimonio una sola vez: «Tu plata» y lo apartado salen de la misma cuenta. «Te
             // quedan» resta lo apartado menos lo que los fijos pendientes ya restan.
@@ -205,8 +214,10 @@ fun Route.dashboardRoutes() {
                 // por Google Wallet es UNO por revisar — la misma cuenta que la bandeja y que el
                 // renglón de Movimientos (`cuantosPagosPorRevisar`, en :core). Agrupar lee el texto,
                 // así que solo se pide la bandeja entera cuando hay algo pendiente.
-                pendingSms = if (filasDeSms.none { (_, _, state) -> state == SMS_STATE_PENDING }) 0
-                else cuantosPagosPorRevisar(bandejaConLosPagos(uid, ahora)),
+                pendingSms = bandejaPendiente?.let(::cuantosPagosPorRevisar) ?: 0,
+                // Vuelta 44: «Por confirmar $103.600» — cuánto dicen esos mismos pagos, o nada si
+                // alguno no se lee entero (ver `sumaDeLoPorConfirmar` en :core).
+                porConfirmarSuman = bandejaPendiente?.let { porConfirmarSumanDe(uid, it) },
                 // Vuelta de diseño 22: los movimientos que esperan en «Por confirmar», contados como
                 // los cuenta Movimientos (un traspaso es un renglón), para que Hoy diga su número.
                 movimientosPorConfirmar = movimientosPorConfirmarDe(uid, voidedIds),
@@ -750,4 +761,21 @@ internal fun Transaction.movimientosPorConfirmarDe(uid: String, voidedIds: Set<S
                     tipo = runCatching { TransactionType.valueOf(fila[Events.type]) }.getOrNull() ?: TransactionType.EXPENSE,
                 )
             },
+    )
+
+/**
+ * **Cuánto dicen los avisos por confirmar** (vuelta 44), uno por pago: el monto que lee Movi del aviso
+ * que propone cada pago ([propuestaDelGrupo], el mismo de la bandeja), o la lectura guardada de un
+ * comprobante. Sin la memoria ni los terceros del dueño: eso cambia la categoría, nunca el monto. Si
+ * alguno no se lee, o no es en pesos, `null` ([sumaDeLoPorConfirmar]): la franja dice solo el conteo.
+ */
+internal fun Transaction.porConfirmarSumanDe(uid: String, bandeja: List<SmsMessage>): Long? =
+    sumaDeLoPorConfirmar(
+        unoPorPago(bandeja).map { cabeza ->
+            val miembros = cabeza.grupoId?.let { grupo -> bandeja.filter { it.grupoId == grupo } }?.ifEmpty { null } ?: listOf(cabeza)
+            val propuesta = if (miembros.size > 1) propuestaDelGrupo(miembros) else cabeza
+            val leido = (if (esUnComprobante(propuesta)) parsedDeUnComprobante(uid, propuesta.id, propuesta.text) else null)
+                ?: parseSms(propuesta.text, propuesta.bank)
+            leido?.let { MontoDelAviso(it.amount.roundToLong(), it.currency) }
+        },
     )

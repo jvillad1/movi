@@ -602,3 +602,14 @@ fun categoriaSugeridaPorNombre(
         ?.name
         ?.takeIf { categoriaSirveParaTipo(it, type, usedCategories, prefs) }
 }
+
+/**
+ * **¿Agregar se abrió para pagar algo que Movi ya espera?** (vuelta 44): «Anotar pago» de una factura
+ * del período (el modo pago de la vuelta 43, `presetPago`, o su nombre y su categoría, ver
+ * `hojaParaAnotar`) o la cuota de un crédito o una tarjeta (con la deuda). Ese pago salda una ocurrencia —ya hay una regla detrás—, así que no se le
+ * pregunta «¿se repite todos los meses?» (ver `seRepiteParaProponer` en `:core`).
+ */
+fun vieneDeUnPagoQueSeEspera(pedido: com.jvillada.movi.ui.Screen.QuickAdd): Boolean =
+    pedido.presetPago != null || pedido.presetDeudaId != null ||
+        (pedido.presetNota != null && pedido.presetCategoria != null)
+

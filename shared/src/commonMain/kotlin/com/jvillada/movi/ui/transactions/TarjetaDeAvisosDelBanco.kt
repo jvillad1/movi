@@ -46,7 +46,8 @@ const val REVISAR_UNO_POR_UNO: String = "Revisar uno por uno"
 internal fun TarjetaDeAvisosDelBanco(
     avisos: AvisosPorConfirmar,
     onConfirmar: () -> Unit,
-    onRevisar: () -> Unit,
+    /** «Revisar uno por uno» (abre Por revisar). `null` en Por revisar mismo (vuelta 44): ya está ahí. */
+    onRevisar: (() -> Unit)?,
     modifier: Modifier = Modifier,
     ocupado: Boolean = false,
 ) {
@@ -83,13 +84,15 @@ internal fun TarjetaDeAvisosDelBanco(
                     cargando = ocupado,
                 )
             }
-            Boton(
-                botonDeRevisarLosAvisos(avisos),
-                onClick = onRevisar,
-                modifier = Modifier.weight(1f),
-                variante = VarianteDeBoton.Secundario,
-                habilitado = !ocupado,
-            )
+            if (onRevisar != null) {
+                Boton(
+                    botonDeRevisarLosAvisos(avisos),
+                    onClick = onRevisar,
+                    modifier = Modifier.weight(1f),
+                    variante = VarianteDeBoton.Secundario,
+                    habilitado = !ocupado,
+                )
+            }
         }
     }
 }

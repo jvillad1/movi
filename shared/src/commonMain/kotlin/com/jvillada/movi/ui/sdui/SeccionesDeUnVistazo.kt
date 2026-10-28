@@ -107,6 +107,7 @@ import com.jvillada.movi.ui.dashboard.HojaDeDondeSale
 import com.jvillada.movi.ui.dashboard.conteoPorRevisarDelInicio
 import com.jvillada.movi.ui.dashboard.rememberCifraQueCambia
 import com.jvillada.movi.ui.porrevisar.desgloseDePorRevisar
+import com.jvillada.movi.ui.porrevisar.ConteoPorRevisar
 import com.jvillada.movi.ui.porrevisar.textoDePorRevisar
 import com.jvillada.movi.ui.components.ds.Pildora
 import com.jvillada.movi.ui.components.ds.TonoDePildora
@@ -321,23 +322,40 @@ private fun CuerpoDelHeroe(
 internal fun textoDeLaPastillaDeAvisos(n: Int): String = textoDePorRevisar(n)
 
 /**
+ * **Lo que dice la franja «Por confirmar»** (vuelta 44): con la suma de los avisos
+ * (`DashboardSummary.porConfirmarSuman`, entera o nada), «Por confirmar $103.600» y debajo de qué es
+ * —«En 3 avisos», o «En 4 avisos · y 1 movimiento» si espera algo más, que no está en la cifra—. Sin la
+ * suma, como en la vuelta 39: «Por confirmar» y, con varias fuentes, el desglose. Pura.
+ */
+internal fun textosDeLaFranjaPorConfirmar(conteo: ConteoPorRevisar, suman: Long?): Pair<String, String?> {
+    val desglose = desgloseDePorRevisar(conteo)
+    if (suman == null || suman <= 0L || conteo.avisos <= 0) {
+        return "Por confirmar" to desglose?.takeIf { it.contains(" · ") }
+    }
+    val avisos = if (conteo.avisos == 1) "En 1 aviso" else "En ${conteo.avisos} avisos"
+    val resto = desgloseDePorRevisar(conteo.copy(avisos = 0))
+    return "Por confirmar ${formatCOP(suman)}" to (if (resto == null) avisos else "$avisos · y $resto")
+}
+
+/**
  * **La franja «Por confirmar»** de la tarjeta héroe (vuelta 39): debajo del hilo, en la capa 2, el reloj
- * en el tinte, «Por confirmar», la pastilla «N avisos» —el mismo número de la insignia de «Revisar
- * avisos» ([conteoPorRevisarDelInicio])— y la flecha; abre Por revisar. Con varias fuentes, de qué es el
- * número va debajo («2 avisos · 1 movimiento»). Sin nada que confirmar, la franja no está (sin hueco).
+ * en el tinte, «Por confirmar», la pastilla «N por revisar» —el mismo número de la insignia de «Revisar
+ * avisos» ([conteoPorRevisarDelInicio])— y la flecha; abre Por revisar. Sin nada que confirmar, la
+ * franja no está (sin hueco).
  *
- * La maqueta dice además cuánta plata espera («Por confirmar $186.400»): ese total no lo calcula ninguna
- * función de Movi, y esta vuelta no inventa reglas de plata. Va el conteo.
+ * Vuelta 44: dice cuánto suman los avisos («Por confirmar $103.600 · En 3 avisos», ver
+ * [textosDeLaFranjaPorConfirmar]), para saber cuánto va a bajar «Te quedan» antes de confirmar.
  */
 @Composable
 private fun FranjaPorConfirmar(data: DashboardData, onNavigate: (Screen) -> Unit) {
     val conteo = conteoPorRevisarDelInicio(data)
     if (conteo.total <= 0) return
+    val (titulo, subtitulo) = textosDeLaFranjaPorConfirmar(conteo, data.porConfirmarSuman)
     Separador(SangriaDeSeparador.Ninguna)
     Box(modifier = Modifier.fillMaxWidth().background(Movi.colores.capa2)) {
         Fila(
-            titulo = "Por confirmar",
-            subtitulo = desgloseDePorRevisar(conteo)?.takeIf { it.contains(" · ") },
+            titulo = conCifrasOcultas(titulo),
+            subtitulo = subtitulo,
             modifier = Modifier.testTag(TAG_FRANJA_POR_CONFIRMAR),
             inicio = { IconoEnCirculo(Icons.Rounded.Schedule, tono = TonoDeIcono.Aviso) },
             final = {
