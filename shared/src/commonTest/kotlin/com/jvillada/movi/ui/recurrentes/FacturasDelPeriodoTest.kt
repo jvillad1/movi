@@ -81,7 +81,8 @@ class FacturasDelPeriodoTest {
         assertEquals("Vence hoy" to TonoDePildora.Aviso, pastillaDeVencimiento(arriendo.copy(diasParaVencer = 0), conPropuesta = false))
         assertEquals("Llega hoy" to TonoDePildora.Aviso, pastillaDeVencimiento(sueldo, conPropuesta = false))
         // Cuando Movi pregunta «¿fue este?», eso es lo que dice.
-        assertEquals("Por confirmar" to TonoDePildora.Marca, pastillaDeVencimiento(arriendo, conPropuesta = true))
+        // Una píldora de estado no va llena de amarillo (eso es de la acción principal): el tinte.
+        assertEquals("Por confirmar" to TonoDePildora.Aviso, pastillaDeVencimiento(arriendo, conPropuesta = true))
     }
 
     @Test
@@ -90,6 +91,22 @@ class FacturasDelPeriodoTest {
         // Un sello viejo sin movimiento no tiene a dónde llevar; una sin pagar tampoco.
         assertNull(enlaceDelMovimiento(coomeva.copy(eventId = null)))
         assertNull(enlaceDelMovimiento(arriendo))
+    }
+
+    @Test
+    fun `sin nada pagado dice Aun no pagas nada de esto`() {
+        val sinPagar = resumenDeFacturas(listOf(arriendo, internet))
+        assertEquals(0L, sinPagar.pagado)
+        assertEquals("Aún no pagas nada de esto", lineaDeLoPagado(sinPagar))
+    }
+
+    /** El arriendo del demo está en «Otros»: el ícono sale del nombre (la casa), no el genérico. */
+    @Test
+    fun `una factura en Otros toma el icono de su nombre`() {
+        assertEquals("Arriendo", nombreParaElIconoDeLaFactura("Otros", "Arriendo"))
+        assertEquals("Arriendo", nombreParaElIconoDeLaFactura("", "Arriendo"))
+        assertEquals("Vivienda", nombreParaElIconoDeLaFactura("Vivienda", "Arriendo"))
+        assertEquals("casa", com.jvillada.movi.ui.categorias.aparienciaDe("Arriendo", null).icono)
     }
 
     @Test

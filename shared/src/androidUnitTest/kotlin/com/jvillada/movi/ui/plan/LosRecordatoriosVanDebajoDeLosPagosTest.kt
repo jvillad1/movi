@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.plan
 
+import com.jvillada.movi.ui.recurrentes.AUN_NO_PAGAS_NADA
 import com.jvillada.movi.ui.recurrentes.TAG_TARJETA_FALTA_POR_PAGAR
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -104,8 +105,8 @@ class LosRecordatoriosVanDebajoDeLosPagosTest {
     @Test
     fun `ya pagaste en cero va apagado`() {
         montar()
-        // Vuelta 40: lo pagado lo dice la tarjeta amarilla en una frase, «Llevas $0 pagados».
-        composeRule.onNodeWithText("Llevas \$0 pagados", useUnmergedTree = true).assertExists()
+        // Vuelta 40: lo pagado lo dice la tarjeta amarilla en una frase; en cero, «Aún no pagas nada de esto».
+        composeRule.onNodeWithText(AUN_NO_PAGAS_NADA, useUnmergedTree = true).assertExists()
         // El primero es el de la tarjeta («Falta por pagar»); el otro, el de la fila del Arriendo.
         val falta = composeRule.onAllNodesWithText("\$1.800.000", useUnmergedTree = true).fetchSemanticsNodes().first()
         assertEquals(TonoDeCifra.Neutro, falta.config[TonoDeCifraKey])

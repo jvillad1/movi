@@ -33,7 +33,9 @@ import com.jvillada.movi.theme.Icono
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.theme.Radio
+import com.jvillada.movi.ui.categorias.ICONO_DE_CATEGORIA_RESPALDO
 import com.jvillada.movi.ui.categorias.IconoDeCategoria
+import com.jvillada.movi.ui.categorias.aparienciaDe
 import com.jvillada.movi.ui.components.ds.BarraDeProgreso
 import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.ui.components.ds.Cifra
@@ -120,8 +122,23 @@ fun lineaDeLoQueQueda(resumen: ResumenDeFacturas): String {
     return "de ${formatCOP(resumen.total)} · $quedan"
 }
 
-/** «Llevas $1.638.600 pagados». */
-fun lineaDeLoPagado(resumen: ResumenDeFacturas): String = "Llevas ${formatCOP(resumen.pagado)} pagados"
+/**
+ * «Llevas $1.638.600 pagados»; en cero, «Aún no pagas nada de esto» (la frase de la vuelta 28: un
+ * «$0» no dice nada que haya que mirar).
+ */
+fun lineaDeLoPagado(resumen: ResumenDeFacturas): String =
+    if (resumen.pagado <= 0L) AUN_NO_PAGAS_NADA else "Llevas ${formatCOP(resumen.pagado)} pagados"
+
+/** Lo que dice la tarjeta amarilla cuando todavía no se ha pagado nada del período. */
+const val AUN_NO_PAGAS_NADA: String = "Aún no pagas nada de esto"
+
+/**
+ * **Con qué nombre se elige el ícono de una factura**: el de su categoría, salvo que la categoría no
+ * diga nada (vacía, u «Otros» y cualquiera que caiga en el ícono genérico): ahí el de su nombre. El
+ * arriendo del usuario demo está en «Otros» y salía con el ícono genérico en vez de la casa. Pura.
+ */
+internal fun nombreParaElIconoDeLaFactura(categoria: String, nombre: String): String =
+    if (categoria.isBlank() || aparienciaDe(categoria, null).icono == ICONO_DE_CATEGORIA_RESPALDO) nombre else categoria
 
 /**
  * **El orden de la lista**: lo vencido primero (lo que venció hace más, arriba), después lo que vence
@@ -148,10 +165,11 @@ fun fechaCortaDeFactura(iso: String): String? =
 /**
  * **La pastilla de vencimiento de una factura sin pagar**, con su tono: lo vencido y lo que vence en
  * tres días o menos en el tinte con el texto de aviso («Vence el martes»); lo demás, neutra («Vence
- * el 3 nov»). Lo que Movi pregunta («¿fue este?») dice «Por confirmar». Pura.
+ * el 3 nov»). Lo que Movi pregunta («¿fue este?») dice «Por confirmar», también en el tinte. Pura.
  */
 fun pastillaDeVencimiento(pago: PagoDelPeriodo, conPropuesta: Boolean): Pair<String, TonoDePildora> {
-    if (conPropuesta) return "Por confirmar" to TonoDePildora.Marca
+    // Una píldora de estado nunca va llena de amarillo: eso es de la acción principal (revisión).
+    if (conPropuesta) return "Por confirmar" to TonoDePildora.Aviso
     val dias = pago.diasParaVencer
     val verbo = if (pago.esIngreso) "Llega" else "Vence"
     val fecha = runCatching { LocalDate.parse(pago.vence) }.getOrNull()
@@ -232,44 +250,73 @@ internal fun FilaDeFactura(
 ) {
     // Lo que se toca para abrir la regla es el ícono con los textos, no la fila entera: el botón de la
     // derecha es otro control, y un botón adentro de otro tocable se lee mal (y se toca mal).
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = Medida.altoDeFilaDoble)
-            .testTag(TAG_FILA_DE_FACTURA)
-            .padding(end = Medida.margenDePantalla),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-    Row(
-        modifier = Modifier
-            .weight(1f)
-            .then(if (onAbrir != null) Modifier.clickable(onClickLabel = etiquetaDeAbrir, onClick = onAbrir) else Modifier)
-            .padding(start = Medida.margenDePantalla, top = Espacio.s, bottom = Espacio.s),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(modifier = Modifier.size(Medida.avatar), contentAlignment = Alignment.Center) {
-            IconoDeCategoria(pago.categoria.ifBlank { pago.nombre })
-        }
-        Spacer(Modifier.width(ESPACIO_ANTES_DEL_TEXTO_DE_FILA))
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
-            Text(
-                pago.nombre,
-                style = Movi.textos.cuerpoFuerte,
-                color = Movi.colores.texto,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
-                MontoDeFila(
-                    textoDelMontoDelChecklist(pago),
-                    color = if (pago.pagado) Movi.colores.textoMedio else Movi.colores.texto,
-                )
-                // Una tarjeta se paga con su mínimo o su saldo: el monto dice de cuál se habla.
-                if (pago.montoEsSaldo && !pago.pagado) {
-                    Text("saldo", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+    Column(modifier = Modifier.fillMaxWidth().testTag(TAG_FILA_DE_FACTURA)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = Medida.altoDeFila)
+                .padding(end = Medida.margenDePantalla),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .then(if (onAbrir != null) Modifier.clickable(onClickLabel = etiquetaDeAbrir, onClick = onAbrir) else Modifier)
+                    .padding(start = Medida.margenDePantalla, top = Espacio.s, bottom = Espacio.xxs),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(modifier = Modifier.size(Medida.avatar), contentAlignment = Alignment.Center) {
+                    // Vuelta 40: el ícono de la categoría, o el del nombre si la categoría no dice nada
+                    // («Arriendo» anotado en «Otros» lleva la casa, no el ícono genérico).
+                    IconoDeCategoria(nombreParaElIconoDeLaFactura(pago.categoria, pago.nombre))
+                }
+                Spacer(Modifier.width(ESPACIO_ANTES_DEL_TEXTO_DE_FILA))
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
+                    Text(
+                        pago.nombre,
+                        style = Movi.textos.cuerpoFuerte,
+                        color = Movi.colores.texto,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
+                        MontoDeFila(
+                            textoDelMontoDelChecklist(pago),
+                            color = if (pago.pagado) Movi.colores.textoMedio else Movi.colores.texto,
+                        )
+                        // Una tarjeta se paga con su mínimo o su saldo: el monto dice de cuál se habla.
+                        if (pago.montoEsSaldo && !pago.pagado) {
+                            Text("saldo", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                        }
+                    }
                 }
             }
-            val enlace = enlaceDelMovimiento(pago)
+            Spacer(Modifier.width(ESPACIO_ANTES_DEL_FINAL_DE_FILA))
+            when {
+                pago.pagado -> PildoraDePagado(pago.esIngreso)
+                onAnotar != null && !conPropuesta -> Boton(
+                    if (pago.esIngreso) ETIQUETA_ANOTAR_INGRESO else ETIQUETA_ANOTAR,
+                    onClick = onAnotar,
+                    variante = if (principal) VarianteDeBoton.Principal else VarianteDeBoton.Secundario,
+                    tamano = TamanoDeBoton.S,
+                    habilitado = !enVuelo,
+                )
+            }
+        }
+        // **La pastilla (o el enlace) va en su renglón**, a todo el ancho desde el texto (vuelta 40,
+        // revisión): al lado de «Anotar pago», a 360 dp, «Venció hace 23 días» se cortaba en «Venció
+        // hace 23». Lo mide `LaPastillaCabeEnteraTest`.
+        val enlace = enlaceDelMovimiento(pago)
+        // El renglón de la pastilla también abre la regla (es parte de lo que se lee de la fila); el
+        // de un pago con enlace no, para no meter un tocable dentro de otro.
+        val abreLaRegla = onAbrir != null && (enlace == null || onVerMovimiento == null)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(if (abreLaRegla) Modifier.clickable(onClickLabel = etiquetaDeAbrir, onClick = onAbrir!!) else Modifier)
+                .padding(start = SANGRIA_DEL_TEXTO_DE_LA_FILA, end = Medida.margenDePantalla, bottom = Espacio.s),
+            verticalArrangement = Arrangement.spacedBy(Espacio.xxs),
+        ) {
             when {
                 enVuelo -> Text("Guardando…", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                 !pago.pagado -> {
@@ -286,18 +333,6 @@ internal fun FilaDeFactura(
                 }
                 evidencia != null -> Text(evidencia, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
             }
-        }
-    }
-        Spacer(Modifier.width(ESPACIO_ANTES_DEL_FINAL_DE_FILA))
-        when {
-            pago.pagado -> PildoraDePagado(pago.esIngreso)
-            onAnotar != null && !conPropuesta -> Boton(
-                if (pago.esIngreso) ETIQUETA_ANOTAR_INGRESO else ETIQUETA_ANOTAR,
-                onClick = onAnotar,
-                variante = if (principal) VarianteDeBoton.Principal else VarianteDeBoton.Secundario,
-                tamano = TamanoDeBoton.S,
-                habilitado = !enVuelo,
-            )
         }
     }
     debajo?.let { BajoLaFila { it() } }

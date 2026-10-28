@@ -305,6 +305,15 @@ fun SeccionChecklistDelPeriodo(
                     TarjetaFaltaPorPagar(resumenDeFacturas(checklist))
                     Spacer(Modifier.height(Medida.entreSecciones))
                 }
+                // «Tus recordatorios no llegan» (vuelta de diseño 28): un aviso propio, compacto y en
+                // tono de aviso, entre la tarjeta amarilla y la lista. No es una factura: va afuera
+                // de la lista (revisión de la vuelta 40).
+                if (debajoDelResumen != null) {
+                    Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
+                        debajoDelResumen()
+                    }
+                    Spacer(Modifier.height(Medida.entreSecciones))
+                }
                 // ── Tus facturas del período ─────────────────────────────────────────────────
                 Seccion(titulo = TITULO_TUS_FACTURAS)
                 Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
@@ -313,9 +322,6 @@ fun SeccionChecklistDelPeriodo(
                             MomentoDeCelebracion(FRASE_DEL_CHECKLIST_COMPLETO)
                         }
                     }
-                    // «Tus recordatorios no llegan» (vuelta de diseño 28): arriba de la lista, debajo
-                    // de lo que falta.
-                    debajoDelResumen?.invoke()
                     val aLaVista = if (todasALaVista) facturas else facturas.take(FACTURAS_A_LA_VISTA)
                     if (facturas.isEmpty()) {
                         Text(
@@ -695,7 +701,12 @@ private fun LoQueOfreceLaFila(
             // La pregunta es una propuesta de Movi: va en la superficie de las propuestas (la de
             // «Movi propone hoy» del Inicio), con su píldora y sus dos botones del sistema.
             EstadoDeLaFila.CON_DUDAS -> if (propuesta != null) {
-                Superficie(modifier = Modifier.fillMaxWidth(), nivel = NivelDeSuperficie.Propuesta) {
+                // Vuelta 40 (revisión): dentro de la lista de facturas, un bloque plano en la capa 2
+                // —sin sombra—: una tarjeta con sombra metida en una lista es tarjeta dentro de tarjeta.
+                Superficie(
+                    modifier = Modifier.fillMaxWidth(),
+                    nivel = if (conBotonDeAnotar) NivelDeSuperficie.Propuesta else NivelDeSuperficie.Capa2,
+                ) {
                     Text(text = preguntaDeLaFila(pago), style = Movi.textos.titulo, color = Movi.colores.texto)
                     Spacer(Modifier.height(Espacio.xs))
                     PropuestaDeMovimiento(
