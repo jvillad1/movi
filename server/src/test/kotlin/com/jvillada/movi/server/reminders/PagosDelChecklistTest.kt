@@ -146,8 +146,7 @@ class PagosDelChecklistTest {
         val parte = parteFija(reglasDelDueno, sellosDelDueno, pagosDelDueno)
         assertEquals(
             mapOf(
-                "ev_2f79" to 3_000_000L,          // Colegio, su sello
-                "ev_colegio_parte" to 1_000_000L, // Colegio, lo que le faltaba
+                "ev_2f79" to 3_000_000L,          // Colegio, su sello: el ítem resta lo pagado (vuelta 43)
                 "ev_f02f" to 180_000L,            // Gimnasio Caro, su sello
                 "ev_mercado" to 2_000_000L,       // Mercado, sellado sin movimiento
                 "ev_gym_cami" to 180_000L,        // Gimnasio Cami, sellado sin movimiento
@@ -159,8 +158,10 @@ class PagosDelChecklistTest {
             parte,
         )
         // Queda el gimnasio de Caro del 25-ago: la regla ya está completa con el del 27, así que
-        // ese segundo pago de $180.000 es gasto de más, no un fijo. Y el almuerzo.
-        assertEquals(180_000L + 45_000L, gastoTotal(pagosDelDueno, parte))
+        // ese segundo pago de $180.000 es gasto de más, no un fijo. Y el almuerzo. Y, desde la vuelta
+        // 43, la otra parte del colegio: el sello resta como fijo lo que pagó su movimiento
+        // ($3.000.000), así que el millón que se pagó aparte cuenta una vez, como variable.
+        assertEquals(180_000L + 45_000L + 1_000_000L, gastoTotal(pagosDelDueno, parte))
     }
 
     // ── Los casos, uno por uno ───────────────────────────────────────────────
@@ -180,8 +181,14 @@ class PagosDelChecklistTest {
         assertEquals(mapOf("el-mercado" to 2_000_000L), parte)
     }
 
+    /**
+     * Vuelta 43: sellado con la parte de $3.000.000, el ítem resta lo que pagó ese movimiento (el
+     * cliente lo lee en `montoPagado`) y queda completo; la otra parte es variable. La suma es la
+     * misma que antes —fijos $3.000.000 + variable $1.250.000 = $4.000.000 + $250.000—: cada peso una
+     * vez. Sin sello, las dos partes salen igual (la prueba de abajo).
+     */
     @Test
-    fun `un pago en dos movimientos saca las dos partes y nada mas`() {
+    fun `un pago en dos movimientos sellado con una parte resta esa y deja la otra como variable`() {
         val colegio = regla("rr_colegio", "Colegio Hija", "Hija", 4_000_000, 25)
         val eventos = listOf(
             evento("tres", "Colegio Hija", 3_000_000, "2026-08-31", "Hija"),
@@ -189,8 +196,8 @@ class PagosDelChecklistTest {
             evento("uniforme", "Uniforme", 250_000, "2026-09-02", "Hija"),
         )
         val parte = parteFija(listOf(colegio), listOf(sello("rr_colegio", "2026-08", "tres")), eventos)
-        assertEquals(mapOf("tres" to 3_000_000L, "uno" to 1_000_000L), parte)
-        assertEquals(250_000L, gastoTotal(eventos, parte))
+        assertEquals(mapOf("tres" to 3_000_000L), parte)
+        assertEquals(1_250_000L, gastoTotal(eventos, parte))
     }
 
     @Test
@@ -217,13 +224,21 @@ class PagosDelChecklistTest {
         assertEquals(360_000L, gastoTotal(eventos, parte))
     }
 
+    /**
+     * Vuelta 43: un sello con movimiento resta como fijo lo que se pagó (`montoPagado`), así que el
+     * pago sale entero del variable. Antes salían $180.000 y los $20.000 de más quedaban como
+     * variable: la misma suma, pero un sello por MENOS que la regla dejaba restada plata que nunca
+     * salió y «Te quedan» no subía por la diferencia.
+     */
     @Test
-    fun `un pago mas grande que el fijo deja la diferencia como variable`() {
+    fun `un pago sellado sale entero del variable, mas grande o mas chico que el fijo`() {
         val gimnasio = regla("rr_gym", "Gimnasio Caro", "Gimnasio", 180_000, 25)
         val eventos = listOf(evento("gym", "Gimnasio Caro", 200_000, "2026-08-25", "Gimnasio"))
         val parte = parteFija(listOf(gimnasio), listOf(sello("rr_gym", "2026-08", "gym")), eventos)
-        assertEquals(mapOf("gym" to 180_000L), parte)
-        assertEquals(20_000L, gastoTotal(eventos, parte))
+        assertEquals(mapOf("gym" to 200_000L), parte)
+        assertEquals(0L, gastoTotal(eventos, parte))
+        val menos = listOf(evento("gym", "Gimnasio Caro", 150_000, "2026-08-25", "Gimnasio"))
+        assertEquals(mapOf("gym" to 150_000L), parteFija(listOf(gimnasio), listOf(sello("rr_gym", "2026-08", "gym")), menos))
     }
 
     /** El error contrario: sacar del variable algo que los fijos no cuentan. */

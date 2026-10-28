@@ -435,12 +435,10 @@ class PagoTardioPasadaLaGraciaTest {
     }
 
     /**
-     * El control, sellado a mano: para esa fila el server no manda `montoPagado` y el cliente resta
-     * el monto de la regla ($53.077). Los $3.077 que faltan para completarla NO se sacan del agua:
-     * comparte solo la categoría, no el nombre, y un movimiento así no es evidencia de que pague el
-     * fijo (ver `PagosDelChecklist.kt`). El agua queda entera como variable; el error es de $3.077
-     * a favor de la prudencia —el Disponible sale más bajo, nunca más alto— y no hay plata contada
-     * de menos.
+     * Sellado a mano, igual que emparejado solo (vuelta 43): el sello con movimiento manda
+     * `montoPagado` ($50.000) y el cliente resta eso, no el monto de la regla. Los $3.077 que faltan
+     * NO se sacan del agua —comparte solo la categoría, no el nombre—: el agua queda entera como
+     * variable. Antes el sello restaba $53.077 y esos $3.077 quedaban restados sin haber salido.
      */
     @Test
     fun `sellado a mano con menos que la regla el faltante no se saca de un gasto solo de su categoria`() {
@@ -450,8 +448,8 @@ class PagoTardioPasadaLaGraciaTest {
         sellar(celular, "2026-09", "ev-celular")
 
         val estado = estadoDelCelular()
-        assertTrue(estado.occurred && !estado.automatica && estado.montoDelPago == null, "Sellado a mano, sin lo pagado")
-        val f = fijos(pasadaLaGracia, mapOf(celular to (LocalDate.of(2026, 9, 26) to 53_077L)))
+        assertTrue(estado.occurred && !estado.automatica && estado.montoDelPago == 50_000L, "Sellado a mano, con lo pagado")
+        val f = fijos(pasadaLaGracia, mapOf(celular to (LocalDate.of(2026, 9, 26) to 50_000L)))
         assertEquals(b - f - agua - v, loQueQueda(pasadaLaGracia, f))
         assertEquals(v + agua, servidor(pasadaLaGracia).gastoVariablePorDia["2026-09-27"], "El agua sigue entera como variable")
     }
