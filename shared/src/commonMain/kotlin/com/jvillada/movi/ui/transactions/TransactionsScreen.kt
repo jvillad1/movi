@@ -22,6 +22,7 @@ import com.jvillada.movi.ui.components.ds.BotonDeIcono
 import com.jvillada.movi.ui.components.ds.VarianteDeBotonDeIcono
 import com.jvillada.movi.ui.components.ds.EsqueletoDeFila
 import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.SIGNO_MENOS
 import com.jvillada.movi.ui.components.ds.Pildora
 import com.jvillada.movi.ui.components.ds.PildoraDeFiltro
 import com.jvillada.movi.ui.components.ds.TonoDePildora
@@ -104,6 +105,10 @@ import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.aporteAlFlujoDelDia
+import com.jvillada.movi.shared.model.PresentacionDelMovimiento
+import com.jvillada.movi.shared.model.comoSePresenta
+import com.jvillada.movi.shared.model.comoSePresentaElPar
+import com.jvillada.movi.shared.model.laPataQueCuenta
 import com.jvillada.movi.shared.model.cuentaEnGastosEIngresos
 import com.jvillada.movi.shared.model.esperaEnPorConfirmar
 import com.jvillada.movi.ui.porrevisar.RenglonPorRevisar
@@ -282,7 +287,10 @@ enum class TonoDelMonto {
     GASTO,
     /** Plata que entró al bolsillo. Verde y con «+». */
     INGRESO,
-    /** Plata que fue de una cuenta suya a otra: traspaso, cuota o pago de tarjeta. Azul y sin signo. */
+    /**
+     * Plata que fue de una cuenta suya a otra sin contar como gasto ni ingreso: traspaso, pago de
+     * tarjeta o abono extraordinario. Gris azulado y sin signo. (La cuota de un crédito no: es gasto.)
+     */
     ENTRE_CUENTAS,
     /** No movió plata del bolsillo. Gris y sin signo. */
     NEUTRO,
@@ -304,33 +312,40 @@ enum class TonoDelMonto {
  * La pata del dinero de una **cuota de crédito** sí cuenta (`CUOTA_CATEGORY` no es reservada: el
  * dueño decidió que «es plata que salió»), así que cuando aparece suelta —en «Gastos», donde su
  * hermana de la deuda no entra— va en rojo, como el gasto que es.
+ *
+ * Vuelta 50: la decisión es [comoSePresenta] (`:core`), la misma con la que suman «Gastos» y el
+ * «Gastaste» del día. Acá solo se traduce a un tono.
  */
-fun tonoDelEvento(event: FinancialEvent): TonoDelMonto = when {
-    !event.countsAsCashFlow -> TonoDelMonto.NEUTRO
-    event.type == TransactionType.INCOME -> TonoDelMonto.INGRESO
-    else -> TonoDelMonto.GASTO
-}
+fun tonoDelEvento(event: FinancialEvent, tipoDeCuenta: AccountType? = null): TonoDelMonto =
+    when (comoSePresenta(event, tipoDeCuenta)) {
+        PresentacionDelMovimiento.GASTO -> TonoDelMonto.GASTO
+        PresentacionDelMovimiento.INGRESO -> TonoDelMonto.INGRESO
+        PresentacionDelMovimiento.NEUTRO -> TonoDelMonto.NEUTRO
+    }
 
 /**
- * El tono de un renglón. Un **par** —traspaso, cuota, pago de tarjeta, leído como un solo hecho—
- * es `ENTRE_CUENTAS`, ni gasto ni ingreso (la única excepción es el desembolso de un crédito, que
- * es `INGRESO`: la plata prestada sí entró a tu cuenta): la plata no entró ni salió, cambió de
- * cuenta. Ponerle un signo obligaría a elegir el punto de vista de una de las dos cuentas, que es
- * justo la confusión que el renglón doble vino a sacar (ver [TransferRow]) — pero eso solo dice
- * que no lleva signo, no que tenga que verse igual que un NEUTRO real (la apertura de una cuenta,
- * una pata huérfana): son un hecho identificable y el dueño los quiere distinguibles a simple
- * vista (ver [TonoDelMonto]).
+ * El tono de un renglón. Un **par** —dos patas leídas como un solo hecho— se pinta como **la pata que
+ * cuenta** en los totales ([comoSePresentaElPar], `:core`, vuelta 50):
+ *
+ * - **Cuota de crédito → `GASTO`**: la pata que sale de tu cuenta suma en «Gastos» (decisión del dueño,
+ *   «es plata que salió»), así que va con «−» y en tinta, igual que en el «Gastaste» del día.
+ * - **Desembolso → `INGRESO`**: la plata prestada entró a tu cuenta y suma en «Entró».
+ * - **Traspaso, pago de tarjeta, abono extraordinario → `ENTRE_CUENTAS`**: ninguna pata cuenta; la
+ *   plata cambió de cuenta. Sin signo —ponérselo obligaría a elegir el punto de vista de una de las dos
+ *   cuentas— pero distinguible de un NEUTRO real (la apertura de una cuenta, una pata huérfana).
  */
 fun tonoDelRenglon(
     row: MovementRow,
     accountTypes: Map<String, AccountType> = emptyMap(),
 ): TonoDelMonto = when (row) {
-    // **El desembolso de un crédito sí es plata que entró a tu cuenta**, aunque no cuente como
-    // ingreso del mes (es deuda): sin verde ni «+», la fila se leía como un movimiento cualquiera
-    // y el dueño no encontraba de dónde había salido la plata que gastó. Sin los tipos de cuenta
-    // todavía, se queda neutro como siempre — ver [transferRowTitle].
-    is MovementRow.Transfer ->
-        if (esDesembolso(row, accountTypes)) TonoDelMonto.INGRESO else TonoDelMonto.ENTRE_CUENTAS
+    // Un desembolso anterior a su categoría (guardado como «Traspaso») se llama «Desembolso» por los
+    // tipos de cuenta ([transferRowTitle]) pero no suma en «Entró» —la migración de datos lo pasa a
+    // [DESEMBOLSO_CATEGORY]—, así que se pinta neutro, como lo cuentan los totales.
+    is MovementRow.Transfer -> when (comoSePresentaElPar(row.out, row.into, accountTypes)) {
+        PresentacionDelMovimiento.GASTO -> TonoDelMonto.GASTO
+        PresentacionDelMovimiento.INGRESO -> TonoDelMonto.INGRESO
+        PresentacionDelMovimiento.NEUTRO -> TonoDelMonto.ENTRE_CUENTAS
+    }
     is MovementRow.Single -> tonoDelEvento(row.event)
     // Un grupo de ajustes no movió plata del bolsillo — ninguno de sus renglones lo hizo, por
     // `isCashFlow` — así que el gris es literal, no una elección estética.
@@ -918,10 +933,27 @@ private const val TITULO_DE_DESEMBOLSO = "Desembolso"
  */
 const val NOTA_DE_DESEMBOLSO: String = "Crédito · plata prestada que entró a tu cuenta"
 
-/** El monto grande del par: con «+» si es un desembolso (entró plata), sin signo en los demás. */
+/**
+ * **La pata del par cuya cifra se muestra**: la que cuenta ([laPataQueCuenta]) —la de la cuenta de
+ * dinero en una cuota o un desembolso— o, si ninguna cuenta, la que sale.
+ */
+fun pataQueSeMuestra(row: MovementRow.Transfer, accountTypes: Map<String, AccountType>): FinancialEvent =
+    laPataQueCuenta(row.out, row.into, accountTypes) ?: row.out
+
+/**
+ * El monto grande del par, como lo escribe su [Cifra]: «−$980.000» en una cuota (gasto), «+$X» en un
+ * desembolso (ingreso), sin signo en un traspaso, un pago de tarjeta o un abono. Ver [tonoDelRenglon].
+ */
 fun textoDelMontoDeTraspaso(row: MovementRow.Transfer, accountTypes: Map<String, AccountType>): String {
-    val monto = formatMoney(row.amount, row.out.currency)
-    return if (esDesembolso(row, accountTypes)) "+$monto" else monto
+    val pata = pataQueSeMuestra(row, accountTypes)
+    val monto = formatMoney(pata.amount, pata.currency)
+    // Con «Ocultar los saldos», sin signo: un «−» suelto ya diría algo (ver `textoDeLaCifra`).
+    if (monto == PLATA_OCULTA) return monto
+    return when (tonoDelRenglon(row, accountTypes)) {
+        TonoDelMonto.GASTO -> "$SIGNO_MENOS$monto"
+        TonoDelMonto.INGRESO -> "+$monto"
+        else -> monto
+    }
 }
 
 /**
@@ -2117,12 +2149,14 @@ private fun FinalDeLaFila(
 }
 
 /**
- * Un traspaso, leído como un solo hecho: "Traspaso · Ahorros → CDT" y el monto **sin signo**, en
- * el azul de [TonoDelMonto.ENTRE_CUENTAS].
+ * Un par —traspaso, cuota, pago de tarjeta, desembolso, abono—, leído como un solo hecho: «Traspaso ·
+ * De Ahorros a CDT» y el monto **como cuenta en los totales** ([tonoDelRenglon], vuelta 50):
  *
- * Sin `+` ni `−` a propósito: la plata no entró ni salió del bolsillo, solo cambió de cuenta.
- * (El desembolso de un crédito es la excepción: entró plata prestada, va en verde con «+» y una
- * nota que aclara que es prestada — suma en «Entró» — ver [esDesembolso].)
+ * - **La cuota de un crédito es un gasto**: «−$980.000» en tinta, con el ícono de «Cuota de crédito».
+ * - **El desembolso es un ingreso**: «+$X» en verde, con su ícono y una nota que aclara que la plata es
+ *   prestada ([esDesembolso]).
+ * - **Traspaso, pago de tarjeta y abono extraordinario** van sin signo, con las flechas y en el gris
+ *   azulado de [TonoDelMonto.ENTRE_CUENTAS]: la plata no entró ni salió del bolsillo, cambió de cuenta.
  *
  * Lleva **el mismo ícono de repetición** que [MovementSingleRow] cuando el par es una cuota de
  * crédito o el pago de una tarjeta. La marca sale de la pata del dinero — [MovementRow.Transfer.out].
@@ -2145,15 +2179,17 @@ internal fun TransferRow(
         // El desembolso dice que la plata es prestada; el resto, de dónde a dónde fue.
         subtitulo = if (esDesembolso(row, accountTypes)) "$NOTA_DE_DESEMBOLSO · $subtitulo" else subtitulo,
         modifier = Modifier.marcaDeElegido(elegido),
-        // Neutro a propósito: un traspaso (o la cuota / el pago de tarjeta que se ven con esta
-        // misma forma) no es una categoría del dueño, es plata que cambió de cuenta.
-        inicio = { IconoDeCategoria(TRANSFER_CATEGORY) },
+        // Vuelta 50: el ícono de lo que cuenta. La cuota lleva el de «Cuota de crédito» y el desembolso
+        // el suyo (los de su categoría); lo que no cuenta —un traspaso, un pago de tarjeta, un abono—
+        // las flechas: no es una categoría del dueño, es plata que cambió de cuenta.
+        inicio = { IconoDeCategoria(laPataQueCuenta(row.out, row.into, accountTypes)?.category ?: TRANSFER_CATEGORY) },
         final = {
+            val pata = pataQueSeMuestra(row, accountTypes)
             FinalDeLaFila(
-                // En la moneda del movimiento: un traspaso de la Master Black USD no son pesos. Sin
-                // signo y en el azul de entre cuentas; el desembolso, en verde con «+».
-                monto = row.amount,
-                moneda = row.out.currency,
+                // En la moneda del movimiento: un traspaso de la Master Black USD no son pesos. La cuota
+                // con «−» en tinta, el desembolso en verde con «+», lo demás sin signo y en gris azulado.
+                monto = pata.amount,
+                moneda = pata.currency,
                 tono = tonoDelRenglon(row, accountTypes),
                 porConfirmar = false,
                 esRecurrente = esRecurrente,

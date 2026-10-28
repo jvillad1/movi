@@ -8,6 +8,7 @@ import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.isCashFlow
 import com.jvillada.movi.theme.COLORES_CLAROS
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -44,7 +45,9 @@ class DesembolsoEnMovimientosTest {
         timestamp = 0L,
         transferId = "tr",
         reconciliationStatus = ReconciliationStatus.RECONCILED,
-        countsAsCashFlow = false,
+        // Derivado como lo hace el server (vuelta 50): la pata del dinero de un desembolso o de una
+        // cuota SÍ es flujo; la del crédito, un traspaso o un pago de tarjeta no.
+        countsAsCashFlow = isCashFlow(tipos[cuenta] ?: AccountType.CHECKING, tipo, categoria),
     )
 
     private fun par(desde: String, hacia: String, categoria: String = TRANSFER_CATEGORY, monto: Long = 10_000_000L) =
@@ -118,8 +121,10 @@ class DesembolsoEnMovimientosTest {
     }
 
     @Test
-    fun `la cuota, el pago de tarjeta, el abono extraordinario y el traspaso entre cuentas siguen neutros`() {
+    fun `el pago de tarjeta, el abono extraordinario y el traspaso entre cuentas siguen neutros`() {
+        // La cuota ya no (vuelta 50): es un gasto, ver `ComoSePresentaLaFilaTest`.
         val cuota = par("acc_ahorros", "acc_credito", CUOTA_CATEGORY, 4_215_223L)
+        assertEquals(TonoDelMonto.GASTO, tonoDelRenglon(cuota, tipos))
         val tarjeta = par("acc_ahorros", "acc_tarjeta", CARD_PAYMENT_CATEGORY, 1_000_000L)
         val abono = par("acc_ahorros", "acc_credito", monto = 2_000_000L)
         val entreAhorros = par("acc_ahorros", "acc_cdt", monto = 5_000_000L)
@@ -129,11 +134,12 @@ class DesembolsoEnMovimientosTest {
         // también es deuda.
         val delCreditoALaTarjeta = par("acc_credito", "acc_tarjeta")
 
-        for (fila in listOf(cuota, tarjeta, abono, entreAhorros, cuotaDesdeElCredito, delCreditoALaTarjeta)) {
+        for (fila in listOf(tarjeta, abono, entreAhorros, delCreditoALaTarjeta)) {
             assertEquals(TonoDelMonto.ENTRE_CUENTAS, tonoDelRenglon(fila, tipos), transferRowTitle(fila, tipos))
             assertNotEquals('+', textoDelMontoDeTraspaso(fila, tipos).first())
             assertTrue(!esDesembolso(fila, tipos))
         }
+        assertTrue(!esDesembolso(cuotaDesdeElCredito, tipos))
         assertEquals("Cuota de crédito", transferRowTitle(cuota, tipos))
         assertEquals("Pago de tarjeta", transferRowTitle(tarjeta, tipos))
         assertEquals("Abono extraordinario", transferRowTitle(abono, tipos))

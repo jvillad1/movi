@@ -1,6 +1,8 @@
 package com.jvillada.movi.ui.periodos
 
 import com.jvillada.movi.ui.transactions.tituloDelMovimiento
+import com.jvillada.movi.ui.transactions.CifraDelMovimiento
+import com.jvillada.movi.ui.transactions.tonoDelEvento
 import com.jvillada.movi.shared.model.PequenosQueSuman
 import com.jvillada.movi.shared.model.GASTO_CHICO_HASTA
 import com.jvillada.movi.shared.model.VECES_PARA_SUMAR
@@ -1027,7 +1029,9 @@ private fun LosMasGrandes(eventos: List<FinancialEvent>, onAbrir: (FinancialEven
                     titulo = tituloDelMovimiento(evento),
                     subtitulo = diaLegible(epochMillisToAppDate(evento.timestamp)),
                     inicio = { IconoDeCategoria(evento.category) },
-                    final = { Cifra(evento.amount) },
+                    // Vuelta 50: la cifra de la fila de un movimiento, como en Actividad: «−$980.000»
+                    // en tinta (la cuota de un crédito incluida), con la misma regla ([tonoDelEvento]).
+                    final = { CifraDelMovimiento(evento.amount, evento.currency, tonoDelEvento(evento)) },
                     onClick = { onAbrir(evento) },
                     modifier = Modifier.testTag(TAG_GASTO_GRANDE),
                 )
