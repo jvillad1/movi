@@ -429,6 +429,20 @@ fun destinoResaltado(screen: Screen): NavTab? =
     if (screen is Screen.AIChat) NavTab.MOVI_AI else navTabFor(screen)
 
 /**
+ * **Qué destino resalta la navegación con [pila] a la vista** (vuelta de diseño 30): el de la pantalla
+ * de arriba ([destinoResaltado]), salvo **Buscar**, que no es de ninguna pestaña —se abre con la lupa
+ * de Hoy y con la de Movimientos—: marca la pestaña de donde se abrió, la de la pantalla más cercana
+ * debajo que tenga una. Abierta desde Movimientos, la barra marcaba «Inicio». Sin nada debajo, Hoy.
+ */
+fun destinoResaltadoDeLaPila(pila: List<Screen>): NavTab? {
+    val arriba = pila.lastOrNull() ?: return null
+    if (arriba != Screen.Buscar) return destinoResaltado(arriba)
+    return pila.dropLast(1).asReversed()
+        .firstNotNullOfOrNull { pantalla -> destinoResaltado(pantalla).takeIf { pantalla != Screen.Buscar } }
+        ?: NavTab.HOY
+}
+
+/**
  * **Adónde se va de verdad** cuando se pide [screen].
  *
  * Ola C: el tablero de Recurrentes salió de Movimientos a Plan. `Screen.Transactions(CHIP_RECURRENTES)`

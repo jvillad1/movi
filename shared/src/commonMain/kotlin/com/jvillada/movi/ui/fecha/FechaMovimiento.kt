@@ -100,6 +100,22 @@ fun etiquetaDeFecha(fecha: LocalDate, hoy: LocalDate): String = when {
 }
 
 /**
+ * **La fecha corta**: «2 sep», o «2 sep 2025» si no es del año de [hoy]. La forma de los avisos del banco
+ * y de «En qué se va», para donde «2 de septiembre» no cabe (un separador del chat, una gráfica).
+ */
+fun fechaCortaDelDia(fecha: LocalDate, hoy: LocalDate): String {
+    val corta = "${fecha.dayOfMonth} ${MESES_DEL_ANIO[fecha.monthNumber - 1].take(3)}"
+    return if (fecha.year != hoy.year) "$corta ${fecha.year}" else corta
+}
+
+/** «Hoy», «Ayer» o [fechaCortaDelDia] («2 sep»): el separador de los días del chat de Movi AI. */
+fun etiquetaCortaDeFecha(fecha: LocalDate, hoy: LocalDate): String = when {
+    fecha == hoy -> "Hoy"
+    fecha == hoy.minus(DatePeriod(days = 1)) -> "Ayer"
+    else -> fechaCortaDelDia(fecha, hoy)
+}
+
+/**
  * «10 de marzo de 2025» o «23 de agosto»: [etiquetaDeFecha] **sin** «Hoy» ni «Ayer», para las frases
  * que ya traen su preposición («desde el …», «Meta para el …»), donde «desde el Hoy» no se lee.
  * El año solo cuando no es el corriente, igual que en [etiquetaDeFecha].

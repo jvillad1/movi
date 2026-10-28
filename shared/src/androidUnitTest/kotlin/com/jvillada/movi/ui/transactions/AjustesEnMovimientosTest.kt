@@ -3,6 +3,9 @@ package com.jvillada.movi.ui.transactions
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -165,7 +168,7 @@ class AjustesEnMovimientosTest {
      */
     @Test
     fun `agrupar no mueve el flujo del dia`() {
-        composeRule.onNodeWithText("−$28.500", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNode(hasText("−$28.500") and !hasAnyAncestor(hasTestTag(TAG_RESUMEN_EN_EL_TELEFONO)), useUnmergedTree = true).assertIsDisplayed()
     }
 }
 

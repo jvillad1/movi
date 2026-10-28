@@ -17,6 +17,14 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class ConversacionDelAsistente(
     val mensajes: List<ChatMessage> = emptyList(),
+    /**
+     * **¿Movi AI puede contestar preguntas libres ahora?** (vuelta de diseño 30). `false` cuando el
+     * server no tiene clave o la última llamada a Anthropic falló por la cuenta (sin crédito, clave
+     * rechazada: ver `EstadoDeLaIa` en el server). Con `false` el chat no sugiere preguntas que irían
+     * al modelo: solo las tres que Movi contesta sin él. Default `true` para un server viejo (que no
+     * lo manda): el chat se ve como siempre.
+     */
+    val iaDisponible: Boolean = true,
 )
 
 /**

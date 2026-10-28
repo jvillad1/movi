@@ -39,9 +39,14 @@ const val TAG_MARCA_DE_LISTA: String = "ai-marca-de-lista"
  * Un texto que no trae formato se ve como antes: un párrafo.
  */
 @Composable
-internal fun TextoDelAsistente(texto: String, modifier: Modifier = Modifier) {
+internal fun TextoDelAsistente(
+    texto: String,
+    modifier: Modifier = Modifier,
+    /** Vuelta de diseño 30: una respuesta de otro día va en `textoMedio` (sus cifras eran de ese día). */
+    apagado: Boolean = false,
+) {
     val bloques = remember(texto) { bloquesDeTexto(texto) }
-    val estilo = Movi.textos.cuerpoRegular.copy(color = Movi.colores.texto)
+    val estilo = Movi.textos.cuerpoRegular.copy(color = if (apagado) Movi.colores.textoMedio else Movi.colores.texto)
     val enfasis = Movi.textos.enfasis
     val monto = Movi.textos.monto
     val cifra = SpanStyle(

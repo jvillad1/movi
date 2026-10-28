@@ -767,6 +767,7 @@ internal fun ContenidoDelMovimiento(
                 evento = renombradoAca ?: event,
                 cuentas = cuentas,
                 onEditar = { accion = AccionDelMovimiento.Nota },
+                espacios = espacios,
             )
             Spacer(Modifier.height(Espacio.s))
             ChipDeCategoria(

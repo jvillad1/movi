@@ -1286,7 +1286,53 @@ Lo vigila `RepartirEnReconciliarTest` (la propuesta del caso del dueño con cifr
 el botón que se prende solo si cuadra y su razón, «El resto como gasto» que agrega la parte 2 sin tocar
 la 1, «Qué fue» con su detalle por tipo, y nada recortado a 360 dp).
 
-## 32. Vuelta 31: Créditos y Espacios se consultan, el cuadre dice una sola cosa y Ajustes se ordena
+## 32. Vuelta de diseño 30: Movimientos con su resumen, tu parte primero y Movi AI sin cifras viejas
+
+Revisado en producción (6ce5327e) con la cuenta demo, a 390 px.
+
+- **Movi AI dice de qué día es cada respuesta** (`ui/ai/LoQueEraDeOtroDia.kt`). Cada mensaje trae
+  `ChatMessage.enviadoEn` (el server lo pone desde `ai_turns.created_at` al recargar; la app, al mandar;
+  default `null` para clientes y servers viejos). Si algún mensaje no es de hoy, los días se separan
+  con una `Seccion` («Hoy», «Ayer», «2 sep»: `etiquetaCortaDeFecha`, la forma corta de los avisos). La
+  respuesta de un día anterior va en `textoMedio` (`TextoDelAsistente(apagado = true)`) con «Estas cifras
+  eran de ayer» y «Preguntar de nuevo» (`Boton` `Fantasma` `S`), que manda la misma pregunta —con su id
+  si era una de las tres: el server ahora la devuelve en el globo recargado (`preguntaSugeridaDelTurno`)—.
+  Sin la IA, «Preguntar de nuevo» solo va en las tres. Si la conversación entera es de otro día, arriba
+  de la lista una `TarjetaDePropuesta` ofrece «Empezar una conversación nueva» (y «Seguir con esta»):
+  nunca se borra sola.
+- **Sin la IA, el chat no sugiere lo que no puede contestar.** `GET /api/ai/conversacion` manda
+  `iaDisponible` (`EstadoDeLaIa` en el server: sin clave, o una falla de la cuenta —sin crédito, clave
+  rechazada— en la última hora; la saturación no cuenta; una respuesta del modelo la vuelve a prender).
+  Con `false`, el arranque y las preguntas para seguir son solo las tres de respaldo
+  (`preguntasQueSePuedenHacer`). La respuesta sin clave ahora trae `codigo = IA_NO_DISPONIBLE`.
+- **El encabezado de Movi AI va en su capa**, con `fondo` opaco y encima de la lista; la lista recorta
+  lo suyo (`clipToBounds`).
+- **Movimientos en el teléfono tiene su resumen** (`ResumenDelPeriodoEnElTelefono`): el **primer ítem
+  de la lista** —se va con el scroll, antes de «N por revisar»; fijos siguen solo el encabezado, el
+  selector y los chips (§11)—, Entró · Salió · Neto con `CifraConRotulo` en forma `Compacta` (columna de tres), con
+  **la misma `resumenDelPanel`** del panel de escritorio, y tocarla abre «En qué se va». Mientras no
+  hay historia, `EsqueletoDeCifraConRotulo` (sin «$0»). Con un filtro que recorta la lista (categoría,
+  comercio, búsqueda) no va: el resumen es del período entero y encima de lo filtrado se leería como
+  su total. Los chips de tipo no lo esconden.
+- **En un gasto repartido, la cifra es tu parte** (`ui/transactions/LaFilaDelMovimiento.kt`): la fila y
+  el detalle dicen «−$44.300» y debajo «de $88.600 · con Caro» (o el nombre del espacio si son más);
+  el detalle agrega «Salieron $88.600 de Nu» en su renglón de cuándo y dónde. El saldo no cambia: el
+  movimiento sigue siendo de $88.600. En el detalle de una cuenta (`tonoForzado`), donde el total del
+  día es lo que movió el saldo, la fila sigue con el total y «Tu parte» debajo.
+- **«Mercado / Mercado»** (`textosDeLaFila`): si la descripción es la categoría, el título es el
+  comercio o la cuenta y el subtítulo no la repite. Solo presentación.
+- **Buscar marca la pestaña de donde se abrió** (`destinoResaltadoDeLaPila`) y **el total de un comercio
+  lleva el signo** del sistema (`CifraDelMovimiento` con el tono del movimiento).
+
+**Las líneas base** no cambian: `dp_sueltos` 119, `radios_con_numero` 3, y las guardas en 0 siguen en 0.
+
+Lo vigilan `LoQueEraDeOtroDiaTest` y `LaFilaDelMovimientoTest` (puras), `BuscarMarcaSuPestanaTest`,
+`MoviAiNoMienteConCifrasViejasTest`, `MovimientosConSuResumenYTuParteTest` y
+`LosComerciosLlevanSuSignoTest` (Robolectric), y en el server `LoQueMoviDijoOtroDiaTest` y
+`LasCifrasDeComoVoySonLasDeHoyTest` («¿Cómo voy?» y `/api/finance-summary` cuentan lo mismo con un gasto
+repartido).
+
+## 33. Vuelta 31: Créditos y Espacios se consultan, el cuadre dice una sola cosa y Ajustes se ordena
 
 Sin componentes nuevos en `ds/` (solo el tag `TAG_ICONO_EN_CIRCULO` de `IconoEnCirculo`, para las pruebas):
 

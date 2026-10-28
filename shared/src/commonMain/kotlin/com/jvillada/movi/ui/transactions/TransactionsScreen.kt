@@ -1,6 +1,7 @@
 package com.jvillada.movi.ui.transactions
 
 import com.jvillada.movi.shared.model.montoContado
+import com.jvillada.movi.shared.model.Espacio as EspacioCompartido
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -1025,6 +1026,8 @@ fun TransactionsScreen(
     var selectedEvent by remember { mutableStateOf<FinancialEvent?>(null) }
     /** Vuelta de diseño 9: tu parte de lo que pagaron otros, para el resumen del panel (ver abajo). */
     var tuParteDeOtros by remember { mutableStateOf<List<FinancialEvent>>(emptyList()) }
+    /** Vuelta de diseño 30: los espacios por id, para la línea «de $88.600 · con Caro». */
+    var espaciosDelDueno by remember { mutableStateOf<Map<String, EspacioCompartido>>(emptyMap()) }
     val focusManager = LocalFocusManager.current
     /** Si [selectedEvent] se eligió en el panel de al lado (y no para abrir la hoja). */
     var elegidoEnElPanel by remember { mutableStateOf(false) }
@@ -1184,6 +1187,30 @@ fun TransactionsScreen(
     // tocó —y menos sobre un movimiento que quizás ya no existe—: se suelta la elección.
     val soltarLoDelPanel = !conPanel && elegidoEnElPanel && selectedEvent != null
     if (soltarLoDelPanel) SideEffect { selectedEvent = null; elegidoEnElPanel = false }
+    // **El resumen del período** (vuelta de diseño 9 en el panel, 30 en el teléfono): lo que entró,
+    // lo que salió y el neto del período a la vista, con [resumenDelPanel] — la MISMA función en los
+    // dos anchos. Tu parte de lo que pagaron otros, para que cuente lo mismo que «En qué se va» y el
+    // widget del Inicio (R3, «solo tu parte»): la misma lectura que hace «En qué se va», con la caché
+    // del repositorio.
+    LaunchedEffect(refreshKey, refreshTick) {
+        tuParteDeOtros = runCatching { Repositories.wallets.getTuParteDeOtros() }.getOrDefault(emptyList())
+    }
+    val historia = eventos.valor
+    // Vuelta de diseño 30: los espacios, para que un gasto repartido diga «con Caro». Solo si la
+    // historia tiene alguno repartido; si la lectura falla, la fila dice «de $88.600» a secas.
+    val hayRepartidos = remember(historia) { historia?.any { d -> d.items.any { it.espacioId != null } } == true }
+    LaunchedEffect(refreshKey, refreshTick, hayRepartidos) {
+        if (hayRepartidos) {
+            espaciosDelDueno = runCatching { Repositories.wallets.getEspacios() }.getOrDefault(emptyList()).associateBy { it.id }
+        }
+    }
+    val resumen = remember(historia, tuParteDeOtros, periodoVisible, ajustesDelPeriodo, hoyIso, accountTypes, perfilLeido) {
+        if (historia == null || !perfilLeido) null
+        else resumenDelPanel(
+            historia, periodoVisible, ajustesDelPeriodo, LocalDate.parse(hoyIso), accountTypes,
+            tuParteDeOtros = tuParteDeOtros,
+        )
+    }
     Box(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
     ListaYPanelDeMovimientos(
         conPanel = conPanel,
@@ -1371,6 +1398,18 @@ fun TransactionsScreen(
             // El aire de abajo deja la última fila por encima del botón de Agregar.
             contentPadding = PaddingValues(bottom = Medida.botonFlotante + Medida.margenDePantalla),
         ) {
+            // Vuelta de diseño 30: en el teléfono, Entró · Salió · Neto del período (en pantalla ancha
+            // lo dice el panel). **El primer ítem de la lista**, antes de «N por revisar»: se va con el
+            // scroll, como todo lo de arriba de las filas. Con un filtro que recorta la lista no va.
+            if (muestraElResumenEnElTelefono(conPanel, hayFiltro = filtro != null, busqueda = searchQuery)) {
+                item(contentType = "arriba") {
+                    ResumenDelPeriodoEnElTelefono(
+                        resumen = resumen,
+                        onVerEnQueSeVa = { onNavigate(Screen.EnQueSeVa(periodoVisible.prefijo)) },
+                        modifier = arribaDeLaLista,
+                    )
+                }
+            }
             if (textoDeLosRechazados != null) {
                 item(contentType = "arriba") {
                     Superficie(modifier = arribaDeLaLista.fillMaxWidth()) {
@@ -1534,6 +1573,7 @@ fun TransactionsScreen(
                                                     nombresDeSuscripcionesActivas,
                                                 ) != null,
                                                 elegido = conPanel && selectedEvent?.id == row.event.id,
+                                                espacios = espaciosDelDueno,
                                                 onClick = { elegir(row.event) },
                                             )
                                         }
@@ -1577,21 +1617,7 @@ fun TransactionsScreen(
             val enElPanel = movimientoDelPanel(selectedEvent, eventos.valor)
             // Vuelta de diseño 9: sin nada elegido, el resumen del período que la lista tiene a la
             // vista (ver `ResumenEnElPanel.kt`), sobre la misma historia. Sin historia leída todavía,
-            // la invitación de siempre.
-            // Tu parte de lo que pagaron otros, para que el resumen cuente lo mismo que «En qué se va»
-            // y el widget del Inicio (R3, «solo tu parte»): la MISMA lectura que hace «En qué se va»,
-            // con la caché del repositorio. Solo con el panel a la vista: el teléfono no la pide.
-            LaunchedEffect(refreshKey, refreshTick) {
-                tuParteDeOtros = runCatching { Repositories.wallets.getTuParteDeOtros() }.getOrDefault(emptyList())
-            }
-            val historia = eventos.valor
-            val resumen = remember(historia, tuParteDeOtros, periodoVisible, ajustesDelPeriodo, hoyIso, accountTypes, perfilLeido) {
-                if (historia == null || !perfilLeido) null
-                else resumenDelPanel(
-                    historia, periodoVisible, ajustesDelPeriodo, LocalDate.parse(hoyIso), accountTypes,
-                    tuParteDeOtros = tuParteDeOtros,
-                )
-            }
+            // la invitación de siempre. El resumen es el mismo de la franja del teléfono (arriba).
             if (enElPanel == null && resumen != null) {
                 ResumenDelPeriodoEnElPanel(
                     resumen = resumen,
@@ -1878,8 +1904,8 @@ internal fun EncabezadoDelDia(
 
 /**
  * Lo que va al final de una fila de movimiento: el punto de «por confirmar», el ícono de repetición
- * y el monto (con «Tu parte» debajo si el gasto se repartió). El punto y el ícono dicen su nombre al
- * lector de pantalla: el color nunca es la única pista.
+ * y el monto (con una línea debajo si el gasto se repartió: «de $88.600 · con Caro»). El punto y el
+ * ícono dicen su nombre al lector de pantalla: el color nunca es la única pista.
  */
 @Composable
 private fun FinalDeLaFila(
@@ -1888,7 +1914,7 @@ private fun FinalDeLaFila(
     tono: TonoDelMonto,
     porConfirmar: Boolean,
     esRecurrente: Boolean,
-    tuParte: String? = null,
+    debajo: String? = null,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -1907,9 +1933,9 @@ private fun FinalDeLaFila(
         }
         Column(horizontalAlignment = Alignment.End) {
             CifraDelMovimiento(monto, moneda, tono)
-            if (tuParte != null) {
+            if (debajo != null) {
                 Text(
-                    text = tuParte,
+                    text = debajo,
                     style = Movi.textos.apoyo,
                     color = Movi.colores.textoMedio,
                     maxLines = 1,
@@ -2024,18 +2050,29 @@ internal fun MovementSingleRow(
      * siempre: ahí el total del día cuenta todo lo que mueve el saldo, no solo el flujo de caja.
      */
     tonoForzado: TonoDelMonto? = null,
+    /** Los espacios del dueño por id, para decir con quién se repartió un gasto («con Caro»). */
+    espacios: Map<String, EspacioCompartido> = emptyMap(),
     onClick: () -> Unit,
 ) {
     // Texto el gasto, verde el ingreso, gris lo que no movió plata del bolsillo — la apertura de una
     // cuenta, la pata huérfana, la cuota que paga un tercero. Una sola regla, ver [tonoDelEvento].
     val tono = tonoForzado ?: tonoDelEvento(tx)
-    val subtitulo = accountNames[tx.accountId]
-        ?.let { "${tx.category} · $it" }
-        ?: tx.category
+    // Vuelta de diseño 30: «Mercado / Mercado» no repite la categoría (ver [textosDeLaFila]).
+    val textos = textosDeLaFila(tx, accountNames[tx.accountId])
+    // Vuelta de diseño 30: en un gasto repartido la cifra es tu parte, y debajo de cuánto y con quién.
+    // Con el tono forzado (el detalle de una cuenta, cuyo total del día es lo que movió el saldo) la
+    // cifra sigue siendo lo que salió de la cuenta, con tu parte debajo.
+    val porElSaldo = tonoForzado != null
+    val monto = if (porElSaldo) tx.amount else montoPrincipalDelMovimiento(tx)
+    val debajo = when {
+        !esGastoRepartido(tx) -> null
+        porElSaldo -> "Tu parte ${formatMoney(montoContado(tx), tx.currency)}"
+        else -> lineaDelRepartido(tx, tx.espacioId?.let { espacios[it] })
+    }
     Column {
         Fila(
-            titulo = conCifrasOcultas(tx.description),
-            subtitulo = subtitulo,
+            titulo = conCifrasOcultas(textos.titulo),
+            subtitulo = textos.subtitulo,
             // El tag de la fila va en la fila misma —la que se toca—, no en lo que la envuelve.
             modifier = Modifier.testTag(TAG_FILA_DE_MOVIMIENTO_SUELTO).marcaDeElegido(elegido),
             // La marca del comercio si Movi la reconoce (Ola 2a), y si no el ícono de la categoría.
@@ -2043,14 +2080,14 @@ internal fun MovementSingleRow(
             final = {
                 FinalDeLaFila(
                     // En la moneda del movimiento: un cargo de US$20 en la tarjeta en dólares no son pesos.
-                    monto = tx.amount,
+                    monto = monto,
                     moneda = tx.currency,
                     tono = tono,
                     porConfirmar = tx.reconciliationStatus == ReconciliationStatus.UNCONFIRMED,
                     esRecurrente = esRecurrente,
-                    // R3 · un gasto repartido: la plata salió entera (el monto), pero en tus gastos
-                    // cuenta solo tu parte (ver `montoContado` en :core).
-                    tuParte = if (tx.parteAjena > 0L) "Tu parte ${formatMoney(montoContado(tx), tx.currency)}" else null,
+                    // R3 · un gasto repartido: la plata salió entera, pero en tus gastos cuenta solo
+                    // tu parte (ver `montoContado` en :core).
+                    debajo = debajo,
                 )
             },
             onClick = onClick,
@@ -2068,7 +2105,10 @@ internal fun MovementSingleRow(
     }
 }
 
-/** El `testTag` de «Tu parte $X» bajo el monto de un movimiento repartido. */
+/**
+ * El `testTag` de la línea bajo el monto de un movimiento repartido: «de $88.600 · con Caro» (vuelta
+ * de diseño 30; en el detalle de una cuenta, «Tu parte $X»).
+ */
 const val TAG_TU_PARTE: String = "tu-parte"
 
 /**

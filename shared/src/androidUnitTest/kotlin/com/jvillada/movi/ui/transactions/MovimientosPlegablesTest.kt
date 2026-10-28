@@ -3,6 +3,8 @@ package com.jvillada.movi.ui.transactions
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -106,7 +108,7 @@ class MovimientosPlegablesTest {
 
     @Test
     fun `un dia plegado esconde sus renglones pero sigue diciendo su flujo`() {
-        composeRule.onNodeWithText("−$69.489", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNode(hasText("−$69.489") and !hasAnyAncestor(hasTestTag(TAG_RESUMEN_EN_EL_TELEFONO)), useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("Las Doce", useUnmergedTree = true).assertIsDisplayed()
 
         composeRule.onNode(hasText("Hoy"), useUnmergedTree = true).performClick()
@@ -116,7 +118,7 @@ class MovimientosPlegablesTest {
         composeRule.onNodeWithText("Las Doce", useUnmergedTree = true).assertDoesNotExist()
         // El flujo del día, con la cifra sola: sin el rótulo «Flujo del día» (vuelta de diseño 14).
         composeRule.onNodeWithText("Flujo del día", useUnmergedTree = true).assertDoesNotExist()
-        composeRule.onNodeWithText("−$69.489", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNode(hasText("−$69.489") and !hasAnyAncestor(hasTestTag(TAG_RESUMEN_EN_EL_TELEFONO)), useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("2 movimientos", substring = true, useUnmergedTree = true).assertIsDisplayed()
         assertTrue(HOY_ISO in DiasPlegadosStore.plegados(), "el pliegue tiene que quedar recordado por fecha")
     }
