@@ -1,9 +1,15 @@
 # El sistema de diseño de Movi
 
-Ola R0 del rediseño (26-oct-2026). La base es el camino 1 «Noche premium», con la cuadrícula de
-acciones del camino 3 y el feed de propuestas del camino 5. El pedido del dueño: **que los
-espaciados, los componentes y todo sea extremadamente estandarizado y correcto en toda la app, que
-no haya inconsistencias entre pantallas y que las secciones tengan sentido.**
+**Vigente desde el 28-oct-2026 (vuelta 29): la opción 3 «Acción primero»** del lienzo «Movi · 5
+caminos», elegida por el dueño —«me encantó a mí y a mi esposa mucho más que 1, 2 y 4»—. Reemplaza al
+camino 1 «Noche premium» (oscuro, lavanda, Space Grotesk y Martian Mono) que había fijado la ola R0
+(26-oct-2026): **un solo tema, claro**, fondo crema, tarjetas blancas, la tinta casi negra, el amarillo
+como acción y **Figtree** para todo. Lo que la ola R0 ordenó —las escalas, los componentes, las
+guardas— sigue igual; cambió la piel (§3, §4, §5 y §40).
+
+El pedido de la R0 sigue en pie: **que los espaciados, los componentes y todo sea extremadamente
+estandarizado y correcto en toda la app, que no haya inconsistencias entre pantallas y que las
+secciones tengan sentido.**
 
 Una pantalla **no decide** espacios, radios, colores ni tamaños: elige de esta página. Lo que no
 está acá no existe; si hace falta, se agrega acá primero (y su prueba con él).
@@ -36,10 +42,12 @@ Las reglas que se repiten tienen nombre propio (`Medida`), y se usa el nombre, n
 | `Medida.entreSecciones` | 24 |
 | `Medida.rellenoDeSuperficie` | 16 |
 | `Medida.dentroDeSeccion` | 12 |
-| `Medida.altoDeFila` / `altoDeFilaDoble` | 56 / 64 |
+| `Medida.altoDeFila` / `altoDeFilaDoble` | 56 / 58 (era 64; vuelta 29) |
 | `Medida.objetivoTactil` | 48 — nada que se toque mide menos |
-| `Medida.altoChico` | 36 — botón chico y filtro, solo dentro de una tarjeta |
-| `Medida.altoDeEncabezado` | 56 |
+| `Medida.altoChico` | 36 — botón chico, solo dentro de una tarjeta |
+| `Medida.altoDeFiltro` | 44 — un filtro (`PildoraDeFiltro`), el de la opción 3 |
+| `Medida.anchoDePildoraDePestana` × `altoDePildoraDePestana` | 56 × 30 — la píldora amarilla de la pestaña activa |
+| `Medida.altoDeEncabezado` | 64 (era 56; vuelta 29, por el título de 28) |
 | `Medida.avatar` / `avatarGrande` / `accionRapida` | 40 / 48 / 56 |
 | `Medida.altoDeMarcaDeBarra` | 12 — la marca sobre una `BarraDeProgreso` («la mitad» en Espacios) |
 | `Medida.altoDeTarjetaDeCuenta` | 128 — la tarjeta de una cuenta en el carrusel (ola R1) |
@@ -56,93 +64,141 @@ de «Tu plata, día a día» de Plan las tenía sueltas.
 | token | dp | para |
 |---|---:|---|
 | `Radio.s` | 8 | chips chicos, campos, muestras |
-| `Radio.m` | 12 | filas destacadas, botones |
-| `Radio.l` | 16 | superficies |
-| `Radio.xl` | 24 | hojas, tarjetas de cuenta |
-| `Radio.pill` | 999 | píldoras, filtros, círculos |
+| `Radio.m` | 12 | filas destacadas |
+| `Radio.l` | 18 | superficies: listas y tarjetas (opción 3) |
+| `Radio.xl` | 22 | la tarjeta principal (el héroe, una propuesta), tarjetas de cuenta, hojas |
+| `Radio.pill` | 999 | botones, píldoras, filtros, círculos |
 
 Antes eran 6 / 11 / 16 / píldora: el 6 pasó a 8 y el 11 a 12 (a la grilla de 4, y los valores que la
-app ya escribía a mano), y las hojas de 28 a 24. `Movi.formas.*` sale de acá.
+app ya escribía a mano), y las hojas de 28 a 24. **Vuelta 29:** `Radio.l` de 16 a 18 y `Radio.xl` de
+24 a 22, los de la maqueta de la opción 3; el `Boton` pasó de `Radio.m` a píldora. `Movi.formas.*` sale
+de acá.
 
 Íconos: **`Icono.s` 16** (en un texto, en una píldora), **`Icono.m` 20** (fila, botón, pestañas),
 **`Icono.l` 24** (solo, en un encabezado o en un círculo grande). Nada más.
 
-## 3. Superficies por capas, sin bordes duros
+## 3. Superficies: blanco sobre crema, sombra solo donde destaca
 
-Una superficie se distingue de lo de abajo **por su color, no por una línea**:
+Un solo tema desde la vuelta 29. La paleta es la de la maqueta de la opción 3 tal cual
+(`project/p3/*.dc.html`), salvo los tres valores que puso la prueba (ver §4):
 
-| capa | oscuro | claro | para |
-|---|---|---|---|
-| `fondo` | `#08090D` | `#E9ECF1` | el lienzo |
-| `capa1` (= `tarjeta`) | `#191B25` | `#FFFFFF` | tarjetas, listas, hojas, barra de pestañas |
-| `capa2` | `#222530` | `#F2F4F7` | encima de una capa 1: chips sin elegir, campos, botón secundario |
-| `capa3` | `#2B2F3D` | `#E3E7EC` | pistas de progreso, lo apretado |
-| `propuesta` | `#1D1A31` | `#F8F5FF` | una propuesta de Movi (tinte de la marca) |
+| capa | valor | para |
+|---|---|---|
+| `fondo` | `#F4F1EC` | el lienzo: el crema |
+| `capa1` (= `tarjeta`) | `#FFFFFF` | tarjetas, listas, hojas, barra de pestañas, botón secundario, filtro sin elegir |
+| `capa2` | `#FBF8F3` | la superficie suave: la franja de abajo de una tarjeta («Por confirmar» debajo del Disponible), un campo |
+| `capa3` | `#F1EDE6` | pistas de progreso, la píldora neutra, un botón apagado |
+| `propuesta` | `#FFFFFF` | una propuesta de Movi: blanca, **con sombra** y radio 22 |
 
-Los valores de referencia del camino 1 (`#0A0B10 / #12141C / #1A1D28 / #232737`) **no pasaban la prueba
-de contraste**: la capa 1 quedaba a 1,07:1 del fondo, más plana que el 1,15 que Movi exige. Se ajustaron
-lo justo. `ContrasteDeLosTokensTest` mide: cada texto ≥ 4,5:1 sobre el fondo **y cada capa**; capa 1 ≥
-1,15 del fondo; cada capa ≥ 1,08 de la de abajo; la propuesta ≥ 1,08 del fondo y distinta de toda capa;
-cada color de estado ≥ 4,5 sobre su propio lavado.
+Una tarjeta se despega del crema **por ser blanca** (1,13:1); la que destaca —la principal de una
+pantalla, una propuesta— además por la **sombra suave** de la maqueta (`0 1px 2px rgba(31,27,22,.06),
+0 10px 24px rgba(31,27,22,.08)`; en Compose, `Modifier.shadow` con `Sombra.destacada` = 6 dp y el color
+`sombra`, la tinta). **Las listas van sin sombra.** `Superficie(destacada = true)` la pide, y el nivel
+`Propuesta` la lleva siempre (`laSuperficieLlevaSombra`, y `SuperficieDestacadaKey` en la semántica
+para vigilarlo). La capa 2 casi no se distingue del blanco (1,06): lo que la separa es el `hilo` de
+arriba, como en la maqueta.
 
-El borde (`borde`) sigue existiendo para campos y separaciones que de verdad lo necesitan; una tarjeta
-no lleva borde. `MinCardVariant.High` (que era «tarjeta con borde») pasó a ser la capa 2; desde la vuelta
-de diseño 21, `MinCard` ya no existe.
+Los bordes son tres, de menos a más firme, y van alrededor de algo **blanco**, nunca de una tarjeta:
 
-## 4. Marca y estado
+| token | valor | para |
+|---|---|---|
+| `hilo` | `#EFEAE1` | el separador entre filas de una lista |
+| `borde` | `#E7E1D7` | el círculo de una acción rápida, el botón redondo de un encabezado, el borde de arriba de la barra de pestañas, un campo |
+| `bordeDePildora` | `#E0D9CD` | un filtro o una píldora de acción sin elegir |
+| `bordeDeBoton` | `#D9D1C3` | el botón secundario (a 1,5 dp, `Medida.trazoDeBoton`) |
 
-- **La marca (lavanda) es acción y foco.** Botón principal, filtro elegido, pestaña activa, enlace,
-  lo que propone Movi. **Nunca significa plata.**
-- **Los colores de estado son solo para estado**: `entra` (entró plata, éxito), `sale` (se pasó,
-  peligro), `aviso` (por vencer, por confirmar), `entreCuentas` (traspaso, información). Una píldora en
-  aviso dice «vence», no «esto es importante».
+`ContrasteDeLosTokensTest` mide: cada texto ≥ 4,5:1 sobre el fondo, cada capa, la propuesta y el tinte;
+la tarjeta ≥ 1,12 del fondo (era 1,15 en el camino 1: el blanco sobre el crema de la maqueta da 1,13 y
+lo que despega lo destacado es la sombra); la capa 2 ≥ 1,05 de la 1 y la 3 ≥ 1,08 de la 2; cada borde
+≥ 1,25 contra la tarjeta y en orden; cada color de estado ≥ 4,5 sobre su propio lavado.
+
+## 4. Marca, enlace y estado
+
+| rol | valor | para |
+|---|---|---|
+| `marca` | `#FFC21A` | **relleno** de la acción: botón principal, acción destacada, píldora de la pestaña activa, botón flotante |
+| `sobreMarca` | `#1F1B16` | lo que va sobre el amarillo (10,58:1) |
+| `sobreMarcaMedio` | `#3D3220` | el texto secundario sobre el amarillo (7,75:1) |
+| `marcaSuave` | `#FFE08A` | los botones redondos sobre la franja amarilla |
+| `tinte` | `#FFF2C6` | el fondo de un aviso y de «por confirmar»; es el `lavado` de la marca y del aviso |
+| `aviso` | `#6B4A00` | el texto sobre el tinte (7,21:1): «Vence el martes», «3 avisos» |
+| `enlace` | `#1D4E9E` | enlaces y acciones de texto: «Ver toda la actividad», `Boton` `Fantasma`, la acción de un encabezado, el foco de un campo |
+| `texto` / `textoMedio` / `textoApagado` | `#1F1B16` / `#5C554C` / `#6E665B` | la tinta, el apoyo de la maqueta y el más tenue que pasa sobre la capa 3 (4,84:1) |
+| `entra` | `#147849` | entró plata (sobre su lavado ≈ `#E3F1E8`) |
+| `sale` | `#B3261E` | **solo alertas**: lo que se pasó o se debe, «Borrar mi cuenta» |
+| `capital` / `entreCuentas` / `neutro` | `#8A5A18` / `#1F5B96` / `#A39A8C` | sin cambio de papel |
+
+- **La marca es un relleno, nunca una letra.** El amarillo da 1,6:1 sobre el blanco: no se lee como
+  texto, ni como ícono, ni como borde. Lo que hasta la vuelta 28 era «texto en la marca» (un enlace, «Ver
+  todo», un check de «elegido», el foco de un campo, la línea de una gráfica) pasó a `enlace`; lo que era
+  `lavado(marca)` como fondo de algo elegido, a `lavado(enlace)`. La prueba de contraste lo sostiene: la
+  marca ya no está en la lista de textos y hay una prueba de que el amarillo no se lee como letra.
+- **Lo elegido va en tinta**: el filtro elegido (`PildoraDeFiltro`) es la tinta con la letra blanca; la
+  casilla marcada, tinta con el visto blanco; la barra de un avance propio (`TonoDeBarra.Marca`), tinta.
+- **Los colores de estado son solo para estado**: `entra`, `sale` (alerta), `aviso` (por vencer, por
+  confirmar), `entreCuentas`. Una píldora en aviso dice «vence», no «esto es importante».
 - **Un gasto no es una alarma**: va en el color del texto. `sale` es para lo que se pasó o se debe.
-- **El color nunca es la única pista**: un monto lleva «+» solo cuando entra plata, y el subtítulo
-  dice el verbo.
-- **El lavado** de un color es `Movi.colores.lavado(color)` (16 % en oscuro, 10 % en claro), nunca un
-  `copy(alpha = …)` a mano.
+- **El color nunca es la única pista**: un monto lleva «+» solo cuando entra plata, y el subtítulo dice
+  el verbo.
+- **El lavado** de un color es `Movi.colores.lavado(color)` (10 %), nunca un `copy(alpha = …)` a mano. La
+  marca y el aviso no se lavan con alfa: su lavado es el `tinte`.
+- **Los colores de marca de los bancos no cambian** (`MarcasConocidas`): una `TarjetaDeCuenta` sigue con el
+  color de su banco.
+
+Los tres pares que la prueba pidió cambiar de la maqueta: **`entra` `#147849`** (la maqueta dice
+`#14794A`, que daba 4,47:1 sobre su lavado encima de la capa 2; un paso más oscuro da 4,53), **`sale`
+`#B3261E`** (la maqueta no trae rojo) y **`textoApagado` `#6E665B`** (la maqueta tiene dos niveles de
+texto; el tercero es el más claro de la familia que pasa sobre la capa 3).
+
+**Solo claro.** No hay tema oscuro ni preferencia: «Cómo se ve» en Ajustes deja solo «Ocultar los
+saldos»; `TemaStore` se borró (lo guardado en `tema`/`tema_oscuro` se ignora); la app, el widget, el
+ingreso web (`index.html`) y la página compartida con un tercero se pintan claros aunque el teléfono
+esté en modo oscuro (`SoloHayUnTemaTest`).
 
 ## 5. Tipografía
 
-Los siete estilos de siempre (`cifra`, `titular`, `titulo`, `cuerpo`, `monto`, `apoyo`, `rotulo`) y uno
-nuevo: **`cifraDeTarjeta`** (Martian Mono, 24 sp), la cifra de una tarjeta de cuenta o un widget. La
-cifra héroe es `cifra` (Martian Mono, 42 sp). Ningún `fontSize` suelto (lo vigila
-`LosTamanosSueltosSoloBajanTest`).
+**Figtree para todo, también las cifras** (vuelta 29). Cinco TTF estáticos —400, 500, 600, 700 y 800—
+en `composeResources/font/figtree_*.ttf`, licencia OFL en `docs/licencias/OFL-Figtree.txt`. Las cifras
+(`cifra`, `cifraDeTarjeta`, `monto`) van en la misma letra **con números tabulares**
+(`fontFeatureSettings = "tnum"`): una columna de montos alinea sin la monoespaciada. Space Grotesk y
+Martian Mono se borraron. Ningún `fontSize` suelto (lo vigila `LosTamanosSueltosSoloBajanTest`).
 
-**Vuelta de diseño 3: `portada`** (Space Grotesk bold, 32 sp), el título de una pantalla de una sola
-cosa: el logotipo «Movi» de la entrada (era el `fontSize` suelto de `LoginScreen`) y «Te damos la
-bienvenida a Movi» en la guía de primer uso. No es para una cifra ni para el título de una pantalla
-con contenido (`titular`).
+| estilo | tamaño / peso | maqueta |
+|---|---|---|
+| `cifra` | 40 / 800, tracking −1,2, tabular | la cifra héroe |
+| `cifraDeTarjeta` | 24 / 800, tabular | la cifra de una tarjeta de cuenta o un widget |
+| `portada` | 32 / 800 | «Movi» en la entrada, la bienvenida de la guía |
+| `titular` | 28 / 800, tracking −0,6 | el título de una pantalla |
+| `titulo` | 16 / 700 | el título de una sección o de una tarjeta |
+| `cuerpo` | 15 / 600 | el título de una fila, un filtro sin elegir, un enlace |
+| `monto` | 15 / 700, tabular | el monto de una fila |
+| `apoyo` | 12,5 / 400 | el subtítulo |
+| `rotulo` | 12 / 600, espaciado | un rótulo chico; la base de las pestañas |
 
-**Ola R1: toda cifra de plata va en Martian Mono.** `monto` —el de una fila, una propuesta, un
-widget— pasó de Space Grotesk tabular a Martian Mono a 12,5 sp (la monoespaciada es más ancha: un
-punto menos que el cuerpo se lee del mismo tamaño). Así las cifras de la app se ven de la misma familia
-en todas partes. Space Grotesk queda para todo lo que no es un monto.
-
-**Vuelta de diseño 21: los pesos con nombre.** Una pantalla no escribe `fontWeight =`: elige un estilo.
-Son los de arriba con otro de los pesos que la escala ya usa —Normal, Medium, SemiBold; **ningún peso
-nuevo**— y se derivan de su base en el cuerpo de `TextosDeMovi`, así llevan su familia y nunca se
-separan de ella en tamaño ni interlineado (lo fija `TipografiaTest`):
+**Los pesos con nombre** (vuelta de diseño 21). Una pantalla no escribe `fontWeight =`: elige un estilo.
+Son los de arriba con otro peso de Figtree, y se derivan de su base en el cuerpo de `TextosDeMovi`, así
+llevan su familia y nunca se separan de ella en tamaño ni interlineado (lo fija `TipografiaTest`):
 
 | estilo | es | para |
 |---|---|---|
-| `apoyoMedio` | `apoyo` en Medium | el mini-título: el rótulo de un dato arriba de su valor, el nombre en una fila apretada, el número de un círculo. Es la letra de `RotuloDeCampo` (que además trae su color y su margen) |
-| `tituloMedio` | `titulo` en Medium | un nombre que encabeza sin gritar (vuelta 4): una cuenta, una categoría, un tercero arriba de su detalle; el título de `EncabezadoDeHoja` |
-| `tituloRegular` | `titulo` en Normal | lo que acompaña a un título en su renglón: el conteo de una `Seccion`, «· 3 movimientos» junto a un día plegado |
-| `cuerpoFuerte` | `cuerpo` en SemiBold | lo elegido y lo que se toca: la opción elegida de un selector, el texto de un `Boton` |
-| `cuerpoRegular` | `cuerpo` en Normal | un párrafo (la respuesta de Movi AI, una explicación larga) y la opción no elegida donde así iba |
-| `pestana` / `pestanaActiva` | `rotulo` en frase, casi sin espaciado, Normal / SemiBold | el rótulo de una pestaña (barra del teléfono, riel compacto) |
-| `enfasis` | `SpanStyle` en SemiBold | el énfasis dentro de una frase (`withStyle(Movi.textos.enfasis)`): la **negrita** de Movi AI, lo que se resalta de un aviso del banco |
+| `apoyoMedio` | `apoyo` en 600 | el mini-título: el rótulo de un dato arriba de su valor, el texto de una píldora, el rótulo de una acción rápida |
+| `tituloMedio` | `titulo` en 600 | un nombre que encabeza sin gritar: una cuenta, una categoría, un tercero arriba de su detalle; el título de `EncabezadoDeHoja` |
+| `tituloRegular` | `titulo` en 400 | lo que acompaña a un título en su renglón: el conteo de una `Seccion` |
+| `cuerpoFuerte` | `cuerpo` en 700 | lo elegido y lo que se toca: el texto de un `Boton` (15/700 en la maqueta), el filtro elegido |
+| `cuerpoRegular` | `cuerpo` en 400 | un párrafo (la respuesta de Movi AI, una explicación larga) |
+| `pestana` / `pestanaActiva` | 12 / 500 y 12 / 700 | el rótulo de una pestaña |
+| `enfasis` | `SpanStyle` en 700 | el énfasis dentro de una frase (`withStyle(Movi.textos.enfasis)`) |
 
-Lo elegido se escribe con el estilo, no con el peso: `style = if (elegido) Movi.textos.cuerpoFuerte else
-Movi.textos.cuerpo`. Un `Bold` sobre la letra de la interfaz se dibujaba igual que SemiBold (Space
-Grotesk viene en 400, 500 y 600): los pocos que había pasaron a su estilo sin cambiar nada.
+**iOS sigue con la letra del sistema** (`laPlataformaTraeLasFuentes = false` en `LetraPropia.ios.kt`),
+con los mismos tamaños, pesos y cifras tabulares. Prenderlo pide abrir la app en un iPhone o el
+simulador y ver que `Font(recurso)` encuentra el archivo en el framework estático; ver §40.
 
 ## 6. Los componentes (`ui/components/ds/`)
 
 Cada uno con pocos parámetros; las variantes, en un `enum`.
 
 **`Superficie`** — el contenedor de toda tarjeta. Reemplazó a `MinCard`, borrada en la vuelta de diseño 21.
+Radio 18; `destacada = true` (y el nivel `Propuesta`) con radio 22 y la sombra suave (§3).
 ```kotlin
 Superficie { Text("Tu plata", style = Movi.textos.apoyo); Cifra(tuPlata, VarianteDeCifra.Grande) }
 Superficie(relleno = RellenoDeSuperficie.Lista) { Fila(…); Separador(); Fila(…) }
@@ -157,7 +213,7 @@ Seccion(titulo = "Tarjetas", conteo = 3, accion = "Ver todo", onAccion = ::verTo
 
 **`Fila`** — la fila de lista de toda la app: `inicio` (avatar de comercio, `IconoEnCirculo`, persona),
 `titulo`, `subtitulo?`, `final` (`Cifra`, `Pildora` o `Chevron`). 12 entre el inicio y el texto, 8 entre
-el texto y el final (vuelta de diseño 15). 56 / 64 de alto mínimo, 16 a los
+el texto y el final (vuelta de diseño 15). 56 / 58 de alto mínimo (vuelta 29), 4 arriba y abajo, 16 a los
 lados, toque de borde a borde. El título va en hasta dos renglones antes del «…» (la fila crece) y el
 subtítulo en uno —o en dos con `lineasDelSubtitulo = 2`, solo donde el subtítulo es la razón de la fila
 y no se puede acortar («Bancolombia Ahorros · Nunca la has cuadrado», vuelta de diseño 2)—;
@@ -186,13 +242,16 @@ Fila(titulo = "Borrar mi cuenta", tonoDelTitulo = TonoDeFila.Alerta,
 ```
 
 **`Boton`** — `Principal`, `Secundario`, `Fantasma`, `Peligro`; tamaño `M` (48) o `S` (36, solo dentro
-de una tarjeta; su toque igual llega a 48). Ícono opcional y `cargando`.
+de una tarjeta; su toque igual llega a 48). Ícono opcional y `cargando`. **Opción 3 (vuelta 29):**
+píldora; el `Principal` amarillo con la tinta encima, el `Secundario` blanco con `bordeDeBoton` a 1,5,
+el `Fantasma` en el azul del `enlace`, el `Peligro` el rojo de alerta sobre su lavado; apagado, la capa 3
+con el texto apagado. Texto en `cuerpoFuerte` (15/700).
 ```kotlin
 Boton("Guardar", onClick = ::guardar, anchoCompleto = true, cargando = guardando)
 Boton("Borrar", onClick = ::borrar, variante = VarianteDeBoton.Peligro)
 ```
 
-**`Fantasma` es el botón de texto**: solo el texto en marca, sin fondo, **tampoco apagado** (vuelta de
+**`Fantasma` es el botón de texto**: solo el texto en el azul del enlace, sin fondo, **tampoco apagado** (vuelta de
 diseño 5: los demás se apagan sobre la capa 2; uno de texto que se rellena de gris parece otro botón,
 ver `coloresDelBotonApagado`). Va debajo o al lado de la acción con peso, nunca a todo el ancho: «Saltar
 este paso» en la guía de primer uso es `Fantasma`, tamaño `S`, centrado debajo de «Atrás · Siguiente».
@@ -202,7 +261,9 @@ Boton("Saltar este paso", onClick = ::saltar, variante = VarianteDeBoton.Fantasm
 ```
 
 **`Pildora`** y **`PildoraDeFiltro`** — estado (`Neutra`, `Info`, `Aviso`, `Peligro`, `Exito`, `Marca`)
-y filtro que se elige.
+y filtro que se elige. Vuelta 29: la neutra en la capa 3, la de aviso en el tinte con el ocre, la de marca
+llena de amarillo. El filtro mide 44 (`Medida.altoDeFiltro`): **elegido, en tinta con la letra blanca**
+(`cuerpoFuerte`); sin elegir, blanco con `bordeDePildora` (`cuerpo`).
 ```kotlin
 Pildora("Vence en 2 días", TonoDePildora.Aviso)
 PildoraDeFiltro("Gastos", seleccionada = filtro == Gastos, onClick = { filtro = Gastos })
@@ -211,7 +272,7 @@ PildoraDeFiltro(marca.nombre, elegido, onClick, inicio = { CirculoDeMarca(marca,
 ```
 
 **`PildoraDeAccion`** (vuelta de diseño 12) — una píldora que **hace algo** al tocarla: se ve como un
-`PildoraDeFiltro` sin elegir (capa 2, `cuerpo`, ícono en la marca) pero es un botón, no dice «elegido».
+`PildoraDeFiltro` sin elegir (blanca con `bordeDePildora`, `cuerpo`, ícono en el `enlace`) pero es un botón, no dice «elegido».
 Alto mínimo `Medida.altoChico`; un texto largo baja a un segundo renglón. `descripcion` es lo que oye
 el lector de pantalla si el texto es una versión corta. Hoy: las preguntas para seguir de Movi AI.
 ```kotlin
@@ -227,7 +288,8 @@ PildoraDeAccion(nombre, onClick = ::alternar, inicio = { IconoDeCategoria(nombre
 ```
 
 **`AccionRapida`** y **`CuadriculaDeAcciones`** — la cuadrícula del camino 3: cuatro columnas, ícono en
-círculo de 56 y **rótulo de un renglón** (vuelta de diseño 2: «Gasto», «Comprobante», «Preguntar»; si uno
+círculo de 56 (vuelta 29: la destacada amarilla con el ícono en tinta; las demás blancas con `borde` y el
+ícono en tinta; la insignia en tinta con el número blanco y un aro del fondo; rótulo en `apoyoMedio`) y **rótulo de un renglón** (vuelta de diseño 2: «Gasto», «Comprobante», «Preguntar»; si uno
 no entra se achica hasta la letra de `rotulo` y recién ahí lleva «…»), con la frase entera en
 `descripcion` para el lector de pantalla («Anotar un gasto»). Una destacada como mucho, insignia
 opcional. `RenglonesDelRotulo.Dos` es para rótulos que son nombres de pantallas (eran las fichas de Ajustes, que desde la vuelta 3 es una lista de `Fila`).
@@ -273,8 +335,8 @@ Cifra(teQuedan, VarianteDeCifra.Heroe)
 **`FormaDeCifra`** (vuelta de diseño 19) — cómo se escribe: `Entera` («$15.600.000») **siempre**,
 salvo en una **columna de tres** (el Disponible del período, las cifras de Tus períodos), donde va
 `Compacta` («$15,6M» de un millón para arriba, los pesos por debajo): un tercio de tarjeta a 360 dp
-deja ~90 dp y Martian Mono pide ~9,5 dp por carácter con la letra de la app (0,7 em a 12,5 sp × 1,12),
-así que «$15.600.000» no entra. En otra moneda no se compacta. Una fila, una tarjeta, dos cifras lado
+deja ~90 dp y Martian Mono pedía ~9,5 dp por carácter con la letra de la app (0,7 em a 12,5 sp × 1,12),
+así que «$15.600.000» no entraba (con Figtree tabular, desde la vuelta 29, la regla se quedó igual). En otra moneda no se compacta. Una fila, una tarjeta, dos cifras lado
 a lado o el patrimonio de Hoy van enteras: «$1,5M» al lado de un héroe entero se leía como otro número.
 ```kotlin
 Cifra(resumen.entradas, tono = TonoDeCifra.Ingreso, forma = FormaDeCifra.Compacta)   // +$15,6M
@@ -359,7 +421,7 @@ ParDeWidgets(
 )
 ```
 
-**`Encabezado`** — el de toda pantalla: 56 de alto, 16 de margen, título (y subtítulo), flecha o
+**`Encabezado`** — el de toda pantalla: 64 de alto (vuelta 29; era 56), 16 de margen, título (y subtítulo), flecha o
 avatar, y a la derecha `acciones` (`BotonDeIcono`, una `Pildora` como «Beta», «Actualizando…») y
 `accion`. Sin línea debajo. `MinScreenHeader` delega acá (con `action` y `accion`).
 
@@ -461,13 +523,15 @@ CampoDeBusqueda(busqueda, { busqueda = it }, guia = "Buscar o crear categoría",
 |---|---|
 | `LosValoresSueltosSoloBajanTest` (`core/src/jvmTest/.../quality/`) | los `.dp` sueltos y los `RoundedCornerShape` con número en `ui/` no suben de la línea base (`docs/diseno/lineas-base.txt`); los `Color(0x…)` fuera de `theme/` están en cero |
 | `ElSistemaNoTieneValoresSueltosTest` | cero `.dp`/`.sp`/`Color(0x)`/radio/`fontSize`/`alpha` a mano dentro de `ds/` |
-| `ContrasteDeLosTokensTest` | el contraste de cada par, con las capas nuevas |
+| `ContrasteDeLosTokensTest` | el contraste de cada par: texto, enlace y estados sobre cada superficie; tinta sobre el amarillo; blanco sobre la tinta; los bordes; y que la marca no sea letra |
+| `SoloHayUnTemaTest` (Robolectric, vuelta 29) | con el teléfono en modo oscuro, el tema y el esquema de Material son los claros |
+| `ElWidgetHablaLosTokensTest` / `ElIngresoHablaLosTokensTest` / `PaginaCompartidaTest` | el widget, el ingreso web y la página compartida copian los colores del único tema |
 | `LosTamanosSueltosSoloBajanTest` | los `fontSize` sueltos |
 | `LosCamposSonDelSistemaTest` | ningún `BasicTextField` / `TextField` / `OutlinedTextField` en `ui/` fuera de `ui/components/` y de cuatro excepciones con nombre (§15; Buscar salió en la vuelta 35, §37) |
 | `LosRotulosNoGritanTest` | ninguna función `…SectionLabel` en `ui/`, y ningún `Seccion` / `GrupoDeCampos` / `RotuloDeCampo` / `rotulo =` / `label =` con un texto entero en mayúsculas |
 | `LasGuiasNoParecenDatosTest` | ningún `guia =` / `placeholder =` con un literal puramente numérico en `ui/` («20», «29,6», «$ 0»): va `ejemplo =`, y sin su propio «Ej:» (§15) |
 | `LosCamposDelSistemaTest` (Robolectric) | el rótulo en frase, la guía de un monto en la letra de cuerpo y el valor en la de cifras, el error en `sale`, «¿Qué es esto?» abre y cierra, la caja llega a 48, y nada se recorta a 360 dp con la letra a ×1,3 (también en las hojas de crédito y tarjeta) |
-| `SistemaDeDisenoTest` (Robolectric) | cada componente se compone en los dos temas; la fila mide 56/64; el botón llega a 48 de toque; la cifra se oculta; la tarjeta de cuenta mide 128 con marca y sin ella; dos widgets de un par miden lo mismo; la casilla que se toca sola mide 48 y dice su estado |
+| `SistemaDeDisenoTest` (Robolectric) | cada componente se compone en el tema (uno solo desde la vuelta 29); los colores de botón, filtro, píldora e ícono son los de la opción 3; la sombra va en la propuesta y la destacada, no en una lista; el filtro mide 44; la fila mide 56/58; el botón llega a 48 de toque; la cifra se oculta; la tarjeta de cuenta mide 128 con marca y sin ella; dos widgets de un par miden lo mismo; la casilla que se toca sola mide 48 y dice su estado |
 | `CifraConRotuloTest` (Robolectric, motor de texto real) | el rótulo como se escribe, la cifra del sistema con su signo y tono, nada en claro con los saldos ocultos, «—» sin dato, y ninguna cifra recortada ni partida a 360 dp con la letra ×1,12 (tres compactas, dos enteras de diez dígitos, una en renglón) |
 | `LasCifrasDelSistemaSeOcultanTest` (Robolectric) | con «Ocultar los saldos», ni un «$» seguido de un dígito en el flujo libre de Plan, Presupuestos, la hoja de anular, los candidatos a pago de tarjeta y, en Hoy, «Tu patrimonio», «Para revisar» (con la evidencia abierta) y «Tu día más justo» |
 | `LoQueNoEsDelSistemaSoloBajaTest` (`core/src/jvmTest/.../quality/`, vuelta de diseño 18) | en `ui/` fuera de `ds/`, seis cosas que solo pueden bajar de su línea base (`lineas-base.txt`): `Button(`/`OutlinedButton(`/`TextButton(` de Material, `Color.White`/`Color.Black` (salvo el velo de `MarcoDeHoja`), `Hairline(`, `MinCard(`, un `Text(` cuyo primer argumento es `formatCOP(`/`formatMoney(` (aproximación por regex) y `fontWeight =` (§24). **Desde la vuelta 21 las cinco primeras se exigen en 0**, aunque alguien suba su línea base (§27) |
@@ -475,7 +539,7 @@ CampoDeBusqueda(busqueda, { busqueda = it }, guia = "Buscar o crear categoría",
 
 ## 9. Migrar una pantalla
 
-1. Mirarla antes (web a 390 dp, los dos temas).
+1. Mirarla antes (web a 390 dp; desde la vuelta 29 hay un solo tema).
 2. Cambiar tarjetas por `Superficie`, filas por `Fila`, títulos por `Seccion`, botones por `Boton`,
    montos por `Cifra`; los números que queden, por `Espacio` / `Medida` / `Radio` / `Icono`.
 3. `python3 scripts/auditoria-de-diseno.py --resumen` y bajar `docs/diseno/lineas-base.txt` al número
@@ -1644,3 +1708,38 @@ dice el cargo y manda 2.100.000 por `adjustAccountBalance`; el préstamo no apar
 sin «por revisar» y sin «Ver todos»; la × vuelve a «Todo» con las dos), más los casos puros de
 `CuadreDeSaldosLogicTest` (secciones, rótulos, cargo/abono, `sePuedeCuadrar` sin tarjetas) y de
 `EntreCuentasFueraDeLosChipsTest`.
+
+## 40. Vuelta 29: la opción 3 «Acción primero» es el tema de toda la app
+
+El 28-oct el dueño volvió a la opción 3 del lienzo «Movi · 5 caminos» («me encantó a mí y a mi esposa
+mucho más que 1, 2 y 4»). Esta vuelta cambia **la piel, no el orden**: tokens, letra, formas, sombras
+y los componentes de `ds/`. La navegación de 4 pestañas y las 8 acciones de Hoy van en la vuelta 30.
+
+- **Paleta** (§3, §4): crema, blanco, tinta, amarillo de acción, azul de enlace. Tres valores los puso
+  la prueba: `entra` `#147849`, `sale` `#B3261E`, `textoApagado` `#6E665B`.
+- **La marca es relleno**: cada `Movi.colores.marca` usado como letra, ícono, borde o línea pasó a
+  `enlace` (70 lugares en 34 archivos fuera de `ds/`), y los `lavado(marca)` de algo elegido a `lavado(enlace)`.
+  Los rellenos amarillos llevan la tinta encima (`sobreMarca`): tres hojas de Ajustes ponían `fondo`
+  como letra sobre la marca y no se habría leído.
+- **Letra** (§5): Figtree 400–800, también las cifras, tabulares.
+- **Formas** (§2): `Radio.l` 18, `Radio.xl` 22, botones en píldora, la fila de dos renglones a 58, el
+  filtro a 44 (36, `AltoDeFiltro.Compacto`, en los chips de Agregar: la hoja está anclada abajo y con 44
+  el pie se salía a 360 × 740), el encabezado a 64 (el título de 28 no dejaba aire abajo en 56).
+- **Sombra** (§3): solo en la superficie destacada y la propuesta.
+- **Componentes**: `Boton`, `Pildora`, `PildoraDeFiltro`, `PildoraDeAccion`, `AccionRapida`, `Fila`
+  (4 arriba y abajo), `IconoEnCirculo`/`AvatarDePersona` (la marca: círculo amarillo con la tinta),
+  `Casilla` (marcada en tinta), `BarraDeProgreso` (`Marca` en tinta), `Campo` (foco en el enlace),
+  `BotonDeIcono` `Secundario` (círculo blanco con borde), `Seccion` (la acción en el enlace),
+  `TarjetaDeCuenta` (sin marca, blanca). La barra de pestañas: blanca con el borde de arriba y el ícono
+  activo sobre la píldora amarilla de 56 × 30, rótulos 12/700 y 12/500 en el texto medio; el rail igual.
+- **Solo claro**: sin `COLORES_OSCUROS`, `CATEGORIAS_OSCURAS`, `TemaStore`, `PreferenciaDeTema`,
+  `HojaDelTema` ni el parámetro `oscuro` de `MoviTheme` y de `AjustarBarrasDelSistema`; las barras del
+  sistema con íconos oscuros; el arranque de Android en el crema (`movi_fondo`, `Theme.Material.Light`);
+  el widget, el ingreso web y la página compartida, claros; los atajos del ícono, amarillos.
+- **iOS**: con Kotlin 2.2.21 el XCFramework se arma, pero el framework es estático y `Font(recurso)`
+  solo se puede comprobar abriendo la app; sin simulador en esta vuelta, iOS sigue con la letra del
+  sistema (`laPlataformaTraeLasFuentes = false`).
+- **Lo que queda para las vueltas siguientes**: el héroe de Hoy todavía no es una tarjeta (cuando lo
+  sea, `Superficie(destacada = true)`), la franja amarilla y los botones `marcaSuave` del encabezado,
+  las 4 pestañas y las 8 acciones (vuelta 30).
+
