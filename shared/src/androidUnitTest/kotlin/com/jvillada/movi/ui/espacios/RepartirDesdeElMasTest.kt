@@ -9,6 +9,9 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTouchInput
 import com.jvillada.movi.ui.components.LocalWindowWidthClass
 import com.jvillada.movi.ui.components.MinBottomNav
+import com.jvillada.movi.ui.components.LocalAtajosDeAgregar
+import com.jvillada.movi.ui.components.MAS_FORMAS_DE_ANOTAR
+import com.jvillada.movi.ui.components.MasFormasDeAnotar
 import com.jvillada.movi.ui.components.NavTab
 import com.jvillada.movi.ui.components.WindowWidthClass
 import com.jvillada.movi.ui.quickadd.AtajoDeAgregar
@@ -50,8 +53,9 @@ import kotlin.test.assertEquals
  *
  * Vuelta 7: con un espacio, la hoja «Pagó otro» sobre ese; con varios, primero se elige; sin ninguno,
  * la creación del espacio. Vuelta 26: «Repartir» salió de la cuadrícula del Inicio y vive en el menú
- * del «+»; abre **lo mismo que antes**. Se monta la barra con el «+» y sus atajos como la monta la
- * cáscara (`App.kt`: [hacerElAtajo] con un [EstadoDeRepartir] y sus [HojasDeRepartir]), y la pantalla
+ * del «+»; abre **lo mismo que antes**. Vuelta 38: el teléfono ya no tiene «+», y el mismo menú lo
+ * abre «Más formas de anotar» de Inicio. Se monta como la monta la cáscara (`App.kt`: [hacerElAtajo]
+ * con un [EstadoDeRepartir] y sus [HojasDeRepartir], puesto en `LocalAtajosDeAgregar`), y la pantalla
  * a la que navega, como lo haría la app.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -100,13 +104,16 @@ class RepartirDesdeElMasTest {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
                         when (val p = pantalla) {
                             is Screen.Espacio -> EspacioScreen(p.id, pagoOtro = p.pagoOtro)
-                            else -> MinBottomNav(
-                                active = NavTab.HOY,
-                                onTabSelected = {},
-                                onAtajo = { atajo ->
+                            else -> CompositionLocalProvider(
+                                LocalAtajosDeAgregar provides { atajo ->
                                     hacerElAtajo(atajo, navegar = onNavigate, repartir = repartir::tocar, elegirComprobante = {})
                                 },
-                            )
+                            ) {
+                                androidx.compose.foundation.layout.Column {
+                                    MasFormasDeAnotar()
+                                    MinBottomNav(active = NavTab.HOY, onTabSelected = {})
+                                }
+                            }
                         }
                         HojasDeRepartir(repartir)
                     }
@@ -126,9 +133,9 @@ class RepartirDesdeElMasTest {
 
     private fun esperar(condicion: () -> Boolean) = composeRule.waitUntil(timeoutMillis = 5_000, condicion)
 
-    /** Mantener presionado el «+» y elegir «Repartir» en su menú. */
+    /** Tocar «Más formas de anotar» y elegir «Repartir» en su menú. */
     private fun tocarRepartir() {
-        composeRule.onNodeWithContentDescription("Agregar", useUnmergedTree = true).performTouchInput { longClick() }
+        composeRule.onNodeWithText(MAS_FORMAS_DE_ANOTAR, useUnmergedTree = true).performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithText(AtajoDeAgregar.REPARTIR.rotulo, useUnmergedTree = true).performClick()
         composeRule.waitForIdle()

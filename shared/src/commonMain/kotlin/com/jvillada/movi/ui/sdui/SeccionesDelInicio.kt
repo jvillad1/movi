@@ -12,6 +12,7 @@ import com.jvillada.movi.ui.components.WindowWidthClass
 import com.jvillada.movi.ui.dashboard.CuentaDelCarrusel
 import com.jvillada.movi.ui.dashboard.tarjetasPorRenglon
 import androidx.compose.foundation.layout.Column
+import com.jvillada.movi.ui.components.MasFormasDeAnotar
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -143,7 +144,8 @@ private fun iconoDe(accion: AccionDelInicio): ImageVector = when (accion) {
  * **La cuadrícula de acciones** (camino 3): cuatro columnas, **una fila** (vuelta de diseño 26).
  * «Anotar gasto» es la destacada —lo que más se hace— y «Avisos» lleva la insignia de lo que espera en
  * Por revisar. Cada una abre lo que ya existe (ver `destinoDeLaAccion`). Traspaso, Pagar tarjeta,
- * Repartir y Comprobante viven en el menú del «+» (ver `AccionDelInicio`).
+ * Repartir y Comprobante viven en el menú de atajos: debajo, «Más formas de anotar» (vuelta 38, el
+ * teléfono ya no tiene «+») y el «+» del rail.
  */
 @Composable
 internal fun AccionesDelInicioSection(
@@ -151,6 +153,7 @@ internal fun AccionesDelInicioSection(
     onNavigate: (Screen) -> Unit,
 ) {
     val insignia = pendientesPorRevisar(data)
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
     CuadriculaDeAcciones(
         acciones = accionesDelInicio().map { accion ->
             Accion(
@@ -165,6 +168,10 @@ internal fun AccionesDelInicioSection(
         },
         modifier = Modifier.padding(horizontal = Medida.margenDePantalla),
     )
+    // Vuelta 38: sin «+» en la barra del teléfono, el resto de las formas de anotar (Traspaso, Pago de
+    // tarjeta, Repartir, Subir comprobante) se abre de aquí. La vuelta 39 lo cambia por las 8 acciones.
+    MasFormasDeAnotar()
+    }
 }
 
 // ── Movi propone hoy ─────────────────────────────────────────────────────────
