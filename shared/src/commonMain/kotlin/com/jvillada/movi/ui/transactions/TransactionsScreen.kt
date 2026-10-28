@@ -22,7 +22,6 @@ import com.jvillada.movi.ui.components.ds.EsqueletoDeFila
 import com.jvillada.movi.ui.components.ds.Fila
 import com.jvillada.movi.ui.components.ds.PildoraDeFiltro
 import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
-import com.jvillada.movi.ui.components.ds.Seccion
 import com.jvillada.movi.ui.components.ds.Separador
 import com.jvillada.movi.ui.components.ds.Superficie
 import com.jvillada.movi.ui.components.ds.Cifra
@@ -542,17 +541,40 @@ fun textoDeRechazados(rechazados: List<MovimientoRechazado>): String? {
 }
 
 /**
- * El rótulo del encabezado cuando se está adentro de un filtro que **no tiene chip**, o `null` si
- * el filtro activo sí es uno de los que se dibujan.
+ * El rótulo del **chip marcado del modo** cuando se está adentro de un filtro que no está entre los
+ * [CHIPS_VISIBLES], o `null` si el filtro activo sí es uno de los que se dibujan siempre.
  *
- * Sin chip marcado, la lista se vería filtrada sin nada que dijera por qué ni cómo volver. Ver
- * [CHIPS_VISIBLES]. Hoy es solo «Entre cuentas»: «Por confirmar» dejó de ser un modo de esta
- * pantalla en la ola C (ver [CHIP_POR_CONFIRMAR]).
+ * Sin chip marcado, la lista se vería filtrada sin nada que dijera por qué ni cómo volver. Hoy es
+ * solo «Entre cuentas»: «Por confirmar» dejó de ser un modo de esta pantalla en la ola C (ver
+ * [CHIP_POR_CONFIRMAR]).
+ *
+ * **Vuelta de diseño 37.** Hasta acá el modo se decía con una `Seccion` «Entre cuentas · Ver todos»
+ * encima de la lista, con los tres chips sin marcar, la franja Entró · Salió · Neto de todo el período
+ * y la tarjeta «N por revisar». Ahora el modo es un chip marcado con su × —el patrón del «Solo …» de
+ * la ola 4—, que lo dice y lo quita, y en el modo no van ni la franja ni «por revisar» (ver
+ * [loDeArribaEnElModo]).
  */
 fun tituloDelModoSinChip(chip: Int): String? = when (chip) {
     CHIP_ENTRE_CUENTAS -> CHIPS_DE_MOVIMIENTOS[CHIP_ENTRE_CUENTAS]
     else -> null
 }
+
+/**
+ * **Lo que va arriba de las filas en un modo sin chip** (vuelta de diseño 37): `false` = ni la franja
+ * Entró · Salió · Neto ni la tarjeta «N por revisar», ni el resumen del período en el panel de
+ * pantalla ancha.
+ *
+ * Las dos hablan de **todo** el período: «Entró $X» es la plata que llegó de afuera, y la lista de
+ * «Entre cuentas» es justo lo que esa cifra no cuenta (traspasos, cuotas, pagos de tarjeta). Puestas
+ * encima de esa lista decían de otra cosa. Se eligió **ocultar la franja** y no cambiarla por un
+ * «Movido entre cuentas $X»: un traspaso de $500.000 a otra cuenta propia no es plata que se gastó
+ * ni que entró, y una suma de patas —con tarjetas en dólares y cuotas que bajan una deuda— sería
+ * una cifra nueva sin regla de plata detrás.
+ */
+fun loDeArribaEnElModo(chip: Int): Boolean = tituloDelModoSinChip(chip) == null
+
+/** El tag del chip marcado de un modo sin chip («Entre cuentas ×»). Ver [tituloDelModoSinChip]. */
+const val TAG_CHIP_DEL_MODO: String = "chip-del-modo"
 
 /**
  * **Los días que caen adentro de un período**, para que Movimientos muestre el mes que el dueño
@@ -1328,6 +1350,17 @@ fun TransactionsScreen(
                     modifier = Modifier.testTag(TAG_CHIP_DE_LA_BUSQUEDA).semantics { contentDescription = "Quitar la búsqueda" },
                 )
             }
+            // Vuelta de diseño 37: el modo sin chip («Entre cuentas», desde Patrimonio) es un chip
+            // marcado con su ×, como el «Solo …» de al lado: lo dice y lo quita.
+            tituloDelModoSinChip(activeFilter)?.let { modo ->
+                PildoraDeFiltro(
+                    texto = modo,
+                    seleccionada = true,
+                    icono = Icons.Rounded.Close,
+                    onClick = { activeFilter = CHIP_TODO },
+                    modifier = Modifier.testTag(TAG_CHIP_DEL_MODO).semantics { contentDescription = "Salir de $modo" },
+                )
+            }
             filtro?.let { activo ->
                 PildoraDeFiltro(
                     texto = "Solo ${activo.rotulo}",
@@ -1381,10 +1414,9 @@ fun TransactionsScreen(
         }
         SideEffect { if (conteoFresco != null) ultimoConteoPorRevisar.value = conteoFresco }
         val cuantosPorRevisarAhora = conteoFresco ?: ultimoConteoPorRevisar.value
-        // Adentro de un modo sin chip («Entre cuentas»), el título que dice dónde está y cómo
-        // salir. Hace falta porque sin chip **ningún chip queda marcado**: la lista se vería
-        // filtrada sin nada que explicara por qué.
-        val tituloDelModo = tituloDelModoSinChip(activeFilter)
+        // Adentro de un modo sin chip («Entre cuentas») lo de arriba de las filas que habla de todo
+        // el período no va: ver [loDeArribaEnElModo]. El modo lo dice su chip marcado, arriba.
+        val conLoDeArriba = loDeArribaEnElModo(activeFilter)
 
         // Tirar hacia abajo pide lo mismo que «Reintentar»: `refreshKey` (ver [TirarParaActualizar]).
         TirarParaActualizar(
@@ -1401,7 +1433,7 @@ fun TransactionsScreen(
             // Vuelta de diseño 30: en el teléfono, Entró · Salió · Neto del período (en pantalla ancha
             // lo dice el panel). **El primer ítem de la lista**, antes de «N por revisar»: se va con el
             // scroll, como todo lo de arriba de las filas. Con un filtro que recorta la lista no va.
-            if (muestraElResumenEnElTelefono(conPanel, hayFiltro = filtro != null, busqueda = searchQuery)) {
+            if (conLoDeArriba && muestraElResumenEnElTelefono(conPanel, hayFiltro = filtro != null, busqueda = searchQuery)) {
                 item(contentType = "arriba") {
                     ResumenDelPeriodoEnElTelefono(
                         resumen = resumen,
@@ -1417,7 +1449,7 @@ fun TransactionsScreen(
                     }
                 }
             }
-            if (cuantosPorRevisarAhora != null && cuantosPorRevisarAhora.total > 0) {
+            if (conLoDeArriba && cuantosPorRevisarAhora != null && cuantosPorRevisarAhora.total > 0) {
                 item(contentType = "arriba") {
                     RenglonPorRevisar(
                         cuantos = cuantosPorRevisarAhora.total,
@@ -1425,16 +1457,6 @@ fun TransactionsScreen(
                         // mismo desglose que la insignia y «Movi propone hoy» del Inicio.
                         desglose = desgloseDePorRevisar(cuantosPorRevisarAhora),
                         onClick = { onNavigate(Screen.PorRevisar) },
-                        modifier = arribaDeLaLista,
-                    )
-                }
-            }
-            if (tituloDelModo != null) {
-                item(contentType = "arriba") {
-                    Seccion(
-                        titulo = tituloDelModo,
-                        accion = "Ver todos",
-                        onAccion = { activeFilter = CHIP_TODO },
                         modifier = arribaDeLaLista,
                     )
                 }
@@ -1618,7 +1640,7 @@ fun TransactionsScreen(
             // Vuelta de diseño 9: sin nada elegido, el resumen del período que la lista tiene a la
             // vista (ver `ResumenEnElPanel.kt`), sobre la misma historia. Sin historia leída todavía,
             // la invitación de siempre. El resumen es el mismo de la franja del teléfono (arriba).
-            if (enElPanel == null && resumen != null) {
+            if (enElPanel == null && resumen != null && loDeArribaEnElModo(activeFilter)) {
                 ResumenDelPeriodoEnElPanel(
                     resumen = resumen,
                     // Como desde «En qué se va»: los gastos de esa categoría, con su chip y su ×.
