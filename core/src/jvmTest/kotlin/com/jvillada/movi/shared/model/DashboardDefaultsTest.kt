@@ -23,13 +23,14 @@ class DashboardDefaultsTest {
         val def = defaultDashboardDefinition()
         assertEquals("dashboard", def.slug)
         assertEquals(DASHBOARD_LAYOUT_VERSION, def.version)
-        // Generación 9, el Inicio del rediseño (ola R1): el héroe → la cuadrícula de acciones → «Movi
-        // propone hoy» → el carrusel de cuentas → los dos widgets (falta por pagar, en qué se va). ALERTS
-        // y el BANNER se quedan últimos, solo para los APK viejos.
-        assertEquals(9, DASHBOARD_LAYOUT_VERSION)
+        // Generación 10, el Inicio de la opción 3 (vuelta 39): el héroe → la cuadrícula de acciones → el
+        // próximo pago → «Movi propone hoy» → los últimos movimientos → el carrusel de cuentas → los dos
+        // widgets (falta por pagar, en qué se va). ALERTS y el BANNER se quedan últimos, solo para los APK
+        // viejos.
+        assertEquals(10, DASHBOARD_LAYOUT_VERSION)
         assertEquals(
             listOf(
-                "HERO_BALANCE", "ACCIONES", "PROPUESTAS", "CUENTAS",
+                "HERO_BALANCE", "ACCIONES", "PROXIMO_PAGO", "PROPUESTAS", "ULTIMOS_MOVIMIENTOS", "CUENTAS",
                 "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA", "ALERTS", "BANNER",
             ),
             def.sections.map { it.type },
@@ -65,6 +66,28 @@ class DashboardDefaultsTest {
         assertEquals("aichat", banner.cards.single().action?.target, "y conserva su acceso a Movi AI")
     }
 
+    /**
+     * **Qué ve un APK de la generación 9** (la ola R1) con la definición de la vuelta 39: PROXIMO_PAGO y
+     * ULTIMOS_MOVIMIENTOS no están en su taxonomía y los descarta. Le queda su Inicio de siempre —con el
+     * próximo pago dentro de su «Movi propone hoy», que su binario sigue proponiendo—.
+     */
+    @Test
+    fun un_apk_de_la_generacion_9_descarta_el_proximo_pago_y_los_ultimos_movimientos() {
+        val tiposDeLaGeneracion9 = listOf(
+            "HERO_BALANCE", "UPCOMING_PAYMENTS", "ALERTS", "QUICK_LINKS_WITH_TOTALS",
+            "CARD_ROW", "CARD_LIST", "LINK_LIST", "BANNER",
+            "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA", "DISPONIBLE_DEL_PERIODO",
+            "PREGUNTALE_A_MOVI", "PATRIMONIO", "ACCIONES", "PROPUESTAS", "CUENTAS",
+        )
+        val loQueVe = defaultDashboardDefinition().sections.filter { it.type in tiposDeLaGeneracion9 }
+        assertEquals(
+            listOf("HERO_BALANCE", "ACCIONES", "PROPUESTAS", "CUENTAS", "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA", "ALERTS", "BANNER"),
+            loQueVe.map { it.type },
+            "el APK de la generación 9 ve exactamente su Inicio de siempre",
+        )
+        assertTrue(listOf("PROXIMO_PAGO", "ULTIMOS_MOVIMIENTOS").all { it in ScreenTaxonomy.SECTION_TYPES })
+    }
+
     /** Lo mismo para un APK de la generación 7, el más viejo que todavía puede andar por ahí. */
     @Test
     fun un_apk_viejo_ve_el_inicio_de_la_generacion_7() {
@@ -81,7 +104,7 @@ class DashboardDefaultsTest {
         )
         // Los tipos nuevos existen para ESTE binario: si salieran de la taxonomía, el cliente nuevo
         // también los descartaría y el Inicio se quedaría sin acciones, propuestas ni cuentas.
-        assertTrue(listOf("ACCIONES", "PROPUESTAS", "CUENTAS").all { it in ScreenTaxonomy.SECTION_TYPES })
+        assertTrue(listOf("ACCIONES", "PROXIMO_PAGO", "PROPUESTAS", "ULTIMOS_MOVIMIENTOS", "CUENTAS").all { it in ScreenTaxonomy.SECTION_TYPES })
         assertTrue("PREGUNTALE_A_MOVI" in ScreenTaxonomy.SECTION_TYPES)
         assertTrue("PATRIMONIO" in ScreenTaxonomy.SECTION_TYPES)
     }
