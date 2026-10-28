@@ -47,4 +47,18 @@ class LaFacturaPagadaOfreceLoQueEsTest {
         assertEquals(EstadoDeLaFila.MARCADA_A_MANO, aMano.estado)
         assertEquals(emptyList(), accionesDeLaFilaPagada(aMano))
     }
+
+    /** Vuelta 48: la fila pagada se toca para ver el movimiento; el resto va en su «⋯». */
+    @Test
+    fun `el menu de la fila pagada guarda quitar la marca y no fue este, no ver movimiento`() {
+        val emparejada = base.copy(automatica = true, derivado = true, eventId = "ev_1", pagadoEl = "2026-10-06")
+        assertEquals(listOf(AccionDeLaFilaPagada.NO_FUE_ESTE), accionesDelMenuDeLaFilaPagada(emparejada))
+        val sellada = base.copy(eventId = "ev_pago")
+        assertEquals(listOf(AccionDeLaFilaPagada.QUITAR_LA_MARCA), accionesDelMenuDeLaFilaPagada(sellada))
+        // El sello viejo sin movimiento también tiene su «Quitar la marca», ahora en el menú.
+        assertEquals(listOf(AccionDeLaFilaPagada.QUITAR_LA_MARCA), accionesDelMenuDeLaFilaPagada(base.copy(eventId = null)))
+        // La cuota probada por su pago no tiene menú; lo pendiente tampoco.
+        assertEquals(emptyList(), accionesDelMenuDeLaFilaPagada(base.copy(ruleId = "credit_1", derivado = true, eventId = "ev_cuota")))
+        assertEquals(emptyList(), accionesDelMenuDeLaFilaPagada(base.copy(pagado = false)))
+    }
 }

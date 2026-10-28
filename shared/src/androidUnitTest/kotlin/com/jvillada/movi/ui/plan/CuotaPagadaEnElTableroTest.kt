@@ -5,7 +5,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
@@ -146,6 +148,16 @@ class CuotaPagadaEnElTableroTest {
         }
     }
 
+    /** Vuelta 48: abre el «⋯» de la primera fila pagada que lo tenga (cuando aparece). */
+    private fun abrirElMenuDeLaFila() {
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithContentDescription("Más opciones de", substring = true).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onAllNodesWithContentDescription("Más opciones de", substring = true).onFirst()
+            .performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+    }
+
     private fun esperarTexto(texto: String) {
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithText(texto, substring = true, useUnmergedTree = true)
@@ -185,6 +197,14 @@ class CuotaPagadaEnElTableroTest {
         montar()
         esperarTexto("Cuota Crediágil 3090")
 
+        // Vuelta 48: lo que se puede hacer con una fila pagada va en su «⋯». La cuota no tiene.
+        assertEquals(
+            listOf("Más opciones de Gimnasio Cami"),
+            composeRule.onAllNodesWithContentDescription("Más opciones de", substring = true)
+                .fetchSemanticsNodes().map { it.config[SemanticsProperties.ContentDescription].first() },
+            "solo el sello a mano tiene menú",
+        )
+        abrirElMenuDeLaFila()
         assertEquals(
             1,
             composeRule.onAllNodesWithText("Quitar la marca", useUnmergedTree = true).fetchSemanticsNodes().size,
@@ -201,6 +221,7 @@ class CuotaPagadaEnElTableroTest {
     @Test
     fun `el sello a mano sigue teniendo su quitar la marca`() {
         montar()
+        abrirElMenuDeLaFila()
         esperarTexto("Marcado a mano, sin movimiento")
 
         composeRule.onAllNodes(hasClickAction() and hasAnyDescendant(hasText("Quitar la marca")), useUnmergedTree = true)

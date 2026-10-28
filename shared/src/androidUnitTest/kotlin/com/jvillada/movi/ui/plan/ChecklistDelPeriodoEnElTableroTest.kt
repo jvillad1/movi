@@ -11,6 +11,7 @@ import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onLast
@@ -199,6 +200,16 @@ class ChecklistDelPeriodoEnElTableroTest {
         }
     }
 
+    /** Vuelta 48: abre el «⋯» de la primera fila pagada (cuando aparece). */
+    private fun abrirElMenuDeLaFila() {
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithContentDescription("Más opciones de", substring = true).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onAllNodesWithContentDescription("Más opciones de", substring = true).onFirst()
+            .performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+    }
+
     private fun esperarTexto(texto: String) {
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithText(texto, substring = true, useUnmergedTree = true)
@@ -316,6 +327,8 @@ class ChecklistDelPeriodoEnElTableroTest {
             derivadaDeUnMovimiento = true, montoDelPago = 1_800_000L, monedaDelPago = "COP",
         )
         montar()
+        // Vuelta 48: la fila pagada es compacta; lo que Movi emparejó lo dice su «⋯», con «No fue este».
+        abrirElMenuDeLaFila()
         esperarTexto("Movi lo emparejó")
 
         tocar("No fue este")
@@ -334,6 +347,8 @@ class ChecklistDelPeriodoEnElTableroTest {
     fun `un sello sin movimiento se puede quitar`() {
         estadoDelArriendo = estadoDelArriendo.copy(occurred = true, eventId = null)
         montar()
+        // Vuelta 48: «Quitar la marca» vive en el «⋯» de la fila pagada, con lo que la fila es.
+        abrirElMenuDeLaFila()
         esperarTexto("Marcado a mano, sin movimiento")
 
         tocar("Quitar la marca")

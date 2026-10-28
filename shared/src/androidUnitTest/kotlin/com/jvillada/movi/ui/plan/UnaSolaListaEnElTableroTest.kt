@@ -1,6 +1,5 @@
 package com.jvillada.movi.ui.plan
 
-import com.jvillada.movi.ui.recurrentes.TAG_ENLACE_AL_MOVIMIENTO
 import com.jvillada.movi.ui.recurrentes.TITULO_TUS_FACTURAS
 import com.jvillada.movi.ui.recurrentes.TAG_VER_TODAS_LAS_FACTURAS
 import com.jvillada.movi.ui.recurrentes.ETIQUETA_ANOTAR
@@ -16,6 +15,7 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performSemanticsAction
 import com.jvillada.movi.data.RecurringOfferGate
@@ -155,6 +155,13 @@ class UnaSolaListaEnElTableroTest {
      * Toca el botón [etiqueta] de la fila de [nombre]. Por la acción semántica: la lista es más
      * larga que la pantalla de prueba y un toque por coordenadas no llega.
      */
+    /** Vuelta 48: abre el «⋯» de la fila pagada de [nombre]. */
+    private fun abrirElMenuDe(nombre: String) {
+        verTodas()
+        composeRule.onNodeWithContentDescription("Más opciones de $nombre").performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+    }
+
     private fun tocarEnLaFila(etiqueta: String) {
         composeRule.onAllNodes(hasClickAction() and hasAnyDescendant(hasText(etiqueta)), useUnmergedTree = true)
             .onFirst().performSemanticsAction(SemanticsActions.OnClick)
@@ -177,8 +184,8 @@ class UnaSolaListaEnElTableroTest {
 
         // Las dos de octubre dicen cuándo vencen (la pastilla), no que ya se pagaron.
         assertEquals(2, nodos("Vence el 22 oct").size)
-        // Crediágil: el enlace al movimiento que la pagó.
-        assertEquals(1, nodos("Movimiento del 27 sep").size)
+        // Crediágil: compacta (vuelta 48), «Pagado ✓ · $1.204.064 · 27 sep»; tocarla abre el movimiento.
+        assertEquals(1, nodos(" · \$1.204.064 · 27 sep").size)
     }
 
     /**
@@ -227,6 +234,8 @@ class UnaSolaListaEnElTableroTest {
     fun `no fue este sobre lo que emparejo Movi guarda el rechazo`() {
         montar()
 
+        // Vuelta 48: «No fue este» vive en el «⋯» de la fila pagada que Movi emparejó sola.
+        abrirElMenuDe("Mercado")
         tocarEnLaFila("No fue este")
 
         composeRule.waitUntil(timeoutMillis = 5_000) { rechazados.isNotEmpty() }
@@ -238,15 +247,22 @@ class UnaSolaListaEnElTableroTest {
     fun `quitar la marca borra el sello viejo hecho a mano`() {
         montar()
 
+        abrirElMenuDe("Internet")
         tocarEnLaFila("Quitar la marca")
 
         composeRule.waitUntil(timeoutMillis = 5_000) { desmarcadas.isNotEmpty() }
         assertEquals(listOf("rr_internet" to "2026-09"), desmarcadas)
     }
 
-    /** El toque de la fila (el de «Próximos») sigue: una cuota se gestiona en Créditos. */
+    /**
+     * El toque de la fila (el de «Próximos») sigue: una cuota **pendiente** se gestiona en Créditos.
+     * (Una pagada abre su movimiento, vuelta 48: ver la prueba de abajo.)
+     */
     @Test
     fun `tocar una cuota lleva a creditos`() {
+        ocurrencias = Caso.ocurrencias.map {
+            if (it.ruleId == Caso.crediagil.id) it.copy(occurred = false, eventId = null, derivadaDeUnMovimiento = false, montoDelPago = null) else it
+        }
         montar()
         verTodas()
 
@@ -278,9 +294,9 @@ class UnaSolaListaEnElTableroTest {
         assertEquals(listOf<Triple<String, String, String?>>(Triple("rr_coomeva", "2026-09", "ev_coomeva")), marcadas.toList())
     }
 
-    /** Vuelta 40: «Movimiento del 27 sep» de una factura pagada abre la hoja de ese movimiento. */
+    /** Vuelta 48: tocar una factura pagada (compacta) abre la hoja del movimiento que la pagó. */
     @Test
-    fun `el enlace de una factura pagada abre su movimiento`() {
+    fun `tocar una factura pagada abre su movimiento`() {
         eventos = listOf(
             EventDay(
                 date = "2026-09-27", total = -1_204_064L,
@@ -295,8 +311,7 @@ class UnaSolaListaEnElTableroTest {
         montar()
         verTodas()
 
-        composeRule.onNode(hasTestTag(TAG_ENLACE_AL_MOVIMIENTO) and hasText("Movimiento del 27 sep"), useUnmergedTree = true)
-            .performSemanticsAction(SemanticsActions.OnClick)
+        tocarEnLaFila(" · \$1.204.064 · 27 sep")
         esperarTexto("Pago cuota Crediágil")
         assertTrue(marcadas.isEmpty(), "abrir el movimiento no sella nada")
     }
