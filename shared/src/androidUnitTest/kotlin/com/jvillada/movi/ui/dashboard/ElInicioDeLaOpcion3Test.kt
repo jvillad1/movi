@@ -3,7 +3,10 @@ package com.jvillada.movi.ui.dashboard
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -160,5 +163,25 @@ class ElInicioDeLaOpcion3Test {
         assertEquals(1, composeRule.onAllNodesWithText("−\$27.500", substring = true, useUnmergedTree = true).fetchSemanticsNodes().size)
         composeRule.onNodeWithText(VER_TODA_LA_ACTIVIDAD, useUnmergedTree = true).performClick()
         assertEquals(Screen.Transactions(), navegado.last())
+    }
+
+    /**
+     * **Ningún texto de Inicio por debajo de 12 px efectivos** (la web lo pide): la app agranda toda la
+     * letra ×1,12, así que cada estilo pintado tiene que medir al menos 12 ÷ 1,12 sp.
+     */
+    @Test
+    fun `ningun texto de Inicio queda por debajo de 12 px efectivos`() {
+        montar(datos.copy(pendingSms = 3))
+        val chicos = composeRule.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsActions.GetTextLayoutResult), useUnmergedTree = true)
+            .fetchSemanticsNodes()
+            .mapNotNull { nodo ->
+                val resultados = mutableListOf<TextLayoutResult>()
+                nodo.config[SemanticsActions.GetTextLayoutResult].action?.invoke(resultados)
+                resultados.firstOrNull()?.let { r ->
+                    val efectivo = r.layoutInput.style.fontSize.value * 1.12f
+                    if (efectivo < 11.95f) "«${r.layoutInput.text}» a $efectivo px" else null
+                }
+            }
+        assertTrue(chicos.isEmpty(), "textos de menos de 12 px: $chicos")
     }
 }

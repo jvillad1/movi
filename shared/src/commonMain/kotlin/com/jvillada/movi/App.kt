@@ -697,9 +697,10 @@ internal fun EsqueletoDeLaCascara(
             // íconos oscuros de siempre, `AjustarBarrasDelSistema`): sin esto quedaba una franja crema
             // arriba del encabezado amarillo. Del ancho del contenido, nunca detrás del rail.
             if (pantalla == Screen.Dashboard) {
+                val anchoDeInicio = anchoMaximoDeLaPantalla(pantalla, widthClass)
                 Box(
                     modifier = Modifier
-                        .widthIn(max = anchoMaximoDeLaPantalla(pantalla, widthClass))
+                        .widthIn(max = anchoDeInicio)
                         .fillMaxWidth()
                         .windowInsetsTopHeight(WindowInsets.statusBars)
                         .background(Movi.colores.marca),
