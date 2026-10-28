@@ -46,6 +46,9 @@ import com.jvillada.movi.shared.model.PropuestaDePresupuesto
 import com.jvillada.movi.shared.model.CategoryRewriteResult
 import com.jvillada.movi.shared.model.CategoryUsage
 import com.jvillada.movi.shared.model.RecuerdoDeCategoria
+import com.jvillada.movi.shared.model.AnotarElPagoDeLaOcurrencia
+import com.jvillada.movi.shared.model.PagoDeLaOcurrenciaAnotado
+import com.jvillada.movi.shared.model.CuentasDeCadaUso
 import com.jvillada.movi.shared.model.DetalleDePeriodo
 import com.jvillada.movi.shared.model.ResumenDePeriodo
 import com.jvillada.movi.shared.model.CardSummary
@@ -2198,6 +2201,9 @@ class LocalRepository(
     /** Ola A: la memoria se arma sobre TODA la historia del dueño — sin espejo local, igual que [getCategories]. */
     override suspend fun getMemoriaDeCategorias(): List<RecuerdoDeCategoria> = remote.getMemoriaDeCategorias()
 
+    /** Vuelta 43: sale de toda la historia, como la memoria de categorías. Sin conexión, Agregar no la usa. */
+    override suspend fun getCuentasDeCadaUso(): CuentasDeCadaUso = remote.getCuentasDeCadaUso()
+
     /**
      * Renombrar contra el server y **espejar la reescritura en SQLDelight** — mismo patrón que
      * [createAccount] y [updateEventCategory]: `remote` primero, lo local después y solo con lo
@@ -2377,6 +2383,45 @@ class LocalRepository(
     override suspend fun markOccurrence(ruleId: String, period: String, eventId: String?): RecurringOccurrence =
         remote.markOccurrence(ruleId, period, eventId)
     override suspend fun unmarkOccurrence(ruleId: String, period: String) = remote.unmarkOccurrence(ruleId, period)
+
+    /**
+     * **«Anotar pago»** (vuelta 43): el server escribe el movimiento y el sello juntos, así que va
+     * derecho a él —el espejo no tiene ocurrencias— y después se **espeja el movimiento** con el id
+     * que quedó, como [confirmarDebitoAutomatico]: Movimientos y Cuentas leen de esta base y el
+     * `SyncEngine` solo empuja. Sin conexión falla y la hoja lo dice: guardar el gasto suelto en el
+     * teléfono para subirlo después dejaría la fila sin saldar, que es el bug que esto arregla.
+     */
+    override suspend fun anotarElPagoDeLaOcurrencia(
+        ruleId: String,
+        pedido: AnotarElPagoDeLaOcurrencia,
+    ): PagoDeLaOcurrenciaAnotado = enDisco {
+        val anotado = remote.anotarElPagoDeLaOcurrencia(ruleId, pedido)
+        val evento = anotado.movimiento
+        val uid = userId()
+        val now = Clock.System.now().toEpochMilliseconds()
+        db.transaction {
+            val yaEstaba = db.financialEventQueries.selectById(evento.id, uid).executeAsOneOrNull() != null
+            if (yaEstaba) return@transaction
+            db.financialEventQueries.insert(
+                evento.id, evento.accountId, evento.type.name, evento.amount,
+                evento.category, evento.description, evento.merchant,
+                evento.timestamp, evento.source.name, evento.rawPayload,
+                evento.reconciliationStatus.name, evento.syncedAt ?: now, uid,
+                evento.transferId,
+                evento.createdAt ?: now,
+                evento.noAmortiza,
+                siNoSeRepite(evento.noSeRepite),
+                evento.currency,
+                evento.lastEditedAt,
+            )
+            val acct = db.accountQueries.selectById(evento.accountId).executeAsOneOrNull() ?: return@transaction
+            val tipo = AccountType.valueOf(acct.type)
+            db.accountQueries.updateBalance(
+                acct.balance + deltaDelEspejo(tipo, evento.type, evento.amount, evento.currency), acct.id,
+            )
+        }
+        return@enDisco anotado
+    }
     // Y el «no fue este» también: es una fila de `occurrence_rejections`, que el espejo tampoco
     // tiene. Sin conexión no se puede rechazar, igual que no se puede marcar.
     override suspend fun rechazarOcurrencia(ruleId: String, eventId: String) =

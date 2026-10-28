@@ -239,6 +239,14 @@ open class NoOpRepository(
     override suspend fun setCategoryPrefs(name: String, hidden: Boolean, pinnedType: String?, icono: String?, color: String?) =
         com.jvillada.movi.shared.model.CategoryUsage(name = name, hidden = hidden, pinnedType = pinnedType, icono = icono, color = color)
     override suspend fun getMemoriaDeCategorias() = emptyList<com.jvillada.movi.shared.model.RecuerdoDeCategoria>()
+    override suspend fun getCuentasDeCadaUso() = com.jvillada.movi.shared.model.CuentasDeCadaUso()
+    override suspend fun anotarElPagoDeLaOcurrencia(
+        ruleId: String,
+        pedido: com.jvillada.movi.shared.model.AnotarElPagoDeLaOcurrencia,
+    ) = com.jvillada.movi.shared.model.PagoDeLaOcurrenciaAnotado(
+        movimiento = pedido.movimiento,
+        ocurrencia = com.jvillada.movi.shared.model.RecurringOccurrence(ruleId = ruleId, period = pedido.periodo ?: "", eventId = pedido.movimiento.id),
+    )
     override suspend fun getRecurringRules() = emptyList<RecurringRule>()
     override suspend fun createRecurringRule(rule: RecurringRule) = rule
     override suspend fun updateRecurringRule(id: String, rule: RecurringRule) = rule

@@ -35,6 +35,9 @@ import com.jvillada.movi.shared.model.CategoryPrefsRequest
 import com.jvillada.movi.shared.model.CategoryRewriteResult
 import com.jvillada.movi.shared.model.CategoryUsage
 import com.jvillada.movi.shared.model.RecuerdoDeCategoria
+import com.jvillada.movi.shared.model.AnotarElPagoDeLaOcurrencia
+import com.jvillada.movi.shared.model.PagoDeLaOcurrenciaAnotado
+import com.jvillada.movi.shared.model.CuentasDeCadaUso
 import com.jvillada.movi.shared.model.DetalleDePeriodo
 import com.jvillada.movi.shared.model.ResumenDePeriodo
 import com.jvillada.movi.shared.model.MergeCategoryRequest
@@ -724,6 +727,9 @@ class WalletRepositoryImpl(
     override suspend fun getMemoriaDeCategorias(): List<RecuerdoDeCategoria> =
         client.get("$baseUrl/api/categorias/memoria").body()
 
+    override suspend fun getCuentasDeCadaUso(): CuentasDeCadaUso =
+        client.get("$baseUrl/api/cuentas/de-cada-uso").exigirExito().body()
+
     override suspend fun getRecurringRules(): List<RecurringRule> =
         client.get("$baseUrl/api/recurring-rules").body()
 
@@ -759,6 +765,22 @@ class WalletRepositoryImpl(
         val response = client.post("$baseUrl/api/recurring-rules/$ruleId/occurrence") {
             contentType(ContentType.Application.Json)
             setBody(MarkOccurrenceRequest(period = period, eventId = eventId))
+        }
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
+    }
+
+    // Mismo idioma que `markOccurrence`: el server contesta en texto por qué no (un 409 «Ese pago ya
+    // está anotado con otro movimiento.»), y la hoja lo tiene que poder decir.
+    override suspend fun anotarElPagoDeLaOcurrencia(
+        ruleId: String,
+        pedido: AnotarElPagoDeLaOcurrencia,
+    ): PagoDeLaOcurrenciaAnotado {
+        val response = client.post("$baseUrl/api/recurring-rules/$ruleId/occurrence/pago") {
+            contentType(ContentType.Application.Json)
+            setBody(pedido)
         }
         if (!response.status.isSuccess()) {
             throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
