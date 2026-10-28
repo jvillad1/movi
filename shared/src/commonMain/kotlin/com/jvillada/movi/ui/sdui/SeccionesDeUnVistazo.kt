@@ -107,6 +107,7 @@ import com.jvillada.movi.ui.dashboard.HojaDeDondeSale
 import com.jvillada.movi.ui.dashboard.conteoPorRevisarDelInicio
 import com.jvillada.movi.ui.dashboard.rememberCifraQueCambia
 import com.jvillada.movi.ui.porrevisar.desgloseDePorRevisar
+import com.jvillada.movi.ui.porrevisar.textoDePorRevisar
 import com.jvillada.movi.ui.components.ds.Pildora
 import com.jvillada.movi.ui.components.ds.TonoDePildora
 import androidx.compose.material.icons.rounded.Schedule
@@ -313,8 +314,11 @@ private fun CuerpoDelHeroe(
     }
 }
 
-/** «3 avisos», «1 aviso»: la pastilla de la franja «Por confirmar». */
-internal fun textoDeLaPastillaDeAvisos(n: Int): String = if (n == 1) "1 aviso" else "$n avisos"
+/**
+ * «2 por revisar»: la pastilla de la franja «Por confirmar». No dice «avisos»: con un aviso y un
+ * movimiento, «2 avisos» contradecía el desglose de debajo (la revisión de la vuelta 39).
+ */
+internal fun textoDeLaPastillaDeAvisos(n: Int): String = textoDePorRevisar(n)
 
 /**
  * **La franja «Por confirmar»** de la tarjeta héroe (vuelta 39): debajo del hilo, en la capa 2, el reloj

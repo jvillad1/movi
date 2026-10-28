@@ -347,8 +347,15 @@ data class ProximoPagoDelInicio(
     val accion: String,
     val alTocar: Screen,
 ) {
-    /** Lo que se lee arriba de la tarjeta: «Próximo pago · vence el 22 de octubre». */
-    val titulo: String get() = "Próximo pago · $cuando"
+    /**
+     * Lo que se lee arriba de la tarjeta: «Próximo pago · vence el 22 de octubre». Un pago vencido no es
+     * «próximo» (la revisión de la vuelta 39): «Pago vencido · hace 23 días», «Pago vencido · ayer».
+     */
+    val titulo: String get() = when {
+        pago.diasParaVencer < -1 -> "Pago vencido · hace ${-pago.diasParaVencer} días"
+        pago.diasParaVencer == -1 -> "Pago vencido · ayer"
+        else -> "Próximo pago · $cuando"
+    }
 
     /** Vencido o vence hoy: el título va en el color de aviso. */
     val urgente: Boolean get() = pago.diasParaVencer <= 0
@@ -366,17 +373,6 @@ fun proximoPagoDelInicio(data: DashboardData): ProximoPagoDelInicio? {
         accion = accion,
         alTocar = destino,
     )
-}
-
-/**
- * La pastilla del vencimiento del próximo pago: «Vencido», «Hoy» o «Mañana»; `null` si vence más
- * adelante (la fecha ya la dice el título).
- */
-fun pastillaDelVencimiento(diasParaVencer: Int): String? = when {
-    diasParaVencer < 0 -> "Vencido"
-    diasParaVencer == 0 -> "Hoy"
-    diasParaVencer == 1 -> "Mañana"
-    else -> null
 }
 
 /**

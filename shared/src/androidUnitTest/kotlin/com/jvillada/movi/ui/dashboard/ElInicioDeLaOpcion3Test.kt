@@ -116,11 +116,20 @@ class ElInicioDeLaOpcion3Test {
         assertTrue(heroe < acciones && acciones < proximo && proximo < ultimos, "$heroe / $acciones / $proximo / $ultimos")
     }
 
+    /** Con un aviso y un movimiento, la pastilla no dice «2 avisos»: dice «2 por revisar». */
+    @Test
+    fun `la pastilla de la franja no contradice su desglose`() {
+        montar(datos.copy(pendingSms = 1, movimientosPorConfirmar = 1))
+        composeRule.onNodeWithText("2 por revisar", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("1 aviso · 1 movimiento", useUnmergedTree = true).assertIsDisplayed()
+        assertEquals(0, composeRule.onAllNodesWithText("2 avisos", useUnmergedTree = true).fetchSemanticsNodes().size)
+    }
+
     @Test
     fun `la franja Por confirmar aparece con avisos y lleva a Por revisar`() {
         montar(datos.copy(pendingSms = 3))
         composeRule.onNodeWithTag(TAG_FRANJA_POR_CONFIRMAR, useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithText("3 avisos", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("3 por revisar", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithTag(TAG_FRANJA_POR_CONFIRMAR, useUnmergedTree = true).performClick()
         assertEquals(Screen.PorRevisar, navegado.last())
     }
@@ -132,12 +141,13 @@ class ElInicioDeLaOpcion3Test {
     }
 
     @Test
-    fun `el proximo pago es el vencido, con Anotar pago y y N mas`() {
+    fun `el pago vencido va primero, sin decir que es proximo, con Anotar pago y y N mas`() {
         montar(datos)
-        composeRule.onNodeWithText("Próximo pago · venció hace 3 días", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Pago vencido · hace 3 días", useUnmergedTree = true).assertIsDisplayed()
         // «Arriendo» también está en el widget «Falta por pagar», más abajo: el primero es el próximo pago.
         assertTrue(composeRule.onAllNodesWithText("Arriendo", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
-        composeRule.onNodeWithText("Vencido", useUnmergedTree = true).assertIsDisplayed()
+        // Sin la pastilla «Vencido»: el título ya lo dice.
+        assertEquals(0, composeRule.onAllNodesWithText("Vencido", useUnmergedTree = true).fetchSemanticsNodes().size)
         composeRule.onNodeWithText("Anotar pago", useUnmergedTree = true).performClick()
         assertTrue(navegado.last() is Screen.QuickAdd, "abre Agregar con el pago: ${navegado.last()}")
         composeRule.onNodeWithText("y 1 más", useUnmergedTree = true).performClick()

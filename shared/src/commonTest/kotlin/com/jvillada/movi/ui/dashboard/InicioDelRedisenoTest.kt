@@ -25,6 +25,8 @@ import com.jvillada.movi.ui.quickadd.AtajoDeAgregar
 import com.jvillada.movi.ui.quickadd.PestanaDeAgregar
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import androidx.compose.ui.unit.dp
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -204,13 +206,17 @@ class InicioDelRedisenoTest {
         assertEquals(3, proximo.masPagos)
         assertEquals("Anotar pago", proximo.accion)
         assertTrue(proximo.urgente)
-        assertTrue(proximo.titulo.startsWith("Próximo pago · venció"), proximo.titulo)
-        assertEquals("Vencido", pastillaDelVencimiento(proximo.pago.diasParaVencer))
+        // Un pago vencido no es «próximo».
+        assertEquals("Pago vencido · hace 22 días", proximo.titulo)
         // Sin vencidos, el que vence antes.
         val sinVencidos = datos.copy(upcoming = listOf(pago("r_gym", "Gimnasio", 139_900, 12), pago("r_cel", "Celular", 53_000, 1)))
-        assertEquals("Celular", proximoPagoDelInicio(sinVencidos)?.pago?.nombre)
-        assertEquals("Mañana", pastillaDelVencimiento(1))
-        assertNull(pastillaDelVencimiento(12))
+        val celular = assertNotNull(proximoPagoDelInicio(sinVencidos))
+        assertEquals("Celular", celular.pago.nombre)
+        assertEquals("Próximo pago · vence mañana", celular.titulo)
+        assertEquals(
+            "Pago vencido · ayer",
+            proximoPagoDelInicio(datos.copy(upcoming = listOf(pago("r_x", "Agua", 40_000, -1))))?.titulo,
+        )
         // Sin pagos pendientes, no hay próximo pago.
         assertNull(proximoPagoDelInicio(datos.copy(upcoming = emptyList())))
     }
@@ -231,6 +237,26 @@ class InicioDelRedisenoTest {
         val tipos = visibleSections(com.jvillada.movi.shared.model.defaultDashboardDefinition(), soloElPago).map { it.type }
         assertTrue("PROXIMO_PAGO" in tipos)
         assertTrue("PROPUESTAS" !in tipos, "el único pendiente es el pago, y ya está arriba")
+    }
+
+    /**
+     * **Dos columnas parejas** (vuelta 39): el héroe a la izquierda; cada bloque a la más corta; la derecha
+     * arranca debajo de la banda; un bloque vacío no suma separación.
+     */
+    @Test
+    fun `las columnas se reparten a la mas corta y la derecha arranca debajo de la banda`() {
+        // Héroe 170, acciones 200, próximo pago 110, propuestas 500, últimos 230, cuentas 200, widgets 300.
+        val altos = listOf(170, 200, 110, 500, 230, 200, 300)
+        val lados = repartoEnDosColumnas(altos, fijosALaIzquierda = setOf(0), arribaDeLaDerecha = 116, separacion = 24)
+        assertEquals(listOf(true, false, true, true, false, false, false), lados)
+        val izquierda = altos.filterIndexed { i, _ -> lados[i] }.sum() + 24 * 2
+        val derecha = 116 + altos.filterIndexed { i, _ -> !lados[i] }.sum() + 24 * 3
+        assertTrue(minOf(izquierda, derecha) >= 0.7 * maxOf(izquierda, derecha), "$izquierda / $derecha")
+        // Los fijos van a la izquierda aunque sea la más larga; un bloque vacío no cuenta.
+        assertEquals(listOf(true, true, false), repartoEnDosColumnas(listOf(500, 0, 100), setOf(0, 1), 0, 24))
+        assertFalse(inicioEnDosColumnas(8, 899.dp))
+        assertTrue(inicioEnDosColumnas(8, 900.dp))
+        assertFalse(inicioEnDosColumnas(1, 1_400.dp), "con un solo bloque, una columna")
     }
 
     // ── Últimos movimientos (vuelta 39) ──────────────────────────────────────

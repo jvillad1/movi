@@ -117,7 +117,6 @@ import com.jvillada.movi.ui.components.ds.TonoDePildora
 import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import com.jvillada.movi.ui.dashboard.FILAS_DE_ULTIMOS_MOVIMIENTOS
 import com.jvillada.movi.ui.dashboard.filasDeUltimosMovimientos
-import com.jvillada.movi.ui.dashboard.pastillaDelVencimiento
 import com.jvillada.movi.ui.dashboard.proximoPagoDelInicio
 import com.jvillada.movi.ui.transactions.HojaDelMovimiento
 import com.jvillada.movi.ui.transactions.MovementRow
@@ -328,8 +327,7 @@ const val TAG_ESQUELETO_DEL_PROXIMO_PAGO: String = "inicio-esqueleto-del-proximo
 /**
  * **«Próximo pago»** (vuelta 39, la opción 3): el pago pendiente más urgente del período en una
  * tarjeta blanca —«Próximo pago · vence el 22 de octubre», su ícono, su nombre y su cifra (la de
- * siempre: `cifraDelPago`, el mínimo en una tarjeta), la pastilla si ya venció o vence hoy o mañana—
- * con el botón amarillo «Anotar pago», que hace lo mismo que el de «Movi propone hoy»
+ * siempre: `cifraDelPago`, el mínimo en una tarjeta)— con el botón amarillo «Anotar pago», que hace lo mismo que el de «Movi propone hoy»
  * ([proximoPagoDelInicio], `accionDelPago`). «y N más» lleva a Pagos. Sin pagos pendientes no se pinta
  * (`visibleSections`); mientras los vencimientos no llegan, un esqueleto del mismo alto.
  */
@@ -346,31 +344,26 @@ internal fun ProximoPagoSection(data: DashboardData, onNavigate: (Screen) -> Uni
         return
     }
     val pago = proximo.pago
+    // Como en la maqueta: el nombre y la cifra en texto, y el botón a la derecha. Sin ícono ni pastilla
+    // (la revisión: a 360 «Arriendo» se partía en «Arrien / do»); el estado lo dice el título.
     Superficie(
         modifier = Modifier.padding(horizontal = Medida.margenDePantalla).fillMaxWidth().testTag(TAG_PROXIMO_PAGO),
     ) {
-        Text(
-            text = proximo.titulo,
-            style = Movi.textos.apoyoMedio,
-            color = if (proximo.urgente) Movi.colores.aviso else Movi.colores.textoMedio,
-        )
-        Spacer(Modifier.height(Espacio.xs))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.s)) {
-            IconoDeCategoria(pago.categoria.ifBlank { pago.nombre })
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
-                    Text(
-                        text = pago.nombre,
-                        style = Movi.textos.titulo,
-                        color = Movi.colores.texto,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false),
-                    )
-                    pastillaDelVencimiento(pago.diasParaVencer)?.let { texto ->
-                        Pildora(texto, tono = if (pago.diasParaVencer < 0) TonoDePildora.Peligro else TonoDePildora.Aviso)
-                    }
-                }
+                Text(
+                    text = proximo.titulo,
+                    style = Movi.textos.apoyoMedio,
+                    color = if (proximo.urgente) Movi.colores.aviso else Movi.colores.textoMedio,
+                )
+                Text(
+                    text = pago.nombre,
+                    style = Movi.textos.titulo,
+                    color = Movi.colores.texto,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.testTag(TAG_NOMBRE_DEL_PROXIMO_PAGO),
+                )
                 // Una tarjeta sin mínimo conocido no tiene cifra que decir: su «monto» es el saldo.
                 cifraDelPago(pago)?.let { Cifra(it, VarianteDeCifra.Fila, moneda = pago.moneda) }
             }
@@ -386,6 +379,9 @@ internal fun ProximoPagoSection(data: DashboardData, onNavigate: (Screen) -> Uni
         }
     }
 }
+
+/** El nombre del pago de «Próximo pago»: a 360 dp va entero, en un renglón. */
+const val TAG_NOMBRE_DEL_PROXIMO_PAGO: String = "inicio-nombre-del-proximo-pago"
 
 // ── Últimos movimientos ──────────────────────────────────────────────────────
 
