@@ -52,6 +52,9 @@ const val FILA_TU_PATRIMONIO: String = "Tu patrimonio"
 /** La fila del cuadre de saldos en Tú. */
 const val FILA_CUADRE_DE_SALDOS: String = "Cuadre de saldos"
 
+/** Lo que dice debajo del cuadre: corto, para que entre entero a 360 dp (`LoTuyoA360Test`). */
+const val SUBTITULO_DEL_CUADRE: String = "Contra lo que dice el banco"
+
 /** Para las pruebas: la sección «Lo tuyo» y las dos columnas de Tú en pantalla ancha. */
 const val TAG_LO_TUYO: String = "tu:lo-tuyo"
 const val TAG_COLUMNA_DE_LO_TUYO: String = "tu:columna-de-lo-tuyo"
@@ -68,7 +71,7 @@ fun tuEnDosColumnas(anchoDelPanel: Dp): Boolean =
 /**
  * Lo que dice la fila «Personas» de Tú: el saldo pendiente con los demás, si lo hay.
  *
- * @property subtitulo «Caro te debe», «Le debes a Caro», «2 espacios con saldo pendiente» o, sin
+ * @property subtitulo «Caro te debe», «Le debes a Caro», «2 grupos con saldo pendiente» o, sin
  *   nada pendiente (o sin leer), qué hay adentro.
  * @property monto la cifra de la derecha; `null` cuando no hay una sola cifra que decir.
  */
@@ -89,7 +92,7 @@ fun resumenDePersonas(detalles: List<DetalleDelEspacio>?): ResumenDePersonas {
     return when (conSaldo.size) {
         0 -> ResumenDePersonas(PERSONAS_SIN_SALDO, null)
         1 -> ResumenDePersonas(conSaldo.single().titulo, conSaldo.single().monto)
-        else -> ResumenDePersonas("${conSaldo.size} espacios con saldo pendiente", null)
+        else -> ResumenDePersonas("${conSaldo.size} grupos con saldo pendiente", null)
     }
 }
 
@@ -128,8 +131,9 @@ internal fun LoTuyo(onNavigate: (Screen) -> Unit) {
         Seccion(titulo = SECCION_LO_TUYO)
         Superficie(relleno = RellenoDeSuperficie.Lista) {
             Fila(
+                // Sin subtítulo (revisión de la vuelta 38): «Lo que tienes menos lo que debes» se cortaba a
+                // 390 al lado de la cifra, y la cifra ya lo dice.
                 titulo = FILA_TU_PATRIMONIO,
-                subtitulo = "Lo que tienes menos lo que debes",
                 inicio = { IconoEnCirculo(Icons.Rounded.AccountBalance, tono = TonoDeIcono.Neutro) },
                 final = { CifraYChevron(neto) },
                 onClick = { onNavigate(Screen.Accounts) },
@@ -145,7 +149,7 @@ internal fun LoTuyo(onNavigate: (Screen) -> Unit) {
             Separador()
             Fila(
                 titulo = FILA_CUADRE_DE_SALDOS,
-                subtitulo = "Tus cuentas y tarjetas contra el banco",
+                subtitulo = SUBTITULO_DEL_CUADRE,
                 inicio = { IconoEnCirculo(Icons.Rounded.Balance, tono = TonoDeIcono.Neutro) },
                 final = { Chevron() },
                 onClick = { onNavigate(Screen.CuadreDeSaldos) },
