@@ -201,4 +201,11 @@ class BuscarEnMoviTest {
         val personas = PANTALLAS_BUSCABLES.single { it.destino == com.jvillada.movi.ui.Screen.Destinos() }
         kotlin.test.assertEquals("Espacios", personas.donde)
     }
+    /** Vuelta 35: el título de un movimiento es el mismo que en Movimientos, no la categoría repetida. */
+    @Test
+    fun `un movimiento cuya descripcion es la categoria se titula con el comercio, como en Movimientos`() {
+        val mov = ResultadoDeBusqueda.Movimiento(ev("x1", "Mercado", 50_000, categoria = "Mercado", comercio = "EXITO SUBA"))
+        kotlin.test.assertEquals("Éxito Suba", mov.titulo)
+        kotlin.test.assertEquals("Uber", ResultadoDeBusqueda.Movimiento(ev("x2", "UBER", 21_400, categoria = "Transporte")).titulo)
+    }
 }

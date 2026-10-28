@@ -3,6 +3,7 @@ package com.jvillada.movi.ui.destinos
 import com.jvillada.movi.ui.components.ds.AccionDeEncabezado
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.ui.components.ds.Cifra
+import com.jvillada.movi.ui.components.ds.CampoDeBusqueda
 import com.jvillada.movi.ui.components.ds.EsqueletoDeFila
 import com.jvillada.movi.ui.components.ds.Fila
 import com.jvillada.movi.ui.components.ds.IconoEnCirculo
@@ -343,7 +344,9 @@ fun DestinosScreen(onNavigate: (Screen) -> Unit, abrir: String? = null, conSuger
 
                 if (destinos.size > TERCEROS_PARA_BUSCAR) {
                     item {
-                        FieldBox("Buscar por nombre, número o llave", busqueda, { busqueda = it })
+                        // Vuelta 35: la caja de búsqueda del sistema (lupa, × y 48 de alto), la misma
+                        // de Buscar y Categorías. Era el `Campo` de un formulario.
+                        CampoDeBusqueda(busqueda, { busqueda = it }, guia = GUIA_DE_BUSCAR_TERCEROS)
                         Spacer(Modifier.height(Espacio.s))
                     }
                 }
@@ -462,6 +465,9 @@ internal const val SUGERIDOS_A_LA_VISTA: Int = 5
 
 /** Desde cuántos terceros guardados aparece el buscador. */
 internal const val TERCEROS_PARA_BUSCAR: Int = 8
+
+/** La guía de la búsqueda de Personas y comercios. */
+const val GUIA_DE_BUSCAR_TERCEROS: String = "Buscar por nombre, número o llave"
 
 /** El tag del bloque de lo que Movi encontró. */
 const val TAG_SUGERIDOS: String = "destinos-sugeridos"

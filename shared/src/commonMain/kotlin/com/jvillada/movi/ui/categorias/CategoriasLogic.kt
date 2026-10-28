@@ -198,21 +198,29 @@ fun resumenDelMes(c: CategoryUsage, rotulo: String = ROTULO_ESTE_PERIODO): Strin
 }
 
 /**
- * El uso, pero pelado a cuántos movimientos — para la fila compacta de Ola B, que no tiene lugar
- * para una oración entera (ver [resumenDeUso], la versión larga que sigue usando la hoja de
- * detalle). Cuenta también los de otra moneda: acá no hay plata que mezclar, solo un conteo.
+ * **El renglón de la fila de Categorías: cuántos movimientos tuvo en el período** — el mismo de su
+ * cifra. Vuelta 35: el renglón contaba los de **toda la historia** (`movements` + los de otra moneda)
+ * y la cifra de al lado era **del período** ([cifrasDelMes]), así que «Carro · 3 movimientos ·
+ * $260.000» mezclaba dos alcances sin decir ninguno. Ahora los dos son del período en curso, el de
+ * «En qué se va» y el de las cifras de esta pantalla desde la vuelta 15, y el encabezado de la lista
+ * lo dice ([rotuloDelPeriodoDeCategorias]). Lo de toda la historia sigue en la hoja de detalle
+ * ([resumenDeUso]).
  *
- * **Fix round 1: «Escondida · …» cuando corresponde.** Sin las etiquetas de la fila vieja, lo
- * único que decía «está escondida» era el nombre en gris — un color que no todos los ojos leen
- * igual de bien. Acá se dice con palabras, en el mismo renglón corto que ya existía, en vez de
- * agregar un renglón o una etiqueta nueva.
+ * El conteo es [CategoryUsage.monthMovements]: todo uso de la categoría en el período, en COP (lo de
+ * otra moneda tampoco entra en la cifra). Sin movimientos pero con cifra —tu parte de lo que pagó
+ * otra persona, que no es un movimiento tuyo— dice «Sin movimientos tuyos», para que la cifra no
+ * parezca salida de la nada.
+ *
+ * **«Escondida · …» cuando corresponde** (fix round 1 de la Ola B): sin las etiquetas de la fila
+ * vieja, lo único que decía «está escondida» era el nombre en gris, un color que no todos los ojos
+ * leen igual de bien. Se dice con palabras, en el mismo renglón.
  */
-fun resumenDeUsoCorto(c: CategoryUsage): String {
-    val total = c.movements + c.otherCurrencyMovements
-    val uso = when (total) {
-        0 -> "Sin movimientos"
-        1 -> "1 movimiento"
-        else -> "$total movimientos"
+fun resumenDelPeriodoCorto(c: CategoryUsage): String {
+    val uso = when {
+        c.monthMovements == 1 -> "1 movimiento"
+        c.monthMovements > 1 -> "${c.monthMovements} movimientos"
+        cifrasDelMes(c) != null -> "Sin movimientos tuyos"
+        else -> "Sin movimientos"
     }
     return if (c.hidden) "Escondida · $uso" else uso
 }
@@ -345,7 +353,7 @@ sealed class PropuestaDeOrden {
     data class UnUso(val categoria: CategoryUsage) : PropuestaDeOrden()
 }
 
-/** Cuántos movimientos lleva [c] **en total**, mezclando COP y otra moneda — solo para contar, no para sumar plata. Mismo criterio que [resumenDeUsoCorto] y [avisoDeUnificacion]. */
+/** Cuántos movimientos lleva [c] **en total**, mezclando COP y otra moneda — solo para contar, no para sumar plata. Mismo criterio que [resumenDeUso] y [avisoDeUnificacion]. */
 private fun totalMovimientos(c: CategoryUsage): Int = c.movements + c.otherCurrencyMovements
 
 /**
