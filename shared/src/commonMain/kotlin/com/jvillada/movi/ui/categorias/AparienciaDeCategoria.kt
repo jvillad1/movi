@@ -230,7 +230,10 @@ internal val PALABRAS_CLAVE: List<PalabraClave> = listOf(
     PalabraClave("peluqueria", "belleza", "rosa"),
     PalabraClave("barberia", "belleza", "rosa"),
     // Casa.
-    PalabraClave("arriendo", "arriendo", "ambar"),
+    // Vuelta 40 (revisión): el arriendo que se paga lleva la casa, como en la maqueta; la llave queda
+    // para «Arriendo recibido» (arriba, por nombre). «Alquiler» es lo mismo dicho de otra forma.
+    PalabraClave("arriendo", "casa", "ambar"),
+    PalabraClave("alquiler", "casa", "ambar"),
     PalabraClave("administracion", "casa", "ambar"),
     PalabraClave("energia", "luz", "ambar"),
     PalabraClave("luz", "luz", "ambar", entera = true),
