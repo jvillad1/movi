@@ -15,7 +15,8 @@ import kotlin.test.assertTrue
  *
  * Esta prueba falla si aparece un `BasicTextField`, `TextField` u `OutlinedTextField` en `ui/` fuera
  * de `ui/components/` y de la lista corta de [EXCEPCIONES]. **Si te falló**: usa `Campo` o
- * `CampoDeMonto` (rótulo, guía, ayuda de una línea con «¿Qué es esto?», error, tag). Si de verdad
+ * `CampoDeMonto` (rótulo, guía, ayuda de una línea con «¿Qué es esto?», error, tag), o
+ * `CampoDeBusqueda` si lo que se escribe filtra una lista. Si de verdad
  * hace falta otra cosa, agrégala al sistema (y a `docs/diseno/sistema.md`) antes que a esta lista.
  */
 class LosCamposSonDelSistemaTest {
@@ -28,9 +29,12 @@ class LosCamposSonDelSistemaTest {
      * Agregar (`quickadd/QuickAddScreen.kt`) salió en la vuelta de diseño 13: su nota es el `Campo`
      * del sistema. Lo que le queda propio —el teclado numérico y el monto grande— no es un campo de
      * texto (son teclas y un `Text`), así que no hay nada que exceptuar.
+     *
+     * Buscar salió en la vuelta 35: su caja es el `CampoDeBusqueda` del sistema
+     * (`ui/components/ds/CampoDeBusqueda.kt`), el mismo de Categorías, del selector de categoría y
+     * de Personas y comercios.
      */
     private val EXCEPCIONES = mapOf(
-        "buscar/BuscarScreen.kt" to "la caja de Buscar: es la búsqueda de la app, no un formulario",
         "ai/AIChatScreen.kt" to "el compositor del chat de Movi AI",
         "sdui/editor/ScreenEditorScreen.kt" to "el Editor de pantallas (admin)",
         "primeruso/PrimerUsoScreen.kt" to "la guía de primer uso (otra rama la está tocando)",

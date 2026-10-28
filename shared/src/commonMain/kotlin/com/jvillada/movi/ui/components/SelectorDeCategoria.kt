@@ -1,7 +1,6 @@
 package com.jvillada.movi.ui.components
 
 import androidx.compose.foundation.border
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -12,13 +11,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -31,9 +27,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
@@ -55,6 +48,8 @@ import com.jvillada.movi.ui.categorias.TamanoDeIconoDeCategoria
 import com.jvillada.movi.ui.categorias.aparienciaDe
 import com.jvillada.movi.ui.categorias.prefDeCategoria
 import com.jvillada.movi.theme.Medida
+import com.jvillada.movi.ui.components.ds.CampoDeBusqueda
+import com.jvillada.movi.ui.components.ds.NivelDeSuperficie
 
 /**
  * Ola B · Task 4: cuántas frecuentes encabezan la cuadrícula — dos filas de cuatro en un teléfono.
@@ -70,6 +65,9 @@ val ANCHO_MINIMO_DE_CELDA: Dp = 80.dp
 
 /** El campo de búsqueda del selector — para que una prueba mire si tiene el foco. */
 const val TAG_BUSCAR_CATEGORIA: String = "categoria:buscar"
+
+/** La guía de la búsqueda del selector: se busca una existente o se escribe una nueva. */
+const val GUIA_DEL_SELECTOR_DE_CATEGORIA: String = "Buscar o crear categoría"
 
 /** La celda «Crear "…"». */
 const val TAG_CREAR_CATEGORIA: String = "categoria:crear"
@@ -335,57 +333,29 @@ fun SelectorDeCategoria(
     if (pedidosDeFoco > 0) {
         LaunchedEffect(pedidosDeFoco) { runCatching { focoDeLaBusqueda.requestFocus() } }
     }
-    // El tope es el de la COLUMNA (`varchar(100)`): una categoría más larga reventaba el insert del
-    // server. Se corta acá, en lo único que se puede escribir, y así vale para todas las pantallas.
-    val campo = rememberCampoConSeleccion(busqueda) { busqueda = it.take(MAX_CATEGORIA_LENGTH) }
     val focusManager = LocalFocusManager.current
     val contenido = remember(busqueda, tipo, usadas, prefs, usos) {
         contenidoDelSelectorDeCategoria(busqueda, tipo, usadas, prefs, usos)
     }
-    val forma = RoundedCornerShape(Movi.formas.normal)
-
     fun elegir(nombre: String) {
         focusManager.clearFocus()
         onElegir(nombre)
     }
 
     Column(modifier = modifier) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(forma)
-                .background(Movi.colores.tarjeta)
-                .border(Medida.trazo, Movi.colores.borde, forma)
-                .padding(horizontal = Movi.espacios.medio, vertical = Movi.espacios.medio),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                Icons.Rounded.Search,
-                contentDescription = null,
-                tint = Movi.colores.textoMedio,
-                modifier = Modifier.size(18.dp),
-            )
-            Spacer(Modifier.width(Movi.espacios.corto))
-            BasicTextField(
-                value = campo.valor,
-                onValueChange = campo::alCambiar,
-                singleLine = true,
-                cursorBrush = SolidColor(Movi.colores.texto),
-                textStyle = Movi.textos.cuerpo.copy(color = Movi.colores.texto),
-                modifier = Modifier
-                    .weight(1f)
-                    .testTag(TAG_BUSCAR_CATEGORIA)
-                    .focusRequester(focoDeLaBusqueda)
-                    // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver [esAtajoDeSeleccionarTodo].
-                    .onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
-                decorationBox = { inner ->
-                    if (busqueda.isEmpty()) {
-                        Text("Buscar o crear categoría", style = Movi.textos.cuerpo, color = Movi.colores.textoApagado)
-                    }
-                    inner()
-                },
-            )
-        }
+        // Vuelta 35: la caja de búsqueda del sistema, la misma de Buscar y Categorías (lupa, × y 48
+        // de alto). El selector vive dentro de una hoja, que ya es capa 1: la caja va en la capa 2.
+        CampoDeBusqueda(
+            valor = busqueda,
+            // El tope es el de la COLUMNA (`varchar(100)`): una categoría más larga reventaba el
+            // insert del server. Se corta acá, en lo único que se puede escribir, y así vale para
+            // todas las pantallas.
+            alCambiar = { busqueda = it.take(MAX_CATEGORIA_LENGTH) },
+            guia = GUIA_DEL_SELECTOR_DE_CATEGORIA,
+            nivel = NivelDeSuperficie.Capa2,
+            foco = focoDeLaBusqueda,
+            tag = TAG_BUSCAR_CATEGORIA,
+        )
 
         contenido.reservadaEscrita?.let { reservada ->
             Spacer(Modifier.height(Movi.espacios.corto))
