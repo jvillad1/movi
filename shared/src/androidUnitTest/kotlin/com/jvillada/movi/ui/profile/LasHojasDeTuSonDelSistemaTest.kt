@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Density
 import com.jvillada.movi.shared.model.AhorroDelPeriodo
 import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.shared.model.PasswordPolicy
 import com.jvillada.movi.shared.model.PeriodoFinanciero
 import com.jvillada.movi.shared.model.SiElCorteCaeEnFinDeSemana
 import com.jvillada.movi.shared.model.TipoDeAhorro
@@ -28,6 +29,7 @@ import com.jvillada.movi.ui.primeruso.DireccionDeMovi
 import com.jvillada.movi.ui.components.ds.TAG_BOTON
 import com.jvillada.movi.ui.components.ds.TAG_ENCABEZADO_DE_HOJA
 import com.jvillada.movi.ui.components.ds.TAG_GRUPO_DE_CAMPOS
+import com.jvillada.movi.ui.components.ds.TAG_GUIA_DEL_CAMPO
 import com.jvillada.movi.ui.components.ds.TAG_VISTA_PREVIA
 import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import com.jvillada.movi.ui.components.ds.VarianteDeBotonKey
@@ -199,6 +201,16 @@ class LasHojasDeTuSonDelSistemaTest {
     fun `Cambiar contrasena abre con su titulo y cambia con el pie del sistema`() {
         montar { ChangePasswordSheet(onDismiss = {}, onSaved = {}) }
         esUnaHojaDelSistema(CAMBIAR_CONTRASENA, CAMBIAR_CONTRASENA)
+    }
+
+    @Test
+    fun `ninguna guia de Cambiar contrasena es solo puntos`() {
+        montar { ChangePasswordSheet(onDismiss = {}, onSaved = {}) }
+        val guias = composeRule.onAllNodes(hasTestTag(TAG_GUIA_DEL_CAMPO), useUnmergedTree = true)
+            .fetchSemanticsNodes().map(::textoDe)
+        assertEquals(3, guias.size, "los tres campos vacíos muestran su guía: $guias")
+        assertTrue(guias.none { g -> g.isNotBlank() && g.all { it == '•' || it == '·' || it == '.' || it.isWhitespace() } }, "una guía de puntos parece un campo lleno: $guias")
+        assertTrue("Al menos ${PasswordPolicy.MIN_LENGTH} caracteres" in guias, "la guía de la nueva dice la regla del server: $guias")
     }
 
     // ── Recibe tus alertas por correo (`ui/mas`) ───────────────────────────────────────────

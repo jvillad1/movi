@@ -51,6 +51,12 @@ import com.jvillada.movi.ui.components.ds.PieDeHoja
  * navegador no ofrece actualizar lo guardado. Arreglarlo implica tocar `index.html`, fuera del
  * alcance de esta tarea (solo `PerfilScreen.kt` + hojas nuevas en `ui/profile/`).
  */
+/**
+ * La guía de «Contraseña nueva»: la regla del server ([PasswordPolicy.MIN_LENGTH], la misma que valida
+ * `UserRoutes`), no una fila de puntos que hacía parecer el campo ya lleno.
+ */
+val GUIA_DE_LA_CONTRASENA_NUEVA: String = "Al menos ${PasswordPolicy.MIN_LENGTH} caracteres"
+
 /** El título de la hoja y su botón. */
 const val CAMBIAR_CONTRASENA: String = "Cambiar contraseña"
 
@@ -144,7 +150,8 @@ fun ChangePasswordSheet(
                     rotulo = "Contraseña nueva",
                     valor = new,
                     alCambiar = { new = it },
-                    guia = "•".repeat(PasswordPolicy.MIN_LENGTH),
+                    // Vuelta 41: una fila de puntos parecía un campo ya lleno; la guía dice la regla.
+                    guia = GUIA_DE_LA_CONTRASENA_NUEVA,
                     secreto = true,
                     teclado = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
                 )
