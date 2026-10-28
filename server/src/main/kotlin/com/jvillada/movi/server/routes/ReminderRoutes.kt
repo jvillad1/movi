@@ -472,6 +472,35 @@ fun Route.reminderRoutes() {
     }
 
     /**
+     * **«Anotar pago» desde la fila de una factura** (vuelta 43): el movimiento y el sello de la
+     * ocurrencia que paga, en una transacción. Ver `AnotarElPagoDeLaOcurrencia.kt`.
+     *
+     * 201 con lo que quedó; 200 si el mismo movimiento ya había llegado (reintento); 409 si otra
+     * plata ya saldó esa ocurrencia; 404 con una regla o una cuenta ajena; 400 con la cuota de un
+     * crédito o el pago de una tarjeta, que se anotan en «Cuota».
+     */
+    post("/api/recurring-rules/{id}/occurrence/pago") {
+        val uid = call.userId()
+        val ruleId = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
+        // El JSON crudo además del objeto, para saber si el cliente MANDÓ la moneda del movimiento
+        // (mismo motivo que `POST /api/events`).
+        val crudo = runCatching { call.receive<kotlinx.serialization.json.JsonObject>() }.getOrNull()
+            ?: return@post call.respond(HttpStatusCode.BadRequest, "No se pudo leer el pago.")
+        val pedido = runCatching {
+            com.jvillada.movi.server.plugins.jsonDeLaApi
+                .decodeFromJsonElement(com.jvillada.movi.shared.model.AnotarElPagoDeLaOcurrencia.serializer(), crudo)
+        }.getOrNull() ?: return@post call.respond(HttpStatusCode.BadRequest, "No se pudo leer el pago.")
+        val mandoLaMoneda = (crudo["movimiento"] as? kotlinx.serialization.json.JsonObject)?.containsKey("currency") == true
+        when (val resultado = anotarElPagoDeLaOcurrencia(uid, ruleId, pedido, mandoLaMoneda, AppClock.today())) {
+            is PagoDeLaOcurrencia.Hecho -> call.respond(
+                if (resultado.nuevo) HttpStatusCode.Created else HttpStatusCode.OK,
+                resultado.anotado,
+            )
+            is PagoDeLaOcurrencia.Rechazado -> call.respond(resultado.codigo, resultado.motivo)
+        }
+    }
+
+    /**
      * **«No, ese movimiento no es esto»**, guardado para siempre.
      *
      * Es la única forma de revertir un emparejamiento automático, y por eso tiene que persistir:
@@ -923,15 +952,26 @@ internal fun org.jetbrains.exposed.sql.Transaction.ocurrenciasReales(
         // Lo que se muestra es cuándo se espera: el salario del 25 que cae domingo, el viernes 23.
         val esperada = fechaEsperada(rule, due, periodo).toString()
         when (resolucion) {
-            is Resolucion.Sellada -> OccurrenceState(
-                ruleId = rule.id,
-                period = periodoEnCurso,
-                dueDate = esperada,
-                occurred = true,
-                eventId = resolucion.fila?.eventId,
-                confirmedAt = resolucion.fila?.confirmedAt ?: 0L,
-                periodoDelDueno = nombreDelPeriodo,
-            )
+            is Resolucion.Sellada -> {
+                // Vuelta 43: un sello CON movimiento dice cuánta plata salió, igual que lo emparejado
+                // solo. Es lo que el Disponible resta como fijo (`fijosDelPeriodo`) y lo que el server
+                // saca del gasto variable (`parteFijaDelChecklist`), así que si el arriendo se pagó con
+                // otro monto «Te quedan» cambia solo por la diferencia. Sin el movimiento a la vista
+                // (un sello viejo sin evidencia, o uno fuera de la franja leída) sigue el monto de la
+                // regla, como siempre.
+                val delSello = resolucion.fila?.eventId?.let { id -> lectura.eventos.firstOrNull { it.id == id } }
+                OccurrenceState(
+                    ruleId = rule.id,
+                    period = periodoEnCurso,
+                    dueDate = esperada,
+                    occurred = true,
+                    eventId = resolucion.fila?.eventId,
+                    confirmedAt = resolucion.fila?.confirmedAt ?: 0L,
+                    periodoDelDueno = nombreDelPeriodo,
+                    montoDelPago = delSello?.amount,
+                    monedaDelPago = delSello?.currency,
+                )
+            }
             is Resolucion.Emparejada -> OccurrenceState(
                 ruleId = rule.id,
                 period = periodoEnCurso,

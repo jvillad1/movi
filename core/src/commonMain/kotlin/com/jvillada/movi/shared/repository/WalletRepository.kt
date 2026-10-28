@@ -32,6 +32,9 @@ import com.jvillada.movi.shared.model.PropuestaDePresupuesto
 import com.jvillada.movi.shared.model.CategoryRewriteResult
 import com.jvillada.movi.shared.model.CategoryUsage
 import com.jvillada.movi.shared.model.RecuerdoDeCategoria
+import com.jvillada.movi.shared.model.AnotarElPagoDeLaOcurrencia
+import com.jvillada.movi.shared.model.PagoDeLaOcurrenciaAnotado
+import com.jvillada.movi.shared.model.CuentasDeCadaUso
 import com.jvillada.movi.shared.model.DetalleDePeriodo
 import com.jvillada.movi.shared.model.ResumenDePeriodo
 import com.jvillada.movi.shared.model.EventOccurrenceMark
@@ -436,6 +439,12 @@ interface WalletRepository {
      * Hija» al escribir un movimiento a mano — antes solo el server la usaba, al clasificar un SMS.
      */
     suspend fun getMemoriaDeCategorias(): List<RecuerdoDeCategoria>
+
+    /**
+     * Vuelta 43: **la cuenta con que el dueño anota cada categoría y cada nombre**
+     * (`GET /api/cuentas/de-cada-uso`), para que Agregar proponga «La que usas para Mercado».
+     */
+    suspend fun getCuentasDeCadaUso(): CuentasDeCadaUso
     suspend fun getRecurringRules(): List<RecurringRule>
     suspend fun createRecurringRule(rule: RecurringRule): RecurringRule
     suspend fun updateRecurringRule(id: String, rule: RecurringRule): RecurringRule
@@ -470,6 +479,17 @@ interface WalletRepository {
      * Si vas a agregar un llamador con `null`, ese es el debate que estás reabriendo.
      */
     suspend fun markOccurrence(ruleId: String, period: String, eventId: String? = null): RecurringOccurrence
+
+    /**
+     * **«Anotar pago» desde la fila de una factura** (vuelta 43): el movimiento y el sello de la
+     * ocurrencia que paga, en una sola operación del server (`POST /api/recurring-rules/{id}/occurrence/pago`).
+     * O quedan los dos o ninguno: un gasto suelto que no salda la fila hace que «Te quedan» lo reste
+     * dos veces. Con el mismo id del movimiento, un reintento devuelve lo que quedó.
+     *
+     * Solo reglas reales: la cuota de un crédito y el pago de una tarjeta se anotan en «Cuota»
+     * ([payInstallment]), que es lo que baja la deuda.
+     */
+    suspend fun anotarElPagoDeLaOcurrencia(ruleId: String, pedido: AnotarElPagoDeLaOcurrencia): PagoDeLaOcurrenciaAnotado
 
     /** Deshacer el sello: el recurrente vuelve a estar pendiente en ese periodo. */
     suspend fun unmarkOccurrence(ruleId: String, period: String)

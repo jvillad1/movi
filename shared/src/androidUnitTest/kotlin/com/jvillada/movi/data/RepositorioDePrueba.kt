@@ -87,6 +87,11 @@ open class RepositorioDePrueba : WalletRepository {
     override suspend fun mergeCategory(from: String, into: String): CategoryRewriteResult = noUsado("mergeCategory")
     override suspend fun setCategoryPrefs(name: String, hidden: Boolean, pinnedType: String?, icono: String?, color: String?): CategoryUsage = noUsado("setCategoryPrefs")
     override suspend fun getMemoriaDeCategorias(): List<RecuerdoDeCategoria> = noUsado("getMemoriaDeCategorias")
+    // Vuelta 43: vacía y no `noUsado`, igual que [getApartados]: Agregar la pide al abrirse, y una
+    // memoria vacía deja la hoja como estaba (la más usada, o la primera).
+    override suspend fun getCuentasDeCadaUso(): CuentasDeCadaUso = CuentasDeCadaUso()
+    override suspend fun anotarElPagoDeLaOcurrencia(ruleId: String, pedido: AnotarElPagoDeLaOcurrencia): PagoDeLaOcurrenciaAnotado =
+        noUsado("anotarElPagoDeLaOcurrencia")
     override suspend fun getRecurringRules(): List<RecurringRule> = noUsado("getRecurringRules")
     override suspend fun createRecurringRule(rule: RecurringRule): RecurringRule = noUsado("createRecurringRule")
     override suspend fun updateRecurringRule(id: String, rule: RecurringRule): RecurringRule = noUsado("updateRecurringRule")

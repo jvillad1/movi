@@ -97,6 +97,12 @@ sealed class Screen {
          */
         val presetPestana: com.jvillada.movi.ui.quickadd.PestanaDeAgregar? = null,
         /**
+         * Vuelta 43 · **modo pago**: la factura del período que se viene a pagar. Con esto la hoja
+         * dice «Pago de Arriendo · octubre» y, al guardar, el movimiento sale junto con la ocurrencia
+         * que salda. Ver `AgregarEnModoPago.kt`. Lo pone `hojaParaAnotar`; `null` = Agregar de siempre.
+         */
+        val presetPago: com.jvillada.movi.ui.quickadd.PagoDeLaFactura? = null,
+        /**
          * Vuelta 44 · **«Repartir» abre Agregar en modo personas**: «Repartir este gasto · ¿Quién
          * pagó? Yo | Caro», con el monto en blanco y «Yo» marcado. Antes abría «Pagó otro» en el
          * grupo, que supone que pagó el otro.

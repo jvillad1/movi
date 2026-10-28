@@ -7,6 +7,7 @@ import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.dbQuery
+import com.jvillada.movi.server.db.toFinancialEvent
 import com.jvillada.movi.server.balance.accountTypesFor
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.server.sms.memoriaDe
@@ -101,6 +102,16 @@ fun Route.categoryRoutes() {
     get("/api/categorias/memoria") {
         val uid = call.userId()
         call.respond(dbQuery { memoriaDe(uid).entradas() })
+    }
+
+    /**
+     * Vuelta 43: **la cuenta con que el dueño anota cada categoría y cada nombre** — la memoria
+     * equivalente a la de arriba, para que Agregar proponga «La que usas para Mercado» en vez de la
+     * más usada para todo. Ver `CuentasDeCadaUso.kt` en `:core`.
+     */
+    get("/api/cuentas/de-cada-uso") {
+        val uid = call.userId()
+        call.respond(dbQuery { cuentasDeCadaUsoDe(uid) })
     }
 
     /**
@@ -661,4 +672,19 @@ internal fun Transaction.categoryUsage(uid: String, monthStart: Long, monthEnd: 
             .thenByDescending { it.movements + it.otherCurrencyMovements }
             .thenBy { it.name.lowercase() },
     )
+}
+
+/** Cuántos movimientos hacia atrás mira [cuentasDeCadaUsoDe]: los mismos que la memoria de categorías. */
+private const val MOVIMIENTOS_PARA_LA_CUENTA = 2_000
+
+/** [cuentasDeCadaUso] sobre los últimos movimientos vivos de [uid]. */
+internal fun Transaction.cuentasDeCadaUsoDe(uid: String): com.jvillada.movi.shared.model.CuentasDeCadaUso {
+    val anulados = VoidEvents.selectAll().where { VoidEvents.userId eq uid }.map { it[VoidEvents.originalEventId] }.toSet()
+    val movimientos = Events.selectAll()
+        .where { Events.userId eq uid }
+        .orderBy(Events.timestamp to SortOrder.DESC)
+        .limit(MOVIMIENTOS_PARA_LA_CUENTA)
+        .filterNot { it[Events.id] in anulados }
+        .map { it.toFinancialEvent() }
+    return com.jvillada.movi.shared.model.cuentasDeCadaUso(movimientos)
 }

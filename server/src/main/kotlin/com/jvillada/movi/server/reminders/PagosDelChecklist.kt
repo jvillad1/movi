@@ -54,18 +54,22 @@ import java.time.ZoneId
  *    más bajo, nunca más alto).
  *
  * Cada movimiento paga **como mucho lo que le falta a la regla**: el colegio de $4.000.000 pagado
- * con $3.000.000 (sellado) + $1.000.000 saca los dos; el segundo gimnasio de $180.000, con la regla
+ * con $3.000.000 + $1.000.000, los dos sin sellar, saca los dos (sellado el de $3.000.000, el ítem
+ * resta $3.000.000 y el otro queda variable: la misma suma); el segundo gimnasio de $180.000, con la regla
  * ya completa, sigue siendo variable; y un pago de $200.000 para un fijo de $180.000 saca $180.000
  * y deja $20.000 como variable. Así fijos + variable suman lo que de verdad salió.
  *
- * **Salvo lo que Movi emparejó solo, que sale entero y cierra el ítem.** En esa fila el cliente
- * resta como fijo lo que de verdad se pagó (`montoPagado`, el monto del movimiento), no el de la
- * regla — el Celular del dueño no cuesta lo mismo cada mes. Así que el server saca del variable
- * exactamente ese monto: con $60.000 contra una regla de $53.077, los $6.923 de más no pueden
- * quedar además como variable (contarían dos veces); con $50.000, los $3.077 que faltan no se
+ * **Salvo el movimiento de su sello, que sale entero y cierra el ítem** — lo haya emparejado Movi
+ * sola o lo haya ligado el dueño («Sí, fue este», o «Anotar pago» desde la fila, vuelta 43). En esa
+ * fila el cliente resta como fijo lo que de verdad se pagó (`montoPagado`, el monto del movimiento),
+ * no el de la regla — el Celular del dueño no cuesta lo mismo cada mes. Así que el server saca del
+ * variable exactamente ese monto: con $60.000 contra una regla de $53.077, los $6.923 de más no
+ * pueden quedar además como variable (contarían dos veces); con $50.000, los $3.077 que faltan no se
  * buscan en otro candidato (no están en los fijos de nadie, y ese candidato quedaría contado en
- * ningún lado). Un sello a mano sí sigue con el monto de la regla: para esa fila el server no manda
- * `montoPagado` y el cliente resta el de la regla, que es lo que se completa acá.
+ * ningún lado). Hasta la vuelta 43 un sello a mano restaba el monto de la regla: pagar el arriendo de
+ * $1.800.000 con $1.500.000 dejaba $300.000 restados de un fijo que ya estaba pagado, y «Te quedan»
+ * no subía por la diferencia. Un sello SIN movimiento (los viejos, de antes de que la casilla dejara
+ * de marcar) sigue con el monto de la regla: no hay otro dato.
  *
  * Un ítem **pendiente** también reclama su pago: los fijos ya lo cuentan por su monto entero, así
  * que un pago anotado sin marcar es exactamente el caso del doble descuento.
@@ -132,8 +136,8 @@ fun vencimientoEnElChecklist(
  *   movimiento murió no cuenta).
  * @param eventos los movimientos vivos del período.
  * @param automaticas los `(regla, período)` de [sellos] que Movi emparejó solo
- *   (`emparejadasComoSellos`): su ítem sale por el monto entero del movimiento, ver el KDoc del
- *   archivo.
+ *   (`emparejadasComoSellos`). Desde la vuelta 43 ya no decide nada —todo sello con movimiento sale
+ *   por el monto entero, ver el KDoc del archivo—; se deja para no cambiar a quien lo pasa.
  * @param rechazados los «no fue este» del dueño, como pares `(ruleId, eventId)` — mismo formato
  *   que `loadRejectedPairs`. Un candidato rechazado explícitamente para una regla no puede
  *   absorber su ítem: el dueño ya dijo que ese movimiento no es el pago, y sin este filtro salía
@@ -187,17 +191,15 @@ fun parteFijaDelChecklist(
             // Sellado con un movimiento vivo que cae fuera del período: el pago no está acá, y no
             // hay nada más que buscarle en este período.
             eventoDelSello !in porId -> regla.amount
-            // Emparejado solo: el cliente resta el monto del movimiento, así que sale entero y el
-            // ítem queda completo — ni el excedente vuelve al variable ni el faltante se busca en
-            // otro movimiento.
-            (regla.id to periodOf(vence)) in automaticas -> {
+            // El sello de ESTE ítem —emparejado solo o puesto por el dueño («Sí, fue este», «Anotar
+            // pago»)—: el cliente resta como fijo el monto del movimiento (`montoPagado`), así que
+            // sale entero y el ítem queda completo — ni el excedente vuelve al variable ni el
+            // faltante se busca en otro movimiento. Solo este: el sello de otra ocurrencia de la
+            // misma regla no está en los fijos de este período (ver el KDoc del archivo).
+            else -> {
                 parte[eventoDelSello] = porId.getValue(eventoDelSello).amount
                 regla.amount
             }
-            // El sello de ESTE ítem: su movimiento sale del variable hasta el monto de la regla,
-            // que es lo que los fijos ya restaron. Solo este: el sello de otra ocurrencia de la
-            // misma regla no está en los fijos de este período (ver el KDoc del archivo).
-            else -> minOf(porId.getValue(eventoDelSello).amount, regla.amount).also { parte[eventoDelSello] = it }
         }
         if (eventoDelSello != null && eventoDelSello in porId) conPagoYaVisto += regla.id
         val resto = regla.amount - yaPagado
