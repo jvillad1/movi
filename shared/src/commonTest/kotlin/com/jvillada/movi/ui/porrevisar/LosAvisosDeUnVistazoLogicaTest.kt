@@ -81,6 +81,12 @@ class LosAvisosDeUnVistazoLogicaTest {
     fun `el pago de algo que se espera no pregunta si se repite`() {
         assertTrue(vieneDeUnPagoQueSeEspera(Screen.QuickAdd(presetNota = "Arriendo", presetCategoria = "Vivienda", presetMonto = 1_800_000)))
         assertTrue(vieneDeUnPagoQueSeEspera(Screen.QuickAdd(presetDeudaId = "credito")))
+        // El modo pago de la vuelta 43, que es lo que arma hoy «Anotar pago».
+        assertTrue(
+            vieneDeUnPagoQueSeEspera(
+                Screen.QuickAdd(presetPago = com.jvillada.movi.ui.quickadd.PagoDeLaFactura(ruleId = "r", periodo = "2026-10", nombre = "Arriendo", mes = "octubre", cuentaDeLaRegla = null)),
+            ),
+        )
         assertFalse(vieneDeUnPagoQueSeEspera(Screen.QuickAdd()))
         assertFalse(vieneDeUnPagoQueSeEspera(Screen.QuickAdd(presetRepartir = true)))
     }
