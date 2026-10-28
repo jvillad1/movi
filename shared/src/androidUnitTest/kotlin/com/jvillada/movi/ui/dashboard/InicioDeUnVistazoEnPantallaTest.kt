@@ -165,17 +165,14 @@ class InicioDeUnVistazoEnPantallaTest {
 
     @Test
     @Config(qualifiers = "w1400dp-h1200dp-mdpi")
-    fun `en escritorio dos columnas, las cuentas y los widgets a la derecha`() {
+    fun `en escritorio dos columnas, el heroe a la izquierda y la cuadricula a su lado`() {
         montar()
 
+        // Vuelta 39: dos columnas parejas. El héroe a la izquierda y la cuadrícula arriba de la derecha,
+        // a la altura del héroe (debajo de la banda); lo demás, a la columna más corta.
         val heroIzq = heroe().left
-        val cuentasIzq = izquierda("Tus cuentas")
-        assertTrue(cuentasIzq.value > heroIzq.value + 300f, "las cuentas van en la columna derecha")
-        // Vuelta 39: el héroe y las acciones arriba, lado a lado.
         assertTrue(izquierda("Anotar gasto").value > heroIzq.value + 300f, "las acciones a la derecha del héroe")
         assertTrue(arriba("Anotar gasto") < heroe().bottom, "y a su misma altura")
-        assertEquals(cuentasIzq, izquierda(com.jvillada.movi.ui.sdui.TITULO_DE_LOS_WIDGETS))
-        assertTrue(izquierda("Movi propone hoy").value < cuentasIzq.value, "las propuestas a la izquierda")
     }
 
     /**
@@ -188,8 +185,8 @@ class InicioDeUnVistazoEnPantallaTest {
         montarEnLaCascara()
 
         assertTrue(
-            izquierda("Tus cuentas").value > heroe().left.value + 300f,
-            "las cuentas van en la columna derecha",
+            izquierda("Anotar gasto").value > heroe().left.value + 300f,
+            "la cuadrícula va en la columna derecha",
         )
     }
 
@@ -224,7 +221,7 @@ class InicioDeUnVistazoEnPantallaTest {
         montarEnLaCascara(header = guia)
 
         val laGuia = limitesDeLaGuia()
-        val derecha = izquierda("Tus cuentas")
+        val derecha = izquierda("Anotar gasto")
         assertEquals(216f, laGuia.left.value, 0.5f, "empieza en el borde izquierdo del panel, junto al rail")
         assertTrue(laGuia.right <= derecha, "no se mete en la columna derecha: ${laGuia.right} / $derecha")
         assertTrue(laGuia.bottom <= heroe().top, "va arriba del hero")
