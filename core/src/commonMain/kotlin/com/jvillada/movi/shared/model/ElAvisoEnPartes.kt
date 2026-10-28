@@ -173,8 +173,10 @@ fun montosParecidos(a: Long, b: Long): Boolean {
 }
 
 /**
- * **El reparto de la vez anterior**, guardado por el server en `repartos_recordados` (uno por usuario,
- * cuenta de origen y a quién fue). Viaja en [PropuestaDeReparto.recordado].
+ * **El reparto de la vez anterior**: el server lo guarda en el aviso mismo (`sms_messages.reparto`) al
+ * confirmarlo en partes, y «la última vez» es el último aviso repartido a la misma persona
+ * ([claveDelReparto]). Viaja en [PropuestaDeReparto.recordado]; la app lo propone solo si sale de la
+ * misma cuenta ([origenId]) y por un monto parecido.
  */
 @Serializable
 data class RepartoRecordado(
