@@ -1481,7 +1481,10 @@ componentes nuevos en `ds/`; dos tokens: `Medida.anchoDelCursor` (2 dp) y
   - la cifra sigue siendo la protagonista, con un **cursor** de la marca pegado a su derecha, del alto
     de la letra de la cifra, que parpadea (fijo si el sistema pide menos movimiento);
   - la hoja se acorta a lo que tiene (~212 dp: cuatro filas de 50 y su respiro) y va del ancho de las
-    demás hojas (560): los 600 eran para que el teclado respirara.
+    demás hojas (560): los 600 eran para que el teclado respirara;
+  - el renglón del error / «Anotado» / aviso pendiente, entre la tarjeta y el pie, no reserva sus 32 dp
+    ni su respiro (estaban para que el teclado no se moviera bajo el dedo): mide lo que diga, y nada si
+    no dice nada. Sin eso quedaban ~50 dp vacíos entre «Nota» y «Guardar movimiento».
   En el teléfono y en una tablet que se toca no cambia nada.
 - **La categoría se lee en un solo lugar.** Debajo del monto había una fila «Categoría · Restaurantes ›»
   y, justo debajo, los chips con «Restaurantes» marcado. La fila se fue: queda un renglón
@@ -1503,7 +1506,8 @@ componentes nuevos en `ds/`; dos tokens: `Medida.anchoDelCursor` (2 dp) y
 **Las líneas base** no cambian: `dp_sueltos` 119, `radios_con_numero` 3, y las guardas en 0 siguen en 0.
 Lo vigilan `AgregarConElTecladoDeVerdadTest` (a 1.280 sin teclas ni «⌫» y con el cursor a la derecha
 de la cifra; 4-2-0-0-0 deja $42.000, Retroceso deja $4.200 y Enter lo guarda; la hoja ≥ 200 dp más
-corta; a 1.280 con tacto y a 390 el teclado sigue y escribe) y `UnaSolaCategoriaEnAgregarTest` (a 360:
+corta; de la tarjeta a «Guardar» no más de 16 dp, y con teclado el renglón sigue en 32; a 1.280 con
+tacto y a 390 el teclado sigue y escribe) y `UnaSolaCategoriaEnAgregarTest` (a 360:
 la elegida una sola vez y marcada, «Categoría» no es una `Fila`, «Todas» entero y sin desplazar en el
 renglón del rótulo —con seis frecuentes que desbordan los chips—, de 48 de toque, abre el selector, la
 elegida en el selector vuelve primera y entera, y elegir chip, categoría o cuenta no mueve el teclado

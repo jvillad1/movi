@@ -1829,8 +1829,20 @@ private fun EditorBody(
     //
     // Dos renglones de alto: los mensajes de `toUserMessage()` más largos se parten en dos en
     // el ancho de un teléfono, y reservar de menos volvería a mover el teclado.
-    Spacer(Modifier.height(Espacio.xs))
-    Box(modifier = Modifier.fillMaxWidth().height(32.dp), contentAlignment = Alignment.CenterStart) {
+    //
+    // **Vuelta 34: sin teclado en pantalla no se reserva.** Los 32 dp y su respiro estaban para que
+    // el teclado no se moviera bajo el dedo; frente a un computador no hay teclado y quedaban ~50 dp
+    // vacíos entre «Nota» y «Guardar movimiento». Ahí el renglón mide lo que diga, y nada si no dice
+    // nada.
+    val hayRenglonDeAviso = error != null || ultimoAnotado != null || avisoPendiente != null
+    if (conTecladoEnPantalla || hayRenglonDeAviso) Spacer(Modifier.height(Espacio.xs))
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (conTecladoEnPantalla) Modifier.height(32.dp) else Modifier)
+            .testTag(TAG_RENGLON_DEL_AVISO_EN_AGREGAR),
+        contentAlignment = Alignment.CenterStart,
+    ) {
         if (error != null) {
             Text(error, style = Movi.textos.apoyo, color = Movi.colores.sale, modifier = Modifier.align(Alignment.TopStart))
         } else if (ultimoAnotado != null) {
@@ -2208,6 +2220,9 @@ internal const val TAG_ENCABEZADO_DE_LA_CATEGORIA: String = "agregar:encabezado-
 
 /** El toque de «Todas ›». */
 internal const val TAG_PASTILLA_TODAS_LAS_CATEGORIAS_AGREGAR: String = "agregar:pastilla-todas"
+
+/** El renglón del error / «Anotado» / aviso pendiente, entre la tarjeta y el pie. */
+internal const val TAG_RENGLON_DEL_AVISO_EN_AGREGAR: String = "agregar:renglon-del-aviso"
 
 /** El cursor del monto, que solo se dibuja sin teclado en pantalla. */
 internal const val TAG_CURSOR_DEL_MONTO: String = "agregar:cursor-del-monto"

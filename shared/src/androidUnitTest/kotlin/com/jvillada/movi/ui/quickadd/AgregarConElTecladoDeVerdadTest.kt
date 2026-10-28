@@ -35,6 +35,7 @@ import com.jvillada.movi.data.RepositorioDePrueba
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.LocalPunteroFino
@@ -49,6 +50,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import kotlin.test.assertEquals
+import org.junit.Assert.assertEquals as assertCasi
 import kotlin.test.assertTrue
 
 /**
@@ -120,6 +122,30 @@ class AgregarConElTecladoDeVerdadTest {
         val sinTeclado = altoDelPanel()
         // Cuatro filas de 50 y el respiro de debajo: 212. Con 200 alcanza para decir que se fueron.
         assertTrue(conTeclado - sinTeclado >= 200f, "la hoja pasó de $conTeclado a $sinTeclado dp")
+    }
+
+    /**
+     * **Sin teclado no queda un hueco entre «Nota» y el pie.** El renglón del error reservaba 32 dp
+     * (y su respiro) para que el teclado no se moviera bajo el dedo; sin teclado no reserva nada: de
+     * la tarjeta al botón queda solo el respiro de siempre. Con el teclado en pantalla, como antes.
+     */
+    @Test
+    @Config(qualifiers = ESCRITORIO)
+    fun sin_teclado_no_hay_hueco_entre_la_tarjeta_y_guardar() {
+        var fino by mutableStateOf(true)
+        montarAncha(punteroFino = { fino })
+        val sinTeclado = huecoSobreGuardar()
+        assertTrue(sinTeclado <= Espacio.m.value + 0.5f, "de «Nota» a «Guardar» quedan $sinTeclado dp")
+        fino = false
+        composeRule.waitForIdle()
+        assertCasi("con teclado, el renglón sigue reservado", 32f, altoDelRenglonDelAviso(), 0.5f)
+    }
+
+    @Test
+    @Config(qualifiers = TELEFONO)
+    fun en_el_telefono_el_renglon_del_aviso_sigue_reservado() {
+        montarTelefono()
+        assertCasi(32f, altoDelRenglonDelAviso(), 0.5f)
     }
 
     /** **Una tablet que se toca** es ancha, pero su puntero no es fino: el teclado se queda. */
@@ -232,6 +258,17 @@ class AgregarConElTecladoDeVerdadTest {
 
     private fun montoEnPantalla(texto: String) =
         composeRule.onAllNodes(hasText(texto), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+
+    private fun huecoSobreGuardar(): Float {
+        val tarjeta = composeRule.onNodeWithTag(TAG_TARJETA_DE_AGREGAR, useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val guardar = composeRule.onNodeWithText("Guardar movimiento").getUnclippedBoundsInRoot()
+        return (guardar.top - tarjeta.bottom).value
+    }
+
+    private fun altoDelRenglonDelAviso(): Float {
+        val renglon = composeRule.onNodeWithTag(TAG_RENGLON_DEL_AVISO_EN_AGREGAR, useUnmergedTree = true).getUnclippedBoundsInRoot()
+        return (renglon.bottom - renglon.top).value
+    }
 
     private fun altoDelPanel(): Float {
         val panel = composeRule.onNodeWithTag(TAG_PANEL_DE_HOJA).getUnclippedBoundsInRoot()
