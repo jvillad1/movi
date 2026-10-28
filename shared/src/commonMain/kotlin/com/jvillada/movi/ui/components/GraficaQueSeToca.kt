@@ -19,6 +19,12 @@ import androidx.compose.ui.input.pointer.pointerInput
  * Los [cuantos] puntos se reparten parejo a lo ancho, como los dibujan las gráficas: el índice de
  * una `x` es la franja en la que cae. Si el dedo se mueve más que el umbral del sistema (un
  * desplazamiento de la lista, o un deslizamiento sobre la gráfica) ya no es un toque.
+ *
+ * **El mouse quieto no elige** (vuelta 45). «En qué se va» abría con el 25 oct elegido —«25 oct · $0 ·
+ * período pasado $0»— sin que nadie tocara nada: el clic que la abrió dejó el puntero donde después
+ * quedó la gráfica, y Compose avisa con un movimiento sintético cuando lo de abajo de un puntero quieto
+ * cambia. Ahora, sin botón apretado, solo elige un movimiento que de verdad mueve el puntero
+ * ([elMouseSeMovio]); la gráfica abre sin elegir y la leyenda dice el resumen.
  */
 fun Modifier.graficaQueSeToca(
     cuantos: Int,
@@ -41,6 +47,9 @@ fun Modifier.graficaQueSeToca(
     awaitPointerEventScope {
         var desde: Offset? = null
         var deslizo = false
+        // Dónde se vio el puntero sin botón apretado por última vez: lo que distingue al mouse que se
+        // mueve del movimiento sintético de un puntero quieto (ver el KDoc).
+        var ultimoSinApretar: Offset? = null
         while (true) {
             val evento = awaitPointerEvent()
             val cambio = evento.changes.firstOrNull() ?: continue
@@ -50,17 +59,33 @@ fun Modifier.graficaQueSeToca(
                     deslizo = false
                     alElegir(indice(cambio.position.x))
                 }
-                PointerEventType.Move -> {
-                    desde?.let { if ((cambio.position - it).getDistance() > umbral) deslizo = true }
+                PointerEventType.Move -> if (desde != null) {
+                    if ((cambio.position - desde).getDistance() > umbral) deslizo = true
                     alElegir(indice(cambio.position.x))
+                } else {
+                    val antes = ultimoSinApretar
+                    ultimoSinApretar = cambio.position
+                    if (elMouseSeMovio(antes, cambio.position)) alElegir(indice(cambio.position.x))
                 }
+                PointerEventType.Enter -> if (desde == null) ultimoSinApretar = cambio.position
                 PointerEventType.Release -> {
                     if (desde != null && !deslizo && !cambio.isConsumed) alTocar?.invoke(indice(cambio.position.x))
                     desde = null
+                    ultimoSinApretar = cambio.position
                 }
-                PointerEventType.Exit -> if (desde == null) alElegir(null)
+                PointerEventType.Exit -> if (desde == null) {
+                    ultimoSinApretar = null
+                    alElegir(null)
+                }
                 else -> Unit
             }
         }
     }
 }
+
+/**
+ * **¿El puntero se movió de verdad?** Sin botón apretado, un movimiento cuenta solo si viene de un lugar
+ * conocido y distinto: el primero que llega (sin [antes]) y el que repite la posición son los
+ * sintéticos que Compose manda cuando cambia lo que hay debajo de un puntero quieto. Pura.
+ */
+internal fun elMouseSeMovio(antes: Offset?, ahora: Offset): Boolean = antes != null && antes != ahora
