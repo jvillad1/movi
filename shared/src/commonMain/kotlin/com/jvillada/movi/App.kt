@@ -546,6 +546,8 @@ fun App() {
                             presetEsIngreso = request.presetEsIngreso,
                             presetDeudaId = request.presetDeudaId,
                             presetPestana = request.presetPestana,
+                            // Vuelta 43: «Anotar pago» desde una factura — el guardado la salda.
+                            presetPago = request.presetPago,
                             // Ola 9 · B: el movimiento ya se guardó; recién ahora se evalúa si
                             // vale la pena ofrecer el recurrente.
                             onSavedEvent = { movimientoRecienGuardado = it },

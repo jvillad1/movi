@@ -96,6 +96,12 @@ sealed class Screen {
          * con qué pestaña abre la hoja. `null` = la de siempre (la que deciden los otros presets).
          */
         val presetPestana: com.jvillada.movi.ui.quickadd.PestanaDeAgregar? = null,
+        /**
+         * Vuelta 43 · **modo pago**: la factura del período que se viene a pagar. Con esto la hoja
+         * dice «Pago de Arriendo · octubre» y, al guardar, el movimiento sale junto con la ocurrencia
+         * que salda. Ver `AgregarEnModoPago.kt`. Lo pone `hojaParaAnotar`; `null` = Agregar de siempre.
+         */
+        val presetPago: com.jvillada.movi.ui.quickadd.PagoDeLaFactura? = null,
     ) : Screen()
     /**
      * Movi AI, opcionalmente **con una pregunta ya lista**.

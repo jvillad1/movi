@@ -158,6 +158,12 @@ const val TAG_SUBIR_PAPEL_EN_AGREGAR: String = "quickadd:subir-papel"
 
 /** El enlace de debajo del botón de guardar que guarda y deja la hoja abierta. */
 const val GUARDAR_Y_ANOTAR_OTRO: String = "Guardar y anotar otro"
+
+/** Vuelta 43: el valor de la fila «Cuenta» en modo pago cuando la regla no dice de dónde sale. */
+const val ELIGE_LA_CUENTA: String = "Elige la cuenta"
+
+/** Hasta cuántas letras un rótulo de la cuenta entra con el ancho de siempre («Última usada»). */
+private const val LARGO_DE_UN_ROTULO_CORTO = 14
 internal const val TAG_GUARDAR_Y_ANOTAR_OTRO = "quickadd:guardar-y-anotar-otro"
 
 /**
@@ -300,6 +306,12 @@ fun QuickAddScreen(
     /** Ola 5 · los atajos del «+»: con qué pestaña abre. Ver [Screen.QuickAdd.presetPestana]. */
     presetPestana: PestanaDeAgregar? = null,
     /**
+     * Vuelta 43 · **modo pago**: la factura que se viene a pagar. La hoja dice «Pago de Arriendo ·
+     * octubre» en vez de las pestañas, y al guardar el movimiento sale JUNTO con la ocurrencia que
+     * salda (`anotarElPagoDeLaOcurrencia`). Ver `AgregarEnModoPago.kt`.
+     */
+    presetPago: PagoDeLaFactura? = null,
+    /**
      * Ola 9 · B: el movimiento que se acaba de guardar, para que quien sobreviva a esta hoja
      * (App.kt) pueda ofrecer convertirlo en recurrente. Se llama **después** de que el POST
      * salió bien, junto con [onSaved] — nunca antes: primero se guarda, después se ofrece.
@@ -405,7 +417,27 @@ fun QuickAddScreen(
      * cuando la lista de cuentas se vuelve a cargar (p. ej. tras crear una cuenta desde acá).
      */
     var origenCuenta by remember {
-        mutableStateOf(if (presetAccountId != null) OrigenCuenta.CONTEXTO else OrigenCuenta.NINGUNA)
+        mutableStateOf(
+            when {
+                presetPago != null -> OrigenCuenta.NINGUNA
+                presetAccountId != null -> OrigenCuenta.CONTEXTO
+                else -> OrigenCuenta.NINGUNA
+            },
+        )
+    }
+    /** Vuelta 43: el «Mercado» de «La que usas para Mercado» ([CuentaElegida.para]). */
+    var cuentaPara by remember { mutableStateOf<String?>(null) }
+    /** Vuelta 43 · modo pago sin cuenta en la regla: la que se sugiere, arriba en el selector. */
+    var cuentaSugerida by remember { mutableStateOf<String?>(null) }
+    /**
+     * Vuelta 43: **la cuenta con que el dueño anota cada categoría y cada nombre** (ver
+     * `CuentasDeCadaUso` en `:core`). Se pide al abrir la hoja; si falla, vacía, y la hoja elige como
+     * antes (la última usada, la más usada).
+     */
+    var usosDeCuentas by remember { mutableStateOf(com.jvillada.movi.shared.model.CuentasDeCadaUso()) }
+    LaunchedEffect(Unit) {
+        usosDeCuentas = runCatching { Repositories.wallets.getCuentasDeCadaUso() }
+            .getOrDefault(com.jvillada.movi.shared.model.CuentasDeCadaUso())
     }
     /**
      * Qué pestaña está elegida y qué sub-picker está abierto, en UN solo estado y con
@@ -686,14 +718,26 @@ fun QuickAddScreen(
         // y esta hoja no revoca decisiones suyas.
         val eleccionFirme = origenCuenta == OrigenCuenta.ELEGIDA && lista.any { it.id == selectedAccountId }
         if (eleccionFirme) return
-        val elegida = resolverCuenta(
+        // Vuelta 43: la cuenta sale de QUÉ se anota —la de la regla en modo pago, la de efectivo, la
+        // que usa para ese nombre o esa categoría— y recién después de la costumbre. Ver
+        // [resolverCuentaDelMovimiento].
+        val elegida = resolverCuentaDelMovimiento(
             cuentas = cuentasPara(lista, uso).principales,
-            contexto = presetAccountId,
+            tipo = if (uso == UsoDeCuenta.DESTINO_DE_INGRESO) TransactionType.INCOME else TransactionType.EXPENSE,
+            categoria = category,
+            nombre = note,
+            usos = usosDeCuentas,
+            // En modo pago el `presetAccountId` es la cuenta de la regla, no el detalle de una cuenta.
+            contexto = presetAccountId.takeIf { presetPago == null },
+            modoPago = presetPago != null,
+            deLaRegla = presetPago?.cuentaDeLaRegla,
             ultima = LastAccountStore.lastAccountId,
             masUsada = CuentaMasUsadaCache.id,
         )
         selectedAccountId = elegida.id
         origenCuenta = elegida.origen
+        cuentaPara = elegida.para
+        cuentaSugerida = elegida.sugerida?.id
     }
 
     // **El único llamador de [reconciliarCuenta].**
@@ -715,7 +759,10 @@ fun QuickAddScreen(
     // había elegido a mano, y el cambio se ve (la fila dice el nombre nuevo con su «Por
     // defecto»), así que probablemente sea mejor así: quien acaba de crear una cuenta suele
     // querer estrenarla.
-    LaunchedEffect(accounts, accountsLoaded, usoDeCuenta) {
+    // Vuelta 43: también cuando cambia lo que se anota —la categoría, la nota— o llega la memoria de
+    // cuentas: «La que usas para Mercado» se decide con la categoría elegida. Una cuenta elegida a
+    // mano no se toca (ver [reconciliarCuenta]).
+    LaunchedEffect(accounts, accountsLoaded, usoDeCuenta, category, note, usosDeCuentas) {
         if (accountsLoaded) reconciliarCuenta(accounts, usoDeCuenta)
     }
 
@@ -974,6 +1021,10 @@ fun QuickAddScreen(
      * limpia se lea de una vez — es justo lo que la prueba fija.
      */
     fun limpiarParaElSiguiente(tipo: TransactionType) {
+        // Vuelta 43: la cuenta se conserva aunque la hubiera puesto la app —desde que la cuenta se
+        // decide por la categoría, limpiar la categoría la movería—: en una tanda, la cuenta es una
+        // decisión ya tomada.
+        if (selectedAccountId != null) origenCuenta = OrigenCuenta.ELEGIDA
         amount = ""
         note = ""
         category = categoriaPorDefectoPara(tipo, usedCategories, categoryPrefs, usosRecientes)
@@ -1032,7 +1083,14 @@ fun QuickAddScreen(
         )
         val event = elAviso?.let { movimientoConElAviso(deLaHoja, it, ahora = Clock.System.now().toEpochMilliseconds()) }
             ?: deLaHoja
-        Repositories.wallets.postEvent(event)
+        // Vuelta 43 · modo pago: el movimiento sale JUNTO con la ocurrencia que paga, en una sola
+        // operación del server. Un `postEvent` suelto dejaba la factura sin saldar y «Te quedan» la
+        // restaba dos veces (ver `AgregarEnModoPago.kt`).
+        if (presetPago != null) {
+            Repositories.wallets.anotarElPagoDeLaOcurrencia(presetPago.ruleId, pedidoDelPago(presetPago, event))
+        } else {
+            Repositories.wallets.postEvent(event)
+        }
         // El aviso queda confirmado CON este movimiento: no se anota dos veces. Si esto falla,
         // el movimiento ya está guardado y el aviso sigue en «Por revisar», donde «¿Ya lo
         // anotaste?» lo encuentra (lleva el mismo texto) y ofrece «Es este».
@@ -1076,9 +1134,11 @@ fun QuickAddScreen(
             result.onSuccess { event ->
                 // Ola 9 · B: el movimiento YA está guardado; recién ahora se ofrece el
                 // recurrente, y quien lo ofrece es App.kt (esta hoja se cierra en este mismo
-                // paso, así que un ofrecimiento suyo se iría con ella).
-                onSavedEvent(event)
-                if (yAnotarOtro) {
+                // paso, así que un ofrecimiento suyo se iría con ella). Vuelta 43: el pago de una
+                // factura YA es de un recurrente — no se ofrece otro.
+                if (presetPago == null) onSavedEvent(event)
+                // Modo pago: «Guardar y anotar otro» no existe (cada pago es de su factura).
+                if (yAnotarOtro && presetPago == null) {
                     ultimoAnotado = confirmacionDeLoAnotado(event)
                     limpiarParaElSiguiente(event.type)
                     onSavedSinCerrar()
@@ -1328,6 +1388,12 @@ fun QuickAddScreen(
                 // El selector de tipo elige entre DOS formularios distintos: un movimiento
                 // (gasto/ingreso) y un traspaso, que no tiene ni categoría ni tipo pero sí dos
                 // cuentas — por eso decide qué se dibuja abajo en vez de vivir en [EditorBody].
+                if (presetPago != null) {
+                    // Vuelta 43 · modo pago: en vez de las pestañas, de qué es el pago. Cambiar a
+                    // «Traspaso» o «Cuota» no tiene sentido acá (el guardado salda ESTA factura), y
+                    // el encabezado es lo que le dice al dueño que no es un gasto cualquiera.
+                    EncabezadoDelPago(encabezadoDelPago(presetPago))
+                } else {
                 SelectorSegmentado(
                     // «Gasto», no «Egreso»: es la palabra que la gente usa. Toda la app
                     // habla igual — Inicio y Movimientos también dicen «Gastos».
@@ -1342,6 +1408,7 @@ fun QuickAddScreen(
                     onSelect = { pasarA(pickers.conTipo(it)) },
                     enabled = !saving,
                 )
+                }
 
                 val density = LocalDensity.current
                 // El alto que el sub-picker va a respetar: NO el del cuerpo entero, sino el
@@ -1409,7 +1476,8 @@ fun QuickAddScreen(
                         Spacer(Modifier.height(Espacio.xxs))
                     }
                     Picker.Wallet -> WalletPicker(
-                        cuentas = cuentasDelPicker,
+                        // Vuelta 43 · modo pago sin cuenta en la regla: la sugerida, arriba.
+                        cuentas = cuentasDelPicker.copy(principales = conLaSugeridaArriba(cuentasDelPicker.principales, cuentaSugerida)),
                         uso = usoDeCuenta,
                         selectedId = selectedAccountId,
                         onPick = {
@@ -1500,11 +1568,13 @@ fun QuickAddScreen(
                         // correcta, sin que el dueño haya llegado a ver cuál era. Arreglarlo
                         // bien pide resolver el nombre sin la lista (o bloquear el guardado, que
                         // sería peor: hoy se guarda, y se guarda bien).
-                        walletLabel = selectedAccount?.name ?: "Seleccionar cuenta",
+                        walletLabel = selectedAccount?.name
+                            ?: if (origenCuenta == OrigenCuenta.POR_ELEGIR) ELIGE_LA_CUENTA else "Seleccionar cuenta",
                         // Ola 11: solo dice algo cuando el valor lo puso la app y hay más de una
-                        // cuenta donde anotar (ver [avisoDeCuenta]).
-                        walletHint = if (selectedAccount == null) null
-                            else avisoDeCuenta(origenCuenta, accounts.size),
+                        // cuenta donde anotar (ver [avisoDeCuenta]). Vuelta 43: y dice por qué esa
+                        // («La de la regla», «La que usas para Mercado»), o que falta elegirla.
+                        walletHint = if (selectedAccount == null && origenCuenta != OrigenCuenta.POR_ELEGIR) null
+                            else avisoDeCuenta(origenCuenta, accounts.size, cuentaPara),
                         walletHintReserved = accounts.size > 1,
                         note = note,
                         dateLabel = etiquetaDeFecha(fecha, hoy),
@@ -1544,12 +1614,13 @@ fun QuickAddScreen(
                             }
                         },
                         onSave = { save() },
-                        onSaveYOtro = { save(yAnotarOtro = true) },
+                        // Vuelta 43: en modo pago no hay «otro»: cada pago es de su factura.
+                        onSaveYOtro = if (presetPago == null) ({ save(yAnotarOtro = true) }) else null,
                         ultimoAnotado = ultimoAnotado,
                                 hasNoAccounts = accountsLoaded && accounts.isEmpty(),
                                 onCreateAccount = { showCreateSheet = true },
                                 onSubirPapel = elegirPapel,
-                                onRepartir = if (pickers.typeIndex == PestanaDeAgregar.GASTO.indice && espaciosParaRepartir.isNotEmpty()) {
+                                onRepartir = if (presetPago == null && pickers.typeIndex == PestanaDeAgregar.GASTO.indice && espaciosParaRepartir.isNotEmpty()) {
                                     { repartiendo = true }
                                 } else {
                                     null
@@ -1674,8 +1745,11 @@ private fun EditorBody(
     onEsEsteAviso: () -> Unit = {},
     onNoEsEsteAviso: () -> Unit = {},
     onSave: () -> Unit,
-    /** «Guardar y anotar otro»: guarda y deja la hoja abierta. Ver `limpiarParaElSiguiente`. */
-    onSaveYOtro: () -> Unit = {},
+    /**
+     * «Guardar y anotar otro»: guarda y deja la hoja abierta. Ver `limpiarParaElSiguiente`. `null` en
+     * modo pago (vuelta 43): ahí no se ofrece.
+     */
+    onSaveYOtro: (() -> Unit)? = {},
     /** «Anotado: $45.000 · Comida» tras un «Guardar y anotar otro», o `null`. */
     ultimoAnotado: String? = null,
     hasNoAccounts: Boolean = false,
@@ -1801,8 +1875,16 @@ private fun EditorBody(
         FilaDeLaHoja(
             titulo = "Cuenta",
             valor = walletLabel,
+            valorVacio = walletLabel == ELIGE_LA_CUENTA,
             aviso = walletHint,
             reservarAviso = walletHintReserved,
+            // Vuelta 43: «La que usas para Mercado» es una frase, no una etiqueta de doce letras: el
+            // nombre de la cuenta le cede ancho para que entre entera.
+            fraccionDelValor = if ((walletHint?.length ?: 0) > LARGO_DE_UN_ROTULO_CORTO) {
+                FRACCION_DEL_VALOR_CON_ROTULO_LARGO
+            } else {
+                FRACCION_DEL_VALOR_DE_LA_HOJA
+            },
             // F10: sin cuentas no hay nada que elegir — abrir el selector solo mostraría la
             // mentira de "Cargando cuentas…" (no está cargando, no hay ninguna). En ese caso el
             // toque lleva directo a crear la cuenta, que es lo único que de verdad hace algo acá.
@@ -1999,7 +2081,7 @@ private fun EditorBody(
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(),
                 )
-            } else if (canSave) {
+            } else if (canSave && onSaveYOtro != null) {
                 // «Guardar y anotar otro», en el renglón que ya estaba reservado debajo del botón:
                 // cuando se puede guardar, «Falta el monto» no tiene nada que decir y el renglón
                 // queda libre. Así el enlace aparece sin cambiar el alto de la hoja —la disciplina

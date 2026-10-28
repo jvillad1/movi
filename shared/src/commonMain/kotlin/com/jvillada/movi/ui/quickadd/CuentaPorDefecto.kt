@@ -1,6 +1,12 @@
 package com.jvillada.movi.ui.quickadd
 
 import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.CuentasDeCadaUso
+import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.claveDeCategoriaParaCuenta
+import com.jvillada.movi.shared.model.claveDeNombreParaCuenta
+import com.jvillada.movi.shared.model.normalizarParaBuscar
 
 /**
  * De dónde salió la cuenta que la hoja de Agregar está mostrando.
@@ -11,9 +17,28 @@ import com.jvillada.movi.shared.model.Account
  * Movimientos.
  */
 enum class OrigenCuenta {
-    /** La trajo el contexto desde el que se abrió la hoja: el detalle de una cuenta, o la regla
-     *  recurrente que se está anotando. Manda sobre todo lo demás. */
+    /** La trajo el contexto desde el que se abrió la hoja: el detalle de una cuenta. Manda sobre
+     *  todo lo demás. */
     CONTEXTO,
+
+    /** Vuelta 43 · modo pago: la cuenta de la regla que se está pagando. «La de la regla». */
+    REGLA,
+
+    /**
+     * Vuelta 43 · modo pago con una regla SIN cuenta: la hoja **no elige** —poner una tarjeta en
+     * silencio fue el error del día del dueño— y pide la cuenta, con la sugerencia arriba
+     * ([CuentaElegida.sugerida]).
+     */
+    POR_ELEGIR,
+
+    /** Vuelta 43: un gasto en «Efectivo» (la categoría o el título) va a la cuenta de efectivo. */
+    EFECTIVO,
+
+    /** Vuelta 43: la última cuenta con que anotó ese mismo nombre («La que usas para Rappi»). */
+    POR_NOMBRE,
+
+    /** Vuelta 43: la última cuenta con que anotó esa categoría («La que usas para Mercado»). */
+    POR_CATEGORIA,
 
     /** La última en la que se anotó algo (ver `LastAccountStore`). */
     ULTIMA,
@@ -35,8 +60,20 @@ enum class OrigenCuenta {
     NINGUNA,
 }
 
-/** Qué cuenta quedó elegida y por qué. */
-data class CuentaElegida(val id: String?, val origen: OrigenCuenta)
+/**
+ * Qué cuenta quedó elegida y por qué.
+ *
+ * @param para la categoría o el nombre que la decidió, en [OrigenCuenta.POR_CATEGORIA] y
+ *   [OrigenCuenta.POR_NOMBRE]: el «Mercado» de «La que usas para Mercado».
+ * @param sugerida en [OrigenCuenta.POR_ELEGIR], la que la hoja le sugiere al dueño (arriba en el
+ *   selector), con su propio porqué. `null` en todo lo demás.
+ */
+data class CuentaElegida(
+    val id: String?,
+    val origen: OrigenCuenta,
+    val para: String? = null,
+    val sugerida: CuentaElegida? = null,
+)
 
 /**
  * **La regla de qué cuenta arranca elegida, en un solo lugar y sin Compose adentro** para que se
@@ -94,7 +131,7 @@ fun resolverCuenta(
  * Con [OrigenCuenta.CONTEXTO] tampoco: el dueño llegó desde el detalle de esa misma cuenta, o
  * desde el recurrente que la tiene guardada — repetírselo sería ruido.
  */
-fun avisoDeCuenta(origen: OrigenCuenta, cuentasDisponibles: Int): String? {
+fun avisoDeCuenta(origen: OrigenCuenta, cuentasDisponibles: Int, para: String? = null): String? {
     if (cuentasDisponibles <= 1) return null
     return when (origen) {
         // **Cortos a propósito, y medido en la web, no a ojo.** Este renglón comparte la fila con
@@ -107,6 +144,87 @@ fun avisoDeCuenta(origen: OrigenCuenta, cuentasDisponibles: Int): String? {
         // comentario de arriba.
         OrigenCuenta.MAS_USADA -> "Más usada"
         OrigenCuenta.PRIMERA -> "Por defecto"
+        // Vuelta 43: el porqué de la cuenta que la hoja eligió mirando QUÉ se anota. «La que usas
+        // para Mercado» es más largo que doce caracteres: la fila le da más ancho al rótulo cuando lo
+        // lleva (ver [FRACCION_DEL_VALOR_CON_ROTULO_LARGO]) y, si ni así entra, se corta con «…» sin
+        // partir la fila.
+        OrigenCuenta.REGLA -> "La de la regla"
+        OrigenCuenta.EFECTIVO -> "Es en efectivo"
+        OrigenCuenta.POR_NOMBRE, OrigenCuenta.POR_CATEGORIA -> para?.let { "La que usas para $it" }
+        OrigenCuenta.POR_ELEGIR -> "Elige de dónde sale"
         OrigenCuenta.CONTEXTO, OrigenCuenta.ELEGIDA, OrigenCuenta.NINGUNA -> null
     }
+}
+
+/**
+ * Vuelta 43: el valor de la fila «Cuenta» cede ancho al rótulo cuando el rótulo es una frase («La
+ * que usas para Mercado») y no una etiqueta de doce letras.
+ */
+internal const val FRACCION_DEL_VALOR_CON_ROTULO_LARGO = 0.42f
+
+/**
+ * **La cuenta que Agregar propone para un gasto o un ingreso** (vuelta 43), mirando QUÉ se anota.
+ *
+ * El día del dueño: *«Las cuentas por defecto son siempre "Más usada" (Nu, tarjeta de crédito). El
+ * arriendo, el mercado y el efectivo arrancaron todos en Nu.»* El orden, de más fuerte a más débil:
+ *
+ * 1. **[contexto]** — el detalle de una cuenta desde el que se abrió la hoja (como siempre).
+ * 2. **Modo pago: la cuenta de la regla** ([deLaRegla]) — «La de la regla». Si la regla no tiene
+ *    cuenta, **la hoja no elige**: devuelve [OrigenCuenta.POR_ELEGIR] con la sugerencia de los pasos
+ *    que siguen en [CuentaElegida.sugerida]. Poner en silencio la tarjeta más usada para pagar un
+ *    arriendo es lo que pasó.
+ * 3. **«Efectivo»** en la categoría o en el título → la cuenta de efectivo, si hay una.
+ * 4. **La última cuenta con ese nombre** ([CuentasDeCadaUso.porNombre]) — «La que usas para Rappi».
+ * 5. **La última cuenta con esa categoría** ([CuentasDeCadaUso.porCategoria]) — «La que usas para
+ *    Mercado».
+ * 6. **La última cuenta usada** y 7. **la más usada**, como antes, solo si lo de arriba no dijo nada.
+ * 8. La primera de la lista.
+ *
+ * Todo vale **solo si la cuenta está en [cuentas]** (las que esa pestaña ofrece): una tarjeta
+ * recordada no aparece como destino de un ingreso.
+ */
+fun resolverCuentaDelMovimiento(
+    cuentas: List<Account>,
+    tipo: TransactionType,
+    categoria: String,
+    nombre: String,
+    usos: CuentasDeCadaUso = CuentasDeCadaUso(),
+    contexto: String? = null,
+    modoPago: Boolean = false,
+    deLaRegla: String? = null,
+    ultima: String? = null,
+    masUsada: String? = null,
+): CuentaElegida {
+    fun existe(id: String?) = id != null && cuentas.any { it.id == id }
+    if (existe(contexto)) return CuentaElegida(contexto, OrigenCuenta.CONTEXTO)
+    if (modoPago && existe(deLaRegla)) return CuentaElegida(deLaRegla, OrigenCuenta.REGLA)
+
+    val porLoQueSeAnota: CuentaElegida? = run {
+        if (esEnEfectivo(categoria) || esEnEfectivo(nombre)) {
+            cuentas.firstOrNull { it.type == AccountType.CASH }?.let { return@run CuentaElegida(it.id, OrigenCuenta.EFECTIVO) }
+        }
+        val porNombre = claveDeNombreParaCuenta(tipo, nombre)?.let { usos.porNombre[it] }
+        if (existe(porNombre)) return@run CuentaElegida(porNombre, OrigenCuenta.POR_NOMBRE, para = nombre.trim())
+        val porCategoria = claveDeCategoriaParaCuenta(tipo, categoria)?.let { usos.porCategoria[it] }
+        if (existe(porCategoria)) return@run CuentaElegida(porCategoria, OrigenCuenta.POR_CATEGORIA, para = categoria.trim())
+        null
+    }
+    val propuesta = porLoQueSeAnota ?: resolverCuenta(cuentas, ultima = ultima, masUsada = masUsada)
+    // Modo pago sin cuenta en la regla: se pide, con la propuesta de arriba como sugerencia. Con una
+    // sola cuenta no hay nada que preguntar.
+    if (modoPago && cuentas.size > 1) return CuentaElegida(null, OrigenCuenta.POR_ELEGIR, sugerida = propuesta.takeIf { it.id != null })
+    return propuesta
+}
+
+/** «Efectivo», «Retiro en efectivo», «efectivo para el taxi»: la palabra, sin tildes ni mayúsculas. */
+private fun esEnEfectivo(texto: String): Boolean =
+    normalizarParaBuscar(texto).split(Regex("[^a-z0-9]+")).any { it == "efectivo" }
+
+/**
+ * Las cuentas del selector en modo pago, **con la sugerida arriba** (vuelta 43): la hoja no la
+ * eligió, pero la pone primera para que sea un toque.
+ */
+fun conLaSugeridaArriba(cuentas: List<Account>, sugerida: String?): List<Account> {
+    val primera = cuentas.firstOrNull { it.id == sugerida } ?: return cuentas
+    return listOf(primera) + cuentas.filter { it.id != sugerida }
 }
