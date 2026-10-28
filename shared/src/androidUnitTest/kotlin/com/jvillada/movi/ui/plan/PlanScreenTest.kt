@@ -841,7 +841,8 @@ class PlanScreenTest {
             "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
         )[hoy.monthNumber - 1]
         assertEquals(1, contarTag(TAG_LINEA_DEL_PERIODO_DE_PLAN))
-        assertTrue(hay("Del 1 de $mes al ", substring = true), "«Del 1 de $mes al …»")
+        // El mes una vez: «Del 1 al 31 de octubre».
+        assertTrue(hay("Del 1 al ", substring = true) && hay(" de $mes", substring = true), "«Del 1 al … de $mes»")
     }
 }
 

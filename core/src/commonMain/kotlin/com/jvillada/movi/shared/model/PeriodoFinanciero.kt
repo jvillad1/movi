@@ -458,7 +458,7 @@ fun rangoLegibleDe(periodo: PeriodoFinanciero, settings: PeriodSettings): String
 }
 
 /**
- * «Del 1 de octubre al 31 de octubre» — el rango de un período **siempre**, también con el mes de
+ * «Del 1 al 31 de octubre» — el rango de un período **siempre**, también con el mes de
  * calendario (corte 1). Lo pide Pagos (vuelta 40): la opción 3 escribe el período debajo del
  * título, y sin él la pantalla no decía de qué fechas son las facturas. [rangoLegibleDe] sigue
  * callándose con corte 1 donde el mes ya está escrito (el selector de Actividad).
@@ -469,8 +469,19 @@ fun rangoDelPeriodo(periodo: PeriodoFinanciero, settings: PeriodSettings): Strin
     val inicio = Instant.fromEpochMilliseconds(v.first).toLocalDateTime(zona).date
     // El último día incluido es el anterior al arranque del siguiente.
     val ultimo = Instant.fromEpochMilliseconds(v.last).toLocalDateTime(zona).date
-    return "Del ${diaLegible(inicio)} al ${diaLegible(ultimo)}"
+    return rangoEntre(inicio, ultimo)
 }
+
+/**
+ * «Del 25 de octubre al 24 de noviembre»; dentro del mismo mes, el mes una vez: «Del 1 al 31 de
+ * octubre» (revisión de la vuelta 40: «Del 1 de octubre al 31 de octubre» lo repetía). Pura.
+ */
+fun rangoEntre(inicio: LocalDate, ultimo: LocalDate): String =
+    if (inicio.year == ultimo.year && inicio.monthNumber == ultimo.monthNumber) {
+        "Del ${inicio.dayOfMonth} al ${diaLegible(ultimo)}"
+    } else {
+        "Del ${diaLegible(inicio)} al ${diaLegible(ultimo)}"
+    }
 
 /**
  * «25 de julio»: un día como se dice, sin año. Es la mitad de [rangoLegibleDe], suelta para quien

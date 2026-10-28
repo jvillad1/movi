@@ -2145,14 +2145,17 @@ ajustadas.
 
 1. **El período no salía en Pagos con el usuario demo.** No esperaba un dato ni se escondía al cargar:
    el demo no tiene corte (`period_cutoff_day` nulo = el 1) y `rangoLegibleDe` se calla con el mes de
-   calendario por diseño. Pagos usa ahora `rangoDelPeriodo` (`:core`), que lo dice siempre: «Del 1 de
-   octubre al 31 de octubre». Mientras el perfil viaja, la línea se reserva. Lo cubre `PlanScreenTest`
+   calendario por diseño. Pagos usa ahora `rangoDelPeriodo` (`:core`), que lo dice siempre: «Del 1 al
+   31 de octubre» (dentro del mismo mes, el mes una vez —`rangoEntre`—; cuando cruza, «Del 25 de
+   octubre al 24 de noviembre»). Mientras el perfil viaja, la línea se reserva. Lo cubre `PlanScreenTest`
    con un perfil sin corte.
 2. **«Por confirmar» ya no va llena de amarillo**: es una píldora de estado, en el `tinte` con `aviso`.
    El amarillo lleno queda para la acción principal.
 3. **«Llevas $0 pagados» → «Aún no pagas nada de esto»** (`AUN_NO_PAGAS_NADA`, la frase de la vuelta 28).
 4. **«¿Ya pagaste el de octubre?» dentro de la lista** es un bloque plano en la capa 2, sin sombra, con
    «Sí, fue este» y «No fue este» adentro (fuera de la lista, en una hoja, sigue siendo una propuesta).
+   Los botones de una fila (`AccionesDeLaFila`) van en un `FlowRow`: a 360 dp «No fue este» se cortaba
+   en «No fue», y ahora el que no cabe baja a su renglón (`LosBotonesDeLaPropuestaCabenTest`).
 5. **«Tus recordatorios no llegan» salió de la lista**: es una `Fila` compacta en tono de aviso, con
    «Ahora no», en su propia superficie entre la tarjeta amarilla y «Tus facturas del período».
 6. **La pastilla de vencimiento va en su renglón**, a todo el ancho desde el texto: al lado de «Anotar
