@@ -46,30 +46,25 @@ const val TAG_MARCA_DE_LA_TARJETA: String = "ds-marca-de-la-tarjeta"
 const val FRACCION_DE_TARJETA_DE_CUENTA: Float = 0.82f
 
 /**
- * Los colores de adentro de una tarjeta: los de la marca del banco (su fondo y el texto que pasa AA
- * contra él, de `MarcasConocidas`), o el blanco de una tarjeta y el texto del tema si la cuenta no
- * tiene marca (vuelta 29: era la capa 2; en la opción 3 las tarjetas son blancas sobre el crema). Pura.
- *
- * El texto de apoyo («Ahorros», «Saldo») va en el mismo color que el principal: la tarjeta es de un
- * color fuerte y un gris encima no pasaría el contraste con todas las marcas.
+ * Los colores de adentro de una tarjeta: **los del tema, con o sin marca** (vuelta 29). La tarjeta es
+ * blanca y el color del banco va solo en su avatar ([AvatarDeLaMarca]): el amarillo de Bancolombia
+ * de fondo se confundía con el `#FFC21A` de la marca de Movi, y el morado de Nu pesaba en el
+ * carrusel. Pura; queda como función para que la prueba lo diga.
  */
-fun coloresDeLaTarjetaDeCuenta(marca: Marca?, colores: ColoresDeMovi): ColoresDeMovi {
-    if (marca == null) return colores
-    val texto = Color(marca.texto)
-    return colores.copy(tarjeta = Color(marca.fondo), texto = texto, textoMedio = texto, textoApagado = texto)
-}
+@Suppress("UNUSED_PARAMETER")
+fun coloresDeLaTarjetaDeCuenta(marca: Marca?, colores: ColoresDeMovi): ColoresDeMovi = colores
 
 /**
- * **La tarjeta de una cuenta** del carrusel «Tus cuentas» (camino 1): el color y la marca de su banco,
+ * **La tarjeta de una cuenta** del carrusel «Tus cuentas» (camino 1): blanca, con la marca de su banco en el avatar,
  * el nombre (en hasta dos renglones: nunca «Bancolombia Ah…»), el tipo («Ahorros», «Tarjeta») junto al
  * rótulo del saldo —salvo que el nombre ya lo diga—, y el saldo en [VarianteDeCifra.Grande], que se
  * achica antes que recortarse.
  *
  * - Alto [Medida.altoDeTarjetaDeCuenta], radio [Radio.xl], relleno [Medida.rellenoDeSuperficie], sin
- *   borde: la marca es el color de la superficie.
- * - Con [marca], el círculo de arriba va invertido —el texto de la marca de fondo y su color en la
- *   letra— para que se vea sobre el color del banco. Sin marca, el [icono] del tipo de cuenta en un
- *   [IconoEnCirculo] y la tarjeta en la capa 2.
+ *   borde: **blanca** sobre el crema (vuelta 29; antes era del color del banco).
+ * - Con [marca], el avatar de arriba lleva el color del banco con su letra ([AvatarDeLaMarca]): es el
+ *   único lugar de la tarjeta con el color de la marca. Sin marca, el [icono] del tipo de cuenta en un
+ *   [IconoEnCirculo].
  * - La [Cifra] lleva «Ocultar los saldos» incluido. El signo lo decide quien llama: una deuda se
  *   muestra en positivo con [rotuloDelSaldo] = «Debes».
  * - Toda la tarjeta se toca ([onClick]): abre el detalle de la cuenta.
@@ -113,7 +108,7 @@ fun TarjetaDeCuenta(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(Espacio.s),
             ) {
-                if (marca != null) MarcaInvertida(marca) else IconoEnCirculo(icono, tono = TonoDeIcono.Neutro)
+                if (marca != null) AvatarDeLaMarca(marca) else IconoEnCirculo(icono, tono = TonoDeIcono.Neutro)
                 // Dos renglones: «Bancolombia Ahorros» se lee entero (la revisión de la R1 vio
                 // «Bancolombia Ah…»). El «…» queda solo para un nombre que no entra ni en dos.
                 Text(
@@ -147,13 +142,13 @@ fun TarjetaDeCuenta(
     }
 }
 
-/** El logotipo tipográfico de la marca, invertido para ir encima de su propio color. */
+/** El logotipo tipográfico de la marca en su color, sobre la tarjeta blanca: «B» en el amarillo de Bancolombia. */
 @Composable
-private fun MarcaInvertida(marca: Marca) {
+private fun AvatarDeLaMarca(marca: Marca) {
     Box(
         modifier = Modifier
             .size(Medida.avatar)
-            .background(Color(marca.texto), CircleShape)
+            .background(Color(marca.fondo), CircleShape)
             .semantics { contentDescription = marca.nombre }
             .testTag(TAG_MARCA_DE_LA_TARJETA),
         contentAlignment = Alignment.Center,
@@ -161,7 +156,7 @@ private fun MarcaInvertida(marca: Marca) {
         Text(
             text = marca.corta,
             style = Movi.textos.titulo,
-            color = Color(marca.fondo),
+            color = Color(marca.texto),
             maxLines = 1,
             softWrap = false,
         )

@@ -402,7 +402,7 @@ private fun FilaDePeriodo(resumen: ResumenDePeriodo, elegida: Boolean, onClick: 
     // trazo de `marca` —la marca es acción y foco— y se anuncia como seleccionada.
     val marcaDeElegida = if (elegida) {
         Modifier
-            .border(Medida.trazoDeCarga, Movi.colores.enlace, RoundedCornerShape(Radio.l))
+            .border(Medida.trazoDeCarga, Movi.colores.texto, RoundedCornerShape(Radio.l))
             .semantics { selected = true }
     } else {
         Modifier

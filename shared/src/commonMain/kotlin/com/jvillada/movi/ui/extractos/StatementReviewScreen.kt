@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.extractos
 
+import com.jvillada.movi.ui.components.ds.coloresDeLoElegido
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -655,13 +656,14 @@ private fun FieldCell(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val borderColor = if (active) Movi.colores.enlace else Color.Transparent
+    val borderColor = Color.Transparent
     // Sin elegir, en la capa 2: la celda va sobre la `Superficie` (capa 1) y tiene que verse tocable.
-    val bgColor = if (active) Movi.colores.lavado(Movi.colores.enlace) else Movi.colores.capa2
+    // Vuelta 29: la elegida en tinta con la letra blanca, el «seleccionado» de toda la app.
+    val bgColor = if (active) coloresDeLoElegido(Movi.colores).first else Movi.colores.capa3
     Text(
         value,
         style = Movi.textos.apoyo,
-        color = if (active) Movi.colores.texto else Movi.colores.textoMedio,
+        color = if (active) coloresDeLoElegido(Movi.colores).second else Movi.colores.textoMedio,
         modifier = modifier
             .clip(RoundedCornerShape(Radio.s))
             .background(bgColor)

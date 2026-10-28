@@ -158,7 +158,7 @@ fun Cifra(
     color: Color = Movi.colores.texto,
 ) {
     Text(
-        text = text,
+        text = com.jvillada.movi.ui.components.ds.conElMenosPegado(text, Movi.textos.menosPegado),
         style = estilo.copy(
             letterSpacing = (-0.3).sp,
             fontFeatureSettings = "tnum",
@@ -283,7 +283,8 @@ fun formatMoneyAbreviadaSinOcultar(amount: Long): String {
 
 /**
  * **La cifra protagonista de una pantalla**: «Tu plata» en el Inicio, «Deuda total» en Créditos.
- * Una por pantalla, o ninguna. Va en `Movi.textos.cifra`, que es Martian Mono a 42 sp.
+ * Una por pantalla, o ninguna. Va en `Movi.textos.cifra` (Figtree 40/800 a la vista, tabular), con el
+ * menos pegado al «$» (`conElMenosPegado`).
  *
  * **Un renglón siempre, achicándose si hace falta.** Martian Mono es ancha: a 42 sp «$8.550.000» no
  * entraba en un teléfono de 390 dp y se partía en «$8.550.00» con un «0» solo abajo. Visto en la
@@ -296,7 +297,7 @@ fun formatMoneyAbreviadaSinOcultar(amount: Long): String {
 fun CifraProtagonista(text: String, color: Color, modifier: Modifier = Modifier) {
     val estilo = Movi.textos.cifra
     BasicText(
-        text = text,
+        text = com.jvillada.movi.ui.components.ds.conElMenosPegado(text, Movi.textos.menosPegado),
         // Es una héroe aunque llegue escrita: cuenta para «una sola por pantalla» (ver `VarianteDeCifraKey`).
         modifier = modifier.semantics { varianteDeCifra = VarianteDeCifra.Heroe },
         style = estilo.copy(color = color),

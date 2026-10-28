@@ -48,7 +48,7 @@ Las reglas que se repiten tienen nombre propio (`Medida`), y se usa el nombre, n
 | `Medida.altoDeFiltro` | 44 — un filtro (`PildoraDeFiltro`), el de la opción 3 |
 | `Medida.anchoDePildoraDePestana` × `altoDePildoraDePestana` | 56 × 30 — la píldora amarilla de la pestaña activa |
 | `Medida.altoDeBarraDePestanas` | 76 (era 64; vuelta 38) — la barra de 4 pestañas del teléfono |
-| `Medida.altoDeEncabezado` | 64 (era 56; vuelta 29, por el título de 28) |
+| `Medida.altoDeEncabezado` | 56 |
 | `Medida.avatar` / `avatarGrande` / `accionRapida` | 40 / 48 / 56 |
 | `Medida.altoDeMarcaDeBarra` | 12 — la marca sobre una `BarraDeProgreso` («la mitad» en Espacios) |
 | `Medida.altoDeTarjetaDeCuenta` | 128 — la tarjeta de una cuenta en el carrusel (ola R1) |
@@ -127,15 +127,21 @@ lo que despega lo destacado es la sombra); la capa 2 ≥ 1,05 de la 1 y la 3 ≥
 | `texto` / `textoMedio` / `textoApagado` | `#1F1B16` / `#5C554C` / `#6E665B` | la tinta, el apoyo de la maqueta y el más tenue que pasa sobre la capa 3 (4,84:1) |
 | `entra` | `#147849` | entró plata (sobre su lavado ≈ `#E3F1E8`) |
 | `sale` | `#B3261E` | **solo alertas**: lo que se pasó o se debe, «Borrar mi cuenta» |
-| `capital` / `entreCuentas` / `neutro` | `#8A5A18` / `#1F5B96` / `#A39A8C` | sin cambio de papel |
+| `entreCuentas` | `#556372` | un gris azulado: el `#1F5B96` de antes se leía como el enlace (1,07:1 entre los dos) |
+| `capital` / `neutro` | `#8A5A18` / `#A39A8C` | sin cambio de papel |
 
 - **La marca es un relleno, nunca una letra.** El amarillo da 1,6:1 sobre el blanco: no se lee como
   texto, ni como ícono, ni como borde. Lo que hasta la vuelta 28 era «texto en la marca» (un enlace, «Ver
   todo», un check de «elegido», el foco de un campo, la línea de una gráfica) pasó a `enlace`; lo que era
   `lavado(marca)` como fondo de algo elegido, a `lavado(enlace)`. La prueba de contraste lo sostiene: la
   marca ya no está en la lista de textos y hay una prueba de que el amarillo no se lee como letra.
-- **Lo elegido va en tinta**: el filtro elegido (`PildoraDeFiltro`) es la tinta con la letra blanca; la
-  casilla marcada, tinta con el visto blanco; la barra de un avance propio (`TonoDeBarra.Marca`), tinta.
+- **Lo elegido va en tinta, siempre**: el filtro elegido, el segmentado (`SelectorSegmentado`, Gasto ·
+  Ingreso · Traspaso · Cuota en Agregar, Pagos · Presupuestos en Plan), la casilla marcada, el interruptor
+  encendido, el día o la moneda elegidos en una hoja: la tinta de fondo con la letra blanca
+  (`coloresDeLoElegido`). Una fila elegida de una lista lleva el lavado de la tinta (`fondoDeLaFilaElegida`)
+  y un «elegido» con visto, el visto en tinta. **El amarillo lleno es solo de la acción principal** y el
+  azul, solo de un enlace. El `primary` de Material también es la tinta. La barra de un avance propio
+  (`TonoDeBarra.Marca`) va en tinta.
 - **Los colores de estado son solo para estado**: `entra`, `sale` (alerta), `aviso` (por vencer, por
   confirmar), `entreCuentas`. Una píldora en aviso dice «vence», no «esto es importante».
 - **Un gasto no es una alarma**: va en el color del texto. `sale` es para lo que se pasó o se debe.
@@ -143,8 +149,9 @@ lo que despega lo destacado es la sombra); la capa 2 ≥ 1,05 de la 1 y la 3 ≥
   el verbo.
 - **El lavado** de un color es `Movi.colores.lavado(color)` (10 %), nunca un `copy(alpha = …)` a mano. La
   marca y el aviso no se lavan con alfa: su lavado es el `tinte`.
-- **Los colores de marca de los bancos no cambian** (`MarcasConocidas`): una `TarjetaDeCuenta` sigue con el
-  color de su banco.
+- **Los colores de marca de los bancos van solo en su avatar** (`MarcasConocidas`): la `TarjetaDeCuenta` es
+  blanca, con o sin marca, y el color del banco va en el círculo con su letra. El amarillo de Bancolombia
+  de fondo se confundía con el de la marca de Movi, y el morado de Nu pesaba en el carrusel.
 
 Los tres pares que la prueba pidió cambiar de la maqueta: **`entra` `#147849`** (la maqueta dice
 `#14794A`, que daba 4,47:1 sobre su lavado encima de la capa 2; un paso más oscuro da 4,53), **`sale`
@@ -164,17 +171,38 @@ en `composeResources/font/figtree_*.ttf`, licencia OFL en `docs/licencias/OFL-Fi
 (`fontFeatureSettings = "tnum"`): una columna de montos alinea sin la monoespaciada. Space Grotesk y
 Martian Mono se borraron. Ningún `fontSize` suelto (lo vigila `LosTamanosSueltosSoloBajanTest`).
 
-| estilo | tamaño / peso | maqueta |
-|---|---|---|
-| `cifra` | 40 / 800, tracking −1,2, tabular | la cifra héroe |
-| `cifraDeTarjeta` | 24 / 800, tabular | la cifra de una tarjeta de cuenta o un widget |
-| `portada` | 32 / 800 | «Movi» en la entrada, la bienvenida de la guía |
-| `titular` | 28 / 800, tracking −0,6 | el título de una pantalla |
-| `titulo` | 16 / 700 | el título de una sección o de una tarjeta |
-| `cuerpo` | 15 / 600 | el título de una fila, un filtro sin elegir, un enlace |
-| `monto` | 15 / 700, tabular | el monto de una fila |
-| `apoyo` | 12,5 / 400 | el subtítulo |
-| `rotulo` | 12 / 600, espaciado | un rótulo chico; la base de las pestañas |
+**Los sp son la maqueta ÷ 1,12.** `App()` agranda toda la letra ×1,12, así que un estilo escrito con los
+px de la maqueta se veía 12 % más grande: la primera versión de la vuelta partía «Bancolombia Ahorros» y
+«Mercado del sábado» en dos renglones y cortaba «Arrie…». Cada estilo es lo que, ×1,12, da la maqueta
+(lo fija `TipografiaTest`):
+
+| estilo | sp | se ve como | maqueta |
+|---|---|---|---|
+| `cifra` | 36 / 800, tracking −1,1, tabular | 40,3 | la cifra héroe (40/800) |
+| `cifraDeTarjeta` | 21,5 / 800, tabular | 24 | la cifra de una tarjeta de cuenta o un widget |
+| `portada` | 28,5 / 800 | 32 | «Movi» en la entrada, la bienvenida de la guía |
+| `titular` | 25 / 800, interlineado 30 | 28 | el título de una **pestaña** (el encabezado con el avatar) |
+| `titularDePantalla` | 19,5 / 800 | 22 | el título de una pantalla con flecha («Personas» en la maqueta) |
+| `saludo` | 15 / 700 | 17 | «Hola, Juan» en Hoy y el nombre en la tarjeta del perfil, con la fecha o el correo debajo |
+| `titulo` | 14,5 / 700 | 16 | el título de una sección o de una tarjeta |
+| `cuerpo` | 13,5 / 600 | 15 | el título de una fila, un filtro sin elegir, un enlace |
+| `monto` | 13,5 / 700, tabular | 15 | el monto de una fila |
+| `apoyo` | 11 / 400 | 12,3 | el subtítulo |
+| `rotulo` | 12 / 600 | 13,4 | un rótulo chico; la base de las pestañas (sin tocar: la barra la rehace la vuelta 38) |
+
+El `Encabezado` elige el suyo con `TamanoDelTitulo`: `Pestana` con el avatar, `Pantalla` con la flecha,
+`Saludo` en Hoy. Con el título de pestaña a interlineado 30, el encabezado sigue en 56.
+
+**Un renglón mide su interlineado** (`RENGLON_ENTERO`: `Trim.None`, centrado), en todos los estilos menos
+`cifra`. Un texto de N renglones mide N × `lineHeight`, que es lo que reservan los esqueletos
+(`LineaEsqueleto`, `altoDeUnRenglon`): con el recorte de siempre, lo cargado y su esqueleto diferían de a
+unos dp por renglón y lo de abajo saltaba al llegar el dato. La `cifra` (36 sp) se queda con el recorte: su
+letra es más alta que su interlineado y Agregar, anclada abajo, no tiene ese lugar.
+
+**El menos va pegado al «$».** El `−` (U+2212) de Figtree existe y es del ancho de un dígito con el trazo
+centrado, así que «−$85.000» se leía «- $85.000». `Cifra`, `CifraProtagonista` y la `Cifra` de texto le ponen
+`Movi.textos.menosPegado` (−0,12 em) solo al menos (`conElMenosPegado`); el texto no cambia
+(`ElMenosVaPegadoTest`, y `LoQueSeVeEnteroTest` lo mide).
 
 **Los pesos con nombre** (vuelta de diseño 21). Una pantalla no escribe `fontWeight =`: elige un estilo.
 Son los de arriba con otro peso de Figtree, y se derivan de su base en el cuerpo de `TextosDeMovi`, así
@@ -185,9 +213,9 @@ llevan su familia y nunca se separan de ella en tamaño ni interlineado (lo fija
 | `apoyoMedio` | `apoyo` en 600 | el mini-título: el rótulo de un dato arriba de su valor, el texto de una píldora, el rótulo de una acción rápida |
 | `tituloMedio` | `titulo` en 600 | un nombre que encabeza sin gritar: una cuenta, una categoría, un tercero arriba de su detalle; el título de `EncabezadoDeHoja` |
 | `tituloRegular` | `titulo` en 400 | lo que acompaña a un título en su renglón: el conteo de una `Seccion` |
-| `cuerpoFuerte` | `cuerpo` en 700 | lo elegido y lo que se toca: el texto de un `Boton` (15/700 en la maqueta), el filtro elegido |
+| `cuerpoFuerte` | `cuerpo` en 700 | lo elegido y lo que se toca: el texto de un `Boton` (15/700 a la vista), el filtro elegido |
 | `cuerpoRegular` | `cuerpo` en 400 | un párrafo (la respuesta de Movi AI, una explicación larga) |
-| `pestana` / `pestanaActiva` | 12 / 500 y 12 / 700 | el rótulo de una pestaña |
+| `pestana` / `pestanaActiva` | `rotulo` en 500 y en 700 | el rótulo de una pestaña |
 | `enfasis` | `SpanStyle` en 700 | el énfasis dentro de una frase (`withStyle(Movi.textos.enfasis)`) |
 
 **iOS sigue con la letra del sistema** (`laPlataformaTraeLasFuentes = false` en `LetraPropia.ios.kt`),
@@ -422,7 +450,7 @@ ParDeWidgets(
 )
 ```
 
-**`Encabezado`** — el de toda pantalla: 64 de alto (vuelta 29; era 56), 16 de margen, título (y subtítulo), flecha o
+**`Encabezado`** — el de toda pantalla: 56 de alto, 16 de margen, título (y subtítulo), flecha o
 avatar, y a la derecha `acciones` (`BotonDeIcono`, una `Pildora` como «Beta», «Actualizando…») y
 `accion`. Sin línea debajo. `MinScreenHeader` delega acá (con `action` y `accion`).
 
@@ -1795,7 +1823,7 @@ y los componentes de `ds/`. La navegación de 4 pestañas y las 8 acciones de Ho
 - **Letra** (§5): Figtree 400–800, también las cifras, tabulares.
 - **Formas** (§2): `Radio.l` 18, `Radio.xl` 22, botones en píldora, la fila de dos renglones a 58, el
   filtro a 44 (36, `AltoDeFiltro.Compacto`, en los chips de Agregar: la hoja está anclada abajo y con 44
-  el pie se salía a 360 × 740), el encabezado a 64 (el título de 28 no dejaba aire abajo en 56).
+  el pie se salía a 360 × 740). El encabezado sigue en 56.
 - **Sombra** (§3): solo en la superficie destacada y la propuesta.
 - **Componentes**: `Boton`, `Pildora`, `PildoraDeFiltro`, `PildoraDeAccion`, `AccionRapida`, `Fila`
   (4 arriba y abajo), `IconoEnCirculo`/`AvatarDePersona` (la marca: círculo amarillo con la tinta),
@@ -1814,6 +1842,30 @@ y los componentes de `ds/`. La navegación de 4 pestañas y las 8 acciones de Ho
 - **Lo que queda para las vueltas siguientes**: el héroe de Hoy todavía no es una tarjeta (cuando lo
   sea, `Superficie(destacada = true)`), la franja amarilla y los botones `marcaSuave` del encabezado,
   las 4 pestañas y las 8 acciones (vuelta 30).
+
+**La revisión de la vuelta 29 (a 390, 360 y 1280 contra las maquetas p3), y lo que cambió:**
+
+1. **Un solo «seleccionado»: la tinta.** El segmentado pasó del amarillo a la tinta con la letra blanca;
+   los selectores armados en pantallas (el día de un recurrente, la moneda de una tarjeta, la clase de un
+   bien, el día del período y del aviso, la acción abierta de un movimiento, la celda del extracto) que
+   habían quedado en azul sobre su lavado usan `coloresDeLoElegido`, y las filas elegidas
+   `fondoDeLaFilaElegida`. Los vistos y los bordes de lo elegido, en tinta. El interruptor encendido y el
+   `primary` de Material, en tinta.
+2. **`TarjetaDeCuenta` blanca**: el color del banco solo en el avatar.
+3. **Títulos**: «Hola, {nombre}» y el nombre del perfil en `saludo`; el título de 28 solo en las pestañas
+   y uno de 22 con la flecha; el encabezado volvió a 56.
+4. **Lo que se partía o se cortaba**: los estilos pasaron a la maqueta ÷ 1,12 (§5). Además, el widget «Falta
+   por pagar» lleva el nombre de cada pago en su renglón y el monto debajo; la fila de acciones de un
+   movimiento achica su rótulo hasta el 85 % antes de recortarse; «Tus recordatorios no llegan» (más
+   corto) lleva «Ahora no» debajo, con su sangría, y el subtítulo en hasta dos renglones. Lo mide
+   `LoQueSeVeEnteroTest` a 390 y 360. «Bancolombia Ahorros» va en un renglón a 390; a 360, al lado de un
+   saldo de ocho cifras, en dos, entero. Los rótulos de íconos de categoría a 364 dp
+   (`LosRotulosDeIconosNoSePartenTest`) siguen verdes con la letra nueva.
+5. **La acción del encabezado de una pestaña va siempre en su botón redondo** (blanco con borde, el
+   ícono en tinta, su nombre para el lector de pantalla): «+» en Patrimonio, Espacios y Presupuestos por
+   igual. Con flecha, la regla de la vuelta 8 de siempre (con texto si cabe).
+6. **El menos pegado al «$»** (§5).
+7. **`entreCuentas` gris azulado** `#556372` (§4); `ContrasteDeLosTokensTest` pide que se despegue del enlace.
 
 ## 42. Vuelta 38: la navegación de la opción 3 — Inicio · Actividad · Pagos · Tú
 

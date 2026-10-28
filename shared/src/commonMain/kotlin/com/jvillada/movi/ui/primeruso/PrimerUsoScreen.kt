@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.primeruso
 
+import com.jvillada.movi.ui.components.ds.coloresDeLoElegido
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -562,7 +563,7 @@ private fun DiaParaElegir(dia: Int, elegido: Boolean, habilitado: Boolean, onCli
         modifier = Modifier
             .size(Medida.avatar)
             .clip(CircleShape)
-            .background(if (elegido) Movi.colores.marca else Movi.colores.capa1)
+            .background(if (elegido) coloresDeLoElegido(Movi.colores).first else Movi.colores.capa1)
             .clickable(enabled = habilitado, role = Role.RadioButton, onClick = onClick)
             .semantics { selected = elegido },
         contentAlignment = Alignment.Center,
@@ -570,7 +571,7 @@ private fun DiaParaElegir(dia: Int, elegido: Boolean, habilitado: Boolean, onCli
         Text(
             text = dia.toString(),
             style = if (elegido) Movi.textos.cuerpoFuerte else Movi.textos.cuerpoRegular,
-            color = if (elegido) Movi.colores.sobreMarca else Movi.colores.texto,
+            color = if (elegido) coloresDeLoElegido(Movi.colores).second else Movi.colores.texto,
             textAlign = TextAlign.Center,
             maxLines = 1,
             // A lo ancho del círculo: centrado por el párrafo y no por la caja, que a la letra

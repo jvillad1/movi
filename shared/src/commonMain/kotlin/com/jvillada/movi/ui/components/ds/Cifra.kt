@@ -1,5 +1,9 @@
 package com.jvillada.movi.ui.components.ds
 
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.runtime.Composable
@@ -203,6 +207,25 @@ fun textoDeLaCifra(
     }
 }
 
+/** El menos de una cifra: U+2212, no el guion. Figtree lo trae (`figtree_*.ttf`, glifo `minus`). */
+const val SIGNO_MENOS: Char = '\u2212'
+
+/**
+ * **El menos pegado al «$»** (vuelta 29): si [texto] empieza con [SIGNO_MENOS], ese carácter lleva
+ * [menos] (`Movi.textos.menosPegado`, que le quita el aire de su derecha). El `−` de Figtree es del
+ * ancho de un dígito con el trazo centrado, y sin esto «−$85.000» se leía «- $85.000». El texto no
+ * cambia (las pruebas que buscan «−$27.500» lo siguen encontrando). Pura.
+ */
+fun conElMenosPegado(texto: String, menos: SpanStyle): AnnotatedString =
+    if (texto.firstOrNull() == SIGNO_MENOS) {
+        buildAnnotatedString {
+            withStyle(menos) { append(SIGNO_MENOS) }
+            append(texto.substring(1))
+        }
+    } else {
+        AnnotatedString(texto)
+    }
+
 /**
  * **Una cifra de plata.** El signo, el color y «Ocultar los saldos» vienen incluidos: la pantalla
  * pasa el monto con su signo y dice qué papel juega.
@@ -229,7 +252,7 @@ fun Cifra(
     moneda: String = "COP",
     forma: FormaDeCifra = FormaDeCifra.Entera,
 ) {
-    val texto = textoDeLaCifra(monto, moneda, tono, LocalSaldosOcultos.current, forma)
+    val texto = conElMenosPegado(textoDeLaCifra(monto, moneda, tono, LocalSaldosOcultos.current, forma), Movi.textos.menosPegado)
     val estilo = estiloDeLaCifra(variante, Movi.textos).copy(color = colorDeLaCifra(tono, Movi.colores))
     val conTag = modifier.testTag(TAG_CIFRA).semantics {
         varianteDeCifra = variante
