@@ -343,14 +343,20 @@ class EspaciosEnPantallaTest {
     }
 
     @Test
-    fun `la fila de un movimiento repartido dice Tu parte bajo el monto entero`() {
+    fun `la fila de un movimiento repartido dice tu parte y debajo el monto entero`() {
+        // Vuelta de diseño 30: la cifra principal es tu parte; el total va debajo, con quién.
         val repartido = mercado.copy(parteAjena = 120_000L, espacioId = casa.id)
         composeRule.setContent {
-            MoviTheme { MovementSingleRow(tx = repartido, accountNames = mapOf(bancolombia.id to "Bancolombia"), onClick = {}) }
+            MoviTheme {
+                MovementSingleRow(
+                    tx = repartido, accountNames = mapOf(bancolombia.id to "Bancolombia"),
+                    espacios = mapOf(casa.id to casa), onClick = {},
+                )
+            }
         }
         composeRule.onNodeWithTag(TAG_TU_PARTE, useUnmergedTree = true).assertIsDisplayed()
-        esperarTexto("Tu parte \$120.000")
-        esperarTexto("240.000")
+        esperarTexto("−\$120.000")
+        esperarTexto("de \$240.000 · ")
     }
 
     @Test

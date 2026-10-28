@@ -388,7 +388,12 @@ private fun FilaDeResultado(
                 1 -> "1 vez este período"
                 else -> "${resultado.enElPeriodo} veces este período"
             }
-            veces to resultado.totalDelPeriodo.takeIf { it > 0 }?.let { total -> @Composable { Cifra(total, moneda = resultado.moneda) } }
+            // Vuelta de diseño 30: con el signo y el tono del sistema, como los movimientos de arriba
+            // («−$40.100» lo gastado en Uber); antes iba sin signo.
+            val tono = tonoDelEvento(resultado.ejemplo)
+            veces to resultado.totalDelPeriodo.takeIf { it > 0 }?.let { total ->
+                @Composable { CifraDelMovimiento(total, resultado.moneda, tono) }
+            }
         }
         is ResultadoDeBusqueda.Persona -> {
             val d = resultado.destinoConocido

@@ -67,6 +67,7 @@ import com.jvillada.movi.ui.hayAdondeVolver
 import com.jvillada.movi.ui.NavStack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.destinoResaltado
+import com.jvillada.movi.ui.destinoResaltadoDeLaPila
 import com.jvillada.movi.ui.muestraLaNavegacion
 import com.jvillada.movi.ui.opensAsOverlay
 import com.jvillada.movi.ui.screenForTab
@@ -362,7 +363,8 @@ fun App() {
                 modifier = Modifier.fillMaxSize().background(Movi.colores.fondo),
             ) {
                 // Con Movi AI, que en el rail tiene su lugar propio (ver [destinoResaltado]).
-                val activeTab = destinoResaltado(currentScreen)
+                // Buscar marca la pestaña de donde se abrió (ver [destinoResaltadoDeLaPila]).
+                val activeTab = destinoResaltadoDeLaPila(backStack.toList())
                 // Ola C: Ajustes y lo que cuelga de ahí no marcan pestaña pero sí llevan la
                 // barra — ver [muestraLaNavegacion].
                 val conNavegacion = muestraLaNavegacion(currentScreen)

@@ -6,6 +6,9 @@ import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.shared.model.ChatMessage
 import com.jvillada.movi.shared.model.ChatRole
 import com.jvillada.movi.shared.model.ConversacionDelAsistente
+import com.jvillada.movi.shared.model.PreguntaSugerida
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.insert
@@ -75,7 +78,28 @@ internal data class TurnoGuardado(
     val pregunta: String,
     val respuesta: String,
     val teniaImagen: Boolean,
+    /** Cuándo se contestó (`ai_turns.created_at`). */
+    val creadoEn: Long = 0L,
+    /** El id de la pregunta sugerida que contestó sin modelo, o `null` (ver [preguntaSugeridaDelTurno]). */
+    val preguntaSugerida: String? = null,
 )
+
+private val jsonDeLasConsultas = Json { ignoreUnknownKeys = true }
+
+/**
+ * **El id de la pregunta sugerida que contestó un turno sin modelo**, leído de lo que ese turno dejó
+ * anotado (`modelo` = [MODELO_SIN_IA] y la consulta [CONSULTA_DE_LA_PREGUNTA_SUGERIDA] en
+ * `consultas`). Vuelve en el globo recargado para que «Preguntar de nuevo» la mande con su id y la
+ * siga contestando Movi sin la IA: se reconoce por el id, nunca por el texto. Lo demás, `null`.
+ */
+internal fun preguntaSugeridaDelTurno(modelo: String, consultas: String): String? {
+    if (modelo != MODELO_SIN_IA) return null
+    val guardadas = runCatching {
+        jsonDeLasConsultas.decodeFromString(ListSerializer(ConsultaGuardada.serializer()), consultas)
+    }.getOrNull() ?: return null
+    return guardadas.firstOrNull { it.herramienta == CONSULTA_DE_LA_PREGUNTA_SUGERIDA }?.argumentos?.get("id")
+        ?.takeIf { PreguntaSugerida.deId(it) != null }
+}
 
 /** Los últimos [TURNOS_QUE_SE_VEN] turnos de la conversación en curso de [uid], del más viejo al más nuevo. */
 internal suspend fun turnosDeLaConversacion(uid: String): List<TurnoGuardado> {
@@ -91,6 +115,8 @@ internal suspend fun turnosDeLaConversacion(uid: String): List<TurnoGuardado> {
                     pregunta = it[AiTurns.pregunta],
                     respuesta = it[AiTurns.respuesta],
                     teniaImagen = it[AiTurns.imagen],
+                    creadoEn = it[AiTurns.creadoEn],
+                    preguntaSugerida = preguntaSugeridaDelTurno(it[AiTurns.modelo], it[AiTurns.consultas]),
                 )
             }
             .reversed()
@@ -108,9 +134,17 @@ suspend fun conversacionGuardada(uid: String): ConversacionDelAsistente {
     val propuestas = propuestasDeLosTurnos(uid, turnos.map { it.id })
     return ConversacionDelAsistente(
         mensajes = turnos.flatMap { turno ->
+            // Vuelta de diseño 30: con su fecha (la del turno, en los dos globos), para que el chat
+            // diga de qué día es cada respuesta; y la pregunta sugerida con su id.
             listOf(
-                ChatMessage(ChatRole.USER, turno.pregunta, teniaImagen = turno.teniaImagen),
-                ChatMessage(ChatRole.ASSISTANT, turno.respuesta, propuestas = propuestas[turno.id].orEmpty()),
+                ChatMessage(
+                    ChatRole.USER, turno.pregunta, teniaImagen = turno.teniaImagen,
+                    preguntaSugerida = turno.preguntaSugerida, enviadoEn = turno.creadoEn,
+                ),
+                ChatMessage(
+                    ChatRole.ASSISTANT, turno.respuesta, propuestas = propuestas[turno.id].orEmpty(),
+                    enviadoEn = turno.creadoEn,
+                ),
             )
         },
     )

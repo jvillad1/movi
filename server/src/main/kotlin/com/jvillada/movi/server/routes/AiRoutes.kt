@@ -50,6 +50,8 @@ import com.jvillada.movi.server.ai.guardarLaConversacion
 import io.ktor.server.application.log
 import com.jvillada.movi.server.ai.laPreguntaPideCriterio
 import com.jvillada.movi.server.ai.avisarQueLaIaNoEstaDisponible
+import com.jvillada.movi.server.ai.EstadoDeLaIa
+import com.jvillada.movi.shared.model.IA_NO_DISPONIBLE
 import com.jvillada.movi.server.ai.fallaDeLaIa
 import com.jvillada.movi.server.ai.MODELO_DE_RESPALDO
 import com.jvillada.movi.server.ai.MODELO_DE_TODOS_LOS_DIAS
@@ -264,7 +266,10 @@ internal fun Route.aiRoutes(fabricaDePrueba: FabricaDeModelos?) {
     // **La conversación en curso** (Ola 3): lo que la pantalla pinta al volver. Solo del dueño —el
     // `uid` sale del token— y sin fotos: `ai_turns` nunca las guardó.
     get("/api/ai/conversacion") {
-        call.respond(conversacionGuardada(call.userId()))
+        // Vuelta de diseño 30: y si la IA contesta preguntas libres ahora, para que el chat no
+        // sugiera una que va a dar el aviso (ver [EstadoDeLaIa]).
+        val hayClave = fabricaDePrueba != null || anthropicClient != null
+        call.respond(conversacionGuardada(call.userId()).copy(iaDisponible = EstadoDeLaIa.disponible(hayClave)))
     }
 
     // «Nueva conversación»: no borra nada, mueve el comienzo de la en curso a ahora.
@@ -345,6 +350,9 @@ internal fun Route.aiRoutes(fabricaDePrueba: FabricaDeModelos?) {
                 HttpStatusCode.ServiceUnavailable,
                 AiChatResponse(
                     text = "ANTHROPIC_API_KEY no está configurada en el server. Configúrala y reinicia: export ANTHROPIC_API_KEY=sk-ant-... && ./gradlew :server:run",
+                    // Vuelta de diseño 30: con el código, la app dice su frase («sí funcionan estas
+                    // tres») en vez de la instrucción para quien corre el server.
+                    codigo = IA_NO_DISPONIBLE,
                 ),
             )
             return@post
@@ -459,7 +467,10 @@ internal fun Route.aiRoutes(fabricaDePrueba: FabricaDeModelos?) {
                 call.application.log.warn("movi-ai: no pude guardar las propuestas de $uid")
             }
         }
-        reply.onSuccess { call.respond(AiChatResponse(text = stripEmojis(it.texto), propuestas = propuestas.propuestas)) }
+        reply.onSuccess {
+            EstadoDeLaIa.anotarRespuesta()
+            call.respond(AiChatResponse(text = stripEmojis(it.texto), propuestas = propuestas.propuestas))
+        }
             .onFailure {
                 // **La cuenta de Anthropic, no la pregunta.** Sin saldo, con la clave rechazada o la
                 // API saturada, la burbuja decía «Error llamando a Claude: 400 …credit balance…»:

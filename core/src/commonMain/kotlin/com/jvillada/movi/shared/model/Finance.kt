@@ -1049,6 +1049,15 @@ data class ChatMessage(
      * modelo. Un APK viejo no lo manda; un server viejo lo ignora.
      */
     val preguntaSugerida: String? = null,
+    /**
+     * **Cuándo se dijo**, en epoch-ms (vuelta de diseño 30). Lo pone el server al devolver una
+     * conversación guardada (`ai_turns.created_at` del turno) y la app al pintar lo que se acaba de
+     * mandar. Con él el chat separa los días («Hoy», «Ayer», «2 sep») y atenúa las respuestas de un
+     * día anterior: «Te quedan $10.869.550» de ayer no es lo que te queda hoy. `null` = no se sabe
+     * (un server viejo, o lo que manda un APK viejo): se pinta como siempre, sin separador. El server
+     * no lo lee de lo que le mandan.
+     */
+    val enviadoEn: Long? = null,
 )
 
 @Serializable

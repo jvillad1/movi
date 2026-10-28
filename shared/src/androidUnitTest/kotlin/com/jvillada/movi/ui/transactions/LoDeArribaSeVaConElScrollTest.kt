@@ -48,6 +48,9 @@ import org.robolectric.annotation.Config
  * arriba de la lista: se comía un tercio de la pantalla para siempre y, al hacer scroll, las filas
  * se asomaban por sus esquinas redondeadas al pasar por debajo. Ahora es el primer ítem de la lista:
  * fijos quedan solo el encabezado, el selector del período y los chips.
+ *
+ * **Vuelta de diseño 30: la franja Entró · Salió · Neto también** (decisión del coordinador). Va en la
+ * lista, primero, y la tarjeta después; las dos se van con el scroll.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "w411dp-h731dp-xhdpi")
@@ -110,6 +113,9 @@ class LoDeArribaSeVaConElScrollTest {
     private fun tarjetas(): SemanticsNodeInteractionCollection =
         composeRule.onAllNodes(hasTestTag(TAG_RENGLON_POR_REVISAR), useUnmergedTree = true)
 
+    private fun franjas(): SemanticsNodeInteractionCollection =
+        composeRule.onAllNodes(hasTestTag(TAG_RESUMEN_EN_EL_TELEFONO), useUnmergedTree = true)
+
     /** Los rectángulos, dentro de la pantalla, de las filas de compras que se ven. */
     private fun filasALaVista(): List<Rect> {
         val pantalla = composeRule.onRoot().fetchSemanticsNode().boundsInRoot
@@ -137,9 +143,25 @@ class LoDeArribaSeVaConElScrollTest {
     }
 
     @Test
+    fun `la franja del resumen es el primer item de la lista, antes de la tarjeta`() {
+        montar()
+
+        composeRule.onNode(
+            hasTestTag(TAG_RESUMEN_EN_EL_TELEFONO) and hasAnyAncestor(hasScrollToIndexAction()),
+            useUnmergedTree = true,
+        ).assertIsDisplayed()
+        val franja = franjas().fetchSemanticsNodes().single().boundsInRoot
+        val tarjeta = tarjetas().fetchSemanticsNodes().single().boundsInRoot
+        val listaRect = lista.fetchSemanticsNode().boundsInRoot
+        assertTrue("la franja ($franja) va adentro de la lista ($listaRect)", franja.top >= listaRect.top)
+        assertTrue("la franja ($franja) va antes de la tarjeta ($tarjeta)", franja.bottom <= tarjeta.top)
+    }
+
+    @Test
     fun `tras un scroll corto la tarjeta sube con la lista y no tapa la primera fila visible`() {
         montar()
         val antes = tarjetas().fetchSemanticsNodes().single().boundsInRoot
+        val antesLaFranja = franjas().fetchSemanticsNodes().single().boundsInRoot
 
         lista.performTouchInput { swipeUp(startY = bottom - 10f, endY = centerY) }
         composeRule.waitForIdle()
@@ -147,6 +169,8 @@ class LoDeArribaSeVaConElScrollTest {
         // Se movió con la lista (o ya se fue): fija, quedaría en el mismo lugar.
         val despues = tarjetas().fetchSemanticsNodes().map { it.boundsInRoot }.filter { it.height > 0f }
         assertTrue("la tarjeta no se movió con el scroll: $antes → $despues", despues.all { it.top < antes.top })
+        val franjaDespues = franjas().fetchSemanticsNodes().map { it.boundsInRoot }.filter { it.height > 0f }
+        assertTrue("la franja no se movió con el scroll: $antesLaFranja → $franjaDespues", franjaDespues.all { it.top < antesLaFranja.top })
         val primera = filasALaVista().minByOrNull { it.top }!!
         tarjetas().fetchSemanticsNodes().forEach { nodo ->
             val tarjeta = nodo.boundsInRoot
@@ -167,6 +191,8 @@ class LoDeArribaSeVaConElScrollTest {
         // `boundsInRoot` viene recortado: un ítem que salió de la lista mide cero (o ya no existe).
         val aLaVista = tarjetas().fetchSemanticsNodes().filter { it.boundsInRoot.height > 0f }
         assertTrue("la tarjeta se quedó fija arriba de la lista: ${aLaVista.map { it.boundsInRoot }}", aLaVista.isEmpty())
+        val franjaALaVista = franjas().fetchSemanticsNodes().filter { it.boundsInRoot.height > 0f }
+        assertTrue("la franja se quedó fija arriba de la lista: ${franjaALaVista.map { it.boundsInRoot }}", franjaALaVista.isEmpty())
         // Lo fijo sigue: los chips.
         composeRule.onAllNodesWithText("Todo", useUnmergedTree = true).fetchSemanticsNodes().let {
             assertTrue("los chips siguen fijos", it.isNotEmpty())
