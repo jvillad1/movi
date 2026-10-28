@@ -32,9 +32,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.History
-import com.jvillada.movi.data.FormaRecordada
-import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.shared.model.periodoActual
+import com.jvillada.movi.shared.model.rangoDelPeriodo
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.budgets.HojasDePresupuestos
@@ -147,10 +146,6 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
     // Recargando con cifras ya pintadas (lo del Inicio): lo dice, como el Inicio, en vez de hacer
     // pasar lo de antes por lo de ahora.
     val actualizando = disponible.cargando && alcanzaParaElDisponible(data)
-    // Si la última vez que el perfil contestó el período llevaba línea de rango. `null` (nada
-    // recordado) la reserva, como Movimientos: ver `FormaRecordada.recordarLineaDePeriodo`.
-    val lineaRecordada = remember { FormaRecordada.delAparato.movimientos(SessionManager.userId)?.lineaDePeriodo }
-
     val ajustesDelPeriodo = data.ajustesDePeriodo
     val periodoDeHoy = remember(ajustesDelPeriodo) {
         periodoActual(Clock.System.now().toEpochMilliseconds(), ajustesDelPeriodo)
@@ -172,9 +167,11 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
     // primeras a la izquierda y el selector con su segmento a la derecha.
     val lineaDelPeriodo: @Composable () -> Unit = {
         LineaDelPeriodo(
-            // Vuelta 40: «Del 25 de octubre al 24 de noviembre», sin «quedan N días» (la opción 3).
-            texto = encabezadoDelPeriodo(data, conDias = false),
-            reservar = data.periodoActual == null && disponible.cargando && lineaRecordada != false,
+            // Vuelta 40: «Del 25 de octubre al 24 de noviembre», sin «quedan N días» (la opción 3), y
+            // **siempre**: también con el mes de calendario (corte 1, el del usuario demo), que antes
+            // se callaba por diseño —«no hay nada que aclarar»— y dejaba a Pagos sin fechas.
+            texto = lineaDelPeriodoDePagos(data),
+            reservar = data.periodoActual == null && disponible.cargando,
         )
     }
     val cuantoPuedesGastar: @Composable () -> Unit = {
@@ -345,7 +342,8 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
 
 /**
  * «Del 25 de agosto al 24 de septiembre · quedan 9 días» — la misma línea que el hero del Inicio
- * ([encabezadoDelPeriodo]). Con el mes de calendario no hay nada que aclarar y no se pinta, igual
+ * ([encabezadoDelPeriodo]). Vuelta 40: va siempre, también con el mes de calendario (ver
+ * [lineaDelPeriodoDePagos]); lo que sigue es la historia de antes: con el mes de calendario no se pintaba, igual
  * que allá. [reservar]: el perfil (de donde sale el período) todavía viene en camino y la última vez
  * la línea iba — un esqueleto de su alto, para que al llegar no empuje la tarjeta de abajo.
  */
@@ -379,6 +377,13 @@ private fun LineaDelPeriodo(texto: String?, reservar: Boolean) {
         Spacer(Modifier.height(Espacio.m))
     }
 }
+
+/**
+ * **La línea del período de Pagos** (vuelta 40): «Del 25 de octubre al 24 de noviembre», o «Del 1 de
+ * octubre al 31 de octubre» con el mes de calendario. `null` solo mientras no se sabe el período.
+ */
+internal fun lineaDelPeriodoDePagos(data: com.jvillada.movi.ui.dashboard.DashboardData): String? =
+    data.periodoActual?.let { rangoDelPeriodo(it, data.ajustesDePeriodo) }
 
 /** El título de la tarjeta del disponible en Plan: la pregunta que contesta. */
 const val TITULO_CUANTO_PUEDES_GASTAR = "Cuánto puedes gastar"
