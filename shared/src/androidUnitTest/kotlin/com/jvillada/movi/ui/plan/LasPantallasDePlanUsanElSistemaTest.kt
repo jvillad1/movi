@@ -208,7 +208,7 @@ class LasPantallasDePlanUsanElSistemaTest {
         usaElSistema("Plan", minimoDeSecciones = 2)
         // La fila del pago vence hoy: lo dice su píldora, no solo un color.
         assertTrue(nodos(TAG_PILDORA).any { "Hoy" in textosDentro(it) }, "el pago de hoy lleva la píldora «Hoy»")
-        assertTrue(!hay("Tus recordatorios no te van a llegar"), "sin recordatorios pedidos, no hay propuesta")
+        assertTrue(!hay(TITULO_RECORDATORIOS_SIN_CANAL), "sin recordatorios pedidos, no hay propuesta")
     }
 
     @Test
