@@ -322,7 +322,7 @@ class LaAccionDelEncabezadoCedeAlTituloTest {
             calculado = anchoDeLaAccionConTexto(
                 medidor,
                 accion.texto,
-                Movi.textos.cuerpo.copy(fontWeight = FontWeight.SemiBold),
+                Movi.textos.cuerpoFuerte,
                 LocalDensity.current,
             )
             Box { AccionDelEncabezado(accion) }

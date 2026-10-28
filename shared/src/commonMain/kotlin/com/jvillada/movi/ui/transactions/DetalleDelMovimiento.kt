@@ -324,20 +324,20 @@ internal fun FilaDeAcciones(
                 Box(
                     modifier = Modifier
                         .size(Medida.avatar)
-                        .background(if (elegida) Movi.colores.lavado(Movi.colores.marca) else Movi.colores.capa2, CircleShape),
+                        .background(if (elegida) Movi.colores.lavado(Movi.colores.enlace) else Movi.colores.capa2, CircleShape),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
                         imageVector = accion.icono,
                         contentDescription = null,
-                        tint = if (elegida) Movi.colores.marca else Movi.colores.texto,
+                        tint = if (elegida) Movi.colores.enlace else Movi.colores.texto,
                         modifier = Modifier.size(Icono.m),
                     )
                 }
                 Text(
                     accion.rotulo,
                     style = if (elegida) Movi.textos.apoyoMedio else Movi.textos.apoyo,
-                    color = if (elegida) Movi.colores.marca else Movi.colores.textoMedio,
+                    color = if (elegida) Movi.colores.enlace else Movi.colores.textoMedio,
                     maxLines = 1,
                     softWrap = false,
                 )

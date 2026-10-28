@@ -2143,7 +2143,7 @@ private fun Modifier.marcaDeElegido(elegido: Boolean): Modifier =
     else this
         .semantics { selected = true }
         .clip(RoundedCornerShape(Radio.s))
-        .background(Movi.colores.lavado(Movi.colores.marca))
+        .background(Movi.colores.lavado(Movi.colores.enlace))
 
 /**
  * Ola 4 · Ver la plata: [dias] con solo lo que deja pasar [filtro] (ver `FiltroDeMovimientos` en

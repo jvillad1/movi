@@ -29,8 +29,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.theme.*
-import com.jvillada.movi.ui.components.ds.Separador
-import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
+import androidx.compose.material3.HorizontalDivider
 
 /**
  * Los destinos de la navegación principal.
@@ -127,9 +126,9 @@ fun MinBottomNav(
                 .background(Movi.colores.tarjeta)
                 .navigationBarsPadding(),
         ) {
-            // La barra se despega del contenido con un BORDE, no con otro gris. Es la misma decisión
-            // que la de las tarjetas: con planos tan cercanos, el borde es el que hace el trabajo.
-            Separador(SangriaDeSeparador.Ninguna)
+            // La barra se despega del contenido con un BORDE, no con otro gris: blanca con el borde
+            // de arriba en `borde`, como la de la opción 3 (vuelta 29).
+            HorizontalDivider(thickness = Medida.trazo, color = Movi.colores.borde)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -182,24 +181,24 @@ private fun NavItem(
         verticalArrangement = Arrangement.spacedBy(Espacio.xxs),
         modifier = Modifier
             .clickable { onTabSelected(tab) }
-            .padding(horizontal = Espacio.xxs, vertical = Espacio.xs),
+            // Sin relleno a los lados: la píldora de 56 ya le da el ancho a cada pestaña, y la fila
+            // reparte lo que sobra (`SpaceAround`). Con relleno, las cinco y el «+» no entraban a 390.
+            .padding(vertical = Espacio.xxs),
     ) {
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
+                // La píldora del activo (opción 3, vuelta 29): el amarillo de la marca detrás del
+                // ícono, 56 × 30, con el ícono en la tinta encima. Las demás, sin píldora y en el
+                // texto medio.
+                .size(Medida.anchoDePildoraDePestana, Medida.altoDePildoraDePestana)
                 .clip(RoundedCornerShape(Movi.formas.pleno))
-                // La píldora del activo era un morado sólido propio, un color que existía solo para
-                // esto. Es la MARCA lavada: el sistema tiene un lavanda, no dos, y el ícono encima va
-                // del mismo lavanda a plena fuerza. 44 × 28, como la del camino 1.
-                .background(
-                    if (isActive) Movi.colores.lavado(Movi.colores.marca) else Color.Transparent,
-                )
-                .padding(horizontal = Espacio.s, vertical = Espacio.xxs),
+                .background(if (isActive) Movi.colores.marca else Color.Transparent),
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = label,
-                tint = if (isActive) Movi.colores.marca else Movi.colores.textoApagado,
+                tint = if (isActive) Movi.colores.sobreMarca else Movi.colores.textoMedio,
                 modifier = Modifier.size(Icono.m),
             )
         }
@@ -210,7 +209,7 @@ private fun NavItem(
                 // las otras y correría su ícono hacia arriba. Ver [destinosPrincipales].
                 maxLines = 1,
                 style = estiloDelRotulo(isActive),
-                color = if (isActive) Movi.colores.texto else Movi.colores.textoApagado,
+                color = if (isActive) Movi.colores.texto else Movi.colores.textoMedio,
             )
         } else {
             Spacer(Modifier.height(with(LocalDensity.current) { estiloDelRotulo(false).lineHeight.toDp() }))
@@ -230,8 +229,8 @@ private fun estiloDelRotulo(activo: Boolean): TextStyle =
  * Pura, para probar el umbral sin montar la barra.
  */
 fun rotulosQueEntran(anchosDeRotulos: List<Dp>, ancho: Dp): Boolean {
-    val pildora = Icono.m + Espacio.s * 2
+    val pildora = Medida.anchoDePildoraDePestana
     var suma = Medida.botonFlotante
-    anchosDeRotulos.forEach { rotulo -> suma += maxOf(rotulo, pildora) + Espacio.xxs * 2 }
+    anchosDeRotulos.forEach { rotulo -> suma += maxOf(rotulo, pildora) }
     return suma <= ancho
 }

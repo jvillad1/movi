@@ -770,7 +770,7 @@ private fun HabitoRow(icon: ImageVector, title: String, onClick: () -> Unit) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = Movi.colores.marca,
+                tint = Movi.colores.enlace,
                 modifier = Modifier.size(Icono.m),
             )
         },

@@ -626,7 +626,7 @@ private fun ChipDePregunta(texto: String, onClick: () -> Unit) {
     // no es una `Fila`, que corta en uno).
     Superficie(modifier = Modifier.fillMaxWidth(), onClick = onClick) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.s)) {
-            Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = Movi.colores.marca, modifier = Modifier.size(Icono.m))
+            Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = Movi.colores.enlace, modifier = Modifier.size(Icono.m))
             Text(text = texto, style = Movi.textos.cuerpo, color = Movi.colores.texto, modifier = Modifier.weight(1f))
         }
     }

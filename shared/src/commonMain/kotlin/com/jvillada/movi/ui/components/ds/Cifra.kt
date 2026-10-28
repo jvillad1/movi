@@ -15,7 +15,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
-import androidx.compose.ui.text.font.FontWeight
 import com.jvillada.movi.theme.ColoresDeMovi
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.theme.TextosDeMovi
@@ -32,12 +31,12 @@ const val TAG_CIFRA: String = "ds-cifra"
 /**
  * **El papel de una cifra en la pantalla**, que decide su tamaño y su letra.
  *
- * - [Heroe]: la cifra protagonista. **Una por pantalla, o ninguna.** Martian Mono a 42 sp, en un
- *   renglón; si no entra se achica hasta la de [Grande], y ahí para.
- * - [Grande]: la de una tarjeta de cuenta o un widget. Martian Mono a 24 sp, en un renglón; si no
- *   entra (un widget de media pantalla) se achica hasta la de [Fila].
- * - [Fila]: el monto al final de una [Fila]. Martian Mono a 12,5 sp con cifras tabulares (ola R1:
- *   toda cifra de plata va en la misma familia), para que la columna no baile.
+ * - [Heroe]: la cifra protagonista. **Una por pantalla, o ninguna.** Figtree 40/800 tabular (vuelta
+ *   29, opción 3), en un renglón; si no entra se achica hasta la de [Grande], y ahí para.
+ * - [Grande]: la de una tarjeta de cuenta o un widget. Figtree 24/800, en un renglón; si no entra (un
+ *   widget de media pantalla) se achica hasta la de [Fila].
+ * - [Fila]: el monto al final de una [Fila]. Figtree 15/700 con cifras tabulares, para que la columna
+ *   no baile.
  * - [Chica]: un monto dentro de un subtítulo o un desglose.
  */
 enum class VarianteDeCifra { Heroe, Grande, Fila, Chica }
@@ -74,8 +73,8 @@ enum class TonoDeCifra {
  *   resumen dicen la cifra completa.
  * - [Compacta]: «$15,6M» de un millón para arriba, los pesos por debajo («$250.000»). **Solo en una
  *   columna de tres** —el Disponible del período, las cifras de Tus períodos—: un tercio de tarjeta a
- *   360 dp deja ~90 dp, y Martian Mono pide ~9,5 dp por carácter con la letra de la app, así que
- *   «$15.600.000» no entra. Solo pesos: en otra moneda va [Entera].
+ *   360 dp deja ~90 dp, y una cifra de tarjeta no deja entrar «$15.600.000» (lo medía Martian Mono,
+ *   ~9,5 dp por carácter; Figtree tabular es más angosta, pero la regla de cuándo compactar se quedó). Solo pesos: en otra moneda va [Entera].
  */
 enum class FormaDeCifra {
     Entera,
@@ -156,7 +155,7 @@ var SemanticsPropertyReceiver.tonoDeCifra: TonoDeCifra by TonoDeCifraKey
 fun estiloDeLaCifra(variante: VarianteDeCifra, textos: TextosDeMovi): TextStyle = when (variante) {
     VarianteDeCifra.Heroe -> textos.cifra
     VarianteDeCifra.Grande -> textos.cifraDeTarjeta
-    VarianteDeCifra.Fila -> textos.monto.copy(fontWeight = FontWeight.Medium)
+    VarianteDeCifra.Fila -> textos.monto
     VarianteDeCifra.Chica -> textos.apoyo.copy(fontFeatureSettings = "tnum")
 }
 
@@ -236,8 +235,8 @@ fun Cifra(
         varianteDeCifra = variante
         tonoDeCifra = tono
     }
-    // Un renglón siempre: Martian Mono es ancha y a 42 sp «$8.550.000» se partía en un teléfono de
-    // 390 dp. La héroe se achica hasta el tamaño de la cifra de tarjeta, no más; la grande (ola R1),
+    // Un renglón siempre: a 42 sp en Martian Mono «$8.550.000» se partía en un teléfono de 390 dp, y
+    // una cifra larga en Figtree 40/800 tampoco tiene por qué. La héroe se achica hasta el tamaño de la cifra de tarjeta, no más; la grande (ola R1),
     // hasta el de un monto de fila, porque va en un widget de media pantalla.
     val piso = pisoDeLaCifra(variante, Movi.textos)
     if (piso != null) {

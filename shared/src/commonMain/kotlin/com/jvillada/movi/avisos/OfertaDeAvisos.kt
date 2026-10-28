@@ -84,7 +84,7 @@ fun TarjetaDeAvisos(oferta: OfertaDeAvisos) {
                     Text("Ahora no", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
                 }
                 TextButton(onClick = { visible = false; oferta.pedir() }) {
-                    Text("Activar avisos", style = Movi.textos.cuerpo, color = Movi.colores.marca)
+                    Text("Activar avisos", style = Movi.textos.cuerpo, color = Movi.colores.enlace)
                 }
             }
         }

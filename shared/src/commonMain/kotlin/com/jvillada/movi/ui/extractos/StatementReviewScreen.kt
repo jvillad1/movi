@@ -532,7 +532,7 @@ private fun ReconciliationCard(
             // Column headers
             Row(modifier = Modifier.fillMaxWidth()) {
                 Spacer(Modifier.width(ANCHO_DEL_ROTULO))
-                Text("Manual", style = Movi.textos.apoyo, color = Movi.colores.marca, modifier = Modifier.weight(1f))
+                Text("Manual", style = Movi.textos.apoyo, color = Movi.colores.enlace, modifier = Modifier.weight(1f))
                 Text("Extracto", style = Movi.textos.apoyo, color = Movi.colores.entreCuentas, modifier = Modifier.weight(1f))
             }
 
@@ -655,9 +655,9 @@ private fun FieldCell(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val borderColor = if (active) Movi.colores.marca else Color.Transparent
+    val borderColor = if (active) Movi.colores.enlace else Color.Transparent
     // Sin elegir, en la capa 2: la celda va sobre la `Superficie` (capa 1) y tiene que verse tocable.
-    val bgColor = if (active) Movi.colores.lavado(Movi.colores.marca) else Movi.colores.capa2
+    val bgColor = if (active) Movi.colores.lavado(Movi.colores.enlace) else Movi.colores.capa2
     Text(
         value,
         style = Movi.textos.apoyo,

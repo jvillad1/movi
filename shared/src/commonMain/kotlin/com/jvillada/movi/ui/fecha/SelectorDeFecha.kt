@@ -218,7 +218,7 @@ private fun CasillaDeDia(
             modifier = Modifier
                 .size(34.dp)
                 .clip(CircleShape)
-                .background(if (seleccionada) Movi.colores.lavado(Movi.colores.marca) else Color.Transparent)
+                .background(if (seleccionada) Movi.colores.lavado(Movi.colores.enlace) else Color.Transparent)
                 .then(
                     if (esHoy && !seleccionada) Modifier.border(Medida.trazo, Movi.colores.borde, CircleShape)
                     else Modifier,
@@ -230,7 +230,7 @@ private fun CasillaDeDia(
                 text = dia.dayOfMonth.toString(),
                 style = Movi.textos.cuerpo,
                 color = when {
-                    seleccionada -> Movi.colores.marca
+                    seleccionada -> Movi.colores.enlace
                     !habilitado -> Movi.colores.textoApagado
                     else -> Movi.colores.textoMedio
                 },

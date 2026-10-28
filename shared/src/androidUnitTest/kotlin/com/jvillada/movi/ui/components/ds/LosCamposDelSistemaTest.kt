@@ -157,9 +157,12 @@ class LosCamposDelSistemaTest {
         val valor = layoutDelTag(TAG_CAMPO_DE_MONTO)
         assertEquals("1.800.000", valor.layoutInput.text.text)
         assertEquals(familiaDeCifras, valor.layoutInput.style.fontFamily, "el valor en la letra de las cifras")
-        assertNotEquals(familiaDeCuerpo, familiaDeCifras, "si las dos letras fueran la misma, esta prueba no diría nada")
+        // Vuelta 29: la letra de las cifras es Figtree, la misma que la de cuerpo; lo que la hace «de
+        // cifras» son los números tabulares, que se piden acá.
+        assertEquals("tnum", valor.layoutInput.style.fontFeatureSettings, "el valor con números tabulares")
         val moneda = layoutDelTag(TAG_MONEDA_DEL_CAMPO)
         assertEquals(familiaDeCifras, moneda.layoutInput.style.fontFamily, "la moneda va con la cifra")
+        assertEquals("tnum", moneda.layoutInput.style.fontFeatureSettings, "la moneda con números tabulares")
     }
 
     // ── Vuelta de diseño 17: un ejemplo numérico va con «Ej:» ─────────────────────────────

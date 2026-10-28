@@ -163,7 +163,7 @@ fun InicioDelPeriodoSheet(
                             Text(
                                 text = d.toString(),
                                 style = if (esElElegido) Movi.textos.cuerpoFuerte else Movi.textos.cuerpoRegular,
-                                color = if (esElElegido) Movi.colores.fondo else Movi.colores.texto,
+                                color = if (esElElegido) Movi.colores.sobreMarca else Movi.colores.texto,
                                 textAlign = TextAlign.Center,
                             )
                         }

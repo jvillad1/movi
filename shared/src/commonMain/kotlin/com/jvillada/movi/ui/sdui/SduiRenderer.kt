@@ -507,7 +507,7 @@ private fun SduiCardTile(card: ScreenCard, onClick: (() -> Unit)?) {
         }
         card.badge?.let {
             Spacer(Modifier.height(Espacio.xs))
-            Text(it, style = Movi.textos.rotulo, color = Movi.colores.marca)
+            Text(it, style = Movi.textos.rotulo, color = Movi.colores.enlace)
         }
     }
 }

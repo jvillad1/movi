@@ -86,10 +86,12 @@ fun VacioQueEnsena(
                 Box(
                     modifier = Modifier
                         .size(Medida.avatarGrande)
-                        .background(Movi.colores.lavado(Movi.colores.marca), CircleShape),
+                        // El círculo amarillo con la tinta encima, como el ícono de la tarjeta de
+                        // avisos de la opción 3 (vuelta 29).
+                        .background(Movi.colores.marca, CircleShape),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(icono, contentDescription = null, tint = Movi.colores.marca)
+                    Icon(icono, contentDescription = null, tint = Movi.colores.sobreMarca)
                 }
                 Spacer(Modifier.height(Movi.espacios.medio))
             }

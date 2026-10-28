@@ -1,6 +1,7 @@
 package com.jvillada.movi.ui.components.ds
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -54,9 +55,10 @@ const val TAG_BOTON_DE_ICONO: String = "ds-boton-de-icono"
  * **Cómo se ve un [BotonDeIcono]** (vuelta de diseño 20).
  *
  * - [Plano]: solo el ícono, en un círculo de toque. El de un encabezado (la flecha, la lupa).
- * - [Secundario]: el ícono sobre la capa 2, en un cuadrado de [Medida.objetivoTactil] con el radio de
- *   un [Boton] ([Radio.m]): es el [VarianteDeBoton.Secundario] sin texto, para ir al lado de un
- *   [Boton] de alto `M` («Pagó otro» y «Subir comprobante» junto a «Guardar movimiento» en Agregar).
+ * - [Secundario]: el ícono en un **círculo blanco con borde** de [Medida.objetivoTactil] (vuelta 29:
+ *   el botón redondo de la lupa en la opción 3): es el [VarianteDeBoton.Secundario] sin texto, para ir
+ *   al lado de un [Boton] de alto `M` («Pagó otro» y «Subir comprobante» junto a «Guardar movimiento»
+ *   en Agregar).
  */
 enum class VarianteDeBotonDeIcono { Plano, Secundario }
 
@@ -75,15 +77,18 @@ fun BotonDeIcono(
     variante: VarianteDeBotonDeIcono = VarianteDeBotonDeIcono.Plano,
     habilitado: Boolean = true,
 ) {
-    val forma = when (variante) {
-        VarianteDeBotonDeIcono.Plano -> CircleShape
-        VarianteDeBotonDeIcono.Secundario -> RoundedCornerShape(Radio.m)
-    }
+    val forma = CircleShape
     Box(
         modifier = modifier
             .size(Medida.objetivoTactil)
             .clip(forma)
-            .then(if (variante == VarianteDeBotonDeIcono.Secundario) Modifier.background(Movi.colores.capa2) else Modifier)
+            .then(
+                if (variante == VarianteDeBotonDeIcono.Secundario) {
+                    Modifier.background(Movi.colores.tarjeta).border(Medida.trazo, Movi.colores.borde, forma)
+                } else {
+                    Modifier
+                },
+            )
             .clickable(enabled = habilitado, role = Role.Button, onClickLabel = descripcion, onClick = onClick)
             .testTag(TAG_BOTON_DE_ICONO),
         contentAlignment = Alignment.Center,
@@ -103,7 +108,7 @@ const val TAG_ACCION_DEL_ENCABEZADO: String = "ds-accion-del-encabezado"
 /**
  * **La acción principal de un encabezado**: lo que se crea o se hace desde esa pantalla («Nueva
  * cuenta», «Nuevo crédito», «Subir archivo»). Viaja como dato para que [Encabezado] la pinte siempre
- * igual —texto con ícono, en la marca, [AccionDelEncabezado]— y ninguna pantalla elija otro botón
+ * igual —texto con ícono, en el azul del enlace, [AccionDelEncabezado]— y ninguna pantalla elija otro botón
  * (vuelta de diseño 4: Patrimonio la tenía como texto morado y Créditos como botón tonal relleno).
  */
 data class AccionDeEncabezado(
@@ -115,7 +120,7 @@ data class AccionDeEncabezado(
 
 /**
  * **La forma de la [AccionDeEncabezado]**: un [Boton] [VarianteDeBoton.Fantasma] tamaño
- * [TamanoDeBoton.S] con su ícono (texto e ícono en la marca, sin relleno; el toque llega a 48).
+ * [TamanoDeBoton.S] con su ícono (texto e ícono en el azul del enlace, sin relleno; el toque llega a 48).
  * Solo la pinta [Encabezado].
  */
 @Composable
@@ -133,12 +138,12 @@ internal fun AccionDelEncabezado(accion: AccionDeEncabezado, modifier: Modifier 
 
 /**
  * **La [AccionDeEncabezado] cuando el título no deja lugar para su texto** (vuelta de diseño 8): solo
- * el ícono, en la marca, en un área de [Medida.objetivoTactil]. El texto no se pierde: es lo que dice
+ * el ícono, en el azul del enlace, en un área de [Medida.objetivoTactil]. El texto no se pierde: es lo que dice
  * el lector de pantalla. Lleva el mismo tag que [AccionDelEncabezado].
  */
 @Composable
 internal fun AccionDelEncabezadoSoloIcono(accion: AccionDeEncabezado, modifier: Modifier = Modifier) {
-    val color = if (accion.habilitado) Movi.colores.marca else Movi.colores.textoApagado
+    val color = if (accion.habilitado) Movi.colores.enlace else Movi.colores.textoApagado
     Box(
         modifier = modifier
             .size(Medida.objetivoTactil)
@@ -187,7 +192,7 @@ fun laAccionVaConTexto(
 /**
  * **El encabezado de una pantalla. El mismo alto y los mismos márgenes en todas.**
  *
- * - Alto [Medida.altoDeEncabezado] (56), como mínimo: con la letra del sistema agrandada crece en
+ * - Alto [Medida.altoDeEncabezado] (64 desde la vuelta 29), como mínimo: con la letra del sistema agrandada crece en
  *   vez de cortar.
  * - Margen [Medida.margenDePantalla] a los dos lados. Con [onVolver], la flecha va en un área de
  *   toque de 48 y el margen se corre lo justo para que **el dibujo** de la flecha quede en el

@@ -126,7 +126,7 @@ fun CampoDeBusqueda(
                 onValueChange = campo::alCambiar,
                 singleLine = true,
                 textStyle = Movi.textos.cuerpo.copy(color = Movi.colores.texto),
-                cursorBrush = SolidColor(Movi.colores.marca),
+                cursorBrush = SolidColor(Movi.colores.enlace),
                 keyboardOptions = if (alBuscar != null) KeyboardOptions(imeAction = ImeAction.Search) else KeyboardOptions.Default,
                 keyboardActions = if (alBuscar != null) KeyboardActions(onSearch = { alBuscar() }) else KeyboardActions.Default,
                 modifier = Modifier

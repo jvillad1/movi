@@ -47,13 +47,14 @@ const val FRACCION_DE_TARJETA_DE_CUENTA: Float = 0.82f
 
 /**
  * Los colores de adentro de una tarjeta: los de la marca del banco (su fondo y el texto que pasa AA
- * contra él, de `MarcasConocidas`), o la capa 2 y el texto del tema si la cuenta no tiene marca. Pura.
+ * contra él, de `MarcasConocidas`), o el blanco de una tarjeta y el texto del tema si la cuenta no
+ * tiene marca (vuelta 29: era la capa 2; en la opción 3 las tarjetas son blancas sobre el crema). Pura.
  *
  * El texto de apoyo («Ahorros», «Saldo») va en el mismo color que el principal: la tarjeta es de un
  * color fuerte y un gris encima no pasaría el contraste con todas las marcas.
  */
 fun coloresDeLaTarjetaDeCuenta(marca: Marca?, colores: ColoresDeMovi): ColoresDeMovi {
-    if (marca == null) return colores.copy(tarjeta = colores.capa2)
+    if (marca == null) return colores
     val texto = Color(marca.texto)
     return colores.copy(tarjeta = Color(marca.fondo), texto = texto, textoMedio = texto, textoApagado = texto)
 }

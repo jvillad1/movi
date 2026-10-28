@@ -273,7 +273,7 @@ internal fun LasDosPatasEnElResumen(
             Text(
                 if (eligiendo) "Cerrar" else if (destino == null) "Elegir" else "Cambiar",
                 style = Movi.textos.apoyoMedio,
-                color = Movi.colores.marca,
+                color = Movi.colores.enlace,
                 modifier = Modifier
                     .clickable(enabled = habilitado, role = Role.Button) { onCambiar() }
                     .testTag(TAG_CAMBIAR_EL_DESTINO)
@@ -290,7 +290,7 @@ internal fun LasDosPatasEnElResumen(
             Text(
                 cuenta.name,
                 style = if (esLaElegida) Movi.textos.cuerpo else Movi.textos.cuerpoRegular,
-                color = if (esLaElegida) Movi.colores.marca else Movi.colores.texto,
+                color = if (esLaElegida) Movi.colores.enlace else Movi.colores.texto,
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable(enabled = habilitado, role = Role.Button) { onElegir(cuenta) }

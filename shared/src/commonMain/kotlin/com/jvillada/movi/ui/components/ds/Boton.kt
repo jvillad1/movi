@@ -1,6 +1,7 @@
 package com.jvillada.movi.ui.components.ds
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -42,15 +43,15 @@ const val ROTULO_CARGANDO: String = "Cargando"
  * **Qué tan fuerte habla un botón.** Uno [Principal] por pantalla o por tarjeta, como mucho.
  */
 enum class VarianteDeBoton {
-    /** La acción principal: lleno de marca. */
+    /** La acción principal: amarillo de la marca con la tinta encima (opción 3). */
     Principal,
 
-    /** Una acción al lado de la principal: en la capa 2, con texto normal. */
+    /** Una acción al lado de la principal: blanco con el borde de botón y texto normal. */
     Secundario,
 
     /**
-     * **El botón de texto**: una acción que casi no pesa, solo el texto en marca, sin fondo —tampoco
-     * apagado—. «Saltar este paso» debajo de «Siguiente», «Ver» al lado de «Confirmar».
+     * **El botón de texto**: una acción que casi no pesa, solo el texto en el azul del enlace, sin
+     * fondo —tampoco apagado—. «Saltar este paso» debajo de «Siguiente», «Ver» al lado de «Confirmar».
      */
     Fantasma,
 
@@ -78,33 +79,41 @@ enum class TamanoDeBoton(val alto: Dp) {
     S(Medida.altoChico),
 }
 
-/** El fondo y el texto de una variante, en la paleta del tema. Pura, para probarla en los dos. */
+/** El fondo y el texto de una variante, en la paleta del tema. Pura, para probarla. */
 fun coloresDelBoton(variante: VarianteDeBoton, colores: ColoresDeMovi): Pair<Color, Color> = when (variante) {
     VarianteDeBoton.Principal -> colores.marca to colores.sobreMarca
-    VarianteDeBoton.Secundario -> colores.capa2 to colores.texto
-    VarianteDeBoton.Fantasma -> Color.Transparent to colores.marca
+    VarianteDeBoton.Secundario -> colores.tarjeta to colores.texto
+    VarianteDeBoton.Fantasma -> Color.Transparent to colores.enlace
     VarianteDeBoton.Peligro -> colores.lavado(colores.sale) to colores.sale
 }
 
 /**
- * El fondo y el texto de una variante **apagada**: la capa 2 y el texto apagado, para que se siga
+ * El borde de una variante: solo el [VarianteDeBoton.Secundario] lleva uno (el blanco sobre blanco
+ * no se vería), `bordeDeBoton` a [Medida.trazoDeBoton]. Pura.
+ */
+fun bordeDelBoton(variante: VarianteDeBoton, colores: ColoresDeMovi): Color? =
+    if (variante == VarianteDeBoton.Secundario) colores.bordeDeBoton else null
+
+/**
+ * El fondo y el texto de una variante **apagada**: la capa 3 y el texto apagado, para que se siga
  * leyendo como botón pero no como tocable; el [VarianteDeBoton.Fantasma] sigue sin fondo, porque un
  * botón de texto que se apaga y se rellena de gris parece otro botón. Pura.
  */
 fun coloresDelBotonApagado(variante: VarianteDeBoton, colores: ColoresDeMovi): Pair<Color, Color> = when (variante) {
     VarianteDeBoton.Fantasma -> Color.Transparent to colores.textoApagado
-    else -> colores.capa2 to colores.textoApagado
+    else -> colores.capa3 to colores.textoApagado
 }
 
 /**
  * **El botón de Movi.** Reemplaza a los botones armados a mano —la auditoría encontró botones
  * principales de 46, 48, 50 y 54 dp de alto, con radios de 10, 12, 14 y píldora—.
  *
- * - Radio [Radio.m], alto fijo por [tamano], texto en `cuerpo` seminegrita.
+ * - **Píldora** ([Radio.pill], opción 3), alto fijo por [tamano], texto en `cuerpoFuerte` (15/700).
+ *   El secundario lleva el borde de botón ([bordeDelBoton]).
  * - [icono] opcional a la izquierda, a [Icono.m].
  * - [cargando]: la ruedita reemplaza al ícono, el botón no se toca y el lector de pantalla dice
  *   «Cargando». El ancho no cambia (el texto se queda), así que nada salta.
- * - Apagado ([habilitado] en `false`): fondo de la capa 2 y texto apagado, para que se siga leyendo
+ * - Apagado ([habilitado] en `false`): fondo de la capa 3 y texto apagado, para que se siga leyendo
  *   como botón pero no como tocable; el de texto ([VarianteDeBoton.Fantasma]) sigue sin fondo (ver
  *   [coloresDelBotonApagado]).
  *
@@ -130,13 +139,15 @@ fun Boton(
     } else {
         coloresDelBotonApagado(variante, Movi.colores)
     }
-    val forma = RoundedCornerShape(Radio.m)
+    val forma = RoundedCornerShape(Radio.pill)
+    val borde = if (habilitado) bordeDelBoton(variante, Movi.colores) else null
     Row(
         modifier = modifier
             .then(if (anchoCompleto) Modifier.fillMaxWidth() else Modifier)
             .height(tamano.alto)
             .clip(forma)
             .background(fondo)
+            .then(if (borde != null) Modifier.border(Medida.trazoDeBoton, borde, forma) else Modifier)
             .clickable(enabled = habilitado && !cargando, role = Role.Button, onClick = onClick)
             .then(if (cargando) Modifier.semantics { stateDescription = ROTULO_CARGANDO } else Modifier)
             .semantics { varianteDeBoton = variante }

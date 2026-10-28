@@ -84,7 +84,8 @@ fun Seccion(
             Text(
                 text = accion,
                 style = Movi.textos.cuerpo,
-                color = Movi.colores.marca,
+                // El azul del enlace: el amarillo de la marca no se lee como letra (vuelta 29).
+                color = Movi.colores.enlace,
                 maxLines = 1,
                 modifier = if (onAccion != null) {
                     Modifier.clickable(role = Role.Button, onClick = onAccion)

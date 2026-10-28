@@ -91,7 +91,7 @@ fun DiasDeAvisoSheet(
                         Text(
                             text = d.toString(),
                             style = if (elegido) Movi.textos.cuerpoFuerte else Movi.textos.cuerpoRegular,
-                            color = if (elegido) Movi.colores.fondo else Movi.colores.texto,
+                            color = if (elegido) Movi.colores.sobreMarca else Movi.colores.texto,
                         )
                     }
                 }
@@ -115,7 +115,7 @@ fun DiasDeAvisoSheet(
             ) {
                 Text(
                     text = if (saving) "Guardando…" else "Guardar",
-                    color = if (saving) Movi.colores.textoMedio else Movi.colores.fondo,
+                    color = if (saving) Movi.colores.textoMedio else Movi.colores.sobreMarca,
                     style = Movi.textos.cuerpo,
                 )
             }

@@ -63,9 +63,11 @@ class LaFranjaHablaEnUnaFormaTest {
 
     @Test
     fun `si una no cabe entera van abreviadas las tres`() {
-        val cifras = cifrasDeLaFranja(entro = 850_000, salio = 14_752_250)
+        // Vuelta 29: con Figtree tabular «$14.752.250» ya entra a 360 dp (con Martian Mono no); hace
+        // falta una cifra de doce caracteres para que una no quepa.
+        val cifras = cifrasDeLaFranja(entro = 850_000, salio = 147_522_500)
         assertEquals(3, cifras.size)
         assertTrue(cifras.none(::esEntera), "cuando una es abreviada, las tres lo son: $cifras")
-        assertEquals(listOf("+\$850 mil", "\$14,8M", "−\$13,9M"), cifras)
+        assertEquals(listOf("+\$850 mil", "\$147,5M", "−\$146,7M"), cifras)
     }
 }

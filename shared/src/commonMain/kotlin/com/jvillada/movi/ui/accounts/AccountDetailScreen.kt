@@ -281,7 +281,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
             if (loading) {
                 LinearProgressIndicator(
                     modifier = Modifier.fillMaxWidth(),
-                    color = Movi.colores.lavado(Movi.colores.marca),
+                    color = Movi.colores.lavado(Movi.colores.enlace),
                     trackColor = Movi.colores.tarjeta,
                 )
             } else {

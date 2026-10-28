@@ -1146,10 +1146,10 @@ private fun AccountPickerRow(label: String, selected: Boolean, onClick: () -> Un
     Text(
         text = label,
         style = if (selected) Movi.textos.cuerpo else Movi.textos.cuerpoRegular,
-        color = if (selected) Movi.colores.marca else Movi.colores.texto,
+        color = if (selected) Movi.colores.enlace else Movi.colores.texto,
         modifier = Modifier
             .fillMaxWidth()
-            .then(if (selected) Modifier.background(Movi.colores.lavado(Movi.colores.marca)) else Modifier)
+            .then(if (selected) Modifier.background(Movi.colores.lavado(Movi.colores.enlace)) else Modifier)
             .clickable(onClick = onClick)
             .padding(horizontal = Espacio.s, vertical = Espacio.s),
     )
@@ -1169,7 +1169,7 @@ private fun RowScope.SheetChip(
         modifier = Modifier
             .weight(1f)
             .clip(RoundedCornerShape(Radio.m))
-            .background(if (selected) Movi.colores.lavado(Movi.colores.marca) else Movi.colores.tarjeta)
+            .background(if (selected) Movi.colores.lavado(Movi.colores.enlace) else Movi.colores.tarjeta)
             .then(
                 if (!selected) Modifier.border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.m)) else Modifier,
             )
@@ -1184,7 +1184,7 @@ private fun RowScope.SheetChip(
             style = if (selected) Movi.textos.cuerpo else Movi.textos.cuerpoRegular,
             color = when {
                 !enabled -> Movi.colores.textoApagado
-                selected -> Movi.colores.marca
+                selected -> Movi.colores.enlace
                 else     -> Movi.colores.textoMedio
             },
         )
@@ -1281,7 +1281,7 @@ private fun RowScope.DayCell(day: Int, selected: Boolean, enabled: Boolean, onPi
             .weight(1f)
             .height(Medida.objetivoTactil)
             .clip(RoundedCornerShape(Radio.s))
-            .background(if (selected) Movi.colores.lavado(Movi.colores.marca) else Movi.colores.capa2)
+            .background(if (selected) Movi.colores.lavado(Movi.colores.enlace) else Movi.colores.capa2)
             .clickable(enabled = enabled) { onPick(day) },
         contentAlignment = Alignment.Center,
     ) {
@@ -1290,7 +1290,7 @@ private fun RowScope.DayCell(day: Int, selected: Boolean, enabled: Boolean, onPi
             style = if (selected) Movi.textos.cuerpo else Movi.textos.cuerpoRegular,
             color = when {
                 !enabled -> Movi.colores.textoApagado
-                selected -> Movi.colores.marca
+                selected -> Movi.colores.enlace
                 else -> Movi.colores.textoMedio
             },
         )

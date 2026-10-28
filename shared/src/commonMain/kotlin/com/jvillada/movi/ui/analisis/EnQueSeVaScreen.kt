@@ -444,7 +444,7 @@ private fun GraficoDelAnalisis(
 ) {
     val barra = Movi.colores.neutro
     val barraElegida = Movi.colores.textoMedio
-    val linea = Movi.colores.marca
+    val linea = Movi.colores.enlace
     val pista = Movi.colores.hilo
     val reducido = LocalMovimientoReducido.current
     // Las barras crecen al llegar y al cambiar de período o de modo, salvo con movimiento reducido.

@@ -290,7 +290,7 @@ private fun Opcion(texto: String, elegida: Boolean, modifier: Modifier, onClick:
     Box(
         modifier = modifier
             .clip(forma)
-            .background(if (elegida) Movi.colores.lavado(Movi.colores.marca) else Movi.colores.tarjeta)
+            .background(if (elegida) Movi.colores.lavado(Movi.colores.enlace) else Movi.colores.tarjeta)
             .then(if (!elegida) Modifier.border(Medida.trazo, Movi.colores.borde, forma) else Modifier)
             .clickable(onClick = onClick)
             .padding(horizontal = Movi.espacios.medio, vertical = Movi.espacios.medio),
@@ -299,14 +299,14 @@ private fun Opcion(texto: String, elegida: Boolean, modifier: Modifier, onClick:
         Text(
             text = texto,
             style = if (elegida) Movi.textos.cuerpo else Movi.textos.cuerpoRegular,
-            color = if (elegida) Movi.colores.marca else Movi.colores.texto,
+            color = if (elegida) Movi.colores.enlace else Movi.colores.texto,
             maxLines = 1,
         )
     }
 }
 
 @Composable
-private fun Enlace(texto: String, enabled: Boolean, color: Color = Movi.colores.marca, onClick: () -> Unit) {
+private fun Enlace(texto: String, enabled: Boolean, color: Color = Movi.colores.enlace, onClick: () -> Unit) {
     Text(
         text = texto,
         style = Movi.textos.cuerpo,

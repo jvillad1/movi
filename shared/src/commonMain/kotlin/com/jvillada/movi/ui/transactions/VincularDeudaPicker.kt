@@ -93,7 +93,7 @@ fun SelectorDeCuentaDeDeuda(
                         titulo = textoDeCuentaDeDeuda(cuenta),
                         modifier = Modifier.semantics { selected = on },
                         final = if (on) {
-                            { Icon(Icons.Rounded.Check, contentDescription = "Elegida", tint = Movi.colores.marca, modifier = Modifier.size(Icono.m)) }
+                            { Icon(Icons.Rounded.Check, contentDescription = "Elegida", tint = Movi.colores.enlace, modifier = Modifier.size(Icono.m)) }
                         } else null,
                         onClick = { onSeleccionar(if (on) null else cuenta) },
                     )

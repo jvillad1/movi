@@ -925,7 +925,7 @@ private fun OpcionElegible(
             lineasDelSubtitulo = 2,
             final = {
                 if (selected) {
-                    Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.marca, modifier = Modifier.size(Icono.m))
+                    Icon(Icons.Rounded.Check, contentDescription = null, tint = Movi.colores.enlace, modifier = Modifier.size(Icono.m))
                 }
             },
             modifier = Modifier.selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onClick),

@@ -73,7 +73,7 @@ fun TirarParaActualizar(
                 isRefreshing = porElDedo,
                 modifier = Modifier.align(Alignment.TopCenter),
                 containerColor = Movi.colores.tarjeta,
-                color = Movi.colores.marca,
+                color = Movi.colores.enlace,
             )
         }
     }

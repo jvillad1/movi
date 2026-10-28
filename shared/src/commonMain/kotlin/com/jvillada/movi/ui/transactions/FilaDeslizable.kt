@@ -118,7 +118,7 @@ internal fun FilaDeslizable(
                     // Antes del umbral, la capa 2; pasado, el lavado de su color: «suelta y se hace».
                     .background(
                         if (!pasoElUmbral) Movi.colores.capa2
-                        else if (aLaIzquierda) Movi.colores.lavado(Movi.colores.marca)
+                        else if (aLaIzquierda) Movi.colores.lavado(Movi.colores.enlace)
                         else Movi.colores.lavado(Movi.colores.entra),
                     )
                     .padding(horizontal = Medida.margenDePantalla),
@@ -126,7 +126,7 @@ internal fun FilaDeslizable(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 val (icono, rotulo, color) = if (aLaIzquierda) {
-                    Triple(Icons.Rounded.Category, "Categoría", Movi.colores.marca)
+                    Triple(Icons.Rounded.Category, "Categoría", Movi.colores.enlace)
                 } else {
                     Triple(Icons.Rounded.Check, "Confirmar", Movi.colores.entra)
                 }

@@ -159,7 +159,7 @@ private fun TarjetaDelResultado(
                 Spacer(Modifier.height(10.dp))
                 LinearProgressIndicator(
                     modifier = Modifier.fillMaxWidth(),
-                    color = Movi.colores.marca,
+                    color = Movi.colores.enlace,
                     trackColor = Movi.colores.hilo,
                 )
             }

@@ -61,7 +61,8 @@ fun MinNavRail(
             // Tamaño suelto a propósito: es el logotipo del riel, no un título; ningún estilo de la escala es ese papel.
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
-            color = Movi.colores.marca,
+            // En tinta: el amarillo de la marca no se lee como letra sobre el blanco (vuelta 29).
+            color = Movi.colores.texto,
             letterSpacing = 1.5.sp,
             modifier = Modifier.padding(start = Espacio.s, bottom = Espacio.m),
         )
@@ -192,14 +193,15 @@ private fun RailCompactoItem(dest: DestinoPrincipal, active: NavTab?, onTabSelec
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
+                // La misma píldora amarilla de 56 × 30 que la barra del teléfono (vuelta 29).
+                .size(Medida.anchoDePildoraDePestana, Medida.altoDePildoraDePestana)
                 .clip(RoundedCornerShape(Movi.formas.pleno))
-                .background(if (isActive) Movi.colores.lavado(Movi.colores.marca) else Color.Transparent)
-                .padding(horizontal = Espacio.s, vertical = Espacio.xxs),
+                .background(if (isActive) Movi.colores.marca else Color.Transparent),
         ) {
             Icon(
                 imageVector = dest.icon,
                 contentDescription = null,
-                tint = if (isActive) Movi.colores.marca else Movi.colores.textoApagado,
+                tint = if (isActive) Movi.colores.sobreMarca else Movi.colores.textoMedio,
                 modifier = Modifier.size(Icono.m),
             )
         }
@@ -219,7 +221,7 @@ internal val RELLENO_DEL_ITEM_DEL_RAIL_COMPACTO = 2.dp
 @Composable
 internal fun RotuloDelRailCompacto(texto: String, activo: Boolean, modifier: Modifier = Modifier) {
     val estilo = (if (activo) Movi.textos.pestanaActiva else Movi.textos.pestana).copy(
-        color = if (activo) Movi.colores.texto else Movi.colores.textoApagado,
+        color = if (activo) Movi.colores.texto else Movi.colores.textoMedio,
     )
     BasicText(
         text = texto,
@@ -246,21 +248,22 @@ private fun RailItem(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = Medida.objetivoTactil)
-            .clip(RoundedCornerShape(Radio.m))
-            .background(if (isActive) Movi.colores.lavado(Movi.colores.marca) else Color.Transparent)
+            // La activa, en la píldora amarilla de la opción 3 con la tinta encima (vuelta 29).
+            .clip(RoundedCornerShape(Radio.pill))
+            .background(if (isActive) Movi.colores.marca else Color.Transparent)
             .clickable { onTabSelected(tab) }
             .padding(horizontal = Espacio.s),
     ) {
         Icon(
             imageVector = icon,
             contentDescription = label,
-            tint = if (isActive) Movi.colores.marca else Movi.colores.textoApagado,
+            tint = if (isActive) Movi.colores.sobreMarca else Movi.colores.textoMedio,
             modifier = Modifier.size(Icono.m),
         )
         Text(
             text = label,
             style = if (isActive) Movi.textos.cuerpoFuerte else Movi.textos.cuerpoRegular,
-            color = if (isActive) Movi.colores.texto else Movi.colores.textoApagado,
+            color = if (isActive) Movi.colores.sobreMarca else Movi.colores.textoMedio,
         )
     }
 }
