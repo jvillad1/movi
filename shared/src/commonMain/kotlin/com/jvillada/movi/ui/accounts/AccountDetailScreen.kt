@@ -58,7 +58,9 @@ import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.homeScreenFor
 import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.LocalRefreshTick
+import com.jvillada.movi.ui.credits.AvisoDeFaltanDatos
 import com.jvillada.movi.ui.credits.HojasDeLaDeuda
+import com.jvillada.movi.ui.credits.faltanLosDatos
 import com.jvillada.movi.ui.credits.SeccionDeLaDeuda
 import com.jvillada.movi.ui.credits.rememberDeudaDelDetalle
 import com.jvillada.movi.ui.credits.textosDeLosPagosQueNoFueronLaCuota
@@ -317,6 +319,14 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                 // cómo cuadrarla. El saldo es el que ya trae `Account` —derivado por el server, sin
                 // anulados—: acá no se suma nada a mano.
                 account?.let { acc ->
+                    // Vuelta 31: a una deuda sin términos se le dice arriba, antes del saldo, que le
+                    // faltan datos, con «Completar datos». Créditos ya no abre el formulario directo.
+                    if (deuda != null && faltanLosDatos(deuda)) {
+                        item(key = "faltan-datos") {
+                            AvisoDeFaltanDatos(deuda)
+                            Spacer(Modifier.height(Medida.entreSecciones))
+                        }
+                    }
                     item(key = "balance-card") {
                         EncabezadoDeLaCuenta(
                             acc = acc,

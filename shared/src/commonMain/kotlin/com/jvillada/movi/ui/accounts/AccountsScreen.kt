@@ -162,7 +162,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
     val tarjetasDeCredito = tarjetasLeidas.valor.takeUnless { tarjetasLeidas.fallo && it.isNullOrEmpty() }
     val cargandoDeudas = creditosLeidos.actualizando || tarjetasLeidas.actualizando
 
-    // Ola R4: «Personas y comercios» salió de Patrimonio (quedan dos puertas: Espacios y Ajustes).
+    // Ola R4: «Personas y comercios» salió de Patrimonio (desde la vuelta 31 vive solo en Espacios).
     // Patrimonio contesta «¿qué tengo yo y qué debo?»; lo que se les mandó a otros no es tuyo.
 
     // ── Lo apartado: sale de «Tu plata» y tiene su renglón. Secundario, fuera de `lecturas`: si

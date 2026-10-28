@@ -159,6 +159,12 @@ interface WalletRepository {
         noLoTiene("repartirMovimiento")
     /** Lo saca del espacio: vuelve a contar entero. */
     suspend fun quitarDelEspacio(espacioId: String, eventoId: String): Unit = noLoTiene("quitarDelEspacio")
+    /**
+     * Quita del espacio el gasto [gastoId] que no tiene movimiento propio («Pagó otro»):
+     * `DELETE /api/espacios/{id}/gastos/{gastoId}`, que el server ya tenía. Uno con movimiento se
+     * quita con [quitarDelEspacio], por el movimiento.
+     */
+    suspend fun quitarGastoDelEspacio(espacioId: String, gastoId: String): Unit = noLoTiene("quitarGastoDelEspacio")
     /** «Pagó otro»: un gasto del espacio que pagó otro miembro. Upsert por id. */
     suspend fun anotarGastoDeOtro(espacioId: String, gasto: com.jvillada.movi.shared.model.GastoDelEspacio): com.jvillada.movi.shared.model.GastoDelEspacio =
         noLoTiene("anotarGastoDeOtro")

@@ -2,9 +2,11 @@ package com.jvillada.movi.ui.credits
 
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performSemanticsAction
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Account
@@ -13,6 +15,7 @@ import com.jvillada.movi.shared.model.CardSummary
 import com.jvillada.movi.shared.model.CardTerms
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.CreditTerms
+import com.jvillada.movi.ui.accounts.TAG_ENCABEZADO_DE_LA_CUENTA
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
@@ -133,14 +136,37 @@ class LaDeudaEnSuDetalleTest {
         assertTrue(hay("De tu nómina"))
     }
 
+    /**
+     * Vuelta 31: una deuda sin términos se abre igual que las demás. El detalle lo dice arriba, en el
+     * tono de aviso, y «Completar datos» abre el formulario de siempre.
+     */
     @Test
-    fun `una deuda sin terminos pide completarlos y deja ajustar el saldo`() {
+    fun `una deuda sin terminos lo dice arriba, con Completar datos, y deja ajustar el saldo`() {
         composeRule.montarElDetalleDe(vehiculo.account, RepositorioDeLaDeuda(creditos = listOf(vehiculo)))
 
-        assertTrue(hay(FALTAN_DATOS_DE_LA_DEUDA))
+        assertTrue(hay("Faltan los datos de este préstamo"))
         assertEquals(1, tocables(AJUSTAR_EL_SALDO))
-        tocar(FALTAN_LAS_CONDICIONES)
+        val aviso = composeRule.onNodeWithTag(TAG_FALTAN_DATOS_DE_LA_DEUDA, useUnmergedTree = true).fetchSemanticsNode()
+        val saldo = composeRule.onNodeWithTag(TAG_ENCABEZADO_DE_LA_CUENTA, useUnmergedTree = true).fetchSemanticsNode()
+        assertTrue(aviso.boundsInRoot.bottom <= saldo.boundsInRoot.top, "el aviso va arriba del saldo")
+        tocar(COMPLETAR_DATOS)
         assertTrue(hay("Guardar crédito"))
+    }
+
+    /** Una tarjeta con nombre de banco («Nu») llega al formulario con el banco ya lleno. */
+    @Test
+    fun `la Nu sin terminos abre su detalle y el formulario llega con el banco lleno`() {
+        val nu = CardSummary(
+            account = Account("acc_nu", "Nu", AccountType.CREDIT_CARD, 1_998_960L, balancesByCurrency = mapOf("COP" to 1_998_960L)),
+            terms = null,
+        )
+        composeRule.montarElDetalleDe(nu.account, RepositorioDeLaDeuda(tarjetas = listOf(nu)))
+
+        assertTrue(hay("Faltan los datos de esta tarjeta"))
+        tocar(COMPLETAR_DATOS)
+        assertTrue(hay("Guardar tarjeta"))
+        val banco = composeRule.onAllNodes(hasSetTextAction() and hasText("Nu"), useUnmergedTree = true).fetchSemanticsNodes()
+        assertEquals(1, banco.size, "el campo Banco llega con «Nu»")
     }
 
     @Test

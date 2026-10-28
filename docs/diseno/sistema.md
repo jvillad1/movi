@@ -160,7 +160,7 @@ Seccion(titulo = "Tarjetas", conteo = 3, accion = "Ver todo", onAccion = ::verTo
 el texto y el final (vuelta de diseño 15). 56 / 64 de alto mínimo, 16 a los
 lados, toque de borde a borde. El título va en hasta dos renglones antes del «…» (la fila crece) y el
 subtítulo en uno —o en dos con `lineasDelSubtitulo = 2`, solo donde el subtítulo es la razón de la fila
-y no se puede acortar («Hace más de un mes que no cuadras Bancolombia Ahorros», vuelta de diseño 2)—;
+y no se puede acortar («Bancolombia Ahorros · Nunca la has cuadrado», vuelta de diseño 2)—;
 el final se mide primero, así que un monto nunca se recorta. `tonoDelSubtitulo = TonoDeSubtitulo.Aviso`
 pinta el subtítulo en el color de aviso cuando pide algo al dueño («Faltan datos: tócala para
 completarlos», vuelta de diseño 4). **El subtítulo dice algo que el título y la
@@ -1331,3 +1331,43 @@ Lo vigilan `LoQueEraDeOtroDiaTest` y `LaFilaDelMovimientoTest` (puras), `BuscarM
 `LosComerciosLlevanSuSignoTest` (Robolectric), y en el server `LoQueMoviDijoOtroDiaTest` y
 `LasCifrasDeComoVoySonLasDeHoyTest` («¿Cómo voy?» y `/api/finance-summary` cuentan lo mismo con un gasto
 repartido).
+
+## 33. Vuelta 31: Créditos y Espacios se consultan, el cuadre dice una sola cosa y Ajustes se ordena
+
+Sin componentes nuevos en `ds/` (solo el tag `TAG_ICONO_EN_CIRCULO` de `IconoEnCirculo`, para las pruebas):
+
+- **Tocar una deuda siempre abre su detalle** (`FilaDeDeuda`), también sin términos («Nu», «Vehículo
+  4083»): antes abría el formulario y esa deuda no se podía consultar. Si faltan datos, el detalle lo
+  dice **arriba, antes del saldo**, con una `TarjetaDePropuesta` en `TonoDeIcono.Aviso` y «Completar
+  datos» (`AvisoDeFaltanDatos` en `ui/credits/LaDeudaEnSuDetalle.kt`), que abre el formulario de
+  siempre; «El préstamo / La tarjeta» no se pinta vacío. El campo **Banco llega lleno** cuando el
+  nombre es una marca del catálogo (`bancoSugeridoPara`: solo bancos y billeteras, nunca una red como
+  Visa, Mastercard o AMEX); escribirlo a mano manda.
+- **Cada gasto de un espacio es una `Fila` tocable.** Con movimiento propio abre el MISMO detalle de
+  Movimientos (`HojaDelMovimiento`); sin él («Pagó Caro») abre `HojaDelGasto` (`ui/espacios/DetalleDelGasto.kt`):
+  quién pagó, cuánto, tu parte, la categoría y la fecha en `Fila`s sobre capa 2, y «Quitar del espacio»
+  en `Peligro` con su pregunta antes. El cliente ganó `quitarGastoDelEspacio`, sobre la ruta
+  `DELETE /api/espacios/{id}/gastos/{gastoId}` que el server ya tenía (sin cambios de server). El
+  subtítulo **empieza por la fecha** («21 oct · Pagó Caro · Mercado»), no repite la categoría si ya es
+  el título, y va en dos renglones antes de cortarse.
+- **Una sola frase del cuadre de una cuenta**: `fraseDelCuadre` (`:core` `CuadreDeSaldos.kt`) la decide
+  y **nunca pierde la fecha** si hubo un cuadre: «Sin movimientos todavía», «Nunca la has cuadrado»,
+  «Cuadrada el 3 oct» (o «hoy», «ayer») hasta 45 días, y después «Hace más de un mes que no la cuadras ·
+  última el 3 ago» (con el año si es de otro). La dicen el detalle de la cuenta y Cuadre de saldos
+  (`textoDelUltimoCuadre`); Patrimonio, Hoy y Movi AI dicen su versión con nombre y la misma regla, más
+  corta (`textoDelAvisoDeCuadre`: «Bancolombia Ahorros · Nunca la has cuadrado», «Bancolombia Ahorros ·
+  última el 3 ago»). Donde un largo no cabe, baja a dos renglones antes que cortarse.
+- **Ajustes, más corto y con íconos**: cada fila lleva su `IconoEnCirculo` neutro (`IconoDeAjuste`;
+  «Borrar mi cuenta» sigue en peligro). El tema es **una fila «Tema» con su valor** que abre
+  `HojaDelTema` con las tres opciones. En Avisos hay **un solo «Activar avisos»** (en la fila de las
+  notificaciones; la de los recordatorios ya no repite su «Activar»). «Inicio del mes» pasó a
+  **«Inicio del período»** y su hoja pregunta «¿Qué día empieza tu período?». Donde no se leen SMS (la
+  web, iOS), «Tu plata» trae **«Recibe tus alertas por correo»** con la dirección a la vista; abre una
+  hoja con la MISMA pieza de la guía de primer uso (`ReenvioPorCorreo` en `ui/primeruso/`). **«Personas
+  y comercios» quedó solo en Espacios**: es de esa pestaña (`navTabFor` ya la marcaba) y ahí se elige
+  con quién compartir; en Ajustes era una segunda puerta a lo mismo.
+
+**Las líneas base** no cambian: `dp_sueltos` 119, `radios_con_numero` 3, y las guardas en 0 siguen en 0.
+Lo vigilan `LaDeudaEnSuDetalleTest`, `LaListaDeCreditosEsDeFilasTest`, `EspaciosEnPantallaTest`,
+`LosGastosDelEspacioSeLeenTest` (360 dp, motor de texto real), `ElCuadreDiceLoMismoTest`,
+`MasScreenTest` y `LosAvisosApagadosSeVenTest`.

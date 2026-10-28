@@ -30,6 +30,7 @@ import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.DetalleDelEspacio
+import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.Espacio
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.GastoDelEspacio
@@ -244,13 +245,90 @@ class EspaciosEnPantallaTest {
         assertNull(botones()["Pedirle a Caro"], "no hay nada que pedir")
     }
 
-    /** Vuelta de diseño 26: cada gasto dice su fecha en el subtítulo. */
+    /** Vuelta de diseño 26: cada gasto dice su fecha en el subtítulo; desde la vuelta 31, primero. */
     @Test
     fun `cada gasto del espacio dice su fecha`() {
         Repositories.sustitutoDePrueba = ConLaCasa()
         montarLaPestana()
-        esperarTexto("Pagó Caro · Mercado · 20 oct")
-        esperarTexto("Pagaste tú · Mercado · 20 oct")
+        esperarTexto("20 oct · Pagó Caro · Mercado")
+        esperarTexto("20 oct · Pagaste tú · Mercado")
+    }
+
+    // ── Vuelta 31: los gastos se tocan ───────────────────────────────────────
+
+    /** Toca la fila de gasto que dice [titulo]. */
+    private fun tocarGasto(titulo: String) {
+        composeRule.onNode(
+            SemanticsMatcher.expectValue(SemanticsProperties.TestTag, TAG_GASTO_DEL_ESPACIO) and hasText(titulo) and hasClickAction(),
+        ).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+    }
+
+    @Test
+    fun `cada gasto del espacio es una fila tocable`() {
+        Repositories.sustitutoDePrueba = ConLaCasa()
+        montarLaPestana()
+        esperarTexto("Mercado del sábado")
+        val gastos = composeRule.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.TestTag, TAG_GASTO_DEL_ESPACIO))
+            .fetchSemanticsNodes()
+        assertEquals(2, gastos.size)
+        gastos.forEach { assertTrue(it.config.contains(SemanticsActions.OnClick), "un gasto que no responde al tocarlo") }
+    }
+
+    /** Un gasto que pagó Caro no tiene movimiento: abre su hoja, y «Quitar del espacio» pregunta y lo quita. */
+    @Test
+    fun `un gasto que pago otro abre su hoja y se puede quitar`() {
+        val quitados = mutableListOf<Pair<String, String>>()
+        Repositories.sustitutoDePrueba = object : ConLaCasa() {
+            override suspend fun quitarGastoDelEspacio(espacioId: String, gastoId: String) {
+                quitados += espacioId to gastoId
+            }
+        }
+        montarLaPestana()
+        esperarTexto("Mercado del sábado")
+        tocarGasto("Mercado del sábado")
+
+        esperarTag(TAG_DETALLE_DEL_GASTO)
+        listOf("Pagó Caro", "No salió de tus cuentas", "Tu parte", "Mitad", "Categoría", "Fecha", "20 de octubre de 2025")
+            .forEach { esperarTexto(it) }
+        tocarBoton(QUITAR_DEL_ESPACIO)
+        esperarTexto("¿Quitar «Mercado del sábado» de Casa con Caro?")
+        tocarBoton("Quitar")
+        composeRule.waitUntil(timeoutMillis = 5_000) { quitados.isNotEmpty() }
+        assertEquals(listOf("esp_casa" to "g2"), quitados)
+    }
+
+    /** Un gasto con movimiento propio abre el MISMO detalle de Movimientos. */
+    @Test
+    fun `un gasto con movimiento abre el detalle del movimiento`() {
+        val repartido = mercado.copy(id = "e1", amount = 2_100_000L, parteAjena = 1_050_000L, espacioId = casa.id)
+        Repositories.sustitutoDePrueba = object : ConLaCasa() {
+            override suspend fun getEventsByDay(): List<EventDay> = listOf(EventDay("2025-10-20", -2_100_000L, listOf(repartido)))
+            override suspend fun getAccounts(): List<Account> = listOf(bancolombia)
+            override suspend fun getParecidos(id: String): List<FinancialEvent> = emptyList()
+        }
+        montarLaPestana()
+        esperarTexto("Mercado Éxito")
+        tocarGasto("Mercado Éxito")
+
+        esperarTexto("Repartido en Casa con Caro")
+        composeRule.onNodeWithTag(TAG_REPARTIR, useUnmergedTree = true).assertExists()
+        composeRule.onAllNodesWithTag(TAG_DETALLE_DEL_GASTO, useUnmergedTree = true).fetchSemanticsNodes()
+            .let { assertEquals(0, it.size, "no es la hoja del gasto sin movimiento") }
+    }
+
+    /** Si el movimiento no aparece (anulado, o falló la lectura), la hoja del gasto: nunca un toque mudo. */
+    @Test
+    fun `si el movimiento no aparece, abre la hoja del gasto`() {
+        Repositories.sustitutoDePrueba = object : ConLaCasa() {
+            override suspend fun getEventsByDay(): List<EventDay> = emptyList()
+            override suspend fun getAccounts(): List<Account> = listOf(bancolombia)
+        }
+        montarLaPestana()
+        esperarTexto("Mercado Éxito")
+        tocarGasto("Mercado Éxito")
+        esperarTag(TAG_DETALLE_DEL_GASTO)
+        esperarTexto("Pagaste tú")
     }
 
     private val bancolombia = Account("acc-banco", "Bancolombia", AccountType.SAVINGS, 1_000_000L, "COP")

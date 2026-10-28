@@ -62,7 +62,10 @@ fun CardTermsSheet(
     var name by remember { mutableStateOf("") }
     var initialDebt by remember { mutableStateOf<Long?>(null) }
     var currency by remember { mutableStateOf(editing?.account?.currency ?: "COP") }
-    var bank by remember { mutableStateOf(existingTerms?.bank ?: "") }
+    // Vuelta 31: si el nombre ya dice el banco («Nu»), el campo llega lleno ([bancoSugeridoPara]). Lo
+    // que el dueño escribe a mano manda: escribir el nombre después ya no lo pisa.
+    var bank by remember { mutableStateOf(existingTerms?.bank ?: editing?.account?.name?.let(::bancoSugeridoPara) ?: "") }
+    var bancoAMano by remember { mutableStateOf(existingTerms != null) }
     var creditLimit by remember { mutableStateOf(existingTerms?.creditLimit) }
     var cutoffDay by remember { mutableStateOf(existingTerms?.cutoffDay?.toString() ?: "") }
     // El pago mínimo del extracto. Nullable y sin default: null significa «no lo cargué», no 0.
@@ -164,7 +167,15 @@ fun CardTermsSheet(
                 Spacer(Modifier.height(Medida.entreSecciones))
             } else {
                 GrupoDeCampos("La tarjeta") {
-                Campo(name, { name = it }, rotulo = "Nombre", guia = "Ej: Visa Bancolombia")
+                Campo(
+                name,
+                {
+                    name = it
+                    if (!bancoAMano) bank = bancoSugeridoPara(it).orEmpty()
+                },
+                rotulo = "Nombre",
+                guia = "Ej: Visa Bancolombia",
+            )
                 // Opcional a propósito: una tarjeta recién sacada no debe nada.
                 CampoDeMonto(initialDebt, { initialDebt = it }, rotulo = "Deuda actual (opcional)", moneda = simboloDeLaMoneda(currency))
                 Column {
@@ -188,7 +199,7 @@ fun CardTermsSheet(
 
             val moneda = simboloDeLaMoneda(editing?.account?.currency ?: currency)
             GrupoDeCampos("Términos") {
-            Campo(bank, { bank = it }, rotulo = "Banco", guia = "Ej: Bancolombia")
+            Campo(bank, { bank = it; bancoAMano = true }, rotulo = "Banco", guia = "Ej: Bancolombia")
             CampoDeMonto(creditLimit, { creditLimit = it }, rotulo = "Cupo total (opcional)", moneda = moneda)
             Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
                 Box(Modifier.weight(1f)) {

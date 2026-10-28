@@ -115,9 +115,9 @@ class PerfilNoInventaTusAjustesTest {
         assertTrue(hay(NO_PUDIMOS_LEERLO), "la fila tiene que decir que no se pudo leer")
 
         // Y la puerta al «Guardar» está cerrada: sin valor conocido, la fila no abre nada.
-        assertTrue(!filaTocable("Inicio del mes"), "no se puede elegir un corte que todavía no se leyó")
+        assertTrue(!filaTocable("Inicio del período"), "no se puede elegir un corte que todavía no se leyó")
         assertTrue(!filaTocable("Avisarme antes de un vencimiento"), "lo mismo para el aviso")
-        assertTrue(!hay("¿Qué día empieza tu mes?"), "la hoja no debería estar abierta")
+        assertTrue(!hay("¿Qué día empieza tu período?"), "la hoja no debería estar abierta")
 
         // Lo que no depende del perfil sigue estando: la pantalla no se apaga entera.
         // (Solo lo que entra en la primera pantalla: es una `LazyColumn`, lo de más abajo ni
@@ -142,7 +142,7 @@ class PerfilNoInventaTusAjustesTest {
         assertTrue(!hay(AJUSTES_NO_LEIDOS), "resuelto el problema, el aviso se va")
         assertTrue(!hay(NO_PUDIMOS_LEERLO))
         assertTrue(hay("Te avisamos 5 días antes del vencimiento."))
-        assertTrue(filaTocable("Inicio del mes"), "con el valor en la mano la fila vuelve a abrir la hoja")
+        assertTrue(filaTocable("Inicio del período"), "con el valor en la mano la fila vuelve a abrir la hoja")
     }
 
     // ── Con el perfil leído ───────────────────────────────────────────────────
@@ -160,8 +160,8 @@ class PerfilNoInventaTusAjustesTest {
         }) { MasScreen(onNavigate = {}, onLogout = {}) }
 
         esperar("Cada día 25")
-        tocarFila("Inicio del mes")
-        esperar("¿Qué día empieza tu mes?")
+        tocarFila("Inicio del período")
+        esperar("¿Qué día empieza tu período?")
 
         // Guardar sin tocar ningún número: lo que se escriba es lo que la hoja traía preseleccionado.
         tocar(hasClickAction() and hasAnyChild(hasText("Guardar")))

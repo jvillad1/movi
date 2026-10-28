@@ -342,6 +342,10 @@ class WalletRepositoryImpl(
         conRespuesta(client.delete("$baseUrl/api/espacios/$espacioId/compartir/$eventoId")) { }
     }
 
+    override suspend fun quitarGastoDelEspacio(espacioId: String, gastoId: String) {
+        conRespuesta(client.delete("$baseUrl/api/espacios/$espacioId/gastos/$gastoId")) { }
+    }
+
     override suspend fun anotarGastoDeOtro(espacioId: String, gasto: com.jvillada.movi.shared.model.GastoDelEspacio): com.jvillada.movi.shared.model.GastoDelEspacio =
         conRespuesta(
             client.post("$baseUrl/api/espacios/$espacioId/gastos") {

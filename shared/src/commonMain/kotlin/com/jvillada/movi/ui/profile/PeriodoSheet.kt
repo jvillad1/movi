@@ -48,6 +48,12 @@ import com.jvillada.movi.ui.components.MarcoDeHoja
 import kotlinx.datetime.Clock
 import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
 
+/** La fila de Ajustes que abre esta hoja: «período», como en el resto de la app (vuelta 31). */
+const val INICIO_DEL_PERIODO: String = "Inicio del período"
+
+/** La pregunta de la hoja (vuelta 31: decía «¿Qué día empieza tu mes?»). */
+const val PREGUNTA_DEL_INICIO_DEL_PERIODO: String = "¿Qué día empieza tu período?"
+
 /**
  * Elegir el día en que arranca el período financiero.
  *
@@ -100,9 +106,9 @@ fun PeriodoSheet(
         ) {
 
             EncabezadoDeHoja(
-                "¿Qué día empieza tu mes?",
+                PREGUNTA_DEL_INICIO_DEL_PERIODO,
                 subtitulo = "Movi cuenta tus ingresos, gastos y presupuestos sobre esta ventana. " +
-                    "Si te pagan el 26, elige 26 y el mes te va a cuadrar con el sueldo.",
+                    "Si te pagan el 26, elige 26 y el período te va a cuadrar con el sueldo.",
                 modifier = Modifier.padding(top = Espacio.xxs, bottom = Espacio.m),
             )
 

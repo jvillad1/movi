@@ -142,7 +142,7 @@ internal val PANTALLAS_BUSCABLES: List<PantallaBuscable> = listOf(
     PantallaBuscable("Cómo salir de tus deudas", "Créditos", Screen.SalidaDeDeudas, listOf("abono", "avalancha", "bola de nieve")),
     PantallaBuscable("Cuadre de saldos", "Patrimonio", Screen.CuadreDeSaldos, listOf("cuadrar", "ajustar saldo")),
     // Ola R4: su casa es Espacios (y Ajustes); Movimientos ya no tiene su fila.
-    PantallaBuscable(PERSONAS_Y_COMERCIOS, "Espacios y Ajustes", Screen.Destinos(), listOf("terceros", "cuentas de otros", "hogar")),
+    PantallaBuscable(PERSONAS_Y_COMERCIOS, "Espacios", Screen.Destinos(), listOf("terceros", "cuentas de otros", "hogar")),
     // Vuelta de diseño 3: Perfil se mudó dentro de Ajustes, y lo que se buscaba ahí lleva acá.
     PantallaBuscable(TITULO_DE_AJUSTES, "El avatar", Screen.Mas, listOf("perfil", "huella", "ocultar los saldos", "tema", "como se ve", "avisos por correo", "corte del periodo", "contrasena", "cerrar sesion", "descargar tus datos")),
     PantallaBuscable("Categorías", TITULO_DE_AJUSTES, Screen.Categorias),

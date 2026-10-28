@@ -121,10 +121,9 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
     // el corte del dueño — ver [ajustesDelPeriodo]. Si falla se sigue con el corte 1: esto solo espera.
     val perfilContestado = perfilLeido.valor != null || perfilLeido.terminada
     var showTypeChooser by remember { mutableStateOf(false) }
+    // Desde la vuelta 31 estas hojas solo crean: completar o editar una deuda se hace en su detalle.
     var showLoanSheet by remember { mutableStateOf(false) }
-    var editingLoan by remember { mutableStateOf<CreditSummary?>(null) }
     var showCardSheet by remember { mutableStateOf(false) }
-    var editingCard by remember { mutableStateOf<CardSummary?>(null) }
     // Vuelta de diseño 4: «Ajustar saldo», «¿Y si abonas de más?» y «Registrar pago/descuento» ya
     // no son botones de la lista: viven en el detalle de la deuda (ver [SeccionDeLaDeuda]).
     // Ola 2 #6: mismo guard que ya usaba Recurrentes — sin esto el botón ancho de "vacío"
@@ -308,7 +307,8 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                 }
             }
             // Vuelta de diseño 4: cada deuda es una fila tocable. Abre su detalle —donde viven
-            // «Editar», «Ajustar saldo» y lo demás—; sin términos, tocarla los completa.
+            // «Editar», «Ajustar saldo» y lo demás—. Vuelta 31: también sin términos; el detalle dice
+            // arriba que faltan datos y trae «Completar datos».
             val hoy = hoyEnAppZone()
             val filaDePrestamo: @Composable (CreditSummary) -> Unit = { c ->
                 FilaDeDeuda(
@@ -317,7 +317,6 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                     deuda = prestamoEnLaLista(c, planes[c.account.id], periodoActual, hoy),
                     saldo = { Cifra(c.account.balance) },
                     onAbrir = { onNavigate(Screen.AccountDetail(c.account.id, c.account.type.group)) },
-                    onCompletar = { editingLoan = c; showLoanSheet = true },
                 )
             }
             val filaDeTarjeta: @Composable (CardSummary) -> Unit = { c ->
@@ -330,7 +329,6 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                     // sería $0, un número que miente.
                     saldo = { MontoDeFila(formatMoney(c.account.balancesByCurrency[moneda] ?: c.account.balance, moneda)) },
                     onAbrir = { onNavigate(Screen.AccountDetail(c.account.id, c.account.type.group)) },
-                    onCompletar = { editingCard = c; showCardSheet = true },
                 )
             }
 
@@ -436,13 +434,13 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
         if (showTypeChooser) {
             DebtTypeChooserSheet(
                 onDismiss = { showTypeChooser = false },
-                onLoan = { showTypeChooser = false; editingLoan = null; showLoanSheet = true },
-                onCard = { showTypeChooser = false; editingCard = null; showCardSheet = true },
+                onLoan = { showTypeChooser = false; showLoanSheet = true },
+                onCard = { showTypeChooser = false; showCardSheet = true },
             )
         }
         if (showLoanSheet) {
             CreditTermsSheet(
-                editing = editingLoan,
+                editing = null,
                 // «+ Nuevo crédito» se puede tocar desde el primer cuadro, antes de que contesten
                 // los créditos. La hoja lee [candidates] en cada composición, así que la línea
                 // «Ya tienes una deuda cargada como cuenta, ¿es esta?» aparece sola en cuanto
@@ -454,7 +452,7 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
         }
         if (showCardSheet) {
             CardTermsSheet(
-                editing = editingCard,
+                editing = null,
                 onDismiss = { showCardSheet = false },
                 onSaved = { showCardSheet = false; reloadKey++ },
             )
@@ -635,7 +633,9 @@ private fun <T> GrupoDeDeudas(deudas: List<T>, fila: @Composable (T) -> Unit) {
  * **Una deuda en la lista de Créditos** (vuelta de diseño 4): una [Fila] tocable —ícono, nombre, el
  * próximo pago y el saldo— y, debajo, solo lo que hace falta: la barra cuando es verdadera, o la
  * nota que la barra no puede decir (la deuda que crece, el desembolso que falta). Sin botones: tocarla
- * abre su detalle, donde están «Editar» y «Ajustar saldo»; sin términos, tocarla los completa.
+ * abre su detalle, donde están «Editar» y «Ajustar saldo». **Siempre** el detalle (vuelta 31): sin
+ * términos abría directo el formulario, y una deuda sin datos era la única que no se podía consultar
+ * —saldo, movimientos—; ahora el detalle dice arriba que faltan y ofrece «Completar datos».
  *
  * Antes era una tarjeta con «Ajustar saldo» y «Editar» adentro, un «0% pagado» y una barra, y una
  * deuda sin términos decía «Sin términos registrados · $0 · 0% pagado».
@@ -647,7 +647,6 @@ private fun FilaDeDeuda(
     deuda: DeudaEnLaLista,
     saldo: @Composable () -> Unit,
     onAbrir: () -> Unit,
-    onCompletar: () -> Unit,
 ) {
     Column(modifier = Modifier.testTag(TAG_FILA_DE_DEUDA)) {
         Fila(
@@ -660,8 +659,8 @@ private fun FilaDeDeuda(
             lineasDelSubtitulo = 2,
             inicio = { IconoEnCirculo(icono, tono = TonoDeIcono.Neutro) },
             final = { if (deuda.pagada) Pildora(DEUDA_PAGADA, TonoDePildora.Exito) else saldo() },
-            onClick = if (deuda.faltanDatos) onCompletar else onAbrir,
-            onClickLabel = if (deuda.faltanDatos) "Completar los datos" else "Ver la deuda",
+            onClick = onAbrir,
+            onClickLabel = "Ver la deuda",
         )
         val nota = deuda.nota
         val fraccion = deuda.fraccionPagada

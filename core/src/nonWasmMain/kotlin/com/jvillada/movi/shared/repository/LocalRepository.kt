@@ -2053,6 +2053,7 @@ class LocalRepository(
         }
     }
     override suspend fun quitarDelEspacio(espacioId: String, eventoId: String) = remote.quitarDelEspacio(espacioId, eventoId)
+    override suspend fun quitarGastoDelEspacio(espacioId: String, gastoId: String) = remote.quitarGastoDelEspacio(espacioId, gastoId)
     override suspend fun anotarGastoDeOtro(espacioId: String, gasto: com.jvillada.movi.shared.model.GastoDelEspacio) =
         remote.anotarGastoDeOtro(espacioId, gasto)
     override suspend fun liquidarEspacio(espacioId: String, liquidacion: com.jvillada.movi.shared.model.LiquidacionDelEspacio) =
