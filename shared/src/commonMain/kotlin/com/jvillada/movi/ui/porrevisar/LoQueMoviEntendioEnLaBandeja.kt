@@ -83,7 +83,18 @@ data class LoQueMoviEntendio(
     val anotacion: AnotacionEntendida?,
     val dudas: Set<DudaDelAviso>,
     val advertencia: String? = null,
+    /**
+     * **«Transporte · Bancolombia Ahorros»** (vuelta 44): la categoría y la cuenta que Movi propone,
+     * entendidas o no —son las que Revisar aviso va a mostrar—, para la tarjeta de la bandeja. Se ve
+     * sin abrir el aviso, y así el mal categorizado salta a la vista. `null` sin lectura.
+     */
+    val linea: String? = null,
 )
+
+/** «Transporte · Bancolombia Ahorros», lo que haya de las dos; `null` sin ninguna. */
+fun lineaDeLoEntendido(categoria: String?, cuenta: String?): String? =
+    listOfNotNull(categoria?.trim()?.takeIf { it.isNotEmpty() }, cuenta?.trim()?.takeIf { it.isNotEmpty() })
+        .joinToString(" · ").ifEmpty { null }
 
 /** Las cuentas que se resolvieron por un dato y no por defecto: el número, el banco o la marca, lo que sabe Movi del pago. */
 private val CUENTAS_SEGURAS = setOf(
@@ -154,11 +165,13 @@ fun loQueMoviEntendio(
         antesDeLaCuenta = cuenta != null && esAntesDeLaCuenta(momento, propuestas.inicioDeLasCuentas[cuenta.id]),
         seReparte = propuesta.seReparte,
     )
-    if (dudas.isNotEmpty() || cuenta == null) return LoQueMoviEntendio(null, dudas, advertencia)
+    val linea = lineaDeLoEntendido(leido.category, resuelta.cuenta?.name)
+    if (dudas.isNotEmpty() || cuenta == null) return LoQueMoviEntendio(null, dudas, advertencia, linea)
     return LoQueMoviEntendio(
         AnotacionEntendida(cabezaId = cabeza.id, sms = delQueSale, pago = pago, leido = leido, cuenta = cuenta, categoria = leido.category),
         emptySet(),
         advertencia,
+        linea,
     )
 }
 
@@ -193,6 +206,14 @@ suspend fun confirmarLoEntendido(
     anotarElMovimientoDelAviso(anotacion.sms.id, anotacion.pago, evento, esIdDeComprobante(anotacion.sms.id), alCrearElMovimiento, repo)
 }
 
+/**
+ * **«Anotado · Uber Rides $18.300»** (vuelta 44): lo que dice el aviso de abajo al confirmar desde la
+ * fila. Sin «Deshacer»: confirmar un aviso no tiene vuelta en Movi (se anula el movimiento, como
+ * siempre).
+ */
+fun textoDeAnotado(anotacion: AnotacionEntendida): String =
+    "Anotado · ${com.jvillada.movi.shared.model.nombreParaMostrar(anotacion.leido.merchant)} ${formatMoney(anotacion.monto, anotacion.leido.currency)}"
+
 /** Cómo terminó el lote: lo que se anotó y lo que quedó en la bandeja, con por qué. */
 data class ResultadoDelLote(
     val anotados: List<AnotacionEntendida>,
@@ -218,15 +239,4 @@ suspend fun confirmarElLote(
         alAvanzar(i + 1)
     }
     return ResultadoDelLote(anotados, quedaron)
-}
-
-/** «Se anotaron 3.» / «Se anotó 1. Quedó en la bandeja: …». */
-fun textoDelResultadoDelLote(resultado: ResultadoDelLote): String {
-    val n = resultado.anotados.size
-    val hechos = if (n == 1) "Se anotó 1." else "Se anotaron $n."
-    if (resultado.quedaron.isEmpty()) return hechos
-    val cuales = resultado.quedaron.joinToString(" ") { (anotacion, porQue) ->
-        "${anotacion.leido.merchant} (${anotacion.linea}): $porQue."
-    }
-    return "$hechos Quedó en la bandeja: $cuales"
 }

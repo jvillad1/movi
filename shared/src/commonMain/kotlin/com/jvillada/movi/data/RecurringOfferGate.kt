@@ -1,6 +1,11 @@
 package com.jvillada.movi.data
 
+import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.ComoSeGuardo
 import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.ajustesDelPeriodo
+import com.jvillada.movi.shared.model.seRepiteParaProponer
+import kotlinx.datetime.Clock
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.Subscription
 import com.jvillada.movi.ui.recurrentes.RecurringPrefill
@@ -30,6 +35,27 @@ import com.jvillada.movi.ui.recurrentes.throttleKeyFor
  * crear un recurrente que ya tiene.
  */
 object RecurringOfferGate {
+    /** La evidencia de la vuelta 44: la historia, las cuentas y el período, leídos al momento. */
+    private suspend fun seRepiteConLaHistoria(event: FinancialEvent, como: ComoSeGuardo): Boolean {
+        val ahora = Clock.System.now().toEpochMilliseconds()
+        val historia = CacheDeLecturas.ultima(ClaveDeLectura.EventosPorDia, ahora)
+            ?: intentar { Repositories.wallets.getEventsByDay() }.getOrNull()
+            ?: return false
+        val cuentas = CacheDeLecturas.ultima(ClaveDeLectura.Cuentas, ahora)
+            ?: intentar { Repositories.wallets.getAccounts() }.getOrNull()
+            ?: return false
+        val perfil = CacheDeLecturas.ultima(ClaveDeLectura.Perfil, ahora)
+            ?: intentar { Repositories.wallets.getUserProfile() }.getOrNull()
+            ?: return false
+        val esEfectivo = cuentas.firstOrNull { it.id == event.accountId }?.type == AccountType.CASH
+        return seRepiteParaProponer(
+            evento = event,
+            historia = historia.flatMap { it.items },
+            ajustes = perfil.ajustesDelPeriodo(),
+            como = como.copy(esEfectivo = como.esEfectivo || esEfectivo),
+        )
+    }
+
     private var reglas: List<RecurringRule>? = null
     private var suscripciones: List<Subscription>? = null
     /** Las "cosas" (tipo + categoría + monto) que ya recibieron su barra en esta sesión. */
@@ -121,7 +147,11 @@ object RecurringOfferGate {
      * de insistencia de su categoría, que [seTomo] descuenta si el dueño la toma (guarda 3 en
      * `RecurringOffer.kt`).
      */
-    suspend fun ofrecerPara(event: FinancialEvent): RecurringPrefill? {
+    suspend fun ofrecerPara(
+        event: FinancialEvent,
+        /** Vuelta 44: cómo se guardó (repartido, el pago de algo que se espera); ver [seRepiteParaProponer]. */
+        como: ComoSeGuardo = ComoSeGuardo(),
+    ): RecurringPrefill? {
         val reglasAlDia = reglas ?: runCatching { Repositories.wallets.getRecurringRules() }
             .onSuccess { reglas = it }
             .getOrNull()
@@ -138,6 +168,12 @@ object RecurringOfferGate {
         // movimiento: los dos caminos que crean un recurrente tienen que medir lo mismo.
         val activas = nombresDeSuscripcionesQueYaSuman(cobrosAlDia)
         if (!shouldOfferRecurring(event, reglasAlDia, yaOfrecidas, activas, sinTomarPorCategoria)) return null
+        // Vuelta 44 · **solo cuando ya se repitió**: el mismo gasto en dos períodos anteriores, y nunca
+        // tras repartir, un efectivo chico o el pago de algo que se espera (`seRepiteParaProponer`, en
+        // `:core`). Hace falta la historia, las cuentas (¿salió de efectivo?) y el período del dueño;
+        // se piden recién acá, cuando las guardas baratas ya pasaron. Si alguna lectura falla, no se
+        // ofrece: sin la evidencia, la pregunta vuelve a ser ruido.
+        if (!seRepiteConLaHistoria(event, como)) return null
         yaOfrecidas += throttleKeyFor(event)
         val categoria = categoryThrottleKeyFor(event)
         sinTomarPorCategoria[categoria] = (sinTomarPorCategoria[categoria] ?: 0) + 1

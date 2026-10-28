@@ -77,7 +77,8 @@ class LaCabezaDelAvisoTest {
         assertEquals("Panaderia La Esq", cabeza.titulo, "el comercio no grita (vuelta de diseño 4)")
         assertNull(cabeza.marca)
         assertEquals("Comida", cabeza.categoria)
-        assertEquals("SMS · 11:02 a. m.", cabeza.subtitulo, "el código del remitente no dice nada: «SMS»")
+        // Vuelta 44: el código del remitente se dice como el banco que lo manda.
+        assertEquals("Bancolombia · 11:02 a. m.", cabeza.subtitulo, "«85540» es Bancolombia")
     }
 
     @Test
@@ -228,7 +229,11 @@ class LaCabezaDelAvisoTest {
         assertEquals("Nu", bancoDelAviso("Notificación · Nu"))
         assertEquals("Bancolombia", bancoDelAviso("Correo · Bancolombia"))
         assertEquals("Comprobante", bancoDelAviso("Comprobante · transferencia.png"))
-        assertEquals("SMS", bancoDelAviso("85540"))
+        assertEquals("Bancolombia", bancoDelAviso("85540"))
+        assertEquals("Bancolombia", bancoDelAviso("891333"))
+        // Un código que Movi no conoce no se adivina.
+        assertEquals("SMS", bancoDelAviso("899776"))
+        assertEquals("SMS", bancoDelAviso(""))
         assertEquals("Falabella", bancoDelAviso("Falabella"))
     }
 }

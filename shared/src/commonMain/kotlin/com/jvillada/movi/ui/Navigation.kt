@@ -102,6 +102,12 @@ sealed class Screen {
          * que salda. Ver `AgregarEnModoPago.kt`. Lo pone `hojaParaAnotar`; `null` = Agregar de siempre.
          */
         val presetPago: com.jvillada.movi.ui.quickadd.PagoDeLaFactura? = null,
+        /**
+         * Vuelta 44 · **«Repartir» abre Agregar en modo personas**: «Repartir este gasto · ¿Quién
+         * pagó? Yo | Caro», con el monto en blanco y «Yo» marcado. Antes abría «Pagó otro» en el
+         * grupo, que supone que pagó el otro.
+         */
+        val presetRepartir: Boolean = false,
     ) : Screen()
     /**
      * Movi AI, opcionalmente **con una pregunta ya lista**.

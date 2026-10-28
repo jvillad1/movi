@@ -86,6 +86,35 @@ class PagoOtroConNotaTest {
         assertEquals("Mercado", anotar(nota = null).descripcion)
     }
 
+    /**
+     * Vuelta 44: la categoría de «Pagó otro» se elige con el selector del sistema —el de Agregar:
+     * «Categoría … Todas ›» y las pastillas con la elegida marcada—, no con el desplegable y su
+     * «Administrar categorías».
+     */
+    @Test
+    fun `la categoria se elige con las pastillas de Agregar`() {
+        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {}
+        composeRule.setContent {
+            MoviTheme {
+                Box(Modifier.fillMaxSize()) {
+                    HojaPagoOtro(espacio = casa, onDismiss = {}, onGuardado = {}, categoriaInicial = "Mercado")
+                }
+            }
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(TAG_CATEGORIA_PAGO_OTRO, useUnmergedTree = true).assertExists()
+        assertEquals(0, composeRule.onAllNodes(hasText("Administrar categorías"), useUnmergedTree = true).fetchSemanticsNodes().size)
+        composeRule.onNodeWithTag(com.jvillada.movi.ui.quickadd.TAG_PASTILLA_TODAS_LAS_CATEGORIAS_AGREGAR, useUnmergedTree = true).assertExists()
+        // La elegida, marcada.
+        val mercado = composeRule.onNode(
+            hasText("Mercado") and androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag(TAG_CATEGORIA_PAGO_OTRO)),
+            useUnmergedTree = true,
+        ).fetchSemanticsNode()
+        val seleccionada = androidx.compose.ui.semantics.SemanticsProperties.Selected
+        val conSeleccion = generateSequence(mercado) { it.parent }.firstOrNull { seleccionada in it.config }
+        assertEquals(true, conSeleccion?.config?.get(seleccionada))
+    }
+
     @Test
     fun `una nota en blanco tambien cae a la categoria`() {
         assertEquals("Mercado", descripcionDelPagoOtro("   ", "Mercado"))

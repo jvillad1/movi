@@ -21,6 +21,7 @@ import com.jvillada.movi.shared.model.marcaDeLaCuenta
 import com.jvillada.movi.shared.model.marcaDelBanco
 import com.jvillada.movi.shared.model.marcaDelTexto
 import com.jvillada.movi.shared.model.nombreParaMostrar
+import com.jvillada.movi.shared.model.nombreDelOrigenDeCaptura
 import com.jvillada.movi.ui.categorias.IconoDeCategoria
 import com.jvillada.movi.ui.components.CirculoDeMarca
 import com.jvillada.movi.ui.components.TamanoDeAvatar
@@ -69,14 +70,19 @@ data class CabezaDelAviso(
 
 /**
  * **El banco que mandó el aviso, como se nombra en una línea**: «Notificación · Nu» → «Nu», «Correo ·
- * Bancolombia» → «Bancolombia», «Comprobante · transferencia.png» → «Comprobante», y un SMS que llega
- * con el código del remitente («85540») → «SMS», que es lo único que ese número dice.
+ * Bancolombia» → «Bancolombia», «Comprobante · transferencia.png» → «Comprobante».
+ *
+ * **Un SMS llega con el código del remitente** («85540»): vuelta 44, se dice el banco con el mapeo de
+ * `:core` ([nombreDelOrigenDeCaptura], el mismo que nombra al banco mudo) —«85540» → «Bancolombia»—.
+ * La revisión de «un día del dueño» vio «85540» como título de Revisar aviso. Un código que Movi no
+ * conoce no se adivina: «SMS», que es lo único que ese número dice.
  */
 fun bancoDelAviso(bank: String): String {
     val limpio = bank.replace(' ', ' ').trim()
     if (limpio.startsWith("Comprobante", ignoreCase = true)) return "Comprobante"
     val origen = origenLegibleDelAviso(limpio)
-    return if (origen.isEmpty() || origen.all { it.isDigit() }) "SMS" else origen
+    if (origen.isEmpty() || origen.all { it.isDigit() || it == '+' }) return nombreDelOrigenDeCaptura(limpio) ?: "SMS"
+    return origen
 }
 
 /** El título de un aviso que no nombra comercio y llega con el código del remitente («85540»). */
@@ -233,7 +239,7 @@ fun cabezaDelAviso(
             },
             // El banco ya es el título: abajo queda la hora (o, en un pago, por dónde llegó cada aviso).
             subtitulo = if (avisos.size > 1) subtitulo else cuando,
-            marca = marcaDelBanco(primero.bank),
+            marca = marcaDelBanco(primero.bank) ?: marcaDelBanco(banco),
             monto = monto,
             moneda = moneda,
             tono = tono,

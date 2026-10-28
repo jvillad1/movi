@@ -68,6 +68,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import com.jvillada.movi.shared.model.ventanaDe
 import com.jvillada.movi.shared.model.periodoDe
 import com.jvillada.movi.shared.model.PeriodSettings
@@ -191,13 +192,14 @@ class DashboardRoutesTest {
         uid: String = userId,
         cuando: String = "2026-08-01T10:00:00",
         origen: String = "Bancolombia",
+        texto: String = "Compra \$50.000 en Netflix",
     ) = transaction {
         SmsMessages.insert {
             it[SmsMessages.id]     = id
             it[SmsMessages.userId] = uid
             it[time]               = cuando
             it[bank]               = origen
-            it[text]               = "Compra \$50.000 en Netflix"
+            it[text]               = texto
             it[SmsMessages.state]  = state
             it[det]                = ""
         }
@@ -534,6 +536,33 @@ class DashboardRoutesTest {
         sms("s-otro", SMS_STATE_PENDING, cuando = "2026-08-02T10:00:00", origen = "85540")
 
         assertEquals(2L, summary().long("pendingSms"))
+    }
+
+    /**
+     * Vuelta 44 · «Por confirmar $103.600»: cuánto dicen los avisos, uno por pago. El mismo pago
+     * avisado dos veces suma una; un aviso que no se lee deja la suma afuera (nunca una a medias).
+     */
+    @Test
+    fun `suma lo que dicen los avisos por confirmar, entero o nada`() = testApplication {
+        wireApp()
+        sms("s-uber", SMS_STATE_PENDING, origen = "85540", cuando = "2026-08-01T12:05:00",
+            texto = "Bancolombia: Compraste \$18.300,00 en UBER RIDES con tu T.Deb *4057, el 01/08/2026 a las 12:05.")
+        sms("s-farma", SMS_STATE_PENDING, origen = "85540", cuando = "2026-08-01T09:40:00",
+            texto = "Bancolombia: Compraste \$61.900,00 en FARMATODO LAURELES con tu T.Deb *4057, el 01/08/2026 a las 09:40.")
+        sms("s-cafe", SMS_STATE_PENDING, origen = "85540", cuando = "2026-08-01T08:12:00",
+            texto = "Bancolombia: Compraste \$23.400,00 en JUAN VALDEZ CAFE con tu T.Deb *4057, el 01/08/2026 a las 08:12.")
+        sms("s-ya", SMS_STATE_CONFIRMED, origen = "85540",
+            texto = "Bancolombia: Compraste \$99.000,00 en EXITO con tu T.Deb *4057, el 01/08/2026 a las 07:00.")
+
+        assertEquals(3L, summary().long("pendingSms"))
+        assertEquals(103_600L, summary().long("porConfirmarSuman"))
+
+        // Uno que Movi no lee: la suma no se dice, el conteo sí.
+        sms("s-raro", SMS_STATE_PENDING, origen = "85540", cuando = "2026-08-01T13:00:00", texto = "Bancolombia te informa que tu clave cambió.")
+        val conUnoIlegible = summary()
+        assertEquals(4L, conUnoIlegible.long("pendingSms"))
+        val suma = conUnoIlegible["porConfirmarSuman"]
+        assertTrue(suma == null || suma is kotlinx.serialization.json.JsonNull, "sin suma a medias: $suma")
     }
 
     /**

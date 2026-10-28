@@ -35,6 +35,14 @@ data class DashboardSummary(
     /** Mensajes del banco en estado `pending` — lo que el inbox de SMS llama «por confirmar». */
     val pendingSms: Int = 0,
     /**
+     * **Cuánto dicen los avisos por confirmar** (vuelta 44), en pesos: la suma de los montos de
+     * [pendingSms], uno por pago ([sumaDeLoPorConfirmar]). `null` si no hay avisos, o si alguno no
+     * trae un monto legible o no es en pesos: entonces la franja «Por confirmar» del Inicio dice solo
+     * el conteo. No es una regla de plata —nada de esto cuenta hasta confirmarlo—. Con default: un
+     * server viejo no lo manda y un APK viejo lo ignora.
+     */
+    val porConfirmarSuman: Long? = null,
+    /**
      * **Los movimientos que entraron solos y esperan en «Por confirmar»**, contados como renglones de
      * la bandeja (un traspaso es uno, ver [renglonesPorConfirmar]). Vuelta de diseño 22: con esto la
      * insignia de «Avisos» y «Movi propone hoy» dicen el mismo número que «N por revisar» de
