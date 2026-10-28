@@ -145,6 +145,7 @@ class ActividadPorDentroTest {
         assertEquals(listOf("cafe", "pan"), avisos.confirmables.map { it.cabezaId })
         assertEquals("4 avisos del banco por confirmar", tituloDeLosAvisos(avisos.cuantos))
         assertEquals("Confirmar los 2 que Movi entendió", botonDeConfirmarLosAvisos(avisos))
+        assertEquals(REVISAR_UNO_POR_UNO, botonDeRevisarLosAvisos(avisos))
         assertEquals(46_000L + 9_000L + 80_000L + 386_902L, avisos.suman)
         assertTrue(detalleDeLosAvisos(avisos)!!.startsWith("Suman \$521.902 · "), detalleDeLosAvisos(avisos))
 
@@ -162,6 +163,9 @@ class ActividadPorDentroTest {
         val ninguno = avisosPorConfirmar(listOf(exito, pagoDeTarjeta), propuestas, listOf(ahorros), ahora)
         assertTrue(ninguno.confirmables.isEmpty())
         assertNull(botonDeConfirmarLosAvisos(ninguno))
+        // Sin un «Confirmar» al lado, o con un solo aviso, el botón dice «Revisar» a secas.
+        assertEquals("Revisar", botonDeRevisarLosAvisos(ninguno))
+        assertEquals("Revisar", botonDeRevisarLosAvisos(avisosPorConfirmar(listOf(cafe), propuestas, listOf(ahorros), ahora)))
 
         // Sin la lectura de las propuestas no se confirma nada (ni se suma lo que no se leyó).
         val sinLeer = avisosPorConfirmar(listOf(cafe, pan), propuestas = null, cuentas = listOf(ahorros), ahora = ahora)

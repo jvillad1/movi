@@ -215,6 +215,14 @@ fun detalleDeLaConfirmacion(avisos: AvisosPorConfirmar): String {
     return (lineas + listOfNotNull(total, quedan)).joinToString("\n")
 }
 
+/**
+ * **El botón que abre «Por revisar»**: «Revisar uno por uno» solo cuando al lado hay un «Confirmar»
+ * de varios; con un solo aviso, o sin ninguno que Movi entienda, «Revisar» a secas (revisión de la
+ * vuelta 40: «uno por uno» de uno no dice nada).
+ */
+fun botonDeRevisarLosAvisos(avisos: AvisosPorConfirmar): String =
+    if (avisos.cuantos <= 1 || avisos.confirmables.isEmpty()) "Revisar" else REVISAR_UNO_POR_UNO
+
 /** «¿Confirmar estos 3 avisos?». */
 fun preguntaDeConfirmarLosAvisos(cuantos: Int): String =
     if (cuantos == 1) "¿Confirmar este aviso?" else "¿Confirmar estos $cuantos avisos?"

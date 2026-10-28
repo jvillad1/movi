@@ -28,7 +28,7 @@ import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 /** El tag de la tarjeta de avisos del banco de Actividad (vuelta 40). */
 const val TAG_TARJETA_DE_AVISOS: String = "actividad:avisos-del-banco"
 
-/** El rótulo del botón que abre «Por revisar». */
+/** El rótulo del botón que abre «Por revisar» junto a un «Confirmar» de varios (ver [botonDeRevisarLosAvisos]). */
 const val REVISAR_UNO_POR_UNO: String = "Revisar uno por uno"
 
 /**
@@ -84,7 +84,7 @@ internal fun TarjetaDeAvisosDelBanco(
                 )
             }
             Boton(
-                REVISAR_UNO_POR_UNO,
+                botonDeRevisarLosAvisos(avisos),
                 onClick = onRevisar,
                 modifier = Modifier.weight(1f),
                 variante = VarianteDeBoton.Secundario,

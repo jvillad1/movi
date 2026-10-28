@@ -182,7 +182,8 @@ class PorConfirmarEnMovimientosTest {
         composeRule.onNodeWithText("entró solo", substring = true, useUnmergedTree = true).assertDoesNotExist()
         composeRule.onNodeWithText("sin marcar", substring = true, useUnmergedTree = true).assertDoesNotExist()
 
-        composeRule.onNodeWithText(REVISAR_UNO_POR_UNO, useUnmergedTree = true).performClick()
+        // Sin ninguno que Movi entienda, el botón es «Revisar» a secas (revisión de la vuelta 40).
+        composeRule.onNodeWithText("Revisar", useUnmergedTree = true).performClick()
         composeRule.waitForIdle()
         assertEquals(listOf<Screen>(Screen.PorRevisar), navegaciones)
     }
