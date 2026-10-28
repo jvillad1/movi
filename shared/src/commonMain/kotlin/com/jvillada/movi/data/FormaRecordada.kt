@@ -45,7 +45,7 @@ import kotlinx.serialization.json.Json
  *
  * ## Lo que no puede pasar
  *
- * Lo mismo que en `TemaStore` y en la instantánea del Inicio: `Settings()` explota **al
+ * Lo mismo que en `LastAccountStore` y en la instantánea del Inicio: `Settings()` explota **al
  * construirse** en una JVM sin contexto o en un navegador con el almacenamiento bloqueado, así que
  * va `by lazy` y todo acceso adentro de un `runCatching`. Una forma que no deserializa —otra
  * versión de la app, o el almacenamiento corrupto— o que trae un número imposible (negativo,

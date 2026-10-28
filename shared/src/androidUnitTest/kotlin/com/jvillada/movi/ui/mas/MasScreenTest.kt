@@ -20,9 +20,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performSemanticsAction
 import com.jvillada.movi.data.Repositories
-import com.jvillada.movi.data.PreferenciaDeTema
 import com.jvillada.movi.data.RepositorioDePrueba
-import com.jvillada.movi.data.TemaStore
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.DireccionDeCorreo
@@ -72,7 +70,6 @@ class MasScreenTest {
     @After
     fun limpiar() {
         Repositories.sustitutoDePrueba = null
-        TemaStore.poner(PreferenciaDeTema.SISTEMA)
     }
 
     private val perfilDelDueno = UserProfile(
@@ -153,7 +150,7 @@ class MasScreenTest {
         val enOrden = listOf(
             "Inicio del período", "Ahorro de cada período", "Categorías", "Captura del banco",
             "Movi AI", "Lo que Movi sabe de ti", "Editar inicio",
-            TITULO_DEL_TEMA, "Ocultar los saldos",
+            "Ocultar los saldos",
             "Avisarme antes de un vencimiento", "Resumen del período por correo",
             "Documentos", "Descargar tus datos", "Compartir",
             "Cambiar contraseña", CERRAR_SESION, CERRAR_SESION_EN_TODOS,
@@ -317,22 +314,18 @@ class MasScreenTest {
         assertEquals(emptyList(), filasSinIcono(), "filas sin ícono")
     }
 
+    /**
+     * **Vuelta 29: no hay tema que elegir.** La opción 3 es clara y nada más: «Cómo se ve» deja solo
+     * «Ocultar los saldos», sin la fila «Tema» ni sus tres opciones.
+     */
     @Test
-    fun `el tema es una fila con su valor que abre una hoja`() {
+    fun `como se ve deja solo ocultar los saldos, sin elegir tema`() {
         montar()
-        assertTrue(hay(TITULO_DEL_TEMA))
-        assertTrue(hay("Igual que el teléfono"), "la fila dice el tema elegido")
-        listOf("Claro", "Oscuro").forEach {
+        assertTrue(hay("Cómo se ve"))
+        assertTrue(hay("Ocultar los saldos"))
+        listOf("Tema", "Igual que el teléfono", "Claro", "Oscuro").forEach {
             composeRule.onNodeWithText(it, useUnmergedTree = true).assertDoesNotExist()
         }
-
-        tocarFila(TITULO_DEL_TEMA)
-        composeRule.onNodeWithTag(TAG_HOJA_DEL_TEMA, useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNode(hasClickAction() and hasText("Oscuro")).performSemanticsAction(SemanticsActions.OnClick)
-        composeRule.waitForIdle()
-        assertEquals(PreferenciaDeTema.OSCURO, TemaStore.preferencia)
-        composeRule.onNodeWithTag(TAG_HOJA_DEL_TEMA, useUnmergedTree = true).assertDoesNotExist()
-        assertTrue(hay("Oscuro"), "la fila dice el tema nuevo")
     }
 
     @Test

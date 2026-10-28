@@ -25,12 +25,12 @@ import kotlin.math.roundToLong
  *
  * ## Coherente con Movi, sin depender de la app
  *
- * Los colores son **los mismos valores** de `Tokens.kt` (`COLORES_OSCUROS` y `COLORES_CLAROS`), y
- * el tema lo decide el teléfono de quien mira (`prefers-color-scheme`). No se pueden importar —
- * `Tokens.kt` es Compose y esto es un `String`—, así que `PaginaCompartidaTest` lee `Tokens.kt` y
- * falla si algún valor de acá se desalinea. La tipografía es la de la app (Space Grotesk y Martian
- * Mono para la cifra protagonista), servida desde el mismo bundle que el server ya publica; si en
- * algún armado no está, cae a la pila del sistema sin romper nada.
+ * Los colores son **los mismos valores** de `Tokens.kt` (`COLORES_CLAROS`, el único tema desde la
+ * vuelta 29: la opción 3 es clara siempre, también con el teléfono de quien mira en modo oscuro). No
+ * se pueden importar —`Tokens.kt` es Compose y esto es un `String`—, así que `PaginaCompartidaTest`
+ * lee `Tokens.kt` y falla si algún valor de acá se desalinea. La tipografía es la de la app (Figtree,
+ * también para las cifras, con números tabulares), servida desde el mismo bundle que el server ya
+ * publica; si en algún armado no está, cae a la pila del sistema sin romper nada.
  *
  * ## Todo texto que viene de la base se escapa
  *
@@ -97,52 +97,45 @@ internal object PaginaCompartida {
      * una sola.
      */
     private val ESTILOS = """
-@font-face { font-family: 'Space Grotesk'; src: url('$FUENTES/space_grotesk_regular.ttf') format('truetype'); font-weight: 400; font-display: swap; }
-@font-face { font-family: 'Space Grotesk'; src: url('$FUENTES/space_grotesk_medium.ttf') format('truetype'); font-weight: 500; font-display: swap; }
-@font-face { font-family: 'Space Grotesk'; src: url('$FUENTES/space_grotesk_semibold.ttf') format('truetype'); font-weight: 600; font-display: swap; }
-@font-face { font-family: 'Martian Mono'; src: url('$FUENTES/martian_mono_medium.ttf') format('truetype'); font-weight: 500 600; font-display: swap; }
+@font-face { font-family: 'Figtree'; src: url('$FUENTES/figtree_regular.ttf') format('truetype'); font-weight: 400; font-display: swap; }
+@font-face { font-family: 'Figtree'; src: url('$FUENTES/figtree_medium.ttf') format('truetype'); font-weight: 500; font-display: swap; }
+@font-face { font-family: 'Figtree'; src: url('$FUENTES/figtree_semibold.ttf') format('truetype'); font-weight: 600; font-display: swap; }
+@font-face { font-family: 'Figtree'; src: url('$FUENTES/figtree_bold.ttf') format('truetype'); font-weight: 700; font-display: swap; }
+@font-face { font-family: 'Figtree'; src: url('$FUENTES/figtree_extrabold.ttf') format('truetype'); font-weight: 800; font-display: swap; }
 :root {
-  --fondo: #08090D; --tarjeta: #191B25; --borde: #2E3242; --hilo: #21242E;
-  --texto: #EAEEF2; --texto-medio: #B4BEC9; --texto-apagado: #95A0AD;
-  --marca: #B9A0FF; --entra: #7FD4A8; --sale: #F08A7C; --neutro: #4A5763;
+  --fondo: #F4F1EC; --tarjeta: #FFFFFF; --borde: #E7E1D7; --hilo: #EFEAE1;
+  --texto: #1F1B16; --texto-medio: #5C554C; --texto-apagado: #6E665B;
+  --marca: #FFC21A; --entra: #147849; --sale: #B3261E; --neutro: #A39A8C;
   --margen: 16px; --amplio: 16px; --medio: 12px; --corto: 8px; --seccion: 24px;
-  --forma-amplia: 16px; --forma-normal: 12px;
-  --letra: 'Space Grotesk', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --cifras: 'Martian Mono', ui-monospace, 'SF Mono', Menlo, monospace;
-  color-scheme: dark;
-}
-@media (prefers-color-scheme: light) {
-  :root {
-    --fondo: #E9ECF1; --tarjeta: #FFFFFF; --borde: #CCD3DC; --hilo: #DDE2E9;
-    --texto: #0D1218; --texto-medio: #3D4752; --texto-apagado: #5C6873;
-    --marca: #5636B8; --entra: #117050; --sale: #B3392A; --neutro: #98A3AE;
-    color-scheme: light;
-  }
+  --forma-amplia: 22px; --forma-normal: 12px;
+  --letra: 'Figtree', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --cifras: var(--letra);
+  color-scheme: light;
 }
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body { margin: 0; background: var(--fondo); color: var(--texto); font-family: var(--letra);
-  font-size: 13.5px; line-height: 18px; font-weight: 500; -webkit-font-smoothing: antialiased; }
+  font-size: 15px; line-height: 20px; font-weight: 500; -webkit-font-smoothing: antialiased; }
 main { max-width: 560px; margin: 0 auto; padding: 28px var(--margen) 40px; }
 h1, h2, h3, p, ul, dl, dd { margin: 0; padding: 0; }
 ul { list-style: none; }
 .num { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum'; white-space: nowrap; }
-.marca { color: var(--marca); font-size: 15.5px; font-weight: 600; letter-spacing: -0.3px; }
-h1 { margin-top: 18px; font-size: 19px; line-height: 24px; font-weight: 600; letter-spacing: -0.45px; }
-.meta { margin-top: 4px; color: var(--texto-medio); font-size: 11.5px; line-height: 16px; font-weight: 400; }
-.rotulo { color: var(--texto-apagado); font-size: 10.5px; line-height: 14px; font-weight: 500;
-  letter-spacing: 1.7px; text-transform: uppercase; }
-.apoyo { color: var(--texto-medio); font-size: 11.5px; line-height: 16px; font-weight: 400; }
+.marca { display: inline-block; padding: 2px 10px; border-radius: 999px; background: var(--marca);
+  color: var(--texto); font-size: 15px; font-weight: 800; letter-spacing: -0.3px; }
+h1 { margin-top: 18px; font-size: 28px; line-height: 34px; font-weight: 800; letter-spacing: -0.6px; }
+.meta { margin-top: 4px; color: var(--texto-medio); font-size: 12.5px; line-height: 16px; font-weight: 400; }
+.rotulo { color: var(--texto-medio); font-size: 14px; line-height: 18px; font-weight: 600; }
+.apoyo { color: var(--texto-medio); font-size: 12.5px; line-height: 16px; font-weight: 400; }
 .hero { margin-top: var(--seccion); }
 .hero .rotulo { margin-bottom: 6px; }
-.cifra { font-family: var(--cifras); font-size: clamp(28px, 10.5vw, 42px); line-height: 1.1;
-  font-weight: 600; letter-spacing: -0.9px; overflow-wrap: anywhere; }
+.cifra { font-family: var(--cifras); font-size: clamp(28px, 10.5vw, 40px); line-height: 1.15;
+  font-weight: 800; letter-spacing: -1.2px; overflow-wrap: anywhere; }
 .hero .apoyo { margin-top: 8px; }
-.tarjeta { margin-top: var(--amplio); background: var(--tarjeta); border: 1px solid var(--hilo);
+.tarjeta { margin-top: var(--amplio); background: var(--tarjeta);
   border-radius: var(--forma-amplia); padding: 18px var(--amplio); }
 .hero + .tarjeta { margin-top: 28px; }
 .tarjeta > .rotulo:first-child { margin-bottom: 8px; }
-.cifra-media { font-size: 26px; line-height: 32px; font-weight: 600; letter-spacing: -0.6px; overflow-wrap: anywhere; }
+.cifra-media { font-size: 26px; line-height: 32px; font-weight: 800; letter-spacing: -0.6px; overflow-wrap: anywhere; }
 .barra { display: flex; gap: 3px; height: 10px; margin-top: 14px; border-radius: 999px; overflow: hidden; }
 .barra span { display: block; height: 100%; border-radius: 999px; flex: 0 0 var(--p); min-width: 4px;
   transform-origin: left center; animation: crece 600ms cubic-bezier(.2,.7,.2,1) both; }
@@ -157,7 +150,7 @@ h1 { margin-top: 18px; font-size: 19px; line-height: 24px; font-weight: 600; let
 .renglones div:last-child { border-bottom: 0; padding-bottom: 0; }
 .renglones dt { color: var(--texto-medio); }
 .tres { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--corto); margin-top: 14px; }
-.tres p + p { margin-top: 2px; font-size: 15.5px; line-height: 20px; font-weight: 600; }
+.tres p + p { margin-top: 2px; font-size: 15px; line-height: 20px; font-weight: 700; }
 .veredicto { margin-top: 14px; padding: 10px 12px; border-radius: var(--forma-normal);
   background: var(--fondo); color: var(--texto-medio); }
 .subtitulo { margin-top: 22px; margin-bottom: 4px; }
@@ -166,16 +159,16 @@ h1 { margin-top: 18px; font-size: 19px; line-height: 24px; font-weight: 600; let
 .linea .nombre { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .linea .num { font-weight: 400; }
 .pista { position: relative; height: 4px; margin-top: 6px; border-radius: 999px; background: var(--hilo); }
-.pista span { position: absolute; inset: 0 auto 0 0; width: var(--p); border-radius: 999px; background: var(--marca);
+.pista span { position: absolute; inset: 0 auto 0 0; width: var(--p); border-radius: 999px; background: var(--texto);
   transform-origin: left center; animation: crece 600ms cubic-bezier(.2,.7,.2,1) both; }
-.pct { color: var(--texto-apagado); font-size: 11.5px; font-weight: 400; margin-left: 8px; }
+.pct { color: var(--texto-apagado); font-size: 12.5px; font-weight: 400; margin-left: 8px; }
 .deudas li { padding: 12px 0; border-bottom: 1px solid var(--hilo); }
 .deudas li:first-child { padding-top: 4px; }
 .deudas li:last-child { border-bottom: 0; padding-bottom: 0; }
 .deudas .apoyo { margin-top: 3px; }
 .vacio { color: var(--texto-medio); margin-top: 6px; }
 .entra { color: var(--entra); } .sale { color: var(--sale); }
-footer { margin-top: var(--seccion); text-align: center; color: var(--texto-apagado); font-size: 11.5px; font-weight: 400; }
+footer { margin-top: var(--seccion); text-align: center; color: var(--texto-apagado); font-size: 12.5px; font-weight: 400; }
 .aviso { margin-top: 30vh; text-align: center; }
 .aviso h1 { margin-top: 14px; }
 .aviso .apoyo { margin-top: 8px; max-width: 320px; margin-left: auto; margin-right: auto; }
@@ -213,9 +206,8 @@ footer { margin-top: var(--seccion); text-align: center; color: var(--texto-apag
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow, noarchive">
 <meta name="referrer" content="no-referrer">
-<meta name="color-scheme" content="dark light">
-<meta name="theme-color" content="#08090D" media="(prefers-color-scheme: dark)">
-<meta name="theme-color" content="#E9ECF1" media="(prefers-color-scheme: light)">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#F4F1EC">
 <title>Resumen compartido · Movi</title>
 <style>
 $ESTILOS

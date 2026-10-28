@@ -5,71 +5,46 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Movi</title>
     <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#08090D">
+    <meta name="theme-color" content="#F4F1EC">
     <link rel="apple-touch-icon" href="icons/movi-192.png">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="Movi">
-    <script>
-        // El tema que el dueño eligió en Ajustes. Lo guarda `TemaStore` en esta misma clave de
-        // localStorage («sistema», «claro» u «oscuro»); se lee acá, antes del primer cuadro, para
-        // que el ingreso no aparezca oscuro medio segundo y después salte a claro. Sin clave nueva
-        // se migra el interruptor viejo (`tema_oscuro`), y sin nada es «Igual que el teléfono»:
-        // claro salvo que el navegador pida oscuro, igual que `isSystemInDarkTheme`.
-        try {
-            var tema = localStorage.getItem("tema");
-            if (tema !== "sistema" && tema !== "claro" && tema !== "oscuro") {
-                var viejo = localStorage.getItem("tema_oscuro");
-                tema = viejo === "true" ? "oscuro" : viejo === "false" ? "claro" : "sistema";
-            }
-            var sistemaOscuro = !!(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
-            if (tema === "claro" || (tema === "sistema" && !sistemaOscuro)) {
-                document.documentElement.setAttribute("data-tema", "claro");
-                document.querySelector('meta[name="theme-color"]').setAttribute("content", "#E9ECF1");
-            }
-        } catch (e) {}
-    </script>
     <style>
         /* ── Los colores y la letra del sistema de diseño ───────────────────────────────
            Este formulario vive en HTML y no en Compose (el administrador de contraseñas del
            navegador no ve un canvas), así que no puede leer `Tokens.kt`. Los valores de acá
-           son una COPIA de `COLORES_OSCUROS` y `COLORES_CLAROS`, y `ElIngresoHablaLosTokensTest`
-           falla si alguno se separa del original. Antes esta pantalla tenía su propia paleta
-           (#121212, #C9B8FF) y la letra del sistema: era la única de la app que no parecía Movi,
-           y es la primera que ve cualquiera. */
-        @font-face { font-family: "Space Grotesk"; font-weight: 400; font-display: swap;
-            src: url("composeResources/com.jvillada.movi.resources/font/space_grotesk_regular.ttf") format("truetype"); }
-        @font-face { font-family: "Space Grotesk"; font-weight: 500; font-display: swap;
-            src: url("composeResources/com.jvillada.movi.resources/font/space_grotesk_medium.ttf") format("truetype"); }
-        @font-face { font-family: "Space Grotesk"; font-weight: 600; font-display: swap;
-            src: url("composeResources/com.jvillada.movi.resources/font/space_grotesk_semibold.ttf") format("truetype"); }
+           son una COPIA de `COLORES_CLAROS` —el único tema desde la vuelta 29, la opción 3— y
+           `ElIngresoHablaLosTokensTest` falla si alguno se separa del original. La letra es
+           Figtree, la de la app. El amarillo de la marca es un relleno (el botón), nunca una
+           letra: los enlaces van en `--enlace`. */
+        @font-face { font-family: "Figtree"; font-weight: 400; font-display: swap;
+            src: url("composeResources/com.jvillada.movi.resources/font/figtree_regular.ttf") format("truetype"); }
+        @font-face { font-family: "Figtree"; font-weight: 500; font-display: swap;
+            src: url("composeResources/com.jvillada.movi.resources/font/figtree_medium.ttf") format("truetype"); }
+        @font-face { font-family: "Figtree"; font-weight: 600; font-display: swap;
+            src: url("composeResources/com.jvillada.movi.resources/font/figtree_semibold.ttf") format("truetype"); }
+        @font-face { font-family: "Figtree"; font-weight: 700; font-display: swap;
+            src: url("composeResources/com.jvillada.movi.resources/font/figtree_bold.ttf") format("truetype"); }
+        @font-face { font-family: "Figtree"; font-weight: 800; font-display: swap;
+            src: url("composeResources/com.jvillada.movi.resources/font/figtree_extrabold.ttf") format("truetype"); }
         :root {
-            --fondo: #08090D;
-            --tarjeta: #191B25;
-            --borde: #2E3242;
-            --texto: #EAEEF2;
-            --textoMedio: #B4BEC9;
-            --textoApagado: #95A0AD;
-            --marca: #B9A0FF;
-            --sobreMarca: #140F26;
-            --entra: #7FD4A8;
-            --sale: #F08A7C;
-        }
-        :root[data-tema="claro"] {
-            --fondo: #E9ECF1;
+            --fondo: #F4F1EC;
             --tarjeta: #FFFFFF;
-            --borde: #CCD3DC;
-            --texto: #0D1218;
-            --textoMedio: #3D4752;
-            --textoApagado: #5C6873;
-            --marca: #5636B8;
-            --sobreMarca: #FFFFFF;
-            --entra: #117050;
-            --sale: #B3392A;
+            --borde: #E7E1D7;
+            --texto: #1F1B16;
+            --textoMedio: #5C554C;
+            --textoApagado: #6E665B;
+            --marca: #FFC21A;
+            --sobreMarca: #1F1B16;
+            --enlace: #1D4E9E;
+            --entra: #147849;
+            --sale: #B3261E;
+            color-scheme: light;
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { background: var(--fondo); font-family: "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif; }
+        body { background: var(--fondo); font-family: "Figtree", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif; }
         #ComposeTarget { width: 100vw; height: 100vh; display: block; }
 
         /* Native HTML login overlay — lets the browser's password manager
@@ -83,16 +58,16 @@
         }
         #login-overlay.hidden { display: none; }
         .lg-card { width: min(420px, 100%); }
-        .lg-title { color: var(--texto); font-size: 34px; font-weight: 600; text-align: center; letter-spacing: -0.8px; }
+        .lg-title { color: var(--texto); font-size: 34px; font-weight: 800; text-align: center; letter-spacing: -0.8px; }
         .lg-sub { color: var(--textoMedio); text-align: center; margin: 6px 0 26px; font-size: 15px; }
-        .lg-box { background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 16px; padding: 24px; }
+        .lg-box { background: var(--tarjeta); border-radius: 22px; padding: 24px; }
         .lg-label { color: var(--textoMedio); font-size: 13px; font-weight: 500; display: block; margin-bottom: 8px; }
         .lg-input {
             width: 100%; background: var(--fondo); border: 1px solid var(--borde); border-radius: 12px;
             color: var(--texto); font-family: inherit; font-size: 15px; padding: 14px; margin-bottom: 18px; outline: none;
         }
         .lg-input::placeholder { color: var(--textoApagado); }
-        .lg-input:focus { border-color: var(--marca); }
+        .lg-input:focus { border-color: var(--enlace); }
         /* F57: mostrar/ocultar contraseña. El botón vive DENTRO del campo (wrapper relativo)
            y alterna type password/text — puro atributo, no toca el valor ni el autocompletado. */
         .lg-pwwrap { position: relative; }
@@ -116,19 +91,19 @@
         .lg-err { color: var(--sale); font-size: 13px; min-height: 18px; margin-bottom: 8px; }
         .lg-btn {
             width: 100%; background: var(--marca); color: var(--sobreMarca); border: none; border-radius: 999px;
-            padding: 15px; font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer;
+            padding: 15px; font-family: inherit; font-size: 15px; font-weight: 700; cursor: pointer;
         }
         .lg-btn:disabled { opacity: 0.6; cursor: default; }
         .lg-alt {
             display: block; width: 100%; margin-top: 16px; padding: 6px;
-            background: none; border: none; color: var(--marca); font-family: inherit; font-size: 13px; font-weight: 500; text-align: center; cursor: pointer;
+            background: none; border: none; color: var(--enlace); font-family: inherit; font-size: 14px; font-weight: 600; text-align: center; cursor: pointer;
         }
         .lg-hidden { display: none; }
         .lg-check {
             display: flex; align-items: center; gap: 8px; margin: -6px 0 18px;
             color: var(--textoMedio); font-size: 13px; cursor: pointer; user-select: none;
         }
-        .lg-check input { width: 16px; height: 16px; accent-color: var(--marca); cursor: pointer; }
+        .lg-check input { width: 16px; height: 16px; accent-color: var(--texto); cursor: pointer; }
         .lg-note { color: var(--textoMedio); font-size: 13px; line-height: 1.45; margin-bottom: 16px; }
         .lg-ok { color: var(--entra); font-size: 13px; line-height: 1.45; }
         .lg-ok:not(:empty) { margin-bottom: 14px; }

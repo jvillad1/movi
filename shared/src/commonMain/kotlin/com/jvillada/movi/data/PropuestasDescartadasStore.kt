@@ -12,7 +12,7 @@ import com.russhwolf.settings.set
  * guarda la propuesta entera —ni hace falta, ni sobreviviría a un rename— solo que ESA combinación
  * ya se ofreció y se rechazó.
  *
- * **Es del usuario, no del aparato** (a diferencia de `TemaStore`): un «Ahora no» a una propuesta
+ * **Es del usuario, no del aparato** (a diferencia de `LastAccountStore`): un «Ahora no» a una propuesta
  * sobre SUS categorías no significa nada para otra cuenta que entre en este mismo teléfono. Por
  * eso se limpia en `SessionManager.clear()`, y `ElForkLlegaLimpioTest` lo prueba.
  *

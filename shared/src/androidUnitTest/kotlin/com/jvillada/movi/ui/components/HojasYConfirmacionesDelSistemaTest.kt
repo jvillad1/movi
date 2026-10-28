@@ -17,7 +17,6 @@ import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.theme.COLORES_CLAROS
-import com.jvillada.movi.theme.COLORES_OSCUROS
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.accounts.DeleteAccountSheet
 import com.jvillada.movi.ui.components.ds.ROTULO_CARGANDO
@@ -112,7 +111,7 @@ class HojasYConfirmacionesDelSistemaTest {
 
     @Test
     fun `el boton de borrar va en el tono de alerta del tema`() {
-        for (colores in listOf(COLORES_OSCUROS, COLORES_CLAROS)) {
+        for (colores in listOf(COLORES_CLAROS)) {
             val (fondo, texto) = coloresDelBoton(VarianteDeBoton.Peligro, colores)
             assertEquals(colores.sale, texto, "el texto de «Borrar» es el `sale` del tema")
             assertEquals(colores.lavado(colores.sale), fondo, "sobre su lavado, nunca lleno de rojo")

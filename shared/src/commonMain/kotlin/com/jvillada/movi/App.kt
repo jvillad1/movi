@@ -3,7 +3,6 @@ package com.jvillada.movi
 import com.jvillada.movi.ui.ai.LoQueMoviSabeScreen
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
@@ -29,7 +28,6 @@ import com.jvillada.movi.ui.direccionDe
 import com.jvillada.movi.ui.transicionEntrePantallas
 import com.jvillada.movi.ui.components.LocalRetoqueDePestana
 import com.jvillada.movi.ui.components.RetoqueDePestana
-import com.jvillada.movi.data.TemaStore
 import com.jvillada.movi.avisos.DestinoDesdeAfuera
 import com.jvillada.movi.ui.papeles.ArchivoCompartido
 import com.jvillada.movi.ui.buscar.BuscarScreen
@@ -127,16 +125,13 @@ import kotlinx.serialization.json.Json
 
 @Composable
 fun App() {
-    // El único lugar de la app que lee el tema elegido. Es `mutableStateOf`, así que elegir otro
-    // en Ajustes recompone desde acá para abajo — o sea, todo. «Igual que el teléfono» le pregunta
-    // al sistema, y cambiar el tema del teléfono con Movi abierta también se ve en el acto.
-    val oscuro = TemaStore.preferencia.esOscuro(sistemaOscuro = isSystemInDarkTheme())
     // ¿El sistema pidió menos movimiento? Se decide una vez y lo lee todo lo que se mueve (ver
     // [com.jvillada.movi.theme.Movimiento]).
     val movimientoReducido = movimientoReducidoDelSistema()
-    MoviTheme(oscuro = oscuro) {
-        // La barra de estado la pinta el sistema, no Movi: hay que decirle de qué color va.
-        AjustarBarrasDelSistema(oscuro)
+    // Un solo tema desde la vuelta 29 (opción 3): claro, con el teléfono en claro o en oscuro.
+    MoviTheme {
+        // La barra de estado la pinta el sistema, no Movi: hay que decirle que va sobre claro.
+        AjustarBarrasDelSistema()
         val baseDensity = LocalDensity.current
         CompositionLocalProvider(
             LocalDensity provides Density(baseDensity.density, baseDensity.fontScale * 1.12f),

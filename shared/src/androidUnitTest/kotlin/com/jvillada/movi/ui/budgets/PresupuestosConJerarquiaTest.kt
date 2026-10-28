@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.budgets
 
+import com.jvillada.movi.theme.COLORES_CLAROS
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
@@ -23,7 +24,6 @@ import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.PropuestaDePresupuesto
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.UserProfile
-import com.jvillada.movi.theme.COLORES_OSCUROS
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.components.ds.TAG_CASILLA
@@ -162,7 +162,7 @@ class PresupuestosConJerarquiaTest {
     @Test
     fun `una categoria pasada lleva una sola senal roja, barra y texto, sin pildora`() {
         montar(ConPresupuestos(), esperar = "Restaurantes y domicilios")
-        val colores = COLORES_OSCUROS
+        val colores = COLORES_CLAROS
 
         // El texto de abajo dice lo que importa, en el tono del estado.
         val pasada = conTexto("Te pasaste por \$120.700").single()

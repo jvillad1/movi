@@ -7,7 +7,6 @@ import com.jvillada.movi.data.FormaRecordada
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.data.SaldosOcultosStore
-import com.jvillada.movi.data.TemaStore
 import com.jvillada.movi.platform.Huella
 import com.jvillada.movi.ui.dashboard.InstantaneaDelInicio
 import java.lang.reflect.Method
@@ -54,11 +53,6 @@ import org.robolectric.TestLifecycleApplication
  * media docena de clases de esta suite y hoy todas lo devuelven en su `@After`. Esto es para que
  * un olvido ajeno no se cobre en la clase siguiente.
  *
- * Y [TemaStore] va aparte por el motivo contrario: el tema es del APARATO, no del usuario, así que
- * a propósito **no** lo limpia el logout —cerrar sesión no tiene por qué devolverte el tema que no
- * elegiste—. Pero entre dos pruebas sí tiene que volver al default: una que corriera después de
- * otra que puso el claro estaría midiendo otra paleta.
- *
  * ## Lo que esto NO hace, y hay que decirlo
  *
  * - **No alcanza a las pruebas que no son de Robolectric.** `commonTest` corre en la JVM pelada,
@@ -88,7 +82,6 @@ class AppDePrueba : Application(), TestLifecycleApplication {
         // suite, no estado del usuario, y un olvido ajeno no tiene por qué cobrarse en la clase
         // siguiente — ahí la pantalla de entrada creería estar en un teléfono con lector.
         Huella.sustitutoDePrueba = null
-        TemaStore.clear()
         // «Ocultar los saldos»: el logout de arriba ya lo apagó (y vació su almacén de mentira);
         // acá se suelta la costura, igual que la de la forma recordada.
         SaldosOcultosStore.almacenDePrueba = null
