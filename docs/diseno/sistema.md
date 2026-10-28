@@ -160,7 +160,7 @@ Seccion(titulo = "Tarjetas", conteo = 3, accion = "Ver todo", onAccion = ::verTo
 el texto y el final (vuelta de diseño 15). 56 / 64 de alto mínimo, 16 a los
 lados, toque de borde a borde. El título va en hasta dos renglones antes del «…» (la fila crece) y el
 subtítulo en uno —o en dos con `lineasDelSubtitulo = 2`, solo donde el subtítulo es la razón de la fila
-y no se puede acortar («Hace más de un mes que no cuadras Bancolombia Ahorros», vuelta de diseño 2)—;
+y no se puede acortar («Bancolombia Ahorros · Nunca la has cuadrado», vuelta de diseño 2)—;
 el final se mide primero, así que un monto nunca se recorta. `tonoDelSubtitulo = TonoDeSubtitulo.Aviso`
 pinta el subtítulo en el color de aviso cuando pide algo al dueño («Faltan datos: tócala para
 completarlos», vuelta de diseño 4). **El subtítulo dice algo que el título y la
@@ -278,6 +278,18 @@ así que «$15.600.000» no entra. En otra moneda no se compacta. Una fila, una 
 a lado o el patrimonio de Hoy van enteras: «$1,5M» al lado de un héroe entero se leía como otro número.
 ```kotlin
 Cifra(resumen.entradas, tono = TonoDeCifra.Ingreso, forma = FormaDeCifra.Compacta)   // +$15,6M
+```
+
+**`FormaDeCifra.Abreviada`** (vuelta de diseño 32) — abreviada en **todas** las escalas: «$850 mil»
+(con espacio duro), «$1,8M», «$500». No se elige a mano: la decide **`formaComunDeLasCifras`** para un
+renglón de cifras que tienen que leerse en la misma forma (la franja Entró · Salió · Neto de
+Movimientos y su panel de escritorio). Si **todas** caben enteras en su lugar van `Entera`; si una no
+cabe, van `Abreviada` **las tres**. Nunca una entera al lado de una abreviada. Se mide de verdad con
+`rememberFormaComunDeLasCifras` (el texto entero de cada una con la letra de su variante; una que se
+achica, en su tamaño más chico: `pisoDeLaCifra`).
+```kotlin
+val forma = rememberFormaComunDeLasCifras(cifrasDelResumen(resumen), VarianteDeCifra.Fila, anchoDeCadaUna)
+CifraConRotulo("Entró", resumen.entro, Modifier.weight(1f), tono = TonoDeCifra.Ingreso, forma = forma)
 ```
 
 **`CifraConRotulo`** (vuelta de diseño 19, `ds/CifraConRotulo.kt`) — una cifra con su nombre:
@@ -423,6 +435,15 @@ AvatarDePersona("Caro", tono = TonoDeIcono.Info)
 **`Campo`**, **`CampoDeMonto`**, **`GrupoDeCampos`**, **`RotuloDeCampo`**, **`AyudaDeCampo`** y
 **`PieDeHoja`** (vuelta de diseño 6, `ds/Campo.kt`) — los formularios. Ver §15.
 
+**`CampoDeBusqueda`** (vuelta 35, `ds/CampoDeBusqueda.kt`) — lo que se escribe para filtrar una lista:
+la lupa, el texto (la guía en `textoApagado`, de un renglón) y la × solo con texto, que borra y deja el
+foco. Una superficie sin borde, `Radio.m`, de 48 de alto con la × o sin ella. `Capa1` sobre el fondo de
+una pantalla; `Capa2` dentro de una hoja. No es un `Campo`: no tiene rótulo, ayuda ni error. Ver §37.
+```kotlin
+CampoDeBusqueda(consulta, { consulta = it }, guia = "Gasto, comercio o persona", alBuscar = ::anotar)
+CampoDeBusqueda(busqueda, { busqueda = it }, guia = "Buscar o crear categoría", nivel = NivelDeSuperficie.Capa2)
+```
+
 ## 7. La regla de secciones
 
 1. **Cada pantalla es dueña de una pregunta.** Inicio (antes «Hoy»): «¿cuánto me queda y qué hago
@@ -442,7 +463,7 @@ AvatarDePersona("Caro", tono = TonoDeIcono.Info)
 | `ElSistemaNoTieneValoresSueltosTest` | cero `.dp`/`.sp`/`Color(0x)`/radio/`fontSize`/`alpha` a mano dentro de `ds/` |
 | `ContrasteDeLosTokensTest` | el contraste de cada par, con las capas nuevas |
 | `LosTamanosSueltosSoloBajanTest` | los `fontSize` sueltos |
-| `LosCamposSonDelSistemaTest` | ningún `BasicTextField` / `TextField` / `OutlinedTextField` en `ui/` fuera de `ui/components/` y de seis excepciones con nombre (§15) |
+| `LosCamposSonDelSistemaTest` | ningún `BasicTextField` / `TextField` / `OutlinedTextField` en `ui/` fuera de `ui/components/` y de cuatro excepciones con nombre (§15; Buscar salió en la vuelta 35, §37) |
 | `LosRotulosNoGritanTest` | ninguna función `…SectionLabel` en `ui/`, y ningún `Seccion` / `GrupoDeCampos` / `RotuloDeCampo` / `rotulo =` / `label =` con un texto entero en mayúsculas |
 | `LasGuiasNoParecenDatosTest` | ningún `guia =` / `placeholder =` con un literal puramente numérico en `ui/` («20», «29,6», «$ 0»): va `ejemplo =`, y sin su propio «Ej:» (§15) |
 | `LosCamposDelSistemaTest` (Robolectric) | el rótulo en frase, la guía de un monto en la letra de cuerpo y el valor en la de cifras, el error en `sale`, «¿Qué es esto?» abre y cierra, la caja llega a 48, y nada se recorta a 360 dp con la letra a ×1,3 (también en las hojas de crédito y tarjeta) |
@@ -1150,7 +1171,7 @@ qué cuenta como plata ni qué es un pendiente: cambia el **orden**, el **origen
     `/api/payments/upcoming`, que rueda al período siguiente pasados los días de gracia (`dueDateFor`).
     Vencido hace 22 días, el Arriendo figuraba «vence en 9 días» y la ventana de 7 lo dejaba afuera; el
     checklist, donde manda la ocurrencia, sí lo veía. Ahora la campana sale del checklist.
-  - **Hoy no repite un pago** (deshecho en la vuelta 28, §31: el widget esconde así la deuda grande): el widget no lista como fila el pago que ya está en «Movi propone hoy»
+  - **Hoy no repite un pago** (deshecho en la vuelta 28, §40: el widget esconde así la deuda grande): el widget no lista como fila el pago que ya está en «Movi propone hoy»
     (`filasDelWidgetDeFalta`, solo si esa sección está en el Inicio) y dice «y N más» cuando recorta; las
     filas más ese número dan lo que dice «Faltan N». Si el único pendiente es el de arriba, lo dice
     («Está arriba, en «Movi propone hoy»»).
@@ -1250,7 +1271,381 @@ dp), `AtajosDelMasTest` (las cuatro en el menú, el clic derecho, la flecha), `B
 (`hacerElAtajo`), `RepartirDesdeElMasTest` (Repartir desde el menú abre lo de la vuelta 7),
 `PedirleACaroTest` (el mensaje, el principal, la pregunta, la fecha) y `EspaciosEnPantallaTest`.
 
-## 31. Vuelta de diseño 28: una cifra que se explica sola, y Hoy y Plan sin ruido
+## 31. Vuelta 27: un aviso que pagó varias cosas
+
+El giro al papá que paga dos cuotas y sobra un poco se reparte en Reconciliar, sin componentes nuevos
+en `ds/` (`ui/sms/RepartirEnPartes.kt`, `ui/sms/RepartirEnReconciliar.kt`):
+
+- **La propuesta de entrada es una `TarjetaDePropuesta`** arriba, con las demás propuestas: «¿Pagaste
+  las cuotas de Libranza Papá y Hipoteca Papá? Suman $4.250.000 · sobran $23.333», el cuerpo que dice
+  qué se anota y «Repartir así», que **abre el editor lleno, no confirma**. Reemplaza a la tarjeta de
+  #447 («Son 2 pagos…» con su lista a mano, en la que el último pago tomaba el resto).
+- **«Esto pagó varias cosas»** es un `Boton` `Fantasma` `S` debajo de «Movi sugiere». Abre «Repartir en
+  partes» (`Seccion`) y esconde «Confirma o ajusta»: en partes, cada parte dice lo suyo.
+- **Cada parte es una `Superficie` de capa 1** (en una `Capa2` las píldoras sin elegir, que son de
+  capa 2, no se veían y la fila parecía texto suelto): «Parte N» en `cuerpoFuerte` con «Quitar»
+  (`Fantasma` `S`); **«Qué fue»** (`RotuloDeCampo`) con una sola fila de `PildoraDeFiltro`, siempre los
+  cinco tipos en este orden: Gasto · Cuota · Pago de tarjeta · Traspaso · A un tercero; y debajo **solo
+  lo que ese tipo necesita, con su rótulo**: «Categoría» si es un gasto (y «Pago del período» si hay
+  uno pendiente), «Crédito», «Tarjeta» o «Cuenta» con las cuentas que `operacionEntre` acepta, y
+  «Persona» (la del aviso, o un `Campo` para escribirla) más su «Categoría» si va a un tercero. El
+  monto en `CampoDeMonto`. **Las filas de píldoras ruedan en horizontal**: no se parten ni se cortan a
+  360 dp. Lo que le falta a la parte, en una línea de `apoyo`.
+- **La línea en vivo** va en `cuerpoFuerte`: «Faltan $23.333» en `texto`, «Te pasaste por $X» en `sale`,
+  «Cuadra con el aviso» en `entra`. Debajo, cuando falta, «El resto a Papá» / «El resto como gasto» en
+  `PildoraDeAccion`: **siempre agregan una parte nueva por lo que falta** y no tocan las que estaban.
+  «Agregar otra parte» y «Volver a un solo movimiento» en `Fantasma` `S`.
+- **Un solo botón confirma**: el principal de la pantalla dice «Confirmar las N partes» y se prende solo
+  cuando cuadran (`sePuedenConfirmar`). **Apagado, dice por qué** en una línea centrada debajo, como
+  `PieDeHoja` (`razonDeLasPartes`): «Una sola parte no es un reparto: agrega otra o vuelve a un solo
+  movimiento», «Parte 2: elige el crédito», o cuánto falta o sobra.
+- **Un movimiento ya anotado** usa el mismo editor dentro de «Más» de su detalle («Repartir en partes»,
+  `Secundario` a todo el ancho; al abrirlo, «Confirmar las N partes» en un `PieDeHoja` con su razón).
+
+**Las líneas base** no cambian: `dp_sueltos` 119, `radios_con_numero` 3, y las guardas en 0 siguen en 0.
+Lo vigila `RepartirEnReconciliarTest` (la propuesta del caso del dueño con cifras de prueba, «Faltan»,
+el botón que se prende solo si cuadra y su razón, «El resto como gasto» que agrega la parte 2 sin tocar
+la 1, «Qué fue» con su detalle por tipo, y nada recortado a 360 dp).
+
+## 32. Vuelta de diseño 30: Movimientos con su resumen, tu parte primero y Movi AI sin cifras viejas
+
+Revisado en producción (6ce5327e) con la cuenta demo, a 390 px.
+
+- **Movi AI dice de qué día es cada respuesta** (`ui/ai/LoQueEraDeOtroDia.kt`). Cada mensaje trae
+  `ChatMessage.enviadoEn` (el server lo pone desde `ai_turns.created_at` al recargar; la app, al mandar;
+  default `null` para clientes y servers viejos). Si algún mensaje no es de hoy, los días se separan
+  con una `Seccion` («Hoy», «Ayer», «2 sep»: `etiquetaCortaDeFecha`, la forma corta de los avisos). La
+  respuesta de un día anterior va en `textoMedio` (`TextoDelAsistente(apagado = true)`) con «Estas cifras
+  eran de ayer» y «Preguntar de nuevo» (`Boton` `Fantasma` `S`), que manda la misma pregunta —con su id
+  si era una de las tres: el server ahora la devuelve en el globo recargado (`preguntaSugeridaDelTurno`)—.
+  Sin la IA, «Preguntar de nuevo» solo va en las tres. Si la conversación entera es de otro día, arriba
+  de la lista una `TarjetaDePropuesta` ofrece «Empezar una conversación nueva» (y «Seguir con esta»):
+  nunca se borra sola.
+- **Sin la IA, el chat no sugiere lo que no puede contestar.** `GET /api/ai/conversacion` manda
+  `iaDisponible` (`EstadoDeLaIa` en el server: sin clave, o una falla de la cuenta —sin crédito, clave
+  rechazada— en la última hora; la saturación no cuenta; una respuesta del modelo la vuelve a prender).
+  Con `false`, el arranque y las preguntas para seguir son solo las tres de respaldo
+  (`preguntasQueSePuedenHacer`). La respuesta sin clave ahora trae `codigo = IA_NO_DISPONIBLE`.
+- **El encabezado de Movi AI va en su capa**, con `fondo` opaco y encima de la lista; la lista recorta
+  lo suyo (`clipToBounds`).
+- **Movimientos en el teléfono tiene su resumen** (`ResumenDelPeriodoEnElTelefono`): el **primer ítem
+  de la lista** —se va con el scroll, antes de «N por revisar»; fijos siguen solo el encabezado, el
+  selector y los chips (§11)—, Entró · Salió · Neto con `CifraConRotulo` en forma `Compacta` (columna de tres), con
+  **la misma `resumenDelPanel`** del panel de escritorio, y tocarla abre «En qué se va». Mientras no
+  hay historia, `EsqueletoDeCifraConRotulo` (sin «$0»). Con un filtro que recorta la lista (categoría,
+  comercio, búsqueda) no va: el resumen es del período entero y encima de lo filtrado se leería como
+  su total. Los chips de tipo no lo esconden.
+- **En un gasto repartido, la cifra es tu parte** (`ui/transactions/LaFilaDelMovimiento.kt`): la fila y
+  el detalle dicen «−$44.300» y debajo «de $88.600 · con Caro» (o el nombre del espacio si son más);
+  el detalle agrega «Salieron $88.600 de Nu» en su renglón de cuándo y dónde. El saldo no cambia: el
+  movimiento sigue siendo de $88.600. En el detalle de una cuenta (`tonoForzado`), donde el total del
+  día es lo que movió el saldo, la fila sigue con el total y «Tu parte» debajo.
+- **«Mercado / Mercado»** (`textosDeLaFila`): si la descripción es la categoría, el título es el
+  comercio o la cuenta y el subtítulo no la repite. Solo presentación.
+- **Buscar marca la pestaña de donde se abrió** (`destinoResaltadoDeLaPila`) y **el total de un comercio
+  lleva el signo** del sistema (`CifraDelMovimiento` con el tono del movimiento).
+
+**Las líneas base** no cambian: `dp_sueltos` 119, `radios_con_numero` 3, y las guardas en 0 siguen en 0.
+
+Lo vigilan `LoQueEraDeOtroDiaTest` y `LaFilaDelMovimientoTest` (puras), `BuscarMarcaSuPestanaTest`,
+`MoviAiNoMienteConCifrasViejasTest`, `MovimientosConSuResumenYTuParteTest` y
+`LosComerciosLlevanSuSignoTest` (Robolectric), y en el server `LoQueMoviDijoOtroDiaTest` y
+`LasCifrasDeComoVoySonLasDeHoyTest` («¿Cómo voy?» y `/api/finance-summary` cuentan lo mismo con un gasto
+repartido).
+
+## 33. Vuelta 31: Créditos y Espacios se consultan, el cuadre dice una sola cosa y Ajustes se ordena
+
+Sin componentes nuevos en `ds/` (solo el tag `TAG_ICONO_EN_CIRCULO` de `IconoEnCirculo`, para las pruebas):
+
+- **Tocar una deuda siempre abre su detalle** (`FilaDeDeuda`), también sin términos («Nu», «Vehículo
+  4083»): antes abría el formulario y esa deuda no se podía consultar. Si faltan datos, el detalle lo
+  dice **arriba, antes del saldo**, con una `TarjetaDePropuesta` en `TonoDeIcono.Aviso` y «Completar
+  datos» (`AvisoDeFaltanDatos` en `ui/credits/LaDeudaEnSuDetalle.kt`), que abre el formulario de
+  siempre; «El préstamo / La tarjeta» no se pinta vacío. El campo **Banco llega lleno** cuando el
+  nombre es una marca del catálogo (`bancoSugeridoPara`: solo bancos y billeteras, nunca una red como
+  Visa, Mastercard o AMEX); escribirlo a mano manda.
+- **Cada gasto de un espacio es una `Fila` tocable.** Con movimiento propio abre el MISMO detalle de
+  Movimientos (`HojaDelMovimiento`); sin él («Pagó Caro») abre `HojaDelGasto` (`ui/espacios/DetalleDelGasto.kt`):
+  quién pagó, cuánto, tu parte, la categoría y la fecha en `Fila`s sobre capa 2, y «Quitar del espacio»
+  en `Peligro` con su pregunta antes. El cliente ganó `quitarGastoDelEspacio`, sobre la ruta
+  `DELETE /api/espacios/{id}/gastos/{gastoId}` que el server ya tenía (sin cambios de server). El
+  subtítulo **empieza por la fecha** («21 oct · Pagó Caro · Mercado»), no repite la categoría si ya es
+  el título, y va en dos renglones antes de cortarse.
+- **Una sola frase del cuadre de una cuenta**: `fraseDelCuadre` (`:core` `CuadreDeSaldos.kt`) la decide
+  y **nunca pierde la fecha** si hubo un cuadre: «Sin movimientos todavía», «Nunca la has cuadrado»,
+  «Cuadrada el 3 oct» (o «hoy», «ayer») hasta 45 días, y después «Hace más de un mes que no la cuadras ·
+  última el 3 ago» (con el año si es de otro). La dicen el detalle de la cuenta y Cuadre de saldos
+  (`textoDelUltimoCuadre`); Patrimonio, Hoy y Movi AI dicen su versión con nombre y la misma regla, más
+  corta (`textoDelAvisoDeCuadre`: «Bancolombia Ahorros · Nunca la has cuadrado», «Bancolombia Ahorros ·
+  última el 3 ago»). Donde un largo no cabe, baja a dos renglones antes que cortarse.
+- **Ajustes, más corto y con íconos**: cada fila lleva su `IconoEnCirculo` neutro (`IconoDeAjuste`;
+  «Borrar mi cuenta» sigue en peligro). El tema es **una fila «Tema» con su valor** que abre
+  `HojaDelTema` con las tres opciones. En Avisos hay **un solo «Activar avisos»** (en la fila de las
+  notificaciones; la de los recordatorios ya no repite su «Activar»). «Inicio del mes» pasó a
+  **«Inicio del período»** y su hoja pregunta «¿Qué día empieza tu período?». Donde no se leen SMS (la
+  web, iOS), «Tu plata» trae **«Recibe tus alertas por correo»** con la dirección a la vista; abre una
+  hoja con la MISMA pieza de la guía de primer uso (`ReenvioPorCorreo` en `ui/primeruso/`). **«Personas
+  y comercios» quedó solo en Espacios**: es de esa pestaña (`navTabFor` ya la marcaba) y ahí se elige
+  con quién compartir; en Ajustes era una segunda puerta a lo mismo.
+
+**Las líneas base** no cambian: `dp_sueltos` 119, `radios_con_numero` 3, y las guardas en 0 siguen en 0.
+Lo vigilan `LaDeudaEnSuDetalleTest`, `LaListaDeCreditosEsDeFilasTest`, `EspaciosEnPantallaTest`,
+`LosGastosDelEspacioSeLeenTest` (360 dp, motor de texto real), `ElCuadreDiceLoMismoTest`,
+`MasScreenTest` y `LosAvisosApagadosSeVenTest`.
+
+## 34. Vuelta de diseño 32: las cifras hablan igual en toda la pantalla
+
+Revisado en la vista previa de las vueltas 30 y 31 (3995d638) con la cuenta demo, a 390 px. Sin
+componentes nuevos en `ds/`: una forma más de `Cifra` (`FormaDeCifra.Abreviada`) y su regla.
+
+- **El total del día dice lo mismo que sus filas** (`totalDelDiaComoSusFilas`, `ui/accounts/ElTotalDelDia.kt`).
+  En el detalle de la tarjeta «Nu» el día decía «+$42.000» y su fila «−$42.000»: el total salía de
+  `accountDayTotal` (`:core`, ya borrada), con la convención de la deuda —una compra la sube—, y la fila
+  pinta el signo del gasto. Ahora, en **toda** cuenta, el total es la suma de sus filas con la
+  convención de Movimientos: lo que entró suma, todo lo demás resta. Se pinta como el de Movimientos:
+  `Cifra` `Chica`, `Ingreso` si es positivo. En una cuenta de dinero da lo mismo que antes. El saldo no
+  cambia: sigue saliendo del server con `signedDelta`.
+- **Una franja, una forma** (ver `FormaDeCifra.Abreviada` en §6): «Entró +$850.000 · Salió $1,8M · Neto
+  −$902.250» pasó a ser enteras las tres si caben, y abreviadas las tres si una no cabe. Lo mismo en el
+  panel de escritorio, donde antes cada cifra se achicaba por su cuenta.
+- **Lo que el banco manda en MAYÚSCULAS se lee en forma de título** (`enFormaDeTitulo`, `:core`
+  `NombreParaMostrar.kt`): «EXITO SUBA» → «Éxito Suba» (las tildes y mayúsculas salen del catálogo de
+  `MarcasConocidas`, palabra por palabra), «PAGO EPM» → «Pago EPM», «DIAN» → «DIAN». Respeta lo que trae
+  minúsculas, las siglas de 2 a 4 letras (sin vocales, del catálogo o conocidas) y los números; a
+  diferencia de `nombreParaMostrar` no quita nada. **Solo presentación**: lo guardado no cambia. La usan
+  la fila de un movimiento (`textosDeLaFila`, también en el detalle de una cuenta), su detalle
+  (`descripcionParaMostrar`), Buscar y el título de un gasto de un espacio.
+- **En Espacios el subtítulo de un gasto cabe en un renglón** a 360 dp: «26 oct · Caro · Mercado» (antes
+  «Pagó Caro» / «Pagaste tú»; el avatar ya dice quién pagó), sin la categoría cuando el título ya la
+  dice por palabras («Mercado del sábado»), y de un renglón: si aun así no cabe, la `Fila` corta la
+  categoría con «…» al final, nunca la fecha.
+- **La tarjeta también tiene «Qué puedes hacer»**, con o sin sus datos: «Registrar un pago» abre
+  «Agregar» en la pestaña del pago con la tarjeta en «Hacia» (`Screen.QuickAdd(presetDeudaId)`, la misma
+  hoja de «Anotar este pago»), y con datos, «Editar las condiciones». **«Ajustar saldo» no**: para una
+  tarjeta no existe en la app ni en el server (las dos rutas de ajuste la rechazan), y la vuelta no crea
+  flujos nuevos.
+
+**Las líneas base** no cambian: `dp_sueltos` 119, `radios_con_numero` 3, y las guardas en 0 siguen en 0.
+Lo vigilan `ElTotalDelDiaTest`, `LasCifrasDeUnRenglonHablanIgualTest`, `LaFilaDelMovimientoTest`,
+`PedirleACaroTest` y `NombreParaMostrarTest` (puras), y `LaTarjetaEnSuDetalleTest`,
+`LaFranjaHablaEnUnaFormaTest` y `LosGastosDelEspacioSeLeenTest` (Robolectric; las dos últimas a 360 dp con
+el motor de texto real).
+
+## 35. Vuelta 33: la tarjeta se cuadra, y la pantalla ancha se aprovecha
+
+Revisado en la vista previa de la vuelta 32 (2208acaf) con la cuenta demo, a 390 y a 1.280 px. Sin
+componentes nuevos en `ds/`: un token, `Medida.anchoMaximoDeBoton` (360 dp).
+
+- **Una tarjeta se cuadra contra el banco.** No había dónde: `POST /api/credits/{id}/balance-adjustment`
+  solo acepta préstamos y `POST /api/accounts/{id}/balance-adjustment` rechazaba toda deuda. Ahora la
+  de **cuentas** acepta `CREDIT_CARD` (es la que menos duplica: misma respuesta `AdjustAccountBalanceResponse`
+  que el teléfono ya espeja, el saldo en la moneda de la cuenta —una tarjeta en dólares también— y el
+  mismo `balanceAdjustmentEventFor`, que pone el signo de la deuda: subir lo que se debe es un cargo).
+  Un préstamo sigue yendo a Créditos («El saldo de un préstamo se cuadra en Créditos»). Sin columnas
+  nuevas. En la app, el detalle de la tarjeta suma «Ajustar saldo» a «Qué puedes hacer» (con o sin sus
+  datos), con la MISMA hoja que el préstamo (`CardBalanceSheet`, que comparte el cuerpo con
+  `CreditBalanceSheet`): «Cuánto debes hoy según el banco» y la ayuda «la deuda total de hoy, no el pago
+  mínimo ni el cupo disponible». Movi calcula la diferencia contra el saldo sin anulados; nunca se ajusta
+  solo. Patrimonio lee el saldo nuevo (sale de los movimientos), el ajuste no cuenta como gasto
+  (`ADJUSTMENT_CATEGORY`), y Cuadre de saldos sigue siendo de Dinero e Inversión (`sePuedeCuadrar` no
+  cambió: una tarjeta no se «atrasa» en el aviso de cuadre).
+- **Movi AI en el rail es una raíz.** Tocada en el rail deja la pila como cualquier pestaña (`[Hoy, Movi
+  AI]`, `NavStack.navegarALaPestana`) y su encabezado lleva el avatar (`moviAiEsLaRaizDeSuPestana`). En
+  el teléfono —sin pestaña de Movi AI— y con el rail apilada encima de Ajustes, conserva la «←».
+- **Espacios, el detalle de un espacio y el de una cuenta son tableros** (`disposicionDe`). Con un
+  espacio, a la izquierda el espacio con su total, «Quién puso qué» y el saldo con «Pedirle a Caro»; a la
+  derecha «Gastos» con «Anotar lo que pagó Caro», «Lo que paga otra persona» y «Personas y comercios»
+  (`espacioEnDosColumnas`). En el detalle de una cuenta, la cuenta (saldo, deuda, para qué es, apartados,
+  «Eliminar cuenta») a la izquierda y sus movimientos a la derecha (`cuentaEnDosColumnas`). Las cuentas
+  del ancho son las de Patrimonio: columnas de 420 dp, cada una con su scroll. Con varios espacios o sin
+  ninguno, una columna de lectura centrada. Fuera del teléfono, los botones de ancho completo de Espacios
+  no pasan de `Medida.anchoMaximoDeBoton`; en el teléfono no cambia nada.
+- **Créditos no se tocó**: desde la Ola W3 ya va en dos columnas a 1.280 (con dos deudas o más).
+
+**Las líneas base** no cambian: `dp_sueltos` 119, `radios_con_numero` 3, y las guardas en 0 siguen en 0.
+Lo vigilan, en el server, los casos de tarjeta de `AccountRoutesTest` (de $1.499.000 a $1.520.000, hacia
+abajo, sin ensuciar el período, un ajuste anulado no cuenta, la de otro usuario es 404, el préstamo manda
+a Créditos); `MoviAiComoRaizTest` (pura); y `LaTarjetaEnSuDetalleTest`, `ElEncabezadoDeMoviAiTest`,
+`EspaciosEnDosColumnasTest` y `LaCuentaEnDosColumnasTest` (Robolectric; las dos últimas dentro de la
+cáscara, a 1.280 y a 390 dp).
+
+## 36. Vuelta 34: Agregar con teclado de verdad
+
+Revisado en la vista previa de la vuelta 33 (aa82588a) con la cuenta demo, a 1.280 y a 390 px. Sin
+componentes nuevos en `ds/`; dos tokens: `Medida.anchoDelCursor` (2 dp) y
+`Movimiento.PARPADEO_DEL_CURSOR_MS` (530, lo único que se repite: no es una transición).
+
+- **Frente a un computador, Agregar no dibuja el teclado numérico.** A 1.280 px la hoja medía
+  600 × 720 y casi la mitad eran las teclas 1–9, 000, 0 y ⌫, con un teclado físico al lado. **La señal
+  es el puntero principal** (`LocalPunteroFino`, `platform/PunteroPrincipal.kt`): en la web,
+  `matchMedia("(pointer: fine)")` —un mouse o un trackpad—; en Android e iOS, siempre `false`. No es la
+  clase de ancho: una tablet es mediana o expandida y se toca (ahí el teclado se queda), y una ventana
+  de escritorio angosta es compacta y tiene teclado. Tampoco `LocalHayTecladoFisico`, que es
+  `!isAndroid` y vale también en un iPhone. Sin teclado en pantalla:
+  - el monto se escribe con el teclado físico por el camino que ya existía (`alTeclear` →
+    `accionDeTecla` → el mismo `onKey` de los botones): los dígitos suman, Retroceso borra, Enter
+    guarda si se puede, ⇧Enter guarda y deja anotar otro; Escape lo sigue atendiendo el marco;
+  - al abrir, el foco ya es de la hoja (el velo de la centrada, el panel de la de abajo), así que la
+    primera tecla va al monto sin hacer clic;
+  - la cifra sigue siendo la protagonista, con un **cursor** de la marca pegado a su derecha, del alto
+    de la letra de la cifra, que parpadea (fijo si el sistema pide menos movimiento);
+  - la hoja se acorta a lo que tiene (~212 dp: cuatro filas de 50 y su respiro) y va del ancho de las
+    demás hojas (560): los 600 eran para que el teclado respirara;
+  - el renglón del error / «Anotado» / aviso pendiente, entre la tarjeta y el pie, no reserva sus 32 dp
+    ni su respiro (estaban para que el teclado no se moviera bajo el dedo): mide lo que diga, y nada si
+    no dice nada. Sin eso quedaban ~50 dp vacíos entre «Nota» y «Guardar movimiento».
+  En el teléfono y en una tablet que se toca no cambia nada.
+- **La categoría se lee en un solo lugar.** Debajo del monto había una fila «Categoría · Restaurantes ›»
+  y, justo debajo, los chips con «Restaurantes» marcado. La fila se fue: queda un renglón
+  **«Categoría ……… Todas ›»** encima de los chips —el rótulo en `cuerpo`, la letra de los títulos de
+  «Cuenta» y «Nota»; «Todas ›» a la derecha, como el «Ver todo» de una `Seccion` (en la marca) con el
+  `KeyboardArrowRight` de lo que se abre, y un toque de 48—, que abre el selector entero, sin teclado,
+  como lo abría la fila. «Todas» iba primero al final de los chips, pero ahí quedaba fuera de la
+  pantalla a 390 y a 1.280, y desplazar de lado con el mouse es incómodo: en el renglón del rótulo se
+  ve siempre. La elegida va marcada; si no está entre
+  las frecuentes va primera (lo hacía ya `categoriasParaLasPastillasDeAgregar`), y sin datos de uso es
+  la única pastilla (`pastillasDeLaCategoria`): sin eso quien recién empieza no la vería en ningún
+  lado. Si la elegida queda fuera del desplazamiento de la fila, la fila se corre lo justo para
+  mostrarla, solo en horizontal (un `bringIntoView` también correría la hoja). «Movi la reconoce: …» va
+  en el mismo renglón, entre el rótulo y «Todas ›», y es lo único que cede (se corta con «…»): antes era
+  un renglón propio que se iba al elegir otra a mano y movía el teclado.
+- **A 360 dp** la tarjeta mide lo de antes menos un separador (el renglón del rótulo mide 48, lo de la
+  fila que reemplaza), nada se corta, y elegir un chip, una categoría en el selector u otra cuenta no mueve el teclado.
+
+**Las líneas base** no cambian: `dp_sueltos` 119, `radios_con_numero` 3, y las guardas en 0 siguen en 0.
+Lo vigilan `AgregarConElTecladoDeVerdadTest` (a 1.280 sin teclas ni «⌫» y con el cursor a la derecha
+de la cifra; 4-2-0-0-0 deja $42.000, Retroceso deja $4.200 y Enter lo guarda; la hoja ≥ 200 dp más
+corta; de la tarjeta a «Guardar» no más de 16 dp, y con teclado el renglón sigue en 32; a 1.280 con
+tacto y a 390 el teclado sigue y escribe) y `UnaSolaCategoriaEnAgregarTest` (a 360:
+la elegida una sola vez y marcada, «Categoría» no es una `Fila`, «Todas» entero y sin desplazar en el
+renglón del rótulo —con seis frecuentes que desbordan los chips—, de 48 de toque, abre el selector, la
+elegida en el selector vuelve primera y entera, y elegir chip, categoría o cuenta no mueve el teclado
+ni corta «Guardar movimiento»), más un caso en `HojaAgregarSugerenciaDeCategoriaTest` (la sugerencia
+aparece y se va sin mover el teclado, y va antes de «Todas ›», que no se corta). Las pruebas que abrían el selector tocando la fila ahora tocan
+«Todas».
+
+## 37. Vuelta 35: Buscar y Categorías se ven como el resto
+
+Revisado en la vista previa de la vuelta 34 (d567ba4c) con la cuenta demo, a 390 px. Un componente
+nuevo en `ds/`, `CampoDeBusqueda`; ningún token nuevo. **Solo presentación**: sin cambios de plata ni
+de server.
+
+- **Los resultados de Buscar van en su superficie.** «Movimientos · 2» y «Comercios · 1» eran filas
+  sueltas sobre el fondo. Ahora cada grupo —movimientos, comercios, personas y comercios, categorías,
+  cuentas, pantallas y las recientes— es su `Seccion` y, debajo, una `Superficie` de lista con el
+  `Separador` entre filas, como en Movimientos, Ajustes y Patrimonio. Las filas no cambiaron: la
+  `Fila` con el avatar del comercio, título, subtítulo y la `Cifra` con su signo (`CifraDelMovimiento`).
+  Un grupo es un solo `item` de la lista perezosa (son pocas filas: 30 movimientos, 8 por grupo), así
+  la superficie no se parte.
+- **Una sola caja de búsqueda** (`CampoDeBusqueda`, §6). La de Buscar era blanca, con lupa y ×; la de
+  Categorías, el `Campo` gris de los formularios, sin lupa ni ×; el selector de categoría y Personas y
+  comercios armaban la suya. Ahora la usan Buscar, Categorías (la lista y «Unificar en…»), el selector
+  de categoría —Agregar, recategorizar, Presupuestos, Recurrentes y, por ser el mismo componente,
+  Reconciliar— y Personas y comercios. Buscar salió de las excepciones de `LosCamposSonDelSistemaTest`,
+  y el `18.dp` de la lupa del selector se fue (`dp_sueltos` 119 → 118).
+- **En Categorías, las cifras dicen de qué son.** La fila decía «Carro · 3 movimientos · $260.000»
+  sin decir el alcance, y **medía dos cosas**: el conteo era de toda la historia (`movements` + los de
+  otra moneda) y la cifra, del período en curso (`monthTotal` / `monthIncomeTotal`, la regla de «En qué
+  se va», §21). Ahora los dos son del período —la regla que esta pantalla ya usaba para la plata—: el
+  renglón es `monthMovements` (`resumenDelPeriodoCorto`; «Sin movimientos tuyos» si solo hay tu parte
+  de lo que pagó otra persona), y la lista lleva arriba la `Seccion` «Este período» —«Este mes» si el
+  período es el mes del calendario, el mismo `rotuloDelPeriodoDeCategorias` de la hoja de detalle—,
+  también mientras carga, para que la lista no baje. Lo de toda la historia sigue en la hoja de detalle
+  (`resumenDeUso`). El orden de la lista no cambió (alfabético).
+
+**Las líneas base:** `dp_sueltos` 118, `radios_con_numero` 3, y las guardas en 0 siguen en 0. Lo
+vigilan `LosResultadosDeBuscarVanEnSuSuperficieTest` (ningún resultado ni reciente fuera de la
+superficie de su grupo, una por grupo, el título encima), `UnSoloCampoDeBusquedaTest` (la × solo con
+texto, borra y deja el foco, la caja mide 48 con la × o sin ella; Buscar, Categorías, el selector y
+Personas y comercios escriben dentro de la caja del sistema y la × borra) y
+`CategoriasDicenDeQueSonLasCifrasTest` (el título «Este período» / «Este mes» encima de las filas, y el
+conteo de la fila del período: 3, no 40), más los casos de `resumenDelPeriodoCorto` en
+`CategoriasLogicTest`.
+
+## 38. Vuelta 36: el detalle dice lo mismo que la fila, y ningún rótulo se parte
+
+Revisado en la vista previa de la vuelta 35 (fc2eeb17) con la cuenta demo, a 390 px. Ningún componente
+ni token nuevo. **Solo presentación**: sin cambios de plata ni de server.
+
+- **El detalle de un movimiento se titula como su fila.** En Movimientos la fila decía «Éxito Suba»
+  («Mercado · Bancolombia Ahorros» debajo) y, al tocarla, la hoja se titulaba «Mercado»: la fila sabía
+  (vuelta 30) que una descripción igual a la categoría no dice nada; el detalle no. Ahora los dos salen
+  de `textosDeLaFila` por `tituloDelMovimiento(evento, cuenta)` (`ui/transactions/LaFilaDelMovimiento.kt`),
+  con el nombre de la cuenta igual que la fila. Lo usan también la rama del traspaso y la del saldo
+  inicial de la misma hoja, la lista de «¿Y los parecidos?», los pagos de tarjeta sin marcar, la
+  confirmación de anular (`VoidEventSheet`), los movimientos de una persona o comercio, los de un
+  presupuesto, «Los más grandes» del detalle de un período, el importe de un extracto, «ya anotado» al
+  leer un papel y el aviso de lo que no se pudo subir. La propuesta «¿Fue este?» de un recurrente
+  (`descripcionPropuesta`) tampoco repite la categoría: con una nota igual a ella va el comercio, o nada.
+  **Al editar la nota, el campo sigue trayendo lo guardado** (`description`), no el título.
+- **Los rótulos de la cuadrícula de íconos no se parten dentro de una palabra.** A 390 dp entran
+  cuatro columnas y «Medicamentos» salía «Medicament» / «os». La celda más angosta de un teléfono no
+  es la de 360 dp (tres columnas de ~106) sino la de **364 dp**, donde empiezan las cuatro de 80 dp
+  justos (`ANCHO_MINIMO_DE_CELDA`) y el rótulo tiene 72: ninguna palabra puede ser más ancha que eso.
+  Se puede partir entre palabras («Arreglos del hogar», «Banco y comisiones»), en dos renglones como
+  mucho. Cinco rótulos cambiaron por uno más corto del mismo significado —la letra no se achicó—:
+  «Restaurante» → «Comer fuera», «Medicamentos» → «Medicinas», «Entretenimiento» → «Diversión»,
+  «Suscripciones» → «Membresía», «Transferencia» → «Traspaso». **Las claves no cambiaron**
+  (`restaurante`, `medicamentos`, `entretenimiento`, `suscripciones`, `transferencia`): lo guardado en
+  `category_prefs.icono` se sigue viendo igual. La regla está en el KDoc de `IconoDelCatalogo.rotulo`.
+
+**Las líneas base:** `dp_sueltos` 118, `radios_con_numero` 3, y las guardas en 0 siguen en 0. Lo
+vigilan `ElDetalleSeTitulaComoLaFilaTest` (Mercado con «EXITO SUBA» titula su detalle «Éxito Suba»,
+«Mercado» queda solo en el chip, el campo de la nota trae «Mercado», una descripción propia sigue siendo
+el título) y `LosRotulosDeIconosNoSePartenTest` (con la hoja de una categoría abierta de verdad, el
+motor de texto real —`NATIVE`, sdk 34— y la escala de letra de la app, ningún renglón termina entre dos
+letras ni con «…», a 360, 364 y 390 dp; y las cinco claves siguen siendo las de antes), más el caso
+nuevo de `descripcionPropuesta` en `OccurrenceLogicTest`.
+
+## 39. Vuelta 37: Cuadre de saldos se lee de una pasada, y «Entre cuentas» es un modo claro
+
+Revisado en la vista previa de la vuelta 36 (0b84be13) con la cuenta demo, a 390 px. Ningún componente
+ni token nuevo. Sin cambios de server ni de reglas de plata: el ajuste de una tarjeta ya existía
+(vuelta 33).
+
+- **Cuadre de saldos tiene menos texto que formulario.** Arriba había un párrafo de seis renglones en
+  su superficie, el encabezado repetía «Compara con lo que dice tu banco hoy», y cada cuenta repetía
+  «Escribe el saldo que te muestra el banco hoy.» y cerraba con un rótulo «Dinero» suelto. Ahora:
+  - la entrada es una frase sin superficie, «Escribe lo que dice tu banco y Movi anota la diferencia.»
+    (`QUE_ES_EL_CUADRE`), y el encabezado va sin subtítulo;
+  - lo que el párrafo explicaba va en una nota debajo del botón (`NOTA_DEL_CUADRE`): que el ajuste
+    queda como un movimiento visible, que no cuenta como gasto ni ingreso, y que lo que quede en
+    blanco no se toca;
+  - las cuentas van bajo su `Seccion` —«Dinero», «Inversión», «Tarjetas», en ese orden, sin secciones
+    vacías (`seccionesDelCuadre`)— y el rótulo suelto se fue. Con avisos que traen el saldo, «Lo que
+    dijo el banco» va primero y las secciones siguen; el «O escribe tú el saldo» de entre medio salió
+    (eran dos títulos seguidos);
+  - el rótulo del campo basta: `textoDelCuadre` es `null` con el campo vacío y solo habla cuando hay
+    una cifra («Movi dice … tú dices …: se va a anotar …»);
+  - cada cuenta sigue con «Movi dice» y su estado («Nunca la has cuadrado», «Cuadrada el …»). El
+    esqueleto perdió las dos líneas de abajo y ganó el título de la sección, para que nada salte.
+- **Las tarjetas también se cuadran ahí.** La sección «Tarjetas» lista las `CREDIT_CARD`: el campo
+  dice «Cuánto debes según el banco», «Movi dice» muestra la deuda, y el texto dice **cargo** o
+  **abono** como la hoja «Ajustar saldo» de la tarjeta. Al anotar va por la misma ruta que
+  `CardBalanceSheet` (`adjustAccountBalance`, `POST /api/accounts/{id}/balance-adjustment`). Lo decide
+  un predicado propio de la pantalla, `seccionDelCuadre`; **`sePuedeCuadrar` de `:core` no cambió**: el
+  server, Movi AI y los avisos de «sin cuadrar» siguen sin tarjetas, así que una tarjeta nunca sale en
+  ámbar ni se reclama como atrasada. Los préstamos siguen fuera (se cuadran en Créditos).
+- **«Entre cuentas» es un modo claro.** Desde Patrimonio → Herramientas → «Movimientos entre
+  cuentas», Movimientos abría sin ningún chip marcado, con la franja Entró · Salió · Neto de todo el
+  período, la tarjeta «N por revisar» y un encabezado «Entre cuentas · Ver todos». Ahora el modo es un
+  chip marcado **«Entre cuentas ×»** (`TAG_CHIP_DEL_MODO`), el patrón del «Solo …» de la ola 4: lo
+  dice y lo quita (vuelve a «Todo»). El encabezado con «Ver todos» se fue. En el modo no van la franja
+  ni «por revisar», ni el resumen del período en el panel de pantalla ancha (`loDeArribaEnElModo`).
+  **Se eligió ocultar la franja** y no cambiarla por «Movido entre cuentas $X»: lo que se mueve entre
+  cuentas propias no es plata que entró ni que salió, y sumar patas —con tarjetas en dólares y cuotas
+  que bajan una deuda— sería una cifra nueva sin regla de plata detrás.
+
+**Las líneas base** no cambian: `dp_sueltos` 118, `radios_con_numero` 3, y las guardas en 0 siguen en 0.
+Lo vigilan `CuadreDeSaldosScreenTest` (cada cuenta bajo su sección, «Dinero» una sola vez, ninguna ayuda
+repetida, la frase y la nota una vez, «Movi dice» y el estado en cada cuenta; la tarjeta pide la deuda,
+dice el cargo y manda 2.100.000 por `adjustAccountBalance`; el préstamo no aparece) y
+`EntreCuentasEsUnModoClaroTest` (en el modo, el chip marcado con «Salir de Entre cuentas», sin franja,
+sin «por revisar» y sin «Ver todos»; la × vuelve a «Todo» con las dos), más los casos puros de
+`CuadreDeSaldosLogicTest` (secciones, rótulos, cargo/abono, `sePuedeCuadrar` sin tarjetas) y de
+`EntreCuentasFueraDeLosChipsTest`.
+
+## 40. Vuelta de diseño 28: una cifra que se explica sola, y Hoy y Plan sin ruido
 
 Un segundo diseñador revisó la app sin sesgo (27-oct): «la plata disponible sale con cinco cifras
 distintas y una contradice a otra». Cada una era correcta para su concepto, pero no se distinguían. Sin
@@ -1281,7 +1676,9 @@ reglas de plata nuevas: la cascada y los rótulos usan las funciones de siempre.
   | Tu plata, día a día · el supuesto | «Suponiendo que gastas como siempre, unos $26.523 por día (tu promedio …)» | «Supone que sigues como siempre: gastas en promedio $26.523 por día (en tus últimos 3 períodos).» |
   | Tus períodos | «Te quedó» (en `sale` si es negativo) | «Neto del período» (`ROTULO_NETO_DEL_PERIODO`), neutro si es negativo: no es una alerta |
 
-  La única cifra «por día» sin otro nombre es la del héroe y la frase de Plan (`porDiaParaLoQueQueda`).
+  El tono del neto es UNO para el mismo concepto: «Neto» de la franja de Movimientos (vuelta 30) y «Neto
+  del período» de Tus períodos salen de `tonoDelNeto` (en `entra` si quedó, en el color del texto si
+  salió más, apagado en cero); la franja lo pintaba en `sale`. La única cifra «por día» sin otro nombre es la del héroe y la frase de Plan (`porDiaParaLoQueQueda`).
   «Saldo proyectado al cierre» no entra a 360 dp entre las dos fechas de la caja (lo mide
   `UnNombrePorConceptoTest`): el cierre lo dice la fecha de la derecha.
 - **El widget «Falta por pagar» no esconde la deuda grande.** La vuelta 22 sacaba el pago de «Movi
@@ -1302,14 +1699,16 @@ reglas de plata nuevas: la cascada y los rótulos usan las funciones de siempre.
   debajo del resumen (`SeccionChecklistDelPeriodo(debajoDelResumen = …)`). Y en ese resumen una cifra en
   cero va apagada (`tonoDelResumen`): «Ya pagaste $0» ya no pesa lo mismo que lo que falta.
 
-**Las líneas base** no cambian: `dp_sueltos` 119, `radios_con_numero` 3, y las guardas en 0 siguen en 0.
+**Las líneas base** no cambian: `dp_sueltos` 118 (lo que dejó la vuelta 34), `radios_con_numero` 3, y las
+guardas en 0 siguen en 0.
 
 Lo vigilan `CascadaDelDisponibleTest` (la suma da la cifra del héroe al peso: sin y con ahorro, con un
 apartado, lo guardado y otros pagos de deuda, con fijos pendientes, sin margen y con un server viejo),
 `TeQuedanEnHoyEnPantallaTest` (tocar el héroe abre la hoja, su total es la cifra del héroe y «Ver tus
 períodos» lleva allá), `DisponibleEnInicioTest` y `AhorroDelPeriodoEnHoyYPlanTest` (la cascada en la
-tarjeta), `UnNombrePorConceptoTest`, `CajaDelPeriodoTest` y `ElNetoDelPeriodoTest` (los rótulos),
+tarjeta), `UnNombrePorConceptoTest`, `CajaDelPeriodoTest` y `ElNetoDelPeriodoTest` y `ResumenDelPanelTest` (los rótulos y el tono del neto),
 `UnaSolaVerdadEnHoyTest` y `ChecklistEnInicioTest` (el Arriendo primero en el widget),
 `LoPendienteSeAvisaUnaVezTest` (con 3 por revisar y nada vencido, ni tarjeta ni punto) y
 `LosRecordatoriosVanDebajoDeLosPagosTest` (la fila debajo del resumen, «Ahora no» por período, el $0
 apagado).
+

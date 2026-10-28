@@ -744,6 +744,22 @@ object SmsMessages : Table("sms_messages") {
      * `NULL` en lo confirmado antes de esta columna. NULLABLE por lo mismo que [motivoApartado].
      */
     val confirmadoEn = long("confirmado_en").nullable()
+    /**
+     * **Todos los movimientos de un aviso repartido en partes** (vuelta 27, ver `ElAvisoEnPartes.kt`
+     * en `:core`), como JSON de una lista de ids, en orden. [eventoId] sigue apuntando a UNO —la pata
+     * del dinero de la primera parte—, así que lo que lo lee (el cuadre por aviso, «ya anotado», la
+     * memoria de categorías) no cambia; esto los guarda **todos**, para que un reintento conteste lo
+     * mismo que el primer toque. `NULL` en un aviso que no se repartió. NULLABLE por lo mismo que
+     * [motivoApartado].
+     */
+    val partesEventos = text("partes_eventos").nullable()
+    /**
+     * **Cómo se repartió**, para proponerlo la próxima vez (vuelta 27): JSON de `RepartoRecordado` —la
+     * cuenta de la que salió, el monto y las partes como las eligió el dueño—. La memoria del reparto
+     * es el aviso mismo: el último aviso repartido a la misma persona (`claveDelReparto`) es «la última
+     * vez». Sin tabla nueva. `NULL` en un aviso que no se repartió.
+     */
+    val reparto = text("reparto").nullable()
     override val primaryKey = PrimaryKey(id, userId)  // per-user: the same SMS id may exist for different users
     init { index("idx_sms_messages_user_id", false, userId) }
 }

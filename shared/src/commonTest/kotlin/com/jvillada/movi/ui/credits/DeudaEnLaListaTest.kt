@@ -131,4 +131,20 @@ class DeudaEnLaListaTest {
         assertTrue(alDia.pagada)
         assertEquals("Disponible \$8.000.000", alDia.subtitulo)
     }
+
+    /** Vuelta 31: el banco que el nombre ya dice llega lleno al formulario. */
+    @Test
+    fun `el banco sale del nombre cuando es una marca conocida`() {
+        assertEquals("Nu", bancoSugeridoPara("Nu"))
+        assertEquals("Bancolombia", bancoSugeridoPara("Bancolombia Libre inversión"))
+        assertEquals("Davivienda", bancoSugeridoPara("Crédito Davivienda 1254"))
+        assertNull(bancoSugeridoPara("Vehículo 4083"), "sin marca, el campo queda vacío")
+        assertNull(bancoSugeridoPara("Master Black 3684"))
+        // Una red no es el banco que emite la tarjeta.
+        assertNull(bancoSugeridoPara("Visa"))
+        assertNull(bancoSugeridoPara("Mastercard Black"))
+        assertNull(bancoSugeridoPara("AMEX"))
+        // Un comercio tampoco.
+        assertNull(bancoSugeridoPara("Rappi"))
+    }
 }

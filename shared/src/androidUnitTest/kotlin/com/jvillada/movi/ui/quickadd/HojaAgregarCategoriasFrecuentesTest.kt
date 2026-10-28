@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -56,19 +58,19 @@ class HojaAgregarCategoriasFrecuentesTest {
 
     /**
      * **El caso central.** Con «Mercado» (10 usos) y «Transporte» (3 usos) en los últimos 60
-     * días, «Agregar» arranca en la más frecuente —«Mercado»— y la ofrece TAMBIÉN como chip: por
-     * eso el conteo da dos coincidencias con ese texto (la fila «Categoría» y el chip) y solo una
-     * con «Transporte» (el chip nomás).
+     * días, «Agregar» arranca en la más frecuente —«Mercado»— y la marca como chip. Desde la vuelta
+     * 34 el chip es el único lugar donde se lee: una sola coincidencia con cada texto (antes había
+     * además la fila «Categoría · Mercado ›»).
      */
     @Test
-    fun arranca_en_la_mas_frecuente_y_la_ofrece_tambien_como_chip() {
+    fun arranca_en_la_mas_frecuente_y_la_marca_como_chip() {
         cargarUsos(
             UsedCategory("Mercado", listOf(TransactionType.EXPENSE), usosRecientes = 10),
             UsedCategory("Transporte", listOf(TransactionType.EXPENSE), usosRecientes = 3),
         )
         montarHoja()
 
-        assertApariciones("Mercado", 2)
+        assertApariciones("Mercado", 1)
         assertApariciones("Transporte", 1)
     }
 
@@ -84,10 +86,11 @@ class HojaAgregarCategoriasFrecuentesTest {
 
         tocar("Transporte")
 
-        // Ahora «Transporte» es la elegida (chip + fila «Categoría») y «Mercado» quedó solo
-        // como chip.
-        assertApariciones("Transporte", 2)
+        // Ahora «Transporte» es la elegida (el chip marcado) y «Mercado» quedó como un chip más.
+        assertApariciones("Transporte", 1)
         assertApariciones("Mercado", 1)
+        assertEquals(true, elegida("Transporte"))
+        assertEquals(false, elegida("Mercado"))
     }
 
     /**
@@ -121,14 +124,18 @@ class HojaAgregarCategoriasFrecuentesTest {
         assertEquals("«Salud» se movió al tocar «Comida»", saludAntes, saludDespues)
     }
 
-    /** Sin datos de uso, la fila no dibuja nada: el comportamiento de siempre, intacto. */
+    /**
+     * Sin datos de uso no hay frecuentes, pero la elegida igual se ve: es una pastilla marcada, la
+     * única (vuelta 34: ya no hay fila «Categoría» que la diga).
+     */
     @Test
-    fun sin_datos_de_uso_no_hay_chips() {
+    fun sin_datos_de_uso_la_elegida_es_la_unica_pastilla() {
         montarHoja()
 
         // El valor inicial (sin uso) es el primero del catálogo de gastos — «Comida»— y aparece
-        // una sola vez: si hubiera un chip duplicaría el texto.
+        // una sola vez, marcada.
         assertApariciones("Comida", 1)
+        assertEquals(true, elegida("Comida"))
     }
 
     /** Una categoría escondida no se ofrece como chip aunque tenga muchos usos. */
@@ -150,16 +157,14 @@ class HojaAgregarCategoriasFrecuentesTest {
             UsedCategory("Transporte", listOf(TransactionType.EXPENSE), usosRecientes = 3),
         )
         montarHoja()
-        // Antes de cambiar de pestaña: «Mercado» es la elegida (chip + fila) y «Transporte» es
-        // solo un chip — el mismo escenario del primer test, de nuevo acá para dejar claro qué
-        // cambia al tocar «Traspaso».
-        assertApariciones("Mercado", 2)
+        // Antes de cambiar de pestaña: «Mercado» es la elegida y «Transporte» un chip más — el mismo
+        // escenario del primer test, de nuevo acá para dejar claro qué cambia al tocar «Traspaso».
+        assertApariciones("Mercado", 1)
         assertApariciones("Transporte", 1)
 
         tocar("Traspaso")
 
-        // Ni la fila «Categoría» ni los chips existen en esta pestaña: los dos nombres
-        // desaparecen enteros, no solo el chip.
+        // Los chips no existen en esta pestaña: los dos nombres desaparecen enteros.
         assertApariciones("Mercado", 0)
         assertApariciones("Transporte", 0)
     }
@@ -191,6 +196,9 @@ class HojaAgregarCategoriasFrecuentesTest {
         val encontradas = composeRule.onAllNodesWithText(texto).fetchSemanticsNodes().size
         assertEquals("«$texto» no apareció las veces esperadas", cuantas, encontradas)
     }
+
+    private fun elegida(texto: String): Boolean? =
+        composeRule.onNodeWithText(texto).fetchSemanticsNode().config.getOrNull(SemanticsProperties.Selected)
 
     private fun tocar(texto: String) {
         composeRule.onNodeWithText(texto).performSemanticsAction(SemanticsActions.OnClick)

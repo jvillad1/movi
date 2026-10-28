@@ -343,31 +343,47 @@ class CategoriasLogicTest {
 
     // ── La fila compacta (Ola B, tarea 5) ────────────────────────────────────
 
+    // Vuelta 35: el renglón de la fila cuenta los del PERÍODO, como su cifra; antes contaba los de
+    // toda la historia al lado de una cifra del período.
+
     @Test
-    fun `el resumen corto solo cuenta movimientos, sin plata ni presupuesto`() {
-        assertEquals("12 movimientos", resumenDeUsoCorto(cat("Comida", movements = 12, total = 450_000, budgets = 1)))
-        assertEquals("1 movimiento", resumenDeUsoCorto(cat("Comida", movements = 1)))
-        assertEquals("Sin movimientos", resumenDeUsoCorto(cat("Comida")))
+    fun `el resumen corto cuenta los movimientos del periodo, sin plata ni presupuesto`() {
+        assertEquals("3 movimientos", resumenDelPeriodoCorto(cat("Comida", movements = 12, total = 450_000, monthMovements = 3, budgets = 1)))
+        assertEquals("1 movimiento", resumenDelPeriodoCorto(cat("Comida", movements = 1, monthMovements = 1)))
+        assertEquals("Sin movimientos", resumenDelPeriodoCorto(cat("Comida")))
     }
 
     @Test
-    fun `el resumen corto cuenta tambien los de otra moneda`() {
-        assertEquals("5 movimientos", resumenDeUsoCorto(cat("Tecnología", movements = 2, otherCurrencyMovements = 3)))
+    fun `el resumen corto y la cifra miden lo mismo, el periodo`() {
+        // «Carro · 3 movimientos · $260.000»: los 3 eran de toda la historia y los $260.000 del
+        // período. Ahora una categoría con historia y nada en el período dice eso, sin cifra.
+        val carro = cat("Carro", movements = 40, total = 9_000_000, monthMovements = 3, monthTotal = 260_000)
+        assertEquals("3 movimientos", resumenDelPeriodoCorto(carro))
+        assertEquals(CifrasDelMes(gasto = 260_000, ingreso = null), cifrasDelMes(carro))
+        val vieja = cat("Viajes", movements = 7, total = 3_000_000)
+        assertEquals("Sin movimientos", resumenDelPeriodoCorto(vieja))
+        assertEquals(null, cifrasDelMes(vieja))
+    }
+
+    @Test
+    fun `con cifra del periodo y sin movimientos propios lo dice`() {
+        // Tu parte de lo que pagó otra persona suma en la cifra sin ser un movimiento tuyo.
+        assertEquals("Sin movimientos tuyos", resumenDelPeriodoCorto(cat("Mercado", monthTotal = 45_000)))
     }
 
     @Test
     fun `una categoria con presupuesto pero sin movimientos dice Sin movimientos en el resumen corto`() {
         // El resumen corto es de MOVIMIENTOS: tener un presupuesto sin haber anotado nada todavía
         // sigue siendo, literalmente, no tener movimientos.
-        assertEquals("Sin movimientos", resumenDeUsoCorto(cat("Colegio", budgets = 1)))
+        assertEquals("Sin movimientos", resumenDelPeriodoCorto(cat("Colegio", budgets = 1)))
     }
 
     @Test
     fun `una categoria escondida lo dice en el resumen corto, no solo con el color`() {
         // Fix round 1: sin las etiquetas de la fila vieja, el color gris no bastaba para decir
         // «está escondida» — acá se dice con palabras, en el mismo renglón.
-        assertEquals("Escondida · 3 movimientos", resumenDeUsoCorto(cat("Ropa", movements = 3, hidden = true)))
-        assertEquals("Escondida · Sin movimientos", resumenDeUsoCorto(cat("Ropa", hidden = true)))
+        assertEquals("Escondida · 3 movimientos", resumenDelPeriodoCorto(cat("Ropa", movements = 9, monthMovements = 3, hidden = true)))
+        assertEquals("Escondida · Sin movimientos", resumenDelPeriodoCorto(cat("Ropa", hidden = true)))
     }
 
     @Test
@@ -412,7 +428,7 @@ class CategoriasLogicTest {
 
     @Test
     fun `los rotulos del catalogo se leen para la vista previa de la hoja de detalle`() {
-        assertEquals("Restaurante", rotuloDeIcono("restaurante"))
+        assertEquals("Comer fuera", rotuloDeIcono("restaurante"))
         assertEquals("Naranja", rotuloDeColor("naranja"))
         // Una clave desconocida (de una versión más nueva) se muestra tal cual, no revienta.
         assertEquals("no-existe", rotuloDeIcono("no-existe"))

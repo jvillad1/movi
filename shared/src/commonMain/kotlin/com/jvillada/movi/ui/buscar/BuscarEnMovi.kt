@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.buscar
 
+import com.jvillada.movi.shared.model.enFormaDeTitulo
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.DestinoConocido
 import com.jvillada.movi.shared.model.FinancialEvent
@@ -11,6 +12,7 @@ import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.shared.model.PERSONAS_Y_COMERCIOS
 import com.jvillada.movi.ui.mas.TITULO_DE_AJUSTES
 import com.jvillada.movi.ui.sms.tituloDeCapturaDelBanco
+import com.jvillada.movi.ui.transactions.textosDeLaFila
 import com.jvillada.movi.ui.transactions.isTransferLeg
 import com.jvillada.movi.ui.transactions.matchesQuery
 
@@ -75,7 +77,12 @@ sealed class ResultadoDeBusqueda {
     data class Movimiento(val evento: FinancialEvent) : ResultadoDeBusqueda() {
         override val tipo get() = TipoDeResultado.MOVIMIENTO
         override val clave get() = "mov:${evento.id}"
-        override val titulo get() = evento.description.ifBlank { evento.merchant ?: evento.category }
+        // El mismo título que la fila de Movimientos ([textosDeLaFila]): en forma de título (vuelta 32) y,
+        // si la descripción es la categoría, el comercio (vuelta 30). Antes Buscar decía «Mercado» donde
+        // Movimientos decía «Éxito Suba».
+        override val titulo get() =
+            if (evento.description.isBlank()) enFormaDeTitulo(evento.merchant ?: evento.category)
+            else textosDeLaFila(evento, nombreDeLaCuenta = null).titulo
         override val destino: Screen? get() = null
     }
 
@@ -89,7 +96,7 @@ sealed class ResultadoDeBusqueda {
     ) : ResultadoDeBusqueda() {
         override val tipo get() = TipoDeResultado.COMERCIO
         override val clave get() = "com:${claveDeComercio(ejemplo) ?: nombre}"
-        override val titulo get() = nombre
+        override val titulo get() = enFormaDeTitulo(nombre)
         override val destino: Screen get() = Screen.Transactions(consultaInicial = nombre)
     }
 
@@ -142,7 +149,7 @@ internal val PANTALLAS_BUSCABLES: List<PantallaBuscable> = listOf(
     PantallaBuscable("Cómo salir de tus deudas", "Créditos", Screen.SalidaDeDeudas, listOf("abono", "avalancha", "bola de nieve")),
     PantallaBuscable("Cuadre de saldos", "Patrimonio", Screen.CuadreDeSaldos, listOf("cuadrar", "ajustar saldo")),
     // Ola R4: su casa es Espacios (y Ajustes); Movimientos ya no tiene su fila.
-    PantallaBuscable(PERSONAS_Y_COMERCIOS, "Espacios y Ajustes", Screen.Destinos(), listOf("terceros", "cuentas de otros", "hogar")),
+    PantallaBuscable(PERSONAS_Y_COMERCIOS, "Espacios", Screen.Destinos(), listOf("terceros", "cuentas de otros", "hogar")),
     // Vuelta de diseño 3: Perfil se mudó dentro de Ajustes, y lo que se buscaba ahí lleva acá.
     PantallaBuscable(TITULO_DE_AJUSTES, "El avatar", Screen.Mas, listOf("perfil", "huella", "ocultar los saldos", "tema", "como se ve", "avisos por correo", "corte del periodo", "contrasena", "cerrar sesion", "descargar tus datos")),
     PantallaBuscable("Categorías", TITULO_DE_AJUSTES, Screen.Categorias),

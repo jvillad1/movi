@@ -5,6 +5,7 @@ import com.jvillada.movi.data.SaldosOcultosStore
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
@@ -35,7 +36,6 @@ import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.TransactionType
-import com.jvillada.movi.shared.model.accountDayTotal
 import com.jvillada.movi.shared.model.masRecientePrimero
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.components.ds.Boton
@@ -58,7 +58,9 @@ import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.homeScreenFor
 import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.LocalRefreshTick
+import com.jvillada.movi.ui.credits.AvisoDeFaltanDatos
 import com.jvillada.movi.ui.credits.HojasDeLaDeuda
+import com.jvillada.movi.ui.credits.faltanLosDatos
 import com.jvillada.movi.ui.credits.SeccionDeLaDeuda
 import com.jvillada.movi.ui.credits.rememberDeudaDelDetalle
 import com.jvillada.movi.ui.credits.textosDeLosPagosQueNoFueronLaCuota
@@ -162,18 +164,13 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                 .map { (date, items) ->
                     EventDay(
                         date  = date,
-                        // accountDayTotal, no countsAsCashFlow (Hallazgo bloqueante 1 de la
-                        // revisión de esta rama). Movimientos/`by-day` filtran por
-                        // countsAsCashFlow porque agregan VARIAS cuentas para responder "¿cuánta
-                        // plata entró o salió del bolsillo?" — acá ya se sabe de qué cuenta se
-                        // trata (es esta pantalla), así que esa pregunta no aplica. Lo que no
-                        // miente es "¿cuánto se movió el saldo de esta cuenta hoy?", con SU
-                        // convención: en LOAN/CREDIT_CARD un INCOME (abono) resta. Con
-                        // countsAsCashFlow el total habría dado $0 todos los días en una cuenta
-                        // LOAN (la regla es "LOAN nunca es flujo de caja") — incluso el día de un
-                        // ajuste de $60.000.000 — y en CREDIT_CARD el abono habría desaparecido
-                        // del total aunque sí mueve la deuda. Ver el KDoc de accountDayTotal.
-                        total = accountDayTotal(acc.type, items),
+                        // Vuelta de diseño 32: la suma de lo que dicen sus filas, con el signo de
+                        // Movimientos (ver [totalDelDiaComoSusFilas]). Antes era la convención de la
+                        // deuda, y en una tarjeta una compra decía «+$42.000» arriba y «−$42.000» en
+                        // su fila. No es `countsAsCashFlow` (Movimientos): acá ya se sabe de qué
+                        // cuenta se trata y se suma todo lo que se lista, la apertura y el ajuste
+                        // incluidos (en una cuenta LOAN el flujo de caja daría $0 todos los días).
+                        total = totalDelDiaComoSusFilas(items),
                         // masRecientePrimero, no `sortedByDescending { it.timestamp }` (que es
                         // lo que había): sin desempate, dos movimientos del mismo milisegundo
                         // —las dos patas de un traspaso, un lote de extracto, o cualquier día
@@ -230,7 +227,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
     //
     // `movementCount` (`:core`) no cuenta las aperturas, y ahora tampoco las lista Movimientos.
     // Acá sí se listan, a propósito y por la misma razón por la que el total del día de esta
-    // pantalla usa `accountDayTotal` y no `countsAsCashFlow` (ver el bloque de arriba): las otras
+    // pantalla usa `totalDelDiaComoSusFilas` y no `countsAsCashFlow` (ver el bloque de arriba): las otras
     // pantallas agregan VARIAS cuentas para contestar «¿qué hice con mi plata?», donde una
     // apertura no es un hecho; esta contesta «¿de dónde sale el saldo de ESTA cuenta?», y ahí la
     // apertura es el primer renglón de la respuesta — es el ancla de la que sale todo lo demás.
@@ -256,6 +253,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
     }
 
     Box(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
+        PanelDeTablero(enDosColumnas = ::cuentaEnDosColumnas) { dosColumnas ->
         Column(modifier = Modifier.fillMaxSize()) {
 
             // Header
@@ -296,27 +294,30 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
             // queda escondido arriba (en la web, con la red de por medio, abría así siempre). La
             // primera vez que la cuenta llega, la lista vuelve al principio.
             val lista = rememberLazyListState()
+            val listaDeMovimientos = rememberLazyListState()
             val cuentaLlego = account != null
             LaunchedEffect(cuentaLlego) {
                 if (cuentaLlego) lista.scrollToItem(0)
             }
 
-            LazyColumn(
-                state = lista,
-                modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(
-                    start = Medida.margenDePantalla,
-                    end = Medida.margenDePantalla,
-                    top = Medida.dentroDeSeccion,
-                    bottom = Medida.botonFlotante + Medida.entreSecciones,
-                ),
-            ) {
+            // Vuelta 33: en pantalla ancha, la cuenta (saldo, deuda, para qué es, apartados) a la
+            // izquierda y sus movimientos a la derecha, cada columna con su scroll (ver
+            // [cuentaEnDosColumnas]). En el teléfono, una sola lista, en el mismo orden de siempre.
+            fun LazyListScope.laCuenta() {
                 // **El saldo arriba** (Ola 2a). Antes el detalle abría casi directo en la lista y el
                 // dueño tenía que leer una tarjeta genérica para saber de qué cuenta se trataba: ahora
                 // el encabezado dice la cuenta (su marca), cuánto hay, desde cuándo nadie la cuadra y
                 // cómo cuadrarla. El saldo es el que ya trae `Account` —derivado por el server, sin
                 // anulados—: acá no se suma nada a mano.
                 account?.let { acc ->
+                    // Vuelta 31: a una deuda sin términos se le dice arriba, antes del saldo, que le
+                    // faltan datos, con «Completar datos». Créditos ya no abre el formulario directo.
+                    if (deuda != null && faltanLosDatos(deuda)) {
+                        item(key = "faltan-datos") {
+                            AvisoDeFaltanDatos(deuda)
+                            Spacer(Modifier.height(Medida.entreSecciones))
+                        }
+                    }
                     item(key = "balance-card") {
                         EncabezadoDeLaCuenta(
                             acc = acc,
@@ -331,7 +332,11 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                     // tercero—, que antes eran botones dentro de la tarjeta de Créditos.
                     if (deuda != null && (deuda.prestamo != null || deuda.tarjeta != null)) {
                         item(key = "deuda") {
-                            SeccionDeLaDeuda(deuda)
+                            SeccionDeLaDeuda(
+                                deuda,
+                                // Vuelta de diseño 32: la misma hoja que «Anotar este pago» de Plan.
+                                onRegistrarPagoDeLaTarjeta = { onNavigate(Screen.QuickAdd(presetDeudaId = acc.id)) },
+                            )
                             Spacer(Modifier.height(Medida.entreSecciones))
                         }
                     }
@@ -374,6 +379,9 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                     }
                 }
 
+            }
+
+            fun LazyListScope.losMovimientos() {
                 // Section header
                 item(key = "section-header") {
                     Seccion(titulo = "Movimientos", conteo = totalEvents.takeIf { it > 0 })
@@ -420,15 +428,14 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                                     color = Movi.colores.textoMedio,
                                 )
                                 if (day.items.any { it.currency == "COP" }) {
-                                    Text(
-                                        // Se pasa el valor absoluto: el signo ya lo pone el if de acá
-                                        // (siempre "+" o "−", incluso en 0) — pasarle el total con signo
-                                        // a formatCOP (F36) duplicaría el "−" cuando el día cierra en rojo.
-                                        text = "${if (day.total >= 0) "+" else "−"}${formatCOP(kotlin.math.abs(day.total))}",
-                                        // El tamaño del rótulo del día que tiene al lado, con dígitos
-                                        // tabulares como todo monto.
-                                        style = Movi.textos.apoyo.copy(fontFeatureSettings = "tnum"),
-                                        color = Movi.colores.textoMedio,
+                                    // Vuelta de diseño 32: la cifra del sistema, como el total del día
+                                    // de Movimientos —«+» y verde lo que entró, «−» lo que salió—, para
+                                    // que diga lo mismo que la suma de sus filas.
+                                    Cifra(
+                                        day.total,
+                                        VarianteDeCifra.Chica,
+                                        tono = if (day.total > 0) TonoDeCifra.Ingreso else TonoDeCifra.Neutro,
+                                        modifier = Modifier.testTag(TAG_TOTAL_DEL_DIA_DE_LA_CUENTA),
                                     )
                                 }
                             }
@@ -443,9 +450,9 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                                         // - **El signo se pinta SIEMPRE.** En Movimientos `tonoDelEvento`
                                         //   se lo quita a la pata huérfana y a la apertura porque ahí el
                                         //   total del día es flujo de caja. Esta pantalla suma con
-                                        //   `accountDayTotal`, que cuenta TODO lo que mueve el saldo —
-                                        //   la pata huérfana incluida—: sin signo, la fila contradiría
-                                        //   el total de ESTA pantalla.
+                                        //   `totalDelDiaComoSusFilas`, que cuenta TODO lo que se lista
+                                        //   —la pata huérfana incluida— con este mismo signo: sin él,
+                                        //   la fila contradiría el total de ESTA pantalla.
                                         // - **Qué le pasó a la deuda si este pago no fue la cuota**, en
                                         //   una línea debajo (ver [textosDeLosPagosQueNoFueronLaCuota]:
                                         //   se juzga la cuota entera, en su último pago).
@@ -464,6 +471,9 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                     }
                 }
 
+            }
+
+            fun LazyListScope.borrarLaCuenta() {
                 // F55: al final de la pantalla, en rojo — mismo lugar donde el dueño esperaba
                 // encontrarlo cuando pidió "ayúdame a eliminarla" y no había nada acá. Solo
                 // aparece una vez que la cuenta cargó (necesita accountName real para la hoja).
@@ -479,7 +489,43 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                     }
                 }
             }
+
+            val alPie = Medida.botonFlotante + Medida.entreSecciones
+            if (dosColumnas) {
+                // Los rellenos suman los 48 de [RELLENO_DE_DOS_COLUMNAS], como Patrimonio.
+                Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    LazyColumn(
+                        state = lista,
+                        modifier = Modifier.weight(1f).fillMaxHeight().testTag(TAG_COLUMNA_DE_LA_CUENTA),
+                        contentPadding = PaddingValues(start = Medida.margenDePantalla, end = Medida.margenDePantalla / 2, top = Medida.dentroDeSeccion, bottom = alPie),
+                    ) {
+                        laCuenta()
+                        borrarLaCuenta()
+                    }
+                    LazyColumn(
+                        state = listaDeMovimientos,
+                        modifier = Modifier.weight(1f).fillMaxHeight().testTag(TAG_COLUMNA_DE_LOS_MOVIMIENTOS_DE_LA_CUENTA),
+                        contentPadding = PaddingValues(start = Medida.margenDePantalla / 2, end = Medida.margenDePantalla, top = Medida.dentroDeSeccion, bottom = alPie),
+                    ) { losMovimientos() }
+                }
+            } else {
+                LazyColumn(
+                    state = lista,
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(
+                        start = Medida.margenDePantalla,
+                        end = Medida.margenDePantalla,
+                        top = Medida.dentroDeSeccion,
+                        bottom = Medida.botonFlotante + Medida.entreSecciones,
+                    ),
+                ) {
+                    laCuenta()
+                    losMovimientos()
+                    borrarLaCuenta()
+                }
+            }
         }
+        } // PanelDeTablero
 
         SnackbarHost(
             hostState = snackbarHostState,

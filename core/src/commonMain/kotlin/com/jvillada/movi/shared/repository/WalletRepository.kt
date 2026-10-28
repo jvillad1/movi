@@ -159,6 +159,12 @@ interface WalletRepository {
         noLoTiene("repartirMovimiento")
     /** Lo saca del espacio: vuelve a contar entero. */
     suspend fun quitarDelEspacio(espacioId: String, eventoId: String): Unit = noLoTiene("quitarDelEspacio")
+    /**
+     * Quita del espacio el gasto [gastoId] que no tiene movimiento propio («Pagó otro»):
+     * `DELETE /api/espacios/{id}/gastos/{gastoId}`, que el server ya tenía. Uno con movimiento se
+     * quita con [quitarDelEspacio], por el movimiento.
+     */
+    suspend fun quitarGastoDelEspacio(espacioId: String, gastoId: String): Unit = noLoTiene("quitarGastoDelEspacio")
     /** «Pagó otro»: un gasto del espacio que pagó otro miembro. Upsert por id. */
     suspend fun anotarGastoDeOtro(espacioId: String, gasto: com.jvillada.movi.shared.model.GastoDelEspacio): com.jvillada.movi.shared.model.GastoDelEspacio =
         noLoTiene("anotarGastoDeOtro")
@@ -516,9 +522,10 @@ interface WalletRepository {
      * el movimiento de ajuste del lado del server.
      *
      * Es la hermana de [adjustCreditBalance] —misma mecánica, mismo constructor de eventos y misma
-     * categoría reservada— para las cuentas de Dinero e Inversión. No hay dos formas de ajustar un
-     * saldo: hay una, con dos puertas, porque una deuda se cuadra mirando su plan de pagos y una
-     * cuenta de ahorros no.
+     * categoría reservada— para las cuentas de Dinero e Inversión y, desde la vuelta 33, la
+     * tarjeta de crédito (lo que se debe hoy según el banco). No hay dos formas de ajustar un
+     * saldo: hay una, con dos puertas, porque un préstamo se cuadra mirando su plan de pagos y una
+     * cuenta de ahorros o una tarjeta no.
      *
      * Manda el saldo OBJETIVO y no la diferencia: el saldo que tiene el cliente en pantalla puede
      * llegar viejo. Si ya coincidía, no se escribe nada y `adjustmentEvent` vuelve en null.
@@ -905,6 +912,21 @@ interface WalletRepository {
      */
     suspend fun confirmarConLasDosPatas(smsId: String, patas: com.jvillada.movi.shared.model.DosPatasDelAviso): MismoPagoConfirmado =
         throw UnsupportedOperationException("confirmarConLasDosPatas")
+
+    /**
+     * `POST /api/sms/{id}/confirm` con **varias partes** (vuelta 27, `ElAvisoEnPartes.kt`): el aviso
+     * pagó varias cosas. El server escribe todas en una transacción, con la suma exacta del aviso, y
+     * contesta con todos los ids; un doble toque contesta lo mismo. Directo al server.
+     */
+    suspend fun confirmarEnPartes(smsId: String, partes: com.jvillada.movi.shared.model.PartesDelAviso): MismoPagoConfirmado =
+        throw UnsupportedOperationException("confirmarEnPartes")
+
+    /**
+     * `POST /api/events/{id}/repartir`: reparte en partes un movimiento ya anotado (lo anula y escribe
+     * las partes, en una transacción del server). Directo al server.
+     */
+    suspend fun repartirElMovimiento(eventoId: String, partes: com.jvillada.movi.shared.model.PartesDelAviso): MismoPagoConfirmado =
+        throw UnsupportedOperationException("repartirElMovimiento")
 
     /**
      * `GET /api/sms/confirmados-sin-movimiento`: los avisos confirmados cuyo movimiento se anuló o

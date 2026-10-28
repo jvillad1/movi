@@ -19,6 +19,7 @@ import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.components.ds.TAG_ACCION_DEL_ENCABEZADO
 import com.jvillada.movi.ui.components.ds.TAG_ENCABEZADO
 import com.jvillada.movi.ui.components.ds.TAG_PILDORA
+import com.jvillada.movi.ui.components.ds.ROTULO_VOLVER
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
@@ -47,11 +48,11 @@ class ElEncabezadoDeMoviAiTest {
         Repositories.sustitutoDePrueba = null
     }
 
-    private fun montar(vararg mensajes: ChatMessage) {
+    private fun montar(vararg mensajes: ChatMessage, comoRaiz: Boolean = false) {
         Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
             override suspend fun getConversacionDelAsistente() = ConversacionDelAsistente(mensajes.toList())
         }
-        composeRule.setContent { MoviTheme { Box(Modifier.fillMaxSize()) { AIChatScreen(onNavigate = {}) } } }
+        composeRule.setContent { MoviTheme { Box(Modifier.fillMaxSize()) { AIChatScreen(onNavigate = {}, comoRaiz = comoRaiz) } } }
         composeRule.waitForIdle()
     }
 
@@ -91,5 +92,25 @@ class ElEncabezadoDeMoviAiTest {
         val accion = nodos(TAG_ACCION_DEL_ENCABEZADO).single()
         assertTrue(NUEVA_CONVERSACION in textosDentro(accion))
         assertTrue(nodos(TAG_PILDORA).none { MARCA_BETA in textosDentro(it) }, "con conversación, la acción reemplaza la marca")
+    }
+
+    /**
+     * Vuelta 33: **como raíz de su pestaña** (el rail de una ventana ancha) el encabezado lleva el
+     * avatar, como Espacios o Patrimonio; **apilada** encima de otra pantalla, la flecha.
+     */
+    @Test
+    fun `como raiz de su pestana, sin flecha y con el avatar`() {
+        montar(comoRaiz = true)
+        val textos = textosDentro(nodos(TAG_ENCABEZADO).single())
+        assertTrue(ROTULO_VOLVER !in textos, "sin «←»: $textos")
+        assertTrue("U" in textos, "el avatar con la inicial: $textos")
+    }
+
+    @Test
+    fun `apilada encima de otra pantalla, con flecha`() {
+        montar(comoRaiz = false)
+        val textos = textosDentro(nodos(TAG_ENCABEZADO).single())
+        assertTrue(ROTULO_VOLVER in textos, "con «←»: $textos")
+        assertTrue("U" !in textos, "sin avatar: $textos")
     }
 }

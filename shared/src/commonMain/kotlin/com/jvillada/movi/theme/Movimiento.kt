@@ -38,6 +38,15 @@ object Movimiento {
     /** Lo más largo: una pantalla o una hoja que entra. Nada de Movi dura más que esto. */
     const val LARGO_MS = 280
 
+    /**
+     * **Lo único que se repite: el cursor.** Medio ciclo del parpadeo del cursor de una cifra que se
+     * escribe con el teclado físico (vuelta 34): encendido este tiempo, apagado otro tanto, como el
+     * de los campos de texto de los sistemas. No es una transición —nada entra ni sale—, por eso no
+     * cuenta para el «nada dura más que [LARGO_MS]». Con el sistema pidiendo menos movimiento el
+     * cursor queda fijo.
+     */
+    const val PARPADEO_DEL_CURSOR_MS = 530
+
     /** Material «emphasized decelerate»: lo que entra llega rápido y se asienta. */
     val entrar: Easing = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1f)
 

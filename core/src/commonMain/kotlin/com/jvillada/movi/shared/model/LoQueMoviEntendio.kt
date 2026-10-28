@@ -94,7 +94,7 @@ enum class DudaDelAviso {
     /** El aviso es de antes de que la cuenta arrancara en Movi: se contaría dos veces. */
     ANTES_DE_LA_CUENTA,
 
-    /** El envío es la suma exacta de varios pagos del período: se reparte en Reconciliar. */
+    /** Movi propone repartir el envío (la suma exacta de varios pagos, las cuotas que cubre con lo que sobra, o como la última vez): se reparte en Reconciliar. */
     SE_REPARTE,
 }
 

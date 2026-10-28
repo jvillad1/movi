@@ -316,7 +316,9 @@ class RepartirUnEnvioTest {
         // Y la bandeja no ofrece «Confirmar» en la fila: se reparte en Reconciliar.
         val bandeja = cliente().get("/api/sms/propuestas") { header(HttpHeaders.Authorization, "Bearer ${token()}") }.body<PropuestasDeLaBandeja>()
         assertTrue(bandeja.propuestas.single { it.avisoId == "sms_papa" }.seReparte)
-        assertTrue(!bandeja.propuestas.single { it.avisoId == "sms_papa_de_mas" }.seReparte)
+        // Vuelta 27: el giro de $4.300.000 cubre las dos cuotas y sobran $20.000 (menos del 5 %): Movi
+        // también propone repartirlo (las cuotas y lo que sobra), así que la fila tampoco lo anota.
+        assertTrue(bandeja.propuestas.single { it.avisoId == "sms_papa_de_mas" }.seReparte)
     }
 
     @Test

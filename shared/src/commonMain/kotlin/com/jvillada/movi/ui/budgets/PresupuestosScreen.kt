@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.budgets
 
+import com.jvillada.movi.ui.transactions.tituloDelMovimiento
 import com.jvillada.movi.ui.components.ds.TonoDeCifra
 import com.jvillada.movi.ui.components.ds.AccionDeEncabezado
 import com.jvillada.movi.theme.Espacio
@@ -996,7 +997,7 @@ private fun BudgetSheet(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                             ) {
                                 Column(Modifier.weight(1f)) {
-                                    Text(ev.description, style = Movi.textos.cuerpo, color = Movi.colores.texto)
+                                    Text(tituloDelMovimiento(ev), style = Movi.textos.cuerpo, color = Movi.colores.texto)
                                     Text("Hoy en \"${ev.category}\" · toca para moverlo aquí", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                                 }
                                 Cifra(ev.amount)
@@ -1111,7 +1112,7 @@ private fun BudgetSheet(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(Modifier.weight(1f)) {
-                            Text(ev.description, style = Movi.textos.cuerpo, color = Movi.colores.texto)
+                            Text(tituloDelMovimiento(ev), style = Movi.textos.cuerpo, color = Movi.colores.texto)
                             Text(etiquetaDeFecha(fechaDeEpoch(ev.timestamp), hoyEnAppZone()), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                         }
                         Spacer(Modifier.width(Espacio.xs))

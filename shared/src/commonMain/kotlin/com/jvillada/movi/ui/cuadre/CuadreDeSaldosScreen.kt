@@ -43,12 +43,12 @@ import com.jvillada.movi.data.intentar
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.MAX_ACCOUNT_BALANCE_COP
 import com.jvillada.movi.shared.model.PropuestaDeCuadrePorAviso
-import com.jvillada.movi.shared.model.groupLabel
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.accounts.CreateAccountSheet
 import com.jvillada.movi.ui.components.BloqueEsqueleto
+import com.jvillada.movi.ui.components.RotuloDeSeccionEsqueleto
 import com.jvillada.movi.ui.components.HeaderLeading
 import com.jvillada.movi.ui.components.LineaEsqueleto
 import com.jvillada.movi.ui.components.MinScreenHeader
@@ -75,7 +75,8 @@ import kotlinx.datetime.LocalDate
  * rendimientos de Nu habían crecido $745.856 y los de la Fiducuenta $1.637 sin un solo SMS que
  * capturar; una cuota de manejo que solo figura en el extracto hace lo mismo del otro lado.
  *
- * Esta pantalla es el lugar donde eso se corrige: todas las cuentas juntas, con lo que Movi cree al
+ * Esta pantalla es el lugar donde eso se corrige: todas las cuentas juntas, agrupadas bajo «Dinero»,
+ * «Inversión» y «Tarjetas» (vuelta de diseño 37, ver [seccionDelCuadre]), con lo que Movi cree al
  * lado de un campo para escribir lo que dice el banco. No inventa ninguna forma nueva de tocar un
  * saldo — usa el ajuste que ya existía (ver `CuadreDeSaldosLogic` y, del lado del server,
  * `balanceAdjustmentEventFor`), que registra un **movimiento visible** en vez de sobrescribir un
@@ -181,7 +182,7 @@ fun CuadreDeSaldosScreen(
             MinScreenHeader(
                 title = "Cuadre de saldos",
                 leading = HeaderLeading.Back(fallback = Screen.Accounts),
-                subtitle = if (cuentas.isEmpty()) null else "Compara con lo que dice tu banco hoy",
+                // Vuelta de diseño 37: sin subtítulo. Decía lo mismo que la frase de entrada.
             )
 
             if (noSeLeyo) {
@@ -198,16 +199,18 @@ fun CuadreDeSaldosScreen(
                 contentPadding = PaddingValues(start = Espacio.m, end = Espacio.m, top = Espacio.s, bottom = Espacio.xl),
             ) {
                 item {
-                    Superficie(modifier = Modifier.fillMaxWidth()) {
+                    // Vuelta de diseño 37: una frase, sin superficie. Lo que antes explicaba un
+                    // párrafo de seis renglones va en la nota de debajo del botón ([NOTA_DEL_CUADRE]).
+                    if (cuentas.isNotEmpty() || cargando) {
                         Text(QUE_ES_EL_CUADRE, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
+                        Spacer(Modifier.height(Medida.entreSecciones))
                     }
-                    Spacer(Modifier.height(Medida.entreSecciones))
                     // Reemplaza al «Todavía no tienes cuentas…» de siempre.
                     if (cuentas.isEmpty() && !cargando) {
                         Vacio(
                             titulo = "Todavía no hay nada que cuadrar",
-                            detalle = "El cuadre compara el saldo de cada cuenta de Dinero o Inversión con el " +
-                                "que te dice tu banco. Crea una cuenta para empezar.",
+                            detalle = "El cuadre compara el saldo de cada cuenta de Dinero, Inversión o tarjeta " +
+                                "con el que te dice tu banco. Crea una cuenta para empezar.",
                             accion = "Crear una cuenta",
                             onAccion = { showCreateSheet = true },
                         )
@@ -229,9 +232,6 @@ fun CuadreDeSaldosScreen(
                         )
                         Spacer(Modifier.height(Espacio.s))
                     }
-                    item {
-                        Seccion(titulo = "O escribe tú el saldo", modifier = Modifier.padding(top = Medida.entreSecciones - Espacio.s))
-                    }
                 }
                 // Ola B, tarea 9: antes de la primera lectura buena, la pantalla quedaba en
                 // blanco debajo de la explicación — ni una fila, ni una rueda. `!leidas` y no
@@ -240,16 +240,29 @@ fun CuadreDeSaldosScreen(
                 if (cargando && !leidas) {
                     cuadreEsqueleto()
                 } else {
-                    items(cuentas, key = { it.id }) { cuenta ->
-                        FilaDeCuadre(
-                            cuenta = cuenta,
-                            hoy = hoy,
-                            ahora = ahora,
-                            escrito = escrito[cuenta.id],
-                            habilitado = !guardando,
-                            onEscribir = { escrito[cuenta.id] = it },
-                        )
-                        Spacer(Modifier.height(Espacio.s))
+                    // Vuelta de diseño 37: cada cuenta bajo su sección («Dinero», «Inversión»,
+                    // «Tarjetas»), en vez del rótulo suelto al final de cada tarjeta. La primera
+                    // sección va pegada a la frase de entrada; las demás, con el aire entre secciones
+                    // (la tarjeta de arriba ya dejó `Espacio.s`).
+                    seccionesDelCuadre(cuentas).forEachIndexed { i, (seccion, suyas) ->
+                        item(key = "seccion-" + seccion.name) {
+                            val pegada = i == 0 && propuestas.isEmpty()
+                            Seccion(
+                                titulo = seccion.titulo,
+                                modifier = if (pegada) Modifier else Modifier.padding(top = Medida.entreSecciones - Espacio.s),
+                            )
+                        }
+                        items(suyas, key = { it.id }) { cuenta ->
+                            FilaDeCuadre(
+                                cuenta = cuenta,
+                                hoy = hoy,
+                                ahora = ahora,
+                                escrito = escrito[cuenta.id],
+                                habilitado = !guardando,
+                                onEscribir = { escrito[cuenta.id] = it },
+                            )
+                            Spacer(Modifier.height(Espacio.s))
+                        }
                     }
                 }
                 item {
@@ -265,19 +278,28 @@ fun CuadreDeSaldosScreen(
             }
 
             if (!noSeLeyo && cuentas.isNotEmpty()) {
-                Boton(
-                    texto = when {
-                        guardando -> "Anotando…"
-                        pendientes.size > 1 -> "Anotar ${pendientes.size} ajustes"
-                        else -> "Anotar el ajuste"
-                    },
-                    onClick = { anotar() },
-                    habilitado = sePuedeAnotar,
-                    anchoCompleto = true,
+                Column(
                     modifier = Modifier
                         .padding(horizontal = Medida.margenDePantalla)
                         .padding(bottom = Medida.margenDePantalla),
-                )
+                ) {
+                    Boton(
+                        texto = when {
+                            guardando -> "Anotando…"
+                            pendientes.size > 1 -> "Anotar ${pendientes.size} ajustes"
+                            else -> "Anotar el ajuste"
+                        },
+                        onClick = { anotar() },
+                        habilitado = sePuedeAnotar,
+                        anchoCompleto = true,
+                    )
+                    Text(
+                        NOTA_DEL_CUADRE,
+                        style = Movi.textos.apoyo,
+                        color = Movi.colores.textoMedio,
+                        modifier = Modifier.padding(top = Espacio.xs).testTag(TAG_NOTA_DEL_CUADRE),
+                    )
+                }
             }
         }
 
@@ -291,14 +313,26 @@ fun CuadreDeSaldosScreen(
 }
 
 /**
- * Lo que la pantalla explica arriba de todo. Vive afuera del `@Composable` para poder leerse de
- * corrido: tiene que dejar claras las dos cosas que no son obvias —que el ajuste queda como un
- * movimiento y que no cuenta como gasto— antes de que alguien escriba una cifra.
+ * La frase de entrada (vuelta de diseño 37): qué se hace acá, en una frase. Era un párrafo de seis
+ * renglones a 390 px, más texto que formulario; lo que explicaba va en [NOTA_DEL_CUADRE].
  */
 internal const val QUE_ES_EL_CUADRE: String =
-    "Escribe el saldo que muestra tu banco y Movi anota la diferencia como un ajuste. Queda como " +
-        "un movimiento visible en la cuenta, no como un número editado a mano, y no cuenta como " +
-        "gasto ni como ingreso del período. La cuenta que dejes en blanco no se toca."
+    "Escribe lo que dice tu banco y Movi anota la diferencia."
+
+/**
+ * **La nota de debajo del botón** (vuelta de diseño 37): las dos cosas que no son obvias —que el
+ * ajuste queda como un movimiento y que no cuenta como gasto ni como ingreso— y la que más caro
+ * costaría no saber: la cuenta en blanco no se toca. Al lado del botón que las dispara.
+ */
+internal const val NOTA_DEL_CUADRE: String =
+    "Cada ajuste queda como un movimiento visible y no cuenta como gasto ni ingreso. " +
+        "Lo que dejes en blanco no se toca."
+
+/** El tag de [NOTA_DEL_CUADRE]. */
+internal const val TAG_NOTA_DEL_CUADRE: String = "cuadre-nota"
+
+/** El tag de la tarjeta de cada cuenta: `cuadre:fila:<id>`. */
+internal const val TAG_FILA_DE_CUADRE: String = "cuadre:fila:"
 
 /** Una cuenta: lo que Movi cree, desde cuándo nadie la mira, el campo y lo que se va a anotar. */
 @Composable
@@ -312,7 +346,8 @@ private fun FilaDeCuadre(
 ) {
     val (enMovi, moneda) = saldoQueCreeMovi(cuenta)
     val diferencia = diferenciaDelCuadre(enMovi, escrito)
-    Superficie(modifier = Modifier.fillMaxWidth()) {
+    val esDeuda = seCuadraComoDeuda(cuenta)
+    Superficie(modifier = Modifier.fillMaxWidth().testTag(TAG_FILA_DE_CUADRE + cuenta.id)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -342,27 +377,28 @@ private fun FilaDeCuadre(
         MoneyField(
             value = escrito,
             onValueChange = { if (habilitado) onEscribir(it) },
-            label = "Lo que dice el banco",
+            // Vuelta de diseño 37: el rótulo basta; la ayuda que se repetía debajo de cada campo se
+            // fue. Una tarjeta pide la deuda («Cuánto debes según el banco»).
+            label = rotuloDelCampoDelCuadre(cuenta),
             placeholder = "Sin cuadrar",
             // El símbolo de la moneda de la cuenta: en Colombia «$20» se lee veinte pesos, así que
             // una cuenta en dólares con el símbolo del peso invitaría a escribir otra cifra.
             prefix = if (moneda == "COP") "$" else "US$",
         )
-        Spacer(Modifier.height(Espacio.xs))
-        Text(
-            text = when {
-                escrito != null && escrito > MAX_ACCOUNT_BALANCE_COP -> "Saldo fuera de rango — revisa el monto."
-                else -> textoDelCuadre(enMovi, escrito, moneda)
-            },
-            style = Movi.textos.apoyo,
-            color = if (hayAjusteQueAnotar(diferencia)) Movi.colores.texto else Movi.colores.textoMedio,
-        )
-        Text(
-            cuenta.type.groupLabel,
-            style = Movi.textos.apoyo,
-            color = Movi.colores.textoApagado,
-            modifier = Modifier.padding(top = Espacio.xs),
-        )
+        // Lo que se va a anotar, solo cuando hay una cifra escrita. La sección ya dice de qué
+        // grupo es la cuenta: el rótulo «Dinero» suelto de abajo se fue.
+        val loQueSeAnota = when {
+            escrito != null && escrito > MAX_ACCOUNT_BALANCE_COP -> "Saldo fuera de rango — revisa el monto."
+            else -> textoDelCuadre(enMovi, escrito, moneda, esDeuda = esDeuda)
+        }
+        if (loQueSeAnota != null) {
+            Spacer(Modifier.height(Espacio.xs))
+            Text(
+                text = loQueSeAnota,
+                style = Movi.textos.apoyo,
+                color = if (hayAjusteQueAnotar(diferencia)) Movi.colores.texto else Movi.colores.textoMedio,
+            )
+        }
     }
 }
 
@@ -373,10 +409,13 @@ private const val FILAS_DE_CUADRE_ESQUELETO = 3
  * **Cuadre de saldos mientras carga, con la forma de [FilaDeCuadre]** (Ola B, tarea 9). Antes de
  * esta tarea la pantalla quedaba en blanco debajo de la explicación de arriba —ni una rueda, ni
  * una fila— hasta que las cuentas contestaban. Copia el mismo `MinCard` de 18 dp de relleno, el
- * título y subtítulo a la izquierda, «Movi dice» + su cifra a la derecha, el campo «LO QUE DICE EL
- * BANCO» y las dos líneas de apoyo de abajo.
+ * título y subtítulo a la izquierda, «Movi dice» + su cifra a la derecha y el campo «LO QUE DICE EL
+ * BANCO», con el título de la sección encima.
  */
 private fun LazyListScope.cuadreEsqueleto() {
+    // Vuelta de diseño 37: la lista real arranca con el título de su sección («Dinero»); sin este
+    // renglón, las filas bajarían de golpe al llegar los datos.
+    item { RotuloDeSeccionEsqueleto() }
     items(FILAS_DE_CUADRE_ESQUELETO) {
         FilaDeCuadreEsqueleto()
         Spacer(Modifier.height(Espacio.s))
@@ -412,9 +451,7 @@ private fun FilaDeCuadreEsqueleto() {
         // —los mismos tokens que arma el campo real, no un número puesto a ojo— para que no se
         // desalinee en silencio si `Movi.textos.apoyo`/`.monto` cambian.
         BloqueEsqueleto(alto = altoDeMoneyFieldConRotulo())
-        Spacer(Modifier.height(Espacio.xs))
-        LineaEsqueleto(fraccionDelAncho = 0.85f, estilo = Movi.textos.apoyo)
-        Spacer(Modifier.height(Espacio.xs))
-        LineaEsqueleto(fraccionDelAncho = 0.3f, estilo = Movi.textos.apoyo)
+        // Vuelta de diseño 37: sin las dos líneas de abajo. La fila real, con el campo vacío, ya no
+        // repite la ayuda ni lleva el rótulo de su grupo.
     }
 }

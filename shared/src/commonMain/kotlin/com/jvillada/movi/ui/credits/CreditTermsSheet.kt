@@ -148,7 +148,10 @@ fun CreditTermsSheet(
         cuentasCargadas = true
     }
 
-    var bank by remember { mutableStateOf(existingTerms?.bank ?: "") }
+    // Vuelta 31: si el nombre ya dice el banco («Bancolombia Libre inversión»), el campo llega lleno
+    // ([bancoSugeridoPara]). Lo que el dueño escribe a mano manda: el nombre ya no lo pisa.
+    var bank by remember { mutableStateOf(existingTerms?.bank ?: editing?.account?.name?.let(::bancoSugeridoPara) ?: "") }
+    var bancoAMano by remember { mutableStateOf(existingTerms != null) }
     var principal by remember { mutableStateOf(existingTerms?.principal) }
     // F23: la tasa aceptaba "12%" y no se leía como número — el filtro de abajo (solo dígitos y
     // un único punto) hace que el "%" nunca llegue a este estado; el campo lo pinta aparte.
@@ -435,6 +438,7 @@ fun CreditTermsSheet(
                                 } else {
                                     newAccountMode = false
                                     selectedAccountId = acc.id
+                                    if (!bancoAMano) bank = bancoSugeridoPara(acc.name).orEmpty()
                                 }
                             },
                         )
@@ -487,7 +491,15 @@ fun CreditTermsSheet(
                     )
                     Spacer(Modifier.height(Espacio.s))
 
-                    Campo(newAccountName, { newAccountName = it }, rotulo = "Nombre", guia = "Ej: Crédito Vehículo Santander")
+                    Campo(
+                        newAccountName,
+                        {
+                            newAccountName = it
+                            if (!bancoAMano) bank = bancoSugeridoPara(it).orEmpty()
+                        },
+                        rotulo = "Nombre",
+                        guia = "Ej: Crédito Vehículo Santander",
+                    )
                     // La deuda actual solo tiene sentido en el crédito que ya venía: en el
                     // recién recibido la deuda la arma el desembolso, y pedir las dos cosas
                     // es exactamente cómo se contaba dos veces. Sigue siendo opcional, igual
@@ -508,7 +520,7 @@ fun CreditTermsSheet(
             }
 
             GrupoDeCampos("Términos") {
-            Campo(bank, { bank = it }, rotulo = "Banco", guia = "Ej: Bancolombia")
+            Campo(bank, { bank = it; bancoAMano = true }, rotulo = "Banco", guia = "Ej: Bancolombia")
             CampoDeMonto(principal, { principal = it }, rotulo = "Capital original")
             Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
                 // Sin intereses no hay tasa que pedir: el campo se va y el plazo ocupa la fila.

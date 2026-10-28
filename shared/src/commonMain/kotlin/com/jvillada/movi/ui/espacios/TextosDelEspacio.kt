@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.espacios
 
+import com.jvillada.movi.shared.model.enFormaDeTitulo
+import com.jvillada.movi.shared.model.normalizarParaBuscar
 import com.jvillada.movi.shared.model.Espacio
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.GastoDelEspacio
@@ -81,17 +83,37 @@ fun rotuloDeTuParte(espacio: Espacio): String =
     if (espacio.reparto == RepartoDelEspacio.PARTES_IGUALES && idsDeMiembros(espacio).size == 2) "Mitad" else "Te toca"
 
 /**
- * El subtítulo de un gasto del espacio: «Pagaste tú · Mercado · 18 oct» o «Pagó Caro · Mercado ·
- * 18 oct». La fecha la pidió la revisión de la vuelta de diseño 26: sin ella, dos mercados del mismo
- * monto no se distinguían. Sin fecha (un gasto viejo con 0), sin ese tramo.
+ * El título de la fila de un gasto del espacio: su descripción o, sin ella, su categoría. Vuelta de
+ * diseño 32: lo que el banco mandó en mayúsculas, en forma de título ([enFormaDeTitulo]).
+ */
+fun tituloDelGasto(gasto: GastoDelEspacio): String = enFormaDeTitulo(gasto.descripcion.ifBlank { gasto.categoria })
+
+/**
+ * El subtítulo de un gasto del espacio: «18 oct · Tú · Mercado» o «18 oct · Caro · Mercado». La fecha
+ * la pidió la revisión de la vuelta de diseño 26 (sin ella, dos mercados del mismo monto no se
+ * distinguían) y **va primero** desde la vuelta 31: al final se cortaba y era justo lo que los
+ * distinguía.
+ *
+ * Vuelta de diseño 32: **cabe en un renglón a 360 dp**. Quién pagó es solo el nombre («Tú», «Caro»):
+ * el avatar de la fila ya dice que es quien pagó, y «Pagaste tú» / «Pagó Caro» empujaban la categoría
+ * a un segundo renglón, sola. La categoría no va si el título ya la dice («Mercado del sábado»), y va
+ * al final: si aun así no cabe, la fila la corta con «…» y la fecha queda entera. Sin fecha (un gasto
+ * viejo con 0), sin ese tramo.
  */
 fun quienPagoElGasto(espacio: Espacio, gasto: GastoDelEspacio, zona: TimeZone = AppTimeZone.zone): String {
-    val quien = if (gasto.pagadoPor == MIEMBRO_YO) "Pagaste tú" else "Pagó ${nombreEnElEspacio(espacio, gasto.pagadoPor)}"
-    return listOfNotNull(
-        quien,
-        gasto.categoria.takeIf { it.isNotBlank() },
-        fechaDelGasto(gasto, zona),
-    ).joinToString(" · ")
+    val quien = nombreEnElEspacio(espacio, gasto.pagadoPor)
+    val categoria = gasto.categoria.takeIf { it.isNotBlank() && !elTituloDiceLaCategoria(tituloDelGasto(gasto), it) }
+    return listOfNotNull(fechaDelGasto(gasto, zona), quien, categoria).joinToString(" · ")
+}
+
+/**
+ * ¿[titulo] ya dice [categoria]? Por palabras enteras, sin mayúsculas ni tildes: «Mercado del sábado»
+ * dice «Mercado»; «Supermercado» no. Pura.
+ */
+internal fun elTituloDiceLaCategoria(titulo: String, categoria: String): Boolean {
+    val enElTitulo = " ${normalizarParaBuscar(titulo)} "
+    val buscada = normalizarParaBuscar(categoria)
+    return buscada.isNotEmpty() && enElTitulo.contains(" $buscada ")
 }
 
 /** «18 oct»: el día de [gasto] en la zona de la app, o `null` si no tiene fecha. */

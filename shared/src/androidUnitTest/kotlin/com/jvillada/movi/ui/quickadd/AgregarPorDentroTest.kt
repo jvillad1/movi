@@ -124,7 +124,7 @@ class AgregarPorDentroTest {
     @Test
     fun abrir_un_sub_editor_muestra_la_flecha_con_su_titulo_y_una_sola_x() {
         montar()
-        listOf("Hoy" to "Fecha", "Agregar nota…" to "Nota", "Categoría" to "Categoría").forEach { (fila, titulo) ->
+        listOf("Hoy" to "Fecha", "Agregar nota…" to "Nota", TODAS_LAS_CATEGORIAS to "Categoría").forEach { (fila, titulo) ->
             tocar(fila)
             composeRule.onNodeWithTag(TAG_VOLVER_DEL_SUB_EDITOR).assertIsDisplayed()
             composeRule.onNodeWithText(titulo, useUnmergedTree = true).assertIsDisplayed()
@@ -151,7 +151,7 @@ class AgregarPorDentroTest {
         tocar("5")
         assertTrue(montoEnPantalla("$45"), "el monto escrito se ve")
 
-        listOf("Agregar nota…", "Categoría", "Hoy").forEach { fila ->
+        listOf("Agregar nota…", TODAS_LAS_CATEGORIAS, "Hoy").forEach { fila ->
             tocar(fila)
             assertEquals(2, hojas.cuantas, "el sub-editor «$fila» se anota encima de la hoja")
             apretarAtras()
@@ -210,7 +210,7 @@ class AgregarPorDentroTest {
 
     private fun rotulosALaMismaLetra() {
         montar()
-        tocar("Categoría")
+        tocar(TODAS_LAS_CATEGORIAS)
         val rotulos = composeRule.onAllNodesWithTag(TAG_ROTULO_DE_CELDA, useUnmergedTree = true).fetchSemanticsNodes()
         assertTrue(rotulos.size >= 8, "la cuadrícula muestra el catálogo (${rotulos.size} rótulos)")
 

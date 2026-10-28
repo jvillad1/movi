@@ -59,20 +59,34 @@ data class PropuestaDeReparto(
     val destinoNombre: String? = null,
     val pagos: List<PagoParaRepartir> = emptyList(),
     val exacto: List<String> = emptyList(),
+    /**
+     * **El reparto de la vez anterior** a esta misma persona y desde una cuenta (vuelta 27, ver
+     * `ElAvisoEnPartes.kt`): la app lo propone si el monto es parecido. `null` si nunca se repartió.
+     * Un APK viejo lo ignora.
+     */
+    val recordado: RepartoRecordado? = null,
 )
 
 /**
- * **Una parte del reparto**, como viaja en [ConfirmarElMismoPago.reparto]: el pago que salda, cuánto,
- * y el movimiento que la anota — [evento] para un recurrente común, [patas] para la cuota de un
- * crédito. Los ids los genera el cliente, como en un traspaso: un reintento no crea nada nuevo.
+ * **Una parte del reparto**, como viaja en [ConfirmarElMismoPago.reparto] y en [PartesDelAviso]: el
+ * pago que salda, cuánto, y el movimiento que la anota — [evento] para un gasto (o un recurrente
+ * común), [patas] para la cuota de un crédito, el pago de una tarjeta o un traspaso. Los ids los
+ * genera el cliente, como en un traspaso: un reintento no crea nada nuevo.
+ *
+ * **Vuelta 27: una parte suelta** (ver `ElAvisoEnPartes.kt`). Con [ruleId] vacío la parte no salda
+ * ningún pago del período por nombre: es lo que el dueño eligió en «Repartir en partes» (una cuota que
+ * igual marca su período por la pata de la deuda, el pago de una tarjeta, un traspaso, un gasto o una
+ * transferencia a un tercero). [tipo] dice cuál, para que el server lo mire y lo recuerde; un APK
+ * viejo no lo manda y todo sigue como antes.
  */
 @Serializable
 data class ParteDelReparto(
-    val ruleId: String,
-    val periodo: String,
+    val ruleId: String = "",
+    val periodo: String = "",
     val monto: Long,
     val evento: FinancialEvent? = null,
     val patas: DosPatasDelAviso? = null,
+    val tipo: QueFueLaParte? = null,
 )
 
 /** Cuántos pagos se combinan, como mucho, para proponer una suma exacta. */

@@ -75,7 +75,13 @@ import androidx.compose.ui.graphics.vector.ImageVector
 data class IconoDelCatalogo(
     /** Lo que viaja y se guarda. Ver el KDoc del archivo. */
     val clave: String,
-    /** Cómo se dice en el selector. */
+    /**
+     * Cómo se dice en el selector. **Ninguna palabra puede ser más ancha que la celda más angosta**
+     * de un teléfono (80 dp, el rótulo tiene 72): se parte entre palabras, en dos renglones como
+     * mucho, nunca dentro de una (vuelta de diseño 36: «Medicament» / «os»). Si una palabra no cabe,
+     * se cambia por una más corta que diga lo mismo, no se achica la letra; la [clave] no cambia. Lo
+     * vigila `LosRotulosDeIconosNoSePartenTest`.
+     */
     val rotulo: String,
     val imagen: ImageVector,
 )
@@ -86,7 +92,7 @@ const val ICONO_DE_CATEGORIA_RESPALDO = "otros"
 /** El catálogo, **en el orden del selector**: primero lo de todos los días, lo de plata al final. */
 val ICONOS_DEL_CATALOGO: List<IconoDelCatalogo> = listOf(
     IconoDelCatalogo("comida", "Comida", Icons.Rounded.LunchDining),
-    IconoDelCatalogo("restaurante", "Restaurante", Icons.Rounded.Restaurant),
+    IconoDelCatalogo("restaurante", "Comer fuera", Icons.Rounded.Restaurant),
     IconoDelCatalogo("cafe", "Café", Icons.Rounded.LocalCafe),
     IconoDelCatalogo("mercado", "Mercado", Icons.Rounded.ShoppingCart),
     IconoDelCatalogo("transporte", "Transporte", Icons.Rounded.Commute),
@@ -104,7 +110,7 @@ val ICONOS_DEL_CATALOGO: List<IconoDelCatalogo> = listOf(
     IconoDelCatalogo("celular", "Celular", Icons.Rounded.Smartphone),
     IconoDelCatalogo("arreglos", "Arreglos del hogar", Icons.Rounded.Handyman),
     IconoDelCatalogo("salud", "Salud", Icons.Rounded.MedicalServices),
-    IconoDelCatalogo("medicamentos", "Medicamentos", Icons.Rounded.Medication),
+    IconoDelCatalogo("medicamentos", "Medicinas", Icons.Rounded.Medication),
     IconoDelCatalogo("gimnasio", "Gimnasio", Icons.Rounded.FitnessCenter),
     IconoDelCatalogo("futbol", "Fútbol", Icons.Rounded.SportsSoccer),
     IconoDelCatalogo("deporte", "Deporte", Icons.AutoMirrored.Rounded.DirectionsRun),
@@ -118,9 +124,9 @@ val ICONOS_DEL_CATALOGO: List<IconoDelCatalogo> = listOf(
     IconoDelCatalogo("ropa", "Ropa", Icons.Rounded.Checkroom),
     IconoDelCatalogo("belleza", "Belleza", Icons.Rounded.Spa),
     IconoDelCatalogo("tecnologia", "Tecnología", Icons.Rounded.Computer),
-    IconoDelCatalogo("entretenimiento", "Entretenimiento", Icons.Rounded.Movie),
+    IconoDelCatalogo("entretenimiento", "Diversión", Icons.Rounded.Movie),
     IconoDelCatalogo("musica", "Música", Icons.Rounded.MusicNote),
-    IconoDelCatalogo("suscripciones", "Suscripciones", Icons.Rounded.Subscriptions),
+    IconoDelCatalogo("suscripciones", "Membresía", Icons.Rounded.Subscriptions),
     IconoDelCatalogo("viajes", "Viajes", Icons.Rounded.Flight),
     IconoDelCatalogo("regalos", "Regalos", Icons.Rounded.CardGiftcard),
     IconoDelCatalogo("donacion", "Donación", Icons.Rounded.VolunteerActivism),
@@ -133,7 +139,7 @@ val ICONOS_DEL_CATALOGO: List<IconoDelCatalogo> = listOf(
     IconoDelCatalogo("salario", "Salario", Icons.Rounded.Payments),
     IconoDelCatalogo("trabajo", "Trabajo", Icons.Rounded.Work),
     IconoDelCatalogo("ingreso", "Ingreso", Icons.Rounded.AttachMoney),
-    IconoDelCatalogo("transferencia", "Transferencia", Icons.Rounded.SwapHoriz),
+    IconoDelCatalogo("transferencia", "Traspaso", Icons.Rounded.SwapHoriz),
     IconoDelCatalogo(ICONO_DE_CATEGORIA_RESPALDO, "Otros", Icons.Rounded.Category),
 )
 

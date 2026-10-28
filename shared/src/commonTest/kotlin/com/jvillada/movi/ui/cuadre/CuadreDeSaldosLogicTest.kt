@@ -66,7 +66,7 @@ class CuadreDeSaldosLogicTest {
         val diferencia = diferenciaDelCuadre(saldoEnMovi = 352_082L, saldoDelBanco = 352_082L)
         assertEquals(0L, diferencia)
         assertFalse(hayAjusteQueAnotar(diferencia))
-        assertTrue("no hay nada que anotar" in textoDelCuadre(352_082L, 352_082L, "COP"))
+        assertTrue("no hay nada que anotar" in textoDelCuadre(352_082L, 352_082L, "COP")!!)
     }
 
     /**
@@ -91,25 +91,42 @@ class CuadreDeSaldosLogicTest {
     /** En dólares el símbolo cambia: «US$» — en Colombia «$20» se lee veinte pesos. */
     @Test
     fun `una cuenta en dolares se dice en dolares`() {
-        val texto = textoDelCuadre(saldoEnMovi = 100L, saldoDelBanco = 250L, moneda = "USD")
+        val texto = textoDelCuadre(saldoEnMovi = 100L, saldoDelBanco = 250L, moneda = "USD")!!
         assertTrue("US\$100" in texto && "US\$250" in texto && "+US\$150" in texto, texto)
     }
 
-    /** Sin cifra escrita, el texto pide la cifra en vez de afirmar nada sobre la plata. */
+    /**
+     * Sin cifra escrita no se dice nada (vuelta de diseño 37): la ayuda «Escribe el saldo que te
+     * muestra el banco hoy.» se repetía debajo de cada cuenta, y el rótulo del campo ya lo dice.
+     */
     @Test
-    fun `sin cifra escrita el texto solo pide el saldo del banco`() {
-        assertEquals("Escribe el saldo que te muestra el banco hoy.", textoDelCuadre(352_082L, null, "COP"))
+    fun `sin cifra escrita no hay texto que repetir`() {
+        assertNull(textoDelCuadre(352_082L, null, "COP"))
+        assertNull(textoDelCuadre(2_000_000L, null, "COP", esDeuda = true))
+    }
+
+    /** Una tarjeta se dice como su hoja «Ajustar saldo»: subir lo que se debe es un cargo. */
+    @Test
+    fun `en una tarjeta el ajuste se dice cargo o abono`() {
+        assertEquals(
+            "Movi dice \$2.000.000, tú dices \$2.100.000: se va a anotar un cargo de \$100.000.",
+            textoDelCuadre(2_000_000L, 2_100_000L, "COP", esDeuda = true),
+        )
+        assertEquals(
+            "Movi dice \$2.000.000, tú dices \$1.950.000: se va a anotar un abono de \$50.000.",
+            textoDelCuadre(2_000_000L, 1_950_000L, "COP", esDeuda = true),
+        )
+        assertEquals("Coincide con Movi: no hay nada que anotar.", textoDelCuadre(2_000_000L, 2_000_000L, "COP", esDeuda = true))
     }
 
     // ── Qué cuentas entran ───────────────────────────────────────────────────
 
     /**
-     * Dinero e Inversión sí; tarjetas y préstamos no. La razón completa está en [sePuedeCuadrar]:
-     * el banco no muestra UN número para una tarjeta, y un préstamo se cuadra en Créditos, donde
-     * al lado se ven la cuota y los intereses que explican la diferencia.
+     * Dinero, Inversión y, desde la vuelta de diseño 37, tarjetas; préstamos no: un préstamo se
+     * cuadra en Créditos, donde al lado se ven la cuota y los intereses que explican la diferencia.
      */
     @Test
-    fun `solo se cuadran las cuentas de dinero e inversion`() {
+    fun `se cuadran dinero, inversion y tarjetas, no los prestamos`() {
         val todas = listOf(
             cuenta(id = "a", tipo = AccountType.SAVINGS),
             cuenta(id = "b", tipo = AccountType.CASH),
@@ -118,7 +135,51 @@ class CuadreDeSaldosLogicTest {
             cuenta(id = "e", tipo = AccountType.CREDIT_CARD),
             cuenta(id = "f", tipo = AccountType.LOAN),
         )
-        assertEquals(listOf("a", "b", "c", "d"), cuentasParaCuadrar(todas).map { it.id })
+        assertEquals(listOf("a", "b", "c", "d", "e"), cuentasParaCuadrar(todas).map { it.id })
+        // `sePuedeCuadrar` (`:core`) no cambió: la usan el server y los avisos de «sin cuadrar», que
+        // siguen sin tarjetas.
+        assertEquals(listOf("a", "b", "c", "d"), todas.filter { sePuedeCuadrar(it) }.map { it.id })
+        assertFalse(estaSinCuadrar(cuenta(id = "e", tipo = AccountType.CREDIT_CARD, primerEvento = AHORA - 400 * UN_DIA), AHORA))
+    }
+
+    /** Cada cuenta bajo su sección, en el orden Dinero · Inversión · Tarjetas, sin secciones vacías. */
+    @Test
+    fun `las cuentas van agrupadas por seccion`() {
+        val todas = listOf(
+            cuenta(id = "tarjeta", tipo = AccountType.CREDIT_CARD),
+            cuenta(id = "fondo", tipo = AccountType.INVESTMENT),
+            cuenta(id = "nu", tipo = AccountType.SAVINGS),
+            cuenta(id = "efectivo", tipo = AccountType.CASH),
+            cuenta(id = "prestamo", tipo = AccountType.LOAN),
+        )
+        val secciones = seccionesDelCuadre(cuentasParaCuadrar(todas))
+        assertEquals(
+            listOf(
+                SeccionDelCuadre.DINERO to listOf("nu", "efectivo"),
+                SeccionDelCuadre.INVERSION to listOf("fondo"),
+                SeccionDelCuadre.TARJETAS to listOf("tarjeta"),
+            ),
+            secciones.map { (s, cuentas) -> s to cuentas.map { it.id } },
+        )
+        assertEquals(listOf("Dinero", "Inversión", "Tarjetas"), secciones.map { it.first.titulo })
+        // Sin inversiones, no hay sección vacía.
+        assertEquals(
+            listOf(SeccionDelCuadre.DINERO),
+            seccionesDelCuadre(listOf(cuenta(id = "nu"))).map { it.first },
+        )
+        // La cuenta pedida arriba («Cuadrar efectivo») queda primera de la suya.
+        assertEquals(
+            listOf("efectivo", "nu"),
+            seccionesDelCuadre(cuentasConLaPrimera(cuentasParaCuadrar(todas), "efectivo")).first().second.map { it.id },
+        )
+    }
+
+    /** El rótulo del campo basta, y en una tarjeta pide la deuda. */
+    @Test
+    fun `el rotulo del campo de una tarjeta pide la deuda`() {
+        assertEquals("Cuánto debes según el banco", rotuloDelCampoDelCuadre(cuenta(tipo = AccountType.CREDIT_CARD)))
+        assertEquals("Lo que dice el banco", rotuloDelCampoDelCuadre(cuenta(tipo = AccountType.SAVINGS)))
+        assertEquals("Lo que dice el banco", rotuloDelCampoDelCuadre(cuenta(tipo = AccountType.INVESTMENT)))
     }
 
     // ── Desde cuándo nadie la mira ───────────────────────────────────────────
@@ -174,13 +235,23 @@ class CuadreDeSaldosLogicTest {
     @Test
     fun `el aviso nombra la cuenta cuando es una sola y cuenta cuando son varias`() {
         assertNull(textoDelAvisoDeCuadre(emptyList()))
+        // Vuelta 31: con una sola, su nombre y la MISMA frase que dice su detalle.
         assertEquals(
-            "Hace más de un mes que no cuadras Nu",
-            textoDelAvisoDeCuadre(listOf(cuenta())),
+            "Nu · Nunca la has cuadrado",
+            textoDelAvisoDeCuadre(listOf(cuenta(primerEvento = AHORA - 60 * UN_DIA))),
+        )
+        // 60 días antes del 20-sep: el 22 de julio. La versión con nombre, corta y con la fecha.
+        assertEquals(
+            "Nu · última el 22 jul",
+            textoDelAvisoDeCuadre(listOf(cuenta(ultimoAjuste = AHORA - 60 * UN_DIA)), AHORA),
+        )
+        assertEquals(
+            "2 cuentas nunca se han cuadrado",
+            textoDelAvisoDeCuadre(listOf(cuenta(), cuenta(id = "b", nombre = "Fiducuenta"))),
         )
         assertEquals(
             "2 cuentas llevan más de un mes sin cuadrar",
-            textoDelAvisoDeCuadre(listOf(cuenta(), cuenta(id = "b", nombre = "Fiducuenta"))),
+            textoDelAvisoDeCuadre(listOf(cuenta(ultimoAjuste = AHORA - 60 * UN_DIA), cuenta(id = "b", nombre = "Fiducuenta"))),
         )
     }
 
@@ -189,11 +260,44 @@ class CuadreDeSaldosLogicTest {
     @Test
     fun `cada fila dice cuando se cuadro, o que nunca se cuadro`() {
         val hoy = LocalDate(2026, 9, 20)
-        assertEquals("Nunca la has cuadrado", textoDelUltimoCuadre(cuenta(primerEvento = AHORA), hoy))
-        assertEquals("Sin movimientos todavía", textoDelUltimoCuadre(cuenta(), hoy))
-        // 1-ago-2026 12:00 en Bogotá (la zona de la app) — se escribe como lo escribe Movimientos.
+        assertEquals("Nunca la has cuadrado", textoDelUltimoCuadre(cuenta(primerEvento = AHORA), hoy, AHORA))
+        assertEquals("Sin movimientos todavía", textoDelUltimoCuadre(cuenta(), hoy, AHORA))
+        // 1-sep-2026 12:00 en Bogotá (la zona de la app) — se escribe como lo escribe Movimientos.
+        val primeroDeSeptiembre = 1_788_282_000_000L
+        assertEquals("Cuadrada el 1 sep", textoDelUltimoCuadre(cuenta(ultimoAjuste = primeroDeSeptiembre), hoy, AHORA))
+        assertEquals("Cuadrada hoy", textoDelUltimoCuadre(cuenta(ultimoAjuste = AHORA), hoy, AHORA))
+        assertEquals("Cuadrada ayer", textoDelUltimoCuadre(cuenta(ultimoAjuste = AHORA - UN_DIA), hoy, AHORA))
+        // 1-ago-2026: 50 días antes, pasó el plazo. Sin perder la fecha.
         val primeroDeAgosto = 1_785_603_600_000L
-        assertEquals("Cuadrada el 1 de agosto", textoDelUltimoCuadre(cuenta(ultimoAjuste = primeroDeAgosto), hoy))
+        assertEquals(
+            "Hace más de un mes que no la cuadras · última el 1 ago",
+            textoDelUltimoCuadre(cuenta(ultimoAjuste = primeroDeAgosto), hoy, AHORA),
+        )
+        // 45 días justos ya es «hace más de un mes»; 44, todavía con su fecha.
+        assertEquals("Cuadrada el 7 ago", textoDelUltimoCuadre(cuenta(ultimoAjuste = AHORA - 45 * UN_DIA + UN_DIA), hoy, AHORA))
+        assertTrue(textoDelUltimoCuadre(cuenta(ultimoAjuste = AHORA - 45 * UN_DIA), hoy, AHORA).startsWith("Hace más de un mes"))
+        // De otro año, con el año.
+        assertEquals(
+            "Hace más de un mes que no la cuadras · última el 21 sep 2025",
+            textoDelUltimoCuadre(cuenta(ultimoAjuste = AHORA - 364 * UN_DIA), hoy, AHORA),
+        )
+    }
+
+    /** Vuelta 31: la frase de una cuenta es una sola, la de su detalle y la del aviso de Patrimonio. */
+    @Test
+    fun `el aviso y el detalle dicen la misma frase de la misma cuenta`() {
+        val hoy = LocalDate(2026, 9, 20)
+        listOf(
+            cuenta(nombre = "Bancolombia Ahorros", primerEvento = AHORA - 60 * UN_DIA),
+            cuenta(nombre = "Bancolombia Ahorros", ultimoAjuste = AHORA - 60 * UN_DIA),
+        ).forEach { c ->
+            assertEquals(listOf(c), cuentasSinCuadrar(listOf(c), AHORA))
+            val delDetalle = textoDelUltimoCuadre(c, hoy, AHORA)
+            val conNombre = textoDelAvisoDeCuadre(listOf(c), AHORA)!!
+            // La versión con nombre dice lo mismo, más corta: su tramo después del nombre está en la del detalle.
+            assertTrue(conNombre.startsWith("Bancolombia Ahorros · "), conNombre)
+            assertTrue(conNombre.removePrefix("Bancolombia Ahorros · ") in delDetalle, "«$conNombre» contra «$delDetalle»")
+        }
     }
 
     private fun propuesta(banco: Long, movi: Long) = com.jvillada.movi.shared.model.PropuestaDeCuadrePorAviso(

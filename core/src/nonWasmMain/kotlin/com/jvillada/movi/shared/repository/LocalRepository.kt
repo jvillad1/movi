@@ -2053,6 +2053,7 @@ class LocalRepository(
         }
     }
     override suspend fun quitarDelEspacio(espacioId: String, eventoId: String) = remote.quitarDelEspacio(espacioId, eventoId)
+    override suspend fun quitarGastoDelEspacio(espacioId: String, gastoId: String) = remote.quitarGastoDelEspacio(espacioId, gastoId)
     override suspend fun anotarGastoDeOtro(espacioId: String, gasto: com.jvillada.movi.shared.model.GastoDelEspacio) =
         remote.anotarGastoDeOtro(espacioId, gasto)
     override suspend fun liquidarEspacio(espacioId: String, liquidacion: com.jvillada.movi.shared.model.LiquidacionDelEspacio) =
@@ -2472,6 +2473,11 @@ class LocalRepository(
     // `vincularPagoDeDeuda`. El espejo local las trae en la próxima lectura de eventos.
     override suspend fun confirmarConLasDosPatas(smsId: String, patas: com.jvillada.movi.shared.model.DosPatasDelAviso) =
         remote.confirmarConLasDosPatas(smsId, patas)
+    // Varias partes, o repartir un movimiento ya anotado: directo al server, igual que las dos patas.
+    override suspend fun confirmarEnPartes(smsId: String, partes: com.jvillada.movi.shared.model.PartesDelAviso) =
+        remote.confirmarEnPartes(smsId, partes)
+    override suspend fun repartirElMovimiento(eventoId: String, partes: com.jvillada.movi.shared.model.PartesDelAviso) =
+        remote.repartirElMovimiento(eventoId, partes)
 
     override suspend fun getAvisosConfirmadosSinMovimiento() = remote.getAvisosConfirmadosSinMovimiento()
 

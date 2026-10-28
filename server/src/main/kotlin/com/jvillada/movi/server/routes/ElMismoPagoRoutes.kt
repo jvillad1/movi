@@ -165,7 +165,9 @@ internal fun confirmarElMismoPago(
     // nunca se crea otro movimiento. Se cierran los que quedaban, con el movimiento que ya tiene.
     if (confirmados.isNotEmpty()) {
         val yaTiene = confirmados.firstNotNullOfOrNull { it[SmsMessages.eventoId] } ?: pedido.eventoExistenteId
-        return cerrar(yaTiene, creado = false)
+        // Un aviso repartido en partes contesta con todas, como el primer toque.
+        val partes = confirmados.firstNotNullOfOrNull { fila -> partesDeLaFila(fila).ifEmpty { null } }
+        return cerrar(yaTiene, creado = false, todos = partes)
     }
 
     // «Es este»: el movimiento ya existía; se enlaza sin crear nada.
@@ -178,10 +180,20 @@ internal fun confirmarElMismoPago(
     // **Repartir el envío entre varios pagos del período** (ver `RepartirElAviso.kt`): un movimiento
     // por pago, en esta misma transacción y con estos avisos bloqueados. Los avisos quedan con el de
     // la primera parte; la respuesta trae todos.
+    //
+    // Vuelta 27: las partes también pueden ser sueltas (un gasto, un traspaso, el pago de una tarjeta,
+    // lo que sobra para un tercero; ver `ElAvisoEnPartes.kt`). Todos los movimientos quedan en
+    // `partes_de_avisos` —el reintento contesta con ellos— y el reparto se recuerda para el mes que viene.
     pedido.reparto?.let { partes ->
-        val propuesta = propuestaDelGrupo(filas.map { it.toSmsMessage() })
-        return when (val hecho = TransactionManager.current().escribirElReparto(uid, propuesta, partes, pedido.recordarDestinoId, ahora)) {
-            is Repartido.Hecho -> cerrar(hecho.eventoDelAviso, creado = true, todos = hecho.ids)
+        val avisos = filas.map { it.toSmsMessage() }
+        val propuesta = propuestaDelGrupo(avisos)
+        val t = TransactionManager.current()
+        return when (val hecho = t.escribirElReparto(uid, propuesta, partes, pedido.recordarDestinoId, ahora)) {
+            is Repartido.Hecho -> {
+                t.enlazarLasPartes(uid, pendientes, hecho.ids)
+                t.recordarElReparto(uid, pendientes, partes, hecho.moneda)
+                cerrar(hecho.eventoDelAviso, creado = true, todos = hecho.ids)
+            }
             is Repartido.Rechazado -> Confirmacion.Rechazada(hecho.estado, hecho.motivo)
         }
     }

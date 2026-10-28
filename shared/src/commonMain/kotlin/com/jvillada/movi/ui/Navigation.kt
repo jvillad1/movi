@@ -4,6 +4,7 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.ui.components.NavTab
+import com.jvillada.movi.ui.components.WindowWidthClass
 import com.jvillada.movi.ui.plan.SEGMENTO_PAGOS
 import com.jvillada.movi.ui.transactions.CHIP_POR_CONFIRMAR
 import com.jvillada.movi.ui.transactions.CHIP_RECURRENTES
@@ -162,9 +163,10 @@ sealed class Screen {
      * No vive dentro de `Screen.Accounts` **a propósito**: `Screen.Accounts` lista la plata del
      * dueño, y la cuenta de otra persona no es su plata.
      *
-     * **Dos puertas** (ola R4): la fila al final de **Espacios** (ver `RenglonDePersonasYComercios`)
-     * —lo que tienes con los demás— y la ficha de Ajustes, más la alerta de Hoy. Por eso marca la
-     * pestaña Espacios ([navTabFor]). Antes la principal era Movimientos y había otra en Patrimonio.
+     * **Una puerta** (vuelta 31): la fila al final de **Espacios** (ver `RenglonDePersonasYComercios`)
+     * —lo que tienes con los demás—, más la alerta de Hoy. Por eso marca la pestaña Espacios
+     * ([navTabFor]). Antes la principal era Movimientos, había otra en Patrimonio y, hasta la vuelta 31,
+     * otra en Ajustes.
      *
      * [abrir] es el id de un tercero cuya ficha se abre al llegar: lo pide «Ver su ficha» desde el
      * detalle de un movimiento. [sugeridos] = llegar con lo que Movi encontró ya abierto: lo pide la
@@ -424,8 +426,37 @@ fun screenForTab(tab: NavTab): Screen = when (tab) {
  * La barra del teléfono no tiene a Movi AI entre sus cuatro, así que con el chat abierto no marca
  * ninguna — igual que antes.
  */
+/**
+ * **¿Movi AI es la raíz de su pestaña?** (vuelta 33). En una ventana con rail —mediana o ancha—
+ * Movi AI tiene su lugar propio ([destinoResaltado]) y tocarlo deja la pila como la de cualquier
+ * otra pestaña (`[Hoy, Movi AI]`, ver [NavStack.navegarALaPestana]); ahí su encabezado va con el
+ * avatar, como Espacios o Patrimonio, y no con una «←» que no lleva a ningún lado. En el teléfono
+ * no hay pestaña de Movi AI: siempre se abre encima de otra pantalla (desde Hoy, desde Ajustes) y
+ * conserva la flecha. Con el rail, abierto encima de algo que no es Hoy —desde Ajustes, desde
+ * Movimientos—, también la conserva: ahí volver sí lleva a algún lado.
+ */
+fun moviAiEsLaRaizDeSuPestana(pila: List<Screen>, clase: WindowWidthClass): Boolean =
+    clase != WindowWidthClass.Compact &&
+        pila.lastOrNull() is Screen.AIChat &&
+        pila.dropLast(1).all { it == Screen.Dashboard } &&
+        pila.size <= 2
+
 fun destinoResaltado(screen: Screen): NavTab? =
     if (screen is Screen.AIChat) NavTab.MOVI_AI else navTabFor(screen)
+
+/**
+ * **Qué destino resalta la navegación con [pila] a la vista** (vuelta de diseño 30): el de la pantalla
+ * de arriba ([destinoResaltado]), salvo **Buscar**, que no es de ninguna pestaña —se abre con la lupa
+ * de Hoy y con la de Movimientos—: marca la pestaña de donde se abrió, la de la pantalla más cercana
+ * debajo que tenga una. Abierta desde Movimientos, la barra marcaba «Inicio». Sin nada debajo, Hoy.
+ */
+fun destinoResaltadoDeLaPila(pila: List<Screen>): NavTab? {
+    val arriba = pila.lastOrNull() ?: return null
+    if (arriba != Screen.Buscar) return destinoResaltado(arriba)
+    return pila.dropLast(1).asReversed()
+        .firstNotNullOfOrNull { pantalla -> destinoResaltado(pantalla).takeIf { pantalla != Screen.Buscar } }
+        ?: NavTab.HOY
+}
 
 /**
  * **Adónde se va de verdad** cuando se pide [screen].
@@ -500,6 +531,23 @@ object NavStack {
                 }
             }
             shouldPush(stack, screen) -> stack.add(screen)
+        }
+    }
+
+    /**
+     * **Lo que hace tocar una pestaña de la barra o del rail** (vuelta 33). Igual que [navegar],
+     * salvo Movi AI: no es raíz para [navegar] —desde Ajustes o desde Hoy se apila, y volver regresa
+     * ahí—, pero tocada en el rail sí lo es, y deja la pila como cualquier otra pestaña:
+     * `[Hoy, Movi AI]`. Antes se apilaba encima de lo que hubiera (`[Hoy, Movimientos, Movi AI]`) y
+     * el encabezado mostraba una flecha. Ver [moviAiEsLaRaizDeSuPestana].
+     */
+    fun navegarALaPestana(stack: MutableList<Screen>, tab: NavTab) {
+        val destino = destinoVigente(screenForTab(tab))
+        if (tab != NavTab.MOVI_AI) return navegar(stack, destino)
+        val pila = pilaDeLaPestana(destino)
+        if (stack != pila) {
+            stack.clear()
+            stack.addAll(pila)
         }
     }
 

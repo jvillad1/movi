@@ -94,7 +94,7 @@ class GuardarYAnotarOtroTest {
         tocar("Hoy")
         tocar("Ayer")
         tocar("4"); tocar("5"); tocar("000")
-        tocar("Categoría")
+        tocar(TODAS_LAS_CATEGORIAS)
         tocar(elegida)
         tocar("Nota")
         composeRule.onNodeWithTag(TAG_CAMPO_DE_NOTA).performTextReplacement("Venta del sofá")

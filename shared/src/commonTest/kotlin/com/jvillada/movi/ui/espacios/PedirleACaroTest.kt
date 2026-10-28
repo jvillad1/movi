@@ -132,12 +132,34 @@ class PedirleACaroTest {
     }
 
     @Test
-    fun `cada gasto dice su fecha en el subtitulo`() {
-        val deCaro = gasto("g1", "Mercado del sábado", 80_000, dia(18), pagadoPor = "dst_caro")
-        assertEquals("Pagó Caro · Mercado · 18 oct", quienPagoElGasto(casa, deCaro, zona))
-        assertEquals("Pagaste tú · Mercado · 2 oct", quienPagoElGasto(casa, cinco.last(), zona))
-        assertEquals("Pagaste tú · Mercado", quienPagoElGasto(casa, cinco.last().copy(fecha = 0L), zona), "sin fecha, sin ese tramo")
-        assertEquals("Pagaste tú · 2 oct", quienPagoElGasto(casa, cinco.last().copy(categoria = ""), zona))
+    fun `cada gasto dice su fecha en el subtitulo, primero`() {
+        val deCaro = gasto("g1", "Arriendo", 80_000, dia(18), pagadoPor = "dst_caro")
+        // Vuelta 31: la fecha va primero (al final se cortaba) y luego quién pagó y la categoría.
+        // Vuelta 32: quién pagó es solo el nombre («Tú», «Caro»): el avatar ya dice que pagó.
+        assertEquals("18 oct · Caro · Mercado", quienPagoElGasto(casa, deCaro, zona))
+        assertEquals("2 oct · Tú · Mercado", quienPagoElGasto(casa, cinco.last(), zona))
+        assertEquals("Tú · Mercado", quienPagoElGasto(casa, cinco.last().copy(fecha = 0L), zona), "sin fecha, sin ese tramo")
+        assertEquals("2 oct · Tú", quienPagoElGasto(casa, cinco.last().copy(categoria = ""), zona))
+    }
+
+    @Test
+    fun `la categoria no se repite si ya es el titulo o el titulo la dice`() {
+        val mercado = gasto("g1", "Mercado", 80_000, dia(21), pagadoPor = "dst_caro")
+        assertEquals("Mercado", tituloDelGasto(mercado))
+        assertEquals("21 oct · Caro", quienPagoElGasto(casa, mercado, zona))
+        val sinDescripcion = mercado.copy(descripcion = "")
+        assertEquals("Mercado", tituloDelGasto(sinDescripcion))
+        assertEquals("21 oct · Caro", quienPagoElGasto(casa, sinDescripcion, zona))
+        // Vuelta 32: «Mercado del sábado» ya dice «Mercado»; «Supermercado» no (palabras enteras).
+        assertEquals("21 oct · Caro", quienPagoElGasto(casa, mercado.copy(descripcion = "Mercado del sábado"), zona))
+        assertEquals("21 oct · Caro", quienPagoElGasto(casa, mercado.copy(descripcion = "MERCADO EXITO"), zona))
+        assertEquals("21 oct · Caro · Mercado", quienPagoElGasto(casa, mercado.copy(descripcion = "Supermercado"), zona))
+    }
+
+    @Test
+    fun `el titulo de un gasto que llego en mayusculas se lee en forma de titulo`() {
+        assertEquals("Éxito Suba", tituloDelGasto(gasto("g1", "EXITO SUBA", 80_000, dia(21))))
+        assertEquals("Mercado del sábado", tituloDelGasto(gasto("g1", "Mercado del sábado", 80_000, dia(21))))
     }
 
     @Test

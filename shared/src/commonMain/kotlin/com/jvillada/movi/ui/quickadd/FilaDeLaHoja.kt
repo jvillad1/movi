@@ -23,8 +23,9 @@ import com.jvillada.movi.ui.components.ds.Fila
 internal const val FRACCION_DEL_VALOR_DE_LA_HOJA = 0.55f
 
 /**
- * **Una fila de la hoja de Agregar que abre un sub-editor** —«Categoría», «Cuenta», «Nota», y
- * «Desde» / «Hacia» del traspaso— (vuelta de diseño 20). Es la [Fila] del sistema, en su densidad
+ * **Una fila de la hoja de Agregar que abre un sub-editor** —«Cuenta», «Nota», y «Desde» / «Hacia»
+ * del traspaso— (vuelta de diseño 20; la de «Categoría» se fue en la vuelta 34: la categoría la dicen
+ * los chips, con «Todas ›» al final). Es la [Fila] del sistema, en su densidad
  * [DensidadDeFila.Compacta]: 48 dp —lo que medían los `CardRow` armados a mano que reemplaza—, el
  * margen de la pantalla a los lados y el toque de borde a borde. Con la densidad de siempre (56 / 64)
  * la hoja crecía ~30 dp y a 360 × 740 «Guardar movimiento» quedaba cortado por el borde: esta hoja

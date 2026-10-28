@@ -200,14 +200,18 @@ class LaListaDeCreditosEsDeFilasTest {
     }
 
     @Test
-    fun `tocar una deuda abre su detalle, y una sin terminos los pide`() {
+    fun `tocar una deuda abre su detalle, tambien una sin terminos`() {
         montar()
 
         tocar("Libre inversión 9695")
         assertEquals(Screen.AccountDetail("acc_9695", AccountGroup.DEUDA), destinos.single())
 
+        // Vuelta 31: sin términos también abre el detalle (que dice arriba que faltan datos); el
+        // formulario ya no se abre directo desde la lista.
         tocar("Vehículo 4083")
-        assertTrue(hay("Guardar crédito"), "sin términos, tocarla abre la hoja de completarlos")
-        assertEquals(1, destinos.size, "y no navega")
+        assertEquals(Screen.AccountDetail("acc_4083", AccountGroup.DEUDA), destinos.last())
+        tocar("Nu")
+        assertEquals(Screen.AccountDetail("acc_nu", AccountGroup.DEUDA), destinos.last())
+        assertTrue(!hay("Guardar crédito") && !hay("Guardar tarjeta"), "ninguna hoja se abre en la lista")
     }
 }

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountBalanceWallet
 import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.Payments
 import androidx.compose.material.icons.rounded.Event
 import androidx.compose.material.icons.rounded.Savings
 import androidx.compose.material.icons.rounded.Tune
@@ -53,7 +54,7 @@ import com.jvillada.movi.ui.components.ds.Superficie
 import com.jvillada.movi.ui.components.ds.TonoDeBarra
 import com.jvillada.movi.ui.components.ds.TonoDeIcono
 import com.jvillada.movi.ui.components.ds.TonoDePildora
-import com.jvillada.movi.ui.components.ds.TonoDeSubtitulo
+import com.jvillada.movi.ui.components.ds.TarjetaDePropuesta
 import com.jvillada.movi.ui.components.formatMoney
 import com.jvillada.movi.ui.components.toUserMessage
 import com.jvillada.movi.ui.fecha.fechaEnPalabras
@@ -78,11 +79,17 @@ enum class HojaDeLaDeuda { Condiciones, Saldo, Abono }
 /** El título de la acción que abre la hoja de condiciones. */
 const val EDITAR_LAS_CONDICIONES: String = "Editar las condiciones"
 
-/** El título de la acción que abre la hoja de ajustar el saldo de un préstamo. */
+/** El título de la acción que abre la hoja de ajustar el saldo de un préstamo o (vuelta 33) una tarjeta. */
 const val AJUSTAR_EL_SALDO: String = "Ajustar saldo"
 
-/** La fila de una deuda sin términos, en su detalle. */
-const val FALTAN_LAS_CONDICIONES: String = "Faltan las condiciones"
+/** La acción de la tarjeta que abre «Agregar» para anotar su pago (vuelta de diseño 32). */
+const val REGISTRAR_UN_PAGO_DE_LA_TARJETA: String = "Registrar un pago"
+
+/** El botón del aviso de arriba del detalle cuando a la deuda le faltan sus datos (vuelta 31). */
+const val COMPLETAR_DATOS: String = "Completar datos"
+
+/** El tag del aviso de que faltan datos, arriba del detalle de la deuda. */
+const val TAG_FALTAN_DATOS_DE_LA_DEUDA: String = "faltan-datos-de-la-deuda"
 
 /** El tag de la sección de la deuda en el detalle de la cuenta. */
 const val TAG_SECCION_DE_LA_DEUDA: String = "seccion-de-la-deuda"
@@ -155,20 +162,33 @@ fun rememberDeudaDelDetalle(accountId: String, tipo: AccountType?, reintento: In
  * [Fila]. Nada si la deuda todavía no llegó.
  */
 @Composable
-fun SeccionDeLaDeuda(deuda: DeudaDelDetalle, modifier: Modifier = Modifier) {
+fun SeccionDeLaDeuda(
+    deuda: DeudaDelDetalle,
+    modifier: Modifier = Modifier,
+    /**
+     * Vuelta de diseño 32: abre «Agregar» en la pestaña del pago con esta tarjeta en «Hacia» (lo que
+     * ya hace «Anotar este pago» desde Plan). `null` = sin esa acción.
+     */
+    onRegistrarPagoDeLaTarjeta: (() -> Unit)? = null,
+) {
     val prestamo = deuda.prestamo
     val tarjeta = deuda.tarjeta
     if (prestamo == null && tarjeta == null) return
+    val acciones = accionesDeLaDeuda(deuda, onRegistrarPagoDeLaTarjeta)
+    val conCondiciones = !faltanLosDatos(deuda)
+    if (!conCondiciones && acciones.isEmpty()) return
     Column(modifier = modifier.fillMaxWidth().testTag(TAG_SECCION_DE_LA_DEUDA)) {
-        val completar = { deuda.hoja = HojaDeLaDeuda.Condiciones }
-        Seccion(titulo = if (prestamo != null) "El préstamo" else "La tarjeta")
-        Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
-            if (prestamo != null) LoQueDiceElPrestamo(prestamo, deuda.plan, deuda.periodoActual, completar)
-            if (tarjeta != null) LoQueDiceLaTarjeta(tarjeta, completar)
+        // Sin términos no hay nada que decir de la cuota ni del pago: lo dice el aviso de arriba del
+        // detalle ([AvisoDeFaltanDatos]) con «Completar datos», y acá queda lo que sí se puede hacer.
+        if (conCondiciones) {
+            Seccion(titulo = if (prestamo != null) "El préstamo" else "La tarjeta")
+            Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
+                if (prestamo != null) LoQueDiceElPrestamo(prestamo, deuda.plan, deuda.periodoActual)
+                if (tarjeta != null) LoQueDiceLaTarjeta(tarjeta)
+            }
         }
-        val acciones = accionesDeLaDeuda(deuda)
         if (acciones.isEmpty()) return@Column
-        Spacer(Modifier.height(Medida.entreSecciones))
+        if (conCondiciones) Spacer(Modifier.height(Medida.entreSecciones))
         Seccion(titulo = "Qué puedes hacer")
         Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
             acciones.forEachIndexed { i, accion ->
@@ -193,7 +213,17 @@ private class AccionDeLaDeuda(
     val onClick: () -> Unit,
 )
 
-private fun accionesDeLaDeuda(deuda: DeudaDelDetalle): List<AccionDeLaDeuda> = buildList {
+private fun accionesDeLaDeuda(deuda: DeudaDelDetalle, onRegistrarPagoDeLaTarjeta: (() -> Unit)?): List<AccionDeLaDeuda> = buildList {
+    // Vuelta de diseño 32: la tarjeta también tiene «Qué puedes hacer», empezando por anotar lo que le
+    // pagaste (el traspaso de dos patas de la pestaña del pago de Agregar). Con o sin sus datos.
+    if (deuda.tarjeta != null && onRegistrarPagoDeLaTarjeta != null) {
+        add(AccionDeLaDeuda(REGISTRAR_UN_PAGO_DE_LA_TARJETA, "Lo que le pagaste desde otra cuenta", Icons.Rounded.Payments, onRegistrarPagoDeLaTarjeta))
+    }
+    // Vuelta 33: la tarjeta también se cuadra contra el banco, con la misma hoja que un préstamo
+    // ([CardBalanceSheet]). Con o sin sus datos: lo que se debe no depende del corte ni del cupo.
+    if (deuda.tarjeta != null) {
+        add(AccionDeLaDeuda(AJUSTAR_EL_SALDO, "Cuando no cuadra con lo que dice el banco", Icons.Rounded.Tune) { deuda.hoja = HojaDeLaDeuda.Saldo })
+    }
     val prestamo = deuda.prestamo
     val terms = prestamo?.terms
     if (prestamo != null) {
@@ -220,13 +250,8 @@ private fun LoQueDiceElPrestamo(
     credit: CreditSummary,
     plan: PlanDelCredito?,
     periodoActual: PeriodoFinanciero,
-    onCompletar: () -> Unit,
 ) {
-    val t = credit.terms
-    if (t == null) {
-        FilaDeFaltanLasCondiciones(onCompletar)
-        return
-    }
+    val t = credit.terms ?: return
     val hoy = hoyEnAppZone()
     val tasa = if (t.sinIntereses) "Sin intereses" else "${t.rateEa}% EA"
     Fila(
@@ -283,12 +308,8 @@ private fun LoQueDiceElPrestamo(
 
 /** Una tarjeta: el pago (mínimo y día), el corte y el cupo disponible, en su moneda. */
 @Composable
-private fun LoQueDiceLaTarjeta(card: CardSummary, onCompletar: () -> Unit) {
-    val t = card.terms
-    if (t == null) {
-        FilaDeFaltanLasCondiciones(onCompletar)
-        return
-    }
+private fun LoQueDiceLaTarjeta(card: CardSummary) {
+    val t = card.terms ?: return
     val hoy = hoyEnAppZone()
     val moneda = card.account.currency
     val pago = fechaEnPalabras(proximaFechaDelDia(t.paymentDay, hoy), hoy)
@@ -310,18 +331,34 @@ private fun LoQueDiceLaTarjeta(card: CardSummary, onCompletar: () -> Unit) {
     }
 }
 
-/** Sin términos: la fila que lleva a completarlos. La misma frase de aviso que la lista. */
+/** ¿A esta deuda le faltan sus términos? La misma condición que «Faltan datos» en la lista. */
+fun faltanLosDatos(deuda: DeudaDelDetalle): Boolean =
+    (deuda.prestamo != null && deuda.prestamo.terms == null) || (deuda.tarjeta != null && deuda.tarjeta.terms == null)
+
+/**
+ * **Faltan datos, arriba del detalle** (vuelta 31). Antes, tocar en Créditos una deuda sin términos
+ * («Nu», «Vehículo 4083») abría directo el formulario: era la única deuda que no se podía consultar.
+ * Ahora siempre se abre el detalle, y si faltan datos lo dice primero, como una propuesta de Movi en
+ * el tono de aviso, con «Completar datos» que abre el mismo formulario de siempre. Nada si no faltan.
+ */
 @Composable
-private fun FilaDeFaltanLasCondiciones(onCompletar: () -> Unit) {
-    Fila(
-        titulo = FALTAN_LAS_CONDICIONES,
-        subtitulo = FALTAN_DATOS_DE_LA_DEUDA,
-        tonoDelSubtitulo = TonoDeSubtitulo.Aviso,
-        lineasDelSubtitulo = 2,
-        inicio = { IconoEnCirculo(Icons.Rounded.Edit, tono = TonoDeIcono.Aviso) },
-        final = { Chevron() },
-        onClick = onCompletar,
-    )
+fun AvisoDeFaltanDatos(deuda: DeudaDelDetalle, modifier: Modifier = Modifier) {
+    if (!faltanLosDatos(deuda)) return
+    val esTarjeta = deuda.tarjeta != null
+    Box(modifier = modifier.fillMaxWidth().testTag(TAG_FALTAN_DATOS_DE_LA_DEUDA)) {
+        TarjetaDePropuesta(
+            icono = Icons.Rounded.Edit,
+            titulo = if (esTarjeta) "Faltan los datos de esta tarjeta" else "Faltan los datos de este préstamo",
+            cuerpo = if (esTarjeta) {
+                "Con el corte y el día de pago, Movi te dice cuándo vence y cuánto tienes disponible."
+            } else {
+                "Con la cuota, la tasa y el plazo, Movi te dice cuánto pagas de intereses y cuándo terminas."
+            },
+            accion = COMPLETAR_DATOS,
+            onAccion = { deuda.hoja = HojaDeLaDeuda.Condiciones },
+            tono = TonoDeIcono.Aviso,
+        )
+    }
 }
 
 /**
@@ -348,9 +385,14 @@ fun HojasDeLaDeuda(deuda: DeudaDelDetalle, onCambiada: () -> Unit, onError: (Str
                 onSaved = { deuda.hoja = null; onCambiada() },
             )
         }
-        HojaDeLaDeuda.Saldo -> if (prestamo != null) {
-            CreditBalanceSheet(
+        HojaDeLaDeuda.Saldo -> when {
+            prestamo != null -> CreditBalanceSheet(
                 credit = prestamo,
+                onDismiss = { deuda.hoja = null },
+                onSaved = { deuda.hoja = null; onCambiada() },
+            )
+            tarjeta != null -> CardBalanceSheet(
+                card = tarjeta,
                 onDismiss = { deuda.hoja = null },
                 onSaved = { deuda.hoja = null; onCambiada() },
             )

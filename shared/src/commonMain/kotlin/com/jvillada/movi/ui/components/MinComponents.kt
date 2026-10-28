@@ -249,6 +249,12 @@ fun formatMoneyCompact(amount: Long): String =
 fun formatMoneyCompactSinOcultar(amount: Long): String {
     val abs = kotlin.math.abs(amount)
     if (abs < 1_000_000L) return formatCOPSinOcultar(amount)
+    return enMillones(amount)
+}
+
+/** «$1,2M», «−$12M»: [amount] en millones con un decimal que solo aparece cuando dice algo. */
+private fun enMillones(amount: Long): String {
+    val abs = kotlin.math.abs(amount)
     val sign = if (amount < 0) MINUS_SIGN else ""
     // Décimas de millón, redondeadas sin pasar por coma flotante.
     val tenths = (abs + 50_000L) / 100_000L
@@ -256,6 +262,23 @@ fun formatMoneyCompactSinOcultar(amount: Long): String {
     val frac = tenths % 10
     // «$12M», no «$12,0M»: el decimal solo aparece cuando dice algo.
     return if (frac == 0L) "$sign$${groupThousands(intPart)}M" else "$sign$${groupThousands(intPart)},${frac}M"
+}
+
+/**
+ * **Abreviada en todas las escalas** (vuelta de diseño 32): «$850 mil», «$1,8M», «$500». A diferencia
+ * de [formatMoneyCompactSinOcultar], por debajo del millón tampoco dice los pesos: es la forma de un
+ * renglón de cifras que tienen que leerse en la MISMA forma (la franja Entró · Salió · Neto), donde
+ * «+$850.000 · $1,8M · −$902.250» eran dos formas en tres cifras. Los miles se redondean al mil; lo
+ * que redondea a mil miles pasa a millones («$999.600» → «$1M»). Sin «Ocultar los saldos».
+ */
+fun formatMoneyAbreviadaSinOcultar(amount: Long): String {
+    val abs = kotlin.math.abs(amount)
+    if (abs < 1_000L) return formatCOPSinOcultar(amount)
+    val miles = (abs + 500L) / 1_000L
+    if (miles >= 1_000L) return enMillones(amount)
+    val sign = if (amount < 0) MINUS_SIGN else ""
+    // Espacio duro: en una columna angosta, «mil» nunca baja solo a un renglón que no se ve.
+    return "$sign$$miles\u00A0mil"
 }
 
 /**

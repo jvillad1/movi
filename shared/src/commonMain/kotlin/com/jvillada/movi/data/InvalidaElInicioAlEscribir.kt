@@ -82,6 +82,10 @@ internal class InvalidaElInicioAlEscribir(
         trasEscribir { delegado.confirmarElMismoPago(grupoId, pedido) }
     override suspend fun confirmarConLasDosPatas(smsId: String, patas: com.jvillada.movi.shared.model.DosPatasDelAviso): MismoPagoConfirmado =
         trasEscribir { delegado.confirmarConLasDosPatas(smsId, patas) }
+    override suspend fun confirmarEnPartes(smsId: String, partes: com.jvillada.movi.shared.model.PartesDelAviso): MismoPagoConfirmado =
+        trasEscribir { delegado.confirmarEnPartes(smsId, partes) }
+    override suspend fun repartirElMovimiento(eventoId: String, partes: com.jvillada.movi.shared.model.PartesDelAviso): MismoPagoConfirmado =
+        trasEscribir { delegado.repartirElMovimiento(eventoId, partes) }
     override suspend fun ignorarElMismoPago(grupoId: String, miembros: List<String>): Unit = trasEscribir { delegado.ignorarElMismoPago(grupoId, miembros) }
     override suspend fun noSonElMismoPago(grupoId: String, miembros: List<String>): Unit = trasEscribir { delegado.noSonElMismoPago(grupoId, miembros) }
     override suspend fun esteEsOtroPago(id: String): Unit = trasEscribir { delegado.esteEsOtroPago(id) }
@@ -130,6 +134,8 @@ internal class InvalidaElInicioAlEscribir(
         trasEscribir { delegado.repartirMovimiento(espacioId, eventoId) }
     override suspend fun quitarDelEspacio(espacioId: String, eventoId: String): Unit =
         trasEscribir { delegado.quitarDelEspacio(espacioId, eventoId) }
+    override suspend fun quitarGastoDelEspacio(espacioId: String, gastoId: String): Unit =
+        trasEscribir { delegado.quitarGastoDelEspacio(espacioId, gastoId) }
     override suspend fun anotarGastoDeOtro(espacioId: String, gasto: com.jvillada.movi.shared.model.GastoDelEspacio) =
         trasEscribir { delegado.anotarGastoDeOtro(espacioId, gasto) }
     override suspend fun liquidarEspacio(espacioId: String, liquidacion: com.jvillada.movi.shared.model.LiquidacionDelEspacio) =

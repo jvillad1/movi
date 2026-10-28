@@ -74,4 +74,53 @@ internal inline fun <T> conLaIa(donde: String, alFallar: (FallaDeLaIa) -> Nothin
 /** Una línea en el log por cada vez: es lo que le dice al administrador que hay que recargar. */
 fun avisarQueLaIaNoEstaDisponible(donde: String, falla: FallaDeLaIa, e: Throwable) {
     log.warn("IA no disponible en {}: {} ({})", donde, falla.codigo, e.message)
+    EstadoDeLaIa.anotarFalla(falla)
+}
+
+/**
+ * # Lo que el server sabe, sin preguntarle a Anthropic, de si la IA contesta (vuelta de diseño 30)
+ *
+ * El chat sugería «¿Por qué salieron $902.250 de más?» y al tocarlo contestaba «Movi AI no está
+ * disponible ahora para preguntas libres». La app no tenía cómo saberlo antes de preguntar. Ahora
+ * `GET /api/ai/conversacion` lo dice en `ConversacionDelAsistente.iaDisponible`, con esto:
+ *
+ * - **Sin clave** no hay IA, siempre.
+ * - **La última falla por la cuenta** ([FallaDeLaIa.SIN_CREDITO] o [FallaDeLaIa.SIN_PERMISO]) la
+ *   apaga por [VIGENCIA_DE_LA_FALLA_MS]: reintentar en un minuto no la arregla, y una sola llamada
+ *   que falle (de cualquier dueño: la cuenta de Anthropic es una) ya lo prueba. Pasado ese rato se
+ *   vuelve a suponer que contesta, así que una recarga se nota sola sin reiniciar el server.
+ * - **Una respuesta del modelo en el chat** la vuelve a prender en el acto. (Una lectura de papeles
+ *   que salió bien no: puede no haber pasado por la IA, como los extractos que se leen sin ella.)
+ * - [FallaDeLaIa.SATURADA] no la apaga: es del momento, no de la cuenta.
+ *
+ * Vive en memoria y no en la base: es del proceso (el mismo que tiene o no la clave), y perderlo
+ * en un reinicio solo cuesta una pregunta que vuelva a dar el aviso.
+ */
+object EstadoDeLaIa {
+    /** Cuánto dura apagada después de una falla por la cuenta. */
+    const val VIGENCIA_DE_LA_FALLA_MS: Long = 60L * 60 * 1000
+
+    @Volatile private var ultimaFallaEn: Long? = null
+
+    /** Anota una falla: solo las de la cuenta apagan la IA. */
+    fun anotarFalla(falla: FallaDeLaIa, ahora: Long = System.currentTimeMillis()) {
+        if (falla != FallaDeLaIa.SATURADA) ultimaFallaEn = ahora
+    }
+
+    /** Llegó una respuesta del modelo: la cuenta anda. */
+    fun anotarRespuesta() {
+        ultimaFallaEn = null
+    }
+
+    /** ¿Se le puede mandar una pregunta libre? [hayClave]: el server tiene `ANTHROPIC_API_KEY`. */
+    fun disponible(hayClave: Boolean, ahora: Long = System.currentTimeMillis()): Boolean {
+        if (!hayClave) return false
+        val falla = ultimaFallaEn ?: return true
+        return ahora - falla >= VIGENCIA_DE_LA_FALLA_MS
+    }
+
+    /** Para las pruebas: el estado de un proceso recién arrancado. */
+    internal fun olvidar() {
+        ultimaFallaEn = null
+    }
 }

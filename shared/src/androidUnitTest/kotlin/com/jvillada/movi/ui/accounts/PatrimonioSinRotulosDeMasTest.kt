@@ -45,7 +45,8 @@ import kotlin.test.assertTrue
  *
  * En producción, a 390 px:
  * - dentro de «Dinero · 2» cada cuenta decía «Dinero» debajo de su nombre;
- * - en Herramientas, «Hace más de un mes que no cuadras …» se cortaba;
+ * - en Herramientas, «Hace más de un mes que no cuadras …» se cortaba (desde la vuelta 31 dice
+ * «Bancolombia Ahorros · Nunca la has cuadrado», la frase de su detalle);
  * - «Bancolombia Ahorros» se partía en dos renglones al lado de «$13.845.800» aunque sobraba ancho.
  *
  * Mismo método que `LasPantallasDeR4cUsanElSistemaTest`: `sdk = [34]` y `NATIVE` para el motor de
@@ -143,7 +144,7 @@ class PatrimonioSinRotulosDeMasTest {
     @Config(qualifiers = "w360dp-h2400dp-xhdpi")
     fun `a 360 dp el subtitulo de Herramientas no se corta`() {
         montarPatrimonio()
-        listOf("Hace más de un mes que no cuadras Bancolombia Ahorros", "Traspasos, cuotas de crédito y pagos de tarjeta").forEach { t ->
+        listOf("Bancolombia Ahorros · Nunca la has cuadrado", "Traspasos, cuotas de crédito y pagos de tarjeta").forEach { t ->
             val nodo = nodoConTexto(t)
             assertTrue(seVeEntero(nodo), "«$t» se corta a 360 dp (${disposicion(nodo).lineCount} renglones)")
         }

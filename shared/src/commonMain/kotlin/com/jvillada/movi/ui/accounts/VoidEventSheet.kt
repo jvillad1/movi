@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.accounts
 
+import com.jvillada.movi.ui.transactions.tituloDelMovimiento
 import com.jvillada.movi.ui.components.ds.Superficie
 import com.jvillada.movi.ui.components.ds.TonoDeCifra
 import com.jvillada.movi.ui.components.ds.Cifra
@@ -158,7 +159,8 @@ fun VoidEventSheet(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = event.description,
+                            // Vuelta de diseño 36: el mismo título que la fila que se anula.
+                            text = tituloDelMovimiento(event),
                             style = Movi.textos.cuerpo,
                             color = Movi.colores.texto,
                         )

@@ -543,7 +543,10 @@ internal fun ContenidoDelMovimiento(
                         else -> "Traspaso"
                     },
                 )
-                NombreQueSeEdita(event.description) { edicionAbierta = true }
+                // Vuelta de diseño 36: el título de su fila; al editar, el campo trae lo guardado.
+                NombreQueSeEdita(tituloDelMovimiento(event, cuentas.firstOrNull { it.id == event.accountId }?.name)) {
+                    edicionAbierta = true
+                }
                 Spacer(Modifier.height(Espacio.s))
                 PorConfirmar(event, onError = { errorDeEdicion = it }, onConfirmado = onEventChanged)
                 Spacer(Modifier.height(Espacio.m))
@@ -597,6 +600,13 @@ internal fun ContenidoDelMovimiento(
                 // `transferId` dentro de la misma transacción, así que no hay forma de dejar medio
                 // par anulado. Lo que se anula, y por cuánto en cada cuenta, lo dice la hoja de
                 // anular ([loQuePasaAlAnular]).
+                //
+                // Vuelta 27 · un traspaso o una cuota que en verdad pagó varias cosas se reparte desde
+                // la pata que sale: el server anula las dos y escribe las partes.
+                if (sePuedeRepartirEnPartes(event, cuentas)) {
+                    SeccionDeRepartirEnPartes(evento = event, cuentas = cuentas, onRepartido = onEventChanged)
+                    Spacer(Modifier.height(Espacio.m))
+                }
                 SeccionDeAnular(onAnular, habilitado = true)
                 Spacer(Modifier.height(Espacio.xl))
             }
@@ -629,7 +639,11 @@ internal fun ContenidoDelMovimiento(
         MarcoDelMovimiento(lugar, onDismiss = onDismiss, dismissEnabled = true) {
             Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
                 SheetLabel("Saldo inicial")
-                Text(event.description, style = Movi.textos.tituloMedio, color = Movi.colores.texto)
+                Text(
+                    tituloDelMovimiento(event, cuentas.firstOrNull { it.id == event.accountId }?.name),
+                    style = Movi.textos.tituloMedio,
+                    color = Movi.colores.texto,
+                )
                 Spacer(Modifier.height(Espacio.m))
                 Text(OPENING_BALANCE_EXPLAINER, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
                 if (onVerCuenta != null) {
@@ -683,7 +697,7 @@ internal fun ContenidoDelMovimiento(
                 o.otros.forEach { otro ->
                     Row(modifier = Modifier.fillMaxWidth().padding(vertical = Espacio.xs)) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(otro.description, style = Movi.textos.cuerpo, color = Movi.colores.texto, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(tituloDelMovimiento(otro), style = Movi.textos.cuerpo, color = Movi.colores.texto, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(
                                 "${etiquetaDeFecha(fechaDeEpoch(otro.timestamp), hoyEnAppZone())} · ${otro.category}",
                                 style = Movi.textos.apoyo,
@@ -739,11 +753,13 @@ internal fun ContenidoDelMovimiento(
     // categoría de cada gasto.
     val espacios = com.jvillada.movi.ui.espacios.rememberEspaciosParaRepartir(event)
     val ofreceRepartir = com.jvillada.movi.ui.espacios.ofreceRepartir(event, espacios)
+    // Vuelta 27 · «Repartir en partes»: un gasto que pagó varias cosas se anula y queda en partes.
+    val ofreceEnPartes = sePuedeRepartirEnPartes(event, cuentas)
     val acciones = accionesDelMovimiento(
         ofreceRepetir = ofreceRepetir,
         ofreceRepartir = ofreceRepartir,
         conTercero = tercero != null || ofreceGuardarElTercero,
-        conMas = onAnular != null || ofreceVincular,
+        conMas = onAnular != null || ofreceVincular || ofreceEnPartes,
     )
     val repartirEnMas = repartirVaEnMas(ofreceRepartir, acciones)
     val reducido = LocalMovimientoReducido.current
@@ -758,6 +774,7 @@ internal fun ContenidoDelMovimiento(
                 evento = renombradoAca ?: event,
                 cuentas = cuentas,
                 onEditar = { accion = AccionDelMovimiento.Nota },
+                espacios = espacios,
             )
             Spacer(Modifier.height(Espacio.s))
             ChipDeCategoria(
@@ -969,6 +986,12 @@ internal fun ContenidoDelMovimiento(
                                 Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
                             }
                         }
+                        if (ofreceEnPartes) {
+                            Spacer(Modifier.height(Espacio.s))
+                            Separador(SangriaDeSeparador.Ninguna)
+                            Spacer(Modifier.height(Espacio.s))
+                            SeccionDeRepartirEnPartes(evento = event, cuentas = cuentas, onRepartido = onEventChanged)
+                        }
                         SeccionDeAnular(onAnular, habilitado = !saving)
                     }
                     null -> Unit
@@ -1104,7 +1127,7 @@ fun CardPaymentCandidatesSheet(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            event.description,
+                            tituloDelMovimiento(event),
                             style = Movi.textos.cuerpo,
                             color = Movi.colores.texto,
                         )

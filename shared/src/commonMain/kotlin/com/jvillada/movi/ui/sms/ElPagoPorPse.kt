@@ -27,10 +27,8 @@ fun momentoConLaFechaDelAviso(momento: Long, fecha: String?, zona: TimeZone = Ap
 }
 
 /** El nombre del movimiento, con lo que dijo el aviso de para qué fue: «Coomeva · Pago de saldo plan familiar». */
-fun descripcionConLaNota(comercio: String, nota: String?): String {
-    val n = nota?.trim().orEmpty()
-    return if (n.isEmpty() || n.equals(comercio.trim(), ignoreCase = true)) comercio else "$comercio · $n"
-}
+fun descripcionConLaNota(comercio: String, nota: String?): String =
+    com.jvillada.movi.shared.model.descripcionConLaNota(comercio, nota)
 
 /** Lo que dice la pantalla cuando la categoría es «Traspaso»: qué se va a anotar, o por qué así no se puede. */
 fun avisoDelTraspaso(hacia: Account?, origen: Account?): String =

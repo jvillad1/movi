@@ -387,13 +387,10 @@ internal fun netoDelPeriodoDe(resumen: ResumenDePeriodo): Long = resumen.entrada
  *
  * **Un neto negativo no es una alerta** (vuelta de diseño 28): un período en que salió más de lo que
  * entró puede haberse pagado con lo que ya había (ver [loQueCubrioLoDemas]); el rojo queda para lo
- * que pide algo, como gastar más de lo que había para el período.
+ * que pide algo, como gastar más de lo que había para el período. Es la regla del «Neto» de
+ * Movimientos ([com.jvillada.movi.ui.transactions.tonoDelNeto]): el mismo concepto, el mismo tono.
  */
-internal fun tonoDelNetoDelPeriodo(monto: Long): TonoDeCifra = when {
-    monto > 0 -> TonoDeCifra.Ingreso
-    monto < 0 -> TonoDeCifra.Neutro
-    else -> TonoDeCifra.Apagado
-}
+internal fun tonoDelNetoDelPeriodo(monto: Long): TonoDeCifra = com.jvillada.movi.ui.transactions.tonoDelNeto(monto)
 
 /**
  * [elegida]: es el período que muestra el detalle de al lado (solo en la web). Se marca con un borde

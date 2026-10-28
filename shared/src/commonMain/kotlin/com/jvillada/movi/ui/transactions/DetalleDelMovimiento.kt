@@ -39,6 +39,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.Espacio as EspacioCompartido
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Icono
@@ -132,6 +133,9 @@ internal fun repartirVaEnMas(ofreceRepartir: Boolean, acciones: List<AccionDelMo
 /** El `testTag` del monto grande del encabezado. */
 const val TAG_MONTO_DEL_MOVIMIENTO: String = "monto-del-movimiento"
 
+/** El `testTag` de «de $88.600 · con Caro» bajo tu parte, en el detalle de un gasto repartido. */
+const val TAG_TOTAL_DEL_REPARTIDO: String = "total-del-repartido"
+
 /** El `testTag` del chip de la categoría. */
 const val TAG_CHIP_DE_CATEGORIA: String = "chip-de-categoria"
 
@@ -161,10 +165,17 @@ internal fun EncabezadoDelMovimiento(
     evento: FinancialEvent,
     cuentas: List<Account>,
     onEditar: () -> Unit,
+    /** Los espacios del dueño, para decir con quién se repartió un gasto («con Caro»). */
+    espacios: List<EspacioCompartido> = emptyList(),
 ) {
     val hoy = remember { hoyEnAppZone() }
     val cuenta = cuentas.firstOrNull { it.id == evento.accountId }?.name
-    val linea = remember(evento.timestamp, cuenta, hoy) { lineaDeCuandoYDonde(evento, cuenta, hoy) }
+    // Vuelta de diseño 30: en un gasto repartido la cifra es tu parte, debajo «de $88.600 · con
+    // Caro», y la línea de cuándo dice lo que salió de la cuenta («Salieron $88.600 de Nu»): el saldo
+    // sigue siendo el de toda la plata que salió.
+    val repartido = lineaDelRepartido(evento, espacios.firstOrNull { it.id == evento.espacioId })
+    val dondeOLoQueSalio = salieronDeLaCuenta(evento, cuenta) ?: cuenta
+    val linea = lineaDeCuandoYDonde(evento, dondeOLoQueSalio, hoy)
     Row(
         modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(Radio.m)).clickable(onClick = onEditar),
         verticalAlignment = Alignment.CenterVertically,
@@ -173,8 +184,9 @@ internal fun EncabezadoDelMovimiento(
         Box(modifier = Modifier.size(TamanoDeAvatar.Encabezado.circulo), contentAlignment = Alignment.Center) {
             AvatarDelComercio(evento, tamano = TamanoDeAvatar.Encabezado)
         }
+        // Vuelta de diseño 36: el mismo título que su fila («Éxito Suba», no «Mercado»).
         Text(
-            evento.description,
+            tituloDelMovimiento(evento, cuenta),
             style = Movi.textos.tituloMedio,
             color = Movi.colores.texto,
             maxLines = 2,
@@ -187,12 +199,20 @@ internal fun EncabezadoDelMovimiento(
     // La cifra protagonista: la héroe del sistema, en un renglón; si no entra —millones en dólares
     // con centavos en un teléfono de 360 dp— se achica hasta la de una tarjeta.
     CifraDelMovimiento(
-        monto = evento.amount,
+        monto = montoPrincipalDelMovimiento(evento),
         moneda = evento.currency,
         tono = tono,
         variante = VarianteDeCifra.Heroe,
         modifier = Modifier.testTag(TAG_MONTO_DEL_MOVIMIENTO).clickable(onClick = onEditar),
     )
+    if (repartido != null) {
+        Text(
+            repartido,
+            style = Movi.textos.cuerpo,
+            color = Movi.colores.textoMedio,
+            modifier = Modifier.testTag(TAG_TOTAL_DEL_REPARTIDO),
+        )
+    }
     Spacer(Modifier.height(Espacio.xxs))
     Text(linea, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
 }
