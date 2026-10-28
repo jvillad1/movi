@@ -78,6 +78,12 @@ fun AIChatScreen(
      * modelo (el chip de Hoy lo trae). `null` = pregunta libre.
      */
     sugeridaInicial: String? = null,
+    /**
+     * Vuelta 33: Movi AI es la raíz de su pestaña (el rail de una ventana ancha, ver
+     * [com.jvillada.movi.ui.moviAiEsLaRaizDeSuPestana]): el encabezado lleva el avatar, como las
+     * otras raíces. `false` = se abrió encima de otra pantalla y lleva la flecha.
+     */
+    comoRaiz: Boolean = false,
 ) {
     val coroutine = rememberCoroutineScope()
     // **Arranca vacía.** El saludo ya no es un mensaje del asistente sembrado en la lista: es el
@@ -241,7 +247,7 @@ fun AIChatScreen(
         ) {
         MinScreenHeader(
             title = "Movi AI",
-            leading = HeaderLeading.Back(fallback = Screen.Mas),
+            leading = if (comoRaiz) HeaderLeading.Avatar(onNavigate) else HeaderLeading.Back(fallback = Screen.Mas),
             subtitle = "Conoce tus finanzas",
             // Con conversación, la acción es empezar otra (con la forma de toda acción de encabezado);
             // sin conversación no hay nada que limpiar y queda la marca «Beta», una [Pildora].

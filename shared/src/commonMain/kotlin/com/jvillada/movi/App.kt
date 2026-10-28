@@ -68,6 +68,7 @@ import com.jvillada.movi.ui.NavStack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.destinoResaltado
 import com.jvillada.movi.ui.destinoResaltadoDeLaPila
+import com.jvillada.movi.ui.moviAiEsLaRaizDeSuPestana
 import com.jvillada.movi.ui.muestraLaNavegacion
 import com.jvillada.movi.ui.opensAsOverlay
 import com.jvillada.movi.ui.screenForTab
@@ -376,6 +377,10 @@ fun App() {
                     val destino = screenForTab(tab)
                     if (!opensAsOverlay(destino) && quickAdd == null && backStack.last() == destinoVigente(destino)) {
                         retoque.retocar()
+                    } else if (tab == NavTab.MOVI_AI) {
+                        // Vuelta 33: Movi AI tocada en el rail es la raíz de su pestaña, no se apila.
+                        quickAdd = null
+                        NavStack.navegarALaPestana(backStack, tab)
                     } else {
                         navigate(destino)
                     }
@@ -450,7 +455,12 @@ fun App() {
                 // siendo exhaustivo sobre `Screen` — con un `else` perdería el chequeo que avisa
                 // cuando alguien agrega una pantalla nueva y se olvida de enrutarla.
                 is Screen.QuickAdd       -> Unit
-                is Screen.AIChat         -> AIChatScreen(navigate, preguntaInicial = pantalla.preguntaInicial, sugeridaInicial = pantalla.sugerida)
+                is Screen.AIChat         -> AIChatScreen(
+                    navigate,
+                    preguntaInicial = pantalla.preguntaInicial,
+                    sugeridaInicial = pantalla.sugerida,
+                    comoRaiz = moviAiEsLaRaizDeSuPestana(pila, LocalWindowWidthClass.current),
+                )
                 Screen.Credits           -> CreditosScreen(navigate)
                 Screen.SalidaDeDeudas    -> SalidaDeDeudasScreen(navigate)
                 Screen.Budgets           -> PresupuestosScreen(navigate)
