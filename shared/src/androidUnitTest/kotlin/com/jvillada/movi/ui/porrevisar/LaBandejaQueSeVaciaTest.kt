@@ -9,6 +9,10 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onLast
+import androidx.compose.ui.test.onParent
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
 import com.jvillada.movi.shared.model.Account
@@ -133,12 +137,15 @@ class LaBandejaQueSeVaciaTest {
         montar()
 
         assertEquals(2, conTag(TAG_CONFIRMAR_EN_LA_FILA))
-        assertEquals(2, conTag(TAG_LINEA_DE_LO_ENTENDIDO))
-        assertEquals(1, cuantos("Se anota: Comida · Bancolombia Ahorros 8133 · \$46.000"))
-        assertEquals(1, cuantos("Se anota: Mercado · Bancolombia Ahorros 8133 · \$180.000"))
-        // «Ignorar» va en las cuatro tarjetas; «Revisar» también (en las dos con dudas es el principal).
+        // Vuelta 44: las cuatro dicen arriba lo que Movi entendió, entendido o no.
+        assertEquals(4, conTag(TAG_LINEA_DE_LO_ENTENDIDO))
+        assertEquals(1, cuantos("Comida · Bancolombia Ahorros 8133"))
+        assertEquals(2, cuantos("Mercado · Bancolombia Ahorros 8133"))
+        assertEquals(0, cuantos("Se anota:"), "lo que se anota ya está arriba")
+        // «Ignorar» va en las cuatro; junto a «Confirmar», «Cambiar»; en las dos con dudas, «Revisar».
         assertEquals(4, cuantos("Ignorar"))
-        assertEquals(4, cuantos("Revisar"))
+        assertEquals(2, cuantos("Cambiar"))
+        assertEquals(2, cuantos("Revisar"))
     }
 
     @Test
@@ -156,6 +163,9 @@ class LaBandejaQueSeVaciaTest {
         assertEquals(mercado.text, evento.rawPayload)
         assertEquals(listOf("mercado" to evento.id), confirmados)
         esperar { conTag(TAG_CONFIRMAR_EN_LA_FILA) == 1 }
+        // Vuelta 44: «Anotado», abajo (sin «Deshacer»: confirmar no tiene vuelta).
+        esperar { cuantos("Anotado · Carulla \$180.000") == 1 }
+        assertEquals(0, cuantos("Deshacer"))
     }
 
     @Test
@@ -167,23 +177,35 @@ class LaBandejaQueSeVaciaTest {
         assertTrue(publicados.isEmpty())
     }
 
+    /**
+     * Vuelta 44: el lote es el de Actividad —la tarjeta con «Confirmar los 2 que Movi entendió» y la
+     * misma hoja de confirmación— y confirma uno por uno por el camino de la fila.
+     */
     @Test
     fun `el lote confirma solo los que Movi entendio y dice cual quedo`() {
         fallaElMercado = true
         montar()
 
-        assertEquals(1, cuantos(tituloDelLote(2)))
-        tocar(botonDelLote(2))
-        // Pide confirmación una vez.
-        assertEquals(1, cuantos(preguntaDelLote(2)))
+        assertEquals(1, conTag(TAG_LOTE_DE_LA_BANDEJA))
+        tocarElBoton("Confirmar los 2 que Movi entendió")
+        // Pregunta una vez, con la hoja de Actividad.
+        assertEquals(1, cuantos("¿Confirmar estos 2 avisos?"))
         assertTrue(publicados.isEmpty())
-        tocar(SI_ANOTAR_EL_LOTE)
-        esperar { cuantos("Quedó en la bandeja") == 1 }
+        // El «Confirmar» de la hoja es el último que se compone (la hoja va encima de la bandeja).
+        composeRule.onAllNodes(hasText("Confirmar"), useUnmergedTree = true).onLast().onParent()
+            .performSemanticsAction(SemanticsActions.OnClick)
+        esperar { cuantos("no se pudo") == 1 }
 
         // El café se anotó; el mercado falló y los dos con dudas ni se intentaron.
         assertEquals(listOf(46_000L), publicados.map { it.amount })
         assertEquals(listOf("cafe"), confirmados.map { it.first })
-        assertEquals(1, cuantos("Se anotó 1."))
-        assertEquals(1, cuantos("Quedó en la bandeja: CARULLA"))
+        assertEquals(1, cuantos("1 confirmado. 1 no se pudo: quedó en Por revisar."))
+    }
+
+    /** Toca el botón cuyo texto es [texto] (el botón es el padre del texto: el `Boton` del sistema). */
+    private fun tocarElBoton(texto: String) {
+        composeRule.onAllNodes(hasText(texto), useUnmergedTree = true).onFirst().onParent()
+            .performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
     }
 }

@@ -49,7 +49,9 @@ import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
 
 /**
- * # «Repartir» desde el menú del «+» abre la hoja (vuelta de diseño 7, mudada en la 26)
+ * # «Repartir» desde el menú del «+» abre la hoja (vuelta de diseño 7, mudada en la 26, cambiada en la 44)
+ *
+ * Vuelta 44: abre Agregar en modo personas (`pantallaParaRepartir`), con «Yo» marcado.
  *
  * Vuelta 7: con un espacio, la hoja «Pagó otro» sobre ese; con varios, primero se elige; sin ninguno,
  * la creación del espacio. Vuelta 26: «Repartir» salió de la cuadrícula del Inicio y vive en el menú
@@ -139,31 +141,20 @@ class RepartirDesdeElMasTest {
         composeRule.waitForIdle()
     }
 
+    /**
+     * Vuelta 44: con algún espacio, «Repartir» abre **Agregar en modo personas** («Repartir este gasto ·
+     * ¿Quién pagó? Yo | Caro»), no «Pagó otro» en el grupo, que suponía que pagó el otro. Con varios, la
+     * hoja de Agregar pregunta en cuál.
+     */
     @Test
-    fun `con un espacio, Repartir desde el mas abre la hoja de anotar lo que pago otro sobre ese`() {
-        montar(listOf(casa))
-        tocarRepartir()
-        esperar { navegado.isNotEmpty() }
-        assertEquals(listOf<Screen>(Screen.Espacio("esp_casa", pagoOtro = true)), navegado)
-        // La hoja de siempre, abierta: «Pagó otro» con «¿Cuánto pagó Caro?».
-        esperar { hay("Pagó otro") }
-        esperar { hay("¿Cuánto pagó Caro?") }
-    }
-
-    @Test
-    fun `con varios espacios, primero se elige y despues se abre la hoja`() {
+    fun `con espacios, Repartir abre Agregar en modo personas`() {
         montar(listOf(casa, oficina))
         tocarRepartir()
-        esperar { hay(TITULO_ELEGIR_ESPACIO) }
-        assertEquals(emptyList(), navegado, "todavía no navega: falta elegir")
-        assertEquals(2, composeRule.onAllNodesWithTag(TAG_FILA_ELEGIR_ESPACIO, useUnmergedTree = true).fetchSemanticsNodes().size)
-
-        // La segunda fila: «Casa con Ana». Por la acción de toque (la hoja todavía puede estar entrando).
-        composeRule.onAllNodesWithTag(TAG_FILA_ELEGIR_ESPACIO)[1].assert(hasText("Casa con Ana", substring = true))
-            .performSemanticsAction(SemanticsActions.OnClick)
         esperar { navegado.isNotEmpty() }
-        assertEquals(listOf<Screen>(Screen.Espacio("esp_oficina", pagoOtro = true)), navegado)
-        esperar { hay("¿Cuánto pagó Ana?") }
+        assertEquals(listOf(pantallaParaRepartir()), navegado)
+        val agregar = navegado.single() as Screen.QuickAdd
+        assertEquals(true, agregar.presetRepartir)
+        assertEquals(null, agregar.presetMonto, "el monto en blanco")
     }
 
     @Test
@@ -185,8 +176,8 @@ class RepartirDesdeElMasTest {
     @Test
     fun `a donde lleva Repartir segun cuantos espacios hay`() {
         assertEquals(DestinoDeRepartir.CrearEspacio, destinoDeRepartir(emptyList()))
-        assertEquals(DestinoDeRepartir.AnotarEn("esp_casa"), destinoDeRepartir(listOf(casa)))
-        assertEquals(DestinoDeRepartir.ElegirEspacio(listOf(casa, oficina)), destinoDeRepartir(listOf(casa, oficina)))
+        assertEquals(DestinoDeRepartir.Agregar, destinoDeRepartir(listOf(casa)))
+        assertEquals(DestinoDeRepartir.Agregar, destinoDeRepartir(listOf(casa, oficina)))
         assertEquals(null, conQuienDe(casa), "«Casa con Caro» ya dice con quién")
         assertEquals("Con Caro", conQuienDe(casa.copy(nombre = "Apartamento")))
     }
