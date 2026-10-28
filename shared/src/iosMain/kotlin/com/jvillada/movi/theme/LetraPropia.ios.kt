@@ -13,7 +13,15 @@ package com.jvillada.movi.theme
  * Mac de desarrollo `xcrun -f ld` falla porque la licencia de Xcode no está aceptada, así que ni
  * siquiera enlaza el framework.
  *
- * Para prenderlo: aceptar la licencia, armar el XCFramework, poner esto en `true` y abrir la app.
- * Si abre y los títulos se ven en Space Grotesk, queda.
+ * **Vuelta 29 (Figtree), medido:** la licencia de Xcode ya está aceptada y `linkDebugFrameworkIosX64`
+ * enlaza, y `assembleIosX64MainResources` arma los cinco `figtree_*.ttf` en
+ * `build/generated/compose/resourceGenerator/assembledResources/iosX64Main/composeResources/`. Pero
+ * **el `ComposeApp.framework` enlazado no los trae adentro** (solo el binario, `Headers`, `Modules` e
+ * `Info.plist`), y el proyecto de Xcode no tiene un paso que copie `composeResources` al paquete de la
+ * app. Prender esto sin ese paso es la caída al abrir de arriba.
+ *
+ * Para prenderlo: sumar al proyecto de Xcode la copia de `composeResources` al paquete de la app (o
+ * pasar al `embedAndSignAppleFrameworkForXcode`, que la hace), poner esto en `true` y abrir la app en
+ * el simulador. Si abre y los títulos se ven en Figtree, queda.
  */
 internal actual val laPlataformaTraeLasFuentes: Boolean = false

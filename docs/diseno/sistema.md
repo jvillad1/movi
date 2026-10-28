@@ -1806,9 +1806,10 @@ y los componentes de `ds/`. La navegación de 4 pestañas y las 8 acciones de Ho
   `HojaDelTema` ni el parámetro `oscuro` de `MoviTheme` y de `AjustarBarrasDelSistema`; las barras del
   sistema con íconos oscuros; el arranque de Android en el crema (`movi_fondo`, `Theme.Material.Light`);
   el widget, el ingreso web y la página compartida, claros; los atajos del ícono, amarillos.
-- **iOS**: con Kotlin 2.2.21 el XCFramework se arma, pero el framework es estático y `Font(recurso)`
-  solo se puede comprobar abriendo la app; sin simulador en esta vuelta, iOS sigue con la letra del
-  sistema (`laPlataformaTraeLasFuentes = false`).
+- **iOS**: `assembleIosX64MainResources` arma los cinco `figtree_*.ttf`, y `linkDebugFrameworkIosX64`
+  enlaza, pero el `ComposeApp.framework` no los lleva adentro y el proyecto de Xcode no los copia al
+  paquete de la app. Sin ese paso (y sin simulador en esta vuelta para verlo), iOS sigue con la letra
+  del sistema (`laPlataformaTraeLasFuentes = false`): mismos tamaños, pesos y cifras tabulares.
 - **Lo que queda para las vueltas siguientes**: el héroe de Hoy todavía no es una tarjeta (cuando lo
   sea, `Superficie(destacada = true)`), la franja amarilla y los botones `marcaSuave` del encabezado,
   las 4 pestañas y las 8 acciones (vuelta 30).
