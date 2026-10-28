@@ -783,7 +783,7 @@ fun gruposDelResumen(resumen: ResumenDeDeudas): List<Int> = buildList {
  * que faltan datos y trae «Completar datos» (vuelta 31; antes abría el formulario directo). Antes se
  * leía «Sin términos registrados · $0 · 0% pagado», que se contradecía.
  */
-const val FALTAN_DATOS_DE_LA_DEUDA: String = "Faltan datos: tócala para completarlos"
+const val FALTAN_DATOS_DE_LA_DEUDA: String = "Faltan datos"
 
 /** La píldora de una deuda en cero que llegó ahí con movimientos. */
 const val DEUDA_PAGADA: String = "Pagado"

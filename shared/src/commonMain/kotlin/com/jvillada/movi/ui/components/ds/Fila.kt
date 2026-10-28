@@ -35,7 +35,7 @@ const val LINEAS_DEL_TITULO_DE_FILA: Int = 2
 
 /**
  * **El tono del subtítulo de una [Fila]**: [Normal] (texto medio) casi siempre; [Aviso] cuando el
- * subtítulo pide algo al dueño («Faltan datos: tócala para completarlos», en Créditos).
+ * subtítulo pide algo al dueño («Faltan datos», en Créditos).
  */
 enum class TonoDeSubtitulo { Normal, Aviso }
 

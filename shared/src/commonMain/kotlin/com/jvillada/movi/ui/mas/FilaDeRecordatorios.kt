@@ -98,12 +98,15 @@ internal fun FilasDeAvisos(
     if (pushSoportado) {
         val activadas = pushStatus == "enabled"
         Fila(
-            titulo = "Notificaciones push",
+            // Título corto y subtítulo en dos líneas: el botón ocupa la mitad de la fila, y con
+            // «Notificaciones push» el título partía en dos y la frase se cortaba.
+            titulo = "Notificaciones",
             subtitulo = when (pushStatus) {
                 "enabled" -> "Activadas en este dispositivo"
                 "denied" -> "Bloqueadas por el navegador"
-                else -> "Recibe tus pagos próximos"
+                else -> "Antes de cada pago"
             },
+            lineasDelSubtitulo = 2,
             inicio = { IconoEnCirculo(Icons.Rounded.Notifications, tono = TonoDeIcono.Neutro) },
             final = {
                 Boton(

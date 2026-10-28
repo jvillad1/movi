@@ -443,7 +443,8 @@ fun MasScreen(
                         }
                         NotaDeSeccion(
                             errorCierre ?: when (profile?.cierrePorCorreo) {
-                                true -> "El día siguiente al corte te llega cómo te fue en el período."
+                                // Encendido, la fila ya dice cuándo llega: la nota lo repetía.
+                                true -> null
                                 false -> "El resumen sigue en Hoy y en «Tus períodos»."
                                 null -> null
                             },
