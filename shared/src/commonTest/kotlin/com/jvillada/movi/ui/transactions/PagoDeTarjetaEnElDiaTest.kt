@@ -52,7 +52,7 @@ class PagoDeTarjetaEnElDiaTest {
         )
         assertEquals(1_929_536L, montoPagoDeTarjetaEnElDia(items, accountTypes))
         assertEquals(
-            "De eso, \$1.929.536 fueron a pagar tarjeta — ya contado en tu gasto del mes cuando compraste, " +
+            "Además, \$1.929.536 fueron a pagar tarjeta — ya contado en tu gasto del mes cuando compraste, " +
                 "no se duplica.",
             textoPagoDeTarjetaEnElDia(montoPagoDeTarjetaEnElDia(items, accountTypes)),
         )
@@ -94,7 +94,7 @@ class PagoDeTarjetaEnElDiaTest {
         )
         assertEquals(386_902L, montoPagoDeTarjetaEnElDia(items, accountTypes))
         assertEquals(
-            "De eso, \$386.902 fueron a pagar tarjeta — ya contado en tu gasto del mes cuando compraste, " +
+            "Además, \$386.902 fueron a pagar tarjeta — ya contado en tu gasto del mes cuando compraste, " +
                 "no se duplica.",
             textoPagoDeTarjetaEnElDia(montoPagoDeTarjetaEnElDia(items, accountTypes)),
         )
