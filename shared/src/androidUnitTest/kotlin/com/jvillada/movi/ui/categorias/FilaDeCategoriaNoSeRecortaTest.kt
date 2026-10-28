@@ -55,7 +55,7 @@ class FilaDeCategoriaNoSeRecortaTest {
 
     @get:Rule val composeRule = createComposeRule()
 
-    private val categoria = CategoryUsage(name = "Restaurantes y domicilios", movements = 3)
+    private val categoria = CategoryUsage(name = "Restaurantes y domicilios", movements = 3, monthMovements = 3)
 
     @After
     fun limpiar() {
@@ -67,7 +67,7 @@ class FilaDeCategoriaNoSeRecortaTest {
         montar(fontScaleAmbiente = 1f)
 
         assertTextoSinRecortar(categoria.name)
-        assertTextoSinRecortar(resumenDeUsoCorto(categoria))
+        assertTextoSinRecortar(resumenDelPeriodoCorto(categoria))
 
         // Y la fila no creció más allá del mínimo: el esqueleto de la tarea 9 puede confiar en
         // que este es el alto real a la escala de todos los días, no uno que ya superó.
@@ -84,7 +84,7 @@ class FilaDeCategoriaNoSeRecortaTest {
         montar(fontScaleAmbiente = 1.6f)
 
         assertTextoSinRecortar(categoria.name)
-        assertTextoSinRecortar(resumenDeUsoCorto(categoria))
+        assertTextoSinRecortar(resumenDelPeriodoCorto(categoria))
 
         val fila = composeRule.onNodeWithTag(tagDeFilaDeCategoria(categoria.name)).getUnclippedBoundsInRoot()
         val altoDeLaFila = fila.bottom - fila.top

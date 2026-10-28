@@ -435,6 +435,15 @@ AvatarDePersona("Caro", tono = TonoDeIcono.Info)
 **`Campo`**, **`CampoDeMonto`**, **`GrupoDeCampos`**, **`RotuloDeCampo`**, **`AyudaDeCampo`** y
 **`PieDeHoja`** (vuelta de diseño 6, `ds/Campo.kt`) — los formularios. Ver §15.
 
+**`CampoDeBusqueda`** (vuelta 35, `ds/CampoDeBusqueda.kt`) — lo que se escribe para filtrar una lista:
+la lupa, el texto (la guía en `textoApagado`, de un renglón) y la × solo con texto, que borra y deja el
+foco. Una superficie sin borde, `Radio.m`, de 48 de alto con la × o sin ella. `Capa1` sobre el fondo de
+una pantalla; `Capa2` dentro de una hoja. No es un `Campo`: no tiene rótulo, ayuda ni error. Ver §37.
+```kotlin
+CampoDeBusqueda(consulta, { consulta = it }, guia = "Gasto, comercio o persona", alBuscar = ::anotar)
+CampoDeBusqueda(busqueda, { busqueda = it }, guia = "Buscar o crear categoría", nivel = NivelDeSuperficie.Capa2)
+```
+
 ## 7. La regla de secciones
 
 1. **Cada pantalla es dueña de una pregunta.** Inicio (antes «Hoy»): «¿cuánto me queda y qué hago
@@ -454,7 +463,7 @@ AvatarDePersona("Caro", tono = TonoDeIcono.Info)
 | `ElSistemaNoTieneValoresSueltosTest` | cero `.dp`/`.sp`/`Color(0x)`/radio/`fontSize`/`alpha` a mano dentro de `ds/` |
 | `ContrasteDeLosTokensTest` | el contraste de cada par, con las capas nuevas |
 | `LosTamanosSueltosSoloBajanTest` | los `fontSize` sueltos |
-| `LosCamposSonDelSistemaTest` | ningún `BasicTextField` / `TextField` / `OutlinedTextField` en `ui/` fuera de `ui/components/` y de seis excepciones con nombre (§15) |
+| `LosCamposSonDelSistemaTest` | ningún `BasicTextField` / `TextField` / `OutlinedTextField` en `ui/` fuera de `ui/components/` y de cuatro excepciones con nombre (§15; Buscar salió en la vuelta 35, §37) |
 | `LosRotulosNoGritanTest` | ninguna función `…SectionLabel` en `ui/`, y ningún `Seccion` / `GrupoDeCampos` / `RotuloDeCampo` / `rotulo =` / `label =` con un texto entero en mayúsculas |
 | `LasGuiasNoParecenDatosTest` | ningún `guia =` / `placeholder =` con un literal puramente numérico en `ui/` («20», «29,6», «$ 0»): va `ejemplo =`, y sin su propio «Ej:» (§15) |
 | `LosCamposDelSistemaTest` (Robolectric) | el rótulo en frase, la guía de un monto en la letra de cuerpo y el valor en la de cifras, el error en `sale`, «¿Qué es esto?» abre y cierra, la caja llega a 48, y nada se recorta a 360 dp con la letra a ×1,3 (también en las hojas de crédito y tarjeta) |
@@ -1514,3 +1523,41 @@ elegida en el selector vuelve primera y entera, y elegir chip, categoría o cuen
 ni corta «Guardar movimiento»), más un caso en `HojaAgregarSugerenciaDeCategoriaTest` (la sugerencia
 aparece y se va sin mover el teclado, y va antes de «Todas ›», que no se corta). Las pruebas que abrían el selector tocando la fila ahora tocan
 «Todas».
+
+## 37. Vuelta 35: Buscar y Categorías se ven como el resto
+
+Revisado en la vista previa de la vuelta 34 (d567ba4c) con la cuenta demo, a 390 px. Un componente
+nuevo en `ds/`, `CampoDeBusqueda`; ningún token nuevo. **Solo presentación**: sin cambios de plata ni
+de server.
+
+- **Los resultados de Buscar van en su superficie.** «Movimientos · 2» y «Comercios · 1» eran filas
+  sueltas sobre el fondo. Ahora cada grupo —movimientos, comercios, personas y comercios, categorías,
+  cuentas, pantallas y las recientes— es su `Seccion` y, debajo, una `Superficie` de lista con el
+  `Separador` entre filas, como en Movimientos, Ajustes y Patrimonio. Las filas no cambiaron: la
+  `Fila` con el avatar del comercio, título, subtítulo y la `Cifra` con su signo (`CifraDelMovimiento`).
+  Un grupo es un solo `item` de la lista perezosa (son pocas filas: 30 movimientos, 8 por grupo), así
+  la superficie no se parte.
+- **Una sola caja de búsqueda** (`CampoDeBusqueda`, §6). La de Buscar era blanca, con lupa y ×; la de
+  Categorías, el `Campo` gris de los formularios, sin lupa ni ×; el selector de categoría y Personas y
+  comercios armaban la suya. Ahora la usan Buscar, Categorías (la lista y «Unificar en…»), el selector
+  de categoría —Agregar, recategorizar, Presupuestos, Recurrentes y, por ser el mismo componente,
+  Reconciliar— y Personas y comercios. Buscar salió de las excepciones de `LosCamposSonDelSistemaTest`,
+  y el `18.dp` de la lupa del selector se fue (`dp_sueltos` 119 → 118).
+- **En Categorías, las cifras dicen de qué son.** La fila decía «Carro · 3 movimientos · $260.000»
+  sin decir el alcance, y **medía dos cosas**: el conteo era de toda la historia (`movements` + los de
+  otra moneda) y la cifra, del período en curso (`monthTotal` / `monthIncomeTotal`, la regla de «En qué
+  se va», §21). Ahora los dos son del período —la regla que esta pantalla ya usaba para la plata—: el
+  renglón es `monthMovements` (`resumenDelPeriodoCorto`; «Sin movimientos tuyos» si solo hay tu parte
+  de lo que pagó otra persona), y la lista lleva arriba la `Seccion` «Este período» —«Este mes» si el
+  período es el mes del calendario, el mismo `rotuloDelPeriodoDeCategorias` de la hoja de detalle—,
+  también mientras carga, para que la lista no baje. Lo de toda la historia sigue en la hoja de detalle
+  (`resumenDeUso`). El orden de la lista no cambió (alfabético).
+
+**Las líneas base:** `dp_sueltos` 118, `radios_con_numero` 3, y las guardas en 0 siguen en 0. Lo
+vigilan `LosResultadosDeBuscarVanEnSuSuperficieTest` (ningún resultado ni reciente fuera de la
+superficie de su grupo, una por grupo, el título encima), `UnSoloCampoDeBusquedaTest` (la × solo con
+texto, borra y deja el foco, la caja mide 48 con la × o sin ella; Buscar, Categorías, el selector y
+Personas y comercios escriben dentro de la caja del sistema y la × borra) y
+`CategoriasDicenDeQueSonLasCifrasTest` (el título «Este período» / «Este mes» encima de las filas, y el
+conteo de la fila del período: 3, no 40), más los casos de `resumenDelPeriodoCorto` en
+`CategoriasLogicTest`.

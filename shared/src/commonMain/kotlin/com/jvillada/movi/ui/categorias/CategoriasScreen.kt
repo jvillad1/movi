@@ -2,6 +2,7 @@ package com.jvillada.movi.ui.categorias
 
 import com.jvillada.movi.ui.components.ds.EsqueletoDeFila
 import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.Seccion
 import com.jvillada.movi.ui.components.ds.Chevron
 import com.jvillada.movi.ui.components.ds.PildoraDeFiltro
 import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
@@ -111,6 +112,7 @@ import com.jvillada.movi.ui.components.rememberCampoConSeleccion
 import com.jvillada.movi.ui.components.toUserMessage
 import kotlinx.coroutines.launch
 import com.jvillada.movi.ui.components.ds.Campo
+import com.jvillada.movi.ui.components.ds.CampoDeBusqueda
 import com.jvillada.movi.ui.components.ds.PieDeHoja
 import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.ui.components.ds.VarianteDeBoton
@@ -345,10 +347,13 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
                 }
             }
 
+            // Vuelta 35: la caja de búsqueda del sistema, la misma de Buscar (lupa, × y 48 de alto).
+            // Era el `Campo` gris de los formularios, sin lupa ni ×.
             CampoDeBusqueda(
                 valor = busqueda,
-                onValorCambia = { busqueda = it },
-                modifier = Modifier.padding(horizontal = Espacio.m),
+                alCambiar = { busqueda = it },
+                guia = GUIA_DE_BUSCAR_CATEGORIA,
+                modifier = Modifier.padding(horizontal = Medida.margenDePantalla),
             )
 
             if (error != null) {
@@ -374,6 +379,25 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
                 modifier = Modifier.weight(1f),
                 contentPadding = PaddingValues(top = Espacio.xs, bottom = Medida.botonFlotante + Medida.entreSecciones),
             ) {
+                // Vuelta 35: de qué son las cifras de las filas. «Carro · 3 movimientos · $260.000»
+                // no decía si era este período o desde siempre; ahora el renglón y la cifra son los
+                // dos del período en curso ([resumenDelPeriodoCorto], [cifrasDelMes]) y el título de
+                // la lista lo nombra, con el rótulo de la hoja de detalle («Este período», o «Este
+                // mes» si el período es el mes del calendario). Va también con el esqueleto, para
+                // que la lista no baje cuando llegan los datos.
+                if (leidas && visibles.isNotEmpty() || loading && !leidas) {
+                    item(key = "alcance") {
+                        // El tag en una caja propia: la `Seccion` ya trae el suyo.
+                        Box(
+                            modifier = Modifier
+                                .padding(horizontal = Medida.margenDePantalla)
+                                .padding(top = Espacio.xs)
+                                .testTag(TAG_ALCANCE_DE_CATEGORIAS),
+                        ) {
+                            Seccion(titulo = rotuloDelPeriodo)
+                        }
+                    }
+                }
                 if (loading && !leidas) {
                     // Ola B, tarea 9: antes de la primera lectura buena la pantalla quedaba en
                     // blanco entre los filtros/la búsqueda y la primera fila — ver
@@ -788,11 +812,11 @@ private fun Pastilla(texto: String, activa: Boolean, onClick: () -> Unit) {
     PildoraDeFiltro(texto, seleccionada = activa, onClick = onClick)
 }
 
-/** La búsqueda de la lista de categorías: un [Campo] del sistema, sin rótulo (la guía lo dice). */
-@Composable
-private fun CampoDeBusqueda(valor: String, onValorCambia: (String) -> Unit, modifier: Modifier = Modifier) {
-    Campo(valor, onValorCambia, modifier = modifier, guia = "Buscar categoría")
-}
+/** La guía de la búsqueda de categorías (la lista y «Unificar en…»). */
+const val GUIA_DE_BUSCAR_CATEGORIA: String = "Buscar categoría"
+
+/** El `testTag` del título de la lista, el que dice de qué período son las cifras (vuelta 35). */
+const val TAG_ALCANCE_DE_CATEGORIAS: String = "categorias:alcance"
 
 /** El `testTag` de [FilaDeCategoria], para medir su alto real en una prueba (fix round 1). */
 fun tagDeFilaDeCategoria(nombre: String): String = "categoria:fila:$nombre"
@@ -801,8 +825,9 @@ fun tagDeFilaDeCategoria(nombre: String): String = "categoria:fila:$nombre"
  * Ola B · tarea 5: la fila compacta. Reemplaza a la de dos etiquetas y una oración — «Tuya» y el
  * tipo («Ambos») salieron de acá: el tipo se dice solo cuando ayuda, y eso pasó a la hoja de
  * detalle (ver [etiquetaDeTipo]). Lo que queda es lo mínimo para reconocer una categoría y decidir
- * si vale la pena abrirla: el ícono, el nombre, la cifra del período si tiene, y cuánto la usó en
- * total, sin adornos.
+ * si vale la pena abrirla: el ícono, el nombre, cuántos movimientos tuvo en el período y su cifra
+ * del período si tiene, sin adornos. Vuelta 35: el renglón contaba los de toda la historia, al lado
+ * de una cifra del período; ahora los dos son del período, y el título de la lista lo dice.
  *
  * **Alto MÍNIMO** ([ALTO_DE_FILA_DE_CATEGORIA], vía `heightIn(min = …)`, no `height(…)`) — fix
  * round 1. `App.kt` multiplica la escala de letra ambiente por 1,12 en TODA la app (el «tamaño de
@@ -822,7 +847,7 @@ private fun FilaDeCategoria(categoria: CategoryUsage, primera: Boolean, ultima: 
     TramoDeLista(primera = primera, ultima = ultima) {
         Fila(
             titulo = categoria.name,
-            subtitulo = resumenDeUsoCorto(categoria),
+            subtitulo = resumenDelPeriodoCorto(categoria),
             inicio = { IconoDeCategoria(categoria.name) },
             final = cifrasDelMes(categoria)?.let { cifras -> { CifrasDeLaCategoria(cifras) } },
             onClick = onClick,
@@ -1344,7 +1369,13 @@ private fun HojaUnificar(
                 color = Movi.colores.texto,
                 modifier = Modifier.padding(top = Espacio.xxs, bottom = Espacio.s),
             )
-            CampoDeBusqueda(valor = busqueda, onValorCambia = { busqueda = it })
+            // Dentro de una hoja (capa 1): la caja va en la capa 2.
+            CampoDeBusqueda(
+                valor = busqueda,
+                alCambiar = { busqueda = it },
+                guia = GUIA_DE_BUSCAR_CATEGORIA,
+                nivel = NivelDeSuperficie.Capa2,
+            )
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
