@@ -64,7 +64,7 @@ class LaCuentaEnDosColumnasTest {
             ConClaseDeAncho {
                 EsqueletoDeLaCascara(
                     pantalla = pantalla,
-                    activeTab = NavTab.PATRIMONIO,
+                    activeTab = NavTab.TU,
                     conNavegacion = true,
                     onTabSelected = {},
                     relevoDeScroll = remember { RelevoDeScroll() },

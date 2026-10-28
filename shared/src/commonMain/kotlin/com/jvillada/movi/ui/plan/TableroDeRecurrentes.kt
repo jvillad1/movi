@@ -700,7 +700,7 @@ fun LazyListScope.tableroDeRecurrentes(
             bloqueadas = estado.pushStatus == "denied",
             onActivar = {
                 if (estado.pushStatus == "denied") {
-                    onNavigate(Screen.Mas)
+                    onNavigate(Screen.Tu)
                 } else {
                     PushOptIn.enable()
                     estado.pushRefreshTick++

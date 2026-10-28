@@ -232,7 +232,7 @@ class InicioConInstantaneaTest {
      * («Hola, …», del nombre del dueño) con el período. Su avatar sigue abriendo **Ajustes**.
      */
     @Test
-    fun `el encabezado saluda y el avatar abre Ajustes`() {
+    fun `el encabezado saluda y el avatar abre Tu`() {
         var navegoA: Screen? = null
         composeRule.setContent { MoviTheme { DashboardScreen(onNavigate = { navegoA = it }) } }
         composeRule.waitForIdle()
@@ -244,7 +244,7 @@ class InicioConInstantaneaTest {
         assertEquals(0, composeRule.onAllNodesWithContentDescription("Compartir un resumen", useUnmergedTree = true).fetchSemanticsNodes().size)
 
         composeRule.onNodeWithText("J", useUnmergedTree = true).performClick()
-        assertEquals(Screen.Mas, navegoA)
+        assertEquals(Screen.Tu, navegoA)
     }
 
     @Test

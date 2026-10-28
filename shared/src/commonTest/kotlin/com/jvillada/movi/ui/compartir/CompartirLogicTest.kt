@@ -78,9 +78,9 @@ class CompartirLogicTest {
     }
 
     @Test
-    fun `Compartir vive en Ajustes, que no es una pestana`() {
-        // Ola C: «Más» dejó de ser pestaña; Ajustes se abre por el avatar y no marca ninguna.
-        assertEquals(null, navTabFor(Screen.Compartir))
+    fun `Compartir vive en Tu, con lo que era Ajustes`() {
+        // Vuelta 38: lo que era Ajustes vive en la pestaña «Tú», y la marca.
+        assertEquals(com.jvillada.movi.ui.components.NavTab.TU, navTabFor(Screen.Compartir))
         assertTrue(esDeAjustes(Screen.Compartir))
     }
 }

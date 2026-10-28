@@ -206,7 +206,7 @@ fun CapturaDelBancoScreen(onNavigate: (Screen) -> Unit) {
         // «Por revisar», y esta pantalla es el historial.
         MinScreenHeader(
             title = tituloDeCapturaDelBanco,
-            leading = HeaderLeading.Back(fallback = Screen.Mas),
+            leading = HeaderLeading.Back(fallback = Screen.Tu),
             action = { BotonDeIcono(Icons.Rounded.Refresh, "Actualizar", onClick = { refreshKey++ }) },
         )
 

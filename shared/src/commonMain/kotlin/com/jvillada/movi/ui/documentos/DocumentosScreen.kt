@@ -274,7 +274,7 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
             // fuera nulo ni vacío, así que el título se corría apenas llegaba la lista.
             MinScreenHeader(
                 title = "Documentos",
-                leading = HeaderLeading.Back(fallback = Screen.Mas),
+                leading = HeaderLeading.Back(fallback = Screen.Tu),
                 accion = AccionDeEncabezado("Subir archivo", Icons.Rounded.Add, onClick = elegirArchivo),
             )
             val lista = documentos

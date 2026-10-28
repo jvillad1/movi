@@ -120,7 +120,7 @@ fun LoQueMoviSabeScreen(onNavigate: (Screen) -> Unit) {
     Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         MinScreenHeader(
             title = TITULO_LO_QUE_MOVI_SABE,
-            leading = HeaderLeading.Back(fallback = Screen.Mas),
+            leading = HeaderLeading.Back(fallback = Screen.Tu),
         )
         LazyColumn(
             contentPadding = PaddingValues(horizontal = Medida.margenDePantalla, vertical = Medida.dentroDeSeccion),

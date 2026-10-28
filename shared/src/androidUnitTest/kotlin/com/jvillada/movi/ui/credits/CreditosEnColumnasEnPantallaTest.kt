@@ -79,7 +79,7 @@ class CreditosEnColumnasEnPantallaTest {
             ConClaseDeAncho {
                 EsqueletoDeLaCascara(
                     pantalla = Screen.Credits,
-                    activeTab = NavTab.PATRIMONIO,
+                    activeTab = NavTab.TU,
                     conNavegacion = true,
                     onTabSelected = {},
                     relevoDeScroll = remember { RelevoDeScroll() },

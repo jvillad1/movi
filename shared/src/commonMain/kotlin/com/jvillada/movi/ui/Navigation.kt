@@ -268,7 +268,20 @@ sealed class Screen {
          */
         val abrirCategoria: Boolean = false,
     ) : Screen()
+    /**
+     * **Ajustes** (lo que abría el avatar). Vuelta 38: sus secciones se mudaron a [Tu], y pedir `Mas`
+     * —una pila vieja, el destino SDUI `"mas"` o `"profile"`, un enlace que nadie actualizó— lleva a
+     * «Tú» (ver [destinoVigente]). Se conserva para que esas rutas no se pierdan.
+     */
     data object Mas : Screen()
+    /**
+     * **«Tú»** (vuelta 38, la cuarta pestaña de la opción 3): el centro de lo personal. Arriba quién
+     * eres (avatar, nombre y correo), después «Tu patrimonio» con la cifra neta, «Personas» con su
+     * saldo y «Cuadre de saldos», y debajo todo lo que era Ajustes. Patrimonio, Personas (Espacios) y
+     * lo que se abría desde Ajustes se apilan encima, con su volver.
+     */
+    data object Tu : Screen()
+    /** **Patrimonio**. Desde la vuelta 38 se abre apilado sobre [Tu] (ver [NavStack.navegar]). */
     data object Accounts : Screen()
     /**
      * Detalle de una cuenta. Lleva el grupo de la cuenta además del id porque la navegación
@@ -314,8 +327,9 @@ sealed class Screen {
     data class EnQueSeVa(val periodo: String? = null) : Screen()
 
     /**
-     * **Espacios** (R3): lo grupal con casa propia —«Casa con Caro»—, su saldo de quién le debe a
-     * quién y lo que paga otra persona. Raíz de su pestaña.
+     * **Personas** (antes «Espacios», R3): lo grupal con casa propia —«Casa con Caro»—, su saldo de
+     * quién le debe a quién y lo que paga otra persona. Vuelta 38: dejó de ser pestaña; vive en
+     * [Tu] y se abre apilado encima (ver [NavStack.navegar]).
      */
     data object Espacios : Screen()
 
@@ -331,38 +345,41 @@ sealed class Screen {
  * resaltar el ítem activo en la barra (teléfono) y en el rail (pantalla ancha), que son los únicos
  * lugares donde se pinta la navegación — ninguna pantalla arma su propia barra.
  *
- * Ola C (2026-09): cuatro lugares, los mismos en el teléfono y en la web — **Hoy** (¿cómo estoy?),
- * **Movimientos** (¿qué pasó?), **Plan** (¿cuánto puedo gastar y qué me falta pagar?) y
- * **Patrimonio** (¿cuánto tengo y cuánto debo?). Cada pantalla marca la pestaña de la pregunta que
- * contesta: Presupuestos es Plan; Créditos, el cuadre y el detalle de cualquier cuenta son
- * Patrimonio; «Personas y comercios» es Movimientos (a quién le mandaste plata).
+ * Vuelta 38 (la opción 3): cuatro lugares, los mismos en el teléfono y en la web — **Inicio** (¿cómo
+ * estoy?), **Actividad** (¿qué pasó?), **Pagos** (¿cuánto puedo gastar y qué me falta pagar?) y **Tú**
+ * (lo tuyo: cuánto tienes y cuánto debes, las personas con las que compartes gastos y los ajustes).
+ * Cada pantalla marca la pestaña de la pregunta que contesta: Presupuestos y Tus períodos son Pagos;
+ * Patrimonio, Créditos, el cuadre, el detalle de cualquier cuenta, Personas y lo que era Ajustes son Tú.
  *
- * «Más» dejó de ser pestaña: Ajustes y lo que se abre desde ahí (Perfil, Categorías, Documentos,
- * Compartir, Movi AI, la captura del banco…) se alcanzan tocando el avatar, así que no marcan
- * ninguna — pero **la barra sigue pintada** (ver [muestraLaNavegacion]): ninguna pestaña marcada
- * no es lo mismo que sin navegación.
+ * Movi AI no marca ninguna en el teléfono (se abre desde Inicio y desde Tú); en el rail tiene su lugar
+ * ([destinoResaltado]). **La barra sigue pintada** aunque no haya pestaña marcada (ver
+ * [muestraLaNavegacion]).
  */
 fun navTabFor(screen: Screen): NavTab? = when (screen) {
     // «En qué se va» se abre desde Hoy y contesta la pregunta de Hoy: ¿cómo voy? Buscar también.
     Screen.Dashboard, Screen.Buscar, is Screen.EnQueSeVa -> NavTab.HOY
-    // «Por revisar» y el detalle de un mensaje se abren desde Movimientos (su renglón «N por
-    // revisar»): marcan esa pestaña, no Ajustes.
+    // «Por revisar» y el detalle de un mensaje se abren desde Actividad (su renglón «N por
+    // revisar»): marcan esa pestaña.
     is Screen.Transactions, Screen.PorRevisar, is Screen.SMSReconcile -> NavTab.MOVIMIENTOS
     is Screen.Plan, Screen.Budgets, Screen.Periodos, is Screen.DetalleDePeriodo -> NavTab.PLAN
-    Screen.Accounts, Screen.Credits, Screen.SalidaDeDeudas, Screen.CuadreDeSaldos, is Screen.CuadrarLaCuenta -> NavTab.PATRIMONIO
-    Screen.Espacios, is Screen.Espacio, is Screen.Destinos -> NavTab.ESPACIOS
+    // Vuelta 38: lo que eran las pestañas Patrimonio y Espacios, y lo que era Ajustes, vive en «Tú».
+    Screen.Tu, Screen.Mas,
+    Screen.Accounts, Screen.Credits, Screen.SalidaDeDeudas, Screen.CuadreDeSaldos, is Screen.CuadrarLaCuenta,
+    Screen.Espacios, is Screen.Espacio, is Screen.Destinos,
+    Screen.CapturaDelBanco, Screen.Categorias, Screen.PrimerosPasos, Screen.Documentos, Screen.Compartir,
+    Screen.LoQueMoviSabe, Screen.BorrarLaCuenta, Screen.EditarInicio -> NavTab.TU
     // El detalle hereda la pestaña de la pantalla donde vive la cuenta — así resaltar y
-    // «volver» no pueden contradecirse. Hoy las dos (Cuentas y Créditos) son Patrimonio.
+    // «volver» no pueden contradecirse. Las dos (Cuentas y Créditos) son Tú.
     is Screen.AccountDetail -> navTabFor(homeScreenFor(screen.group))
     else -> null
 }
 
 /**
- * **Ajustes y lo que se abre desde ahí** — las pantallas a las que se llega por el avatar.
+ * **Ajustes y lo que se abre desde ahí** — las pantallas a las que se llegaba por el avatar.
  *
- * Ola C: son las que hasta acá marcaban la pestaña «Más». No marcan ninguna pestaña (ver
- * [navTabFor]), pero siguen siendo pantallas de todos los días con la barra abajo: esconderla al
- * entrar a Perfil dejaría al dueño sin forma de saltar a Movimientos que no sea volver dos veces.
+ * Ola C: son las que hasta acá marcaban la pestaña «Más». Vuelta 38: casi todas marcan «Tú» (ver
+ * [navTabFor]); Movi AI no marca ninguna en el teléfono, pero sigue con la barra abajo: esconderla
+ * dejaría al dueño sin forma de saltar a Actividad que no sea volver dos veces.
  */
 fun esDeAjustes(screen: Screen): Boolean = when (screen) {
     Screen.Mas, is Screen.AIChat,
@@ -412,8 +429,7 @@ fun screenForTab(tab: NavTab): Screen = when (tab) {
     NavTab.MOVIMIENTOS -> Screen.Transactions()
     NavTab.ADD -> Screen.QuickAdd()
     NavTab.PLAN -> Screen.Plan()
-    NavTab.PATRIMONIO -> Screen.Accounts
-    NavTab.ESPACIOS -> Screen.Espacios
+    NavTab.TU -> Screen.Tu
     NavTab.MOVI_AI -> Screen.AIChat()
 }
 
@@ -473,6 +489,9 @@ fun destinoVigente(screen: Screen): Screen = when {
     // y los pagos de tarjeta en una sola bandeja. El índice sigue valiendo 3 (no se renumera) y
     // quien lo pida llega a donde ahora vive lo que mostraba.
     screen is Screen.Transactions && screen.chipInicial == CHIP_POR_CONFIRMAR -> Screen.PorRevisar
+    // Vuelta 38: Ajustes se mudó a «Tú». Quien pida Ajustes (el destino SDUI `"mas"`/`"profile"`, una
+    // pila vieja) llega a Tú, donde están sus mismas secciones.
+    screen == Screen.Mas -> Screen.Tu
     else -> screen
 }
 
@@ -530,6 +549,11 @@ object NavStack {
                     stack.addAll(pila)
                 }
             }
+            // Vuelta 38: Patrimonio y Personas eran raíces; ahora se abren encima de «Tú».
+            seAbreSobreTu(screen) && Screen.Tu !in stack -> {
+                stack.clear()
+                stack.addAll(pilaDeLaPestana(Screen.Tu) + screen)
+            }
             shouldPush(stack, screen) -> stack.add(screen)
         }
     }
@@ -552,14 +576,23 @@ object NavStack {
     }
 
     /**
-     * Las cuatro pantallas raíz de la barra (y del rail): Hoy, Movimientos, Plan y Patrimonio, tal
-     * como las abre su pestaña ([screenForTab]). Movimientos con un chip puesto o Plan en
-     * Presupuestos no son raíz: son otra pantalla de la misma pestaña, y se apilan.
+     * Las cuatro pantallas raíz de la barra (y del rail): Inicio, Actividad, Pagos y Tú, tal como las
+     * abre su pestaña ([screenForTab]). Actividad con un chip puesto o Pagos en Presupuestos no son
+     * raíz: son otra pantalla de la misma pestaña, y se apilan.
      */
     fun esRaizDePestana(screen: Screen): Boolean = screen in RAICES_DE_PESTANA
 
     private val RAICES_DE_PESTANA: List<Screen> =
-        listOf(NavTab.HOY, NavTab.MOVIMIENTOS, NavTab.PLAN, NavTab.ESPACIOS, NavTab.PATRIMONIO).map(::screenForTab)
+        listOf(NavTab.HOY, NavTab.MOVIMIENTOS, NavTab.PLAN, NavTab.TU).map(::screenForTab)
+
+    /**
+     * **Lo que antes era raíz y ahora vive en «Tú»** (vuelta 38): Patrimonio y Personas (Espacios).
+     * Pedidos desde fuera de Tú —el tramo de patrimonio de Inicio, «Repartir», un enlace viejo— no se
+     * apilan sobre la pantalla de donde se pidieron: la pila queda `[Inicio, Tú, Patrimonio]`, así la
+     * barra marca «Tú» y su volver lleva a Tú, la pantalla donde viven. Desde dentro de Tú se apilan
+     * como cualquier otra.
+     */
+    fun seAbreSobreTu(screen: Screen): Boolean = screen == Screen.Accounts || screen == Screen.Espacios
 
     /**
      * **Saltar entre pestañas no apila historial** (Ola 1 · «Que Movi se sienta viva»).

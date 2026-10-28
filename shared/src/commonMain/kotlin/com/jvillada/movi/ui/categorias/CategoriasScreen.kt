@@ -303,7 +303,7 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
                 leading = leadingFor(
                     Screen.Categorias,
                     onNavigate = onNavigate,
-                    fallback = Screen.Mas,
+                    fallback = Screen.Tu,
                 ),
                 subtitle = when {
                     loading || !leidas -> null

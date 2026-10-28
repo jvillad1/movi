@@ -19,7 +19,7 @@ class MoviAiComoRaizTest {
 
     @Test
     fun `tocar Movi AI en el rail deja la pila como la de una pestana`() {
-        val pila = mutableListOf<Screen>(Screen.Dashboard, Screen.Transactions(), Screen.Mas)
+        val pila = mutableListOf<Screen>(Screen.Dashboard, Screen.Tu, Screen.Categorias)
         NavStack.navegarALaPestana(pila, NavTab.MOVI_AI)
         assertEquals(listOf(Screen.Dashboard, Screen.AIChat()), pila)
     }
@@ -27,15 +27,15 @@ class MoviAiComoRaizTest {
     @Test
     fun `las otras pestanas se navegan como siempre`() {
         val pila = mutableListOf<Screen>(Screen.Dashboard, Screen.AIChat())
-        NavStack.navegarALaPestana(pila, NavTab.PATRIMONIO)
-        assertEquals(listOf(Screen.Dashboard, Screen.Accounts), pila)
+        NavStack.navegarALaPestana(pila, NavTab.TU)
+        assertEquals(listOf(Screen.Dashboard, Screen.Tu), pila)
     }
 
     @Test
-    fun `desde Ajustes Movi AI se sigue apilando`() {
-        val pila = mutableListOf<Screen>(Screen.Dashboard, Screen.Mas)
+    fun `desde Tu Movi AI se sigue apilando`() {
+        val pila = mutableListOf<Screen>(Screen.Dashboard, Screen.Tu)
         NavStack.navegar(pila, Screen.AIChat())
-        assertEquals(listOf(Screen.Dashboard, Screen.Mas, Screen.AIChat()), pila, "volver regresa a Ajustes")
+        assertEquals(listOf(Screen.Dashboard, Screen.Tu, Screen.AIChat()), pila, "volver regresa a Tú")
     }
 
     @Test
@@ -53,7 +53,7 @@ class MoviAiComoRaizTest {
 
     @Test
     fun `con el rail, apilada encima de Ajustes conserva la flecha`() {
-        assertFalse(moviAiEsLaRaizDeSuPestana(listOf(Screen.Dashboard, Screen.Mas, Screen.AIChat()), WindowWidthClass.Expanded))
+        assertFalse(moviAiEsLaRaizDeSuPestana(listOf(Screen.Dashboard, Screen.Tu, Screen.AIChat()), WindowWidthClass.Expanded))
         assertFalse(moviAiEsLaRaizDeSuPestana(listOf(Screen.Dashboard, Screen.Accounts), WindowWidthClass.Expanded), "no es Movi AI")
     }
 }

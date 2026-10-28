@@ -43,15 +43,14 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 /**
- * # Las cuatro pestañas, en el teléfono y en la web (ola C)
+ * # Las cuatro pestañas, en el teléfono y en la web (vuelta 38, la opción 3)
  *
- * «Hoy · Movimientos · + · Plan · Patrimonio» en la barra del teléfono y las mismas cuatro más
- * «Agregar» en el rail de la web — sin «Más», Créditos ni Presupuestos. Y el avatar, que era la
- * puerta de Perfil, ahora abre Ajustes.
+ * «Inicio · Actividad · Pagos · Tú» en la barra del teléfono —sin «+»— y las mismas cuatro más Movi AI
+ * y «Agregar» en el rail de la web. Patrimonio, Espacios (Personas) y Ajustes viven en «Tú», y el
+ * avatar lleva ahí. (Ola C fijó la regla de las cuatro, las mismas en los dos.)
  *
- * `@GraphicsMode(NATIVE)` y `sdk = [34]`: que «Movimientos» entre entero a 390 dp se mide con el
- * motor de texto real (ver `CreditosNoAfirmanMientrasCarganTest`), y con la letra 12 % más grande
- * que App.kt le pone a toda la app — medirlo sin eso sería medir otra app.
+ * `@GraphicsMode(NATIVE)` y `sdk = [34]`: que los rótulos entren enteros se mide con el motor de texto
+ * real, y con la letra 12 % más grande que App.kt le pone a toda la app.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -60,18 +59,19 @@ class LasCuatroPestanasTest {
 
     @get:Rule val composeRule = createComposeRule()
 
-    private val rotulos = listOf("Inicio", "Movimientos", "Plan", "Espacios", "Patrimonio")
-    // Ola R1: «Hoy» volvió a llamarse «Inicio»; lo que ya no es pestaña es «Hoy».
-    private val loQueYaNoEsPestana = listOf("Más", "Hoy", "Movs", "Cuentas", "Créditos", "Presupuestos")
+    private val rotulos = listOf("Inicio", "Actividad", "Pagos", "Tú")
+    // Lo que ya no es pestaña: las de antes de la vuelta 38 («Movimientos», «Plan», «Espacios»,
+    // «Patrimonio») y las de antes de la ola C.
+    private val loQueYaNoEsPestana = listOf("Movimientos", "Plan", "Espacios", "Patrimonio", "Más", "Hoy", "Movs", "Cuentas", "Créditos", "Presupuestos", "Ajustes")
 
     private var elegida: NavTab? = null
 
     /** La barra del teléfono como la pinta App.kt: al pie, con la letra de la app. */
-    private fun montarBarra(activa: NavTab? = NavTab.HOY, letraDelSistema: Float = 1f) {
+    private fun montarBarra(activa: NavTab? = NavTab.HOY) {
         composeRule.setContent {
             val base = LocalDensity.current
             CompositionLocalProvider(
-                LocalDensity provides Density(base.density, base.fontScale * letraDelSistema * 1.12f),
+                LocalDensity provides Density(base.density, base.fontScale * 1.12f),
                 LocalWindowWidthClass provides WindowWidthClass.Compact,
             ) {
                 MoviTheme {
@@ -83,11 +83,11 @@ class LasCuatroPestanasTest {
         }
     }
 
-    private fun montarRail(compacto: Boolean = false) {
+    private fun montarRail(compacto: Boolean = false, activa: NavTab = NavTab.PLAN) {
         composeRule.setContent {
             val clase = if (compacto) WindowWidthClass.Medium else WindowWidthClass.Expanded
             CompositionLocalProvider(LocalWindowWidthClass provides clase) {
-                MoviTheme { MinNavRail(active = NavTab.PLAN, onTabSelected = { elegida = it }, compacto = compacto) }
+                MoviTheme { MinNavRail(active = activa, onTabSelected = { elegida = it }, compacto = compacto) }
             }
         }
     }
@@ -102,18 +102,15 @@ class LasCuatroPestanasTest {
     // ── La barra del teléfono ─────────────────────────────────────────────────
 
     @Test
-    fun `la barra pinta las cuatro pestanas y el boton de agregar, y no Mas`() {
+    fun `la barra pinta las cuatro pestanas, sin mas ni las de antes`() {
         montarBarra()
 
         rotulos.forEach { composeRule.onNodeWithText(it, useUnmergedTree = true).assertIsDisplayed() }
-        composeRule.onNodeWithContentDescription("Agregar", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Agregar", useUnmergedTree = true).assertDoesNotExist()
         loQueYaNoEsPestana.forEach { composeRule.onNodeWithText(it, useUnmergedTree = true).assertDoesNotExist() }
     }
 
-    /**
-     * **Movi AI es del rail, no de la barra del teléfono.** Un quinto lugar abajo apretaría los cuatro
-     * rótulos que las pruebas de esta clase miden; en el teléfono Movi AI se abre desde Hoy.
-     */
+    /** **Movi AI es del rail, no de la barra del teléfono.** En el teléfono se abre desde Inicio y desde Tú. */
     @Test
     fun `la barra del telefono no tiene a Movi AI`() {
         montarBarra()
@@ -122,68 +119,38 @@ class LasCuatroPestanasTest {
         composeRule.onNodeWithContentDescription(destinoMoviAi.label, useUnmergedTree = true).assertDoesNotExist()
     }
 
-    /**
-     * «Movimientos» va entero, no «Movs»: entra a 390 dp junto a las otras tres y el «+», en un solo
-     * renglón y sin recortarse. Se miran los cuatro rótulos porque si la fila no entrara, el que se
-     * recorta es el último (la `Row` le da a cada uno lo que sobra), no necesariamente el largo.
-     */
+    /** Los cuatro rótulos entran enteros a 390 dp, en un renglón (a 360, `LasCuatroPestanasA360Test`). */
     @Test
-    fun `Movimientos entra entero a 390 dp junto a las otras`() {
+    fun `los cuatro rotulos entran enteros a 390 dp`() {
         montarBarra()
 
         rotulos.forEach { rotulo ->
             val texto = layoutDelTexto(rotulo)
-            // `maxLines = 1`: un rótulo que no entrara se partiría en dos y el segundo renglón se
-            // cortaría — eso es `didExceedMaxLines`. (No `hasVisualOverflow`: con la medida de
-            // semántica compara contra el ancho máximo de la fila, no contra el del rótulo.)
             assertEquals(1, texto.lineCount, "«$rotulo» en un renglón")
             assertFalse(texto.multiParagraph.didExceedMaxLines, "«$rotulo» sin partirse")
-            // Y el nodo mide al menos lo que mide el texto: la fila no lo apretó.
             val anchoDelTexto = texto.getLineRight(0) - texto.getLineLeft(0)
             val anchoDelNodo = composeRule.onNodeWithText(rotulo, useUnmergedTree = true)
                 .fetchSemanticsNode().boundsInRoot.width
             assertTrue(anchoDelNodo + 0.5f >= anchoDelTexto, "«$rotulo» entero: $anchoDelNodo < $anchoDelTexto")
         }
         val ancho = composeRule.onRoot().fetchSemanticsNode().boundsInRoot.right
-        val patrimonio = composeRule.onNodeWithText("Patrimonio", useUnmergedTree = true)
-            .fetchSemanticsNode().boundsInRoot
-        assertTrue(patrimonio.right <= ancho, "el último rótulo termina adentro de la pantalla")
-    }
-
-    /**
-     * **Con la letra del sistema más grande (1,3×, y encima el 1,12× de la app) ningún rótulo sale
-     * cortado.** R3: con Espacios son cinco pestañas y a 1,3× no entran las cinco con su rótulo, así
-     * que la barra muestra solo el de la activa (las demás, su ícono; el lector de pantalla las
-     * sigue nombrando). El rótulo no se achica nunca por debajo del token. Ver `rotulosQueEntran`.
-     */
-    @Test
-    fun `con la letra del sistema al 130 por ciento ningun rotulo sale cortado`() {
-        montarBarra(letraDelSistema = 1.3f)
-
-        val texto = layoutDelTexto("Inicio")
-        assertEquals(1, texto.lineCount)
-        assertFalse(texto.multiParagraph.didExceedMaxLines, "«Inicio» sin partirse")
-        rotulos.filter { it != "Inicio" }.forEach {
-            composeRule.onNodeWithText(it, useUnmergedTree = true).assertDoesNotExist()
-            composeRule.onNodeWithContentDescription(it, useUnmergedTree = true).assertIsDisplayed()
-        }
+        val tu = composeRule.onNodeWithText("Tú", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertTrue(tu.right <= ancho, "el último rótulo termina adentro de la pantalla")
     }
 
     @Test
     fun `tocar una pestana la elige`() {
         montarBarra()
 
-        composeRule.onNodeWithText("Plan", useUnmergedTree = true).performClick()
+        composeRule.onNodeWithText("Pagos", useUnmergedTree = true).performClick()
         assertEquals(NavTab.PLAN, elegida)
-        composeRule.onNodeWithText("Patrimonio", useUnmergedTree = true).performClick()
-        assertEquals(NavTab.PATRIMONIO, elegida)
-        composeRule.onNodeWithText("Espacios", useUnmergedTree = true).performClick()
-        assertEquals(NavTab.ESPACIOS, elegida)
-        composeRule.onNodeWithContentDescription("Agregar", useUnmergedTree = true).performClick()
-        assertEquals(NavTab.ADD, elegida)
+        composeRule.onNodeWithText("Tú", useUnmergedTree = true).performClick()
+        assertEquals(NavTab.TU, elegida)
+        composeRule.onNodeWithText("Actividad", useUnmergedTree = true).performClick()
+        assertEquals(NavTab.MOVIMIENTOS, elegida)
     }
 
-    /** En Ajustes no hay pestaña marcada, pero la barra sigue ahí con sus cuatro. */
+    /** Con Movi AI abierta en el teléfono no hay pestaña marcada, pero la barra sigue ahí con sus cuatro. */
     @Test
     fun `sin pestana activa la barra se pinta igual`() {
         montarBarra(activa = null)
@@ -194,14 +161,14 @@ class LasCuatroPestanasTest {
     // ── El rail de la web ─────────────────────────────────────────────────────
 
     @Test
-    fun `el rail pinta las mismas cuatro, Movi AI y Agregar, sin Creditos ni Presupuestos ni Mas`() {
+    fun `el rail pinta las mismas cuatro, Movi AI y Agregar, sin las de antes`() {
         montarRail()
 
         rotulos.forEach { composeRule.onNodeWithText(it, useUnmergedTree = true).assertIsDisplayed() }
         composeRule.onNodeWithText("Movi AI", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("Agregar", useUnmergedTree = true).assertIsDisplayed()
         loQueYaNoEsPestana.forEach { composeRule.onNodeWithText(it, useUnmergedTree = true).assertDoesNotExist() }
-        assertEquals(5, destinosPrincipales.size)
+        assertEquals(4, destinosPrincipales.size)
         assertEquals(destinosPrincipales + destinoMoviAi, destinosDelRail)
     }
 
@@ -225,70 +192,73 @@ class LasCuatroPestanasTest {
     fun `tocar una entrada del rail la elige`() {
         montarRail()
 
-        composeRule.onNodeWithText("Movimientos", useUnmergedTree = true).performClick()
+        composeRule.onNodeWithText("Actividad", useUnmergedTree = true).performClick()
         assertEquals(NavTab.MOVIMIENTOS, elegida)
+        composeRule.onNodeWithText("Tú", useUnmergedTree = true).performClick()
+        assertEquals(NavTab.TU, elegida)
         composeRule.onNodeWithText("Agregar", useUnmergedTree = true).performClick()
         assertEquals(NavTab.ADD, elegida)
     }
 
-    // ── El avatar abre Ajustes ────────────────────────────────────────────────
+    // ── El avatar abre Tú ─────────────────────────────────────────────────────
 
     @Test
-    fun `el avatar abre Ajustes, no Perfil`() {
+    fun `el avatar abre Tu`() {
         SessionManager.save(token = "tok", userId = "u1", name = "Juan", email = "juan@ejemplo.com")
         var navegoA: Screen? = null
         composeRule.setContent {
-            MoviTheme { MinScreenHeader(title = "Plan", leading = HeaderLeading.Avatar { navegoA = it }) }
+            MoviTheme { MinScreenHeader(title = "Pagos", leading = HeaderLeading.Avatar { navegoA = it }) }
         }
 
         composeRule.onNodeWithText("J", useUnmergedTree = true).performClick()
 
-        assertEquals(Screen.Mas, navegoA)
+        assertEquals(Screen.Tu, navegoA)
     }
 
     /**
-     * Solo la pantalla principal de una pestaña lleva avatar. Presupuestos suelto y Créditos se
-     * abren desde Plan y desde Patrimonio, así que llevan flecha — en el teléfono y en la web por
-     * igual, ahora que las dos muestran las mismas pestañas.
+     * Solo la pantalla principal de una pestaña lleva avatar; «Tú» no lleva nada (sería ella misma).
+     * Presupuestos suelto, Créditos, Patrimonio y Personas se abren desde Pagos y desde Tú, así que
+     * llevan flecha — en el teléfono y en la web por igual.
      */
     @Test
     fun `avatar solo en la pantalla principal de cada pestana`() {
         val ir: (Screen) -> Unit = {}
-        listOf(Screen.Dashboard, Screen.Transactions(), Screen.Plan(), Screen.Accounts).forEach {
+        listOf(Screen.Dashboard, Screen.Transactions(), Screen.Plan()).forEach {
             assertIs<HeaderLeading.Avatar>(leadingFor(it, ir, fallback = Screen.Dashboard), "$it")
         }
+        assertEquals(HeaderLeading.Ninguno, leadingFor(Screen.Tu, ir, fallback = Screen.Dashboard))
         assertEquals(
             HeaderLeading.Back(Screen.Plan(SEGMENTO_PRESUPUESTOS)),
             leadingFor(Screen.Budgets, ir, fallback = Screen.Plan(SEGMENTO_PRESUPUESTOS)),
         )
         assertEquals(HeaderLeading.Back(Screen.Accounts), leadingFor(Screen.Credits, ir, fallback = Screen.Accounts))
-        assertEquals(HeaderLeading.Back(Screen.Mas), leadingFor(Screen.Categorias, ir, fallback = Screen.Mas))
+        assertEquals(HeaderLeading.Back(Screen.Tu), leadingFor(Screen.Accounts, ir, fallback = Screen.Tu))
+        assertEquals(HeaderLeading.Back(Screen.Tu), leadingFor(Screen.Espacios, ir, fallback = Screen.Tu))
+        assertEquals(HeaderLeading.Back(Screen.Tu), leadingFor(Screen.Categorias, ir, fallback = Screen.Tu))
     }
 
     // ── El rail compacto de una ventana mediana (Ola W1) ──────────────────────
 
     /**
      * Entre 600 y 999 dp ni la barra del teléfono ni el rail de 216 dp: un rail de 80 dp con las
-     * mismas cuatro pestañas, con su rótulo corto, y el «+» arriba.
+     * mismas cuatro pestañas, con su rótulo, y el «+» arriba.
      */
     @Test
-    fun `el rail compacto pinta las mismas cuatro con su rotulo corto y el boton de agregar`() {
+    fun `el rail compacto pinta las mismas cuatro con su rotulo y el boton de agregar`() {
         montarRail(compacto = true)
 
-        // El lector de pantalla oye el nombre entero una vez; el rótulo corto es solo lo que se ve.
         destinosPrincipales.forEach {
             composeRule.onNodeWithContentDescription(it.label, useUnmergedTree = true).assertIsDisplayed()
         }
         composeRule.onNodeWithContentDescription("Agregar", useUnmergedTree = true).assertIsDisplayed()
-        loQueYaNoEsPestana.filter { it != "Movs" }
-            .forEach { composeRule.onNodeWithText(it, useUnmergedTree = true).assertDoesNotExist() }
+        loQueYaNoEsPestana.forEach { composeRule.onNodeWithText(it, useUnmergedTree = true).assertDoesNotExist() }
     }
 
     @Test
     fun `tocar una entrada del rail compacto la elige, y el mas abre Agregar`() {
         montarRail(compacto = true)
 
-        composeRule.onNodeWithContentDescription("Movimientos", useUnmergedTree = true).performClick()
+        composeRule.onNodeWithContentDescription("Actividad", useUnmergedTree = true).performClick()
         assertEquals(NavTab.MOVIMIENTOS, elegida)
         composeRule.onNodeWithContentDescription("Agregar", useUnmergedTree = true).performClick()
         assertEquals(NavTab.ADD, elegida)

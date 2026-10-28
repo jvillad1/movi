@@ -531,7 +531,7 @@ fun DashboardScreen(
             Encabezado(
                 titulo = saludoDelInicio(SessionManager.userName),
                 subtitulo = periodoDelEncabezado(data),
-                inicio = { AvatarButton(onClick = { onNavigate(Screen.Mas) }) },
+                inicio = { AvatarButton(onClick = { onNavigate(Screen.Tu) }) },
                 acciones = {
                     // Recargando con cifras ya pintadas (la caché o la instantánea): una línea discreta
                     // en vez de la barra de ancho completo. El alto del encabezado lo fija su mínimo,
