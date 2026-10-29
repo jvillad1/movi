@@ -199,12 +199,18 @@ const val TAG_MONTO_EN_LA_MONEDA_DE_LA_DEUDA: String = "sms:dos-patas:monto-en-l
  * [montoEnLaMonedaDeLaDeuda] es lo que el dueño escribió en «¿Cuánto bajó la deuda en USD?»; solo
  * viaja en un pago de tarjeta entre monedas ([pideElMontoEnLaMonedaDeLaDeuda]) y si es mayor que cero.
  * Sin él, el server convierte con la tasa del día.
+ *
+ * Vuelta 56 · **una cuota va siempre con `esLaCuota`**: así el server pregunta antes de saldar dos veces
+ * la cuota del mismo período (409 `CUOTA_YA_PAGADA`, como `vincular-deuda` desde el detalle) y la
+ * pantalla ofrece «Un abono extra». [comoAbono] es esa respuesta: el server escribe el traspaso de
+ * siempre hacia el crédito, que no salda ninguna cuota. Solo vale en una cuota.
  */
 fun pedidoDeDosPatas(
     propuestas: DosPatasPropuestas,
     leido: ParsedSms,
     momento: Long,
     montoEnLaMonedaDeLaDeuda: Long? = null,
+    comoAbono: Boolean = false,
     nuevoId: (String) -> String,
 ): DosPatasDelAviso = DosPatasDelAviso(
     operacion = propuestas.operacion,
@@ -219,7 +225,12 @@ fun pedidoDeDosPatas(
     avisoDelLadoQueEntra = propuestas.entrante,
     montoEnLaMonedaDeLaDeuda = montoEnLaMonedaDeLaDeuda
         ?.takeIf { it > 0L && pideElMontoEnLaMonedaDeLaDeuda(propuestas) },
+    esLaCuota = propuestas.operacion == OperacionDelAviso.CUOTA && !comoAbono,
+    comoAbono = propuestas.operacion == OperacionDelAviso.CUOTA && comoAbono,
 )
+
+/** El tag de la pregunta «La cuota de octubre de X ya está pagada. ¿Este pago es un abono extra?» en Revisar aviso. */
+const val TAG_CUOTA_YA_PAGADA_EN_EL_AVISO: String = "sms:cuota-ya-pagada"
 
 /** El tag del renglón «Sale de … · entra a …» en la tarjeta de resumen. */
 const val TAG_RESUMEN_DE_LAS_DOS_PATAS: String = "sms:dos-patas:resumen"

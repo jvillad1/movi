@@ -75,6 +75,22 @@ data class DosPatasDelAviso(
     val montoEnLaMonedaDeLaDeuda: Long? = null,
     val interesReal: Long? = null,
     val avisoDelLadoQueEntra: Boolean = false,
+    /**
+     * Vuelta 56 · **la app sabe preguntar por la segunda cuota del mes**, como `vincular-deuda` con
+     * [VincularPagoDeDeudaRequest.esLaCuota]. En una [OperacionDelAviso.CUOTA], si la cuota del período
+     * donde cae este pago ya la saldó **otro** movimiento, el server no escribe nada y contesta **409**
+     * con [CuotaYaPagada] (el mismo cuerpo de la vuelta 53); la app pregunta «¿Este pago es un abono
+     * extra?». Default `false`: un APK viejo, los débitos automáticos y las partes de un reparto siguen
+     * como siempre.
+     */
+    val esLaCuota: Boolean = false,
+    /**
+     * Vuelta 56 · **«Un abono extra»** desde Revisar aviso: en una [OperacionDelAviso.CUOTA], el server
+     * escribe **el traspaso de siempre** ([transferLegsFor], «Abono extraordinario a …», las dos patas en
+     * [TRANSFER_CATEGORY], el monto entero contra el capital) en vez de [pagoDeCuotaLegs], y no salda
+     * ninguna cuota. Lo mismo que [VincularPagoDeDeudaRequest.comoAbono]. Solo con un crédito.
+     */
+    val comoAbono: Boolean = false,
 )
 
 /**
@@ -118,14 +134,22 @@ fun validarDosPatas(patas: DosPatasDelAviso, origen: Account?, destino: Account?
     if (origen == null || destino == null) return "Elige de dónde sale la plata y a dónde entra"
     if (patas.monto <= 0L) return "El monto tiene que ser mayor que cero"
     if (operacionEntre(origen, destino) != patas.operacion) return DOS_PATAS_NO_ENCAJAN
+    // «Un abono extra» solo existe hacia un crédito: un pago de tarjeta o un traspaso ya son lo que son.
+    if (patas.comoAbono && patas.operacion != OperacionDelAviso.CUOTA) return EL_ABONO_EXTRA_SOLO_A_UN_CREDITO
     return when (patas.operacion) {
         OperacionDelAviso.TRASPASO -> validateTransfer(origen, destino, patas.monto)
         OperacionDelAviso.AVANCE ->
             if (origen.currency != destino.currency) "Por ahora solo entre cuentas de la misma moneda" else null
-        OperacionDelAviso.PAGO_DE_TARJETA, OperacionDelAviso.CUOTA ->
-            validarPagoDeCuota(pedidoDePago(patas), origen, destino)
+        OperacionDelAviso.PAGO_DE_TARJETA -> validarPagoDeCuota(pedidoDePago(patas), origen, destino)
+        // El abono extra es el traspaso de siempre: sus reglas son las del traspaso.
+        OperacionDelAviso.CUOTA ->
+            if (patas.comoAbono) validateTransfer(origen, destino, patas.monto)
+            else validarPagoDeCuota(pedidoDePago(patas), origen, destino)
     }
 }
+
+/** Lo que se dice cuando llega «un abono extra» que no va a un crédito. */
+const val EL_ABONO_EXTRA_SOLO_A_UN_CREDITO: String = "Un abono extra solo se hace a un crédito."
 
 /** El pago de cuota que estas patas son, para pasarlo por [validarPagoDeCuota] y [pagoDeCuotaLegs]. */
 fun pedidoDePago(patas: DosPatasDelAviso): CreatePagoDeCuotaRequest = CreatePagoDeCuotaRequest(

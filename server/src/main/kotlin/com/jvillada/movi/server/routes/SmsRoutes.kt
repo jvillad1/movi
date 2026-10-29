@@ -774,7 +774,7 @@ fun Route.smsRoutes() {
             }
             return@post when (resultado) {
                 is Confirmacion.Hecha -> call.respond(resultado.respuesta)
-                is Confirmacion.Rechazada -> call.respond(resultado.estado, resultado.motivo)
+                is Confirmacion.Rechazada -> call.responderElRechazo(resultado)
             }
         }
         // Con qué movimiento se confirmó (el que se acaba de crear, o el que ya estaba: «Es este»).

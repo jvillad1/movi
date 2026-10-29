@@ -8,6 +8,7 @@ import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.server.time.epochMillisToAppDate
 import com.jvillada.movi.shared.model.AvisosDelMismoPago
 import com.jvillada.movi.shared.model.ConfirmarElMismoPago
+import com.jvillada.movi.shared.model.CuotaYaPagada
 import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY_NOT_MANUAL
 import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.FinancialEvent
@@ -25,6 +26,7 @@ import com.jvillada.movi.shared.model.momentoDelSms
 import com.jvillada.movi.shared.model.rechazoDeLosTextos
 import com.jvillada.movi.shared.model.rechazoDelMonto
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.ApplicationCall
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
@@ -90,7 +92,7 @@ fun Route.elMismoPagoRoutes() {
         val resultado = dbQuery { confirmarElMismoPago(uid, ids, conTasa, ahora = System.currentTimeMillis()) }
         when (resultado) {
             is Confirmacion.Hecha -> call.respond(resultado.respuesta)
-            is Confirmacion.Rechazada -> call.respond(resultado.estado, resultado.motivo)
+            is Confirmacion.Rechazada -> call.responderElRechazo(resultado)
         }
     }
 
@@ -118,7 +120,22 @@ fun Route.elMismoPagoRoutes() {
 
 internal sealed interface Confirmacion {
     data class Hecha(val respuesta: MismoPagoConfirmado) : Confirmacion
-    data class Rechazada(val estado: HttpStatusCode, val motivo: String) : Confirmacion
+    /** [cuotaYaPagada]: vuelta 56, el 409 de la segunda cuota del mes (ver [PatasDelAviso.Rechazadas]). */
+    data class Rechazada(
+        val estado: HttpStatusCode,
+        val motivo: String,
+        val cuotaYaPagada: CuotaYaPagada? = null,
+    ) : Confirmacion
+}
+
+/**
+ * Contesta un rechazo de la confirmación. La segunda cuota del mes (vuelta 56) va con el cuerpo JSON de
+ * [CuotaYaPagada] —el mismo de `vincular-deuda`, que la app reconoce con `cuotaYaPagadaDe`—; lo demás,
+ * con su frase, como siempre.
+ */
+internal suspend fun ApplicationCall.responderElRechazo(rechazo: Confirmacion.Rechazada) {
+    val ya = rechazo.cuotaYaPagada
+    if (ya != null) respond(rechazo.estado, ya) else respond(rechazo.estado, rechazo.motivo)
 }
 
 /**
@@ -207,7 +224,7 @@ internal fun confirmarElMismoPago(
         val origen = if (esIdDeComprobante(propuesta.id)) EventSource.OCR else EventSource.SMS
         return when (val escritas = TransactionManager.current().escribirLasPatasDelAviso(uid, patas, origen, propuesta.text, ahora)) {
             is PatasDelAviso.Escritas -> cerrar(escritas.pataDelAviso, creado = escritas.creadas)
-            is PatasDelAviso.Rechazadas -> Confirmacion.Rechazada(escritas.estado, escritas.motivo)
+            is PatasDelAviso.Rechazadas -> Confirmacion.Rechazada(escritas.estado, escritas.motivo, escritas.cuotaYaPagada)
         }
     }
 

@@ -3,11 +3,11 @@ package com.jvillada.movi.server.routes
 import com.jvillada.movi.server.balance.loadNonVoidedEvents
 import com.jvillada.movi.server.credits.toCreditTerms
 import com.jvillada.movi.server.db.Credits
-import com.jvillada.movi.server.reminders.cargarPagosDeDeuda
+import com.jvillada.movi.server.reminders.pagosDeDeudaAlrededorDe
 import com.jvillada.movi.server.reminders.periodoQueSalda
 import com.jvillada.movi.server.reminders.periodosSaldados
 import com.jvillada.movi.server.reminders.virtualRuleFor
-import com.jvillada.movi.server.time.ajustesDePeriodoDe
+import com.jvillada.movi.server.time.ajustesDelPeriodoSinSuspender
 import com.jvillada.movi.server.time.epochMillisToAppDate
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.CreateTransferRequest
@@ -51,6 +51,7 @@ import io.ktor.server.routing.put
 import io.ktor.server.routing.route
 import kotlin.math.roundToLong
 import org.jetbrains.exposed.exceptions.ExposedSQLException
+import org.jetbrains.exposed.sql.Transaction
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.selectAll
@@ -337,23 +338,32 @@ private suspend fun escribirYResponder(
 }
 
 /**
- * Vuelta 53 · ¿la cuota del período donde caería [evento] ya la saldó **otro** movimiento? Se pregunta
- * con las funciones de siempre —la regla sintética del crédito ([virtualRuleFor]), el período que
- * saldaría este pago ([periodoQueSalda]) y lo ya saldado ([periodosSaldados])—, sin las patas del
- * mismo [transferId] (un reintento no choca consigo mismo). Sin condiciones del crédito no hay regla, y
- * no se pregunta nada.
+ * Vuelta 53 · ¿la cuota del período donde caería [evento] ya la saldó **otro** movimiento? Ver
+ * [cuotaYaPagadaDelPago], que es la misma pregunta dentro de una transacción ya abierta.
  */
-private suspend fun cuotaYaPagadaPara(uid: String, credito: Account, evento: FinancialEvent, transferId: String): CuotaYaPagada? {
-    val terms = dbQuery {
-        Credits.selectAll()
-            .where { (Credits.userId eq uid) and (Credits.accountId eq credito.id) }
-            .firstOrNull()?.toCreditTerms()
-    } ?: return null
+private suspend fun cuotaYaPagadaPara(uid: String, credito: Account, evento: FinancialEvent, transferId: String): CuotaYaPagada? =
+    dbQuery { cuotaYaPagadaDelPago(uid, credito, evento.timestamp, transferId) }
+
+/**
+ * **¿La cuota del período donde caería un pago a [credito] en [timestamp] ya la saldó otro
+ * movimiento?** Se pregunta con las funciones de siempre —la regla sintética del crédito
+ * ([virtualRuleFor]), el período que saldaría este pago ([periodoQueSalda]) y lo ya saldado
+ * ([periodosSaldados])—, sin las patas del mismo [transferId] (un reintento no choca consigo mismo).
+ * Sin condiciones del crédito no hay regla, y no se pregunta nada.
+ *
+ * Dentro de la transacción del llamador: la usan `vincular-deuda` (vuelta 53) y la confirmación de un
+ * aviso de dos patas con [com.jvillada.movi.shared.model.DosPatasDelAviso.esLaCuota] (vuelta 56,
+ * [escribirLasPatasDelAviso]), que ya tiene los avisos bloqueados y no puede suspender.
+ */
+internal fun Transaction.cuotaYaPagadaDelPago(uid: String, credito: Account, timestamp: Long, transferId: String): CuotaYaPagada? {
+    val terms = Credits.selectAll()
+        .where { (Credits.userId eq uid) and (Credits.accountId eq credito.id) }
+        .firstOrNull()?.toCreditTerms() ?: return null
     val regla = virtualRuleFor(terms, credito.name)
-    val settings = ajustesDePeriodoDe(uid)
-    val fecha = epochMillisToAppDate(evento.timestamp)
+    val settings = ajustesDelPeriodoSinSuspender(uid)
+    val fecha = epochMillisToAppDate(timestamp)
     val periodo = periodoQueSalda(regla, fecha, settings = settings)
-    val pagos = cargarPagosDeDeuda(uid, fecha).filter { it.transferId != transferId }
+    val pagos = pagosDeDeudaAlrededorDe(uid, fecha).filter { it.transferId != transferId }
     if (periodo !in periodosSaldados(listOf(regla), pagos, settings = settings)[regla.id].orEmpty()) return null
     return CuotaYaPagada(periodo = periodo, credito = credito.name, mensaje = fraseDeLaCuotaYaPagada(credito.name, periodo))
 }

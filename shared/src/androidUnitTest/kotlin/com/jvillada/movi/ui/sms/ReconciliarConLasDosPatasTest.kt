@@ -31,6 +31,15 @@ import com.jvillada.movi.shared.model.SMS_STATE_PENDING
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.theme.MoviTheme
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onAllNodesWithText
+import com.jvillada.movi.shared.model.CUOTA_CATEGORY
+import com.jvillada.movi.shared.model.CuotaYaPagada
+import com.jvillada.movi.shared.model.fraseDeLaCuotaYaPagada
+import com.jvillada.movi.shared.repository.ApiException
+import com.jvillada.movi.ui.transactions.UN_ABONO_EXTRA
+import kotlinx.serialization.json.Json
+import kotlin.test.assertFalse
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
@@ -87,7 +96,7 @@ class ReconciliarConLasDosPatasTest {
         Repositories.sustitutoDePrueba = null
     }
 
-    private inner class Repo(
+    private open inner class Repo(
         private val sms: SmsMessage,
         private val leido: ParsedSms,
         private val cuentas: List<Account> = listOf(ahorros, otra, masterBlack, amex, fiducuenta),
@@ -213,6 +222,63 @@ class ReconciliarConLasDosPatasTest {
         assertEquals(fiducuenta.id, patas.origenId)
         assertEquals(ahorros.id, patas.destinoId)
         assertTrue(patas.avisoDelLadoQueEntra)
+    }
+
+    /**
+     * Vuelta 56 · **la segunda cuota del mes también pregunta desde Revisar aviso.** La cuota va con
+     * `esLaCuota`; si el server contesta 409 `CUOTA_YA_PAGADA`, la pantalla no da un error: en el lugar de
+     * los botones pregunta «La cuota de octubre de Vehículo 4083 ya está pagada. ¿Este pago es un abono
+     * extra?» (sin «adelantada»), «Cancelar» vuelve a los botones, y «Un abono extra» confirma con
+     * `comoAbono`.
+     */
+    @Test
+    fun la_segunda_cuota_del_mes_pregunta_y_un_abono_extra_confirma_como_abono() {
+        val vehiculo = Account("v", "Vehículo 4083", AccountType.LOAN, 40_000_000)
+        val cuota = pagoDeTarjeta.copy(id = "sms_cuota", text = "Bancolombia: Pagaste \$980.000 a Banco de Occidente desde tu producto 8133")
+        val leido = ParsedSms(980_000.0, "Banco de Occidente", TransactionType.EXPENSE, CUOTA_CATEGORY, deudaSugeridaId = vehiculo.id)
+        val ya = CuotaYaPagada(periodo = "2026-10", credito = vehiculo.name, mensaje = fraseDeLaCuotaYaPagada(vehiculo.name, "2026-10"))
+        val repo = object : Repo(cuota, leido, cuentas = listOf(ahorros, vehiculo)) {
+            override suspend fun confirmarConLasDosPatas(smsId: String, patas: DosPatasDelAviso): MismoPagoConfirmado {
+                conPatas += smsId to patas
+                if (!patas.comoAbono) throw ApiException(409, Json { encodeDefaults = true }.encodeToString(CuotaYaPagada.serializer(), ya))
+                return MismoPagoConfirmado(eventoId = patas.origenEventId, creado = true, cerrados = listOf(smsId))
+            }
+        }
+        montar(repo, cuota.id)
+        composeRule.onNodeWithTag(TAG_RESUMEN_DE_LAS_DOS_PATAS)
+            .assertTextEquals("Sale de Bancolombia Ahorros 8133 · entra a Vehículo 4083 como cuota")
+
+        tocar("Confirmar")
+        val (_, laCuota) = repo.conPatas.single()
+        assertEquals(OperacionDelAviso.CUOTA, laCuota.operacion)
+        assertTrue(laCuota.esLaCuota, "una cuota va con la marca, para que el server pregunte")
+        assertFalse(laCuota.comoAbono)
+
+        val pregunta = "La cuota de octubre de Vehículo 4083 ya está pagada. ¿Este pago es un abono extra?"
+        composeRule.onNodeWithTag(TAG_CUOTA_YA_PAGADA_EN_EL_AVISO).assertIsDisplayed()
+        composeRule.onNodeWithText(pregunta).assertIsDisplayed()
+        composeRule.onAllNodesWithText("adelantada", substring = true).assertCountEquals(0)
+        composeRule.onAllNodesWithText("Confirmar").assertCountEquals(0)
+        composeRule.onAllNodesWithText("HTTP", substring = true).assertCountEquals(0)
+
+        // «Cancelar» vuelve a los botones, y nada más se mandó.
+        tocar("Cancelar")
+        composeRule.onNodeWithTag(TAG_CUOTA_YA_PAGADA_EN_EL_AVISO).assertDoesNotExist()
+        composeRule.onNodeWithText("Confirmar").assertIsEnabled()
+        assertEquals(1, repo.conPatas.size)
+
+        // Otra vez, y ahora «Un abono extra»: el mismo crédito, como abono.
+        tocar("Confirmar")
+        tocar(UN_ABONO_EXTRA)
+        assertEquals(3, repo.conPatas.size)
+        val (aviso, abono) = repo.conPatas.last()
+        assertEquals(cuota.id, aviso)
+        assertEquals(OperacionDelAviso.CUOTA, abono.operacion)
+        assertEquals(vehiculo.id, abono.destinoId)
+        assertTrue(abono.comoAbono)
+        assertFalse(abono.esLaCuota)
+        assertEquals(980_000L, abono.monto)
+        assertEquals(0, repo.sueltos.size, "nunca un gasto suelto")
     }
 
     private fun montar(repo: Repo, smsId: String) {

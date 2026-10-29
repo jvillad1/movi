@@ -9,6 +9,7 @@ import com.jvillada.movi.server.fx.FxRateService
 import com.jvillada.movi.server.fx.convertirEntreMonedas
 import com.jvillada.movi.server.time.epochMillisToAppDate
 import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.CuotaYaPagada
 import com.jvillada.movi.shared.model.DosPatasDelAviso
 import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.FinancialEvent
@@ -56,7 +57,15 @@ import org.jetbrains.exposed.sql.selectAll
 internal sealed interface PatasDelAviso {
     /** [pataDelAviso] es la que queda en `sms_messages.evento_id`; [creadas] es falso si ya estaban (un reintento). */
     data class Escritas(val pataDelAviso: String, val ids: List<String>, val creadas: Boolean) : PatasDelAviso
-    data class Rechazadas(val estado: HttpStatusCode, val motivo: String) : PatasDelAviso
+    /**
+     * [cuotaYaPagada]: vuelta 56, el 409 de la segunda cuota del mes. Viaja como cuerpo JSON (el mismo de
+     * `vincular-deuda`) para que la app pregunte «¿Este pago es un abono extra?»; [motivo] es su frase.
+     */
+    data class Rechazadas(
+        val estado: HttpStatusCode,
+        val motivo: String,
+        val cuotaYaPagada: CuotaYaPagada? = null,
+    ) : PatasDelAviso
 }
 
 private const val MAX_ID = 50
@@ -117,7 +126,20 @@ internal fun Transaction.escribirLasPatasDelAviso(
         return PatasDelAviso.Rechazadas(HttpStatusCode.Conflict, "Ese id ya existe")
     }
 
-    val (salida, entrada) = when (patas.operacion) {
+    // ── Vuelta 56 · la segunda cuota del mes también pregunta desde Revisar aviso ─────────────────
+    // La misma pregunta que `vincular-deuda` con `esLaCuota` (vuelta 53): si la cuota del período donde
+    // cae este pago ya la saldó OTRO movimiento, no se escribe nada y la app pregunta si es un abono
+    // extra. Después de la idempotencia: un reintento con estos mismos ids ya contestó arriba.
+    if (patas.operacion == OperacionDelAviso.CUOTA && patas.esLaCuota && !patas.comoAbono) {
+        cuotaYaPagadaDelPago(uid, hacia, patas.timestamp, patas.transferId)?.let {
+            return PatasDelAviso.Rechazadas(HttpStatusCode.Conflict, it.mensaje, cuotaYaPagada = it)
+        }
+    }
+
+    // Vuelta 56 · «Un abono extra» (solo con un crédito, ver [validarDosPatas]): el traspaso de siempre
+    // hacia el crédito, sin desglose ni cuota que saldar.
+    val esAbono = patas.operacion == OperacionDelAviso.CUOTA && patas.comoAbono
+    val (salida, entrada) = if (esAbono) transferLegsFor(pedidoDeTraspaso(patas), desde, hacia) else when (patas.operacion) {
         OperacionDelAviso.TRASPASO -> transferLegsFor(pedidoDeTraspaso(patas), desde, hacia)
         OperacionDelAviso.AVANCE -> patasDelAvance(patas, desde, hacia)
         OperacionDelAviso.PAGO_DE_TARJETA, OperacionDelAviso.CUOTA -> {
