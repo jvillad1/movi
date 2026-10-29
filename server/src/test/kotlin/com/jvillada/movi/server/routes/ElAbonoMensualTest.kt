@@ -293,7 +293,7 @@ class ElAbonoMensualTest {
     // ── Un mismo pago no sella dos filas ────────────────────────────────────────
 
     @Test
-    fun `un pago a la tarjeta que coincide con las dos filas lo toma la tarjeta, y el abono pregunta`() {
+    fun `un pago a la tarjeta que coincide con las dos filas lo toma la tarjeta, y el abono no lo ofrece`() {
         val nu = "acc_nu"
         transaction {
             Accounts.insert { it[id] = nu; it[userId] = uid; it[name] = "Nu"; it[type] = "CREDIT_CARD"; it[currency] = "COP" }
@@ -313,7 +313,7 @@ class ElAbonoMensualTest {
 
         val abonoNu = estados().single { it.ruleId == "rr_abono_nu" }
         assertFalse(abonoNu.occurred, "el pago es de la fila «Pago tarjeta»")
-        assertEquals(listOf("sale-p1"), abonoNu.candidates.map { it.id }, "pero se le propone: el dueño puede elegirlo")
+        assertTrue(abonoNu.candidates.isEmpty(), "ni se le propone: ya cuenta como el pago de la tarjeta")
         val tarjeta = runBlocking { ocurrenciasDelPeriodo(uid, hoy) }.single { it.ruleId == "card_$nu" }
         assertTrue(tarjeta.occurred, "la tarjeta queda pagada con él")
 
@@ -322,6 +322,14 @@ class ElAbonoMensualTest {
         val conDos = estados().single { it.ruleId == "rr_abono_nu" }
         assertTrue(conDos.occurred)
         assertEquals("sale-p2", conDos.eventId)
+
+        // Y la fila de la tarjeta no toma ese mismo pago: los dos sellos son de traspasos distintos.
+        val laTarjeta = runBlocking { ocurrenciasDelPeriodo(uid, hoy) }.single { it.ruleId == "card_$nu" }
+        val elAbono = runBlocking { ocurrenciasDelPeriodo(uid, hoy) }.single { it.ruleId == "rr_abono_nu" }
+        assertTrue(laTarjeta.occurred)
+        fun traspasoDe(id: String?) = transaction { Events.selectAll().where { Events.id eq id!! }.single()[Events.transferId] }
+        assertEquals("p1", traspasoDe(laTarjeta.eventId))
+        assertEquals("p2", traspasoDe(elAbono.eventId))
     }
 
     // ── No es un fijo ───────────────────────────────────────────────────────────

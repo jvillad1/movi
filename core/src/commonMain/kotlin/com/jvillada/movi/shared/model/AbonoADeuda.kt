@@ -102,8 +102,9 @@ fun reglaDelAbono(
  * **Los pagos a la tarjeta [tarjetaId] que toma primero su fila «Pago tarjeta»**, de [eventos] (los del
  * período): las patas que salen hacia ella como «Pago de tarjeta», en orden, hasta cubrir [minimo]. Sin
  * mínimo (o en cero), solo el primero: es el que sella la fila. Un mismo pago no sella dos filas, así
- * que el abono mensual a esa tarjeta solo se tilda solo con un pago que la tarjeta no tomó; uno que sí
- * tomó se le propone, y queda si el dueño lo elige («Sí, fue este»).
+ * que el abono mensual a esa tarjeta solo se tilda con un pago que la tarjeta no tomó; los que tomó ni
+ * se le proponen (revisión de la vuelta 63). Y al revés: el pago con que se selló el abono no es el
+ * de la fila de la tarjeta (`sinLosPagosDeLosAbonos` en el server).
  */
 fun pagosQueTomaLaTarjeta(tarjetaId: String, eventos: List<FinancialEvent>, minimo: Long?): Set<String> {
     val pagos = eventos

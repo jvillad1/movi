@@ -704,12 +704,34 @@ internal suspend fun ocurridosDeLosVencimientos(
     periodo: PeriodSettings,
     sinteticas: List<RecurringRule>,
 ): Map<String, Set<String>> {
-    val reales = dbQuery {
-        unirOcurridos(loadOccurredBy(uid), emparejadasComoSellos(uid, hoy, periodo).periodosPorRegla())
+    val (reales, delAbono) = dbQuery {
+        val emparejadas = emparejadasComoSellos(uid, hoy, periodo)
+        unirOcurridos(loadOccurredBy(uid), emparejadas.periodosPorRegla()) to
+            eventosDeLosAbonos(uid, loadOccurrenceRows(uid) + emparejadas)
     }
     val derivadas = if (sinteticas.isEmpty()) emptyMap()
-        else periodosSaldados(sinteticas, cargarPagosDeDeuda(uid, hoy), settings = periodo)
+        else periodosSaldados(sinteticas, sinLosPagosDeLosAbonos(cargarPagosDeDeuda(uid, hoy), delAbono), settings = periodo)
     return unirOcurridos(reales, derivadas)
+}
+
+/** Los movimientos con que se sellaron (o emparejaron) las reglas de abono de [uid], de [sellos]. */
+private fun org.jetbrains.exposed.sql.Transaction.eventosDeLosAbonos(
+    uid: String,
+    sellos: List<RecurringOccurrence>,
+): Set<String> {
+    val abonos = reglasRealesDe(uid).filter { it.esAbonoADeuda }.map { it.id }.toSet()
+    if (abonos.isEmpty()) return emptySet()
+    return sellos.filter { it.ruleId in abonos }.mapNotNull { it.eventId }.toSet()
+}
+
+/**
+ * Vuelta 63 (revisión): [pagos] de deuda sin los traspasos que ya son un abono mensual ([delAbono]: la
+ * pata con que se selló). Así el sello derivado de «Pago tarjeta» no toma el mismo pago que el abono.
+ */
+internal fun sinLosPagosDeLosAbonos(pagos: List<FinancialEvent>, delAbono: Set<String>): List<FinancialEvent> {
+    if (delAbono.isEmpty()) return pagos
+    val traspasos = pagos.filter { it.id in delAbono }.mapNotNull { it.transferId }.toSet()
+    return pagos.filterNot { it.id in delAbono || (it.transferId != null && it.transferId in traspasos) }
 }
 
 /** `"YYYY-MM"`, con mes real: `2026-13` no es un periodo. */
@@ -1104,7 +1126,7 @@ internal fun org.jetbrains.exposed.sql.Transaction.ocurrenciasReales(
                     rule,
                     due,
                     lectura.evidenciaPara(rule, due, today),
-                    lectura.reservados,
+                    lectura.usadosPara(rule),
                     settings = periodo,
                     destinos = destinos,
                 ),
@@ -1210,11 +1232,18 @@ internal class LecturaDeOcurrencias(
     val reservados: MutableSet<String>,
     /**
      * Vuelta 63: **los pagos a una tarjeta que toma primero su fila «Pago tarjeta»**
-     * ([pagosQueTomaLaTarjeta]). Un abono mensual a esa tarjeta no los empareja solo —un mismo pago no
-     * sella dos filas—, pero sí se los propone: si el dueño elige uno («Sí, fue este»), queda.
+     * ([pagosQueTomaLaTarjeta]). Un mismo pago no sella dos filas: el abono mensual a esa tarjeta ni
+     * los empareja ni se los propone (ya cuentan como el pago de la tarjeta).
      */
     val tomadosPorLaTarjeta: MutableSet<String> = mutableSetOf(),
 ) {
+    /**
+     * Lo que ya no puede ser la ocurrencia de [rule]: [reservados] y, para un abono, además lo que tomó
+     * la fila de la tarjeta (revisión de la vuelta 63: ni se tilda solo ni se le propone).
+     */
+    fun usadosPara(rule: RecurringRule): Set<String> =
+        if (rule.esAbonoADeuda) reservados + tomadosPorLaTarjeta else reservados
+
     /** Los movimientos de la franja sin los que el dueño ya rechazó para [rule]. */
     fun sinRechazados(rule: RecurringRule): List<FinancialEvent> =
         eventos.filterNot { (rule.id to it.id) in rechazados }
@@ -1316,9 +1345,8 @@ internal fun resolverOcurrencias(
     destinos: Map<String, com.jvillada.movi.shared.model.DestinoConocido> = emptyMap(),
 ): List<OcurrenciaResuelta> = pares.map { (rule, due) ->
     val clave = periodOf(due)
-    // Vuelta 63: lo que tomó la fila de la tarjeta no tilda solo el abono (sí se le propone).
-    fun usadosParaDecidir(): Set<String> =
-        if (rule.esAbonoADeuda) lectura.reservados + lectura.tomadosPorLaTarjeta else lectura.reservados
+    // Vuelta 63: lo que tomó la fila de la tarjeta no es del abono: ni lo tilda ni se le propone.
+    fun usadosParaDecidir(): Set<String> = lectura.usadosPara(rule)
     val resolucion = when {
         clave in lectura.ocurridos[rule.id].orEmpty() -> Resolucion.Sellada(lectura.sellos[rule.id to clave])
         // **Lo que llegó ANTES del vencimiento** (1-oct-2026: la recarga de Glim del día 2 entró el 1 y
@@ -1342,7 +1370,7 @@ internal fun resolverOcurrencias(
                     Resolucion.Emparejada(unico)
                 }
                 occurrenceCandidatesFor(
-                    rule, due, evidencia, lectura.reservados, settings = periodo, destinos = destinos,
+                    rule, due, evidencia, usadosParaDecidir(), settings = periodo, destinos = destinos,
                 ).isNotEmpty() -> Resolucion.Abierta(concluyentes.size)
                 else -> Resolucion.PorLlegar
             }
@@ -1413,7 +1441,11 @@ internal suspend fun ocurrenciasDelPeriodo(uid: String, today: java.time.LocalDa
     // Solo créditos: el «monto» de una tarjeta es su saldo y no entra a ningún fijo.
     val sinteticas = loadCreditRulePairs(uid).map { it.first } + loadCardRulePairs(uid).map { it.first }
     val derivadas = if (sinteticas.isEmpty()) emptyList() else {
-        val pagos = cargarPagosDeDeuda(uid, today)
+        // Vuelta 63 (revisión): un pago que ya es el abono mensual a esta deuda no es además su
+        // «Pago tarjeta» — un mismo pago no sella dos filas.
+        val abonos = idsDeLosAbonos(uid)
+        val delAbono = estados.filter { it.occurred && it.ruleId in abonos }.mapNotNull { it.eventId }.toSet()
+        val pagos = sinLosPagosDeLosAbonos(cargarPagosDeDeuda(uid, today), delAbono)
         val pagadas = pagosDeDeudaPorPeriodo(sinteticas, pagos, settings = periodo)
         sinteticas.mapNotNull { rule ->
             val ruleId = rule.id
