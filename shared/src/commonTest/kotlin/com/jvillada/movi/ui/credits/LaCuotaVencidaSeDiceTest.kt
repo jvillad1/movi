@@ -1,6 +1,11 @@
 package com.jvillada.movi.ui.credits
 
+import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.CreditSummary
+import com.jvillada.movi.shared.model.CreditTerms
 import com.jvillada.movi.shared.model.PeriodoFinanciero
+import com.jvillada.movi.shared.model.mesDeLaPrimeraCuota
 import com.jvillada.movi.shared.model.mesDeLaPrimeraCuotaSinPagar
 import kotlinx.datetime.LocalDate
 import kotlin.test.Test
@@ -60,4 +65,35 @@ class LaCuotaVencidaSeDiceTest {
             subtituloDeLaCuota(31, PeriodoFinanciero(2026, 9), hoy),
         )
     }
+
+    // ── La lista de Créditos dice lo mismo que el detalle ─────────────────────
+
+    private fun credito(pagadas: List<String>?) = CreditSummary(
+        account = Account("acc_vehiculo", "Vehículo 4083", AccountType.LOAN, 30_000_000L, "COP"),
+        terms = CreditTerms(
+            accountId = "acc_vehiculo", bank = "Banco", principal = 40_000_000L, rateEa = 18.0,
+            termMonths = 60, installment = 980_000L, dayOfMonth = 5, startDate = "2026-01-10",
+        ),
+        paidPct = null,
+        hasMovements = true,
+        cuotasPagadas = pagadas,
+    )
+
+    @Test
+    fun `la lista dice la cuota vencida como el detalle`() {
+        val c = credito(pagadas = emptyList())
+        val primera = assertNotNullPrimera(c)
+        val fila = prestamoEnLaLista(c, plan = null, periodoActual = PeriodoFinanciero(2026, 10), hoy = hoy)
+        assertEquals(subtituloDeLaCuota(5, primera, hoy), fila.subtitulo)
+        assertEquals("Cuota de octubre vencida desde el 5 oct", fila.subtitulo)
+    }
+
+    @Test
+    fun `con la cuota al dia la lista dice el monto y la fecha de la proxima`() {
+        val fila = prestamoEnLaLista(credito(pagadas = listOf("2026-10")), null, PeriodoFinanciero(2026, 10), hoy)
+        assertEquals("Cuota \$980.000 · 5 de noviembre", fila.subtitulo)
+    }
+
+    private fun assertNotNullPrimera(c: CreditSummary): PeriodoFinanciero =
+        mesDeLaPrimeraCuota(c, hoy) ?: error("el crédito tiene términos")
 }

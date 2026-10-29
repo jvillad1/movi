@@ -17,6 +17,7 @@ import com.jvillada.movi.shared.model.abonoMinimoParaQueSeTermine
 import com.jvillada.movi.shared.model.deudaEnOtraMoneda
 import com.jvillada.movi.shared.model.deudaTotalDe
 import com.jvillada.movi.shared.model.proximoVencimientoDelDia
+import com.jvillada.movi.shared.model.mesDeLaPrimeraCuota
 import com.jvillada.movi.shared.model.vencimientoDelMes
 import com.jvillada.movi.shared.model.nombreDelMesDe
 import com.jvillada.movi.shared.model.marcaDelBanco
@@ -935,7 +936,13 @@ fun prestamoEnLaLista(
     if (credit.account.balance == 0L && credit.hasMovements && !deudaEnOtraMoneda(credit)) {
         return DeudaEnLaLista(subtitulo = terms.bank.takeIf { it.isNotBlank() }, pagada = true)
     }
-    val proxima = proximaFechaDelDia(terms.dayOfMonth, hoy)
+    // Vuelta 64: la misma primera cuota sin pagar que el detalle (`subtituloDeLaCuota`). Vencida, la
+    // lista dice lo mismo que la ficha —«Cuota de octubre vencida desde el 5 oct»— y no «5 de
+    // noviembre»; si no, la fecha de esa cuota (una pagada por adelantado corre la próxima un mes).
+    val primera = mesDeLaPrimeraCuota(credit, hoy)
+        ?: proximaFechaDelDia(terms.dayOfMonth, hoy).let { PeriodoFinanciero(it.year, it.monthNumber) }
+    val vencida = laCuotaEstaVencida(terms.dayOfMonth, primera, hoy)
+    val proxima = vencimientoDelMes(primera.year, primera.month, terms.dayOfMonth)
     val progreso = progresoDeCredito(credit)
     // Con menos de un punto pagado la barra diría «0 % pagado»: se calla.
     val barra = progreso.fraccion.takeIf {
@@ -948,7 +955,8 @@ fun prestamoEnLaLista(
         else -> null
     }
     return DeudaEnLaLista(
-        subtitulo = "Cuota ${formatCOP(terms.installment)} · ${fechaEnPalabras(proxima, hoy)}",
+        subtitulo = if (vencida) subtituloDeLaCuota(terms.dayOfMonth, primera, hoy)
+        else "Cuota ${formatCOP(terms.installment)} · ${fechaEnPalabras(proxima, hoy)}",
         sinSaldo = sinSaldo,
         fraccionPagada = barra,
         nota = nota,
