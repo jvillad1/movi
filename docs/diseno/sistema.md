@@ -2927,7 +2927,9 @@ La revisión de accesibilidad del 28-oct (sobre `ad4bdfa3`) encontró seis cosas
    búsqueda). Lo llevan `Boton`, `BotonDeIcono`, la acción del encabezado, `Fila`, `PildoraDeFiltro`,
    `PildoraDeAccion`, `AccionRapida`, `Casilla`, `Campo`, `CampoDeBusqueda`, la acción de una `Seccion`,
    `Superficie` tocable, `renglonTocable`, `TarjetaDeCuenta`, «Todas ›» de `FilaDeCategorias`, las
-   pestañas (barra y rail), el avatar y el `SelectorSegmentado`. `ElFocoSeVeConElTecladoTest` (el
+   pestañas (barra y rail), el avatar y el `SelectorSegmentado`. **Revisión:** también el avatar, el ojo y
+   la campana del encabezado del Inicio (`EncabezadoDelInicio`), recortados al círculo; el anillo entra
+   entero en los 56 del encabezado sobre el amarillo. `ElFocoSeVeConElTecladoTest` (el
    enfocado por teclado lo lleva, con el dedo no) y `TodoLoEnfocableDibujaElAnilloTest` (`:core`, en
    **cero**: un toque de `ds/` o de las pestañas sin anillo en su cadena la rompe).
 4. **`neutro` pasa de `#A39A8C` a `#857C6F`**: el gris de los gráficos daba 2,78:1 sobre el blanco y 2,47
@@ -2943,3 +2945,8 @@ La revisión de accesibilidad del 28-oct (sobre `ad4bdfa3`) encontró seis cosas
    acciones y «Próximo pago» de Inicio, la fila de una factura con «Anotar pago», la tarjeta de un aviso
    en Por revisar (`TAG_TARJETA_DE_AVISO`) y Agregar en Gasto: ningún «…», ningún renglón de más, nada
    más ancho que su caja ni fuera de la pantalla (una fila que se desplaza de lado sí puede seguir afuera).
+7. **Revisión: «Tu período» solo se le pide a una cuenta nueva y vacía.** La vuelta 54 lo daba por hecho
+   solo con un corte distinto del mes de calendario, así que una cuenta en uso que se quedó con el mes de
+   calendario veía «Te falta 1 paso · Sigue con «Tu período»» para siempre. `periodoHechoEn` (`:core`)
+   lo da por hecho también si la cuenta ya estaba en uso (`laCuentaYaEstabaEnUso`: movimientos, alguna
+   cuenta o `primerUsoEn` puesto); el Inicio y la guía usan la misma regla. Lo vigila `PrimerosPasosTest`.
