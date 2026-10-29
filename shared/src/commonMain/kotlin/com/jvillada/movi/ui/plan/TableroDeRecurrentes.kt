@@ -884,6 +884,10 @@ fun LazyListScope.tableroDeRecurrentes(
              * vuelto a poner al Inicio y a Movimientos a decir cosas distintas del mismo mes, que
              * es un error que este repo ya cometió y arregló.
              */
+            // Vuelta 62: las tarjetas, por su extracto del corte (la misma lectura que Créditos).
+            val tarjetasDelTablero = com.jvillada.movi.data.rememberLectura(com.jvillada.movi.data.ClaveDeLectura.Tarjetas, reintento = 0) {
+                Repositories.wallets.getCards()
+            }
             val checklist = remember(
                 estado.upcomingRecurrentes, estado.ocurrencias, estado.ocurrenciasOk, periodoVisible, ajustesDelPeriodo,
             ) {
@@ -955,6 +959,10 @@ fun LazyListScope.tableroDeRecurrentes(
                 ) { estado.cuotasQueSeParecen(ajustesDelPeriodo) },
                 onEsLaCuota = { pago, parecido -> estado.esLaCuota(pago, parecido) },
                 onNoEsLaCuota = { _, parecido -> estado.noEsLaCuota(parecido) },
+                // Vuelta 62: la fila de una tarjeta dice lo facturado al corte, no el saldo entero.
+                extractosDeTarjetas = remember(tarjetasDelTablero.valor) {
+                    tarjetasDelTablero.valor.orEmpty().mapNotNull { t -> t.extracto?.let { t.account.id to it } }.toMap()
+                },
             )
         }
     }

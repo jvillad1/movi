@@ -565,6 +565,8 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                 deuda = it,
                 onCambiada = { refreshKey++ },
                 onError = { mensaje -> error = mensaje },
+                // Vuelta 62: «Anotar este abono» del simulador abre Agregar → Traspaso ya lleno.
+                onAnotarAbono = { pantalla -> it.hoja = null; onNavigate(pantalla) },
             )
         }
 

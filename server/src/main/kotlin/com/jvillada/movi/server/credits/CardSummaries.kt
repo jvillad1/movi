@@ -4,6 +4,10 @@ import com.jvillada.movi.server.db.Cards
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.CardSummary
 import com.jvillada.movi.shared.model.CardTerms
+import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.extractoDeLaTarjetaAl
+import com.jvillada.movi.server.time.AppClock
+import java.time.LocalDate
 import org.jetbrains.exposed.sql.ResultRow
 
 fun ResultRow.toCardTerms() = CardTerms(
@@ -26,11 +30,23 @@ fun ResultRow.toCardTerms() = CardTerms(
  * de una Mastercard en dólares es un número en dólares. Sin cupo declarado, null. Puede ser
  * negativo (sobregiro real): no se recorta a 0.
  */
-fun cardSummaryFor(enriched: Account, terms: CardTerms?): CardSummary {
+fun cardSummaryFor(
+    enriched: Account,
+    terms: CardTerms?,
+    /**
+     * Vuelta 62 · los movimientos de la tarjeta, sin anulados: con ellos sale el extracto del corte más
+     * reciente ([extractoDeLaTarjeta]). Vacío = sin extracto (quien no los tiene a mano).
+     */
+    eventos: List<FinancialEvent> = emptyList(),
+    hoy: LocalDate = AppClock.today(),
+): CardSummary {
     val debt = enriched.balancesByCurrency[enriched.currency] ?: enriched.balance
     return CardSummary(
         account   = enriched,
         terms     = terms,
         available = terms?.creditLimit?.let { it - debt },
+        extracto  = terms?.takeIf { eventos.isNotEmpty() }?.let {
+            extractoDeLaTarjetaAl(it, enriched.currency, eventos, hoy.toString(), AppClock.zone.id)
+        },
     )
 }

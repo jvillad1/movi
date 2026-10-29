@@ -92,6 +92,9 @@ const val COMPLETAR_DATOS: String = "Completar datos"
 /** El tag del aviso de que faltan datos, arriba del detalle de la deuda. */
 const val TAG_FALTAN_DATOS_DE_LA_DEUDA: String = "faltan-datos-de-la-deuda"
 
+/** Vuelta 62 · el tag de la fila del extracto de la tarjeta en su ficha. */
+const val TAG_EXTRACTO_DE_LA_TARJETA: String = "extracto-de-la-tarjeta"
+
 /** El tag de la sección de la deuda en el detalle de la cuenta. */
 const val TAG_SECCION_DE_LA_DEUDA: String = "seccion-de-la-deuda"
 
@@ -327,13 +330,36 @@ private fun LoQueDiceLaTarjeta(card: CardSummary) {
     val hoy = hoyEnAppZone()
     val moneda = card.account.currency
     val pago = fechaEnPalabras(proximaFechaDelDia(t.paymentDay, hoy), hoy)
-    Fila(
-        titulo = if (t.pagoMinimo != null) "Pago mínimo" else "Pago",
-        subtitulo = t.cutoffDay?.let { "El $pago · corte el día $it" } ?: "El $pago",
-        lineasDelSubtitulo = 2,
-        inicio = { IconoEnCirculo(Icons.Rounded.Event, tono = TonoDeIcono.Neutro) },
-        final = t.pagoMinimo?.let { minimo -> { MontoDeFila(formatMoney(minimo, moneda)) } },
-    )
+    val extracto = card.extracto
+    if (extracto != null) {
+        // Vuelta 62 · **el extracto, por fechas**: lo facturado al corte (menos lo ya pagado), el mínimo y
+        // cuándo pagarlo; debajo, lo que entró después del corte y va al próximo extracto.
+        Fila(
+            titulo = tituloDelExtracto(extracto),
+            subtitulo = detalleDelExtracto(extracto),
+            lineasDelSubtitulo = 2,
+            inicio = { IconoEnCirculo(Icons.Rounded.Event, tono = TonoDeIcono.Neutro) },
+            final = { MontoDeFila(montoDelExtracto(extracto.facturado, extracto.moneda)) },
+            modifier = Modifier.testTag(TAG_EXTRACTO_DE_LA_TARJETA),
+        )
+        val despues = lineaDespuesDelCorte(extracto)
+        if (despues != null || extracto.puedeIncluirDiferidos) {
+            BajoLaFila {
+                despues?.let { Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio) }
+                if (extracto.puedeIncluirDiferidos) {
+                    Text(PUEDE_INCLUIR_DIFERIDOS, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
+                }
+            }
+        }
+    } else {
+        Fila(
+            titulo = if (t.pagoMinimo != null) "Pago mínimo" else "Pago",
+            subtitulo = t.cutoffDay?.let { "El $pago · corte el día $it" } ?: "El $pago",
+            lineasDelSubtitulo = 2,
+            inicio = { IconoEnCirculo(Icons.Rounded.Event, tono = TonoDeIcono.Neutro) },
+            final = t.pagoMinimo?.let { minimo -> { MontoDeFila(formatMoney(minimo, moneda)) } },
+        )
+    }
     card.available?.let { disponible ->
         Separador()
         Fila(
@@ -382,7 +408,13 @@ fun AvisoDeFaltanDatos(deuda: DeudaDelDetalle, modifier: Modifier = Modifier) {
  * que un doble toque no baja la deuda dos veces—. [onCambiada] relee el detalle; [onError] lo dice.
  */
 @Composable
-fun HojasDeLaDeuda(deuda: DeudaDelDetalle, onCambiada: () -> Unit, onError: (String) -> Unit) {
+fun HojasDeLaDeuda(
+    deuda: DeudaDelDetalle,
+    onCambiada: () -> Unit,
+    onError: (String) -> Unit,
+    /** Vuelta 62 · «Anotar este abono» del simulador: la pantalla de Agregar que abre. `null` = sin el botón. */
+    onAnotarAbono: ((com.jvillada.movi.ui.Screen) -> Unit)? = null,
+) {
     val prestamo = deuda.prestamo
     val tarjeta = deuda.tarjeta
     when (deuda.hoja) {
@@ -413,7 +445,12 @@ fun HojasDeLaDeuda(deuda: DeudaDelDetalle, onCambiada: () -> Unit, onError: (Str
         }
         HojaDeLaDeuda.Abono -> if (prestamo != null) {
             // Vuelta 59: las fechas del simulador se cuentan desde la primera cuota sin pagar.
-            SimuladorDeAbonoSheet(credit = prestamo, periodoActual = deuda.primeraCuota, onDismiss = { deuda.hoja = null })
+            SimuladorDeAbonoSheet(
+                credit = prestamo,
+                periodoActual = deuda.primeraCuota,
+                onDismiss = { deuda.hoja = null },
+                onAnotarAbono = onAnotarAbono,
+            )
         }
         null -> Unit
     }

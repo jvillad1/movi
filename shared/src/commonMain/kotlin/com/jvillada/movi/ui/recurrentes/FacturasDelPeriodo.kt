@@ -1,5 +1,10 @@
 package com.jvillada.movi.ui.recurrentes
 
+import com.jvillada.movi.shared.model.ExtractoDeLaTarjeta
+import com.jvillada.movi.ui.credits.PUEDE_INCLUIR_DIFERIDOS
+import com.jvillada.movi.ui.credits.ROTULO_DEL_EXTRACTO
+import com.jvillada.movi.ui.credits.alternativaDelMinimo
+import com.jvillada.movi.ui.credits.montoDelExtracto
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -265,6 +270,12 @@ internal fun FilaDeFactura(
      * acción. Solo se mira en una fila pagada: ver [FilaDeFacturaPagada].
      */
     accionesDelMenu: List<Pair<String, () -> Unit>> = emptyList(),
+    /**
+     * Vuelta 62 · el extracto de la tarjeta de esta fila (ver `extractoDeLaFila`): la cifra pasa a ser
+     * lo facturado al corte —no el saldo entero— con el mínimo como alternativa debajo. `null` = la
+     * fila de siempre.
+     */
+    extracto: ExtractoDeLaTarjeta? = null,
 ) {
     if (pago.pagado) {
         FilaDeFacturaPagada(
@@ -314,10 +325,16 @@ internal fun FilaDeFactura(
                         overflow = TextOverflow.Ellipsis,
                     )
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
-                        MontoDeFila(textoDelMontoDelChecklist(pago), color = Movi.colores.texto)
-                        // Una tarjeta se paga con su mínimo o su saldo: el monto dice de cuál se habla.
-                        if (pago.montoEsSaldo) {
-                            Text("saldo", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                        if (extracto != null) {
+                            // Vuelta 62: lo que pide el extracto, no el saldo entero.
+                            MontoDeFila(montoDelExtracto(extracto.facturado, extracto.moneda), color = Movi.colores.texto)
+                            Text(ROTULO_DEL_EXTRACTO, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                        } else {
+                            MontoDeFila(textoDelMontoDelChecklist(pago), color = Movi.colores.texto)
+                            // Una tarjeta se paga con su mínimo o su saldo: el monto dice de cuál se habla.
+                            if (pago.montoEsSaldo) {
+                                Text("saldo", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                            }
                         }
                     }
                 }
@@ -350,6 +367,10 @@ internal fun FilaDeFactura(
                     val (texto, tono) = pastillaDeVencimiento(pago, conPropuesta)
                     Pildora(texto, tono)
                 }
+            }
+            extracto?.let { e ->
+                alternativaDelMinimo(e)?.let { Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio) }
+                if (e.puedeIncluirDiferidos) Text(PUEDE_INCLUIR_DIFERIDOS, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
             }
         }
     }
