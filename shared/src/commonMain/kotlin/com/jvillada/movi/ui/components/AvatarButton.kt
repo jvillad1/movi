@@ -18,6 +18,7 @@ import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.shared.model.AvatarPalette
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.theme.Medida
+import com.jvillada.movi.ui.components.ds.anilloDeFoco
 
 /**
  * F41: el avatar con la inicial ya abría Perfil desde el encabezado del Dashboard, pero nada
@@ -35,6 +36,8 @@ fun AvatarButton(onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .size(32.dp)
+            // Vuelta 55: con Tab, el avatar mostraba un cuadrado gris tenue; ahora el anillo de tinta.
+            .anilloDeFoco(CircleShape)
             .clip(CircleShape)
             .background(avatarColorOrDefault(SessionManager.avatarColor))
             .border(Medida.trazo, Movi.colores.borde, CircleShape)

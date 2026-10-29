@@ -131,6 +131,7 @@ private fun EncabezadoDeLaFilaDeCategorias(
         Row(
             modifier = Modifier
                 .heightIn(min = Medida.objetivoTactil)
+                .anilloDeFoco(RoundedCornerShape(Radio.s))
                 .clip(RoundedCornerShape(Radio.s))
                 .clickable(role = Role.Button, onClickLabel = "Ver todas las categorías", onClick = onTodas)
                 .padding(horizontal = Espacio.xs)

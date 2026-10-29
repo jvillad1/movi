@@ -31,6 +31,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.theme.*
+import com.jvillada.movi.theme.Radio
+import com.jvillada.movi.ui.components.ds.anilloDeFoco
 
 /**
  * Contraparte de [MinBottomNav] desde 600 dp: un rail a la izquierda, pintado una vez en la raíz de
@@ -193,6 +195,7 @@ private fun RailCompactoItem(dest: DestinoPrincipal, active: NavTab?, onTabSelec
         verticalArrangement = Arrangement.spacedBy(Espacio.xxs),
         modifier = Modifier
             .fillMaxWidth()
+            .anilloDeFoco(RoundedCornerShape(Radio.m), adentro = true)
             .clickable { onTabSelected(dest.tab) }
             // Un lector de pantalla dice el nombre entero UNA vez («Movimientos»), no el ícono y
             // después el rótulo corto («Movimientos, Movs»).
@@ -265,6 +268,7 @@ private fun RailItem(
             .heightIn(min = Medida.objetivoTactil)
             // La activa, en el amarillo SUAVE con la tinta encima (vuelta 38): el amarillo lleno es
             // solo de «Agregar», y dos bloques amarillos iguales competían en el rail.
+            .anilloDeFoco(RoundedCornerShape(Radio.pill))
             .clip(RoundedCornerShape(Radio.pill))
             .background(fondoDelDestinoDelRailAncho(isActive, Movi.colores))
             // Revisión de la vuelta 38: sobre el activo, el velo del hover (la tinta con alfa) volvía el

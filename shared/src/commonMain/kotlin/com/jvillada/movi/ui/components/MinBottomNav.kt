@@ -24,6 +24,8 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import com.jvillada.movi.theme.*
 import androidx.compose.material3.HorizontalDivider
+import com.jvillada.movi.theme.Radio
+import com.jvillada.movi.ui.components.ds.anilloDeFoco
 
 /**
  * Los destinos de la navegación principal.
@@ -141,6 +143,8 @@ private fun NavItem(
         verticalArrangement = Arrangement.spacedBy(Espacio.xxs, Alignment.CenterVertically),
         modifier = modifier
             .fillMaxHeight()
+            // Vuelta 55: el foco del teclado se ve (hacia adentro: la barra llega al borde).
+            .anilloDeFoco(RoundedCornerShape(Radio.m), adentro = true)
             // Un lector de pantalla oye el rótulo (el ícono no dice nada) y sabe cuál está elegida.
             .clickable(role = Role.Tab) { onTabSelected(tab) }
             .semantics { selected = isActive },

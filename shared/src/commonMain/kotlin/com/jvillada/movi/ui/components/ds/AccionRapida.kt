@@ -35,6 +35,8 @@ import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Icono
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
+import com.jvillada.movi.theme.Radio
+import androidx.compose.foundation.shape.RoundedCornerShape
 
 /** Tag estable de una [AccionRapida]. */
 const val TAG_ACCION_RAPIDA: String = "ds-accion-rapida"
@@ -111,6 +113,7 @@ fun AccionRapida(
     val conInsignia = insignia != null && insignia > 0
     Column(
         modifier = modifier
+            .anilloDeFoco(RoundedCornerShape(Radio.m))
             .clickable(role = Role.Button, onClick = onClick)
             .semantics(mergeDescendants = true) {
                 val dicho = descripcion ?: rotulo

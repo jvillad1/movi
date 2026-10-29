@@ -32,6 +32,8 @@ import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Icono
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
+import com.jvillada.movi.theme.Radio
+import androidx.compose.foundation.shape.RoundedCornerShape
 
 /** Cuántos renglones puede ocupar el título de una [Fila] antes de cortarse con «…». */
 const val LINEAS_DEL_TITULO_DE_FILA: Int = 2
@@ -159,7 +161,16 @@ fun Fila(
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = altoMinimoDeFila(densidad, conSubtitulo = subtitulo != null))
-            .then(if (onClick != null) Modifier.clickable(onClickLabel = onClickLabel, onClick = onClick) else Modifier)
+            .then(
+                if (onClick != null) {
+                    // Hacia adentro: la superficie de la lista recorta lo que sale de la fila.
+                    Modifier
+                        .anilloDeFoco(RoundedCornerShape(Radio.m), adentro = true)
+                        .clickable(onClickLabel = onClickLabel, onClick = onClick)
+                } else {
+                    Modifier
+                },
+            )
             .testTag(TAG_FILA)
             // Vuelta 29: 4 arriba y abajo (era 8). La fila de la opción 3 mide 58 con el texto
             // centrado; con 8, el título a 15 y el subtítulo a 12,5 la empujaban por encima del alto.

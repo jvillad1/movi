@@ -215,6 +215,15 @@ object Medida {
     val trazoDeCarga: Dp = 2.dp
 
     /**
+     * **El anillo de foco** (vuelta 55, accesibilidad): lo que dibuja `Modifier.anilloDeFoco` alrededor
+     * de lo que tiene el foco del teclado — 2 de trazo en la tinta, a 2 del borde del componente.
+     */
+    val trazoDelAnilloDeFoco: Dp = 2.dp
+
+    /** El aire entre el borde de un componente y su [trazoDelAnilloDeFoco]. */
+    val separacionDelAnilloDeFoco: Dp = 2.dp
+
+    /**
      * El ancho del cursor que parpadea al lado de una cifra que se escribe con el teclado físico (el
      * monto de «Agregar» fuera del teléfono, vuelta 34). El alto lo pone la letra de la cifra.
      */

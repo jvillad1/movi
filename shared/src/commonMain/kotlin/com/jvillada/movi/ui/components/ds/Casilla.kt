@@ -56,6 +56,7 @@ fun Casilla(
     val conToque = if (onCambiar != null) {
         modifier
             .size(Medida.objetivoTactil)
+            .anilloDeFoco(RoundedCornerShape(Radio.s), alrededorDe = Icono.l)
             .toggleable(value = marcada, enabled = habilitada, role = Role.Checkbox, onValueChange = onCambiar)
     } else {
         modifier

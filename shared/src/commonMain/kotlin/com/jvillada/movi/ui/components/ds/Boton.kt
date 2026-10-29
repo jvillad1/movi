@@ -145,6 +145,7 @@ fun Boton(
         modifier = modifier
             .then(if (anchoCompleto) Modifier.fillMaxWidth() else Modifier)
             .height(tamano.alto)
+            .anilloDeFoco(forma)
             .clip(forma)
             .background(fondo)
             .then(if (borde != null) Modifier.border(Medida.trazoDeBoton, borde, forma) else Modifier)

@@ -37,6 +37,7 @@ val RADIO_DEL_RESALTADO: Dp = Radio.m
 fun Modifier.renglonTocable(onClickLabel: String? = null, onClick: () -> Unit): Modifier =
     this
         .salirHaciaLosLados(SALIDA_DEL_RESALTADO)
+        .anilloDeFoco(RoundedCornerShape(RADIO_DEL_RESALTADO))
         .clip(RoundedCornerShape(RADIO_DEL_RESALTADO))
         .clickable(onClickLabel = onClickLabel, onClick = onClick)
         .padding(horizontal = SALIDA_DEL_RESALTADO)
