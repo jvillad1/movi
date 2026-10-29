@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        La pantalla de arranque de Android 12+ (vuelta 65). El sistema la pinta siempre; sin estos
+        atributos ponía el ícono de la app sobre el fondo de la ventana. Ahora es explícita y del
+        sistema de diseño: el crema del fondo (el mismo `windowBackground` de la base, así no hay
+        destello al pasar a la app) con la «m» del ícono dentro de su círculo amarillo. La «m» es el
+        mismo primer plano del ícono adaptable: a 240 dp su zona segura (66/108) cae dentro del
+        círculo de 160 que deja el sistema.
+    -->
+    <style name="Theme.Movi" parent="Base.Theme.Movi">
+        <item name="android:windowSplashScreenBackground">@color/movi_fondo</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">@color/movi_marca</item>
+    </style>
+</resources>

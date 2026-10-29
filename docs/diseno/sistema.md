@@ -3267,7 +3267,55 @@ Lo vigilan `ApartadoParaUnGastoTest` (`:core`), `ApartadoRoutesTest` y `SchemaDe
 (`:server`), `ElApartadoQueAvisaTest` y `LaCuotaVencidaSeDiceTest` (`commonTest`), y en Robolectric
 `ApartadosEnLaCuentaTest` y `LaHojaDeApartarA360Test` (360 dp, letra ×1,12).
 
-## 64. Vuelta 66: los totales se pueden rastrear, y el hogar compartido no pierde plata
+## 64. Vuelta 65: el ícono de Movi es la «m»
+
+El 29-oct el dueño pidió que el ícono y las notificaciones hicieran juego con la opción 3, y entre siete
+opciones eligió la **A: la «m» de Figtree ExtraBold en la tinta (`#1F1B16`) sobre el amarillo de la
+marca (`#FFC21A`)**, en un cuadrado redondeado. Reemplaza la billetera azul marino con tarjetas verdes
+de la paleta vieja.
+
+**Cómo se genera.** `scripts/generar-icono.py` lee el glifo «m» del mismo TTF que usa la app
+(`shared/src/commonMain/composeResources/font/figtree_extrabold.ttf`) con fontTools y lo escribe como
+`pathData` (coordenadas absolutas, dos decimales) para los vectores y como polígonos para los PNG. Las
+proporciones son las de la referencia: respecto del lado visible del ícono, el em mide 330/512 y el
+centro sube 10/512. No depende de rutas fuera del repo; necesita fontTools y Pillow (en esta Mac, el
+Python de Xcode: `/Applications/Xcode.app/Contents/Developer/usr/bin/python3 scripts/generar-icono.py`,
+con `--capturas DIR` para las imágenes de revisión). **Nada de lo que escribe se edita a mano.**
+
+| pieza | archivo | qué es |
+|---|---|---|
+| Ícono adaptable | `mipmap-anydpi-v26/ic_launcher{,_round}.xml` | fondo `@color/movi_marca`, primer plano y `monochrome` = `drawable/ic_launcher_foreground.xml` (la «m» en `@color/movi_tinta`, en la capa de 108, dentro del círculo seguro de 66) |
+| Respaldo API 24-25 | `mipmap-{m,h,xh,xxh,xxxh}dpi/ic_launcher{,_round}.png` | 48 dp por densidad: cuadrado redondeado y círculo, con alfa |
+| Ícono de los avisos | `drawable/ic_stat_movi.xml` | la misma «m», 20 de ancho en 24, blanca (Android usa solo el alfa) |
+| Arranque Android 12+ | `values-v31/themes.xml` | fondo crema (`movi_fondo`), la «m» en su círculo amarillo; `Theme.Movi` hereda de `Base.Theme.Movi` |
+| PWA | `icons/movi-{192,512}.png` (maskable, la «m» respecto del 80 % central), `icons/movi-redondeado-{192,512}.png` (any) | `manifest.json` con `background_color`/`theme_color` `#F4F1EC` (antes `#121212`, del tema oscuro que ya no existe) |
+| iOS en la web | `icons/apple-touch-icon.png` | 180 × 180, a sangre y sin alfa |
+| Favicon | `icons/favicon.png` | 48 × 48 |
+| Push web | `push-sw.js` | `icon` el redondeado, `badge` `icons/movi-badge.png` (la «m» blanca sobre transparente) |
+| En la app | `theme/LaMDeMovi.kt` | el mismo `pathData` como `ImageVector` (la marca de la guía de primer uso; vector y no texto para que en iOS también sea Figtree) |
+
+**El acento de los avisos es la tinta, no el amarillo.** Desde Android 12 el acento (`setColor`) pinta el
+círculo detrás de la «m» blanca en la cabecera de la notificación: blanco sobre amarillo da 1,6:1 y no
+se lee; blanco sobre tinta da 16:1. En la cortina oscura el círculo de tinta casi no se separa del gris,
+pero la «m» blanca sí, que es lo que tiene que leerse. En Android 8-11 el acento tiñe la «m» y el nombre
+de la app, y el sistema lo aclara solo en la cortina oscura. Todos los avisos (Por revisar, pagos,
+banco mudo, sesión cerrada, débitos, cierre) salen de `Avisador.publicar`: un ícono y un color.
+
+**Los canales hablan como la app de hoy**, con tuteo, sin cambiar sus ids (un id nuevo sería un canal
+nuevo y se perdería lo que el dueño silenció): «Por revisar» (antes «Movimientos por revisar»), «Pagos
+por vencer», «Captura del banco», «Débitos automáticos» y «Cierre del período». El push web de los
+vencimientos se titula también «Pagos por vencer» (antes «Pagos próximos en movi»).
+
+**iOS**: `iosApp` no tiene `Assets.xcassets` ni `AppIcon`; la app de iOS sigue con el ícono por defecto
+de Xcode hasta que se agregue un catálogo (el script ya sabe pintar cualquier tamaño).
+
+Lo vigila `ElIconoDeMoviTest` (JUnit en `:shared:testDebugUnitTest`, lee los archivos): `movi_marca`/`movi_tinta` =
+`marca`/`sobreMarca` de `Tokens.kt`; el adaptable con su fondo, primer plano y monocromo; la «m» dentro
+del círculo seguro y con el mismo `pathData` que `LaMDeMovi.kt`; `ic_stat_movi` vector blanco y nada
+más; cada `NotificationCompat.Builder` con `ic_stat_movi` y la tinta; el manifest en crema con el
+`theme-color` del `index.html`; los maskable y el apple-touch-icon a sangre y opacos; y el badge blanco.
+
+## 65. Vuelta 66: los totales se pueden rastrear, y el hogar compartido no pierde plata
 
 Tercera revisión de producto sobre master `32485a7a` (capturas `r3-*.png`). **Sin reglas de plata
 nuevas**: la vinculación de un saldado es la de siempre, con una ventana más.

@@ -83,9 +83,16 @@ class GuardarDesdeDondeApareceTest {
 
     private val ahorros = Account("acc-banco", "Bancolombia Ahorros 8133", AccountType.SAVINGS, 2_000_000L)
 
+    /**
+     * El día de los avisos: ayer, no una fecha fija. Con el 29-sep fijo, desde el 29-oct los avisos
+     * pasaban de 30 días y Por revisar los plegaba en «Más antiguos» (vuelta 51): las tres pruebas
+     * de Por revisar dejaron de encontrar la tarjeta. El texto del SMS puede seguir diciendo otra fecha.
+     */
+    private val ayer = java.time.LocalDate.now(java.time.ZoneId.of("America/Bogota")).minusDays(1).toString()
+
     private val transferencia = SmsMessage(
         id = "sms-1",
-        time = "2026-09-29 10:02",
+        time = "$ayer 10:02",
         bank = "Bancolombia",
         text = "Bancolombia: Transferiste \$350.000 desde tu cuenta *8133 a la cuenta *55500000756 el 29/09/2026 a las 10:02.",
         state = SMS_STATE_PENDING,
@@ -101,7 +108,7 @@ class GuardarDesdeDondeApareceTest {
 
     private val llego = SmsMessage(
         id = "sms-2",
-        time = "2026-09-29 11:30",
+        time = "$ayer 11:30",
         bank = "Notificación · Nu",
         text = "Te llegó dinero de ANA PRUEBA SALAZAR con tu llave. Recibiste \$120.000.",
         state = SMS_STATE_PENDING,

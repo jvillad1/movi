@@ -22,7 +22,7 @@ class PushPayloadTest {
     fun `single payment renders name, amount and status`() {
         val json = buildPushPayload(listOf(rule("Cuota Vehículo", 4_550_030, 22)), today, leadDays = 3)
         val obj = Json.parseToJsonElement(json).jsonObject
-        assertEquals("Pagos próximos en movi", obj["title"]!!.jsonPrimitive.content)
+        assertEquals("Pagos por vencer", obj["title"]!!.jsonPrimitive.content)
         assertEquals("/", obj["url"]!!.jsonPrimitive.content)
         assertEquals("Cuota Vehículo — ${'$'}4.550.030 (vence en 2 días)", body(json))
     }
