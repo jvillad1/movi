@@ -3,6 +3,8 @@ package com.jvillada.movi.ui.dashboard
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import com.jvillada.movi.theme.Radio
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -130,7 +132,7 @@ fun EncabezadoDelInicio(
                         } else Modifier
                         ).then(
                         if (onSubtitulo != null) {
-                            Modifier.clickable(role = Role.Button, onClickLabel = "Reintentar", onClick = onSubtitulo)
+                            Modifier.anilloDeFoco(RoundedCornerShape(Radio.s)).clickable(role = Role.Button, onClickLabel = "Reintentar", onClick = onSubtitulo)
                         } else Modifier,
                     ).testTag(TAG_SUBTITULO_DEL_INICIO),
                 )
