@@ -87,7 +87,9 @@ class LasPreguntasSugeridasTextoTest {
         val rapido = disponibleAlDia(
             ingresosRecibidos = 3_000_000,
             pagos = pagos,
-            gastoVariablePorDia = mapOf("2026-10-05" to 2_450_000L, "2026-10-13" to 50_000L),
+            // Vuelta 60: lo de ayer, no lo de hoy. La meta de hoy sale de lo que quedaba esta mañana
+            // ($877.000 entre 19 días), y $50.000 hoy la pasaban: el detalle hablaría de hoy.
+            gastoVariablePorDia = mapOf("2026-10-05" to 2_450_000L, "2026-10-12" to 50_000L),
             desde = "2026-10-01",
             hasta = "2026-10-31",
             hoy = "2026-10-13",
