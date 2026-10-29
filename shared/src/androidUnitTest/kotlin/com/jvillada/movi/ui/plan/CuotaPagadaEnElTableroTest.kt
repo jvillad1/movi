@@ -8,6 +8,8 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.semantics.SemanticsProperties
+import com.jvillada.movi.ui.recurrentes.ETIQUETA_VER_MOVIMIENTO
+import com.jvillada.movi.ui.recurrentes.NOTA_DE_LA_CUOTA_PAGADA
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
@@ -149,11 +151,12 @@ class CuotaPagadaEnElTableroTest {
     }
 
     /** Vuelta 48: abre el «⋯» de la primera fila pagada que lo tenga (cuando aparece). */
+    /** Vuelta 51: la cuota también tiene «⋯»; este abre el del sello a mano (Gimnasio Cami). */
     private fun abrirElMenuDeLaFila() {
         composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithContentDescription("Más opciones de", substring = true).fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithContentDescription("Más opciones de Gimnasio Cami").fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onAllNodesWithContentDescription("Más opciones de", substring = true).onFirst()
+        composeRule.onAllNodesWithContentDescription("Más opciones de Gimnasio Cami").onFirst()
             .performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
     }
@@ -191,24 +194,29 @@ class CuotaPagadaEnElTableroTest {
     /**
      * **El control muerto que no puede existir.** Una ocurrencia derivada no se desmarca: la fila
      * no ofrece nada que la quite. El único «Quitar la marca» es el del sello a mano.
+     *
+     * Vuelta 51: la cuota también lleva su «⋯», como todas las pagadas, pero con «Ver movimiento» y la
+     * frase de cómo deshacerla (anulando el movimiento), nunca «Quitar la marca» ni «No fue este».
      */
     @Test
     fun `la cuota pagada no ofrece nada que la quite`() {
         montar()
         esperarTexto("Cuota Crediágil 3090")
 
-        // Vuelta 48: lo que se puede hacer con una fila pagada va en su «⋯». La cuota no tiene.
+        val menus = { composeRule.onAllNodesWithContentDescription("Más opciones de", substring = true)
+            .fetchSemanticsNodes().map { it.config[SemanticsProperties.ContentDescription].first() } }
+        composeRule.waitUntil(timeoutMillis = 5_000) { menus().size == 2 }
+        assertEquals(setOf("Más opciones de Gimnasio Cami", "Más opciones de Cuota Crediágil 3090"), menus().toSet(), "todas las pagadas tienen «⋯»")
+
+        composeRule.onAllNodesWithContentDescription("Más opciones de Cuota Crediágil 3090")
+            .onFirst().performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        assertEquals(1, composeRule.onAllNodesWithText(ETIQUETA_VER_MOVIMIENTO, useUnmergedTree = true).fetchSemanticsNodes().size)
+        assertEquals(1, composeRule.onAllNodesWithText(NOTA_DE_LA_CUOTA_PAGADA, useUnmergedTree = true).fetchSemanticsNodes().size)
         assertEquals(
-            listOf("Más opciones de Gimnasio Cami"),
-            composeRule.onAllNodesWithContentDescription("Más opciones de", substring = true)
-                .fetchSemanticsNodes().map { it.config[SemanticsProperties.ContentDescription].first() },
-            "solo el sello a mano tiene menú",
-        )
-        abrirElMenuDeLaFila()
-        assertEquals(
-            1,
+            0,
             composeRule.onAllNodesWithText("Quitar la marca", useUnmergedTree = true).fetchSemanticsNodes().size,
-            "solo el sello a mano puede quitarse",
+            "la cuota no se desmarca desde la fila",
         )
         assertEquals(
             0,
