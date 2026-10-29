@@ -52,3 +52,33 @@ const val CUOTA_CATEGORY_NOT_MANUAL: String =
 const val AVANCE_CATEGORY_NOT_MANUAL: String =
     "«$AVANCE_DE_TARJETA_CATEGORY» la escribe Movi cuando confirmas el avance con la cuenta a la que " +
         "entró la plata. Elige otra categoría."
+
+// ── Vuelta 57 · una cuota sin crédito no se confirma desde un aviso ──────────────────────────────
+
+/*
+ * La revisión de la vuelta 56 confirmó una tercera cuota del mes con «Cuota de crédito» elegida (la
+ * puso la memoria de categorías) y sin elegir el crédito: Revisar aviso escribió un gasto suelto de una
+ * pata en «Cuota de crédito». Contaba como cuota anotada, no saldaba nada y, encima, la memoria lo
+ * aprendía y el aviso siguiente llegaba otra vez como «Cuota de crédito · Así lo anotaste la última
+ * vez». La vuelta 51 cerró esa puerta para lo MANUAL y dejó pasar los avisos (`SMS`, `OCR`) porque ahí
+ * el APK ≤ 1.69 escribía la pata suelta y después la vinculaba (`vincular-deuda`). Desde #439 (APK
+ * 1.70+) la cuota de un aviso viaja entera por `DosPatasDelAviso`, así que la pata suelta de un aviso
+ * nuevo ya no tiene un camino legítimo. No es una regla de plata nueva: protege la de la cuota.
+ */
+
+/**
+ * Lo que se le dice a quien confirma un aviso como «Cuota de crédito» sin el crédito: `POST /api/events`
+ * con `source = SMS | OCR` (nuevo), `POST /api/sms/grupo/{id}/confirmar` con un `evento` suelto y el
+ * espejo local del teléfono contestan 422 con esto.
+ */
+const val CUOTA_DEL_AVISO_SIN_CREDITO: String =
+    "Una cuota se confirma con su crédito: elige cuál es en «Es la cuota de un crédito». Suelta, la deuda no baja."
+
+/**
+ * ¿[evento] es la pata suelta de una cuota que viene de un aviso? Un gasto en «Cuota de crédito» sin
+ * `transferId`, escrito desde un mensaje del banco o un comprobante. Lo de dos patas (con `transferId`)
+ * pasa: es la cuota de verdad.
+ */
+fun esCuotaSueltaDeUnAviso(evento: FinancialEvent): Boolean =
+    (evento.source == EventSource.SMS || evento.source == EventSource.OCR) &&
+        evento.transferId == null && esCategoriaDeCuota(evento.category)

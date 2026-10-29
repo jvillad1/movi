@@ -23,6 +23,8 @@ import com.jvillada.movi.shared.model.esCategoriaDelDesembolso
 import com.jvillada.movi.shared.db.MoviDatabase
 import com.jvillada.movi.shared.model.isReservedCategory
 import com.jvillada.movi.shared.model.motivoDeLaCategoriaDeDosPatas
+import com.jvillada.movi.shared.model.CUOTA_DEL_AVISO_SIN_CREDITO
+import com.jvillada.movi.shared.model.esCuotaSueltaDeUnAviso
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.TipoDeDocumento
 import com.jvillada.movi.shared.model.EnlaceDeDescarga
@@ -575,6 +577,13 @@ class LocalRepository(
             db.financialEventQueries.selectById(event.id, userId()).executeAsOneOrNull() == null
         ) {
             motivoDeLaCategoriaDeDosPatas(event.category)?.let { throw ApiException(422, it) }
+        }
+        // Vuelta 57: la cuota de un aviso sin su crédito tampoco (la misma guarda que `POST /api/events`):
+        // va con sus dos patas por `confirmarConLasDosPatas`.
+        if (esCuotaSueltaDeUnAviso(event) &&
+            db.financialEventQueries.selectById(event.id, userId()).executeAsOneOrNull() == null
+        ) {
+            throw ApiException(422, CUOTA_DEL_AVISO_SIN_CREDITO)
         }
         if (event.timestamp != 0L &&
             Instant.fromEpochMilliseconds(event.timestamp).toLocalDateTime(AppTimeZone.zone).year !in 2000..2100

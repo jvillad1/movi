@@ -357,11 +357,67 @@ fun accionesDeDeudaDelAviso(leido: ParsedSms?, categoria: String?, cuentas: List
 }
 
 /**
- * Las deudas que lista el selector: con una acción elegida, solo las de su tipo; si no (Movi ya leyó
- * «Cuota de crédito» o «Pago de tarjeta»), créditos y tarjetas, como siempre.
+ * Las deudas que lista el selector: solo las del tipo de [pedida] (ver [deudaQuePideLaPantalla]). `null`
+ * (ninguna categoría de dos patas): créditos y tarjetas, como antes.
  */
 fun deudasParaElegir(cuentas: List<Account>, pedida: DeudaQuePagaElAviso?): List<Account> =
     if (pedida == null) cuentas else cuentas.filter { it.type == pedida.tipo }
+
+// ── Vuelta 57 · el selector respeta la categoría, y una cuota sin crédito no se confirma ──────────
+
+/*
+ * La revisión de la vuelta 56: cuando la memoria (o el parser) dejaba «Cuota de crédito», el selector
+ * preguntaba «¿A cuál crédito o tarjeta corresponde?» y ofrecía Nu; elegida, el pedido salía como
+ * `PAGO_DE_TARJETA` y la fila de categoría seguía diciendo «Cuota de crédito». Y sin elegir nada,
+ * Confirmar escribía un gasto suelto en «Cuota de crédito» que no bajaba ninguna deuda.
+ */
+
+/**
+ * **Qué deuda pide la pantalla**: la de la acción que tocó el dueño ([pedida]) o, si no tocó ninguna, la
+ * que dice la categoría — «Cuota de crédito» pide un crédito, «Pago de tarjeta» una tarjeta—. `null` con
+ * cualquier otra categoría. Pura.
+ */
+fun deudaQuePideLaPantalla(categoria: String?, pedida: DeudaQuePagaElAviso?): DeudaQuePagaElAviso? =
+    pedida ?: DeudaQuePagaElAviso.entries.firstOrNull { it.categoria == categoria }
+
+/**
+ * **La categoría que corresponde a la deuda elegida**: si por alguna vía quedó una tarjeta estando en
+ * «Cuota de crédito» (o un crédito en «Pago de tarjeta»), la fila de categoría pasa a la de esa deuda,
+ * para que el pedido y la pantalla digan lo mismo. Con cualquier otra combinación, [categoria] tal cual.
+ */
+fun categoriaParaLaDeudaElegida(categoria: String?, deuda: Account?): String? = when {
+    deuda == null -> categoria
+    categoria == CUOTA_CATEGORY && deuda.type == AccountType.CREDIT_CARD -> CARD_PAYMENT_CATEGORY
+    categoria == CARD_PAYMENT_CATEGORY && deuda.type == AccountType.LOAN -> CUOTA_CATEGORY
+    else -> categoria
+}
+
+/** El pie de Revisar aviso cuando una cuota todavía no tiene su crédito. */
+const val ELIGE_EL_CREDITO: String = "Elige el crédito"
+
+/** …y cuando el crédito elegido está en otra moneda que la cuenta (una cuota entre monedas no se arma). */
+const val EL_CREDITO_EN_OTRA_MONEDA: String = "Ese crédito está en otra moneda que la cuenta: elige otro o cambia la categoría"
+
+/** El tag del pie que dice por qué una cuota todavía no se confirma. */
+const val TAG_FALTA_EL_CREDITO: String = "sms:falta-el-credito"
+
+/**
+ * **¿Por qué esta cuota todavía no se confirma?** Un gasto en «Cuota de crédito» se confirma solo con sus
+ * dos patas ([propuestas]): sin el crédito, «Elige el crédito»; con uno en otra moneda, por qué no. `null`
+ * si no es una cuota o si ya tiene sus patas. **Nunca** se escribe un gasto suelto en «Cuota de crédito»:
+ * el server tampoco lo acepta (`CUOTA_DEL_AVISO_SIN_CREDITO`). Pura.
+ */
+fun porQueFaltaElCredito(
+    leido: ParsedSms?,
+    categoria: String?,
+    cuenta: Account?,
+    deuda: Account?,
+    propuestas: DosPatasPropuestas?,
+): String? {
+    if (leido?.type != TransactionType.EXPENSE || categoria != CUOTA_CATEGORY || propuestas != null) return null
+    return if (deuda?.type == AccountType.LOAN && cuenta != null && deuda.currency != cuenta.currency) EL_CREDITO_EN_OTRA_MONEDA
+    else ELIGE_EL_CREDITO
+}
 
 /** El tag del selector de la deuda en Revisar aviso. */
 const val TAG_SELECTOR_DE_LA_DEUDA_DEL_AVISO: String = "sms:selector-de-la-deuda"

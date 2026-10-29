@@ -156,6 +156,31 @@ class LoQueSeSaleDeLoNormalTest {
         assertEquals("Llevas \$312.000 este período; en el período anterior no habías gastado en Ropa.", aviso.detalle)
     }
 
+    /**
+     * Vuelta 57: «Gasto nuevo en Otros · Llevas $980.000» al lado de «En qué se va · Otros $2.780.000»
+     * parecía un error; la diferencia era el arriendo, un pago fijo que el aviso no cuenta. Con fijos en la
+     * categoría el texto dice su base; la cifra y el umbral no cambian.
+     */
+    @Test
+    fun `con un pago fijo en la categoria el texto dice que no lo cuenta`() {
+        val actual = listOf(gasto("o1", "Banco de Occidente", 980_000L, 1.0, categoria = "Otros"))
+        val arriendo = gasto("arr", "Arriendo", 1_800_000L, 2.0, categoria = "Otros")
+        val aviso = categoriasPorEncima(actual, listOf(periodo("Comida" to 500_000L)), "p", cuentas, diaDe, fijosDelPeriodo = listOf(arriendo)).single()
+        assertEquals("Gasto nuevo en Otros", aviso.titulo)
+        assertEquals(
+            "Llevas \$980.000 este período sin contar tus pagos fijos (con ellos, \$2.780.000); " +
+                "en el período anterior no habías gastado en Otros.",
+            aviso.detalle,
+        )
+        assertEquals(listOf("o1"), aviso.evidencia.map { it.id }, "el fijo no es evidencia")
+        // Un fijo de otra categoría no cambia el texto de esta.
+        val sinFijosAca = categoriasPorEncima(
+            actual, listOf(periodo("Comida" to 500_000L)), "p", cuentas, diaDe,
+            fijosDelPeriodo = listOf(arriendo.copy(category = "Hogar")),
+        ).single()
+        assertEquals("Llevas \$980.000 este período; en el período anterior no habías gastado en Otros.", sinFijosAca.detalle)
+    }
+
     @Test
     fun `sin periodos anteriores no hay normal y no se avisa`() {
         assertTrue(categoriasPorEncima(listOf(gasto("a", "x", 9_000_000L, 1.0)), emptyList(), "p", cuentas, diaDe).isEmpty())

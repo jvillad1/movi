@@ -6,6 +6,8 @@ import com.jvillada.movi.server.db.SmsMessages
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.server.time.epochMillisToAppDate
+import com.jvillada.movi.shared.model.CUOTA_DEL_AVISO_SIN_CREDITO
+import com.jvillada.movi.shared.model.esCategoriaDeCuota
 import com.jvillada.movi.shared.model.AvisosDelMismoPago
 import com.jvillada.movi.shared.model.ConfirmarElMismoPago
 import com.jvillada.movi.shared.model.CuotaYaPagada
@@ -259,6 +261,9 @@ internal fun movimientoDelAviso(uid: String, pedido: FinancialEvent, ahora: Long
         return Validado.Mal(HttpStatusCode.UnprocessableEntity, TRANSFER_LEG_NOT_STANDALONE)
     }
     if (esCategoriaDelDesembolso(pedido.category)) return Validado.Mal(HttpStatusCode.BadRequest, DESEMBOLSO_CATEGORY_NOT_MANUAL)
+    // Vuelta 57: una cuota sin su crédito no se escribe suelta (la misma guarda que `POST /api/events`
+    // para un aviso): va con `patas`, que baja la deuda y salda la cuota.
+    if (esCategoriaDeCuota(pedido.category)) return Validado.Mal(HttpStatusCode.UnprocessableEntity, CUOTA_DEL_AVISO_SIN_CREDITO)
     rechazoDelMonto(pedido.amount)?.let { return Validado.Mal(HttpStatusCode.BadRequest, it) }
     rechazoDeLosTextos(pedido.category, pedido.description)?.let { return Validado.Mal(HttpStatusCode.BadRequest, it) }
     val evento = pedido.copy(

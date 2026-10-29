@@ -371,6 +371,57 @@ class ReconciliarConLasDosPatasTest {
         assertEquals(OperacionDelAviso.PAGO_DE_TARJETA, repo.conPatas.single().second.operacion)
     }
 
+    // ── Vuelta 57 · una cuota sin crédito no se confirma, y el selector respeta la categoría ──────
+
+    private val nu = Account("nu", "Nu", AccountType.CREDIT_CARD, -300_000)
+
+    /**
+     * Revisión de la vuelta 56: la memoria dejó «Cuota de crédito» («Así lo anotaste la última vez») y,
+     * sin elegir el crédito, Confirmar escribía un gasto suelto en «Cuota de crédito». Ahora Confirmar no
+     * prende, el pie dice «Elige el crédito», el selector pregunta «¿De cuál crédito?» sin la tarjeta, y con
+     * el crédito la cuota va con sus dos patas.
+     */
+    @Test
+    fun una_cuota_sin_credito_no_se_confirma_y_el_selector_lista_solo_creditos() {
+        val leido = leidoDeOccidente.copy(category = CUOTA_CATEGORY, aprendidoDe = "Así lo anotaste la última vez")
+        val repo = Repo(avisoDeOccidente, leido, cuentas = listOf(ahorros4057, vehiculo4083, nu))
+        montar(repo, avisoDeOccidente.id)
+
+        composeRule.onNodeWithText("Confirmar").assertIsNotEnabled()
+        composeRule.onNodeWithTag(TAG_FALTA_EL_CREDITO).assertTextEquals(ELIGE_EL_CREDITO)
+        tocar("Confirmar")
+        assertTrue(repo.sueltos.isEmpty() && repo.conPatas.isEmpty(), "nunca un gasto suelto en «Cuota de crédito»")
+
+        composeRule.onNodeWithText("¿De cuál crédito?").assertIsDisplayed()
+        composeRule.onAllNodesWithText("¿A cuál crédito o tarjeta corresponde?").assertCountEquals(0)
+        composeRule.onAllNodesWithText(textoDeCuentaDeDeuda(nu)).assertCountEquals(0)
+        tocar(textoDeCuentaDeDeuda(vehiculo4083))
+
+        composeRule.onNodeWithTag(TAG_FALTA_EL_CREDITO).assertDoesNotExist()
+        composeRule.onNodeWithText("Confirmar").assertIsEnabled()
+        tocar("Confirmar")
+        assertEquals(0, repo.sueltos.size)
+        val (_, patas) = repo.conPatas.single()
+        assertEquals(OperacionDelAviso.CUOTA, patas.operacion)
+        assertEquals(vehiculo4083.id, patas.destinoId)
+    }
+
+    /** …y con «Pago de tarjeta» el selector lista solo las tarjetas. */
+    @Test
+    fun con_pago_de_tarjeta_el_selector_lista_solo_tarjetas() {
+        val leido = leidoDeOccidente.copy(category = CARD_PAYMENT_CATEGORY)
+        val repo = Repo(avisoDeOccidente, leido, cuentas = listOf(ahorros4057, vehiculo4083, nu))
+        montar(repo, avisoDeOccidente.id)
+
+        composeRule.onNodeWithText("¿De cuál tarjeta?").assertIsDisplayed()
+        composeRule.onAllNodesWithText(textoDeCuentaDeDeuda(vehiculo4083)).assertCountEquals(0)
+        tocar(textoDeCuentaDeDeuda(nu))
+        composeRule.onNodeWithTag(TAG_RESUMEN_DE_LAS_DOS_PATAS)
+            .assertTextEquals("Sale de Bancolombia Ahorros 4057 · entra a Nu como pago")
+        tocar("Confirmar")
+        assertEquals(OperacionDelAviso.PAGO_DE_TARJETA, repo.conPatas.single().second.operacion)
+    }
+
     private fun montar(repo: Repo, smsId: String) {
         Repositories.sustitutoDePrueba = repo
         composeRule.setContent {

@@ -24,6 +24,7 @@ import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
 import com.jvillada.movi.shared.model.CUOTA_CATEGORY
+import com.jvillada.movi.shared.model.CUOTA_DEL_AVISO_SIN_CREDITO
 import com.jvillada.movi.shared.model.ConfirmarElMismoPago
 import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY
 import com.jvillada.movi.shared.model.DosPatasDelAviso
@@ -673,9 +674,10 @@ class LasDosPatasDelAvisoTest {
     fun `el pago avisado varias veces sigue aceptando un solo movimiento, como antes`() = testApplication {
         application { testModule() }
         val ids = listOf("sms_cuota", "correo_cuota")
+        // Vuelta 57: en «Otros». Suelto en «Cuota de crédito» ya no entra (ver la prueba de abajo).
         val evento = FinancialEvent(
             id = "ev-suelto-viejo", accountId = ahorros, type = TransactionType.EXPENSE, amount = cuota,
-            category = CUOTA_CATEGORY, description = "Banco de Occidente", timestamp = appDateToEpochMillis(hoy),
+            category = "Otros", description = "Banco de Occidente", timestamp = appDateToEpochMillis(hoy),
         )
         val r = cliente().post("/api/sms/grupo/sms_cuota/confirmar") {
             header(HttpHeaders.Authorization, "Bearer ${token()}")
@@ -686,6 +688,53 @@ class LasDosPatasDelAvisoTest {
         val hecho = r.body<MismoPagoConfirmado>()
         assertEquals("ev-suelto-viejo", hecho.eventoId)
         assertTrue(hecho.patas.isEmpty(), "un movimiento suelto no tiene hermana")
+    }
+
+    /**
+     * Vuelta 57 · **una cuota sin su crédito no se escribe suelta**, por ninguna de las dos puertas del
+     * movimiento suelto de un aviso: el pago avisado varias veces (`…/grupo/{id}/confirmar` con `evento`) y
+     * el aviso suelto (`POST /api/events` con `source = SMS`, seguido de `/confirm?eventoId=`). Las dos
+     * contestan 422 y no escriben nada; el aviso queda pendiente. Con las patas, la cuota sí.
+     */
+    @Test
+    fun `una cuota suelta de un aviso se rechaza por las dos puertas y no deja nada`() = testApplication {
+        application { testModule() }
+        val antes = movimientos(ahorros).size
+        val suelta = FinancialEvent(
+            id = "ev-cuota-suelta", accountId = ahorros, type = TransactionType.EXPENSE, amount = cuota,
+            category = CUOTA_CATEGORY, description = "Banco de Occidente", timestamp = appDateToEpochMillis(hoy),
+            source = EventSource.SMS,
+        )
+        val porElGrupo = cliente().post("/api/sms/grupo/sms_cuota/confirmar") {
+            header(HttpHeaders.Authorization, "Bearer ${token()}")
+            contentType(ContentType.Application.Json)
+            setBody(ConfirmarElMismoPago(listOf("sms_cuota", "correo_cuota"), evento = suelta))
+        }
+        assertEquals(HttpStatusCode.UnprocessableEntity, porElGrupo.status)
+        assertEquals(CUOTA_DEL_AVISO_SIN_CREDITO, porElGrupo.bodyAsText())
+
+        val porElAlta = cliente().post("/api/events") {
+            header(HttpHeaders.Authorization, "Bearer ${token()}")
+            contentType(ContentType.Application.Json)
+            setBody(suelta.copy(id = "ev-cuota-suelta-2"))
+        }
+        assertEquals(HttpStatusCode.UnprocessableEntity, porElAlta.status)
+        assertEquals(CUOTA_DEL_AVISO_SIN_CREDITO, porElAlta.bodyAsText())
+        // Sin tildes ni mayúsculas tampoco.
+        val enMinuscula = cliente().post("/api/events") {
+            header(HttpHeaders.Authorization, "Bearer ${token()}")
+            contentType(ContentType.Application.Json)
+            setBody(suelta.copy(id = "ev-cuota-suelta-3", category = "cuota de credito"))
+        }
+        assertEquals(HttpStatusCode.UnprocessableEntity, enMinuscula.status)
+
+        assertEquals(antes, movimientos(ahorros).size, "no se escribió ningún gasto suelto")
+        assertEquals(SMS_STATE_PENDING, estadoDelAviso("sms_cuota").first)
+
+        // Con el crédito, la misma cuota entra con sus dos patas.
+        val conPatas = confirmar("sms_cuota", patas(OperacionDelAviso.CUOTA, ahorros, vehiculo, cuota, "v57"))
+        assertEquals(HttpStatusCode.OK, conPatas.status)
+        assertEquals(SMS_STATE_CONFIRMED, estadoDelAviso("sms_cuota").first)
     }
 
     // ── Aislamiento y reglas ────────────────────────────────────────────────────

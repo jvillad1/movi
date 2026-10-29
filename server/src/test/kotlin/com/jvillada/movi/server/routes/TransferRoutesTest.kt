@@ -26,6 +26,7 @@ import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY
 import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY_NOT_MANUAL
 import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.CUOTA_CATEGORY_NOT_MANUAL
+import com.jvillada.movi.shared.model.CUOTA_DEL_AVISO_SIN_CREDITO
 import com.jvillada.movi.shared.model.AVANCE_DE_TARJETA_CATEGORY
 import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
 import com.jvillada.movi.shared.model.ORPHANED_LEG_NOT_MANUAL
@@ -1115,8 +1116,8 @@ class TransferRoutesTest {
     /**
      * Vuelta 51: **«Cuota de crédito» no se elige a mano.** La escribe el flujo de dos patas (Agregar →
      * Cuota); suelta, un gasto que dice ser la cuota no baja la deuda. Rechazo en las tres puertas: el alta
-     * a mano, el cambio de categoría de un movimiento y el lote. Un aviso del banco confirmado (`SMS`) sí
-     * entra con ella, como siempre: es lo que leyó el parser.
+     * a mano, el cambio de categoría de un movimiento y el lote. Desde la vuelta 57 tampoco un aviso del banco
+     * (`SMS`) suelto: su cuota va con las dos patas.
      */
     @Test
     fun `la cuota de credito no se elige a mano en ninguna puerta`() = testApplication {
@@ -1174,7 +1175,8 @@ class TransferRoutesTest {
         }
         assertEquals(HttpStatusCode.UnprocessableEntity, enLote.status)
 
-        // El aviso del banco que el parser leyó como cuota sí entra: no lo eligió nadie a mano.
+        // Vuelta 57: el aviso del banco confirmado como cuota, suelto, tampoco entra —sin el crédito no baja
+        // ninguna deuda—. La cuota de un aviso viaja con sus dos patas (`DosPatasDelAviso`).
         val delAviso = client.post("/api/events") {
             header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
             contentType(ContentType.Application.Json)
@@ -1184,8 +1186,26 @@ class TransferRoutesTest {
                     """"timestamp":${System.currentTimeMillis()}}""",
             )
         }
-        assertTrue(delAviso.status.value in 200..299, "un aviso confirmado con la cuota entra: ${delAviso.status}")
-        assertEquals(before + 1, eventCount())
+        assertEquals(HttpStatusCode.UnprocessableEntity, delAviso.status)
+        assertEquals(CUOTA_DEL_AVISO_SIN_CREDITO, delAviso.bodyAsText())
+        assertEquals(before, eventCount())
+
+        // Uno así que ya estaba en la base (escrito antes de esta vuelta) sigue ahí.
+        transaction {
+            Events.insert {
+                it[id] = "ev-cuota-sms"
+                it[userId] = userAId
+                it[accountId] = ahorrosId
+                it[type] = "EXPENSE"
+                it[amount] = 4_215_223L
+                it[currency] = "COP"
+                it[category] = CUOTA_CATEGORY
+                it[description] = "PSE Banco de Occidente"
+                it[timestamp] = System.currentTimeMillis()
+                it[eventSource] = "SMS"
+                it[reconciliationStatus] = "RECONCILED"
+            }
+        }
 
         // Y el reenvío del teléfono de un movimiento que el server ya tiene, tampoco rebota.
         val reenvio = client.post("/api/events") {

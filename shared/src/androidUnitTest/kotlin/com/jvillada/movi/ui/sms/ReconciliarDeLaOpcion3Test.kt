@@ -108,8 +108,8 @@ class ReconciliarDeLaOpcion3Test {
     fun `el comercio de Confirma o ajusta va en forma de titulo, no gritando`() {
         montar()
 
-        composeRule.onNode(hasSetTextAction() and hasAnyAncestor(hasTestTag(TAG_CONFIRMA_O_AJUSTA_COMERCIO)), useUnmergedTree = true)
-            .assertTextEquals("Éxito Suba")
+        // Vuelta 57: fuera de edición, el comercio es un texto (desde el principio, con «…» al final).
+        composeRule.onNodeWithTag(TAG_COMERCIO_A_LA_VISTA, useUnmergedTree = true).assertTextEquals("Éxito Suba")
         assertTrue(
             composeRule.onAllNodesWithText("EXITO SUBA", useUnmergedTree = true).fetchSemanticsNodes().isEmpty(),
             "«EXITO SUBA» en mayúsculas",

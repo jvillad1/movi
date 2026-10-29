@@ -237,6 +237,11 @@ fun suscripcionesQueSubieron(
  *   cuáles); sin ninguno no hay «normal» contra qué medir y no se avisa nada.
  * @param periodoActual el prefijo del período en curso: va en la huella, para que el descarte valga
  *   para este período y no apague la categoría para siempre.
+ * @param fijosDelPeriodo vuelta 57: los pagos de facturas del período (el arriendo anotado con «Anotar
+ *   pago»), que el server ya sacó de [actual] porque son fijos y no consumo (vuelta 43). No cambian
+ *   ninguna cifra ni el umbral: solo hacen que el texto diga su base. «Llevas $980.000 este período en
+ *   Otros» al lado de «En qué se va · Otros $2.780.000» parecía un error; la diferencia era el arriendo.
+ *   Con fijos en esa categoría el detalle dice «sin contar tus pagos fijos (con ellos, $2.780.000)».
  */
 fun categoriasPorEncima(
     actual: List<FinancialEvent>,
@@ -244,6 +249,7 @@ fun categoriasPorEncima(
     periodoActual: String,
     nombreDeCuenta: Map<String, String>,
     diaDe: (Long) -> String,
+    fijosDelPeriodo: List<FinancialEvent> = emptyList(),
 ): List<Anomalia> {
     if (anteriores.isEmpty()) return emptyList()
     fun porCategoria(eventos: List<FinancialEvent>) = eventos
@@ -251,13 +257,19 @@ fun categoriasPorEncima(
         .groupBy { it.category }
     val ahora = porCategoria(actual)
     val antes = anteriores.map { periodo -> porCategoria(periodo).mapValues { (_, es) -> es.sumOf { montoContado(it) } } }
+    val fijos = porCategoria(fijosDelPeriodo).mapValues { (_, es) -> es.sumOf { montoContado(it) } }
     return ahora.mapNotNull { (categoria, eventos) ->
         val gastado = eventos.sumOf { montoContado(it) }
         val promedio = antes.sumOf { it[categoria] ?: 0L } / antes.size
         val diferencia = gastado - promedio
         if (diferencia < DIFERENCIA_MINIMA_DE_CATEGORIA) return@mapNotNull null
         if (promedio > 0L && gastado * 10 < promedio * VECES_SOBRE_EL_PROMEDIO_X10) return@mapNotNull null
-        val llevas = "Llevas ${plata(gastado, "COP")} este período"
+        val fijosAca = fijos[categoria] ?: 0L
+        val llevas = if (fijosAca > 0L) {
+            "Llevas ${plata(gastado, "COP")} este período sin contar tus pagos fijos (con ellos, ${plata(gastado + fijosAca, "COP")})"
+        } else {
+            "Llevas ${plata(gastado, "COP")} este período"
+        }
         // Sin historia en la categoría, «lo normal es $0» no dice nada: es un gasto nuevo.
         val (titulo, detalle) = if (promedio == 0L) {
             val cuando = if (antes.size == 1) "en el período anterior" else "en los ${antes.size} períodos anteriores"

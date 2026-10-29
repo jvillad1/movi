@@ -30,10 +30,12 @@ import com.jvillada.movi.shared.model.MismoPagoConfirmado
 import com.jvillada.movi.shared.model.OccurrenceState
 import com.jvillada.movi.shared.model.ParsedSms
 import com.jvillada.movi.shared.model.SMS_STATE_PENDING
+import com.jvillada.movi.shared.model.CUOTA_DEL_AVISO_SIN_CREDITO
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.VincularPagoDeDeudaRequest
 import io.ktor.client.call.body
+import io.ktor.client.statement.bodyAsText
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -235,17 +237,16 @@ class ElPagoPorPseDePuntaAPuntaTest {
     }
 
     @Test
-    fun `confirmar la cuota propuesta con su credito marca la fila del periodo`() = testApplication {
+    fun `confirmar la cuota propuesta suelta, como el APK viejo, ya no entra`() = testApplication {
         application { testModule() }
         val reglaDelCredito = "$CREDIT_RULE_PREFIX$vehiculo"
-        val antes = leer<List<OccurrenceState>>("/api/payments/occurrences").firstOrNull { it.ruleId == reglaDelCredito }
-        assertTrue(antes == null || !antes.occurred, "antes de confirmar la cuota del período no está pagada")
-
         val grupoId = assertNotNull(leer<List<SmsMessage>>("/api/sms").first { it.id == "sms_rt_occidente" }.grupoId)
         val grupo = leer<GrupoDeAvisos>("/api/sms/grupo/$grupoId")
         val p = leer<ParsedSms>("/api/sms/${grupo.propuestaDe}/parse")
 
-        // Lo que hace la app al confirmar: un movimiento para los dos avisos…
+        // Vuelta 57: el APK ≤ 1.69 escribía la pata suelta en «Cuota de crédito» y después la vinculaba.
+        // Esa pata suelta ya no entra (422, sin escribir nada): la cuota de un aviso viaja con sus dos
+        // patas, que es la prueba de abajo.
         val evento = FinancialEvent(
             id = "ev-cuota-pse", accountId = assertNotNull(p.cuentaSugeridaId), type = p.type, amount = cuota,
             currency = p.currency, category = p.category, description = "${p.merchant} · ${p.nota}", merchant = p.merchant,
@@ -256,22 +257,12 @@ class ElPagoPorPseDePuntaAPuntaTest {
             contentType(ContentType.Application.Json)
             setBody(ConfirmarElMismoPago(grupo.miembros.map { it.id }, evento = evento))
         }
-        assertEquals(HttpStatusCode.OK, confirmado.status)
-        assertTrue(confirmado.body<MismoPagoConfirmado>().creado)
-
-        // …y el traspaso de dos patas con la deuda que propuso Movi.
-        val vinculo = cliente().put("/api/events/ev-cuota-pse/vincular-deuda") {
-            header(HttpHeaders.Authorization, "Bearer ${token()}")
-            contentType(ContentType.Application.Json)
-            setBody(VincularPagoDeDeudaRequest(debtAccountId = assertNotNull(p.deudaSugeridaId), transferId = "tr-pse", toEventId = "ev-cuota-pse-deuda"))
-        }
-        assertEquals(HttpStatusCode.OK, vinculo.status)
+        assertEquals(HttpStatusCode.UnprocessableEntity, confirmado.status)
+        assertEquals(CUOTA_DEL_AVISO_SIN_CREDITO, confirmado.bodyAsText())
 
         val despues = leer<List<OccurrenceState>>("/api/payments/occurrences").firstOrNull { it.ruleId == reglaDelCredito }
-        assertNotNull(despues, "la cuota del período aparece")
-        assertTrue(despues.occurred, "y está pagada")
-        assertEquals(YearMonth.from(hoy).toString(), despues.period)
-        assertEquals("ev-cuota-pse-deuda", despues.eventId)
+        assertTrue(despues == null || !despues.occurred, "nada quedó pagado")
+        assertTrue(leer<List<SmsMessage>>("/api/sms").filter { it.grupoId == grupoId }.all { it.state == SMS_STATE_PENDING })
     }
 
     /**

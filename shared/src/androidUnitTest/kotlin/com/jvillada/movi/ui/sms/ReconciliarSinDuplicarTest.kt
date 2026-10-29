@@ -11,6 +11,7 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTextReplacement
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
@@ -210,6 +211,8 @@ class ReconciliarSinDuplicarTest {
     fun el_comercio_editado_es_el_que_se_guarda() {
         montar(Repo())
 
+        // Vuelta 57: fuera de edición el comercio es un texto; tocar la fila abre el campo.
+        abrirElComercio()
         composeRule.onNode(hasSetTextAction()).performTextReplacement("Tostao")
         composeRule.waitForIdle()
         tocar("Confirmar")
@@ -225,6 +228,7 @@ class ReconciliarSinDuplicarTest {
     fun un_comercio_vacio_vuelve_al_leido() {
         montar(Repo())
 
+        abrirElComercio()
         composeRule.onNode(hasSetTextAction()).performTextReplacement("   ")
         composeRule.waitForIdle()
         tocar("Confirmar")
@@ -233,6 +237,11 @@ class ReconciliarSinDuplicarTest {
     }
 
     // ── Andamio ─────────────────────────────────────────────────────────────────
+
+    private fun abrirElComercio() {
+        composeRule.onNodeWithTag(TAG_CONFIRMA_O_AJUSTA_COMERCIO).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+    }
 
     private fun montar(repo: Repo) {
         Repositories.sustitutoDePrueba = repo

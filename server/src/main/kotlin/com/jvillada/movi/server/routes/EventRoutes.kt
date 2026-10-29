@@ -12,6 +12,8 @@ import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY_NOT_MANUAL
 import com.jvillada.movi.shared.model.esCategoriaDelDesembolso
 import com.jvillada.movi.shared.model.motivoDeLaCategoriaDeDosPatas
+import com.jvillada.movi.shared.model.CUOTA_DEL_AVISO_SIN_CREDITO
+import com.jvillada.movi.shared.model.esCuotaSueltaDeUnAviso
 import com.jvillada.movi.server.balance.accountTypesFor
 import com.jvillada.movi.server.balance.toAccount
 import com.jvillada.movi.server.balance.dismissedCardPaymentEventIds
@@ -252,6 +254,15 @@ fun Route.eventRoutes() {
                 motivoDeLaCategoriaDeDosPatas(body.category)?.let { motivo ->
                     return@post call.respond(HttpStatusCode.UnprocessableEntity, motivo)
                 }
+            }
+            // Vuelta 57: **la cuota de un aviso, suelta, tampoco.** Un aviso del banco (o un
+            // comprobante) confirmado como «Cuota de crédito» sin el crédito era un gasto de una pata
+            // que no bajaba ninguna deuda —y la memoria de categorías lo aprendía—. Desde #439 (APK
+            // 1.70+) la cuota de un aviso viaja con sus dos patas (`DosPatasDelAviso`); la pata suelta
+            // solo la escribía el APK ≤ 1.69 antes de vincularla, y ese camino se cierra a propósito.
+            // El reenvío de lo que el server ya tiene sigue pasando.
+            if (!yaExiste && esCuotaSueltaDeUnAviso(body)) {
+                return@post call.respond(HttpStatusCode.UnprocessableEntity, CUOTA_DEL_AVISO_SIN_CREDITO)
             }
             if (body.source == EventSource.MANUAL &&
                 isReservedCategory(body.category) &&

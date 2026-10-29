@@ -93,4 +93,40 @@ class LasDosPatasEnReconciliarTest {
     fun `como destino solo cuentas suyas de dinero o inversion, distintas del origen`() {
         assertEquals(listOf(ahorros), destinosElegibles(todas, fidu))
     }
+
+    // ── Vuelta 57 ────────────────────────────────────────────────────────────
+
+    @Test
+    fun `la pantalla pide la deuda que dice la categoria, o la de la accion tocada`() {
+        assertEquals(DeudaQuePagaElAviso.CREDITO, deudaQuePideLaPantalla(CUOTA_CATEGORY, null))
+        assertEquals(DeudaQuePagaElAviso.TARJETA, deudaQuePideLaPantalla(CARD_PAYMENT_CATEGORY, null))
+        assertEquals(DeudaQuePagaElAviso.TARJETA, deudaQuePideLaPantalla(CUOTA_CATEGORY, DeudaQuePagaElAviso.TARJETA))
+        assertNull(deudaQuePideLaPantalla("Comida", null))
+        assertEquals(listOf(carro), deudasParaElegir(todas, deudaQuePideLaPantalla(CUOTA_CATEGORY, null)))
+        assertEquals(listOf(masterBlack, amex), deudasParaElegir(todas, deudaQuePideLaPantalla(CARD_PAYMENT_CATEGORY, null)))
+    }
+
+    @Test
+    fun `una tarjeta elegida en cuota pasa la categoria a pago de tarjeta, y al reves`() {
+        assertEquals(CARD_PAYMENT_CATEGORY, categoriaParaLaDeudaElegida(CUOTA_CATEGORY, masterBlack))
+        assertEquals(CUOTA_CATEGORY, categoriaParaLaDeudaElegida(CARD_PAYMENT_CATEGORY, carro))
+        assertEquals(CUOTA_CATEGORY, categoriaParaLaDeudaElegida(CUOTA_CATEGORY, carro))
+        assertEquals(CUOTA_CATEGORY, categoriaParaLaDeudaElegida(CUOTA_CATEGORY, null))
+        // Y entonces el pedido es el de la tarjeta con la categoría que lo dice.
+        val categoria = categoriaParaLaDeudaElegida(CUOTA_CATEGORY, masterBlack)
+        val propuestas = assertNotNull(dosPatasPropuestas(leido(TransactionType.EXPENSE, categoria!!), categoria, ahorros, masterBlack, null))
+        assertEquals(OperacionDelAviso.PAGO_DE_TARJETA, propuestas.operacion)
+    }
+
+    @Test
+    fun `una cuota sin credito dice por que no se confirma`() {
+        val cuota = leido(TransactionType.EXPENSE, CUOTA_CATEGORY)
+        assertEquals(ELIGE_EL_CREDITO, porQueFaltaElCredito(cuota, CUOTA_CATEGORY, ahorros, null, null))
+        assertEquals(EL_CREDITO_EN_OTRA_MONEDA, porQueFaltaElCredito(cuota, CUOTA_CATEGORY, ahorros, carroEnDolares, null))
+        val conCredito = dosPatasPropuestas(cuota, CUOTA_CATEGORY, ahorros, carro, null)
+        assertNull(porQueFaltaElCredito(cuota, CUOTA_CATEGORY, ahorros, carro, conCredito))
+        // Lo demás no pide crédito: un pago de tarjeta suelto (una tarjeta que no está en Movi) sigue como antes.
+        assertNull(porQueFaltaElCredito(leido(TransactionType.EXPENSE, CARD_PAYMENT_CATEGORY), CARD_PAYMENT_CATEGORY, ahorros, null, null))
+        assertNull(porQueFaltaElCredito(leido(TransactionType.EXPENSE, "Comida"), "Comida", ahorros, null, null))
+    }
 }
