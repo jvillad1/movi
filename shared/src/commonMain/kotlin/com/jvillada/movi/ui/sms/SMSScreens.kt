@@ -217,6 +217,17 @@ fun CapturaDelBancoScreen(onNavigate: (Screen) -> Unit) {
             }
     }
     val mensajes = mensajesMasRecientesPrimero(smsItems.orEmpty())
+    // Vuelta 67 · el historial: su chip, el mensaje abierto y, para abrir un confirmado, su movimiento.
+    var filtroDelHistorial by remember { mutableStateOf(FiltroDelHistorial.TODOS) }
+    var abierto by remember { mutableStateOf<String?>(null) }
+    var movimientoAbierto by remember { mutableStateOf<com.jvillada.movi.shared.model.FinancialEvent?>(null) }
+    val eventos = com.jvillada.movi.data.rememberLectura(com.jvillada.movi.data.ClaveDeLectura.EventosPorDia, reintento = refreshKey) {
+        Repositories.wallets.getEventsByDay()
+    }
+    val cuentasDelHistorial = com.jvillada.movi.data.rememberLectura(com.jvillada.movi.data.ClaveDeLectura.Cuentas, reintento = refreshKey) {
+        Repositories.wallets.getAccounts()
+    }
+    val hoy = remember { hoyEnAppZone() }
     // El estado de la captura sale de la MISMA función que usa el server para el Inicio
     // (`capturaDeSms`, en :core) — acá sin un viaje extra, porque la lista ya está bajada.
     // Sin los comprobantes compartidos (Ola 2): esos no prueban que la captura ande.
@@ -386,15 +397,34 @@ fun CapturaDelBancoScreen(onNavigate: (Screen) -> Unit) {
                 }
             }
 
-            mensajes.forEach { sms ->
-                item {
-                    TarjetaDeMensajeDelBanco(
-                        sms,
-                        onRevisar = { onNavigate(Screen.SMSReconcile(sms.id)) },
-                        parecidoA = sms.parecidoA?.let { id -> mensajes.firstOrNull { it.id == id } },
+            // Vuelta 67 · el historial se recorre: chips, una lista compacta por día, el comercio de
+            // título, y cada fila abre lo suyo (ver `ElHistorialDelBanco.kt`).
+            if (mensajes.isNotEmpty()) {
+                item(key = "chips-del-historial") {
+                    ChipsDelHistorial(mensajes, filtroDelHistorial, onFiltro = { filtroDelHistorial = it; abierto = null })
+                }
+            }
+            historialPorDia(mensajes, filtroDelHistorial, hoy).forEach { dia ->
+                item(key = "dia-${dia.clave}") {
+                    DiaDelHistorialDelBanco(
+                        dia = dia,
+                        hoy = hoy,
+                        conEstado = filtroDelHistorial == FiltroDelHistorial.TODOS,
+                        abierto = abierto,
+                        onTocar = { sms ->
+                            when (val accion = alTocarElMensaje(sms)) {
+                                is AlTocarElMensaje.Revisar -> onNavigate(Screen.SMSReconcile(accion.smsId))
+                                is AlTocarElMensaje.Movimiento -> {
+                                    val movimiento = eventos.valor?.flatMap { it.items }?.firstOrNull { it.id == accion.eventoId }
+                                    if (movimiento != null) movimientoAbierto = movimiento
+                                    else abierto = if (abierto == sms.id) null else sms.id
+                                }
+                                AlTocarElMensaje.VerElTexto -> abierto = if (abierto == sms.id) null else sms.id
+                            }
+                        },
                         // «Era un movimiento»: lo que Movi apartó vuelve a «Por revisar». Se ve
                         // devuelto en el acto y se relee la lista cuando el server contesta.
-                        onEraUnMovimiento = {
+                        onEraUnMovimiento = { sms ->
                             coroutine.launch {
                                 intentar { Repositories.wallets.devolverSmsALaBandeja(sms.id) }
                                     .onSuccess {
@@ -409,6 +439,14 @@ fun CapturaDelBancoScreen(onNavigate: (Screen) -> Unit) {
                 }
             }
         }
+    }
+    movimientoAbierto?.let { evento ->
+        com.jvillada.movi.ui.transactions.HojaDelMovimiento(
+            event = evento,
+            cuentas = cuentasDelHistorial.valor.orEmpty(),
+            onDismiss = { movimientoAbierto = null },
+            onCambiado = { movimientoAbierto = null; refreshKey++ },
+        )
     }
 }
 

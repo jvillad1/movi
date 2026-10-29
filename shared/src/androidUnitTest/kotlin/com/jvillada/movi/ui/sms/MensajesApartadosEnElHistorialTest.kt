@@ -9,6 +9,7 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performSemanticsAction
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
@@ -90,19 +91,22 @@ class MensajesApartadosEnElHistorialTest {
             MoviTheme { Box(Modifier.fillMaxSize()) { CapturaDelBancoScreen(onNavigate = {}) } }
         }
 
+        // Vuelta 67: una fila por mensaje; el estado va en el subtítulo y el texto se abre al tocarla.
+        esperar { cuantos("Apartado") == 1 }
+        assertEquals(0, cuantos(ERA_UN_MOVIMIENTO), "el texto del banco se abre al tocar la fila")
+        composeRule.onNodeWithTag("$TAG_FILA_DEL_HISTORIAL:sms_codigo", useUnmergedTree = true)
+            .performSemanticsAction(SemanticsActions.OnClick)
         esperar { cuantos("Movi lo apartó: código de verificación") == 1 }
-        assertEquals(1, cuantos("Apartado"))
         // Uno solo: el que ignoró el dueño se queda como él lo dejó.
         assertEquals(1, cuantos(ERA_UN_MOVIMIENTO))
-        assertEquals(1, cuantos("Revisar"), "solo la compra pendiente")
 
         composeRule.onAllNodes(hasClickAction() and (hasText(ERA_UN_MOVIMIENTO) or hasAnyChild(hasText(ERA_UN_MOVIMIENTO))), useUnmergedTree = true)[0]
             .performSemanticsAction(SemanticsActions.OnClick)
-        esperar { devueltos.isNotEmpty() && cuantos("Movi lo apartó") == 0 }
+        esperar { devueltos.isNotEmpty() && cuantos("Apartado") == 0 }
 
         assertEquals(listOf("sms_codigo"), devueltos)
         assertEquals(0, cuantos(ERA_UN_MOVIMIENTO))
-        assertEquals(2, cuantos("Revisar"), "el devuelto vuelve a esperar una decisión")
+        assertEquals(2, cuantos("· Pendiente"), "el devuelto vuelve a esperar una decisión")
     }
 
     @Test

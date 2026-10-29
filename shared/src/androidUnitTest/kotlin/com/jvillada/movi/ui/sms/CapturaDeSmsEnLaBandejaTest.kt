@@ -195,8 +195,12 @@ class CapturaDeSmsEnLaBandejaTest {
         esperarTexto("Historial")
         composeRule.onNodeWithText("Captura del banco", useUnmergedTree = true).assertExists()
         composeRule.onNodeWithText("Captura en este teléfono", substring = true, useUnmergedTree = true).assertExists()
-        composeRule.onNodeWithText("Confirmado", useUnmergedTree = true).assertExists()
-        composeRule.onNodeWithText("Pendiente", useUnmergedTree = true).assertExists()
+        // Vuelta 67: el historial entero, por día, con sus chips; el confirmado y el pendiente, cada uno
+        // con su fila (el pendiente lo dice en su subtítulo).
+        composeRule.onNodeWithText("Confirmados · 1", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithText("Pendientes · 1", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithTag("$TAG_FILA_DEL_HISTORIAL:s1", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithTag("$TAG_FILA_DEL_HISTORIAL:s2", useUnmergedTree = true).assertExists()
         // Ya no cuenta pendientes en el encabezado: eso lo dice «Por revisar».
         composeRule.onNodeWithText("por confirmar", substring = true, useUnmergedTree = true).assertDoesNotExist()
     }
