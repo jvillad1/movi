@@ -129,11 +129,11 @@ class LaCuotaSeVeComoGastoTest {
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithTag(TAG_ENCABEZADO_DE_DIA, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.waitUntil(timeoutMillis = 5_000) { hay("Cuota de crédito") }
+        composeRule.waitUntil(timeoutMillis = 5_000) { hay("Cuota de Libre inversión 9695") }
         composeRule.waitForIdle()
 
         // La fila de la cuota: un gasto, con «−».
-        composeRule.onNodeWithText("Cuota de crédito", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Cuota de Libre inversión 9695", useUnmergedTree = true).assertIsDisplayed()
         assertTrue(hay("−\$980.000"), "la cuota va con «−»")
         // El pago de tarjeta y el traspaso, sin signo.
         composeRule.onNodeWithText("Pago de tarjeta", useUnmergedTree = true).assertIsDisplayed()
@@ -174,7 +174,7 @@ class LaCuotaSeVeComoGastoTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Cuota de crédito", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Cuota de Libre inversión 9695", useUnmergedTree = true).assertIsDisplayed()
         assertTrue(hay("−\$980.000"), "la cuota va con «−»")
         assertTrue(hay("\$100.000") && !hay("−\$100.000"), "el pago de tarjeta no lleva signo")
         assertTrue(hay("\$50.000") && !hay("−\$50.000"), "el traspaso no lleva signo")

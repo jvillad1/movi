@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.transactions
 
+import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.Espacio
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.MIEMBRO_YO
@@ -35,26 +36,43 @@ fun laDescripcionEsLaCategoria(tx: FinancialEvent): Boolean {
 }
 
 /**
- * **Título y subtítulo** de la fila de [tx], con [nombreDeLaCuenta] si se conoce.
+ * **Título y subtítulo** de la fila de [tx], con [nombreDeLaCuenta] si se conoce. **Una sola regla**
+ * para la fila de Actividad (en Todo y en cada chip), el detalle, la hoja de anular y Buscar.
  *
- * - Lo de siempre: la descripción, y «categoría · cuenta».
+ * - Lo de siempre: la descripción (el concepto), y «categoría · cuenta».
  * - Si la descripción es la categoría: el comercio («Éxito», con «Mercado · Nu» debajo); sin
- *   comercio, la cuenta («Nu», con «Mercado» debajo); sin ninguno de los dos, la categoría sola.
+ *   comercio, **la categoría** («Internet», con la cuenta debajo). Vuelta 67: hasta acá el título era
+ *   la cuenta («Bancolombia Ahorros 4057 · Internet», y el detalle se titulaba «Nu»): la cuenta no es
+ *   lo que pasó, es de dónde salió, y va en el subtítulo.
+ * - **La cuota de un crédito** ([CUOTA_CATEGORY]) se llama por su crédito: [tituloDeLaCuota] —«Cuota de
+ *   Vehículo 4083»—, igual que su renglón de dos patas en Todo ([tituloDeLaCuota] también). Antes era
+ *   «Cuota de crédito» en Todo y «Cuota de Vehículo 4083 · Pago Occidente» en Gastos.
  */
 fun textosDeLaFila(tx: FinancialEvent, nombreDeLaCuenta: String?): TextosDeLaFila {
     val cuenta = nombreDeLaCuenta?.takeIf { it.isNotBlank() }
     // Vuelta de diseño 32: lo que el banco mandó en mayúsculas se lee en forma de título.
     val descripcion = descripcionParaMostrar(tx)
     val deSiempre = TextosDeLaFila(descripcion, cuenta?.let { "${tx.category} · $it" } ?: tx.category)
+    if (tx.category == CUOTA_CATEGORY) return deSiempre.copy(titulo = tituloDeLaCuota(tx))
     if (!laDescripcionEsLaCategoria(tx)) return deSiempre
     val comercio = tx.merchant?.trim()?.takeIf {
         it.isNotEmpty() && normalizarParaBuscar(it) != normalizarParaBuscar(tx.category)
     }
     return when {
         comercio != null -> TextosDeLaFila(enFormaDeTitulo(comercio), deSiempre.subtitulo)
-        cuenta != null -> TextosDeLaFila(cuenta, tx.category)
-        else -> TextosDeLaFila(descripcion, null)
+        else -> TextosDeLaFila(enFormaDeTitulo(tx.category.trim().ifEmpty { descripcion }), cuenta)
     }
+}
+
+/**
+ * **El título de una cuota de crédito** (vuelta 67), desde la pata del dinero: «Cuota de Vehículo
+ * 4083». Sale del concepto que escribe `pagoDeCuotaLegs` («Cuota de Vehículo 4083», con la nota del
+ * dueño después de « · »), sin la nota; si el concepto no tiene esa forma, «Cuota de crédito». Es el mismo para la fila suelta (Gastos) y el renglón
+ * del par (Todo, [transferRowTitle]).
+ */
+fun tituloDeLaCuota(pataDelDinero: FinancialEvent): String {
+    val concepto = descripcionParaMostrar(pataDelDinero).trim()
+    return if (concepto.startsWith("Cuota de ", ignoreCase = true)) concepto.substringBefore(" · ").trim() else CUOTA_CATEGORY
 }
 
 /**

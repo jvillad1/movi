@@ -61,7 +61,7 @@ class ComoSePresentaLaFilaTest {
         assertEquals("−\$980.000", textoDelMontoDeTraspaso(fila(cuota), tipos))
         // La cifra es la de la pata del dinero (la cuota entera), no la del abono a capital.
         assertEquals(cuota.first, pataQueSeMuestra(fila(cuota), tipos))
-        assertEquals("Cuota de crédito", transferRowTitle(fila(cuota), tipos))
+        assertEquals("Cuota de Libre inversión 9695", transferRowTitle(fila(cuota), tipos), "vuelta 67: por su crédito")
     }
 
     @Test

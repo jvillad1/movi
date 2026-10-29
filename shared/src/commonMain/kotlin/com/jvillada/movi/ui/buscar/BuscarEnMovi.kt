@@ -9,6 +9,7 @@ import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.claveDelComercio
+import com.jvillada.movi.shared.model.marcaDe
 import com.jvillada.movi.shared.model.vecesEnElComercio
 import com.jvillada.movi.shared.model.normalizarParaBuscar
 import com.jvillada.movi.ui.Screen
@@ -223,6 +224,29 @@ fun unaPataPorPar(eventos: List<FinancialEvent>, tipos: Map<String, AccountType>
 }
 
 /**
+ * **El nombre de un comercio de Buscar** (vuelta 67): **su marca** si la tiene («Éxito», que junta
+ * Éxito Suba y Éxito Laureles; antes se llamaba «Éxito Suba» y sumaba también Laureles). Sin marca, el
+ * texto que más se repite en el grupo; a igual cuenta, el del más reciente (el primero). Pura.
+ */
+fun nombreDelComercio(delComercio: List<FinancialEvent>): String {
+    val ejemplo = delComercio.first()
+    marcaDe(ejemplo)?.let { return it.nombre }
+    return delComercio.map { (it.merchant?.takeIf { m -> m.isNotBlank() } ?: it.description).trim() }
+        .groupingBy { it }.eachCount().maxByOrNull { it.value }?.key ?: ejemplo.description.trim()
+}
+
+/**
+ * **El subtítulo de un movimiento en Buscar** (vuelta 67): el de su fila en Actividad
+ * ([textosDeLaFila]) con la fecha, porque acá no hay días: «Mercado · 27 de octubre · Nu». La categoría
+ * no se repite si ya es el título. Pura.
+ */
+fun subtituloDeUnMovimientoEnBuscar(evento: FinancialEvent, nombreDeLaCuenta: String?, fecha: String): String {
+    val titulo = textosDeLaFila(evento, nombreDeLaCuenta).titulo
+    val categoria = evento.category.takeIf { it.isNotBlank() && normalizarParaBuscar(it) != normalizarParaBuscar(titulo) }
+    return listOfNotNull(categoria, fecha, nombreDeLaCuenta?.takeIf { it.isNotBlank() }).joinToString(" · ")
+}
+
+/**
  * **Buscar [consulta] en lo que hay a mano.** Vacío con la consulta en blanco. Los grupos sin
  * resultados no vienen.
  *
@@ -270,10 +294,7 @@ fun buscarEnMovi(
                 clave,
             )
             ResultadoDeBusqueda.Comercio(
-                // El nombre que más se repite en el grupo (con la marca juntan textos distintos:
-                // «Juan Valdez Cafe» y «Tinto y pan»); a igual cuenta, el del más reciente.
-                nombre = delComercio.map { (it.merchant?.takeIf { m -> m.isNotBlank() } ?: it.description).trim() }
-                    .groupingBy { it }.eachCount().maxByOrNull { it.value }?.key ?: ejemplo.description.trim(),
+                nombre = nombreDelComercio(delComercio),
                 ejemplo = ejemplo,
                 enElPeriodo = enElPeriodo.veces,
                 totalDelPeriodo = enElPeriodo.total,

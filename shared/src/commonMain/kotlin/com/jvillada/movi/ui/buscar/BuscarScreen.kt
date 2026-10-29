@@ -70,6 +70,9 @@ import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.formatMoney
 import com.jvillada.movi.ui.fecha.etiquetaDeFecha
 import com.jvillada.movi.ui.transactions.HojaDelMovimiento
+import com.jvillada.movi.ui.transactions.FinalDeLaFila
+import com.jvillada.movi.ui.transactions.debajoDeLaCifra
+import com.jvillada.movi.ui.transactions.montoPrincipalDelMovimiento
 
 /** El `testTag` del campo de búsqueda. */
 const val TAG_CAMPO_DE_BUSCAR: String = "buscar-campo"
@@ -151,6 +154,13 @@ fun BuscarScreen(onNavigate: (Screen) -> Unit) {
         )
     }
     val grupos = remember(consulta, filtros, datos, periodo) { buscarEnMovi(consulta, datos, filtros, periodo) }
+    // Vuelta 67: los grupos, para que un gasto repartido diga «de $88.600 · con Caro» como en Actividad.
+    // Solo si la historia tiene alguno repartido; si la lectura falla, la fila dice «de $88.600».
+    val hayRepartidos = remember(todosLosEventos) { todosLosEventos.any { it.espacioId != null } }
+    var espacios by remember { mutableStateOf<Map<String, com.jvillada.movi.shared.model.Espacio>>(emptyMap()) }
+    LaunchedEffect(recarga, hayRepartidos) {
+        if (hayRepartidos) intentar { Repositories.wallets.getEspacios() }.onSuccess { lista -> espacios = lista.associateBy { it.id } }
+    }
 
     val anotar: () -> Unit = { BusquedasRecientesStore.anotar(consulta) }
     val alTocar: (ResultadoDeBusqueda) -> Unit = { resultado ->
@@ -225,7 +235,7 @@ fun BuscarScreen(onNavigate: (Screen) -> Unit) {
                             ) {
                                 grupo.resultados.forEachIndexed { j, resultado ->
                                     if (j > 0) Separador()
-                                    FilaDeResultado(resultado, cuentas = datos.cuentas, alTocar = { alTocar(resultado) })
+                                    FilaDeResultado(resultado, cuentas = datos.cuentas, espacios = espacios, alTocar = { alTocar(resultado) })
                                 }
                             }
                         }
@@ -236,11 +246,24 @@ fun BuscarScreen(onNavigate: (Screen) -> Unit) {
     }
 
     eventoAbierto?.let { evento ->
+        // Vuelta 67: «N veces este período», como al abrirlo desde Actividad: con los movimientos del
+        // período de ESE movimiento, que Buscar ya tiene (la historia entera).
+        val enEsteComercio = remember(evento, eventos.valor, perfil.valor) {
+            perfil.valor?.ajustesDelPeriodo()?.let { ajustes ->
+                val suPeriodo = periodoActual(evento.timestamp, ajustes)
+                com.jvillada.movi.ui.transactions.enEsteComercio(
+                    evento,
+                    com.jvillada.movi.ui.transactions.diasDelPeriodo(eventos.valor.orEmpty(), suPeriodo, ajustes).flatMap { it.items },
+                )
+            }
+        }
         HojaDelMovimiento(
             event = evento,
             cuentas = cuentas.valor.orEmpty(),
             onDismiss = { eventoAbierto = null },
             onCambiado = { eventoAbierto = null; recarga++ },
+            enEsteComercio = enEsteComercio,
+            onVerElComercio = { busqueda -> eventoAbierto = null; onNavigate(Screen.Transactions(consultaInicial = busqueda)) },
         )
     }
 }
@@ -367,6 +390,7 @@ private fun FilaReciente(texto: String, alElegir: () -> Unit, alQuitar: () -> Un
 private fun FilaDeResultado(
     resultado: ResultadoDeBusqueda,
     cuentas: List<com.jvillada.movi.shared.model.Account>,
+    espacios: Map<String, com.jvillada.movi.shared.model.Espacio> = emptyMap(),
     alTocar: () -> Unit,
 ) {
     val hoy = remember { epochMillisToAppDate(ahoraEnMs()) }
@@ -376,13 +400,23 @@ private fun FilaDeResultado(
         is ResultadoDeBusqueda.Movimiento -> {
             val e = resultado.evento
             val laCuenta = cuentas.firstOrNull { it.id == e.accountId }
-            val cuenta = laCuenta?.name
-            val linea = listOfNotNull(e.category.takeIf { it.isNotBlank() }, etiquetaDeFecha(epochMillisToAppDate(e.timestamp), hoy), cuenta)
-                .joinToString(" · ")
+            val linea = subtituloDeUnMovimientoEnBuscar(e, laCuenta?.name, etiquetaDeFecha(epochMillisToAppDate(e.timestamp), hoy))
             // Vuelta 50: de un par se lista la pata que cuenta (`unaPataPorPar`), así que la cuota sale
             // como el gasto que es, «−$980.000».
             val tono = tonoDelEvento(e, laCuenta?.type)
-            linea to @Composable { CifraDelMovimiento(e.amount, e.currency, tono) }
+            // Vuelta 67: la cifra de la fila de Actividad —tu parte en un gasto repartido, con «de
+            // $88.600 · con Caro» debajo—. Antes Buscar mostraba el total y su comercio sumaba tu parte:
+            // la suma de arriba no salía de las filas.
+            linea to @Composable {
+                FinalDeLaFila(
+                    monto = montoPrincipalDelMovimiento(e),
+                    moneda = e.currency,
+                    tono = tono,
+                    porConfirmar = e.reconciliationStatus == com.jvillada.movi.shared.model.ReconciliationStatus.UNCONFIRMED,
+                    esRecurrente = false,
+                    debajo = debajoDeLaCifra(e, e.espacioId?.let { espacios[it] }),
+                )
+            }
         }
         is ResultadoDeBusqueda.Comercio -> {
             val veces = when (resultado.enElPeriodo) {

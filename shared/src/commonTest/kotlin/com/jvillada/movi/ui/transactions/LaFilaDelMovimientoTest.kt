@@ -60,11 +60,12 @@ class LaFilaDelMovimientoTest {
     }
 
     @Test
-    fun `Mercado sobre Mercado muestra el comercio o la cuenta y no repite la categoria`() {
+    fun `Mercado sobre Mercado muestra el comercio o la categoria, con la cuenta debajo`() {
         assertTrue(laDescripcionEsLaCategoria(gasto(" mercado ", "Mercado")))
         assertEquals(TextosDeLaFila("Éxito", "Mercado · Nu"), textosDeLaFila(gasto(merchant = "Éxito"), "Nu"))
-        assertEquals(TextosDeLaFila("Nu", "Mercado"), textosDeLaFila(gasto(), "Nu"))
-        assertEquals(TextosDeLaFila("Nu", "Mercado"), textosDeLaFila(gasto(merchant = "MERCADO"), "Nu"), "un comercio igual a la categoría no sirve")
+        // Vuelta 67: la categoría de título y la cuenta debajo (antes «Nu» / «Mercado»).
+        assertEquals(TextosDeLaFila("Mercado", "Nu"), textosDeLaFila(gasto(), "Nu"))
+        assertEquals(TextosDeLaFila("Mercado", "Nu"), textosDeLaFila(gasto(merchant = "MERCADO"), "Nu"), "un comercio igual a la categoría no sirve")
         assertEquals(TextosDeLaFila("Mercado", null), textosDeLaFila(gasto(), null))
     }
 

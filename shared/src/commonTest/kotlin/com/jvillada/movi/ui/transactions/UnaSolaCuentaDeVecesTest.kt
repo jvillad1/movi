@@ -47,6 +47,6 @@ class UnaSolaCuentaDeVecesTest {
             .single { it.tipo == TipoDeResultado.COMERCIO }.resultados.single() as ResultadoDeBusqueda.Comercio
         assertEquals(detalle.veces, comercio.enElPeriodo)
         assertEquals(detalle.total, comercio.totalDelPeriodo)
-        assertEquals("JUAN VALDEZ CAFE", comercio.nombre, "el nombre que más se repite")
+        assertEquals("Juan Valdez", comercio.nombre, "vuelta 67: el nombre de la marca")
     }
 }
