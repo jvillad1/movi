@@ -46,6 +46,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
 import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.GastoParecidoALaCuota
+import com.jvillada.movi.shared.model.SI_ES_LA_CUOTA
+import com.jvillada.movi.shared.model.claveDeLaCuotaPorSaldar
+import com.jvillada.movi.shared.model.preguntaDeLaCuotaQueSeParece
 import com.jvillada.movi.shared.model.PlanDelCredito
 import com.jvillada.movi.shared.model.pagosEnOrdenDeUrgencia
 import com.jvillada.movi.theme.Espacio
@@ -212,6 +216,15 @@ fun SeccionChecklistDelPeriodo(
     debajoDelResumen: (@Composable () -> Unit)? = null,
     /** Vuelta 48: tocar una factura pagada (compacta) abre el movimiento que la pagó. */
     onVerMovimiento: ((eventId: String) -> Unit)? = null,
+    /**
+     * Vuelta 57: por cada cuota sin saldar ([claveDeLaCuotaPorSaldar]), el gasto suelto que se le parece
+     * (`gastosParecidosALasCuotas`, la regla del detalle). Vacío: la fila no ofrece nada nuevo.
+     */
+    cuotasQueSeParecen: Map<String, GastoParecidoALaCuota> = emptyMap(),
+    /** «Sí, es la cuota»: lo mismo que la sugerencia del detalle (`vincular-deuda` con `esLaCuota`). */
+    onEsLaCuota: ((pago: PagoDelPeriodo, parecido: GastoParecidoALaCuota) -> Unit)? = null,
+    /** «No fue este» sobre el gasto parecido: deja de ofrecerse. */
+    onNoEsLaCuota: ((pago: PagoDelPeriodo, parecido: GastoParecidoALaCuota) -> Unit)? = null,
 ) {
     // ── El momento de celebrar (Ola 1 · «Que Movi se sienta viva») ──────────────────────────────
     // Cuando el dueño completa la lista —pasa de «falta 1» a «todo pagado» por algo que hizo acá:
@@ -263,6 +276,8 @@ fun SeccionChecklistDelPeriodo(
         val conPropuesta = pago.estado == EstadoDeLaFila.CON_DUDAS && propuesta != null && !esPropuestaLejana(pago, propuesta)
         val enVuelo = pago.ruleId in marcando
         val estimacion = estimacionDeLaFila(pago, planesDeCuotas)?.takeIf { !enVuelo && !pago.pagado }
+        // Vuelta 57: la cuota pendiente ofrece el gasto que se le parece, como el detalle de ese gasto.
+        val parecido = gastoParecidoDeLaFila(pago, cuotasQueSeParecen)?.takeIf { onEsLaCuota != null }
         FilaDeFactura(
             pago = pago,
             principal = pago == urgente,
@@ -284,10 +299,19 @@ fun SeccionChecklistDelPeriodo(
                     }
                 }
             },
-            debajo = if (!pago.pagado && (estimacion != null || ofreceAlgoDebajo(pago, conPropuesta))) {
+            debajo = if (!pago.pagado && (estimacion != null || parecido != null || ofreceAlgoDebajo(pago, conPropuesta))) {
                 {
                     if (estimacion != null) Text(text = estimacion, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                     LoQueOfreceLaFila(pago, propuesta, enVuelo, acciones, conBotonDeAnotar = false)
+                    if (parecido != null) {
+                        LaCuotaQueSeParece(
+                            pago = pago,
+                            parecido = parecido,
+                            enVuelo = enVuelo,
+                            onEsLaCuota = { onEsLaCuota?.invoke(pago, parecido) },
+                            onNoEs = { onNoEsLaCuota?.invoke(pago, parecido) },
+                        )
+                    }
                 }
             } else null,
         )
@@ -896,6 +920,61 @@ internal fun PropuestaLejana(
                     enVuelo = enVuelo,
                     onConfirmar = { acciones.onConfirmar(pago, propuesta.id) },
                     onDescartar = { acciones.onNoFueEste(pago, propuesta.id) },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * **El gasto que se parece a la cuota de esta fila** (vuelta 57), o `null`: solo en la cuota de un crédito
+ * todavía sin pagar, y solo si Movi no está ya proponiendo un candidato del server para ella.
+ */
+internal fun gastoParecidoDeLaFila(
+    pago: PagoDelPeriodo,
+    parecidos: Map<String, GastoParecidoALaCuota>,
+): GastoParecidoALaCuota? {
+    if (pago.pagado || !pago.ruleId.startsWith(CREDIT_RULE_PREFIX) || pago.candidatos.isNotEmpty()) return null
+    return parecidos[claveDeLaCuotaPorSaldar(pago.ruleId.removePrefix(CREDIT_RULE_PREFIX), pago.vence)]
+}
+
+/** El tag del enlace «¿Es el de $980.000?» de la cuota que se parece, en Pagos. */
+const val TAG_CUOTA_QUE_SE_PARECE_EN_PAGOS: String = "checklist:cuota-que-se-parece"
+
+/**
+ * **«¿Es el de $980.000?» · «Sí, es la cuota»** (vuelta 57): el mismo enlace que una propuesta lejana
+ * ([PropuestaLejana]); al tocarlo pregunta «¿Es la cuota de Vehículo 4083?» con el gasto, y «Sí, es la
+ * cuota» hace lo mismo que la sugerencia del detalle. «No fue este» deja de ofrecerlo. Nunca se tilda solo.
+ */
+@Composable
+internal fun LaCuotaQueSeParece(
+    pago: PagoDelPeriodo,
+    parecido: GastoParecidoALaCuota,
+    enVuelo: Boolean,
+    onEsLaCuota: () -> Unit,
+    onNoEs: () -> Unit,
+) {
+    var abierta by rememberSaveable(pago.ruleId, parecido.gasto.id) { mutableStateOf(false) }
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Boton(
+            enlaceDeLaPropuestaLejana(parecido.gasto),
+            onClick = { abierta = !abierta },
+            variante = VarianteDeBoton.Fantasma,
+            tamano = TamanoDeBoton.S,
+            habilitado = !enVuelo,
+            modifier = Modifier.testTag(TAG_CUOTA_QUE_SE_PARECE_EN_PAGOS),
+        )
+        if (abierta) {
+            Superficie(modifier = Modifier.fillMaxWidth(), nivel = NivelDeSuperficie.Capa2) {
+                Text(preguntaDeLaCuotaQueSeParece(parecido.cuota), style = Movi.textos.titulo, color = Movi.colores.texto)
+                Spacer(Modifier.height(Espacio.xs))
+                PropuestaDeMovimiento(
+                    propuesta = parecido.gasto,
+                    aviso = null,
+                    enVuelo = enVuelo,
+                    onConfirmar = onEsLaCuota,
+                    onDescartar = onNoEs,
+                    textoConfirmar = SI_ES_LA_CUOTA,
                 )
             }
         }

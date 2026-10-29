@@ -32,6 +32,14 @@ import com.jvillada.movi.data.intentar
 import com.jvillada.movi.platform.PushOptIn
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.GastoParecidoALaCuota
+import com.jvillada.movi.shared.model.VincularPagoDeDeudaRequest
+import com.jvillada.movi.shared.model.cuotaYaPagadaDe
+import com.jvillada.movi.shared.model.cuotasPorSaldar
+import com.jvillada.movi.shared.model.gastosParecidosALasCuotas
+import com.jvillada.movi.shared.model.newId
+import com.jvillada.movi.shared.repository.ApiException
+import com.jvillada.movi.ui.dashboard.PagoDelPeriodo
 import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.ui.transactions.HojaDelMovimiento
 import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
@@ -130,6 +138,9 @@ import kotlinx.datetime.Clock
  * recarga y los nombres de las cuentas—; Plan lo monta así. Las pruebas del tablero lo montan igual,
  * en una lista propia (`TableroDeRecurrentesDePrueba`, en las fuentes de prueba).
  */
+
+/** La clave de «No fue este» sobre el gasto que se parece a una cuota (vuelta 57), en [PropuestasDescartadasStore]. */
+internal fun claveDeLaCuotaParecidaDescartada(eventId: String): String = "cuota-parecida:$eventId"
 
 /**
  * **Lo que el tablero lee y lo que el dueño le hace.** Estaba suelto adentro de `TransactionsScreen`
@@ -370,6 +381,67 @@ class EstadoDelTableroDeRecurrentes internal constructor(
     /** «Ahora no»: la fila de los recordatorios no vuelve hasta el período que viene. */
     internal fun descartarRecordatorios(periodo: PeriodoFinanciero) {
         recordatoriosDescartados = PropuestasDescartadasStore.marcar(claveDeRecordatoriosAhoraNo(periodo))
+    }
+
+    // ── Vuelta 57 · la cuota pendiente ofrece el gasto que se le parece ────────────────────────
+    /**
+     * Las cuentas y los movimientos vivos, para «¿Es el de $980.000?» en la cuota pendiente de un crédito
+     * (`gastosParecidosALasCuotas`, la regla del detalle). Se leen con el tablero activo, como los planes;
+     * un fallo deja las listas vacías y la fila como antes, sin cartel.
+     */
+    internal var cuentasDelTablero by mutableStateOf<List<Account>>(emptyList())
+    internal var gastosDelTablero by mutableStateOf<List<FinancialEvent>>(emptyList())
+
+    /** Hay la cuota de un crédito sin un pago que la salde: solo entonces se leen los movimientos. */
+    internal val hayCuotaDeCreditoSinPagar: Boolean by derivedStateOf {
+        upcomingRecurrentes.any { pago ->
+            pago.rule.id.startsWith(CREDIT_RULE_PREFIX) && ocurrencias.none { it.ruleId == pago.rule.id && it.occurred }
+        }
+    }
+
+    /** Los gastos que el dueño dijo que no son la cuota («No fue este»): guardados por usuario, no por sesión. */
+    internal var cuotasParecidasDescartadas by mutableStateOf(PropuestasDescartadasStore.descartadas())
+        private set
+
+    /** Por cada cuota sin saldar, el gasto que se le parece (sin los descartados). */
+    internal fun cuotasQueSeParecen(settings: PeriodSettings): Map<String, GastoParecidoALaCuota> {
+        if (!vencimientosOk) return emptyMap()
+        val cuotas = cuotasPorSaldar(upcomingRecurrentes, cuentasDelTablero, if (ocurrenciasOk) ocurrencias else emptyList())
+        if (cuotas.isEmpty()) return emptyMap()
+        val gastos = gastosDelTablero.filterNot { claveDeLaCuotaParecidaDescartada(it.id) in cuotasParecidasDescartadas }
+        return gastosParecidosALasCuotas(gastos, cuotas, settings)
+    }
+
+    /**
+     * «Sí, es la cuota»: lo mismo que la sugerencia del detalle de ese gasto (`vincular-deuda` con
+     * `esLaCuota`). Si la cuota de ese período ya la saldó otro movimiento, el server contesta 409 y se dice.
+     */
+    internal fun esLaCuota(pago: PagoDelPeriodo, parecido: GastoParecidoALaCuota) {
+        if (pago.ruleId in marcando) return
+        marcando = marcando + pago.ruleId
+        alcance.launch {
+            runCatching {
+                Repositories.wallets.vincularPagoDeDeuda(
+                    parecido.gasto.id,
+                    VincularPagoDeDeudaRequest(
+                        debtAccountId = parecido.cuota.creditoId,
+                        transferId = newId("tr"),
+                        toEventId = newId("ev"),
+                        esLaCuota = true,
+                    ),
+                )
+            }
+                .onSuccess { recargas++ }
+                .onFailure { e ->
+                    error = (e as? ApiException)?.let { cuotaYaPagadaDe(it.status, it.serverMessage)?.mensaje } ?: e.toUserMessage()
+                }
+            marcando = marcando - pago.ruleId
+        }
+    }
+
+    /** «No fue este»: ese gasto deja de ofrecerse como la cuota. */
+    internal fun noEsLaCuota(parecido: GastoParecidoALaCuota) {
+        cuotasParecidasDescartadas = PropuestasDescartadasStore.marcar(claveDeLaCuotaParecidaDescartada(parecido.gasto.id))
     }
 
     /** Vuelve a traer todo lo del tablero, sin tocar lo de quien lo monta. */
@@ -658,6 +730,16 @@ fun rememberEstadoDelTableroDeRecurrentes(
             .onFailure { estado.planesDeCuotas = emptyMap() }
     }
 
+    // Vuelta 57 · ver [EstadoDelTableroDeRecurrentes.cuentasDelTablero]. Un fallo no es un error de la pantalla.
+    // Solo si hay la cuota de un crédito sin pagar: sin ella el tablero no tiene por qué leer los movimientos.
+    val hayCuotaSinPagar = estado.hayCuotaDeCreditoSinPagar
+    LaunchedEffect(activo, hayCuotaSinPagar, estado.recargas, refreshTick, recarga) {
+        if (!activo || !hayCuotaSinPagar) return@LaunchedEffect
+        estado.cuentasDelTablero = intentar { Repositories.wallets.getAccounts() }.getOrDefault(emptyList())
+        estado.gastosDelTablero = intentar { Repositories.wallets.getEventsByDay() }.getOrNull()
+            ?.flatMap { it.items }.orEmpty()
+    }
+
     // El flujo de permisos del navegador es async (moviPush.js): tras pedirlo se refresca unas
     // veces para que el aviso desaparezca sin reabrir la app. Solo donde el push existe Y con el
     // tablero a la vista — en Android/iOS `status()` es una constante, y con otro segmento de
@@ -866,6 +948,13 @@ fun LazyListScope.tableroDeRecurrentes(
                 planesDeCuotas = estado.planesDeCuotas,
                 debajoDelResumen = if (avisarRecordatorios) filaDeRecordatorios else null,
                 onVerMovimiento = { estado.abrirMovimiento(it) },
+                // Vuelta 57: «¿Es el de $980.000?» · «Sí, es la cuota» en la cuota pendiente.
+                cuotasQueSeParecen = remember(
+                    estado.upcomingRecurrentes, estado.ocurrencias, estado.ocurrenciasOk, estado.vencimientosOk,
+                    estado.cuentasDelTablero, estado.gastosDelTablero, estado.cuotasParecidasDescartadas, ajustesDelPeriodo,
+                ) { estado.cuotasQueSeParecen(ajustesDelPeriodo) },
+                onEsLaCuota = { pago, parecido -> estado.esLaCuota(pago, parecido) },
+                onNoEsLaCuota = { _, parecido -> estado.noEsLaCuota(parecido) },
             )
         }
     }

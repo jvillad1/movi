@@ -111,3 +111,39 @@ fun preguntaDeLaCuotaQueSeParece(cuota: CuotaPorSaldar): String = "¿Es la cuota
 
 /** El botón de la sugerencia: hace lo mismo que «Es la cuota de un crédito» con ese crédito. */
 const val SI_ES_LA_CUOTA: String = "Sí, es la cuota"
+
+// ── Vuelta 57 · la fila de Pagos también ofrece el gasto parecido ─────────────────────────────────
+
+/*
+ * En Pagos, la cuota pendiente del Vehículo 4083 solo decía «¿Se cobró?», aunque el detalle del gasto
+ * de $980.000 en «Otros» ya sugería «¿Es la cuota de Vehículo 4083?». La fila usa ahora **la misma
+ * regla** ([cuotaQueSeParece]: el monto a ±10 %, el período del vencimiento sin saldar y un solo crédito
+ * posible) y ofrece «¿Es el de $980.000?» · «Sí, es la cuota», que hace lo mismo que la sugerencia del
+ * detalle (`vincular-deuda` con `esLaCuota`). Nunca se vincula solo.
+ */
+
+/** Un gasto suelto que se parece a la cuota [cuota] sin saldar. */
+data class GastoParecidoALaCuota(val cuota: CuotaPorSaldar, val gasto: FinancialEvent)
+
+/** La clave de un vencimiento de un crédito: el crédito y el día que vence. */
+fun claveDeLaCuotaPorSaldar(creditoId: String, vence: String): String = "$creditoId@$vence"
+
+/**
+ * **Por cada cuota sin saldar, el gasto suelto que se le parece**, con [cuotaQueSeParece] (la regla del
+ * detalle, entera: si un gasto se parece a dos créditos no se ofrece en ninguno). Si varios gastos se
+ * parecen a la misma cuota, el de monto más cercano; si empatan, el más reciente. La clave es
+ * [claveDeLaCuotaPorSaldar]. Pura.
+ */
+fun gastosParecidosALasCuotas(
+    gastos: List<FinancialEvent>,
+    cuotas: List<CuotaPorSaldar>,
+    settings: PeriodSettings,
+): Map<String, GastoParecidoALaCuota> =
+    gastos
+        .mapNotNull { gasto -> cuotaQueSeParece(gasto, cuotas, settings)?.let { cuota -> GastoParecidoALaCuota(cuota, gasto) } }
+        .groupBy { claveDeLaCuotaPorSaldar(it.cuota.creditoId, it.cuota.vence) }
+        .mapValues { (_, parecidos) ->
+            parecidos.minWith(
+                compareBy<GastoParecidoALaCuota> { abs(it.gasto.amount - it.cuota.cuota) }.thenByDescending { it.gasto.timestamp },
+            )
+        }
