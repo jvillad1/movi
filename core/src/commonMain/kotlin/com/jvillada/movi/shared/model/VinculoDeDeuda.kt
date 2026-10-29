@@ -75,6 +75,16 @@ data class VincularPagoDeDeudaRequest(
     val transferId: String,
     val toEventId: String,
     val interesReal: Long? = null,
+    /**
+     * Vuelta 51 · **«Es la cuota de un crédito»**: el dueño dijo, desde el detalle, que este gasto suelto
+     * es la cuota del crédito [debtAccountId]. Antes eso se hacía eligiendo «Cuota de crédito» en el
+     * selector y después vinculando; desde que esa categoría no se elige a mano, esta marca es la que
+     * deja vincular un gasto con otra categoría. Solo vale con un crédito (LOAN) y sobre un gasto cuya
+     * categoría no sea una de las que escribe Movi; el resto es lo de siempre: las mismas dos patas
+     * ([pagoDeCuotaLegs]), la pata del dinero pasa a [CUOTA_CATEGORY]. Default `false`: un cliente viejo
+     * sigue igual.
+     */
+    val esLaCuota: Boolean = false,
 )
 
 /** Lo que se le dice a quien intenta vincular un movimiento que ya es parte de otro traspaso. */

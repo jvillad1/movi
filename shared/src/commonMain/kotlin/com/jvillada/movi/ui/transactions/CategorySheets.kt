@@ -17,6 +17,7 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -188,6 +189,21 @@ private fun CategoryRow(
  * del movimiento esté entre los que la categoría sirve ([effectiveCategoryTypes] — lo fijado por él
  * gana sobre el catálogo). Aparte del `@Composable` para poder probarla.
  */
+/** Vuelta 51: la fila especial del detalle que convierte un gasto suelto en la cuota de un crédito. */
+const val ES_LA_CUOTA_DE_UN_CREDITO: String = "Es la cuota de un crédito"
+
+/** El tag del selector de crédito que abre «Es la cuota de un crédito». */
+const val TAG_ELEGIR_EL_CREDITO: String = "movimiento:elegir-el-credito"
+
+/**
+ * **¿El detalle ofrece «Es la cuota de un crédito»?** (vuelta 51). Un gasto suelto —sin `transferId`—,
+ * con una categoría que no sea de las que escribe Movi (la cuota y el pago de tarjeta ya ofrecen
+ * vincular en «Más»), y con al menos un crédito (LOAN) donde ponerlo. Pura.
+ */
+fun puedeMarcarseCuotaDeCredito(event: FinancialEvent, cuentas: List<Account>): Boolean =
+    event.type == TransactionType.EXPENSE && event.transferId == null &&
+        !esCategoriaQueNoSeElige(event.category) && cuentas.any { it.type == AccountType.LOAN }
+
 internal fun puedeMarcarsePagoDeTarjeta(tipo: TransactionType, prefs: Map<String, CategoryPref>): Boolean {
     val pref = prefs.entries
         .firstOrNull { it.key.trim().equals(CARD_PAYMENT_CATEGORY, ignoreCase = true) }?.value
@@ -481,7 +497,10 @@ internal fun ContenidoDelMovimiento(
     var vinculando by remember(event.id) { mutableStateOf(false) }
     var errorDeVinculo by remember(event.id) { mutableStateOf<String?>(null) }
 
-    fun vincular(cuenta: Account) {
+    // Vuelta 51 · «Es la cuota de un crédito»: abierta, la hoja pide el crédito.
+    var eligiendoElCredito by remember(event.id) { mutableStateOf(false) }
+
+    fun vincular(cuenta: Account, esLaCuota: Boolean = false) {
         if (vinculando) return
         vinculando = true
         errorDeVinculo = null
@@ -493,6 +512,7 @@ internal fun ContenidoDelMovimiento(
                         debtAccountId = cuenta.id,
                         transferId = newId("tr"),
                         toEventId = newId("ev"),
+                        esLaCuota = esLaCuota,
                     ),
                 )
             }
@@ -881,6 +901,41 @@ internal fun ContenidoDelMovimiento(
                                 subtitle = "Deja de contar en tus gastos del mes: la compra ya se contó al usar la tarjeta",
                                 compacto = true,
                             )
+                        }
+                        // Vuelta 51 · «Es la cuota de un crédito», junto a «Pago de tarjeta»: desde que
+                        // «Cuota de crédito» no se elige en el selector, esta es la puerta para convertir
+                        // en cuota un gasto suelto (el SMS o el correo del pago). Elegido el crédito, hace
+                        // lo de la Ola Y: `vincular-deuda` con las mismas dos patas.
+                        if (puedeMarcarseCuotaDeCredito(event, cuentas)) {
+                            Spacer(Modifier.height(Espacio.xs))
+                            Separador(SangriaDeSeparador.Ninguna)
+                            Spacer(Modifier.height(Espacio.xs))
+                            CategoryRow(
+                                name = ES_LA_CUOTA_DE_UN_CREDITO,
+                                selected = eligiendoElCredito,
+                                enabled = !saving && !vinculando,
+                                onClick = { eligiendoElCredito = !eligiendoElCredito },
+                                subtitle = "Elige el crédito: queda como su cuota y baja la deuda",
+                                compacto = true,
+                            )
+                            if (eligiendoElCredito) {
+                                Spacer(Modifier.height(Espacio.xs))
+                                SelectorDeCuentaDeDeuda(
+                                    cuentas = cuentas.filter { it.type == AccountType.LOAN },
+                                    seleccionada = null,
+                                    onSeleccionar = { credito -> credito?.let { vincular(it, esLaCuota = true) } },
+                                    titulo = "¿De cuál crédito?",
+                                    modifier = Modifier.testTag(TAG_ELEGIR_EL_CREDITO),
+                                )
+                                if (vinculando) {
+                                    Spacer(Modifier.height(Espacio.xs))
+                                    Text("Vinculando…", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                                }
+                                errorDeVinculo?.let {
+                                    Spacer(Modifier.height(Espacio.xs))
+                                    Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
+                                }
+                            }
                         }
                         Spacer(Modifier.height(Espacio.xxs))
                         EnlaceAdministrarCategorias()

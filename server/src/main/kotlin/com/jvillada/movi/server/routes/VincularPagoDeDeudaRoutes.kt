@@ -14,6 +14,7 @@ import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.CUOTA_CATEGORY
+import com.jvillada.movi.shared.model.esCategoriaQueNoSeElige
 import com.jvillada.movi.shared.model.CreatePagoDeCuotaRequest
 import com.jvillada.movi.shared.model.DesgloseDeCuota
 import com.jvillada.movi.shared.model.FinancialEvent
@@ -141,7 +142,13 @@ fun Route.vincularPagoDeDeudaRoutes() {
             if (evento.transferId != null && evento.transferId != body.transferId) {
                 return@put call.respond(HttpStatusCode.UnprocessableEntity, VINCULO_YA_ES_TRASPASO)
             }
-            if (evento.type != TransactionType.EXPENSE || (evento.category != CUOTA_CATEGORY && evento.category != CARD_PAYMENT_CATEGORY)) {
+            // Vuelta 51 · «Es la cuota de un crédito» (`esLaCuota`): el gasto puede traer otra categoría
+            // —la que le puso el banco o el dueño—, siempre que la deuda sea un crédito y la categoría no
+            // sea una de las que escribe Movi. Lo demás, idéntico: las mismas dos patas de abajo.
+            val esLaCuotaElegida = body.esLaCuota && debtAccount.type == AccountType.LOAN &&
+                !esCategoriaQueNoSeElige(evento.category)
+            val categoriaQueVincula = evento.category == CUOTA_CATEGORY || evento.category == CARD_PAYMENT_CATEGORY
+            if (evento.type != TransactionType.EXPENSE || (!categoriaQueVincula && !esLaCuotaElegida)) {
                 return@put call.respond(HttpStatusCode.UnprocessableEntity, VINCULO_CATEGORIA_INVALIDA)
             }
 

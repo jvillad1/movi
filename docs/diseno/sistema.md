@@ -2701,7 +2701,12 @@ nuevas**: el punto 2 protege una que ya existía.
    un movimiento (`ofreceCategoriaEscritaAMano`, de donde sale también el lote). «Cuota de crédito» y
    «Desembolso de crédito» **siguen sin ser reservadas** (cuentan en el mes). La fila especial «Pago de
    tarjeta» del detalle se queda: es la acción explícita «esto fue el pago de mi tarjeta», no una categoría
-   del selector. El server rechaza la cuota y el avance a mano con `motivoDeLaCategoriaDeDosPatas`
+   del selector. A su lado, **«Es la cuota de un crédito»** (`ES_LA_CUOTA_DE_UN_CREDITO`,
+   `puedeMarcarseCuotaDeCredito`: un gasto suelto con una categoría elegible y algún crédito) reemplaza el
+   camino de la Ola Y que pasaba por elegir «Cuota de crédito»: abre «¿De cuál crédito?»
+   (`SelectorDeCuentaDeDeuda` con solo los LOAN) y llama a **`vincular-deuda` de siempre** con
+   `VincularPagoDeDeudaRequest.esLaCuota = true` —el server acepta entonces un gasto de otra categoría,
+   solo con un crédito—: las mismas dos patas de `pagoDeCuotaLegs`, y el período queda saldado. El server rechaza la cuota y el avance a mano con `motivoDeLaCategoriaDeDosPatas`
    (`CUOTA_CATEGORY_NOT_MANUAL`, `AVANCE_CATEGORY_NOT_MANUAL`): en `categoriaQueMoviEscribeSola` (el
    `PUT …/category`, el lote y las propuestas de Movi AI) y en el alta `POST /api/events` **a mano y nueva**
    (un aviso confirmado, `SMS`, y el reenvío de un movimiento que el server ya tiene pasan); el espejo local
