@@ -3440,3 +3440,26 @@ Lo vigilan `ElGrupoQueEsperaTest`, `LoQueSaldaUnGrupoSeCuentaTest`, `BuscarHabla
 `LoAnuladoSeRestauraTest` y `ElHistorialDelBancoSeRecorreTest` (`commonTest`), y en `:server`
 `RestaurarUnAnuladoTest` (restaurar, el par, «Anulados», el aislamiento y lo que dice un aviso) y
 `ElAvisoEnPartesTest` (el rastro, deshacer, restaurar el original y el aislamiento).
+
+**La revisión de la vuelta 67** (capturas `rev67-*.png`) encontró dos fallas de plata y se arreglaron:
+
+- **Dividir, deshacer y volver a dividir no infla la compra.** `GET /api/events/{id}/reparto` solo
+  devuelve las partes vivas; al volver a dividir, las partes de la división deshecha quedan desligadas
+  (`reparto_de` en NULL); «Lo anulado» nunca muestra una parte con `MOTIVO_DEL_REPARTO_DESHECHO`, y
+  restaurarla contesta 409.
+- **Lo que anuló el sistema no se restaura** (`porQueNoSeRestaura`, `:core`): un ajuste de saldo, lo
+  anulado al deshacer un extracto (`MOTIVO_DEL_EXTRACTO_DESHECHO`), una parte de una división deshecha y
+  un original dividido antes de esta vuelta (`MOTIVO_DEL_REPARTIDO_EN_PARTES` sin partes con
+  `repartoDe`). El server contesta 409 con la frase, y la lista no ofrece «Restaurar»: dice por qué
+  (`MovimientoAnulado.porQueNo`).
+- **Restaurar en un aparato llega al otro**: si el server devuelve un movimiento que el teléfono anuló
+  y ya subió, la marca local se borra y su efecto vuelve al saldo guardado
+  (`LocalRepository.restauradasEnOtroLado`); una anulación sin subir sigue escondiéndolo.
+- La campana: el desglose de lo que entró solo no cuenta la propuesta de saldar, que tiene su renglón.
+- **«Anulados» salió de los chips**: Actividad termina con «2 anulados en octubre · Ver» (`FilaDeLosAnulados`),
+  que abre **«Lo anulado»** de ese período (`Screen.Anulados(periodo)`); en Tú, junto a los mensajes del
+  banco, «Lo anulado» abre todo. Cada fila: «$180.000 · 12 oct · anulado el 29 oct».
+- Menores: el historial del banco pone el estado primero y no repite el banco; «Ver» de las partes las
+  titula por su categoría; anular un traspaso dice que también se anula la otra mitad
+  (`loQueTambienSeAnula`); el panel a 1280 con un chip dice «· del período» (`tituloDelPanel`); la lista de
+  grupos dice lo que espera (`saldoEnLaListaDeGrupos`).
