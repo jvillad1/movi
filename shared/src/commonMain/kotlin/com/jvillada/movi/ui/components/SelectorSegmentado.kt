@@ -21,6 +21,7 @@ import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Radio
 import com.jvillada.movi.theme.Medida
+import com.jvillada.movi.ui.components.ds.anilloDeFoco
 
 /**
  * **Los colores de un segmento** (vuelta 29): elegido, la tinta con la letra blanca —el único
@@ -57,6 +58,7 @@ fun SelectorSegmentado(
             Box(
                 modifier = Modifier
                     .weight(1f)
+                    .anilloDeFoco(RoundedCornerShape(Radio.pill), adentro = true)
                     .clip(RoundedCornerShape(Radio.pill))
                     // El elegido es una pastilla llena, no solo otro color de letra: en Plan es el
                     // control principal. Vuelta 29: **en tinta con la letra blanca**, el mismo

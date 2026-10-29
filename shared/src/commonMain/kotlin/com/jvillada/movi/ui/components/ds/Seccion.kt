@@ -17,6 +17,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
+import com.jvillada.movi.theme.Radio
+import androidx.compose.foundation.shape.RoundedCornerShape
 
 /** Tag estable del título de una sección. */
 const val TAG_SECCION: String = "ds-seccion"
@@ -88,7 +90,9 @@ fun Seccion(
                 color = Movi.colores.enlace,
                 maxLines = 1,
                 modifier = if (onAccion != null) {
-                    Modifier.clickable(role = Role.Button, onClick = onAccion)
+                    Modifier
+                        .anilloDeFoco(RoundedCornerShape(Radio.s))
+                        .clickable(role = Role.Button, onClick = onAccion)
                 } else {
                     Modifier
                 },

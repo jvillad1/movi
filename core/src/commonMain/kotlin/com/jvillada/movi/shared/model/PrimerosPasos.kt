@@ -100,3 +100,20 @@ fun tituloDelPrimerPaso(paso: PrimerPaso, captura: CapturaDelPrimerUso): String 
  * un inicio a mano). El mes de calendario es lo que tiene quien nunca lo tocó.
  */
 fun periodoElegidoEn(ajustes: PeriodSettings): Boolean = !ajustes.esMesDeCalendario
+
+/**
+ * **¿La cuenta ya estaba en uso?** (revisión de la vuelta 55) Tiene movimientos o alguna cuenta, o la
+ * guía vieja ya se terminó o se descartó ([UserProfile.primerUsoEn] puesto). Pura.
+ */
+fun laCuentaYaEstabaEnUso(hayMovimientos: Boolean, cuentas: Int, primerUsoEn: Long?): Boolean =
+    hayMovimientos || cuentas > 0 || primerUsoEn != null
+
+/**
+ * **¿«Tu período» está hecho?** (revisión de la vuelta 55) La vuelta 54 lo daba por hecho solo con un
+ * corte distinto del mes de calendario, y una cuenta en uso que se quedó con el mes de calendario —el
+ * valor por defecto, que es una elección válida— veía «Te falta 1 paso · Sigue con «Tu período»» para
+ * siempre. Ahora está hecho si el corte no es el de defecto **o** si la cuenta ya estaba en uso
+ * ([laCuentaYaEstabaEnUso]): solo a una cuenta nueva y vacía se le pide elegirlo. Pura.
+ */
+fun periodoHechoEn(ajustes: PeriodSettings, yaEstabaEnUso: Boolean): Boolean =
+    periodoElegidoEn(ajustes) || yaEstabaEnUso

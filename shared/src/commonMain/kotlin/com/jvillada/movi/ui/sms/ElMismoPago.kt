@@ -308,7 +308,7 @@ internal fun TarjetaDeAviso(
     contenido: @Composable ColumnScope.() -> Unit,
 ) {
     Superficie(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth().testTag(TAG_TARJETA_DE_AVISO),
         nivel = if (destacada) NivelDeSuperficie.Propuesta else NivelDeSuperficie.Capa1,
     ) {
         Row(
@@ -397,6 +397,9 @@ const val TAG_LO_QUE_DICE_EL_BANCO: String = "lo-que-dice-el-banco"
 
 /** El tag del título de una [TarjetaDeAviso]. */
 const val TAG_TITULO_DE_LA_TARJETA_DE_AVISO: String = "titulo-de-la-tarjeta-de-aviso"
+
+/** La [TarjetaDeAviso] entera: la mide `ElTextoAl130NoSeCortaTest` (vuelta 55). */
+const val TAG_TARJETA_DE_AVISO: String = "tarjeta-de-aviso"
 
 /**
  * **Lo que dijo el banco, tal cual**, con lo importante en negrita ([resaltadoDelTextoDelBanco]) y

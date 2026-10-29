@@ -35,6 +35,8 @@ import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Icono
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
+import com.jvillada.movi.theme.Radio
+import androidx.compose.foundation.shape.RoundedCornerShape
 
 /** Tag estable de una [AccionRapida]. */
 const val TAG_ACCION_RAPIDA: String = "ds-accion-rapida"
@@ -111,6 +113,7 @@ fun AccionRapida(
     val conInsignia = insignia != null && insignia > 0
     Column(
         modifier = modifier
+            .anilloDeFoco(RoundedCornerShape(Radio.m))
             .clickable(role = Role.Button, onClick = onClick)
             .semantics(mergeDescendants = true) {
                 val dicho = descripcion ?: rotulo
@@ -180,12 +183,20 @@ fun AccionRapida(
                 // entra entera en su columna (lo mide `LasOchoAccionesDelInicioTest` con [partePalabras]).
                 val estilo = Movi.textos.rotuloDeAccion.copy(color = Movi.colores.texto, textAlign = TextAlign.Center)
                 val altoDeDos = with(LocalDensity.current) { estilo.lineHeight.toDp() } * RENGLONES_DEL_ROTULO_LARGO
+                // Vuelta 55: con la letra del sistema al 130 % a 360 dp, «Subir comprobante» no entraba
+                // en dos renglones y se cortaba. Si no entra, se achica — nunca por debajo de lo que
+                // mide con la letra de siempre (÷ [ESCALA_QUE_ABSORBE_EL_ROTULO]) —; con la letra de
+                // siempre todo entra y no se achica nada.
                 BasicText(
                     text = rotulo,
                     modifier = Modifier.fillMaxWidth().height(altoDeDos).testTag(TAG_ROTULO_DE_ACCION),
                     style = estilo,
                     maxLines = RENGLONES_DEL_ROTULO_LARGO,
                     overflow = TextOverflow.Ellipsis,
+                    autoSize = TextAutoSize.StepBased(
+                        minFontSize = estilo.fontSize / ESCALA_QUE_ABSORBE_EL_ROTULO,
+                        maxFontSize = estilo.fontSize,
+                    ),
                 )
             }
         }
@@ -194,6 +205,13 @@ fun AccionRapida(
 
 /** Cuántos renglones lleva un rótulo [RenglonesDelRotulo.Dos]. */
 const val RENGLONES_DEL_ROTULO_LARGO: Int = 2
+
+/**
+ * **Cuánto de la letra agrandada puede devolver un rótulo de dos renglones** (vuelta 55): con la letra
+ * del sistema al 130 %, un rótulo que no entra se achica hasta lo que mide con la letra de siempre, no
+ * más. Es la escala que vigila `ElTextoAl130NoSeCortaTest`.
+ */
+const val ESCALA_QUE_ABSORBE_EL_ROTULO: Float = 1.3f
 
 /**
  * **¿Algún renglón corta una palabra por la mitad?** Un renglón que termina sin espacio, seguido de

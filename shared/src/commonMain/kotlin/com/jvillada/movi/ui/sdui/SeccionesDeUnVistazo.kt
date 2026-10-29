@@ -360,6 +360,9 @@ private fun FranjaPorConfirmar(data: DashboardData, onNavigate: (Screen) -> Unit
         Fila(
             titulo = conCifrasOcultas(titulo),
             subtitulo = subtitulo,
+            // Vuelta 55: con la letra al 130 %, «3 avisos · 1 movimiento» no entra al lado de la
+            // pastilla; baja a un segundo renglón en vez de cortarse.
+            lineasDelSubtitulo = 2,
             modifier = Modifier.testTag(TAG_FRANJA_POR_CONFIRMAR),
             inicio = { IconoEnCirculo(Icons.Rounded.Schedule, tono = TonoDeIcono.Aviso) },
             final = {

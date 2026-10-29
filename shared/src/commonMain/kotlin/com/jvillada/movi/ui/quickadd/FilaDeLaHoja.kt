@@ -62,11 +62,14 @@ internal fun FilaDeLaHoja(
                 horizontalArrangement = Arrangement.spacedBy(Espacio.xxs, Alignment.End),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                // Vuelta 55: hasta dos renglones. Con la letra al 130 % a 360 dp «Bancolombia
+                // Ahorros» se cortaba en «Bancolombia Ah…»; lo que entra en uno sigue en uno, así que
+                // con la letra de siempre la hoja mide lo mismo.
                 Text(
                     text = valor,
                     style = Movi.textos.cuerpo,
                     color = if (valorVacio) Movi.colores.textoApagado else Movi.colores.texto,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false),
                 )

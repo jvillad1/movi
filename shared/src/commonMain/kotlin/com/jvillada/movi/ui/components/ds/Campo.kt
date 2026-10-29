@@ -61,6 +61,7 @@ import com.jvillada.movi.ui.components.moneyFieldFromDigits
 import com.jvillada.movi.ui.components.nextMoneyField
 import com.jvillada.movi.ui.components.parseMoneyDigits
 import com.jvillada.movi.ui.components.rememberCampoConSeleccion
+import androidx.compose.foundation.shape.CircleShape
 
 /** Tag del texto editable de un [Campo] (se puede cambiar con `tag`). */
 const val TAG_CAMPO: String = "ds-campo"
@@ -248,6 +249,7 @@ fun Campo(
                     tint = Movi.colores.textoMedio,
                     modifier = Modifier
                         .size(Icono.m)
+                        .anilloDeFoco(CircleShape)
                         .clickable(role = Role.Button) { mostrarSecreto = !mostrarSecreto },
                 )
             }
@@ -619,6 +621,7 @@ fun AyudaDeCampo(
                         maxLines = 1,
                         modifier = Modifier
                             .testTag(TAG_QUE_ES_ESTO)
+                            .anilloDeFoco(RoundedCornerShape(Radio.s))
                             .clickable(role = Role.Button) { ayudaAbierta = !ayudaAbierta },
                     )
                 }
@@ -662,6 +665,7 @@ private fun MarcoDeCampo(
             modifier = Modifier
                 .fillMaxWidth()
                 .defaultMinSize(minHeight = Medida.objetivoTactil)
+                .anilloDeFoco(forma, deLoDeAdentro = true)
                 .clip(forma)
                 .background(Movi.colores.capa2)
                 .border(Medida.trazo, colorDelBorde, forma)

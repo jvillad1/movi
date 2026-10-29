@@ -82,6 +82,7 @@ fun BotonDeIcono(
     Box(
         modifier = modifier
             .size(Medida.objetivoTactil)
+            .anilloDeFoco(forma)
             .clip(forma)
             .then(
                 if (variante == VarianteDeBotonDeIcono.Secundario) {
@@ -150,6 +151,7 @@ internal fun AccionDelEncabezadoSoloIcono(accion: AccionDeEncabezado, modifier: 
     Box(
         modifier = modifier
             .size(Medida.objetivoTactil)
+            .anilloDeFoco(CircleShape)
             .clip(CircleShape)
             .background(Movi.colores.tarjeta)
             .border(Medida.trazo, Movi.colores.borde, CircleShape)

@@ -518,7 +518,7 @@ fun DashboardScreen(
             val instantanea = if (perfilLlego) {
                 llegado
             } else {
-                llegado.copy(ajustesDePeriodo = data.ajustesDePeriodo, periodoActual = data.periodoActual)
+                llegado.copy(ajustesDePeriodo = data.ajustesDePeriodo, periodoActual = data.periodoActual, primerUsoEn = data.primerUsoEn)
             }
             if (SessionManager.userId == usuario) InstantaneaDelInicio.delAparato.guardarDatos(usuario, instantanea)
         }

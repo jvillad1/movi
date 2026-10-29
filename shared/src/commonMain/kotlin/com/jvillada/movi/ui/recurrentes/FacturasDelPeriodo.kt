@@ -304,11 +304,13 @@ internal fun FilaDeFactura(
                 }
                 Spacer(Modifier.width(ESPACIO_ANTES_DEL_TEXTO_DE_FILA))
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
+                    // Vuelta 55: tres renglones. Con la letra al 130 % a 360 dp, «Administración del
+                    // conjunto» al lado de «Anotar pago» necesita tres; con dos se cortaba.
                     Text(
                         pago.nombre,
                         style = Movi.textos.cuerpoFuerte,
                         color = Movi.colores.texto,
-                        maxLines = 2,
+                        maxLines = 3,
                         overflow = TextOverflow.Ellipsis,
                     )
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.xxs)) {

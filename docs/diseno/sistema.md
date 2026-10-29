@@ -128,7 +128,7 @@ lo que despega lo destacado es la sombra); la capa 2 ≥ 1,05 de la 1 y la 3 ≥
 | `entra` | `#147849` | entró plata (sobre su lavado ≈ `#E3F1E8`) |
 | `sale` | `#B3261E` | **solo alertas**: lo que se pasó o se debe, «Borrar mi cuenta» |
 | `entreCuentas` | `#556372` | un gris azulado: el `#1F5B96` de antes se leía como el enlace (1,07:1 entre los dos) |
-| `capital` / `neutro` | `#8A5A18` / `#A39A8C` | sin cambio de papel |
+| `capital` / `neutro` | `#8A5A18` / `#857C6F` | `neutro`: el relleno de un gráfico sin color propio (las barras de «En qué se va», el área de la curva del patrimonio, la derecha de las filas de Períodos). Vuelta 55: era `#A39A8C` (2,78:1 sobre el blanco, 2,47 sobre el crema); un gráfico pide 3:1 (WCAG 1.4.11) y ahora da 4,11 / 3,65 |
 
 - **La marca es un relleno, nunca una letra.** El amarillo da 1,6:1 sobre el blanco: no se lee como
   texto, ni como ícono, ni como borde. Lo que hasta la vuelta 28 era «texto en la marca» (un enlace, «Ver
@@ -2894,3 +2894,59 @@ desplazar, el botón debajo del saldo y antes de las tarjetas; bancos y tipos en
 escrito no se pierde» en `PrimerUsoEnPantallaTest` (llenar el arriendo y tocar el principal lo guarda;
 a medias, el pie dice qué falta; saltar pregunta, «Cancelar» lo conserva y «Descartar» lo tira; la
 cuenta escrita se guarda con el principal) y `InicioDelRedisenoTest` / `MasScreenTest`, ajustadas.
+
+## 57. Vuelta 55: accesibilidad — la web lo dice, el foco se ve, el gris pasa, 48 de toque y la letra al 130 %
+
+La revisión de accesibilidad del 28-oct (sobre `ad4bdfa3`) encontró seis cosas. Lo que se hizo:
+
+1. **La web no tiene árbol de accesibilidad, y ahora lo dice.** Toda la app es un `<canvas>`, y Compose
+   Multiplatform **1.8.2** (la de Movi) no le pasa su semántica al DOM: su `ui-wasm-js` no trae nada de
+   accesibilidad web. La **1.9** sí la trae, experimental (`ComposeViewport(configure = { isA11YEnabled =
+   true })`, que arma un árbol de `div` con `aria-label`, rol y clic encima del canvas), pero solo con
+   `ComposeViewport` —`CanvasBasedWindow` queda deprecado con error y «no soporta A11Y»— y subiendo todo
+   Compose (Android e iOS incluidos) de versión: no es una opción ni una actualización menor, queda para su
+   propia vuelta. Mientras tanto: el canvas lleva `role="application"`, `aria-label="Movi"` y
+   `aria-describedby` hacia un aviso oculto a la vista (`.solo-lector`, no `display: none`) que es lo
+   primero del `<body>`: «Movi en la web todavía no funciona con lectores de pantalla. Usa la app de
+   Android.» El mismo texto (`LECTOR_DE_PANTALLA_EN_LA_WEB`) va como nota de Ajustes → «Cómo se ve», solo
+   donde `elLectorDePantallaLeeLaApp` es falso (la web). Lo vigila `LaWebDiceQueNoTieneLectorTest`.
+2. **Los formularios ocultos no estorban.** El overlay del ingreso (`login-form`, `forgot-form`,
+   `reset-form`, `register-form` y los cinco «Mostrar contraseña») arranca con `class="hidden" inert
+   aria-hidden="true"`, y lo muestra y lo esconde **solo** `window.ponerElIngreso(visible)`, que pone y
+   quita la clase, `inert` y `aria-hidden` juntos. Las dos entradas (sin sesión y con `?reset=…`) lo
+   muestran con ella; la red de seguridad y el navegador sin WasmGC lo esconden con ella. Cerrar sesión
+   recarga la página (`reloadForLogout`), así que volver al ingreso pasa por lo mismo. Lo vigila
+   `LosFormulariosOcultosNoEstorbanTest`.
+3. **El anillo de foco** (`ds/AnilloDeFoco.kt`). `Modifier.anilloDeFoco(forma)` dibuja, con el foco del
+   **teclado** (`seVeElAnilloDeFoco`: enfocado y `InputMode.Keyboard`, el `:focus-visible` de la web),
+   un anillo de `Medida.trazoDelAnilloDeFoco` (2) en la tinta a `Medida.separacionDelAnilloDeFoco` (2) del
+   borde, con la forma del componente. Va en la cadena **antes del `clip` y del toque**. `adentro = true`
+   lo dibuja hacia adentro donde un recorte se lo comería (la `Fila` dentro de su superficie, las
+   pestañas, el segmentado); `alrededorDe` lo centra en lo que se ve (la `Casilla`: 24 en un toque de 48);
+   `deLoDeAdentro` lo prende cuando el foco está en algo de adentro (la caja de un `Campo` y la de
+   búsqueda). Lo llevan `Boton`, `BotonDeIcono`, la acción del encabezado, `Fila`, `PildoraDeFiltro`,
+   `PildoraDeAccion`, `AccionRapida`, `Casilla`, `Campo`, `CampoDeBusqueda`, la acción de una `Seccion`,
+   `Superficie` tocable, `renglonTocable`, `TarjetaDeCuenta`, «Todas ›» de `FilaDeCategorias`, las
+   pestañas (barra y rail), el avatar y el `SelectorSegmentado`. **Revisión:** también el avatar, el ojo y
+   la campana del encabezado del Inicio (`EncabezadoDelInicio`), recortados al círculo; el anillo entra
+   entero en los 56 del encabezado sobre el amarillo. `ElFocoSeVeConElTecladoTest` (el
+   enfocado por teclado lo lleva, con el dedo no) y `TodoLoEnfocableDibujaElAnilloTest` (`:core`, en
+   **cero**: un toque de `ds/` o de las pestañas sin anillo en su cadena la rompe).
+4. **`neutro` pasa de `#A39A8C` a `#857C6F`**: el gris de los gráficos daba 2,78:1 sobre el blanco y 2,47
+   sobre el crema; ahora 4,11 / 3,65 (y 3,88 sobre la capa 2, 3,52 sobre la 3, 3,43 sobre el `hilo`).
+   `ContrasteDeLosTokensTest` lo mide con el mínimo de gráficos (3:1). La página compartida copia el
+   valor (`PaginaCompartidaTest`); el widget no usa `neutro`.
+5. **Nada se toca con menos de 48 × 48** (`NadaSeTocaConMenosDe48Test`): Inicio, Pagos, Por revisar,
+   Actividad y Agregar montados con datos a 360 dp; cada nodo que se toca tiene un área de toque
+   (`touchBoundsInRoot`: lo que se ve más la extensión de Compose a `minimumTouchTargetSize`) de al menos
+   48 por lado. Un enlace en línea («Ahora no», «Todas ›», «y 2 más») se queda del tamaño de su texto y
+   se toca en 48: lo que la revisión midió a ojo era lo visible.
+6. **La letra al 130 %** (`ElTextoAl130NoSeCortaTest`, 360 dp, `fontScale = 1.3`): el héroe, las ocho
+   acciones y «Próximo pago» de Inicio, la fila de una factura con «Anotar pago», la tarjeta de un aviso
+   en Por revisar (`TAG_TARJETA_DE_AVISO`) y Agregar en Gasto: ningún «…», ningún renglón de más, nada
+   más ancho que su caja ni fuera de la pantalla (una fila que se desplaza de lado sí puede seguir afuera).
+7. **Revisión: «Tu período» solo se le pide a una cuenta nueva y vacía.** La vuelta 54 lo daba por hecho
+   solo con un corte distinto del mes de calendario, así que una cuenta en uso que se quedó con el mes de
+   calendario veía «Te falta 1 paso · Sigue con «Tu período»» para siempre. `periodoHechoEn` (`:core`)
+   lo da por hecho también si la cuenta ya estaba en uso (`laCuentaYaEstabaEnUso`: movimientos, alguna
+   cuenta o `primerUsoEn` puesto); el Inicio y la guía usan la misma regla. Lo vigila `PrimerosPasosTest`.

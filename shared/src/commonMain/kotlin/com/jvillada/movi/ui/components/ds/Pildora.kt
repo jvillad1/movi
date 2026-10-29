@@ -153,6 +153,7 @@ fun PildoraDeFiltro(
     Row(
         modifier = modifier
             .height(if (alto == AltoDeFiltro.Compacto) Medida.altoChico else Medida.altoDeFiltro)
+            .anilloDeFoco(forma)
             .clip(forma)
             .background(fondo)
             .then(if (seleccionada) Modifier else Modifier.border(Medida.trazo, Movi.colores.bordeDePildora, forma))
@@ -218,6 +219,7 @@ fun PildoraDeAccion(
     Row(
         modifier = modifier
             .heightIn(min = if (compacta) Medida.altoDePildora else Medida.altoChico)
+            .anilloDeFoco(forma)
             .clip(forma)
             .background(Movi.colores.tarjeta)
             .border(Medida.trazo, Movi.colores.bordeDePildora, forma)

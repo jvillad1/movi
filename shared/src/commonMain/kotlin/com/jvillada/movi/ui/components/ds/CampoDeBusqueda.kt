@@ -100,6 +100,7 @@ fun CampoDeBusqueda(
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = Medida.objetivoTactil)
+            .anilloDeFoco(RoundedCornerShape(Radio.m), deLoDeAdentro = true)
             .clip(RoundedCornerShape(Radio.m))
             .background(colorDeLaSuperficie(nivel, Movi.colores))
             .testTag(TAG_CAJA_DE_BUSQUEDA)

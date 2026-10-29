@@ -178,6 +178,7 @@ private fun SuperficieConRellenoLibre(
                     Modifier
                 },
             )
+            .anilloDeFoco(forma)
             .clip(forma)
             .background(colorDeLaSuperficie(nivel, Movi.colores))
             .then(if (onClick != null) Modifier.clickable(onClickLabel = onClickLabel, onClick = onClick) else Modifier)
