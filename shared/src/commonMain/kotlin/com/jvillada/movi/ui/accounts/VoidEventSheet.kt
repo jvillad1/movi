@@ -1,6 +1,6 @@
 package com.jvillada.movi.ui.accounts
 
-import com.jvillada.movi.ui.transactions.tituloDelMovimiento
+import com.jvillada.movi.ui.transactions.textosDeLaFila
 import com.jvillada.movi.ui.components.ds.Superficie
 import com.jvillada.movi.ui.components.ds.TonoDeCifra
 import com.jvillada.movi.ui.components.ds.Cifra
@@ -41,7 +41,9 @@ import com.jvillada.movi.ui.components.ds.PieDeHoja
 import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 
 /**
- * Confirmar la anulación de un movimiento — la única acción de la app que no tiene deshacer.
+ * Confirmar la anulación de un movimiento. Vuelta 67: ya tiene vuelta atrás —«Anulado · Deshacer»
+ * al anular, y «Restaurar» en Actividad → «Anulados»—, pero sigue sacando plata de todas las cifras, y
+ * por eso se confirma en su propia hoja.
  *
  * ## Por qué la hoja va a buscar la otra mitad
  *
@@ -158,18 +160,18 @@ fun VoidEventSheet(
                     verticalAlignment = Alignment.Top,
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
+                        // Vuelta de diseño 36: el mismo título y el mismo subtítulo que la fila que
+                        // se anula. Vuelta 67: sin «MANUAL» (el origen en mayúsculas, un dato interno).
+                        val textos = textosDeLaFila(event, nombres[event.accountId])
                         Text(
-                            // Vuelta de diseño 36: el mismo título que la fila que se anula.
-                            text = tituloDelMovimiento(event),
+                            text = textos.titulo,
                             style = Movi.textos.cuerpo,
                             color = Movi.colores.texto,
                         )
-                        Spacer(Modifier.height(Espacio.xxs))
-                        Text(
-                            text = "${event.category} · ${event.source.name}",
-                            style = Movi.textos.apoyo,
-                            color = Movi.colores.textoMedio,
-                        )
+                        textos.subtitulo?.let {
+                            Spacer(Modifier.height(Espacio.xxs))
+                            Text(text = it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                        }
                     }
                     Spacer(Modifier.width(Espacio.s))
                     // Vuelta de diseño 19: la `Cifra` del sistema pone el signo, el tono y «Ocultar los saldos».

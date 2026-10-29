@@ -114,6 +114,8 @@ fun Application.configureRouting() {
             elMismoPagoRoutes()
             bandejaQueSeVaciaRoutes()
             repartoRoutes()
+            // Vuelta 67: restaurar un anulado, deshacer una compra dividida y los anulados.
+            restaurarYDeshacerRoutes()
             direccionDeCorreoRoutes()
             aiRoutes()
             statementRoutes()

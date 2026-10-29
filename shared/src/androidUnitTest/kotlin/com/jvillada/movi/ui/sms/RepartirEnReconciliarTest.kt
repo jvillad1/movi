@@ -10,6 +10,9 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasAnyChild
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -216,8 +219,15 @@ class RepartirEnReconciliarTest {
         esperar { composeRule.onAllNodesWithTag(tagDelMontoDeLaParte(1)).fetchSemanticsNodes().size == 1 }
         composeRule.onNodeWithTag(tagDelMontoDeLaParte(0)).assert(hasText("4.000.000", substring = true))
         composeRule.onNodeWithTag(tagDelMontoDeLaParte(1)).assert(hasText("273.333", substring = true))
-        assertEquals(1, cuantos("Parte 2"))
         assertEquals(1, cuantos("Cuadra con el aviso"))
+        // Vuelta 67: la parte nueva empieza sin categoría, y Confirmar dice que falta.
+        assertEquals(1, cuantos("Parte 2: elige la categoría"))
+        botonDeConfirmar(botonDeConfirmarLasPartes(2)).assertIsNotEnabled()
+        composeRule.onAllNodes(
+            (hasText("Familia") or hasAnyChild(hasText("Familia"))) and hasClickAction() and hasAnyAncestor(hasTestTag(tagDelDetalleDeLaParte(1))),
+            useUnmergedTree = true,
+        )[0].performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
         botonDeConfirmar(botonDeConfirmarLasPartes(2)).assertIsEnabled()
         assertEquals(0, composeRule.onAllNodesWithTag(TAG_RAZON_DE_LAS_PARTES).fetchSemanticsNodes().size)
 

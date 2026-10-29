@@ -2548,6 +2548,48 @@ class LocalRepository(
     override suspend fun repartirElMovimiento(eventoId: String, partes: com.jvillada.movi.shared.model.PartesDelAviso) =
         remote.repartirElMovimiento(eventoId, partes)
 
+    // Vuelta 67: deshacer un reparto pasa por el server, como dividirlo. El original vuelve en la
+    // próxima lectura (su lápida de fantasma se borra sola, ver `olvidarFantasma`).
+    override suspend fun deshacerReparto(id: String): FinancialEvent = remote.deshacerReparto(id)
+    override suspend fun getRepartoDe(id: String) = remote.getRepartoDe(id)
+    override suspend fun getAnulados() = remote.getAnulados()
+
+    /**
+     * Vuelta 67 · **restaurar un anulado**, el camino de vuelta de [voidEvent]. Si la anulación todavía
+     * no subió (sin señal, o dentro de los 30 s del `SyncEngine`), se deshace solo acá: el server nunca
+     * se enteró. Si ya subió, primero el server (sin red, el error llega a la pantalla) y después el
+     * espejo. En los dos casos se borran las marcas del movimiento y de su otra pata, y el saldo
+     * guardado vuelve a tener su delta —la reversa exacta de la de [voidEvent]—.
+     */
+    override suspend fun restaurarMovimiento(id: String) {
+        val uid = userId()
+        val (filas, subio) = enDisco {
+            val event = db.financialEventQueries.selectById(id, uid).executeAsOneOrNull()
+            val hermanas = event?.transferId
+                ?.let { db.financialEventQueries.selectByTransferId(it, uid).executeAsList() }
+                ?.filter { it.id != id }
+                .orEmpty()
+            val filas = listOfNotNull(event) + hermanas
+            val marcas = (listOf(id) + hermanas.map { it.id }).flatMap { db.voidEventQueries.selectFor(it).executeAsList() }
+            // La anulación que se empuja es la única sin sellar (la de la otra pata nace sellada): si
+            // está, el server todavía no sabe nada.
+            filas to marcas.none { it.syncedAt == null }
+        }
+        if (subio) remote.restaurarMovimiento(id)
+        enDisco {
+            db.transaction {
+                val ids = (listOf(id) + filas.map { it.id }).distinct()
+                val conMarca = ids.filter { db.voidEventQueries.countFor(it).executeAsOne() > 0L }
+                ids.forEach { db.voidEventQueries.deleteFor(it) }
+                filas.filter { it.id in conMarca }.forEach { fila ->
+                    val acct = db.accountQueries.selectById(fila.accountId).executeAsOneOrNull() ?: return@forEach
+                    val delta = deltaDelEspejo(AccountType.valueOf(acct.type), TransactionType.valueOf(fila.type), fila.amount, fila.currency)
+                    db.accountQueries.updateBalance(acct.balance + delta, acct.id)
+                }
+            }
+        }
+    }
+
     override suspend fun getAvisosConfirmadosSinMovimiento() = remote.getAvisosConfirmadosSinMovimiento()
 
     override suspend fun getAvisosPendientesParecidos(

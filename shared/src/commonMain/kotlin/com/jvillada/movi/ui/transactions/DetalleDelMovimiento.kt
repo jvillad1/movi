@@ -91,8 +91,11 @@ import com.jvillada.movi.ui.components.ds.TamanoDeBoton
 /** Lo que se puede hacer sobre un movimiento desde su detalle. El orden es el de la fila. */
 enum class AccionDelMovimiento(val rotulo: String, internal val icono: ImageVector) {
     Categoria("Categoría", Icons.Rounded.Category),
-    /** La nota (el concepto), y con ella el monto y la cuenta: la sección «Monto, cuenta y concepto». */
-    Nota("Nota", Icons.Rounded.EditNote),
+    /**
+     * El monto, la cuenta y el concepto: la sección «Monto, cuenta y concepto». Vuelta 67: se llama
+     * «Editar» (era «Nota»): abre mucho más que la nota. El nombre del valor no cambió.
+     */
+    Nota("Editar", Icons.Rounded.EditNote),
     Fecha("Fecha", Icons.Rounded.Today),
     /** «¿Se repite todos los meses?». */
     Repetir("Repetir", Icons.Rounded.Repeat),

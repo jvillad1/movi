@@ -67,6 +67,7 @@ import io.ktor.server.routing.post
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import org.jetbrains.exposed.sql.and
+import com.jvillada.movi.shared.model.COMERCIO_DE_UN_AVISO_SIN_LEER
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
@@ -619,7 +620,9 @@ fun Route.smsRoutes() {
     get("/api/sms") {
         val uid = call.userId()
         // Los avisos del mismo pago salen marcados (`grupoId`): la bandeja muestra uno por pago.
-        call.respond(dbQuery { bandejaConLosPagos(uid, ahora = System.currentTimeMillis()) })
+        // Vuelta 67: con a quién fue y cuánto, para que «Mensajes del banco» no diga «Bancolombia» en
+        // cada fila (ver [conLoQueDice]).
+        call.respond(dbQuery { conLoQueDice(uid, bandejaConLosPagos(uid, ahora = System.currentTimeMillis())) })
     }
 
     /**
@@ -1018,4 +1021,36 @@ internal fun org.jetbrains.exposed.sql.ResultRow.toSmsMessage() = SmsMessage(
     // mensaje que el dueño ya movió de estado.
     apartadoPor = this[SmsMessages.motivoApartado]
         ?.takeIf { this[SmsMessages.state] == SMS_STATE_IGNORED && motivoDeApartado(it) != null },
+    // Vuelta 67: el movimiento que anotó, para abrirlo desde «Mensajes del banco».
+    eventoId = this[SmsMessages.eventoId],
 )
+
+/**
+ * Vuelta 67 · **a quién fue y cuánto** cada aviso, para la fila de «Mensajes del banco»: el comercio (o
+ * el concepto) del movimiento que anotó si se confirmó y sigue vivo, y si no el que lee [parseSms] en
+ * el texto; el monto y la moneda, de [parseSms]. Lo que no se lee queda en `null` y la fila dice el
+ * banco, como antes. Solo para mostrar: no cambia nada guardado.
+ */
+internal fun org.jetbrains.exposed.sql.Transaction.conLoQueDice(uid: String, avisos: List<SmsMessage>): List<SmsMessage> {
+    val ids = avisos.mapNotNull { it.eventoId }.distinct()
+    val anulados = if (ids.isEmpty()) emptySet() else com.jvillada.movi.server.db.VoidEvents.selectAll()
+        .where { (com.jvillada.movi.server.db.VoidEvents.userId eq uid) and (com.jvillada.movi.server.db.VoidEvents.originalEventId inList ids) }
+        .map { it[com.jvillada.movi.server.db.VoidEvents.originalEventId] }.toSet()
+    val movimientos = if (ids.isEmpty()) emptyMap() else com.jvillada.movi.server.db.Events.selectAll()
+        .where { (com.jvillada.movi.server.db.Events.userId eq uid) and (com.jvillada.movi.server.db.Events.id inList ids) }
+        .associate { it[com.jvillada.movi.server.db.Events.id] to it }
+    return avisos.map { aviso ->
+        val leido = runCatching { parseSms(aviso.text, aviso.bank) }.getOrNull()
+        val delMovimiento = aviso.eventoId?.takeIf { it !in anulados }?.let { movimientos[it] }?.let { fila ->
+            fila[com.jvillada.movi.server.db.Events.merchant]?.trim()?.ifEmpty { null }
+                ?: fila[com.jvillada.movi.server.db.Events.description].trim().ifEmpty { null }
+        }
+        aviso.copy(
+            eventoId = aviso.eventoId?.takeIf { it !in anulados && it in movimientos },
+            comercio = delMovimiento ?: leido?.merchant?.trim()?.takeIf { it.isNotEmpty() && it != COMERCIO_DE_UN_AVISO_SIN_LEER },
+            monto = leido?.amount?.takeIf { it > 0.0 },
+            moneda = leido?.currency,
+            tipo = leido?.type,
+        )
+    }
+}

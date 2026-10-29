@@ -38,6 +38,7 @@ import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.repartoDeEntrada
 import io.ktor.client.call.body
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
@@ -526,5 +527,83 @@ class ElAvisoEnPartesTest {
         transaction { evento("ev-giro-anotado", ahorros, "EXPENSE", giro, "Familia", hoy, raw = alPapa) }
         assertEquals(HttpStatusCode.NotFound, repartirElMovimiento("ev-giro-anotado", lasTres(), quien = otro).status)
         assertTrue(anulados().isEmpty())
+    }
+
+    // ── Vuelta 67 · la compra dividida deja rastro y se deshace ──────────────────────────────────
+
+    private suspend fun ApplicationTestBuilder.deshacer(id: String, quien: String = uid): HttpResponse =
+        cliente().post("/api/events/$id/deshacer-reparto") { header(HttpHeaders.Authorization, "Bearer ${token(quien)}") }
+
+    private suspend fun ApplicationTestBuilder.restaurar(id: String, quien: String = uid): HttpResponse =
+        cliente().delete("/api/events/$id/void") { header(HttpHeaders.Authorization, "Bearer ${token(quien)}") }
+
+    private fun repartoDe(id: String): String? = transaction {
+        Events.selectAll().where { Events.id eq id }.first()[Events.repartoDe]
+    }
+
+    private suspend fun ApplicationTestBuilder.dividirElGiro(): MismoPagoConfirmado {
+        transaction {
+            evento("ev-giro-anotado", ahorros, "EXPENSE", giro, "Familia", hoy, raw = alPapa)
+            aviso("sms_ya_confirmado", alPapa.replace("10:00", "08:00"), estado = SMS_STATE_CONFIRMED, eventoId = "ev-giro-anotado")
+        }
+        val respuesta = repartirElMovimiento("ev-giro-anotado", lasTres())
+        assertEquals(HttpStatusCode.OK, respuesta.status)
+        return respuesta.body()
+    }
+
+    @Test
+    fun `cada pata de cada parte sabe de que compra es, y el reparto se lee desde cualquiera`() = testApplication {
+        application { testModule() }
+        val hecho = dividirElGiro()
+        hecho.patas.forEach { assertEquals("ev-giro-anotado", repartoDe(it), it) }
+        val reparto = cliente().get("/api/events/ev-papa/reparto") { header(HttpHeaders.Authorization, "Bearer ${token()}") }
+            .body<com.jvillada.movi.shared.model.RepartoDeUnMovimiento>()
+        assertEquals("ev-giro-anotado", reparto.original.id)
+        assertEquals(giro, reparto.original.amount)
+        assertEquals(3, com.jvillada.movi.shared.model.partesQueSeVen(reparto).size, "dos cuotas y el sobrante: tres partes")
+    }
+
+    @Test
+    fun `deshacer el reparto anula las partes, restaura el original y le devuelve su aviso`() = testApplication {
+        application { testModule() }
+        val hecho = dividirElGiro()
+        val respuesta = deshacer("ev-papa")
+        assertEquals(HttpStatusCode.OK, respuesta.status)
+        assertEquals("ev-giro-anotado", respuesta.body<FinancialEvent>().id)
+        assertTrue("ev-giro-anotado" !in anulados(), "el original vuelve a contar")
+        assertTrue(hecho.patas.all { it in anulados() }, "las partes dejan de contar")
+        assertEquals(saldoInicial - giro, saldoDeAhorros(), "el saldo no cambia: vuelve a ser un solo movimiento")
+        assertEquals(SMS_STATE_CONFIRMED to "ev-giro-anotado", estado("sms_ya_confirmado"))
+        // Dos veces no deshace nada más, y una parte suelta no se restaura encima del original.
+        assertEquals(HttpStatusCode.Conflict, deshacer("ev-papa").status)
+        assertEquals(HttpStatusCode.Conflict, restaurar("ev-papa").status)
+        assertEquals(saldoInicial - giro, saldoDeAhorros())
+        // Y las partes deshechas no aparecen en «Anulados».
+        val lista = cliente().get("/api/events/anulados") { header(HttpHeaders.Authorization, "Bearer ${token()}") }
+            .body<List<com.jvillada.movi.shared.model.MovimientoAnulado>>()
+        assertTrue(lista.none { it.evento.repartoDe != null })
+    }
+
+    @Test
+    fun `restaurar el original de una compra dividida es deshacer el reparto`() = testApplication {
+        application { testModule() }
+        val hecho = dividirElGiro()
+        assertEquals(HttpStatusCode.OK, restaurar("ev-giro-anotado").status)
+        assertTrue("ev-giro-anotado" !in anulados())
+        assertTrue(hecho.patas.all { it in anulados() })
+        assertEquals(saldoInicial - giro, saldoDeAhorros())
+    }
+
+    @Test
+    fun `aislamiento - el reparto de otro ni se lee ni se deshace`() = testApplication {
+        application { testModule() }
+        dividirElGiro()
+        assertEquals(HttpStatusCode.NotFound, deshacer("ev-papa", quien = otro).status)
+        assertEquals(HttpStatusCode.NotFound, restaurar("ev-giro-anotado", quien = otro).status)
+        assertEquals(
+            HttpStatusCode.NotFound,
+            cliente().get("/api/events/ev-papa/reparto") { header(HttpHeaders.Authorization, "Bearer ${token(otro)}") }.status,
+        )
+        assertTrue("ev-giro-anotado" in anulados(), "nada cambió")
     }
 }

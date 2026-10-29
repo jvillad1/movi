@@ -44,7 +44,7 @@ class PorConfirmarComoAvisoTest {
         assertEquals(5, CHIP_RECURRENTES)
         // Ola C: «Recurrentes» también salió de la fila (se mudó a Plan) y tampoco se renumeró.
         // Vuelta 40: «Personas» entró al final, con su índice nuevo.
-        assertEquals(listOf(CHIP_TODO, CHIP_GASTOS, CHIP_INGRESOS, CHIP_PERSONAS), CHIPS_VISIBLES)
+        assertEquals(listOf(CHIP_TODO, CHIP_GASTOS, CHIP_INGRESOS, CHIP_PERSONAS, CHIP_ANULADOS), CHIPS_VISIBLES, "vuelta 67: «Anulados» al final")
     }
 
     @Test

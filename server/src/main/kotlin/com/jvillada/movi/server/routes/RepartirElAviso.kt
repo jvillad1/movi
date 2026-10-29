@@ -442,6 +442,9 @@ internal fun Transaction.repartirUnMovimiento(uid: String, eventoId: String, par
         is Repartido.Rechazado -> { rollback(); return escritas }
     }
 
+    // Vuelta 67: cada pata de cada parte sabe de qué compra es, para decirlo y para deshacerlo.
+    Events.update({ (Events.userId eq uid) and (Events.id inList hecho.ids) }) { it[Events.repartoDe] = salida.id }
+
     // 3. Los avisos que apuntaban al original, a la primera parte.
     val avisos = SmsMessages.selectAll()
         .where { (SmsMessages.userId eq uid) and (SmsMessages.eventoId inList ids) }

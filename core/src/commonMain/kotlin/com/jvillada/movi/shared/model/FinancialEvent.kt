@@ -259,6 +259,15 @@ data class FinancialEvent(
      * movimiento de tus cuentas.
      */
     val pagadoPor: String? = null,
+    /**
+     * **Vuelta 67 · de qué compra es parte** este movimiento: el id del movimiento original cuando se
+     * dividió en categorías («Repartir en partes» de un movimiento ya anotado, `POST
+     * /api/events/{id}/repartir`). Todas las patas de todas las partes llevan el mismo. Con él, el
+     * detalle dice «Parte de una compra de $100.000 · 2 partes» y ofrece deshacerlo (`POST
+     * /api/events/{id}/deshacer-reparto`). Lo escribe solo el server (columna `reparto_de`); lo que
+     * mande un cliente en `POST /api/events` se ignora. `null` en todo lo demás.
+     */
+    val repartoDe: String? = null,
 )
 
 /**

@@ -75,8 +75,8 @@ class AvisosDelMismoPagoRoutesTest {
             driver = "org.h2.Driver",
         )
         transaction {
-            SchemaUtils.drop(SmsMessages, PushSubscriptions, KnownDestinations, Events, Accounts, Users)
-            SchemaUtils.create(Users, Accounts, Events, SmsMessages, PushSubscriptions, KnownDestinations)
+            SchemaUtils.drop(com.jvillada.movi.server.db.VoidEvents, SmsMessages, PushSubscriptions, KnownDestinations, Events, Accounts, Users)
+            SchemaUtils.create(Users, Accounts, Events, com.jvillada.movi.server.db.VoidEvents, SmsMessages, PushSubscriptions, KnownDestinations)
             for (id in listOf(a, b)) {
                 Users.insert {
                     it[Users.id] = id

@@ -122,6 +122,9 @@ class SchemaDeArranqueTest {
         // Vuelta 63 — las cuotas de una compra diferida. `toFinancialEvent()` —o sea TODA lectura de
         // movimientos— la nombra: sin el ALTER, la app no mostraría un solo movimiento.
         "financial_events" to "cuotas",
+        // Vuelta 67 — de qué compra dividida es parte un movimiento. `toFinancialEvent()` la nombra: sin
+        // el ALTER, la app no mostraría un solo movimiento.
+        "financial_events" to "reparto_de",
         // Vuelta 64 — el gasto de un mes puntual de un apartado. `apartados` existe en producción con
         // el colegio del dueño, y `apartadosDelUsuario` —o sea toda lectura de apartados, «Tu plata» y
         // «Te quedan»— las nombra: sin el ALTER, el Inicio entero caería con «column does not exist».

@@ -970,6 +970,23 @@ data class SmsMessage(
      * cerrarlo (o decir que no es el mismo pago).
      */
     val yaAnotadoCon: String? = null,
+    /**
+     * Vuelta 67 · **el movimiento que anotó este aviso**, si se confirmó (`sms_messages.evento_id`): en
+     * «Mensajes del banco», tocar un confirmado abre su movimiento. `null` en lo demás.
+     */
+    val eventoId: String? = null,
+    /**
+     * Vuelta 67 · **a quién fue**, para el título de la fila en «Mensajes del banco» (antes decía
+     * «Bancolombia» en cada una): el comercio del movimiento que anotó, o el que lee `parseSms` en el
+     * texto. Solo lo pone `GET /api/sms`; `null` si no se sabe.
+     */
+    val comercio: String? = null,
+    /** Vuelta 67 · el monto que dice el texto, para la cifra de esa fila; `null` si no se lee. */
+    val monto: Double? = null,
+    /** Vuelta 67 · la moneda de [monto]. */
+    val moneda: String? = null,
+    /** Vuelta 67 · si la plata salió o entró, según el texto; `null` si no se lee. */
+    val tipo: TransactionType? = null,
 )
 
 @Serializable

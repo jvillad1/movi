@@ -186,6 +186,8 @@ fun App() {
             // usan como key de su LaunchedEffect — sin esto, la de atrás (que ahora nunca sale de
             // la composición) seguiría mostrando la lista de antes de guardar. Ver [LocalRefreshTick].
             var refreshTick by remember { mutableStateOf(0) }
+            // Vuelta 67: «Anulado · Deshacer». Deshacer bien relee como cualquier guardado.
+            val avisoDeDeshacer = remember { com.jvillada.movi.ui.components.AvisoDeDeshacer(alCambiar = { refreshTick++ }) }
             // Ola 9 · B — «¿esto se repite todos los meses?», ofrecido DESPUÉS de guardar.
             //
             // Vive acá, y no en la hoja de Agregar, por una razón concreta: guardar cierra esa
@@ -407,6 +409,7 @@ fun App() {
                 val relevoDeScroll = remember { RelevoDeScroll() }
                 CompositionLocalProvider(
                     LocalRefreshTick provides refreshTick,
+                    com.jvillada.movi.ui.components.LocalAvisoDeDeshacer provides avisoDeDeshacer,
                     LocalRelevoDeScroll provides relevoDeScroll,
                     // Para que cualquier pantalla pueda anotar su hoja sin que App.kt tenga que
                     // conocerla (Perfil y sus cuatro overlays). Ver [PilaDeHojas].
@@ -720,7 +723,13 @@ internal fun EsqueletoDeLaCascara(
                 )
             }
             Column(modifier = Modifier.widthIn(max = anchoMaximoDeLaPantalla(pantalla, widthClass)).fillMaxSize().statusBarsPadding().then(sinBarraInferior).imePadding()) {
-                Box(modifier = Modifier.weight(1f).fillMaxWidth(), content = contenido)
+                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    contenido()
+                    // Vuelta 67: «Anulado · Deshacer», abajo de la pantalla y encima de su contenido.
+                    com.jvillada.movi.ui.components.LocalAvisoDeDeshacer.current?.let { aviso ->
+                        com.jvillada.movi.ui.components.AnfitrionDelAvisoDeDeshacer(aviso, Modifier.align(Alignment.BottomCenter))
+                    }
+                }
 
                 // Y con el teclado arriba la barra se esconde: no sirve para nada mientras se
                 // escribe, y son 60 dp de los pocos que quedan — con ella puesta, en un teléfono

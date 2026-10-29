@@ -87,7 +87,11 @@ private fun List<ParteEnPantalla>.siguienteClave(): Int = (maxOfOrNull { it.clav
 data class TerceroDelAviso(val nombre: String, val corto: String, val destinoId: String? = null)
 
 const val ESTO_PAGO_VARIAS_COSAS: String = "Esto pagó varias cosas"
-const val REPARTIR_EN_PARTES: String = "Repartir en partes"
+/**
+ * Vuelta 67: «Dividir en categorías» (era «Repartir en partes»): al lado de «Repartir» —con personas,
+ * en un grupo— se confundían. El nombre de la constante no cambió.
+ */
+const val REPARTIR_EN_PARTES: String = "Dividir en categorías"
 const val VOLVER_A_UN_SOLO_MOVIMIENTO: String = "Volver a un solo movimiento"
 const val AGREGAR_OTRA_PARTE: String = "Agregar otra parte"
 const val EL_RESTO_COMO_GASTO: String = "El resto como gasto"
@@ -97,15 +101,25 @@ const val TAG_CUADRE_DE_LAS_PARTES: String = "partes:cuadre"
 /** «Confirmar las 3 partes» (con una sola todavía no hay reparto: «Confirmar las partes», apagado). */
 fun botonDeConfirmarLasPartes(cuantas: Int): String = if (cuantas >= 2) "Confirmar las $cuantas partes" else "Confirmar las partes"
 
+/**
+ * **Una parte nueva** (vuelta 67): un gasto con lo que falta y **sin categoría**. Antes copiaba la del
+ * movimiento, y dividir «Mercado» en dos daba dos «Mercado»: lo que se viene a hacer es elegir otra.
+ * «Confirmar» queda apagado con «Parte 2: elige la categoría» hasta que se elige.
+ */
+fun parteNuevaSinCategoria(monto: Long = 0L): ParteElegida = ParteElegida(QueFueLaParte.GASTO, monto = monto)
+
 /** «El resto a Papá». */
 fun elRestoA(tercero: TerceroDelAviso): String = "El resto a ${tercero.corto}"
 
 /** El tag del campo del monto de la parte [i] (desde 0). */
 fun tagDelMontoDeLaParte(i: Int): String = "partes:monto:$i"
 
-/** «Faltan $23.333», «Te pasaste por $76.667» o «Cuadra con el aviso». */
-fun textoDelCuadre(cuadre: CuadreDeLasPartes, moneda: String): String = when (cuadre) {
-    CuadreDeLasPartes.Cuadra -> "Cuadra con el aviso"
+/**
+ * «Faltan $23.333», «Te pasaste por $76.667» o «Cuadra con el aviso». Vuelta 67: sin aviso —un
+ * movimiento anotado a mano— no hay aviso con qué cuadrar, y cuadrado dice «Suma $100.000» ([total]).
+ */
+fun textoDelCuadre(cuadre: CuadreDeLasPartes, moneda: String, total: Long? = null): String = when (cuadre) {
+    CuadreDeLasPartes.Cuadra -> if (total != null) "Suma ${formatMoney(total, moneda)}" else "Cuadra con el aviso"
     is CuadreDeLasPartes.Faltan -> "Faltan ${formatMoney(cuadre.monto, moneda)}"
     is CuadreDeLasPartes.TePasaste -> "Te pasaste por ${formatMoney(cuadre.monto, moneda)}"
 }
@@ -225,6 +239,8 @@ fun EditorDePartes(
     habilitado: Boolean,
     onVolver: (() -> Unit)?,
     modifier: Modifier = Modifier,
+    /** Vuelta 67: `false` en un movimiento sin aviso (anotado a mano): cuadrado dice «Suma $X». */
+    conAviso: Boolean = true,
 ) {
     val cuadre = cuadreDeLasPartes(total, partes.map { it.parte.monto })
     // La categoría de un gasto nuevo: la que propone Movi para el aviso, o la primera de las suyas.
@@ -268,7 +284,7 @@ fun EditorDePartes(
 
         // La línea en vivo: lo que falta, o lo que sobra.
         Text(
-            textoDelCuadre(cuadre, moneda),
+            textoDelCuadre(cuadre, moneda, total = total.takeIf { !conAviso }),
             style = Movi.textos.cuerpoFuerte,
             color = when (cuadre) {
                 CuadreDeLasPartes.Cuadra -> Movi.colores.entra
@@ -296,7 +312,7 @@ fun EditorDePartes(
                     })
                 }
                 PildoraDeAccion(EL_RESTO_COMO_GASTO, habilitada = habilitado, onClick = {
-                    conResto(parteDeTipo(QueFueLaParte.GASTO, ParteElegida(QueFueLaParte.CUOTA), tercero, categoriaPropuesta))
+                    conResto(parteNuevaSinCategoria())
                 })
             }
         }
@@ -311,8 +327,7 @@ fun EditorDePartes(
                     texto = AGREGAR_OTRA_PARTE,
                     onClick = {
                         val falta = (cuadre as? CuadreDeLasPartes.Faltan)?.monto ?: 0L
-                        val nueva = parteDeTipo(QueFueLaParte.GASTO, ParteElegida(QueFueLaParte.CUOTA, monto = falta), tercero, categoriaPropuesta)
-                        onPartes(partes + ParteEnPantalla(partes.siguienteClave(), nueva))
+                        onPartes(partes + ParteEnPantalla(partes.siguienteClave(), parteNuevaSinCategoria(falta)))
                     },
                     variante = VarianteDeBoton.Fantasma,
                     tamano = TamanoDeBoton.S,

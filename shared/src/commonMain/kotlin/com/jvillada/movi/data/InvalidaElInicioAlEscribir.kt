@@ -161,6 +161,9 @@ internal class InvalidaElInicioAlEscribir(
     override suspend fun deleteAccount(id: String): Unit = trasEscribir { delegado.deleteAccount(id) }
     override suspend fun postEvent(event: FinancialEvent): FinancialEvent = trasEscribir { delegado.postEvent(event) }
     override suspend fun voidEvent(id: String, reason: String?): VoidEvent = trasEscribir { delegado.voidEvent(id, reason) }
+    // Vuelta 67: restaurar un anulado y deshacer un reparto mueven plata como anular.
+    override suspend fun restaurarMovimiento(id: String): Unit = trasEscribir { delegado.restaurarMovimiento(id) }
+    override suspend fun deshacerReparto(id: String): FinancialEvent = trasEscribir { delegado.deshacerReparto(id) }
     override suspend fun createTransfer(request: CreateTransferRequest): TransferResult = trasEscribir { delegado.createTransfer(request) }
     override suspend fun payInstallment(request: CreatePagoDeCuotaRequest): PagoDeCuotaResult = trasEscribir { delegado.payInstallment(request) }
     override suspend fun vincularPagoDeDeuda(

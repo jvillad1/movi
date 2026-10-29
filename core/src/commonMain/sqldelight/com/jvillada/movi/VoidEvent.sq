@@ -102,3 +102,11 @@ WHERE syncedAt IS NOT NULL
 -- Al borrar la cuenta: TODO lo del usuario, también lo que no subió (ver `olvidarTodoLoDe`).
 deleteAllForUser:
 DELETE FROM void_event WHERE userId = :userId;
+
+-- Vuelta 67 · restaurar un anulado: las anulaciones de ESTE movimiento (para saber si ya subieron).
+selectFor:
+SELECT * FROM void_event WHERE originalEventId = :originalEventId;
+
+-- Vuelta 67 · restaurar un anulado: borrar la marca. El movimiento vuelve a mostrarse y a contar.
+deleteFor:
+DELETE FROM void_event WHERE originalEventId = :originalEventId;
