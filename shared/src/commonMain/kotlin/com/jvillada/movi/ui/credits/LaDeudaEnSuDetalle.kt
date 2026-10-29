@@ -38,6 +38,7 @@ import com.jvillada.movi.shared.model.PlanDelCredito
 import com.jvillada.movi.shared.model.ajustesDelPeriodo
 import com.jvillada.movi.shared.model.periodoDe
 import com.jvillada.movi.shared.model.planDelCredito
+import com.jvillada.movi.shared.model.mesDeLaPrimeraCuota
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
@@ -107,6 +108,11 @@ class DeudaDelDetalle internal constructor(
     val plan: PlanDelCredito?,
     val periodoActual: PeriodoFinanciero,
     private val abierto: LoAbiertoDeLaDeuda,
+    /**
+     * **El mes de la primera cuota sin pagar** (vuelta 59): de ahí se cuentan las que faltan y la última
+     * («la última en noviembre de 2030»), no del mes en curso. Ver [mesDeLaPrimeraCuota].
+     */
+    val primeraCuota: PeriodoFinanciero = periodoActual,
 ) {
     /** La hoja abierta. Vive aparte: releer la deuda (otro objeto) no cierra la hoja. */
     var hoja: HojaDeLaDeuda?
@@ -151,8 +157,11 @@ fun rememberDeudaDelDetalle(accountId: String, tipo: AccountType?, reintento: In
     val periodoActual = remember(ajustes) { periodoDe(Clock.System.now().toEpochMilliseconds(), ajustes) }
     val plan = remember(prestamo) { prestamo?.let { planDelCredito(it, hoyEnAppZone()) } }
     val abierto = remember(accountId) { LoAbiertoDeLaDeuda() }
-    val deuda = remember(prestamo, tarjeta, plan, periodoActual, abierto) {
-        DeudaDelDetalle(prestamo, tarjeta, plan, periodoActual, abierto)
+    val primeraCuota = remember(prestamo, periodoActual) {
+        prestamo?.let { mesDeLaPrimeraCuota(it, hoyEnAppZone()) } ?: periodoActual
+    }
+    val deuda = remember(prestamo, tarjeta, plan, periodoActual, abierto, primeraCuota) {
+        DeudaDelDetalle(prestamo, tarjeta, plan, periodoActual, abierto, primeraCuota)
     }
     return deuda
 }
@@ -183,7 +192,7 @@ fun SeccionDeLaDeuda(
         if (conCondiciones) {
             Seccion(titulo = if (prestamo != null) "El préstamo" else "La tarjeta")
             Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
-                if (prestamo != null) LoQueDiceElPrestamo(prestamo, deuda.plan, deuda.periodoActual)
+                if (prestamo != null) LoQueDiceElPrestamo(prestamo, deuda.plan, deuda.primeraCuota, deuda.periodoActual)
                 if (tarjeta != null) LoQueDiceLaTarjeta(tarjeta)
             }
         }
@@ -249,6 +258,8 @@ private fun accionesDeLaDeuda(deuda: DeudaDelDetalle, onRegistrarPagoDeLaTarjeta
 private fun LoQueDiceElPrestamo(
     credit: CreditSummary,
     plan: PlanDelCredito?,
+    /** El mes de la primera cuota sin pagar: de ahí se cuenta la última (vuelta 59). */
+    primeraCuota: PeriodoFinanciero,
     periodoActual: PeriodoFinanciero,
 ) {
     val t = credit.terms ?: return
@@ -276,7 +287,7 @@ private fun LoQueDiceElPrestamo(
         )
         plan?.let { p ->
             Text(textoDelInteres(p), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-            comoVaEstaDeuda(p, periodoActual)?.let { comoVa ->
+            comoVaEstaDeuda(p, primeraCuota)?.let { comoVa ->
                 Text(
                     comoVa.texto,
                     style = if (comoVa.esAlerta) Movi.textos.apoyoMedio else Movi.textos.apoyo,
@@ -398,7 +409,8 @@ fun HojasDeLaDeuda(deuda: DeudaDelDetalle, onCambiada: () -> Unit, onError: (Str
             )
         }
         HojaDeLaDeuda.Abono -> if (prestamo != null) {
-            SimuladorDeAbonoSheet(credit = prestamo, periodoActual = deuda.periodoActual, onDismiss = { deuda.hoja = null })
+            // Vuelta 59: las fechas del simulador se cuentan desde la primera cuota sin pagar.
+            SimuladorDeAbonoSheet(credit = prestamo, periodoActual = deuda.primeraCuota, onDismiss = { deuda.hoja = null })
         }
         null -> Unit
     }

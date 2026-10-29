@@ -19,6 +19,8 @@ import com.jvillada.movi.data.RepositorioDePrueba
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.AdjustAccountBalanceResponse
+import com.jvillada.movi.shared.model.CreditSummary
+import com.jvillada.movi.ui.credits.SIN_SALDO_EN_MOVI
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.components.ds.TAG_SECCION
 import kotlinx.coroutines.CompletableDeferred
@@ -75,15 +77,22 @@ class CuadreDeSaldosScreenTest {
         id = "acc-loan",
         name = "Crédito del carro",
         type = AccountType.LOAN,
-        balance = 30_000_000L,
-        balancesByCurrency = mapOf("COP" to 30_000_000L),
+        balance = -980_000L,
+        balancesByCurrency = mapOf("COP" to -980_000L),
     )
 
     /** Lo que llegó al repositorio: (cuenta, saldo objetivo). Vacío = no se escribió nada. */
     private val anotados = mutableListOf<Pair<String, Long>>()
 
+    /** Vuelta 59: los ajustes que fueron por la ruta de los créditos (la hoja de la ficha). */
+    private val anotadosComoCredito = mutableListOf<Pair<String, Long>>()
+
     private open inner class ConDosCuentas : RepositorioDePrueba() {
         override suspend fun getAccounts(): List<Account> = listOf(nu, masterBlack, prestamo, fiducuenta)
+        override suspend fun adjustCreditBalance(accountId: String, targetBalance: Long): CreditSummary {
+            anotadosComoCredito += accountId to targetBalance
+            return CreditSummary(account = prestamo.copy(balance = targetBalance), terms = null, paidPct = null)
+        }
         override suspend fun adjustAccountBalance(
             accountId: String,
             targetBalance: Long,
@@ -112,6 +121,7 @@ class CuadreDeSaldosScreenTest {
     fun limpiar() {
         Repositories.sustitutoDePrueba = null
         anotados.clear()
+        anotadosComoCredito.clear()
     }
 
     private fun esperarTexto(texto: String) {
@@ -138,7 +148,8 @@ class CuadreDeSaldosScreenTest {
     }
 
     @Test
-    fun `lista las cuentas de dinero y las tarjetas con lo que cree Movi, y deja los prestamos afuera`() {
+    @Config(qualifiers = AVD_MOVI_CUADRE_ALTO)
+    fun `lista las cuentas de dinero, las tarjetas y los prestamos con lo que cree Movi`() {
         montar()
 
         esperarTexto("Nu")
@@ -146,12 +157,31 @@ class CuadreDeSaldosScreenTest {
         esperarTexto("352.082")
         // Vuelta de diseño 37: la tarjeta también se cuadra acá, en su sección.
         esperarTexto("Master Black")
-        // El préstamo no: se cuadra en Créditos.
-        assertEquals(
-            0,
-            composeRule.onAllNodesWithText("Crédito del carro", substring = true, useUnmergedTree = true)
-                .fetchSemanticsNodes().size,
-        )
+        // Vuelta 59: y el préstamo, en la suya — «justo donde estaba el mayor descuadre».
+        esperarTexto("Crédito del carro")
+        assertTrue(hay("Préstamos"))
+        // En negativo no dice «−$980.000»: un solo signo.
+        assertTrue(hay(SIN_SALDO_EN_MOVI))
+        assertTrue(!hay("−\$980.000"))
+    }
+
+    /** Vuelta 59: el préstamo se cuadra con el ajuste de su ficha (la ruta de los créditos), con su confirmación. */
+    @Test
+    @Config(qualifiers = AVD_MOVI_CUADRE_ALTO)
+    fun `el prestamo se cuadra con lo que debes por la ruta de los creditos`() {
+        montar()
+        esperarTexto("Crédito del carro")
+
+        // Nu (0), Fiducuenta (1), Master Black (2), Crédito del carro (3): el orden de las secciones.
+        escribir(fila = 3, digitos = "34500000")
+        esperarTexto("Movi no tiene su saldo, tú dices \$34.500.000: se va a anotar un cargo de \$35.480.000.")
+        assertTrue(anotadosComoCredito.isEmpty(), "nada se escribe hasta confirmar")
+
+        tocar("Anotar el ajuste")
+        composeRule.waitUntil(timeoutMillis = 5_000) { anotadosComoCredito.isNotEmpty() }
+
+        assertEquals(listOf("acc-loan" to 34_500_000L), anotadosComoCredito)
+        assertTrue(anotados.isEmpty(), "no por la ruta de cuentas: $anotados")
     }
 
     private fun arriba(tag: String): Float =
@@ -190,7 +220,8 @@ class CuadreDeSaldosScreenTest {
         assertEquals(1, composeRule.onAllNodesWithText(NOTA_DEL_CUADRE, useUnmergedTree = true).fetchSemanticsNodes().size)
         assertEquals(1, composeRule.onAllNodesWithText(QUE_ES_EL_CUADRE, useUnmergedTree = true).fetchSemanticsNodes().size)
         // Cada cuenta sigue diciendo «Movi dice» y su estado.
-        assertEquals(3, composeRule.onAllNodesWithText("Movi dice", useUnmergedTree = true).fetchSemanticsNodes().size)
+        // Vuelta 59: el préstamo también (cuatro cuentas).
+        assertEquals(4, composeRule.onAllNodesWithText("Movi dice", useUnmergedTree = true).fetchSemanticsNodes().size)
         assertEquals(3, composeRule.onAllNodesWithText("Nunca la has cuadrado", substring = true, useUnmergedTree = true).fetchSemanticsNodes().size)
     }
 
@@ -304,7 +335,7 @@ class CuadreDeSaldosScreenTest {
     }
 
     /**
-     * Sin una sola cuenta de Dinero, Inversión o tarjeta, el vacío que enseña — título, detalle y el botón
+     * Sin una sola cuenta de Dinero, Inversión, tarjeta o préstamo, el vacío que enseña — título, detalle y el botón
      * que abre la MISMA hoja de crear cuenta que «Nueva cuenta» en Patrimonio.
      */
     @Test
@@ -314,7 +345,7 @@ class CuadreDeSaldosScreenTest {
         })
         esperarTexto("Todavía no hay nada que cuadrar")
 
-        assertTrue(hay("El cuadre compara el saldo de cada cuenta de Dinero, Inversión o tarjeta"))
+        assertTrue(hay("El cuadre compara el saldo de cada cuenta de Dinero, Inversión, tarjeta o préstamo"))
         assertTrue(hay("Crear una cuenta"))
 
         tocar("Crear una cuenta")

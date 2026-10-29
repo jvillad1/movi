@@ -217,10 +217,15 @@ class CreditosDiceLoQueCuestaLaDeudaTest {
     fun `el detalle dice cuando termina`() {
         montarElDetalle(libreInversion)
 
-        // El mes de la última cuota se cuenta desde el mes en curso (corte 1: esta clase no manda
-        // perfil), así que se calcula igual acá. Fijo en «junio de 2030» se rompió el 1 de octubre
-        // de 2026: el número de cuotas (46) no depende de la fecha, el mes en que termina sí.
-        val ultima = nombreDe(periodoDe(Clock.System.now().toEpochMilliseconds(), PeriodSettings()).mas(46 - 1))
+        // Vuelta 59: el mes de la última cuota se cuenta desde la primera cuota sin pagar (sin saber
+        // qué se pagó, la del próximo día 15), así que se calcula igual acá. Fijo en «junio de 2030» se
+        // rompió el 1 de octubre de 2026: el número de cuotas (46) no depende de la fecha, el mes sí.
+        val ultima = nombreDe(
+            com.jvillada.movi.shared.model.mesDeLaUltimaCuota(
+                com.jvillada.movi.shared.model.mesDeLaPrimeraCuotaSinPagar(15, com.jvillada.movi.ui.fecha.hoyEnAppZone(), pagadas = null),
+                46,
+            ),
+        )
         composeRule.onNodeWithText(
             "Te faltan 46 cuotas · la última en $ultima si la cuota y la tasa no cambian",
             substring = true,

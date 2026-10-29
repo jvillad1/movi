@@ -37,6 +37,9 @@ import com.jvillada.movi.shared.model.TipoDeDeuda
 import com.jvillada.movi.shared.model.deudasParaSalir
 import com.jvillada.movi.shared.model.periodoDe
 import com.jvillada.movi.shared.model.planDeSalida
+import com.jvillada.movi.shared.model.planDelCredito
+import com.jvillada.movi.shared.model.interesDelMes
+import com.jvillada.movi.ui.fecha.hoyEnAppZone
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.HeaderLeading
@@ -98,6 +101,13 @@ fun SalidaDeDeudasScreen(onNavigate: (Screen) -> Unit) {
     val plan = remember(deudas, abono, estrategia) {
         deudas?.let { planDeSalida(it, abono ?: 0L, estrategiaDelIndice(estrategia)) }
     }
+    // Vuelta 59: el interés del mes de Créditos (créditos y tarjetas, `interesDelMes` de :core) y la
+    // primera cuota sin pagar de cada deuda, de donde se cuentan sus fechas.
+    val hoy = hoyEnAppZone()
+    val interes = remember(listas) {
+        listas?.let { (c, t) -> interesDelMes(c.mapNotNull { planDelCredito(it, hoy) }, t) }
+    }
+    val primeras = remember(listas) { listas?.let { (c, t) -> primerasCuotasDe(c, t, hoy) }.orEmpty() }
     val noSeLeyo = listas == null && (creditos.terminada || tarjetas.terminada) && !creditos.actualizando && !tarjetas.actualizando
 
     Box(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
@@ -129,7 +139,9 @@ fun SalidaDeDeudasScreen(onNavigate: (Screen) -> Unit) {
                         }
                         else -> ContenidoDelPlan(
                             plan = plan,
+                            interes = interes,
                             periodoActual = periodoActual,
+                            primeras = primeras,
                             estrategia = estrategia,
                             onEstrategia = { estrategia = it },
                             abono = abono,
@@ -162,7 +174,9 @@ fun SalidaDeDeudasScreen(onNavigate: (Screen) -> Unit) {
 @Composable
 private fun ContenidoDelPlan(
     plan: com.jvillada.movi.shared.model.PlanDeSalida,
+    interes: com.jvillada.movi.shared.model.InteresDelMes?,
     periodoActual: com.jvillada.movi.shared.model.PeriodoFinanciero,
+    primeras: Map<String, com.jvillada.movi.shared.model.PeriodoFinanciero>,
     estrategia: Int,
     onEstrategia: (Int) -> Unit,
     abono: Long?,
@@ -170,14 +184,14 @@ private fun ContenidoDelPlan(
     onCargar: (DeudaParaSalir) -> Unit,
 ) {
     Spacer(Modifier.height(Movi.espacios.corto))
-    if (plan.enElCalculo.isNotEmpty()) {
+    if (interes != null && interes.propio > 0L) {
         Text(
-            "Tus deudas te cobran ${formatCOP(interesDelMesPropio(plan))} de interés este mes",
+            "Tus deudas te cobran ${formatCOP(interes.propio)} de interés este mes",
             style = Movi.textos.cuerpo,
             color = Movi.colores.texto,
         )
         Text(
-            "Solo las que salen de tu bolsillo y tienen tasa.",
+            desgloseDelInteresDelMes(interes),
             style = Movi.textos.apoyo,
             color = Movi.colores.textoMedio,
         )
@@ -196,7 +210,7 @@ private fun ContenidoDelPlan(
             modifier = Modifier.testTag(TAG_ABONO_EXTRA),
         )
         Spacer(Modifier.height(Movi.espacios.medio))
-        resumenDelSimulador(plan, periodoActual).forEachIndexed { i, linea ->
+        resumenDelSimulador(plan, periodoActual, primeras).forEachIndexed { i, linea ->
             Text(
                 linea,
                 style = when {
@@ -228,7 +242,7 @@ private fun ContenidoDelPlan(
                     inicio = { NumeroEnCirculo(salida.orden) },
                 )
                 BajoLaFila {
-                    Text(textoDeLaSalida(salida, plan.abonoMensual, periodoActual), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                    Text(textoDeLaSalida(salida, plan.abonoMensual, primeras[salida.deuda.id] ?: periodoActual), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                 }
                 if (i < plan.enElCalculo.lastIndex) Separador(SangriaDeSeparador.ConInicio)
             }

@@ -112,7 +112,7 @@ class CreditosLogicTest {
             credito(deuda = -1_500_000L, paidPct = 1.0, hasMovements = true),
         )
 
-        assertEquals("Deuda en negativo — revísala", progreso.etiqueta)
+        assertEquals(FALTA_EL_SALDO_DE_LA_DEUDA, progreso.etiqueta)
         assertEquals(0f, progreso.fraccion)
         assertEquals(true, progreso.esAviso)
     }

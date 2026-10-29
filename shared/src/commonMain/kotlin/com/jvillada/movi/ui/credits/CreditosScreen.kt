@@ -51,6 +51,10 @@ import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.periodoDe
 import com.jvillada.movi.shared.model.planDelCredito
 import com.jvillada.movi.shared.model.resumirDeudas
+import com.jvillada.movi.shared.model.deudasSinSaldoDe
+import com.jvillada.movi.shared.model.interesDelMes
+import com.jvillada.movi.shared.model.mesDeLaPrimeraCuota
+import com.jvillada.movi.shared.model.ultimaCuotaDeTodas
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.components.ds.BarraDeProgreso
 import com.jvillada.movi.ui.components.ds.Boton
@@ -294,13 +298,21 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                     // La protagonista de esta pantalla, igual que «Tu plata» en el Inicio: misma
                     // letra, mismo tamaño, y un renglón siempre. Ver [CifraProtagonista].
                     Cifra(totalDebtCop(creditosALaVista, tarjetasALaVista), VarianteDeCifra.Heroe)
+                    // Vuelta 59: las deudas en negativo no restan arriba; se nombran acá, con «Cuadrar».
+                    DeudasSinSaldo(creditosALaVista, tarjetasALaVista, onNavigate)
                     // Lo que esa deuda CUESTA, que es lo que la pantalla no decía. La deuda
                     // total de arriba cuenta todos los créditos —quién paga la cuota no cambia
                     // de quién es el pasivo—; el costo mensual de acá sí separa. Ver
                     // [saleDeTuBolsillo].
                     LoQueCuestaLaDeuda(
                         planes.values.filterNotNull(),
-                        periodoActual,
+                        // Vuelta 59: el interés del mes con las tarjetas, y la última cuota contada
+                        // desde la primera sin pagar de cada crédito.
+                        tarjetasALaVista,
+                        creditosALaVista.mapNotNull { c ->
+                            val plan = planes[c.account.id] ?: return@mapNotNull null
+                            mesDeLaPrimeraCuota(c, hoyEnAppZone())?.let { plan to it }
+                        },
                         quienesPaganLoQueNoSaleDeTuBolsillo(creditosALaVista.mapNotNull { it.terms }),
                         onRenglonesDelAvisoAmbar = { renglonesDelAvisoAmbar = it },
                         onRenglonesDelAvisoRojo = { renglonesDelAvisoRojo = it },
@@ -481,12 +493,17 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
 @Composable
 private fun LoQueCuestaLaDeuda(
     planes: List<PlanDelCredito>,
-    periodoActual: PeriodoFinanciero,
+    tarjetas: List<CardSummary>,
+    /** Cada plan con el mes de su primera cuota sin pagar: de ahí sale «Tu última cuota». */
+    planesConSuPrimeraCuota: List<Pair<PlanDelCredito, PeriodoFinanciero>>,
     quienesPagan: List<String> = emptyList(),
     onRenglonesDelAvisoAmbar: (Int) -> Unit = {},
     onRenglonesDelAvisoRojo: (Int) -> Unit = {},
 ) {
+    // Sin un solo crédito con plan no se pinta (como siempre: la forma recordada del esqueleto cuenta
+    // con eso); con alguno, el interés del mes suma también las tarjetas.
     if (planes.isEmpty()) return
+    val interes = interesDelMes(planes, tarjetas)
     val resumen = resumirDeudas(planes)
     Spacer(Modifier.height(Espacio.m))
     Separador(SangriaDeSeparador.Ninguna)
@@ -496,11 +513,13 @@ private fun LoQueCuestaLaDeuda(
     // el total le cobraría al bolsillo millones que no salen de su cuenta; quedarse solo con lo suyo
     // escondería que existen; y dejar la ajena como nota al pie hacía que un dueño con solo créditos
     // de Skandia leyera «Intereses este mes — $0» en la fila titular. Ver [saleDeTuBolsillo].
+    // Vuelta 59: la cifra de `interesDelMes` (:core), la misma de «Cómo salir de tus deudas» y de
+    // Movi AI: tus créditos y tus tarjetas. Con tarjetas que cobran, el rótulo lo dice.
     TituloDelGrupo(TITULO_INTERES_DEL_MES)
-    FilaDelResumen(ALCANCE_INTERES_PROPIO, resumen.interesMensualPropio)
-    if (resumen.interesMensualAjeno > 0L) {
+    FilaDelResumen(alcanceDelInteresPropio(interes), interes.propio)
+    if (interes.ajeno > 0L) {
         Spacer(Modifier.height(Espacio.xxs))
-        FilaDelResumen(alcanceDelInteresAjeno(quienesPagan), resumen.interesMensualAjeno)
+        FilaDelResumen(alcanceDelInteresAjeno(quienesPagan), interes.ajeno)
     }
 
     if (resumen.interesPorPagarPropio > 0L || resumen.interesPorPagarAjeno > 0L) {
@@ -520,7 +539,7 @@ private fun LoQueCuestaLaDeuda(
     if (resumen.mesesHastaLaUltimaCuota != null || resumen.creditosQueNoSeTerminan > 0) {
         Spacer(Modifier.height(Espacio.s))
         TituloDelGrupo(TITULO_ULTIMA_CUOTA)
-        FechaDelResumen(ALCANCE_ULTIMA_CUOTA, textoDeLaUltimaCuota(resumen, periodoActual))
+        FechaDelResumen(ALCANCE_ULTIMA_CUOTA, textoDeLaUltimaCuota(ultimaCuotaDeTodas(planesConSuPrimeraCuota)))
     }
 
     // **Los dos avisos, y el primero es el que faltaba.** `creditosQueNoSeTerminan` se calculaba,
@@ -549,6 +568,39 @@ private fun LoQueCuestaLaDeuda(
 
     Spacer(Modifier.height(Espacio.s))
     Text(SUPUESTO_DE_LA_PROYECCION, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
+}
+
+/** El tag de la línea de las deudas sin saldo, debajo de «Deuda total». */
+const val TAG_DEUDAS_SIN_SALDO: String = "creditos:deudas-sin-saldo"
+
+/**
+ * **Las deudas sin saldo, debajo de «Deuda total»** (vuelta 59): «1 crédito sin saldo · Cuadrar». No
+ * restan arriba ([totalDebtCop]) y por eso se dicen acá, con la salida a la mano: «Cuadrar» abre Cuadre
+ * de saldos —que desde esta vuelta lista los préstamos— con la deuda arriba si es una sola. Nada si no hay.
+ */
+@Composable
+private fun DeudasSinSaldo(creditos: List<CreditSummary>, tarjetas: List<CardSummary>, onNavigate: (Screen) -> Unit) {
+    val sinSaldo = deudasSinSaldoDe(creditos.map { it.account } + tarjetas.map { it.account })
+    val texto = textoDeLasDeudasSinSaldo(
+        creditos = sinSaldo.count { it.type == com.jvillada.movi.shared.model.AccountType.LOAN },
+        tarjetas = sinSaldo.count { it.type != com.jvillada.movi.shared.model.AccountType.LOAN },
+    ) ?: return
+    Spacer(Modifier.height(Espacio.xs))
+    Row(
+        modifier = Modifier.fillMaxWidth().testTag(TAG_DEUDAS_SIN_SALDO),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Espacio.s),
+    ) {
+        Text(texto, style = Movi.textos.apoyoMedio, color = Movi.colores.aviso, modifier = Modifier.weight(1f))
+        Boton(
+            texto = CUADRAR_LAS_DEUDAS_SIN_SALDO,
+            onClick = {
+                onNavigate(sinSaldo.singleOrNull()?.let { Screen.CuadrarLaCuenta(it.id) } ?: Screen.CuadreDeSaldos)
+            },
+            variante = VarianteDeBoton.Fantasma,
+            tamano = TamanoDeBoton.S,
+        )
+    }
 }
 
 /** El rótulo de un grupo de filas del resumen: qué se está midiendo, antes de con qué alcance. */
@@ -659,7 +711,14 @@ private fun FilaDeDeuda(
             tonoDelSubtitulo = if (deuda.faltanDatos) TonoDeSubtitulo.Aviso else TonoDeSubtitulo.Normal,
             lineasDelSubtitulo = 2,
             inicio = { IconoEnCirculo(icono, tono = TonoDeIcono.Neutro) },
-            final = { if (deuda.pagada) Pildora(DEUDA_PAGADA, TonoDePildora.Exito) else saldo() },
+            // Vuelta 59: una deuda en negativo no pinta su cifra con el signo al revés.
+            final = {
+                when {
+                    deuda.pagada -> Pildora(DEUDA_PAGADA, TonoDePildora.Exito)
+                    deuda.sinSaldo -> Pildora(SIN_SALDO_EN_MOVI, TonoDePildora.Aviso)
+                    else -> saldo()
+                }
+            },
             onClick = onAbrir,
             onClickLabel = "Ver la deuda",
         )
