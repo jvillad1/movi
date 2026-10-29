@@ -2726,8 +2726,10 @@ nuevas**: el punto 2 protege una que ya existía.
    afirma nada. `accionDelPago` y «Movi propone hoy» miran `candidatosParecidos`: con solo uno lejano el
    Inicio dice «Anotar pago», no «Revisar». En Pagos la fila prefiere un candidato parecido
    (`propuestaDeLaFila`); si solo queda uno lejano, no es «Por confirmar»: «Anotar pago» a la derecha y
-   debajo el enlace **«Hay un movimiento de $260.000 · ¿Es este?»** (`PropuestaLejana`, `TAG_PROPUESTA_LEJANA`),
-   que abre la pregunta de siempre. **Nunca se tilda solo.**
+   debajo el enlace **«¿Es el de $260.000?»** (`PropuestaLejana`, `TAG_PROPUESTA_LEJANA`),
+   que abre la pregunta de siempre. **Nunca se tilda solo.** El enlace es corto a propósito: «Hay un
+   movimiento de $260.000 · ¿Es este?» se cortaba a 390 dp antes de la pregunta (lo mide
+   `ElEnlaceDelCandidatoCabeTest`, a 360 dp con la letra ×1,12).
 
 **Los toques** (desde el Inicio, tres avisos con Farmatodo en «Transporte»): el mal categorizado, **4** (la
 franja, «Cambiar», la pastilla y el «Confirmar» de la tarjeta); con «Todas ›», **5**; los tres, **5** (la

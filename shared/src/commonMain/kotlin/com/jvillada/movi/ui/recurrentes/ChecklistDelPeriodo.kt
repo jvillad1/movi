@@ -685,14 +685,18 @@ internal fun propuestaDeLaFila(pago: PagoDelPeriodo, descartadas: Set<String>): 
 /**
  * **¿La propuesta de la fila está muy lejos del monto?** (vuelta 51; [candidatoMuyDistinto] en `:core`,
  * más del 50 %). Entonces la fila no pregunta «¿Ya pagaste…?» de principal: «Anotar pago» queda como
- * acción y el candidato como enlace, «Hay un movimiento de $260.000 · ¿Es este?». Nunca se tilda solo.
+ * acción y el candidato como enlace, «¿Es el de $260.000?». Nunca se tilda solo.
  */
 internal fun esPropuestaLejana(pago: PagoDelPeriodo, propuesta: FinancialEvent?): Boolean =
     propuesta != null && pago.candidatoMuyDistinto(propuesta)
 
-/** «Hay un movimiento de $260.000 · ¿Es este?»: el enlace de una propuesta lejana (vuelta 51). */
+/**
+ * «¿Es el de $260.000?»: el enlace de una propuesta lejana (vuelta 51). Corto a propósito: «Hay un
+ * movimiento de $260.000 · ¿Es este?» se cortaba a 390 dp en «… $260.000 ·», justo antes de la
+ * pregunta (lo mide `ElEnlaceDelCandidatoCabeTest`, a 360 dp con la letra ×1,12).
+ */
 fun enlaceDeLaPropuestaLejana(propuesta: FinancialEvent): String =
-    "Hay un movimiento de ${formatMoney(propuesta.amount, propuesta.currency)} · ¿Es este?"
+    "¿Es el de ${formatMoney(propuesta.amount, propuesta.currency)}?"
 
 /** El tag del enlace de una propuesta lejana. */
 const val TAG_PROPUESTA_LEJANA: String = "checklist:propuesta-lejana"
@@ -833,7 +837,7 @@ private fun LoQueOfreceLaFila(
  * dueño decide; nada se tilda solo.
  */
 @Composable
-private fun PropuestaLejana(
+internal fun PropuestaLejana(
     pago: PagoDelPeriodo,
     propuesta: FinancialEvent,
     enVuelo: Boolean,

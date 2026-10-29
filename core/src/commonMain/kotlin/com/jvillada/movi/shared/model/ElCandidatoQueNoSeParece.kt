@@ -9,7 +9,7 @@ import kotlin.math.abs
  * tanqueo de $260.000 para una factura de $9.000. El emparejamiento no exige el monto (un salario varía
  * con las retenciones), pero un candidato que se aleja más de la mitad del monto de la regla no es una
  * buena respuesta a «¿ya pagaste?». La fila deja «Anotar pago» como principal y el candidato queda como
- * enlace («Hay un movimiento de $260.000 · ¿Es este?»). **Nunca se tilda solo**: esto solo decide qué
+ * enlace («¿Es el de $260.000?»). **Nunca se tilda solo**: esto solo decide qué
  * se ofrece primero.
  */
 

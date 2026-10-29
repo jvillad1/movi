@@ -172,7 +172,7 @@ class Vuelta51Test {
         assertEquals("Anotar pago", accionDelPago(carro).first)
         val propuesta = propuestaDeLaFila(carro, emptySet())
         assertTrue(esPropuestaLejana(carro, propuesta))
-        assertEquals("Hay un movimiento de \$260.000 · ¿Es este?", enlaceDeLaPropuestaLejana(propuesta!!))
+        assertEquals("¿Es el de \$260.000?", enlaceDeLaPropuestaLejana(propuesta!!))
         // Nunca se tilda solo: la fila sigue abierta y sin pagar.
         assertFalse(carro.pagado)
     }
