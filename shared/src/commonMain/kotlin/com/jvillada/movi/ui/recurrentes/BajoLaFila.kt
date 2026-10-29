@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.recurrentes
 
+import androidx.compose.foundation.text.BasicText
+import com.jvillada.movi.ui.components.ds.seAchicaHastaLaBase
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.size
@@ -64,11 +66,15 @@ fun MontoDeFila(
     color: Color = Movi.colores.texto,
     variante: VarianteDeCifra = VarianteDeCifra.Fila,
 ) {
-    Text(
+    // Vuelta 56: con la letra al 130 % de verdad (×1,456), «$1.245.900» al lado de «Anotar pago» no
+    // cabía en su renglón: se achica hasta la letra de siempre ([seAchicaHastaLaBase]), nunca se parte.
+    val estilo = estiloDeLaCifra(variante, Movi.textos).copy(color = color)
+    BasicText(
         text = texto,
-        style = estiloDeLaCifra(variante, Movi.textos),
-        color = color,
+        style = estilo,
         maxLines = 1,
+        softWrap = false,
+        autoSize = seAchicaHastaLaBase(estilo),
         modifier = modifier.testTag(TAG_CIFRA),
     )
 }

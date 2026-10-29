@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.dashboard
 
+import com.jvillada.movi.ui.ESCALA_DEL_TELEFONO_AL_130
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.CompositionLocalProvider
@@ -179,4 +180,9 @@ class NadaSeRecortaEnElInicioTest {
     @Test
     @Config(qualifiers = "w360dp-h3200dp-xhdpi")
     fun `a 360 dp con la letra agrandada tampoco`() = nadaSeRecorta(escalaDeLetra = 1.3f)
+
+    /** Vuelta 56: el 130 % del teléfono por el ×1,12 de la app, 1,456 en la práctica. */
+    @Test
+    @Config(qualifiers = "w360dp-h3200dp-xhdpi")
+    fun `a 360 dp con la letra al 130 por ciento de verdad tampoco`() = nadaSeRecorta(escalaDeLetra = ESCALA_DEL_TELEFONO_AL_130)
 }

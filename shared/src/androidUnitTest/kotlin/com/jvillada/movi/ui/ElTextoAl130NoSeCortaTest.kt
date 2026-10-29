@@ -84,7 +84,7 @@ import kotlin.test.assertTrue
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34], qualifiers = "w360dp-h3200dp-xhdpi")
-class ElTextoAl130NoSeCortaTest {
+open class ElTextoAl130NoSeCortaTest {
 
     private fun hasClickLabel(rotulo: String) = SemanticsMatcher("onClickLabel = $rotulo") {
         it.config.getOrNull(SemanticsActions.OnClick)?.label == rotulo
@@ -92,7 +92,8 @@ class ElTextoAl130NoSeCortaTest {
 
     @get:Rule val composeRule = createComposeRule()
 
-    private val escala = 1.3f
+    /** La `fontScale` con que se monta. Ver [ElTextoAl1456NoSeCortaTest] para la del teléfono de verdad. */
+    protected open val escala = 1.3f
 
     private val hoyMs = Clock.System.now().toEpochMilliseconds()
     private val hoy = epochMillisToAppDate(hoyMs)
@@ -205,7 +206,7 @@ class ElTextoAl130NoSeCortaTest {
     private fun nadaSeCorta(donde: String, raices: List<SemanticsNode>) {
         assertTrue(raices.isNotEmpty(), "No encontré $donde")
         val fallas = cortados(raices)
-        assertTrue(fallas.isEmpty(), "Con la letra al 130 % a 360 dp, en $donde:\n" + fallas.joinToString("\n") { "  $it" })
+        assertTrue(fallas.isEmpty(), "Con la letra a ×$escala a 360 dp, en $donde:\n" + fallas.joinToString("\n") { "  $it" })
     }
 
     @Test
@@ -256,3 +257,21 @@ class ElTextoAl130NoSeCortaTest {
         nadaSeCorta("Agregar", listOf(composeRule.onRoot(useUnmergedTree = true).fetchSemanticsNode()))
     }
 }
+
+/**
+ * # Con la letra al 130 % **de verdad** nada se corta (vuelta 56)
+ *
+ * Las pruebas de la vuelta 55 montan `fontScale = 1.3`, pero `App()` ya multiplica la letra ×1,12
+ * (`App.kt`): un teléfono al 130 % ve la letra a **1,3 × 1,12 = 1,456**. Las mismas cuatro pantallas, a
+ * 360 dp, con esa escala. Lo que no cabe crece a dos renglones, se achica sin bajar de su tamaño de
+ * base, o se pliega con su «Ver entero».
+ */
+@RunWith(RobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(sdk = [34], qualifiers = "w360dp-h3200dp-xhdpi")
+class ElTextoAl1456NoSeCortaTest : ElTextoAl130NoSeCortaTest() {
+    override val escala = ESCALA_DEL_TELEFONO_AL_130
+}
+
+/** El 130 % del sistema por el ×1,12 de `App()`: la escala que de verdad ve un teléfono al 130 %. */
+const val ESCALA_DEL_TELEFONO_AL_130: Float = 1.3f * 1.12f

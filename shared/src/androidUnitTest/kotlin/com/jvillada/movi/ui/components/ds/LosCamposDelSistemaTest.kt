@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.components.ds
 
+import com.jvillada.movi.ui.ESCALA_DEL_TELEFONO_AL_130
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -311,8 +312,14 @@ class LosCamposDelSistemaTest {
     }
 
     @Test
-    fun `un formulario del sistema no recorta nada a 360 dp con la letra a 1,3`() {
-        montar(escala = 1.3f) {
+    fun `un formulario del sistema no recorta nada a 360 dp con la letra a 1,3`() = unFormularioNoRecortaNada(1.3f)
+
+    /** Vuelta 56: el 130 % del teléfono por el ×1,12 de la app. */
+    @Test
+    fun `un formulario del sistema no recorta nada a 360 dp con la letra al 130 por ciento de verdad`() = unFormularioNoRecortaNada(ESCALA_DEL_TELEFONO_AL_130)
+
+    private fun unFormularioNoRecortaNada(escala: Float) {
+        montar(escala = escala) {
             Column(Modifier.verticalScroll(rememberScrollState()).padding(Medida.margenDePantalla)) {
                 GrupoDeCampos("Términos") {
                     Campo("", {}, rotulo = "Banco", guia = "Ej: Bancolombia")
@@ -344,7 +351,13 @@ class LosCamposDelSistemaTest {
     }
 
     @Test
-    fun `la hoja de un credito no recorta nada a 360 dp con la letra a 1,3`() {
+    fun `la hoja de un credito no recorta nada a 360 dp con la letra a 1,3`() = laHojaDeUnCreditoNoRecortaNada(1.3f)
+
+    /** Vuelta 56: el 130 % del teléfono por el ×1,12 de la app. */
+    @Test
+    fun `la hoja de un credito no recorta nada a 360 dp con la letra al 130 por ciento de verdad`() = laHojaDeUnCreditoNoRecortaNada(ESCALA_DEL_TELEFONO_AL_130)
+
+    private fun laHojaDeUnCreditoNoRecortaNada(escala: Float) {
         val vehiculo = Account("acc_8761", "Vehículo 8761", AccountType.LOAN, 177_200_000)
         val terms = CreditTerms(
             accountId = vehiculo.id, bank = "Banco de Occidente", principal = 190_000_000L, rateEa = 18.16,
@@ -354,7 +367,7 @@ class LosCamposDelSistemaTest {
         Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
             override suspend fun getAccounts(): List<Account> = listOf(vehiculo)
         }
-        montar(escala = 1.3f) {
+        montar(escala = escala) {
             CreditTermsSheet(CreditSummary(account = vehiculo, terms = terms, paidPct = null), emptyList(), {}, {})
         }
         ningunTextoSeRecorta()
@@ -362,13 +375,19 @@ class LosCamposDelSistemaTest {
     }
 
     @Test
-    fun `la hoja de una tarjeta no recorta nada a 360 dp con la letra a 1,3`() {
+    fun `la hoja de una tarjeta no recorta nada a 360 dp con la letra a 1,3`() = laHojaDeUnaTarjetaNoRecortaNada(1.3f)
+
+    /** Vuelta 56: el 130 % del teléfono por el ×1,12 de la app. */
+    @Test
+    fun `la hoja de una tarjeta no recorta nada a 360 dp con la letra al 130 por ciento de verdad`() = laHojaDeUnaTarjetaNoRecortaNada(ESCALA_DEL_TELEFONO_AL_130)
+
+    private fun laHojaDeUnaTarjetaNoRecortaNada(escala: Float) {
         val master = Account("acc_3684", "Master Black 3684", AccountType.CREDIT_CARD, 4_000_000)
         val terms = CardTerms(accountId = master.id, bank = "Bancolombia", creditLimit = 20_000_000L, cutoffDay = 30, paymentDay = 15)
         Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
             override suspend fun getAccounts(): List<Account> = listOf(master)
         }
-        montar(escala = 1.3f) {
+        montar(escala = escala) {
             CardTermsSheet(CardSummary(account = master, terms = terms), {}, {})
         }
         ningunTextoSeRecorta()

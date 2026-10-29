@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -212,6 +213,17 @@ const val RENGLONES_DEL_ROTULO_LARGO: Int = 2
  * más. Es la escala que vigila `ElTextoAl130NoSeCortaTest`.
  */
 const val ESCALA_QUE_ABSORBE_EL_ROTULO: Float = 1.3f
+
+/**
+ * Vuelta 56 · **un texto de un renglón que se achica sin bajar del tamaño de base.** Con la letra del
+ * sistema al 130 % —1,3 × el 1,12 de `App()` = 1,456 en la práctica— un rótulo corto que no cabe en su
+ * renglón («Traspaso» en el selector de Agregar, «$1.245.900» al lado de «Anotar pago», «Martes 30 de
+ * septiembre» en el encabezado de un día) se achica hasta lo que mide con la letra de siempre
+ * ([ESCALA_QUE_ABSORBE_EL_ROTULO]), no más; con la letra de siempre entra entero y no se achica nada.
+ * Va con `maxLines = 1` y `softWrap = false`.
+ */
+fun seAchicaHastaLaBase(estilo: TextStyle): TextAutoSize =
+    TextAutoSize.StepBased(minFontSize = estilo.fontSize / ESCALA_QUE_ABSORBE_EL_ROTULO, maxFontSize = estilo.fontSize)
 
 /**
  * **¿Algún renglón corta una palabra por la mitad?** Un renglón que termina sin espacio, seguido de

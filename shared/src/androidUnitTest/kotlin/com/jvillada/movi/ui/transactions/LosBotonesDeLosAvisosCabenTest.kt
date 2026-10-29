@@ -130,6 +130,10 @@ class LosBotonesDeLosAvisosCabenTest {
     @Test @Config(sdk = [34], qualifiers = "w360dp-h800dp-xhdpi")
     fun `a 360 con la letra agrandada`() { montar(1.3f); losCuatroRotulos(360, largoCabe = false) }
 
+    /** Vuelta 56 · el 130 % del teléfono por el ×1,12 de la app: 1,456 en la práctica. */
+    @Test @Config(sdk = [34], qualifiers = "w360dp-h800dp-xhdpi")
+    fun `a 360 con la letra al 130 por ciento de verdad`() { montar(1.3f * 1.12f); losCuatroRotulos(360, largoCabe = false) }
+
     @Test @Config(sdk = [34], qualifiers = "w390dp-h844dp-xhdpi")
     fun `a 390 con la letra de la app`() { montar(1.12f); losCuatroRotulos(390, largoCabe = true) }
 
