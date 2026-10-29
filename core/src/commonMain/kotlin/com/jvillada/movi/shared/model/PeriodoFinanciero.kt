@@ -483,6 +483,32 @@ fun rangoEntre(inicio: LocalDate, ultimo: LocalDate): String =
         "Del ${diaLegible(inicio)} al ${diaLegible(ultimo)}"
     }
 
+private val MESES_CORTOS = listOf("ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic")
+
+/**
+ * **El rango corto de un período**, para el encabezado del Inicio (vuelta 54): «23 oct – 24 nov»; dentro
+ * del mismo mes, el mes una vez: «1 – 31 oct». Con un corte a mitad de mes el nombre solo («Noviembre
+ * 2026») confundía: el 28 de octubre ya decía noviembre. Entra en un renglón a 360 dp, que el rango largo
+ * no (vuelta de diseño 11). Pura.
+ */
+fun rangoCortoDelPeriodo(periodo: PeriodoFinanciero, settings: PeriodSettings): String {
+    val zona = AppTimeZone.zone
+    val v = ventanaDe(periodo, settings)
+    val inicio = Instant.fromEpochMilliseconds(v.first).toLocalDateTime(zona).date
+    val ultimo = Instant.fromEpochMilliseconds(v.last).toLocalDateTime(zona).date
+    return rangoCortoEntre(inicio, ultimo)
+}
+
+/** «23 oct – 24 nov», o «1 – 31 oct» dentro del mismo mes. Pura. */
+fun rangoCortoEntre(inicio: LocalDate, ultimo: LocalDate): String {
+    val mesFinal = MESES_CORTOS[ultimo.month.number - 1]
+    return if (inicio.year == ultimo.year && inicio.monthNumber == ultimo.monthNumber) {
+        "${inicio.dayOfMonth} – ${ultimo.dayOfMonth} $mesFinal"
+    } else {
+        "${inicio.dayOfMonth} ${MESES_CORTOS[inicio.month.number - 1]} – ${ultimo.dayOfMonth} $mesFinal"
+    }
+}
+
 /**
  * «25 de julio»: un día como se dice, sin año. Es la mitad de [rangoLegibleDe], suelta para quien
  * tiene los dos bordes por separado (las propuestas de presupuesto traen `desde` y `hasta`) y

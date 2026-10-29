@@ -73,6 +73,7 @@ fun EncabezadoDelInicio(
     onAvatar: () -> Unit,
     onCampana: () -> Unit,
     modifier: Modifier = Modifier,
+    descripcionDelSubtitulo: String? = null,
 ) {
     Row(
         modifier = modifier
@@ -110,6 +111,10 @@ fun EncabezadoDelInicio(
                     color = Movi.colores.sobreMarcaMedio,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                    // Vuelta 54: el rango entero del período, para el lector de pantalla.
+                    modifier = if (descripcionDelSubtitulo != null) {
+                        Modifier.semantics { contentDescription = descripcionDelSubtitulo }
+                    } else Modifier,
                 )
             }
         }

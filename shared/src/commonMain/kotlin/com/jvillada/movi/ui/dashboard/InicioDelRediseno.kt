@@ -10,6 +10,8 @@ import com.jvillada.movi.shared.model.TipoDeAnomalia
 import com.jvillada.movi.shared.model.fraseDelCierre
 import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.tituloDelPeriodo
+import com.jvillada.movi.shared.model.rangoCortoDelPeriodo
+import com.jvillada.movi.shared.model.rangoDelPeriodo
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.ANCHO_DE_LECTURA
 import com.jvillada.movi.ui.components.WindowWidthClass
@@ -53,15 +55,23 @@ fun saludoDelInicio(nombre: String?): String {
 }
 
 /**
- * El período, debajo del saludo: su nombre, «Noviembre 2026», con cualquier corte; o `null` mientras el
- * perfil no contesta.
+ * El período, debajo del saludo; o `null` mientras el perfil no contesta.
  *
- * **Corto siempre** (vuelta de diseño 11). Con un corte a mitad de mes era el rango entero, «Del 23 de
- * octubre al 24 de noviembre», y a 360 dp el subtítulo de un renglón se cortaba en «Del 23 de octubre
- * al 24 de no…». El rango completo sigue donde se lee con lugar: la línea del período de Plan y de
- * Movimientos. Es el mismo nombre que dicen «Tus períodos» y el server ([tituloDelPeriodo]).
+ * **Vuelta 54: con un corte a mitad de mes, el rango corto** —«23 oct – 24 nov» ([rangoCortoDelPeriodo])—.
+ * Era el nombre, «Noviembre 2026», y el 28 de octubre eso confundía: el período se llama por el mes en
+ * que termina y nada lo explicaba. El rango largo («Del 23 de octubre al 24 de noviembre») se cortaba a
+ * 360 dp (vuelta de diseño 11); el corto entra, y dice lo mismo que la línea «Del … al …» de Pagos. Con
+ * el mes de calendario no hay nada que aclarar: sigue el nombre, «Octubre 2026». El rango entero va en
+ * la descripción para el lector de pantalla ([descripcionDelPeriodoDelEncabezado]).
  */
-fun periodoDelEncabezado(data: DashboardData): String? = data.periodoActual?.let(::tituloDelPeriodo)
+fun periodoDelEncabezado(data: DashboardData): String? = data.periodoActual?.let { periodo ->
+    if (data.ajustesDePeriodo.esMesDeCalendario) tituloDelPeriodo(periodo) else rangoCortoDelPeriodo(periodo, data.ajustesDePeriodo)
+}
+
+/** Lo que dice el lector de pantalla del período del encabezado: «Tu período: del 23 de octubre al 24 de noviembre». */
+fun descripcionDelPeriodoDelEncabezado(data: DashboardData): String? = data.periodoActual?.let { periodo ->
+    "Tu período: " + rangoDelPeriodo(periodo, data.ajustesDePeriodo).replaceFirstChar { it.lowercase() }
+}
 
 /**
  * **El héroe pide la primera cuenta**: las cuentas ya contestaron y no hay ninguna (`null` es que

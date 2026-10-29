@@ -6,13 +6,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Notifications
-import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material.icons.rounded.Sms
-import androidx.compose.material.icons.rounded.UploadFile
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.Icon
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -37,6 +32,11 @@ import com.jvillada.movi.shared.model.renderableSections
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.primeruso.GuiaDePrimerUso
+import com.jvillada.movi.ui.primeruso.FilaDePrimerosPasos
+import com.jvillada.movi.ui.primeruso.PrimerosPasosDescartados
+import com.jvillada.movi.ui.primeruso.modoDeCapturaDe
+import com.jvillada.movi.ui.primeruso.rememberPrimerosPasos
+import com.jvillada.movi.shared.model.pasosQueFaltan
 import com.jvillada.movi.ui.plan.SEGMENTO_PAGOS
 import com.jvillada.movi.ui.accounts.CreateAccountSheet
 import com.jvillada.movi.ui.components.*
@@ -50,10 +50,6 @@ import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
 import com.jvillada.movi.ui.components.ds.Separador
 import com.jvillada.movi.ui.components.ds.Superficie
 import com.jvillada.movi.ui.components.ds.Encabezado
-import com.jvillada.movi.ui.extractos.TiposDeArchivo
-import com.jvillada.movi.ui.extractos.rememberFilePicker
-import com.jvillada.movi.ui.papeles.ArchivoCompartido
-import com.jvillada.movi.ui.papeles.PapelesCompartidos
 import com.jvillada.movi.ui.LocalRefreshTick
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -551,6 +547,7 @@ fun DashboardScreen(
             EncabezadoDelInicio(
                 saludo = saludoDelInicio(nombreDelDueno),
                 subtitulo = if (actualizandoConDatos) "Actualizando…" else periodoDelEncabezado(data),
+                descripcionDelSubtitulo = if (actualizandoConDatos) null else descripcionDelPeriodoDelEncabezado(data),
                 iniciales = inicialesDelUsuario(nombreDelDueno),
                 conPunto = campanaConPunto(notifications),
                 onAvatar = { onNavigate(Screen.Tu) },
@@ -566,20 +563,33 @@ fun DashboardScreen(
             // mostraban nada— así que sacarla no les quita información. Con algo ya pintado
             // (`actualizandoConDatos`), la cabecera sigue diciendo «Actualizando…»: ver más abajo.
 
-            // Guía "Primeros pasos": chrome nativo, fuera de la definición SDUI a propósito —
-            // así existe siempre, sin depender de tocar `screen_definitions` en producción.
-            // Se apaga sola cuando ya hay cuenta y movimiento (los datos son el estado).
-            // F7: va como primer ítem del scroll, no pegada arriba — antes tapaba el resto.
-            // `puedeAfirmarVacio`: la guía dice «Crea tu primera cuenta» y «Registra un
-            // movimiento» sin tildar, o sea afirma que el dueño no tiene ni una cosa ni la otra.
-            // Eso solo se puede decir cuando cuentas y resumen YA contestaron. Sin esta guarda,
-            // cada carga en frío de la web —donde la caché en memoria se pierde al recargar—
-            // saludaba con una lista de tareas ya hechas hace meses.
-            // Y no compite con la guía de primer uso: si está por abrirse, la tarjeta no se asoma.
-            val showGuide = data.guiaIncompleta && !GuiaDePrimerUso.enCurso
+            // «Primeros pasos» (vuelta 54): **una sola fila debajo de las acciones** —«Te faltan 3 pasos ›»—,
+            // con la lista única de `:core` (la misma de la guía y de Tú → «Primeros pasos»). Antes era
+            // una tarjeta de cinco renglones arriba de «Te quedan», con otra lista que no cuadraba con la
+            // guía. Chrome nativo, fuera de la definición SDUI: un APK viejo sigue con su tarjeta. No se
+            // pinta mientras no se puede afirmar (`primerosPasosDe` es `null`), con todo hecho, con la
+            // guía abierta ni después de «×».
+            val modoDeCaptura = modoDeCapturaDe(isAndroid)
+            val primerosPasos = rememberPrimerosPasos(data, modoDeCaptura)
+            var pasosDescartados by remember { mutableStateOf(PrimerosPasosDescartados.estan()) }
+            val filaDePasos: (@Composable () -> Unit)? = primerosPasos
+                ?.takeIf { pasosQueFaltan(it) > 0 && !GuiaDePrimerUso.enCurso && !pasosDescartados }
+                ?.let { lista ->
+                    {
+                        FilaDePrimerosPasos(
+                            lista = lista,
+                            modo = modoDeCaptura,
+                            onAbrir = { paso -> onNavigate(Screen.PrimerUso(desde = paso)) },
+                            onDescartar = {
+                                PrimerosPasosDescartados.descartar()
+                                pasosDescartados = true
+                            },
+                        )
+                    }
+                }
             // Ola 1 · Movi avisa: la tarjeta que ofrece los avisos del teléfono, una sola vez y
-            // solo en Android 13+ sin el permiso (ver [AvisosEnHoy]). Va donde va la guía, y solo
-            // cuando la guía no está: una cuenta recién creada tiene cosas más urgentes que hacer.
+            // solo en Android 13+ sin el permiso (ver [AvisosEnHoy]). Solo cuando no faltan primeros
+            // pasos: una cuenta recién creada tiene cosas más urgentes que hacer.
             val ofertaDeAvisos = AvisosEnHoy.oferta()
             // «Cerró tu período»: desde la ola R1 es una tarjeta más de «Movi propone hoy» (ver
             // `propuestasDelInicio`), no una tarjeta suelta arriba de todo. «Ya lo vi» llega acá.
@@ -590,11 +600,6 @@ fun DashboardScreen(
                 data = data.copy(cierre = null)
                 DashboardDataCache.data = DashboardDataCache.data?.copy(cierre = null)
                 alcanceDelCierre.launch { runCatching { Repositories.wallets.descartarCierre(periodo) } }
-            }
-            // «Subir un papel» de «Primeros pasos»: elige el archivo y lo deja en [PapelesCompartidos],
-            // la misma puerta que el atajo del «+» (la hoja «Movi está leyendo…» lo toma).
-            val elegirComprobante = rememberFilePicker(TiposDeArchivo.EXTRACTOS) { nombre, bytes, mime ->
-                PapelesCompartidos.recibir(listOf(ArchivoCompartido(nombre, bytes, mime)))
             }
             // SDUI: la definición del server si la hay; si no, la misma lista que el server
             // siembra (anti-rotura capa 3) — una sola fuente en :core, idéntica por construcción.
@@ -613,20 +618,10 @@ fun DashboardScreen(
                     data = data,
                     modifier = Modifier.fillMaxSize(),
                     onNavigate = onNavigate,
-                    header = if (showGuide) {
-                        {
-                            PrimerosPasosCard(
-                                data = data,
-                                onNavigate = onNavigate,
-                                onShowCreateSheet = { showCreateSheet = true },
-                                onSubirUnPapel = elegirComprobante,
-                                // El héroe vacío ya pide la cuenta, justo arriba: no se repite.
-                                conElPasoDeLaCuenta = !elHeroePideLaCuenta(data),
-                            )
-                        }
-                    } else if (ofertaDeAvisos != null) {
+                    header = if (filaDePasos == null && ofertaDeAvisos != null) {
                         { TarjetaDeAvisos(ofertaDeAvisos) }
                     } else null,
+                    despuesDeLasAcciones = filaDePasos,
                     // El hero vacío abre la MISMA hoja que «Primeros pasos» —
                     // mismo estado, un solo `CreateAccountSheet` en esta pantalla.
                     onShowCreateSheet = { showCreateSheet = true },
@@ -666,145 +661,4 @@ fun DashboardScreen(
             )
         }
     }
-}
-
-/**
- * Guía de arranque compacta (F6 · F7): una línea por paso, sin subtítulos largos, y el
- * paso 2 es el que faltaba — "Anota tus gastos recurrentes" (colegio, arriendo, gimnasio,
- * cuotas),
- * que es donde van las obligaciones que no son ni préstamo ni tarjeta (F6 preguntaba dónde
- * cargar el colegio o el gimnasio: en Recurrentes).
- *
- * Se apaga sola sin flag ni columna nueva: cada vez que el Inicio carga, recalcula el estado
- * a partir de los datos reales. El día que haya cuenta Y movimiento, la tarjeta entera deja
- * de renderizarse — y si el dueño vacía la instancia de nuevo, vuelve a aparecer sola.
- *
- * Gastos recurrentes (paso 2) y créditos (paso 3) NO condicionan el apagado — a propósito. Son
- * pasos *ofrecidos*, no *requeridos*: se tildan si existe algo, pero alguien sin préstamos
- * ni cuotas no tiene por qué ver esta guía para siempre esperando un casillero que jamás se
- * cumple. Cuando la tarjeta se apaga (cuenta + movimiento), se apaga entera.
- *
- * El pie no tiene "hecho" propio: no es una acción puntual sino un hábito (subir extractos / dejar el
- * SMS corriendo). Vuelta de diseño 11: era «Deja que la app se llene sola · Documentos», que no decía
- * qué pasaba al tocarlo; ahora cada hábito es una fila que dice lo que hace —«Sube un extracto y Movi
- * anota los movimientos» elige el archivo y lo deja en la misma puerta de papeles que «Comprobante» del
- * Inicio ([onSubirUnPapel])— y, en Android, los SMS del banco.
- *
- * [conElPasoDeLaCuenta] en `false` saca «Crea tu primera cuenta» (y su cuenta del «N de M») cuando el
- * héroe del Inicio ya lo está pidiendo con su botón, justo arriba (ver `elHeroePideLaCuenta`): un solo
- * llamado, no dos seguidos.
- *
- * Ola 14 — **la misma tarjeta la usa [PrimerosPasosScreen]**, que es la puerta de vuelta desde
- * «Más» (el dueño: «no veo el onboarding o FTU que tenía ciertas tareas, quisiera poder verlo si
- * aún me faltan tareas»). Por eso pasó de `private` a `internal`: una sola tarjeta, no dos que
- * se van separando. Lo que NO cambió es cuándo aparece sola en el Inicio — se sigue apagando con
- * cuenta + movimiento, y no vuelve a asomarse por su cuenta.
- */
-@Composable
-internal fun PrimerosPasosCard(
-    data: DashboardData,
-    onNavigate: (Screen) -> Unit,
-    onShowCreateSheet: () -> Unit,
-    onSubirUnPapel: () -> Unit,
-    conElPasoDeLaCuenta: Boolean = true,
-) {
-    val steps = listOfNotNull(
-        data.hasAccount.takeIf { conElPasoDeLaCuenta },
-        data.hasRecurringRule,
-        data.hasCredit,
-        data.hasMovement,
-    )
-    // Ola R1: con los componentes del sistema —una superficie con filas—, como el resto del Inicio.
-    Superficie(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = Medida.margenDePantalla),
-        relleno = RellenoDeSuperficie.Lista,
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = Medida.margenDePantalla, vertical = Espacio.s),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text("Primeros pasos", style = Movi.textos.titulo, color = Movi.colores.texto, modifier = Modifier.weight(1f))
-            Text("${steps.count { it }} de ${steps.size}", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-        }
-
-        if (conElPasoDeLaCuenta) {
-            PasoRow(done = data.hasAccount, title = "Crea tu primera cuenta", onClick = onShowCreateSheet)
-            Separador()
-        }
-        PasoRow(
-            done = data.hasRecurringRule,
-            title = "Anota tus gastos recurrentes",
-            subtitle = "Colegio, arriendo, gimnasio, cuotas",
-            // Ola C: los recurrentes se anotan y se revisan en Plan · Pagos del mes.
-            onClick = { onNavigate(Screen.Plan(SEGMENTO_PAGOS)) },
-        )
-        Separador()
-        PasoRow(done = data.hasCredit, title = "Si tienes préstamos o tarjetas, cárgalos", onClick = { onNavigate(Screen.Credits) })
-        Separador()
-        PasoRow(done = data.hasMovement, title = "Registra un movimiento", onClick = { onNavigate(Screen.QuickAdd()) })
-        Separador()
-
-        // Pie — sin tilde a propósito (ver KDoc). El extracto en todas las plataformas; el SMS del
-        // banco solo en Android (no existe en iOS/web).
-        HabitoRow(
-            icon = Icons.Rounded.UploadFile,
-            title = SUBIR_UN_EXTRACTO,
-            onClick = onSubirUnPapel,
-        )
-        if (isAndroid) {
-            Separador()
-            HabitoRow(
-                icon = Icons.Rounded.Sms,
-                title = "Activa los SMS del banco y Movi anota cada compra",
-                onClick = { onNavigate(Screen.CapturaDelBanco) },
-            )
-        }
-    }
-}
-
-/** El hábito del pie de «Primeros pasos» que llena Movi con un papel (vuelta de diseño 11). */
-internal const val SUBIR_UN_EXTRACTO: String = "Sube un extracto y Movi anota los movimientos"
-
-/** Un hábito del pie: como un paso, pero sin tilde —no se «hace» una vez—, con su ícono en la marca. */
-@Composable
-private fun HabitoRow(icon: ImageVector, title: String, onClick: () -> Unit) {
-    Fila(
-        titulo = title,
-        inicio = {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = Movi.colores.enlace,
-                modifier = Modifier.size(Icono.m),
-            )
-        },
-        final = { Chevron() },
-        onClick = onClick,
-    )
-}
-
-/** Un paso de la guía: una [Fila] con su tilde (o el círculo vacío) y la flecha si falta hacerlo. */
-@Composable
-private fun PasoRow(
-    done: Boolean,
-    title: String,
-    subtitle: String? = null,
-    onClick: () -> Unit,
-) {
-    Fila(
-        titulo = title,
-        subtitulo = subtitle,
-        inicio = {
-            Icon(
-                imageVector = if (done) Icons.Rounded.CheckCircle else Icons.Rounded.RadioButtonUnchecked,
-                contentDescription = if (done) "Hecho" else "Pendiente",
-                tint = if (done) Movi.colores.entra else Movi.colores.textoApagado,
-                modifier = Modifier.size(Icono.m),
-            )
-        },
-        final = if (done) null else ({ Chevron() }),
-        onClick = onClick,
-    )
 }

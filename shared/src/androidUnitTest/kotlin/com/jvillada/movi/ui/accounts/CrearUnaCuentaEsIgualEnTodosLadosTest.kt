@@ -123,7 +123,7 @@ class CrearUnaCuentaEsIgualEnTodosLadosTest {
         composeRule.setContent {
             ConClaseDeAncho {
                 Box(Modifier.fillMaxSize()) {
-                    PrimerUsoScreen(onNavigate = {}, pasoInicial = PasoDePrimerUso.CUENTAS, modoDeCaptura = ModoDeCaptura.REENVIO_DE_CORREO)
+                    PrimerUsoScreen(onNavigate = {}, pasoInicial = PasoDePrimerUso.CUENTAS, modoDeCaptura = ModoDeCaptura.SUBIR_UN_EXTRACTO)
                 }
             }
         }

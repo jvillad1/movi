@@ -117,6 +117,11 @@ fun SduiRenderer(
     // Vuelta 39: la banda amarilla detrás de lo de arriba (el Inicio de la opción 3). La pinta el
     // scroll, así que se va con él; el encabezado, fijo arriba, lleva el mismo amarillo.
     conBanda: Boolean = false,
+    // Vuelta 54: la fila «Te faltan 3 pasos ›» de los primeros pasos. Va **debajo de las acciones**
+    // (sin la cuadrícula en la definición, debajo del héroe; sin los dos, arriba): «Te quedan» va
+    // primero. Chrome nativo como [header]: la definición SDUI no la conoce, y un APK viejo sigue con
+    // su tarjeta de siempre.
+    despuesDeLasAcciones: (@Composable () -> Unit)? = null,
 ) {
     val uriHandler = LocalUriHandler.current
     val sections = visibleSections(definition, data)
@@ -138,6 +143,15 @@ fun SduiRenderer(
     val guiaDebajoDelHeroe = header != null && elHeroePideLaCuenta(data) && sections.any { it.type == "HERO_BALANCE" }
     val guiaArriba = header.takeUnless { guiaDebajoDelHeroe }
     val guiaDespuesDelHeroe = header.takeIf { guiaDebajoDelHeroe }
+    // Dónde va la fila de los primeros pasos: debajo de la cuadrícula, o del héroe, o arriba de todo.
+    val anclaDeLosPasos = when {
+        despuesDeLasAcciones == null -> null
+        sections.any { it.type == "ACCIONES" } -> "ACCIONES"
+        sections.any { it.type == "HERO_BALANCE" } -> "HERO_BALANCE"
+        else -> null
+    }
+    val pasosArriba = despuesDeLasAcciones.takeIf { anclaDeLosPasos == null }
+    val pasos = despuesDeLasAcciones.takeIf { anclaDeLosPasos != null }?.let { fila -> AnclaDeLosPasos(anclaDeLosPasos!!, fila) }
 
     BoxWithConstraints(modifier = modifier) {
         val bloques = bloquesDelInicio(sections)
@@ -174,7 +188,7 @@ fun SduiRenderer(
                     }
                     bloques.forEach { bloque ->
                         Box(Modifier.fillMaxWidth()) {
-                            BloqueDelInicio(bloque, data, acciones, guiaDespuesDelHeroe, conBanda = false)
+                            BloqueDelInicio(bloque, data, acciones, guiaDespuesDelHeroe, conBanda = false, pasos = pasos)
                         }
                     }
                 }
@@ -184,12 +198,17 @@ fun SduiRenderer(
                     Box(Modifier.widthIn(max = ANCHO_DE_UNA_COLUMNA)) { guiaArriba() }
                     Spacer(Modifier.height(Movi.espacios.margen))
                 }
+                if (pasosArriba != null) {
+                    Box(Modifier.widthIn(max = ANCHO_DE_UNA_COLUMNA)) { pasosArriba() }
+                    Spacer(Modifier.height(Movi.espacios.margen))
+                }
                 ColumnaDeSecciones(
                     bloques, data, acciones,
                     Modifier.fillMaxWidth().widthIn(max = ANCHO_DE_UNA_COLUMNA),
                     guiaDespuesDelHeroe,
                     // Con la guía arriba, el héroe ya no arranca en lo alto de la banda.
-                    conBanda = conBanda && guiaArriba == null,
+                    conBanda = conBanda && guiaArriba == null && pasosArriba == null,
+                    pasos = pasos,
                 )
             }
             if (footer != null) {
@@ -328,14 +347,18 @@ private fun ColumnaDeSecciones(
     modifier: Modifier,
     despuesDelHeroe: (@Composable () -> Unit)? = null,
     conBanda: Boolean = false,
+    pasos: AnclaDeLosPasos? = null,
 ) {
     Column(modifier = modifier) {
         bloques.forEachIndexed { index, bloque ->
             if (index > 0) Spacer(Modifier.height(Medida.entreSecciones))
-            BloqueDelInicio(bloque, data, acciones, despuesDelHeroe, conBanda)
+            BloqueDelInicio(bloque, data, acciones, despuesDelHeroe, conBanda, pasos)
         }
     }
 }
+
+/** La fila de los primeros pasos y la sección debajo de la cual va (vuelta 54). */
+private class AnclaDeLosPasos(val tipo: String, val fila: @Composable () -> Unit)
 
 /**
  * Un bloque del Inicio: una sección, o dos widgets lado a lado. El del héroe lleva debajo
@@ -349,6 +372,7 @@ private fun BloqueDelInicio(
     acciones: AccionesDelRenderer,
     despuesDelHeroe: (@Composable () -> Unit)?,
     conBanda: Boolean,
+    pasos: AnclaDeLosPasos? = null,
 ) {
     val esElHeroe = bloque.any { it.type == "HERO_BALANCE" }
     Column(modifier = if (esElHeroe && conBanda) Modifier.heightIn(min = ALTO_DE_LA_BANDA_EN_EL_SCROLL) else Modifier) {
@@ -360,6 +384,10 @@ private fun BloqueDelInicio(
         if (despuesDelHeroe != null && esElHeroe) {
             Spacer(Modifier.height(Medida.entreSecciones))
             despuesDelHeroe()
+        }
+        if (pasos != null && bloque.any { it.type == pasos.tipo }) {
+            Spacer(Modifier.height(Medida.entreSecciones))
+            pasos.fila()
         }
     }
 }

@@ -31,15 +31,15 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.ui.Screen
-import com.jvillada.movi.ui.accounts.CreateAccountSheet
 import com.jvillada.movi.ui.components.HeaderLeading
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.NoSePudoLeer
-import com.jvillada.movi.ui.extractos.TiposDeArchivo
-import com.jvillada.movi.ui.extractos.rememberFilePicker
-import com.jvillada.movi.ui.papeles.ArchivoCompartido
-import com.jvillada.movi.ui.papeles.PapelesCompartidos
+import com.jvillada.movi.data.isAndroid
+import com.jvillada.movi.ui.primeruso.ListaDePrimerosPasos
+import com.jvillada.movi.ui.primeruso.modoDeCapturaDe
+import com.jvillada.movi.ui.primeruso.rememberPrimerosPasos
 import kotlinx.coroutines.coroutineScope
+import kotlinx.datetime.Clock
 import kotlinx.coroutines.launch
 
 /**
@@ -58,8 +58,9 @@ import kotlinx.coroutines.launch
  *
  * ## Qué se hizo, y qué NO
  *
- * Una entrada en «Más» que abre esta pantalla, con la misma tarjeta de siempre
- * ([PrimerosPasosCard]) y sus mismos pasos tocables. Y nada más:
+ * Una entrada en «Más» que abre esta pantalla, con la misma lista de pasos. **Vuelta 54:** es la lista
+ * única de `:core` (`primerosPasos`) —la misma de la guía y de la fila «Te faltan N pasos» del Inicio—
+ * ([ListaDePrimerosPasos]); tocar un paso abre la guía en ese paso. Lo de abajo es la historia:
  *
  * - **No se cambió cuándo aparece sola en el Inicio.** Se sigue apagando con cuenta +
  *   movimiento. Él pidió *poder volver*, no que la guía le reaparezca: se apagó sola por una
@@ -87,8 +88,8 @@ import kotlinx.coroutines.launch
  */
 @Composable
 fun PrimerosPasosScreen(onNavigate: (Screen) -> Unit) {
+    val modoDeCaptura = modoDeCapturaDe(isAndroid)
     var data by remember { mutableStateOf(DashboardDataCache.data ?: DashboardData()) }
-    var showCreateSheet by remember { mutableStateOf(false) }
     var refreshKey by remember { mutableStateOf(0) }
     // Con la guarda de `puedeAfirmarVacio`, una lectura que falla ya no deja una tarjeta con
     // todo sin tildar: deja una barra de progreso. Sin este contador esa barra giraba PARA
@@ -106,12 +107,6 @@ fun PrimerosPasosScreen(onNavigate: (Screen) -> Unit) {
     // debajo de ella. Acá duele más que en ninguna: esta pantalla existe para contestar «¿me
     // falta algo?».
     val refreshTick = LocalRefreshTick.current
-    // «Sube un extracto y Movi anota los movimientos»: la misma puerta de papeles que «Comprobante» del
-    // Inicio (la hoja «Movi está leyendo…» de App.kt lo toma).
-    val elegirUnPapel = rememberFilePicker(TiposDeArchivo.EXTRACTOS) { nombre, bytes, mime ->
-        PapelesCompartidos.recibir(listOf(ArchivoCompartido(nombre, bytes, mime)))
-    }
-
     LaunchedEffect(refreshKey, refreshTick) {
         fallo = false
         coroutineScope {
@@ -133,6 +128,12 @@ fun PrimerosPasosScreen(onNavigate: (Screen) -> Unit) {
             launch {
                 runCatching { Repositories.wallets.getCards() }
                     .onSuccess { c -> data = data.copy(cards = c) }
+                    .onFailure { fallo = true }
+            }
+            launch {
+                // El período: sin perfil no se sabe si ya se eligió (la lista no afirma nada).
+                runCatching { Repositories.wallets.getUserProfile() }
+                    .onSuccess { p -> data = data.conElPerfil(p, Clock.System.now().toEpochMilliseconds()) }
                     .onFailure { fallo = true }
             }
             launch {
@@ -172,34 +173,24 @@ fun PrimerosPasosScreen(onNavigate: (Screen) -> Unit) {
             // «te falta todo» mientras todavía está preguntando. La caché suele llegar llena
             // (se entra desde «Más», o sea después del Inicio), pero un arranque en frío de la
             // web sí puede caer acá sin nada: ahí se espera, no se inventa.
-            if (!data.puedeAfirmarVacio && fallo) {
+            val lista = rememberPrimerosPasos(data, modoDeCaptura)
+            if (lista == null && fallo) {
                 // Se dice qué pasó y se ofrece la salida, en vez de girar sin fin.
                 NoSePudoLeer(
                     "No pudimos revisar qué te falta. Puede ser la conexión.",
                     onReintentar = { refreshKey++ },
                     modifier = Modifier.padding(horizontal = Medida.margenDePantalla),
                 )
-            } else if (!data.puedeAfirmarVacio) {
+            } else if (lista == null) {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(horizontal = Espacio.m))
             } else {
-                PrimerosPasosCard(
-                    data = data,
-                    onNavigate = onNavigate,
-                    onShowCreateSheet = { showCreateSheet = true },
-                    onSubirUnPapel = elegirUnPapel,
+                ListaDePrimerosPasos(
+                    lista = lista,
+                    modo = modoDeCaptura,
+                    onAbrir = { paso -> onNavigate(Screen.PrimerUso(desde = paso)) },
                 )
             }
             Spacer(Modifier.height(Espacio.xl))
         }
-    }
-
-    if (showCreateSheet) {
-        CreateAccountSheet(
-            onDismiss = { showCreateSheet = false },
-            // Crear la cuenta desde acá tiene que tildar el paso al instante: sin este
-            // `refreshKey++` la pantalla seguiría mostrando «pendiente» lo que el dueño acaba
-            // de hacer, que es el modo de falla más molesto de una lista de tareas.
-            onAccountCreated = { showCreateSheet = false; refreshKey++ },
-        )
     }
 }

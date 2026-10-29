@@ -3,7 +3,14 @@ package com.jvillada.movi.ui.primeruso
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.jvillada.movi.shared.model.CapturaDelPrimerUso
+import com.jvillada.movi.shared.model.EstadoDelPrimerPaso
+import com.jvillada.movi.shared.model.LoQueYaHay
+import com.jvillada.movi.shared.model.PrimerPaso
+import com.jvillada.movi.shared.model.capturaDelPrimerUsoEn
 import com.jvillada.movi.shared.model.debeAbrirseLaGuiaDePrimerUso
+import com.jvillada.movi.shared.model.primerosPasos
+import com.jvillada.movi.shared.model.tituloDelPrimerPaso
 import com.jvillada.movi.shared.repository.WalletRepository
 
 /**
@@ -19,41 +26,63 @@ import com.jvillada.movi.shared.repository.WalletRepository
  * hoja de crear cuenta, `createCard` como la hoja de tarjetas, `createRecurringRule` como la de
  * recurrentes—: la guía no tiene escrituras propias, salvo marcarse terminada.
  */
-enum class PasoDePrimerUso(val titulo: String) {
-    BIENVENIDA("Te damos la bienvenida a Movi"),
-    PERIODO("Tu período"),
-    CUENTAS("Tus cuentas"),
-    CAPTURA("Que Movi se entere solo"),
-    RECURRENTES("Lo que pagas cada mes"),
-    LISTO("Listo"),
+enum class PasoDePrimerUso(val primerPaso: PrimerPaso?) {
+    BIENVENIDA(null),
+    PERIODO(PrimerPaso.PERIODO),
+    CUENTAS(PrimerPaso.CUENTAS),
+    CAPTURA(PrimerPaso.CAPTURA),
+    RECURRENTES(PrimerPaso.FIJOS),
+    LISTO(null),
     ;
 
-    val numero: Int get() = ordinal + 1
+    /** El título que se lee arriba del paso: el de la lista única para los pasos de en medio. */
+    fun titulo(captura: CapturaDelPrimerUso): String =
+        primerPaso?.let { tituloDelPrimerPaso(it, captura) } ?: when (this) {
+            BIENVENIDA -> TITULO_DE_LA_BIENVENIDA
+            else -> "Listo"
+        }
 
     /**
-     * ¿Lleva el botón de texto «Saltar este paso»? Los pasos opcionales (el período, la captura, los
-     * pagos de cada mes). La bienvenida y el final no tienen nada que saltar, y las cuentas se saltan
-     * con «Ahora no»: sin ninguna cuenta Movi no tiene dónde anotar nada.
+     * ¿Lleva el botón de texto «Saltar este paso»? **Todos los de en medio** (vuelta 54: también las
+     * cuentas, que antes solo se saltaban con «Ahora no» y dejaban «Siguiente» apagado sin otra salida
+     * a la vista). La bienvenida y el final no tienen nada que saltar.
      */
-    val seSaltaConUnBoton: Boolean get() = this == PERIODO || this == CAPTURA || this == RECURRENTES
-
-    /** La fracción de la barra de progreso: el primer paso ya cuenta, el último la llena. */
-    val progreso: Float get() = numero.toFloat() / entries.size
-
-    val anterior: PasoDePrimerUso? get() = entries.getOrNull(ordinal - 1)
-    val siguiente: PasoDePrimerUso? get() = entries.getOrNull(ordinal + 1)
+    val seSaltaConUnBoton: Boolean get() = primerPaso != null
 }
 
+/** El paso de la guía que pinta un paso de la lista única. */
+fun pasoDeLaGuia(paso: PrimerPaso): PasoDePrimerUso = PasoDePrimerUso.entries.first { it.primerPaso == paso }
+
 /**
- * **Cómo se entera Movi sola, según dónde corre.** Android lee los SMS y las notificaciones del banco
- * (la sección de Captura del banco); la web y iOS no pueden, y ahí lo que funciona es reenviar los
- * correos del banco a la dirección de Movi.
+ * **Los pasos de la guía en esta plataforma**: la bienvenida, los de la lista única ([primerosPasos],
+ * en su orden; sin captura posible, sin ese paso) y el final. «Paso N de M» y la barra salen de acá.
  */
-enum class ModoDeCaptura { PERMISOS_DEL_TELEFONO, REENVIO_DE_CORREO }
+fun pasosDeLaGuia(captura: CapturaDelPrimerUso): List<PasoDePrimerUso> {
+    val delMedio = primerosPasos(LoQueYaHay(false, 0, false, 0), captura).map { pasoDeLaGuia(it.paso) }
+    return listOf(PasoDePrimerUso.BIENVENIDA) + delMedio + PasoDePrimerUso.LISTO
+}
+
+/** El número de [paso] en [pasos] (desde 1). */
+fun numeroDelPaso(paso: PasoDePrimerUso, pasos: List<PasoDePrimerUso>): Int = pasos.indexOf(paso) + 1
+
+/** La fracción de la barra de progreso: el primer paso ya cuenta, el último la llena. */
+fun progresoDelPaso(paso: PasoDePrimerUso, pasos: List<PasoDePrimerUso>): Float =
+    numeroDelPaso(paso, pasos).toFloat() / pasos.size
+
+fun pasoAnterior(paso: PasoDePrimerUso, pasos: List<PasoDePrimerUso>): PasoDePrimerUso? =
+    pasos.getOrNull(pasos.indexOf(paso) - 1)
+
+fun pasoSiguiente(paso: PasoDePrimerUso, pasos: List<PasoDePrimerUso>): PasoDePrimerUso? =
+    pasos.indexOf(paso).takeIf { it >= 0 }?.let { pasos.getOrNull(it + 1) }
+
+/**
+ * **Cómo se entera Movi sola, según dónde corre**: la de la lista única (`:core`). Android lee los SMS y
+ * las notificaciones del banco; la web y iOS, un extracto que se sube.
+ */
+typealias ModoDeCaptura = CapturaDelPrimerUso
 
 /** Pura, para poder probar la decisión sin depender de en qué plataforma corre la prueba. */
-fun modoDeCapturaDe(esAndroid: Boolean): ModoDeCaptura =
-    if (esAndroid) ModoDeCaptura.PERMISOS_DEL_TELEFONO else ModoDeCaptura.REENVIO_DE_CORREO
+fun modoDeCapturaDe(esAndroid: Boolean): ModoDeCaptura = capturaDelPrimerUsoEn(esAndroid)
 
 /**
  * El estado de la guía **en esta sesión** (no en el server: eso es `UserProfile.primerUsoEn`).
@@ -134,8 +163,9 @@ val ATAJOS_DE_RECURRENTES: List<AtajoDeRecurrente> = listOf(
 // pintan el mismo bloque.
 
 /**
- * Lo que quedó al terminar, para el paso «Listo». [periodo] es el texto de «Inicio del mes» si se
- * guardó en la guía (`null` = no se tocó); [captura] dice si Movi ya se puede enterar sola.
+ * Lo que quedó al terminar, para el paso «Listo»: el detalle de cada renglón. Si un paso quedó hecho o
+ * pendiente **no se decide acá**: sale de la lista única ([primerosPasos]), la misma de la fila del
+ * Inicio. [periodo] es el texto de «Inicio del mes» si ya está elegido (`null` = mes de calendario).
  */
 data class ResumenDelPrimerUso(
     val periodo: String?,
@@ -143,19 +173,24 @@ data class ResumenDelPrimerUso(
     val tarjetas: Int,
     val recurrentes: Int,
     val captura: EstadoDeLaCaptura,
+    val modo: CapturaDelPrimerUso,
 )
 
-enum class EstadoDeLaCaptura { ACTIVA, DIRECCION_COPIADA, PENDIENTE }
+/**
+ * Cómo quedó la captura. [ACTIVA]: el permiso del teléfono. [EXTRACTO_SUBIDO]: se subió uno en la guía.
+ * [CON_MOVIMIENTOS]: ya hay movimientos (en la web y en iOS, el paso está hecho). [DIRECCION_COPIADA]: se
+ * copió la dirección de reenvío, que no prueba que el reenvío ande.
+ */
+enum class EstadoDeLaCaptura { ACTIVA, EXTRACTO_SUBIDO, CON_MOVIMIENTOS, DIRECCION_COPIADA, PENDIENTE }
 
 /** Un renglón del resumen: qué es, cómo quedó, y si quedó hecho. */
 data class LineaDelResumen(val titulo: String, val detalle: String, val hecho: Boolean)
 
-/** Las líneas del paso «Listo», en el orden de los pasos. Pura. */
-fun lineasDelResumen(r: ResumenDelPrimerUso): List<LineaDelResumen> = listOf(
-    LineaDelResumen("Tu período", r.periodo ?: "Sin cambiar: mes de calendario", r.periodo != null),
-    LineaDelResumen(
-        "Tus cuentas",
-        when (r.cuentas) {
+/** Las líneas del paso «Listo»: una por paso de la lista única, en su orden. Pura. */
+fun lineasDelResumen(lista: List<EstadoDelPrimerPaso>, r: ResumenDelPrimerUso): List<LineaDelResumen> = lista.map { estado ->
+    val detalle = when (estado.paso) {
+        PrimerPaso.PERIODO -> if (estado.hecho) r.periodo ?: "Elegido" else "Sin elegir: mes de calendario"
+        PrimerPaso.CUENTAS -> when (r.cuentas) {
             0 -> "Ninguna todavía"
             1 -> "1 cuenta"
             else -> "${r.cuentas} cuentas"
@@ -163,25 +198,20 @@ fun lineasDelResumen(r: ResumenDelPrimerUso): List<LineaDelResumen> = listOf(
             0 -> ""
             1 -> " y 1 tarjeta"
             else -> " y ${r.tarjetas} tarjetas"
-        },
-        r.cuentas > 0,
-    ),
-    LineaDelResumen(
-        "Que Movi se entere solo",
-        when (r.captura) {
+        }
+        PrimerPaso.CAPTURA -> when (r.captura) {
             EstadoDeLaCaptura.ACTIVA -> "Activo en este teléfono"
+            EstadoDeLaCaptura.EXTRACTO_SUBIDO -> "Movi está leyendo tu extracto"
+            EstadoDeLaCaptura.CON_MOVIMIENTOS -> "Ya tienes movimientos en Movi"
             EstadoDeLaCaptura.DIRECCION_COPIADA -> "Dirección copiada: falta el reenvío en Gmail"
-            EstadoDeLaCaptura.PENDIENTE -> "Pendiente"
-        },
-        r.captura == EstadoDeLaCaptura.ACTIVA,
-    ),
-    LineaDelResumen(
-        "Lo que pagas cada mes",
-        when (r.recurrentes) {
+            EstadoDeLaCaptura.PENDIENTE ->
+                if (r.modo == CapturaDelPrimerUso.PERMISOS_DEL_TELEFONO) "Sin activar todavía" else "Sin subir todavía"
+        }
+        PrimerPaso.FIJOS -> when (r.recurrentes) {
             0 -> "Ninguno todavía"
             1 -> "1 pago"
             else -> "${r.recurrentes} pagos"
-        },
-        r.recurrentes > 0,
-    ),
-)
+        }
+    }
+    LineaDelResumen(tituloDelPrimerPaso(estado.paso, r.modo), detalle, estado.hecho)
+}

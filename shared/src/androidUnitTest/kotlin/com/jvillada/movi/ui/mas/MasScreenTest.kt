@@ -265,12 +265,27 @@ class MasScreenTest {
 
     // ── Primeros pasos es condicional (Ola B, tarea 7) ─────────────────────────
 
+    /**
+     * Vuelta 54: la lista única. Con [eventCount] > 0, todo hecho (el corte 25, una cuenta, una regla y
+     * un aviso que ya llegó al teléfono); con 0, sin cuentas ni nada.
+     */
     private fun cuentaConMovimiento(eventCount: Int) = DashboardData(
         accounts = if (eventCount > 0) listOf(Account(id = "a1", name = "Nu", type = AccountType.SAVINGS, balance = 1)) else emptyList(),
         summary = FinanceSummary(scope = Scope.SELF, balance = 0L, ingresos = 0L, egresos = 0L, eventCount = eventCount),
-        upcoming = emptyList(),
+        upcoming = if (eventCount > 0) listOf(
+            com.jvillada.movi.shared.model.UpcomingPayment(
+                rule = com.jvillada.movi.shared.model.RecurringRule(
+                    id = "r1", name = "Arriendo", category = "Vivienda", amount = 1, dayOfMonth = 5,
+                    type = com.jvillada.movi.shared.model.TransactionType.EXPENSE,
+                ),
+                dueDate = "2026-10-05", daysUntil = 3, status = com.jvillada.movi.shared.model.PaymentStatus.UPCOMING,
+            ),
+        ) else emptyList(),
         credits = emptyList(),
         cards = emptyList(),
+        ajustesDePeriodo = com.jvillada.movi.shared.model.PeriodSettings(cutoffDay = if (eventCount > 0) 25 else 1),
+        periodoActual = com.jvillada.movi.shared.model.PeriodoFinanciero(2026, 10),
+        captura = com.jvillada.movi.shared.model.CapturaDeSms(total = if (eventCount > 0) 3 else 0),
     )
 
     @Test
@@ -283,7 +298,7 @@ class MasScreenTest {
     }
 
     @Test
-    fun `Primeros pasos no aparece si ya hay cuenta y movimiento`() {
+    fun `Primeros pasos no aparece con todos los pasos hechos`() {
         DashboardDataCache.data = cuentaConMovimiento(eventCount = 3)
         montar()
         assertTrue(!hay("Primeros pasos"))

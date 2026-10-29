@@ -850,7 +850,8 @@ cómo llenarlo (como «Aquí van tus pagos fijos» en Plan).
 - **El subtítulo del Inicio es corto siempre** (`periodoDelEncabezado`): el nombre del período,
   «Noviembre 2026» (`tituloDelPeriodo`, el mismo de «Tus períodos»), también con un corte a mitad de
   mes. El rango entero («Del 23 de octubre al 24 de noviembre») se cortaba a 360 dp; sigue en la línea
-  del período de Plan y de Movimientos, donde tiene lugar.
+  del período de Plan y de Movimientos, donde tiene lugar. *Vuelta 54: con un corte a mitad de mes, el
+  rango corto, «23 oct – 24 nov» (§56).*
 - **Un solo llamado a crear la primera cuenta** (`elHeroePideLaCuenta`): sin cuentas, el héroe es el
   vacío «Aquí vas a ver tu plata» con «Crear mi primera cuenta» y va primero; «Primeros pasos» va
   debajo de él (`SduiRenderer`, `despuesDelHeroe`) y sin el paso de la cuenta, contando solo lo que
@@ -2821,3 +2822,75 @@ en `:core` `Vuelta53LogicaTest` (los bordes del 10 %, el período, dos parecidos
 frase y el código del 409), y en `:server` `VincularPagoDeDeudaRoutesTest` (de punta a punta: la cuota de agosto
 saldada, la segunda responde 409 sin escribir, como abono queda un traspaso de $980.000 que no salda nada, los
 reintentos de los dos contestan 200; el abono no vale con una tarjeta).
+
+## 56. Vuelta 54: el primer uso, sin listas que no cuadran ni pasos sin salida
+
+La revisión de primer uso del 28-oct (una cuenta nueva, «Ana Prueba», sobre master ad4bdfa3): llegar a un
+«Te quedan» con sentido costaba 6 pantallas y unos 14 toques. El resultado era correcto; lo que costaba era
+el camino.
+
+1. **Una sola lista de primeros pasos** (`:core` `PrimerosPasos.kt`). `primerosPasos(LoQueYaHay,
+   CapturaDelPrimerUso)` da los pasos de la plataforma, en orden, hechos o pendientes: **Tu período** (el
+   corte no es el mes de calendario, `periodoElegidoEn`), **Tus cuentas** (alguna de dinero), **la
+   captura** y **Lo que pagas cada mes** (alguna regla de verdad, sin cuotas ni pagos de tarjeta). El
+   contador (`contadorDeLosPrimerosPasos`, «2 de 4»), «Te faltan N pasos» (`textoDeLosPasosQueFaltan`) y
+   el paso donde abre la guía (`primerPasoPendiente`) salen de la misma lista. La usan la guía
+   (`pasosDeLaGuia`: Bienvenida + la lista + Listo), la fila del Inicio, Tú → «Primeros pasos»
+   (`ListaDePrimerosPasos`) y el resumen del final (`lineasDelResumen(lista, …)`: lo hecho sale de la
+   lista, el resumen solo pone el detalle). Con lo que el Inicio leyó la arma `primerosPasosDe`; mientras
+   no se puede afirmar (las lecturas de siempre y el perfil), es `null` y no se pinta nada.
+   **Quedaron afuera**: «Si tienes préstamos o tarjetas, cárgalos» (quien no tiene deudas no lo podía
+   tildar nunca; las tarjetas van en el paso de las cuentas y los préstamos en Créditos), «Registra un
+   movimiento» (es el uso de todos los días, no algo que se prepara; en la web y en iOS lo cubre la
+   captura) y «Sube un extracto» como hábito sin tilde (en la web y en iOS es el paso de la captura; en
+   Android sigue en «Subir comprobante»).
+2. **Ningún paso sin salida.** La captura depende de la plataforma (`capturaDelPrimerUsoEn`): en Android,
+   los SMS y las notificaciones como siempre (hecha con el permiso o con un aviso que ya llegó); en la web
+   y en iOS, **«Sube un extracto»** (`SUBIR_UN_EXTRACTO_EN_LA_GUIA`): el archivo va a `PapelesCompartidos`
+   y la hoja «Movi está leyendo…» lo toma encima de la guía; se da por hecho con el extracto subido o con
+   cualquier movimiento. El reenvío de correos va debajo **solo si el server tiene la dirección** (ya no
+   «todavía no está disponible»). Sin poder elegir archivos (`NINGUNA`), el paso no está en la lista, así
+   que el resumen nunca dice «Pendiente» de algo imposible («Sin activar todavía» en Android, «Sin subir
+   todavía» en la web). **«Saltar este paso» en todos los pasos de en medio**, también en las cuentas.
+3. **El héroe primero.** «Primeros pasos» ya no es la tarjeta de cinco renglones arriba de «Te quedan»: es
+   **una fila** debajo de las acciones (`FilaDePrimerosPasos`, `TAG_FILA_DE_PRIMEROS_PASOS`): «Te faltan
+   3 pasos» con «Sigue con «Tus cuentas»», que abre la guía en ese paso (`Screen.PrimerUso(desde = …)`), y
+   una × (`DESCARTAR_PRIMEROS_PASOS`) que la oculta (`PrimerosPasosDescartados`, en
+   `PropuestasDescartadasStore`: se limpia al cerrar sesión). Con todo hecho no se pinta. Vive en
+   `SduiRenderer(despuesDeLasAcciones = …)`: debajo de `ACCIONES`, o del héroe si la definición no trae la
+   cuadrícula. Es chrome nativo: la definición SDUI no cambia y un APK viejo sigue con su tarjeta.
+4. **El período se explica.** El paso del período muestra la misma `VistaPrevia` de la hoja de Tú
+   («Tu período: del 23 de octubre al 24 de noviembre» + el detalle de un 29-31 o del corte que la regla
+   corre); era «Hoy estarías en noviembre de 2026». El encabezado del Inicio, con un corte a mitad de mes,
+   dice **el rango corto** (`rangoCortoDelPeriodo`: «23 oct – 24 nov», en un renglón a 360 dp con la letra
+   ×1,3) y el rango entero en su `contentDescription` (`descripcionDelPeriodoDelEncabezado`); con el mes de
+   calendario sigue el nombre («Octubre 2026»). Dice lo mismo que el «Del … al …» de Pagos.
+5. **El paso de las cuentas deja lo esencial a la vista.** `FormularioDeCuenta(enUnaFila = true)`: los
+   bancos y los tipos van cada uno en una fila de chips que se desplaza de lado (`TAG_BANCOS_DE_UN_TOQUE`,
+   `TAG_TIPOS_DE_CUENTA`), y **«Agregar cuenta» va dentro de la tarjeta del formulario, debajo de «Saldo de
+   hoy»** (`TAG_AGREGAR_CUENTA_EN_LA_GUIA`, `Secundario`). En la revisión iba fijo en el pie, justo debajo
+   de «Tarjetas de crédito · Opcional…», y se leía como agregar una tarjeta; la sección de tarjetas lleva
+   su propio «Agregar una tarjeta». Las cuentas ya creadas van debajo del formulario. «Nueva cuenta» de
+   Patrimonio sigue con los chips en varios renglones.
+6. **Lo escrito no se pierde** (revisión de la vuelta 54, `BorradoresDeLaGuia.kt`). Con el arriendo
+   escrito, «Guardar» iba adentro con borde y «Siguiente» apagado: la revisión tocó «Saltar este paso»
+   creyendo que avanzaba y el arriendo se perdió. Cada formulario de un paso es un `Borrador` (la cuenta,
+   la tarjeta, cada pago de cada mes abierto —cerrarlo no lo borra—) y el pie lo mira: con algo escrito y
+   completo, el principal es **«Guardar y seguir»** (`GUARDAR_Y_SEGUIR`: guarda todo lo escrito con la
+   creación de siempre y avanza); incompleto, el pie dice qué falta en una línea centrada
+   (`razonDelPie`: «Falta el día del arriendo», `TAG_RAZON_DEL_PIE`); y «Saltar este paso» o «Ahora no»
+   preguntan antes con `ConfirmarEnHoja` (`preguntaDeDescartar`: «¿Descartar el arriendo que
+   escribiste?»). Los «Guardar» de adentro siguen, para agregar varios.
+
+**Las líneas base** no cambian y las guardas en 0 siguen en 0. Lo vigilan `PrimerosPasosTest` (`:core`: los
+estados, el contador, la captura por plataforma y el rango corto), `GuiaDePrimerUsoTest` (`commonTest`: los
+pasos de la guía son los de la lista, sin captura se saltan, todos se saltan, el resumen toma lo hecho de la
+lista y nunca dice «Pendiente» de algo imposible, `primerosPasosDe` con los datos del Inicio),
+`ElPrimerDiaTest` (el héroe y las acciones antes de la fila, la fila abre la guía en el paso y la × la
+oculta, la lista de Tú, el encabezado con el rango corto), `PrimerUsoEnPantallaTest` (la vista previa, el
+extracto en la web, «Saltar» en las cuentas, la guía abierta a mitad de camino con lo que ya había),
+`ElPasoDeCuentasALaVistaTest` (a 390 × 844 y 360 × 760, el nombre, el saldo y «Agregar cuenta» sin
+desplazar, el botón debajo del saldo y antes de las tarjetas; bancos y tipos en una fila), los de «lo
+escrito no se pierde» en `PrimerUsoEnPantallaTest` (llenar el arriendo y tocar el principal lo guarda;
+a medias, el pie dice qué falta; saltar pregunta, «Cancelar» lo conserva y «Descartar» lo tira; la
+cuenta escrita se guarda con el principal) y `InicioDelRedisenoTest` / `MasScreenTest`, ajustadas.
