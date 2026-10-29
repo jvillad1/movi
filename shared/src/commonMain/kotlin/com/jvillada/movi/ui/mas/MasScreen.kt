@@ -80,8 +80,8 @@ import com.jvillada.movi.ui.components.HeaderLeading
 import com.jvillada.movi.ui.components.LocalSaldosOcultos
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.NoSePudoLeer
-import com.jvillada.movi.ui.components.PLATA_OCULTA
 import com.jvillada.movi.ui.components.ROTULO_OCULTAR_LOS_SALDOS
+import com.jvillada.movi.ui.components.SUBTITULO_DE_OCULTAR_LOS_SALDOS
 import com.jvillada.movi.ui.components.avatarColorOrDefault
 import com.jvillada.movi.ui.components.inicialesDelUsuario
 import com.jvillada.movi.ui.components.ds.Boton
@@ -375,7 +375,9 @@ fun MasScreen(
                     val ocultos = LocalSaldosOcultos.current
                     Fila(
                         titulo = ROTULO_OCULTAR_LOS_SALDOS,
-                        subtitulo = "Tus cifras se ven como $PLATA_OCULTA en este aparato",
+                        subtitulo = SUBTITULO_DE_OCULTAR_LOS_SALDOS,
+                        // Vuelta 57: a 390 dp se cortaba en «…en est…»; es la razón de la fila, va en dos renglones.
+                        lineasDelSubtitulo = 2,
                         inicio = { IconoDeAjuste(Icons.Rounded.VisibilityOff) },
                         final = { Interruptor(ocultos, onCambio = { SaldosOcultosStore.poner(it) }) },
                         onClick = { SaldosOcultosStore.alternar() },

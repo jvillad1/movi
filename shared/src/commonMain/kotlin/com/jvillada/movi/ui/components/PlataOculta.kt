@@ -68,6 +68,9 @@ fun conCifrasOcultas(texto: String): String =
 
 /** La etiqueta del ojo, que dice lo que hace tocarlo. */
 const val ROTULO_OCULTAR_LOS_SALDOS: String = "Ocultar los saldos"
+
+/** Lo que dice debajo de «Ocultar los saldos» en Tú (vuelta 57: en dos renglones, ya no se corta). */
+val SUBTITULO_DE_OCULTAR_LOS_SALDOS: String = "Tus cifras se ven como $PLATA_OCULTA en este aparato"
 const val ROTULO_MOSTRAR_LOS_SALDOS: String = "Mostrar los saldos"
 
 const val TAG_OJO_DE_LOS_SALDOS: String = "ojo-de-los-saldos"
