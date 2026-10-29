@@ -283,6 +283,11 @@ sealed class Screen {
      */
     data object CapturaDelBanco : Screen()
     /**
+     * Vuelta 67 · **«Lo anulado»**, con «Restaurar». [periodo] (el prefijo, «2026-10») cuando se abre
+     * desde el final de Actividad («2 anulados en octubre · Ver»); `null` desde Tú, con todo.
+     */
+    data class Anulados(val periodo: String? = null) : Screen()
+    /**
      * Un mensaje del banco por confirmar. Se abre desde [PorRevisar] (y desde el historial de
      * [CapturaDelBanco]), así que marca Movimientos y su flecha, sin historial, cae en la bandeja.
      */
@@ -397,6 +402,8 @@ fun navTabFor(screen: Screen): NavTab? = when (screen) {
     // El detalle hereda la pestaña de la pantalla donde vive la cuenta — así resaltar y
     // «volver» no pueden contradecirse. Las dos (Cuentas y Créditos) son Tú.
     is Screen.AccountDetail -> navTabFor(homeScreenFor(screen.group))
+    // Vuelta 67: desde Actividad (con su período) marca Actividad; desde Tú, Tú.
+    is Screen.Anulados -> if (screen.periodo != null) NavTab.MOVIMIENTOS else NavTab.TU
     else -> null
 }
 

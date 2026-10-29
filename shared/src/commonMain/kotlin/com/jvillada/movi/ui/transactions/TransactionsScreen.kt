@@ -439,13 +439,6 @@ const val CHIP_RECURRENTES = 5
 const val CHIP_PERSONAS = 6
 
 /**
- * **«Anulados»** (vuelta 67): los movimientos anulados, con «Restaurar». No es una forma de mirar los
- * del período: es una lista aparte (`GET /api/events/anulados`), el último anulado primero, y en el
- * modo no van la franja ni «por revisar» ([loDeArribaEnElModo]). Índice nuevo, al final.
- */
-const val CHIP_ANULADOS = 7
-
-/**
  * El tag de un renglón suelto de Movimientos (Task 3, Ola B): sin él, una prueba no tiene forma de
  * medir el alto real del renglón para verificar que agregarle [IconoDeCategoria] no lo hizo crecer.
  */
@@ -536,7 +529,7 @@ internal fun aireArribaDelDia(indice: Int): Dp =
  * Los rótulos de los chips, en el orden de sus índices. «Recurrentes» ya no se dibuja (ver
  * [CHIP_RECURRENTES]) pero su rótulo se queda en su lugar: sacarlo correría los índices.
  */
-val CHIPS_DE_MOVIMIENTOS = listOf("Todo", "Gastos", "Ingresos", "Por confirmar", "Entre cuentas", "Recurrentes", "Compartidos", "Anulados")
+val CHIPS_DE_MOVIMIENTOS = listOf("Todo", "Gastos", "Ingresos", "Por confirmar", "Entre cuentas", "Recurrentes", "Compartidos")
 
 /**
  * **Los chips que se dibujan**, que ya no son todos.
@@ -576,7 +569,7 @@ val CHIPS_DE_MOVIMIENTOS = listOf("Todo", "Gastos", "Ingresos", "Por confirmar",
  * de mirar movimientos sino la respuesta a «¿qué me falta pagar?», que es la pregunta de la pestaña
  * Plan. Ahí vive ahora, como «Pagos del mes». Ver [CHIP_RECURRENTES].
  */
-val CHIPS_VISIBLES = listOf(CHIP_TODO, CHIP_GASTOS, CHIP_INGRESOS, CHIP_PERSONAS, CHIP_ANULADOS)
+val CHIPS_VISIBLES = listOf(CHIP_TODO, CHIP_GASTOS, CHIP_INGRESOS, CHIP_PERSONAS)
 
 /**
  * **El aviso de lo que no subió**, o `null` si todo subió. Lo que el server rechaza (la cuenta se
@@ -622,7 +615,7 @@ fun tituloDelModoSinChip(chip: Int): String? = when (chip) {
  * ni que entró, y una suma de patas —con tarjetas en dólares y cuotas que bajan una deuda— sería
  * una cifra nueva sin regla de plata detrás.
  */
-fun loDeArribaEnElModo(chip: Int): Boolean = tituloDelModoSinChip(chip) == null && chip != CHIP_ANULADOS
+fun loDeArribaEnElModo(chip: Int): Boolean = tituloDelModoSinChip(chip) == null
 
 /** El tag del chip marcado de un modo sin chip («Entre cuentas ×»). Ver [tituloDelModoSinChip]. */
 const val TAG_CHIP_DEL_MODO: String = "chip-del-modo"
@@ -713,8 +706,6 @@ fun matchesChip(
     CHIP_POR_CONFIRMAR -> esperaEnPorConfirmar(event.reconciliationStatus)
     CHIP_ENTRE_CUENTAS -> esEntreCuentas(event)
     CHIP_PERSONAS -> esConOtrasPersonas(event)
-    // Vuelta 67: los anulados no vienen en la historia; su lista es aparte.
-    CHIP_ANULADOS -> false
     else -> true
 }
 
@@ -1335,6 +1326,16 @@ fun TransactionsScreen(
     LaunchedEffect(refreshKey, refreshTick) {
         tuParteDeOtros = runCatching { Repositories.wallets.getTuParteDeOtros() }.getOrDefault(emptyList())
     }
+    // Vuelta 67 (revisión): lo anulado, para la fila «N anulados en octubre» del final de la lista.
+    var anuladosDelDueno by remember { mutableStateOf<List<com.jvillada.movi.shared.model.MovimientoAnulado>>(emptyList()) }
+    LaunchedEffect(refreshKey, refreshTick) {
+        anuladosDelDueno = runCatching { Repositories.wallets.getAnulados() }
+            .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
+            .getOrDefault(anuladosDelDueno)
+    }
+    val anuladosDelPeriodoVisible = remember(anuladosDelDueno, periodoVisible, ajustesDelPeriodo) {
+        anuladosDelPeriodo(anuladosDelDueno, periodoVisible, ajustesDelPeriodo)
+    }
     val historia = eventos.valor
     // Vuelta de diseño 30: los espacios, para que un gasto repartido diga «con Caro». Solo si la
     // historia tiene alguno repartido; si la lectura falla, la fila dice «de $88.600» a secas.
@@ -1619,26 +1620,15 @@ fun TransactionsScreen(
 
             // Mientras carga, la forma real: dos o tres DÍAS, cada uno con su encabezado y su
             // superficie. Ver [movimientosEsqueleto].
-            if (loading && visibleDays.isEmpty() && activeFilter != CHIP_ANULADOS) {
+            if (loading && visibleDays.isEmpty()) {
                 movimientosEsqueleto()
             }
 
-            // Vuelta 67 · «Anulados»: su propia lista, con «Restaurar» (ver [ListaDeAnulados]).
-            if (activeFilter == CHIP_ANULADOS) {
-                item(key = "anulados") {
-                    ListaDeAnulados(
-                        recarga = refreshKey,
-                        nombresDeCuentas = accountNames,
-                        onRestaurado = { refreshKey++ },
-                        modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(top = Medida.dentroDeSeccion),
-                    )
-                }
-            }
 
             // Con el aviso de arriba puesto, un vacío no se afirma: saldría de lo que se leyó en
             // otra visita, y «Sin movimientos aún» tiene que venir de una lectura que contestó en
             // esta. Queda solo el aviso, con su «Reintentar».
-            if (!loading && visibleDays.isEmpty() && !noSePudoActualizar && activeFilter != CHIP_ANULADOS) {
+            if (!loading && visibleDays.isEmpty() && !noSePudoActualizar) {
                 item {
                     val alrededor = Modifier.padding(horizontal = Medida.margenDePantalla).padding(top = Espacio.xxxl)
                     if (!diasLeidos) {
@@ -1791,6 +1781,17 @@ fun TransactionsScreen(
                     }
                 }
             }
+            // Vuelta 67 (revisión) · lo anulado del período, al final y fuera de los chips: «2 anulados
+            // en octubre · Ver» abre su lista (ver [AnuladosScreen]).
+            if (searchQuery.isBlank() && filtro == null && anuladosDelPeriodoVisible.isNotEmpty()) {
+                item(key = "anulados-del-periodo") {
+                    FilaDeLosAnulados(
+                        texto = textoDeLosAnuladosDelPeriodo(anuladosDelPeriodoVisible.size, periodoVisible),
+                        onVer = { onNavigate(Screen.Anulados(periodoVisible.prefijo)) },
+                        modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(top = Medida.entreSecciones),
+                    )
+                }
+            }
         }
         } // TirarParaActualizar
 
@@ -1804,6 +1805,7 @@ fun TransactionsScreen(
             if (enElPanel == null && resumen != null && loDeArribaEnElModo(activeFilter)) {
                 ResumenDelPeriodoEnElPanel(
                     resumen = resumen,
+                    conChip = activeFilter != CHIP_TODO,
                     // Como desde «En qué se va»: los gastos de esa categoría, con su chip y su ×.
                     onCategoria = { fila ->
                         filtro = FiltroDeMovimientos.deLaFila(fila, VistaDelAnalisis.CATEGORIA)

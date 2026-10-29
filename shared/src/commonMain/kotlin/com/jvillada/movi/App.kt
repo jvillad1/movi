@@ -485,6 +485,7 @@ fun App() {
                 is Screen.PrimerUso      -> PrimerUsoScreen(navigate, desde = pantalla.desde)
                 Screen.PorRevisar        -> PorRevisarScreen(navigate)
                 Screen.CapturaDelBanco   -> CapturaDelBancoScreen(navigate)
+                is Screen.Anulados       -> com.jvillada.movi.ui.transactions.AnuladosScreen(pantalla.periodo, navigate)
                 is Screen.SMSReconcile   -> SMSReconcileScreen(navigate, pantalla.smsId, abrirCategoria = pantalla.abrirCategoria)
                 // Vuelta 38: «Tú» lleva todo lo que era Ajustes (Perfil se mudó adentro en la vuelta de
                 // diseño 3), y cerrar la sesión desde ahí hace lo que hacía desde Perfil. `Screen.Mas`

@@ -279,6 +279,11 @@ internal fun ResumenDelPeriodoEnElPanel(
     resumen: ResumenDelPanel,
     onCategoria: (FilaDelAnalisis) -> Unit,
     onVerEnQueSeVa: () -> Unit,
+    /**
+     * Vuelta 67 (revisión): con un chip puesto la lista de al lado muestra menos que el período; el
+     * panel lo dice («Octubre 2026 · del período»): sus cifras son de todo el período.
+     */
+    conChip: Boolean = false,
 ) {
     Column(
         modifier = Modifier
@@ -288,7 +293,7 @@ internal fun ResumenDelPeriodoEnElPanel(
             .padding(top = Medida.dentroDeSeccion, bottom = Medida.entreSecciones)
             .testTag(TAG_RESUMEN_DEL_PERIODO_EN_EL_PANEL),
     ) {
-        Seccion(titulo = tituloDelPeriodo(resumen.periodo))
+        Seccion(titulo = tituloDelPanel(resumen.periodo, conChip))
         Superficie(modifier = Modifier.fillMaxWidth()) {
             BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
                 // Vuelta de diseño 32: la misma regla que la franja del teléfono. Si una no cabe
@@ -369,3 +374,7 @@ private fun FilaDeCategoriaDelResumen(fila: FilaDelAnalisis, onClick: () -> Unit
         onClickLabel = "Ver los movimientos",
     )
 }
+
+/** El título del panel: «Octubre 2026», o «Octubre 2026 · del período» con un chip puesto. Pura. */
+fun tituloDelPanel(periodo: PeriodoFinanciero, conChip: Boolean): String =
+    if (conChip) "${tituloDelPeriodo(periodo)} · del período" else tituloDelPeriodo(periodo)

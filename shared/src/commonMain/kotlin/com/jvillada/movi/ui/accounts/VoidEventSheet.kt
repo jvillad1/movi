@@ -18,6 +18,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -232,6 +233,19 @@ fun VoidEventSheet(
                 )
             }
 
+            // Vuelta 67 (revisión): un traspaso de dos mitades iguales no lista dos cifras, pero sí dice
+            // que la otra mitad también se anula: la entrada en el CDT se va con la salida de Ahorros.
+            val hermana = (otraMitad as? LaOtraMitad.Llego)?.hermana
+            if (loQuePasa.isEmpty() && hermana != null) {
+                Spacer(Modifier.height(Espacio.s))
+                Text(
+                    text = loQueTambienSeAnula(event, nombres[hermana.accountId]),
+                    style = Movi.textos.apoyo,
+                    color = Movi.colores.textoMedio,
+                    modifier = Modifier.testTag(TAG_LA_OTRA_MITAD_TAMBIEN),
+                )
+            }
+
             // **Y mientras la otra mitad no esté, se dice.** La lectura tarda del orden de
             // segundos (medido a ojo en la web), y callar durante esa ventana dejaba la hoja
             // viéndose entera con una sola cifra — el mismo defecto de siempre, ahora por
@@ -274,6 +288,19 @@ fun VoidEventSheet(
         // la anulación fallaba en silencio. Ver [BarraDeError].
         BarraDeError(error)
     }
+}
+
+/** El tag de «También se anula la entrada en …». */
+const val TAG_LA_OTRA_MITAD_TAMBIEN: String = "anular:la-otra-mitad"
+
+/**
+ * «También se anula la entrada en CDT.» (anulando la salida) o «También se anula la salida de
+ * Ahorros.» (anulando la entrada). Sin el nombre, «la otra cuenta». Pura.
+ */
+fun loQueTambienSeAnula(event: FinancialEvent, nombreDeLaOtraCuenta: String?): String {
+    val otra = nombreDeLaOtraCuenta?.takeIf { it.isNotBlank() } ?: "la otra cuenta"
+    return if (event.type == TransactionType.EXPENSE) "También se anula la entrada en $otra."
+    else "También se anula la salida de $otra."
 }
 
 /**

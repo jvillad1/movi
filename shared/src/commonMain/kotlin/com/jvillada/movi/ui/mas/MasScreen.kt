@@ -30,6 +30,7 @@ import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Fingerprint
 import androidx.compose.material.icons.rounded.Flag
 import androidx.compose.material.icons.rounded.Inbox
+import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Password
 import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material.icons.rounded.Savings
@@ -328,6 +329,14 @@ fun MasScreen(
                         tituloDeCapturaDelBanco,
                         if (esAndroid) Icons.Rounded.Sms else Icons.Rounded.Inbox,
                         Screen.CapturaDelBanco,
+                        onNavigate,
+                    )
+                    // Vuelta 67: lo anulado de cualquier fecha, con «Restaurar».
+                    Separador()
+                    FilaQueLleva(
+                        com.jvillada.movi.ui.transactions.TITULO_LO_ANULADO,
+                        Icons.Rounded.History,
+                        Screen.Anulados(),
                         onNavigate,
                     )
                     // Donde no se leen SMS, la captura es reenviar los correos del banco: la
