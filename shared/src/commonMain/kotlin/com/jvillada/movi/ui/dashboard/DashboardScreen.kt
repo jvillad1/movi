@@ -450,6 +450,12 @@ fun DashboardScreen(
                 runCatching { Repositories.wallets.getDebitosAutomaticos() }
                     .onSuccess { d -> data = data.copy(debitosPorConfirmar = d); llegado = llegado.copy(debitosPorConfirmar = d) }
             }
+            // Vuelta 66: las transferencias que saldan un grupo, para la campana. Secundaria y solo en
+            // `data`, como el cierre.
+            launch {
+                runCatching { Repositories.wallets.getPropuestasDeSaldar() }
+                    .onSuccess { p -> data = data.copy(propuestasDeSaldar = p) }
+            }
             // «Cerró tu período»: la tarjeta de los primeros días. Secundaria, como las anomalías, y
             // solo en `data`: no va a la instantánea (ver `DashboardData.cierre`).
             launch {

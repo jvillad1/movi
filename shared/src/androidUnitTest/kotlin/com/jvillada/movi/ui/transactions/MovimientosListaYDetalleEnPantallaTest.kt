@@ -293,8 +293,9 @@ class MovimientosListaYDetalleEnPantallaTest {
             ).fetchSemanticsNodes().isNotEmpty(),
             "Mercado con tu parte del de Caro",
         )
-        // Tu parte no es un movimiento de tus cuentas: la lista no la muestra.
-        assertTrue(filaDe("Mercado del sábado").fetchSemanticsNodes().isEmpty())
+        // Vuelta 66: toda cifra de Actividad sale de las filas — tu parte de lo que pagó otro es una
+        // fila en su día (no es un movimiento de tus cuentas: la fila abre el gasto del grupo).
+        assertTrue(filaDe("Mercado del sábado").fetchSemanticsNodes().isNotEmpty())
     }
 
     @Test

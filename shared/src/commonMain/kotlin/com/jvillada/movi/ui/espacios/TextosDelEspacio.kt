@@ -13,8 +13,13 @@ import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.idsDeMiembros
 import com.jvillada.movi.shared.model.netoDe
 import com.jvillada.movi.shared.model.DetalleDelEspacio
+import com.jvillada.movi.shared.model.DestinoConocido
+import com.jvillada.movi.shared.model.LiquidacionDelEspacio
+import com.jvillada.movi.shared.model.PropuestaDeSaldar
+import com.jvillada.movi.shared.model.esperaLaTransferencia
 import com.jvillada.movi.ui.analisis.fechaCorta
 import com.jvillada.movi.ui.components.formatCOPSinOcultar
+import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.ui.fecha.fechaDeEpoch
 import com.jvillada.movi.shared.time.AppTimeZone
 import kotlinx.datetime.TimeZone
@@ -247,3 +252,140 @@ const val MAX_NOTA_PAGO_OTRO: Int = 200
 /** La descripción de un gasto que pagó otro: la nota escrita, o la categoría si no hay nota. */
 fun descripcionDelPagoOtro(nota: String, categoria: String): String =
     nota.trim().ifBlank { categoria.trim() }.take(MAX_NOTA_PAGO_OTRO)
+
+// ── Vuelta 66 · el saldado que espera su transferencia, y el historial ───────────────────────
+
+/**
+ * La pregunta de una propuesta de saldar, dentro o fuera del grupo. Si el saldado ya se marcó y espera
+ * la plata ([PropuestaDeSaldar.liquidacionId]): «¿Es la transferencia de Caro que marcaste como
+ * saldada?»; si salda una deuda abierta, la de siempre ([preguntaDeSaldar]).
+ */
+fun preguntaDeLaPropuesta(p: PropuestaDeSaldar, quien: String, nombreDelGrupo: String): String {
+    val entra = p.a == MIEMBRO_YO
+    val laTransferencia = if (entra) "la transferencia de $quien" else "tu transferencia a $quien"
+    return if (p.liquidacionId != null) "¿Es $laTransferencia que marcaste como saldada?"
+    else if (entra) "¿Esta transferencia de $quien salda $nombreDelGrupo?"
+    else "¿Esta transferencia a $quien salda $nombreDelGrupo?"
+}
+
+/** Lo que sigue a la pregunta: el concepto del movimiento y, fuera del grupo, de qué grupo es. */
+fun cuerpoDeLaPropuesta(p: PropuestaDeSaldar, conElGrupo: Boolean): String =
+    listOfNotNull(
+        p.descripcion.trim().ifBlank { null },
+        p.nombreDelEspacio.trim().takeIf { conElGrupo && it.isNotEmpty() },
+    ).joinToString(" · ")
+
+/** El título de la sección del historial de un grupo. */
+const val PAGOS_ENTRE_USTEDES: String = "Pagos entre ustedes"
+
+/** Lo que dice un saldado sin movimiento mientras espera la plata. */
+const val ESPERANDO_LA_TRANSFERENCIA: String = "Esperando la transferencia"
+
+/** Lo que dice un saldado viejo que nunca se vinculó (en efectivo, o por fuera de tus cuentas). */
+const val SIN_TRANSFERENCIA: String = "Sin transferencia vinculada"
+
+/** «Caro te pagó $168.050», «Le pagaste $90.000 a Caro», «Caro le pagó $50.000 a Ana». */
+fun tituloDelPago(espacio: Espacio, l: LiquidacionDelEspacio): String {
+    val monto = formatCOP(l.monto)
+    return when (MIEMBRO_YO) {
+        l.a -> "${nombreEnElEspacio(espacio, l.de)} te pagó $monto"
+        l.de -> "Le pagaste $monto a ${nombreEnElEspacio(espacio, l.a)}"
+        else -> "${nombreEnElEspacio(espacio, l.de)} le pagó $monto a ${nombreEnElEspacio(espacio, l.a)}"
+    }
+}
+
+/**
+ * «29 oct · Transferencia de Caro», «29 oct · Esperando la transferencia» o «29 oct · Sin
+ * transferencia vinculada» (ver [esperaLaTransferencia]).
+ */
+fun detalleDelPago(l: LiquidacionDelEspacio, ahora: Long, zona: TimeZone = AppTimeZone.zone): String {
+    val como = when {
+        l.eventoId != null -> l.movimiento?.trim()?.ifBlank { null }?.let { enFormaDeTitulo(it) } ?: "Transferencia vinculada"
+        esperaLaTransferencia(l, ahora) -> ESPERANDO_LA_TRANSFERENCIA
+        else -> SIN_TRANSFERENCIA
+    }
+    val fecha = l.fecha.takeIf { it > 0L }?.let { fechaCorta(fechaDeEpoch(it, zona)) }
+    return listOfNotNull(fecha, como).joinToString(" · ")
+}
+
+/** La marca de corte en la lista de gastos: «Saldaron $168.050 · 29 oct». */
+fun corteDelSaldado(l: LiquidacionDelEspacio, zona: TimeZone = AppTimeZone.zone): String =
+    listOfNotNull(
+        "Saldaron ${formatCOP(l.monto)}",
+        l.fecha.takeIf { it > 0L }?.let { fechaCorta(fechaDeEpoch(it, zona)) },
+    ).joinToString(" · ")
+
+/** Un renglón de la lista de gastos: un gasto, o el corte de un saldado. */
+sealed interface RenglonDeLosGastos {
+    val fecha: Long
+    data class Gasto(val gasto: GastoDelEspacio) : RenglonDeLosGastos { override val fecha get() = gasto.fecha }
+    data class Corte(val liquidacion: LiquidacionDelEspacio) : RenglonDeLosGastos { override val fecha get() = liquidacion.fecha }
+}
+
+/**
+ * **Los gastos con un corte en cada saldado** (vuelta 66), del más reciente al más viejo: lo de arriba
+ * de un corte es lo que se debe desde ese pago. Solo los cortes entre gastos que se muestran (ninguno
+ * debajo del último).
+ */
+fun gastosConSusCortes(gastos: List<GastoDelEspacio>, liquidaciones: List<LiquidacionDelEspacio>): List<RenglonDeLosGastos> {
+    if (gastos.isEmpty()) return emptyList()
+    val masViejo = gastos.minOf { it.fecha }
+    val renglones = gastos.map { RenglonDeLosGastos.Gasto(it) } +
+        liquidaciones.filter { it.monto > 0L && it.fecha >= masViejo }.map { RenglonDeLosGastos.Corte(it) }
+    // A la misma hora, el corte va arriba del gasto: saldar es lo que pasó después.
+    return renglones.sortedWith(compareByDescending<RenglonDeLosGastos> { it.fecha }.thenBy { if (it is RenglonDeLosGastos.Corte) 0 else 1 })
+}
+
+/**
+ * **Lo que pasa al borrar un grupo** (vuelta 66), dicho antes de hacerlo: la pregunta y el detalle.
+ * A mano, solo que se van sus gastos y pagos y que tus movimientos quedan. Con un saldo pendiente, lo
+ * que se pierde: «Caro te debe $76.050: al borrarlo, Movi deja de llevar esa cuenta», y que tus gastos
+ * repartidos vuelven a contar enteros, tu parte de lo que pagó el otro deja de contar y las
+ * transferencias vinculadas vuelven a ser ingreso o gasto.
+ */
+fun confirmacionDeBorrarElGrupo(detalle: DetalleDelEspacio): Pair<String, String> {
+    val espacio = detalle.espacio
+    val frase = fraseDelSaldo(espacio, detalle.saldo)
+    val conGastos = detalle.gastos.isNotEmpty() || detalle.liquidaciones.isNotEmpty()
+    val pregunta = "¿Borrar «${espacio.nombre}»?"
+    val partes = buildList {
+        if (frase.monto > 0L) add("${frase.titulo} ${formatCOP(frase.monto)}: al borrarlo, Movi deja de llevar esa cuenta.")
+        if (conGastos) {
+            add("Se borran sus gastos y pagos. Tus movimientos quedan en tus cuentas y vuelven a contar enteros; lo que pagó otra persona deja de contar.")
+            if (detalle.liquidaciones.any { it.eventoId != null }) add("Las transferencias que vinculaste vuelven a contar como ingreso o gasto.")
+        } else {
+            add("No tiene gastos ni pagos.")
+        }
+    }
+    return pregunta to partes.joinToString(" ")
+}
+
+/** El texto del botón de borrar: más fuerte si queda un saldo pendiente. */
+fun botonDeBorrarElGrupo(detalle: DetalleDelEspacio): String =
+    if (fraseDelSaldo(detalle.espacio, detalle.saldo).monto > 0L) "Borrar de todas formas" else "Borrar grupo"
+
+/**
+ * **¿Ya hay un grupo así?** (vuelta 66) El mismo nombre (sin mayúsculas ni tildes) con las mismas
+ * personas: «Ya tienes «Casa con Caro» con Caro.». `null` si no.
+ */
+fun avisoDeGrupoRepetido(nombre: String, personas: List<DestinoConocido>, existentes: List<Espacio>): String? {
+    val buscado = normalizarParaBuscar(nombre.trim())
+    if (buscado.isEmpty() || personas.isEmpty()) return null
+    val ids = personas.map { it.id }.toSet()
+    val igual = existentes.firstOrNull { e ->
+        normalizarParaBuscar(e.nombre.trim()) == buscado && e.miembros.filter { it.id != MIEMBRO_YO }.map { it.id }.toSet() == ids
+    } ?: return null
+    val con = personas.joinToString(", ") { it.nombre }
+    return "Ya tienes «${igual.nombre}» con $con."
+}
+
+/** El nombre que Movi sugiere para un grupo nuevo: «Casa con Caro», «Casa con Caro y Ana». */
+fun nombreSugeridoDelGrupo(personas: List<DestinoConocido>): String {
+    val nombres = personas.map { it.nombre.trim() }.filter { it.isNotEmpty() }
+    val lista = when (nombres.size) {
+        0 -> return ""
+        1 -> nombres.single()
+        else -> nombres.dropLast(1).joinToString(", ") + " y " + nombres.last()
+    }
+    return "Casa con $lista".take(com.jvillada.movi.shared.model.MAX_NOMBRE_DE_ESPACIO)
+}

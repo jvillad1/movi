@@ -213,7 +213,9 @@ private fun enEpoch(fecha: LocalDate): Long = fecha.atStartOfDayIn(AppTimeZone.z
  * Movimientos (vuelta de diseño 9), así las dos pantallas no pueden contar distinto.
  */
 fun movimientosDelAnalisis(dias: List<EventDay>, tuParteDeOtros: List<FinancialEvent>): List<FinancialEvent> =
-    dias.flatMap { it.items } + tuParteDeOtros
+    // Vuelta 66: Actividad ya trae tu parte de otros como filas de sus días ([conTuParteDeOtros]);
+    // si además la pasa aparte, no cuenta dos veces.
+    (dias.flatMap { it.items } + tuParteDeOtros).distinctBy { it.id }
 
 // ── La lista de abajo ────────────────────────────────────────────────────────
 

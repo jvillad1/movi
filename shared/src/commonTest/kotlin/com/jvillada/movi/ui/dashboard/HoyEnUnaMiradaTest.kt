@@ -180,4 +180,19 @@ class HoyEnUnaMiradaTest {
         val todo = subida.mostrando("PATRIMONIO", true).mostrando("CUENTAS", false)
         assertEquals(deMovi, todo.deMovi())
     }
+
+    /**
+     * Vuelta 66 · el caso de la revisión: «Disponible» quedó en `ocultas` de cuando venía en Hoy. Al
+     * prenderla, el editor la saca de ahí (antes solo la agregaba a `visibles` y ganaba la oculta).
+     */
+    @Test
+    fun `prender una opcional escondida de antes la saca de ocultas`() {
+        val deAntes = deMovi.copy(ocultas = listOf("DISPONIBLE_DEL_PERIODO"))
+        val prendida = deAntes.mostrando("DISPONIBLE_DEL_PERIODO", true)
+        assertEquals(listOf("DISPONIBLE_DEL_PERIODO"), prendida.visibles)
+        assertEquals(emptyList(), prendida.ocultas)
+        // La preferencia ya guardada con las dos: el editor dice lo mismo que Hoy (prendida).
+        val guardada = deMovi.copy(ocultas = listOf("DISPONIBLE_DEL_PERIODO"), visibles = listOf("DISPONIBLE_DEL_PERIODO"))
+        assertEquals(true, seccionesDelEditor(guardada).first { it.tipo == "DISPONIBLE_DEL_PERIODO" }.visible)
+    }
 }

@@ -19,7 +19,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Groups
-import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -54,6 +53,9 @@ import com.jvillada.movi.theme.Espacio as EspacioDeDiseno
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.LocalRefreshTick
+import com.jvillada.movi.ui.LocalGoBack
+import com.jvillada.movi.ui.components.ds.BotonDeIcono
+import androidx.compose.material.icons.rounded.Edit
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.HeaderLeading
 import com.jvillada.movi.ui.components.MinScreenHeader
@@ -69,7 +71,6 @@ import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
 import com.jvillada.movi.ui.components.ds.Seccion
 import com.jvillada.movi.ui.components.ds.Separador
 import com.jvillada.movi.ui.components.ds.Superficie
-import com.jvillada.movi.ui.components.ds.TarjetaDePropuesta
 import com.jvillada.movi.ui.components.ds.TonoDeIcono
 import com.jvillada.movi.ui.components.ds.Vacio
 import com.jvillada.movi.ui.components.ds.VarianteDeBoton
@@ -183,6 +184,7 @@ fun EspaciosScreen(onNavigate: (Screen) -> Unit) {
                 detalle = actual.detalles.single(),
                 onCambio = { reintento++ },
                 onVerTodo = { onNavigate(Screen.Espacio(actual.detalles.single().espacio.id)) },
+                onBorrado = { reintento++ },
                 enDosColumnas = true,
                 alFinalDeLaDerecha = alFinal,
                 modifier = Modifier.weight(1f),
@@ -215,6 +217,7 @@ fun EspaciosScreen(onNavigate: (Screen) -> Unit) {
                         detalle = actual.detalles.single(),
                         onCambio = { reintento++ },
                         onVerTodo = { onNavigate(Screen.Espacio(actual.detalles.single().espacio.id)) },
+                        onBorrado = { reintento++ },
                     )
                     else -> ListaDeEspacios(actual.detalles, onAbrir = { onNavigate(Screen.Espacio(it)) })
                 }
@@ -247,6 +250,7 @@ fun EspaciosScreen(onNavigate: (Screen) -> Unit) {
 @Composable
 fun EspacioScreen(id: String, pagoOtro: Boolean) {
     val refresco = LocalRefreshTick.current
+    val volver = LocalGoBack.current
     var reintento by remember { mutableStateOf(0) }
     var detalle by remember { mutableStateOf<DetalleDelEspacio?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -272,6 +276,7 @@ fun EspacioScreen(id: String, pagoOtro: Boolean) {
                 detalle = actual,
                 onCambio = { reintento++ },
                 onVerTodo = null,
+                onBorrado = { volver(Screen.Espacios) },
                 pagoOtroDeEntrada = pagoOtro,
                 enDosColumnas = true,
                 modifier = Modifier.weight(1f),
@@ -297,6 +302,7 @@ fun EspacioScreen(id: String, pagoOtro: Boolean) {
                         detalle = actual,
                         onCambio = { reintento++ },
                         onVerTodo = null,
+                        onBorrado = { volver(Screen.Espacios) },
                         pagoOtroDeEntrada = pagoOtro,
                     )
                 }
@@ -320,6 +326,8 @@ internal fun CuerpoDelEspacio(
     detalle: DetalleDelEspacio,
     onCambio: () -> Unit,
     onVerTodo: (() -> Unit)?,
+    /** Vuelta 66: el grupo se borró desde «Editar grupo». */
+    onBorrado: () -> Unit = onCambio,
     pagoOtroDeEntrada: Boolean = false,
     /**
      * Vuelta 33: en pantalla ancha, el espacio, «Quién puso qué» y el saldo a la izquierda, y los
@@ -335,8 +343,11 @@ internal fun CuerpoDelEspacio(
     val coroutine = rememberCoroutineScope()
     var saldando by remember { mutableStateOf(false) }
     var pagoOtro by remember(espacio.id) { mutableStateOf(pagoOtroDeEntrada) }
-    var descartadas by remember(espacio.id) { mutableStateOf(emptySet<String>()) }
     var errorDePropuesta by remember { mutableStateOf<String?>(null) }
+    var editando by remember(espacio.id) { mutableStateOf(false) }
+    // Vuelta 66: «Marcar como saldado» elige entre las transferencias de la deuda abierta; las que
+    // esperan un saldado ya marcado se vinculan desde su propia tarjeta.
+    val paraLaDeuda = detalle.propuestas.filter { it.liquidacionId == null }
     // Vuelta de diseño 26 · «Pedirle a Caro» y saldar con confirmación.
     var confirmandoSaldado by remember(espacio.id) { mutableStateOf(false) }
     var saldandoSinVincular by remember(espacio.id) { mutableStateOf(false) }
@@ -346,34 +357,21 @@ internal fun CuerpoDelEspacio(
 
     // ── Lo que Movi propone, el espacio, quién puso qué y el saldo: la izquierda en dos columnas. ──
     val izquierda: @Composable ColumnScope.() -> Unit = {
-        // ── Lo que Movi propone: vincular una transferencia que salda. ──
-        val propuestas = detalle.propuestas.filterNot { it.eventoId in descartadas }
-        propuestas.forEach { p ->
-            TarjetaDePropuesta(
-                icono = Icons.Rounded.SwapHoriz,
-                titulo = preguntaDeSaldar(espacio, if (p.a == MIEMBRO_YO) p.de else p.a, entra = p.a == MIEMBRO_YO),
-                cifra = p.monto,
-                cuerpo = p.descripcion,
-                accion = "Sí, saldar",
-                onAccion = {
-                    coroutine.launch {
-                        try {
-                            Repositories.wallets.liquidarEspacio(espacio.id, liquidacionDe(p))
-                            onCambio()
-                        } catch (e: CancellationException) {
-                            throw e
-                        } catch (e: Throwable) {
-                            errorDePropuesta = mensajeDelEspacio(e)
-                        }
-                    }
-                },
-                accionSecundaria = "No",
-                onAccionSecundaria = { descartadas = descartadas + p.eventoId },
+        // ── Lo que Movi propone: vincular una transferencia que salda (vuelta 66: también la que
+        // espera un saldado ya marcado). La misma tarjeta de Por revisar y la campana. ──
+        detalle.propuestas.forEach { p ->
+            TarjetaDeSaldar(
+                p = p,
+                espacioId = espacio.id,
+                quien = nombreEnElEspacio(espacio, if (p.a == MIEMBRO_YO) p.de else p.a),
+                nombreDelGrupo = espacio.nombre,
+                conElGrupo = false,
+                onHecho = onCambio,
             )
         }
         errorDePropuesta?.let { Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale) }
 
-        EncabezadoDelEspacio(detalle)
+        EncabezadoDelEspacio(detalle, onEditar = { editando = true })
         QuienPusoQue(detalle)
         SaldoDelEspacioTarjeta(
             detalle,
@@ -385,10 +383,12 @@ internal fun CuerpoDelEspacio(
             onSaldar = { saldando = true },
             // Con transferencias que pueden ser el pago, la hoja de siempre (se elige cuál vincular); sin
             // ninguna, la pregunta antes de dejar el espacio en cero.
-            onSaldadoSecundario = { if (detalle.propuestas.isEmpty()) confirmandoSaldado = true else saldando = true },
+            onSaldadoSecundario = { if (paraLaDeuda.isEmpty()) confirmandoSaldado = true else saldando = true },
             mensajeCopiado = mensajeCopiado,
             onAbrirWhatsApp = { mensajeCopiado?.let { runCatching { uriHandler.openUri(enlaceDeWhatsApp(it)) } } },
         )
+        // Vuelta 66 · el historial: cada saldado, con su transferencia o «Esperando la transferencia».
+        PagosEntreUstedes(detalle, ahora = kotlinx.datetime.Clock.System.now().toEpochMilliseconds(), onCambio = onCambio)
     }
     val derecha: @Composable ColumnScope.() -> Unit = {
         GastosDelEspacio(detalle, onPagoOtro = { pagoOtro = true }, onVerTodo = onVerTodo, onCambio = onCambio)
@@ -426,9 +426,23 @@ internal fun CuerpoDelEspacio(
         }
     }
 
+    if (editando) {
+        HojaEditarGrupo(
+            detalle = detalle,
+            onDismiss = { editando = false },
+            onGuardado = {
+                editando = false
+                onCambio()
+            },
+            onBorrado = {
+                editando = false
+                onBorrado()
+            },
+        )
+    }
     if (saldando) {
         HojaSaldar(
-            detalle = detalle,
+            detalle = detalle.copy(propuestas = paraLaDeuda),
             onDismiss = { saldando = false },
             onSaldado = {
                 saldando = false
@@ -495,13 +509,17 @@ internal fun CuerpoDelEspacio(
     }
 }
 
-/** La liquidación que propone [p]: el monto de la transferencia, vinculada. */
+/**
+ * La liquidación que propone [p]: el monto de la transferencia, vinculada. Vuelta 66: si la propuesta
+ * es para un saldado que espera su transferencia, va con **su** id: el server la vincula a ese saldado
+ * (no crea otro), y el monto del saldado no cambia.
+ */
 internal fun liquidacionDe(p: PropuestaDeSaldar): LiquidacionDelEspacio =
-    LiquidacionDelEspacio(id = newId("liq"), de = p.de, a = p.a, monto = p.monto, fecha = p.fecha, eventoId = p.eventoId)
+    LiquidacionDelEspacio(id = p.liquidacionId ?: newId("liq"), de = p.de, a = p.a, monto = p.monto, fecha = p.fecha, eventoId = p.eventoId)
 
 /** Los avatares, el nombre, quiénes comparten y el gasto del período. */
 @Composable
-private fun EncabezadoDelEspacio(detalle: DetalleDelEspacio) {
+private fun EncabezadoDelEspacio(detalle: DetalleDelEspacio, onEditar: () -> Unit) {
     val espacio = detalle.espacio
     Superficie {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(EspacioDeDiseno.s)) {
@@ -512,6 +530,8 @@ private fun EncabezadoDelEspacio(detalle: DetalleDelEspacio) {
                 Text(espacio.nombre, style = Movi.textos.titulo, color = Movi.colores.texto, maxLines = 1)
                 Text(quienesComparten(espacio), style = Movi.textos.apoyo, color = Movi.colores.textoMedio, maxLines = 1)
             }
+            // Vuelta 66: renombrar y borrar el grupo.
+            BotonDeIcono(Icons.Rounded.Edit, "Editar grupo", onClick = onEditar, modifier = Modifier.testTag(TAG_EDITAR_GRUPO))
         }
         Spacer(Modifier.height(Medida.dentroDeSeccion))
         Text("Gastos de este período", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
@@ -660,8 +680,16 @@ private fun GastosDelEspacio(
         } else {
             val aLaVista = if (onVerTodo != null) detalle.gastos.take(GASTOS_A_LA_VISTA) else detalle.gastos
             Superficie(relleno = RellenoDeSuperficie.Lista) {
-                aLaVista.forEachIndexed { i, g ->
+                // Vuelta 66: una marca de corte en cada saldado (lo de arriba es lo que se debe desde ahí).
+                gastosConSusCortes(aLaVista, detalle.liquidaciones).forEachIndexed { i, renglon ->
                     if (i > 0) Separador()
+                    val g = when (renglon) {
+                        is RenglonDeLosGastos.Corte -> {
+                            CorteDelSaldado(renglon.liquidacion)
+                            return@forEachIndexed
+                        }
+                        is RenglonDeLosGastos.Gasto -> renglon.gasto
+                    }
                     Fila(
                         titulo = tituloDelGasto(g),
                         // Vuelta de diseño 32: un renglón; si no cabe, se corta la categoría (va al final).

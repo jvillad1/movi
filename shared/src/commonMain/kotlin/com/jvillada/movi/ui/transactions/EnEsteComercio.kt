@@ -1,8 +1,9 @@
 package com.jvillada.movi.ui.transactions
 
 import com.jvillada.movi.shared.model.FinancialEvent
-import com.jvillada.movi.shared.model.claveDeComercio
-import com.jvillada.movi.shared.model.isOpeningBalance
+import com.jvillada.movi.shared.model.claveDelComercio
+import com.jvillada.movi.shared.model.cuentaComoVisita
+import com.jvillada.movi.shared.model.vecesEnElComercio
 import com.jvillada.movi.shared.model.marcaDe
 import com.jvillada.movi.shared.time.AppTimeZone
 import com.jvillada.movi.ui.fecha.etiquetaDeFecha
@@ -38,31 +39,21 @@ data class EnEsteComercio(
     val busqueda: String,
 )
 
-/** La clave con la que se agrupa: la marca primero, la clave de comercio después. */
-internal fun claveParaAgrupar(evento: FinancialEvent): String? =
-    marcaDe(evento)?.let { "marca:${it.id}" } ?: claveDeComercio(evento)?.let { "comercio:$it" }
-
 /**
  * Los movimientos de [delPeriodo] que son del mismo comercio que [evento] (él incluido), o `null`
- * si no hay ningún otro.
+ * si no hay ninguna otra compra. **Vuelta 66:** cuenta compras, no movimientos ([vecesEnElComercio],
+ * en `:core`, la misma cuenta de Buscar): las partes de una compra repartida son una vez.
  */
 fun enEsteComercio(evento: FinancialEvent, delPeriodo: List<FinancialEvent>): EnEsteComercio? {
-    if (evento.transferId != null || isOpeningBalance(evento)) return null
-    val clave = claveParaAgrupar(evento) ?: return null
-    val mismos = delPeriodo.filter {
-        it.transferId == null &&
-            !isOpeningBalance(it) &&
-            it.type == evento.type &&
-            it.currency == evento.currency &&
-            claveParaAgrupar(it) == clave
-    }.distinctBy { it.id }
-    val conEste = if (mismos.any { it.id == evento.id }) mismos else mismos + evento
-    if (conEste.size < 2) return null
+    if (!cuentaComoVisita(evento)) return null
+    val clave = claveDelComercio(evento) ?: return null
+    val cuenta = vecesEnElComercio(delPeriodo + evento, clave, comoEste = evento)
+    if (cuenta.veces < 2) return null
     return EnEsteComercio(
-        veces = conEste.size,
-        total = conEste.sumOf { com.jvillada.movi.shared.model.montoContado(it) },
+        veces = cuenta.veces,
+        total = cuenta.total,
         moneda = evento.currency,
-        busqueda = busquedaParaElComercio(evento, conEste),
+        busqueda = busquedaParaElComercio(evento, cuenta.movimientos),
     )
 }
 

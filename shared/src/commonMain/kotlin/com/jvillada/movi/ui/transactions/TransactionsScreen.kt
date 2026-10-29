@@ -4,6 +4,9 @@ import com.jvillada.movi.ui.components.ds.seAchicaHastaLaBase
 import androidx.compose.foundation.text.BasicText
 import com.jvillada.movi.ui.components.ds.fondoDeLaFilaElegida
 import com.jvillada.movi.shared.model.montoContado
+import com.jvillada.movi.shared.model.conTuParteDeOtros
+import com.jvillada.movi.shared.model.esTuParteDeOtro
+import com.jvillada.movi.ui.espacios.AbrirTuParteDeOtro
 import com.jvillada.movi.shared.model.Espacio as EspacioCompartido
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -1048,7 +1051,14 @@ fun TransactionsScreen(
      * defecto y volver a filtrarla cuando llega el de verdad sería una lista que cambia de mes
      * delante del dueño. Con los dos recordados, están los dos al primer cuadro.
      */
-    val allDays = if (perfilLeido) eventos.valor.orEmpty() else emptyList()
+    /** Vuelta de diseño 9: tu parte de lo que pagaron otros (ver abajo, y [conTuParteDeOtros]). */
+    var tuParteDeOtros by remember { mutableStateOf<List<FinancialEvent>>(emptyList()) }
+    /**
+     * Vuelta 66 · **toda cifra de Actividad sale de las filas**: tu parte de lo que pagó otro va como
+     * fila en su día ([conTuParteDeOtros]), en Todo, Gastos y Compartidos. «Salió» la contaba y la lista
+     * no: los días sumaban menos que el total.
+     */
+    val allDays = if (perfilLeido) conTuParteDeOtros(eventos.valor.orEmpty(), tuParteDeOtros) else emptyList()
     /**
      * Si la última carga que salió bien mostraba la línea del rango del período, o nunca la
      * mostró (corte 1). `null` la primera vez en este aparato: reserva la línea, como siempre.
@@ -1110,8 +1120,8 @@ fun TransactionsScreen(
      * cada vez que la lista se relee ([movimientoDelPanel]).
      */
     var selectedEvent by remember { mutableStateOf<FinancialEvent?>(null) }
-    /** Vuelta de diseño 9: tu parte de lo que pagaron otros, para el resumen del panel (ver abajo). */
-    var tuParteDeOtros by remember { mutableStateOf<List<FinancialEvent>>(emptyList()) }
+    /** Vuelta 66: tu parte de un gasto que pagó otro, tocada: abre el gasto del grupo, no un movimiento. */
+    var tuParteAbierta by remember { mutableStateOf<FinancialEvent?>(null) }
     /** Vuelta de diseño 30: los espacios por id, para la línea «de $88.600 · con Caro». */
     var espaciosDelDueno by remember { mutableStateOf<Map<String, EspacioCompartido>>(emptyMap()) }
     val focusManager = LocalFocusManager.current
@@ -1275,7 +1285,12 @@ fun TransactionsScreen(
      * encuentra —la búsqueda de categorías del movimiento nuevo, con el teclado arriba—. Lo midió
      * `MovimientosListaYDetalleEnPantallaTest`.
      */
-    val elegir: (FinancialEvent?) -> Unit = { evento ->
+    val elegir: (FinancialEvent?) -> Unit = elegir@{ evento ->
+        // Vuelta 66: tu parte de lo que pagó otro no es un movimiento tuyo: abre el gasto del grupo.
+        if (evento != null && esTuParteDeOtro(evento)) {
+            tuParteAbierta = evento
+            return@elegir
+        }
         if (conPanel) {
             if (runCatching { focoDelPanel.requestFocus() }.isFailure) focusManager.clearFocus()
         }
@@ -1313,7 +1328,9 @@ fun TransactionsScreen(
     val historia = eventos.valor
     // Vuelta de diseño 30: los espacios, para que un gasto repartido diga «con Caro». Solo si la
     // historia tiene alguno repartido; si la lectura falla, la fila dice «de $88.600» a secas.
-    val hayRepartidos = remember(historia) { historia?.any { d -> d.items.any { it.espacioId != null } } == true }
+    val hayRepartidos = remember(historia, tuParteDeOtros) {
+        tuParteDeOtros.isNotEmpty() || historia?.any { d -> d.items.any { it.espacioId != null } } == true
+    }
     LaunchedEffect(refreshKey, refreshTick, hayRepartidos) {
         if (hayRepartidos) {
             espaciosDelDueno = runCatching { Repositories.wallets.getEspacios() }.getOrDefault(emptyList()).associateBy { it.id }
@@ -1321,9 +1338,10 @@ fun TransactionsScreen(
     }
     val resumen = remember(historia, tuParteDeOtros, periodoVisible, ajustesDelPeriodo, hoyIso, accountTypes, perfilLeido) {
         if (historia == null || !perfilLeido) null
+        // Vuelta 66: sobre los MISMOS días que pinta la lista, con tu parte de otros ya como filas:
+        // la suma de los días es «Salió» (ver `ActividadCuadraConSusFilasTest`).
         else resumenDelPanel(
-            historia, periodoVisible, ajustesDelPeriodo, LocalDate.parse(hoyIso), accountTypes,
-            tuParteDeOtros = tuParteDeOtros,
+            conTuParteDeOtros(historia, tuParteDeOtros), periodoVisible, ajustesDelPeriodo, LocalDate.parse(hoyIso), accountTypes,
         )
     }
     Box(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
@@ -1694,7 +1712,9 @@ fun TransactionsScreen(
                                         // pantalla ancha no: ahí se usa con mouse y el panel de al
                                         // lado ya es el detalle (ver [FilaDeslizable]).
                                         is MovementRow.Single -> FilaDeslizable(
-                                            habilitada = !conPanel,
+                                            // Tu parte de lo que pagó otro no se confirma ni se
+                                            // recategoriza desde acá: es del grupo.
+                                            habilitada = !conPanel && !esTuParteDeOtro(row.event),
                                             puedeConfirmar = row.event.reconciliationStatus == ReconciliationStatus.UNCONFIRMED,
                                             onCategoria = {
                                                 elegir(row.event)
@@ -1827,6 +1847,10 @@ fun TransactionsScreen(
                 buscarElComercio(busqueda)
             },
         )
+    }
+
+    tuParteAbierta?.let { parte ->
+        AbrirTuParteDeOtro(parte, onCerrar = { tuParteAbierta = null }, onCambio = { tuParteAbierta = null; refreshKey++ })
     }
 
     if (editandoElInicio) {
@@ -2278,18 +2302,22 @@ internal fun MovementSingleRow(
     // cuenta, la pata huérfana, la cuota que paga un tercero. Una sola regla, ver [tonoDelEvento].
     val tono = tonoForzado ?: tonoDelEvento(tx)
     // Vuelta de diseño 30: «Mercado / Mercado» no repite la categoría (ver [textosDeLaFila]).
-    val textos = textosDeLaFila(tx, accountNames[tx.accountId])
+    val espacioDelMovimiento = tx.espacioId?.let { espacios[it] }
+    val textos = if (esTuParteDeOtro(tx)) textosDeTuParteDeOtro(tx, espacioDelMovimiento)
+    else textosDeLaFila(tx, accountNames[tx.accountId])
     // Vuelta de diseño 30: en un gasto repartido la cifra es tu parte, y debajo de cuánto y con quién.
     // Con el tono forzado (el detalle de una cuenta, cuyo total del día es lo que movió el saldo) la
     // cifra sigue siendo lo que salió de la cuenta, con tu parte debajo.
     val porElSaldo = tonoForzado != null
     val monto = if (porElSaldo) tx.amount else montoPrincipalDelMovimiento(tx)
     val debajo = when {
+        // Vuelta 66: tu parte de lo que pagó otro lo dice debajo de la cifra.
+        esTuParteDeOtro(tx) -> TU_PARTE
         // Vuelta 63 (revisión): una compra diferida dice a cuántas cuotas — explica por qué el extracto
         // de la tarjeta cuenta menos que el monto.
         !esGastoRepartido(tx) -> textoDeLasCuotas(tx.cuotas)
         porElSaldo -> "Tu parte ${formatMoney(montoContado(tx), tx.currency)}"
-        else -> lineaDelRepartido(tx, tx.espacioId?.let { espacios[it] })
+        else -> lineaDelRepartido(tx, espacioDelMovimiento)
     }
     Column {
         Fila(

@@ -8,7 +8,8 @@ import com.jvillada.movi.shared.model.DestinoConocido
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.group
-import com.jvillada.movi.shared.model.claveDeComercio
+import com.jvillada.movi.shared.model.claveDelComercio
+import com.jvillada.movi.shared.model.vecesEnElComercio
 import com.jvillada.movi.shared.model.normalizarParaBuscar
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.shared.model.PERSONAS_Y_COMERCIOS
@@ -100,7 +101,7 @@ sealed class ResultadoDeBusqueda {
         val moneda: String,
     ) : ResultadoDeBusqueda() {
         override val tipo get() = TipoDeResultado.COMERCIO
-        override val clave get() = "com:${claveDeComercio(ejemplo) ?: nombre}"
+        override val clave get() = "com:${claveDelComercio(ejemplo) ?: nombre}"
         override val titulo get() = enFormaDeTitulo(nombre)
         override val destino: Screen get() = Screen.Transactions(consultaInicial = nombre)
     }
@@ -256,18 +257,26 @@ fun buscarEnMovi(
     // Los comercios salen del nombre, no del monto: «27500» no es el nombre de ningún comercio.
     val comercios = if (monto != null) emptyList() else coinciden
         .filter { !isTransferLeg(it) && (contiene(it.merchant, q) || contiene(it.description, q)) }
-        .groupBy { claveDeComercio(it) }
-        .filterKeys { it != null }
-        .values
-        .filter { it.size >= 2 }
-        .map { delComercio ->
+        // Vuelta 66: la clave y la cuenta de `:core` ([claveDelComercio], [vecesEnElComercio]), las
+        // mismas del detalle de un movimiento: los dos dicen el mismo «N veces» y el mismo total.
+        .groupBy { claveDelComercio(it) }
+        .entries
+        .mapNotNull { (clave, delComercio) ->
+            if (clave == null) return@mapNotNull null
             val ejemplo = delComercio.first()
-            val enElPeriodo = delComercio.filter { periodo != null && it.timestamp in periodo }
+            if (vecesEnElComercio(delComercio, clave).veces < 2) return@mapNotNull null
+            val enElPeriodo = vecesEnElComercio(
+                delComercio.filter { periodo != null && it.timestamp in periodo && it.currency == ejemplo.currency },
+                clave,
+            )
             ResultadoDeBusqueda.Comercio(
-                nombre = (ejemplo.merchant?.takeIf { it.isNotBlank() } ?: ejemplo.description).trim(),
+                // El nombre que más se repite en el grupo (con la marca juntan textos distintos:
+                // «Juan Valdez Cafe» y «Tinto y pan»); a igual cuenta, el del más reciente.
+                nombre = delComercio.map { (it.merchant?.takeIf { m -> m.isNotBlank() } ?: it.description).trim() }
+                    .groupingBy { it }.eachCount().maxByOrNull { it.value }?.key ?: ejemplo.description.trim(),
                 ejemplo = ejemplo,
-                enElPeriodo = enElPeriodo.size,
-                totalDelPeriodo = enElPeriodo.filter { it.currency == ejemplo.currency }.sumOf { com.jvillada.movi.shared.model.montoContado(it) },
+                enElPeriodo = enElPeriodo.veces,
+                totalDelPeriodo = enElPeriodo.total,
                 moneda = ejemplo.currency,
             )
         }

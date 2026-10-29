@@ -201,4 +201,45 @@ class EspacioTest {
         assertEquals(listOf("t1"), propuestas.map { it.eventoId })
         assertEquals(caro.id, propuestas.single().de)
     }
+
+    // ── Vuelta 66 · el saldado que espera su transferencia ──────────────────
+
+    @Test
+    fun `saldado antes de que llegue la plata - se propone la primera transferencia de Caro por ese monto, mas o menos 1 por ciento`() {
+        val destinoCaro = DestinoConocido(id = caro.id, nombre = "Caro", numero = "")
+        val saldado = LiquidacionDelEspacio("l_esp", casa.id, caro.id, MIEMBRO_YO, 168_050, fecha = ts("2026-10-29"))
+        // A mano después de saldar: la propuesta de siempre (la de la deuda) ya no sale.
+        val saldo = saldoDelEspacio(casa, listOf(deMi("a", 336_100)), listOf(saldado))
+        assertTrue(saldo.reembolsos.isEmpty())
+        val ahora = ts("2026-10-31")
+        val llega = mov("t_llega", "2026-10-30", 168_500, TransactionType.INCOME, "Ingreso", "Transferencia de Caro")
+        val otraDespues = mov("t_otra", "2026-10-31", 168_050, TransactionType.INCOME, "Ingreso", "Transferencia de Caro")
+        val muyDistinta = mov("t_mas", "2026-10-30", 200_000, TransactionType.INCOME, "Ingreso", "Transferencia de Caro")
+        val deOtro = mov("t_papa", "2026-10-30", 168_050, TransactionType.INCOME, "Ingreso", "Transferencia de Papá")
+
+        val propuestas = transferenciasParaSaldar(saldo, listOf(otraDespues, llega, muyDistinta, deOtro), listOf(destinoCaro), ahora, liquidaciones = listOf(saldado))
+
+        assertEquals(listOf("t_llega"), propuestas.map { it.eventoId }, "la primera que llegó, dentro del 1 %")
+        assertEquals("l_esp", propuestas.single().liquidacionId)
+        assertTrue(montoParecido(168_050 + 1_680, 168_050))
+        assertFalse(montoParecido(168_050 + 1_681, 168_050))
+    }
+
+    @Test
+    fun `un saldado vinculado, uno viejo o uno sin el duenno no esperan nada`() {
+        val ahora = ts("2026-10-31")
+        assertTrue(esperaLaTransferencia(LiquidacionDelEspacio("l", casa.id, caro.id, MIEMBRO_YO, 100, fecha = ts("2026-10-29")), ahora))
+        assertFalse(esperaLaTransferencia(LiquidacionDelEspacio("l", casa.id, caro.id, MIEMBRO_YO, 100, fecha = ts("2026-10-29"), eventoId = "e"), ahora))
+        assertFalse(esperaLaTransferencia(LiquidacionDelEspacio("l", casa.id, caro.id, MIEMBRO_YO, 100, fecha = ts("2026-08-01")), ahora))
+        assertFalse(esperaLaTransferencia(LiquidacionDelEspacio("l", casa.id, caro.id, "dst_ana", 100, fecha = ts("2026-10-29")), ahora))
+    }
+
+    @Test
+    fun `si le pagaste tu, se propone tu transferencia a Caro`() {
+        val destinoCaro = DestinoConocido(id = caro.id, nombre = "Caro", numero = "")
+        val pagaste = LiquidacionDelEspacio("l_yo", casa.id, MIEMBRO_YO, caro.id, 120_000, fecha = ts("2026-10-29"))
+        val sale = mov("t_sale", "2026-10-29", 120_000, TransactionType.EXPENSE, "Transferencias", "Transferencia a Caro")
+        val propuestas = transferenciasQueEsperan(listOf(pagaste), listOf(sale), listOf(destinoCaro), ts("2026-10-30"))
+        assertEquals(listOf("t_sale"), propuestas.map { it.eventoId })
+    }
 }

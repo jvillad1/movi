@@ -10,6 +10,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Event
 import androidx.compose.material.icons.rounded.PieChart
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -20,7 +22,10 @@ import androidx.compose.ui.platform.testTag
 import com.jvillada.movi.data.ClaveDeLectura
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.rememberLectura
+import com.jvillada.movi.shared.model.DetalleDelEspacio
 import com.jvillada.movi.shared.model.Espacio
+import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.PREFIJO_TU_PARTE
 import com.jvillada.movi.shared.model.GastoDelEspacio
 import com.jvillada.movi.shared.model.MIEMBRO_YO
 import com.jvillada.movi.shared.model.tuParteDe
@@ -93,6 +98,35 @@ internal fun AlTocarUnGasto(espacio: Espacio, gasto: GastoDelEspacio, onCerrar: 
         eventos.terminada && !eventos.actualizando -> HojaDelGasto(espacio, gasto, onCerrar, onCambio)
         else -> Unit
     }
+}
+
+/**
+ * **Tu parte de un gasto que pagó otro, tocada en Actividad** (vuelta 66): la fila
+ * (`espacio:<gasto>`, ver `tuParteComoEventos`) no es un movimiento tuyo, así que abre **el gasto del
+ * grupo** ([HojaDelGasto]), leído del grupo. Si el gasto ya no está, se cierra.
+ */
+@Composable
+internal fun AbrirTuParteDeOtro(parte: FinancialEvent, onCerrar: () -> Unit, onCambio: () -> Unit) {
+    val espacioId = parte.espacioId ?: run {
+        SideEffect { onCerrar() }
+        return
+    }
+    val gastoId = parte.id.removePrefix(PREFIJO_TU_PARTE)
+    var detalle by remember(parte.id) { mutableStateOf<DetalleDelEspacio?>(null) }
+    var fallo by remember(parte.id) { mutableStateOf(false) }
+    LaunchedEffect(parte.id) {
+        runCatching { Repositories.wallets.getDetalleDelEspacio(espacioId) }
+            .onSuccess { detalle = it }
+            .onFailure { if (it is CancellationException) throw it; fallo = true }
+    }
+    if (fallo) SideEffect { onCerrar() }
+    val actual = detalle ?: return
+    val gasto = actual.gastos.firstOrNull { it.id == gastoId }
+    if (gasto == null) {
+        SideEffect { onCerrar() }
+        return
+    }
+    HojaDelGasto(actual.espacio, gasto, onCerrar, onCambio)
 }
 
 /**

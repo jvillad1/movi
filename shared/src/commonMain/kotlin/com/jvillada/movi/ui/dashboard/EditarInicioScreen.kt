@@ -157,12 +157,18 @@ fun PreferenciasDelInicio.moviendo(tipo: String, hacia: Int): PreferenciasDelIni
 /**
  * [tipo] visible o escondida en el Inicio. Una opcional que el Inicio de Movi no trae se prende y se
  * apaga en [PreferenciasDelInicio.visibles]; las demás se esconden en [PreferenciasDelInicio.ocultas].
+ *
+ * **Vuelta 66: una sección nunca queda en las dos listas.** Prender una opcional la saca también de
+ * `ocultas` (quien la escondió cuando venía en Hoy la tenía ahí, y ganaba la oculta), y esconder una
+ * la saca de `visibles`. El server aplica la misma regla al limpiar (`limpias`, gana `visibles`).
  */
 fun PreferenciasDelInicio.mostrando(tipo: String, visible: Boolean): PreferenciasDelInicio =
     if (tipo in SECCIONES_OPCIONALES && tipo !in deLaDefinicion(this)) {
-        copy(visibles = if (visible) (visibles + tipo).distinct() else visibles - tipo)
+        if (visible) copy(visibles = (visibles + tipo).distinct(), ocultas = ocultas - tipo)
+        else copy(visibles = visibles - tipo)
     } else {
-        copy(ocultas = if (visible) ocultas - tipo else (ocultas + tipo).distinct())
+        if (visible) copy(ocultas = ocultas - tipo)
+        else copy(ocultas = (ocultas + tipo).distinct(), visibles = visibles - tipo)
     }
 
 /** «Volver al orden de Movi»: sin orden propio ni ocultas. */
