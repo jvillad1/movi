@@ -160,6 +160,8 @@ private fun JuegoDelMovimiento(
     onVerElComercio: ((String) -> Unit)?,
 ) {
     var pidioAnular by remember(event.id) { mutableStateOf(false) }
+    // Vuelta 67: al anular, «Anulado · Deshacer» abajo de la pantalla (ver [AvisoDeDeshacer]).
+    val avisoDeDeshacer = com.jvillada.movi.ui.components.LocalAvisoDeDeshacer.current
     var prefillRecurrente by remember(event.id) { mutableStateOf<RecurringPrefill?>(null) }
     // PR 1 del rediseño de Recurrentes: la regla que el dueño pidió editar desde acá mismo —ver
     // `SeccionEstoSeRepite` en `CategorySheets.kt`— en vez del mensaje mudo que antes lo mandaba a
@@ -230,6 +232,9 @@ private fun JuegoDelMovimiento(
             onDismiss = { pidioAnular = false },
             onVoided = {
                 pidioAnular = false
+                avisoDeDeshacer?.mostrar(com.jvillada.movi.ui.components.ANULADO) {
+                    com.jvillada.movi.data.Repositories.wallets.restaurarMovimiento(event.id)
+                }
                 onResuelto(event)
                 onAnulado()
                 onCambiado()

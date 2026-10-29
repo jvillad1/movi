@@ -117,7 +117,7 @@ class Vuelta52Test {
             }
         }
         composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithText("Cuota de crédito", useUnmergedTree = true)
+            composeRule.onAllNodesWithText("Cuota de Vehículo", useUnmergedTree = true)
                 .fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.waitForIdle()
@@ -127,7 +127,7 @@ class Vuelta52Test {
     fun `el glifo junto a la cifra es Recurrente en la cuota y el pago de tarjeta y no en el traspaso`() {
         montar()
         composeRule.onAllNodesWithText("Traspaso", useUnmergedTree = true).assertCountEquals(1)
-        composeRule.onAllNodesWithText("Cuota de crédito", useUnmergedTree = true).assertCountEquals(1)
+        composeRule.onAllNodesWithText("Cuota de Vehículo", useUnmergedTree = true).assertCountEquals(1)
         composeRule.onAllNodesWithText("Pago de tarjeta", useUnmergedTree = true).assertCountEquals(1)
         // Tres pares, dos marcas: el traspaso a mano no se repite, así que no la lleva.
         composeRule.onAllNodesWithContentDescription("Recurrente", useUnmergedTree = true).assertCountEquals(2)

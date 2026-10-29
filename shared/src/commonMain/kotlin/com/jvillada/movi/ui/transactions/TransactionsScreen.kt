@@ -905,7 +905,8 @@ fun transferRowTitle(row: MovementRow.Transfer, accountTypes: Map<String, Accoun
     // cuota mensual rotulada justo como lo contrario de lo que es, que es la confusión que este
     // nombre existe para evitar. La categoría la escribe `pagoDeCuotaLegs` y no hay otra forma de
     // llegar a ella, así que distingue exacto.
-    row.out.category == CUOTA_CATEGORY -> "Cuota de crédito"
+    // Vuelta 67: la misma regla que la fila suelta de Gastos ([tituloDeLaCuota]): «Cuota de Vehículo 4083».
+    row.out.category == CUOTA_CATEGORY -> tituloDeLaCuota(row.out)
     row.out.category == CARD_PAYMENT_CATEGORY -> "Pago de tarjeta"
     // La categoría del desembolso también manda sobre el tipo de cuenta: dice «Desembolso» aunque la
     // lista de cuentas todavía no haya llegado (con el mapa vacío caería en «Traspaso»).
@@ -1325,6 +1326,16 @@ fun TransactionsScreen(
     LaunchedEffect(refreshKey, refreshTick) {
         tuParteDeOtros = runCatching { Repositories.wallets.getTuParteDeOtros() }.getOrDefault(emptyList())
     }
+    // Vuelta 67 (revisión): lo anulado, para la fila «N anulados en octubre» del final de la lista.
+    var anuladosDelDueno by remember { mutableStateOf<List<com.jvillada.movi.shared.model.MovimientoAnulado>>(emptyList()) }
+    LaunchedEffect(refreshKey, refreshTick) {
+        anuladosDelDueno = runCatching { Repositories.wallets.getAnulados() }
+            .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
+            .getOrDefault(anuladosDelDueno)
+    }
+    val anuladosDelPeriodoVisible = remember(anuladosDelDueno, periodoVisible, ajustesDelPeriodo) {
+        anuladosDelPeriodo(anuladosDelDueno, periodoVisible, ajustesDelPeriodo)
+    }
     val historia = eventos.valor
     // Vuelta de diseño 30: los espacios, para que un gasto repartido diga «con Caro». Solo si la
     // historia tiene alguno repartido; si la lectura falla, la fila dice «de $88.600» a secas.
@@ -1526,6 +1537,8 @@ fun TransactionsScreen(
                 dias = if (diasLeidos) allDays else null,
                 candidatos = porRevisar.candidatos,
                 debitos = porRevisar.debitos,
+                // Vuelta 67: el mismo número del Inicio y de la bandeja, con lo que salda un grupo.
+                propuestasDeSaldar = porRevisar.propuestasDeSaldar,
             )
         } else {
             null
@@ -1554,7 +1567,8 @@ fun TransactionsScreen(
             if (conLoDeArriba && muestraElResumenEnElTelefono(conPanel, hayFiltro = filtro != null, busqueda = searchQuery)) {
                 item(contentType = "arriba") {
                     ResumenDelPeriodoEnElTelefono(
-                        resumen = resumen,
+                        // Vuelta 67: la suma de la lista de abajo, con su chip (ver [laFranjaDeLaLista]).
+                        resumen = resumen?.let { laFranjaDeLaLista(it, visibleDays, accountTypes) },
                         onVerEnQueSeVa = { onNavigate(Screen.EnQueSeVa(periodoVisible.prefijo)) },
                         modifier = arribaDeLaLista,
                     )
@@ -1609,6 +1623,7 @@ fun TransactionsScreen(
             if (loading && visibleDays.isEmpty()) {
                 movimientosEsqueleto()
             }
+
 
             // Con el aviso de arriba puesto, un vacío no se afirma: saldría de lo que se leyó en
             // otra visita, y «Sin movimientos aún» tiene que venir de una lectura que contestó en
@@ -1766,6 +1781,17 @@ fun TransactionsScreen(
                     }
                 }
             }
+            // Vuelta 67 (revisión) · lo anulado del período, al final y fuera de los chips: «2 anulados
+            // en octubre · Ver» abre su lista (ver [AnuladosScreen]).
+            if (searchQuery.isBlank() && filtro == null && anuladosDelPeriodoVisible.isNotEmpty()) {
+                item(key = "anulados-del-periodo") {
+                    FilaDeLosAnulados(
+                        texto = textoDeLosAnuladosDelPeriodo(anuladosDelPeriodoVisible.size, periodoVisible),
+                        onVer = { onNavigate(Screen.Anulados(periodoVisible.prefijo)) },
+                        modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(top = Medida.entreSecciones),
+                    )
+                }
+            }
         }
         } // TirarParaActualizar
 
@@ -1779,6 +1805,7 @@ fun TransactionsScreen(
             if (enElPanel == null && resumen != null && loDeArribaEnElModo(activeFilter)) {
                 ResumenDelPeriodoEnElPanel(
                     resumen = resumen,
+                    conChip = activeFilter != CHIP_TODO,
                     // Como desde «En qué se va»: los gastos de esa categoría, con su chip y su ×.
                     onCategoria = { fila ->
                         filtro = FiltroDeMovimientos.deLaFila(fila, VistaDelAnalisis.CATEGORIA)
@@ -2143,7 +2170,7 @@ private fun CifraDelDia(cifra: Pair<RotuloDelDia, Long>?, conRotulo: Boolean) {
  * pantalla y la píldora lo dice en palabras: el color nunca es la única pista.
  */
 @Composable
-private fun FinalDeLaFila(
+internal fun FinalDeLaFila(
     monto: Long,
     moneda: String,
     tono: TonoDelMonto,
@@ -2310,15 +2337,7 @@ internal fun MovementSingleRow(
     // cifra sigue siendo lo que salió de la cuenta, con tu parte debajo.
     val porElSaldo = tonoForzado != null
     val monto = if (porElSaldo) tx.amount else montoPrincipalDelMovimiento(tx)
-    val debajo = when {
-        // Vuelta 66: tu parte de lo que pagó otro lo dice debajo de la cifra.
-        esTuParteDeOtro(tx) -> TU_PARTE
-        // Vuelta 63 (revisión): una compra diferida dice a cuántas cuotas — explica por qué el extracto
-        // de la tarjeta cuenta menos que el monto.
-        !esGastoRepartido(tx) -> textoDeLasCuotas(tx.cuotas)
-        porElSaldo -> "Tu parte ${formatMoney(montoContado(tx), tx.currency)}"
-        else -> lineaDelRepartido(tx, espacioDelMovimiento)
-    }
+    val debajo = debajoDeLaCifra(tx, espacioDelMovimiento, porElSaldo)
     Column {
         Fila(
             titulo = conCifrasOcultas(textos.titulo),
@@ -2353,6 +2372,21 @@ internal fun MovementSingleRow(
             )
         }
     }
+}
+
+/**
+ * **Lo que va debajo de la cifra de una fila de movimiento** (vuelta 67: una sola función para
+ * Actividad y Buscar). Tu parte de lo que pagó otro dice «Tu parte»; una compra diferida, a cuántas
+ * cuotas; un gasto repartido, «de $88.600 · con Caro» (o, [porElSaldo], tu parte). Pura.
+ */
+fun debajoDeLaCifra(tx: FinancialEvent, espacio: EspacioCompartido?, porElSaldo: Boolean = false): String? = when {
+    // Vuelta 66: tu parte de lo que pagó otro lo dice debajo de la cifra.
+    esTuParteDeOtro(tx) -> TU_PARTE
+    // Vuelta 63 (revisión): una compra diferida dice a cuántas cuotas — explica por qué el extracto
+    // de la tarjeta cuenta menos que el monto.
+    !esGastoRepartido(tx) -> textoDeLasCuotas(tx.cuotas)
+    porElSaldo -> "Tu parte ${formatMoney(montoContado(tx), tx.currency)}"
+    else -> lineaDelRepartido(tx, espacio)
 }
 
 /** Lo que dice la píldora de un movimiento que entró solo y espera confirmación (vuelta 42). */

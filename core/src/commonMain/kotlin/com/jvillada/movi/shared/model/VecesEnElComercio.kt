@@ -23,7 +23,10 @@ fun claveDelComercio(evento: FinancialEvent): String? =
 
 /** La clave de la compra de [evento]: sus partes (si se repartió) comparten esta clave. */
 fun claveDeLaCompra(evento: FinancialEvent): String =
-    evento.createdAt?.let { "${evento.accountId}|${evento.timestamp}|$it" } ?: "id:${evento.id}"
+    // Vuelta 67: las partes llevan el id de su compra ([FinancialEvent.repartoDe]); el instante de
+    // escritura queda para las de antes.
+    evento.repartoDe?.let { "reparto:$it" }
+        ?: evento.createdAt?.let { "${evento.accountId}|${evento.timestamp}|$it" } ?: "id:${evento.id}"
 
 /** Cuántas compras y cuánto, de un comercio en un período. */
 data class VecesEnElComercio(val veces: Int, val total: Long, val movimientos: List<FinancialEvent>)

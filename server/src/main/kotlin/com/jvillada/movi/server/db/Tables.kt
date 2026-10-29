@@ -385,6 +385,14 @@ object Events : Table("financial_events") {
      * en `SchemaDeArranqueTest`.
      */
     val cuotas               = integer("cuotas").nullable()
+    /**
+     * Vuelta 67 · **de qué compra es parte** esta fila: el id del movimiento original cuando se dividió
+     * en categorías (ver [com.jvillada.movi.shared.model.FinancialEvent.repartoDe]). Nullable y sin
+     * índice, como [cuotas]: el `ADD COLUMN reparto_de VARCHAR(50) NULL` del arranque es seguro sobre la
+     * tabla con datos, y lo de antes queda en NULL (las partes viejas no tienen cómo deshacerse). Se
+     * filtra siempre junto con `user_id`, que ya tiene índice. Su caso está en `SchemaDeArranqueTest`.
+     */
+    val repartoDe            = varchar("reparto_de", 50).nullable()
     override val primaryKey  = PrimaryKey(id)
     init {
         index("idx_events_statement_import_id", false, statementImportId)

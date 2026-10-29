@@ -955,6 +955,8 @@ data class NotificationRow(
     val monto: Long? = null,
     val moneda: String = "COP",
     val urgencia: Int = urgenciaDeLaNotificacion(tipo),
+    /** Vuelta 67: la propuesta de saldar dice su pregunta en dos renglones (en uno se cortaba a 390). */
+    val lineasDelSubtitulo: Int = 1,
 ) {
     /**
      * **Vencido o urgente** (vuelta de diseño 28): un pago vencido o que vence hoy, lo que el banco
@@ -1075,13 +1077,17 @@ fun notificationRows(data: DashboardData): List<NotificationRow> = buildList {
     }
     // Vuelta 66: las transferencias que saldan un grupo. Llevan a Por revisar, donde se vinculan.
     data.propuestasDeSaldar.orEmpty().forEach { p ->
+        // Vuelta 67: en la campana el título es corto («Transferencia de Caro») y la pregunta va
+        // debajo, en dos renglones: a 390 la pregunta entera se cortaba en «…que marcaste co…».
+        val (titulo, subtitulo) = com.jvillada.movi.ui.espacios.laPropuestaEnLaCampana(p, p.quien.ifBlank { "otra persona" })
         add(
             NotificationRow(
-                titulo = com.jvillada.movi.ui.espacios.preguntaDeLaPropuesta(p, p.quien.ifBlank { "otra persona" }, p.nombreDelEspacio),
+                titulo = titulo,
                 target = Screen.PorRevisar,
                 tipo = TipoDeNotificacion.TransferenciaParaSaldar,
-                subtitulo = com.jvillada.movi.ui.espacios.cuerpoDeLaPropuesta(p, conElGrupo = true).ifBlank { null },
+                subtitulo = subtitulo,
                 monto = p.monto.takeIf { it > 0 },
+                lineasDelSubtitulo = 2,
             ),
         )
     }

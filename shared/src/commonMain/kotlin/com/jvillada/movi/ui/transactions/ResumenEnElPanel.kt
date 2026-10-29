@@ -167,9 +167,23 @@ fun resumenDelPanel(
  * - Con «Ocultar los saldos», las cifras del sistema se tapan solas.
  * - **Con un filtro que recorta la lista** (una categoría, un comercio o una búsqueda) no se pinta:
  *   el resumen es del período entero, y encima de una lista filtrada se leería como el total de lo
- *   filtrado. Los chips de tipo («Gastos», «Ingresos») no lo esconden: no cambian qué entró y qué
- *   salió en el período, solo qué filas se ven.
+ *   filtrado. Los chips de tipo («Gastos», «Ingresos», «Compartidos») no lo esconden: desde la vuelta
+ *   67 la franja **suma lo que muestra la lista con el chip** ([laFranjaDeLaLista]), así que nunca
+ *   contradice las filas de abajo.
  */
+
+/**
+ * **La franja sigue al chip** (vuelta 67, decisión): Entró · Salió · Neto es la suma de **la lista que
+ * tiene debajo** —los días que se ven, con el chip puesto—, con las mismas reglas de la cifra de cada
+ * día ([resumenDelDia]). En «Compartidos» decía $4.888.850 de todo el período mientras la lista sumaba
+ * $408.050; ahora dice lo que suman sus filas. Con «Todo» es lo mismo que [resumenDelPanel] (lo fija
+ * `LaFranjaSigueAlChipTest`). El panel de la pantalla ancha sigue siendo del período entero: no está
+ * encima de la lista, y su título dice el período.
+ */
+fun laFranjaDeLaLista(resumen: ResumenDelPanel, diasALaVista: List<EventDay>, tiposDeCuenta: Map<String, AccountType>): ResumenDelPanel {
+    val porDia = diasALaVista.map { resumenDelDia(it.items, tiposDeCuenta) }
+    return resumen.copy(entro = porDia.sumOf { it.entro }, salio = porDia.sumOf { it.gastaste })
+}
 
 /** El tag de la franja del resumen en el teléfono. */
 const val TAG_RESUMEN_EN_EL_TELEFONO: String = "movimientos-resumen-en-el-telefono"
@@ -265,6 +279,11 @@ internal fun ResumenDelPeriodoEnElPanel(
     resumen: ResumenDelPanel,
     onCategoria: (FilaDelAnalisis) -> Unit,
     onVerEnQueSeVa: () -> Unit,
+    /**
+     * Vuelta 67 (revisión): con un chip puesto la lista de al lado muestra menos que el período; el
+     * panel lo dice («Octubre 2026 · del período»): sus cifras son de todo el período.
+     */
+    conChip: Boolean = false,
 ) {
     Column(
         modifier = Modifier
@@ -274,7 +293,7 @@ internal fun ResumenDelPeriodoEnElPanel(
             .padding(top = Medida.dentroDeSeccion, bottom = Medida.entreSecciones)
             .testTag(TAG_RESUMEN_DEL_PERIODO_EN_EL_PANEL),
     ) {
-        Seccion(titulo = tituloDelPeriodo(resumen.periodo))
+        Seccion(titulo = tituloDelPanel(resumen.periodo, conChip))
         Superficie(modifier = Modifier.fillMaxWidth()) {
             BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
                 // Vuelta de diseño 32: la misma regla que la franja del teléfono. Si una no cabe
@@ -355,3 +374,7 @@ private fun FilaDeCategoriaDelResumen(fila: FilaDelAnalisis, onClick: () -> Unit
         onClickLabel = "Ver los movimientos",
     )
 }
+
+/** El título del panel: «Octubre 2026», o «Octubre 2026 · del período» con un chip puesto. Pura. */
+fun tituloDelPanel(periodo: PeriodoFinanciero, conChip: Boolean): String =
+    if (conChip) "${tituloDelPeriodo(periodo)} · del período" else tituloDelPeriodo(periodo)

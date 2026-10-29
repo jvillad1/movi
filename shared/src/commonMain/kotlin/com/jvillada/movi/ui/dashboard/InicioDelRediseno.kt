@@ -146,6 +146,8 @@ fun conteoPorRevisarDelInicio(data: DashboardData): ConteoPorRevisar = ConteoPor
     pagosDeTarjeta = data.cardCandidates,
     debitos = data.debitosPorConfirmar.orEmpty().size,
     avisosAntiguos = data.avisosAntiguos,
+    // Vuelta 67: las transferencias que saldan un grupo también esperan en Por revisar.
+    saldar = data.propuestasDeSaldar.orEmpty().size,
 )
 
 /**
@@ -446,7 +448,9 @@ fun cuerpoDeLoQueEntroSolo(conteo: ConteoPorRevisar): String? = when (conteo.loQ
     0 -> null
     conteo.avisos, conteo.movimientos -> "por confirmar"
     conteo.pagosDeTarjeta -> "Movi los encontró en tus movimientos"
-    else -> desgloseDePorRevisar(conteo, conDebitos = false)
+    // Vuelta 67 (revisión): sin las propuestas de saldar, que en la campana tienen su propio renglón
+    // (con ellas el desglose sumaba más que el título).
+    else -> desgloseDePorRevisar(conteo.copy(saldar = 0), conDebitos = false)
 }
 
 private fun propuestaDeCuadre(data: DashboardData): PropuestaDelInicio? {

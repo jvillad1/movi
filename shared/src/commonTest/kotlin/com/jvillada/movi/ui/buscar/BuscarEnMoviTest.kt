@@ -97,7 +97,7 @@ class BuscarEnMoviTest {
         val comercio = grupo(buscarEnMovi("rappi", datos, periodo = periodo), TipoDeResultado.COMERCIO).single() as ResultadoDeBusqueda.Comercio
         assertEquals(2, comercio.enElPeriodo)
         assertEquals(68_500L, comercio.totalDelPeriodo)
-        assertEquals(Screen.Transactions(consultaInicial = "RAPPI"), comercio.destino)
+        assertEquals(Screen.Transactions(consultaInicial = "Rappi"), comercio.destino, "vuelta 67: el nombre de la marca")
     }
 
     @Test

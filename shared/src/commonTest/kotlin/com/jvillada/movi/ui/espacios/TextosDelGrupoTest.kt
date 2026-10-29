@@ -41,10 +41,10 @@ class TextosDelGrupoTest {
     fun `el historial dice quien le pago a quien, cuando y con que`() {
         val vinculado = LiquidacionDelEspacio("l1", casa.id, "dst_caro", MIEMBRO_YO, 168_050, fecha = dia(29), eventoId = "e", movimiento = "Transferencia de Caro")
         assertEquals("Caro te pagó $168.050", tituloDelPago(casa, vinculado))
-        assertEquals("29 oct · Transferencia de Caro", detalleDelPago(vinculado, dia(30), zona))
+        assertEquals("29 oct\nTransferencia de Caro", detalleDelPago(vinculado, dia(30), zona))
         val espera = vinculado.copy(eventoId = null, movimiento = null)
-        assertEquals("29 oct · $ESPERANDO_LA_TRANSFERENCIA", detalleDelPago(espera, dia(30), zona))
-        assertEquals("29 oct · $SIN_TRANSFERENCIA", detalleDelPago(espera, dia(29) + 60L * 86_400_000L, zona))
+        assertEquals("29 oct\n$ESPERANDO_LA_TRANSFERENCIA", detalleDelPago(espera, dia(30), zona))
+        assertEquals("29 oct\n$SIN_TRANSFERENCIA", detalleDelPago(espera, dia(29) + 60L * 86_400_000L, zona))
         assertEquals("Le pagaste $90.000 a Caro", tituloDelPago(casa, LiquidacionDelEspacio("l2", casa.id, MIEMBRO_YO, "dst_caro", 90_000)))
         assertEquals("Saldaron $168.050 · 29 oct", corteDelSaldado(vinculado, zona))
     }

@@ -1293,6 +1293,22 @@ class WalletRepositoryImpl(
             setBody(partes)
         }.exigirExito().body()
 
+    override suspend fun restaurarMovimiento(id: String) {
+        client.delete("$baseUrl/api/events/$id/void").exigirExito()
+    }
+
+    override suspend fun getAnulados(): List<com.jvillada.movi.shared.model.MovimientoAnulado> =
+        client.get("$baseUrl/api/events/anulados").exigirExito().body()
+
+    override suspend fun getRepartoDe(id: String): com.jvillada.movi.shared.model.RepartoDeUnMovimiento? {
+        val response = client.get("$baseUrl/api/events/$id/reparto")
+        if (response.status == HttpStatusCode.NotFound) return null
+        return response.exigirExito().body()
+    }
+
+    override suspend fun deshacerReparto(id: String): FinancialEvent =
+        client.post("$baseUrl/api/events/$id/deshacer-reparto").exigirExito().body()
+
     override suspend fun getAvisosConfirmadosSinMovimiento(): List<com.jvillada.movi.shared.model.AvisoConfirmadoSinMovimiento> =
         client.get("$baseUrl/api/sms/confirmados-sin-movimiento").exigirExito().body()
 

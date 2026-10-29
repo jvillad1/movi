@@ -967,6 +967,25 @@ interface WalletRepository {
         throw UnsupportedOperationException("repartirElMovimiento")
 
     /**
+     * Vuelta 67 · **restaurar un anulado** (`DELETE /api/events/{id}/void`): borra la marca de
+     * `void_events` del movimiento (y la de su otra pata, si es un traspaso o una cuota). Si es el
+     * original de una compra dividida, deshace el reparto. Solo del dueño.
+     */
+    suspend fun restaurarMovimiento(id: String): Unit = throw UnsupportedOperationException("restaurarMovimiento")
+
+    /** Vuelta 67 · los movimientos anulados del dueño, el último anulado primero (`GET /api/events/anulados`). */
+    suspend fun getAnulados(): List<com.jvillada.movi.shared.model.MovimientoAnulado> = emptyList()
+
+    /** Vuelta 67 · la compra de la que [id] es parte (o que [id] es), con todas sus partes; `null` si no. */
+    suspend fun getRepartoDe(id: String): com.jvillada.movi.shared.model.RepartoDeUnMovimiento? = null
+
+    /**
+     * Vuelta 67 · **deshacer un reparto** (`POST /api/events/{id}/deshacer-reparto`, [id] una parte o el
+     * original): anula las partes y restaura el original. Devuelve el original.
+     */
+    suspend fun deshacerReparto(id: String): FinancialEvent = throw UnsupportedOperationException("deshacerReparto")
+
+    /**
      * `GET /api/sms/confirmados-sin-movimiento`: los avisos confirmados cuyo movimiento se anuló o
      * ya no existe. Ver `AvisoConfirmadoSinMovimiento`.
      */

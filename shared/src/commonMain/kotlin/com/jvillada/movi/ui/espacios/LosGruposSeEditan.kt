@@ -58,6 +58,7 @@ import com.jvillada.movi.ui.components.ds.TonoDeIcono
 import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import com.jvillada.movi.ui.destinos.DestinoSheet
 import kotlinx.coroutines.CancellationException
+import com.jvillada.movi.ui.components.ConfirmacionEnLinea
 import kotlinx.coroutines.launch
 
 /*
@@ -237,6 +238,14 @@ fun HojaEditarGrupo(detalle: DetalleDelEspacio, onDismiss: () -> Unit, onGuardad
     var preguntando by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val limpio = nombre.trim()
+    // Vuelta 67: renombrar avisa, como crear, si ya hay un grupo con ese nombre y esas personas.
+    var existentes by remember(espacio.id) { mutableStateOf<List<Espacio>>(emptyList()) }
+    LaunchedEffect(espacio.id) {
+        existentes = runCatching { Repositories.wallets.getEspacios() }
+            .onFailure { if (it is CancellationException) throw it }
+            .getOrDefault(emptyList())
+    }
+    val repetido = if (limpio == espacio.nombre) null else avisoDeNombreRepetido(limpio, espacio, existentes)
 
     fun guardar() {
         if (trabajando || limpio.isEmpty()) return
@@ -275,7 +284,9 @@ fun HojaEditarGrupo(detalle: DetalleDelEspacio, onDismiss: () -> Unit, onGuardad
         }
     }
 
-    MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !trabajando) {
+    // Vuelta 67: mientras se pregunta si borrar, la hoja de editar no queda abierta detrás; «No»
+    // vuelve a ella.
+    if (!preguntando) MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !trabajando) {
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
             EncabezadoDeHoja("Editar grupo", subtitulo = quienesComparten(espacio))
             Spacer(Modifier.height(Medida.dentroDeSeccion))
@@ -285,9 +296,13 @@ fun HojaEditarGrupo(detalle: DetalleDelEspacio, onDismiss: () -> Unit, onGuardad
                 rotulo = "Nombre",
                 tag = TAG_NOMBRE_DEL_GRUPO,
             )
+            repetido?.let {
+                Spacer(Modifier.height(EspacioDeDiseno.xs))
+                Text(it, style = Movi.textos.apoyo, color = Movi.colores.aviso, modifier = Modifier.testTag(TAG_AVISO_DE_GRUPO_REPETIDO))
+            }
             Spacer(Modifier.height(Medida.dentroDeSeccion))
             PieDeHoja(
-                "Guardar",
+                if (repetido != null) "Guardar igual" else "Guardar",
                 onClick = ::guardar,
                 habilitado = limpio.isNotEmpty() && limpio != espacio.nombre,
                 razon = when {
@@ -337,6 +352,7 @@ fun TarjetaDeSaldar(
     val coroutine = rememberCoroutineScope()
     var trabajando by remember(p.eventoId) { mutableStateOf(false) }
     var error by remember(p.eventoId) { mutableStateOf<String?>(null) }
+    var preguntandoElNo by remember(p.eventoId) { mutableStateOf(false) }
     fun hacer(bloque: suspend () -> Unit) {
         if (trabajando) return
         trabajando = true
@@ -363,8 +379,22 @@ fun TarjetaDeSaldar(
             accion = "Sí, saldar",
             onAccion = { hacer { Repositories.wallets.liquidarEspacio(espacioId, liquidacionDe(p)) } },
             accionSecundaria = "No",
-            onAccionSecundaria = { hacer { Repositories.wallets.descartarAnomalia(huellaDeLaPropuestaDeSaldar(p.eventoId)) } },
+            // Vuelta 67: «No» dice antes lo que hace: el descarte es por la transferencia, también
+            // para un saldo futuro.
+            onAccionSecundaria = { preguntandoElNo = true },
         )
+        if (preguntandoElNo) {
+            Spacer(Modifier.height(EspacioDeDiseno.xs))
+            ConfirmacionEnLinea(
+                pregunta = PREGUNTA_DEL_NO_DE_SALDAR,
+                detalle = DETALLE_DEL_NO_DE_SALDAR,
+                textoConfirmar = CONFIRMAR_EL_NO_DE_SALDAR,
+                ocupado = trabajando,
+                onConfirmar = { hacer { Repositories.wallets.descartarAnomalia(huellaDeLaPropuestaDeSaldar(p.eventoId)) } },
+                onCancelar = { if (!trabajando) preguntandoElNo = false },
+                modifier = Modifier.testTag(TAG_CONFIRMAR_EL_NO_DE_SALDAR),
+            )
+        }
         error?.let { Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale) }
     }
 }
@@ -390,7 +420,9 @@ fun PagosEntreUstedes(detalle: DetalleDelEspacio, ahora: Long, onCambio: () -> U
                 if (i > 0) Separador()
                 Fila(
                     titulo = tituloDelPago(espacio, l),
+                    // Vuelta 67: la fecha y, abajo, cómo se pagó; en un renglón se cortaba «Esperando la transfere…».
                     subtitulo = detalleDelPago(l, ahora),
+                    lineasDelSubtitulo = RENGLONES_DEL_DETALLE_DEL_PAGO,
                     inicio = { AvatarDePersona(nombreEnElEspacio(espacio, if (l.a == MIEMBRO_YO) l.de else l.a), tono = TonoDeIcono.Info) },
                     final = {
                         Boton(
@@ -452,3 +484,6 @@ internal fun CorteDelSaldado(l: LiquidacionDelEspacio) {
 
 /** El tag de la marca de corte de un saldado en la lista de gastos. */
 const val TAG_CORTE_DEL_SALDADO: String = "grupos:corte"
+
+/** El tag de la pregunta que sigue al «No» de una propuesta de saldar (vuelta 67). */
+const val TAG_CONFIRMAR_EL_NO_DE_SALDAR: String = "grupos:confirmar-el-no-de-saldar"

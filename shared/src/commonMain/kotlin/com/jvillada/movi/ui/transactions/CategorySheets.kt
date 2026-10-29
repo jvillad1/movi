@@ -230,10 +230,13 @@ fun preguntaDeLaCuotaYaPagada(ya: CuotaYaPagada): String =
 /**
  * **¿El detalle ofrece «Es la cuota de un crédito»?** (vuelta 51). Un gasto suelto —sin `transferId`—,
  * con una categoría que no sea de las que escribe Movi (la cuota y el pago de tarjeta ya ofrecen
- * vincular en «Más»), y con al menos un crédito (LOAN) donde ponerlo. Pura.
+ * vincular en «Más»), y con al menos un crédito (LOAN) donde ponerlo. Vuelta 67: **no en un gasto
+ * compartido** (repartido en un grupo, o tu parte de lo que pagó otro): la cuota de tu crédito no se
+ * reparte con nadie. Pura.
  */
 fun puedeMarcarseCuotaDeCredito(event: FinancialEvent, cuentas: List<Account>): Boolean =
     event.type == TransactionType.EXPENSE && event.transferId == null &&
+        event.espacioId == null && event.parteAjena == 0L && event.pagadoPor == null &&
         !esCategoriaQueNoSeElige(event.category) && cuentas.any { it.type == AccountType.LOAN }
 
 internal fun puedeMarcarsePagoDeTarjeta(tipo: TransactionType, prefs: Map<String, CategoryPref>): Boolean {
@@ -945,6 +948,11 @@ internal fun ContenidoDelMovimiento(
             if (event.espacioId != null) {
                 Spacer(Modifier.height(Espacio.s))
                 com.jvillada.movi.ui.espacios.BloqueDeRepartido(evento = event, espacios = espacios, onCambiado = onEventChanged)
+            }
+            // Vuelta 67: una parte de una compra dividida dice de cuál, y la división se deshace.
+            if (event.repartoDe != null) {
+                Spacer(Modifier.height(Espacio.s))
+                ParteDeUnaCompra(evento = event, onDeshecho = onEventChanged)
             }
             // Lo que espera una decisión no se esconde detrás de una acción: confirmarlo es lo que
             // el dueño vino a hacer cuando abre un aviso pendiente.

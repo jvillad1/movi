@@ -197,7 +197,7 @@ class CuotasRecurrentesEnMovimientosTest {
             MoviTheme { Box(Modifier.fillMaxSize()) { TransactionsScreen(onNavigate = {}) } }
         }
         // Chip «Todo» de arranque: el par de la cuota ya plegado en un solo renglón.
-        esperarTexto("Cuota de crédito")
+        esperarTexto("Cuota de Vehículo")
     }
 
     /** El tablero de Plan · Pagos del mes, solo: ahí vive el card de «Flujo libre» desde la ola C. */
@@ -239,7 +239,7 @@ class CuotasRecurrentesEnMovimientosTest {
     @Test
     fun `en Todo los dos pares van marcados, y el titulo los distingue`() {
         montarMovimientos()
-        composeRule.onNodeWithText("Cuota de crédito", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithText("Cuota de Vehículo", useUnmergedTree = true).assertExists()
         composeRule.onNodeWithText("Pago de tarjeta", useUnmergedTree = true).assertExists()
         marcasDeRecurrente().assertCountEquals(2)
     }

@@ -1778,6 +1778,47 @@ class LocalRepositoryTest {
         assertEquals(900_000L, repo.getAccount("acc-pend").balance, "y no tocó ningún saldo")
     }
 
+    /**
+     * Vuelta 67 (revisión) · **lo restaurado en otro aparato vuelve**: el teléfono anuló algo y la
+     * anulación subió; en la web lo restauran y el server lo vuelve a devolver. La marca local se
+     * borra y su efecto vuelve al saldo guardado.
+     */
+    @Test
+    fun lo_restaurado_en_la_web_vuelve_a_verse_y_a_contar() = runBlocking {
+        repo.createAccount(Account("accR", "Ahorros", AccountType.SAVINGS, 0L))
+        repo.postEvent(event("anulado-aca", "accR", TransactionType.EXPENSE, 7_000L))
+        db.financialEventQueries.markSynced(1_700_000_000_000L, "anulado-aca")
+        repo.voidEvent("anulado-aca")
+        db.voidEventQueries.selectUnsynced(testUserId).executeAsList().forEach { db.voidEventQueries.markSynced(1L, it.id) }
+        assertEquals(0L, repo.getAccount("accR").balance)
+
+        val remoto = NoOpRepository()
+        remoto.cuentasDelServer += Account("accR", "Ahorros", AccountType.SAVINGS, -7_000L)
+        remoto.eventosDelServer += event("anulado-aca", "accR", TransactionType.EXPENSE, 7_000L).copy(syncedAt = 1L)
+        val conRed = LocalRepository(db = db, remote = remoto, userId = { testUserId })
+
+        assertTrue(conRed.getEvents().any { it.id == "anulado-aca" }, "restaurado en la web, se vuelve a ver")
+        assertEquals(0L, db.voidEventQueries.countFor("anulado-aca").executeAsOne(), "la marca local se borró")
+        assertEquals(-7_000L, db.accountQueries.selectById("accR").executeAsOne().balance, "y su efecto volvió al saldo guardado")
+    }
+
+    /** Y la guarda: una anulación que todavía no subió no se olvida porque el server lo siga devolviendo. */
+    @Test
+    fun una_anulacion_sin_subir_sigue_escondiendo_el_movimiento() = runBlocking {
+        repo.createAccount(Account("accS", "Ahorros", AccountType.SAVINGS, 0L))
+        repo.postEvent(event("recien-anulado", "accS", TransactionType.EXPENSE, 7_000L))
+        db.financialEventQueries.markSynced(1_700_000_000_000L, "recien-anulado")
+        repo.voidEvent("recien-anulado")
+
+        val remoto = NoOpRepository()
+        remoto.cuentasDelServer += Account("accS", "Ahorros", AccountType.SAVINGS, -7_000L)
+        remoto.eventosDelServer += event("recien-anulado", "accS", TransactionType.EXPENSE, 7_000L).copy(syncedAt = 1L)
+        val conRed = LocalRepository(db = db, remote = remoto, userId = { testUserId })
+
+        assertTrue(conRed.getEvents().none { it.id == "recien-anulado" })
+        assertEquals(1L, db.voidEventQueries.countFor("recien-anulado").executeAsOne())
+    }
+
     private fun event(id: String, accountId: String, type: TransactionType, amount: Long) =
         FinancialEvent(
             id = id, accountId = accountId, type = type, amount = amount,

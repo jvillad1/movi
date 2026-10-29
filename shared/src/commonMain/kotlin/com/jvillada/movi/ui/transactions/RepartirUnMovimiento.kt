@@ -19,6 +19,7 @@ import com.jvillada.movi.data.intentar
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.shared.model.group
+import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.ParteElegida
 import com.jvillada.movi.shared.model.PartesDelAviso
@@ -107,7 +108,7 @@ internal fun SeccionDeRepartirEnPartes(
             )
             Spacer(Modifier.height(Espacio.xxs))
             Text(
-                "Si este movimiento pagó varias cosas, repártelo: se anula y queda una parte por cada cosa.",
+                "Si este movimiento pagó varias cosas, divídelo: queda una parte por cada cosa, y se puede deshacer.",
                 style = Movi.textos.apoyo,
                 color = Movi.colores.textoMedio,
             )
@@ -133,6 +134,8 @@ internal fun SeccionDeRepartirEnPartes(
             categoriaDelAviso = categoria,
             habilitado = !guardando,
             onVolver = { abierto = false },
+            // Vuelta 67: lo anotado a mano no tiene aviso con qué cuadrar: «Suma $100.000».
+            conAviso = evento.source != EventSource.MANUAL,
         )
         Spacer(Modifier.height(Espacio.s))
         val elegidas = partes.map { it.parte }
