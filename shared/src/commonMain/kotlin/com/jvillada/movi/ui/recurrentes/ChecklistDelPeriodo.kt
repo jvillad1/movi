@@ -314,7 +314,7 @@ fun SeccionChecklistDelPeriodo(
                     // Vuelta 63: el abono planeado dice que no es un fijo (antes de vencer; después lo
                     // dice la fila sin movimiento, con el mismo texto).
                     if (pago.esAbono && pago.estado == EstadoDeLaFila.AUN_NO_VENCE) {
-                        Text(text = com.jvillada.movi.ui.quickadd.EL_ABONO_PENDIENTE_NO_RESTA, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                        Text(text = com.jvillada.movi.ui.quickadd.textoDelAbonoPendiente(pago), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                     }
                     LoQueOfreceLaFila(pago, propuesta, enVuelo, acciones, conBotonDeAnotar = false, esLaMasUrgente = pago == urgente)
                     if (parecido != null) {
@@ -1061,7 +1061,7 @@ const val TEXTO_SIN_MOVIMIENTO_DEL_DEBITO = "El banco no avisa cuando la cobra: 
 fun textoSinMovimiento(pago: PagoDelPeriodo): String = when {
     pago.esIngreso -> TEXTO_SIN_MOVIMIENTO_DE_INGRESO
     // Vuelta 63: el abono no se «encuentra»: es plata que el dueño decide mover.
-    pago.esAbono -> com.jvillada.movi.ui.quickadd.EL_ABONO_PENDIENTE_NO_RESTA
+    pago.esAbono -> com.jvillada.movi.ui.quickadd.textoDelAbonoPendiente(pago)
     pago.seCobraSola -> TEXTO_SIN_MOVIMIENTO_DEL_DEBITO
     else -> TEXTO_SIN_MOVIMIENTO
 }

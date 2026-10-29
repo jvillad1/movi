@@ -36,6 +36,13 @@ const val ANOTAR_ESTE_ABONO: String = "Anotar este abono"
 const val RECORDARMELO_CADA_MES: String = "Recordármelo cada mes"
 
 /** Lo que el plan dice debajo de los botones: el abono no es un fijo. */
+/**
+ * Lo que el plan dice debajo de los botones, según a qué va el abono: a un crédito
+ * [EL_ABONO_NO_ES_UN_FIJO]; a una tarjeta, que no cambia «Te quedan» (lo comprado ya contó).
+ */
+fun elAbonoNoEsUnFijo(aTarjeta: Boolean): String =
+    if (aTarjeta) com.jvillada.movi.shared.model.EL_ABONO_A_UNA_TARJETA_NO_CAMBIA_TE_QUEDAN else EL_ABONO_NO_ES_UN_FIJO
+
 const val EL_ABONO_NO_ES_UN_FIJO: String =
     "No queda como un pago fijo. El mes que lo hagas, sale de tu plata y baja «Te quedan»."
 

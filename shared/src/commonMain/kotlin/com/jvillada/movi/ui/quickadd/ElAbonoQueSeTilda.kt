@@ -53,9 +53,22 @@ suspend fun sellarElAbono(abono: AbonoDeLaRegla, eventId: String) {
     runCatching { Repositories.wallets.markOccurrence(abono.ruleId, abono.periodo, eventId) }
 }
 
-/** Lo que dice debajo la fila del abono pendiente. */
+/** Lo que dice debajo la fila del abono pendiente a un crédito. */
 const val EL_ABONO_PENDIENTE_NO_RESTA: String =
     "No es un pago fijo: no baja «Te quedan» hasta que hagas el traspaso."
+
+/**
+ * Lo que dice la fila del abono pendiente: a un crédito, [EL_ABONO_PENDIENTE_NO_RESTA]; a una tarjeta,
+ * que pagarle de más no cambia «Te quedan» (lo comprado ya contó).
+ */
+fun textoDelAbonoPendiente(pago: PagoDelPeriodo): String =
+    if (pago.abonoATarjeta) com.jvillada.movi.shared.model.EL_ABONO_A_UNA_TARJETA_NO_CAMBIA_TE_QUEDAN
+    else EL_ABONO_PENDIENTE_NO_RESTA
+
+/** Marca las filas de abono cuya deuda está en [tarjetas] (ids de cuentas de tarjeta). */
+fun conLosAbonosATarjeta(checklist: List<PagoDelPeriodo>, tarjetas: Set<String>): List<PagoDelPeriodo> =
+    if (tarjetas.isEmpty()) checklist
+    else checklist.map { if (it.esAbono && it.haciaDeuda in tarjetas) it.copy(abonoATarjeta = true) else it }
 
 /** La pastilla del abono: «El día 15», neutra (un abono planeado no vence). */
 fun pastillaDelAbono(pago: PagoDelPeriodo): String {

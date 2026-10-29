@@ -302,7 +302,7 @@ private fun ContenidoDelPlan(
                 modifier = Modifier.testTag(TAG_RECORDARMELO_CADA_MES),
             )
             Spacer(Modifier.height(Espacio.xs))
-            Text(recordatorio ?: EL_ABONO_NO_ES_UN_FIJO, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+            Text(recordatorio ?: elAbonoNoEsUnFijo(primera.tipo == TipoDeDeuda.TARJETA), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
         }
     }
 

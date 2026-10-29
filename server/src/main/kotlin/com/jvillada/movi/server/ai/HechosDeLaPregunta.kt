@@ -298,7 +298,11 @@ private fun hechosDelRecurrente(r: RecurrenteParaContexto): String =
 private fun renglonDelRecurrente(r: RecurrenteParaContexto): String {
     val que = if (r.esIngreso) "entra" else "sale"
     val estado = if (r.yaOcurrioEnElPeriodo) "YA ocurrió en este período" else "TODAVÍA no ocurrió en este período"
-    val abono = if (r.esAbono) " (abono planeado a una deuda, no es un fijo)" else ""
+    val abono = when {
+        r.abonoATarjeta -> " (abono planeado a una tarjeta, no es un fijo; pagarle de más no cambia «Te quedan»: lo comprado ya contó)"
+        r.esAbono -> " (abono planeado a una deuda, no es un fijo)"
+        else -> ""
+    }
     return "${r.nombre} ${pesos(r.monto)}, $que el día ${r.dia} — $estado$abono"
 }
 

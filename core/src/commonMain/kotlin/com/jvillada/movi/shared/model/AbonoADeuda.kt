@@ -72,6 +72,15 @@ fun esElAbonoALaDeuda(
     return !conElMonto || montoDelAbonoPega(regla.amount, evento.amount)
 }
 
+/**
+ * **Revisión de la vuelta 63 · a una tarjeta, el abono no baja «Te quedan».** Lo que se compró con ella
+ * ya contó como gasto el día de la compra, así que pagarle de más solo mueve plata de Tu plata a la
+ * deuda: `pagosDeDeudaFueraDelChecklist` no lo cuenta (la regla de siempre, que no cambia). A un
+ * crédito sí lo baja. Lo dicen igual el plan de salida, la fila de Pagos y Movi AI.
+ */
+const val EL_ABONO_A_UNA_TARJETA_NO_CAMBIA_TE_QUEDAN: String =
+    "A una tarjeta, pagar de más no cambia «Te quedan»: lo que compraste ya contó."
+
 /** El nombre de la regla del abono: «Abono extra a Vehículo 4083». */
 fun nombreDelAbonoA(deuda: String): String = "Abono extra a $deuda"
 

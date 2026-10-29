@@ -915,7 +915,12 @@ fun LazyListScope.tableroDeRecurrentes(
                 )
             }
             SeccionChecklistDelPeriodo(
-                checklist = checklist,
+                // Vuelta 63 (revisión): el abono a una tarjeta dice que no cambia «Te quedan».
+                checklist = remember(checklist, tarjetasDelTablero.valor) {
+                    com.jvillada.movi.ui.quickadd.conLosAbonosATarjeta(
+                        checklist, tarjetasDelTablero.valor.orEmpty().map { it.account.id }.toSet(),
+                    )
+                },
                 anteriores = anteriores,
                 cargando = !estado.recurrentesNoSePudieronLeer && !(estado.vencimientosOk && estado.ocurrenciasOk),
                 pudoLeer = !estado.recurrentesNoSePudieronLeer,

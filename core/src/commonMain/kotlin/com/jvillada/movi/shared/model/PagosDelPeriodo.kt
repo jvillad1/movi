@@ -154,6 +154,11 @@ data class PagoDelPeriodo(
      * fijo ([esAbono]): ver `AbonoADeuda.kt`.
      */
     val haciaDeuda: String? = null,
+    /**
+     * Revisión de la vuelta 63: la deuda del abono es una TARJETA. Lo pone la pantalla (que conoce las
+     * tarjetas), solo para decir lo que es cierto: a una tarjeta, el abono no cambia «Te quedan».
+     */
+    val abonoATarjeta: Boolean = false,
 ) {
     /** Vuelta 63: un abono planeado no «vence» — si el día pasó sin hacerlo, sigue siendo un recordatorio. */
     val vencido: Boolean get() = !pagado && !esAbono && diasParaVencer < 0

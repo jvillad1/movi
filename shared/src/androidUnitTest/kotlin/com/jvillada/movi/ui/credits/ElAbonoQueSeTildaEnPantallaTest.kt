@@ -137,6 +137,35 @@ class ElAbonoQueSeTildaEnPantallaTest {
     }
 
     @Test
+    fun `a una tarjeta la fila dice que el abono no cambia Te quedan`() {
+        val aNu = RecurringRule(
+            id = "rr_abono", name = "Abono extra a Nu", category = "Traspaso", amount = 500_000L,
+            dayOfMonth = 15, type = TransactionType.EXPENSE, accountId = nuAhorros.id, haciaDeuda = "nu",
+        )
+        val filas = com.jvillada.movi.ui.quickadd.conLosAbonosATarjeta(filaDe(aNu), setOf("nu"))
+        assertTrue(filas.single { it.ruleId == "rr_abono" }.abonoATarjeta)
+        composeRule.setContent {
+            MoviTheme {
+                Box(Modifier.fillMaxSize()) {
+                    SeccionChecklistDelPeriodo(
+                        checklist = filas, cargando = false, pudoLeer = true, marcando = emptySet(),
+                        onConfirmar = { _, _ -> }, onNoFueEste = { _, _ -> }, onAnotarMovimiento = {},
+                        onQuitarLaMarca = {}, onReintentar = {},
+                    )
+                }
+            }
+        }
+        composeRule.waitForIdle()
+        assertTrue(hay(com.jvillada.movi.shared.model.EL_ABONO_A_UNA_TARJETA_NO_CAMBIA_TE_QUEDAN))
+        assertTrue(!hay(EL_ABONO_PENDIENTE_NO_RESTA), "no promete que baja «Te quedan»")
+        assertEquals(
+            "A una tarjeta, pagar de más no cambia «Te quedan»: lo que compraste ya contó.",
+            elAbonoNoEsUnFijo(aTarjeta = true),
+        )
+        assertEquals(EL_ABONO_NO_ES_UN_FIJO, elAbonoNoEsUnFijo(aTarjeta = false))
+    }
+
+    @Test
     fun `recordarmelo tambien desde la ficha del credito`() {
         val reglas = mutableListOf<RecurringRule>()
         Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
