@@ -2745,3 +2745,22 @@ del lote, «Ignorar los N» con su pregunta), en `commonTest` `Vuelta51Test` (**
 selectores**, los antiguos en el conteo y la franja, el candidato lejano), en `:core` `Vuelta51LogicaTest`,
 y en `:server` `TransferRoutesTest` (la cuota a mano rechazada en las tres puertas) y `DashboardRoutesTest`
 (los antiguos no cuentan ni suman).
+
+## 54. Vuelta 52: la marca junto a la cifra es «Recurrente», y la nota del pago de tarjeta cabe en un renglón
+
+1. **El glifo junto a la cifra no es «tiene par».** La revisión de la vuelta 50 lo leyó como ⇄ («la cuota
+   y el pago de tarjeta lo llevan, el traspaso no»). Es `Icons.Rounded.Repeat` con
+   `contentDescription = "Recurrente"` (`FinalDeLaFila`): sale cuando `nombreRecurrenteDe` reconoce que el
+   movimiento se repite. La cuota de un crédito y el pago de una tarjeta se repiten por su forma; un
+   traspaso a mano no (`NombreRecurrenteDeTest`: «una pata de traspaso nunca matchea»). **La regla queda
+   como estaba**: la marca es «se repite», no «tiene par»; ponérsela al traspaso diría que se repite, y
+   quitársela a la cuota borraría un dato. Que un movimiento tenga contraparte ya lo dicen su título y su
+   subtítulo («De X a Y»), y los traspasos y pagos de tarjeta llevan las flechas (`SwapHoriz`) como ícono
+   de entrada. Lo fija `Vuelta52Test`: tres pares en un día, dos marcas.
+2. **La nota del pago de tarjeta del encabezado de un día** pasó de dos renglones («Además, $X fueron a
+   pagar tarjeta — ya contado en tu gasto del mes cuando compraste, no se duplica.») a uno, apagado:
+   **«+ $100.000 a tu tarjeta · no suma, ya contó al comprar»** (`textoPagoDeTarjetaEnElDia`). Si ni así
+   cabe (360 dp con la letra ×1,12) baja a **«+ $100.000 a tu tarjeta»** (`textoCortoDelPagoDeTarjeta`),
+   siempre en un renglón (`maxLines = 1`, sin salto de alto); la frase entera va en el
+   `contentDescription` (`explicacionDelPagoDeTarjeta`). No hay otra nota parecida en ese encabezado
+   (los traspasos y abonos no tienen). Lo vigilan `PagoDeTarjetaEnElDiaTest` y `Vuelta52Test`.
