@@ -45,6 +45,7 @@ import com.jvillada.movi.shared.model.OPENING_BALANCE_EXPLAINER
 import com.jvillada.movi.shared.model.OPENING_CATEGORY
 import com.jvillada.movi.shared.model.isOpeningBalance
 import com.jvillada.movi.shared.model.isReservedCategory
+import com.jvillada.movi.shared.model.esCategoriaQueNoSeElige
 import com.jvillada.movi.shared.model.ORPHANED_LEG_EXPLAINER
 import com.jvillada.movi.shared.model.TRANSFER_RECATEGORIZE_BLOCKED
 import com.jvillada.movi.shared.model.FinancialEvent
@@ -227,7 +228,7 @@ internal fun puedeMarcarsePagoDeTarjeta(tipo: TransactionType, prefs: Map<String
  */
 fun ofreceCategoriaEscritaAMano(freeText: String, currentCategory: String): Boolean {
     val escrita = freeText.trim()
-    return escrita.isNotEmpty() && escrita != currentCategory && !isReservedCategory(escrita)
+    return escrita.isNotEmpty() && escrita != currentCategory && !esCategoriaQueNoSeElige(escrita)
 }
 
 /**

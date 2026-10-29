@@ -40,7 +40,7 @@ import com.jvillada.movi.shared.model.CategoryPref
 import com.jvillada.movi.shared.model.MAX_CATEGORIA_LENGTH
 import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
 import com.jvillada.movi.shared.model.TransactionType
-import com.jvillada.movi.shared.model.isReservedCategory
+import com.jvillada.movi.shared.model.esCategoriaQueNoSeElige
 import com.jvillada.movi.shared.model.normalizarParaBuscar
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.categorias.IconoDeCategoria
@@ -159,7 +159,7 @@ fun contenidoDelSelectorDeCategoria(
     val existentes = (frecuentes + coinciden.filterNot { it in frecuentes })
         .map { CeldaDeCategoria.Existente(it) }
 
-    if (escrito.isNotEmpty() && isReservedCategory(escrito)) {
+    if (escrito.isNotEmpty() && esCategoriaQueNoSeElige(escrito)) {
         return ContenidoDelSelectorDeCategoria(existentes, reservadaEscrita = escrito)
     }
     // Las propias de cualquier tipo Y el catálogo entero Y lo que tiene preferencias (una
@@ -366,7 +366,7 @@ fun SelectorDeCategoria(
                     color = Movi.colores.texto,
                 )
                 Text(
-                    "Es una categoría reservada y de ella dependen las cifras de tu mes. Elige otra.",
+                    "La escribe Movi en los traspasos, las cuotas y los pagos de tarjeta, y de ella dependen las cifras de tu mes. Elige otra.",
                     style = Movi.textos.apoyo,
                     color = Movi.colores.textoMedio,
                 )

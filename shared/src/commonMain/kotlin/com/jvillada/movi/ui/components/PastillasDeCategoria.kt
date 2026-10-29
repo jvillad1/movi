@@ -3,6 +3,7 @@ package com.jvillada.movi.ui.components
 import com.jvillada.movi.shared.model.CategoryPref
 import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.esCategoriaQueNoSeElige
 import com.jvillada.movi.shared.model.normalizarParaBuscar
 
 /**
@@ -14,7 +15,8 @@ import com.jvillada.movi.shared.model.normalizarParaBuscar
  *
  * 1. [primeras]: lo que la pantalla quiere adelante — la propuesta de Movi, o la categoría que ya
  *    tiene el movimiento. Va tal cual, aunque no esté en ningún catálogo (una importada), y sin
- *    pasar por el filtro de tipo/escondidas: es lo que YA está puesto o propuesto.
+ *    pasar por el filtro de tipo/escondidas: es lo que YA está puesto o propuesto. Lo único que no
+ *    pasa es una de las que solo escribe Movi ([esCategoriaQueNoSeElige], vuelta 51).
  * 2. **Las frecuentes**, por uso reciente ([categoriasFrecuentes], las mismas de los chips de
  *    «Agregar»).
  * 3. **Las propias** que no se usaron hace poco, alfabéticas: siguen siendo suyas.
@@ -45,7 +47,9 @@ fun categoriasParaPastillas(
         .partition { normalizarParaBuscar(it) in delCatalogo }
 
     val vistas = mutableSetOf<String>()
+    // Vuelta 51: ni siquiera de [primeras] pasa una de las que solo escribe Movi («Cuota de crédito»,
+    // «Pago de tarjeta»…): la fila del movimiento la sigue diciendo, pero como opción no se ofrece.
     return (primeras.filterNotNull().map { it.trim() } + frecuentes + propias + catalogo)
-        .filter { it.isNotEmpty() && vistas.add(normalizarParaBuscar(it)) }
+        .filter { it.isNotEmpty() && !esCategoriaQueNoSeElige(it) && vistas.add(normalizarParaBuscar(it)) }
         .take(cuantas)
 }

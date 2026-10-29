@@ -16,7 +16,7 @@ import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.ui.porrevisar.AnotacionEntendida
 import com.jvillada.movi.ui.porrevisar.ResultadoDelLote
 import com.jvillada.movi.ui.porrevisar.loQueMoviEntendio
-import com.jvillada.movi.ui.porrevisar.pagosPorRevisar
+import com.jvillada.movi.ui.porrevisar.pagosRecientesPorRevisar
 import com.jvillada.movi.ui.porrevisar.propuestaDelPago
 import com.jvillada.movi.ui.porrevisar.tituloDelLote
 import kotlinx.datetime.DatePeriod
@@ -156,7 +156,8 @@ fun avisosPorConfirmar(
     /** Vuelta 46: cabeza del pago → la categoría que el dueño eligió en su tarjeta de Por revisar. */
     categoriasElegidas: Map<String, String> = emptyMap(),
 ): AvisosPorConfirmar {
-    val pagos = pagosPorRevisar(mensajes)
+    // Vuelta 51: los de los últimos 30 días. Los antiguos esperan aparte («Más antiguos»), con su «Ignorar».
+    val pagos = pagosRecientesPorRevisar(mensajes, ahora)
     val leidos = pagos.map { propuestaDelPago(propuestas, it)?.leido }
     // La misma suma que la franja «Por confirmar» del Inicio (`sumaDeLoPorConfirmar`, vuelta 44).
     val suman = sumaDeLoPorConfirmar(leidos.map { leido -> leido?.let { MontoDelAviso(it.amount.roundToLong(), it.currency) } })

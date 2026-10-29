@@ -329,12 +329,16 @@ internal fun textoDeLaPastillaDeAvisos(n: Int): String = textoDePorRevisar(n)
  */
 internal fun textosDeLaFranjaPorConfirmar(conteo: ConteoPorRevisar, suman: Long?): Pair<String, String?> {
     val desglose = desgloseDePorRevisar(conteo)
+    // Vuelta 51: los avisos de más de 30 días no entran en la cifra ni en el número; se mencionan aparte.
+    val antiguos = conteo.avisosAntiguos.takeIf { it > 0 }?.let { if (it == 1) "y 1 antiguo" else "y $it antiguos" }
     if (suman == null || suman <= 0L || conteo.avisos <= 0) {
-        return "Por confirmar" to desglose?.takeIf { it.contains(" · ") }
+        val base = desglose?.takeIf { it.contains(" · ") }
+        return "Por confirmar" to (if (antiguos == null) base else listOfNotNull(base ?: desglose, antiguos).joinToString(" · "))
     }
     val avisos = if (conteo.avisos == 1) "En 1 aviso" else "En ${conteo.avisos} avisos"
     val resto = desgloseDePorRevisar(conteo.copy(avisos = 0))
-    return "Por confirmar ${formatCOP(suman)}" to (if (resto == null) avisos else "$avisos · y $resto")
+    val linea = if (resto == null) avisos else "$avisos · y $resto"
+    return "Por confirmar ${formatCOP(suman)}" to (if (antiguos == null) linea else "$linea · $antiguos")
 }
 
 /**

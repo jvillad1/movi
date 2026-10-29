@@ -18,6 +18,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
+import com.jvillada.movi.shared.model.candidatoMuyDistinto
 import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
@@ -257,7 +259,8 @@ fun SeccionChecklistDelPeriodo(
     @Composable
     fun FilaDe(pago: PagoDelPeriodo, conAnotar: Boolean = true) {
         val propuesta = propuestaDeLaFila(pago, descartadas)
-        val conPropuesta = pago.estado == EstadoDeLaFila.CON_DUDAS && propuesta != null
+        // Vuelta 51: una propuesta muy distinta del monto no es «Por confirmar»: la fila ofrece «Anotar pago».
+        val conPropuesta = pago.estado == EstadoDeLaFila.CON_DUDAS && propuesta != null && !esPropuestaLejana(pago, propuesta)
         val enVuelo = pago.ruleId in marcando
         val estimacion = estimacionDeLaFila(pago, planesDeCuotas)?.takeIf { !enVuelo && !pago.pagado }
         FilaDeFactura(
@@ -672,8 +675,27 @@ fun accionesDelMenuDeLaFilaPagada(pago: PagoDelPeriodo): List<AccionDeLaFilaPaga
  * Si todas quedaron descartadas, la fila cae al estado «sin movimiento» y ofrece anotarlo. Es lo
  * correcto: el dueño acaba de decir que ninguno de los que Movi propone es este.
  */
-internal fun propuestaDeLaFila(pago: PagoDelPeriodo, descartadas: Set<String>): FinancialEvent? =
-    pago.candidatos.firstOrNull { claveDescartada(pago.ruleId, it.id) !in descartadas }
+internal fun propuestaDeLaFila(pago: PagoDelPeriodo, descartadas: Set<String>): FinancialEvent? {
+    val vivos = pago.candidatos.filter { claveDescartada(pago.ruleId, it.id) !in descartadas }
+    // Vuelta 51: primero uno que se parezca al monto; uno muy distinto solo si no queda otro, y entonces
+    // la fila no lo propone de principal (ver [esPropuestaLejana]).
+    return vivos.firstOrNull { !pago.candidatoMuyDistinto(it) } ?: vivos.firstOrNull()
+}
+
+/**
+ * **¿La propuesta de la fila está muy lejos del monto?** (vuelta 51; [candidatoMuyDistinto] en `:core`,
+ * más del 50 %). Entonces la fila no pregunta «¿Ya pagaste…?» de principal: «Anotar pago» queda como
+ * acción y el candidato como enlace, «Hay un movimiento de $260.000 · ¿Es este?». Nunca se tilda solo.
+ */
+internal fun esPropuestaLejana(pago: PagoDelPeriodo, propuesta: FinancialEvent?): Boolean =
+    propuesta != null && pago.candidatoMuyDistinto(propuesta)
+
+/** «Hay un movimiento de $260.000 · ¿Es este?»: el enlace de una propuesta lejana (vuelta 51). */
+fun enlaceDeLaPropuestaLejana(propuesta: FinancialEvent): String =
+    "Hay un movimiento de ${formatMoney(propuesta.amount, propuesta.currency)} · ¿Es este?"
+
+/** El tag del enlace de una propuesta lejana. */
+const val TAG_PROPUESTA_LEJANA: String = "checklist:propuesta-lejana"
 
 /** Qué dice el toque sobre una fila: una cuota o una tarjeta se gestionan en Créditos. */
 internal fun etiquetaDeAbrir(ruleId: String): String =
@@ -717,6 +739,11 @@ private fun LoQueOfreceLaFila(
 ) {
     if (!hayQueOfrecer(pago)) return
     if (!conBotonDeAnotar && pago.estado == EstadoDeLaFila.AUN_NO_VENCE) return
+    // Vuelta 51: el candidato que se aleja más de la mitad del monto va de enlace, no de pregunta.
+    if (pago.estado == EstadoDeLaFila.CON_DUDAS && propuesta != null && esPropuestaLejana(pago, propuesta)) {
+        PropuestaLejana(pago, propuesta, enVuelo, acciones, conBotonDeAnotar)
+        return
+    }
     if (!conBotonDeAnotar && (pago.estado == EstadoDeLaFila.SIN_MOVIMIENTO || (pago.estado == EstadoDeLaFila.CON_DUDAS && propuesta == null))) {
         // Movi buscó y no encontró: se dice (el botón ya está a la derecha de la fila).
         Text(
@@ -795,6 +822,52 @@ private fun LoQueOfreceLaFila(
                 ),
                 enVuelo = enVuelo,
             )
+        }
+    }
+}
+
+/**
+ * **La propuesta lejana** (vuelta 51): «Anotar pago» sigue siendo la acción —a la derecha de la fila, o
+ * acá si la fila no lo tiene ([conBotonDeAnotar])— y el candidato queda como enlace, «Hay un movimiento
+ * de $260.000 · ¿Es este?». Tocarlo abre la pregunta de siempre («Sí, fue este» / «No fue este»): el
+ * dueño decide; nada se tilda solo.
+ */
+@Composable
+private fun PropuestaLejana(
+    pago: PagoDelPeriodo,
+    propuesta: FinancialEvent,
+    enVuelo: Boolean,
+    acciones: AccionesDelChecklist,
+    conBotonDeAnotar: Boolean,
+) {
+    var abierta by rememberSaveable(pago.ruleId, propuesta.id) { mutableStateOf(false) }
+    Column(modifier = Modifier.fillMaxWidth()) {
+        if (conBotonDeAnotar) {
+            AccionesDeLaFila(
+                acciones = listOf(
+                    AccionDeOcurrencia(etiquetaDeAnotar(pago.esIngreso), primary = true) { acciones.onAnotarMovimiento(pago) },
+                ),
+                enVuelo = enVuelo,
+            )
+        }
+        Boton(
+            enlaceDeLaPropuestaLejana(propuesta),
+            onClick = { abierta = !abierta },
+            variante = VarianteDeBoton.Fantasma,
+            tamano = TamanoDeBoton.S,
+            habilitado = !enVuelo,
+            modifier = Modifier.testTag(TAG_PROPUESTA_LEJANA),
+        )
+        if (abierta) {
+            Superficie(modifier = Modifier.fillMaxWidth(), nivel = NivelDeSuperficie.Capa2) {
+                PropuestaDeMovimiento(
+                    propuesta = propuesta,
+                    aviso = avisoDeMontoDistinto(pago.monto, pago.montoEsSaldo, propuesta),
+                    enVuelo = enVuelo,
+                    onConfirmar = { acciones.onConfirmar(pago, propuesta.id) },
+                    onDescartar = { acciones.onNoFueEste(pago, propuesta.id) },
+                )
+            }
         }
     }
 }

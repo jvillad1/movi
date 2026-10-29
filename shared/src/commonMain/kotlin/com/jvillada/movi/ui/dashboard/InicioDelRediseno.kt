@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.dashboard
 
+import com.jvillada.movi.shared.model.candidatosParecidos
+
 import com.jvillada.movi.ui.accounts.tipoSiElNombreNoLoDice
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountGroup
@@ -130,6 +132,7 @@ fun conteoPorRevisarDelInicio(data: DashboardData): ConteoPorRevisar = ConteoPor
     movimientos = data.movimientosPorConfirmar,
     pagosDeTarjeta = data.cardCandidates,
     debitos = data.debitosPorConfirmar.orEmpty().size,
+    avisosAntiguos = data.avisosAntiguos,
 )
 
 /**
@@ -282,7 +285,8 @@ private fun propuestaDePago(data: DashboardData): PropuestaDelInicio? {
     val otros = porVencer.size - 1
     // Una tarjeta no tiene cuota: su «monto» es el saldo. Va el mínimo si se sabe; si no, sin cifra.
     val cifra = cifraDelPago(pago)
-    val conCandidatos = pago.candidatos.isNotEmpty()
+    // Vuelta 51: solo los candidatos que se parecen al monto cuentan como «Movi encontró…».
+    val conCandidatos = pago.candidatosParecidos.isNotEmpty()
     val (accion, destino) = accionDelPago(pago)
     return PropuestaDelInicio(
         tipo = TipoDePropuesta.PAGO,
@@ -329,7 +333,10 @@ private fun propuestaDeDebitos(data: DashboardData): PropuestaDelInicio? {
  * «Movi propone hoy» y «Próximo pago»: el mismo botón hace lo mismo en los dos.
  */
 fun accionDelPago(pago: PagoDelPeriodo): Pair<String, Screen> =
-    if (pago.candidatos.isNotEmpty()) "Revisar" to Screen.Plan(SEGMENTO_PAGOS) else "Anotar pago" to hojaParaAnotar(pago)
+    // Vuelta 51: un candidato que se aleja más de la mitad del monto (el tanqueo de $260.000 para la
+    // factura de $9.000) no hace «Revisar»: el principal sigue siendo «Anotar pago», y en Pagos el
+    // candidato queda como enlace ([candidatosParecidos]).
+    if (pago.candidatosParecidos.isNotEmpty()) "Revisar" to Screen.Plan(SEGMENTO_PAGOS) else "Anotar pago" to hojaParaAnotar(pago)
 
 // ── Próximo pago ─────────────────────────────────────────────────────────────
 

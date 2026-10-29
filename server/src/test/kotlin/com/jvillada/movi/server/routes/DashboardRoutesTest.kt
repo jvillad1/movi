@@ -186,11 +186,18 @@ class DashboardRoutesTest {
         }
     }
 
+    /**
+     * Vuelta 51: los avisos de estas pruebas son de ayer —relativos al reloj—, porque uno de más de 30
+     * días ya no cuenta en `pendingSms` ni en `porConfirmarSuman` (`avisosAntiguos`).
+     */
+    private val ayer: String = AppClock.today().minusDays(1).toString()
+    private val hoyIso: String = AppClock.today().toString()
+
     private fun sms(
         id: String,
         state: String,
         uid: String = userId,
-        cuando: String = "2026-08-01T10:00:00",
+        cuando: String = "${ayer}T10:00:00",
         origen: String = "Bancolombia",
         texto: String = "Compra \$50.000 en Netflix",
     ) = transaction {
@@ -523,6 +530,27 @@ class DashboardRoutesTest {
     }
 
     /**
+     * Vuelta 51 · **los avisos de más de 30 días se apartan**: no entran en `pendingSms` ni en
+     * `porConfirmarSuman`, y `avisosAntiguos` los cuenta aparte para que la franja los mencione.
+     */
+    @Test
+    fun `los avisos de mas de 30 dias no cuentan ni suman y se dicen aparte`() = testApplication {
+        wireApp()
+        val haceDosMeses = AppClock.today().minusDays(56).toString()
+        sms("s-uber", SMS_STATE_PENDING, origen = "85540", cuando = "${ayer}T12:05:00",
+            texto = "Bancolombia: Compraste \$18.300,00 en UBER RIDES con tu T.Deb *4057, el 01/08/2026 a las 12:05.")
+        sms("s-rappi", SMS_STATE_PENDING, origen = "85540", cuando = "${haceDosMeses}T19:40:00",
+            texto = "Bancolombia: Compraste \$46.000,00 en RAPPI con tu T.Deb *4057, el 02/09/2026 a las 19:40.")
+        sms("s-pana", SMS_STATE_PENDING, origen = "85540", cuando = "${haceDosMeses}T14:05:00",
+            texto = "Bancolombia: Compraste \$54.000,00 en PANAMERICANA con tu T.Deb *4057, el 02/09/2026 a las 14:05.")
+
+        val body = summary()
+        assertEquals(1L, body.long("pendingSms"))
+        assertEquals(18_300L, body.long("porConfirmarSuman"), "Rappi y Panamericana no inflan la suma")
+        assertEquals(2L, body.long("avisosAntiguos"))
+    }
+
+    /**
      * «Un pago, una tarjeta» (4-oct-2026): el mismo pago avisado por SMS, por la app del banco y por
      * Google Wallet es UNO por revisar en el Inicio, como en la bandeja y en Movimientos.
      */
@@ -533,7 +561,7 @@ class DashboardRoutesTest {
         sms("s-app", SMS_STATE_PENDING, origen = "Notificación · Bancolombia")
         sms("s-wallet", SMS_STATE_PENDING, origen = "Notificación · Google Wallet")
         // Otra compra igual al otro día: es otro pago.
-        sms("s-otro", SMS_STATE_PENDING, cuando = "2026-08-02T10:00:00", origen = "85540")
+        sms("s-otro", SMS_STATE_PENDING, cuando = "${hoyIso}T10:00:00", origen = "85540")
 
         assertEquals(2L, summary().long("pendingSms"))
     }
@@ -545,11 +573,11 @@ class DashboardRoutesTest {
     @Test
     fun `suma lo que dicen los avisos por confirmar, entero o nada`() = testApplication {
         wireApp()
-        sms("s-uber", SMS_STATE_PENDING, origen = "85540", cuando = "2026-08-01T12:05:00",
+        sms("s-uber", SMS_STATE_PENDING, origen = "85540", cuando = "${ayer}T12:05:00",
             texto = "Bancolombia: Compraste \$18.300,00 en UBER RIDES con tu T.Deb *4057, el 01/08/2026 a las 12:05.")
-        sms("s-farma", SMS_STATE_PENDING, origen = "85540", cuando = "2026-08-01T09:40:00",
+        sms("s-farma", SMS_STATE_PENDING, origen = "85540", cuando = "${ayer}T09:40:00",
             texto = "Bancolombia: Compraste \$61.900,00 en FARMATODO LAURELES con tu T.Deb *4057, el 01/08/2026 a las 09:40.")
-        sms("s-cafe", SMS_STATE_PENDING, origen = "85540", cuando = "2026-08-01T08:12:00",
+        sms("s-cafe", SMS_STATE_PENDING, origen = "85540", cuando = "${ayer}T08:12:00",
             texto = "Bancolombia: Compraste \$23.400,00 en JUAN VALDEZ CAFE con tu T.Deb *4057, el 01/08/2026 a las 08:12.")
         sms("s-ya", SMS_STATE_CONFIRMED, origen = "85540",
             texto = "Bancolombia: Compraste \$99.000,00 en EXITO con tu T.Deb *4057, el 01/08/2026 a las 07:00.")
@@ -558,7 +586,7 @@ class DashboardRoutesTest {
         assertEquals(103_600L, summary().long("porConfirmarSuman"))
 
         // Uno que Movi no lee: la suma no se dice, el conteo sí.
-        sms("s-raro", SMS_STATE_PENDING, origen = "85540", cuando = "2026-08-01T13:00:00", texto = "Bancolombia te informa que tu clave cambió.")
+        sms("s-raro", SMS_STATE_PENDING, origen = "85540", cuando = "${ayer}T13:00:00", texto = "Bancolombia te informa que tu clave cambió.")
         val conUnoIlegible = summary()
         assertEquals(4L, conUnoIlegible.long("pendingSms"))
         val suma = conUnoIlegible["porConfirmarSuman"]
@@ -575,7 +603,7 @@ class DashboardRoutesTest {
     fun `un SMS recien sincronizado cuenta en pendingSms y deja de contar al confirmarlo`() = testApplication {
         wireApp()
         val id = "sms_rt_deadbeefdeadbeef"
-        val body = """[{"id":"$id","time":"2026-08-01 10:00","bank":"Bancolombia",""" +
+        val body = """[{"id":"$id","time":"$ayer 10:00","bank":"Bancolombia",""" +
             """"text":"Compra por ${'$'}50.000 en Netflix","state":"","det":""}]"""
 
         val sync = client.post("/api/sms/sync") {
@@ -639,14 +667,15 @@ class DashboardRoutesTest {
     @Test
     fun `con varios gana el mas reciente, en cualquier estado`() = testApplication {
         wireApp()
-        sms("s-1", SMS_STATE_PENDING, cuando = "2026-08-01 10:00")
-        sms("s-2", SMS_STATE_CONFIRMED, cuando = "2026-09-03 07:15")
+        // Vuelta 51: el pendiente es de ayer (uno de más de 30 días ya no cuenta en `pendingSms`).
+        sms("s-1", SMS_STATE_PENDING, cuando = "$ayer 06:00")
+        sms("s-2", SMS_STATE_CONFIRMED, cuando = "$hoyIso 07:15")
         sms("s-3", SMS_STATE_IGNORED, cuando = "2026-08-30 23:59")
 
         val body = summary()
         assertEquals(3L, body.long("smsTotal"), "confirmados e ignorados también llegaron")
         assertEquals(1L, body.long("pendingSms"), "y «por confirmar» sigue contando solo los pending")
-        assertEquals("2026-09-03 07:15", body["smsLastAt"]!!.jsonPrimitive.content)
+        assertEquals("$hoyIso 07:15", body["smsLastAt"]!!.jsonPrimitive.content)
     }
 
     /**
@@ -679,7 +708,7 @@ class DashboardRoutesTest {
         wireApp()
         event("b-spent", "acc-b", "EXPENSE", 40_000L, uid = otherUserId)
         event("b-cand", "acc-b", "EXPENSE", 40_000L, category = "Otros", description = "Pago tarjeta", uid = otherUserId)
-        sms("b-sms", SMS_STATE_PENDING, uid = otherUserId, cuando = "2026-09-05 08:00")
+        sms("b-sms", SMS_STATE_PENDING, uid = otherUserId, cuando = "$ayer 08:00")
 
         val a = summary()
         assertEquals(0L, a.long("monthSpent"))
@@ -695,7 +724,7 @@ class DashboardRoutesTest {
         assertEquals(1L, b.long("cardPaymentCandidates"))
         assertEquals(1L, b.long("pendingSms"))
         assertEquals(1L, b.long("smsTotal"))
-        assertEquals("2026-09-05 08:00", b["smsLastAt"]!!.jsonPrimitive.content)
+        assertEquals("$ayer 08:00", b["smsLastAt"]!!.jsonPrimitive.content)
     }
 
     @Test

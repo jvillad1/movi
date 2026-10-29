@@ -13,10 +13,7 @@ import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import com.jvillada.movi.shared.model.AVANCE_DE_TARJETA_CATEGORY
 import com.jvillada.movi.shared.model.Account
-import com.jvillada.movi.shared.model.CUOTA_CATEGORY
-import com.jvillada.movi.shared.model.esCategoriaDelDesembolso
 import com.jvillada.movi.shared.model.CuadreDeLasPartes
 import com.jvillada.movi.shared.model.MAXIMO_DE_PARTES_DEL_AVISO
 import com.jvillada.movi.shared.model.PagoParaRepartir
@@ -25,7 +22,7 @@ import com.jvillada.movi.shared.model.QueFueLaParte
 import com.jvillada.movi.shared.model.conElResto
 import com.jvillada.movi.shared.model.cuadreDeLasPartes
 import com.jvillada.movi.shared.model.estaCompleta
-import com.jvillada.movi.shared.model.isReservedCategory
+import com.jvillada.movi.shared.model.esCategoriaQueNoSeElige
 import com.jvillada.movi.shared.model.operacion
 import com.jvillada.movi.shared.model.operacionEntre
 import com.jvillada.movi.shared.model.parteDelPago
@@ -66,8 +63,8 @@ internal const val CATEGORIAS_EN_LAS_PARTES: Int = 20
  * Cuota de crédito, el desembolso, el avance): esas son las patas, y una parte con dos patas ya las pone.
  */
 fun esCategoriaDeGastoSuelta(categoria: String): Boolean =
-    categoria.isNotBlank() && !isReservedCategory(categoria) && categoria != CUOTA_CATEGORY &&
-        categoria != AVANCE_DE_TARJETA_CATEGORY && !esCategoriaDelDesembolso(categoria)
+    // Vuelta 51: la lista única de `:core` ([esCategoriaQueNoSeElige]): las reservadas y las de dos patas.
+    categoria.isNotBlank() && !esCategoriaQueNoSeElige(categoria)
 
 /** [categoria] si sirve para un gasto suelto; si no, `null` (el dueño elige). */
 fun categoriaDeGastoOAnada(categoria: String?): String? = categoria?.trim()?.takeIf { esCategoriaDeGastoSuelta(it) }
