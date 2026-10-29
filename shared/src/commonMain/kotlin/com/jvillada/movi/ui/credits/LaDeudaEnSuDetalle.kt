@@ -46,6 +46,7 @@ import com.jvillada.movi.ui.components.ds.BarraDeProgreso
 import com.jvillada.movi.ui.components.ds.Chevron
 import com.jvillada.movi.ui.components.ds.Cifra
 import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.TonoDeSubtitulo
 import com.jvillada.movi.ui.components.ds.IconoEnCirculo
 import com.jvillada.movi.ui.components.ds.Pildora
 import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
@@ -270,7 +271,10 @@ private fun LoQueDiceElPrestamo(
     val tasa = if (t.sinIntereses) "Sin intereses" else "${t.rateEa}% EA"
     Fila(
         titulo = "Cuota",
-        subtitulo = "Día ${t.dayOfMonth} · la próxima el ${fechaEnPalabras(proximaFechaDelDia(t.dayOfMonth, hoy), hoy)}",
+        // Vuelta 64: de la MISMA primera cuota sin pagar con que se cuentan las que faltan; si ya
+        // venció, lo dice («Cuota de octubre vencida desde el 5 oct») en vez de saltar a la próxima.
+        subtitulo = subtituloDeLaCuota(t.dayOfMonth, primeraCuota, hoy),
+        tonoDelSubtitulo = if (laCuotaEstaVencida(t.dayOfMonth, primeraCuota, hoy)) TonoDeSubtitulo.Aviso else TonoDeSubtitulo.Normal,
         // Al lado de la cuota, a 360 dp, la fecha no entra en un renglón: baja al segundo.
         lineasDelSubtitulo = 2,
         inicio = { IconoEnCirculo(Icons.Rounded.Event, tono = TonoDeIcono.Neutro) },

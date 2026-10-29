@@ -17,6 +17,9 @@ import com.jvillada.movi.shared.model.abonoMinimoParaQueSeTermine
 import com.jvillada.movi.shared.model.deudaEnOtraMoneda
 import com.jvillada.movi.shared.model.deudaTotalDe
 import com.jvillada.movi.shared.model.proximoVencimientoDelDia
+import com.jvillada.movi.shared.model.mesDeLaPrimeraCuota
+import com.jvillada.movi.shared.model.vencimientoDelMes
+import com.jvillada.movi.shared.model.nombreDelMesDe
 import com.jvillada.movi.shared.model.marcaDelBanco
 import com.jvillada.movi.shared.model.mas
 import com.jvillada.movi.shared.model.nombreDe
@@ -25,6 +28,7 @@ import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.ui.components.formatMoney
 import com.jvillada.movi.ui.components.formatMoneyCompact
 import com.jvillada.movi.ui.fecha.fechaEnPalabras
+import com.jvillada.movi.ui.fecha.fechaCortaDelDia
 import kotlinx.datetime.LocalDate
 import kotlin.math.round
 
@@ -893,6 +897,32 @@ private fun porcentajeEntero(fraccion: Float): Int = (fraccion * 100).toInt()
  */
 fun proximaFechaDelDia(dia: Int, hoy: LocalDate): LocalDate = proximoVencimientoDelDia(dia, hoy)
 
+/**
+ * **La cuota de [primeraCuota] ya venció sin pagarse** (vuelta 64): su vencimiento —el día [dia] de ese
+ * mes— quedó antes de [hoy]. [primeraCuota] es la primera sin pagar ([mesDeLaPrimeraCuota], vuelta 59):
+ * si es la de octubre y ya es 29 de octubre, está vencida. El mismo día del vencimiento todavía no.
+ */
+fun laCuotaEstaVencida(dia: Int, primeraCuota: PeriodoFinanciero, hoy: LocalDate): Boolean =
+    vencimientoDelMes(primeraCuota.year, primeraCuota.month, dia) < hoy
+
+/**
+ * **Lo que dice la fila «Cuota» del detalle del crédito** (vuelta 64).
+ *
+ * Hasta la vuelta 63 decía siempre «Día 5 · la próxima el 5 de noviembre», sacado del próximo día de
+ * pago desde hoy, aunque la cuota de octubre siguiera sin pagar: la cuenta de las cuotas que faltan
+ * ya arrancaba en octubre (vuelta 59) y la fila de arriba decía otra cosa. Ahora las dos salen de la
+ * misma [primeraCuota]:
+ *
+ * - vencida → «Cuota de octubre vencida desde el 5 oct»;
+ * - si no → «Día 5 · la próxima el 5 de noviembre», con la fecha de esa primera cuota sin pagar (una
+ *   pagada por adelantado corre la próxima un mes).
+ */
+fun subtituloDeLaCuota(dia: Int, primeraCuota: PeriodoFinanciero, hoy: LocalDate): String {
+    val vence = vencimientoDelMes(primeraCuota.year, primeraCuota.month, dia)
+    return if (vence < hoy) "Cuota de ${nombreDelMesDe(primeraCuota)} vencida desde el ${fechaCortaDelDia(vence, hoy)}"
+    else "Día $dia · la próxima el ${fechaEnPalabras(vence, hoy)}"
+}
+
 /** Un préstamo en la lista de Créditos. [plan] y [periodoActual] dicen si su deuda crece sola. */
 fun prestamoEnLaLista(
     credit: CreditSummary,
@@ -906,7 +936,13 @@ fun prestamoEnLaLista(
     if (credit.account.balance == 0L && credit.hasMovements && !deudaEnOtraMoneda(credit)) {
         return DeudaEnLaLista(subtitulo = terms.bank.takeIf { it.isNotBlank() }, pagada = true)
     }
-    val proxima = proximaFechaDelDia(terms.dayOfMonth, hoy)
+    // Vuelta 64: la misma primera cuota sin pagar que el detalle (`subtituloDeLaCuota`). Vencida, la
+    // lista dice lo mismo que la ficha —«Cuota de octubre vencida desde el 5 oct»— y no «5 de
+    // noviembre»; si no, la fecha de esa cuota (una pagada por adelantado corre la próxima un mes).
+    val primera = mesDeLaPrimeraCuota(credit, hoy)
+        ?: proximaFechaDelDia(terms.dayOfMonth, hoy).let { PeriodoFinanciero(it.year, it.monthNumber) }
+    val vencida = laCuotaEstaVencida(terms.dayOfMonth, primera, hoy)
+    val proxima = vencimientoDelMes(primera.year, primera.month, terms.dayOfMonth)
     val progreso = progresoDeCredito(credit)
     // Con menos de un punto pagado la barra diría «0 % pagado»: se calla.
     val barra = progreso.fraccion.takeIf {
@@ -919,7 +955,8 @@ fun prestamoEnLaLista(
         else -> null
     }
     return DeudaEnLaLista(
-        subtitulo = "Cuota ${formatCOP(terms.installment)} · ${fechaEnPalabras(proxima, hoy)}",
+        subtitulo = if (vencida) subtituloDeLaCuota(terms.dayOfMonth, primera, hoy)
+        else "Cuota ${formatCOP(terms.installment)} · ${fechaEnPalabras(proxima, hoy)}",
         sinSaldo = sinSaldo,
         fraccionPagada = barra,
         nota = nota,

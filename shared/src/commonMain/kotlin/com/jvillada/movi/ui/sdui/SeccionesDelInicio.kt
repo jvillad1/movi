@@ -10,6 +10,7 @@ import androidx.compose.runtime.key
 import com.jvillada.movi.ui.components.LocalWindowWidthClass
 import com.jvillada.movi.ui.components.WindowWidthClass
 import com.jvillada.movi.ui.dashboard.CuentaDelCarrusel
+import com.jvillada.movi.ui.dashboard.notaDeLoApartado
 import com.jvillada.movi.ui.dashboard.tarjetasPorRenglon
 import androidx.compose.foundation.layout.Column
 import com.jvillada.movi.ui.components.LocalAtajosDeAgregar
@@ -485,7 +486,8 @@ internal fun UltimosMovimientosSection(
  */
 @Composable
 internal fun CuentasDelInicioSection(data: DashboardData, onNavigate: (Screen) -> Unit) {
-    val cuentas = cuentasDelCarrusel(data.accounts)
+    // Vuelta 64: con lo apartado de cada cuenta, que la tarjeta dice debajo del saldo.
+    val cuentas = cuentasDelCarrusel(data.accounts, data.apartados.orEmpty())
     val cargando = LocalCargandoElInicio.current
     if (cuentas == null && !cargando) return
     if (cuentas != null && cuentas.isEmpty()) return
@@ -520,7 +522,7 @@ internal fun CuentasDelInicioSection(data: DashboardData, onNavigate: (Screen) -
 
 /** La tarjeta de una cuenta del Inicio, en el carrusel o en la grilla. */
 @Composable
-private fun TarjetaDelInicio(c: CuentaDelCarrusel, onNavigate: (Screen) -> Unit, modifier: Modifier) {
+private fun TarjetaDelInicio(c: CuentaDelCarrusel, onNavigate: (Screen) -> Unit, modifier: Modifier, reservarNota: Boolean) {
     TarjetaDeCuenta(
         nombre = c.cuenta.name,
         tipo = c.tipo,
@@ -531,6 +533,8 @@ private fun TarjetaDelInicio(c: CuentaDelCarrusel, onNavigate: (Screen) -> Unit,
         icono = iconoDelTipoDeCuenta(c.cuenta.type).first,
         onClick = { onNavigate(c.destino) },
         modifier = modifier,
+        nota = notaDeLoApartado(c),
+        reservarNota = reservarNota,
     )
 }
 
@@ -547,6 +551,7 @@ private fun CarruselDeCuentas(cuentas: List<CuentaDelCarrusel>, onNavigate: (Scr
                 c, onNavigate,
                 // Con una sola cuenta no hay siguiente que asome: la tarjeta va a todo el ancho.
                 Modifier.fillParentMaxWidth(if (cuentas.size == 1) 1f else FRACCION_DE_TARJETA_DE_CUENTA),
+                reservarNota = cuentas.any { it.apartado > 0L },
             )
         }
     }
@@ -573,7 +578,9 @@ private fun GrillaDeCuentas(cuentas: List<CuentaDelCarrusel>, porRenglon: Int, o
                 horizontalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion),
             ) {
                 renglon.forEach { c ->
-                    key(c.cuenta.id) { TarjetaDelInicio(c, onNavigate, Modifier.weight(1f).fillMaxHeight()) }
+                    key(c.cuenta.id) {
+                        TarjetaDelInicio(c, onNavigate, Modifier.weight(1f).fillMaxHeight(), reservarNota = renglon.any { it.apartado > 0L })
+                    }
                 }
                 repeat(porRenglon - renglon.size) { Spacer(Modifier.weight(1f)) }
             }

@@ -4,6 +4,8 @@ import com.jvillada.movi.shared.model.candidatosParecidos
 
 import com.jvillada.movi.ui.accounts.tipoSiElNombreNoLoDice
 import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.Apartado
+import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.TipoDeAnomalia
@@ -589,6 +591,12 @@ data class CuentaDelCarrusel(
     /** El saldo tal como lo trae la cuenta; en una tarjeta, la deuda en positivo. */
     val saldo: Long,
     val moneda: String,
+    /**
+     * Vuelta 64: lo apartado de esta cuenta que de verdad pesa ([apartadoEfectivoDe]), o 0. La tarjeta
+     * lo dice debajo del saldo («$2.000.000 apartado»): el saldo sigue siendo el del banco, y lo
+     * apartado es la diferencia con «Disponible en la cuenta» del detalle.
+     */
+    val apartado: Long = 0L,
 ) {
     /** Lo que abre tocarla: el detalle de la cuenta, en el grupo donde vive. */
     val destino: Screen get() = Screen.AccountDetail(cuenta.id, cuenta.type.group)
@@ -602,15 +610,19 @@ data class CuentaDelCarrusel(
  * Fuera quedan los préstamos y los bienes (la casa, el carro): no son plata para mover, y su casa es
  * Patrimonio. Ninguna cifra se calcula: cada tarjeta muestra el saldo que trae su cuenta.
  */
-fun cuentasDelCarrusel(accounts: List<Account>?): List<CuentaDelCarrusel>? {
+fun cuentasDelCarrusel(accounts: List<Account>?, apartados: List<Apartado> = emptyList()): List<CuentaDelCarrusel>? {
     accounts ?: return null
     val visibles = accounts.filter { it.type != AccountType.LOAN && it.bien == null }
     val porGrupo = visibles.groupBy { it.type.group }
     return (porGrupo[AccountGroup.DINERO].orEmpty().sortedByDescending { it.balance } +
         porGrupo[AccountGroup.INVERSION].orEmpty().sortedByDescending { it.balance } +
         porGrupo[AccountGroup.DEUDA].orEmpty().sortedBy { it.balance })
-        .map { cuentaDelCarrusel(it) }
+        .map { cuentaDelCarrusel(it).copy(apartado = if (apartados.isEmpty()) 0L else apartadoEfectivoDe(it, apartados)) }
 }
+
+/** La línea de debajo del saldo en la tarjeta de una cuenta con algo apartado: «$2.000.000 apartado». */
+fun notaDeLoApartado(c: CuentaDelCarrusel): String? =
+    c.apartado.takeIf { it > 0L }?.let { "${formatCOP(it)} apartado" }
 
 /**
  * **¿Carrusel o grilla?** (vuelta de diseño 9). Cuántas [com.jvillada.movi.ui.components.ds.TarjetaDeCuenta]

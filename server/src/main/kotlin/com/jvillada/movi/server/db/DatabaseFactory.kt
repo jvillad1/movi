@@ -126,7 +126,11 @@ object DatabaseFactory {
             // NULLABLE. La tabla ya existía en producción cuando llegó la columna y faltaba en esta
             // lista: «Editar inicio» guardaba con 500 («column "visibles" does not exist») hasta el
             // 28-oct-2026. Su clave es `user_id`, sin índices sueltos: el único DDL es el ADD COLUMN.
-            SchemaUtils.createMissingTablesAndColumns(Events, RecurringRules, Screens, Users, Credits, Cards, Accounts, Subscriptions, AiTurns, CategoryPrefs, KnownDestinations, SmsMessages, InicioPersonalizado)
+            // Apartados: `objetivo` y `mes_del_gasto` (vuelta 64, el apartado para un gasto de un mes
+            // puntual) — las dos NULLABLE. La tabla existe en producción desde el 20-oct con el
+            // colegio del dueño; su único índice (`user_id`) viajó dentro del CREATE TABLE y ya
+            // existe, así que el único DDL es el ADD COLUMN.
+            SchemaUtils.createMissingTablesAndColumns(Events, RecurringRules, Screens, Users, Credits, Cards, Accounts, Subscriptions, AiTurns, CategoryPrefs, KnownDestinations, SmsMessages, InicioPersonalizado, Apartados)
             // Migraciones de datos (idempotentes), después del schema — ver Migrations.kt.
             with(Migrations) { runAll() }
         }

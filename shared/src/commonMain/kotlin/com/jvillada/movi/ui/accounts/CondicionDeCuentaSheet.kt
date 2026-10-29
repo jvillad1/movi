@@ -45,8 +45,13 @@ import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
 /** El título de la fila del detalle de la cuenta y de esta hoja (vuelta de diseño 5). */
 const val PARA_QUE_ES_ESTA_PLATA: String = "Para qué es esta plata"
 
-/** Lo que dice la fila de una cuenta sin condición: su plata se usa para lo que sea. */
-const val PLATA_LIBRE: String = "Libre: para cualquier gasto"
+/**
+ * Lo que dice la fila de una cuenta sin condición: su plata se usa para lo que sea. Vuelta 64: era
+ * «Libre: para cualquier gasto», y en la misma pantalla el renglón de los apartados decía «Libre» por
+ * lo que queda sin apartar. Ahora cada palabra tiene un solo sentido: esta dice que la cuenta no tiene
+ * condición, y lo que queda sin apartar es [DISPONIBLE_EN_LA_CUENTA].
+ */
+const val PLATA_LIBRE: String = "Sin condición: para cualquier gasto"
 
 /**
  * **El subtítulo de «Para qué es esta plata»**: el estado, en palabras. Sin condición,
@@ -113,7 +118,7 @@ fun CondicionDeCuentaSheet(
             // prometerle al dueño un efecto que no existe. Es el subtítulo del encabezado.
             EncabezadoDeHoja(
                 PARA_QUE_ES_ESTA_PLATA,
-                subtitulo = "Si esta plata es libre, déjalo vacío. Si solo puedes usarla para algo " +
+                subtitulo = "Si esta plata no tiene condición, déjalo vacío. Si solo puedes usarla para algo " +
                     "—una pensión voluntaria, las cesantías, una cuenta AFC—, escribe para qué: " +
                     "esta cuenta deja de sumar en «Tu plata» y aparece en su propio renglón. " +
                     "Tu patrimonio no cambia: la plata sigue siendo tuya.",
@@ -130,9 +135,9 @@ fun CondicionDeCuentaSheet(
                 rotulo = "Solo se puede usar para",
                 guia = "Vivienda",
                 ayuda = if (account.condicionadaA != null) {
-                    "Déjalo vacío para que vuelva a ser libre: para cualquier gasto."
+                    "Déjalo vacío y la plata vuelve a servir para cualquier gasto."
                 } else {
-                    "Vacío es libre: para cualquier gasto."
+                    "Vacío es sin condición: para cualquier gasto."
                 },
                 teclado = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                 habilitado = !guardando,

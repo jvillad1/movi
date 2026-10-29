@@ -1146,6 +1146,15 @@ object Apartados : Table("apartados") {
     val desde        = long("desde")
     val createdAt    = long("created_at")
     val lastEditedAt = long("last_edited_at").nullable()
+    /**
+     * Vuelta 64 — el gasto de un mes puntual para el que se aparta (el SOAT, el predial): cuánto
+     * cuesta y en qué mes llega (`"AAAA-MM"`). Las dos NULLABLE —un apartado de siempre no tiene— y
+     * la tabla ya existe en producción, así que entra a `createMissingTablesAndColumns` (ver
+     * `SchemaDeArranqueTest`). Solo alimentan la sugerencia del aporte mensual: ninguna cifra de
+     * plata las lee.
+     */
+    val objetivo     = long("objetivo").nullable()
+    val mesDelGasto  = varchar("mes_del_gasto", 7).nullable()
     override val primaryKey = PrimaryKey(id)
     init { index("idx_apartados_user_id", false, userId) }
 }
