@@ -85,7 +85,51 @@ data class VincularPagoDeDeudaRequest(
      * sigue igual.
      */
     val esLaCuota: Boolean = false,
+    /**
+     * Vuelta 53 · **«Un abono extra»**: el dueño dijo que este gasto suelto no es la cuota sino plata de
+     * más contra el capital del crédito [debtAccountId]. El server arma **el traspaso de siempre**
+     * ([transferLegsFor], el mismo del abono extraordinario de Agregar): la pata del dinero pasa a
+     * [TRANSFER_CATEGORY] y entra un INCOME por el monto entero al crédito. No salda ninguna cuota
+     * (`PagosDeDeuda.kt` solo lee [CUOTA_CATEGORY]). Solo con un crédito. Default `false`.
+     */
+    val comoAbono: Boolean = false,
 )
+
+/**
+ * Vuelta 53 · el código del 409 de `vincular-deuda` cuando el dueño dice «es la cuota» ([VincularPagoDeDeudaRequest.esLaCuota])
+ * de un crédito cuya cuota del período donde caería este pago **ya la saldó otro movimiento**. El
+ * cliente no la vincula en silencio: pregunta si es un abono extra.
+ */
+const val VINCULO_CUOTA_YA_PAGADA: String = "CUOTA_YA_PAGADA"
+
+/**
+ * El cuerpo de ese 409. [periodo] es el mes de la cuota ya saldada (`"2026-10"`, el `periodOf` de su
+ * vencimiento); [mensaje] la frase entera, para un cliente que no conozca el código (un APK de la
+ * vuelta 51 la muestra tal cual).
+ */
+@Serializable
+data class CuotaYaPagada(
+    val codigo: String = VINCULO_CUOTA_YA_PAGADA,
+    val periodo: String,
+    val credito: String,
+    val mensaje: String,
+)
+
+/** «La cuota de octubre de Vehículo 4083 ya está pagada.» — `periodo` como `"2026-10"`. */
+fun fraseDeLaCuotaYaPagada(credito: String, periodo: String): String {
+    val mes = periodoDelPrefijo(periodo)?.let { nombreDe(it).substringBefore(" de ") }
+    return if (mes != null) "La cuota de $mes de $credito ya está pagada." else "La cuota de este mes de $credito ya está pagada."
+}
+
+/** El [CuotaYaPagada] de una respuesta de `vincular-deuda`, o `null` si no es ese 409. */
+fun cuotaYaPagadaDe(status: Int, cuerpo: String?): CuotaYaPagada? {
+    if (status != 409 || cuerpo.isNullOrBlank()) return null
+    return runCatching { JSON_DEL_VINCULO.decodeFromString(CuotaYaPagada.serializer(), cuerpo) }
+        .getOrNull()
+        ?.takeIf { it.codigo == VINCULO_CUOTA_YA_PAGADA }
+}
+
+private val JSON_DEL_VINCULO = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
 
 /** Lo que se le dice a quien intenta vincular un movimiento que ya es parte de otro traspaso. */
 const val VINCULO_YA_ES_TRASPASO: String =

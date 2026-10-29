@@ -60,13 +60,31 @@ import com.jvillada.movi.theme.Movi
 fun cuentasDeDeuda(cuentas: List<Account>): List<Account> =
     cuentas.filter { it.type == AccountType.LOAN || it.type == AccountType.CREDIT_CARD }
 
-/** «Vehículo 4083 · COP · Debes $177.200.000» — nombre, moneda y cuánto debe, en una sola línea. */
+/**
+ * «Vehículo 4083 · COP · Debes $177.200.000» — nombre, moneda y cuánto debe, en una sola línea.
+ *
+ * Vuelta 53: **nunca «A favor»**. En este selector se elige a qué deuda va un pago, y un crédito «a
+ * favor $980.000» no dice nada (pasaba con la demo: un crédito con condiciones y sin movimientos). Sin
+ * deuda en Movi —saldo en 0 o por debajo— un crédito dice [SIN_EL_SALDO_EN_EL_SELECTOR], como la hoja de
+ * Cuota de la vuelta 49; una tarjeta dice [SIN_DEUDA_EN_EL_SELECTOR] (pagarla de más sí la deja en
+ * cero o a favor, y eso es un dato real, pero acá no es lo que se está eligiendo).
+ */
 fun textoDeCuentaDeDeuda(cuenta: Account): String {
     val (monto, moneda) = saldoEnSuMoneda(cuenta)
-    val saldo = saldoDeDeuda(monto, moneda)
-    val cuanto = if (saldo.aFavor) "A favor ${saldo.magnitud}" else "Debes ${saldo.magnitud}"
+    val cuanto = when {
+        // En una deuda el saldo positivo es lo que se debe (ver [saldoDeDeuda]).
+        monto > 0L -> "Debes ${saldoDeDeuda(monto, moneda).magnitud}"
+        cuenta.type == AccountType.LOAN -> SIN_EL_SALDO_EN_EL_SELECTOR
+        else -> SIN_DEUDA_EN_EL_SELECTOR
+    }
     return "${cuenta.name} · $moneda · $cuanto"
 }
+
+/** Lo que dice un crédito sin deuda en Movi en «¿De cuál crédito?» (vuelta 53). */
+const val SIN_EL_SALDO_EN_EL_SELECTOR: String = "Movi no tiene el saldo"
+
+/** Lo que dice una tarjeta en cero (o pagada de más) en el mismo selector (vuelta 53). */
+const val SIN_DEUDA_EN_EL_SELECTOR: String = "Sin deuda"
 
 /**
  * La sección «¿A cuál crédito o tarjeta corresponde?». `cuentas` es la lista COMPLETA de cuentas
