@@ -65,6 +65,7 @@ if [ "$ENSAYO" = 1 ] && [ "$MODO" = "fuente" ]; then
 fi
 
 cd "$(dirname "$0")/.."
+RAIZ=$(pwd)
 git fetch -q origin master
 if [ -n "$COMMIT" ]; then
     SHA=$(git rev-parse --verify "$COMMIT^{commit}")
@@ -201,16 +202,42 @@ fi
 
 # ── Subir, esperar y verificar: el mismo contrato en los dos caminos ─────────────────────────────
 
+# Sube la carpeta $1 y deja en ID el id de ESTE despliegue, sacado del enlace a los logs. Mirar
+# «la primera fila» de la lista puede leer el despliegue anterior y dar un SUCCESS que no es el
+# nuestro. Sin id, la subida falló antes de que Railway armara nada (un 500, un límite de tamaño):
+# devuelve 1 y la salida de `railway up` queda impresa con el motivo.
+subir() {
+    local carpeta=$1 salida
+    cd "$carpeta"
+    # `railway link` es por carpeta: cada carpeta que se sube se enlaza con todo explícito.
+    railway link -p "$PROYECTO" -e "$ENTORNO" -s "$SERVICIO" >/dev/null
+    salida=$(railway up --service "$SERVICIO" --environment "$ENTORNO" --detach 2>&1) || true
+    echo "$salida"
+    ID=$(echo "$salida" | grep -o 'id=[0-9a-f-]\{36\}' | head -1 | cut -d= -f2 || true)
+    [ -n "$ID" ]
+}
+
 cd "$SUBIDA"
 railway link -p "$PROYECTO" -e "$ENTORNO" -s "$SERVICIO" >/dev/null
 # --skip-deploys: sin él, setear la variable dispara OTRO despliegue y se paga doble.
 railway variable set "MOVI_COMMIT_SHA=$SHA" --skip-deploys -s "$SERVICIO" >/dev/null
-SALIDA=$(railway up --service "$SERVICIO" --environment "$ENTORNO" --detach 2>&1)
-echo "$SALIDA"
-# El id de ESTE despliegue, sacado del enlace a los logs. Mirar «la primera fila» de la lista
-# puede leer el despliegue anterior y dar un SUCCESS que no es el nuestro.
-ID=$(echo "$SALIDA" | grep -o 'id=[0-9a-f-]\{36\}' | head -1 | cut -d= -f2)
-[ -n "$ID" ] || { echo "══ No encontré el id del despliegue en la salida de railway up"; exit 1; }
+ID=""
+if ! subir "$SUBIDA"; then
+    if [ "$MODO" != "paquete" ]; then
+        echo "══ No encontré el id del despliegue en la salida de railway up"; exit 1
+    fi
+    # **El respaldo automático, una sola vez.** Si lo que falló fue SUBIR el paquete (el JAR pesa
+    # ~84 MB y Railway no documenta un límite: ver CLAUDE.md), se repite por el camino de
+    # --desde-fuente, que sube solo el código. Un build que falla DENTRO de Railway no llega acá:
+    # ese sí tiene id, y abajo sigue siendo un error.
+    echo "══ La subida del paquete falló sin id de despliegue (el motivo está arriba)."
+    echo "── Repito una vez por el camino --desde-fuente (Railway arma todo; ~20 min)."
+    MODO="fuente"
+    FUENTE_DIR="$TRABAJO/fuente"
+    mkdir -p "$FUENTE_DIR"
+    git -C "$RAIZ" archive "$SHA" | tar -x -C "$FUENTE_DIR"
+    subir "$FUENTE_DIR" || { echo "══ Tampoco subió desde la fuente: no encontré el id del despliegue."; exit 1; }
+fi
 
 if [ "$ESPERAR" = 0 ]; then echo "── Subido; no espero el build."; exit 0; fi
 
