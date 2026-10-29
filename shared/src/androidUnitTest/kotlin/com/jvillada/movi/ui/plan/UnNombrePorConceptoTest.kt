@@ -8,6 +8,8 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.shared.model.CajaProyectada
 import com.jvillada.movi.shared.model.DiaDeLaCaja
+import com.jvillada.movi.shared.model.LLEGA_TU_SALARIO
+import com.jvillada.movi.shared.model.MovimientoDeLaCaja
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.theme.MoviTheme
@@ -56,8 +58,9 @@ class UnNombrePorConceptoTest {
     fun `los rotulos nuevos`() {
         assertEquals("Meta de hoy", ROTULO_META_DE_HOY)
         assertEquals("Neto del período", ROTULO_NETO_DEL_PERIODO)
-        assertEquals("Saldo proyectado: \$11,9M", leyendaDelCierre(caja))
-        assertEquals("Saldo proyectado al cierre, el 24 oct: \$11,9M", descripcionDelCierre(caja))
+        // Vuelta 70: el renglón de abajo ya no repite la cifra (la dice la frase de puente, una vez).
+        assertEquals(TOCA_UN_DIA, leyendaDelCierre(caja))
+        assertEquals("Libre el 24 oct: \$11,9M", descripcionDelCierre(caja))
     }
 
     /**
@@ -65,7 +68,7 @@ class UnNombrePorConceptoTest {
      * con «…» si no entra. A 360 dp con la letra ×1,12 tiene que entrar entero.
      */
     @Test
-    fun `saldo proyectado entra entero a 360 dp`() {
+    fun `el renglon de abajo entra entero a 360 dp`() {
         var cabe = false
         var detalle = ""
         composeRule.setContent {
@@ -81,13 +84,20 @@ class UnNombrePorConceptoTest {
                     val disponible = with(densidad) {
                         (360.dp - Medida.margenDePantalla * 2 - Medida.rellenoDeSuperficie * 2 - Movi.espacios.corto * 2).roundToPx()
                     } - ancho("25 sep") - ancho("24 oct")
-                    val pide = ancho(leyendaDelCierre(caja.copy(dias = caja.dias.map { it.copy(saldo = 999_900_000L) })))
+                    // Lo más largo que puede decir: el salario más grande, o cómo leer la línea.
+                    val conSalario = caja.copy(
+                        dias = caja.dias.dropLast(1) + DiaDeLaCaja(
+                            "2026-10-24", 999_900_000L, listOf(MovimientoDeLaCaja(LLEGA_TU_SALARIO, 999_900_000L)),
+                        ),
+                        hastaElSalario = true,
+                    )
+                    val pide = maxOf(ancho(leyendaDelCierre(conSalario)), ancho(leyendaDelCierre(caja)))
                     cabe = pide <= disponible
                     detalle = "pide $pide px y hay $disponible px"
                 }
             }
         }
         composeRule.waitForIdle()
-        assertTrue(cabe, "«Saldo proyectado» no entra a 360 dp: $detalle")
+        assertTrue(cabe, "El renglón de abajo de la caja no entra a 360 dp: $detalle")
     }
 }

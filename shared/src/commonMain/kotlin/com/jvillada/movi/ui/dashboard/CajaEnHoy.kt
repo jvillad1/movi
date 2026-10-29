@@ -34,9 +34,9 @@ import kotlinx.datetime.LocalDate
  * # «Tu día más justo» en Hoy
  *
  * Plan ya dibuja la caja proyectada día a día («Tu plata, día a día», Ola 4). Hoy dice lo único que
- * de ella hace falta de un vistazo: **cuál es el día más justo del período y con cuánto quedas ese
- * día** —«El 27 de octubre quedas en $180.000»—, o el primer día que quedarías en rojo. Tocarla lleva
- * a Plan, donde está la línea entera.
+ * de ella hace falta de un vistazo: **cuál es el día más justo hasta que te pagan y cuánto te queda
+ * libre ese día** —«Tu día más justo es el 5 de noviembre · $180.000»—, o el primer día que no te
+ * alcanzaría. Tocarla lleva a Plan, donde está la línea entera.
  *
  * **Es el mismo dato que Plan, no otra cuenta**: la caja sale de [cajaDelPeriodoDe] —la función que
  * usa la sección de Plan— sobre los mismos datos del Inicio (la lista del período y Tu plata), y el
@@ -57,18 +57,32 @@ const val TAG_ESQUELETO_CAJA_EN_HOY: String = "esqueleto-caja-en-hoy"
 data class CajaDeHoy(val rotulo: String, val cuando: String, val saldo: Long, val enRojo: Boolean)
 
 /**
- * [CajaDeHoy] de la proyección. **El rojo manda**: si algún día queda en negativo se dice el primero
- * —eso es lo que hay que atender—, aunque el más bajo sea otro más adelante. Si no, el día más justo.
+ * [CajaDeHoy] de la proyección. **El rojo manda**: si algún día lo libre queda en negativo se dice el
+ * primero —eso es lo que hay que atender—, aunque el más bajo sea otro más adelante. Si no, el día más
+ * justo.
+ *
+ * Vuelta 70: la cifra es **lo libre** (sin tu ahorro del período ni lo apartado), la misma de la frase
+ * de puente de Pagos, y el horizonte es hasta que te pagan (o 30 días sin un salario anotado).
  */
 fun cajaDeHoy(caja: CajaProyectada, hoy: LocalDate): CajaDeHoy {
     caja.primerDiaEnRojo?.let { rojo ->
         val cuando = if (rojo.fecha == hoy.toString()) "Hoy quedarías en" else "El ${fechaEnPalabras(rojo.fecha, hoy)} quedarías en"
-        return CajaDeHoy("Quedarías en rojo", cuando, rojo.saldo, enRojo = true)
+        return CajaDeHoy(ROTULO_NO_TE_ALCANZA, cuando, rojo.libre, enRojo = true)
     }
     val bajo = caja.diaMasBajo
-    val cuando = if (bajo.fecha == hoy.toString()) "Hoy tienes" else "El ${fechaEnPalabras(bajo.fecha, hoy)} quedas en"
-    return CajaDeHoy("Tu día más justo del período", cuando, bajo.saldo, enRojo = false)
+    val cuando = if (bajo.fecha == hoy.toString()) "Tu día más justo es hoy" else "Tu día más justo es el ${fechaEnPalabras(bajo.fecha, hoy)}"
+    val rotulo = if (caja.hastaElSalario) ROTULO_HASTA_QUE_TE_PAGUEN else ROTULO_PROXIMOS_30_DIAS
+    return CajaDeHoy(rotulo, cuando, bajo.libre, enRojo = false)
 }
+
+/** El rótulo de la fila cuando lo libre no alcanza (vuelta 70). */
+const val ROTULO_NO_TE_ALCANZA: String = "No te alcanza"
+
+/** El rótulo con un salario anotado: la caja mira hasta ese día. */
+const val ROTULO_HASTA_QUE_TE_PAGUEN: String = "Libre hasta que te paguen"
+
+/** El rótulo sin un salario anotado: la caja mira 30 días. */
+const val ROTULO_PROXIMOS_30_DIAS: String = "Libre en los próximos 30 días"
 
 /** El rótulo de la fila mientras no hay frase (cargando o sin poder leer): no afirma nada. */
 const val ROTULO_CAJA_SIN_DATO: String = "Tu plata, día a día"

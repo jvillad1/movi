@@ -308,7 +308,7 @@ class LasCifrasDelSistemaSeOcultanTest {
                 ParaRevisarSection(ScreenSection(type = "ALERTS", title = "Para revisar"), datosDeHoy) {}
             }
         }
-        esperar("Tu día más justo del período")
+        esperar("Tu día más justo")
         composeRule.onAllNodesWithText("Ver los movimientos", useUnmergedTree = true)[0].performClick()
         esperar("28 de septiembre · RAPPI COLOMBIA · Bancolombia")
     }
