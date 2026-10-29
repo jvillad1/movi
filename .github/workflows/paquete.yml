@@ -1,0 +1,121 @@
+# El paquete que Railway despliega: el JAR del server, con la web adentro, armado acá.
+#
+# **Por qué existe (vuelta 69, 29-oct-2026).** `scripts/desplegar.sh` subía el código y Railway
+# armaba todo con el `Dockerfile` (wasm + fat JAR). Ese build tarda 17 a 25 min y el plan de
+# Railway lo corta a los ~20 («DeadlineExceeded»): fallaba cerca de 1 de cada 2 intentos y cada
+# despliegue pedía hasta 4 reintentos. El límite es del plan, no se puede subir. En GitHub Actions
+# el mismo wasm arma bien, así que el JAR se arma acá y Railway solo lo empaqueta en una imagen
+# de runtime (`scripts/despliegue-runtime/`), que tarda segundos.
+#
+# **Cuándo corre.** Solo cuando se va a desplegar: lo dispara `scripts/desplegar.sh`
+# (`gh workflow run paquete.yml -f commit=<sha>`), que antes reusa una corrida exitosa del mismo
+# commit si ya existe. A propósito NO corre en cada push a master: cada corrida cuesta minutos.
+# El `push` a `paquete/**` es para probar el workflow en una rama antes de mergearlo
+# (`workflow_dispatch` solo funciona con el archivo ya en la rama por defecto).
+#
+# **Cómo lo encuentra el script.** Por el título de la corrida, «Paquete <sha completo>»: en una
+# corrida a mano, `headSha` es la punta de master al dispararla, no el commit que se armó.
+name: Paquete para Railway
+run-name: Paquete ${{ inputs.commit || github.sha }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: 'SHA completo del commit a empaquetar'
+        required: true
+  push:
+    branches: ['paquete/**']
+
+# El mismo commit dos veces no se arma en paralelo; el segundo espera y el script reusa el primero.
+concurrency:
+  group: paquete-${{ inputs.commit || github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  paquete:
+    name: JAR del server con la web
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit || github.sha }}
+
+      # El JDK y su reintento, igual que en `pruebas.yml` (ahí está el porqué completo): JetBrains
+      # Runtime 21 porque `gradle/gradle-daemon-jvm.properties` lo pide, el `token` para no caer en
+      # el cupo anónimo de la API de GitHub, y un segundo intento que sí rompe.
+      - id: jdk
+        uses: actions/setup-java@v5
+        continue-on-error: true
+        with:
+          distribution: jetbrains
+          java-version: '21'
+          token: ${{ github.token }}
+
+      - name: Reintentar el JDK
+        if: steps.jdk.outcome == 'failure'
+        run: sleep 45
+
+      - if: steps.jdk.outcome == 'failure'
+        uses: actions/setup-java@v5
+        with:
+          distribution: jetbrains
+          java-version: '21'
+          token: ${{ github.token }}
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # yarn y node nuevos (la copia guardada puede quedar trabada por un build cortado: ver el
+      # Dockerfile), y sin `local.properties`, como en la imagen de Railway.
+      - name: Limpiar yarn, node y local.properties
+        run: |
+          rm -rf ~/.gradle/yarn ~/.gradle/nodejs
+          rm -f local.properties
+
+      - name: La web (wasm de producción)
+        run: ./gradlew :webApp:wasmJsBrowserDistribution --console=plain
+
+      - name: La web trae las fuentes
+        run: sh scripts/el-paquete-web-trae-las-fuentes.sh webApp/build/dist/wasmJs/productionExecutable
+
+      - name: La web dentro del server
+        run: |
+          mkdir -p server/src/main/resources/static
+          cp -r webApp/build/dist/wasmJs/productionExecutable/. server/src/main/resources/static/
+
+      - name: El JAR
+        run: ./gradlew :server:buildFatJar --console=plain
+
+      # La imagen de runtime es `eclipse-temurin:17-jre-alpine`: una clase compilada para 21 (el
+      # JDK de este runner) no arrancaría ahí. Se mira la clase principal y una de `:core`.
+      # También que el JAR traiga la web y la fuente, que es lo que `desplegar.sh` verifica en
+      # producción.
+      - name: El JAR corre en Java 17 y trae la web
+        run: |
+          JAR=server/build/libs/server-all.jar
+          ls -l "$JAR"
+          for clase in com/jvillada/movi/server/ApplicationKt.class com/jvillada/movi/shared/model/Account.class; do
+            mayor=$(unzip -p "$JAR" "$clase" | od -An -j6 -N2 -tu1 | awk '{print $1*256+$2}')
+            echo "$clase: versión de clase $mayor"
+            [ "$mayor" -le 61 ] || { echo "══ $clase es para Java $((mayor-44)): no corre en el JRE 17 de Railway"; exit 1; }
+          done
+          unzip -l "$JAR" | grep -q ' static/index.html$' || { echo "══ El JAR no trae static/index.html"; exit 1; }
+          unzip -l "$JAR" | grep -q 'static/composeResources/com.jvillada.movi.resources/font/figtree_regular.ttf$' \
+            || { echo "══ El JAR no trae figtree_regular.ttf"; exit 1; }
+          echo "── JAR para Java 17, con la web y las fuentes: ok"
+
+      - name: Preparar el artefacto
+        run: |
+          mkdir -p paquete-railway
+          cp server/build/libs/server-all.jar paquete-railway/
+          git rev-parse HEAD > paquete-railway/commit.txt
+          echo "── commit $(cat paquete-railway/commit.txt), JAR de $(du -h paquete-railway/server-all.jar | cut -f1)"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: server-all
+          path: paquete-railway/
+          retention-days: 7
+          if-no-files-found: error
