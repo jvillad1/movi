@@ -6,6 +6,9 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.text.TextLayoutResult
@@ -22,13 +25,15 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
-import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 /**
- * # «Ocultar los saldos» se lee entero en Tú (vuelta 57)
+ * # Ningún texto de Tú se corta (vuelta 57 y 58)
  *
- * A 390 dp el subtítulo se cortaba en «…en est…». Ahora va en dos renglones: con el motor de texto real
- * y la letra de la app (×1,12), a 390 y a 360 dp, no se corta ni pasa de dos renglones.
+ * A 390 dp «Ocultar los saldos» se cortaba en «…en est…» (vuelta 57) y a 360 dp «Editar inicio» en «…y en
+ * qué o…» (vuelta 58). Ahora los subtítulos de las filas de Tú van en dos renglones: con el motor de
+ * texto real y la letra de la app (×1,12), a 390 y a 360 dp, se recorren **todas** las filas y ningún
+ * texto pasa de sus renglones ni termina en «…».
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -61,12 +66,30 @@ class OcultarLosSaldosEnteroTest {
         composeRule.waitUntil(5_000) {
             composeRule.onAllNodes(hasText(SUBTITULO_DE_OCULTAR_LOS_SALDOS), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
         }
-        val nodo = composeRule.onAllNodes(hasText(SUBTITULO_DE_OCULTAR_LOS_SALDOS), useUnmergedTree = true).fetchSemanticsNodes().single()
-        val r = mutableListOf<TextLayoutResult>()
-        nodo.config[SemanticsActions.GetTextLayoutResult].action?.invoke(r)
-        val layout = r.single()
-        assertFalse(layout.multiParagraph.didExceedMaxLines, "«$SUBTITULO_DE_OCULTAR_LOS_SALDOS» entero")
-        assertFalse((0 until layout.lineCount).any { layout.isLineEllipsized(it) }, "sin «…»")
+        // Que el perfil ya haya llegado: «Inicio del período» deja de decir «Cargando…».
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodes(hasText("Cargando", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isEmpty()
+        }
+        composeRule.waitForIdle()
+
+        // Vuelta 58: **todas** las filas de Tú, no solo una. Cada texto con su medida real: ninguno pasa de
+        // sus renglones ni termina en «…». (A 360 dp y ×1,12, «Qué secciones ves en Hoy y en qué o…» se cortaba.)
+        val leidos = composeRule.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsActions.GetTextLayoutResult), useUnmergedTree = true)
+            .fetchSemanticsNodes()
+        val cortados = leidos.mapNotNull { nodo ->
+            val r = mutableListOf<TextLayoutResult>()
+            nodo.config[SemanticsActions.GetTextLayoutResult].action?.invoke(r)
+            val layout = r.firstOrNull() ?: return@mapNotNull null
+            val texto = layout.layoutInput.text.text
+            val corta = layout.multiParagraph.didExceedMaxLines || (0 until layout.lineCount).any { layout.isLineEllipsized(it) }
+            if (corta) texto else null
+        }
+        assertTrue(leidos.size > 20, "se leyeron las filas de Tú (${leidos.size})")
+        assertTrue(cortados.isEmpty(), "ningún texto de Tú se corta; cortados: $cortados")
+        assertTrue(
+            leidos.any { n -> n.config.getOrNull(SemanticsProperties.Text)?.any { it.text == "Qué secciones ves en Hoy y en qué orden" } == true },
+            "el subtítulo de «Editar inicio» está en pantalla",
+        )
     }
 
     @Test

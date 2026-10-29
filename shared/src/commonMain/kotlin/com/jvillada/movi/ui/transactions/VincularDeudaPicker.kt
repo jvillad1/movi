@@ -3,6 +3,7 @@ package com.jvillada.movi.ui.transactions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.Icon
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import com.jvillada.movi.theme.Espacio
@@ -80,11 +81,43 @@ fun textoDeCuentaDeDeuda(cuenta: Account): String {
     return "${cuenta.name} · $moneda · $cuanto"
 }
 
+/** El tag del pie del selector de deuda (vuelta 58). */
+const val TAG_AYUDA_DEL_SELECTOR_DE_DEUDA: String = "movimiento:ayuda-del-selector-de-deuda"
+
 /** Lo que dice un crédito sin deuda en Movi en «¿De cuál crédito?» (vuelta 53). */
 const val SIN_EL_SALDO_EN_EL_SELECTOR: String = "Movi no tiene el saldo"
 
 /** Lo que dice una tarjeta en cero (o pagada de más) en el mismo selector (vuelta 53). */
 const val SIN_DEUDA_EN_EL_SELECTOR: String = "Sin deuda"
+
+/**
+ * **Vuelta 58 · lo que dice el pie del selector, con el género bien.** «Es opcional: si no eliges ningún
+ * crédito / ninguna tarjeta / ninguna deuda…»: según lo que el selector ofrece de verdad ([cuentas]).
+ * Antes decía siempre «ninguna», justo debajo de «¿De cuál crédito?». Pura.
+ */
+fun ayudaDelSelectorDeDeuda(cuentas: List<Account>): String {
+    val deudas = cuentasDeDeuda(cuentas)
+    val ninguna = when {
+        deudas.isNotEmpty() && deudas.all { it.type == AccountType.LOAN } -> "ningún crédito"
+        deudas.isNotEmpty() && deudas.all { it.type == AccountType.CREDIT_CARD } -> "ninguna tarjeta"
+        else -> "ninguna deuda"
+    }
+    return "Es opcional: si no eliges $ninguna, el movimiento queda como un gasto suelto."
+}
+
+/**
+ * **Vuelta 58 · primero las del tipo que pide la categoría.** En «Más» el selector lista créditos y
+ * tarjetas; con «Pago de tarjeta» van primero las tarjetas, con «Cuota de crédito» los créditos. El orden
+ * dentro de cada grupo se conserva. Pura.
+ */
+fun deudasConLasDeLaCategoriaPrimero(cuentas: List<Account>, categoria: String?): List<Account> {
+    val primero = when (categoria) {
+        com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY -> AccountType.CREDIT_CARD
+        com.jvillada.movi.shared.model.CUOTA_CATEGORY -> AccountType.LOAN
+        else -> return cuentas
+    }
+    return cuentas.sortedBy { if (it.type == primero) 0 else 1 }
+}
 
 /**
  * La sección «¿A cuál crédito o tarjeta corresponde?». `cuentas` es la lista COMPLETA de cuentas
@@ -99,6 +132,11 @@ fun SelectorDeCuentaDeDeuda(
     modifier: Modifier = Modifier,
     /** Vuelta 51: «¿De cuál crédito?» cuando solo se ofrecen créditos («Es la cuota de un crédito»). */
     titulo: String = "¿A cuál crédito o tarjeta corresponde?",
+    /**
+     * Vuelta 58: el pie. Por defecto, [ayudaDelSelectorDeDeuda] de lo que se ofrece; Revisar aviso pasa el
+     * suyo (en modo cuota, «Elige el crédito: sin él no se confirma»); `null` no pinta pie.
+     */
+    ayuda: String? = ayudaDelSelectorDeDeuda(cuentas),
 ) {
     val deudas = cuentasDeDeuda(cuentas)
     if (deudas.isEmpty()) return
@@ -121,11 +159,13 @@ fun SelectorDeCuentaDeDeuda(
                 }
             }
         }
-        Text(
-            "Es opcional: si no eliges ninguna, el movimiento queda como un gasto suelto.",
-            style = Movi.textos.apoyo,
-            color = Movi.colores.textoMedio,
-            modifier = Modifier.padding(top = Espacio.xs),
-        )
+        if (ayuda != null) {
+            Text(
+                ayuda,
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoMedio,
+                modifier = Modifier.padding(top = Espacio.xs).testTag(TAG_AYUDA_DEL_SELECTOR_DE_DEUDA),
+            )
+        }
     }
 }

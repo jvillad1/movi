@@ -29,18 +29,18 @@ class LaPataQueNoSeRecategorizaTest {
     fun `la cuota dice que es la cuota de su credito y que cuenta como gasto`() {
         val dinero = pata(ahorros, CUOTA_CATEGORY, "Cuota de Vehículo 4083 · Pago Occidente")
         assertEquals(
-            "Es la cuota de Vehículo 4083: cuenta como gasto. Para cambiarla, anúlala y vuelve a anotarla.",
+            "Es la cuota de Vehículo 4083: cuenta como gasto. Su categoría no se cambia; si no era la cuota, anúlala.",
             porQueLaPataNoSeRecategoriza(dinero, cuentas),
         )
         // La pata del crédito dice lo mismo, con su cuenta.
         val deuda = pata(vehiculo, CUOTA_CATEGORY, "Abono a capital desde Bancolombia Ahorros 4057", TransactionType.INCOME)
         assertEquals(
-            "Es la cuota de Vehículo 4083: cuenta como gasto. Para cambiarla, anúlala y vuelve a anotarla.",
+            "Es la cuota de Vehículo 4083: cuenta como gasto. Su categoría no se cambia; si no era la cuota, anúlala.",
             porQueLaPataNoSeRecategoriza(deuda, cuentas),
         )
         // Con el concepto cambiado, sin nombre.
         assertEquals(
-            "Es la cuota de un crédito: cuenta como gasto. Para cambiarla, anúlala y vuelve a anotarla.",
+            "Es la cuota de un crédito: cuenta como gasto. Su categoría no se cambia; si no era la cuota, anúlala.",
             porQueLaPataNoSeRecategoriza(pata(ahorros, CUOTA_CATEGORY, "Carro octubre"), cuentas),
         )
         assertFalse(porQueLaPataNoSeRecategoriza(dinero, cuentas).contains("traspaso"))

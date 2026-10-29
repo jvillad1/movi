@@ -220,10 +220,10 @@ const val QUE_PASA_CON_EL_ABONO_EXTRA: String =
     "Un abono extra baja el capital por el monto entero y no marca otra cuota como pagada. " +
         "Movi no adelanta la cuota del mes que viene: un pago salda la cuota del período en que se hizo."
 
-/** «La cuota de octubre de Vehículo 4083 ya está pagada. ¿Este pago es un abono extra?» */
 /** El tag de por qué una pata no se recategoriza, en su detalle (vuelta 57). */
 const val TAG_POR_QUE_NO_SE_RECATEGORIZA: String = "movimiento:por-que-no-se-recategoriza"
 
+/** «La cuota de octubre de Vehículo 4083 ya está pagada. ¿Este pago es un abono extra?» */
 fun preguntaDeLaCuotaYaPagada(ya: CuotaYaPagada): String =
     "${fraseDeLaCuotaYaPagada(ya.credito, ya.periodo)} ¿Este pago es un abono extra?"
 
@@ -1172,7 +1172,8 @@ internal fun ContenidoDelMovimiento(
                             Separador(SangriaDeSeparador.Ninguna)
                             Spacer(Modifier.height(Espacio.s))
                             SelectorDeCuentaDeDeuda(
-                                cuentas = cuentas,
+                                // Vuelta 58: primero las del tipo que pide la categoría (las tarjetas, en «Pago de tarjeta»).
+                                cuentas = deudasConLasDeLaCategoriaPrimero(cuentas, event.category),
                                 seleccionada = null,
                                 onSeleccionar = { elegida -> elegida?.let { desdeLaSugerencia = false; vincular(it) } },
                             )

@@ -302,6 +302,7 @@ fun MasScreen(
                         subtitulo = cutoff?.let { d ->
                             textoDelInicioDelMes(d, siElCorteCaeEnFinDeSemanaDe(profile?.periodWeekendRule))
                         } ?: if (falloElPerfil) NO_PUDIMOS_LEERLO else CARGANDO,
+                        lineasDelSubtitulo = 2,
                         final = if (cutoff != null) ({ Chevron() }) else null,
                         onClick = if (cutoff == null) null else ({ errorPeriodo = null; showPeriodo = true }),
                     )
@@ -313,6 +314,7 @@ fun MasScreen(
                         titulo = AHORRO_DE_CADA_PERIODO,
                         inicio = { IconoDeAjuste(Icons.Rounded.Savings) },
                         subtitulo = ahorro?.let(::textoDelAhorro) ?: if (falloElPerfil) NO_PUDIMOS_LEERLO else CARGANDO,
+                        lineasDelSubtitulo = 2,
                         final = if (ahorro != null) ({ Chevron() }) else null,
                         onClick = if (ahorro == null) null else ({ errorAhorro = null; showAhorro = true }),
                     )
@@ -450,6 +452,7 @@ fun MasScreen(
                             true -> "El día siguiente al corte"
                             false -> "Apagado"
                         },
+                        lineasDelSubtitulo = 2,
                         final = {
                             Interruptor(
                                 cierrePorCorreo == true,
@@ -488,6 +491,7 @@ fun MasScreen(
                         titulo = DESCARGAR_TUS_DATOS,
                         inicio = { IconoDeAjuste(Icons.Rounded.Download) },
                         subtitulo = if (bajandoDatos) "Preparando el archivo…" else "Un ZIP en CSV y JSON",
+                        lineasDelSubtitulo = 2,
                         final = { Chevron() },
                         onClick = {
                             if (!bajandoDatos) {
@@ -544,6 +548,7 @@ fun MasScreen(
                         titulo = CERRAR_SESION_EN_TODOS,
                         inicio = { IconoDeAjuste(Icons.Rounded.Devices) },
                         subtitulo = if (cerrandoTodas) "Cerrando…" else null,
+                        lineasDelSubtitulo = 2,
                         onClick = if (cerrandoTodas) null else ({ errorCierreTotal = null; confirmarCierreTotal = true }),
                     )
                 }
@@ -780,6 +785,7 @@ private fun FilaQueLleva(
     Fila(
         titulo = titulo,
         subtitulo = subtitulo,
+        lineasDelSubtitulo = 2,
         inicio = { IconoDeAjuste(icono) },
         final = { Chevron() },
         onClick = { onNavigate(destino) },
@@ -871,6 +877,7 @@ private fun SeccionEntrarConHuella() {
                     estado == EstadoDeHuella.SIN_REGISTRAR -> "Sin huellas registradas"
                     else -> "Sin escribir tu contraseña"
                 },
+                lineasDelSubtitulo = 2,
                 final = { Interruptor(activada, onCambio = { alternar() }) },
                 onClick = { alternar() },
             )
