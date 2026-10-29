@@ -870,8 +870,12 @@ class LocalRepository(
         // disfrazado y permanente. Solo se borran lápidas; una anulación del dueño no se toca.
         val lapidasQueSobran = db.voidEventQueries.selectFantasmaIds().executeAsList()
             .filter { it in porId }
+        // Vuelta 67 (revisión) · **lo restaurado en otro aparato**: el server vuelve a devolver un
+        // movimiento que este teléfono anuló y ya subió. Sin esto la marca local lo seguía escondiendo
+        // para siempre (`olvidarFantasma` solo borra las lápidas). Ver [restauradasEnOtroLado].
+        val restauradas = restauradasEnOtroLado(uid, porId.keys)
         val ahora = Clock.System.now().toEpochMilliseconds()
-        if (cambiados.isNotEmpty() || fantasmas.isNotEmpty() || lapidasQueSobran.isNotEmpty()) {
+        if (cambiados.isNotEmpty() || fantasmas.isNotEmpty() || lapidasQueSobran.isNotEmpty() || restauradas.isNotEmpty()) {
             // **Todo en la misma transacción que espeja la respuesta**, que es el punto: antes lo
             // que el server ya no tenía se tachaba en una variable local, y esa conclusión se
             // perdía con la respuesta. Escrita en `void_event`, la lectura sin red dice lo mismo
@@ -882,6 +886,7 @@ class LocalRepository(
                 cambiados.forEach { mirrorEventLocally(it, uid) }
                 fantasmas.forEach { db.voidEventQueries.insertFantasma(it, ahora, uid) }
                 lapidasQueSobran.forEach { db.voidEventQueries.olvidarFantasma(it) }
+                olvidarLasAnulaciones(restauradas, uid)
             }
         }
         // R3: la foto de lo compartido, para que sin señal se siga contando solo tu parte.
@@ -2561,6 +2566,40 @@ class LocalRepository(
      * espejo. En los dos casos se borran las marcas del movimiento y de su otra pata, y el saldo
      * guardado vuelve a tener su delta —la reversa exacta de la de [voidEvent]—.
      */
+    /**
+     * Los movimientos que el server devuelve y este teléfono tiene anulados por el dueño, con la
+     * anulación ya subida: alguien los restauró en otro aparato. No cuenta si la anulación del
+     * movimiento —o la de su otra pata— todavía no subió (entre anular y empujar, el server los sigue
+     * devolviendo).
+     */
+    private fun restauradasEnOtroLado(uid: String, delServer: Set<String>): List<String> {
+        val marcas = db.voidEventQueries.selectDelDueno().executeAsList()
+        if (marcas.isEmpty()) return emptyList()
+        val sinSubir = db.voidEventQueries.selectUnsynced(uid).executeAsList().map { it.originalEventId }.toSet()
+        return marcas.map { it.originalEventId }.distinct()
+            .filter { it in delServer && it !in sinSubir }
+            .filter { id ->
+                val fila = db.financialEventQueries.selectById(id, uid).executeAsOneOrNull() ?: return@filter true
+                val hermanas = fila.transferId?.let { db.financialEventQueries.selectByTransferId(it, uid).executeAsList() }.orEmpty()
+                hermanas.none { it.id in sinSubir }
+            }
+    }
+
+    /**
+     * Borra las anulaciones de [ids] y devuelve su efecto al saldo guardado: la reversa exacta de la
+     * de [voidEvent]. Va adentro de una transacción de quien llama.
+     */
+    private fun olvidarLasAnulaciones(ids: List<String>, uid: String) {
+        ids.distinct().forEach { id ->
+            if (db.voidEventQueries.countFor(id).executeAsOne() == 0L) return@forEach
+            db.voidEventQueries.deleteFor(id)
+            val fila = db.financialEventQueries.selectById(id, uid).executeAsOneOrNull() ?: return@forEach
+            val acct = db.accountQueries.selectById(fila.accountId).executeAsOneOrNull() ?: return@forEach
+            val delta = deltaDelEspejo(AccountType.valueOf(acct.type), TransactionType.valueOf(fila.type), fila.amount, fila.currency)
+            db.accountQueries.updateBalance(acct.balance + delta, acct.id)
+        }
+    }
+
     override suspend fun restaurarMovimiento(id: String) {
         val uid = userId()
         val (filas, subio) = enDisco {
@@ -2576,18 +2615,7 @@ class LocalRepository(
             filas to marcas.none { it.syncedAt == null }
         }
         if (subio) remote.restaurarMovimiento(id)
-        enDisco {
-            db.transaction {
-                val ids = (listOf(id) + filas.map { it.id }).distinct()
-                val conMarca = ids.filter { db.voidEventQueries.countFor(it).executeAsOne() > 0L }
-                ids.forEach { db.voidEventQueries.deleteFor(it) }
-                filas.filter { it.id in conMarca }.forEach { fila ->
-                    val acct = db.accountQueries.selectById(fila.accountId).executeAsOneOrNull() ?: return@forEach
-                    val delta = deltaDelEspejo(AccountType.valueOf(acct.type), TransactionType.valueOf(fila.type), fila.amount, fila.currency)
-                    db.accountQueries.updateBalance(acct.balance + delta, acct.id)
-                }
-            }
-        }
+        enDisco { db.transaction { olvidarLasAnulaciones(listOf(id) + filas.map { it.id }, uid) } }
     }
 
     override suspend fun getAvisosConfirmadosSinMovimiento() = remote.getAvisosConfirmadosSinMovimiento()
