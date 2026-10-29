@@ -45,7 +45,7 @@ class ElTotalSeParteEnDiaADiaYFijosTest {
         val desglose = assertNotNull(desgloseDelAnalisis(analisis, mapOf("2026-10-02" to 2_100_000L), hoy))
         assertEquals(4_888_850L, analisis.total)
         assertEquals(analisis.total, desglose.diaADia + desglose.fijos)
-        assertEquals("Día a día \$2,1M + fijos \$2,8M", textoDelDesglose(desglose))
+        assertEquals("Día a día \$2,1M + fijos pagados \$2,8M", textoDelDesglose(desglose))
     }
 
     @Test

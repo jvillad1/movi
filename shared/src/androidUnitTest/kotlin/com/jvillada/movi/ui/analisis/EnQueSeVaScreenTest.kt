@@ -17,6 +17,8 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.DashboardSummary
+import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FiltroDeMovimientos
 import com.jvillada.movi.shared.model.FinancialEvent
@@ -82,8 +84,10 @@ class EnQueSeVaScreenTest {
 
     private val navegado = mutableListOf<Screen>()
 
-    private fun montar() {
+    private fun montar(resumen: DashboardSummary? = null) {
         Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+            override suspend fun getDashboardSummary(scope: Scope): DashboardSummary =
+                resumen ?: error("sin resumen en esta prueba")
             override suspend fun getUserProfile(): UserProfile = perfil
             override suspend fun getAccounts(): List<Account> = cuentas
             override suspend fun getEventsByDay(): List<EventDay> =
@@ -129,6 +133,34 @@ class EnQueSeVaScreenTest {
         assertEquals(listOf("Comida", "Transporte"), nombresDeLasFilas())
         // Septiembre a la misma altura (15 días): los $200.000 del 3.
         assertTrue(hay("a esta altura del período pasado"))
+    }
+
+    /**
+     * Vuelta 60: **el total dice de qué está hecho**, en la pantalla de verdad: el resumen del Inicio
+     * (una lectura que depende del período) trae el gasto del día a día, y el total se parte en día a
+     * día + fijos pagados. La revisión de la vuelta encontró que la lectura no se hacía nunca (sin el
+     * período vigente, `rememberLectura` no lee) y el renglón no salía.
+     */
+    @Test
+    fun `el total se parte en dia a dia y fijos pagados`() {
+        // De los $650.000, el server dice que $530.000 fueron del día a día; el resto (Uber), fijos.
+        montar(DashboardSummary(scope = Scope.SELF, gastoVariablePorDia = mapOf("2026-10-02" to 450_000L, "2026-10-09" to 80_000L)))
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag(TAG_DESGLOSE_DEL_ANALISIS, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        }
+        val desglose = composeRule.onNodeWithTag(TAG_DESGLOSE_DEL_ANALISIS, useUnmergedTree = true).fetchSemanticsNode()
+        assertEquals(
+            "Día a día \$530.000 + fijos pagados \$120.000",
+            desglose.config.getOrNull(SemanticsProperties.Text).orEmpty().joinToString("") { it.text },
+        )
+    }
+
+    @Test
+    fun `sin el resumen no hay desglose, y el total sigue`() {
+        montar()
+        composeRule.waitForIdle()
+        assertTrue(hay(formatCOP(650_000L)))
+        assertEquals(0, composeRule.onAllNodesWithTag(TAG_DESGLOSE_DEL_ANALISIS, useUnmergedTree = true).fetchSemanticsNodes().size)
     }
 
     @Test

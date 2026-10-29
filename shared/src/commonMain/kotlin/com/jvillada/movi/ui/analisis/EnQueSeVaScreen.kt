@@ -146,11 +146,6 @@ fun EnQueSeVaScreen(
     val perfil = rememberLectura(ClaveDeLectura.Perfil, reintento = reintento) { Repositories.wallets.getUserProfile() }
     val eventos = rememberLectura(ClaveDeLectura.EventosPorDia, reintento = reintento) { Repositories.wallets.getEventsByDay() }
     val cuentas = rememberLectura(ClaveDeLectura.Cuentas, reintento = reintento) { Repositories.wallets.getAccounts() }
-    // Vuelta 60: el gasto del día a día del período en curso, el MISMO que mide «Cuánto puedes gastar»
-    // (la misma lectura que el Inicio, recordada). Con él, el total se parte en día a día + fijos.
-    val resumen = rememberLectura(ClaveDeLectura.ResumenDelTablero(Scope.SELF), reintento = reintento) {
-        Repositories.wallets.getDashboardSummary(Scope.SELF)
-    }
     // R3 · tu parte de lo que pagaron otros («Caro pagó el mercado»): es gasto tuyo el día del gasto,
     // igual que en «Salió». No está en la lista de movimientos (no es de tus cuentas).
     var tuParteDeOtros by remember { mutableStateOf<List<com.jvillada.movi.shared.model.FinancialEvent>>(emptyList()) }
@@ -162,6 +157,17 @@ fun EnQueSeVaScreen(
     // (como Movimientos): es lo único honesto que se puede mostrar sin él.
     val ajustes: PeriodSettings? = perfil.valor?.ajustesDelPeriodo() ?: if (perfil.terminada) PeriodSettings() else null
     val periodoDeHoy = remember(ajustes, hoy) { ajustes?.let { periodoDeLaFecha(hoy.toString(), it) } }
+    // Vuelta 60: el gasto del día a día del período en curso, el MISMO que mide «Cuánto puedes gastar»
+    // (la misma lectura que el Inicio, recordada). Con él, el total se parte en día a día + fijos. La
+    // clave depende del período: sin decirle cuál, `rememberLectura` no lee nada.
+    val resumen = rememberLectura(
+        ClaveDeLectura.ResumenDelTablero(Scope.SELF),
+        reintento = reintento,
+        periodoVigente = periodoDeHoy?.prefijo,
+        activa = periodoDeHoy != null,
+    ) {
+        Repositories.wallets.getDashboardSummary(Scope.SELF)
+    }
     var periodo by remember(periodoDeHoy, periodoInicial) {
         mutableStateOf(periodoInicial?.let { periodoDelPrefijo(it) } ?: periodoDeHoy)
     }
@@ -368,11 +374,12 @@ internal fun desgloseDelAnalisis(
 }
 
 /**
- * «Día a día $2,1M + fijos $2,8M»: el día a día es la cifra de la columna «Período» de «Cuánto puedes
- * gastar»; los fijos, lo que pagó facturas, cuotas y recurrentes del período.
+ * «Día a día $2,1M + fijos pagados $2,8M»: el día a día es la cifra de la columna «Período» de «Cuánto
+ * puedes gastar»; los fijos, lo que ya pagó facturas, cuotas y recurrentes del período («pagados»: en
+ * «¿De dónde sale?», «Fijos del período» cuenta también los que faltan por pagar).
  */
 internal fun textoDelDesglose(desglose: DesgloseDelGastado): String =
-    "Día a día ${formatMoneyCompact(desglose.diaADia)} + fijos ${formatMoneyCompact(desglose.fijos)}"
+    "Día a día ${formatMoneyCompact(desglose.diaADia)} + fijos pagados ${formatMoneyCompact(desglose.fijos)}"
 
 /** El renglón del desglose. */
 const val TAG_DESGLOSE_DEL_ANALISIS = "desglose-del-analisis"
