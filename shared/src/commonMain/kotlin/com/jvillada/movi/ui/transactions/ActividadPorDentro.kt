@@ -7,9 +7,10 @@ import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.PropuestasDeLaBandeja
 import com.jvillada.movi.shared.model.SmsMessage
-import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.PresentacionDelMovimiento
+import com.jvillada.movi.shared.model.comoSePresenta
 import com.jvillada.movi.shared.model.esGastoDelPeriodo
-import com.jvillada.movi.shared.model.isCashFlow
+import com.jvillada.movi.shared.model.esperaEnPorConfirmar
 import com.jvillada.movi.shared.model.montoContado
 import com.jvillada.movi.shared.model.nombreParaMostrar
 import com.jvillada.movi.ui.components.formatCOP
@@ -81,8 +82,10 @@ fun encabezadoDelDiaDeActividad(iso: String, hoy: String): String {
  * siempre.
  *
  * @property gastaste lo gastado ese día: la regla de «Gastos» ([esGastoDelPeriodo]: gasto en pesos,
- *   confirmado, de plata del bolsillo —sin traspasos, pagos de tarjeta, cuentas de deuda ni ajustes—)
- *   y **tu parte** de un gasto repartido ([montoContado]), la que suma «En qué se va».
+ *   confirmado, de plata del bolsillo —con la cuota de un crédito; sin traspasos, pagos de tarjeta,
+ *   cuentas de deuda ni ajustes—) y **tu parte** de un gasto repartido ([montoContado]), la que suma «En
+ *   qué se va». Es la misma función que pinta el «−» de cada fila ([comoSePresenta]): el «Gastaste» es
+ *   la suma de las filas con «−» (en pesos y confirmadas).
  * @property entro lo que entró: la regla de «Entró» de la franja del período ([resumenDelPanel]).
  */
 data class ResumenDelDia(val gastaste: Long, val entro: Long)
@@ -92,9 +95,11 @@ fun resumenDelDia(items: List<FinancialEvent>, tiposDeCuenta: Map<String, Accoun
     val gastaste = items
         .filter { esGastoDelPeriodo(it, tiposDeCuenta[it.accountId]) }
         .sumOf { montoContado(it) }
+    // Vuelta 50: la misma función que pinta el «+» de la fila ([comoSePresenta]), con la moneda y «Por
+    // confirmar» de la regla de «Entró».
     val entro = items
-        .filter { it.type == TransactionType.INCOME && it.currency == "COP" && matchesChip(it, CHIP_INGRESOS) }
-        .filter { isCashFlow(tiposDeCuenta[it.accountId] ?: AccountType.CHECKING, it.type, it.category) }
+        .filter { comoSePresenta(it, tiposDeCuenta[it.accountId]) == PresentacionDelMovimiento.INGRESO }
+        .filter { it.currency == "COP" && !esperaEnPorConfirmar(it.reconciliationStatus) }
         .sumOf { montoContado(it) }
     return ResumenDelDia(gastaste = gastaste, entro = entro)
 }

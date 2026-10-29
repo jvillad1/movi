@@ -375,10 +375,13 @@ private fun FilaDeResultado(
     val detalleYDerecha: Pair<String, (@Composable () -> Unit)?> = when (resultado) {
         is ResultadoDeBusqueda.Movimiento -> {
             val e = resultado.evento
-            val cuenta = cuentas.firstOrNull { it.id == e.accountId }?.name
+            val laCuenta = cuentas.firstOrNull { it.id == e.accountId }
+            val cuenta = laCuenta?.name
             val linea = listOfNotNull(e.category.takeIf { it.isNotBlank() }, etiquetaDeFecha(epochMillisToAppDate(e.timestamp), hoy), cuenta)
                 .joinToString(" · ")
-            val tono = tonoDelEvento(e)
+            // Vuelta 50: de un par se lista la pata que cuenta (`unaPataPorPar`), así que la cuota sale
+            // como el gasto que es, «−$980.000».
+            val tono = tonoDelEvento(e, laCuenta?.type)
             linea to @Composable { CifraDelMovimiento(e.amount, e.currency, tono) }
         }
         is ResultadoDeBusqueda.Comercio -> {

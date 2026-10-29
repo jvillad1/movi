@@ -48,12 +48,15 @@ private const val DIAS_POR_SEMANA = 7
  * [tipoDeCuenta] es el de la cuenta del movimiento, si se conoce. Sin él igual se aplican las
  * exclusiones por categoría de [isCashFlow] (traspaso, pago de tarjeta, ajuste…): se le pregunta
  * como si fuera una cuenta de activo, que es donde esas categorías viven.
+ *
+ * Vuelta 50: es [comoSePresenta] —la misma función con la que la fila decide «−», «+» o nada— más la
+ * moneda y «Por confirmar». Así la fila de la cuota dice «−$980.000» y el «Gastaste» del día la suma,
+ * con una sola regla.
  */
 fun esGastoDelPeriodo(evento: FinancialEvent, tipoDeCuenta: AccountType?): Boolean =
-    evento.type == TransactionType.EXPENSE &&
+    comoSePresenta(evento, tipoDeCuenta) == PresentacionDelMovimiento.GASTO &&
         evento.currency == "COP" &&
-        cuentaEnGastosEIngresos(evento) &&
-        isCashFlow(tipoDeCuenta ?: AccountType.CHECKING, evento.type, evento.category)
+        !esperaEnPorConfirmar(evento.reconciliationStatus)
 
 /**
  * Una barra del gráfico: un día (o una semana) del período.

@@ -635,7 +635,9 @@ definición solo para los APK viejos; este cliente no los pinta. Ver §43.
 - **La fila de un movimiento es una `Fila`** (Movimientos, Por revisar, Buscar, el detalle de una
   cuenta) y **su monto es la `Cifra` del sistema** (`CifraDelMovimiento`): el gasto `Neutro` con «−»,
   el ingreso `Ingreso` con «+», el traspaso `EntreCuentas` sin signo y lo que no movió plata
-  `Apagado` (`tonoDeCifraDelTono`). Ninguna fila elige su color a mano. El punto de «por confirmar» y
+  `Apagado` (`tonoDeCifraDelTono`). **Qué es cada fila lo decide `comoSePresenta`** (`:core`, vuelta 50),
+  la misma función que suma «Gastos» y el «Gastaste» del día: la cuota de un crédito es un gasto (`−`),
+  el desembolso un ingreso (`+`), el pago de tarjeta, el traspaso y el abono van entre cuentas. Ninguna fila elige su color a mano. El punto de «por confirmar» y
   el ícono de repetición van junto al monto y dicen su nombre al lector de pantalla.
 - **Un aviso del banco se ve igual en todas partes** (`TarjetaDeAviso`, en `ui/sms/ElMismoPago.kt`):
   la superficie de la propuesta cuando pide decisión y la capa 1 cuando es historial, el estado en una
@@ -2622,7 +2624,54 @@ el movimiento; «Quitar la marca» y «No fue este» en el «⋯»), en `commonT
 `LaFacturaPagadaOfreceLoQueEsTest`, y en `:server` `PagoDeCuotaSaldaElPeriodoTest` (las dos patas saldan
 el período; el abono no). `HojaDeCuotaConInteresRealTest` ya no escribe la cuota: llega puesta.
 
-## 53. Vuelta 51: «Cambiar» en la tarjeta, las categorías internas fuera de los selectores, y los avisos viejos se apartan
+## 53. Vuelta 50: la cuota de un crédito se ve como lo que es, un gasto
+
+La revisión del arreglo #541 (28-oct, `r49-06`): en «Últimos movimientos» del Inicio la «Cuota de crédito
+$980.000» salía como un traspaso —las flechas, sin signo y en gris azulado—, igual que «Traspaso $50.000» y
+«Pago de tarjeta $100.000». Por la regla del dueño **la cuota sí cuenta como gasto** («es plata que
+salió») y el pago de tarjeta no, así que mostrarla neutra decía lo contrario. **Sin reglas de plata
+nuevas**: la presentación sigue a `isCashFlow`.
+
+1. **Una sola función decide** (`core/.../ComoSePresenta.kt`): `comoSePresenta(evento, tipoDeCuenta)` →
+   `GASTO`, `INGRESO` o `NEUTRO`, con `countsAsCashFlow` y `isCashFlow` (sin el tipo de cuenta, como una
+   cuenta de activo). No mira la moneda ni «Por confirmar»: un cargo en dólares o un aviso sin confirmar
+   se ven como gasto, con su píldora. Para un par, `laPataQueCuenta` / `comoSePresentaElPar`: la pata que
+   sale y después la que entra, la primera que no sea neutra.
+   - `esGastoDelPeriodo` (la regla de «Gastos», «En qué se va» y el **«Gastaste» del día**) es ahora
+     `comoSePresenta == GASTO` más pesos y confirmado, y el «Entró» del día `== INGRESO` con lo mismo. La
+     fila y su total salen de la misma función: el «Gastaste» es la suma de las filas con «−».
+2. **La fila pinta lo que cuenta**, en todas las listas:
+
+   | | Antes | Ahora |
+   |---|---|---|
+   | Cuota de crédito (par) | flechas, «$980.000» gris azulado | ícono de «Cuota de crédito», **«−$980.000» en tinta** |
+   | Desembolso (par) | flechas, «+$X» verde | ícono del desembolso, «+$X» verde |
+   | Pago de tarjeta, traspaso, abono extra | flechas, sin signo, gris azulado | igual |
+
+   - **Actividad e Inicio** (`TransferRow`, `tonoDelRenglon`): la cifra es la de la pata que cuenta
+     (`pataQueSeMuestra`: la cuota entera que salió, no el abono a capital) y el ícono, el de su
+     categoría. En el chip «Gastos» la pata del dinero ya iba suelta con «−»; la del crédito no entra.
+   - **Buscar** (`unaPataPorPar`): de un par se lista la pata que cuenta. Antes se quedaba la primera, y
+     una cuota podía salir por la pata del crédito, sin signo y por el abono a capital.
+   - **El detalle de un período** («Los más grandes»): la cifra de la fila de un movimiento
+     (`CifraDelMovimiento` con `tonoDelEvento`), «−$980.000»; antes iban sin signo.
+   - **El detalle de una cuenta no cambia**: ahí la fila pinta el signo de lo que movió el saldo de ESA
+     cuenta (vuelta de diseño 32, el total del día es la suma de sus filas). En la cuenta de dinero la
+     cuota ya era «−$980.000»; en la del crédito su pata es «+» lo que bajó la deuda (el capital).
+   - Un desembolso guardado antes de su categoría («Traspaso») sigue llamándose «Desembolso» por los tipos
+     de cuenta, pero se pinta neutro: no suma en «Entró» (la migración de datos lo pasa a
+     `DESEMBOLSO_CATEGORY`).
+3. **El «Gastaste» del día ya incluía la cuota y excluía el pago de tarjeta y el traspaso** (vuelta 40,
+   `resumenDelDia` sobre `esGastoDelPeriodo`); ahora además comparte la función con la fila.
+
+Lo vigilan `ComoSePresentaTest` (`:core`: cuota, pago de tarjeta, traspaso, desembolso y abono con las patas
+de `pagoDeCuotaLegs` y `transferLegsFor`), `ComoSePresentaLaFilaTest` (`commonTest`: el tono y el texto de
+cada par, «Gastaste» = la suma de las filas con «−», el chip «Gastos» y Buscar) y `LaCuotaSeVeComoGastoTest`
+(Robolectric: en Actividad y en el Inicio la cuota dice «−$980.000», el pago de tarjeta y el traspaso no
+llevan signo, y el día dice «Gastaste $980.000»). `ColorYEntreCuentasTest` y `DesembolsoEnMovimientosTest`
+pasan la cuota de entre cuentas a gasto (y derivan `countsAsCashFlow` como el server).
+
+## 54. Vuelta 51: «Cambiar» en la tarjeta, las categorías internas fuera de los selectores, y los avisos viejos se apartan
 
 La segunda pasada de «un día del dueño» (28-oct, sobre master 8951c0bb): ya no hay resultados equivocados,
 pero «Cambiar» y «Elegir categoría» se comportaban distinto, «Cuota de crédito» aparecía en el selector
