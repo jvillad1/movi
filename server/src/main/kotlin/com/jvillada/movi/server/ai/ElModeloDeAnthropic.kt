@@ -430,12 +430,13 @@ private val HERRAMIENTAS_DE_LECTURA: List<Tool> = listOf(
     Tool.builder()
         .name(PROYECTAR_CAJA)
         .description(
-            "Proyecta cuánta plata va a tener el usuario cada día hasta el cierre de su período y cuál " +
-                "es el día más justo. Parte de «Tu plata» de hoy, resta los pagos pendientes de su lista " +
-                "del período el día que vencen (una tarjeta, su pago mínimo), suma los ingresos que faltan " +
-                "y resta un gasto del día a día estimado de sus períodos cerrados. Úsala para «¿me alcanza " +
-                "hasta fin de mes?», «¿cuánto voy a tener el 17?», «¿qué día ando más corto?». Trae los " +
-                "supuestos y lo que no entró: dilos.",
+            "Proyecta cuánta plata libre va a tener el usuario cada día hasta que le paguen (el día del " +
+                "próximo salario esperado, ese día incluido; sin salario, 30 días) y cuál es el día más " +
+                "justo. Parte de lo que hay en sus cuentas, resta los pagos pendientes de su período y los " +
+                "del siguiente que vencen antes (una tarjeta, su pago mínimo), suma los ingresos que faltan " +
+                "y resta un gasto del día a día estimado de sus períodos cerrados. Lo libre es el saldo menos " +
+                "su ahorro del período y lo apartado. Úsala para «¿me alcanza hasta que me paguen?», «¿cuánto " +
+                "voy a tener el 17?», «¿qué día ando más corto?». Trae los supuestos y lo que no entró: dilos.",
         )
         .inputSchema(
             Tool.InputSchema.builder()

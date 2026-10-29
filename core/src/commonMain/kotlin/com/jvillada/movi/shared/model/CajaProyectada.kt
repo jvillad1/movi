@@ -263,10 +263,13 @@ private fun esIngresoEsperado(fila: PagoDelPeriodo): Boolean =
  * siguiente que vencen dentro del horizonte (sus pagos y su salario). Una fila sin fecha legible del
  * período siguiente no entra: no hay cómo saber si cae adentro.
  */
-fun filasDeLaCaja(delPeriodo: List<PagoDelPeriodo>, delSiguiente: List<PagoDelPeriodo>, hasta: LocalDate): List<PagoDelPeriodo> =
-    delPeriodo + delSiguiente.filter { fila ->
-        runCatching { LocalDate.parse(fila.vence) }.getOrNull()?.let { it <= hasta } ?: false
+fun filasDeLaCaja(delPeriodo: List<PagoDelPeriodo>, delSiguiente: List<PagoDelPeriodo>, hasta: String): List<PagoDelPeriodo> {
+    // ISO y no `LocalDate`: el server la llama y no ve los tipos de `kotlinx-datetime`.
+    val limite = runCatching { LocalDate.parse(hasta) }.getOrNull() ?: return delPeriodo
+    return delPeriodo + delSiguiente.filter { fila ->
+        runCatching { LocalDate.parse(fila.vence) }.getOrNull()?.let { it <= limite } ?: false
     }
+}
 
 /**
  * **La caja hasta que te paguen**: la función que usan Pagos, «Tu día más justo» de Inicio y Movi AI
@@ -297,7 +300,7 @@ fun cajaHastaQueTePaguen(
     apartadoFueraDe: (List<PagoDelPeriodo>) -> Long = { 0L },
 ): CajaProyectada? {
     val horizonte = horizonteDeLaCaja(hoy, ultimoDiaDelPeriodo, delSiguiente) ?: return null
-    val filas = filasDeLaCaja(delPeriodo, delSiguiente, horizonte.hasta)
+    val filas = filasDeLaCaja(delPeriodo, delSiguiente, horizonte.hasta.toString())
     return cajaProyectada(
         tuPlataHoy = enLasCuentasHoy,
         pagos = filas,

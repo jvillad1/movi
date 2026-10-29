@@ -490,7 +490,10 @@ class LasPreguntasSugeridasTest {
         assertEquals(0, llamadasAlModelo)
 
         val caja = assertNotNull(cajaProyectadaDe(a.duenoA, hoy).caja)
-        assertEquals(con.patrimonio!!.tuPlata + 1_000_000L, caja.tuPlataHoy)
+        // Vuelta 70: la caja parte de lo que hay en las cuentas (lo apartado sigue ahí) y lo libre resta
+        // solo lo apartado que el arriendo pendiente no cubre: el $1M cubierto no se resta dos veces.
+        assertEquals(con.patrimonio!!.tuPlata + 5_000_000L, caja.tuPlataHoy)
+        assertEquals(con.patrimonio!!.tuPlata + 1_000_000L, caja.libreHoy)
     }
 
     @Test

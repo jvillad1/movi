@@ -40,6 +40,8 @@ import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.update
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.time.LocalDate
 import java.util.Date
@@ -195,7 +197,9 @@ class CajaProyectadaRoutesTest {
         val caja = assertNotNull(d.caja)
         assertEquals(5_000_000L, caja.tuPlataHoy)
         assertEquals(hoy.toString(), caja.dias.first().fecha)
-        assertEquals(hoy.withDayOfMonth(hoy.lengthOfMonth()).toString(), caja.alCierre.fecha)
+        // Vuelta 70: sin un ingreso recurrente la caja mira 30 días (nunca menos que el cierre del mes).
+        assertEquals(hoy.plusDays(30).toString(), caja.alCierre.fecha)
+        assertTrue(!caja.hastaElSalario)
         assertEquals(listOf("Gimnasio"), caja.dias.first().movimientos.map { it.nombre })
         assertEquals(4_820_000L, caja.alCierre.saldo, "sin período cerrado no hay gasto del día a día que restar")
         assertNull(d.gasto.porDia)
@@ -218,10 +222,47 @@ class CajaProyectadaRoutesTest {
                 gasto = GastoDelDiaADia(100_000L, listOf(GastoVariableDeUnPeriodo("2026-09", 3_100_000L, 31))),
             ),
         )
-        assertTrue("Tu plata hoy: 1000000" in texto, texto)
+        assertTrue("En sus cuentas hoy: 1000000" in texto, texto)
+        assertTrue("Libre hoy: 1000000" in texto, texto)
         assertTrue("SUPUESTO: gasta como siempre, 100000 por día" in texto, texto)
         assertTrue("2026-09: 3100000 en 31 días" in texto, texto)
         assertTrue("NO ENTRAN" in texto && "AMEX: falta el pago mínimo" in texto, texto)
-        assertTrue("PRIMER DÍA EN NEGATIVO: 2026-10-17, queda en -3201123 por Cuota Vehiculo 8761 (4101123)" in texto, texto)
+        assertTrue("PRIMER DÍA EN NEGATIVO: 2026-10-17, lo libre queda en -3201123 (saldo -3201123) por Cuota Vehiculo 8761 (4101123)" in texto, texto)
+        assertTrue("30 días desde hoy" in texto, texto)
+    }
+
+    /**
+     * Vuelta 70: Movi AI arma la caja con la MISMA función de Pagos: hasta el salario, con el pago del
+     * período siguiente que vence antes, y lo libre sin el ahorro del período (que no cambia el saldo).
+     */
+    @Test
+    fun `la caja de movi ai llega al salario, cuenta el pago del siguiente y lo libre sin el ahorro`() {
+        // El mes que viene: el salario del 1 y el arriendo del 1 (este mes ya se pagó: su vencimiento rueda).
+        val proximo = hoy.withDayOfMonth(1).plusMonths(1)
+        anotar(duenoId, "apertura", 5_000_000L, hoy, OPENING_CATEGORY, tipo = "INCOME")
+        transaction {
+            RecurringRules.insert {
+                it[id] = "rr_salario"; it[userId] = duenoId; it[name] = "Salario"; it[category] = "Ingreso"
+                it[amount] = 7_000_000L; it[dayOfMonth] = 1; it[type] = "INCOME"
+            }
+            Users.update({ Users.id eq duenoId }) {
+                it[ahorroDelPeriodoTipo] = "MONTO"; it[ahorroDelPeriodoValor] = 2_000_000L
+            }
+        }
+        val d = runBlocking { cajaProyectadaDe(duenoId, hoy) }
+        val caja = assertNotNull(d.caja)
+        if (hoy.dayOfMonth == 1) {
+            // El salario de hoy es de este período: entra hoy y no cierra el horizonte.
+            assertEquals(hoy.plusDays(30).toString(), caja.alCierre.fecha)
+        } else {
+            assertEquals(proximo.toString(), caja.alCierre.fecha)
+            assertTrue(caja.hastaElSalario)
+            assertEquals(MovimientoDeLaCaja("Llega tu salario (esperado)", 7_000_000L), caja.alCierre.movimientos.single())
+        }
+        assertEquals(5_000_000L, caja.tuPlataHoy, "el ahorro no mueve plata")
+        assertEquals(2_000_000L, caja.ahorro)
+        assertEquals(3_000_000L, caja.libreHoy)
+        assertTrue(caja.dias.all { it.saldo - it.libre == 2_000_000L })
+        assertTrue("NO ES LIBRE: 2000000 de ahorro" in textoDeLaCaja(d), textoDeLaCaja(d))
     }
 }

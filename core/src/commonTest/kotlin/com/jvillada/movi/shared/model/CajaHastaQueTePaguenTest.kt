@@ -286,7 +286,7 @@ class CajaHastaQueTePaguenTest {
                 apartadoFueraDeLosFijos(cuentas, apartados, it)
             },
         )
-        val filas = filasDeLaCaja(l.delPeriodo, l.delSiguiente, LocalDate.parse(caja.alCierre.fecha))
+        val filas = filasDeLaCaja(l.delPeriodo, l.delSiguiente, caja.alCierre.fecha)
         // Con la regla del cruce: lo de las cuentas − ahorro − lo apartado fuera de los fijos …
         assertEquals(p.tuPlata + p.apartado - ahorro - apartadoFueraDeLosFijos(cuentas, apartados, filas), caja.libreHoy)
         // … que es Tu plata + lo apartado que cubre un fijo − ahorro.
