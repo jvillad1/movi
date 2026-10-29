@@ -49,6 +49,7 @@ import com.jvillada.movi.shared.model.isReservedCategory
 import com.jvillada.movi.shared.model.esCategoriaQueNoSeElige
 import com.jvillada.movi.shared.model.ORPHANED_LEG_EXPLAINER
 import com.jvillada.movi.shared.model.TRANSFER_RECATEGORIZE_BLOCKED
+import com.jvillada.movi.shared.model.porQueLaPataNoSeRecategoriza
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.effectiveCategoryTypes
@@ -220,6 +221,9 @@ const val QUE_PASA_CON_EL_ABONO_EXTRA: String =
         "Movi no adelanta la cuota del mes que viene: un pago salda la cuota del período en que se hizo."
 
 /** «La cuota de octubre de Vehículo 4083 ya está pagada. ¿Este pago es un abono extra?» */
+/** El tag de por qué una pata no se recategoriza, en su detalle (vuelta 57). */
+const val TAG_POR_QUE_NO_SE_RECATEGORIZA: String = "movimiento:por-que-no-se-recategoriza"
+
 fun preguntaDeLaCuotaYaPagada(ya: CuotaYaPagada): String =
     "${fraseDeLaCuotaYaPagada(ya.credito, ya.periodo)} ¿Este pago es un abono extra?"
 
@@ -643,12 +647,13 @@ internal fun ContenidoDelMovimiento(
                 PorConfirmar(event, onError = { errorDeEdicion = it }, onConfirmado = onEventChanged)
                 Spacer(Modifier.height(Espacio.m))
                 // El texto de «traspaso» dice «no es un gasto ni un ingreso», y un desembolso SÍ es
-                // plata que entró: para él se dice lo suyo.
+                // plata que entró: para él se dice lo suyo. Vuelta 57: y una cuota, que cuenta como
+                // gasto, tampoco es un traspaso: «Es la cuota de Vehículo 4083: cuenta como gasto…».
                 Text(
-                    if (event.category == DESEMBOLSO_CATEGORY) DESEMBOLSO_RECATEGORIZE_BLOCKED
-                    else TRANSFER_RECATEGORIZE_BLOCKED,
+                    porQueLaPataNoSeRecategoriza(event, cuentas),
                     style = Movi.textos.cuerpo,
                     color = Movi.colores.textoMedio,
+                    modifier = Modifier.testTag(TAG_POR_QUE_NO_SE_RECATEGORIZA),
                 )
                 Spacer(Modifier.height(Espacio.l))
                 Separador(SangriaDeSeparador.Ninguna)
@@ -696,6 +701,10 @@ internal fun ContenidoDelMovimiento(
                 // Vuelta 27 · un traspaso o una cuota que en verdad pagó varias cosas se reparte desde
                 // la pata que sale: el server anula las dos y escribe las partes.
                 if (sePuedeRepartirEnPartes(event, cuentas)) {
+                    // Vuelta 57: con su aire respecto de «Fecha · Hoy», como las demás secciones (iba pegado).
+                    Spacer(Modifier.height(Espacio.l))
+                    Separador(SangriaDeSeparador.Ninguna)
+                    Spacer(Modifier.height(Espacio.m))
                     SeccionDeRepartirEnPartes(evento = event, cuentas = cuentas, onRepartido = onEventChanged)
                     Spacer(Modifier.height(Espacio.m))
                 }
