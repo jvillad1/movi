@@ -3159,11 +3159,11 @@ totales salen de las funciones de siempre (`esGastoDelPeriodo`, `spentByCategory
    - **Los bienes**: con `conBienes`, la nota «Los bienes cuentan con su valor de hoy en todos los
      meses.» El cálculo no cambia.
 2. **Una sola manera de decir «gastado»** (`:core` `LoGastado.kt`).
-   - **Presupuestos**: debajo de «Gastado en octubre», «En tus N presupuestos» con la cifra y «de $Y», y
+   - **Presupuestos**: debajo del período («Octubre»), «En tus N presupuestos» con la cifra y «de $Y», y
      el renglón **«Fuera de presupuesto»** (`CifraConRotulo` chica en renglón, `TAG_FUERA_DE_PRESUPUESTO`).
      `gastoEnPresupuestos`: las dos cifras suman el gasto del período (un presupuesto repetido cuenta una
      vez). El esqueleto reserva los dos renglones nuevos.
-   - **«En qué se va»**: debajo del total, «Día a día $2,1M + fijos $2,8M» (`desgloseDelAnalisis`,
+   - **«En qué se va»**: debajo del total, «Día a día $2,1M + fijos pagados $2,8M» (`desgloseDelAnalisis`,
      `TAG_DESGLOSE_DEL_ANALISIS`). El día a día es el gasto variable del Disponible (`gastoVariablePorDia`
      del resumen del Inicio, la misma lectura recordada) y los fijos, el resto: la misma regla que separa
      los fijos en el Disponible. Solo en el período en curso (el server manda ese gasto de ningún otro) y
@@ -3193,6 +3193,23 @@ totales salen de las funciones de siempre (`esGastoDelPeriodo`, `spentByCategory
    los pagos de facturas desde la vuelta 43), y Movi AI («¿En qué se me está yendo…?») compara las
    categorías con el recurrente donde estaba (`comoEnElPeriodoAnterior`) y lo dice. Con «No», cuenta
    como cualquier gasto. El widget «En qué se va» del Inicio no se tocó.
+
+**La revisión de la vuelta** (capturas `rev60-*.png`) encontró y se arregló:
+- **El desglose de «En qué se va» no salía nunca**: la lectura del resumen del Inicio depende del
+  período, y sin `periodoVigente` `rememberLectura` no lee nada. Ahora va con el período de hoy, y lo
+  vigila una prueba de pantalla (`EnQueSeVaScreenTest`, `TAG_DESGLOSE_DEL_ANALISIS`). Dice **«fijos
+  pagados»**: en «¿De dónde sale?», «Fijos del período» cuenta también los que faltan.
+- **El arriendo de la demo no se proponía**: el de septiembre es «Arriendo octubre» con comercio
+  «Inmobiliaria», y se comparaba solo el comercio. Ahora un gasto de una regla (sellado, emparejado o
+  que la nombra con su monto) encuentra en el período anterior lo de la misma regla o lo que la nombra
+  —en el comercio **o** en la descripción, con el monto a ±5 %—; sin regla se comparan los dos nombres
+  de cada lado. El server lee también lo que Movi emparejó solo en el período anterior.
+- **El ajuste de este mes no se marcaba** (el aro se saltaba el punto de hoy): ahora hoy lleva un aro por
+  fuera (`hoyTraeAjustes`) y el lector oye «Hoy incluye un ajuste».
+- **Movi AI decía «Otros $1.800.000 · casi igual que el período pasado»**: el renglón de la categoría
+  donde quedó el recurrente dice qué es («es Arriendo, que el período pasado fue Hogar», o «incluye…»).
+- **La tarjeta de Presupuestos** ya no se titula «Gastado en octubre» (su cifra grande es solo lo de los
+  presupuestos): dice el período, «Octubre» o «Este período».
 
 **Las líneas base** no cambian (`dp_sueltos` 115, `radios_con_numero` 3) y las guardas en 0 siguen en 0.
 Lo vigilan, en `:core`, `UnaSolaManeraDeDecirGastadoTest` (día a día + fijos = el gasto del período; los
