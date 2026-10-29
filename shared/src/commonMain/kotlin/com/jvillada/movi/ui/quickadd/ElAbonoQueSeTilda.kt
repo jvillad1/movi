@@ -70,8 +70,12 @@ fun conLosAbonosATarjeta(checklist: List<PagoDelPeriodo>, tarjetas: Set<String>)
     if (tarjetas.isEmpty()) checklist
     else checklist.map { if (it.esAbono && it.haciaDeuda in tarjetas) it.copy(abonoATarjeta = true) else it }
 
-/** La pastilla del abono: «El día 15», neutra (un abono planeado no vence). */
+/**
+ * La pastilla del abono, neutra (un abono planeado no vence): «El día 15» antes del día de pago, y
+ * «Este mes» desde que pasó (revisión de la vuelta 63: sigue pendiente, no atrasado).
+ */
 fun pastillaDelAbono(pago: PagoDelPeriodo): String {
+    if (pago.diasParaVencer < 0) return "Este mes"
     val dia = pago.vence.drop(8).take(2).toIntOrNull()
     return if (dia != null) "El día $dia" else "Planeado"
 }

@@ -86,7 +86,9 @@ fun tituloPropuesta(tipo: TransactionType, period: String): String {
  * nombra la cuota, y una cuota del 30 de octubre es la de octubre; el período se dice en otro lado
  * («Del período de septiembre», [tituloDeLosAnteriores]).
  */
-fun preguntaDeLaFila(pago: PagoDelPeriodo): String = tituloPropuesta(
+fun preguntaDeLaFila(pago: PagoDelPeriodo): String =
+    // Vuelta 63 (revisión): un abono no se «paga»: «¿Ya hiciste el abono de octubre?».
+    if (pago.esAbono) preguntaDelAbono(pago) else tituloPropuesta(
     if (pago.esIngreso) TransactionType.INCOME else TransactionType.EXPENSE,
     pago.periodoDelSello ?: pago.vence,
 )
@@ -337,3 +339,9 @@ private fun hojaParaAnotarUnPago(pago: PagoDelPeriodo): Screen = hojaParaAnotar(
     // El mes del período del dueño («el de octubre»), como lo dice la fila; sin él, el del vencimiento.
     mes = nombreDelMes(pago.periodoDelDueno ?: pago.periodoDelSello ?: pago.vence),
 )
+
+/** «¿Ya hiciste el abono de octubre?» (el mes del período del dueño), o sin mes si no se entiende. */
+fun preguntaDelAbono(pago: PagoDelPeriodo): String {
+    val mes = nombreDelMes(pago.periodoDelDueno ?: pago.periodoDelSello ?: pago.vence)
+    return if (mes.isBlank()) "¿Ya hiciste el abono?" else "¿Ya hiciste el abono de $mes?"
+}
