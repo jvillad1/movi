@@ -58,6 +58,16 @@ import kotlinx.datetime.Clock
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
+import androidx.compose.ui.test.onNodeWithContentDescription
+import com.jvillada.movi.shared.model.CapturaDelPrimerUso
+import com.jvillada.movi.shared.model.LoQueYaHay
+import com.jvillada.movi.shared.model.PrimerPaso
+import com.jvillada.movi.shared.model.primerosPasos
+import com.jvillada.movi.shared.model.rangoCortoDelPeriodo
+import com.jvillada.movi.ui.primeruso.DESCARTAR_PRIMEROS_PASOS
+import com.jvillada.movi.ui.primeruso.ListaDePrimerosPasos
+import com.jvillada.movi.ui.primeruso.PrimerosPasosDescartados
+import com.jvillada.movi.ui.primeruso.TAG_FILA_DE_PRIMEROS_PASOS
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -74,14 +84,12 @@ import kotlin.test.assertTrue
  * movimientos, sin pagos fijos. Lo que se revisó en el navegador y lo que esta prueba sostiene:
  *
  * - **Hoy pide la primera cuenta una sola vez**: el héroe «Aquí vas a ver tu plata» con su botón va
- *   primero, y «Primeros pasos» debajo, sin el paso de la cuenta («0 de 3»). Antes la tarjeta iba
- *   arriba con «Crea tu primera cuenta» y el héroe repetía «Crear mi primera cuenta» justo debajo.
- * - **El pie de «Primeros pasos» dice qué hace**: «Sube un extracto y Movi anota los movimientos»
- *   (era «Deja que la app se llene sola · Documentos») y elige el archivo.
+ *   primero. Vuelta 54: los primeros pasos son una sola fila debajo de las acciones («Te faltan 3
+ *   pasos ›»), con la lista única de `:core`.
  * - **Ningún «$0» como cifra**, ni en Hoy ni en Plan: «Movi propone hoy» sin nada no se pinta, y la
  *   caja de Plan («Hoy es tu día más justo: tienes $0» sobre una línea plana) no se dibuja sin cuentas.
  * - **El subtítulo de Hoy no se corta** con un corte a mitad de mes, a 360 dp con la letra a ×1,3: es
- *   el nombre del período, no el rango entero.
+ *   el rango corto («23 oct – 24 nov», vuelta 54), no el rango entero.
  *
  * `sdk = [34]` y `NATIVE`: se mide el texto dibujado (ver `NadaSeRecortaEnElInicioTest`).
  */
@@ -200,61 +208,52 @@ class ElPrimerDiaTest {
     // ── Hoy: un solo llamado ─────────────────────────────────────────────────
 
     @Test
-    fun `Hoy pide la primera cuenta una sola vez, desde el heroe y antes de Primeros pasos`() {
+    fun `Hoy pide la primera cuenta una sola vez, el heroe va primero y los pasos en una fila debajo de las acciones`() {
         entrarAHoy()
 
         assertTrue(hay("Aquí vas a ver tu plata"))
         assertEquals(1, cuantos("primera cuenta", substring = true), "un solo llamado a crear la cuenta: ${textos()}")
         assertTrue(hay("Crear mi primera cuenta"))
-        assertFalse(hay("Crea tu primera cuenta"), "«Primeros pasos» no repite el paso que el héroe pide")
 
-        // El héroe primero; la guía, debajo.
+        // Vuelta 54: «Te quedan» primero; los primeros pasos, una fila debajo de las acciones.
         val heroe = composeRule.onNodeWithTag(TAG_TARJETA_DEL_HERO, useUnmergedTree = true).getUnclippedBoundsInRoot()
-        val guia = composeRule.onNodeWithText("Primeros pasos", useUnmergedTree = true).getUnclippedBoundsInRoot()
-        assertTrue(heroe.bottom <= guia.top, "el héroe ($heroe) va antes que «Primeros pasos» ($guia)")
-        // Y la guía cuenta solo lo que lista.
-        assertTrue(hay("0 de 3"))
+        val acciones = composeRule.onNodeWithText("Anotar gasto", substring = true, useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val fila = composeRule.onNodeWithTag(TAG_FILA_DE_PRIMEROS_PASOS, useUnmergedTree = true).getUnclippedBoundsInRoot()
+        assertTrue(heroe.bottom <= fila.top, "el héroe ($heroe) va antes que los primeros pasos ($fila)")
+        assertTrue(acciones.bottom <= fila.top, "las acciones ($acciones) van antes que los primeros pasos ($fila)")
+        // El período ya está (el 25); faltan las cuentas, la captura del teléfono y los pagos de cada mes.
+        assertTrue(hay("Te faltan 3 pasos"))
+        assertTrue(hay("Sigue con «Tus cuentas»"))
+        assertFalse(hay("Crea tu primera cuenta"), "la tarjeta de cinco renglones ya no va")
+        assertEquals(1, cuantosTags(TAG_FILA_DE_PRIMEROS_PASOS), "una sola fila")
     }
 
     @Test
-    fun `el boton del heroe abre la hoja de crear cuenta`() {
+    fun `la fila abre la guia en el primer paso que falta, y la equis la oculta`() {
         entrarAHoy()
-        composeRule.onNodeWithText("Crear mi primera cuenta", useUnmergedTree = true).performClick()
+        composeRule.onNodeWithText("Te faltan 3 pasos", useUnmergedTree = true).performClick()
         composeRule.waitForIdle()
-        // La hoja de «Nueva cuenta»: pide el nombre antes de guardar.
-        assertTrue(hay("Falta el nombre"))
+        assertEquals(Screen.PrimerUso(desde = PrimerPaso.CUENTAS), navegado.last())
+
+        composeRule.onNodeWithContentDescription(DESCARTAR_PRIMEROS_PASOS, useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+        assertEquals(0, cuantosTags(TAG_FILA_DE_PRIMEROS_PASOS), "descartada, la fila no vuelve")
+        assertTrue(PrimerosPasosDescartados.estan())
     }
 
     @Test
-    fun `el pie de Primeros pasos dice que hace y elige el papel`() {
-        var subio = false
-        conLetraGrande {
-            PrimerosPasosCard(
-                data = DashboardData(accounts = emptyList()),
-                onNavigate = { navegado += it },
-                onShowCreateSheet = {},
-                onSubirUnPapel = { subio = true },
-                conElPasoDeLaCuenta = false,
-            )
-        }
-        assertFalse(hay("Deja que la app se llene sola"))
-        assertFalse(hay("Documentos"))
-        composeRule.onNodeWithText(SUBIR_UN_EXTRACTO, useUnmergedTree = true).performClick()
-        assertTrue(subio)
-    }
-
-    @Test
-    fun `desde Mas, Primeros pasos sigue con sus cuatro pasos`() {
-        conLetraGrande {
-            PrimerosPasosCard(
-                data = DashboardData(accounts = emptyList()),
-                onNavigate = {},
-                onShowCreateSheet = {},
-                onSubirUnPapel = {},
-            )
-        }
-        assertTrue(hay("Crea tu primera cuenta"))
-        assertTrue(hay("0 de 4"))
+    fun `desde Tu, la lista de primeros pasos es la misma lista unica`() {
+        val lista = primerosPasos(
+            LoQueYaHay(periodoElegido = true, cuentasDeDinero = 0, capturaHecha = false, fijos = 0),
+            CapturaDelPrimerUso.SUBIR_UN_EXTRACTO,
+        )
+        var abierto: PrimerPaso? = null
+        conLetraGrande { ListaDePrimerosPasos(lista, CapturaDelPrimerUso.SUBIR_UN_EXTRACTO, onAbrir = { abierto = it }) }
+        listOf("Tu período", "Tus cuentas", "Sube un extracto", "Lo que pagas cada mes").forEach { assertTrue(hay(it), "falta «$it»") }
+        assertTrue(hay("1 de 4"))
+        assertFalse(hay("Si tienes préstamos o tarjetas, cárgalos"))
+        composeRule.onNodeWithText("Sube un extracto", useUnmergedTree = true).performClick()
+        assertEquals(PrimerPaso.CAPTURA, abierto)
     }
 
     // ── Hoy: nada vacío, ningún $0 ───────────────────────────────────────────
@@ -287,26 +286,28 @@ class ElPrimerDiaTest {
     // ── Hoy: el subtítulo no se corta ────────────────────────────────────────
 
     @Test
-    fun `con un corte a mitad de mes el subtitulo de Hoy es el nombre del periodo y entra entero`() {
+    fun `con un corte a mitad de mes el subtitulo de Hoy es el rango corto y entra entero`() {
         entrarAHoy()
 
         val ajustes = perfil.ajustesDelPeriodo()
         val periodo = periodoActual(Clock.System.now().toEpochMilliseconds(), ajustes)
-        val nombre = tituloDelPeriodo(periodo)
-        assertTrue(seVeEntero(nombre), "«$nombre» se corta en el encabezado")
-        // El rango entero no va en el encabezado (vive en Plan y Movimientos).
-        val rango = rangoLegibleDe(periodo, ajustes)!!
-        assertFalse(hay(rango), "el encabezado ya no dice «$rango»")
+        val corto = rangoCortoDelPeriodo(periodo, ajustes)
+        assertTrue(seVeEntero(corto), "«$corto» se corta en el encabezado")
+        // Vuelta 54: ya no el nombre del mes que viene, que confundía; el rango entero lo dice el lector.
+        assertFalse(hay(tituloDelPeriodo(periodo)), "el encabezado ya no dice «${tituloDelPeriodo(periodo)}»")
+        val largo = rangoLegibleDe(periodo, ajustes)!!
+        assertFalse(hay(largo), "el rango largo no va escrito en el encabezado")
+        composeRule.onNodeWithContentDescription("Tu período: " + largo.replaceFirstChar { it.lowercase() }, useUnmergedTree = true).assertExists()
     }
 
     @Test
-    fun `el nombre de periodo mas largo entra a 360 dp con letra grande, y el rango de antes no`() {
-        // «Septiembre 2026» es el nombre más ancho; con un nombre de dueño largo, al lado del avatar y
-        // de los dos íconos. Debajo, el subtítulo de antes, para que la prueba muestre lo que arregla.
+    fun `el rango corto mas largo entra a 360 dp con letra grande, y el rango largo no`() {
+        // «25 ago – 24 sep» es de los más anchos; con un nombre de dueño largo, al lado del avatar y de
+        // los dos íconos. Debajo, el rango largo, para que la prueba muestre lo que el corto evita.
         val ajustes = PeriodSettings(cutoffDay = 25)
         val septiembre = PeriodoFinanciero(2026, 9)
         val subtitulo = periodoDelEncabezado(DashboardData(periodoActual = septiembre, ajustesDePeriodo = ajustes))!!
-        assertEquals("Septiembre 2026", subtitulo)
+        assertEquals("25 ago – 24 sep", subtitulo)
         val deAntes = rangoLegibleDe(septiembre, ajustes)!!
         conLetraGrande {
             androidx.compose.foundation.layout.Column {
@@ -315,8 +316,6 @@ class ElPrimerDiaTest {
             }
         }
         assertTrue(seVeEntero(subtitulo), "«$subtitulo» se corta")
-        // Desde la vuelta de diseño 12 un subtítulo que no cabe baja a un segundo renglón en vez de
-        // cortarse: el de antes ya no sale con «…», pero tampoco entraba en uno (el encabezado crecía).
         val renglonesDeAntes = disposicion(composeRule.onNodeWithText(deAntes, useUnmergedTree = true).fetchSemanticsNode()).lineCount
         assertTrue(!seVeEntero(deAntes) || renglonesDeAntes > 1, "«$deAntes» entraba en un renglón: la prueba no mide lo que dice")
         assertTrue(disposicion(composeRule.onNodeWithText(subtitulo, useUnmergedTree = true).fetchSemanticsNode()).lineCount == 1, "«$subtitulo» en un renglón")

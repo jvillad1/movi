@@ -168,7 +168,7 @@ class NavStackTest {
         // Movi AI: sin pestaña en el teléfono (en el rail tiene su lugar, ver `destinoResaltado`).
         Screen.AIChat() to null,
         // Sin navegación: autenticación, la guía de primer uso y flujos a pantalla completa.
-        Screen.PrimerUso to null,
+        Screen.PrimerUso() to null,
         // Sin navegación: autenticación y flujos a pantalla completa.
         Screen.Login to null,
         Screen.Register to null,
@@ -391,11 +391,11 @@ class NavStackTest {
 
     @Test
     fun `la guia de primer uso va sin barra, y crearla o terminarla no deja nada atras`() {
-        assertFalse(muestraLaNavegacion(Screen.PrimerUso))
+        assertFalse(muestraLaNavegacion(Screen.PrimerUso()))
         // Registrarse reemplaza la pila: «atrás» no vuelve al formulario.
         val pila = mutableListOf<Screen>(Screen.Login, Screen.Register)
-        NavStack.navegar(pila, Screen.PrimerUso)
-        assertEquals(listOf<Screen>(Screen.PrimerUso), pila)
+        NavStack.navegar(pila, Screen.PrimerUso())
+        assertEquals(listOf<Screen>(Screen.PrimerUso()), pila)
         // Y terminarla deja solo el Inicio: «atrás» no vuelve a la guía.
         NavStack.navegar(pila, Screen.Dashboard)
         assertEquals(listOf<Screen>(Screen.Dashboard), pila)

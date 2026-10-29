@@ -209,8 +209,11 @@ sealed class Screen {
      * cada mes). A pantalla completa y sin barra: se abre sola tras crear la cuenta, o desde el
      * Inicio para quien todavía no tiene ninguna cuenta de dinero (ver
      * `debeAbrirseLaGuiaDePrimerUso` en :core). Lo que se salte queda en [PrimerosPasos].
+     *
+     * Vuelta 54: [desde] abre la guía en un paso de la lista única (la fila «Te faltan 3 pasos ›» del
+     * Inicio la abre en el primero que falta); `null`, en la bienvenida.
      */
-    data object PrimerUso : Screen()
+    data class PrimerUso(val desde: com.jvillada.movi.shared.model.PrimerPaso? = null) : Screen()
     /**
      * **«Compartir»** — el enlace de solo lectura para un tercero (Caro, un asesor): crearlo,
      * mandarlo y revocarlo. Se llega desde **Más** (la puerta que no depende de nadie, como

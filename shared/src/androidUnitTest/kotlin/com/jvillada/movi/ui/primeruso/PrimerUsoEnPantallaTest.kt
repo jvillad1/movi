@@ -96,7 +96,7 @@ class PrimerUsoEnPantallaTest {
     private fun montar(
         repo: RepositorioDePrueba,
         paso: PasoDePrimerUso = PasoDePrimerUso.BIENVENIDA,
-        modo: ModoDeCaptura = ModoDeCaptura.REENVIO_DE_CORREO,
+        modo: ModoDeCaptura = ModoDeCaptura.SUBIR_UN_EXTRACTO,
     ) {
         Repositories.sustitutoDePrueba = repo
         composeRule.setContent {
@@ -149,7 +149,7 @@ class PrimerUsoEnPantallaTest {
         composeRule.onAllNodesWithText("Crear cuenta").filter(hasClickAction()).onFirst().performClick()
         composeRule.waitForIdle()
 
-        assertEquals(listOf<Screen>(Screen.PrimerUso), navegaciones)
+        assertEquals(listOf<Screen>(Screen.PrimerUso()), navegaciones)
         assertTrue(GuiaDePrimerUso.enCurso, "la guía queda en curso: la tarjeta de Primeros pasos no compite")
     }
 
@@ -204,8 +204,8 @@ class PrimerUsoEnPantallaTest {
 
         assertTrue(seVe("Paso 3 de 6"))
         composeRule.onNodeWithTag(TAG_AVANZAR_EN_LA_GUIA).assertIsNotEnabled()
-        assertTrue(sinSaltar(), "las cuentas se saltan con «Ahora no»")
-        assertTrue(seVe("Agrega al menos una cuenta para seguir", parcial = true))
+        // Vuelta 54: «Siguiente» apagado nunca va sin salida: las cuentas también se saltan.
+        assertFalse(sinSaltar(), "las cuentas también tienen «Saltar este paso»")
         composeRule.onNodeWithText(AHORA_NO).performClick()
         composeRule.waitForIdle()
 
@@ -255,7 +255,9 @@ class PrimerUsoEnPantallaTest {
         montar(repo, paso = PasoDePrimerUso.PERIODO)
         composeRule.onNodeWithText("25").performClick()
         composeRule.waitForIdle()
-        assertTrue(seVe("Hoy estarías en", parcial = true), "la consecuencia se ve en vivo")
+        // Vuelta 54: la vista previa de la hoja de Tú, con el rango, no «Hoy estarías en noviembre».
+        assertTrue(seVe("Tu período: del", parcial = true), "la consecuencia se ve en vivo")
+        assertFalse(seVe("Hoy estarías en", parcial = true))
         composeRule.onNodeWithTag(TAG_AVANZAR_EN_LA_GUIA).assertTextContains("Siguiente")
         avanzar()
 
@@ -285,7 +287,8 @@ class PrimerUsoEnPantallaTest {
         composeRule.waitForIdle()
         // El nombre lo propuso el banco con el tipo (vuelta de diseño 16); el saldo es el segundo campo.
         composeRule.onAllNodes(hasSetTextAction())[1].performTextInput("1500000")
-        composeRule.onNodeWithText("Agregar cuenta").performScrollTo().performClick()
+        // Vuelta 54: «Agregar cuenta» va en el pie de la guía, siempre a la vista.
+        composeRule.onNodeWithTag(TAG_AGREGAR_CUENTA_EN_LA_GUIA).performClick()
         composeRule.waitForIdle()
 
         val creada = repo.cuentasCreadas.single()
@@ -327,14 +330,15 @@ class PrimerUsoEnPantallaTest {
     // ── Que Movi se entere solo ────────────────────────────────────────────────────────────────
 
     @Test
-    fun `en la web el paso de captura da la direccion de correo para copiar y el paso a paso de Gmail`() {
-        montar(RepoDeLaGuia(), paso = PasoDePrimerUso.CAPTURA, modo = ModoDeCaptura.REENVIO_DE_CORREO)
+    fun `en la web el paso de captura sube un extracto, y el reenvio va debajo si el server lo tiene`() {
+        montar(RepoDeLaGuia(), paso = PasoDePrimerUso.CAPTURA, modo = ModoDeCaptura.SUBIR_UN_EXTRACTO)
+        assertTrue(seVe("Paso 4 de 6"))
+        assertTrue(seVe("Sube un extracto"))
+        composeRule.onNodeWithTag(TAG_SUBIR_EXTRACTO_EN_LA_GUIA).assertExists()
         assertTrue(seVe("alertas+abc@movi.resend.app"))
-        assertTrue(seVe("Copiar"))
-        assertTrue(seVe(PASOS_DEL_REENVIO_EN_GMAIL.first()))
         assertFalse(seVe("Captura en este teléfono"))
 
-        composeRule.onNodeWithText("Copiar").performClick()
+        composeRule.onNodeWithText("Copiar").performScrollTo().performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithTag(TAG_AVANZAR_EN_LA_GUIA).assertTextContains("Siguiente")
     }
@@ -345,19 +349,54 @@ class PrimerUsoEnPantallaTest {
         assertTrue(seVe("Captura en este teléfono"))
         assertTrue(seVe("Permiso de SMS"))
         assertFalse(seVe("Copiar"))
+        assertFalse(seVe(SUBIR_UN_EXTRACTO_EN_LA_GUIA))
     }
 
     @Test
-    fun `sin la direccion configurada en el server se dice y se puede saltar`() {
+    fun `sin la direccion configurada el paso sigue teniendo que hacer y se puede saltar`() {
         val repo = object : RepoDeLaGuia() {
             override suspend fun getDireccionDeCorreo() = DireccionDeCorreo(token = "abc", configurado = false)
         }
         montar(repo, paso = PasoDePrimerUso.CAPTURA)
-        assertTrue(seVe("todavía no está disponible", parcial = true))
+        // Vuelta 54: ya no «El reenvío por correo todavía no está disponible»: subir un extracto sí existe.
+        assertFalse(seVe("todavía no está disponible", parcial = true))
+        composeRule.onNodeWithTag(TAG_SUBIR_EXTRACTO_EN_LA_GUIA).assertIsEnabled()
         assertNull(composeRule.onAllNodesWithText("Copiar").fetchSemanticsNodes().firstOrNull())
         principalApagado()
         saltar()
         assertTrue(seVe("Paso 5 de 6"))
+    }
+
+    // ── Vuelta 54: la lista única ──────────────────────────────────────────────────────────────
+
+    @Test
+    fun `abierta desde la fila del Inicio arranca en el paso pedido y el resumen cuenta lo que ya habia`() {
+        val repo = object : RepoDeLaGuia() {
+            override suspend fun getUserProfile(): UserProfile = perfilNuevo.copy(periodCutoffDay = 25)
+            override suspend fun getAccounts() = listOf(Account("a1", "Bancolombia", AccountType.SAVINGS, 1_000_000))
+        }
+        Repositories.sustitutoDePrueba = repo
+        composeRule.setContent {
+            ConClaseDeAncho {
+                Box(Modifier.fillMaxSize()) {
+                    PrimerUsoScreen(
+                        onNavigate = { navegaciones += it },
+                        modoDeCaptura = ModoDeCaptura.SUBIR_UN_EXTRACTO,
+                        desde = com.jvillada.movi.shared.model.PrimerPaso.FIJOS,
+                    )
+                }
+            }
+        }
+        composeRule.waitForIdle()
+        assertTrue(seVe("Paso 5 de 6"))
+        assertTrue(seVe("Lo que pagas cada mes"))
+        saltar()
+        // El resumen dice lo mismo que la lista única: el período y la cuenta ya estaban.
+        assertTrue(seVe("1 cuenta"))
+        assertTrue(seVe("Cada día 25", parcial = true))
+        assertTrue(seVe("Sin subir todavía"))
+        assertTrue(seVe("Ninguno todavía"))
+        assertFalse(seVe("Activo en este teléfono"))
     }
 
     // ── Vuelta de diseño 3 ─────────────────────────────────────────────────────────────────────
@@ -435,7 +474,7 @@ class PrimerUsoEnPantallaTest {
 
         composeRule.onAllNodes(hasSetTextAction())[0].performTextInput("Billetera")
         composeRule.onNodeWithText("Efectivo").performClick()
-        composeRule.onNodeWithText("Agregar cuenta").performScrollTo().performClick()
+        composeRule.onNodeWithTag(TAG_AGREGAR_CUENTA_EN_LA_GUIA).performClick()
         composeRule.waitForIdle()
 
         assertEquals(AccountType.CASH, repo.cuentasCreadas.single().type)

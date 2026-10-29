@@ -301,7 +301,7 @@ fun App() {
             // Inicio con sesión; ver [revisarLaGuiaDePrimerUso] para la regla.
             LaunchedEffect(SessionManager.loggedIn, currentScreen) {
                 if (!SessionManager.loggedIn || currentScreen != Screen.Dashboard) return@LaunchedEffect
-                if (revisarLaGuiaDePrimerUso(Repositories.wallets)) navigate(Screen.PrimerUso)
+                if (revisarLaGuiaDePrimerUso(Repositories.wallets)) navigate(Screen.PrimerUso())
             }
 
             BackHandlerEffect(
@@ -479,7 +479,7 @@ fun App() {
                 Screen.EditarInicio      -> EditarInicioScreen(navigate)
                 Screen.BorrarLaCuenta    -> BorrarLaCuentaScreen(navigate)
                 Screen.PrimerosPasos     -> PrimerosPasosScreen(navigate)
-                Screen.PrimerUso         -> PrimerUsoScreen(navigate)
+                is Screen.PrimerUso      -> PrimerUsoScreen(navigate, desde = pantalla.desde)
                 Screen.PorRevisar        -> PorRevisarScreen(navigate)
                 Screen.CapturaDelBanco   -> CapturaDelBancoScreen(navigate)
                 is Screen.SMSReconcile   -> SMSReconcileScreen(navigate, pantalla.smsId, abrirCategoria = pantalla.abrirCategoria)

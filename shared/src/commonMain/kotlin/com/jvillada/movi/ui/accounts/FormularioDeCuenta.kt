@@ -1,12 +1,15 @@
 package com.jvillada.movi.ui.accounts
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.runtime.Composable
@@ -155,6 +158,10 @@ private val MARCAS_DE_UN_TOQUE: List<Marca> =
  *
  * No crea nada: quien lo pinta crea [EstadoDelFormularioDeCuenta.cuentaNueva] con
  * `crearCuentaConSaldo`, la creación de siempre.
+ *
+ * [enUnaFila] (vuelta 54, la guía): los bancos y los tipos van cada uno en **una sola fila de chips
+ * que se desplaza de lado**, en vez de bajar en varios renglones. Con los siete bancos en varios
+ * renglones, a 390 dp el nombre, el saldo y «Agregar cuenta» quedaban debajo del pliegue.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -163,17 +170,15 @@ fun FormularioDeCuenta(
     modifier: Modifier = Modifier,
     onElegirBien: ((nombre: String) -> Unit)? = null,
     habilitado: Boolean = true,
+    enUnaFila: Boolean = false,
 ) {
     Column(modifier = modifier.fillMaxWidth().testTag(TAG_FORMULARIO_DE_CUENTA)) {
         RotuloDeCampo("Banco")
-        SelectorDeBanco(elegido = estado.banco, onElegir = { if (habilitado) estado.elegirBanco(it) })
+        SelectorDeBanco(elegido = estado.banco, onElegir = { if (habilitado) estado.elegirBanco(it) }, enUnaFila = enUnaFila)
         Spacer(Modifier.height(Medida.dentroDeSeccion))
 
         RotuloDeCampo("Tipo")
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
-            verticalArrangement = Arrangement.spacedBy(Espacio.xs),
-        ) {
+        ChipsEnFilas(enUnaFila, Modifier.testTag(TAG_TIPOS_DE_CUENTA)) {
             TIPOS_DE_CUENTA.forEach { (rotulo, tipo) ->
                 PildoraDeFiltro(rotulo, seleccionada = estado.tipo == tipo, onClick = { if (habilitado) estado.elegirTipo(tipo) })
             }
@@ -202,13 +207,9 @@ fun FormularioDeCuenta(
  * ([CirculoDeMarca]), a [TamanoDeAvatar.Linea] dentro de la píldora. Lo usan este bloque y las
  * tarjetas de crédito de la guía.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun SelectorDeBanco(elegido: String?, onElegir: (String) -> Unit) {
-    FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
-        verticalArrangement = Arrangement.spacedBy(Espacio.xs),
-    ) {
+internal fun SelectorDeBanco(elegido: String?, onElegir: (String) -> Unit, enUnaFila: Boolean = false) {
+    ChipsEnFilas(enUnaFila, Modifier.testTag(TAG_BANCOS_DE_UN_TOQUE)) {
         MARCAS_DE_UN_TOQUE.forEach { marca ->
             PildoraDeFiltro(
                 marca.nombre,
@@ -217,5 +218,32 @@ internal fun SelectorDeBanco(elegido: String?, onElegir: (String) -> Unit) {
                 inicio = { CirculoDeMarca(marca, tamano = TamanoDeAvatar.Linea) },
             )
         }
+    }
+}
+
+/** El tag de la fila de bancos del bloque. */
+const val TAG_BANCOS_DE_UN_TOQUE: String = "formulario-de-cuenta-bancos"
+
+/** El tag de la fila de tipos del bloque. */
+const val TAG_TIPOS_DE_CUENTA: String = "formulario-de-cuenta-tipos"
+
+/**
+ * Chips que bajan en varios renglones ([enUnaFila] `false`) o van en **una sola fila que se desplaza de
+ * lado** (vuelta 54): la fila mide un chip de alto, y lo que no cabe asoma en el borde.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ChipsEnFilas(enUnaFila: Boolean, modifier: Modifier = Modifier, contenido: @Composable () -> Unit) {
+    if (enUnaFila) {
+        Row(
+            modifier = modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
+        ) { contenido() }
+    } else {
+        FlowRow(
+            modifier = modifier,
+            horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
+            verticalArrangement = Arrangement.spacedBy(Espacio.xs),
+        ) { contenido() }
     }
 }

@@ -68,9 +68,7 @@ import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.SiElCorteCaeEnFinDeSemana
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UserProfile
-import com.jvillada.movi.shared.model.nombreDe
 import com.jvillada.movi.shared.model.periodoDe
-import com.jvillada.movi.shared.model.rangoLegibleDe
 import com.jvillada.movi.shared.model.siElCorteCaeEnFinDeSemanaDe
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Icono
@@ -108,11 +106,29 @@ import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.ui.components.rememberCampoConSeleccion
 import com.jvillada.movi.ui.components.toUserMessage
 import com.jvillada.movi.ui.profile.guardarElInicioDelMes
-import com.jvillada.movi.ui.profile.proximoCorteCorrido
 import com.jvillada.movi.ui.profile.textoDelInicioDelMes
 import com.jvillada.movi.ui.sms.SmsSensorSetupSection
 import com.jvillada.movi.ui.sms.rememberSmsCaptureReady
 import com.jvillada.movi.ui.transicionEntrePantallas
+import androidx.compose.material.icons.rounded.UploadFile
+import androidx.compose.runtime.Stable
+import com.jvillada.movi.shared.model.EstadoDelPrimerPaso
+import com.jvillada.movi.shared.model.LoQueYaHay
+import com.jvillada.movi.shared.model.PrimerPaso
+import com.jvillada.movi.shared.model.Scope
+import com.jvillada.movi.shared.model.TIPOS_DE_CUENTA_DE_DINERO
+import com.jvillada.movi.shared.model.ajustesDelPeriodo
+import com.jvillada.movi.shared.model.periodoElegidoEn
+import com.jvillada.movi.shared.model.primerosPasos
+import com.jvillada.movi.ui.accounts.EstadoDelFormularioDeCuenta
+import com.jvillada.movi.ui.components.ds.VistaPrevia
+import com.jvillada.movi.ui.extractos.TiposDeArchivo
+import com.jvillada.movi.ui.extractos.rememberFilePicker
+import com.jvillada.movi.ui.papeles.ArchivoCompartido
+import com.jvillada.movi.ui.papeles.PapelesCompartidos
+import com.jvillada.movi.ui.profile.detalleDelInicioDelPeriodo
+import com.jvillada.movi.ui.profile.ejemploCortoDelCorte
+import com.jvillada.movi.ui.profile.vistaPreviaDelPeriodo
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 
@@ -135,13 +151,17 @@ const val AHORA_NO = "Ahora no"
  * # La guía «Primer uso», a pantalla completa
  *
  * Ver [PasoDePrimerUso] para qué hace cada paso y [GuiaDePrimerUso] para cuándo se abre. Arriba:
- * «Paso N de 6», la barra de progreso y «Ahora no» (sale y la marca descartada). Abajo, **igual en
+ * «Paso N de M», la barra de progreso y «Ahora no» (sale y la marca descartada). Abajo, **igual en
  * todos los pasos** (vuelta de diseño 3): «Atrás» y el botón principal, que dice «Empezar»,
- * «Siguiente» o «Ir a Inicio» y **se habilita solo cuando hay algo que guardar**; debajo, en los
- * pasos opcionales, el botón de texto «Saltar este paso». Antes el principal decía «Saltar» mientras
- * no hubiera nada hecho, y el botón lleno de marca era el de no hacer nada. **Todo paso se salta**;
- * el de las cuentas, con «Ahora no»: sin ninguna cuenta Movi no tiene dónde anotar nada, y lo que
- * sigue (la captura, los pagos) se completa después desde «Primeros pasos».
+ * «Siguiente» o «Ir a Inicio» y **se habilita solo cuando hay algo que guardar**; debajo, en todos los
+ * pasos de en medio, el botón de texto «Saltar este paso» (vuelta 54: también en las cuentas, que antes
+ * dejaban «Siguiente» apagado y solo «Ahora no» como salida).
+ *
+ * **Los pasos salen de la lista única** (`primerosPasos` en `:core`, vuelta 54): los mismos de la fila
+ * del Inicio y de Tú → «Primeros pasos», en el mismo orden; sin captura posible en la plataforma, ese
+ * paso no va. Al abrir, la guía lee lo que ya hay (perfil, cuentas, tarjetas, reglas, movimientos), así
+ * que el resumen del final dice lo mismo que la fila del Inicio aunque se abra a mitad de camino
+ * ([desde]).
  *
  * [pasoInicial] y [modoDeCaptura] existen para las pruebas: una prueba de la web corre en
  * Robolectric, o sea en Android.
@@ -151,9 +171,12 @@ fun PrimerUsoScreen(
     onNavigate: (Screen) -> Unit,
     pasoInicial: PasoDePrimerUso = PasoDePrimerUso.BIENVENIDA,
     modoDeCaptura: ModoDeCaptura = modoDeCapturaDe(isAndroid),
+    desde: PrimerPaso? = null,
 ) {
     val alcance = rememberCoroutineScope()
-    var paso by rememberSaveable { mutableStateOf(pasoInicial) }
+    val pasos = remember(modoDeCaptura) { pasosDeLaGuia(modoDeCaptura) }
+    val arranque = desde?.let(::pasoDeLaGuia) ?: pasoInicial
+    var paso by rememberSaveable { mutableStateOf(if (arranque in pasos) arranque else PasoDePrimerUso.BIENVENIDA) }
     var perfil by remember { mutableStateOf<UserProfile?>(null) }
     var guardando by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -163,14 +186,16 @@ fun PrimerUsoScreen(
     var regla by remember { mutableStateOf(SiElCorteCaeEnFinDeSemana.DIA_HABIL_ANTERIOR) }
     var periodoGuardado by remember { mutableStateOf<String?>(null) }
 
-    // Lo que se creó en la guía: es lo que dice el resumen del final.
+    // Lo que se creó en la guía, y lo que ya había (para quien la abre desde «Te faltan N pasos»).
     val cuentas = remember { mutableStateListOf<Account>() }
     val tarjetas = remember { mutableStateListOf<String>() }
     val recurrentes = remember { mutableStateListOf<RecurringRule>() }
+    var yaHabia by remember { mutableStateOf(LoQueYaHabia()) }
     var direccionCopiada by remember { mutableStateOf(false) }
+    var extractoSubido by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
-        // Llegar acá por cualquier camino la pone «en curso»: la tarjeta «Primeros pasos» no compite.
+        // Llegar acá por cualquier camino la pone «en curso»: la fila «Primeros pasos» no compite.
         GuiaDePrimerUso.abrir()
         runCatching { Repositories.wallets.getUserProfile() }.onSuccess { p ->
             perfil = p
@@ -181,16 +206,44 @@ fun PrimerUsoScreen(
                 regla = propia
             }
         }
+        // Lo que ya había. Cada lectura por su cuenta: una que falla deja ese dato en cero, como antes.
+        yaHabia = LoQueYaHabia(
+            cuentas = runCatching { Repositories.wallets.getAccounts() }.getOrNull()
+                ?.filter { it.type in TIPOS_DE_CUENTA_DE_DINERO }.orEmpty(),
+            tarjetas = runCatching { Repositories.wallets.getCards() }.getOrNull()?.size ?: 0,
+            fijos = runCatching { Repositories.wallets.getRecurringRules() }.getOrNull()?.map { it.id }.orEmpty(),
+            movimientos = runCatching { Repositories.wallets.getFinanceSummary(Scope.SELF) }.getOrNull()?.eventCount ?: 0,
+        )
     }
 
     // Android: el permiso concedido es lo único que la guía puede afirmar.
     val permisoDeSms = rememberSmsCaptureReady()
-    val capturaLista = modoDeCaptura == ModoDeCaptura.PERMISOS_DEL_TELEFONO && permisoDeSms
     val estadoDeLaCaptura = when {
-        capturaLista -> EstadoDeLaCaptura.ACTIVA
+        modoDeCaptura == ModoDeCaptura.PERMISOS_DEL_TELEFONO && permisoDeSms -> EstadoDeLaCaptura.ACTIVA
+        modoDeCaptura == ModoDeCaptura.SUBIR_UN_EXTRACTO && extractoSubido != null -> EstadoDeLaCaptura.EXTRACTO_SUBIDO
+        modoDeCaptura == ModoDeCaptura.SUBIR_UN_EXTRACTO && yaHabia.movimientos > 0 -> EstadoDeLaCaptura.CON_MOVIMIENTOS
         direccionCopiada -> EstadoDeLaCaptura.DIRECCION_COPIADA
         else -> EstadoDeLaCaptura.PENDIENTE
     }
+    val cuentasDeDinero = (yaHabia.cuentas.map { it.id } + cuentas.filter { it.type in TIPOS_DE_CUENTA_DE_DINERO }.map { it.id }).toSet().size
+    val fijos = (yaHabia.fijos + recurrentes.map { it.id }).toSet().size
+    val periodoDelPerfil = perfil?.takeIf { periodoElegidoEn(it.ajustesDelPeriodo()) }
+        ?.let { textoDelInicioDelMes(it.periodCutoffDay, siElCorteCaeEnFinDeSemanaDe(it.periodWeekendRule)) }
+    // La lista única, con lo que hay ahora: la misma regla que la fila del Inicio.
+    val lista = primerosPasos(
+        LoQueYaHay(
+            periodoElegido = periodoGuardado != null || periodoDelPerfil != null,
+            cuentasDeDinero = cuentasDeDinero,
+            capturaHecha = estadoDeLaCaptura in setOf(
+                EstadoDeLaCaptura.ACTIVA, EstadoDeLaCaptura.EXTRACTO_SUBIDO, EstadoDeLaCaptura.CON_MOVIMIENTOS,
+            ),
+            fijos = fijos,
+        ),
+        modoDeCaptura,
+    )
+
+    // «Agregar cuenta» va en el pie, así que su estado vive acá (vuelta 54).
+    val agregarCuenta = rememberAgregarCuenta()
 
     fun irA(destino: PasoDePrimerUso) {
         error = null
@@ -211,7 +264,7 @@ fun PrimerUsoScreen(
 
     fun avanzar() {
         if (guardando) return
-        val siguiente = paso.siguiente
+        val siguiente = pasoSiguiente(paso, pasos)
         when {
             paso == PasoDePrimerUso.LISTO -> salir()
             paso == PasoDePrimerUso.PERIODO && dia != null -> {
@@ -236,13 +289,14 @@ fun PrimerUsoScreen(
     }
 
     // El «atrás» del teléfono vuelve un paso, como el botón de abajo.
-    BackHandlerEffect(enabled = paso.anterior != null) { paso.anterior?.let(::irA) }
+    val anterior = pasoAnterior(paso, pasos)
+    BackHandlerEffect(enabled = anterior != null) { anterior?.let(::irA) }
 
     val hayAlgoHecho = when (paso) {
         PasoDePrimerUso.PERIODO -> dia != null
-        PasoDePrimerUso.CUENTAS -> cuentas.isNotEmpty()
+        PasoDePrimerUso.CUENTAS -> cuentasDeDinero > 0 || cuentas.isNotEmpty()
         PasoDePrimerUso.CAPTURA -> estadoDeLaCaptura != EstadoDeLaCaptura.PENDIENTE
-        PasoDePrimerUso.RECURRENTES -> recurrentes.isNotEmpty()
+        PasoDePrimerUso.RECURRENTES -> fijos > 0
         else -> true
     }
     val textoDeAvanzar = when (paso) {
@@ -250,13 +304,13 @@ fun PrimerUsoScreen(
         PasoDePrimerUso.LISTO -> "Ir a Inicio"
         else -> "Siguiente"
     }
-    // El principal solo cuando hay algo que guardar (o que seguir: la bienvenida y el final). Sin
-    // ninguna cuenta no se sigue: el botón se apaga y la nota de abajo dice por qué.
+    // El principal solo cuando hay algo que guardar (o que seguir: la bienvenida y el final). Apagado,
+    // «Saltar este paso» está siempre justo debajo.
     val sePuedeAvanzar = hayAlgoHecho
 
     Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         Encabezado(
-            titulo = "Paso ${paso.numero} de ${PasoDePrimerUso.entries.size}",
+            titulo = "Paso ${numeroDelPaso(paso, pasos)} de ${pasos.size}",
             acciones = {
                 if (paso != PasoDePrimerUso.LISTO) {
                     Boton(AHORA_NO, onClick = ::salir, variante = VarianteDeBoton.Fantasma, habilitado = !guardando)
@@ -264,7 +318,7 @@ fun PrimerUsoScreen(
             },
         )
         BarraDeProgreso(
-            fraccion = paso.progreso,
+            fraccion = progresoDelPaso(paso, pasos),
             modifier = Modifier.fillMaxWidth().padding(horizontal = Medida.margenDePantalla),
         )
         val reducido = LocalMovimientoReducido.current
@@ -292,7 +346,7 @@ fun PrimerUsoScreen(
             ) {
                 // La bienvenida lleva su propio título, grande y centrado (ver [PasoBienvenida]).
                 if (p != PasoDePrimerUso.BIENVENIDA) {
-                    Text(p.titulo, style = Movi.textos.titular, color = Movi.colores.texto)
+                    Text(p.titulo(modoDeCaptura), style = Movi.textos.titular, color = Movi.colores.texto)
                     Spacer(Modifier.height(Espacio.xs))
                 }
                 when (p) {
@@ -309,27 +363,31 @@ fun PrimerUsoScreen(
                         onRegla = { regla = it },
                     )
                     PasoDePrimerUso.CUENTAS -> PasoCuentas(
-                        cuentas = cuentas,
+                        cuentas = (yaHabia.cuentas + cuentas).distinctBy { it.id },
                         tarjetas = tarjetas,
-                        onCuenta = { cuentas += it },
+                        formulario = agregarCuenta,
                         onTarjeta = { tarjetas += it },
                     )
                     PasoDePrimerUso.CAPTURA -> PasoCaptura(
                         modo = modoDeCaptura,
+                        extractoSubido = extractoSubido,
+                        onExtracto = { extractoSubido = it },
                         onCopiada = { direccionCopiada = true },
                     )
                     PasoDePrimerUso.RECURRENTES -> PasoRecurrentes(
                         creados = recurrentes,
-                        cuentaPorDefecto = cuentas.firstOrNull { it.type in CUENTAS_QUE_PAGAN }?.id,
+                        cuentaPorDefecto = (cuentas + yaHabia.cuentas).firstOrNull { it.type in CUENTAS_QUE_PAGAN }?.id,
                         onCreado = { recurrentes += it },
                     )
                     PasoDePrimerUso.LISTO -> PasoListo(
+                        lista,
                         ResumenDelPrimerUso(
-                            periodo = periodoGuardado,
-                            cuentas = cuentas.size,
-                            tarjetas = tarjetas.size,
-                            recurrentes = recurrentes.size,
+                            periodo = periodoGuardado ?: periodoDelPerfil,
+                            cuentas = cuentasDeDinero,
+                            tarjetas = yaHabia.tarjetas + tarjetas.size,
+                            recurrentes = fijos,
                             captura = estadoDeLaCaptura,
+                            modo = modoDeCaptura,
                         ),
                     )
                 }
@@ -347,16 +405,26 @@ fun PrimerUsoScreen(
                 Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
                 Spacer(Modifier.height(Espacio.xs))
             }
-            if (paso == PasoDePrimerUso.CUENTAS && !sePuedeAvanzar) {
-                Text(
-                    "Agrega al menos una cuenta para seguir, o toca «$AHORA_NO» y hazlo después.",
-                    style = Movi.textos.apoyo,
-                    color = Movi.colores.textoMedio,
+            // Vuelta 54: en el paso de las cuentas, «Agregar cuenta» va en el pie, siempre a la vista
+            // (con los bancos en varios renglones quedaba debajo del pliegue a 390 dp).
+            if (paso == PasoDePrimerUso.CUENTAS) {
+                agregarCuenta.error?.let {
+                    Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
+                    Spacer(Modifier.height(Espacio.xs))
+                }
+                Boton(
+                    AGREGAR_CUENTA,
+                    onClick = { agregarCuenta.agregar(alcance) { cuentas += it } },
+                    variante = if (sePuedeAvanzar) VarianteDeBoton.Secundario else VarianteDeBoton.Principal,
+                    icono = Icons.Rounded.Add,
+                    cargando = agregarCuenta.creando,
+                    habilitado = agregarCuenta.formulario.sePuedeCrear,
+                    anchoCompleto = true,
+                    modifier = Modifier.testTag(TAG_AGREGAR_CUENTA_EN_LA_GUIA),
                 )
                 Spacer(Modifier.height(Espacio.xs))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
-                val anterior = paso.anterior
                 if (anterior != null && paso != PasoDePrimerUso.LISTO) {
                     Boton(
                         "Atrás",
@@ -374,11 +442,11 @@ fun PrimerUsoScreen(
                     modifier = Modifier.weight(1f).testTag(TAG_AVANZAR_EN_LA_GUIA),
                 )
             }
-            // Saltar no es la acción principal: un botón de texto debajo, en los pasos opcionales.
-            // Pasa al siguiente sin guardar nada (el día elegido y no confirmado queda sin guardar).
-            // Vuelta de diseño 5: chico y centrado, sin ancho completo, para que «Siguiente» sea la
-            // única acción con peso (a todo el ancho se leía como un tercer botón).
-            val siguiente = paso.siguiente
+            // Saltar no es la acción principal: un botón de texto debajo, en todos los pasos de en
+            // medio. Pasa al siguiente sin guardar nada (el día elegido y no confirmado queda sin
+            // guardar). Vuelta de diseño 5: chico y centrado, sin ancho completo, para que «Siguiente»
+            // sea la única acción con peso (a todo el ancho se leía como un tercer botón).
+            val siguiente = pasoSiguiente(paso, pasos)
             if (paso.seSaltaConUnBoton && siguiente != null) {
                 Boton(
                     SALTAR_ESTE_PASO,
@@ -394,6 +462,58 @@ fun PrimerUsoScreen(
             }
         }
     }
+}
+
+/** Lo que el dueño ya tenía al abrir la guía (para el resumen y para tildar la lista única). */
+private data class LoQueYaHabia(
+    val cuentas: List<Account> = emptyList(),
+    val tarjetas: Int = 0,
+    val fijos: List<String> = emptyList(),
+    val movimientos: Int = 0,
+)
+
+/** Lo que dice el botón del pie que agrega la cuenta del formulario. */
+const val AGREGAR_CUENTA: String = "Agregar cuenta"
+
+/** El tag de «Agregar cuenta» en el pie de la guía. */
+const val TAG_AGREGAR_CUENTA_EN_LA_GUIA: String = "primer-uso-agregar-cuenta"
+
+/** El formulario del paso de las cuentas y su creación, que el pie de la guía dispara. */
+@Stable
+private class AgregarCuenta(val formulario: EstadoDelFormularioDeCuenta) {
+    var creando by mutableStateOf(false)
+    var error by mutableStateOf<String?>(null)
+    private var yaCreada: Account? = null
+
+    /** La creación de siempre ([crearCuentaConSaldo]), como la hoja «Nueva cuenta». */
+    fun agregar(alcance: kotlinx.coroutines.CoroutineScope, onCuenta: (Account) -> Unit) {
+        if (!formulario.sePuedeCrear || creando) return
+        creando = true
+        error = null
+        val cuenta = formulario.cuentaNueva()
+        alcance.launch {
+            runCatching { crearCuentaConSaldo(cuenta, yaCreada = yaCreada) { yaCreada = it } }
+                .onSuccess { creada ->
+                    onCuenta(creada.copy(balance = cuenta.balance))
+                    formulario.limpiar()
+                    yaCreada = null
+                }
+                .onFailure {
+                    error = if (yaCreada != null) {
+                        "La cuenta quedó creada, pero no se pudo guardar el saldo. Toca «$AGREGAR_CUENTA» otra vez."
+                    } else {
+                        it.toUserMessage()
+                    }
+                }
+            creando = false
+        }
+    }
+}
+
+@Composable
+private fun rememberAgregarCuenta(): AgregarCuenta {
+    val formulario = rememberEstadoDelFormularioDeCuenta()
+    return remember(formulario) { AgregarCuenta(formulario) }
 }
 
 /** Los tipos de cuenta de los que sale un pago de cada mes. */
@@ -512,14 +632,6 @@ private fun PasoPeriodo(
         }
         Spacer(Modifier.height(Espacio.xs))
     }
-    if (dia != null && dia > 28) {
-        Text(
-            "En los meses que no tienen día $dia, empieza el último día del mes.",
-            style = Movi.textos.apoyo,
-            color = Movi.colores.textoMedio,
-        )
-        Spacer(Modifier.height(Espacio.xs))
-    }
     Spacer(Modifier.height(Espacio.xs))
     val esElDiaDePago = regla != SiElCorteCaeEnFinDeSemana.ESE_DIA
     Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
@@ -540,20 +652,14 @@ private fun PasoPeriodo(
         modifier = Modifier.padding(start = Medida.margenDePantalla, end = Medida.margenDePantalla, top = Espacio.xs),
     )
     if (dia != null) {
+        // Vuelta 54: **la misma vista previa de la hoja de Tú** («Tu período: del 23 de octubre al 24 de
+        // noviembre», con `rangoEntre`). Antes decía «Hoy estarías en noviembre de 2026» el 28 de
+        // octubre, y el mes siguiente sin el rango confundía.
         val settings = remember(dia, regla) { PeriodSettings(cutoffDay = dia, siCaeEnFinDeSemana = regla) }
         val hoy = remember(settings) { periodoDe(Clock.System.now().toEpochMilliseconds(), settings) }
+        val ejemplo = remember(settings, hoy) { ejemploCortoDelCorte(hoy, settings) }
         Spacer(Modifier.height(Medida.dentroDeSeccion))
-        Superficie(modifier = Modifier.fillMaxWidth()) {
-            Text("Hoy estarías en ${nombreDe(hoy)}", style = Movi.textos.titulo, color = Movi.colores.texto)
-            rangoLegibleDe(hoy, settings)?.let {
-                Spacer(Modifier.height(Espacio.xxs))
-                Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-            }
-            remember(settings, hoy) { proximoCorteCorrido(hoy, settings) }?.let {
-                Spacer(Modifier.height(Espacio.xs))
-                Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-            }
-        }
+        VistaPrevia(vistaPreviaDelPeriodo(hoy, settings), detalle = detalleDelInicioDelPeriodo(dia, ejemplo))
     }
 }
 
@@ -583,15 +689,18 @@ private fun DiaParaElegir(dia: Int, elegido: Boolean, habilitado: Boolean, onCli
 
 // ── 3 · Tus cuentas ────────────────────────────────────────────────────────────────────────────
 
-@OptIn(ExperimentalLayoutApi::class)
+/**
+ * **Las cuentas, con lo esencial a la vista** (vuelta 54): los bancos y los tipos van cada uno en una
+ * fila de chips que se desplaza de lado ([FormularioDeCuenta] `enUnaFila`), y «Agregar cuenta» va en el
+ * pie de la guía. A 390 dp se ven el nombre, el saldo y el botón sin desplazar.
+ */
 @Composable
 private fun PasoCuentas(
     cuentas: List<Account>,
     tarjetas: List<String>,
-    onCuenta: (Account) -> Unit,
+    formulario: AgregarCuenta,
     onTarjeta: (String) -> Unit,
 ) {
-    val alcance = rememberCoroutineScope()
     Text(
         "Las cuentas donde tienes tu plata: el banco, Nequi, el efectivo. Con lo que tienen hoy.",
         style = Movi.textos.cuerpo,
@@ -599,7 +708,16 @@ private fun PasoCuentas(
     )
     Spacer(Modifier.height(Medida.entreSecciones))
 
+    // El mismo bloque y la misma creación que Patrimonio → «Nueva cuenta» (vuelta de diseño 16): ver
+    // [FormularioDeCuenta] y crearCuentaConSaldo. La guía no ofrece «Bien»: aquí lo que hace falta es
+    // dónde está la plata. El botón que la crea va en el pie.
+    Seccion(if (cuentas.isEmpty()) "Agrega una cuenta" else "Agrega otra")
+    Superficie(modifier = Modifier.fillMaxWidth()) {
+        FormularioDeCuenta(formulario.formulario, habilitado = !formulario.creando, enUnaFila = true)
+    }
+
     if (cuentas.isNotEmpty()) {
+        Spacer(Modifier.height(Medida.entreSecciones))
         Seccion("Tus cuentas", conteo = cuentas.size)
         Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
             cuentas.forEachIndexed { i, c ->
@@ -613,55 +731,6 @@ private fun PasoCuentas(
                 )
             }
         }
-        Spacer(Modifier.height(Medida.entreSecciones))
-    }
-
-    // El mismo bloque y la misma creación que Patrimonio → «Nueva cuenta» (vuelta de diseño 16): ver
-    // [FormularioDeCuenta] y crearCuentaConSaldo. La guía no ofrece «Bien»: aquí lo que hace falta es
-    // dónde está la plata.
-    val formulario = rememberEstadoDelFormularioDeCuenta()
-    var creando by remember { mutableStateOf(false) }
-    var yaCreada by remember { mutableStateOf<Account?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
-
-    Seccion(if (cuentas.isEmpty()) "Agrega una cuenta" else "Agrega otra")
-    Superficie(modifier = Modifier.fillMaxWidth()) {
-        FormularioDeCuenta(formulario, habilitado = !creando)
-        error?.let {
-            Spacer(Modifier.height(Espacio.xs))
-            Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
-        }
-        Spacer(Modifier.height(Medida.dentroDeSeccion))
-        Boton(
-            "Agregar cuenta",
-            onClick = {
-                if (!formulario.sePuedeCrear || creando) return@Boton
-                creando = true
-                error = null
-                val cuenta = formulario.cuentaNueva()
-                alcance.launch {
-                    runCatching { crearCuentaConSaldo(cuenta, yaCreada = yaCreada) { yaCreada = it } }
-                        .onSuccess { creada ->
-                            onCuenta(creada.copy(balance = cuenta.balance))
-                            formulario.limpiar()
-                            yaCreada = null
-                        }
-                        .onFailure {
-                            error = if (yaCreada != null) {
-                                "La cuenta quedó creada, pero no se pudo guardar el saldo. Toca «Agregar cuenta» otra vez."
-                            } else {
-                                it.toUserMessage()
-                            }
-                        }
-                    creando = false
-                }
-            },
-            variante = VarianteDeBoton.Secundario,
-            icono = Icons.Rounded.Add,
-            cargando = creando,
-            habilitado = formulario.sePuedeCrear,
-            anchoCompleto = true,
-        )
     }
 
     Spacer(Modifier.height(Medida.entreSecciones))
@@ -711,7 +780,7 @@ private fun PasoTarjetas(tarjetas: List<String>, onTarjeta: (String) -> Unit) {
     val diaValido = diaDePago.toIntOrNull()?.takeIf { it in 1..31 }
     Superficie(modifier = Modifier.fillMaxWidth()) {
         RotuloDelCampo("Banco")
-        SelectorDeBanco(elegido = banco, onElegir = { banco = it })
+        SelectorDeBanco(elegido = banco, onElegir = { banco = it }, enUnaFila = true)
         Spacer(Modifier.height(Medida.dentroDeSeccion))
         MoneyField(value = cupo, onValueChange = { cupo = it }, label = "Cupo")
         Spacer(Modifier.height(Medida.dentroDeSeccion))
@@ -777,7 +846,12 @@ private fun rotuloDelTipo(tipo: AccountType): String =
 // ── 4 · Que Movi se entere solo ────────────────────────────────────────────────────────────────
 
 @Composable
-private fun PasoCaptura(modo: ModoDeCaptura, onCopiada: () -> Unit) {
+private fun PasoCaptura(
+    modo: ModoDeCaptura,
+    extractoSubido: String?,
+    onExtracto: (String) -> Unit,
+    onCopiada: () -> Unit,
+) {
     when (modo) {
         ModoDeCaptura.PERMISOS_DEL_TELEFONO -> {
             Text(
@@ -789,25 +863,69 @@ private fun PasoCaptura(modo: ModoDeCaptura, onCopiada: () -> Unit) {
             // La misma sección de Ajustes → «Captura del banco»: los permisos se piden en un solo lugar.
             SmsSensorSetupSection(onSynced = {})
         }
-        ModoDeCaptura.REENVIO_DE_CORREO -> PasoCapturaPorCorreo(onCopiada)
+        ModoDeCaptura.SUBIR_UN_EXTRACTO -> PasoCapturaConUnExtracto(extractoSubido, onExtracto, onCopiada)
+        // Sin captura posible el paso no está en la lista (ver `pasosDeLaGuia`): nunca se llega acá.
+        ModoDeCaptura.NINGUNA -> Unit
     }
 }
 
-/** La pieza es la misma que Ajustes → «Recibe tus alertas por correo» (ver `ReenvioPorCorreo.kt`). */
+/** Lo que dice el botón que elige el extracto. */
+const val SUBIR_UN_EXTRACTO_EN_LA_GUIA: String = "Subir un extracto"
+
+/** El tag del botón que elige el extracto en la guía. */
+const val TAG_SUBIR_EXTRACTO_EN_LA_GUIA: String = "primer-uso-subir-extracto"
+
+/**
+ * **En la web y en iOS: «Sube un extracto y Movi lo lee»** (vuelta 54). Era el reenvío de correos, que
+ * sin la dirección configurada en el server decía «todavía no está disponible» y dejaba el paso sin
+ * nada que hacer. Subir un extracto sí existe en todas partes: el archivo va a la misma puerta de
+ * papeles que «Subir comprobante» del Inicio ([PapelesCompartidos]), y la hoja «Movi está leyendo…»
+ * de App.kt lo toma encima de la guía. El reenvío sigue debajo, **solo si el server tiene la
+ * dirección** (la misma pieza de Ajustes, `ReenvioPorCorreo`).
+ */
 @Composable
-private fun PasoCapturaPorCorreo(onCopiada: () -> Unit) {
+private fun PasoCapturaConUnExtracto(extractoSubido: String?, onExtracto: (String) -> Unit, onCopiada: () -> Unit) {
+    val elegir = rememberFilePicker(TiposDeArchivo.EXTRACTOS) { nombre, bytes, mime ->
+        PapelesCompartidos.recibir(listOf(ArchivoCompartido(nombre, bytes, mime)))
+        onExtracto(nombre)
+    }
     Text(
-        "Si tu banco te manda un correo con cada compra, reenvíalo a Movi: te queda en «Por revisar» " +
-            "para que lo confirmes. Es opcional.",
+        "Sube el extracto de tu banco (el PDF que te mandan cada mes) y Movi lo lee: los movimientos te " +
+            "esperan en «Por revisar» para que los confirmes. Es opcional.",
         style = Movi.textos.cuerpo,
         color = Movi.colores.textoMedio,
     )
     Spacer(Modifier.height(Medida.entreSecciones))
-    ReenvioPorCorreo(
-        direccion = rememberDireccionDeMovi(),
-        onCopiada = onCopiada,
-        sinDireccion = "El reenvío por correo todavía no está disponible. Puedes saltar este paso.",
+    if (extractoSubido != null) {
+        Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
+            Fila(
+                titulo = "Movi está leyendo tu extracto",
+                subtitulo = extractoSubido,
+                inicio = { IconoEnCirculo(Icons.Rounded.CheckCircle) },
+                final = { Pildora("Listo", TonoDePildora.Exito) },
+            )
+        }
+        Spacer(Modifier.height(Medida.dentroDeSeccion))
+    }
+    Boton(
+        if (extractoSubido == null) SUBIR_UN_EXTRACTO_EN_LA_GUIA else "Subir otro",
+        onClick = elegir,
+        variante = VarianteDeBoton.Secundario,
+        icono = Icons.Rounded.UploadFile,
+        anchoCompleto = true,
+        modifier = Modifier.testTag(TAG_SUBIR_EXTRACTO_EN_LA_GUIA),
     )
+    val direccion = rememberDireccionDeMovi()
+    if (direccion.direccion != null) {
+        Spacer(Modifier.height(Medida.entreSecciones))
+        Text(
+            "¿Tu banco te manda un correo con cada compra? También puedes reenviarlo a Movi.",
+            style = Movi.textos.cuerpo,
+            color = Movi.colores.textoMedio,
+        )
+        Spacer(Modifier.height(Medida.dentroDeSeccion))
+        ReenvioPorCorreo(direccion = direccion, onCopiada = onCopiada)
+    }
 }
 
 // ── 5 · Lo que pagas cada mes ──────────────────────────────────────────────────────────────────
@@ -955,8 +1073,9 @@ private fun FormularioDeRecurrente(
 // ── 6 · Listo ──────────────────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun PasoListo(resumen: ResumenDelPrimerUso) {
-    val lineas = lineasDelResumen(resumen)
+private fun PasoListo(lista: List<EstadoDelPrimerPaso>, resumen: ResumenDelPrimerUso) {
+    // Los renglones y si quedaron hechos salen de la lista única: la misma de «Te faltan N pasos».
+    val lineas = lineasDelResumen(lista, resumen)
     Text("Esto es lo que quedó:", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
     Spacer(Modifier.height(Medida.dentroDeSeccion))
     Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
@@ -990,7 +1109,7 @@ private fun PasoListo(resumen: ResumenDelPrimerUso) {
     if (lineas.any { !it.hecho }) {
         Spacer(Modifier.height(Medida.dentroDeSeccion))
         Text(
-            "Lo que te faltó queda en «Primeros pasos», en el Inicio, para cuando quieras.",
+            "Lo que te faltó queda en el Inicio, en «Primeros pasos», para cuando quieras.",
             style = Movi.textos.apoyo,
             color = Movi.colores.textoMedio,
         )

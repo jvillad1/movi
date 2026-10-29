@@ -67,7 +67,7 @@ fun RegisterScreen(onNavigate: (Screen) -> Unit) {
                 // Una cuenta recién creada no tiene nada: la guía de primer uso la acompaña paso a
                 // paso. Ya se sabe que va, así que el Inicio no tiene que volver a preguntarlo.
                 GuiaDePrimerUso.abrir()
-                onNavigate(Screen.PrimerUso)
+                onNavigate(Screen.PrimerUso())
             }.onFailure {
                 // Ver AuthErrors.kt. El 409 se detectaba buscando "409" DENTRO del texto del
                 // error, que además de frágil solo acertaba de casualidad: sin `expectSuccess`,

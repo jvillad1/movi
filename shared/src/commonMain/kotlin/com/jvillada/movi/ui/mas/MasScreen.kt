@@ -122,6 +122,9 @@ import com.jvillada.movi.shared.model.ahorroDelPeriodo
 import com.jvillada.movi.ui.profile.guardarElInicioDelMes
 import com.jvillada.movi.ui.profile.textoDelInicioDelMes
 import com.jvillada.movi.ui.sms.tituloDeCapturaDelBanco
+import com.jvillada.movi.ui.primeruso.rememberPrimerosPasos
+import com.jvillada.movi.ui.primeruso.modoDeCapturaDe
+import com.jvillada.movi.shared.model.pasosQueFaltan
 import kotlinx.coroutines.launch
 
 /**
@@ -243,10 +246,10 @@ fun MasScreen(
         isAdmin = runCatching { Repositories.wallets.isScreenAdmin() }.getOrDefault(false)
     }
 
-    // Ola B, tarea 7: «Primeros pasos» solo mientras la guía del Inicio tenga algo por tildar — la
-    // MISMA condición que decide si el Inicio la pinta (`DashboardData.guiaIncompleta`), leída del
-    // caché del Inicio: sin datos, no se afirma que falte nada.
-    val guiaIncompleta = DashboardDataCache.data?.guiaIncompleta == true
+    // Ola B, tarea 7: «Primeros pasos» solo mientras falte algún paso. Vuelta 54: la lista única
+    // (`primerosPasos`, la misma de la guía y de la fila del Inicio), leída del caché del Inicio: sin
+    // datos, no se afirma que falte nada. Sigue aunque el dueño haya ocultado la fila del Inicio.
+    val guiaIncompleta = rememberPrimerosPasos(DashboardDataCache.data, modoDeCapturaDe(esAndroid))?.let { pasosQueFaltan(it) > 0 } == true
 
     // Vuelta 31: la dirección de Movi para reenviar los correos del banco, solo donde no se leen SMS.
     val direccionDeMovi = if (!esAndroid) rememberDireccionDeMovi() else remember { DireccionDeMovi() }

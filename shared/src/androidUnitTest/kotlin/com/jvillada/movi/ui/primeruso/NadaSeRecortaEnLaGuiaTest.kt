@@ -46,7 +46,7 @@ class NadaSeRecortaEnLaGuiaTest {
             DireccionDeCorreo(token = "0123456789abcdef", direccion = "alertas+0123456789abcdef@k3x9.resend.app", configurado = true)
     }
 
-    private fun montar(paso: PasoDePrimerUso, modo: ModoDeCaptura = ModoDeCaptura.REENVIO_DE_CORREO) {
+    private fun montar(paso: PasoDePrimerUso, modo: ModoDeCaptura = ModoDeCaptura.SUBIR_UN_EXTRACTO) {
         Repositories.sustitutoDePrueba = repo
         composeRule.setContent {
             ConClaseDeAncho(escala = 1.3f * 1.12f) {
@@ -100,7 +100,7 @@ class NadaSeRecortaEnLaGuiaTest {
         nadaSeRecorta("cuentas")
     }
 
-    @Test fun `captura por correo`() { montar(PasoDePrimerUso.CAPTURA); nadaSeRecorta("captura por correo") }
+    @Test fun `captura con un extracto y el reenvio`() { montar(PasoDePrimerUso.CAPTURA); nadaSeRecorta("captura con un extracto") }
 
     @Test fun `captura en Android`() {
         montar(PasoDePrimerUso.CAPTURA, ModoDeCaptura.PERMISOS_DEL_TELEFONO)
