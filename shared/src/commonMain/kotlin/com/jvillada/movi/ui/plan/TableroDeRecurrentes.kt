@@ -9,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.loQueViene
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -972,6 +973,29 @@ fun LazyListScope.tableroDeRecurrentes(
                     tarjetasDelTablero.valor.orEmpty().mapNotNull { t -> t.extracto?.let { t.account.id to it } }.toMap()
                 },
             )
+        }
+    }
+
+    // ── Lo que viene · próximos 15 días (vuelta 70) ─────────────────────────
+    // Con 7 días o menos del período, lo del siguiente que vence pronto, con su total, debajo de la
+    // lista. No suma en «Falta por pagar», que sigue siendo del período. Las mismas dos lecturas.
+    if (periodoVisible == periodoDeHoy) {
+        item(key = "lo-que-viene") {
+            val viene = remember(
+                estado.upcomingRecurrentes, estado.ocurrencias, estado.vencimientosOk, estado.ocurrenciasOk, periodoVisible, ajustesDelPeriodo,
+            ) {
+                if (estado.vencimientosOk && estado.ocurrenciasOk) {
+                    loQueViene(estado.upcomingRecurrentes, estado.ocurrencias, periodoVisible, ajustesDelPeriodo)
+                } else {
+                    null
+                }
+            }
+            viene?.let {
+                SeccionLoQueViene(
+                    it,
+                    modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(bottom = Medida.entreSecciones),
+                )
+            }
         }
     }
 
