@@ -126,6 +126,8 @@ import com.jvillada.movi.ui.primeruso.rememberPrimerosPasos
 import com.jvillada.movi.ui.primeruso.modoDeCapturaDe
 import com.jvillada.movi.shared.model.pasosQueFaltan
 import kotlinx.coroutines.launch
+import com.jvillada.movi.platform.elLectorDePantallaLeeLaApp
+import com.jvillada.movi.platform.notaDelLectorDePantalla
 
 /**
  * Lo que se llamaba la pantalla que abría el avatar. Vuelta 38: sus secciones viven en «Tú»
@@ -379,6 +381,8 @@ fun MasScreen(
                         onClick = { SaldosOcultosStore.alternar() },
                     )
                 }
+                // Vuelta 55: en la web un lector de pantalla no lee la app (es un canvas); se dice.
+                NotaDeSeccion(notaDelLectorDePantalla(elLectorDePantallaLeeLaApp))
             }
         }
 

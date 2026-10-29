@@ -47,6 +47,13 @@
         body { background: var(--fondo); font-family: "Figtree", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif; }
         #ComposeTarget { width: 100vw; height: 100vh; display: block; }
 
+        /* Vuelta 55 (accesibilidad): un texto que solo oye un lector de pantalla. Fuera de la vista
+           pero no `display: none` (eso también lo calla para el lector). */
+        .solo-lector {
+            position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+            overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+        }
+
         /* Native HTML login overlay — lets the browser's password manager
            save & autofill credentials (Compose renders to canvas, which the
            password manager can't see). */
@@ -124,7 +131,13 @@
     </style>
 </head>
 <body>
-    <canvas id="ComposeTarget"></canvas>
+    <!-- Vuelta 55 (accesibilidad): la app entera es un <canvas> y Compose Multiplatform 1.8 no le
+         pasa su semántica al DOM, así que un lector de pantalla no lee nada de adentro. Se dice: el
+         canvas tiene nombre y rol, y este aviso (oculto a la vista) es lo primero que oye el lector.
+         El mismo texto está en Ajustes → «Cómo se ve» (`LECTOR_DE_PANTALLA_EN_LA_WEB`, en
+         `MasScreen.kt`); `LaWebDiceQueNoTieneLectorTest` vigila que los dos digan lo mismo. -->
+    <p id="aviso-lector" class="solo-lector">Movi en la web todavía no funciona con lectores de pantalla. Usa la app de Android.</p>
+    <canvas id="ComposeTarget" role="application" aria-label="Movi" aria-describedby="aviso-lector"></canvas>
 
     <!-- Native login form (hidden by default; shown only when there is no session) -->
     <div id="login-overlay" class="hidden">
