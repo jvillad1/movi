@@ -5,8 +5,11 @@ self.addEventListener('push', function (event) {
     try { if (event.data) data = Object.assign(data, event.data.json()); } catch (e) {}
     event.waitUntil(self.registration.showNotification(data.title, {
         body: data.body,
-        icon: 'icons/movi-192.png',
-        badge: 'icons/movi-192.png',
+        // Vuelta 65: el ícono de Movi (la «m» en tinta sobre el amarillo, redondeado) y el badge
+        // monocromo: Android dibuja el badge en la barra de estado usando solo su alfa, así que va
+        // la «m» blanca sobre transparente, no el ícono a color (salía un cuadrado blanco).
+        icon: 'icons/movi-redondeado-192.png',
+        badge: 'icons/movi-badge.png',
         data: { url: data.url || '/' }
     }));
 });

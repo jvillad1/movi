@@ -11,6 +11,7 @@ import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import com.jvillada.movi.app.R
 import com.jvillada.movi.data.SaldosOcultosStore
 import com.jvillada.movi.data.SessionManager
@@ -25,9 +26,10 @@ import kotlinx.coroutines.withTimeoutOrNull
  * en `:shared` (`AvisosDelTelefono.kt`, puro y probado); acá solo hay canales, `NotificationCompat`
  * y el `Intent` que abre la pantalla al tocar.
  *
- * Dos canales separados, con nombre en español, para que el dueño pueda silenciar uno sin el otro
+ * Canales separados, con nombre en español, para que el dueño pueda silenciar uno sin el otro
  * desde los ajustes del sistema: los movimientos pueden llegar diez veces al día, los vencimientos
- * una.
+ * una. Todas las notificaciones salen de [publicar], con el mismo ícono (`ic_stat_movi`) y el mismo
+ * acento (`movi_tinta`); `ElIconoDeMoviTest` lo vigila.
  */
 object Avisador {
     private const val TAG = "movi"
@@ -53,28 +55,34 @@ object Avisador {
     /** Cuánto se espera la propuesta del aviso antes de publicar sin «Confirmar». */
     private const val MILIS_PARA_LEER_LA_PROPUESTA = 8_000L
 
-    /** Idempotente: Android ignora crear un canal que ya existe (solo actualiza su nombre). */
+    /**
+     * Idempotente: Android ignora crear un canal que ya existe y solo actualiza su nombre y su
+     * descripción, así que un cambio de texto acá llega a los teléfonos que ya los tenían.
+     *
+     * Vuelta 65: los nombres hablan como la app de hoy (Actividad, Pagos, Inicio) y tutean. Los ids
+     * no cambian nunca: un id nuevo sería un canal nuevo y el dueño perdería lo que ya silenció.
+     */
     fun crearCanales(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val gestor = context.getSystemService(NotificationManager::class.java) ?: return
         gestor.createNotificationChannel(
-            NotificationChannel(CANAL_MOVIMIENTOS, "Movimientos por revisar", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                description = "Cuando la captura del banco deja un movimiento en «Por revisar»."
+            NotificationChannel(CANAL_MOVIMIENTOS, "Por revisar", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = "Cuando un aviso de tu banco queda en «Por revisar», en Actividad."
             },
         )
         gestor.createNotificationChannel(
             NotificationChannel(CANAL_VENCIMIENTOS, "Pagos por vencer", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                description = "Los pagos del período que vencen hoy o mañana y no están pagados."
+                description = "Los pagos de tu período que vencen hoy o mañana y todavía no pagaste."
             },
         )
         gestor.createNotificationChannel(
-            NotificationChannel(CANAL_CAPTURA, "La captura del banco", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                description = "Cuando un banco que avisaba siempre lleva días sin mandar nada."
+            NotificationChannel(CANAL_CAPTURA, "Captura del banco", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = "Cuando un banco que siempre te avisaba lleva días sin mandar nada, o Movi dejó de recibir tus avisos."
             },
         )
         gestor.createNotificationChannel(
             NotificationChannel(CANAL_DEBITOS, "Débitos automáticos", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                description = "El día que el banco debió cobrar solo una cuota o un pago, para confirmar si se cobró."
+                description = "El día que tu banco debió cobrar solo una cuota o un pago, para que confirmes si se cobró."
             },
         )
         gestor.createNotificationChannel(
@@ -265,7 +273,13 @@ object Avisador {
             NotificationCompat.BigTextStyle().bigText(texto.texto)
         }
         val aviso = NotificationCompat.Builder(context, canal)
+            // Vuelta 65: la «m» del ícono, y la tinta de acento. La tinta y no el amarillo: desde
+            // Android 12 el acento es el círculo detrás de la «m» blanca, y blanco sobre amarillo
+            // no se lee (1,6:1); blanco sobre tinta sí (16:1), en la cortina clara y en la oscura.
+            // En Android 8-11 el acento tiñe la «m» y el nombre de la app, y el sistema lo aclara
+            // solo en la cortina oscura. Todos los avisos pasan por acá: un solo ícono y un color.
             .setSmallIcon(R.drawable.ic_stat_movi)
+            .setColor(ContextCompat.getColor(context, R.color.movi_tinta))
             .setLargeIcon(icono)
             .setContentTitle(texto.titulo)
             .setContentText(texto.texto)

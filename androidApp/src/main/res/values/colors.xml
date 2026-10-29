@@ -3,6 +3,14 @@
     <!-- El fondo de Movi (Tokens.kt, el crema de la opción 3) — evita un destello de otro color en el arranque -->
     <color name="movi_fondo">#F4F1EC</color>
     <!--
+        El ícono de Movi (vuelta 65): el fondo del ícono adaptable es la marca (el amarillo de
+        Tokens.kt) y la «m» va en la tinta que va sobre ella (`sobreMarca`). La tinta también es el
+        acento de las notificaciones (`setColor` en Avisador). `ElIconoDeMoviTest` los compara con
+        la paleta.
+    -->
+    <color name="movi_marca">#FFC21A</color>
+    <color name="movi_tinta">#1F1B16</color>
+    <!--
         El widget «Te quedan hoy» ANTES de que la app lo pinte (la vista previa del selector de
         widgets y el primer cuadro): el único tema de Tokens.kt. Después los pone WidgetTeQuedan
         desde Tokens.kt. `ElWidgetHablaLosTokensTest` compara estos cuatro (y el fondo) con la

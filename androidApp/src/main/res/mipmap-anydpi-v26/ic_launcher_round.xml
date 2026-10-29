@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    El ícono de Movi (vuelta 65): la «m» en tinta sobre el amarillo de la marca. El fondo es un color
+    (`movi_marca`, el `marca` de Tokens.kt) y el primer plano la «m» vectorial; la capa monochrome
+    es la misma «m», que Android 13 tiñe con el tema del sistema. Lo vigila `ElIconoDeMoviTest`.
+-->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-    <background android:drawable="@drawable/ic_launcher_background" />
+    <background android:drawable="@color/movi_marca" />
     <foreground android:drawable="@drawable/ic_launcher_foreground" />
+    <monochrome android:drawable="@drawable/ic_launcher_foreground" />
 </adaptive-icon>

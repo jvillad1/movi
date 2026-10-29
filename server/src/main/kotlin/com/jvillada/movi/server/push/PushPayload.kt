@@ -48,7 +48,9 @@ fun buildPushPayload(
     val extra = selected.size - MAX_LINES
     val body = (lines + if (extra > 0) listOf("…y $extra más") else emptyList()).joinToString("\n")
     return buildJsonObject {
-        put("title", "Pagos próximos en movi")
+        // Vuelta 65: el mismo nombre que el canal del teléfono («Pagos por vencer»). El navegador
+        // ya dice que es de Movi (el ícono y el sitio): repetirlo en minúscula sobraba.
+        put("title", "Pagos por vencer")
         put("body", body)
         put("url", "/")
     }.toString()
