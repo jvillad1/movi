@@ -52,8 +52,7 @@ class PagoDeTarjetaEnElDiaTest {
         )
         assertEquals(1_929_536L, montoPagoDeTarjetaEnElDia(items, accountTypes))
         assertEquals(
-            "Además, \$1.929.536 fueron a pagar tarjeta — ya contado en tu gasto del mes cuando compraste, " +
-                "no se duplica.",
+            "+ \$1.929.536 a tu tarjeta · no suma, ya contó al comprar",
             textoPagoDeTarjetaEnElDia(montoPagoDeTarjetaEnElDia(items, accountTypes)),
         )
     }
@@ -94,8 +93,7 @@ class PagoDeTarjetaEnElDiaTest {
         )
         assertEquals(386_902L, montoPagoDeTarjetaEnElDia(items, accountTypes))
         assertEquals(
-            "Además, \$386.902 fueron a pagar tarjeta — ya contado en tu gasto del mes cuando compraste, " +
-                "no se duplica.",
+            "+ \$386.902 a tu tarjeta · no suma, ya contó al comprar",
             textoPagoDeTarjetaEnElDia(montoPagoDeTarjetaEnElDia(items, accountTypes)),
         )
     }
@@ -106,5 +104,30 @@ class PagoDeTarjetaEnElDiaTest {
             ev("p1", "acc-sin-tipo", TransactionType.EXPENSE, CARD_PAYMENT_CATEGORY, 100_000L),
         )
         assertEquals(0L, montoPagoDeTarjetaEnElDia(items, emptyMap()))
+    }
+
+    // ── Vuelta 52: la nota cabe en un renglón y la explicación entera no se pierde ───────────────
+
+    @Test
+    fun `la nota es un renglon corto, sin salto ni raya`() {
+        val nota = textoPagoDeTarjetaEnElDia(100_000L)!!
+        assertEquals("+ \$100.000 a tu tarjeta · no suma, ya contó al comprar", nota)
+        kotlin.test.assertFalse('\n' in nota || '—' in nota, "un renglón, sin la raya de la frase larga")
+    }
+
+    @Test
+    fun `la version corta es solo el monto a la tarjeta`() {
+        assertEquals("+ \$100.000 a tu tarjeta", textoCortoDelPagoDeTarjeta(100_000L))
+        assertNull(textoCortoDelPagoDeTarjeta(0L))
+    }
+
+    @Test
+    fun `la explicacion entera conserva todo lo que decia la frase larga`() {
+        assertEquals(
+            "Además, \$100.000 fueron a pagar tarjeta — ya contado en tu gasto del mes cuando compraste, " +
+                "no se duplica.",
+            explicacionDelPagoDeTarjeta(100_000L),
+        )
+        assertNull(explicacionDelPagoDeTarjeta(0L))
     }
 }
