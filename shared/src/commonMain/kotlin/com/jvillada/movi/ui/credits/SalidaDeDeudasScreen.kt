@@ -39,6 +39,7 @@ import com.jvillada.movi.shared.model.periodoDe
 import com.jvillada.movi.shared.model.planDeSalida
 import com.jvillada.movi.shared.model.planDelCredito
 import com.jvillada.movi.shared.model.interesDelMes
+import com.jvillada.movi.shared.model.deudasSinSaldoDe
 import com.jvillada.movi.ui.fecha.hoyEnAppZone
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.Screen
@@ -108,6 +109,10 @@ fun SalidaDeDeudasScreen(onNavigate: (Screen) -> Unit) {
         listas?.let { (c, t) -> interesDelMes(c.mapNotNull { planDelCredito(it, hoy) }, t) }
     }
     val primeras = remember(listas) { listas?.let { (c, t) -> primerasCuotasDe(c, t, hoy) }.orEmpty() }
+    // Vuelta 59: las deudas sin saldo no entran al plan (no hay saldo que amortizar) y se dicen aparte.
+    val sinSaldo = remember(listas) {
+        listas?.let { (c, t) -> deudasSinSaldoDe(c.map { it.account } + t.map { it.account }) }.orEmpty()
+    }
     val noSeLeyo = listas == null && (creditos.terminada || tarjetas.terminada) && !creditos.actualizando && !tarjetas.actualizando
 
     Box(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
@@ -142,6 +147,8 @@ fun SalidaDeDeudasScreen(onNavigate: (Screen) -> Unit) {
                             interes = interes,
                             periodoActual = periodoActual,
                             primeras = primeras,
+                            sinSaldo = sinSaldo,
+                            onCuadrar = { id -> onNavigate(Screen.CuadrarLaCuenta(id)) },
                             estrategia = estrategia,
                             onEstrategia = { estrategia = it },
                             abono = abono,
@@ -177,6 +184,8 @@ private fun ContenidoDelPlan(
     interes: com.jvillada.movi.shared.model.InteresDelMes?,
     periodoActual: com.jvillada.movi.shared.model.PeriodoFinanciero,
     primeras: Map<String, com.jvillada.movi.shared.model.PeriodoFinanciero>,
+    sinSaldo: List<com.jvillada.movi.shared.model.Account>,
+    onCuadrar: (String) -> Unit,
     estrategia: Int,
     onEstrategia: (Int) -> Unit,
     abono: Long?,
@@ -272,6 +281,30 @@ private fun ContenidoDelPlan(
                     }
                 }
                 if (i < plan.faltanDatos.lastIndex) Separador(SangriaDeSeparador.ConInicio)
+            }
+        }
+    }
+
+    // ── Sin saldo en Movi (vuelta 59) ──
+    // No entran al cálculo, y antes desaparecían de la pantalla sin decir por qué.
+    if (sinSaldo.isNotEmpty()) {
+        Spacer(Modifier.height(Medida.entreSecciones))
+        Seccion(titulo = SIN_SALDO_EN_MOVI, conteo = sinSaldo.size)
+        Superficie(modifier = Modifier.fillMaxWidth().testTag(TAG_SIN_SALDO_EN_LA_SALIDA), relleno = RellenoDeSuperficie.Lista) {
+            sinSaldo.forEachIndexed { i, cuenta ->
+                Fila(
+                    titulo = textoDeLaDeudaSinSaldoEnLaSalida(cuenta.name),
+                    inicio = { IconoEnCirculo(Icons.Rounded.ErrorOutline, tono = TonoDeIcono.Aviso) },
+                    final = {
+                        Boton(
+                            texto = CUADRAR_LAS_DEUDAS_SIN_SALDO,
+                            onClick = { onCuadrar(cuenta.id) },
+                            variante = VarianteDeBoton.Fantasma,
+                            tamano = TamanoDeBoton.S,
+                        )
+                    },
+                )
+                if (i < sinSaldo.lastIndex) Separador(SangriaDeSeparador.ConInicio)
             }
         }
     }

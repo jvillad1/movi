@@ -587,8 +587,10 @@ private fun DeudasSinSaldo(creditos: List<CreditSummary>, tarjetas: List<CardSum
         tarjetas = sinSaldo.count { it.type != com.jvillada.movi.shared.model.AccountType.LOAN },
     ) ?: return
     Spacer(Modifier.height(Espacio.xs))
+    // Topada al ancho de los renglones del resumen (vuelta 61): así «Cuadrar» y la cifra del interés
+    // del mes quedan alineadas al mismo borde derecho, también a 1.280.
     Row(
-        modifier = Modifier.fillMaxWidth().testTag(TAG_DEUDAS_SIN_SALDO),
+        modifier = Modifier.widthIn(max = ANCHO_MAXIMO_DEL_RESUMEN_DE_DEUDA).fillMaxWidth().testTag(TAG_DEUDAS_SIN_SALDO),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Espacio.s),
     ) {

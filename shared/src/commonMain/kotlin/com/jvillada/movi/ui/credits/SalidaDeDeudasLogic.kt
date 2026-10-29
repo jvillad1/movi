@@ -191,3 +191,10 @@ fun quienPagaEnTexto(d: DeudaParaSalir): String = "La paga ${d.quienLaPaga}"
  * (vuelta 59): esa es [interesDelMes], la misma de Créditos. Queda para quien quiera solo las del cálculo.
  */
 fun interesDelMesPropio(plan: PlanDeSalida): Long = plan.enElCalculo.sumOf { it.deuda.interesDelMes ?: 0L }
+
+/** El tag de las deudas sin saldo en «Cómo salir de tus deudas» (vuelta 59). */
+const val TAG_SIN_SALDO_EN_LA_SALIDA = "salida:sin-saldo"
+
+/** «Vehículo 4083: sin saldo en Movi» — la fila de una deuda que el plan no puede incluir (vuelta 59). */
+fun textoDeLaDeudaSinSaldoEnLaSalida(nombre: String): String = "$nombre: sin saldo en Movi"
+

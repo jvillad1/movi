@@ -139,6 +139,11 @@ class LosCreditosDicenLaVerdadTest {
         assertEquals(PeriodoFinanciero(2026, 10), primerasCuotasDe(listOf(credito(1L, pagadas = emptyList())), emptyList(), hoy)["acc_vehiculo"])
     }
 
+    @Test
+    fun `como salir de tus deudas nombra la deuda sin saldo`() {
+        assertEquals("Vehículo 4083: sin saldo en Movi", textoDeLaDeudaSinSaldoEnLaSalida("Vehículo 4083"))
+    }
+
     /** «10 cuotas, hasta julio de 2027» era agosto: contada desde la primera sin pagar. */
     @Test
     fun `nu dice hasta agosto de 2027`() {
