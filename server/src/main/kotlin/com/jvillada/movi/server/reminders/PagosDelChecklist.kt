@@ -6,6 +6,7 @@ import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.RecurringOccurrence
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.esAbonoADeuda
 import com.jvillada.movi.shared.model.palabrasClave
 import com.jvillada.movi.shared.model.cuentaComoGastoVariable
 import com.jvillada.movi.shared.model.CUOTA_CATEGORY
@@ -175,7 +176,10 @@ fun parteFijaDelChecklist(
     // Las reglas cuyo ítem ya tiene un pago con movimiento vivo en el período: evidencia por nombre
     // (o por emparejamiento) de que lo que sigue sin dicho nombre puede ser otra parte de ese pago.
     val conPagoYaVisto = mutableSetOf<String>()
-    reglas.filter { it.type == TransactionType.EXPENSE }.forEach { regla ->
+    // Vuelta 63: el abono mensual a una deuda no es un fijo (ni el cliente lo resta como tal): su
+    // traspaso queda en «otros pagos de deuda», que es donde baja «Te quedan». Si se absorbiera acá,
+    // `pagosDeDeudaFueraDelChecklist` lo descontaría y el abono no restaría en ningún lado.
+    reglas.filter { it.type == TransactionType.EXPENSE && !it.esAbonoADeuda }.forEach { regla ->
         val sellados = ocurridos[regla.id].orEmpty()
         val vence = vencimientoEnElChecklist(regla, hoy, settings, sellados, zone) ?: return@forEach
         // Un sello a mano cuyo movimiento se anuló sigue en la tabla, y Movi pudo emparejar solo el

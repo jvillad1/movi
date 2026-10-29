@@ -316,8 +316,16 @@ fun deudaDeLaRegla(ruleId: String): String? = when {
     else -> null
 }?.takeIf { it.isNotBlank() }
 
-/** [hojaParaAnotar] desde una fila del checklist, que ya trae los datos. */
-fun hojaParaAnotar(pago: PagoDelPeriodo): Screen = hojaParaAnotar(
+/**
+ * [hojaParaAnotar] desde una fila del checklist, que ya trae los datos. Vuelta 63: la fila del abono
+ * mensual abre el Traspaso hacia su deuda ([com.jvillada.movi.ui.quickadd.hojaDelAbono]); [tarjetas]
+ * son las cuentas de tarjeta, que se pagan en Cuota.
+ */
+fun hojaParaAnotar(pago: PagoDelPeriodo, tarjetas: Set<String> = emptySet()): Screen =
+    if (pago.esAbono) com.jvillada.movi.ui.quickadd.hojaDelAbono(pago, esTarjeta = pago.haciaDeuda in tarjetas)
+    else hojaParaAnotarUnPago(pago)
+
+private fun hojaParaAnotarUnPago(pago: PagoDelPeriodo): Screen = hojaParaAnotar(
     ruleId = pago.ruleId,
     nombre = pago.nombre,
     monto = pago.monto,

@@ -309,6 +309,8 @@ fun QuickAddScreen(
      * salda (`anotarElPagoDeLaOcurrencia`). Ver `AgregarEnModoPago.kt`.
      */
     presetPago: PagoDeLaFactura? = null,
+    /** Vuelta 63 · el abono mensual que este traspaso salda. Ver [Screen.QuickAdd.presetAbono]. */
+    presetAbono: AbonoDeLaRegla? = null,
     /**
      * Ola 9 · B: el movimiento que se acaba de guardar, para que quien sobreviva a esta hoja
      * (App.kt) pueda ofrecer convertirlo en recurrente. Se llama **después** de que el POST
@@ -1573,6 +1575,8 @@ fun QuickAddScreen(
                                 presetMesDeLaCuota = presetMesDeLaCuota,
                                 // Vuelta 49: un crédito sin saldo en Movi se cuadra en Créditos.
                                 onCuadrarElCredito = { onNavigate(Screen.Credits) },
+                                // Vuelta 63: al guardar, el abono mensual de Pagos queda sellado.
+                                abonoQueSalda = presetAbono,
                                 // La misma hoja sirve las dos pestañas: un pago de cuota es un
                                 // traspaso con otras categorías y otro endpoint. Ver
                                 // [ModoDeTraspaso].

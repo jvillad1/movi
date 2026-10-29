@@ -932,7 +932,10 @@ fun LazyListScope.tableroDeRecurrentes(
                     val sello = pago.periodoDelSello?.takeIf { pago.pagado && !pago.automatica }
                     estado.noFueEste(pago.ruleId, eventId, sello)
                 },
-                onAnotarMovimiento = { pago -> onNavigate(hojaParaAnotar(pago)) },
+                // Vuelta 63: el abono mensual a una tarjeta se paga en Cuota, a un crédito con un traspaso.
+                onAnotarMovimiento = { pago ->
+                    onNavigate(hojaParaAnotar(pago, tarjetas = tarjetasDelTablero.valor.orEmpty().map { it.account.id }.toSet()))
+                },
                 onQuitarLaMarca = { pago ->
                     pago.periodoDelSello?.let { estado.deshacerOcurrio(pago.ruleId, it) }
                 },

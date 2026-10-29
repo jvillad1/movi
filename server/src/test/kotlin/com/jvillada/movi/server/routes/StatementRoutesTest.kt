@@ -275,6 +275,37 @@ class StatementRoutesTest {
         Events.selectAll().where { Events.accountId eq accountAId }.map { it[Events.id] to it[Events.reconciliationStatus] }
     }
 
+    /**
+     * Vuelta 63: las cuotas de una compra de la tarjeta que dice el extracto quedan en el movimiento,
+     * al crearlo y al conciliar uno que no las sabía (el SMS de la compra). Las que ya tenía no se pisan.
+     */
+    @Test
+    fun `el importador guarda las cuotas de la compra al crearla y al conciliarla`() = testApplication {
+        wireApp()
+        sembrar("ev-sms-tv", accountAId, 1_200_000)
+        sembrar("ev-con-cuotas", accountAId, 600_000)
+        transaction { Events.update({ Events.id eq "ev-con-cuotas" }) { it[Events.cuotas] = 6 } }
+        fun conCuotas(json: String, n: Int) = json.replace("\"rawText\":\"\"", "\"rawText\":\"\",\"cuotas\":$n")
+        val nueva = conCuotas(parsedTx("n1", "2026-06-10", "NEVERA", 2_400_000), 24)
+        val concilia = conCuotas(reconciliacion("r1", "ev-sms-tv", 1_200_000), 12)
+        val noPisa = conCuotas(reconciliacion("r2", "ev-con-cuotas", 600_000), 3)
+        val body = """{"statementId":"st-cuotas","accountId":"acc-tc-a","bankName":"Bancolombia","period":"2026-06",
+            "imports":[$nueva],"reconciliations":[$concilia,$noPisa],"skipped":[]}"""
+        val res = client.post("/api/statements/import") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(body)
+        }
+        assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
+
+        val cuotasPorMonto = transaction {
+            Events.selectAll().where { Events.accountId eq accountAId }.associate { it[Events.amount] to it[Events.cuotas] }
+        }
+        assertEquals(24, cuotasPorMonto[2_400_000L], "la compra nueva nace con sus cuotas")
+        assertEquals(12, cuotasPorMonto[1_200_000L], "el SMS que no las sabía las toma del extracto")
+        assertEquals(6, cuotasPorMonto[600_000L], "las que ya tenía no se pisan")
+    }
+
     @Test
     fun `conciliar confirma el movimiento, y dos filas contra el mismo o contra otra cuenta entran como nuevas`() = testApplication {
         wireApp()

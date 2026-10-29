@@ -105,7 +105,8 @@ private fun montoParaOrdenar(pago: PagoDelPeriodo): Long? = when {
  * adelante en el período ([UrgenciaDelPendiente.MAS_ADELANTE]).
  */
 fun urgenciaDelPago(pago: PagoDelPeriodo, diasPorVencer: Int = DIAS_POR_VENCER_EN_LA_COLA): UrgenciaDelPendiente? = when {
-    pago.pagado || pago.esIngreso -> null
+    // Vuelta 63: un abono planeado no vence ni apura: es un recordatorio que vive en Pagos.
+    pago.pagado || pago.esIngreso || pago.esAbono -> null
     pago.diasParaVencer < 0 -> UrgenciaDelPendiente.VENCIDO
     pago.diasParaVencer == 0 -> UrgenciaDelPendiente.VENCE_HOY
     pago.diasParaVencer <= diasPorVencer -> UrgenciaDelPendiente.POR_VENCER

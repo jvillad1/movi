@@ -699,6 +699,13 @@ internal fun TransferBody(
      * ajusta (Créditos). `null` deja el renglón sin acción.
      */
     onCuadrarElCredito: (() -> Unit)? = null,
+    /**
+     * Vuelta 63 · **«Anotar este abono»**: la ocurrencia del abono mensual que este guardado salda.
+     * Guardado el traspaso (o el pago de la tarjeta), se sella con la pata que salió de la cuenta —la
+     * única puerta por la que el server acepta un traspaso como ocurrencia—. Si el sello no se puede
+     * poner, el traspaso queda igual: Movi lo empareja solo si el monto está a ±5 %.
+     */
+    abonoQueSalda: AbonoDeLaRegla? = null,
     onSaved: () -> Unit,
 ) {
     val coroutine = rememberCoroutineScope()
@@ -1051,6 +1058,8 @@ internal fun TransferBody(
         val timestamp = timestampParaFecha(fecha, hoy)
         saving = true
         error = null
+        // Vuelta 63: los ids de ESTE guardado, para sellar el abono con la pata que salió.
+        val idsDelGuardado = ids
         coroutine.launch {
             val result = runCatching {
                 // El abono extra de la vuelta 48 es el traspaso de siempre (`transferLegsFor`).
@@ -1063,6 +1072,10 @@ internal fun TransferBody(
                         transferRequestFor(ids, origen, destino, amount ?: 0L, timestamp, note),
                     )
                 }
+            }
+            // Vuelta 63: guardado (o ya guardado antes, un 409), el abono mensual queda sellado.
+            if (abonoQueSalda != null && (result.isSuccess || result.exceptionOrNull()?.let(::isAlreadyRegistered) == true)) {
+                sellarElAbono(abonoQueSalda, idsDelGuardado.fromEventId)
             }
             saving = false
             result

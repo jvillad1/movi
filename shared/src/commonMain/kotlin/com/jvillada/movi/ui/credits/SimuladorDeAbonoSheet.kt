@@ -30,6 +30,11 @@ import com.jvillada.movi.ui.components.ds.Separador
 import com.jvillada.movi.ui.components.ds.PildoraDeFiltro
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
+import androidx.compose.ui.platform.testTag
+import kotlinx.coroutines.launch
+
+/** Vuelta 63 · el tag de «Recordármelo cada mes» en la ficha del crédito. */
+const val TAG_RECORDARMELO_EN_LA_FICHA = "simulador:recordarmelo-cada-mes"
 
 /**
  * **«¿Y si le abono de más?»** — cuánto se ahorra en intereses y cuánto se acorta el plazo si hoy
@@ -38,7 +43,8 @@ import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
  * ### No escribe nada, y por eso no se parece a las otras hojas
  *
  * Las hojas vecinas —[CreditTermsSheet], [CreditBalanceSheet]— terminan en un botón oscuro que
- * guarda. Esta termina en «Cerrar»: **es una pregunta, no una operación**. Un abono de verdad se
+ * guarda. Esta termina en «Cerrar»: **es una pregunta, no una operación** (vuelta 63: lo único que
+ * guarda es «Recordármelo cada mes», la regla del abono mensual, que no toca la deuda). Un abono de verdad se
  * registra donde se registra la plata que se mueve (Agregar → Traspaso, préstamo como destino),
  * porque tiene dos patas —sale de una cuenta y entra al crédito— y esta hoja no sabe de cuál
  * cuenta saldría. Duplicar el alta acá abriría una segunda puerta para escribir la misma deuda, que
@@ -61,6 +67,10 @@ fun SimuladorDeAbonoSheet(
     onAnotarAbono: ((Screen) -> Unit)? = null,
 ) {
     var abono by remember { mutableStateOf<Long?>(null) }
+    // Vuelta 63: «Recordármelo cada mes» — la confirmación, y si está guardando. Cambiar el monto la borra.
+    var recordatorio by remember(abono) { mutableStateOf<String?>(null) }
+    var recordando by remember { mutableStateOf(false) }
+    val alcance = rememberCoroutineScope()
     val saldo = credit.account.balance
     val cuota = credit.terms?.installment ?: 0L
     // Una búsqueda binaria sobre treinta y pico de proyecciones: se hace UNA vez por crédito, no
@@ -167,6 +177,29 @@ fun SimuladorDeAbonoSheet(
                 habilitado = montoParaAnotar != null,
                 anchoCompleto = true,
             )
+            Spacer(Modifier.height(Espacio.xs))
+            // Vuelta 63: «Recordármelo cada mes» también acá — deja el abono en Pagos como un
+            // recordatorio que se tilda con el traspaso (ver `recordarElAbonoA`).
+            Boton(
+                texto = RECORDARMELO_CADA_MES,
+                onClick = {
+                    val monto = montoParaAnotar ?: return@Boton
+                    recordando = true
+                    alcance.launch {
+                        recordatorio = runCatching { recordarElAbono(credit, monto) }.getOrElse { NO_SE_PUDO_RECORDAR }
+                        recordando = false
+                    }
+                },
+                variante = VarianteDeBoton.Secundario,
+                cargando = recordando,
+                habilitado = montoParaAnotar != null && !recordando && (recordatorio == null || recordatorio == NO_SE_PUDO_RECORDAR),
+                anchoCompleto = true,
+                modifier = Modifier.testTag(TAG_RECORDARMELO_EN_LA_FICHA),
+            )
+            recordatorio?.let {
+                Spacer(Modifier.height(Espacio.xs))
+                Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+            }
             Spacer(Modifier.height(Espacio.xs))
         }
         Boton(

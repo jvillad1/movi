@@ -26,4 +26,5 @@ fun ResultRow.toFinancialEvent(): FinancialEvent = FinancialEvent(
     noAmortiza           = this[Events.noAmortiza],
     noSeRepite           = this[Events.noSeRepite],
     lastEditedAt         = this[Events.lastEditedAt],
+    cuotas               = this[Events.cuotas],
 )

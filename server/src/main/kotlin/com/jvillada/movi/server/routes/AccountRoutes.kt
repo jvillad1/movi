@@ -602,6 +602,19 @@ fun Route.accountRoutes() {
                 // borrar el plan (con su recordatorio) porque cambió de banco sería una pérdida
                 // silenciosa que el dueño no pidió. La cuenta es opcional en el modelo justamente
                 // para que `null` se pueda mostrar sin drama.
+                // Vuelta 63 — el abono mensual A esta deuda sí se va con ella: sin la deuda no hay a
+                // dónde abonar, y soltarle `hacia_deuda` lo volvería un gasto fijo que nadie pidió.
+                // Sus sellos se van con la regla, como en `DELETE /api/recurring-rules/{id}`.
+                val abonos = RecurringRules.selectAll()
+                    .where { (RecurringRules.userId eq uid) and (RecurringRules.haciaDeuda eq id) }
+                    .map { it[RecurringRules.id] }
+                if (abonos.isNotEmpty()) {
+                    com.jvillada.movi.server.db.RecurringOccurrences.deleteWhere {
+                        (com.jvillada.movi.server.db.RecurringOccurrences.userId eq uid) and
+                            (com.jvillada.movi.server.db.RecurringOccurrences.ruleId inList abonos)
+                    }
+                    RecurringRules.deleteWhere { (RecurringRules.userId eq uid) and (RecurringRules.id inList abonos) }
+                }
                 val reglasSueltas = RecurringRules.update({
                     (RecurringRules.userId eq uid) and (RecurringRules.accountId eq id)
                 }) { it[RecurringRules.accountId] = null }

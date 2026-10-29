@@ -11,6 +11,9 @@ import com.jvillada.movi.shared.model.isReservedCategory
 import com.jvillada.movi.shared.model.nombreDeMovimientoPegaConRegla
 import com.jvillada.movi.shared.model.nombraAlDestino
 import com.jvillada.movi.shared.model.ultimoDiaParaProponer
+import com.jvillada.movi.shared.model.esAbonoADeuda
+import com.jvillada.movi.shared.model.esElAbonoALaDeuda
+import com.jvillada.movi.shared.model.montoDelAbonoPega
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
@@ -282,6 +285,9 @@ fun candidatosPuntuados(
      */
     destinos: Map<String, DestinoConocido> = emptyMap(),
 ): List<CandidatoPuntuado> {
+    // Vuelta 63: el abono mensual a una deuda tiene su propio emparejador — su ocurrencia es un
+    // traspaso, que todo lo de abajo descarta a propósito. Ver [candidatosDelAbono].
+    if (rule.esAbonoADeuda) return candidatosDelAbono(rule, dueDate, events, usedEventIds, zone, settings)
     val claveCategoria = claveComparableDeNombre(rule.category)
     // La ventana (con su piso en el primer día del mes del vencimiento) sale de
     // [occurrenceWindow]: es la MISMA que decide si un sello ya puesto sigue teniendo evidencia.
@@ -521,3 +527,43 @@ fun ocurrenciasConcluyentes(
     candidatosPuntuados(rule, dueDate, events, usedEventIds, zone, windowDays, settings, destinos)
         .filter { it.concluyente }
         .map { it.event }
+
+/**
+ * **Vuelta 63 · los candidatos del abono mensual a una deuda** ([RecurringRule.haciaDeuda]): la pata que
+ * sale de una cuenta del dueño en un traspaso (o un pago de tarjeta) hacia esa deuda, dentro del
+ * período del dueño en que vence ([diasDelPeriodo]: el abono se hace cualquier día del mes, no cerca
+ * de una fecha). La pata de una cuota no cuenta: esa salda la cuota, no el abono.
+ *
+ * El monto ordena y decide igual que en el resto del archivo, con su propio margen: **concluyente**
+ * (Movi lo tilda sola) solo a ±5 % del monto planeado ([montoDelAbonoPega]); a otro monto se pregunta.
+ * Nunca es identidad fuerte: un abono no es un fijo y no absorbe nada del gasto variable.
+ */
+private fun candidatosDelAbono(
+    rule: RecurringRule,
+    dueDate: LocalDate,
+    events: List<FinancialEvent>,
+    usedEventIds: Set<String>,
+    zone: ZoneId,
+    settings: PeriodSettings,
+): List<CandidatoPuntuado> {
+    val periodo = diasDelPeriodo(dueDate, settings, zone)
+    return events
+        .asSequence()
+        .filter { it.id !in usedEventIds }
+        .filter { esElAbonoALaDeuda(rule, it, events, conElMonto = false) }
+        .mapNotNull { event ->
+            val fecha = epochMillisToAppDate(event.timestamp, zone)
+            if (fecha !in periodo) return@mapNotNull null
+            CandidatoPuntuado(
+                event = event,
+                senas = SENA_DEL_NOMBRE,
+                distanciaMonto = abs(event.amount - rule.amount),
+                distanciaDias = abs(ChronoUnit.DAYS.between(dueDate, fecha)),
+                identidadFuerte = false,
+                concluyente = montoDelAbonoPega(rule.amount, event.amount),
+                enLaVentana = true,
+            )
+        }
+        .sortedWith(ORDEN_DE_CANDIDATOS)
+        .toList()
+}

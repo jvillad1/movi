@@ -60,6 +60,9 @@ import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.isReservedCategory
 import com.jvillada.movi.shared.model.rechazoDelMonto
 import com.jvillada.movi.shared.model.validarDebitoDeLaRegla
+import com.jvillada.movi.shared.model.esAbonoADeuda
+import com.jvillada.movi.shared.model.esElAbonoALaDeuda
+import com.jvillada.movi.server.db.toFinancialEvent
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
@@ -98,7 +101,22 @@ internal fun org.jetbrains.exposed.sql.ResultRow.toRule() = RecurringRule(
     destinoConocidoId = this[RecurringRules.destinoConocidoId],
     // «Se debita solo»: con valor siempre en la respuesta (las filas viejas, `false`).
     seDebitaSolo = this[RecurringRules.seDebitaSolo] ?: false,
+    // Vuelta 63: la deuda del abono mensual, si esta regla es uno.
+    haciaDeuda = this[RecurringRules.haciaDeuda],
 )
+
+/**
+ * Vuelta 63: ¿[deudaId] es un crédito o una tarjeta de este usuario? Misma decisión que
+ * [accountIdIfOwned]: un id ajeno, inventado o de una cuenta que no es deuda no rechaza el alta, se
+ * guarda `null` (y la regla queda como un gasto común, que el dueño ve y puede borrar).
+ */
+internal fun org.jetbrains.exposed.sql.Transaction.deudaIdIfOwned(uid: String, deudaId: String?): String? {
+    val id = deudaId?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    val tipo = Accounts.selectAll()
+        .where { (Accounts.id eq id) and (Accounts.userId eq uid) }
+        .firstOrNull()?.get(Accounts.type)
+    return id.takeIf { tipo == com.jvillada.movi.shared.model.AccountType.LOAN.name || tipo == com.jvillada.movi.shared.model.AccountType.CREDIT_CARD.name }
+}
 
 /**
  * Ola 9 · D: ¿esta cuenta es de este usuario? La cuenta de una regla recurrente es **opcional**,
@@ -166,12 +184,17 @@ fun Route.reminderRoutes() {
         }
         val newId = "rr_${UUID.randomUUID()}"
         var storedDestinoId: String? = null
+        var storedDeudaId: String? = null
         // «Se debita solo» necesita la cuenta que quedó guardada (una ajena se guarda null), así que
         // se valida adentro, antes de insertar. En un POST `null` es `false`.
         var problemaDelDebito: String? = null
         val storedAccountId = dbQuery {
             val safeAccountId = accountIdIfOwned(uid, body.accountId)
-            problemaDelDebito = validarDebitoDeLaRegla(body.seDebitaSolo == true, body.type, safeAccountId)
+            // Vuelta 63: el abono mensual a una deuda (ver `RecurringRule.haciaDeuda`). Un abono no se
+            // debita solo: la plata la mueve el dueño, y su prueba es el traspaso.
+            val safeDeudaId = deudaIdIfOwned(uid, body.haciaDeuda)
+            storedDeudaId = safeDeudaId
+            problemaDelDebito = validarDebitoDeLaRegla(body.seDebitaSolo == true && safeDeudaId == null, body.type, safeAccountId)
             if (problemaDelDebito != null) return@dbQuery null
             // Ola V: el destino es opcional y, si viene, tiene que ser de este usuario (ver
             // [destinoConocidoIdIfOwned]) — mismo criterio que la cuenta, arriba.
@@ -192,7 +215,8 @@ fun Route.reminderRoutes() {
                 // (ver [accountIdIfOwned]).
                 it[accountId] = safeAccountId
                 it[destinoConocidoId] = safeDestinoId
-                it[seDebitaSolo] = body.seDebitaSolo == true
+                it[seDebitaSolo] = body.seDebitaSolo == true && safeDeudaId == null
+                it[haciaDeuda] = safeDeudaId
                 // **Desde cuándo corre.** Lo manda quien crea la regla a partir de un movimiento
                 // que ya ocurrió: con la fecha de ese movimiento acá, la regla no se inventa
                 // ocurrencias en los períodos ANTERIORES. El período de ese movimiento sí existe,
@@ -249,7 +273,8 @@ fun Route.reminderRoutes() {
                 destinoConocidoId = storedDestinoId,
                 activeFrom = fechaIsoValida(body.activeFrom),
                 eventoDeOrigen = null,
-                seDebitaSolo = body.seDebitaSolo == true,
+                seDebitaSolo = body.seDebitaSolo == true && storedDeudaId == null,
+                haciaDeuda = storedDeudaId,
             ),
         )
     }
@@ -266,6 +291,7 @@ fun Route.reminderRoutes() {
         var storedDestinoId: String? = null
         var storedActiveFrom: String? = null
         var storedSeDebitaSolo = false
+        var storedDeudaId: String? = null
         var problemaDelDebito: String? = null
         val updated = dbQuery {
             // Ola 9 · D — **un cliente viejo NO puede borrar la cuenta sin querer.**
@@ -314,7 +340,17 @@ fun Route.reminderRoutes() {
             // viejo) conserva lo guardado. Si lo conservado ya no se sostiene —la regla cambió a
             // ingreso o se quedó sin cuenta— se apaga en vez de rechazar al cliente que ni lo ve; si
             // el dueño lo pidió explícito, sí se le dice por qué no.
-            val debitoPedido = body.seDebitaSolo ?: (filaActual?.get(RecurringRules.seDebitaSolo) ?: false)
+            // Vuelta 63: la deuda del abono, con los mismos tres estados que la cuenta (un APK que no
+            // conoce el campo la conserva). Un abono no se debita solo.
+            val deudaActual = filaActual?.get(RecurringRules.haciaDeuda)
+            val deudaPedida = body.haciaDeuda
+            val safeDeudaId = when {
+                deudaPedida == null -> deudaActual
+                deudaPedida.isBlank() -> null
+                else -> deudaIdIfOwned(uid, deudaPedida)
+            }
+            storedDeudaId = safeDeudaId
+            val debitoPedido = (body.seDebitaSolo ?: (filaActual?.get(RecurringRules.seDebitaSolo) ?: false)) && safeDeudaId == null
             val motivo = validarDebitoDeLaRegla(debitoPedido, body.type, safeAccountId)
             if (motivo != null && body.seDebitaSolo == true) {
                 problemaDelDebito = motivo
@@ -332,6 +368,7 @@ fun Route.reminderRoutes() {
                 it[destinoConocidoId] = safeDestinoId
                 it[activeFrom] = arranqueGuardado
                 it[seDebitaSolo] = storedSeDebitaSolo
+                it[haciaDeuda] = safeDeudaId
             }
         }
         problemaDelDebito?.let { return@put call.respond(HttpStatusCode.BadRequest, it) }
@@ -343,6 +380,7 @@ fun Route.reminderRoutes() {
                 destinoConocidoId = storedDestinoId,
                 activeFrom = storedActiveFrom,
                 seDebitaSolo = storedSeDebitaSolo,
+                haciaDeuda = storedDeudaId,
             ),
         )
     }
@@ -746,7 +784,26 @@ internal fun org.jetbrains.exposed.sql.Transaction.sellarOcurrencia(
         }
         // Las mismas dos puertas que cierra `occurrenceCandidatesFor`, cerradas también
         // acá: la UI solo ofrece candidatos, pero el endpoint no puede confiar en eso.
-        if (evento[Events.transferId] != null || isReservedCategory(evento[Events.category])) {
+        //
+        // **Con UNA excepción (vuelta 63): el abono mensual a una deuda.** Su ocurrencia ES un
+        // traspaso —la pata que sale de una cuenta del dueño hacia esa deuda, no la de una cuota—, y
+        // solo en una regla con `haciaDeuda`. Cualquier otro traspaso, en esa regla o en otra, sigue
+        // rechazado. El monto no se exige acá: «Sí, fue este» y «Anotar este abono» son la decisión
+        // del dueño (el ±5 % es solo para que Movi lo tilde sola).
+        val esElAbono = rule.esAbonoADeuda && run {
+            val evento0 = evento.toFinancialEvent()
+            val hermanas = evento0.transferId?.let { t ->
+                Events.selectAll().where { (Events.userId eq uid) and (Events.transferId eq t) }.map { it.toFinancialEvent() }
+            }.orEmpty()
+            esElAbonoALaDeuda(rule, evento0, hermanas, conElMonto = false)
+        }
+        if (rule.esAbonoADeuda && !esElAbono) {
+            return MarcaResult.Error(
+                HttpStatusCode.BadRequest,
+                "El abono a una deuda se marca con el traspaso que sale de tu cuenta hacia esa deuda.",
+            )
+        }
+        if (!esElAbono && (evento[Events.transferId] != null || isReservedCategory(evento[Events.category]))) {
             return MarcaResult.Error(
                 HttpStatusCode.BadRequest,
                 "Un traspaso o un asiento interno no puede ser la ocurrencia de un recurrente.",

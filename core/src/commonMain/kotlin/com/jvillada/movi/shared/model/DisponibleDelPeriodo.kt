@@ -262,7 +262,10 @@ data class DisponibleDelPeriodo(
  */
 fun fijosDelPeriodo(checklist: List<PagoDelPeriodo>): Long =
     checklist
-        .filter { !it.esIngreso && !it.montoEsSaldo && it.moneda == "COP" }
+        // Vuelta 63: el abono mensual a una deuda no es un fijo, ni pendiente ni hecho. Hecho, su
+        // traspaso ya resta como «otro pago de deuda» (`pagosDeDeudaFueraDelChecklist`): contarlo acá
+        // lo restaría dos veces.
+        .filter { !it.esIngreso && !it.montoEsSaldo && !it.esAbono && it.moneda == "COP" }
         .sumOf { if (it.pagado) it.montoPagado ?: it.monto else it.monto }
 
 /** Los ingresos del checklist que todavía no llegan: el sueldo que falta, un arriendo que se cobra. */

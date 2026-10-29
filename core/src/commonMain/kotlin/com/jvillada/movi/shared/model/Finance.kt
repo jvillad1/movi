@@ -848,6 +848,23 @@ data class RecurringRule(
      * nullable, `recurring_rules.se_debita_solo`, que `createMissingTablesAndColumns` agrega sin riesgo.
      */
     val seDebitaSolo: Boolean? = null,
+    /**
+     * **Vuelta 63 · el abono mensual a una deuda**: el id de la cuenta del crédito o la tarjeta a la
+     * que va esta plata todos los meses («Abono extra a Vehículo 4083 · $500.000»), o `null` en toda
+     * regla de siempre.
+     *
+     * Una regla con este campo **es un recordatorio, no un fijo** (decisión del dueño, 29-oct): sale
+     * en Pagos, pero mientras está pendiente no se resta de «Te quedan», ni de «Falta por pagar», ni
+     * de la caja. Cuando el dueño de verdad hace el traspaso, ese traspaso baja «Te quedan» con la
+     * regla de siempre (`pagosDeDeudaFueraDelChecklist`) y tilda la fila: se sella con la pata que
+     * sale de su cuenta hacia esta deuda (ver `AbonoADeuda.kt`). Es la única regla cuya ocurrencia
+     * puede ser un traspaso.
+     *
+     * Los mismos tres estados de wire que [accountId] en un PUT: `null` = no lo toques (un APK que
+     * no conoce el campo), `""` = quitarlo, un id = esa deuda si es del dueño (un crédito o una
+     * tarjeta; si no, se guarda `null`). Columna nueva y nullable, `recurring_rules.hacia_deuda`.
+     */
+    val haciaDeuda: String? = null,
 )
 
 @Serializable

@@ -36,9 +36,11 @@ import kotlinx.serialization.Serializable
  * Una compra a 36 cuotas no se factura entera: el extracto trae una cuota. Si Movi **conoce** las
  * cuotas de una compra ([DiferidoConocido]) al corte cuenta solo lo que ya se facturó de ella. Si no
  * las conoce, no inventa: [puedeIncluirDiferidos] lo dice y la pantalla escribe «puede incluir
- * compras diferidas». Hoy ningún movimiento de Movi guarda sus cuotas (el lector de movimientos de
- * Bancolombia las lee pero `FinancialEvent` no tiene dónde ponerlas), así que el server llama sin
- * diferidos y la frase sale siempre que haya algo facturado de origen desconocido.
+ * compras diferidas». Desde la vuelta 63 el movimiento guarda sus cuotas ([FinancialEvent.cuotas]) cuando
+ * vino del extracto de movimientos de la tarjeta de Bancolombia: con eso una compra de $1.200.000 a 12
+ * cuotas cuenta $100.000 en el corte que la facturó. La división es entera, como la de la cuota de
+ * cualquier compra acá (el peso que sobra va a la última). Lo anotado a mano o por SMS sigue sin
+ * cuotas, y la frase sale si hay algo facturado así.
  *
  * ## Moneda
  *
@@ -83,7 +85,12 @@ fun extractoDeLaTarjeta(
     val diaDeCorte = terms.cutoffDay?.takeIf { it in 1..31 } ?: return null
     val corte = corteMasReciente(diaDeCorte, hoy)
     val pago = fechaDePagoDespuesDe(corte, terms.paymentDay)
-    val cuotasPorEvento = diferidos.filter { it.cuotas > 1 }.associate { it.eventoId to it.cuotas }
+    // Vuelta 63: las cuotas que el banco dijo (el importador las guarda en el movimiento) más las que
+    // lleguen aparte. Una compra con sus cuotas conocidas —aunque sea una sola— ya no es «desconocida»;
+    // solo las de más de una cuota se reparten.
+    val conocidas: Map<String, Int> = eventos.mapNotNull { e -> e.cuotas?.let { e.id to it.coerceAtLeast(1) } }.toMap() +
+        diferidos.associate { it.eventoId to it.cuotas.coerceAtLeast(1) }
+    val cuotasPorEvento = conocidas.filterValues { it > 1 }
 
     val enSuMoneda = eventos
         .filter { it.currency == moneda }
@@ -121,7 +128,7 @@ fun extractoDeLaTarjeta(
         minimo = terms.pagoMinimo?.takeIf { it > 0L },
         despuesDelCorte = (comprasDesde - sobrante - saldoAFavor).coerceAtLeast(0L),
         moneda = moneda,
-        puedeIncluirDiferidos = facturadoBruto > 0L && hayComprasSinCuotasConocidas(hastaElCorte, cuotasPorEvento),
+        puedeIncluirDiferidos = facturadoBruto > 0L && hayComprasSinCuotasConocidas(hastaElCorte, conocidas.keys),
     )
 }
 
@@ -132,7 +139,7 @@ fun extractoDeLaTarjeta(
  */
 private fun hayComprasSinCuotasConocidas(
     hastaElCorte: List<Pair<FinancialEvent, LocalDate>>,
-    cuotasPorEvento: Map<String, Int>,
+    conCuotasConocidas: Set<String>,
 ): Boolean {
     var deuda = 0L
     var desde = 0
@@ -140,7 +147,7 @@ private fun hayComprasSinCuotasConocidas(
         deuda += signedDelta(AccountType.CREDIT_CARD, e.type, e.amount)
         if (deuda <= 0L) desde = i + 1
     }
-    return hastaElCorte.drop(desde).any { (e, _) -> e.type == TransactionType.EXPENSE && e.id !in cuotasPorEvento }
+    return hastaElCorte.drop(desde).any { (e, _) -> e.type == TransactionType.EXPENSE && e.id !in conCuotasConocidas }
 }
 
 /** El día [dia] del mes de [fecha], o el último del mes si ese mes no lo tiene (el 31 en febrero). */

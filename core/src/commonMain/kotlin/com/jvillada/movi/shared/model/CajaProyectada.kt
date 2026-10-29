@@ -91,6 +91,9 @@ private fun porQueNoEntra(pago: PagoDelPeriodo): String? = when {
 /** Lo que mueve esta fila, con signo, o `null` si no mueve nada (pagada, o no entra). */
 private fun montoDeLaFila(pago: PagoDelPeriodo): Long? {
     if (pago.pagado || porQueNoEntra(pago) != null) return null
+    // Vuelta 63: el abono planeado a una deuda no es una salida que la caja dé por hecha: es una
+    // intención. El día que se hace, el traspaso baja Tu plata y la caja arranca de ahí.
+    if (pago.esAbono) return null
     val monto = if (pago.montoEsSaldo) pago.pagoMinimo ?: return null else pago.monto
     if (monto <= 0L) return null
     return if (pago.esIngreso) monto else -monto

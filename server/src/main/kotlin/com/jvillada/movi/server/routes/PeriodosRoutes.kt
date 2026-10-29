@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.shared.model.esAbonoADeuda
 import com.jvillada.movi.server.espacios.loCompartidoDelUsuario
 import com.jvillada.movi.shared.model.conLoCompartido
 import com.jvillada.movi.server.balance.accountTypesFor
@@ -348,7 +349,8 @@ internal fun Transaction.pagosFijosDelPeriodo(
     ajustes: PeriodSettings,
     inicioDeLaHistoria: LocalDate,
 ): List<PagoFijoDelPeriodo> {
-    val reglas = reglasRealesDe(uid)
+    // Vuelta 63: el abono planeado a una deuda no es un pago fijo del período.
+    val reglas = reglasRealesDe(uid).filterNot { it.esAbonoADeuda }
     if (reglas.isEmpty()) return emptyList()
     val ventana = ventanaDe(periodo, ajustes)
     val dias = epochMillisToAppDate(ventana.first)..epochMillisToAppDate(ventana.last)

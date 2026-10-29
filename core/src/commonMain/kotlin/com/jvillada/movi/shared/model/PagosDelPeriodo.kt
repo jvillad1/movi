@@ -148,8 +148,21 @@ data class PagoDelPeriodo(
      * revisar → Lo que el banco cobró solo».
      */
     val seCobraSola: Boolean = false,
+    /**
+     * **Vuelta 63 · el abono mensual a esta deuda** ([RecurringRule.haciaDeuda]): la cuenta del crédito
+     * o la tarjeta a la que va. `null` en todo lo demás. Con valor, la fila es un recordatorio y no un
+     * fijo ([esAbono]): ver `AbonoADeuda.kt`.
+     */
+    val haciaDeuda: String? = null,
 ) {
-    val vencido: Boolean get() = !pagado && diasParaVencer < 0
+    /** Vuelta 63: un abono planeado no «vence» — si el día pasó sin hacerlo, sigue siendo un recordatorio. */
+    val vencido: Boolean get() = !pagado && !esAbono && diasParaVencer < 0
+
+    /**
+     * Vuelta 63: **un abono planeado, no un fijo.** Pendiente no se resta de nada («Te quedan», «Falta
+     * por pagar», la caja); hecho, el traspaso ya baja «Te quedan» por `pagosDeDeudaFueraDelChecklist`.
+     */
+    val esAbono: Boolean get() = !haciaDeuda.isNullOrBlank()
 
     /**
      * **Qué le pasa a esta fila**, que es lo único que decide qué dice y qué ofrece.
@@ -352,6 +365,7 @@ private fun filaDelPago(
         ?.let { epochMillisToAppDate(it.confirmedAt).toString() },
     periodoDelDueno = ocurrencia?.periodoDelDueno ?: ocurrencia?.period,
     seCobraSola = pago.rule.seDebitaSolo == true && pago.rule.type == TransactionType.EXPENSE,
+    haciaDeuda = pago.rule.haciaDeuda?.takeIf { it.isNotBlank() },
 )
 
 /**
@@ -406,8 +420,12 @@ fun epochDeFecha(iso: String): Long {
  * del dueño mientras no lo marcara — la cifra afirmaba que le faltaba pagar su propio salario.
  */
 fun faltaPorPagar(checklist: List<PagoDelPeriodo>): Long =
-    checklist.filter { !it.pagado && !it.montoEsSaldo && !it.esIngreso }.sumOf { it.monto }
+    // Vuelta 63: un abono planeado tampoco — no es un fijo; se dice aparte (`abonosPlaneados`).
+    checklist.filter { !it.pagado && !it.montoEsSaldo && !it.esIngreso && !it.esAbono }.sumOf { it.monto }
 
-/** Lo que falta pagar, en el orden en que sale del checklist. Un ingreso no se paga: no va acá. */
+/**
+ * Lo que falta pagar, en el orden en que sale del checklist. Un ingreso no se paga: no va acá. Un
+ * abono planeado tampoco (vuelta 63): no es una deuda que venza, es plata que el dueño decide mover.
+ */
 fun pagosPendientes(checklist: List<PagoDelPeriodo>): List<PagoDelPeriodo> =
-    checklist.filter { !it.pagado && !it.esIngreso }
+    checklist.filter { !it.pagado && !it.esIngreso && !it.esAbono }

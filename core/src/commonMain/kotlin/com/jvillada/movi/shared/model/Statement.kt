@@ -13,6 +13,12 @@ data class ParsedTransaction(
     val category: String,
     val description: String,
     val rawText: String,
+    /**
+     * Vuelta 63: a cuántas cuotas va la compra, cuando el extracto lo dice (la columna de cuotas de los
+     * movimientos de la tarjeta de Bancolombia). `null` = no se sabe. Al importar queda en
+     * [FinancialEvent.cuotas].
+     */
+    val cuotas: Int? = null,
 )
 
 @Serializable

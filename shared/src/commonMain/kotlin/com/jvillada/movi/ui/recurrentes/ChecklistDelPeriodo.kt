@@ -308,9 +308,14 @@ fun SeccionChecklistDelPeriodo(
                     }
                 }
             },
-            debajo = if (!pago.pagado && (estimacion != null || parecido != null || ofreceAlgoDebajo(pago, conPropuesta))) {
+            debajo = if (!pago.pagado && (estimacion != null || parecido != null || pago.esAbono || ofreceAlgoDebajo(pago, conPropuesta))) {
                 {
                     if (estimacion != null) Text(text = estimacion, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                    // Vuelta 63: el abono planeado dice que no es un fijo (antes de vencer; después lo
+                    // dice la fila sin movimiento, con el mismo texto).
+                    if (pago.esAbono && pago.estado == EstadoDeLaFila.AUN_NO_VENCE) {
+                        Text(text = com.jvillada.movi.ui.quickadd.EL_ABONO_PENDIENTE_NO_RESTA, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                    }
                     LoQueOfreceLaFila(pago, propuesta, enVuelo, acciones, conBotonDeAnotar = false, esLaMasUrgente = pago == urgente)
                     if (parecido != null) {
                         LaCuotaQueSeParece(
@@ -642,6 +647,8 @@ private fun IconoDeEstadoDelPago(estado: EstadoVisualDelPago, esIngreso: Boolean
 internal fun pildoraDeLaFila(pago: PagoDelPeriodo, conPropuesta: Boolean): Pair<String, TonoDePildora> = when {
     pago.pagado -> (if (pago.esIngreso) "Recibido" else "Pagado") to TonoDePildora.Exito
     conPropuesta -> "Por confirmar" to TonoDePildora.Aviso
+    // Vuelta 63: un abono planeado no vence ni falta: es un recordatorio.
+    pago.esAbono -> "Planeado" to TonoDePildora.Neutra
     // Vuelta 49: lo que el banco cobra solo no «vence»: se pregunta si se cobró.
     pago.seCobraSola && pago.diasParaVencer <= 0 -> PILDORA_SE_COBRO to TonoDePildora.Aviso
     pago.vencido -> (if (pago.esIngreso) "Atrasado" else "Vencido") to TonoDePildora.Peligro
@@ -1053,6 +1060,8 @@ const val TEXTO_SIN_MOVIMIENTO_DEL_DEBITO = "El banco no avisa cuando la cobra: 
 /** Qué dice una fila sin movimiento: un ingreso, una cuota que se cobra sola, o un pago. Pura. */
 fun textoSinMovimiento(pago: PagoDelPeriodo): String = when {
     pago.esIngreso -> TEXTO_SIN_MOVIMIENTO_DE_INGRESO
+    // Vuelta 63: el abono no se «encuentra»: es plata que el dueño decide mover.
+    pago.esAbono -> com.jvillada.movi.ui.quickadd.EL_ABONO_PENDIENTE_NO_RESTA
     pago.seCobraSola -> TEXTO_SIN_MOVIMIENTO_DEL_DEBITO
     else -> TEXTO_SIN_MOVIMIENTO
 }

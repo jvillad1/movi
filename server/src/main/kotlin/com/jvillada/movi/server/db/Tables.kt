@@ -377,6 +377,14 @@ object Events : Table("financial_events") {
      * corren dentro de la transacción de arranque).
      */
     val lastEditedAt         = long("last_edited_at").nullable()
+    /**
+     * Vuelta 63 · a cuántas cuotas se difirió la compra, cuando el extracto de movimientos de la tarjeta
+     * lo dijo (ver [com.jvillada.movi.shared.model.FinancialEvent.cuotas]). Nullable y sin índice: el
+     * `ADD COLUMN cuotas INT NULL` que emite `createMissingTablesAndColumns(Events)` es seguro sobre la
+     * tabla con datos, y lo viejo queda en NULL («no se sabe»), sin migración retroactiva. Su caso está
+     * en `SchemaDeArranqueTest`.
+     */
+    val cuotas               = integer("cuotas").nullable()
     override val primaryKey  = PrimaryKey(id)
     init {
         index("idx_events_statement_import_id", false, statementImportId)
@@ -638,6 +646,14 @@ object RecurringRules : Table("recurring_rules") {
      * destino se borra, `DestinoRoutes` suelta la referencia en vez de borrar la regla.
      */
     val destinoConocidoId  = varchar("destino_conocido_id", 50).nullable()
+    /**
+     * Vuelta 63 · la deuda a la que va el abono mensual (ver
+     * [com.jvillada.movi.shared.model.RecurringRule.haciaDeuda]). Nullable, y por eso DDL seguro:
+     * `createMissingTablesAndColumns` emite `ADD COLUMN hacia_deuda VARCHAR(50) NULL` y toda regla que
+     * ya existe queda en NULL, que es la verdad. Sin FK: si la deuda se borra, `AccountRoutes` borra
+     * la regla del abono (sin la deuda no hay a dónde abonar). Su caso está en `SchemaDeArranqueTest`.
+     */
+    val haciaDeuda         = varchar("hacia_deuda", 50).nullable()
     override val primaryKey = PrimaryKey(id)
     init { index("idx_recurring_rules_user_id", false, userId) }
 }
