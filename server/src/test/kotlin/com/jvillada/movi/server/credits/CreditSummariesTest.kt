@@ -23,7 +23,14 @@ class CreditSummariesTest {
     }
 
     @Test
-    fun `overpaid credit (negative debt) clamps to one hundred pct`() {
-        assertEquals(1.0, paidPctFor(principal = 100, debt = -20)!!, 1e-9)
+    fun `una deuda en negativo no es un credito pagado, es uno sin saldo - no hay avance`() {
+        // Vuelta 59: «Vehículo 4083» en −$980.000 daba paidPct 1.0, «100 % pagado».
+        assertNull(paidPctFor(principal = 40_000_000, debt = -980_000))
+        assertNull(paidPctFor(principal = 100, debt = -20))
+    }
+
+    @Test
+    fun `una deuda en cero sigue siendo pagada`() {
+        assertEquals(1.0, paidPctFor(principal = 100, debt = 0)!!, 1e-9)
     }
 }

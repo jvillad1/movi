@@ -29,7 +29,12 @@ import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY
 import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.PlanDelCredito
 import com.jvillada.movi.shared.model.planDeUnaDeuda
-import com.jvillada.movi.shared.model.resumirDeudas
+import com.jvillada.movi.shared.model.DeudaParaSalir
+import com.jvillada.movi.shared.model.InteresDelMes
+import com.jvillada.movi.shared.model.interesDelMesDe
+import com.jvillada.movi.shared.model.deudaTotalDe
+import com.jvillada.movi.shared.model.deudasSinSaldoDe
+import com.jvillada.movi.shared.model.valorEnPesosDe
 import com.jvillada.movi.shared.model.PeriodicidadDeCobro
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
@@ -224,7 +229,30 @@ internal data class ContextoDelPeriodo(
      * no aparta nada: el contexto queda exactamente como antes. Ver [AhorroParaContexto].
      */
     val ahorro: AhorroParaContexto? = null,
+    /**
+     * **Las tarjetas con deuda** (vuelta 59), como las ve «Cómo salir de tus deudas». Solo para el
+     * interés del mes: con ellas el asistente dice la misma cifra que Créditos ([interesDelMesDe]).
+     */
+    val tarjetas: List<DeudaParaSalir> = emptyList(),
 )
+
+/** **El interés de este mes**: los planes de los créditos y las tarjetas. La cuenta de Créditos. */
+internal fun ContextoDelPeriodo.interesDelMes(): InteresDelMes = interesDelMesDe(creditos.mapNotNull { it.plan }, tarjetas)
+
+/**
+ * **Las deudas sin saldo en Movi** (vuelta 59), en un renglón, o `null` sin ninguna: un préstamo o una
+ * tarjeta en negativo casi siempre es una deuda a la que Movi no le tiene el saldo («Vehículo 4083»,
+ * creado sin «Deuda actual»). El patrimonio neto la cuenta con su signo; la deuda total de Créditos
+ * no la resta ([deudaTotalDe]). El asistente tiene que saber las dos cosas para no contradecir a la
+ * pantalla, y para sugerir cuadrarla.
+ */
+internal fun lineaDeLasDeudasSinSaldo(cuentas: List<Account>, formato: (Long) -> String): String? {
+    val sinSaldo = deudasSinSaldoDe(cuentas)
+    if (sinSaldo.isEmpty()) return null
+    val nombres = sinSaldo.joinToString(", ") { "«${it.name}» (${formato(-valorEnPesosDe(it))} a favor por sus movimientos)" }
+    return "- Sin saldo en Movi: $nombres. Casi seguro falta cargarle su saldo real: sugiere cuadrarla en Cuadre de saldos. " +
+        "La deuda total de Créditos no la resta (es ${formato(deudaTotalDe(cuentas))}); el patrimonio neto de arriba sí la cuenta con su signo."
+}
 
 /**
  * **El ahorro del período para el asistente** (27-oct-2026, ver `AhorroDelPeriodo.kt` en :core).
@@ -517,10 +545,11 @@ internal fun ContextoDelPeriodo.render(): String = buildString {
             // Los totales van partidos por quién paga, igual que en la pantalla de Créditos: un solo
             // total le cobraría a su bolsillo millones al mes que no salen de ahí. Ver
             // `ResumenDeDeudas`.
-            val resumen = resumirDeudas(planes)
+            val interes = interesDelMes()
             appendLine(
-                "Intereses estimados de un mes: \$${resumen.interesMensualPropio} en los créditos que " +
-                    "salen de su bolsillo, y \$${resumen.interesMensualAjeno} en los que paga la nómina o un tercero.",
+                "Intereses estimados de un mes (la cifra de Créditos): \$${interes.propio} los que paga él " +
+                    "(\$${interes.creditosPropios} de sus créditos y \$${interes.tarjetas} de sus tarjetas), y " +
+                    "\$${interes.ajeno} en los créditos que paga la nómina o un tercero.",
             )
         }
         appendLine(

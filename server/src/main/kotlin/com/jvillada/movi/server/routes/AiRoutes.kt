@@ -12,6 +12,8 @@ import com.jvillada.movi.server.ai.contextoDelPeriodoDe
 import com.jvillada.movi.server.ai.conSaldos
 import com.jvillada.movi.server.ai.conElAhorro
 import com.jvillada.movi.server.ai.lineaDeCreditosDesembolsados
+import com.jvillada.movi.server.ai.lineaDeLasDeudasSinSaldo
+import com.jvillada.movi.shared.model.deudasParaSalir
 import com.jvillada.movi.server.ai.render
 import com.jvillada.movi.server.ai.BUSCAR_DOCUMENTOS
 import com.jvillada.movi.server.balance.cuentasConSaldo
@@ -675,6 +677,9 @@ internal suspend fun cargarDatosDelUsuario(uid: String): DatosDelUsuario {
     // Con el saldo de cada crédito puesto: sin él no hay interés del mes ni «cuánto baja», y esas
     // son las dos cifras con que se contesta «¿qué deuda abono primero?». Ver `conSaldos`.
     val delPeriodo = contextoDelPeriodoDe(uid).conSaldos(cuentas)
+        // Las tarjetas, para que el interés del mes sea el de Créditos y «Cómo salir de tus deudas»
+        // (vuelta 59, `interesDelMes`): créditos y tarjetas, una sola cifra.
+        .copy(tarjetas = deudasParaSalir(emptyList(), tarjetasDe(uid)))
         // El ahorro del período (Ajustes), solo si aparta algo: así el chat dice el mismo «Te
         // quedan» que Hoy. Sin ahorro no se lee nada más y el contexto queda como antes.
         .conElAhorro(uid)
@@ -728,7 +733,7 @@ internal fun DatosDelUsuario.comoContexto(): String {
             }
         }
         appendLine()
-        append(renderizarPatrimonio(patrimonio))
+        append(renderizarPatrimonio(patrimonio, cuentas))
         appendLine()
         append(renderizarPresupuestos(budgets, delPeriodo.gastoPorCategoria))
 
@@ -797,7 +802,7 @@ internal fun lineaDelBien(cuenta: Account, bien: Bien, cuentas: List<Account>): 
  * distinto que el Inicio): la plata que se puede usar, la condicionada, los bienes y las deudas,
  * con la resta escrita. Mismas cifras que [patrimonioDe] le da a la pantalla.
  */
-internal fun renderizarPatrimonio(p: Patrimonio): String = buildString {
+internal fun renderizarPatrimonio(p: Patrimonio, cuentas: List<Account> = emptyList()): String = buildString {
     appendLine("== Patrimonio ==")
     appendLine("- Tu plata (disponible para usar): \$${p.tuPlata}")
     if (p.apartado != 0L) {
@@ -812,4 +817,5 @@ internal fun renderizarPatrimonio(p: Patrimonio): String = buildString {
     appendLine("- Deudas: \$${p.deudas}")
     appendLine("- Patrimonio neto (tu plata + plata con destino + bienes − deudas): \$${p.neto}")
     if (p.apartado != 0L) appendLine("  (el neto incluye la plata apartada: apartarla no cambia lo que tienes)")
+    lineaDeLasDeudasSinSaldo(cuentas) { "\$$it" }?.let { appendLine(it) }
 }

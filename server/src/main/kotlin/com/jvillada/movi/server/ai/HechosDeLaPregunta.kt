@@ -10,7 +10,6 @@ import com.jvillada.movi.shared.model.deudaDelBien
 import com.jvillada.movi.shared.model.esCuentaDeDeuda
 import com.jvillada.movi.shared.model.estadoDePresupuesto
 import com.jvillada.movi.shared.model.normalizarParaBuscar
-import com.jvillada.movi.shared.model.resumirDeudas
 import com.jvillada.movi.shared.model.tasaMensualDeUnaEA
 import com.jvillada.movi.shared.model.valorEnPesosDe
 import kotlin.math.abs
@@ -165,8 +164,8 @@ internal fun hechosParaLaPregunta(pregunta: String, datos: DatosParaLosHechos): 
     // que es donde va su renglón. Sin ahorro, lo de siempre.
     val porElAhorro = p.ahorro != null && hablaDe(" ahorro ", " ahorrar ", " ahorrando ", " puedo gastar ", " te quedan ")
     if (hablaDe(" periodo ", " este mes ", " me alcanza ", " me queda ") || porElAhorro) bloques += hechosDelPeriodo(p)
-    if (hablaDe(" patrimonio ", " cuanto tengo ", " mi plata ", " tu plata ")) bloques += hechosDelPatrimonio(datos.patrimonio)
-    if (hablaDe(" interes ", " intereses ")) hechosDeLosIntereses(p.creditos)?.let { bloques += it }
+    if (hablaDe(" patrimonio ", " cuanto tengo ", " mi plata ", " tu plata ")) bloques += hechosDelPatrimonio(datos.patrimonio, datos.cuentas)
+    if (hablaDe(" interes ", " intereses ")) hechosDeLosIntereses(p)?.let { bloques += it }
     if (hablaDe(" presupuesto ", " presupuestos ") && nombradas.none { it in categorias }) {
         hechosDeLosPresupuestos(datos)?.let { bloques += it }
     }
@@ -330,7 +329,7 @@ private fun hechosDelPeriodo(p: ContextoDelPeriodo): String = buildString {
     p.ahorro?.let { appendLine(it.linea(::pesos)) }
 }
 
-private fun hechosDelPatrimonio(pat: Patrimonio): String = buildString {
+private fun hechosDelPatrimonio(pat: Patrimonio, cuentas: List<Account>): String = buildString {
     appendLine("Patrimonio (la misma cuenta que el Inicio):")
     appendLine("- Tu plata (disponible): ${pesos(pat.tuPlata)}")
     if (pat.apartado != 0L) {
@@ -341,18 +340,25 @@ private fun hechosDelPatrimonio(pat: Patrimonio): String = buildString {
     if (pat.bienes != 0L) appendLine("- Bienes (no son plata): ${pesos(pat.bienes)}")
     appendLine("- Deudas: ${pesos(pat.deudas)}")
     appendLine("- Patrimonio neto: ${pesos(pat.neto)}")
+    lineaDeLasDeudasSinSaldo(cuentas, ::pesos)?.let { appendLine(it) }
 }
 
-private fun hechosDeLosIntereses(creditos: List<CreditoParaContexto>): String? {
-    val conPlan = creditos.mapNotNull { c -> c.plan?.let { c to it } }.filter { (c, _) -> !c.sinIntereses }
-    if (conPlan.isEmpty()) return null
-    val resumen = resumirDeudas(conPlan.map { it.second })
+private fun hechosDeLosIntereses(p: ContextoDelPeriodo): String? {
+    val conPlan = p.creditos.mapNotNull { c -> c.plan?.let { c to it } }.filter { (c, _) -> !c.sinIntereses }
+    // Las tarjetas con deuda y tasa (vuelta 59): cobran interés igual que un crédito.
+    val tarjetas = p.tarjetas.filter { (it.interesDelMes ?: 0L) > 0L && it.moneda == "COP" }
+    if (conPlan.isEmpty() && tarjetas.isEmpty()) return null
+    // La MISMA cuenta que Créditos y «Cómo salir de tus deudas»: `interesDelMes` de :core.
+    val interes = p.interesDelMes()
     return buildString {
-        appendLine("Intereses de este mes, crédito por crédito (del más caro al más barato):")
+        appendLine("Intereses de este mes, deuda por deuda (del más caro al más barato):")
         conPlan.sortedByDescending { it.second.interes }.forEach { (c, plan) ->
             appendLine("- «${c.cuenta}»: ${pesos(plan.interes)} (tasa ${porcentaje(c.tasaEa, 2)} EA; ${if (c.saleDeSuBolsillo) "sale de su bolsillo" else "no sale de su cuenta"})")
         }
-        appendLine("- Total: ${pesos(resumen.interesMensualPropio)} en los que salen de su bolsillo y ${pesos(resumen.interesMensualAjeno)} en los que paga la nómina, otra cuenta o un tercero")
+        tarjetas.sortedByDescending { it.interesDelMes ?: 0L }.forEach { t ->
+            appendLine("- Tarjeta «${t.nombre}»: ${pesos(t.interesDelMes ?: 0L)} (tasa ${porcentaje(t.tasaEa ?: 0.0, 2)} EA; sale de su bolsillo)")
+        }
+        appendLine("- Total: ${pesos(interes.propio)} los que paga él (créditos y tarjetas) y ${pesos(interes.ajeno)} en los que paga la nómina, otra cuenta o un tercero")
     }
 }
 

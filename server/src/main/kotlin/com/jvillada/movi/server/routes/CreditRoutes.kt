@@ -40,6 +40,7 @@ import com.jvillada.movi.shared.model.newId
 import com.jvillada.movi.shared.model.openingEventFor
 import com.jvillada.movi.shared.model.transferLegsFor
 import com.jvillada.movi.shared.model.validateCreditDisbursement
+import com.jvillada.movi.shared.model.esPagoDeUnaCuota
 import com.jvillada.movi.server.time.appDateToEpochMillis
 import java.time.LocalDate
 import io.ktor.http.HttpStatusCode
@@ -782,7 +783,28 @@ internal suspend fun creditosDe(uid: String): List<CreditSummary> {
             .associate { it[Credits.accountId] to it.toCreditTerms() }
     }
     val eventsByAccount = loadNonVoidedEvents(uid).groupBy { it.accountId }
+    val hoy = AppClock.today()
     return loans.map { acc ->
-        summaryFor(acc, termsByAccount[acc.id], eventsByAccount[acc.id] ?: emptyList(), rate)
+        val terms = termsByAccount[acc.id]
+        val eventos = eventsByAccount[acc.id] ?: emptyList()
+        summaryFor(acc, terms, eventos, rate)
+            .copy(cuotasPagadas = terms?.let { cuotasPagadasAlrededorDe(eventos, it.dayOfMonth, hoy) })
     }
+}
+
+/**
+ * **Las cuotas ya pagadas de un crédito** (`"2026-10"`), de un año atrás a un año adelante de [hoy]:
+ * cada pago de una cuota sobre la cuenta ([esPagoDeUnaCuota], sin anulados —[eventos] ya viene así)
+ * sella la del vencimiento más cercano ([cuotaMasCercana], la misma regla que agrupa las partes de una
+ * cuota). La pantalla cuenta las que faltan desde la primera sin pagar. Ver [CreditSummary.cuotasPagadas].
+ */
+internal fun cuotasPagadasAlrededorDe(eventos: List<FinancialEvent>, diaDePago: Int, hoy: LocalDate): List<String> {
+    val desde = java.time.YearMonth.from(hoy).minusMonths(12).toString()
+    val hasta = java.time.YearMonth.from(hoy).plusMonths(12).toString()
+    return eventos
+        .filter(::esPagoDeUnaCuota)
+        .map { cuotaMasCercana(com.jvillada.movi.server.time.epochMillisToAppDate(it.timestamp), diaDePago) }
+        .filter { it in desde..hasta }
+        .distinct()
+        .sorted()
 }
