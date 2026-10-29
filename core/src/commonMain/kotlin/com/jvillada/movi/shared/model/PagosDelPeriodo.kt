@@ -7,6 +7,7 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.daysUntil
 import kotlinx.datetime.minus
+import kotlinx.datetime.plus
 import kotlinx.datetime.toInstant
 
 /*
@@ -434,3 +435,46 @@ fun faltaPorPagar(checklist: List<PagoDelPeriodo>): Long =
  */
 fun pagosPendientes(checklist: List<PagoDelPeriodo>): List<PagoDelPeriodo> =
     checklist.filter { !it.pagado && !it.esIngreso && !it.esAbono }
+
+// ── Vuelta 70 · lo que viene del período siguiente ───────────────────────────
+
+/** Cuántos días del período tienen que quedar, como mucho, para mostrar [loQueViene]. */
+const val DIAS_PARA_MOSTRAR_LO_QUE_VIENE: Int = 7
+
+/** Cuántos días hacia adelante mira [loQueViene]. */
+const val DIAS_DE_LO_QUE_VIENE: Int = 15
+
+/**
+ * **Lo que viene**: los pagos del período siguiente que vencen en los próximos [DIAS_DE_LO_QUE_VIENE]
+ * días, con su total.
+ *
+ * @property filas [pagosPendientes] del período siguiente, en el orden del checklist.
+ * @property total con la regla de [faltaPorPagar] (sin el saldo de una tarjeta, sin ingresos, sin
+ *   abonos). **No cuenta en «Falta por pagar» del período**, que sigue siendo del período.
+ */
+data class LoQueViene(val filas: List<PagoDelPeriodo>, val total: Long)
+
+/**
+ * **El bloque «Lo que viene · próximos 15 días»** de Pagos, o `null` si no va: quedan más de
+ * [DIAS_PARA_MOSTRAR_LO_QUE_VIENE] días del período (hoy incluido) o no vence nada en esos días.
+ *
+ * Las filas son las de [checklistDelPeriodo] del período siguiente sobre las MISMAS respuestas, no
+ * otra lista. «Hoy» sale de la misma respuesta de los vencimientos (`daysUntil`, como en
+ * [checklistDelPeriodo]): sin reloj, puro.
+ */
+fun loQueViene(
+    upcoming: List<UpcomingPayment>,
+    ocurrencias: List<OccurrenceState>,
+    periodo: PeriodoFinanciero,
+    settings: PeriodSettings,
+): LoQueViene? {
+    val hoy = hoySegunLosVencimientos(upcoming) ?: return null
+    val ultimoDia = inicioDelPeriodo(periodoSiguiente(periodo), settings).minus(1, DateTimeUnit.DAY)
+    val quedan = hoy.daysUntil(ultimoDia) + 1
+    if (quedan > DIAS_PARA_MOSTRAR_LO_QUE_VIENE) return null
+    val hasta = hoy.plus(DIAS_DE_LO_QUE_VIENE, DateTimeUnit.DAY)
+    val filas = pagosPendientes(checklistDelPeriodo(upcoming, ocurrencias, periodoSiguiente(periodo), settings))
+        .filter { fila -> fechaDe(fila.vence)?.let { it <= hasta } ?: false }
+    if (filas.isEmpty()) return null
+    return LoQueViene(filas = filas, total = faltaPorPagar(filas))
+}
