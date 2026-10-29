@@ -161,6 +161,8 @@ class InicioDeUnVistazoEnPantallaTest {
         // Lo que quedó solo para los APK viejos no se pinta: ni «Para revisar» ni el banner.
         composeRule.onNodeWithText("Pregúntale a Movi AI", useUnmergedTree = true).assertDoesNotExist()
         composeRule.onNodeWithText("Para revisar", useUnmergedTree = true).assertDoesNotExist()
+        // Vuelta 68: «Tus widgets» ya no lleva su propio «Editar»; la única puerta es «Editar inicio».
+        composeRule.onNodeWithText("Editar", useUnmergedTree = true).assertDoesNotExist()
     }
 
     @Test

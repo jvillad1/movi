@@ -79,6 +79,7 @@ import com.jvillada.movi.ui.components.Celebracion
 import com.jvillada.movi.ui.components.MomentoDeCelebracion
 import com.jvillada.movi.ui.components.rememberVibrador
 import com.jvillada.movi.ui.components.NoSePudoLeer
+import com.jvillada.movi.ui.components.NoSePudoLeerEnLaPantalla
 import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.ui.components.formatMoney
 import com.jvillada.movi.ui.dashboard.EstadoDeLaFila
@@ -335,13 +336,13 @@ fun SeccionChecklistDelPeriodo(
     Column(modifier = modifier) {
         when {
             cargando -> Seccion(titulo = TITULO_TUS_FACTURAS)
-            !pudoLeer -> {
-                Seccion(titulo = TITULO_TUS_FACTURAS)
-                NoSePudoLeer(
-                    texto = "No se pudieron leer los pagos de este período",
-                    onReintentar = onReintentar,
-                )
-            }
+            // Vuelta 68: en Pagos, el aviso único de arriba lo dice (ver [NoSePudoLeerEnLaPantalla]).
+            !pudoLeer -> NoSePudoLeerEnLaPantalla(
+                clave = "facturas",
+                texto = "No se pudieron leer los pagos de este período",
+                onReintentar = onReintentar,
+                contenidoSuelto = { Seccion(titulo = TITULO_TUS_FACTURAS) },
+            )
             checklist.isEmpty() && anteriores.isEmpty() -> {
                 Seccion(titulo = TITULO_TUS_FACTURAS)
                 Superficie(modifier = Modifier.fillMaxWidth()) {

@@ -11,6 +11,8 @@ import androidx.fragment.app.FragmentActivity
 import com.jvillada.movi.avisos.AvisoDeBancoMudoWorker
 import com.jvillada.movi.avisos.AvisoDeDebitosAutomaticosWorker
 import com.jvillada.movi.avisos.AvisoDeCierreWorker
+import com.jvillada.movi.avisos.AvisoDeLaMananaWorker
+import com.jvillada.movi.avisos.AvisoSemanalDeLaParejaWorker
 import com.jvillada.movi.avisos.AvisoDeVencimientosWorker
 import com.jvillada.movi.avisos.Avisador
 import com.jvillada.movi.avisos.DestinoDesdeAfuera
@@ -76,6 +78,10 @@ class MainActivity : FragmentActivity() {
         AvisoDeDebitosAutomaticosWorker.programar(applicationContext)
         // «Cerró tu período»: la mañana siguiente al corte (decide al correr, como los otros).
         AvisoDeCierreWorker.programar(applicationContext)
+        // Vuelta 68: el resumen de la mañana (8:00) y el semanal de los grupos (domingo, 19:00).
+        // Deciden al correr, como los otros: con su interruptor apagado no hacen nada.
+        AvisoDeLaMananaWorker.programar(applicationContext)
+        AvisoSemanalDeLaParejaWorker.programar(applicationContext)
         // Si la app se abrió tocando un aviso, a qué pantalla va (lo cumple App() tras la puerta).
         recibirAviso(intent)
         // Ola 2 · «Compartir con Movi». Solo en un arranque de verdad: si Android recrea la

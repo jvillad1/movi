@@ -44,6 +44,9 @@ import com.jvillada.movi.ui.components.ds.anilloDeFoco
 /** El encabezado del Inicio, sobre la banda amarilla (vuelta 39). */
 const val TAG_ENCABEZADO_DEL_INICIO: String = "inicio-encabezado"
 
+/** La línea de debajo del saludo: el período, «Actualizando…» o «Sin conexión · cifras de las 9:06». */
+const val TAG_SUBTITULO_DEL_INICIO: String = "inicio-subtitulo"
+
 /** El avatar del encabezado del Inicio, que abre «Tú». */
 const val TAG_AVATAR_DEL_INICIO: String = "inicio-avatar"
 
@@ -76,6 +79,8 @@ fun EncabezadoDelInicio(
     onCampana: () -> Unit,
     modifier: Modifier = Modifier,
     descripcionDelSubtitulo: String? = null,
+    /** Vuelta 68: con «Sin conexión · cifras de las 9:06», tocar la línea reintenta. */
+    onSubtitulo: (() -> Unit)? = null,
 ) {
     Row(
         modifier = modifier
@@ -119,9 +124,15 @@ fun EncabezadoDelInicio(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     // Vuelta 54: el rango entero del período, para el lector de pantalla.
-                    modifier = if (descripcionDelSubtitulo != null) {
-                        Modifier.semantics { contentDescription = descripcionDelSubtitulo }
-                    } else Modifier,
+                    modifier = (
+                        if (descripcionDelSubtitulo != null) {
+                            Modifier.semantics { contentDescription = descripcionDelSubtitulo }
+                        } else Modifier
+                        ).then(
+                        if (onSubtitulo != null) {
+                            Modifier.clickable(role = Role.Button, onClickLabel = "Reintentar", onClick = onSubtitulo)
+                        } else Modifier,
+                    ).testTag(TAG_SUBTITULO_DEL_INICIO),
                 )
             }
         }

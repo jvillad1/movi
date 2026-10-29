@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,6 +53,10 @@ import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
 import com.jvillada.movi.ui.components.ds.Seccion
 import com.jvillada.movi.ui.components.ds.Superficie
 import com.jvillada.movi.ui.components.NoSePudoLeer
+import com.jvillada.movi.ui.components.NoSePudoLeerEnLaPantalla
+import com.jvillada.movi.ui.components.LocalErroresDeLaPantalla
+import com.jvillada.movi.ui.components.ErroresDeLaPantalla
+import com.jvillada.movi.ui.components.AvisoDeLaPantalla
 import com.jvillada.movi.ui.components.PanelDeTablero
 import com.jvillada.movi.ui.components.ScrollDesdeLosMargenes
 import com.jvillada.movi.ui.components.SubirAlRetocarLaPestana
@@ -136,7 +141,10 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
 
     // `vencimientosSiempre`: la tarjeta del disponible saca sus fijos de los vencimientos y las
     // ocurrencias del tablero, también con Presupuestos a la vista (ver [DisponibleDelPlan]).
-    val pagos = rememberTableroMontadoSolo(activo = enPagos, vencimientosSiempre = true)
+    // Vuelta 68 · un solo error por pantalla: las secciones que no pudieron leer se anotan acá y lo
+    // dice un aviso único arriba, con un «Reintentar» que reintenta todo (ver [ErroresDeLaPantalla]).
+    val errores = remember { ErroresDeLaPantalla() }
+    val pagos = rememberTableroMontadoSolo(activo = enPagos, vencimientosSiempre = true, errores = errores)
     val presupuestos = rememberEstadoDePresupuestos(activo = !enPagos)
     // Marcar que algo ocurrió, confirmar un cobro o editar un recurrente cambia los fijos del
     // período, que son la mitad del disponible: la tarjeta de arriba vuelve a leer con cada acción
@@ -254,6 +262,7 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
         }
     }
 
+    CompositionLocalProvider(LocalErroresDeLaPantalla provides errores) {
     Box(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         // Ola W3: en pantalla ancha, el disponible a la izquierda y los pagos a la derecha. El ancho
         // lo mide el panel, ya sin el rail — ver [planEnDosColumnas] para la cuenta completa.
@@ -283,6 +292,11 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
                 accion = if (!enPagos && presupuestos.nuevoEnElEncabezado) {
                     AccionDeEncabezado("Nuevo", Icons.Rounded.Add, onClick = { presupuestos.abrirNuevo() })
                 } else null,
+            )
+            // Vuelta 68: el aviso único, arriba de todo y fuera del scroll, en una y en dos columnas.
+            AvisoDeLaPantalla(
+                errores = errores,
+                modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(bottom = Medida.dentroDeSeccion),
             )
             if (dosColumnas) {
                 // Las mismas piezas que en una columna, en los mismos lugares relativos: cargando o
@@ -341,6 +355,7 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
         HojasDelTableroDeRecurrentes(pagos.estado, onNavigate)
         HojasDePresupuestos(presupuestos)
     }
+    } // CompositionLocalProvider
 }
 
 /**
@@ -438,8 +453,13 @@ private fun SeccionCuantoPuedesGastar(
 @Composable
 private fun NoSePudoLeerElDisponible(onReintentar: () -> Unit) {
     Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla)) {
-        Seccion(titulo = TITULO_CUANTO_PUEDES_GASTAR)
-        NoSePudoLeer("No pudimos calcular cuánto puedes gastar", onReintentar = onReintentar)
+        // Vuelta 68: en Pagos lo dice el aviso único de arriba; suelta, su tarjeta de siempre.
+        NoSePudoLeerEnLaPantalla(
+            clave = "disponible",
+            texto = "No pudimos calcular cuánto puedes gastar",
+            onReintentar = onReintentar,
+            contenidoSuelto = { Seccion(titulo = TITULO_CUANTO_PUEDES_GASTAR) },
+        )
     }
 }
 

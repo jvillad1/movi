@@ -1146,7 +1146,9 @@ fun TransactionsScreen(
     LaunchedEffect(perfil.error, eventos.error) {
         val deLosEventos = eventos.error
         error = when {
-            deLosEventos != null && eventos.valor == null -> deLosEventos.toUserMessage()
+            // Vuelta 68 · un solo error por pantalla: sin nada a la vista lo dice la tarjeta «No
+            // pudimos cargar tus movimientos», con su «Reintentar»; el aviso de abajo sobraba.
+            deLosEventos != null && eventos.valor == null -> return@LaunchedEffect
             // Sin el perfil la pantalla cae al mes de calendario, y con corte 25 eso es mostrar
             // otro período con otro total. Se dice; si además fallan los movimientos, ese error
             // (arriba) es el que manda.
@@ -1564,7 +1566,11 @@ fun TransactionsScreen(
             // Vuelta de diseño 30: en el teléfono, Entró · Salió · Neto del período (en pantalla ancha
             // lo dice el panel). **El primer ítem de la lista**, antes de «N por revisar»: se va con el
             // scroll, como todo lo de arriba de las filas. Con un filtro que recorta la lista no va.
-            if (conLoDeArriba && muestraElResumenEnElTelefono(conPanel, hayFiltro = filtro != null, busqueda = searchQuery)) {
+            // Vuelta 68: si la lectura falló, la franja no queda en esqueleto para siempre: se va
+            // (ver [laFranjaSePinta]); el aviso de abajo dice qué pasó.
+            if (conLoDeArriba && muestraElResumenEnElTelefono(conPanel, hayFiltro = filtro != null, busqueda = searchQuery) &&
+                laFranjaSePinta(resumen, cargando = loading)
+            ) {
                 item(contentType = "arriba") {
                     ResumenDelPeriodoEnElTelefono(
                         // Vuelta 67: la suma de la lista de abajo, con su chip (ver [laFranjaDeLaLista]).
@@ -1584,7 +1590,10 @@ fun TransactionsScreen(
             // Vuelta 40: con avisos del banco por confirmar, su tarjeta —«Confirmar los N» y «Revisar
             // uno por uno»— en lugar del renglón «N por revisar». Sin avisos (solo movimientos que
             // entraron solos, pagos de tarjeta o débitos), el renglón de siempre.
-            val avisosALaVista = avisosDelBanco?.takeIf { it.cuantos > 0 }
+            // Vuelta 68: lo que espera por revisar es de hoy, no de un período pasado: en septiembre
+            // no se ofrece «Confirmar los 2» (ver [loPendienteSeVeEn]).
+            val conLoPendiente = loPendienteSeVeEn(periodoVisible, periodoDeHoy)
+            val avisosALaVista = avisosDelBanco?.takeIf { it.cuantos > 0 && conLoPendiente }
             if (conLoDeArriba && avisosALaVista != null) {
                 item(contentType = "arriba") {
                     TarjetaDeAvisosDelBanco(
@@ -1595,7 +1604,7 @@ fun TransactionsScreen(
                         modifier = arribaDeLaLista,
                     )
                 }
-            } else if (conLoDeArriba && cuantosPorRevisarAhora != null && cuantosPorRevisarAhora.total > 0) {
+            } else if (conLoDeArriba && conLoPendiente && cuantosPorRevisarAhora != null && cuantosPorRevisarAhora.total > 0) {
                 item(contentType = "arriba") {
                     RenglonPorRevisar(
                         cuantos = cuantosPorRevisarAhora.total,

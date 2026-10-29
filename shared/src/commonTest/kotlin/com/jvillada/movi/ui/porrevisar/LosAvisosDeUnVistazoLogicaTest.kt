@@ -51,11 +51,11 @@ class LosAvisosDeUnVistazoLogicaTest {
 
     @Test
     fun `la franja dice la suma solo entera`() {
-        assertEquals("Por confirmar \$103.600" to "En 3 avisos", textosDeLaFranjaPorConfirmar(ConteoPorRevisar(avisos = 3), 103_600L))
-        assertEquals("Por confirmar \$18.300" to "En 1 aviso", textosDeLaFranjaPorConfirmar(ConteoPorRevisar(avisos = 1), 18_300L))
+        assertEquals("Por confirmar" to "\$103.600 en 3 avisos", textosDeLaFranjaPorConfirmar(ConteoPorRevisar(avisos = 3), 103_600L))
+        assertEquals("Por confirmar" to "\$18.300 en 1 aviso", textosDeLaFranjaPorConfirmar(ConteoPorRevisar(avisos = 1), 18_300L))
         // Con algo más que espera, la cifra dice de qué es y lo demás va aparte.
         assertEquals(
-            "Por confirmar \$103.600" to "En 4 avisos · y 1 movimiento",
+            "Por confirmar" to "\$103.600 en 4 avisos · y 1 movimiento",
             textosDeLaFranjaPorConfirmar(ConteoPorRevisar(avisos = 4, movimientos = 1), 103_600L),
         )
         // Sin la suma (un aviso sin monto, otra moneda, un server viejo): el conteo, como antes.

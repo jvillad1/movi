@@ -234,6 +234,16 @@ fun DashboardScreen(
         )
     }
     var error by remember { mutableStateOf<String?>(null) }
+    // Vuelta 68: cuándo se leyeron las cifras que están a la vista (la caché de este proceso o la
+    // instantánea del aparato), y si la última carga falló: con las dos, el encabezado dice «Sin
+    // conexión · cifras de las 9:06» en vez de hacer pasar lo guardado por lo de ahora.
+    var cifrasDe by remember {
+        mutableStateOf(
+            if (DashboardDataCache.data != null) DashboardDataCache.cargadoEn.takeIf { it > 0L }
+            else InstantaneaDelInicio.delAparato.selladaEn(SessionManager.userId),
+        )
+    }
+    var falloLaCarga by remember { mutableStateOf(false) }
     var refreshKey by remember { mutableStateOf(0) }
     var showCreateSheet by remember { mutableStateOf(false) }
     var showNotifications by remember { mutableStateOf(false) }
@@ -252,6 +262,8 @@ fun DashboardScreen(
     // instantánea del aparato. «Que vale la pena» es la misma vara del resto del Inicio
     // (`puedeAfirmarVacio`): la cabecera dice «Actualizando…» en vez de la barra de progreso.
     val actualizandoConDatos = loading && data.puedeAfirmarVacio
+    // Vuelta 68: la carga terminó caída y lo que se ve es lo guardado (ver [lineaSinConexion]).
+    val sinConexion = !loading && falloLaCarga && data.puedeAfirmarVacio && cifrasDe != null
     // F5: la campana vuelve — vista derivada de lo que el Inicio ya carga, sin fetch propio.
     val notifications = notificationRows(data)
 
@@ -297,6 +309,7 @@ fun DashboardScreen(
         }
         loading = true
         error = null
+        falloLaCarga = false
         // De quién es esta carga. Se vuelve a mirar antes de guardar la instantánea: si en el medio
         // se cerró la sesión, `clear()` ya borró la de este usuario y escribirla de nuevo dejaría su
         // plata en el aparato.
@@ -345,12 +358,12 @@ fun DashboardScreen(
             launch {
                 runCatching { Repositories.wallets.getFinanceSummary(scope) }
                     .onSuccess { s -> data = data.copy(summary = s); llegado = llegado.copy(summary = s) }
-                    .onFailure { e -> error = e.toUserMessage() }
+                    .onFailure { e -> falloLaCarga = true; error = e.toUserMessage() }
             }
             launch {
                 runCatching { Repositories.wallets.getAccounts() }
                     .onSuccess { a -> data = data.copy(accounts = a); llegado = llegado.copy(accounts = a) }
-                    .onFailure { e -> if (error == null) error = e.toUserMessage() }
+                    .onFailure { e -> falloLaCarga = true; if (error == null) error = e.toUserMessage() }
             }
             // Lo apartado sale de «Tu plata». Secundario: si falla, se toma como ninguno.
             launch {
@@ -520,6 +533,7 @@ fun DashboardScreen(
         // `conElPeriodoDe`: el corte se le puede confiar a la instantánea, la fecha no).
         if (llegado.puedeAfirmarVacio && resumenDelInicioLlego) {
             DashboardDataCache.cargadoEn = Clock.System.now().toEpochMilliseconds()
+            cifrasDe = DashboardDataCache.cargadoEn
             DashboardDataCache.tickDeLaCarga = refreshTick
             val instantanea = if (perfilLlego) {
                 llegado
@@ -533,6 +547,13 @@ fun DashboardScreen(
 
     LaunchedEffect(error) {
         val msg = error ?: return@LaunchedEffect
+        // Vuelta 68 · un solo error por pantalla: con cifras guardadas a la vista lo dice el
+        // encabezado («Sin conexión · cifras de las 9:06», que al tocarlo reintenta); el aviso de
+        // abajo queda para cuando no hay nada que mostrar.
+        if (data.puedeAfirmarVacio && cifrasDe != null) {
+            error = null
+            return@LaunchedEffect
+        }
         val result = snackbarHostState.showSnackbar(msg, actionLabel = "Reintentar")
         error = null
         if (result == SnackbarResult.ActionPerformed) refreshKey++
@@ -552,8 +573,15 @@ fun DashboardScreen(
             // lugar a «Actualizando…»: el alto no cambia y nada de lo de abajo se mueve.
             EncabezadoDelInicio(
                 saludo = saludoDelInicio(nombreDelDueno),
-                subtitulo = if (actualizandoConDatos) "Actualizando…" else periodoDelEncabezado(data),
-                descripcionDelSubtitulo = if (actualizandoConDatos) null else descripcionDelPeriodoDelEncabezado(data),
+                subtitulo = subtituloDelEncabezadoDelInicio(
+                    data = data,
+                    actualizandoConDatos = actualizandoConDatos,
+                    falloLaCarga = falloLaCarga && !loading,
+                    cifrasDe = cifrasDe,
+                    ahora = Clock.System.now().toEpochMilliseconds(),
+                ),
+                descripcionDelSubtitulo = if (actualizandoConDatos || sinConexion) null else descripcionDelPeriodoDelEncabezado(data),
+                onSubtitulo = if (sinConexion) ({ refreshKey++ }) else null,
                 iniciales = inicialesDelUsuario(nombreDelDueno),
                 conPunto = campanaConPunto(notifications),
                 onAvatar = { onNavigate(Screen.Tu) },

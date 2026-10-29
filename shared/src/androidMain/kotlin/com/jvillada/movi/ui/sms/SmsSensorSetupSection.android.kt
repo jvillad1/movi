@@ -318,7 +318,7 @@ private fun SensorNotificationsCard(installSource: InstallSource) {
  * ajustes de notificaciones de la app.
  */
 @Composable
-private fun AvisosDelTelefonoCard() {
+internal fun AvisosDelTelefonoCard() {
     val context = LocalContext.current
     val activity = remember(context) { context.findComponentActivity() }
     var puede by remember { mutableStateOf(puedeAvisar(context)) }
@@ -329,6 +329,8 @@ private fun AvisosDelTelefonoCard() {
     var bancoMudo by remember { mutableStateOf(PreferenciasDeAvisos.avisarBancoMudo(context)) }
     var debitos by remember { mutableStateOf(PreferenciasDeAvisos.avisarDebitos(context)) }
     var cierre by remember { mutableStateOf(PreferenciasDeAvisos.avisarCierre(context)) }
+    var manana by remember { mutableStateOf(PreferenciasDeAvisos.avisarResumenDeLaManana(context)) }
+    var semanal by remember { mutableStateOf(PreferenciasDeAvisos.avisarResumenSemanal(context)) }
 
     fun refrescar() {
         puede = puedeAvisar(context)
@@ -413,8 +415,31 @@ private fun AvisosDelTelefonoCard() {
             cierre = it
             PreferenciasDeAvisos.ponerAvisarCierre(context, it)
         }
+        // Vuelta 68: los dos resúmenes, sin IA y con las cifras del Inicio. Encendidos por defecto.
+        FilaDeInterruptor(
+            texto = TEXTO_INTERRUPTOR_RESUMEN_DE_LA_MANANA,
+            encendido = manana,
+            habilitado = puede,
+        ) {
+            manana = it
+            PreferenciasDeAvisos.ponerAvisarResumenDeLaManana(context, it)
+        }
+        FilaDeInterruptor(
+            texto = TEXTO_INTERRUPTOR_RESUMEN_SEMANAL,
+            encendido = semanal,
+            habilitado = puede,
+        ) {
+            semanal = it
+            PreferenciasDeAvisos.ponerAvisarResumenSemanal(context, it)
+        }
     }
 }
+
+/** Vuelta 68: el interruptor del resumen de la mañana. */
+internal const val TEXTO_INTERRUPTOR_RESUMEN_DE_LA_MANANA = "Resumen de la mañana, a las 8:00"
+
+/** Vuelta 68: el interruptor del resumen semanal de los grupos. */
+internal const val TEXTO_INTERRUPTOR_RESUMEN_SEMANAL = "Resumen semanal de tus grupos, el domingo"
 
 /** Una fila «texto … interruptor»: toda la fila alterna, como en Perfil. */
 @Composable

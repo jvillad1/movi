@@ -278,7 +278,8 @@ fun destinoDeAviso(valor: String?): Screen? = when (valor) {
     ABRIR_AGREGAR_TRASPASO -> com.jvillada.movi.ui.quickadd.pantallaDelAtajo(com.jvillada.movi.ui.quickadd.AtajoDeAgregar.TRASPASO)
     // «Cerró tu período»: el detalle del período que cerró (ver `abrirElPeriodo`). Ola 5: «Revisar»
     // y «Otra categoría» de la notificación de un aviso abren Reconciliar de ese aviso.
-    else -> valor?.let { detalleDelAviso(it) ?: reconciliarDelAviso(it) }
+    // Vuelta 68: el resumen de la mañana abre el Inicio; el semanal, el grupo (o la lista de grupos).
+    else -> valor?.let { detalleDelAviso(it) ?: reconciliarDelAviso(it) ?: inicioDelAviso(it) ?: grupoDelAviso(it) }
 }
 
 /** Reconciliar de un `"aviso:<id>"` o `"aviso-categoria:<id>"` (Ola 5), o `null` si no es eso. */

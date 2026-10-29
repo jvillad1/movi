@@ -52,6 +52,8 @@ import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.LineaEsqueleto
 import com.jvillada.movi.ui.components.NoSePudoLeer
+import com.jvillada.movi.ui.components.NoSePudoLeerEnLaPantalla
+import com.jvillada.movi.ui.components.LocalErroresDeLaPantalla
 import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.ui.components.formatMoneyCompact
 import com.jvillada.movi.ui.dashboard.DashboardData
@@ -222,6 +224,11 @@ internal fun SeccionCajaProyectada(
     // Sin período, sin lista o sin cuentas no hay nada honesto que proyectar: no se pinta nada, ni
     // el título (un título sobre un hueco es una promesa que no se cumple).
     if (caja == null && !noSePudo && !(gastoLeido.actualizando || cargando)) return
+    // Vuelta 68: en Pagos, el aviso único de arriba lo dice; esta sección no pinta ni su título.
+    if (caja == null && noSePudo && LocalErroresDeLaPantalla.current != null) {
+        NoSePudoLeerEnLaPantalla(clave = "caja", texto = "No pudimos proyectar tu plata", onReintentar = { reintento++ })
+        return
+    }
 
     Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla).testTag(TAG_CAJA_PROYECTADA)) {
         if (aireArriba) Spacer(Modifier.height(Medida.entreSecciones))

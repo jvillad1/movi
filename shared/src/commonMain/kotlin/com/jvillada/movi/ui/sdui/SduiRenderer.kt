@@ -377,7 +377,8 @@ private fun BloqueDelInicio(
     val esElHeroe = bloque.any { it.type == "HERO_BALANCE" }
     Column(modifier = if (esElHeroe && conBanda) Modifier.heightIn(min = ALTO_DE_LA_BANDA_EN_EL_SCROLL) else Modifier) {
         if (bloque.all { it.type in TIPOS_DE_WIDGET }) {
-            WidgetsDelInicio(bloque.map { it.type }, data, acciones.onNavigate)
+            // Vuelta 68: con «Próximo pago» en la definición, el widget no repite ese pago.
+            WidgetsDelInicio(bloque.map { it.type }, data, acciones.onNavigate, sinElProximoPago = !acciones.conElPagoEnLasPropuestas)
         } else {
             SduiSection(bloque.single(), data, acciones)
         }
@@ -419,7 +420,8 @@ private fun SduiSection(
         "ALERTS" -> ParaRevisarSection(section, data, onNavigate)
         PARA_REVISAR_COMPACTO -> ParaRevisarCompactoSection(section, data, onNavigate)
         // Sueltos, sin el otro al lado (el Editor de pantallas los separó): el widget a todo el ancho.
-        "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA" -> WidgetsDelInicio(listOf(section.type), data, onNavigate)
+        "CHECKLIST_DEL_PERIODO", "GASTO_POR_CATEGORIA" ->
+            WidgetsDelInicio(listOf(section.type), data, onNavigate, sinElProximoPago = !acciones.conElPagoEnLasPropuestas)
         "DISPONIBLE_DEL_PERIODO" -> DisponibleDelPeriodoSection(section, data, onNavigate = onNavigate)
         "QUICK_LINKS_WITH_TOTALS" -> QuickLinksSection(section, data, onNavigate, uriHandler)
         "CARD_ROW" -> CardRowSection(section, onNavigate, uriHandler)

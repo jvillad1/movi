@@ -238,6 +238,13 @@ internal fun ResumenDelPeriodoEnElTelefono(
     }
 }
 
+/**
+ * Vuelta 68 · **¿se pinta la franja Entró · Salió · Neto?** Con el resumen, sí; mientras carga, su
+ * esqueleto; si la lectura terminó sin resumen (falló), **no**: un esqueleto que pulsa para siempre dice
+ * «ya viene» de algo que no va a venir. El aviso de la lista dice qué pasó.
+ */
+fun laFranjaSePinta(resumen: ResumenDelPanel?, cargando: Boolean): Boolean = resumen != null || cargando
+
 /** Entró, Salió y Neto con su tono, en el orden en que se pintan: lo que mide la forma común. */
 fun cifrasDelResumen(resumen: ResumenDelPanel): List<Pair<Long, TonoDeCifra>> = listOf(
     resumen.entro to TonoDeCifra.Ingreso,

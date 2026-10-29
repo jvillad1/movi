@@ -192,8 +192,8 @@ class LosAvisosDeUnVistazoTest {
     @Test
     fun `la franja del Inicio dice cuanto suman los avisos`() {
         montarDesdeElInicio(propuestas("Salud"))
-        assertEquals(1, cuantos("Por confirmar \$103.600"))
-        assertEquals(1, cuantos("En 3 avisos"))
+        // Vuelta 68: la cifra va pegada a lo que suma.
+        assertEquals(1, cuantos("\$103.600 en 3 avisos"))
     }
 
     @Test
