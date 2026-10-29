@@ -106,7 +106,7 @@ class MensajesApartadosEnElHistorialTest {
 
         assertEquals(listOf("sms_codigo"), devueltos)
         assertEquals(0, cuantos(ERA_UN_MOVIMIENTO))
-        assertEquals(2, cuantos("· Pendiente"), "el devuelto vuelve a esperar una decisión")
+        assertEquals(2, cuantos("Pendiente ·"), "el devuelto vuelve a esperar una decisión")
     }
 
     @Test

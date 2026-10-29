@@ -88,15 +88,14 @@ fun historialPorDia(mensajes: List<SmsMessage>, filtro: FiltroDelHistorial, hoy:
 /**
  * **La cabeza de una fila del historial**: el comercio de título (el del movimiento que anotó, o el
  * que lee el server en el texto, [SmsMessage.comercio]), y el banco si no hay comercio; el monto que
- * dice el texto. Debajo, «Bancolombia · 11:45 p. m.» y, con todos los chips, el estado si no está
- * confirmado. Pura.
+ * dice el texto. Debajo, el estado primero si no está confirmado (con todos los chips) y la hora:
+ * «Pendiente · 10:30 p. m.». Pura.
  */
 fun filaDelHistorial(sms: SmsMessage, hoy: LocalDate, conEstado: Boolean): CabezaDelAviso {
     val sinLeer = AvisoSinLeer(
         monto = sms.monto ?: 0.0, moneda = sms.moneda ?: "COP", tipo = sms.tipo ?: TransactionType.EXPENSE, comercio = sms.comercio,
     )
     val cabeza = cabezaDelAviso(listOf(sms), leido = null, hoy = hoy, sinLeer = sinLeer)
-    val banco = bancoDelAviso(sms.bank).takeIf { it != cabeza.titulo }
     val estado = when {
         !conEstado -> null
         loApartoMovi(sms) -> "Apartado"
@@ -105,7 +104,9 @@ fun filaDelHistorial(sms: SmsMessage, hoy: LocalDate, conEstado: Boolean): Cabez
         else -> null
     }
     return cabeza.copy(
-        subtitulo = listOfNotNull(banco, horaLegibleDeSms(sms.time), estado).joinToString(" · ").ifEmpty { cabeza.subtitulo },
+        // Vuelta 67 (revisión): el estado primero, y sin «Bancolombia ·» en cada fila: a 390 cortaba el
+        // estado, que es lo que se busca al recorrer la lista.
+        subtitulo = listOfNotNull(estado, horaLegibleDeSms(sms.time)).joinToString(" · ").ifEmpty { cabeza.subtitulo },
         monto = sms.monto?.roundToLong()?.takeIf { it > 0 },
     )
 }

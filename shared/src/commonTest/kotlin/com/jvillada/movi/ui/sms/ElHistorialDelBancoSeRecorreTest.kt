@@ -44,12 +44,14 @@ class ElHistorialDelBancoSeRecorreTest {
     }
 
     @Test
-    fun `el comercio va de titulo y el banco abajo, con la hora`() {
+    fun `el comercio va de titulo, y debajo el estado primero y la hora, sin el banco`() {
         val fila = filaDelHistorial(mensajes[1], hoy, conEstado = true)
         assertEquals("Banco de Occidente S A ATH", fila.titulo)
         assertEquals(980_000L, fila.monto)
-        assertEquals(true, fila.subtitulo.startsWith("Bancolombia · 11:45"), fila.subtitulo)
-        assertEquals(true, filaDelHistorial(mensajes[0], hoy, conEstado = true).subtitulo.endsWith("Pendiente"))
+        assertEquals(true, fila.subtitulo.startsWith("11:45"), fila.subtitulo)
+        val pendiente = filaDelHistorial(mensajes[0], hoy, conEstado = true).subtitulo
+        assertEquals(true, pendiente.startsWith("Pendiente · "), pendiente)
+        assertEquals(false, "Bancolombia" in pendiente, "el banco no se repite en cada fila")
         // Sin comercio, el banco de título, como antes.
         assertEquals("Bancolombia", filaDelHistorial(sms("x", "2026-10-29 09:10", SMS_STATE_PENDING, comercio = null), hoy, conEstado = false).titulo)
     }

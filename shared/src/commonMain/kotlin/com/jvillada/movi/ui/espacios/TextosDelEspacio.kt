@@ -346,6 +346,16 @@ fun loQueEspera(detalle: DetalleDelEspacio, ahora: Long): String? {
 }
 
 /**
+ * **El saldo en la lista de grupos** (vuelta 67, revisión): «Caro te debe $76.050» o «Están a mano», y
+ * lo que espera: «Están a mano · esperando $168.050 de Caro».
+ */
+fun saldoEnLaListaDeGrupos(detalle: DetalleDelEspacio, ahora: Long): String {
+    val frase = fraseDelSaldo(detalle.espacio, detalle.saldo)
+    val base = if (frase.monto > 0L) "${frase.titulo} ${formatCOP(frase.monto)}" else frase.titulo
+    return loQueEspera(detalle, ahora)?.let { "$base · $it" } ?: base
+}
+
+/**
  * **El título de la tarjeta del saldo** (vuelta 67): la frase de siempre ([fraseDelSaldo]) y, si el
  * grupo espera una transferencia, «Están a mano · esperando $168.050 de Caro».
  */

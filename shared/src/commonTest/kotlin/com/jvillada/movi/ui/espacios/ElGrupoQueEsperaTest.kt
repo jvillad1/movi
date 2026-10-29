@@ -85,4 +85,11 @@ class ElGrupoQueEsperaTest {
     fun `el No dice que tambien apaga la propuesta para un saldo futuro`() {
         assertTrue("saldo futuro" in DETALLE_DEL_NO_DE_SALDAR)
     }
+
+    @Test
+    fun `la lista de grupos tambien dice lo que espera`() {
+        val espera = LiquidacionDelEspacio("l1", casa.id, "dst_caro", MIEMBRO_YO, 168_050, fecha = dia(29))
+        assertEquals("Están a mano · esperando \$168.050 de Caro", saldoEnLaListaDeGrupos(detalle(listOf(espera)), dia(30)))
+        assertEquals("Caro te debe \$168.050", saldoEnLaListaDeGrupos(detalle(emptyList()), dia(30)))
+    }
 }

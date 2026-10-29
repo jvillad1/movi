@@ -739,13 +739,15 @@ internal fun MontoYTuParte(monto: Long, tuParte: Long) {
 /** Varios espacios: una fila por espacio, con su saldo dicho corto. */
 @Composable
 private fun ListaDeEspacios(detalles: List<DetalleDelEspacio>, onAbrir: (String) -> Unit) {
+    val ahora = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
     Superficie(relleno = RellenoDeSuperficie.Lista) {
         detalles.forEachIndexed { i, d ->
             if (i > 0) Separador()
-            val frase = fraseDelSaldo(d.espacio, d.saldo)
             Fila(
                 titulo = d.espacio.nombre,
-                subtitulo = if (frase.monto > 0L) "${frase.titulo} ${formatCOP(frase.monto)}" else frase.titulo,
+                // Vuelta 67 (revisión): también aquí, «Están a mano · esperando $168.050 de Caro».
+                subtitulo = saldoEnLaListaDeGrupos(d, ahora),
+                lineasDelSubtitulo = 2,
                 inicio = { IconoEnCirculo(Icons.Rounded.Groups) },
                 final = { Chevron() },
                 onClick = { onAbrir(d.espacio.id) },

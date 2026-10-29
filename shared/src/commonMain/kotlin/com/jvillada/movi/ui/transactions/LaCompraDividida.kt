@@ -95,7 +95,8 @@ internal fun ParteDeUnaCompra(evento: FinancialEvent, onDeshecho: (FinancialEven
             partesQueSeVen(leido).forEach { parte ->
                 Row(modifier = Modifier.fillMaxWidth()) {
                     Text(
-                        tituloDelMovimiento(parte) + if (parte.id == evento.id) " · esta" else "",
+                        // Vuelta 67 (revisión): cada parte por su categoría (el concepto es el mismo en todas).
+                        parte.category + if (parte.id == evento.id) " · esta" else "",
                         style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,
                         modifier = Modifier.weight(1f),
