@@ -313,7 +313,7 @@ fun CapturaDelBancoScreen(onNavigate: (Screen) -> Unit) {
                                 Spacer(Modifier.height(Espacio.s))
                                 if (silencioActual) {
                                     Text(
-                                        "Este aviso no se muestra en Hoy ni en Por revisar.",
+                                        "Este aviso no se muestra en Inicio ni en Por revisar.",
                                         style = Movi.textos.apoyo,
                                         color = Movi.colores.textoMedio,
                                     )

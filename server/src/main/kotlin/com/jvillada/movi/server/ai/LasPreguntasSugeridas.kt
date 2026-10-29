@@ -464,20 +464,20 @@ internal fun queRevisar(d: DatosDeLasSugeridas): String {
         val vencidos = d.pagos.filter { it.vencido && it.ruleId !in conDebito }
         when (vencidos.size) {
             0 -> Unit
-            1 -> add(CosaQueRevisar("«${vencidos.single().nombre}» venció y no está marcado.", "Si ya lo pagaste, anótalo y Movi lo tilda solo en Plan."))
+            1 -> add(CosaQueRevisar("«${vencidos.single().nombre}» venció y no está marcado.", "Si ya lo pagaste, anótalo y Movi lo tilda solo en Pagos."))
             else -> add(
                 CosaQueRevisar(
                     "${vencidos.size} pagos vencidos sin marcar: ${vencidos.joinToString(", ") { it.nombre }}.",
-                    "Si ya los pagaste, anótalos y Movi los tilda solos en Plan.",
+                    "Si ya los pagaste, anótalos y Movi los tilda solos en Pagos.",
                 ),
             )
         }
         d.disponible?.let { disp ->
             when {
                 !disp.hayMargen && (disp.disponible < 0L || disp.periodo.gastado > 0L) ->
-                    add(CosaQueRevisar(sinMargen(disp), "Míralo en la tarjeta Disponible de Plan."))
+                    add(CosaQueRevisar(sinMargen(disp), "Míralo en la tarjeta Disponible de Pagos."))
                 disp.periodo.teQuedan < 0L ->
-                    add(CosaQueRevisar("Te pasaste del disponible del período por ${pesosDelCierre(-disp.periodo.teQuedan)}.", "Míralo en la tarjeta Disponible de Plan."))
+                    add(CosaQueRevisar("Te pasaste del disponible del período por ${pesosDelCierre(-disp.periodo.teQuedan)}.", "Míralo en la tarjeta Disponible de Pagos."))
             }
         }
         d.presupuestos
@@ -518,7 +518,7 @@ internal fun queRevisar(d: DatosDeLasSugeridas): String {
         append(if (mostradas.size == 1) "Revisa esto:" else "Revisa esto, en este orden:")
         mostradas.forEachIndexed { i, cosa -> append("\n${i + 1}. ${cosa.texto.conPunto()} ${cosa.donde}") }
         val resto = cosas.size - mostradas.size
-        if (resto > 0) append("\n\nY ${if (resto == 1) "1 cosa más" else "$resto cosas más"} en «Para revisar», en Hoy.")
+        if (resto > 0) append("\n\nY ${if (resto == 1) "1 cosa más" else "$resto cosas más"} en «Para revisar», en Inicio.")
     }
 }
 

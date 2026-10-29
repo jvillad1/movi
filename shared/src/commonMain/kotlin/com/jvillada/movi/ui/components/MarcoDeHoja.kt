@@ -601,7 +601,9 @@ private fun HojaDesdeAbajo(
             .then(focoDelVeloModifier)
             // El velo se oscurece a la par de la hoja: entra, sale y se aclara mientras se arrastra.
             .drawBehind { drawRect(Color.Black.copy(alpha = OPACIDAD_DEL_VELO * estado.fraccionVisible())) }
-            .clickable(enabled = dismissEnabled && !estado.cerrando, onClick = estado::cerrar)
+            // Sin indicación (vuelta 61): el velo contiene al panel, y el estado de hover/foco de su
+            // `clickable` —un 8 % de tinta— se pintaba ENCIMA de todo lo de adentro. Ver [veloSinIndicacion].
+            .veloSinIndicacion(enabled = dismissEnabled && !estado.cerrando, onClick = estado::cerrar)
             // Con el velo apagado (guardando) los toques tampoco pasan a la barra de abajo.
             .tapaLoDeAbajo()
             // En la cáscara (encima de la barra de pestañas, de borde a borde) la hoja descuenta sola
@@ -628,6 +630,22 @@ private fun HojaDesdeAbajo(
         }
     }
 }
+
+/**
+ * # El toque del velo, sin indicación (vuelta 61)
+ *
+ * En la web **todas las hojas se veían grises**: el panel medía `#EBEBEB` en vez de `#FFFFFF` y el
+ * botón principal `#EBB318` en vez de `#FFC21A` — un 8 % de negro encima. Era el `clickable` del
+ * velo con la indicación del tema (el *ripple* de Material 3): el velo es el contenedor del panel, así
+ * que con el mouse sobre el panel (un descendiente) el velo también está en *hover*, y la capa de
+ * estado del *ripple* —hover 0,08; foco 0,10— se dibuja después del contenido, **encima del panel
+ * entero**. En el teléfono no hay hover y por eso nunca se vio.
+ *
+ * El velo no necesita indicación: su respuesta es cerrar la hoja. Los elementos enfocables de
+ * adentro siguen con su anillo de foco (vuelta 55, `anilloDeFoco`). Lo vigila `LasHojasSonBlancasTest`.
+ */
+internal fun Modifier.veloSinIndicacion(enabled: Boolean, onClick: () -> Unit): Modifier =
+    clickable(interactionSource = null, indication = null, enabled = enabled, onClick = onClick)
 
 /**
  * El velo es un destino de toques aunque no cierre nada (una hoja guardando): sin esto, con el
@@ -695,7 +713,7 @@ private fun HojaCentrada(
             .focusable()
             // El velo se oscurece a la par de la hoja (ver [EstadoDeLaHoja]).
             .drawBehind { drawRect(Color.Black.copy(alpha = OPACIDAD_DEL_VELO * hoja.fraccionVisible())) }
-            .clickable(enabled = dismissEnabled && !hoja.cerrando, onClick = hoja::cerrar)
+            .veloSinIndicacion(enabled = dismissEnabled && !hoja.cerrando, onClick = hoja::cerrar)
             .tapaLoDeAbajo()
             .testTag(TAG_VELO_DE_HOJA)
             // El velo va de borde a borde; el panel, dentro de lo que dejan las barras del sistema

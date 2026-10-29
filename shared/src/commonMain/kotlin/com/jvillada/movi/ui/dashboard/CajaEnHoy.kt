@@ -111,7 +111,7 @@ internal fun CajaEnHoy(
             titulo = fila?.rotulo ?: ROTULO_CAJA_SIN_DATO,
             subtitulo = when {
                 fila != null -> fila.cuando
-                noSePudo -> "No pudimos proyectarla: tócala para verla en Plan"
+                noSePudo -> "No pudimos proyectarla: tócala para verla en Pagos"
                 else -> ""
             },
             tonoDelTitulo = if (fila?.enRojo == true) TonoDeFila.Alerta else TonoDeFila.Normal,
@@ -133,7 +133,7 @@ internal fun CajaEnHoy(
                 }
             },
             onClick = { onNavigate(Screen.Plan(SEGMENTO_PAGOS)) },
-            onClickLabel = "Ver tu plata día a día en Plan",
+            onClickLabel = "Ver tu plata día a día en Pagos",
         )
     }
 }

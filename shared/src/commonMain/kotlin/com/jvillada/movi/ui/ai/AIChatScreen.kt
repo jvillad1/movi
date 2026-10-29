@@ -40,6 +40,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
+import androidx.compose.runtime.CompositionLocalProvider
+import com.jvillada.movi.ui.components.LocalHayTecladoFisico
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import com.jvillada.movi.data.Repositories
@@ -145,8 +153,11 @@ fun AIChatScreen(
      * las tres pasan por el mismo recorte de [mensajesParaEnviar] y la misma guarda de «ya hay
      * una pregunta en camino».
      */
-    fun enviar(texto: String, sugerida: PreguntaSugerida? = null) {
+    fun enviar(texto: String, delChip: PreguntaSugerida? = null) {
         val text = texto.trim()
+        // Vuelta 61: lo escrito a mano casi igual que una de las tres («¿Cómo voy?») viaja con su id,
+        // como el chip, y se contesta sin la IA. Con una foto pendiente no: la foto es para el modelo.
+        val sugerida = delChip ?: PreguntaSugerida.delTexto(text).takeIf { pendingImage == null }
         // Una de las tres sugeridas viaja sin la foto pendiente: la contesta Movi con sus números, y
         // la foto se queda esperando la pregunta para la que se adjuntó.
         val image = if (sugerida != null) null else pendingImage
@@ -316,7 +327,10 @@ fun AIChatScreen(
                 if (msg.role == ChatRole.USER) {
                     AIMsgUser(msg.content, hasImage = msg.imageBase64 != null || msg.teniaImagen)
                 } else {
-                    AIMsgAI(msg.content, apagado = pieza.deOtroDia)
+                    // Vuelta 61: los nombres de pantalla de la respuesta llevan a ella.
+                    CompositionLocalProvider(LocalAbrirPantallaDesdeElChat provides onNavigate) {
+                        AIMsgAI(msg.content, apagado = pieza.deOtroDia)
+                    }
                     val loQueEra = pieza.vieja ?: pieza.cifrasDe?.let(::textoDeLasCifrasViejas)
                     if (pieza.deOtroDia && loQueEra != null) {
                         // «Preguntar de nuevo» solo si se puede contestar: una pregunta libre sin la IA
@@ -419,6 +433,10 @@ fun AIChatScreen(
                 // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver
                 // [esAtajoDeSeleccionarTodo].
                 val campo = rememberCampoConSeleccion(input) { input = it }
+                // Vuelta 61: con teclado físico (la web, iOS con teclado), **Enter envía** y Shift+Enter
+                // sigue siendo un salto de renglón (no se atiende acá: lo hace el campo). En el
+                // teléfono Android el Enter del teclado en pantalla sigue siendo un salto de renglón.
+                val tecladoFisico = LocalHayTecladoFisico.current
                 BasicTextField(
                     value = campo.valor,
                     onValueChange = campo::alCambiar,
@@ -431,7 +449,15 @@ fun AIChatScreen(
                     // nada. Sin `fillMaxWidth` solo se podía escribir después de acertarle a
                     // una raya invisible.
                     modifier = Modifier.fillMaxWidth()
-                        .onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
+                        .testTag(TAG_CAMPO_DE_MOVI_AI)
+                        .onPreviewKeyEvent { evento ->
+                            if (tecladoFisico && esEnterParaEnviar(evento)) {
+                                send()
+                                true
+                            } else {
+                                campo.atajoDeSeleccionarTodo(evento)
+                            }
+                        },
                     decorationBox = { inner ->
                         if (input.isEmpty()) {
                             Text(
@@ -469,6 +495,18 @@ fun AIChatScreen(
         }
     }
 }
+
+/** Tag del campo de escribir de Movi AI. */
+internal const val TAG_CAMPO_DE_MOVI_AI: String = "ai-campo-de-escribir"
+
+/**
+ * **¿Esta tecla envía?** (vuelta 61): Enter (o el Enter del teclado numérico) al bajar, sin Shift.
+ * Shift+Enter es el salto de renglón. Solo se mira con teclado físico (ver el campo de Movi AI).
+ */
+internal fun esEnterParaEnviar(evento: KeyEvent): Boolean =
+    evento.type == KeyEventType.KeyDown &&
+        (evento.key == Key.Enter || evento.key == Key.NumPadEnter) &&
+        !evento.isShiftPressed
 
 /** Tag del encabezado de Movi AI, con su fondo opaco. */
 internal const val TAG_ENCABEZADO_DE_MOVI_AI: String = "ai-encabezado"

@@ -25,6 +25,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Psychology
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.ui.platform.testTag
+import com.jvillada.movi.ui.components.ds.AccionDeEncabezado
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -61,8 +64,10 @@ import com.jvillada.movi.ui.components.ds.Campo
  * conversación, así que tiene que poder verse entero, corregirse y borrarse sin pedirle nada a
  * nadie: una frase equivocada acá es un asistente que se equivoca siempre en lo mismo.
  *
- * Nada se agrega desde acá: lo que Movi recuerda nace de una conversación, con una propuesta que el
- * dueño confirma. Acá se mira y se arregla.
+ * Lo que Movi recuerda nace casi siempre de una conversación, con una propuesta que el dueño
+ * confirma. **Vuelta 61: también se escribe a mano** («Agregar», arriba, y en el vacío), con el mismo
+ * `POST /api/asistente/memoria` de siempre y el origen `A_MANO` («Lo escribiste tú»): sin crédito en
+ * Anthropic el chat no propone nada, y la memoria no se podía llenar de ninguna forma.
  */
 
 internal const val TITULO_LO_QUE_MOVI_SABE = "Lo que Movi sabe de ti"
@@ -75,7 +80,15 @@ internal const val NADA_TODAVIA = "Todavía no sé nada de ti"
 
 internal const val COMO_SE_LLENA =
     "Cuando le cuentes a Movi AI algo que valga la pena recordar —quién es quién, qué es cada pago—, " +
-        "te va a proponer guardarlo aquí. Nada se guarda sin que lo confirmes."
+        "te va a proponer guardarlo aquí. Nada se guarda sin que lo confirmes. También puedes escribirlo tú."
+
+internal const val AGREGAR = "Agregar"
+internal const val AGREGAR_UN_RECUERDO = "Escribir un recuerdo"
+internal const val ROTULO_DEL_RECUERDO_NUEVO = "Lo que Movi debe saber de ti"
+internal const val EJEMPLO_DE_RECUERDO = "Caro es mi esposa; el colegio de mi hija se paga el 25"
+
+/** El editor de un recuerdo nuevo, para encontrarlo en una prueba. */
+internal const val TAG_RECUERDO_NUEVO = "ai-recuerdo-nuevo"
 
 internal const val EDITAR = "Editar"
 internal const val BORRAR = "Borrar"
@@ -107,6 +120,21 @@ fun LoQueMoviSabeScreen(onNavigate: (Screen) -> Unit) {
     var fallo by remember { mutableStateOf(false) }
     var intento by remember { mutableStateOf(0) }
     var aviso by remember { mutableStateOf<String?>(null) }
+    var agregando by remember { mutableStateOf(false) }
+
+    fun guardarNuevo(texto: String, listo: () -> Unit) {
+        coroutine.launch {
+            runCatching { Repositories.wallets.guardarRecuerdo(texto, OrigenDelRecuerdo.A_MANO) }
+                .onSuccess { nuevo ->
+                    recuerdos.removeAll { it.id == nuevo.id }
+                    recuerdos.add(0, nuevo)
+                    aviso = null
+                    agregando = false
+                    listo()
+                }
+                .onFailure { aviso = motivoDeLaFalla(it); listo() }
+        }
+    }
 
     LaunchedEffect(intento) {
         cargando = true
@@ -121,6 +149,8 @@ fun LoQueMoviSabeScreen(onNavigate: (Screen) -> Unit) {
         MinScreenHeader(
             title = TITULO_LO_QUE_MOVI_SABE,
             leading = HeaderLeading.Back(fallback = Screen.Tu),
+            // Vuelta 61: escribir un recuerdo a mano (sin la IA, era la única forma que faltaba).
+            accion = AccionDeEncabezado(AGREGAR, Icons.Rounded.Add, onClick = { agregando = true; aviso = null }, habilitado = !agregando),
         )
         LazyColumn(
             contentPadding = PaddingValues(horizontal = Medida.margenDePantalla, vertical = Medida.dentroDeSeccion),
@@ -133,6 +163,11 @@ fun LoQueMoviSabeScreen(onNavigate: (Screen) -> Unit) {
             aviso?.let { texto ->
                 item { Text(texto, style = Movi.textos.apoyo, color = Movi.colores.sale) }
             }
+            if (agregando) {
+                item(key = "recuerdo-nuevo") {
+                    RecuerdoNuevo(onGuardar = ::guardarNuevo, onCancelar = { agregando = false })
+                }
+            }
             when {
                 cargando && recuerdos.isEmpty() -> item {
                     Column { repeat(3) { EsqueletoDeFila(conInicio = false, conFinal = false) } }
@@ -140,8 +175,14 @@ fun LoQueMoviSabeScreen(onNavigate: (Screen) -> Unit) {
                 fallo && recuerdos.isEmpty() -> item {
                     NoSePudoLeer("No pude cargar lo que Movi sabe de ti.", onReintentar = { intento++ })
                 }
-                recuerdos.isEmpty() -> item {
-                    Vacio(titulo = NADA_TODAVIA, detalle = COMO_SE_LLENA, icono = Icons.Rounded.Psychology)
+                recuerdos.isEmpty() -> if (!agregando) item {
+                    Vacio(
+                        titulo = NADA_TODAVIA,
+                        detalle = COMO_SE_LLENA,
+                        icono = Icons.Rounded.Psychology,
+                        accion = AGREGAR_UN_RECUERDO,
+                        onAccion = { agregando = true; aviso = null },
+                    )
                 }
                 else -> items(recuerdos, key = { it.id }) { recuerdo ->
                     FilaDeRecuerdo(
@@ -167,6 +208,34 @@ fun LoQueMoviSabeScreen(onNavigate: (Screen) -> Unit) {
                         },
                     )
                 }
+            }
+        }
+    }
+}
+
+/**
+ * **Un recuerdo nuevo, escrito a mano** (vuelta 61): el mismo editor que corregir uno —el [Campo] de
+ * hasta seis renglones con el tope de [LARGO_MAXIMO_DE_UN_RECUERDO]— con «Guardar» y «Cancelar».
+ */
+@Composable
+private fun RecuerdoNuevo(onGuardar: (String, () -> Unit) -> Unit, onCancelar: () -> Unit) {
+    var texto by remember { mutableStateOf("") }
+    var guardando by remember { mutableStateOf(false) }
+    Superficie(modifier = Modifier.fillMaxWidth().testTag(TAG_RECUERDO_NUEVO)) {
+        Column(verticalArrangement = Arrangement.spacedBy(Espacio.xs)) {
+            Campo(
+                texto,
+                { if (it.length <= LARGO_MAXIMO_DE_UN_RECUERDO) texto = it },
+                rotulo = ROTULO_DEL_RECUERDO_NUEVO,
+                ejemplo = EJEMPLO_DE_RECUERDO,
+                renglones = 6,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
+                Accion(GUARDAR, principal = true, habilitada = texto.isNotBlank() && !guardando) {
+                    guardando = true
+                    onGuardar(texto.trim()) { guardando = false }
+                }
+                Accion(CANCELAR, onClick = onCancelar)
             }
         }
     }

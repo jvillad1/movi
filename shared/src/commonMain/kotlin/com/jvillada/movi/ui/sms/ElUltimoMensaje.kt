@@ -41,7 +41,7 @@ const val LA_FECHA_DICE_LO_QUE_LLEGO: String = "Dice lo que llegó, no si la cap
 /** Lo que se abre en la web y en iOS: quién lee los mensajes y dónde se revisa lo pendiente. */
 internal const val QUIEN_LEE_LOS_MENSAJES: String =
     "Los mensajes los lee un teléfono Android con Movi instalado. Aquí queda el historial de lo que " +
-        "llegó; lo pendiente se revisa en «Por revisar», desde Movimientos."
+        "llegó; lo pendiente se revisa en «Por revisar», desde Actividad."
 
 /**
  * Arma [ElUltimoMensaje] con lo que dice [avisoDeCaptura] (en `:core`, la misma regla de siempre).
@@ -77,9 +77,9 @@ fun ayudaDelBancoQueSeCalla(dias: Int): Pair<String, String> =
     if (dias <= 0) {
         "Apagado: Movi no te avisa." to
             "Movi no te avisa si un banco deja de mandar mensajes, avisos o correos. Súbelo con «+» " +
-            "para que te avise en Hoy."
+            "para que te avise en Inicio."
     } else {
-        "Te avisa en Hoy tras ${textoDeDiasDeBancoMudo(dias)} sin nada." to
+        "Te avisa en Inicio tras ${textoDeDiasDeBancoMudo(dias)} sin nada." to
             "Si un banco que te avisaba siempre lleva ${textoDeDiasDeBancoMudo(dias)} sin mandar nada " +
-            "—mensajes, avisos o correos—, Movi te lo dice en Hoy. Con «Nunca», no te avisa."
+            "—mensajes, avisos o correos—, Movi te lo dice en Inicio. Con «Nunca», no te avisa."
     }

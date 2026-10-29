@@ -653,7 +653,7 @@ private fun GastosDelEspacio(
         )
         if (detalle.gastos.isEmpty()) {
             Text(
-                "Reparte un gasto desde su detalle en Movimientos, o anota lo que pagó ${otro ?: "otra persona"}.",
+                "Reparte un gasto desde su detalle en Actividad, o anota lo que pagó ${otro ?: "otra persona"}.",
                 style = Movi.textos.apoyo,
                 color = Movi.colores.textoMedio,
             )

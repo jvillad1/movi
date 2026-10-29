@@ -1783,7 +1783,7 @@ private fun SeccionEstoSeRepite(
         return
     }
     Text(
-        text = "Movi puede anotarlo en Plan · Pagos del mes con lo que ya tiene este movimiento: el " +
+        text = "Movi puede anotarlo en Pagos con lo que ya tiene este movimiento: el " +
             "concepto, el monto, la categoría, la cuenta y el día. El primer recordatorio será " +
             "el mes que viene, porque este pago ya lo hiciste.",
         style = Movi.textos.apoyo,
