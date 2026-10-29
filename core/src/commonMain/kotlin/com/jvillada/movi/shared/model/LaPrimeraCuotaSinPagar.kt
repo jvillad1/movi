@@ -1,6 +1,9 @@
 package com.jvillada.movi.shared.model
 
+import com.jvillada.movi.shared.time.AppTimeZone
 import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.Instant
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.minus
 import kotlinx.datetime.plus
@@ -18,7 +21,9 @@ import kotlinx.datetime.plus
  * no, la de octubre (por vencer o vencida: el saldo todavía la incluye). La última es esa más N − 1.
  *
  * Se cuenta en **meses de vencimiento** (el mes del día de pago), no en períodos del dueño: una cuota
- * vence un día del calendario, y es lo mismo que sella el pago de una cuota (`cuotaMasCercana`).
+ * vence un día del calendario. Qué cuota salda cada pago lo decide el server con la MISMA regla que
+ * `/api/payments/occurrences` y Pagos (`periodosSaldados`: un pago salda la cuota del período en que
+ * se hizo, #416), y llega en [CreditSummary.cuotasPagadas].
  */
 
 /** Las categorías con que se anota el pago de una cuota: la tuya, la de la nómina y la de un tercero. */
@@ -63,19 +68,27 @@ private fun elMasTarde(a: PeriodoFinanciero, b: PeriodoFinanciero): PeriodoFinan
  *   [proximoVencimientoDelDia], o sea, se supone pagada la cuota cuyo día ya pasó.
  * @param desde el desembolso, si se sabe: la primera cuota de un crédito vence **después** de él, nunca
  *   antes ni el mismo día.
+ * @param saldoFijadoEl el día del último movimiento que **fijó** el saldo —la apertura con la deuda
+ *   actual, o un ajuste—, si se sabe. Toda cuota que venció antes de ese día ya está descontada del
+ *   saldo, así que cuenta como pagada aunque no haya un pago anotado: un crédito recién creado con la
+ *   deuda de hoy no debe la cuota de este mes que ya venció.
  */
 fun mesDeLaPrimeraCuotaSinPagar(
     dia: Int,
     hoy: LocalDate,
     pagadas: Collection<String>?,
     desde: LocalDate? = null,
+    saldoFijadoEl: LocalDate? = null,
 ): PeriodoFinanciero {
     val laPrimeraDelCredito = desde?.let { d ->
         val enSuMes = vencimientoDelMes(d.year, d.monthNumber, dia)
         if (enSuMes > d) mesDe(enSuMes) else periodoSiguiente(mesDe(enSuMes))
     }
+    // La primera cuota que vence el día que se fijó el saldo, o después.
+    val laPrimeraDespuesDelSaldo = saldoFijadoEl?.let { mesDe(proximoVencimientoDelDia(dia, it)) }
     var mes = if (pagadas == null) mesDe(proximoVencimientoDelDia(dia, hoy)) else mesDe(hoy)
     if (laPrimeraDelCredito != null) mes = elMasTarde(mes, laPrimeraDelCredito)
+    if (laPrimeraDespuesDelSaldo != null) mes = elMasTarde(mes, laPrimeraDespuesDelSaldo)
     if (pagadas != null) {
         // Un tope por si alguien sella años por adelantado: nadie paga más de dos años de cuotas antes.
         var vueltas = 0
@@ -93,7 +106,10 @@ private const val MAX_CUOTAS_ADELANTADAS = 24
 fun mesDeLaPrimeraCuota(credit: CreditSummary, hoy: LocalDate): PeriodoFinanciero? {
     val terms = credit.terms ?: return null
     val desde = runCatching { LocalDate.parse(terms.startDate.trim()) }.getOrNull()
-    return mesDeLaPrimeraCuotaSinPagar(terms.dayOfMonth, hoy, credit.cuotasPagadas, desde)
+    val fijado = credit.saldoFijadoEn?.let {
+        Instant.fromEpochMilliseconds(it).toLocalDateTime(AppTimeZone.zone).date
+    }
+    return mesDeLaPrimeraCuotaSinPagar(terms.dayOfMonth, hoy, credit.cuotasPagadas, desde, fijado)
 }
 
 /** **El mes de la última cuota**: la primera sin pagar más las [meses] − 1 que siguen. */

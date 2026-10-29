@@ -41,6 +41,13 @@ import com.jvillada.movi.shared.model.openingEventFor
 import com.jvillada.movi.shared.model.transferLegsFor
 import com.jvillada.movi.shared.model.validateCreditDisbursement
 import com.jvillada.movi.shared.model.esPagoDeUnaCuota
+import com.jvillada.movi.shared.model.ADJUSTMENT_CATEGORY
+import com.jvillada.movi.shared.model.CUOTA_CATEGORY
+import com.jvillada.movi.shared.model.OPENING_CATEGORY
+import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.server.reminders.periodosSaldados
+import com.jvillada.movi.server.reminders.virtualRuleFor
+import com.jvillada.movi.server.time.ajustesDePeriodoDe
 import com.jvillada.movi.server.time.appDateToEpochMillis
 import java.time.LocalDate
 import io.ktor.http.HttpStatusCode
@@ -784,27 +791,51 @@ internal suspend fun creditosDe(uid: String): List<CreditSummary> {
     }
     val eventsByAccount = loadNonVoidedEvents(uid).groupBy { it.accountId }
     val hoy = AppClock.today()
+    // El período del dueño: decide qué cuota salda cada pago, igual que en `/api/payments/occurrences`.
+    val periodo = ajustesDePeriodoDe(uid)
     return loans.map { acc ->
         val terms = termsByAccount[acc.id]
         val eventos = eventsByAccount[acc.id] ?: emptyList()
-        summaryFor(acc, terms, eventos, rate)
-            .copy(cuotasPagadas = terms?.let { cuotasPagadasAlrededorDe(eventos, it.dayOfMonth, hoy) })
+        summaryFor(acc, terms, eventos, rate).copy(
+            cuotasPagadas = terms?.let { cuotasPagadasAlrededorDe(eventos, it, acc.name, hoy, periodo) },
+            saldoFijadoEn = saldoFijadoEn(eventos),
+        )
     }
 }
 
 /**
- * **Las cuotas ya pagadas de un crédito** (`"2026-10"`), de un año atrás a un año adelante de [hoy]:
- * cada pago de una cuota sobre la cuenta ([esPagoDeUnaCuota], sin anulados —[eventos] ya viene así)
- * sella la del vencimiento más cercano ([cuotaMasCercana], la misma regla que agrupa las partes de una
- * cuota). La pantalla cuenta las que faltan desde la primera sin pagar. Ver [CreditSummary.cuotasPagadas].
+ * **Las cuotas ya pagadas de un crédito** (`"2026-10"`), de un año atrás a un año adelante de [hoy].
+ *
+ * **La misma fuente que las ocurrencias** (`/api/payments/occurrences`, Pagos): [periodosSaldados]
+ * sobre la regla sintética del crédito ([virtualRuleFor]), con el período del dueño — un pago salda la
+ * cuota del período en que se hizo (#416). La primera versión sellaba con `cuotaMasCercana`, y un pago
+ * del 28 de octubre (día 5) salía «noviembre» acá y «octubre» en Pagos: la última cuota se anunciaba
+ * un mes antes.
+ *
+ * Una libranza o una cuota que paga otro no pasan por [periodosSaldados] (su categoría es otra y su
+ * regla no entra a los avisos): su registro ya va fechado en el vencimiento de su mes, así que se
+ * sella con [cuotaMasCercana]. [eventos] ya viene sin anulados.
  */
-internal fun cuotasPagadasAlrededorDe(eventos: List<FinancialEvent>, diaDePago: Int, hoy: LocalDate): List<String> {
+internal fun cuotasPagadasAlrededorDe(
+    eventos: List<FinancialEvent>,
+    terms: CreditTerms,
+    nombre: String,
+    hoy: LocalDate,
+    periodo: PeriodSettings,
+): List<String> {
     val desde = java.time.YearMonth.from(hoy).minusMonths(12).toString()
     val hasta = java.time.YearMonth.from(hoy).plusMonths(12).toString()
-    return eventos
-        .filter(::esPagoDeUnaCuota)
-        .map { cuotaMasCercana(com.jvillada.movi.server.time.epochMillisToAppDate(it.timestamp), diaDePago) }
-        .filter { it in desde..hasta }
-        .distinct()
-        .sorted()
+    val regla = virtualRuleFor(terms, nombre)
+    val propias = periodosSaldados(listOf(regla), eventos, settings = periodo)[regla.id].orEmpty()
+    val ajenas = eventos
+        .filter { esPagoDeUnaCuota(it) && it.category != CUOTA_CATEGORY }
+        .map { cuotaMasCercana(com.jvillada.movi.server.time.epochMillisToAppDate(it.timestamp), terms.dayOfMonth) }
+    return (propias + ajenas).filter { it in desde..hasta }.distinct().sorted()
 }
+
+/**
+ * **Cuándo se fijó el saldo por última vez**: la apertura (la deuda actual del alta) o el último ajuste.
+ * Ver [CreditSummary.saldoFijadoEn]. `null` si ninguno de los dos.
+ */
+internal fun saldoFijadoEn(eventos: List<FinancialEvent>): Long? =
+    eventos.filter { it.category == OPENING_CATEGORY || it.category == ADJUSTMENT_CATEGORY }.maxOfOrNull { it.timestamp }

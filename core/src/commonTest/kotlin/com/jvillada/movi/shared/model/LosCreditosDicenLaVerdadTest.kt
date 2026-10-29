@@ -108,6 +108,51 @@ class LosCreditosDicenLaVerdadTest {
         assertEquals(PeriodoFinanciero(2026, 10), mesDeLaPrimeraCuotaSinPagar(dia = 30, hoy = hoy, pagadas = emptyList()))
     }
 
+    /**
+     * **El caso de la revisión**: Vehículo 4083, día 5, primera cuota en febrero de 2026 y 60 cuotas. El
+     * pago del 28 de octubre salda octubre (como en Pagos), la próxima es el 5 de noviembre y le faltan
+     * 51: la última es la próxima + 51 − 1 = enero de 2031, no diciembre de 2030.
+     */
+    @Test
+    fun `con el pago del 28 de octubre la ultima es la proxima mas N menos 1`() {
+        val primera = mesDeLaPrimeraCuotaSinPagar(dia = 5, hoy = hoy, pagadas = listOf("2026-10"), desde = LocalDate(2026, 1, 10))
+        assertEquals(PeriodoFinanciero(2026, 11), primera)
+        assertEquals(PeriodoFinanciero(proximoVencimientoDelDia(5, hoy).year, proximoVencimientoDelDia(5, hoy).monthNumber), primera)
+        assertEquals(PeriodoFinanciero(2031, 1), mesDeLaUltimaCuota(primera, 51))
+        // Febrero de 2026 + 60 cuotas − 1 = enero de 2031: la misma fecha contada desde el principio.
+        assertEquals(PeriodoFinanciero(2031, 1), mesDeLaUltimaCuota(PeriodoFinanciero(2026, 2), 60))
+    }
+
+    /**
+     * **El crédito recién creado** con la deuda de hoy: decía «diciembre de 2030» con `cuotasPagadas: []`
+     * aunque su saldo ya descontaba la cuota de octubre. La que venció antes de fijar el saldo cuenta
+     * como pagada.
+     */
+    @Test
+    fun `en un credito recien creado la cuota que vencio antes del saldo cuenta como pagada`() {
+        assertEquals(
+            PeriodoFinanciero(2026, 11),
+            mesDeLaPrimeraCuotaSinPagar(dia = 5, hoy = hoy, pagadas = emptyList(), saldoFijadoEl = hoy),
+        )
+        // Fijado antes del vencimiento de este mes, esa cuota sigue debiéndose.
+        assertEquals(
+            PeriodoFinanciero(2026, 10),
+            mesDeLaPrimeraCuotaSinPagar(dia = 30, hoy = hoy, pagadas = emptyList(), saldoFijadoEl = LocalDate(2026, 10, 3)),
+        )
+        val recienCreado = CreditSummary(
+            account = Account("acc_v", "Vehículo 4083", AccountType.LOAN, 35_830_084L, "COP"),
+            terms = CreditTerms(
+                accountId = "acc_v", bank = "Banco", principal = 40_000_000L, rateEa = 18.0,
+                termMonths = 60, installment = 980_000L, dayOfMonth = 5, startDate = "2026-01-02",
+            ),
+            paidPct = 0.1,
+            cuotasPagadas = emptyList(),
+            // 29-oct-2026, mediodía en Bogotá.
+            saldoFijadoEn = 1_793_293_200_000L,
+        )
+        assertEquals(PeriodoFinanciero(2026, 11), mesDeLaPrimeraCuota(recienCreado, hoy))
+    }
+
     @Test
     fun `una cuota pagada por adelantado corre la primera`() {
         assertEquals(

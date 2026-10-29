@@ -336,15 +336,21 @@ data class CreditSummary(
      */
     val disbursement: TransferResult? = null,
     /**
-     * **Las cuotas ya pagadas** (`"2026-10"`), alrededor de hoy: cada pago de una cuota en esta cuenta
-     * ([esPagoDeUnaCuota]) sella la del vencimiento más cercano ([cuotaMasCercana]). Con esto la
-     * pantalla cuenta las cuotas que faltan desde la primera sin pagar ([mesDeLaPrimeraCuota]) y no
-     * desde el mes en curso (vuelta 59).
+     * **Las cuotas ya pagadas** (`"2026-10"`), alrededor de hoy, con la MISMA regla que
+     * `/api/payments/occurrences` y Pagos (`periodosSaldados`: un pago salda la cuota del período en que
+     * se hizo). Con esto la pantalla cuenta las cuotas que faltan desde la primera sin pagar
+     * ([mesDeLaPrimeraCuota]) y no desde el mes en curso (vuelta 59).
      *
      * Solo lo llena `GET /api/credits`. `null` = no se sabe (un server viejo, o una respuesta de alta o
      * de ajuste): la pantalla supone pagada la cuota cuyo día ya pasó.
      */
     val cuotasPagadas: List<String>? = null,
+    /**
+     * **Cuándo se fijó el saldo por última vez** (epoch ms): la apertura con la deuda actual o el último
+     * ajuste. Las cuotas que vencieron antes ya están descontadas del saldo, así que cuentan como
+     * pagadas ([mesDeLaPrimeraCuotaSinPagar]). Solo `GET /api/credits`; `null` = no se sabe.
+     */
+    val saldoFijadoEn: Long? = null,
 )
 
 /**
