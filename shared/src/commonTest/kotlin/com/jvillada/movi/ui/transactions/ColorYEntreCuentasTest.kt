@@ -93,9 +93,10 @@ class ColorYEntreCuentasTest {
     }
 
     @Test
-    fun `la cuota como par va entre cuentas, pero su pata del dinero suelta es un gasto en rojo`() {
-        // El par: plata de una cuenta suya a otra, sin signo, en el color de ENTRE_CUENTAS.
-        assertEquals(TonoDelMonto.ENTRE_CUENTAS, tonoDelRenglon(MovementRow.Transfer(cuotaDinero, cuotaDeuda)))
+    fun `la cuota es un gasto como par y como pata suelta, y la pata de la deuda no cuenta`() {
+        // Vuelta 50: el par se pinta como la pata que cuenta —la del dinero, un gasto—, con «−»: la
+        // cuota suma en «Gastos» (regla del dueño). Antes iba entre cuentas, como un traspaso.
+        assertEquals(TonoDelMonto.GASTO, tonoDelRenglon(MovementRow.Transfer(cuotaDinero, cuotaDeuda)))
         // Suelta —como queda en «Gastos», donde su hermana no entra— es plata que salió.
         assertEquals(TonoDelMonto.GASTO, tonoDelEvento(cuotaDinero))
         // La pata de la deuda nunca es un ingreso: baja la deuda, no llena el bolsillo.
@@ -114,9 +115,9 @@ class ColorYEntreCuentasTest {
     fun `entre cuentas no lleva signo, igual que neutro`() {
         // El pedido del dueño fue de COLOR, no de signo: la plata sigue sin haber entrado ni
         // salido del bolsillo, así que el par sigue sin «+» ni «−» (ver TransferRow).
+        // (La cuota ya no: es un gasto, ver arriba.)
         for (row in listOf(
             MovementRow.Transfer(traspasoSale, traspasoEntra),
-            MovementRow.Transfer(cuotaDinero, cuotaDeuda),
             MovementRow.Transfer(tarjetaDinero, tarjetaDeuda),
         )) {
             val tono = tonoDelRenglon(row)

@@ -2,6 +2,8 @@ package com.jvillada.movi.ui.buscar
 
 import com.jvillada.movi.shared.model.enFormaDeTitulo
 import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.laPataQueCuenta
 import com.jvillada.movi.shared.model.DestinoConocido
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.TransactionType
@@ -200,6 +202,26 @@ private fun pasaLosFiltros(evento: FinancialEvent, filtros: FiltrosDeBusqueda, p
 }
 
 /**
+ * **Una fila por par**, en el orden de [eventos]: de las dos patas de un `transferId` se queda **la que
+ * cuenta** ([laPataQueCuenta]: la de la cuenta de dinero en una cuota —un gasto, «−$980.000»— o en un
+ * desembolso) y, si ninguna cuenta (traspaso, pago de tarjeta), la primera. Antes se quedaba la primera
+ * siempre, y una cuota podía salir por la pata del crédito: sin signo y por el abono a capital, no por
+ * lo que salió de tu cuenta. Va en el lugar de la primera pata. Pura.
+ */
+fun unaPataPorPar(eventos: List<FinancialEvent>, tipos: Map<String, AccountType> = emptyMap()): List<FinancialEvent> {
+    val porPar = eventos.filter { it.transferId != null }.groupBy { it.transferId }
+    val vistos = mutableSetOf<String>()
+    return eventos.mapNotNull { evento ->
+        val par = evento.transferId ?: return@mapNotNull evento
+        if (!vistos.add(par)) return@mapNotNull null
+        val patas = porPar[par].orEmpty()
+        val salida = patas.firstOrNull { it.type == TransactionType.EXPENSE }
+        val entrada = patas.firstOrNull { it.type == TransactionType.INCOME }
+        if (salida != null && entrada != null) laPataQueCuenta(salida, entrada, tipos) ?: evento else evento
+    }
+}
+
+/**
  * **Buscar [consulta] en lo que hay a mano.** Vacío con la consulta en blanco. Los grupos sin
  * resultados no vienen.
  *
@@ -226,8 +248,8 @@ fun buscarEnMovi(
         .filter { (monto != null && it.amount == monto) || matchesQuery(it, consulta) }
         .filter { pasaLosFiltros(it, filtros, periodo) }
         .sortedByDescending { it.timestamp }
-        // Un traspaso son dos patas con el mismo `transferId`: se lista una.
-        .distinctBy { it.transferId ?: it.id }
+        // Un traspaso son dos patas con el mismo `transferId`: se lista una — la que cuenta (vuelta 50).
+        .let { unaPataPorPar(it, datos.cuentas.associate { c -> c.id to c.type }) }
 
     val movimientos = coinciden.take(TOPE_DE_MOVIMIENTOS_EN_LA_BUSQUEDA).map { ResultadoDeBusqueda.Movimiento(it) }
 
