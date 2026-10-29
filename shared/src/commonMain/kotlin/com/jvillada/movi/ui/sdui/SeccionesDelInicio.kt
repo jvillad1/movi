@@ -356,11 +356,13 @@ internal fun ProximoPagoSection(data: DashboardData, onNavigate: (Screen) -> Uni
                     style = Movi.textos.apoyoMedio,
                     color = if (proximo.urgente) Movi.colores.aviso else Movi.colores.textoMedio,
                 )
+                // Vuelta 55: hasta dos renglones. Con la letra al 130 % a 360 dp, «Administración del
+                // conjunto» al lado de «Anotar pago» no entra en uno y se cortaba.
                 Text(
                     text = pago.nombre,
                     style = Movi.textos.titulo,
                     color = Movi.colores.texto,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.testTag(TAG_NOMBRE_DEL_PROXIMO_PAGO),
                 )
@@ -380,7 +382,7 @@ internal fun ProximoPagoSection(data: DashboardData, onNavigate: (Screen) -> Uni
     }
 }
 
-/** El nombre del pago de «Próximo pago»: a 360 dp va entero, en un renglón. */
+/** El nombre del pago de «Próximo pago»: a 360 dp va entero (en un renglón con la letra de siempre). */
 const val TAG_NOMBRE_DEL_PROXIMO_PAGO: String = "inicio-nombre-del-proximo-pago"
 
 // ── Últimos movimientos ──────────────────────────────────────────────────────
