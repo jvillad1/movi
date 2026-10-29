@@ -29,6 +29,9 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import com.jvillada.movi.shared.model.MAX_CONCEPTO_LENGTH
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -1389,6 +1392,8 @@ fun SMSReconcileScreen(
         }
     }
 
+    /** Vuelta 57: el alto de la barra de Ignorar / Confirmar, medido, para el relleno del final de la lista. */
+    var altoDeLaBarra by remember { mutableStateOf(0.dp) }
     Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         // F60 · F22: el detalle vuelve a la bandeja si no hay historial (su padre lógico). Ola C:
         // esa bandeja es «Por revisar».
@@ -1401,13 +1406,17 @@ fun SMSReconcileScreen(
         // la cuenta, ya anotado), lo que Movi propone y los datos para ajustar—, cada bloque con su
         // [Seccion] y [Medida.entreSecciones] entre uno y otro.
         val pendiente = currentSms == null || currentSms.state == SMS_STATE_PENDING
+        val densidad = LocalDensity.current
         LazyColumn(
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).testTag(TAG_LISTA_DE_REVISAR_AVISO),
             contentPadding = PaddingValues(
                 start = Medida.margenDePantalla,
                 end = Medida.margenDePantalla,
                 top = Medida.dentroDeSeccion,
-                bottom = Medida.margenDePantalla,
+                // Vuelta 57: el contenido termina con un relleno del alto de la barra de Ignorar /
+                // Confirmar, para que lo último («Es el pago de una tarjeta ›») se pueda subir entero
+                // por encima de ella y no quede leyéndose a medias contra su borde.
+                bottom = maxOf(Medida.margenDePantalla, altoDeLaBarra),
             ),
             verticalArrangement = Arrangement.spacedBy(Medida.entreSecciones),
         ) {
@@ -1799,24 +1808,23 @@ fun SMSReconcileScreen(
                     val accionesDeDeuda = if ((currentSms != null && currentSms.state != SMS_STATE_PENDING) || enPartes) emptyList()
                     else accionesDeDeudaDelAviso(parsed, categoriaActual, accounts)
                     if (accionesDeDeuda.isNotEmpty()) {
+                        // Vuelta 57: el mismo enlace que «Esto pagó varias cosas» (Fantasma, S): iban en
+                        // letra más chica y se leían como una nota, no como una acción.
                         Column(modifier = Modifier.padding(top = Espacio.xs)) {
                             accionesDeDeuda.forEach { deuda ->
-                                Text(
-                                    deuda.accion,
-                                    style = Movi.textos.apoyoMedio,
-                                    color = Movi.colores.enlace,
-                                    modifier = Modifier
-                                        .clickable(enabled = !working, role = Role.Button) {
-                                            selectedCategory = deuda.categoria
-                                            deudaPedida = deuda
-                                            eligiendoCategoria = false
-                                            deudaTocadaAMano = false
-                                            if (cuentaDeDeudaElegida?.type != deuda.tipo) cuentaDeDeudaElegida = null
-                                        }
-                                        .testTag(deuda.tag)
-                                        .heightIn(min = Medida.objetivoTactil)
-                                        .padding(horizontal = Espacio.s)
-                                        .wrapContentHeight(),
+                                Boton(
+                                    texto = deuda.accion,
+                                    onClick = {
+                                        selectedCategory = deuda.categoria
+                                        deudaPedida = deuda
+                                        eligiendoCategoria = false
+                                        deudaTocadaAMano = false
+                                        if (cuentaDeDeudaElegida?.type != deuda.tipo) cuentaDeDeudaElegida = null
+                                    },
+                                    variante = VarianteDeBoton.Fantasma,
+                                    tamano = TamanoDeBoton.S,
+                                    habilitado = !working,
+                                    modifier = Modifier.testTag(deuda.tag),
                                 )
                             }
                         }
@@ -1929,7 +1937,10 @@ fun SMSReconcileScreen(
                     .testTag(TAG_CUOTA_YA_PAGADA_EN_EL_AVISO),
             )
         } else Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = Medida.margenDePantalla, vertical = Espacio.s),
+            modifier = Modifier
+                .fillMaxWidth()
+                .onSizeChanged { altoDeLaBarra = with(densidad) { it.height.toDp() } }
+                .padding(horizontal = Medida.margenDePantalla, vertical = Espacio.s),
             horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
         ) {
             Boton(
@@ -2050,9 +2061,13 @@ fun SMSReconcileScreen(
  * Movimientos. Lo que quede escrito es el concepto y el comercio del movimiento; vacío vuelve al
  * leído, que se muestra de guía mientras tanto.
  *
- * Tiene la anatomía de una [Fila] (el estado al inicio, el rótulo y el valor, «Editar» al final),
- * con el campo en el lugar del valor: el mismo del concepto en la hoja del movimiento
- * ([rememberCampoConSeleccion], con ⌘A en la web), con el tope de la columna.
+ * Tiene la anatomía de una [Fila] (el estado al inicio, el rótulo y el valor, «Editar» al final).
+ *
+ * **Vuelta 57 · se lee desde el principio.** El campo de una línea, sin foco, quedaba desplazado hasta el
+ * final del texto: a 360 dp se leía «anco de Occidente S A ATH», cortado por la izquierda y sin «…».
+ * Fuera de edición el valor es un [Text] de hasta dos renglones con «…» al final; tocar la fila (o
+ * «Editar») abre el campo de siempre ([rememberCampoConSeleccion], con ⌘A en la web) con el foco, y al
+ * perderlo vuelve el texto.
  */
 @Composable
 private fun ComercioQueSeEdita(
@@ -2064,12 +2079,18 @@ private fun ComercioQueSeEdita(
 ) {
     // Toda la fila lleva al campo, como las demás filas de este resumen llevan a lo suyo.
     val foco = remember { FocusRequester() }
+    var editando by remember { mutableStateOf(false) }
+    /** El campo ya tuvo el foco: perderlo después cierra la edición (antes de tenerlo, no). */
+    var tuvoFoco by remember { mutableStateOf(false) }
+    LaunchedEffect(editando) { if (editando) runCatching { foco.requestFocus() } }
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = Medida.altoDeFilaDoble)
             .testTag(TAG_CONFIRMA_O_AJUSTA_COMERCIO)
-            .clickable(enabled = enabled) { foco.requestFocus() }
+            .clickable(enabled = enabled) {
+                if (editando) runCatching { foco.requestFocus() } else editando = true
+            }
             .padding(horizontal = Medida.margenDePantalla, vertical = Espacio.xs),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Espacio.s),
@@ -2082,29 +2103,54 @@ private fun ComercioQueSeEdita(
                 style = Movi.textos.apoyo,
                 color = if (ok) Movi.colores.textoMedio else Movi.colores.aviso,
             )
-            val campo = rememberCampoConSeleccion(valor) { onCambio(it.take(MAX_CONCEPTO_LENGTH)) }
-            BasicTextField(
-                value = campo.valor,
-                onValueChange = campo::alCambiar,
-                enabled = enabled,
-                cursorBrush = SolidColor(Movi.colores.texto),
-                textStyle = Movi.textos.cuerpo.copy(color = Movi.colores.texto),
-                singleLine = true,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .focusRequester(foco)
-                    .onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
-                decorationBox = { inner ->
-                    if (valor.isEmpty()) {
-                        Text(leido, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
-                    }
-                    inner()
-                },
-            )
+            if (editando && enabled) {
+                val campo = rememberCampoConSeleccion(valor) { onCambio(it.take(MAX_CONCEPTO_LENGTH)) }
+                BasicTextField(
+                    value = campo.valor,
+                    onValueChange = campo::alCambiar,
+                    enabled = enabled,
+                    cursorBrush = SolidColor(Movi.colores.texto),
+                    textStyle = Movi.textos.cuerpo.copy(color = Movi.colores.texto),
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(foco)
+                        .onFocusChanged { estado ->
+                            if (estado.isFocused) tuvoFoco = true
+                            else if (tuvoFoco) {
+                                tuvoFoco = false
+                                editando = false
+                            }
+                        }
+                        .onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
+                    decorationBox = { inner ->
+                        if (valor.isEmpty()) {
+                            Text(leido, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
+                        }
+                        inner()
+                    },
+                )
+            } else {
+                // Desde el principio, con «…» al final si no cabe en dos renglones.
+                Text(
+                    valor.ifEmpty { leido },
+                    style = Movi.textos.cuerpo,
+                    color = if (valor.isEmpty()) Movi.colores.textoMedio else Movi.colores.texto,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.testTag(TAG_COMERCIO_A_LA_VISTA),
+                )
+            }
         }
         Text("Editar", style = Movi.textos.cuerpo, color = Movi.colores.enlace)
     }
 }
+
+/** El tag de la lista de Revisar aviso (lo que se desplaza sobre la barra de Ignorar / Confirmar). */
+const val TAG_LISTA_DE_REVISAR_AVISO: String = "sms:lista"
+
+/** El tag del comercio a la vista (fuera de edición) en «Confirma o ajusta». */
+const val TAG_COMERCIO_A_LA_VISTA: String = "sms:comercio:a-la-vista"
 
 /**
  * Una fila del resumen «Confirma o ajusta»: una [Fila] del sistema con el estado al inicio (listo, o
