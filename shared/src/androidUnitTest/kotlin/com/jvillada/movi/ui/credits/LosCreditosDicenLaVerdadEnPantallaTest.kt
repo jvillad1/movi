@@ -86,6 +86,7 @@ class LosCreditosDicenLaVerdadEnPantallaTest {
         }
 
         assertTrue(hay(SIN_SALDO_EN_MOVI))
+        assertEquals(1, cuantos(FALTA_EL_SALDO_DE_LA_DEUDA), "la ficha lo decía dos veces")
         assertFalse(hay("+\$980.000"), "el «+$980.000» en verde de antes")
         assertFalse(hay("−\$980.000"))
         // «Cuadrar» abre la hoja de ajustar el saldo de su ficha, que tampoco dice la cifra al revés.
@@ -114,6 +115,29 @@ class LosCreditosDicenLaVerdadEnPantallaTest {
         // Y el crédito sin saldo se nombra con su salida.
         assertTrue(hay("1 crédito sin saldo"))
         composeRule.onAllNodesWithTag(TAG_DEUDAS_SIN_SALDO, useUnmergedTree = true).fetchSemanticsNodes().single()
+        composeRule.onNode(hasText(CUADRAR_LAS_DEUDAS_SIN_SALDO) and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        assertEquals(Screen.CuadrarLaCuenta("acc_4083"), destinos.last())
+    }
+
+    /** Patrimonio decía «Deudas −$603.000» y abajo «Créditos y tarjetas $1.583.000», sin explicar por qué. */
+    @Test
+    fun `patrimonio dice que sus deudas incluyen el credito sin saldo`() {
+        val destinos = mutableListOf<Screen>()
+        val ahorros = Account("acc_ah", "Ahorros", AccountType.SAVINGS, 10_000_000L, balancesByCurrency = mapOf("COP" to 10_000_000L))
+        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+            override suspend fun getAccounts(): List<Account> = listOf(ahorros, vehiculo.account, nu.account)
+            override suspend fun getCredits(): List<CreditSummary> = listOf(vehiculo)
+            override suspend fun getCards(): List<CardSummary> = listOf(nu)
+            override suspend fun getDestinos(): List<DestinoConocido> = emptyList()
+            override suspend fun getApartados(): List<com.jvillada.movi.shared.model.Apartado> = emptyList()
+        }
+        composeRule.setContent {
+            MoviTheme { Box(Modifier.fillMaxSize()) { com.jvillada.movi.ui.accounts.AccountsScreen(onNavigate = { destinos += it }) } }
+        }
+        composeRule.waitUntil(5_000) { hay("Incluye 1 crédito sin saldo") }
+        composeRule.onAllNodesWithTag(com.jvillada.movi.ui.accounts.TAG_DEUDAS_SIN_SALDO_EN_EL_PATRIMONIO, useUnmergedTree = true)
+            .fetchSemanticsNodes().single()
         composeRule.onNode(hasText(CUADRAR_LAS_DEUDAS_SIN_SALDO) and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
         assertEquals(Screen.CuadrarLaCuenta("acc_4083"), destinos.last())

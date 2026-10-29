@@ -297,7 +297,10 @@ private fun LoQueDiceElPrestamo(
         }
         val progreso = progresoDeCredito(credit)
         if (progreso.esAviso) {
-            Text(progreso.etiqueta, style = Movi.textos.apoyo, color = Movi.colores.aviso)
+            // Vuelta 59: «Movi no tiene su saldo…» ya lo dice el encabezado de la ficha, con «Cuadrar».
+            if (progreso.etiqueta != FALTA_EL_SALDO_DE_LA_DEUDA) {
+                Text(progreso.etiqueta, style = Movi.textos.apoyo, color = Movi.colores.aviso)
+            }
         } else {
             prestamoEnLaLista(credit, plan, periodoActual, hoy).let { enLaLista ->
                 val fraccion = enLaLista.fraccionPagada
