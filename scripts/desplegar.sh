@@ -24,7 +24,10 @@
 #
 # **El respaldo**, `--desde-fuente`, hace lo de antes de la vuelta 69: `git archive` de
 # origin/master y el `Dockerfile` completo armando todo en Railway. Sirve si GitHub Actions está
-# caído o el paquete no se puede armar; vuelve a chocar con el límite de ~20 min.
+# caído o el paquete no se puede armar; vuelve a chocar con el límite de ~20 min. Si `railway up`
+# falla al SUBIR el paquete (sin id de despliegue: un 500, un límite de tamaño), el script imprime
+# el motivo y repite solo por este camino, una vez. Un build que falla dentro de Railway no se
+# repite: es un error, como siempre.
 #
 # Uso: ./scripts/desplegar.sh                  # paquete de Actions + railway up del JAR, y espera
 #      ./scripts/desplegar.sh --sin-esperar
@@ -227,7 +230,7 @@ if ! subir "$SUBIDA"; then
         echo "══ No encontré el id del despliegue en la salida de railway up"; exit 1
     fi
     # **El respaldo automático, una sola vez.** Si lo que falló fue SUBIR el paquete (el JAR pesa
-    # ~84 MB y Railway no documenta un límite: ver CLAUDE.md), se repite por el camino de
+    # ~87 MB y Railway no documenta un límite: ver CLAUDE.md), se repite por el camino de
     # --desde-fuente, que sube solo el código. Un build que falla DENTRO de Railway no llega acá:
     # ese sí tiene id, y abajo sigue siendo un error.
     echo "══ La subida del paquete falló sin id de despliegue (el motivo está arriba)."
