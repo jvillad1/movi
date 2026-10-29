@@ -4,8 +4,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.FinancialEvent
@@ -63,42 +70,61 @@ fun montoPagoDeTarjetaEnElDia(items: List<FinancialEvent>, accountTypes: Map<Str
     }.sumOf { it.amount }
 
 /**
- * La frase que explica el pago de tarjeta del día, o `null` si ese día no tuvo ninguno — el caso
- * normal, donde «Flujo del día» ya cuenta la historia completa y no hay nada que agregar encima.
+ * La nota del pago de tarjeta del día, en **un solo renglón** —«+ $100.000 a tu tarjeta · no suma, ya
+ * contó al comprar»—, o `null` si ese día no tuvo ninguno (el caso normal: no hay nada que agregar).
  *
  * Ola W: ya no aclara una exclusión (esa plata SÍ está en el total de arriba, desde `diasVisibles`)
  * — aclara que no se cuenta dos veces: el gasto real ya quedó registrado el día de la compra, así
  * que el período/Disponible no vuelve a restarlo cuando se paga la tarjeta.
  *
- * Vuelta 40: el encabezado del día dice «Gastaste $X» con la regla de «Gastos», que no cuenta el
- * pago de tarjeta; la frase pasó de «De eso, …» a «Además, …»: esa plata salió igual de tu cuenta.
+ * Vuelta 52: era una frase de dos renglones («Además, $X fueron a pagar tarjeta — ya contado en tu
+ * gasto del mes cuando compraste, no se duplica.») en un encabezado de día. Ahora cabe en uno; si ni
+ * así cabe (360 dp con la letra ×1,12), [LineaPagoDeTarjetaEnElDia] baja a [textoCortoDelPagoDeTarjeta]
+ * y la frase entera queda en [explicacionDelPagoDeTarjeta], que es lo que lee el lector de pantalla.
  */
 fun textoPagoDeTarjetaEnElDia(monto: Long): String? =
-    if (monto <= 0L) {
-        null
-    } else {
-        "Además, ${formatCOP(monto)} fueron a pagar tarjeta — ya contado en tu gasto del mes cuando " +
-            "compraste, no se duplica."
-    }
+    if (monto <= 0L) null else "+ ${formatCOP(monto)} a tu tarjeta · no suma, ya contó al comprar"
+
+/** La nota recortada a lo esencial, para cuando la completa no cabe en el renglón. */
+fun textoCortoDelPagoDeTarjeta(monto: Long): String? =
+    if (monto <= 0L) null else "+ ${formatCOP(monto)} a tu tarjeta"
+
+/**
+ * La explicación entera, con todas las palabras: va como `contentDescription` de la línea (que a la
+ * vista queda en un renglón) para que nada de lo que decía la frase larga se pierda.
+ */
+fun explicacionDelPagoDeTarjeta(monto: Long): String? =
+    if (monto <= 0L) null else "Además, ${formatCOP(monto)} fueron a pagar tarjeta — ya contado en tu gasto " +
+        "del mes cuando compraste, no se duplica."
 
 /** El tag de la línea de pago de tarjeta del día, para que las pruebas la encuentren. */
 const val TAG_PAGO_DE_TARJETA_EN_EL_DIA: String = "pago-de-tarjeta-en-el-dia"
 
 /**
- * La línea de contexto del pago de tarjeta del día, debajo del «Flujo del día» —ver
- * [textoPagoDeTarjetaEnElDia]. No reserva
- * alto cuando no hay nada que decir: el monto sale de movimientos que la pantalla ya tiene en
- * memoria, sin ninguna lectura en vuelo que pueda hacer saltar la lista al contestar.
+ * La línea de contexto del pago de tarjeta del día, debajo del encabezado —ver
+ * [textoPagoDeTarjetaEnElDia]. **Un renglón, apagada**, que no cambia de alto: si la nota completa se
+ * sale del ancho se pinta la corta ([textoCortoDelPagoDeTarjeta]) en el mismo renglón. No reserva alto
+ * cuando no hay nada que decir: el monto sale de movimientos que la pantalla ya tiene en memoria, sin
+ * ninguna lectura en vuelo que pueda hacer saltar la lista al contestar.
  */
 @Composable
-internal fun LineaPagoDeTarjetaEnElDia(texto: String) {
+internal fun LineaPagoDeTarjetaEnElDia(monto: Long) {
+    val largo = textoPagoDeTarjetaEnElDia(monto) ?: return
+    val corto = textoCortoDelPagoDeTarjeta(monto) ?: return
+    val explicacion = explicacionDelPagoDeTarjeta(monto) ?: return
+    var noCabe by remember(monto) { mutableStateOf(false) }
     Text(
-        text = texto,
+        text = if (noCabe) corto else largo,
         modifier = Modifier
             .fillMaxWidth()
             .padding(bottom = Espacio.xs)
+            .semantics { contentDescription = explicacion }
             .testTag(TAG_PAGO_DE_TARJETA_EN_EL_DIA),
         style = Movi.textos.apoyo,
         color = Movi.colores.textoApagado,
+        maxLines = 1,
+        softWrap = false,
+        overflow = TextOverflow.Clip,
+        onTextLayout = { if (!noCabe && it.didOverflowWidth) noCabe = true },
     )
 }
