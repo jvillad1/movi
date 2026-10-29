@@ -937,8 +937,14 @@ fun tarjetaEnLaLista(card: CardSummary, hoy: LocalDate): DeudaEnLaLista {
     }
     val fecha = fechaEnPalabras(proximaFechaDelDia(terms.paymentDay, hoy), hoy)
     val minimo = terms.pagoMinimo?.takeIf { deuda > 0L }
+    // Vuelta 62: con el extracto del corte, la lista dice lo mismo que la ficha (no el mínimo suelto).
+    val extracto = card.extracto?.takeIf { deuda > 0L }
     return DeudaEnLaLista(
-        subtitulo = if (minimo != null) "Pago mínimo ${formatMoney(minimo, moneda)} · $fecha" else "Fecha de pago · $fecha",
+        subtitulo = when {
+            extracto != null -> lineaCortaDelExtracto(extracto)
+            minimo != null -> "Pago mínimo ${formatMoney(minimo, moneda)} · $fecha"
+            else -> "Fecha de pago · $fecha"
+        },
         // Vuelta 59: una tarjeta en negativo no dice «−$50.000»: dice que Movi no tiene su saldo.
         sinSaldo = deuda < 0L,
         nota = if (deuda < 0L) NotaDeLaDeuda(FALTA_EL_SALDO_DE_LA_DEUDA, esAlerta = false) else null,

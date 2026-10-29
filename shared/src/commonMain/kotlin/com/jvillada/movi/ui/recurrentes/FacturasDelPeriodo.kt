@@ -5,6 +5,7 @@ import com.jvillada.movi.ui.credits.PUEDE_INCLUIR_DIFERIDOS
 import com.jvillada.movi.ui.credits.ROTULO_DEL_EXTRACTO
 import com.jvillada.movi.ui.credits.alternativaDelMinimo
 import com.jvillada.movi.ui.credits.montoDelExtracto
+import com.jvillada.movi.ui.credits.loQueFaltaDelExtracto
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -288,6 +289,7 @@ internal fun FilaDeFactura(
             // «Pagado» arriba de su «⋯»: es justo lo que «No fue este» y «Quitar la marca» discuten.
             // Vuelta 51: la cuota de un crédito dice cómo deshacerla (`notaDelMenuDeLaFilaPagada`).
             notaDelMenu = notaDelMenuDeLaFilaPagada(pago, evidencia),
+            extracto = extracto,
         )
         return
     }
@@ -406,6 +408,8 @@ private fun FilaDeFacturaPagada(
     etiquetaDeTocar: String?,
     accionesDelMenu: List<Pair<String, () -> Unit>>,
     notaDelMenu: String? = null,
+    /** Vuelta 62: el extracto de la tarjeta que sigue abierto aunque un abono haya sellado la fila. */
+    extracto: ExtractoDeLaTarjeta? = null,
 ) {
     Box(modifier = Modifier.fillMaxWidth().testTag(TAG_FILA_DE_FACTURA)) {
     Row(
@@ -454,6 +458,11 @@ private fun FilaDeFacturaPagada(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
+                    }
+                    // Vuelta 62 (revisión): un abono menor que el extracto sella la fila, pero el
+                    // extracto sigue abierto. La regla del sello no cambia; la fila lo dice.
+                    extracto?.let { e ->
+                        Text(loQueFaltaDelExtracto(e), style = Movi.textos.apoyo, color = Movi.colores.aviso)
                     }
                 }
             }

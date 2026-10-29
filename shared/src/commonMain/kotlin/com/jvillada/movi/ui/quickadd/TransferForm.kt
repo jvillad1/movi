@@ -3,9 +3,10 @@ package com.jvillada.movi.ui.quickadd
 import com.jvillada.movi.shared.model.CardSummary
 import com.jvillada.movi.ui.components.ds.PildoraDeAccion
 import com.jvillada.movi.ui.credits.pastillasDelPagoDeLaTarjeta
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import com.jvillada.movi.ui.credits.extractoPagado
+import com.jvillada.movi.ui.credits.mesDelPagoDeLaTarjeta
 import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.ui.components.ds.NivelDeSuperficie
 import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
@@ -632,6 +633,7 @@ internal enum class ModoDeTraspaso {
     PAGO_DE_CUOTA,
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun TransferBody(
     accounts: List<Account>,
@@ -1270,7 +1272,12 @@ internal fun TransferBody(
             // Vuelta 48 · **qué se está anotando**, en un renglón: «Cuota de Libre inversión 9695 ·
             // octubre». Desde la fila de Pagos, el mes es el de esa cuota.
             val mesDeHoy = remember(ajustesDelPeriodo) { mesDelPeriodoDeHoy(ajustesDelPeriodo, Clock.System.now().toEpochMilliseconds()) }
-            val mes = presetMesDeLaCuota?.takeIf { it.isNotBlank() && to?.id == presetDestinoId } ?: mesDeHoy
+            // Vuelta 62 (revisión): una tarjeta con su extracto se nombra por su corte, no por «octubre».
+            val extractoDelDestino = to?.takeIf { it.type == AccountType.CREDIT_CARD }
+                ?.let { tarjetasPorCuenta[it.id]?.extracto }
+                ?.takeIf { !extractoPagado(it) }
+            val mes = extractoDelDestino?.let { mesDelPagoDeLaTarjeta(it) }
+                ?: presetMesDeLaCuota?.takeIf { it.isNotBlank() && to?.id == presetDestinoId } ?: mesDeHoy
             Text(
                 encabezadoDeLaCuota(to, abonoExtra, mes),
                 style = Movi.textos.cuerpoFuerte,
@@ -1490,14 +1497,16 @@ internal fun TransferBody(
             if (to == null || to.type == AccountType.CREDIT_CARD) {
                 val pastillas = if (to != null && !pagoEntreMonedas) pastillasDelPagoDeLaTarjeta(tarjetasPorCuenta[to.id]) else emptyList()
                 Spacer(Modifier.height(Espacio.xs))
-                Row(
+                // Revisión: a 390 dp «Otro monto» se salía de la pantalla y «Mínimo» quedaba cortada.
+                // Textos cortos («Extracto $X», «Mínimo $Y», «Otro») que caben en un renglón, y un
+                // FlowRow por si una letra grande no los deja caber: bajan, no se salen.
+                FlowRow(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = Medida.altoChico)
-                        .horizontalScroll(rememberScrollState())
                         .testTag(TAG_PASTILLAS_DEL_PAGO_DE_LA_TARJETA),
                     horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
-                    verticalAlignment = Alignment.CenterVertically,
+                    verticalArrangement = Arrangement.spacedBy(Espacio.xs),
                 ) {
                     pastillas.forEach { pastilla ->
                         PildoraDeAccion(

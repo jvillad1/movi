@@ -334,19 +334,32 @@ private fun LoQueDiceLaTarjeta(card: CardSummary) {
     if (extracto != null) {
         // Vuelta 62 · **el extracto, por fechas**: lo facturado al corte (menos lo ya pagado), el mínimo y
         // cuándo pagarlo; debajo, lo que entró después del corte y va al próximo extracto.
-        Fila(
-            titulo = tituloDelExtracto(extracto),
-            subtitulo = detalleDelExtracto(extracto),
-            lineasDelSubtitulo = 2,
-            inicio = { IconoEnCirculo(Icons.Rounded.Event, tono = TonoDeIcono.Neutro) },
-            final = { MontoDeFila(montoDelExtracto(extracto.facturado, extracto.moneda)) },
-            modifier = Modifier.testTag(TAG_EXTRACTO_DE_LA_TARJETA),
-        )
+        val pagado = extractoPagado(extracto)
+        if (pagado) {
+            // Revisión: con el extracto pagado no hay mínimo, ni fecha, ni diferidos que advertir.
+            Fila(
+                titulo = tituloDelExtractoPagado(extracto),
+                inicio = { IconoEnCirculo(Icons.Rounded.Event, tono = TonoDeIcono.Neutro) },
+                modifier = Modifier.testTag(TAG_EXTRACTO_DE_LA_TARJETA),
+            )
+        } else {
+            Fila(
+                titulo = tituloDelExtracto(extracto),
+                subtitulo = detalleDelExtracto(extracto),
+                lineasDelSubtitulo = 2,
+                inicio = { IconoEnCirculo(Icons.Rounded.Event, tono = TonoDeIcono.Neutro) },
+                final = { MontoDeFila(montoDelExtracto(extracto.facturado, extracto.moneda)) },
+                modifier = Modifier.testTag(TAG_EXTRACTO_DE_LA_TARJETA),
+            )
+        }
+        val yaPagado = if (pagado) null else loYaPagadoDelExtracto(extracto)
         val despues = lineaDespuesDelCorte(extracto)
-        if (despues != null || extracto.puedeIncluirDiferidos) {
+        val diferidos = extracto.puedeIncluirDiferidos && !pagado
+        if (yaPagado != null || despues != null || diferidos) {
             BajoLaFila {
+                yaPagado?.let { Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio) }
                 despues?.let { Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio) }
-                if (extracto.puedeIncluirDiferidos) {
+                if (diferidos) {
                     Text(PUEDE_INCLUIR_DIFERIDOS, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
                 }
             }
