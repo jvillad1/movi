@@ -77,7 +77,10 @@ class ElApartadoQueAvisaTest {
         val v = assertNotNull(teQuedanConElApartado(inicio(), colegio, hoy))
         assertEquals(1_450_950L, v.antes)
         assertEquals(-549_050L, v.despues)
-        assertEquals("Te quedan pasa de \$1.450.950 a −\$549.050", fraseDeLaVistaPrevia(v))
+        val frase = fraseDeLaVistaPrevia(v)
+        assertEquals("Te quedan pasa de \$1.450.950 a −\$549.050", frase.replace(UNION_QUE_NO_SE_PARTE, "").replace(ESPACIO_QUE_NO_SE_PARTE, " "))
+        // Revisión de la vuelta 64: el «−» no queda solo al final del renglón, ni la cifra sin su «a».
+        assertTrue("a$ESPACIO_QUE_NO_SE_PARTE−$UNION_QUE_NO_SE_PARTE\$549.050" in frase, frase)
     }
 
     /**

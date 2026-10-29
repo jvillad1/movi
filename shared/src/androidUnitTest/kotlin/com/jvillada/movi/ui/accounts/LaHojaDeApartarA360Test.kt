@@ -5,7 +5,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -111,11 +113,24 @@ class LaHojaDeApartarA360Test {
         composeRule.onAllNodes(hasSetTextAction(), useUnmergedTree = true)[1].performTextInput("2000000")
         composeRule.waitForIdle()
 
-        val frase = "Te quedan pasa de \$1.450.950 a −\$549.050"
+        val frase = "Te quedan pasa de"
         composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithText(frase, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithText(frase, substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
         }
-        dentroDeLaPantalla(unoConTexto(frase), frase)
+        val nodo = unoConTexto(frase)
+        dentroDeLaPantalla(nodo, frase)
+        // Revisión de la vuelta 64 (rev64-06): a 360 el «−» quedaba solo al final del renglón. Ahora
+        // «a −$549.050» va en el mismo renglón, entero.
+        val r = mutableListOf<TextLayoutResult>()
+        nodo.config[SemanticsActions.GetTextLayoutResult].action?.invoke(r)
+        val layout = r.single()
+        val texto = layout.layoutInput.text.text
+        val menos = texto.indexOf('−')
+        assertTrue(menos > 0, texto)
+        val linea = layout.getLineForOffset(menos)
+        assertEquals(linea, layout.getLineForOffset(texto.indexOf('$', menos)), "el «−» y su «$» en el mismo renglón")
+        assertEquals(linea, layout.getLineForOffset(menos - 2), "la «a» con su cifra")
+        assertEquals(linea, layout.getLineForOffset(texto.length - 1), "la cifra entera en un renglón")
         val aviso = unoConTexto("se resta aparte")
         dentroDeLaPantalla(aviso, "la advertencia del ahorro")
         assertEquals(1, composeRule.onAllNodesWithTag(TAG_VISTA_PREVIA, useUnmergedTree = true).fetchSemanticsNodes().size)

@@ -98,11 +98,28 @@ fun teQuedanConElApartado(data: DashboardData, propuesto: Apartado, hoy: LocalDa
     )
 }
 
-/** El renglón principal de la vista previa: «Te quedan pasa de $1.450.950 a −$549.050». */
+/** Pega dos caracteres sin dejar que el renglón se parta entre ellos (WORD JOINER, U+2060). */
+const val UNION_QUE_NO_SE_PARTE: String = "\u2060"
+
+/** El espacio que no se parte (U+00A0): «a −$549.050» va junto. */
+const val ESPACIO_QUE_NO_SE_PARTE: String = "\u00A0"
+
+/**
+ * Una cifra que no se parte al final del renglón (revisión de la vuelta 64, rev64-06): a 360 dp el
+ * «−» de «−$549.050» quedaba solo al final de la línea y la cifra bajaba sin su signo. El menos va
+ * pegado al «$» con [UNION_QUE_NO_SE_PARTE], que no se ve.
+ */
+fun cifraQueNoSeParte(monto: Long): String =
+    formatCOP(monto).replace("\u2212$", "\u2212$UNION_QUE_NO_SE_PARTE$")
+
+/**
+ * El renglón principal de la vista previa: «Te quedan pasa de $1.450.950 a −$549.050», con la cifra
+ * nueva pegada a su «a» y su signo pegado al «$» (si el renglón se parte, baja «a −$549.050» entero).
+ */
 fun fraseDeLaVistaPrevia(v: TeQuedanConElApartado): String = when {
     v.despues == null -> "Con este apartado no te queda plata para gastar en el período"
-    v.despues == v.antes -> "Te quedan sigue en ${formatCOP(v.antes)}"
-    else -> "Te quedan pasa de ${formatCOP(v.antes)} a ${formatCOP(v.despues)}"
+    v.despues == v.antes -> "Te quedan sigue en${ESPACIO_QUE_NO_SE_PARTE}${cifraQueNoSeParte(v.antes)}"
+    else -> "Te quedan pasa de ${cifraQueNoSeParte(v.antes)} a$ESPACIO_QUE_NO_SE_PARTE${cifraQueNoSeParte(v.despues)}"
 }
 
 /**
