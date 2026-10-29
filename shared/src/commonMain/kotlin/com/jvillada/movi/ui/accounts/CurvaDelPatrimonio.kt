@@ -84,6 +84,15 @@ internal fun leyendaDelPunto(punto: PuntoDelPatrimonio, ajustesDelMes: Long = 0L
 internal fun ajustesDelMes(puntos: List<PuntoDelPatrimonio>): List<Long> =
     puntos.mapIndexed { i, p -> if (i == 0) 0L else p.ajustes - puntos[i - 1].ajustes }
 
+/**
+ * ¿El punto de hoy trae ajustes de este mes? (vuelta 60). Es el caso más común —la deuda se anotó hace
+ * poco— y el aro de los otros meses no se le podía poner encima del punto de hoy: va un aro por fuera.
+ */
+internal fun hoyTraeAjustes(ajustesDelMes: List<Long>): Boolean = ajustesDelMes.lastOrNull()?.let { it != 0L } == true
+
+/** Lo que el lector de pantalla oye del aro de hoy. */
+const val HOY_INCLUYE_UN_AJUSTE = "Hoy incluye un ajuste."
+
 private fun conSigno(monto: Long): String = if (monto > 0L) "+${formatMoneyCompact(monto)}" else formatMoneyCompact(monto)
 
 private fun haciaDonde(cambio: Long): String = when {
@@ -196,7 +205,8 @@ internal fun CurvaDelPatrimonio(historia: HistoriaDelPatrimonio, modifier: Modif
                 .semantics {
                     contentDescription = "Tu patrimonio neto en el tiempo: $leyenda. " +
                         "${nombreDelPunto(puntos.first())}: ${formatMoneyCompact(puntos.first().neto)}; " +
-                        "hoy: ${formatMoneyCompact(puntos.last().neto)}." + (nota?.let { " $it" } ?: "")
+                        "hoy: ${formatMoneyCompact(puntos.last().neto)}." +
+                        (if (hoyTraeAjustes(ajustes)) " $HOY_INCLUYE_UN_AJUSTE" else "") + (nota?.let { " $it" } ?: "")
                 }
                 .graficaQueSeToca(cuantos = puntos.size, datos = historia, alElegir = { elegido = it }, enPuntos = true),
         ) { dibujarLaCurva(puntos, elegido, colores, entrada.value, ajustes) }
@@ -315,5 +325,16 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.dibujarLaCurva(
         val hoy = Offset(x(valores.lastIndex), y(valores.last()))
         drawCircle(colores.fondo, radius = radio + 2.dp.toPx(), center = hoy)
         drawCircle(colores.punto, radius = radio, center = hoy)
+        // Vuelta 60: el ajuste de este mes —el caso más común: la deuda se anotó hace poco— va con un
+        // aro de afuera alrededor de hoy, la misma marca de los otros meses con ajustes.
+        if (hoyTraeAjustes(ajustes)) {
+            drawCircle(
+                colores.linea,
+                // El doble del punto: por fuera del aro del color de la tarjeta, sin un valor suelto nuevo.
+                radius = radio * 2,
+                center = hoy,
+                style = Stroke(width = Medida.trazo.toPx()),
+            )
+        }
     }
 }

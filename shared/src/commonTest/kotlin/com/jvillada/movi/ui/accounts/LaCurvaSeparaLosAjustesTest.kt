@@ -56,6 +56,9 @@ class LaCurvaSeparaLosAjustesTest {
     @Test
     fun `cada mes dice sus ajustes, y el punto elegido los nombra`() {
         assertEquals(listOf(0L, 0L, -35_500_000L), ajustesDelMes(puntos))
+        // El ajuste de este mes —el caso más común— se marca en el punto de hoy, con un aro por fuera.
+        assertTrue(hoyTraeAjustes(ajustesDelMes(puntos)))
+        assertFalse(hoyTraeAjustes(ajustesDelMes(puntos.map { it.copy(ajustes = 0) })))
         assertEquals("Hoy: \$36,5M · ajustes −\$35,5M", leyendaDelPunto(puntos.last(), -35_500_000))
         assertEquals("Al cierre de sep 2026: \$75.200.000", leyendaDelPunto(puntos[1]))
     }
