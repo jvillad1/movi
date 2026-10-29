@@ -2867,10 +2867,20 @@ el camino.
    calendario sigue el nombre («Octubre 2026»). Dice lo mismo que el «Del … al …» de Pagos.
 5. **El paso de las cuentas deja lo esencial a la vista.** `FormularioDeCuenta(enUnaFila = true)`: los
    bancos y los tipos van cada uno en una fila de chips que se desplaza de lado (`TAG_BANCOS_DE_UN_TOQUE`,
-   `TAG_TIPOS_DE_CUENTA`), y **«Agregar cuenta» va en el pie de la guía** (`TAG_AGREGAR_CUENTA_EN_LA_GUIA`),
-   arriba de «Atrás · Siguiente»: `Principal` mientras no hay cuentas (Siguiente está apagado), `Secundario`
-   después. Las cuentas ya creadas van debajo del formulario. «Nueva cuenta» de Patrimonio sigue con los
-   chips en varios renglones.
+   `TAG_TIPOS_DE_CUENTA`), y **«Agregar cuenta» va dentro de la tarjeta del formulario, debajo de «Saldo de
+   hoy»** (`TAG_AGREGAR_CUENTA_EN_LA_GUIA`, `Secundario`). En la revisión iba fijo en el pie, justo debajo
+   de «Tarjetas de crédito · Opcional…», y se leía como agregar una tarjeta; la sección de tarjetas lleva
+   su propio «Agregar una tarjeta». Las cuentas ya creadas van debajo del formulario. «Nueva cuenta» de
+   Patrimonio sigue con los chips en varios renglones.
+6. **Lo escrito no se pierde** (revisión de la vuelta 54, `BorradoresDeLaGuia.kt`). Con el arriendo
+   escrito, «Guardar» iba adentro con borde y «Siguiente» apagado: la revisión tocó «Saltar este paso»
+   creyendo que avanzaba y el arriendo se perdió. Cada formulario de un paso es un `Borrador` (la cuenta,
+   la tarjeta, cada pago de cada mes abierto —cerrarlo no lo borra—) y el pie lo mira: con algo escrito y
+   completo, el principal es **«Guardar y seguir»** (`GUARDAR_Y_SEGUIR`: guarda todo lo escrito con la
+   creación de siempre y avanza); incompleto, el pie dice qué falta en una línea centrada
+   (`razonDelPie`: «Falta el día del arriendo», `TAG_RAZON_DEL_PIE`); y «Saltar este paso» o «Ahora no»
+   preguntan antes con `ConfirmarEnHoja` (`preguntaDeDescartar`: «¿Descartar el arriendo que
+   escribiste?»). Los «Guardar» de adentro siguen, para agregar varios.
 
 **Las líneas base** no cambian y las guardas en 0 siguen en 0. Lo vigilan `PrimerosPasosTest` (`:core`: los
 estados, el contador, la captura por plataforma y el rango corto), `GuiaDePrimerUsoTest` (`commonTest`: los
@@ -2880,4 +2890,7 @@ lista y nunca dice «Pendiente» de algo imposible, `primerosPasosDe` con los da
 oculta, la lista de Tú, el encabezado con el rango corto), `PrimerUsoEnPantallaTest` (la vista previa, el
 extracto en la web, «Saltar» en las cuentas, la guía abierta a mitad de camino con lo que ya había),
 `ElPasoDeCuentasALaVistaTest` (a 390 × 844 y 360 × 760, el nombre, el saldo y «Agregar cuenta» sin
-desplazar; bancos y tipos en una fila) y `InicioDelRedisenoTest` / `MasScreenTest`, ajustadas.
+desplazar, el botón debajo del saldo y antes de las tarjetas; bancos y tipos en una fila), los de «lo
+escrito no se pierde» en `PrimerUsoEnPantallaTest` (llenar el arriendo y tocar el principal lo guarda;
+a medias, el pie dice qué falta; saltar pregunta, «Cancelar» lo conserva y «Descartar» lo tira; la
+cuenta escrita se guarda con el principal) y `InicioDelRedisenoTest` / `MasScreenTest`, ajustadas.
