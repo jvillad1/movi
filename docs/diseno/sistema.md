@@ -3511,3 +3511,63 @@ Lo vigilan `ResumenDeLaMananaTest` y `ResumenSemanalTest` (lo que dicen, cuándo
 grupo y la huella), `UnSoloErrorYSinRepeticionesTest` (`commonTest`), y en Robolectric
 `LosResumenesSeApaganTest` (los interruptores), `PlanScreenTest` (con la API caída, un aviso y un
 «Reintentar») y `UnSoloErrorEnActividadTest`. **Las líneas base** no cambian, y las guardas en 0 siguen en 0.
+
+## 68. Vuelta 70: «¿Me alcanza hasta que me paguen?»
+
+De la revisión 4 del 29-oct (`r4-pagos-*.png`, `r4-err-pagos.png`), puntos 1, 2, 3 y 15. **Sin reglas de
+plata nuevas**: la cuota cuenta, el pago de tarjeta no, un pago salda la cuota del período en que se hizo,
+toda suma sin anulados. Ninguna cifra existente cambió; cambió hasta dónde mira la caja y cuál es su titular.
+
+1. **El horizonte de la caja** (`horizonteDeLaCaja`, `cajaHastaQueTePaguen` en `:core` `CajaProyectada.kt`).
+   «Tu plata, día a día» ya no termina el último día del período: llega **al día del próximo salario**, ese
+   día incluido —el primer ingreso recurrente pendiente del período siguiente, que el server ya pone en el
+   día que se espera (`fechaEsperadaDelIngreso`: el arranque del período, corrido si el corte cae en fin de
+   semana o festivo)—; sin un ingreso recurrente, **30 días**, nunca menos que el cierre del período.
+   - Los pagos del período siguiente que vencen dentro del horizonte entran con la regla de siempre (lo
+     vencido hoy, una tarjeta su mínimo o «No entra a la cuenta», lo saldado no cuenta): son las filas de
+     `checklistDelPeriodo` del período siguiente sobre las MISMAS respuestas, no otra lista.
+   - El salario entra como subida el día que se espera, rotulado **«Llega tu salario (esperado)»**
+     (`LLEGA_TU_SALARIO`).
+   - Límite conocido: una regla cuyo pago de este período sigue pendiente todavía no «rodó» al siguiente,
+     así que su próxima ocurrencia no entra (la de este período sí, como siempre).
+2. **Una sola base: lo libre.** Cada día de la caja tiene dos cifras: `saldo`, lo que habrá en las cuentas
+   (Tu plata + lo apartado: un apartado no mueve plata), y `libre`, **el titular**: el saldo menos el ahorro
+   del período y lo apartado fuera de los fijos (`apartadoFueraDeLosFijos`, la única regla del cruce,
+   sobre las filas que la caja resta, también las del período siguiente: un apartado que es un fijo nunca
+   se resta dos veces). El día más justo, el rojo y la línea se miden en lo libre.
+   - **Una sola frase con la cifra** (`fraseDePuente`, en `texto` o en `sale` si no alcanza): «Hasta el 25
+     de nov te quedan libres $1,4M en el peor día (el 5 de nov) · en las cuentas habrá $9,4M, de eso $8M es
+     tu ahorro». Sin ahorro ni apartados, sin la segunda mitad. La frase del rojo solo sale si el primer
+     día en rojo no es el peor («El 3 de noviembre ya quedarías en −$100.000 libres por Arriendo…»).
+   - El renglón de abajo **ya no repite la cifra** («Saldo proyectado: $10,5M» era la tercera vez): con
+     salario, «Llega tu salario: +$7M»; sin él, «Toca un día para verlo». Un día elegido dice
+     «5 nov: $1,4M libres · Arriendo».
+   - «Tu día más justo» de Inicio (`cajaDeHoy`) dice lo mismo: «Libre hasta que te paguen» (o «Libre en
+     los próximos 30 días») · «Tu día más justo es el 5 de noviembre» · la cifra libre; si no alcanza, «No te
+     alcanza» · «El 5 de noviembre quedarías en». Movi AI (`proyectar_caja`) usa la misma función.
+3. **Las tres columnas del Disponible con el mismo patrón** (`ColumnaDeVentana`). Las tres dicen en grande
+   **lo que queda** —en el período, `periodo.teQuedan`, la MISMA cifra del héroe de Inicio y de «Te
+   quedan» en Pagos (`teQuedanDeHoy`)— y debajo, en tres renglones apagados, «gastaste» · $Y · «de $Z». La
+   semana y hoy sin nada que repartir: «$0» y, en el último renglón, «ya te pasaste». Tres renglones y no
+   uno: «gastaste $440.000» no entra en un tercio de tarjeta a 390 dp. El esqueleto tiene los mismos
+   renglones.
+4. **Pagos con ‹ ›** (`NavegadorDelPeriodoDePagos`, `ui/plan/PagosDeOtroPeriodo.kt`). La línea del rango va
+   entre dos `BotonDeIcono`, desde el primer cuadro (nada salta). En «Facturas»: ‹ al anterior (sus pagos
+   como en «Tus períodos», `PagosFijos`, cerrado), › al siguiente (**solo lectura**: «Lo que vencerá», su
+   total con la regla de «Falta por pagar», y la nota de que lo que aún falta de este período aparece al
+   pagarlo), y no más allá. Con otro período a la vista solo va su lista. En «Presupuestos» las flechas
+   van apagadas.
+5. **«Lo que viene · próximos 15 días»** (`loQueViene` en `:core`, `SeccionLoQueViene`): con 7 días o
+   menos del período, debajo de la lista, las filas del siguiente que vencen en 15 días, con su total.
+   **No cuenta en «Falta por pagar»**, que sigue siendo del período, y lo dice.
+6. **La caja con su fuente caída** no se pinta: sin los pagos, el resumen o el perfil
+   (`DisponibleDelPlan.fallo`), se anota en `ErroresDeLaPantalla` como las demás secciones y lo dice el
+   aviso único de la vuelta 68. Antes pintaba «$10,5M» debajo del error.
+
+Lo vigilan `CajaHastaQueTePaguenTest` (`:core`: el horizonte con y sin salario y con el corte del dueño,
+los pagos del siguiente, lo saldado, el mínimo, la subida del salario, lo libre con ahorro y con un
+apartado que es un fijo, las invariantes y `loQueViene`), `CajaProyectadaRoutesTest` y
+`LasPreguntasSugeridasTest` (el server), `CajaDelPeriodoTest`, `CajaDeHoyTest` y, en Robolectric,
+`PagosHastaQueTePaguenTest` (‹ ›, «Lo que viene», la caja oculta con el error), `DisponibleEnInicioTest`
+y `LasCifrasDelDisponibleEntranTest` (las tres columnas), `CajaEnHoyTest`, `UnNombrePorConceptoTest` y
+`PlanScreenTest` (nada salta más de 8 dp). **Las líneas base** no cambian, y las guardas en 0 siguen en 0.
