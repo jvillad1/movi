@@ -19,7 +19,7 @@ import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UserProfile
-import com.jvillada.movi.shared.model.claveDeComercio
+import com.jvillada.movi.shared.model.claveDelComercio
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.quickadd.todayIsoInAppZone
 import kotlinx.datetime.Clock
@@ -65,7 +65,8 @@ class LosComerciosLlevanSuSignoTest {
         composeRule.setContent { MoviTheme { Box(Modifier.fillMaxSize()) { BuscarScreen(onNavigate = {}) } } }
         composeRule.waitForIdle()
         composeRule.onNodeWithTag(TAG_CAMPO_DE_BUSCAR).performTextReplacement("uber")
-        val tag = TAG_RESULTADO_DE_BUSCAR + "com:${claveDeComercio(viajes.first())}"
+        // Vuelta 66: la clave del comercio es la de `:core` (la marca primero), la misma del detalle.
+        val tag = TAG_RESULTADO_DE_BUSCAR + "com:${claveDelComercio(viajes.first())}"
         composeRule.waitUntil(5_000) { composeRule.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
         assertTrue(
             composeRule.onAllNodes(hasText("−\$40.100") and hasAnyAncestor(hasTestTag(tag)), useUnmergedTree = true)
