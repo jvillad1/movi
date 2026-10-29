@@ -55,4 +55,12 @@ class LoQueSaldaUnGrupoSeCuentaTest {
         assertEquals("Transferencia de Caro", fila.titulo)
         assertEquals(2, fila.lineasDelSubtitulo)
     }
+
+    @Test
+    fun `en la campana el desglose de lo que entro solo no cuenta la propuesta, que va aparte`() {
+        val conteo = ConteoPorRevisar(avisos = 5, movimientos = 1, saldar = 1)
+        assertEquals("6 por revisar", com.jvillada.movi.ui.dashboard.tituloDeLoQueEntroSolo(conteo))
+        assertEquals("5 avisos · 1 movimiento", com.jvillada.movi.ui.dashboard.cuerpoDeLoQueEntroSolo(conteo))
+        assertEquals(7, conteo.total, "la insignia del Inicio sí la cuenta")
+    }
 }
