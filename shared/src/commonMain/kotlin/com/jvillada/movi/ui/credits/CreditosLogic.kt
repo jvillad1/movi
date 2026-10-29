@@ -1,8 +1,10 @@
 package com.jvillada.movi.ui.credits
 
-import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.CardSummary
 import com.jvillada.movi.shared.model.ComoVaLaDeuda
+import com.jvillada.movi.shared.model.InteresDelMes
+import com.jvillada.movi.shared.model.SaldoSegunElPlan
+import com.jvillada.movi.shared.model.saldoSegunElPlan
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.CreditTerms
 import com.jvillada.movi.shared.model.PeriodoFinanciero
@@ -13,17 +15,17 @@ import com.jvillada.movi.shared.model.RubroDeMarca
 import com.jvillada.movi.shared.model.SimulacionDeAbono
 import com.jvillada.movi.shared.model.abonoMinimoParaQueSeTermine
 import com.jvillada.movi.shared.model.deudaEnOtraMoneda
+import com.jvillada.movi.shared.model.deudaTotalDe
+import com.jvillada.movi.shared.model.proximoVencimientoDelDia
 import com.jvillada.movi.shared.model.marcaDelBanco
 import com.jvillada.movi.shared.model.mas
 import com.jvillada.movi.shared.model.nombreDe
 import com.jvillada.movi.shared.model.simularAbonoUnico
 import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.ui.components.formatMoney
+import com.jvillada.movi.ui.components.formatMoneyCompact
 import com.jvillada.movi.ui.fecha.fechaEnPalabras
-import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
-import kotlinx.datetime.minus
-import kotlinx.datetime.plus
 import kotlin.math.round
 
 /**
@@ -36,9 +38,53 @@ import kotlin.math.round
  * (que sería $0 y mentiría el total).
  */
 fun totalDebtCop(credits: List<CreditSummary>, cards: List<CardSummary>): Long =
-    credits.sumOf { debtCopOf(it.account) } + cards.sumOf { debtCopOf(it.account) }
+    // Vuelta 59: una deuda sin saldo (en negativo) suma cero, no resta. Ver [deudaTotalDe].
+    deudaTotalDe(credits.map { it.account } + cards.map { it.account })
 
-private fun debtCopOf(account: Account): Long = account.estimatedTotalCop ?: account.balance
+// ── Un solo signo para el saldo de una deuda (vuelta 59) ────────────────────────────────────────
+
+/** Lo que dice una deuda cuyo saldo en Movi no es positivo y no se llegó ahí pagándola. */
+const val SIN_SALDO_EN_MOVI: String = "Sin saldo en Movi"
+
+/** Lo que cuelga debajo de una deuda sin saldo, en la lista y en su detalle: qué hacer. */
+const val FALTA_EL_SALDO_DE_LA_DEUDA: String = "Movi no tiene su saldo: cuádrala con el banco"
+
+/**
+ * **El saldo de una deuda, con un solo signo** (vuelta 59). «Vehículo 4083» decía «+$980.000» en verde
+ * en su detalle, «−$980.000» en la lista y «Deuda en Movi −$980.000» en la hoja de ajustar: el mismo
+ * número con tres signos. Ahora una deuda se dice de dos formas y nada más:
+ *
+ * - **con saldo** ([conSaldo]): lo que se debe, sin signo —«Debes $1.583.000» ([texto]), o la cifra
+ *   [magnitud] sola donde el rótulo ya dice que es una deuda—. Una deuda pagada (en cero y con
+ *   movimientos, [pagada]) también: debe $0, que es cierto;
+ * - **sin saldo**: [SIN_SALDO_EN_MOVI]. Una deuda en negativo, o en cero sin un movimiento que la
+ *   haya llevado ahí, casi siempre es una deuda a la que Movi no le tiene el saldo, no una plata a favor.
+ */
+data class SaldoDeUnaDeuda(val conSaldo: Boolean, val monto: Long, val magnitud: String) {
+    /** «Debes $1.583.000», o [SIN_SALDO_EN_MOVI]. */
+    val texto: String get() = if (conSaldo) "Debes $magnitud" else SIN_SALDO_EN_MOVI
+}
+
+/** Ver [SaldoDeUnaDeuda]. [monto] es lo que se debe en [moneda] (positivo = se debe). */
+fun saldoDeUnaDeuda(monto: Long, moneda: String = "COP", pagada: Boolean = false): SaldoDeUnaDeuda {
+    val conSaldo = monto > 0L || (monto == 0L && pagada)
+    return SaldoDeUnaDeuda(conSaldo = conSaldo, monto = monto, magnitud = formatMoney(monto.coerceAtLeast(0L), moneda))
+}
+
+/**
+ * **La línea de la «Deuda total» que nombra las deudas sin saldo** (vuelta 59): «1 crédito sin saldo»,
+ * «2 tarjetas sin saldo», «3 deudas sin saldo». `null` sin ninguna. No suman en la deuda total
+ * ([deudaTotalDe]) y por eso se dicen aparte, con su «Cuadrar».
+ */
+fun textoDeLasDeudasSinSaldo(creditos: Int, tarjetas: Int): String? = when {
+    creditos <= 0 && tarjetas <= 0 -> null
+    tarjetas <= 0 -> if (creditos == 1) "1 crédito sin saldo" else "$creditos créditos sin saldo"
+    creditos <= 0 -> if (tarjetas == 1) "1 tarjeta sin saldo" else "$tarjetas tarjetas sin saldo"
+    else -> "${creditos + tarjetas} deudas sin saldo"
+}
+
+/** La acción de esa línea: abre Cuadre de saldos (con la deuda arriba, si es una sola). */
+const val CUADRAR_LAS_DEUDAS_SIN_SALDO: String = "Cuadrar"
 
 /**
  * Lo que dice la esquina derecha de la tarjeta de un préstamo, y cuánto llena su barra.
@@ -116,9 +162,10 @@ data class ProgresoDeCredito(
  * En los dos casos se **suprime el porcentaje** en vez de inventarle un número: la tarjeta pasa a
  * pedir que se revise, que es lo único cierto que se puede decir.
  *
- * Lo que NO se toca es `totalDebtCop`: una deuda negativa le resta al total, y eso es la suma
- * honesta de lo que hay registrado. Corregirla ahí sería tapar la anomalía justo en la cifra que
- * el dueño usa para confiar; el lugar donde se señala es la tarjeta del crédito que la causó.
+ * **Vuelta 59: `totalDebtCop` ya no la resta.** Antes se dejaba restar al total con el argumento de
+ * que corregirla ahí tapaba la anomalía; en la práctica la anomalía quedaba tapada igual —«Deuda total
+ * $603.000» con $1.583.000 debidos— y nada la nombraba. Ahora suma cero y la tarjeta de «Deuda total»
+ * la nombra aparte («1 crédito sin saldo · Cuadrar»), que es señalarla donde el dueño mira.
  *
  * Solo aplica con términos y capital original cargados: sin eso no hay porcentaje que calcular ni
  * desembolso que reclamar, y la tarjeta se comporta como siempre.
@@ -131,7 +178,7 @@ fun progresoDeCredito(credit: CreditSummary): ProgresoDeCredito {
     // Antes que el signo: con saldo en otra moneda el componente COP es 0 y nunca sería negativo,
     // así que este es el motivo real y el que se le debe explicar.
     if (deudaEnOtraMoneda(credit)) return aviso("Deuda en otra moneda")
-    if (credit.account.balance < 0L) return aviso("Deuda en negativo — revísala")
+    if (credit.account.balance < 0L) return aviso(FALTA_EL_SALDO_DE_LA_DEUDA)
 
     // **La deuda pasó por encima del capital original.** No hay progreso que pintar, y «0 % pagado»
     // dice justo lo contrario de lo que pasó. Ver [ProgresoDeCredito.mostrarBarra].
@@ -277,6 +324,17 @@ fun comoVaEstaDeuda(plan: PlanDelCredito, periodoActual: PeriodoFinanciero): Com
  * prueba: es exactamente el pedazo que se puede borrar sin que ninguna prueba de aritmética caiga.
  */
 const val ALCANCE_INTERES_PROPIO: String = "Los pagas tú"
+
+/**
+ * El alcance de la fila del interés propio (vuelta 59): desde que la cifra es [interesDelMes] —créditos
+ * **y tarjetas**, la misma de «Cómo salir de tus deudas» y de Movi AI—, el rótulo dice que las tarjetas
+ * están adentro cuando alguna cobra. Sin tarjetas que cobren, [ALCANCE_INTERES_PROPIO] de siempre.
+ */
+fun alcanceDelInteresPropio(interes: InteresDelMes): String =
+    if (interes.tarjetas > 0L) ALCANCE_INTERES_PROPIO_CON_TARJETAS else ALCANCE_INTERES_PROPIO
+
+/** [alcanceDelInteresPropio] con tarjetas que cobran interés. */
+const val ALCANCE_INTERES_PROPIO_CON_TARJETAS: String = "Los pagas tú, con tus tarjetas"
 const val ALCANCE_INTERES_AJENO: String = "Los paga tu nómina o un tercero"
 const val ALCANCE_FALTA_PROPIO: String = "En tus créditos que se terminan"
 const val ALCANCE_FALTA_AJENO: String = "En los que paga otro y se terminan"
@@ -345,6 +403,12 @@ fun textoDeLaUltimaCuota(resumen: ResumenDeDeudas, periodoActual: PeriodoFinanci
     resumen.mesesHastaLaUltimaCuota
         ?.let { nombreDe(periodoActual.mas((it - 1).coerceAtLeast(0))) }
         ?: "Sin fecha"
+
+/**
+ * **Lo mismo, con la fecha ya contada crédito por crédito** (vuelta 59): cada uno desde su primera cuota
+ * sin pagar ([ultimaCuotaDeTodas]), no todos desde el mes en curso. `null` = «Sin fecha».
+ */
+fun textoDeLaUltimaCuota(ultima: PeriodoFinanciero?): String = ultima?.let(::nombreDe) ?: "Sin fecha"
 
 /**
  * **La plata que no se acaba nunca, dicha en pesos.**
@@ -803,6 +867,7 @@ data class NotaDeLaDeuda(val texto: String, val esAlerta: Boolean)
  *   o, si ya está pagada, el banco.
  * @property faltanDatos sin términos: el subtítulo va en el tono de aviso y tocarla los completa.
  * @property pagada en cero y con movimientos: la píldora [DEUDA_PAGADA] en vez del saldo.
+ * @property sinSaldo en negativo: la píldora [SIN_SALDO_EN_MOVI] en vez del saldo (ver [saldoDeUnaDeuda]).
  * @property fraccionPagada la barra, **solo** cuando es verdadera (ver [progresoDeCredito]) y hay algo
  *   pagado: nunca un «0% pagado» suelto.
  * @property nota lo que cuelga debajo de la fila, si hay algo que la barra no dice.
@@ -811,6 +876,8 @@ data class DeudaEnLaLista(
     val subtitulo: String?,
     val faltanDatos: Boolean = false,
     val pagada: Boolean = false,
+    /** Vuelta 59: en negativo, la píldora [SIN_SALDO_EN_MOVI] en vez de una cifra con el signo al revés. */
+    val sinSaldo: Boolean = false,
     val fraccionPagada: Float? = null,
     val nota: NotaDeLaDeuda? = null,
 ) {
@@ -824,17 +891,7 @@ private fun porcentajeEntero(fraccion: Float): Int = (fraccion * 100).toInt()
  * **El próximo día [dia] desde [hoy]**, hoy incluido. En un mes más corto que [dia] cae el último
  * día del mes (el 31 de un pago, en noviembre, es el 30).
  */
-fun proximaFechaDelDia(dia: Int, hoy: LocalDate): LocalDate {
-    fun enElMes(anio: Int, mes: Int): LocalDate {
-        val primero = LocalDate(anio, mes, 1)
-        val ultimo = primero.plus(1, DateTimeUnit.MONTH).minus(1, DateTimeUnit.DAY).dayOfMonth
-        return LocalDate(anio, mes, dia.coerceIn(1, ultimo))
-    }
-    val esteMes = enElMes(hoy.year, hoy.monthNumber)
-    if (esteMes >= hoy) return esteMes
-    val siguiente = LocalDate(hoy.year, hoy.monthNumber, 1).plus(1, DateTimeUnit.MONTH)
-    return enElMes(siguiente.year, siguiente.monthNumber)
-}
+fun proximaFechaDelDia(dia: Int, hoy: LocalDate): LocalDate = proximoVencimientoDelDia(dia, hoy)
 
 /** Un préstamo en la lista de Créditos. [plan] y [periodoActual] dicen si su deuda crece sola. */
 fun prestamoEnLaLista(
@@ -843,7 +900,9 @@ fun prestamoEnLaLista(
     periodoActual: PeriodoFinanciero,
     hoy: LocalDate,
 ): DeudaEnLaLista {
-    val terms = credit.terms ?: return DeudaEnLaLista(FALTAN_DATOS_DE_LA_DEUDA, faltanDatos = true)
+    // Vuelta 59: con o sin términos, la cifra de la fila es la misma que la de su ficha (un solo signo).
+    val sinSaldo = !deudaEnOtraMoneda(credit) && !saldoDeUnaDeuda(credit.account.balance, pagada = credit.hasMovements).conSaldo
+    val terms = credit.terms ?: return DeudaEnLaLista(FALTAN_DATOS_DE_LA_DEUDA, faltanDatos = true, sinSaldo = sinSaldo)
     if (credit.account.balance == 0L && credit.hasMovements && !deudaEnOtraMoneda(credit)) {
         return DeudaEnLaLista(subtitulo = terms.bank.takeIf { it.isNotBlank() }, pagada = true)
     }
@@ -861,6 +920,7 @@ fun prestamoEnLaLista(
     }
     return DeudaEnLaLista(
         subtitulo = "Cuota ${formatCOP(terms.installment)} · ${fechaEnPalabras(proxima, hoy)}",
+        sinSaldo = sinSaldo,
         fraccionPagada = barra,
         nota = nota,
     )
@@ -868,9 +928,9 @@ fun prestamoEnLaLista(
 
 /** Una tarjeta de crédito en la lista de Créditos: el pago mínimo y su fecha, en su moneda. */
 fun tarjetaEnLaLista(card: CardSummary, hoy: LocalDate): DeudaEnLaLista {
-    val terms = card.terms ?: return DeudaEnLaLista(FALTAN_DATOS_DE_LA_DEUDA, faltanDatos = true)
     val moneda = card.account.currency
     val deuda = card.account.balancesByCurrency[moneda] ?: card.account.balance
+    val terms = card.terms ?: return DeudaEnLaLista(FALTAN_DATOS_DE_LA_DEUDA, faltanDatos = true, sinSaldo = deuda < 0L)
     if (deuda == 0L) {
         val disponible = card.available?.let { "Disponible ${formatMoney(it, moneda)}" }
         return DeudaEnLaLista(subtitulo = disponible ?: terms.bank.takeIf { it.isNotBlank() }, pagada = true)
@@ -879,6 +939,9 @@ fun tarjetaEnLaLista(card: CardSummary, hoy: LocalDate): DeudaEnLaLista {
     val minimo = terms.pagoMinimo?.takeIf { deuda > 0L }
     return DeudaEnLaLista(
         subtitulo = if (minimo != null) "Pago mínimo ${formatMoney(minimo, moneda)} · $fecha" else "Fecha de pago · $fecha",
+        // Vuelta 59: una tarjeta en negativo no dice «−$50.000»: dice que Movi no tiene su saldo.
+        sinSaldo = deuda < 0L,
+        nota = if (deuda < 0L) NotaDeLaDeuda(FALTA_EL_SALDO_DE_LA_DEUDA, esAlerta = false) else null,
     )
 }
 
@@ -898,3 +961,27 @@ fun bancoSugeridoPara(nombre: String): String? =
     marcaDelBanco(nombre)
         ?.takeIf { it.rubro == RubroDeMarca.BANCOS_Y_BILLETERAS && it.id !in REDES_DE_TARJETA }
         ?.nombre
+
+// ── El saldo que propone el plan, en el alta de un crédito que ya venía (vuelta 59) ─────────────
+
+/** El botón que pone en «Deuda actual» el saldo que da el plan. */
+const val USAR_EL_SALDO_DEL_PLAN: String = "Usar este"
+
+/** Lo que pide la hoja cuando «Deuda actual» queda en blanco en un crédito que ya venía. */
+const val FALTA_LA_DEUDA_ACTUAL: String = "Falta la deuda actual: escríbela o usa la de tu plan"
+
+/**
+ * **Lo que la hoja dice debajo de «Deuda actual»** cuando el campo está en blanco: el saldo que da el
+ * plan («Por tu plan deberías unos $34,5M») o, si falta un dato para calcularlo, cuál («Para
+ * proponerte la deuda, falta la tasa»). Nunca un cero supuesto: así nació un crédito de $40M en
+ * −$980.000. Ver [saldoSegunElPlan].
+ */
+fun textoDelSaldoDelPlan(plan: SaldoSegunElPlan): String {
+    val saldo = plan.saldo
+    return when {
+        saldo != null && saldo <= 0L -> "Por tu plan ya lo terminaste de pagar"
+        saldo != null -> "Por tu plan deberías unos ${formatMoneyCompact(saldo)}"
+        else -> "Para proponerte la deuda, falta ${plan.falta?.texto ?: "un dato"}"
+    }
+}
+

@@ -48,6 +48,7 @@ fun CreditBalanceSheet(
         nombre = credit.account.name,
         deudaEnMovi = credit.account.balance,
         moneda = "COP",
+        pagada = credit.hasMovements,
         rotuloDelCampo = "Deuda real según el banco (COP)",
         ayuda = "Copia el saldo que muestra la banca en línea hoy.",
         ajustar = { objetivo -> Repositories.wallets.adjustCreditBalance(credit.account.id, objetivo) },
@@ -99,6 +100,8 @@ private fun HojaDeAjustarLaDeuda(
     nombre: String,
     deudaEnMovi: Long,
     moneda: String,
+    /** ¿Un cero es «pagada»? Un préstamo sin movimientos en cero está sin saldo (ver [saldoDeUnaDeuda]). */
+    pagada: Boolean = true,
     rotuloDelCampo: String,
     ayuda: String,
     ajustar: suspend (Long) -> Unit,
@@ -144,7 +147,14 @@ private fun HojaDeAjustarLaDeuda(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text("Deuda en Movi", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
-                Cifra(current, moneda = moneda)
+                // Vuelta 59: un solo signo. Lo que se debe, sin signo; en negativo no es «−$980.000»
+                // sino una deuda a la que Movi no le tiene el saldo — que es lo que esta hoja arregla.
+                val saldo = saldoDeUnaDeuda(current, moneda, pagada = pagada)
+                if (saldo.conSaldo) {
+                    Cifra(current, moneda = moneda)
+                } else {
+                    Text(SIN_SALDO_EN_MOVI, style = Movi.textos.cuerpo, color = Movi.colores.aviso)
+                }
             }
             Spacer(Modifier.height(Espacio.s))
 

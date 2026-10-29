@@ -55,8 +55,7 @@ const val DIAS_PARA_VOLVER_A_CUADRAR = com.jvillada.movi.shared.model.DIAS_PARA_
  * actual, saldo a pagar, cupo disponible y compras sin facturar son cuatro cifras distintas—, y ya
  * tiene quién la concilie: el extracto y la captura de mensajes. Cuando el dueño sí quiere cuadrarla,
  * la pantalla le pide la cifra que va («Cuánto debes según el banco», la deuda total de hoy). Un
- * préstamo se cuadra en Créditos, donde al lado se ven la cuota, la tasa y los intereses que explican
- * la diferencia.
+ * préstamo tampoco se reclama; desde la vuelta 59 se puede cuadrar acá también (ver [seccionDelCuadre]).
  */
 fun sePuedeCuadrar(cuenta: Account): Boolean = com.jvillada.movi.shared.model.sePuedeCuadrar(cuenta)
 // ↑ Un bien tampoco: no tiene saldo que comparar contra un banco, tiene un avalúo, y se actualiza
@@ -70,6 +69,8 @@ enum class SeccionDelCuadre(val titulo: String) {
     DINERO("Dinero"),
     INVERSION("Inversión"),
     TARJETAS("Tarjetas"),
+    /** Vuelta 59: los préstamos, que era justo donde estaba el descuadre más grande. */
+    PRESTAMOS("Préstamos"),
 }
 
 /**
@@ -79,18 +80,33 @@ enum class SeccionDelCuadre(val titulo: String) {
  * propio de la pantalla, sin tocar [sePuedeCuadrar] —que sigue sin tarjetas para el server y los
  * avisos—. Su ajuste va por la misma ruta que la hoja «Ajustar saldo» del detalle de la tarjeta
  * (`CardBalanceSheet`, `POST /api/accounts/{id}/balance-adjustment`, que acepta `CREDIT_CARD` desde
- * la vuelta 33). Los préstamos no: se cuadran en Créditos. Un bien tampoco.
+ * la vuelta 33). Un bien no.
+ *
+ * **Los préstamos, desde la vuelta 59**: «Cuadre de saldos no incluye los créditos, que es justo donde
+ * estaba el mayor descuadre» (un crédito creado sin saldo, en −$980.000). Van en su sección, con
+ * «Cuánto debes según el banco», y su ajuste es **el de la ficha del crédito** (`CreditBalanceSheet`,
+ * `POST /api/credits/{id}/balance-adjustment`), no uno nuevo. Solo en pesos: ese ajuste no cruza
+ * monedas, así que un préstamo con saldo en otra moneda no se ofrece.
  */
 fun seccionDelCuadre(cuenta: Account): SeccionDelCuadre? = when {
     cuenta.esBien -> null
     cuenta.type == AccountType.CREDIT_CARD -> SeccionDelCuadre.TARJETAS
+    cuenta.type == AccountType.LOAN ->
+        SeccionDelCuadre.PRESTAMOS.takeIf { cuenta.currency == "COP" && !tieneSaldoEnOtraMoneda(cuenta) }
     !sePuedeCuadrar(cuenta) -> null
     cuenta.type.group == AccountGroup.INVERSION -> SeccionDelCuadre.INVERSION
     else -> SeccionDelCuadre.DINERO
 }
 
-/** ¿[cuenta] es una deuda que se cuadra acá (una tarjeta)? Cambia el rótulo y el texto del ajuste. */
-fun seCuadraComoDeuda(cuenta: Account): Boolean = seccionDelCuadre(cuenta) == SeccionDelCuadre.TARJETAS
+private fun tieneSaldoEnOtraMoneda(cuenta: Account): Boolean =
+    cuenta.balancesByCurrency.any { (moneda, saldo) -> moneda != "COP" && saldo != 0L }
+
+/** ¿[cuenta] es una deuda que se cuadra acá (una tarjeta o un préstamo)? Cambia el rótulo y el texto del ajuste. */
+fun seCuadraComoDeuda(cuenta: Account): Boolean =
+    seccionDelCuadre(cuenta).let { it == SeccionDelCuadre.TARJETAS || it == SeccionDelCuadre.PRESTAMOS }
+
+/** ¿El ajuste de [cuenta] va por la ruta de los créditos (la hoja «Ajustar saldo» de su ficha)? */
+fun seCuadraComoPrestamo(cuenta: Account): Boolean = seccionDelCuadre(cuenta) == SeccionDelCuadre.PRESTAMOS
 
 /** Las cuentas que la pantalla «Cuadre de saldos» lista, en el orden en que vienen. */
 fun cuentasParaCuadrar(cuentas: List<Account>): List<Account> = cuentas.filter { seccionDelCuadre(it) != null }
@@ -99,20 +115,36 @@ fun cuentasParaCuadrar(cuentas: List<Account>): List<Account> = cuentas.filter {
  * **Las cuentas agrupadas por sección**, en el orden de [SeccionDelCuadre] y, adentro, en el orden en
  * que vienen (así la cuenta de [cuentasConLaPrimera] queda primera de la suya). Sin secciones vacías.
  */
-fun seccionesDelCuadre(cuentas: List<Account>): List<Pair<SeccionDelCuadre, List<Account>>> =
-    SeccionDelCuadre.entries.mapNotNull { seccion ->
+fun seccionesDelCuadre(
+    cuentas: List<Account>,
+    /**
+     * La cuenta pedida arriba («Cuadrar» desde Créditos, «Cuadrar efectivo»): **su sección va primera**
+     * (vuelta 59). Un préstamo pedido desde Créditos quedaba al final, fuera de la pantalla.
+     */
+    primeraId: String? = null,
+): List<Pair<SeccionDelCuadre, List<Account>>> {
+    val secciones = SeccionDelCuadre.entries.mapNotNull { seccion ->
         cuentas.filter { seccionDelCuadre(it) == seccion }.takeIf { it.isNotEmpty() }?.let { seccion to it }
     }
+    val laDeLaPrimera = cuentas.firstOrNull { it.id == primeraId }?.let(::seccionDelCuadre) ?: return secciones
+    return secciones.sortedBy { (seccion, _) -> if (seccion == laDeLaPrimera) 0 else 1 }
+}
 
 /** El rótulo del campo de una cuenta de Dinero o Inversión. */
 const val LO_QUE_DICE_EL_BANCO: String = "Lo que dice el banco"
 
-/** El rótulo del campo de una tarjeta: la deuda total, no el pago mínimo ni el cupo. */
+/** El rótulo del campo de una tarjeta o un préstamo: la deuda total, no el pago mínimo ni el cupo. */
 const val CUANTO_DEBES_SEGUN_EL_BANCO: String = "Cuánto debes según el banco"
 
+/** El rótulo del campo del efectivo (vuelta 59): el efectivo no tiene banco que lo diga. */
+const val LO_QUE_TIENES: String = "Lo que tienes"
+
 /** El rótulo del campo de [cuenta]. Basta: la pantalla no repite una ayuda debajo de cada campo. */
-fun rotuloDelCampoDelCuadre(cuenta: Account): String =
-    if (seCuadraComoDeuda(cuenta)) CUANTO_DEBES_SEGUN_EL_BANCO else LO_QUE_DICE_EL_BANCO
+fun rotuloDelCampoDelCuadre(cuenta: Account): String = when {
+    seCuadraComoDeuda(cuenta) -> CUANTO_DEBES_SEGUN_EL_BANCO
+    cuenta.type == AccountType.CASH -> LO_QUE_TIENES
+    else -> LO_QUE_DICE_EL_BANCO
+}
 
 /**
  * **Las cuentas del cuadre con [primeraId] arriba** (vuelta de diseño 23): «Cuadrar efectivo» abre el
@@ -191,7 +223,9 @@ fun montoDelAjuste(diferencia: Long, moneda: String): String =
  */
 fun textoDelCuadre(saldoEnMovi: Long, saldoDelBanco: Long?, moneda: String, esDeuda: Boolean = false): String? {
     val diferencia = diferenciaDelCuadre(saldoEnMovi, saldoDelBanco) ?: return null
-    val dos = "Movi dice ${formatMoney(saldoEnMovi, moneda)}, tú dices ${formatMoney(saldoDelBanco!!, moneda)}"
+    // Vuelta 59: una deuda en negativo no se dice «Movi dice −$980.000»: un solo signo.
+    val loQueDiceMovi = if (esDeuda && saldoEnMovi < 0L) "Movi no tiene su saldo" else "Movi dice ${formatMoney(saldoEnMovi, moneda)}"
+    val dos = "$loQueDiceMovi, tú dices ${formatMoney(saldoDelBanco!!, moneda)}"
     return when {
         diferencia == 0L -> "Coincide con Movi: no hay nada que anotar."
         esDeuda && diferencia > 0L -> "$dos: se va a anotar un cargo de ${formatMoney(diferencia, moneda)}."
@@ -268,3 +302,17 @@ fun textoDelMomentoDelAviso(momento: Long, hoy: LocalDate): String =
  */
 fun textoDeLasPropuestasPorAviso(propuestas: List<com.jvillada.movi.shared.model.PropuestaDeCuadrePorAviso>): String? =
     com.jvillada.movi.shared.model.textoDeLasPropuestasPorAviso(propuestas)
+
+/**
+ * **Lo que la confirmación de un préstamo dice antes de anotar** (vuelta 59): «Movi deja la deuda en
+ * $35.830.084 (ajuste de $36.810.084)». El ajuste de un préstamo mueve decenas de millones y sale de un
+ * campo que se escribe a mano: no se anota con un solo toque.
+ */
+fun textoDelAjusteDelPrestamo(saldoEnMovi: Long, saldoDelBanco: Long): String =
+    "Movi deja la deuda en ${formatMoney(saldoDelBanco, "COP")} " +
+        "(ajuste de ${formatMoney(kotlin.math.abs(saldoDelBanco - saldoEnMovi), "COP")})"
+
+/** La pregunta de esa confirmación: con un préstamo, su nombre; con varios, cuántos. */
+fun preguntaDelAjusteDePrestamos(nombres: List<String>): String =
+    if (nombres.size == 1) "¿Ajustar la deuda de ${nombres.single()}?" else "¿Ajustar la deuda de ${nombres.size} préstamos?"
+

@@ -604,7 +604,12 @@ class ContextoDelPeriodoTest {
         assertTrue("unos \$$interesDelVehiculo son interés este mes" in texto, "falta el interés del mes:\n$texto")
         // Los totales partidos por quién paga: uno solo le cobraría a su bolsillo las cuotas de Skandia.
         assertTrue("Cuotas al mes: \$1500000 salen de su bolsillo; \$5500000 las paga la nómina o un tercero" in texto, texto)
-        assertTrue("Intereses estimados de un mes: \$$interesDelVehiculo en los créditos que salen de su bolsillo" in texto, texto)
+        // Vuelta 59: la cifra de Créditos (créditos y tarjetas); sin tarjetas, solo el vehículo.
+        assertTrue(
+            "Intereses estimados de un mes (la cifra de Créditos): \$$interesDelVehiculo los que paga él " +
+                "(\$$interesDelVehiculo de sus créditos y \$0 de sus tarjetas)" in texto,
+            texto,
+        )
         // Bienes y patrimonio.
         assertTrue("Casa Almendros (BIEN" in texto && "vale \$1411903920" in texto, texto)
         assertTrue("lo financia «Hipoteca 1254»" in texto)

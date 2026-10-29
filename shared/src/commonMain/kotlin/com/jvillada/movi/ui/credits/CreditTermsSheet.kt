@@ -60,6 +60,7 @@ import com.jvillada.movi.shared.model.cuentasPara
 import com.jvillada.movi.shared.model.cuentasParaElDebito
 import com.jvillada.movi.shared.model.DEBITO_SIN_CUENTA
 import com.jvillada.movi.shared.model.validateCreditDisbursement
+import com.jvillada.movi.shared.model.saldoSegunElPlan
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.recurrentes.ReminderOptInField
 import com.jvillada.movi.ui.components.*
@@ -289,8 +290,25 @@ fun CreditTermsSheet(
     // produce negativos (el filtro solo deja pasar dígitos), así que sería una condición que
     // aparenta cubrir algo y nunca se evalúa a false. El server sí la tiene, que es donde importa
     // — ahí sí llegan cuerpos escritos a mano.
+    // Vuelta 59: en un crédito que ya venía, la deuda actual en blanco ya no vale 0. La hoja propone la
+    // del plan ([saldoSegunElPlan]) o dice qué dato le falta para calcularla, y no guarda sin una cifra:
+    // así nació «Vehículo 4083», $40M de capital en −$980.000 después de la primera cuota.
+    val faltaLaDeudaActual = preguntaVisible && recienRecibido == false && newAccountDebt == null
+    val saldoDelPlan = saldoSegunElPlan(
+        capital = principal,
+        tasaEa = rateEa.toDoubleOrNull(),
+        sinIntereses = sinIntereses,
+        plazoMeses = termMonths.toIntOrNull(),
+        cuota = installment,
+        seguroMensual = seguroMensual,
+        otrosCargosMensuales = otrosCargos,
+        diaDePago = dayOfMonth.toIntOrNull(),
+        desde = startDate.takeIf { isValidCreditDate(it) }?.let { runCatching { kotlinx.datetime.LocalDate.parse(it.trim()) }.getOrNull() },
+        hoy = com.jvillada.movi.ui.fecha.hoyEnAppZone(),
+    )
     val accountValid = if (editing != null) true
         else if (newAccountMode) newAccountName.isNotBlank() && recienRecibido != null &&
+            !faltaLaDeudaActual &&
             bloqueoDeCuentas == null && motivoDelDesembolso == null
         else selectedAccountId != null
     val canSave = termsValid && accountValid && !saving
@@ -312,6 +330,8 @@ fun CreditTermsSheet(
         dayOfMonth.toIntOrNull() !in 1..31 -> "El día de pago tiene que estar entre 1 y 31"
         startDate.isBlank() -> "Falta la fecha de desembolso"
         !isValidCreditDate(startDate) -> "La fecha de desembolso tiene que ser AAAA-MM-DD"
+        // Después de los términos: son los que arman la propuesta del plan que la resuelve en un toque.
+        faltaLaDeudaActual -> FALTA_LA_DEUDA_ACTUAL
         // Va al final porque el bloque del desembolso va al final de la hoja: el capital tiene que
         // estar escrito antes para que el monto pueda venir con él puesto por defecto.
         motivoDelDesembolso != null -> motivoDelDesembolso
@@ -524,18 +544,28 @@ fun CreditTermsSheet(
                     )
                     // La deuda actual solo tiene sentido en el crédito que ya venía: en el
                     // recién recibido la deuda la arma el desembolso, y pedir las dos cosas
-                    // es exactamente cómo se contaba dos veces. Sigue siendo opcional, igual
-                    // que desde la ola 14: se puede anotar un crédito sin saber todavía el
-                    // saldo exacto y cuadrarlo después con «Ajustar saldo».
+                    // es exactamente cómo se contaba dos veces.
+                    //
+                    // Vuelta 59: ya no es opcional. En blanco valía 0, y un crédito de $40M
+                    // quedaba en −$980.000 con la primera cuota. Si no tiene el saldo a mano, la
+                    // hoja le propone el del plan («Por tu plan deberías unos $34,5M · Usar
+                    // este») con los términos de abajo, o le dice qué dato falta para calcularlo.
                     if (recienRecibido == false) {
                         Spacer(Modifier.height(Espacio.xs))
                         CampoDeMonto(
                             newAccountDebt, { newAccountDebt = it },
-                            rotulo = "Deuda actual (opcional)",
+                            rotulo = "Deuda actual",
                             ayuda = "Lo que tu banco dice que debes hoy.",
-                            masAyuda = "Si no lo tienes a mano, déjalo en blanco y cuádralo después " +
+                            masAyuda = "Si no lo tienes a mano, usa el que da tu plan y cuádralo después " +
                                 "con «Ajustar saldo».",
                         )
+                        if (newAccountDebt == null) {
+                            PropuestaDelSaldoDelPlan(
+                                texto = textoDelSaldoDelPlan(saldoDelPlan),
+                                onUsar = saldoDelPlan.saldo?.let { saldo -> { newAccountDebt = saldo } },
+                                habilitada = !saving,
+                            )
+                        }
                     }
                 }
                 Spacer(Modifier.height(Medida.entreSecciones))
@@ -1197,4 +1227,36 @@ fun isValidCreditDate(input: String): Boolean {
     val month = m.toIntOrNull() ?: return false
     val day = d.toIntOrNull() ?: return false
     return year in 1900..2100 && month in 1..12 && day in 1..31
+}
+
+/** El tag de la propuesta del saldo del plan, debajo de «Deuda actual» (vuelta 59). */
+const val TAG_SALDO_DEL_PLAN: String = "credito:saldo-del-plan"
+
+/**
+ * **La propuesta del saldo del plan** (vuelta 59): «Por tu plan deberías unos $34,5M · Usar este». Sin
+ * [onUsar] (falta un dato para calcularlo) solo dice cuál falta.
+ */
+@Composable
+private fun PropuestaDelSaldoDelPlan(texto: String, onUsar: (() -> Unit)?, habilitada: Boolean) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = Espacio.xxs).testTag(TAG_SALDO_DEL_PLAN),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Espacio.s),
+    ) {
+        Text(
+            texto,
+            style = Movi.textos.apoyo,
+            color = if (onUsar != null) Movi.colores.textoMedio else Movi.colores.aviso,
+            modifier = Modifier.weight(1f),
+        )
+        if (onUsar != null) {
+            Boton(
+                texto = USAR_EL_SALDO_DEL_PLAN,
+                onClick = onUsar,
+                variante = VarianteDeBoton.Fantasma,
+                tamano = TamanoDeBoton.S,
+                habilitado = habilitada,
+            )
+        }
+    }
 }

@@ -13,7 +13,9 @@ import com.jvillada.movi.shared.model.CreditTerms
 import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.PeriodoFinanciero
 import com.jvillada.movi.shared.model.UserProfile
-import com.jvillada.movi.shared.model.mas
+import com.jvillada.movi.shared.model.mesDeLaPrimeraCuotaSinPagar
+import com.jvillada.movi.shared.model.mesDeLaUltimaCuota
+import com.jvillada.movi.ui.fecha.hoyEnAppZone
 import com.jvillada.movi.shared.model.nombreDe
 import com.jvillada.movi.shared.model.periodoDe
 import com.jvillada.movi.shared.model.periodoSiguiente
@@ -27,24 +29,19 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
-import kotlin.test.assertNotEquals
 
 /**
- * # Créditos cuenta los meses desde el período del dueño, no desde el mes de calendario
+ * # La última cuota se cuenta desde la primera cuota sin pagar (vuelta 59)
  *
- * La fecha de la última cuota se dice contando meses **desde el mes en curso**, y esta pantalla
- * resolvía «el mes en curso» con `PeriodSettings()` a secas — corte 1 — ignorando el
- * `periodCutoffDay` que Movimientos, el Inicio y Presupuestos sí cargan del perfil.
+ * Esta prueba nació para que Créditos contara los meses desde el **período del dueño** y no desde el
+ * mes de calendario (con corte 25, el 26 de septiembre el resto de la app ya está en octubre). La
+ * vuelta 59 encontró que las dos respuestas eran la misma pregunta mal hecha: «próxima 5 de
+ * noviembre · te faltan 49 cuotas · la última en octubre de 2030» era noviembre, porque se contaba el
+ * mes en curso como la cuota 1 aunque la de octubre ya estuviera pagada.
  *
- * Con corte 25, el 26 de septiembre el resto de la app ya está en octubre y Créditos seguía en
- * septiembre: la misma deuda se anunciaba «la última en octubre de 2029» donde habría que leer
- * noviembre. Seis días de cada mes, en la pantalla cuyo trabajo es decir cuándo se termina de
- * pagar — y al lado de fechas que corren con el otro calendario.
- *
- * **La prueba se monta para que los dos calendarios discrepen el día que corra**, porque si no
- * coincidirían ~24 días de cada 30 y estaría verde sin probar nada: ver [ajustesQueCorrenElMes].
- * Y el mes esperado sale de las mismas funciones que usa la pantalla, no de una constante: fijar
- * «noviembre de 2029» volvería falsa la prueba el mes que viene.
+ * Las cuotas que faltan empiezan en **la primera sin pagar**, y una cuota vence un día del calendario:
+ * su mes no depende del corte. La prueba sigue montando un corte que corre el mes ([ajustesQueCorrenElMes])
+ * para que se vea que la fecha ya no se mueve con él.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = TELEFONO_DEL_AVD_DEL_PERIODO)
@@ -64,25 +61,19 @@ class ElPeriodoDeCreditosEsElDelDuenoTest {
     )
 
     private val ahora = Clock.System.now().toEpochMilliseconds()
+    private val hoy = hoyEnAppZone()
     private val ajustesDelDueno = ajustesQueCorrenElMes(ahora)
     private val mesesQueFaltan = planDelCredito(libreInversion)!!.mesesHastaLaUltimaCuota!!
 
-    /** El mes que la pantalla TIENE que decir: contado desde el período del dueño. */
-    private val mesCorrecto = nombreDe(periodoDe(ahora, ajustesDelDueno).mas(mesesQueFaltan - 1))
-
-    /** Y el que decía antes: contado desde el mes de calendario. */
-    private val mesDelCalendario = nombreDe(periodoDe(ahora, PeriodSettings()).mas(mesesQueFaltan - 1))
+    /** El mes que la pantalla TIENE que decir sin saber qué se pagó: desde el próximo vencimiento. */
+    private val mesCorrecto = nombreDe(mesDeLaUltimaCuota(mesDeLaPrimeraCuotaSinPagar(15, hoy, pagadas = null), mesesQueFaltan))
 
     @After
     fun limpiarLaCostura() {
         Repositories.sustitutoDePrueba = null
     }
 
-    /**
-     * Vuelta de diseño 4: la fecha de la última cuota de un préstamo la dice su detalle (la lista
-     * de Créditos es de filas). Se cuenta igual: desde el período del dueño.
-     */
-    private fun montar(cutoffDay: Int, iniciosPropios: Map<String, String>) {
+    private fun montar(cutoffDay: Int, iniciosPropios: Map<String, String>, credito: CreditSummary = libreInversion) {
         val perfil = UserProfile(
             id = "u1",
             email = "jvillad1@gmail.com",
@@ -91,7 +82,7 @@ class ElPeriodoDeCreditosEsElDelDuenoTest {
             periodCutoffDay = cutoffDay,
             periodStarts = iniciosPropios,
         )
-        composeRule.montarElDetalleDe(libreInversion.account, RepositorioDeLaDeuda(creditos = listOf(libreInversion), perfil = perfil))
+        composeRule.montarElDetalleDe(credito.account, RepositorioDeLaDeuda(creditos = listOf(credito), perfil = perfil))
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithText("la última en", substring = true, useUnmergedTree = true)
                 .fetchSemanticsNodes().isNotEmpty()
@@ -99,36 +90,30 @@ class ElPeriodoDeCreditosEsElDelDuenoTest {
     }
 
     @Test
-    fun `la fecha de la ultima cuota se cuenta desde el periodo del dueno`() {
-        // La prueba no serviría si los dos calendarios nombraran el mismo mes hoy.
-        assertNotEquals(
-            mesDelCalendario,
-            mesCorrecto,
-            "los ajustes de la prueba tienen que correr el mes: si no, esto pasa sin probar nada",
-        )
-
+    fun `la fecha de la ultima cuota no se corre con el corte del dueno`() {
         montar(ajustesDelDueno.cutoffDay, ajustesDelDueno.iniciosPropios)
 
         composeRule.onNodeWithText("la última en $mesCorrecto", substring = true, useUnmergedTree = true)
-            .assertExists("Créditos tiene que contar desde el período del dueño, no desde el mes de calendario")
-        assertEquals(
-            0,
-            composeRule.onAllNodesWithText("la última en $mesDelCalendario", substring = true, useUnmergedTree = true)
-                .fetchSemanticsNodes().size,
-            "el mes de calendario es justamente el que estaba mal",
-        )
+            .assertExists("se cuenta desde la primera cuota sin pagar, no desde el período en curso")
     }
 
-    /**
-     * El contracaso: un dueño con corte 1 —el que no tocó nada— sigue viendo el mes de calendario.
-     * Sin esto, «leer el perfil» podría haber sido «correr todas las fechas un mes».
-     */
     @Test
-    fun `con corte 1 nada cambia`() {
+    fun `con corte 1 dice lo mismo`() {
         montar(cutoffDay = 1, iniciosPropios = emptyMap())
 
-        composeRule.onNodeWithText("la última en $mesDelCalendario", substring = true, useUnmergedTree = true)
-            .assertExists("con el mes de calendario, la fecha es la de siempre")
+        composeRule.onNodeWithText("la última en $mesCorrecto", substring = true, useUnmergedTree = true)
+            .assertExists("el corte no cambia el mes en que vence una cuota")
+    }
+
+    /** Con la cuota de este mes sin pagar, la primera de las que faltan es la de este mes. */
+    @Test
+    fun `con la cuota del mes sin pagar se cuenta desde este mes`() {
+        val sinPagar = libreInversion.copy(cuotasPagadas = emptyList())
+        val esperado = nombreDe(mesDeLaUltimaCuota(mesDeLaPrimeraCuotaSinPagar(15, hoy, pagadas = emptyList()), mesesQueFaltan))
+        montar(cutoffDay = 1, iniciosPropios = emptyMap(), credito = sinPagar)
+
+        composeRule.onNodeWithText("la última en $esperado", substring = true, useUnmergedTree = true).assertExists()
+        assertEquals(PeriodoFinanciero(hoy.year, hoy.monthNumber), mesDeLaPrimeraCuotaSinPagar(15, hoy, pagadas = emptyList()))
     }
 }
 

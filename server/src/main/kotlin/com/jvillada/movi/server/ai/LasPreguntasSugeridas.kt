@@ -45,6 +45,8 @@ import com.jvillada.movi.shared.model.checklistDelPeriodo
 import com.jvillada.movi.shared.model.contraElAnterior
 import com.jvillada.movi.shared.model.cuantosPagosPorRevisar
 import com.jvillada.movi.shared.model.cuentasSinCuadrar
+import com.jvillada.movi.shared.model.deudasSinSaldoDe
+import com.jvillada.movi.server.balance.cuentasConSaldo
 import com.jvillada.movi.shared.model.disponibleAlDia
 import com.jvillada.movi.shared.model.estadoDePresupuesto
 import com.jvillada.movi.shared.model.faltaPorPagar
@@ -145,6 +147,8 @@ internal data class DatosDeLasSugeridas(
     val debitos: List<DebitoAutomaticoPorConfirmar> = emptyList(),
     val anomalias: List<Anomalia> = emptyList(),
     val sinCuadrar: List<Account> = emptyList(),
+    /** Vuelta 59: los préstamos y tarjetas sin saldo en Movi (en negativo, ver `deudasSinSaldoDe`). */
+    val sinSaldo: List<Account> = emptyList(),
 ) {
     val salio: Long get() = gastoPorCategoria.values.sum()
 }
@@ -253,6 +257,7 @@ internal suspend fun datosDeLasSugeridas(
             debitos = debitos,
             anomalias = if (revisar) loQueSeSaleDeLoNormalDe(uid, hoy, ajustes, conDeudas = true) else emptyList(),
             sinCuadrar = if (revisar) cuentasSinCuadrar(cuentasConSusSellos(uid, anulados), ahora) else emptyList(),
+            sinSaldo = if (revisar) deudasSinSaldoDe(cuentasConSaldo(uid, anulados, usdToCop)) else emptyList(),
         )
     }
 }
@@ -460,6 +465,10 @@ private data class CosaQueRevisar(val texto: String, val donde: String)
 internal fun queRevisar(d: DatosDeLasSugeridas): String {
     val conDebito = d.debitos.map { it.ruleId }.toSet()
     val cosas = buildList {
+        // 0. Vuelta 59: una deuda sin saldo en Movi tuerce la deuda total, el patrimonio y los intereses.
+        textoDeLasDeudasSinSaldoParaRevisar(d.sinSaldo)?.let {
+            add(CosaQueRevisar(it, "Escribe lo que dice el banco en Cuadre de saldos."))
+        }
         // 1. Lo urgente.
         val vencidos = d.pagos.filter { it.vencido && it.ruleId !in conDebito }
         when (vencidos.size) {
@@ -520,6 +529,15 @@ internal fun queRevisar(d: DatosDeLasSugeridas): String {
         val resto = cosas.size - mostradas.size
         if (resto > 0) append("\n\nY ${if (resto == 1) "1 cosa más" else "$resto cosas más"} en «Para revisar», en Inicio.")
     }
+}
+
+/**
+ * «Vehículo 4083 no tiene saldo en Movi: cuádralo», o con varias, cuántas y cuáles. `null` sin ninguna.
+ */
+internal fun textoDeLasDeudasSinSaldoParaRevisar(sinSaldo: List<Account>): String? = when (sinSaldo.size) {
+    0 -> null
+    1 -> "${sinSaldo.single().name} no tiene saldo en Movi: cuádralo"
+    else -> "${sinSaldo.size} deudas no tienen saldo en Movi (${sinSaldo.joinToString(", ") { it.name }}): cuádralas"
 }
 
 /** El texto con su punto final (o su signo de pregunta), sin duplicar. */

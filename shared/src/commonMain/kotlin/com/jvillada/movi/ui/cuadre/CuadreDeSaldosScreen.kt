@@ -2,7 +2,10 @@ package com.jvillada.movi.ui.cuadre
 
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import com.jvillada.movi.ui.components.ConfirmarEnHoja
 import com.jvillada.movi.ui.components.ds.Cifra
+import com.jvillada.movi.ui.credits.SIN_SALDO_EN_MOVI
 import com.jvillada.movi.ui.components.ds.Seccion
 import com.jvillada.movi.ui.components.ds.Superficie
 import com.jvillada.movi.ui.components.ds.Vacio
@@ -76,7 +79,7 @@ import kotlinx.datetime.LocalDate
  * capturar; una cuota de manejo que solo figura en el extracto hace lo mismo del otro lado.
  *
  * Esta pantalla es el lugar donde eso se corrige: todas las cuentas juntas, agrupadas bajo «Dinero»,
- * «Inversión» y «Tarjetas» (vuelta de diseño 37, ver [seccionDelCuadre]), con lo que Movi cree al
+ * «Inversión», «Tarjetas» (vuelta de diseño 37) y «Préstamos» (vuelta 59, ver [seccionDelCuadre]), con lo que Movi cree al
  * lado de un campo para escribir lo que dice el banco. No inventa ninguna forma nueva de tocar un
  * saldo — usa el ajuste que ya existía (ver `CuadreDeSaldosLogic` y, del lado del server,
  * `balanceAdjustmentEventFor`), que registra un **movimiento visible** en vez de sobrescribir un
@@ -144,6 +147,9 @@ fun CuadreDeSaldosScreen(
     }
     val fueraDeRango = escrito.values.any { it != null && it > MAX_ACCOUNT_BALANCE_COP }
     val sePuedeAnotar = pendientes.isNotEmpty() && !fueraDeRango && !guardando
+    // Vuelta 59: el ajuste de un préstamo pide confirmación antes de anotarse (ver [textoDelAjusteDelPrestamo]).
+    var confirmandoPrestamos by remember { mutableStateOf(false) }
+    val prestamosPendientes = pendientes.filter { seCuadraComoPrestamo(it) }
 
     fun anotar() {
         // La guarda contra el doble toque (mismo patrón que la hoja de ajuste de un crédito): sin
@@ -161,7 +167,12 @@ fun CuadreDeSaldosScreen(
             // problema que esta pantalla vino a resolver.
             pendientes.forEach { cuenta ->
                 val objetivo = escrito[cuenta.id] ?: return@forEach
-                runCatching { Repositories.wallets.adjustAccountBalance(cuenta.id, objetivo) }
+                // Un préstamo va por el ajuste de su ficha (`CreditBalanceSheet`), no por el de cuentas:
+                // el mismo movimiento que «Ajustar saldo» del crédito (vuelta 59).
+                runCatching {
+                    if (seCuadraComoPrestamo(cuenta)) Repositories.wallets.adjustCreditBalance(cuenta.id, objetivo)
+                    else Repositories.wallets.adjustAccountBalance(cuenta.id, objetivo)
+                }
                     .onSuccess { anotados++; escrito.remove(cuenta.id) }
                     .onFailure { e -> fallados++; error = e.toUserMessage() }
             }
@@ -209,8 +220,8 @@ fun CuadreDeSaldosScreen(
                     if (cuentas.isEmpty() && !cargando) {
                         Vacio(
                             titulo = "Todavía no hay nada que cuadrar",
-                            detalle = "El cuadre compara el saldo de cada cuenta de Dinero, Inversión o tarjeta " +
-                                "con el que te dice tu banco. Crea una cuenta para empezar.",
+                            detalle = "El cuadre compara el saldo de cada cuenta de Dinero, Inversión, tarjeta o " +
+                                "préstamo con el que te dice tu banco. Crea una cuenta para empezar.",
                             accion = "Crear una cuenta",
                             onAccion = { showCreateSheet = true },
                         )
@@ -244,7 +255,7 @@ fun CuadreDeSaldosScreen(
                     // «Tarjetas»), en vez del rótulo suelto al final de cada tarjeta. La primera
                     // sección va pegada a la frase de entrada; las demás, con el aire entre secciones
                     // (la tarjeta de arriba ya dejó `Espacio.s`).
-                    seccionesDelCuadre(cuentas).forEachIndexed { i, (seccion, suyas) ->
+                    seccionesDelCuadre(cuentas, primeraId).forEachIndexed { i, (seccion, suyas) ->
                         item(key = "seccion-" + seccion.name) {
                             val pegada = i == 0 && propuestas.isEmpty()
                             Seccion(
@@ -289,7 +300,7 @@ fun CuadreDeSaldosScreen(
                             pendientes.size > 1 -> "Anotar ${pendientes.size} ajustes"
                             else -> "Anotar el ajuste"
                         },
-                        onClick = { anotar() },
+                        onClick = { if (prestamosPendientes.isNotEmpty()) confirmandoPrestamos = true else anotar() },
                         habilitado = sePuedeAnotar,
                         anchoCompleto = true,
                     )
@@ -301,6 +312,21 @@ fun CuadreDeSaldosScreen(
                     )
                 }
             }
+        }
+
+        if (confirmandoPrestamos) {
+            ConfirmarEnHoja(
+                pregunta = preguntaDelAjusteDePrestamos(prestamosPendientes.map { it.name }),
+                detalle = prestamosPendientes.joinToString("\n") { p ->
+                    val ajuste = textoDelAjusteDelPrestamo(saldoQueCreeMovi(p).first, escrito[p.id] ?: 0L)
+                    if (prestamosPendientes.size == 1) "$ajuste." else "${p.name}: $ajuste."
+                } + " Queda como un movimiento visible en la cuenta.",
+                textoConfirmar = "Ajustar",
+                ocupado = guardando,
+                onConfirmar = { confirmandoPrestamos = false; anotar() },
+                onCancelar = { confirmandoPrestamos = false },
+                varianteConfirmar = VarianteDeBoton.Principal,
+            )
         }
 
         if (showCreateSheet) {
@@ -370,7 +396,17 @@ private fun FilaDeCuadre(
             }
             Column(horizontalAlignment = Alignment.End) {
                 Text("Movi dice", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                Cifra(enMovi, moneda = moneda, modifier = Modifier.padding(top = Espacio.xxs))
+                // Vuelta 59: una deuda en negativo no se pinta con el signo al revés: un solo signo.
+                if (esDeuda && enMovi < 0L) {
+                    Text(
+                        SIN_SALDO_EN_MOVI,
+                        style = Movi.textos.cuerpo,
+                        color = Movi.colores.aviso,
+                        modifier = Modifier.padding(top = Espacio.xxs),
+                    )
+                } else {
+                    Cifra(enMovi, moneda = moneda, modifier = Modifier.padding(top = Espacio.xxs))
+                }
             }
         }
         Spacer(Modifier.height(Espacio.s))

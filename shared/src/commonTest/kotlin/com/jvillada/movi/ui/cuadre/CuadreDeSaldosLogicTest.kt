@@ -122,11 +122,11 @@ class CuadreDeSaldosLogicTest {
     // ── Qué cuentas entran ───────────────────────────────────────────────────
 
     /**
-     * Dinero, Inversión y, desde la vuelta de diseño 37, tarjetas; préstamos no: un préstamo se
-     * cuadra en Créditos, donde al lado se ven la cuota y los intereses que explican la diferencia.
+     * Dinero, Inversión, desde la vuelta de diseño 37 tarjetas y, desde la vuelta 59, préstamos: «Cuadre
+     * de saldos no incluye los créditos, que es justo donde estaba el mayor descuadre».
      */
     @Test
-    fun `se cuadran dinero, inversion y tarjetas, no los prestamos`() {
+    fun `se cuadran dinero, inversion, tarjetas y prestamos`() {
         val todas = listOf(
             cuenta(id = "a", tipo = AccountType.SAVINGS),
             cuenta(id = "b", tipo = AccountType.CASH),
@@ -135,14 +135,14 @@ class CuadreDeSaldosLogicTest {
             cuenta(id = "e", tipo = AccountType.CREDIT_CARD),
             cuenta(id = "f", tipo = AccountType.LOAN),
         )
-        assertEquals(listOf("a", "b", "c", "d", "e"), cuentasParaCuadrar(todas).map { it.id })
+        assertEquals(listOf("a", "b", "c", "d", "e", "f"), cuentasParaCuadrar(todas).map { it.id })
         // `sePuedeCuadrar` (`:core`) no cambió: la usan el server y los avisos de «sin cuadrar», que
         // siguen sin tarjetas.
         assertEquals(listOf("a", "b", "c", "d"), todas.filter { sePuedeCuadrar(it) }.map { it.id })
         assertFalse(estaSinCuadrar(cuenta(id = "e", tipo = AccountType.CREDIT_CARD, primerEvento = AHORA - 400 * UN_DIA), AHORA))
     }
 
-    /** Cada cuenta bajo su sección, en el orden Dinero · Inversión · Tarjetas, sin secciones vacías. */
+    /** Cada cuenta bajo su sección, en el orden Dinero · Inversión · Tarjetas · Préstamos, sin secciones vacías. */
     @Test
     fun `las cuentas van agrupadas por seccion`() {
         val todas = listOf(
@@ -158,10 +158,11 @@ class CuadreDeSaldosLogicTest {
                 SeccionDelCuadre.DINERO to listOf("nu", "efectivo"),
                 SeccionDelCuadre.INVERSION to listOf("fondo"),
                 SeccionDelCuadre.TARJETAS to listOf("tarjeta"),
+                SeccionDelCuadre.PRESTAMOS to listOf("prestamo"),
             ),
             secciones.map { (s, cuentas) -> s to cuentas.map { it.id } },
         )
-        assertEquals(listOf("Dinero", "Inversión", "Tarjetas"), secciones.map { it.first.titulo })
+        assertEquals(listOf("Dinero", "Inversión", "Tarjetas", "Préstamos"), secciones.map { it.first.titulo })
         // Sin inversiones, no hay sección vacía.
         assertEquals(
             listOf(SeccionDelCuadre.DINERO),
@@ -180,6 +181,64 @@ class CuadreDeSaldosLogicTest {
         assertEquals("Cuánto debes según el banco", rotuloDelCampoDelCuadre(cuenta(tipo = AccountType.CREDIT_CARD)))
         assertEquals("Lo que dice el banco", rotuloDelCampoDelCuadre(cuenta(tipo = AccountType.SAVINGS)))
         assertEquals("Lo que dice el banco", rotuloDelCampoDelCuadre(cuenta(tipo = AccountType.INVESTMENT)))
+    }
+
+    // ── Vuelta 59: los préstamos y el efectivo ───────────────────────────────
+
+    /** Un préstamo pide la deuda, y su ajuste va por la ruta de los créditos (la hoja de su ficha). */
+    @Test
+    fun `un prestamo se cuadra como deuda y por el ajuste del credito`() {
+        val prestamo = cuenta(id = "vehiculo", tipo = AccountType.LOAN, saldo = -980_000L)
+        assertEquals(SeccionDelCuadre.PRESTAMOS, seccionDelCuadre(prestamo))
+        assertEquals(CUANTO_DEBES_SEGUN_EL_BANCO, rotuloDelCampoDelCuadre(prestamo))
+        assertTrue(seCuadraComoDeuda(prestamo))
+        assertTrue(seCuadraComoPrestamo(prestamo))
+        assertFalse(seCuadraComoPrestamo(cuenta(tipo = AccountType.CREDIT_CARD)))
+        // El ajuste de un crédito no cruza monedas: un préstamo en dólares no se ofrece.
+        assertNull(seccionDelCuadre(cuenta(id = "usd", tipo = AccountType.LOAN, moneda = "USD", saldo = 5_000L)))
+    }
+
+    /** Un solo signo: «Movi dice −$980.000» no; Movi no tiene su saldo, y el cargo lo explica. */
+    @Test
+    fun `el cuadre de un prestamo sin saldo no dice la cifra con el signo al reves`() {
+        val texto = textoDelCuadre(saldoEnMovi = -980_000L, saldoDelBanco = 34_500_000L, moneda = "COP", esDeuda = true)!!
+        assertEquals("Movi no tiene su saldo, tú dices \$34.500.000: se va a anotar un cargo de \$35.480.000.", texto)
+        assertFalse("−" in texto)
+    }
+
+    /** «Cuadrar» desde Créditos: la sección del préstamo pedido va primera, no al final fuera de pantalla. */
+    @Test
+    fun `la seccion de la cuenta pedida va primera`() {
+        val todas = listOf(
+            cuenta(id = "nu"),
+            cuenta(id = "tarjeta", tipo = AccountType.CREDIT_CARD),
+            cuenta(id = "vehiculo", tipo = AccountType.LOAN, saldo = -980_000L),
+        )
+        val secciones = seccionesDelCuadre(cuentasConLaPrimera(todas, "vehiculo"), primeraId = "vehiculo")
+        assertEquals(
+            listOf(SeccionDelCuadre.PRESTAMOS, SeccionDelCuadre.DINERO, SeccionDelCuadre.TARJETAS),
+            secciones.map { it.first },
+        )
+        // Sin cuenta pedida, el orden de siempre.
+        assertEquals(SeccionDelCuadre.DINERO, seccionesDelCuadre(todas).first().first)
+    }
+
+    /** El ajuste de un préstamo se confirma con lo que va a quedar, sin signos. */
+    @Test
+    fun `la confirmacion del prestamo dice en cuanto queda la deuda y el ajuste`() {
+        assertEquals(
+            "Movi deja la deuda en \$35.830.084 (ajuste de \$36.810.084)",
+            textoDelAjusteDelPrestamo(saldoEnMovi = -980_000L, saldoDelBanco = 35_830_084L),
+        )
+        assertEquals("¿Ajustar la deuda de Vehículo 4083?", preguntaDelAjusteDePrestamos(listOf("Vehículo 4083")))
+        assertEquals("¿Ajustar la deuda de 2 préstamos?", preguntaDelAjusteDePrestamos(listOf("A", "B")))
+    }
+
+    /** El efectivo no tiene banco que lo diga. */
+    @Test
+    fun `el campo del efectivo dice lo que tienes`() {
+        assertEquals(LO_QUE_TIENES, rotuloDelCampoDelCuadre(cuenta(tipo = AccountType.CASH)))
+        assertEquals("Lo que tienes", LO_QUE_TIENES)
     }
 
     // ── Desde cuándo nadie la mira ───────────────────────────────────────────

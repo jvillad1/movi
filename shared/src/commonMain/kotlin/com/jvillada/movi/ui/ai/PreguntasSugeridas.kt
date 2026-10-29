@@ -5,7 +5,8 @@ import com.jvillada.movi.shared.model.PreguntaSugerida
 import com.jvillada.movi.shared.model.estadoDePresupuesto
 import com.jvillada.movi.shared.model.patrimonioDe
 import com.jvillada.movi.shared.model.planDelCredito
-import com.jvillada.movi.shared.model.resumirDeudas
+import com.jvillada.movi.shared.model.interesDelMes
+import com.jvillada.movi.shared.model.deudaTotalDe
 import com.jvillada.movi.ui.components.formatMoneyCompactSinOcultar
 import com.jvillada.movi.ui.dashboard.DashboardData
 import com.jvillada.movi.ui.dashboard.checklistDelPeriodoDe
@@ -114,7 +115,8 @@ data class SenalesParaPreguntar(
     /** Las deudas que tienen algo que decir: saldo vivo y condiciones cargadas. */
     val deudas: List<DeudaParaPreguntar> = emptyList(),
     /**
-     * Intereses de un mes de los créditos cuya cuota sale de su bolsillo (ver `resumirDeudas`). Los
+     * Intereses de un mes de los créditos cuya cuota sale de su bolsillo y de sus tarjetas (vuelta 59,
+     * `interesDelMes`: la cifra de Créditos y de «Cómo salir de tus deudas»). Los
      * que paga la nómina o un tercero no cuentan acá: «¿cómo bajo lo que pago de intereses?» es una
      * pregunta sobre SU flujo, y las dos hipotecas que gira Skandia no salen de ahí.
      */
@@ -258,7 +260,8 @@ internal fun senalesDe(data: DashboardData): SenalesParaPreguntar {
                 saldo = plan.saldo,
             )
         },
-        interesesPropiosAlMes = resumirDeudas(conPlan.map { it.second }).interesMensualPropio,
+        // Vuelta 59: la cifra de Créditos y de «Cómo salir de tus deudas» —créditos y tarjetas—, una sola.
+        interesesPropiosAlMes = interesDelMes(conPlan.map { it.second }, data.cards.orEmpty()).propio,
         // Sin período, vencimientos u ocurrencias el checklist no se sabe: todo se vería pendiente
         // y la pregunta afirmaría una plata que quizá ya se pagó.
         faltaPorPagar = if (data.periodoActual == null || data.upcoming == null || data.ocurrencias == null) {
@@ -268,6 +271,7 @@ internal fun senalesDe(data: DashboardData): SenalesParaPreguntar {
         },
         tuPlata = patrimonio?.tuPlata,
         bienes = patrimonio?.bienes ?: 0L,
-        deudasTotales = patrimonio?.deudas ?: 0L,
+        // La deuda total de Créditos (vuelta 59): una deuda sin saldo no resta.
+        deudasTotales = data.accounts?.let(::deudaTotalDe) ?: 0L,
     )
 }

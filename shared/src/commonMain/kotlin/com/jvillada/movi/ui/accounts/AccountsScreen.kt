@@ -77,6 +77,12 @@ import com.jvillada.movi.ui.components.ds.TonoDeIcono
 import com.jvillada.movi.ui.components.ds.Vacio
 import com.jvillada.movi.ui.components.ds.VarianteDeCifra
 import com.jvillada.movi.ui.credits.totalDebtCop
+import com.jvillada.movi.ui.credits.CUADRAR_LAS_DEUDAS_SIN_SALDO
+import com.jvillada.movi.ui.credits.textoDeLasDeudasSinSaldo
+import com.jvillada.movi.shared.model.deudasSinSaldoDe
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import com.jvillada.movi.ui.cuadre.cuentasSinCuadrar
 import com.jvillada.movi.ui.cuadre.textoDelAvisoDeCuadre
 import com.jvillada.movi.ui.dashboard.heroBalance
@@ -259,6 +265,9 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                             balance = heroBalance(cuentas, apartados),
                             historia = historiaLeida.valor,
                             historiaEnCamino = historiaLeida.actualizando,
+                            // Vuelta 59: las deudas sin saldo, que «Deudas» cuenta con su signo.
+                            deudasSinSaldo = deudasSinSaldoDe(cuentas),
+                            onCuadrar = { id -> onNavigate(id?.let { Screen.CuadrarLaCuenta(it) } ?: Screen.CuadreDeSaldos) },
                         )
                     }
                     if (conCuentas) {
@@ -496,6 +505,9 @@ private fun TarjetaDelPatrimonio(
     balance: com.jvillada.movi.ui.dashboard.HeroBalance,
     historia: com.jvillada.movi.shared.model.HistoriaDelPatrimonio?,
     historiaEnCamino: Boolean,
+    deudasSinSaldo: List<Account> = emptyList(),
+    /** Abre Cuadre de saldos con esa deuda arriba (o sin ninguna, con varias). */
+    onCuadrar: (String?) -> Unit = {},
 ) {
     Superficie(modifier = Modifier.fillMaxWidth().testTag(TAG_TARJETA_DEL_PATRIMONIO)) {
         Text(ROTULO_DEL_PATRIMONIO_NETO, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
@@ -520,10 +532,33 @@ private fun TarjetaDelPatrimonio(
             }
             // Los bienes: sin este renglón la cifra de arriba subía con la casa y nada decía por qué.
             if (balance.bienes > 0L) RenglonDelPatrimonio("Bienes", balance.bienes)
-            if (balance.deudas > 0) RenglonDelPatrimonio("Deudas", -balance.deudas)
+            if (balance.deudas > 0 || deudasSinSaldo.isNotEmpty()) RenglonDelPatrimonio("Deudas", -balance.deudas)
+            // Vuelta 59: «Deudas» es la cuenta del patrimonio (cada deuda con su signo), así que una sin
+            // saldo en Movi le resta; Créditos no la resta. Sin esta línea las dos cifras se contradecían.
+            textoDeLasDeudasSinSaldo(
+                creditos = deudasSinSaldo.count { it.type == AccountType.LOAN },
+                tarjetas = deudasSinSaldo.count { it.type != AccountType.LOAN },
+            )?.let { sinSaldo ->
+                Row(
+                    modifier = Modifier.fillMaxWidth().testTag(TAG_DEUDAS_SIN_SALDO_EN_EL_PATRIMONIO),
+                    horizontalArrangement = Arrangement.spacedBy(Espacio.s),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("Incluye $sinSaldo", style = Movi.textos.apoyo, color = Movi.colores.aviso, modifier = Modifier.weight(1f))
+                    Boton(
+                        texto = CUADRAR_LAS_DEUDAS_SIN_SALDO,
+                        onClick = { onCuadrar(deudasSinSaldo.singleOrNull()?.id) },
+                        variante = VarianteDeBoton.Fantasma,
+                        tamano = TamanoDeBoton.S,
+                    )
+                }
+            }
         }
     }
 }
+
+/** La línea «Incluye 1 crédito sin saldo · Cuadrar» debajo de «Deudas» (vuelta 59). */
+const val TAG_DEUDAS_SIN_SALDO_EN_EL_PATRIMONIO: String = "patrimonio:deudas-sin-saldo"
 
 /** Un renglón de la resta del patrimonio: el rótulo a la izquierda y la cifra chica a la derecha. */
 @Composable

@@ -221,6 +221,23 @@ class CreditRoutesTest {
         assertTrue(summary["paidPct"]!!.jsonPrimitive.double in 0.61..0.62)
     }
 
+    /**
+     * Vuelta 59: el GET manda las cuotas pagadas (vacías si no hay ningún pago de cuota), para que la
+     * pantalla cuente las que faltan desde la primera sin pagar. Vacía no es «no se sabe» (`null`).
+     */
+    @Test
+    fun `GET manda las cuotas pagadas de cada credito`() = testApplication {
+        wireApp()
+        client.put("/api/credits/$loanAccountId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(validTermsJson)
+        }
+        val res = client.get("/api/credits") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }
+        val summary = Json.parseToJsonElement(res.bodyAsText()).jsonArray[0].jsonObject
+        assertEquals(0, summary["cuotasPagadas"]!!.jsonArray.size)
+    }
+
     @Test
     fun `PUT is an idempotent upsert`() = testApplication {
         wireApp()

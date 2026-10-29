@@ -59,6 +59,11 @@ import com.jvillada.movi.ui.homeScreenFor
 import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.ui.credits.AvisoDeFaltanDatos
+import com.jvillada.movi.ui.credits.CUADRAR_LAS_DEUDAS_SIN_SALDO
+import com.jvillada.movi.ui.credits.FALTA_EL_SALDO_DE_LA_DEUDA
+import com.jvillada.movi.ui.credits.HojaDeLaDeuda
+import com.jvillada.movi.ui.credits.SIN_SALDO_EN_MOVI
+import com.jvillada.movi.ui.credits.saldoDeUnaDeuda
 import com.jvillada.movi.ui.credits.HojasDeLaDeuda
 import com.jvillada.movi.ui.credits.faltanLosDatos
 import com.jvillada.movi.ui.credits.SeccionDeLaDeuda
@@ -314,6 +319,12 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                             acc = acc,
                             onCuadrar = { onNavigate(Screen.CuadreDeSaldos) },
                             onCuadrarEsta = { onNavigate(Screen.CuadrarLaCuenta(acc.id)) },
+                            // Vuelta 59: un préstamo en cero sin un movimiento no está pagado, está sin
+                            // saldo; una tarjeta en cero sí está al día.
+                            deudaPagada = deuda?.prestamo?.hasMovements ?: true,
+                            // La deuda sin saldo se cuadra con la hoja de siempre de la ficha.
+                            onAjustarLaDeuda = deuda?.let { d -> { d.hoja = HojaDeLaDeuda.Saldo } }
+                                ?: { onNavigate(Screen.CuadrarLaCuenta(acc.id)) },
                         )
                         Spacer(Modifier.height(Medida.entreSecciones))
                     }
@@ -689,6 +700,9 @@ private fun SeccionDeApartados(
 /** El `testTag` del tipo de la cuenta con su ícono, en la tarjeta del saldo (vuelta 42). */
 const val TAG_TIPO_DE_LA_CUENTA: String = "cuenta:tipo"
 
+/** El `testTag` de «Sin saldo en Movi» en el encabezado de una deuda en negativo (vuelta 59). */
+const val TAG_DEUDA_SIN_SALDO: String = "cuenta:deuda-sin-saldo"
+
 /** El `testTag` del encabezado del detalle de una cuenta. */
 const val TAG_ENCABEZADO_DE_LA_CUENTA: String = "encabezado-de-la-cuenta"
 
@@ -705,7 +719,13 @@ const val TAG_EFECTIVO_EN_NEGATIVO: String = "efectivo-en-negativo"
  * de una tarjeta sí va en verde, porque es plata tuya.
  */
 @Composable
-private fun EncabezadoDeLaCuenta(acc: Account, onCuadrar: () -> Unit, onCuadrarEsta: () -> Unit) {
+private fun EncabezadoDeLaCuenta(
+    acc: Account,
+    onCuadrar: () -> Unit,
+    onCuadrarEsta: () -> Unit,
+    deudaPagada: Boolean = true,
+    onAjustarLaDeuda: () -> Unit = onCuadrarEsta,
+) {
     val isCard = isDebtAccount(acc.type)
     val (typeIcon, typeLabel) = accountTypeIcon(acc.type)
     Superficie(modifier = Modifier.fillMaxWidth().testTag(TAG_ENCABEZADO_DE_LA_CUENTA)) {
@@ -747,13 +767,43 @@ private fun EncabezadoDeLaCuenta(acc: Account, onCuadrar: () -> Unit, onCuadrarE
         Spacer(Modifier.height(Medida.dentroDeSeccion))
         if (isCard) {
             val (debt, isEstimate) = cardDebt(acc)
-            // El signo invertido —negativo es saldo a FAVOR— vive en [saldoDeDeuda] desde la Ola 15.
-            // Queda en `CifraProtagonista` (el texto ya armado) por el «≈» de una deuda estimada.
-            val saldo = saldoDeDeuda(debt)
-            CifraProtagonista(
-                text = "${if (isEstimate) "≈" else ""}${if (saldo.aFavor) "+" else ""}${saldo.magnitud}",
-                color = if (saldo.aFavor) Movi.colores.entra else Movi.colores.texto,
-            )
+            // Vuelta 59: **un solo signo** ([saldoDeUnaDeuda]). Lo que se debe, sin signo; una deuda en
+            // negativo no es un «+$980.000» en verde: es una deuda a la que Movi no le tiene el saldo,
+            // y se dice así, con cómo cuadrarla. Queda en `CifraProtagonista` (el texto ya armado) por
+            // el «≈» de una deuda estimada.
+            val saldo = saldoDeUnaDeuda(debt, pagada = deudaPagada)
+            if (saldo.conSaldo) {
+                CifraProtagonista(
+                    text = "${if (isEstimate) "≈" else ""}${saldo.magnitud}",
+                    color = Movi.colores.texto,
+                )
+            } else {
+                Text(
+                    SIN_SALDO_EN_MOVI,
+                    style = Movi.textos.titulo,
+                    color = Movi.colores.aviso,
+                    modifier = Modifier.testTag(TAG_DEUDA_SIN_SALDO),
+                )
+                Spacer(Modifier.height(Espacio.xs))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Espacio.s),
+                ) {
+                    Text(
+                        FALTA_EL_SALDO_DE_LA_DEUDA,
+                        style = Movi.textos.apoyo,
+                        color = Movi.colores.textoMedio,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Boton(
+                        texto = CUADRAR_LAS_DEUDAS_SIN_SALDO,
+                        onClick = onAjustarLaDeuda,
+                        variante = VarianteDeBoton.Secundario,
+                        tamano = TamanoDeBoton.S,
+                    )
+                }
+            }
         } else {
             Cifra(acc.balance, VarianteDeCifra.Heroe, tono = if (acc.balance < 0) TonoDeCifra.Alerta else TonoDeCifra.Neutro)
         }

@@ -8,9 +8,14 @@ import org.jetbrains.exposed.sql.ResultRow
  * Progreso de pago de un crédito: 1 − deuda/principal, clampado a [0, 1].
  * Null cuando el principal no es positivo (términos inválidos/incompletos).
  * La deuda llega derivada de los eventos de la cuenta LOAN — nunca se almacena aquí.
+ *
+ * **Null también con la deuda en negativo** (vuelta 59): un crédito sin saldo en Movi —creado sin
+ * «Deuda actual» y con una cuota encima, «Vehículo 4083» en −$980.000— daba `1.0`, «100 % pagado»,
+ * sobre una deuda que nadie conoce. Sin saldo no hay avance que decir (ver `deudasSinSaldoDe`).
  */
 fun paidPctFor(principal: Long, debt: Long): Double? {
     if (principal <= 0L) return null
+    if (debt < 0L) return null
     return (1.0 - debt.toDouble() / principal.toDouble()).coerceIn(0.0, 1.0)
 }
 
