@@ -6,6 +6,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import com.jvillada.movi.theme.Medida
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.unit.dp
@@ -27,9 +29,10 @@ import kotlin.test.assertTrue
 /**
  * **El paso de las cuentas deja a la vista lo esencial** (vuelta 54). Con los siete bancos en varios
  * renglones, a 390 dp el nombre, el saldo y «Agregar cuenta» quedaban debajo del pliegue (nuevo-04).
- * Ahora los bancos y los tipos van cada uno en una fila que se desplaza de lado y «Agregar cuenta» va en
- * el pie: sin desplazar nada, el campo del saldo y el botón se ven enteros, a 390 × 844 y a 360 × 760,
- * con la letra de la app (×1,12).
+ * Ahora los bancos y los tipos van cada uno en una fila que se desplaza de lado y «Agregar cuenta» va
+ * dentro de la tarjeta del formulario, debajo del saldo (revisión: fijo en el pie se confundía con
+ * agregar una tarjeta): sin desplazar nada, el campo del saldo y el botón se ven enteros, a 390 × 844 y
+ * a 360 × 760, con la letra de la app (×1,12).
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -61,9 +64,12 @@ class ElPasoDeCuentasALaVistaTest {
         val saldo = campos[1].getUnclippedBoundsInRoot()
         val boton = composeRule.onNodeWithTag(TAG_AGREGAR_CUENTA_EN_LA_GUIA).getUnclippedBoundsInRoot()
         val avanzar = composeRule.onNodeWithTag(TAG_AVANZAR_EN_LA_GUIA).getUnclippedBoundsInRoot()
-        assertTrue(nombre.bottom <= boton.top, "el nombre ($nombre) se ve sin desplazar, arriba del pie ($boton)")
-        assertTrue(saldo.bottom <= boton.top, "el saldo ($saldo) se ve sin desplazar, arriba del pie ($boton)")
-        assertTrue(boton.bottom <= avanzar.top && avanzar.bottom <= alto, "«Agregar cuenta» y «Siguiente» en el pie, a la vista")
+        val tarjetas = composeRule.onNodeWithText("Tarjetas de crédito").getUnclippedBoundsInRoot()
+        assertTrue(nombre.bottom <= saldo.top && saldo.bottom <= boton.top, "el botón va debajo del saldo, en el formulario")
+        assertTrue(boton.bottom <= tarjetas.top, "«Agregar cuenta» va antes de la sección de tarjetas, no debajo")
+        // El pie de la guía empieza `dentroDeSeccion` arriba de «Siguiente»: el botón se ve entero antes.
+        assertTrue(boton.bottom <= avanzar.top - Medida.dentroDeSeccion, "«Agregar cuenta» ($boton) se ve sin desplazar, arriba del pie ($avanzar)")
+        assertTrue(avanzar.bottom <= alto, "«Siguiente» a la vista")
 
         // Los bancos y los tipos: una fila cada uno, del alto de un chip.
         val bancos = composeRule.onNodeWithTag(TAG_BANCOS_DE_UN_TOQUE).getUnclippedBoundsInRoot()

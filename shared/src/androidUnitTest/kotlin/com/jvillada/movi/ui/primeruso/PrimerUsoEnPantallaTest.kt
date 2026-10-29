@@ -8,6 +8,10 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.filter
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasAnyChild
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -327,6 +331,96 @@ class PrimerUsoEnPantallaTest {
         composeRule.onNodeWithTag(TAG_AVANZAR_EN_LA_GUIA).assertTextContains("Siguiente")
     }
 
+    // ── Revisión de la vuelta 54: lo escrito no se pierde ──────────────────────────────────────
+
+    /**
+     * Un botón de una hoja: el velo y el panel son `clickable` y funden lo de adentro, así que el toque va
+     * por la acción semántica del botón (como en `CrearUnaCuentaEsIgualEnTodosLadosTest`).
+     */
+    private fun tocarEnLaHoja(texto: String) {
+        composeRule.onNode(hasClickAction() and hasAnyChild(hasText(texto)), useUnmergedTree = true)
+            .performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+    }
+
+    private fun escribirElArriendo(dia: String = "5") {
+        composeRule.onNodeWithText("Arriendo").performClick()
+        composeRule.waitForIdle()
+        val campos = composeRule.onAllNodes(hasSetTextAction())
+        campos[0].performTextInput("1200000")
+        if (dia.isNotEmpty()) campos[1].performTextInput(dia)
+        composeRule.waitForIdle()
+    }
+
+    @Test
+    fun `con el arriendo escrito el principal es Guardar y seguir, y lo guarda`() {
+        val repo = RepoDeLaGuia()
+        montar(repo, paso = PasoDePrimerUso.RECURRENTES)
+        escribirElArriendo()
+        composeRule.onNodeWithTag(TAG_AVANZAR_EN_LA_GUIA).assertTextContains(GUARDAR_Y_SEGUIR).assertIsEnabled()
+        avanzar()
+
+        val regla = repo.reglas.single()
+        assertEquals("Arriendo", regla.name)
+        assertEquals(1_200_000L, regla.amount)
+        assertEquals(5, regla.dayOfMonth)
+        assertTrue(seVe("Paso 6 de 6"))
+        assertTrue(seVe("1 pago"), "el resumen cuenta el arriendo")
+    }
+
+    @Test
+    fun `con el arriendo a medias el pie dice que falta`() {
+        montar(RepoDeLaGuia(), paso = PasoDePrimerUso.RECURRENTES)
+        escribirElArriendo(dia = "")
+        composeRule.onNodeWithTag(TAG_AVANZAR_EN_LA_GUIA).assertTextContains(GUARDAR_Y_SEGUIR).assertIsNotEnabled()
+        composeRule.onNodeWithTag(TAG_RAZON_DEL_PIE).assertTextContains("Falta el día del arriendo")
+    }
+
+    @Test
+    fun `saltar con el arriendo escrito pregunta antes de descartarlo`() {
+        val repo = RepoDeLaGuia()
+        montar(repo, paso = PasoDePrimerUso.RECURRENTES)
+        escribirElArriendo()
+        saltar()
+        assertTrue(seVe("¿Descartar el arriendo que escribiste?"))
+        assertTrue(seVe("Paso 5 de 6"), "todavía no saltó")
+
+        // «Cancelar» lo deja como estaba: el principal sigue guardándolo.
+        tocarEnLaHoja("Cancelar")
+        composeRule.waitForIdle()
+        assertFalse(seVe("¿Descartar el arriendo que escribiste?"))
+        composeRule.onNodeWithTag(TAG_AVANZAR_EN_LA_GUIA).assertTextContains(GUARDAR_Y_SEGUIR)
+
+        saltar()
+        tocarEnLaHoja("Descartar")
+        composeRule.waitForIdle()
+        val textos = textosDe(composeRule.onRoot(useUnmergedTree = true).fetchSemanticsNode())
+        assertTrue(seVe("Paso 6 de 6"), "TEXTOS: $textos")
+        assertTrue(repo.reglas.isEmpty(), "descartado, no se guardó")
+        assertTrue(seVe("Ninguno todavía"), "TEXTOS: $textos")
+    }
+
+    @Test
+    fun `con la cuenta escrita el principal la guarda y sigue, y saltar pregunta`() {
+        val repo = RepoDeLaGuia()
+        montar(repo, paso = PasoDePrimerUso.CUENTAS)
+        composeRule.onNodeWithText("Bancolombia").performClick()
+        composeRule.waitForIdle()
+        composeRule.onAllNodes(hasSetTextAction())[1].performTextInput("1500000")
+        composeRule.waitForIdle()
+
+        saltar()
+        assertTrue(seVe("¿Descartar la cuenta que escribiste?"))
+        tocarEnLaHoja("Cancelar")
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag(TAG_AVANZAR_EN_LA_GUIA).assertTextContains(GUARDAR_Y_SEGUIR).assertIsEnabled()
+        avanzar()
+        assertEquals("Bancolombia Ahorros", repo.cuentasCreadas.single().name)
+        assertEquals(1_500_000L, repo.eventos.single().amount)
+        assertTrue(seVe("Paso 4 de 6"))
+    }
+
     // ── Que Movi se entere solo ────────────────────────────────────────────────────────────────
 
     @Test
@@ -480,4 +574,11 @@ class PrimerUsoEnPantallaTest {
         assertEquals(AccountType.CASH, repo.cuentasCreadas.single().type)
         assertTrue(seVe("Efectivo"), "la fila de la cuenta creada dice su tipo")
     }
+}
+
+/** Todos los textos debajo de [nodo], para el mensaje de una prueba que falla. */
+private fun textosDe(nodo: androidx.compose.ui.semantics.SemanticsNode): List<String> {
+    val propios: List<androidx.compose.ui.text.AnnotatedString> =
+        nodo.config.getOrElseNullable(androidx.compose.ui.semantics.SemanticsProperties.Text) { null } ?: emptyList()
+    return propios.map { a -> a.text }.filter { t -> t.isNotBlank() } + nodo.children.flatMap { c -> textosDe(c) }
 }

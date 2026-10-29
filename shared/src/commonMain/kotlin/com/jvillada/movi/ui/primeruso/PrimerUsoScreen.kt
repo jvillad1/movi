@@ -129,6 +129,8 @@ import com.jvillada.movi.ui.papeles.PapelesCompartidos
 import com.jvillada.movi.ui.profile.detalleDelInicioDelPeriodo
 import com.jvillada.movi.ui.profile.ejemploCortoDelCorte
 import com.jvillada.movi.ui.profile.vistaPreviaDelPeriodo
+import androidx.compose.runtime.mutableStateMapOf
+import com.jvillada.movi.ui.components.ConfirmarEnHoja
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 
@@ -242,12 +244,65 @@ fun PrimerUsoScreen(
         modoDeCaptura,
     )
 
-    // «Agregar cuenta» va en el pie, así que su estado vive acá (vuelta 54).
-    val agregarCuenta = rememberAgregarCuenta()
+    // Los formularios de los pasos viven acá: el pie los mira (revisión de la vuelta 54, ver
+    // `BorradoresDeLaGuia.kt`). Con algo escrito, el principal es «Guardar y seguir» y saltar pregunta.
+    val formularioDeCuenta = rememberEstadoDelFormularioDeCuenta()
+    val borradorDeCuenta = remember(formularioDeCuenta) { BorradorDeCuenta(formularioDeCuenta) { cuentas += it } }
+    val borradorDeTarjeta = remember { BorradorDeTarjeta { tarjetas += it } }
+    // Un borrador por pago de cada mes que se abrió (clave: el nombre del atajo, o "" para «Agregar
+    // otro»): cerrar uno no borra lo escrito, y el pie guarda todos los escritos.
+    val borradoresDeRecurrentes = remember { mutableStateMapOf<String, BorradorDeRecurrente>() }
+    var recurrenteAbierto by remember { mutableStateOf<String?>(null) }
+    // Lo que se hace después de «Descartar» en la pregunta (saltar el paso o salir de la guía).
+    var porDescartar by remember { mutableStateOf<(() -> Unit)?>(null) }
 
     fun irA(destino: PasoDePrimerUso) {
         error = null
         paso = destino
+    }
+
+    fun cuentaPorDefecto(): String? = (cuentas + yaHabia.cuentas).firstOrNull { it.type in CUENTAS_QUE_PAGAN }?.id
+
+    fun alternarRecurrente(clave: String, nombreFijo: String?, categoria: String) {
+        if (recurrenteAbierto == clave) {
+            recurrenteAbierto = null
+            return
+        }
+        if (clave !in borradoresDeRecurrentes) {
+            borradoresDeRecurrentes[clave] = BorradorDeRecurrente(nombreFijo, categoria, cuenta = ::cuentaPorDefecto) { regla ->
+                recurrentes += regla
+                borradoresDeRecurrentes.remove(clave)
+                if (recurrenteAbierto == clave) recurrenteAbierto = null
+            }
+        }
+        recurrenteAbierto = clave
+    }
+
+    fun borradoresDe(p: PasoDePrimerUso): List<Borrador> = when (p) {
+        PasoDePrimerUso.CUENTAS -> listOf(borradorDeCuenta, borradorDeTarjeta)
+        PasoDePrimerUso.RECURRENTES -> borradoresDeRecurrentes.values.toList()
+        else -> emptyList()
+    }
+
+    /** Lo escrito en [p] se tira (después de «Descartar»). */
+    fun descartarLoEscrito(p: PasoDePrimerUso) {
+        when (p) {
+            PasoDePrimerUso.CUENTAS -> {
+                formularioDeCuenta.limpiar()
+                borradorDeTarjeta.banco = null; borradorDeTarjeta.cupo = null; borradorDeTarjeta.diaDePago = ""
+                borradorDeTarjeta.abierta = false
+            }
+            PasoDePrimerUso.RECURRENTES -> {
+                borradoresDeRecurrentes.clear()
+                recurrenteAbierto = null
+            }
+            else -> Unit
+        }
+    }
+
+    /** Si hay algo escrito en el paso, pregunta antes de [accion]; si no, la hace. */
+    fun preguntandoSiHayAlgoEscrito(accion: () -> Unit) {
+        if (preguntaDeDescartar(borradoresDe(paso)) != null) porDescartar = accion else accion()
     }
 
     /** Terminada o descartada: se sella en el server y se va al Inicio, haya contestado o no. */
@@ -288,6 +343,24 @@ fun PrimerUsoScreen(
         }
     }
 
+    /** «Guardar y seguir»: guarda todo lo escrito del paso con la creación de siempre, y avanza. */
+    fun guardarYSeguir(escritos: List<Borrador>) {
+        if (guardando) return
+        guardando = true
+        error = null
+        alcance.launch {
+            for (b in escritos) {
+                if (!b.guardar()) {
+                    error = b.error ?: "No pudimos guardar. Revisa tu conexión e inténtalo de nuevo."
+                    guardando = false
+                    return@launch
+                }
+            }
+            guardando = false
+            pasoSiguiente(paso, pasos)?.let(::irA)
+        }
+    }
+
     // El «atrás» del teléfono vuelve un paso, como el botón de abajo.
     val anterior = pasoAnterior(paso, pasos)
     BackHandlerEffect(enabled = anterior != null) { anterior?.let(::irA) }
@@ -307,13 +380,23 @@ fun PrimerUsoScreen(
     // El principal solo cuando hay algo que guardar (o que seguir: la bienvenida y el final). Apagado,
     // «Saltar este paso» está siempre justo debajo.
     val sePuedeAvanzar = hayAlgoHecho
+    // Revisión de la vuelta 54: con un formulario escrito, el principal lo guarda y sigue; incompleto,
+    // el pie dice qué falta.
+    val escritos = borradoresDe(paso).filter { it.escrito }
+    val razon = razonDelPie(escritos)
 
+    Box(modifier = Modifier.fillMaxSize()) {
     Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         Encabezado(
             titulo = "Paso ${numeroDelPaso(paso, pasos)} de ${pasos.size}",
             acciones = {
                 if (paso != PasoDePrimerUso.LISTO) {
-                    Boton(AHORA_NO, onClick = ::salir, variante = VarianteDeBoton.Fantasma, habilitado = !guardando)
+                    Boton(
+                        AHORA_NO,
+                        onClick = { preguntandoSiHayAlgoEscrito(::salir) },
+                        variante = VarianteDeBoton.Fantasma,
+                        habilitado = !guardando,
+                    )
                 }
             },
         )
@@ -365,8 +448,8 @@ fun PrimerUsoScreen(
                     PasoDePrimerUso.CUENTAS -> PasoCuentas(
                         cuentas = (yaHabia.cuentas + cuentas).distinctBy { it.id },
                         tarjetas = tarjetas,
-                        formulario = agregarCuenta,
-                        onTarjeta = { tarjetas += it },
+                        borrador = borradorDeCuenta,
+                        tarjeta = borradorDeTarjeta,
                     )
                     PasoDePrimerUso.CAPTURA -> PasoCaptura(
                         modo = modoDeCaptura,
@@ -376,8 +459,9 @@ fun PrimerUsoScreen(
                     )
                     PasoDePrimerUso.RECURRENTES -> PasoRecurrentes(
                         creados = recurrentes,
-                        cuentaPorDefecto = (cuentas + yaHabia.cuentas).firstOrNull { it.type in CUENTAS_QUE_PAGAN }?.id,
-                        onCreado = { recurrentes += it },
+                        borradores = borradoresDeRecurrentes,
+                        abierto = recurrenteAbierto,
+                        onAlternar = ::alternarRecurrente,
                     )
                     PasoDePrimerUso.LISTO -> PasoListo(
                         lista,
@@ -405,25 +489,6 @@ fun PrimerUsoScreen(
                 Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
                 Spacer(Modifier.height(Espacio.xs))
             }
-            // Vuelta 54: en el paso de las cuentas, «Agregar cuenta» va en el pie, siempre a la vista
-            // (con los bancos en varios renglones quedaba debajo del pliegue a 390 dp).
-            if (paso == PasoDePrimerUso.CUENTAS) {
-                agregarCuenta.error?.let {
-                    Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
-                    Spacer(Modifier.height(Espacio.xs))
-                }
-                Boton(
-                    AGREGAR_CUENTA,
-                    onClick = { agregarCuenta.agregar(alcance) { cuentas += it } },
-                    variante = if (sePuedeAvanzar) VarianteDeBoton.Secundario else VarianteDeBoton.Principal,
-                    icono = Icons.Rounded.Add,
-                    cargando = agregarCuenta.creando,
-                    habilitado = agregarCuenta.formulario.sePuedeCrear,
-                    anchoCompleto = true,
-                    modifier = Modifier.testTag(TAG_AGREGAR_CUENTA_EN_LA_GUIA),
-                )
-                Spacer(Modifier.height(Espacio.xs))
-            }
             Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
                 if (anterior != null && paso != PasoDePrimerUso.LISTO) {
                     Boton(
@@ -435,11 +500,21 @@ fun PrimerUsoScreen(
                     )
                 }
                 Boton(
-                    textoDeAvanzar,
-                    onClick = ::avanzar,
+                    if (escritos.isNotEmpty()) GUARDAR_Y_SEGUIR else textoDeAvanzar,
+                    onClick = { if (escritos.isNotEmpty()) guardarYSeguir(escritos) else avanzar() },
                     cargando = guardando,
-                    habilitado = sePuedeAvanzar,
+                    habilitado = if (escritos.isNotEmpty()) razon == null else sePuedeAvanzar,
                     modifier = Modifier.weight(1f).testTag(TAG_AVANZAR_EN_LA_GUIA),
+                )
+            }
+            // Lo que falta para guardar lo escrito, en una línea centrada justo debajo (como `PieDeHoja`).
+            if (razon != null) {
+                Text(
+                    razon,
+                    style = Movi.textos.apoyo,
+                    color = Movi.colores.textoMedio,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(top = Espacio.xs).testTag(TAG_RAZON_DEL_PIE),
                 )
             }
             // Saltar no es la acción principal: un botón de texto debajo, en todos los pasos de en
@@ -450,7 +525,8 @@ fun PrimerUsoScreen(
             if (paso.seSaltaConUnBoton && siguiente != null) {
                 Boton(
                     SALTAR_ESTE_PASO,
-                    onClick = { irA(siguiente) },
+                    // Con algo escrito pregunta antes: el arriendo escrito no se pierde por un toque.
+                    onClick = { preguntandoSiHayAlgoEscrito { descartarLoEscrito(paso); irA(siguiente) } },
                     variante = VarianteDeBoton.Fantasma,
                     tamano = TamanoDeBoton.S,
                     habilitado = !guardando,
@@ -462,7 +538,26 @@ fun PrimerUsoScreen(
             }
         }
     }
+
+    // «¿Descartar el arriendo que escribiste?»: antes de saltar o salir con algo escrito.
+    porDescartar?.let { accion ->
+        ConfirmarEnHoja(
+            pregunta = preguntaDeDescartar(borradoresDe(paso)) ?: "¿Descartar lo que escribiste?",
+            detalle = "Si sigues sin guardarlo, no queda anotado.",
+            textoConfirmar = "Descartar",
+            ocupado = false,
+            onConfirmar = {
+                porDescartar = null
+                accion()
+            },
+            onCancelar = { porDescartar = null },
+        )
+    }
+    }
 }
+
+/** El tag de la razón del pie («Falta el monto del arriendo»). */
+const val TAG_RAZON_DEL_PIE: String = "primer-uso-razon-del-pie"
 
 /** Lo que el dueño ya tenía al abrir la guía (para el resumen y para tildar la lista única). */
 private data class LoQueYaHabia(
@@ -477,44 +572,6 @@ const val AGREGAR_CUENTA: String = "Agregar cuenta"
 
 /** El tag de «Agregar cuenta» en el pie de la guía. */
 const val TAG_AGREGAR_CUENTA_EN_LA_GUIA: String = "primer-uso-agregar-cuenta"
-
-/** El formulario del paso de las cuentas y su creación, que el pie de la guía dispara. */
-@Stable
-private class AgregarCuenta(val formulario: EstadoDelFormularioDeCuenta) {
-    var creando by mutableStateOf(false)
-    var error by mutableStateOf<String?>(null)
-    private var yaCreada: Account? = null
-
-    /** La creación de siempre ([crearCuentaConSaldo]), como la hoja «Nueva cuenta». */
-    fun agregar(alcance: kotlinx.coroutines.CoroutineScope, onCuenta: (Account) -> Unit) {
-        if (!formulario.sePuedeCrear || creando) return
-        creando = true
-        error = null
-        val cuenta = formulario.cuentaNueva()
-        alcance.launch {
-            runCatching { crearCuentaConSaldo(cuenta, yaCreada = yaCreada) { yaCreada = it } }
-                .onSuccess { creada ->
-                    onCuenta(creada.copy(balance = cuenta.balance))
-                    formulario.limpiar()
-                    yaCreada = null
-                }
-                .onFailure {
-                    error = if (yaCreada != null) {
-                        "La cuenta quedó creada, pero no se pudo guardar el saldo. Toca «$AGREGAR_CUENTA» otra vez."
-                    } else {
-                        it.toUserMessage()
-                    }
-                }
-            creando = false
-        }
-    }
-}
-
-@Composable
-private fun rememberAgregarCuenta(): AgregarCuenta {
-    val formulario = rememberEstadoDelFormularioDeCuenta()
-    return remember(formulario) { AgregarCuenta(formulario) }
-}
 
 /** Los tipos de cuenta de los que sale un pago de cada mes. */
 private val CUENTAS_QUE_PAGAN = setOf(AccountType.SAVINGS, AccountType.CHECKING, AccountType.CASH)
@@ -691,16 +748,19 @@ private fun DiaParaElegir(dia: Int, elegido: Boolean, habilitado: Boolean, onCli
 
 /**
  * **Las cuentas, con lo esencial a la vista** (vuelta 54): los bancos y los tipos van cada uno en una
- * fila de chips que se desplaza de lado ([FormularioDeCuenta] `enUnaFila`), y «Agregar cuenta» va en el
- * pie de la guía. A 390 dp se ven el nombre, el saldo y el botón sin desplazar.
+ * fila de chips que se desplaza de lado ([FormularioDeCuenta] `enUnaFila`), y «Agregar cuenta» va
+ * **dentro de la tarjeta del formulario**, debajo de «Saldo de hoy» (revisión de la vuelta 54: fijo en el
+ * pie quedaba justo debajo de «Tarjetas de crédito» y se leía como agregar una tarjeta). A 390 dp se ven
+ * el nombre, el saldo y el botón sin desplazar. Con algo escrito, el pie ofrece «Guardar y seguir».
  */
 @Composable
 private fun PasoCuentas(
     cuentas: List<Account>,
     tarjetas: List<String>,
-    formulario: AgregarCuenta,
-    onTarjeta: (String) -> Unit,
+    borrador: BorradorDeCuenta,
+    tarjeta: BorradorDeTarjeta,
 ) {
+    val alcance = rememberCoroutineScope()
     Text(
         "Las cuentas donde tienes tu plata: el banco, Nequi, el efectivo. Con lo que tienen hoy.",
         style = Movi.textos.cuerpo,
@@ -710,10 +770,25 @@ private fun PasoCuentas(
 
     // El mismo bloque y la misma creación que Patrimonio → «Nueva cuenta» (vuelta de diseño 16): ver
     // [FormularioDeCuenta] y crearCuentaConSaldo. La guía no ofrece «Bien»: aquí lo que hace falta es
-    // dónde está la plata. El botón que la crea va en el pie.
+    // dónde está la plata.
     Seccion(if (cuentas.isEmpty()) "Agrega una cuenta" else "Agrega otra")
     Superficie(modifier = Modifier.fillMaxWidth()) {
-        FormularioDeCuenta(formulario.formulario, habilitado = !formulario.creando, enUnaFila = true)
+        FormularioDeCuenta(borrador.formulario, habilitado = !borrador.creando, enUnaFila = true)
+        borrador.error?.let {
+            Spacer(Modifier.height(Espacio.xs))
+            Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
+        }
+        Spacer(Modifier.height(Medida.dentroDeSeccion))
+        Boton(
+            AGREGAR_CUENTA,
+            onClick = { alcance.launch { borrador.guardar() } },
+            variante = VarianteDeBoton.Secundario,
+            icono = Icons.Rounded.Add,
+            cargando = borrador.creando,
+            habilitado = borrador.formulario.sePuedeCrear,
+            anchoCompleto = true,
+            modifier = Modifier.testTag(TAG_AGREGAR_CUENTA_EN_LA_GUIA),
+        )
     }
 
     if (cuentas.isNotEmpty()) {
@@ -734,19 +809,13 @@ private fun PasoCuentas(
     }
 
     Spacer(Modifier.height(Medida.entreSecciones))
-    PasoTarjetas(tarjetas = tarjetas, onTarjeta = onTarjeta)
+    PasoTarjetas(tarjetas = tarjetas, borrador = tarjeta)
 }
 
 /** Las tarjetas de crédito, opcionales: banco, cupo y día de pago, con la creación de siempre. */
 @Composable
-private fun PasoTarjetas(tarjetas: List<String>, onTarjeta: (String) -> Unit) {
+private fun PasoTarjetas(tarjetas: List<String>, borrador: BorradorDeTarjeta) {
     val alcance = rememberCoroutineScope()
-    var abierta by remember { mutableStateOf(false) }
-    var banco by remember { mutableStateOf<String?>(null) }
-    var cupo by remember { mutableStateOf<Long?>(null) }
-    var diaDePago by remember { mutableStateOf("") }
-    var creando by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
 
     Seccion("Tarjetas de crédito", conteo = tarjetas.size.takeIf { it > 0 })
     Text(
@@ -768,70 +837,44 @@ private fun PasoTarjetas(tarjetas: List<String>, onTarjeta: (String) -> Unit) {
         }
         Spacer(Modifier.height(Medida.dentroDeSeccion))
     }
-    if (!abierta) {
+    if (!borrador.abierta) {
         Boton(
             "Agregar una tarjeta",
-            onClick = { abierta = true },
+            onClick = { borrador.abierta = true },
             variante = VarianteDeBoton.Fantasma,
             icono = Icons.Rounded.Add,
         )
         return
     }
-    val diaValido = diaDePago.toIntOrNull()?.takeIf { it in 1..31 }
     Superficie(modifier = Modifier.fillMaxWidth()) {
         RotuloDelCampo("Banco")
-        SelectorDeBanco(elegido = banco, onElegir = { banco = it }, enUnaFila = true)
+        SelectorDeBanco(elegido = borrador.banco, onElegir = { borrador.banco = it }, enUnaFila = true)
         Spacer(Modifier.height(Medida.dentroDeSeccion))
-        MoneyField(value = cupo, onValueChange = { cupo = it }, label = "Cupo")
+        MoneyField(value = borrador.cupo, onValueChange = { borrador.cupo = it }, label = "Cupo")
         Spacer(Modifier.height(Medida.dentroDeSeccion))
         CampoDeTexto(
             "Día de pago (1 a 31)",
-            diaDePago,
-            { nuevo -> diaDePago = nuevo.filter(Char::isDigit).take(2) },
+            borrador.diaDePago,
+            { nuevo -> borrador.diaDePago = nuevo.filter(Char::isDigit).take(2) },
             marcador = "Ej: 15",
             teclado = KeyboardType.Number,
         )
-        error?.let {
+        borrador.error?.let {
             Spacer(Modifier.height(Espacio.xs))
             Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
         }
         Spacer(Modifier.height(Medida.dentroDeSeccion))
         Boton(
             "Agregar tarjeta",
-            onClick = {
-                val elBanco = banco ?: return@Boton
-                val elDia = diaValido ?: return@Boton
-                if (creando) return@Boton
-                creando = true
-                error = null
-                val nombre = "Tarjeta $elBanco"
-                alcance.launch {
-                    runCatching {
-                        Repositories.wallets.createCard(
-                            CreateCardRequest(
-                                name = nombre,
-                                terms = CardTerms(accountId = "", bank = elBanco, creditLimit = cupo, paymentDay = elDia),
-                            ),
-                        )
-                    }.onSuccess {
-                        onTarjeta(nombre)
-                        banco = null; cupo = null; diaDePago = ""; abierta = false
-                    }.onFailure { error = it.toUserMessage() }
-                    creando = false
-                }
-            },
+            onClick = { alcance.launch { borrador.guardar() } },
             variante = VarianteDeBoton.Secundario,
-            cargando = creando,
-            habilitado = banco != null && diaValido != null,
+            cargando = borrador.creando,
+            habilitado = borrador.queFalta == null,
             anchoCompleto = true,
         )
-        if (banco == null || diaValido == null) {
+        borrador.queFalta?.let {
             Spacer(Modifier.height(Espacio.xs))
-            Text(
-                if (banco == null) "Falta el banco" else "Falta el día de pago",
-                style = Movi.textos.apoyo,
-                color = Movi.colores.textoMedio,
-            )
+            Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
         }
     }
 }
@@ -933,11 +976,10 @@ private fun PasoCapturaConUnExtracto(extractoSubido: String?, onExtracto: (Strin
 @Composable
 private fun PasoRecurrentes(
     creados: List<RecurringRule>,
-    cuentaPorDefecto: String?,
-    onCreado: (RecurringRule) -> Unit,
+    borradores: Map<String, BorradorDeRecurrente>,
+    abierto: String?,
+    onAlternar: (clave: String, nombreFijo: String?, categoria: String) -> Unit,
 ) {
-    // Qué atajo está abierto: su nombre, o "" para «Agregar otro». `null` = ninguno.
-    var abierto by remember { mutableStateOf<String?>(null) }
     Text(
         "Lo que pagas todos los meses. Movi te avisa antes de que venza y lo descuenta de lo que te queda. Es opcional.",
         style = Movi.textos.cuerpo,
@@ -952,16 +994,10 @@ private fun PasoRecurrentes(
                 titulo = atajo.nombre,
                 subtitulo = creado?.let { "${formatCOP(it.amount)} · el día ${it.dayOfMonth}" } ?: atajo.categoria,
                 final = { if (creado != null) Pildora("Listo", TonoDePildora.Exito) else Chevron() },
-                onClick = { abierto = if (abierto == atajo.nombre) null else atajo.nombre },
+                onClick = { onAlternar(atajo.nombre, atajo.nombre, atajo.categoria) },
             )
-            if (abierto == atajo.nombre) {
-                FormularioDeRecurrente(
-                    nombreFijo = atajo.nombre,
-                    categoria = atajo.categoria,
-                    cuenta = cuentaPorDefecto,
-                    onCreado = { onCreado(it); abierto = null },
-                )
-            }
+            val borrador = borradores[atajo.nombre]
+            if (abierto == atajo.nombre && borrador != null) FormularioDeRecurrente(borrador)
         }
         val otros = creados.filter { r -> ATAJOS_DE_RECURRENTES.none { it.nombre == r.name } }
         otros.forEach { r ->
@@ -976,94 +1012,56 @@ private fun PasoRecurrentes(
         Fila(
             titulo = "Agregar otro",
             inicio = { IconoEnCirculo(Icons.Rounded.Add) },
-            onClick = { abierto = if (abierto == "") null else "" },
+            onClick = { onAlternar(CLAVE_DE_OTRO_PAGO, null, "Otros") },
         )
-        if (abierto == "") {
-            FormularioDeRecurrente(
-                nombreFijo = null,
-                categoria = "Otros",
-                cuenta = cuentaPorDefecto,
-                onCreado = { onCreado(it); abierto = null },
-            )
-        }
+        val otro = borradores[CLAVE_DE_OTRO_PAGO]
+        if (abierto == CLAVE_DE_OTRO_PAGO && otro != null) FormularioDeRecurrente(otro)
     }
 }
 
-/** Monto y día (y el nombre, si es «Agregar otro»), guardado con la creación de reglas de siempre. */
+/** La clave del borrador de «Agregar otro». */
+private const val CLAVE_DE_OTRO_PAGO = ""
+
+/**
+ * Monto y día (y el nombre, si es «Agregar otro»). «Guardar» de adentro guarda este y deja seguir
+ * agregando; el pie ofrece «Guardar y seguir» con lo escrito.
+ */
 @Composable
-private fun FormularioDeRecurrente(
-    nombreFijo: String?,
-    categoria: String,
-    cuenta: String?,
-    onCreado: (RecurringRule) -> Unit,
-) {
+private fun FormularioDeRecurrente(borrador: BorradorDeRecurrente) {
     val alcance = rememberCoroutineScope()
-    var nombre by remember { mutableStateOf(nombreFijo ?: "") }
-    var monto by remember { mutableStateOf<Long?>(null) }
-    var dia by remember { mutableStateOf("") }
-    var guardando by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
-    val diaValido = dia.toIntOrNull()?.takeIf { it in 1..31 }
-    val falta = when {
-        nombre.isBlank() -> "Falta el nombre"
-        (monto ?: 0L) <= 0L -> "Falta el monto"
-        diaValido == null -> "Falta el día"
-        else -> null
-    }
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = Medida.margenDePantalla)
             .padding(bottom = Medida.dentroDeSeccion),
     ) {
-        if (nombreFijo == null) {
-            CampoDeTexto("Nombre", nombre, { nombre = it }, marcador = "Ej: Gimnasio")
+        if (borrador.nombreFijo == null) {
+            CampoDeTexto("Nombre", borrador.nombre, { borrador.nombre = it }, marcador = "Ej: Gimnasio")
             Spacer(Modifier.height(Medida.dentroDeSeccion))
         }
-        MoneyField(value = monto, onValueChange = { monto = it }, label = "Cuánto pagas")
+        MoneyField(value = borrador.monto, onValueChange = { borrador.monto = it }, label = "Cuánto pagas")
         Spacer(Modifier.height(Medida.dentroDeSeccion))
         CampoDeTexto(
             "Qué día del mes (1 a 31)",
-            dia,
-            { nuevo -> dia = nuevo.filter(Char::isDigit).take(2) },
+            borrador.dia,
+            { nuevo -> borrador.dia = nuevo.filter(Char::isDigit).take(2) },
             marcador = "Ej: 5",
             teclado = KeyboardType.Number,
         )
-        error?.let {
+        borrador.error?.let {
             Spacer(Modifier.height(Espacio.xs))
             Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
         }
         Spacer(Modifier.height(Medida.dentroDeSeccion))
         Boton(
             "Guardar",
-            onClick = {
-                val elMonto = monto ?: return@Boton
-                val elDia = diaValido ?: return@Boton
-                if (falta != null || guardando) return@Boton
-                guardando = true
-                error = null
-                val regla = RecurringRule(
-                    id = "",
-                    name = nombre.trim(),
-                    category = categoria,
-                    amount = elMonto,
-                    dayOfMonth = elDia,
-                    type = TransactionType.EXPENSE,
-                    accountId = cuenta,
-                )
-                alcance.launch {
-                    runCatching { Repositories.wallets.createRecurringRule(regla) }
-                        .onSuccess { onCreado(it) }
-                        .onFailure { error = it.toUserMessage() }
-                    guardando = false
-                }
-            },
+            onClick = { alcance.launch { borrador.guardar() } },
             variante = VarianteDeBoton.Secundario,
-            cargando = guardando,
-            habilitado = falta == null,
+            cargando = borrador.guardando,
+            habilitado = borrador.queFalta == null,
             anchoCompleto = true,
         )
-        if (falta != null) {
+        borrador.queFalta?.let { falta ->
             Spacer(Modifier.height(Espacio.xs))
             Text(falta, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
         }

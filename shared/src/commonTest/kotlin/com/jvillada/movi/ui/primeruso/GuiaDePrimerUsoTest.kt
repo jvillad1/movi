@@ -169,4 +169,28 @@ class GuiaDePrimerUsoTest {
         assertEquals(true, captura(leido(), true))
         assertEquals(true, captura(leido(captura = CapturaDeSms(total = 2)), false))
     }
+
+    // ── Revisión de la vuelta 54: lo escrito ───────────────────────────────────────────────────
+
+    @Test
+    fun `lo que dice el pie y la pregunta de descartar`() {
+        val arriendo = BorradorDeRecurrente("Arriendo", "Vivienda", cuenta = { null }, alCrear = {})
+        val tarjeta = BorradorDeTarjeta(alCrear = {})
+        assertEquals(false, arriendo.escrito, "abierto sin escribir no pregunta nada")
+        assertNull(preguntaDeDescartar(listOf(arriendo, tarjeta)))
+
+        arriendo.monto = 1_200_000L
+        assertEquals("Falta el día del arriendo", razonDelPie(listOf(arriendo)))
+        assertEquals("¿Descartar el arriendo que escribiste?", preguntaDeDescartar(listOf(arriendo)))
+        arriendo.dia = "5"
+        assertNull(razonDelPie(listOf(arriendo)), "completo: el principal es «Guardar y seguir»")
+
+        tarjeta.abierta = true
+        tarjeta.cupo = 5_000_000L
+        assertEquals("Falta el banco de la tarjeta", razonDelPie(listOf(arriendo, tarjeta)))
+        assertEquals("¿Descartar el arriendo y la tarjeta que escribiste?", preguntaDeDescartar(listOf(arriendo, tarjeta)))
+
+        assertEquals("la suscripción", articuloDelPago("Una suscripción"))
+        assertEquals("el pago", articuloDelPago(null))
+    }
 }
