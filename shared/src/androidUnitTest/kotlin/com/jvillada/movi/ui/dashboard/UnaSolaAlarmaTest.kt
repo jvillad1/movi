@@ -47,7 +47,7 @@ import kotlin.test.assertEquals
  * - **a lo sumo una barra en alerta**: ninguna con la semana pasada, la del período si el período se pasó.
  *
  * Escenario de `TeQuedanEnHoyEnPantallaTest`: lunes 21-sep-2026, $10M de ingresos, $3,1M de arriendo;
- * la meta de la semana es $890.320.
+ * desde la vuelta 60 la meta de la semana sale de lo que quedaba el lunes.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w390dp-h2400dp-xhdpi")
@@ -78,7 +78,7 @@ class UnaSolaAlarmaTest {
         periodoActual = PeriodoFinanciero(2026, 9),
     )
 
-    private fun montar(data: DashboardData) {
+    private fun montar(data: DashboardData, hoy: LocalDate = this.hoy) {
         navegoA = null
         composeRule.setContent {
             MoviTheme {
@@ -108,12 +108,14 @@ class UnaSolaAlarmaTest {
 
     @Test
     fun `semana pasada - una sola alarma, en Pagos, con que hacer, y ninguna barra en alerta`() {
-        // $1.000.000 hoy contra una meta de la semana de $890.320; al período le sobra.
-        montar(datos(gasto = mapOf("2026-09-21" to 1_000_000L)))
+        // Vuelta 60: la semana mide contra lo que quedaba el lunes, y la última del período se lleva todo
+        // lo que queda (no se pasa sin pasar el período). Esta es la del lunes 14: quedaban $6,9M para 11
+        // días, la semana $4.390.904; $4.500.000 hoy, y al período le sobra.
+        montar(datos(gasto = mapOf("2026-09-14" to 4_500_000L)), hoy = LocalDate(2026, 9, 14))
 
         assertEquals(1, cuantos(TAG_ALERTA_DEL_DISPONIBLE), "una sola alarma")
         assertEquals(1, cuantosDicen("pasaste de la meta"), "el héroe no la repite")
-        composeRule.onNodeWithText("Esta semana te pasaste de la meta por \$109.680.", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithText("Esta semana te pasaste de la meta por \$109.096.", useUnmergedTree = true).assertExists()
         assertEquals(0, cuantos(TAG_BARRA_EN_ALERTA), "ninguna barra en alerta: el período no se pasó")
         assertEquals(3, cuantos(TAG_BARRA_DE_VENTANA), "las tres barras, en tinta")
 

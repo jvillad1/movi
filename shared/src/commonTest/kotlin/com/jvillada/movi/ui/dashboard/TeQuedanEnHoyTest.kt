@@ -22,7 +22,8 @@ import kotlin.test.assertTrue
  *
  * Mismo escenario que `DisponibleEnInicioTest`: lunes 21 de septiembre de 2026, período del 25 de
  * agosto al 24 de septiembre (31 días, quedan 4 contando hoy). $10M de ingresos y $3,1M de arriendo
- * ya pagado: disponible $6,9M, meta diaria $222.580, meta de esta semana (corta, 4 días) $890.320.
+ * ya pagado: disponible $6,9M, ritmo fijo $222.580 por día. Desde la vuelta 60 la meta de la semana y
+ * la de hoy salen de lo que queda (esta semana, la última, se lleva todo lo que quedaba el lunes).
  *
  * Cada prueba compara la cifra de Hoy contra `disponibleDelInicio(data).periodo.teQuedan`, que es
  * exactamente lo que pinta la tarjeta de Plan (`PlanScreen` → `TarjetaDelDisponible`).
@@ -103,15 +104,19 @@ class TeQuedanEnHoyTest {
      */
     @Test
     fun `la semana pasada no va en el detalle - la dice una vez la alarma de Pagos`() {
-        val (cifra, plan) = lasDos(datos(gasto = mapOf("2026-09-21" to 1_000_000L)))
+        // Vuelta 60: la semana mide contra lo que quedaba el lunes, así que la última semana del período
+        // (que se lleva todo lo que queda) no se puede pasar sin pasar el período. Esta es la del lunes
+        // 14: quedaban $6,9M para 11 días, $627.272 por día, por 7 = $4.390.904.
+        val lunes14 = LocalDate(2026, 9, 14)
+        val (cifra, plan) = lasDos(datos(gasto = mapOf("2026-09-14" to 4_500_000L)), lunes14)
 
-        assertEquals(5_900_000, cifra.teQuedan)
-        assertEquals(890_320, plan.semana.meta)
-        assertEquals("para 4 días · \$1,5M por día", cifra.detalle)
+        assertEquals(2_400_000, cifra.teQuedan)
+        assertEquals(4_390_904, plan.semana.meta)
+        assertEquals("para 11 días · \$218.181 por día", cifra.detalle)
         assertFalse("meta" in cifra.detalle, "el detalle no repite la alarma de la semana")
         assertFalse(cifra.enRojo, "el período no está pasado: la cifra grande no va en rojo")
         assertEquals(
-            AlertaDelDisponible("Esta semana te pasaste de la meta por \$109.680."),
+            AlertaDelDisponible("Esta semana te pasaste de la meta por \$109.096."),
             alertaDelDisponible(plan),
         )
         // Ninguna barra en alerta: el período no se pasó.
@@ -121,11 +126,13 @@ class TeQuedanEnHoyTest {
 
     @Test
     fun `hoy pasado - la alarma lo dice con la cifra de la columna de hoy`() {
-        // $300.000 hoy contra una meta de $222.580.
-        val (cifra, plan) = lasDos(datos(gasto = mapOf("2026-09-21" to 300_000L)))
+        // Vuelta 60: $1.800.000 hoy contra una meta de $1.725.000 (lo que quedaba esta mañana, $6,9M,
+        // entre los 4 días que quedan).
+        val (cifra, plan) = lasDos(datos(gasto = mapOf("2026-09-21" to 1_800_000L)))
 
+        assertEquals(1_725_000, plan.hoy.meta)
         assertFalse("meta" in cifra.detalle)
-        assertEquals(AlertaDelDisponible("Hoy te pasaste de la meta por \$77.420."), alertaDelDisponible(plan))
+        assertEquals(AlertaDelDisponible("Hoy te pasaste de la meta por \$75.000."), alertaDelDisponible(plan))
     }
 
     @Test

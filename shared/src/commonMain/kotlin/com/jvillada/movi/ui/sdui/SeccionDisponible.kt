@@ -122,6 +122,23 @@ internal fun DisponibleDelPeriodoSection(
  */
 const val ROTULO_META_DE_HOY: String = "Meta de hoy"
 
+/**
+ * **La semana y hoy cuando ya no queda nada** (vuelta 60): «$0», y debajo esto en vez de «gastaste».
+ * Las metas de la semana y de hoy salen de lo que queda (ver `DisponibleDelPeriodo`), así que con el
+ * período pasado no hay plata que repartir y la columna no ofrece una meta positiva.
+ */
+const val YA_TE_PASASTE: String = "ya te pasaste"
+
+/** El renglón de lo gastado en la ventana cuando ya no queda nada: «llevas $50.000». */
+internal fun llevasEnLaVentana(gastado: Long): String = "llevas ${formatMoneyCompact(gastado)}"
+
+/**
+ * El renglón chico de la columna del período (vuelta 60): su cifra es el gasto **del día a día** —sin
+ * los fijos—, y decía «gastaste», el mismo verbo que «En qué se va» usa para todo lo que salió
+ * («Llevas gastado $4.888.850»). Dos cifras distintas con el mismo nombre en pantallas vecinas.
+ */
+const val ROTULO_DIA_A_DIA_DEL_PERIODO: String = "en el día a día"
+
 /** La tarjeta del disponible, cargando o cargada: el mismo tag en las dos para medir que no salte. */
 const val TAG_TARJETA_DEL_DISPONIBLE: String = "tarjeta-del-disponible"
 
@@ -360,13 +377,19 @@ private fun ColumnaDeVentana(
     // dice el signo, y la alarma, con qué hacer, sale una vez arriba).
     val enAlerta = barraEnAlerta(disponible, delPeriodo) ||
         (delPeriodo && !hayMargen && ventana.nivel == NivelDelGasto.PASADO)
+    // Vuelta 60: la semana y hoy con el período ya pasado dicen «$0 · ya te pasaste», no una meta.
+    val sinNadaQueRepartir = !delPeriodo && disponible.yaTePasaste
     Column(modifier = modifier) {
         Text(text = rotulo, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, maxLines = 1)
         // En el período la cifra es lo gastado, y va en rojo si gastaste más de lo que había (vuelta
         // 45: solo esa; la semana y hoy, en tinta). Vuelta de diseño 19: la `Cifra` del sistema,
         // compacta porque son tres columnas (§6).
         CifraDelSistema(
-            if (delPeriodo) ventana.gastado else ventana.teQuedan,
+            when {
+                delPeriodo -> ventana.gastado
+                sinNadaQueRepartir -> 0L
+                else -> ventana.teQuedan
+            },
             tono = if (enAlerta) TonoDeCifra.Alerta else TonoDeCifra.Neutro,
             forma = FormaDeCifra.Compacta,
         )
@@ -375,9 +398,22 @@ private fun ColumnaDeVentana(
         // letra hasta que entre la dejaba en ~9 sp. Dos renglones fijos en las tres columnas, así
         // que las barras siguen parejas. Que cada cifra entre en su columna lo mide
         // `LasCifrasDelDisponibleEntranTest`.
-        Text(text = "gastaste", style = Movi.textos.apoyo, color = Movi.colores.textoApagado, maxLines = 1)
         Text(
-            text = if (delPeriodo) "de ${formatMoneyCompact(ventana.meta)}" else formatMoneyCompact(ventana.gastado),
+            text = when {
+                delPeriodo -> ROTULO_DIA_A_DIA_DEL_PERIODO
+                sinNadaQueRepartir -> YA_TE_PASASTE
+                else -> "gastaste"
+            },
+            style = Movi.textos.apoyo,
+            color = if (sinNadaQueRepartir) Movi.colores.textoMedio else Movi.colores.textoApagado,
+            maxLines = 1,
+        )
+        Text(
+            text = when {
+                delPeriodo -> "de ${formatMoneyCompact(ventana.meta)}"
+                sinNadaQueRepartir -> llevasEnLaVentana(ventana.gastado)
+                else -> formatMoneyCompact(ventana.gastado)
+            },
             style = Movi.textos.apoyo,
             color = Movi.colores.textoApagado,
             maxLines = 1,

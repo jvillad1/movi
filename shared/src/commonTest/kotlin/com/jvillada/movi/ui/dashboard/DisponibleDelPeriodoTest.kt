@@ -79,30 +79,44 @@ class DisponibleDelPeriodoTest {
 
     // ── Las metas ────────────────────────────────────────────────────────────
 
-    /** Las metas del dueño: 31 días. No dependen de lo gastado. */
+    /**
+     * Las metas del dueño: 31 días. Vuelta 60: la del período es el disponible; la de la semana y la de
+     * hoy salen de lo que quedaba al empezar cada una (la regla de «Te quedan» y «$X por día»).
+     */
     @Test
     fun `las metas de un periodo de 31 dias`() {
         val sinGasto = assertNotNull(calcular(recibidos = 8_500_000, checklist = emptyList(), hoy = LocalDate(2026, 9, 8)))
-        // 8.500.000 ÷ 31 = 274.193 (se trunca), por 7 = 1.919.351.
+        // El ritmo fijo sigue existiendo: 8.500.000 ÷ 31 = 274.193 (se trunca), por 7 = 1.919.351.
         assertEquals(8_500_000, sinGasto.periodo.meta)
         assertEquals(274_193, sinGasto.metaPorDia)
         assertEquals(1_919_351, sinGasto.metaPorSemana)
         // Martes 8: la semana del lunes 7 al domingo 13 cabe entera.
         assertEquals(7, sinGasto.diasDeLaSemana)
         assertFalse(sinGasto.semanaCorta)
-        assertEquals(1_919_351, sinGasto.semana.meta)
-        assertEquals(274_193, sinGasto.hoy.meta)
+        // El lunes 7 quedaban $8,5M para 18 días: 472.222 por día, por 7.
+        assertEquals(3_305_554, sinGasto.semana.meta)
+        // El martes 8 quedaban $8,5M para 17 días.
+        assertEquals(500_000, sinGasto.hoy.meta)
+        assertEquals(sinGasto.porDiaParaLoQueQueda, sinGasto.hoy.meta, "a primera hora, el «por día» del héroe")
         assertEquals("Semana", rotuloDeLaSemana(sinGasto))
 
-        val conGasto = assertNotNull(
+        // Lo gastado antes achica la semana y hoy; lo de hoy no achica la meta de hoy.
+        val antes = assertNotNull(
+            calcular(
+                recibidos = 8_500_000, checklist = emptyList(),
+                gasto = mapOf("2026-09-01" to 6_000_000L), hoy = LocalDate(2026, 9, 8),
+            ),
+        )
+        val conHoy = assertNotNull(
             calcular(
                 recibidos = 8_500_000, checklist = emptyList(),
                 gasto = mapOf("2026-09-01" to 6_000_000L, "2026-09-08" to 900_000L), hoy = LocalDate(2026, 9, 8),
             ),
         )
-        assertEquals(sinGasto.periodo.meta, conGasto.periodo.meta)
-        assertEquals(sinGasto.semana.meta, conGasto.semana.meta)
-        assertEquals(sinGasto.hoy.meta, conGasto.hoy.meta)
+        assertEquals(sinGasto.periodo.meta, conHoy.periodo.meta)
+        assertEquals(147_058, antes.hoy.meta, "$2,5M para 17 días")
+        assertEquals(antes.hoy.meta, conHoy.hoy.meta)
+        assertEquals(antes.semana.meta, conHoy.semana.meta)
     }
 
     /** Un miércoles 26 de agosto: la semana empezó el lunes 24, que es del período anterior. */
@@ -140,7 +154,8 @@ class DisponibleDelPeriodoTest {
         val d = assertNotNull(calcular(recibidos = 3_100_000, checklist = emptyList(), hoy = LocalDate(2026, 9, 22)))
         assertEquals(4, d.diasDeLaSemana)
         assertEquals(2, d.diasCorridosDeLaSemana)
-        assertEquals(400_000, d.semana.meta)
+        // Vuelta 60: la semana que cierra el período se lleva todo lo que quedaba el lunes.
+        assertEquals(3_100_000, d.semana.meta)
         assertEquals("Semana · 4 días", rotuloDeLaSemana(d))
         // La meta de una semana entera se sigue diciendo por 7.
         assertEquals(700_000, d.metaPorSemana)
@@ -165,13 +180,13 @@ class DisponibleDelPeriodoTest {
         assertEquals(NivelDelGasto.BIEN, d.periodo.nivel)
         // Quedan $3,5M para 3 días (hoy incluido). Una sola frase para la tarjeta, y sin «vas
         // bien»: dice lo que queda, no opina. Junto a «para 3 días» va lo que queda entre esos 3
-        // días (3.500.000 ÷ 3 = 1.166.666); la meta diaria (8.500.000 ÷ 31) sigue en la columna «Hoy».
+        // días (3.500.000 ÷ 3 = 1.166.666); desde la vuelta 60 la columna «Meta de hoy» dice lo mismo.
         assertEquals(
             FraseDelDisponible("Te quedan \$3,5M para 3 días · \$1,2M por día", NivelDelGasto.BIEN),
             fraseDelDisponible(d),
         )
         assertEquals(1_166_666, d.porDiaParaLoQueQueda)
-        assertEquals(274_193, d.hoy.meta, "la columna Hoy sigue con la meta diaria")
+        assertEquals(1_166_666, d.hoy.meta, "la columna de hoy, con la misma regla")
     }
 
     @Test
@@ -197,7 +212,8 @@ class DisponibleDelPeriodoTest {
 
     @Test
     fun `la semana contra su ritmo`() {
-        // Miércoles 9: corridos lunes 7, martes 8 y hoy. 100.000 por día → previsto 300.000.
+        // Miércoles 9: corridos lunes 7, martes 8 y hoy. El lunes quedaban $3,1M para 18 días:
+        // 172.222 por día → la semana $1.205.554 y lo previsto a hoy, $516.666.
         fun semanaCon(gastado: Long) = assertNotNull(
             calcular(
                 recibidos = 3_100_000, checklist = emptyList(),
@@ -208,17 +224,17 @@ class DisponibleDelPeriodoTest {
         assertEquals(NivelDelGasto.BIEN, bien.semana.nivel)
         assertEquals(NivelDelGasto.BIEN, fraseDelDisponible(bien).nivel)
 
-        val porEncima = semanaCon(420_000)
+        val porEncima = semanaCon(600_000)
         assertEquals(NivelDelGasto.CERCA, porEncima.semana.nivel)
         // La semana va por encima de su ritmo y el período no: la barra de la semana se pone ámbar,
         // y la frase —que habla del período— no se contradice con ella porque no opina de la semana.
         assertEquals(NivelDelGasto.BIEN, fraseDelDisponible(porEncima).nivel)
 
-        val pasada = semanaCon(800_000)
+        val pasada = semanaCon(1_300_000)
         assertEquals(NivelDelGasto.PASADO, pasada.semana.nivel)
         assertEquals(
             FraseDelDisponible(
-                "Esta semana te pasaste de la meta por \$100.000 · al período le quedan \$2,3M",
+                "Esta semana te pasaste de la meta por \$94.446 · al período le quedan \$1,8M",
                 NivelDelGasto.PASADO,
             ),
             fraseDelDisponible(pasada),
@@ -228,24 +244,25 @@ class DisponibleDelPeriodoTest {
     @Test
     fun `hoy pasado de su meta`() {
         val d = assertNotNull(
-            calcular(recibidos = 3_100_000, checklist = emptyList(), gasto = mapOf("2026-09-21" to 130_000L)),
+            // Lunes 21: quedaban $3,1M para 4 días, $775.000 la meta de hoy (vuelta 60).
+            calcular(recibidos = 3_100_000, checklist = emptyList(), gasto = mapOf("2026-09-21" to 800_000L)),
         )
         assertEquals(NivelDelGasto.PASADO, d.hoy.nivel)
         assertEquals(
             FraseDelDisponible(
-                "Hoy te pasaste de la meta por \$30.000 · a la semana le quedan \$270.000",
+                "Hoy te pasaste de la meta por \$25.000 · a la semana le quedan \$2,3M",
                 NivelDelGasto.PASADO,
             ),
             fraseDelDisponible(d),
         )
 
         val cerca = assertNotNull(
-            calcular(recibidos = 3_100_000, checklist = emptyList(), gasto = mapOf("2026-09-21" to 90_000L)),
+            calcular(recibidos = 3_100_000, checklist = emptyList(), gasto = mapOf("2026-09-21" to 700_000L)),
         )
         assertEquals(NivelDelGasto.CERCA, cerca.hoy.nivel)
         // Hoy va cerca de su tope sin pasarlo: la frase sigue hablando del período.
         assertEquals(
-            FraseDelDisponible("Te quedan \$3M para 4 días · \$752.500 por día", NivelDelGasto.BIEN),
+            FraseDelDisponible("Te quedan \$2,4M para 4 días · \$600.000 por día", NivelDelGasto.BIEN),
             fraseDelDisponible(cerca),
         )
     }
@@ -270,12 +287,17 @@ class DisponibleDelPeriodoTest {
         assertEquals(5_711_711, d.porDiaParaLoQueQueda)
         assertEquals("Te quedan \$11,4M para 2 días · \$5,7M por día", frase)
         assertFalse("meta diaria" in frase, "la meta diaria es de la columna Hoy, no de la frase")
-        assertEquals(410_433, d.hoy.meta)
+        // Vuelta 60: la columna de hoy usa la misma regla que la frase.
+        assertEquals(5_711_711, d.hoy.meta)
     }
 
-    /** Lo que el dueño pidió explícito: con el período pasado, la semana y hoy siguen con su meta. */
+    /**
+     * Con el período pasado no queda nada que repartir (vuelta 60): la semana y hoy van en cero y la
+     * pantalla dice «$0 · ya te pasaste». Antes seguían con la meta fija y la tarjeta decía «Te pasaste
+     * por $X» al lado de «Meta de hoy $100.000».
+     */
     @Test
-    fun `con el periodo pasado la semana y hoy siguen midiendo contra su meta`() {
+    fun `con el periodo pasado la semana y hoy no ofrecen meta`() {
         val d = assertNotNull(
             calcular(
                 recibidos = 3_100_000, checklist = emptyList(),
@@ -290,12 +312,11 @@ class DisponibleDelPeriodoTest {
         assertEquals("te pasaste del disponible por \$920.000", avisoDelDisponible(d), "la misma cifra que la frase")
         assertNull(d.porDiaParaLoQueQueda)
 
-        assertEquals(400_000, d.semana.meta)
-        assertEquals(100_000, d.hoy.meta)
-        assertEquals(NivelDelGasto.BIEN, d.semana.nivel)
+        assertTrue(d.yaTePasaste)
+        assertEquals(0, d.semana.meta)
+        assertEquals(0, d.hoy.meta)
         // Lo que la tarjeta vieja decía acá era «Vas bien: te quedan $380.000 para esta semana», un
-        // renglón debajo del «Te pasaste» rojo. Las metas de la semana y de hoy se siguen viendo en
-        // sus columnas; la frase es una y manda la peor ventana.
+        // renglón debajo del «Te pasaste» rojo. La frase es una y manda la peor ventana.
         assertFalse("bien" in fraseDelDisponible(d).texto.lowercase())
     }
 

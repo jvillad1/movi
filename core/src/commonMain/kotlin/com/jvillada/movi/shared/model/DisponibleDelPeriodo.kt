@@ -159,11 +159,24 @@ data class VentanaDelDisponible(val gastado: Long, val meta: Long, val esperadoA
 /**
  * Todo lo que pinta la tarjeta «Disponible».
  *
- * **Las metas son fijas para todo el período** (el dueño: *«dividir el disponible en metas por
- * unidades de tiempo y con eso irme organizando»*): la del período es el disponible, la diaria es
- * el disponible entre los días del período y la semanal es la diaria por 7. No se recalculan con
- * lo gastado: un período pasado sigue mostrando la meta de la semana y la de hoy, porque son la
- * vara con la que se organiza el resto del mes.
+ * **La meta del período es el disponible; la de la semana y la de hoy salen de lo que queda**
+ * (vuelta 60). Hasta la 59 eran el ritmo fijo —el disponible entre los días del período, y la
+ * semanal la diaria por 7—, y con el período ya pasado la tarjeta decía «Te pasaste por $549.050»
+ * al lado de «Meta de hoy $50.203»: la columna de hoy seguía ofreciendo plata que ya no había, y la
+ * semana (−$256.882) medía otra cosa. Ahora las tres columnas usan **la misma regla que «Te
+ * quedan» y «$X por día»** ([porDiaParaLoQueQueda]): lo que quedaba del disponible **al empezar**
+ * la ventana, repartido entre los días que quedaban, hoy incluido.
+ *
+ * - **Hoy**: lo que quedaba al empezar el día ÷ los días que quedan (hoy incluido). A primera hora
+ *   es exactamente el «$X por día» del héroe; lo que se gasta hoy no achica la meta de hoy (sí la
+ *   de mañana).
+ * - **Esta semana**: lo que quedaba al empezar la semana (o el período, si la semana empezó antes)
+ *   ÷ los días que quedaban entonces, por los días de la semana que caen en el período.
+ * - **Sin nada que repartir** (lo que quedaba ya era cero o negativo) la meta es cero: la pantalla
+ *   dice «$0 · ya te pasaste» ([yaTePasaste]) y nunca una meta positiva.
+ *
+ * [metaPorDia] y [metaPorSemana] siguen siendo el ritmo fijo: los usa la línea «Día a día» de cada
+ * día pasado en Actividad, que mide días ya cerrados contra la misma vara.
  */
 data class DisponibleDelPeriodo(
     val ingresosRecibidos: Long,
@@ -219,13 +232,24 @@ data class DisponibleDelPeriodo(
      * `null` cuando ya no queda nada que repartir.
      *
      * Es la cifra diaria que va pegada a «para N días» en el héroe del Inicio y en la frase de Plan
-     * («para 6 días · $1,8M por día»); la meta diaria ([metaPorDia]) es la de la columna «Hoy».
+     * («para 6 días · $1,8M por día»). La columna «Meta de hoy» usa la misma regla, con lo que
+     * quedaba al empezar el día (vuelta 60, ver [hoy]).
      */
     val porDiaParaLoQueQueda: Long? get() {
         val resto = disponible - periodo.gastado
         if (resto <= 0L || diasQueQuedan <= 0) return null
         return resto / diasQueQuedan
     }
+
+    /** Lo que queda del disponible: lo que dice el héroe («Te quedan» / «Te pasaste por»). */
+    val loQueQueda: Long get() = disponible - periodo.gastado
+
+    /**
+     * **Ya no queda nada para gastar en el período** (vuelta 60): lo gastado pasó el disponible, o
+     * los fijos se lo llevaron entero. La semana y hoy dicen entonces «$0 · ya te pasaste», no una
+     * meta: no hay plata que repartir.
+     */
+    val yaTePasaste: Boolean get() = loQueQueda < 0L
 }
 
 /**
@@ -304,7 +328,17 @@ fun disponibleDelPeriodo(
 
     // Las metas. Sin margen no hay nada que dividir: van en cero y la tarjeta no dibuja barras.
     val metaDelPeriodo = disponible.coerceAtLeast(0L)
-    val metaPorDia = metaDelPeriodo / diasDelPeriodo
+
+    // Vuelta 60: la semana y hoy, con la regla de «Te quedan» y «$X por día»: lo que quedaba al
+    // empezar la ventana, repartido entre los días que quedaban (ese día incluido). Sin nada que
+    // repartir, cero.
+    fun porDiaDesde(desde: LocalDate): Long {
+        val quedaba = metaDelPeriodo - gastadoEntre(inicio, desde.minus(1, DateTimeUnit.DAY))
+        val dias = desde.daysUntil(finExclusivo)
+        return if (quedaba <= 0L || dias <= 0) 0L else quedaba / dias
+    }
+    val metaDeHoy = porDiaDesde(hoy)
+    val porDiaDeLaSemana = porDiaDesde(desdeSemana)
 
     return DisponibleDelPeriodo(
         ingresosRecibidos = recibidos,
@@ -323,10 +357,10 @@ fun disponibleDelPeriodo(
         // ritmo se mide igual: la diaria por los días que ya corrieron.
         semana = VentanaDelDisponible(
             gastado = gastadoEntre(desdeSemana, hastaSemana),
-            meta = metaPorDia * diasDeLaSemana,
-            esperadoAHoy = metaPorDia * diasCorridosDeLaSemana,
+            meta = porDiaDeLaSemana * diasDeLaSemana,
+            esperadoAHoy = porDiaDeLaSemana * diasCorridosDeLaSemana,
         ),
-        hoy = VentanaDelDisponible(gastado = gastadoEntre(hoy, hoy), meta = metaPorDia, esperadoAHoy = metaPorDia),
+        hoy = VentanaDelDisponible(gastado = gastadoEntre(hoy, hoy), meta = metaDeHoy, esperadoAHoy = metaDeHoy),
         diaDeInicio = inicio.dayOfMonth,
         plata = plata,
     )

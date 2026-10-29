@@ -157,8 +157,11 @@ class TeQuedanEnHoyEnPantallaTest {
         // El mismo detalle en los dos, y el rótulo también.
         assertEquals(2, composeRule.onAllNodesWithText("Para 4 días · \$1,7M por día", useUnmergedTree = true).fetchSemanticsNodes().size)
         assertEquals(2, composeRule.onAllNodesWithText(ROTULO_TE_QUEDAN, useUnmergedTree = true).fetchSemanticsNodes().size)
+        // Vuelta 60: la semana mide contra lo que quedaba el lunes, y esta es la última del período, así
+        // que su columna dice lo mismo que queda ($6,8M). Una vez, la de la semana: la columna «Período»
+        // no lo repite (dice lo gastado y de cuánto).
         assertEquals(
-            0,
+            1,
             composeRule.onAllNodesWithText(formatMoneyCompact(esperado), useUnmergedTree = true).fetchSemanticsNodes().size,
             "la columna «Período» no repite ${formatMoneyCompact(esperado)}",
         )
