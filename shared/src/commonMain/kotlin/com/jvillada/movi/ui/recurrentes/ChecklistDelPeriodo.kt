@@ -311,6 +311,7 @@ fun SeccionChecklistDelPeriodo(
                             enVuelo = enVuelo,
                             onEsLaCuota = { onEsLaCuota?.invoke(pago, parecido) },
                             onNoEs = { onNoEsLaCuota?.invoke(pago, parecido) },
+                            principal = pago == urgente,
                         )
                     }
                 }
@@ -947,7 +948,8 @@ internal enum class AccionPrincipalDeLaFila { ANOTAR, EL_CANDIDATO, NINGUNA }
  * parecido ya anotado duplicaría el gasto, así que mientras haya un candidato **parecido** la acción
  * principal es el candidato —«Sí, fue este» ([conPropuesta], dentro del ±50 % de la vuelta 51) o
  * «¿Es el de $X?» ([hayGastoParecido], la regla de `cuotaQueSeParece`)— y «Anotar pago» pasa a
- * secundario. Con un candidato **lejano** (más del 50 %) o sin ninguno queda como estaba: la más
+ * secundario. **Un solo amarillo por pantalla** (vuelta 40): «¿Es el de $X?» es amarillo solo en la fila
+ * más urgente ([esLaMasUrgente]); en las demás va con borde. Con un candidato **lejano** (más del 50 %) o sin ninguno queda como estaba: la más
  * urgente lleva «Anotar pago» en amarillo y el candidato, si lo hay, es un enlace. Pura.
  */
 internal fun accionPrincipalDeLaFila(
@@ -955,7 +957,9 @@ internal fun accionPrincipalDeLaFila(
     conPropuesta: Boolean,
     hayGastoParecido: Boolean,
 ): AccionPrincipalDeLaFila = when {
-    conPropuesta || hayGastoParecido -> AccionPrincipalDeLaFila.EL_CANDIDATO
+    conPropuesta -> AccionPrincipalDeLaFila.EL_CANDIDATO
+    // Un solo amarillo en Pagos, y solo en la fila más urgente (vuelta 40): en otra fila, el candidato va con borde.
+    hayGastoParecido -> if (esLaMasUrgente) AccionPrincipalDeLaFila.EL_CANDIDATO else AccionPrincipalDeLaFila.NINGUNA
     esLaMasUrgente -> AccionPrincipalDeLaFila.ANOTAR
     else -> AccionPrincipalDeLaFila.NINGUNA
 }
@@ -974,14 +978,16 @@ internal fun LaCuotaQueSeParece(
     enVuelo: Boolean,
     onEsLaCuota: () -> Unit,
     onNoEs: () -> Unit,
+    /** Amarillo solo en la fila más urgente ([accionPrincipalDeLaFila]); en las demás, con borde. */
+    principal: Boolean = true,
 ) {
     var abierta by rememberSaveable(pago.ruleId, parecido.gasto.id) { mutableStateOf(false) }
     Column(modifier = Modifier.fillMaxWidth()) {
         Boton(
             enlaceDeLaPropuestaLejana(parecido.gasto),
             onClick = { abierta = !abierta },
-            // Vuelta 58: es la acción principal de la fila; «Anotar pago» duplicaría el gasto parecido.
-            variante = VarianteDeBoton.Principal,
+            // Vuelta 58: es la acción principal de la fila más urgente; «Anotar pago» duplicaría el gasto parecido.
+            variante = if (principal) VarianteDeBoton.Principal else VarianteDeBoton.Secundario,
             tamano = TamanoDeBoton.S,
             habilitado = !enVuelo,
             modifier = Modifier.testTag(TAG_CUOTA_QUE_SE_PARECE_EN_PAGOS),

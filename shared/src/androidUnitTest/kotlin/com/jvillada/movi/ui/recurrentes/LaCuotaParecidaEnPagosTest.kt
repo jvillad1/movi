@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -155,13 +156,48 @@ class LaCuotaParecidaEnPagosTest {
 
     @Test
     fun `la accion principal de la fila, caso por caso`() {
-        // Parecido (la regla de la cuota que se parece): el candidato.
+        // Parecido (la regla de la cuota que se parece), en la más urgente: el candidato.
         assertEquals(AccionPrincipalDeLaFila.EL_CANDIDATO, accionPrincipalDeLaFila(esLaMasUrgente = true, conPropuesta = false, hayGastoParecido = true))
-        assertEquals(AccionPrincipalDeLaFila.EL_CANDIDATO, accionPrincipalDeLaFila(esLaMasUrgente = false, conPropuesta = false, hayGastoParecido = true))
+        // …pero amarillo solo en la más urgente: en otra fila no hay acción principal.
+        assertEquals(AccionPrincipalDeLaFila.NINGUNA, accionPrincipalDeLaFila(esLaMasUrgente = false, conPropuesta = false, hayGastoParecido = true))
         // Candidato del server dentro del ±50 %: «Sí, fue este».
         assertEquals(AccionPrincipalDeLaFila.EL_CANDIDATO, accionPrincipalDeLaFila(esLaMasUrgente = true, conPropuesta = true, hayGastoParecido = false))
         // Sin candidato o con uno lejano: como estaba.
         assertEquals(AccionPrincipalDeLaFila.ANOTAR, accionPrincipalDeLaFila(esLaMasUrgente = true, conPropuesta = false, hayGastoParecido = false))
         assertEquals(AccionPrincipalDeLaFila.NINGUNA, accionPrincipalDeLaFila(esLaMasUrgente = false, conPropuesta = false, hayGastoParecido = false))
+    }
+
+    /**
+     * Vuelta 40: **un solo amarillo, y solo en la fila más urgente.** Dos cuotas, cada una con su gasto
+     * parecido: «¿Es el de…?» es el principal de la más urgente; en la otra va con borde. «Anotar pago»
+     * es secundario en las dos.
+     */
+    @Test
+    fun `con dos facturas con candidato parecido hay un solo amarillo y es el de la mas urgente`() {
+        val menosUrgente = cuota
+        val masUrgente = cuota.copy(
+            ruleId = "${CREDIT_RULE_PREFIX}c777", nombre = "Cuota Casa 777", monto = 450_000L,
+            diasParaVencer = -5, vence = "2026-10-23",
+        )
+        val gastoCasa = gasto.copy(id = "ev-450", amount = 450_000L)
+        val parecidoCasa = GastoParecidoALaCuota(
+            CuotaPorSaldar(creditoId = "c777", nombre = "Casa 777", cuota = 450_000L, moneda = "COP", vence = "2026-10-23"),
+            gastoCasa,
+        )
+        montar(
+            mapOf(
+                claveDeLaCuotaPorSaldar("v4083", "2026-10-27") to parecido,
+                claveDeLaCuotaPorSaldar("c777", "2026-10-23") to parecidoCasa,
+            ),
+            checklist = listOf(menosUrgente, masUrgente),
+        )
+        val botones = composeRule.onAllNodes(SemanticsMatcher.keyIsDefined(VarianteDeBotonKey)).fetchSemanticsNodes()
+        val amarillos = botones.filter { it.config.getOrNull(VarianteDeBotonKey) == VarianteDeBoton.Principal }
+        assertEquals(1, amarillos.size, "un solo botón amarillo en Pagos")
+        assertEquals(VarianteDeBoton.Principal, variante("¿Es el de \$450.000?"), "el de la más urgente")
+        assertEquals(VarianteDeBoton.Secundario, variante("¿Es el de \$980.000?"), "el de la otra, con borde")
+        composeRule.onAllNodesWithText(ETIQUETA_ANOTAR).fetchSemanticsNodes().forEach {
+            assertEquals(VarianteDeBoton.Secundario, it.config.getOrNull(VarianteDeBotonKey), "Anotar pago, secundario")
+        }
     }
 }
