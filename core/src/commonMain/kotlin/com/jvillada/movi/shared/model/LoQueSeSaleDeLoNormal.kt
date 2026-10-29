@@ -37,6 +37,12 @@ enum class TipoDeAnomalia {
      * llegaran, así que el server solo las manda a quien las pide (`GET /api/anomalias?conDeudas=1`).
      */
     DEUDA_QUE_CRECE, INTERES_LEJOS_DEL_ESTIMADO,
+    /**
+     * Vuelta 60: un recurrente que este período quedó en otra categoría que el anterior (ver
+     * `RecurrenteQueCambioDeCategoria.kt`). Igual que las de las deudas, solo a quien la pide
+     * (`GET /api/anomalias?conRecurrentes=1`).
+     */
+    RECURRENTE_CAMBIO_DE_CATEGORIA,
 }
 
 /** Un movimiento que respalda un aviso, como se lo muestra al dueño. */
@@ -65,6 +71,11 @@ data class Anomalia(
     val titulo: String,
     val detalle: String,
     val evidencia: List<EvidenciaDeAnomalia>,
+    /**
+     * Vuelta 60: en [TipoDeAnomalia.RECURRENTE_CAMBIO_DE_CATEGORIA], qué cambiar si el dueño dice «Sí,
+     * cambiar». `null` en las demás.
+     */
+    val cambioDeCategoria: CambioDeCategoriaDeUnRecurrente? = null,
 )
 
 /** `POST /api/anomalias/descartar`: «Está bien», no volver a avisar esta [huella]. */

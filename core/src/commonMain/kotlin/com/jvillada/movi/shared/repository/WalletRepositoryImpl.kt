@@ -559,7 +559,7 @@ class WalletRepositoryImpl(
 
     override suspend fun getAnomalias(): List<com.jvillada.movi.shared.model.Anomalia> =
         // `conDeudas=1`: esta app conoce los dos avisos de las deudas (ver `TipoDeAnomalia`).
-        client.get("$baseUrl/api/anomalias?conDeudas=1").exigirExito().body()
+        client.get("$baseUrl/api/anomalias?conDeudas=1&conRecurrentes=1").exigirExito().body()
 
     override suspend fun descartarAnomalia(huella: String) {
         client.post("$baseUrl/api/anomalias/descartar") {

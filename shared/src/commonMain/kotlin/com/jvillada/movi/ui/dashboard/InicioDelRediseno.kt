@@ -7,6 +7,7 @@ import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.TipoDeAnomalia
+import com.jvillada.movi.shared.model.CambioDeCategoriaDeUnRecurrente
 import com.jvillada.movi.shared.model.fraseDelCierre
 import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.tituloDelPeriodo
@@ -229,7 +230,36 @@ sealed interface AccionDeLaPropuesta {
 
     /** «Ya lo vi»: la tarjeta del cierre no vuelve en este período. */
     data class DescartarCierre(val periodo: String) : AccionDeLaPropuesta
+
+    /**
+     * Vuelta 60: «Sí, cambiar»: el movimiento vuelve a la categoría del período anterior y, si la regla
+     * tiene la otra, también la regla. Lo hace el dueño con el toque; Movi nunca lo cambia solo.
+     */
+    data class CambiarLaCategoria(val cambio: CambioDeCategoriaDeUnRecurrente) : AccionDeLaPropuesta
 }
+
+/**
+ * **«Sí, cambiar»** (vuelta 60): el movimiento vuelve a la categoría que tuvo el período anterior con el
+ * cambio de categoría de siempre, y la regla —si la propuesta la nombra y todavía tiene la otra— con la
+ * edición de siempre. Nada más: no hay escritura nueva en el server.
+ */
+internal suspend fun aceptarElCambioDeCategoria(
+    repo: com.jvillada.movi.shared.repository.WalletRepository,
+    cambio: CambioDeCategoriaDeUnRecurrente,
+) {
+    repo.updateEventCategory(cambio.eventoId, cambio.categoriaAnterior)
+    val reglaId = cambio.reglaId ?: return
+    val regla = repo.getRecurringRules().firstOrNull { it.id == reglaId } ?: return
+    if (regla.category != cambio.categoriaAnterior) {
+        repo.updateRecurringRule(reglaId, regla.copy(category = cambio.categoriaAnterior))
+    }
+}
+
+/** El botón que acepta un cambio de categoría (vuelta 60). */
+const val SI_CAMBIAR: String = "Sí, cambiar"
+
+/** El que lo rechaza: el aviso no vuelve para ese movimiento. */
+const val NO_CAMBIAR: String = "No"
 
 /** Una tarjeta de «Movi propone hoy»: lo que pasa, su cifra si la tiene y la decisión que pide. */
 data class PropuestaDelInicio(
@@ -439,6 +469,22 @@ private fun propuestaDeCuadre(data: DashboardData): PropuestaDelInicio? {
 
 private fun propuestaDeAnomalia(data: DashboardData): PropuestaDelInicio? {
     val anomalias = anomaliasVisiblesDe(data)
+    // Vuelta 60: un recurrente que cambió de categoría va primero: es lo único que se resuelve con un
+    // toque, y mientras siga, otras pantallas cuentan mal (Presupuestos, «En qué se va»).
+    val cambio = anomalias.firstOrNull { it.cambioDeCategoria != null }
+    if (cambio != null) {
+        val otras = anomalias.size - 1
+        return PropuestaDelInicio(
+            tipo = TipoDePropuesta.ANOMALIA,
+            titulo = cambio.titulo,
+            cuerpo = cuerpoDeLaAnomalia(cambio.detalle, otras),
+            accion = SI_CAMBIAR,
+            alTocar = AccionDeLaPropuesta.CambiarLaCategoria(cambio.cambioDeCategoria!!),
+            accionSecundaria = NO_CAMBIAR,
+            alTocarSecundaria = AccionDeLaPropuesta.DescartarAnomalia(cambio.huella),
+            rango = 5,
+        )
+    }
     val anomalia = anomalias.firstOrNull() ?: return null
     val otras = anomalias.size - 1
     return PropuestaDelInicio(

@@ -192,6 +192,37 @@ class AnomaliasRoutesTest {
         assertTrue("lo normal es \$400.000 (el período anterior)" in aviso.detalle, aviso.detalle)
     }
 
+    /**
+     * Vuelta 60: el arriendo que este mes quedó en Otros y el pasado fue Hogar no es «Gasto nuevo en
+     * Otros»: se propone «¿ARRIENDO va en Hogar…?», solo a quien conoce el aviso, y «No» lo saca.
+     */
+    @Test
+    fun `el recurrente que cambio de categoria se propone y no cuenta como gasto nuevo`() = testApplication {
+        application { testModule() }
+        val mesPasado = inicioDelMes.minusMonths(1)
+        anotar(duenoId, "Apertura", 10_000_000L, mesPasado.minusDays(5), OPENING_CATEGORY, tipo = "INCOME")
+        anotar(duenoId, "ARRIENDO", 1_800_000L, mesPasado.plusDays(3), "Hogar")
+        anotar(duenoId, "ARRIENDO", 1_800_000L, hoy, "Otros")
+
+        // Un APK viejo no conoce el aviso: no lo recibe, y tampoco ve «Gasto nuevo en Otros».
+        val viejas = anomalias(duenoId)
+        assertTrue(viejas.none { it.tipo == TipoDeAnomalia.RECURRENTE_CAMBIO_DE_CATEGORIA })
+        assertTrue(viejas.none { it.tipo == TipoDeAnomalia.CATEGORIA_POR_ENCIMA }, "no es gasto nuevo: $viejas")
+
+        val res = client.get("/api/anomalias?conDeudas=1&conRecurrentes=1") { header(HttpHeaders.Authorization, "Bearer ${token(duenoId)}") }
+        val aviso = json.decodeFromString(ListSerializer(Anomalia.serializer()), res.bodyAsText())
+            .single { it.tipo == TipoDeAnomalia.RECURRENTE_CAMBIO_DE_CATEGORIA }
+        val cambio = aviso.cambioDeCategoria!!
+        assertEquals("Otros", cambio.categoria)
+        assertEquals("Hogar", cambio.categoriaAnterior)
+        assertTrue(aviso.titulo.startsWith("¿ARRIENDO va en Hogar, como en "), aviso.titulo)
+        assertEquals(2, aviso.evidencia.size, "los dos arriendos")
+
+        assertEquals(HttpStatusCode.NoContent, descartar(duenoId, aviso.huella).status)
+        val despues = client.get("/api/anomalias?conRecurrentes=1") { header(HttpHeaders.Authorization, "Bearer ${token(duenoId)}") }
+        assertTrue(despues.bodyAsText().let { !it.contains("RECURRENTE_CAMBIO_DE_CATEGORIA") })
+    }
+
     @Test
     fun `sin un mes cubierto entero no hay normal contra que medir`() = testApplication {
         application { testModule() }

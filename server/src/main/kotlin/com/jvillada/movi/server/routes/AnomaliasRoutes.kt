@@ -19,6 +19,15 @@ import com.jvillada.movi.server.time.appDateToEpochMillis
 import com.jvillada.movi.server.time.epochMillisToAppDateString
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.Anomalia
+import com.jvillada.movi.shared.model.CambioDeCategoriaDeUnRecurrente
+import com.jvillada.movi.shared.model.EvidenciaDeAnomalia
+import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.RecurringOccurrence
+import com.jvillada.movi.shared.model.RecurringRule
+import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.anomaliaDelCambioDeCategoria
+import com.jvillada.movi.shared.model.recurrentesQueCambiaronDeCategoria
+import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.deudasQueCrecen
 import com.jvillada.movi.shared.model.interesesLejosDelEstimado
@@ -62,7 +71,9 @@ fun Route.anomaliasRoutes() {
         // Las de las deudas solo a quien las pide: un APK instalado no conoce esos tipos y perdería
         // la lista entera al leerla (ver `TipoDeAnomalia`).
         val conDeudas = call.request.queryParameters["conDeudas"] == "1"
-        call.respond(dbQuery { loQueSeSaleDeLoNormalDe(uid, AppClock.today(), ajustes, conDeudas) })
+        // Vuelta 60: el recurrente que cambió de categoría, por la misma razón.
+        val conRecurrentes = call.request.queryParameters["conRecurrentes"] == "1"
+        call.respond(dbQuery { loQueSeSaleDeLoNormalDe(uid, AppClock.today(), ajustes, conDeudas, conRecurrentes) })
     }
 
     /**
@@ -107,6 +118,8 @@ internal fun Transaction.loQueSeSaleDeLoNormalDe(
     ajustes: PeriodSettings,
     /** Sumar las dos de las deudas ([deudasQueCrecen], [interesesLejosDelEstimado]). */
     conDeudas: Boolean = false,
+    /** Sumar los recurrentes que cambiaron de categoría ([recurrentesQueCambiaronDeCategoria]). */
+    conRecurrentes: Boolean = false,
 ): List<Anomalia> {
     val primerMovimiento: Long = Events.select(Events.timestamp.min())
         .where { Events.userId eq uid }
@@ -148,8 +161,26 @@ internal fun Transaction.loQueSeSaleDeLoNormalDe(
     // emparejado solo— no entra a «categoría por encima» ni a «comercio nuevo», ni como gasto de
     // este período ni como «lo normal» de los anteriores. El cobro duplicado sí lo sigue mirando: un
     // arriendo pagado dos veces es justo lo que tiene que avisar.
-    val pagosDeFacturas = pagosDeFacturasDe(uid, hoy, ajustes)
-    val delConsumo = delPeriodo.filterNot { it.id in pagosDeFacturas }
+    val descartadas = AnomaliasDescartadas.selectAll()
+        .where { AnomaliasDescartadas.userId eq uid }
+        .map { it[AnomaliasDescartadas.huella] }
+        .toSet()
+    val sellos = sellosDe(uid, hoy, ajustes)
+    val pagosDeFacturas = sellos.mapNotNull { it.eventId }.toSet()
+    // Vuelta 60: **el recurrente que solo cambió de categoría no es gasto nuevo.** El arriendo que
+    // este período quedó en Otros y el pasado fue Hogar salía como «Gasto nuevo en Otros $1.800.000»:
+    // mientras el dueño no decide («¿Arriendo va en Hogar…?»), ese monto no entra a «categoría por
+    // encima» ni a «comercio nuevo» (no es nuevo: es el mismo de siempre). Con «No» el dueño dijo que
+    // sí es de esa categoría: desde ahí cuenta como cualquier gasto.
+    val cambios = cambiosDeCategoria(
+        delPeriodo = delPeriodo,
+        delAnterior = historia.filter { it.timestamp in ventanaPrevia },
+        reglas = reglasDe(uid),
+        sellos = sellos,
+        periodoAnterior = previo.prefijo,
+    ).filterNot { it.huella in descartadas }
+    val cambiados = cambios.map { it.eventoId }.toSet()
+    val delConsumo = delPeriodo.filterNot { it.id in pagosDeFacturas || it.id in cambiados }
 
     val suscripciones = Subscriptions.selectAll().where { Subscriptions.userId eq uid }.map { it.toSubscription() }
     val periodoDeUnInstante: (Long) -> String = { ts ->
@@ -177,23 +208,88 @@ internal fun Transaction.loQueSeSaleDeLoNormalDe(
             fijosDelPeriodo = delPeriodo.filter { it.id in pagosDeFacturas },
         ) +
         comerciosNuevosConMontoAlto(delConsumo, historia, primerMovimiento, nombreDeCuenta, diaDe) +
-        (if (conDeudas) loDeLasDeudas(uid, hoy, previo, ventanaPrevia, diaDe) else emptyList())
+        (if (conDeudas) loDeLasDeudas(uid, hoy, previo, ventanaPrevia, diaDe) else emptyList()) +
+        (
+            if (!conRecurrentes) {
+                emptyList()
+            } else {
+                val porId = (delPeriodo + historia).associateBy { it.id }
+                cambios.map { c ->
+                    val evidencia = listOfNotNull(porId[c.eventoId], porId[c.eventoAnteriorId]).map { e ->
+                        EvidenciaDeAnomalia(
+                            id = e.id, fecha = diaDe(e.timestamp), nombre = e.description, monto = e.amount,
+                            moneda = e.currency, cuenta = nombreDeCuenta[e.accountId],
+                        )
+                    }
+                    anomaliaDelCambioDeCategoria(c, evidencia)
+                }
+            }
+            )
 
-    val descartadas = AnomaliasDescartadas.selectAll()
-        .where { AnomaliasDescartadas.userId eq uid }
-        .map { it[AnomaliasDescartadas.huella] }
-        .toSet()
     return todas.filterNot { it.huella in descartadas }.distinctBy { it.huella }
 }
 
 private const val MEDIO_DIA_MS = 12L * 60 * 60 * 1000
 
 /**
- * Los movimientos que pagan una factura del checklist: los de un sello (`recurring_occurrences`, de
+ * Los sellos que atan un movimiento a una factura del checklist: los de `recurring_occurrences` (de
  * cualquier período: «Sí, fue este», «Anotar pago») y los que Movi emparejó solo en este período.
  */
-private fun Transaction.pagosDeFacturasDe(uid: String, hoy: LocalDate, ajustes: PeriodSettings): Set<String> =
-    (loadOccurrenceRows(uid) + emparejadasComoSellos(uid, hoy, ajustes)).mapNotNull { it.eventId }.toSet()
+private fun Transaction.sellosDe(uid: String, hoy: LocalDate, ajustes: PeriodSettings): List<RecurringOccurrence> =
+    loadOccurrenceRows(uid) + emparejadasComoSellos(uid, hoy, ajustes)
+
+/** Las reglas recurrentes de [uid], con lo que [recurrentesQueCambiaronDeCategoria] mira. */
+private fun Transaction.reglasDe(uid: String): List<RecurringRule> =
+    RecurringRules.selectAll().where { RecurringRules.userId eq uid }.mapNotNull { fila ->
+        val tipo = runCatching { TransactionType.valueOf(fila[RecurringRules.type]) }.getOrNull() ?: return@mapNotNull null
+        RecurringRule(
+            id = fila[RecurringRules.id],
+            name = fila[RecurringRules.name],
+            category = fila[RecurringRules.category],
+            amount = fila[RecurringRules.amount],
+            dayOfMonth = fila[RecurringRules.dayOfMonth],
+            type = tipo,
+        )
+    }
+
+private fun cambiosDeCategoria(
+    delPeriodo: List<FinancialEvent>,
+    delAnterior: List<FinancialEvent>,
+    reglas: List<RecurringRule>,
+    sellos: List<RecurringOccurrence>,
+    periodoAnterior: String,
+): List<CambioDeCategoriaDeUnRecurrente> = recurrentesQueCambiaronDeCategoria(
+    actual = delPeriodo,
+    anterior = delAnterior,
+    reglas = reglas,
+    reglaDelMovimiento = sellos.mapNotNull { s -> s.eventId?.let { it to s.ruleId } }.toMap(),
+    periodoAnterior = periodoAnterior,
+)
+
+/**
+ * **Los recurrentes de [uid] que este período quedaron en otra categoría que el anterior** (vuelta
+ * 60), sin los que el dueño ya descartó con «No». Los lee Movi AI para no comparar el arriendo como
+ * gasto nuevo de Otros (ver `comoEnElPeriodoAnterior`).
+ */
+internal fun Transaction.cambiosDeCategoriaDe(uid: String, hoy: LocalDate, ajustes: PeriodSettings): List<CambioDeCategoriaDeUnRecurrente> {
+    val actual = periodoDe(appDateToEpochMillis(hoy) + MEDIO_DIA_MS, ajustes)
+    val ventana = ventanaDe(actual, ajustes)
+    val previo = periodoAnterior(actual)
+    val ventanaPrevia = ventanaDe(previo, ajustes)
+    val delPeriodo = loadEventsBetween(uid, ventana.first, ventana.last + 1)
+    if (delPeriodo.isEmpty()) return emptyList()
+    val descartadas = AnomaliasDescartadas.selectAll()
+        .where { AnomaliasDescartadas.userId eq uid }
+        .map { it[AnomaliasDescartadas.huella] }
+        .toSet()
+    return cambiosDeCategoria(
+        delPeriodo = delPeriodo,
+        delAnterior = loadEventsBetween(uid, ventanaPrevia.first, ventanaPrevia.last + 1),
+        reglas = reglasDe(uid),
+        sellos = sellosDe(uid, hoy, ajustes),
+        periodoAnterior = previo.prefijo,
+    ).filterNot { it.huella in descartadas }
+}
 
 /**
  * Las dos de las deudas: la que creció entre el cierre del período anterior y el de antes

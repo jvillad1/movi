@@ -76,6 +76,7 @@ import com.jvillada.movi.ui.components.iconoDelTipoDeCuenta
 import com.jvillada.movi.ui.dashboard.AccionDeLaPropuesta
 import com.jvillada.movi.ui.dashboard.AccionDelInicio
 import com.jvillada.movi.ui.dashboard.AnomaliasDescartadasEnLaSesion
+import com.jvillada.movi.ui.dashboard.aceptarElCambioDeCategoria
 import com.jvillada.movi.ui.dashboard.DashboardData
 import com.jvillada.movi.ui.dashboard.LocalCargandoElInicio
 import com.jvillada.movi.ui.dashboard.PropuestaDelInicio
@@ -258,6 +259,15 @@ internal fun PropuestasDelInicioSection(
                 alcance.launch {
                     runCatching { Repositories.wallets.descartarAnomalia(accion.huella) }
                         .onFailure { AnomaliasDescartadasEnLaSesion.deshacer(accion.huella) }
+                }
+            }
+            is AccionDeLaPropuesta.CambiarLaCategoria -> {
+                // Vuelta 60: «Sí, cambiar». Se va en el mismo toque; si no se pudo, vuelve.
+                val huella = accion.cambio.huella
+                AnomaliasDescartadasEnLaSesion.descartar(huella)
+                alcance.launch {
+                    runCatching { aceptarElCambioDeCategoria(Repositories.wallets, accion.cambio) }
+                        .onFailure { AnomaliasDescartadasEnLaSesion.deshacer(huella) }
                 }
             }
         }

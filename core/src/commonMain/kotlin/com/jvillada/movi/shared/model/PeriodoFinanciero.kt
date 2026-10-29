@@ -436,6 +436,9 @@ private val MESES = listOf(
     "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
 )
 
+/** «septiembre»: el nombre del mes que le da nombre a [periodo] (vuelta 60: «como en septiembre»). */
+fun nombreDelMesDe(periodo: PeriodoFinanciero): String = MESES[periodo.month - 1]
+
 /** «septiembre de 2026» — para encabezados. */
 fun nombreDe(periodo: PeriodoFinanciero): String =
     "${MESES[periodo.month - 1]} de ${periodo.year}"
