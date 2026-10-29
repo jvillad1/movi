@@ -1,5 +1,6 @@
 package com.jvillada.movi.shared.model
 
+import com.jvillada.movi.shared.time.epochMillisToAppDate
 import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
@@ -119,7 +120,35 @@ data class LiquidacionDelEspacio(
     val monto: Long,
     val fecha: Long = 0L,
     val eventoId: String? = null,
+    /**
+     * Vuelta 66 · el concepto del movimiento vinculado («Transferencia de Caro»), para el historial
+     * «Pagos entre ustedes». Derivado: lo pone el server al leer; lo que mande un cliente se ignora.
+     */
+    val movimiento: String? = null,
 )
+
+/**
+ * **¿[l] espera la transferencia?** (vuelta 66) Un «Marcar como saldado» sin movimiento vinculado en
+ * el que el dueño paga o cobra, de los últimos [DIAS_PARA_PROPONER_SALDAR] días. Mientras espera,
+ * Movi propone vincular la plata que llegue ([transferenciasQueEsperan]): si no, la transferencia de
+ * Caro que llega después de saldar quedaba contada como ingreso para siempre. Pasado ese plazo se
+ * entiende que fue en efectivo (o por fuera de tus cuentas) y deja de esperar.
+ */
+fun esperaLaTransferencia(l: LiquidacionDelEspacio, ahora: Long): Boolean =
+    l.eventoId == null && (l.a == MIEMBRO_YO || l.de == MIEMBRO_YO) && l.de != l.a && l.monto > 0L &&
+        l.fecha >= ahora - DIAS_PARA_PROPONER_SALDAR * UN_DIA_EN_MS
+
+private const val UN_DIA_EN_MS: Long = 24L * 60 * 60 * 1000
+
+/** Cuántos días antes de saldar puede haber llegado la transferencia que se propone vincular. */
+const val DIAS_ANTES_DEL_SALDADO: Int = 7
+
+/** ¿[monto] es [esperado] ± 1 %? (al menos un peso de margen). */
+fun montoParecido(monto: Long, esperado: Long): Boolean =
+    esperado > 0L && kotlin.math.abs(monto - esperado) <= maxOf(1L, esperado / 100)
+
+/** La huella con que «No» descarta una propuesta de saldar (en `anomalias_descartadas`). */
+fun huellaDeLaPropuestaDeSaldar(eventoId: String): String = "saldar:$eventoId"
 
 /** Body de `POST /api/espacios/{id}/compartir`: repartir un movimiento propio en el espacio. */
 @Serializable
@@ -360,8 +389,34 @@ fun tuParteComoEventos(gastos: List<GastoDelEspacio>): List<FinancialEvent> =
                 reconciliationStatus = ReconciliationStatus.RECONCILED,
                 countsAsCashFlow = true,
                 espacioId = g.espacioId,
+                pagadoPor = g.pagadoPor,
             )
         }
+
+/**
+ * **Los días de Actividad con tu parte de lo que pagaron otros como filas** (vuelta 66). «Salió»
+ * contaba tu parte del mercado que pagó Caro ([tuParteComoEventos]) pero ninguna fila la mostraba: los
+ * días sumaban $120.000 menos que el total, y un día con solo eso no aparecía. Ahora cada parte va en
+ * su día (la fecha del gasto, en la zona de la app), en su lugar por hora, y un día que no existía se
+ * crea en orden. Toda cifra de Actividad sale de estos días. Una parte que ya está (mismo id) no se
+ * repite. El `total` del día no se toca: lo recalcula quien filtra.
+ */
+fun conTuParteDeOtros(dias: List<EventDay>, tuParteDeOtros: List<FinancialEvent>): List<EventDay> {
+    val yaEstan = dias.flatMap { d -> d.items.map { it.id } }.toSet()
+    val nuevas = tuParteDeOtros.filter { esTuParteDeOtro(it) && it.id !in yaEstan }
+    if (nuevas.isEmpty()) return dias
+    val porDia = nuevas.groupBy { epochMillisToAppDate(it.timestamp).toString() }
+    val existentes = dias.map { d ->
+        val suyas = porDia[d.date] ?: return@map d
+        d.copy(items = (d.items + suyas).masRecientePrimero())
+    }
+    val fechas = dias.map { it.date }.toSet()
+    val diasNuevos = porDia.filterKeys { it !in fechas }.map { (fecha, items) ->
+        EventDay(date = fecha, total = 0L, items = items.masRecientePrimero())
+    }
+    // Las fechas ISO se ordenan como texto: el día más reciente primero, como `/by-day`.
+    return (existentes + diasNuevos).sortedByDescending { it.date }
+}
 
 /**
  * Una propuesta: «¿Esta transferencia de Caro es para saldar la casa?». Movi la propone; el dueño
@@ -375,6 +430,17 @@ data class PropuestaDeSaldar(
     val monto: Long,
     val fecha: Long,
     val descripcion: String,
+    /**
+     * Vuelta 66 · la liquidación que ya se marcó y espera esta transferencia ([esperaLaTransferencia]);
+     * `null` si la propuesta salda una deuda que sigue abierta. Con ella, «Sí, saldar» vincula ese
+     * saldado (el mismo id) en vez de crear otro.
+     */
+    val liquidacionId: String? = null,
+    /** El grupo, para mostrarla fuera de él (Por revisar, la campana). */
+    val espacioId: String = "",
+    val nombreDelEspacio: String = "",
+    /** El nombre de la otra persona («Caro»), para decirlo fuera del grupo. Lo pone el server. */
+    val quien: String = "",
 )
 
 /** Cuántos días atrás se mira para proponer una transferencia que salda. */
@@ -393,6 +459,8 @@ fun transferenciasParaSaldar(
     eventos: List<FinancialEvent>,
     destinos: List<DestinoConocido>,
     ahora: Long,
+    /** Vuelta 66: los saldados del grupo; los que esperan su transferencia también proponen. */
+    liquidaciones: List<LiquidacionDelEspacio> = emptyList(),
 ): List<PropuestaDeSaldar> {
     val desde = ahora - DIAS_PARA_PROPONER_SALDAR * 24L * 60 * 60 * 1000
     val porId = destinos.associateBy { it.id }
@@ -414,7 +482,43 @@ fun transferenciasParaSaldar(
             }
             .forEach { e -> propuestas += PropuestaDeSaldar(e.id, r.de, r.a, e.amount, e.timestamp, e.description) }
     }
-    return propuestas.sortedByDescending { it.fecha }
+    val yaPropuestos = propuestas.map { it.eventoId }.toMutableSet()
+    return propuestas.sortedByDescending { it.fecha } +
+        transferenciasQueEsperan(liquidaciones, eventos, destinos, ahora, yaPropuestos)
+}
+
+/**
+ * **La transferencia que espera cada saldado** (vuelta 66): por cada liquidación que
+ * [esperaLaTransferencia], **la primera** plata de esa persona (un ingreso si te pagó, un gasto hacia
+ * ella si le pagaste) por el monto del saldado ± 1 % ([montoParecido]), desde
+ * [DIAS_ANTES_DEL_SALDADO] días antes de marcarlo, en pesos, y que no salde ni esté repartida en
+ * ningún grupo. Un movimiento se propone para un solo saldado. Sin reglas nuevas: «Sí, saldar» es la
+ * vinculación de siempre ([LiquidacionDelEspacio.eventoId]), con una ventana más.
+ */
+fun transferenciasQueEsperan(
+    liquidaciones: List<LiquidacionDelEspacio>,
+    eventos: List<FinancialEvent>,
+    destinos: List<DestinoConocido>,
+    ahora: Long,
+    yaPropuestos: MutableSet<String> = mutableSetOf(),
+): List<PropuestaDeSaldar> {
+    val porId = destinos.associateBy { it.id }
+    return liquidaciones.filter { esperaLaTransferencia(it, ahora) }.sortedBy { it.fecha }.mapNotNull { l ->
+        val entra = l.a == MIEMBRO_YO
+        val destino = porId[if (entra) l.de else l.a] ?: return@mapNotNull null
+        val desde = l.fecha - DIAS_ANTES_DEL_SALDADO * UN_DIA_EN_MS
+        val e = eventos.asSequence()
+            .filter { it.timestamp in desde..ahora && it.currency == "COP" && it.id !in yaPropuestos }
+            .filter { it.saldaEspacioId == null && it.espacioId == null && !esTuParteDeOtro(it) }
+            .filter { montoParecido(it.amount, l.monto) }
+            .filter {
+                if (entra) it.type == TransactionType.INCOME && vieneDelDestino(it, destino)
+                else it.type == TransactionType.EXPENSE && vaHaciaElDestino(it, destino)
+            }
+            .minByOrNull { it.timestamp } ?: return@mapNotNull null
+        yaPropuestos += e.id
+        PropuestaDeSaldar(e.id, l.de, l.a, e.amount, e.timestamp, e.description, liquidacionId = l.id, espacioId = l.espacioId)
+    }
 }
 
 /**

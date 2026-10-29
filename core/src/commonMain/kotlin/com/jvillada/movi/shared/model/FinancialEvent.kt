@@ -252,6 +252,13 @@ data class FinancialEvent(
      * Columna `financial_events.cuotas`, nullable; un `POST /api/events` no la toca.
      */
     val cuotas: Int? = null,
+    /**
+     * **Vuelta 66 · quién pagó**, solo en tu parte de un gasto que pagó otro miembro de un grupo (los
+     * movimientos sintéticos `espacio:<gasto>` de [tuParteComoEventos]): el id del miembro
+     * (`DestinoConocido.id`), para que la fila de Actividad diga «Pagó Caro». Derivado, `null` en todo
+     * movimiento de tus cuentas.
+     */
+    val pagadoPor: String? = null,
 )
 
 /**

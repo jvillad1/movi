@@ -2082,6 +2082,11 @@ class LocalRepository(
         remote.liquidarEspacio(espacioId, liquidacion)
     override suspend fun getTuParteDeOtros(): List<FinancialEvent> =
         leerConCache("tu-parte-de-otros") { remote.getTuParteDeOtros() }
+    override suspend fun getPropuestasDeSaldar(): List<com.jvillada.movi.shared.model.PropuestaDeSaldar> =
+        remote.getPropuestasDeSaldar()
+    override suspend fun borrarEspacio(id: String) = remote.borrarEspacio(id)
+    override suspend fun deshacerLiquidacion(espacioId: String, liquidacionId: String) =
+        remote.deshacerLiquidacion(espacioId, liquidacionId)
 
     /**
      * **Las cuentas de otros van siempre al server, y sin caché.**

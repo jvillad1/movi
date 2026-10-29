@@ -142,6 +142,10 @@ internal class InvalidaElInicioAlEscribir(
         trasEscribir { delegado.anotarGastoDeOtro(espacioId, gasto) }
     override suspend fun liquidarEspacio(espacioId: String, liquidacion: com.jvillada.movi.shared.model.LiquidacionDelEspacio) =
         trasEscribir { delegado.liquidarEspacio(espacioId, liquidacion) }
+    // Vuelta 66: borrar un grupo o deshacer un saldado también cambia «Salió» y «Entró».
+    override suspend fun borrarEspacio(id: String): Unit = trasEscribir { delegado.borrarEspacio(id) }
+    override suspend fun deshacerLiquidacion(espacioId: String, liquidacionId: String): Unit =
+        trasEscribir { delegado.deshacerLiquidacion(espacioId, liquidacionId) }
     override suspend fun deleteDestino(id: String): Unit = trasEscribir { delegado.deleteDestino(id) }
     override suspend fun agregarIdentificador(id: String, pedido: com.jvillada.movi.shared.model.AgregarIdentificador) =
         trasEscribir { delegado.agregarIdentificador(id, pedido) }

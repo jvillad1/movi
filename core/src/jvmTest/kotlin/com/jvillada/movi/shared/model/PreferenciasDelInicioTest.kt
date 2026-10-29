@@ -145,4 +145,25 @@ class PreferenciasDelInicioTest {
         // Lo fijo arriba no se configura: el héroe, la cuadrícula y las propuestas.
         assertTrue(listOf("HERO_BALANCE", "ACCIONES", "PROXIMO_PAGO", "PROPUESTAS", "ULTIMOS_MOVIMIENTOS").none { it in SECCIONES_CONFIGURABLES })
     }
+
+    /**
+     * Vuelta 66 · **el caso exacto de la revisión**: «Disponible» escondida cuando venía en Hoy y
+     * prendida después, ya opcional. La preferencia quedó en las dos listas y ganaba la oculta: el
+     * editor la mostraba prendida y Hoy sin ella. Gana `visibles` (lo último que pidió el dueño), al
+     * guardar y al leer lo ya guardado.
+     */
+    @Test
+    fun `una opcional en ocultas y en visibles se muestra - gana visibles`() {
+        val guardada = PreferenciasDelInicio(
+            ocultas = listOf("DISPONIBLE_DEL_PERIODO"),
+            visibles = listOf("DISPONIBLE_DEL_PERIODO", "PATRIMONIO"),
+        )
+        assertEquals(PreferenciasDelInicio(visibles = listOf("DISPONIBLE_DEL_PERIODO", "PATRIMONIO")), guardada.limpias())
+        val tipos = inicioConPreferencias(porDefecto, guardada).sections.map { it.type }
+        assertTrue("DISPONIBLE_DEL_PERIODO" in tipos, "Hoy muestra Disponible")
+        assertTrue("PATRIMONIO" in tipos)
+        // Una oculta que no está en visibles sigue oculta.
+        val soloOculta = PreferenciasDelInicio(ocultas = listOf("CUENTAS"), visibles = listOf("PATRIMONIO"))
+        assertEquals(listOf("CUENTAS"), soloOculta.limpias().ocultas)
+    }
 }

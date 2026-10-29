@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.server.db.AnomaliasDescartadas
 import com.jvillada.movi.server.db.Espacios
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.GastosDelEspacio
@@ -25,6 +26,10 @@ import com.jvillada.movi.shared.model.GastoDelEspacio
 import com.jvillada.movi.shared.model.LiquidacionDelEspacio
 import com.jvillada.movi.shared.model.MAX_NOMBRE_DE_ESPACIO
 import com.jvillada.movi.shared.model.MIEMBRO_YO
+import com.jvillada.movi.shared.model.PropuestaDeSaldar
+import com.jvillada.movi.shared.model.DIAS_ANTES_DEL_SALDADO
+import com.jvillada.movi.shared.model.esperaLaTransferencia
+import com.jvillada.movi.shared.model.huellaDeLaPropuestaDeSaldar
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.idsDeMiembros
 import com.jvillada.movi.shared.model.partesDelGasto
@@ -43,7 +48,9 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.Transaction
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.exists
 import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
@@ -60,6 +67,8 @@ import java.util.UUID
  *
  * - `GET /api/espacios` · `POST /api/espacios` (upsert) · `DELETE /api/espacios/{id}`
  * - `GET /api/espacios/tu-parte`: tu parte de lo que pagaron otros, para los totales del cliente.
+ * - `GET /api/espacios/propuestas`: las transferencias que Movi propone vincular, de todos los grupos
+ *   (vuelta 66: también las que espera un saldado marcado antes de que llegara la plata).
  * - `GET /api/espacios/{id}`: [DetalleDelEspacio] (saldo, quién puso qué en el período, gastos,
  *   liquidaciones y las transferencias que Movi propone vincular).
  * - `POST /api/espacios/{id}/compartir` (repartir un movimiento propio) ·
@@ -74,6 +83,13 @@ fun Route.espacioRoutes() {
         // Tu parte de lo que pagaron otros, como movimientos de gasto para los totales que arma el
         // cliente (En qué se va). Nunca van a la lista de movimientos ni a un saldo.
         get("/tu-parte") { call.respond(dbQuery { loCompartidoDelUsuario(call.userId()).tuParteDeOtros }) }
+
+        // Vuelta 66: las transferencias que Movi propone vincular, de todos los grupos (Por revisar y
+        // la campana). Las mismas que dice cada grupo.
+        get("/propuestas") {
+            val ahora = AppClock.now().toInstant().toEpochMilli()
+            call.respond(dbQuery { propuestasDeSaldarDe(call.userId(), ahora) })
+        }
 
         post {
             val uid = call.userId()
@@ -234,24 +250,87 @@ internal fun Transaction.detalleDelEspacio(uid: String, espacioId: String, ahora
     val espacio = espacios.firstOrNull { it.id == espacioId } ?: return null
     val anulados = anuladosDe(uid)
     val gastos = gastosDe(uid, espacios, espacioId).filterNot { it.eventoId != null && it.eventoId in anulados }
-    val liquidaciones = liquidacionesDe(uid, espacioId).filterNot { it.eventoId != null && it.eventoId in anulados }
+    val liquidaciones = conElMovimiento(uid, liquidacionesDe(uid, espacioId).filterNot { it.eventoId != null && it.eventoId in anulados })
     val saldo = saldoDelEspacio(espacio, gastos, liquidaciones, anulados)
     val ventana = ventanaDe(periodoDe(ahora, ajustesDelPeriodoSinSuspender(uid)), ajustesDelPeriodoSinSuspender(uid))
     val delPeriodo = saldoDelEspacio(espacio, gastos.filter { it.fecha in ventana }, emptyList(), anulados)
-    val propuestas = if (saldo.reembolsos.none { it.de == MIEMBRO_YO || it.a == MIEMBRO_YO }) {
-        emptyList()
-    } else {
-        val desde = ahora - com.jvillada.movi.shared.model.DIAS_PARA_PROPONER_SALDAR * 24L * 60 * 60 * 1000
-        transferenciasParaSaldar(saldo, loadEventsBetween(uid, desde, ahora + 1), destinosDelDueno(uid), ahora)
-    }
     return DetalleDelEspacio(
         espacio = espacio,
         saldo = saldo,
         delPeriodo = delPeriodo,
         gastos = gastos,
         liquidaciones = liquidaciones,
-        propuestas = propuestas,
+        propuestas = propuestasDelEspacio(uid, espacio, saldo, liquidaciones, ahora),
     )
+}
+
+/**
+ * **Lo que Movi propone vincular en [espacio]**: la transferencia que salda la deuda abierta (como
+ * siempre) y, desde la vuelta 66, la que espera un saldado que se marcó antes de que llegara la plata
+ * ([transferenciasQueEsperan] vía `transferenciasParaSaldar`). Sin lo que el dueño ya descartó con «No»
+ * ([huellaDeLaPropuestaDeSaldar] en `anomalias_descartadas`). Cada propuesta lleva su grupo, para
+ * mostrarla también en Por revisar y la campana.
+ */
+internal fun Transaction.propuestasDelEspacio(
+    uid: String,
+    espacio: Espacio,
+    saldo: com.jvillada.movi.shared.model.SaldoDelEspacio,
+    liquidaciones: List<LiquidacionDelEspacio>,
+    ahora: Long,
+): List<PropuestaDeSaldar> {
+    val hayDeuda = saldo.reembolsos.any { it.de == MIEMBRO_YO || it.a == MIEMBRO_YO }
+    val esperan = liquidaciones.filter { esperaLaTransferencia(it, ahora) }
+    if (!hayDeuda && esperan.isEmpty()) return emptyList()
+    val diasAtras = com.jvillada.movi.shared.model.DIAS_PARA_PROPONER_SALDAR * UN_DIA
+    val desde = (listOf(ahora - diasAtras) + esperan.map { it.fecha - DIAS_ANTES_DEL_SALDADO * UN_DIA }).min()
+    val eventos = loadEventsBetween(uid, desde, ahora + 1)
+    val saldoParaProponer = if (hayDeuda) saldo else saldo.copy(reembolsos = emptyList())
+    val descartadas = propuestasDescartadas(uid)
+    return transferenciasParaSaldar(saldoParaProponer, eventos, destinosDelDueno(uid), ahora, liquidaciones = esperan)
+        .filterNot { huellaDeLaPropuestaDeSaldar(it.eventoId) in descartadas }
+        .map { p ->
+            val otro = if (p.a == MIEMBRO_YO) p.de else p.a
+            p.copy(
+                espacioId = espacio.id,
+                nombreDelEspacio = espacio.nombre,
+                quien = espacio.miembros.firstOrNull { it.id == otro }?.nombre.orEmpty(),
+            )
+        }
+}
+
+private const val UN_DIA: Long = 24L * 60 * 60 * 1000
+
+/** Las huellas que el dueño descartó (la tabla de las anomalías); vacío si la tabla no existe. */
+private fun Transaction.propuestasDescartadas(uid: String): Set<String> =
+    if (!runCatching { AnomaliasDescartadas.exists() }.getOrDefault(false)) emptySet()
+    else AnomaliasDescartadas.selectAll().where { AnomaliasDescartadas.userId eq uid }
+        .map { it[AnomaliasDescartadas.huella] }.filter { it.startsWith("saldar:") }.toSet()
+
+/**
+ * **Todas las propuestas de saldar del dueño** (vuelta 66, `GET /api/espacios/propuestas`): las de
+ * cada grupo, para Por revisar y la campana. Antes solo se veían dentro del grupo.
+ */
+internal fun Transaction.propuestasDeSaldarDe(uid: String, ahora: Long): List<PropuestaDeSaldar> {
+    val espacios = espaciosDe(uid)
+    if (espacios.isEmpty()) return emptyList()
+    val anulados = anuladosDe(uid)
+    val gastos = gastosDe(uid, espacios).filterNot { it.eventoId != null && it.eventoId in anulados }
+    val liquidaciones = liquidacionesDe(uid).filterNot { it.eventoId != null && it.eventoId in anulados }
+    val usados = mutableSetOf<String>()
+    return espacios.flatMap { espacio ->
+        val suyas = liquidaciones.filter { it.espacioId == espacio.id }
+        val saldo = saldoDelEspacio(espacio, gastos.filter { it.espacioId == espacio.id }, suyas, anulados)
+        propuestasDelEspacio(uid, espacio, saldo, suyas, ahora).filter { usados.add(it.eventoId) }
+    }
+}
+
+/** [liquidaciones] con el concepto de su movimiento vinculado («Transferencia de Caro»). */
+private fun Transaction.conElMovimiento(uid: String, liquidaciones: List<LiquidacionDelEspacio>): List<LiquidacionDelEspacio> {
+    val ids = liquidaciones.mapNotNull { it.eventoId }
+    if (ids.isEmpty()) return liquidaciones
+    val conceptos = Events.selectAll().where { (Events.userId eq uid) and (Events.id inList ids) }
+        .associate { it[Events.id] to it[Events.description] }
+    return liquidaciones.map { l -> l.eventoId?.let { conceptos[it] }?.let { l.copy(movimiento = it) } ?: l }
 }
 
 /**
@@ -374,6 +453,18 @@ internal fun Transaction.liquidar(
     when {
         existente != null && existente[LiquidacionesDelEspacio.userId] != uid ->
             throw Rechazo(HttpStatusCode.Conflict, "Ese id ya existe")
+        // Vuelta 66 · un saldado que espera su transferencia y ahora llega con ella: se vincula (la
+        // misma validación de siempre). Lo demás de la liquidación no cambia: saldar dos veces sigue
+        // siendo saldar una.
+        existente != null && existente[LiquidacionesDelEspacio.eventoId] == null && body.eventoId != null &&
+            existente[LiquidacionesDelEspacio.espacioId] == espacioId -> {
+            val guardada = liquidacionesDe(uid, espacioId).first { it.id == id }
+            validarElVinculo(uid, body.eventoId!!, guardada)
+            LiquidacionesDelEspacio.update({ (LiquidacionesDelEspacio.id eq id) and (LiquidacionesDelEspacio.userId eq uid) }) {
+                it[eventoId] = body.eventoId
+            }
+            Respuesta(HttpStatusCode.OK, liquidacionesDe(uid, espacioId).first { it.id == id })
+        }
         existente != null -> Respuesta(HttpStatusCode.OK, liquidacionesDe(uid, espacioId).first { it.id == id })
         else -> {
             val miembros = idsDeMiembros(espacio)

@@ -3266,3 +3266,58 @@ dice «Te quedan vuelve a $X».
 Lo vigilan `ApartadoParaUnGastoTest` (`:core`), `ApartadoRoutesTest` y `SchemaDeArranqueTest`
 (`:server`), `ElApartadoQueAvisaTest` y `LaCuotaVencidaSeDiceTest` (`commonTest`), y en Robolectric
 `ApartadosEnLaCuentaTest` y `LaHojaDeApartarA360Test` (360 dp, letra ×1,12).
+
+## 64. Vuelta 66: los totales se pueden rastrear, y el hogar compartido no pierde plata
+
+Tercera revisión de producto sobre master `32485a7a` (capturas `r3-*.png`). **Sin reglas de plata
+nuevas**: la vinculación de un saldado es la de siempre, con una ventana más.
+
+1. **Toda cifra de Actividad sale de las filas.** Tu parte de un gasto que pagó otra persona del grupo
+   es una fila en su día —«Mercado del sábado» · «Pagó Caro · Mercado» · −$120.000 y «Tu parte»
+   debajo— en Todo, Gastos y Compartidos (`conTuParteDeOtros` en `:core`; `textosDeTuParteDeOtro`, y
+   `FinancialEvent.pagadoPor`, derivado, solo en esas filas). El resumen (Entró · Salió · Neto, y el
+   panel) sale de los mismos días, así que la suma de los días es «Salió»; un día con solo eso (el lunes
+   26) aparece. Tocarla abre **el gasto del grupo** (`AbrirTuParteDeOtro` → `HojaDelGasto`), no un
+   movimiento; no se desliza. `movimientosDelAnalisis` no repite una parte que venga en los días y
+   aparte.
+2. **El saldo del grupo espera la transferencia.** Un «Marcar como saldado» sin movimiento en el que el
+   dueño paga o cobra queda **esperando la transferencia** (`esperaLaTransferencia`: hasta 45 días).
+   Mientras espera, Movi propone vincular la primera plata de esa persona por ese monto ± 1 %
+   (`transferenciasQueEsperan`, desde 7 días antes de saldar); «Sí, saldar» manda el **mismo id** del
+   saldado con el movimiento, y el server lo vincula (antes, el upsert por id devolvía el saldado sin
+   tocarlo). Vinculado, sale de `monthIncome` como siempre. Las propuestas —las de la deuda y las que
+   esperan— van también a **Por revisar** («Para saldar en tus grupos») y a la **campana**
+   (`TipoDeNotificacion.TransferenciaParaSaldar`), por `GET /api/espacios/propuestas`; las tres usan
+   `TarjetaDeSaldar`. «No» la descarta para siempre (`saldar:<movimiento>` en `anomalias_descartadas`).
+3. **Editar inicio no se contradice.** Prender una opcional la saca de `ocultas`, y esconder una la saca
+   de `visibles` (`mostrando`). Al leer, **gana `visibles`** (`limpias`): una opcional solo entra ahí
+   prendiéndola en el editor, así que es lo último que pidió el dueño. Como el server limpia al leer
+   (la preferencia, `GET` y la definición de Hoy), esto arregla también las preferencias ya guardadas
+   en producción sin reescribir la fila; la fila queda con las dos listas hasta el próximo guardado.
+4. **Historial del grupo.** «Pagos entre ustedes» lista cada saldado —«Caro te pagó $168.050», «29 oct
+   · Transferencia de Caro» (o «Esperando la transferencia», o «Sin transferencia vinculada»)— con
+   «Deshacer» (el `DELETE …/liquidaciones/{id}` que el server ya tenía; la deuda vuelve y la
+   transferencia vuelve a ser ingreso). En la lista de gastos, una marca de corte en cada saldado
+   («Saldaron $168.050 · 29 oct», `gastosConSusCortes`). `LiquidacionDelEspacio.movimiento`, derivado.
+5. **Crear, nombrar y borrar grupos.** «Nuevo grupo» pide el nombre (Movi sugiere «Casa con Caro») y una
+   o varias personas, con «Agregar persona» ahí mismo (la hoja de «Personas y comercios», que pide número
+   o llave: sin eso Movi no reconoce sus transferencias); con el mismo nombre y las mismas personas
+   avisa (`avisoDeGrupoRepetido`) y el botón dice «Crear otro igual». El lápiz del encabezado del grupo
+   abre «Editar grupo»: renombrar (el upsert de siempre) y «Borrar grupo», con su pregunta antes
+   (`confirmacionDeBorrarElGrupo`). **Decisión: se deja borrar aunque no esté a mano, diciendo lo que
+   pasa**: «Caro te debe $X: al borrarlo, Movi deja de llevar esa cuenta», que tus movimientos vuelven a
+   contar enteros, que lo que pagó otra persona deja de contar y que las transferencias vinculadas
+   vuelven a ser ingreso o gasto; el botón dice «Borrar de todas formas». Un grupo repetido o de prueba
+   casi siempre está a mano, y bloquear el borrado de uno con saldo obligaba a inventar un saldado. El
+   reparto distinto de 50/50 no entra: el modelo y el server ya admiten porcentajes
+   (`RepartoDelEspacio.PORCENTAJES`, `repartoValido`), falta la hoja.
+6. **Una sola cuenta de «N veces».** `vecesEnElComercio` (`:core` `VecesEnElComercio.kt`) con
+   `claveDelComercio` (la marca primero, después la clave de comercio) y `claveDeLaCompra` (las partes
+   de una compra repartida salen de la misma cuenta, a la misma hora y se anotaron en el mismo
+   instante: cuentan una vez). La usan el detalle (`enEsteComercio`) y Buscar.
+
+Lo vigilan `VecesEnElComercioTest`, `EspacioTest` y `PreferenciasDelInicioTest` (`:core`),
+`EspacioRoutesTest` (saldar primero, la transferencia que llega, la propuesta, vincular, `monthIncome`;
+deshacer; «No») e `InicioRoutesTest` (la preferencia guardada con las dos listas) en `:server`, y en
+`commonTest` `ActividadCuadraConSusFilasTest` (la suma de los días es «Salió», con un gasto que pagó
+Caro), `UnaSolaCuentaDeVecesTest`, `HoyEnUnaMiradaTest` y `TextosDelGrupoTest`.

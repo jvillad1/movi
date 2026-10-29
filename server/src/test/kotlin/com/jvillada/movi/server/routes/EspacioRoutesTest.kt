@@ -16,6 +16,7 @@ import com.jvillada.movi.shared.model.montoContado
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import com.jvillada.movi.server.db.Accounts
+import com.jvillada.movi.server.db.AnomaliasDescartadas
 import com.jvillada.movi.server.db.Apartados
 import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.CardPaymentDismissals
@@ -46,6 +47,7 @@ import com.jvillada.movi.shared.model.GastoDelEspacio
 import com.jvillada.movi.shared.model.LiquidacionDelEspacio
 import com.jvillada.movi.shared.model.MIEMBRO_YO
 import com.jvillada.movi.shared.model.netoDe
+import com.jvillada.movi.shared.model.PropuestaDeSaldar
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -100,6 +102,8 @@ class EspacioRoutesTest {
         KnownDestinations, Espacios, GastosDelEspacio, LiquidacionesDelEspacio,
         // Las lee el contexto de Movi AI (`cargarDatosDelUsuario`): los papeles y las suscripciones.
         Documents, Subscriptions,
+        // Vuelta 66: el «No» de una propuesta de saldar se guarda como huella descartada.
+        AnomaliasDescartadas,
     )
 
     @BeforeTest
@@ -484,5 +488,92 @@ class EspacioRoutesTest {
         post("/api/espacios/esp_casa/compartir", """{"eventoId":"e_mercado"}""")
 
         assertEquals(1_000_000L - 120_000L - 30_000L, restante())
+    }
+
+    // ── Vuelta 66 · el saldo del grupo espera la transferencia ──────────────
+
+    private suspend fun ApplicationTestBuilder.monthIncome(): Long =
+        Json.parseToJsonElement(get("/api/dashboard/summary").bodyAsText()).jsonObject["monthIncome"]?.jsonPrimitive?.long ?: 0L
+
+    /**
+     * El caso de la revisión: «Marcar como saldado» antes de que llegue la plata. Ya no queda deuda, así
+     * que la propuesta de siempre no salía y la transferencia de Caro quedaba contada como ingreso para
+     * siempre. Ahora el saldado espera: se propone (en el grupo y en `/propuestas`), se vincula a ESE
+     * saldado y `monthIncome` deja de contarla. Sin reglas nuevas: es la vinculación de siempre.
+     */
+    @Test
+    fun `saldar primero, que llegue la transferencia, que se proponga, vincular, y monthIncome no la cuenta`() = conApp {
+        post("/api/espacios", casa)
+        evento("e_mercado", 336_100)
+        post("/api/espacios/esp_casa/compartir", """{"eventoId":"e_mercado"}""")
+        // Se marca saldado sin movimiento: el grupo queda a mano.
+        assertEquals(
+            HttpStatusCode.Created,
+            post("/api/espacios/esp_casa/liquidaciones", """{"id":"liq_ya","de":"dst_caro","a":"yo","monto":168050}""").status,
+        )
+        assertEquals(0L, detalle().saldo.netoDe(MIEMBRO_YO))
+        // Llega la plata de Caro (±1 %): por ahora es ingreso.
+        evento("e_de_caro", 168_500, tipo = "INCOME", categoria = "Ingreso", descripcion = "Transferencia de Caro")
+        assertEquals(168_500L, monthIncome())
+
+        val propuesta = detalle().propuestas.single()
+        assertEquals("e_de_caro", propuesta.eventoId)
+        assertEquals("liq_ya", propuesta.liquidacionId)
+        // También fuera del grupo (Por revisar y la campana), con el grupo y el nombre.
+        val todas = json.decodeFromString<List<PropuestaDeSaldar>>(get("/api/espacios/propuestas").bodyAsText())
+        assertEquals(listOf("e_de_caro"), todas.map { it.eventoId })
+        assertEquals("esp_casa", todas.single().espacioId)
+        assertEquals("Casa con Caro", todas.single().nombreDelEspacio)
+        assertEquals("Caro", todas.single().quien)
+
+        // «Sí, saldar»: el mismo id del saldado, con la transferencia. Se vincula; no crea otro.
+        val vinculada = post("/api/espacios/esp_casa/liquidaciones", """{"id":"liq_ya","de":"dst_caro","a":"yo","monto":168500,"eventoId":"e_de_caro"}""")
+        assertEquals(HttpStatusCode.OK, vinculada.status)
+        val liq = json.decodeFromString<LiquidacionDelEspacio>(vinculada.bodyAsText())
+        assertEquals("e_de_caro", liq.eventoId)
+        assertEquals(168_050L, liq.monto, "el monto del saldado no cambia")
+        assertEquals(1L, transaction { LiquidacionesDelEspacio.selectAll().count() })
+
+        assertEquals(0L, monthIncome(), "la transferencia vinculada no es ingreso")
+        val d = detalle()
+        assertTrue(d.propuestas.isEmpty())
+        assertEquals(0L, d.saldo.netoDe(MIEMBRO_YO))
+        assertEquals("Transferencia de Caro", d.liquidaciones.single().movimiento, "el historial dice con qué se pagó")
+        assertTrue(json.decodeFromString<List<PropuestaDeSaldar>>(get("/api/espacios/propuestas").bodyAsText()).isEmpty())
+    }
+
+    @Test
+    fun `deshacer un saldado devuelve la deuda y la transferencia vuelve a ser ingreso`() = conApp {
+        post("/api/espacios", casa)
+        evento("e_mercado", 336_100)
+        post("/api/espacios/esp_casa/compartir", """{"eventoId":"e_mercado"}""")
+        evento("e_de_caro", 168_050, tipo = "INCOME", categoria = "Ingreso", descripcion = "Transferencia de Caro")
+        post("/api/espacios/esp_casa/liquidaciones", """{"id":"liq","de":"dst_caro","a":"yo","monto":168050,"eventoId":"e_de_caro"}""")
+        assertEquals(0L, monthIncome())
+
+        val deshacer = client.delete("/api/espacios/esp_casa/liquidaciones/liq") { header(HttpHeaders.Authorization, "Bearer ${token(a)}") }
+        assertEquals(HttpStatusCode.NoContent, deshacer.status)
+        assertEquals(168_050L, monthIncome())
+        assertEquals(168_050L, detalle().saldo.netoDe(MIEMBRO_YO))
+        assertEquals(listOf("e_de_caro"), detalle().propuestas.map { it.eventoId }, "vuelve a proponerse")
+    }
+
+    @Test
+    fun `No descarta la propuesta para siempre, y un saldado que espera no se vincula a una transferencia ajena`() = conApp {
+        post("/api/espacios", casa)
+        evento("e_mercado", 336_100)
+        post("/api/espacios/esp_casa/compartir", """{"eventoId":"e_mercado"}""")
+        post("/api/espacios/esp_casa/liquidaciones", """{"id":"liq_ya","de":"dst_caro","a":"yo","monto":168050}""")
+        evento("e_de_caro", 168_050, tipo = "INCOME", categoria = "Ingreso", descripcion = "Transferencia de Caro")
+        evento("e_gasto", 168_050)
+        // La dirección se valida igual que siempre.
+        assertEquals(
+            HttpStatusCode.BadRequest,
+            post("/api/espacios/esp_casa/liquidaciones", """{"id":"liq_ya","de":"dst_caro","a":"yo","monto":168050,"eventoId":"e_gasto"}""").status,
+        )
+        assertEquals(1, detalle().propuestas.size)
+        assertEquals(HttpStatusCode.NoContent, post("/api/anomalias/descartar", """{"huella":"saldar:e_de_caro"}""").status)
+        assertTrue(detalle().propuestas.isEmpty())
+        assertEquals(168_050L, monthIncome(), "descartarla no la vincula: sigue siendo ingreso")
     }
 }

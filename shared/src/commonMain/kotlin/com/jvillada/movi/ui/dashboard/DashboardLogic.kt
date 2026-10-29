@@ -235,6 +235,12 @@ data class DashboardData(
      * mientras carga y no se pinta si la lectura falló.
      */
     val ultimosMovimientos: List<com.jvillada.movi.shared.model.FinancialEvent>? = null,
+    /**
+     * Vuelta 66 · **las transferencias que Movi propone vincular para saldar un grupo**
+     * (`GET /api/espacios/propuestas`): van a la campana. Se piden aparte, como los débitos; `null` = no
+     * llegó, y no se dice nada. No viaja en la instantánea (`llegado` no la lleva).
+     */
+    val propuestasDeSaldar: List<com.jvillada.movi.shared.model.PropuestaDeSaldar>? = null,
 ) {
     val hasAccount: Boolean get() = !accounts.isNullOrEmpty()
     /**
@@ -924,6 +930,12 @@ enum class TipoDeNotificacion {
 
     /** Nunca llegó un mensaje del banco. */
     CapturaSinMensajes,
+
+    /**
+     * Vuelta 66 · una transferencia que puede saldar un grupo (la deuda abierta, o un saldado que se
+     * marcó antes de que llegara la plata). Si no se vincula, cuenta como ingreso.
+     */
+    TransferenciaParaSaldar,
 }
 
 /**
@@ -985,6 +997,7 @@ fun urgenciaDeLaNotificacion(tipo: TipoDeNotificacion, diasParaVencer: Int? = nu
     TipoDeNotificacion.PagoDeTarjetaPorConfirmar -> 5
     TipoDeNotificacion.MensajesDelBanco -> 5
     TipoDeNotificacion.CapturaSinMensajes -> 7
+    TipoDeNotificacion.TransferenciaParaSaldar -> 5
 }
 
 /** «Internet venció ayer», «Carro vence hoy», «Colegio vence en 2 días»: el pago, en una frase. */
@@ -1059,6 +1072,18 @@ fun notificationRows(data: DashboardData): List<NotificationRow> = buildList {
                 )
             }
         }
+    }
+    // Vuelta 66: las transferencias que saldan un grupo. Llevan a Por revisar, donde se vinculan.
+    data.propuestasDeSaldar.orEmpty().forEach { p ->
+        add(
+            NotificationRow(
+                titulo = com.jvillada.movi.ui.espacios.preguntaDeLaPropuesta(p, p.quien.ifBlank { "otra persona" }, p.nombreDelEspacio),
+                target = Screen.PorRevisar,
+                tipo = TipoDeNotificacion.TransferenciaParaSaldar,
+                subtitulo = com.jvillada.movi.ui.espacios.cuerpoDeLaPropuesta(p, conElGrupo = true).ifBlank { null },
+                monto = p.monto.takeIf { it > 0 },
+            ),
+        )
     }
     // Lo que no es un pendiente de la cola: el banco que se calló, los presupuestos, la captura. Los
     // pagos de tarjeta y los mensajes del banco ya entraron arriba, como «Por revisar».

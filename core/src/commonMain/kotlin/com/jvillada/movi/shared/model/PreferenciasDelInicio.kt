@@ -98,12 +98,23 @@ const val MAXIMO_DE_SECCIONES_EN_LA_PREFERENCIA: Int = 32
  * La preferencia sin lo que no corresponde: solo tipos de [SECCIONES_CONFIGURABLES], sin repetidos.
  * Lo que sobra se descarta en silencio —una versión futura de la app puede mandar un tipo que esta
  * no conoce— en vez de rechazar el guardado entero.
+ *
+ * **Una sección en las dos listas gana [PreferenciasDelInicio.visibles]** (vuelta 66). Quien escondió
+ * «Disponible» cuando todavía venía en Hoy quedó con `ocultas:[DISPONIBLE_DEL_PERIODO]`; cuando pasó a
+ * opcional y la prendió, el editor la agregó a `visibles` sin sacarla de `ocultas`, y ganaba la oculta:
+ * el interruptor prendido y la sección sin aparecer. `visibles` es lo último que el dueño pidió —una
+ * opcional solo entra ahí prendiéndola en el editor, después de que existió la lista—, así que se queda
+ * y la oculta sale. Como el server limpia **al leer** (la preferencia guardada, `GET` y la definición
+ * de Hoy), esto arregla también las preferencias ya guardadas, sin reescribir la fila.
  */
-fun PreferenciasDelInicio.limpias(): PreferenciasDelInicio = PreferenciasDelInicio(
-    orden = orden.filter { it in SECCIONES_CONFIGURABLES }.distinct(),
-    ocultas = ocultas.filter { it in SECCIONES_CONFIGURABLES }.distinct(),
-    visibles = visibles.filter { it in SECCIONES_OPCIONALES }.distinct(),
-)
+fun PreferenciasDelInicio.limpias(): PreferenciasDelInicio {
+    val prendidas = visibles.filter { it in SECCIONES_OPCIONALES }.distinct()
+    return PreferenciasDelInicio(
+        orden = orden.filter { it in SECCIONES_CONFIGURABLES }.distinct(),
+        ocultas = ocultas.filter { it in SECCIONES_CONFIGURABLES && it !in prendidas }.distinct(),
+        visibles = prendidas,
+    )
+}
 
 /**
  * **Reordena [items] según [orden], sin mover lo que el orden no nombra.**

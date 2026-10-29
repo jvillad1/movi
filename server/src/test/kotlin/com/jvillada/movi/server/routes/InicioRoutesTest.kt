@@ -250,4 +250,34 @@ class InicioRoutesTest {
         }
         assertTrue(com.jvillada.movi.server.screens.validateDefinition(conCompacto) != null)
     }
+
+    /**
+     * Vuelta 66 · **una preferencia ya guardada con «Disponible» en las dos listas** (la de quien la
+     * escondió cuando venía en Hoy y la prendió después). La fila queda tal cual en la base —nadie la
+     * reescribe—, pero el server la limpia al leer: el GET la devuelve sin contradicción y Hoy muestra
+     * Disponible. Así se arreglan también las que ya están guardadas, sin tocar producción.
+     */
+    @Test
+    fun `una preferencia guardada con la misma seccion oculta y visible muestra la seccion`() = testApplication {
+        wireApp()
+        transaction {
+            InicioPersonalizado.insert {
+                it[userId] = userA
+                it[orden] = "[]"
+                it[ocultas] = """["DISPONIBLE_DEL_PERIODO"]"""
+                it[visibles] = """["DISPONIBLE_DEL_PERIODO","PATRIMONIO"]"""
+                it[actualizadoEn] = 0L
+            }
+        }
+        val leida = leer(userA)
+        assertEquals(emptyList<String>(), leida.ocultas)
+        assertEquals(listOf("DISPONIBLE_DEL_PERIODO", "PATRIMONIO"), leida.visibles)
+        val tipos = hoy(userA).definicion().sections.map { it.type }
+        assertTrue("DISPONIBLE_DEL_PERIODO" in tipos, "Hoy muestra Disponible")
+        assertTrue("PATRIMONIO" in tipos)
+
+        // Guardar lo mismo de nuevo ya no la deja en las dos listas.
+        guardar(userA, PreferenciasDelInicio(ocultas = listOf("DISPONIBLE_DEL_PERIODO"), visibles = listOf("DISPONIBLE_DEL_PERIODO")))
+        assertEquals(PreferenciasDelInicio(visibles = listOf("DISPONIBLE_DEL_PERIODO"), ordenDeMovi = ordenDeMovi), leer(userA))
+    }
 }

@@ -371,6 +371,20 @@ class WalletRepositoryImpl(
         return conRespuesta(response) { it.body() }
     }
 
+    override suspend fun getPropuestasDeSaldar(): List<com.jvillada.movi.shared.model.PropuestaDeSaldar> {
+        val response = client.get("$baseUrl/api/espacios/propuestas")
+        if (response.status == HttpStatusCode.NotFound) return emptyList()
+        return conRespuesta(response) { it.body() }
+    }
+
+    override suspend fun borrarEspacio(id: String) {
+        conRespuesta(client.delete("$baseUrl/api/espacios/$id")) { }
+    }
+
+    override suspend fun deshacerLiquidacion(espacioId: String, liquidacionId: String) {
+        conRespuesta(client.delete("$baseUrl/api/espacios/$espacioId/liquidaciones/$liquidacionId")) { }
+    }
+
     override suspend fun getDestinos(): List<DestinoConocido> =
         client.get("$baseUrl/api/destinos").body()
 

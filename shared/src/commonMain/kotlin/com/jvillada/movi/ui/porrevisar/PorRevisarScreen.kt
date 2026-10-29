@@ -69,6 +69,8 @@ import com.jvillada.movi.ui.destinos.rememberDestinosParaGuardar
 import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.LocalRefreshTick
+import com.jvillada.movi.shared.model.PropuestaDeSaldar
+import com.jvillada.movi.ui.espacios.TarjetaDeSaldar
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.ChevronRight
 import com.jvillada.movi.ui.components.HeaderLeading
@@ -357,6 +359,15 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
     var debitosResueltos by remember { mutableStateOf(emptySet<String>()) }
     val debitos = lecturas.debitos?.filterNot { it.clave in debitosResueltos }
     val nombresDeCuentas = remember(cuentas) { cuentas.associate { it.id to it.name } }
+    // ── Vuelta 66 · las transferencias que saldan un grupo ── antes solo se veían dentro del grupo (y
+    // la que esperaba un saldado ya marcado, en ningún lado). Secundaria: si falla, no se dice nada.
+    var propuestasDeSaldar by remember { mutableStateOf<List<PropuestaDeSaldar>>(emptyList()) }
+    val refrescoDeSaldar = LocalRefreshTick.current
+    LaunchedEffect(recarga, refrescoDeSaldar) {
+        propuestasDeSaldar = runCatching { Repositories.wallets.getPropuestasDeSaldar() }
+            .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
+            .getOrDefault(propuestasDeSaldar)
+    }
     val tiposDeCuentas = remember(cuentas) { cuentas.associate { it.id to it.type } }
 
     // La primera carga: alguna de las tres fuentes todavía no dijo nada. Con lo de antes en
@@ -477,6 +488,28 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
             return true
         }
         return false
+    }
+
+    fun LazyListScope.losSaldados(ll: LlavesDeLaLista) {
+        if (propuestasDeSaldar.isEmpty()) return
+        fila(ll, "titulo-de-saldar") { Seccion(titulo = TITULO_DE_SALDAR_EN_LOS_GRUPOS, conteo = propuestasDeSaldar.size) }
+        propuestasDeSaldar.forEach { p ->
+            fila(ll, "saldar-${p.eventoId}") {
+                TarjetaDeSaldar(
+                    p = p,
+                    espacioId = p.espacioId,
+                    quien = p.quien.ifBlank { "otra persona" },
+                    nombreDelGrupo = p.nombreDelEspacio,
+                    conElGrupo = true,
+                    onHecho = {
+                        propuestasDeSaldar = propuestasDeSaldar.filterNot { it.eventoId == p.eventoId }
+                        recarga++
+                    },
+                    modifier = Modifier.padding(bottom = Medida.dentroDeSeccion),
+                )
+            }
+        }
+        fila(ll, "despues-de-saldar") { Spacer(Modifier.height(Medida.entreSecciones - Medida.dentroDeSeccion)) }
     }
 
     fun LazyListScope.losDebitos(ll: LlavesDeLaLista) {
@@ -763,6 +796,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                     ll.empezar()
                     noSePudoActualizarArriba(ll)
                     subirYCaptura(ll)
+                    losSaldados(ll)
                     losDebitos(ll)
                     entraronSolos(ll)
                     losPagosDeTarjeta(ll)
@@ -788,6 +822,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                 noSePudoActualizarArriba(ll)
                 subirYCaptura(ll)
                 elLote(ll)
+                losSaldados(ll)
                 if (alDia(ll)) return@LazyColumn
                 losDebitos(ll)
                 losMensajes(ll)
@@ -1037,3 +1072,6 @@ const val DETALLE_DE_IGNORAR_LOS_ANTIGUOS: String =
 
 const val TAG_SECCION_DE_LOS_ANTIGUOS: String = "por-revisar:antiguos"
 const val TAG_IGNORAR_LOS_ANTIGUOS: String = "por-revisar:ignorar-los-antiguos"
+
+/** Vuelta 66: el título de las transferencias que saldan un grupo, en Por revisar. */
+const val TITULO_DE_SALDAR_EN_LOS_GRUPOS: String = "Para saldar en tus grupos"

@@ -103,3 +103,25 @@ fun salieronDeLaCuenta(tx: FinancialEvent, nombreDeLaCuenta: String?): String? {
     val monto = formatMoney(tx.amount, tx.currency)
     return nombreDeLaCuenta?.takeIf { it.isNotBlank() }?.let { "Salieron $monto de $it" } ?: "Salieron $monto de tu cuenta"
 }
+
+/** Lo que va debajo de la cifra de tu parte de un gasto que pagó otro (vuelta 66). */
+const val TU_PARTE: String = "Tu parte"
+
+/**
+ * **«Pagó Caro»**: quién pagó tu parte de un gasto de un grupo ([FinancialEvent.pagadoPor]), por su
+ * nombre en el grupo; sin el grupo o sin el miembro, «Pagó otra persona».
+ */
+fun quienPagoTuParte(tx: FinancialEvent, espacio: Espacio?): String {
+    val nombre = espacio?.miembros?.firstOrNull { it.id == tx.pagadoPor }?.nombre?.trim()?.takeIf { it.isNotEmpty() }
+    return "Pagó ${nombre ?: "otra persona"}"
+}
+
+/**
+ * **La fila de tu parte de un gasto que pagó otro** (vuelta 66): «Mercado del sábado» y debajo «Pagó
+ * Caro · Mercado» (sin repetir la categoría si es el título); la cifra es tu parte y debajo «Tu parte».
+ */
+fun textosDeTuParteDeOtro(tx: FinancialEvent, espacio: Espacio?): TextosDeLaFila {
+    val titulo = descripcionParaMostrar(tx).ifBlank { tx.category }
+    val categoria = tx.category.takeIf { it.isNotBlank() && !laDescripcionEsLaCategoria(tx) }
+    return TextosDeLaFila(titulo, listOfNotNull(quienPagoTuParte(tx, espacio), categoria).joinToString(" · "))
+}

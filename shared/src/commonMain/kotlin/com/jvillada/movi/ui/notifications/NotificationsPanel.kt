@@ -17,6 +17,7 @@ import androidx.compose.material.icons.rounded.Inbox
 import androidx.compose.material.icons.rounded.NotificationsOff
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Sms
+import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -63,6 +64,8 @@ fun iconoDelAviso(tipo: TipoDeNotificacion): Pair<ImageVector, TonoDeIcono> = wh
     // El ícono de su tarjeta en «Movi propone hoy»: lo que el banco cobró solo.
     TipoDeNotificacion.DebitoPorConfirmar -> Icons.Rounded.AccountBalance to TonoDeIcono.Aviso
     TipoDeNotificacion.CapturaSinMensajes -> Icons.Rounded.Sms to TonoDeIcono.Neutro
+    // Vuelta 66: el ícono de su tarjeta en el grupo y en Por revisar.
+    TipoDeNotificacion.TransferenciaParaSaldar -> Icons.Rounded.SwapHoriz to TonoDeIcono.Aviso
 }
 
 /**

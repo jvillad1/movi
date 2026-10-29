@@ -181,6 +181,15 @@ interface WalletRepository {
      * cliente (En qué se va). Ver `tuParteComoEventos`. Nunca van a la lista de movimientos.
      */
     suspend fun getTuParteDeOtros(): List<FinancialEvent> = emptyList()
+    /**
+     * Vuelta 66 · las transferencias que Movi propone vincular para saldar, de todos los grupos
+     * (`GET /api/espacios/propuestas`): Por revisar y la campana. Un server viejo (404) = ninguna.
+     */
+    suspend fun getPropuestasDeSaldar(): List<com.jvillada.movi.shared.model.PropuestaDeSaldar> = emptyList()
+    /** Vuelta 66 · borra el grupo con sus gastos y saldados (`DELETE /api/espacios/{id}`). */
+    suspend fun borrarEspacio(id: String): Unit = noLoTiene("borrarEspacio")
+    /** Vuelta 66 · «Deshacer» un saldado (`DELETE /api/espacios/{id}/liquidaciones/{liquidacionId}`). */
+    suspend fun deshacerLiquidacion(espacioId: String, liquidacionId: String): Unit = noLoTiene("deshacerLiquidacion")
 
     // ── Cuentas de otros (destinos conocidos) ─────────────────────────────────
 
