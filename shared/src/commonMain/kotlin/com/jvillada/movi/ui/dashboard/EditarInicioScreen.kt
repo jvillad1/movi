@@ -98,7 +98,7 @@ internal const val TITULO_EDITAR_INICIO = "Editar inicio"
 internal const val VOLVER_AL_ORDEN_DE_MOVI = "Volver al orden de Movi"
 internal const val EL_HEROE_VA_PRIMERO = "«Te quedan», las acciones y «Movi propone hoy» van siempre arriba."
 internal const val PARA_REVISAR_ESCONDIDA =
-    "Escondida: si hay algo urgente, Hoy te lo dice en una sola línea."
+    "Escondida: si hay algo urgente, Inicio te lo dice en una sola línea."
 
 /** El tag de la fila de una sección, por su tipo. */
 internal fun tagDeLaFilaDelEditor(tipo: String): String = "editar-inicio-$tipo"

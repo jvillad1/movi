@@ -250,7 +250,7 @@ private fun SensorNotificationsCard(installSource: InstallSource) {
         Text(
             "Hay bancos que ya no mandan un SMS por cada movimiento, pero su app sí muestra una " +
                 "notificación. Con este acceso, Movi lee esas notificaciones y las deja en " +
-                "«Por revisar», en Movimientos, igual que un SMS: tú decides cuáles se anotan.",
+                "«Por revisar», en Actividad, igual que un SMS: tú decides cuáles se anotan.",
             fontSize = 13.sp,
             color = Movi.colores.textoMedio,
         )

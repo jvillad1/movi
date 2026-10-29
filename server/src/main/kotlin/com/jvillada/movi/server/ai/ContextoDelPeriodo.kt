@@ -290,7 +290,7 @@ internal fun AhorroParaContexto.linea(formato: (Long) -> String): String {
         else -> "; te quedan ${formato(teQuedan)} para gastar en $dias"
     }
     return "- Apartas ${formato(monto)} de ahorro cada período ($como)$queda. Es la misma cifra de «Te quedan» " +
-        "en Hoy, ya sin el ahorro: no la recalcules ni le sumes el ahorro. El ahorro no mueve plata: " +
+        "en Inicio, ya sin el ahorro: no la recalcules ni le sumes el ahorro. El ahorro no mueve plata: " +
         "Tu plata y el patrimonio no lo restan."
 }
 

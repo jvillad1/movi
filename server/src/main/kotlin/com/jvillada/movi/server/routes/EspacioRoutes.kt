@@ -264,7 +264,7 @@ internal fun Transaction.compartirMovimiento(
     espacioId: String,
     body: CompartirMovimientoRequest,
 ): Respuesta<GastoDelEspacio> = try {
-    val espacio = espacioDelUsuario(uid, espacioId) ?: throw Rechazo(HttpStatusCode.NotFound, "Espacio no encontrado")
+    val espacio = espacioDelUsuario(uid, espacioId) ?: throw Rechazo(HttpStatusCode.NotFound, "Grupo no encontrado")
     val fila = Events.selectAll().where { (Events.id eq body.eventoId) and (Events.userId eq uid) }.firstOrNull()
         ?: throw Rechazo(HttpStatusCode.NotFound, "Movimiento no encontrado")
     if (body.eventoId in anuladosDe(uid)) throw Rechazo(HttpStatusCode.NotFound, "Ese movimiento está anulado")
@@ -274,12 +274,12 @@ internal fun Transaction.compartirMovimiento(
     val salda = LiquidacionesDelEspacio.selectAll()
         .where { (LiquidacionesDelEspacio.userId eq uid) and (LiquidacionesDelEspacio.eventoId eq body.eventoId) }
         .any()
-    if (salda) throw Rechazo(HttpStatusCode.Conflict, "Ese movimiento ya salda un espacio")
+    if (salda) throw Rechazo(HttpStatusCode.Conflict, "Ese movimiento ya salda un grupo")
     val yaEsta = GastosDelEspacio.selectAll()
         .where { (GastosDelEspacio.userId eq uid) and (GastosDelEspacio.eventoId eq body.eventoId) }
         .firstOrNull()
     if (yaEsta != null && yaEsta[GastosDelEspacio.espacioId] != espacioId) {
-        throw Rechazo(HttpStatusCode.Conflict, "Ese movimiento ya está repartido en otro espacio")
+        throw Rechazo(HttpStatusCode.Conflict, "Ese movimiento ya está repartido en otro grupo")
     }
     if (yaEsta == null) {
         val id = body.gastoId.trim().ifBlank { "gde_${UUID.randomUUID()}" }
@@ -312,7 +312,7 @@ internal fun Transaction.gastoQuePagoOtro(
     espacioId: String,
     body: GastoDelEspacio,
 ): Respuesta<GastoDelEspacio> = try {
-    val espacio = espacioDelUsuario(uid, espacioId) ?: throw Rechazo(HttpStatusCode.NotFound, "Espacio no encontrado")
+    val espacio = espacioDelUsuario(uid, espacioId) ?: throw Rechazo(HttpStatusCode.NotFound, "Grupo no encontrado")
     if (body.eventoId != null) throw Rechazo(HttpStatusCode.BadRequest, "Un movimiento tuyo se reparte desde su detalle")
     if (body.pagadoPor == MIEMBRO_YO || body.pagadoPor !in idsDeMiembros(espacio)) {
         throw Rechazo(HttpStatusCode.BadRequest, "Elige quién lo pagó")
@@ -368,7 +368,7 @@ internal fun Transaction.liquidar(
     espacioId: String,
     body: LiquidacionDelEspacio,
 ): Respuesta<LiquidacionDelEspacio> = try {
-    val espacio = espacioDelUsuario(uid, espacioId) ?: throw Rechazo(HttpStatusCode.NotFound, "Espacio no encontrado")
+    val espacio = espacioDelUsuario(uid, espacioId) ?: throw Rechazo(HttpStatusCode.NotFound, "Grupo no encontrado")
     val id = body.id.trim().ifBlank { "liq_${UUID.randomUUID()}" }
     val existente = LiquidacionesDelEspacio.selectAll().where { LiquidacionesDelEspacio.id eq id }.firstOrNull()
     when {
@@ -421,5 +421,5 @@ private fun Transaction.validarElVinculo(uid: String, eventoId: String, body: Li
     val repartido = GastosDelEspacio.selectAll()
         .where { (GastosDelEspacio.userId eq uid) and (GastosDelEspacio.eventoId eq eventoId) }
         .any()
-    if (yaSalda || repartido) throw Rechazo(HttpStatusCode.Conflict, "Ese movimiento ya está en un espacio")
+    if (yaSalda || repartido) throw Rechazo(HttpStatusCode.Conflict, "Ese movimiento ya está en un grupo")
 }

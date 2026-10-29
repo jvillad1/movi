@@ -29,6 +29,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
@@ -88,6 +91,15 @@ import com.jvillada.movi.ui.components.ds.TamanoDeBoton
  * como deuda, están en `CreateCreditRequest.disbursement`. El porqué de la redacción está donde se
  * pinta la pregunta, más abajo.
  */
+/** El título de la hoja de alta de un préstamo (vuelta 61). */
+const val TITULO_DEL_NUEVO_PRESTAMO: String = "Nuevo préstamo"
+
+/** La primera pregunta del alta: de ella depende si el crédito nace con su desembolso. */
+const val PREGUNTA_DEL_DESEMBOLSO: String = "¿Acabas de recibir la plata de este crédito?"
+
+/** La pregunta del desembolso, para medir su letra contra el título de la hoja. */
+const val TAG_PREGUNTA_DEL_DESEMBOLSO: String = "pregunta-del-desembolso"
+
 @Composable
 fun CreditTermsSheet(
     editing: CreditSummary?,
@@ -433,6 +445,10 @@ fun CreditTermsSheet(
                 Campo(nombreEditado, { nombreEditado = it }, rotulo = "Nombre del crédito")
                 Spacer(Modifier.height(Medida.entreSecciones))
             } else {
+                // Vuelta 61: el alta también tiene su título de hoja (no tenía ninguno: la hoja
+                // arrancaba con la pregunta en la letra de cuerpo).
+                EncabezadoDeHoja(TITULO_DEL_NUEVO_PRESTAMO)
+                Spacer(Modifier.height(Medida.entreSecciones))
                 // F25: el selector "CUENTA DEL PRÉSTAMO · + Nueva cuenta de préstamo"
                 // desapareció del flujo normal — era la estructura interna (cuenta +
                 // términos) asomándose, ruido para quien solo quiere anotar un crédito
@@ -489,12 +505,18 @@ fun CreditTermsSheet(
                     // había pagado. Lo único que esta pregunta necesita separar es si la
                     // plata acaba de entrar a una cuenta suya, así que eso es lo único que
                     // dicen las opciones.
+                    //
+                    // Vuelta 61: la pregunta va en la letra del título de un grupo de la hoja —la de
+                    // «Términos», más abajo—, debajo del título de la hoja y sin ganarle. No es una
+                    // `Seccion` porque esa va en un renglón y la pregunta, a 360 con la letra grande,
+                    // necesita dos.
                     Text(
-                        "¿Acabas de recibir la plata de este crédito?",
-                        style = Movi.textos.cuerpo,
+                        PREGUNTA_DEL_DESEMBOLSO,
+                        style = Movi.textos.titulo,
                         color = Movi.colores.texto,
+                        modifier = Modifier.semantics { heading() }.testTag(TAG_PREGUNTA_DEL_DESEMBOLSO),
                     )
-                    Spacer(Modifier.height(Espacio.xs))
+                    Spacer(Modifier.height(Medida.dentroDeSeccion))
                     OpcionDeAlta(
                         titulo = "Sí, me la acaban de depositar",
                         detalle = "Es un crédito nuevo y el banco ya giró la plata.",

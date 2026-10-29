@@ -488,11 +488,20 @@ fun destinoResaltado(screen: Screen): NavTab? =
  */
 fun destinoResaltadoDeLaPila(pila: List<Screen>): NavTab? {
     val arriba = pila.lastOrNull() ?: return null
-    if (arriba != Screen.Buscar) return destinoResaltado(arriba)
+    if (!marcaLaPestanaDeDondeSeAbrio(arriba)) return destinoResaltado(arriba)
     return pila.dropLast(1).asReversed()
-        .firstNotNullOfOrNull { pantalla -> destinoResaltado(pantalla).takeIf { pantalla != Screen.Buscar } }
+        .firstNotNullOfOrNull { pantalla -> destinoResaltado(pantalla).takeIf { !marcaLaPestanaDeDondeSeAbrio(pantalla) } }
         ?: NavTab.HOY
 }
+
+/**
+ * Las pantallas que no son de una pestaña sola y marcan la de donde se abrieron: **Buscar** (la lupa
+ * de Inicio y la de Actividad) y, desde la vuelta 61, **«En qué se va»**: se abre desde Inicio y
+ * desde la alarma del Disponible de Pagos («Mira en qué se fue ›»), y abierta desde Pagos marcaba
+ * «Inicio». Sin nada debajo, Inicio.
+ */
+private fun marcaLaPestanaDeDondeSeAbrio(pantalla: Screen): Boolean =
+    pantalla == Screen.Buscar || pantalla is Screen.EnQueSeVa
 
 /**
  * **Adónde se va de verdad** cuando se pide [screen].

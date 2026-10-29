@@ -198,11 +198,29 @@ class LasPreguntasSugeridasTest {
         assertEquals(6, conversacion.mensajes.size)
     }
 
+    /**
+     * Vuelta 61: la misma pregunta escrita a mano —o casi igual: «¿Cómo voy?»— se contesta sin el
+     * modelo, como el chip. Era «se reconoce por el id, nunca por el texto», y sin crédito el dueño
+     * veía el aviso de la IA debajo del chip que decía lo mismo.
+     */
     @Test
-    fun `la misma pregunta escrita a mano, sin el id, va al modelo`() = testApplication {
+    fun `la misma pregunta escrita a mano, sin el id, se contesta sin el modelo`() = testApplication {
         with(a) { application { modulo { aiRoutes(fabricaQueCuenta) } } }
-        preguntar(a.duenoA, PreguntaSugerida.COMO_VOY.texto, sugerida = null)
-        assertEquals(1, llamadasAlModelo, "se reconoce por el id, nunca por el texto")
+        periodoDeA(AppClock.today())
+        listOf(PreguntaSugerida.COMO_VOY.texto, "¿Cómo voy?", "como voy", "¿Qué reviso primero?").forEach { texto ->
+            val res = preguntar(a.duenoA, texto, sugerida = null)
+            assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
+        }
+        assertEquals(0, llamadasAlModelo, "lo escrito casi igual que una de las tres no llama al modelo")
+        val modelos = transaction { AiTurns.selectAll().where { AiTurns.userId eq a.duenoA }.map { it[AiTurns.modelo] } }
+        assertTrue(modelos.size == 4 && modelos.all { it == MODELO_SIN_IA }, modelos.toString())
+    }
+
+    @Test
+    fun `una pregunta que solo empieza igual va al modelo`() = testApplication {
+        with(a) { application { modulo { aiRoutes(fabricaQueCuenta) } } }
+        preguntar(a.duenoA, "¿Cómo voy con la deuda del carro?", sugerida = null)
+        assertEquals(1, llamadasAlModelo, "nada de adivinar: solo lo casi idéntico se contesta sin el modelo")
     }
 
     @Test

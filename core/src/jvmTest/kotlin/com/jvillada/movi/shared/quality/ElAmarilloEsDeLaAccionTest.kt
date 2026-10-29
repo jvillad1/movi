@@ -106,6 +106,56 @@ class ElAmarilloEsDeLaAccionTest {
         }
     }
 
+    /**
+     * Los únicos archivos de `ui/` (fuera de `ds/`) con un círculo amarillo lleno hecho a mano: el «+»
+     * flotante del rail compacto, que es la acción de agregar.
+     */
+    private val CIRCULOS_DE_ACCION = setOf("components/MinNavRail.kt")
+
+    /**
+     * Un `colores.marca` (no `marcaSuave`) con un `CircleShape` a dos renglones o menos: un círculo
+     * amarillo lleno armado con `background`/`clip`, que no pasa por `TonoDeIcono.Marca`.
+     */
+    private fun circulosAmarillosAMano(archivos: Map<String, String>): List<String> =
+        archivos.flatMap { (ruta, codigo) ->
+            val renglones = codigo.lines()
+            renglones.indices.mapNotNull { n ->
+                if (!Regex("""colores\.marca\b""").containsMatchIn(renglones[n])) return@mapNotNull null
+                val cerca = renglones.subList(maxOf(0, n - 2), minOf(renglones.size, n + 3))
+                if (cerca.any { "CircleShape" in it }) "${nombre(ruta)}:${n + 1}" else null
+            }
+        }
+
+    /**
+     * Vuelta 61: el vacío de «Lo que Movi sabe de ti» pintaba su ícono en un círculo amarillo lleno
+     * —`VacioQueEnsena` lo armaba con `background(Movi.colores.marca, CircleShape)`, en todo vacío con
+     * ícono— y las guardas de arriba no lo veían, porque solo buscan `TonoDeIcono.Marca`.
+     */
+    @Test
+    fun `ningun circulo amarillo armado a mano fuera de la accion`() {
+        val donde = circulosAmarillosAMano(ui).filter { it.substringBefore(":") !in CIRCULOS_DE_ACCION }
+        assertTrue(
+            donde.isEmpty(),
+            "Un círculo amarillo lleno armado a mano. Un ícono que no es la acción va en el círculo neutro " +
+                "(IconoEnCirculo, fondoDelTonoDeIcono(TonoDeIcono.Neutro)):\n" + donde.joinToString("\n"),
+        )
+    }
+
+    @Test
+    fun `el detector de circulos ve uno amarillo y deja pasar el suave y el de otra forma`() {
+        val codigo = LecturaDelCodigo.sinComentarios(
+            """
+            Box(Modifier.background(Movi.colores.marca, CircleShape))
+            Box(Modifier.background(Movi.colores.marcaSuave, CircleShape))
+
+
+
+            Box(Modifier.clip(RoundedCornerShape(Radio.xl)).background(Movi.colores.marca))
+            """.trimIndent(),
+        )
+        assertEquals(listOf("x.kt:1"), circulosAmarillosAMano(mapOf("/ui/x.kt" to codigo)))
+    }
+
     @Test
     fun `el detector ve un amarillo y deja pasar los demas tonos`() {
         val codigo = LecturaDelCodigo.sinComentarios(

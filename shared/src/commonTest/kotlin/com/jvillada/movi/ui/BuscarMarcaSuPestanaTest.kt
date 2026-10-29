@@ -25,3 +25,26 @@ class BuscarMarcaSuPestanaTest {
         assertEquals(null, destinoResaltadoDeLaPila(emptyList()))
     }
 }
+
+/** Vuelta 61: «Mira en qué se fue», abierto desde Pagos, marca Pagos (marcaba Inicio). */
+class EnQueSeVaMarcaSuPestanaTest {
+
+    @Test
+    fun `abierta desde Pagos marca Pagos`() {
+        assertEquals(NavTab.PLAN, destinoResaltadoDeLaPila(listOf(Screen.Dashboard, Screen.Plan(), Screen.EnQueSeVa())))
+    }
+
+    @Test
+    fun `abierta desde Inicio o sin nada debajo marca Inicio`() {
+        assertEquals(NavTab.HOY, destinoResaltadoDeLaPila(listOf(Screen.Dashboard, Screen.EnQueSeVa())))
+        assertEquals(NavTab.HOY, destinoResaltadoDeLaPila(listOf(Screen.EnQueSeVa("2026-10"))))
+    }
+
+    @Test
+    fun `Buscar abierta encima de En que se va abierta desde Pagos sigue marcando Pagos`() {
+        assertEquals(
+            NavTab.PLAN,
+            destinoResaltadoDeLaPila(listOf(Screen.Dashboard, Screen.Plan(), Screen.EnQueSeVa(), Screen.Buscar)),
+        )
+    }
+}
