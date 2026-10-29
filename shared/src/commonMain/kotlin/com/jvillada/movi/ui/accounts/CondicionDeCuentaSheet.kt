@@ -135,7 +135,7 @@ fun CondicionDeCuentaSheet(
                 rotulo = "Solo se puede usar para",
                 guia = "Vivienda",
                 ayuda = if (account.condicionadaA != null) {
-                    "Déjalo vacío para que vuelva a ser sin condición: para cualquier gasto."
+                    "Déjalo vacío y la plata vuelve a servir para cualquier gasto."
                 } else {
                     "Vacío es sin condición: para cualquier gasto."
                 },
