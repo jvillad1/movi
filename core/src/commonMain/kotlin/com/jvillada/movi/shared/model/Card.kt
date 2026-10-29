@@ -125,6 +125,12 @@ data class CardSummary(
      * miente sobre un sobregiro real.
      */
     val available: Long? = null,
+    /**
+     * Vuelta 62 · **el extracto del corte más reciente, por fechas** (ver [extractoDeLaTarjeta]): lo
+     * facturado, el mínimo, lo que va al próximo extracto y la fecha de pago. `null` sin día de corte,
+     * o con un server anterior a la vuelta.
+     */
+    val extracto: ExtractoDeLaTarjeta? = null,
 )
 
 /**

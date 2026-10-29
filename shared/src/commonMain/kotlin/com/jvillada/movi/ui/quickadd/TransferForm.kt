@@ -1,5 +1,12 @@
 package com.jvillada.movi.ui.quickadd
 
+import com.jvillada.movi.shared.model.CardSummary
+import com.jvillada.movi.ui.components.ds.PildoraDeAccion
+import com.jvillada.movi.ui.credits.pastillasDelPagoDeLaTarjeta
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import com.jvillada.movi.ui.credits.extractoPagado
+import com.jvillada.movi.ui.credits.mesDelPagoDeLaTarjeta
 import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.ui.components.ds.NivelDeSuperficie
 import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
@@ -559,6 +566,9 @@ internal const val TAG_ENCABEZADO_DE_LA_CUOTA = "cuota:encabezado"
 internal const val TAG_RENGLON_DE_LA_DEUDA = "cuota:renglon-de-la-deuda"
 internal const val TAG_ENLACE_DEL_ABONO = "cuota:enlace-del-abono"
 
+/** Vuelta 62 · el renglón de las pastillas «Total del extracto» · «Mínimo» · «Otro monto» al pagar una tarjeta. */
+internal const val TAG_PASTILLAS_DEL_PAGO_DE_LA_TARJETA = "cuota:pastillas-de-la-tarjeta"
+
 /** Lo que se dice cuando no se pudieron cargar las condiciones del crédito para armar el desglose. */
 const val SIN_CONDICIONES_PARA_EL_DESGLOSE: String =
     "No pudimos cargar las condiciones de este crédito, así que no podemos mostrarte cuánto de " +
@@ -623,6 +633,7 @@ internal enum class ModoDeTraspaso {
     PAGO_DE_CUOTA,
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun TransferBody(
     accounts: List<Account>,
@@ -736,6 +747,8 @@ internal fun TransferBody(
      */
     // Se reejecuta también cuando cambia el DESTINO elegible: al pasar de Traspaso a Cuota la
     // lista del lado «hacia» cambia entera, y lo que había quedado seleccionado ya no sirve.
+    // Vuelta 62: el destino que trajo la hoja en Traspaso (un abono a un crédito), si es elegible.
+    val destinoDelTraspaso = if (esPago) null else elegiblesDestino.firstOrNull { it.id == presetDestinoId }
     LaunchedEffect(elegibles, elegiblesDestino) {
         // Vuelta 48: la cuenta del débito automático del crédito elegido tampoco se pisa.
         val origenFirme = (origenFrom == OrigenCuenta.ELEGIDA || origenFrom == OrigenCuenta.DEBITO_AUTOMATICO) &&
@@ -773,8 +786,16 @@ internal fun TransferBody(
                 // La única excepción es que el dueño YA la eligió en otra pantalla: tocó «Anotar
                 // este pago» en la fila de ESA cuota. Ahí la deuda llega por [presetDestinoId], y
                 // solo esa entra a la lista.
-                cuentas = if (esPago) elegiblesDestino.filter { it.id == presetDestinoId } else paraDefecto,
-                contexto = if (esPago) presetDestinoId else null,
+                //
+                // Vuelta 62: en Traspaso también, cuando la hoja se abrió con un destino («Anotar este
+                // abono» desde el simulador): el crédito va en «Hacia» aunque los valores por defecto
+                // nunca propongan uno.
+                cuentas = when {
+                    esPago -> elegiblesDestino.filter { it.id == presetDestinoId }
+                    destinoDelTraspaso != null -> listOf(destinoDelTraspaso)
+                    else -> paraDefecto
+                },
+                contexto = if (esPago || destinoDelTraspaso != null) presetDestinoId else null,
                 ultima = if (esPago) null else destinoSugerido(fromId),
                 excluir = fromId,
             )
@@ -813,6 +834,15 @@ internal fun TransferBody(
                 ?: runCatching { Repositories.wallets.getUserProfile() }.getOrNull()
             ajustesDelPeriodo = perfil?.ajustesDelPeriodo()
         }
+    }
+
+    // Vuelta 62 · las tarjetas, por su extracto del corte: las pastillas «Total del extracto $X» y
+    // «Mínimo $Y» al pagar una. Si no se pueden leer, la hoja sigue igual (sin pastillas).
+    var tarjetasPorCuenta by remember { mutableStateOf<Map<String, CardSummary>>(emptyMap()) }
+    LaunchedEffect(esPago) {
+        if (!esPago) return@LaunchedEffect
+        runCatching { Repositories.wallets.getCards() }
+            .onSuccess { tarjetas -> tarjetasPorCuenta = tarjetas.associateBy { it.account.id } }
     }
 
     val amount: Long? = monto.toLongOrNull()?.takeIf { it > 0 }
@@ -1242,7 +1272,12 @@ internal fun TransferBody(
             // Vuelta 48 · **qué se está anotando**, en un renglón: «Cuota de Libre inversión 9695 ·
             // octubre». Desde la fila de Pagos, el mes es el de esa cuota.
             val mesDeHoy = remember(ajustesDelPeriodo) { mesDelPeriodoDeHoy(ajustesDelPeriodo, Clock.System.now().toEpochMilliseconds()) }
-            val mes = presetMesDeLaCuota?.takeIf { it.isNotBlank() && to?.id == presetDestinoId } ?: mesDeHoy
+            // Vuelta 62 (revisión): una tarjeta con su extracto se nombra por su corte, no por «octubre».
+            val extractoDelDestino = to?.takeIf { it.type == AccountType.CREDIT_CARD }
+                ?.let { tarjetasPorCuenta[it.id]?.extracto }
+                ?.takeIf { !extractoPagado(it) }
+            val mes = extractoDelDestino?.let { mesDelPagoDeLaTarjeta(it) }
+                ?: presetMesDeLaCuota?.takeIf { it.isNotBlank() && to?.id == presetDestinoId } ?: mesDeHoy
             Text(
                 encabezadoDeLaCuota(to, abonoExtra, mes),
                 style = Movi.textos.cuerpoFuerte,
@@ -1454,6 +1489,34 @@ internal fun TransferBody(
                     )
                     .testTag(TAG_RENGLON_DE_LA_DEUDA),
             )
+
+            // Vuelta 62 · **cuánto pagar de la tarjeta**: «Total del extracto $X», «Mínimo $Y», «Otro
+            // monto». El renglón se reserva desde antes de elegir (como el de la deuda): elegir la
+            // tarjeta cambia lo que dice, no el alto. Entre monedas no se ofrecen (la cifra de arriba
+            // es la de la cuenta que paga, no la de la tarjeta).
+            if (to == null || to.type == AccountType.CREDIT_CARD) {
+                val pastillas = if (to != null && !pagoEntreMonedas) pastillasDelPagoDeLaTarjeta(tarjetasPorCuenta[to.id]) else emptyList()
+                Spacer(Modifier.height(Espacio.xs))
+                // Revisión: a 390 dp «Otro monto» se salía de la pantalla y «Mínimo» quedaba cortada.
+                // Textos cortos («Extracto $X», «Mínimo $Y», «Otro») que caben en un renglón, y un
+                // FlowRow por si una letra grande no los deja caber: bajan, no se salen.
+                FlowRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = Medida.altoChico)
+                        .testTag(TAG_PASTILLAS_DEL_PAGO_DE_LA_TARJETA),
+                    horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
+                    verticalArrangement = Arrangement.spacedBy(Espacio.xs),
+                ) {
+                    pastillas.forEach { pastilla ->
+                        PildoraDeAccion(
+                            pastilla.texto,
+                            onClick = { onMontoPropuesto(pastilla.monto?.toString() ?: "") },
+                            habilitada = !saving,
+                        )
+                    }
+                }
+            }
 
             // **El abono extra, como opción secundaria** de la misma hoja: un enlace, no una pestaña.
             if (esCredito) {

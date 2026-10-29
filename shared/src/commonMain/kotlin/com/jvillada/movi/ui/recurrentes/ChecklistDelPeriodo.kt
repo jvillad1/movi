@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.recurrentes
 
+import com.jvillada.movi.shared.model.ExtractoDeLaTarjeta
+import com.jvillada.movi.ui.credits.extractoDeLaFila
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -225,6 +227,11 @@ fun SeccionChecklistDelPeriodo(
     onEsLaCuota: ((pago: PagoDelPeriodo, parecido: GastoParecidoALaCuota) -> Unit)? = null,
     /** «No fue este» sobre el gasto parecido: deja de ofrecerse. */
     onNoEsLaCuota: ((pago: PagoDelPeriodo, parecido: GastoParecidoALaCuota) -> Unit)? = null,
+    /**
+     * Vuelta 62 · el extracto de cada tarjeta, por el id de su cuenta (`CardSummary.extracto`): la fila
+     * «Pago tarjeta Nu» dice lo facturado al corte, con el mínimo como alternativa. Vacío: la de siempre.
+     */
+    extractosDeTarjetas: Map<String, ExtractoDeLaTarjeta> = emptyMap(),
 ) {
     // ── El momento de celebrar (Ola 1 · «Que Movi se sienta viva») ──────────────────────────────
     // Cuando el dueño completa la lista —pasa de «falta 1» a «todo pagado» por algo que hizo acá:
@@ -289,6 +296,7 @@ fun SeccionChecklistDelPeriodo(
             onAbrir = onAbrir?.let { abrir -> { abrir(pago) } },
             etiquetaDeAbrir = etiquetaDeAbrir(pago.ruleId),
             evidencia = evidenciaDeLaFila(pago),
+            extracto = extractoDeLaFila(pago, extractosDeTarjetas),
             // Vuelta 48: lo de una fila pagada va en su «⋯»; tocarla abre el movimiento.
             accionesDelMenu = accionesDelMenuDeLaFilaPagada(pago).mapNotNull { accion ->
                 when (accion) {

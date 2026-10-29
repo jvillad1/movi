@@ -20,6 +20,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -74,6 +76,17 @@ import kotlinx.datetime.Clock
 
 const val TAG_SALIDA_DE_DEUDAS = "salida-de-deudas"
 
+/** Vuelta 62 · los dos botones del abono simulado en el plan. */
+const val TAG_ANOTAR_ESTE_ABONO = "salida:anotar-este-abono"
+const val TAG_RECORDARMELO_CADA_MES = "salida:recordarmelo-cada-mes"
+
+/** Lo que dice el plan si no pudo guardar el recordatorio. */
+const val NO_SE_PUDO_RECORDAR = "No se pudo guardar el recordatorio. Inténtalo de nuevo."
+
+/** «Va a Libre inversión 9695, la primera del orden.» */
+fun aQuienVaElAbono(nombre: String): String = "Este mes va a $nombre, la primera del orden."
+
+
 /**
  * # «Cómo salir de tus deudas» (Ola 4)
  *
@@ -94,6 +107,10 @@ fun SalidaDeDeudasScreen(onNavigate: (Screen) -> Unit) {
     var estrategia by rememberSaveable { mutableStateOf(0) }
     var abono by rememberSaveable { mutableStateOf<Long?>(null) }
     var editandoTarjeta by remember { mutableStateOf<CardSummary?>(null) }
+    // Vuelta 62: «Recordármelo cada mes» — lo que contestó, y si está guardando.
+    var recordatorio by remember { mutableStateOf<String?>(null) }
+    var recordando by remember { mutableStateOf(false) }
+    val alcance = rememberCoroutineScope()
 
     val ajustes = perfil.valor?.ajustesDelPeriodo() ?: PeriodSettings()
     val periodoActual = remember(ajustes) { periodoDe(Clock.System.now().toEpochMilliseconds(), ajustes) }
@@ -152,7 +169,22 @@ fun SalidaDeDeudasScreen(onNavigate: (Screen) -> Unit) {
                             estrategia = estrategia,
                             onEstrategia = { estrategia = it },
                             abono = abono,
-                            onAbono = { abono = it },
+                            onAbono = { abono = it; recordatorio = null },
+                            // Vuelta 62: el abono simulado se anota (Agregar ya lleno) o se recuerda.
+                            onAnotarAbono = { deuda, monto ->
+                                onNavigate(pantallaDelAbono(deuda, monto, creditos.valor.orEmpty()))
+                            },
+                            recordatorio = recordatorio,
+                            recordando = recordando,
+                            onRecordar = { deuda, monto ->
+                                recordando = true
+                                alcance.launch {
+                                    recordatorio = runCatching {
+                                        recordarElAbono(deuda, monto, creditos.valor.orEmpty(), tarjetas.valor.orEmpty())
+                                    }.getOrElse { NO_SE_PUDO_RECORDAR }
+                                    recordando = false
+                                }
+                            },
                             onCargar = { deuda ->
                                 if (deuda.tipo == TipoDeDeuda.TARJETA) {
                                     editandoTarjeta = tarjetas.valor?.firstOrNull { it.account.id == deuda.id }
@@ -191,6 +223,10 @@ private fun ContenidoDelPlan(
     abono: Long?,
     onAbono: (Long?) -> Unit,
     onCargar: (DeudaParaSalir) -> Unit,
+    onAnotarAbono: (DeudaParaSalir, Long) -> Unit = { _, _ -> },
+    recordatorio: String? = null,
+    recordando: Boolean = false,
+    onRecordar: (DeudaParaSalir, Long) -> Unit = { _, _ -> },
 ) {
     Spacer(Modifier.height(Movi.espacios.corto))
     if (interes != null && interes.propio > 0L) {
@@ -212,10 +248,14 @@ private fun ContenidoDelPlan(
     Superficie(modifier = Modifier.fillMaxWidth()) {
         // Vuelta 42: «Ej: 500.000» (el campo ya pone el «$» delante). Era «Abono extra al mes, por
         // ejemplo $500.000», que no cabía y se cortaba en «…por ejemplo $500....».
+        // Vuelta 62 (revisión): un abono mayor que todo lo que se debe en el plan se avisa en el campo.
+        val deudaTotal = plan.enElCalculo.sumOf { it.deuda.saldo }
+        val pasaDeLaDeuda = abono != null && deudaTotal > 0L && abono > deudaTotal
         CampoDeMonto(
             valor = abono,
             alCambiar = onAbono,
             ejemplo = EJEMPLO_DEL_ABONO_EXTRA,
+            error = if (pasaDeLaDeuda) avisoDeAbonoMayorQueLaDeuda(deudaTotal) else null,
             modifier = Modifier.testTag(TAG_ABONO_EXTRA),
         )
         Spacer(Modifier.height(Movi.espacios.medio))
@@ -233,6 +273,37 @@ private fun ContenidoDelPlan(
         }
         // Vuelta 42: debajo del campo, una sola frase de apoyo. Los supuestos (un párrafo gris
         // denso debajo de otro negro) pasaron a la nota del final.
+
+        // Vuelta 62 · **el abono que se puede hacer**: va a la primera deuda del orden, que es a la que
+        // el plan se lo da. «Anotar este abono» abre Agregar ya lleno; «Recordármelo cada mes» deja el
+        // plan en la memoria de Movi y el aviso de esa deuda prendido (ver `ElAbonoQueSeHace.kt`).
+        val primera = plan.enElCalculo.minByOrNull { it.orden }?.deuda
+        val monto = abono?.takeIf { it > 0L }
+        if (primera != null && monto != null) {
+            Spacer(Modifier.height(Movi.espacios.medio))
+            Text(aQuienVaElAbono(primera.nombre), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+            Spacer(Modifier.height(Espacio.xs))
+            Boton(
+                texto = ANOTAR_ESTE_ABONO,
+                // Nunca más que el saldo de la deuda a la que va.
+                onClick = { onAnotarAbono(primera, montoParaAnotar(monto, primera.saldo)) },
+                anchoCompleto = true,
+                modifier = Modifier.testTag(TAG_ANOTAR_ESTE_ABONO),
+            )
+            Spacer(Modifier.height(Espacio.xs))
+            Boton(
+                texto = RECORDARMELO_CADA_MES,
+                onClick = { onRecordar(primera, monto) },
+                variante = VarianteDeBoton.Secundario,
+                cargando = recordando,
+                // Un monto mayor que toda la deuda del plan no se guarda como plan.
+                habilitado = !recordando && !pasaDeLaDeuda && (recordatorio == null || recordatorio == NO_SE_PUDO_RECORDAR),
+                anchoCompleto = true,
+                modifier = Modifier.testTag(TAG_RECORDARMELO_CADA_MES),
+            )
+            Spacer(Modifier.height(Espacio.xs))
+            Text(recordatorio ?: EL_ABONO_NO_ES_UN_FIJO, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+        }
     }
 
     // ── El orden ──

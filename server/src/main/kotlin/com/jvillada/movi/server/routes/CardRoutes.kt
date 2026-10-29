@@ -151,8 +151,9 @@ fun Route.cardRoutes() {
             dbQuery {
                 Cards.upsert { fillCardTerms(it, uid, body) }
             }
-            val enriched = enrichWith(account, loadNonVoidedEvents(uid, accountId), FxRateService.usdToCop())
-            call.respond(cardSummaryFor(enriched, body))
+            val eventos = loadNonVoidedEvents(uid, accountId)
+            val enriched = enrichWith(account, eventos, FxRateService.usdToCop())
+            call.respond(cardSummaryFor(enriched, body, eventos))
         }
 
         delete("/{accountId}") {
@@ -238,6 +239,7 @@ internal suspend fun tarjetasDe(uid: String): List<com.jvillada.movi.shared.mode
     }
     val eventsByAccount = loadNonVoidedEvents(uid).groupBy { it.accountId }
     return cards.map { acc ->
-        cardSummaryFor(enrichWith(acc, eventsByAccount[acc.id] ?: emptyList(), rate), termsByAccount[acc.id])
+        val eventos = eventsByAccount[acc.id] ?: emptyList()
+        cardSummaryFor(enrichWith(acc, eventos, rate), termsByAccount[acc.id], eventos)
     }
 }

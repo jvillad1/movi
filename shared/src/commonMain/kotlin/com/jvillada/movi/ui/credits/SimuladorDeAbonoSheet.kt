@@ -27,6 +27,8 @@ import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.components.ds.Cifra
 import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
 import com.jvillada.movi.ui.components.ds.Separador
+import com.jvillada.movi.ui.components.ds.PildoraDeFiltro
+import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
 
 /**
@@ -52,6 +54,11 @@ fun SimuladorDeAbonoSheet(
     credit: CreditSummary,
     periodoActual: PeriodoFinanciero,
     onDismiss: () -> Unit,
+    /**
+     * Vuelta 62 · **«Anotar este abono»**: abre Agregar → Traspaso con el crédito en «Hacia» y el monto
+     * simulado (ver [pantallaDelAbono]). `null` = la hoja de antes, solo «Cerrar».
+     */
+    onAnotarAbono: ((Screen) -> Unit)? = null,
 ) {
     var abono by remember { mutableStateOf<Long?>(null) }
     val saldo = credit.account.balance
@@ -103,12 +110,10 @@ fun SimuladorDeAbonoSheet(
                     modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
                 ) {
+                    // Vuelta 62: los montos rápidos son pastillas del sistema (parecían texto), y la
+                    // elegida se ve elegida —en tinta—, como un filtro: es el monto que está en el campo.
                     sugeridos.forEach { s ->
-                        ChipDeMonto(
-                            etiqueta = s.etiqueta,
-                            seleccionado = abono == s.monto,
-                            onClick = { abono = s.monto },
-                        )
+                        PildoraDeFiltro(s.etiqueta, seleccionada = abono == s.monto, onClick = { abono = s.monto })
                     }
                 }
             }
@@ -152,6 +157,18 @@ fun SimuladorDeAbonoSheet(
         }
 
         Spacer(Modifier.height(Espacio.m))
+        // Vuelta 62: la pregunta ya tiene respuesta, así que se puede hacer. «Anotar este abono» es el
+        // traspaso de siempre (Agregar → Traspaso, ya lleno): no hay una segunda puerta para la deuda.
+        val montoParaAnotar = abono?.takeIf { it > 0L && resultado != null }
+        if (onAnotarAbono != null) {
+            Boton(
+                texto = ANOTAR_ESTE_ABONO,
+                onClick = { montoParaAnotar?.let { onAnotarAbono(pantallaDelAbono(credit, it)) } },
+                habilitado = montoParaAnotar != null,
+                anchoCompleto = true,
+            )
+            Spacer(Modifier.height(Espacio.xs))
+        }
         Boton(
             texto = "Cerrar",
             onClick = onDismiss,
@@ -160,23 +177,4 @@ fun SimuladorDeAbonoSheet(
         )
         Spacer(Modifier.height(Espacio.l))
     }
-}
-
-/**
- * Un monto sugerido, con su nombre y no con su cifra. Ver [montosSugeridosDeAbono] para por qué el
- * rótulo dice «Una cuota más» y no «$1.204.064»: el número aparece en el campo apenas se toca, y
- * cuatro cifras de siete dígitos una al lado de la otra no se leen.
- */
-@Composable
-private fun ChipDeMonto(etiqueta: String, seleccionado: Boolean, onClick: () -> Unit) {
-    Text(
-        etiqueta,
-        style = Movi.textos.apoyoMedio,
-        color = if (seleccionado) Movi.colores.fondo else Movi.colores.texto,
-        modifier = Modifier
-            .clip(RoundedCornerShape(Radio.m))
-            .background(if (seleccionado) Movi.colores.texto else Movi.colores.tarjeta)
-            .clickable(onClick = onClick)
-            .padding(horizontal = Espacio.s, vertical = Espacio.xs),
-    )
 }
