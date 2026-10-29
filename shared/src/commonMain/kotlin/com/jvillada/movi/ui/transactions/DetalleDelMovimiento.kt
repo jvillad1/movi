@@ -36,16 +36,22 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.Espacio as EspacioCompartido
 import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.CuotaPorSaldar
+import com.jvillada.movi.shared.model.cuotaQueSeParece
+import com.jvillada.movi.shared.model.cuotasPorSaldar
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Icono
 import com.jvillada.movi.theme.Medida
@@ -303,6 +309,28 @@ internal fun PreguntaDelTercero(pregunta: String, onAbrir: () -> Unit) {
 /** El `testTag` de la sugerencia «¿Es la cuota de X?» del detalle (vuelta 53). */
 const val TAG_SUGERENCIA_DE_LA_CUOTA: String = "detalle:sugerencia-de-la-cuota"
 
+/** El `testTag` del lugar que la sugerencia guarda mientras carga (vuelta 56). */
+const val TAG_LUGAR_DE_LA_SUGERENCIA_DE_LA_CUOTA: String = "detalle:lugar-de-la-sugerencia-de-la-cuota"
+
+/**
+ * Vuelta 56 · **¿El detalle guarda el lugar de «¿Es la cuota de X?» mientras pide los vencimientos?**
+ * La sugerencia espera `/upcoming` y `/occurrences`, y al llegar empujaba las acciones hacia abajo. Con
+ * lo que la app ya leyó —el Inicio deja en [datos] los mismos vencimientos y ocurrencias, y el período
+ * del dueño— se hace **la misma cuenta pura** ([cuotaQueSeParece] sobre [cuotasPorSaldar]): si el gasto
+ * se parece a una cuota (monto, categoría, moneda y período), devuelve esa cuota y la hoja reserva su
+ * alto con su misma pregunta; si no, `null` y no se reserva nada (un gasto cualquiera no deja un hueco
+ * que después se cierra). Sin nada leído, tampoco. Es solo el lugar: lo que se muestra y se toca sale
+ * siempre de la lectura fresca.
+ */
+fun cuotaPrevistaParaElDetalle(
+    gasto: FinancialEvent,
+    cuentas: List<Account>,
+    datos: com.jvillada.movi.ui.dashboard.DashboardData?,
+): CuotaPorSaldar? {
+    val vencimientos = datos?.upcoming ?: return null
+    return cuotaQueSeParece(gasto, cuotasPorSaldar(vencimientos, cuentas, datos.ocurrencias.orEmpty()), datos.ajustesDePeriodo)
+}
+
 /**
  * **«¿Es la cuota de Vehículo 4083? · Sí, es la cuota»** (vuelta 53): la fila destacada suave, arriba de
  * las acciones, cuando el gasto se parece a la cuota de un crédito sin saldar (`cuotaQueSeParece`, en
@@ -310,11 +338,26 @@ const val TAG_SUGERENCIA_DE_LA_CUOTA: String = "detalle:sugerencia-de-la-cuota"
  * «Es la cuota de un crédito» con ese crédito. Nunca se vincula sola.
  */
 @Composable
-internal fun SugerenciaDeLaCuota(pregunta: String, detalle: String, ocupado: Boolean, onSi: () -> Unit) {
+internal fun SugerenciaDeLaCuota(
+    pregunta: String,
+    detalle: String,
+    ocupado: Boolean,
+    onSi: () -> Unit,
+    /**
+     * Vuelta 56 · **solo el lugar**: mientras se piden los vencimientos, la misma tarjeta, invisible, sin
+     * semántica y sin toque, guarda su alto para que las acciones no salten cuando llega. Ver
+     * [cuotaPrevistaParaElDetalle].
+     */
+    reserva: Boolean = false,
+) {
     // El botón va debajo y a la derecha, no al final del renglón: a 360 dp, con «Sí, es la cuota» al
     // lado, «¿Es la cuota de Libre inversión 9695?» no cabía en dos renglones.
     Superficie(
-        modifier = Modifier.fillMaxWidth().testTag(TAG_SUGERENCIA_DE_LA_CUOTA),
+        modifier = if (reserva) {
+            Modifier.fillMaxWidth().alpha(0f).clearAndSetSemantics { testTag = TAG_LUGAR_DE_LA_SUGERENCIA_DE_LA_CUOTA }
+        } else {
+            Modifier.fillMaxWidth().testTag(TAG_SUGERENCIA_DE_LA_CUOTA)
+        },
         nivel = NivelDeSuperficie.Propuesta,
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(Espacio.s), verticalAlignment = Alignment.CenterVertically) {
@@ -328,10 +371,11 @@ internal fun SugerenciaDeLaCuota(pregunta: String, detalle: String, ocupado: Boo
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             Boton(
                 com.jvillada.movi.shared.model.SI_ES_LA_CUOTA,
-                onClick = onSi,
+                onClick = { if (!reserva) onSi() },
                 variante = VarianteDeBoton.Secundario,
                 tamano = TamanoDeBoton.S,
                 cargando = ocupado,
+                habilitado = !reserva,
             )
         }
     }

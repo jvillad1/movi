@@ -64,6 +64,7 @@ import com.jvillada.movi.ui.destinos.rememberDestinosParaGuardar
 import com.jvillada.movi.shared.model.VincularPagoDeDeudaRequest
 import com.jvillada.movi.shared.model.CuotaPorSaldar
 import com.jvillada.movi.shared.model.CuotaYaPagada
+import com.jvillada.movi.ui.dashboard.DashboardDataCache
 import com.jvillada.movi.shared.model.cuotaQueSeParece
 import com.jvillada.movi.shared.model.cuotaYaPagadaDe
 import com.jvillada.movi.shared.model.cuotasPorSaldar
@@ -538,14 +539,25 @@ internal fun ContenidoDelMovimiento(
     // algo falla no se sugiere nada y la fila de siempre sigue en Categoría y en «Más».
     val puedeSerCuota = puedeMarcarseCuotaDeCredito(event, cuentas)
     var cuotaSugerida by remember(event.id) { mutableStateOf<CuotaPorSaldar?>(null) }
+    // Vuelta 56 · mientras se pide, el lugar: con lo que el Inicio ya leyó, si el gasto se parece a una
+    // cuota, la hoja guarda el alto de la sugerencia (`cuotaPrevistaParaElDetalle`) y las acciones no
+    // saltan cuando llega. Un gasto que no se parece a ninguna no reserva nada.
+    val cuotaPrevista = remember(event.id, puedeSerCuota) {
+        if (puedeSerCuota) cuotaPrevistaParaElDetalle(event, cuentas, DashboardDataCache.data) else null
+    }
+    var cargandoLaSugerencia by remember(event.id) { mutableStateOf(puedeSerCuota) }
     LaunchedEffect(event.id, puedeSerCuota) {
         cuotaSugerida = null
-        if (!puedeSerCuota) return@LaunchedEffect
-        val vencimientos = runCatching { Repositories.wallets.getUpcomingPayments() }.getOrNull() ?: return@LaunchedEffect
-        // La cuota del período vencida y sin pago la dice `occurrences` (`upcoming` ya rodó al mes que viene).
-        val ocurrencias = runCatching { Repositories.wallets.getOccurrenceStates() }.getOrDefault(emptyList())
-        val ajustes = runCatching { Repositories.wallets.getUserProfile().ajustesDelPeriodo() }.getOrDefault(PeriodSettings())
-        cuotaSugerida = cuotaQueSeParece(event, cuotasPorSaldar(vencimientos, cuentas, ocurrencias), ajustes)
+        try {
+            if (!puedeSerCuota) return@LaunchedEffect
+            val vencimientos = runCatching { Repositories.wallets.getUpcomingPayments() }.getOrNull() ?: return@LaunchedEffect
+            // La cuota del período vencida y sin pago la dice `occurrences` (`upcoming` ya rodó al mes que viene).
+            val ocurrencias = runCatching { Repositories.wallets.getOccurrenceStates() }.getOrDefault(emptyList())
+            val ajustes = runCatching { Repositories.wallets.getUserProfile().ajustesDelPeriodo() }.getOrDefault(PeriodSettings())
+            cuotaSugerida = cuotaQueSeParece(event, cuotasPorSaldar(vencimientos, cuentas, ocurrencias), ajustes)
+        } finally {
+            cargandoLaSugerencia = false
+        }
     }
 
     /**
@@ -952,6 +964,17 @@ internal fun ContenidoDelMovimiento(
             // Vuelta 53 · «¿Es la cuota de Vehículo 4083? · Sí, es la cuota», arriba de las acciones. Con la
             // pregunta del abono abierta se calla: lo que se decide es eso.
             val sugerida = cuotaSugerida
+            val lugarGuardado = if (sugerida == null && cargandoLaSugerencia) cuotaPrevista else null
+            if (lugarGuardado != null) {
+                Spacer(Modifier.height(Espacio.s))
+                SugerenciaDeLaCuota(
+                    pregunta = preguntaDeLaCuotaQueSeParece(lugarGuardado),
+                    detalle = "Cuota de ${formatMoney(lugarGuardado.cuota, lugarGuardado.moneda)}",
+                    ocupado = false,
+                    onSi = {},
+                    reserva = true,
+                )
+            }
             if (sugerida != null && !(desdeLaSugerencia && cuotaYaPagada != null)) {
                 Spacer(Modifier.height(Espacio.s))
                 SugerenciaDeLaCuota(
