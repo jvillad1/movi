@@ -106,4 +106,16 @@ class LasCuotasPagadasDelCreditoTest {
         assertTrue("La deuda total de Créditos no la resta (es \$1583000)" in linea, linea)
         assertNull(lineaDeLasDeudasSinSaldo(cuentas.take(1)) { "\$$it" })
     }
+
+    /** «¿Qué me recomiendas revisar primero?» nombra el crédito sin saldo, primero y con dónde se cuadra. */
+    @Test
+    fun `que revisar nombra el credito sin saldo con Cuadre de saldos`() {
+        val vehiculo = Account("acc_v", "Vehículo 4083", AccountType.LOAN, -980_000L, "COP")
+        val respuesta = com.jvillada.movi.server.ai.queRevisar(
+            com.jvillada.movi.server.ai.DatosDeLasSugeridas(
+                rango = "1 de octubre al 31 de octubre", entro = 0, gastoPorCategoria = emptyMap(), sinSaldo = listOf(vehiculo),
+            ),
+        )
+        assertTrue("1. Vehículo 4083 no tiene saldo en Movi: cuádralo. Escribe lo que dice el banco en Cuadre de saldos." in respuesta, respuesta)
+    }
 }
