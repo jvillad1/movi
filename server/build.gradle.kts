@@ -22,6 +22,18 @@ java {
     targetCompatibility = JavaVersion.VERSION_17
 }
 
+// **El fat JAR no lleva `sqlite-jdbc`** (vuelta 69). Llega por `:core` (el `jvm()` usa el driver
+// SQLite de SQLDelight para el espejo local de los clientes), pero el server no abre ninguna base
+// SQLite: producción es Postgres. Son 12,9 MB de nativos para todas las plataformas, el 13 % del
+// JAR, y el JAR viaja entero en cada `railway up`. Solo sale del fat JAR: `:server:run` y las
+// pruebas siguen viéndolo. Va acá y no en el workflow para que `desplegar.sh --desde-fuente` arme
+// el mismo JAR.
+tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {
+    dependencies {
+        exclude(dependency("org.xerial:sqlite-jdbc"))
+    }
+}
+
 application {
     mainClass.set("com.jvillada.movi.server.ApplicationKt")
     applicationDefaultJvmArgs = listOf("-Dio.ktor.development=${project.findProperty("development") ?: "false"}")
