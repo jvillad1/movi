@@ -14,6 +14,7 @@ import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.Bien
 import com.jvillada.movi.shared.model.HistoriaDelPatrimonio
+import com.jvillada.movi.shared.model.cambioDelPatrimonio
 import com.jvillada.movi.shared.model.patrimonioDe
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -88,7 +89,15 @@ class HistoriaDelPatrimonioTest {
         }
     }
 
-    private fun anotar(uid: String, id: String, cuenta: String, tipo: String, monto: Long, fecha: LocalDate) = transaction {
+    private fun anotar(
+        uid: String,
+        id: String,
+        cuenta: String,
+        tipo: String,
+        monto: Long,
+        fecha: LocalDate,
+        categoria: String = "Varios",
+    ) = transaction {
         Events.insert {
             it[Events.id] = id
             it[userId] = uid
@@ -96,7 +105,7 @@ class HistoriaDelPatrimonioTest {
             it[type] = tipo
             it[amount] = monto
             it[currency] = "COP"
-            it[category] = "Varios"
+            it[category] = categoria
             it[description] = id
             it[timestamp] = appDateToEpochMillis(fecha) + 12 * 3_600_000L
             it[reconciliationStatus] = "RECONCILED"
@@ -192,6 +201,48 @@ class HistoriaDelPatrimonioTest {
         cuenta(duenoId, "casa", AccountType.INVESTMENT, bien = 1_000_000_000L)
         val conCasa = historia(duenoId).puntos.map { it.neto }
         assertEquals(listOf(5_300_000L, 4_050_000L, 4_050_000L, 9_050_000L).map { it + 1_000_000_000L }, conCasa)
+    }
+
+    /**
+     * Vuelta 60: **un ajuste no es una pérdida.** En octubre se registra con «Ajustar saldo» una deuda
+     * de $35.500.000 que ya existía: el neto baja igual (no se toca), y cada punto dice cuánto de su
+     * neto son ajustes y aperturas.
+     */
+    @Test
+    fun `cada punto dice cuanto de su neto son ajustes, sin cambiar el neto`() {
+        duenoConTresMeses()
+        cuenta(duenoId, "credito", AccountType.LOAN)
+        // La apertura del crédito en julio, y el ajuste de octubre: la deuda que ya existía.
+        anotar(duenoId, "apertura-credito", "credito", "EXPENSE", 2_000_000L, LocalDate.of(2026, 7, 15), categoria = "Saldo inicial")
+        anotar(duenoId, "ajuste-credito", "credito", "EXPENSE", 35_500_000L, LocalDate.of(2026, 10, 15), categoria = "Ajuste de saldo")
+        // Un ajuste anulado no cuenta ni como ajuste.
+        anotar(duenoId, "ajuste-anulado", "ahorros", "INCOME", 1_000_000L, LocalDate.of(2026, 10, 16), categoria = "Ajuste de saldo")
+        anular(duenoId, "ajuste-anulado")
+
+        val h = historia(duenoId)
+        assertEquals(
+            listOf(5_300_000L, 4_050_000L, 4_050_000L, 9_050_000L).zip(listOf(2_000_000L, 2_000_000L, 2_000_000L, 37_500_000L)) { neto, deuda -> neto - deuda },
+            h.puntos.map { it.neto },
+            "el neto es el de siempre: las deudas restan",
+        )
+        assertEquals(listOf(-2_000_000L, -2_000_000L, -2_000_000L, -37_500_000L), h.puntos.map { it.ajustes })
+        val cambio = cambioDelPatrimonio(h.puntos)!!
+        assertEquals(-35_500_000L, cambio.porAjustes, "de julio a hoy, el ajuste de octubre")
+        assertEquals(9_050_000L - 5_300_000L, cambio.sinAjustes, "sin el ajuste, lo que de verdad se movió")
+    }
+
+    @Test
+    fun `el primer movimiento real no es una apertura, y los bienes se avisan`() {
+        cuenta(duenoId, "ahorros", AccountType.SAVINGS)
+        anotar(duenoId, "apertura", "ahorros", "INCOME", 1_000_000L, LocalDate.of(2026, 6, 2), categoria = "Saldo inicial")
+        anotar(duenoId, "anulado", "ahorros", "EXPENSE", 10_000L, LocalDate.of(2026, 6, 20))
+        anular(duenoId, "anulado")
+        anotar(duenoId, "mercado", "ahorros", "EXPENSE", 200_000L, LocalDate.of(2026, 7, 4))
+        val h = historia(duenoId)
+        assertEquals("2026-07-04", h.primerMovimiento)
+        assertTrue(!h.conBienes)
+        cuenta(duenoId, "casa", AccountType.INVESTMENT, bien = 1_000_000_000L)
+        assertTrue(historia(duenoId).conBienes)
     }
 
     @Test

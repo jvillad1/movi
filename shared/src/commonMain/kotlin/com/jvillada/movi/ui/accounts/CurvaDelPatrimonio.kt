@@ -27,8 +27,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.shared.model.HistoriaDelPatrimonio
-import com.jvillada.movi.shared.model.MESES_DE_HISTORIA
 import com.jvillada.movi.shared.model.PuntoDelPatrimonio
+import com.jvillada.movi.shared.model.cambioDelPatrimonio
 import com.jvillada.movi.shared.model.periodoDelPrefijo
 import com.jvillada.movi.theme.LocalMovimientoReducido
 import com.jvillada.movi.theme.Movi
@@ -66,10 +66,54 @@ internal fun nombreDelPunto(punto: PuntoDelPatrimonio): String {
     return "${MESES_DEL_ANIO[periodo.month - 1].take(3)} ${periodo.year}"
 }
 
-/** Lo que dice la leyenda con un punto elegido: «Al cierre de mar 2026: $1.234.567». */
-internal fun leyendaDelPunto(punto: PuntoDelPatrimonio): String =
-    if (punto.esHoy) "Hoy: ${formatCOP(punto.neto)}"
-    else "Al cierre de ${nombreDelPunto(punto)}: ${formatCOP(punto.neto)}"
+/**
+ * Lo que dice la leyenda con un punto elegido: «Al cierre de mar 2026: $1.234.567». Vuelta 60: si en
+ * ese mes hubo ajustes ([ajustesDelMes]), lo dice al lado, compacto para que quepa en el renglón:
+ * «Al cierre de oct 2026: $36,5M · ajustes −$35,5M».
+ */
+internal fun leyendaDelPunto(punto: PuntoDelPatrimonio, ajustesDelMes: Long = 0L): String {
+    val donde = if (punto.esHoy) "Hoy" else "Al cierre de ${nombreDelPunto(punto)}"
+    if (ajustesDelMes == 0L) return "$donde: ${formatCOP(punto.neto)}"
+    return "$donde: ${formatMoneyCompact(punto.neto)} · ajustes ${conSigno(ajustesDelMes)}"
+}
+
+/**
+ * **Los ajustes de cada punto** (vuelta 60): lo que cambió por ajustes de saldo y aperturas desde el
+ * punto anterior. El primero es cero: no se sabe qué hubo antes de él.
+ */
+internal fun ajustesDelMes(puntos: List<PuntoDelPatrimonio>): List<Long> =
+    puntos.mapIndexed { i, p -> if (i == 0) 0L else p.ajustes - puntos[i - 1].ajustes }
+
+private fun conSigno(monto: Long): String = if (monto > 0L) "+${formatMoneyCompact(monto)}" else formatMoneyCompact(monto)
+
+private fun haciaDonde(cambio: Long): String = when {
+    cambio > 0 -> "subió ${formatMoneyCompact(cambio)}"
+    cambio < 0 -> "bajó ${formatMoneyCompact(-cambio)}"
+    else -> "sigue igual"
+}
+
+/**
+ * **La nota de los ajustes** (vuelta 60), o `null` si no hubo. Registrar una deuda que ya existía con
+ * «Ajustar saldo» hacía decir «Desde ago 2026, bajó $34,6M» sin que se hubiera gastado nada. La cifra
+ * no cambia —es el neto de siempre—; la nota dice cuánto de ese cambio son correcciones y cuánto queda
+ * sin ellas (una resta, ninguna cifra inventada): «Los ajustes suman −$35,5M: deudas y saldos que ya
+ * tenías y anotaste después. Sin ellos, subió $900.000.»
+ */
+internal fun notaDeLosAjustes(puntos: List<PuntoDelPatrimonio>): String? {
+    val cambio = cambioDelPatrimonio(puntos) ?: return null
+    if (cambio.porAjustes == 0L) return null
+    return "Los ajustes suman ${conSigno(cambio.porAjustes)}: $QUE_SON_LOS_AJUSTES. " +
+        "Sin ellos, ${haciaDonde(cambio.sinAjustes)}."
+}
+
+/** Qué es un ajuste, en las palabras del dueño. */
+const val QUE_SON_LOS_AJUSTES = "deudas y saldos que ya tenías y anotaste después"
+
+/** Vuelta 60: la nota de los bienes, que la historia cuenta con su valor de hoy. */
+const val LOS_BIENES_CON_SU_VALOR_DE_HOY = "Los bienes cuentan con su valor de hoy en todos los meses."
+
+/** La nota de los ajustes, para medirla y buscarla. */
+const val TAG_NOTA_DE_LOS_AJUSTES = "nota-de-los-ajustes"
 
 /**
  * **La curva arranca donde hay saldos de verdad** (vuelta de diseño 23). En la cuenta demo decía
@@ -90,12 +134,19 @@ internal fun puntosConSaldos(puntos: List<PuntoDelPatrimonio>): List<PuntoDelPat
 }
 
 /**
- * ¿La curva arranca cuando el dueño empezó a usar Movi? Sí si se descartó un arranque plano, o si el
- * server trajo menos cierres que la ventana (empezó a cortar en su primer movimiento). Si trajo la
- * ventana entera, la curva solo muestra los últimos meses.
+ * ¿La curva arranca cuando el dueño empezó a usar Movi?
+ *
+ * Vuelta 60: **sale del primer movimiento real del dueño** ([HistoriaDelPatrimonio.primerMovimiento],
+ * el mismo arranque de «Tus períodos»): sí solo si el primer punto de la curva es el mes de ese
+ * movimiento. Antes se deducía de la curva —un arranque plano descartado, o menos cierres que la
+ * ventana— y decía «Desde que usas Movi (ago 2026)» a quien tenía movimientos desde agosto de 2025: lo
+ * que se descartaba eran meses con saldos sin cargar, no meses sin Movi. Sin el dato (un server viejo)
+ * no se afirma.
  */
-internal fun arrancaConElDueno(historia: HistoriaDelPatrimonio, puntos: List<PuntoDelPatrimonio>): Boolean =
-    puntos.size < historia.puntos.size || historia.puntos.size < MESES_DE_HISTORIA + 1
+internal fun arrancaConElDueno(historia: HistoriaDelPatrimonio, puntos: List<PuntoDelPatrimonio>): Boolean {
+    val primerMes = historia.primerMovimiento?.take(7) ?: return false
+    return puntos.firstOrNull()?.mes == primerMes
+}
 
 /**
  * Lo que dice sin nada elegido: de dónde a dónde. «Desde que usas Movi (ago 2026), subió $5M» si la
@@ -103,12 +154,7 @@ internal fun arrancaConElDueno(historia: HistoriaDelPatrimonio, puntos: List<Pun
  */
 internal fun leyendaDeLaCurva(puntos: List<PuntoDelPatrimonio>, desdeQueUsasMovi: Boolean = false): String {
     val primero = puntos.first()
-    val cambio = puntos.last().neto - primero.neto
-    val hacia = when {
-        cambio > 0 -> "subió ${formatMoneyCompact(cambio)}"
-        cambio < 0 -> "bajó ${formatMoneyCompact(-cambio)}"
-        else -> "sigue igual"
-    }
+    val hacia = haciaDonde(puntos.last().neto - primero.neto)
     val desde = if (desdeQueUsasMovi) "Desde que usas Movi (${nombreDelPunto(primero)})" else "Desde ${nombreDelPunto(primero)}"
     return "$desde, $hacia"
 }
@@ -124,6 +170,8 @@ internal fun CurvaDelPatrimonio(historia: HistoriaDelPatrimonio, modifier: Modif
     if (!hayCurva(historia)) return
     val puntos = remember(historia) { puntosConSaldos(historia.puntos) }
     val leyenda = leyendaDeLaCurva(puntos, desdeQueUsasMovi = arrancaConElDueno(historia, puntos))
+    val ajustes = remember(puntos) { ajustesDelMes(puntos) }
+    val nota = remember(puntos) { notaDeLosAjustes(puntos) }
     var elegido by remember(historia) { mutableStateOf<Int?>(null) }
     // Los colores se leen acá: una lambda de dibujo no puede leer un CompositionLocal. La curva va en
     // el color del texto (el patrimonio es neutro en los dos signos, como su cifra de arriba).
@@ -148,20 +196,33 @@ internal fun CurvaDelPatrimonio(historia: HistoriaDelPatrimonio, modifier: Modif
                 .semantics {
                     contentDescription = "Tu patrimonio neto en el tiempo: $leyenda. " +
                         "${nombreDelPunto(puntos.first())}: ${formatMoneyCompact(puntos.first().neto)}; " +
-                        "hoy: ${formatMoneyCompact(puntos.last().neto)}."
+                        "hoy: ${formatMoneyCompact(puntos.last().neto)}." + (nota?.let { " $it" } ?: "")
                 }
                 .graficaQueSeToca(cuantos = puntos.size, datos = historia, alElegir = { elegido = it }, enPuntos = true),
-        ) { dibujarLaCurva(puntos, elegido, colores, entrada.value) }
+        ) { dibujarLaCurva(puntos, elegido, colores, entrada.value, ajustes) }
         Spacer(Modifier.height(Movi.espacios.corto))
         // Un renglón de alto fijo: elegir un punto cambia el texto, no mueve la tarjeta.
         Text(
-            text = elegido?.let { puntos.getOrNull(it) }?.let(::leyendaDelPunto) ?: leyenda,
+            text = elegido?.let { i -> puntos.getOrNull(i)?.let { leyendaDelPunto(it, ajustes.getOrElse(i) { 0L }) } } ?: leyenda,
             style = Movi.textos.apoyo,
             color = if (elegido != null) Movi.colores.texto else Movi.colores.textoMedio,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.testTag(TAG_LEYENDA_DE_LA_CURVA),
         )
+        // Vuelta 60: lo que la curva no es. Los ajustes no son ganancia ni pérdida (los puntos con
+        // ajustes van marcados con un aro), y los bienes van con su valor de hoy en todos los meses.
+        if (nota != null) {
+            Text(
+                nota,
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoMedio,
+                modifier = Modifier.testTag(TAG_NOTA_DE_LOS_AJUSTES),
+            )
+        }
+        if (historia.conBienes) {
+            Text(LOS_BIENES_CON_SU_VALOR_DE_HOY, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
+        }
         if (historia.conLaTrmDeHoy) {
             Text(CON_LA_TRM_DE_HOY, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
         }
@@ -201,6 +262,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.dibujarLaCurva(
     elegido: Int?,
     colores: ColoresDeLaCurva,
     progreso: Float,
+    ajustes: List<Long>,
 ) {
     val valores = puntos.map { it.neto }
     val maximo = valores.max()
@@ -233,6 +295,16 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.dibujarLaCurva(
             color = colores.linea,
             style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round),
         )
+    }
+    // Vuelta 60: el mes que trae ajustes va marcado con un aro: ahí la curva se movió por una
+    // corrección, no por plata.
+    if (progreso >= 1f) {
+        ajustes.forEachIndexed { i, ajuste ->
+            if (ajuste == 0L || i == valores.lastIndex) return@forEachIndexed
+            val centro = Offset(x(i), y(valores[i]))
+            drawCircle(colores.fondo, radius = radio, center = centro)
+            drawCircle(colores.linea, radius = radio, center = centro, style = Stroke(width = Medida.trazo.toPx()))
+        }
     }
     elegido?.let { i ->
         drawLine(colores.guia, Offset(x(i), 0f), Offset(x(i), size.height), strokeWidth = Medida.trazo.toPx())

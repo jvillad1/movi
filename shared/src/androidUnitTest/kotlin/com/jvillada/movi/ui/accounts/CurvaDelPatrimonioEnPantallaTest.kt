@@ -47,6 +47,8 @@ class CurvaDelPatrimonioEnPantallaTest {
             PuntoDelPatrimonio("2026-10", "2026-10-20", 9_050_000L, esHoy = true),
         ),
         conLaTrmDeHoy = true,
+        // Vuelta 60: «desde que usas Movi» sale del primer movimiento real, no de la curva.
+        primerMovimiento = "2026-08-03",
     )
 
     @After
@@ -78,7 +80,7 @@ class CurvaDelPatrimonioEnPantallaTest {
     fun `con historia pinta la curva, de donde a donde fue y la TRM de hoy`() {
         montar { historia }
         composeRule.waitUntil(timeoutMillis = 5_000) { curvas() == 1 }
-        // Tres puntos (menos que la ventana de doce meses): la curva arranca con el dueño.
+        // El primer punto es el mes del primer movimiento real: la curva arranca con el dueño.
         assertTrue(hay("Desde que usas Movi (ago 2026), subió"))
         assertTrue(hay(CON_LA_TRM_DE_HOY))
     }
