@@ -518,6 +518,31 @@ class ContrasteDeLosTokensTest {
     }
 
     /**
+     * **El gris de los gráficos se ve** (vuelta 55, accesibilidad). `neutro` es el relleno de lo que no
+     * tiene color propio: las barras de «En qué se va», el área de la curva del patrimonio, la derecha
+     * de las filas de Períodos y de Secciones. Era `#A39A8C`, que daba 2,78:1 sobre el blanco y 2,47
+     * sobre el crema; un elemento gráfico pide 3:1 (WCAG 1.4.11). Se mide contra todo lo que puede
+     * tener debajo: la tarjeta, el fondo, las capas 2 y 3 y la pista de una barra (`hilo`).
+     */
+    @Test
+    fun `el gris de los graficos llega a 3 a 1 sobre la tarjeta y el fondo`() {
+        val fallas = mutableListOf<String>()
+        for ((tema, c) in temas) {
+            for ((nombre, debajo) in listOf(
+                "tarjeta" to c.tarjeta,
+                "fondo" to c.fondo,
+                "capa 2" to c.capa2,
+                "capa 3" to c.capa3,
+                "la pista (hilo)" to c.hilo,
+            )) {
+                val r = contraste(c.neutro, debajo)
+                if (r < GRAFICO_AA) fallas += "  $tema · neutro sobre $nombre: ${r.legible()}:1 (mínimo ${GRAFICO_AA.legible()})"
+            }
+        }
+        if (fallas.isNotEmpty()) fail("El gris de los gráficos no se ve:\n" + fallas.joinToString("\n"))
+    }
+
+    /**
      * Que el cálculo sea el de WCAG y no una aproximación propia: negro contra blanco da 21:1
      * exacto, y un color contra sí mismo da 1:1. Si esto se rompe, todos los números de arriba son
      * ruido.

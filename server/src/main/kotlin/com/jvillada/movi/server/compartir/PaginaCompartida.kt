@@ -105,7 +105,7 @@ internal object PaginaCompartida {
 :root {
   --fondo: #F4F1EC; --tarjeta: #FFFFFF; --borde: #E7E1D7; --hilo: #EFEAE1;
   --texto: #1F1B16; --texto-medio: #5C554C; --texto-apagado: #6E665B;
-  --marca: #FFC21A; --entra: #147849; --sale: #B3261E; --neutro: #A39A8C;
+  --marca: #FFC21A; --entra: #147849; --sale: #B3261E; --neutro: #857C6F;
   --margen: 16px; --amplio: 16px; --medio: 12px; --corto: 8px; --seccion: 24px;
   --forma-amplia: 22px; --forma-normal: 12px;
   --letra: 'Figtree', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
