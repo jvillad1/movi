@@ -3134,3 +3134,73 @@ son de la vuelta 59.
      origen `A_MANO` («Lo escribiste tú»). `LaMemoriaSeEscribeAManoTest`.
 
 **Las líneas base** no cambian (`dp_sueltos` 115, `radios_con_numero` 3) y las guardas en 0 siguen en 0.
+
+## 62. Vuelta 60: una sola manera de decir «gastado», y el patrimonio que no confunde un ajuste con una pérdida
+
+Lo que dejó la revisión fresca del 29-oct (capturas `fresca-*.png`). **Sin reglas de plata nuevas**: los
+totales salen de las funciones de siempre (`esGastoDelPeriodo`, `spentByCategory`, `gastoVariablePorDia`,
+`patrimonioDe`); cambian los rótulos, los desgloses y lo que se propone. El neto del patrimonio no cambia.
+
+1. **La curva del patrimonio separa los ajustes** (`HistoriaDelPatrimonio`, `PatrimonioRoutes.kt`,
+   `ui/accounts/CurvaDelPatrimonio.kt`). Registrar con «Ajustar saldo» una deuda que ya existía hacía
+   decir «Desde que usas Movi (ago 2026), bajó $34,6M». **Decisión: marcar, no rebasar.** Rebasar hacia
+   atrás supondría desde cuándo existía la deuda, y eso Movi no lo sabe; marcar no inventa nada.
+   - Cada punto trae `ajustes`: el neto con todo menos el neto **sin** los «Ajuste de saldo» y las
+     aperturas («Saldo inicial»/«Deuda inicial») hasta esa fecha —`patrimonioDe` calculado dos veces, una
+     consulta agregada más—. `cambioDelPatrimonio` (`:core`) parte el cambio en `porAjustes` y
+     `sinAjustes` (una resta).
+   - La leyenda sigue diciendo el neto («Desde ago 2026, bajó $34,6M») y debajo va la nota
+     (`notaDeLosAjustes`): «Los ajustes suman −$35,5M: deudas y saldos que ya tenías y anotaste después.
+     Sin ellos, subió $900.000.» El mes con ajustes lleva un **aro** en la curva, y elegirlo dice «Al
+     cierre de oct 2026: $36,5M · ajustes −$35,5M».
+   - **«Desde que usas Movi»** sale de `HistoriaDelPatrimonio.primerMovimiento`: el primer movimiento
+     vivo que no es apertura ni ajuste (el arranque de «Tus períodos»). Solo si el primer punto de la
+     curva es ese mes; si no, «Desde ago 2026». Sin el dato (server viejo) no se afirma.
+   - **Los bienes**: con `conBienes`, la nota «Los bienes cuentan con su valor de hoy en todos los
+     meses.» El cálculo no cambia.
+2. **Una sola manera de decir «gastado»** (`:core` `LoGastado.kt`).
+   - **Presupuestos**: debajo de «Gastado en octubre», «En tus N presupuestos» con la cifra y «de $Y», y
+     el renglón **«Fuera de presupuesto»** (`CifraConRotulo` chica en renglón, `TAG_FUERA_DE_PRESUPUESTO`).
+     `gastoEnPresupuestos`: las dos cifras suman el gasto del período (un presupuesto repetido cuenta una
+     vez). El esqueleto reserva los dos renglones nuevos.
+   - **«En qué se va»**: debajo del total, «Día a día $2,1M + fijos $2,8M» (`desgloseDelAnalisis`,
+     `TAG_DESGLOSE_DEL_ANALISIS`). El día a día es el gasto variable del Disponible (`gastoVariablePorDia`
+     del resumen del Inicio, la misma lectura recordada) y los fijos, el resto: la misma regla que separa
+     los fijos en el Disponible. Solo en el período en curso (el server manda ese gasto de ningún otro) y
+     solo si cuadra con el total; si no, no se parte.
+   - **«Cuánto puedes gastar»**: la columna «Período» decía «gastaste» bajo el día a día; ahora dice **«en
+     el día a día»** (`ROTULO_DIA_A_DIA_DEL_PERIODO`). A 1.280: «Llevas gastado» (todo), «en el día a
+     día» (sin fijos), «En tus N presupuestos» y «Fuera de presupuesto»: ninguna cifra distinta con el
+     mismo nombre.
+3. **Una sola regla en las tres columnas** (`DisponibleDelPeriodo`). **Decisión: lo que queda**, la regla
+   de «Te quedan» y de «$X por día» (`porDiaParaLoQueQueda`), no el ritmo fijo: la meta de hoy es lo que
+   quedaba al **empezar** el día entre los días que quedan (a primera hora, el «$X por día» del héroe; lo
+   que se gasta hoy no la achica), y la de la semana, lo que quedaba al empezar la semana entre los días
+   que quedaban, por sus días. Sin nada que repartir la meta es cero, y con el período ya pasado
+   (`yaTePasaste`) la semana y hoy dicen **«$0 · ya te pasaste · llevas $X»** (`YA_TE_PASASTE`). El ritmo
+   fijo (`metaPorDia`) queda solo para la línea «Día a día» de los días pasados en Actividad. Consecuencia
+   honesta: la última semana del período se lleva todo lo que queda, así que su columna dice lo mismo que
+   «Te quedan» (la del período sigue diciendo lo gastado), y esa semana no se puede pasar sin pasar el período.
+4. **El recurrente que cambió de categoría** (`:core` `RecurrenteQueCambioDeCategoria.kt`). Un gasto de
+   este período y uno del anterior son el mismo si son ocurrencias de la misma regla (sellos o
+   emparejados) o si tienen el mismo nombre y el monto a ±5 % (elegido). En otra categoría, el server lo
+   manda como `TipoDeAnomalia.RECURRENTE_CAMBIO_DE_CATEGORIA` con su `cambioDeCategoria`, solo a quien
+   pide `?conRecurrentes=1` (un APK viejo no conoce el tipo). «Movi propone hoy» lo pone primero:
+   «¿Arriendo va en Hogar, como en septiembre?» con **«Sí, cambiar»** (`aceptarElCambioDeCategoria`: el
+   `updateEventCategory` y, si la regla tiene la otra, el `updateRecurringRule` de siempre) y **«No»**
+   (descarta la huella `recurrente-categoria:<id>`). **Nunca cambia solo.** Mientras no se resuelve:
+   la anomalía de categoría y la de comercio nuevo **no cuentan** ese movimiento (sale de `actual`, como
+   los pagos de facturas desde la vuelta 43), y Movi AI («¿En qué se me está yendo…?») compara las
+   categorías con el recurrente donde estaba (`comoEnElPeriodoAnterior`) y lo dice. Con «No», cuenta
+   como cualquier gasto. El widget «En qué se va» del Inicio no se tocó.
+
+**Las líneas base** no cambian (`dp_sueltos` 115, `radios_con_numero` 3) y las guardas en 0 siguen en 0.
+Lo vigilan, en `:core`, `UnaSolaManeraDeDecirGastadoTest` (día a día + fijos = el gasto del período; los
+presupuestos + lo de afuera = lo mismo), `LaMismaReglaEnLasTresColumnasTest` (con el disponible pasado,
+cero; con margen, la meta de hoy es el «por día» de la mañana) y `RecurrenteQueCambioDeCategoriaTest`; en
+`:server`, `HistoriaDelPatrimonioTest` (los ajustes de cada punto, el primer movimiento real, los
+bienes), `AnomaliasRoutesTest` (el arriendo en Otros no es gasto nuevo, se propone y «No» lo saca) y
+`EnQueSeVaNoCuentaElCambioComoNuevoTest`; en `commonTest`, `LaCurvaSeparaLosAjustesTest` y
+`ElTotalSeParteEnDiaADiaYFijosTest`; en Robolectric, `LasCifrasDelDisponibleEntranTest` («ya te pasaste»,
+«llevas $888.888» y «en el día a día» entran a 390), `PresupuestosConJerarquiaTest` y
+`ElRecurrenteQueCambioDeCategoriaSeProponeTest`.
