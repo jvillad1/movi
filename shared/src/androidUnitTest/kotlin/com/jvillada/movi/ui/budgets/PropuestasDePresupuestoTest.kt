@@ -144,7 +144,7 @@ class PropuestasDePresupuestoTest {
         composeRule.waitForIdle()
 
         assertEquals(listOf(Budget("Mercado", 1_050_000L), Budget("Fútbol", 100_000L)), repo.intentos)
-        assertTrue(hay("Gastado en"), "con presupuestos creados, la pantalla ya no está vacía")
+        assertTrue(hay("Fuera de presupuesto"), "con presupuestos creados, la pantalla ya no está vacía")
         assertTrue(!hay("Movi te propone"))
     }
 
@@ -185,7 +185,7 @@ class PropuestasDePresupuestoTest {
 
         assertEquals(listOf("Mercado", "Fútbol"), repo.creados.map { it.category })
         assertTrue(hay("No pudimos crear el presupuesto de Comida"))
-        assertTrue(hay("Gastado en"))
+        assertTrue(hay("Fuera de presupuesto"))
 
         repo.fallanCon = emptyMap()
         composeRule.onNodeWithText("Reintentar", useUnmergedTree = true).performClick()
@@ -262,7 +262,7 @@ class PropuestasDePresupuestoTest {
         val repo = SinPresupuestos(yaTiene = listOf(Budget("Comida", 1_000_000L)))
         montar(repo)
 
-        assertTrue(hay("Gastado en"))
+        assertTrue(hay("Fuera de presupuesto"))
         assertEquals(0, repo.lecturasDePropuestas)
     }
 

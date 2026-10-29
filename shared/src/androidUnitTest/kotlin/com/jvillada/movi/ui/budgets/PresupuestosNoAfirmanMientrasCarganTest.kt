@@ -118,7 +118,7 @@ class PresupuestosNoAfirmanMientrasCarganTest {
         assertTrue(!hay("0 %"))
         assertTrue(!hay("Te quedan"))
         assertTrue(!hay("Mercado"), "la lista espera al gasto: si se pinta antes, se reordena al llegar")
-        assertTrue(!hay("Gastado en"))
+        assertTrue(!hay("Fuera de presupuesto"))
         assertEquals(1, contarTag(TAG_ESQUELETO_DEL_GASTO_DEL_PERIODO))
         assertEquals(4, contarTag(TAG_ESQUELETO_FILA_DE_PRESUPUESTO))
         assertTrue(hay("Nuevo"), "el alta del encabezado está desde el primer cuadro")
@@ -162,7 +162,7 @@ class PresupuestosNoAfirmanMientrasCarganTest {
         assertTrue(hay("Ponle un tope a lo que más gastas"))
         assertTrue(hay("Nuevo presupuesto"))
         // La tarjeta de siempre decía «$0 de $0»: un hecho inventado sobre categorías que no existen.
-        assertTrue(!hay("Gastado en"))
+        assertTrue(!hay("Fuera de presupuesto"))
         assertTrue(!hay("\$0"))
         assertEquals(0, contarTag(TAG_ESQUELETO_DEL_GASTO_DEL_PERIODO))
         assertEquals(0, contarTag(TAG_ESQUELETO_FILA_DE_PRESUPUESTO))
@@ -211,7 +211,7 @@ class PresupuestosNoAfirmanMientrasCarganTest {
         assertTrue(hay("Ponle un tope a lo que más gastas"))
         assertTrue(hay("Nuevo presupuesto"))
         assertTrue(!hay("No pudimos cargar"))
-        assertTrue(!hay("Gastado en"))
+        assertTrue(!hay("Fuera de presupuesto"))
         sinEsqueletos()
     }
 

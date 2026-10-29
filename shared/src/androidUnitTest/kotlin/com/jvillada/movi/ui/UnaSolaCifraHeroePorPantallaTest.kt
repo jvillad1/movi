@@ -242,7 +242,7 @@ class UnaSolaCifraHeroePorPantallaTest {
     /** El caso de la vuelta: «Gastado en …» era una héroe debajo de «Disponible del período». */
     @Test
     fun `Plan en Presupuestos tiene a lo sumo una cifra heroe`() {
-        montar("Gastado en") { PlanScreen(onNavigate = {}, segmento = SEGMENTO_PRESUPUESTOS) }
+        montar("Fuera de presupuesto") { PlanScreen(onNavigate = {}, segmento = SEGMENTO_PRESUPUESTOS) }
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithText("Mercado", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
         }

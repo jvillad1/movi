@@ -156,7 +156,8 @@ private fun Month.spanishName(): String = when (this) {
 }
 
 /**
- * **La única función que decide entre «Gastado en septiembre» y «Gastado en este período».**
+ * **La única función que decide entre «Septiembre» y «Este período»** (hasta la vuelta 60, «Gastado en
+ * septiembre» y «Gastado en este período»).
  *
  * Con corte 1 el período ES el mes de calendario ([PeriodSettings.esMesDeCalendario]) y nombrarlo
  * es exacto y más corto. Con cualquier otro corte —el dueño tiene 25— el período no coincide con
@@ -165,7 +166,10 @@ private fun Month.spanishName(): String = when (this) {
  * y, peor, sonaba a que el gasto era SOLO de septiembre.
  */
 internal fun tituloDelGastoDelPeriodo(settings: PeriodSettings, monthName: String): String =
-    if (settings.esMesDeCalendario) "Gastado en $monthName" else "Gastado en este período"
+    // Vuelta 60 (la revisión): sin «Gastado»: la cifra grande de la tarjeta es solo lo de los
+    // presupuestos («En tus N presupuestos»), y «Gastado en octubre» la hacía pasar por todo lo gastado.
+    // El título nombra el período; las dos cifras de abajo dicen de qué son.
+    if (settings.esMesDeCalendario) monthName.replaceFirstChar { it.uppercase() } else "Este período"
 
 internal sealed class Sheet {
     data class Edit(val current: Budget) : Sheet()
