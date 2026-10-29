@@ -3248,13 +3248,20 @@ De la revisión fresca del 29-oct (punto 11) y un pendiente de la vuelta 59.
 - **Apartado para un gasto de un mes puntual** (SOAT, predial, matrícula, primas): `Apartado.objetivo`
   y `mesDelGasto` («AAAA-MM»), columnas nullable `apartados.objetivo` / `mes_del_gasto`. La hoja ofrece
   una casilla, el mes (este y los once que siguen) y el costo, y sugiere `aporteMensualSugerido` =
-  (objetivo − lo apartado) ÷ meses que faltan, hacia arriba. El detalle dice «Para marzo de 2027:
-  llevas $400.000 de $1.200.000 · aparta $160.000 al mes». **Es solo una sugerencia**: no es un fijo, no
+  (objetivo − lo apartado) ÷ meses que faltan, hacia arriba. El detalle lo dice en dos renglones:
+  «Llevas $400.000 de $1.200.000 · marzo de 2027» y «Aparta $160.000 al mes». **Es solo una sugerencia**: no es un fijo, no
   resta de «Te quedan» y no mueve plata. Los dos campos viajan siempre (`@EncodeDefault`) y el server
   solo los toca si la clave vino: un APK viejo que edita el monto no borra el objetivo.
 - **La cuota vencida se dice.** En el detalle del crédito, la fila «Cuota» sale de la misma primera
   cuota sin pagar con que se cuentan las que faltan (`subtituloDeLaCuota`): «Cuota de octubre vencida
   desde el 5 oct», en el tono de aviso, o «Día 5 · la próxima el 5 de noviembre».
+
+**La revisión de la vuelta** (capturas `rev64-*.png`) pidió y se arregló: el aporte se cortaba en un
+renglón («… al m…») y ahora va en dos; un apartado cuyo mes ya pasó se puede editar (el mes guardado se
+valida sin `hoy` y se ofrece primero); el «−» de la vista previa va pegado a su «$» (WORD JOINER) y la
+cifra a su «a» (espacio que no se parte); la lista de Créditos dice la cuota vencida como el detalle
+(`prestamoEnLaLista` sale de la misma primera cuota); y mientras se confirma «Quitar» la vista previa
+dice «Te quedan vuelve a $X».
 
 Lo vigilan `ApartadoParaUnGastoTest` (`:core`), `ApartadoRoutesTest` y `SchemaDeArranqueTest`
 (`:server`), `ElApartadoQueAvisaTest` y `LaCuotaVencidaSeDiceTest` (`commonTest`), y en Robolectric
