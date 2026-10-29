@@ -373,8 +373,10 @@ internal fun CuerpoDelEspacio(
 
         EncabezadoDelEspacio(detalle, onEditar = { editando = true })
         QuienPusoQue(detalle)
+        val ahora = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
         SaldoDelEspacioTarjeta(
             detalle,
+            ahora = ahora,
             onPedir = {
                 mensajeParaPedir(detalle)?.let { mensaje ->
                     mensajeCopiado = if (hoja.mandarMensaje(mensaje) == ComoSalioElMensaje.COPIADO) mensaje else null
@@ -388,7 +390,7 @@ internal fun CuerpoDelEspacio(
             onAbrirWhatsApp = { mensajeCopiado?.let { runCatching { uriHandler.openUri(enlaceDeWhatsApp(it)) } } },
         )
         // Vuelta 66 · el historial: cada saldado, con su transferencia o «Esperando la transferencia».
-        PagosEntreUstedes(detalle, ahora = kotlinx.datetime.Clock.System.now().toEpochMilliseconds(), onCambio = onCambio)
+        PagosEntreUstedes(detalle, ahora = ahora, onCambio = onCambio)
     }
     val derecha: @Composable ColumnScope.() -> Unit = {
         GastosDelEspacio(detalle, onPagoOtro = { pagoOtro = true }, onVerTodo = onVerTodo, onCambio = onCambio)
@@ -593,6 +595,7 @@ private fun QuienPusoQue(detalle: DetalleDelEspacio) {
 @Composable
 private fun SaldoDelEspacioTarjeta(
     detalle: DetalleDelEspacio,
+    ahora: Long,
     onPedir: () -> Unit,
     onSaldar: () -> Unit,
     onSaldadoSecundario: () -> Unit,
@@ -602,7 +605,13 @@ private fun SaldoDelEspacioTarjeta(
     val frase = fraseDelSaldo(detalle.espacio, detalle.saldo)
     // Ancho completo: sin él la tarjeta medía lo que su botón, que fuera del teléfono va con tope.
     Superficie(modifier = Modifier.fillMaxWidth().testTag(TAG_SALDO_DEL_ESPACIO)) {
-        Text(frase.titulo, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
+        // Vuelta 67: «Están a mano · esperando $168.050 de Caro» mientras un saldado espera su plata.
+        Text(
+            tituloDeLaTarjetaDelSaldo(detalle, ahora),
+            style = Movi.textos.cuerpo,
+            color = Movi.colores.textoMedio,
+            modifier = Modifier.testTag(TAG_TITULO_DEL_SALDO),
+        )
         if (frase.monto > 0L) Cifra(frase.monto, VarianteDeCifra.Grande)
         frase.apoyo?.let { Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio) }
         when (val principal = principalDelSaldo(detalle.espacio, detalle.saldo)) {
@@ -764,3 +773,6 @@ private fun ColumnScope.LoQuePagaOtraPersona(creditos: List<CreditSummary>) {
         }
     }
 }
+
+/** El tag del título de la tarjeta del saldo («Están a mano · esperando $168.050 de Caro»). */
+const val TAG_TITULO_DEL_SALDO: String = "grupos:titulo-del-saldo"

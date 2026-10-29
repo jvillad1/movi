@@ -268,6 +268,22 @@ fun preguntaDeLaPropuesta(p: PropuestaDeSaldar, quien: String, nombreDelGrupo: S
     else "¿Esta transferencia a $quien salda $nombreDelGrupo?"
 }
 
+/**
+ * **La propuesta en la campana** (vuelta 67): el título corto —«Transferencia de Caro», «Tu
+ * transferencia a Caro»— y la pregunta debajo, con el grupo: «¿Es la que marcaste como saldada? ·
+ * Casa con Caro» o «¿Salda Casa con Caro?».
+ */
+fun laPropuestaEnLaCampana(p: PropuestaDeSaldar, quien: String): Pair<String, String> {
+    val titulo = if (p.a == MIEMBRO_YO) "Transferencia de $quien" else "Tu transferencia a $quien"
+    val grupo = p.nombreDelEspacio.trim()
+    val pregunta = if (p.liquidacionId != null) {
+        listOfNotNull("¿Es la que marcaste como saldada?", grupo.ifEmpty { null }).joinToString(" · ")
+    } else {
+        if (grupo.isEmpty()) "¿Salda tu grupo?" else "¿Salda $grupo?"
+    }
+    return titulo to pregunta
+}
+
 /** Lo que sigue a la pregunta: el concepto del movimiento y, fuera del grupo, de qué grupo es. */
 fun cuerpoDeLaPropuesta(p: PropuestaDeSaldar, conElGrupo: Boolean): String =
     listOfNotNull(
@@ -295,8 +311,10 @@ fun tituloDelPago(espacio: Espacio, l: LiquidacionDelEspacio): String {
 }
 
 /**
- * «29 oct · Transferencia de Caro», «29 oct · Esperando la transferencia» o «29 oct · Sin
- * transferencia vinculada» (ver [esperaLaTransferencia]).
+ * «29 oct» y, en el renglón de abajo, «Transferencia de Caro», «Esperando la transferencia» o «Sin
+ * transferencia vinculada» (ver [esperaLaTransferencia]). **Vuelta 67: dos renglones** —la fila los
+ * pinta con `lineasDelSubtitulo = 2`—: en uno solo, a 390 y a 360 dp se cortaba en «Esperando la
+ * transfere…», que es justo lo que había que leer.
  */
 fun detalleDelPago(l: LiquidacionDelEspacio, ahora: Long, zona: TimeZone = AppTimeZone.zone): String {
     val como = when {
@@ -305,7 +323,35 @@ fun detalleDelPago(l: LiquidacionDelEspacio, ahora: Long, zona: TimeZone = AppTi
         else -> SIN_TRANSFERENCIA
     }
     val fecha = l.fecha.takeIf { it > 0L }?.let { fechaCorta(fechaDeEpoch(it, zona)) }
-    return listOfNotNull(fecha, como).joinToString(" · ")
+    return listOfNotNull(fecha, como).joinToString("\n")
+}
+
+/** Los renglones de [detalleDelPago]. */
+const val RENGLONES_DEL_DETALLE_DEL_PAGO: Int = 2
+
+/**
+ * **Vuelta 67 · lo que espera el grupo**, para la tarjeta del saldo: «esperando $168.050 de Caro» (o
+ * «esperando tu transferencia de $90.000 a Caro») por cada saldado marcado sin movimiento que todavía
+ * espera su plata ([esperaLaTransferencia]). `null` si no espera nada. Antes la tarjeta decía solo
+ * «Están a mano» y la espera quedaba en un renglón cortado del historial.
+ */
+fun loQueEspera(detalle: DetalleDelEspacio, ahora: Long): String? {
+    val espacio = detalle.espacio
+    val esperando = detalle.liquidaciones.filter { esperaLaTransferencia(it, ahora) }.sortedByDescending { it.fecha }
+    if (esperando.isEmpty()) return null
+    return esperando.joinToString(" y ") { l ->
+        if (l.a == MIEMBRO_YO) "esperando ${formatCOP(l.monto)} de ${nombreEnElEspacio(espacio, l.de)}"
+        else "esperando tu transferencia de ${formatCOP(l.monto)} a ${nombreEnElEspacio(espacio, l.a)}"
+    }
+}
+
+/**
+ * **El título de la tarjeta del saldo** (vuelta 67): la frase de siempre ([fraseDelSaldo]) y, si el
+ * grupo espera una transferencia, «Están a mano · esperando $168.050 de Caro».
+ */
+fun tituloDeLaTarjetaDelSaldo(detalle: DetalleDelEspacio, ahora: Long): String {
+    val frase = fraseDelSaldo(detalle.espacio, detalle.saldo)
+    return loQueEspera(detalle, ahora)?.let { "${frase.titulo} · $it" } ?: frase.titulo
 }
 
 /** La marca de corte en la lista de gastos: «Saldaron $168.050 · 29 oct». */
@@ -368,16 +414,39 @@ fun botonDeBorrarElGrupo(detalle: DetalleDelEspacio): String =
  * **¿Ya hay un grupo así?** (vuelta 66) El mismo nombre (sin mayúsculas ni tildes) con las mismas
  * personas: «Ya tienes «Casa con Caro» con Caro.». `null` si no.
  */
-fun avisoDeGrupoRepetido(nombre: String, personas: List<DestinoConocido>, existentes: List<Espacio>): String? {
-    val buscado = normalizarParaBuscar(nombre.trim())
-    if (buscado.isEmpty() || personas.isEmpty()) return null
-    val ids = personas.map { it.id }.toSet()
-    val igual = existentes.firstOrNull { e ->
-        normalizarParaBuscar(e.nombre.trim()) == buscado && e.miembros.filter { it.id != MIEMBRO_YO }.map { it.id }.toSet() == ids
-    } ?: return null
-    val con = personas.joinToString(", ") { it.nombre }
-    return "Ya tienes «${igual.nombre}» con $con."
+fun avisoDeGrupoRepetido(nombre: String, personas: List<DestinoConocido>, existentes: List<Espacio>): String? =
+    grupoIgual(nombre, personas.map { it.id }.toSet(), existentes, excepto = null)
+        ?.let { igual -> "Ya tienes «${igual.nombre}» con ${personas.joinToString(", ") { it.nombre }}." }
+
+/**
+ * **Vuelta 67 · renombrar con la misma comprobación que al crear**: si [nombre] es el de otro grupo
+ * con las mismas personas que [espacio], «Ya tienes «Casa con Caro» con Caro.». `null` si no (o si
+ * el único igual es el mismo grupo).
+ */
+fun avisoDeNombreRepetido(nombre: String, espacio: Espacio, existentes: List<Espacio>): String? {
+    val otros = espacio.miembros.filter { it.id != MIEMBRO_YO }
+    return grupoIgual(nombre, otros.map { it.id }.toSet(), existentes, excepto = espacio.id)
+        ?.let { igual -> "Ya tienes «${igual.nombre}» con ${otros.joinToString(", ") { nombreEnElEspacio(espacio, it.id) }}." }
 }
+
+/** El grupo de [existentes] con el mismo nombre (sin mayúsculas ni tildes) y las mismas personas. */
+private fun grupoIgual(nombre: String, ids: Set<String>, existentes: List<Espacio>, excepto: String?): Espacio? {
+    val buscado = normalizarParaBuscar(nombre.trim())
+    if (buscado.isEmpty() || ids.isEmpty()) return null
+    return existentes.firstOrNull { e ->
+        e.id != excepto && normalizarParaBuscar(e.nombre.trim()) == buscado &&
+            e.miembros.filter { it.id != MIEMBRO_YO }.map { it.id }.toSet() == ids
+    }
+}
+
+/**
+ * **Lo que dice el «No» de una propuesta de saldar** (vuelta 67), antes de hacerlo: el descarte es
+ * por la transferencia, así que tampoco vuelve para un saldo futuro.
+ */
+const val PREGUNTA_DEL_NO_DE_SALDAR: String = "¿Esta transferencia no salda el grupo?"
+const val DETALLE_DEL_NO_DE_SALDAR: String =
+    "Movi no te la vuelve a proponer: tampoco para un saldo futuro de este grupo. Sigue contando como ingreso o gasto."
+const val CONFIRMAR_EL_NO_DE_SALDAR: String = "No la vincules"
 
 /** El nombre que Movi sugiere para un grupo nuevo: «Casa con Caro», «Casa con Caro y Ana». */
 fun nombreSugeridoDelGrupo(personas: List<DestinoConocido>): String {
