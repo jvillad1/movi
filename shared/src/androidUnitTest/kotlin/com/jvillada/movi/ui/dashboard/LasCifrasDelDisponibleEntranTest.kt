@@ -37,7 +37,8 @@ import org.robolectric.annotation.GraphicsMode
  * **Las cifras de cada columna del disponible entran enteras a 390 dp.**
  *
  * Desde el 28-sep cada columna (período, semana, hoy) dice en grande lo que te queda —negativo
- * cuando te pasaste— y abajo «gastaste» y la cifra, en dos renglones. Cada columna tiene un tercio
+ * cuando te pasaste— y abajo «gastaste», la cifra y «de $X», en tres renglones (vuelta 70: el período
+ * también). Cada columna tiene un tercio
  * de lo que deja la tarjeta: ~100 dp, y los textos van en un renglón (`maxLines = 1`), así que si
  * no entran se cortan callados.
  *
@@ -101,14 +102,14 @@ class LasCifrasDelDisponibleEntranTest {
         }
         composeRule.waitForIdle()
 
-        // Vuelta 60: sin margen y con gasto ya no queda nada, así que la semana y hoy dicen «$0», «ya te
-        // pasaste» y «llevas $888.888» (antes «−$888.888» y «gastaste»). El período (vuelta de diseño
-        // 3): «$888.888» grande, «en el día a día» y «de $0» chico.
+        // Vuelta 70: las tres columnas con el mismo patrón —lo que queda en grande, y abajo «gastaste»,
+        // la cifra y «de $X»—. Sin margen y con gasto ya no queda nada, así que la semana y hoy dicen
+        // «$0» y, en el último renglón, «ya te pasaste»; el período dice «−$888.888» y «de $0».
         listOf(
             "ya te pasaste" to 2,
-            "llevas \$888.888" to 2,
-            "\$888.888" to 1,
-            "en el día a día" to 1,
+            "gastaste" to 3,
+            "\$888.888" to 3,
+            "−\$888.888" to 1,
             "de \$0" to 1,
         ).forEach { (texto, cuantas) ->
             val nodos = composeRule.onAllNodesWithText(texto, useUnmergedTree = true).fetchSemanticsNodes()
@@ -130,8 +131,8 @@ class LasCifrasDelDisponibleEntranTest {
     }
 
     /**
-     * Con margen, la columna del período dice lo gastado y «de $X» con la meta del período (vuelta de
-     * diseño 3): $15,6M de ingresos − $3,1M de arriendo = $12,5M, y $888.888 gastados hoy.
+     * Con margen, la columna del período dice lo que queda ($11,6M) y abajo lo gastado «de $X» con la meta
+     * del período (vuelta 70): $15,6M de ingresos − $3,1M de arriendo = $12,5M, y $888.888 gastados hoy.
      */
     @Test
     fun `con margen lo gastado y de cuanto del periodo entran en su columna`() {
@@ -153,7 +154,7 @@ class LasCifrasDelDisponibleEntranTest {
             }
         }
         composeRule.waitForIdle()
-        listOf("\$888.888", "de \$12,5M", "en el día a día").forEach { texto ->
+        listOf("\$888.888", "de \$12,5M", "gastaste", "\$11,6M").forEach { texto ->
             val nodos = composeRule.onAllNodesWithText(texto, useUnmergedTree = true).fetchSemanticsNodes()
             assertTrue("«$texto» tendría que estar", nodos.isNotEmpty())
             nodos.forEach { nodo ->

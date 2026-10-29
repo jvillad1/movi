@@ -123,21 +123,17 @@ internal fun DisponibleDelPeriodoSection(
 const val ROTULO_META_DE_HOY: String = "Meta de hoy"
 
 /**
- * **La semana y hoy cuando ya no queda nada** (vuelta 60): «$0», y debajo esto en vez de «gastaste».
- * Las metas de la semana y de hoy salen de lo que queda (ver `DisponibleDelPeriodo`), así que con el
- * período pasado no hay plata que repartir y la columna no ofrece una meta positiva.
+ * **La semana y hoy cuando ya no queda nada** (vuelta 60): «$0», y en el último renglón esto en vez de
+ * «de $X». Las metas de la semana y de hoy salen de lo que queda (ver `DisponibleDelPeriodo`), así que
+ * con el período pasado no hay plata que repartir y la columna no ofrece una meta positiva.
  */
 const val YA_TE_PASASTE: String = "ya te pasaste"
 
-/** El renglón de lo gastado en la ventana cuando ya no queda nada: «llevas $50.000». */
-internal fun llevasEnLaVentana(gastado: Long): String = "llevas ${formatMoneyCompact(gastado)}"
+/** El renglón que va debajo de lo que queda, en las tres columnas (vuelta 70): «gastaste», y la cifra. */
+const val GASTASTE: String = "gastaste"
 
-/**
- * El renglón chico de la columna del período (vuelta 60): su cifra es el gasto **del día a día** —sin
- * los fijos—, y decía «gastaste», el mismo verbo que «En qué se va» usa para todo lo que salió
- * («Llevas gastado $4.888.850»). Dos cifras distintas con el mismo nombre en pantallas vecinas.
- */
-const val ROTULO_DIA_A_DIA_DEL_PERIODO: String = "en el día a día"
+/** El último renglón de una columna: «de $3,6M», la meta de esa ventana. */
+internal fun deLaMeta(meta: Long): String = "de ${formatMoneyCompact(meta)}"
 
 /** La tarjeta del disponible, cargando o cargada: el mismo tag en las dos para medir que no salte. */
 const val TAG_TARJETA_DEL_DISPONIBLE: String = "tarjeta-del-disponible"
@@ -303,7 +299,7 @@ private fun AlertaDeLaTarjeta(alerta: AlertaDelDisponible, onVerEnQueSeVa: (() -
 /**
  * [CuerpoDelDisponible] sin ninguna cifra: el rótulo «Disponible del período» (no es un dato, es
  * el nombre del renglón) con un bloque donde va la cifra, un renglón para la frase y las tres
- * columnas con su rótulo, lo que queda, los dos renglones de «gastaste $…» y la barra. Mismos
+ * columnas con su rótulo, lo que queda, los tres renglones de «gastaste $… de $…» y la barra. Mismos
  * espacios y estilos que la real, para que al llegar el dato no cambie de alto (±8 dp, lo mide
  * `PlanScreenTest`).
  */
@@ -332,6 +328,7 @@ private fun CuerpoDelDisponibleEsqueleto() {
                 LineaEsqueleto(fraccionDelAncho = 0.8f, estilo = Movi.textos.monto)
                 LineaEsqueleto(fraccionDelAncho = 0.6f, estilo = Movi.textos.apoyo)
                 LineaEsqueleto(fraccionDelAncho = 0.6f, estilo = Movi.textos.apoyo)
+                LineaEsqueleto(fraccionDelAncho = 0.6f, estilo = Movi.textos.apoyo)
                 Spacer(Modifier.height(Movi.espacios.minimo))
                 BloqueEsqueleto(alto = Medida.altoDeBarraDeProgreso)
             }
@@ -341,26 +338,29 @@ private fun CuerpoDelDisponibleEsqueleto() {
 
 /**
  * Una ventana en su columna: el rótulo, **lo que te queda por gastar en ella**, lo que ya gastaste
- * y la barra. La columna del período ([delPeriodo]) es la excepción, ver abajo.
+ * de cuánto, y la barra.
  *
  * El dueño, el 28-sep: *«yo quiero que esto me marque cuánto me puedo gastar por cada una de esas
- * unidades de tiempo no cuánto me gasté, son cosas muy diferentes»*. La cifra grande era lo gastado
- * y la meta iba chiquita («de $X»), y sin margen la meta ni aparecía — justo cuando más importa
- * saber cuánto queda. Ahora la grande es [VentanaDelDisponible.teQuedan] y la chica, lo gastado.
+ * unidades de tiempo no cuánto me gasté, son cosas muy diferentes»*. La cifra grande es
+ * [VentanaDelDisponible.teQuedan] y debajo, chico, lo gastado y la meta.
  *
- * **Las dos cifras se ven siempre, con o sin margen.** Sin margen la meta es cero, así que lo que
- * queda es menos lo gastado: «$0» si en esa ventana no gastaste nada, y el negativo en rojo si ya
- * gastaste — «no te queda nada, y ya gastaste $X de más» es información, no un susto.
+ * **Vuelta 70 · las tres columnas con el mismo patrón** (`r4-pagos-390-b.png`). El período era la
+ * excepción: su cifra grande era lo gastado («$2,2M en el día a día de $3,6M») mientras la semana y
+ * hoy decían lo que queda («$1,4M · gastaste $603.100»): tres columnas lado a lado midiendo cosas
+ * distintas. Ahora las tres dicen lo mismo: en grande lo que queda —en el período, la MISMA cifra que
+ * «Te quedan» del héroe de Inicio y de la tarjeta de Pagos ([teQuedanDeHoy] lee el mismo
+ * `periodo.teQuedan`)—, y debajo «gastaste» · $Y · «de $Z». Ninguna cifra cambió, solo dónde va.
  *
- * **La barra sí se va sin margen**: mide lo gastado contra la meta, y contra cero no tiene largo que
+ * Tres renglones chicos y no «gastaste $X de $Y» en uno: a 390 dp, con la letra de la app, ni
+ * «gastaste $440.000» entra en su tercio de tarjeta (`LasCifrasDelDisponibleEntranTest`). Los mismos
+ * renglones y estilos en las tres columnas, así que sus barras quedan a la misma altura.
+ *
+ * **Las cifras se ven siempre, con o sin margen.** Sin margen la meta es cero, así que lo que queda es
+ * menos lo gastado: «$0» si no gastaste nada, y el negativo si ya gastaste. La semana y hoy, cuando ya
+ * no queda nada que repartir (vuelta 60), dicen «$0» y en el último renglón «ya te pasaste».
+ *
+ * **La barra se va sin margen**: mide lo gastado contra la meta, y contra cero no tiene largo que
  * signifique algo.
- *
- * **La columna del período no repite «te quedan»** (vuelta de diseño 3). Lo que le queda al período
- * ya lo dice la frase de arriba en Plan («Te quedan $10,9M para 5 días · …») y el héroe en Hoy; en
- * su columna salía otra vez, y la meta del período es la cifra grande de la tarjeta. Así que el
- * período dice lo que la barra mide: **cuánto gastaste y de cuánto** («$1,7M · gastaste · de
- * $12,5M»). Los mismos cuatro renglones y los mismos estilos que las otras dos columnas: las tres
- * miden lo mismo de alto y sus barras quedan a la misma altura (`PlanScreenTest` mide que nada salte).
  */
 @Composable
 private fun ColumnaDeVentana(
@@ -381,41 +381,23 @@ private fun ColumnaDeVentana(
     val sinNadaQueRepartir = !delPeriodo && disponible.yaTePasaste
     Column(modifier = modifier) {
         Text(text = rotulo, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, maxLines = 1)
-        // En el período la cifra es lo gastado, y va en rojo si gastaste más de lo que había (vuelta
-        // 45: solo esa; la semana y hoy, en tinta). Vuelta de diseño 19: la `Cifra` del sistema,
-        // compacta porque son tres columnas (§6).
+        // Vuelta de diseño 19: la `Cifra` del sistema, compacta porque son tres columnas (§6).
         CifraDelSistema(
-            when {
-                delPeriodo -> ventana.gastado
-                sinNadaQueRepartir -> 0L
-                else -> ventana.teQuedan
-            },
+            if (sinNadaQueRepartir) 0L else ventana.teQuedan,
             tono = if (enAlerta) TonoDeCifra.Alerta else TonoDeCifra.Neutro,
             forma = FormaDeCifra.Compacta,
         )
-        // «gastaste» y la cifra en dos renglones, no en uno: «gastaste $440.000» no entra en su
-        // tercio de tarjeta a 390 dp —visto en la web, cortado en «gastaste $440…»— y achicar la
-        // letra hasta que entre la dejaba en ~9 sp. Dos renglones fijos en las tres columnas, así
-        // que las barras siguen parejas. Que cada cifra entre en su columna lo mide
-        // `LasCifrasDelDisponibleEntranTest`.
+        Text(text = GASTASTE, style = Movi.textos.apoyo, color = Movi.colores.textoApagado, maxLines = 1)
         Text(
-            text = when {
-                delPeriodo -> ROTULO_DIA_A_DIA_DEL_PERIODO
-                sinNadaQueRepartir -> YA_TE_PASASTE
-                else -> "gastaste"
-            },
+            text = formatMoneyCompact(ventana.gastado),
             style = Movi.textos.apoyo,
-            color = if (sinNadaQueRepartir) Movi.colores.textoMedio else Movi.colores.textoApagado,
+            color = Movi.colores.textoApagado,
             maxLines = 1,
         )
         Text(
-            text = when {
-                delPeriodo -> "de ${formatMoneyCompact(ventana.meta)}"
-                sinNadaQueRepartir -> llevasEnLaVentana(ventana.gastado)
-                else -> formatMoneyCompact(ventana.gastado)
-            },
+            text = if (sinNadaQueRepartir) YA_TE_PASASTE else deLaMeta(ventana.meta),
             style = Movi.textos.apoyo,
-            color = Movi.colores.textoApagado,
+            color = if (sinNadaQueRepartir) Movi.colores.textoMedio else Movi.colores.textoApagado,
             maxLines = 1,
         )
         if (hayMargen) {
