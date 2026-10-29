@@ -1,6 +1,20 @@
 package com.jvillada.movi.server.routes
 
 import com.jvillada.movi.server.balance.loadNonVoidedEvents
+import com.jvillada.movi.server.credits.toCreditTerms
+import com.jvillada.movi.server.db.Credits
+import com.jvillada.movi.server.reminders.cargarPagosDeDeuda
+import com.jvillada.movi.server.reminders.periodoQueSalda
+import com.jvillada.movi.server.reminders.periodosSaldados
+import com.jvillada.movi.server.reminders.virtualRuleFor
+import com.jvillada.movi.server.time.ajustesDePeriodoDe
+import com.jvillada.movi.server.time.epochMillisToAppDate
+import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.CreateTransferRequest
+import com.jvillada.movi.shared.model.CuotaYaPagada
+import com.jvillada.movi.shared.model.fraseDeLaCuotaYaPagada
+import com.jvillada.movi.shared.model.transferLegsFor
+import com.jvillada.movi.shared.model.validateTransfer
 import com.jvillada.movi.server.balance.toAccount
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Events
@@ -148,7 +162,16 @@ fun Route.vincularPagoDeDeudaRoutes() {
             val esLaCuotaElegida = body.esLaCuota && debtAccount.type == AccountType.LOAN &&
                 !esCategoriaQueNoSeElige(evento.category)
             val categoriaQueVincula = evento.category == CUOTA_CATEGORY || evento.category == CARD_PAYMENT_CATEGORY
-            if (evento.type != TransactionType.EXPENSE || (!categoriaQueVincula && !esLaCuotaElegida)) {
+            // Vuelta 53 · «Un abono extra» (`comoAbono`): el traspaso puro de siempre hacia un crédito,
+            // sobre un gasto suelto con una categoría del dueño (o la cuota que dejó la Ola Y).
+            // Un reintento (el mismo transferId ya escrito) llega con la pata en «Traspaso»: pasa, y abajo
+            // la colisión contesta lo que quedó guardado.
+            val abonoElegido = body.comoAbono && debtAccount.type == AccountType.LOAN &&
+                (evento.category == CUOTA_CATEGORY || !esCategoriaQueNoSeElige(evento.category) || evento.transferId == body.transferId)
+            if (evento.type != TransactionType.EXPENSE || (!categoriaQueVincula && !esLaCuotaElegida && !abonoElegido)) {
+                return@put call.respond(HttpStatusCode.UnprocessableEntity, VINCULO_CATEGORIA_INVALIDA)
+            }
+            if (body.comoAbono && !abonoElegido) {
                 return@put call.respond(HttpStatusCode.UnprocessableEntity, VINCULO_CATEGORIA_INVALIDA)
             }
 
@@ -162,6 +185,39 @@ fun Route.vincularPagoDeDeudaRoutes() {
             }
             if (patasExistentes.isNotEmpty() && patasExistentes != setOf(evento.id, body.toEventId)) {
                 return@put call.respond(HttpStatusCode.UnprocessableEntity, "Ese identificador de pago ya lo usa otro movimiento.")
+            }
+
+            // ── Vuelta 53 · la segunda cuota del mismo período pregunta antes ─────────────────
+            // «Es la cuota» de un crédito cuya cuota del período donde caería este pago ya la saldó
+            // otro movimiento: no se vincula en silencio (el período no se salda dos veces y el pago
+            // no adelanta la del mes que viene — ver `periodoQueSalda`). 409 con el código, y el
+            // cliente pregunta si es un abono extra (`comoAbono`).
+            if (body.esLaCuota && !body.comoAbono && debtAccount.type == AccountType.LOAN) {
+                cuotaYaPagadaPara(uid, debtAccount, evento, body.transferId)?.let {
+                    return@put call.respond(HttpStatusCode.Conflict, it)
+                }
+            }
+
+            // ── Vuelta 53 · el abono extra: las patas de `transferLegsFor`, sin desglose ──────
+            if (body.comoAbono) {
+                validateTransfer(fromAccount, debtAccount, evento.amount)?.let {
+                    return@put call.respond(HttpStatusCode.UnprocessableEntity, it)
+                }
+                val (pataDelDinero, pataDeLaDeuda) = transferLegsFor(
+                    CreateTransferRequest(
+                        transferId = body.transferId,
+                        fromEventId = evento.id,
+                        toEventId = body.toEventId,
+                        fromAccountId = fromAccount.id,
+                        toAccountId = debtAccount.id,
+                        amount = evento.amount,
+                        timestamp = evento.timestamp,
+                        note = evento.description.trim().ifBlank { null },
+                    ),
+                    fromAccount,
+                    debtAccount,
+                )
+                return@put escribirYResponder(call, uid, evento, pataDelDinero, pataDeLaDeuda, debtAccount, body.transferId, body.toEventId, null)
             }
 
             // ── La conversión de moneda, si hace falta ───────────────────────────────────────
@@ -210,57 +266,96 @@ fun Route.vincularPagoDeDeudaRoutes() {
             }
             val (pataDelDinero, pataDeLaDeuda) = pagoDeCuotaLegs(pseudoRequest, fromAccount, debtAccount, desglose)
 
-            // La pata del dinero YA EXISTE: se ACTUALIZA, no se inserta. Las dos escrituras
-            // viven en la MISMA transacción: si la segunda choca, la primera se va con ella —
-            // media operación acá dejaría la categoría cambiada sin que la deuda bajara nada.
-            val ok = try {
-                dbQuery {
-                    val ahora = System.currentTimeMillis()
-                    Events.update({ (Events.id eq evento.id) and (Events.userId eq uid) }) {
-                        it[Events.category] = pataDelDinero.category
-                        it[Events.description] = pataDelDinero.description
-                        it[Events.transferId] = pataDelDinero.transferId
-                        it[Events.lastEditedAt] = ahora
-                    }
-                    insertEventRow(uid, pataDeLaDeuda)
-                }
-                true
-            } catch (e: ExposedSQLException) {
-                call.application.environment.log.warn("[vincular-deuda] escritura falló para ${body.transferId}", e)
-                false
-            }
-
-            if (!ok) {
-                // El reintento de verdad manda los mismos ids. Si las dos patas ya están, el
-                // vínculo YA ocurrió: se contesta 200 con lo que de verdad quedó guardado.
-                val ahoraExistentes = dbQuery {
-                    Events.select(Events.id)
-                        .where { (Events.userId eq uid) and (Events.transferId eq body.transferId) }
-                        .map { it[Events.id] }.toSet()
-                }
-                if (ahoraExistentes != setOf(evento.id, body.toEventId)) {
-                    return@put call.respond(HttpStatusCode.InternalServerError, "No se pudo vincular el pago. Inténtalo de nuevo.")
-                }
-            }
-
-            val guardadas = dbQuery {
-                Events.selectAll()
-                    .where { (Events.userId eq uid) and (Events.transferId eq body.transferId) }
-                    .map { it.toFinancialEvent() }
-            }
-            val eventos = loadNonVoidedEvents(uid, debtAccount.id)
-            call.respond(
-                if (ok) HttpStatusCode.OK else HttpStatusCode.OK,
-                PagoDeCuotaResult(
-                    deudaRestante = eventos
-                        .filter { it.currency == debtAccount.currency }
-                        .sumOf { signedDelta(debtAccount.type, it.type, it.amount) },
-                    patas = guardadas,
-                    desglose = desgloseDeLoVinculado(guardadas, debtAccount.id, desglose),
-                ),
-            )
+            escribirYResponder(call, uid, evento, pataDelDinero, pataDeLaDeuda, debtAccount, body.transferId, body.toEventId, desglose)
         }
     }
+}
+
+/**
+ * La pata del dinero YA EXISTE: se ACTUALIZA, no se inserta. Las dos escrituras viven en la MISMA
+ * transacción: si la segunda choca, la primera se va con ella — media operación acá dejaría la
+ * categoría cambiada sin que la deuda bajara nada. Común a la cuota (con [desglose]) y al abono extra
+ * de la vuelta 53 (sin desglose: un traspaso no se reparte).
+ */
+private suspend fun escribirYResponder(
+    call: io.ktor.server.application.ApplicationCall,
+    uid: String,
+    evento: FinancialEvent,
+    pataDelDinero: FinancialEvent,
+    pataDeLaDeuda: FinancialEvent,
+    debtAccount: Account,
+    transferId: String,
+    toEventId: String,
+    desglose: DesgloseDeCuota?,
+) {
+    val ok = try {
+        dbQuery {
+            val ahora = System.currentTimeMillis()
+            Events.update({ (Events.id eq evento.id) and (Events.userId eq uid) }) {
+                it[Events.category] = pataDelDinero.category
+                it[Events.description] = pataDelDinero.description
+                it[Events.transferId] = pataDelDinero.transferId
+                it[Events.lastEditedAt] = ahora
+            }
+            insertEventRow(uid, pataDeLaDeuda)
+        }
+        true
+    } catch (e: ExposedSQLException) {
+        call.application.environment.log.warn("[vincular-deuda] escritura falló para $transferId", e)
+        false
+    }
+
+    if (!ok) {
+        // El reintento de verdad manda los mismos ids. Si las dos patas ya están, el
+        // vínculo YA ocurrió: se contesta 200 con lo que de verdad quedó guardado.
+        val ahoraExistentes = dbQuery {
+            Events.select(Events.id)
+                .where { (Events.userId eq uid) and (Events.transferId eq transferId) }
+                .map { it[Events.id] }.toSet()
+        }
+        if (ahoraExistentes != setOf(evento.id, toEventId)) {
+            return call.respond(HttpStatusCode.InternalServerError, "No se pudo vincular el pago. Inténtalo de nuevo.")
+        }
+    }
+
+    val guardadas = dbQuery {
+        Events.selectAll()
+            .where { (Events.userId eq uid) and (Events.transferId eq transferId) }
+            .map { it.toFinancialEvent() }
+    }
+    val eventos = loadNonVoidedEvents(uid, debtAccount.id)
+    call.respond(
+        HttpStatusCode.OK,
+        PagoDeCuotaResult(
+            deudaRestante = eventos
+                .filter { it.currency == debtAccount.currency }
+                .sumOf { signedDelta(debtAccount.type, it.type, it.amount) },
+            patas = guardadas,
+            desglose = desglose?.let { desgloseDeLoVinculado(guardadas, debtAccount.id, it) },
+        ),
+    )
+}
+
+/**
+ * Vuelta 53 · ¿la cuota del período donde caería [evento] ya la saldó **otro** movimiento? Se pregunta
+ * con las funciones de siempre —la regla sintética del crédito ([virtualRuleFor]), el período que
+ * saldaría este pago ([periodoQueSalda]) y lo ya saldado ([periodosSaldados])—, sin las patas del
+ * mismo [transferId] (un reintento no choca consigo mismo). Sin condiciones del crédito no hay regla, y
+ * no se pregunta nada.
+ */
+private suspend fun cuotaYaPagadaPara(uid: String, credito: Account, evento: FinancialEvent, transferId: String): CuotaYaPagada? {
+    val terms = dbQuery {
+        Credits.selectAll()
+            .where { (Credits.userId eq uid) and (Credits.accountId eq credito.id) }
+            .firstOrNull()?.toCreditTerms()
+    } ?: return null
+    val regla = virtualRuleFor(terms, credito.name)
+    val settings = ajustesDePeriodoDe(uid)
+    val fecha = epochMillisToAppDate(evento.timestamp)
+    val periodo = periodoQueSalda(regla, fecha, settings = settings)
+    val pagos = cargarPagosDeDeuda(uid, fecha).filter { it.transferId != transferId }
+    if (periodo !in periodosSaldados(listOf(regla), pagos, settings = settings)[regla.id].orEmpty()) return null
+    return CuotaYaPagada(periodo = periodo, credito = credito.name, mensaje = fraseDeLaCuotaYaPagada(credito.name, periodo))
 }
 
 /** «4012.5» → «4.012,50»: la TRM del día, para la descripción de la pata convertida. */

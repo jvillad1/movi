@@ -2745,3 +2745,57 @@ del lote, «Ignorar los N» con su pregunta), en `commonTest` `Vuelta51Test` (**
 selectores**, los antiguos en el conteo y la franja, el candidato lejano), en `:core` `Vuelta51LogicaTest`,
 y en `:server` `TransferRoutesTest` (la cuota a mano rechazada en las tres puertas) y `DashboardRoutesTest`
 (los antiguos no cuentan ni suman).
+
+## 55. Vuelta 53: la cuota que se parece se sugiere sola, la segunda del mes pregunta, y los botones de avisos caben
+
+La revisión de la vuelta 51 (28-oct, sobre eb3f29f4, `r51b-*`): «Revisar uno por» cortado a 390 dp, «Es la
+cuota de un crédito» escondido al fondo del selector, una segunda cuota de octubre de Vehículo 4083 que se
+vinculó sin avisar, y un crédito que decía «A favor $980.000». **Sin reglas de plata nuevas**: la cuota
+sigue siendo `pagoDeCuotaLegs`, el abono extra el traspaso de `transferLegsFor`, y un pago salda la cuota
+del período en que se hizo (`periodoQueSalda`).
+
+1. **Los botones de la tarjeta de avisos nunca se cortan** (`TarjetaDeAvisosDelBanco`, `LadoALadoOApilados`).
+   El `FlowRow` con `weight` de la vuelta 40 decidía el renglón con el ancho **mínimo** de cada botón (la
+   palabra más larga) y después los apretaba lado a lado: a 390 dp «Revisar uno por uno» quedaba en «Revisar
+   uno por». Ahora un `Layout` mide el ancho entero de cada rótulo (`maxIntrinsicWidth`): si la suma y la
+   separación caben, van lado a lado y se reparten lo que sobra (llenan el ancho, como antes); si no, uno
+   debajo del otro a todo el ancho. Lo mide `LosBotonesDeLosAvisosCabenTest` a 360 y 390 dp con la letra
+   ×1,12 y ×1,3 («Confirmar los 2», «Confirmar los 2 que Movi entendió», «Revisar uno por uno»), y a 600 que
+   siguen lado a lado.
+2. **«¿Es la cuota de Vehículo 4083?» en el detalle de un gasto** (`:core` `LaCuotaQueSeParece.kt`,
+   `SugerenciaDeLaCuota`). Arriba de las acciones, en la superficie de propuesta (ícono en el tinte de aviso,
+   la pregunta en `cuerpoFuerte`, «Cuota de $980.000» debajo y **«Sí, es la cuota»** `Secundario` `S` en su
+   renglón, a la derecha: al lado no cabía a 360). Aparece cuando `cuotaQueSeParece` encuentra **un solo**
+   crédito cuya cuota pactada está a ±10 % (`MARGEN_DE_LA_CUOTA_QUE_SE_PARECE`, elegido) del gasto, en su
+   moneda, y cuyo vencimiento **sin saldar** (`cuotasPorSaldar` sobre `GET /api/payments/upcoming`, que ya
+   rodó al mes siguiente si la del período está saldada) cae en el período del dueño del gasto. Solo un gasto
+   suelto con una categoría del dueño. Con dos parecidos, ninguno. **La palabra «crédito» o «cuota» en la
+   descripción no cuenta**, ni sola ni para desempatar: «Cuota de manejo» es un cobro de la tarjeta y «Cuota
+   3/12» una compra diferida. «Sí, es la cuota» hace exactamente lo de «Es la cuota de un crédito» con ese
+   crédito. Si algo falla al leer, no se sugiere nada. **«Es la cuota de un crédito» también está en «Más»**
+   (la misma fila y el mismo «¿De cuál crédito?»), que ahora aparece también por eso.
+3. **La segunda cuota del mismo período pregunta antes.** `vincular-deuda` con `esLaCuota` sobre un crédito
+   cuya cuota del período donde caería el pago ya saldó **otro** movimiento (`periodoQueSalda` +
+   `periodosSaldados`, sin las patas del mismo `transferId`: un reintento no choca consigo mismo) contesta
+   **409** con `CuotaYaPagada` (`codigo = CUOTA_YA_PAGADA`, el `periodo` de la cuota, el crédito y la frase)
+   y no escribe nada. El detalle lo reconoce (`cuotaYaPagadaDe`) y pregunta en línea, donde se tocó:
+   **«La cuota de octubre de Vehículo 4083 ya está pagada. ¿Este pago es un abono extra?»**, con «Cancelar» y
+   **«Un abono extra»** (`Principal`). El abono es `vincular-deuda` con `comoAbono`: el server arma **el
+   traspaso de siempre** (`transferLegsFor`, «Abono extraordinario a …», las dos patas en «Traspaso», el monto
+   entero contra el capital) sobre la pata que ya existía, y no salda ninguna cuota. **No se ofrece «la cuota
+   de noviembre (adelantada)»**: no existe ese camino —un pago salda la cuota del período en que se hizo,
+   decisión del dueño— y no se inventa. Desde el detalle, todo vínculo a un crédito va con `esLaCuota`, así
+   que también la Ola Y (un gasto «Cuota de crédito» desde «Más») pregunta. La hoja de reconciliar un aviso
+   todavía no manda la marca: vincula como antes.
+4. **Un crédito nunca dice «A favor» en «¿De cuál crédito?»** (`textoDeCuentaDeDeuda`). Con deuda, «Debes
+   $X»; un crédito en 0 o por debajo, **«Movi no tiene el saldo»** (`SIN_EL_SALDO_EN_EL_SELECTOR`, como la hoja
+   de Cuota de la vuelta 49); una tarjeta en 0 o pagada de más, **«Sin deuda»**. El selector de cuentas de
+   Agregar no cambia: ahí una tarjeta sobrepagada «A favor» es un dato real (`SelectorDeCuentaTest`).
+
+Lo vigilan `LosBotonesDeLosAvisosCabenTest`, `LaCuotaQueSePareceEnElDetalleTest` (la sugerencia vincula
+como «Es la cuota»; sin cuota parecida no hay nada; el 409 pregunta sin «adelantada» y «Un abono extra»
+manda `comoAbono`; «Es la cuota de un crédito» en «Más»), en `commonTest` `ElSaldoDeUnCreditoEnElSelectorTest`,
+en `:core` `Vuelta53LogicaTest` (los bordes del 10 %, el período, dos parecidos, la palabra que no cuenta, la
+frase y el código del 409), y en `:server` `VincularPagoDeDeudaRoutesTest` (de punta a punta: la cuota de agosto
+saldada, la segunda responde 409 sin escribir, como abono queda un traspaso de $980.000 que no salda nada, los
+reintentos de los dos contestan 200; el abono no vale con una tarjeta).

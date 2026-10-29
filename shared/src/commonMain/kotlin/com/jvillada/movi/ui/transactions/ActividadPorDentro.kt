@@ -211,6 +211,21 @@ fun botonDeConfirmarLosAvisos(avisos: AvisosPorConfirmar): String? {
 }
 
 /**
+ * Vuelta 53 · **el mismo botón, corto**, para cuando el largo no cabe ni solo en su renglón (a 360 dp con
+ * la letra agrandada ×1,3, «Confirmar los 2 que Movi entendió» se cortaba en «Confirmar los 2 que Mov»):
+ * «Confirmar los 2», o «Confirmar uno». Lo que queda para revisar lo dice la hoja de confirmar. `null`
+ * cuando [botonDeConfirmarLosAvisos] también lo es.
+ */
+fun botonCortoDeConfirmarLosAvisos(avisos: AvisosPorConfirmar): String? {
+    val m = avisos.confirmables.size
+    return when {
+        m == 0 -> null
+        m == 1 -> if (avisos.cuantos == 1) "Confirmar el aviso" else "Confirmar uno"
+        else -> "Confirmar los $m"
+    }
+}
+
+/**
  * Lo que dice la hoja antes de confirmar: cada movimiento en una línea («Rappi: Comida · Nu ·
  * $27.500») y el total. Lo que no se anota también se dice.
  */

@@ -46,6 +46,8 @@ fun ConfirmacionEnLinea(
     onConfirmar: () -> Unit,
     onCancelar: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Vuelta 53: `Principal` para lo que se confirma sin borrar nada («Un abono extra»), como en [ConfirmarEnHoja]. */
+    varianteConfirmar: VarianteDeBoton = VarianteDeBoton.Peligro,
 ) {
     Column(
         modifier = modifier
@@ -59,7 +61,7 @@ fun ConfirmacionEnLinea(
         Text(detalle, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
         Spacer(Modifier.height(Espacio.s))
         // Dentro de un bloque de la hoja: los botones chicos, como los de una tarjeta.
-        BotonesDeConfirmar(textoConfirmar, ocupado, onConfirmar, onCancelar, TamanoDeBoton.S)
+        BotonesDeConfirmar(textoConfirmar, ocupado, onConfirmar, onCancelar, TamanoDeBoton.S, varianteConfirmar)
     }
 }
 

@@ -50,6 +50,7 @@ import java.util.Date
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -428,6 +429,101 @@ class VincularPagoDeDeudaRoutesTest {
         }
         val saldados = com.jvillada.movi.server.reminders.pagosDeDeudaPorPeriodo(listOf(regla), lasPatas)[regla.id].orEmpty()
         assertTrue(saldados.values.any { it.id == "ev-deuda-980" }, "la cuota de su período queda saldada: $saldados")
+    }
+
+    /**
+     * Vuelta 53 · **la segunda cuota del mismo período pregunta antes.** La cuota de agosto del crédito
+     * ya la saldó un pago; otro gasto del mismo período marcado «es la cuota» no se vincula en
+     * silencio: 409 con `CUOTA_YA_PAGADA` y el mes, sin escribir nada. Como abono extra
+     * (`comoAbono`) queda el traspaso de siempre —las dos patas en «Traspaso», el monto entero contra
+     * el capital— y no salda ninguna cuota: el período sigue saldado por el primer pago, y nada más.
+     */
+    @Test
+    fun `la segunda cuota del periodo responde 409 y como abono queda un traspaso que no salda nada`() = testApplication {
+        val libre = "acc-libre-v53"
+        transaction {
+            cuenta(libre, duenoId, "Libre inversión 9695", "LOAN", "COP")
+            Events.insert {
+                it[id] = "ev-apertura-libre-v53"
+                it[userId] = duenoId
+                it[accountId] = libre
+                it[type] = "EXPENSE"
+                it[amount] = 40_710_555L
+                it[currency] = "COP"
+                it[category] = "Saldo inicial"
+                it[description] = "Deuda inicial"
+                it[timestamp] = 1_788_000_000_000L
+                it[eventSource] = "MANUAL"
+                it[reconciliationStatus] = "RECONCILED"
+            }
+            Credits.insert {
+                it[accountId] = libre
+                it[userId] = duenoId
+                it[bank] = "Bancolombia"
+                it[principal] = 45_000_000L
+                it[rateEa] = 11.27
+                it[termMonths] = 60
+                it[installment] = 980_000L
+                it[dayOfMonth] = 5
+                it[startDate] = "2025-01-05"
+            }
+        }
+        fun conMarca(tr: String, to: String, marca: String) = cuerpo(libre, tr = tr, toEventId = to).dropLast(1) + ""","$marca":true}"""
+        gastoSuelto("ev-cuota-1", ahorros, 980_000L, "Otros")
+        gastoSuelto("ev-cuota-2", ahorros, 980_000L, "Otros")
+        wireApp()
+
+        // La primera: la cuota del período (el 30 de agosto, con mes de calendario: agosto).
+        assertEquals(HttpStatusCode.OK, vincular(duenoId, "ev-cuota-1", conMarca("tr-c1", "ev-deuda-c1", "esLaCuota")).status)
+
+        // La segunda del mismo período: 409, con el código y el mes, y nada escrito.
+        val antes = saldoDe(libre)
+        val repetida = vincular(duenoId, "ev-cuota-2", conMarca("tr-c2", "ev-deuda-c2", "esLaCuota"))
+        assertEquals(HttpStatusCode.Conflict, repetida.status)
+        val ya = assertNotNull(com.jvillada.movi.shared.model.cuotaYaPagadaDe(409, repetida.bodyAsText()), repetida.bodyAsText())
+        assertEquals("2026-08", ya.periodo)
+        assertEquals("La cuota de agosto de Libre inversión 9695 ya está pagada.", ya.mensaje)
+        assertEquals(0, patas("tr-c2").size)
+        assertEquals("Otros", filaDe("ev-cuota-2")[Events.category], "el gasto queda como estaba")
+        assertEquals(antes, saldoDe(libre))
+
+        // Un reintento de la primera no choca consigo mismo.
+        assertEquals(HttpStatusCode.OK, vincular(duenoId, "ev-cuota-1", conMarca("tr-c1", "ev-deuda-c1", "esLaCuota")).status)
+
+        // Como abono extra: el traspaso de siempre, el monto entero contra el capital.
+        val abono = vincular(duenoId, "ev-cuota-2", conMarca("tr-c2", "ev-deuda-c2", "comoAbono"))
+        assertEquals(HttpStatusCode.OK, abono.status, abono.bodyAsText())
+        assertEquals(
+            setOf(ahorros to com.jvillada.movi.shared.model.TRANSFER_CATEGORY, libre to com.jvillada.movi.shared.model.TRANSFER_CATEGORY),
+            patas("tr-c2").toSet(),
+        )
+        assertEquals(980_000L, montoDeLaPataEn(libre, "tr-c2"), "un abono baja el capital por el monto entero")
+        assertEquals(antes - 980_000L, saldoDe(libre))
+        assertTrue(filaDe("ev-cuota-2")[Events.description].startsWith("Abono extraordinario"), filaDe("ev-cuota-2")[Events.description])
+        // Reintentar el abono contesta lo que quedó.
+        assertEquals(HttpStatusCode.OK, vincular(duenoId, "ev-cuota-2", conMarca("tr-c2", "ev-deuda-c2", "comoAbono")).status)
+        assertEquals(2, patas("tr-c2").size)
+
+        // Y no salda nada: el período de agosto lo sigue saldando el primer pago, y ningún otro aparece.
+        val regla = com.jvillada.movi.shared.model.RecurringRule(
+            id = "${com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX}$libre", name = "Cuota Libre inversión 9695",
+            category = CUOTA_CATEGORY, amount = 980_000L, dayOfMonth = 5,
+            type = com.jvillada.movi.shared.model.TransactionType.EXPENSE,
+        )
+        val todos = transaction {
+            Events.selectAll().where { (Events.userId eq duenoId) and (Events.accountId eq libre) }.map { it.toFinancialEvent() }
+        }
+        val saldados = com.jvillada.movi.server.reminders.pagosDeDeudaPorPeriodo(listOf(regla), todos)[regla.id].orEmpty()
+        assertEquals(mapOf("2026-08" to "ev-deuda-c1"), saldados.mapValues { it.value.id })
+    }
+
+    @Test
+    fun `el abono extra no vale con una tarjeta`() = testApplication {
+        gastoSuelto("ev-abono-t", ahorros, 500_000L, "Otros")
+        wireApp()
+        val res = vincular(duenoId, "ev-abono-t", cuerpo(amex, tr = "tr-at", toEventId = "ev-deuda-at").dropLast(1) + ""","comoAbono":true}""")
+        assertEquals(HttpStatusCode.UnprocessableEntity, res.status)
+        assertEquals(0, patas("tr-at").size)
     }
 
     @Test

@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AccountBalance
 import androidx.compose.material.icons.rounded.Category
 import androidx.compose.material.icons.rounded.EditNote
 import androidx.compose.material.icons.rounded.Groups
@@ -296,6 +297,43 @@ internal fun PreguntaDelTercero(pregunta: String, onAbrir: () -> Unit) {
             final = { Boton("Responder", onClick = onAbrir, variante = VarianteDeBoton.Fantasma, tamano = TamanoDeBoton.S) },
             onClick = onAbrir,
         )
+    }
+}
+
+/** El `testTag` de la sugerencia «¿Es la cuota de X?» del detalle (vuelta 53). */
+const val TAG_SUGERENCIA_DE_LA_CUOTA: String = "detalle:sugerencia-de-la-cuota"
+
+/**
+ * **«¿Es la cuota de Vehículo 4083? · Sí, es la cuota»** (vuelta 53): la fila destacada suave, arriba de
+ * las acciones, cuando el gasto se parece a la cuota de un crédito sin saldar (`cuotaQueSeParece`, en
+ * `:core`). La misma superficie de propuesta que [PreguntaDelTercero]; el botón hace exactamente lo de
+ * «Es la cuota de un crédito» con ese crédito. Nunca se vincula sola.
+ */
+@Composable
+internal fun SugerenciaDeLaCuota(pregunta: String, detalle: String, ocupado: Boolean, onSi: () -> Unit) {
+    // El botón va debajo y a la derecha, no al final del renglón: a 360 dp, con «Sí, es la cuota» al
+    // lado, «¿Es la cuota de Libre inversión 9695?» no cabía en dos renglones.
+    Superficie(
+        modifier = Modifier.fillMaxWidth().testTag(TAG_SUGERENCIA_DE_LA_CUOTA),
+        nivel = NivelDeSuperficie.Propuesta,
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(Espacio.s), verticalAlignment = Alignment.CenterVertically) {
+            IconoEnCirculo(Icons.Rounded.AccountBalance, tono = TonoDeIcono.Aviso)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(pregunta, style = Movi.textos.cuerpoFuerte, color = Movi.colores.texto)
+                Text(detalle, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+            }
+        }
+        Spacer(Modifier.height(Espacio.s))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            Boton(
+                com.jvillada.movi.shared.model.SI_ES_LA_CUOTA,
+                onClick = onSi,
+                variante = VarianteDeBoton.Secundario,
+                tamano = TamanoDeBoton.S,
+                cargando = ocupado,
+            )
+        }
     }
 }
 

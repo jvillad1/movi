@@ -62,6 +62,14 @@ import com.jvillada.movi.ui.destinos.nombreParaLaFila
 import com.jvillada.movi.ui.destinos.preguntaDelDestino
 import com.jvillada.movi.ui.destinos.rememberDestinosParaGuardar
 import com.jvillada.movi.shared.model.VincularPagoDeDeudaRequest
+import com.jvillada.movi.shared.model.CuotaPorSaldar
+import com.jvillada.movi.shared.model.CuotaYaPagada
+import com.jvillada.movi.shared.model.cuotaQueSeParece
+import com.jvillada.movi.shared.model.cuotaYaPagadaDe
+import com.jvillada.movi.shared.model.cuotasPorSaldar
+import com.jvillada.movi.shared.model.fraseDeLaCuotaYaPagada
+import com.jvillada.movi.shared.model.preguntaDeLaCuotaQueSeParece
+import com.jvillada.movi.shared.repository.ApiException
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.fecha.SelectorDeFecha
 import com.jvillada.movi.shared.model.EventOccurrenceMark
@@ -194,6 +202,25 @@ const val ES_LA_CUOTA_DE_UN_CREDITO: String = "Es la cuota de un crédito"
 
 /** El tag del selector de crédito que abre «Es la cuota de un crédito». */
 const val TAG_ELEGIR_EL_CREDITO: String = "movimiento:elegir-el-credito"
+
+/** El tag de la pregunta «La cuota de octubre de X ya está pagada. ¿Este pago es un abono extra?» (vuelta 53). */
+const val TAG_CUOTA_YA_PAGADA: String = "movimiento:cuota-ya-pagada"
+
+/** El botón de esa pregunta: el abono extra de siempre (un traspaso que no salda ninguna cuota). */
+const val UN_ABONO_EXTRA: String = "Un abono extra"
+
+/**
+ * Lo que explica esa pregunta. **No hay «la cuota del mes que viene (adelantada)»**: un pago salda la
+ * cuota del período en que se hizo (`periodoQueSalda`, decisión del dueño), así que Movi no tiene cómo
+ * adelantar una cuota sin una regla de plata nueva, y no la inventa.
+ */
+const val QUE_PASA_CON_EL_ABONO_EXTRA: String =
+    "Un abono extra baja el capital por el monto entero y no marca otra cuota como pagada. " +
+        "Movi no adelanta la cuota del mes que viene: un pago salda la cuota del período en que se hizo."
+
+/** «La cuota de octubre de Vehículo 4083 ya está pagada. ¿Este pago es un abono extra?» */
+fun preguntaDeLaCuotaYaPagada(ya: CuotaYaPagada): String =
+    "${fraseDeLaCuotaYaPagada(ya.credito, ya.periodo)} ¿Este pago es un abono extra?"
 
 /**
  * **¿El detalle ofrece «Es la cuota de un crédito»?** (vuelta 51). Un gasto suelto —sin `transferId`—,
@@ -500,7 +527,31 @@ internal fun ContenidoDelMovimiento(
     // Vuelta 51 · «Es la cuota de un crédito»: abierta, la hoja pide el crédito.
     var eligiendoElCredito by remember(event.id) { mutableStateOf(false) }
 
-    fun vincular(cuenta: Account, esLaCuota: Boolean = false) {
+    // Vuelta 53 · la segunda cuota del mismo período: el server contestó 409 (`CUOTA_YA_PAGADA`) y la
+    // hoja pregunta si es un abono extra, con el crédito que se eligió. La pregunta va donde se tocó:
+    // arriba si vino de la sugerencia, en la sección abierta si vino de «Es la cuota de un crédito».
+    var cuotaYaPagada by remember(event.id) { mutableStateOf<Pair<Account, CuotaYaPagada>?>(null) }
+    var desdeLaSugerencia by remember(event.id) { mutableStateOf(false) }
+
+    // Vuelta 53 · «¿Es la cuota de Vehículo 4083?»: si el gasto se parece a la cuota de un crédito sin
+    // saldar (`cuotaQueSeParece`, en `:core`). Se pide al abrir, solo si el gasto puede ser una cuota; si
+    // algo falla no se sugiere nada y la fila de siempre sigue en Categoría y en «Más».
+    val puedeSerCuota = puedeMarcarseCuotaDeCredito(event, cuentas)
+    var cuotaSugerida by remember(event.id) { mutableStateOf<CuotaPorSaldar?>(null) }
+    LaunchedEffect(event.id, puedeSerCuota) {
+        cuotaSugerida = null
+        if (!puedeSerCuota) return@LaunchedEffect
+        val vencimientos = runCatching { Repositories.wallets.getUpcomingPayments() }.getOrNull() ?: return@LaunchedEffect
+        val ajustes = runCatching { Repositories.wallets.getUserProfile().ajustesDelPeriodo() }.getOrDefault(PeriodSettings())
+        cuotaSugerida = cuotaQueSeParece(event, cuotasPorSaldar(vencimientos, cuentas), ajustes)
+    }
+
+    /**
+     * Vincula el gasto con [cuenta] por `vincular-deuda`. Con un crédito va marcado `esLaCuota` (vuelta
+     * 53: así el server pregunta antes de saldar dos veces el mismo período); [comoAbono] es «Un abono
+     * extra» —el traspaso de siempre—.
+     */
+    fun vincular(cuenta: Account, comoAbono: Boolean = false) {
         if (vinculando) return
         vinculando = true
         errorDeVinculo = null
@@ -512,19 +563,24 @@ internal fun ContenidoDelMovimiento(
                         debtAccountId = cuenta.id,
                         transferId = newId("tr"),
                         toEventId = newId("ev"),
-                        esLaCuota = esLaCuota,
+                        esLaCuota = cuenta.type == AccountType.LOAN && !comoAbono,
+                        comoAbono = comoAbono,
                     ),
                 )
             }
             vinculando = false
             result
                 .onSuccess { resultado ->
+                    cuotaYaPagada = null
                     // La pata del dinero es la que comparte id con ESTE movimiento — la otra es
                     // la de la deuda, recién creada. Si por lo que sea no viene (no debería), la
                     // hoja se queda como estaba: no hay nada que romper mostrando el mismo evento.
                     resultado.patas.firstOrNull { it.id == event.id }?.let(onEventChanged)
                 }
-                .onFailure { errorDeVinculo = it.toUserMessage() }
+                .onFailure { e ->
+                    val ya = (e as? ApiException)?.let { cuotaYaPagadaDe(it.status, it.serverMessage) }
+                    if (ya != null) cuotaYaPagada = cuenta to ya else errorDeVinculo = e.toUserMessage()
+                }
         }
     }
 
@@ -781,8 +837,61 @@ internal fun ContenidoDelMovimiento(
         ofreceRepetir = ofreceRepetir,
         ofreceRepartir = ofreceRepartir,
         conTercero = tercero != null || ofreceGuardarElTercero,
-        conMas = onAnular != null || ofreceVincular || ofreceEnPartes,
+        // Vuelta 53: «Es la cuota de un crédito» también vive en «Más».
+        conMas = onAnular != null || ofreceVincular || ofreceEnPartes || puedeSerCuota,
     )
+
+    /** Vuelta 53 · «La cuota de octubre de X ya está pagada. ¿Este pago es un abono extra?» */
+    @Composable
+    fun PreguntaDelAbonoExtra() {
+        val (credito, ya) = cuotaYaPagada ?: return
+        Spacer(Modifier.height(Espacio.xs))
+        ConfirmacionEnLinea(
+            pregunta = preguntaDeLaCuotaYaPagada(ya),
+            detalle = QUE_PASA_CON_EL_ABONO_EXTRA,
+            textoConfirmar = UN_ABONO_EXTRA,
+            ocupado = vinculando,
+            onConfirmar = { vincular(credito, comoAbono = true) },
+            onCancelar = { cuotaYaPagada = null },
+            varianteConfirmar = VarianteDeBoton.Principal,
+            modifier = Modifier.testTag(TAG_CUOTA_YA_PAGADA),
+        )
+    }
+
+    /**
+     * Vuelta 51 · «Es la cuota de un crédito» (y desde la vuelta 53 también en «Más»): elegido el
+     * crédito, hace lo de la Ola Y —`vincular-deuda` con las mismas dos patas—.
+     */
+    @Composable
+    fun EsLaCuotaDeUnCredito() {
+        CategoryRow(
+            name = ES_LA_CUOTA_DE_UN_CREDITO,
+            selected = eligiendoElCredito,
+            enabled = !saving && !vinculando,
+            onClick = { eligiendoElCredito = !eligiendoElCredito },
+            subtitle = "Elige el crédito: queda como su cuota y baja la deuda",
+            compacto = true,
+        )
+        if (eligiendoElCredito) {
+            Spacer(Modifier.height(Espacio.xs))
+            SelectorDeCuentaDeDeuda(
+                cuentas = cuentas.filter { it.type == AccountType.LOAN },
+                seleccionada = null,
+                onSeleccionar = { credito -> credito?.let { desdeLaSugerencia = false; vincular(it) } },
+                titulo = "¿De cuál crédito?",
+                modifier = Modifier.testTag(TAG_ELEGIR_EL_CREDITO),
+            )
+            if (vinculando) {
+                Spacer(Modifier.height(Espacio.xs))
+                Text("Vinculando…", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+            }
+            errorDeVinculo?.takeIf { !desdeLaSugerencia }?.let {
+                Spacer(Modifier.height(Espacio.xs))
+                Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
+            }
+            if (!desdeLaSugerencia) PreguntaDelAbonoExtra()
+        }
+    }
     val repartirEnMas = repartirVaEnMas(ofreceRepartir, acciones)
     val reducido = LocalMovimientoReducido.current
     fun alternar(a: AccionDelMovimiento) {
@@ -837,6 +946,30 @@ internal fun ContenidoDelMovimiento(
                 Spacer(Modifier.height(Espacio.m))
                 SheetLabel("Era un traspaso")
                 Text(ORPHANED_LEG_EXPLAINER, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
+            }
+            // Vuelta 53 · «¿Es la cuota de Vehículo 4083? · Sí, es la cuota», arriba de las acciones. Con la
+            // pregunta del abono abierta se calla: lo que se decide es eso.
+            val sugerida = cuotaSugerida
+            if (sugerida != null && !(desdeLaSugerencia && cuotaYaPagada != null)) {
+                Spacer(Modifier.height(Espacio.s))
+                SugerenciaDeLaCuota(
+                    pregunta = preguntaDeLaCuotaQueSeParece(sugerida),
+                    detalle = "Cuota de ${formatMoney(sugerida.cuota, sugerida.moneda)}",
+                    ocupado = vinculando && desdeLaSugerencia,
+                    onSi = {
+                        cuentas.firstOrNull { it.id == sugerida.creditoId }?.let {
+                            desdeLaSugerencia = true
+                            vincular(it)
+                        }
+                    },
+                )
+            }
+            if (desdeLaSugerencia) {
+                PreguntaDelAbonoExtra()
+                errorDeVinculo?.let {
+                    Spacer(Modifier.height(Espacio.xs))
+                    Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
+                }
             }
             Spacer(Modifier.height(Espacio.m))
             FilaDeAcciones(acciones = acciones, abierta = accion, onElegir = ::alternar)
@@ -906,36 +1039,11 @@ internal fun ContenidoDelMovimiento(
                         // «Cuota de crédito» no se elige en el selector, esta es la puerta para convertir
                         // en cuota un gasto suelto (el SMS o el correo del pago). Elegido el crédito, hace
                         // lo de la Ola Y: `vincular-deuda` con las mismas dos patas.
-                        if (puedeMarcarseCuotaDeCredito(event, cuentas)) {
+                        if (puedeSerCuota) {
                             Spacer(Modifier.height(Espacio.xs))
                             Separador(SangriaDeSeparador.Ninguna)
                             Spacer(Modifier.height(Espacio.xs))
-                            CategoryRow(
-                                name = ES_LA_CUOTA_DE_UN_CREDITO,
-                                selected = eligiendoElCredito,
-                                enabled = !saving && !vinculando,
-                                onClick = { eligiendoElCredito = !eligiendoElCredito },
-                                subtitle = "Elige el crédito: queda como su cuota y baja la deuda",
-                                compacto = true,
-                            )
-                            if (eligiendoElCredito) {
-                                Spacer(Modifier.height(Espacio.xs))
-                                SelectorDeCuentaDeDeuda(
-                                    cuentas = cuentas.filter { it.type == AccountType.LOAN },
-                                    seleccionada = null,
-                                    onSeleccionar = { credito -> credito?.let { vincular(it, esLaCuota = true) } },
-                                    titulo = "¿De cuál crédito?",
-                                    modifier = Modifier.testTag(TAG_ELEGIR_EL_CREDITO),
-                                )
-                                if (vinculando) {
-                                    Spacer(Modifier.height(Espacio.xs))
-                                    Text("Vinculando…", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                                }
-                                errorDeVinculo?.let {
-                                    Spacer(Modifier.height(Espacio.xs))
-                                    Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
-                                }
-                            }
+                            EsLaCuotaDeUnCredito()
                         }
                         Spacer(Modifier.height(Espacio.xxs))
                         EnlaceAdministrarCategorias()
@@ -1032,16 +1140,24 @@ internal fun ContenidoDelMovimiento(
                             SelectorDeCuentaDeDeuda(
                                 cuentas = cuentas,
                                 seleccionada = null,
-                                onSeleccionar = { it?.let(::vincular) },
+                                onSeleccionar = { elegida -> elegida?.let { desdeLaSugerencia = false; vincular(it) } },
                             )
                             if (vinculando) {
                                 Spacer(Modifier.height(Espacio.xs))
                                 Text("Vinculando…", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                             }
-                            errorDeVinculo?.let {
+                            errorDeVinculo?.takeIf { !desdeLaSugerencia }?.let {
                                 Spacer(Modifier.height(Espacio.xs))
                                 Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
                             }
+                            if (!desdeLaSugerencia) PreguntaDelAbonoExtra()
+                        }
+                        // Vuelta 53: quien busca cómo marcar un gasto como la cuota lo busca acá, en «Más».
+                        if (puedeSerCuota) {
+                            Spacer(Modifier.height(Espacio.s))
+                            Separador(SangriaDeSeparador.Ninguna)
+                            Spacer(Modifier.height(Espacio.s))
+                            EsLaCuotaDeUnCredito()
                         }
                         if (ofreceEnPartes) {
                             Spacer(Modifier.height(Espacio.s))
