@@ -39,6 +39,8 @@ object Avisador {
     const val CANAL_CAPTURA = "captura"
     const val CANAL_DEBITOS = "debitos"
     const val CANAL_CIERRE = "cierre"
+    const val CANAL_RESUMEN_DE_LA_MANANA = "resumen_de_la_manana"
+    const val CANAL_RESUMEN_SEMANAL = "resumen_semanal"
 
     /** Un id fijo por tipo: la notificación de «Por revisar» se reemplaza, no se apila. */
     private const val ID_MOVIMIENTOS = 7101
@@ -47,6 +49,8 @@ object Avisador {
     private const val ID_DEBITOS = 7104
     private const val ID_CIERRE = 7105
     private const val ID_SESION_CERRADA = 7106
+    private const val ID_RESUMEN_DE_LA_MANANA = 7107
+    private const val ID_RESUMEN_SEMANAL = 7108
 
     /** Los `requestCode` de los botones de la notificación de un aviso: distintos del de tocarla. */
     private const val CODIGO_OTRA_CATEGORIA = 7111
@@ -88,6 +92,17 @@ object Avisador {
         gestor.createNotificationChannel(
             NotificationChannel(CANAL_CIERRE, "Cierre del período", NotificationManager.IMPORTANCE_DEFAULT).apply {
                 description = "El día siguiente al corte, cómo te fue en el período que terminó."
+            },
+        )
+        // Vuelta 68: los dos resúmenes, cada uno en su canal para silenciarlo aparte.
+        gestor.createNotificationChannel(
+            NotificationChannel(CANAL_RESUMEN_DE_LA_MANANA, "Resumen de la mañana", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = "A las 8:00, cuánto gastaste ayer, cuánto te queda y lo que espera por revisar."
+            },
+        )
+        gestor.createNotificationChannel(
+            NotificationChannel(CANAL_RESUMEN_SEMANAL, "Resumen semanal", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = "El domingo en la noche, cuánto gastaron juntos en tus grupos y cómo quedan las cuentas."
             },
         )
     }
@@ -238,6 +253,16 @@ object Avisador {
     /** «Cerró tu período de septiembre»: tocarlo abre el detalle de ese período. */
     fun avisarCierre(context: Context, periodo: String, texto: TextoDeAviso) {
         publicar(context, ID_CIERRE, CANAL_CIERRE, texto, abrirElPeriodo(periodo), cuantos = 1)
+    }
+
+    /** Vuelta 68 · el resumen de la mañana: tocarlo abre el Inicio. */
+    fun avisarResumenDeLaManana(context: Context, texto: TextoDeAviso) {
+        publicar(context, ID_RESUMEN_DE_LA_MANANA, CANAL_RESUMEN_DE_LA_MANANA, texto, ABRIR_INICIO, cuantos = 1)
+    }
+
+    /** Vuelta 68 · el resumen semanal de los grupos: tocarlo abre [abrir] (el grupo, o la lista). */
+    fun avisarResumenSemanal(context: Context, texto: TextoDeAviso, abrir: String) {
+        publicar(context, ID_RESUMEN_SEMANAL, CANAL_RESUMEN_SEMANAL, texto, abrir, cuantos = maxOf(1, texto.lineas.size))
     }
 
     /**

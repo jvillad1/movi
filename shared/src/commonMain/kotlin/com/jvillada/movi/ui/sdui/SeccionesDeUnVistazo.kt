@@ -323,9 +323,13 @@ internal fun textoDeLaPastillaDeAvisos(n: Int): String = textoDePorRevisar(n)
 
 /**
  * **Lo que dice la franja «Por confirmar»** (vuelta 44): con la suma de los avisos
- * (`DashboardSummary.porConfirmarSuman`, entera o nada), «Por confirmar $103.600» y debajo de qué es
- * —«En 3 avisos», o «En 4 avisos · y 1 movimiento» si espera algo más, que no está en la cifra—. Sin la
- * suma, como en la vuelta 39: «Por confirmar» y, con varias fuentes, el desglose. Pura.
+ * (`DashboardSummary.porConfirmarSuman`, entera o nada), «Por confirmar» y debajo **la cifra pegada a
+ * lo que suma** —«$103.600 en 3 avisos», o «$103.600 en 4 avisos · y 1 movimiento» si espera algo más,
+ * que no está en la cifra—. Sin la suma, como en la vuelta 39: «Por confirmar» y, con varias fuentes,
+ * el desglose. Pura.
+ *
+ * Vuelta 68: la cifra iba en el título («Por confirmar $1.100.200») y el desglose debajo («En 5 avisos
+ * · y 1 movimiento»): se leía como la suma de los seis, y era solo la de los avisos (la revisión `r3`).
  */
 internal fun textosDeLaFranjaPorConfirmar(conteo: ConteoPorRevisar, suman: Long?): Pair<String, String?> {
     val desglose = desgloseDePorRevisar(conteo)
@@ -335,10 +339,10 @@ internal fun textosDeLaFranjaPorConfirmar(conteo: ConteoPorRevisar, suman: Long?
         val base = desglose?.takeIf { it.contains(" · ") }
         return "Por confirmar" to (if (antiguos == null) base else listOfNotNull(base ?: desglose, antiguos).joinToString(" · "))
     }
-    val avisos = if (conteo.avisos == 1) "En 1 aviso" else "En ${conteo.avisos} avisos"
+    val avisos = if (conteo.avisos == 1) "${formatCOP(suman)} en 1 aviso" else "${formatCOP(suman)} en ${conteo.avisos} avisos"
     val resto = desgloseDePorRevisar(conteo.copy(avisos = 0))
     val linea = if (resto == null) avisos else "$avisos · y $resto"
-    return "Por confirmar ${formatCOP(suman)}" to (if (antiguos == null) linea else "$linea · $antiguos")
+    return "Por confirmar" to (if (antiguos == null) linea else "$linea · $antiguos")
 }
 
 /**
@@ -359,7 +363,7 @@ private fun FranjaPorConfirmar(data: DashboardData, onNavigate: (Screen) -> Unit
     Box(modifier = Modifier.fillMaxWidth().background(Movi.colores.capa2)) {
         Fila(
             titulo = conCifrasOcultas(titulo),
-            subtitulo = subtitulo,
+            subtitulo = subtitulo?.let { conCifrasOcultas(it) },
             // Vuelta 55: con la letra al 130 %, «3 avisos · 1 movimiento» no entra al lado de la
             // pastilla; baja a un segundo renglón en vez de cortarse.
             lineasDelSubtitulo = 2,

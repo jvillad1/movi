@@ -71,6 +71,42 @@ fun periodoDelEncabezado(data: DashboardData): String? = data.periodoActual?.let
     if (data.ajustesDePeriodo.esMesDeCalendario) tituloDelPeriodo(periodo) else rangoCortoDelPeriodo(periodo, data.ajustesDePeriodo)
 }
 
+/** El comienzo de la línea del encabezado cuando las cifras a la vista son de antes de una carga caída. */
+const val SIN_CONEXION: String = "Sin conexión"
+
+/**
+ * Vuelta 68 · **«Sin conexión · cifras de las 9:06»**: lo que dice el encabezado del Inicio cuando la
+ * última carga falló y lo que se ve son las cifras guardadas ([cifrasDe]: cuándo se leyeron). Antes
+ * el Inicio mostraba la cifra guardada como si fuera de ahora, y el único error era un aviso de abajo
+ * que se iba solo (la revisión `r3-err-inicio.png`). «de las 9:06» si son de hoy, «de ayer a las
+ * 21:05», «del 3 de octubre a las 9:40». `null` si no se sabe de cuándo son.
+ */
+fun lineaSinConexion(cifrasDe: Long?, ahora: Long): String? {
+    val cuando = cifrasDe?.takeIf { it > 0L }?.let { deCuandoEs(it, ahora) } ?: return null
+    val de = when {
+        cuando.startsWith("a las ") -> "de " + cuando.removePrefix("a ")
+        cuando.startsWith("el ") -> "del " + cuando.removePrefix("el ")
+        else -> "de $cuando"
+    }
+    return "$SIN_CONEXION · cifras $de"
+}
+
+/**
+ * Lo que va debajo del saludo: «Actualizando…» mientras se recarga con cifras a la vista; la línea
+ * [lineaSinConexion] si la carga falló y se ven las guardadas; si no, el período.
+ */
+fun subtituloDelEncabezadoDelInicio(
+    data: DashboardData,
+    actualizandoConDatos: Boolean,
+    falloLaCarga: Boolean,
+    cifrasDe: Long?,
+    ahora: Long,
+): String? = when {
+    actualizandoConDatos -> "Actualizando…"
+    falloLaCarga && data.puedeAfirmarVacio -> lineaSinConexion(cifrasDe, ahora) ?: periodoDelEncabezado(data)
+    else -> periodoDelEncabezado(data)
+}
+
 /** Lo que dice el lector de pantalla del período del encabezado: «Tu período: del 23 de octubre al 24 de noviembre». */
 fun descripcionDelPeriodoDelEncabezado(data: DashboardData): String? = data.periodoActual?.let { periodo ->
     "Tu período: " + rangoDelPeriodo(periodo, data.ajustesDePeriodo).replaceFirstChar { it.lowercase() }
@@ -202,15 +238,27 @@ private fun pagosParaProponer(data: DashboardData): List<PagoDelPeriodo> =
 data class FilasDelWidgetDeFalta(
     val filas: List<PagoDelPeriodo>,
     val masSinFila: Int,
+    /**
+     * Vuelta 68: el pago que no tiene fila porque ya está en «Próximo pago», arriba en el mismo Inicio;
+     * `null` si no se saltó ninguno. Con él, filas + [masSinFila] + 1 es lo que dice «Faltan N».
+     */
+    val elDeArriba: PagoDelPeriodo? = null,
 )
 
 /** Cuántos pagos lista el widget de «Falta por pagar». */
 const val PAGOS_EN_EL_WIDGET: Int = 2
 
-fun filasDelWidgetDeFalta(data: DashboardData): FilasDelWidgetDeFalta {
-    val pendientes = pagosEnOrdenDeUrgencia(checklistDelPeriodoDe(data))
+/**
+ * @param sinElProximoPago **vuelta 68**: el Inicio ya muestra «Próximo pago», que es el primero de esta
+ *   misma cola ([proximoPagoDelInicio]): el widget no lo repite como primer renglón (la revisión `r3`:
+ *   «Carro $9.000» dos veces, una debajo de la otra). Sigue contando en la cifra y en «Falta 1 de 5».
+ */
+fun filasDelWidgetDeFalta(data: DashboardData, sinElProximoPago: Boolean = false): FilasDelWidgetDeFalta {
+    val todos = pagosEnOrdenDeUrgencia(checklistDelPeriodoDe(data))
+    val elDeArriba = if (sinElProximoPago) todos.firstOrNull() else null
+    val pendientes = if (elDeArriba != null) todos.drop(1) else todos
     val filas = pendientes.take(PAGOS_EN_EL_WIDGET)
-    return FilasDelWidgetDeFalta(filas = filas, masSinFila = pendientes.size - filas.size)
+    return FilasDelWidgetDeFalta(filas = filas, masSinFila = pendientes.size - filas.size, elDeArriba = elDeArriba)
 }
 
 /** «y 2 más»: lo pendiente que el widget no lista (ver [FilasDelWidgetDeFalta.masSinFila]). */

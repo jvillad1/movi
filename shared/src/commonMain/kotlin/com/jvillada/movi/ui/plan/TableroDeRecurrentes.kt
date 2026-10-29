@@ -1236,7 +1236,16 @@ class TableroMontadoSolo internal constructor(
  * @param vencimientosSiempre ver [rememberEstadoDelTableroDeRecurrentes].
  */
 @Composable
-fun rememberTableroMontadoSolo(activo: Boolean = true, vencimientosSiempre: Boolean = false): TableroMontadoSolo {
+fun rememberTableroMontadoSolo(
+    activo: Boolean = true,
+    vencimientosSiempre: Boolean = false,
+    /**
+     * Vuelta 68 · **un solo error por pantalla**: con quien junte los errores (Pagos), una lectura
+     * caída del tablero se anota ahí —el aviso único de arriba, con su «Reintentar»— en vez de salir
+     * además como aviso de abajo.
+     */
+    errores: com.jvillada.movi.ui.components.ErroresDeLaPantalla? = null,
+): TableroMontadoSolo {
     val error = remember { mutableStateOf<String?>(null) }
     val estado = rememberEstadoDelTableroDeRecurrentes(
         activo = activo,
@@ -1252,8 +1261,14 @@ fun rememberTableroMontadoSolo(activo: Boolean = true, vencimientosSiempre: Bool
         intentar { Repositories.wallets.getAccounts() }.onSuccess { cuentas.value = it }
     }
     val aviso = remember { SnackbarHostState() }
-    LaunchedEffect(error.value) {
-        val msg = error.value ?: return@LaunchedEffect
+    LaunchedEffect(error.value, errores) {
+        val msg = error.value
+        if (errores != null) {
+            if (msg == null) errores.quitar(CLAVE_DE_LA_LECTURA_DEL_TABLERO)
+            else errores.anotar(CLAVE_DE_LA_LECTURA_DEL_TABLERO) { error.value = null; estado.recargar() }
+            return@LaunchedEffect
+        }
+        if (msg == null) return@LaunchedEffect
         val result = aviso.showSnackbar(msg, actionLabel = "Reintentar")
         error.value = null
         // `recargar()` y no una clave local: la tarjeta del disponible de Plan escucha
@@ -1262,6 +1277,9 @@ fun rememberTableroMontadoSolo(activo: Boolean = true, vencimientosSiempre: Bool
     }
     return remember(estado, aviso) { TableroMontadoSolo(estado, aviso, cuentas) }
 }
+
+/** La clave con la que una lectura caída del tablero se anota en el aviso único de la pantalla. */
+internal const val CLAVE_DE_LA_LECTURA_DEL_TABLERO: String = "lectura-del-tablero"
 
 /** El rótulo de las candidatas a suscripción, debajo de la lista del período. */
 const val TITULO_COBROS_DETECTADOS: String = "Cobros detectados · por confirmar"

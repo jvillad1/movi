@@ -600,18 +600,18 @@ internal fun WidgetsDelInicio(
     tipos: List<String>,
     data: DashboardData,
     onNavigate: (Screen) -> Unit,
+    /** Vuelta 68: «Próximo pago» está en el Inicio, así que el widget no lo repite (ver [filasDelWidgetDeFalta]). */
+    sinElProximoPago: Boolean = false,
 ) {
     @Composable
     fun Uno(tipo: String, modifier: Modifier) = when (tipo) {
-        "CHECKLIST_DEL_PERIODO" -> WidgetFaltaPorPagar(data, onNavigate, modifier)
+        "CHECKLIST_DEL_PERIODO" -> WidgetFaltaPorPagar(data, onNavigate, modifier, sinElProximoPago = sinElProximoPago)
         else -> WidgetEnQueSeVa(data, onNavigate, modifier)
     }
     Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla)) {
-        Seccion(
-            titulo = TITULO_DE_LOS_WIDGETS,
-            accion = "Editar",
-            onAccion = { onNavigate(Screen.EditarInicio) },
-        )
+        // Vuelta 68: sin «Editar» al lado. Era una segunda entrada a lo mismo que «Editar inicio», al
+        // final del Inicio: una sola puerta.
+        Seccion(titulo = TITULO_DE_LOS_WIDGETS)
         if (tipos.size >= 2) {
             ParDeWidgets(izquierdo = { Uno(tipos[0], it) }, derecho = { Uno(tipos[1], it) })
         } else {
@@ -619,6 +619,9 @@ internal fun WidgetsDelInicio(
         }
     }
 }
+
+/** Vuelta 68: lo que dice el widget cuando lo único que falta es el pago de «Próximo pago». */
+const val EL_DE_PROXIMO_PAGO: String = "Es el de «Próximo pago»"
 
 /** Lo que dice el widget de «Falta por pagar» cuando ya salió todo. */
 const val TODO_PAGADO: String = "Ya salió todo lo del período"
@@ -641,11 +644,12 @@ internal fun WidgetFaltaPorPagar(
     data: DashboardData,
     onNavigate: (Screen) -> Unit,
     modifier: Modifier = Modifier,
+    sinElProximoPago: Boolean = false,
 ) {
     val checklist = checklistDelPeriodoDe(data)
     val total = avanceDelChecklist(checklist).second
     val pendientes = pagosPendientes(checklist)
-    val lista = filasDelWidgetDeFalta(data)
+    val lista = filasDelWidgetDeFalta(data, sinElProximoPago = sinElProximoPago)
     Widget(
         titulo = "Falta por pagar",
         onClick = { onNavigate(Screen.Plan(com.jvillada.movi.ui.plan.SEGMENTO_PAGOS)) },
@@ -684,7 +688,8 @@ internal fun WidgetFaltaPorPagar(
             }
         }
         // Las filas más este renglón dan lo que dice «Faltan N»: ninguna lista se recorta callada.
-        val resto = yNMas(lista.masSinFila)
+        // Vuelta 68: el de «Próximo pago» no tiene fila acá; si es el único, se dice dónde está.
+        val resto = yNMas(lista.masSinFila) ?: lista.elDeArriba?.takeIf { lista.filas.isEmpty() }?.let { EL_DE_PROXIMO_PAGO }
         if (resto != null) {
             Text(
                 text = resto,

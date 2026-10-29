@@ -3463,3 +3463,51 @@ Lo vigilan `ElGrupoQueEsperaTest`, `LoQueSaldaUnGrupoSeCuentaTest`, `BuscarHabla
   titula por su categoría; anular un traspaso dice que también se anula la otra mitad
   (`loQueTambienSeAnula`); el panel a 1280 con un chip dice «· del período» (`tituloDelPanel`); la lista de
   grupos dice lo que espera (`saldoEnLaListaDeGrupos`).
+
+## 67. Vuelta 68: el resumen de la mañana, el cierre semanal de la pareja, un solo error por pantalla e Inicio sin repeticiones
+
+Decisión del dueño (29-oct): «Sí, ambos, apagables». Y dos arreglos de la tercera revisión (capturas
+`r3-err-*.png` y `r3-inicio-*.png`). **Sin IA y sin reglas de plata nuevas**: las cifras salen de las
+funciones de Inicio y de Grupos.
+
+1. **El resumen de la mañana** (8:00, canal «Resumen de la mañana»). Título: lo primero que hay para
+   decir; texto: lo demás, separado por « · ».
+   - «Ayer gastaste $85.000» (o «Ayer no anotaste gastos»): el «Gastaste» del día en Actividad
+     (`gastoDeAyer` → `resumenDelDia`, la regla de «Gastos», con tu parte de lo que pagaron otros).
+   - «Te quedan $6,8M para 4 días» («para hoy» el último día, «te pasaste por $X» en rojo): la cifra del
+     héroe (`teQuedanDeHoy`), en millones como el detalle del héroe.
+   - «2 avisos por confirmar», o «3 por revisar» si hay otras cosas: el número de Por revisar.
+   - **No sale** sin cifras, con cifras que no son de hoy (la instantánea de anoche no se dice como de
+     hoy: el Worker pide las nuevas, y si no llegan se calla), sin nada útil, o si ese día ya sonó.
+   - Tocarlo abre Inicio. Con «Ocultar los saldos», ninguna cifra sale en claro (`PLATA_OCULTA`).
+2. **El cierre semanal de la pareja** (domingo 19:00, canal «Resumen semanal»): «Esta semana gastaron
+   $480.000 juntos en Casa con Caro» · «Caro te debe $265.000» (o «Le debes a Caro $50.000», o «Están a
+   mano»: `fraseDelSaldo`, la de la tarjeta del grupo). El monto es **el gasto entero del grupo** de lunes
+   a domingo; «juntos» lo dice. Varios grupos: «… juntos en 2 grupos», uno por renglón al desplegar, y
+   tocarlo abre la lista. Sin un grupo con gastos esa semana no suena. Si el domingo no hubo red, el lunes
+   dice «La semana pasada…».
+3. **Los interruptores** van donde viven los demás avisos del teléfono (Captura del banco → «Avisos de
+   Movi»): «Resumen de la mañana, a las 8:00» y «Resumen semanal de tus grupos, el domingo», con
+   `FilaDeInterruptor` como los otros. **Prendidos por defecto**, también para quien ya usa Movi.
+4. **Un solo error por pantalla.** `ErroresDeLaPantalla` + `NoSePudoLeerEnLaPantalla` + `AvisoDeLaPantalla`
+   (`ui/components/UnSoloError.kt`): una sección caída se anota y no pinta nada (ni su título); arriba va
+   **una** `NoSePudoLeer` «No pudimos cargar» con un «Reintentar» que reintenta todo. Sin quien junte, la
+   sección pinta su tarjeta como siempre. Pagos lo usa (facturas, disponible, caja y la lectura del
+   tablero). En Actividad la franja Entró · Salió · Neto **se va** si la lectura falló (`laFranjaSePinta`:
+   esqueleto solo mientras carga) y el aviso de abajo no repite la tarjeta. En Inicio, con cifras
+   guardadas a la vista, el encabezado dice **«Sin conexión · cifras de las 9:06»** (`lineaSinConexion`;
+   «de ayer a las 21:05», «del 3 de octubre…») y tocarlo reintenta; el aviso de abajo queda para cuando
+   no hay nada que mostrar. La tarjeta de avisos del banco y «N por revisar» de Actividad solo salen en
+   el período en curso (`loPendienteSeVeEn`).
+5. **Inicio sin repeticiones.**
+   - El widget «Falta por pagar» no repite el pago de «Próximo pago» (es el primero de la misma cola):
+     lista los siguientes; si era el único, dice «Es el de «Próximo pago»». La cifra y «Falta 1 de 5
+     pagos» siguen contándolo.
+   - Una sola puerta a «Editar inicio»: el botón del final. «Tus widgets» va sin «Editar».
+   - La franja del héroe: «Por confirmar» y debajo **«$1.100.200 en 5 avisos · y 1 movimiento»**: la
+     cifra va pegada a lo que suma (antes iba en el título y se leía como la suma de los seis).
+
+Lo vigilan `ResumenDeLaMananaTest` y `ResumenSemanalTest` (lo que dicen, cuándo no salen, la semana sin
+grupo y la huella), `UnSoloErrorYSinRepeticionesTest` (`commonTest`), y en Robolectric
+`LosResumenesSeApaganTest` (los interruptores), `PlanScreenTest` (con la API caída, un aviso y un
+«Reintentar») y `UnSoloErrorEnActividadTest`. **Las líneas base** no cambian, y las guardas en 0 siguen en 0.

@@ -6,6 +6,7 @@ import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.PropuestasDeLaBandeja
+import com.jvillada.movi.shared.model.PeriodoFinanciero
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.PresentacionDelMovimiento
 import com.jvillada.movi.shared.model.comoSePresenta
@@ -128,6 +129,15 @@ fun cifraDelDia(resumen: ResumenDelDia): Pair<RotuloDelDia, Long>? = when {
 fun esConOtrasPersonas(evento: FinancialEvent): Boolean = evento.espacioId != null
 
 // ── La tarjeta de los avisos del banco ───────────────────────────────────────────────────────────
+
+/**
+ * Vuelta 68 · **¿se ve lo que espera por revisar en este período?** Solo en el período en curso: los
+ * avisos del banco y «N por revisar» son de ahora, y en septiembre la tarjeta «5 avisos del banco por
+ * confirmar» con «Confirmar los 2» hablaba de otra cosa que la lista de abajo (la revisión `r3`).
+ * Un período que no es el de hoy (pasado, o uno al que se navegó) no la muestra.
+ */
+fun loPendienteSeVeEn(periodoVisible: PeriodoFinanciero, periodoDeHoy: PeriodoFinanciero): Boolean =
+    periodoVisible == periodoDeHoy
 
 /**
  * **Los avisos del banco que esperan en Actividad** (vuelta 40), uno por pago —el mismo conteo de

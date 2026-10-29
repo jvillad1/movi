@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.plan
 
+import com.jvillada.movi.ui.components.NO_PUDIMOS_CARGAR
+import com.jvillada.movi.ui.components.TAG_AVISO_DE_LA_PANTALLA
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.isHeading
@@ -332,6 +334,7 @@ class PlanScreenTest {
 
         suscripcionesFallan = false
         composeRule.onNodeWithText("Reintentar", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
 
         composeRule.waitUntil(timeoutMillis = 5_000) { lecturasDelResumen > lecturasAntes }
         composeRule.waitForIdle()
@@ -538,9 +541,38 @@ class PlanScreenTest {
         conInstantaneaDelInicio()
         montar()
 
-        assertTrue(hay("No pudimos calcular cuánto puedes gastar"))
+        // Vuelta 68: lo dice el aviso único de arriba, no una tarjeta por sección.
+        composeRule.waitUntil(timeoutMillis = 5_000) { contarTag(TAG_AVISO_DE_LA_PANTALLA) == 1 }
+        assertTrue(hay(NO_PUDIMOS_CARGAR))
         assertTrue(!hay("de \$5M"), "las cifras de la instantánea no se pueden dar por actuales")
         assertTrue(!hay("Actualizando…"))
+    }
+
+    /**
+     * Vuelta 68 · **un solo error por pantalla** (la revisión `r3-err-pagos.png`): con la API caída,
+     * Pagos apilaba «No se pudieron leer los pagos», «No pudimos calcular cuánto puedes gastar», «No
+     * pudimos proyectar tu plata» y el aviso de abajo, cada uno con su «Reintentar». Ahora es uno, arriba,
+     * y su «Reintentar» vuelve a pedir todo.
+     */
+    @Test
+    fun `con la API caida hay un solo aviso arriba con un solo Reintentar`() {
+        sinRed = true
+        puerta.complete(Unit)
+        montar()
+        composeRule.waitUntil(timeoutMillis = 5_000) { contarTag(TAG_AVISO_DE_LA_PANTALLA) == 1 }
+        composeRule.waitForIdle()
+
+        assertEquals(1, composeRule.onAllNodesWithText("Reintentar", useUnmergedTree = true).fetchSemanticsNodes().size)
+        assertTrue(!hay("No se pudieron leer los pagos de este período"))
+        assertTrue(!hay("No pudimos calcular cuánto puedes gastar"))
+        assertTrue(!hay("No pudimos proyectar tu plata"))
+
+        val lecturasAntes = lecturasDelResumen
+        sinRed = false
+        composeRule.onNodeWithText("Reintentar", useUnmergedTree = true).performClick()
+        composeRule.waitForIdle()
+        composeRule.waitUntil(timeoutMillis = 5_000) { lecturasDelResumen > lecturasAntes }
+        composeRule.waitUntil(timeoutMillis = 5_000) { contarTag(TAG_AVISO_DE_LA_PANTALLA) == 0 }
     }
 
     /**

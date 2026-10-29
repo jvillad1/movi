@@ -34,6 +34,10 @@ object PreferenciasDeAvisos {
     private const val KEY_DEBITOS_AVISADOS = "debitos_automaticos_avisados"
     private const val KEY_CIERRE = "avisar_cierre_del_periodo"
     private const val KEY_CIERRE_AVISADO = "cierre_del_periodo_avisado"
+    private const val KEY_MANANA = "avisar_resumen_de_la_manana"
+    private const val KEY_MANANA_AVISADO = "resumen_de_la_manana_avisado"
+    private const val KEY_SEMANAL = "avisar_resumen_semanal"
+    private const val KEY_SEMANAL_AVISADO = "resumen_semanal_avisado"
 
     private val json = Json { ignoreUnknownKeys = true }
     private val listaDeAvisos = ListSerializer(AvisoPorRevisar.serializer())
@@ -93,6 +97,33 @@ object PreferenciasDeAvisos {
     fun cierreAvisado(context: Context): String? = prefs(context).getString(KEY_CIERRE_AVISADO, null)
     fun guardarCierreAvisado(context: Context, periodo: String) {
         prefs(context).edit().putString(KEY_CIERRE_AVISADO, periodo).apply()
+    }
+
+    /**
+     * Vuelta 68 · «Resumen de la mañana» (a las 8:00). **Encendido por defecto**, para quien ya usa
+     * Movi y para las cuentas nuevas (decisión del dueño), como los demás.
+     */
+    fun avisarResumenDeLaManana(context: Context): Boolean = prefs(context).getBoolean(KEY_MANANA, true)
+    fun ponerAvisarResumenDeLaManana(context: Context, valor: Boolean) {
+        prefs(context).edit().putBoolean(KEY_MANANA, valor).apply()
+    }
+
+    /** La huella del último resumen de la mañana que sonó (`"manana:2026-10-29"`). */
+    fun resumenDeLaMananaAvisado(context: Context): String? = prefs(context).getString(KEY_MANANA_AVISADO, null)
+    fun guardarResumenDeLaMananaAvisado(context: Context, huella: String) {
+        prefs(context).edit().putString(KEY_MANANA_AVISADO, huella).apply()
+    }
+
+    /** Vuelta 68 · «Resumen semanal» de los grupos (domingo, 19:00). Encendido por defecto. */
+    fun avisarResumenSemanal(context: Context): Boolean = prefs(context).getBoolean(KEY_SEMANAL, true)
+    fun ponerAvisarResumenSemanal(context: Context, valor: Boolean) {
+        prefs(context).edit().putBoolean(KEY_SEMANAL, valor).apply()
+    }
+
+    /** La huella de la última semana avisada (`"semana:2026-10-26"`, su lunes). */
+    fun resumenSemanalAvisado(context: Context): String? = prefs(context).getString(KEY_SEMANAL_AVISADO, null)
+    fun guardarResumenSemanalAvisado(context: Context, huella: String) {
+        prefs(context).edit().putString(KEY_SEMANAL_AVISADO, huella).apply()
     }
 
     /** La tarjeta de Hoy ya se contestó («Activar avisos» o «Ahora no»): no vuelve a salir. */

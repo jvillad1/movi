@@ -149,10 +149,10 @@ class Vuelta51Test {
     @Test
     fun `la franja los menciona aparte`() {
         val conteo = ConteoPorRevisar(avisos = 1, avisosAntiguos = 2)
-        assertEquals("Por confirmar \$18.300" to "En 1 aviso · y 2 antiguos", textosDeLaFranjaPorConfirmar(conteo, 18_300L))
+        assertEquals("Por confirmar" to "\$18.300 en 1 aviso · y 2 antiguos", textosDeLaFranjaPorConfirmar(conteo, 18_300L))
         assertEquals("Por confirmar" to "1 aviso · y 1 antiguo", textosDeLaFranjaPorConfirmar(ConteoPorRevisar(avisos = 1, avisosAntiguos = 1), null))
         // Sin antiguos, lo de siempre.
-        assertEquals("Por confirmar \$18.300" to "En 1 aviso", textosDeLaFranjaPorConfirmar(ConteoPorRevisar(avisos = 1), 18_300L))
+        assertEquals("Por confirmar" to "\$18.300 en 1 aviso", textosDeLaFranjaPorConfirmar(ConteoPorRevisar(avisos = 1), 18_300L))
     }
 
     // ── 4 · El candidato que no se parece ─────────────────────────────────────────
