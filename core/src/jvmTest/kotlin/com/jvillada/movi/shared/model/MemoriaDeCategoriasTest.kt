@@ -166,6 +166,32 @@ class MemoriaDeCategoriasTest {
         assertNull(memoria.recuerdoDe("Retiro en cajero SUCVIVAPAL1"))
     }
 
+    /**
+     * Vuelta 57 · **ni la cuota ni el pago de tarjeta.** Un gasto suelto en «Cuota de crédito» (la tercera
+     * cuota del mes que la revisión confirmó sin crédito) hacía llegar el aviso siguiente como «Cuota de
+     * crédito · Así lo anotaste la última vez». Las dos son lo que escriben las acciones propias de Revisar
+     * aviso con las dos patas: la memoria no las aprende ni las propone, escritas como sea. Lo demás del
+     * mismo comercio sí se recuerda.
+     */
+    @Test
+    fun `no aprende Cuota de credito ni Pago de tarjeta`() {
+        val occidente = "Banco de Occidente S A ATH"
+        val memoria = MemoriaDeCategorias.de(
+            listOf(
+                anotacion(occidente, CUOTA_CATEGORY, cuando = 3),
+                anotacion(occidente, CUOTA_CATEGORY, cuando = 2),
+                anotacion("Pago a tarjeta *3684", CARD_PAYMENT_CATEGORY),
+                anotacion("Coomeva", "cuota de credito"),
+                anotacion("Occidente Seguros", "Seguros", cuando = 1),
+            ),
+        )
+        assertNull(memoria.recuerdoDe(occidente))
+        assertNull(memoria.recuerdoDe("Pago a tarjeta *3684"))
+        assertNull(memoria.recuerdoDe("Coomeva"))
+        assertEquals("Seguros", memoria.recuerdoDe("Occidente Seguros")?.categoria)
+        assertTrue(memoria.entradas().none { esCategoriaDeCuota(it.categoria) || it.categoria == CARD_PAYMENT_CATEGORY })
+    }
+
     @Test
     fun `sin historia no recuerda nada, y eso no es un error`() {
         assertNull(MemoriaDeCategorias.vacia.recuerdoDe("Zelo Group"))

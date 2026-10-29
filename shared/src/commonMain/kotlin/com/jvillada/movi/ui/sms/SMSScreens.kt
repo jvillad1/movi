@@ -1075,11 +1075,34 @@ fun SMSReconcileScreen(
     // la quita o elige otra, Movi no se la vuelve a poner.
     val deudaPropuesta = deudaPropuestaDelAviso(cuentaDelSms, parsed?.deudaSugeridaId, accounts)
     var deudaTocadaAMano by remember { mutableStateOf(false) }
-    LaunchedEffect(ofreceVinculo, deudaPropuesta?.id, deudaPedida) {
+    // Vuelta 57: la deuda que pide la pantalla —la de la acción tocada o la que dice la categoría—. El
+    // selector lista solo las de ese tipo y Movi no propone una del otro.
+    val deudaQuePide = deudaQuePideLaPantalla(selectedCategory ?: parsed?.category, deudaPedida)
+    LaunchedEffect(ofreceVinculo, deudaPropuesta?.id, deudaQuePide) {
         if (ofreceVinculo && !deudaTocadaAMano && cuentaDeDeudaElegida == null && deudaPropuesta != null &&
-            (deudaPedida == null || deudaPropuesta.type == deudaPedida?.tipo)
+            (deudaQuePide == null || deudaPropuesta.type == deudaQuePide.tipo)
         ) {
             cuentaDeDeudaElegida = deudaPropuesta
+        }
+    }
+    /**
+     * Vuelta 57: si por alguna vía quedó elegida una deuda del otro tipo —una tarjeta estando en «Cuota de
+     * crédito»—, la fila de categoría pasa a la de esa deuda: el pedido y la pantalla dicen lo mismo.
+     */
+    fun alElegirLaDeuda(deuda: Account?) {
+        cuentaDeDeudaElegida = deuda
+        val actual = selectedCategory ?: parsed?.category
+        val queCorresponde = categoriaParaLaDeudaElegida(actual, deuda)
+        if (queCorresponde != actual) {
+            selectedCategory = queCorresponde
+            deudaPedida = null
+        }
+    }
+    LaunchedEffect(cuentaDeDeudaElegida?.id, selectedCategory, parsed?.category) {
+        cuentaDeDeudaElegida?.let { deuda ->
+            if (categoriaParaLaDeudaElegida(selectedCategory ?: parsed?.category, deuda) != (selectedCategory ?: parsed?.category)) {
+                alElegirLaDeuda(deuda)
+            }
         }
     }
     // ── Las dos patas (arreglo 1 de la auditoría de la ingesta) ─────────────────────────────────
@@ -1123,6 +1146,11 @@ fun SMSReconcileScreen(
      * que vino— no se confirma: el avance bajaría la deuda de la tarjeta, y un «Traspaso» suelto no existe.
      */
     val faltaElDestino = (pideDestino || pideOrigen) && lasDosPatas == null
+    /**
+     * Vuelta 57: una cuota sin su crédito (o con uno en otra moneda) no se confirma. Confirmar queda
+     * apagado y el pie dice «Elige el crédito»: nunca un gasto suelto en «Cuota de crédito».
+     */
+    val faltaElCredito = porQueFaltaElCredito(parsed, categoriaActual, resolvedAccount, cuentaDeDeudaElegida, lasDosPatas)
 
     // Vuelta 56 · la segunda cuota del mes: el server contestó 409 (`CUOTA_YA_PAGADA`) al confirmar la
     // cuota de un crédito cuya cuota del período ya saldó otro movimiento. La pantalla pregunta si es un
@@ -1158,6 +1186,8 @@ fun SMSReconcileScreen(
         val enLaDeuda = montoEnLaDeuda
         // Un traspaso o un avance sin la cuenta a la que entró: el botón ya está apagado.
         if (faltaElDestino) return
+        // Una cuota sin su crédito, tampoco (vuelta 57): sería un gasto suelto que no baja la deuda.
+        if (faltaElCredito != null) return
         working = true
         error = null
         coroutine.launch {
@@ -1807,10 +1837,11 @@ fun SMSReconcileScreen(
                     if (ofreceVinculo) {
                         Box(Modifier.padding(top = Medida.dentroDeSeccion)) {
                             SelectorDeCuentaDeDeuda(
-                                cuentas = deudasParaElegir(accounts, deudaPedida),
+                                // Vuelta 57: solo las del tipo que pide la categoría («¿De cuál crédito?»).
+                                cuentas = deudasParaElegir(accounts, deudaQuePide),
                                 seleccionada = cuentaDeDeudaElegida,
-                                onSeleccionar = { deudaTocadaAMano = true; cuentaDeDeudaElegida = it },
-                                titulo = deudaPedida?.titulo ?: "¿A cuál crédito o tarjeta corresponde?",
+                                onSeleccionar = { deudaTocadaAMano = true; alElegirLaDeuda(it) },
+                                titulo = deudaQuePide?.titulo ?: "¿A cuál crédito o tarjeta corresponde?",
                                 modifier = Modifier.testTag(TAG_SELECTOR_DE_LA_DEUDA_DEL_AVISO),
                             )
                         }
@@ -1920,7 +1951,7 @@ fun SMSReconcileScreen(
             val categoriaParaAnotar = (selectedCategory ?: parsed?.category)?.takeIf { it.isNotBlank() }
             val canConfirm = !working && !alreadyResolved && (
                 ofreceAnotarloIgual || soloCerrar || (
-                    parsed != null && resolvedAccount != null && revisionContesto && !faltaElDestino &&
+                    parsed != null && resolvedAccount != null && revisionContesto && !faltaElDestino && faltaElCredito == null &&
                         categoriaParaAnotar != null && (parsed?.amount ?: 0.0) > 0.0
                     )
                 )
@@ -1952,6 +1983,17 @@ fun SMSReconcileScreen(
                 modifier = Modifier.weight(1.7f),
                 habilitado = if (enPartesYa) !working && partesListas else canConfirm,
                 anchoCompleto = true,
+            )
+        }
+        // Vuelta 57: una cuota sin su crédito dice por qué Confirmar no prende, en el mismo lugar.
+        if (!enPartes && !alreadyResolved && yaAnotadoCon == null && preguntaDelAbono == null && faltaElCredito != null) {
+            Text(
+                faltaElCredito,
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoMedio,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = Medida.margenDePantalla).padding(bottom = Espacio.s)
+                    .testTag(TAG_FALTA_EL_CREDITO),
             )
         }
         // En partes, el botón apagado dice por qué, en una línea debajo (como `PieDeHoja`).

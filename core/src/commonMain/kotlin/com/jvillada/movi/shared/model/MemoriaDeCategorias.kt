@@ -114,6 +114,26 @@ internal val CATEGORIAS_QUE_NO_SE_APRENDEN: Set<String> = setOf(
     "Otro", "Otros",
 )
 
+/**
+ * **Lo que la memoria de categorías tampoco aprende** (vuelta 57): además de
+ * [CATEGORIAS_QUE_NO_SE_APRENDEN], «Cuota de crédito» y «Pago de tarjeta». No son la categoría de un
+ * gasto suelto: son lo que escriben las acciones propias de Revisar aviso («Es la cuota de un crédito ›»,
+ * «Es el pago de una tarjeta ›») con las dos patas. Aprendidas, el aviso siguiente llegaba como «Cuota
+ * de crédito · Así lo anotaste la última vez», y confirmarlo sin elegir el crédito dejaba un gasto suelto
+ * que dice ser una cuota sin bajar ninguna deuda. Solo las huellas de la memoria: el vocabulario del dueño
+ * ([MemoriaDeCategorias.categoriasDelDueno]) y el resto de quien lee [CATEGORIAS_QUE_NO_SE_APRENDEN] no
+ * cambian.
+ */
+internal val CATEGORIAS_QUE_LA_MEMORIA_NO_APRENDE: Set<String> =
+    CATEGORIAS_QUE_NO_SE_APRENDEN + CUOTA_CATEGORY + CARD_PAYMENT_CATEGORY
+
+/** ¿[categoria] es de [CATEGORIAS_QUE_LA_MEMORIA_NO_APRENDE]? Sin distinguir mayúsculas ni tildes. */
+private fun laMemoriaNoLaAprende(categoria: String): Boolean {
+    val limpia = categoria.trim()
+    return categoria in CATEGORIAS_QUE_LA_MEMORIA_NO_APRENDE || limpia in CATEGORIAS_QUE_LA_MEMORIA_NO_APRENDE ||
+        esCategoriaDeCuota(limpia) || limpia.equals(CARD_PAYMENT_CATEGORY, ignoreCase = true)
+}
+
 /** Un movimiento ya anotado, reducido a lo único que la memoria necesita de él. */
 data class AnotacionPasada(
     /** El texto crudo del banco (`merchant`) o, si no hay, el nombre que quedó en pantalla. */
@@ -207,7 +227,7 @@ class MemoriaDeCategorias private constructor(
         fun de(anotaciones: List<AnotacionPasada>): MemoriaDeCategorias {
             val porHuella = mutableMapOf<String, LoQueMoviRecuerda>()
             anotaciones
-                .filter { it.categoria.isNotBlank() && it.categoria !in CATEGORIAS_QUE_NO_SE_APRENDEN }
+                .filter { it.categoria.isNotBlank() && !laMemoriaNoLaAprende(it.categoria) }
                 .groupBy { huellaDeUnMovimiento(it.comoLlego) }
                 .forEach { (huella, delMismo) ->
                     if (huella == null) return@forEach
