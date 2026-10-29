@@ -160,8 +160,9 @@ class LaCuotaParecidaEnPagosTest {
         assertEquals(AccionPrincipalDeLaFila.EL_CANDIDATO, accionPrincipalDeLaFila(esLaMasUrgente = true, conPropuesta = false, hayGastoParecido = true))
         // …pero amarillo solo en la más urgente: en otra fila no hay acción principal.
         assertEquals(AccionPrincipalDeLaFila.NINGUNA, accionPrincipalDeLaFila(esLaMasUrgente = false, conPropuesta = false, hayGastoParecido = true))
-        // Candidato del server dentro del ±50 %: «Sí, fue este».
+        // Candidato del server dentro del ±50 %: «Sí, fue este», amarillo solo en la más urgente.
         assertEquals(AccionPrincipalDeLaFila.EL_CANDIDATO, accionPrincipalDeLaFila(esLaMasUrgente = true, conPropuesta = true, hayGastoParecido = false))
+        assertEquals(AccionPrincipalDeLaFila.NINGUNA, accionPrincipalDeLaFila(esLaMasUrgente = false, conPropuesta = true, hayGastoParecido = false))
         // Sin candidato o con uno lejano: como estaba.
         assertEquals(AccionPrincipalDeLaFila.ANOTAR, accionPrincipalDeLaFila(esLaMasUrgente = true, conPropuesta = false, hayGastoParecido = false))
         assertEquals(AccionPrincipalDeLaFila.NINGUNA, accionPrincipalDeLaFila(esLaMasUrgente = false, conPropuesta = false, hayGastoParecido = false))
@@ -199,5 +200,40 @@ class LaCuotaParecidaEnPagosTest {
         composeRule.onAllNodesWithText(ETIQUETA_ANOTAR).fetchSemanticsNodes().forEach {
             assertEquals(VarianteDeBoton.Secundario, it.config.getOrNull(VarianteDeBotonKey), "Anotar pago, secundario")
         }
+    }
+
+    /**
+     * Vuelta 58: lo mismo con el candidato del **server** dentro del ±50 % («Sí, fue este»): amarillo solo
+     * en la fila más urgente. Tres facturas —una cuota con gasto parecido (la menos urgente), una con
+     * candidato del server (la del medio) y una con candidato del server que es la más urgente—: un solo
+     * amarillo, y es el «Sí, fue este» de la más urgente.
+     */
+    @Test
+    fun `con candidatos del server en varias filas tambien hay un solo amarillo`() {
+        fun candidato(id: String, monto: Long) = FinancialEvent(
+            id = id, accountId = "acc", type = TransactionType.EXPENSE, amount = monto, category = "Servicios",
+            description = "Pago $id", timestamp = 1_793_000_000_000L,
+        )
+        val agua = PagoDelPeriodo(
+            ruleId = "rr_agua", nombre = "Agua", monto = 100_000L, pagado = false, diasParaVencer = -6,
+            vence = "2026-10-22", periodoDelSello = "2026-10", categoria = "Servicios", candidatos = listOf(candidato("ev-agua", 98_000L)),
+        )
+        val gas = PagoDelPeriodo(
+            ruleId = "rr_gas", nombre = "Gas", monto = 60_000L, pagado = false, diasParaVencer = -2,
+            vence = "2026-10-26", periodoDelSello = "2026-10", categoria = "Servicios", candidatos = listOf(candidato("ev-gas", 59_000L)),
+        )
+        montar(
+            mapOf(claveDeLaCuotaPorSaldar("v4083", "2026-10-27") to parecido),
+            checklist = listOf(cuota, gas, agua),
+        )
+        val botones = composeRule.onAllNodes(SemanticsMatcher.keyIsDefined(VarianteDeBotonKey)).fetchSemanticsNodes()
+        val amarillos = botones.filter { it.config.getOrNull(VarianteDeBotonKey) == VarianteDeBoton.Principal }
+        assertEquals(1, amarillos.size, "un solo botón amarillo en Pagos")
+        // Dos «Sí, fue este» (Agua y Gas): el de Agua (la más urgente) es amarillo, el de Gas no.
+        val si = composeRule.onAllNodesWithText(ETIQUETA_SI_FUE_ESTE).fetchSemanticsNodes().map { it.config.getOrNull(VarianteDeBotonKey) }
+        assertEquals(2, si.size)
+        assertEquals(1, si.count { it == VarianteDeBoton.Principal }, "uno amarillo")
+        assertEquals(1, si.count { it == VarianteDeBoton.Secundario }, "el otro con borde")
+        assertEquals(VarianteDeBoton.Secundario, variante("¿Es el de \$980.000?"), "la cuota parecida, con borde")
     }
 }

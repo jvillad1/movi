@@ -52,6 +52,8 @@ internal fun PropuestaDeMovimiento(
     onDescartar: () -> Unit,
     /** Vuelta 57: «Sí, es la cuota» en la cuota que se parece; si no, «Sí, fue este». */
     textoConfirmar: String = ETIQUETA_SI_FUE_ESTE,
+    /** Vuelta 58: un solo amarillo en Pagos; en las filas que no son la más urgente, el sí va con borde. */
+    confirmarEsPrincipal: Boolean = true,
 ) {
     // Alineado arriba y con aire entre las dos columnas: en un teléfono angosto (390 px)
     // la descripción se envuelve en dos líneas, y con `CenterVertically` y sin separación
@@ -76,7 +78,7 @@ internal fun PropuestaDeMovimiento(
     Spacer(Modifier.height(Espacio.s))
     AccionesDeLaFila(
         acciones = listOf(
-            AccionDeOcurrencia(textoConfirmar, primary = true, onClick = onConfirmar),
+            AccionDeOcurrencia(textoConfirmar, primary = confirmarEsPrincipal, onClick = onConfirmar),
             AccionDeOcurrencia(ETIQUETA_NO_FUE_ESTE, primary = false, onClick = onDescartar),
         ),
         enVuelo = enVuelo,

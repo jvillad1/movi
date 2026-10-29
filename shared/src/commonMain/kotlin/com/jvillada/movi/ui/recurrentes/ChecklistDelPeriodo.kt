@@ -303,7 +303,7 @@ fun SeccionChecklistDelPeriodo(
             debajo = if (!pago.pagado && (estimacion != null || parecido != null || ofreceAlgoDebajo(pago, conPropuesta))) {
                 {
                     if (estimacion != null) Text(text = estimacion, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                    LoQueOfreceLaFila(pago, propuesta, enVuelo, acciones, conBotonDeAnotar = false)
+                    LoQueOfreceLaFila(pago, propuesta, enVuelo, acciones, conBotonDeAnotar = false, esLaMasUrgente = pago == urgente)
                     if (parecido != null) {
                         LaCuotaQueSeParece(
                             pago = pago,
@@ -792,6 +792,8 @@ private fun LoQueOfreceLaFila(
      * repite (ni «Movi no encontró…»: la pastilla ya dice que venció).
      */
     conBotonDeAnotar: Boolean = true,
+    /** Vuelta 58: «Sí, fue este» es amarillo solo en la fila más urgente (un solo amarillo en Pagos). */
+    esLaMasUrgente: Boolean = true,
 ) {
     if (!hayQueOfrecer(pago)) return
     if (!conBotonDeAnotar && pago.estado == EstadoDeLaFila.AUN_NO_VENCE) return
@@ -859,6 +861,7 @@ private fun LoQueOfreceLaFila(
                         enVuelo = enVuelo,
                         onConfirmar = { acciones.onConfirmar(pago, propuesta.id) },
                         onDescartar = { acciones.onNoFueEste(pago, propuesta.id) },
+                        confirmarEsPrincipal = esLaMasUrgente,
                     )
                 }
             } else {
@@ -957,9 +960,8 @@ internal fun accionPrincipalDeLaFila(
     conPropuesta: Boolean,
     hayGastoParecido: Boolean,
 ): AccionPrincipalDeLaFila = when {
-    conPropuesta -> AccionPrincipalDeLaFila.EL_CANDIDATO
     // Un solo amarillo en Pagos, y solo en la fila más urgente (vuelta 40): en otra fila, el candidato va con borde.
-    hayGastoParecido -> if (esLaMasUrgente) AccionPrincipalDeLaFila.EL_CANDIDATO else AccionPrincipalDeLaFila.NINGUNA
+    conPropuesta || hayGastoParecido -> if (esLaMasUrgente) AccionPrincipalDeLaFila.EL_CANDIDATO else AccionPrincipalDeLaFila.NINGUNA
     esLaMasUrgente -> AccionPrincipalDeLaFila.ANOTAR
     else -> AccionPrincipalDeLaFila.NINGUNA
 }
