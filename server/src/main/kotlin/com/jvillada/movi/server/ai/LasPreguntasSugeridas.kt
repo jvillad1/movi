@@ -441,6 +441,16 @@ internal fun enQueSeVa(d: DatosDeLasSugeridas): String {
     // pasado fue Hogar) se compara donde estaba: no es «Otros +$1,8M». Las cifras no cambian.
     val paraComparar = comoEnElPeriodoAnterior(positivas, d.cambiosDeCategoria)
     val renglones = ordenadas.mapIndexed { i, (categoria, gastado) ->
+        // Vuelta 60 (la revisión): el renglón de la categoría donde quedó el recurrente no compara —sin
+        // él, «Otros $1.800.000 · casi igual que el período pasado» no decía nada—: dice qué es.
+        val cambiados = d.cambiosDeCategoria.filter { it.categoria == categoria }
+        if (d.anterior != null && cambiados.isNotEmpty()) {
+            val queEs = cambiados.joinToString(" y ") { c ->
+                if (cambiados.size == 1 && c.monto >= gastado) "es ${c.nombre}, que el período pasado fue ${c.categoriaAnterior}"
+                else "incluye ${c.nombre} (${pesosDelCierre(c.monto)}), que el período pasado fue ${c.categoriaAnterior}"
+            }
+            return@mapIndexed "${i + 1}. $categoria ${pesosDelCierre(gastado)} · $queEs"
+        }
         val comparacion = d.anterior?.let { anterior ->
             val antes = anterior[categoria] ?: 0L
             contraElAnterior(paraComparar[categoria] ?: 0L, antes)?.let { c ->
