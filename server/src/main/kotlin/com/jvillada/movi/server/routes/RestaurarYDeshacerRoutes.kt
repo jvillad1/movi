@@ -13,6 +13,7 @@ import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.MOTIVO_DEL_REPARTO_DESHECHO
 import com.jvillada.movi.shared.model.MovimientoAnulado
 import com.jvillada.movi.shared.model.RepartoDeUnMovimiento
+import com.jvillada.movi.shared.model.porQueNoSeRestaura
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
@@ -98,48 +99,76 @@ internal fun Transaction.deshacerElReparto(uid: String, originalId: String, ahor
     return Restaurado.Hecho(original.withCashFlowFlag(accountTypesFor(uid)))
 }
 
+/** Las marcas de anulación de [ids]: id del movimiento → motivo. */
+private fun Transaction.marcasDe(uid: String, ids: Collection<String>): Map<String, String?> =
+    if (ids.isEmpty()) emptyMap()
+    else VoidEvents.selectAll()
+        .where { (VoidEvents.userId eq uid) and (VoidEvents.originalEventId inList ids) }
+        .associate { it[VoidEvents.originalEventId] to it[VoidEvents.reason] }
+
+/** ¿[originalId] tiene partes vivas (una división vigente)? */
+private fun Transaction.tienePartesVivas(uid: String, originalId: String): Boolean {
+    val partes = Events.selectAll().where { (Events.userId eq uid) and (Events.repartoDe eq originalId) }.map { it[Events.id] }
+    return partes.isNotEmpty() && (partes - anuladosDe(uid, partes)).isNotEmpty()
+}
+
+/** ¿La compra de la parte [parte] ya volvió a ser un solo movimiento (su original está vivo)? */
+private fun Transaction.suCompraVolvioAUna(uid: String, parte: FinancialEvent): Boolean {
+    val originalId = parte.repartoDe ?: return false
+    return anuladosDe(uid, listOf(originalId)).isEmpty() &&
+        Events.selectAll().where { (Events.userId eq uid) and (Events.id eq originalId) }.any()
+}
+
 /**
  * **Restaurar el anulado [id]**: borra su marca y la de su otra pata. Si es el original de una compra
- * dividida con partes vivas, deshace el reparto ([deshacerElReparto]); si es una parte de una compra
- * que ya volvió a ser un solo movimiento, 409 (restaurarla contaría la plata dos veces). 404 si no es
- * del dueño o no está anulado.
+ * dividida con partes vivas, deshace el reparto ([deshacerElReparto]). Lo que anuló el sistema no se
+ * restaura (409 con la frase de [porQueNoSeRestaura]): un ajuste de saldo, lo de un extracto deshecho,
+ * una parte de una división deshecha o de una compra que volvió a ser una, y un original dividido sin
+ * partes que se puedan deshacer. 404 si no es del dueño o no está anulado.
  */
 internal fun Transaction.restaurarElMovimiento(uid: String, id: String, ahora: Long): Restaurado {
     val evento = movimientoDe(uid, id) ?: return Restaurado.Rechazado(HttpStatusCode.NotFound, "Movimiento no encontrado")
     val par = conSuPar(uid, evento)
     val ids = par.map { it.id }
-    if (anuladosDe(uid, ids).isEmpty()) return Restaurado.Rechazado(HttpStatusCode.NotFound, "Ese movimiento no está anulado.")
-    // El original de una compra dividida: restaurarlo es deshacer el reparto.
-    val conPartes = ids.firstOrNull { originalId ->
-        val partes = Events.selectAll().where { (Events.userId eq uid) and (Events.repartoDe eq originalId) }.map { it[Events.id] }
-        partes.isNotEmpty() && (partes - anuladosDe(uid, partes)).isNotEmpty()
-    }
+    val marcas = marcasDe(uid, ids)
+    if (marcas.isEmpty()) return Restaurado.Rechazado(HttpStatusCode.NotFound, "Ese movimiento no está anulado.")
+    val motivo = if (evento.id in marcas) marcas[evento.id] else marcas.values.firstOrNull()
+    // El original de una compra dividida con partes vivas: restaurarlo es deshacer el reparto.
+    val conPartes = ids.firstOrNull { tienePartesVivas(uid, it) }
+    porQueNoSeRestaura(evento, motivo, tienePartesVivas = conPartes != null, suCompraVolvioAUna = suCompraVolvioAUna(uid, evento))
+        ?.let { return Restaurado.Rechazado(HttpStatusCode.Conflict, it) }
     if (conPartes != null) return deshacerElReparto(uid, conPartes, ahora)
-    // Una parte de una compra que ya volvió a ser una sola.
-    evento.repartoDe?.let { originalId ->
-        if (anuladosDe(uid, listOf(originalId)).isEmpty() && Events.selectAll().where { (Events.userId eq uid) and (Events.id eq originalId) }.any()) {
-            return Restaurado.Rechazado(HttpStatusCode.Conflict, "Esta parte es de una compra que volvió a ser un solo movimiento.")
-        }
-    }
     VoidEvents.deleteWhere { (VoidEvents.userId eq uid) and (VoidEvents.originalEventId inList ids) }
     return Restaurado.Hecho(evento.withCashFlowFlag(accountTypesFor(uid)))
 }
 
-/** Los anulados del dueño, el último anulado primero. Las partes de una compra que volvió a ser una no van. */
+/**
+ * Los anulados del dueño, el último anulado primero, cada uno con [MovimientoAnulado.porQueNo] si no se
+ * restaura. Las partes de una división deshecha no van nunca (eran una forma de contar la misma compra),
+ * ni las de una compra que volvió a ser una.
+ */
 internal fun Transaction.anuladosDelUsuario(uid: String): List<MovimientoAnulado> {
     val marcas = VoidEvents.selectAll().where { VoidEvents.userId eq uid }.associate { it[VoidEvents.originalEventId] to it }
     if (marcas.isEmpty()) return emptyList()
     val tipos = accountTypesFor(uid)
     val eventos = Events.selectAll().where { (Events.userId eq uid) and (Events.id inList marcas.keys) }.map { it.toFinancialEvent() }
-    val vivos = { id: String -> id !in marcas }
     return eventos
-        .filterNot { e -> e.repartoDe != null && vivos(e.repartoDe!!) }
+        .filterNot { e -> marcas.getValue(e.id)[VoidEvents.reason] == MOTIVO_DEL_REPARTO_DESHECHO }
+        .filterNot { e -> suCompraVolvioAUna(uid, e) }
         .map { e ->
             val marca = marcas.getValue(e.id)
+            val motivo = marca[VoidEvents.reason]
             MovimientoAnulado(
                 evento = e.withCashFlowFlag(tipos),
-                motivo = marca[VoidEvents.reason]?.trim()?.ifEmpty { null },
+                motivo = motivo?.trim()?.ifEmpty { null },
                 anuladoEn = marca[VoidEvents.timestamp],
+                porQueNo = porQueNoSeRestaura(
+                    e, motivo,
+                    // De un par se pregunta por las dos patas: la que lleva las partes es la que salió.
+                    tienePartesVivas = eventos.filter { it.id == e.id || (e.transferId != null && it.transferId == e.transferId) }
+                        .any { tienePartesVivas(uid, it.id) },
+                    suCompraVolvioAUna = false,
+                ),
             )
         }
         .sortedWith(compareByDescending<MovimientoAnulado> { it.anuladoEn }.thenByDescending { it.evento.timestamp })
@@ -151,7 +180,10 @@ internal fun Transaction.repartoDelMovimiento(uid: String, id: String): RepartoD
     val originalId = evento.repartoDe ?: id
     val original = if (originalId == id) evento
     else Events.selectAll().where { (Events.id eq originalId) and (Events.userId eq uid) }.firstOrNull()?.toFinancialEvent() ?: return null
-    val partes = Events.selectAll().where { (Events.userId eq uid) and (Events.repartoDe eq originalId) }.map { it.toFinancialEvent() }
+    // Solo las partes vivas: las de una división que se deshizo no son de esta compra.
+    val todas = Events.selectAll().where { (Events.userId eq uid) and (Events.repartoDe eq originalId) }.map { it.toFinancialEvent() }
+    val muertas = anuladosDe(uid, todas.map { it.id })
+    val partes = todas.filterNot { it.id in muertas }
     if (partes.isEmpty()) return null
     val tipos = accountTypesFor(uid)
     return RepartoDeUnMovimiento(original.withCashFlowFlag(tipos), partes.sortedBy { it.id }.map { it.withCashFlowFlag(tipos) })

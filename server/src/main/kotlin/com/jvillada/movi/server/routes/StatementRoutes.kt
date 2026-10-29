@@ -845,7 +845,7 @@ fun Route.statementRoutes() {
                     it[VoidEvents.id] = "void_${UUID.randomUUID()}"
                     it[VoidEvents.userId] = uid
                     it[VoidEvents.originalEventId] = id
-                    it[VoidEvents.reason] = "Se deshizo el importe del extracto"
+                    it[VoidEvents.reason] = com.jvillada.movi.shared.model.MOTIVO_DEL_EXTRACTO_DESHECHO
                     it[VoidEvents.timestamp] = ahora
                 }
             }

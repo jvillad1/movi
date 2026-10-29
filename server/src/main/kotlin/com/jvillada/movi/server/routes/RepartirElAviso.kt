@@ -11,6 +11,7 @@ import com.jvillada.movi.shared.model.pataDelAviso
 import io.ktor.server.request.receive
 import io.ktor.server.routing.post
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.notInList
 import com.jvillada.movi.server.plugins.jsonDeLaApi
 import com.jvillada.movi.shared.model.MAXIMO_DE_PARTES_DEL_AVISO
 import com.jvillada.movi.shared.model.ParteElegida
@@ -442,7 +443,9 @@ internal fun Transaction.repartirUnMovimiento(uid: String, eventoId: String, par
         is Repartido.Rechazado -> { rollback(); return escritas }
     }
 
-    // Vuelta 67: cada pata de cada parte sabe de qué compra es, para decirlo y para deshacerlo.
+    // Vuelta 67: cada pata de cada parte sabe de qué compra es, para decirlo y para deshacerlo. Las
+    // partes de una división anterior que se deshizo se desligan antes: ya no son de esta compra.
+    Events.update({ (Events.userId eq uid) and (Events.repartoDe eq salida.id) and (Events.id notInList hecho.ids) }) { it[Events.repartoDe] = null }
     Events.update({ (Events.userId eq uid) and (Events.id inList hecho.ids) }) { it[Events.repartoDe] = salida.id }
 
     // 3. Los avisos que apuntaban al original, a la primera parte.
@@ -460,7 +463,7 @@ internal fun Transaction.repartirUnMovimiento(uid: String, eventoId: String, par
 }
 
 /** El motivo que queda en `void_events` al repartir un movimiento ya anotado. */
-const val MOTIVO_DE_LA_ANULACION_AL_REPARTIR: String = "Repartido en partes"
+const val MOTIVO_DE_LA_ANULACION_AL_REPARTIR: String = com.jvillada.movi.shared.model.MOTIVO_DEL_REPARTIDO_EN_PARTES
 
 /** «YYYY-MM». */
 private val PERIODO_DEL_REPARTO = Regex("""\d{4}-\d{2}""")

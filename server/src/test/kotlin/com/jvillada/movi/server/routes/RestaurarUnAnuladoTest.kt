@@ -19,6 +19,7 @@ import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
@@ -190,5 +191,59 @@ class RestaurarUnAnuladoTest {
         assertTrue(despues.comercio.orEmpty().contains("Occidente", ignoreCase = true), despues.comercio)
         // El de otro usuario no se mira.
         assertEquals(null, transaction { conLoQueDice(otro, listOf(confirmado)) }.single().eventoId)
+    }
+
+    // ── Lo que anuló el sistema no se restaura ──────────────────────────────────────────────────
+
+    private fun marcar(id: String, motivo: String?) = transaction {
+        VoidEvents.insert {
+            it[VoidEvents.id] = "void_$id"
+            it[userId] = uid
+            it[originalEventId] = id
+            it[reason] = motivo
+            it[timestamp] = 1_800_000_000_000L
+        }
+    }
+
+    private suspend fun ApplicationTestBuilder.noSeRestaura(id: String, frase: String) {
+        val respuesta = restaurar(id)
+        assertEquals(HttpStatusCode.Conflict, respuesta.status)
+        assertEquals(frase, respuesta.bodyAsText())
+        assertTrue(id in marcas(), "sigue anulado")
+        assertEquals(frase, anulados().single { it.evento.id == id }.porQueNo, "la app no ofrece «Restaurar» y dice por qué")
+    }
+
+    @Test
+    fun `un ajuste de saldo no se restaura`() = testApplication {
+        application { testModule() }
+        transaction { evento("ev-ajuste", "ahorros", "INCOME", 30_980_000L, com.jvillada.movi.shared.model.ADJUSTMENT_CATEGORY) }
+        marcar("ev-ajuste", null)
+        noSeRestaura("ev-ajuste", com.jvillada.movi.shared.model.NO_SE_RESTAURA_UN_AJUSTE)
+    }
+
+    @Test
+    fun `lo anulado al deshacer un extracto no se restaura`() = testApplication {
+        application { testModule() }
+        marcar("ev-almuerzo", com.jvillada.movi.shared.model.MOTIVO_DEL_EXTRACTO_DESHECHO)
+        noSeRestaura("ev-almuerzo", com.jvillada.movi.shared.model.NO_SE_RESTAURA_LO_DEL_EXTRACTO)
+    }
+
+    @Test
+    fun `un original dividido antes de esta vuelta no se restaura encima de sus partes`() = testApplication {
+        application { testModule() }
+        // Las partes de antes, sin reparto_de, y vivas.
+        transaction { evento("ev-parte-vieja", "ahorros", "EXPENSE", 40_000L, "Mercado") }
+        marcar("ev-almuerzo", com.jvillada.movi.shared.model.MOTIVO_DEL_REPARTIDO_EN_PARTES)
+        noSeRestaura("ev-almuerzo", com.jvillada.movi.shared.model.NO_SE_RESTAURA_LO_DIVIDIDO)
+    }
+
+    @Test
+    fun `una parte de una division deshecha no se restaura`() = testApplication {
+        application { testModule() }
+        marcar("ev-almuerzo", com.jvillada.movi.shared.model.MOTIVO_DEL_REPARTO_DESHECHO)
+        val respuesta = restaurar("ev-almuerzo")
+        assertEquals(HttpStatusCode.Conflict, respuesta.status)
+        assertEquals(com.jvillada.movi.shared.model.NO_SE_RESTAURA_UNA_PARTE_DESHECHA, respuesta.bodyAsText())
+        assertTrue(anulados().none { it.evento.id == "ev-almuerzo" }, "no sale en «Anulados»")
     }
 }

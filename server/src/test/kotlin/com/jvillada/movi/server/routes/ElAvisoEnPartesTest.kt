@@ -44,6 +44,7 @@ import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -605,5 +606,34 @@ class ElAvisoEnPartesTest {
             cliente().get("/api/events/ev-papa/reparto") { header(HttpHeaders.Authorization, "Bearer ${token(otro)}") }.status,
         )
         assertTrue("ev-giro-anotado" in anulados(), "nada cambió")
+    }
+
+    @Test
+    fun `dividir, deshacer y volver a dividir no infla la compra ni deja contar dos veces`() = testApplication {
+        application { testModule() }
+        dividirElGiro()
+        assertEquals(HttpStatusCode.OK, deshacer("ev-papa").status)
+        val otraVez = PartesDelAviso(
+            listOf(cuota(libranza, cuotaLibranza, "libranza2"), cuota(hipoteca, cuotaHipoteca, "hipoteca2"), alTercero(sobra, "papa2")),
+        )
+        assertEquals(HttpStatusCode.OK, repartirElMovimiento("ev-giro-anotado", otraVez).status)
+        assertEquals(saldoInicial - giro, saldoDeAhorros())
+
+        // El reparto vigente tiene sus tres partes, no seis: las viejas quedaron desligadas.
+        val reparto = cliente().get("/api/events/ev-papa2/reparto") { header(HttpHeaders.Authorization, "Bearer ${token()}") }
+            .body<com.jvillada.movi.shared.model.RepartoDeUnMovimiento>()
+        assertEquals(3, com.jvillada.movi.shared.model.partesQueSeVen(reparto).size)
+        assertEquals(giro, com.jvillada.movi.shared.model.partesQueSeVen(reparto).sumOf { it.amount })
+        assertEquals(null, repartoDe("ev-papa"), "la parte vieja ya no es de esta compra")
+
+        // Una parte vieja no se restaura encima de la división nueva, ni sale en «Anulados».
+        val respuesta = restaurar("ev-papa")
+        assertEquals(HttpStatusCode.Conflict, respuesta.status)
+        assertEquals(com.jvillada.movi.shared.model.NO_SE_RESTAURA_UNA_PARTE_DESHECHA, respuesta.bodyAsText())
+        assertEquals(saldoInicial - giro, saldoDeAhorros(), "la suma queda intacta")
+        val lista = cliente().get("/api/events/anulados") { header(HttpHeaders.Authorization, "Bearer ${token()}") }
+            .body<List<com.jvillada.movi.shared.model.MovimientoAnulado>>()
+        assertTrue(lista.none { it.evento.id == "ev-papa" || it.evento.id == "ev-libranza-sale" })
+        assertTrue(lista.none { it.evento.id == "ev-giro-anotado" && it.porQueNo != null }, "el original dividido se restaura deshaciendo")
     }
 }
