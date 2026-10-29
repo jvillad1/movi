@@ -361,13 +361,11 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
     val nombresDeCuentas = remember(cuentas) { cuentas.associate { it.id to it.name } }
     // ── Vuelta 66 · las transferencias que saldan un grupo ── antes solo se veían dentro del grupo (y
     // la que esperaba un saldado ya marcado, en ningún lado). Secundaria: si falla, no se dice nada.
-    var propuestasDeSaldar by remember { mutableStateOf<List<PropuestaDeSaldar>>(emptyList()) }
-    val refrescoDeSaldar = LocalRefreshTick.current
-    LaunchedEffect(recarga, refrescoDeSaldar) {
-        propuestasDeSaldar = runCatching { Repositories.wallets.getPropuestasDeSaldar() }
-            .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
-            .getOrDefault(propuestasDeSaldar)
-    }
+    // Vuelta 67: es una lectura más de la bandeja ([LecturasPorRevisar]) y cuenta para «Todo al día»
+    // y para «N por revisar»; lo que se resuelve acá se va en el acto, sin esperar la relectura.
+    var saldadasAca by remember { mutableStateOf(emptySet<String>()) }
+    val propuestasDeSaldar: List<PropuestaDeSaldar> =
+        lecturas.propuestasDeSaldar.orEmpty().filterNot { it.eventoId in saldadasAca }
     val tiposDeCuentas = remember(cuentas) { cuentas.associate { it.id to it.type } }
 
     // La primera carga: alguna de las tres fuentes todavía no dijo nada. Con lo de antes en
@@ -375,7 +373,9 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
     val cargando = (mensajes == null && lecturas.leyendoMensajes) ||
         (dias == null && leyendoDias) ||
         (lecturas.candidatos == null && lecturas.leyendoCandidatos) ||
-        (lecturas.debitos == null && lecturas.leyendoDebitos)
+        (lecturas.debitos == null && lecturas.leyendoDebitos) ||
+        // Vuelta 67: sin esto, «Todo al día» asomaba un instante antes de que llegara la propuesta.
+        (lecturas.propuestasDeSaldar == null && lecturas.leyendoSaldar)
     // Con todo pintado, alguna lectura sigue en vuelo: lo pintado es lo de antes.
     val actualizandoConAlgoALaVista = !cargando &&
         (lecturas.leyendoMensajes || leyendoDias || lecturas.leyendoCandidatos || lecturas.leyendoDebitos)
@@ -389,8 +389,9 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
     var fueAReconciliar by rememberSaveable { mutableStateOf(false) }
     var celebrar by remember { mutableStateOf(false) }
     val huboAccion = fueAReconciliar || avisosResueltos.isNotEmpty() || avisosSeparados.isNotEmpty() ||
-        candidatosResueltos.isNotEmpty() || movimientosResueltos.isNotEmpty() || debitosResueltos.isNotEmpty()
-    val bandejaVacia: Boolean? = if (cargando || noSePudoActualizar) null else bandejaAlDia(mensajes, dias, candidatos, debitos)
+        candidatosResueltos.isNotEmpty() || movimientosResueltos.isNotEmpty() || debitosResueltos.isNotEmpty() ||
+        saldadasAca.isNotEmpty()
+    val bandejaVacia: Boolean? = if (cargando || noSePudoActualizar) null else bandejaAlDia(mensajes, dias, candidatos, debitos, propuestasDeSaldar)
     LaunchedEffect(bandejaVacia) {
         val celebracion = Celebracion(ultimoEstadoDeLaBandeja)
         if (celebracion.observar(bandejaVacia, huboAccion)) {
@@ -468,8 +469,8 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
     /** Si la bandeja está al día: pinta el vacío (o nada, si no se pudo actualizar) y dice que sí. */
     fun LazyListScope.alDia(ll: LlavesDeLaLista): Boolean {
         // «Todo al día» es un vacío: se afirma solo con lecturas que contestaron en esta visita.
-        if (bandejaAlDia(mensajes, dias, candidatos, debitos) && noSePudoActualizar) return true
-        if (bandejaAlDia(mensajes, dias, candidatos, debitos)) {
+        if (bandejaAlDia(mensajes, dias, candidatos, debitos, propuestasDeSaldar) && noSePudoActualizar) return true
+        if (bandejaAlDia(mensajes, dias, candidatos, debitos, propuestasDeSaldar)) {
             if (celebrar) {
                 fila(ll, "celebracion") {
                     MomentoDeCelebracion(FRASE_DE_LA_BANDEJA_AL_DIA, Modifier.padding(bottom = Espacio.xs))
@@ -502,7 +503,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                     nombreDelGrupo = p.nombreDelEspacio,
                     conElGrupo = true,
                     onHecho = {
-                        propuestasDeSaldar = propuestasDeSaldar.filterNot { it.eventoId == p.eventoId }
+                        saldadasAca = saldadasAca + p.eventoId
                         recarga++
                     },
                     modifier = Modifier.padding(bottom = Medida.dentroDeSeccion),
@@ -747,7 +748,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
     // Dos columnas solo con algo a cada lado: sin mensajes del banco por revisar, la izquierda
     // quedaría vacía (un hueco, no un tablero), y la bandeja al día es un vacío de una columna.
     val hayMensajesPorRevisar = mensajes?.let { pagosPorRevisar(it).isNotEmpty() } == true
-    val conDosLados = !cargando && hayMensajesPorRevisar && !bandejaAlDia(mensajes, dias, candidatos, debitos)
+    val conDosLados = !cargando && hayMensajesPorRevisar && !bandejaAlDia(mensajes, dias, candidatos, debitos, propuestasDeSaldar)
     val alPie = Medida.botonFlotante + Medida.margenDePantalla
     // Vuelta 44: al volver de Revisar aviso, la lista queda donde la dejaste (ver [ListaQueSeConserva]).
     val lista = rememberListaQueSeConserva(conDatos = !cargando)

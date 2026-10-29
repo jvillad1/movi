@@ -142,6 +142,7 @@ private fun AvisoDeLaCampana(row: NotificationRow, modifier: Modifier, onClick: 
     Fila(
         titulo = row.titulo,
         subtitulo = row.subtitulo,
+        lineasDelSubtitulo = row.lineasDelSubtitulo,
         inicio = { IconoEnCirculo(icono, tono = tono) },
         final = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.xxs)) {

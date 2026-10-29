@@ -146,6 +146,8 @@ fun conteoPorRevisarDelInicio(data: DashboardData): ConteoPorRevisar = ConteoPor
     pagosDeTarjeta = data.cardCandidates,
     debitos = data.debitosPorConfirmar.orEmpty().size,
     avisosAntiguos = data.avisosAntiguos,
+    // Vuelta 67: las transferencias que saldan un grupo también esperan en Por revisar.
+    saldar = data.propuestasDeSaldar.orEmpty().size,
 )
 
 /**
