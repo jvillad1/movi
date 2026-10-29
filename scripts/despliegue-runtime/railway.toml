@@ -1,0 +1,12 @@
+# El `railway.toml` de la carpeta que sube `scripts/desplegar.sh` (vuelta 69). El `[deploy]` es el
+# mismo del `railway.toml` de la raíz, healthcheck incluido; el `Dockerfile` es el de runtime, que
+# solo empaqueta el JAR que armó GitHub Actions.
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+healthcheckPath = "/health"
+healthcheckTimeout = 120
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
