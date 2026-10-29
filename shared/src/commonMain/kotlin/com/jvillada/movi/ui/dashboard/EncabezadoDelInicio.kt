@@ -38,6 +38,8 @@ import com.jvillada.movi.ui.components.ROTULO_MOSTRAR_LOS_SALDOS
 import com.jvillada.movi.ui.components.ROTULO_OCULTAR_LOS_SALDOS
 import com.jvillada.movi.ui.components.TAG_OJO_DE_LOS_SALDOS
 import com.jvillada.movi.ui.components.rememberVibrador
+import androidx.compose.ui.draw.clip
+import com.jvillada.movi.ui.components.ds.anilloDeFoco
 
 /** El encabezado del Inicio, sobre la banda amarilla (vuelta 39). */
 const val TAG_ENCABEZADO_DEL_INICIO: String = "inicio-encabezado"
@@ -87,6 +89,11 @@ fun EncabezadoDelInicio(
         Box(
             modifier = Modifier
                 .size(Medida.circuloDeLaBanda)
+                // Vuelta 55 (revisión): con Tab, el avatar mostraba el cuadrado gris tenue del foco sobre
+                // el amarillo, sin anillo. Ahora el anillo de tinta (entra en los 56 del encabezado: el
+                // círculo mide 44 y el anillo sale 4) y el resaltado redondo, recortado al círculo.
+                .anilloDeFoco(CircleShape)
+                .clip(CircleShape)
                 .background(Movi.colores.tarjeta, CircleShape)
                 .clickable(role = Role.Button, onClickLabel = "Abrir Tú", onClick = onAvatar)
                 .semantics { contentDescription = "Tú" }
@@ -147,6 +154,8 @@ private fun BotonDeLaBanda(
     Box(
         modifier = modifier
             .size(Medida.circuloDeLaBanda)
+            .anilloDeFoco(CircleShape)
+            .clip(CircleShape)
             .background(Movi.colores.marcaSuave, CircleShape)
             .clickable(role = Role.Button, onClickLabel = descripcion, onClick = onClick),
         contentAlignment = Alignment.Center,

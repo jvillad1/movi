@@ -8,8 +8,8 @@ import kotlin.test.assertTrue
  * # Todo lo que se toca en el sistema dibuja el anillo de foco (vuelta 55, accesibilidad)
  *
  * La revisión de accesibilidad del 28-oct navegó la web con Tab y el foco casi no se veía. Desde la
- * vuelta 55 cada componente de `ui/components/ds/` que se toca —y las pestañas, el avatar y el
- * segmentado, que viven al lado— lleva `Modifier.anilloDeFoco` en la misma cadena que su `clickable`,
+ * vuelta 55 cada componente de `ui/components/ds/` que se toca —y las pestañas, el avatar, el
+ * segmentado y el encabezado del Inicio (avatar, ojo y campana sobre la banda)— lleva `Modifier.anilloDeFoco` en la misma cadena que su `clickable`,
  * `toggleable` o `selectable`. Esta guarda está en **cero**: un toque nuevo sin anillo en esos archivos
  * la rompe. El anillo va en la misma cadena que el toque, antes del `clip`, que es donde tiene que ir
  * (ver `sinAnillo`).
@@ -25,7 +25,9 @@ class TodoLoEnfocableDibujaElAnilloTest {
         "MinNavRail.kt",
         "AvatarButton.kt",
         "SelectorSegmentado.kt",
-    ).map { "${LecturaDelCodigo.UI}/components/$it" }
+    ).map { "${LecturaDelCodigo.UI}/components/$it" } +
+        // Revisión de la vuelta 55: el avatar, el ojo y la campana sobre la banda amarilla del Inicio.
+        "${LecturaDelCodigo.UI}/dashboard/EncabezadoDelInicio.kt"
 
     /**
      * Los toques que no tienen un `anilloDeFoco(` en **su misma cadena** de modifiers, como

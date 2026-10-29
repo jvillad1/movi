@@ -20,7 +20,16 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.foundation.background
+import com.jvillada.movi.theme.Medida
+import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.theme.MoviTheme
+import com.jvillada.movi.ui.components.TAG_OJO_DE_LOS_SALDOS
+import com.jvillada.movi.ui.dashboard.EncabezadoDelInicio
+import com.jvillada.movi.ui.dashboard.ROTULO_DE_LA_CAMPANA
+import com.jvillada.movi.ui.dashboard.TAG_AVATAR_DEL_INICIO
+import com.jvillada.movi.ui.dashboard.TAG_ENCABEZADO_DEL_INICIO
+import androidx.compose.ui.test.onNodeWithTag
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -114,6 +123,51 @@ class ElFocoSeVeConElTecladoTest {
         for (tag in componentes.keys) {
             runCatching { enfocar(tag) }
             assertFalse(anillo(tag) == true, "«$tag» dibuja el anillo con el dedo")
+        }
+    }
+
+    /**
+     * **Revisión de la vuelta 55: el encabezado del Inicio.** El avatar es el primer destino del Tab y
+     * mostraba el cuadrado gris tenue de siempre sobre el amarillo; el ojo y la campana, lo mismo. Los
+     * tres llevan el anillo, y el anillo (4 dp afuera del círculo) **entra entero** en el encabezado: nada
+     * lo recorta.
+     */
+    @Test
+    fun `en el encabezado del Inicio el avatar, el ojo y la campana llevan el anillo entero`() {
+        composeRule.setContent {
+            CompositionLocalProvider(LocalInputModeManager provides ModoFijo(InputMode.Keyboard)) {
+                MoviTheme {
+                    EncabezadoDelInicio(
+                        saludo = "Hola, Demo",
+                        subtitulo = "Octubre 2026",
+                        iniciales = "DM",
+                        conPunto = true,
+                        onAvatar = {},
+                        onCampana = {},
+                        modifier = Modifier.background(Movi.colores.marca),
+                    )
+                }
+            }
+        }
+        composeRule.waitForIdle()
+        val encabezado = composeRule.onNodeWithTag(TAG_ENCABEZADO_DEL_INICIO, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val afuera = with(composeRule.density) { (Medida.separacionDelAnilloDeFoco + Medida.trazoDelAnilloDeFoco).toPx() }
+        val delEncabezado = mapOf(
+            "avatar" to hasTestTag(TAG_AVATAR_DEL_INICIO),
+            "ojo" to hasTestTag(TAG_OJO_DE_LOS_SALDOS),
+            "campana" to hasContentDescription(ROTULO_DE_LA_CAMPANA),
+        )
+        for ((nombre, matcher) in delEncabezado) {
+            composeRule.onNode(matcher).performSemanticsAction(SemanticsActions.RequestFocus)
+            composeRule.waitForIdle()
+            val nodo = composeRule.onNode(matcher).fetchSemanticsNode()
+            assertEquals(true, nodo.config.getOrNull(AnilloDeFocoVisibleKey), "el $nombre enfocado con el teclado no dibuja el anillo")
+            val b = nodo.boundsInRoot
+            assertTrue(
+                b.top - afuera >= encabezado.top - 0.5f && b.bottom + afuera <= encabezado.bottom + 0.5f &&
+                    b.left - afuera >= encabezado.left - 0.5f && b.right + afuera <= encabezado.right + 0.5f,
+                "el anillo del $nombre se sale del encabezado: $b con $afuera px afuera, encabezado $encabezado",
+            )
         }
     }
 
