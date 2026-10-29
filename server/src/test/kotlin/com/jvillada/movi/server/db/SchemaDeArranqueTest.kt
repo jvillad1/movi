@@ -122,6 +122,11 @@ class SchemaDeArranqueTest {
         // Vuelta 63 — las cuotas de una compra diferida. `toFinancialEvent()` —o sea TODA lectura de
         // movimientos— la nombra: sin el ALTER, la app no mostraría un solo movimiento.
         "financial_events" to "cuotas",
+        // Vuelta 64 — el gasto de un mes puntual de un apartado. `apartados` existe en producción con
+        // el colegio del dueño, y `apartadosDelUsuario` —o sea toda lectura de apartados, «Tu plata» y
+        // «Te quedan»— las nombra: sin el ALTER, el Inicio entero caería con «column does not exist».
+        "apartados" to "objetivo",
+        "apartados" to "mes_del_gasto",
     )
 
     /**
@@ -151,7 +156,7 @@ class SchemaDeArranqueTest {
         Users, Accounts, StatementImports, Events, VoidEvents, Budgets, RecurringRules,
         RecurringOccurrences, OccurrenceRejections, SmsMessages, Credits, Cards, Subscriptions, PushSubscriptions,
         Screens, PasswordResetTokens, CardPaymentDismissals, Goals, CategoryPrefs, Documents,
-        StatementImportMatches, KnownDestinations, InicioPersonalizado,
+        StatementImportMatches, KnownDestinations, InicioPersonalizado, Apartados,
     )
 
     @BeforeTest

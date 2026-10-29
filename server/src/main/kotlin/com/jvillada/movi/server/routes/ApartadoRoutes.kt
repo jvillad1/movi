@@ -5,11 +5,14 @@ import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Apartados
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.dbQuery
+import com.jvillada.movi.server.plugins.jsonDeLaApi
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.Apartado
 import com.jvillada.movi.shared.model.MAX_PROPOSITO_APARTADO
 import com.jvillada.movi.shared.model.esDeTuPlata
+import com.jvillada.movi.shared.model.mesDeTexto
+import com.jvillada.movi.shared.model.problemaDelGastoDelApartado
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
@@ -19,6 +22,8 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.put
 import io.ktor.server.routing.route
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.decodeFromJsonElement
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.deleteWhere
@@ -38,8 +43,9 @@ fun Route.apartadoRoutes() {
 
         post {
             val uid = call.userId()
-            val body = call.receive<Apartado>()
-            val valido = validar(uid, body)
+            val crudo = call.receive<JsonObject>()
+            val body = jsonDeLaApi.decodeFromJsonElement<Apartado>(crudo)
+            val valido = validar(uid, body, conGasto = CAMPO_OBJETIVO in crudo || CAMPO_MES in crudo)
             valido.error?.let { return@post call.respond(it.first, it.second) }
             val id = body.id.trim().ifBlank { "apt_${UUID.randomUUID()}" }
             val ahora = System.currentTimeMillis()
@@ -56,6 +62,8 @@ fun Route.apartadoRoutes() {
                             it[categoria] = valido.categoria
                             it[desde] = if (body.desde == 0L) ahora else body.desde
                             it[createdAt] = ahora
+                            it[objetivo] = valido.objetivo
+                            it[mesDelGasto] = valido.mesDelGasto
                         }
                         true
                     }
@@ -73,8 +81,9 @@ fun Route.apartadoRoutes() {
         put("/{id}") {
             val uid = call.userId()
             val id = call.parameters["id"] ?: return@put call.respond(HttpStatusCode.BadRequest, "Missing id")
-            val body = call.receive<Apartado>()
-            val valido = validar(uid, body)
+            val crudo = call.receive<JsonObject>()
+            val body = jsonDeLaApi.decodeFromJsonElement<Apartado>(crudo)
+            val valido = validar(uid, body, conGasto = CAMPO_OBJETIVO in crudo || CAMPO_MES in crudo)
             valido.error?.let { return@put call.respond(it.first, it.second) }
             val actualizados = dbQuery { actualizar(uid, id, body, valido, System.currentTimeMillis()) }
             if (actualizados == 0) return@put call.respond(HttpStatusCode.NotFound)
@@ -90,17 +99,33 @@ fun Route.apartadoRoutes() {
     }
 }
 
+/** Las claves del gasto de un mes puntual (vuelta 64), tal como viajan en el JSON. */
+private const val CAMPO_OBJETIVO = "objetivo"
+private const val CAMPO_MES = "mesDelGasto"
+
+/**
+ * @param conGasto el cuerpo trae las claves del gasto de un mes puntual. **Sin ellas no se tocan las
+ *   columnas**: es un APK anterior a la vuelta 64, que no las conoce, y editar el monto desde ahí no
+ *   puede borrar el objetivo (la misma guarda por clave que `pagoMinimo` en `CardRoutes`). El cliente
+ *   nuevo las manda siempre, también en `null` (`@EncodeDefault`), así que «quitarlo» llega como tal.
+ */
 private class ApartadoValidado(
     val proposito: String,
     val categoria: String?,
     val error: Pair<HttpStatusCode, String>? = null,
+    val conGasto: Boolean = false,
+    val objetivo: Long? = null,
+    val mesDelGasto: String? = null,
 )
 
 /** Valida el cuerpo y que la cuenta sea del dueño, en pesos y «de su plata» (no deuda, bien ni condicionada). */
-private suspend fun validar(uid: String, body: Apartado): ApartadoValidado {
+private suspend fun validar(uid: String, body: Apartado, conGasto: Boolean): ApartadoValidado {
     val proposito = body.proposito.trim()
     val categoria = body.categoria?.trim()?.ifBlank { null }
     fun falla(estado: HttpStatusCode, motivo: String) = ApartadoValidado(proposito, categoria, estado to motivo)
+    val mes = body.mesDelGasto?.trim()?.ifBlank { null }
+    // Sin `hoy`: un apartado cuyo mes ya pasó se puede seguir editando (ver `problemaDelGastoDelApartado`).
+    if (conGasto) problemaDelGastoDelApartado(body.objetivo, mes)?.let { return falla(HttpStatusCode.BadRequest, it) }
     if (proposito.isBlank()) return falla(HttpStatusCode.BadRequest, "Falta el propósito")
     if (proposito.length > MAX_PROPOSITO_APARTADO) {
         return falla(HttpStatusCode.BadRequest, "El propósito no puede pasar de $MAX_PROPOSITO_APARTADO letras")
@@ -117,7 +142,12 @@ private suspend fun validar(uid: String, body: Apartado): ApartadoValidado {
     }
     val sirve = esDeTuPlata(tipo, cuenta[Accounts.conditionedTo], esBien = cuenta[Accounts.assetKind] != null)
     if (!sirve) return falla(HttpStatusCode.BadRequest, "Elige una cuenta de tu plata: una deuda, un bien o una cuenta condicionada no se aparta")
-    return ApartadoValidado(proposito, categoria)
+    return ApartadoValidado(
+        proposito, categoria,
+        conGasto = conGasto,
+        objetivo = if (conGasto) body.objetivo else null,
+        mesDelGasto = if (conGasto) mesDeTexto(mes)?.prefijo else null,
+    )
 }
 
 private fun org.jetbrains.exposed.sql.Transaction.actualizar(uid: String, id: String, body: Apartado, v: ApartadoValidado, ahora: Long): Int =
@@ -127,6 +157,10 @@ private fun org.jetbrains.exposed.sql.Transaction.actualizar(uid: String, id: St
         it[monto] = body.monto
         it[categoria] = v.categoria
         if (body.desde != 0L) it[desde] = body.desde
+        if (v.conGasto) {
+            it[objetivo] = v.objetivo
+            it[mesDelGasto] = v.mesDelGasto
+        }
         it[lastEditedAt] = ahora
     }
 

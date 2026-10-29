@@ -74,6 +74,8 @@ fun Transaction.apartadosDelUsuario(uid: String, voidedIds: Set<String>): List<A
                 categoria = categoria,
                 desde = fila[Apartados.desde],
                 restante = restanteDelApartado(fila[Apartados.monto], consumido),
+                objetivo = fila[Apartados.objetivo],
+                mesDelGasto = fila[Apartados.mesDelGasto],
             )
         }
 }

@@ -90,6 +90,16 @@ fun TarjetaDeCuenta(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     moneda: String = "COP",
+    /**
+     * Vuelta 64: una línea chica debajo del saldo —«$2.000.000 apartado»—, o `null`. El saldo sigue
+     * siendo el del banco; la nota dice cuánto de él ya tiene dueño.
+     */
+    nota: String? = null,
+    /**
+     * Reserva el renglón de [nota] aunque esta tarjeta no la tenga: en un carrusel donde alguna cuenta
+     * tiene algo apartado, todas miden lo mismo de alto.
+     */
+    reservarNota: Boolean = nota != null,
 ) {
     val colores = coloresDeLaTarjetaDeCuenta(marca, Movi.colores)
     CompositionLocalProvider(LocalColores provides colores) {
@@ -138,10 +148,24 @@ fun TarjetaDeCuenta(
                     }
                 }
                 Cifra(saldo, VarianteDeCifra.Grande, moneda = moneda)
+                if (reservarNota) {
+                    Text(
+                        text = nota.orEmpty(),
+                        style = Movi.textos.apoyo,
+                        color = colores.textoMedio,
+                        maxLines = 1,
+                        minLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.testTag(TAG_NOTA_DE_LA_TARJETA_DE_CUENTA),
+                    )
+                }
             }
         }
     }
 }
+
+/** El `testTag` de la nota de una [TarjetaDeCuenta] («$2.000.000 apartado», vuelta 64). */
+const val TAG_NOTA_DE_LA_TARJETA_DE_CUENTA: String = "tarjeta-de-cuenta:nota"
 
 /** El logotipo tipográfico de la marca en su color, sobre la tarjeta blanca: «B» en el amarillo de Bancolombia. */
 @Composable

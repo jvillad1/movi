@@ -382,4 +382,70 @@ class ApartadoRoutesTest {
         assertEquals(HttpStatusCode.BadRequest, crear(json(accountId = "acc-rara")).status)
         assertTrue(listar().isEmpty())
     }
+
+    // ── Vuelta 64 · el gasto de un mes puntual ─────────────────────────────────
+
+    /** El cuerpo del cliente nuevo: siempre con las dos claves, aunque valgan `null`. */
+    private fun conGasto(objetivo: Long?, mes: String?, id: String = "apt-soat", monto: Long = 400_000L): String {
+        val o = objetivo?.toString() ?: "null"
+        val m = mes?.let { """"$it"""" } ?: "null"
+        return """{"id":"$id","accountId":"$cashAccountId","proposito":"SOAT","monto":$monto,"categoria":null,"desde":0,"objetivo":$o,"mesDelGasto":$m}"""
+    }
+
+    @Test
+    fun `el objetivo y el mes del gasto se guardan y vuelven`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.Created, crear(conGasto(1_200_000L, "2027-03")).status)
+        val a = listar()[0].jsonObject
+        assertEquals(1_200_000L, a["objetivo"]!!.jsonPrimitive.long)
+        assertEquals("2027-03", a["mesDelGasto"]!!.jsonPrimitive.content)
+        // La sugerencia es solo un número a la vista: el restante sigue siendo lo apartado.
+        assertEquals(400_000L, a["restante"]!!.jsonPrimitive.long)
+    }
+
+    @Test
+    fun `un APK viejo que edita el monto no borra el objetivo`() = testApplication {
+        wireApp()
+        crear(conGasto(1_200_000L, "2027-03"))
+        // El cuerpo de un APK anterior a la vuelta 64: sin las claves del gasto.
+        val viejo = crear(json(id = "apt-soat", monto = 600_000L, proposito = "SOAT", categoria = null))
+        assertEquals(HttpStatusCode.OK, viejo.status)
+        val put = client.put("/api/apartados/apt-soat") {
+            header(HttpHeaders.Authorization, auth)
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(json(monto = 700_000L, proposito = "SOAT", categoria = null))
+        }
+        assertEquals(HttpStatusCode.OK, put.status)
+        val a = listar()[0].jsonObject
+        assertEquals(700_000L, a["monto"]!!.jsonPrimitive.long)
+        assertEquals(1_200_000L, a["objetivo"]!!.jsonPrimitive.long)
+        assertEquals("2027-03", a["mesDelGasto"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `el cliente nuevo lo quita mandando null`() = testApplication {
+        wireApp()
+        crear(conGasto(1_200_000L, "2027-03"))
+        assertEquals(HttpStatusCode.OK, crear(conGasto(null, null)).status)
+        val a = listar()[0].jsonObject
+        assertTrue(a["objetivo"] is kotlinx.serialization.json.JsonNull)
+        assertTrue(a["mesDelGasto"] is kotlinx.serialization.json.JsonNull)
+    }
+
+    @Test
+    fun `un objetivo sin mes, un mes mal escrito o un objetivo en cero se rechazan`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.BadRequest, crear(conGasto(1_200_000L, null)).status)
+        assertEquals(HttpStatusCode.BadRequest, crear(conGasto(1_200_000L, "marzo")).status)
+        assertEquals(HttpStatusCode.BadRequest, crear(conGasto(0L, "2027-03")).status)
+        assertEquals(HttpStatusCode.BadRequest, crear(conGasto(null, "2027-03")).status)
+        assertTrue(listar().isEmpty())
+    }
+
+    @Test
+    fun `un apartado cuyo mes ya paso se puede seguir editando`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.Created, crear(conGasto(1_200_000L, "2020-03")).status)
+        assertEquals(HttpStatusCode.OK, crear(conGasto(1_200_000L, "2020-03", monto = 500_000L)).status)
+    }
 }

@@ -29,6 +29,7 @@ import androidx.compose.ui.platform.testTag
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.Apartado
+import com.jvillada.movi.shared.model.mesDelGastoDe
 import com.jvillada.movi.shared.model.esDeTuPlata
 import com.jvillada.movi.shared.model.CreditTerms
 import com.jvillada.movi.shared.model.AccountGroup
@@ -671,10 +672,15 @@ private fun SeccionDeApartados(
 ) {
     if (apartados.isNotEmpty()) Seccion(titulo = "Apartado")
     Superficie(relleno = RellenoDeSuperficie.Lista) {
+        val hoy = hoyEnAppZone()
         apartados.forEach { apartado ->
+            // Vuelta 64: un apartado para un gasto de un mes puntual dice cuánto lleva y cuánto apartar
+            // al mes («Para marzo: llevas $400.000 de $1.200.000 · aparta $160.000 al mes»).
+            val delGasto = lineaDelGasto(apartado, mesDelGastoDe(apartado), hoy)
             Fila(
                 titulo = apartado.proposito,
-                subtitulo = apartado.categoria?.let { "Se descuenta con los gastos de $it" },
+                subtitulo = delGasto ?: apartado.categoria?.let { "Se descuenta con los gastos de $it" },
+                lineasDelSubtitulo = if (delGasto != null) 2 else 1,
                 final = {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
                         Cifra(apartado.restante)
@@ -686,7 +692,9 @@ private fun SeccionDeApartados(
             Separador()
         }
         if (apartados.isNotEmpty()) {
-            Fila(titulo = "Libre", final = { Cifra(libreDeLaCuenta(account, apartados), tono = TonoDeCifra.Apagado) })
+            // Vuelta 64: «Disponible en la cuenta», no «Libre» (que en esta pantalla ya dice que la cuenta
+            // no tiene condición). Es la misma cifra que «Tus cuentas» del Inicio deja ver debajo del saldo.
+            Fila(titulo = DISPONIBLE_EN_LA_CUENTA, final = { Cifra(libreDeLaCuenta(account, apartados), tono = TonoDeCifra.Apagado) })
             Separador()
         }
         Fila(

@@ -3221,3 +3221,41 @@ bienes), `AnomaliasRoutesTest` (el arriendo en Otros no es gasto nuevo, se propo
 `ElTotalSeParteEnDiaADiaYFijosTest`; en Robolectric, `LasCifrasDelDisponibleEntranTest` («ya te pasaste»,
 «llevas $888.888» y «en el día a día» entran a 390), `PresupuestosConJerarquiaTest` y
 `ElRecurrenteQueCambioDeCategoriaSeProponeTest`.
+
+## 63. Vuelta 64: los apartados que avisan, y la cuota vencida que se dice
+
+De la revisión fresca del 29-oct (punto 11) y un pendiente de la vuelta 59.
+
+- **La hoja de apartar avisa antes de guardar.** Debajo del monto, una `VistaPrevia`: «Te quedan pasa
+  de $1.450.950 a −$549.050». No es una cuenta nueva: `teQuedanConElApartado` (`ui/accounts/
+  ElApartadoQueAvisa.kt`) corre `teQuedanDelInicio` —la del héroe— sobre los mismos datos, con lo
+  apartado de `PlataDelDisponible` movido en lo que cambia `apartadoFueraDeLosFijos` (la regla con que
+  el server manda esa cifra) al sumar el propuesto. Así «antes» es el héroe de ahora y «después» el que
+  va a pintar el Inicio al recalcular. Lee lo del Inicio si está fresco; si no, las lecturas del
+  disponible (`leerDatosDelDiaADia`) más cuentas y apartados. Sin datos, la hoja guarda igual, sin aviso.
+- **«¿Sale de tu ahorro del período?» no se pregunta.** Hoy el ahorro y el apartado se restan cada uno
+  una vez y por separado, y nada dice que un apartado «sale de» un ahorro: contarlo adentro sería una
+  regla de plata nueva. Por eso la hoja solo advierte, cuando «Te quedan» quedaría negativo, que el
+  ahorro se resta aparte y que, si esa plata sale de ahí, se baja en Tú → «Ahorro de cada período».
+- **La hoja habla el sistema**: `EncabezadoDeHoja` con «Quitar» (Peligro, S) a su lado y
+  `ConfirmacionEnLinea`; `PieDeHoja` con una sola acción, sin «Cancelar»; la categoría con
+  `FilaDeCategorias` (frecuentes y «Todas ›», que abre `SelectorDeCategoria`), no la cuadrícula en línea.
+- **«Libre» con un solo sentido.** La fila de la condición dice «Sin condición: para cualquier gasto»
+  (`PLATA_LIBRE`) y lo que queda sin apartar es «Disponible en la cuenta» (`DISPONIBLE_EN_LA_CUENTA`).
+- **«Tus cuentas» del Inicio** dice debajo del saldo «$2.000.000 apartado» (`notaDeLoApartado`, con
+  `apartadoEfectivoDe`): saldo − apartado = «Disponible en la cuenta» del detalle. `TarjetaDeCuenta`
+  ganó `nota` y `reservarNota`: si alguna del carrusel tiene apartado, todas reservan el renglón.
+- **Apartado para un gasto de un mes puntual** (SOAT, predial, matrícula, primas): `Apartado.objetivo`
+  y `mesDelGasto` («AAAA-MM»), columnas nullable `apartados.objetivo` / `mes_del_gasto`. La hoja ofrece
+  una casilla, el mes (este y los once que siguen) y el costo, y sugiere `aporteMensualSugerido` =
+  (objetivo − lo apartado) ÷ meses que faltan, hacia arriba. El detalle dice «Para marzo de 2027:
+  llevas $400.000 de $1.200.000 · aparta $160.000 al mes». **Es solo una sugerencia**: no es un fijo, no
+  resta de «Te quedan» y no mueve plata. Los dos campos viajan siempre (`@EncodeDefault`) y el server
+  solo los toca si la clave vino: un APK viejo que edita el monto no borra el objetivo.
+- **La cuota vencida se dice.** En el detalle del crédito, la fila «Cuota» sale de la misma primera
+  cuota sin pagar con que se cuentan las que faltan (`subtituloDeLaCuota`): «Cuota de octubre vencida
+  desde el 5 oct», en el tono de aviso, o «Día 5 · la próxima el 5 de noviembre».
+
+Lo vigilan `ApartadoParaUnGastoTest` (`:core`), `ApartadoRoutesTest` y `SchemaDeArranqueTest`
+(`:server`), `ElApartadoQueAvisaTest` y `LaCuotaVencidaSeDiceTest` (`commonTest`), y en Robolectric
+`ApartadosEnLaCuentaTest` y `LaHojaDeApartarA360Test` (360 dp, letra ×1,12).

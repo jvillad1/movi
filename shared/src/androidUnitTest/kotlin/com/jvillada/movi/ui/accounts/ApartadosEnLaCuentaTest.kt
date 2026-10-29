@@ -73,11 +73,12 @@ class ApartadosEnLaCuentaTest {
             .fetchSemanticsNodes().isNotEmpty()
 
     /**
-     * La fila «Libre» de los apartados, por su texto entero: «Libre: para cualquier gasto» (la fila
-     * de para qué es la plata, vuelta de diseño 5) es otra cosa.
+     * La fila de lo que queda sin apartar, por su texto entero. Vuelta 64: era «Libre», y en la misma
+     * pantalla «Para qué es esta plata · Libre: para cualquier gasto» quería decir otra cosa; ahora es
+     * [DISPONIBLE_EN_LA_CUENTA] y la otra dice [PLATA_LIBRE] («Sin condición: …»).
      */
     private fun hayLaFilaLibre(): Boolean =
-        composeRule.onAllNodesWithText("Libre", substring = false, useUnmergedTree = true)
+        composeRule.onAllNodesWithText(DISPONIBLE_EN_LA_CUENTA, substring = false, useUnmergedTree = true)
             .fetchSemanticsNodes().isNotEmpty()
 
     private fun tocar(texto: String) {
@@ -131,7 +132,9 @@ class ApartadosEnLaCuentaTest {
         assertTrue(!hayLaFilaLibre(), "sin apartados no hay nada libre que decir")
         tocar("Apartar plata")
         esperarTexto("¿Para qué?")
-        esperarTexto("Se descuenta con los gastos de")
+        esperarTexto("Opcional. Si eliges una")
+        // Vuelta 64: una sola acción abajo, sin «Cancelar» (la X y el velo cierran).
+        assertTrue(!hay("Cancelar"), "la hoja no trae «Cancelar»")
 
         val editables = composeRule.onAllNodes(hasSetTextAction(), useUnmergedTree = true)
         editables[0].performTextInput("Colegio nov-dic")
@@ -198,7 +201,7 @@ class ApartadosEnLaCuentaTest {
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithText(PARA_QUE_ES_ESTA_PLATA, useUnmergedTree = true).fetchSemanticsNodes().size == 2
         }
-        assertTrue(hay("Vacío es libre: para cualquier gasto."))
+        assertTrue(hay("Vacío es sin condición: para cualquier gasto."))
     }
 
     @Test
@@ -219,6 +222,69 @@ class ApartadosEnLaCuentaTest {
         composeRule.waitForIdle()
         assertTrue(!hay("Apartar plata"))
         assertTrue(!hay("Colegio nov-dic"))
+    }
+
+    /** Vuelta 64: «Libre» tiene un solo sentido en el detalle. */
+    @Test
+    fun `Libre ya no se usa con dos sentidos en el detalle`() {
+        Repositories.sustitutoDePrueba = ConNu()
+        detalle()
+        composeRule.waitUntil(timeoutMillis = 5_000) { hayLaFilaLibre() }
+        assertTrue(hay(PLATA_LIBRE))
+        assertTrue(
+            composeRule.onAllNodesWithText("Libre", substring = false, useUnmergedTree = true).fetchSemanticsNodes().isEmpty(),
+            "ninguna fila se llama «Libre» a secas",
+        )
+        assertTrue(!hay("Libre:"), "la fila de la condición ya no empieza con «Libre»")
+    }
+
+    /** Vuelta 64: el apartado para un gasto dice cuánto lleva y cuánto apartar al mes. */
+    @Test
+    fun `el apartado para un gasto dice cuanto lleva y cuanto apartar al mes`() {
+        val hoy = com.jvillada.movi.ui.fecha.hoyEnAppZone()
+        val mes = mesesParaElGasto(hoy)[5]
+        val soat = Apartado(
+            id = "apt_soat", accountId = "acc-nu", proposito = "SOAT", monto = 400_000L,
+            objetivo = 1_000_000L, mesDelGasto = mes.prefijo,
+        )
+        Repositories.sustitutoDePrueba = ConNu(lista = listOf(soat))
+        detalle()
+        esperarTexto("SOAT")
+        esperarTexto("llevas \$400.000 de \$1.000.000 · aparta \$120.000 al mes")
+    }
+
+    @Test
+    fun `marcar el gasto pide el mes y el costo, sugiere el aporte y lo guarda`() {
+        val hoy = com.jvillada.movi.ui.fecha.hoyEnAppZone()
+        val mes = mesesParaElGasto(hoy)[5]
+        val intentos = mutableListOf<Apartado>()
+        Repositories.sustitutoDePrueba = object : ConNu(lista = emptyList()) {
+            override suspend fun guardarApartado(a: Apartado): Apartado {
+                intentos += a
+                return a.copy(restante = a.monto).also { lista = listOf(it) }
+            }
+        }
+        detalle()
+        esperarTexto("Apartar plata")
+        tocar("Apartar plata")
+        esperarTexto("¿Para qué?")
+        val editables = composeRule.onAllNodes(hasSetTextAction(), useUnmergedTree = true)
+        editables[0].performTextInput("SOAT")
+        editables[1].performTextInput("400000")
+        composeRule.waitForIdle()
+
+        tocar("Es para un gasto de un mes puntual")
+        esperarTexto("¿En qué mes llega?")
+        tocar(pastillaDelMes(mes, hoy))
+        esperarTexto("Es para un gasto que llega en ${nombreDelMesDelGasto(mes, hoy)}")
+        composeRule.onAllNodes(hasSetTextAction(), useUnmergedTree = true)[2].performTextInput("1000000")
+        composeRule.waitForIdle()
+        esperarTexto("Aparta \$120.000 al mes")
+
+        tocar("Guardar")
+        composeRule.waitUntil(timeoutMillis = 5_000) { intentos.isNotEmpty() }
+        assertEquals(1_000_000L, intentos.single().objetivo)
+        assertEquals(mes.prefijo, intentos.single().mesDelGasto)
     }
 
     @Test
