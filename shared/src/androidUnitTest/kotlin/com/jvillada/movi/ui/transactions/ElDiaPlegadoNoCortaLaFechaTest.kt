@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.transactions
 
+import com.jvillada.movi.ui.ESCALA_DEL_TELEFONO_AL_130
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -106,6 +107,19 @@ class ElDiaPlegadoNoCortaLaFechaTest {
     fun `a 360 dp con la letra agrandada la fecha del dia plegado se lee entera`() {
         montar("Martes 30 de septiembre")
         laFechaEntera("Martes 30 de septiembre")
+    }
+
+    /** Vuelta 56: el 130 % del teléfono por el ×1,12 de la app, 1,456 en la práctica. */
+    @Test
+    fun `a 360 dp con la letra al 130 por ciento de verdad la fecha del dia plegado se lee entera`() {
+        montar("Martes 30 de septiembre", escala = ESCALA_DEL_TELEFONO_AL_130)
+        laFechaEntera("Martes 30 de septiembre")
+    }
+
+    @Test
+    fun `a la letra del telefono al 130 por ciento, si no cabe todo se corta el conteo, nunca la fecha ni la cifra`() {
+        montar("Hoy · martes 30", escala = ESCALA_DEL_TELEFONO_AL_130, cuantos = 128, total = 12_257_400L)
+        laFechaEntera("Hoy · martes 30")
     }
 
     @Test

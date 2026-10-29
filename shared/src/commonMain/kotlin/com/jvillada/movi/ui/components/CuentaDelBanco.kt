@@ -114,7 +114,9 @@ private val digitosDelNombre = Regex("""\d+""")
 /**
  * **Lo que va justo antes de un número que es el DESTINO de la plata**, no la cuenta de donde sale:
  * «… a la cuenta \*N», «… hacia la cuenta \*N», «… a tu tarjeta de credito \*\*N», «Pagaste $X en
- * la tarjeta de credito \*N desde la cuenta \*8133». Se mira sobre el texto ya normalizado (sin
+ * la tarjeta de credito \*N desde la cuenta \*8133» y, desde la vuelta 56, «Pagaste $X a tu credito
+ * \*4083 desde tu cuenta \*4057» (la misma forma que «a tu tarjeta», con el crédito; antes el \*4083
+ * se leía como la cuenta de donde salía la plata). Se mira sobre el texto ya normalizado (sin
  * tildes ni mayúsculas) y sin el asterisco ni las viñetas del número.
  *
  * Todo lo demás —«de tu cuenta \*9586», «en tu cuenta \*8133», «desde tu T.Credito \*9208», «con tu
@@ -122,7 +124,7 @@ private val digitosDelNombre = Regex("""\d+""")
  * movimiento toca.
  */
 private val antesDeUnDestino =
-    Regex("""(?:\b(?:a|hacia)\s+(?:la|tu)\s+(?:cuenta|tarjeta(?:\s+de\s+credito)?)|\ben\s+la\s+tarjeta\s+de\s+credito)$""")
+    Regex("""(?:\b(?:a|hacia)\s+(?:la|tu)\s+(?:cuenta|tarjeta(?:\s+de\s+credito)?|credito)|\ben\s+la\s+tarjeta\s+de\s+credito)$""")
 
 /** ¿El número que empieza en [inicio] es el destino de la plata? Ver [antesDeUnDestino]. */
 private fun esUnDestino(texto: String, inicio: Int): Boolean {

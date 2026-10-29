@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.dashboard
 
+import com.jvillada.movi.ui.ESCALA_DEL_TELEFONO_AL_130
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Notifications
@@ -140,10 +141,10 @@ class ElPrimerDiaTest {
     }
 
     /** La letra del sistema agrandada a ×1,3, como la pide la vuelta. */
-    private fun conLetraGrande(contenido: @androidx.compose.runtime.Composable () -> Unit) {
+    private fun conLetraGrande(escala: Float = 1.3f, contenido: @androidx.compose.runtime.Composable () -> Unit) {
         composeRule.setContent {
             val base = LocalDensity.current
-            CompositionLocalProvider(LocalDensity provides Density(base.density, 1.3f)) {
+            CompositionLocalProvider(LocalDensity provides Density(base.density, escala)) {
                 MoviTheme { Box(Modifier.fillMaxSize()) { contenido() } }
             }
         }
@@ -301,7 +302,14 @@ class ElPrimerDiaTest {
     }
 
     @Test
-    fun `el rango corto mas largo entra a 360 dp con letra grande, y el rango largo no`() {
+    fun `el rango corto mas largo entra a 360 dp con letra grande, y el rango largo no`() = elRangoCortoMasLargoEntra(1.3f)
+
+    /** Vuelta 56: el 130 % del teléfono por el ×1,12 de la app, 1,456 en la práctica. */
+    @Test
+    fun `el rango corto mas largo entra a 360 dp con la letra al 130 por ciento de verdad`() =
+        elRangoCortoMasLargoEntra(ESCALA_DEL_TELEFONO_AL_130)
+
+    private fun elRangoCortoMasLargoEntra(escala: Float) {
         // «25 ago – 24 sep» es de los más anchos; con un nombre de dueño largo, al lado del avatar y de
         // los dos íconos. Debajo, el rango largo, para que la prueba muestre lo que el corto evita.
         val ajustes = PeriodSettings(cutoffDay = 25)
@@ -309,7 +317,7 @@ class ElPrimerDiaTest {
         val subtitulo = periodoDelEncabezado(DashboardData(periodoActual = septiembre, ajustesDePeriodo = ajustes))!!
         assertEquals("25 ago – 24 sep", subtitulo)
         val deAntes = rangoLegibleDe(septiembre, ajustes)!!
-        conLetraGrande {
+        conLetraGrande(escala) {
             androidx.compose.foundation.layout.Column {
                 EncabezadoDelInicio(subtitulo)
                 EncabezadoDelInicio(deAntes)

@@ -27,6 +27,9 @@ import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.ConfirmarElMismoPago
 import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY
 import com.jvillada.movi.shared.model.DosPatasDelAviso
+import com.jvillada.movi.shared.model.EL_ABONO_EXTRA_SOLO_A_UN_CREDITO
+import com.jvillada.movi.shared.model.cuotaYaPagadaDe
+import com.jvillada.movi.shared.model.fraseDeLaCuotaYaPagada
 import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.MismoPagoConfirmado
@@ -45,6 +48,7 @@ import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -460,6 +464,127 @@ class LasDosPatasDelAvisoTest {
         val otraVez = confirmarElPago(ids, patas(OperacionDelAviso.CUOTA, ahorros, vehiculo, cuota, "grupo"))
         assertEquals(HttpStatusCode.OK, otraVez.status)
         assertFalse(otraVez.body<MismoPagoConfirmado>().creado)
+        assertEquals(antes, cuantosMovimientos())
+    }
+
+    // ── Vuelta 56 · la segunda cuota del mes también pregunta desde Revisar aviso ─
+
+    private fun deudaDe(cuenta: String): Long =
+        movimientos(cuenta).sumOf { signedDelta(AccountType.LOAN, it.type, it.amount) }
+
+    /**
+     * La cuota del período ya la saldó un aviso; otro aviso del mismo período confirmado como cuota (con
+     * `esLaCuota`, lo que manda la app nueva) no se escribe en silencio: **409** con el cuerpo de
+     * `vincular-deuda` (`CUOTA_YA_PAGADA`), nada escrito y el aviso sigue pendiente, por los dos caminos
+     * (el aviso suelto y el pago avisado varias veces). Como abono extra (`comoAbono`) queda el traspaso
+     * de siempre: el monto entero contra el capital, y la cuota del período la sigue saldando la primera.
+     */
+    @Test
+    fun `la segunda cuota del periodo desde un aviso responde 409 y como abono queda un traspaso que no salda nada`() = testApplication {
+        application { testModule() }
+        val primera = confirmar("sms_cuota", patas(OperacionDelAviso.CUOTA, ahorros, vehiculo, cuota, "c1").copy(esLaCuota = true))
+        assertEquals(HttpStatusCode.OK, primera.status, primera.bodyAsText())
+        val delPeriodo = assertNotNull(ocurrencias().firstOrNull { it.ruleId == "$CREDIT_RULE_PREFIX$vehiculo" })
+        assertTrue(delPeriodo.occurred)
+        assertEquals("ev-c1-entra", delPeriodo.eventId)
+
+        transaction {
+            aviso("sms_cuota_2", textoDeLaCuota, "$hoy 11:00")
+            aviso("correo_cuota_2", "Pago PSE · Banco de Occidente · \$ 4.178.163,00", "$hoy 11:00", banco = "Correo · PSE")
+        }
+        val antes = cuantosMovimientos()
+        val deudaAntes = deudaDe(vehiculo)
+
+        // El aviso suelto: 409 con el código, el crédito y la frase; nada escrito.
+        val repetida = confirmar("sms_cuota_2", patas(OperacionDelAviso.CUOTA, ahorros, vehiculo, cuota, "c2").copy(esLaCuota = true))
+        assertEquals(HttpStatusCode.Conflict, repetida.status)
+        val ya = assertNotNull(cuotaYaPagadaDe(409, repetida.bodyAsText()), repetida.bodyAsText())
+        assertEquals("Vehículo 8761", ya.credito)
+        assertEquals(fraseDeLaCuotaYaPagada("Vehículo 8761", ya.periodo), ya.mensaje)
+        assertEquals(antes, cuantosMovimientos())
+        assertEquals(SMS_STATE_PENDING to null, estadoDelAviso("sms_cuota_2"))
+
+        // El pago avisado varias veces: la misma pregunta.
+        val ids = listOf("sms_cuota_2", "correo_cuota_2")
+        val enGrupo = confirmarElPago(ids, patas(OperacionDelAviso.CUOTA, ahorros, vehiculo, cuota, "c2g").copy(esLaCuota = true))
+        assertEquals(HttpStatusCode.Conflict, enGrupo.status)
+        assertEquals(ya, cuotaYaPagadaDe(409, enGrupo.bodyAsText()))
+        assertEquals(antes, cuantosMovimientos())
+
+        // «Un abono extra»: el traspaso de siempre hacia el crédito.
+        val abono = confirmarElPago(ids, patas(OperacionDelAviso.CUOTA, ahorros, vehiculo, cuota, "c2").copy(comoAbono = true))
+        assertEquals(HttpStatusCode.OK, abono.status, abono.bodyAsText())
+        val legs = deEsteTraspaso("tr-c2")
+        assertEquals(setOf(ahorros to TRANSFER_CATEGORY, vehiculo to TRANSFER_CATEGORY), legs.map { it.accountId to it.category }.toSet())
+        assertEquals(cuota, legs.single { it.accountId == vehiculo }.amount, "un abono baja el capital por el monto entero")
+        assertTrue(legs.single { it.accountId == ahorros }.description.startsWith("Abono extraordinario"))
+        assertEquals(deudaAntes - cuota, deudaDe(vehiculo))
+        ids.forEach { assertEquals(SMS_STATE_CONFIRMED to "ev-c2-sale", estadoDelAviso(it)) }
+        // Y no salda nada: la cuota del período la sigue saldando la primera.
+        assertEquals("ev-c1-entra", ocurrencias().first { it.ruleId == "$CREDIT_RULE_PREFIX$vehiculo" }.eventId)
+
+        // El doble toque contesta lo mismo y no duplica.
+        val otraVez = confirmarElPago(ids, patas(OperacionDelAviso.CUOTA, ahorros, vehiculo, cuota, "c2").copy(comoAbono = true))
+        assertEquals(HttpStatusCode.OK, otraVez.status)
+        assertEquals(antes + 2, cuantosMovimientos())
+    }
+
+    /**
+     * Revisión de la vuelta 56, de punta a punta con el aviso real de Occidente, que Movi deja en «Otros»:
+     * lo que manda Revisar aviso tras «Es la cuota de un crédito ›» y el crédito —una cuota con la
+     * marca— escribe las dos patas en «Cuota de crédito» con el mismo `transferId`; con la cuota del mes
+     * ya pagada, el siguiente aviso igual responde 409 y como abono queda un traspaso.
+     */
+    @Test
+    fun `el aviso de Occidente se confirma como cuota, y el segundo del mes pregunta y va como abono`() = testApplication {
+        application { testModule() }
+        val textoDeOccidente = "Bancolombia: Pagaste \$980,000.00 a Banco de Occidente S A ATH desde tu producto 4057"
+        transaction {
+            aviso("sms_occidente_1", textoDeOccidente, "$hoy 10:30")
+            aviso("sms_occidente_2", textoDeOccidente, "$hoy 22:30")
+        }
+        val leido = leer("sms_occidente_1")
+        assertEquals(TransactionType.EXPENSE, leido.type)
+        assertEquals(980_000.0, leido.amount)
+
+        val primera = confirmar("sms_occidente_1", patas(OperacionDelAviso.CUOTA, ahorros, vehiculo, 980_000L, "occ1").copy(esLaCuota = true))
+        assertEquals(HttpStatusCode.OK, primera.status, primera.bodyAsText())
+        val legs = deEsteTraspaso("tr-occ1")
+        assertEquals(setOf(ahorros to CUOTA_CATEGORY, vehiculo to CUOTA_CATEGORY), legs.map { it.accountId to it.category }.toSet())
+        assertEquals(setOf("tr-occ1"), legs.map { it.transferId }.toSet(), "las dos patas con el mismo transferId")
+        assertEquals(SMS_STATE_CONFIRMED to "ev-occ1-sale", estadoDelAviso("sms_occidente_1"))
+
+        val segunda = confirmar("sms_occidente_2", patas(OperacionDelAviso.CUOTA, ahorros, vehiculo, 980_000L, "occ2").copy(esLaCuota = true))
+        assertEquals(HttpStatusCode.Conflict, segunda.status)
+        assertNotNull(cuotaYaPagadaDe(409, segunda.bodyAsText()))
+        assertTrue(deEsteTraspaso("tr-occ2").isEmpty())
+
+        val abono = confirmar("sms_occidente_2", patas(OperacionDelAviso.CUOTA, ahorros, vehiculo, 980_000L, "occ2").copy(comoAbono = true))
+        assertEquals(HttpStatusCode.OK, abono.status, abono.bodyAsText())
+        assertEquals(
+            setOf(ahorros to TRANSFER_CATEGORY, vehiculo to TRANSFER_CATEGORY),
+            deEsteTraspaso("tr-occ2").map { it.accountId to it.category }.toSet(),
+        )
+        assertEquals("ev-occ1-entra", ocurrencias().first { it.ruleId == "$CREDIT_RULE_PREFIX$vehiculo" }.eventId)
+    }
+
+    @Test
+    fun `sin la marca, la segunda cuota se escribe como siempre (un APK viejo)`() = testApplication {
+        application { testModule() }
+        assertEquals(HttpStatusCode.OK, confirmar("sms_cuota", patas(OperacionDelAviso.CUOTA, ahorros, vehiculo, cuota, "v1").copy(esLaCuota = true)).status)
+        transaction { aviso("sms_cuota_v", textoDeLaCuota, "$hoy 11:30") }
+        val vieja = confirmar("sms_cuota_v", patas(OperacionDelAviso.CUOTA, ahorros, vehiculo, cuota, "v2"))
+        assertEquals(HttpStatusCode.OK, vieja.status, vieja.bodyAsText())
+        assertEquals(2, deEsteTraspaso("tr-v2").size)
+    }
+
+    @Test
+    fun `un abono extra solo va a un credito`() = testApplication {
+        application { testModule() }
+        val antes = cuantosMovimientos()
+        val r = confirmar("sms_pago_mb", patas(OperacionDelAviso.PAGO_DE_TARJETA, ahorros, masterBlack, 386_902L, "abono-t").copy(comoAbono = true))
+        assertEquals(HttpStatusCode.UnprocessableEntity, r.status)
+        assertEquals(EL_ABONO_EXTRA_SOLO_A_UN_CREDITO, r.bodyAsText())
         assertEquals(antes, cuantosMovimientos())
     }
 

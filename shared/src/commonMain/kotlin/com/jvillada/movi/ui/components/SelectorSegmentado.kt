@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.text.BasicText
+import com.jvillada.movi.ui.components.ds.seAchicaHastaLaBase
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -70,11 +72,13 @@ fun SelectorSegmentado(
                     .padding(vertical = Espacio.xs),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
+                // Vuelta 56: con la letra al 130 % de verdad (×1,456), «Traspaso» no cabía en su
+                // cuarto: se achica hasta la letra de siempre ([seAchicaHastaLaBase]), sin partirse.
+                val estilo = Movi.textos.cuerpo.copy(color = colorDelSegmento(isActive, Movi.colores).second, letterSpacing = 0.1.sp)
+                BasicText(
                     text = label,
-                    style = Movi.textos.cuerpo,
-                    color = colorDelSegmento(isActive, Movi.colores).second,
-                    letterSpacing = 0.1.sp,
+                    style = estilo,
+                    autoSize = seAchicaHastaLaBase(estilo),
                     // Una sola línea SIEMPRE. Con cuatro segmentos, cada uno se queda con ~82 dp
                     // en un teléfono de 375 px: «Traspaso» a 13 sp mide ~55, pero con la escala de
                     // fuente del sistema al 2× se pasa y envuelve, lo que crece la fila del

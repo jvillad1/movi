@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.transactions
 
+import com.jvillada.movi.ui.components.ds.seAchicaHastaLaBase
+import androidx.compose.foundation.text.BasicText
 import com.jvillada.movi.ui.components.ds.fondoDeLaFilaElegida
 import com.jvillada.movi.shared.model.montoContado
 import com.jvillada.movi.shared.model.Espacio as EspacioCompartido
@@ -1995,15 +1997,18 @@ internal fun EncabezadoDelDia(
             val junto = Espacio.xxs.roundToPx()
 
             val fechaM = subcompose(PiezaDelDia.Fecha) {
-                Text(
+                // Vuelta 56: con la letra al 130 % de verdad (×1,456), «Martes 30 de septiembre» no
+                // entraba ni sin el conteo: se achica hasta la letra de siempre ([seAchicaHastaLaBase]).
+                val estiloDeLaFecha = Movi.textos.cuerpoFuerte.copy(color = Movi.colores.texto)
+                BasicText(
                     text = fecha,
                     // Vuelta 40: el día en 15/700 a la vista (la maqueta dice 14/700; el estilo más
                     // cercano del sistema), con el día de la semana: «Hoy · martes 28».
-                    style = Movi.textos.cuerpoFuerte,
-                    color = Movi.colores.texto,
+                    style = estiloDeLaFecha,
                     maxLines = 1,
                     softWrap = false,
                     overflow = TextOverflow.Ellipsis,
+                    autoSize = seAchicaHastaLaBase(estiloDeLaFecha),
                     modifier = Modifier.testTag(TAG_FECHA_DEL_DIA).semantics { heading() },
                 )
             }.first()

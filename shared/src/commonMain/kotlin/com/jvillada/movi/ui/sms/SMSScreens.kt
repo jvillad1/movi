@@ -123,6 +123,13 @@ import com.jvillada.movi.ui.destinos.FilaGuardarElDestino
 import com.jvillada.movi.ui.destinos.nombreParaLaFila
 import com.jvillada.movi.ui.destinos.rememberDestinosParaGuardar
 import com.jvillada.movi.ui.transactions.SelectorDeCuentaDeDeuda
+import com.jvillada.movi.ui.transactions.QUE_PASA_CON_EL_ABONO_EXTRA
+import com.jvillada.movi.ui.transactions.UN_ABONO_EXTRA
+import com.jvillada.movi.ui.transactions.preguntaDeLaCuotaYaPagada
+import com.jvillada.movi.shared.model.CuotaYaPagada
+import com.jvillada.movi.shared.model.OperacionDelAviso
+import com.jvillada.movi.shared.model.cuotaYaPagadaDe
+import com.jvillada.movi.shared.repository.ApiException
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
@@ -847,6 +854,13 @@ fun SMSReconcileScreen(
      */
     var cuentaDeDeudaElegida by remember { mutableStateOf<Account?>(null) }
     /**
+     * Vuelta 56: «Es la cuota de un crédito ›» / «Es el pago de una tarjeta ›». Las dos categorías de
+     * dos patas ya no se eligen (vuelta 51): estas acciones dejan la pantalla en el mismo estado que
+     * antes armaba elegirlas, y el selector de la deuda lista solo las de ese tipo. Ver
+     * [DeudaQuePagaElAviso].
+     */
+    var deudaPedida by remember { mutableStateOf<DeudaQuePagaElAviso?>(null) }
+    /**
      * Arreglo 1 de la ingesta: la cuenta suya a la que fue la plata en un traspaso, o a la que entró
      * un avance, elegida con el dedo. `null` = la que propone Movi ([destinoPropuestoDelAviso]).
      */
@@ -1048,7 +1062,10 @@ fun SMSReconcileScreen(
     val ofreceVinculo = parsed != null &&
         ofreceVincularDeuda(parsed!!.type, selectedCategory ?: parsed!!.category, transferId = null)
     LaunchedEffect(ofreceVinculo) {
-        if (!ofreceVinculo) cuentaDeDeudaElegida = null
+        if (!ofreceVinculo) {
+            cuentaDeDeudaElegida = null
+            deudaPedida = null
+        }
     }
     // La deuda que se paga queda elegida, en este orden: la que el mensaje NOMBRA por su número
     // («Pagaste $X en la tarjeta de credito *9208 desde la cuenta *8133», ver
@@ -1058,8 +1075,10 @@ fun SMSReconcileScreen(
     // la quita o elige otra, Movi no se la vuelve a poner.
     val deudaPropuesta = deudaPropuestaDelAviso(cuentaDelSms, parsed?.deudaSugeridaId, accounts)
     var deudaTocadaAMano by remember { mutableStateOf(false) }
-    LaunchedEffect(ofreceVinculo, deudaPropuesta?.id) {
-        if (ofreceVinculo && !deudaTocadaAMano && cuentaDeDeudaElegida == null && deudaPropuesta != null) {
+    LaunchedEffect(ofreceVinculo, deudaPropuesta?.id, deudaPedida) {
+        if (ofreceVinculo && !deudaTocadaAMano && cuentaDeDeudaElegida == null && deudaPropuesta != null &&
+            (deudaPedida == null || deudaPropuesta.type == deudaPedida?.tipo)
+        ) {
             cuentaDeDeudaElegida = deudaPropuesta
         }
     }
@@ -1105,7 +1124,17 @@ fun SMSReconcileScreen(
      */
     val faltaElDestino = (pideDestino || pideOrigen) && lasDosPatas == null
 
-    fun confirm() {
+    // Vuelta 56 · la segunda cuota del mes: el server contestó 409 (`CUOTA_YA_PAGADA`) al confirmar la
+    // cuota de un crédito cuya cuota del período ya saldó otro movimiento. La pantalla pregunta si es un
+    // abono extra, en el lugar de los botones —como el detalle desde la vuelta 53—. Va atada al crédito
+    // por el que se preguntó: si el dueño elige otro, la pregunta ya no aplica.
+    var cuotaYaPagada by remember(smsId) { mutableStateOf<Pair<String, CuotaYaPagada>?>(null) }
+    val preguntaDelAbono = cuotaYaPagada?.takeIf { (creditoId, _) ->
+        lasDosPatas?.operacion == OperacionDelAviso.CUOTA && lasDosPatas?.destino?.id == creditoId
+    }?.second
+
+    /** [comoAbono]: «Un abono extra», la respuesta a esa pregunta (ver [pedidoDeDosPatas]). */
+    fun confirm(comoAbono: Boolean = false) {
         if (working) return
         // Ya confirmado (un segundo toque que llegó tarde): nada más que hacer.
         if (sms?.state.let { it != null && it != SMS_STATE_PENDING }) return
@@ -1142,7 +1171,9 @@ fun SMSReconcileScreen(
                     // Las dos patas en una transacción del server, con este aviso (o todos los del
                     // pago) enlazados a la del dinero. Un doble toque no crea otras: el server ve el
                     // aviso ya anotado y contesta con las mismas.
-                    val pedido = pedidoDeDosPatas(dosPatas, p, momento, montoEnLaMonedaDeLaDeuda = enLaDeuda, nuevoId = ::newId)
+                    val pedido = pedidoDeDosPatas(
+                        dosPatas, p, momento, montoEnLaMonedaDeLaDeuda = enLaDeuda, comoAbono = comoAbono, nuevoId = ::newId,
+                    )
                     val elPago = pagoActual
                     if (elPago != null) {
                         Repositories.wallets.confirmarElMismoPago(elPago.grupoId, ConfirmarElMismoPago(idsDelPago, patas = pedido))
@@ -1165,6 +1196,7 @@ fun SMSReconcileScreen(
                 anotarElMovimientoDelAviso(smsId, pagoActual, event, esComprobante, alCrearElMovimiento = { movimientoCreado = true })
             }.onSuccess {
                 working = false
+                cuotaYaPagada = null
                 sms = sms?.copy(state = SMS_STATE_CONFIRMED)
                 vibrador.confirmar()
                 // Ola 2 #1: pop, no push — un segundo tap en ‹ desde la bandeja no debe volver
@@ -1172,6 +1204,12 @@ fun SMSReconcileScreen(
                 goBack(Screen.PorRevisar)
             }.onFailure {
                 working = false
+                // La segunda cuota del mes no es un error: es una pregunta (vuelta 56).
+                val ya = (it as? ApiException)?.let { e -> cuotaYaPagadaDe(e.status, e.serverMessage) }
+                if (ya != null && dosPatas != null) {
+                    cuotaYaPagada = dosPatas.destino.id to ya
+                    return@onFailure
+                }
                 error = it.toUserMessage()
                 // Se vuelve a revisar «¿Ya lo anotaste?»: el que se acaba de crear aparece ahí con
                 // «Es este», que marca el aviso sin crear otro.
@@ -1725,6 +1763,35 @@ fun SMSReconcileScreen(
                         }
                     }
 
+                    // Vuelta 56 · «Es la cuota de un crédito ›» / «Es el pago de una tarjeta ›»: las dos
+                    // patas de una cuota o de un pago de tarjeta, sin elegir una categoría que ya no se
+                    // ofrece (vuelta 51). Dejan la pantalla en el modo de dos patas de siempre.
+                    val accionesDeDeuda = if ((currentSms != null && currentSms.state != SMS_STATE_PENDING) || enPartes) emptyList()
+                    else accionesDeDeudaDelAviso(parsed, categoriaActual, accounts)
+                    if (accionesDeDeuda.isNotEmpty()) {
+                        Column(modifier = Modifier.padding(top = Espacio.xs)) {
+                            accionesDeDeuda.forEach { deuda ->
+                                Text(
+                                    deuda.accion,
+                                    style = Movi.textos.apoyoMedio,
+                                    color = Movi.colores.enlace,
+                                    modifier = Modifier
+                                        .clickable(enabled = !working, role = Role.Button) {
+                                            selectedCategory = deuda.categoria
+                                            deudaPedida = deuda
+                                            eligiendoCategoria = false
+                                            deudaTocadaAMano = false
+                                            if (cuentaDeDeudaElegida?.type != deuda.tipo) cuentaDeDeudaElegida = null
+                                        }
+                                        .testTag(deuda.tag)
+                                        .heightIn(min = Medida.objetivoTactil)
+                                        .padding(horizontal = Espacio.s)
+                                        .wrapContentHeight(),
+                                )
+                            }
+                        }
+                    }
+
                     // Un traspaso sin la cuenta a la que fue la plata: por qué todavía no se puede.
                     if (categoriaActual == TRANSFER_CATEGORY && parsed != null && lasDosPatas == null) {
                         Text(
@@ -1740,9 +1807,11 @@ fun SMSReconcileScreen(
                     if (ofreceVinculo) {
                         Box(Modifier.padding(top = Medida.dentroDeSeccion)) {
                             SelectorDeCuentaDeDeuda(
-                                cuentas = accounts,
+                                cuentas = deudasParaElegir(accounts, deudaPedida),
                                 seleccionada = cuentaDeDeudaElegida,
                                 onSeleccionar = { deudaTocadaAMano = true; cuentaDeDeudaElegida = it },
+                                titulo = deudaPedida?.titulo ?: "¿A cuál crédito o tarjeta corresponde?",
+                                modifier = Modifier.testTag(TAG_SELECTOR_DE_LA_DEUDA_DEL_AVISO),
                             )
                         }
                     }
@@ -1813,7 +1882,22 @@ fun SMSReconcileScreen(
                 }
             }
         }
-        Row(
+        // Vuelta 56 · «La cuota de octubre de X ya está pagada. ¿Este pago es un abono extra?»: en el lugar
+        // de los botones, con «Cancelar» (vuelve a «Ignorar» / «Confirmar») y «Un abono extra».
+        if (preguntaDelAbono != null && !alreadyResolved) {
+            ConfirmacionEnLinea(
+                pregunta = preguntaDeLaCuotaYaPagada(preguntaDelAbono),
+                detalle = QUE_PASA_CON_EL_ABONO_EXTRA,
+                textoConfirmar = UN_ABONO_EXTRA,
+                ocupado = working,
+                onConfirmar = { confirm(comoAbono = true) },
+                onCancelar = { cuotaYaPagada = null },
+                varianteConfirmar = VarianteDeBoton.Principal,
+                modifier = Modifier
+                    .padding(horizontal = Medida.margenDePantalla, vertical = Espacio.s)
+                    .testTag(TAG_CUOTA_YA_PAGADA_EN_EL_AVISO),
+            )
+        } else Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = Medida.margenDePantalla, vertical = Espacio.s),
             horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
         ) {

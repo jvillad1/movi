@@ -134,6 +134,18 @@ class LaCuentaPorElNumeroDeVerdadTest {
         assertNull(deudaQueNombraElMensaje(r))
     }
 
+    /** Vuelta 56: «a tu credito *N» es el destino, como «a tu tarjeta»; la plata sale de la *4057. */
+    @Test
+    fun `el pago a tu credito sale de la cuenta y va al credito`() {
+        val ahorros4057 = Account("aho4057", "Bancolombia Ahorros 4057", AccountType.SAVINGS, 0)
+        val vehiculo = Account("veh", "Vehículo 4083", AccountType.LOAN, 0)
+        val texto = "Bancolombia: Pagaste \$980,000.00 a tu credito *4083 desde tu cuenta *4057"
+        val r = resolver(texto, UsoDeCuenta.ORIGEN_DE_GASTO, cuentas() + ahorros4057 + vehiculo)
+        assertEquals(ahorros4057, r.cuenta, "la plata sale de la *4057, no del crédito")
+        assertEquals(vehiculo, r.destino)
+        assertEquals(vehiculo, deudaQueNombraElMensaje(r), "y es la deuda que se paga")
+    }
+
     @Test
     fun `el avance sale de la tarjeta`() {
         val texto = "Bancolombia: Hiciste un avance de \$6.200.000 en tu SUC VIRTUAL el 17:43 03/10/2026 " +

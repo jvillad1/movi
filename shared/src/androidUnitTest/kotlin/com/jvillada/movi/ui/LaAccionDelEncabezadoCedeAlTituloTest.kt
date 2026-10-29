@@ -263,6 +263,58 @@ class LaAccionDelEncabezadoCedeAlTituloTest {
         revisar("Grupos", "Nuevo grupo")
     }
 
+    // ── Vuelta 56 · con la letra al 130 % de verdad (×1,3 del teléfono por ×1,12 de la app) ──
+
+    @Test
+    fun `Patrimonio al 130 por ciento de verdad`() {
+        Repositories.sustitutoDePrueba = repo
+        montar(ESCALA_DEL_TELEFONO_AL_130) { AccountsScreen(onNavigate = {}) }
+        revisar("Patrimonio", "Nueva cuenta")
+    }
+
+    @Test
+    fun `Creditos al 130 por ciento de verdad`() {
+        Repositories.sustitutoDePrueba = repo
+        montar(ESCALA_DEL_TELEFONO_AL_130) { CreditosScreen(onNavigate = {}) }
+        revisar("Créditos", "Nuevo crédito")
+    }
+
+    @Test
+    fun `Personas y comercios al 130 por ciento de verdad`() {
+        Repositories.sustitutoDePrueba = repo
+        montar(ESCALA_DEL_TELEFONO_AL_130) { DestinosScreen(onNavigate = {}) }
+        revisar("Personas y comercios", "Nueva")
+    }
+
+    @Test
+    fun `Presupuestos al 130 por ciento de verdad`() {
+        Repositories.sustitutoDePrueba = repo
+        montar(ESCALA_DEL_TELEFONO_AL_130) { PresupuestosScreen(onNavigate = {}) }
+        revisar("Presupuestos", "Nuevo")
+    }
+
+    @Test
+    fun `Documentos al 130 por ciento de verdad`() {
+        Repositories.sustitutoDePrueba = repo
+        montar(ESCALA_DEL_TELEFONO_AL_130) { DocumentosScreen(onNavigate = {}) }
+        revisar("Documentos", "Subir archivo")
+    }
+
+    @Test
+    fun `Movi AI al 130 por ciento de verdad`() {
+        Repositories.sustitutoDePrueba = repo
+        montar(ESCALA_DEL_TELEFONO_AL_130) { AIChatScreen(onNavigate = {}) }
+        revisar("Movi AI", "Nueva conversación")
+        subtituloEntero("Conoce tus finanzas")
+    }
+
+    @Test
+    fun `Espacios al 130 por ciento de verdad`() {
+        Repositories.sustitutoDePrueba = repo
+        montar(ESCALA_DEL_TELEFONO_AL_130) { EspaciosScreen(onNavigate = {}) }
+        revisar("Grupos", "Nuevo grupo")
+    }
+
     // ── La regla, en el componente ─────────────────────────────────────────────────────
 
     @Test

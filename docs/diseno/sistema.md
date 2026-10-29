@@ -851,7 +851,7 @@ cómo llenarlo (como «Aquí van tus pagos fijos» en Plan).
   «Noviembre 2026» (`tituloDelPeriodo`, el mismo de «Tus períodos»), también con un corte a mitad de
   mes. El rango entero («Del 23 de octubre al 24 de noviembre») se cortaba a 360 dp; sigue en la línea
   del período de Plan y de Movimientos, donde tiene lugar. *Vuelta 54: con un corte a mitad de mes, el
-  rango corto, «23 oct – 24 nov» (§56).*
+  rango corto, «23 oct – 24 nov» (§57).*
 - **Un solo llamado a crear la primera cuenta** (`elHeroePideLaCuenta`): sin cuentas, el héroe es el
   vacío «Aquí vas a ver tu plata» con «Crear mi primera cuenta» y va primero; «Primeros pasos» va
   debajo de él (`SduiRenderer`, `despuesDelHeroe`) y sin el paso de la cuenta, contando solo lo que
@@ -2747,7 +2747,7 @@ selectores**, los antiguos en el conteo y la franja, el candidato lejano), en `:
 y en `:server` `TransferRoutesTest` (la cuota a mano rechazada en las tres puertas) y `DashboardRoutesTest`
 (los antiguos no cuentan ni suman).
 
-## 54. Vuelta 52: la marca junto a la cifra es «Recurrente», y la nota del pago de tarjeta cabe en un renglón
+## 55. Vuelta 52: la marca junto a la cifra es «Recurrente», y la nota del pago de tarjeta cabe en un renglón
 
 1. **El glifo junto a la cifra no es «tiene par».** La revisión de la vuelta 50 lo leyó como ⇄ («la cuota
    y el pago de tarjeta lo llevan, el traspaso no»). Es `Icons.Rounded.Repeat` con
@@ -2766,7 +2766,7 @@ y en `:server` `TransferRoutesTest` (la cuota a mano rechazada en las tres puert
    `contentDescription` (`explicacionDelPagoDeTarjeta`). No hay otra nota parecida en ese encabezado
    (los traspasos y abonos no tienen). Lo vigilan `PagoDeTarjetaEnElDiaTest` y `Vuelta52Test`.
 
-## 55. Vuelta 53: la cuota que se parece se sugiere sola, la segunda del mes pregunta, y los botones de avisos caben
+## 56. Vuelta 53: la cuota que se parece se sugiere sola, la segunda del mes pregunta, y los botones de avisos caben
 
 La revisión de la vuelta 51 (28-oct, sobre eb3f29f4, `r51b-*`): «Revisar uno por» cortado a 390 dp, «Es la
 cuota de un crédito» escondido al fondo del selector, una segunda cuota de octubre de Vehículo 4083 que se
@@ -2808,8 +2808,8 @@ del período en que se hizo (`periodoQueSalda`).
    entero contra el capital) sobre la pata que ya existía, y no salda ninguna cuota. **No se ofrece «la cuota
    de noviembre (adelantada)»**: no existe ese camino —un pago salda la cuota del período en que se hizo,
    decisión del dueño— y no se inventa. Desde el detalle, todo vínculo a un crédito va con `esLaCuota`, así
-   que también la Ola Y (un gasto «Cuota de crédito» desde «Más») pregunta. La hoja de reconciliar un aviso
-   todavía no manda la marca: vincula como antes.
+   que también la Ola Y (un gasto «Cuota de crédito» desde «Más») pregunta. Revisar aviso hace la misma
+   pregunta desde la vuelta 56 (§59).
 4. **Un crédito nunca dice «A favor» en «¿De cuál crédito?»** (`textoDeCuentaDeDeuda`). Con deuda, «Debes
    $X»; un crédito en 0 o por debajo, **«Movi no tiene el saldo»** (`SIN_EL_SALDO_EN_EL_SELECTOR`, como la hoja
    de Cuota de la vuelta 49); una tarjeta en 0 o pagada de más, **«Sin deuda»**. El selector de cuentas de
@@ -2823,7 +2823,7 @@ frase y el código del 409), y en `:server` `VincularPagoDeDeudaRoutesTest` (de 
 saldada, la segunda responde 409 sin escribir, como abono queda un traspaso de $980.000 que no salda nada, los
 reintentos de los dos contestan 200; el abono no vale con una tarjeta).
 
-## 56. Vuelta 54: el primer uso, sin listas que no cuadran ni pasos sin salida
+## 57. Vuelta 54: el primer uso, sin listas que no cuadran ni pasos sin salida
 
 La revisión de primer uso del 28-oct (una cuenta nueva, «Ana Prueba», sobre master ad4bdfa3): llegar a un
 «Te quedan» con sentido costaba 6 pantallas y unos 14 toques. El resultado era correcto; lo que costaba era
@@ -2895,7 +2895,7 @@ escrito no se pierde» en `PrimerUsoEnPantallaTest` (llenar el arriendo y tocar 
 a medias, el pie dice qué falta; saltar pregunta, «Cancelar» lo conserva y «Descartar» lo tira; la
 cuenta escrita se guarda con el principal) y `InicioDelRedisenoTest` / `MasScreenTest`, ajustadas.
 
-## 57. Vuelta 55: accesibilidad — la web lo dice, el foco se ve, el gris pasa, 48 de toque y la letra al 130 %
+## 58. Vuelta 55: accesibilidad — la web lo dice, el foco se ve, el gris pasa, 48 de toque y la letra al 130 %
 
 La revisión de accesibilidad del 28-oct (sobre `ad4bdfa3`) encontró seis cosas. Lo que se hizo:
 
@@ -2950,3 +2950,67 @@ La revisión de accesibilidad del 28-oct (sobre `ad4bdfa3`) encontró seis cosas
    calendario veía «Te falta 1 paso · Sigue con «Tu período»» para siempre. `periodoHechoEn` (`:core`)
    lo da por hecho también si la cuenta ya estaba en uso (`laCuentaYaEstabaEnUso`: movimientos, alguna
    cuenta o `primerUsoEn` puesto); el Inicio y la guía usan la misma regla. Lo vigila `PrimerosPasosTest`.
+
+## 59. Vuelta 56: cabos sueltos de la 53 y la 55
+
+**Sin reglas de plata nuevas**: la cuota sigue siendo `pagoDeCuotaLegs`, el abono extra el traspaso de
+`transferLegsFor`, y un pago salda la cuota del período en que se hizo.
+
+1. **Revisar aviso también pregunta por la segunda cuota del mes.** La vuelta 53 (§56) hizo que
+   `vincular-deuda` preguntara, pero Revisar aviso confirma una cuota por las dos patas
+   (`DosPatasDelAviso`) y la segunda cuota del mes entraba en silencio. Ahora `pedidoDeDosPatas` manda
+   **`esLaCuota`** en toda cuota, y `escribirLasPatasDelAviso` —después de la idempotencia, con la misma
+   `cuotaYaPagadaDelPago` de `vincular-deuda`, ahora dentro de la transacción— contesta **409** con el
+   mismo cuerpo `CuotaYaPagada`, por el aviso suelto (`/api/sms/{id}/confirm`) y por el pago avisado
+   varias veces (`…/grupo/{id}/confirmar`); no escribe nada y el aviso sigue pendiente. La pantalla lo
+   reconoce (`cuotaYaPagadaDe`) y, **en el lugar de los botones**, pregunta «La cuota de octubre de
+   Vehículo 4083 ya está pagada. ¿Este pago es un abono extra?» (`TAG_CUOTA_YA_PAGADA_EN_EL_AVISO`, los
+   mismos textos del detalle) con «Cancelar» y **«Un abono extra»** (`Principal`), que confirma con
+   **`comoAbono`**: el server escribe el traspaso de siempre hacia el crédito y no salda ninguna cuota.
+   `comoAbono` solo vale con un crédito (`EL_ABONO_EXTRA_SOLO_A_UN_CREDITO`). Sin la marca —un APK viejo,
+   los débitos automáticos, las partes de un reparto— todo sigue como antes.
+2. **La sugerencia de la cuota no empuja el detalle.** «¿Es la cuota de X?» esperaba `/upcoming` y
+   `/occurrences` y al llegar movía las acciones. Mientras carga, la hoja guarda su lugar **solo si el
+   gasto puede ser candidato**: `cuotaPrevistaParaElDetalle` hace la misma cuenta pura
+   (`cuotaQueSeParece` sobre `cuotasPorSaldar`: monto, categoría, moneda y período) con lo que el Inicio
+   ya dejó en `DashboardDataCache`. Si se parece, `SugerenciaDeLaCuota(reserva = true)` —invisible, sin
+   semántica ni toque, con su misma pregunta, `TAG_LUGAR_DE_LA_SUGERENCIA_DE_LA_CUOTA`— guarda el alto, y
+   la lectura fresca la reemplaza por la real o la suelta. Un gasto que no se parece a ninguna no reserva
+   nada (no deja un hueco que después se cierra). Lo que se muestra y se toca sale siempre de la lectura
+   fresca.
+3. **La letra a la escala real: 1,456.** Un teléfono al 130 % ve la letra a 1,3 × el 1,12 de `App()`.
+   Las pruebas de la letra grande corren también a **1,456** y 360 dp
+   (`ESCALA_DEL_TELEFONO_AL_130`). Se cortaban tres textos de un renglón, y los tres **se achican hasta
+   la letra de siempre** (`seAchicaHastaLaBase`: piso = tamaño ÷ `ESCALA_QUE_ABSORBE_EL_ROTULO`, el mismo
+   de los rótulos de la vuelta 55), sin partirse: «Traspaso» en el selector de Agregar
+   (`SelectorSegmentado`), «$1.245.900» junto a «Anotar pago» en Pagos (`MontoDeFila`) y «Martes 30 de
+   septiembre» en el encabezado de un día de Actividad. Lo demás ya cabía.
+4. **Revisar aviso: «Es la cuota de un crédito ›» y «Es el pago de una tarjeta ›»** (regresión de la
+   vuelta 51). Las dos patas de una cuota o de un pago de tarjeta se armaban solo eligiendo «Cuota de
+   crédito» o «Pago de tarjeta», y la 51 las sacó de todos los selectores: con «Bancolombia: Pagaste
+   $980,000.00 a Banco de Occidente S A ATH desde tu producto 4057», que Movi deja en «Otros», no había
+   cómo llegar a «Sale de … · entra a …». Ahora, junto a la categoría, dos acciones propias
+   (`DeudaQuePagaElAviso`, `accionesDeDeudaDelAviso`: solo en un gasto, mientras la categoría no sea ya de
+   dos patas, y solo si hay créditos o tarjetas) dejan la pantalla en el mismo estado que antes armaba
+   elegir la categoría, con el selector de la deuda filtrado a su tipo («¿De cuál crédito?» / «¿De cuál
+   tarjeta?», `deudasParaElegir`, el saldo de `textoDeCuentaDeDeuda`). **Las reservadas siguen fuera del
+   selector.** Desde ahí funciona el punto 1. Se revisó el resto: la tarjeta de Por revisar manda lo de
+   dos patas a Revisar aviso (`DudaDelAviso.DOS_PATAS`); el detalle de un movimiento ya tenía sus filas
+   propias («Es la cuota de un crédito», vuelta 51, y «Pago de tarjeta»); recategorizar en lote no tiene
+   ningún modo especial. Además, «Pagaste $X a tu credito \*4083 desde tu cuenta \*4057» lee el \*4083
+   como el destino, igual que «a tu tarjeta» (`antesDeUnDestino`): antes lo tomaba como la cuenta de
+   origen.
+5. **Documentación.** Había dos «§54» (vueltas 51 y 52): la 52 pasó a §55 y las siguientes corrieron uno;
+   las referencias cruzadas (aquí y en `CLAUDE.md`) apuntan a los números nuevos.
+
+**Las líneas base** no cambian y las guardas en 0 siguen en 0. Lo vigilan, en `:server`,
+`LasDosPatasDelAvisoTest` (el 409 por los dos caminos sin escribir nada, el abono como traspaso que no
+salda, sin la marca como siempre, el abono solo a un crédito); `ReconciliarConLasDosPatasTest` (la
+pregunta en el lugar de los botones, «Cancelar», y «Un abono extra» con `comoAbono`);
+los de punta a punta con el aviso de Occidente (en `ReconciliarConLasDosPatasTest` y
+`LasDosPatasDelAvisoTest`), `LaCuentaPorElNumeroDeVerdadTest` («a tu credito»);
+`LaSugerenciaDeLaCuotaNoEmpujaTest` (las acciones se mueven menos de 8 dp; sin parecido no reserva;
+la lectura fresca manda) y `LaCuotaPrevistaTest` (`commonTest`); y a 1,456, `ElTextoAl1456NoSeCortaTest`,
+`LosBotonesDeLosAvisosCabenTest`, `ElPrimerDiaTest` (el rango corto), `NadaSeRecortaEnElInicioTest`,
+`LaAccionDelEncabezadoCedeAlTituloTest`, `ElDiaPlegadoNoCortaLaFechaTest`,
+`ElEfectivoEnNegativoSeLeeEnteroTest` y `LosCamposDelSistemaTest`.

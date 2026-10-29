@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.accounts
 
+import com.jvillada.movi.ui.ESCALA_DEL_TELEFONO_AL_130
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.CompositionLocalProvider
@@ -100,6 +101,13 @@ class ElEfectivoEnNegativoSeLeeEnteroTest {
     fun `a 360 dp con la letra por 1,3 el subtitulo del efectivo en negativo se lee entero`() {
         val (nodo, _) = montarYMedir(1.3f)
         assertTrue(seVeEntero(nodo), "«$EFECTIVO_EN_NEGATIVO_CORTO» se recorta a 360 dp con la letra ×1,3")
+    }
+
+    /** Vuelta 56: el 130 % del teléfono por el ×1,12 de la app, 1,456 en la práctica. */
+    @Test
+    fun `a 360 dp con la letra al 130 por ciento de verdad tambien se lee entero`() {
+        val (nodo, _) = montarYMedir(ESCALA_DEL_TELEFONO_AL_130)
+        assertTrue(seVeEntero(nodo), "«$EFECTIVO_EN_NEGATIVO_CORTO» se recorta a 360 dp con la letra ×1,456")
     }
 
     /**

@@ -199,12 +199,18 @@ const val TAG_MONTO_EN_LA_MONEDA_DE_LA_DEUDA: String = "sms:dos-patas:monto-en-l
  * [montoEnLaMonedaDeLaDeuda] es lo que el dueño escribió en «¿Cuánto bajó la deuda en USD?»; solo
  * viaja en un pago de tarjeta entre monedas ([pideElMontoEnLaMonedaDeLaDeuda]) y si es mayor que cero.
  * Sin él, el server convierte con la tasa del día.
+ *
+ * Vuelta 56 · **una cuota va siempre con `esLaCuota`**: así el server pregunta antes de saldar dos veces
+ * la cuota del mismo período (409 `CUOTA_YA_PAGADA`, como `vincular-deuda` desde el detalle) y la
+ * pantalla ofrece «Un abono extra». [comoAbono] es esa respuesta: el server escribe el traspaso de
+ * siempre hacia el crédito, que no salda ninguna cuota. Solo vale en una cuota.
  */
 fun pedidoDeDosPatas(
     propuestas: DosPatasPropuestas,
     leido: ParsedSms,
     momento: Long,
     montoEnLaMonedaDeLaDeuda: Long? = null,
+    comoAbono: Boolean = false,
     nuevoId: (String) -> String,
 ): DosPatasDelAviso = DosPatasDelAviso(
     operacion = propuestas.operacion,
@@ -219,7 +225,12 @@ fun pedidoDeDosPatas(
     avisoDelLadoQueEntra = propuestas.entrante,
     montoEnLaMonedaDeLaDeuda = montoEnLaMonedaDeLaDeuda
         ?.takeIf { it > 0L && pideElMontoEnLaMonedaDeLaDeuda(propuestas) },
+    esLaCuota = propuestas.operacion == OperacionDelAviso.CUOTA && !comoAbono,
+    comoAbono = propuestas.operacion == OperacionDelAviso.CUOTA && comoAbono,
 )
+
+/** El tag de la pregunta «La cuota de octubre de X ya está pagada. ¿Este pago es un abono extra?» en Revisar aviso. */
+const val TAG_CUOTA_YA_PAGADA_EN_EL_AVISO: String = "sms:cuota-ya-pagada"
 
 /** El tag del renglón «Sale de … · entra a …» en la tarjeta de resumen. */
 const val TAG_RESUMEN_DE_LAS_DOS_PATAS: String = "sms:dos-patas:resumen"
@@ -305,3 +316,52 @@ internal fun LasDosPatasEnElResumen(
         }
     }
 }
+
+// ── Vuelta 56 · «Es la cuota de un crédito ›» y «Es el pago de una tarjeta ›» en Revisar aviso ─────
+
+/*
+ * La vuelta 51 sacó «Cuota de crédito» y «Pago de tarjeta» de todos los selectores (son de las que
+ * escribe Movi), también del de Revisar aviso. Pero las dos patas de una cuota o de un pago de tarjeta
+ * ([dosPatasPropuestas]) se armaban **solo** eligiendo una de esas dos categorías: con «Pagaste
+ * $980,000.00 a Banco de Occidente S A ATH desde tu producto 4057», que Movi deja en «Otros», no había
+ * cómo llegar a «Sale de … · entra a …». Ahora son dos acciones propias, junto a la categoría: cada una
+ * deja la pantalla en el mismo estado que antes armaba elegir la categoría (la categoría de dos patas y
+ * «¿De cuál crédito?» / «¿De cuál tarjeta?» con la lista y el saldo de siempre, `textoDeCuentaDeDeuda`).
+ * Las categorías siguen fuera del selector.
+ */
+
+/** Qué deuda paga el aviso, dicho por el dueño con una de las dos acciones. */
+enum class DeudaQuePagaElAviso(
+    /** El texto de la acción. */
+    val accion: String,
+    /** La categoría de dos patas en que queda la pantalla: la misma que antes se elegía a mano. */
+    val categoria: String,
+    val tipo: AccountType,
+    /** El rótulo del selector de la deuda. */
+    val titulo: String,
+    val tag: String,
+) {
+    CREDITO("Es la cuota de un crédito ›", CUOTA_CATEGORY, AccountType.LOAN, "¿De cuál crédito?", "sms:es-la-cuota-de-un-credito"),
+    TARJETA("Es el pago de una tarjeta ›", CARD_PAYMENT_CATEGORY, AccountType.CREDIT_CARD, "¿De cuál tarjeta?", "sms:es-el-pago-de-una-tarjeta"),
+}
+
+/**
+ * **Las acciones que Revisar aviso ofrece junto a la categoría**: solo en un gasto leído, mientras la
+ * categoría no sea ya una de dos patas, y solo las que tienen dónde ir (algún crédito, alguna tarjeta).
+ * Pura.
+ */
+fun accionesDeDeudaDelAviso(leido: ParsedSms?, categoria: String?, cuentas: List<Account>): List<DeudaQuePagaElAviso> {
+    if (leido == null || leido.type != TransactionType.EXPENSE) return emptyList()
+    if (categoria == CUOTA_CATEGORY || categoria == CARD_PAYMENT_CATEGORY) return emptyList()
+    return DeudaQuePagaElAviso.entries.filter { deuda -> cuentas.any { it.type == deuda.tipo && !it.esBien } }
+}
+
+/**
+ * Las deudas que lista el selector: con una acción elegida, solo las de su tipo; si no (Movi ya leyó
+ * «Cuota de crédito» o «Pago de tarjeta»), créditos y tarjetas, como siempre.
+ */
+fun deudasParaElegir(cuentas: List<Account>, pedida: DeudaQuePagaElAviso?): List<Account> =
+    if (pedida == null) cuentas else cuentas.filter { it.type == pedida.tipo }
+
+/** El tag del selector de la deuda en Revisar aviso. */
+const val TAG_SELECTOR_DE_LA_DEUDA_DEL_AVISO: String = "sms:selector-de-la-deuda"
