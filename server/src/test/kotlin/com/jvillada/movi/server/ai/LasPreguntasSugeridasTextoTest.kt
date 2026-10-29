@@ -194,14 +194,14 @@ class LasPreguntasSugeridasTextoTest {
         assertEquals(
             """
             Revisa esto, en este orden:
-            1. «Gimnasio» venció y no está marcado. Si ya lo pagaste, anótalo y Movi lo tilda solo en Plan.
+            1. «Gimnasio» venció y no está marcado. Si ya lo pagaste, anótalo y Movi lo tilda solo en Pagos.
             2. Te pasaste del presupuesto de Comida por ${'$'}50.000. Puedes ajustar el límite o frenar el gasto en Presupuestos.
             3. Tienes 4 pagos del banco por revisar. Hasta confirmarlos no cuentan en el gasto del período: ábrelos en Por revisar.
             4. El saldo de Nu no coincide con el del banco. Te lo dijo el banco en un aviso: en Cuadre de saldos Movi anota la diferencia con un toque.
             5. ¿Se cobró la cuota de Libre inversión 9695? El banco lo cobra solo y no avisa: confírmalo en Por revisar para que cuente.
             6. ¿Cobro duplicado en Rappi? Dos cobros de ${'$'}45.000 el 10 de octubre.
 
-            Y 1 cosa más en «Para revisar», en Hoy.
+            Y 1 cosa más en «Para revisar», en Inicio.
             """.trimIndent(),
             respuestaSinModelo(PreguntaSugerida.QUE_REVISAR, conTodo),
         )

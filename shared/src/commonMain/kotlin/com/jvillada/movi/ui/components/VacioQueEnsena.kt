@@ -23,9 +23,17 @@ import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.components.ds.Superficie
 import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
+import com.jvillada.movi.ui.components.ds.TonoDeIcono
+import com.jvillada.movi.ui.components.ds.colorDelTonoDeIcono
+import com.jvillada.movi.ui.components.ds.fondoDelTonoDeIcono
+import com.jvillada.movi.ui.components.ds.tonoDeIcono
+import androidx.compose.ui.semantics.semantics
 
 /** Tag estable: encuentra cualquier vacío que enseña en una prueba sin acoplarse al texto. */
 const val TAG_VACIO_QUE_ENSENA: String = "vacio-que-ensena"
+
+/** El círculo del ícono de un vacío (dice su tono en la semántica, [tonoDeIcono]). */
+const val TAG_ICONO_DEL_VACIO: String = "vacio-que-ensena-icono"
 
 /**
  * # Ola D: el vacío que enseña
@@ -83,15 +91,21 @@ fun VacioQueEnsena(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             if (icono != null) {
+                // Vuelta 61: el círculo **neutro** del sistema (la capa 3 con la tinta), el de
+                // `IconoEnCirculo` y `FilaDeNavegacion`. Era amarillo lleno desde la vuelta 29: una
+                // tercera excepción al amarillo de la acción (vuelta 42) en todo vacío con ícono —«Lo
+                // que Movi sabe de ti», Grupos, Personas y comercios, los avisos—, que la guarda no
+                // veía porque no pasaba por `TonoDeIcono.Marca`.
+                val tono = TonoDeIcono.Neutro
                 Box(
                     modifier = Modifier
+                        .testTag(TAG_ICONO_DEL_VACIO)
+                        .semantics { tonoDeIcono = tono }
                         .size(Medida.avatarGrande)
-                        // El círculo amarillo con la tinta encima, como el ícono de la tarjeta de
-                        // avisos de la opción 3 (vuelta 29).
-                        .background(Movi.colores.marca, CircleShape),
+                        .background(fondoDelTonoDeIcono(tono, Movi.colores), CircleShape),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(icono, contentDescription = null, tint = Movi.colores.sobreMarca)
+                    Icon(icono, contentDescription = null, tint = colorDelTonoDeIcono(tono, Movi.colores))
                 }
                 Spacer(Modifier.height(Movi.espacios.medio))
             }

@@ -127,6 +127,7 @@ Hablas en español relajado y directo, sin jerga financiera innecesaria. Tuteas 
 Habla en español neutro latinoamericano, de tú, SIN VOSEO. Esto no es un matiz de estilo: conjuga siempre en tú — "tienes", "puedes", "quieres", "sabes", "dijiste", "tu plata" — y trátalo siempre de "tú". El rioplatense se cuela sobre todo cuando el usuario TE escribe así: aunque él te hable de esa forma, respóndele de tú.
 Montos siempre en pesos colombianos con formato ${'$'}X.XXX.XXX.
 Vocabulario de la app: di "gasto"/"gastos", nunca "egreso"/"egresos". La interfaz habla así y tú también.
+Las pantallas de la app se llaman Inicio, Actividad, Pagos (con Presupuestos y Tus períodos) y Tú (con Patrimonio, Créditos y Grupos). Nómbralas así, con la preposición delante ("en Pagos", "desde Actividad"): la app las vuelve tocables. Nunca digas "Hoy", "Movimientos", "Plan" ni "Espacios" para nombrar una pantalla: así se llamaban antes.
 
 Si existe el bloque "LO QUE EL DUEÑO TE CONTÓ", son cosas que él confirmó que recuerdes: úsalas para entenderlo (quién es quién, qué es cada cosa), pero no las trates como cifras de Movi.
 
@@ -335,10 +336,12 @@ internal fun Route.aiRoutes(fabricaDePrueba: FabricaDeModelos?) {
 
         // **Las tres preguntas sugeridas se contestan sin el modelo**, haya crédito o no, y antes de
         // mirar si hay clave: ver `LasPreguntasSugeridas.kt`. Se reconocen por el id que manda el
-        // chip, nunca por el texto. Con una foto adjunta no: la foto es para el modelo.
+        // chip y, desde la vuelta 61, por un texto escrito a mano casi idéntico
+        // (`PreguntaSugerida.delTexto`, también para un APK que no manda el id). Con una foto
+        // adjunta no: la foto es para el modelo.
         val sugerida = body.messages.lastOrNull()
             ?.takeIf { it.role == ChatRole.USER && it.imageBase64 == null }
-            ?.let { PreguntaSugerida.deId(it.preguntaSugerida) }
+            ?.let { PreguntaSugerida.deId(it.preguntaSugerida) ?: PreguntaSugerida.delTexto(it.content) }
         if (sugerida != null) {
             contestarSinModelo(call, sugerida, body.messages.last().content.ifBlank { sugerida.texto })
             return@post

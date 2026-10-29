@@ -17,8 +17,10 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.openingEventFor
 import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.components.MarcoDeHoja
+import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
 import com.jvillada.movi.ui.components.ds.PieDeHoja
 import com.jvillada.movi.ui.components.toUserMessage
 import kotlinx.coroutines.launch
@@ -37,6 +39,9 @@ import kotlinx.datetime.Clock
  * alto que las tarjetas de antes, y la hoja ya iba con margen cero en un teléfono bajo (Ola 12: unos
  * 28 dp cortados en el AVD de entonces, el borde de «Crear cuenta» contra la barra inferior).
  */
+/** El título de la hoja de crear una cuenta (vuelta 61). */
+const val TITULO_DE_NUEVA_CUENTA: String = "Nueva cuenta"
+
 @Composable
 fun CreateAccountSheet(
     onDismiss: () -> Unit,
@@ -98,6 +103,9 @@ fun CreateAccountSheet(
 
     MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !saving) {
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+            // Vuelta 61: con su título, como toda hoja (arrancaba en «Banco», sin decir qué se crea).
+            EncabezadoDeHoja(TITULO_DE_NUEVA_CUENTA)
+            Spacer(Modifier.height(Medida.entreSecciones))
             FormularioDeCuenta(formulario, onElegirBien = onElegirBien, habilitado = !saving)
             Spacer(Modifier.height(Espacio.xs))
             // F52: nota, no botón — Créditos vive en Más, no acá.

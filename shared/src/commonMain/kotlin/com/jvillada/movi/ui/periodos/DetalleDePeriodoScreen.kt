@@ -510,7 +510,7 @@ const val TAG_PAGOS_DEL_PERIODO_EN_PLAN: String = "detalle-pagos-del-periodo-en-
 const val TAG_PRESUPUESTOS_EN_PLAN: String = "detalle-presupuestos-en-plan"
 
 /** El título de la sección que lleva a Plan desde el período en curso. */
-const val TITULO_ESTE_PERIODO_EN_PLAN: String = "Este período, en Plan"
+const val TITULO_ESTE_PERIODO_EN_PLAN: String = "Este período, en Pagos"
 
 /** Las dos filas que llevan a Plan desde el período en curso (ver [SeccionesDeLoQueTeniaQuePasar]). */
 @Composable

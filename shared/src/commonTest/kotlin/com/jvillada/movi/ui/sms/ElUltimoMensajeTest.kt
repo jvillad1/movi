@@ -68,11 +68,11 @@ class ElUltimoMensajeTest {
     @Test
     fun `el banco que se calla dice una linea y lo demas detras de Que es esto`() {
         val (encendido, explicacion) = ayudaDelBancoQueSeCalla(3)
-        assertEquals("Te avisa en Hoy tras 3 días sin nada.", encendido)
-        assertTrue("3 días sin mandar nada" in explicacion && "Movi te lo dice en Hoy" in explicacion, explicacion)
+        assertEquals("Te avisa en Inicio tras 3 días sin nada.", encendido)
+        assertTrue("3 días sin mandar nada" in explicacion && "Movi te lo dice en Inicio" in explicacion, explicacion)
         val (apagado, porQue) = ayudaDelBancoQueSeCalla(0)
         assertEquals("Apagado: Movi no te avisa.", apagado)
         assertTrue("mensajes, avisos o correos" in porQue, porQue)
-        assertEquals("Te avisa en Hoy tras 1 día sin nada.", ayudaDelBancoQueSeCalla(1).first)
+        assertEquals("Te avisa en Inicio tras 1 día sin nada.", ayudaDelBancoQueSeCalla(1).first)
     }
 }

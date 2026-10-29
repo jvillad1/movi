@@ -217,7 +217,7 @@ class CapturaDeSmsEnLaBandejaTest {
         esperarTexto("Silenciar este aviso")
         composeRule.onNodeWithText("Silenciar este aviso", useUnmergedTree = true).performClick()
 
-        esperarTexto("Este aviso no se muestra en Hoy ni en Por revisar.")
+        esperarTexto("Este aviso no se muestra en Inicio ni en Por revisar.")
         assertEquals(true, pedido?.smsAlertMuted)
         // El hecho sigue ahí: lo que se calló es el recordatorio, no la noticia.
         composeRule.onNodeWithText("Nunca ha llegado un mensaje", useUnmergedTree = true).assertExists()

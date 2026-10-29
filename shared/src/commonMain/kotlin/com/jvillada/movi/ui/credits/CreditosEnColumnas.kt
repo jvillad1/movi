@@ -42,6 +42,14 @@ import com.jvillada.movi.ui.components.cabenDosColumnasIguales
  */
 val ANCHO_MINIMO_DE_COLUMNA_DE_CREDITOS: Dp = 420.dp
 
+/**
+ * **Lo más ancho que va un renglón del resumen de deuda** (vuelta 61): «Los pagas tú … $466.775». A
+ * 1.280 la tarjeta de «Deuda total» va a lo ancho del tablero (1.032 dp por dentro) y el rótulo y su
+ * cifra quedaban a ~900 px uno del otro. Topado al ancho de una columna, quedan juntos, como en el
+ * héroe de las demás pantallas (el de Patrimonio va en su columna). En el teléfono no topa nada.
+ */
+val ANCHO_MAXIMO_DEL_RESUMEN_DE_DEUDA: Dp = ANCHO_MINIMO_DE_COLUMNA_DE_CREDITOS
+
 /** El panel mínimo para dos columnas: 2 × 420 + 48 = 888 dp (una ventana de 1.104 en escritorio). */
 val UMBRAL_DE_CREDITOS_EN_DOS_COLUMNAS: Dp = ANCHO_MINIMO_DE_COLUMNA_DE_CREDITOS * 2 + RELLENO_DE_DOS_COLUMNAS
 

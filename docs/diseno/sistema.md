@@ -3068,3 +3068,69 @@ puerta escribe una cuota sin su crédito.
    lo último suba entero por encima de su borde.
 8. **«Ocultar los saldos» en Tú**: el subtítulo va en dos renglones (`lineasDelSubtitulo = 2`); a 390 dp
    se cortaba en «…en est…». Probado a 390 y 360 con la letra ×1,12.
+
+## 61. Vuelta 61: las hojas blancas en la web, nombres viejos y Movi AI sin IA
+
+**Sin reglas de plata nuevas** ni cifras distintas: la forma del héroe de Créditos cambia, sus cuentas
+son de la vuelta 59.
+
+1. **Las hojas eran grises en la web** (el panel `#EBEBEB`, el botón principal `#EBB318`: un 8 % de
+   tinta encima). **La causa**: el `clickable` del velo de `MarcoDeHoja` usaba la indicación del tema (el
+   *ripple* de Material 3). El velo es el **contenedor** del panel, así que con el mouse sobre el panel
+   el velo también está en *hover* (Compose reparte el puntero a toda la cadena de ancestros), y la capa
+   de estado del *ripple* —0,08 en hover, 0,10 en foco— se dibuja **después del contenido**, encima del
+   panel entero. No era el foco: el que tiene el foco del velo es su `focusable()`, que no pinta nada; la
+   prueba vio llegar un `HoverInteraction.Enter`. En el teléfono no hay hover y nunca se vio. Ahora el velo
+   toca **sin indicación** (`veloSinIndicacion`, en las dos hojas: desde abajo y centrada); los
+   enfocables de adentro conservan su anillo de foco (§58). Lo vigila `LasHojasSonBlancasTest`
+   (Robolectric: `captureToImage` se cuelga, así que mide la causa con una indicación espía en el tema:
+   con el mouse sobre el panel y sobre el velo, y el foco del teclado en el velo, no le llega nada; sin el
+   arreglo le llegaba el hover del velo).
+2. **Hojas y tarjetas al sistema.**
+   - **«Nueva cuenta»** y **«Nuevo préstamo»** abren con su `EncabezadoDeHoja` (`TITULO_DE_NUEVA_CUENTA`,
+     `TITULO_DEL_NUEVO_PRESTAMO`). En el préstamo, «¿Acabas de recibir la plata de este crédito?» va en
+     `titulo` —la letra de «Términos», el título de un grupo—, no en `cuerpo`; no es una `Seccion` porque
+     a 360 con la letra grande necesita dos renglones. **«¿Qué deuda quieres registrar?» es el título de
+     su hoja** (iba en `tituloMedio`). Lo vigila `LasHojasDeAltaTienenTituloTest` (un solo encabezado, lo
+     primero de la hoja, nada lo supera, y la pregunta en la letra de «Términos»).
+   - **El héroe de Créditos**: los renglones del resumen («Los pagas tú», «Contando todas tus deudas»)
+     van **sin la sangría** de 8 dp y **topados** a `ANCHO_MAXIMO_DEL_RESUMEN_DE_DEUDA` (420, el de una
+     columna de Créditos): a 1.280 el rótulo y su cifra quedaban a ~900 px. `ElHeroeDeCreditosVaJuntoTest`
+     (a 1.280 y a 390).
+   - **El vacío que enseña** (`VacioQueEnsena`, todo vacío con ícono: «Lo que Movi sabe de ti», Grupos,
+     Personas y comercios, los avisos) pinta su ícono en el **círculo neutro** (`TonoDeIcono.Neutro`: la
+     capa 3 con la tinta). Era amarillo lleno, armado con `background(marca, CircleShape)`, y
+     `ElAmarilloEsDeLaAccionTest` no lo veía porque solo buscaba `TonoDeIcono.Marca`: ahora también
+     falla con **un círculo amarillo armado a mano** (`colores.marca` a dos renglones de un
+     `CircleShape`) fuera del «+» flotante del rail compacto, que es la acción.
+3. **Los nombres viejos.** Hoy → **Inicio**, Plan → **Pagos**, Movimientos → **Actividad** (Espacios →
+   **Grupos** en los errores del server) en lo que lee el dueño:
+   «Qué secciones ves en Inicio y en qué orden», «Reordena y edita las secciones de Inicio», «El resumen
+   sigue en Inicio y en «Tus períodos»», «Escondida: si hay algo urgente, Inicio te lo dice…»,
+   «Este período, en Pagos», «tócala para verla en Pagos», «Ver tu plata día a día en Pagos», «Movi puede
+   anotarlo en Pagos…», «Reparte un gasto desde su detalle en Actividad…», «…desde Actividad» y «Te avisa
+   en Inicio…» (Captura del banco), «Este aviso no se muestra en Inicio…», «en Actividad» (la captura de
+   notificaciones en Android), y en Movi AI «…lo tilda solo en Pagos», «la tarjeta Disponible de Pagos»,
+   «en «Para revisar», en Inicio». Las instrucciones del asistente (`PERSONA`) nombran las pantallas de
+   ahora y piden la preposición delante. **Los nombres de pantalla de una respuesta son enlaces**
+   (`enlacesAPantallas`, `ui/ai/PantallasNombradas.kt`, con `LinkAnnotation` en el azul del enlace):
+   conservador —con su mayúscula y después de «en/de/desde/a»—, así «Pagos del período» al empezar una
+   frase sigue siendo texto. **«Mira en qué se fue», abierto desde Pagos, marca Pagos**: «En qué se va»
+   marca la pestaña de donde se abrió, como Buscar (`destinoResaltadoDeLaPila`). Lo vigilan
+   `LosNombresViejosDeLasPestanasTest` (`:core`: ningún literal de `ui/` ni de `server/.../ai/` nombra una
+   pestaña vieja como lugar), `PantallasNombradasTest`, `EnQueSeVaMarcaSuPestanaTest` y el enlace en
+   `MoviAiSinIaFuncionaMejorTest`.
+4. **Movi AI sin IA.**
+   - **Lo escrito casi igual que una de las tres** se contesta sin la IA, como el chip:
+     `PreguntaSugerida.delTexto` (`:core`) compara lo escrito normalizado (`normalizarPregunta`: sin
+     tildes, signos ni mayúsculas, espacios juntos) contra una lista corta y explícita por pregunta («cómo
+     voy», «qué reviso primero», «en qué se me va la plata»…). El server la usa si no llega el id (también
+     un APK viejo), y la app manda el id. «¿Cómo voy con el carro?» o «¿cómo voy este mes?» siguen siendo
+     preguntas libres. `PreguntaSugeridaDelTextoTest`, `LasPreguntasSugeridasTest` (server).
+   - **Enter envía** con teclado físico (`LocalHayTecladoFisico`: la web, iOS con teclado); Shift+Enter
+     es el salto de renglón del campo (`esEnterParaEnviar`). En el teléfono Android, como siempre.
+   - **«Lo que Movi sabe de ti» se escribe a mano**: «Agregar» en el encabezado y «Escribir un recuerdo»
+     en el vacío abren un recuerdo nuevo que se guarda con el `POST /api/asistente/memoria` de siempre,
+     origen `A_MANO` («Lo escribiste tú»). `LaMemoriaSeEscribeAManoTest`.
+
+**Las líneas base** no cambian (`dp_sueltos` 115, `radios_con_numero` 3) y las guardas en 0 siguen en 0.

@@ -87,7 +87,7 @@ class OcultarLosSaldosEnteroTest {
         assertTrue(leidos.size > 20, "se leyeron las filas de Tú (${leidos.size})")
         assertTrue(cortados.isEmpty(), "ningún texto de Tú se corta; cortados: $cortados")
         assertTrue(
-            leidos.any { n -> n.config.getOrNull(SemanticsProperties.Text)?.any { it.text == "Qué secciones ves en Hoy y en qué orden" } == true },
+            leidos.any { n -> n.config.getOrNull(SemanticsProperties.Text)?.any { it.text == "Qué secciones ves en Inicio y en qué orden" } == true },
             "el subtítulo de «Editar inicio» está en pantalla",
         )
     }

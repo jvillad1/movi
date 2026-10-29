@@ -56,6 +56,7 @@ import com.jvillada.movi.ui.components.ds.BarraDeProgreso
 import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.ui.components.ds.Chevron
 import com.jvillada.movi.ui.components.ds.Cifra
+import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
 import com.jvillada.movi.ui.components.ds.EsqueletoDeFila
 import com.jvillada.movi.ui.components.ds.Fila
 import com.jvillada.movi.ui.components.ds.FilaDeNavegacion
@@ -554,21 +555,28 @@ private fun LoQueCuestaLaDeuda(
 /** El rótulo de un grupo de filas del resumen: qué se está midiendo, antes de con qué alcance. */
 @Composable
 private fun TituloDelGrupo(titulo: String) {
-    Text(titulo, style = Movi.textos.apoyoMedio, color = Movi.colores.textoMedio)
+    Text(titulo, style = Movi.textos.apoyoMedio, color = Movi.colores.textoMedio, modifier = Modifier.testTag(TAG_TITULO_DEL_GRUPO_DEL_RESUMEN))
     Spacer(Modifier.height(Espacio.xs))
 }
+
+/** El rótulo de un grupo del resumen («Intereses este mes»), para medir que sus filas no van sangradas. */
+const val TAG_TITULO_DEL_GRUPO_DEL_RESUMEN: String = "titulo-del-grupo-del-resumen-de-deuda"
 
 /**
  * Una fila del resumen. [alcance] no es una decoración: es **de qué habla** la cifra de la derecha,
  * y va en el rótulo justamente para que no se pueda leer el número sin él. Vuelta de diseño 19: la
  * `CifraConRotulo` del sistema, en renglón (la cifra con su letra, su signo y «Ocultar los saldos»).
+ *
+ * Vuelta 61: **sin sangría** —iba 8 dp corrida a la derecha de su grupo, el único renglón de la app
+ * así— y **topada** a [ANCHO_MAXIMO_DEL_RESUMEN_DE_DEUDA], para que a 1.280 el rótulo y la cifra no
+ * queden a lados opuestos de la tarjeta.
  */
 @Composable
 private fun FilaDelResumen(alcance: String, monto: Long) {
     CifraConRotulo(
         alcance,
         monto,
-        Modifier.padding(start = Espacio.xs),
+        Modifier.widthIn(max = ANCHO_MAXIMO_DEL_RESUMEN_DE_DEUDA),
         disposicion = DisposicionDeCifraConRotulo.EnRenglon,
     )
 }
@@ -578,7 +586,7 @@ private fun FilaDelResumen(alcance: String, monto: Long) {
 private fun FechaDelResumen(alcance: String, fecha: String) {
     RotuloConValor(
         alcance,
-        Modifier.padding(start = Espacio.xs),
+        Modifier.widthIn(max = ANCHO_MAXIMO_DEL_RESUMEN_DE_DEUDA),
         disposicion = DisposicionDeCifraConRotulo.EnRenglon,
     ) { MontoDeFila(fecha) }
 }
@@ -695,8 +703,11 @@ private fun FilaDeDeuda(
  * tiene capital, tasa y plazo; la tarjeta, cupo, corte y día de pago. Preguntar primero evita
  * una hoja única llena de campos que no aplican.
  */
+/** El título de la hoja que pregunta qué deuda se va a registrar. */
+const val TITULO_DEL_ELECTOR_DE_DEUDA: String = "¿Qué deuda quieres registrar?"
+
 @Composable
-private fun DebtTypeChooserSheet(
+internal fun DebtTypeChooserSheet(
     onDismiss: () -> Unit,
     onLoan: () -> Unit,
     onCard: () -> Unit,
@@ -717,8 +728,9 @@ private fun DebtTypeChooserSheet(
                 .verticalScroll(rememberScrollState())
                 .weight(1f, fill = false),
         ) {
-            Text("¿Qué deuda quieres registrar?", style = Movi.textos.tituloMedio, color = Movi.colores.texto)
-            Spacer(Modifier.height(Espacio.s))
+            // Vuelta 61: la pregunta ES el título de la hoja (iba en `tituloMedio`, chica).
+            EncabezadoDeHoja(TITULO_DEL_ELECTOR_DE_DEUDA)
+            Spacer(Modifier.height(Medida.entreSecciones))
             DebtTypeOption(
                 title = "Préstamo",
                 subtitle = "Cuota fija, tasa y plazo — libranza, libre inversión, vehículo",

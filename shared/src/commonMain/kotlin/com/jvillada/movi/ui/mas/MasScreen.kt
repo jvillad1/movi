@@ -355,7 +355,7 @@ fun MasScreen(
                         Icons.Rounded.DashboardCustomize,
                         Screen.EditarInicio,
                         onNavigate,
-                        subtitulo = "Qué secciones ves en Hoy y en qué orden",
+                        subtitulo = "Qué secciones ves en Inicio y en qué orden",
                     )
                     if (guiaIncompleta) {
                         Separador()
@@ -467,7 +467,7 @@ fun MasScreen(
                     errorCierre ?: when (profile?.cierrePorCorreo) {
                         // Encendido, la fila ya dice cuándo llega: la nota lo repetía.
                         true -> null
-                        false -> "El resumen sigue en Hoy y en «Tus períodos»."
+                        false -> "El resumen sigue en Inicio y en «Tus períodos»."
                         null -> null
                     },
                     esError = errorCierre != null,
@@ -567,7 +567,7 @@ fun MasScreen(
                             Icons.Rounded.Tune,
                             Screen.ScreenEditor,
                             onNavigate,
-                            subtitulo = "Reordena y edita las secciones de Hoy",
+                            subtitulo = "Reordena y edita las secciones de Inicio",
                         )
                     }
                 }
