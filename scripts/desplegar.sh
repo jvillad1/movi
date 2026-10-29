@@ -75,11 +75,8 @@ if [ "$ENSAYO" = 1 ]; then ACCION="Ensayo con"; else ACCION="Despliego"; fi
 echo "── $ACCION ${SHA:0:8} ($MODO): $(git log -1 --format=%s "$SHA")"
 
 TRABAJO=$(mktemp -d "${TMPDIR:-/tmp}/movi-despliegue.XXXXXX")
-if [ "$ENSAYO" = 1 ]; then
-    trap 'rm -rf "$TRABAJO/artefacto"' EXIT      # la carpeta de subida queda para mirarla
-else
-    trap 'rm -rf "$TRABAJO"' EXIT
-fi
+CONSERVAR=0   # un ensayo que termina bien deja la carpeta de subida para mirarla
+trap 'if [ "$CONSERVAR" = 1 ]; then rm -rf "$TRABAJO/artefacto"; else rm -rf "$TRABAJO"; fi' EXIT
 SUBIDA="$TRABAJO/subida"
 mkdir -p "$SUBIDA"
 
@@ -197,6 +194,7 @@ armar_subida_desde_fuente() {
 if [ "$MODO" = "fuente" ]; then armar_subida_desde_fuente; else armar_subida_del_paquete; fi
 
 if [ "$ENSAYO" = 1 ]; then
+    CONSERVAR=1
     echo "── Ensayo: no corro railway link/variable/up. La carpeta queda en $SUBIDA."
     exit 0
 fi
