@@ -529,6 +529,45 @@ class LasDosPatasDelAvisoTest {
         assertEquals(antes + 2, cuantosMovimientos())
     }
 
+    /**
+     * Revisión de la vuelta 56, de punta a punta con el aviso real de Occidente, que Movi deja en «Otros»:
+     * lo que manda Revisar aviso tras «Es la cuota de un crédito ›» y el crédito —una cuota con la
+     * marca— escribe las dos patas en «Cuota de crédito» con el mismo `transferId`; con la cuota del mes
+     * ya pagada, el siguiente aviso igual responde 409 y como abono queda un traspaso.
+     */
+    @Test
+    fun `el aviso de Occidente se confirma como cuota, y el segundo del mes pregunta y va como abono`() = testApplication {
+        application { testModule() }
+        val textoDeOccidente = "Bancolombia: Pagaste \$980,000.00 a Banco de Occidente S A ATH desde tu producto 4057"
+        transaction {
+            aviso("sms_occidente_1", textoDeOccidente, "$hoy 10:30")
+            aviso("sms_occidente_2", textoDeOccidente, "$hoy 22:30")
+        }
+        val leido = leer("sms_occidente_1")
+        assertEquals(TransactionType.EXPENSE, leido.type)
+        assertEquals(980_000.0, leido.amount)
+
+        val primera = confirmar("sms_occidente_1", patas(OperacionDelAviso.CUOTA, ahorros, vehiculo, 980_000L, "occ1").copy(esLaCuota = true))
+        assertEquals(HttpStatusCode.OK, primera.status, primera.bodyAsText())
+        val legs = deEsteTraspaso("tr-occ1")
+        assertEquals(setOf(ahorros to CUOTA_CATEGORY, vehiculo to CUOTA_CATEGORY), legs.map { it.accountId to it.category }.toSet())
+        assertEquals(setOf("tr-occ1"), legs.map { it.transferId }.toSet(), "las dos patas con el mismo transferId")
+        assertEquals(SMS_STATE_CONFIRMED to "ev-occ1-sale", estadoDelAviso("sms_occidente_1"))
+
+        val segunda = confirmar("sms_occidente_2", patas(OperacionDelAviso.CUOTA, ahorros, vehiculo, 980_000L, "occ2").copy(esLaCuota = true))
+        assertEquals(HttpStatusCode.Conflict, segunda.status)
+        assertNotNull(cuotaYaPagadaDe(409, segunda.bodyAsText()))
+        assertTrue(deEsteTraspaso("tr-occ2").isEmpty())
+
+        val abono = confirmar("sms_occidente_2", patas(OperacionDelAviso.CUOTA, ahorros, vehiculo, 980_000L, "occ2").copy(comoAbono = true))
+        assertEquals(HttpStatusCode.OK, abono.status, abono.bodyAsText())
+        assertEquals(
+            setOf(ahorros to TRANSFER_CATEGORY, vehiculo to TRANSFER_CATEGORY),
+            deEsteTraspaso("tr-occ2").map { it.accountId to it.category }.toSet(),
+        )
+        assertEquals("ev-occ1-entra", ocurrencias().first { it.ruleId == "$CREDIT_RULE_PREFIX$vehiculo" }.eventId)
+    }
+
     @Test
     fun `sin la marca, la segunda cuota se escribe como siempre (un APK viejo)`() = testApplication {
         application { testModule() }

@@ -854,6 +854,13 @@ fun SMSReconcileScreen(
      */
     var cuentaDeDeudaElegida by remember { mutableStateOf<Account?>(null) }
     /**
+     * Vuelta 56: «Es la cuota de un crédito ›» / «Es el pago de una tarjeta ›». Las dos categorías de
+     * dos patas ya no se eligen (vuelta 51): estas acciones dejan la pantalla en el mismo estado que
+     * antes armaba elegirlas, y el selector de la deuda lista solo las de ese tipo. Ver
+     * [DeudaQuePagaElAviso].
+     */
+    var deudaPedida by remember { mutableStateOf<DeudaQuePagaElAviso?>(null) }
+    /**
      * Arreglo 1 de la ingesta: la cuenta suya a la que fue la plata en un traspaso, o a la que entró
      * un avance, elegida con el dedo. `null` = la que propone Movi ([destinoPropuestoDelAviso]).
      */
@@ -1055,7 +1062,10 @@ fun SMSReconcileScreen(
     val ofreceVinculo = parsed != null &&
         ofreceVincularDeuda(parsed!!.type, selectedCategory ?: parsed!!.category, transferId = null)
     LaunchedEffect(ofreceVinculo) {
-        if (!ofreceVinculo) cuentaDeDeudaElegida = null
+        if (!ofreceVinculo) {
+            cuentaDeDeudaElegida = null
+            deudaPedida = null
+        }
     }
     // La deuda que se paga queda elegida, en este orden: la que el mensaje NOMBRA por su número
     // («Pagaste $X en la tarjeta de credito *9208 desde la cuenta *8133», ver
@@ -1065,8 +1075,10 @@ fun SMSReconcileScreen(
     // la quita o elige otra, Movi no se la vuelve a poner.
     val deudaPropuesta = deudaPropuestaDelAviso(cuentaDelSms, parsed?.deudaSugeridaId, accounts)
     var deudaTocadaAMano by remember { mutableStateOf(false) }
-    LaunchedEffect(ofreceVinculo, deudaPropuesta?.id) {
-        if (ofreceVinculo && !deudaTocadaAMano && cuentaDeDeudaElegida == null && deudaPropuesta != null) {
+    LaunchedEffect(ofreceVinculo, deudaPropuesta?.id, deudaPedida) {
+        if (ofreceVinculo && !deudaTocadaAMano && cuentaDeDeudaElegida == null && deudaPropuesta != null &&
+            (deudaPedida == null || deudaPropuesta.type == deudaPedida?.tipo)
+        ) {
             cuentaDeDeudaElegida = deudaPropuesta
         }
     }
@@ -1751,6 +1763,35 @@ fun SMSReconcileScreen(
                         }
                     }
 
+                    // Vuelta 56 · «Es la cuota de un crédito ›» / «Es el pago de una tarjeta ›»: las dos
+                    // patas de una cuota o de un pago de tarjeta, sin elegir una categoría que ya no se
+                    // ofrece (vuelta 51). Dejan la pantalla en el modo de dos patas de siempre.
+                    val accionesDeDeuda = if ((currentSms != null && currentSms.state != SMS_STATE_PENDING) || enPartes) emptyList()
+                    else accionesDeDeudaDelAviso(parsed, categoriaActual, accounts)
+                    if (accionesDeDeuda.isNotEmpty()) {
+                        Column(modifier = Modifier.padding(top = Espacio.xs)) {
+                            accionesDeDeuda.forEach { deuda ->
+                                Text(
+                                    deuda.accion,
+                                    style = Movi.textos.apoyoMedio,
+                                    color = Movi.colores.enlace,
+                                    modifier = Modifier
+                                        .clickable(enabled = !working, role = Role.Button) {
+                                            selectedCategory = deuda.categoria
+                                            deudaPedida = deuda
+                                            eligiendoCategoria = false
+                                            deudaTocadaAMano = false
+                                            if (cuentaDeDeudaElegida?.type != deuda.tipo) cuentaDeDeudaElegida = null
+                                        }
+                                        .testTag(deuda.tag)
+                                        .heightIn(min = Medida.objetivoTactil)
+                                        .padding(horizontal = Espacio.s)
+                                        .wrapContentHeight(),
+                                )
+                            }
+                        }
+                    }
+
                     // Un traspaso sin la cuenta a la que fue la plata: por qué todavía no se puede.
                     if (categoriaActual == TRANSFER_CATEGORY && parsed != null && lasDosPatas == null) {
                         Text(
@@ -1766,9 +1807,11 @@ fun SMSReconcileScreen(
                     if (ofreceVinculo) {
                         Box(Modifier.padding(top = Medida.dentroDeSeccion)) {
                             SelectorDeCuentaDeDeuda(
-                                cuentas = accounts,
+                                cuentas = deudasParaElegir(accounts, deudaPedida),
                                 seleccionada = cuentaDeDeudaElegida,
                                 onSeleccionar = { deudaTocadaAMano = true; cuentaDeDeudaElegida = it },
+                                titulo = deudaPedida?.titulo ?: "¿A cuál crédito o tarjeta corresponde?",
+                                modifier = Modifier.testTag(TAG_SELECTOR_DE_LA_DEUDA_DEL_AVISO),
                             )
                         }
                     }

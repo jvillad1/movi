@@ -38,6 +38,7 @@ import com.jvillada.movi.shared.model.CuotaYaPagada
 import com.jvillada.movi.shared.model.fraseDeLaCuotaYaPagada
 import com.jvillada.movi.shared.repository.ApiException
 import com.jvillada.movi.ui.transactions.UN_ABONO_EXTRA
+import com.jvillada.movi.ui.transactions.textoDeCuentaDeDeuda
 import kotlinx.serialization.json.Json
 import kotlin.test.assertFalse
 import org.junit.After
@@ -279,6 +280,95 @@ class ReconciliarConLasDosPatasTest {
         assertFalse(abono.esLaCuota)
         assertEquals(980_000L, abono.monto)
         assertEquals(0, repo.sueltos.size, "nunca un gasto suelto")
+    }
+
+    // ── Vuelta 56 · «Es la cuota de un crédito ›» y «Es el pago de una tarjeta ›» ───────────────
+
+    private val ahorros4057 = Account("a4057", "Bancolombia Ahorros 4057", AccountType.SAVINGS, 5_000_000)
+    private val vehiculo4083 = Account("v4083", "Vehículo 4083", AccountType.LOAN, 40_000_000)
+
+    /** El aviso real de la revisión: Movi lo deja en «Otros» y no nombra el crédito. */
+    private val avisoDeOccidente = pagoDeTarjeta.copy(
+        id = "sms_occidente",
+        text = "Bancolombia: Pagaste \$980,000.00 a Banco de Occidente S A ATH desde tu producto 4057",
+    )
+    private val leidoDeOccidente = ParsedSms(980_000.0, "Banco de Occidente S A ATH", TransactionType.EXPENSE, "Otros")
+
+    private fun elegirElCredito() {
+        composeRule.onNodeWithTag(DeudaQuePagaElAviso.CREDITO.tag).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("¿De cuál crédito?").assertIsDisplayed()
+        // Solo los créditos: la tarjeta no está en la lista.
+        composeRule.onAllNodesWithText(textoDeCuentaDeDeuda(masterBlack)).assertCountEquals(0)
+        tocar(textoDeCuentaDeDeuda(vehiculo4083))
+    }
+
+    /**
+     * Revisión de la vuelta 56: con el aviso de Occidente en «Otros» no había cómo llegar a «Sale de … ·
+     * entra a …» (la vuelta 51 sacó «Cuota de crédito» del selector). «Es la cuota de un crédito ›» →
+     * el crédito → Confirmar manda las dos patas de una cuota, con la marca.
+     */
+    @Test
+    fun el_aviso_de_occidente_en_otros_se_confirma_como_la_cuota_de_un_credito() {
+        val repo = Repo(avisoDeOccidente, leidoDeOccidente, cuentas = listOf(ahorros4057, vehiculo4083, masterBlack))
+        montar(repo, avisoDeOccidente.id)
+        composeRule.onNodeWithTag(TAG_RESUMEN_DE_LAS_DOS_PATAS).assertDoesNotExist()
+        composeRule.onNodeWithTag(DeudaQuePagaElAviso.TARJETA.tag).assertIsDisplayed()
+
+        elegirElCredito()
+        composeRule.onNodeWithTag(TAG_RESUMEN_DE_LAS_DOS_PATAS)
+            .assertTextEquals("Sale de Bancolombia Ahorros 4057 · entra a Vehículo 4083 como cuota")
+        // Ya en el modo de dos patas, las acciones se van.
+        composeRule.onNodeWithTag(DeudaQuePagaElAviso.CREDITO.tag).assertDoesNotExist()
+
+        tocar("Confirmar")
+        assertEquals(0, repo.sueltos.size, "no se crea un gasto suelto")
+        val (aviso, patas) = repo.conPatas.single()
+        assertEquals(avisoDeOccidente.id, aviso)
+        assertEquals(OperacionDelAviso.CUOTA, patas.operacion)
+        assertEquals(ahorros4057.id, patas.origenId)
+        assertEquals(vehiculo4083.id, patas.destinoId)
+        assertEquals(980_000L, patas.monto)
+        assertTrue(patas.esLaCuota)
+    }
+
+    /** …y con la cuota del mes ya pagada: el 409, la pregunta, y «Un abono extra» como abono. */
+    @Test
+    fun el_aviso_de_occidente_con_la_cuota_ya_pagada_pregunta_y_va_como_abono() {
+        val ya = CuotaYaPagada(periodo = "2026-10", credito = vehiculo4083.name, mensaje = fraseDeLaCuotaYaPagada(vehiculo4083.name, "2026-10"))
+        val repo = object : Repo(avisoDeOccidente, leidoDeOccidente, cuentas = listOf(ahorros4057, vehiculo4083)) {
+            override suspend fun confirmarConLasDosPatas(smsId: String, patas: DosPatasDelAviso): MismoPagoConfirmado {
+                conPatas += smsId to patas
+                if (!patas.comoAbono) throw ApiException(409, Json { encodeDefaults = true }.encodeToString(CuotaYaPagada.serializer(), ya))
+                return MismoPagoConfirmado(eventoId = patas.origenEventId, creado = true, cerrados = listOf(smsId))
+            }
+        }
+        montar(repo, avisoDeOccidente.id)
+        // Sin tarjetas, solo se ofrece la del crédito.
+        composeRule.onNodeWithTag(DeudaQuePagaElAviso.TARJETA.tag).assertDoesNotExist()
+        elegirElCredito()
+        tocar("Confirmar")
+        composeRule.onNodeWithText("La cuota de octubre de Vehículo 4083 ya está pagada. ¿Este pago es un abono extra?").assertIsDisplayed()
+        tocar(UN_ABONO_EXTRA)
+        val (_, abono) = repo.conPatas.last()
+        assertEquals(2, repo.conPatas.size)
+        assertTrue(abono.comoAbono)
+        assertEquals(vehiculo4083.id, abono.destinoId)
+    }
+
+    @Test
+    fun es_el_pago_de_una_tarjeta_lista_solo_las_tarjetas_y_arma_el_pago() {
+        val repo = Repo(avisoDeOccidente, leidoDeOccidente, cuentas = listOf(ahorros4057, vehiculo4083, masterBlack))
+        montar(repo, avisoDeOccidente.id)
+        composeRule.onNodeWithTag(DeudaQuePagaElAviso.TARJETA.tag).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("¿De cuál tarjeta?").assertIsDisplayed()
+        composeRule.onAllNodesWithText(textoDeCuentaDeDeuda(vehiculo4083)).assertCountEquals(0)
+        tocar(textoDeCuentaDeDeuda(masterBlack))
+        composeRule.onNodeWithTag(TAG_RESUMEN_DE_LAS_DOS_PATAS)
+            .assertTextEquals("Sale de Bancolombia Ahorros 4057 · entra a Master Black 3684 como pago")
+        tocar("Confirmar")
+        assertEquals(OperacionDelAviso.PAGO_DE_TARJETA, repo.conPatas.single().second.operacion)
     }
 
     private fun montar(repo: Repo, smsId: String) {
