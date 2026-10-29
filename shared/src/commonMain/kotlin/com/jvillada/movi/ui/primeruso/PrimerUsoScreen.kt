@@ -25,7 +25,6 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.AccountBalanceWallet
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.CheckCircle
@@ -72,6 +71,7 @@ import com.jvillada.movi.shared.model.periodoDe
 import com.jvillada.movi.shared.model.siElCorteCaeEnFinDeSemanaDe
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Icono
+import com.jvillada.movi.theme.LaMDeMovi
 import com.jvillada.movi.theme.LocalMovimientoReducido
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
@@ -640,10 +640,9 @@ private fun PasoBienvenida(modifier: Modifier) {
 }
 
 /**
- * **La marca de Movi**: la billetera del ícono de la app (el `ic_launcher` de Android y el
- * `movi-192.png` de la web son una billetera), en blanco sobre la marca, en un cuadrado redondeado
- * como el de un ícono de app. Con el ícono del sistema y no con el PNG: un recurso de imagen de
- * Compose todavía no llega a iOS (ver `laPlataformaTraeLasFuentes`), y ahí la app se caería.
+ * **La marca de Movi**: el ícono de la app (vuelta 65), la «m» de Figtree ExtraBold en tinta sobre el
+ * amarillo, en un cuadrado redondeado. La «m» es [LaMDeMovi], el mismo contorno del ícono de Android
+ * y de la web hecho vector (no texto): así también en iOS, que todavía no tiene las fuentes propias.
  */
 @Composable
 private fun MarcaDeMovi() {
@@ -656,10 +655,10 @@ private fun MarcaDeMovi() {
         contentAlignment = Alignment.Center,
     ) {
         Icon(
-            imageVector = Icons.Rounded.AccountBalanceWallet,
+            imageVector = LaMDeMovi,
             contentDescription = "Movi",
             tint = Movi.colores.sobreMarca,
-            modifier = Modifier.size(Icono.l * 2),
+            modifier = Modifier.fillMaxSize(),
         )
     }
 }

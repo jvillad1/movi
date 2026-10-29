@@ -8,11 +8,15 @@
         (opción 3) Movi tiene un solo tema, claro: la ventana arranca en el crema del fondo y no
         hay destello de ningún otro color.
     -->
-    <style name="Theme.Movi" parent="android:Theme.Material.Light.NoActionBar">
+    <style name="Base.Theme.Movi" parent="android:Theme.Material.Light.NoActionBar">
         <!-- El fondo debe coincidir con el de la app para evitar destellos -->
         <item name="android:windowBackground">@color/movi_fondo</item>
         <!-- Barras de estado y navegación transparentes para que Compose las maneje -->
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
+
+    <!-- Antes de Android 12, el tema es la base tal cual; desde 12 suma la pantalla de arranque
+         (values-v31/themes.xml). -->
+    <style name="Theme.Movi" parent="Base.Theme.Movi" />
 </resources>

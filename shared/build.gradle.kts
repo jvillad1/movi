@@ -164,4 +164,9 @@ tasks.withType<Test>().configureEach {
         .withPropertyName("coloresDelWidget")
     inputs.file(rootProject.file("androidApp/src/main/res/layout/widget_te_quedan.xml"))
         .withPropertyName("layoutDelWidget")
+    // Y `ElIconoDeMoviTest` (vuelta 65), el ícono de Android, los avisos y los íconos de la PWA.
+    inputs.dir(rootProject.file("androidApp/src/main/res/drawable")).withPropertyName("drawablesDeLaApp")
+    inputs.dir(rootProject.file("androidApp/src/main/res/mipmap-anydpi-v26")).withPropertyName("iconoAdaptable")
+    inputs.dir(rootProject.file("androidApp/src/main/kotlin")).withPropertyName("fuentesDeLaApp")
+    inputs.dir(rootProject.file("webApp/src/wasmJsMain/resources")).withPropertyName("recursosDelWebApp")
 }
