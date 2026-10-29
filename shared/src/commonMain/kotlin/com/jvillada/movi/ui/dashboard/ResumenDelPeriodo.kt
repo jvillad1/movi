@@ -274,7 +274,8 @@ fun yaRecibidoEnElPeriodo(checklist: List<PagoDelPeriodo>): Long =
  * estando en el checklist y se tildan igual — no se cuentan, que es distinto de esconderlos.
  */
 fun avanceDelChecklist(checklist: List<PagoDelPeriodo>): Pair<Int, Int> {
-    val pagos = checklist.filter { !it.esIngreso }
+    // Vuelta 63: un abono planeado tampoco es uno de los pagos del período (Hoy y Pagos cuentan igual).
+    val pagos = checklist.filter { !it.esIngreso && !it.esAbono }
     return pagos.count { it.pagado } to pagos.size
 }
 
