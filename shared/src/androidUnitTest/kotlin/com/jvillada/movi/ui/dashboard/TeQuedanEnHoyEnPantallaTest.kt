@@ -60,7 +60,8 @@ import kotlin.test.assertTrue
  * `PlanScreen` (`TarjetaDelDisponible` con `disponibleDelInicio(data)`). Se lee lo que de verdad se
  * pinta: el texto de la cifra grande y el de la frase de Plan, y el color de los dos.
  *
- * Vuelta de diseño 3: la columna «Período» de Plan ya no repite lo que queda —lo dice su frase—;
+ * Vuelta de diseño 3: la columna «Período» de Plan ya no repetía lo que queda —lo decía su frase—
+ * (vuelta 70: vuelve a decirlo, la MISMA cifra, para que las tres columnas midan lo mismo);
  * dice lo gastado y de cuánto.
  *
  * Escenario de `DisponibleEnInicioTest`: lunes 21-sep-2026, $10M de ingresos, $3,1M de arriendo.
@@ -158,12 +159,13 @@ class TeQuedanEnHoyEnPantallaTest {
         assertEquals(2, composeRule.onAllNodesWithText("Para 4 días · \$1,7M por día", useUnmergedTree = true).fetchSemanticsNodes().size)
         assertEquals(2, composeRule.onAllNodesWithText(ROTULO_TE_QUEDAN, useUnmergedTree = true).fetchSemanticsNodes().size)
         // Vuelta 60: la semana mide contra lo que quedaba el lunes, y esta es la última del período, así
-        // que su columna dice lo mismo que queda ($6,8M). Una vez, la de la semana: la columna «Período»
-        // no lo repite (dice lo gastado y de cuánto).
+        // que su columna dice lo mismo que queda ($6,8M). Vuelta 70: las tres columnas con el mismo patrón,
+        // así que la del período también dice lo que queda —la MISMA cifra del héroe, compacta—, y debajo
+        // lo gastado y de cuánto.
         assertEquals(
-            1,
+            2,
             composeRule.onAllNodesWithText(formatMoneyCompact(esperado), useUnmergedTree = true).fetchSemanticsNodes().size,
-            "la columna «Período» no repite ${formatMoneyCompact(esperado)}",
+            "la semana y el período dicen ${formatMoneyCompact(esperado)}, lo que queda",
         )
         // El total del período, en su renglón con el nombre de la vuelta 28.
         composeRule.onNodeWithText(ROTULO_DISPONIBLE_DEL_PERIODO, useUnmergedTree = true).assertIsDisplayed()
@@ -186,12 +188,14 @@ class TeQuedanEnHoyEnPantallaTest {
         // La frase vieja se fue: la cifra ya dice «Te pasaste por».
         assertEquals(0, composeRule.onAllNodesWithText("Te pasaste del disponible del período por \$100.000", useUnmergedTree = true)
             .fetchSemanticsNodes().size)
-        assertEquals(0, composeRule.onAllNodesWithText("−\$100.000", useUnmergedTree = true).fetchSemanticsNodes().size,
-            "la columna «Período» no lo repite")
-        // La columna «Período» dice lo gastado ($7M), en el mismo rojo: se pasó.
+        // Vuelta 70: la columna «Período» dice lo que queda —−$100.000, la cifra del héroe con su signo—
+        // en el mismo rojo, y debajo lo gastado ($7M), apagado.
+        val quedaEnPlan = composeRule.onAllNodesWithText("−\$100.000", useUnmergedTree = true).fetchSemanticsNodes()
+        assertEquals(1, quedaEnPlan.size, "la columna «Período» dice lo que queda")
+        assertEquals(rojo, color(quedaEnPlan.single()))
         val gastadoEnPlan = composeRule.onAllNodesWithText("\$7M", useUnmergedTree = true).fetchSemanticsNodes()
         assertEquals(1, gastadoEnPlan.size)
-        assertEquals(rojo, color(gastadoEnPlan.single()))
+        assertTrue(color(gastadoEnPlan.single()) != rojo, "lo gastado va apagado, no en rojo")
     }
 
     /**

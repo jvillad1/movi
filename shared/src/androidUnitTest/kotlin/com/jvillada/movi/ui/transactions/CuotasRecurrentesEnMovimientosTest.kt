@@ -5,6 +5,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
@@ -276,8 +279,13 @@ class CuotasRecurrentesEnMovimientosTest {
         composeRule.onAllNodesWithText(
             "Un crédito tuyo se paga de una sola vez", substring = true, useUnmergedTree = true,
         ).assertCountEquals(1)
-        // Los $10.000.000 del techo no están en ninguna cifra del card.
-        composeRule.onAllNodesWithText("14.215.223", substring = true, useUnmergedTree = true)
-            .assertCountEquals(0)
+        // Los $10.000.000 del techo no están en ninguna cifra del card. Vuelta 70: con 7 días o menos del
+        // período, «Lo que viene» sí lista las dos cuotas del 1 con su total ($14.215.223) —es correcto: el
+        // pago único SÍ vence en esos días—; esa cifra no es del card y no cuenta acá.
+        composeRule.onAllNodes(
+            hasText("14.215.223", substring = true) and
+                !hasAnyAncestor(hasTestTag(com.jvillada.movi.ui.plan.TAG_LO_QUE_VIENE)),
+            useUnmergedTree = true,
+        ).assertCountEquals(0)
     }
 }
