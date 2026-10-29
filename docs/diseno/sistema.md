@@ -2985,13 +2985,30 @@ La revisión de accesibilidad del 28-oct (sobre `ad4bdfa3`) encontró seis cosas
    de los rótulos de la vuelta 55), sin partirse: «Traspaso» en el selector de Agregar
    (`SelectorSegmentado`), «$1.245.900» junto a «Anotar pago» en Pagos (`MontoDeFila`) y «Martes 30 de
    septiembre» en el encabezado de un día de Actividad. Lo demás ya cabía.
-4. **Documentación.** Había dos «§54» (vueltas 51 y 52): la 52 pasó a §55 y las siguientes corrieron uno;
+4. **Revisar aviso: «Es la cuota de un crédito ›» y «Es el pago de una tarjeta ›»** (regresión de la
+   vuelta 51). Las dos patas de una cuota o de un pago de tarjeta se armaban solo eligiendo «Cuota de
+   crédito» o «Pago de tarjeta», y la 51 las sacó de todos los selectores: con «Bancolombia: Pagaste
+   $980,000.00 a Banco de Occidente S A ATH desde tu producto 4057», que Movi deja en «Otros», no había
+   cómo llegar a «Sale de … · entra a …». Ahora, junto a la categoría, dos acciones propias
+   (`DeudaQuePagaElAviso`, `accionesDeDeudaDelAviso`: solo en un gasto, mientras la categoría no sea ya de
+   dos patas, y solo si hay créditos o tarjetas) dejan la pantalla en el mismo estado que antes armaba
+   elegir la categoría, con el selector de la deuda filtrado a su tipo («¿De cuál crédito?» / «¿De cuál
+   tarjeta?», `deudasParaElegir`, el saldo de `textoDeCuentaDeDeuda`). **Las reservadas siguen fuera del
+   selector.** Desde ahí funciona el punto 1. Se revisó el resto: la tarjeta de Por revisar manda lo de
+   dos patas a Revisar aviso (`DudaDelAviso.DOS_PATAS`); el detalle de un movimiento ya tenía sus filas
+   propias («Es la cuota de un crédito», vuelta 51, y «Pago de tarjeta»); recategorizar en lote no tiene
+   ningún modo especial. Además, «Pagaste $X a tu credito \*4083 desde tu cuenta \*4057» lee el \*4083
+   como el destino, igual que «a tu tarjeta» (`antesDeUnDestino`): antes lo tomaba como la cuenta de
+   origen.
+5. **Documentación.** Había dos «§54» (vueltas 51 y 52): la 52 pasó a §55 y las siguientes corrieron uno;
    las referencias cruzadas (aquí y en `CLAUDE.md`) apuntan a los números nuevos.
 
 **Las líneas base** no cambian y las guardas en 0 siguen en 0. Lo vigilan, en `:server`,
 `LasDosPatasDelAvisoTest` (el 409 por los dos caminos sin escribir nada, el abono como traspaso que no
 salda, sin la marca como siempre, el abono solo a un crédito); `ReconciliarConLasDosPatasTest` (la
 pregunta en el lugar de los botones, «Cancelar», y «Un abono extra» con `comoAbono`);
+los de punta a punta con el aviso de Occidente (en `ReconciliarConLasDosPatasTest` y
+`LasDosPatasDelAvisoTest`), `LaCuentaPorElNumeroDeVerdadTest` («a tu credito»);
 `LaSugerenciaDeLaCuotaNoEmpujaTest` (las acciones se mueven menos de 8 dp; sin parecido no reserva;
 la lectura fresca manda) y `LaCuotaPrevistaTest` (`commonTest`); y a 1,456, `ElTextoAl1456NoSeCortaTest`,
 `LosBotonesDeLosAvisosCabenTest`, `ElPrimerDiaTest` (el rango corto), `NadaSeRecortaEnElInicioTest`,
