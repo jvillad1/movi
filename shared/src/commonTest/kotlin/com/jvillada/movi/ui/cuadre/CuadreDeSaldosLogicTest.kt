@@ -206,6 +206,34 @@ class CuadreDeSaldosLogicTest {
         assertFalse("−" in texto)
     }
 
+    /** «Cuadrar» desde Créditos: la sección del préstamo pedido va primera, no al final fuera de pantalla. */
+    @Test
+    fun `la seccion de la cuenta pedida va primera`() {
+        val todas = listOf(
+            cuenta(id = "nu"),
+            cuenta(id = "tarjeta", tipo = AccountType.CREDIT_CARD),
+            cuenta(id = "vehiculo", tipo = AccountType.LOAN, saldo = -980_000L),
+        )
+        val secciones = seccionesDelCuadre(cuentasConLaPrimera(todas, "vehiculo"), primeraId = "vehiculo")
+        assertEquals(
+            listOf(SeccionDelCuadre.PRESTAMOS, SeccionDelCuadre.DINERO, SeccionDelCuadre.TARJETAS),
+            secciones.map { it.first },
+        )
+        // Sin cuenta pedida, el orden de siempre.
+        assertEquals(SeccionDelCuadre.DINERO, seccionesDelCuadre(todas).first().first)
+    }
+
+    /** El ajuste de un préstamo se confirma con lo que va a quedar, sin signos. */
+    @Test
+    fun `la confirmacion del prestamo dice en cuanto queda la deuda y el ajuste`() {
+        assertEquals(
+            "Movi deja la deuda en \$35.830.084 (ajuste de \$36.810.084)",
+            textoDelAjusteDelPrestamo(saldoEnMovi = -980_000L, saldoDelBanco = 35_830_084L),
+        )
+        assertEquals("¿Ajustar la deuda de Vehículo 4083?", preguntaDelAjusteDePrestamos(listOf("Vehículo 4083")))
+        assertEquals("¿Ajustar la deuda de 2 préstamos?", preguntaDelAjusteDePrestamos(listOf("A", "B")))
+    }
+
     /** El efectivo no tiene banco que lo diga. */
     @Test
     fun `el campo del efectivo dice lo que tienes`() {

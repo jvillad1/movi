@@ -115,10 +115,20 @@ fun cuentasParaCuadrar(cuentas: List<Account>): List<Account> = cuentas.filter {
  * **Las cuentas agrupadas por sección**, en el orden de [SeccionDelCuadre] y, adentro, en el orden en
  * que vienen (así la cuenta de [cuentasConLaPrimera] queda primera de la suya). Sin secciones vacías.
  */
-fun seccionesDelCuadre(cuentas: List<Account>): List<Pair<SeccionDelCuadre, List<Account>>> =
-    SeccionDelCuadre.entries.mapNotNull { seccion ->
+fun seccionesDelCuadre(
+    cuentas: List<Account>,
+    /**
+     * La cuenta pedida arriba («Cuadrar» desde Créditos, «Cuadrar efectivo»): **su sección va primera**
+     * (vuelta 59). Un préstamo pedido desde Créditos quedaba al final, fuera de la pantalla.
+     */
+    primeraId: String? = null,
+): List<Pair<SeccionDelCuadre, List<Account>>> {
+    val secciones = SeccionDelCuadre.entries.mapNotNull { seccion ->
         cuentas.filter { seccionDelCuadre(it) == seccion }.takeIf { it.isNotEmpty() }?.let { seccion to it }
     }
+    val laDeLaPrimera = cuentas.firstOrNull { it.id == primeraId }?.let(::seccionDelCuadre) ?: return secciones
+    return secciones.sortedBy { (seccion, _) -> if (seccion == laDeLaPrimera) 0 else 1 }
+}
 
 /** El rótulo del campo de una cuenta de Dinero o Inversión. */
 const val LO_QUE_DICE_EL_BANCO: String = "Lo que dice el banco"
@@ -292,3 +302,17 @@ fun textoDelMomentoDelAviso(momento: Long, hoy: LocalDate): String =
  */
 fun textoDeLasPropuestasPorAviso(propuestas: List<com.jvillada.movi.shared.model.PropuestaDeCuadrePorAviso>): String? =
     com.jvillada.movi.shared.model.textoDeLasPropuestasPorAviso(propuestas)
+
+/**
+ * **Lo que la confirmación de un préstamo dice antes de anotar** (vuelta 59): «Movi deja la deuda en
+ * $35.830.084 (ajuste de $36.810.084)». El ajuste de un préstamo mueve decenas de millones y sale de un
+ * campo que se escribe a mano: no se anota con un solo toque.
+ */
+fun textoDelAjusteDelPrestamo(saldoEnMovi: Long, saldoDelBanco: Long): String =
+    "Movi deja la deuda en ${formatMoney(saldoDelBanco, "COP")} " +
+        "(ajuste de ${formatMoney(kotlin.math.abs(saldoDelBanco - saldoEnMovi), "COP")})"
+
+/** La pregunta de esa confirmación: con un préstamo, su nombre; con varios, cuántos. */
+fun preguntaDelAjusteDePrestamos(nombres: List<String>): String =
+    if (nombres.size == 1) "¿Ajustar la deuda de ${nombres.single()}?" else "¿Ajustar la deuda de ${nombres.size} préstamos?"
+

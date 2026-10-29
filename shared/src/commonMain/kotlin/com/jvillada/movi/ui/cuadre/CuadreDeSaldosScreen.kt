@@ -2,6 +2,8 @@ package com.jvillada.movi.ui.cuadre
 
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import com.jvillada.movi.ui.components.ConfirmarEnHoja
 import com.jvillada.movi.ui.components.ds.Cifra
 import com.jvillada.movi.ui.credits.SIN_SALDO_EN_MOVI
 import com.jvillada.movi.ui.components.ds.Seccion
@@ -145,6 +147,9 @@ fun CuadreDeSaldosScreen(
     }
     val fueraDeRango = escrito.values.any { it != null && it > MAX_ACCOUNT_BALANCE_COP }
     val sePuedeAnotar = pendientes.isNotEmpty() && !fueraDeRango && !guardando
+    // Vuelta 59: el ajuste de un préstamo pide confirmación antes de anotarse (ver [textoDelAjusteDelPrestamo]).
+    var confirmandoPrestamos by remember { mutableStateOf(false) }
+    val prestamosPendientes = pendientes.filter { seCuadraComoPrestamo(it) }
 
     fun anotar() {
         // La guarda contra el doble toque (mismo patrón que la hoja de ajuste de un crédito): sin
@@ -250,7 +255,7 @@ fun CuadreDeSaldosScreen(
                     // «Tarjetas»), en vez del rótulo suelto al final de cada tarjeta. La primera
                     // sección va pegada a la frase de entrada; las demás, con el aire entre secciones
                     // (la tarjeta de arriba ya dejó `Espacio.s`).
-                    seccionesDelCuadre(cuentas).forEachIndexed { i, (seccion, suyas) ->
+                    seccionesDelCuadre(cuentas, primeraId).forEachIndexed { i, (seccion, suyas) ->
                         item(key = "seccion-" + seccion.name) {
                             val pegada = i == 0 && propuestas.isEmpty()
                             Seccion(
@@ -295,7 +300,7 @@ fun CuadreDeSaldosScreen(
                             pendientes.size > 1 -> "Anotar ${pendientes.size} ajustes"
                             else -> "Anotar el ajuste"
                         },
-                        onClick = { anotar() },
+                        onClick = { if (prestamosPendientes.isNotEmpty()) confirmandoPrestamos = true else anotar() },
                         habilitado = sePuedeAnotar,
                         anchoCompleto = true,
                     )
@@ -307,6 +312,21 @@ fun CuadreDeSaldosScreen(
                     )
                 }
             }
+        }
+
+        if (confirmandoPrestamos) {
+            ConfirmarEnHoja(
+                pregunta = preguntaDelAjusteDePrestamos(prestamosPendientes.map { it.name }),
+                detalle = prestamosPendientes.joinToString("\n") { p ->
+                    val ajuste = textoDelAjusteDelPrestamo(saldoQueCreeMovi(p).first, escrito[p.id] ?: 0L)
+                    if (prestamosPendientes.size == 1) "$ajuste." else "${p.name}: $ajuste."
+                } + " Queda como un movimiento visible en la cuenta.",
+                textoConfirmar = "Ajustar",
+                ocupado = guardando,
+                onConfirmar = { confirmandoPrestamos = false; anotar() },
+                onCancelar = { confirmandoPrestamos = false },
+                varianteConfirmar = VarianteDeBoton.Principal,
+            )
         }
 
         if (showCreateSheet) {

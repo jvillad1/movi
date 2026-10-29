@@ -177,7 +177,11 @@ class CuadreDeSaldosScreenTest {
         esperarTexto("Movi no tiene su saldo, tú dices \$34.500.000: se va a anotar un cargo de \$35.480.000.")
         assertTrue(anotadosComoCredito.isEmpty(), "nada se escribe hasta confirmar")
 
+        // Un préstamo no se anota con un solo toque: primero la confirmación, con lo que va a quedar.
         tocar("Anotar el ajuste")
+        esperarTexto("Movi deja la deuda en \$34.500.000 (ajuste de \$35.480.000)")
+        assertTrue(anotadosComoCredito.isEmpty(), "sin confirmar no se anota nada")
+        tocar("Ajustar")
         composeRule.waitUntil(timeoutMillis = 5_000) { anotadosComoCredito.isNotEmpty() }
 
         assertEquals(listOf("acc-loan" to 34_500_000L), anotadosComoCredito)
