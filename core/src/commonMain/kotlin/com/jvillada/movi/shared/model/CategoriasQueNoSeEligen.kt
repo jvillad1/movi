@@ -78,6 +78,11 @@ const val CUOTA_DEL_AVISO_SIN_CREDITO: String =
  * ¿[evento] es la pata suelta de una cuota que viene de un aviso? Un gasto en «Cuota de crédito» sin
  * `transferId`, escrito desde un mensaje del banco o un comprobante. Lo de dos patas (con `transferId`)
  * pasa: es la cuota de verdad.
+ *
+ * **«Pago de tarjeta» no lleva esta guarda, a propósito** (vuelta 58): una cuota suelta no baja ninguna
+ * deuda y cuenta como gasto, así que es un error; un pago de tarjeta suelto es legítimo cuando la tarjeta
+ * no está en Movi (se paga a un plástico ajeno o aún no cargado). Es una categoría reservada, no cuenta
+ * como gasto, y Revisar aviso lo dice en su pie cuando no se eligió tarjeta.
  */
 fun esCuotaSueltaDeUnAviso(evento: FinancialEvent): Boolean =
     (evento.source == EventSource.SMS || evento.source == EventSource.OCR) &&

@@ -261,6 +261,9 @@ fun Route.eventRoutes() {
             // 1.70+) la cuota de un aviso viaja con sus dos patas (`DosPatasDelAviso`); la pata suelta
             // solo la escribía el APK ≤ 1.69 antes de vincularla, y ese camino se cierra a propósito.
             // El reenvío de lo que el server ya tiene sigue pasando.
+            // Vuelta 58: «Pago de tarjeta» NO lleva esta guarda a propósito. Un pago a una tarjeta que
+            // no está en Movi es válido sin `transferId`: es categoría reservada y no cuenta como gasto
+            // (a diferencia de la cuota suelta, que cuenta como gasto y no baja ninguna deuda).
             if (!yaExiste && esCuotaSueltaDeUnAviso(body)) {
                 return@post call.respond(HttpStatusCode.UnprocessableEntity, CUOTA_DEL_AVISO_SIN_CREDITO)
             }

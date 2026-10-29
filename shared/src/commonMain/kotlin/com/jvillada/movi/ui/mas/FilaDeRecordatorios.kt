@@ -67,6 +67,8 @@ internal fun FilaDeRecordatorios(
     Fila(
         titulo = TITULO_DE_LOS_RECORDATORIOS,
         subtitulo = subtituloDeLosRecordatorios(estado, diasDeAviso, falloElPerfil),
+        // Vuelta 58: «Te avisamos 3 días antes del vencimiento.» se cortaba a 360 dp con la letra ×1,12.
+        lineasDelSubtitulo = 2,
         tonoDelSubtitulo = if (apagados) TonoDeSubtitulo.Aviso else TonoDeSubtitulo.Normal,
         inicio = { IconoEnCirculo(Icons.Rounded.Alarm, tono = if (apagados) TonoDeIcono.Aviso else TonoDeIcono.Neutro) },
         final = if (diasDeAviso != null) ({ Chevron() }) else null,

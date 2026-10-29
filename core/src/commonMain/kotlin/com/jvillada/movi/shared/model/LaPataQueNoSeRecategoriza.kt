@@ -22,10 +22,15 @@ fun creditoDeLaCuota(evento: FinancialEvent, cuentas: List<Account>): Account? {
         .maxByOrNull { it.name.length }
 }
 
-/** «Es la cuota de Vehículo 4083: cuenta como gasto. Para cambiarla, anúlala y vuelve a anotarla.» */
+/**
+ * «Es la cuota de Vehículo 4083: cuenta como gasto. Su categoría no se cambia; si no era la cuota, anúlala.»
+ *
+ * Vuelta 58: el texto anterior ordenaba «anúlala y vuelve a anotarla» al lado de «Editar» y de dos «Cambiar»
+ * —que sí cambian el monto, la fecha y la nota—. Lo único que no se toca es la categoría.
+ */
 fun textoDeLaCuotaQueNoSeRecategoriza(credito: String?): String =
     "Es la cuota de ${credito?.takeIf { it.isNotBlank() } ?: "un crédito"}: cuenta como gasto. " +
-        "Para cambiarla, anúlala y vuelve a anotarla."
+        "Su categoría no se cambia; si no era la cuota, anúlala."
 
 /**
  * **Por qué esta pata no se recategoriza**, dicho según lo que es: la cuota de un crédito (cuenta como

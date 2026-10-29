@@ -126,6 +126,7 @@ import com.jvillada.movi.ui.destinos.FilaGuardarElDestino
 import com.jvillada.movi.ui.destinos.nombreParaLaFila
 import com.jvillada.movi.ui.destinos.rememberDestinosParaGuardar
 import com.jvillada.movi.ui.transactions.SelectorDeCuentaDeDeuda
+import com.jvillada.movi.ui.transactions.ayudaDelSelectorDeDeuda
 import com.jvillada.movi.ui.transactions.QUE_PASA_CON_EL_ABONO_EXTRA
 import com.jvillada.movi.ui.transactions.UN_ABONO_EXTRA
 import com.jvillada.movi.ui.transactions.preguntaDeLaCuotaYaPagada
@@ -1562,7 +1563,7 @@ fun SMSReconcileScreen(
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(nombreParaMostrar(comercio ?: p.merchant), style = Movi.textos.titulo, color = Movi.colores.texto)
                                     Text(
-                                        "${(selectedCategory ?: p.category).ifBlank { "Elige la categoría" }} · ${resolvedAccount?.name ?: "Elige la cuenta"}",
+                                        "${categoriaEnElResumen(selectedCategory ?: p.category, p, UsedCategoriesCache.used.keys)} · ${resolvedAccount?.name ?: "Elige la cuenta"}",
                                         style = Movi.textos.apoyo,
                                         color = Movi.colores.textoMedio,
                                     )
@@ -1850,6 +1851,9 @@ fun SMSReconcileScreen(
                                 seleccionada = cuentaDeDeudaElegida,
                                 onSeleccionar = { deudaTocadaAMano = true; alElegirLaDeuda(it) },
                                 titulo = deudaQuePide?.titulo ?: "¿A cuál crédito o tarjeta corresponde?",
+                                // Vuelta 58: en modo cuota el crédito es obligatorio; no decir «es opcional».
+                                ayuda = ayudaDelSelectorEnRevisarAviso(deudaQuePide)
+                                    ?: ayudaDelSelectorDeDeuda(deudasParaElegir(accounts, deudaQuePide)),
                                 modifier = Modifier.testTag(TAG_SELECTOR_DE_LA_DEUDA_DEL_AVISO),
                             )
                         }
@@ -2005,6 +2009,19 @@ fun SMSReconcileScreen(
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = Medida.margenDePantalla).padding(bottom = Espacio.s)
                     .testTag(TAG_FALTA_EL_CREDITO),
+            )
+        }
+        // Vuelta 58: «Pago de tarjeta» sin tarjeta se confirma (la tarjeta puede no estar en Movi), y el pie
+        // lo dice para que no parezca un olvido.
+        val pagoSinTarjeta = avisoDelPagoDeTarjetaSinTarjeta(parsed, categoriaActual, lasDosPatas)
+        if (!enPartes && !alreadyResolved && yaAnotadoCon == null && preguntaDelAbono == null && pagoSinTarjeta != null) {
+            Text(
+                pagoSinTarjeta,
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoMedio,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = Medida.margenDePantalla).padding(bottom = Espacio.s)
+                    .testTag(TAG_PAGO_DE_TARJETA_SIN_TARJETA),
             )
         }
         // En partes, el botón apagado dice por qué, en una línea debajo (como `PieDeHoja`).
@@ -2265,6 +2282,25 @@ fun categoriaEnReconciliar(
     }
     val entendida = com.jvillada.movi.shared.model.categoriaEntendida(propuesta!!, categoriasDelDueno)
     return CategoriaEnReconciliar(entendida, elegida, if (entendida) null else "Revísala: Movi la propone")
+}
+
+/** Lo que dice la tarjeta resumen cuando Movi no entendió la categoría (vuelta 58). */
+const val SIN_CATEGORIA_EN_EL_RESUMEN: String = "Sin categoría"
+
+/**
+ * **La categoría en la tarjeta resumen de Revisar aviso** (vuelta 58): lo mismo que dice la fila «Categoría»
+ * ([categoriaEnReconciliar]). Antes la tarjeta decía «Otros» mientras la fila decía «Elige la categoría ·
+ * Movi no la entendió»: si Movi no la entendió (o no hay), el resumen dice [SIN_CATEGORIA_EN_EL_RESUMEN];
+ * lo que el dueño eligió a mano, aunque sea «Otros», se dice tal cual. Pura.
+ */
+fun categoriaEnElResumen(
+    elegida: String?,
+    propuesta: ParsedSms?,
+    categoriasDelDueno: Collection<String>,
+): String {
+    if (elegida.isNullOrBlank()) return SIN_CATEGORIA_EN_EL_RESUMEN
+    val fila = categoriaEnReconciliar(elegida, propuesta, categoriasDelDueno)
+    return if (!fila.entendida && fila.valor == ELIGE_LA_CATEGORIA) SIN_CATEGORIA_EN_EL_RESUMEN else elegida
 }
 
 /** Vuelta 46: la cuenta que Movi puso por defecto (o ninguna) no lleva el ✓. */

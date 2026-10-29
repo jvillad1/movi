@@ -421,3 +421,44 @@ fun porQueFaltaElCredito(
 
 /** El tag del selector de la deuda en Revisar aviso. */
 const val TAG_SELECTOR_DE_LA_DEUDA_DEL_AVISO: String = "sms:selector-de-la-deuda"
+
+// ── Vuelta 58 · lo que el selector y el pie dicen de la deuda ─────────────────────────────────────
+
+/**
+ * **El pie del selector en Revisar aviso**: en modo cuota, que sin el crédito no se confirma (la regla de
+ * la vuelta 57, dicha donde se elige); en modo tarjeta, qué pasa si no se elige ninguna. `null` si la
+ * pantalla no pide una deuda concreta (entonces vale el pie general, [ayudaDelSelectorDeDeuda]). Pura.
+ */
+fun ayudaDelSelectorEnRevisarAviso(pide: DeudaQuePagaElAviso?): String? = when (pide) {
+    DeudaQuePagaElAviso.CREDITO -> AYUDA_DEL_CREDITO_EN_EL_AVISO
+    DeudaQuePagaElAviso.TARJETA -> AYUDA_DE_LA_TARJETA_EN_EL_AVISO
+    null -> null
+}
+
+/** …en modo cuota: el crédito es obligatorio. */
+const val AYUDA_DEL_CREDITO_EN_EL_AVISO: String = "Elige el crédito: sin él no se confirma"
+
+/** …en modo tarjeta: elegirla es opcional. */
+const val AYUDA_DE_LA_TARJETA_EN_EL_AVISO: String =
+    "Es opcional: si no eliges ninguna tarjeta, se anota como un pago de tarjeta suelto."
+
+/** El pie de Revisar aviso cuando es un pago de tarjeta y no se eligió tarjeta (vuelta 58). */
+const val PAGO_DE_TARJETA_SIN_TARJETA: String =
+    "Si la tarjeta no está en Movi, se anota como pago de tarjeta y no cuenta como gasto."
+
+/** El tag de ese pie. */
+const val TAG_PAGO_DE_TARJETA_SIN_TARJETA: String = "sms:pago-de-tarjeta-sin-tarjeta"
+
+/**
+ * **¿Hay que explicar un pago de tarjeta sin tarjeta?** Un gasto en «Pago de tarjeta» sin las dos patas
+ * (no se eligió tarjeta) se confirma igual —un pago a una tarjeta que no está en Movi es válido, queda
+ * como pago de tarjeta y no cuenta como gasto—; el pie lo dice para que no parezca un olvido. `null` en
+ * cualquier otro caso. Pura.
+ */
+fun avisoDelPagoDeTarjetaSinTarjeta(
+    leido: ParsedSms?,
+    categoria: String?,
+    propuestas: DosPatasPropuestas?,
+): String? =
+    if (leido?.type == TransactionType.EXPENSE && categoria == CARD_PAYMENT_CATEGORY && propuestas == null) PAGO_DE_TARJETA_SIN_TARJETA
+    else null

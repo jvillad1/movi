@@ -37,6 +37,7 @@ import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.CuotaYaPagada
 import com.jvillada.movi.shared.model.fraseDeLaCuotaYaPagada
 import com.jvillada.movi.shared.repository.ApiException
+import com.jvillada.movi.ui.transactions.TAG_AYUDA_DEL_SELECTOR_DE_DEUDA
 import com.jvillada.movi.ui.transactions.UN_ABONO_EXTRA
 import com.jvillada.movi.ui.transactions.textoDeCuentaDeDeuda
 import kotlinx.serialization.json.Json
@@ -393,6 +394,9 @@ class ReconciliarConLasDosPatasTest {
         assertTrue(repo.sueltos.isEmpty() && repo.conPatas.isEmpty(), "nunca un gasto suelto en «Cuota de crédito»")
 
         composeRule.onNodeWithText("¿De cuál crédito?").assertIsDisplayed()
+        // Vuelta 58: no «Es opcional… ninguna» debajo de «¿De cuál crédito?» con Confirmar apagado.
+        composeRule.onNodeWithTag(TAG_AYUDA_DEL_SELECTOR_DE_DEUDA).assertTextEquals("Elige el crédito: sin él no se confirma")
+        composeRule.onAllNodesWithText("Es opcional", substring = true).assertCountEquals(0)
         composeRule.onAllNodesWithText("¿A cuál crédito o tarjeta corresponde?").assertCountEquals(0)
         composeRule.onAllNodesWithText(textoDeCuentaDeDeuda(nu)).assertCountEquals(0)
         tocar(textoDeCuentaDeDeuda(vehiculo4083))
@@ -415,11 +419,40 @@ class ReconciliarConLasDosPatasTest {
 
         composeRule.onNodeWithText("¿De cuál tarjeta?").assertIsDisplayed()
         composeRule.onAllNodesWithText(textoDeCuentaDeDeuda(vehiculo4083)).assertCountEquals(0)
+        // Vuelta 58: sin tarjeta elegida se puede confirmar, y el pie explica qué pasa.
+        composeRule.onNodeWithText("Confirmar").assertIsEnabled()
+        composeRule.onNodeWithTag(TAG_PAGO_DE_TARJETA_SIN_TARJETA).assertTextEquals(PAGO_DE_TARJETA_SIN_TARJETA)
+        composeRule.onNodeWithTag(TAG_AYUDA_DEL_SELECTOR_DE_DEUDA).assertTextEquals(AYUDA_DE_LA_TARJETA_EN_EL_AVISO)
         tocar(textoDeCuentaDeDeuda(nu))
+        composeRule.onNodeWithTag(TAG_PAGO_DE_TARJETA_SIN_TARJETA).assertDoesNotExist()
         composeRule.onNodeWithTag(TAG_RESUMEN_DE_LAS_DOS_PATAS)
             .assertTextEquals("Sale de Bancolombia Ahorros 4057 · entra a Nu como pago")
         tocar("Confirmar")
         assertEquals(OperacionDelAviso.PAGO_DE_TARJETA, repo.conPatas.single().second.operacion)
+    }
+
+    // ── Vuelta 58 · la tarjeta resumen y la fila de categoría dicen lo mismo; pago sin tarjeta ───────
+
+    @Test
+    fun la_tarjeta_resumen_dice_sin_categoria_cuando_la_fila_dice_elige_la_categoria() {
+        val repo = Repo(avisoDeOccidente, leidoDeOccidente, cuentas = listOf(ahorros4057, vehiculo4083, nu))
+        montar(repo, avisoDeOccidente.id)
+        // La fila: «Elige la categoría · Movi no la entendió». La tarjeta: «Sin categoría», no «Otros».
+        composeRule.onNodeWithText(ELIGE_LA_CATEGORIA).assertExists()
+        composeRule.onNodeWithText("Sin categoría · ", substring = true).assertExists()
+        composeRule.onAllNodesWithText("Otros · ", substring = true).assertCountEquals(0)
+    }
+
+    /** Un pago de tarjeta sin tarjeta elegida se confirma: es un pago a una tarjeta que no está en Movi. */
+    @Test
+    fun un_pago_de_tarjeta_sin_tarjeta_se_confirma_como_gasto_suelto_de_pago_de_tarjeta() {
+        val leido = leidoDeOccidente.copy(category = CARD_PAYMENT_CATEGORY)
+        val repo = Repo(avisoDeOccidente, leido, cuentas = listOf(ahorros4057, vehiculo4083, nu))
+        montar(repo, avisoDeOccidente.id)
+        composeRule.onNodeWithTag(TAG_PAGO_DE_TARJETA_SIN_TARJETA).assertTextEquals(PAGO_DE_TARJETA_SIN_TARJETA)
+        tocar("Confirmar")
+        assertEquals(CARD_PAYMENT_CATEGORY, repo.sueltos.single().category)
+        assertTrue(repo.conPatas.isEmpty())
     }
 
     private fun montar(repo: Repo, smsId: String) {

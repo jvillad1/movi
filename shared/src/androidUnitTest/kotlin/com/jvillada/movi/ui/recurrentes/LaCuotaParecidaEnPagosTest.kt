@@ -8,6 +8,9 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import com.jvillada.movi.ui.components.ds.VarianteDeBotonKey
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.performSemanticsAction
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
 import com.jvillada.movi.shared.model.CuotaPorSaldar
@@ -56,12 +59,15 @@ class LaCuotaParecidaEnPagosTest {
     private val esLaCuota = mutableListOf<String>()
     private val noEs = mutableListOf<String>()
 
-    private fun montar(parecidos: Map<String, GastoParecidoALaCuota>) {
+    private fun montar(
+        parecidos: Map<String, GastoParecidoALaCuota>,
+        checklist: List<PagoDelPeriodo> = listOf(cuota),
+    ) {
         composeRule.setContent {
             MoviTheme {
                 Box(Modifier.fillMaxSize()) {
                     SeccionChecklistDelPeriodo(
-                        checklist = listOf(cuota),
+                        checklist = checklist,
                         cargando = false,
                         pudoLeer = true,
                         marcando = emptySet(),
@@ -112,5 +118,50 @@ class LaCuotaParecidaEnPagosTest {
         montar(mapOf(claveDeLaCuotaPorSaldar("v4083", "2026-11-27") to parecido))
         assertTrue(composeRule.onAllNodesWithText("¿Es el de", substring = true).fetchSemanticsNodes().isEmpty())
         composeRule.onNodeWithText(TEXTO_SIN_MOVIMIENTO_DEL_DEBITO).assertExists()
+    }
+
+    // ── Vuelta 58 · con un gasto parecido, la acción principal es el candidato, no «Anotar pago» ────
+
+    private fun variante(texto: String): VarianteDeBoton? =
+        composeRule.onNodeWithText(texto).fetchSemanticsNode().config.getOrNull(VarianteDeBotonKey)
+
+    /**
+     * Revisión de la vuelta 57: «Anotar pago» seguía siendo el botón amarillo y «¿Es el de $980.000?» un
+     * enlace; tocar el principal duplicaba el gasto. Con un candidato **parecido** el principal es el
+     * candidato y «Anotar pago» pasa a secundario.
+     */
+    @Test
+    fun `con un gasto parecido el principal es el candidato y Anotar pago es secundario`() {
+        montar(mapOf(claveDeLaCuotaPorSaldar("v4083", "2026-10-27") to parecido))
+        assertEquals(VarianteDeBoton.Principal, variante("¿Es el de \$980.000?"))
+        assertEquals(VarianteDeBoton.Secundario, variante(ETIQUETA_ANOTAR))
+    }
+
+    /** Con un candidato **lejano** (más del 50 %) queda como estaba: «Anotar pago» principal, el enlace al lado. */
+    @Test
+    fun `con un candidato lejano Anotar pago sigue siendo el principal y el enlace es secundario`() {
+        val tanqueo = FinancialEvent(
+            id = "ev-tanqueo", accountId = "acc", type = TransactionType.EXPENSE, amount = 260_000L,
+            category = "Transporte", description = "Terpel", timestamp = 1_793_000_000_000L,
+        )
+        val carro = PagoDelPeriodo(
+            ruleId = "rr_carro", nombre = "Carro", monto = 9_000L, pagado = false, diasParaVencer = -3,
+            vence = "2026-10-25", periodoDelSello = "2026-10", categoria = "Transporte", candidatos = listOf(tanqueo),
+        )
+        montar(emptyMap(), checklist = listOf(carro))
+        assertEquals(VarianteDeBoton.Principal, variante(ETIQUETA_ANOTAR))
+        assertEquals(VarianteDeBoton.Fantasma, variante("¿Es el de \$260.000?"))
+    }
+
+    @Test
+    fun `la accion principal de la fila, caso por caso`() {
+        // Parecido (la regla de la cuota que se parece): el candidato.
+        assertEquals(AccionPrincipalDeLaFila.EL_CANDIDATO, accionPrincipalDeLaFila(esLaMasUrgente = true, conPropuesta = false, hayGastoParecido = true))
+        assertEquals(AccionPrincipalDeLaFila.EL_CANDIDATO, accionPrincipalDeLaFila(esLaMasUrgente = false, conPropuesta = false, hayGastoParecido = true))
+        // Candidato del server dentro del ±50 %: «Sí, fue este».
+        assertEquals(AccionPrincipalDeLaFila.EL_CANDIDATO, accionPrincipalDeLaFila(esLaMasUrgente = true, conPropuesta = true, hayGastoParecido = false))
+        // Sin candidato o con uno lejano: como estaba.
+        assertEquals(AccionPrincipalDeLaFila.ANOTAR, accionPrincipalDeLaFila(esLaMasUrgente = true, conPropuesta = false, hayGastoParecido = false))
+        assertEquals(AccionPrincipalDeLaFila.NINGUNA, accionPrincipalDeLaFila(esLaMasUrgente = false, conPropuesta = false, hayGastoParecido = false))
     }
 }

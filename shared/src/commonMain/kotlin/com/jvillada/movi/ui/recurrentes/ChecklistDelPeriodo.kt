@@ -280,7 +280,8 @@ fun SeccionChecklistDelPeriodo(
         val parecido = gastoParecidoDeLaFila(pago, cuotasQueSeParecen)?.takeIf { onEsLaCuota != null }
         FilaDeFactura(
             pago = pago,
-            principal = pago == urgente,
+            // Vuelta 58: con un gasto parecido, la acción principal es «¿Es el de $X?», no «Anotar pago».
+            principal = accionPrincipalDeLaFila(pago == urgente, conPropuesta, parecido != null) == AccionPrincipalDeLaFila.ANOTAR,
             enVuelo = enVuelo,
             conPropuesta = conPropuesta,
             onAnotar = if (conAnotar) ({ acciones.onAnotarMovimiento(pago) }) else null,
@@ -938,12 +939,32 @@ internal fun gastoParecidoDeLaFila(
     return parecidos[claveDeLaCuotaPorSaldar(pago.ruleId.removePrefix(CREDIT_RULE_PREFIX), pago.vence)]
 }
 
+/** Qué es lo principal (lo amarillo) en una fila de Pagos sin pagar. */
+internal enum class AccionPrincipalDeLaFila { ANOTAR, EL_CANDIDATO, NINGUNA }
+
+/**
+ * **¿Cuál es la acción principal de la fila?** (vuelta 58). Tocar «Anotar pago» con un movimiento
+ * parecido ya anotado duplicaría el gasto, así que mientras haya un candidato **parecido** la acción
+ * principal es el candidato —«Sí, fue este» ([conPropuesta], dentro del ±50 % de la vuelta 51) o
+ * «¿Es el de $X?» ([hayGastoParecido], la regla de `cuotaQueSeParece`)— y «Anotar pago» pasa a
+ * secundario. Con un candidato **lejano** (más del 50 %) o sin ninguno queda como estaba: la más
+ * urgente lleva «Anotar pago» en amarillo y el candidato, si lo hay, es un enlace. Pura.
+ */
+internal fun accionPrincipalDeLaFila(
+    esLaMasUrgente: Boolean,
+    conPropuesta: Boolean,
+    hayGastoParecido: Boolean,
+): AccionPrincipalDeLaFila = when {
+    conPropuesta || hayGastoParecido -> AccionPrincipalDeLaFila.EL_CANDIDATO
+    esLaMasUrgente -> AccionPrincipalDeLaFila.ANOTAR
+    else -> AccionPrincipalDeLaFila.NINGUNA
+}
+
 /** El tag del enlace «¿Es el de $980.000?» de la cuota que se parece, en Pagos. */
 const val TAG_CUOTA_QUE_SE_PARECE_EN_PAGOS: String = "checklist:cuota-que-se-parece"
 
 /**
- * **«¿Es el de $980.000?» · «Sí, es la cuota»** (vuelta 57): el mismo enlace que una propuesta lejana
- * ([PropuestaLejana]); al tocarlo pregunta «¿Es la cuota de Vehículo 4083?» con el gasto, y «Sí, es la
+ * **«¿Es el de $980.000?» · «Sí, es la cuota»** (vuelta 57): al tocarlo pregunta «¿Es la cuota de Vehículo 4083?» con el gasto, y «Sí, es la
  * cuota» hace lo mismo que la sugerencia del detalle. «No fue este» deja de ofrecerlo. Nunca se tilda solo.
  */
 @Composable
@@ -959,7 +980,8 @@ internal fun LaCuotaQueSeParece(
         Boton(
             enlaceDeLaPropuestaLejana(parecido.gasto),
             onClick = { abierta = !abierta },
-            variante = VarianteDeBoton.Fantasma,
+            // Vuelta 58: es la acción principal de la fila; «Anotar pago» duplicaría el gasto parecido.
+            variante = VarianteDeBoton.Principal,
             tamano = TamanoDeBoton.S,
             habilitado = !enVuelo,
             modifier = Modifier.testTag(TAG_CUOTA_QUE_SE_PARECE_EN_PAGOS),
