@@ -3014,3 +3014,57 @@ la lectura fresca manda) y `LaCuotaPrevistaTest` (`commonTest`); y a 1,456, `ElT
 `LosBotonesDeLosAvisosCabenTest`, `ElPrimerDiaTest` (el rango corto), `NadaSeRecortaEnElInicioTest`,
 `LaAccionDelEncabezadoCedeAlTituloTest`, `ElDiaPlegadoNoCortaLaFechaTest`,
 `ElEfectivoEnNegativoSeLeeEnteroTest` y `LosCamposDelSistemaTest`.
+
+## 60. Vuelta 57: lo que encontró la revisión de master después de la 56
+
+**Sin reglas de plata nuevas**: la cuota sigue siendo `pagoDeCuotaLegs`, y lo que cambia es que ninguna
+puerta escribe una cuota sin su crédito.
+
+1. **El comercio de Revisar aviso se lee desde el principio.** El campo de una línea (`ComercioQueSeEdita`),
+   sin foco, quedaba desplazado hasta el final: a 360 dp se leía «anco de Occidente S A ATH», sin «…».
+   Fuera de edición es un `Text` de hasta dos renglones con «…» al final (`TAG_COMERCIO_A_LA_VISTA`);
+   tocar la fila (o «Editar») abre el campo de siempre con el foco, y al perderlo vuelve el texto.
+2. **Una cuota sin crédito no se confirma.** Con «Cuota de crédito» y sin crédito elegido, Confirmar no
+   prende y el pie dice **«Elige el crédito»** (`porQueFaltaElCredito`, `TAG_FALTA_EL_CREDITO`; con un
+   crédito en otra moneda dice por qué). **Nunca** se escribe un gasto suelto en «Cuota de crédito»: el
+   server contesta **422** `CUOTA_DEL_AVISO_SIN_CREDITO` a `POST /api/events` con `source = SMS | OCR`
+   (nuevo, sin `transferId`) y a `…/grupo/{id}/confirmar` con un `evento` en «Cuota de crédito»; el espejo
+   local del teléfono, igual. La única puerta que lo escribía a propósito era el APK ≤ 1.69 (antes de
+   #439: pata suelta + `vincular-deuda`), y se cierra: desde el APK 1.70 la cuota de un aviso viaja con
+   `DosPatasDelAviso`. Lo que ya está en la base (y su reenvío) sigue pasando. Un «Pago de tarjeta»
+   suelto (una tarjeta que no está en Movi) sigue como antes: es reservado y no cuenta. **La memoria de
+   categorías no aprende ni propone** «Cuota de crédito» ni «Pago de tarjeta»
+   (`CATEGORIAS_QUE_LA_MEMORIA_NO_APRENDE`, solo las huellas; el vocabulario del dueño no cambia): para eso
+   están «Es la cuota de un crédito ›» y «Es el pago de una tarjeta ›».
+3. **El selector de la deuda respeta la categoría.** La deuda que pide la pantalla es la de la acción
+   tocada o, si no, la que dice la categoría (`deudaQuePideLaPantalla`): con «Cuota de crédito», solo
+   créditos y «¿De cuál crédito?»; con «Pago de tarjeta», solo tarjetas. Movi no autocompleta una deuda del
+   otro tipo, y si por alguna vía queda una tarjeta en una cuota, la fila de categoría pasa a «Pago de
+   tarjeta» (`categoriaParaLaDeudaElegida`): el pedido y la pantalla dicen lo mismo.
+4. **El detalle de una cuota dice lo que es**: «Es la cuota de Vehículo 4083: cuenta como gasto. Para
+   cambiarla, anúlala y vuelve a anotarla.» (`porQueLaPataNoSeRecategoriza` en `:core`: el crédito sale de
+   la pata de la deuda o del «Cuota de X» de la pata del dinero; sin él, «un crédito»). El texto de
+   traspaso queda para traspasos, pagos de tarjeta y abonos; el desembolso sigue con el suyo. «Repartir en
+   partes» lleva su aire y su separador respecto de «Fecha».
+5. **La fila de Pagos ofrece el gasto parecido.** La cuota pendiente de un crédito usa la misma regla del
+   detalle (`gastosParecidosALasCuotas` sobre `cuotaQueSeParece` y `cuotasPorSaldar`: ±10 %, el período del
+   vencimiento, un solo crédito posible; entre varios gastos, el de monto más cercano) y ofrece
+   **«¿Es el de $980.000?»** (el mismo enlace que la propuesta lejana, `TAG_CUOTA_QUE_SE_PARECE_EN_PAGOS`);
+   al tocarlo, «¿Es la cuota de Vehículo 4083?» con **«Sí, es la cuota»** —`vincular-deuda` con
+   `esLaCuota`, lo mismo que el detalle— y «No fue este», que lo deja de ofrecer
+   (`PropuestasDescartadasStore`, `cuota-parecida:<id>`). Nunca se tilda solo. **Decisión sobre «Carro»
+   $9.000 → «¿Es el de $260.000?»**: se queda como enlace, a propósito (vuelta 51). El emparejador de una
+   regla común no exige el monto (un recibo varía) y, si el candidato lejano no se ofreciera ni como
+   enlace, la única salida sería «Anotar pago», que duplicaría el gasto si sí era ese. Como enlace no
+   empuja (no es «Por confirmar» ni «Revisar») y el dueño decide.
+6. **La anomalía de categoría dice su base.** «Gasto nuevo en Otros · Llevas $980.000» al lado de «En qué
+   se va · Otros $2.780.000» parecía un error: la anomalía no cuenta los pagos de facturas (vuelta 43) y la
+   diferencia era el arriendo. Con fijos en esa categoría, `categoriasPorEncima(fijosDelPeriodo = …)` dice
+   «Llevas $980.000 este período sin contar tus pagos fijos (con ellos, $2.780.000)». Ni la cifra ni el
+   umbral cambian.
+7. **Los enlaces de Revisar aviso son parejos**: «Es la cuota de un crédito ›» y «Es el pago de una
+   tarjeta ›» son `Boton` Fantasma S, como «Esto pagó varias cosas». La barra de Ignorar / Confirmar va
+   debajo de la lista (no la tapa), y la lista termina con un relleno del alto medido de la barra, para que
+   lo último suba entero por encima de su borde.
+8. **«Ocultar los saldos» en Tú**: el subtítulo va en dos renglones (`lineasDelSubtitulo = 2`); a 390 dp
+   se cortaba en «…en est…». Probado a 390 y 360 con la letra ×1,12.
