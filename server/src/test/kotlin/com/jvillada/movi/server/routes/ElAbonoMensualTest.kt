@@ -20,6 +20,7 @@ import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.server.time.ajustesDelPeriodoSinSuspender
 import com.jvillada.movi.server.time.appDateToEpochMillis
 import com.jvillada.movi.shared.model.CUOTA_CATEGORY
+import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.cajaProyectada
@@ -50,6 +51,7 @@ import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.update
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.time.LocalDate
@@ -286,6 +288,40 @@ class ElAbonoMensualTest {
         val fila = estados().single { it.ruleId == "rr_abono" }
         assertFalse(fila.occurred)
         assertEquals(listOf("sale-corto"), fila.candidates.map { it.id }, "el de otro monto se propone; el de otra deuda, no")
+    }
+
+    // ── Un mismo pago no sella dos filas ────────────────────────────────────────
+
+    @Test
+    fun `un pago a la tarjeta que coincide con las dos filas lo toma la tarjeta, y el abono pregunta`() {
+        val nu = "acc_nu"
+        transaction {
+            Accounts.insert { it[id] = nu; it[userId] = uid; it[name] = "Nu"; it[type] = "CREDIT_CARD"; it[currency] = "COP" }
+            Cards.insert {
+                it[accountId] = nu; it[userId] = uid; it[bank] = "Nu"; it[cutoffDay] = 1; it[paymentDay] = 15
+                it[pagoMinimo] = abono
+            }
+            RecurringRules.insert {
+                it[id] = "rr_abono_nu"; it[userId] = uid; it[name] = "Abono extra a Nu"; it[category] = TRANSFER_CATEGORY
+                it[amount] = abono; it[dayOfMonth] = 15; it[type] = "EXPENSE"; it[accountId] = ahorros; it[haciaDeuda] = nu
+            }
+        }
+        // Una compra que deja deuda, y un pago de $500.000: el mínimo de la tarjeta y el abono a la vez.
+        pata("compra", nu, "EXPENSE", 2_000_000L, LocalDate.of(2026, 10, 2), "Mercado", "sin-traspaso-compra")
+        transaction { Events.update({ Events.id eq "compra" }) { it[transferId] = null } }
+        traspaso("p1", abono, LocalDate.of(2026, 10, 14), hacia = nu, categoria = CARD_PAYMENT_CATEGORY)
+
+        val abonoNu = estados().single { it.ruleId == "rr_abono_nu" }
+        assertFalse(abonoNu.occurred, "el pago es de la fila «Pago tarjeta»")
+        assertEquals(listOf("sale-p1"), abonoNu.candidates.map { it.id }, "pero se le propone: el dueño puede elegirlo")
+        val tarjeta = runBlocking { ocurrenciasDelPeriodo(uid, hoy) }.single { it.ruleId == "card_$nu" }
+        assertTrue(tarjeta.occurred, "la tarjeta queda pagada con él")
+
+        // Un segundo pago, con el mínimo ya cubierto, es el abono.
+        traspaso("p2", abono, LocalDate.of(2026, 10, 16), hacia = nu, categoria = CARD_PAYMENT_CATEGORY)
+        val conDos = estados().single { it.ruleId == "rr_abono_nu" }
+        assertTrue(conDos.occurred)
+        assertEquals("sale-p2", conDos.eventId)
     }
 
     // ── No es un fijo ───────────────────────────────────────────────────────────

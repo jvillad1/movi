@@ -62,6 +62,7 @@ import com.jvillada.movi.shared.model.rechazoDelMonto
 import com.jvillada.movi.shared.model.validarDebitoDeLaRegla
 import com.jvillada.movi.shared.model.esAbonoADeuda
 import com.jvillada.movi.shared.model.esElAbonoALaDeuda
+import com.jvillada.movi.shared.model.pagosQueTomaLaTarjeta
 import com.jvillada.movi.server.db.toFinancialEvent
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receive
@@ -999,6 +1000,20 @@ internal fun org.jetbrains.exposed.sql.Transaction.ocurrenciasReales(
 
     val enJuego = ocurrenciasPorPreguntar(rules, today, periodo)
 
+    // Vuelta 63: un abono mensual a una TARJETA compite con su fila «Pago tarjeta» por los mismos
+    // pagos. Primero la tarjeta, hasta su mínimo (sin mínimo, el pago que la sella): esos pagos no
+    // tildan el abono solos. Ver [LecturaDeOcurrencias.tomadosPorLaTarjeta].
+    val tarjetasConAbono = rules.mapNotNull { it.haciaDeuda?.takeIf { d -> d.isNotBlank() } }.toSet()
+    if (tarjetasConAbono.isNotEmpty()) {
+        val minimos = com.jvillada.movi.server.db.Cards.selectAll()
+            .where { com.jvillada.movi.server.db.Cards.userId eq uid }
+            .associate { it[com.jvillada.movi.server.db.Cards.accountId] to it[com.jvillada.movi.server.db.Cards.pagoMinimo] }
+        val delPeriodo = lectura.eventos.filter { epochMillisToAppDate(it.timestamp) in diasDelPeriodoEnCurso }
+        tarjetasConAbono.filter { it in minimos }.forEach { tarjeta ->
+            lectura.tomadosPorLaTarjeta += pagosQueTomaLaTarjeta(tarjeta, delPeriodo, minimos[tarjeta])
+        }
+    }
+
     // Ola V: los destinos conocidos del dueño, resueltos UNA vez para toda la respuesta (las tres
     // pasadas de abajo los necesitan) — ver el KDoc de `RecurringRule.destinoConocidoId` y de
     // `candidatosPuntuados`. Sin totales: acá solo hace falta el número para reconocer el destino
@@ -1193,6 +1208,12 @@ internal class LecturaDeOcurrencias(
      * evita).
      */
     val reservados: MutableSet<String>,
+    /**
+     * Vuelta 63: **los pagos a una tarjeta que toma primero su fila «Pago tarjeta»**
+     * ([pagosQueTomaLaTarjeta]). Un abono mensual a esa tarjeta no los empareja solo —un mismo pago no
+     * sella dos filas—, pero sí se los propone: si el dueño elige uno («Sí, fue este»), queda.
+     */
+    val tomadosPorLaTarjeta: MutableSet<String> = mutableSetOf(),
 ) {
     /** Los movimientos de la franja sin los que el dueño ya rechazó para [rule]. */
     fun sinRechazados(rule: RecurringRule): List<FinancialEvent> =
@@ -1295,6 +1316,9 @@ internal fun resolverOcurrencias(
     destinos: Map<String, com.jvillada.movi.shared.model.DestinoConocido> = emptyMap(),
 ): List<OcurrenciaResuelta> = pares.map { (rule, due) ->
     val clave = periodOf(due)
+    // Vuelta 63: lo que tomó la fila de la tarjeta no tilda solo el abono (sí se le propone).
+    fun usadosParaDecidir(): Set<String> =
+        if (rule.esAbonoADeuda) lectura.reservados + lectura.tomadosPorLaTarjeta else lectura.reservados
     val resolucion = when {
         clave in lectura.ocurridos[rule.id].orEmpty() -> Resolucion.Sellada(lectura.sellos[rule.id to clave])
         // **Lo que llegó ANTES del vencimiento** (1-oct-2026: la recarga de Glim del día 2 entró el 1 y
@@ -1309,7 +1333,7 @@ internal fun resolverOcurrencias(
         fechaEsperada(rule, due, periodo).isAfter(today) -> {
             val evidencia = lectura.evidenciaPara(rule, due, today)
             val concluyentes = ocurrenciasConcluyentes(
-                rule, due, evidencia, lectura.reservados, settings = periodo, destinos = destinos,
+                rule, due, evidencia, usadosParaDecidir(), settings = periodo, destinos = destinos,
             )
             val unico = concluyentes.singleOrNull()
             when {
@@ -1328,7 +1352,7 @@ internal fun resolverOcurrencias(
                 rule,
                 due,
                 lectura.evidenciaPara(rule, due, today),
-                lectura.reservados,
+                usadosParaDecidir(),
                 settings = periodo,
                 destinos = destinos,
             )

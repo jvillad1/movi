@@ -98,6 +98,28 @@ fun reglaDelAbono(
     haciaDeuda = deudaId,
 )
 
+/**
+ * **Los pagos a la tarjeta [tarjetaId] que toma primero su fila «Pago tarjeta»**, de [eventos] (los del
+ * período): las patas que salen hacia ella como «Pago de tarjeta», en orden, hasta cubrir [minimo]. Sin
+ * mínimo (o en cero), solo el primero: es el que sella la fila. Un mismo pago no sella dos filas, así
+ * que el abono mensual a esa tarjeta solo se tilda solo con un pago que la tarjeta no tomó; uno que sí
+ * tomó se le propone, y queda si el dueño lo elige («Sí, fue este»).
+ */
+fun pagosQueTomaLaTarjeta(tarjetaId: String, eventos: List<FinancialEvent>, minimo: Long?): Set<String> {
+    val pagos = eventos
+        .filter { it.category == CARD_PAYMENT_CATEGORY && pataQueEntraALaDeuda(tarjetaId, it, eventos) != null }
+        .sortedWith(compareBy<FinancialEvent>({ it.timestamp }, { it.id }))
+    val tope = minimo?.takeIf { it > 0L }
+    val tomados = linkedSetOf<String>()
+    var cubierto = 0L
+    for (pago in pagos) {
+        if (tomados.isNotEmpty() && (tope == null || cubierto >= tope)) break
+        tomados += pago.id
+        cubierto += pago.amount
+    }
+    return tomados
+}
+
 /** Los abonos planeados que todavía no se hicieron en el período: lo que se dice aparte de «Falta». */
 fun abonosPlaneados(checklist: List<PagoDelPeriodo>): Long =
     checklist.filter { it.esAbono && !it.pagado && it.moneda == "COP" }.sumOf { it.monto }

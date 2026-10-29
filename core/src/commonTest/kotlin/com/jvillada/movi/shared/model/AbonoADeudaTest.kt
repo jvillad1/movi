@@ -82,6 +82,28 @@ class AbonoADeudaTest {
     }
 
     @Test
+    fun `un pago a Nu que coincide con la tarjeta y con el abono lo toma primero la tarjeta`() {
+        val aNu = regla.copy(haciaDeuda = "nu")
+        fun pagoANu(t: String, monto: Long, cuando: Long) = traspaso(monto, hacia = "nu", categoria = CARD_PAYMENT_CATEGORY, t = t)
+            .map { it.copy(timestamp = cuando) }
+        val primero = pagoANu("p1", 500_000L, 1L)
+        // El pago coincide con las dos filas: con el mínimo de $500.000 de la tarjeta y con el abono.
+        assertTrue(esElAbonoALaDeuda(aNu, primero[0], primero))
+        assertEquals(setOf("sale-p1"), pagosQueTomaLaTarjeta("nu", primero, minimo = 500_000L), "la tarjeta lo toma")
+
+        // Un segundo pago, con el mínimo ya cubierto, queda libre para el abono.
+        val dos = primero + pagoANu("p2", 500_000L, 2L)
+        assertEquals(setOf("sale-p1"), pagosQueTomaLaTarjeta("nu", dos, minimo = 500_000L))
+        // Con un primer pago menor que el mínimo, la tarjeta también toma el segundo hasta cubrirlo.
+        val parcial = pagoANu("q1", 200_000L, 1L) + pagoANu("q2", 500_000L, 2L)
+        assertEquals(setOf("sale-q1", "sale-q2"), pagosQueTomaLaTarjeta("nu", parcial, minimo = 500_000L))
+        // Sin mínimo, solo el que sella la fila.
+        assertEquals(setOf("sale-q1"), pagosQueTomaLaTarjeta("nu", parcial, minimo = null))
+        // Un traspaso a un crédito no es un pago de tarjeta.
+        assertTrue(pagosQueTomaLaTarjeta("v4083", traspaso(500_000L), minimo = null).isEmpty())
+    }
+
+    @Test
     fun `pendiente no suma en los fijos, en falta por pagar ni en la caja, y se dice aparte`() {
         val arriendo = PagoDelPeriodo(ruleId = "rr_arr", nombre = "Arriendo", monto = 1_800_000L, pagado = false, diasParaVencer = 3, vence = "2026-11-05")
         val abono = PagoDelPeriodo(
