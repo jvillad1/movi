@@ -18,8 +18,12 @@ import kotlin.math.abs
  *
  * **Cuándo es «el mismo»**: un gasto de este período y uno del anterior son el mismo recurrente si
  *
- * 1. los dos son ocurrencias de la misma regla (un sello del dueño o un emparejamiento de Movi), o
- * 2. tienen el mismo nombre ([claveDeComercio]) y el monto a ±[TOLERANCIA_DEL_MISMO_MONTO_PORCIENTO] %.
+ * 1. el de este período es de una regla (sellado, emparejado o que la nombra con su monto) y el del
+ *    anterior es de la misma regla, o su comercio **o** su descripción la nombran y el monto está a
+ *    ±[TOLERANCIA_DEL_MISMO_MONTO_PORCIENTO] % («Arriendo octubre», comercio «Inmobiliaria», es el
+ *    arriendo); o
+ * 2. sin regla, comparten un nombre —el comercio o la descripción de cualquiera de los dos— y el monto
+ *    está a ±[TOLERANCIA_DEL_MISMO_MONTO_PORCIENTO] %.
  *
  * Si están en categorías distintas, se propone volver a la del período anterior. Puro: los
  * movimientos, las reglas y qué movimiento es de qué regla entran por parámetro.
@@ -76,6 +80,34 @@ private fun mismoMonto(a: Long, b: Long): Boolean =
 private fun claveDeNombre(texto: String): String? =
     normalizeMerchant(texto)?.key ?: claveComparableDeNombre(texto).takeIf { it.length >= 3 }
 
+/** Los textos con que se nombra un movimiento: su comercio y su descripción. */
+private fun nombresDe(e: FinancialEvent): List<String> =
+    listOfNotNull(e.merchant?.takeIf { it.isNotBlank() }, e.description.takeIf { it.isNotBlank() })
+
+/**
+ * ¿[texto] nombra a [nombreDeLaRegla]? Sus palabras aparecen seguidas en el texto («Arriendo
+ * octubre» nombra a «Arriendo»), o el texto es el nombre con su fecha ([nombreDeMovimientoPegaConRegla]).
+ */
+private fun nombra(texto: String, nombreDeLaRegla: String): Boolean {
+    if (nombreDeMovimientoPegaConRegla(nombreDeLaRegla, texto)) return true
+    val regla = palabrasClave(nombreDeLaRegla).filter { it.isNotEmpty() }
+    if (regla.isEmpty()) return false
+    val palabras = palabrasClave(texto).filter { it.isNotEmpty() }
+    return (0..palabras.size - regla.size).any { i -> palabras.subList(i, i + regla.size) == regla }
+}
+
+/** ¿El comercio o la descripción de [e] nombran a [r]? */
+private fun nombraLaRegla(e: FinancialEvent, r: RecurringRule): Boolean = nombresDe(e).any { nombra(it, r.name) }
+
+/** ¿[a] y [b] comparten un nombre, por el comercio o por la descripción de cualquiera de los dos? */
+private fun compartenNombre(a: FinancialEvent, b: FinancialEvent): Boolean {
+    val deA = nombresDe(a)
+    val deB = nombresDe(b)
+    val clavesDeB = deB.mapNotNull(::claveDeNombre).toSet()
+    if (deA.mapNotNull(::claveDeNombre).any { it in clavesDeB }) return true
+    return deA.any { x -> deB.any { y -> nombreDeMovimientoPegaConRegla(x, y) || nombreDeMovimientoPegaConRegla(y, x) } }
+}
+
 /**
  * **Los gastos de este período que el anterior estaban en otra categoría.** Ver el KDoc del archivo.
  *
@@ -97,30 +129,28 @@ fun recurrentesQueCambiaronDeCategoria(
     if (delAnterior.isEmpty()) return emptyList()
     val reglasPorId = reglas.associateBy { it.id }
     val usados = mutableSetOf<String>()
+    val reglasDeGasto = reglas.filter { it.type == TransactionType.EXPENSE }
     return actual.filter(::esGastoDeUnRecurrente).sortedByDescending { it.amount }.mapNotNull { e ->
+        // La regla de este gasto: la de su sello o emparejamiento, o la que su comercio o su
+        // descripción nombran con el mismo monto.
         val regla = reglaDelMovimiento[e.id]?.let { reglasPorId[it] }
-        val clave = claveDeNombre(e.merchant?.takeIf { it.isNotBlank() } ?: e.description)
+            ?: reglasDeGasto.firstOrNull { r -> nombraLaRegla(e, r) && mismoMonto(e.amount, r.amount) }
         val candidatos = delAnterior.filter { a -> a.id !in usados && a.currency == e.currency }
-        // 1. La misma regla: su ocurrencia del período anterior, sin pedir el monto (un recibo varía).
-        val porLaRegla = regla?.let { r -> candidatos.filter { reglaDelMovimiento[it.id] == r.id } }.orEmpty()
-        // 2. El mismo nombre y el mismo monto.
-        val porElNombre = if (clave == null) {
-            emptyList()
-        } else {
+        // 1. La misma regla: su ocurrencia del período anterior (sin pedir el monto: un recibo varía),
+        //    o un gasto que la nombra con el mismo monto.
+        val porLaRegla = regla?.let { r ->
             candidatos.filter { a ->
-                claveDeNombre(a.merchant?.takeIf { it.isNotBlank() } ?: a.description) == clave && mismoMonto(e.amount, a.amount)
+                reglaDelMovimiento[a.id] == r.id || (nombraLaRegla(a, r) && mismoMonto(e.amount, a.amount))
             }
-        }
+        }.orEmpty()
+        // 2. Sin regla: un nombre en común y el mismo monto.
+        val porElNombre = candidatos.filter { a -> compartenNombre(e, a) && mismoMonto(e.amount, a.amount) }
         val equivalente = (porLaRegla.ifEmpty { porElNombre }).minByOrNull { abs(it.amount - e.amount) }
             ?: return@mapNotNull null
         if (equivalente.category == e.category) return@mapNotNull null
         usados += equivalente.id
-        // La regla que «Sí, cambiar» también corrige: la de la ocurrencia, o la que se llama igual y
-        // cobra lo mismo. Solo si tiene otra categoría que la del período anterior.
-        val laRegla = regla ?: reglas.firstOrNull { r ->
-            r.type == TransactionType.EXPENSE && clave != null && claveDeNombre(r.name) == clave && mismoMonto(e.amount, r.amount)
-        }
-        val reglaQueCorregir = laRegla?.takeIf { it.category != equivalente.category }
+        // La regla que «Sí, cambiar» también corrige, solo si tiene otra categoría que la del anterior.
+        val reglaQueCorregir = regla?.takeIf { it.category != equivalente.category }
         CambioDeCategoriaDeUnRecurrente(
             eventoId = e.id,
             nombre = (regla?.name ?: e.description).ifBlank { e.description },

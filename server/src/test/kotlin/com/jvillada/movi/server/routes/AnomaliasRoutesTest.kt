@@ -82,9 +82,19 @@ class AnomaliasRoutesTest {
         }
     }
 
-    private fun anotar(uid: String, nombre: String, monto: Long, fecha: LocalDate, categoria: String = "Comida", tipo: String = "EXPENSE", hora: Long = 12) =
+    private fun anotar(
+        uid: String,
+        nombre: String,
+        monto: Long,
+        fecha: LocalDate,
+        categoria: String = "Comida",
+        tipo: String = "EXPENSE",
+        hora: Long = 12,
+        comercio: String? = null,
+    ) =
         transaction {
             Events.insert {
+                if (comercio != null) it[merchant] = comercio
                 it[id] = "ev_${uid}_${n++}"
                 it[userId] = uid
                 it[accountId] = "acc_$uid"
@@ -221,6 +231,31 @@ class AnomaliasRoutesTest {
         assertEquals(HttpStatusCode.NoContent, descartar(duenoId, aviso.huella).status)
         val despues = client.get("/api/anomalias?conRecurrentes=1") { header(HttpHeaders.Authorization, "Bearer ${token(duenoId)}") }
         assertTrue(despues.bodyAsText().let { !it.contains("RECURRENTE_CAMBIO_DE_CATEGORIA") })
+    }
+
+    /**
+     * La forma de la demo (revisión de la vuelta 60): el de septiembre es «Arriendo octubre», comercio
+     * «Inmobiliaria», en Hogar, y nadie lo emparejó; el de octubre es «Arriendo», en Otros, y hay una
+     * regla «Arriendo» en Otros. Se propone, con la regla.
+     */
+    @Test
+    fun `el arriendo con comercio Inmobiliaria del mes pasado se reconoce por la regla`() = testApplication {
+        application { testModule() }
+        val mesPasado = inicioDelMes.minusMonths(1)
+        anotar(duenoId, "Apertura", 10_000_000L, mesPasado.minusDays(5), OPENING_CATEGORY, tipo = "INCOME")
+        anotar(duenoId, "Arriendo octubre", 1_850_000L, mesPasado.plusDays(3), "Hogar", comercio = "Inmobiliaria")
+        anotar(duenoId, "Arriendo", 1_850_000L, hoy, "Otros")
+        transaction {
+            RecurringRules.insert {
+                it[id] = "rr-arriendo"; it[userId] = duenoId; it[name] = "Arriendo"; it[category] = "Otros"
+                it[amount] = 1_850_000L; it[dayOfMonth] = 28; it[type] = "EXPENSE"
+            }
+        }
+        val res = client.get("/api/anomalias?conRecurrentes=1") { header(HttpHeaders.Authorization, "Bearer ${token(duenoId)}") }
+        val cambio = json.decodeFromString(ListSerializer(Anomalia.serializer()), res.bodyAsText())
+            .single { it.tipo == TipoDeAnomalia.RECURRENTE_CAMBIO_DE_CATEGORIA }.cambioDeCategoria!!
+        assertEquals("Hogar", cambio.categoriaAnterior)
+        assertEquals("rr-arriendo", cambio.reglaId, "«Sí, cambiar» también corrige la regla")
     }
 
     @Test

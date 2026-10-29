@@ -176,7 +176,7 @@ internal fun Transaction.loQueSeSaleDeLoNormalDe(
         delPeriodo = delPeriodo,
         delAnterior = historia.filter { it.timestamp in ventanaPrevia },
         reglas = reglasDe(uid),
-        sellos = sellos,
+        sellos = sellos + emparejadasDelPeriodoAnterior(uid, ventanaPrevia, ajustes),
         periodoAnterior = previo.prefijo,
     ).filterNot { it.huella in descartadas }
     val cambiados = cambios.map { it.eventoId }.toSet()
@@ -238,6 +238,19 @@ private const val MEDIO_DIA_MS = 12L * 60 * 60 * 1000
 private fun Transaction.sellosDe(uid: String, hoy: LocalDate, ajustes: PeriodSettings): List<RecurringOccurrence> =
     loadOccurrenceRows(uid) + emparejadasComoSellos(uid, hoy, ajustes)
 
+/**
+ * Lo que Movi emparejó solo en el período ANTERIOR (vuelta 60): `emparejadasComoSellos` mira el
+ * período de su «hoy», así que se le pasa el último día de ese período. Los sellos del dueño ya vienen
+ * de todos los períodos en [loadOccurrenceRows]. Solo para reconocer el recurrente que cambió de
+ * categoría: no entra a [sellosDe] ni cambia qué se cuenta como pago de una factura.
+ */
+private fun Transaction.emparejadasDelPeriodoAnterior(
+    uid: String,
+    ventanaPrevia: LongRange,
+    ajustes: PeriodSettings,
+): List<RecurringOccurrence> =
+    emparejadasComoSellos(uid, LocalDate.parse(epochMillisToAppDateString(ventanaPrevia.last)), ajustes)
+
 /** Las reglas recurrentes de [uid], con lo que [recurrentesQueCambiaronDeCategoria] mira. */
 private fun Transaction.reglasDe(uid: String): List<RecurringRule> =
     RecurringRules.selectAll().where { RecurringRules.userId eq uid }.mapNotNull { fila ->
@@ -286,7 +299,7 @@ internal fun Transaction.cambiosDeCategoriaDe(uid: String, hoy: LocalDate, ajust
         delPeriodo = delPeriodo,
         delAnterior = loadEventsBetween(uid, ventanaPrevia.first, ventanaPrevia.last + 1),
         reglas = reglasDe(uid),
-        sellos = sellosDe(uid, hoy, ajustes),
+        sellos = sellosDe(uid, hoy, ajustes) + emparejadasDelPeriodoAnterior(uid, ventanaPrevia, ajustes),
         periodoAnterior = previo.prefijo,
     ).filterNot { it.huella in descartadas }
 }

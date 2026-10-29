@@ -53,6 +53,59 @@ class RecurrenteQueCambioDeCategoriaTest {
         assertEquals("recurrente-categoria:oct", aviso.huella, "«No» vale para este movimiento")
     }
 
+    /**
+     * **El caso de la demo, tal cual** (la revisión de la vuelta 60): el de septiembre es «Arriendo
+     * octubre», comercio «Inmobiliaria», en Hogar, $1.850.000, y Movi no lo emparejó; el de octubre es
+     * de la regla «Arriendo» (en Otros). Comparar solo el comercio daba «inmobiliaria» contra «arriendo»
+     * y la propuesta no salía.
+     */
+    @Test
+    fun `el arriendo de la demo, con comercio Inmobiliaria y sin sello en septiembre, se propone`() {
+        val septiembreDemo = FinancialEvent(
+            id = "evt_ux_595afd16ed15", accountId = "acc-1", type = TransactionType.EXPENSE, amount = 1_850_000,
+            category = "Hogar", description = "Arriendo octubre", merchant = "Inmobiliaria", timestamp = septiembre,
+            reconciliationStatus = ReconciliationStatus.RECONCILED,
+        )
+        val regla = reglaArriendo.copy(amount = 1_850_000)
+        val octubreDemo = gasto("oct", 1_850_000, "Otros", octubre, "Arriendo")
+        // Con el de octubre sellado en la regla…
+        val sellado = recurrentesQueCambiaronDeCategoria(
+            actual = listOf(octubreDemo),
+            anterior = listOf(septiembreDemo),
+            reglas = listOf(regla),
+            reglaDelMovimiento = mapOf("oct" to "rr-arriendo"),
+            periodoAnterior = "2026-09",
+        ).single()
+        assertEquals("evt_ux_595afd16ed15", sellado.eventoAnteriorId)
+        assertEquals("Hogar", sellado.categoriaAnterior)
+        assertEquals("rr-arriendo", sellado.reglaId)
+        // …y sin ningún sello: el de octubre nombra la regla con su monto.
+        val sinSellos = recurrentesQueCambiaronDeCategoria(
+            actual = listOf(octubreDemo),
+            anterior = listOf(septiembreDemo),
+            reglas = listOf(regla),
+            reglaDelMovimiento = emptyMap(),
+            periodoAnterior = "2026-09",
+        ).single()
+        assertEquals("evt_ux_595afd16ed15", sinSellos.eventoAnteriorId)
+        // Sin regla, la descripción con su mes también es el mismo nombre.
+        assertEquals(
+            1,
+            recurrentesQueCambiaronDeCategoria(
+                actual = listOf(octubreDemo), anterior = listOf(septiembreDemo), reglas = emptyList(),
+                reglaDelMovimiento = emptyMap(), periodoAnterior = "2026-09",
+            ).size,
+        )
+        // Otro gasto de la inmobiliaria por otro monto no es el arriendo.
+        assertTrue(
+            recurrentesQueCambiaronDeCategoria(
+                actual = listOf(octubreDemo),
+                anterior = listOf(septiembreDemo.copy(amount = 400_000, description = "Administración")),
+                reglas = listOf(regla), reglaDelMovimiento = emptyMap(), periodoAnterior = "2026-09",
+            ).isEmpty(),
+        )
+    }
+
     @Test
     fun `sin regla, el mismo nombre y el monto a mas o menos cinco por ciento`() {
         val anterior = listOf(gasto("sep", 1_800_000, "Hogar", septiembre))
