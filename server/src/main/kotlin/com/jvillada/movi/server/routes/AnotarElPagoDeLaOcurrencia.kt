@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.shared.model.esAbonoADeuda
 import com.jvillada.movi.server.balance.accountTypesFor
 import com.jvillada.movi.server.balance.withCashFlowFlag
 import com.jvillada.movi.server.db.Accounts
@@ -132,6 +133,10 @@ private fun Transaction.anotarOFallar(
         .where { (RecurringRules.id eq ruleId) and (RecurringRules.userId eq uid) }
         .firstOrNull()?.toRule()
         ?: rechazar(HttpStatusCode.NotFound, "Ese recurrente no existe.")
+    // Vuelta 63: el abono mensual a una deuda no se paga con un gasto: se anota con su traspaso.
+    if (rule.esAbonoADeuda) {
+        rechazar(HttpStatusCode.BadRequest, "El abono a una deuda se anota con un traspaso hacia esa deuda.")
+    }
     if (crudo.type != rule.type) {
         rechazar(HttpStatusCode.UnprocessableEntity, "Ese movimiento no es del tipo de «${rule.name}».")
     }

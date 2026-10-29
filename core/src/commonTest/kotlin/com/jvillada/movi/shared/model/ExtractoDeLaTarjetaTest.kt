@@ -162,8 +162,9 @@ class ExtractoDeLaTarjetaTest {
             diferidos = listOf(DiferidoConocido("nueva", 1)),
         )!!
         assertEquals(40_000L, e.facturado)
-        // «nueva» a 1 cuota no es un diferido: es una compra sin cuotas que digan otra cosa.
-        assertTrue(e.puedeIncluirDiferidos)
+        // Vuelta 63: «nueva» a 1 cuota es una compra con sus cuotas conocidas (el banco dijo «1»): no
+        // es un diferido y no hace sospechar ninguno.
+        assertFalse(e.puedeIncluirDiferidos)
 
         val conocida = extractoDeLaTarjeta(
             nu, "COP",
@@ -172,6 +173,30 @@ class ExtractoDeLaTarjetaTest {
             diferidos = listOf(DiferidoConocido("nueva", 2)),
         )!!
         assertFalse(conocida.puedeIncluirDiferidos, "la compra vieja se pagó entera: no cuenta")
+    }
+
+    @Test
+    fun `vuelta 63 · una compra de 1_200_000 a 12 cuotas guardadas en el movimiento cuenta 100_000`() {
+        val tv = compra("2026-10-05", 1_200_000L, id = "tv").copy(cuotas = 12)
+        val e = extractoDeLaTarjeta(nu, "COP", listOf(tv), hoy)!!
+        assertEquals(100_000L, e.facturado, "la cuota del mes, no el total")
+        assertFalse(e.puedeIncluirDiferidos, "sus cuotas se conocen")
+
+        // El mes siguiente, con la primera cuota pagada, factura la segunda.
+        val enNoviembre = extractoDeLaTarjeta(nu, "COP", listOf(tv, pago("2026-11-01", 100_000L)), LocalDate(2026, 11, 25))!!
+        assertEquals(100_000L, enNoviembre.facturado)
+    }
+
+    @Test
+    fun `vuelta 63 · la frase de diferidos sale solo si hay compras con cuotas desconocidas`() {
+        val conocida = compra("2026-10-05", 1_200_000L, id = "tv").copy(cuotas = 12)
+        val deUna = compra("2026-10-06", 80_000L, id = "pan").copy(cuotas = 1)
+        assertFalse(extractoDeLaTarjeta(nu, "COP", listOf(conocida, deUna), hoy)!!.puedeIncluirDiferidos)
+
+        val aMano = compra("2026-10-07", 50_000L, id = "a-mano")
+        val e = extractoDeLaTarjeta(nu, "COP", listOf(conocida, deUna, aMano), hoy)!!
+        assertTrue(e.puedeIncluirDiferidos, "la anotada a mano no dice sus cuotas")
+        assertEquals(100_000L + 80_000L + 50_000L, e.facturado)
     }
 
     @Test

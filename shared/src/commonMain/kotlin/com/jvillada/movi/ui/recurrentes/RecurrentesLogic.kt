@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.recurrentes
 
+import com.jvillada.movi.shared.model.esAbonoADeuda
 import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
 import com.jvillada.movi.shared.model.MANUAL_SUB_PREFIX
@@ -171,7 +172,9 @@ fun reglasSinteticas(upcoming: List<UpcomingPayment>): List<RecurringRule> =
  * descuento. Si alguna vez esas reglas empezaran a viajar, esta función habría que ampliarla.
  */
 fun cuentaComoCompromisoMensual(rule: RecurringRule): Boolean =
-    !rule.montoEsSaldo && !rule.esPagoUnico && !rule.id.startsWith(CARD_RULE_PREFIX)
+    // Vuelta 63: el abono planeado a una deuda tampoco: no es un fijo, es plata que el dueño mueve.
+    !rule.montoEsSaldo && !rule.esPagoUnico && !rule.id.startsWith(CARD_RULE_PREFIX) &&
+        !rule.esAbonoADeuda
 
 /**
  * Todo lo que la pantalla necesita mostrar arriba, calculado una sola vez.

@@ -60,6 +60,10 @@ import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.isReservedCategory
 import com.jvillada.movi.shared.model.rechazoDelMonto
 import com.jvillada.movi.shared.model.validarDebitoDeLaRegla
+import com.jvillada.movi.shared.model.esAbonoADeuda
+import com.jvillada.movi.shared.model.esElAbonoALaDeuda
+import com.jvillada.movi.shared.model.pagosQueTomaLaTarjeta
+import com.jvillada.movi.server.db.toFinancialEvent
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
@@ -98,7 +102,41 @@ internal fun org.jetbrains.exposed.sql.ResultRow.toRule() = RecurringRule(
     destinoConocidoId = this[RecurringRules.destinoConocidoId],
     // «Se debita solo»: con valor siempre en la respuesta (las filas viejas, `false`).
     seDebitaSolo = this[RecurringRules.seDebitaSolo] ?: false,
+    // Vuelta 63: la deuda del abono mensual, si esta regla es uno.
+    haciaDeuda = this[RecurringRules.haciaDeuda],
 )
+
+/**
+ * Vuelta 63: ¿[deudaId] es un crédito o una tarjeta de este usuario? Misma decisión que
+ * [accountIdIfOwned]: un id ajeno, inventado o de una cuenta que no es deuda no rechaza el alta, se
+ * guarda `null` (y la regla queda como un gasto común, que el dueño ve y puede borrar).
+ */
+internal fun org.jetbrains.exposed.sql.Transaction.deudaIdIfOwned(uid: String, deudaId: String?): String? {
+    val id = deudaId?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    val tipo = Accounts.selectAll()
+        .where { (Accounts.id eq id) and (Accounts.userId eq uid) }
+        .firstOrNull()?.get(Accounts.type)
+    return id.takeIf { tipo == com.jvillada.movi.shared.model.AccountType.LOAN.name || tipo == com.jvillada.movi.shared.model.AccountType.CREDIT_CARD.name }
+}
+
+/**
+ * **Vuelta 63 · ¿el cliente sabe qué es un abono planeado?** Solo con `?conAbonos=1` las respuestas
+ * que arman el checklist y los fijos (`/api/recurring-rules`, `/api/payments/upcoming`,
+ * `/api/payments/occurrences`) traen las reglas con `haciaDeuda`. Un APK anterior (el 1.78 que el
+ * dueño tiene) no conoce el campo y restaría el abono como un pago fijo, así que no las ve. Mismo
+ * patrón que `?conCreditos=1` y `?conRecurrentes=1`. Lo que el server calcula por su cuenta (el
+ * Disponible, la caja, Movi AI, el cierre) sí las lee, porque ya las sabe dejar fuera de los fijos.
+ */
+internal fun io.ktor.server.application.ApplicationCall.pideLosAbonos(): Boolean =
+    request.queryParameters["conAbonos"] == "1"
+
+/** Los ids de las reglas de abono de [uid] (ver [pideLosAbonos]). */
+internal suspend fun idsDeLosAbonos(uid: String): Set<String> = dbQuery {
+    RecurringRules.selectAll()
+        .where { RecurringRules.userId eq uid }
+        .filter { !it[RecurringRules.haciaDeuda].isNullOrBlank() }
+        .mapTo(mutableSetOf()) { it[RecurringRules.id] }
+}
 
 /**
  * Ola 9 · D: ¿esta cuenta es de este usuario? La cuenta de una regla recurrente es **opcional**,
@@ -149,10 +187,11 @@ private fun fechaIsoValida(crudo: String?): String? {
 fun Route.reminderRoutes() {
     get("/api/recurring-rules") {
         val uid = call.userId()
+        val conAbonos = call.pideLosAbonos()
         val rules = dbQuery {
             RecurringRules.selectAll().where { RecurringRules.userId eq uid }.map { it.toRule() }
         }
-        call.respond(rules)
+        call.respond(rules.filter { conAbonos || !it.esAbonoADeuda })
     }
 
     post("/api/recurring-rules") {
@@ -166,12 +205,17 @@ fun Route.reminderRoutes() {
         }
         val newId = "rr_${UUID.randomUUID()}"
         var storedDestinoId: String? = null
+        var storedDeudaId: String? = null
         // «Se debita solo» necesita la cuenta que quedó guardada (una ajena se guarda null), así que
         // se valida adentro, antes de insertar. En un POST `null` es `false`.
         var problemaDelDebito: String? = null
         val storedAccountId = dbQuery {
             val safeAccountId = accountIdIfOwned(uid, body.accountId)
-            problemaDelDebito = validarDebitoDeLaRegla(body.seDebitaSolo == true, body.type, safeAccountId)
+            // Vuelta 63: el abono mensual a una deuda (ver `RecurringRule.haciaDeuda`). Un abono no se
+            // debita solo: la plata la mueve el dueño, y su prueba es el traspaso.
+            val safeDeudaId = deudaIdIfOwned(uid, body.haciaDeuda)
+            storedDeudaId = safeDeudaId
+            problemaDelDebito = validarDebitoDeLaRegla(body.seDebitaSolo == true && safeDeudaId == null, body.type, safeAccountId)
             if (problemaDelDebito != null) return@dbQuery null
             // Ola V: el destino es opcional y, si viene, tiene que ser de este usuario (ver
             // [destinoConocidoIdIfOwned]) — mismo criterio que la cuenta, arriba.
@@ -192,7 +236,8 @@ fun Route.reminderRoutes() {
                 // (ver [accountIdIfOwned]).
                 it[accountId] = safeAccountId
                 it[destinoConocidoId] = safeDestinoId
-                it[seDebitaSolo] = body.seDebitaSolo == true
+                it[seDebitaSolo] = body.seDebitaSolo == true && safeDeudaId == null
+                it[haciaDeuda] = safeDeudaId
                 // **Desde cuándo corre.** Lo manda quien crea la regla a partir de un movimiento
                 // que ya ocurrió: con la fecha de ese movimiento acá, la regla no se inventa
                 // ocurrencias en los períodos ANTERIORES. El período de ese movimiento sí existe,
@@ -249,7 +294,8 @@ fun Route.reminderRoutes() {
                 destinoConocidoId = storedDestinoId,
                 activeFrom = fechaIsoValida(body.activeFrom),
                 eventoDeOrigen = null,
-                seDebitaSolo = body.seDebitaSolo == true,
+                seDebitaSolo = body.seDebitaSolo == true && storedDeudaId == null,
+                haciaDeuda = storedDeudaId,
             ),
         )
     }
@@ -266,6 +312,7 @@ fun Route.reminderRoutes() {
         var storedDestinoId: String? = null
         var storedActiveFrom: String? = null
         var storedSeDebitaSolo = false
+        var storedDeudaId: String? = null
         var problemaDelDebito: String? = null
         val updated = dbQuery {
             // Ola 9 · D — **un cliente viejo NO puede borrar la cuenta sin querer.**
@@ -314,7 +361,17 @@ fun Route.reminderRoutes() {
             // viejo) conserva lo guardado. Si lo conservado ya no se sostiene —la regla cambió a
             // ingreso o se quedó sin cuenta— se apaga en vez de rechazar al cliente que ni lo ve; si
             // el dueño lo pidió explícito, sí se le dice por qué no.
-            val debitoPedido = body.seDebitaSolo ?: (filaActual?.get(RecurringRules.seDebitaSolo) ?: false)
+            // Vuelta 63: la deuda del abono, con los mismos tres estados que la cuenta (un APK que no
+            // conoce el campo la conserva). Un abono no se debita solo.
+            val deudaActual = filaActual?.get(RecurringRules.haciaDeuda)
+            val deudaPedida = body.haciaDeuda
+            val safeDeudaId = when {
+                deudaPedida == null -> deudaActual
+                deudaPedida.isBlank() -> null
+                else -> deudaIdIfOwned(uid, deudaPedida)
+            }
+            storedDeudaId = safeDeudaId
+            val debitoPedido = (body.seDebitaSolo ?: (filaActual?.get(RecurringRules.seDebitaSolo) ?: false)) && safeDeudaId == null
             val motivo = validarDebitoDeLaRegla(debitoPedido, body.type, safeAccountId)
             if (motivo != null && body.seDebitaSolo == true) {
                 problemaDelDebito = motivo
@@ -332,6 +389,7 @@ fun Route.reminderRoutes() {
                 it[destinoConocidoId] = safeDestinoId
                 it[activeFrom] = arranqueGuardado
                 it[seDebitaSolo] = storedSeDebitaSolo
+                it[haciaDeuda] = safeDeudaId
             }
         }
         problemaDelDebito?.let { return@put call.respond(HttpStatusCode.BadRequest, it) }
@@ -343,6 +401,7 @@ fun Route.reminderRoutes() {
                 destinoConocidoId = storedDestinoId,
                 activeFrom = storedActiveFrom,
                 seDebitaSolo = storedSeDebitaSolo,
+                haciaDeuda = storedDeudaId,
             ),
         )
     }
@@ -407,7 +466,8 @@ fun Route.reminderRoutes() {
 
     get("/api/payments/upcoming") {
         val uid = call.userId()
-        call.respond(proximosPagos(uid, AppClock.today()))
+        val conAbonos = call.pideLosAbonos()
+        call.respond(proximosPagos(uid, AppClock.today()).filter { conAbonos || !it.rule.esAbonoADeuda })
     }
 
     // ── «Esto ya ocurrió» ─────────────────────────────────────────────────────
@@ -426,7 +486,11 @@ fun Route.reminderRoutes() {
      * con un sello propio.
      */
     get("/api/payments/occurrences") {
-        call.respond(ocurrenciasDelPeriodo(call.userId(), AppClock.today()))
+        val uid = call.userId()
+        val estados = ocurrenciasDelPeriodo(uid, AppClock.today())
+        if (call.pideLosAbonos()) return@get call.respond(estados)
+        val abonos = idsDeLosAbonos(uid)
+        call.respond(estados.filter { it.ruleId !in abonos })
     }
 
     /**
@@ -640,12 +704,34 @@ internal suspend fun ocurridosDeLosVencimientos(
     periodo: PeriodSettings,
     sinteticas: List<RecurringRule>,
 ): Map<String, Set<String>> {
-    val reales = dbQuery {
-        unirOcurridos(loadOccurredBy(uid), emparejadasComoSellos(uid, hoy, periodo).periodosPorRegla())
+    val (reales, delAbono) = dbQuery {
+        val emparejadas = emparejadasComoSellos(uid, hoy, periodo)
+        unirOcurridos(loadOccurredBy(uid), emparejadas.periodosPorRegla()) to
+            eventosDeLosAbonos(uid, loadOccurrenceRows(uid) + emparejadas)
     }
     val derivadas = if (sinteticas.isEmpty()) emptyMap()
-        else periodosSaldados(sinteticas, cargarPagosDeDeuda(uid, hoy), settings = periodo)
+        else periodosSaldados(sinteticas, sinLosPagosDeLosAbonos(cargarPagosDeDeuda(uid, hoy), delAbono), settings = periodo)
     return unirOcurridos(reales, derivadas)
+}
+
+/** Los movimientos con que se sellaron (o emparejaron) las reglas de abono de [uid], de [sellos]. */
+private fun org.jetbrains.exposed.sql.Transaction.eventosDeLosAbonos(
+    uid: String,
+    sellos: List<RecurringOccurrence>,
+): Set<String> {
+    val abonos = reglasRealesDe(uid).filter { it.esAbonoADeuda }.map { it.id }.toSet()
+    if (abonos.isEmpty()) return emptySet()
+    return sellos.filter { it.ruleId in abonos }.mapNotNull { it.eventId }.toSet()
+}
+
+/**
+ * Vuelta 63 (revisión): [pagos] de deuda sin los traspasos que ya son un abono mensual ([delAbono]: la
+ * pata con que se selló). Así el sello derivado de «Pago tarjeta» no toma el mismo pago que el abono.
+ */
+internal fun sinLosPagosDeLosAbonos(pagos: List<FinancialEvent>, delAbono: Set<String>): List<FinancialEvent> {
+    if (delAbono.isEmpty()) return pagos
+    val traspasos = pagos.filter { it.id in delAbono }.mapNotNull { it.transferId }.toSet()
+    return pagos.filterNot { it.id in delAbono || (it.transferId != null && it.transferId in traspasos) }
 }
 
 /** `"YYYY-MM"`, con mes real: `2026-13` no es un periodo. */
@@ -746,7 +832,26 @@ internal fun org.jetbrains.exposed.sql.Transaction.sellarOcurrencia(
         }
         // Las mismas dos puertas que cierra `occurrenceCandidatesFor`, cerradas también
         // acá: la UI solo ofrece candidatos, pero el endpoint no puede confiar en eso.
-        if (evento[Events.transferId] != null || isReservedCategory(evento[Events.category])) {
+        //
+        // **Con UNA excepción (vuelta 63): el abono mensual a una deuda.** Su ocurrencia ES un
+        // traspaso —la pata que sale de una cuenta del dueño hacia esa deuda, no la de una cuota—, y
+        // solo en una regla con `haciaDeuda`. Cualquier otro traspaso, en esa regla o en otra, sigue
+        // rechazado. El monto no se exige acá: «Sí, fue este» y «Anotar este abono» son la decisión
+        // del dueño (el ±5 % es solo para que Movi lo tilde sola).
+        val esElAbono = rule.esAbonoADeuda && run {
+            val evento0 = evento.toFinancialEvent()
+            val hermanas = evento0.transferId?.let { t ->
+                Events.selectAll().where { (Events.userId eq uid) and (Events.transferId eq t) }.map { it.toFinancialEvent() }
+            }.orEmpty()
+            esElAbonoALaDeuda(rule, evento0, hermanas, conElMonto = false)
+        }
+        if (rule.esAbonoADeuda && !esElAbono) {
+            return MarcaResult.Error(
+                HttpStatusCode.BadRequest,
+                "El abono a una deuda se marca con el traspaso que sale de tu cuenta hacia esa deuda.",
+            )
+        }
+        if (!esElAbono && (evento[Events.transferId] != null || isReservedCategory(evento[Events.category]))) {
             return MarcaResult.Error(
                 HttpStatusCode.BadRequest,
                 "Un traspaso o un asiento interno no puede ser la ocurrencia de un recurrente.",
@@ -917,6 +1022,20 @@ internal fun org.jetbrains.exposed.sql.Transaction.ocurrenciasReales(
 
     val enJuego = ocurrenciasPorPreguntar(rules, today, periodo)
 
+    // Vuelta 63: un abono mensual a una TARJETA compite con su fila «Pago tarjeta» por los mismos
+    // pagos. Primero la tarjeta, hasta su mínimo (sin mínimo, el pago que la sella): esos pagos no
+    // tildan el abono solos. Ver [LecturaDeOcurrencias.tomadosPorLaTarjeta].
+    val tarjetasConAbono = rules.mapNotNull { it.haciaDeuda?.takeIf { d -> d.isNotBlank() } }.toSet()
+    if (tarjetasConAbono.isNotEmpty()) {
+        val minimos = com.jvillada.movi.server.db.Cards.selectAll()
+            .where { com.jvillada.movi.server.db.Cards.userId eq uid }
+            .associate { it[com.jvillada.movi.server.db.Cards.accountId] to it[com.jvillada.movi.server.db.Cards.pagoMinimo] }
+        val delPeriodo = lectura.eventos.filter { epochMillisToAppDate(it.timestamp) in diasDelPeriodoEnCurso }
+        tarjetasConAbono.filter { it in minimos }.forEach { tarjeta ->
+            lectura.tomadosPorLaTarjeta += pagosQueTomaLaTarjeta(tarjeta, delPeriodo, minimos[tarjeta])
+        }
+    }
+
     // Ola V: los destinos conocidos del dueño, resueltos UNA vez para toda la respuesta (las tres
     // pasadas de abajo los necesitan) — ver el KDoc de `RecurringRule.destinoConocidoId` y de
     // `candidatosPuntuados`. Sin totales: acá solo hace falta el número para reconocer el destino
@@ -1007,7 +1126,7 @@ internal fun org.jetbrains.exposed.sql.Transaction.ocurrenciasReales(
                     rule,
                     due,
                     lectura.evidenciaPara(rule, due, today),
-                    lectura.reservados,
+                    lectura.usadosPara(rule),
                     settings = periodo,
                     destinos = destinos,
                 ),
@@ -1111,7 +1230,20 @@ internal class LecturaDeOcurrencias(
      * evita).
      */
     val reservados: MutableSet<String>,
+    /**
+     * Vuelta 63: **los pagos a una tarjeta que toma primero su fila «Pago tarjeta»**
+     * ([pagosQueTomaLaTarjeta]). Un mismo pago no sella dos filas: el abono mensual a esa tarjeta ni
+     * los empareja ni se los propone (ya cuentan como el pago de la tarjeta).
+     */
+    val tomadosPorLaTarjeta: MutableSet<String> = mutableSetOf(),
 ) {
+    /**
+     * Lo que ya no puede ser la ocurrencia de [rule]: [reservados] y, para un abono, además lo que tomó
+     * la fila de la tarjeta (revisión de la vuelta 63: ni se tilda solo ni se le propone).
+     */
+    fun usadosPara(rule: RecurringRule): Set<String> =
+        if (rule.esAbonoADeuda) reservados + tomadosPorLaTarjeta else reservados
+
     /** Los movimientos de la franja sin los que el dueño ya rechazó para [rule]. */
     fun sinRechazados(rule: RecurringRule): List<FinancialEvent> =
         eventos.filterNot { (rule.id to it.id) in rechazados }
@@ -1213,6 +1345,8 @@ internal fun resolverOcurrencias(
     destinos: Map<String, com.jvillada.movi.shared.model.DestinoConocido> = emptyMap(),
 ): List<OcurrenciaResuelta> = pares.map { (rule, due) ->
     val clave = periodOf(due)
+    // Vuelta 63: lo que tomó la fila de la tarjeta no es del abono: ni lo tilda ni se le propone.
+    fun usadosParaDecidir(): Set<String> = lectura.usadosPara(rule)
     val resolucion = when {
         clave in lectura.ocurridos[rule.id].orEmpty() -> Resolucion.Sellada(lectura.sellos[rule.id to clave])
         // **Lo que llegó ANTES del vencimiento** (1-oct-2026: la recarga de Glim del día 2 entró el 1 y
@@ -1227,7 +1361,7 @@ internal fun resolverOcurrencias(
         fechaEsperada(rule, due, periodo).isAfter(today) -> {
             val evidencia = lectura.evidenciaPara(rule, due, today)
             val concluyentes = ocurrenciasConcluyentes(
-                rule, due, evidencia, lectura.reservados, settings = periodo, destinos = destinos,
+                rule, due, evidencia, usadosParaDecidir(), settings = periodo, destinos = destinos,
             )
             val unico = concluyentes.singleOrNull()
             when {
@@ -1236,7 +1370,7 @@ internal fun resolverOcurrencias(
                     Resolucion.Emparejada(unico)
                 }
                 occurrenceCandidatesFor(
-                    rule, due, evidencia, lectura.reservados, settings = periodo, destinos = destinos,
+                    rule, due, evidencia, usadosParaDecidir(), settings = periodo, destinos = destinos,
                 ).isNotEmpty() -> Resolucion.Abierta(concluyentes.size)
                 else -> Resolucion.PorLlegar
             }
@@ -1246,7 +1380,7 @@ internal fun resolverOcurrencias(
                 rule,
                 due,
                 lectura.evidenciaPara(rule, due, today),
-                lectura.reservados,
+                usadosParaDecidir(),
                 settings = periodo,
                 destinos = destinos,
             )
@@ -1307,7 +1441,11 @@ internal suspend fun ocurrenciasDelPeriodo(uid: String, today: java.time.LocalDa
     // Solo créditos: el «monto» de una tarjeta es su saldo y no entra a ningún fijo.
     val sinteticas = loadCreditRulePairs(uid).map { it.first } + loadCardRulePairs(uid).map { it.first }
     val derivadas = if (sinteticas.isEmpty()) emptyList() else {
-        val pagos = cargarPagosDeDeuda(uid, today)
+        // Vuelta 63 (revisión): un pago que ya es el abono mensual a esta deuda no es además su
+        // «Pago tarjeta» — un mismo pago no sella dos filas.
+        val abonos = idsDeLosAbonos(uid)
+        val delAbono = estados.filter { it.occurred && it.ruleId in abonos }.mapNotNull { it.eventId }.toSet()
+        val pagos = sinLosPagosDeLosAbonos(cargarPagosDeDeuda(uid, today), delAbono)
         val pagadas = pagosDeDeudaPorPeriodo(sinteticas, pagos, settings = periodo)
         sinteticas.mapNotNull { rule ->
             val ruleId = rule.id

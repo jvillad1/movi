@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.ai
 
+import com.jvillada.movi.shared.model.esAbonoADeuda
 import com.jvillada.movi.server.balance.accountTypesFor
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Credits
@@ -83,6 +84,10 @@ internal data class RecurrenteParaContexto(
     val dia: Int,
     val esIngreso: Boolean,
     val yaOcurrioEnElPeriodo: Boolean,
+    /** Vuelta 63: el abono planeado a una deuda — un recordatorio, no un gasto fijo. */
+    val esAbono: Boolean = false,
+    /** …y a una tarjeta: pagarle de más no cambia «Te quedan» (lo comprado ya contó). */
+    val abonoATarjeta: Boolean = false,
 )
 
 /**
@@ -362,6 +367,9 @@ internal suspend fun contextoDelPeriodoDe(uid: String): ContextoDelPeriodo {
             .where { RecurringOccurrences.userId eq uid }
             .groupBy({ it[RecurringOccurrences.ruleId] }, { it[RecurringOccurrences.period] })
             .mapValues { (_, periodos) -> periodos.toSet() }
+        val tarjetasDelDueno = Accounts.selectAll()
+            .where { (Accounts.userId eq uid) and (Accounts.type eq com.jvillada.movi.shared.model.AccountType.CREDIT_CARD.name) }
+            .mapTo(mutableSetOf()) { it[Accounts.id] }
         val recurrentes = RecurringRules.selectAll().where { RecurringRules.userId eq uid }.map { fila ->
             val regla = RecurringRule(
                 id = fila[RecurringRules.id],
@@ -375,6 +383,7 @@ internal suspend fun contextoDelPeriodoDe(uid: String): ContextoDelPeriodo {
                 // decide ocurrencias (eso ya lo resolvió `estadosDeLasOcurrenciasReales` arriba),
                 // pero que quede completo evita el «campo leído en uno y no en el otro».
                 destinoConocidoId = fila[RecurringRules.destinoConocidoId],
+                haciaDeuda = fila[RecurringRules.haciaDeuda],
             )
             // `null` = este período no tiene ninguna ocurrencia que preguntar (un período acortado
             // a mano que no alcanza a contener el día de la regla). Ahí no hay sello que mirar.
@@ -387,6 +396,8 @@ internal suspend fun contextoDelPeriodoDe(uid: String): ContextoDelPeriodo {
                 esIngreso = regla.type == TransactionType.INCOME,
                 yaOcurrioEnElPeriodo = regla.id in ocurridasEnElPeriodo ||
                     (sello != null && sello in selladasPorRegla[regla.id].orEmpty()),
+                esAbono = regla.esAbonoADeuda,
+                abonoATarjeta = regla.esAbonoADeuda && regla.haciaDeuda in tarjetasDelDueno,
             )
         }
 
@@ -521,11 +532,16 @@ internal fun ContextoDelPeriodo.render(): String = buildString {
         recurrentes.sortedBy { it.dia }.forEach { r ->
             val que = if (r.esIngreso) "entra" else "sale"
             val estado = if (r.yaOcurrioEnElPeriodo) "YA ocurrió en este período" else "TODAVÍA no ocurrió en este período"
-            appendLine("- ${r.nombre} (${r.categoria}): \$${r.monto} $que el día ${r.dia} — $estado")
+            val abono = when {
+                r.abonoATarjeta -> " (abono planeado a una tarjeta: NO es un gasto fijo, y pagarle de más a una tarjeta no cambia «Te quedan»: lo comprado ya contó)"
+                r.esAbono -> " (abono planeado a una deuda: NO es un gasto fijo y no resta de «Te quedan» hasta que se hace el traspaso)"
+                else -> ""
+            }
+            appendLine("- ${r.nombre} (${r.categoria}): \$${r.monto} $que el día ${r.dia} — $estado$abono")
         }
         // Sumado acá por lo mismo que el total de suscripciones: «¿me alcanza?» se contesta con este
-        // número, y sumar renglones es justo lo que el modelo hace mal.
-        val pendientes = recurrentes.filter { !it.esIngreso && !it.yaOcurrioEnElPeriodo }
+        // número, y sumar renglones es justo lo que el modelo hace mal. Sin los abonos planeados.
+        val pendientes = recurrentes.filter { !it.esIngreso && !it.yaOcurrioEnElPeriodo && !it.esAbono }
         if (pendientes.isNotEmpty()) {
             appendLine("Total de gastos recurrentes que TODAVÍA no ocurrieron en este período: \$${pendientes.sumOf { it.monto }}")
         }

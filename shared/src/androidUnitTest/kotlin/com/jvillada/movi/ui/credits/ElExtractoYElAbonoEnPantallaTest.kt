@@ -270,31 +270,21 @@ class ElExtractoYElAbonoEnPantallaTest {
     }
 
     @Test
-    fun `el plan de salida anota el abono y lo recuerda cada mes sin crear un fijo`() {
+    fun `el plan de salida anota el abono y lo recuerda cada mes con una regla que no es un fijo`() {
         val navegado = mutableListOf<Screen>()
-        val recuerdos = mutableListOf<String>()
-        val terminos = mutableListOf<CreditTerms>()
+        val reglas = mutableListOf<com.jvillada.movi.shared.model.RecurringRule>()
         Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
             override suspend fun getCredits(): List<CreditSummary> = listOf(libre)
             override suspend fun getCards(): List<CardSummary> = emptyList()
             override suspend fun getUserProfile(): UserProfile =
                 UserProfile(id = "u1", email = "juan@movi.test", name = "Juan", avatarColor = "#4F7CFF")
-            override suspend fun getMemoriaDelAsistente(): List<RecuerdoDelAsistente> =
-                recuerdos.mapIndexed { i, t -> RecuerdoDelAsistente(id = "r$i", texto = t, creadoEn = 0L, origen = OrigenDelRecuerdo.A_MANO) }
-            override suspend fun guardarRecuerdo(texto: String, origen: OrigenDelRecuerdo, propuestaId: String?): RecuerdoDelAsistente {
-                recuerdos += texto
-                return RecuerdoDelAsistente(id = "r${recuerdos.lastIndex}", texto = texto, creadoEn = 0L, origen = origen)
-            }
-            override suspend fun editarRecuerdo(id: String, texto: String): RecuerdoDelAsistente {
-                recuerdos[id.removePrefix("r").toInt()] = texto
-                return RecuerdoDelAsistente(id = id, texto = texto, creadoEn = 0L, origen = OrigenDelRecuerdo.A_MANO)
-            }
-            override suspend fun putCreditTerms(terms: CreditTerms): CreditSummary {
-                terminos += terms
-                return libre.copy(terms = terms)
-            }
+            override suspend fun getRecurringRules() = reglas.toList()
             override suspend fun createRecurringRule(rule: com.jvillada.movi.shared.model.RecurringRule) =
-                error("el abono no es una regla recurrente")
+                rule.copy(id = "rr_abono").also { reglas += it }
+            override suspend fun updateRecurringRule(id: String, rule: com.jvillada.movi.shared.model.RecurringRule) =
+                rule.also { r -> reglas.replaceAll { if (it.id == id) r else it } }
+            override suspend fun guardarRecuerdo(texto: String, origen: OrigenDelRecuerdo, propuestaId: String?): RecuerdoDelAsistente =
+                error("vuelta 63: el abono ya no va a la memoria de Movi")
         }
         composeRule.setContent {
             MoviTheme { Box(Modifier.fillMaxSize()) { SalidaDeDeudasScreen(onNavigate = { navegado += it }) } }
@@ -316,16 +306,23 @@ class ElExtractoYElAbonoEnPantallaTest {
 
         tocar(RECORDARMELO_CADA_MES)
         composeRule.waitUntil(5_000) { hay(confirmacionDelRecordatorio(libre.account.name, 500_000L, 15)) }
-        assertEquals(listOf(recuerdoDelAbono(libre.account.name, 500_000L, 15)), recuerdos)
-        assertTrue(terminos.single().remindMe, "el aviso de la deuda queda prendido")
-        assertEquals("Te avisamos cuando venza Libre inversión 9695 (el 15) y Movi AI recuerda tu plan de \$500.000.", confirmacionDelRecordatorio(libre.account.name, 500_000L, 15))
+        val regla = reglas.single()
+        assertEquals(libre.account.id, regla.haciaDeuda, "la regla va a la deuda")
+        assertEquals("Abono extra a Libre inversión 9695", regla.name)
+        assertEquals(500_000L, regla.amount)
+        assertEquals(15, regla.dayOfMonth, "el día de pago del crédito")
+        assertEquals(nuAhorros.id, regla.accountId, "desde la cuenta del débito automático")
+        assertEquals(
+            "Listo: el abono de \$500.000 a Libre inversión 9695 queda en Pagos el día 15 de cada mes. Se marca solo cuando anotes el traspaso.",
+            confirmacionDelRecordatorio(libre.account.name, 500_000L, 15),
+        )
 
-        // Otro monto, y pedirlo otra vez: reemplaza el recuerdo, no crea otro.
+        // Otro monto, y pedirlo otra vez: actualiza la regla de esa deuda, no crea otra.
         campo.performTextInput("0")
-        composeRule.waitUntil(5_000) { hay(RECORDARMELO_CADA_MES) && !hay("Te avisamos", substring = true) }
+        composeRule.waitUntil(5_000) { hay(RECORDARMELO_CADA_MES) && !hay("Listo:", substring = true) }
         tocar(RECORDARMELO_CADA_MES)
         composeRule.waitUntil(5_000) { hay(confirmacionDelRecordatorio(libre.account.name, 5_000_000L, 15)) }
-        assertEquals(listOf(recuerdoDelAbono(libre.account.name, 5_000_000L, 15)), recuerdos, "uno solo, el nuevo")
+        assertEquals(5_000_000L, reglas.single().amount, "una sola, con el monto nuevo")
     }
 
     @Test

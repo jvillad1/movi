@@ -37,6 +37,8 @@ import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.DEBITO_DE_REGLA_SIN_CUENTA
 import com.jvillada.movi.ui.components.ds.Casilla
 import com.jvillada.movi.shared.model.UsoDeCuenta
+import com.jvillada.movi.shared.model.esAbonoADeuda
+import androidx.compose.ui.platform.testTag
 import com.jvillada.movi.shared.model.sirvePara
 import com.jvillada.movi.shared.model.cuentasPara
 import com.jvillada.movi.theme.*
@@ -266,6 +268,10 @@ fun CreateRecurringRuleSheet(
 
     val editandoSuscripcion = existingSub != null
     val isEditMode = existing != null || editandoSuscripcion
+    // Vuelta 63 (revisión) · **el modo abono**: la regla del abono mensual a una deuda no es un gasto.
+    // La hoja dice «Hacia: X» y esconde Gasto/Ingreso, la categoría, «Persona o comercio» y «El banco
+    // lo cobra solo» (lo que se guarda conserva los de la regla: «Traspaso», sin destino, sin débito).
+    val esAbono = existing?.esAbonoADeuda == true
     /**
      * **¿Esta hoja puede estar mostrando una suscripción?** Editando una REGLA la respuesta es
      * no, y por eso existe: los chips de moneda y de periodicidad están apagados en ese modo
@@ -480,6 +486,7 @@ fun CreateRecurringRuleSheet(
                 Text(
                     text = when {
                         editandoSuscripcion -> "Editar suscripción"
+                        esAbono -> TITULO_DEL_EDITOR_DEL_ABONO
                         isEditMode -> "Editar recurrente"
                         else -> "Nuevo recurrente"
                     },
@@ -504,8 +511,9 @@ fun CreateRecurringRuleSheet(
             }
             if (pidiendoBorrar && existing != null) {
                 ConfirmacionEnLinea(
-                    pregunta = "¿Eliminar el recurrente «${existing.name}»?",
-                    detalle = "Deja de avisarte y de contar en el flujo libre. Los movimientos que ya anotaste no se tocan. No se puede deshacer.",
+                    pregunta = if (esAbono) "¿Eliminar «${existing.name}»?" else "¿Eliminar el recurrente «${existing.name}»?",
+                    detalle = if (esAbono) DETALLE_DE_BORRAR_EL_ABONO
+                    else "Deja de avisarte y de contar en el flujo libre. Los movimientos que ya anotaste no se tocan. No se puede deshacer.",
                     textoConfirmar = "Eliminar",
                     ocupado = saving,
                     onConfirmar = { delete() },
@@ -634,6 +642,16 @@ fun CreateRecurringRuleSheet(
             // existe y que no aplica, en lugar de elegirla y que Movi la cambie por atrás. (Un
             // ingreso recurrente en dólares, o uno anual, no se puede registrar hoy — el
             // modelo de suscripciones es de cobros. Ver la nota de abajo.)
+            if (esAbono) {
+                // Vuelta 63: un abono no es un gasto ni un ingreso: va hacia una deuda.
+                RotuloDeCampo("Hacia")
+                Text(
+                    text = haciaDelAbono(existing?.haciaDeuda, accounts),
+                    style = Movi.textos.cuerpoFuerte,
+                    color = Movi.colores.texto,
+                    modifier = Modifier.testTag(TAG_HACIA_DEL_ABONO),
+                )
+            } else {
             RotuloDeCampo("Tipo")
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -650,6 +668,7 @@ fun CreateRecurringRuleSheet(
                     enabled = !seGuardaComoSuscripcion,
                     onClick = { selectedType = TransactionType.INCOME },
                 )
+            }
             }
 
             Spacer(Modifier.height(Espacio.m))
@@ -700,7 +719,7 @@ fun CreateRecurringRuleSheet(
                         color = Movi.colores.textoMedio,
                     )
                 }
-            } else {
+            } else if (!esAbono) {
                 // --- CATEGORÍA ---
                 // F35: campo libre con sugerencias — antes arrancaba en "Otros" sin ninguna ayuda.
                 // Filtra por el tipo elegido arriba (Gasto/Ingreso) para no sugerir "Salario" en
@@ -829,7 +848,7 @@ fun CreateRecurringRuleSheet(
                 //
                 // Solo en GASTO: una suscripción no tiene esta columna, y un ingreso no es algo
                 // que se «mande» a nadie (mismo criterio que `vaHaciaElDestino` en `:core`).
-                if (selectedType == TransactionType.EXPENSE) {
+                if (selectedType == TransactionType.EXPENSE && !esAbono) {
                     Spacer(Modifier.height(Espacio.m))
                     DestinoConocidoPickerField(
                         destinos = destinosConocidos,
@@ -858,12 +877,14 @@ fun CreateRecurringRuleSheet(
                         onCheckedChange = { remindMe = it },
                         enabled = !saving,
                     )
-                    Spacer(Modifier.height(Espacio.s))
-                    CasillaDelDebitoAutomatico(
-                        marcada = seDebitaSolo,
-                        enabled = !saving,
-                        onCambiar = { seDebitaSolo = !seDebitaSolo },
-                    )
+                    if (!esAbono) {
+                        Spacer(Modifier.height(Espacio.s))
+                        CasillaDelDebitoAutomatico(
+                            marcada = seDebitaSolo,
+                            enabled = !saving,
+                            onCambiar = { seDebitaSolo = !seDebitaSolo },
+                        )
+                    }
                 } else {
                     // V10: antes la casilla simplemente se esfumaba al tocar «Ingreso». Que un
                     // control desaparezca sin decir nada deja al dueño preguntándose si lo
@@ -905,6 +926,20 @@ fun CreateRecurringRuleSheet(
 }
 
 /** El título de la casilla «se debita solo» en la hoja de un recurrente. */
+/** Vuelta 63 · el título de la hoja al editar la regla del abono mensual. */
+const val TITULO_DEL_EDITOR_DEL_ABONO: String = "Editar abono"
+
+/** Lo que dice la confirmación al borrar la regla del abono (no habla de «flujo libre»: no está ahí). */
+const val DETALLE_DE_BORRAR_EL_ABONO: String =
+    "Movi dejará de recordarte este abono. Los movimientos que ya anotaste no se tocan. No se puede deshacer."
+
+/** El tag de «Hacia: X» en la hoja del abono. */
+const val TAG_HACIA_DEL_ABONO: String = "regla:hacia-del-abono"
+
+/** «Hacia»: el nombre de la deuda del abono, o «Tu deuda» si su cuenta no se pudo leer. Pura. */
+fun haciaDelAbono(deudaId: String?, cuentas: List<Account>): String =
+    cuentas.firstOrNull { it.id == deudaId }?.name ?: "Tu deuda"
+
 const val TITULO_DEL_DEBITO_DE_LA_REGLA: String = "El banco lo cobra solo"
 
 /**

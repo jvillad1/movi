@@ -473,12 +473,18 @@ private fun NewTransactionRow(
             subtitulo = "${tx.category} · ${fechaEnPalabras(tx.date, hoyEnAppZone())}",
             final = {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.s)) {
-                    // Ola 2a: el gasto en el color del texto; el signo «−» ya lo dice.
-                    Cifra(
-                        if (entra) tx.amount else -tx.amount,
-                        tono = if (entra) TonoDeCifra.Ingreso else TonoDeCifra.Neutro,
-                        moneda = tx.currency,
-                    )
+                    Column(horizontalAlignment = Alignment.End) {
+                        // Ola 2a: el gasto en el color del texto; el signo «−» ya lo dice.
+                        Cifra(
+                            if (entra) tx.amount else -tx.amount,
+                            tono = if (entra) TonoDeCifra.Ingreso else TonoDeCifra.Neutro,
+                            moneda = tx.currency,
+                        )
+                        // Vuelta 63 (revisión): la compra diferida dice a cuántas cuotas.
+                        com.jvillada.movi.ui.transactions.textoDeLasCuotas(tx.cuotas)?.let {
+                            Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                        }
+                    }
                     Casilla(checked)
                 }
             },
@@ -523,11 +529,17 @@ private fun ReconciliationCard(
                     else -> Pildora("Se importará como nuevo", TonoDePildora.Neutra)
                 }
                 val entra = match.parsed.type == TransactionType.INCOME
-                Cifra(
-                    if (entra) match.parsed.amount else -match.parsed.amount,
-                    tono = if (entra) TonoDeCifra.Ingreso else TonoDeCifra.Neutro,
-                    moneda = match.parsed.currency,
-                )
+                Column(horizontalAlignment = Alignment.End) {
+                    Cifra(
+                        if (entra) match.parsed.amount else -match.parsed.amount,
+                        tono = if (entra) TonoDeCifra.Ingreso else TonoDeCifra.Neutro,
+                        moneda = match.parsed.currency,
+                    )
+                    // Vuelta 63 (revisión): la compra diferida dice a cuántas cuotas.
+                    com.jvillada.movi.ui.transactions.textoDeLasCuotas(match.parsed.cuotas)?.let {
+                        Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                    }
+                }
             }
 
             // Column headers

@@ -298,7 +298,12 @@ private fun hechosDelRecurrente(r: RecurrenteParaContexto): String =
 private fun renglonDelRecurrente(r: RecurrenteParaContexto): String {
     val que = if (r.esIngreso) "entra" else "sale"
     val estado = if (r.yaOcurrioEnElPeriodo) "YA ocurrió en este período" else "TODAVÍA no ocurrió en este período"
-    return "${r.nombre} ${pesos(r.monto)}, $que el día ${r.dia} — $estado"
+    val abono = when {
+        r.abonoATarjeta -> " (abono planeado a una tarjeta, no es un fijo; pagarle de más no cambia «Te quedan»: lo comprado ya contó)"
+        r.esAbono -> " (abono planeado a una deuda, no es un fijo)"
+        else -> ""
+    }
+    return "${r.nombre} ${pesos(r.monto)}, $que el día ${r.dia} — $estado$abono"
 }
 
 private fun hechosDeLaSuscripcion(s: SuscripcionParaContexto): String = buildString {
@@ -320,7 +325,7 @@ private fun hechosDelPeriodo(p: ContextoDelPeriodo): String = buildString {
         // La cuenta hecha: lo que quedaría sin la plata prestada, para que el modelo no la calcule.
         appendLine("- Sin los créditos desembolsados, el flujo del período sería ${pesos(flujo - p.creditosDesembolsados)}")
     }
-    val pendientes = p.recurrentes.filter { !it.esIngreso && !it.yaOcurrioEnElPeriodo }.sumOf { it.monto }
+    val pendientes = p.recurrentes.filter { !it.esIngreso && !it.yaOcurrioEnElPeriodo && !it.esAbono }.sumOf { it.monto }
     if (pendientes > 0L) {
         appendLine("- Gastos recurrentes que todavía no ocurrieron: ${pesos(pendientes)}")
         appendLine("- Si salen todos, el flujo del período quedaría en ${pesos(flujo - pendientes)}")

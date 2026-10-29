@@ -1006,11 +1006,15 @@ private fun Transaction.escribirElImporte(
                         merchant   = it[Events.merchant],
                         isTransferLeg = it[Events.transferId] != null || it[Events.category] == TRANSFER_CATEGORY,
                         importeAnterior = it[Events.statementImportId],
+                        cuotas = it[Events.cuotas],
                     )
                 }
 
             if (existingEvent != null) {
                 val (existCat, existDesc, existMerchant, esPataDeTraspaso, importeAnterior) = existingEvent
+                // Vuelta 63: el movimiento que ya existía (el SMS de la compra) y no sabía sus cuotas
+                // las toma del extracto. Las que ya tenía no se pisan.
+                val cuotasDelExtracto = dec.parsed.cuotas?.takeIf { existingEvent.cuotas == null && dec.parsed.type == TransactionType.EXPENSE }
                 // La categoría de una pata de traspaso NO se toca por esta puerta. Esta
                 // reconciliación escribe con un `Events.update` directo, sin pasar por la
                 // guarda de `PUT /api/events/{id}/category` — y el matcher empareja por monto
@@ -1042,6 +1046,7 @@ private fun Transaction.escribirElImporte(
                     // confirmar». Antes un SMS conciliado seguía pendiente, y descartarlo
                     // ahí como duplicado borraba el único registro de la compra.
                     it[reconciliationStatus] = ReconciliationStatus.RECONCILED.name
+                    if (cuotasDelExtracto != null) it[cuotas] = cuotasDelExtracto
                 }
                 // Pero el vínculo de ESTE importe queda escrito: si no, deshacer el
                 // anterior anulaba el movimiento aunque este importe todavía lo reclamara.
@@ -1188,6 +1193,8 @@ private fun Transaction.createEventFromParsed(tx: ParsedTransaction, accountId: 
         // que ordenar `decision.imports` antes del `for`, o sellar la serie a propósito—; acá
         // solo queda escrito lo que el código hace hoy.
         it[createdAt]            = System.currentTimeMillis()
+        // Vuelta 63: las cuotas de una compra de la tarjeta, cuando el extracto las dice.
+        it[cuotas]               = tx.cuotas?.takeIf { tx.type == TransactionType.EXPENSE }
     }
     return eventId
 }
@@ -1220,6 +1227,8 @@ private data class ExistingEventFields(
     val isTransferLeg: Boolean,
     /** El importe que ya concilió este movimiento, si alguno: reimportar no se lo quita. */
     val importeAnterior: String? = null,
+    /** Vuelta 63: las cuotas que ya tenía, si alguna. */
+    val cuotas: Int? = null,
 )
 
 /** A dónde va una fila del extracto cuya categoría no se puede usar (ver `createEventFromParsed`). */

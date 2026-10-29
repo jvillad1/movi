@@ -86,7 +86,9 @@ fun tituloPropuesta(tipo: TransactionType, period: String): String {
  * nombra la cuota, y una cuota del 30 de octubre es la de octubre; el período se dice en otro lado
  * («Del período de septiembre», [tituloDeLosAnteriores]).
  */
-fun preguntaDeLaFila(pago: PagoDelPeriodo): String = tituloPropuesta(
+fun preguntaDeLaFila(pago: PagoDelPeriodo): String =
+    // Vuelta 63 (revisión): un abono no se «paga»: «¿Ya hiciste el abono de octubre?».
+    if (pago.esAbono) preguntaDelAbono(pago) else tituloPropuesta(
     if (pago.esIngreso) TransactionType.INCOME else TransactionType.EXPENSE,
     pago.periodoDelSello ?: pago.vence,
 )
@@ -316,8 +318,16 @@ fun deudaDeLaRegla(ruleId: String): String? = when {
     else -> null
 }?.takeIf { it.isNotBlank() }
 
-/** [hojaParaAnotar] desde una fila del checklist, que ya trae los datos. */
-fun hojaParaAnotar(pago: PagoDelPeriodo): Screen = hojaParaAnotar(
+/**
+ * [hojaParaAnotar] desde una fila del checklist, que ya trae los datos. Vuelta 63: la fila del abono
+ * mensual abre el Traspaso hacia su deuda ([com.jvillada.movi.ui.quickadd.hojaDelAbono]); [tarjetas]
+ * son las cuentas de tarjeta, que se pagan en Cuota.
+ */
+fun hojaParaAnotar(pago: PagoDelPeriodo, tarjetas: Set<String> = emptySet()): Screen =
+    if (pago.esAbono) com.jvillada.movi.ui.quickadd.hojaDelAbono(pago, esTarjeta = pago.haciaDeuda in tarjetas)
+    else hojaParaAnotarUnPago(pago)
+
+private fun hojaParaAnotarUnPago(pago: PagoDelPeriodo): Screen = hojaParaAnotar(
     ruleId = pago.ruleId,
     nombre = pago.nombre,
     monto = pago.monto,
@@ -329,3 +339,9 @@ fun hojaParaAnotar(pago: PagoDelPeriodo): Screen = hojaParaAnotar(
     // El mes del período del dueño («el de octubre»), como lo dice la fila; sin él, el del vencimiento.
     mes = nombreDelMes(pago.periodoDelDueno ?: pago.periodoDelSello ?: pago.vence),
 )
+
+/** «¿Ya hiciste el abono de octubre?» (el mes del período del dueño), o sin mes si no se entiende. */
+fun preguntaDelAbono(pago: PagoDelPeriodo): String {
+    val mes = nombreDelMes(pago.periodoDelDueno ?: pago.periodoDelSello ?: pago.vence)
+    return if (mes.isBlank()) "¿Ya hiciste el abono?" else "¿Ya hiciste el abono de $mes?"
+}

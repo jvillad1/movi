@@ -554,6 +554,8 @@ fun App() {
                             // Vuelta 43: «Anotar pago» desde una factura — el guardado la salda.
                             presetPago = request.presetPago,
                             presetRepartir = request.presetRepartir,
+                            // Vuelta 63: «Anotar este abono» — el traspaso sella el abono del mes.
+                            presetAbono = request.presetAbono,
                             // Ola 9 · B: el movimiento ya se guardó; recién ahora se evalúa si
                             // vale la pena ofrecer el recurrente.
                             onSavedEvent = {

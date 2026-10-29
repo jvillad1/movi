@@ -255,7 +255,8 @@ fun ingresosRecibidos(checklist: List<PagoDelPeriodo>): List<PagoDelPeriodo> =
  * pesos que esconde dólares adentro es la clase de total que este archivo no da.
  */
 fun yaPagadoEnElPeriodo(checklist: List<PagoDelPeriodo>): Long =
-    pagosHechos(checklist).filter { it.moneda == "COP" }.sumOf { it.montoPagado ?: if (it.montoEsSaldo) 0L else it.monto }
+    // Vuelta 63: el abono hecho no es uno de los pagos del período («Llevas $X pagados» de «de $Y»).
+    pagosHechos(checklist).filter { it.moneda == "COP" && !it.esAbono }.sumOf { it.montoPagado ?: if (it.montoEsSaldo) 0L else it.monto }
 
 /** Lo que falta que llegue: el total de «Por cobrar», con el mismo criterio que [faltaPorPagar]. */
 fun faltaPorCobrar(checklist: List<PagoDelPeriodo>): Long =
@@ -273,7 +274,8 @@ fun yaRecibidoEnElPeriodo(checklist: List<PagoDelPeriodo>): Long =
  * estando en el checklist y se tildan igual — no se cuentan, que es distinto de esconderlos.
  */
 fun avanceDelChecklist(checklist: List<PagoDelPeriodo>): Pair<Int, Int> {
-    val pagos = checklist.filter { !it.esIngreso }
+    // Vuelta 63: un abono planeado tampoco es uno de los pagos del período (Hoy y Pagos cuentan igual).
+    val pagos = checklist.filter { !it.esIngreso && !it.esAbono }
     return pagos.count { it.pagado } to pagos.size
 }
 
@@ -542,7 +544,7 @@ fun gastoSinCategoriaDe(gastoPorCategoria: Map<String, Long>): Long =
 
 /** El monto que el checklist dice que ya se pagó, para el rótulo de avance. */
 fun yaPagado(checklist: List<PagoDelPeriodo>): Long =
-    checklist.filter { it.pagado && !it.montoEsSaldo && !it.esIngreso }.sumOf { it.monto }
+    checklist.filter { it.pagado && !it.montoEsSaldo && !it.esIngreso && !it.esAbono }.sumOf { it.monto }
 
 /** Un pago de [checklist] que sirva de ejemplo de lo que urge, o `null` si no falta nada. */
 fun loQueUrge(checklist: List<PagoDelPeriodo>): PagoDelPeriodo? =

@@ -2,6 +2,10 @@ package com.jvillada.movi.ui.recurrentes
 
 import com.jvillada.movi.shared.model.ExtractoDeLaTarjeta
 import com.jvillada.movi.ui.credits.PUEDE_INCLUIR_DIFERIDOS
+import com.jvillada.movi.ui.credits.ANOTAR_ESTE_ABONO
+import com.jvillada.movi.ui.quickadd.lineaDelAbonoPlaneado
+import com.jvillada.movi.ui.quickadd.pastillaDelAbono
+import com.jvillada.movi.shared.model.abonosPlaneados
 import com.jvillada.movi.ui.credits.ROTULO_DEL_EXTRACTO
 import com.jvillada.movi.ui.credits.alternativaDelMinimo
 import com.jvillada.movi.ui.credits.montoDelExtracto
@@ -112,7 +116,14 @@ const val TAG_VER_TODAS_LAS_FACTURAS: String = "pagos:ver-todas-las-facturas"
  * @property total [falta] + [pagado]: «de $X».
  * @property quedan las facturas que faltan ([pagosPendientes]); [de], todas las del período.
  */
-data class ResumenDeFacturas(val falta: Long, val pagado: Long, val quedan: Int, val de: Int) {
+data class ResumenDeFacturas(
+    val falta: Long,
+    val pagado: Long,
+    val quedan: Int,
+    val de: Int,
+    /** Vuelta 63: los abonos planeados que faltan ([abonosPlaneados]). No suman en [falta]: van aparte. */
+    val abonos: Long = 0L,
+) {
     val total: Long get() = falta + pagado
 
     /** Cuánto de la barra va lleno: lo pagado sobre el total (0 sin total). */
@@ -124,7 +135,9 @@ fun resumenDeFacturas(checklist: List<PagoDelPeriodo>): ResumenDeFacturas = Resu
     falta = faltaPorPagar(checklist),
     pagado = yaPagadoEnElPeriodo(checklist),
     quedan = pagosPendientes(checklist).size,
-    de = checklist.count { !it.esIngreso },
+    // Vuelta 63: un abono planeado no es un pago del período (no cuenta en «quedan 4 de 7»).
+    de = checklist.count { !it.esIngreso && !it.esAbono },
+    abonos = abonosPlaneados(checklist),
 )
 
 /** «de $5.950.600 · quedan 4 de 7 pagos». */
@@ -166,7 +179,7 @@ fun enOrdenDeFacturas(pagos: List<PagoDelPeriodo>): List<PagoDelPeriodo> =
     )
 
 /** La factura cuyo «Anotar pago» va en amarillo: la primera sin pagar del orden. `null` sin ninguna. */
-fun laMasUrgente(ordenadas: List<PagoDelPeriodo>): PagoDelPeriodo? = ordenadas.firstOrNull { !it.pagado }
+fun laMasUrgente(ordenadas: List<PagoDelPeriodo>): PagoDelPeriodo? = ordenadas.firstOrNull { !it.pagado && !it.esAbono }
 
 private val MESES_CORTOS = listOf("ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic")
 
@@ -182,6 +195,8 @@ fun fechaCortaDeFactura(iso: String): String? =
 fun pastillaDeVencimiento(pago: PagoDelPeriodo, conPropuesta: Boolean): Pair<String, TonoDePildora> {
     // Una píldora de estado nunca va llena de amarillo: eso es de la acción principal (revisión).
     if (conPropuesta) return "Por confirmar" to TonoDePildora.Aviso
+    // Vuelta 63: un abono planeado no vence: «El día 15», neutra.
+    if (pago.esAbono) return pastillaDelAbono(pago) to TonoDePildora.Neutra
     val dias = pago.diasParaVencer
     // Vuelta 49: una cuota que el banco cobra sola no «vence»: se cobra sola, y después se pregunta.
     if (pago.seCobraSola) pastillaDelDebito(pago)?.let { return it }
@@ -237,6 +252,10 @@ internal fun TarjetaFaltaPorPagar(resumen: ResumenDeFacturas, modifier: Modifier
             Text(TITULO_FALTA_POR_PAGAR, style = Movi.textos.cuerpo, color = Movi.colores.sobreMarcaMedio)
             Cifra(resumen.falta, VarianteDeCifra.Heroe, tono = TonoDeCifra.Neutro)
             Text(lineaDeLoQueQueda(resumen), style = Movi.textos.cuerpoRegular, color = Movi.colores.sobreMarcaMedio)
+            // Vuelta 63: el abono planeado no es parte de lo que falta: se dice aparte.
+            if (resumen.abonos > 0L) {
+                Text(lineaDelAbonoPlaneado(resumen.abonos), style = Movi.textos.apoyo, color = Movi.colores.sobreMarcaMedio)
+            }
         }
         BarraDeProgreso(
             resumen.fraccionPagada,
@@ -344,7 +363,12 @@ internal fun FilaDeFactura(
             Spacer(Modifier.width(ESPACIO_ANTES_DEL_FINAL_DE_FILA))
             if (onAnotar != null && !conPropuesta) {
                 Boton(
-                    if (pago.esIngreso) ETIQUETA_ANOTAR_INGRESO else ETIQUETA_ANOTAR,
+                    when {
+                        pago.esIngreso -> ETIQUETA_ANOTAR_INGRESO
+                        // Vuelta 63: abre el Traspaso hacia la deuda, ya lleno, y al guardar la tilda.
+                        pago.esAbono -> ANOTAR_ESTE_ABONO
+                        else -> ETIQUETA_ANOTAR
+                    },
                     onClick = onAnotar,
                     variante = if (principal) VarianteDeBoton.Principal else VarianteDeBoton.Secundario,
                     tamano = TamanoDeBoton.S,

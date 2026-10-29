@@ -4,33 +4,29 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.CardSummary
 import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.DeudaParaSalir
-import com.jvillada.movi.shared.model.OrigenDelRecuerdo
+import com.jvillada.movi.shared.model.reglaDelAbono
 import com.jvillada.movi.shared.model.TipoDeDeuda
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.formatCOPSinOcultar
 import com.jvillada.movi.ui.quickadd.PestanaDeAgregar
 
 /*
- * # El abono que se puede hacer (vuelta 62)
+ * # El abono que se puede hacer (vuelta 62) y que se recuerda (vuelta 63)
  *
  * La revisión del 29-oct: en «¿Y si abonas de más?» y en «Cómo salir de tus deudas» la única acción
  * era «Cerrar». Ahora el monto simulado se anota con el camino de siempre —Agregar → Traspaso, ya
- * lleno: desde la cuenta del débito automático (si la tiene), hacia el crédito, por ese monto—, y en
- * el plan se puede pedir que Movi lo recuerde cada mes.
+ * lleno: desde la cuenta del débito automático (si la tiene), hacia el crédito, por ese monto—, y se
+ * puede pedir que Movi lo recuerde cada mes.
  *
- * ## Por qué «Recordármelo cada mes» no crea una regla recurrente
+ * ## «Recordármelo cada mes» crea una regla recurrente (vuelta 63)
  *
- * Una regla recurrente es un gasto o un ingreso de UNA cuenta: no tiene destino, así que no puede ser
- * un traspaso. Y el server cierra la puerta a propósito: «un traspaso no puede ser la ocurrencia de
- * un recurrente». Una regla de gasto por el abono sería además un fijo más que «Te quedan» y la caja
- * restarían, y el traspaso nunca la tildaría: se quedaría «vencida» cada mes. Y lo restaría dos veces,
- * porque el abono ya baja «Te quedan» el mes que se hace (todo lo que sale de Tu plata hacia una deuda
- * fuera del checklist cuenta, `pagosDeDeudaFueraDelChecklist`). Eso es una regla de plata nueva, y
- * esta vuelta no la trae (la 63 lo vuelve un recordatorio de verdad).
- *
- * Así que usa los dos recordatorios que ya existen: **el aviso de la deuda** (`remindMe` de sus
- * condiciones: el día de pago de cada mes, por correo y en el teléfono), que se prende si estaba
- * apagado, y **lo que Movi sabe de ti** (la memoria de Movi AI), donde queda el plan con su monto.
+ * Decisión del dueño (29-oct): **un recordatorio que se tilda**. La regla lleva la deuda en
+ * `RecurringRule.haciaDeuda` («Abono extra a Vehículo 4083 · $500.000», el día de pago de la deuda) y
+ * aparece en Pagos. **No es un fijo**: mientras está pendiente no resta de «Te quedan» ni de la caja;
+ * el mes que se hace, el traspaso baja «Te quedan» por la regla de siempre
+ * (`pagosDeDeudaFueraDelChecklist`) y tilda la fila (ver `AbonoADeuda.kt`). Pedirlo otra vez actualiza
+ * la regla de esa deuda en vez de crear otra. Ya no usa la memoria de Movi AI; lo que la vuelta 62 dejó
+ * ahí se queda.
  */
 
 /** El botón principal del simulador con un monto. */
@@ -40,6 +36,13 @@ const val ANOTAR_ESTE_ABONO: String = "Anotar este abono"
 const val RECORDARMELO_CADA_MES: String = "Recordármelo cada mes"
 
 /** Lo que el plan dice debajo de los botones: el abono no es un fijo. */
+/**
+ * Lo que el plan dice debajo de los botones, según a qué va el abono: a un crédito
+ * [EL_ABONO_NO_ES_UN_FIJO]; a una tarjeta, que no cambia «Te quedan» (lo comprado ya contó).
+ */
+fun elAbonoNoEsUnFijo(aTarjeta: Boolean): String =
+    if (aTarjeta) com.jvillada.movi.shared.model.EL_ABONO_A_UNA_TARJETA_NO_CAMBIA_TE_QUEDAN else EL_ABONO_NO_ES_UN_FIJO
+
 const val EL_ABONO_NO_ES_UN_FIJO: String =
     "No queda como un pago fijo. El mes que lo hagas, sale de tu plata y baja «Te quedan»."
 
@@ -67,24 +70,14 @@ fun pantallaDelAbono(deuda: DeudaParaSalir, monto: Long, creditos: List<CreditSu
             ?: Screen.QuickAdd(presetMonto = monto, presetDeudaId = deuda.id, presetPestana = PestanaDeAgregar.TRASPASO)
     }
 
-/** El final fijo del recuerdo del abono: es lo que lo distingue de otro recuerdo (ver [esRecuerdoDelAbono]). */
-private const val FINAL_DEL_RECUERDO_DEL_ABONO = ", según el plan para salir de las deudas."
-
-/** Lo que queda en la memoria de Movi: «Abonar $500.000 extra al mes a Libre inversión 9695, el día 5…». */
-fun recuerdoDelAbono(nombre: String, monto: Long, dia: Int?): String =
-    "Abonar ${formatCOPSinOcultar(monto)} extra al mes a $nombre" +
-        (dia?.let { ", el día $it" } ?: "") +
-        FINAL_DEL_RECUERDO_DEL_ABONO
-
-/** ¿[texto] es el recuerdo del abono a [nombre]? Pedirlo otra vez lo reemplaza, no lo duplica. */
-fun esRecuerdoDelAbono(texto: String, nombre: String): Boolean =
-    texto.startsWith("Abonar ") && texto.endsWith(FINAL_DEL_RECUERDO_DEL_ABONO) &&
-        (texto.contains(" extra al mes a $nombre,") || texto.contains(" extra al mes a $nombre$FINAL_DEL_RECUERDO_DEL_ABONO"))
-
-/** La confirmación debajo del botón: «Te avisamos cuando venza Nu (el 5) y Movi AI recuerda tu plan de $500.000.» */
+/**
+ * La confirmación debajo del botón: «Listo: «Abono extra a Nu» queda en Pagos el día 5 de cada mes. Se
+ * marca solo cuando anotes el traspaso.»
+ */
 fun confirmacionDelRecordatorio(nombre: String, monto: Long, dia: Int?): String =
-    "Te avisamos cuando venza $nombre" + (dia?.let { " (el $it)" } ?: "") +
-        " y Movi AI recuerda tu plan de ${formatCOPSinOcultar(monto)}."
+    "Listo: el abono de ${formatCOPSinOcultar(monto)} a $nombre queda en Pagos" +
+        (dia?.let { " el día $it de cada mes" } ?: " cada mes") +
+        ". Se marca solo cuando anotes el traspaso."
 
 /** El aviso del campo del plan cuando el abono es más que todo lo que se debe. */
 fun avisoDeAbonoMayorQueLaDeuda(total: Long): String =
@@ -99,32 +92,77 @@ fun diaDePagoDe(deuda: DeudaParaSalir, creditos: List<CreditSummary>, tarjetas: 
     else creditos.firstOrNull { it.account.id == deuda.id }?.terms?.dayOfMonth
 
 /**
- * **«Recordármelo cada mes»**: deja el plan en la memoria de Movi y prende el aviso de la deuda si estaba
- * apagado. No crea ninguna regla (ver el encabezado del archivo). Devuelve la confirmación.
+ * **«Recordármelo cada mes»** desde el plan de salida: crea —o actualiza, si ya hay una para esa deuda—
+ * la regla del abono mensual ([recordarElAbonoA]). Devuelve la confirmación.
  */
 suspend fun recordarElAbono(
     deuda: DeudaParaSalir,
     monto: Long,
     creditos: List<CreditSummary>,
     tarjetas: List<CardSummary>,
-): String {
-    val dia = diaDePagoDe(deuda, creditos, tarjetas)
+): String = recordarElAbonoA(
+    deudaId = deuda.id,
+    nombre = deuda.nombre,
+    monto = monto,
+    dia = diaDePagoDe(deuda, creditos, tarjetas),
+    desde = creditos.firstOrNull { it.account.id == deuda.id }?.terms?.debitoAutomaticoDesde,
+)
+
+/** Lo mismo desde la ficha del crédito («¿Y si abonas de más?»). */
+suspend fun recordarElAbono(credit: CreditSummary, monto: Long): String = recordarElAbonoA(
+    deudaId = credit.account.id,
+    nombre = credit.account.name,
+    monto = monto,
+    dia = credit.terms?.dayOfMonth,
+    desde = credit.terms?.debitoAutomaticoDesde,
+)
+
+/**
+ * **La regla del abono mensual a [deudaId]** (`RecurringRule.haciaDeuda`): la crea, o actualiza la que
+ * ya existe para esa deuda —pedirlo otra vez cambia el monto, no duplica la fila de Pagos—. El día es
+ * el de pago de la deuda; sin él, el de la regla que ya estaba, o el 1.
+ */
+suspend fun recordarElAbonoA(deudaId: String, nombre: String, monto: Long, dia: Int?, desde: String?): String {
     val repo = Repositories.wallets
-    val texto = recuerdoDelAbono(deuda.nombre, monto, dia)
-    // Revisión: pedirlo otra vez reemplaza el recuerdo del abono a esa deuda, no crea otro.
-    val anterior = runCatching { repo.getMemoriaDelAsistente() }.getOrDefault(emptyList())
-        .firstOrNull { esRecuerdoDelAbono(it.texto, deuda.nombre) }
-    if (anterior != null) {
-        if (anterior.texto != texto) repo.editarRecuerdo(anterior.id, texto)
-    } else {
-        repo.guardarRecuerdo(texto, OrigenDelRecuerdo.A_MANO)
-    }
-    if (deuda.tipo == TipoDeDeuda.TARJETA) {
-        tarjetas.firstOrNull { it.account.id == deuda.id }?.terms?.takeIf { !it.remindMe }
-            ?.let { repo.putCardTerms(it.copy(remindMe = true)) }
-    } else {
-        creditos.firstOrNull { it.account.id == deuda.id }?.terms?.takeIf { !it.remindMe }
-            ?.let { repo.putCreditTerms(it.copy(remindMe = true)) }
-    }
-    return confirmacionDelRecordatorio(deuda.nombre, monto, dia)
+    val existente = repo.getRecurringRules().firstOrNull { it.haciaDeuda == deudaId }
+    val elDia = dia ?: existente?.dayOfMonth ?: 1
+    val nueva = reglaDelAbono(
+        id = existente?.id.orEmpty(),
+        deudaId = deudaId,
+        nombreDeLaDeuda = nombre,
+        monto = monto,
+        dia = elDia,
+        // Revisión: sin débito automático (una tarjeta, casi siempre) la regla quedaba sin cuenta y
+        // «Anotar este abono» abría sin «Desde». Va la cuenta con que más se le ha pagado a esa deuda.
+        desdeCuentaId = desde ?: existente?.accountId ?: cuentaQueMasLePagaA(deudaId),
+    )
+    if (existente != null) repo.updateRecurringRule(existente.id, existente.copy(
+        name = nueva.name, amount = monto, dayOfMonth = nueva.dayOfMonth, category = nueva.category,
+        type = nueva.type, accountId = nueva.accountId, haciaDeuda = deudaId,
+    ))
+    else repo.createRecurringRule(nueva)
+    return confirmacionDelRecordatorio(nombre, monto, elDia)
+}
+
+/**
+ * **La cuenta con que más se le ha pagado a [deudaId]**: la otra pata de los traspasos y pagos que
+ * entraron a esa deuda, la más repetida. `null` sin historia (o si no se pudo leer).
+ */
+suspend fun cuentaQueMasLePagaA(deudaId: String): String? = runCatching {
+    val eventos = Repositories.wallets.getEvents(null)
+    cuentaQueMasLePagaA(deudaId, eventos)
+}.getOrNull()
+
+/** [cuentaQueMasLePagaA] sobre [eventos] ya leídos. Pura. */
+fun cuentaQueMasLePagaA(deudaId: String, eventos: List<com.jvillada.movi.shared.model.FinancialEvent>): String? {
+    val traspasos = eventos
+        .filter { it.accountId == deudaId && it.type == com.jvillada.movi.shared.model.TransactionType.INCOME }
+        .mapNotNull { it.transferId }
+        .toSet()
+    return eventos
+        .filter { it.transferId in traspasos && it.accountId != deudaId && it.type == com.jvillada.movi.shared.model.TransactionType.EXPENSE }
+        .groupingBy { it.accountId }
+        .eachCount()
+        .maxWithOrNull(compareBy<Map.Entry<String, Int>> { it.value }.thenByDescending { it.key })
+        ?.key
 }

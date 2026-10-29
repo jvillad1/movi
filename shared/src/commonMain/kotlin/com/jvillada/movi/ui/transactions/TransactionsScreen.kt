@@ -1930,6 +1930,12 @@ internal fun CifraDelMovimiento(
     Cifra(montoParaLaCifra(tono, monto), variante, modifier, tonoDeCifraDelTono(tono), moneda)
 }
 
+/**
+ * Vuelta 63 (revisión) · **«a 12 cuotas»** junto al monto de una compra diferida (`FinancialEvent.cuotas`
+ * mayor que 1), en Movimientos y en la revisión del extracto. `null` sin cuotas conocidas o a una sola.
+ */
+fun textoDeLasCuotas(cuotas: Int?): String? = cuotas?.takeIf { it > 1 }?.let { "a $it cuotas" }
+
 /** El tag de lo que se toca (y se resalta) en el encabezado de un día: sale un poco hacia el margen. */
 const val TAG_TOQUE_DEL_DIA: String = "toque-del-dia"
 
@@ -2279,7 +2285,9 @@ internal fun MovementSingleRow(
     val porElSaldo = tonoForzado != null
     val monto = if (porElSaldo) tx.amount else montoPrincipalDelMovimiento(tx)
     val debajo = when {
-        !esGastoRepartido(tx) -> null
+        // Vuelta 63 (revisión): una compra diferida dice a cuántas cuotas — explica por qué el extracto
+        // de la tarjeta cuenta menos que el monto.
+        !esGastoRepartido(tx) -> textoDeLasCuotas(tx.cuotas)
         porElSaldo -> "Tu parte ${formatMoney(montoContado(tx), tx.currency)}"
         else -> lineaDelRepartido(tx, tx.espacioId?.let { espacios[it] })
     }

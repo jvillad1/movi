@@ -241,6 +241,17 @@ data class FinancialEvent(
      * saldado»), o `null`. Derivado; con él, [countsAsCashFlow] es `false`: no es ingreso ni gasto.
      */
     val saldaEspacioId: String? = null,
+    /**
+     * **Vuelta 63 · a cuántas cuotas se difirió esta compra**, cuando el banco lo dijo, o `null` si no
+     * se sabe (lo viejo, lo anotado a mano). `1` = una sola cuota: se sabe que NO se difirió.
+     *
+     * Lo llena el importador de los movimientos de la tarjeta de Bancolombia, que trae la columna de
+     * cuotas, al crear o conciliar el movimiento (el SMS no la dice). No cambia [amount] —la compra
+     * sigue siendo el total, y el gasto del período la cuenta entera el día que se hizo—: solo sirve
+     * para que el extracto de la tarjeta (`extractoDeLaTarjeta`) cuente la cuota del mes y no el total.
+     * Columna `financial_events.cuotas`, nullable; un `POST /api/events` no la toca.
+     */
+    val cuotas: Int? = null,
 )
 
 /**

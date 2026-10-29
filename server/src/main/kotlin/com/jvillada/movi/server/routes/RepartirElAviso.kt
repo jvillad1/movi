@@ -143,7 +143,8 @@ internal suspend fun pagosParaRepartir(uid: String, dia: LocalDate, destinoId: S
     val filas = checklistDelPeriodo(upcoming, ocurrenciasDelPeriodo(uid, dia), periodo, ajustes)
     val reglas = upcoming.associate { it.rule.id to it.rule }
     return filas
-        .filter { !it.pagado && !it.esIngreso && !it.montoEsSaldo && it.moneda == moneda && it.monto > 0L }
+        // Vuelta 63: un abono planeado se salda con su traspaso, no repartiendo un aviso.
+        .filter { !it.pagado && !it.esIngreso && !it.montoEsSaldo && !it.esAbono && it.moneda == moneda && it.monto > 0L }
         .filterNot { it.ruleId.startsWith(CARD_RULE_PREFIX) }
         .map { fila ->
             val esCuota = fila.ruleId.startsWith(CREDIT_RULE_PREFIX)

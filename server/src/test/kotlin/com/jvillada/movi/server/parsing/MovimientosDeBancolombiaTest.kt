@@ -164,6 +164,16 @@ class MovimientosDeBancolombiaTest {
         assertEquals(TransactionType.EXPENSE, leido.filas[5].type)
     }
 
+    @Test
+    fun `vuelta 63 - cada cobro trae sus cuotas, un cargo cuenta como una y un abono no tiene`() {
+        val leido = assertNotNull(leerLosMovimientosDeBancolombia(tarjeta))
+        assertEquals(36, leido.filas[0].cuotas, "la suscripción en dólares diferida a 36")
+        assertEquals(1, leido.filas[1].cuotas, "la plataforma de video a una cuota")
+        assertEquals(1, leido.filas[3].cuotas, "un cargo del banco («0») no se difirió")
+        assertEquals(null, leido.filas[4].cuotas, "un abono no tiene cuotas")
+        assertEquals(36, leido.filas[5].cuotas, "la ampliación de plazo, partida en renglones")
+    }
+
     // ── El fondo de inversión ──────────────────────────────────────────────
 
     private val fondo = """

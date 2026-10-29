@@ -113,6 +113,12 @@ sealed class Screen {
          * grupo, que supone que pagó el otro.
          */
         val presetRepartir: Boolean = false,
+        /**
+         * Vuelta 63 · **«Anotar este abono»** desde la fila del abono mensual en Pagos: al guardar el
+         * traspaso (o el pago de la tarjeta), la hoja sella esa ocurrencia con la pata que salió. Ver
+         * `AbonoDeLaRegla`. `null` = Agregar de siempre.
+         */
+        val presetAbono: com.jvillada.movi.ui.quickadd.AbonoDeLaRegla? = null,
     ) : Screen()
     /**
      * Movi AI, opcionalmente **con una pregunta ya lista**.

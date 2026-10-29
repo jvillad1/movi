@@ -301,4 +301,23 @@ class ResumenDelPeriodoTest {
         assertTrue(sms(109).urgente)
         assertTrue(sms(1).texto.startsWith("1 mensaje "), "singular: «1 mensaje», no «1 mensajes»")
     }
+
+    /**
+     * Vuelta 63 (revisión): Hoy decía «Falta 1 de 6 pagos» y Pagos «queda 1 de 5» — el abono planeado
+     * contaba como un pago en el avance. No es un pago del período: no cuenta en ninguno de los dos.
+     */
+    @Test
+    fun `el abono planeado no cuenta en el avance de los pagos`() {
+        val arriendo = PagoDelPeriodo(ruleId = "rr_a", nombre = "Arriendo", monto = 1_800_000L, pagado = true, diasParaVencer = -3, vence = "2026-10-05")
+        val internet = PagoDelPeriodo(ruleId = "rr_i", nombre = "Internet", monto = 90_000L, pagado = false, diasParaVencer = 4, vence = "2026-10-12")
+        val abono = PagoDelPeriodo(
+            ruleId = "rr_abono", nombre = "Abono extra a Nu", monto = 500_000L, pagado = false, diasParaVencer = 7,
+            vence = "2026-10-15", haciaDeuda = "nu",
+        )
+        val checklist = listOf(arriendo, internet, abono)
+        assertEquals(1 to 2, avanceDelChecklist(checklist))
+        assertEquals("Te falta 1 de 2 pagos de este período", lineaDeLoQueFalta(checklist))
+        val resumen = com.jvillada.movi.ui.recurrentes.resumenDeFacturas(checklist)
+        assertEquals(1 to 2, resumen.quedan to resumen.de, "Hoy y Pagos dicen lo mismo")
+    }
 }

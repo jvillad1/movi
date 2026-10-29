@@ -59,7 +59,7 @@ fun apartadoCubiertoPorLosFijos(
     checklist: List<PagoDelPeriodo>,
 ): Long {
     val pendientes = checklist
-        .filter { !it.pagado && !it.esIngreso && !it.montoEsSaldo && it.moneda == "COP" }
+        .filter { !it.pagado && !it.esIngreso && !it.montoEsSaldo && !it.esAbono && it.moneda == "COP" }
         .filter { it.cuentaId != null && it.categoria.isNotBlank() }
         .groupBy { it.cuentaId!! to it.categoria }
         .mapValues { (_, filas) -> filas.sumOf { it.monto } }
