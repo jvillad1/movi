@@ -45,6 +45,10 @@ import com.jvillada.movi.shared.model.DashboardSummary
 import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.shared.model.Budget
+import com.jvillada.movi.shared.model.GastoEnPresupuestos
+import com.jvillada.movi.shared.model.gastoEnPresupuestos
+import com.jvillada.movi.ui.components.ds.CifraConRotulo
+import com.jvillada.movi.ui.components.ds.DisposicionDeCifraConRotulo
 import com.jvillada.movi.shared.model.PropuestaDePresupuesto
 import kotlin.math.roundToLong
 import com.jvillada.movi.shared.repository.ApiException
@@ -449,8 +453,13 @@ class EstadoDePresupuestos internal constructor(private val alcance: CoroutineSc
      */
     val nuevoEnElEncabezado: Boolean get() = !sinPresupuestos && !noSeLeyo
 
-    internal val totalLimit: Long get() = budgets.orEmpty().sumOf { it.monthlyLimit }
-    internal val totalSpent: Long get() = progresses.sumOf { it.spent }
+    /**
+     * Vuelta 60: **lo gastado, dicho por partes.** La tarjeta decía «Gastado en octubre $810.550» —solo
+     * lo de las categorías con presupuesto— al lado de «En qué se va · Llevas gastado $4.888.850».
+     * Ahora dice «En tus N presupuestos» y, aparte, «Fuera de presupuesto»: las dos suman el gasto del
+     * período, con el mismo gasto por categoría de siempre ([gastoPorCategoria]).
+     */
+    internal val gastoEnPresupuestos: GastoEnPresupuestos get() = gastoEnPresupuestos(budgets.orEmpty(), gastoPorCategoria)
     // «Al límite» cuenta como aviso, no como sobrepasado: el encabezado decía «2 Sobrepasados»
     // con uno de los dos exactamente en el límite.
     internal val warnCount: Int get() =
@@ -576,7 +585,7 @@ fun LazyListScope.presupuestos(estado: EstadoDePresupuestos) {
     }
 
     // La tarjeta «Gastado en …» es un hecho sobre categorías que no existen sin
-    // presupuestos — hasta acá se pintaba igual, y con `totalSpent`/`totalLimit` en cero decía
+    // presupuestos — hasta acá se pintaba igual, y con el gasto y el tope en cero decía
     // «$0 de $0», justo el «$0 presentado como un hecho» que el vacío de arriba vino a evitar.
     if (estado.cargando) {
         presupuestosEsqueleto()
@@ -585,19 +594,37 @@ fun LazyListScope.presupuestos(estado: EstadoDePresupuestos) {
             Superficie(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = Medida.margenDePantalla).testTag(TAG_TARJETA_DEL_GASTO_DEL_PERIODO),
             ) {
+                val partes = estado.gastoEnPresupuestos
                 Text(estado.tituloDelGasto, style = Movi.textos.apoyoMedio, color = Movi.colores.textoMedio)
                 Spacer(Modifier.height(Espacio.xs))
+                // Vuelta 60: la cifra grande dice de qué es —lo de tus presupuestos—, no «gastado» a
+                // secas: «En qué se va» dice «Llevas gastado» con todo lo del período.
+                Text(
+                    rotuloEnTusPresupuestos(partes.presupuestos),
+                    style = Movi.textos.apoyo,
+                    color = Movi.colores.textoMedio,
+                )
                 // Vuelta de diseño 14: `Grande`, no `Heroe`. En Plan esta tarjeta va debajo de
                 // «Disponible del período» (también `Grande`), y dos cifras gigantes competían; una
                 // sola héroe por pantalla (`UnaSolaCifraHeroePorPantallaTest`). Un renglón siempre.
-                Cifra(estado.totalSpent, VarianteDeCifra.Grande)
+                Cifra(partes.enPresupuestos, VarianteDeCifra.Grande)
                 Spacer(Modifier.height(Espacio.xxs))
                 // Vuelta de diseño 19: el tope es una `Cifra` (letra tabular, «Ocultar los saldos»).
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(text = "de", color = Movi.colores.textoMedio, style = Movi.textos.apoyo)
                     Spacer(Modifier.width(Espacio.xxs))
-                    Cifra(estado.totalLimit, tono = TonoDeCifra.Apagado)
+                    Cifra(partes.limite, tono = TonoDeCifra.Apagado)
                 }
+                Spacer(Modifier.height(Espacio.xs))
+                // Lo de las categorías sin presupuesto: con esto, las dos cifras suman el gasto del
+                // período (el «Llevas gastado» de «En qué se va»).
+                CifraConRotulo(
+                    rotulo = ROTULO_FUERA_DE_PRESUPUESTO,
+                    monto = partes.fueraDePresupuesto,
+                    variante = VarianteDeCifra.Chica,
+                    disposicion = DisposicionDeCifraConRotulo.EnRenglon,
+                    modifier = Modifier.testTag(TAG_FUERA_DE_PRESUPUESTO),
+                )
                 val warnCount = estado.warnCount
                 val overCount = estado.overCount
                 if (warnCount + overCount > 0) {
@@ -1222,6 +1249,16 @@ private fun BudgetSheet(
     }
 }
 
+/** El rótulo de la cifra grande: «En tus 4 presupuestos» / «En tu presupuesto» (vuelta 60). */
+internal fun rotuloEnTusPresupuestos(cuantos: Int): String =
+    if (cuantos == 1) "En tu presupuesto" else "En tus $cuantos presupuestos"
+
+/** El renglón de lo gastado en categorías sin presupuesto (vuelta 60). */
+const val ROTULO_FUERA_DE_PRESUPUESTO: String = "Fuera de presupuesto"
+
+/** El renglón «Fuera de presupuesto». */
+const val TAG_FUERA_DE_PRESUPUESTO: String = "fuera-de-presupuesto"
+
 /** La tarjeta de «Gastado en …», cargando o cargada: el mismo tag en las dos para medir que no salte. */
 const val TAG_TARJETA_DEL_GASTO_DEL_PERIODO: String = "tarjeta-del-gasto-del-periodo"
 
@@ -1252,6 +1289,8 @@ private fun LazyListScope.presupuestosEsqueleto() {
             // perfil — con corte 25, el 26 ya es el mes siguiente.
             LineaEsqueleto(fraccionDelAncho = 0.4f, estilo = Movi.textos.apoyo)
             Spacer(Modifier.height(Espacio.xs))
+            // «En tus N presupuestos» (vuelta 60).
+            LineaEsqueleto(fraccionDelAncho = 0.45f, estilo = Movi.textos.apoyo)
             LineaEsqueleto(
                 fraccionDelAncho = 0.55f,
                 // La letra de `Cifra.Grande`, la de la tarjeta real (vuelta de diseño 14).
@@ -1260,6 +1299,9 @@ private fun LazyListScope.presupuestosEsqueleto() {
             )
             Spacer(Modifier.height(Espacio.xxs))
             LineaEsqueleto(fraccionDelAncho = 0.35f, estilo = Movi.textos.monto)
+            Spacer(Modifier.height(Espacio.xs))
+            // «Fuera de presupuesto … $X» (vuelta 60).
+            LineaEsqueleto(fraccionDelAncho = 1f, estilo = Movi.textos.apoyo)
             Spacer(Modifier.height(Espacio.s))
             // Las píldoras de los avisos: el alto de una píldora.
             BloqueEsqueleto(alto = Medida.altoDePildora, ancho = Medida.avatar * 3)

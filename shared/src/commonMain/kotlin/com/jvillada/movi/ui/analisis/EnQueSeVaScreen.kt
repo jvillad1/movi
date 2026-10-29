@@ -52,6 +52,9 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.rememberLectura
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.AnalisisDelPeriodo
+import com.jvillada.movi.shared.model.DesgloseDelGastado
+import com.jvillada.movi.shared.model.Scope
+import com.jvillada.movi.shared.model.desgloseDelGastado
 import com.jvillada.movi.shared.model.FilaDelAnalisis
 import com.jvillada.movi.shared.model.FiltroDeMovimientos
 import com.jvillada.movi.shared.model.PeriodSettings
@@ -143,6 +146,11 @@ fun EnQueSeVaScreen(
     val perfil = rememberLectura(ClaveDeLectura.Perfil, reintento = reintento) { Repositories.wallets.getUserProfile() }
     val eventos = rememberLectura(ClaveDeLectura.EventosPorDia, reintento = reintento) { Repositories.wallets.getEventsByDay() }
     val cuentas = rememberLectura(ClaveDeLectura.Cuentas, reintento = reintento) { Repositories.wallets.getAccounts() }
+    // Vuelta 60: el gasto del día a día del período en curso, el MISMO que mide «Cuánto puedes gastar»
+    // (la misma lectura que el Inicio, recordada). Con él, el total se parte en día a día + fijos.
+    val resumen = rememberLectura(ClaveDeLectura.ResumenDelTablero(Scope.SELF), reintento = reintento) {
+        Repositories.wallets.getDashboardSummary(Scope.SELF)
+    }
     // R3 · tu parte de lo que pagaron otros («Caro pagó el mercado»): es gasto tuyo el día del gasto,
     // igual que en «Salió». No está en la lista de movimientos (no es de tus cuentas).
     var tuParteDeOtros by remember { mutableStateOf<List<com.jvillada.movi.shared.model.FinancialEvent>>(emptyList()) }
@@ -169,6 +177,8 @@ fun EnQueSeVaScreen(
         if (dias == null || p == null || ajustes == null) null
         else analisisDelPeriodo(movimientosDelAnalisis(dias, tuParteDeOtros), p, ajustes, hoy, tipos)
     }
+    val gastoVariable = resumen.valor?.gastoVariablePorDia
+    val desglose = remember(analisis, gastoVariable, hoy) { analisis?.let { desgloseDelAnalisis(it, gastoVariable, hoy) } }
     val laVista = VistaDelAnalisis.entries[vista]
     val filas = remember(analisis, laVista, nombres) { analisis?.let { filasDelAnalisis(it, laVista, nombres) }.orEmpty() }
 
@@ -195,7 +205,7 @@ fun EnQueSeVaScreen(
                     item {
                         when {
                             analisis != null -> {
-                                ResumenDelAnalisis(analisis, hoy)
+                                ResumenDelAnalisis(analisis, hoy, desglose)
                                 Spacer(Modifier.height(Medida.dentroDeSeccion))
                                 TarjetaDelGrafico(
                                     analisis = analisis,
@@ -343,8 +353,32 @@ internal fun fraseDeLaComparacion(analisis: AnalisisDelPeriodo): String {
     }
 }
 
+/**
+ * **El total partido en día a día + fijos** (vuelta 60), o `null` si no se puede afirmar: solo en el
+ * período en curso (el server manda el gasto del día a día de ese período y de ningún otro) y solo si
+ * cuadra con el total (ver [desgloseDelGastado]).
+ */
+internal fun desgloseDelAnalisis(
+    analisis: AnalisisDelPeriodo,
+    gastoVariablePorDia: Map<String, Long>?,
+    hoy: LocalDate,
+): DesgloseDelGastado? {
+    if (hoy < analisis.desde || hoy > analisis.hasta) return null
+    return desgloseDelGastado(analisis.total, gastoVariablePorDia, analisis.desde.toString(), analisis.hasta.toString())
+}
+
+/**
+ * «Día a día $2,1M + fijos $2,8M»: el día a día es la cifra de la columna «Período» de «Cuánto puedes
+ * gastar»; los fijos, lo que pagó facturas, cuotas y recurrentes del período.
+ */
+internal fun textoDelDesglose(desglose: DesgloseDelGastado): String =
+    "Día a día ${formatMoneyCompact(desglose.diaADia)} + fijos ${formatMoneyCompact(desglose.fijos)}"
+
+/** El renglón del desglose. */
+const val TAG_DESGLOSE_DEL_ANALISIS = "desglose-del-analisis"
+
 @Composable
-private fun ResumenDelAnalisis(analisis: AnalisisDelPeriodo, hoy: LocalDate) {
+private fun ResumenDelAnalisis(analisis: AnalisisDelPeriodo, hoy: LocalDate, desglose: DesgloseDelGastado?) {
     // La cifra de esta pantalla: lo gastado en el período, la héroe (una por pantalla).
     Superficie(modifier = Modifier.fillMaxWidth()) {
         Text(
@@ -354,6 +388,17 @@ private fun ResumenDelAnalisis(analisis: AnalisisDelPeriodo, hoy: LocalDate) {
         )
         Box(Modifier.padding(vertical = Espacio.xxs).testTag(TAG_TOTAL_DEL_ANALISIS)) {
             DsCifra(analisis.total, VarianteDeCifra.Heroe)
+        }
+        // Vuelta 60: de qué está hecho el total. «Cuánto puedes gastar» dice solo el día a día y lo
+        // llamaba «gastaste»; acá se ve que el resto son los fijos.
+        if (desglose != null) {
+            Text(
+                text = textoDelDesglose(desglose),
+                style = Movi.textos.apoyo,
+                color = Movi.colores.texto,
+                modifier = Modifier.testTag(TAG_DESGLOSE_DEL_ANALISIS),
+            )
+            Spacer(Modifier.height(Espacio.xxs))
         }
         val tendencia = analisis.anteriorAMismaAltura?.let { contraElAnterior(analisis.total, it)?.tendencia }
         Text(

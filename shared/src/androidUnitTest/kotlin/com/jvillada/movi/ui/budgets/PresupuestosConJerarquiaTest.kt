@@ -77,7 +77,8 @@ class PresupuestosConJerarquiaTest {
         )
         override suspend fun getEventsByDay(): List<EventDay> = emptyList()
         override suspend fun getDashboardSummary(scope: Scope): DashboardSummary = DashboardSummary(
-            spentByCategory = mapOf("Restaurantes y domicilios" to 190_700L, "Mercado" to 23_200L),
+            // Vuelta 60: Ropa no tiene presupuesto: va en «Fuera de presupuesto».
+            spentByCategory = mapOf("Restaurantes y domicilios" to 190_700L, "Mercado" to 23_200L, "Ropa" to 50_000L),
         )
         override suspend fun getUserProfile(): UserProfile =
             UserProfile(id = "u", email = "u@local", name = "U", avatarColor = "#000000", periodCutoffDay = 25)
@@ -149,14 +150,27 @@ class PresupuestosConJerarquiaTest {
         montar(ConPresupuestos(), esperar = "Restaurantes y domicilios")
         val tarjeta = nodos(TAG_TARJETA_DEL_GASTO_DEL_PERIODO).single()
         val cifras = (listOf(tarjeta) + descendientes(tarjeta)).filter { it.config.getOrNull(SemanticsProperties.TestTag) == TAG_CIFRA }
-        // La gastada en `Grande` y, debajo, el tope («de $109.300») en la de una fila (vuelta de diseño 19).
+        // La gastada en `Grande` y, debajo, el tope («de $109.300») en la de una fila (vuelta de diseño 19);
+        // vuelta 60: y en su renglón, chica, lo de fuera de presupuesto.
         assertEquals(
-            listOf(VarianteDeCifra.Grande, VarianteDeCifra.Fila),
+            listOf(VarianteDeCifra.Grande, VarianteDeCifra.Fila, VarianteDeCifra.Chica),
             cifras.map { it.config[VarianteDeCifraKey] },
-            "la cifra de «Gastado en …» y su tope",
+            "la cifra de tus presupuestos, su tope y lo de afuera",
         )
-        assertEquals("\$213.900", texto(cifras.first()))
-        assertEquals("\$109.300", texto(cifras.last()))
+        assertEquals(listOf("\$213.900", "\$109.300", "\$50.000"), cifras.map(::texto))
+    }
+
+    /**
+     * Vuelta 60: **la cifra grande dice de qué es.** «En tus 2 presupuestos» y, aparte, «Fuera de
+     * presupuesto»: las dos suman el gasto del período, y ninguna se llama «gastado» a secas.
+     */
+    @Test
+    fun `lo de tus presupuestos y lo de afuera tienen su nombre y no se recortan`() {
+        montar(ConPresupuestos(), esperar = "Restaurantes y domicilios")
+        assertEquals(1, conTexto("En tus 2 presupuestos").size)
+        assertEquals(1, conTexto(ROTULO_FUERA_DE_PRESUPUESTO).size)
+        assertEquals(1, nodos(TAG_FUERA_DE_PRESUPUESTO).size)
+        nadaSeRecorta()
     }
 
     @Test
