@@ -17,7 +17,21 @@ kotlin {
             }
         }
     }
-    jvm()
+    // El `jvm()` lo usa el server, y el server corre en `eclipse-temurin:17-jre` (Railway). Sin
+    // esto, la versión de clase sale del JDK que corre Gradle: con el JBR 21 de GitHub Actions
+    // (vuelta 69, el JAR se arma ahí) daba clases de Java 21 que el JRE 17 no carga.
+    // `-Xjdk-release=17` además compila contra la API de 17, no solo emite su bytecode.
+    jvm {
+        compilations.all {
+            @OptIn(ExperimentalKotlinGradlePluginApi::class)
+            compileTaskProvider.configure {
+                compilerOptions {
+                    jvmTarget.set(JvmTarget.JVM_17)
+                    freeCompilerArgs.add("-Xjdk-release=17")
+                }
+            }
+        }
+    }
     listOf(iosX64(), iosArm64(), iosSimulatorArm64()).forEach {
         it.binaries.framework { baseName = "Shared"; isStatic = true }
     }

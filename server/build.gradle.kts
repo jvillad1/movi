@@ -1,8 +1,25 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     alias(libs.plugins.kotlinJvm)
     alias(libs.plugins.kotlinSerialization)
     alias(libs.plugins.ktor)
     application
+}
+
+// El server corre en `eclipse-temurin:17-jre` (Railway). Sin esto, la versión de clase sale del JDK
+// que corre Gradle: con el JBR 21 de GitHub Actions (vuelta 69, el JAR se arma ahí) daba clases de
+// Java 21 que el JRE 17 no carga. `-Xjdk-release=17` además compila contra la API de 17.
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
+        freeCompilerArgs.add("-Xjdk-release=17")
+    }
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
 }
 
 application {
