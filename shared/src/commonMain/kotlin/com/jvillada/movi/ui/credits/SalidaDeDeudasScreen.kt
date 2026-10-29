@@ -248,10 +248,14 @@ private fun ContenidoDelPlan(
     Superficie(modifier = Modifier.fillMaxWidth()) {
         // Vuelta 42: «Ej: 500.000» (el campo ya pone el «$» delante). Era «Abono extra al mes, por
         // ejemplo $500.000», que no cabía y se cortaba en «…por ejemplo $500....».
+        // Vuelta 62 (revisión): un abono mayor que todo lo que se debe en el plan se avisa en el campo.
+        val deudaTotal = plan.enElCalculo.sumOf { it.deuda.saldo }
+        val pasaDeLaDeuda = abono != null && deudaTotal > 0L && abono > deudaTotal
         CampoDeMonto(
             valor = abono,
             alCambiar = onAbono,
             ejemplo = EJEMPLO_DEL_ABONO_EXTRA,
+            error = if (pasaDeLaDeuda) avisoDeAbonoMayorQueLaDeuda(deudaTotal) else null,
             modifier = Modifier.testTag(TAG_ABONO_EXTRA),
         )
         Spacer(Modifier.height(Movi.espacios.medio))
@@ -281,7 +285,8 @@ private fun ContenidoDelPlan(
             Spacer(Modifier.height(Espacio.xs))
             Boton(
                 texto = ANOTAR_ESTE_ABONO,
-                onClick = { onAnotarAbono(primera, monto) },
+                // Nunca más que el saldo de la deuda a la que va.
+                onClick = { onAnotarAbono(primera, montoParaAnotar(monto, primera.saldo)) },
                 anchoCompleto = true,
                 modifier = Modifier.testTag(TAG_ANOTAR_ESTE_ABONO),
             )
@@ -291,7 +296,8 @@ private fun ContenidoDelPlan(
                 onClick = { onRecordar(primera, monto) },
                 variante = VarianteDeBoton.Secundario,
                 cargando = recordando,
-                habilitado = !recordando && (recordatorio == null || recordatorio == NO_SE_PUDO_RECORDAR),
+                // Un monto mayor que toda la deuda del plan no se guarda como plan.
+                habilitado = !recordando && !pasaDeLaDeuda && (recordatorio == null || recordatorio == NO_SE_PUDO_RECORDAR),
                 anchoCompleto = true,
                 modifier = Modifier.testTag(TAG_RECORDARMELO_CADA_MES),
             )

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasSetTextAction
@@ -103,7 +104,8 @@ class ElExtractoYElAbonoEnPantallaTest {
 
         assertTrue(hay("Del extracto del 20 oct"))
         assertTrue(hay("\$1.292.700"))
-        assertTrue(hay("Mínimo \$180.000 · pagar antes del 5 nov"))
+        assertTrue(hay("Mínimo: te faltan \$80.000 · pagar antes del 5 nov"), "el mínimo descuenta lo ya pagado")
+        assertTrue(hay("\$1.392.700 · ya pagaste \$100.000"))
         assertTrue(hay("Después del corte: \$290.300 (va al próximo extracto)"))
         assertTrue(hay(PUEDE_INCLUIR_DIFERIDOS), "sin las cuotas conocidas, lo dice")
         assertFalse(hay("Pago mínimo"), "la fila del mínimo suelto se cambió por la del extracto")
@@ -143,7 +145,7 @@ class ElExtractoYElAbonoEnPantallaTest {
 
         assertTrue(hay("\$1.292.700"), "lo facturado, no el saldo")
         assertTrue(hay(ROTULO_DEL_EXTRACTO))
-        assertTrue(hay("o el mínimo, \$180.000"))
+        assertTrue(hay("o lo que falta del mínimo, \$80.000"))
         assertFalse(hay("saldo"), "ya no pide el saldo entero")
         assertFalse(hay("\$1.583.000"))
     }
@@ -179,14 +181,15 @@ class ElExtractoYElAbonoEnPantallaTest {
         }
         composeRule.waitUntil(5_000) { hay(pastillaDelTotalDelExtracto(extracto)) }
 
-        assertTrue(hay("Total del extracto \$1.292.700"))
-        assertTrue(hay("Mínimo \$180.000"))
+        assertTrue(hay("Extracto \$1.292.700"))
+        assertTrue(hay("Mínimo \$80.000"), "lo que falta del mínimo")
         assertTrue(hay(PASTILLA_OTRO_MONTO))
         composeRule.onAllNodesWithTag(TAG_PASTILLAS_DEL_PAGO_DE_LA_TARJETA, useUnmergedTree = true).fetchSemanticsNodes().single()
 
-        tocar("Mínimo \$180.000")
-        assertTrue(hay("\$180.000"), "el mínimo en la cifra")
-        tocar("Total del extracto \$1.292.700")
+        assertTrue(hay("Pago de Nu · extracto del 20 oct"), "el encabezado nombra el corte, no el mes")
+        tocar("Mínimo \$80.000")
+        assertTrue(hay("\$80.000"), "el mínimo en la cifra")
+        tocar("Extracto \$1.292.700")
         composeRule.onNodeWithText("Registrar pago").performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitUntil(5_000) { pagos.isNotEmpty() }
 
@@ -276,9 +279,15 @@ class ElExtractoYElAbonoEnPantallaTest {
             override suspend fun getCards(): List<CardSummary> = emptyList()
             override suspend fun getUserProfile(): UserProfile =
                 UserProfile(id = "u1", email = "juan@movi.test", name = "Juan", avatarColor = "#4F7CFF")
+            override suspend fun getMemoriaDelAsistente(): List<RecuerdoDelAsistente> =
+                recuerdos.mapIndexed { i, t -> RecuerdoDelAsistente(id = "r$i", texto = t, creadoEn = 0L, origen = OrigenDelRecuerdo.A_MANO) }
             override suspend fun guardarRecuerdo(texto: String, origen: OrigenDelRecuerdo, propuestaId: String?): RecuerdoDelAsistente {
                 recuerdos += texto
-                return RecuerdoDelAsistente(id = "r1", texto = texto, creadoEn = 0L, origen = origen)
+                return RecuerdoDelAsistente(id = "r${recuerdos.lastIndex}", texto = texto, creadoEn = 0L, origen = origen)
+            }
+            override suspend fun editarRecuerdo(id: String, texto: String): RecuerdoDelAsistente {
+                recuerdos[id.removePrefix("r").toInt()] = texto
+                return RecuerdoDelAsistente(id = id, texto = texto, creadoEn = 0L, origen = OrigenDelRecuerdo.A_MANO)
             }
             override suspend fun putCreditTerms(terms: CreditTerms): CreditSummary {
                 terminos += terms
@@ -306,9 +315,82 @@ class ElExtractoYElAbonoEnPantallaTest {
         assertEquals(500_000L, hoja.presetMonto)
 
         tocar(RECORDARMELO_CADA_MES)
-        composeRule.waitUntil(5_000) { hay("Listo:", substring = true) }
+        composeRule.waitUntil(5_000) { hay(confirmacionDelRecordatorio(libre.account.name, 500_000L, 15)) }
         assertEquals(listOf(recuerdoDelAbono(libre.account.name, 500_000L, 15)), recuerdos)
         assertTrue(terminos.single().remindMe, "el aviso de la deuda queda prendido")
-        assertTrue(hay(confirmacionDelRecordatorio(libre.account.name, 500_000L, 15)))
+        assertEquals("Te avisamos cuando venza Libre inversión 9695 (el 15) y Movi AI recuerda tu plan de \$500.000.", confirmacionDelRecordatorio(libre.account.name, 500_000L, 15))
+
+        // Otro monto, y pedirlo otra vez: reemplaza el recuerdo, no crea otro.
+        campo.performTextInput("0")
+        composeRule.waitUntil(5_000) { hay(RECORDARMELO_CADA_MES) && !hay("Te avisamos", substring = true) }
+        tocar(RECORDARMELO_CADA_MES)
+        composeRule.waitUntil(5_000) { hay(confirmacionDelRecordatorio(libre.account.name, 5_000_000L, 15)) }
+        assertEquals(listOf(recuerdoDelAbono(libre.account.name, 5_000_000L, 15)), recuerdos, "uno solo, el nuevo")
+    }
+
+    @Test
+    fun `el plan no anota mas que la deuda ni recuerda un monto mayor que toda la deuda`() {
+        val navegado = mutableListOf<Screen>()
+        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+            override suspend fun getCredits(): List<CreditSummary> = listOf(libre)
+            override suspend fun getCards(): List<CardSummary> = emptyList()
+            override suspend fun getUserProfile(): UserProfile =
+                UserProfile(id = "u1", email = "juan@movi.test", name = "Juan", avatarColor = "#4F7CFF")
+        }
+        composeRule.setContent {
+            MoviTheme { Box(Modifier.fillMaxSize()) { SalidaDeDeudasScreen(onNavigate = { navegado += it }) } }
+        }
+        composeRule.waitUntil(5_000) { hay("Si abonas al mes extra") }
+        val campo = composeRule.onNode(hasSetTextAction(), useUnmergedTree = true)
+        campo.performSemanticsAction(SemanticsActions.RequestFocus)
+        campo.performTextInput("90000000")
+        composeRule.waitUntil(5_000) { hay(ANOTAR_ESTE_ABONO) }
+
+        assertTrue(hay(avisoDeAbonoMayorQueLaDeuda(libre.account.balance)), "el campo avisa que pasa de la deuda")
+        tocar(ANOTAR_ESTE_ABONO)
+        assertEquals(libre.account.balance, assertIs<Screen.QuickAdd>(navegado.last()).presetMonto, "nunca más que el saldo")
+        composeRule.onNode(hasText(RECORDARMELO_CADA_MES) and hasClickAction()).assertIsNotEnabled()
+    }
+
+    @Test
+    fun `un abono menor que el extracto sella la fila pero la fila dice lo que falta`() {
+        val pagada = PagoDelPeriodo(
+            ruleId = "card_${nu.id}", nombre = "Pago tarjeta Nu", monto = 1_583_000L, pagado = true,
+            diasParaVencer = 7, montoEsSaldo = true, vence = "2026-11-05", montoPagado = 100_000L, derivado = true,
+        )
+        composeRule.setContent {
+            MoviTheme {
+                Box(Modifier.fillMaxSize()) {
+                    SeccionChecklistDelPeriodo(
+                        checklist = listOf(pagada), cargando = false, pudoLeer = true, marcando = emptySet(),
+                        onConfirmar = { _, _ -> }, onNoFueEste = { _, _ -> }, onAnotarMovimiento = {},
+                        onQuitarLaMarca = {}, onReintentar = {},
+                        extractosDeTarjetas = mapOf(nu.id to extracto),
+                    )
+                }
+            }
+        }
+        composeRule.waitForIdle()
+        assertTrue(hay("Abonaste \$100.000 · faltan \$1.292.700 del extracto (mínimo: faltan \$80.000)"))
+    }
+
+    @Test
+    fun `con el extracto pagado la ficha dice pagado, sin minimo, fecha ni diferidos`() {
+        val pagado = tarjeta.copy(extracto = extracto.copy(facturado = 0L, pagadoDesdeElCorte = 1_392_700L))
+        composeRule.montarElDetalleDe(nu, RepositorioDeLaDeuda(tarjetas = listOf(pagado)))
+
+        assertTrue(hay("Extracto del 20 oct · pagado ✓"))
+        assertFalse(hay("Mínimo", substring = true))
+        assertFalse(hay("pagar antes", substring = true))
+        assertFalse(hay(PUEDE_INCLUIR_DIFERIDOS))
+        assertTrue(hay("Después del corte: \$290.300 (va al próximo extracto)"))
+    }
+
+    @Test
+    fun `la lista de Creditos dice la linea del extracto, no el minimo suelto`() {
+        val hoy = kotlinx.datetime.LocalDate(2026, 10, 29)
+        assertEquals("Extracto \$1.292.700 · pagar antes del 5 nov", tarjetaEnLaLista(tarjeta, hoy).subtitulo)
+        val pagado = tarjeta.copy(extracto = extracto.copy(facturado = 0L))
+        assertEquals("Extracto del 20 oct · pagado ✓", tarjetaEnLaLista(pagado, hoy).subtitulo)
     }
 }

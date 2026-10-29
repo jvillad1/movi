@@ -23,8 +23,10 @@ import com.jvillada.movi.ui.quickadd.PestanaDeAgregar
  * Una regla recurrente es un gasto o un ingreso de UNA cuenta: no tiene destino, así que no puede ser
  * un traspaso. Y el server cierra la puerta a propósito: «un traspaso no puede ser la ocurrencia de
  * un recurrente». Una regla de gasto por el abono sería además un fijo más que «Te quedan» y la caja
- * restarían —un abono es un traspaso puro y no cuenta en el mes— y el traspaso nunca la tildaría: se
- * quedaría «vencida» cada mes. Eso es una regla de plata nueva, y esta vuelta no la trae.
+ * restarían, y el traspaso nunca la tildaría: se quedaría «vencida» cada mes. Y lo restaría dos veces,
+ * porque el abono ya baja «Te quedan» el mes que se hace (todo lo que sale de Tu plata hacia una deuda
+ * fuera del checklist cuenta, `pagosDeDeudaFueraDelChecklist`). Eso es una regla de plata nueva, y
+ * esta vuelta no la trae (la 63 lo vuelve un recordatorio de verdad).
  *
  * Así que usa los dos recordatorios que ya existen: **el aviso de la deuda** (`remindMe` de sus
  * condiciones: el día de pago de cada mes, por correo y en el teléfono), que se prende si estaba
@@ -39,7 +41,7 @@ const val RECORDARMELO_CADA_MES: String = "Recordármelo cada mes"
 
 /** Lo que el plan dice debajo de los botones: el abono no es un fijo. */
 const val EL_ABONO_NO_ES_UN_FIJO: String =
-    "El abono es un traspaso: no queda como un pago fijo ni resta de «Te quedan»."
+    "No queda como un pago fijo. El mes que lo hagas, sale de tu plata y baja «Te quedan»."
 
 /**
  * **Agregar, listo para anotar el abono a [credit]** por [monto]: la pestaña Traspaso con el crédito en
@@ -65,16 +67,31 @@ fun pantallaDelAbono(deuda: DeudaParaSalir, monto: Long, creditos: List<CreditSu
             ?: Screen.QuickAdd(presetMonto = monto, presetDeudaId = deuda.id, presetPestana = PestanaDeAgregar.TRASPASO)
     }
 
+/** El final fijo del recuerdo del abono: es lo que lo distingue de otro recuerdo (ver [esRecuerdoDelAbono]). */
+private const val FINAL_DEL_RECUERDO_DEL_ABONO = ", según el plan para salir de las deudas."
+
 /** Lo que queda en la memoria de Movi: «Abonar $500.000 extra al mes a Libre inversión 9695, el día 5…». */
 fun recuerdoDelAbono(nombre: String, monto: Long, dia: Int?): String =
     "Abonar ${formatCOPSinOcultar(monto)} extra al mes a $nombre" +
         (dia?.let { ", el día $it" } ?: "") +
-        ", según el plan para salir de las deudas."
+        FINAL_DEL_RECUERDO_DEL_ABONO
 
-/** La confirmación debajo del botón, después de guardarlo. */
+/** ¿[texto] es el recuerdo del abono a [nombre]? Pedirlo otra vez lo reemplaza, no lo duplica. */
+fun esRecuerdoDelAbono(texto: String, nombre: String): Boolean =
+    texto.startsWith("Abonar ") && texto.endsWith(FINAL_DEL_RECUERDO_DEL_ABONO) &&
+        (texto.contains(" extra al mes a $nombre,") || texto.contains(" extra al mes a $nombre$FINAL_DEL_RECUERDO_DEL_ABONO"))
+
+/** La confirmación debajo del botón: «Te avisamos cuando venza Nu (el 5) y Movi AI recuerda tu plan de $500.000.» */
 fun confirmacionDelRecordatorio(nombre: String, monto: Long, dia: Int?): String =
-    "Listo: Movi te avisa " + (dia?.let { "el día $it de cada mes" } ?: "cada mes") +
-        " por $nombre y recuerda tu plan de abonar ${formatCOPSinOcultar(monto)}."
+    "Te avisamos cuando venza $nombre" + (dia?.let { " (el $it)" } ?: "") +
+        " y Movi AI recuerda tu plan de ${formatCOPSinOcultar(monto)}."
+
+/** El aviso del campo del plan cuando el abono es más que todo lo que se debe. */
+fun avisoDeAbonoMayorQueLaDeuda(total: Long): String =
+    "Es más que todo lo que debes en el plan (${formatCOPSinOcultar(total)})."
+
+/** Lo que el plan prellena al anotar: nunca más que el saldo de la deuda a la que va. */
+fun montoParaAnotar(monto: Long, saldoDeLaDeuda: Long): Long = if (saldoDeLaDeuda > 0L) minOf(monto, saldoDeLaDeuda) else monto
 
 /** El día de pago de la deuda, de sus condiciones. */
 fun diaDePagoDe(deuda: DeudaParaSalir, creditos: List<CreditSummary>, tarjetas: List<CardSummary>): Int? =
@@ -93,7 +110,15 @@ suspend fun recordarElAbono(
 ): String {
     val dia = diaDePagoDe(deuda, creditos, tarjetas)
     val repo = Repositories.wallets
-    repo.guardarRecuerdo(recuerdoDelAbono(deuda.nombre, monto, dia), OrigenDelRecuerdo.A_MANO)
+    val texto = recuerdoDelAbono(deuda.nombre, monto, dia)
+    // Revisión: pedirlo otra vez reemplaza el recuerdo del abono a esa deuda, no crea otro.
+    val anterior = runCatching { repo.getMemoriaDelAsistente() }.getOrDefault(emptyList())
+        .firstOrNull { esRecuerdoDelAbono(it.texto, deuda.nombre) }
+    if (anterior != null) {
+        if (anterior.texto != texto) repo.editarRecuerdo(anterior.id, texto)
+    } else {
+        repo.guardarRecuerdo(texto, OrigenDelRecuerdo.A_MANO)
+    }
     if (deuda.tipo == TipoDeDeuda.TARJETA) {
         tarjetas.firstOrNull { it.account.id == deuda.id }?.terms?.takeIf { !it.remindMe }
             ?.let { repo.putCardTerms(it.copy(remindMe = true)) }

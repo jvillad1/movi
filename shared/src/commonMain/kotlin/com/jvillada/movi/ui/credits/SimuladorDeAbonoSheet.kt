@@ -27,7 +27,7 @@ import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.components.ds.Cifra
 import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
 import com.jvillada.movi.ui.components.ds.Separador
-import com.jvillada.movi.ui.components.ds.PildoraDeAccion
+import com.jvillada.movi.ui.components.ds.PildoraDeFiltro
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
 
@@ -110,9 +110,10 @@ fun SimuladorDeAbonoSheet(
                     modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
                 ) {
-                    // Vuelta 62: los montos rápidos son pastillas del sistema; parecían texto.
+                    // Vuelta 62: los montos rápidos son pastillas del sistema (parecían texto), y la
+                    // elegida se ve elegida —en tinta—, como un filtro: es el monto que está en el campo.
                     sugeridos.forEach { s ->
-                        PildoraDeAccion(s.etiqueta, onClick = { abono = s.monto })
+                        PildoraDeFiltro(s.etiqueta, seleccionada = abono == s.monto, onClick = { abono = s.monto })
                     }
                 }
             }
