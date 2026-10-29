@@ -119,6 +119,7 @@ import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.TIPOS_DE_CUENTA_DE_DINERO
 import com.jvillada.movi.shared.model.ajustesDelPeriodo
 import com.jvillada.movi.shared.model.periodoElegidoEn
+import com.jvillada.movi.shared.model.laCuentaYaEstabaEnUso
 import com.jvillada.movi.shared.model.primerosPasos
 import com.jvillada.movi.ui.accounts.EstadoDelFormularioDeCuenta
 import com.jvillada.movi.ui.components.ds.VistaPrevia
@@ -234,7 +235,10 @@ fun PrimerUsoScreen(
     // La lista única, con lo que hay ahora: la misma regla que la fila del Inicio.
     val lista = primerosPasos(
         LoQueYaHay(
-            periodoElegido = periodoGuardado != null || periodoDelPerfil != null,
+            // Revisión de la vuelta 55: la misma regla que la fila del Inicio (`periodoHechoEn`): una
+            // cuenta que ya estaba en uso y se quedó con el mes de calendario no tiene ese paso pendiente.
+            periodoElegido = periodoGuardado != null || periodoDelPerfil != null ||
+                laCuentaYaEstabaEnUso(yaHabia.movimientos > 0, yaHabia.cuentas.size, perfil?.primerUsoEn),
             cuentasDeDinero = cuentasDeDinero,
             capturaHecha = estadoDeLaCaptura in setOf(
                 EstadoDeLaCaptura.ACTIVA, EstadoDeLaCaptura.EXTRACTO_SUBIDO, EstadoDeLaCaptura.CON_MOVIMIENTOS,

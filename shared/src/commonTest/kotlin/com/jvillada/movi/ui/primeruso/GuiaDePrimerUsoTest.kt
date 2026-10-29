@@ -159,7 +159,11 @@ class GuiaDePrimerUsoTest {
             upcoming = listOf(regla("credit_x")),
         )
         val lista = primerosPasosDe(soloDeuda, CapturaDelPrimerUso.SUBIR_UN_EXTRACTO, false)!!
-        assertEquals(listOf(false, false, false, false), lista.map { it.hecho })
+        // Revisión de la vuelta 55: con una cuenta (aunque sea la tarjeta) la cuenta ya está en uso, y
+        // «Tu período» con el mes de calendario cuenta como elegido. Lo demás sigue pendiente.
+        assertEquals(listOf(true, false, false, false), lista.map { it.hecho })
+        // Nueva y vacía, con el mes de calendario: el período se pide.
+        assertEquals(false, primerosPasosDe(leido(), CapturaDelPrimerUso.SUBIR_UN_EXTRACTO, false)!!.first().hecho)
 
         // En Android: el permiso o un aviso que ya llegó.
         val captura = { d: DashboardData, permiso: Boolean ->

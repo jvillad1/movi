@@ -25,7 +25,8 @@ import com.jvillada.movi.shared.model.PrimerPaso
 import com.jvillada.movi.shared.model.TIPOS_DE_CUENTA_DE_DINERO
 import com.jvillada.movi.shared.model.contadorDeLosPrimerosPasos
 import com.jvillada.movi.shared.model.pasosQueFaltan
-import com.jvillada.movi.shared.model.periodoElegidoEn
+import com.jvillada.movi.shared.model.laCuentaYaEstabaEnUso
+import com.jvillada.movi.shared.model.periodoHechoEn
 import com.jvillada.movi.shared.model.primerPasoPendiente
 import com.jvillada.movi.shared.model.primerosPasos
 import com.jvillada.movi.shared.model.textoDeLosPasosQueFaltan
@@ -70,7 +71,11 @@ fun loQueYaHayEn(data: DashboardData, modo: CapturaDelPrimerUso, permisoDelTelef
         CapturaDelPrimerUso.NINGUNA -> false
     }
     return LoQueYaHay(
-        periodoElegido = periodoElegidoEn(data.ajustesDePeriodo),
+        // Revisión de la vuelta 55: una cuenta en uso que se quedó con el mes de calendario ya eligió.
+        periodoElegido = periodoHechoEn(
+            data.ajustesDePeriodo,
+            laCuentaYaEstabaEnUso(data.hasMovement, data.accounts.orEmpty().size, data.primerUsoEn),
+        ),
         cuentasDeDinero = data.accounts.orEmpty().count { it.type in TIPOS_DE_CUENTA_DE_DINERO },
         capturaHecha = capturaHecha,
         // Las reglas de verdad: las cuotas de un crédito y los pagos de tarjeta no son «lo que pagas cada mes».

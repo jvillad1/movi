@@ -162,6 +162,12 @@ data class DashboardData(
     /** En qué período estamos, según [ajustesDePeriodo]. `null` mientras no se sepa la fecha. */
     val periodoActual: PeriodoFinanciero? = null,
     /**
+     * Revisión de la vuelta 55: cuándo se terminó o descartó la guía de primer uso, del perfil
+     * ([UserProfile.primerUsoEn]). Con él, «Tu período» cuenta como hecho en una cuenta que ya estaba
+     * en uso (ver `periodoHechoEn`).
+     */
+    val primerUsoEn: Long? = null,
+    /**
      * El gasto variable de cada día del período (ver `DashboardSummary.gastoVariablePorDia`).
      * `null` = no llegó, o el server es anterior al campo: la tarjeta «Disponible» no se pinta.
      */
@@ -1317,7 +1323,7 @@ internal fun DashboardData.conResumenDelInicio(s: DashboardSummary): DashboardDa
  */
 internal fun DashboardData.conElPerfil(perfil: UserProfile, ahora: Long): DashboardData {
     val ajustes = perfil.ajustesDelPeriodo()
-    return copy(ajustesDePeriodo = ajustes, periodoActual = periodoDe(ahora, ajustes))
+    return copy(ajustesDePeriodo = ajustes, periodoActual = periodoDe(ahora, ajustes), primerUsoEn = perfil.primerUsoEn)
 }
 
 /**

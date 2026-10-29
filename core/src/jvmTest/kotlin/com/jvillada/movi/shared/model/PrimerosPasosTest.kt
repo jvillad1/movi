@@ -84,4 +84,34 @@ class PrimerosPasosTest {
         val ajustes = PeriodSettings(cutoffDay = 25, siCaeEnFinDeSemana = SiElCorteCaeEnFinDeSemana.DIA_HABIL_ANTERIOR)
         assertEquals("23 oct – 24 nov", rangoCortoDelPeriodo(PeriodoFinanciero(2026, 11), ajustes))
     }
+
+    /**
+     * **Revisión de la vuelta 55: «Tu período» se le pide solo a una cuenta nueva y vacía.** Una cuenta
+     * en uso que se quedó con el mes de calendario (el defecto, una elección válida) veía «Te falta 1
+     * paso · Sigue con «Tu período»» para siempre.
+     */
+    @Test
+    fun `tu periodo se pide solo a una cuenta nueva y vacia`() {
+        val mesDeCalendario = PeriodSettings()
+        val corteElegido = PeriodSettings(cutoffDay = 25)
+        // Nueva, sin nada: se pide.
+        val nueva = laCuentaYaEstabaEnUso(hayMovimientos = false, cuentas = 0, primerUsoEn = null)
+        assertFalse(nueva)
+        assertFalse(periodoHechoEn(mesDeCalendario, nueva))
+        // En uso con el mes de calendario: hecho, por cualquiera de las tres señales.
+        assertTrue(periodoHechoEn(mesDeCalendario, laCuentaYaEstabaEnUso(hayMovimientos = true, cuentas = 0, primerUsoEn = null)))
+        assertTrue(periodoHechoEn(mesDeCalendario, laCuentaYaEstabaEnUso(hayMovimientos = false, cuentas = 2, primerUsoEn = null)))
+        assertTrue(periodoHechoEn(mesDeCalendario, laCuentaYaEstabaEnUso(hayMovimientos = false, cuentas = 0, primerUsoEn = 1_761_000_000_000L)))
+        // Con el corte elegido: hecho, aunque la cuenta sea nueva.
+        assertTrue(periodoHechoEn(corteElegido, nueva))
+        // Y la fila del Inicio de una cuenta en uso con todo lo demás hecho ya no dice que falta un paso.
+        val enUso = primerosPasos(
+            LoQueYaHay(
+                periodoElegido = periodoHechoEn(mesDeCalendario, laCuentaYaEstabaEnUso(true, 3, null)),
+                cuentasDeDinero = 3, capturaHecha = true, fijos = 2,
+            ),
+            CapturaDelPrimerUso.SUBIR_UN_EXTRACTO,
+        )
+        assertEquals(null, textoDeLosPasosQueFaltan(pasosQueFaltan(enUso)))
+    }
 }
