@@ -1393,7 +1393,7 @@ fun SMSReconcileScreen(
     }
 
     /** Vuelta 57: el alto de la barra de Ignorar / Confirmar, medido, para el relleno del final de la lista. */
-    var altoDeLaBarra by remember { mutableStateOf(0.dp) }
+    var altoDeLaBarra by remember { mutableStateOf(Medida.margenDePantalla) }
     Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         // F60 · F22: el detalle vuelve a la bandeja si no hay historial (su padre lógico). Ola C:
         // esa bandeja es «Por revisar».
