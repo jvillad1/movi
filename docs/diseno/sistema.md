@@ -2730,6 +2730,10 @@ nuevas**: el punto 2 protege una que ya existía.
    que abre la pregunta de siempre. **Nunca se tilda solo.** El enlace es corto a propósito: «Hay un
    movimiento de $260.000 · ¿Es este?» se cortaba a 390 dp antes de la pregunta (lo mide
    `ElEnlaceDelCandidatoCabeTest`, a 360 dp con la letra ×1,12).
+5. **La cuota pagada también lleva su «⋯»** (revisión de la vuelta 51). Arriendo e Internet tenían «⋯» y la
+   cuota de un crédito no. La cuota no se desmarca desde la fila —sus dos patas se deshacen anulando el
+   movimiento—, así que su «⋯» ofrece «Ver movimiento» y dice cómo deshacerla (`NOTA_DE_LA_CUOTA_PAGADA`,
+   `esPagoDeDeudaProbado`, `notaDelMenuDeLaFilaPagada`). Todas las filas pagadas tienen «⋯».
 
 **Los toques** (desde el Inicio, tres avisos con Farmatodo en «Transporte»): el mal categorizado, **4** (la
 franja, «Cambiar», la pastilla y el «Confirmar» de la tarjeta); con «Todas ›», **5**; los tres, **5** (la

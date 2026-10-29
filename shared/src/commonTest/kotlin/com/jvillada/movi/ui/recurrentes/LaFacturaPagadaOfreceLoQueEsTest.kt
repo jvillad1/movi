@@ -57,8 +57,14 @@ class LaFacturaPagadaOfreceLoQueEsTest {
         assertEquals(listOf(AccionDeLaFilaPagada.QUITAR_LA_MARCA), accionesDelMenuDeLaFilaPagada(sellada))
         // El sello viejo sin movimiento también tiene su «Quitar la marca», ahora en el menú.
         assertEquals(listOf(AccionDeLaFilaPagada.QUITAR_LA_MARCA), accionesDelMenuDeLaFilaPagada(base.copy(eventId = null)))
-        // La cuota probada por su pago no tiene menú; lo pendiente tampoco.
-        assertEquals(emptyList(), accionesDelMenuDeLaFilaPagada(base.copy(ruleId = "credit_1", derivado = true, eventId = "ev_cuota")))
+        // Lo pendiente no tiene menú.
+        // Vuelta 51: la cuota de un crédito también lleva «⋯»: «Ver movimiento» y cómo deshacerla.
+        val cuotaPagada = base.copy(ruleId = "credit_1", derivado = true, eventId = "ev_cuota")
+        assertEquals(listOf(AccionDeLaFilaPagada.VER_MOVIMIENTO), accionesDelMenuDeLaFilaPagada(cuotaPagada))
+        assertEquals(NOTA_DE_LA_CUOTA_PAGADA, notaDelMenuDeLaFilaPagada(cuotaPagada, evidencia = "lo prueba un pago de \$980.000"))
+        // Las demás, la frase de siempre: solo lo emparejado solo y el sello viejo sin movimiento.
+        assertEquals("lo emparejó Movi", notaDelMenuDeLaFilaPagada(emparejada, "lo emparejó Movi"))
+        assertEquals(null, notaDelMenuDeLaFilaPagada(sellada, "con un movimiento"))
         assertEquals(emptyList(), accionesDelMenuDeLaFilaPagada(base.copy(pagado = false)))
     }
 }

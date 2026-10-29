@@ -274,12 +274,14 @@ fun SeccionChecklistDelPeriodo(
             etiquetaDeAbrir = etiquetaDeAbrir(pago.ruleId),
             evidencia = evidenciaDeLaFila(pago),
             // Vuelta 48: lo de una fila pagada va en su «⋯»; tocarla abre el movimiento.
-            accionesDelMenu = accionesDelMenuDeLaFilaPagada(pago).map { accion ->
+            accionesDelMenu = accionesDelMenuDeLaFilaPagada(pago).mapNotNull { accion ->
                 when (accion) {
                     AccionDeLaFilaPagada.NO_FUE_ESTE -> ETIQUETA_NO_FUE_ESTE to { pago.eventId?.let { acciones.onNoFueEste(pago, it) }; Unit }
                     AccionDeLaFilaPagada.QUITAR_LA_MARCA -> ETIQUETA_QUITAR_LA_MARCA to { acciones.onQuitarLaMarca(pago) }
-                    // No llega: ver un movimiento es tocar la fila.
-                    AccionDeLaFilaPagada.VER_MOVIMIENTO -> ETIQUETA_VER_MOVIMIENTO to { pago.eventId?.let { onVerMovimiento?.invoke(it) }; Unit }
+                    // Vuelta 51: solo en la cuota de un crédito (que no se desmarca), y solo si hay dónde verlo.
+                    AccionDeLaFilaPagada.VER_MOVIMIENTO -> onVerMovimiento?.let { ver ->
+                        ETIQUETA_VER_MOVIMIENTO to { pago.eventId?.let { ver(it) }; Unit }
+                    }
                 }
             },
             debajo = if (!pago.pagado && (estimacion != null || ofreceAlgoDebajo(pago, conPropuesta))) {
@@ -631,6 +633,25 @@ internal data class AccionesDelChecklist(
     val onVerMovimiento: ((eventId: String) -> Unit)? = null,
 )
 
+/** Vuelta 51: lo pagado que prueba el movimiento que bajó una deuda (la cuota de un crédito, el pago de una tarjeta). */
+internal fun esPagoDeDeudaProbado(pago: PagoDelPeriodo): Boolean =
+    pago.estado == EstadoDeLaFila.LISTO && pago.derivado && !pago.automatica && pago.eventId != null
+
+/** Lo que dice el «⋯» de una cuota pagada: no se desmarca, se anula el movimiento (vuelta 51). */
+const val NOTA_DE_LA_CUOTA_PAGADA: String =
+    "La pagó un movimiento que bajó la deuda. Para deshacerla, anula ese movimiento: se van sus dos patas."
+
+/**
+ * **La frase de arriba del «⋯» de una fila pagada**: de dónde salió el «Pagado» en lo que Movi emparejó
+ * solo y en el sello viejo sin movimiento ([evidencia]); en lo que prueba el pago de una deuda, cómo
+ * deshacerla ([NOTA_DE_LA_CUOTA_PAGADA]); en lo demás, nada. Pura.
+ */
+fun notaDelMenuDeLaFilaPagada(pago: PagoDelPeriodo, evidencia: String?): String? = when {
+    esPagoDeDeudaProbado(pago) -> NOTA_DE_LA_CUOTA_PAGADA
+    pago.automatica || pago.eventId == null -> evidencia
+    else -> null
+}
+
 /** Lo que puede ofrecer una fila pagada (vuelta 45). */
 enum class AccionDeLaFilaPagada { NO_FUE_ESTE, VER_MOVIMIENTO, QUITAR_LA_MARCA }
 
@@ -656,11 +677,16 @@ fun accionesDeLaFilaPagada(pago: PagoDelPeriodo): List<AccionDeLaFilaPagada> = w
  * **Lo que va en el «⋯» de una factura pagada** (vuelta 48). La fila pagada es compacta —ícono, nombre,
  * «Pagado ✓ · $1.800.000 · 27 oct»— y **tocarla abre el movimiento**, así que «Ver movimiento» deja de
  * ser un botón. Lo demás se guarda en el menú: «Quitar la marca» (un sello del dueño, con movimiento o
- * el viejo sin él) y «No fue este» (solo lo que Movi emparejó solo). Lo que prueba el pago de una deuda
- * no ofrece nada: ahí lo que revierte es borrar el pago.
+ * el viejo sin él) y «No fue este» (solo lo que Movi emparejó solo).
+ *
+ * **Vuelta 51 · la cuota de un crédito también lleva su «⋯».** Lo que prueba el pago de una deuda no
+ * se desmarca desde la fila: sus dos patas se deshacen anulando el movimiento. Antes no tenía menú y
+ * era la única pagada sin él; ahora ofrece «Ver movimiento» y dice cómo deshacerla
+ * ([NOTA_DE_LA_CUOTA_PAGADA], ver [notaDelMenuDeLaFilaPagada]).
  */
 fun accionesDelMenuDeLaFilaPagada(pago: PagoDelPeriodo): List<AccionDeLaFilaPagada> = when (pago.estado) {
-    EstadoDeLaFila.LISTO -> accionesDeLaFilaPagada(pago) - AccionDeLaFilaPagada.VER_MOVIMIENTO
+    EstadoDeLaFila.LISTO -> if (esPagoDeDeudaProbado(pago)) listOf(AccionDeLaFilaPagada.VER_MOVIMIENTO)
+    else accionesDeLaFilaPagada(pago) - AccionDeLaFilaPagada.VER_MOVIMIENTO
     EstadoDeLaFila.MARCADA_A_MANO -> listOf(AccionDeLaFilaPagada.QUITAR_LA_MARCA)
     else -> emptyList()
 }
@@ -832,8 +858,8 @@ private fun LoQueOfreceLaFila(
 
 /**
  * **La propuesta lejana** (vuelta 51): «Anotar pago» sigue siendo la acción —a la derecha de la fila, o
- * acá si la fila no lo tiene ([conBotonDeAnotar])— y el candidato queda como enlace, «Hay un movimiento
- * de $260.000 · ¿Es este?». Tocarlo abre la pregunta de siempre («Sí, fue este» / «No fue este»): el
+ * acá si la fila no lo tiene ([conBotonDeAnotar])— y el candidato queda como enlace, «¿Es el de
+ * $260.000?». Tocarlo abre la pregunta de siempre («Sí, fue este» / «No fue este»): el
  * dueño decide; nada se tilda solo.
  */
 @Composable
