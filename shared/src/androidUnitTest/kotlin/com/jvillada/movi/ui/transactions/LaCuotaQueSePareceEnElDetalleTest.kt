@@ -25,6 +25,7 @@ import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
 import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.CuotaYaPagada
 import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.OccurrenceState
 import com.jvillada.movi.shared.model.PagoDeCuotaResult
 import com.jvillada.movi.shared.model.PaymentStatus
 import com.jvillada.movi.shared.model.RecurringRule
@@ -140,6 +141,29 @@ class LaCuotaQueSePareceEnElDetalleTest {
         assertEquals(true, req.esLaCuota, "lo mismo que «Es la cuota de un crédito»")
         assertFalse(req.comoAbono)
         composeRule.waitUntil(5_000) { cambiado > 0 }
+    }
+
+    /** Revisión de la vuelta 53: la cuota del 5 vencida y sin pagar, vista el 28. `upcoming` ya dice noviembre. */
+    @Test
+    fun laCuotaVencidaSinPagarTambienSeSugiere() {
+        val delDia28 = gasto.copy(amount = 985_000L, timestamp = LocalDateTime.parse("2026-10-28T10:00:00").toInstant(AppTimeZone.zone).toEpochMilliseconds())
+        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+            override suspend fun getUpcomingPayments() = listOf(cuotaDeOctubre.copy(dueDate = "2026-11-05", daysUntil = 8))
+            override suspend fun getOccurrenceStates() = listOf(
+                OccurrenceState(ruleId = cuotaDeOctubre.rule.id, period = "2026-10", dueDate = "2026-10-05", occurred = false),
+            )
+        }
+        composeRule.setContent {
+            MoviTheme {
+                Box(Modifier.fillMaxSize()) {
+                    HojaDelMovimiento(event = delDia28, cuentas = listOf(ahorros, libre), onDismiss = {}, onCambiado = {})
+                }
+            }
+        }
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithTag(TAG_SUGERENCIA_DE_LA_CUOTA, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onAllNodesWithText("¿Es la cuota de Libre inversión 9695?", useUnmergedTree = true).assertCountEquals(1)
     }
 
     @Test

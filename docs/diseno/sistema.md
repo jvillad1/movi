@@ -2786,8 +2786,11 @@ del período en que se hizo (`periodoQueSalda`).
    la pregunta en `cuerpoFuerte`, «Cuota de $980.000» debajo y **«Sí, es la cuota»** `Secundario` `S` en su
    renglón, a la derecha: al lado no cabía a 360). Aparece cuando `cuotaQueSeParece` encuentra **un solo**
    crédito cuya cuota pactada está a ±10 % (`MARGEN_DE_LA_CUOTA_QUE_SE_PARECE`, elegido) del gasto, en su
-   moneda, y cuyo vencimiento **sin saldar** (`cuotasPorSaldar` sobre `GET /api/payments/upcoming`, que ya
-   rodó al mes siguiente si la del período está saldada) cae en el período del dueño del gasto. Solo un gasto
+   moneda, y cuyo vencimiento **sin saldar** cae en el período del dueño del gasto. `cuotasPorSaldar` junta
+   el vigente de `GET /api/payments/upcoming` **y** la cuota que `GET /api/payments/occurrences` da por
+   pendiente (`occurred = false`, la fuente del checklist desde #541): pasada la gracia `upcoming` ya rodó al
+   mes siguiente —la cuota del 5, vista el 28, dice noviembre— y sin `occurrences` la cuota vencida, el caso
+   más común, no se sugería (revisión de la vuelta 53). Solo un gasto
    suelto con una categoría del dueño. Con dos parecidos, ninguno. **La palabra «crédito» o «cuota» en la
    descripción no cuenta**, ni sola ni para desempatar: «Cuota de manejo» es un cobro de la tarjeta y «Cuota
    3/12» una compra diferida. «Sí, es la cuota» hace exactamente lo de «Es la cuota de un crédito» con ese

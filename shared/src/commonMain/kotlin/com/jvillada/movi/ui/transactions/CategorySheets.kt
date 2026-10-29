@@ -542,8 +542,10 @@ internal fun ContenidoDelMovimiento(
         cuotaSugerida = null
         if (!puedeSerCuota) return@LaunchedEffect
         val vencimientos = runCatching { Repositories.wallets.getUpcomingPayments() }.getOrNull() ?: return@LaunchedEffect
+        // La cuota del período vencida y sin pago la dice `occurrences` (`upcoming` ya rodó al mes que viene).
+        val ocurrencias = runCatching { Repositories.wallets.getOccurrenceStates() }.getOrDefault(emptyList())
         val ajustes = runCatching { Repositories.wallets.getUserProfile().ajustesDelPeriodo() }.getOrDefault(PeriodSettings())
-        cuotaSugerida = cuotaQueSeParece(event, cuotasPorSaldar(vencimientos, cuentas), ajustes)
+        cuotaSugerida = cuotaQueSeParece(event, cuotasPorSaldar(vencimientos, cuentas, ocurrencias), ajustes)
     }
 
     /**

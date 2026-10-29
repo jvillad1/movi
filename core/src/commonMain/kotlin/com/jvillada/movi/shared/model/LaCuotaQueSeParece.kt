@@ -49,24 +49,36 @@ data class CuotaPorSaldar(
 )
 
 /**
- * Las cuotas por saldar de los créditos de [cuentas], sacadas de los vencimientos vigentes
- * ([upcoming], las reglas sintéticas `credit_<id>`). Un crédito que ya no está entre las cuentas, o sin
- * cuota, no entra.
+ * Las cuotas por saldar de los créditos de [cuentas]: el vencimiento vigente de cada uno ([upcoming], las
+ * reglas sintéticas `credit_<id>`) **y** la cuota del período que [ocurrencias] (`GET
+ * /api/payments/occurrences`) todavía da por pendiente (`occurred = false`).
+ *
+ * Las dos hacen falta (revisión de la vuelta 53, el mismo origen que #541): pasada la gracia, `upcoming`
+ * ya rodó el crédito al mes siguiente —la cuota del 5, vista el 28, aparece el 5 de noviembre— aunque la
+ * de octubre siga sin pagar; esa la dice solo `occurrences`, la fuente del checklist. Sin ella un gasto de
+ * octubre se comparaba con la cuota de noviembre y no se sugería nada justo en el caso más común (el banco
+ * debita el 5 y el dueño revisa días después). La cuota pactada sale de la regla de `upcoming`; una
+ * ocurrencia de un crédito sin regla no entra. Un crédito que ya no está entre las cuentas, o sin cuota,
+ * tampoco.
  */
-fun cuotasPorSaldar(upcoming: List<UpcomingPayment>, cuentas: List<Account>): List<CuotaPorSaldar> {
+fun cuotasPorSaldar(
+    upcoming: List<UpcomingPayment>,
+    cuentas: List<Account>,
+    ocurrencias: List<OccurrenceState> = emptyList(),
+): List<CuotaPorSaldar> {
     val creditos = cuentas.filter { it.type == AccountType.LOAN }.associateBy { it.id }
-    return upcoming.mapNotNull { pago ->
-        if (!pago.rule.id.startsWith(CREDIT_RULE_PREFIX)) return@mapNotNull null
-        val credito = creditos[pago.rule.id.removePrefix(CREDIT_RULE_PREFIX)] ?: return@mapNotNull null
-        if (pago.rule.amount <= 0L) return@mapNotNull null
-        CuotaPorSaldar(
-            creditoId = credito.id,
-            nombre = credito.name,
-            cuota = pago.rule.amount,
-            moneda = credito.currency,
-            vence = pago.dueDate,
-        )
+    val reglas = upcoming.map { it.rule }.filter { it.id.startsWith(CREDIT_RULE_PREFIX) }.associateBy { it.id }
+    fun cuota(ruleId: String, vence: String): CuotaPorSaldar? {
+        val regla = reglas[ruleId] ?: return null
+        val credito = creditos[ruleId.removePrefix(CREDIT_RULE_PREFIX)] ?: return null
+        if (regla.amount <= 0L) return null
+        return CuotaPorSaldar(creditoId = credito.id, nombre = credito.name, cuota = regla.amount, moneda = credito.currency, vence = vence)
     }
+    val vigentes = upcoming.mapNotNull { cuota(it.rule.id, it.dueDate) }
+    val pendientes = ocurrencias
+        .filter { !it.occurred && it.ruleId.startsWith(CREDIT_RULE_PREFIX) }
+        .mapNotNull { cuota(it.ruleId, it.dueDate) }
+    return (pendientes + vigentes).distinctBy { it.creditoId to it.vence }
 }
 
 /** ¿[monto] está a ±[MARGEN_DE_LA_CUOTA_QUE_SE_PARECE] % de [cuota]? Con aritmética entera: sin redondeos. */

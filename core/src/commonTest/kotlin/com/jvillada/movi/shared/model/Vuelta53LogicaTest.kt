@@ -98,6 +98,31 @@ class Vuelta53LogicaTest {
         assertNull(cuotaQueSeParece(gasto(1_000L, "2026-10-01"), enDolares, corte25), "un gasto en pesos no es una cuota en dólares")
     }
 
+    /**
+     * Revisión de la vuelta 53: la cuota del 5, vista el 28 y sin pagar. `upcoming` ya rodó el crédito al 5
+     * de noviembre; `occurrences` sigue dando octubre por pendiente. Un gasto parecido de octubre se sugiere.
+     */
+    @Test
+    fun `la cuota del 5 vencida y sin pagar vista el 28 se sugiere`() {
+        val upcoming = listOf(vence(vehiculo, 980_000L, "2026-11-05"))
+        val pendiente = OccurrenceState(ruleId = "$CREDIT_RULE_PREFIX${vehiculo.id}", period = "2026-10", dueDate = "2026-10-05", occurred = false)
+        val calendario = PeriodSettings()
+        // Sin la ocurrencia, solo noviembre: nada (el defecto que encontró la revisión).
+        assertNull(cuotaQueSeParece(gasto(985_000L, "2026-10-28"), cuotasPorSaldar(upcoming, listOf(vehiculo)), calendario))
+        val cuotas = cuotasPorSaldar(upcoming, listOf(vehiculo), listOf(pendiente))
+        val sugerida = cuotaQueSeParece(gasto(985_000L, "2026-10-28"), cuotas, calendario)
+        assertEquals("¿Es la cuota de Vehículo 4083?", sugerida?.let(::preguntaDeLaCuotaQueSeParece))
+        assertEquals("2026-10-05", sugerida?.vence)
+    }
+
+    @Test
+    fun `con la cuota del periodo ya pagada no se sugiere nada`() {
+        val upcoming = listOf(vence(vehiculo, 980_000L, "2026-11-05"))
+        val pagada = OccurrenceState(ruleId = "$CREDIT_RULE_PREFIX${vehiculo.id}", period = "2026-10", dueDate = "2026-10-05", occurred = true, eventId = "ev-cuota")
+        val cuotas = cuotasPorSaldar(upcoming, listOf(vehiculo), listOf(pagada))
+        assertNull(cuotaQueSeParece(gasto(985_000L, "2026-10-28"), cuotas, PeriodSettings()))
+    }
+
     // ── 3 · El 409 de la segunda cuota ───────────────────────────────────────────
 
     @Test
