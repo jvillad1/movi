@@ -3369,3 +3369,74 @@ Lo vigilan `VecesEnElComercioTest`, `EspacioTest` y `PreferenciasDelInicioTest` 
 deshacer; «No») e `InicioRoutesTest` (la preferencia guardada con las dos listas) en `:server`, y en
 `commonTest` `ActividadCuadraConSusFilasTest` (la suma de los días es «Salió», con un gasto que pagó
 Caro), `UnaSolaCuentaDeVecesTest`, `HoyEnUnaMiradaTest` y `TextosDelGrupoTest`.
+
+## 66. Vuelta 67: lo que dejó la revisión de la 66, y la hoja del movimiento clara
+
+De la revisión de la vuelta 66 (capturas `rev66-*.png`) y de la tercera revisión fresca (`r3-*.png`).
+**Sin reglas de plata nuevas**: restaurar un anulado borra su marca de `void_events` y deshacer una
+compra dividida anula las partes y restaura el original; los dos devuelven el estado anterior.
+
+1. **El grupo dice lo que espera.** La tarjeta del saldo: «Están a mano · esperando $168.050 de Caro»
+   (`tituloDeLaTarjetaDelSaldo`, `loQueEspera`, con `esperaLaTransferencia`); si el que paga es el
+   dueño, «esperando tu transferencia de $90.000 a Caro». En «Pagos entre ustedes» el detalle va en
+   **dos renglones** —la fecha y, abajo, «Esperando la transferencia»— (`detalleDelPago`,
+   `RENGLONES_DEL_DETALLE_DEL_PAGO`): en uno se cortaba a 390 y 360.
+2. **Por revisar cuenta lo que salda un grupo.** `ConteoPorRevisar.saldar` entra en `total` y en el
+   desglose («1 para saldar»); las propuestas son una lectura más de la bandeja
+   (`LecturasPorRevisar.propuestasDeSaldar`, `ClaveDeLectura.PropuestasDeSaldar`), así que «Todo al
+   día» no sale debajo de una (`bandejaAlDia(…, propuestasDeSaldar)`), y la insignia del Inicio, la
+   campana, «N por revisar» de Actividad y la bandeja dicen el mismo número. En la campana la
+   propuesta va corta —«Transferencia de Caro» y, en dos renglones, «¿Es la que marcaste como
+   saldada? · Casa con Caro»— (`laPropuestaEnLaCampana`, `NotificationRow.lineasDelSubtitulo`).
+3. **Buscar habla como Actividad.** La fila de un movimiento usa la cifra y la línea de la fila de
+   Actividad (`FinalDeLaFila`, `montoPrincipalDelMovimiento`, `debajoDeLaCifra`: tu parte y «de $88.600
+   · con Caro»), así que la suma del comercio sale de sus filas; el comercio se llama por **su marca**
+   («Éxito», `nombreDelComercio`). El subtítulo no repite la categoría si ya es el título
+   (`subtituloDeUnMovimientoEnBuscar`). El detalle abierto desde Buscar trae «N veces este período»
+   (con los movimientos del período del movimiento) y su «Ver».
+4. **La franja sigue al chip** (decisión): Entró · Salió · Neto es **la suma de la lista que tiene
+   debajo** con el chip puesto (`laFranjaDeLaLista`, la misma regla de la cifra de cada día,
+   `resumenDelDia`). Con «Todo» es el resumen del período; en «Compartidos» suma lo compartido. El
+   panel de la pantalla ancha sigue siendo del período entero (no está encima de la lista). Con un
+   filtro de «En qué se va» o una búsqueda la franja sigue sin pintarse.
+5. **Una sola regla de título por movimiento** (`textosDeLaFila`, decisión): el título es **el concepto,
+   el comercio o la categoría, nunca la cuenta**; la cuenta va en el subtítulo. Con el concepto igual a
+   la categoría y sin comercio, la categoría de título («Internet», con «Bancolombia Ahorros 4057»
+   debajo); el detalle y la hoja de anular se titulan igual. La cuota de un crédito se llama por su
+   crédito —«Cuota de Vehículo 4083»— en Todo (el renglón del par, `transferRowTitle`) y en Gastos (la
+   pata sola): `tituloDeLaCuota`, sin la nota del dueño.
+6. **La hoja del movimiento dice lo que hace.** «Nota» pasa a **«Editar»** (abre monto, cuenta y
+   concepto); «Repartir en partes» pasa a **«Dividir en categorías»** (`REPARTIR_EN_PARTES`, también en
+   Revisar aviso); «Es la cuota de un crédito» no se ofrece en un gasto compartido
+   (`puedeMarcarseCuotaDeCredito`); la hoja de anular dice el título y el subtítulo de la fila, sin
+   «MANUAL».
+7. **Dividir deja rastro y se deshace.** Cada pata de cada parte lleva el id de su compra
+   (`FinancialEvent.repartoDe`, columna `financial_events.reparto_de`, la escribe solo el server). El
+   detalle de una parte dice «Parte de una compra de $100.000 · 2 partes» con «Ver» y «Deshacer»
+   (`ParteDeUnaCompra`, `GET /api/events/{id}/reparto`, `POST /api/events/{id}/deshacer-reparto`):
+   deshacer anula las partes, restaura el original y le devuelve su aviso. En un movimiento sin aviso
+   el cuadre dice «Suma $100.000»; la parte nueva empieza **sin categoría** (`parteNuevaSinCategoria`).
+   «N veces» cuenta las partes como una compra por `repartoDe` (`claveDeLaCompra`).
+8. **Anular tiene «Deshacer».** Al anular, abajo de la pantalla, «Anulado · Deshacer» durante 10 s
+   (`AvisoDeDeshacer`, `LocalAvisoDeDeshacer`, en la cáscara: la hoja se cierra al anular). Actividad
+   tiene el chip **«Anulados»** (`CHIP_ANULADOS`, `ListaDeAnulados`): lo anulado, el último primero,
+   un par una vez, «$40.000 · anulado el 29 oct · Duplicado» y «Restaurar». `DELETE
+   /api/events/{id}/void` borra la marca del movimiento **y la de su otra pata**; restaurar el original
+   de una compra dividida la deshace, y una parte de una compra que volvió a ser una no se restaura
+   (409). En el teléfono, una anulación que no subió se deshace solo en el espejo.
+9. **«Mensajes del banco» se recorre.** Lista compacta **por día** con chips Todos · Pendientes ·
+   Confirmados · Ignorados (`historialPorDia`, `ChipsDelHistorial`); el comercio de título, no
+   «Bancolombia» (`filaDelHistorial`, con `SmsMessage.comercio`/`monto`/`tipo` que pone `GET
+   /api/sms`); tocar un pendiente abre Revisar aviso, un confirmado su movimiento
+   (`SmsMessage.eventoId`), y lo demás muestra el texto del banco ahí mismo, con «Era un movimiento» si
+   Movi lo apartó.
+10. **Grupos, lo menor.** Renombrar avisa si ya hay un grupo con ese nombre y esas personas
+    (`avisoDeNombreRepetido`, la comprobación de crear; el botón dice «Guardar igual»); la pregunta de
+    borrar sale sola, sin la hoja «Editar grupo» detrás; el «No» de una propuesta de saldar pregunta
+    antes y dice que la apaga también para un saldo futuro (`DETALLE_DEL_NO_DE_SALDAR`).
+
+Lo vigilan `ElGrupoQueEsperaTest`, `LoQueSaldaUnGrupoSeCuentaTest`, `BuscarHablaComoActividadTest`,
+`LaFranjaSigueAlChipTest`, `ElTituloEsLaCategoriaOElConceptoTest`, `LaHojaDelMovimientoDiceLoQueHaceTest`,
+`LoAnuladoSeRestauraTest` y `ElHistorialDelBancoSeRecorreTest` (`commonTest`), y en `:server`
+`RestaurarUnAnuladoTest` (restaurar, el par, «Anulados», el aislamiento y lo que dice un aviso) y
+`ElAvisoEnPartesTest` (el rastro, deshacer, restaurar el original y el aislamiento).
