@@ -131,8 +131,7 @@ class PagoDeTarjetaEnMovimientosTest {
         assertTrue(composeRule.onAllNodesWithText("Gastaste", useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
         assertTrue(composeRule.onAllNodesWithText("−$1.929.536", useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
         composeRule.onNodeWithText(
-            "Además, \$1.929.536 fueron a pagar tarjeta — ya contado en tu gasto del mes cuando " +
-                "compraste, no se duplica.",
+            "+ \$1.929.536 a tu tarjeta · no suma, ya contó al comprar",
             useUnmergedTree = true,
         ).assertIsDisplayed()
     }
@@ -150,7 +149,7 @@ class PagoDeTarjetaEnMovimientosTest {
         val lineas = composeRule.onAllNodesWithTag(TAG_PAGO_DE_TARJETA_EN_EL_DIA, useUnmergedTree = true)
             .fetchSemanticsNodes()
         assertTrue(lineas.isEmpty(), "sin pagos de tarjeta no hay línea de más, había ${lineas.size}")
-        val texto = composeRule.onAllNodesWithText("fueron a pagar tarjeta", substring = true, useUnmergedTree = true)
+        val texto = composeRule.onAllNodesWithText("a tu tarjeta", substring = true, useUnmergedTree = true)
             .fetchSemanticsNodes()
         assertTrue(texto.isEmpty())
     }
@@ -178,8 +177,7 @@ class PagoDeTarjetaEnMovimientosTest {
         assertTrue(composeRule.onAllNodesWithText("$18.500", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
         assertTrue(composeRule.onAllNodesWithText("−$405.402", useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
         composeRule.onNodeWithText(
-            "Además, \$386.902 fueron a pagar tarjeta — ya contado en tu gasto del mes cuando " +
-                "compraste, no se duplica.",
+            "+ \$386.902 a tu tarjeta · no suma, ya contó al comprar",
             useUnmergedTree = true,
         ).assertIsDisplayed()
     }

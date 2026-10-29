@@ -1662,8 +1662,8 @@ fun TransactionsScreen(
                         // Vuelta 40: «Gastaste» no cuenta el pago de tarjeta (la compra ya restó cuando
                         // se hizo); esta línea dice que esa plata igual salió de tu cuenta ese día.
                         val montoPagoDeTarjeta = montoPagoDeTarjetaEnElDia(day.items, accountTypes)
-                        val textoPagoDeTarjeta = textoPagoDeTarjetaEnElDia(montoPagoDeTarjeta)
-                        if (textoPagoDeTarjeta != null) LineaPagoDeTarjetaEnElDia(textoPagoDeTarjeta)
+                        // Vuelta 52: un renglón apagado, no una frase de dos.
+                        if (montoPagoDeTarjeta > 0L) LineaPagoDeTarjetaEnElDia(montoPagoDeTarjeta)
                         if (!plegado) Superficie(
                             modifier = Modifier.fillMaxWidth(),
                             relleno = RellenoDeSuperficie.Lista,
@@ -2120,6 +2120,9 @@ private fun FinalDeLaFila(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Espacio.xxs),
     ) {
+        // Vuelta 52: este glifo dice «Recurrente» (se repite), NO «tiene contraparte en otra cuenta»: la
+        // cuota y el pago de tarjeta lo llevan porque se repiten ([nombreRecurrenteDe]), un traspaso a
+        // mano no. Que un par «tenga par» ya lo dicen su título y el «De X a Y»; no hay un segundo glifo.
         if (esRecurrente) {
             Icon(
                 imageVector = Icons.Rounded.Repeat,
