@@ -56,16 +56,16 @@ class ElMismoPagoEnLaBandejaTest {
 
     private val ids = listOf("s", "w", "n")
 
-    private fun aviso(id: String, bank: String, texto: String, time: String = "2026-09-25 09:15") = SmsMessage(
+    private fun aviso(id: String, bank: String, texto: String, time: String = "${com.jvillada.movi.ui.fecha.hoyEnAppZone().let { kotlinx.datetime.LocalDate.fromEpochDays(it.toEpochDays() - 3) }} 09:15") = SmsMessage(
         id = id, time = time, bank = bank, text = texto, state = SMS_STATE_PENDING, det = "",
         grupoId = "s", miembrosDelGrupo = ids,
     )
 
     private val delSms = aviso("s", "85540", "Bancolombia: Compraste \$12.300,00 en PANADERIA LA ESQ con tu T.Deb *1111.")
     private val deWallet = aviso("w", "Notificación · Google Wallet", "PANADERIA LA ESQUINA: COP12,300 with Debito Mastercard ••1111")
-    private val deLaApp = aviso("n", "Notificación · Bancolombia", "Compraste \$12.300,00 en PANADERIA LA ESQUINA con tu T.Deb *1111.", time = "2026-09-25 09:16")
+    private val deLaApp = aviso("n", "Notificación · Bancolombia", "Compraste \$12.300,00 en PANADERIA LA ESQUINA con tu T.Deb *1111.", time = "${com.jvillada.movi.ui.fecha.hoyEnAppZone().let { kotlinx.datetime.LocalDate.fromEpochDays(it.toEpochDays() - 3) }} 09:16")
     private val suelto = SmsMessage(
-        id = "otro", time = "2026-09-24 18:00", bank = "85540",
+        id = "otro", time = "${com.jvillada.movi.ui.fecha.hoyEnAppZone().let { kotlinx.datetime.LocalDate.fromEpochDays(it.toEpochDays() - 4) }} 18:00", bank = "85540",
         text = "Bancolombia: Compraste \$40.000,00 en OTRA TIENDA con tu T.Deb *1111.", state = SMS_STATE_PENDING, det = "",
     )
 

@@ -54,6 +54,9 @@ import org.robolectric.annotation.Config
 @Config(qualifiers = "w411dp-h1200dp-xhdpi")
 class PorRevisarEnPantallaTest {
 
+    /** Vuelta 51: los avisos de estas pruebas son de hace 10 días; uno de más de 30 se apartaría. */
+    private val haceDiezDias = com.jvillada.movi.ui.fecha.hoyEnAppZone().let { kotlinx.datetime.LocalDate.fromEpochDays(it.toEpochDays() - 10) }
+
     @get:Rule val composeRule = createComposeRule()
 
     private val banco = Account("acc-banco", "Bancolombia Ahorros", AccountType.SAVINGS, 853_037L, "COP")
@@ -76,7 +79,7 @@ class PorRevisarEnPantallaTest {
     private val pagoNu = evento("e-pago", "Pago Nu", ReconciliationStatus.RECONCILED)
 
     private fun sms(id: String, estado: String, det: String = "Uber") = SmsMessage(
-        id = id, time = "2026-09-03 07:15", bank = "Bancolombia",
+        id = id, time = "${com.jvillada.movi.ui.fecha.hoyEnAppZone().let { kotlinx.datetime.LocalDate.fromEpochDays(it.toEpochDays() - 10) }} 07:15", bank = "Bancolombia",
         text = "Compra aprobada \$28.500 en Uber BV.", state = estado, det = det,
     )
 
@@ -161,8 +164,8 @@ class PorRevisarEnPantallaTest {
         montar(Repo(mensajes = listOf(sms("s1", SMS_STATE_PENDING))))
         esperarTexto("Revisar")
 
-        assertTrue("sin la fecha cruda", !hay("2026-09-03"))
-        assertTrue("la fecha corta", hay("Bancolombia · 3 sep"))
+        assertTrue("sin la fecha cruda", !hay(haceDiezDias.toString()))
+        assertTrue("la fecha corta", hay("Bancolombia · ${com.jvillada.movi.ui.sms.fechaRelativaDelAviso(haceDiezDias, com.jvillada.movi.ui.fecha.hoyEnAppZone(), hora = null)}"))
         assertTrue("sin la hora suelta de un aviso viejo", !hay("7:15 a. m."))
     }
 

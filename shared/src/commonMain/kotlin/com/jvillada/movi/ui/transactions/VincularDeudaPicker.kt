@@ -79,11 +79,13 @@ fun SelectorDeCuentaDeDeuda(
     seleccionada: Account?,
     onSeleccionar: (Account?) -> Unit,
     modifier: Modifier = Modifier,
+    /** Vuelta 51: «¿De cuál crédito?» cuando solo se ofrecen créditos («Es la cuota de un crédito»). */
+    titulo: String = "¿A cuál crédito o tarjeta corresponde?",
 ) {
     val deudas = cuentasDeDeuda(cuentas)
     if (deudas.isEmpty()) return
     Column(modifier = modifier) {
-        Seccion(titulo = "¿A cuál crédito o tarjeta corresponde?")
+        Seccion(titulo = titulo)
         Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
             Column {
                 deudas.forEachIndexed { index, cuenta ->

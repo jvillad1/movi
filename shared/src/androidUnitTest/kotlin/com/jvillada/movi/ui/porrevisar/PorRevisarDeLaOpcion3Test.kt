@@ -71,7 +71,7 @@ class PorRevisarDeLaOpcion3Test {
     )
 
     private val aviso = SmsMessage(
-        id = "s1", time = "2026-09-02 11:02", bank = "Bancolombia",
+        id = "s1", time = "${com.jvillada.movi.ui.fecha.hoyEnAppZone().let { kotlinx.datetime.LocalDate.fromEpochDays(it.toEpochDays() - 10) }} 11:02", bank = "Bancolombia",
         text = "Compra aprobada por \$42.500 en RAPPI el 02/09/2026.", state = SMS_STATE_PENDING, det = "Rappi",
     )
 

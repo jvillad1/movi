@@ -32,8 +32,18 @@ data class DashboardSummary(
     val spentByCategory: Map<String, Long> = emptyMap(),
     /** Cantidad que devolvería `GET /api/events/card-payment-candidates` — sin bajar la lista. */
     val cardPaymentCandidates: Int = 0,
-    /** Mensajes del banco en estado `pending` — lo que el inbox de SMS llama «por confirmar». */
+    /**
+     * Mensajes del banco en estado `pending` — lo que el inbox de SMS llama «por confirmar» —, uno por
+     * pago. Vuelta 51: **solo los de los últimos 30 días** ([pagosRecientesPorConfirmar]); los antiguos
+     * van en [avisosAntiguos].
+     */
     val pendingSms: Int = 0,
+    /**
+     * Vuelta 51 · **los pagos avisados hace más de 30 días** que siguen pendientes ([cuantosPagosAntiguos]).
+     * No entran en [pendingSms] ni en [porConfirmarSuman]: la franja del Inicio los menciona aparte.
+     * Con default: un server viejo no lo manda (cero) y un APK viejo lo ignora.
+     */
+    val avisosAntiguos: Int = 0,
     /**
      * **Cuánto dicen los avisos por confirmar** (vuelta 44), en pesos: la suma de los montos de
      * [pendingSms], uno por pago ([sumaDeLoPorConfirmar]). `null` si no hay avisos, o si alguno no

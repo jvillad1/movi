@@ -18,6 +18,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
+import com.jvillada.movi.shared.model.candidatoMuyDistinto
 import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
@@ -257,7 +259,8 @@ fun SeccionChecklistDelPeriodo(
     @Composable
     fun FilaDe(pago: PagoDelPeriodo, conAnotar: Boolean = true) {
         val propuesta = propuestaDeLaFila(pago, descartadas)
-        val conPropuesta = pago.estado == EstadoDeLaFila.CON_DUDAS && propuesta != null
+        // Vuelta 51: una propuesta muy distinta del monto no es «Por confirmar»: la fila ofrece «Anotar pago».
+        val conPropuesta = pago.estado == EstadoDeLaFila.CON_DUDAS && propuesta != null && !esPropuestaLejana(pago, propuesta)
         val enVuelo = pago.ruleId in marcando
         val estimacion = estimacionDeLaFila(pago, planesDeCuotas)?.takeIf { !enVuelo && !pago.pagado }
         FilaDeFactura(
@@ -271,12 +274,14 @@ fun SeccionChecklistDelPeriodo(
             etiquetaDeAbrir = etiquetaDeAbrir(pago.ruleId),
             evidencia = evidenciaDeLaFila(pago),
             // Vuelta 48: lo de una fila pagada va en su «⋯»; tocarla abre el movimiento.
-            accionesDelMenu = accionesDelMenuDeLaFilaPagada(pago).map { accion ->
+            accionesDelMenu = accionesDelMenuDeLaFilaPagada(pago).mapNotNull { accion ->
                 when (accion) {
                     AccionDeLaFilaPagada.NO_FUE_ESTE -> ETIQUETA_NO_FUE_ESTE to { pago.eventId?.let { acciones.onNoFueEste(pago, it) }; Unit }
                     AccionDeLaFilaPagada.QUITAR_LA_MARCA -> ETIQUETA_QUITAR_LA_MARCA to { acciones.onQuitarLaMarca(pago) }
-                    // No llega: ver un movimiento es tocar la fila.
-                    AccionDeLaFilaPagada.VER_MOVIMIENTO -> ETIQUETA_VER_MOVIMIENTO to { pago.eventId?.let { onVerMovimiento?.invoke(it) }; Unit }
+                    // Vuelta 51: solo en la cuota de un crédito (que no se desmarca), y solo si hay dónde verlo.
+                    AccionDeLaFilaPagada.VER_MOVIMIENTO -> onVerMovimiento?.let { ver ->
+                        ETIQUETA_VER_MOVIMIENTO to { pago.eventId?.let { ver(it) }; Unit }
+                    }
                 }
             },
             debajo = if (!pago.pagado && (estimacion != null || ofreceAlgoDebajo(pago, conPropuesta))) {
@@ -628,6 +633,25 @@ internal data class AccionesDelChecklist(
     val onVerMovimiento: ((eventId: String) -> Unit)? = null,
 )
 
+/** Vuelta 51: lo pagado que prueba el movimiento que bajó una deuda (la cuota de un crédito, el pago de una tarjeta). */
+internal fun esPagoDeDeudaProbado(pago: PagoDelPeriodo): Boolean =
+    pago.estado == EstadoDeLaFila.LISTO && pago.derivado && !pago.automatica && pago.eventId != null
+
+/** Lo que dice el «⋯» de una cuota pagada: no se desmarca, se anula el movimiento (vuelta 51). */
+const val NOTA_DE_LA_CUOTA_PAGADA: String =
+    "La pagó un movimiento que bajó la deuda. Para deshacerla, anula ese movimiento: se van sus dos patas."
+
+/**
+ * **La frase de arriba del «⋯» de una fila pagada**: de dónde salió el «Pagado» en lo que Movi emparejó
+ * solo y en el sello viejo sin movimiento ([evidencia]); en lo que prueba el pago de una deuda, cómo
+ * deshacerla ([NOTA_DE_LA_CUOTA_PAGADA]); en lo demás, nada. Pura.
+ */
+fun notaDelMenuDeLaFilaPagada(pago: PagoDelPeriodo, evidencia: String?): String? = when {
+    esPagoDeDeudaProbado(pago) -> NOTA_DE_LA_CUOTA_PAGADA
+    pago.automatica || pago.eventId == null -> evidencia
+    else -> null
+}
+
 /** Lo que puede ofrecer una fila pagada (vuelta 45). */
 enum class AccionDeLaFilaPagada { NO_FUE_ESTE, VER_MOVIMIENTO, QUITAR_LA_MARCA }
 
@@ -653,11 +677,16 @@ fun accionesDeLaFilaPagada(pago: PagoDelPeriodo): List<AccionDeLaFilaPagada> = w
  * **Lo que va en el «⋯» de una factura pagada** (vuelta 48). La fila pagada es compacta —ícono, nombre,
  * «Pagado ✓ · $1.800.000 · 27 oct»— y **tocarla abre el movimiento**, así que «Ver movimiento» deja de
  * ser un botón. Lo demás se guarda en el menú: «Quitar la marca» (un sello del dueño, con movimiento o
- * el viejo sin él) y «No fue este» (solo lo que Movi emparejó solo). Lo que prueba el pago de una deuda
- * no ofrece nada: ahí lo que revierte es borrar el pago.
+ * el viejo sin él) y «No fue este» (solo lo que Movi emparejó solo).
+ *
+ * **Vuelta 51 · la cuota de un crédito también lleva su «⋯».** Lo que prueba el pago de una deuda no
+ * se desmarca desde la fila: sus dos patas se deshacen anulando el movimiento. Antes no tenía menú y
+ * era la única pagada sin él; ahora ofrece «Ver movimiento» y dice cómo deshacerla
+ * ([NOTA_DE_LA_CUOTA_PAGADA], ver [notaDelMenuDeLaFilaPagada]).
  */
 fun accionesDelMenuDeLaFilaPagada(pago: PagoDelPeriodo): List<AccionDeLaFilaPagada> = when (pago.estado) {
-    EstadoDeLaFila.LISTO -> accionesDeLaFilaPagada(pago) - AccionDeLaFilaPagada.VER_MOVIMIENTO
+    EstadoDeLaFila.LISTO -> if (esPagoDeDeudaProbado(pago)) listOf(AccionDeLaFilaPagada.VER_MOVIMIENTO)
+    else accionesDeLaFilaPagada(pago) - AccionDeLaFilaPagada.VER_MOVIMIENTO
     EstadoDeLaFila.MARCADA_A_MANO -> listOf(AccionDeLaFilaPagada.QUITAR_LA_MARCA)
     else -> emptyList()
 }
@@ -672,8 +701,31 @@ fun accionesDelMenuDeLaFilaPagada(pago: PagoDelPeriodo): List<AccionDeLaFilaPaga
  * Si todas quedaron descartadas, la fila cae al estado «sin movimiento» y ofrece anotarlo. Es lo
  * correcto: el dueño acaba de decir que ninguno de los que Movi propone es este.
  */
-internal fun propuestaDeLaFila(pago: PagoDelPeriodo, descartadas: Set<String>): FinancialEvent? =
-    pago.candidatos.firstOrNull { claveDescartada(pago.ruleId, it.id) !in descartadas }
+internal fun propuestaDeLaFila(pago: PagoDelPeriodo, descartadas: Set<String>): FinancialEvent? {
+    val vivos = pago.candidatos.filter { claveDescartada(pago.ruleId, it.id) !in descartadas }
+    // Vuelta 51: primero uno que se parezca al monto; uno muy distinto solo si no queda otro, y entonces
+    // la fila no lo propone de principal (ver [esPropuestaLejana]).
+    return vivos.firstOrNull { !pago.candidatoMuyDistinto(it) } ?: vivos.firstOrNull()
+}
+
+/**
+ * **¿La propuesta de la fila está muy lejos del monto?** (vuelta 51; [candidatoMuyDistinto] en `:core`,
+ * más del 50 %). Entonces la fila no pregunta «¿Ya pagaste…?» de principal: «Anotar pago» queda como
+ * acción y el candidato como enlace, «¿Es el de $260.000?». Nunca se tilda solo.
+ */
+internal fun esPropuestaLejana(pago: PagoDelPeriodo, propuesta: FinancialEvent?): Boolean =
+    propuesta != null && pago.candidatoMuyDistinto(propuesta)
+
+/**
+ * «¿Es el de $260.000?»: el enlace de una propuesta lejana (vuelta 51). Corto a propósito: «Hay un
+ * movimiento de $260.000 · ¿Es este?» se cortaba a 390 dp en «… $260.000 ·», justo antes de la
+ * pregunta (lo mide `ElEnlaceDelCandidatoCabeTest`, a 360 dp con la letra ×1,12).
+ */
+fun enlaceDeLaPropuestaLejana(propuesta: FinancialEvent): String =
+    "¿Es el de ${formatMoney(propuesta.amount, propuesta.currency)}?"
+
+/** El tag del enlace de una propuesta lejana. */
+const val TAG_PROPUESTA_LEJANA: String = "checklist:propuesta-lejana"
 
 /** Qué dice el toque sobre una fila: una cuota o una tarjeta se gestionan en Créditos. */
 internal fun etiquetaDeAbrir(ruleId: String): String =
@@ -717,6 +769,11 @@ private fun LoQueOfreceLaFila(
 ) {
     if (!hayQueOfrecer(pago)) return
     if (!conBotonDeAnotar && pago.estado == EstadoDeLaFila.AUN_NO_VENCE) return
+    // Vuelta 51: el candidato que se aleja más de la mitad del monto va de enlace, no de pregunta.
+    if (pago.estado == EstadoDeLaFila.CON_DUDAS && propuesta != null && esPropuestaLejana(pago, propuesta)) {
+        PropuestaLejana(pago, propuesta, enVuelo, acciones, conBotonDeAnotar)
+        return
+    }
     if (!conBotonDeAnotar && (pago.estado == EstadoDeLaFila.SIN_MOVIMIENTO || (pago.estado == EstadoDeLaFila.CON_DUDAS && propuesta == null))) {
         // Movi buscó y no encontró: se dice (el botón ya está a la derecha de la fila).
         Text(
@@ -795,6 +852,52 @@ private fun LoQueOfreceLaFila(
                 ),
                 enVuelo = enVuelo,
             )
+        }
+    }
+}
+
+/**
+ * **La propuesta lejana** (vuelta 51): «Anotar pago» sigue siendo la acción —a la derecha de la fila, o
+ * acá si la fila no lo tiene ([conBotonDeAnotar])— y el candidato queda como enlace, «¿Es el de
+ * $260.000?». Tocarlo abre la pregunta de siempre («Sí, fue este» / «No fue este»): el
+ * dueño decide; nada se tilda solo.
+ */
+@Composable
+internal fun PropuestaLejana(
+    pago: PagoDelPeriodo,
+    propuesta: FinancialEvent,
+    enVuelo: Boolean,
+    acciones: AccionesDelChecklist,
+    conBotonDeAnotar: Boolean,
+) {
+    var abierta by rememberSaveable(pago.ruleId, propuesta.id) { mutableStateOf(false) }
+    Column(modifier = Modifier.fillMaxWidth()) {
+        if (conBotonDeAnotar) {
+            AccionesDeLaFila(
+                acciones = listOf(
+                    AccionDeOcurrencia(etiquetaDeAnotar(pago.esIngreso), primary = true) { acciones.onAnotarMovimiento(pago) },
+                ),
+                enVuelo = enVuelo,
+            )
+        }
+        Boton(
+            enlaceDeLaPropuestaLejana(propuesta),
+            onClick = { abierta = !abierta },
+            variante = VarianteDeBoton.Fantasma,
+            tamano = TamanoDeBoton.S,
+            habilitado = !enVuelo,
+            modifier = Modifier.testTag(TAG_PROPUESTA_LEJANA),
+        )
+        if (abierta) {
+            Superficie(modifier = Modifier.fillMaxWidth(), nivel = NivelDeSuperficie.Capa2) {
+                PropuestaDeMovimiento(
+                    propuesta = propuesta,
+                    aviso = avisoDeMontoDistinto(pago.monto, pago.montoEsSaldo, propuesta),
+                    enVuelo = enVuelo,
+                    onConfirmar = { acciones.onConfirmar(pago, propuesta.id) },
+                    onDescartar = { acciones.onNoFueEste(pago, propuesta.id) },
+                )
+            }
         }
     }
 }

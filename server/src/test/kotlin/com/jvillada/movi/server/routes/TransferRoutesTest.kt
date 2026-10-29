@@ -24,6 +24,9 @@ import com.jvillada.movi.server.plugins.configureSerialization
 import com.jvillada.movi.server.time.epochMillisToAppDate
 import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY
 import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY_NOT_MANUAL
+import com.jvillada.movi.shared.model.CUOTA_CATEGORY
+import com.jvillada.movi.shared.model.CUOTA_CATEGORY_NOT_MANUAL
+import com.jvillada.movi.shared.model.AVANCE_DE_TARJETA_CATEGORY
 import com.jvillada.movi.shared.model.ORPHANED_LEG_CATEGORY
 import com.jvillada.movi.shared.model.ORPHANED_LEG_NOT_MANUAL
 import com.jvillada.movi.shared.model.ORPHANED_LEG_SUFFIX
@@ -1107,6 +1110,94 @@ class TransferRoutesTest {
             setBody("""{"category":"DESEMBOLSO DE CRÉDITO"}""")
         }
         assertEquals(HttpStatusCode.UnprocessableEntity, enMinuscula.status)
+    }
+
+    /**
+     * Vuelta 51: **«Cuota de crédito» no se elige a mano.** La escribe el flujo de dos patas (Agregar →
+     * Cuota); suelta, un gasto que dice ser la cuota no baja la deuda. Rechazo en las tres puertas: el alta
+     * a mano, el cambio de categoría de un movimiento y el lote. Un aviso del banco confirmado (`SMS`) sí
+     * entra con ella, como siempre: es lo que leyó el parser.
+     */
+    @Test
+    fun `la cuota de credito no se elige a mano en ninguna puerta`() = testApplication {
+        wireApp()
+        val before = eventCount()
+        val alta = client.post("/api/events") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody(
+                """{"id":"ev-cuota-mano","accountId":"$ahorrosId","type":"EXPENSE","amount":4215223,""" +
+                    """"category":"$CUOTA_CATEGORY","description":"cuota a mano","source":"MANUAL",""" +
+                    """"timestamp":${System.currentTimeMillis()}}""",
+            )
+        }
+        assertEquals(HttpStatusCode.UnprocessableEntity, alta.status)
+        assertEquals(CUOTA_CATEGORY_NOT_MANUAL, alta.bodyAsText())
+        assertEquals(before, eventCount())
+
+        val enMinuscula = client.post("/api/events") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody(
+                """{"id":"ev-cuota-mano-2","accountId":"$ahorrosId","type":"EXPENSE","amount":4215223,""" +
+                    """"category":"cuota de credito","description":"cuota a mano",""" +
+                    """"timestamp":${System.currentTimeMillis()}}""",
+            )
+        }
+        assertEquals(HttpStatusCode.UnprocessableEntity, enMinuscula.status)
+        assertEquals(before, eventCount())
+
+        val avance = client.post("/api/events") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody(
+                """{"id":"ev-avance-mano","accountId":"$ahorrosId","type":"INCOME","amount":100000,""" +
+                    """"category":"$AVANCE_DE_TARJETA_CATEGORY","description":"avance a mano",""" +
+                    """"timestamp":${System.currentTimeMillis()}}""",
+            )
+        }
+        assertEquals(HttpStatusCode.UnprocessableEntity, avance.status)
+        assertEquals(before, eventCount())
+
+        val porCategoria = client.put("/api/events/ev-apertura-ahorros/category") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody("""{"category":"$CUOTA_CATEGORY"}""")
+        }
+        assertEquals(HttpStatusCode.UnprocessableEntity, porCategoria.status)
+        assertEquals(CUOTA_CATEGORY_NOT_MANUAL, porCategoria.bodyAsText())
+
+        val enLote = client.put("/api/events/category-en-lote") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody("""{"ids":["ev-apertura-ahorros"],"category":"$CUOTA_CATEGORY"}""")
+        }
+        assertEquals(HttpStatusCode.UnprocessableEntity, enLote.status)
+
+        // El aviso del banco que el parser leyó como cuota sí entra: no lo eligió nadie a mano.
+        val delAviso = client.post("/api/events") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody(
+                """{"id":"ev-cuota-sms","accountId":"$ahorrosId","type":"EXPENSE","amount":4215223,""" +
+                    """"category":"$CUOTA_CATEGORY","description":"PSE Banco de Occidente","source":"SMS",""" +
+                    """"timestamp":${System.currentTimeMillis()}}""",
+            )
+        }
+        assertTrue(delAviso.status.value in 200..299, "un aviso confirmado con la cuota entra: ${delAviso.status}")
+        assertEquals(before + 1, eventCount())
+
+        // Y el reenvío del teléfono de un movimiento que el server ya tiene, tampoco rebota.
+        val reenvio = client.post("/api/events") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            contentType(ContentType.Application.Json)
+            setBody(
+                """{"id":"ev-cuota-sms","accountId":"$ahorrosId","type":"EXPENSE","amount":4215223,""" +
+                    """"category":"$CUOTA_CATEGORY","description":"PSE Banco de Occidente · nota","source":"MANUAL",""" +
+                    """"timestamp":${System.currentTimeMillis()}}""",
+            )
+        }
+        assertTrue(reenvio.status.value in 200..299, "el reenvío de uno que ya existe pasa: ${reenvio.status}")
     }
 
     /** Anular un desembolso anula las dos patas: lo que había sumado en «Ingresos» se va con él. */

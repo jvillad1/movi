@@ -45,12 +45,12 @@ import com.jvillada.movi.shared.model.saldoDeTuPlata
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.DashboardSummary
 import com.jvillada.movi.shared.model.SMS_STATE_PENDING
-import com.jvillada.movi.shared.model.cuantosPagosPorRevisar
 import com.jvillada.movi.shared.model.MontoDelAviso
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.esUnComprobante
 import com.jvillada.movi.shared.model.sumaDeLoPorConfirmar
-import com.jvillada.movi.shared.model.unoPorPago
+import com.jvillada.movi.shared.model.pagosRecientesPorConfirmar
+import com.jvillada.movi.shared.model.cuantosPagosAntiguos
 import kotlin.math.roundToLong
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.TransactionType
@@ -214,10 +214,12 @@ fun Route.dashboardRoutes() {
                 // por Google Wallet es UNO por revisar — la misma cuenta que la bandeja y que el
                 // renglón de Movimientos (`cuantosPagosPorRevisar`, en :core). Agrupar lee el texto,
                 // así que solo se pide la bandeja entera cuando hay algo pendiente.
-                pendingSms = bandejaPendiente?.let(::cuantosPagosPorRevisar) ?: 0,
+                // Vuelta 51: solo los de los últimos 30 días; los antiguos van aparte (`avisosAntiguos`).
+                pendingSms = bandejaPendiente?.let { pagosRecientesPorConfirmar(it, ahora).size } ?: 0,
+                avisosAntiguos = bandejaPendiente?.let { cuantosPagosAntiguos(it, ahora) } ?: 0,
                 // Vuelta 44: «Por confirmar $103.600» — cuánto dicen esos mismos pagos, o nada si
-                // alguno no se lee entero (ver `sumaDeLoPorConfirmar` en :core).
-                porConfirmarSuman = bandejaPendiente?.let { porConfirmarSumanDe(uid, it) },
+                // alguno no se lee entero (ver `sumaDeLoPorConfirmar` en :core). Vuelta 51: sin los antiguos.
+                porConfirmarSuman = bandejaPendiente?.let { porConfirmarSumanDe(uid, it, ahora) },
                 // Vuelta de diseño 22: los movimientos que esperan en «Por confirmar», contados como
                 // los cuenta Movimientos (un traspaso es un renglón), para que Hoy diga su número.
                 movimientosPorConfirmar = movimientosPorConfirmarDe(uid, voidedIds),
@@ -769,9 +771,10 @@ internal fun Transaction.movimientosPorConfirmarDe(uid: String, voidedIds: Set<S
  * comprobante. Sin la memoria ni los terceros del dueño: eso cambia la categoría, nunca el monto. Si
  * alguno no se lee, o no es en pesos, `null` ([sumaDeLoPorConfirmar]): la franja dice solo el conteo.
  */
-internal fun Transaction.porConfirmarSumanDe(uid: String, bandeja: List<SmsMessage>): Long? =
+internal fun Transaction.porConfirmarSumanDe(uid: String, bandeja: List<SmsMessage>, ahora: Long): Long? =
     sumaDeLoPorConfirmar(
-        unoPorPago(bandeja).map { cabeza ->
+        // Vuelta 51: los avisos de más de 30 días no inflan la suma (ver `esPagoAntiguo` en :core).
+        pagosRecientesPorConfirmar(bandeja, ahora).map { cabeza ->
             val miembros = cabeza.grupoId?.let { grupo -> bandeja.filter { it.grupoId == grupo } }?.ifEmpty { null } ?: listOf(cabeza)
             val propuesta = if (miembros.size > 1) propuestaDelGrupo(miembros) else cabeza
             val leido = (if (esUnComprobante(propuesta)) parsedDeUnComprobante(uid, propuesta.id, propuesta.text) else null)

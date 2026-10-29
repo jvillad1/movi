@@ -55,7 +55,7 @@ class PorRevisarRecuerdaLoUltimoTest {
         source = EventSource.SMS, reconciliationStatus = ReconciliationStatus.UNCONFIRMED, countsAsCashFlow = true,
     )
     private val sms = SmsMessage(
-        id = "s1", time = "2026-09-03 07:15", bank = "Bancolombia",
+        id = "s1", time = "${com.jvillada.movi.ui.fecha.hoyEnAppZone().let { kotlinx.datetime.LocalDate.fromEpochDays(it.toEpochDays() - 10) }} 07:15", bank = "Bancolombia",
         text = "Compra aprobada \$28.500 en Uber BV.", state = SMS_STATE_PENDING, det = "Uber",
     )
 

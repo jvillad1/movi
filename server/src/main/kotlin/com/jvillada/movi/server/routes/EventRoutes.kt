@@ -11,6 +11,7 @@ import org.jetbrains.exposed.sql.update
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY_NOT_MANUAL
 import com.jvillada.movi.shared.model.esCategoriaDelDesembolso
+import com.jvillada.movi.shared.model.motivoDeLaCategoriaDeDosPatas
 import com.jvillada.movi.server.balance.accountTypesFor
 import com.jvillada.movi.server.balance.toAccount
 import com.jvillada.movi.server.balance.dismissedCardPaymentEventIds
@@ -110,6 +111,10 @@ internal fun categoriaQueMoviEscribeSola(category: String): String? = when {
     category == OPENING_CATEGORY -> OPENING_CATEGORY_RESERVED
     // No es reservada (cuenta como ingreso), pero una pata suelta inflaría «Entró» sin deuda detrás.
     esCategoriaDelDesembolso(category) -> DESEMBOLSO_CATEGORY_NOT_MANUAL
+    // Vuelta 51: la cuota de un crédito y el avance de una tarjeta tampoco se ponen a mano. Las escribe
+    // el flujo de dos patas; un gasto suelto que dice ser la cuota no baja la deuda (ver
+    // `esCategoriaQueNoSeElige` en :core, la lista que tampoco ofrece ningún selector).
+    motivoDeLaCategoriaDeDosPatas(category) != null -> motivoDeLaCategoriaDeDosPatas(category)
     // Y todas las demás, **sin distinguir mayúsculas**: comparar exacto dejaba pasar «traspaso» en
     // minúscula, y con eso un gasto real de $200.000 salía de «Gastos del mes» sin decir nada.
     category != CARD_PAYMENT_CATEGORY && isReservedCategory(category) ->
@@ -238,6 +243,15 @@ fun Route.eventRoutes() {
             // escrita a mano se sigue rechazando.
             val yaExiste = body.id.isNotBlank() && dbQuery {
                 Events.selectAll().where { (Events.id eq body.id) and (Events.userId eq uid) }.count() > 0
+            }
+            // Vuelta 51: un alta NUEVA a mano en «Cuota de crédito» o «Avance de tarjeta» tampoco: el
+            // selector ya no las ofrece, y suelta la cuota no baja ninguna deuda. Lo que el server ya
+            // tiene (el reenvío del teléfono de un movimiento viejo) sigue pasando, como el pago de
+            // tarjeta de abajo.
+            if (body.source == EventSource.MANUAL && !yaExiste) {
+                motivoDeLaCategoriaDeDosPatas(body.category)?.let { motivo ->
+                    return@post call.respond(HttpStatusCode.UnprocessableEntity, motivo)
+                }
             }
             if (body.source == EventSource.MANUAL &&
                 isReservedCategory(body.category) &&

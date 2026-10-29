@@ -111,6 +111,7 @@ import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UsoDeCuenta
 import com.jvillada.movi.shared.model.cuentasPara
 import com.jvillada.movi.shared.model.isReservedCategory
+import com.jvillada.movi.shared.model.esCategoriaQueNoSeElige
 import com.jvillada.movi.shared.model.newId
 import com.jvillada.movi.shared.model.normalizarParaBuscar
 import com.jvillada.movi.theme.*
@@ -351,7 +352,7 @@ fun QuickAddScreen(
             // del que depende que el emparejamiento automático reconozca después este movimiento
             // (ver `esConcluyente` en el server). Una reservada no se acepta ni de preset: la hoja
             // no deja guardarla, así que ponerla sería nacer con el botón bloqueado.
-            presetCategoria?.trim()?.takeIf { it.isNotEmpty() && !isReservedCategory(it) }
+            presetCategoria?.trim()?.takeIf { it.isNotEmpty() && !categoriaQueNoSeAnotaAca(it, presetPago != null) }
                 ?: categoriaPorDefectoPara(
                     if (presetEsIngreso) TransactionType.INCOME else TransactionType.EXPENSE,
                     UsedCategoriesCache.used,
@@ -372,7 +373,7 @@ fun QuickAddScreen(
      * reemplaza la categoría por su cuenta — ver ese `LaunchedEffect`.
      */
     var categoriaElegidaAMano by remember {
-        mutableStateOf(presetCategoria?.trim()?.let { it.isNotEmpty() && !isReservedCategory(it) } == true)
+        mutableStateOf(presetCategoria?.trim()?.let { it.isNotEmpty() && !categoriaQueNoSeAnotaAca(it, presetPago != null) } == true)
     }
 
     /**
@@ -965,7 +966,9 @@ fun QuickAddScreen(
     // de «Gastos del mes» (isCashFlow lo excluye por nombre) sin que nada lo dijera. Plata que
     // salió de verdad, invisible. El server rechaza lo mismo (ver `POST /api/events`); acá se
     // corta antes para poder explicarlo en vez de devolver un error.
-    val categoriaReservada = isReservedCategory(category)
+    // Vuelta 51: también las de dos patas («Cuota de crédito», «Desembolso de crédito»), salvo la de la
+    // regla en modo pago (ver [categoriaQueNoSeAnotaAca]).
+    val categoriaReservada = categoriaQueNoSeAnotaAca(category, presetPago != null)
     // Ola 2 #2: canSave no miraba la categoría — se podía guardar con la caja vacía.
     val canSave = parsedAmount > 0 && category.isNotBlank() && !categoriaReservada &&
         selectedAccountId != null && !saving
@@ -2588,6 +2591,17 @@ internal fun NoteEditor(initial: String, onSave: (String) -> Unit, onVolver: () 
  *
  * Pura, para poder comparar su orden con el de Reconciliar sin pintar nada.
  */
+/**
+ * **¿Agregar no deja guardar con [categoria]?** Vuelta 51: ninguna de las que solo escribe Movi
+ * ([esCategoriaQueNoSeElige]: las reservadas, «Cuota de crédito», «Desembolso de crédito»…) — el
+ * selector ya no las ofrece y `POST /api/events` las rechaza a mano. La excepción es **el modo pago**
+ * ([enModoPago]): ahí la categoría es la de la regla que se salda (un recurrente con «Cuota de
+ * crédito» que el dueño paga por su cuenta), no una elegida, y se guarda por la ruta de la ocurrencia;
+ * en ese modo solo se cortan las reservadas, como siempre.
+ */
+internal fun categoriaQueNoSeAnotaAca(categoria: String, enModoPago: Boolean): Boolean =
+    if (enModoPago) isReservedCategory(categoria) else esCategoriaQueNoSeElige(categoria)
+
 internal fun categoriasParaLasPastillasDeAgregar(
     categoriaActual: String,
     tipo: TransactionType,

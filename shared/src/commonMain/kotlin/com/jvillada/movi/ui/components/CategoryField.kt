@@ -34,7 +34,7 @@ import com.jvillada.movi.shared.model.CategoryPref
 import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.effectiveCategoryTypes
-import com.jvillada.movi.shared.model.isReservedCategory
+import com.jvillada.movi.shared.model.esCategoriaQueNoSeElige
 import com.jvillada.movi.shared.model.normalizarParaBuscar
 import com.jvillada.movi.ui.LocalNavigate
 import com.jvillada.movi.ui.Screen
@@ -173,7 +173,9 @@ private fun categoriasQueCoinciden(
         // (La hoja de CAMBIAR la categoría de un movimiento existente sí la sigue listando, a
         // propósito: ahí confirmar «esto fue el pago de mi tarjeta» es justo lo que hay que poder
         // hacer.)
-        .filterNot { isReservedCategory(it) }
+        // Vuelta 51: tampoco las que pide el flujo de dos patas («Cuota de crédito», «Desembolso de
+        // crédito»): una sola lista en `:core`, [esCategoriaQueNoSeElige].
+        .filterNot { esCategoriaQueNoSeElige(it) }
         .filter { seOfrece(it, emptySet()) }
     val q = normalizarParaBuscar(query)
     val predefinedMatches = predefined.filter { normalizarParaBuscar(it).contains(q) }
@@ -182,7 +184,7 @@ private fun categoriasQueCoinciden(
             val clean = name.trim()
             if (clean.isEmpty()) null else clean to types
         }
-        .filterNot { (name, _) -> isReservedCategory(name) }
+        .filterNot { (name, _) -> esCategoriaQueNoSeElige(name) }
         .filter { (name, types) -> seOfrece(name, types) }
         .map { (name, _) -> name }
         .distinct()
@@ -231,7 +233,7 @@ fun categoriaSirveParaTipo(
 ): Boolean {
     val limpio = name.trim()
     if (limpio.isEmpty()) return false
-    if (isReservedCategory(limpio)) return false
+    if (esCategoriaQueNoSeElige(limpio)) return false
     val pref = prefs.entries.firstOrNull { normalizarParaBuscar(it.key.trim()) == normalizarParaBuscar(limpio) }?.value
     if (pref?.hidden == true) return false
     val esDelCatalogo = PREDEFINED_CATEGORIES.any { it.name.equals(limpio, ignoreCase = true) }
@@ -267,7 +269,7 @@ fun categoriasFrecuentes(
     return usos.entries
         .filter { (nombre, cantidad) ->
             cantidad > 0 &&
-                !isReservedCategory(nombre) &&
+                !esCategoriaQueNoSeElige(nombre) &&
                 seOfreceParaTipo(nombre, tipo, usadas[nombre].orEmpty(), prefs)
         }
         .sortedWith(

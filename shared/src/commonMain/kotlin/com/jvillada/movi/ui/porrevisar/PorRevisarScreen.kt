@@ -26,6 +26,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.ui.components.ds.BotonDeIcono
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import com.jvillada.movi.ui.components.ConfirmarEnHoja
 import com.jvillada.movi.ui.components.ds.Chevron
 import com.jvillada.movi.ui.components.ds.EsqueletoDeFila
 import com.jvillada.movi.ui.components.ds.Fila
@@ -103,6 +107,7 @@ import com.jvillada.movi.ui.components.SelectorDeCategoria
 import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
 import com.jvillada.movi.ui.quickadd.categoriasParaLasPastillasDeAgregar
 import com.jvillada.movi.ui.sms.EligeLaCategoria
+import com.jvillada.movi.ui.sms.categoriasDeLaTarjeta
 import com.jvillada.movi.shared.model.SmsMessage
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -288,6 +293,10 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
     var categoriasElegidasAca by remember { mutableStateOf(emptyMap<String, String>()) }
     // La cabeza del aviso cuyo «Todas ›» abrió el selector completo.
     var todasLasCategoriasPara by remember { mutableStateOf<String?>(null) }
+    // Vuelta 51 · «Más antiguos»: plegada, y la pregunta de «Ignorar los N».
+    var antiguosAbiertos by rememberSaveable { mutableStateOf(false) }
+    var pidiendoIgnorarLosAntiguos by remember { mutableStateOf(false) }
+    var ignorandoLosAntiguos by remember { mutableStateOf(false) }
     val entendimientos: Map<String, LoQueMoviEntendio> = remember(mensajes, propuestas, cuentas, fallaronAca, categoriasElegidasAca) {
         val todos = mensajes ?: return@remember emptyMap()
         val leidas = propuestas ?: return@remember emptyMap()
@@ -313,24 +322,27 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
     fun eligeLaCategoriaDe(cabeza: SmsMessage): EligeLaCategoria? {
         val entendimiento = entendimientos[cabeza.id] ?: return null
         val elegida = categoriasElegidasAca[cabeza.id]
-        if (!entendimiento.faltaSoloLaCategoria && elegida == null) return null
-        val tipo = propuestaDelPago(propuestas, cabeza)?.leido?.type ?: com.jvillada.movi.shared.model.TransactionType.EXPENSE
-        val frecuentes = categoriasParaLasPastillasDeAgregar(
-            categoriaActual = elegida.orEmpty(),
-            tipo = tipo,
-            usadas = UsedCategoriesCache.used,
-            prefs = UsedCategoriesCache.prefs,
-            usos = UsedCategoriesCache.usosRecientes,
-        ).ifEmpty {
-            propuestas?.categoriasDelDueno.orEmpty()
-                .filterNot { com.jvillada.movi.shared.model.categoriaQueNoDiceNada(it) }
-                .take(CATEGORIAS_EN_LA_TARJETA)
-        }
+        // Vuelta 51: también un aviso entendido entero —«Cambiar» abre estas pastillas en la tarjeta—.
+        if (!entendimiento.faltaSoloLaCategoria && elegida == null && entendimiento.anotacion == null) return null
+        val leido = propuestaDelPago(propuestas, cabeza)?.leido
+        val tipo = leido?.type ?: com.jvillada.movi.shared.model.TransactionType.EXPENSE
+        val actual = entendimiento.anotacion?.categoria
+        val frecuentes = categoriasDeLaTarjeta(
+            frecuentes = categoriasParaLasPastillasDeAgregar(
+                categoriaActual = elegida ?: actual.orEmpty(),
+                tipo = tipo,
+                usadas = UsedCategoriesCache.used,
+                prefs = UsedCategoriesCache.prefs,
+                usos = UsedCategoriesCache.usosRecientes,
+            ),
+            delDueno = propuestas?.categoriasDelDueno.orEmpty(),
+        )
         return EligeLaCategoria(
             categorias = frecuentes,
             elegida = elegida,
             onElegir = { categoriasElegidasAca = categoriasElegidasAca + (cabeza.id to it) },
             onTodas = { todasLasCategoriasPara = cabeza.id },
+            actual = actual,
         )
     }
     /** Vuelta de diseño 23: la cuenta que propone Movi es de otro banco que el del aviso. */
@@ -489,101 +501,140 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
         }
     }
 
+    /** Vuelta 51: la tarjeta de un pago pendiente (suelto o avisado varias veces), reciente o antiguo. */
+    fun LazyListScope.tarjetaDelPago(ll: LlavesDeLaLista, mensajes: List<SmsMessage>, sms: SmsMessage) {
+        val grupoId = sms.grupoId
+        if (grupoId != null) {
+            fila(ll, "pago-$grupoId") {
+                val avisos = avisosDelPago(sms, mensajes)
+                val ids = avisos.map { it.id }
+                val pendientesDelPago = avisos.filter { it.state == SMS_STATE_PENDING }.map { it.id }
+                TarjetaDelMismoPago(
+                    modifier = Modifier.padding(bottom = Medida.dentroDeSeccion),
+                    avisos = avisos,
+                    trabajando = pagoEnCurso == grupoId || confirmarLosAvisos.confirmando,
+                    onRevisar = { revisarEnReconciliar(sms.id, entendidos[sms.id] != null) },
+                    onIgnorar = {
+                        sobreElPago(grupoId, { Repositories.wallets.ignorarElMismoPago(grupoId, ids) }) {
+                            avisosResueltos = avisosResueltos + pendientesDelPago.associateWith { SMS_STATE_IGNORED }
+                        }
+                    },
+                    onNoSonElMismoPago = {
+                        sobreElPago(grupoId, { Repositories.wallets.noSonElMismoPago(grupoId, ids) }) {
+                            avisosSeparados = avisosSeparados + ids
+                        }
+                    },
+                    onCerrar = {
+                        sobreElPago(grupoId, { Repositories.wallets.confirmarElMismoPago(grupoId, ConfirmarElMismoPago(ids)) }) {
+                            avisosResueltos = avisosResueltos + pendientesDelPago.associateWith { SMS_STATE_CONFIRMED }
+                        }
+                    },
+                    entendido = entendidos[sms.id]?.linea,
+                    onConfirmar = entendidos[sms.id]?.let { anotacion -> { confirmarDesdeLaFila(anotacion) } },
+                    leido = propuestaDelPago(propuestas, sms)?.leido,
+                    sinLeer = propuestaDelPago(propuestas, sms)?.sinLeer,
+                    advertencia = advertencias[sms.id],
+                    loEntendido = lineas[sms.id],
+                )
+            }
+            return
+        }
+        fila(ll, "sms-${sms.id}") {
+            TarjetaDeMensajeDelBanco(
+                sms,
+                onRevisar = { revisarEnReconciliar(sms.id, entendidos[sms.id] != null) },
+                entendido = entendidos[sms.id]?.linea,
+                onConfirmar = entendidos[sms.id]?.let { anotacion -> { confirmarDesdeLaFila(anotacion) } },
+                onIgnorar = {
+                    sobreElPago(sms.id, { Repositories.wallets.ignoreSms(sms.id) }) {
+                        avisosResueltos = avisosResueltos + (sms.id to SMS_STATE_IGNORED)
+                    }
+                },
+                trabajando = pagoEnCurso == sms.id || confirmarLosAvisos.confirmando,
+                leido = propuestaDelPago(propuestas, sms)?.leido,
+                sinLeer = propuestaDelPago(propuestas, sms)?.sinLeer,
+                // En la bandeja todo está pendiente: la píldora no diría nada.
+                conPildoraDePendiente = false,
+                advertencia = advertencias[sms.id],
+                loEntendido = lineas[sms.id],
+                eligeLaCategoria = eligeLaCategoriaDe(sms),
+                // Vuelta 51: lo que no es la categoría (cuenta, monto, comercio) sigue en Revisar aviso.
+                onMasCambios = { revisarEnReconciliar(sms.id, false) },
+                // El otro aviso puede estar ya confirmado: se busca en la lista
+                // entera, no solo entre los pendientes.
+                parecidoA = sms.parecidoA?.let { id -> mensajes.firstOrNull { it.id == id } },
+                pie = aQuienFue[sms.id]
+                    ?.takeIf { destinosParaGuardar.ofrece(it, cuentas) }
+                    ?.let { identificador ->
+                        {
+                            FilaGuardarElDestino(
+                                identificador = identificador,
+                                // La tarjeta no tiene el nombre que leyó Movi: se
+                                // prellena con el que trae el texto del banco («… a
+                                // MARTA RUIZ», «Te llegó dinero de …»). Hasta el
+                                // 4-oct quedaba vacío aunque el banco lo dijera.
+                                nombreSugerido = nombreParaLaFila(identificador, nombreDelBanco = null),
+                                textoDelAviso = sms.text,
+                                destinos = destinosParaGuardar.guardados.orEmpty(),
+                                // Guardada, la fila se va sola; al tocar «Revisar»
+                                // el server ya propone «Transferencia a <nombre>».
+                                // Y la propuesta se relee: con el nombre, el aviso puede quedar entendido.
+                                onGuardado = { guardado -> destinosParaGuardar.alGuardar(guardado); recarga++ },
+                            )
+                        }
+                    },
+            )
+        }
+    }
+
     fun LazyListScope.losMensajes(ll: LlavesDeLaLista) {
         // ── Mensajes del banco ────────────────────────────────────────────────
         if (mensajes == null) {
             fila(ll, "no-se-leyeron-los-mensajes") { SeccionQueNoSeLeyo("No pudimos cargar tus mensajes del banco") { recarga++ } }
         } else {
-            // Uno por pago: los avisos del mismo pago van en una sola tarjeta.
-            val pendientes = pagosPorRevisar(mensajes)
-            if (pendientes.isNotEmpty()) {
-                fila(ll, "titulo-de-los-mensajes") { Seccion(titulo = "Mensajes del banco", conteo = pendientes.size) }
+            // Uno por pago: los avisos del mismo pago van en una sola tarjeta. Vuelta 51: los de más de
+            // 30 días van aparte, en «Más antiguos», plegados.
+            val ahora = Clock.System.now().toEpochMilliseconds()
+            val pendientes = pagosRecientesPorRevisar(mensajes, ahora)
+            val antiguos = pagosAntiguosPorRevisar(mensajes, ahora)
+            if (pendientes.isNotEmpty() || antiguos.isNotEmpty()) {
                 errorDeUnPago?.let { error ->
                     fila(ll, "error-de-un-pago") { Text(error, style = Movi.textos.apoyo, color = Movi.colores.sale, modifier = Modifier.padding(bottom = Medida.dentroDeSeccion)) }
                 }
-                pendientes.forEach { sms ->
-                    val grupoId = sms.grupoId
-                    if (grupoId != null) {
-                        fila(ll, "pago-$grupoId") {
-                            val avisos = avisosDelPago(sms, mensajes)
-                            val ids = avisos.map { it.id }
-                            val pendientesDelPago = avisos.filter { it.state == SMS_STATE_PENDING }.map { it.id }
-                            TarjetaDelMismoPago(
-                                modifier = Modifier.padding(bottom = Medida.dentroDeSeccion),
-                                avisos = avisos,
-                                trabajando = pagoEnCurso == grupoId || confirmarLosAvisos.confirmando,
-                                onRevisar = { revisarEnReconciliar(sms.id, entendidos[sms.id] != null) },
-                                onIgnorar = {
-                                    sobreElPago(grupoId, { Repositories.wallets.ignorarElMismoPago(grupoId, ids) }) {
-                                        avisosResueltos = avisosResueltos + pendientesDelPago.associateWith { SMS_STATE_IGNORED }
-                                    }
-                                },
-                                onNoSonElMismoPago = {
-                                    sobreElPago(grupoId, { Repositories.wallets.noSonElMismoPago(grupoId, ids) }) {
-                                        avisosSeparados = avisosSeparados + ids
-                                    }
-                                },
-                                onCerrar = {
-                                    sobreElPago(grupoId, { Repositories.wallets.confirmarElMismoPago(grupoId, ConfirmarElMismoPago(ids)) }) {
-                                        avisosResueltos = avisosResueltos + pendientesDelPago.associateWith { SMS_STATE_CONFIRMED }
-                                    }
-                                },
-                                entendido = entendidos[sms.id]?.linea,
-                                onConfirmar = entendidos[sms.id]?.let { anotacion -> { confirmarDesdeLaFila(anotacion) } },
-                                leido = propuestaDelPago(propuestas, sms)?.leido,
-                                sinLeer = propuestaDelPago(propuestas, sms)?.sinLeer,
-                                advertencia = advertencias[sms.id],
-                                loEntendido = lineas[sms.id],
-                            )
-                        }
-                        return@forEach
-                    }
-                    fila(ll, "sms-${sms.id}") {
-                        TarjetaDeMensajeDelBanco(
-                            sms,
-                            onRevisar = { revisarEnReconciliar(sms.id, entendidos[sms.id] != null) },
-                            entendido = entendidos[sms.id]?.linea,
-                            onConfirmar = entendidos[sms.id]?.let { anotacion -> { confirmarDesdeLaFila(anotacion) } },
-                            onIgnorar = {
-                                sobreElPago(sms.id, { Repositories.wallets.ignoreSms(sms.id) }) {
-                                    avisosResueltos = avisosResueltos + (sms.id to SMS_STATE_IGNORED)
-                                }
-                            },
-                            trabajando = pagoEnCurso == sms.id || confirmarLosAvisos.confirmando,
-                            leido = propuestaDelPago(propuestas, sms)?.leido,
-                            sinLeer = propuestaDelPago(propuestas, sms)?.sinLeer,
-                            // En la bandeja todo está pendiente: la píldora no diría nada.
-                            conPildoraDePendiente = false,
-                            advertencia = advertencias[sms.id],
-                            loEntendido = lineas[sms.id],
-                            eligeLaCategoria = eligeLaCategoriaDe(sms),
-                            // El otro aviso puede estar ya confirmado: se busca en la lista
-                            // entera, no solo entre los pendientes.
-                            parecidoA = sms.parecidoA?.let { id -> mensajes.firstOrNull { it.id == id } },
-                            pie = aQuienFue[sms.id]
-                                ?.takeIf { destinosParaGuardar.ofrece(it, cuentas) }
-                                ?.let { identificador ->
-                                    {
-                                        FilaGuardarElDestino(
-                                            identificador = identificador,
-                                            // La tarjeta no tiene el nombre que leyó Movi: se
-                                            // prellena con el que trae el texto del banco («… a
-                                            // MARTA RUIZ», «Te llegó dinero de …»). Hasta el
-                                            // 4-oct quedaba vacío aunque el banco lo dijera.
-                                            nombreSugerido = nombreParaLaFila(identificador, nombreDelBanco = null),
-                                            textoDelAviso = sms.text,
-                                            destinos = destinosParaGuardar.guardados.orEmpty(),
-                                            // Guardada, la fila se va sola; al tocar «Revisar»
-                                            // el server ya propone «Transferencia a <nombre>».
-                                            // Y la propuesta se relee: con el nombre, el aviso puede quedar entendido.
-                                            onGuardado = { guardado -> destinosParaGuardar.alGuardar(guardado); recarga++ },
-                                        )
-                                    }
-                                },
+            }
+            if (pendientes.isNotEmpty()) {
+                fila(ll, "titulo-de-los-mensajes") { Seccion(titulo = "Mensajes del banco", conteo = pendientes.size) }
+                pendientes.forEach { sms -> tarjetaDelPago(ll, mensajes, sms) }
+                fila(ll, "despues-de-los-mensajes") { Spacer(Modifier.height(Medida.entreSecciones - Medida.dentroDeSeccion)) }
+            }
+            if (antiguos.isNotEmpty()) {
+                fila(ll, "titulo-de-los-antiguos") {
+                    Seccion(
+                        titulo = TITULO_DE_LOS_ANTIGUOS,
+                        conteo = antiguos.size,
+                        accion = if (antiguosAbiertos) OCULTAR_LOS_ANTIGUOS else VER_LOS_ANTIGUOS,
+                        onAccion = { antiguosAbiertos = !antiguosAbiertos },
+                        modifier = Modifier.testTag(TAG_SECCION_DE_LOS_ANTIGUOS),
+                    )
+                }
+                fila(ll, "ignorar-los-antiguos") {
+                    Column(modifier = Modifier.fillMaxWidth().padding(bottom = Medida.dentroDeSeccion)) {
+                        Text(AYUDA_DE_LOS_ANTIGUOS, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                        Spacer(Modifier.height(Espacio.xs))
+                        Boton(
+                            textoDeIgnorarLosAntiguos(antiguos.size),
+                            onClick = { pidiendoIgnorarLosAntiguos = true },
+                            variante = VarianteDeBoton.Secundario,
+                            tamano = TamanoDeBoton.S,
+                            habilitado = pagoEnCurso == null && !confirmarLosAvisos.confirmando,
+                            modifier = Modifier.testTag(TAG_IGNORAR_LOS_ANTIGUOS),
                         )
                     }
                 }
-                fila(ll, "despues-de-los-mensajes") { Spacer(Modifier.height(Medida.entreSecciones - Medida.dentroDeSeccion)) }
+                if (antiguosAbiertos) {
+                    antiguos.forEach { sms -> tarjetaDelPago(ll, mensajes, sms) }
+                }
+                fila(ll, "despues-de-los-antiguos") { Spacer(Modifier.height(Medida.entreSecciones - Medida.dentroDeSeccion)) }
             }
         }
     }
@@ -760,7 +811,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                 EncabezadoDeHoja("Categoría")
                 Spacer(Modifier.height(Medida.dentroDeSeccion))
                 SelectorDeCategoria(
-                    elegida = categoriasElegidasAca[cabezaId].orEmpty(),
+                    elegida = categoriasElegidasAca[cabezaId] ?: entendidos[cabezaId]?.categoria.orEmpty(),
                     onElegir = {
                         categoriasElegidasAca = categoriasElegidasAca + (cabezaId to it)
                         todasLasCategoriasPara = null
@@ -772,6 +823,49 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                 )
                 Spacer(Modifier.height(Medida.margenDePantalla))
             }
+        }
+    }
+
+    // Vuelta 51: «Ignorar los N» de «Más antiguos», con su pregunta. Es el «Ignorar» de siempre, uno por
+    // pago: no se borra nada, y lo ignorado sigue en el historial de Captura del banco.
+    if (pidiendoIgnorarLosAntiguos) {
+        val antiguos = mensajes?.let { pagosAntiguosPorRevisar(it) }.orEmpty()
+        if (antiguos.isEmpty()) {
+            pidiendoIgnorarLosAntiguos = false
+        } else {
+            ConfirmarEnHoja(
+                pregunta = preguntaDeIgnorarLosAntiguos(antiguos.size),
+                detalle = DETALLE_DE_IGNORAR_LOS_ANTIGUOS,
+                textoConfirmar = textoDeIgnorarLosAntiguos(antiguos.size),
+                ocupado = ignorandoLosAntiguos,
+                varianteConfirmar = VarianteDeBoton.Principal,
+                onCancelar = { pidiendoIgnorarLosAntiguos = false },
+                onConfirmar = {
+                    val todos = mensajes.orEmpty()
+                    ignorandoLosAntiguos = true
+                    errorDeUnPago = null
+                    alcance.launch {
+                        val ignorados = mutableListOf<String>()
+                        var fallo: Throwable? = null
+                        for (cabeza in antiguos) {
+                            val grupo = cabeza.grupoId
+                            val avisos = if (grupo != null) avisosDelPago(cabeza, todos) else listOf(cabeza)
+                            val pendientesDelPago = avisos.filter { it.state == SMS_STATE_PENDING }.map { it.id }
+                            intentar {
+                                if (grupo != null) Repositories.wallets.ignorarElMismoPago(grupo, avisos.map { it.id })
+                                else Repositories.wallets.ignoreSms(cabeza.id)
+                            }.onSuccess { ignorados += pendientesDelPago }
+                                .onFailure { fallo = it }
+                            if (fallo != null) break
+                        }
+                        avisosResueltos = avisosResueltos + ignorados.associateWith { SMS_STATE_IGNORED }
+                        ignorandoLosAntiguos = false
+                        pidiendoIgnorarLosAntiguos = false
+                        fallo?.let { errorDeUnPago = it.toUserMessage() }
+                        recarga++
+                    }
+                },
+            )
         }
     }
 
@@ -919,5 +1013,27 @@ internal fun propuestaDelPago(
         ?: todas.firstOrNull { it.avisoId == cabeza.id }
 }
 
-/** Cuántas pastillas lleva la tarjeta que pide la categoría cuando no hay uso a mano (vuelta 46). */
-const val CATEGORIAS_EN_LA_TARJETA: Int = 8
+// ── Vuelta 51 · los avisos antiguos ────────────────────────────────────────────
+
+/** El título de la sección plegada de los avisos de más de 30 días («Más antiguos · 2»). */
+const val TITULO_DE_LOS_ANTIGUOS: String = "Más antiguos"
+
+/** La acción de la sección, plegada y abierta. */
+const val VER_LOS_ANTIGUOS: String = "Ver"
+const val OCULTAR_LOS_ANTIGUOS: String = "Ocultar"
+
+/** Lo que dice la sección debajo del título. */
+const val AYUDA_DE_LOS_ANTIGUOS: String = "Llegaron hace más de 30 días y no cuentan en «Por confirmar»."
+
+/** «Ignorar el aviso», «Ignorar los 2». */
+fun textoDeIgnorarLosAntiguos(cuantos: Int): String = if (cuantos == 1) "Ignorar el aviso" else "Ignorar los $cuantos"
+
+/** «¿Ignorar los 2 avisos antiguos?». */
+fun preguntaDeIgnorarLosAntiguos(cuantos: Int): String =
+    if (cuantos == 1) "¿Ignorar el aviso antiguo?" else "¿Ignorar los $cuantos avisos antiguos?"
+
+const val DETALLE_DE_IGNORAR_LOS_ANTIGUOS: String =
+    "No se anota nada y no se borra nada: quedan como ignorados en Captura del banco."
+
+const val TAG_SECCION_DE_LOS_ANTIGUOS: String = "por-revisar:antiguos"
+const val TAG_IGNORAR_LOS_ANTIGUOS: String = "por-revisar:ignorar-los-antiguos"

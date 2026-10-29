@@ -37,7 +37,7 @@ class PorRevisarLogicaTest {
     private fun dia(vararg eventos: FinancialEvent) =
         EventDay(date = "2026-09-09", total = 0L, items = eventos.toList())
 
-    private fun sms(id: String, estado: String, cuando: String = "2026-09-03 07:15") = SmsMessage(
+    private fun sms(id: String, estado: String, cuando: String = "${com.jvillada.movi.ui.fecha.hoyEnAppZone().let { kotlinx.datetime.LocalDate.fromEpochDays(it.toEpochDays() - 10) }} 07:15") = SmsMessage(
         id = id, time = cuando, bank = "Bancolombia", text = "Compra \$28.500", state = estado, det = "Uber",
     )
 

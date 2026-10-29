@@ -275,7 +275,8 @@ internal fun FilaDeFactura(
             accionesDelMenu = accionesDelMenu,
             // Lo que Movi emparejó solo y el sello viejo sin movimiento dicen de dónde salió el
             // «Pagado» arriba de su «⋯»: es justo lo que «No fue este» y «Quitar la marca» discuten.
-            notaDelMenu = evidencia.takeIf { pago.automatica || pago.eventId == null },
+            // Vuelta 51: la cuota de un crédito dice cómo deshacerla (`notaDelMenuDeLaFilaPagada`).
+            notaDelMenu = notaDelMenuDeLaFilaPagada(pago, evidencia),
         )
         return
     }

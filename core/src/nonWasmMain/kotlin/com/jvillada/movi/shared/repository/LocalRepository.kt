@@ -22,6 +22,7 @@ import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY_NOT_MANUAL
 import com.jvillada.movi.shared.model.esCategoriaDelDesembolso
 import com.jvillada.movi.shared.db.MoviDatabase
 import com.jvillada.movi.shared.model.isReservedCategory
+import com.jvillada.movi.shared.model.motivoDeLaCategoriaDeDosPatas
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.TipoDeDocumento
 import com.jvillada.movi.shared.model.EnlaceDeDescarga
@@ -567,6 +568,13 @@ class LocalRepository(
             event.category.trim() != OPENING_CATEGORY
         ) {
             throw ApiException(422, CATEGORY_RESERVED_NOT_MANUAL)
+        }
+        // Vuelta 51: la cuota de un crédito y el avance de una tarjeta, a mano y nuevos, tampoco (la
+        // misma guarda que `POST /api/events`). Un movimiento que el teléfono ya tiene sigue pasando.
+        if (event.source == EventSource.MANUAL &&
+            db.financialEventQueries.selectById(event.id, userId()).executeAsOneOrNull() == null
+        ) {
+            motivoDeLaCategoriaDeDosPatas(event.category)?.let { throw ApiException(422, it) }
         }
         if (event.timestamp != 0L &&
             Instant.fromEpochMilliseconds(event.timestamp).toLocalDateTime(AppTimeZone.zone).year !in 2000..2100
@@ -1200,6 +1208,8 @@ class LocalRepository(
         // toque el server, en vez de mover una guarda de plata por un texto de error.
         if (category == ORPHANED_LEG_CATEGORY) throw ApiException(422, ORPHANED_LEG_NOT_MANUAL)
         if (esCategoriaDelDesembolso(category)) throw ApiException(422, DESEMBOLSO_CATEGORY_NOT_MANUAL)
+        // Vuelta 51: la cuota y el avance, como el server (`categoriaQueMoviEscribeSola`).
+        motivoDeLaCategoriaDeDosPatas(category)?.let { throw ApiException(422, it) }
         // Ola 16 · las dos guardas del saldo inicial, y **este par sí está en el mismo orden que
         // el server** (a diferencia del de arriba): primero la categoría de destino, después la
         // del evento. Es a propósito y vale escribir por qué. Con este orden, los tres cruces

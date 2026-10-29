@@ -9,6 +9,7 @@ import com.jvillada.movi.server.db.Cards
 import com.jvillada.movi.server.db.CategoryPrefs
 import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.Events
+import com.jvillada.movi.server.db.toFinancialEvent
 import com.jvillada.movi.server.db.Goals
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.SmsMessages
@@ -364,6 +365,78 @@ class VincularPagoDeDeudaRoutesTest {
 
         assertEquals(HttpStatusCode.UnprocessableEntity, res.status)
         assertTrue(PAGO_A_NO_DEUDA_BLOQUEADO in res.bodyAsText())
+    }
+
+    /**
+     * Vuelta 51 · **«Es la cuota de un crédito»**: un gasto suelto de $980.000 capturado por SMS, con la
+     * categoría que le puso el banco («Otros»), se vincula al crédito con `esLaCuota`. Es el mismo
+     * endpoint y las mismas dos patas que la Ola Y: el movimiento queda como la pata de la cuota (con
+     * «Cuota de crédito»), la deuda baja el capital y el período de la cuota queda saldado.
+     */
+    @Test
+    fun `es la cuota de un credito vincula un gasto de otra categoria y salda su periodo`() = testApplication {
+        val libre = "acc-libre-v51"
+        transaction {
+            cuenta(libre, duenoId, "Libre inversión 9695", "LOAN", "COP")
+            Events.insert {
+                it[id] = "ev-apertura-libre"
+                it[userId] = duenoId
+                it[accountId] = libre
+                it[type] = "EXPENSE"
+                it[amount] = 40_710_555L
+                it[currency] = "COP"
+                it[category] = "Saldo inicial"
+                it[description] = "Deuda inicial"
+                it[timestamp] = 1_788_000_000_000L
+                it[eventSource] = "MANUAL"
+                it[reconciliationStatus] = "RECONCILED"
+            }
+            Credits.insert {
+                it[accountId] = libre
+                it[userId] = duenoId
+                it[bank] = "Bancolombia"
+                it[principal] = 45_000_000L
+                it[rateEa] = 11.27
+                it[termMonths] = 60
+                it[installment] = 980_000L
+                it[dayOfMonth] = 5
+                it[startDate] = "2025-01-05"
+            }
+        }
+        gastoSuelto("ev-980", ahorros, 980_000L, "Otros")
+        wireApp()
+        val antes = saldoDe(libre)
+        val res = vincular(duenoId, "ev-980", cuerpo(libre, tr = "tr-980", toEventId = "ev-deuda-980").dropLast(1) + ""","esLaCuota":true}""")
+
+        assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
+        // Las dos patas, las de siempre: la del dinero pasó a «Cuota de crédito».
+        assertEquals(setOf(ahorros to CUOTA_CATEGORY, libre to CUOTA_CATEGORY), patas("tr-980").toSet())
+        assertEquals(980_000L, filaDe("ev-980")[Events.amount], "el monto del SMS no se toca")
+        val capital = montoDeLaPataEn(libre, "tr-980")
+        assertTrue(capital in 1L until 980_000L, "baja el capital, no la cuota entera: $capital")
+        assertEquals(antes - capital, saldoDe(libre))
+
+        // Y el período de la cuota queda saldado, por la regla de siempre (`pagosDeDeudaPorPeriodo`).
+        val regla = com.jvillada.movi.shared.model.RecurringRule(
+            id = "${com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX}$libre", name = "Cuota Libre inversión 9695",
+            category = CUOTA_CATEGORY, amount = 980_000L, dayOfMonth = 5,
+            type = com.jvillada.movi.shared.model.TransactionType.EXPENSE,
+        )
+        val lasPatas = transaction {
+            Events.selectAll().where { (Events.userId eq duenoId) and (Events.transferId eq "tr-980") }
+                .map { it.toFinancialEvent() }
+        }
+        val saldados = com.jvillada.movi.server.reminders.pagosDeDeudaPorPeriodo(listOf(regla), lasPatas)[regla.id].orEmpty()
+        assertTrue(saldados.values.any { it.id == "ev-deuda-980" }, "la cuota de su período queda saldada: $saldados")
+    }
+
+    @Test
+    fun `es la cuota no vale con una tarjeta ni sin la marca`() = testApplication {
+        gastoSuelto("ev-980-b", ahorros, 980_000L, "Otros")
+        wireApp()
+        val conTarjeta = vincular(duenoId, "ev-980-b", cuerpo(amex, tr = "tr-b", toEventId = "ev-deuda-b").dropLast(1) + ""","esLaCuota":true}""")
+        assertEquals(HttpStatusCode.UnprocessableEntity, conTarjeta.status)
+        assertEquals(0, patas("tr-b").size)
     }
 
     @Test

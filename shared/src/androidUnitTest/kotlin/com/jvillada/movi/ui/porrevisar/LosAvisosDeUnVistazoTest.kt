@@ -46,6 +46,12 @@ import com.jvillada.movi.ui.sdui.TAG_FRANJA_POR_CONFIRMAR
 import com.jvillada.movi.shared.model.defaultDashboardDefinition
 import com.jvillada.movi.ui.sms.TAG_CONFIRMAR_EN_LA_FILA
 import com.jvillada.movi.ui.sms.TAG_LINEA_DE_LO_ENTENDIDO
+import com.jvillada.movi.ui.sms.TAG_CAMBIAR_EN_LA_FILA
+import com.jvillada.movi.ui.sms.TAG_CATEGORIAS_EN_LA_TARJETA
+import com.jvillada.movi.ui.sms.TAG_MAS_CAMBIOS_EN_LA_TARJETA
+import com.jvillada.movi.ui.sms.TAG_TODAS_EN_LA_TARJETA
+import com.jvillada.movi.ui.sms.tagDeCategoriaEnLaTarjeta
+import com.jvillada.movi.ui.components.tagDeCeldaDeCategoria
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
@@ -87,6 +93,7 @@ class LosAvisosDeUnVistazoTest {
     private val avisos = mutableListOf(uber, farma, cafe)
     private val confirmados = mutableListOf<String>()
     private val navegado = mutableListOf<Screen>()
+    private val publicados = mutableListOf<FinancialEvent>()
 
     private fun propuestas(categoriaDeFarmatodo: String) = PropuestasDeLaBandeja(
         propuestas = listOf(
@@ -107,7 +114,7 @@ class LosAvisosDeUnVistazoTest {
             UserProfile(id = "u1", email = "juan@movi.test", name = "Juan", avatarColor = "#4F7CFF")
         override suspend fun getPropuestasDeLaBandeja(): PropuestasDeLaBandeja =
             laBandeja.copy(propuestas = laBandeja.propuestas.filter { p -> avisos.any { it.id == p.avisoId && it.state == SMS_STATE_PENDING } })
-        override suspend fun postEvent(event: FinancialEvent): FinancialEvent = event
+        override suspend fun postEvent(event: FinancialEvent): FinancialEvent = event.also { publicados += it }
         override suspend fun confirmSmsCon(id: String, eventoId: String) {
             confirmados += id
             avisos.replaceAll { if (it.id == id) it.copy(state = SMS_STATE_CONFIRMED) else it }
@@ -233,24 +240,78 @@ class LosAvisosDeUnVistazoTest {
         esperar { conTag(TAG_CONFIRMAR_EN_LA_FILA) == 2 }
     }
 
+    private fun tocarElTag(tag: String, indice: Int = 0) {
+        composeRule.onAllNodesWithTag(tag, useUnmergedTree = true)[indice].performSemanticsAction(SemanticsActions.OnClick)
+        toques++
+        composeRule.waitForIdle()
+    }
+
     /**
-     * Con Farmatodo en «Transporte», el error se ve en la tarjeta sin abrirla, y «Cambiar» abre Revisar
-     * aviso con las categorías ya a la vista. Los toques: la franja (1), «Cambiar» (2), la categoría y
-     * «Confirmar» en Revisar aviso (3 y 4) —que vuelve sola a Por revisar—, y «Confirmar los 2» con su
-     * hoja (5 y 6).
+     * Vuelta 51 · con Farmatodo en «Transporte», el error se ve en la tarjeta sin abrirla, y **«Cambiar»
+     * abre las pastillas en la misma tarjeta** (era Revisar aviso). Los toques del mal categorizado: la
+     * franja (1), «Cambiar» (2), la pastilla (3) y el «Confirmar» de la tarjeta (4); eran 6 sumando el lote.
      */
     @Test
-    fun `el mal categorizado se ve sin abrirlo y Cambiar abre Revisar aviso con las categorias`() {
+    fun `el mal categorizado se resuelve en su tarjeta en cuatro toques`() {
         montarDesdeElInicio(propuestas("Transporte"))
         entrarAPorRevisar()
 
         assertEquals(2, cuantos("Transporte · Bancolombia Ahorros 4057"), "Farmatodo dice «Transporte» a la vista")
         // Las tarjetas van de la más nueva a la más vieja: Uber, Farmatodo, Juan Valdez.
-        composeRule.onAllNodes(hasText("Cambiar"), useUnmergedTree = true)[1].onParent()
-            .performSemanticsAction(SemanticsActions.OnClick)
-        toques++
-        composeRule.waitForIdle()
-        assertEquals(listOf<Screen>(Screen.SMSReconcile("farma", abrirCategoria = true)), navegado)
-        assertTrue(toques == 2)
+        tocarElTag(TAG_CAMBIAR_EN_LA_FILA, indice = 1)
+        assertTrue(navegado.isEmpty(), "no sale de la lista")
+        // Las pastillas con «Todas ›» en el renglón del rótulo, y «Más cambios ›» debajo.
+        composeRule.onNodeWithTag(TAG_CATEGORIAS_EN_LA_TARJETA, useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithTag(TAG_TODAS_EN_LA_TARJETA, useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithTag(TAG_MAS_CAMBIOS_EN_LA_TARJETA, useUnmergedTree = true).assertExists()
+        tocarElTag(tagDeCategoriaEnLaTarjeta("Salud"))
+        esperar { cuantos("Salud · Bancolombia Ahorros 4057") == 1 }
+        // Lista para «Confirmar», sin salir de la tarjeta.
+        tocarElTag(TAG_CONFIRMAR_EN_LA_FILA, indice = 1)
+        esperar { confirmados.contains("farma") }
+        assertEquals(4, toques, "la franja, «Cambiar», la pastilla y «Confirmar»")
+        assertEquals("Salud", publicados.single { it.amount == 61_900L }.category)
+    }
+
+    /** Los tres, uno mal categorizado: la franja, «Cambiar», la pastilla, «Confirmar los 3» y la hoja. */
+    @Test
+    fun `los tres, uno mal categorizado, se confirman desde el Inicio en cinco toques`() {
+        montarDesdeElInicio(propuestas("Transporte"))
+        entrarAPorRevisar()
+        tocarElTag(TAG_CAMBIAR_EN_LA_FILA, indice = 1)
+        tocarElTag(tagDeCategoriaEnLaTarjeta("Salud"))
+        esperar { cuantos("Salud · Bancolombia Ahorros 4057") == 1 }
+        tocarElBoton("Confirmar los 3")
+        tocarElBoton("Confirmar", elUltimo = true)
+        esperar { confirmados.size == 3 }
+        assertEquals(5, toques, "eran 6 con Revisar aviso de por medio")
+        assertEquals("Salud", publicados.single { it.amount == 61_900L }.category)
+    }
+
+    /** Si la categoría no está entre las pastillas: «Todas ›» y la celda de la hoja, uno más (5). */
+    @Test
+    fun `con Todas el mal categorizado son cinco toques`() {
+        montarDesdeElInicio(propuestas("Transporte"))
+        entrarAPorRevisar()
+        tocarElTag(TAG_CAMBIAR_EN_LA_FILA, indice = 1)
+        tocarElTag(TAG_TODAS_EN_LA_TARJETA)
+        esperar { conTag(tagDeCeldaDeCategoria("Salud")) > 0 }
+        tocarElTag(tagDeCeldaDeCategoria("Salud"))
+        esperar { cuantos("Salud · Bancolombia Ahorros 4057") == 1 }
+        tocarElTag(TAG_CONFIRMAR_EN_LA_FILA, indice = 1)
+        esperar { confirmados.contains("farma") }
+        assertEquals(5, toques)
+    }
+
+    /** «Más cambios ›» sigue llevando a Revisar aviso, para la cuenta, el monto o el comercio. */
+    @Test
+    fun `Mas cambios abre Revisar aviso`() {
+        montarDesdeElInicio(propuestas("Transporte"))
+        entrarAPorRevisar()
+        tocarElTag(TAG_CAMBIAR_EN_LA_FILA, indice = 1)
+        // Abiertas las pastillas, «Cambiar» dice «Cerrar».
+        assertEquals(2, cuantos("Cambiar"))
+        tocarElTag(TAG_MAS_CAMBIOS_EN_LA_TARJETA)
+        assertEquals(listOf<Screen>(Screen.SMSReconcile("farma")), navegado)
     }
 }

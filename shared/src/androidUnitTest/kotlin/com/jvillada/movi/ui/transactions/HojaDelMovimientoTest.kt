@@ -251,6 +251,61 @@ class HojaDelMovimientoTest {
         assertEquals("ev-hija" to "Comida", pedida)
     }
 
+    /**
+     * **Vuelta 51 · «Es la cuota de un crédito».** Desde que «Cuota de crédito» no se elige en el
+     * selector, un gasto suelto de $980.000 (el SMS del pago) se convierte en la cuota de un crédito con
+     * esta fila del detalle: elegir el crédito llama a `vincular-deuda` —el endpoint de la Ola Y, las
+     * mismas dos patas— marcado `esLaCuota`, y el movimiento queda como la pata de la cuota. Que el
+     * período quede saldado lo fija el server (`VincularPagoDeDeudaRoutesTest`).
+     */
+    @Test
+    fun esLaCuotaDeUnCreditoVinculaElGastoConElCredito() {
+        val libre = Account("acc-libre", "Libre inversión 9695", AccountType.LOAN, 40_710_555L, "COP")
+        val delSms = gasto.copy(id = "ev-980", amount = 980_000L, category = "Otros", description = "Transferencia Bancolombia")
+        var pedido: Pair<String, com.jvillada.movi.shared.model.VincularPagoDeDeudaRequest>? = null
+        var cambiado = 0
+        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+            override suspend fun vincularPagoDeDeuda(
+                eventId: String,
+                request: com.jvillada.movi.shared.model.VincularPagoDeDeudaRequest,
+            ): com.jvillada.movi.shared.model.PagoDeCuotaResult {
+                pedido = eventId to request
+                return com.jvillada.movi.shared.model.PagoDeCuotaResult(
+                    deudaRestante = 40_710_555L - 618_000L,
+                    patas = listOf(
+                        delSms.copy(category = CUOTA_CATEGORY, transferId = request.transferId),
+                        delSms.copy(id = request.toEventId, accountId = libre.id, type = TransactionType.INCOME, amount = 618_000L, category = CUOTA_CATEGORY, transferId = request.transferId),
+                    ),
+                )
+            }
+        }
+        composeRule.setContent {
+            MoviTheme {
+                Box(Modifier.fillMaxSize()) {
+                    HojaDelMovimiento(event = delSms, cuentas = listOf(bancolombia, libre), onDismiss = {}, onCambiado = { cambiado++ })
+                }
+            }
+        }
+        composeRule.waitForIdle()
+        tocarAccion(AccionDelMovimiento.Categoria)
+        // La fila especial, junto a «Pago de tarjeta»; «Cuota de crédito» no está en la cuadrícula.
+        composeRule.onAllNodesWithTag(tagDeCeldaDeCategoria(CUOTA_CATEGORY), useUnmergedTree = true).assertCountEquals(0)
+        composeRule.onAllNodes(hasClickAction() and hasAnyDescendant(hasText(ES_LA_CUOTA_DE_UN_CREDITO)), useUnmergedTree = true)
+            .onLast().performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        composeRule.onAllNodes(
+            hasClickAction() and hasAnyDescendant(hasText("Libre inversión 9695", substring = true)) and hasAnyAncestor(hasTestTag(TAG_ELEGIR_EL_CREDITO)),
+            useUnmergedTree = true,
+        ).onFirst().performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitUntil(5_000) { pedido != null }
+
+        val (id, req) = pedido!!
+        assertEquals("ev-980", id)
+        assertEquals(libre.id, req.debtAccountId)
+        assertEquals(true, req.esLaCuota, "el endpoint de siempre, marcado como la cuota")
+        composeRule.waitUntil(5_000) { cambiado > 0 }
+    }
+
     /** Tocar el chip de la categoría también abre el selector. */
     @Test
     fun tocarElChipAbreElSelector() {

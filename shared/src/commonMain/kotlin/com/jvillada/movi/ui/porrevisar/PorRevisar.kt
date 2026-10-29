@@ -17,6 +17,7 @@ import com.jvillada.movi.shared.model.capturaDeSms
 import com.jvillada.movi.shared.model.esperaEnPorConfirmar
 import com.jvillada.movi.shared.model.soloLoQueLlegoSolo
 import com.jvillada.movi.shared.model.unoPorPago
+import com.jvillada.movi.shared.model.separarLosPagosAntiguos
 import com.jvillada.movi.shared.model.PataPorConfirmar
 import com.jvillada.movi.shared.model.renglonesPorConfirmar
 import com.jvillada.movi.ui.LocalRefreshTick
@@ -48,6 +49,20 @@ fun mensajesPorRevisar(mensajes: List<SmsMessage>): List<SmsMessage> =
  * misma regla que el Inicio ([unoPorPago], en `:core`).
  */
 fun pagosPorRevisar(mensajes: List<SmsMessage>): List<SmsMessage> = unoPorPago(mensajesPorRevisar(mensajes))
+
+/**
+ * **Los pagos de los últimos 30 días** (vuelta 51), del más nuevo al más viejo: lo que va arriba en la
+ * bandeja, lo que cuenta «N por revisar» y lo que entra en «Confirmar los N». Los de más de 30 días
+ * ([pagosAntiguosPorRevisar]) se apartan; la frontera es `esPagoAntiguo`, en `:core`.
+ */
+fun pagosRecientesPorRevisar(mensajes: List<SmsMessage>, ahora: Long = ahoraEnMilis()): List<SmsMessage> =
+    separarLosPagosAntiguos(pagosPorRevisar(mensajes), mensajes, ahora).recientes
+
+/** **Los pagos de más de 30 días**, del más nuevo al más viejo: «Más antiguos · N», plegado (vuelta 51). */
+fun pagosAntiguosPorRevisar(mensajes: List<SmsMessage>, ahora: Long = ahoraEnMilis()): List<SmsMessage> =
+    separarLosPagosAntiguos(pagosPorRevisar(mensajes), mensajes, ahora).antiguos
+
+private fun ahoraEnMilis(): Long = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
 
 /**
  * **Los movimientos que entraron solos** —por SMS, por un extracto, por OCR— y de los que el dueño
@@ -84,8 +99,14 @@ data class ConteoPorRevisar(
     val pagosDeTarjeta: Int = 0,
     /** Lo que el banco cobró solo y Movi propone armado. */
     val debitos: Int = 0,
+    /**
+     * Vuelta 51 · **los avisos de más de 30 días**, uno por pago. Esperan en la bandeja, plegados en
+     * «Más antiguos», pero **no** entran en [total]: no compiten con los de hoy. La franja del Inicio
+     * los menciona aparte («y 2 antiguos»).
+     */
+    val avisosAntiguos: Int = 0,
 ) {
-    /** Todo lo que espera en la bandeja. */
+    /** Todo lo que espera en la bandeja, sin los avisos antiguos ([avisosAntiguos]). */
     val total: Int get() = avisos + movimientos + pagosDeTarjeta + debitos
 
     /**
@@ -118,9 +139,11 @@ fun conteoPorRevisar(
     candidatos: List<FinancialEvent>?,
     /** Lo que el banco cobró solo y Movi propone armado (ver [DebitoAutomaticoPorConfirmar]). */
     debitos: List<DebitoAutomaticoPorConfirmar>? = null,
+    ahora: Long = ahoraEnMilis(),
 ): ConteoPorRevisar = ConteoPorRevisar(
-    // Pagos, no avisos: el mismo pago avisado tres veces cuenta una.
-    avisos = mensajes?.let { pagosPorRevisar(it).size } ?: 0,
+    // Pagos, no avisos: el mismo pago avisado tres veces cuenta una. Vuelta 51: los de los últimos 30 días.
+    avisos = mensajes?.let { pagosRecientesPorRevisar(it, ahora).size } ?: 0,
+    avisosAntiguos = mensajes?.let { pagosAntiguosPorRevisar(it, ahora).size } ?: 0,
     // Con la regla de `:core` que usa el server para el Inicio: un traspaso es un renglón.
     movimientos = dias?.let { d -> renglonesPorConfirmar(entraronSolos(d).map { PataPorConfirmar(it.id, it.transferId, it.type) }) } ?: 0,
     pagosDeTarjeta = candidatos?.size ?: 0,
@@ -151,7 +174,8 @@ fun bandejaAlDia(
     debitos: List<DebitoAutomaticoPorConfirmar>? = emptyList(),
 ): Boolean =
     mensajes != null && dias != null && candidatos != null && debitos != null &&
-        cuantosPorRevisar(mensajes, dias, candidatos, debitos) == 0
+        // Los antiguos no cuentan en el número, pero esperan: con alguno, la bandeja no está al día.
+        conteoPorRevisar(mensajes, dias, candidatos, debitos).let { it.total == 0 && it.avisosAntiguos == 0 }
 
 /**
  * El renglón «la captura dejó de andar» de la bandeja, o `null` si no hay nada que decir.

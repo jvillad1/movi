@@ -80,7 +80,7 @@ class PorConfirmarEnMovimientosTest {
     private val pagoDeTarjeta = evento("e-pago", "Pago Nu", ReconciliationStatus.RECONCILED, EventSource.MANUAL)
 
     private fun sms(id: String, estado: String) = SmsMessage(
-        id = id, time = "2026-09-03 07:15", bank = "Bancolombia",
+        id = id, time = "${com.jvillada.movi.ui.fecha.hoyEnAppZone().let { kotlinx.datetime.LocalDate.fromEpochDays(it.toEpochDays() - 10) }} 07:15", bank = "Bancolombia",
         text = "Compra aprobada \$28.500 en Uber BV.", state = estado, det = "Uber",
     )
 

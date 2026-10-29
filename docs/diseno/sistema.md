@@ -2670,3 +2670,78 @@ cada par, «Gastaste» = la suma de las filas con «−», el chip «Gastos» y 
 (Robolectric: en Actividad y en el Inicio la cuota dice «−$980.000», el pago de tarjeta y el traspaso no
 llevan signo, y el día dice «Gastaste $980.000»). `ColorYEntreCuentasTest` y `DesembolsoEnMovimientosTest`
 pasan la cuota de entre cuentas a gasto (y derivan `countsAsCashFlow` como el server).
+
+## 54. Vuelta 51: «Cambiar» en la tarjeta, las categorías internas fuera de los selectores, y los avisos viejos se apartan
+
+La segunda pasada de «un día del dueño» (28-oct, sobre master 8951c0bb): ya no hay resultados equivocados,
+pero «Cambiar» y «Elegir categoría» se comportaban distinto, «Cuota de crédito» aparecía en el selector
+completo entre Comida e Internet, el Rappi del 2 de septiembre seguía en «Por revisar» dos meses después y
+«Revisar» del Carro proponía un tanqueo de $260.000 para una factura de $9.000. **Sin reglas de plata
+nuevas**: el punto 2 protege una que ya existía.
+
+1. **«Cambiar» se resuelve en la misma tarjeta** (`TarjetaDeMensajeDelBanco`, `TAG_CAMBIAR_EN_LA_FILA`). En
+   un aviso que Movi entendió, «Cambiar» ya no abre Revisar aviso: abre en la tarjeta las mismas pastillas
+   que «Elegir categoría» (`ds/FilaDeCategorias`, relleno `Ninguno`, «Todas ›» en el renglón del rótulo, la
+   categoría que entendió Movi marcada, `EligeLaCategoria.actual`) y pasa a «Cerrar» (`CERRAR_LAS_CATEGORIAS`).
+   Al elegir, la tarjeta queda con la categoría nueva arriba («Salud · Bancolombia Ahorros 4057») y
+   «Confirmar»; también entra en «Confirmar los N» (`categoriasElegidasAca`, como en la vuelta 46). Debajo de
+   las pastillas, **«Más cambios ›»** (`Boton` `Fantasma` `S`, `MAS_CAMBIOS`, `TAG_MAS_CAMBIOS_EN_LA_TARJETA`)
+   lleva a Revisar aviso para la cuenta, el monto o el comercio (`Screen.SMSReconcile` sin `abrirCategoria`).
+   Las pastillas salen de `categoriasDeLaTarjeta` (las frecuentes de Agregar o, sin uso a mano, las del
+   dueño). El pago avisado varias veces (`TarjetaDelMismoPago`) sigue yendo a Revisar aviso.
+2. **Las categorías internas no se ofrecen** (`:core` `CategoriasQueNoSeEligen.kt`). Una sola lista,
+   `CATEGORIAS_QUE_NO_SE_ELIGEN` = las reservadas (`RESERVED_CATEGORIES`: Traspaso, Pago de tarjeta, Saldo
+   inicial, Ajuste de saldo…) + las de dos patas (`CATEGORIAS_DE_DOS_PATAS`: Cuota de crédito, Desembolso
+   de crédito, Avance de tarjeta), con `esCategoriaQueNoSeElige` (sin mayúsculas ni tildes). La leen
+   `categoriasQueCoinciden` / `categoriasFrecuentes` / `categoriaSirveParaTipo` (`CategoryField.kt`),
+   `categoriasParaPastillas` —**también lo que la pantalla pide adelante**: la fila del movimiento dice su
+   categoría, pero no se ofrece—, la hoja «Todas» (`contenidoDelSelectorDeCategoria`: escrita a mano se
+   explica y no se crea), Agregar (`categoriaQueNoSeAnotaAca`; en **modo pago** la de la regla sí, solo las
+   reservadas se cortan), Revisar aviso, la tarjeta, Repartir (`esCategoriaDeGastoSuelta`) y el detalle de
+   un movimiento (`ofreceCategoriaEscritaAMano`, de donde sale también el lote). «Cuota de crédito» y
+   «Desembolso de crédito» **siguen sin ser reservadas** (cuentan en el mes). La fila especial «Pago de
+   tarjeta» del detalle se queda: es la acción explícita «esto fue el pago de mi tarjeta», no una categoría
+   del selector. A su lado, **«Es la cuota de un crédito»** (`ES_LA_CUOTA_DE_UN_CREDITO`,
+   `puedeMarcarseCuotaDeCredito`: un gasto suelto con una categoría elegible y algún crédito) reemplaza el
+   camino de la Ola Y que pasaba por elegir «Cuota de crédito»: abre «¿De cuál crédito?»
+   (`SelectorDeCuentaDeDeuda` con solo los LOAN) y llama a **`vincular-deuda` de siempre** con
+   `VincularPagoDeDeudaRequest.esLaCuota = true` —el server acepta entonces un gasto de otra categoría,
+   solo con un crédito—: las mismas dos patas de `pagoDeCuotaLegs`, y el período queda saldado. El server rechaza la cuota y el avance a mano con `motivoDeLaCategoriaDeDosPatas`
+   (`CUOTA_CATEGORY_NOT_MANUAL`, `AVANCE_CATEGORY_NOT_MANUAL`): en `categoriaQueMoviEscribeSola` (el
+   `PUT …/category`, el lote y las propuestas de Movi AI) y en el alta `POST /api/events` **a mano y nueva**
+   (un aviso confirmado, `SMS`, y el reenvío de un movimiento que el server ya tiene pasan); el espejo local
+   del teléfono, igual.
+3. **Los avisos de más de 30 días se apartan** (`:core` `LosAvisosAntiguos.kt`). `esPagoAntiguo`: más de
+   `DIAS_PARA_QUE_UN_AVISO_SEA_ANTIGUO` (30, elegido) desde la fecha del aviso más reciente del pago; una
+   fecha ilegible nunca se aparta. En Por revisar van en **«Más antiguos · N»** (`Seccion` con «Ver» /
+   «Ocultar», plegada), con «Llegaron hace más de 30 días y no cuentan en «Por confirmar».» y **«Ignorar los
+   N»** (`Boton` `Secundario` `S`) que pregunta antes (`ConfirmarEnHoja`) e ignora uno por pago con el
+   «Ignorar» de siempre: no se borra nada. No cuentan en `ConteoPorRevisar.total` (van en `avisosAntiguos`),
+   ni en «Confirmar los N» (`avisosPorConfirmar` → `pagosRecientesPorRevisar`), ni en `pendingSms` /
+   `porConfirmarSuman` del server; `DashboardSummary.avisosAntiguos` (default 0) los cuenta y la franja del
+   Inicio los menciona aparte («En 1 aviso · y 2 antiguos»). Con solo antiguos la bandeja no está «al día».
+4. **Una propuesta de pago muy distinta del monto no va de principal** (`:core` `ElCandidatoQueNoSeParece.kt`).
+   `candidatoMuyDistinto`: más del 50 % (`DIFERENCIA_MAXIMA_DEL_CANDIDATO`, elegido) del monto de la regla,
+   hacia arriba o hacia abajo; sin un esperado comparable (tarjeta, otra moneda, regla sin monto) no se
+   afirma nada. `accionDelPago` y «Movi propone hoy» miran `candidatosParecidos`: con solo uno lejano el
+   Inicio dice «Anotar pago», no «Revisar». En Pagos la fila prefiere un candidato parecido
+   (`propuestaDeLaFila`); si solo queda uno lejano, no es «Por confirmar»: «Anotar pago» a la derecha y
+   debajo el enlace **«¿Es el de $260.000?»** (`PropuestaLejana`, `TAG_PROPUESTA_LEJANA`),
+   que abre la pregunta de siempre. **Nunca se tilda solo.** El enlace es corto a propósito: «Hay un
+   movimiento de $260.000 · ¿Es este?» se cortaba a 390 dp antes de la pregunta (lo mide
+   `ElEnlaceDelCandidatoCabeTest`, a 360 dp con la letra ×1,12).
+5. **La cuota pagada también lleva su «⋯»** (revisión de la vuelta 51). Arriendo e Internet tenían «⋯» y la
+   cuota de un crédito no. La cuota no se desmarca desde la fila —sus dos patas se deshacen anulando el
+   movimiento—, así que su «⋯» ofrece «Ver movimiento» y dice cómo deshacerla (`NOTA_DE_LA_CUOTA_PAGADA`,
+   `esPagoDeDeudaProbado`, `notaDelMenuDeLaFilaPagada`). Todas las filas pagadas tienen «⋯».
+
+**Los toques** (desde el Inicio, tres avisos con Farmatodo en «Transporte»): el mal categorizado, **4** (la
+franja, «Cambiar», la pastilla y el «Confirmar» de la tarjeta); con «Todas ›», **5**; los tres, **5** (la
+franja, «Cambiar», la pastilla, «Confirmar los 3» y la hoja; eran 6).
+
+**Las líneas base** no cambian y las guardas en 0 siguen en 0. Lo vigilan `LosAvisosDeUnVistazoTest` (los
+toques, «Cambiar» sin salir de la lista, «Más cambios ›»), `LosAvisosViejosSeApartanTest` (plegada, fuera
+del lote, «Ignorar los N» con su pregunta), en `commonTest` `Vuelta51Test` (**la guarda que recorre los
+selectores**, los antiguos en el conteo y la franja, el candidato lejano), en `:core` `Vuelta51LogicaTest`,
+y en `:server` `TransferRoutesTest` (la cuota a mano rechazada en las tres puertas) y `DashboardRoutesTest`
+(los antiguos no cuentan ni suman).

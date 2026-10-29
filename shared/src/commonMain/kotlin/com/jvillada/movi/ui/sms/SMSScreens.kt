@@ -586,9 +586,15 @@ internal fun TarjetaDeMensajeDelBanco(
     loEntendido: String? = null,
     /**
      * Vuelta 46: a este aviso solo le falta la categoría; la tarjeta la pide ahí mismo («Elegir
-     * categoría», ver [EligeLaCategoria]). Solo la bandeja lo pasa.
+     * categoría», ver [EligeLaCategoria]). Vuelta 51: también un aviso que Movi entendió entero —ahí
+     * «Cambiar» abre las mismas pastillas en la tarjeta—. Solo la bandeja lo pasa.
      */
     eligeLaCategoria: EligeLaCategoria? = null,
+    /**
+     * Vuelta 51 · **«Más cambios ›»**, debajo de las pastillas abiertas: Revisar aviso, para cambiar lo
+     * que no es la categoría (la cuenta, el monto, el comercio). Sin esto, el enlace no se pinta.
+     */
+    onMasCambios: (() -> Unit)? = null,
 ) {
     val apartado = loApartoMovi(sms)
     var eligiendoLaCategoria by remember(sms.id) { mutableStateOf(false) }
@@ -604,6 +610,9 @@ internal fun TarjetaDeMensajeDelBanco(
     }
     val confirmable = pendiente && entendido != null && onConfirmar != null
     val pideLaCategoria = pendiente && !confirmable && eligeLaCategoria != null
+    // Vuelta 51: «Cambiar» de un aviso entendido abre las pastillas acá mismo, como «Elegir categoría».
+    val cambiaEnLaTarjeta = confirmable && eligeLaCategoria != null
+    val pastillasAbiertas = eligiendoLaCategoria && eligeLaCategoria != null && (pideLaCategoria || cambiaEnLaTarjeta)
     // Vuelta de diseño 2: la cabeza se lee primero —el comercio (o lo que Movi entendió) con su
     // marca, el monto a la derecha y «banco · hora» debajo—; el texto del banco va después, apagado.
     // Sin comercio, el banco y su marca (o el ícono de los avisos). Ver [cabezaDelAviso].
@@ -627,7 +636,18 @@ internal fun TarjetaDeMensajeDelBanco(
                         CONFIRMAR_EN_LA_FILA, principal = true, habilitada = !trabajando, onClick = onConfirmar!!,
                         modifier = Modifier.testTag(TAG_CONFIRMAR_EN_LA_FILA),
                     )
-                    PastillaDelPago(if (conLoEntendido) CAMBIAR_EN_LA_FILA else "Revisar", habilitada = !trabajando, onClick = onRevisar)
+                    if (cambiaEnLaTarjeta) {
+                        // Vuelta 51: «Cambiar» abre las pastillas en la tarjeta y pasa a «Cerrar»; Revisar
+                        // aviso queda en «Más cambios ›», debajo de ellas.
+                        PastillaDelPago(
+                            if (eligiendoLaCategoria) CERRAR_LAS_CATEGORIAS else CAMBIAR_EN_LA_FILA,
+                            habilitada = !trabajando,
+                            onClick = { eligiendoLaCategoria = !eligiendoLaCategoria },
+                            modifier = Modifier.testTag(TAG_CAMBIAR_EN_LA_FILA),
+                        )
+                    } else {
+                        PastillaDelPago(if (conLoEntendido) CAMBIAR_EN_LA_FILA else "Revisar", habilitada = !trabajando, onClick = onRevisar)
+                    }
                     onIgnorar?.let { PastillaDelPago(IGNORAR_EN_LA_FILA, habilitada = !trabajando, onClick = it) }
                 }
             }
@@ -691,11 +711,13 @@ internal fun TarjetaDeMensajeDelBanco(
             is BloqueDeAbajo.Detalle -> Text(abajo.texto, style = Movi.textos.cuerpo, color = Movi.colores.texto)
             null -> Unit
         }
-        // Vuelta 46: las pastillas de las frecuentes, con «Todas ›» en el renglón del rótulo.
-        if (pideLaCategoria && eligiendoLaCategoria && eligeLaCategoria != null) {
+        // Vuelta 46: las pastillas de las frecuentes, con «Todas ›» en el renglón del rótulo. Vuelta 51:
+        // también las abre «Cambiar» de un aviso entendido, y debajo va «Más cambios ›».
+        if (pastillasAbiertas && eligeLaCategoria != null) {
             FilaDeCategorias(
                 categorias = eligeLaCategoria.categorias,
-                elegida = eligeLaCategoria.elegida.orEmpty(),
+                // La que dice la línea de arriba —la elegida acá o la que entendió Movi— va marcada.
+                elegida = eligeLaCategoria.elegida ?: eligeLaCategoria.actual.orEmpty(),
                 onElegir = { categoria ->
                     eligiendoLaCategoria = false
                     eligeLaCategoria.onElegir(categoria)
@@ -708,6 +730,16 @@ internal fun TarjetaDeMensajeDelBanco(
                     pastilla = ::tagDeCategoriaEnLaTarjeta,
                 ),
             )
+            onMasCambios?.let { masCambios ->
+                Boton(
+                    MAS_CAMBIOS,
+                    onClick = masCambios,
+                    variante = VarianteDeBoton.Fantasma,
+                    tamano = TamanoDeBoton.S,
+                    habilitado = !trabajando,
+                    modifier = Modifier.testTag(TAG_MAS_CAMBIOS_EN_LA_TARJETA),
+                )
+            }
         }
     }
 }
