@@ -166,6 +166,27 @@ class ElAbonoQueSeTildaEnPantallaTest {
     }
 
     @Test
+    fun `sin debito automatico la regla sale de la cuenta con que mas se le paga a la deuda`() {
+        val bancolombia = "a1"
+        fun pago(t: String, desde: String) = listOf(
+            FinancialEvent(id = "s-$t", accountId = desde, type = TransactionType.EXPENSE, amount = 1L, category = "Pago de tarjeta", description = "", timestamp = 0L, transferId = t),
+            FinancialEvent(id = "e-$t", accountId = "nu", type = TransactionType.INCOME, amount = 1L, category = "Pago de tarjeta", description = "", timestamp = 0L, transferId = t),
+        )
+        val eventos = pago("t1", bancolombia) + pago("t2", bancolombia) + pago("t3", nuAhorros.id)
+        assertEquals(bancolombia, cuentaQueMasLePagaA("nu", eventos))
+        assertEquals(null, cuentaQueMasLePagaA("otra", eventos))
+
+        val reglas = mutableListOf<RecurringRule>()
+        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+            override suspend fun getRecurringRules() = reglas.toList()
+            override suspend fun createRecurringRule(rule: RecurringRule) = rule.copy(id = "rr_abono").also { reglas += it }
+            override suspend fun getEvents(accountId: String?) = eventos
+        }
+        runBlocking { recordarElAbonoA(deudaId = "nu", nombre = "Nu", monto = 500_000L, dia = 5, desde = null) }
+        assertEquals(bancolombia, reglas.single().accountId, "«Anotar este abono» abre con «Desde»")
+    }
+
+    @Test
     fun `recordarmelo tambien desde la ficha del credito`() {
         val reglas = mutableListOf<RecurringRule>()
         Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {

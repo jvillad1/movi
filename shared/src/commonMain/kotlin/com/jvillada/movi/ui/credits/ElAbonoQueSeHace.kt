@@ -132,7 +132,9 @@ suspend fun recordarElAbonoA(deudaId: String, nombre: String, monto: Long, dia: 
         nombreDeLaDeuda = nombre,
         monto = monto,
         dia = elDia,
-        desdeCuentaId = desde ?: existente?.accountId,
+        // Revisión: sin débito automático (una tarjeta, casi siempre) la regla quedaba sin cuenta y
+        // «Anotar este abono» abría sin «Desde». Va la cuenta con que más se le ha pagado a esa deuda.
+        desdeCuentaId = desde ?: existente?.accountId ?: cuentaQueMasLePagaA(deudaId),
     )
     if (existente != null) repo.updateRecurringRule(existente.id, existente.copy(
         name = nueva.name, amount = monto, dayOfMonth = nueva.dayOfMonth, category = nueva.category,
@@ -140,4 +142,27 @@ suspend fun recordarElAbonoA(deudaId: String, nombre: String, monto: Long, dia: 
     ))
     else repo.createRecurringRule(nueva)
     return confirmacionDelRecordatorio(nombre, monto, elDia)
+}
+
+/**
+ * **La cuenta con que más se le ha pagado a [deudaId]**: la otra pata de los traspasos y pagos que
+ * entraron a esa deuda, la más repetida. `null` sin historia (o si no se pudo leer).
+ */
+suspend fun cuentaQueMasLePagaA(deudaId: String): String? = runCatching {
+    val eventos = Repositories.wallets.getEvents(null)
+    cuentaQueMasLePagaA(deudaId, eventos)
+}.getOrNull()
+
+/** [cuentaQueMasLePagaA] sobre [eventos] ya leídos. Pura. */
+fun cuentaQueMasLePagaA(deudaId: String, eventos: List<com.jvillada.movi.shared.model.FinancialEvent>): String? {
+    val traspasos = eventos
+        .filter { it.accountId == deudaId && it.type == com.jvillada.movi.shared.model.TransactionType.INCOME }
+        .mapNotNull { it.transferId }
+        .toSet()
+    return eventos
+        .filter { it.transferId in traspasos && it.accountId != deudaId && it.type == com.jvillada.movi.shared.model.TransactionType.EXPENSE }
+        .groupingBy { it.accountId }
+        .eachCount()
+        .maxWithOrNull(compareBy<Map.Entry<String, Int>> { it.value }.thenByDescending { it.key })
+        ?.key
 }
