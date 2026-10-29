@@ -119,6 +119,25 @@ internal fun org.jetbrains.exposed.sql.Transaction.deudaIdIfOwned(uid: String, d
 }
 
 /**
+ * **Vuelta 63 · ¿el cliente sabe qué es un abono planeado?** Solo con `?conAbonos=1` las respuestas
+ * que arman el checklist y los fijos (`/api/recurring-rules`, `/api/payments/upcoming`,
+ * `/api/payments/occurrences`) traen las reglas con `haciaDeuda`. Un APK anterior (el 1.78 que el
+ * dueño tiene) no conoce el campo y restaría el abono como un pago fijo, así que no las ve. Mismo
+ * patrón que `?conCreditos=1` y `?conRecurrentes=1`. Lo que el server calcula por su cuenta (el
+ * Disponible, la caja, Movi AI, el cierre) sí las lee, porque ya las sabe dejar fuera de los fijos.
+ */
+internal fun io.ktor.server.application.ApplicationCall.pideLosAbonos(): Boolean =
+    request.queryParameters["conAbonos"] == "1"
+
+/** Los ids de las reglas de abono de [uid] (ver [pideLosAbonos]). */
+internal suspend fun idsDeLosAbonos(uid: String): Set<String> = dbQuery {
+    RecurringRules.selectAll()
+        .where { RecurringRules.userId eq uid }
+        .filter { !it[RecurringRules.haciaDeuda].isNullOrBlank() }
+        .mapTo(mutableSetOf()) { it[RecurringRules.id] }
+}
+
+/**
  * Ola 9 · D: ¿esta cuenta es de este usuario? La cuenta de una regla recurrente es **opcional**,
  * así que un id desconocido no rechaza el alta: se guarda `null`. Rechazar dejaría al dueño sin
  * poder anotar su arriendo por un id que mandó mal un cliente viejo, y el plan mensual (nombre,
@@ -167,10 +186,11 @@ private fun fechaIsoValida(crudo: String?): String? {
 fun Route.reminderRoutes() {
     get("/api/recurring-rules") {
         val uid = call.userId()
+        val conAbonos = call.pideLosAbonos()
         val rules = dbQuery {
             RecurringRules.selectAll().where { RecurringRules.userId eq uid }.map { it.toRule() }
         }
-        call.respond(rules)
+        call.respond(rules.filter { conAbonos || !it.esAbonoADeuda })
     }
 
     post("/api/recurring-rules") {
@@ -445,7 +465,8 @@ fun Route.reminderRoutes() {
 
     get("/api/payments/upcoming") {
         val uid = call.userId()
-        call.respond(proximosPagos(uid, AppClock.today()))
+        val conAbonos = call.pideLosAbonos()
+        call.respond(proximosPagos(uid, AppClock.today()).filter { conAbonos || !it.rule.esAbonoADeuda })
     }
 
     // ── «Esto ya ocurrió» ─────────────────────────────────────────────────────
@@ -464,7 +485,11 @@ fun Route.reminderRoutes() {
      * con un sello propio.
      */
     get("/api/payments/occurrences") {
-        call.respond(ocurrenciasDelPeriodo(call.userId(), AppClock.today()))
+        val uid = call.userId()
+        val estados = ocurrenciasDelPeriodo(uid, AppClock.today())
+        if (call.pideLosAbonos()) return@get call.respond(estados)
+        val abonos = idsDeLosAbonos(uid)
+        call.respond(estados.filter { it.ruleId !in abonos })
     }
 
     /**

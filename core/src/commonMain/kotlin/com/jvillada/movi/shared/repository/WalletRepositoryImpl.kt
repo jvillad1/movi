@@ -731,7 +731,7 @@ class WalletRepositoryImpl(
         client.get("$baseUrl/api/cuentas/de-cada-uso").exigirExito().body()
 
     override suspend fun getRecurringRules(): List<RecurringRule> =
-        client.get("$baseUrl/api/recurring-rules").body()
+        client.get("$baseUrl/api/recurring-rules?$CON_ABONOS").body()
 
     override suspend fun createRecurringRule(rule: RecurringRule): RecurringRule =
         client.post("$baseUrl/api/recurring-rules") {
@@ -750,13 +750,13 @@ class WalletRepositoryImpl(
     }
 
     override suspend fun getUpcomingPayments(): List<UpcomingPayment> =
-        client.get("$baseUrl/api/payments/upcoming").body()
+        client.get("$baseUrl/api/payments/upcoming?$CON_ABONOS").body()
 
     override suspend fun getReminderChannels(): ReminderChannels =
         client.get("$baseUrl/api/reminders/channels").body()
 
     override suspend fun getOccurrenceStates(): List<OccurrenceState> =
-        client.get("$baseUrl/api/payments/occurrences").body()
+        client.get("$baseUrl/api/payments/occurrences?$CON_ABONOS").body()
 
     // Mismo idioma que createCard: los rechazos de acá son legibles y el dueño los necesita leer
     // («ese movimiento está anulado», «ya está marcado como la ocurrencia de otro periodo»).
@@ -1409,3 +1409,9 @@ class WalletRepositoryImpl(
         }.exigirExito()
     }
 }
+
+/**
+ * Vuelta 63: esta app sabe que una regla con `RecurringRule.haciaDeuda` es un abono planeado y no un
+ * fijo. Sin este parámetro el server no las manda: un APK anterior las restaría como un pago fijo.
+ */
+private const val CON_ABONOS = "conAbonos=1"

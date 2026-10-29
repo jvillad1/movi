@@ -28,6 +28,7 @@ import com.jvillada.movi.shared.model.faltaPorPagar
 import com.jvillada.movi.shared.model.fijosDelPeriodo
 import com.jvillada.movi.shared.model.periodoDe
 import io.ktor.client.request.delete
+import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.put
@@ -206,6 +207,28 @@ class ElAbonoMensualTest {
         }
         assertEquals(HttpStatusCode.NoContent, enviar("/api/recurring-rules/$id", "", metodo = "DELETE").status)
         assertEquals(0L, transaction { RecurringRules.selectAll().count() + RecurringOccurrences.selectAll().count() })
+    }
+
+    // ── Un APK viejo no la ve ───────────────────────────────────────────────────
+
+    @Test
+    fun `sin conAbonos la regla del abono no aparece en reglas, proximos pagos ni ocurrencias`() = testApplication {
+        application { testModule() }
+        reglaDelAbono(dia = 1)
+        transaction {
+            RecurringRules.insert {
+                it[id] = "rr_arriendo"; it[userId] = uid; it[name] = "Arriendo"; it[category] = "Vivienda"
+                it[amount] = abono; it[dayOfMonth] = 1; it[type] = "EXPENSE"; it[accountId] = ahorros
+            }
+        }
+        suspend fun leer(ruta: String) = client.get(ruta) { header(HttpHeaders.Authorization, "Bearer ${token()}") }.bodyAsText()
+        listOf("/api/recurring-rules", "/api/payments/upcoming", "/api/payments/occurrences").forEach { ruta ->
+            val viejo = leer(ruta)
+            assertTrue("rr_arriendo" in viejo, "$ruta: el arriendo sí ($viejo)")
+            assertFalse("rr_abono" in viejo, "$ruta: un APK viejo no ve el abono ($viejo)")
+            val nuevo = leer("$ruta?conAbonos=1")
+            assertTrue("rr_abono" in nuevo, "$ruta?conAbonos=1: el cliente nuevo sí ($nuevo)")
+        }
     }
 
     // ── El sello con un traspaso ────────────────────────────────────────────────
