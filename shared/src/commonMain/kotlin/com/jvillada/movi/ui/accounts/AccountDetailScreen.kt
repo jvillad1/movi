@@ -675,12 +675,12 @@ private fun SeccionDeApartados(
         val hoy = hoyEnAppZone()
         apartados.forEach { apartado ->
             // Vuelta 64: un apartado para un gasto de un mes puntual dice cuánto lleva y cuánto apartar
-            // al mes («Para marzo: llevas $400.000 de $1.200.000 · aparta $160.000 al mes»).
+            // al mes, en dos renglones («Llevas $400.000 de $1.200.000 · marzo» / «Aparta $160.000 al mes»).
             val delGasto = lineaDelGasto(apartado, mesDelGastoDe(apartado), hoy)
             Fila(
                 titulo = apartado.proposito,
                 subtitulo = delGasto ?: apartado.categoria?.let { "Se descuenta con los gastos de $it" },
-                lineasDelSubtitulo = if (delGasto != null) 2 else 1,
+                lineasDelSubtitulo = if (delGasto != null) LINEAS_DEL_GASTO else 1,
                 final = {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
                         Cifra(apartado.restante)

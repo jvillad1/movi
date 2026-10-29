@@ -171,25 +171,27 @@ class ElApartadoQueAvisaTest {
     private val hoyDeOctubre = LocalDate(2026, 10, 29)
 
     @Test
-    fun `el detalle dice cuanto lleva y cuanto apartar al mes`() {
+    fun `el detalle dice cuanto lleva y cuanto apartar al mes, en dos renglones`() {
         val soat = Apartado(
             id = "s", accountId = "acc-nu", proposito = "SOAT", monto = 400_000L,
             objetivo = 1_200_000L, mesDelGasto = "2027-03",
         )
         assertEquals(
-            "Para marzo de 2027: llevas \$400.000 de \$1.200.000 · aparta \$160.000 al mes",
+            "Llevas \$400.000 de \$1.200.000 · marzo de 2027\nAparta \$160.000 al mes",
             lineaDelGasto(soat, mesDelGastoDe(soat), hoyDeOctubre),
         )
         val diciembre = soat.copy(mesDelGasto = "2026-12")
         assertEquals(
-            "Para diciembre: llevas \$400.000 de \$1.200.000 · aparta \$400.000 al mes",
+            "Llevas \$400.000 de \$1.200.000 · diciembre\nAparta \$400.000 al mes",
             lineaDelGasto(diciembre, mesDelGastoDe(diciembre), hoyDeOctubre),
         )
         val completo = soat.copy(monto = 1_200_000L, restante = 1_200_000L)
         assertEquals(
-            "Para marzo de 2027: llevas \$1.200.000 de \$1.200.000 · ya lo tienes",
+            "Llevas \$1.200.000 de \$1.200.000 · marzo de 2027\nYa lo tienes",
             lineaDelGasto(completo, mesDelGastoDe(completo), hoyDeOctubre),
         )
+        val pasado = soat.copy(mesDelGasto = "2026-03")
+        assertEquals("Llevas \$400.000 de \$1.200.000 · marzo", lineaDelGasto(pasado, mesDelGastoDe(pasado), hoyDeOctubre))
         assertNull(lineaDelGasto(colegio, null, hoyDeOctubre), "un apartado de siempre no tiene esa línea")
     }
 
@@ -210,5 +212,30 @@ class ElApartadoQueAvisaTest {
             "Es para un gasto que llega en marzo de 2027",
             tituloDeLaCasillaDelGasto(PeriodoFinanciero(2027, 3), hoyDeOctubre),
         )
+    }
+
+    // ── Revisión de la vuelta 64 ──────────────────────────────────────────────
+
+    @Test
+    fun `al confirmar Quitar la vista previa dice a cuanto vuelve Te quedan`() {
+        val guardados = listOf(colegio)
+        val delServer = apartadoFueraDeLosFijos(listOf(nu), guardados, emptyList())
+        val data = inicio(apartados = guardados, apartadoDelServer = delServer)
+        val v = assertNotNull(teQuedanSinElApartado(data, colegio.id, hoy))
+        assertEquals(-549_050L, v.antes)
+        assertEquals(1_450_950L, v.despues, "lo mismo que antes de apartar")
+        assertEquals("Te quedan vuelve a${ESPACIO_QUE_NO_SE_PARTE}\$1.450.950", fraseAlQuitar(v))
+        // Si quitarlo no cambia nada, no se anuncia nada.
+        assertNull(fraseAlQuitar(TeQuedanConElApartado(antes = 10L, despues = 10L, ahorroDelPeriodo = 0L)))
+    }
+
+    @Test
+    fun `un mes guardado que ya paso se ofrece primero en la hoja`() {
+        val pasado = PeriodoFinanciero(2026, 3)
+        val meses = mesesDeLaHoja(hoyDeOctubre, pasado)
+        assertEquals(pasado, meses.first())
+        assertEquals(13, meses.size)
+        assertEquals(mesesParaElGasto(hoyDeOctubre), mesesDeLaHoja(hoyDeOctubre, PeriodoFinanciero(2027, 3)))
+        assertEquals(mesesParaElGasto(hoyDeOctubre), mesesDeLaHoja(hoyDeOctubre, null))
     }
 }

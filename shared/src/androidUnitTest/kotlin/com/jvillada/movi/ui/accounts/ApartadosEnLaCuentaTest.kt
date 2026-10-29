@@ -250,7 +250,8 @@ class ApartadosEnLaCuentaTest {
         Repositories.sustitutoDePrueba = ConNu(lista = listOf(soat))
         detalle()
         esperarTexto("SOAT")
-        esperarTexto("llevas \$400.000 de \$1.000.000 · aparta \$120.000 al mes")
+        esperarTexto("Llevas \$400.000 de \$1.000.000")
+        esperarTexto("Aparta \$120.000 al mes")
     }
 
     @Test
@@ -285,6 +286,33 @@ class ApartadosEnLaCuentaTest {
         composeRule.waitUntil(timeoutMillis = 5_000) { intentos.isNotEmpty() }
         assertEquals(1_000_000L, intentos.single().objetivo)
         assertEquals(mes.prefijo, intentos.single().mesDelGasto)
+    }
+
+    /** Revisión de la vuelta 64 (rev64-15): un apartado cuyo mes ya pasó se edita sin cambiarle el mes. */
+    @Test
+    fun `un apartado cuyo mes ya paso se puede editar`() {
+        val viejo = Apartado(
+            id = "apt_predial", accountId = "acc-nu", proposito = "Predial", monto = 400_000L,
+            objetivo = 1_000_000L, mesDelGasto = "2020-03",
+        )
+        val intentos = mutableListOf<Apartado>()
+        Repositories.sustitutoDePrueba = object : ConNu(lista = listOf(viejo)) {
+            override suspend fun guardarApartado(a: Apartado): Apartado {
+                intentos += a
+                return a.also { lista = listOf(it) }
+            }
+        }
+        detalle()
+        esperarTexto("Predial")
+        tocar("Predial")
+        esperarTexto("¿En qué mes llega?")
+        esperarTexto("mar 2020")
+        composeRule.waitForIdle()
+        assertTrue(!hay("Ese mes ya pasó"), "el mes que ya tenía no se rechaza")
+        tocar("Guardar")
+        composeRule.waitUntil(timeoutMillis = 5_000) { intentos.isNotEmpty() }
+        assertEquals("2020-03", intentos.single().mesDelGasto)
+        assertEquals(1_000_000L, intentos.single().objetivo)
     }
 
     @Test

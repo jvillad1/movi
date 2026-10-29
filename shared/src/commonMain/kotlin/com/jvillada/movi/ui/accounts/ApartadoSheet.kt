@@ -159,7 +159,14 @@ fun ApartadoSheet(
 
     val propositoLimpio = proposito.trim()
     val montoValido = (monto ?: 0L) > 0L
-    val problemaDelGasto = if (esParaUnGasto) problemaDelGastoDelApartado(objetivo, mesDelGasto?.prefijo, hoy) else null
+    // Revisión de la vuelta 64 (rev64-15): un apartado cuyo mes ya pasó tiene que poder editarse. Si el
+    // mes es el que ya tenía guardado, se valida sin `hoy` (como el server); uno nuevo, no puede ser pasado.
+    val mesGuardado = mesDeTexto(existente?.mesDelGasto)
+    val problemaDelGasto = if (esParaUnGasto) {
+        problemaDelGastoDelApartado(objetivo, mesDelGasto?.prefijo, hoy.takeIf { mesDelGasto == null || mesDelGasto != mesGuardado })
+    } else {
+        null
+    }
     val puedeGuardar = propositoLimpio.isNotEmpty() && montoValido && problemaDelGasto == null && !trabajando
 
     fun propuesto(): Apartado = Apartado(
@@ -268,10 +275,20 @@ fun ApartadoSheet(
             CampoDeMonto(monto, { monto = it }, rotulo = "Monto", habilitado = !trabajando)
 
             // **Lo que va a pasar si guardas**: «Te quedan pasa de $1.450.950 a −$549.050».
-            val vista = datos?.takeIf { montoValido }?.let { d -> teQuedanConElApartado(d, propuesto(), hoy) }
-            if (vista != null) {
-                Spacer(Modifier.height(Espacio.xs))
-                VistaPrevia(fraseDeLaVistaPrevia(vista), detalle = advertenciaDeLaVistaPrevia(vista))
+            // Mientras se confirma «Quitar», lo que pasa al quitarlo: «Te quedan vuelve a $1.450.950» (o
+            // nada, si no cambia). Si no, lo que pasa al guardar lo escrito.
+            if (pidiendoQuitar && existente != null) {
+                val alQuitar = datos?.let { d -> teQuedanSinElApartado(d, existente.id, hoy) }?.let(::fraseAlQuitar)
+                if (alQuitar != null) {
+                    Spacer(Modifier.height(Espacio.xs))
+                    VistaPrevia(alQuitar)
+                }
+            } else {
+                val vista = datos?.takeIf { montoValido }?.let { d -> teQuedanConElApartado(d, propuesto(), hoy) }
+                if (vista != null) {
+                    Spacer(Modifier.height(Espacio.xs))
+                    VistaPrevia(fraseDeLaVistaPrevia(vista), detalle = advertenciaDeLaVistaPrevia(vista))
+                }
             }
 
             Spacer(Modifier.height(Medida.dentroDeSeccion))
@@ -325,6 +342,7 @@ fun ApartadoSheet(
                 onMarcar = { esParaUnGasto = it },
                 mes = mesDelGasto,
                 onMes = { mesDelGasto = it },
+                meses = mesesDeLaHoja(hoy, mesGuardado),
                 objetivo = objetivo,
                 onObjetivo = { objetivo = it },
                 apartado = conSuRestante(propuesto(), existente).restante,
@@ -383,6 +401,7 @@ private fun ElGastoDelApartado(
     onMarcar: (Boolean) -> Unit,
     mes: PeriodoFinanciero?,
     onMes: (PeriodoFinanciero) -> Unit,
+    meses: List<PeriodoFinanciero>,
     objetivo: Long?,
     onObjetivo: (Long?) -> Unit,
     apartado: Long,
@@ -406,7 +425,7 @@ private fun ElGastoDelApartado(
         modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).testTag(TAG_MES_DEL_GASTO),
         horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
     ) {
-        mesesParaElGasto(hoy).forEach { m ->
+        meses.forEach { m ->
             PildoraDeFiltro(pastillaDelMes(m, hoy), seleccionada = m == mes, onClick = { if (habilitado) onMes(m) })
         }
     }

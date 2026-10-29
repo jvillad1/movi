@@ -157,4 +157,46 @@ class LaHojaDeApartarA360Test {
         dentroDeLaPantalla(casilla, "la casilla del gasto")
         dentroDeLaPantalla(unoConTexto("Es para un gasto de un mes puntual"), "el título de la casilla")
     }
+
+    /**
+     * Revisión de la vuelta 64 (rev64-19, rev64-13): en el detalle, a 360 y a 390, la fila del gasto se
+     * cortaba justo en el aporte («… aparta $160.000 al m…»). Ahora va en dos renglones y se lee entera.
+     */
+    @Test
+    fun `el aporte mensual del detalle se lee entero a 360`() {
+        val hoy = hoyEnAppZone()
+        val soat = com.jvillada.movi.shared.model.Apartado(
+            id = "apt_soat", accountId = "acc-nu", proposito = "SOAT", monto = 400_000L,
+            objetivo = 1_200_000L, mesDelGasto = mesesParaElGasto(hoy)[5].prefijo,
+        )
+        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+            override suspend fun getAccount(id: String): Account = nu
+            override suspend fun getEvents(accountId: String?): List<com.jvillada.movi.shared.model.FinancialEvent> = emptyList()
+            override suspend fun getApartados(): List<com.jvillada.movi.shared.model.Apartado> = listOf(soat)
+        }
+        composeRule.setContent {
+            val base = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(base.density, base.fontScale * 1.12f)) {
+                MoviTheme {
+                    Box(Modifier.fillMaxSize()) {
+                        AccountDetailScreen(onNavigate = {}, accountId = "acc-nu", group = com.jvillada.movi.shared.model.AccountGroup.DINERO)
+                    }
+                }
+            }
+        }
+        val aporte = "Aparta \$160.000 al mes"
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText(aporte, substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        }
+        val nodo = unoConTexto(aporte)
+        dentroDeLaPantalla(nodo, aporte)
+        val r = mutableListOf<TextLayoutResult>()
+        nodo.config[SemanticsActions.GetTextLayoutResult].action?.invoke(r)
+        val layout = r.single()
+        val ultima = layout.lineCount - 1
+        val texto = layout.layoutInput.text.text
+        assertTrue(!layout.isLineEllipsized(ultima), "sin «…»: $texto")
+        assertEquals(texto.length, layout.getLineEnd(ultima, visibleEnd = true), "«$aporte» entero")
+        assertTrue(layout.lineCount <= LINEAS_DEL_GASTO, "en ${layout.lineCount} renglones")
+    }
 }

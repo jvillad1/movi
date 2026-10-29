@@ -78,14 +78,30 @@ internal fun conSuRestante(propuesto: Apartado, actual: Apartado?): Apartado {
  * exactamente lo que dice el Inicio ahora y «después» lo que va a decir cuando el server recalcule.
  */
 fun teQuedanConElApartado(data: DashboardData, propuesto: Apartado, hoy: LocalDate): TeQuedanConElApartado? {
+    val apartados = data.apartados ?: return null
+    val actual = apartados.firstOrNull { it.id == propuesto.id }
+    return teQuedanConLosApartados(data, apartados.filterNot { it.id == propuesto.id } + conSuRestante(propuesto, actual), hoy)
+}
+
+/**
+ * **«Te quedan» si se quita el apartado [id]** (revisión de la vuelta 64): lo que dice la hoja mientras
+ * se confirma «Quitar» — «Te quedan vuelve a $1.450.950» ([fraseAlQuitar]). La misma cuenta que
+ * [teQuedanConElApartado], con la lista sin ese apartado.
+ */
+fun teQuedanSinElApartado(data: DashboardData, id: String, hoy: LocalDate): TeQuedanConElApartado? {
+    val apartados = data.apartados ?: return null
+    return teQuedanConLosApartados(data, apartados.filterNot { it.id == id }, hoy)
+}
+
+/** «Te quedan» de hoy y con [nuevos] en lugar de los apartados de [data]. */
+private fun teQuedanConLosApartados(data: DashboardData, nuevos: List<Apartado>, hoy: LocalDate): TeQuedanConElApartado? {
     val plata = data.plataDelDisponible ?: return null
     val cuentas = data.accounts ?: return null
     val apartados = data.apartados ?: return null
     val antes = teQuedanDelInicio(data, hoy) ?: return null
     val checklist = checklistDelPeriodoDe(data)
-    val actual = apartados.firstOrNull { it.id == propuesto.id }
     val sin = apartadoFueraDeLosFijos(cuentas, apartados, checklist)
-    val conElPropuesto = apartados.filterNot { it.id == propuesto.id } + conSuRestante(propuesto, actual)
+    val conElPropuesto = nuevos
     val con = apartadoFueraDeLosFijos(cuentas, conElPropuesto, checklist)
     val conElApartado = data.copy(
         apartados = conElPropuesto,
@@ -120,6 +136,16 @@ fun fraseDeLaVistaPrevia(v: TeQuedanConElApartado): String = when {
     v.despues == null -> "Con este apartado no te queda plata para gastar en el período"
     v.despues == v.antes -> "Te quedan sigue en${ESPACIO_QUE_NO_SE_PARTE}${cifraQueNoSeParte(v.antes)}"
     else -> "Te quedan pasa de ${cifraQueNoSeParte(v.antes)} a$ESPACIO_QUE_NO_SE_PARTE${cifraQueNoSeParte(v.despues)}"
+}
+
+/**
+ * Lo que dice la vista previa mientras se confirma «Quitar»: «Te quedan vuelve a $1.450.950», o `null`
+ * si quitarlo no cambia «Te quedan» (entonces no hay nada que anunciar y la vista previa se oculta).
+ */
+fun fraseAlQuitar(v: TeQuedanConElApartado): String? {
+    val queda = v.despues ?: return null
+    if (queda == v.antes) return null
+    return "Te quedan vuelve a${ESPACIO_QUE_NO_SE_PARTE}${cifraQueNoSeParte(queda)}"
 }
 
 /**
@@ -171,6 +197,15 @@ fun mesesParaElGasto(hoy: LocalDate): List<PeriodoFinanciero> {
     return (0 until MESES_PARA_EL_GASTO).map { este.mas(it) }
 }
 
+/**
+ * Las pastillas de la hoja: [mesesParaElGasto] y, delante, el mes que el apartado ya tenía guardado si
+ * quedó atrás (revisión de la vuelta 64): así un apartado cuyo mes pasó se edita sin perder su mes.
+ */
+fun mesesDeLaHoja(hoy: LocalDate, mesGuardado: PeriodoFinanciero?): List<PeriodoFinanciero> {
+    val meses = mesesParaElGasto(hoy)
+    return if (mesGuardado == null || mesGuardado in meses) meses else listOf(mesGuardado) + meses
+}
+
 /** «marzo», o «marzo de 2027» si no es del año de [hoy]. */
 fun nombreDelMesDelGasto(mes: PeriodoFinanciero, hoy: LocalDate): String =
     if (mes.year == hoy.year) nombreDelMesDe(mes) else "${nombreDelMesDe(mes)} de ${mes.year}"
@@ -182,22 +217,34 @@ fun pastillaDelMes(mes: PeriodoFinanciero, hoy: LocalDate): String {
 }
 
 /**
- * **El renglón del apartado para un gasto**, en el detalle de la cuenta: «Para marzo: llevas $400.000
- * de $1.200.000 · aparta $160.000 al mes». Lo que lleva es lo que le queda ([Apartado.restante]). Sin
- * nada más que apartar, «ya lo tienes»; con el mes ya pasado, sin sugerencia. `null` si el apartado no
- * es para un gasto.
+ * **Las líneas del apartado para un gasto**, en el detalle de la cuenta, en dos renglones (revisión de
+ * la vuelta 64: en uno solo, a 360 y a 390, se cortaba justo el aporte, «… aparta $160.000 al m…»):
+ *
+ * - «Llevas $400.000 de $1.200.000 · marzo de 2027» — lo que lleva es lo que le queda
+ *   ([Apartado.restante]);
+ * - «Aparta $160.000 al mes», o «Ya lo tienes» si no hace falta más; con el mes ya pasado, nada.
+ *
+ * Juntas con un salto de línea, para el subtítulo de la fila (que deja hasta [LINEAS_DEL_GASTO]). `null`
+ * si el apartado no es para un gasto.
  */
 fun lineaDelGasto(apartado: Apartado, mes: PeriodoFinanciero?, hoy: LocalDate): String? {
     val objetivo = apartado.objetivo ?: return null
     mes ?: return null
-    val base = "Para ${nombreDelMesDelGasto(mes, hoy)}: llevas ${formatCOP(apartado.restante)} de ${formatCOP(objetivo)}"
+    val llevas = "Llevas ${formatCOP(apartado.restante)} de ${formatCOP(objetivo)} · ${nombreDelMesDelGasto(mes, hoy)}"
     val aporte = aporteMensualSugerido(objetivo, apartado.restante, mesesHastaElGasto(mes, hoy))
-    return when {
-        aporte == null -> base
-        aporte == 0L -> "$base · ya lo tienes"
-        else -> "$base · aparta ${formatCOP(aporte)} al mes"
+    val segunda = when {
+        aporte == null -> null
+        aporte == 0L -> "Ya lo tienes"
+        else -> "Aparta ${formatCOP(aporte)} al mes"
     }
+    return listOfNotNull(llevas, segunda).joinToString("\n")
 }
+
+/**
+ * Los renglones del subtítulo de un apartado para un gasto: los dos de [lineaDelGasto] y uno más por si
+ * el primero no cabe entero a 360 con la letra grande.
+ */
+const val LINEAS_DEL_GASTO: Int = 3
 
 /**
  * Lo que dice la hoja mientras se arma el gasto: «Aparta $160.000 al mes» y, debajo, de dónde sale.
