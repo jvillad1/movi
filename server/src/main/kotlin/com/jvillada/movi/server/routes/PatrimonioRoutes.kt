@@ -11,6 +11,9 @@ import com.jvillada.movi.server.fx.FxRateService
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.server.time.appDateToEpochMillis
+import com.jvillada.movi.server.time.epochMillisToAppDateString
+import com.jvillada.movi.shared.model.ADJUSTMENT_CATEGORY
+import com.jvillada.movi.shared.model.OPENING_CATEGORY
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.HistoriaDelPatrimonio
 import com.jvillada.movi.shared.model.MESES_DE_HISTORIA
@@ -23,6 +26,7 @@ import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import org.jetbrains.exposed.sql.Case
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.less
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.notInList
 import org.jetbrains.exposed.sql.Transaction
@@ -89,39 +93,77 @@ internal fun Transaction.historiaDelPatrimonioSinSuspender(
         .where { VoidEvents.userId eq uid }
         .map { it[VoidEvents.originalEventId] }
     val sumas = sumasPorTramo(uid, cierres, voidedIds)
+    // Vuelta 60: lo mismo, solo los ajustes de saldo y las aperturas, para decir cuánto del neto son
+    // correcciones de lo que Movi sabía (ver `PuntoDelPatrimonio.ajustes`). Una consulta más.
+    val sumasDeAjustes = sumasPorTramo(uid, cierres, voidedIds, soloAjustes = true)
 
     val cuentas = Accounts.selectAll()
         .where { Accounts.userId eq uid }
         .mapNotNull { row -> runCatching { row.toAccount() }.getOrNull() }
 
-    fun patrimonioHasta(tramo: Int): Long {
+    fun patrimonioHasta(tramo: Int, sinAjustes: Boolean = false): Long {
         // El saldo de cada cuenta con todo lo que cayó antes del cierre: los tramos 0..tramo-1.
-        val conSaldo: List<Account> = cuentas.map { cuenta ->
-            val saldos = sumas.filter { it.accountId == cuenta.id && it.tramo < tramo }
+        fun delta(lista: List<SumaDelTramo>, cuenta: Account): Map<String, Long> =
+            lista.filter { it.accountId == cuenta.id && it.tramo < tramo }
                 .groupBy { it.moneda }
                 .mapValues { (_, l) -> l.sumOf { signedDelta(cuenta.type, it.tipo, it.monto) } }
+        val conSaldo: List<Account> = cuentas.map { cuenta ->
+            val todo = delta(sumas, cuenta)
+            val saldos = if (!sinAjustes) {
+                todo
+            } else {
+                val ajustes = delta(sumasDeAjustes, cuenta)
+                (todo.keys + ajustes.keys).associateWith { (todo[it] ?: 0L) - (ajustes[it] ?: 0L) }
+            }
             conSaldos(cuenta, saldos, usdToCop)
         }
         // Sin apartados: no cambian el neto (ver `Patrimonio.apartado`).
         return patrimonioDe(conSaldo).neto
     }
 
+    // El neto y cuánto de él son ajustes: el neto con todo menos el neto sin ellos (no se supone que
+    // `patrimonioDe` sea una suma: se calcula dos veces).
+    fun punto(mes: String, fecha: String, tramo: Int, esHoy: Boolean = false): PuntoDelPatrimonio {
+        val neto = patrimonioHasta(tramo)
+        val ajustes = if (sumasDeAjustes.isEmpty()) 0L else neto - patrimonioHasta(tramo, sinAjustes = true)
+        return PuntoDelPatrimonio(mes = mes, fecha = fecha, neto = neto, esHoy = esHoy, ajustes = ajustes)
+    }
+
     val puntos = meses.mapIndexedNotNull { i, mes ->
         // Un mes que cerró antes del primer movimiento no tiene datos: no se dibuja como cero.
         if (cierres[i] <= primerMovimiento) return@mapIndexedNotNull null
-        PuntoDelPatrimonio(
-            mes = mes.toString().take(7),
-            fecha = mes.plusMonths(1).minusDays(1).toString(),
-            neto = patrimonioHasta(i + 1),
-        )
-    } + PuntoDelPatrimonio(
+        punto(mes = mes.toString().take(7), fecha = mes.plusMonths(1).minusDays(1).toString(), tramo = i + 1)
+    } + punto(
         mes = hoy.toString().take(7),
         fecha = hoy.toString(),
         // Todos los tramos: lo mismo que suma `GET /api/accounts` hoy.
-        neto = patrimonioHasta(cierres.size + 1),
+        tramo = cierres.size + 1,
         esHoy = true,
     )
-    return HistoriaDelPatrimonio(puntos = puntos, conLaTrmDeHoy = conDolares)
+    return HistoriaDelPatrimonio(
+        puntos = puntos,
+        conLaTrmDeHoy = conDolares,
+        primerMovimiento = primerMovimientoReal(uid, voidedIds)?.let { epochMillisToAppDateString(it) },
+        conBienes = cuentas.any { it.bien != null },
+    )
+}
+
+/** Las categorías que corrigen lo que Movi sabía: no son plata ganada ni perdida (vuelta 60). */
+private val CATEGORIAS_DE_AJUSTE = listOf(ADJUSTMENT_CATEGORY, OPENING_CATEGORY)
+
+/**
+ * **El primer movimiento real** de [uid] (vuelta 60): el más viejo, sin anulados, que no es una
+ * apertura ni un ajuste de saldo. Es el arranque de «Tus períodos» (sus períodos vacíos del principio
+ * son los de antes del primer movimiento de flujo), no el primer punto de la curva.
+ */
+private fun Transaction.primerMovimientoReal(uid: String, voidedIds: List<String>): Long? {
+    val primero = Events.timestamp.min()
+    return Events.select(primero)
+        .where {
+            val base = (Events.userId eq uid) and (Events.category notInList CATEGORIAS_DE_AJUSTE)
+            if (voidedIds.isEmpty()) base else base and (Events.id notInList voidedIds)
+        }
+        .firstOrNull()?.get(primero)
 }
 
 /** Lo que movió una cuenta en un tramo, en una moneda y un tipo. */
@@ -142,7 +184,13 @@ private class SumaDelTramo(
  * `SELECT` y en el `GROUP BY`, y Postgres solo los reconoce como la misma expresión si el texto es
  * idéntico; con parámetros serían `$1` en uno y `$13` en el otro.
  */
-private fun Transaction.sumasPorTramo(uid: String, cierres: List<Long>, voidedIds: List<String>): List<SumaDelTramo> {
+private fun Transaction.sumasPorTramo(
+    uid: String,
+    cierres: List<Long>,
+    voidedIds: List<String>,
+    /** Solo los ajustes de saldo y las aperturas ([CATEGORIAS_DE_AJUSTE]). */
+    soloAjustes: Boolean = false,
+): List<SumaDelTramo> {
     val primerCaso = Case().When(Events.timestamp less longLiteral(cierres.first()), intLiteral(0))
     val casos = cierres.drop(1).foldIndexed(primerCaso) { i, caso, cierre ->
         caso.When(Events.timestamp less longLiteral(cierre), intLiteral(i + 1))
@@ -151,7 +199,8 @@ private fun Transaction.sumasPorTramo(uid: String, cierres: List<Long>, voidedId
     val total = Events.amount.sum()
     return Events.select(Events.accountId, Events.type, Events.currency, tramo, total)
         .where {
-            val base = Events.userId eq uid
+            val delUsuario = Events.userId eq uid
+            val base = if (soloAjustes) delUsuario and (Events.category inList CATEGORIAS_DE_AJUSTE) else delUsuario
             if (voidedIds.isEmpty()) base else base and (Events.id notInList voidedIds)
         }
         .groupBy(Events.accountId, Events.type, Events.currency, tramo)

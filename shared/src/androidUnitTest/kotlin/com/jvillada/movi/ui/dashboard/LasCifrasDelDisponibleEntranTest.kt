@@ -101,9 +101,16 @@ class LasCifrasDelDisponibleEntranTest {
         }
         composeRule.waitForIdle()
 
-        // La semana y hoy: «−$888.888» grande y «$888.888» chico. El período (vuelta de diseño 3):
-        // «$888.888» grande y «de $0» chico.
-        listOf("−\$888.888" to 2, "gastaste" to 3, "\$888.888" to 3, "de \$0" to 1).forEach { (texto, cuantas) ->
+        // Vuelta 60: sin margen y con gasto ya no queda nada, así que la semana y hoy dicen «$0», «ya te
+        // pasaste» y «llevas $888.888» (antes «−$888.888» y «gastaste»). El período (vuelta de diseño
+        // 3): «$888.888» grande, «en el día a día» y «de $0» chico.
+        listOf(
+            "ya te pasaste" to 2,
+            "llevas \$888.888" to 2,
+            "\$888.888" to 1,
+            "en el día a día" to 1,
+            "de \$0" to 1,
+        ).forEach { (texto, cuantas) ->
             val nodos = composeRule.onAllNodesWithText(texto, useUnmergedTree = true).fetchSemanticsNodes()
             assertEquals("«$texto» tendría que estar en $cuantas columnas", cuantas, nodos.size)
             nodos.forEach { nodo ->
@@ -146,7 +153,7 @@ class LasCifrasDelDisponibleEntranTest {
             }
         }
         composeRule.waitForIdle()
-        listOf("\$888.888", "de \$12,5M").forEach { texto ->
+        listOf("\$888.888", "de \$12,5M", "en el día a día").forEach { texto ->
             val nodos = composeRule.onAllNodesWithText(texto, useUnmergedTree = true).fetchSemanticsNodes()
             assertTrue("«$texto» tendría que estar", nodos.isNotEmpty())
             nodos.forEach { nodo ->

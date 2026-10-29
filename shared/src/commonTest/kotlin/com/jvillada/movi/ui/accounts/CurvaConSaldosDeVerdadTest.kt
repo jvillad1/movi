@@ -36,8 +36,10 @@ class CurvaConSaldosDeVerdadTest {
         val puntos = puntosConSaldos(historia.puntos)
 
         assertEquals("2026-08", puntos.first().mes, "arranca el mes en que se cargaron los saldos")
+        // Vuelta 60: los meses planos eran movimientos viejos —el dueño usa Movi desde antes—, así que
+        // la curva no dice «desde que usas Movi»: dice desde dónde arranca.
         val leyenda = leyendaDeLaCurva(puntos, desdeQueUsasMovi = arrancaConElDueno(historia, puntos))
-        assertEquals("Desde que usas Movi (ago 2026), subió \$200.000", leyenda)
+        assertEquals("Desde ago 2026, subió \$200.000", leyenda)
         assertFalse(leyenda.contains("10,9"), "el salto de la carga no es una ganancia")
     }
 

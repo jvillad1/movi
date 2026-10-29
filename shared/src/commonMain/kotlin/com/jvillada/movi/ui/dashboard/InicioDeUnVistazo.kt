@@ -306,7 +306,8 @@ data class FraseDelDisponible(val texto: String, val nivel: NivelDelGasto)
  * la vuelta de diseño 1 iba la meta diaria ([DisponibleDelPeriodo.metaPorDia], el disponible entre
  * los días del período ENTERO), y junto a «para 6 días» se leía «puedes gastar $404.412 por día en los
  * 6 días que faltan» cuando en realidad eran $1,8M. Pegada a «para N días», la única cifra que se lee
- * bien es la división de esos dos números. La meta diaria sigue en la columna «Hoy», rotulada.
+ * bien es la división de esos dos números. La columna «Meta de hoy» usa la misma regla desde la vuelta
+ * 60: lo que quedaba al empezar el día entre los días que quedan.
  */
 fun fraseDelDisponible(d: DisponibleDelPeriodo): FraseDelDisponible {
     if (!d.hayMargen) {

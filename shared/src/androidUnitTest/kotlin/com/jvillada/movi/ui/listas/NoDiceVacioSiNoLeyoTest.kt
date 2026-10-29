@@ -107,7 +107,7 @@ class NoDiceVacioSiNoLeyoTest {
         // «Nuevo» y no «Nuevo presupuesto»: el botón del encabezado dice solo «Nuevo», y por
         // substring esto cubre también el «Nuevo presupuesto» de la pantalla vacía.
         assertTrue(!hay("Nuevo"))
-        assertTrue(!hay("Gastado en"))
+        assertTrue(!hay("Fuera de presupuesto"))
         val antes = lecturas
         reintentar()
         composeRule.waitUntil(5_000) { lecturas > antes }

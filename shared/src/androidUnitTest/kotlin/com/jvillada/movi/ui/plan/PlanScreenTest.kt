@@ -271,7 +271,7 @@ class PlanScreenTest {
         // checklist vacío ni «Flujo libre» en $0 — un solo vacío que enseña los reemplaza.
         assertTrue(hay("Aquí van tus pagos fijos"))
         assertTrue(!hay(tituloDelChecklist))
-        assertTrue(!hay("Gastado en", substring = true), "Presupuestos no se pinta con Pagos elegido")
+        assertTrue(!hay("Fuera de presupuesto", substring = true), "Presupuestos no se pinta con Pagos elegido")
         assertEquals(0, contarTag(TAG_ESQUELETO_DEL_TABLERO))
     }
 
@@ -343,7 +343,7 @@ class PlanScreenTest {
         puerta.complete(Unit)
         montar(segmento = SEGMENTO_PRESUPUESTOS)
 
-        assertTrue(hay("Gastado en", substring = true))
+        assertTrue(hay("Fuera de presupuesto", substring = true))
         assertEquals(1, contarTag(TAG_TARJETA_DEL_GASTO_DEL_PERIODO))
         // Vuelta 29: en una pestaña la acción va en su botón redondo, con «Nuevo» de nombre.
         assertTrue(
@@ -371,7 +371,7 @@ class PlanScreenTest {
 
         composeRule.onNodeWithText("Presupuestos", useUnmergedTree = true).performClick()
         composeRule.waitForIdle()
-        assertTrue(hay("Gastado en", substring = true))
+        assertTrue(hay("Fuera de presupuesto", substring = true))
         assertTrue(hay("Comida"))
         assertTrue(ofreceNuevo())
         assertTrue(!hay(tituloDelChecklist))
@@ -379,7 +379,7 @@ class PlanScreenTest {
         selectorDePagos().performClick()
         composeRule.waitForIdle()
         assertTrue(hay("Aquí van tus pagos fijos"))
-        assertTrue(!hay("Gastado en", substring = true))
+        assertTrue(!hay("Fuera de presupuesto", substring = true))
     }
 
     /**
@@ -486,13 +486,13 @@ class PlanScreenTest {
         composeRule.onNodeWithText("Presupuestos", useUnmergedTree = true).performClick()
         composeRule.waitForIdle()
 
-        assertTrue(!hay("Gastado en", substring = true), "la carga cancelada no cuenta como contestada")
+        assertTrue(!hay("Fuera de presupuesto", substring = true), "la carga cancelada no cuenta como contestada")
         assertTrue(!hay("Comida"))
         assertEquals(1, contarTag(TAG_ESQUELETO_DEL_GASTO_DEL_PERIODO))
 
         puerta.complete(Unit)
         composeRule.waitForIdle()
-        assertTrue(hay("Gastado en", substring = true))
+        assertTrue(hay("Fuera de presupuesto", substring = true))
         assertTrue(hay("Comida"))
     }
 
@@ -817,7 +817,7 @@ class PlanScreenTest {
         enPlan = true
         composeRule.waitForIdle()
 
-        assertTrue(hay("Gastado en", substring = true), "vuelve a Presupuestos, no al segmento de entrada")
+        assertTrue(hay("Fuera de presupuesto", substring = true), "vuelve a Presupuestos, no al segmento de entrada")
         assertTrue(!hay(tituloDelChecklist))
     }
 

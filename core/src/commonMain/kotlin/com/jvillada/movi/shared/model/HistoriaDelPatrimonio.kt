@@ -34,7 +34,37 @@ data class HistoriaDelPatrimonio(
     val puntos: List<PuntoDelPatrimonio> = emptyList(),
     /** Hay plata en otra moneda: los puntos la cuentan con la TRM de hoy. */
     val conLaTrmDeHoy: Boolean = false,
+    /**
+     * Vuelta 60: **el primer movimiento real del dueño** (ISO, `"2025-08-14"`): el más viejo que no es
+     * una apertura ni un ajuste de saldo. Es desde cuándo «usas Movi» —el mismo arranque de «Tus
+     * períodos», que tiene movimientos desde ahí—, no el primer punto de la curva. `null` con un
+     * server viejo o sin movimientos.
+     */
+    val primerMovimiento: String? = null,
+    /** Vuelta 60: hay bienes (la casa, el carro): cuentan con su valor de hoy en todos los puntos. */
+    val conBienes: Boolean = false,
 )
+
+/**
+ * **Lo que cambió el patrimonio entre dos puntos, y cuánto de eso son ajustes** (vuelta 60).
+ *
+ * @property cambio el neto del último menos el del primero.
+ * @property porAjustes lo que de ese cambio vino de ajustes de saldo y aperturas hechos entre los dos
+ *   puntos ([PuntoDelPatrimonio.ajustes]): correcciones de lo que Movi sabía, no plata ganada ni
+ *   perdida.
+ */
+data class CambioDelPatrimonio(val cambio: Long, val porAjustes: Long) {
+    /** El cambio sin los ajustes: lo que de verdad se movió. Resta pura, sin cifras nuevas. */
+    val sinAjustes: Long get() = cambio - porAjustes
+}
+
+/** El [CambioDelPatrimonio] del primero al último de [puntos], o `null` con menos de dos. */
+fun cambioDelPatrimonio(puntos: List<PuntoDelPatrimonio>): CambioDelPatrimonio? {
+    if (puntos.size < 2) return null
+    val primero = puntos.first()
+    val ultimo = puntos.last()
+    return CambioDelPatrimonio(cambio = ultimo.neto - primero.neto, porAjustes = ultimo.ajustes - primero.ajustes)
+}
 
 /**
  * Un punto de la curva.
@@ -43,6 +73,11 @@ data class HistoriaDelPatrimonio(
  * @property fecha el último día del mes, ISO; en el punto de hoy, hoy.
  * @property neto el patrimonio neto a esa fecha ([Patrimonio.neto]).
  * @property esHoy el último punto: lo que hay ahora, no un cierre.
+ * @property ajustes vuelta 60: **cuánto de [neto] viene de ajustes de saldo y aperturas** («Ajuste de
+ *   saldo», «Saldo inicial»/«Deuda inicial»): el neto con todo menos el neto sin esos movimientos, a
+ *   esa fecha. No son ganancia ni pérdida: son lo que Movi no sabía y el dueño le contó después
+ *   (una deuda que ya existía, un saldo que se corrigió). La diferencia entre dos puntos dice cuánto
+ *   del cambio fue eso ([cambioDelPatrimonio]). Cero con un server viejo.
  */
 @Serializable
 data class PuntoDelPatrimonio(
@@ -50,4 +85,5 @@ data class PuntoDelPatrimonio(
     val fecha: String,
     val neto: Long,
     val esHoy: Boolean = false,
+    val ajustes: Long = 0L,
 )

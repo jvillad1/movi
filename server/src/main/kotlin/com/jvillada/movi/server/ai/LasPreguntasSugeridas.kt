@@ -29,6 +29,9 @@ import com.jvillada.movi.server.time.ajustesDePeriodoDe
 import com.jvillada.movi.server.time.appDateToEpochMillis
 import com.jvillada.movi.server.time.epochMillisToAppDate
 import com.jvillada.movi.shared.model.ADJUSTMENT_CATEGORY
+import com.jvillada.movi.shared.model.CambioDeCategoriaDeUnRecurrente
+import com.jvillada.movi.shared.model.comoEnElPeriodoAnterior
+import com.jvillada.movi.server.routes.cambiosDeCategoriaDe
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.Anomalia
 import com.jvillada.movi.shared.model.DebitoAutomaticoPorConfirmar
@@ -149,6 +152,11 @@ internal data class DatosDeLasSugeridas(
     val sinCuadrar: List<Account> = emptyList(),
     /** Vuelta 59: los préstamos y tarjetas sin saldo en Movi (en negativo, ver `deudasSinSaldoDe`). */
     val sinSaldo: List<Account> = emptyList(),
+    /**
+     * Vuelta 60: los recurrentes que este período quedaron en otra categoría que el anterior y el
+     * dueño no resolvió. «En qué se va» los compara donde estaban (ver `comoEnElPeriodoAnterior`).
+     */
+    val cambiosDeCategoria: List<CambioDeCategoriaDeUnRecurrente> = emptyList(),
 ) {
     val salio: Long get() = gastoPorCategoria.values.sum()
 }
@@ -255,7 +263,12 @@ internal suspend fun datosDeLasSugeridas(
             pagosDeTarjeta = if (revisar) cardPaymentCandidateCount(uid, anulados, tipos) else 0,
             cuadresPorAviso = if (revisar) cuadresPorAvisoDe(uid) else emptyList(),
             debitos = debitos,
-            anomalias = if (revisar) loQueSeSaleDeLoNormalDe(uid, hoy, ajustes, conDeudas = true) else emptyList(),
+            anomalias = if (revisar) loQueSeSaleDeLoNormalDe(uid, hoy, ajustes, conDeudas = true, conRecurrentes = true) else emptyList(),
+            cambiosDeCategoria = if (pregunta == PreguntaSugerida.EN_QUE_SE_VA && anterior != null) {
+                cambiosDeCategoriaDe(uid, hoy, ajustes)
+            } else {
+                emptyList()
+            },
             sinCuadrar = if (revisar) cuentasSinCuadrar(cuentasConSusSellos(uid, anulados), ahora) else emptyList(),
             sinSaldo = if (revisar) deudasSinSaldoDe(cuentasConSaldo(uid, anulados, usdToCop)) else emptyList(),
         )
@@ -424,10 +437,23 @@ internal fun enQueSeVa(d: DatosDeLasSugeridas): String {
         .sortedWith(compareByDescending<Map.Entry<String, Long>> { it.value }.thenBy { it.key.lowercase() })
         .take(CATEGORIAS_DE_EN_QUE_SE_VA)
     val dias = d.diasComparados
+    // Vuelta 60: el recurrente que solo cambió de categoría (el arriendo en Otros, que el período
+    // pasado fue Hogar) se compara donde estaba: no es «Otros +$1,8M». Las cifras no cambian.
+    val paraComparar = comoEnElPeriodoAnterior(positivas, d.cambiosDeCategoria)
     val renglones = ordenadas.mapIndexed { i, (categoria, gastado) ->
+        // Vuelta 60 (la revisión): el renglón de la categoría donde quedó el recurrente no compara —sin
+        // él, «Otros $1.800.000 · casi igual que el período pasado» no decía nada—: dice qué es.
+        val cambiados = d.cambiosDeCategoria.filter { it.categoria == categoria }
+        if (d.anterior != null && cambiados.isNotEmpty()) {
+            val queEs = cambiados.joinToString(" y ") { c ->
+                if (cambiados.size == 1 && c.monto >= gastado) "es ${c.nombre}, que el período pasado fue ${c.categoriaAnterior}"
+                else "incluye ${c.nombre} (${pesosDelCierre(c.monto)}), que el período pasado fue ${c.categoriaAnterior}"
+            }
+            return@mapIndexed "${i + 1}. $categoria ${pesosDelCierre(gastado)} · $queEs"
+        }
         val comparacion = d.anterior?.let { anterior ->
             val antes = anterior[categoria] ?: 0L
-            contraElAnterior(gastado, antes)?.let { c ->
+            contraElAnterior(paraComparar[categoria] ?: 0L, antes)?.let { c ->
                 when (c.tendencia) {
                     Tendencia.SUBE -> " · ${pesosDelCierre(c.diferencia)} más que el período pasado"
                     Tendencia.BAJA -> " · ${pesosDelCierre(c.diferencia)} menos que el período pasado"
@@ -441,6 +467,15 @@ internal fun enQueSeVa(d: DatosDeLasSugeridas): String {
         add("Este período (${d.rango}) salieron ${pesosDelCierre(d.salio)}. Lo que más pesa:\n" + renglones.joinToString("\n"))
         if (d.anterior != null && dias != null) {
             add("Comparo contra los primeros $dias ${if (dias == 1) "día" else "días"} del período pasado, los mismos que lleva este.")
+        }
+        if (d.anterior != null && d.cambiosDeCategoria.isNotEmpty()) {
+            add(
+                d.cambiosDeCategoria.joinToString("\n") { c ->
+                    "${c.nombre} (${pesosDelCierre(c.monto)}) quedó en ${c.categoria} y el período pasado fue " +
+                        "${c.categoriaAnterior}: lo comparo como ${c.categoriaAnterior}. Si es así, cámbialo en " +
+                        "«Movi propone hoy», en Inicio."
+                },
+            )
         }
         if (d.pequenos.isNotEmpty()) {
             add(

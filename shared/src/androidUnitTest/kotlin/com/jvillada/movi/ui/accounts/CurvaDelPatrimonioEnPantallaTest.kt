@@ -3,6 +3,8 @@ package com.jvillada.movi.ui.accounts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
@@ -47,6 +49,8 @@ class CurvaDelPatrimonioEnPantallaTest {
             PuntoDelPatrimonio("2026-10", "2026-10-20", 9_050_000L, esHoy = true),
         ),
         conLaTrmDeHoy = true,
+        // Vuelta 60: «desde que usas Movi» sale del primer movimiento real, no de la curva.
+        primerMovimiento = "2026-08-03",
     )
 
     @After
@@ -78,9 +82,25 @@ class CurvaDelPatrimonioEnPantallaTest {
     fun `con historia pinta la curva, de donde a donde fue y la TRM de hoy`() {
         montar { historia }
         composeRule.waitUntil(timeoutMillis = 5_000) { curvas() == 1 }
-        // Tres puntos (menos que la ventana de doce meses): la curva arranca con el dueño.
+        // El primer punto es el mes del primer movimiento real: la curva arranca con el dueño.
         assertTrue(hay("Desde que usas Movi (ago 2026), subió"))
         assertTrue(hay(CON_LA_TRM_DE_HOY))
+    }
+
+    /** Vuelta 60: el ajuste de este mes se marca en hoy y la nota dice cuánto son ajustes. */
+    @Test
+    fun `un ajuste de este mes se marca en hoy y la nota lo explica`() {
+        montar {
+            historia.copy(
+                puntos = historia.puntos.dropLast(1) +
+                    historia.puntos.last().copy(neto = 4_300_000L - 34_600_000L, ajustes = -35_500_000L),
+            )
+        }
+        composeRule.waitUntil(timeoutMillis = 5_000) { curvas() == 1 }
+        val descripcion = composeRule.onNodeWithTag(TAG_CURVA_DEL_PATRIMONIO, useUnmergedTree = true)
+            .fetchSemanticsNode().config[SemanticsProperties.ContentDescription].joinToString(" ")
+        assertTrue(HOY_INCLUYE_UN_AJUSTE in descripcion, descripcion)
+        assertTrue(hay("Los ajustes suman −\$35,5M"))
     }
 
     @Test
