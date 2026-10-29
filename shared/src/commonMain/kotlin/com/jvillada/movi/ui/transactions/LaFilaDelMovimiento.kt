@@ -53,7 +53,9 @@ fun textosDeLaFila(tx: FinancialEvent, nombreDeLaCuenta: String?): TextosDeLaFil
     // Vuelta de diseño 32: lo que el banco mandó en mayúsculas se lee en forma de título.
     val descripcion = descripcionParaMostrar(tx)
     val deSiempre = TextosDeLaFila(descripcion, cuenta?.let { "${tx.category} · $it" } ?: tx.category)
-    if (tx.category == CUOTA_CATEGORY) return deSiempre.copy(titulo = tituloDeLaCuota(tx))
+    // Con el concepto que escribe Movi («Cuota de Vehículo 4083 · nota»); uno propio («Transferencia a
+    // Caro») sigue siendo el título, como en cualquier movimiento.
+    if (tx.category == CUOTA_CATEGORY && esElConceptoDeUnaCuota(tx)) return deSiempre.copy(titulo = tituloDeLaCuota(tx))
     if (!laDescripcionEsLaCategoria(tx)) return deSiempre
     val comercio = tx.merchant?.trim()?.takeIf {
         it.isNotEmpty() && normalizarParaBuscar(it) != normalizarParaBuscar(tx.category)
@@ -68,8 +70,13 @@ fun textosDeLaFila(tx: FinancialEvent, nombreDeLaCuenta: String?): TextosDeLaFil
  * **El título de una cuota de crédito** (vuelta 67), desde la pata del dinero: «Cuota de Vehículo
  * 4083». Sale del concepto que escribe `pagoDeCuotaLegs` («Cuota de Vehículo 4083», con la nota del
  * dueño después de « · »), sin la nota; si el concepto no tiene esa forma, «Cuota de crédito». Es el mismo para la fila suelta (Gastos) y el renglón
- * del par (Todo, [transferRowTitle]).
+ * del par (Todo, [transferRowTitle]). La fila suelta lo usa solo con ese concepto
+ * ([esElConceptoDeUnaCuota]); con uno propio, el concepto.
  */
+/** ¿El concepto de [tx] es el que escribe `pagoDeCuotaLegs` («Cuota de …»)? */
+fun esElConceptoDeUnaCuota(tx: FinancialEvent): Boolean =
+    descripcionParaMostrar(tx).trim().startsWith("Cuota de ", ignoreCase = true)
+
 fun tituloDeLaCuota(pataDelDinero: FinancialEvent): String {
     val concepto = descripcionParaMostrar(pataDelDinero).trim()
     return if (concepto.startsWith("Cuota de ", ignoreCase = true)) concepto.substringBefore(" · ").trim() else CUOTA_CATEGORY

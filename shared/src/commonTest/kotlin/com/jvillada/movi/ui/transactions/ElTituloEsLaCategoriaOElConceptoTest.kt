@@ -39,5 +39,7 @@ class ElTituloEsLaCategoriaOElConceptoTest {
         assertEquals("Cuota de Vehículo 4083", transferRowTitle(par, mapOf("ahorros" to AccountType.SAVINGS, "carro" to AccountType.LOAN)))
         // Sin el concepto de siempre, el nombre de la categoría.
         assertEquals(CUOTA_CATEGORY, tituloDeLaCuota(dinero.copy(description = "")))
+        // Una cuota suelta con un concepto propio («Transferencia a Caro») sigue titulada por su concepto.
+        assertEquals("Transferencia a Caro", textosDeLaFila(dinero.copy(description = "Transferencia a Caro", transferId = null), "Ahorros").titulo)
     }
 }
