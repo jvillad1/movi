@@ -64,7 +64,7 @@ class Vuelta74LogicaTest {
         assertEquals("Anotado \$32.000 · Restaurantes", textoDeLoAnotado(restaurantes))
         assertEquals("Anotado \$500.000 · Traspaso", textoDeLoAnotado("Traspaso", 500_000L, "COP"))
         assertEquals("Repartir con Caro", rotuloDeRepartirCon(casa))
-        assertEquals("Repartido con Caro · tu parte \$16.000", textoDeRepartido(casa, 16_000L))
+        assertEquals("Tu parte \$16.000 · repartido con Caro", textoDeRepartido(casa, 16_000L))
     }
 
     @Test

@@ -192,7 +192,7 @@ class AnotadoConDeshacerTest {
         composeRule.waitForIdle()
 
         assertEquals(listOf(casa.id to guardados.single().id), repartidos)
-        assertEquals("Repartido con Caro · tu parte \$16.000", aviso.actual?.texto)
+        assertEquals("Tu parte \$16.000 · repartido con Caro", aviso.actual?.texto)
         composeRule.onNodeWithTag(TAG_DESHACER_DEL_AVISO).performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitUntil(5_000) { quitados.isNotEmpty() }
         assertEquals(listOf(casa.id to guardados.single().id), quitados, "deshacer el reparto lo saca del grupo")

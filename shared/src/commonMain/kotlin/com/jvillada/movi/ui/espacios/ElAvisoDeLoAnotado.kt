@@ -67,10 +67,13 @@ private fun losOtros(espacio: Espacio): List<String> =
 fun rotuloDeRepartirCon(espacio: Espacio): String =
     losOtros(espacio).singleOrNull()?.let { "Repartir con $it" } ?: "Repartir en ${espacio.nombre}"
 
-/** «Repartido con Caro · tu parte $16.000» (o «Repartido en Casa · …»). */
+/**
+ * «Tu parte $16.000 · repartido con Caro» (o «… · repartido en Casa»). Revisión de la vuelta 82: el monto
+ * primero, como [textoDeLoAnotado]: lo que se corta es con quién, nunca la cifra.
+ */
 fun textoDeRepartido(espacio: Espacio, tuParte: Long): String {
     val con = losOtros(espacio).singleOrNull()?.let { "con $it" } ?: "en ${espacio.nombre}"
-    return "Repartido $con · tu parte ${formatMoney(tuParte, "COP")}"
+    return "Tu parte ${formatMoney(tuParte, "COP")} · repartido $con"
 }
 
 /** El rótulo de la acción cuando hay varios grupos: abre la elección. */
