@@ -28,7 +28,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.platform.testTag
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.ui.credits.saldoDelPlanEnLaFicha
-import kotlinx.coroutines.launch
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.Apartado
 import com.jvillada.movi.shared.model.mesDelGastoDe
@@ -102,9 +101,6 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
     var loading by remember { mutableStateOf(true) }  // true de entrada: antes de la primera lectura no se afirma ni vacío ni error
     var error by remember { mutableStateOf<String?>(null) }
     var refreshKey by remember { mutableStateOf(0) }
-    // Vuelta 77: «Usar este» (el saldo según el plan) mientras guarda.
-    var usandoElDelPlan by remember { mutableStateOf(false) }
-    val alcanceDelPlan = androidx.compose.runtime.rememberCoroutineScope()
     // Ver [NoSePudoLeer]: «Sin movimientos aún» solo si la lectura contestó.
     var leida by remember { mutableStateOf(false) }
     var selectedEvent by remember { mutableStateOf<FinancialEvent?>(null) }
@@ -340,16 +336,9 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                             // Vuelta 77: con sus condiciones completas, el saldo que da el plan, con «Usar
                             // este» (el ajuste de saldo de siempre, fechado hoy; nunca se escribe solo).
                             saldoDelPlan = deuda?.prestamo?.let { saldoDelPlanEnLaFicha(it, hoyEnAppZone()) },
-                            usandoElDelPlan = usandoElDelPlan,
+                            // «Usar este» abre la hoja de siempre ya llena con la cifra del plan.
                             onUsarElDelPlan = { saldo ->
-                                val credito = deuda?.prestamo ?: return@EncabezadoDeLaCuenta
-                                usandoElDelPlan = true
-                                alcanceDelPlan.launch {
-                                    runCatching { Repositories.wallets.adjustCreditBalance(credito.account.id, saldo) }
-                                        .onSuccess { refreshKey++ }
-                                        .onFailure { error = it.toUserMessage() }
-                                    usandoElDelPlan = false
-                                }
+                                deuda?.let { d -> d.cifraPropuesta = saldo; d.hoja = HojaDeLaDeuda.Saldo }
                             },
                         )
                         Spacer(Modifier.height(Medida.entreSecciones))
@@ -766,7 +755,6 @@ private fun EncabezadoDeLaCuenta(
     onAjustarLaDeuda: () -> Unit = onCuadrarEsta,
     /** Vuelta 77: «Según tu plan debes unos $X y terminas en … · Usar este» (ver `saldoDelPlanEnLaFicha`). */
     saldoDelPlan: com.jvillada.movi.ui.credits.ElSaldoDelPlanEnLaFicha? = null,
-    usandoElDelPlan: Boolean = false,
     onUsarElDelPlan: (Long) -> Unit = {},
 ) {
     val isCard = isDebtAccount(acc.type)
@@ -830,48 +818,37 @@ private fun EncabezadoDeLaCuenta(
                     modifier = Modifier.testTag(TAG_DEUDA_SIN_SALDO),
                 )
                 Spacer(Modifier.height(Espacio.xs))
+                // Vuelta 77 (revisión): UNA sola fila de saldo. Con el plan completo, «Según tu plan debes
+                // unos $X y terminas en … · Usar este» (abre la hoja de siempre ya llena con esa cifra; otra
+                // cifra se escribe ahí mismo, y se guarda con «Registrar ajuste», nunca solo). Sin plan,
+                // «Escribe lo que debes hoy según el banco · Cargarlo».
+                val conPlan = creditoSinSaldo && saldoDelPlan != null
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth()
+                        .then(if (conPlan) Modifier.testTag(com.jvillada.movi.ui.credits.TAG_SALDO_SEGUN_EL_PLAN) else Modifier),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(Espacio.s),
                 ) {
                     Text(
-                        if (creditoSinSaldo) CUANTO_DEBES_SEGUN_EL_BANCO else FALTA_EL_SALDO_DE_LA_DEUDA,
+                        when {
+                            conPlan -> com.jvillada.movi.ui.credits.textoDelSaldoDelPlanEnLaFicha(saldoDelPlan!!)
+                            creditoSinSaldo -> CUANTO_DEBES_SEGUN_EL_BANCO
+                            else -> FALTA_EL_SALDO_DE_LA_DEUDA
+                        },
                         style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,
                         modifier = Modifier.weight(1f),
                     )
                     Boton(
-                        texto = if (creditoSinSaldo) CARGAR_EL_SALDO_DEL_CREDITO else CUADRAR_LAS_DEUDAS_SIN_SALDO,
-                        onClick = onAjustarLaDeuda,
+                        texto = when {
+                            conPlan -> com.jvillada.movi.ui.credits.USAR_EL_SALDO_DEL_PLAN
+                            creditoSinSaldo -> CARGAR_EL_SALDO_DEL_CREDITO
+                            else -> CUADRAR_LAS_DEUDAS_SIN_SALDO
+                        },
+                        onClick = { if (conPlan) onUsarElDelPlan(saldoDelPlan!!.saldo) else onAjustarLaDeuda() },
                         variante = VarianteDeBoton.Secundario,
                         tamano = TamanoDeBoton.S,
                     )
-                }
-                // Vuelta 77: lo que dice el plan, con un toque para usarlo. Escribe el ajuste de saldo de
-                // siempre con esa cifra, fechado hoy; nunca solo.
-                if (creditoSinSaldo && saldoDelPlan != null) {
-                    Spacer(Modifier.height(Espacio.xs))
-                    Row(
-                        modifier = Modifier.fillMaxWidth().testTag(com.jvillada.movi.ui.credits.TAG_SALDO_SEGUN_EL_PLAN),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(Espacio.s),
-                    ) {
-                        Text(
-                            com.jvillada.movi.ui.credits.textoDelSaldoDelPlanEnLaFicha(saldoDelPlan),
-                            style = Movi.textos.apoyo,
-                            color = Movi.colores.textoMedio,
-                            modifier = Modifier.weight(1f),
-                        )
-                        Boton(
-                            texto = com.jvillada.movi.ui.credits.USAR_EL_SALDO_DEL_PLAN,
-                            onClick = { onUsarElDelPlan(saldoDelPlan.saldo) },
-                            variante = VarianteDeBoton.Fantasma,
-                            tamano = TamanoDeBoton.S,
-                            cargando = usandoElDelPlan,
-                            habilitado = !usandoElDelPlan,
-                        )
-                    }
                 }
             }
         } else {

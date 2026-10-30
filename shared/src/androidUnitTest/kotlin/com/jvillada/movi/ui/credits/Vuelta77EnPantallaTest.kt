@@ -61,8 +61,8 @@ import kotlin.test.assertTrue
 /**
  * # Vuelta 77 · una deuda, una cifra, en pantalla
  *
- * La ficha de un préstamo sin saldo dice lo que da su plan con «Usar este» (que escribe el ajuste de
- * siempre) y tiene UNA sola acción de saldo; la de un préstamo con saldo abre con «Pagar la cuota de …»
+ * La ficha de un préstamo sin saldo dice lo que da su plan con «Usar este» (que abre la hoja del ajuste
+ * de siempre, ya llena) y tiene UNA sola acción de saldo; la de un préstamo con saldo abre con «Pagar la cuota de …»
  * (o dice que está pagada); el plan de salida compara los dos órdenes; la curva del patrimonio usa un solo
  * verbo; y una conversación nueva de Movi AI ofrece primero las tres preguntas que no gastan IA. El abono
  * en modo Pagar lo vigilan `ElExtractoYElAbonoEnPantallaTest` y `ElAbonoQueSeTildaEnPantallaTest`, y
@@ -147,21 +147,31 @@ class Vuelta77EnPantallaTest {
         val plan = assertNotNull(saldoDelPlanEnLaFicha(vehiculoSinSaldo, hoy), "con todas sus condiciones hay plan")
 
         assertTrue(hay(FALTA_EL_SALDO_DEL_CREDITO))
+        assertFalse(hay(AJUSTAR_EL_SALDO, substring = false))
         val propuesta = composeRule.onNodeWithTag(TAG_SALDO_SEGUN_EL_PLAN, useUnmergedTree = true)
         propuesta.assertExists()
         assertTrue(hay(textoDelSaldoDelPlanEnLaFicha(plan)))
         assertTrue(textoDelSaldoDelPlanEnLaFicha(plan).contains(" y terminas en "), "con el plan dice cuándo terminas")
         assertTrue(repo.ajustes.isEmpty(), "nunca se escribe solo")
 
+        // Revisión: una sola fila. «Usar este» abre la hoja de siempre ya llena con la cifra del plan; se
+        // guarda con «Registrar ajuste».
+        assertFalse(hay(CARGAR_EL_SALDO_DEL_CREDITO, substring = false), "«Cargarlo» y «Usar este» no conviven")
         tocar(USAR_EL_SALDO_DEL_PLAN)
+        assertTrue(hay(ES_LA_CIFRA_DE_TU_PLAN), "la hoja llega con la cifra del plan")
+        assertTrue(repo.ajustes.isEmpty(), "abrir la hoja no escribe nada")
+        tocar("Registrar ajuste")
         composeRule.waitUntil(5_000) { repo.ajustes.isNotEmpty() }
         assertEquals(listOf("acc_veh" to plan.saldo), repo.ajustes)
     }
 
     @Test
-    fun `una sola accion de saldo - sin saldo Cargarlo, con saldo Ajustar saldo`() {
-        montarLaFicha(vehiculoSinSaldo, Repo(listOf(vehiculoSinSaldo)))
+    fun `una sola accion de saldo - sin plan Cargarlo, y nunca Ajustar saldo al lado`() {
+        // Sin la tasa no hay plan: solo «Cargarlo».
+        val sinPlan = vehiculoSinSaldo.copy(terms = vehiculoSinSaldo.terms!!.copy(rateEa = 0.0))
+        montarLaFicha(sinPlan, Repo(listOf(sinPlan)))
         assertTrue(hay(CARGAR_EL_SALDO_DEL_CREDITO, substring = false))
+        assertFalse(hay(USAR_EL_SALDO_DEL_PLAN, substring = false))
         assertFalse(hay(AJUSTAR_EL_SALDO, substring = false), "«Cargarlo» y «Ajustar saldo» no conviven")
     }
 
@@ -250,7 +260,7 @@ class Vuelta77EnPantallaTest {
         assertEquals("Desde ago 2026, subió \$837.900", leyenda)
         val nota = composeRule.onNodeWithTag(TAG_NOTA_DE_LOS_AJUSTES, useUnmergedTree = true)
             .fetchSemanticsNode().config[SemanticsProperties.Text].joinToString { it.text }
-        assertTrue(nota.startsWith("Sin contar \$18,5M de ajustes de saldo"), nota)
+        assertTrue(nota.startsWith("Sin contar −\$18,5M de ajustes de saldo"), nota)
         assertFalse(nota.contains("subió") || nota.contains("bajó"), "un solo verbo: $nota")
     }
 

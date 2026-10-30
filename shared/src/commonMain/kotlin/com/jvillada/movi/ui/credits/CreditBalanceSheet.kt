@@ -43,8 +43,15 @@ fun CreditBalanceSheet(
     credit: CreditSummary,
     onDismiss: () -> Unit,
     onSaved: () -> Unit,
+    /**
+     * Vuelta 77 · **la cifra del plan, ya escrita** («Usar este»): el campo llega lleno con ella y debajo
+     * dice que es la del plan y que, si el banco dice otra, se escribe ahí mismo. Igual se guarda con
+     * «Registrar ajuste»: nunca solo. `null` = el campo vacío, como siempre.
+     */
+    cifraPropuesta: Long? = null,
 ) {
     HojaDeAjustarLaDeuda(
+        inicial = cifraPropuesta,
         nombre = credit.account.name,
         deudaEnMovi = credit.account.balance,
         moneda = "COP",
@@ -97,6 +104,8 @@ fun CardBalanceSheet(
  */
 @Composable
 private fun HojaDeAjustarLaDeuda(
+    /** Vuelta 77: la cifra con que llega el campo (la del plan), o `null`. */
+    inicial: Long? = null,
     nombre: String,
     deudaEnMovi: Long,
     moneda: String,
@@ -111,7 +120,7 @@ private fun HojaDeAjustarLaDeuda(
     val coroutine = rememberCoroutineScope()
     val current = deudaEnMovi
 
-    var target by remember { mutableStateOf<Long?>(null) }
+    var target by remember { mutableStateOf(inicial) }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
@@ -164,6 +173,11 @@ private fun HojaDeAjustarLaDeuda(
                 placeholder = rotuloDelCampo,
             )
 
+            // Vuelta 77: la cifra que trajo «Usar este» es la del plan; otra cifra se escribe acá mismo.
+            if (inicial != null && target == inicial) {
+                Spacer(Modifier.height(Espacio.xs))
+                Text(ES_LA_CIFRA_DE_TU_PLAN, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+            }
             Spacer(Modifier.height(Espacio.xs))
             Text(
                 text = when {
@@ -199,3 +213,6 @@ private fun HojaDeAjustarLaDeuda(
         Spacer(Modifier.height(Espacio.l))
     }
 }
+
+/** Vuelta 77: debajo del campo lleno con la cifra del plan («Usar este»). */
+const val ES_LA_CIFRA_DE_TU_PLAN: String = "Es la cifra de tu plan. Si el banco dice otra, escríbela aquí."

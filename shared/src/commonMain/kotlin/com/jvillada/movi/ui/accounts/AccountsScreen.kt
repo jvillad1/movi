@@ -62,7 +62,6 @@ import com.jvillada.movi.ui.components.TAG_FILA_DE_LISTA_ESQUELETO
 import com.jvillada.movi.ui.components.saldoEnSuMoneda
 import com.jvillada.movi.ui.components.signedMoney
 import com.jvillada.movi.ui.components.toUserMessage
-import kotlinx.coroutines.launch
 import com.jvillada.movi.ui.components.valorEnPesos
 import com.jvillada.movi.ui.components.ds.Chevron
 import com.jvillada.movi.ui.components.ds.Cifra
@@ -164,9 +163,8 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
     // Lectura propia —`null` = no contestó, no vacía por default— e independiente de `accounts`:
     // esta tarjeta tiene que poder aparecer aunque Cuentas siga cargando o se haya rendido.
     val creditosLeidos = rememberLectura(ClaveDeLectura.Creditos, reintento = refreshKey) { Repositories.wallets.getCredits() }
-    // Vuelta 77: «Usar este» (el saldo según el plan del crédito sin saldo) mientras guarda.
-    var usandoElDelPlan by remember { mutableStateOf(false) }
-    val alcanceDelPlan = androidx.compose.runtime.rememberCoroutineScope()
+    // Vuelta 77: «Usar este» abre la hoja del saldo del crédito ya llena con la cifra de su plan.
+    var hojaDelPlan by remember { mutableStateOf<Pair<CreditSummary, Long>?>(null) }
     val tarjetasLeidas = rememberLectura(ClaveDeLectura.Tarjetas, reintento = refreshKey) { Repositories.wallets.getCards() }
     // Un «Sin deudas registradas» recordado no se afirma si la lectura de esta visita falló: se
     // trata como no leído (el «No pudimos cargar» de la sección). Con deudas a la vista se quedan.
@@ -284,15 +282,8 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                                     com.jvillada.movi.ui.credits.saldoDelPlanEnLaFicha(c, com.jvillada.movi.ui.fecha.hoyEnAppZone())?.let { c.account.id to it }
                                 }.toMap()
                             },
-                            usandoElDelPlan = usandoElDelPlan,
                             onUsarElDelPlan = { id, saldo ->
-                                usandoElDelPlan = true
-                                alcanceDelPlan.launch {
-                                    runCatching { Repositories.wallets.adjustCreditBalance(id, saldo) }
-                                        .onSuccess { refreshKey++ }
-                                        .onFailure { error = it.toUserMessage() }
-                                    usandoElDelPlan = false
-                                }
+                                creditos?.firstOrNull { it.account.id == id }?.let { hojaDelPlan = it to saldo }
                             },
                         )
                     }
@@ -385,6 +376,15 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                 .align(Alignment.BottomCenter)
                 .padding(bottom = Medida.margenDePantalla),
         )
+
+        hojaDelPlan?.let { (credito, cifra) ->
+            com.jvillada.movi.ui.credits.CreditBalanceSheet(
+                credit = credito,
+                onDismiss = { hojaDelPlan = null },
+                onSaved = { hojaDelPlan = null; refreshKey++ },
+                cifraPropuesta = cifra,
+            )
+        }
 
         if (showCreateSheet) {
             CreateAccountSheet(
@@ -538,8 +538,7 @@ private fun TarjetaDelPatrimonio(
     onCuadrar: (String?) -> Unit = {},
     /** Vuelta 77: el saldo según el plan de cada crédito sin saldo con sus condiciones completas, por id. */
     saldosDelPlan: Map<String, com.jvillada.movi.ui.credits.ElSaldoDelPlanEnLaFicha> = emptyMap(),
-    usandoElDelPlan: Boolean = false,
-    /** «Usar este»: el ajuste de saldo de siempre del crédito [id], con esa cifra y fechado hoy. */
+    /** «Usar este»: abre la hoja de ajustar el saldo del crédito [id], ya llena con la cifra del plan. */
     onUsarElDelPlan: (id: String, saldo: Long) -> Unit = { _, _ -> },
 ) {
     Superficie(modifier = Modifier.fillMaxWidth().testTag(TAG_TARJETA_DEL_PATRIMONIO)) {
@@ -579,41 +578,39 @@ private fun TarjetaDelPatrimonio(
                         tarjetas = deudasSinSaldo.count { it.type != AccountType.LOAN },
                     )?.let { "Incluye $it" }
                 )?.let { sinSaldo ->
+                // Vuelta 77 (revisión): UNA sola fila. Con el plan completo del crédito, debajo de «Falta el
+                // saldo de …» va lo que dice su plan y el botón es «Usar este» (la hoja de siempre, ya llena
+                // con esa cifra); sin plan, «Cargarlo».
+                val plan = unCreditoSinSaldo?.let { saldosDelPlan[it.id] }
                 Row(
                     modifier = Modifier.fillMaxWidth().testTag(TAG_DEUDAS_SIN_SALDO_EN_EL_PATRIMONIO),
                     horizontalArrangement = Arrangement.spacedBy(Espacio.s),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(sinSaldo, style = Movi.textos.apoyo, color = Movi.colores.aviso, modifier = Modifier.weight(1f))
+                    Column(Modifier.weight(1f)) {
+                        Text(sinSaldo, style = Movi.textos.apoyo, color = Movi.colores.aviso)
+                        if (plan != null) {
+                            Text(
+                                com.jvillada.movi.ui.credits.textoDelSaldoDelPlanEnLaFicha(plan),
+                                style = Movi.textos.apoyo,
+                                color = Movi.colores.textoMedio,
+                                modifier = Modifier.testTag(com.jvillada.movi.ui.credits.TAG_SALDO_SEGUN_EL_PLAN),
+                            )
+                        }
+                    }
                     Boton(
-                        texto = if (unCreditoSinSaldo != null) CARGAR_EL_SALDO_DEL_CREDITO else CUADRAR_LAS_DEUDAS_SIN_SALDO,
-                        onClick = { onCuadrar(deudasSinSaldo.singleOrNull()?.id) },
+                        texto = when {
+                            plan != null -> com.jvillada.movi.ui.credits.USAR_EL_SALDO_DEL_PLAN
+                            unCreditoSinSaldo != null -> CARGAR_EL_SALDO_DEL_CREDITO
+                            else -> CUADRAR_LAS_DEUDAS_SIN_SALDO
+                        },
+                        onClick = {
+                            if (plan != null && unCreditoSinSaldo != null) onUsarElDelPlan(unCreditoSinSaldo.id, plan.saldo)
+                            else onCuadrar(deudasSinSaldo.singleOrNull()?.id)
+                        },
                         variante = VarianteDeBoton.Fantasma,
                         tamano = TamanoDeBoton.S,
                     )
-                }
-                // Vuelta 77: con un solo crédito sin saldo y sus condiciones completas, lo que dice su plan.
-                unCreditoSinSaldo?.let { saldosDelPlan[it.id] }?.let { plan ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth().testTag(com.jvillada.movi.ui.credits.TAG_SALDO_SEGUN_EL_PLAN),
-                        horizontalArrangement = Arrangement.spacedBy(Espacio.s),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            com.jvillada.movi.ui.credits.textoDelSaldoDelPlanEnLaFicha(plan),
-                            style = Movi.textos.apoyo,
-                            color = Movi.colores.textoMedio,
-                            modifier = Modifier.weight(1f),
-                        )
-                        Boton(
-                            texto = com.jvillada.movi.ui.credits.USAR_EL_SALDO_DEL_PLAN,
-                            onClick = { onUsarElDelPlan(unCreditoSinSaldo.id, plan.saldo) },
-                            variante = VarianteDeBoton.Fantasma,
-                            tamano = TamanoDeBoton.S,
-                            cargando = usandoElDelPlan,
-                            habilitado = !usandoElDelPlan,
-                        )
-                    }
                 }
             }
         }

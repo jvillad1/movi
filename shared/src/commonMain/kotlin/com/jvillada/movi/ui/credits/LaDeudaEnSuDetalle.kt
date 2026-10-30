@@ -130,12 +130,18 @@ class DeudaDelDetalle internal constructor(
     var registrando: CreditSummary?
         get() = abierto.registrando
         set(valor) { abierto.registrando = valor }
+
+    /** Vuelta 77: la cifra con que se abre la hoja del saldo («Usar este», la del plan), o `null`. */
+    var cifraPropuesta: Long?
+        get() = abierto.cifraPropuesta
+        set(valor) { abierto.cifraPropuesta = valor }
 }
 
 /** Lo que el dueño abrió en la deuda: sobrevive a que la deuda se relea. */
 internal class LoAbiertoDeLaDeuda {
     var hoja: HojaDeLaDeuda? by mutableStateOf(null)
     var registrando: CreditSummary? by mutableStateOf(null)
+    var cifraPropuesta: Long? by mutableStateOf(null)
 }
 
 /**
@@ -502,8 +508,9 @@ fun HojasDeLaDeuda(
         HojaDeLaDeuda.Saldo -> when {
             prestamo != null -> CreditBalanceSheet(
                 credit = prestamo,
-                onDismiss = { deuda.hoja = null },
-                onSaved = { deuda.hoja = null; onCambiada() },
+                onDismiss = { deuda.hoja = null; deuda.cifraPropuesta = null },
+                onSaved = { deuda.hoja = null; deuda.cifraPropuesta = null; onCambiada() },
+                cifraPropuesta = deuda.cifraPropuesta,
             )
             tarjeta != null -> CardBalanceSheet(
                 card = tarjeta,
