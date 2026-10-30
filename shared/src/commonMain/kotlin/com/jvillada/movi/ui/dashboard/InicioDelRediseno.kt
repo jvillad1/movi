@@ -13,7 +13,9 @@ import com.jvillada.movi.shared.model.CambioDeCategoriaDeUnRecurrente
 import com.jvillada.movi.shared.model.fraseDelCierre
 import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.tituloDelPeriodo
-import com.jvillada.movi.shared.model.rangoCortoDelPeriodo
+import com.jvillada.movi.shared.model.nombreDelPeriodo
+import com.jvillada.movi.shared.time.epochMillisToAppDate
+import kotlinx.datetime.Clock
 import com.jvillada.movi.shared.model.rangoDelPeriodo
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.ANCHO_DE_LECTURA
@@ -66,9 +68,15 @@ fun saludoDelInicio(nombre: String?): String {
  * 360 dp (vuelta de diseño 11); el corto entra, y dice lo mismo que la línea «Del … al …» de Pagos. Con
  * el mes de calendario no hay nada que aclarar: sigue el nombre, «Octubre 2026». El rango entero va en
  * la descripción para el lector de pantalla ([descripcionDelPeriodoDelEncabezado]).
+ *
+ * Vuelta 75: es [nombreDelPeriodo], el mismo nombre de Actividad, Pagos y Tus períodos («Octubre» con el
+ * mes de calendario, sin el año de hoy).
  */
-fun periodoDelEncabezado(data: DashboardData): String? = data.periodoActual?.let { periodo ->
-    if (data.ajustesDePeriodo.esMesDeCalendario) tituloDelPeriodo(periodo) else rangoCortoDelPeriodo(periodo, data.ajustesDePeriodo)
+fun periodoDelEncabezado(
+    data: DashboardData,
+    anioDeHoy: Int? = epochMillisToAppDate(Clock.System.now().toEpochMilliseconds()).year,
+): String? = data.periodoActual?.let { periodo ->
+    nombreDelPeriodo(periodo, data.ajustesDePeriodo, anioDeHoy)
 }
 
 /** El comienzo de la línea del encabezado cuando las cifras a la vista son de antes de una carga caída. */

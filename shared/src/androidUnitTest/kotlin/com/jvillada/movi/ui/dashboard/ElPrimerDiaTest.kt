@@ -314,7 +314,7 @@ class ElPrimerDiaTest {
         // los dos íconos. Debajo, el rango largo, para que la prueba muestre lo que el corto evita.
         val ajustes = PeriodSettings(cutoffDay = 25)
         val septiembre = PeriodoFinanciero(2026, 9)
-        val subtitulo = periodoDelEncabezado(DashboardData(periodoActual = septiembre, ajustesDePeriodo = ajustes))!!
+        val subtitulo = periodoDelEncabezado(DashboardData(periodoActual = septiembre, ajustesDePeriodo = ajustes), anioDeHoy = 2026)!!
         assertEquals("25 ago – 24 sep", subtitulo)
         val deAntes = rangoLegibleDe(septiembre, ajustes)!!
         conLetraGrande(escala) {

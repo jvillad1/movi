@@ -92,13 +92,12 @@ import com.jvillada.movi.shared.model.ADJUSTMENT_CATEGORY
 import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.siElCorteCaeEnFinDeSemanaDe
 import com.jvillada.movi.shared.model.PeriodoFinanciero
-import com.jvillada.movi.shared.model.nombreDe
+import com.jvillada.movi.shared.model.nombreDelPeriodo
 import com.jvillada.movi.shared.model.periodoActual
 import com.jvillada.movi.shared.model.periodoAnterior
 import com.jvillada.movi.shared.model.periodoDeLaFecha
 import com.jvillada.movi.shared.model.periodoDelPrefijo
 import com.jvillada.movi.shared.model.periodoSiguiente
-import com.jvillada.movi.shared.model.rangoLegibleDe
 import com.jvillada.movi.shared.model.showsInMovements
 import com.jvillada.movi.ui.profile.InicioDelPeriodoSheet
 import com.jvillada.movi.ui.profile.guardarInicioDelPeriodo
@@ -1426,32 +1425,25 @@ fun TransactionsScreen(
                         .clickable(onClickLabel = "Cambiar el inicio del período") { editandoElInicio = true },
                     verticalArrangement = Arrangement.Center,
                 ) {
-                    Text(
-                        text = nombreDe(periodoVisible).replaceFirstChar { it.uppercase() },
-                        style = Movi.textos.cuerpo,
-                        color = Movi.colores.texto,
-                    )
-                    // Mientras el perfil no contestó, un esqueleto reserva el lugar de esta línea
-                    // —si no, aparecía al llegar el corte y empujaba la lista—, salvo que la última
-                    // carga que salió bien no la tuviera (corte 1, ver `formaDeMovimientos`).
+                    // Vuelta 75 · un solo nombre del período ([nombreDelPeriodo]): «23 oct – 24 nov», o
+                    // «Octubre» con el mes de calendario. Era «Noviembre de 2026» y, debajo, «Del 23 de
+                    // octubre al 24 de noviembre»: dos nombres más para lo que Inicio llama por sus fechas.
+                    // Mientras el perfil no contestó, el nombre todavía sería el del mes de calendario:
+                    // un esqueleto del mismo alto, salvo que la última carga que salió bien fuera la de
+                    // un mes de calendario (corte 1, ver `formaDeMovimientos`), que ya se sabe nombrar.
                     if (!perfilLeido && formaDeMovimientos?.lineaDePeriodo != false) {
                         LineaEsqueleto(
-                            fraccionDelAncho = 0.5f,
-                            estilo = Movi.textos.apoyo,
+                            fraccionDelAncho = 0.4f,
+                            estilo = Movi.textos.cuerpo,
                             modifier = Modifier.testTag(TAG_LINEA_DE_PERIODO_ESQUELETO),
                         )
-                    } else if (perfilLeido) {
-                        // Con corte 1 esto es `null` y no se pinta: no hay nada que aclarar sobre
-                        // un mes de calendario. Con cualquier otro corte es lo único que explica
-                        // por qué «septiembre» empieza en agosto.
-                        rangoLegibleDe(periodoVisible, ajustesDelPeriodo)?.let { rango ->
-                            Text(
-                                text = rango,
-                                style = Movi.textos.apoyo,
-                                color = Movi.colores.textoMedio,
-                                modifier = Modifier.testTag(TAG_LINEA_DE_PERIODO),
-                            )
-                        }
+                    } else {
+                        Text(
+                            text = nombreDelPeriodo(periodoVisible, ajustesDelPeriodo),
+                            style = Movi.textos.cuerpo,
+                            color = Movi.colores.texto,
+                            modifier = Modifier.testTag(TAG_LINEA_DE_PERIODO),
+                        )
                     }
                 }
                 if (puedeAvanzarDePeriodo(periodoVisible, periodoDeHoy)) {

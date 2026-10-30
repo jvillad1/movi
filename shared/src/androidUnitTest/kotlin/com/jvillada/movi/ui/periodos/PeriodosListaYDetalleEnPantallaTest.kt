@@ -85,7 +85,7 @@ class PeriodosListaYDetalleEnPantallaTest {
                 id = p.prefijo, nombre = tituloDelPeriodo(p),
                 desde = "${p.prefijo}-01", hasta = "${p.prefijo}-28",
                 enCurso = i == 0, entradas = 1_000_000L, salidas = 400_000L, movimientos = 3,
-            )
+            ).let { r -> r.copy(nombre = nombreDelResumen(r)) } // Vuelta 75: el nombre que la fila pinta.
         }.toList()
 
     private val banco = Account("acc-banco", "Bancolombia", AccountType.SAVINGS, 1_000_000L, "COP")

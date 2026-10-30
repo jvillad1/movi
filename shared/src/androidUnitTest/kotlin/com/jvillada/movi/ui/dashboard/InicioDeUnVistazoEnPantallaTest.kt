@@ -323,7 +323,8 @@ class InicioDeUnVistazoEnPantallaTest {
         val conRangoDePeriodo = datos.copy(ajustesDePeriodo = ajustes, periodoActual = PeriodoFinanciero(2026, 9))
         montar(conRangoDePeriodo)
 
-        composeRule.onNodeWithText("Del 25 de agosto al 24 de septiembre", substring = true, useUnmergedTree = true)
+        // Vuelta 75: el nombre único del período.
+        composeRule.onNodeWithText("25 ago – 24 sep", substring = true, useUnmergedTree = true)
             .performClick()
         assertEquals(Screen.Periodos, navegoA)
     }

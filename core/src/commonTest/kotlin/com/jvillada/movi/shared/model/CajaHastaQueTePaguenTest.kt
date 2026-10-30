@@ -116,6 +116,73 @@ class CajaHastaQueTePaguenTest {
         assertEquals("2026-10-31", largo.hasta.toString())
     }
 
+    // ── Vuelta 75 · sin salario, al período siguiente ───────────────────────
+
+    @Test
+    fun `sin salario y con el periodo elegido la caja llega al arranque del periodo siguiente`() {
+        // «25 · es el día que me pagan» y ningún ingreso anotado: antes miraba hasta el 28 de nov (30 días).
+        val hoy = "2026-10-29"
+        val l = listas(hoy, delDueno, listOf(vence(regla("arriendo", 1_800_000L, 5), "2026-11-05", hoy)))
+        val horizonte = assertNotNull(horizonteDeLaCaja(hoy, l.ultimoDia, l.delSiguiente, conElPeriodoElegido = true))
+        assertEquals("2026-11-25", horizonte.hasta.toString(), "el 25-nov es miércoles: ese día arranca el siguiente")
+        assertNull(horizonte.salario)
+        assertTrue(horizonte.alPeriodoSiguiente)
+
+        val caja = assertNotNull(
+            cajaHastaQueTePaguen(5_000_000L, l.delPeriodo, l.delSiguiente, null, hoy, l.ultimoDia, conElPeriodoElegido = true),
+        )
+        assertEquals("2026-11-25", caja.alCierre.fecha)
+        assertTrue(caja.hastaElPeriodoSiguiente && !caja.hastaElSalario)
+        assertEquals(3_200_000L, caja.alCierre.saldo, "el arriendo del 5 de nov entra con la regla de siempre")
+    }
+
+    @Test
+    fun `sin salario, con el corte en fin de semana, la caja llega al dia habil anterior`() {
+        // El 25-ene-2026 es domingo: el período siguiente arranca el viernes 23.
+        val hoy = "2026-01-10"
+        val l = listas(hoy, delDueno, emptyList())
+        assertEquals("2026-01-22", l.ultimoDia)
+        val caja = assertNotNull(cajaHastaQueTePaguen(1_000_000L, l.delPeriodo, l.delSiguiente, null, hoy, l.ultimoDia, conElPeriodoElegido = true))
+        assertEquals("2026-01-23", caja.alCierre.fecha)
+    }
+
+    @Test
+    fun `con un periodo excepcional la caja llega a ese arranque`() {
+        // El dueño empezó el período de noviembre el 20 de octubre (le pagaron antes).
+        val ajustes = delDueno.conInicioPropio(PeriodoFinanciero(2026, 11), "2026-10-20")
+        val hoy = "2026-10-05"
+        val l = listas(hoy, ajustes, emptyList())
+        assertEquals("2026-10-19", l.ultimoDia)
+        val caja = assertNotNull(cajaHastaQueTePaguen(1_000_000L, l.delPeriodo, l.delSiguiente, null, hoy, l.ultimoDia, conElPeriodoElegido = true))
+        assertEquals("2026-10-20", caja.alCierre.fecha)
+    }
+
+    @Test
+    fun `con salario el periodo elegido no cambia nada, y sin elegirlo siguen los 30 dias`() {
+        val hoy = "2026-10-29"
+        val salario = regla("salario", 9_000_000L, 25, tipo = TransactionType.INCOME)
+        val l = listas(hoy, delDueno, listOf(vence(salario, "2026-11-25", hoy)))
+        val con = assertNotNull(cajaHastaQueTePaguen(1_000_000L, l.delPeriodo, l.delSiguiente, null, hoy, l.ultimoDia, conElPeriodoElegido = true))
+        val sin = assertNotNull(cajaHastaQueTePaguen(1_000_000L, l.delPeriodo, l.delSiguiente, null, hoy, l.ultimoDia))
+        assertEquals(sin, con.copy(hastaElPeriodoSiguiente = false))
+        assertFalse(con.hastaElPeriodoSiguiente)
+
+        val calendario = listas(hoy, mesDeCalendario, emptyList())
+        val treinta = assertNotNull(horizonteDeLaCaja(hoy, calendario.ultimoDia, calendario.delSiguiente, conElPeriodoElegido = false))
+        assertEquals("2026-11-28", treinta.hasta.toString())
+    }
+
+    @Test
+    fun `al periodo siguiente las invariantes de lo libre siguen`() {
+        val hoy = "2026-10-29"
+        val l = listas(hoy, delDueno, listOf(vence(regla("arriendo", 1_800_000L, 5), "2026-11-05", hoy)))
+        val caja = assertNotNull(
+            cajaHastaQueTePaguen(10_000_000L, l.delPeriodo, l.delSiguiente, 50_000L, hoy, l.ultimoDia, ahorro = 3_000_000L, conElPeriodoElegido = true) { 500_000L },
+        )
+        caja.dias.forEach { assertEquals(it.saldo - 3_500_000L, it.libre) }
+        assertEquals(10_000_000L - 3_500_000L, caja.libreHoy)
+    }
+
     @Test
     fun `un salario en dolares o sin monto no cierra el horizonte, y se sabe por que`() {
         val hoy = "2026-10-29"

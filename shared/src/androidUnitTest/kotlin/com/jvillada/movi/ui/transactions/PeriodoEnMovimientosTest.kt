@@ -27,10 +27,9 @@ import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UserProfile
-import com.jvillada.movi.shared.model.nombreDe
+import com.jvillada.movi.shared.model.nombreDelPeriodo
 import com.jvillada.movi.shared.model.periodoActual
 import com.jvillada.movi.shared.model.periodoAnterior
-import com.jvillada.movi.shared.model.rangoLegibleDe
 import com.jvillada.movi.shared.time.epochMillisToAppDate
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.Screen
@@ -42,6 +41,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import org.robolectric.annotation.Config
 
 /**
@@ -125,7 +125,7 @@ class PeriodoEnMovimientosTest {
     }
 
     private fun rotulo(periodo: com.jvillada.movi.shared.model.PeriodoFinanciero) =
-        nombreDe(periodo).replaceFirstChar { it.uppercase() }
+        nombreDelPeriodo(periodo, ajustes)
 
     @Test
     fun `arranca en el periodo de hoy y lo dice con todas las letras`() {
@@ -133,14 +133,16 @@ class PeriodoEnMovimientosTest {
     }
 
     /**
-     * **La línea del rango es lo que hace honesto al encabezado.** Sin ella, un «Septiembre» que
-     * empieza el 26 de agosto se lee como un error de la app en vez de como el ajuste que el dueño
-     * eligió.
+     * **Vuelta 75 · el nombre ES el rango.** Con un corte que no es el 1, el período se llama por sus
+     * fechas («26 sep – 25 oct»), como en Inicio y en Pagos; ya no «Octubre de 2026» con «Del 26 de
+     * septiembre al 25 de octubre» debajo: eran dos nombres más para lo mismo.
      */
     @Test
-    fun `explica de que fecha a que fecha va su mes`() {
-        val rango = rangoLegibleDe(hoy, ajustes)!!
-        composeRule.onNodeWithText(rango, useUnmergedTree = true).assertIsDisplayed()
+    fun `el nombre del periodo dice de que fecha a que fecha va`() {
+        val nombre = rotulo(hoy)
+        assertTrue(" – " in nombre, nombre)
+        composeRule.onAllNodesWithText("Del ", substring = true, useUnmergedTree = true).fetchSemanticsNodes()
+            .also { check(it.isEmpty()) { "el rango largo ya no va debajo" } }
     }
 
     @Test
@@ -150,8 +152,6 @@ class PeriodoEnMovimientosTest {
 
         val anterior = periodoAnterior(hoy)
         composeRule.onNodeWithText(rotulo(anterior), useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithText(rangoLegibleDe(anterior, ajustes)!!, useUnmergedTree = true)
-            .assertIsDisplayed()
         // Y el gasto de este mes ya no está: es de otro período.
         composeRule.onAllNodesWithText("Carnes y Legumbres Santa Elena", useUnmergedTree = true)
             .fetchSemanticsNodes()

@@ -101,14 +101,14 @@ class PeriodosScreenTest {
     @Test
     fun `la lista pinta cada periodo con su nombre, rango, marcas y cifras, del en curso al mas viejo`() {
         montarConRepo(ConPeriodos(periodos))
-        esperarTexto("Septiembre 2026")
+        esperarTexto("25 ago – 2")
 
-        // Nombre, rango legible y marca de cada fila.
-        assertTrue(hay("Septiembre 2026"))
-        assertTrue(hay("Del 25 de agosto al 24 de septiembre"))
+        // Vuelta 75: el nombre único del período (sus fechas cortas) y la marca de cada fila; el rango largo ya
+        // no va debajo.
+        assertTrue(hay("25 ago – 24 sep"))
+        assertTrue(!hay("Del 25 de agosto al 24 de septiembre"))
         assertTrue(hay("En curso"))
-        assertTrue(hay("Agosto 2026"))
-        assertTrue(hay("Del 26 de julio al 24 de agosto"))
+        assertTrue(hay("26 jul – 24 ago"))
         assertTrue(hay("Empezó el 26"))
 
         // Cifras: entró/salió/te quedó, con las mismas funciones que la pantalla usa.
@@ -121,13 +121,13 @@ class PeriodosScreenTest {
         assertTrue(hay("−" + formatMoneyCompact(conInicioPropio.salidas - conInicioPropio.entradas)))
 
         // Julio, vacío y anterior al primero con movimientos, no es una tarjeta: es la fila del final.
-        assertTrue(!hay("Julio 2026"))
+        assertTrue(!hay("26 jun – 25 jul"))
         assertTrue(!hay("Del 26 de junio al 25 de julio"))
         assertTrue(hay("Antes de agosto 2026 no hay movimientos"))
 
         // Orden: del en curso al más viejo, de arriba hacia abajo, y la fila al final.
-        val topEnCurso = arriba("Septiembre 2026")
-        val topInicioPropio = arriba("Agosto 2026")
+        val topEnCurso = arriba("25 ago – 24 sep")
+        val topInicioPropio = arriba("26 jul – 24 ago")
         val topVacios = arriba("Antes de agosto 2026 no hay movimientos")
         assertTrue(topEnCurso < topInicioPropio, "septiembre (en curso) va arriba de agosto")
         assertTrue(topInicioPropio < topVacios, "agosto va arriba de la fila de los vacíos")
@@ -152,14 +152,14 @@ class PeriodosScreenTest {
                 ),
             ),
         )
-        esperarTexto("Septiembre 2026")
+        esperarTexto("25 ago – 2")
 
         val tarjetas = composeRule.onAllNodesWithTag(TAG_FILA_DE_PERIODO, useUnmergedTree = true).fetchSemanticsNodes()
         assertEquals(2, tarjetas.size, "una tarjeta por período con movimientos")
         val filas = composeRule.onAllNodesWithTag(TAG_VACIOS_DEL_PRINCIPIO, useUnmergedTree = true).fetchSemanticsNodes()
         assertEquals(1, filas.size, "los cuatro vacíos, en una sola fila")
         assertTrue(hay("Antes de agosto 2026 no hay movimientos"))
-        listOf("Julio 2026", "Junio 2026", "Mayo 2026", "Abril 2026").forEach { assertTrue(!hay(it), "$it no es tarjeta") }
+        listOf("26 jun – 25 jul", "26 may – 25 jun", "26 abr – 25 may", "26 mar – 25 abr").forEach { assertTrue(!hay(it), "$it no es tarjeta") }
         assertTrue(!hay("Sin movimientos de flujo"))
         // La fila no abre nada: no hay nada que mirar.
         composeRule.onNodeWithTag(TAG_VACIOS_DEL_PRINCIPIO, useUnmergedTree = true).assert(!hasClickAction())
@@ -184,7 +184,7 @@ class PeriodosScreenTest {
                 ),
             ),
         )
-        esperarTexto("Septiembre 2026")
+        esperarTexto("25 ago – 2")
 
         assertEquals(3, composeRule.onAllNodesWithTag(TAG_FILA_DE_PERIODO, useUnmergedTree = true).fetchSemanticsNodes().size)
         assertEquals(1, composeRule.onAllNodesWithTag(TAG_RACHA_DE_VACIOS, useUnmergedTree = true).fetchSemanticsNodes().size)
@@ -193,7 +193,7 @@ class PeriodosScreenTest {
         composeRule.onNodeWithTag(TAG_RACHA_DE_VACIOS, useUnmergedTree = true).assert(!hasClickAction())
         // En su lugar: entre agosto y abril.
         val racha = arriba("Mayo a julio 2026 · sin movimientos")
-        assertTrue(arriba("Agosto 2026") < racha && racha < arriba("Abril 2026"))
+        assertTrue(arriba("26 jul – 24 ago") < racha && racha < arriba("26 mar – 25 abr"))
     }
 
     @Test
@@ -203,10 +203,10 @@ class PeriodosScreenTest {
             entradas = 100_000L, salidas = 50_000L, movimientos = 2,
         )
         montarConRepo(ConPeriodos(listOf(enCurso, conInicioPropio, sinFlujo, mayoConFlujo)))
-        esperarTexto("Septiembre 2026")
+        esperarTexto("25 ago – 2")
 
         assertEquals(4, composeRule.onAllNodesWithTag(TAG_FILA_DE_PERIODO, useUnmergedTree = true).fetchSemanticsNodes().size)
-        assertTrue(hay("Julio 2026"))
+        assertTrue(hay("26 jun – 25 jul"))
         assertTrue(hay("Sin movimientos de flujo"), "el vacío del medio lo dice con palabras, no con «$0»")
         assertTrue(composeRule.onAllNodesWithTag(TAG_VACIOS_DEL_PRINCIPIO, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
     }
@@ -214,7 +214,7 @@ class PeriodosScreenTest {
     @Test
     fun `un periodo sin marcas no dice ni En curso ni Empezo el`() {
         montarConRepo(ConPeriodos(listOf(sinFlujo)))
-        esperarTexto("Julio 2026")
+        esperarTexto("26 jun – 25 jul")
 
         assertTrue(!hay("En curso"))
         assertTrue(!hay("Empezó el", substring = true))
@@ -230,13 +230,13 @@ class PeriodosScreenTest {
             }
         })
         esperarTexto("No pudimos cargar tus períodos")
-        assertTrue(!hay("Septiembre 2026"))
+        assertTrue(!hay("25 ago – 24 sep"))
 
         falla = false
         composeRule.onNode(hasClickAction() and hasAnyDescendant(hasText("Reintentar")), useUnmergedTree = true)
             .performSemanticsAction(SemanticsActions.OnClick)
 
-        esperarTexto("Septiembre 2026")
+        esperarTexto("25 ago – 2")
         assertTrue(!hay("No pudimos cargar tus períodos"))
     }
 
@@ -249,9 +249,9 @@ class PeriodosScreenTest {
     @Test
     fun `tocar una fila navega al detalle de ese periodo`() {
         montarConRepo(ConPeriodos(periodos))
-        esperarTexto("Septiembre 2026")
+        esperarTexto("25 ago – 2")
 
-        composeRule.onNode(hasClickAction() and hasAnyDescendant(hasText("Agosto 2026")), useUnmergedTree = true)
+        composeRule.onNode(hasClickAction() and hasAnyDescendant(hasText("26 jul – 24 ago")), useUnmergedTree = true)
             .performClick()
 
         assertEquals(Screen.DetalleDePeriodo(conInicioPropio.id), navegado.single())
@@ -302,7 +302,7 @@ class PeriodosScreenTest {
     @Test
     fun `la fila dice cuanto de lo que entro son creditos, y lo que cubrieron los saldos`() {
         montarConRepo(ConPeriodos(listOf(septiembreDelDueno, enCurso.copy(id = "2026-08", nombre = "Agosto 2026", enCurso = false, saldosIniciales = 1_000_000L))))
-        esperarTexto("Septiembre 2026")
+        esperarTexto("25 ago – 2")
 
         assertTrue(hay("Incluye $10M de créditos desembolsados."))
         assertTrue(hay("Lo demás lo cubrieron $1,5M de saldos que ya tenías."))
@@ -314,7 +314,7 @@ class PeriodosScreenTest {
     @Test
     fun `sin creditos ni saldos la lista se ve como siempre`() {
         montarConRepo(ConPeriodos(periodos))
-        esperarTexto("Septiembre 2026")
+        esperarTexto("25 ago – 2")
         assertTrue(!hay("Lo demás lo cubrieron", substring = true))
         assertTrue(!hay("Incluye", substring = true))
     }

@@ -317,11 +317,13 @@ class InicioDelRedisenoTest {
     @Test
     fun `el periodo del encabezado`() {
         assertNull(periodoDelEncabezado(DashboardData()))
-        assertEquals("Septiembre 2026", periodoDelEncabezado(DashboardData(periodoActual = septiembre)))
+        // Vuelta 75: el nombre único del período; con el mes de calendario, el mes (sin el año de hoy).
+        assertEquals("Septiembre", periodoDelEncabezado(DashboardData(periodoActual = septiembre), anioDeHoy = 2026))
+        assertEquals("Septiembre 2026", periodoDelEncabezado(DashboardData(periodoActual = septiembre), anioDeHoy = 2027))
         // Vuelta 54: con un corte a mitad de mes, el rango corto (el nombre solo, «Septiembre 2026»,
         // decía septiembre en agosto); el rango entero se cortaba a 360 dp (vuelta de diseño 11).
         val conCorte = DashboardData(periodoActual = septiembre, ajustesDePeriodo = PeriodSettings(cutoffDay = 25))
-        assertEquals("25 ago – 24 sep", periodoDelEncabezado(conCorte))
+        assertEquals("25 ago – 24 sep", periodoDelEncabezado(conCorte, anioDeHoy = 2026))
         assertEquals("Tu período: del 25 de agosto al 24 de septiembre", descripcionDelPeriodoDelEncabezado(conCorte))
         assertEquals("Tu período: del 1 al 30 de septiembre", descripcionDelPeriodoDelEncabezado(DashboardData(periodoActual = septiembre)))
     }

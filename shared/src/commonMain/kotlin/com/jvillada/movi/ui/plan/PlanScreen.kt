@@ -16,12 +16,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,11 +37,10 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.History
 import com.jvillada.movi.shared.model.periodoActual
 import com.jvillada.movi.shared.model.periodoAnterior
-import com.jvillada.movi.shared.model.nombreDelMesDe
 import androidx.compose.ui.draw.alpha
 import com.jvillada.movi.shared.model.periodoDelPrefijo
 import com.jvillada.movi.shared.model.periodoSiguiente
-import com.jvillada.movi.shared.model.rangoDelPeriodo
+import com.jvillada.movi.shared.model.nombreDelPeriodo
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.budgets.HojasDePresupuestos
@@ -140,7 +141,7 @@ internal fun segmentoValido(segmento: Int): Int =
  *   pantalla, así que ir a ver un movimiento y volver deja el segmento donde estaba.
  */
 @Composable
-fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
+fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS, enLaCaja: Boolean = false) {
     var elegido by rememberSaveable { mutableStateOf(segmentoValido(segmento)) }
     val enPagos = elegido == SEGMENTO_PAGOS
 
@@ -167,6 +168,9 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
     // Vuelta 70 · ‹ › en «Facturas», como en Actividad: el período que se mira. `null` = el de hoy (y lo
     // sigue si el corte llega después). Solo se va hasta el siguiente.
     var prefijoVisible by rememberSaveable { mutableStateOf<String?>(null) }
+    // Revisión de la 75: el primer período que el server no tiene (anterior al primer movimiento): ‹ no
+    // pasa de ahí.
+    var sinHistoria by rememberSaveable { mutableStateOf<String?>(null) }
     val periodoVisible = prefijoVisible?.let { periodoDelPrefijo(it) } ?: periodoDeHoy
     val viendoOtroPeriodo = enPagos && periodoVisible != periodoDeHoy
     fun irAlPeriodo(periodo: com.jvillada.movi.shared.model.PeriodoFinanciero) {
@@ -193,10 +197,11 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
         // se callaba por diseño —«no hay nada que aclarar»— y dejaba a Pagos sin fechas.
         // Vuelta 70: con ‹ › a los lados, que mueven el período de «Facturas».
         NavegadorDelPeriodoDePagos(
-            texto = if (viendoOtroPeriodo) rangoDelPeriodo(periodoVisible, ajustesDelPeriodo) else lineaDelPeriodoDePagos(data),
+            texto = if (viendoOtroPeriodo) nombreDelPeriodo(periodoVisible, ajustesDelPeriodo) else lineaDelPeriodoDePagos(data),
             reservar = data.periodoActual == null && disponible.cargando,
             habilitado = enPagos && data.periodoActual != null,
             puedeAdelante = puedeIrAlSiguiente(periodoVisible, periodoDeHoy),
+            puedeAtras = sinHistoria.let { it == null || periodoVisible.prefijo > it },
             onAnterior = { irAlPeriodo(periodoAnterior(periodoVisible)) },
             onSiguiente = { irAlPeriodo(periodoSiguiente(periodoVisible)) },
         )
@@ -229,6 +234,8 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
             aireAbajo = abajo,
             // Vuelta 70: sin los pagos (o sin el resumen o el perfil) la caja no se pinta con lo de antes.
             fuenteCaida = disponible.fallo,
+            // Vuelta 75: sin salario, «Agregar» abre la hoja de ingreso ya con el día del corte.
+            onAgregarSalario = { pagos.estado.agregarSalario(dia = data.ajustesDePeriodo.cutoffDay) },
         )
     }
     val tusPeriodos: @Composable () -> Unit = {
@@ -251,7 +258,7 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
     fun LazyListScope.loDeAbajo(conCaja: Boolean) {
         item(key = "disponible") { cuantoPuedesGastar() }
         item(key = "tus-periodos") { tusPeriodos() }
-        if (conCaja) item(key = "caja-proyectada") { cajaProyectada(true, false) }
+        if (conCaja) item(key = CLAVE_DE_LA_CAJA_EN_LA_LISTA) { cajaProyectada(true, false) }
         // Revisión de la 70: el aire de abajo va siempre, y no dentro de la caja. Con la caja oculta (su
         // fuente caída, o nada que proyectar) «Tus períodos» quedaba pegado a «Lo que se repite al mes».
         if (conCaja) item(key = "aire-despues-de-la-caja") { Spacer(Modifier.height(Medida.entreSecciones)) }
@@ -261,7 +268,7 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
             // Vuelta 70: otro período a la vista: solo su lista, de solo lectura. El disponible, «Tus
             // períodos» y la caja son del período en curso (en dos columnas siguen a la izquierda).
             item(key = "aire-de-pagos") { Spacer(Modifier.height(AIRE_DEBAJO_DEL_SELECTOR)) }
-            pagosDeOtroPeriodo(periodoVisible, periodoDeHoy, ajustesDelPeriodo, pagos.estado)
+            pagosDeOtroPeriodo(periodoVisible, periodoDeHoy, ajustesDelPeriodo, pagos.estado) { sinHistoria = it.prefijo }
         } else if (enPagos) {
             item(key = "aire-de-pagos") { Spacer(Modifier.height(AIRE_DEBAJO_DEL_SELECTOR)) }
             val caja: (LazyListScope.() -> Unit)? = if (dosColumnas) null else {
@@ -353,7 +360,7 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
                         ) {
                             if (viendoOtroPeriodo) {
                                 Text(
-                                    text = "$PERIODO_EN_CURSO · ${nombreDelMesDe(periodoDeHoy)}",
+                                    text = "$PERIODO_EN_CURSO · ${nombreDelPeriodo(periodoDeHoy, ajustesDelPeriodo)}",
                                     style = Movi.textos.apoyo,
                                     color = Movi.colores.textoMedio,
                                     modifier = Modifier.testTag(TAG_PERIODO_EN_CURSO),
@@ -381,6 +388,13 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
                     }
                 }
             } else {
+                // Vuelta 75 · «¿Me alcanza?» de Inicio abre Pagos en la caja: cuando la lista ya tiene sus
+                // datos, se baja hasta «Tu plata, día a día» (en dos columnas la caja ya está a la vista).
+                LlevarALaCaja(
+                    pedido = enLaCaja && enPagos,
+                    listo = !esqueletoDePagos && !disponible.cargando,
+                    listState = listState,
+                )
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.weight(1f),
@@ -413,7 +427,7 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
  * octubre al 31 de octubre» con el mes de calendario. `null` solo mientras no se sabe el período.
  */
 internal fun lineaDelPeriodoDePagos(data: com.jvillada.movi.ui.dashboard.DashboardData): String? =
-    data.periodoActual?.let { rangoDelPeriodo(it, data.ajustesDePeriodo) }
+    data.periodoActual?.let { nombreDelPeriodo(it, data.ajustesDePeriodo) }
 
 /** El título de la tarjeta del disponible en Plan: la pregunta que contesta. */
 const val TITULO_CUANTO_PUEDES_GASTAR = "Cuánto puedes gastar"
@@ -499,3 +513,37 @@ private fun FilaDeTusPeriodos(onClick: () -> Unit) {
         )
     }
 }
+
+/** La clave del renglón de la caja en la lista de Pagos (ver `loDeAbajo`). */
+internal const val CLAVE_DE_LA_CAJA_EN_LA_LISTA: String = "caja-proyectada"
+
+/**
+ * **Bajar hasta la caja**, una sola vez por pantalla (vuelta 75). La lista es perezosa: el renglón de la
+ * caja no existe hasta que se acerca, así que se baja de a una pantalla hasta verlo y ahí se lo lleva
+ * arriba. Si la lista se acaba antes (la caja no se pinta), se queda donde llegó.
+ */
+@Composable
+private fun LlevarALaCaja(pedido: Boolean, listo: Boolean, listState: androidx.compose.foundation.lazy.LazyListState) {
+    var pendiente by rememberSaveable { mutableStateOf(pedido) }
+    LaunchedEffect(pendiente, listo) {
+        if (!pendiente || !listo) return@LaunchedEffect
+        repeat(MAXIMO_DE_PANTALLAS_HASTA_LA_CAJA) {
+            val item = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == CLAVE_DE_LA_CAJA_EN_LA_LISTA }
+            if (item != null) {
+                listState.animateScrollToItem(item.index)
+                pendiente = false
+                return@LaunchedEffect
+            }
+            if (!listState.canScrollForward) {
+                pendiente = false
+                return@LaunchedEffect
+            }
+            listState.scrollBy(listState.layoutInfo.viewportSize.height * 0.8f)
+            androidx.compose.runtime.withFrameNanos { }
+        }
+        pendiente = false
+    }
+}
+
+/** Hasta cuántas pantallas se baja buscando la caja: la lista de pagos nunca es tan larga. */
+private const val MAXIMO_DE_PANTALLAS_HASTA_LA_CAJA = 20

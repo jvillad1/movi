@@ -171,8 +171,8 @@ class DetalleDePeriodoScreenTest {
         esperarTexto("Los más grandes")
 
         // Arriba: rango, el arranque propio contra el día de siempre, cifras y Tu plata «hoy».
-        assertTrue(hay("Octubre 2026"))
-        assertTrue(hay("Del 24 de septiembre al 20 de octubre"))
+        assertTrue(hay("24 sep – 20 oct"), "vuelta 75: el nombre único del período")
+        assertTrue(!hay("Del 24 de septiembre al 20 de octubre"), "revisión de la 75: el rango largo sobraba")
         assertTrue(hay("Este período empezó el 24 de septiembre (antes del día 25)"))
         // Lo que entró, con «+»: es la `Cifra` del sistema en tono de ingreso (vuelta de diseño 19).
         assertTrue(hay("+" + formatMoneyCompact(9_000_000L)))
@@ -245,7 +245,7 @@ class DetalleDePeriodoScreenTest {
     @Test
     fun `un periodo pasado no ofrece empezar hoy, y sus vacios ensenan`() {
         montar(ConDetalle(mapOf("2026-09" to septiembre)), "2026-09")
-        esperarTexto("Septiembre 2026")
+        esperarTexto("25 ago – 23 sep")
         esperarTexto("Pagos del período")
 
         assertTrue(!hayTag(TAG_EMPEZAR_PERIODO_HOY))
@@ -407,7 +407,7 @@ class DetalleDePeriodoScreenTest {
     @Test
     fun `ver los movimientos abre Movimientos en ese periodo`() {
         montar(ConDetalle(mapOf("2026-09" to septiembre)), "2026-09")
-        esperarTexto("Septiembre 2026")
+        esperarTexto("25 ago – 23 sep")
 
         composeRule.onNodeWithTag(TAG_VER_MOVIMIENTOS_DEL_PERIODO, useUnmergedTree = true).performScrollTo().performClick()
 
@@ -437,8 +437,9 @@ class DetalleDePeriodoScreenTest {
             }
         }, "2026-10")
         esperarTexto("No pudimos cargar este período")
-        // El título no depende de la lectura: sale del id.
-        assertTrue(hay("Octubre 2026"))
+        // El título no depende de la lectura: sale del id y de los ajustes del perfil (vuelta 75: el nombre
+        // único del período; el perfil corta el 25 y octubre empezó el 24 de septiembre).
+        assertTrue(hay("24 sep – 24 oct"), "vuelta 75: el nombre único del período")
 
         falla = false
         composeRule.onNode(hasClickAction() and hasAnyDescendant(hasText("Reintentar")), useUnmergedTree = true)

@@ -86,7 +86,7 @@ class PeriodosRecuerdaLoUltimoTest {
 
         visitas.volverAlPrimerCuadro()
 
-        assertEquals(1, visitas.cuantas("Septiembre 2026"))
+        assertEquals(1, visitas.cuantas("25 ago – 24 sep"))
         assertEquals(1, visitas.cuantas(TEXTO_ACTUALIZANDO))
         assertEquals(0, esqueleto())
 
@@ -94,7 +94,7 @@ class PeriodosRecuerdaLoUltimoTest {
         puerta.complete(listOf(enCurso))
         composeRule.waitForIdle()
         assertEquals(0, visitas.cuantas(TEXTO_ACTUALIZANDO))
-        assertEquals(1, visitas.cuantas("Septiembre 2026"))
+        assertEquals(1, visitas.cuantas("25 ago – 24 sep"))
     }
 
     @Test
@@ -104,7 +104,7 @@ class PeriodosRecuerdaLoUltimoTest {
 
         visitas.volver()
 
-        assertEquals(1, visitas.cuantas("Septiembre 2026"))
+        assertEquals(1, visitas.cuantas("25 ago – 24 sep"))
         assertEquals(1, visitas.cuantas(TEXTO_NO_PUDIMOS_ACTUALIZAR))
         assertEquals(0, visitas.cuantas("No pudimos cargar tus períodos"))
 
@@ -123,7 +123,7 @@ class PeriodosRecuerdaLoUltimoTest {
 
         visitas.volver()
 
-        assertEquals(0, visitas.cuantas("Septiembre 2026"))
+        assertEquals(0, visitas.cuantas("25 ago – 24 sep"))
         assertTrue(esqueleto() > 0)
         puerta.complete(emptyList())
     }
@@ -137,7 +137,7 @@ class PeriodosRecuerdaLoUltimoTest {
 
         visitas.volver()
 
-        assertEquals(0, visitas.cuantas("Septiembre 2026"))
+        assertEquals(0, visitas.cuantas("25 ago – 24 sep"))
         assertTrue(esqueleto() > 0)
         puerta.complete(emptyList())
     }
@@ -153,7 +153,7 @@ class PeriodosRecuerdaLoUltimoTest {
 
         visitas.volver()
 
-        assertEquals(0, visitas.cuantas("Septiembre 2026"), "«En curso» era el de otro período")
+        assertEquals(0, visitas.cuantas("25 ago – 24 sep"), "«En curso» era el de otro período")
         assertTrue(esqueleto() > 0)
         puerta.complete(emptyList())
     }

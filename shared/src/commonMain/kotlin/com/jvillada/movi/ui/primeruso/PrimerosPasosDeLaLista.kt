@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.primeruso
 
+import com.jvillada.movi.shared.model.TransactionType
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -79,8 +80,10 @@ fun loQueYaHayEn(data: DashboardData, modo: CapturaDelPrimerUso, permisoDelTelef
         cuentasDeDinero = data.accounts.orEmpty().count { it.type in TIPOS_DE_CUENTA_DE_DINERO },
         capturaHecha = capturaHecha,
         // Las reglas de verdad: las cuotas de un crédito y los pagos de tarjeta no son «lo que pagas cada mes».
+        // Revisión de la 75: y el salario tampoco: «lo que pagas cada mes» son gastos.
         fijos = data.upcoming.orEmpty().count {
-            !it.rule.id.startsWith(CREDIT_RULE_PREFIX) && !it.rule.id.startsWith(CARD_RULE_PREFIX)
+            !it.rule.id.startsWith(CREDIT_RULE_PREFIX) && !it.rule.id.startsWith(CARD_RULE_PREFIX) &&
+                it.rule.type == TransactionType.EXPENSE
         },
     )
 }

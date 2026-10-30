@@ -27,6 +27,9 @@ import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UserProfile
+import com.jvillada.movi.shared.model.PeriodoFinanciero
+import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.shared.model.nombreDelPeriodo
 import com.jvillada.movi.shared.time.AppTimeZone
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.Screen
@@ -127,7 +130,7 @@ class EnQueSeVaScreenTest {
     fun `pinta el grafico, el total y la lista por categoria`() {
         montar()
         composeRule.onNodeWithTag(TAG_GRAFICA_DEL_ANALISIS, useUnmergedTree = true).assertExists()
-        assertTrue(hay("Octubre 2026"))
+        assertTrue(hay(nombreDelPeriodo(PeriodoFinanciero(2026, 10), PeriodSettings(cutoffDay = 1))), "vuelta 75: el nombre único del período")
         // 450.000 + 120.000 + 80.000: el traspaso no suma.
         assertTrue(hay(formatCOP(650_000L)))
         assertEquals(listOf("Comida", "Transporte"), nombresDeLasFilas())

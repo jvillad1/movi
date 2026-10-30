@@ -1,6 +1,7 @@
 package com.jvillada.movi.shared.model
 
 import com.jvillada.movi.shared.time.AppTimeZone
+import kotlinx.datetime.Clock
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
@@ -500,6 +501,44 @@ fun rangoCortoDelPeriodo(periodo: PeriodoFinanciero, settings: PeriodSettings): 
     val inicio = Instant.fromEpochMilliseconds(v.first).toLocalDateTime(zona).date
     val ultimo = Instant.fromEpochMilliseconds(v.last).toLocalDateTime(zona).date
     return rangoCortoEntre(inicio, ultimo)
+}
+
+/**
+ * # Vuelta 75 · **el nombre del período**, uno solo en toda la app
+ *
+ * Para alguien con corte el 25, Inicio decía «23 oct – 24 nov», Actividad «Noviembre de 2026» y Pagos
+ * «Del 23 de octubre al 24 de noviembre»: tres nombres para la misma cosa. Ahora Inicio, Actividad,
+ * Pagos, Tus períodos y En qué se va lo nombran con esta función:
+ *
+ * - **«Octubre»** cuando el período ES el mes de calendario (arranca el 1 y termina el último día del
+ *   mismo mes): ahí el mes dice todo;
+ * - **«23 oct – 24 nov»** en cualquier otro caso ([rangoCortoEntre]): con un corte a mitad de mes el
+ *   nombre del mes solo confunde (el 28 de octubre ya decía «noviembre»). También un período excepcional
+ *   (un inicio a mano) se nombra por sus fechas;
+ * - con el año al final («Octubre 2025», «25 nov – 24 dic 2025») solo si el período no es de [anioDeHoy]:
+ *   en una lista de períodos, noviembre de este año y el del pasado no pueden llamarse igual.
+ *
+ * El año de hoy entra por parámetro (por defecto, el de la zona de la app; `null` = no se dice nunca):
+ * las pruebas lo fijan.
+ */
+fun nombreDelPeriodo(
+    periodo: PeriodoFinanciero,
+    settings: PeriodSettings,
+    anioDeHoy: Int? = Clock.System.now().toLocalDateTime(AppTimeZone.zone).year,
+): String {
+    val zona = AppTimeZone.zone
+    val v = ventanaDe(periodo, settings)
+    val inicio = Instant.fromEpochMilliseconds(v.first).toLocalDateTime(zona).date
+    val ultimo = Instant.fromEpochMilliseconds(v.last).toLocalDateTime(zona).date
+    return nombreEntre(inicio, ultimo, anio = periodo.year.takeIf { anioDeHoy != null && it != anioDeHoy })
+}
+
+/** [nombreDelPeriodo] con los dos bordes ya sabidos (el último incluido). Pura. */
+fun nombreEntre(inicio: LocalDate, ultimo: LocalDate, anio: Int? = null): String {
+    val esElMes = inicio.dayOfMonth == 1 && inicio.year == ultimo.year && inicio.monthNumber == ultimo.monthNumber &&
+        ultimo.dayOfMonth == diasDelMes(ultimo.year, ultimo.monthNumber)
+    val base = if (esElMes) MESES[inicio.monthNumber - 1].replaceFirstChar { it.uppercase() } else rangoCortoEntre(inicio, ultimo)
+    return if (anio != null) "$base $anio" else base
 }
 
 /** «23 oct – 24 nov», o «1 – 31 oct» dentro del mismo mes. Pura. */
