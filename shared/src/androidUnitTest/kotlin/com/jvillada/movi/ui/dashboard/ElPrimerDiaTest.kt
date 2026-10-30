@@ -218,7 +218,7 @@ class ElPrimerDiaTest {
 
         // Vuelta 54: «Te quedan» primero; los primeros pasos, una fila debajo de las acciones.
         val heroe = composeRule.onNodeWithTag(TAG_TARJETA_DEL_HERO, useUnmergedTree = true).getUnclippedBoundsInRoot()
-        val acciones = composeRule.onNodeWithText("Anotar gasto", substring = true, useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val acciones = composeRule.onNodeWithContentDescription("Anotar un gasto", useUnmergedTree = true).getUnclippedBoundsInRoot()
         val fila = composeRule.onNodeWithTag(TAG_FILA_DE_PRIMEROS_PASOS, useUnmergedTree = true).getUnclippedBoundsInRoot()
         assertTrue(heroe.bottom <= fila.top, "el héroe ($heroe) va antes que los primeros pasos ($fila)")
         assertTrue(acciones.bottom <= fila.top, "las acciones ($acciones) van antes que los primeros pasos ($fila)")

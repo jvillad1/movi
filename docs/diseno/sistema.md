@@ -4290,13 +4290,13 @@ partes**. **Sin reglas de plata.**
 3. **Un solo amarillo por vista.** **Regla nueva del sistema: un solo `Boton` principal (amarillo) —o una acción
    destacada— visible por vista.** Lo dicen en su semántica (`llevaElAmarillo`) y `UnSoloAmarilloPorVistaTest` lo
    cuenta en Inicio (390 y 1280) y en Pagos.
-   - **Inicio**: «Anotar gasto» es la acción amarilla. «Anotar pago» (Próximo pago) y la acción de «Movi propone hoy»
+   - **Inicio**: «Gasto» (anotar un gasto) es la acción amarilla. «Anotar pago» (Próximo pago) y la acción de «Movi propone hoy»
      pasan a `Secundario` (`TarjetaDePropuesta(varianteDeLaAccion = …)`, que por defecto sigue `Principal`); el círculo
      de la propuesta va en el tinte si urge (`TonoDeIcono.Aviso`) o en la capa 3 (`Neutro`). Sin cuentas, la acción
-     amarilla es «Crear mi primera cuenta» y «Anotar gasto» no se destaca.
+     amarilla es «Crear mi primera cuenta» y «Gasto» no se destaca.
    - **A 1280**: el destino activo del rail sigue en el `tinte` con la tinta. **«Agregar» del rail pasa a secundario**
      (tarjeta, `bordeDeBoton`, tinta; también el «+» del rail compacto): el rail está en todas las vistas, y el amarillo
-     de cada vista es su propia acción («Anotar gasto» en Inicio, el pago más urgente en Pagos), no el del chrome.
+     de cada vista es su propia acción («Gasto» en Inicio, el pago más urgente en Pagos), no el del chrome.
    - **Pagos**: «Falta por pagar» es una `Superficie` blanca destacada con la `BarraDeProgreso` en tinta sobre la capa
      3 (`FondoDeBarra.Destacada`). El amarillo deja de ser superficie (`ElAmarilloEsDeLaAccionTest`).
    - **Avatares de banco** (`TarjetaDeCuenta`): la letra del banco en la tinta sobre la capa 3
@@ -4311,8 +4311,8 @@ partes**. **Sin reglas de plata.**
    e Inicio: **la banda amarilla se vuelve crema al bajar** —el encabezado y lo de detrás de la barra del sistema
    (`LocalBandaDelInicioDesplazada`)—, y sus botones redondos pasan a la tarjeta con borde. El amarillo es de arriba,
    no del chrome.
-5. **La cuadrícula de acciones**: rótulos de **un renglón** y cortos («Comprobante», «Preguntar»; el lector de pantalla
-   dice la frase entera), `Espacio.m` entre filas, círculos de `Medida.circuloDeAccion` (52) y, a pantalla ancha,
+5. **La cuadrícula de acciones**: rótulos de **un renglón** y cortos («Gasto», «Ingreso», «Comprobante», «Preguntar»; el
+   lector de pantalla dice la frase entera; «Anotar ingreso» no entraba a 360 dp con la letra al 130 %), `Espacio.m` entre filas, círculos de `Medida.circuloDeAccion` (52) y, a pantalla ancha,
    dentro de una `Superficie`. Si con la letra agrandada un rótulo no entra, se achica hasta la letra de siempre
    (`seAchicaHastaLaBase`). `LasOchoAccionesDelInicioTest`: a 360 dp con ×1,12 y con el 130 % (×1,456), ninguno en dos
    renglones ni con «…».

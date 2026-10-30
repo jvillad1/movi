@@ -17,6 +17,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.node.DelegatableNode
 import androidx.compose.ui.platform.testTag
@@ -174,6 +175,7 @@ class TocarSeSienteBienTest {
         presionar(TAG_FILA)
         assertEquals(1f, escalaDe(TAG_FILA))
         assertTrue(veloDe(TAG_FILA), "presionada con menos movimiento, la fila lleva el velo")
+        soltar(TAG_FILA)
         presionar(TAG_BOTON)
         assertEquals(1f, escalaDe(TAG_BOTON))
         assertEquals(COLORES_CLAROS.marcaPresionada, fondoDelBotonPresionado(VarianteDeBoton.Principal, COLORES_CLAROS))
@@ -279,6 +281,11 @@ class TocarSeSienteBienTest {
         composeRule.mainClock.advanceTimeBy(32)
     }
 
+    /** Escribe el valor en un snapshot que se aplica: sin eso, con el reloj quieto nadie recompone. */
+    private fun cambiarA(nuevo: Long) {
+        Snapshot.withMutableSnapshot { valor = nuevo }
+    }
+
     private fun cifra(): Long = composeRule.onNodeWithTag("cifra").fetchSemanticsNode()
         .config[SemanticsProperties.Text].joinToString("") { it.text }.toLong()
 
@@ -286,7 +293,7 @@ class TocarSeSienteBienTest {
     fun `cuando el duenno anota, la cifra cuenta hasta la nueva, y al deshacer cuenta hacia atras`() {
         montarLaCifra()
         CambioDelDueno.marcar()
-        valor = 900_000L
+        cambiarA(900_000L)
         composeRule.mainClock.advanceTimeBy(140)
         val enMedio = cifra()
         assertTrue(enMedio in 900_001L until 1_000_000L, "a mitad de la cuenta: $enMedio")
@@ -295,7 +302,7 @@ class TocarSeSienteBienTest {
 
         // Deshacer: de vuelta a la de antes, contando hacia atrás.
         CambioDelDueno.marcar()
-        valor = 1_000_000L
+        cambiarA(1_000_000L)
         composeRule.mainClock.advanceTimeBy(140)
         val deVuelta = cifra()
         assertTrue(deVuelta in 900_001L until 1_000_000L, "a mitad de la vuelta: $deVuelta")
@@ -306,7 +313,7 @@ class TocarSeSienteBienTest {
     @Test
     fun `si la cambio otra cosa, o con menos movimiento, la cifra cambia en el acto`() {
         montarLaCifra()
-        valor = 900_000L
+        cambiarA(900_000L)
         composeRule.mainClock.advanceTimeBy(48)
         assertEquals(900_000L, cifra(), "sin cambio del dueño no cuenta")
     }
@@ -315,7 +322,7 @@ class TocarSeSienteBienTest {
     fun `con menos movimiento la cifra no cuenta`() {
         montarLaCifra(reducido = true)
         CambioDelDueno.marcar()
-        valor = 900_000L
+        cambiarA(900_000L)
         composeRule.mainClock.advanceTimeBy(48)
         assertEquals(900_000L, cifra())
     }

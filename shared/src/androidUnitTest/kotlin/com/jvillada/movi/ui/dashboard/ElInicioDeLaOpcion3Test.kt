@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.dashboard
 
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
@@ -110,7 +111,7 @@ class ElInicioDeLaOpcion3Test {
     fun `de arriba abajo, heroe, acciones, proximo pago y ultimos movimientos`() {
         montar(datos)
         val heroe = arriba(TAG_HEROE_EN_TARJETA)
-        val acciones = composeRule.onNodeWithText("Anotar gasto", useUnmergedTree = true).getUnclippedBoundsInRoot().top
+        val acciones = composeRule.onNodeWithContentDescription("Anotar un gasto", useUnmergedTree = true).getUnclippedBoundsInRoot().top
         val proximo = arriba(TAG_PROXIMO_PAGO)
         val ultimos = arriba(TAG_ULTIMOS_MOVIMIENTOS)
         assertTrue(heroe < acciones && acciones < proximo && proximo < ultimos, "$heroe / $acciones / $proximo / $ultimos")

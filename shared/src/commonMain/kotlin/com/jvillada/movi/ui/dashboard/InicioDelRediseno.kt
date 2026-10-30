@@ -139,14 +139,15 @@ fun elHeroePideLaCuenta(data: DashboardData): Boolean = data.accounts?.isEmpty()
  * la cuadrícula, y el «+» con su menú queda solo en el rail de pantalla ancha.
  *
  * [rotulo] es lo que se lee debajo del círculo, en **un renglón** (vuelta 79; eran dos de alto fijo, y
- * «Subir comprobante» y «Preguntar a Movi» se partían): por eso cortos, «Comprobante» y «Preguntar». A
+ * «Subir comprobante» y «Preguntar a Movi» se partían): por eso cortos, «Gasto», «Ingreso», «Comprobante» y
+ * «Preguntar» («Anotar ingreso» no entraba a 360 dp con la letra al 130 %). A
  * 360 dp con la letra al 130 % ninguno pasa a dos renglones ni se corta (`LasOchoAccionesDelInicioTest`).
  * [descripcion] es la frase entera que dice el lector de pantalla. Los pinta el cliente: la definición SDUI solo trae la sección
  * `ACCIONES`, así que un APK viejo sigue con las suyas y el server no cambia.
  */
 enum class AccionDelInicio(val rotulo: String, val descripcion: String, val destino: DestinoDeLaAccion) {
-    ANOTAR_GASTO("Anotar gasto", "Anotar un gasto", DestinoDeLaAccion.Atajo(AtajoDeAgregar.GASTO)),
-    ANOTAR_INGRESO("Anotar ingreso", "Anotar un ingreso", DestinoDeLaAccion.Atajo(AtajoDeAgregar.INGRESO)),
+    ANOTAR_GASTO("Gasto", "Anotar un gasto", DestinoDeLaAccion.Atajo(AtajoDeAgregar.GASTO)),
+    ANOTAR_INGRESO("Ingreso", "Anotar un ingreso", DestinoDeLaAccion.Atajo(AtajoDeAgregar.INGRESO)),
     TRASPASAR("Traspasar", "Anotar un traspaso entre tus cuentas", DestinoDeLaAccion.Atajo(AtajoDeAgregar.TRASPASO)),
     PAGAR_TARJETA(com.jvillada.movi.ui.quickadd.PAGAR_TARJETA, "Anotar el pago de una tarjeta", DestinoDeLaAccion.Atajo(AtajoDeAgregar.PAGO_DE_TARJETA)),
     REPARTIR("Repartir", "Repartir un gasto con alguien", DestinoDeLaAccion.Atajo(AtajoDeAgregar.REPARTIR)),

@@ -87,7 +87,7 @@ class LasOchoAccionesDelInicioTest {
         montar()
         assertEquals(
             listOf(
-                "Anotar gasto", "Anotar ingreso", "Traspasar", "Pagar tarjeta",
+                "Gasto", "Ingreso", "Traspasar", "Pagar tarjeta",
                 "Repartir", "Comprobante", "Revisar avisos", "Preguntar",
             ),
             rotulos().map(::texto),
@@ -106,13 +106,17 @@ class LasOchoAccionesDelInicioTest {
      */
     private fun cadaRotuloEnUnRenglon(escala: Float) {
         montar(escala)
-        rotulos().forEach { nodo ->
+        val fallas = rotulos().mapNotNull { nodo ->
             val d = disposicion(nodo)
             val t = texto(nodo)
-            assertEquals(1, d.lineCount, "«$t» en ${d.lineCount} renglones a ×$escala")
-            assertFalse(d.isLineEllipsized(0), "«$t» se corta con «…» a ×$escala")
-            assertFalse(d.hasVisualOverflow, "«$t» se sale de su lugar a ×$escala")
+            when {
+                d.lineCount != 1 -> "«$t» en ${d.lineCount} renglones"
+                d.isLineEllipsized(0) -> "«$t» se corta con «…»"
+                d.hasVisualOverflow -> "«$t» se sale de su lugar"
+                else -> null
+            }
         }
+        assertTrue(fallas.isEmpty(), "a ×$escala: " + fallas.joinToString("; "))
     }
 
     @Test

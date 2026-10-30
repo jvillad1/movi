@@ -162,7 +162,7 @@ class InicioDelRedisenoTest {
     fun `Inicio tiene ocho acciones, en el orden de la maqueta`() {
         assertEquals(
             listOf(
-                "Anotar gasto", "Anotar ingreso", "Traspasar", "Pagar tarjeta",
+                "Gasto", "Ingreso", "Traspasar", "Pagar tarjeta",
                 "Repartir", "Comprobante", "Revisar avisos", "Preguntar",
             ),
             accionesDelInicio().map { it.rotulo },
