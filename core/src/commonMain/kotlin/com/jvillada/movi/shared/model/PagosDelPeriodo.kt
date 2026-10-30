@@ -179,6 +179,13 @@ data class PagoDelPeriodo(
     val pagadoDesdeElCorte: Long = 0L,
     /** Vuelta 72 (revisión) · la regla de esta fila está pausada (no se le propone guardar una cuenta). */
     val pausada: Boolean = false,
+    /**
+     * Re-revisión · la regla de esta tarjeta trae el mínimo de su extracto, aunque esta fila no sea la de su
+     * fecha de pago. Ahí la fila es la de un extracto anterior, cuyo mínimo no se conoce: queda como siempre
+     * (`pagado`), sin la regla de la primera ronda —que comparaba ese pago con el mínimo del extracto nuevo y
+     * decía «Pago vencido · hace 24 días» de una fila ya pagada—.
+     */
+    val minimoDelExtractoEnLaRegla: Boolean = false,
 ) {
     /**
      * Vuelta 72 · un pago que **sí cuenta como hecho**. Lo de siempre es [pagado]; la fila de la tarjeta
@@ -187,17 +194,30 @@ data class PagoDelPeriodo(
      * $80.000 para el mínimo») o ninguno. «queda N de M», la cola, la campana, la caja y el orden de la
      * lista leen esto; [pagado] sigue diciendo que hay un movimiento que tilda la fila.
      */
-    val hecho: Boolean get() = restoDelMinimo?.let { it == 0L } ?: pagado
+    val hecho: Boolean get() = restoDelMinimo?.let { it == 0L } ?: (pagado && faltaSinExtracto == null)
 
     /**
      * Vuelta 72 · **lo que falta para el mínimo cuando ya hubo un pago por debajo**: «Pagaste $100.000 ·
-     * faltan $80.000 para el mínimo». `null` sin pagos desde el corte (la fila pendiente de siempre), con
-     * el mínimo cubierto, o fuera de la fila del extracto.
+     * faltan $80.000 para el mínimo». En la fila del extracto, lo que le falta a su mínimo (con pagos desde
+     * el corte); en una tarjeta **sin extracto** (sin día de corte), la regla de la primera ronda: lo pagado
+     * en el período contra su `pagoMinimo` (re-revisión). `null` sin pagos, con el mínimo cubierto, o en
+     * cualquier otra fila.
      */
-    val faltaDelMinimo: Long? get() = restoDelMinimo?.takeIf { it > 0L && pagadoDesdeElCorte > 0L }
+    val faltaDelMinimo: Long?
+        get() = if (restoDelMinimo != null) restoDelMinimo.takeIf { it > 0L && pagadoDesdeElCorte > 0L } else faltaSinExtracto
+
+    /** La regla de la primera ronda, solo sin el mínimo de un extracto: lo pagado en el período contra el mínimo. */
+    private val faltaSinExtracto: Long?
+        get() {
+            if (minimoDelExtractoEnLaRegla || !pagado || !montoEsSaldo || esIngreso || moneda != "COP") return null
+            val minimo = pagoMinimo?.takeIf { it > 0L } ?: return null
+            val pagadoAca = pagadoEnElPeriodo ?: montoPagado ?: return null
+            return (minimo - pagadoAca).takeIf { it > 0L }
+        }
 
     /** Vuelta 72 · lo pagado que [faltaDelMinimo] compara con el mínimo. */
-    val pagadoContraElMinimo: Long get() = pagadoDesdeElCorte
+    val pagadoContraElMinimo: Long
+        get() = if (restoDelMinimo != null) pagadoDesdeElCorte else pagadoEnElPeriodo ?: montoPagado ?: 0L
 
     /** Vuelta 72 (revisión) · lo que de verdad salió por esta fila pagada: el total del período si se sabe. */
     val pagadoParaMostrar: Long? get() = pagadoEnElPeriodo ?: montoPagado
@@ -426,6 +446,7 @@ private fun filaDelPago(
     restoDelMinimo = delExtracto(pago.rule, vence)?.resto,
     pagadoDesdeElCorte = delExtracto(pago.rule, vence)?.pagadoDesdeElCorte ?: 0L,
     pausada = !pago.rule.pausadaDesde.isNullOrBlank(),
+    minimoDelExtractoEnLaRegla = pago.rule.minimoDelExtracto != null,
     moneda = pago.rule.currency,
     vence = vence,
     periodoDelSello = ocurrencia?.period,
@@ -515,8 +536,10 @@ fun epochDeFecha(iso: String): Long {
 fun faltaPorPagar(checklist: List<PagoDelPeriodo>): Long =
     // Vuelta 63: un abono planeado tampoco — no es un fijo; se dice aparte (`abonosPlaneados`).
     checklist.filter { !it.pagado && !it.montoEsSaldo && !it.esIngreso && !it.esAbono }.sumOf { it.monto } +
-        // Vuelta 72: la tarjeta pagada por debajo de su mínimo no está hecha: falta lo que le falta al mínimo.
-        checklist.sumOf { it.faltaDelMinimo ?: 0L }
+        // Vuelta 72: el mínimo pendiente del extracto suma SIEMPRE —entero sin pagos, lo que falta con un
+        // abono—, como lo resta la caja (re-revisión: antes sumaba solo al abonar, y la cifra subía al pagar).
+        // Sin extracto, lo que falta del mínimo de una tarjeta pagada por debajo (la primera ronda).
+        checklist.sumOf { if (it.hecho || !it.montoEsSaldo || it.esIngreso) 0L else it.restoDelMinimo ?: it.faltaDelMinimo ?: 0L }
 
 /**
  * Lo que falta pagar, en el orden en que sale del checklist. Un ingreso no se paga: no va acá. Un

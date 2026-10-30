@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.credits
 
+import com.jvillada.movi.shared.model.minimoQueFalta
 import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
 import com.jvillada.movi.shared.model.ExtractoDeLaTarjeta
 import com.jvillada.movi.ui.components.formatCOP
@@ -33,9 +34,10 @@ fun tituloDelExtractoPagado(e: ExtractoDeLaTarjeta): String = "Extracto del ${fe
 
 /**
  * **Lo que falta del mínimo**, descontando lo ya pagado desde el corte (revisión de la vuelta 62: con
- * $100.000 pagados de un mínimo de $180.000, faltan $80.000). `null` sin mínimo cargado.
+ * $100.000 pagados de un mínimo de $180.000, faltan $80.000). El mínimo nunca pasa de lo facturado al corte
+ * (re-revisión de la vuelta 72, `minimoEfectivo`). `null` sin mínimo cargado.
  */
-fun minimoQueFalta(e: ExtractoDeLaTarjeta): Long? = e.minimo?.let { (it - e.pagadoDesdeElCorte).coerceAtLeast(0L) }
+fun minimoQueFalta(e: ExtractoDeLaTarjeta): Long? = e.minimoQueFalta
 
 /** «Mínimo $180.000», o con algo pagado «Mínimo: te faltan $80.000» (o «Mínimo cubierto»). */
 private fun textoDelMinimo(e: ExtractoDeLaTarjeta): String? {

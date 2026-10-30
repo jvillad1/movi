@@ -445,7 +445,10 @@ internal fun FilaDeFactura(
  * verdad salió ([textoDelMontoDelChecklist]) y el día en que salió, si se sabe. Pura.
  */
 fun resumenDeLaFacturaPagada(pago: PagoDelPeriodo): String =
-    if (!pago.pagado && pago.restoDelMinimo == 0L) "pagaste ${formatCOP(pago.pagadoDesdeElCorte)}"
+    if (!pago.pagado && pago.restoDelMinimo == 0L) {
+        // Re-revisión: con lo facturado en cero no hay nada que pagar de ese extracto.
+        if (pago.pagadoDesdeElCorte > 0L) "pagaste ${formatCOP(pago.pagadoDesdeElCorte)}" else "sin saldo facturado"
+    }
     else listOfNotNull(textoDelMontoDelChecklist(pago), pago.pagadoEl?.let(::fechaCortaDeFactura)).joinToString(" · ")
 
 /** Vuelta 72 (revisión) · la fila del extracto con el mínimo cubierto, sin un pago que la tilde. */

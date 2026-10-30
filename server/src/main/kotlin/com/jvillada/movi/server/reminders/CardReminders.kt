@@ -3,6 +3,7 @@ package com.jvillada.movi.server.reminders
 import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.shared.model.MinimoDelExtracto
 import com.jvillada.movi.shared.model.extractoDeLaTarjetaAl
+import com.jvillada.movi.shared.model.minimoEfectivo
 import com.jvillada.movi.server.balance.computeBalances
 import com.jvillada.movi.server.balance.loadNonVoidedEvents
 import com.jvillada.movi.server.balance.toAccount
@@ -131,7 +132,8 @@ suspend fun loadCardRulePairs(userId: String, hoy: java.time.LocalDate = AppCloc
         val extracto = if (account.currency == "COP") {
             extractoDeLaTarjetaAl(terms, account.currency, eventsByAccount[account.id].orEmpty(), hoy.toString(), AppClock.zone.id)
         } else null
-        val minimo = extracto?.minimo?.let { MinimoDelExtracto(extracto.fechaDePago, it, extracto.pagadoDesdeElCorte) }
+        // Re-revisión: el mínimo efectivo, nunca más que lo facturado al corte (`minimoEfectivo`).
+        val minimo = extracto?.minimoEfectivo?.let { MinimoDelExtracto(extracto.fechaDePago, it, extracto.pagadoDesdeElCorte) }
         TarjetaConDeuda(terms, account.name, account.currency, debt, lastReminded, minimo)
     }
     if (conDeuda.isEmpty()) return emptyList()

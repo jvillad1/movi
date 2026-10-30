@@ -200,7 +200,7 @@ internal suspend fun queAvisarle(userId: String, today: LocalDate, leadDays: Int
             .where { RecurringRules.userId eq userId }
             .map { row -> row.toRulePair() }
     }
-    val sinteticas = loadCreditRulePairs(userId) + loadCardRulePairs(userId)
+    val sinteticas = loadCreditRulePairs(userId) + loadCardRulePairs(userId, today)
     val allPairs = rulePairs + sinteticas
     // Lo que el dueño ya dio por ocurrido no vuelve a avisar ESTE mes (y sí el que viene): el
     // filtro no necesita un `if` nuevo — el vencimiento vigente de una regla cerrada ya rodó al

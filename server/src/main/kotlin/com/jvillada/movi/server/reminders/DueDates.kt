@@ -325,6 +325,10 @@ fun dueDateFor(
  */
 fun pausadaEn(rule: RecurringRule, due: LocalDate): Boolean = rule.pausadaParaElVencimiento(due.toString())
 
+/** Re-revisión · ¿el mínimo del extracto que vence en [due] ya está cubierto? (una tarjeta, nada más). */
+fun minimoCubiertoEn(rule: RecurringRule, due: LocalDate): Boolean =
+    rule.minimoDelExtracto?.let { it.fechaDePago == due.toString() && it.resto == 0L } ?: false
+
 fun statusFor(dueDate: LocalDate, today: LocalDate, leadDays: Int): PaymentStatus = when {
     dueDate.isBefore(today) -> PaymentStatus.OVERDUE
     dueDate.isEqual(today)  -> PaymentStatus.DUE_TODAY
@@ -422,6 +426,8 @@ fun selectDueForReminder(
                 rule.type == TransactionType.EXPENSE &&
                 // Vuelta 72: una regla pausada no avisa por lo que vence en su pausa.
                 !pausadaEn(rule, due) &&
+                // Re-revisión: la tarjeta cuyo mínimo del extracto ya está cubierto no avisa por ese pago.
+                !minimoCubiertoEn(rule, due) &&
                 lastRemindedPeriod != reminderKeyFor(rule, today, DEFAULT_GRACE_DAYS, ocurridos, settings) &&
                 statusFor(due, today, leadDays) != PaymentStatus.UPCOMING
         }

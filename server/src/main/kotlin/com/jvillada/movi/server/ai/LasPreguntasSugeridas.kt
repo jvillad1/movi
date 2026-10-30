@@ -410,6 +410,11 @@ private fun lineaDeLosPagos(pagos: List<PagoDelPeriodo>): String? {
 /** «Arriendo $1.500.000 · vence en 3 días»; una tarjeta dice su saldo, o su pago mínimo si lo tiene. */
 private fun renglonDelPago(p: PagoDelPeriodo): String {
     val monto = when {
+        // Re-revisión: con un abono por debajo del mínimo, lo que falta de cuánto.
+        p.montoEsSaldo && p.faltaDelMinimo != null && p.restoDelMinimo != null ->
+            "falta ${montoDelDebito(p.faltaDelMinimo!!, p.moneda)} del mínimo de ${montoDelDebito(p.pagadoContraElMinimo + p.faltaDelMinimo!!, p.moneda)}"
+        p.montoEsSaldo && p.faltaDelMinimo != null ->
+            "falta ${montoDelDebito(p.faltaDelMinimo!!, p.moneda)} del mínimo de ${montoDelDebito(p.pagoMinimo ?: 0L, p.moneda)}"
         p.montoEsSaldo && p.pagoMinimo != null -> "pago mínimo ${montoDelDebito(p.pagoMinimo!!, p.moneda)}"
         p.montoEsSaldo -> "saldo ${montoDelDebito(p.monto, p.moneda)}"
         else -> montoDelDebito(p.monto, p.moneda)

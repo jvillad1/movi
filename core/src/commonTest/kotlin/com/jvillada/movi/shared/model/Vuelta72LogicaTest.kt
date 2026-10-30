@@ -118,6 +118,59 @@ class Vuelta72LogicaTest {
         assertTrue(colaDePendientes(cubierta).filterIsInstance<Pendiente.Pago>().none { it.pago.ruleId == nuId })
     }
 
+    // ── Re-revisión: el mínimo efectivo, la tarjeta sin extracto y «Falta por pagar» ──
+
+    private fun extracto(facturado: Long, pagado: Long, minimo: Long? = 180_000) = ExtractoDeLaTarjeta(
+        corte = "2026-10-20", fechaDePago = "2026-11-05", facturado = facturado, pagadoDesdeElCorte = pagado, minimo = minimo,
+    )
+
+    @Test
+    fun `un minimo tecleado mayor que lo facturado se salda con lo facturado`() {
+        // Facturado $60.000 al corte y un pago de $200.000: `pagadoDesdeElCorte` ya viene topado en $60.000.
+        val pagado = extracto(facturado = 0, pagado = 60_000)
+        assertEquals(60_000L, pagado.minimoEfectivo)
+        assertEquals(0L, pagado.minimoQueFalta)
+        // Sin pagar todavía: el mínimo a pagar es lo facturado, no los $180.000 tecleados.
+        assertEquals(60_000L, extracto(facturado = 60_000, pagado = 0).minimoQueFalta)
+    }
+
+    @Test
+    fun `con lo facturado en cero no se pide minimo`() {
+        val enCero = extracto(facturado = 0, pagado = 0)
+        assertEquals(0L, enCero.minimoEfectivo)
+        assertEquals(0L, enCero.minimoQueFalta)
+        assertNull(extracto(facturado = 60_000, pagado = 0, minimo = null).minimoQueFalta)
+    }
+
+    @Test
+    fun `sin extracto vale la regla de la primera ronda`() {
+        // Una tarjeta sin día de corte: lo pagado en el período contra su mínimo.
+        val sinCorte = PagoDelPeriodo(
+            ruleId = nuId, nombre = "Pago tarjeta Nu", monto = 1_583_000, pagado = true, diasParaVencer = 7,
+            montoEsSaldo = true, pagoMinimo = 180_000, montoPagado = 100_000, pagadoEnElPeriodo = 100_000, vence = "2026-11-05",
+        )
+        assertFalse(sinCorte.hecho)
+        assertEquals(80_000L, sinCorte.faltaDelMinimo)
+        assertEquals(100_000L, sinCorte.pagadoContraElMinimo)
+        val caja = cajaProyectada(tuPlataHoy = 1_000_000, pagos = listOf(sinCorte), gastoDiario = null, hoy = "2026-10-29", ultimoDia = "2026-11-24")!!
+        assertEquals(1_000_000L - 80_000L, caja.dias.last().saldo)
+        assertEquals(80_000L, faltaPorPagar(listOf(sinCorte)))
+        assertTrue(sinCorte.copy(pagadoEnElPeriodo = 180_000).hecho)
+        // Con el mínimo de un extracto en la regla, otra fila de la tarjeta queda como siempre (`pagado`).
+        assertTrue(sinCorte.copy(minimoDelExtractoEnLaRegla = true).hecho)
+    }
+
+    @Test
+    fun `Falta por pagar no sube al abonar a la tarjeta`() {
+        val arriendo = fijo("Arriendo", 1_800_000, vence = "2026-11-01")
+        val sinPagos = conLaTarjeta(0) + arriendo
+        assertEquals(1_980_000L, faltaPorPagar(sinPagos), "el mínimo entero suma, como lo resta la caja")
+        val tilde = OccurrenceState(nuId, "2026-11", "2026-11-05", occurred = true, eventId = "ev_100", derivadaDeUnMovimiento = true, montoDelPago = 100_000)
+        val conAbono = conLaTarjeta(100_000, tilde) + arriendo
+        assertEquals(1_880_000L, faltaPorPagar(conAbono), "con el abono, lo que falta")
+        assertEquals(1_800_000L, faltaPorPagar(conLaTarjeta(180_000, tilde) + arriendo), "cubierto, nada")
+    }
+
     @Test
     fun `lo pagado se muestra y se suma por el total del periodo`() {
         val dosPagos = OccurrenceState(nuId, "2026-10", "2026-10-05", occurred = true, eventId = "ev_80", derivadaDeUnMovimiento = true, montoDelPago = 80_000, pagadoEnElPeriodo = 180_000)

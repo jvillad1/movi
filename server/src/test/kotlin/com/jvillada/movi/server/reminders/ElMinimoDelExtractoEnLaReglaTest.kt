@@ -69,5 +69,27 @@ class ElMinimoDelExtractoEnLaReglaTest {
         // Pagado el resto: no queda nada del mínimo.
         movimiento("ev_pago_80", "INCOME", 80_000, LocalDate.of(2026, 10, 29), CARD_PAYMENT_CATEGORY)
         assertEquals(0L, minimo()!!.resto)
+        // Y el barrido de recordatorios no avisa por un mínimo ya cubierto.
+        val regla = runBlocking { loadCardRulePairs(uid, hoy) }.single().first
+        assertEquals(true, minimoCubiertoEn(regla, LocalDate.of(2026, 11, 5)))
+    }
+
+    @Test
+    fun `un minimo tecleado mayor que lo facturado se salda pagando lo facturado`() {
+        movimiento("ev_compra", "EXPENSE", 60_000, LocalDate.of(2026, 10, 10), "Compras")
+        // Una compra después del corte, para que la tarjeta siga con deuda (y con regla).
+        movimiento("ev_compra_2", "EXPENSE", 300_000, LocalDate.of(2026, 10, 25), "Compras")
+        assertEquals(MinimoDelExtracto("2026-11-05", 60_000, 0), minimo(), "el mínimo efectivo es lo facturado")
+        movimiento("ev_pago", "INCOME", 200_000, LocalDate.of(2026, 10, 28), CARD_PAYMENT_CATEGORY)
+        assertEquals(0L, minimo()!!.resto, "pagado: no queda «faltan $120.000» para siempre")
+    }
+
+    @Test
+    fun `con lo facturado en cero no se pide el minimo`() {
+        // Todo lo de antes del corte se pagó; lo que se debe es de después del corte.
+        movimiento("ev_compra", "EXPENSE", 100_000, LocalDate.of(2026, 10, 1), "Compras")
+        movimiento("ev_pago", "INCOME", 100_000, LocalDate.of(2026, 10, 15), CARD_PAYMENT_CATEGORY)
+        movimiento("ev_compra_2", "EXPENSE", 300_000, LocalDate.of(2026, 10, 25), "Compras")
+        assertEquals(0L, minimo()!!.resto)
     }
 }

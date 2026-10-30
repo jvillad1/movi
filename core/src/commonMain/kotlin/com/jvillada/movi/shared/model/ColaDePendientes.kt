@@ -89,14 +89,14 @@ fun clavePendienteDelPago(pago: PagoDelPeriodo): String = "pago:${pago.ruleId}"
  */
 fun cifraDelPago(pago: PagoDelPeriodo): Long? =
     // Vuelta 72: en la fila del extracto, `pagoMinimo` ya es lo que le falta al mínimo.
-    if (pago.montoEsSaldo) pago.pagoMinimo else pago.monto
+    if (pago.montoEsSaldo) pago.faltaDelMinimo ?: pago.pagoMinimo else pago.monto
 
 /**
  * Por cuánto se ordena un pago, en pesos. El mínimo de una tarjeta ya viene en pesos
  * (`pagoMinimoCop`); un monto en otra moneda no se compara con pesos y va al final de su grupo.
  */
 private fun montoParaOrdenar(pago: PagoDelPeriodo): Long? = when {
-    pago.montoEsSaldo -> pago.pagoMinimo
+    pago.montoEsSaldo -> pago.faltaDelMinimo ?: pago.pagoMinimo
     pago.moneda == "COP" -> pago.monto
     else -> null
 }
