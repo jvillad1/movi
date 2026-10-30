@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.quickadd
 
+import androidx.compose.ui.text.TextStyle
 import com.jvillada.movi.ui.espacios.deshacerLoAnotado
 import com.jvillada.movi.ui.espacios.mostrarLoAnotado
 import com.jvillada.movi.ui.components.ds.coloresDeLoElegido
@@ -1341,6 +1342,10 @@ fun QuickAddScreen(
     val altoFijo = (conTecladoEnPantalla || LocalWindowWidthClass.current == WindowWidthClass.Compact) &&
         pickers.propio != Picker.Note
     val cuerpoAbajo = altoFijo && conTecladoEnPantalla
+    // Vuelta 80 · sin hueco a 390: sin teclado en pantalla y en una ventana angosta la hoja sigue
+    // ocupando todo el alto (las pestañas quietas de la vuelta 71), pero el cuerpo va **centrado** y la
+    // cifra es la protagonista ([CabezaDelMonto] con `grande`): eran ~350 px vacíos entre «Nota» y el pie.
+    val cuerpoAlCentro = altoFijo && !conTecladoEnPantalla
     var contenidoMaximoPx by remember { mutableStateOf(0) }
     val densidadDeLaHoja = LocalDensity.current
 
@@ -1514,7 +1519,7 @@ fun QuickAddScreen(
                     // Vuelta 71, con teclado en pantalla: el cuerpo ocupa al menos el hueco y se apoya
                     // abajo (ver `verticalArrangement`), así el teclado queda donde siempre.
                     .then(
-                        if (cuerpoAbajo && !hayPicker && huecoVisiblePx > 0) {
+                        if ((cuerpoAbajo || cuerpoAlCentro) && !hayPicker && huecoVisiblePx > 0) {
                             Modifier.heightIn(min = with(densidadDeLaHoja) { huecoVisiblePx.toDp() })
                         } else {
                             Modifier
@@ -1527,7 +1532,12 @@ fun QuickAddScreen(
                             if (!altoFijo) contenidoMaximoPx = maxOf(contenidoMaximoPx, it.height)
                         }
                     },
-                verticalArrangement = if (cuerpoAbajo && !hayPicker) Arrangement.Bottom else Arrangement.Top,
+                verticalArrangement = when {
+                    hayPicker -> Arrangement.Top
+                    cuerpoAbajo -> Arrangement.Bottom
+                    cuerpoAlCentro -> Arrangement.Center
+                    else -> Arrangement.Top
+                },
             ) {
                 // Ola 8 · V2 — LA HOJA NO CAMBIA DE ALTURA AL ABRIR UN SUB-PICKER, Y NINGÚN
                 // CONTROL APARECE DEBAJO DE LA X DEL SUB-PICKER.
@@ -2099,6 +2109,9 @@ private fun EditorBody(
             sugerencia = categoriaSugeridaHint,
             tags = TAGS_DE_LA_CATEGORIA_EN_AGREGAR,
         )
+        // Vuelta 80: los chips no tocan el divisor de «Cuenta». Solo sin teclado en pantalla: con él, cada dp
+        // de esta tarjeta empuja el pie (`HojaAgregarGeometriaTest`), y la fila de chips ya trae su respiro.
+        if (!conTecladoEnPantalla) Spacer(Modifier.height(Espacio.s))
         Separador(SangriaDeSeparador.Margen)
         // Ola 11 — DE DÓNDE SALIÓ LA CUENTA QUE DICE AL LADO, Y POR QUÉ ESTE RENGLÓN
         // OCUPA SU LUGAR AUNQUE NO DIGA NADA.
@@ -2137,6 +2150,8 @@ private fun EditorBody(
             // mentira de "Cargando cuentas…" (no está cargando, no hay ninguna). En ese caso el
             // toque lleva directo a crear la cuenta, que es lo único que de verdad hace algo acá.
             onClick = if (hasNoAccounts) onCreateAccount else onPickWallet,
+            // Vuelta 80: la cuenta en un renglón, con «…»: «Bancolombia Ahorros 4057» se partía en dos.
+            renglones = 1,
         )
         // Vuelta 71: con una tarjeta de crédito, a cuántas cuotas fue la compra.
         if (cuotas != null) {
@@ -2429,8 +2444,15 @@ internal fun CabezaDelMonto(
     onPickDate: () -> Unit,
     tagDeLaFecha: String = TAG_FECHA_EN_AGREGAR,
 ) {
+    // Vuelta 80: sin teclado en pantalla y en una ventana angosta (la web a 390), la cifra es la
+    // protagonista: `cifra` ×1,5 (~54 sp) con [Espacio.xxxl] arriba y abajo (quien llama ya pone
+    // [Espacio.m] a cada lado; acá va lo que falta).
+    val grande = cifraGrandeEnAgregar(conTecladoEnPantalla, LocalWindowWidthClass.current)
     Column(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (grande) Modifier.padding(vertical = Espacio.xxxl - Espacio.m) else Modifier)
+            .testTag(TAG_CABEZA_DEL_MONTO),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         // F14: mismo arreglo que Presupuestos — separador de miles mientras se escribe,
@@ -2444,9 +2466,10 @@ internal fun CabezaDelMonto(
         } else {
             // Vuelta 34: sin teclado en pantalla, el cursor dice dónde va lo que se teclee. La cifra
             // sigue siendo la protagonista; el cursor va pegado a su derecha.
+            val estilo = estiloDeLaCifraDeAgregar(grande)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                CifraProtagonista(montoEscrito, color = Movi.colores.texto, modifier = Modifier.weight(1f, fill = false))
-                CursorDelMonto()
+                CifraProtagonista(montoEscrito, color = Movi.colores.texto, modifier = Modifier.weight(1f, fill = false), estilo = estilo)
+                CursorDelMonto(estilo)
             }
         }
         Spacer(Modifier.height(Espacio.xxs))
@@ -2479,6 +2502,23 @@ internal fun CabezaDelMonto(
     }
 }
 
+/** El `testTag` de [CabezaDelMonto]. */
+const val TAG_CABEZA_DEL_MONTO: String = "agregar:cabeza-del-monto"
+
+/** Cuánto crece la cifra de Agregar cuando es la protagonista (vuelta 80): 36 sp × 1,5 = 54 sp. */
+internal const val ESCALA_DE_LA_CIFRA_GRANDE: Float = 1.5f
+
+/** ¿La cifra de Agregar va grande? Sin teclado en pantalla y en una ventana angosta (vuelta 80). Pura. */
+internal fun cifraGrandeEnAgregar(conTecladoEnPantalla: Boolean, ancho: WindowWidthClass): Boolean =
+    !conTecladoEnPantalla && ancho == WindowWidthClass.Compact
+
+/** La letra de la cifra de Agregar: `cifra`, o ×[ESCALA_DE_LA_CIFRA_GRANDE] si va grande. */
+@Composable
+internal fun estiloDeLaCifraDeAgregar(grande: Boolean): TextStyle {
+    val base = Movi.textos.cifra
+    return if (grande) base.copy(fontSize = base.fontSize * ESCALA_DE_LA_CIFRA_GRANDE, lineHeight = base.lineHeight * ESCALA_DE_LA_CIFRA_GRANDE) else base
+}
+
 /**
  * **El cursor del monto** (vuelta 34): una raya de la marca, del alto de la letra de la cifra, que
  * parpadea a [Movimiento.PARPADEO_DEL_CURSOR_MS] —o queda fija si el sistema pide menos
@@ -2486,9 +2526,9 @@ internal fun CabezaDelMonto(
  * teclee va al monto. El parpadeo se lee en la capa de dibujo: no recompone nada.
  */
 @Composable
-private fun CursorDelMonto() {
+private fun CursorDelMonto(estilo: TextStyle = Movi.textos.cifra) {
     val reducido = LocalMovimientoReducido.current
-    val alto = with(LocalDensity.current) { Movi.textos.cifra.fontSize.toDp() }
+    val alto = with(LocalDensity.current) { estilo.fontSize.toDp() }
     val fase = if (reducido) {
         null
     } else {
@@ -2722,6 +2762,8 @@ internal fun FilaDeCuentaEnAgregar(
         },
         final = if (saldo.conCifra) ({ Cifra(saldo.monto, moneda = saldo.moneda, tono = saldo.tono) }) else null,
         onClick = onClick,
+        // Vuelta 80: se elige, no se abre.
+        chevron = false,
         modifier = Modifier
             .heightIn(min = Medida.altoDeFilaDoble)
             .semantics { selected = elegida }

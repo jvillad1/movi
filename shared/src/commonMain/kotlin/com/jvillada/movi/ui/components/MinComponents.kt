@@ -301,8 +301,13 @@ fun formatMoneyAbreviadaSinOcultar(amount: Long): String {
  * Es un componente y no un estilo porque el achique vive en `BasicText`, no en un `TextStyle`.
  */
 @Composable
-fun CifraProtagonista(text: String, color: Color, modifier: Modifier = Modifier) {
-    val estilo = Movi.textos.cifra
+fun CifraProtagonista(
+    text: String,
+    color: Color,
+    modifier: Modifier = Modifier,
+    /** Vuelta 80: Agregar la pide más grande cuando es la protagonista (ver `estiloDeLaCifraDeAgregar`). */
+    estilo: androidx.compose.ui.text.TextStyle = Movi.textos.cifra,
+) {
     BasicText(
         text = com.jvillada.movi.ui.components.ds.conElMenosPegado(text, Movi.textos.menosPegado),
         // Es una héroe aunque llegue escrita: cuenta para «una sola por pantalla» (ver `VarianteDeCifraKey`).
