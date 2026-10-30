@@ -4112,3 +4112,50 @@ correo con y sin dirección, «Movi propone hoy · 4», Traspaso y Pagar con la 
 sin cortes con y sin lista). Se actualizaron `MasScreenTest`, `LosAvisosApagadosSeVenTest`,
 `AvisosEnElIphoneTest`, `TarjetaDeAvisosTest`, `RepartirDesdeElMasTest` e `InicioDelRedisenoTest`. **Las líneas
 base** no cambian, y las guardas en 0 siguen en 0.
+
+## 76. Vuelta 78: rápida y coherente
+
+Viene de la revisión fresca 6 (puntos 5, 6, 7, 8, 13 y 15, sin Créditos). **Sin reglas de plata nuevas**: todo
+lo que se dice sale de funciones que ya existían.
+
+1. **Respuestas livianas** (server). El JSON sale sin sangría y con gzip (`plugins/Compresion.kt`, desde 1 KB, solo
+   respuestas, solo JSON y texto; el `.wasm`, las fuentes y los documentos van tal cual). Los tres clientes piden y
+   abren gzip solos. Con la demo local, `/api/events/by-day` pasó de 62,6 KB a 5,9 KB y `/api/dashboard/summary` de
+   5,5 KB a 0,9 KB. Ver la sección del server en `CLAUDE.md`.
+2. **Peticiones sin repetir** (cliente). `LecturasSinRepetir` une los pedidos iguales en vuelo y devuelve lo que
+   contestó hace menos de 30 s; una escritura propia lo vuelve viejo. Al abrir el Inicio `users/me` y `accounts`
+   salen una vez (antes dos: el Inicio y la guía de primer uso a la vez), Pagos pide `accounts` una vez, y Actividad
+   no vuelve a bajar la historia si la tiene de hace menos de 30 s. La bandeja «Por revisar» siempre pregunta.
+3. **El héroe con un solo horizonte.** «Para N días · $X por día» (`detalleDelHeroe`) **se calla** con
+   `DIAS_PARA_CALLAR_EL_POR_DIA` = 3 días o menos para el cierre, o si «¿Me alcanza?» dice que no
+   (`RenglonMeAlcanza.noAlcanza`). Los avisos de la línea (te pasaste, sin margen, vas por encima de lo previsto)
+   se dicen siempre. Sin salario, si el primer día en rojo de la caja cae **después** del cierre, el renglón ya no
+   dice «No te alcanza: el 29 nov quedarías en −$1,1M» debajo de un «Te quedan» positivo: dice «Desde el 1 nov,
+   sin salario anotado, no te alcanzaría · Agregar salario» (sin rojo; tocarlo abre la caja de Pagos, con su
+   «Agregar» arriba). Con salario, o con un rojo dentro del período, lo de siempre.
+4. **Pagos: una sola invitación al salario.** La de la caja («Sin tu salario, Movi supone… · Agregar»). La tarjeta
+   de «Lo que se repite» sin ingresos muestra solo «Gastos recurrentes» (`TAG_SOLO_LOS_GASTOS_RECURRENTES`), sin
+   «Agrega tu salario… · Agregar mi salario». Y **las dos cifras se nombran**: debajo de los gastos,
+   `lineaDeLasDosCifras` dice «$3.625.338 al mes en promedio · $3.662.500 este período, con lo que de verdad pagaste
+   y el mínimo de tus tarjetas» —la primera es `ResumenRecurrentes.gastos` (un mes cualquiera, lo anual en doce,
+   sin el pago de las tarjetas); la segunda, el «de $X» de la tarjeta amarilla (`ResumenDeFacturas.total`)—. Si
+   coinciden, o no hay lista del período, no se dice nada.
+5. **Buscar cuenta lo mismo que En qué se va.** Tu parte de lo que pagó otra persona en un grupo (`getTuParteDeOtros`)
+   entra a Buscar con `eventosParaBuscar` (la misma `conTuParteDeOtros` de Actividad): «Mercado del sábado», «Pagó
+   Caro · 25 de octubre» (`subtituloDeTuParteEnBuscar`), la cifra es tu parte y debajo «Tu parte»; tocarla abre el
+   gasto del grupo. La suma de las filas de «mercado» en el período es la de la categoría en En qué se va.
+6. **El esqueleto reserva el alto real.** Mientras carga el Inicio, la tarjeta del héroe reserva con
+   `EsqueletoDeFila` los renglones de «¿Me alcanza?» y «Por confirmar» que llevaba la última vez
+   (`FormaRecordada.heroe`, `FormaDelHeroe`; la primera vez, los dos). En frío sin instantánea ya no baja ~110 px.
+7. **Pulido.**
+   - **El widget «Falta por pagar» empieza por el primero de la cola**, el mismo pago que «Próximo pago» pone arriba
+     (vuelta 68 lo saltaba, y se leían dos órdenes). Con un solo pendiente que ya está arriba, el widget no se pinta
+     (vuelta 73, sin cambios). `EL_DE_PROXIMO_PAGO` salió.
+   - **«Lo que Movi sabe de ti»: una sola acción para agregar.** Con la memoria vacía va «Escribir un recuerdo» del
+     vacío y el encabezado no lleva «Agregar»; con recuerdos, «Agregar» arriba.
+
+Lo vigilan `CompresionTest` (server), `LecturasSinRepetirTest` y `ElInicioNoRepitePeticionesTest` (el contador de
+peticiones sobre un `MockEngine`), `RenglonMeAlcanzaTest` y `ElHeroeConUnSoloHorizonteTest`,
+`ElFlujoLibrePideElSalarioTest` y `PagosHastaQueTePaguenTest` (una sola invitación), `BuscarCuentaComoEnQueSeVaTest`
+y `BuscarMuestraTuParteDelGrupoTest`, `ElHeroeReservaSuAltoTest` (≤ 8 dp), `ElWidgetEmpiezaComoElAvisoTest` y
+`LaMemoriaSeEscribeAManoTest`. **Las líneas base** no cambian, y las guardas en 0 siguen en 0.
