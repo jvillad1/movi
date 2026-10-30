@@ -114,6 +114,9 @@ import com.jvillada.movi.ui.dashboard.HojaDeDondeSale
 import com.jvillada.movi.ui.dashboard.conteoPorRevisarDelInicio
 import com.jvillada.movi.ui.dashboard.EstadoDelHeroe
 import com.jvillada.movi.ui.dashboard.rememberEstadoQueCambia
+import com.jvillada.movi.ui.dashboard.MovimientosDelDueno
+import com.jvillada.movi.ui.dashboard.LocalCargaDelInicioTerminadaEn
+import com.jvillada.movi.ui.dashboard.datosConLosMovimientosDelDueno
 import androidx.compose.ui.graphics.graphicsLayer
 import com.jvillada.movi.ui.porrevisar.desgloseDePorRevisar
 import com.jvillada.movi.ui.porrevisar.ConteoPorRevisar
@@ -192,18 +195,29 @@ internal fun HeroDeUnVistazo(
     // y cambian juntos (ver [EstadoDelHeroe]): nunca la cifra vieja junto a la línea nueva. Revisión de
     // la 75: mientras la carga del Inicio está en vuelo lo visible se queda —las cuentas llegan antes que
     // el resumen y los pagos— y al terminar cambia entero.
-    val disponible = disponibleDelInicio(data, hoy)
-    val renglon = rememberRenglonMeAlcanza(data, hoy)
+    // Vuelta 82 · el optimista: lo que el dueño acaba de anotar, anular o deshacer se adelanta sobre los datos
+    // que había cuando lo hizo ([datosConLosMovimientosDelDueno]); «Te quedan» y «Tu plata» salen de las
+    // funciones de siempre y cambian juntas, en el acto. Dudoso → `null`, y se espera al server.
+    val cargandoElInicio = LocalCargandoElInicio.current
+    val pendientes = MovimientosDelDueno.pendientes(LocalCargaDelInicioTerminadaEn.current)
+    val base = remember(pendientes.firstOrNull()?.id) { data }
+    val optimista = if (pendientes.isEmpty()) null else datosConLosMovimientosDelDueno(base, pendientes, hoy)
+    val datos = optimista ?: data
+    val disponible = disponibleDelInicio(datos, hoy)
+    val renglon = rememberRenglonMeAlcanza(datos, hoy)
     val visto = rememberEstadoQueCambia(
         EstadoDelHeroe(
             teQuedan = disponible?.let(::teQuedanDeHoy),
-            tuPlata = data.accounts?.let { heroBalance(it, data.apartados.orEmpty()).tuPlata },
+            tuPlata = datos.accounts?.let { heroBalance(it, datos.apartados.orEmpty()).tuPlata },
             renglon = renglon,
         ),
-        congelado = LocalCargandoElInicio.current,
+        // Vuelta 82: con el optimista, lo que se ve ya no depende de la carga (no se congela); sin él, todo
+        // cambio de cifra espera el final de la carga —también el del dueño—: las dos cifras cambian juntas.
+        congelado = cargandoElInicio && optimista == null,
         // Vuelta 79: si el cambio lo hizo el dueño (anotar, anular, deshacer), no se desvanece: la cifra
         // cuenta hasta la nueva ([rememberCifraQueCuenta], en el cuerpo).
         seAnima = { antes, despues -> esUnCambioDelHeroe(antes, despues) && !CambioDelDueno.pendiente() },
+        seCongela = { antes, despues -> esUnCambioDelHeroe(antes, despues) },
     )
     Superficie(
         modifier = Modifier
@@ -233,7 +247,7 @@ internal fun HeroDeUnVistazo(
             }
             return@Superficie
         }
-        CuerpoDelHeroe(section, data, onNavigate, disponible, visto)
+        CuerpoDelHeroe(section, datos, onNavigate, disponible, visto)
         // Vuelta 78: mientras la carga está en vuelo, los renglones que la tarjeta llevaba la última vez
         // (o los dos, la primera vez) se reservan con su esqueleto: en un arranque en frío sin instantánea,
         // el héroe medía ~115 px y al llegar los datos ~235: todo el Inicio bajaba ~110 px a los 1,3 s.
@@ -323,7 +337,8 @@ private fun CuerpoDelHeroe(
     // Vuelta 79: la cifra grande cuenta de la vieja a la nueva cuando el cambio lo hizo el dueño. Cuenta
     // con el signo (lo que te pasaste es negativo) y se pinta sin él, como siempre.
     val montoQueCuenta = rememberCifraQueCuenta(teQuedan?.let { if (it.enRojo) -it.monto else it.monto })?.let { kotlin.math.abs(it) }
-    val tuPlataQueCuenta = rememberCifraQueCuenta(if (teQuedan == null) tuPlata else null)
+    // Vuelta 82: «Tu plata» cuenta también en el enlace de arriba, junto con «Te quedan» (el mismo cuadro).
+    val tuPlataQueCuenta = rememberCifraQueCuenta(tuPlata)
 
     Column(
         modifier = Modifier
@@ -351,7 +366,7 @@ private fun CuerpoDelHeroe(
             // «Tu plata» se nombra con un enlace a su casa; si la cifra grande ya es «Tu plata», no.
             if (modoTeQuedan && tuPlata != null) {
                 Text(
-                    text = conCifrasOcultas("Tu plata ${formatCOP(tuPlata)}"),
+                    text = conCifrasOcultas("Tu plata ${formatCOP(tuPlataQueCuenta ?: tuPlata)}"),
                     style = Movi.textos.apoyoMedio,
                     color = Movi.colores.enlace,
                     maxLines = 1,

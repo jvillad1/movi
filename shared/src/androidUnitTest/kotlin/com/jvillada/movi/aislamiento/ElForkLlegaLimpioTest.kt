@@ -123,6 +123,14 @@ class ElForkLlegaLimpioTest {
         DestinoDesdeAfuera.pendiente = Screen.PorRevisar
         // Vuelta 79: un «el dueño cambió la plata» sin tomar haría contar la cifra de la prueba siguiente.
         com.jvillada.movi.ui.components.ds.CambioDelDueno.marcar()
+        // Vuelta 82: un movimiento del dueño sin confirmar haría adelantar el héroe de la prueba siguiente.
+        com.jvillada.movi.ui.dashboard.MovimientosDelDueno.registrar(
+            com.jvillada.movi.shared.model.FinancialEvent(
+                id = "otra-prueba", accountId = "a", type = com.jvillada.movi.shared.model.TransactionType.EXPENSE,
+                amount = 1L, category = "Comida", description = "x", timestamp = 0L,
+            ),
+            signo = 1,
+        )
         // Ola 2: un archivo compartido que esperaba la puerta.
         PapelesCompartidos.recibir(listOf(ArchivoCompartido("recibo.png", byteArrayOf(1), "image/png")))
         // Ola 4: un «Está bien» de otra prueba.
@@ -245,6 +253,7 @@ class ElForkLlegaLimpioTest {
         assertNull("El lector de huellas de otra clase sigue enchufado", Huella.sustitutoDePrueba)
         assertNull("El destino de un aviso tocado en otra prueba sigue pendiente", DestinoDesdeAfuera.pendiente)
         assertFalse("Un cambio del dueño de otra prueba sigue pendiente", com.jvillada.movi.ui.components.ds.CambioDelDueno.pendiente())
+        assertTrue("Un movimiento del dueño de otra prueba sigue adelantándose", com.jvillada.movi.ui.dashboard.MovimientosDelDueno.pendientes(null).isEmpty())
         assertTrue("Un archivo compartido en otra prueba sigue esperando", PapelesCompartidos.pendientes.isEmpty())
         assertNull("La oferta de avisos de otra clase sigue enchufada", AvisosEnHoy.sustitutoDePrueba)
         assertNull("El repositorio de Compartir de otra clase sigue enchufado", Repositories.sustitutoDeCompartirDePrueba)

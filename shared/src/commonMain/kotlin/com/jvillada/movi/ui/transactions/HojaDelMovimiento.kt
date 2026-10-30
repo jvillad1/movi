@@ -237,8 +237,16 @@ private fun JuegoDelMovimiento(
             onDismiss = { pidioAnular = false },
             onVoided = {
                 pidioAnular = false
+                // Vuelta 82: el héroe del Inicio adelanta la anulación (y su «Deshacer»), ver [MovimientosDelDueno].
+                com.jvillada.movi.ui.dashboard.MovimientosDelDueno.registrar(event, signo = -1)
                 avisoDeDeshacer?.mostrar(com.jvillada.movi.ui.components.ds.ANULADO) {
-                    com.jvillada.movi.data.Repositories.wallets.restaurarMovimiento(event.id)
+                    val id = com.jvillada.movi.ui.dashboard.MovimientosDelDueno.registrar(event, signo = 1)
+                    try {
+                        com.jvillada.movi.data.Repositories.wallets.restaurarMovimiento(event.id)
+                    } catch (e: Throwable) {
+                        com.jvillada.movi.ui.dashboard.MovimientosDelDueno.quitar(id)
+                        throw e
+                    }
                 }
                 onResuelto(event)
                 onAnulado()

@@ -70,7 +70,8 @@ fun cifraEnLaCuenta(desde: Long, hasta: Long, progreso: Float): Long =
 
 /**
  * **La cifra que se muestra**: [valor], salvo mientras cuenta. Cuando [valor] cambia de una cifra a otra y
- * el cambio lo hizo el dueño ([CambioDelDueno.tomar]), cuenta de la vieja a la nueva en
+ * el cambio lo hizo el dueño ([CambioDelDueno.pendiente]; vuelta 82: sin consumirla, así cuentan las dos
+ * cifras del héroe y la corrección del server), cuenta de la vieja a la nueva en
  * [DURACION_DE_LA_CIFRA_QUE_CUENTA_MS]; si no, o con menos movimiento, cambia en el acto. `null` (todavía
  * no hay cifra) pasa tal cual.
  */
@@ -82,7 +83,9 @@ fun rememberCifraQueCuenta(valor: Long?): Long? {
     val progreso = remember { Animatable(1f) }
     LaunchedEffect(valor) {
         val antes = if (progreso.value >= 1f) hasta else hasta?.let { h -> desde?.let { cifraEnLaCuenta(it, h, progreso.value) } }
-        if (valor == null || antes == null || antes == valor || reducido || !CambioDelDueno.tomar()) {
+        // Vuelta 82: la marca no se consume: «Te quedan» y «Tu plata» cuentan las dos (en el mismo cuadro), y la
+        // corrección del server, si llega con otra cifra mientras la marca vale, también cuenta.
+        if (valor == null || antes == null || antes == valor || reducido || !CambioDelDueno.pendiente()) {
             desde = valor
             hasta = valor
             progreso.snapTo(1f)

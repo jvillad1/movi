@@ -112,6 +112,13 @@ object DashboardDataCache {
     }
 
     /**
+     * Vuelta 82: cuándo **terminó** la última carga del Inicio (bien o mal), en epoch ms; `null` si ninguna
+     * en este proceso. El héroe la compara con lo que hizo el dueño ([MovimientosDelDueno]): lo de antes de
+     * esta carga ya viene en lo que leyó; lo de después, lo adelanta.
+     */
+    var terminadaEn: Long? = null
+
+    /**
      * Qué bloques del Inicio ya hicieron su entrada animada (la cifra que cuenta, las barras que
      * crecen) en este proceso. Ver [rememberProgresoDeEntrada]: la animación es **una vez**, no cada
      * vez que se vuelve al Inicio ni cada vez que un bloque sale y entra de la pantalla.
@@ -122,6 +129,7 @@ object DashboardDataCache {
     fun clear() {
         data = null
         cargadoEn = 0L
+        terminadaEn = null
         tickDeLaCarga = 0
         // El próximo que entre ve su Inicio llegar, como la primera vez.
         entradasHechas.clear()
@@ -560,6 +568,9 @@ fun DashboardScreen(
             }
             if (SessionManager.userId == usuario) InstantaneaDelInicio.delAparato.guardarDatos(usuario, instantanea)
         }
+        // Vuelta 82: antes de soltar `loading`, para que el héroe lo vea en el mismo cuadro (ver
+        // [LocalCargaDelInicioTerminadaEn]).
+        DashboardDataCache.terminadaEn = Clock.System.now().toEpochMilliseconds()
         loading = false
     }
 
@@ -667,7 +678,10 @@ fun DashboardScreen(
             // `loading` — ver su KDoc para el porqué (Task 7, fix round 1).
             // Tirar hacia abajo pide lo mismo que el «Reintentar» del aviso de error: `refreshKey`
             // (ver [TirarParaActualizar]). No es otra recarga.
-            CompositionLocalProvider(LocalCargandoElInicio provides loading) {
+            CompositionLocalProvider(
+                LocalCargandoElInicio provides loading,
+                LocalCargaDelInicioTerminadaEn provides DashboardDataCache.terminadaEn,
+            ) {
                 TirarParaActualizar(
                     cargando = loading,
                     onActualizar = { refreshKey++ }, // TirarParaActualizar ya olvidó lo fresco
