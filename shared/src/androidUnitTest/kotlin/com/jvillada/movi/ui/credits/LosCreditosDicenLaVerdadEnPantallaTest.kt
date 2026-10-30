@@ -114,12 +114,13 @@ class LosCreditosDicenLaVerdadEnPantallaTest {
         // Vuelta 80: la fila lleva la pieza del préstamo sin saldo (la misma de la ficha), no la píldora.
         assertFalse(hay(SIN_SALDO_EN_MOVI), "sin la píldora: la pieza de abajo ya lo dice")
         assertFalse(hay("−\$980.000"), "la fila decía «−$980.000»")
-        // Deuda total: los $1.583.000 de Nu, no $603.000.
+        // Deuda total: los $1.583.000 de Nu, no $603.000 (vuelta 82: con el signo de Patrimonio).
         assertTrue(hay("\$1.583.000"))
         assertFalse(hay("\$603.000"))
         // Y el crédito sin saldo se nombra con su salida: la misma pieza que Patrimonio y la ficha (vuelta 80),
-        // en el resumen y en su fila, con «Usar este» (sus condiciones están completas).
-        assertEquals(2, cuantos(com.jvillada.movi.ui.credits.textoDelCreditoSinSaldo("Vehículo 4083")))
+        // con «Usar este» (sus condiciones están completas). Vuelta 82: una sola vez, en su fila; debajo de la
+        // deuda total, solo la línea «+ Vehículo 4083 sin saldo (…)».
+        assertEquals(1, cuantos(com.jvillada.movi.ui.credits.textoDelCreditoSinSaldo("Vehículo 4083")))
         composeRule.onAllNodesWithTag(TAG_DEUDAS_SIN_SALDO, useUnmergedTree = true).fetchSemanticsNodes().single()
         composeRule.onAllNodes(hasText(com.jvillada.movi.ui.credits.USAR_EL_SALDO_DEL_PLAN) and hasClickAction())[0]
             .performSemanticsAction(SemanticsActions.OnClick)
