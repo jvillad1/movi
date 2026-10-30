@@ -319,7 +319,7 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                     // positiva en una pantalla y negativa en la otra.
                     Cifra(cifraDeLasDeudasEnLaFila(totalDebtCop(creditosALaVista, tarjetasALaVista)), VarianteDeCifra.Heroe)
                     // Vuelta 59: las deudas en negativo no restan arriba; vuelta 82: se nombran en una línea
-                    // («+ Vehículo 4083 sin saldo (unos $35,8M según el plan)»). La acción, en su fila.
+                    // («Falta Vehículo 4083, sin saldo (unos $35,8M según el plan)»). La acción, en su fila.
                     DeudasSinSaldo(creditosALaVista, tarjetasALaVista)
                     // Lo que esa deuda CUESTA, que es lo que la pantalla no decía. La deuda
                     // total de arriba cuenta todos los créditos —quién paga la cuota no cambia
