@@ -737,6 +737,8 @@ internal fun TransferBody(
     val coroutine = rememberCoroutineScope()
     // Guardar un traspaso o una cuota vibra, igual que un gasto (ver [Vibrador]).
     val vibrador = rememberVibrador()
+    // Vuelta 74: «Anotado · Traspaso $500.000 · Deshacer», el aviso de abajo de la cáscara.
+    val avisoAbajo = com.jvillada.movi.ui.components.ds.LocalAvisoDeDeshacer.current
     val esPago = modo == ModoDeTraspaso.PAGO_DE_CUOTA
     // En un pago, los dos lados ofrecen cosas distintas: de dónde sale la plata son cuentas de
     // dinero, y lo que se paga son deudas. En un traspaso, la misma lista para los dos.
@@ -1091,6 +1093,19 @@ internal fun TransferBody(
         error = null
         // Vuelta 63: los ids de ESTE guardado, para sellar el abono con la pata que salió.
         val idsDelGuardado = ids
+        // Vuelta 74: el aviso de abajo. «Deshacer» anula la pata que salió (la otra se anula con ella,
+        // por su `transferId`: la anulación de siempre). Con un abono que se tilda no hay Deshacer: su
+        // sello (vuelta 63) quedaría apuntando a un anulado, y eso no es un camino limpio.
+        val avisoDelGuardado: () -> Unit = {
+            avisoAbajo?.mostrar(
+                com.jvillada.movi.ui.espacios.textoDeLoAnotado(
+                    if (esPago) "Pago a ${destino.name}" else "Traspaso", amount ?: 0L, origen.currency,
+                ),
+                deshacer = if (abonoQueSalda != null) null else {
+                    { Repositories.wallets.voidEvent(idsDelGuardado.fromEventId) }
+                },
+            )
+        }
         coroutine.launch {
             val result = runCatching {
                 // El abono extra de la vuelta 48 es el traspaso de siempre (`transferLegsFor`).
@@ -1134,6 +1149,7 @@ internal fun TransferBody(
                     // diferencia, se muestra y él la cierra con el dedo — un cartel que se va solo
                     // no es un aviso sobre plata.
                     vibrador.confirmar()
+                    avisoDelGuardado()
                     if (aviso != null) avisoDelDesglose = aviso else onSaved()
                 }
                 .onFailure { fallo ->
