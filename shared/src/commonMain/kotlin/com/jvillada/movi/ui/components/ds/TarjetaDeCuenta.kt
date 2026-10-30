@@ -107,7 +107,7 @@ fun TarjetaDeCuenta(
                 // Un mínimo, no un alto fijo: con la letra del sistema agrandada la tarjeta crece en vez de cortar.
                 .heightIn(min = Medida.altoDeTarjetaDeCuenta)
                 .anilloDeFoco(RoundedCornerShape(Radio.xl))
-                .alPresionar(onClick = onClick, onClickLabel = "Ver $nombre", velo = true, forma = RoundedCornerShape(Radio.xl))
+                .alPresionar(onClick = onClick, onClickLabel = "Ver $nombre", forma = RoundedCornerShape(Radio.xl), conBordeAlEncima = true)
                 .clip(RoundedCornerShape(Radio.xl))
                 .background(colores.tarjeta)
                 .testTag(TAG_TARJETA_DE_CUENTA)
