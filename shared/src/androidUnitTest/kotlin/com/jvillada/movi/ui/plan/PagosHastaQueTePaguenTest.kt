@@ -186,6 +186,38 @@ class PagosHastaQueTePaguenTest {
         assertTrue(!habilitada("Período siguiente"), "más allá del siguiente no se va")
     }
 
+    /**
+     * Revisión de la 70 · a 1280 dp el navegador va a la derecha, encima de «Facturas | Presupuestos»; con
+     * otro período a la vista la izquierda dice «Período en curso · …» (y se atenúa).
+     */
+    @Test
+    @Config(qualifiers = "w1280dp-h900dp-mdpi")
+    fun `a 1280 dp el navegador va con los pagos y la izquierda dice que es el periodo en curso`() {
+        composeRule.setContent {
+            com.jvillada.movi.ConClaseDeAncho {
+                com.jvillada.movi.EsqueletoDeLaCascara(
+                    pantalla = com.jvillada.movi.ui.Screen.Plan(),
+                    activeTab = com.jvillada.movi.ui.components.NavTab.PLAN,
+                    conNavegacion = true,
+                    onTabSelected = {},
+                    relevoDeScroll = androidx.compose.runtime.remember { com.jvillada.movi.ui.components.RelevoDeScroll() },
+                ) { PlanScreen(onNavigate = {}) }
+            }
+        }
+        composeRule.waitUntil(timeoutMillis = 5_000) { habilitada("Período anterior") }
+        fun limites(tag: String) = composeRule.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().single().boundsInRoot
+        val pagos = limites(TAG_COLUMNA_DE_LOS_PAGOS)
+        val navegador = limites(TAG_NAVEGADOR_DEL_PERIODO_DE_PAGOS)
+        assertTrue(navegador.left >= pagos.left - 0.5f, "el navegador va en la columna de los pagos: $navegador")
+        assertEquals(0, contarTag(TAG_PERIODO_EN_CURSO))
+
+        flecha("Período anterior").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) { contarTag(TAG_PERIODO_EN_CURSO) == 1 }
+        val rotulo = limites(TAG_PERIODO_EN_CURSO)
+        assertTrue(rotulo.right <= limites(TAG_COLUMNA_DEL_DISPONIBLE).right + 0.5f, "el rótulo va a la izquierda")
+        assertTrue(hay("$PERIODO_EN_CURSO · ", substring = true))
+    }
+
     // ── Lo que viene ──────────────────────────────────────────────────────
 
     /** El 29-oct con el período cerrando el 31 (corte 1): el 5-nov vencen el arriendo y la cuota. */
@@ -258,7 +290,7 @@ class PagosHastaQueTePaguenTest {
         montarPagos()
         composeRule.waitUntil(timeoutMillis = 5_000) { contarTag(TAG_FRASE_DE_PUENTE) == 1 }
         assertEquals(0, contarTag(TAG_AVISO_DE_LA_PANTALLA))
-        assertTrue(hay("te quedan libres", substring = true))
+        assertTrue(hay("libres en tus cuentas", substring = true))
     }
 
     @Test

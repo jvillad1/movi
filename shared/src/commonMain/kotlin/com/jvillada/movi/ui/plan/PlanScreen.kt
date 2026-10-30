@@ -35,6 +35,8 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.History
 import com.jvillada.movi.shared.model.periodoActual
 import com.jvillada.movi.shared.model.periodoAnterior
+import com.jvillada.movi.shared.model.nombreDelMesDe
+import androidx.compose.ui.draw.alpha
 import com.jvillada.movi.shared.model.periodoDelPrefijo
 import com.jvillada.movi.shared.model.periodoSiguiente
 import com.jvillada.movi.shared.model.rangoDelPeriodo
@@ -249,7 +251,10 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
     fun LazyListScope.loDeAbajo(conCaja: Boolean) {
         item(key = "disponible") { cuantoPuedesGastar() }
         item(key = "tus-periodos") { tusPeriodos() }
-        if (conCaja) item(key = "caja-proyectada") { cajaProyectada(true, true) }
+        if (conCaja) item(key = "caja-proyectada") { cajaProyectada(true, false) }
+        // Revisión de la 70: el aire de abajo va siempre, y no dentro de la caja. Con la caja oculta (su
+        // fuente caída, o nada que proyectar) «Tus períodos» quedaba pegado a «Lo que se repite al mes».
+        if (conCaja) item(key = "aire-despues-de-la-caja") { Spacer(Modifier.height(Medida.entreSecciones)) }
     }
     fun LazyListScope.segmentoElegido(dosColumnas: Boolean) {
         if (viendoOtroPeriodo) {
@@ -334,19 +339,41 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
                             .verticalScroll(scrollDelDisponible)
                             .padding(bottom = Medida.botonFlotante + Espacio.xl),
                     ) {
-                        lineaDelPeriodo()
-                        cuantoPuedesGastar()
-                        tusPeriodos()
-                        cajaProyectada(true, false)
+                        // Revisión de la 70: el navegador ‹ › va a la derecha, encima de «Facturas |
+                        // Presupuestos», que es lo que mueve. Mirando otro período, esta columna sigue
+                        // siendo la del período en curso: lo dice y se atenúa.
+                        // El renglón tiene el alto del navegador de la derecha, con rótulo o sin él: la
+                        // tarjeta queda a la altura del selector y nada se corre al cambiar de período.
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(Medida.objetivoTactil + Espacio.xs)
+                                .padding(horizontal = Medida.margenDePantalla),
+                            contentAlignment = Alignment.CenterStart,
+                        ) {
+                            if (viendoOtroPeriodo) {
+                                Text(
+                                    text = "$PERIODO_EN_CURSO · ${nombreDelMesDe(periodoDeHoy)}",
+                                    style = Movi.textos.apoyo,
+                                    color = Movi.colores.textoMedio,
+                                    modifier = Modifier.testTag(TAG_PERIODO_EN_CURSO),
+                                )
+                            }
+                        }
+                        Column(modifier = Modifier.alpha(if (viendoOtroPeriodo) OPACIDAD_DE_LO_ATENUADO else 1f)) {
+                            cuantoPuedesGastar()
+                            tusPeriodos()
+                            cajaProyectada(true, false)
+                        }
                     }
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.weight(1f).fillMaxHeight().testTag(TAG_COLUMNA_DE_LOS_PAGOS),
                         contentPadding = PaddingValues(bottom = Medida.botonFlotante + Espacio.xl),
                     ) {
+                        item(key = "periodo") { lineaDelPeriodo() }
                         item(key = "segmentos") {
-                            // A la altura de la línea del período de la izquierda (su aire `corto`).
-                            Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(top = Espacio.xs)) {
+                            Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla)) {
                                 selector()
                             }
                         }

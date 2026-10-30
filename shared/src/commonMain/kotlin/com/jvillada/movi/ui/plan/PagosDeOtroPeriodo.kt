@@ -30,7 +30,7 @@ import com.jvillada.movi.shared.model.PagoDelPeriodo
 import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.PeriodoFinanciero
 import com.jvillada.movi.shared.model.checklistDelPeriodo
-import com.jvillada.movi.shared.model.faltaPorPagar
+import com.jvillada.movi.shared.model.loQueSaleDe
 import com.jvillada.movi.shared.model.periodoSiguiente
 import com.jvillada.movi.shared.model.DIAS_DE_LO_QUE_VIENE
 import com.jvillada.movi.shared.time.epochMillisToAppDate
@@ -79,6 +79,15 @@ const val TAG_NAVEGADOR_DEL_PERIODO_DE_PAGOS: String = "navegador-del-periodo-de
 /** Lo que se ve en «Facturas» con otro período a la vista (el anterior o el siguiente). */
 const val TAG_PAGOS_DE_OTRO_PERIODO: String = "pagos-de-otro-periodo"
 
+/** En dos columnas, mirando otro período: el rótulo de la columna izquierda («Período en curso · octubre»). */
+const val TAG_PERIODO_EN_CURSO: String = "periodo-en-curso"
+
+/** El comienzo del rótulo de la columna izquierda. */
+const val PERIODO_EN_CURSO: String = "Período en curso"
+
+/** Lo atenuado de la columna del período en curso mientras se mira otro. */
+const val OPACIDAD_DE_LO_ATENUADO: Float = 0.5f
+
 /** El bloque «Lo que viene». */
 const val TAG_LO_QUE_VIENE: String = "lo-que-viene"
 
@@ -90,7 +99,7 @@ const val TITULO_LO_QUE_VENCERA: String = "Lo que vencerá"
 
 /** Por qué el período siguiente puede no tener todo: lo de este período que falta todavía no rodó. */
 const val NOTA_DEL_PERIODO_SIGUIENTE: String =
-    "Solo lectura. Lo que aún falta pagar de este período aparece aquí cuando lo pagues."
+    "Solo lectura: se paga cuando llegue su período. Una tarjeta suma su pago mínimo."
 
 /** Lo que dice el bloque de abajo: que no suma en la cifra del período. */
 const val NOTA_DE_LO_QUE_VIENE: String = "Es del período siguiente: no suma en «Falta por pagar»."
@@ -215,7 +224,7 @@ private fun PagosDelPeriodoSiguiente(estado: EstadoDelTableroDeRecurrentes, peri
         !(estado.vencimientosOk && estado.ocurrenciasOk) -> EsqueletoDeLaLista(TITULO_LO_QUE_VENCERA)
         else -> {
             val filas = remember(estado.upcomingRecurrentes, estado.ocurrencias, periodo, ajustes) {
-                checklistDelPeriodo(estado.upcomingRecurrentes, estado.ocurrencias, periodo, ajustes)
+                checklistDelPeriodo(estado.upcomingRecurrentes, estado.ocurrencias, periodo, ajustes, conElSiguienteVencimiento = true)
             }
             Seccion(titulo = TITULO_LO_QUE_VENCERA)
             Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
@@ -227,7 +236,7 @@ private fun PagosDelPeriodoSiguiente(estado: EstadoDelTableroDeRecurrentes, peri
                         modifier = Modifier.padding(Medida.rellenoDeSuperficie),
                     )
                 } else {
-                    TotalDeLaLista("Vence en este período", faltaPorPagar(filas))
+                    TotalDeLaLista("Vence en este período", loQueSaleDe(filas))
                     filas.forEach { pago ->
                         Separador(SangriaDeSeparador.ConInicio)
                         FilaDeLoQueVence(pago)
@@ -278,19 +287,30 @@ private fun TotalDeLaLista(rotulo: String, total: Long) {
 
 /**
  * Una fila de lo que vence, sin acciones: la MISMA fila de la lista del período ([FilaDePagoDelPeriodo])
- * con su fecha y su monto. Una tarjeta dice además su pago mínimo, si está cargado.
+ * con su fecha y su monto. Revisión de la 70: una tarjeta dice como monto **lo que va a salir** —«mínimo
+ * $180.000», lo que suma el total y lo que resta la caja— y la deuda como dato secundario; sin el mínimo
+ * cargado, la deuda y que no suma.
  */
 @Composable
 private fun FilaDeLoQueVence(pago: PagoDelPeriodo) {
+    val (monto, evidencia) = montoDeLoQueVence(pago)
     FilaDePagoDelPeriodo(
         estado = estadoVisualDe(pago),
         esIngreso = pago.esIngreso,
         nombre = pago.nombre,
         fecha = fechaDeLaFila(pago),
-        monto = textoDelMontoDelChecklist(pago),
+        monto = monto,
         colorDelMonto = if (pago.esIngreso) Movi.colores.entra else Movi.colores.texto,
-        evidencia = pago.pagoMinimo?.takeIf { pago.montoEsSaldo }?.let { "Pago mínimo ${formatCOP(it)}" },
+        evidencia = evidencia,
     )
+}
+
+/** El monto de una fila de lo que vence y su dato secundario (puro, para las pruebas). */
+internal fun montoDeLoQueVence(pago: PagoDelPeriodo): Pair<String, String?> {
+    if (!pago.montoEsSaldo) return textoDelMontoDelChecklist(pago) to null
+    val deuda = "Deuda ${textoDelMontoDelChecklist(pago)}"
+    val minimo = pago.pagoMinimo ?: return textoDelMontoDelChecklist(pago) to "Falta el pago mínimo: no suma"
+    return "mínimo ${formatCOP(minimo)}" to deuda
 }
 
 /** El título y dos renglones esqueleto, mientras viaja la lista. */
