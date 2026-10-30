@@ -4148,14 +4148,14 @@ lo que se dice sale de funciones que ya existían.
    `EsqueletoDeFila` los renglones de «¿Me alcanza?» y «Por confirmar» que llevaba la última vez
    (`FormaRecordada.heroe`, `FormaDelHeroe`; la primera vez, los dos). En frío sin instantánea ya no baja ~110 px.
 7. **Pulido.**
-   - **El widget «Falta por pagar» empieza por el primero de la cola**, el mismo pago que «Próximo pago» pone arriba
-     (vuelta 68 lo saltaba, y se leían dos órdenes). Con un solo pendiente que ya está arriba, el widget no se pinta
-     (vuelta 73, sin cambios). `EL_DE_PROXIMO_PAGO` salió.
+   - **El widget «Falta por pagar» y «Próximo pago» ordenan con la misma cola** (`pagosEnElOrdenDeLaCola`: los
+     pagos de `colaDePendientes` en su orden y después lo pendiente que la cola no trae). «Próximo pago» es el
+     primero; el widget sigue sin repetirlo (vuelta 68, `sinElProximoPago`) y empieza por el segundo.
    - **«Lo que Movi sabe de ti»: una sola acción para agregar.** Con la memoria vacía va «Escribir un recuerdo» del
      vacío y el encabezado no lleva «Agregar»; con recuerdos, «Agregar» arriba.
 
 Lo vigilan `CompresionTest` (server), `LecturasSinRepetirTest` y `ElInicioNoRepitePeticionesTest` (el contador de
 peticiones sobre un `MockEngine`), `RenglonMeAlcanzaTest` y `ElHeroeConUnSoloHorizonteTest`,
 `ElFlujoLibrePideElSalarioTest` y `PagosHastaQueTePaguenTest` (una sola invitación), `BuscarCuentaComoEnQueSeVaTest`
-y `BuscarMuestraTuParteDelGrupoTest`, `ElHeroeReservaSuAltoTest` (≤ 8 dp), `ElWidgetEmpiezaComoElAvisoTest` y
+y `BuscarMuestraTuParteDelGrupoTest`, `ElHeroeReservaSuAltoTest` (≤ 8 dp), `ElWidgetEmpiezaComoElAvisoTest` (el widget empieza por el segundo de la cola) y
 `LaMemoriaSeEscribeAManoTest`. **Las líneas base** no cambian, y las guardas en 0 siguen en 0.
