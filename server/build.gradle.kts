@@ -50,6 +50,7 @@ dependencies {
     implementation(libs.ktor.server.status.pages)
     implementation(libs.ktor.server.conditional.headers)
     implementation(libs.ktor.server.auto.head.response)
+    implementation(libs.ktor.server.compression)
     implementation(libs.koin.core)
     implementation(libs.koin.ktor)
     implementation(libs.logback)

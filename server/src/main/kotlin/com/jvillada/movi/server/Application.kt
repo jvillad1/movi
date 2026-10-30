@@ -6,6 +6,7 @@ import com.jvillada.movi.server.documentos.Cifrado
 import com.jvillada.movi.server.plugins.configureAuth
 import com.jvillada.movi.server.plugins.configureAutoHead
 import com.jvillada.movi.server.plugins.configureCORS
+import com.jvillada.movi.server.plugins.configureCompression
 import com.jvillada.movi.server.plugins.configureConditionalHeaders
 import com.jvillada.movi.server.plugins.configureMonitoring
 import com.jvillada.movi.server.plugins.configureRouting
@@ -37,6 +38,8 @@ fun Application.module() {
     DatabaseFactory.init()
     configureCORS()
     configureSerialization()
+    // Vuelta 78: el JSON y el texto viajan con gzip si el cliente lo acepta (ver Compresion.kt).
+    configureCompression()
     configureStatusPages()
     configureMonitoring()
     // Antes de routing: le da a lo estático la etiqueta con la que el navegador revalida
