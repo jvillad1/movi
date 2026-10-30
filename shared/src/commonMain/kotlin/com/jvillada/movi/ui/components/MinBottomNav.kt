@@ -1,7 +1,8 @@
 package com.jvillada.movi.ui.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.runtime.remember
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -25,7 +26,9 @@ import androidx.compose.ui.semantics.semantics
 import com.jvillada.movi.theme.*
 import androidx.compose.material3.HorizontalDivider
 import com.jvillada.movi.theme.Radio
+import com.jvillada.movi.ui.components.ds.alPresionar
 import com.jvillada.movi.ui.components.ds.anilloDeFoco
+import com.jvillada.movi.ui.components.ds.hundimientoAlPresionar
 
 /**
  * Los destinos de la navegación principal.
@@ -128,6 +131,12 @@ fun MinBottomNav(
 /** El `testTag` de la barra de pestañas del teléfono. */
 const val TAG_BARRA_DE_PESTANAS: String = "barra-de-pestanas"
 
+/** El `testTag` de la píldora de una pestaña de la barra (vuelta 79: ahí va lo que se ve del toque). */
+const val TAG_PILDORA_DE_PESTANA: String = "barra-de-pestanas:pildora"
+
+/** El `testTag` de cada pestaña de la barra del teléfono. */
+fun tagDePestana(tab: NavTab): String = "barra-de-pestanas:${tab.name}"
+
 @Composable
 private fun NavItem(
     tab: NavTab,
@@ -138,6 +147,8 @@ private fun NavItem(
     modifier: Modifier = Modifier,
 ) {
     val isActive = tab == active
+    val toque = remember { MutableInteractionSource() }
+    val pildora = RoundedCornerShape(Movi.formas.pleno)
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(Espacio.xxs, Alignment.CenterVertically),
@@ -146,8 +157,11 @@ private fun NavItem(
             // Vuelta 55: el foco del teclado se ve (hacia adentro: la barra llega al borde).
             .anilloDeFoco(RoundedCornerShape(Radio.m), adentro = true)
             // Un lector de pantalla oye el rótulo (el ícono no dice nada) y sabe cuál está elegida.
-            .clickable(role = Role.Tab) { onTabSelected(tab) }
-            .semantics { selected = isActive },
+            // Vuelta 79: la celda entera se toca, pero **sin ripple ni hover propio**: lo que se ve del
+            // toque (la escala y el velo) va solo en la píldora, nunca un rectángulo de toda la celda.
+            .alPresionar(onClick = { onTabSelected(tab) }, rol = Role.Tab, escala = 1f, fuente = toque)
+            .semantics { selected = isActive }
+            .testTag(tagDePestana(tab)),
     ) {
         Box(
             contentAlignment = Alignment.Center,
@@ -156,7 +170,11 @@ private fun NavItem(
                 // ícono, 56 × 30, con el ícono en la tinta encima. Las demás, sin píldora y en el
                 // texto medio.
                 .size(Medida.anchoDePildoraDePestana, Medida.altoDePildoraDePestana)
-                .clip(RoundedCornerShape(Movi.formas.pleno))
+                // Vuelta 79: la píldora se hunde al presionar y, sin ser la activa, lleva el velo en
+                // hover (la web) recortado a ella. La activa no: el velo la ensuciaba.
+                .hundimientoAlPresionar(toque, velo = !isActive, forma = pildora)
+                .testTag(TAG_PILDORA_DE_PESTANA)
+                .clip(pildora)
                 .background(if (isActive) Movi.colores.marca else Color.Transparent),
         ) {
             Icon(

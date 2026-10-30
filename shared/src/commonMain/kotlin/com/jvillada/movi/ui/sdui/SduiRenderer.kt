@@ -1,6 +1,7 @@
 package com.jvillada.movi.ui.sdui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
@@ -122,6 +123,9 @@ fun SduiRenderer(
     // primero. Chrome nativo como [header]: la definición SDUI no la conoce, y un APK viejo sigue con
     // su tarjeta de siempre.
     despuesDeLasAcciones: (@Composable () -> Unit)? = null,
+    // Vuelta 79: el scroll del Inicio, de quien lo monta: el encabezado fijo de arriba se separa (y la
+    // banda se vuelve crema) cuando el contenido se desplazó.
+    scroll: ScrollState = rememberScrollState(),
 ) {
     val uriHandler = LocalUriHandler.current
     val sections = visibleSections(definition, data)
@@ -131,7 +135,6 @@ fun SduiRenderer(
         conElPagoEnLasPropuestas = renderableSections(definition).none { it.type == "PROXIMO_PAGO" },
     )
     val colorDeLaBanda = Movi.colores.marca
-    val scroll = rememberScrollState()
     // La rueda del mouse sobre los márgenes mueve esta pantalla (ver [ScrollDesdeLosMargenes]).
     ScrollDesdeLosMargenes(scroll)
     // Re-tocar «Hoy» estando en Hoy vuelve arriba (ver [SubirAlRetocarLaPestana]).

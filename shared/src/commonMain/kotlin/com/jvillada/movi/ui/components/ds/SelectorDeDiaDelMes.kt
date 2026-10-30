@@ -1,7 +1,6 @@
 package com.jvillada.movi.ui.components.ds
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -72,7 +71,7 @@ fun SelectorDeDiaDelMes(
                             .height(Medida.objetivoTactil)
                             // El foco del teclado se ve en el círculo del día (vuelta 55).
                             .anilloDeFoco(CircleShape)
-                            .clickable(enabled = habilitado, role = Role.RadioButton) { onElegir(d) }
+                            .alPresionar(onClick = { onElegir(d) }, habilitado = habilitado, rol = Role.RadioButton, velo = !esElElegido, forma = CircleShape)
                             .semantics { selected = esElElegido }
                             .testTag(tagDelDiaDelMes(d)),
                         contentAlignment = Alignment.Center,

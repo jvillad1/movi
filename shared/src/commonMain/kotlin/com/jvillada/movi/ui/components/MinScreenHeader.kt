@@ -71,9 +71,12 @@ fun MinScreenHeader(
     subtitle: String? = null,
     action: (@Composable RowScope.() -> Unit)? = null,
     accion: AccionDeEncabezado? = null,
+    /** Vuelta 79: el contenido de abajo se desplazó; el encabezado se separa con el hilo (ver `Encabezado`). */
+    desplazado: Boolean = false,
 ) {
     val goBack = LocalGoBack.current
     Encabezado(
+        desplazado = desplazado,
         titulo = title,
         subtitulo = subtitle,
         onVolver = (leading as? HeaderLeading.Back)?.let { back -> { goBack(back.fallback) } },

@@ -163,6 +163,12 @@ object Medida {
     val accionRapida: Dp = 56.dp
 
     /**
+     * **El círculo de una acción de la cuadrícula del Inicio** (vuelta 79): 52, cuatro menos que
+     * [accionRapida]. Las ocho acciones ocupaban ~220 px de lo mejor de la pantalla.
+     */
+    val circuloDeAccion: Dp = 52.dp
+
+    /**
      * **La banda amarilla del Inicio** (vuelta 39, la opción 3): de arriba de la pantalla —debajo de la
      * barra del sistema— hasta la mitad de la tarjeta héroe, que se monta encima. El encabezado
      * ([altoDeEncabezado]) va sobre ella y el resto lo dibuja el scroll, con [Radio.xxl] abajo.

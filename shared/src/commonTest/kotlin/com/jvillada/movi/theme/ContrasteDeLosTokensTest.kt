@@ -188,6 +188,12 @@ class ContrasteDeLosTokensTest {
                 Triple("la tinta sobre la marca suave", c.sobreMarca, c.marcaSuave),
                 // El filtro elegido y la insignia (vuelta 29): blanco sobre la tinta.
                 Triple("el blanco sobre la tinta", c.tarjeta, c.texto),
+                // Vuelta 79: el botón principal presionado con menos movimiento.
+                Triple("la tinta sobre la marca presionada", c.sobreMarca, c.marcaPresionada),
+                // Vuelta 79: el snackbar oscuro de «Anotado · Deshacer».
+                Triple("la letra sobre la tinta del snackbar", c.sobreTinta, c.texto),
+                Triple("las acciones sobre la tinta del snackbar", c.enlaceSobreTinta, c.texto),
+                Triple("la falla sobre la tinta del snackbar", c.saleSobreTinta, c.texto),
             )) {
                 val r = contraste(texto, fondo)
                 assertTrue(
@@ -195,6 +201,24 @@ class ContrasteDeLosTokensTest {
                     "En el tema $tema, $nombre da ${r.legible()}:1 (mínimo ${TEXTO_AA.legible()})",
                 )
             }
+        }
+    }
+
+    /**
+     * **Vuelta 79 · el toque no ensucia.** El velo del hover (la tinta al 6 %) sobre la tarjeta deja el
+     * texto legible y se nota (un borde se despega 1,25; el velo, al menos 1,05); y la marca presionada es
+     * un amarillo un paso más hondo —se distingue de la marca— que **sigue siendo amarillo**: el rojo le
+     * gana al azul como en la marca (no se va a mostaza, que es un amarillo con verde).
+     */
+    @Test
+    fun `el velo y la marca presionada no ensucian`() {
+        for ((tema, c) in temas) {
+            val conVelo = c.velo.compositeOver(c.tarjeta)
+            assertTrue(contraste(c.texto, conVelo) >= TEXTO_AA, "En el tema $tema, la tinta sobre el velo no se lee")
+            assertTrue(contraste(c.tarjeta, conVelo) >= 1.05, "En el tema $tema, el velo no se nota: ${contraste(c.tarjeta, conVelo).legible()}")
+            val r = contraste(c.marca, c.marcaPresionada)
+            assertTrue(r in 1.05..1.25, "En el tema $tema, la marca presionada se aleja de la marca ${r.legible()}:1")
+            assertTrue(c.marcaPresionada.red > c.marcaPresionada.green && c.marcaPresionada.green > c.marcaPresionada.blue, "la marca presionada sigue siendo amarilla")
         }
     }
 

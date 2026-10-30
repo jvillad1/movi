@@ -5,6 +5,9 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.core.AnimationVector1D
+import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import com.jvillada.movi.theme.Movimiento
@@ -19,7 +22,10 @@ enum class DireccionDeTransicion {
     /** Se sacó la de arriba: el movimiento inverso, la de abajo vuelve desde la izquierda. */
     VOLVER,
 
-    /** Cambio de pestaña raíz (o la pila se reemplazó entera): un fundido corto, sin deslizar. */
+    /**
+     * Cambio de pestaña raíz (o la pila se reemplazó entera): un fundido corto, sin deslizar. Desde la
+     * vuelta 79 es **fade-through**: sale lo viejo y después entra lo nuevo, nunca los dos a la vez.
+     */
     FUNDIDO,
 
     /** La pantalla de arriba es la misma: no hay transición. */
@@ -93,10 +99,31 @@ fun transicionEntrePantallas(
             targetContentZIndex = -1f,
             sizeTransform = null,
         )
+        // Vuelta 79 · **fade-through** entre pestañas: primero se va lo viejo ([Movimiento.SALIDA_DEL_FUNDIDO_MS])
+        // y recién después entra lo nuevo, fundiéndose desde 0,98. Antes los dos fundidos corrían a la vez y
+        // a los 100 ms se veían el héroe de Inicio y Pagos encimados (`r7-pestana-pagos-100.png`).
         else -> ContentTransform(
-            targetContentEnter = fadeIn(Movimiento.alEntrar(false, Movimiento.MEDIO_MS)),
-            initialContentExit = fadeOut(Movimiento.alSalir(false, Movimiento.CORTO_MS)),
+            targetContentEnter = fadeIn(Movimiento.alEntrarDelFundido(false)) +
+                scaleIn(Movimiento.alEntrarDelFundido(false), initialScale = Movimiento.ESCALA_AL_ENTRAR_LA_PESTANA),
+            initialContentExit = fadeOut(Movimiento.alSalirDelFundido(false)),
             sizeTransform = null,
         )
     }
 }
+
+/**
+ * **La opacidad de lo que sale y de lo que entra en el fade-through**, a [ms] de empezado (vuelta 79): la
+ * misma cuenta que hacen los specs de [Movimiento] ([Movimiento.alSalirDelFundido] y
+ * [Movimiento.alEntrarDelFundido]), muestreada. `DobleExposicionTest` recorre cada cuadro y exige que
+ * nunca las dos pasen de 0 a la vez. Pura.
+ */
+fun opacidadesDelFundido(ms: Long): Pair<Float, Float> {
+    val sale = Movimiento.alSalirDelFundido<Float>(false).vectorize(Float.VectorConverter)
+        .getValueFromNanos(ms * 1_000_000L, AnimationVector1D(1f), AnimationVector1D(0f), AnimationVector1D(0f)).value
+    val entra = Movimiento.alEntrarDelFundido<Float>(false).vectorize(Float.VectorConverter)
+        .getValueFromNanos(ms * 1_000_000L, AnimationVector1D(0f), AnimationVector1D(1f), AnimationVector1D(0f)).value
+    return sale.coerceIn(0f, 1f) to entra.coerceIn(0f, 1f)
+}
+
+/** Cuánto dura el fade-through entero, en ms: la salida y, después, la entrada. */
+val DURACION_DEL_FUNDIDO_MS: Int = Movimiento.SALIDA_DEL_FUNDIDO_MS + Movimiento.MEDIO_MS

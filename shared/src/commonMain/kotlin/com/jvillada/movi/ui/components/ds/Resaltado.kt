@@ -1,9 +1,9 @@
 package com.jvillada.movi.ui.components.ds
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Modifier
+import com.jvillada.movi.theme.Movimiento
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.Constraints
@@ -38,8 +38,15 @@ fun Modifier.renglonTocable(onClickLabel: String? = null, onClick: () -> Unit): 
     this
         .salirHaciaLosLados(SALIDA_DEL_RESALTADO)
         .anilloDeFoco(RoundedCornerShape(RADIO_DEL_RESALTADO))
+        // Vuelta 79: sin ripple; el resaltado es el velo, con su radio, y se hunde apenas.
+        .alPresionar(
+            onClick = onClick,
+            onClickLabel = onClickLabel,
+            escala = Movimiento.ESCALA_DE_LA_FILA_AL_PRESIONAR,
+            velo = true,
+            forma = RoundedCornerShape(RADIO_DEL_RESALTADO),
+        )
         .clip(RoundedCornerShape(RADIO_DEL_RESALTADO))
-        .clickable(onClickLabel = onClickLabel, onClick = onClick)
         .padding(horizontal = SALIDA_DEL_RESALTADO)
 
 /**

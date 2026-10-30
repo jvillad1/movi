@@ -2,7 +2,6 @@ package com.jvillada.movi.ui.components.ds
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -83,6 +82,8 @@ fun BotonDeIcono(
         modifier = modifier
             .size(Medida.objetivoTactil)
             .anilloDeFoco(forma)
+            // Vuelta 79: se hunde sin ripple, con el velo redondo en hover.
+            .alPresionar(onClick = onClick, habilitado = habilitado, rol = Role.Button, onClickLabel = descripcion, velo = true, forma = forma)
             .clip(forma)
             .then(
                 if (variante == VarianteDeBotonDeIcono.Secundario) {
@@ -91,7 +92,6 @@ fun BotonDeIcono(
                     Modifier
                 },
             )
-            .clickable(enabled = habilitado, role = Role.Button, onClickLabel = descripcion, onClick = onClick)
             .testTag(TAG_BOTON_DE_ICONO),
         contentAlignment = Alignment.Center,
     ) {
@@ -152,15 +152,17 @@ internal fun AccionDelEncabezadoSoloIcono(accion: AccionDeEncabezado, modifier: 
         modifier = modifier
             .size(Medida.objetivoTactil)
             .anilloDeFoco(CircleShape)
+            .alPresionar(
+                onClick = accion.onClick,
+                habilitado = accion.habilitado,
+                rol = Role.Button,
+                onClickLabel = accion.texto,
+                velo = true,
+                forma = CircleShape,
+            )
             .clip(CircleShape)
             .background(Movi.colores.tarjeta)
             .border(Medida.trazo, Movi.colores.borde, CircleShape)
-            .clickable(
-                enabled = accion.habilitado,
-                role = Role.Button,
-                onClickLabel = accion.texto,
-                onClick = accion.onClick,
-            )
             .testTag(TAG_ACCION_DEL_ENCABEZADO),
         contentAlignment = Alignment.Center,
     ) {
@@ -238,6 +240,12 @@ fun Encabezado(
     acciones: (@Composable RowScope.() -> Unit)? = null,
     accion: AccionDeEncabezado? = null,
     tamanoDelTitulo: TamanoDelTitulo = if (onVolver != null) TamanoDelTitulo.Pantalla else TamanoDelTitulo.Pestana,
+    /**
+     * Vuelta 79: **el contenido de abajo ya se desplazó** (scroll > 0). El encabezado fijo se separa de lo
+     * que pasa por debajo con el fondo y el hilo de abajo ([separadoAlDesplazar]); arriba de todo, sin hilo.
+     * Quien lo monta lo pasa desde su scroll (`desplazadoDe`).
+     */
+    desplazado: Boolean = false,
 ) {
     // La flecha dibuja 24 en un área de 48: el margen se achica en la mitad de la diferencia para
     // que el dibujo, no el área, quede alineado con el resto de la pantalla.
@@ -249,6 +257,7 @@ fun Encabezado(
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .separadoAlDesplazar(desplazado)
             .heightIn(min = Medida.altoDeEncabezado)
             .testTag(TAG_ENCABEZADO)
             .padding(start = margenDeInicio, end = Medida.margenDePantalla),

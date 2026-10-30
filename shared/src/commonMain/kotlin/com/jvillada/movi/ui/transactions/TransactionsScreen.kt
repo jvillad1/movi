@@ -4,6 +4,8 @@ import com.jvillada.movi.ui.components.ds.iconoDelMovimiento
 import com.jvillada.movi.ui.components.ds.IconoResuelto
 import com.jvillada.movi.ui.components.ds.IconoDeMovimiento
 import com.jvillada.movi.ui.components.ds.seAchicaHastaLaBase
+import com.jvillada.movi.ui.components.ds.desplazadoDe
+import com.jvillada.movi.ui.components.ds.separadoAlDesplazar
 import androidx.compose.foundation.text.BasicText
 import com.jvillada.movi.ui.components.ds.fondoDeLaFilaElegida
 import com.jvillada.movi.shared.model.montoContado
@@ -445,6 +447,9 @@ const val CHIP_PERSONAS = 6
  * medir el alto real del renglón para verificar que agregarle [IconoDeCategoria] no lo hizo crecer.
  */
 const val TAG_FILA_DE_MOVIMIENTO_SUELTO: String = "fila-de-movimiento-suelto"
+
+/** Vuelta 79: la fila de los chips de Actividad, abajo de lo fijo: lleva el hilo con la lista desplazada. */
+const val TAG_CHIPS_DE_ACTIVIDAD: String = "actividad-chips"
 
 /**
  * El tag del renglón de encabezado de un día esqueleto («Hoy · −$250.100»), para contar
@@ -1014,6 +1019,8 @@ fun TransactionsScreen(
     SubirAlRetocarLaPestana(listState)
 
     var refreshKey by remember { mutableStateOf(0) }
+    // Vuelta 79: el ↻ del rail y la vuelta del foco a la ventana (la web) vuelven a preguntar.
+    com.jvillada.movi.ui.components.AlPedirseUnaRecarga { refreshKey++ }
     // **Lo último que se vio, al primer cuadro.** El perfil, la historia y las cuentas arrancan con
     // lo que la visita anterior dejó en [CacheDeLecturas] (si es de esta sesión y reciente) y se
     // releen igual: mientras la lectura nueva viaja la cabecera dice «Actualizando…», y si trae lo
@@ -1475,9 +1482,13 @@ fun TransactionsScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                // Vuelta 79: con la lista desplazada, lo fijo (título, período y chips) se separa de las
+                // filas con el hilo de abajo, en vez de cortarlas en seco.
+                .separadoAlDesplazar(desplazadoDe(listState))
+                .testTag(TAG_CHIPS_DE_ACTIVIDAD)
                 .horizontalScroll(rememberScrollState())
                 .padding(horizontal = Medida.margenDePantalla)
-                .padding(top = Espacio.xs),
+                .padding(top = Espacio.xs, bottom = Espacio.xs),
             horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
         ) {
             if (searchQuery.isNotBlank()) {

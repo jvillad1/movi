@@ -7,7 +7,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.theme.MoviTheme
@@ -23,14 +25,16 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * # Revisión de la vuelta 74 · el aviso de abajo no parte el texto por letras
+ * # El aviso de abajo es **un renglón** (vuelta 79; en la 74 eran dos)
  *
- * Con «Repartir con Caro» y «Deshacer» en el mismo renglón, a 360 dp el texto quedaba de una palabra
- * por línea: nueve renglones y ~210 px. Ahora el texto va a lo ancho (dos renglones como mucho) y los
- * botones abajo, a la derecha.
+ * La revisión visual 7: el aviso «Anotado» era una tarjeta blanca de dos renglones con «Repartir con
+ * Caro» con borde y «Deshacer», y quedaba encima de la propuesta. Ahora es un snackbar oscuro de un
+ * renglón: el texto a la izquierda, cortado con «…» si no cabe, y las acciones como texto —«Repartir» ·
+ * «Deshacer»— siempre enteras y dentro del aviso, a 360 dp y a 390.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -40,45 +44,56 @@ abstract class ElAvisoDeAbajoNoSeParteBase {
 
     private fun montar(texto: String) {
         val aviso = AvisoDeDeshacer()
-        aviso.mostrar(texto, accion = AvisoDeDeshacer.Accion("Repartir con Caro")) {}
+        aviso.mostrar(texto, accion = AvisoDeDeshacer.Accion("Repartir con Caro", rotuloCorto = "Repartir")) {}
         composeRule.setContent {
             MoviTheme { Box(Modifier.fillMaxSize()) { AnfitrionDelAvisoDeDeshacer(aviso, Modifier.align(Alignment.BottomCenter)) } }
         }
         composeRule.waitForIdle()
     }
 
-    private fun renglones(): Int {
+    private fun disposicion(): TextLayoutResult {
         val resultados = mutableListOf<TextLayoutResult>()
         composeRule.onNodeWithTag(TAG_TEXTO_DEL_AVISO, useUnmergedTree = true).fetchSemanticsNode()
             .config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(resultados)
-        return resultados.single().lineCount
+        return resultados.single()
     }
 
     private fun alto() = with(composeRule.density) {
         composeRule.onNodeWithTag(TAG_AVISO_DE_DESHACER).fetchSemanticsNode().boundsInRoot.height.toDp()
     }
 
-    private fun anchoDelTexto() = with(composeRule.density) {
-        composeRule.onNodeWithTag(TAG_TEXTO_DEL_AVISO, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.width.toDp()
+    private fun bordes(tag: String) = composeRule.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+
+    private fun lasAccionesSeVenEnteras() {
+        val aviso = bordes(TAG_AVISO_DE_DESHACER)
+        for (tag in listOf(TAG_ACCION_DEL_AVISO, TAG_DESHACER_DEL_AVISO)) {
+            val b = bordes(tag)
+            assertTrue(b.width > 0f && b.left >= aviso.left && b.right <= aviso.right, "$tag se sale del aviso: $b de $aviso")
+        }
+        assertTrue(bordes(TAG_TEXTO_DEL_AVISO).right <= bordes(TAG_ACCION_DEL_AVISO).left, "el texto se mete debajo de las acciones")
     }
 
     @Test
-    fun `con Repartir con Caro y Deshacer, el texto ocupa a lo ancho y cabe en dos renglones`() {
-        montar("Anotado · Crepes & Waffles Oviedo \$32.000")
+    fun `con Repartir y Deshacer, el aviso es de un renglon`() {
+        montar("Anotado · Restaurantes \$12.500")
 
-        assertTrue(renglones() <= 2, "renglones: ${renglones()}")
-        assertTrue(anchoDelTexto() >= 250.dp, "el texto tiene que ir a lo ancho: ${anchoDelTexto()}")
-        assertTrue(alto() <= 140.dp, "el aviso mide ${alto()}")
-        composeRule.onNodeWithTag(TAG_ACCION_DEL_AVISO).assertExists()
-        composeRule.onNodeWithTag(TAG_DESHACER_DEL_AVISO).assertExists()
+        assertEquals(1, disposicion().lineCount)
+        assertTrue(alto() <= 64.dp, "el aviso mide ${alto()}")
+        lasAccionesSeVenEnteras()
+        composeRule.onNodeWithText("Repartir", useUnmergedTree = true).assertExists()
+        // El lector de pantalla dice la acción entera.
+        composeRule.onNodeWithContentDescription("Repartir con Caro", useUnmergedTree = true).assertExists()
     }
 
     @Test
-    fun `un comercio muy largo se corta con puntos, no crece`() {
+    fun `un comercio muy largo se corta con puntos y las acciones siguen a la vista`() {
         montar("Anotado · Panaderia y Pasteleria El Trigal de la Avenida Oriental Sucursal Laureles \$32.000")
 
-        assertTrue(renglones() <= 2, "renglones: ${renglones()}")
-        assertTrue(alto() <= 140.dp, "el aviso mide ${alto()}")
+        val d = disposicion()
+        assertEquals(1, d.lineCount)
+        assertTrue(d.isLineEllipsized(0), "el texto largo se corta con «…»")
+        assertTrue(alto() <= 64.dp, "el aviso mide ${alto()}")
+        lasAccionesSeVenEnteras()
     }
 }
 

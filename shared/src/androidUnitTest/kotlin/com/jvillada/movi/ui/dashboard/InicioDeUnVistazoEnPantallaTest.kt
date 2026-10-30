@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.dashboard
 
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -117,8 +119,9 @@ class InicioDeUnVistazoEnPantallaTest {
         }
     }
 
+    // Vuelta 79: la acción se lee «Gasto»; se la encuentra por lo que dice el lector («Anotar un gasto»).
     private fun arriba(texto: String): Dp =
-        composeRule.onNodeWithText(texto, useUnmergedTree = true).getUnclippedBoundsInRoot().top
+        composeRule.onNode(hasText(texto) or hasContentDescription(texto), useUnmergedTree = true).getUnclippedBoundsInRoot().top
 
     /** «Tu plata» y su cifra se repiten en la tarjeta del patrimonio: el hero es el primero. */
     private fun primero(texto: String) = composeRule.onAllNodesWithText(texto, useUnmergedTree = true).onFirst()
@@ -130,7 +133,7 @@ class InicioDeUnVistazoEnPantallaTest {
     private fun heroe() = composeRule.onNodeWithTag(TAG_TARJETA_DEL_HERO, useUnmergedTree = true).getUnclippedBoundsInRoot()
 
     private fun izquierda(texto: String): Dp =
-        composeRule.onNodeWithText(texto, useUnmergedTree = true).getUnclippedBoundsInRoot().left
+        composeRule.onNode(hasText(texto) or hasContentDescription(texto), useUnmergedTree = true).getUnclippedBoundsInRoot().left
 
     /**
      * **Ola R1 (generación 9)**: en el teléfono una columna, en el orden del rediseño —el héroe, la
@@ -149,7 +152,7 @@ class InicioDeUnVistazoEnPantallaTest {
         composeRule.onNodeWithText("Flujo del mes", useUnmergedTree = true).assertDoesNotExist()
 
         val hero = heroe().top
-        val acciones = arriba("Anotar gasto")
+        val acciones = arriba("Anotar un gasto")
         val propuestas = arriba("Movi propone hoy")
         val cuentas = arriba("Tus cuentas")
         val widgets = arriba(com.jvillada.movi.ui.sdui.TITULO_DEL_WIDGET_EN_QUE_SE_VA)
@@ -173,8 +176,8 @@ class InicioDeUnVistazoEnPantallaTest {
         // Vuelta 39: dos columnas parejas. El héroe a la izquierda y la cuadrícula arriba de la derecha,
         // a la altura del héroe (debajo de la banda); lo demás, a la columna más corta.
         val heroIzq = heroe().left
-        assertTrue(izquierda("Anotar gasto").value > heroIzq.value + 300f, "las acciones a la derecha del héroe")
-        assertTrue(arriba("Anotar gasto") < heroe().bottom, "y a su misma altura")
+        assertTrue(izquierda("Anotar un gasto").value > heroIzq.value + 300f, "las acciones a la derecha del héroe")
+        assertTrue(arriba("Anotar un gasto") < heroe().bottom, "y a su misma altura")
     }
 
     /**
@@ -187,7 +190,7 @@ class InicioDeUnVistazoEnPantallaTest {
         montarEnLaCascara()
 
         assertTrue(
-            izquierda("Anotar gasto").value > heroe().left.value + 300f,
+            izquierda("Anotar un gasto").value > heroe().left.value + 300f,
             "la cuadrícula va en la columna derecha",
         )
     }
@@ -223,12 +226,12 @@ class InicioDeUnVistazoEnPantallaTest {
         montarEnLaCascara(header = guia)
 
         val laGuia = limitesDeLaGuia()
-        val derecha = izquierda("Anotar gasto")
+        val derecha = izquierda("Anotar un gasto")
         assertEquals(216f, laGuia.left.value, 0.5f, "empieza en el borde izquierdo del panel, junto al rail")
         assertTrue(laGuia.right <= derecha, "no se mete en la columna derecha: ${laGuia.right} / $derecha")
         assertTrue(laGuia.bottom <= heroe().top, "va arriba del hero")
         // La derecha arranca arriba, sin esperar a la guía.
-        assertTrue(arriba("Anotar gasto") < laGuia.bottom, "la columna derecha (las acciones) no baja por la guía")
+        assertTrue(arriba("Anotar un gasto") < laGuia.bottom, "la columna derecha (las acciones) no baja por la guía")
     }
 
     /** En una columna la guía sigue como siempre: arriba de todo, con el ancho de la columna. */

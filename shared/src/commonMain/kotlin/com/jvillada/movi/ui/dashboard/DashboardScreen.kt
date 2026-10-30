@@ -1,5 +1,9 @@
 package com.jvillada.movi.ui.dashboard
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.runtime.SideEffect
+import com.jvillada.movi.ui.components.ds.desplazadoDe
+import com.jvillada.movi.ui.components.ds.separadoAlDesplazar
 import com.jvillada.movi.avisos.AvisosEnHoy
 import com.jvillada.movi.avisos.TarjetaDeAvisos
 import androidx.compose.foundation.background
@@ -251,6 +255,8 @@ fun DashboardScreen(
     // Inicio recién cargado y nada olvidado, no sale nada.
     var vueltasDelSegundoPlano by remember { mutableStateOf(0) }
     com.jvillada.movi.ui.auth.AlVolverDelSegundoPlano { _, _ -> vueltasDelSegundoPlano++ }
+    // Vuelta 79: el ↻ del rail y la vuelta del foco a la ventana (la web) vuelven a preguntar.
+    com.jvillada.movi.ui.components.AlPedirseUnaRecarga { refreshKey++ }
     var showCreateSheet by remember { mutableStateOf(false) }
     var showNotifications by remember { mutableStateOf(false) }
     // Vuelta 41: el nombre del saludo y de las iniciales, el mismo que dice «Tú». Arranca con el del
@@ -571,6 +577,13 @@ fun DashboardScreen(
         if (result == SnackbarResult.ActionPerformed) { olvidarLoFresco(); refreshKey++ }
     }
 
+    // Vuelta 79: el scroll del Inicio. Con el contenido desplazado, la franja amarilla de arriba (el
+    // encabezado y, en el teléfono, lo de detrás de la barra del sistema) se vuelve crema con el hilo
+    // abajo: el amarillo es de arriba, no del chrome.
+    val scrollDelInicio = rememberScrollState()
+    val desplazado = desplazadoDe(scrollDelInicio)
+    val bandaDesplazada = LocalBandaDelInicioDesplazada.current
+    SideEffect { bandaDesplazada?.value = desplazado }
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -598,7 +611,8 @@ fun DashboardScreen(
                 conPunto = campanaConPunto(notifications),
                 onAvatar = { onNavigate(Screen.Tu) },
                 onCampana = { showNotifications = true },
-                modifier = Modifier.background(Movi.colores.marca),
+                desplazado = desplazado,
+                modifier = Modifier.separadoAlDesplazar(desplazado, arriba = Movi.colores.marca),
             )
 
             // Sin nada pintado todavía (`loading && !actualizandoConDatos`), YA NO va la barra de
@@ -682,6 +696,7 @@ fun DashboardScreen(
                         refreshKey++
                     },
                     conBanda = true,
+                    scroll = scrollDelInicio,
                 )
                 } // TirarParaActualizar
             }

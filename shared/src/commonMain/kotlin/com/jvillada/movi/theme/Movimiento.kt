@@ -67,6 +67,48 @@ object Movimiento {
     /** Lo que vuelve a su lugar (una hoja que se soltó antes del umbral). */
     fun <T> alVolver(reducido: Boolean, duracion: Int = MEDIO_MS): FiniteAnimationSpec<T> =
         if (reducido) snap() else tween(duracion, easing = estandar)
+
+    // ── Vuelta 79 · que tocar se sienta bien ─────────────────────────────────
+
+    /**
+     * **Lo que tarda un toque en hundirse** (y en volver): ~100 ms con la curva [estandar]. Es lo único
+     * más corto que [CORTO_MS]: un toque que tarda en responder se siente lento.
+     */
+    const val PRESIONAR_MS = 100
+
+    /** **Cuánto se achica lo que se presiona**: una acción, una píldora, una fila, una tarjeta. */
+    const val ESCALA_AL_PRESIONAR = 0.96f
+
+    /** El `Boton` se achica un poco menos (es más ancho: 0,96 se notaba de más en uno de pantalla entera). */
+    const val ESCALA_DEL_BOTON_AL_PRESIONAR = 0.97f
+
+    /**
+     * Una [Fila] de lista va de borde a borde: al 0,96 se despegaba de los lados de su tarjeta. Se hunde
+     * apenas y la acompaña el velo.
+     */
+    const val ESCALA_DE_LA_FILA_AL_PRESIONAR = 0.985f
+
+    /** El hundirse y el volver de un toque: [PRESIONAR_MS] con [estandar], o nada con menos movimiento. */
+    fun <T> alPresionar(reducido: Boolean): FiniteAnimationSpec<T> =
+        if (reducido) snap() else tween(PRESIONAR_MS, easing = estandar)
+
+    /**
+     * **El fundido entre pestañas es «fade-through»** (vuelta 79): primero se va lo viejo en este tiempo,
+     * y recién después entra lo nuevo. Antes salían y entraban a la vez, y a los 100 ms se veían el héroe
+     * de Inicio y la lista de Pagos encimados.
+     */
+    const val SALIDA_DEL_FUNDIDO_MS = 90
+
+    /** Lo nuevo del fade-through entra desde este tamaño (casi el suyo): se asienta, no aparece. */
+    const val ESCALA_AL_ENTRAR_LA_PESTANA = 0.98f
+
+    /** Lo que sale en el fade-through: [SALIDA_DEL_FUNDIDO_MS] con [salir]. */
+    fun <T> alSalirDelFundido(reducido: Boolean): FiniteAnimationSpec<T> =
+        if (reducido) snap() else tween(SALIDA_DEL_FUNDIDO_MS, easing = salir)
+
+    /** Lo que entra en el fade-through: [MEDIO_MS] con [entrar], **después** de que salió lo viejo. */
+    fun <T> alEntrarDelFundido(reducido: Boolean): FiniteAnimationSpec<T> =
+        if (reducido) snap() else tween(MEDIO_MS, delayMillis = SALIDA_DEL_FUNDIDO_MS, easing = entrar)
 }
 
 /**

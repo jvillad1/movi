@@ -88,8 +88,10 @@ fun colorDeLaBarra(tono: TonoDeBarra, colores: ColoresDeMovi): Color = when (ton
  * **Sobre qué va una barra** (vuelta 40). [Normal]: la pista en la capa 3, de
  * [Medida.altoDeBarraDeProgreso]. [SobreLaMarca]: dentro de una tarjeta amarilla («Falta por pagar»),
  * la pista en `marcaSuave` y de [Medida.altoDeBarraEnTarjeta]; el relleno sigue en su tono (la tinta).
+ * [Destacada] (vuelta 79): la de una tarjeta blanca destacada —«Falta por pagar», que dejó de ser
+ * amarilla—, la pista en la capa 3 y del alto de la de la tarjeta.
  */
-enum class FondoDeBarra { Normal, SobreLaMarca }
+enum class FondoDeBarra { Normal, SobreLaMarca, Destacada }
 
 @Composable
 fun BarraDeProgreso(
@@ -136,7 +138,7 @@ private fun Pista(fraccion: Float, tono: TonoDeBarra, modifier: Modifier, fondo:
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(if (sobreLaMarca) Medida.altoDeBarraEnTarjeta else Medida.altoDeBarraDeProgreso)
+            .height(if (fondo == FondoDeBarra.Normal) Medida.altoDeBarraDeProgreso else Medida.altoDeBarraEnTarjeta)
             .clip(forma)
             .background(if (sobreLaMarca) Movi.colores.marcaSuave else Movi.colores.capa3)
             .semantics { progressBarRangeInfo = ProgressBarRangeInfo(recortada, 0f..1f) }

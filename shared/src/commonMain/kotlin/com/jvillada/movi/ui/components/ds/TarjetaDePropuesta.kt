@@ -68,6 +68,11 @@ fun TarjetaDePropuesta(
      * tarjeta mientras carga (Categorías, con `FormaRecordada`): el esqueleto mide lo mismo.
      */
     alMedirElTitulo: ((renglones: Int) -> Unit)? = null,
+    /**
+     * Vuelta 79 · un solo amarillo por vista: donde la vista ya tiene su acción amarilla (el Inicio, con
+     * «Anotar gasto»), la de la propuesta va [VarianteDeBoton.Secundario]. Sola en su vista, principal.
+     */
+    varianteDeLaAccion: VarianteDeBoton = VarianteDeBoton.Principal,
 ) {
     Superficie(
         modifier = modifier.fillMaxWidth().testTag(TAG_TARJETA_DE_PROPUESTA),
@@ -98,7 +103,7 @@ fun TarjetaDePropuesta(
                     modifier = Modifier.fillMaxWidth().padding(top = Espacio.xs),
                     horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
                 ) {
-                    Boton(texto = accion, onClick = onAccion, tamano = TamanoDeBoton.S)
+                    Boton(texto = accion, onClick = onAccion, variante = varianteDeLaAccion, tamano = TamanoDeBoton.S)
                     if (accionSecundaria != null && onAccionSecundaria != null) {
                         Boton(
                             texto = accionSecundaria,

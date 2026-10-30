@@ -2,7 +2,7 @@ package com.jvillada.movi.ui.components.ds
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +21,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.Color
+import com.jvillada.movi.theme.ColoresDeMovi
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -98,6 +101,16 @@ data class Accion(
  * AccionRapida("Gasto", Icons.Rounded.Edit, onClick = ::anotar, destacada = true, descripcion = "Anotar un gasto")
  * ```
  */
+/**
+ * **El círculo de una acción** (vuelta 79): la destacada en la marca (también presionada: el amarillo no
+ * se ensucia), las demás en la tarjeta y, presionadas o con el mouse encima, en la capa 3. Pura.
+ */
+fun fondoDelCirculoDeAccion(destacada: Boolean, presionada: Boolean, colores: ColoresDeMovi): Color = when {
+    destacada -> colores.marca
+    presionada -> colores.capa3
+    else -> colores.tarjeta
+}
+
 @Composable
 fun AccionRapida(
     rotulo: String,
@@ -109,14 +122,18 @@ fun AccionRapida(
     descripcion: String? = null,
     renglones: RenglonesDelRotulo = RenglonesDelRotulo.Uno,
 ) {
-    val fondo = if (destacada) Movi.colores.marca else Movi.colores.tarjeta
+    val toque = remember { MutableInteractionSource() }
+    // Vuelta 79: presionada (o con el mouse encima), el círculo pasa a la capa 3 —el de la marca se
+    // queda en la marca—; nunca un rectángulo sobre el círculo y el rótulo.
+    val fondo = fondoDelCirculoDeAccion(destacada, toque.estaPresionado() || toque.estaEncima(), Movi.colores)
     val tinte = if (destacada) Movi.colores.sobreMarca else Movi.colores.texto
     val conInsignia = insignia != null && insignia > 0
     Column(
         modifier = modifier
             .anilloDeFoco(RoundedCornerShape(Radio.m))
-            .clickable(role = Role.Button, onClick = onClick)
+            .alPresionar(onClick = onClick, rol = Role.Button, fuente = toque)
             .semantics(mergeDescendants = true) {
+                if (destacada) llevaElAmarillo = true
                 val dicho = descripcion ?: rotulo
                 contentDescription = if (conInsignia) "$dicho, $insignia" else dicho
             }
@@ -128,7 +145,7 @@ fun AccionRapida(
         Box {
             Box(
                 modifier = Modifier
-                    .size(Medida.accionRapida)
+                    .size(Medida.circuloDeAccion)
                     .background(fondo, CircleShape)
                     .then(if (destacada) Modifier else Modifier.border(Medida.trazo, Movi.colores.borde, CircleShape)),
                 contentAlignment = Alignment.Center,
@@ -174,7 +191,9 @@ fun AccionRapida(
                         maxLines = 1,
                         softWrap = false,
                         overflow = TextOverflow.Ellipsis,
-                        autoSize = TextAutoSize.StepBased(minFontSize = Movi.textos.rotulo.fontSize, maxFontSize = estilo.fontSize),
+                        // Vuelta 79: si con la letra agrandada no entra, se achica hasta la letra de siempre (÷
+                        // [ESCALA_QUE_ABSORBE_EL_ROTULO]); antes el piso era el `rotulo`, más grande que el estilo.
+                        autoSize = seAchicaHastaLaBase(estilo),
                     )
                 }
             }
@@ -263,7 +282,8 @@ fun CuadriculaDeAcciones(
 ) {
     Column(
         modifier = modifier.fillMaxWidth().testTag(TAG_CUADRICULA_DE_ACCIONES),
-        verticalArrangement = Arrangement.spacedBy(Espacio.s),
+        // Vuelta 79: `Espacio.m` entre filas (con los rótulos de un renglón, las dos filas miden ~170 dp).
+        verticalArrangement = Arrangement.spacedBy(Espacio.m),
     ) {
         acciones.chunked(COLUMNAS_DE_ACCIONES).forEach { fila ->
             Row(
