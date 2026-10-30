@@ -396,6 +396,48 @@ class ContrasteDeLosTokensTest {
     }
 
     /**
+     * **Vuelta 82 · el hilo de un encabezado desplazado se ve.** La revisión 8 midió el `hilo` de la vuelta
+     * 79 (`#EFEAE1`) sobre el crema: ~1,06:1, invisible. Lo que no es texto también se mide: el hilo que
+     * separa lo fijo de lo que pasa por debajo tiene que dar **1,3:1** contra el `fondo` (los dos lados del
+     * encabezado desplazado son crema) y contra la tarjeta (las filas que pasan por debajo).
+     */
+    @Test
+    fun `el hilo del encabezado desplazado se ve contra el crema y la tarjeta`() {
+        for ((tema, c) in temas) {
+            val hilo = com.jvillada.movi.ui.components.ds.colorDelHiloAlDesplazar(c)
+            for ((donde, fondo) in listOf("el fondo" to c.fondo, "la tarjeta" to c.tarjeta)) {
+                val r = contraste(hilo, fondo)
+                assertTrue(r >= HILO_AL_DESPLAZAR_MINIMO, "En el tema $tema el hilo al desplazar da ${r.legible()}:1 contra $donde (mínimo 1,3)")
+            }
+        }
+    }
+
+    /**
+     * **Vuelta 82 · el interruptor apagado se ve activo.** Apagado, el contorno del riel es lo que dice
+     * «esto es un control»: **3:1** contra lo que lo rodea (la tarjeta de una fila, el crema), el mínimo de
+     * WCAG 1.4.11 para los componentes. Encendido, la perilla blanca contra el riel en tinta, también 3:1.
+     * Y la perilla es blanca en los dos estados: nunca el gris de lo deshabilitado.
+     */
+    @Test
+    fun `el interruptor apagado tiene contorno de control y la perilla es blanca`() {
+        for ((tema, c) in temas) {
+            val apagado = com.jvillada.movi.ui.components.ds.coloresDelInterruptor(false, c)
+            val encendido = com.jvillada.movi.ui.components.ds.coloresDelInterruptor(true, c)
+            for ((donde, fondo) in listOf("la tarjeta" to c.tarjeta, "el fondo" to c.fondo, "la capa 2" to c.capa2)) {
+                val r = contraste(apagado.borde, fondo)
+                assertTrue(r >= COMPONENTE_MINIMO, "Tema $tema: el borde del riel apagado da ${r.legible()}:1 contra $donde")
+            }
+            val r = contraste(encendido.perilla, encendido.riel)
+            assertTrue(r >= COMPONENTE_MINIMO, "Tema $tema: la perilla encendida da ${r.legible()}:1 contra el riel")
+            assertTrue(apagado.perilla == c.tarjeta && encendido.perilla == c.tarjeta, "Tema $tema: la perilla es blanca")
+            assertTrue(apagado.riel == c.capa3, "Tema $tema: el riel apagado va en la capa 3")
+        }
+    }
+
+    private val HILO_AL_DESPLAZAR_MINIMO = 1.3
+    private val COMPONENTE_MINIMO = 3.0
+
+    /**
      * **Los colores de plata tienen que distinguirse entre sí**, no solo del fondo.
      *
      * Se mide por diferencia de luminancia y el umbral es bajo a propósito: `entra` y `sale` son
