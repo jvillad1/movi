@@ -112,7 +112,7 @@ open class EsEsteEnRevisarAvisoTest {
 
         assertEquals(listOf("crepes" to restaurantes.id), confirmados)
         assertTrue(publicados.isEmpty(), "«Es este» no crea un movimiento")
-        assertEquals("Ya estaba anotado · Restaurantes \$32.000", aviso.actual?.texto)
+        assertEquals("Ya estaba anotado \$32.000 · Restaurantes", aviso.actual?.texto)
         assertNotNull(aviso.actual?.deshacer, "con «Deshacer»")
     }
 

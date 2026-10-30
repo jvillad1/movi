@@ -19,6 +19,7 @@ import com.jvillada.movi.shared.repository.WalletRepository
 import com.jvillada.movi.ui.components.ds.AvisoDeDeshacer
 import com.jvillada.movi.ui.components.ds.FalloDelAviso
 import com.jvillada.movi.ui.components.formatMoney
+import com.jvillada.movi.ui.dashboard.MovimientosDelDueno
 
 /*
  * # Vuelta 74 · «Anotado · Restaurantes $32.000 · Repartir con Caro · Deshacer»
@@ -34,24 +35,29 @@ import com.jvillada.movi.ui.components.formatMoney
  */
 
 /**
- * **«Anotado · Restaurantes $32.000»**: lo que dice el aviso de abajo al guardar [evento]. El comercio
+ * **«Anotado $32.000 · Restaurantes»**: lo que dice el aviso de abajo al guardar [evento]. El comercio
  * como se muestra en toda la app (lo que dijo el banco, «Carulla Laureles») y, sin comercio —lo
  * anotado a mano—, la categoría.
+ *
+ * Vuelta 82: **el monto va primero**. El aviso es de un renglón y lo que no cabe se corta al final con
+ * «…»; con «Anotado · Restaurantes $32.000» se cortaba el monto —lo que importa— y quedaba
+ * «Anotado · Restaurant…». Ahora se corta la categoría, nunca el monto.
  */
 fun textoDeLoAnotado(evento: FinancialEvent): String {
     val quien = evento.merchant?.takeIf { it.isNotBlank() }?.let(::nombreParaMostrar)
         ?: evento.category.trim().ifEmpty { nombreParaMostrar(evento.description) }
-    return "Anotado · $quien ${formatMoney(evento.amount, evento.currency)}"
+    return textoDeLoAnotado(quien, evento.amount, evento.currency)
 }
 
 /**
- * **«Ya estaba anotado · Restaurantes $32.000»**: lo que dice el aviso tras «Es este» (revisión de la
+ * **«Ya estaba anotado $32.000 · Restaurantes»**: lo que dice el aviso tras «Es este» (revisión de la
  * vuelta 74). No se anotó nada: el aviso se juntó con lo que ya estaba.
  */
-fun textoDeLoQueYaEstaba(evento: FinancialEvent): String = textoDeLoAnotado(evento).replaceFirst("Anotado · ", "Ya estaba anotado · ")
+fun textoDeLoQueYaEstaba(evento: FinancialEvent): String = "Ya estaba ${textoDeLoAnotado(evento).replaceFirst("Anotado", "anotado")}"
 
-/** «Anotado · Traspaso $500.000»: lo que dice el aviso al guardar un traspaso o una cuota en Agregar. */
-fun textoDeLoAnotado(que: String, monto: Long, moneda: String): String = "Anotado · $que ${formatMoney(monto, moneda)}"
+/** «Anotado $500.000 · Traspaso»: lo que dice el aviso al guardar un traspaso o una cuota en Agregar. */
+fun textoDeLoAnotado(que: String, monto: Long, moneda: String): String =
+    "Anotado ${formatMoney(monto, moneda)}" + (que.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty())
 
 /** Los otros miembros de [espacio] (sin el dueño), por su nombre. */
 private fun losOtros(espacio: Espacio): List<String> =
@@ -119,10 +125,26 @@ fun AvisoDeDeshacer.mostrarLoAnotado(
     /** «Es este»: el movimiento ya estaba («Ya estaba anotado · …»), no se anotó ahora. */
     yaEstaba: Boolean = false,
 ) {
+    // Vuelta 82: lo anotado lo adelanta el héroe del Inicio, y su «Deshacer» también ([MovimientosDelDueno]).
+    // «Es este» no anotó nada nuevo: no se adelanta.
+    if (!yaEstaba) MovimientosDelDueno.registrar(evento, signo = 1)
     mostrar(
         if (yaEstaba) textoDeLoQueYaEstaba(evento) else textoDeLoAnotado(evento),
         accion = accionDeRepartir(evento, espacios, this, repo),
-        deshacer = deshacer,
+        deshacer = deshacer?.let { original ->
+            if (yaEstaba) original
+            else {
+                {
+                    val id = MovimientosDelDueno.registrar(evento, signo = -1)
+                    try {
+                        original()
+                    } catch (e: Throwable) {
+                        MovimientosDelDueno.quitar(id)
+                        throw e
+                    }
+                }
+            }
+        },
     )
 }
 

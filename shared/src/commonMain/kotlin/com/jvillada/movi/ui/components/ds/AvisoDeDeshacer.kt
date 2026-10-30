@@ -89,6 +89,15 @@ const val RENGLONES_DEL_AVISO: Int = 1
 /** Lo que dice el aviso al anular. */
 const val ANULADO: String = "Anulado"
 
+/**
+ * Vuelta 82: lo que dice el aviso cuando «Deshacer» salió bien, durante [DURACION_DEL_DESHECHO]. Antes el
+ * aviso se iba sin decir nada y el dueño no sabía si el toque había llegado.
+ */
+const val DESHECHO: String = "Deshecho"
+
+/** Cuánto se ve «Deshecho» (ms): lo justo para leerlo. */
+const val DURACION_DEL_DESHECHO: Long = 1_500L
+
 /** El botón de deshacer. */
 const val DESHACER: String = "Deshacer"
 
@@ -129,6 +138,8 @@ class AvisoDeDeshacer(private val alCambiar: () -> Unit = {}) {
         val vez: Long,
         val deshacer: (suspend () -> Unit)?,
         val accion: Accion? = null,
+        /** Cuánto se ve (ms). Vuelta 82: «Deshecho» dura menos ([DURACION_DEL_DESHECHO]). */
+        val duracion: Long = DURACION_DEL_AVISO_DE_DESHACER,
     )
 
     var actual by mutableStateOf<Aviso?>(null)
@@ -171,6 +182,9 @@ class AvisoDeDeshacer(private val alCambiar: () -> Unit = {}) {
         correr(aviso) {
             accion()
             deshechos++
+            // Vuelta 82: «Deshecho», un momento, sin botones. `correr` no lo cierra: es otro aviso.
+            error = null
+            actual = Aviso(DESHECHO, ++veces, deshacer = null, duracion = DURACION_DEL_DESHECHO)
         }
     }
 
@@ -242,7 +256,7 @@ fun AnfitrionDelAvisoDeDeshacer(aviso: AvisoDeDeshacer, modifier: Modifier = Mod
     if (actual != null) {
         LaunchedEffect(actual.vez, aviso.trabajando, aviso.eligiendo) {
             if (aviso.trabajando || aviso.eligiendo) return@LaunchedEffect
-            delay(DURACION_DEL_AVISO_DE_DESHACER)
+            delay(actual.duracion)
             aviso.cerrar(actual.vez)
         }
     }

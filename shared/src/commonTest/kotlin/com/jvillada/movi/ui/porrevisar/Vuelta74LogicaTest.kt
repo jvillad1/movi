@@ -61,15 +61,15 @@ class Vuelta74LogicaTest {
     @Test
     fun `los textos del aviso de abajo`() {
         val casa = Espacio(id = "e1", nombre = "Casa con Caro", miembros = listOf(MiembroDelEspacio(MIEMBRO_YO, "Juan"), MiembroDelEspacio("d1", "Caro")))
-        assertEquals("Anotado · Restaurantes \$32.000", textoDeLoAnotado(restaurantes))
-        assertEquals("Anotado · Traspaso \$500.000", textoDeLoAnotado("Traspaso", 500_000L, "COP"))
+        assertEquals("Anotado \$32.000 · Restaurantes", textoDeLoAnotado(restaurantes))
+        assertEquals("Anotado \$500.000 · Traspaso", textoDeLoAnotado("Traspaso", 500_000L, "COP"))
         assertEquals("Repartir con Caro", rotuloDeRepartirCon(casa))
         assertEquals("Repartido con Caro · tu parte \$16.000", textoDeRepartido(casa, 16_000L))
     }
 
     @Test
     fun `Es este dice que ya estaba, y el Inicio descuenta el conteo y la suma`() {
-        assertEquals("Ya estaba anotado · Restaurantes \$32.000", com.jvillada.movi.ui.espacios.textoDeLoQueYaEstaba(restaurantes))
+        assertEquals("Ya estaba anotado \$32.000 · Restaurantes", com.jvillada.movi.ui.espacios.textoDeLoQueYaEstaba(restaurantes))
         val cache = com.jvillada.movi.ui.dashboard.DashboardDataCache
         try {
             cache.data = com.jvillada.movi.ui.dashboard.DashboardData(pendingSms = 3, porConfirmarSuman = 100_000L)
@@ -90,14 +90,16 @@ class Vuelta74LogicaTest {
     @Test
     fun `una accion que se dice a si misma deja su aviso, y deshacer cuenta`() = sinEsperar {
         val aviso = AvisoDeDeshacer()
-        aviso.mostrar("Anotado · Restaurantes \$32.000", accion = AvisoDeDeshacer.Accion("Repartir con Caro", hacer = {
+        aviso.mostrar("Anotado \$32.000 · Restaurantes", accion = AvisoDeDeshacer.Accion("Repartir con Caro", hacer = {
             aviso.mostrar("Repartido con Caro · tu parte \$16.000") {}
         })) {}
         aviso.tocarLaAccion()
         assertEquals("Repartido con Caro · tu parte \$16.000", aviso.actual?.texto)
         assertNull(aviso.actual?.accion)
         aviso.deshacer()
-        assertNull(aviso.actual)
+        // Vuelta 82: deshecho, el aviso dice «Deshecho» un momento, sin botones.
+        assertEquals(com.jvillada.movi.ui.components.ds.DESHECHO, aviso.actual?.texto)
+        assertNull(aviso.actual?.deshacer)
         assertEquals(1, aviso.deshechos)
     }
 

@@ -169,7 +169,7 @@ class AnotadoConDeshacerTest {
 
         val guardado = guardados.single()
         assertEquals(textoDeLoAnotado(guardado), aviso.actual?.texto)
-        assertTrue(aviso.actual!!.texto.startsWith("Anotado · "))
+        assertTrue(aviso.actual!!.texto.startsWith("Anotado \$"))
         assertEquals(1, conTag(TAG_AVISO_DE_DESHACER))
         assertEquals(0, conTag(TAG_ACCION_DEL_AVISO), "sin grupos no se ofrece repartir")
 
@@ -240,7 +240,7 @@ class AnotadoConDeshacerTest {
 
     @Test
     fun `el texto dice el comercio o, sin el, la categoria`() {
-        assertEquals("Anotado · Restaurantes \$32.000", textoDeLoAnotado(gasto))
-        assertEquals("Anotado · Carulla Laureles \$186.400", textoDeLoAnotado(gasto.copy(merchant = "CARULLA LAURELES", amount = 186_400L)))
+        assertEquals("Anotado \$32.000 · Restaurantes", textoDeLoAnotado(gasto))
+        assertEquals("Anotado \$186.400 · Carulla Laureles", textoDeLoAnotado(gasto.copy(merchant = "CARULLA LAURELES", amount = 186_400L)))
     }
 }

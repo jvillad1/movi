@@ -75,7 +75,7 @@ abstract class ElAvisoDeAbajoNoSeParteBase {
 
     @Test
     fun `con Repartir y Deshacer, el aviso es de un renglon`() {
-        montar("Anotado · Restaurantes \$12.500")
+        montar("Anotado \$12.500 · Restaurantes")
 
         assertEquals(1, disposicion().lineCount)
         assertTrue(alto() <= 64.dp, "el aviso mide ${alto()}")
@@ -87,7 +87,7 @@ abstract class ElAvisoDeAbajoNoSeParteBase {
 
     @Test
     fun `un comercio muy largo se corta con puntos y las acciones siguen a la vista`() {
-        montar("Anotado · Panaderia y Pasteleria El Trigal de la Avenida Oriental Sucursal Laureles \$32.000")
+        montar("Anotado \$32.000 · Panaderia y Pasteleria El Trigal de la Avenida Oriental Sucursal Laureles")
 
         val d = disposicion()
         assertEquals(1, d.lineCount)

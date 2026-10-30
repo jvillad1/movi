@@ -164,7 +164,7 @@ class LaBandejaQueSeVaciaTest {
         assertEquals(listOf("mercado" to evento.id), confirmados)
         esperar { conTag(TAG_CONFIRMAR_EN_LA_FILA) == 1 }
         // Vuelta 44: «Anotado», abajo (sin «Deshacer»: confirmar no tiene vuelta).
-        esperar { cuantos("Anotado · Carulla \$180.000") == 1 }
+        esperar { cuantos("Anotado \$180.000 · Carulla") == 1 }
         assertEquals(0, cuantos("Deshacer"))
     }
 

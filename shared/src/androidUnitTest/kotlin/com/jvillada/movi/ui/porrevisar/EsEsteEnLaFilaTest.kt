@@ -195,7 +195,7 @@ class EsEsteEnLaFilaTest {
         esperar { conTag(TAG_ES_ESTE_EN_LA_FILA) == 0 }
         assertEquals(antes, posicionDe("Comercio 1"), "la lista quedó donde estaba")
         // Abajo: «Anotado · Restaurantes $32.000», con «Deshacer».
-        assertEquals("Ya estaba anotado · Restaurantes \$32.000", aviso.actual?.texto)
+        assertEquals("Ya estaba anotado \$32.000 · Restaurantes", aviso.actual?.texto)
 
         composeRule.onNodeWithTag(TAG_DESHACER_DEL_AVISO).performSemanticsAction(SemanticsActions.OnClick)
         esperar { desvinculados.isNotEmpty() }
