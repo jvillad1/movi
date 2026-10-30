@@ -4287,8 +4287,10 @@ Créditos (`ElPrestamoSinSaldo`). Ningún token nuevo.
 3. **«En qué se va» en el Inicio**: una `Superficie` blanca de lista con su título; cada categoría es una `Fila`
    (nombre y monto) con una `BarraDeProgreso` de 4 dp relativa a la mayor (`fraccionDeLaCategoriaEnElWidget`) y la
    diferencia contra el período anterior en una `Pildora` (`Peligro` solo si sube mucho; la regla de «nuevo» de la
-   vuelta 76). Sin «Tus widgets»: cada widget lleva su título. Los dos widgets van uno debajo del otro, a todo el
-   ancho (ya no `ParDeWidgets`): a media pantalla y con la letra agrandada, nombre y monto no entraban en una fila.
+   vuelta 76). Sin «Tus widgets»: cada widget lleva su título. En el teléfono los dos widgets van uno debajo del
+   otro, a todo el ancho: a media pantalla y con la letra agrandada, nombre y monto no entraban en una fila. En una
+   columna de 450 dp o más siguen lado a lado (`ParDeWidgets`, `ANCHO_PARA_LOS_WIDGETS_LADO_A_LADO`), para que las
+   dos columnas del Inicio ancho queden parejas.
 4. **Pagos con aire.** «Cuánto puedes gastar» son tres `CifraConRotulo` en renglón —Período, Semana, Meta de hoy—
    con su barra (`VentanasEnRenglones`); lo gastado y la meta de cada una van a «¿De dónde sale?»
    (`desgloseDeLaVentana`). Las cifras van compactas, como en las columnas (la del período repite «Te quedan»).

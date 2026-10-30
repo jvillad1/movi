@@ -599,7 +599,8 @@ private fun GrillaDeCuentas(cuentas: List<CuentaDelCarrusel>, porRenglon: Int, o
 
 /**
  * **Los widgets del Inicio** —«Falta por pagar» y «En qué se va», los que el dueño elige en «Editar
- * inicio»—, uno debajo del otro y a todo el ancho (vuelta 80; eran [ParDeWidgets]). Cada uno
+ * inicio»—, uno debajo del otro y a todo el ancho en el teléfono (vuelta 80), y lado a lado ([ParDeWidgets])
+ * en una ventana ancha. Cada uno
  * **resume** y lleva a su casa: Plan y «En qué se va».
  */
 @Composable
@@ -617,13 +618,26 @@ internal fun WidgetsDelInicio(
     }
     Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla)) {
         // Vuelta 80: sin «Tus widgets» (palabra de desarrollador). Cada widget lleva su propio título.
-        // Vuelta 80: uno debajo del otro, a todo el ancho. «En qué se va» es una lista de filas (nombre a la
-        // izquierda, monto a la derecha y su barra): a media pantalla, con la letra agrandada, no entraban.
-        Column(verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion)) {
-            tipos.forEach { Uno(it, Modifier.fillMaxWidth()) }
+        // Vuelta 80: en el teléfono, uno debajo del otro y a todo el ancho. «En qué se va» es una lista de filas
+        // (nombre a la izquierda, monto a la derecha y su barra): a media pantalla de un teléfono, con la letra
+        // agrandada, no entraban. En una ventana ancha siguen lado a lado (las dos columnas del Inicio parejas).
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            if (tipos.size >= 2 && maxWidth >= ANCHO_PARA_LOS_WIDGETS_LADO_A_LADO) {
+                ParDeWidgets(izquierdo = { Uno(tipos[0], it) }, derecho = { Uno(tipos[1], it) })
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion)) {
+                    tipos.forEach { Uno(it, Modifier.fillMaxWidth()) }
+                }
+            }
         }
     }
 }
+
+/**
+ * Vuelta 80: desde qué ancho los dos widgets van lado a lado (tres cuartos del mediano, 450 dp). Un teléfono
+ * (hasta ~430 dp) los apila; una columna del Inicio ancho, no.
+ */
+internal val ANCHO_PARA_LOS_WIDGETS_LADO_A_LADO = com.jvillada.movi.ui.components.ANCHO_DEL_MEDIANO * 0.75f
 
 /** Vuelta 68: lo que dice el widget cuando lo único que falta es el pago de «Próximo pago». */
 const val EL_DE_PROXIMO_PAGO: String = "Es el de «Próximo pago»"
