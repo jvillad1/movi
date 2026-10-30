@@ -132,6 +132,9 @@ class SchemaDeArranqueTest {
         // «Te quedan»— las nombra: sin el ALTER, el Inicio entero caería con «column does not exist».
         "apartados" to "objetivo",
         "apartados" to "mes_del_gasto",
+        // Vuelta 77 — desde qué período corren las cuotas de un crédito que ya venía. La lectura de
+        // los créditos la nombra: sin el ALTER, Créditos, Pagos y el Inicio caerían.
+        "credit_terms" to "cuotas_desde",
     )
 
     /**
