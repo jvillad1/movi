@@ -566,52 +566,21 @@ private fun TarjetaDelPatrimonio(
             if (balance.bienes > 0L) RenglonDelPatrimonio("Bienes", balance.bienes)
             if (balance.deudas > 0 || deudasSinSaldo.isNotEmpty()) RenglonDelPatrimonio("Deudas", -balance.deudas)
             // Vuelta 59: «Deudas» es la cuenta del patrimonio. Vuelta 77: un préstamo sin saldo cuenta
-            // cero ahí (`prestamoSinSaldo`), como en Créditos: «Deudas» y «Créditos y tarjetas» dicen lo
-            // mismo (salvo una tarjeta a favor, que sigue con su signo). La línea dice qué falta.
-            // Vuelta 73: con un solo crédito con condiciones sin su saldo, se dice cuál y se ofrece
-            // cargarlo, con las palabras de su ficha.
-            val unCreditoSinSaldo = deudasSinSaldo.singleOrNull()?.takeIf { it.id in creditosSinSaldo }
-            (
-                unCreditoSinSaldo?.let { textoDelCreditoSinSaldoEnElPatrimonio(it.name) }
-                    ?: textoDeLasDeudasSinSaldo(
-                        creditos = deudasSinSaldo.count { it.type == AccountType.LOAN },
-                        tarjetas = deudasSinSaldo.count { it.type != AccountType.LOAN },
-                    )?.let { "Incluye $it" }
-                )?.let { sinSaldo ->
-                // Vuelta 77 (revisión): UNA sola fila. Con el plan completo del crédito, debajo de «Falta el
-                // saldo de …» va lo que dice su plan y el botón es «Usar este» (la hoja de siempre, ya llena
-                // con esa cifra); sin plan, «Cargarlo».
-                val plan = unCreditoSinSaldo?.let { saldosDelPlan[it.id] }
-                Row(
-                    modifier = Modifier.fillMaxWidth().testTag(TAG_DEUDAS_SIN_SALDO_EN_EL_PATRIMONIO),
-                    horizontalArrangement = Arrangement.spacedBy(Espacio.s),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(sinSaldo, style = Movi.textos.apoyo, color = Movi.colores.aviso)
-                        if (plan != null) {
-                            Text(
-                                com.jvillada.movi.ui.credits.textoDelSaldoDelPlanEnLaFicha(plan),
-                                style = Movi.textos.apoyo,
-                                color = Movi.colores.textoMedio,
-                                modifier = Modifier.testTag(com.jvillada.movi.ui.credits.TAG_SALDO_SEGUN_EL_PLAN),
-                            )
+            // cero ahí (`prestamoSinSaldo`), como en Créditos. Vuelta 80: lo que falta se dice con la
+            // pieza de toda la app ([ElPrestamoSinSaldo]): el mismo texto y el mismo botón que la ficha y
+            // Créditos.
+            com.jvillada.movi.ui.credits.loQueSeDiceSinSaldo(deudasSinSaldo, creditosSinSaldo, saldosDelPlan)?.let { dice ->
+                com.jvillada.movi.ui.credits.ElPrestamoSinSaldo(
+                    dice = dice,
+                    onAccion = { accion ->
+                        when (accion) {
+                            is com.jvillada.movi.ui.credits.AccionSinSaldo.UsarElDelPlan -> onUsarElDelPlan(accion.id, accion.saldo)
+                            is com.jvillada.movi.ui.credits.AccionSinSaldo.Cargar -> onCuadrar(accion.id)
+                            is com.jvillada.movi.ui.credits.AccionSinSaldo.Cuadrar -> onCuadrar(accion.id)
                         }
-                    }
-                    Boton(
-                        texto = when {
-                            plan != null -> com.jvillada.movi.ui.credits.USAR_EL_SALDO_DEL_PLAN
-                            unCreditoSinSaldo != null -> CARGAR_EL_SALDO_DEL_CREDITO
-                            else -> CUADRAR_LAS_DEUDAS_SIN_SALDO
-                        },
-                        onClick = {
-                            if (plan != null && unCreditoSinSaldo != null) onUsarElDelPlan(unCreditoSinSaldo.id, plan.saldo)
-                            else onCuadrar(deudasSinSaldo.singleOrNull()?.id)
-                        },
-                        variante = VarianteDeBoton.Fantasma,
-                        tamano = TamanoDeBoton.S,
-                    )
-                }
+                    },
+                    modifier = Modifier.testTag(TAG_DEUDAS_SIN_SALDO_EN_EL_PATRIMONIO),
+                )
             }
         }
     }
@@ -622,7 +591,8 @@ private fun TarjetaDelPatrimonio(
  * de Vehículo 4083», con «Cargarlo» al lado—. Su ficha dice lo mismo («Falta el saldo de este
  * crédito»). Pura.
  */
-internal fun textoDelCreditoSinSaldoEnElPatrimonio(nombre: String): String = "Falta el saldo de $nombre"
+internal fun textoDelCreditoSinSaldoEnElPatrimonio(nombre: String): String =
+    com.jvillada.movi.ui.credits.textoDelCreditoSinSaldo(nombre)
 
 /** La línea «Incluye 1 crédito sin saldo · Cuadrar» debajo de «Deudas» (vuelta 59). */
 const val TAG_DEUDAS_SIN_SALDO_EN_EL_PATRIMONIO: String = "patrimonio:deudas-sin-saldo"
@@ -678,6 +648,8 @@ private fun GrupoDeCuentas(titulo: String, cuentas: List<Account>, onNavigate: (
                         )
                     },
                     onClick = { onNavigate(Screen.AccountDetail(cuenta.id, cuenta.type.group)) },
+                    // Vuelta 80: se toca y se abre, así que lleva el chevrón (como Herramientas).
+                    chevron = true,
                     // Con o sin subtítulo (vuelta de diseño 2: «Bancolombia Ahorros» ya no lleva uno),
                     // todas las filas del grupo miden lo mismo: la lista no queda despareja y el
                     // esqueleto de la carga, que reserva filas dobles, no salta.
@@ -709,6 +681,7 @@ private fun SeccionDeBienes(bienes: List<Account>, cuentas: List<Account>, onAbr
                     inicio = { IconoEnCirculo(iconoDelBien(bien), tono = TonoDeIcono.Neutro) },
                     final = { Cifra(valorEnPesos(bien)) },
                     onClick = { onAbrir(bien) },
+                    chevron = true,
                 )
             }
         }
@@ -862,13 +835,23 @@ private fun SeccionDeDeudas(
                     // toca); sin deuda, la flecha. Con monto y flecha a la vez, a 360 dp el título se
                     // quedaba con 68 dp y «Créditos y tarjetas» no entraba ni en dos renglones.
                     // Neutro (Ola 2a): las deudas no son una alerta.
-                    final = { if (hayDeuda) Cifra(totalDebtCop(creditos, tarjetas)) else Chevron() },
+                    // Vuelta 80: con el signo del resumen de arriba («Deudas −$1.583.000»): la misma
+                    // cifra no puede decirse positiva en un lado y negativa en el otro. Y con el chevrón,
+                    // como toda fila que se abre.
+                    final = if (hayDeuda) ({ Cifra(cifraDeLasDeudasEnLaFila(totalDebtCop(creditos, tarjetas))) }) else null,
                     onClick = onClick,
+                    chevron = true,
                 )
             }
         }
     }
 }
+
+/**
+ * **La cifra de la fila «Créditos y tarjetas»** (vuelta 80): con el signo del renglón «Deudas» del
+ * resumen, que resta. Pura.
+ */
+internal fun cifraDeLasDeudasEnLaFila(total: Long): Long = -total
 
 /** El conteo de la fila de «Deudas»: «3 créditos · 2 tarjetas», solo los grupos que hay. */
 internal fun resumenDeDeudas(creditos: List<CreditSummary>, tarjetas: List<CardSummary>): String {

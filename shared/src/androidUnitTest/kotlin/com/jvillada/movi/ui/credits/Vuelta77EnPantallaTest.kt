@@ -146,7 +146,7 @@ class Vuelta77EnPantallaTest {
         montarLaFicha(vehiculoSinSaldo, repo)
         val plan = assertNotNull(saldoDelPlanEnLaFicha(vehiculoSinSaldo, hoy), "con todas sus condiciones hay plan")
 
-        assertTrue(hay(FALTA_EL_SALDO_DEL_CREDITO))
+        assertTrue(hay(textoDelCreditoSinSaldo(vehiculoSinSaldo.account.name)))
         assertFalse(hay(AJUSTAR_EL_SALDO, substring = false))
         val propuesta = composeRule.onNodeWithTag(TAG_SALDO_SEGUN_EL_PLAN, useUnmergedTree = true)
         propuesta.assertExists()

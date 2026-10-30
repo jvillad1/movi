@@ -66,24 +66,8 @@ enum class TamanoDeAvatar(val circulo: Dp) {
     Encabezado(48.dp),
 }
 
-/** El avatar de un movimiento: su marca si Movi la reconoce, o el ícono de su categoría. */
-@Composable
-fun AvatarDelComercio(
-    evento: FinancialEvent,
-    modifier: Modifier = Modifier,
-    tamano: TamanoDeAvatar = TamanoDeAvatar.Fila,
-) {
-    val marca = remember(evento.merchant, evento.description) { marcaDe(evento) }
-    if (marca != null) {
-        CirculoDeMarca(marca, modifier, tamano)
-    } else {
-        IconoDeCategoria(
-            evento.category,
-            modifier = modifier,
-            tamano = if (tamano == TamanoDeAvatar.Linea) TamanoDeIconoDeCategoria.Chico else TamanoDeIconoDeCategoria.Normal,
-        )
-    }
-}
+// Vuelta 80: el avatar de un movimiento es `IconoDeMovimiento` (en `ds/`), con una sola prioridad:
+// la marca del comercio (un banco no lo es) y si no, la categoría.
 
 /** El avatar de una cuenta: la marca de su banco, o el ícono de su tipo en un círculo neutro. */
 @Composable

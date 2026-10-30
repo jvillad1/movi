@@ -40,13 +40,12 @@ import com.jvillada.movi.ui.components.ds.RotuloDeCampo
 @Composable
 fun EditProfileSheet(
     initialName: String,
-    initialColor: String?,
+    @Suppress("UNUSED_PARAMETER") initialColor: String? = null,
     onDismiss: () -> Unit,
     onSaved: () -> Unit,
 ) {
     val coroutine = rememberCoroutineScope()
     var name by remember { mutableStateOf(initialName) }
-    var color by remember { mutableStateOf(initialColor ?: AvatarPalette.DEFAULT) }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
@@ -64,7 +63,7 @@ fun EditProfileSheet(
         error = null
         coroutine.launch {
             val result = runCatching {
-                Repositories.wallets.updateUserProfile(UpdateProfileRequest(name = trimmed, avatarColor = color))
+                Repositories.wallets.updateUserProfile(UpdateProfileRequest(name = trimmed))
             }
             saving = false
             result.onSuccess { onSaved() }.onFailure { error = it.toUserMessage() }
@@ -75,25 +74,13 @@ fun EditProfileSheet(
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
             // Vuelta de diseño 18: la hoja abre con su encabezado, como las demás; «Alias» era un
             // rótulo suelto que hacía de título.
-            EncabezadoDeHoja("Tu perfil", subtitulo = "Cómo te llama Movi y el color de tu avatar.")
+            EncabezadoDeHoja("Tu perfil", subtitulo = "Cómo te llama Movi.")
             Spacer(Modifier.height(Medida.entreSecciones))
             // Vuelta 41: el campo del sistema (era `FieldBox`, el de las hojas de Créditos).
             Campo(name, { name = it }, rotulo = "Alias", guia = "Tu nombre", habilitado = !saving)
 
-            Spacer(Modifier.height(Espacio.l))
-            RotuloDeCampo("Color del avatar")
-            Spacer(Modifier.height(Espacio.xs))
-            for (row in AvatarPalette.COLORS.chunked(4)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(Espacio.s),
-                ) {
-                    for (hex in row) {
-                        ColorSwatch(hex = hex, selected = hex == color, onClick = { color = hex })
-                    }
-                }
-                Spacer(Modifier.height(Espacio.s))
-            }
+            // Vuelta 80: sin «Color del avatar». El avatar del dueño va siempre en el tinte, con sus
+            // iniciales (`AvatarDelDueno`): un color elegido ya no pintaba nada.
         }
 
         Spacer(Modifier.height(Espacio.m))
@@ -107,22 +94,5 @@ fun EditProfileSheet(
             error = error,
         )
         Spacer(Modifier.height(Espacio.l))
-    }
-}
-
-@Composable
-private fun ColorSwatch(hex: String, selected: Boolean, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .size(Medida.avatarGrande)
-            .clip(CircleShape)
-            .background(avatarColorOrDefault(hex))
-            .then(if (selected) Modifier.border(2.dp, Movi.colores.texto, CircleShape) else Modifier)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (selected) {
-            Icon(Icons.Rounded.Check, contentDescription = "Elegido", tint = Movi.colores.sobreAvatar, modifier = Modifier.size(Icono.m))
-        }
     }
 }

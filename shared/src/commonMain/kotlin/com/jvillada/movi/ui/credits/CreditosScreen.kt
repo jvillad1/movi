@@ -52,6 +52,7 @@ import com.jvillada.movi.shared.model.periodoDe
 import com.jvillada.movi.shared.model.planDelCredito
 import com.jvillada.movi.shared.model.resumirDeudas
 import com.jvillada.movi.shared.model.deudasSinSaldoDe
+import com.jvillada.movi.shared.model.creditoSinSaldo
 import com.jvillada.movi.shared.model.interesDelMes
 import com.jvillada.movi.shared.model.mesDeLaPrimeraCuota
 import com.jvillada.movi.shared.model.ultimaCuotaDeTodas
@@ -127,6 +128,16 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
     // el corte del dueño — ver [ajustesDelPeriodo]. Si falla se sigue con el corte 1: esto solo espera.
     val perfilContestado = perfilLeido.valor != null || perfilLeido.terminada
     var showTypeChooser by remember { mutableStateOf(false) }
+    // Vuelta 80: «Usar este» también acá (la pieza del préstamo sin saldo): la hoja del saldo ya llena.
+    var hojaDelPlan by remember { mutableStateOf<Pair<CreditSummary, Long>?>(null) }
+    val alTocarSinSaldo: (AccionSinSaldo) -> Unit = { accion ->
+        when (accion) {
+            is AccionSinSaldo.UsarElDelPlan ->
+                credits?.firstOrNull { it.account.id == accion.id }?.let { hojaDelPlan = it to accion.saldo }
+            is AccionSinSaldo.Cargar -> onNavigate(Screen.CuadrarLaCuenta(accion.id))
+            is AccionSinSaldo.Cuadrar -> onNavigate(accion.id?.let { Screen.CuadrarLaCuenta(it) } ?: Screen.CuadreDeSaldos)
+        }
+    }
     // Desde la vuelta 31 estas hojas solo crean: completar o editar una deuda se hace en su detalle.
     var showLoanSheet by remember { mutableStateOf(false) }
     var showCardSheet by remember { mutableStateOf(false) }
@@ -300,7 +311,7 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                     // letra, mismo tamaño, y un renglón siempre. Ver [CifraProtagonista].
                     Cifra(totalDebtCop(creditosALaVista, tarjetasALaVista), VarianteDeCifra.Heroe)
                     // Vuelta 59: las deudas en negativo no restan arriba; se nombran acá, con «Cuadrar».
-                    DeudasSinSaldo(creditosALaVista, tarjetasALaVista, onNavigate)
+                    DeudasSinSaldo(creditosALaVista, tarjetasALaVista, alTocarSinSaldo)
                     // Lo que esa deuda CUESTA, que es lo que la pantalla no decía. La deuda
                     // total de arriba cuenta todos los créditos —quién paga la cuota no cambia
                     // de quién es el pasivo—; el costo mensual de acá sí separa. Ver
@@ -331,6 +342,13 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                     deuda = prestamoEnLaLista(c, planes[c.account.id], periodoActual, hoy),
                     saldo = { Cifra(c.account.balance) },
                     onAbrir = { onNavigate(Screen.AccountDetail(c.account.id, c.account.type.group)) },
+                    // Vuelta 80: sin saldo, la pieza de toda la app debajo, con «Usar este» si hay plan.
+                    sinSaldo = loQueSeDiceSinSaldo(
+                        deudasSinSaldo = listOfNotNull(c.account.takeIf { creditoSinSaldo(c) || c.account in deudasSinSaldoDe(listOf(c.account)) }),
+                        creditosConCondiciones = if (creditoSinSaldo(c)) setOf(c.account.id) else emptySet(),
+                        planes = saldoDelPlanEnLaFicha(c, hoy)?.let { mapOf(c.account.id to it) }.orEmpty(),
+                    ),
+                    onSinSaldo = alTocarSinSaldo,
                 )
             }
             val filaDeTarjeta: @Composable (CardSummary) -> Unit = { c ->
@@ -445,6 +463,14 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
             }
         }
         } // PanelDeTablero
+        hojaDelPlan?.let { (credito, cifra) ->
+            CreditBalanceSheet(
+                credit = credito,
+                onDismiss = { hojaDelPlan = null },
+                onSaved = { hojaDelPlan = null; reloadKey++ },
+                cifraPropuesta = cifra,
+            )
+        }
         if (showTypeChooser) {
             DebtTypeChooserSheet(
                 onDismiss = { showTypeChooser = false },
@@ -580,30 +606,18 @@ const val TAG_DEUDAS_SIN_SALDO: String = "creditos:deudas-sin-saldo"
  * de saldos —que desde esta vuelta lista los préstamos— con la deuda arriba si es una sola. Nada si no hay.
  */
 @Composable
-private fun DeudasSinSaldo(creditos: List<CreditSummary>, tarjetas: List<CardSummary>, onNavigate: (Screen) -> Unit) {
-    val sinSaldo = deudasSinSaldoDe(creditos.map { it.account } + tarjetas.map { it.account })
-    val texto = textoDeLasDeudasSinSaldo(
-        creditos = sinSaldo.count { it.type == com.jvillada.movi.shared.model.AccountType.LOAN },
-        tarjetas = sinSaldo.count { it.type != com.jvillada.movi.shared.model.AccountType.LOAN },
+private fun DeudasSinSaldo(creditos: List<CreditSummary>, tarjetas: List<CardSummary>, onAccion: (AccionSinSaldo) -> Unit) {
+    // Vuelta 80: la pieza del préstamo sin saldo de toda la app, con las mismas deudas que Patrimonio
+    // (`deudasSinSaldoParaDecir`) y el mismo texto: con un crédito y su plan, «Usar este».
+    val hoy = hoyEnAppZone()
+    val dice = loQueSeDiceSinSaldo(
+        deudasSinSaldo = deudasSinSaldoParaDecir(creditos, tarjetas),
+        creditosConCondiciones = creditos.filter(::creditoSinSaldo).map { it.account.id }.toSet(),
+        planes = creditos.mapNotNull { c -> saldoDelPlanEnLaFicha(c, hoy)?.let { c.account.id to it } }.toMap(),
     ) ?: return
     Spacer(Modifier.height(Espacio.xs))
-    // Vuelta 77: a lo ancho de la tarjeta, como los renglones del resumen: «Cuadrar» va al borde derecho,
-    // en la columna de las cifras (el lugar de la acción de una fila del sistema), también a 1.280.
-    Row(
-        modifier = Modifier.fillMaxWidth().testTag(TAG_DEUDAS_SIN_SALDO),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Espacio.s),
-    ) {
-        Text(texto, style = Movi.textos.apoyoMedio, color = Movi.colores.aviso, modifier = Modifier.weight(1f))
-        Boton(
-            texto = CUADRAR_LAS_DEUDAS_SIN_SALDO,
-            onClick = {
-                onNavigate(sinSaldo.singleOrNull()?.let { Screen.CuadrarLaCuenta(it.id) } ?: Screen.CuadreDeSaldos)
-            },
-            variante = VarianteDeBoton.Fantasma,
-            tamano = TamanoDeBoton.S,
-        )
-    }
+    // Vuelta 77: a lo ancho de la tarjeta: el botón va al borde derecho, en la columna de las cifras.
+    ElPrestamoSinSaldo(dice, onAccion = onAccion, modifier = Modifier.testTag(TAG_DEUDAS_SIN_SALDO))
 }
 
 /** El rótulo de un grupo de filas del resumen: qué se está midiendo, antes de con qué alcance. */
@@ -711,6 +725,9 @@ private fun FilaDeDeuda(
     deuda: DeudaEnLaLista,
     saldo: @Composable () -> Unit,
     onAbrir: () -> Unit,
+    /** Vuelta 80: lo que dice la pieza del préstamo sin saldo debajo de la fila; `null`, nada. */
+    sinSaldo: LoQueSeDiceSinSaldo? = null,
+    onSinSaldo: (AccionSinSaldo) -> Unit = {},
 ) {
     Column(modifier = Modifier.testTag(TAG_FILA_DE_DEUDA)) {
         Fila(
@@ -726,6 +743,8 @@ private fun FilaDeDeuda(
             final = {
                 when {
                     deuda.pagada -> Pildora(DEUDA_PAGADA, TonoDePildora.Exito)
+                    // Vuelta 80: con la pieza debajo, la fila no repite «Sin saldo en Movi».
+                    deuda.sinSaldo && sinSaldo != null -> Chevron()
                     deuda.sinSaldo -> Pildora(SIN_SALDO_EN_MOVI, TonoDePildora.Aviso)
                     else -> saldo()
                 }
@@ -733,8 +752,12 @@ private fun FilaDeDeuda(
             onClick = onAbrir,
             onClickLabel = "Ver la deuda",
         )
-        val nota = deuda.nota
+        // Vuelta 80: con la pieza del préstamo sin saldo, su «cuádrala con el banco» ya lo dice ella.
+        val nota = deuda.nota?.takeUnless { sinSaldo != null && it.texto == FALTA_EL_SALDO_DE_LA_DEUDA }
         val fraccion = deuda.fraccionPagada
+        if (sinSaldo != null) {
+            BajoLaFila { ElPrestamoSinSaldo(sinSaldo, onAccion = onSinSaldo) }
+        }
         if (nota != null || fraccion != null) {
             BajoLaFila {
                 if (nota != null) {

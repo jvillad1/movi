@@ -170,8 +170,11 @@ class TeQuedanEnHoyEnPantallaTest {
         // El total del período, en su renglón con el nombre de la vuelta 28.
         composeRule.onNodeWithText(ROTULO_DISPONIBLE_DEL_PERIODO, useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("\$6.900.000", useUnmergedTree = true).assertIsDisplayed()
-        // La columna dice lo gastado y de cuánto.
-        composeRule.onNodeWithText("de \$6,9M", useUnmergedTree = true).assertIsDisplayed()
+        // Vuelta 80: lo gastado y de cuánto van al desglose de «¿De dónde sale?».
+        assertTrue(composeRule.onAllNodesWithText("de \$6,9M", substring = true, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+        composeRule.onNodeWithText("¿De dónde sale?", useUnmergedTree = true).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        assertTrue(composeRule.onAllNodesWithText("de \$6,9M", substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
         assertEquals(normal, color(cifraDeHoy()))
         assertEquals(normal, color(cifraDePagos()))
     }
@@ -193,7 +196,10 @@ class TeQuedanEnHoyEnPantallaTest {
         val quedaEnPlan = composeRule.onAllNodesWithText("−\$100.000", useUnmergedTree = true).fetchSemanticsNodes()
         assertEquals(1, quedaEnPlan.size, "la columna «Período» dice lo que queda")
         assertEquals(rojo, color(quedaEnPlan.single()))
-        val gastadoEnPlan = composeRule.onAllNodesWithText("\$7M", useUnmergedTree = true).fetchSemanticsNodes()
+        // Vuelta 80: lo gastado ($7M) va al desglose de «¿De dónde sale?», apagado.
+        composeRule.onNodeWithText("¿De dónde sale?", useUnmergedTree = true).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        val gastadoEnPlan = composeRule.onAllNodesWithText("en el día a día \$7M", substring = true, useUnmergedTree = true).fetchSemanticsNodes()
         assertEquals(1, gastadoEnPlan.size)
         assertTrue(color(gastadoEnPlan.single()) != rojo, "lo gastado va apagado, no en rojo")
     }

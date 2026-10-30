@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.destinos
 
+import com.jvillada.movi.ui.components.ds.AvatarDeTercero
 import com.jvillada.movi.ui.components.ds.AccionDeEncabezado
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.ui.components.ds.Cifra
@@ -751,7 +752,7 @@ private fun FichaDelDestino(
         lineasDelSubtitulo = if (enSusGrupos != null) 2 else 1,
         inicio = {
             if (esComercio) IconoEnCirculo(Icons.Rounded.Storefront, tono = TonoDeIcono.Neutro)
-            else AvatarDePersona(destino.nombre, tono = TonoDeIcono.Info)
+            else AvatarDeTercero(destino.nombre)
         },
         final = {
             Column(horizontalAlignment = Alignment.End) {

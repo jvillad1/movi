@@ -46,6 +46,9 @@ import com.jvillada.movi.ui.components.ROTULO_OCULTAR_LOS_SALDOS
 import com.jvillada.movi.ui.components.TAG_OJO_DE_LOS_SALDOS
 import com.jvillada.movi.ui.components.rememberVibrador
 import androidx.compose.ui.draw.clip
+import com.jvillada.movi.ui.components.ds.AvatarDePersona
+import com.jvillada.movi.ui.components.ds.QuienEsElAvatar
+import com.jvillada.movi.ui.components.ds.TONO_DEL_DUENO
 import com.jvillada.movi.ui.components.ds.anilloDeFoco
 
 /** El encabezado del Inicio, sobre la banda amarilla (vuelta 39). */
@@ -67,7 +70,7 @@ const val ROTULO_DE_LA_CAMPANA: String = "Notificaciones"
  * **El encabezado del Inicio de la opción 3** (vuelta 39): va sobre la banda amarilla, del alto de
  * cualquier encabezado ([Medida.altoDeEncabezado]).
  *
- * - El avatar blanco con las iniciales ([com.jvillada.movi.ui.components.inicialesDelUsuario]) abre «Tú».
+ * - El avatar del dueño ([AvatarDePersona], vuelta 80: en el tinte) con las iniciales ([com.jvillada.movi.ui.components.inicialesDelUsuario]) abre «Tú».
  * - «Hola, Juan» en `saludo` y, debajo, el período (o «Actualizando…» mientras se recarga con cifras ya
  *   pintadas) en `apoyoMedio` y `sobreMarcaMedio`.
  * - Dos botones redondos en `marcaSuave`, como en la maqueta: **ocultar los saldos** (el ojo que antes
@@ -104,23 +107,25 @@ fun EncabezadoDelInicio(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Espacio.s),
     ) {
-        Box(
+        // Vuelta 80: el avatar del dueño de toda la app ([AvatarDePersona]: sus iniciales en el tinte),
+        // no un círculo blanco propio del Inicio.
+        AvatarDePersona(
+            nombre = iniciales,
+            iniciales = iniciales,
+            tono = TONO_DEL_DUENO,
+            quien = QuienEsElAvatar.Dueno,
+            tamano = Medida.circuloDeLaBanda,
             modifier = Modifier
-                .size(Medida.circuloDeLaBanda)
-                // Vuelta 55 (revisión): con Tab, el avatar mostraba el cuadrado gris tenue del foco sobre
-                // el amarillo, sin anillo. Ahora el anillo de tinta (entra en los 56 del encabezado: el
+                // Vuelta 55 (revisión): con Tab, el anillo de tinta (entra en los 56 del encabezado: el
                 // círculo mide 44 y el anillo sale 4) y el resaltado redondo, recortado al círculo.
                 .anilloDeFoco(CircleShape)
                 .alPresionar(onClick = onAvatar, rol = Role.Button, onClickLabel = "Abrir Tú", forma = CircleShape)
                 .clip(CircleShape)
-                .background(Movi.colores.tarjeta, CircleShape)
+                // Vuelta 79: con el Inicio desplazado (sobre el crema), el borde lo recorta del fondo.
                 .then(if (desplazado) Modifier.border(Medida.trazo, Movi.colores.borde, CircleShape) else Modifier)
                 .semantics { contentDescription = "Tú" }
                 .testTag(TAG_AVATAR_DEL_INICIO),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(iniciales, style = Movi.textos.cuerpoFuerte, color = Movi.colores.texto, maxLines = 1)
-        }
+        )
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = saludo,

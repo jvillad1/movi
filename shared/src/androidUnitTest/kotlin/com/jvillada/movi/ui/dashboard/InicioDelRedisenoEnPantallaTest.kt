@@ -186,8 +186,8 @@ class InicioDelRedisenoEnPantallaTest {
         val faltaPorPagar = arribaDelTag(TAG_WIDGET_FALTA_POR_PAGAR)
         val enQueSeVa = arribaDelTag(TAG_TARJETA_EN_QUE_SE_VA)
         assertTrue(hero < acciones && acciones < propuestas && propuestas < cuentas && cuentas < faltaPorPagar)
-        // Los dos widgets van lado a lado: arrancan a la misma altura.
-        assertEquals(faltaPorPagar, enQueSeVa)
+        // Vuelta 80: los dos widgets, uno debajo del otro.
+        assertTrue(faltaPorPagar < enQueSeVa)
         // Disponible y el patrimonio ya no vienen por defecto; «Para revisar» tampoco se pinta.
         composeRule.onNodeWithText("Tu patrimonio", useUnmergedTree = true).assertDoesNotExist()
         composeRule.onNodeWithText("Para revisar", useUnmergedTree = true).assertDoesNotExist()

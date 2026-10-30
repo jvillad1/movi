@@ -1,5 +1,8 @@
 package com.jvillada.movi.ui.transactions
 
+import com.jvillada.movi.ui.components.ds.iconoDelMovimiento
+import com.jvillada.movi.ui.components.ds.IconoResuelto
+import com.jvillada.movi.ui.components.ds.IconoDeMovimiento
 import com.jvillada.movi.ui.components.ds.seAchicaHastaLaBase
 import com.jvillada.movi.ui.components.ds.desplazadoDe
 import com.jvillada.movi.ui.components.ds.separadoAlDesplazar
@@ -1719,11 +1722,9 @@ fun TransactionsScreen(
                             cuantos = cuantosMovimientosDice(rows),
                             onAlternar = { diasPlegados = DiasPlegadosStore.alternar(day.date) },
                         )
-                        // Vuelta 40: «Gastaste» no cuenta el pago de tarjeta (la compra ya restó cuando
-                        // se hizo); esta línea dice que esa plata igual salió de tu cuenta ese día.
-                        val montoPagoDeTarjeta = montoPagoDeTarjetaEnElDia(day.items, accountTypes)
-                        // Vuelta 52: un renglón apagado, no una frase de dos.
-                        if (montoPagoDeTarjeta > 0L) LineaPagoDeTarjetaEnElDia(montoPagoDeTarjeta)
+                        // Vuelta 80: la nota del pago de tarjeta («no suma, ya contó al comprar») salió del
+                        // encabezado del día —un tercer renglón— y la dice el detalle del pago
+                        // ([NOTA_DEL_PAGO_DE_TARJETA_EN_EL_DETALLE]).
                         if (!plegado) Superficie(
                             modifier = Modifier.fillMaxWidth(),
                             relleno = RellenoDeSuperficie.Lista,
@@ -2277,7 +2278,7 @@ internal fun TransferRow(
         // Vuelta 50: el ícono de lo que cuenta. La cuota lleva el de «Cuota de crédito» y el desembolso
         // el suyo (los de su categoría); lo que no cuenta —un traspaso, un pago de tarjeta, un abono—
         // las flechas: no es una categoría del dueño, es plata que cambió de cuenta.
-        inicio = { IconoDeCategoria(laPataQueCuenta(row.out, row.into, accountTypes)?.category ?: TRANSFER_CATEGORY) },
+        inicio = { IconoDeMovimiento(laPataQueCuenta(row.out, row.into, accountTypes)?.let(::iconoDelMovimiento) ?: IconoResuelto.DeCategoria(TRANSFER_CATEGORY)) },
         final = {
             val pata = pataQueSeMuestra(row, accountTypes)
             FinalDeLaFila(
@@ -2313,7 +2314,7 @@ private fun RenglonDeAjustes(
         subtitulo = if (events.size == 1) "$ADJUSTMENT_CATEGORY · 1 corrección"
         else "$ADJUSTMENT_CATEGORY · ${events.size} correcciones",
         // Un ajuste de saldo no es una categoría, es una corrección: el ícono neutro.
-        inicio = { IconoDeCategoria(ADJUSTMENT_CATEGORY) },
+        inicio = { IconoDeMovimiento(IconoResuelto.DeCategoria(ADJUSTMENT_CATEGORY)) },
         final = {
             Icon(
                 imageVector = if (abierto) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown,
@@ -2375,7 +2376,7 @@ internal fun MovementSingleRow(
             // El tag de la fila va en la fila misma —la que se toca—, no en lo que la envuelve.
             modifier = Modifier.testTag(TAG_FILA_DE_MOVIMIENTO_SUELTO).marcaDeElegido(elegido),
             // La marca del comercio si Movi la reconoce (Ola 2a), y si no el ícono de la categoría.
-            inicio = { AvatarDelComercio(tx) },
+            inicio = { IconoDeMovimiento(tx) },
             final = {
                 FinalDeLaFila(
                     // En la moneda del movimiento: un cargo de US$20 en la tarjeta en dólares no son pesos.

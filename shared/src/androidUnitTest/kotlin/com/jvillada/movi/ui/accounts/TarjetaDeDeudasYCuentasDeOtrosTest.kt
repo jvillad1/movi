@@ -178,7 +178,8 @@ class TarjetaDeDeudasYCuentasDeOtrosTest {
         composeRule.onNodeWithText("Deudas", useUnmergedTree = true).assertExists()
         // credito.account.balance (40.000.000) + tarjeta.account.balance (2.000.000) — la MISMA
         // cuenta que totalDebtCop, no una recalculada acá.
-        composeRule.onNodeWithText("\$42.000.000", useUnmergedTree = true).assertExists()
+        // Vuelta 80: con el signo del renglón «Deudas» del resumen.
+        composeRule.onNodeWithText("−\$42.000.000", useUnmergedTree = true).assertExists()
         composeRule.onNodeWithText("1 crédito · 1 tarjeta", useUnmergedTree = true).assertExists()
     }
 

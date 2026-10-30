@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.buscar
 
+import com.jvillada.movi.ui.components.ds.IconoDeMovimiento
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -66,7 +67,6 @@ import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.categorias.IconoDeCategoria
 import com.jvillada.movi.ui.components.AvatarDeLaCuenta
-import com.jvillada.movi.ui.components.AvatarDelComercio
 import com.jvillada.movi.ui.components.HeaderLeading
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.formatMoney
@@ -469,8 +469,8 @@ private fun FilaDeResultado(
         modifier = Modifier.testTag(TAG_RESULTADO_DE_BUSCAR + resultado.clave),
         inicio = {
             when (resultado) {
-                is ResultadoDeBusqueda.Movimiento -> AvatarDelComercio(resultado.evento)
-                is ResultadoDeBusqueda.Comercio -> AvatarDelComercio(resultado.ejemplo)
+                is ResultadoDeBusqueda.Movimiento -> IconoDeMovimiento(resultado.evento)
+                is ResultadoDeBusqueda.Comercio -> IconoDeMovimiento(resultado.ejemplo)
                 is ResultadoDeBusqueda.Categoria -> IconoDeCategoria(resultado.nombre)
                 is ResultadoDeBusqueda.Cuenta -> AvatarDeLaCuenta(resultado.cuenta)
                 is ResultadoDeBusqueda.Persona -> IconoEnCirculo(Icons.Rounded.Groups, tono = TonoDeIcono.Neutro)

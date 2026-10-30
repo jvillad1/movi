@@ -381,6 +381,12 @@ internal fun FilaDeFactura(
                 }
             }
             Spacer(Modifier.width(ESPACIO_ANTES_DEL_FINAL_DE_FILA))
+            // Vuelta 80: **una sola acción al final de la fila**: el botón o el «⋯», nunca los dos
+            // apilados (el «⋯» flotaba debajo del botón, `r7-pagos-390-a.png`). Con botón, «Pausar»
+            // queda en la regla, que abre tocar la fila.
+            if (accionDeLaFilaPendiente(onAnotar != null, conPropuesta, accionesDelMenuPendiente.isNotEmpty()) == AccionDeLaFila.MENU) {
+                MenuDeLaFila(pago.nombre, accionesDelMenuPendiente, nota = null, enVuelo = enVuelo, tag = TAG_MENU_DE_LA_FILA_PENDIENTE)
+            }
             if (onAnotar != null && !conPropuesta) {
                 Boton(
                     when {
@@ -409,7 +415,7 @@ internal fun FilaDeFactura(
                 .then(if (onAbrir != null) Modifier.clickable(onClickLabel = etiquetaDeAbrir, onClick = onAbrir) else Modifier)
                 .padding(
                     start = SANGRIA_DEL_TEXTO_DE_LA_FILA,
-                    end = if (accionesDelMenuPendiente.isEmpty()) Medida.margenDePantalla else Espacio.xxs,
+                    end = Medida.margenDePantalla,
                     bottom = Espacio.s,
                 ),
             verticalArrangement = Arrangement.spacedBy(Espacio.xxs),
@@ -434,13 +440,22 @@ internal fun FilaDeFactura(
                 if (e.puedeIncluirDiferidos) Text(PUEDE_INCLUIR_DIFERIDOS, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
             }
         }
-        if (accionesDelMenuPendiente.isNotEmpty()) {
-            MenuDeLaFila(pago.nombre, accionesDelMenuPendiente, nota = null, enVuelo = enVuelo, tag = TAG_MENU_DE_LA_FILA_PENDIENTE)
-            Spacer(Modifier.width(Espacio.xs))
-        }
         }
     }
     debajo?.let { BajoLaFila { it() } }
+}
+
+/** Qué lleva al final una factura sin pagar (vuelta 80): una sola cosa. */
+internal enum class AccionDeLaFila { BOTON, MENU, NADA }
+
+/**
+ * **La única acción al final de una factura sin pagar** (vuelta 80): el botón si lo hay («Anotar pago»,
+ * sin una propuesta que lo reemplace); si no, el «⋯» si tiene algo; si no, nada. Pura.
+ */
+internal fun accionDeLaFilaPendiente(conAnotar: Boolean, conPropuesta: Boolean, conMenu: Boolean): AccionDeLaFila = when {
+    conAnotar && !conPropuesta -> AccionDeLaFila.BOTON
+    conMenu -> AccionDeLaFila.MENU
+    else -> AccionDeLaFila.NADA
 }
 
 /**

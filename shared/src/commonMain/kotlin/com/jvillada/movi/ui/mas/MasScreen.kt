@@ -84,7 +84,7 @@ import com.jvillada.movi.ui.components.NoSePudoLeer
 import com.jvillada.movi.ui.components.ROTULO_OCULTAR_LOS_SALDOS
 import com.jvillada.movi.ui.components.SUBTITULO_DE_OCULTAR_LOS_SALDOS
 import com.jvillada.movi.ui.components.avatarColorOrDefault
-import com.jvillada.movi.ui.components.inicialesDelUsuario
+import com.jvillada.movi.ui.components.ds.AvatarDelDueno
 import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.ui.components.ds.Chevron
 import com.jvillada.movi.ui.components.ds.Fila
@@ -273,7 +273,7 @@ fun MasScreen(
 
     // Lo tuyo: quién eres, tu patrimonio, las personas y el cuadre. En dos columnas va a la izquierda.
     val loTuyo: LazyListScope.() -> Unit = {
-        // Quién eres: el avatar, el nombre y el correo, con «Editar» (alias y color).
+        // Quién eres: el avatar, el nombre y el correo, con «Editar» (el alias).
         item(key = "perfil") {
             TarjetaDelPerfil(profile = profile, onEditar = { showEditProfile = true })
         }
@@ -824,24 +824,16 @@ private fun IconoDeAjuste(icono: ImageVector) {
     IconoEnCirculo(icono, tono = TonoDeIcono.Neutro)
 }
 
-/** Quién eres: el avatar, el nombre y el correo, con «Editar» (alias y color). */
+/** Quién eres: el avatar, el nombre y el correo, con «Editar» (el alias). */
 @Composable
 private fun TarjetaDelPerfil(profile: UserProfile?, onEditar: () -> Unit) {
     Superficie(modifier = Modifier.fillMaxWidth().testTag(TAG_TARJETA_DEL_PERFIL)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.s)) {
             // F42 · F46: mientras `profile` no llegó se usa lo que SessionManager tenía del login.
             val displayName = profile?.name ?: SessionManager.userName ?: "Usuario"
-            val avatarColor = avatarColorOrDefault(profile?.avatarColor ?: SessionManager.avatarColor)
-            Box(
-                modifier = Modifier
-                    .size(Medida.avatarGrande)
-                    .clip(CircleShape)
-                    .background(avatarColor),
-                contentAlignment = Alignment.Center,
-            ) {
-                // Vuelta 41: las mismas iniciales que el avatar del Inicio (`inicialesDelUsuario`).
-                Text(inicialesDelUsuario(displayName), style = Movi.textos.tituloMedio, color = Movi.colores.sobreAvatar)
-            }
+            // Vuelta 80: el avatar del dueño de toda la app (sus iniciales en el tinte). Era el color
+            // que guardaba el perfil, y en rojo se leía como un error.
+            AvatarDelDueno(displayName, tamano = Medida.avatarGrande)
             Column(modifier = Modifier.weight(1f)) {
                 // Vuelta 29: el nombre en `saludo` (17/700 a la vista), con el correo debajo, como en la opción 3.
                 Text(displayName, style = Movi.textos.saludo, color = Movi.colores.texto, maxLines = 1, overflow = TextOverflow.Ellipsis)

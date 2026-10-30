@@ -130,10 +130,8 @@ class PagoDeTarjetaEnMovimientosTest {
         // tarjeta: un día de puros pagos no dice nada a la derecha, y la línea dice que la plata salió.
         assertTrue(composeRule.onAllNodesWithText("Gastaste", useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
         assertTrue(composeRule.onAllNodesWithText("−$1.929.536", useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
-        composeRule.onNodeWithText(
-            "+ \$1.929.536 a tu tarjeta · no suma, ya contó al comprar",
-            useUnmergedTree = true,
-        ).assertIsDisplayed()
+        // Vuelta 80: la nota del pago de tarjeta ya no va en el encabezado del día: la dice el detalle.
+        assertTrue(composeRule.onAllNodesWithText("a tu tarjeta", substring = true, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
     }
 
     /** Un día sin ningún pago de tarjeta no gana la línea de más: «Flujo del día» sigue solo. */
@@ -176,10 +174,8 @@ class PagoDeTarjetaEnMovimientosTest {
         composeRule.onNodeWithText("Gastaste", useUnmergedTree = true).assertIsDisplayed()
         assertTrue(composeRule.onAllNodesWithText("$18.500", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
         assertTrue(composeRule.onAllNodesWithText("−$405.402", useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
-        composeRule.onNodeWithText(
-            "+ \$386.902 a tu tarjeta · no suma, ya contó al comprar",
-            useUnmergedTree = true,
-        ).assertIsDisplayed()
+        // Vuelta 80: sin la nota en el encabezado del día (va al detalle del pago).
+        assertTrue(composeRule.onAllNodesWithText("a tu tarjeta", substring = true, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
     }
 }
 

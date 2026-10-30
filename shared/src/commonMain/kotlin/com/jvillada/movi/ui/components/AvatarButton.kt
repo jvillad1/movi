@@ -18,7 +18,9 @@ import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.shared.model.AvatarPalette
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.theme.Medida
+import com.jvillada.movi.ui.components.ds.AvatarDelDueno
 import com.jvillada.movi.ui.components.ds.anilloDeFoco
+import com.jvillada.movi.ui.components.ds.inicialesDelDueno
 
 /**
  * F41: el avatar con la inicial ya abría Perfil desde el encabezado del Dashboard, pero nada
@@ -26,34 +28,22 @@ import com.jvillada.movi.ui.components.ds.anilloDeFoco
  * visual con el círculo de antes — para que Movimientos y Presupuestos lo reciban igual y
  * Perfil quede alcanzable desde ahí también, no solo desde Más.
  *
- * F42 · F46: el círculo gris fijo se reemplaza por [SessionManager.avatarColor] — el mismo
- * color que se ve en el encabezado de Perfil, elegido de [AvatarPalette]. Iniciales siempre en
- * blanco: la paleta entera está pensada para ese contraste (ver AvatarPalette.kt), así que no
- * hace falta calcular nada por color.
+ * Vuelta 80: es [AvatarDelDueno], el mismo de toda la app (sus iniciales en el tinte). El color
+ * que el perfil guardaba ([SessionManager.avatarColor]) ya no pinta ningún avatar.
  */
 @Composable
 fun AvatarButton(onClick: () -> Unit) {
-    Box(
+    // Vuelta 80: el mismo avatar del dueño de toda la app (sus iniciales en el tinte), no el color del
+    // perfil: en rojo se leía como un error.
+    AvatarDelDueno(
+        nombre = SessionManager.userName,
+        tamano = 32.dp,
         modifier = Modifier
-            .size(32.dp)
             // Vuelta 55: con Tab, el avatar mostraba un cuadrado gris tenue; ahora el anillo de tinta.
             .anilloDeFoco(CircleShape)
             .clip(CircleShape)
-            .background(avatarColorOrDefault(SessionManager.avatarColor))
-            .border(Medida.trazo, Movi.colores.borde, CircleShape)
             .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = inicialesDelUsuario(SessionManager.userName),
-            // Blanco en los dos temas: la paleta de avatares está construida entera para contrastar
-            // contra blanco (ver AvatarPalette.kt), y el color del círculo lo elige el dueño, no el
-            // tema. Un token de texto acá se rompería con la mitad de los colores de la paleta; por
-            // eso es `sobreAvatar` y no `sobreMarca` (vuelta de diseño 18).
-            style = Movi.textos.cuerpoFuerte,
-            color = Movi.colores.sobreAvatar,
-        )
-    }
+    )
 }
 
 /**
@@ -75,8 +65,4 @@ internal fun avatarColorOrDefault(hex: String?): Color {
  * el primer apellido («Juan Villada» → «JV»), o la del nombre solo; «?» sin nombre. Antes cada avatar
  * tenía la suya y para el mismo usuario el Inicio decía «D» y «Tú» «DM». Pura.
  */
-fun inicialesDelUsuario(nombre: String?): String {
-    val palabras = nombre?.trim()?.split(' ')?.filter { it.isNotBlank() }.orEmpty()
-    if (palabras.isEmpty()) return "?"
-    return palabras.take(2).joinToString("") { it.first().uppercase() }
-}
+fun inicialesDelUsuario(nombre: String?): String = inicialesDelDueno(nombre)

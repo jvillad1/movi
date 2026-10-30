@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.plan
 
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
@@ -210,6 +212,10 @@ class SuscripcionAnualEnElTableroTest {
     /** Y el card explica de dónde sale ese total, en vez de dejarlo sin cuadrar contra la lista. */
     @Test
     fun `el card explica que los cobros anuales entran repartidos`() {
+        // Vuelta 80: los párrafos del total van detrás de «¿Qué cuenta?».
+        composeRule.onNodeWithTag(com.jvillada.movi.ui.plan.TAG_QUE_CUENTA, useUnmergedTree = true)
+            .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
+        composeRule.waitForIdle()
         composeRule.onNodeWithText("dividimos el cobro en 12", substring = true, useUnmergedTree = true)
             .assertExists()
     }

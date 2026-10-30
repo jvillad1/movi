@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.accounts
 
+import androidx.compose.ui.semantics.SemanticsPropertyReceiver
+import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Column
@@ -179,6 +181,22 @@ internal fun leyendaDeLaCurva(puntos: List<PuntoDelPatrimonio>, desdeQueUsasMovi
 internal fun hayCurva(historia: HistoriaDelPatrimonio?): Boolean = puntosConSaldos(historia?.puntos.orEmpty()).size >= 2
 
 /**
+ * **Desde cuántos puntos la curva lleva el área suave debajo** (vuelta 80). Con tres meses, la línea
+ * con su degradado se veía como una carpa (`r7-patrimonio-390-a.png`): pocos puntos se leen mejor como
+ * lo que son, puntos unidos por una línea simple.
+ */
+internal const val PUNTOS_PARA_EL_RELLENO: Int = 4
+
+/** ¿La curva de [cuantos] puntos lleva el área debajo? Pura. */
+internal fun laCurvaLlevaRelleno(cuantos: Int): Boolean = cuantos >= PUNTOS_PARA_EL_RELLENO
+
+/** Si la curva lleva el área debajo, en su semántica: para vigilarlo sin leer píxeles. */
+val CurvaConRellenoKey: SemanticsPropertyKey<Boolean> = SemanticsPropertyKey("CurvaConRelleno")
+
+/** Ver [CurvaConRellenoKey]. */
+var SemanticsPropertyReceiver.curvaConRelleno: Boolean by CurvaConRellenoKey
+
+/**
  * La curva y su leyenda. Sin historia ([hayCurva] falso) no pinta nada.
  */
 @Composable
@@ -214,6 +232,7 @@ internal fun CurvaDelPatrimonio(historia: HistoriaDelPatrimonio, modifier: Modif
                         "${nombreDelPunto(puntos.first())}: ${formatMoneyCompact(puntos.first().neto)}; " +
                         "hoy: ${formatMoneyCompact(puntos.last().neto)}." +
                         (if (hoyTraeAjustes(ajustes)) " $HOY_INCLUYE_UN_AJUSTE" else "") + (nota?.let { " $it" } ?: "")
+                    curvaConRelleno = laCurvaLlevaRelleno(puntos.size)
                 }
                 .graficaQueSeToca(cuantos = puntos.size, datos = historia, alElegir = { elegido = it }, enPuntos = true),
         ) { dibujarLaCurva(puntos, elegido, colores, entrada.value, ajustes) }
@@ -301,17 +320,24 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.dibujarLaCurva(
         lineTo(x(0), size.height)
         close()
     }
+    val conRelleno = laCurvaLlevaRelleno(puntos.size)
     // Lo que todavía no se dibujó queda tapado: la curva entra de izquierda a derecha.
     clipRect(right = size.width * progreso) {
-        drawPath(
-            area,
-            brush = Brush.verticalGradient(listOf(colores.area.copy(alpha = 0.55f), colores.area.copy(alpha = 0f))),
-        )
+        if (conRelleno) {
+            drawPath(
+                area,
+                brush = Brush.verticalGradient(listOf(colores.area.copy(alpha = 0.55f), colores.area.copy(alpha = 0f))),
+            )
+        }
         drawPath(
             linea,
             color = colores.linea,
             style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round),
         )
+    }
+    // Vuelta 80: con pocos puntos, cada mes es un punto sobre la línea simple.
+    if (!conRelleno && progreso >= 1f) {
+        valores.indices.forEach { i -> drawCircle(colores.linea, radius = radio * 0.8f, center = Offset(x(i), y(valores[i]))) }
     }
     // Vuelta 60: el mes que trae ajustes va marcado con un aro: ahí la curva se movió por una
     // corrección, no por plata.

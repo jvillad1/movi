@@ -20,6 +20,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -1587,14 +1588,50 @@ private fun ResumenFlujoLibreCard(
         } else {
             CifrasDelFlujoLibre(cifras)
         }
-        // Vuelta 78: qué es esta cifra y qué es el «de $X» de «Falta por pagar», en una frase.
-        cifras?.let { lineaDeLasDosCifras(it.gastos, totalDelPeriodo) }?.let { linea ->
-            Spacer(Modifier.height(Espacio.s))
-            Text(linea, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.testTag(TAG_LAS_DOS_CIFRAS))
+        // Lo que no se pudo convertir es un aviso: va siempre a la vista.
+        NotasDelFlujoLibre(cifras, explicaciones = false)
+        // Vuelta 80: los párrafos que explican qué cuenta el total (las dos cifras, la TRM, lo anual, las
+        // cuotas y los pagos únicos) van detrás de «¿Qué cuenta?». Eran tres párrafos a la vista
+        // (`r7-pagos-390-d.png`): la tarjeta se leía como una hoja de cálculo.
+        if (cifras != null && hayQueExplicarElTotal(cifras, totalDelPeriodo)) {
+            var verQueCuenta by rememberSaveable { mutableStateOf(false) }
+            Spacer(Modifier.height(Espacio.xs))
+            Boton(
+                if (verQueCuenta) OCULTAR_QUE_CUENTA else QUE_CUENTA,
+                onClick = { verQueCuenta = !verQueCuenta },
+                variante = VarianteDeBoton.Fantasma,
+                tamano = TamanoDeBoton.S,
+                modifier = Modifier.testTag(TAG_QUE_CUENTA),
+            )
+            if (verQueCuenta) {
+                // Vuelta 78: qué es esta cifra y qué es el «de $X» de «Falta por pagar», en una frase.
+                lineaDeLasDosCifras(cifras.gastos, totalDelPeriodo)?.let { linea ->
+                    Spacer(Modifier.height(Espacio.xs))
+                    Text(linea, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.testTag(TAG_LAS_DOS_CIFRAS))
+                }
+                NotasDelFlujoLibre(cifras, explicaciones = true)
+            }
         }
-        NotasDelFlujoLibre(cifras)
     }
 }
+
+/** El botón que abre las explicaciones del total de «Lo que se repite al mes» (vuelta 80). */
+const val QUE_CUENTA: String = "¿Qué cuenta?"
+
+/** El mismo botón, abierto. */
+const val OCULTAR_QUE_CUENTA: String = "Ocultar"
+
+/** El `testTag` de «¿Qué cuenta?». */
+const val TAG_QUE_CUENTA: String = "plan-que-cuenta"
+
+/**
+ * **¿Hay algo que explicar del total?** (vuelta 80): las dos cifras, la TRM, lo anual, las cuotas o los
+ * pagos únicos. Sin nada, no hay «¿Qué cuenta?». Pura.
+ */
+internal fun hayQueExplicarElTotal(cifras: ResumenRecurrentes, totalDelPeriodo: Long?): Boolean =
+    lineaDeLasDosCifras(cifras.gastos, totalDelPeriodo) != null ||
+        (cifras.sinConvertir <= 0 && cifras.hayMonedaExtranjera) ||
+        cifras.hayCobrosAnuales || cifras.cuotasDeCredito > 0L || cifras.pagosUnicosFuera > 0
 
 /**
  * **¿El flujo libre pide el salario?** Sin un solo ingreso recurrente, «Flujo libre» sería los gastos
@@ -1683,11 +1720,13 @@ private fun CifrasDelFlujoLibre(cifras: ResumenRecurrentes?) {
  * «Gastos recurrentes».
  */
 @Composable
-private fun NotasDelFlujoLibre(cifras: ResumenRecurrentes?) {
+private fun NotasDelFlujoLibre(cifras: ResumenRecurrentes?, explicaciones: Boolean) {
     Column {
         // Mismo criterio que la pantalla vieja: un total al que le faltan filas se dice, no se
-        // disimula. Ver el KDoc de [ResumenRecurrentes.sinConvertir].
-        if (cifras != null && cifras.sinConvertir > 0) {
+        // disimula. Ver el KDoc de [ResumenRecurrentes.sinConvertir]. Vuelta 80: el aviso va siempre
+        // a la vista ([explicaciones] = `false`); lo demás, detrás de «¿Qué cuenta?».
+        if (!explicaciones) {
+            if (cifras != null && cifras.sinConvertir > 0) {
             Spacer(Modifier.height(Espacio.s))
             Text(
                 text = if (cifras.sinConvertir == 1) {
@@ -1699,7 +1738,10 @@ private fun NotasDelFlujoLibre(cifras: ResumenRecurrentes?) {
                 style = Movi.textos.apoyo,
                 color = Movi.colores.aviso,
             )
-        } else if (cifras != null && cifras.hayMonedaExtranjera) {
+            }
+            return@Column
+        }
+        if (cifras != null && cifras.sinConvertir <= 0 && cifras.hayMonedaExtranjera) {
             Spacer(Modifier.height(Espacio.s))
             Text(
                 text = "Lo que te cobran en dólares entra al total convertido a pesos con la tasa " +

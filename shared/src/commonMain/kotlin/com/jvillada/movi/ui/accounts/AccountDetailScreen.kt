@@ -810,44 +810,23 @@ private fun EncabezadoDeLaCuenta(
                     color = Movi.colores.texto,
                 )
             } else {
-                Text(
-                    // Vuelta 73: un crédito con condiciones dice qué le falta, con las palabras de Patrimonio.
-                    if (creditoSinSaldo) FALTA_EL_SALDO_DEL_CREDITO else SIN_SALDO_EN_MOVI,
-                    style = Movi.textos.titulo,
-                    color = Movi.colores.aviso,
-                    modifier = Modifier.testTag(TAG_DEUDA_SIN_SALDO),
-                )
-                Spacer(Modifier.height(Espacio.xs))
-                // Vuelta 77 (revisión): UNA sola fila de saldo. Con el plan completo, «Según tu plan debes
-                // unos $X y terminas en … · Usar este» (abre la hoja de siempre ya llena con esa cifra; otra
-                // cifra se escribe ahí mismo, y se guarda con «Registrar ajuste», nunca solo). Sin plan,
-                // «Escribe lo que debes hoy según el banco · Cargarlo».
-                val conPlan = creditoSinSaldo && saldoDelPlan != null
-                Row(
-                    modifier = Modifier.fillMaxWidth()
-                        .then(if (conPlan) Modifier.testTag(com.jvillada.movi.ui.credits.TAG_SALDO_SEGUN_EL_PLAN) else Modifier),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(Espacio.s),
-                ) {
-                    Text(
-                        when {
-                            conPlan -> com.jvillada.movi.ui.credits.textoDelSaldoDelPlanEnLaFicha(saldoDelPlan!!)
-                            creditoSinSaldo -> CUANTO_DEBES_SEGUN_EL_BANCO
-                            else -> FALTA_EL_SALDO_DE_LA_DEUDA
+                // Vuelta 80: la pieza del préstamo sin saldo de toda la app ([ElPrestamoSinSaldo]): el mismo
+                // texto y el mismo botón que Patrimonio y Créditos. El título va en `titulo`: está en el
+                // lugar de la cifra. Con el plan completo, «Usar este» abre la hoja de siempre ya llena;
+                // sin él, «Cargarlo» o «Cuadrar» abren el ajuste de siempre.
+                com.jvillada.movi.ui.credits.loQueSeDiceSinSaldo(
+                    deudasSinSaldo = listOf(acc),
+                    creditosConCondiciones = if (creditoSinSaldo) setOf(acc.id) else emptySet(),
+                    planes = saldoDelPlan?.let { mapOf(acc.id to it) }.orEmpty(),
+                )?.let { dice ->
+                    com.jvillada.movi.ui.credits.ElPrestamoSinSaldo(
+                        dice = dice,
+                        onAccion = { accion ->
+                            if (accion is com.jvillada.movi.ui.credits.AccionSinSaldo.UsarElDelPlan) onUsarElDelPlan(accion.saldo)
+                            else onAjustarLaDeuda()
                         },
-                        style = Movi.textos.apoyo,
-                        color = Movi.colores.textoMedio,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Boton(
-                        texto = when {
-                            conPlan -> com.jvillada.movi.ui.credits.USAR_EL_SALDO_DEL_PLAN
-                            creditoSinSaldo -> CARGAR_EL_SALDO_DEL_CREDITO
-                            else -> CUADRAR_LAS_DEUDAS_SIN_SALDO
-                        },
-                        onClick = { if (conPlan) onUsarElDelPlan(saldoDelPlan!!.saldo) else onAjustarLaDeuda() },
-                        variante = VarianteDeBoton.Secundario,
-                        tamano = TamanoDeBoton.S,
+                        estiloDelTitulo = Movi.textos.titulo,
+                        modifier = Modifier.testTag(TAG_DEUDA_SIN_SALDO),
                     )
                 }
             }

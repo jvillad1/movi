@@ -26,6 +26,7 @@ import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.ui.components.ds.IconoEnCirculo
 import com.jvillada.movi.ui.components.ds.NivelDeSuperficie
 import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.ds.TarjetaDePropuesta
 import com.jvillada.movi.ui.components.ds.TonoDeIcono
 import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 
@@ -36,77 +37,60 @@ const val TAG_TARJETA_DE_AVISOS: String = "actividad:avisos-del-banco"
 const val REVISAR_UNO_POR_UNO: String = "Revisar uno por uno"
 
 /**
- * **La tarjeta de los avisos del banco** (vuelta 40, la opción 3): blanca con la sombra suave de una
- * propuesta, la campana en su círculo amarillo, «3 avisos del banco por confirmar», «Suman $X · …» y
- * dos botones de 48: **«Confirmar los 3»** (amarillo, solo si Movi entendió alguno; ver
- * [botonDeConfirmarLosAvisos]) y **«Revisar uno por uno»** (con borde, abre «Por revisar»).
+ * **La tarjeta de los avisos del banco**: una [TarjetaDePropuesta] de un renglón (vuelta 80).
  *
- * Los botones van lado a lado si caben enteros, y si no, uno debajo del otro, cada uno a todo el
- * ancho: «Confirmar los 2 que Movi entendió» no entra al lado de «Revisar uno por uno» a 360 px, y un
- * botón nunca se corta. Vuelta 53: lo decide [LadoALadoOApilados] midiendo el ancho **entero** de cada
- * rótulo; el `FlowRow` con `weight` de antes los dejaba lado a lado porque medía la palabra más larga,
- * y a 390 «Revisar uno por uno» se cortaba en «Revisar uno por».
+ * La revisión 7 la vio dominar Actividad: 210 px, dos botones a lo ancho uno encima del otro
+ * («Confirmar los 2 que Movi entendió», «Revisar uno por uno») y una línea de detalle. Ahora es la
+ * propuesta de siempre: la campana, «5 avisos del banco por confirmar» en un renglón, y debajo
+ * **«Confirmar 2»** en un [Boton] chico ([botonCompactoDeConfirmar]) con **«Revisar»** como enlace
+ * (abre «Por revisar»). Sin nada que Movi haya entendido, «Revisar» es la acción.
  */
 @Composable
 internal fun TarjetaDeAvisosDelBanco(
     avisos: AvisosPorConfirmar,
     onConfirmar: () -> Unit,
-    /** «Revisar uno por uno» (abre Por revisar). `null` en Por revisar mismo (vuelta 44): ya está ahí. */
+    /** «Revisar» (abre Por revisar). `null` en Por revisar mismo (vuelta 44): ya está ahí. */
     onRevisar: (() -> Unit)?,
     modifier: Modifier = Modifier,
     ocupado: Boolean = false,
 ) {
-    Superficie(
-        modifier = modifier.fillMaxWidth().testTag(TAG_TARJETA_DE_AVISOS),
-        nivel = NivelDeSuperficie.Propuesta,
-    ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(Espacio.s)) {
-            IconoEnCirculo(Icons.Rounded.NotificationsNone, tono = TonoDeIcono.Marca)
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
-                Text(
-                    tituloDeLosAvisos(avisos.cuantos),
-                    style = Movi.textos.titulo,
-                    color = Movi.colores.texto,
-                    modifier = Modifier.semantics { heading() },
-                )
-                detalleDeLosAvisos(avisos)?.let {
-                    Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                }
-            }
+    val confirmar = botonCompactoDeConfirmar(avisos)
+    val alConfirmar = { if (!ocupado) onConfirmar() }
+    val (accion, onAccion) = when {
+        confirmar != null -> confirmar to alConfirmar
+        onRevisar != null -> REVISAR_LOS_AVISOS to onRevisar
+        else -> return
+    }
+    // Tres nodos: el tag de quien la monta, el de esta tarjeta y el de la propuesta, sin pisarse.
+    Column(modifier = modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.fillMaxWidth().testTag(TAG_TARJETA_DE_AVISOS)) {
+            TarjetaDePropuesta(
+                icono = Icons.Rounded.NotificationsNone,
+                titulo = tituloDeLosAvisos(avisos.cuantos),
+                accion = accion,
+                onAccion = onAccion,
+                tono = TonoDeIcono.Marca,
+                accionSecundaria = REVISAR_LOS_AVISOS.takeIf { confirmar != null && onRevisar != null },
+                onAccionSecundaria = onRevisar.takeIf { confirmar != null },
+            )
         }
-        Spacer(Modifier.height(Espacio.m))
-        // Vuelta 53: si el rótulo largo («Confirmar los 2 que Movi entendió») no cabe ni solo, a todo el
-        // ancho, va el corto («Confirmar los 2»). Se mide con la letra del botón y su relleno.
-        val medidor = rememberTextMeasurer()
-        val estilo = Movi.textos.cuerpoFuerte
-        val largo = botonDeConfirmarLosAvisos(avisos)
-        BoxWithConstraints(Modifier.fillMaxWidth()) {
-            val relleno = with(LocalDensity.current) { (Espacio.l * 2).roundToPx() }
-            val cabeElLargo = largo == null ||
-                medidor.measure(largo, estilo, maxLines = 1).size.width + relleno <= constraints.maxWidth
-            val rotuloDeConfirmar = if (cabeElLargo) largo else botonCortoDeConfirmarLosAvisos(avisos)
-        LadoALadoOApilados(
-            modifier = Modifier.fillMaxWidth().testTag(TAG_BOTONES_DE_LOS_AVISOS),
-            separacion = Espacio.xs,
-        ) {
-            rotuloDeConfirmar?.let { texto ->
-                Boton(
-                    texto,
-                    onClick = onConfirmar,
-                    variante = VarianteDeBoton.Principal,
-                    cargando = ocupado,
-                )
-            }
-            if (onRevisar != null) {
-                Boton(
-                    botonDeRevisarLosAvisos(avisos),
-                    onClick = onRevisar,
-                    variante = VarianteDeBoton.Secundario,
-                    habilitado = !ocupado,
-                )
-            }
-        }
-        }
+    }
+}
+
+/** «Revisar»: el enlace de la tarjeta de avisos, que abre «Por revisar» (vuelta 80). */
+const val REVISAR_LOS_AVISOS: String = "Revisar"
+
+/**
+ * **El botón chico de la tarjeta de avisos** (vuelta 80): «Confirmar 2» —los que Movi entendió—, o
+ * «Confirmar» con un solo aviso; `null` si no entendió ninguno. Lo que queda para revisar lo dice la
+ * hoja de confirmar. Pura.
+ */
+fun botonCompactoDeConfirmar(avisos: AvisosPorConfirmar): String? {
+    val m = avisos.confirmables.size
+    return when {
+        m == 0 -> null
+        avisos.cuantos == 1 -> "Confirmar"
+        else -> "Confirmar $m"
     }
 }
 

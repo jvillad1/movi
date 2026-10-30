@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.quickadd
 
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,6 +22,9 @@ import com.jvillada.movi.ui.components.ds.Fila
  * por letra (era `rightMaxFraction` de `CardRow`, con el mismo porqué).
  */
 internal const val FRACCION_DEL_VALOR_DE_LA_HOJA = 0.55f
+
+/** Desde qué escala de letra el valor de una fila de la hoja vuelve a partirse en dos (vuelta 80). */
+internal const val ESCALA_DE_LETRA_QUE_PARTE_LA_CUENTA: Float = 1.2f
 
 /**
  * **Una fila de la hoja de Agregar que abre un sub-editor** —«Cuenta», «Nota», y «Desde» / «Hacia»
@@ -52,6 +56,8 @@ internal fun FilaDeLaHoja(
     reservarAviso: Boolean = false,
     conChevron: Boolean = true,
     fraccionDelValor: Float = FRACCION_DEL_VALOR_DE_LA_HOJA,
+    /** Vuelta 80: la cuenta va en uno (con «…»); lo demás, hasta dos. */
+    renglones: Int = 2,
 ) {
     Fila(
         titulo = titulo,
@@ -69,7 +75,9 @@ internal fun FilaDeLaHoja(
                     text = valor,
                     style = Movi.textos.cuerpo,
                     color = if (valorVacio) Movi.colores.textoApagado else Movi.colores.texto,
-                    maxLines = 2,
+                    // Vuelta 80: con la letra agrandada (más que el ×1,12 de la app) vuelve a dos renglones: a
+                    // 360 dp y ×1,3 «Bancolombia Ahorros» no entra en uno (vuelta 55).
+                    maxLines = if (LocalDensity.current.fontScale > ESCALA_DE_LETRA_QUE_PARTE_LA_CUENTA) maxOf(renglones, 2) else renglones,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false),
                 )

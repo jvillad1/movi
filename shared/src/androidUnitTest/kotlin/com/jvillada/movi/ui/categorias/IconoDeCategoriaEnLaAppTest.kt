@@ -138,7 +138,7 @@ class IconoDeCategoriaEnLaAppTest {
     }
 
     @Test
-    fun `el icono de categoria aparece en una barra del Inicio`() {
+    fun `la categoria aparece en una fila de En que se va del Inicio`() {
         composeRule.setContent {
             MoviTheme {
                 Box(Modifier.fillMaxSize()) {
@@ -152,7 +152,12 @@ class IconoDeCategoriaEnLaAppTest {
             }
         }
         composeRule.waitForIdle()
-        assertTrue(contarIconos() >= 1, "El Inicio tendría que mostrar el ícono junto a «Comida»")
+        // Vuelta 80: «En qué se va» es una lista de filas (nombre, monto y su barra), sin el ícono chico de
+        // antes; el ícono de la categoría sigue en todo movimiento (`IconoDeMovimiento`).
+        assertTrue(
+            composeRule.onAllNodesWithTag(com.jvillada.movi.ui.sdui.TAG_CATEGORIA_DEL_WIDGET, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty(),
+            "El Inicio tendría que mostrar «Comida» en «En qué se va»",
+        )
     }
 
     @Test

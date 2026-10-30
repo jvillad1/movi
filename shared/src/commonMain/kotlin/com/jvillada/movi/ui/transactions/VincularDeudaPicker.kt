@@ -154,6 +154,8 @@ fun SelectorDeCuentaDeDeuda(
                             { Icon(Icons.Rounded.Check, contentDescription = "Elegida", tint = Movi.colores.texto, modifier = Modifier.size(Icono.m)) }
                         } else null,
                         onClick = { onSeleccionar(if (on) null else cuenta) },
+                        // Vuelta 80: se elige, no se abre.
+                        chevron = false,
                     )
                     if (index != deudas.lastIndex) Separador(SangriaDeSeparador.Margen)
                 }
