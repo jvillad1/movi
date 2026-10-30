@@ -38,7 +38,7 @@ class CadaEscrituraVaciaLoRecordadoTest {
         val envuelto = envueltoSobreNada()
 
         val escrituras = WalletRepository::class.java.methods
-            .filter { !Modifier.isStatic(it.modifiers) && !esLectura(it) }
+            .filter { !Modifier.isStatic(it.modifiers) && !esLectura(it) && it.name !in NO_VACIAN_A_PROPOSITO }
         assertTrue(escrituras.size > 40, "la interfaz tiene muchas más escrituras que ${escrituras.size}")
 
         val sinEnvolver = escrituras.filter { metodo ->
@@ -118,8 +118,15 @@ class CadaEscrituraVaciaLoRecordadoTest {
 
     private companion object {
         // `parseSms` es `GET /api/sms/{id}/parse`: interpreta el mensaje, no escribe nada.
-        // Vuelta 82: `elServerYaTieneElMovimiento` mira los sellos del espejo; no escribe nada.
-        val LECTURAS_SIN_GET = setOf("isScreenAdmin", "parseSms", "leerParaReconciliar", "elServerYaTieneElMovimiento")
+        // Vuelta 82: `desdeCuandoLoTieneElServer` mira los sellos del espejo; no escribe nada.
+        val LECTURAS_SIN_GET = setOf("isScreenAdmin", "parseSms", "leerParaReconciliar", "desdeCuandoLoTieneElServer")
+
+        /**
+         * Vuelta 82 · `subirLoPendienteAhora` no vacía lo recordado al pasar: el `SyncEngine` lo vacía por
+         * `alSubirAlgo` → `olvidarLoFresco` **solo cuando de verdad subió algo**. Envuelto, sin señal cada
+         * reintento (cada 30 s) dejaba toda pantalla en esqueleto.
+         */
+        val NO_VACIAN_A_PROPOSITO = setOf("subirLoPendienteAhora")
 
         val CONTINUACION = object : Continuation<Any?> {
             override val context: CoroutineContext = EmptyCoroutineContext
