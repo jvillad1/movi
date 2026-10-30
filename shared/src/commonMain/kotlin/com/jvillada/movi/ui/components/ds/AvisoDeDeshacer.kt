@@ -23,6 +23,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextOverflow
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.LocalMovimientoReducido
 import com.jvillada.movi.theme.Medida
@@ -61,6 +62,10 @@ const val TAG_AVISO_DE_DESHACER: String = "aviso-de-deshacer"
 const val TAG_DESHACER_DEL_AVISO: String = "aviso-de-deshacer:deshacer"
 const val TAG_ACCION_DEL_AVISO: String = "aviso-de-deshacer:accion"
 const val TAG_ELEGIR_EN_EL_AVISO: String = "aviso-de-deshacer:elegir"
+const val TAG_TEXTO_DEL_AVISO: String = "aviso-de-deshacer:texto"
+
+/** Como mucho, dos renglones de texto: lo que no cabe se corta con «…» (el comercio largo). */
+const val RENGLONES_DEL_AVISO: Int = 2
 
 /** Lo que dice el aviso al anular. */
 const val ANULADO: String = "Anulado"
@@ -227,23 +232,20 @@ fun AnfitrionDelAvisoDeDeshacer(aviso: AvisoDeDeshacer, modifier: Modifier = Mod
                 .testTag(TAG_AVISO_DE_DESHACER),
             nivel = NivelDeSuperficie.Propuesta,
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
+            // Revisión de la vuelta 74: con una acción, el texto va a lo ancho (dos renglones como mucho,
+            // con «…») y los botones en un segundo renglón, a la derecha. Antes los tres compartían un
+            // renglón y a 360 dp el texto quedaba de una palabra por línea: nueve renglones, ~210 px.
+            val texto: @Composable (Modifier) -> Unit = { mod ->
                 Text(
                     aviso.error ?: visto.texto,
                     style = Movi.textos.cuerpo,
                     color = if (aviso.error != null) Movi.colores.sale else Movi.colores.texto,
-                    modifier = Modifier.weight(1f),
+                    maxLines = RENGLONES_DEL_AVISO,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = mod.testTag(TAG_TEXTO_DEL_AVISO),
                 )
-                visto.accion?.let { accion ->
-                    Boton(
-                        accion.rotulo,
-                        onClick = { coroutine.launch { aviso.tocarLaAccion() } },
-                        variante = VarianteDeBoton.Secundario,
-                        tamano = TamanoDeBoton.S,
-                        habilitado = !aviso.trabajando,
-                        modifier = Modifier.testTag(TAG_ACCION_DEL_AVISO),
-                    )
-                }
+            }
+            val deshacer: @Composable () -> Unit = {
                 if (visto.deshacer != null) {
                     Boton(
                         DESHACER,
@@ -253,6 +255,32 @@ fun AnfitrionDelAvisoDeDeshacer(aviso: AvisoDeDeshacer, modifier: Modifier = Mod
                         cargando = aviso.trabajando,
                         modifier = Modifier.testTag(TAG_DESHACER_DEL_AVISO),
                     )
+                }
+            }
+            val accion = visto.accion
+            if (accion == null) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
+                    texto(Modifier.weight(1f))
+                    deshacer()
+                }
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(Espacio.xs)) {
+                    texto(Modifier.fillMaxWidth())
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(Espacio.xs, Alignment.End),
+                    ) {
+                        Boton(
+                            accion.rotulo,
+                            onClick = { coroutine.launch { aviso.tocarLaAccion() } },
+                            variante = VarianteDeBoton.Secundario,
+                            tamano = TamanoDeBoton.S,
+                            habilitado = !aviso.trabajando,
+                            modifier = Modifier.testTag(TAG_ACCION_DEL_AVISO),
+                        )
+                        deshacer()
+                    }
                 }
             }
         }

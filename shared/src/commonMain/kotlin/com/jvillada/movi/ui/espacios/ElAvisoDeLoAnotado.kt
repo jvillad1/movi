@@ -44,6 +44,12 @@ fun textoDeLoAnotado(evento: FinancialEvent): String {
     return "Anotado · $quien ${formatMoney(evento.amount, evento.currency)}"
 }
 
+/**
+ * **«Ya estaba anotado · Restaurantes $32.000»**: lo que dice el aviso tras «Es este» (revisión de la
+ * vuelta 74). No se anotó nada: el aviso se juntó con lo que ya estaba.
+ */
+fun textoDeLoQueYaEstaba(evento: FinancialEvent): String = textoDeLoAnotado(evento).replaceFirst("Anotado · ", "Ya estaba anotado · ")
+
 /** «Anotado · Traspaso $500.000»: lo que dice el aviso al guardar un traspaso o una cuota en Agregar. */
 fun textoDeLoAnotado(que: String, monto: Long, moneda: String): String = "Anotado · $que ${formatMoney(monto, moneda)}"
 
@@ -110,8 +116,14 @@ fun AvisoDeDeshacer.mostrarLoAnotado(
     espacios: List<Espacio>,
     deshacer: (suspend () -> Unit)?,
     repo: WalletRepository = Repositories.wallets,
+    /** «Es este»: el movimiento ya estaba («Ya estaba anotado · …»), no se anotó ahora. */
+    yaEstaba: Boolean = false,
 ) {
-    mostrar(textoDeLoAnotado(evento), accion = accionDeRepartir(evento, espacios, this, repo), deshacer = deshacer)
+    mostrar(
+        if (yaEstaba) textoDeLoQueYaEstaba(evento) else textoDeLoAnotado(evento),
+        accion = accionDeRepartir(evento, espacios, this, repo),
+        deshacer = deshacer,
+    )
 }
 
 /**

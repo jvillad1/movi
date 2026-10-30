@@ -39,12 +39,12 @@ import kotlin.test.assertTrue
  *
  * Antes, con el gasto ya anotado, arriba salía «¿Ya lo anotaste? · Es este» como pastilla con borde y
  * el amarillo de abajo seguía siendo «Confirmar», que crea otro. Ahora el amarillo es «Es este» (no
- * crea nada), y crear otro pasa a «Anotarlo como nuevo», secundario y con una línea que lo dice.
+ * crea nada), y crear otro pasa a «Anotar aparte», secundario y con una línea que lo dice.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [34], qualifiers = "w411dp-h2400dp-xhdpi")
-class EsEsteEnRevisarAvisoTest {
+@Config(sdk = [34], qualifiers = "w390dp-h2400dp-xhdpi")
+open class EsEsteEnRevisarAvisoTest {
 
     @get:Rule val composeRule = createComposeRule()
 
@@ -91,12 +91,12 @@ class EsEsteEnRevisarAvisoTest {
     }
 
     @Test
-    fun `con un anotado, Es este es el principal y Anotarlo como nuevo el secundario`() {
+    fun `con un anotado, Es este es el principal y Anotar aparte el secundario`() {
         montar(listOf(restaurantes))
 
         composeRule.onNodeWithTag(TAG_ES_ESTE_EN_RECONCILIAR).assertIsDisplayed()
-        composeRule.onNodeWithTag(TAG_ANOTARLO_COMO_NUEVO, useUnmergedTree = true).assertExists()
-        composeRule.onNodeWithTag(TAG_ANOTARLO_COMO_NUEVO_CREA_OTRO).assertTextEquals(ANOTARLO_COMO_NUEVO_CREA_OTRO)
+        composeRule.onNodeWithTag(TAG_ANOTAR_APARTE, useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithTag(TAG_ANOTAR_APARTE_CREA_OTRO).assertTextEquals(ANOTAR_APARTE_CREA_OTRO)
         // Un solo «Es este»: el de abajo. La fila de la lista ya no lleva el suyo.
         assertEquals(1, composeRule.onAllNodesWithTag(TAG_ES_ESTE_EN_RECONCILIAR, useUnmergedTree = true).fetchSemanticsNodes().size)
         assertEquals(0, composeRule.onAllNodesWithTag("$TAG_ES_ESTE_EN_RECONCILIAR:0").fetchSemanticsNodes().size)
@@ -112,7 +112,7 @@ class EsEsteEnRevisarAvisoTest {
 
         assertEquals(listOf("crepes" to restaurantes.id), confirmados)
         assertTrue(publicados.isEmpty(), "«Es este» no crea un movimiento")
-        assertEquals("Anotado · Restaurantes \$32.000", aviso.actual?.texto)
+        assertEquals("Ya estaba anotado · Restaurantes \$32.000", aviso.actual?.texto)
         assertNotNull(aviso.actual?.deshacer, "con «Deshacer»")
     }
 
@@ -123,7 +123,24 @@ class EsEsteEnRevisarAvisoTest {
         assertEquals(0, composeRule.onAllNodesWithTag(TAG_ES_ESTE_EN_RECONCILIAR).fetchSemanticsNodes().size)
         composeRule.onNodeWithTag("$TAG_ES_ESTE_EN_RECONCILIAR:0").assertExists()
         composeRule.onNodeWithTag("$TAG_ES_ESTE_EN_RECONCILIAR:1").assertExists()
-        composeRule.onNodeWithTag(TAG_ANOTARLO_COMO_NUEVO_CREA_OTRO).assertExists()
+        composeRule.onNodeWithTag(TAG_ANOTAR_APARTE_CREA_OTRO).assertExists()
+    }
+
+    /** Revisión de la vuelta 74: los dos botones caben enteros, y «Es este» no es más angosto que el otro. */
+    @Test
+    fun `Es este y Anotar aparte caben enteros`() {
+        montar(listOf(restaurantes))
+
+        for (texto in listOf(ES_ESTE, ANOTAR_APARTE)) {
+            val resultados = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+            composeRule.onNode(androidx.compose.ui.test.hasText(texto), useUnmergedTree = true).fetchSemanticsNode()
+                .config[androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult].action?.invoke(resultados)
+            val r = resultados.single()
+            assertTrue(r.lineCount == 1 && !r.isLineEllipsized(0), "«$texto» se corta: ${r.lineCount} renglones")
+        }
+        val esEste = composeRule.onNodeWithTag(TAG_ES_ESTE_EN_RECONCILIAR).fetchSemanticsNode().boundsInRoot.width
+        val aparte = composeRule.onNodeWithTag(TAG_ANOTAR_APARTE).fetchSemanticsNode().boundsInRoot.width
+        assertTrue(esEste >= aparte, "«Es este» ($esEste) más angosto que «Anotar aparte» ($aparte)")
     }
 
     @Test
@@ -131,6 +148,10 @@ class EsEsteEnRevisarAvisoTest {
         montar(emptyList())
 
         assertEquals(0, composeRule.onAllNodesWithTag(TAG_ES_ESTE_EN_RECONCILIAR).fetchSemanticsNodes().size)
-        assertEquals(0, composeRule.onAllNodesWithTag(TAG_ANOTARLO_COMO_NUEVO_CREA_OTRO).fetchSemanticsNodes().size)
+        assertEquals(0, composeRule.onAllNodesWithTag(TAG_ANOTAR_APARTE_CREA_OTRO).fetchSemanticsNodes().size)
     }
 }
+
+/** Lo mismo, a 360 dp: donde «Anotarlo como nuevo» se cortaba. */
+@Config(sdk = [34], qualifiers = "w360dp-h2400dp-xhdpi")
+class EsEsteEnRevisarAvisoA360Test : EsEsteEnRevisarAvisoTest()

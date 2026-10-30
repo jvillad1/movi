@@ -13,8 +13,18 @@ import com.jvillada.movi.ui.dashboard.DashboardDataCache
  * igual y manda.
  */
 
-/** Suma [cuantos] (negativo: resta) a los avisos por confirmar que el Inicio tiene en memoria. Nunca baja de 0. */
-internal fun elInicioCuentaOtrosAvisos(cuantos: Int) {
+/**
+ * Suma [cuantos] (negativo: resta) a los avisos por confirmar que el Inicio tiene en memoria, y [monto]
+ * en [moneda] (con el mismo signo) a lo que suman (`porConfirmarSuman`, revisión de la vuelta 74: el
+ * conteo bajaba y la suma no). Nunca baja de 0. Si el monto no se sabe en pesos, la suma se calla
+ * (`null`: el Inicio dice solo el conteo) hasta que llegue la lectura: nunca una suma a medias.
+ */
+internal fun elInicioCuentaOtrosAvisos(cuantos: Int, monto: Long?, moneda: String) {
     val datos = DashboardDataCache.data ?: return
-    DashboardDataCache.data = datos.copy(pendingSms = (datos.pendingSms + cuantos).coerceAtLeast(0))
+    val conteo = (datos.pendingSms + cuantos).coerceAtLeast(0)
+    val suma = datos.porConfirmarSuman?.let { antes ->
+        if (monto == null || monto <= 0L || moneda != "COP" || conteo == 0) null
+        else (antes + if (cuantos < 0) -monto else monto).takeIf { it > 0L }
+    }
+    DashboardDataCache.data = datos.copy(pendingSms = conteo, porConfirmarSuman = suma)
 }

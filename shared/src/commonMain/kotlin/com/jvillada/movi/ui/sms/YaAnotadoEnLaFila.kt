@@ -35,15 +35,18 @@ const val ES_ESTE: String = "Es este"
 /** Con dos o más candidatos: abre Revisar aviso para elegir. */
 const val ELEGIR_EL_ANOTADO: String = "Elegir"
 
-/** Revisar aviso con algo ya anotado: el botón que crea otro movimiento, ahora secundario. */
-const val ANOTARLO_COMO_NUEVO: String = "Anotarlo como nuevo"
+/**
+ * Revisar aviso con algo ya anotado: el botón que crea otro movimiento, ahora secundario. Revisión de la
+ * vuelta 74: corto, para que quepa junto a «Es este» a 360 dp («Anotarlo como nuevo» se cortaba).
+ */
+const val ANOTAR_APARTE: String = "Anotar aparte"
 
-/** Lo que dice debajo de los botones: que «Anotarlo como nuevo» crea OTRO movimiento. */
-const val ANOTARLO_COMO_NUEVO_CREA_OTRO: String = "«Anotarlo como nuevo» crea otro movimiento, aparte del que ya está anotado."
+/** Lo que dice debajo de los botones: que «Anotar aparte» crea OTRO movimiento. */
+const val ANOTAR_APARTE_CREA_OTRO: String = "«Anotar aparte» crea otro movimiento, además del que ya está anotado."
 
 const val TAG_ES_ESTE_EN_RECONCILIAR: String = "es-este-en-reconciliar"
-const val TAG_ANOTARLO_COMO_NUEVO: String = "anotarlo-como-nuevo"
-const val TAG_ANOTARLO_COMO_NUEVO_CREA_OTRO: String = "anotarlo-como-nuevo-crea-otro"
+const val TAG_ANOTAR_APARTE: String = "anotar-aparte"
+const val TAG_ANOTAR_APARTE_CREA_OTRO: String = "anotar-aparte-crea-otro"
 const val TAG_ES_ESTE_EN_LA_FILA: String = "es-este-en-la-fila"
 const val TAG_ELEGIR_EL_ANOTADO_EN_LA_FILA: String = "elegir-el-anotado-en-la-fila"
 const val TAG_LINEA_DEL_YA_ANOTADO: String = "linea-del-ya-anotado"

@@ -85,6 +85,7 @@ class EsEsteEnLaFilaTest {
     private val confirmados = mutableListOf<Pair<String, String>>()
     private val desvinculados = mutableListOf<List<String>>()
     private val publicados = mutableListOf<FinancialEvent>()
+    private val ignorados = mutableListOf<String>()
     private var fallaElConfirmar = false
 
     private inner class Repo(private val coincidencias: List<FinancialEvent>) : RepositorioDePrueba() {
@@ -108,11 +109,15 @@ class EsEsteEnLaFilaTest {
         override suspend fun desvincularAvisos(avisos: List<String>) {
             desvinculados += avisos
         }
+        override suspend fun ignoreSms(id: String) {
+            ignorados += id
+        }
     }
 
     @After
     fun limpiar() {
         Repositories.sustitutoDePrueba = null
+        RelojDeLaBandeja.ahora = { kotlinx.datetime.Clock.System.now().toEpochMilliseconds() }
     }
 
     private val aviso = AvisoDeDeshacer()
@@ -190,12 +195,34 @@ class EsEsteEnLaFilaTest {
         esperar { conTag(TAG_ES_ESTE_EN_LA_FILA) == 0 }
         assertEquals(antes, posicionDe("Comercio 1"), "la lista quedó donde estaba")
         // Abajo: «Anotado · Restaurantes $32.000», con «Deshacer».
-        assertEquals("Anotado · Restaurantes \$32.000", aviso.actual?.texto)
+        assertEquals("Ya estaba anotado · Restaurantes \$32.000", aviso.actual?.texto)
 
         composeRule.onNodeWithTag(TAG_DESHACER_DEL_AVISO).performSemanticsAction(SemanticsActions.OnClick)
         esperar { desvinculados.isNotEmpty() }
         assertEquals(listOf(listOf("crepes")), desvinculados, "deshacer desvincula el aviso")
         assertTrue(publicados.isEmpty())
+    }
+
+    /** Revisión de la vuelta 74: la tarjeta de abajo sube bajo el dedo; un segundo toque enseguida no cuenta. */
+    @Test
+    fun `un segundo toque enseguida de Es este no resuelve la tarjeta de abajo`() {
+        montar(listOf(restaurantes))
+        bajarHastaCrepes()
+
+        // El reloj de la pausa, quieto: lo que tarde la prueba no cuenta.
+        var ahora = 1_000_000L
+        RelojDeLaBandeja.ahora = { ahora }
+        composeRule.onNodeWithTag(TAG_ES_ESTE_EN_LA_FILA).performSemanticsAction(SemanticsActions.OnClick)
+        esperar { confirmados.isNotEmpty() }
+        // El mismo dedo, otra vez: cae en «Ignorar» de la tarjeta que quedó en su lugar.
+        composeRule.onAllNodesWithText("Ignorar")[0].performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        assertTrue(ignorados.isEmpty(), "el toque de después se ignoró: $ignorados")
+
+        // Pasada la pausa, la lista vuelve a responder.
+        ahora += PAUSA_TRAS_RESOLVER_MS + 1
+        composeRule.onAllNodesWithText("Ignorar")[0].performSemanticsAction(SemanticsActions.OnClick)
+        esperar { ignorados.isNotEmpty() }
     }
 
     @Test

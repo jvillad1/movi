@@ -68,6 +68,26 @@ class Vuelta74LogicaTest {
     }
 
     @Test
+    fun `Es este dice que ya estaba, y el Inicio descuenta el conteo y la suma`() {
+        assertEquals("Ya estaba anotado · Restaurantes \$32.000", com.jvillada.movi.ui.espacios.textoDeLoQueYaEstaba(restaurantes))
+        val cache = com.jvillada.movi.ui.dashboard.DashboardDataCache
+        try {
+            cache.data = com.jvillada.movi.ui.dashboard.DashboardData(pendingSms = 3, porConfirmarSuman = 100_000L)
+            elInicioCuentaOtrosAvisos(-1, 32_000L, "COP")
+            assertEquals(2, cache.data?.pendingSms)
+            assertEquals(68_000L, cache.data?.porConfirmarSuman)
+            elInicioCuentaOtrosAvisos(1, 32_000L, "COP")
+            assertEquals(100_000L, cache.data?.porConfirmarSuman, "deshacer la devuelve")
+            // En otra moneda la suma no se sabe en pesos: se calla hasta la lectura.
+            elInicioCuentaOtrosAvisos(-1, 20L, "USD")
+            assertNull(cache.data?.porConfirmarSuman)
+            assertEquals(2, cache.data?.pendingSms)
+        } finally {
+            cache.clear()
+        }
+    }
+
+    @Test
     fun `una accion que se dice a si misma deja su aviso, y deshacer cuenta`() = sinEsperar {
         val aviso = AvisoDeDeshacer()
         aviso.mostrar("Anotado · Restaurantes \$32.000", accion = AvisoDeDeshacer.Accion("Repartir con Caro", hacer = {

@@ -135,6 +135,14 @@ import com.jvillada.movi.ui.espacios.mostrarLoAnotado
 import com.jvillada.movi.ui.espacios.rememberEspaciosParaRepartir
 import com.jvillada.movi.ui.sms.YaAnotadoEnLaFila
 
+/** Revisión de la vuelta 74: cuánto se ignoran los toques de la lista tras resolver una tarjeta. */
+const val PAUSA_TRAS_RESOLVER_MS: Long = 300L
+
+/** El reloj de esa pausa: el de verdad; una prueba lo cambia para no depender de cuánto tarda. */
+internal object RelojDeLaBandeja {
+    var ahora: () -> Long = { Clock.System.now().toEpochMilliseconds() }
+}
+
 /** El título de la bandeja, y el rótulo con que la nombran los demás. */
 const val TITULO_DE_POR_REVISAR: String = "Por revisar"
 
@@ -244,13 +252,20 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
     val reducido = LocalMovimientoReducido.current
     // Confirmar un aviso desde la fila (o el lote) vibra, como en Reconciliar (ver [Vibrador]).
     val vibrador = rememberVibrador()
+    // Revisión de la vuelta 74 · **el doble toque**: al resolverse una tarjeta, la de abajo sube y su
+    // botón queda bajo el dedo. Los toques de la lista se ignoran [PAUSA_TRAS_RESOLVER_MS] después.
+    val quietoHasta = remember { longArrayOf(0L) }
+    fun sePuedeTocar(): Boolean = RelojDeLaBandeja.ahora() >= quietoHasta[0]
+    fun pausarLosToques() {
+        quietoHasta[0] = RelojDeLaBandeja.ahora() + PAUSA_TRAS_RESOLVER_MS
+    }
     fun sobreElPago(grupoId: String, accion: suspend () -> Unit, alFallar: () -> Unit = {}, alTerminar: () -> Unit) {
-        if (pagoEnCurso != null) return
+        if (pagoEnCurso != null || !sePuedeTocar()) return
         pagoEnCurso = grupoId
         errorDeUnPago = null
         alcance.launch {
             intentar { accion() }
-                .onSuccess { alTerminar(); recarga++ }
+                .onSuccess { pausarLosToques(); alTerminar(); recarga++ }
                 .onFailure { alFallar(); errorDeUnPago = it.toUserMessage() }
             pagoEnCurso = null
         }
@@ -270,6 +285,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
      * siempre es la categoría, y así son dos toques (la categoría y «Confirmar») y no tres.
      */
     fun revisarEnReconciliarDesdeLaFila(id: String, aCambiar: Boolean = false) {
+        if (!sePuedeTocar()) return
         fueAReconciliar = true
         onNavigate(Screen.SMSReconcile(id, abrirCategoria = aCambiar))
     }
@@ -290,9 +306,9 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
      * Se saca de lo resuelto en esta visita (si no, la relectura lo traería pendiente y esto lo
      * seguiría tapando) y el Inicio lo vuelve a contar.
      */
-    fun vuelvenALaBandeja(avisos: List<String>) {
+    fun vuelvenALaBandeja(avisos: List<String>, monto: Long, moneda: String) {
         avisosResueltos = avisosResueltos - avisos.toSet()
-        elInicioCuentaOtrosAvisos(1)
+        elInicioCuentaOtrosAvisos(1, monto, moneda)
     }
     fun confirmarDesdeLaFila(anotacion: AnotacionEntendida) {
         if (confirmarLosAvisos.confirmando) return
@@ -304,7 +320,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
         ) {
             vibrador.confirmar()
             avisosResueltos = avisosResueltos + anotacion.avisos.associateWith { SMS_STATE_CONFIRMED }
-            elInicioCuentaOtrosAvisos(-1)
+            elInicioCuentaOtrosAvisos(-1, anotacion.monto, anotacion.leido.currency)
             val evento = creado
             if (avisoDeLaCascara != null && evento != null) {
                 // Vuelta 74: con «Deshacer» —anula el movimiento que se creó y el aviso vuelve a la
@@ -313,7 +329,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                 avisoDeLaCascara.mostrarLoAnotado(
                     evento, espaciosParaRepartir,
                     deshacer = if (esIdDeComprobante(anotacion.sms.id)) null else {
-                        { deshacerLoAnotado(evento.id, avisos); vuelvenALaBandeja(avisos) }
+                        { deshacerLoAnotado(evento.id, avisos); vuelvenALaBandeja(avisos, anotacion.monto, anotacion.leido.currency) }
                     },
                 )
             } else {
@@ -329,13 +345,15 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
      * y arriba se dice por qué. «Deshacer» la desvincula.
      */
     fun esEsteDesdeLaFila(cabeza: SmsMessage, evento: FinancialEvent) {
-        if (confirmarLosAvisos.confirmando || pagoEnCurso != null) return
+        if (confirmarLosAvisos.confirmando || pagoEnCurso != null || !sePuedeTocar()) return
         val todos = mensajes.orEmpty()
         val grupoId = cabeza.grupoId
         val delPago = if (grupoId != null) avisosDelPago(cabeza, todos) else listOf(cabeza)
         val avisos = delPago.map { it.id }
         val pendientes = delPago.filter { it.state == SMS_STATE_PENDING }.map { it.id }
         avisosResueltos = avisosResueltos + pendientes.associateWith { SMS_STATE_CONFIRMED }
+        // La tarjeta se va ya: la de abajo sube bajo el dedo (ver [pausarLosToques]). Va después de
+        // `sobreElPago`, que todavía tiene que poder empezar.
         sobreElPago(
             grupoId ?: cabeza.id,
             {
@@ -349,18 +367,20 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
             alFallar = { avisosResueltos = avisosResueltos - pendientes.toSet() },
         ) {
             vibrador.confirmar()
-            elInicioCuentaOtrosAvisos(-1)
+            elInicioCuentaOtrosAvisos(-1, evento.amount, evento.currency)
             if (avisoDeLaCascara != null) {
                 avisoDeLaCascara.mostrarLoAnotado(
                     evento, espaciosParaRepartir,
                     deshacer = if (esIdDeComprobante(cabeza.id)) null else {
-                        { deshacerLoAnotado(eventoId = null, avisos = pendientes); vuelvenALaBandeja(pendientes) }
+                        { deshacerLoAnotado(eventoId = null, avisos = pendientes); vuelvenALaBandeja(pendientes, evento.amount, evento.currency) }
                     },
+                    yaEstaba = true,
                 )
             } else {
-                alcance.launch { avisoAbajo.showSnackbar(com.jvillada.movi.ui.espacios.textoDeLoAnotado(evento)) }
+                alcance.launch { avisoAbajo.showSnackbar(com.jvillada.movi.ui.espacios.textoDeLoQueYaEstaba(evento)) }
             }
         }
+        pausarLosToques()
     }
     /** Lo que la tarjeta de [cabeza] necesita si «¿Ya lo anotaste?» encontró algo; `null` si no. */
     fun yaAnotadoDe(cabeza: SmsMessage): YaAnotadoEnLaFila? {
@@ -1011,7 +1031,12 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
         // Vuelta 74: el mismo aviso de abajo de toda la app (sin «Deshacer»: varios a la vez se anulan
         // uno por uno). Sin cáscara, el de siempre.
         if (avisoDeLaCascara != null) {
-            elInicioCuentaOtrosAvisos(-resultado.anotados.size)
+            val enPesos = resultado.anotados.filter { it.leido.currency == "COP" }
+            elInicioCuentaOtrosAvisos(
+                -resultado.anotados.size,
+                enPesos.sumOf { it.monto }.takeIf { enPesos.size == resultado.anotados.size },
+                "COP",
+            )
             avisoDeLaCascara.mostrar(textoDeLosConfirmados(resultado))
         } else {
             avisoAbajo.showSnackbar(textoDeLosConfirmados(resultado))

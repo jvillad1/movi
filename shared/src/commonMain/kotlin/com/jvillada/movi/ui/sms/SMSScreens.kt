@@ -1022,6 +1022,7 @@ fun SMSReconcileScreen(
                         deshacer = if (esComprobante) null else {
                             { deshacerLoAnotado(eventoId = null, avisos = cierra) }
                         },
+                        yaEstaba = true,
                     )
                     goBack(Screen.PorRevisar)
                 }
@@ -2112,7 +2113,7 @@ fun SMSReconcileScreen(
                     ofreceAnotarloIgual -> ANOTARLO_IGUAL
                     anotarSinRevisar -> "Anotar de todas formas"
                     // Vuelta 74: ya está anotado; crear otro es lo secundario, y lo dice.
-                    conYaAnotado -> ANOTARLO_COMO_NUEVO
+                    conYaAnotado -> ANOTAR_APARTE
                     else -> "Confirmar"
                 },
                 variante = if (conYaAnotado) VarianteDeBoton.Secundario else VarianteDeBoton.Principal,
@@ -2128,7 +2129,7 @@ fun SMSReconcileScreen(
                         else -> confirm()
                     }
                 },
-                modifier = Modifier.weight(if (unicoYaAnotado != null) 1.15f else 1.7f).testTag(TAG_ANOTARLO_COMO_NUEVO),
+                modifier = Modifier.weight(if (unicoYaAnotado != null) 1f else 1.7f).testTag(TAG_ANOTAR_APARTE),
                 habilitado = if (enPartesYa) !working && partesListas else canConfirm,
                 anchoCompleto = true,
             )
@@ -2138,7 +2139,7 @@ fun SMSReconcileScreen(
                 Boton(
                     texto = ES_ESTE,
                     onClick = { esElQueYaEstaba(yaEstaba) },
-                    modifier = Modifier.weight(1f).testTag(TAG_ES_ESTE_EN_RECONCILIAR),
+                    modifier = Modifier.weight(1.2f).testTag(TAG_ES_ESTE_EN_RECONCILIAR),
                     variante = VarianteDeBoton.Principal,
                     habilitado = !working,
                     anchoCompleto = true,
@@ -2152,10 +2153,10 @@ fun SMSReconcileScreen(
                 horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
             ) {
                 Text(
-                    ANOTARLO_COMO_NUEVO_CREA_OTRO,
+                    ANOTAR_APARTE_CREA_OTRO,
                     style = Movi.textos.apoyo,
                     color = Movi.colores.textoMedio,
-                    modifier = Modifier.weight(1f).testTag(TAG_ANOTARLO_COMO_NUEVO_CREA_OTRO),
+                    modifier = Modifier.weight(1f).testTag(TAG_ANOTAR_APARTE_CREA_OTRO),
                 )
                 if (unicoYaAnotado != null) {
                     Boton(
