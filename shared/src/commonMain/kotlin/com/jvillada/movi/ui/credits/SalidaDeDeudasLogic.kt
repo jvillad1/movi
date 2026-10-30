@@ -5,6 +5,7 @@ import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.DeudaParaSalir
 import com.jvillada.movi.shared.model.InteresDelMes
 import com.jvillada.movi.shared.model.mesDeLaPrimeraCuota
+import com.jvillada.movi.shared.model.ComparacionDeEstrategias
 import com.jvillada.movi.shared.model.mesDeLaPrimeraCuotaSinPagar
 import com.jvillada.movi.shared.model.mesDeLaUltimaCuota
 import com.jvillada.movi.shared.model.mesesEntre
@@ -60,7 +61,9 @@ fun estrategiaDelIndice(i: Int): EstrategiaDeSalida =
 
 /** Qué hace cada estrategia, en una línea. */
 fun explicacionDe(estrategia: EstrategiaDeSalida): String = when (estrategia) {
-    EstrategiaDeSalida.AVALANCHA -> "Primero la de mayor tasa: es la que menos interés te cobra en total."
+    // Vuelta 77: decía «es la que menos interés te cobra en total», que se leía al revés (la de mayor
+    // tasa es la que MÁS cobra). Lo que es cierto es lo que logra el orden.
+    EstrategiaDeSalida.AVALANCHA -> "Primero la de mayor tasa: así pagas menos interés en total."
     EstrategiaDeSalida.BOLA_DE_NIEVE -> "Primero la de menor saldo: terminas una antes y ves el avance."
 }
 
@@ -198,3 +201,24 @@ const val TAG_SIN_SALDO_EN_LA_SALIDA = "salida:sin-saldo"
 /** «Vehículo 4083: sin saldo en Movi» — la fila de una deuda que el plan no puede incluir (vuelta 59). */
 fun textoDeLaDeudaSinSaldoEnLaSalida(nombre: String): String = "$nombre: sin saldo en Movi"
 
+
+/** Vuelta 77: lo que dice la comparación cuando los dos órdenes cuestan lo mismo. */
+const val LOS_DOS_ORDENES_DAN_IGUAL: String = "Con tus deudas, los dos órdenes dan igual"
+
+/** El tag de la línea que compara los dos órdenes (vuelta 77). */
+const val TAG_COMPARACION_DE_ESTRATEGIAS: String = "salida:comparacion"
+
+/**
+ * **Cuánto cuesta elegir un orden** (vuelta 77): «Avalancha te ahorra $125.453 más que bola de nieve»,
+ * al revés si bola de nieve ahorra más, o [LOS_DOS_ORDENES_DAN_IGUAL]. `null` sin comparación (sin abono,
+ * o alguna deuda que no se termina). Las cifras son de [compararEstrategias], la misma simulación del plan.
+ */
+fun textoDeLaComparacion(c: ComparacionDeEstrategias?): String? {
+    c ?: return null
+    val ahorro = c.loQueAhorraAvalancha
+    return when {
+        ahorro > 0L -> "Avalancha te ahorra ${formatCOP(ahorro)} más que bola de nieve"
+        ahorro < 0L -> "Bola de nieve te ahorra ${formatCOP(-ahorro)} más que avalancha"
+        else -> LOS_DOS_ORDENES_DAN_IGUAL
+    }
+}

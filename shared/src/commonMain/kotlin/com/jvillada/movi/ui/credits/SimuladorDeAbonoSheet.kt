@@ -3,6 +3,7 @@ package com.jvillada.movi.ui.credits
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
 import com.jvillada.movi.theme.Radio
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -67,6 +68,8 @@ fun SimuladorDeAbonoSheet(
     onAnotarAbono: ((Screen) -> Unit)? = null,
 ) {
     var abono by remember { mutableStateOf<Long?>(null) }
+    // Vuelta 77: los supuestos, cerrados de entrada.
+    var verSupuestos by remember { mutableStateOf(false) }
     // Vuelta 63: «Recordármelo cada mes» — la confirmación, y si está guardando. Cambiar el monto la borra.
     var recordatorio by remember(abono) { mutableStateOf<String?>(null) }
     var recordando by remember { mutableStateOf(false) }
@@ -150,20 +153,30 @@ fun SimuladorDeAbonoSheet(
                 }
             }
 
-            Spacer(Modifier.height(Espacio.m))
-            Separador(SangriaDeSeparador.Ninguna)
-            Spacer(Modifier.height(Espacio.s))
             // Los TRES supuestos, y ninguno en letra más chica que el otro: el de la proyección
             // (la tasa y la cuota de hoy) lo arrastra toda esta pantalla; el del abono (que el
             // banco acorte el plazo y no la cuota) es propio de esta hoja y además es algo que
             // él tiene que pedir; y el de la estimación —que el interés que Movi calcula se
             // queda corto contra el extracto— es el único que habla de la cifra misma y no del
             // futuro. Ver [SUPUESTO_DE_LA_ESTIMACION].
-            Text(SUPUESTO_DEL_ABONO, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
+            //
+            // Vuelta 77: detrás de «¿Qué supone?». Eran tres párrafos entre el resultado y los botones:
+            // el resultado va primero, y los supuestos para quien los pida.
             Spacer(Modifier.height(Espacio.xs))
-            Text(SUPUESTO_DE_LA_PROYECCION, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
-            Spacer(Modifier.height(Espacio.xs))
-            Text(SUPUESTO_DE_LA_ESTIMACION, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
+            Boton(
+                texto = if (verSupuestos) OCULTAR_LOS_SUPUESTOS else QUE_SUPONE,
+                onClick = { verSupuestos = !verSupuestos },
+                variante = VarianteDeBoton.Fantasma,
+                tamano = TamanoDeBoton.S,
+                modifier = Modifier.testTag(TAG_QUE_SUPONE_EL_ABONO),
+            )
+            if (verSupuestos) {
+                Text(SUPUESTO_DEL_ABONO, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                Spacer(Modifier.height(Espacio.xs))
+                Text(SUPUESTO_DE_LA_PROYECCION, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                Spacer(Modifier.height(Espacio.xs))
+                Text(SUPUESTO_DE_LA_ESTIMACION, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+            }
         }
 
         Spacer(Modifier.height(Espacio.m))
@@ -211,3 +224,6 @@ fun SimuladorDeAbonoSheet(
         Spacer(Modifier.height(Espacio.l))
     }
 }
+
+/** El tag de «¿Qué supone?» del simulador de la ficha (vuelta 77). */
+const val TAG_QUE_SUPONE_EL_ABONO: String = "simulador:que-supone"

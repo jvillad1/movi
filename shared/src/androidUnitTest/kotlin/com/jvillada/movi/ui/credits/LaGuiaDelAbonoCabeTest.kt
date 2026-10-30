@@ -8,6 +8,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -79,15 +80,19 @@ class LaGuiaDelAbonoCabeTest {
         assertFalse(medidas.single().isLineEllipsized(0), "la guía del abono sale cortada")
     }
 
+    /** Vuelta 77: el resultado primero; los supuestos, una vez y detrás de «¿Qué supone?». */
     @Test
-    fun `los supuestos van una vez, en la nota del final y no dentro del simulador`() {
+    fun `los supuestos van una vez, detras de que supone, y no dentro del simulador`() {
         montar()
 
-        val supuestos = composeRule.onAllNodesWithText("Supone que", substring = true, useUnmergedTree = true).fetchSemanticsNodes()
-        assertEquals(1, supuestos.size, "los supuestos se dicen una sola vez")
+        fun supuestos() = composeRule.onAllNodesWithText("Supone que", substring = true, useUnmergedTree = true).fetchSemanticsNodes()
+        assertEquals(0, supuestos().size, "cerrados de entrada: el resultado va primero")
+        composeRule.onNodeWithTag(TAG_QUE_SUPONE_EL_PLAN, useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        assertEquals(1, supuestos().size, "los supuestos se dicen una sola vez")
         val nota = composeRule.onNodeWithTag(TAG_NOTA_DEL_PLAN_DE_SALIDA, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         val campo = composeRule.onNodeWithTag(TAG_ABONO_EXTRA, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         assertTrue(nota.top > campo.bottom, "la nota va al final, debajo del simulador")
-        composeRule.onNodeWithTag(TAG_NOTA_DEL_PLAN_DE_SALIDA, useUnmergedTree = true).assertTextEquals(notaDelPlanDeSalida())
+        composeRule.onNodeWithTag(TAG_NOTA_DEL_PLAN_DE_SALIDA, useUnmergedTree = true).assertTextEquals(PIE_DEL_PLAN_DE_SALIDA)
     }
 }
