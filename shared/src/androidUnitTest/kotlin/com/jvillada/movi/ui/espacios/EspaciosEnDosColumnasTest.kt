@@ -134,7 +134,8 @@ class EspaciosEnDosColumnasTest {
         val primerGasto = composeRule.onAllNodesWithTag(TAG_GASTO_DEL_ESPACIO, useUnmergedTree = true).fetchSemanticsNodes().first().boundsInRoot
         assertTrue(dentro(primerGasto, derecha), "los gastos van a la derecha")
         assertTrue(dentro(limites(TAG_ANOTAR_LO_QUE_PAGO_OTRO), derecha), "con «Anotar lo que pagó Caro»")
-        assertTrue(dentro(limites(TAG_ACCESO_A_PERSONAS_Y_COMERCIOS), derecha), "y «Personas y comercios»")
+        // Vuelta 73: «Personas y comercios» ya no vive al final de un grupo (es una fila de Tú).
+        assertEquals(0, composeRule.onAllNodesWithTag(TAG_ACCESO_A_PERSONAS_Y_COMERCIOS, useUnmergedTree = true).fetchSemanticsNodes().size)
 
         // Ningún botón se estira más que un teléfono grande (antes: 656 dp).
         listOf(TAG_PEDIRLE, TAG_ANOTAR_LO_QUE_PAGO_OTRO).forEach {

@@ -92,6 +92,8 @@ fun DetalleDelDestinoSheet(
     onAbrirMovimiento: ((FinancialEvent) -> Unit)? = null,
     /** Algo cambió (nombres renombrados): quien la abrió relee. */
     onCambio: () -> Unit = {},
+    /** Vuelta 73: tocar «En Casa con Caro: …» abre ese grupo; `null` = no se ofrece. */
+    onAbrirGrupo: ((String) -> Unit)? = null,
 ) {
     var movimientos by remember(destino.id) { mutableStateOf<List<FinancialEvent>?>(null) }
     var recibidos by remember(destino.id) { mutableStateOf<List<FinancialEvent>>(emptyList()) }
@@ -112,6 +114,15 @@ fun DetalleDelDestinoSheet(
         // Secundario: sin esto la ficha se lee igual, solo no ofrece renombrar.
         runCatching { Repositories.wallets.getRenombrablesDelDestino(destino.id) }
             .onSuccess { renombrables = it }
+    }
+    // Vuelta 73: los grupos donde está este tercero, con lo que dice cada uno (ver [elTerceroEnLosGrupos]).
+    // Secundario: si no se pueden leer, la ficha se lee igual, sin la línea.
+    var grupos by remember(destino.id) { mutableStateOf<List<ElTerceroEnUnGrupo>>(emptyList()) }
+    LaunchedEffect(destino.id, recargar) {
+        runCatching {
+            val espacios = Repositories.wallets.getEspacios().filter { e -> e.miembros.any { it.id == destino.id } }
+            elTerceroEnLosGrupos(destino.id, espacios.map { Repositories.wallets.getDetalleDelEspacio(it.id) })
+        }.onSuccess { grupos = it }
     }
     LaunchedEffect(Unit) {
         if (periodo == null) {
@@ -175,12 +186,34 @@ fun DetalleDelDestinoSheet(
                 }
             }
 
+            // Vuelta 73: lo que dice el grupo, arriba. La ficha cuenta transferencias y el grupo gastos
+            // compartidos: sin esta línea, «Le enviaste Nada» contradecía «Caro te debe $168.050».
+            if (grupos.isNotEmpty()) {
+                Spacer(Modifier.height(Espacio.m))
+                ElTerceroEnSusGrupos(grupos, onAbrirGrupo)
+            }
+
             Spacer(Modifier.height(Espacio.m))
-            Text("Este período", style = Movi.textos.apoyoMedio, color = Movi.colores.textoMedio)
-            Spacer(Modifier.height(Espacio.xs))
-            Row(modifier = Modifier.fillMaxWidth().testTag(TAG_ESTE_PERIODO_DEL_TERCERO)) {
-                ColumnaDeCifra("Le enviaste", enviadoEstePeriodo, Modifier.weight(1f))
-                ColumnaDeCifra("Te envió", recibidoEstePeriodo, Modifier.weight(1f), entra = true)
+            val sinTransferencias = enviadoEstePeriodo.values.none { it != 0L } && recibidoEstePeriodo.values.none { it != 0L }
+            if (grupos.isNotEmpty() && sinTransferencias) {
+                // «Nada» al lado de un grupo con saldo se leía como «no hay nada con Caro».
+                Text(
+                    SIN_TRANSFERENCIAS_ESTE_PERIODO,
+                    style = Movi.textos.cuerpo,
+                    color = Movi.colores.textoMedio,
+                    modifier = Modifier.testTag(TAG_ESTE_PERIODO_DEL_TERCERO),
+                )
+            } else {
+                Text(
+                    if (grupos.isNotEmpty()) "Transferencias este período" else "Este período",
+                    style = Movi.textos.apoyoMedio,
+                    color = Movi.colores.textoMedio,
+                )
+                Spacer(Modifier.height(Espacio.xs))
+                Row(modifier = Modifier.fillMaxWidth().testTag(TAG_ESTE_PERIODO_DEL_TERCERO)) {
+                    ColumnaDeCifra("Le enviaste", enviadoEstePeriodo, Modifier.weight(1f))
+                    ColumnaDeCifra("Te envió", recibidoEstePeriodo, Modifier.weight(1f), entra = true)
+                }
             }
             if (porMotivo.isNotEmpty()) {
                 Spacer(Modifier.height(Espacio.s))

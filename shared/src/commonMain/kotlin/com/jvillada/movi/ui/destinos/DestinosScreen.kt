@@ -259,9 +259,9 @@ fun DestinosScreen(onNavigate: (Screen) -> Unit, abrir: String? = null, conSuger
         Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
             MinScreenHeader(
                 title = PERSONAS_Y_COMERCIOS,
-                // Ola R4: las puertas son Espacios (ver `RenglonDePersonasYComercios`) y Ajustes;
-                // «volver» sigue el historial real y solo cae en Espacios cuando no hay ninguno.
-                leading = HeaderLeading.Back(fallback = Screen.Espacios),
+                // Vuelta 73: la puerta es su fila en «Tú» (ver `FilaDePersonasYComercios`); «volver»
+                // sigue el historial real y solo cae en Tú cuando no hay ninguno.
+                leading = HeaderLeading.Back(fallback = Screen.Tu),
                 subtitle = when {
                     cargando || noSeLeyo -> null
                     destinos.size == 1 -> "1 guardado"
@@ -392,6 +392,8 @@ fun DestinosScreen(onNavigate: (Screen) -> Unit, abrir: String? = null, conSuger
                 onEditar = { formulario = destinos.firstOrNull { it.id == d.id } ?: d; formularioAbierto = true },
                 onAbrirMovimiento = { movimientoAbierto = it },
                 onCambio = { loadKey++ },
+                // Vuelta 73: «En Casa con Caro: …» abre el grupo.
+                onAbrirGrupo = { id -> detalle = null; onNavigate(Screen.Espacio(id)) },
             )
         }
 
