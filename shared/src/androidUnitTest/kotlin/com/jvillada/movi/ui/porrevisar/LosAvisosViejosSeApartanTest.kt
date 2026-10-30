@@ -127,8 +127,8 @@ class LosAvisosViejosSeApartanTest {
         assertEquals(0, cuantos("Rappi"))
         assertEquals(0, cuantos("Panamericana"))
         // El lote es de los de hoy: «Confirmar los 2», no 3 ni 4.
-        esperar { cuantos("Confirmar los 2") > 0 }
-        assertEquals(0, cuantos("Confirmar los 3"))
+        esperar { cuantos("Confirmar 2") > 0 }
+        assertEquals(0, cuantos("Confirmar 3"))
 
         // La acción de la `Seccion` es el texto mismo, tocable.
         composeRule.onAllNodes(hasText(VER_LOS_ANTIGUOS) and hasClickAction(), useUnmergedTree = true).onLast()

@@ -136,9 +136,10 @@ class ActividadPorDentroEnPantallaTest {
         montar(listOf(cafe, pan, exito), esperar = "avisos del banco por confirmar")
 
         assertTrue(hay("3 avisos del banco por confirmar"))
-        assertTrue(hay("Suman \$135.000"))
+        // Vuelta 80: una propuesta de un renglón, sin el renglón de la suma.
+        assertTrue(!hay("Suman"))
         // Éxito tiene un «¿Ya lo anotaste?»: no entra en el lote.
-        tocar("Confirmar los 2 que Movi entendió")
+        tocar("Confirmar 2")
         assertTrue(hay("¿Confirmar estos 2 avisos?"), "pregunta antes, con la lista corta")
         assertTrue(hay("Total \$55.000"))
         assertTrue(anotados.isEmpty(), "preguntar no anota nada")
@@ -156,13 +157,13 @@ class ActividadPorDentroEnPantallaTest {
         composeRule.waitUntil(timeoutMillis = 5_000) { hay("2 confirmados") }
         // Queda Éxito, para revisarlo uno por uno.
         composeRule.waitUntil(timeoutMillis = 5_000) { hay("1 aviso del banco por confirmar") }
-        assertTrue(!hay("Confirmar los"), "lo que queda no se confirma de una vez")
+        assertTrue(!hay("Confirmar 1"), "lo que queda no se confirma de una vez")
     }
 
     @Test
     fun `Revisar uno por uno abre Por revisar`() {
         montar(listOf(cafe, exito), esperar = "avisos del banco por confirmar")
-        tocar(REVISAR_UNO_POR_UNO)
+        tocar(REVISAR_LOS_AVISOS)
         assertEquals(listOf<Screen>(Screen.PorRevisar), navegaciones)
     }
 
