@@ -40,8 +40,10 @@ import kotlin.test.assertTrue
  * # Sin salario no hay flujo libre que mostrar (vuelta de diseño 22)
  *
  * La revisión: «Ingresos recurrentes $0 · Flujo libre −$1.875.159». Sin un ingreso que se repita, el
- * flujo libre son los gastos con signo menos: asusta y no dice nada. En su lugar va la invitación «Agrega
- * tu salario para ver tu flujo libre», que abre la hoja de un recurrente ya en Ingreso.
+ * flujo libre son los gastos con signo menos: asusta y no dice nada. En su lugar van solo los gastos.
+ *
+ * **Vuelta 78:** la tarjeta ya no invita a agregar el salario («Agrega tu salario… Agregar mi salario»):
+ * esa invitación vive en un solo lugar de Pagos, la línea de la caja (`PagosHastaQueTePaguenTest`).
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "w411dp-h1400dp-xhdpi")
@@ -89,11 +91,12 @@ class ElFlujoLibrePideElSalarioTest {
         composeRule.onAllNodesWithText(texto, substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
 
     @Test
-    fun `sin ingresos recurrentes invita a agregar el salario en vez de un flujo libre negativo`() {
+    fun `sin ingresos recurrentes van solo los gastos, sin otra invitacion al salario`() {
         montar(listOf(arriendo))
 
-        assertTrue(hay(AGREGA_TU_SALARIO))
-        assertEquals(1, composeRule.onAllNodesWithTag(TAG_INVITACION_AL_SALARIO, useUnmergedTree = true).fetchSemanticsNodes().size)
+        assertEquals(1, composeRule.onAllNodesWithTag(TAG_SOLO_LOS_GASTOS_RECURRENTES, useUnmergedTree = true).fetchSemanticsNodes().size)
+        assertFalse(hay("Agrega tu salario"), "la invitación vive en la caja")
+        assertFalse(hay("Agregar mi salario"))
         // Ni el flujo libre en negativo ni «Ingresos recurrentes $0».
         assertFalse(hay("−\$1.875.159"), "sin un flujo libre negativo")
         assertFalse(hay("Ingresos recurrentes"))
@@ -102,23 +105,10 @@ class ElFlujoLibrePideElSalarioTest {
     }
 
     @Test
-    fun `agregar mi salario abre la hoja del recurrente ya en Ingreso`() {
-        montar(listOf(arriendo))
-
-        composeRule.onNodeWithText("Agregar mi salario").performClick()
-        composeRule.waitUntil(timeoutMillis = 5_000) { hay("Día del mes") }
-
-        val ingreso = composeRule.onNodeWithText("Ingreso", useUnmergedTree = true).fetchSemanticsNode()
-        // El chip es el padre clickeable del texto: ahí vive su estado.
-        val chip = generateSequence(ingreso) { it.parent }.first { it.config.getOrNull(SemanticsProperties.Selected) != null }
-        assertEquals(true, chip.config.getOrNull(SemanticsProperties.Selected), "la hoja abre en Ingreso")
-    }
-
-    @Test
     fun `con un salario el flujo libre se ve como siempre`() {
         montar(listOf(arriendo, salario))
         assertTrue(hay("Flujo libre"))
-        assertFalse(hay(AGREGA_TU_SALARIO))
+        assertEquals(0, composeRule.onAllNodesWithTag(TAG_SOLO_LOS_GASTOS_RECURRENTES, useUnmergedTree = true).fetchSemanticsNodes().size)
     }
 
     @Test
@@ -129,5 +119,17 @@ class ElFlujoLibrePideElSalarioTest {
         )
         assertTrue(pideElSalario(resumen(0L)))
         assertFalse(pideElSalario(resumen(5_000_000L)))
+    }
+
+    /** Vuelta 78: «$3.625.338» y el «de $3.662.500» de «Falta por pagar» dicen qué es cada una. */
+    @Test
+    fun `las dos cifras se dicen en una frase, y solo si son distintas`() {
+        assertEquals(
+            "\$3.625.338 al mes en promedio · \$3.662.500 este período, con lo que de verdad pagaste y el mínimo de tus tarjetas",
+            lineaDeLasDosCifras(3_625_338L, 3_662_500L),
+        )
+        kotlin.test.assertNull(lineaDeLasDosCifras(3_625_338L, 3_625_338L))
+        kotlin.test.assertNull(lineaDeLasDosCifras(3_625_338L, null))
+        kotlin.test.assertNull(lineaDeLasDosCifras(3_625_338L, 0L))
     }
 }

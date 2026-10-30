@@ -223,6 +223,13 @@ class EstadoDelTableroDeRecurrentes internal constructor(
      */
     internal var filasDelPeriodo by mutableStateOf<List<PagoDelPeriodo>>(emptyList())
 
+    /**
+     * Vuelta 78 · el «de $X» de la tarjeta amarilla «Falta por pagar» (lo pagado + lo que falta del
+     * período): «Lo que se repite» lo nombra junto a sus gastos al mes, para que las dos cifras no se
+     * lean como la misma. `null` mientras la lista del período no se pinta.
+     */
+    internal var totalDeFacturasDelPeriodo by mutableStateOf<Long?>(null)
+
     /** Lo vencido y sin pagar de [ruleId], si hay: lo que «Pausar» pregunta antes de pausar. */
     internal fun vencidoSinPagarDe(ruleId: String): PagoDelPeriodo? =
         filasDelPeriodo.firstOrNull { it.ruleId == ruleId && !it.hecho && it.vencido && !it.esIngreso }
@@ -1033,14 +1040,20 @@ fun LazyListScope.tableroDeRecurrentes(
                     settings = ajustesDelPeriodo,
                 )
             }
-            SideEffect { estado.filasDelPeriodo = checklist + anteriores }
+            // Vuelta 63 (revisión): el abono a una tarjeta dice que no cambia «Te quedan».
+            val checklistConAbonos = remember(checklist, tarjetasDelTablero.valor) {
+                com.jvillada.movi.ui.quickadd.conLosAbonosATarjeta(
+                    checklist, tarjetasDelTablero.valor.orEmpty().map { it.account.id }.toSet(),
+                )
+            }
+            SideEffect {
+                estado.filasDelPeriodo = checklist + anteriores
+                // Vuelta 78: el mismo «de $X» de la tarjeta amarilla, para nombrarlo en «Lo que se repite».
+                estado.totalDeFacturasDelPeriodo = com.jvillada.movi.ui.recurrentes.resumenDeFacturas(checklistConAbonos).total
+                    .takeIf { estado.vencimientosOk && estado.ocurrenciasOk }
+            }
             SeccionChecklistDelPeriodo(
-                // Vuelta 63 (revisión): el abono a una tarjeta dice que no cambia «Te quedan».
-                checklist = remember(checklist, tarjetasDelTablero.valor) {
-                    com.jvillada.movi.ui.quickadd.conLosAbonosATarjeta(
-                        checklist, tarjetasDelTablero.valor.orEmpty().map { it.account.id }.toSet(),
-                    )
-                },
+                checklist = checklistConAbonos,
                 anteriores = anteriores,
                 cargando = !estado.recurrentesNoSePudieronLeer && !(estado.vencimientosOk && estado.ocurrenciasOk),
                 pudoLeer = !estado.recurrentesNoSePudieronLeer,
@@ -1178,7 +1191,8 @@ fun LazyListScope.tableroDeRecurrentes(
                 onAccion = { estado.buscarCobros() },
             )
             ResumenFlujoLibreCard(
-                onAgregarSalario = { estado.agregarSalario() },
+                // Vuelta 78: el total de este período (el «de $X» de «Falta por pagar»), solo con el de hoy a la vista.
+                totalDelPeriodo = estado.totalDeFacturasDelPeriodo.takeIf { periodoVisible == periodoDeHoy },
                 // **Sin los vencimientos no hay cifra.** Las cuotas de los créditos
                 // llegan solo por ahí y son la mitad del mes del dueño: si esa
                 // llamada falló, el total saldría plausible y $5.445.772 más alto
@@ -1542,16 +1556,27 @@ fun resumenPlegadoDeSuscripciones(cuantas: Int, totalMensual: Long): String {
 @Composable
 private fun ResumenFlujoLibreCard(
     cifras: ResumenRecurrentes?,
-    onAgregarSalario: () -> Unit,
+    totalDelPeriodo: Long?,
 ) {
     Superficie(modifier = Modifier.fillMaxWidth()) {
         // Vuelta de diseño 22: sin ningún ingreso recurrente el flujo libre es solo los gastos con
         // signo menos («Ingresos recurrentes $0 · Flujo libre −$1.875.159»), un número que asusta y no
-        // dice nada. En su lugar, la invitación a anotar el salario (ver [pideElSalario]).
+        // dice nada. En su lugar van solo los gastos (ver [pideElSalario]).
+        //
+        // Vuelta 78: **sin la invitación al salario**. Pagos la tenía dos veces, con tres botones —«Sin tu
+        // salario… Agregar» en la caja y «Agrega tu salario… Agregar mi salario» acá—; queda la de la caja,
+        // que es donde el salario cambia una cifra.
         if (cifras != null && pideElSalario(cifras)) {
-            InvitacionAlSalario(cifras, onAgregarSalario)
+            Column(modifier = Modifier.testTag(TAG_SOLO_LOS_GASTOS_RECURRENTES)) {
+                CifraConRotulo("Gastos recurrentes", cifras.gastos)
+            }
         } else {
             CifrasDelFlujoLibre(cifras)
+        }
+        // Vuelta 78: qué es esta cifra y qué es el «de $X» de «Falta por pagar», en una frase.
+        cifras?.let { lineaDeLasDosCifras(it.gastos, totalDelPeriodo) }?.let { linea ->
+            Spacer(Modifier.height(Espacio.s))
+            Text(linea, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.testTag(TAG_LAS_DOS_CIFRAS))
         }
         NotasDelFlujoLibre(cifras)
     }
@@ -1559,38 +1584,33 @@ private fun ResumenFlujoLibreCard(
 
 /**
  * **¿El flujo libre pide el salario?** Sin un solo ingreso recurrente, «Flujo libre» sería los gastos
- * recurrentes con signo menos: no hay nada libre que medir todavía (vuelta de diseño 22).
+ * recurrentes con signo menos: no hay nada libre que medir todavía (vuelta de diseño 22). Desde la vuelta
+ * 78 la tarjeta muestra solo los gastos; la invitación al salario vive en la caja.
  */
 internal fun pideElSalario(cifras: ResumenRecurrentes): Boolean = cifras.ingresos <= 0L
 
-/** El título de la invitación del flujo libre sin ingresos recurrentes. */
-const val AGREGA_TU_SALARIO: String = "Agrega tu salario para ver tu flujo libre"
+/** El tag de la tarjeta con solo los gastos recurrentes (sin salario), para sus pruebas. */
+const val TAG_SOLO_LOS_GASTOS_RECURRENTES: String = "plan-solo-los-gastos-recurrentes"
 
-/** El tag de la invitación, para sus pruebas. */
-const val TAG_INVITACION_AL_SALARIO: String = "plan-invitacion-al-salario"
+/** El tag de la frase que separa «al mes» de «este período» (vuelta 78). */
+const val TAG_LAS_DOS_CIFRAS: String = "plan-las-dos-cifras"
 
 /**
- * La invitación en lugar del flujo libre negativo: qué falta, por qué, la acción que abre la hoja de un
- * recurrente ya en Ingreso, y los gastos recurrentes, que sí son un dato.
+ * **Las dos cifras de Pagos, en una frase** (vuelta 78). «Gastos recurrentes $3.625.338» iba en la misma
+ * pantalla que «Falta por pagar $779.000 de $3.662.500» y nada decía por qué no eran la misma:
+ *
+ * - **los gastos recurrentes** ([ResumenRecurrentes.gastos]) son lo que se repite en un mes cualquiera:
+ *   cada regla por su monto, lo anual repartido en doce y sin el pago de las tarjetas;
+ * - **el «de $X»** ([com.jvillada.movi.ui.recurrentes.ResumenDeFacturas.total]) son los pagos de este
+ *   período: lo pagado por lo que salió de verdad y lo que falta por su monto, con el mínimo de las
+ *   tarjetas.
+ *
+ * `null` si no hay total del período o si las dos coinciden: entonces no hay nada que aclarar. Pura.
  */
-@Composable
-private fun InvitacionAlSalario(cifras: ResumenRecurrentes, onAgregarSalario: () -> Unit) {
-    Column(modifier = Modifier.testTag(TAG_INVITACION_AL_SALARIO)) {
-        Text(AGREGA_TU_SALARIO, style = Movi.textos.titulo, color = Movi.colores.texto)
-        Spacer(Modifier.height(Espacio.xxs))
-        Text(
-            text = "El flujo libre es lo que te entra cada mes menos lo que se repite. Sin un ingreso " +
-                "que se repita, solo verías tus gastos con signo menos.",
-            style = Movi.textos.apoyo,
-            color = Movi.colores.textoMedio,
-        )
-        Spacer(Modifier.height(Espacio.s))
-        Boton("Agregar mi salario", onClick = onAgregarSalario, variante = VarianteDeBoton.Secundario, tamano = TamanoDeBoton.S)
-        Spacer(Modifier.height(Espacio.s))
-        Separador(SangriaDeSeparador.Ninguna)
-        Spacer(Modifier.height(Espacio.s))
-        CifraConRotulo("Gastos recurrentes", cifras.gastos)
-    }
+fun lineaDeLasDosCifras(gastosAlMes: Long, delPeriodo: Long?): String? {
+    if (delPeriodo == null || delPeriodo <= 0L || delPeriodo == gastosAlMes) return null
+    return "${formatCOP(gastosAlMes)} al mes en promedio · ${formatCOP(delPeriodo)} este período, " +
+        "con lo que de verdad pagaste y el mínimo de tus tarjetas"
 }
 
 /** El flujo libre con sus cifras: lo de siempre, con un ingreso recurrente (o sin datos todavía). */
