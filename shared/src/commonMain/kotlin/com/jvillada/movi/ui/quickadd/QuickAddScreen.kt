@@ -159,8 +159,6 @@ const val GUARDAR_Y_ANOTAR_OTRO: String = "Guardar y anotar otro"
 /** Vuelta 43: el valor de la fila «Cuenta» en modo pago cuando la regla no dice de dónde sale. */
 const val ELIGE_LA_CUENTA: String = "Elige la cuenta"
 
-/** Hasta cuántas letras un rótulo de la cuenta entra con el ancho de siempre («Última usada»). */
-private const val LARGO_DE_UN_ROTULO_CORTO = 14
 internal const val TAG_GUARDAR_Y_ANOTAR_OTRO = "quickadd:guardar-y-anotar-otro"
 
 /**
@@ -460,6 +458,16 @@ fun QuickAddScreen(
             .getOrDefault(com.jvillada.movi.shared.model.CuentasDeCadaUso())
     }
     /**
+     * Vuelta 83 · «Repetir uno reciente»: los movimientos que la app ya tiene (la historia de Actividad,
+     * por la lectura sin repetir), para ofrecer los últimos gastos distintos. Si falla, nada.
+     */
+    var historiaParaRepetir by remember { mutableStateOf<List<FinancialEvent>>(emptyList()) }
+    LaunchedEffect(Unit) {
+        historiaParaRepetir = runCatching { Repositories.wallets.getEventsByDay() }
+            .getOrDefault(emptyList())
+            .flatMap { it.items }
+    }
+    /**
      * Qué pestaña está elegida y qué sub-picker está abierto, en UN solo estado y con
      * transiciones puras — ver [PickersDeLaHoja], donde está el porqué (resumen: eran tres
      * variables sueltas, una de ellas espejo de estado de [TransferBody], y el espejo se quedaba
@@ -721,6 +729,13 @@ fun QuickAddScreen(
     } else {
         UsoDeCuenta.ORIGEN_DE_GASTO
     }
+    // Vuelta 83: los últimos gastos distintos, en las cuentas que «Gasto» ofrece.
+    val recientesParaRepetir = remember(historiaParaRepetir, accounts) {
+        gastosRecientesParaRepetir(
+            historiaParaRepetir,
+            cuentasPara(accounts, UsoDeCuenta.ORIGEN_DE_GASTO).principales.map { it.id }.toSet(),
+        )
+    }
 
     /**
      * **Qué cuenta queda elegida.** Se dispara por dos motivos —llegó la lista de cuentas, o
@@ -967,6 +982,20 @@ fun QuickAddScreen(
 
     fun onKey(key: String) {
         amount = conLaTecla(amount, key)
+    }
+
+    /**
+     * Vuelta 83 · tocar un reciente **llena** el formulario —el monto, la categoría, la cuenta y el
+     * concepto— como si el dueño lo hubiera elegido a mano. No guarda: eso lo hace él.
+     */
+    fun repetir(reciente: GastoReciente) {
+        amount = reciente.monto.toString()
+        elegirCategoriaAMano(reciente.categoria)
+        note = reciente.concepto
+        selectedAccountId = reciente.cuentaId
+        origenCuenta = OrigenCuenta.ELEGIDA
+        cuentaPara = null
+        cuentaSugerida = null
     }
 
     // Vuelta 47: **el monto de Traspaso y Cuota vive acá, como el de Gasto**, para que lo escriban el
@@ -1791,7 +1820,9 @@ fun QuickAddScreen(
                         // correcta, sin que el dueño haya llegado a ver cuál era. Arreglarlo
                         // bien pide resolver el nombre sin la lista (o bloquear el guardado, que
                         // sería peor: hoy se guarda, y se guarda bien).
-                        walletLabel = selectedAccount?.name
+                        // Vuelta 83: el nombre corto, «Bancolombia ·4057»: se cortaba en «Bancolombia …»
+                        // justo donde está lo que distingue a dos cuentas del mismo banco.
+                        walletLabel = selectedAccount?.name?.let { com.jvillada.movi.ui.components.nombreCortoDeCuenta(it) }
                             ?: if (origenCuenta == OrigenCuenta.POR_ELEGIR) ELIGE_LA_CUENTA else "Seleccionar cuenta",
                         // Ola 11: solo dice algo cuando el valor lo puso la app y hay más de una
                         // cuenta donde anotar (ver [avisoDeCuenta]). Vuelta 43: y dice por qué esa
@@ -1848,6 +1879,17 @@ fun QuickAddScreen(
                                 } else {
                                     null
                                 },
+                                // Vuelta 83 · «Repetir uno reciente»: solo en Gasto, sin teclado en pantalla y
+                                // fuera del modo pago.
+                                recientes = if (
+                                    presetPago == null && !conTecladoEnPantalla &&
+                                    pickers.typeIndex == PestanaDeAgregar.GASTO.indice
+                                ) {
+                                    recientesParaRepetir
+                                } else {
+                                    emptyList()
+                                },
+                                onRepetir = ::repetir,
                                 // Vuelta 71: «¿A cuántas cuotas?» con una tarjeta de crédito en «Gasto».
                                 cuotas = cuotas.takeIf {
                                     preguntaLasCuotas(selectedAccount?.type, pickers.typeIndex == 0, presetPago != null)
@@ -2057,6 +2099,9 @@ private fun EditorBody(
      */
     cuotas: Int? = null,
     onCuotas: (Int) -> Unit = {},
+    /** Vuelta 83 · «Repetir uno reciente»: vacía, no se pinta (ver [RepetirUnReciente]). */
+    recientes: List<GastoReciente> = emptyList(),
+    onRepetir: (GastoReciente) -> Unit = {},
 ) {
     // Ola 13 — DE DÓNDE SALIERON ESTOS DOS SPACERS MÁS CHICOS (22→16 y 8→2).
     //
@@ -2139,13 +2184,10 @@ private fun EditorBody(
             valorVacio = walletLabel == ELIGE_LA_CUENTA,
             aviso = walletHint,
             reservarAviso = walletHintReserved,
-            // Vuelta 43: «La que usas para Mercado» es una frase, no una etiqueta de doce letras: el
-            // nombre de la cuenta le cede ancho para que entre entera.
-            fraccionDelValor = if ((walletHint?.length ?: 0) > LARGO_DE_UN_ROTULO_CORTO) {
-                FRACCION_DEL_VALOR_CON_ROTULO_LARGO
-            } else {
-                FRACCION_DEL_VALOR_DE_LA_HOJA
-            },
+            // Vuelta 83: la celda de la cuenta ocupa lo que deja el rótulo «Cuenta» (su nombre corto entra
+            // entero); el porqué de debajo se corta con «…» si no le alcanza. Antes cedía ancho a «La que
+            // usas para Mercado» (vuelta 43) y la cuenta quedaba en «Bancolombia …».
+            valorHastaElRotulo = true,
             // F10: sin cuentas no hay nada que elegir — abrir el selector solo mostraría la
             // mentira de "Cargando cuentas…" (no está cargando, no hay ninguna). En ese caso el
             // toque lleva directo a crear la cuenta, que es lo único que de verdad hace algo acá.
@@ -2173,6 +2215,12 @@ private fun EditorBody(
             // exactamente lo mismo que un nombre de cuenta largo.
             onClick = onEditNote,
         )
+    }
+    // Vuelta 83 · «Repetir uno reciente», en el hueco que dejaba la hoja sin teclado a 390. Quien llama
+    // la manda vacía con teclado en pantalla o fuera de «Gasto»: entonces no ocupa nada.
+    if (recientes.isNotEmpty()) {
+        Spacer(Modifier.height(Espacio.m))
+        RepetirUnReciente(recientes = recientes, onRepetir = onRepetir, habilitado = !saving)
     }
 
     // Ola 8 · V2 (N3 de la revisión) — el error de red TAMBIÉN reserva su alto.
