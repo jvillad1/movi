@@ -355,7 +355,6 @@ internal fun textoDeLaRachaDeVacios(racha: List<ResumenDePeriodo>): String {
     return "$inicio a $hasta · sin movimientos"
 }
 
-/** «Del 24 de septiembre al 24 de octubre», o `null` si alguna de las dos fechas no se pudo leer. */
 /**
  * **El nombre del período de un resumen**, el mismo de toda la app (vuelta 75, [nombreEntre] sobre sus
  * bordes): «23 oct – 24 nov», «Octubre», y el año solo si no es el de hoy. Sale de `desde` y `hasta`
@@ -372,11 +371,6 @@ internal fun nombreDelResumen(
     return nombreEntre(inicio, ultimo, anio.takeIf { anioDeHoy != null && it != anioDeHoy })
 }
 
-internal fun rangoDelResumen(resumen: ResumenDePeriodo): String? {
-    val inicio = diaLegible(resumen.desde) ?: return null
-    val fin = diaLegible(resumen.hasta) ?: return null
-    return "Del $inicio al $fin"
-}
 
 /**
  * «En curso» cuando es el período de hoy, «Empezó el 24» cuando el dueño movió su arranque —

@@ -602,11 +602,9 @@ internal fun lineaDeTuPlata(detalle: DetalleDePeriodo): String? {
 private fun Cabecera(detalle: DetalleDePeriodo, ajustes: PeriodSettings?) {
     val resumen = detalle.resumen
     Superficie(modifier = Modifier.fillMaxWidth()) {
-        rangoDelResumen(resumen)?.let {
-            Text(text = it, style = Movi.textos.cuerpo, color = Movi.colores.texto)
-        }
+        // Revisión de la 75: el rango largo («Del 1 de septiembre al 30 de septiembre») sobraba: el título ya es
+        // el nombre del período por sus fechas.
         fraseDelInicioPropio(resumen, ajustes)?.let {
-            Spacer(Modifier.height(Espacio.xxs))
             Text(text = it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
         }
         if (resumen.enCurso) {

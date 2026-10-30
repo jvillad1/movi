@@ -172,7 +172,7 @@ class DetalleDePeriodoScreenTest {
 
         // Arriba: rango, el arranque propio contra el día de siempre, cifras y Tu plata «hoy».
         assertTrue(hay("24 sep – 20 oct"), "vuelta 75: el nombre único del período")
-        assertTrue(hay("Del 24 de septiembre al 20 de octubre"))
+        assertTrue(!hay("Del 24 de septiembre al 20 de octubre"), "revisión de la 75: el rango largo sobraba")
         assertTrue(hay("Este período empezó el 24 de septiembre (antes del día 25)"))
         // Lo que entró, con «+»: es la `Cifra` del sistema en tono de ingreso (vuelta de diseño 19).
         assertTrue(hay("+" + formatMoneyCompact(9_000_000L)))
