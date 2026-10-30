@@ -160,8 +160,8 @@ class LaCuotaParecidaEnPagosTest {
         assertEquals(AccionPrincipalDeLaFila.EL_CANDIDATO, accionPrincipalDeLaFila(esLaMasUrgente = true, conPropuesta = false, hayGastoParecido = true))
         // …pero amarillo solo en la más urgente: en otra fila no hay acción principal.
         assertEquals(AccionPrincipalDeLaFila.NINGUNA, accionPrincipalDeLaFila(esLaMasUrgente = false, conPropuesta = false, hayGastoParecido = true))
-        // Candidato del server dentro del ±50 %: «Sí, fue este», amarillo solo en la más urgente.
-        assertEquals(AccionPrincipalDeLaFila.EL_CANDIDATO, accionPrincipalDeLaFila(esLaMasUrgente = true, conPropuesta = true, hayGastoParecido = false))
+        // Candidato del server dentro del ±50 %: vuelta 72, «Sí, fue este» nunca es amarillo; la fila no lo tiene.
+        assertEquals(AccionPrincipalDeLaFila.NINGUNA, accionPrincipalDeLaFila(esLaMasUrgente = true, conPropuesta = true, hayGastoParecido = false))
         assertEquals(AccionPrincipalDeLaFila.NINGUNA, accionPrincipalDeLaFila(esLaMasUrgente = false, conPropuesta = true, hayGastoParecido = false))
         // Sin candidato o con uno lejano: como estaba.
         assertEquals(AccionPrincipalDeLaFila.ANOTAR, accionPrincipalDeLaFila(esLaMasUrgente = true, conPropuesta = false, hayGastoParecido = false))
@@ -203,8 +203,8 @@ class LaCuotaParecidaEnPagosTest {
     }
 
     /**
-     * Vuelta 58: lo mismo con el candidato del **server** dentro del ±50 % («Sí, fue este»): amarillo solo
-     * en la fila más urgente. Tres facturas —una cuota con gasto parecido (la menos urgente), una con
+     * Vuelta 58: lo mismo con el candidato del **server** dentro del ±50 % («Sí, fue este»). Vuelta 72: ya
+     * no es amarillo en ninguna fila. Tres facturas —una cuota con gasto parecido (la menos urgente), una con
      * candidato del server (la del medio) y una con candidato del server que es la más urgente—: un solo
      * amarillo, y es el «Sí, fue este» de la más urgente.
      */
@@ -228,12 +228,11 @@ class LaCuotaParecidaEnPagosTest {
         )
         val botones = composeRule.onAllNodes(SemanticsMatcher.keyIsDefined(VarianteDeBotonKey)).fetchSemanticsNodes()
         val amarillos = botones.filter { it.config.getOrNull(VarianteDeBotonKey) == VarianteDeBoton.Principal }
-        assertEquals(1, amarillos.size, "un solo botón amarillo en Pagos")
-        // Dos «Sí, fue este» (Agua y Gas): el de Agua (la más urgente) es amarillo, el de Gas no.
+        // Vuelta 72: «Sí, fue este» nunca es amarillo; tildar es decisión del dueño. Ningún amarillo acá.
+        assertEquals(0, amarillos.size, "sin un amarillo que empuje a tildar")
         val si = composeRule.onAllNodesWithText(ETIQUETA_SI_FUE_ESTE).fetchSemanticsNodes().map { it.config.getOrNull(VarianteDeBotonKey) }
         assertEquals(2, si.size)
-        assertEquals(1, si.count { it == VarianteDeBoton.Principal }, "uno amarillo")
-        assertEquals(1, si.count { it == VarianteDeBoton.Secundario }, "el otro con borde")
+        assertTrue(si.all { it == VarianteDeBoton.Secundario }, "los dos con borde")
         assertEquals(VarianteDeBoton.Secundario, variante("¿Es el de \$980.000?"), "la cuota parecida, con borde")
     }
 }
