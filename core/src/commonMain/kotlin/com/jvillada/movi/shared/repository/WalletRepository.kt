@@ -321,6 +321,12 @@ interface WalletRepository {
     suspend fun noSonElMismoPago(grupoId: String, miembros: List<String>)
     /** `POST /api/sms/{id}/no-es-el-mismo-pago`: «Este es otro pago», saca un aviso solo. */
     suspend fun esteEsOtroPago(id: String)
+    /**
+     * Vuelta 74 · `POST /api/sms/desvincular`: los avisos confirmados [avisos] vuelven a «Por revisar»
+     * y dejan de apuntar a su movimiento. Es el «Deshacer» de «Es este» (no toca ningún movimiento) y
+     * la segunda mitad del de confirmar un aviso que creó el suyo (la primera es [voidEvent]).
+     */
+    suspend fun desvincularAvisos(avisos: List<String>): Unit = noLoTiene("desvincularAvisos")
     suspend fun getFinanceSummary(scope: Scope): FinanceSummary
     /**
      * Cifras del Inicio ya reducidas en el server (`GET /api/dashboard/summary`): gasto del mes

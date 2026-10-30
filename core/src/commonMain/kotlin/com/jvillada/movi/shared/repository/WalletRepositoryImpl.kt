@@ -562,6 +562,13 @@ class WalletRepositoryImpl(
         client.post("$baseUrl/api/sms/$id/no-es-el-mismo-pago").exigirExito()
     }
 
+    override suspend fun desvincularAvisos(avisos: List<String>) {
+        client.post("$baseUrl/api/sms/desvincular") {
+            contentType(ContentType.Application.Json)
+            setBody(com.jvillada.movi.shared.model.AvisosDelMismoPago(avisos))
+        }.exigirExito()
+    }
+
     override suspend fun getFinanceSummary(scope: Scope): FinanceSummary =
         client.get("$baseUrl/api/finance-summary?scope=${scope.name}").body()
 

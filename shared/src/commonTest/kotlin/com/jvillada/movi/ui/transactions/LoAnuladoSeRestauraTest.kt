@@ -11,7 +11,7 @@ import kotlinx.datetime.atStartOfDayIn
 import com.jvillada.movi.shared.model.RepartoDeUnMovimiento
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.claveDeLaCompra
-import com.jvillada.movi.ui.components.AvisoDeDeshacer
+import com.jvillada.movi.ui.components.ds.AvisoDeDeshacer
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.coroutines.startCoroutine

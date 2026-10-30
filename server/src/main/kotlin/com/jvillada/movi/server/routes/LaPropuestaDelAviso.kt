@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.server.balance.accountTypesFor
 import com.jvillada.movi.server.balance.toAccount
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.DestinosDescartados
@@ -156,7 +157,13 @@ internal fun Transaction.coincidenciasDelAviso(uid: String, sms: SmsMessage, aho
     val momento = momentoDelSms(sms.time, ahora = ahora)
     val margen = DIAS_PARA_COINCIDIR * 86_400_000L
     val eventos = loadEventsBetween(uid, momento - margen, momento + margen + 1)
-    return coincidenciasDelSms(parsed, momento, eventos)
+    if (eventos.isEmpty()) return emptyList()
+    // Revisión de la vuelta 74: lo que ya es de otro aviso no se ofrece (salvo los de su mismo pago, que
+    // lo comparten). Con un traspaso, sus dos patas: la que lleva el aviso y su hermana.
+    val reclamados = movimientosYaReclamados(uid, excepto = setOf(sms.id) + sms.miembrosDelGrupo)
+    val paresReclamados = eventos.filter { it.id in reclamados }.mapNotNull { it.transferId }.toSet()
+    val libres = eventos.filter { it.id !in reclamados && (it.transferId == null || it.transferId !in paresReclamados) }
+    return coincidenciasDelSms(parsed, momento, libres, accountTypesFor(uid))
 }
 
 /**

@@ -71,6 +71,9 @@ internal fun movimientoDelAviso(
  *   comprobantes, que además cuelga el papel de la cuenta). El server escribe el movimiento del aviso
  *   una sola vez: un segundo confirmar no lo mueve.
  *
+ * Devuelve el movimiento que se creó (vuelta 74, para «Deshacer»), o `null` si el pago ya estaba
+ * anotado y no se creó nada.
+ *
  * [alCrearElMovimiento] avisa que el movimiento suelto ya se creó, por si marcar el aviso falla
  * después: quien llama vuelve a revisar «¿Ya lo anotaste?», donde aparece el recién creado con «Es
  * este», y así un segundo intento no crea otro en silencio.
@@ -86,14 +89,16 @@ internal suspend fun anotarElMovimientoDelAviso(
      * no tener la base local abierta, y confirma contra el server directo con los MISMOS métodos.
      */
     repo: WalletRepository = Repositories.wallets,
-) {
+): FinancialEvent? {
     if (pago != null) {
         // Un solo movimiento para todos los avisos, en una transacción del server.
-        repo.confirmarElMismoPago(
+        val hecho = repo.confirmarElMismoPago(
             pago.grupoId, ConfirmarElMismoPago(pago.miembros.map { it.id }, evento = evento),
         )
         UsedCategoriesCache.record(evento.category, evento.type)
-        return
+        // Vuelta 74: el movimiento que se creó AHORA (para el «Deshacer» del aviso de abajo). Si el pago
+        // ya estaba anotado (un doble toque, otro aparato), no se creó nada y no hay nada que deshacer.
+        return hecho.eventoId?.takeIf { hecho.creado }?.let { evento.copy(id = it) }
     }
     repo.postEvent(evento)
     alCrearElMovimiento()
@@ -102,4 +107,5 @@ internal suspend fun anotarElMovimientoDelAviso(
     UsedCategoriesCache.record(evento.category, evento.type)
     if (esComprobante) repo.confirmarComprobante(smsId, evento.id)
     else repo.confirmSmsCon(smsId, evento.id)
+    return evento
 }

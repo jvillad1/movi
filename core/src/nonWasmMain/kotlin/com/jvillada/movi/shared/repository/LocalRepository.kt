@@ -2169,6 +2169,7 @@ class LocalRepository(
     override suspend fun ignorarElMismoPago(grupoId: String, miembros: List<String>) = remote.ignorarElMismoPago(grupoId, miembros)
     override suspend fun noSonElMismoPago(grupoId: String, miembros: List<String>) = remote.noSonElMismoPago(grupoId, miembros)
     override suspend fun esteEsOtroPago(id: String) = remote.esteEsOtroPago(id)
+    override suspend fun desvincularAvisos(avisos: List<String>) = remote.desvincularAvisos(avisos)
     override suspend fun getFinanceSummary(scope: Scope): FinanceSummary = remote.getFinanceSummary(scope)
     // Igual que getFinanceSummary: es un agregado que solo el server puede calcular con todo lo
     // que sabe (SMS, descartes de candidatos, eventos de todos los dispositivos). Sin red falla

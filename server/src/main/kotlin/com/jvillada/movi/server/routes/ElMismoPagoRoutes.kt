@@ -193,6 +193,10 @@ internal fun confirmarElMismoPago(
     pedido.eventoExistenteId?.let { existente ->
         val esSuyo = Events.selectAll().where { (Events.id eq existente) and (Events.userId eq uid) }.count() > 0
         if (!esSuyo) return Confirmacion.Rechazada(HttpStatusCode.NotFound, "Ese movimiento no existe.")
+        // Revisión de la vuelta 74: el movimiento de OTRO aviso (que no es de este pago) no se comparte.
+        if (existente in TransactionManager.current().movimientosYaReclamados(uid, excepto = ids)) {
+            return Confirmacion.Rechazada(HttpStatusCode.Conflict, YA_ES_DE_OTRO_AVISO)
+        }
         return cerrar(existente, creado = false)
     }
 
