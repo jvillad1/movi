@@ -86,6 +86,17 @@ const val TAG_PAGO_ENTRE_USTEDES: String = "grupos:pago"
 const val TAG_DESHACER_PAGO: String = "grupos:deshacer-pago"
 const val TAG_PROPUESTA_DE_SALDAR: String = "grupos:propuesta-de-saldar"
 
+/**
+ * Vuelta 76 · **elegir con quién, en corto.** La revisión `r5`: «Agregar persona · Con su número o su
+ * llave, para reconocer sus transferencias» se cortaba a 360. Ahora arriba «Elige a la persona», la lista
+ * de personas y al final «Nueva persona». El número o la llave se piden en la hoja de la persona (la de
+ * «Personas y comercios»), que dice para qué sirven: reconocerla en los avisos del banco.
+ */
+const val ELIGE_A_LA_PERSONA: String = "Elige a la persona"
+
+/** La fila que abre la hoja de una persona nueva (vuelta 76: era «Agregar persona»). */
+const val NUEVA_PERSONA: String = "Nueva persona"
+
 /** El título de la hoja de un grupo nuevo. */
 const val TITULO_NUEVO_GRUPO: String = "Nuevo grupo"
 
@@ -163,7 +174,8 @@ fun HojaNuevoEspacio(onDismiss: () -> Unit, onCreado: (Espacio) -> Unit, onIrATe
                 tag = TAG_NOMBRE_DEL_GRUPO,
             )
             Spacer(Modifier.height(Medida.dentroDeSeccion))
-            Text("¿Con quién compartes?", style = Movi.textos.cuerpo, color = Movi.colores.texto)
+            // Vuelta 76: corto, sin pedir número ni llave (ver [ELIGE_A_LA_PERSONA]).
+            Text(ELIGE_A_LA_PERSONA, style = Movi.textos.cuerpo, color = Movi.colores.texto)
             Spacer(Modifier.height(EspacioDeDiseno.xs))
             val lista = personas
             Superficie(nivel = NivelDeSuperficie.Capa2, relleno = RellenoDeSuperficie.Lista) {
@@ -183,8 +195,7 @@ fun HojaNuevoEspacio(onDismiss: () -> Unit, onCreado: (Espacio) -> Unit, onIrATe
                 if (lista != null) {
                     if (lista.isNotEmpty()) Separador()
                     Fila(
-                        titulo = "Agregar persona",
-                        subtitulo = if (lista.isEmpty()) "Con su número o su llave, para reconocer sus transferencias" else null,
+                        titulo = NUEVA_PERSONA,
                         inicio = { com.jvillada.movi.ui.components.ds.IconoEnCirculo(Icons.Rounded.PersonAdd) },
                         onClick = { agregando = true },
                         modifier = Modifier.testTag(TAG_AGREGAR_PERSONA),
@@ -201,7 +212,7 @@ fun HojaNuevoEspacio(onDismiss: () -> Unit, onCreado: (Espacio) -> Unit, onIrATe
                 onClick = ::crear,
                 habilitado = puede,
                 razon = when {
-                    conQuien.isEmpty() -> "Elige con quién compartes"
+                    conQuien.isEmpty() -> ELIGE_A_LA_PERSONA
                     nombreFinal.isEmpty() -> "Ponle un nombre"
                     else -> null
                 },

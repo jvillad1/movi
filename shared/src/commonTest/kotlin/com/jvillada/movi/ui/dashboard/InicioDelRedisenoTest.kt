@@ -393,17 +393,17 @@ class InicioDelRedisenoTest {
     fun `el cuerpo de la anomalia une el detalle y el y N mas sin el punto final`() {
         val detalle = "Llevas \$480.000 en Restaurantes (el promedio de los 3 anteriores)."
         assertEquals(
-            "Llevas \$480.000 en Restaurantes (el promedio de los 3 anteriores) · y 1 aviso más",
+            "Llevas \$480.000 en Restaurantes (el promedio de los 3 anteriores) · y 1 cosa más para revisar",
             cuerpoDeLaAnomalia(detalle, 1),
         )
-        assertEquals("2 cobros de \$45.900 · y 3 avisos más", cuerpoDeLaAnomalia("2 cobros de \$45.900", 3))
+        assertEquals("2 cobros de \$45.900 · y 3 cosas más para revisar", cuerpoDeLaAnomalia("2 cobros de \$45.900", 3))
         // Solo, el detalle queda como viene, con su punto.
         assertEquals(detalle, cuerpoDeLaAnomalia(detalle, 0))
         assertTrue(listOf(1, 2).none { ". ·" in cuerpoDeLaAnomalia(detalle, it) })
         // Y en la tarjeta de verdad.
         val dos = todoPendiente.copy(anomalias = listOf(anomalia.copy(detalle = detalle), anomalia.copy(huella = "otra")))
         assertEquals(
-            "Llevas \$480.000 en Restaurantes (el promedio de los 3 anteriores) · y 1 aviso más",
+            "Llevas \$480.000 en Restaurantes (el promedio de los 3 anteriores) · y 1 cosa más para revisar",
             propuestasDelInicio(dos).single { it.tipo == TipoDePropuesta.ANOMALIA }.cuerpo,
         )
     }

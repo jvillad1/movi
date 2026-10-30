@@ -538,6 +538,8 @@ fun QuickAddScreen(
      * accesibilidad no pasan por acá.
      */
     var volviendoDeUnSubEditor by remember { mutableStateOf(false) }
+    // Vuelta 76: el botón de Traspaso y Pagar, en la barra de abajo como el de Gasto.
+    val barraDelTraspaso = remember { EstadoDeLaBarraDelTraspaso() }
     LaunchedEffect(volviendoDeUnSubEditor) {
         if (!volviendoDeUnSubEditor) return@LaunchedEffect
         kotlinx.coroutines.delay(Movimiento.LARGO_MS.toLong())
@@ -1752,6 +1754,7 @@ fun QuickAddScreen(
                                 } else {
                                     ModoDeTraspaso.TRASPASO
                                 },
+                                barra = barraDelTraspaso,
                                 onSaved = onSaved,
                             )
                         } else {
@@ -1872,6 +1875,14 @@ fun QuickAddScreen(
                     // Vuelta 43: en modo pago no hay «otro»: cada pago es de su factura.
                     onSaveYOtro = if (presetPago == null) ({ save(yAnotarOtro = true) }) else null,
                 )
+                Spacer(Modifier.height(Espacio.s))
+            }
+            // Vuelta 76: Traspaso y Pagar, con la MISMA barra de abajo (antes «Guardar traspaso» iba a
+            // media hoja, adentro del desplazamiento). La pinta [TransferBody] por [barraDelTraspaso].
+            if (pickers.typeIndex >= TIPO_TRASPASO && pickers.propio == Picker.None && barraDelTraspaso.visible) Column(
+                Modifier.fillMaxWidth().then(if (volviendoDeUnSubEditor) Modifier.ignoraLosToques() else Modifier),
+            ) {
+                BarraDeGuardarDelTraspaso(barraDelTraspaso)
                 Spacer(Modifier.height(Espacio.s))
             }
         }

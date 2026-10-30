@@ -913,7 +913,7 @@ fun LazyListScope.tableroDeRecurrentes(
     // de «Pagos del período», como la segunda tarjeta más grande de la pantalla. Vuelta de diseño 28: es
     // una fila compacta en tono de aviso, DENTRO de la lista, debajo del resumen de lo que falta, y se
     // descarta por el período con «Ahora no» ([FilaDeRecordatoriosSinCanal]). Una sola vez en Plan;
-    // Ajustes → Avisos lo dice en su fila («Apagado: no te va a llegar»).
+    // Tú → Notificaciones lo dice en su fila («Apagado: no te va a llegar»).
     val avisarRecordatorios =
         shouldShowReminderWarning(estado.pushStatus, estado.pidieronRecordatorios, ReminderChannelsCache.canales) &&
             !estado.recordatoriosAhoraNo(periodoDeHoy)
@@ -1251,7 +1251,7 @@ internal fun FilaDeRecordatoriosSinCanal(bloqueadas: Boolean, onActivar: () -> U
             lineasDelSubtitulo = 2,
             inicio = { IconoEnCirculo(Icons.Rounded.NotificationsOff, tono = TonoDeIcono.Aviso) },
             onClick = onActivar,
-            onClickLabel = if (bloqueadas) "Ver tus avisos" else "Activar notificaciones",
+            onClickLabel = if (bloqueadas) "Ver tus notificaciones" else "Activar notificaciones",
         )
         Boton(
             AHORA_NO,
@@ -1267,7 +1267,7 @@ internal fun FilaDeRecordatoriosSinCanal(bloqueadas: Boolean, onActivar: () -> U
 const val SUBTITULO_RECORDATORIOS_APAGADOS: String = "Toca para activar las notificaciones"
 
 /** Lo que dice la fila cuando el navegador las bloqueó: desde acá no se pueden prender. */
-const val SUBTITULO_RECORDATORIOS_BLOQUEADOS: String = "Las bloqueaste en el navegador: toca para ver tus avisos"
+const val SUBTITULO_RECORDATORIOS_BLOQUEADOS: String = "Las bloqueaste en el navegador: toca para ver tus notificaciones"
 
 /** El descarte por el período. */
 const val AHORA_NO: String = "Ahora no"

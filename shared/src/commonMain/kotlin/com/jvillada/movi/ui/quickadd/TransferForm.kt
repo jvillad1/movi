@@ -38,6 +38,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -732,6 +734,12 @@ internal fun TransferBody(
     onNota: (String) -> Unit = {},
     /** Vuelta 71: la moneda de la cifra (la de la cuenta de origen), para «¿Descartar …?» de la hoja. */
     onMonedaDelMonto: (String) -> Unit = {},
+    /**
+     * Vuelta 76 · **la barra de guardar de abajo, como en Gasto.** Con ella, este cuerpo no dibuja su
+     * botón: le dice a [QuickAddScreen] qué poner en la barra que va debajo del desplazamiento
+     * ([BarraDeGuardarDelTraspaso]). `null` = el botón va adentro, como antes.
+     */
+    barra: EstadoDeLaBarraDelTraspaso? = null,
     onSaved: () -> Unit,
 ) {
     val coroutine = rememberCoroutineScope()
@@ -1192,6 +1200,25 @@ internal fun TransferBody(
     // vale más que la pantalla: fijarlo tal cual dejaba el sub-picker de cuentas más alto que el
     // hueco y se abría mostrando el final de la lista, sin el título «Desde»/«Hacia» ni su X.
     // Cuando el formulario entra, `alturaVisible` es su propio alto y esto no cambia nada.
+    // Vuelta 76: lo que la barra de abajo de la hoja pinta (ver [EstadoDeLaBarraDelTraspaso]).
+    if (barra != null) {
+        val textoDelBoton = when {
+            saving -> "Guardando…"
+            esAbono -> "Registrar abono"
+            esPago -> "Registrar pago"
+            else -> "Guardar traspaso"
+        }
+        val visible = avisoDelDesglose == null && !editandoNota && !pickingDate && picking == null
+        val falta = if (!saving) missing else null
+        SideEffect {
+            barra.visible = visible
+            barra.texto = textoDelBoton
+            barra.habilitado = canSave
+            barra.falta = falta
+            barra.guardar = { save() }
+        }
+        DisposableEffect(barra) { onDispose { barra.visible = false } }
+    }
     val altoFijado = with(density) { formHeightPx.toDp() }
         .let { if (alturaVisible == Dp.Unspecified) it else minOf(it, alturaVisible) }
     Box(
@@ -1634,32 +1661,20 @@ internal fun TransferBody(
         } else {
             Spacer(Modifier.height(Espacio.m))
         }
-        Boton(
-            texto = when {
-                saving -> "Guardando…"
-                esAbono -> "Registrar abono"
-                esPago -> "Registrar pago"
-                else -> "Guardar traspaso"
-            },
-            onClick = { save() },
-            habilitado = canSave,
-            anchoCompleto = true,
-        )
-
-        // Vuelta 47 · **una sola línea de ayuda** debajo del botón: lo que falta, o —con todo listo—
-        // que se guarda en línea. Eran dos renglones, uno de ellos de dos líneas. Reserva su alto
-        // (Ola 8 · V2): aparecer al escribir el monto no puede correr el botón bajo el dedo.
-        Spacer(Modifier.height(Espacio.xs))
-        Box(modifier = Modifier.fillMaxWidth().height(16.dp).testTag(TAG_AYUDA_DEL_TRASPASO)) {
-            Text(
-                text = if (!saving && missing != null) missing else ayudaDelTraspaso(guardaUnaCuota),
-                style = Movi.textos.apoyo,
-                color = if (!saving && missing != null) Movi.colores.textoMedio else Movi.colores.textoApagado,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.fillMaxWidth(),
+        // Vuelta 76: con [barra], el botón va en la barra de abajo de la hoja (como en Gasto).
+        if (barra == null) {
+            Boton(
+                texto = when {
+                    saving -> "Guardando…"
+                    esAbono -> "Registrar abono"
+                    esPago -> "Registrar pago"
+                    else -> "Guardar traspaso"
+                },
+                onClick = { save() },
+                habilitado = canSave,
+                anchoCompleto = true,
             )
+            RenglonDeLoQueFalta(if (!saving) missing else null)
         }
         } // Column del formulario
         } // else de `picking != null`
@@ -1785,12 +1800,62 @@ internal const val TAG_CAMPO_DE_INTERES = "campo_de_interes_de_la_cuota"
 internal const val TAG_CAMPO_DE_MONTO_EN_LA_DEUDA = "campo_de_monto_en_la_moneda_de_la_deuda"
 
 /**
- * **La línea de ayuda de Traspaso y Cuota con todo listo** (vuelta 47): un traspaso exige conexión
- * (ver `LocalRepository.createTransfer`) —las dos patas nacen juntas en el server o no nacen—, y
- * decirlo antes es más honesto que un «revisa tu conexión» después. Corta, para un renglón a 360.
+ * # La barra de guardar de Traspaso y Pagar (vuelta 76)
+ *
+ * La revisión `r5`: «Guardar traspaso» iba a media hoja, adentro del desplazamiento, y Gasto lo tenía en la
+ * barra de abajo (vuelta 71). Ahora [TransferBody] publica acá su botón —el texto, si se puede, qué falta
+ * y qué hace— y [QuickAddScreen] lo pinta debajo del desplazamiento con [BarraDeGuardarDelTraspaso]:
+ * siempre a la vista, en el mismo lugar que en Gasto. La línea «Se guarda en línea: las dos puntas,
+ * juntas.» se fue: el renglón reservado de abajo solo dice lo que falta.
  */
-internal fun ayudaDelTraspaso(esPago: Boolean): String =
-    if (esPago) "Se guarda en línea: la salida y el pago, juntos." else "Se guarda en línea: las dos puntas, juntas."
+@Stable
+class EstadoDeLaBarraDelTraspaso {
+    /** Con el formulario a la vista (sin un sub-editor abierto ni la confirmación del desglose). */
+    var visible: Boolean by mutableStateOf(false)
+    var texto: String by mutableStateOf("Guardar traspaso")
+    var habilitado: Boolean by mutableStateOf(false)
+    /** «Falta el monto», «Elige de dónde sale»…; `null` con todo listo. */
+    var falta: String? by mutableStateOf(null)
+    var guardar: () -> Unit by mutableStateOf({})
+}
+
+/** El botón de Traspaso y Pagar y su renglón reservado, para la barra de abajo de la hoja. */
+@Composable
+internal fun BarraDeGuardarDelTraspaso(estado: EstadoDeLaBarraDelTraspaso) {
+    Boton(
+        texto = estado.texto,
+        onClick = { estado.guardar() },
+        habilitado = estado.habilitado,
+        anchoCompleto = true,
+        modifier = Modifier.testTag(TAG_BARRA_DE_GUARDAR_DEL_TRASPASO),
+    )
+    RenglonDeLoQueFalta(estado.falta)
+}
+
+/** El tag de la barra de guardar del traspaso (vuelta 76). */
+const val TAG_BARRA_DE_GUARDAR_DEL_TRASPASO: String = "agregar:barra-del-traspaso"
+
+/**
+ * **El renglón de debajo del botón** (vuelta 47, ola 8 · V2): lo que falta, o nada. Reserva su alto:
+ * aparecer al escribir el monto no puede correr el botón bajo el dedo.
+ */
+@Composable
+private fun RenglonDeLoQueFalta(falta: String?) {
+    Spacer(Modifier.height(Espacio.xs))
+    Box(modifier = Modifier.fillMaxWidth().height(16.dp).testTag(TAG_AYUDA_DEL_TRASPASO)) {
+        if (falta != null) {
+            Text(
+                text = falta,
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoMedio,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+}
 
 /** «Sale de» y «Pagas»: los rótulos de las dos filas en Pagar. */
 internal const val ROTULO_SALE_DE: String = "Sale de"

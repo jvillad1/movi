@@ -54,6 +54,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.shared.model.MIEMBRO_YO
+import com.jvillada.movi.ui.components.conCifrasOcultas
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.DestinoConocido
 import com.jvillada.movi.shared.model.PeriodSettings
@@ -143,6 +145,9 @@ fun DestinosScreen(onNavigate: (Screen) -> Unit, abrir: String? = null, conSuger
     // 20-oct-2026: lo que el dueño ya dijo que no (entre otras, «No son la misma» como `MISMA:a|b`).
     var descartados by remember { mutableStateOf<Set<String>>(emptySet()) }
     var errorDeDuplicado by remember { mutableStateOf<String?>(null) }
+    // Vuelta 76: lo que dice cada tercero en sus grupos (las líneas de su ficha), por id. Secundario:
+    // si no se puede leer, cada fila dice lo de siempre.
+    var enLosGrupos by remember { mutableStateOf<Map<String, List<ElTerceroEnUnGrupo>>>(emptyMap()) }
     val alcance = rememberCoroutineScope()
 
     // Qué hoja está abierta. La ficha (leer), la hoja de guardar/editar, y un movimiento abierto
@@ -166,6 +171,11 @@ fun DestinosScreen(onNavigate: (Screen) -> Unit, abrir: String? = null, conSuger
         runCatching { Repositories.wallets.getDestinosSugeridos() }.onSuccess { sugeridos = it }
         runCatching { Repositories.wallets.getDestinosDescartados() }.onSuccess { descartados = it.claves.toSet() }
         cargando = false
+        // Vuelta 76: los grupos con algún tercero, y lo que dice cada uno (`elTerceroEnLosGrupos`, lo de la ficha).
+        runCatching {
+            val conTerceros = Repositories.wallets.getEspacios().filter { e -> e.miembros.any { it.id != MIEMBRO_YO } }
+            losTercerosEnLosGrupos(conTerceros.map { Repositories.wallets.getDetalleDelEspacio(it.id) })
+        }.onSuccess { enLosGrupos = it }
     }
     // «Ver su ficha» desde un movimiento: la ficha pedida se abre sola, una vez.
     LaunchedEffect(destinos, abrir) {
@@ -366,8 +376,8 @@ fun DestinosScreen(onNavigate: (Screen) -> Unit, abrir: String? = null, conSuger
                 if (cargando && !leidos) {
                     destinosEsqueleto()
                 } else {
-                    seccionDeTerceros("Personas", personas, esComercio = false) { detalle = it }
-                    seccionDeTerceros("Comercios", comercios, esComercio = true) { detalle = it }
+                    seccionDeTerceros("Personas", personas, esComercio = false, enLosGrupos) { detalle = it }
+                    seccionDeTerceros("Comercios", comercios, esComercio = true, enLosGrupos) { detalle = it }
                     if (busqueda.isNotBlank() && visibles.isEmpty()) {
                         item {
                             Text(
@@ -500,6 +510,7 @@ private fun LazyListScope.seccionDeTerceros(
     titulo: String,
     terceros: List<DestinoConocido>,
     esComercio: Boolean,
+    enLosGrupos: Map<String, List<ElTerceroEnUnGrupo>>,
     onAbrir: (DestinoConocido) -> Unit,
 ) {
     if (terceros.isEmpty()) return
@@ -509,7 +520,7 @@ private fun LazyListScope.seccionDeTerceros(
             Superficie(relleno = RellenoDeSuperficie.Lista) {
                 terceros.forEachIndexed { i, d ->
                     if (i > 0) Separador()
-                    FichaDelDestino(d, esComercio = esComercio, onClick = { onAbrir(d) })
+                    FichaDelDestino(d, esComercio = esComercio, grupos = enLosGrupos[d.id].orEmpty(), onClick = { onAbrir(d) })
                 }
             }
         }
@@ -723,12 +734,21 @@ const val TAG_FICHA_EN_LA_LISTA: String = "ficha-en-la-lista"
  * histórico vive en la ficha: con tres cifras por tarjeta no se sabía cuál mirar.
  */
 @Composable
-private fun FichaDelDestino(destino: DestinoConocido, esComercio: Boolean, onClick: () -> Unit) {
+private fun FichaDelDestino(
+    destino: DestinoConocido,
+    esComercio: Boolean,
+    onClick: () -> Unit,
+    /** Vuelta 76: sus líneas en los grupos (las de su ficha); vacía si no es de ningún grupo. */
+    grupos: List<ElTerceroEnUnGrupo> = emptyList(),
+) {
     val enviado = destino.totalesDelPeriodo.filterValues { it != 0L }
     val recibido = destino.recibidosDelPeriodo.filterValues { it != 0L }
+    // Vuelta 76: un tercero de un grupo dice lo que dice su ficha («Te debe $261.250 · Casa con Caro»).
+    val enSusGrupos = lineaDelTerceroEnLaLista(grupos)
     Fila(
         titulo = destino.nombre,
-        subtitulo = subtituloDelDestino(destino).ifEmpty { null },
+        subtitulo = enSusGrupos?.let { conCifrasOcultas(it) } ?: subtituloDelDestino(destino).ifEmpty { null },
+        lineasDelSubtitulo = if (enSusGrupos != null) 2 else 1,
         inicio = {
             if (esComercio) IconoEnCirculo(Icons.Rounded.Storefront, tono = TonoDeIcono.Neutro)
             else AvatarDePersona(destino.nombre, tono = TonoDeIcono.Info)
@@ -736,9 +756,12 @@ private fun FichaDelDestino(destino: DestinoConocido, esComercio: Boolean, onCli
         final = {
             Column(horizontalAlignment = Alignment.End) {
                 // Sin nada este período NO se escribe «$0»: un cero con la letra de una cifra se lee
-                // como un dato, y es una ausencia.
+                // como un dato, y es una ausencia. Vuelta 76: con un grupo de por medio tampoco dice
+                // «Nada este período» —el subtítulo ya dice lo que se deben—.
                 if (enviado.isEmpty() && recibido.isEmpty()) {
-                    Text("Nada este período", style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
+                    if (enSusGrupos == null) {
+                        Text("Nada este período", style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
+                    }
                 } else {
                     if (enviado.isNotEmpty()) TotalesEnColumna(enviado, alineadoAlFinal = true)
                     if (recibido.isNotEmpty()) {

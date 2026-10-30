@@ -116,7 +116,7 @@ const val NO_PUDIMOS_LEERLO: String = "No pudimos leerlo"
 internal fun AvisosEnElIphone() {
     Superficie(modifier = Modifier.fillMaxWidth()) {
         Column(verticalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
-            Text("Avisos en tu iPhone", style = Movi.textos.titulo, color = Movi.colores.texto)
+            Text("Notificaciones en tu iPhone", style = Movi.textos.titulo, color = Movi.colores.texto)
             Text(
                 "Safari solo deja avisar a Movi si está en tu pantalla de inicio. Toca Compartir, " +
                     "luego «Agregar a Inicio», y abre Movi desde ese ícono: ahí aparece «Activar».",

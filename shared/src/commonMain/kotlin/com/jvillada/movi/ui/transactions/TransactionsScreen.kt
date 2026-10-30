@@ -1348,7 +1348,7 @@ fun TransactionsScreen(
             espaciosDelDueno = runCatching { Repositories.wallets.getEspacios() }.getOrDefault(emptyList()).associateBy { it.id }
         }
     }
-    val resumen = remember(historia, tuParteDeOtros, periodoVisible, ajustesDelPeriodo, hoyIso, accountTypes, perfilLeido) {
+    val resumenSinFijas = remember(historia, tuParteDeOtros, periodoVisible, ajustesDelPeriodo, hoyIso, accountTypes, perfilLeido) {
         if (historia == null || !perfilLeido) null
         // Vuelta 66: sobre los MISMOS días que pinta la lista, con tu parte de otros ya como filas:
         // la suma de los días es «Salió» (ver `ActividadCuadraConSusFilasTest`).
@@ -1356,6 +1356,19 @@ fun TransactionsScreen(
             conTuParteDeOtros(historia, tuParteDeOtros), periodoVisible, ajustesDelPeriodo, LocalDate.parse(hoyIso), accountTypes,
         )
     }
+    // Vuelta 76: lo fijo del período no dice «nuevo» —las categorías de las reglas, la cuota y lo que el
+    // ícono de repetición reconoce como un pago recurrente (`nombreRecurrenteDe`)—. Ver `categoriasFijas`.
+    val fijasDelPeriodo = remember(historia, periodoVisible, ajustesDelPeriodo, reglasRecurrentes, nombresDeSuscripcionesActivas) {
+        com.jvillada.movi.ui.dashboard.categoriasFijas(
+            reglasRecurrentes,
+            historia.orEmpty().asSequence().flatMap { it.items.asSequence() }
+                .filter { it.type == TransactionType.EXPENSE && com.jvillada.movi.shared.model.periodoDe(it.timestamp, ajustesDelPeriodo) == periodoVisible }
+                .filter { com.jvillada.movi.ui.recurrentes.nombreRecurrenteDe(it, reglasRecurrentes, nombresDeSuscripcionesActivas) != null }
+                .map { it.category }
+                .toSet(),
+        )
+    }
+    val resumen = remember(resumenSinFijas, fijasDelPeriodo) { resumenSinFijas?.copy(fijas = fijasDelPeriodo) }
     Box(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
     ListaYPanelDeMovimientos(
         conPanel = conPanel,

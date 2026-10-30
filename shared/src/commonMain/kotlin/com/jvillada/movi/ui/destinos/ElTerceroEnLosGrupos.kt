@@ -33,7 +33,18 @@ import com.jvillada.movi.ui.components.formatCOP
  * lo que se deben es el reembolso entre los dos (lo mismo que la tarjeta del saldo). Nada se calcula de
  * nuevo acá.
  */
-data class ElTerceroEnUnGrupo(val espacioId: String, val grupo: String, val detalle: String) {
+data class ElTerceroEnUnGrupo(
+    val espacioId: String,
+    val grupo: String,
+    val detalle: String,
+    /**
+     * Vuelta 76 · solo lo que se deben («te debe $168.050», «le debes $X», «están a mano»): la parte
+     * de [detalle] que dice la fila de la lista ([lineaDelTerceroEnLaLista]).
+     */
+    val deuda: String = detalle,
+    /** ¿Alguien le debe a alguien? (no «están a mano»). Lo que tiene saldo va primero en la lista. */
+    val conSaldo: Boolean = false,
+) {
     /** «En Casa con Caro: puso $240.000 · te debe $168.050», en una línea. */
     val texto: String get() = "En $grupo: $detalle"
 }
@@ -57,8 +68,43 @@ fun elTerceroEnLosGrupos(terceroId: String, detalles: List<DetalleDelEspacio>): 
             else -> "están a mano"
         }
         val partes = listOfNotNull(puso.takeIf { it > 0L }?.let { "puso ${formatCOP(it)}" }, deuda)
-        ElTerceroEnUnGrupo(d.espacio.id, d.espacio.nombre, partes.joinToString(" · "))
+        ElTerceroEnUnGrupo(
+            espacioId = d.espacio.id,
+            grupo = d.espacio.nombre,
+            detalle = partes.joinToString(" · "),
+            deuda = deuda,
+            conSaldo = teDebe > 0L || leDebes > 0L,
+        )
     }
+
+/**
+ * **La fila del tercero en «Personas y comercios» dice lo mismo que su ficha** (vuelta 76). La revisión
+ * `r5`: la fila de Caro decía «Nada este período» y su ficha «Puso $240.000 · te debe $261.250». Ahora el
+ * subtítulo de la fila sale de las MISMAS líneas de la ficha ([elTerceroEnLosGrupos]): «Te debe $261.250 ·
+ * Casa con Caro». Con varios grupos, primero el que tiene saldo y «· y N grupos más». `null` sin grupos
+ * (la fila dice lo de siempre). Pura; ninguna cifra nueva.
+ */
+fun lineaDelTerceroEnLaLista(grupos: List<ElTerceroEnUnGrupo>): String? {
+    val primero = grupos.firstOrNull { it.conSaldo } ?: grupos.firstOrNull() ?: return null
+    val otros = grupos.size - 1
+    val mas = when {
+        otros == 1 -> " · y 1 grupo más"
+        otros > 1 -> " · y $otros grupos más"
+        else -> ""
+    }
+    return "${primero.deuda.replaceFirstChar { it.uppercase() }} · ${primero.grupo}$mas"
+}
+
+/**
+ * Las líneas de [elTerceroEnLosGrupos] de cada tercero, por id, para la lista: se leen los grupos una
+ * vez y se reparten. Solo los terceros que son miembros de algún grupo tienen entrada. Pura.
+ */
+fun losTercerosEnLosGrupos(detalles: List<DetalleDelEspacio>): Map<String, List<ElTerceroEnUnGrupo>> =
+    detalles.flatMap { d -> d.espacio.miembros.map { it.id } }
+        .filter { it != MIEMBRO_YO }
+        .distinct()
+        .associateWith { id -> elTerceroEnLosGrupos(id, detalles) }
+        .filterValues { it.isNotEmpty() }
 
 /** El tag de una fila «En Casa con Caro: …» en la ficha del tercero. */
 const val TAG_TERCERO_EN_UN_GRUPO: String = "ficha-del-tercero:grupo"

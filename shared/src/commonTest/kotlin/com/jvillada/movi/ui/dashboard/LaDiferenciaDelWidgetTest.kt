@@ -54,6 +54,7 @@ class LaDiferenciaDelWidgetTest {
         val chica = diferenciaDeLaCategoria(categoria(80_000, 0))!!
         assertEquals(CATEGORIA_NUEVA, chica.texto)
         assertEquals(TonoDeCifra.Neutro, chica.tono)
-        assertEquals(TonoDeCifra.Alerta, diferenciaDeLaCategoria(categoria(450_000, 0))!!.tono)
+        // Vuelta 76: «nuevo» va siempre en un solo tono; antes una nueva grande iba en rojo.
+        assertEquals(TonoDeCifra.Neutro, diferenciaDeLaCategoria(categoria(450_000, 0))!!.tono)
     }
 }

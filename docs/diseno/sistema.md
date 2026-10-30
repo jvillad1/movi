@@ -4049,3 +4049,66 @@ Lo vigilan `CajaProyectadaRoutesTest` (server: el salario con arranque en el sig
 está en la lista del período, y cierra la caja en el siguiente), `PrimerUsoEnPantallaTest` (el doble toque, el
 arranque con y sin «ya te pagaron», sin cuenta no se crea), `ElHeroeNoMezclaTest` (las cuentas antes que el
 resumen) y `RenglonMeAlcanzaTest`/`CajaDelPeriodoTest`.
+
+## 74. Vuelta 76: palabras que dicen una sola cosa
+
+De la revisión fresca 5 del 30-oct (`r5-reg-personas.png`, `r5-reg-caro.png`, `r5-1280-inicio-b.png`,
+`r5-1280-actividad.png`, `r5-inicio-390-s2.png`, `r5-reg-traspaso.png`, `r5-tu-390-b.png`), puntos 6, 7, 9, 10
+y 14. **Sin reglas de plata nuevas**: ninguna cifra cambió; solo qué se dice, dónde y con qué palabra. Ningún
+componente nuevo en `ds/` ni token nuevo.
+
+1. **La fila del tercero dice lo de su ficha.** En «Personas y comercios», un tercero miembro de un grupo lleva
+   de subtítulo (hasta 2 renglones) «Te debe $168.050 · Casa con Caro», de las MISMAS líneas de la ficha
+   (`elTerceroEnLosGrupos` → `lineaDelTerceroEnLaLista`; con varios grupos, primero el que tiene saldo y «· y N
+   grupos más»). La lista lee los grupos una vez (`losTercerosEnLosGrupos`); si falla, cada fila dice lo de
+   siempre. Sin transferencias y con un grupo, a la derecha no va «Nada este período»: el subtítulo ya dice lo
+   que se deben. Con «Ocultar los saldos», la cifra se tapa (`conCifrasOcultas`).
+2. **«Falta por pagar» con todo pagado no se pinta.** Era una tarjeta de ~300 px que solo decía «Ya salió todo
+   lo del período». `visibleSections` lo saca con `pagosPendientes(…)` vacío (junto a la regla de la vuelta 73);
+   «En qué se va» queda solo en su bloque, a todo el ancho.
+3. **«Nuevo» con sentido** (`diferenciaDeLaCategoria(categoria, fijas)`, en el widget «En qué se va» y en el
+   panel de Actividad):
+   - solo con el período pasado cubierto: sin él la guarda de siempre deja `anterior = null` y no se dice nada;
+   - **nunca en lo fijo** (`categoriasFijas`): las categorías de las reglas recurrentes de gasto (incluidas las
+     cuotas y tarjetas sintéticas), `CUOTA_CATEGORY` y, en Actividad, las de los gastos del período que el ícono
+     de repetición reconoce (`nombreRecurrenteDe`, lo más cerca de «lo que salda un pago del período» que la
+     pantalla tiene sin pedir nada). Ahí no va ninguna palabra; un fijo que sube sigue diciendo «$X más»;
+   - **un solo tono**, `TONO_DE_LO_NUEVO` = `TonoDeCifra.Neutro` (el color del texto, como lo que sube sin
+     alarma). Antes salía en `sale` o en el texto según el monto, y la misma palabra parecía decir dos cosas.
+     El rojo queda para «$X más» cuando `subeMucho` (1,5× y $300.000, sin cambios).
+4. **Una palabra por cosa.**
+   - **«Avisos»** son los mensajes del banco: la acción «Avisos» del Inicio, Por revisar, «5 avisos del banco».
+   - **«Notificaciones»** son lo que suena y sus interruptores: la sección de Tú (`TITULO_DE_NOTIFICACIONES`), sus
+     filas «En este navegador» (el push de la web) y «En este teléfono» (Android), el botón «Activar» (era
+     «Activar avisos»), la fila de Captura del banco que lleva ahí, «Notificaciones en tu iPhone», la tarjeta del
+     Inicio («Activar notificaciones»), la fila de recordatorios bloqueados de Pagos («toca para ver tus
+     notificaciones») y Buscar («notificaciones» encuentra Tú). Los interruptores siguen siendo «Avisarme…»: el
+     verbo no choca. La campana ya se llamaba «Notificaciones».
+   - **Lo que se sale de lo normal es «para revisar»**: la tarjeta de «Movi propone hoy» dice «· y 3 cosas más
+     para revisar» (`cuerpoDeLaAnomalia`), y el número del encabezado **cuenta lo mismo que las tarjetas**: cada
+     una lleva `cuantas` (la suya más su «y N más»: pagos, débitos, cuadres, anomalías) y la sección pinta
+     `cuantasCosasProponen`. Antes «Movi propone hoy · 1» encima de «y 3 avisos más».
+5. **Pulido.**
+   - **Traspaso y Pagar con la barra de abajo.** El botón («Guardar traspaso», «Registrar pago», «Registrar
+     abono») va debajo del desplazamiento, como el de Gasto (vuelta 71): `TransferBody` publica su estado en
+     `EstadoDeLaBarraDelTraspaso` y `QuickAddScreen` pinta `BarraDeGuardarDelTraspaso` (con un sub-editor
+     abierto o la confirmación del desglose, no hay barra). Sale «Se guarda en línea: las dos puntas, juntas.»:
+     el renglón reservado de 16 dp solo dice lo que falta.
+   - **La fila de las alertas por correo nunca está muerta.** En Tú (web e iOS) se pinta solo si el server
+     contestó una dirección (`seVeLaFilaDeCorreo`, `GET /api/correo-entrante/direccion` con `configurado`);
+     abre la hoja con la dirección, «Copiar» y el paso a paso de Gmail (la pieza de la guía de primer uso).
+     Mientras lee o sin reenvío configurado, no hay fila.
+   - **Elegir a la persona de un grupo, corto.** «Nuevo grupo» dice «Elige a la persona», la lista y «Nueva
+     persona» (era «Agregar persona · Con su número o su llave, para reconocer sus transferencias», cortado a
+     360). El número o la llave los pide la hoja de la persona, como siempre: el server exige un identificador
+     para guardar un tercero, y volverlo opcional no entraba sin una regla nueva.
+
+Lo vigilan `Vuelta76Test` (commonTest: la línea del tercero con `saldoDelEspacio`, el widget fuera de
+`visibleSections` con todo pagado, «nuevo» cubierto / no cubierto / fijo / cuota / un solo tono y el rojo de
+siempre, «cosas para revisar» con `cuantasCosasProponen`, `seVeLaFilaDeCorreo`) y `Vuelta76EnPantallaTest`
+(Robolectric, `NATIVE`, 360 dp: la fila de Caro sin «Nada este período» ni cortes, el Inicio sin el widget y
+«En qué se va» a lo ancho, «nuevo» en un solo color y la cuota sin palabra, «Notificaciones» en Tú, la fila del
+correo con y sin dirección, «Movi propone hoy · 4», Traspaso y Pagar con la barra abajo, «Elige a la persona»
+sin cortes con y sin lista). Se actualizaron `MasScreenTest`, `LosAvisosApagadosSeVenTest`,
+`AvisosEnElIphoneTest`, `TarjetaDeAvisosTest`, `RepartirDesdeElMasTest` e `InicioDelRedisenoTest`. **Las líneas
+base** no cambian, y las guardas en 0 siguen en 0.

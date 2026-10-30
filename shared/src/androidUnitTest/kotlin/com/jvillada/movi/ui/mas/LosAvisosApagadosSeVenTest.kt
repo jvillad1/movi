@@ -71,7 +71,7 @@ class LosAvisosApagadosSeVenTest {
 
     /**
      * Vuelta 31: eran dos botones seguidos —«Activar» en las notificaciones y «Activar» en esta fila—
-     * para lo mismo. Queda uno, «Activar avisos».
+     * para lo mismo. Queda uno. Vuelta 76: dice «Activar» a secas (la sección ya es «Notificaciones»).
      */
     @Test
     fun `sin canal activo la fila dice Apagado y hay un solo Activar avisos`() {
@@ -80,7 +80,7 @@ class LosAvisosApagadosSeVenTest {
         assertTrue(hay(RECORDATORIOS_APAGADOS), "dice «Apagado: no te va a llegar»")
         assertTrue(!hay("Te avisamos 3 días antes"), "no promete un aviso que no va a llegar")
         assertEquals(1, composeRule.onAllNodes(hasClickAction() and hasText(ACTIVAR_AVISOS)).fetchSemanticsNodes().size)
-        assertEquals(0, composeRule.onAllNodesWithText("Activar", useUnmergedTree = true).fetchSemanticsNodes().size, "ningún «Activar» suelto")
+        assertEquals(1, composeRule.onAllNodesWithText("Activar", useUnmergedTree = true).fetchSemanticsNodes().size, "un solo «Activar»: el botón")
         composeRule.onNodeWithText(ACTIVAR_AVISOS, useUnmergedTree = true).performClick()
         assertEquals(1, activadas)
     }

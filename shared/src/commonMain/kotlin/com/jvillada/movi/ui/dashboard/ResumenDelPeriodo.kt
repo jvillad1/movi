@@ -161,20 +161,41 @@ fun subeMucho(gastado: Long, anterior: Long): Boolean =
         gastado * 10 >= anterior * com.jvillada.movi.shared.model.VECES_SOBRE_EL_PROMEDIO_X10
 
 /**
+ * **Las categorías que no se marcan «nuevo»** (vuelta 76): lo fijo. Un fijo o una cuota que este período
+ * cayó antes que el pasado (o que el pasado se pagó un día después) no es un gasto nuevo, y en la revisión
+ * `r5` la cuota del crédito salía «nuevo» en rojo. Son las categorías de las reglas recurrentes de gasto
+ * ([reglas]: las del dueño y las cuotas y tarjetas sintéticas), [CUOTA_CATEGORY], y las de [saldanUnPago]
+ * (los movimientos que saldan un pago del período, donde se sabe). Pura; no cambia ninguna cifra, solo qué
+ * palabra va debajo.
+ */
+fun categoriasFijas(
+    reglas: List<com.jvillada.movi.shared.model.RecurringRule>,
+    saldanUnPago: Collection<String> = emptyList(),
+): Set<String> =
+    reglas.filter { it.type == com.jvillada.movi.shared.model.TransactionType.EXPENSE }.map { it.category }.toSet() +
+        com.jvillada.movi.shared.model.CUOTA_CATEGORY + saldanUnPago
+
+/**
  * La diferencia de [categoria] contra el período pasado, o `null` sin con qué comparar. **Ninguna
  * cuenta nueva**: es [contraElAnterior] (la misma de «En qué se va») sobre lo que ya trae el Inicio.
  *
  * Sin «+» ni «−»: en Movi el «+» es plata que entra (sistema de diseño §4); acá la palabra dice el
  * verbo.
+ *
+ * **Vuelta 76 · «nuevo» con sentido.** Solo sale con el período pasado cubierto (sin [CategoriaDelPeriodo.anterior]
+ * no hay comparación: la guarda de siempre), nunca en una categoría de [fijas] ([categoriasFijas]: ahí no
+ * dice nada) y siempre en **un solo tono**, [TONO_DE_LO_NUEVO]: antes salía en rojo (Otros, Ropa, la cuota)
+ * o en el color del texto (Salud, Carro) según el monto, y la misma palabra parecía decir dos cosas. El rojo
+ * queda para «$X más» cuando sube mucho ([subeMucho], sin cambios).
  */
-fun diferenciaDeLaCategoria(categoria: CategoriaDelPeriodo): DiferenciaDeLaCategoria? {
+fun diferenciaDeLaCategoria(categoria: CategoriaDelPeriodo, fijas: Set<String> = emptySet()): DiferenciaDeLaCategoria? {
     val anterior = categoria.anterior ?: return null
     val c = categoria.contraElAnterior ?: return null
     val tonoAlSubir = if (subeMucho(categoria.gastado, anterior)) TonoDeCifra.Alerta else TonoDeCifra.Neutro
     return when {
-        anterior == 0L && categoria.gastado > 0 -> DiferenciaDeLaCategoria(
+        anterior == 0L && categoria.gastado > 0 -> if (categoria.nombre in fijas) null else DiferenciaDeLaCategoria(
             texto = CATEGORIA_NUEVA,
-            tono = tonoAlSubir,
+            tono = TONO_DE_LO_NUEVO,
             descripcion = "Nuevo: a esta altura del período pasado no habías gastado aquí",
         )
         c.tendencia == Tendencia.SUBE -> DiferenciaDeLaCategoria("${formatMoneyCompact(c.diferencia)} más", tonoAlSubir, descripcionDeLaFlecha(c))
@@ -182,6 +203,9 @@ fun diferenciaDeLaCategoria(categoria: CategoriaDelPeriodo): DiferenciaDeLaCateg
         else -> DiferenciaDeLaCategoria("igual", TonoDeCifra.Apagado, descripcionDeLaFlecha(c))
     }
 }
+
+/** Vuelta 76: el único tono de «nuevo» (el del texto, como lo que sube sin alarma). Nunca rojo. */
+val TONO_DE_LO_NUEVO: TonoDeCifra = TonoDeCifra.Neutro
 
 /** «↑ $120.000», «↓ $45.000» o «= igual»: lo que la fila pinta al lado del porcentaje. */
 fun textoDeLaFlecha(c: ContraElAnterior): String = when (c.tendencia) {
