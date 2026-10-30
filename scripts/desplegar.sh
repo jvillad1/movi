@@ -171,7 +171,7 @@ bajar_del_release() {
     contenido=$(unzip -l "$dir/server-all.jar")
     grep -q ' static/index.html$' <<< "$contenido" || { echo "══ El JAR no trae static/index.html."; exit 1; }
     grep -q 'font/figtree_regular.ttf$' <<< "$contenido" || { echo "══ El JAR no trae figtree_regular.ttf."; exit 1; }
-    echo "   commit.txt = ${SHA:0:12}… · sha256 $HUELLA · JAR de $(du -h "$dir/server-all.jar" | cut -f1) con la web y la fuente: ok"
+    echo "   commit.txt = ${SHA:0:12}… · sha256 $HUELLA · JAR de $(( $(wc -c < "$dir/server-all.jar") / 1000000 )) MB con la web y la fuente: ok"
 }
 
 conseguir_paquete() {

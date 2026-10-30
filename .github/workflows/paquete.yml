@@ -151,7 +151,9 @@ jobs:
           gh release view "$TAG" --json tagName,isPrerelease,assets \
             --jq '"\(.tagName) prerelease=\(.isPrerelease) archivos=\([.assets[].name] | join(","))"'
 
-      # **Limpieza:** quedan los 5 `paquete-*` más recientes (por fecha de creación); los demás se
+      # **Limpieza:** quedan los 5 `paquete-*` publicados más recientemente (`publishedAt`: el
+      # `createdAt` de `gh release list` es la fecha del COMMIT, y un paquete recién armado de un
+      # commit viejo —volver atrás— saldría primero en la fila de borrar); los demás se
       # borran con su tag. Solo se mira lo que empieza por `paquete-`: ningún otro release ni tag se
       # toca. Un borrado que falla no tumba la corrida (el paquete ya está publicado).
       - name: Borrar los paquete-* viejos (quedan 5)
@@ -159,8 +161,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          viejos=$(gh release list --limit 1000 --json tagName,createdAt \
-            --jq '[.[] | select(.tagName | startswith("paquete-"))] | sort_by(.createdAt) | reverse | .[5:] | .[].tagName')
+          viejos=$(gh release list --limit 1000 --json tagName,publishedAt,createdAt \
+            --jq '[.[] | select(.tagName | startswith("paquete-"))] | sort_by(.publishedAt // .createdAt) | reverse | .[5:] | .[].tagName')
           if [ -z "$viejos" ]; then echo "── Nada que borrar"; exit 0; fi
           for tag in $viejos; do
             case "$tag" in paquete-*) ;; *) echo "══ «$tag» no es un paquete: no lo toco"; continue ;; esac

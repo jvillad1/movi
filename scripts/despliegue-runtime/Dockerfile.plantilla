@@ -1,8 +1,8 @@
 # La imagen de runtime del camino normal de `scripts/desplegar.sh` (vuelta 69; desde la vuelta 84
 # el JAR no se sube: se BAJA).
 #
-# Es una PLANTILLA: `desplegar.sh` reemplaza `@@SHA@@` (el commit completo) y `@@SHA256@@` (la
-# huella del JAR) y sube a Railway una carpeta con solo este `Dockerfile` ya lleno y el
+# Es una PLANTILLA: `desplegar.sh` llena los dos marcadores entre arrobas dobles del `RUN` (SHA, el
+# commit completo, y SHA256, la huella del JAR) y sube a Railway una carpeta con solo este `Dockerfile` ya lleno y el
 # `railway.toml` de al lado. Nunca se arma con un `latest`: la URL nombra el release de UN commit.
 #
 # **Por qué se baja (vuelta 84, 30-oct-2026).** Subir el JAR de 87 MB desde la Mac del dueño a
@@ -12,7 +12,7 @@
 # público y el dueño aprobó que el JAR lo sea: es código compilado y la web, sin secretos), y el
 # builder de Railway lo baja de ahí, del lado de los centros de datos.
 #
-# **La huella es la guarda.** Si lo que llega no da exactamente `@@SHA256@@`, el build FALLA.
+# **La huella es la guarda.** Si lo que llega no da exactamente la huella verificada, el build FALLA.
 # Se usa `wget` + `sha256sum -c` y no `ADD --checksum` (que también serviría: el builder de
 # Railway es BuildKit, ver el `Dockerfile` de la raíz) para que los dos fracasos digan cosas
 # distintas en el log del build: «no se pudo bajar» (GitHub caído → `desplegar.sh` repite una
