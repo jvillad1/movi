@@ -3830,3 +3830,80 @@ Captura sin ellos y con el enlace). Se actualizaron `ElInicioDeLaOpcion3Test`, `
 `LosResumenesSeApaganTest` (ahora en `ui/mas`), `LosCreditosDicenLaVerdadEnPantallaTest`,
 `EspaciosEnDosColumnasTest`, `TransferFormTest` y `ElAmarilloEsDeLaAccionTest`. **Las líneas base** no
 cambian, y las guardas en 0 siguen en 0.
+
+## 73. Vuelta 75: el salario como ancla
+
+De la revisión fresca 5 del 30-oct (`r5-*.png`), puntos 2, 3, 4, 8, 11 y 12. **Una sola regla nueva**, la
+del horizonte sin salario (punto 1); ninguna otra cifra cambió. La §72 es de la vuelta 74, en paralelo.
+
+1. **Sin salario, la caja llega al período siguiente** (`horizonteDeLaCaja(…, conElPeriodoElegido)` en
+   `:core` `CajaProyectada.kt`). Si el dueño **eligió su período** (`!PeriodSettings.esMesDeCalendario`: otro
+   corte, la regla del día hábil o un inicio a mano) y no hay un ingreso recurrente en pesos que cierre el
+   horizonte, la caja llega al **arranque del período siguiente** (el día después del cierre: el día que dijo
+   que le pagan, ya corrido por fin de semana, festivo o excepción) y no a 30 días: «25 · Es el día que me
+   pagan» miraba «Hasta el 28 de nov». Con el mes de calendario que tiene quien nunca lo tocó siguen los 30
+   días. `CajaProyectada.hastaElPeriodoSiguiente` solo cambia lo que se dice. La app (`cajaDelPeriodoDe`) y el
+   server (`cajaProyectadaDe`, Movi AI) pasan lo mismo. Las invariantes de la vuelta 70 (lo libre, el ahorro,
+   los apartados) no cambian y se prueban también con este horizonte.
+2. **La línea sin salario** (`lineaSinSalario`): encima de la cifra de la caja, «Sin tu salario, Movi supone
+   que no te entra nada» con «Agregar» (`Boton` `Fantasma` S), que abre la hoja de ingreso recurrente ya en
+   Ingreso y con el día del corte (`EstadoDelTableroDeRecurrentes.agregarSalario(dia)`,
+   `CreateRecurringRuleSheet(diaNuevo)`). Con un ingreso fijo en otra moneda o sin monto no sale: ya hay uno,
+   y «¿Qué supone?» dice por qué no cuenta.
+3. **«¿Me alcanza?» en el héroe de Inicio** (`RenglonMeAlcanzaDelHeroe`, `ui/dashboard/CajaEnHoy.kt`). Un
+   renglón tocable dentro de la tarjeta del héroe, debajo de la cifra y encima de «Por confirmar»: **siempre
+   se ve**, también con «Disponible» oculto, y un APK viejo no lo pinta (va dentro de `HERO_BALANCE`, la
+   definición SDUI no cambió). «Te alcanza hasta el 25 nov · tu día más justo, el 5 nov» si lo libre del peor
+   día es ≥ 0; «No te alcanza: el 5 nov quedarías en −$1,3M» si no (`renglonMeAlcanza`, en rojo). Sale de
+   `cajaDelPeriodoDe` → `cajaHastaQueTePaguen`, la MISMA de Pagos (`renglonMeAlcanzaDe`); sin período, lista,
+   cuentas o el supuesto del gasto del día a día, no se pinta. Tocarlo abre `Screen.Plan(SEGMENTO_PAGOS,
+   enLaCaja = true)`: en una columna, Pagos baja hasta la caja (`LlevarALaCaja`, una vez). «Tu día más justo»
+   salió de la sección «Disponible»: decirlo dos veces sería repetirlo.
+4. **La caja de Pagos: una cifra y una frase** (`ui/plan/CajaDelPeriodo.kt`). La cifra titular es lo libre
+   del día más justo (`Cifra` `Grande`, `FormaDeCifra.Abreviada`, `TonoDeCifra.Alerta` solo si es negativa);
+   debajo, sin cifras, «Hasta el 25 nov · tu día más justo es el 5 nov» (o «… · el 5 nov no te alcanza»,
+   `fraseCortaDeLaCaja`). Lo demás va a «¿Qué supone?» (`loQueSupone`): lo que habrá en las cuentas y el ahorro
+   (`lineaDeLasCuentas`), la diferencia con «Te quedan» y su causa medida (`clausulaDeLaDiferencia`, ya como
+   frase), el primer día en rojo (`fraseDelRojo`), el supuesto del gasto y de dónde sale la línea. **Una sola
+   forma de cifra**: la abreviada en todas las escalas (`formatMoneyAbreviada`: «$683 mil», «$1,3M») en la
+   cifra, las frases, la leyenda y la gráfica. Era un párrafo rojo de cinco renglones con «−$683.361» junto a
+   «−$1,3M».
+5. **Un solo nombre del período** (`nombreDelPeriodo` en `:core` `PeriodoFinanciero.kt`, `nombreEntre`):
+   **«23 oct – 24 nov»** por sus fechas cortas, o **«Octubre»** solo cuando el período ES el mes de calendario
+   (arranca el 1 y cierra el último día del mismo mes; un inicio a mano lo nombra por sus fechas); con el año
+   («Octubre 2025», «25 oct – 24 nov 2025») solo si no es el de hoy. Lo dicen el encabezado de Inicio (y la
+   línea bajo «Tu plata»), Actividad (ya sin «Noviembre de 2026» ni el rango largo debajo: mientras el perfil
+   no contesta, un esqueleto del mismo alto), Pagos (la línea del período, otro período con ‹ › y «Período en
+   curso · …»), Tus períodos (`nombreDelResumen`, desde `desde`/`hasta` del server: un APK nuevo lo dice igual
+   con un server viejo) con su detalle, y En qué se va. Buscar no nombra períodos. Las frases («Antes de agosto
+   2026 no hay movimientos», «hasta noviembre de 2026» de Créditos) siguen con el mes: no son el nombre de un
+   período en pantalla.
+6. **El Primer uso** (`ui/primeruso/`). «Paso 2 de 6» es un rótulo chico (`apoyoMedio`, `TAG_ROTULO_DEL_PASO`)
+   y el título grande es el del paso (`titular`, `heading`). En «Tu período», con un día elegido y sin un
+   ingreso fijo anotado, **«¿Cuánto te pagan? (opcional)»** (`MoneyField`; con cuentas, «¿A qué cuenta te
+   llega?» en `PildoraDeFiltro`; sin ellas, «Llega el día 25 a la primera cuenta que agregues…»). **El orden
+   de los pasos no cambió** —la lista única de `primerosPasos` la comparten la fila del Inicio y Tú—: el monto
+   se pregunta donde se elige el día, y **al terminar** (al llegar a «Listo», o al salir con «Ahora no») la
+   guía crea la regla con `createRecurringRule` de siempre (`reglaDelSalario`: «Salario», categoría
+   «Salario», INCOME, **el día del corte** —el que `fechaEsperadaDelIngreso` reconoce como el salario—, la
+   cuenta elegida o la primera de dinero), una sola vez y sin escrituras propias. El día de un pago de cada
+   mes se elige con `SelectorDeDiaDelMes` (vuelta 72). «Listo» abre con una cifra real: «Te quedan
+   $4.963.400 hasta el 24 nov» (`fraseDelFinalDeLaGuia`: `teQuedanDeHoy` sobre `disponibleDelInicio` con
+   `leerDatosDelDiaADia`, las lecturas de siempre), o «Ya puedes empezar» sin cuentas o sin cifra.
+7. **El héroe cambia entero** (`rememberEstadoQueCambia`, `EstadoDelHeroe` en `ui/dashboard/EntradaDelInicio.kt`).
+   La cifra grande, su línea («para N días · $X por día») y «Tu plata» salen de UN estado; al llegar uno
+   nuevo, el viejo se desvanece entero y el nuevo aparece entero (`Movimiento.LARGO_MS`), sin un cuadro con
+   piezas de los dos. Antes solo la cifra contaba 600 ms (`rememberCifraQueCambia`, que se fue) mientras la
+   línea y «Tu plata» ya eran las nuevas: «$1.417.943» junto a «$441.916 por día». El primer dato después del
+   esqueleto entra sin esperar; con menos movimiento, en el acto.
+
+Lo vigilan `CajaHastaQueTePaguenTest` (`:core`: el horizonte al período siguiente con el corte del dueño, en
+fin de semana y con un período excepcional, sin cambios con salario o sin período elegido, y las invariantes),
+`NombreDelPeriodoTest` (`:core`: corte 1, corte 25 con fin de semana y festivo, excepcional, el año),
+`CajaProyectadaRoutesTest` (server), `RenglonMeAlcanzaTest` y `CajaDelPeriodoTest` (commonTest), y en
+Robolectric `CajaEnHoyTest` (el renglón en el Inicio por defecto, con «Disponible» oculto, y a Pagos en la
+caja), `PagosHastaQueTePaguenTest` (una cifra, la frase sin cifras, la línea sin salario),
+`PrimerUsoEnPantallaTest` (el salario y su regla, el rótulo, el selector, «Listo» con cifra o «Ya puedes
+empezar») y `ElHeroeNoMezclaTest` (cuadro por cuadro, nunca lo viejo con lo nuevo). Se actualizaron las
+pruebas del nombre del período en Inicio, Actividad, Tus períodos y `LasCifrasDelSistemaSeOcultanTest`.
+**Las líneas base** no cambian, y las guardas en 0 siguen en 0.
