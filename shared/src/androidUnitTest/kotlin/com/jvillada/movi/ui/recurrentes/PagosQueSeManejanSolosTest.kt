@@ -187,7 +187,11 @@ class PagosQueSeManejanSolosTest {
         montar(listOf(carro), nombres = mapOf(nu.id to nu.name))
         assertTrue(hay("¿Usar siempre Nu para Carro?"))
         assertTrue(cuentasGuardadas.isEmpty(), "nunca se guarda sola")
-        assertEquals(VarianteDeBoton.Secundario, variante(GUARDAR_EN_LA_REGLA))
+        // Vuelta 80: una propuesta de Movi arriba de la lista, no adentro de la fila pagada.
+        val propuesta = composeRule.onNodeWithText("¿Usar siempre Nu para Carro?").fetchSemanticsNode().boundsInRoot.top
+        val fila = composeRule.onNodeWithText("Carro").fetchSemanticsNode().boundsInRoot.top
+        assertTrue(propuesta < fila, "la propuesta va arriba de la lista")
+        assertTrue(composeRule.onAllNodesWithTag(com.jvillada.movi.ui.components.ds.TAG_TARJETA_DE_PROPUESTA, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
         tocar(GUARDAR_EN_LA_REGLA)
         assertEquals(listOf("rr_carro" to nu.id), cuentasGuardadas)
     }
@@ -216,24 +220,25 @@ class PagosQueSeManejanSolosTest {
 
     // ── «Pausar» en el «⋯» de una fila sin pagar ───────────────────────────────
 
+    /** Vuelta 80: con «Anotar pago» al final, la fila no lleva además el «⋯» (Pausar está en la regla). */
     @Test
-    fun `Pausar esta en el menu de una fila sin pagar`() {
-        val pausadas = mutableListOf<String>()
+    fun `con Anotar pago la fila no lleva ademas el menu`() {
         composeRule.setContent {
             MoviTheme {
                 SeccionChecklistDelPeriodo(
                     checklist = listOf(arriendo), cargando = false, pudoLeer = true, marcando = emptySet(),
                     onConfirmar = { _, _ -> }, onNoFueEste = { _, _ -> }, onAnotarMovimiento = {}, onQuitarLaMarca = {},
-                    onReintentar = {}, onPausar = { pausadas += it.ruleId },
+                    onReintentar = {}, onPausar = {},
                 )
             }
         }
         composeRule.waitForIdle()
-        composeRule.onNodeWithContentDescription(descripcionDelMenuDeLaFila("Arriendo")).performSemanticsAction(SemanticsActions.OnClick)
-        composeRule.waitForIdle()
-        tocar(ETIQUETA_PAUSAR)
-        assertEquals(listOf("rr_arriendo"), pausadas)
+        assertTrue(hay(com.jvillada.movi.ui.recurrentes.ETIQUETA_ANOTAR))
+        assertTrue(composeRule.onAllNodesWithTag(TAG_MENU_DE_LA_FILA_PENDIENTE, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
     }
+
+    // Vuelta 80: «Pausar esta en el menu de una fila sin pagar» se fue: con «Anotar pago» al final la fila
+    // no lleva además el «⋯»; «Pausar» se ofrece en la hoja de la regla (`la hoja ofrece Pausar`).
 
     @Test
     fun `la fila vencida de una regla ya pausada no ofrece Pausar`() {

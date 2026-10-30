@@ -364,18 +364,17 @@ fun SeccionChecklistDelPeriodo(
                 }
             } else null,
         )
-        // Vuelta 72: la factura pagada desde una cuenta, cuya regla no tiene ninguna, propone guardarla.
-        val cuentaParaGuardar = cuentaParaGuardarEnLaRegla(pago, nombresDeCuentas)
-            ?.takeIf { onUsarSiempreLaCuenta != null && claveDeLaCuentaDeLaRegla(pago.ruleId, it) !in cuentasDescartadas }
-        if (cuentaParaGuardar != null) {
-            BajoLaFila {
-                PropuestaDeLaCuentaDeLaRegla(
-                    pregunta = preguntaDeLaCuentaDeLaRegla(nombresDeCuentas.getValue(cuentaParaGuardar), pago.nombre),
-                    enVuelo = enVuelo,
-                    onGuardar = { onUsarSiempreLaCuenta?.invoke(pago, cuentaParaGuardar) },
-                    onAhoraNo = { onNoUsarSiempreLaCuenta?.invoke(pago, cuentaParaGuardar) },
-                )
-            }
+        // Vuelta 80: la propuesta «¿Usar siempre Nu para Carro?» ya no cuelga de la fila: va arriba de
+        // la lista, como una propuesta de Movi ([PropuestasDeLaCuentaDeLaRegla]).
+    }
+
+    // Vuelta 72: la factura pagada desde una cuenta, cuya regla no tiene ninguna, propone guardarla.
+    // Vuelta 80: una [TarjetaDePropuesta] arriba de la lista, no adentro de la fila.
+    val cuentasParaGuardar: List<Pair<PagoDelPeriodo, String>> = if (onUsarSiempreLaCuenta == null) emptyList() else {
+        facturas.mapNotNull { pago ->
+            cuentaParaGuardarEnLaRegla(pago, nombresDeCuentas)
+                ?.takeIf { claveDeLaCuentaDeLaRegla(pago.ruleId, it) !in cuentasDescartadas }
+                ?.let { pago to it }
         }
     }
 
@@ -418,6 +417,19 @@ fun SeccionChecklistDelPeriodo(
                 // ── Tus facturas del período ─────────────────────────────────────────────────
                 // Vuelta 72: «+ Agregar» siempre, no solo en el vacío.
                 Seccion(titulo = TITULO_TUS_FACTURAS, accion = onAgregar?.let { AGREGAR_UN_PAGO }, onAccion = onAgregar)
+                if (cuentasParaGuardar.isNotEmpty()) {
+                    PropuestasDeLaCuentaDeLaRegla(
+                        propuestas = cuentasParaGuardar.map { (pago, cuentaId) ->
+                            PropuestaDeCuentaDeLaRegla(
+                                pregunta = preguntaDeLaCuentaDeLaRegla(nombresDeCuentas.getValue(cuentaId), pago.nombre),
+                                enVuelo = pago.ruleId in marcando,
+                                onGuardar = { onUsarSiempreLaCuenta?.invoke(pago, cuentaId) },
+                                onAhoraNo = { onNoUsarSiempreLaCuenta?.invoke(pago, cuentaId) },
+                            )
+                        },
+                    )
+                    Spacer(Modifier.height(Medida.dentroDeSeccion))
+                }
                 Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
                     if (celebrar) {
                         Box(Modifier.padding(horizontal = Medida.margenDePantalla).padding(top = Espacio.s)) {

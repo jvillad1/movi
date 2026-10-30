@@ -427,7 +427,7 @@ class PlanScreenTest {
         // La puerta queda cerrada: si Plan pidiera algo para la tarjeta, se quedaría esperando.
         montar()
 
-        assertTrue(hay("de \$5M"), "el disponible del Inicio, sin esperar a nadie")
+        assertTrue(hay("\$5.000.000"), "el disponible del Inicio, sin esperar a nadie")
         assertEquals(0, contarTag(TAG_ESQUELETO_DEL_DISPONIBLE))
         assertEquals(0, lecturasDelResumen, "con el Inicio fresco no hay nada que pedir")
         assertEquals(1, contarTag(TAG_LINEA_DEL_PERIODO_DE_PLAN), "el período también viene del Inicio")
@@ -450,7 +450,7 @@ class PlanScreenTest {
         puerta.complete(Unit)
         composeRule.waitForIdle()
 
-        assertTrue(hay("de \$5M"))
+        assertTrue(hay("\$5.000.000"))
         assertEquals(0, contarTag(TAG_ESQUELETO_DEL_DISPONIBLE))
         assertEquals(0, contarTag(TAG_LINEA_DEL_PERIODO_DE_PLAN_ESQUELETO))
         assertEquals(1, contarTag(TAG_LINEA_DEL_PERIODO_DE_PLAN))
@@ -514,7 +514,7 @@ class PlanScreenTest {
 
         puerta.complete(Unit)
         composeRule.waitForIdle()
-        assertTrue(hay("de \$5M"))
+        assertTrue(hay("\$5.000.000"))
         assertTrue(hay("¿De dónde sale?"), "llega cerrada")
         assertTrue(!hay("Ocultar"))
     }
@@ -525,12 +525,12 @@ class PlanScreenTest {
         conInstantaneaDelInicio()
         montar()
 
-        assertTrue(hay("de \$5M"), "lo último que se supo, en el primer cuadro")
+        assertTrue(hay("\$5.000.000"), "lo último que se supo, en el primer cuadro")
         assertTrue(hay("Actualizando…"), "con la recarga en vuelo, la cabecera lo dice")
 
         puerta.complete(Unit)
         composeRule.waitForIdle()
-        assertTrue(hay("de \$5M"))
+        assertTrue(hay("\$5.000.000"))
         assertTrue(!hay("Actualizando…"))
     }
 
@@ -544,7 +544,7 @@ class PlanScreenTest {
         // Vuelta 68: lo dice el aviso único de arriba, no una tarjeta por sección.
         composeRule.waitUntil(timeoutMillis = 5_000) { contarTag(TAG_AVISO_DE_LA_PANTALLA) == 1 }
         assertTrue(hay(NO_PUDIMOS_CARGAR))
-        assertTrue(!hay("de \$5M"), "las cifras de la instantánea no se pueden dar por actuales")
+        assertTrue(!hay("\$5.000.000"), "las cifras de la instantánea no se pueden dar por actuales")
         assertTrue(!hay("Actualizando…"))
     }
 
@@ -807,7 +807,7 @@ class PlanScreenTest {
 
         puerta.complete(Unit)
         composeRule.waitForIdle()
-        assertTrue(hay("de \$5M"))
+        assertTrue(hay("\$5.000.000"))
 
         val periodosCargado = composeRule.onNodeWithTag(TAG_FILA_DE_TUS_PERIODOS, useUnmergedTree = true)
             .getUnclippedBoundsInRoot().top

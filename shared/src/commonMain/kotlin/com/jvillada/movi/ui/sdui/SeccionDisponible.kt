@@ -41,6 +41,7 @@ import com.jvillada.movi.ui.components.ds.Cifra as CifraDelSistema
 import com.jvillada.movi.ui.components.ds.TonoDeCifra
 import com.jvillada.movi.ui.components.ds.FormaDeCifra
 import com.jvillada.movi.ui.components.ds.VarianteDeCifra
+import com.jvillada.movi.ui.components.ds.estiloDeLaCifra
 import com.jvillada.movi.ui.components.ds.Seccion
 import com.jvillada.movi.ui.components.ds.Superficie
 import com.jvillada.movi.ui.components.ds.TonoDeBarra
@@ -282,8 +283,17 @@ private fun CuerpoDelDisponible(
         // el héroe de Hoy. Eran dos líneas de texto («Tenías $X el 25 · entraron $Y») que no sumaban
         // a la vista.
         CascadaDelDisponibleEnPantalla(disponible)
+        // Vuelta 80: en Pagos, lo gastado de cada ventana y su meta van acá, en el desglose.
+        if (comoEnPagos) {
+            Spacer(Modifier.height(Espacio.s))
+            DesgloseDeLasVentanas(disponible)
+        }
     }
     Spacer(Modifier.height(Movi.espacios.medio))
+    if (comoEnPagos) {
+        VentanasEnRenglones(disponible, entrada)
+        return
+    }
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(Movi.espacios.medio),
@@ -291,6 +301,82 @@ private fun CuerpoDelDisponible(
         ColumnaDeVentana("Período", disponible.periodo, disponible, entrada, Modifier.weight(1f), delPeriodo = true)
         ColumnaDeVentana(rotuloDeLaSemana(disponible), disponible.semana, disponible, entrada, Modifier.weight(1f))
         ColumnaDeVentana(ROTULO_META_DE_HOY, disponible.hoy, disponible, entrada, Modifier.weight(1f))
+    }
+}
+
+/** El tag de cada ventana en renglón de la tarjeta de Pagos (vuelta 80). */
+const val TAG_VENTANA_EN_RENGLON: String = "disponible:ventana-en-renglon"
+
+/** El tag del desglose de las ventanas, dentro de «¿De dónde sale?» (vuelta 80). */
+const val TAG_DESGLOSE_DE_LAS_VENTANAS: String = "disponible:desglose-de-las-ventanas"
+
+/** Las tres ventanas en su orden: el rótulo, la ventana y si es la del período. */
+private fun ventanasDe(disponible: DisponibleDelPeriodo): List<Triple<String, VentanaDelDisponible, Boolean>> = listOf(
+    Triple("Período", disponible.periodo, true),
+    Triple(rotuloDeLaSemana(disponible), disponible.semana, false),
+    Triple(ROTULO_META_DE_HOY, disponible.hoy, false),
+)
+
+/**
+ * **Lo que queda en cada ventana, en un renglón con su barra** (vuelta 80, la tarjeta de Pagos). Eran
+ * tres columnas de seis renglones de letra 11 cada una (`r7-pagos-390-c.png`): se leía como una hoja de
+ * cálculo. Ahora cada ventana es una [CifraConRotulo] en renglón —«Período … $1.450.950»— con su barra
+ * debajo; lo gastado y la meta de cada una van al desglose de «¿De dónde sale?»
+ * ([DesgloseDeLasVentanas]). Las mismas cifras y la misma regla de la alerta y la barra que las columnas.
+ */
+@Composable
+private fun VentanasEnRenglones(disponible: DisponibleDelPeriodo, entrada: Float) {
+    Column(verticalArrangement = Arrangement.spacedBy(Espacio.s)) {
+        ventanasDe(disponible).forEach { (rotulo, ventana, delPeriodo) ->
+            val enAlerta = barraEnAlerta(disponible, delPeriodo) ||
+                (delPeriodo && !disponible.hayMargen && ventana.nivel == NivelDelGasto.PASADO)
+            val sinNadaQueRepartir = !delPeriodo && disponible.yaTePasaste
+            Column(modifier = Modifier.fillMaxWidth().testTag(TAG_VENTANA_EN_RENGLON)) {
+                CifraConRotulo(
+                    rotulo = rotulo,
+                    monto = if (sinNadaQueRepartir) 0L else ventana.teQuedan,
+                    tono = if (enAlerta) TonoDeCifra.Alerta else TonoDeCifra.Neutro,
+                    // Compacta, como las columnas: el período repite «Te quedan» de arriba, y entera se leía doble.
+                    forma = FormaDeCifra.Compacta,
+                    disposicion = DisposicionDeCifraConRotulo.EnRenglon,
+                )
+                if (disponible.hayMargen) {
+                    Spacer(Modifier.height(Movi.espacios.minimo))
+                    BarraDeLaVentana(ventana, enAlerta, entrada)
+                }
+            }
+        }
+    }
+}
+
+/** La barra de una ventana: lo gastado contra su meta, con un mínimo del 2 % si algo se gastó. */
+@Composable
+private fun BarraDeLaVentana(ventana: VentanaDelDisponible, enAlerta: Boolean, entrada: Float) {
+    val fraccion = ventana.fraccion
+    val relleno = if (fraccion != null && ventana.gastado > 0L) fraccion.coerceIn(0.02f, 1f) * entrada.coerceIn(0f, 1f) else 0f
+    Box(modifier = Modifier.fillMaxWidth().testTag(if (enAlerta) TAG_BARRA_EN_ALERTA else TAG_BARRA_DE_VENTANA)) {
+        BarraDeProgreso(fraccion = relleno, tono = tonoDeLaBarra(enAlerta))
+    }
+}
+
+/**
+ * «Período: en el día a día $2,1M de $3,6M», «Semana · 6 días: gastaste $558.100 de $2M»: lo que antes
+ * iba en los renglones chicos de cada columna (vuelta 80). Pura.
+ */
+internal fun desgloseDeLaVentana(rotulo: String, ventana: VentanaDelDisponible, delPeriodo: Boolean, sinNadaQueRepartir: Boolean): String =
+    "$rotulo: ${if (delPeriodo) ROTULO_DIA_A_DIA_DEL_PERIODO else GASTASTE} ${formatMoneyCompact(ventana.gastado)} " +
+        if (sinNadaQueRepartir) YA_TE_PASASTE else deLaMeta(ventana.meta)
+
+@Composable
+private fun DesgloseDeLasVentanas(disponible: DisponibleDelPeriodo) {
+    Column(modifier = Modifier.fillMaxWidth().testTag(TAG_DESGLOSE_DE_LAS_VENTANAS), verticalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
+        ventanasDe(disponible).forEach { (rotulo, ventana, delPeriodo) ->
+            Text(
+                desgloseDeLaVentana(rotulo, ventana, delPeriodo, sinNadaQueRepartir = !delPeriodo && disponible.yaTePasaste),
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoMedio,
+            )
+        }
     }
 }
 
@@ -336,17 +422,11 @@ private fun CuerpoDelDisponibleEsqueleto() {
     // El renglón «Disponible del período … $X».
     LineaEsqueleto(fraccionDelAncho = 1f, estilo = Movi.textos.apoyo)
     Spacer(Modifier.height(Movi.espacios.medio))
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(Movi.espacios.medio),
-    ) {
+    // Vuelta 80: las tres ventanas en renglón (ver [VentanasEnRenglones]), con su barra.
+    Column(verticalArrangement = Arrangement.spacedBy(Espacio.s)) {
         repeat(3) {
-            Column(modifier = Modifier.weight(1f)) {
-                LineaEsqueleto(fraccionDelAncho = 0.6f, estilo = Movi.textos.apoyo)
-                LineaEsqueleto(fraccionDelAncho = 0.8f, estilo = Movi.textos.monto)
-                LineaEsqueleto(fraccionDelAncho = 0.6f, estilo = Movi.textos.apoyo)
-                LineaEsqueleto(fraccionDelAncho = 0.6f, estilo = Movi.textos.apoyo)
-                LineaEsqueleto(fraccionDelAncho = 0.6f, estilo = Movi.textos.apoyo)
+            Column(modifier = Modifier.fillMaxWidth()) {
+                LineaEsqueleto(fraccionDelAncho = 1f, estilo = estiloDeLaCifra(VarianteDeCifra.Fila, Movi.textos))
                 Spacer(Modifier.height(Movi.espacios.minimo))
                 BloqueEsqueleto(alto = Medida.altoDeBarraDeProgreso)
             }
