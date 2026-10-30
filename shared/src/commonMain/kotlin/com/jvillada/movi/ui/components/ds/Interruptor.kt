@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -88,6 +89,8 @@ fun Interruptor(
     val recorrido = Medida.anchoDelInterruptor - Medida.perillaDelInterruptor - hueco * 2
     val x by animateDpAsState(if (encendido) recorrido else Dp.Hairline, Movimiento.alVolver(reducido, Movimiento.CORTO_MS), label = "perilla")
     val forma = CircleShape
+    // Revisión de la vuelta 82: el riel mide 52 × 32, pero lo que se toca mide al menos 48 de alto (el
+    // objetivo táctil de la app): en «Editar inicio» va suelto junto a las flechas. Lo que se ve no cambia.
     Box(
         modifier = modifier
             .anilloDeFoco(forma)
@@ -97,19 +100,25 @@ fun Interruptor(
                 descripcion?.let { contentDescription = it }
             }
             .testTag(TAG_INTERRUPTOR)
-            .size(width = Medida.anchoDelInterruptor, height = Medida.altoDelInterruptor)
-            .alpha(if (habilitado) 1f else ALFA_DEL_INTERRUPTOR_DESHABILITADO)
-            .background(riel, forma)
-            .border(Medida.trazoDeBoton, borde, forma)
-            .padding(hueco),
-        contentAlignment = Alignment.CenterStart,
+            .sizeIn(minWidth = Medida.objetivoTactil, minHeight = Medida.objetivoTactil),
+        contentAlignment = Alignment.Center,
     ) {
         Box(
             modifier = Modifier
-                .offset(x = x)
-                .size(Medida.perillaDelInterruptor)
-                .shadow(Medida.sombraDeLaPerilla, forma, clip = false, ambientColor = Movi.colores.sombra, spotColor = Movi.colores.sombra)
-                .background(objetivo.perilla, forma),
-        )
+                .size(width = Medida.anchoDelInterruptor, height = Medida.altoDelInterruptor)
+                .alpha(if (habilitado) 1f else ALFA_DEL_INTERRUPTOR_DESHABILITADO)
+                .background(riel, forma)
+                .border(Medida.trazoDeBoton, borde, forma)
+                .padding(hueco),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            Box(
+                modifier = Modifier
+                    .offset(x = x)
+                    .size(Medida.perillaDelInterruptor)
+                    .shadow(Medida.sombraDeLaPerilla, forma, clip = false, ambientColor = Movi.colores.sombra, spotColor = Movi.colores.sombra)
+                    .background(objetivo.perilla, forma),
+            )
+        }
     }
 }
