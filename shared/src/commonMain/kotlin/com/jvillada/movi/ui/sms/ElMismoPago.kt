@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Inbox
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -453,8 +454,24 @@ internal fun LoQueDiceElBanco(
 }
 
 /**
+ * Vuelta 82 · **un amarillo por vista en Por revisar**: si la acción esperada de cada tarjeta de aviso va
+ * en amarillo. `true` por defecto (Captura del banco, una tarjeta sola); Por revisar lo apaga cuando hay
+ * más de una tarjeta o el lote «Confirmar N» está a la vista ([laTarjetaLlevaElAmarillo]): entonces el
+ * único amarillo es el lote, y «Confirmar», «Es este» o «Sí, se cobró» de cada tarjeta van secundarios.
+ */
+val LocalLaTarjetaLlevaElAmarillo = compositionLocalOf { true }
+
+/**
+ * ¿La acción de cada tarjeta de Por revisar va en amarillo? Solo si es **la única tarjeta** con acciones
+ * ([tarjetas]) y el lote no está a la vista ([conLote]): con dos «Confirmar» amarillos (o el lote y uno
+ * más) la vista ya no dice cuál es su acción. Pura.
+ */
+fun laTarjetaLlevaElAmarillo(tarjetas: Int, conLote: Boolean): Boolean = !conLote && tarjetas <= 1
+
+/**
  * Un botón de una tarjeta de aviso: un [Boton] chico del sistema. [principal] es la acción que se
- * espera («Confirmar», «Revisar»); el resto va en la capa 2.
+ * espera («Confirmar», «Revisar»); el resto va en la capa 2. Vuelta 82: la principal va en amarillo solo
+ * si [LocalLaTarjetaLlevaElAmarillo] lo deja.
  */
 @Composable
 internal fun PastillaDelPago(
@@ -464,11 +481,12 @@ internal fun PastillaDelPago(
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
+    val enAmarillo = principal && LocalLaTarjetaLlevaElAmarillo.current
     Boton(
         texto = texto,
         onClick = onClick,
         modifier = modifier,
-        variante = if (principal) VarianteDeBoton.Principal else VarianteDeBoton.Secundario,
+        variante = if (enAmarillo) VarianteDeBoton.Principal else VarianteDeBoton.Secundario,
         tamano = TamanoDeBoton.S,
         habilitado = habilitada,
     )

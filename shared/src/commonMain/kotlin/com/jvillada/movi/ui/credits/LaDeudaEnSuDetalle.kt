@@ -471,6 +471,8 @@ fun AvisoDeFaltanDatos(deuda: DeudaDelDetalle, modifier: Modifier = Modifier) {
             accion = COMPLETAR_DATOS,
             onAccion = { deuda.hoja = HojaDeLaDeuda.Condiciones },
             tono = TonoDeIcono.Aviso,
+            // Vuelta 82: sin condiciones no hay «Pagar la cuota»: «Completar datos» es la única principal.
+            varianteDeLaAccion = com.jvillada.movi.ui.components.ds.VarianteDeBoton.Principal,
         )
     }
 }

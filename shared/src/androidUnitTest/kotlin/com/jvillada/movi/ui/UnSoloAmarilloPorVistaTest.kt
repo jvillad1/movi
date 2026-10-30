@@ -43,6 +43,28 @@ import com.jvillada.movi.ui.recurrentes.SeccionChecklistDelPeriodo
 import com.jvillada.movi.ui.recurrentes.TAG_TARJETA_FALTA_POR_PAGAR
 import com.jvillada.movi.ui.sdui.SduiRenderer
 import com.jvillada.movi.ui.sdui.TAG_SUPERFICIE_DE_LAS_ACCIONES
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.onAllNodesWithText
+import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.data.RepositorioDePrueba
+import com.jvillada.movi.data.RepositorioDePruebaDeMovimientos
+import com.jvillada.movi.shared.model.EventDay
+import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.ParsedSms
+import com.jvillada.movi.shared.model.PropuestaDelAviso
+import com.jvillada.movi.shared.model.PropuestasDeLaBandeja
+import com.jvillada.movi.shared.model.SMS_STATE_PENDING
+import com.jvillada.movi.shared.model.SmsMessage
+import com.jvillada.movi.shared.model.UserProfile
+import com.jvillada.movi.ui.accounts.AccountsScreen
+import com.jvillada.movi.ui.components.TAG_AVATAR_DE_MARCA
+import com.jvillada.movi.ui.components.ds.TAG_ICONO_EN_CIRCULO
+import com.jvillada.movi.ui.fecha.hoyEnAppZone
+import com.jvillada.movi.ui.porrevisar.PorRevisarScreen
+import com.jvillada.movi.ui.transactions.TAG_TARJETA_DE_AVISOS
+import com.jvillada.movi.ui.transactions.TransactionsScreen
+import org.junit.After
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -163,5 +185,115 @@ class UnSoloAmarilloPorVistaTest {
         assertEquals(1, amarillos(), "un solo amarillo en Pagos")
         val tarjeta = composeRule.onNodeWithTag(TAG_TARJETA_FALTA_POR_PAGAR, useUnmergedTree = true).fetchSemanticsNode()
         assertEquals(true, tarjeta.config.getOrNull(SuperficieDestacadaKey), "«Falta por pagar» es una superficie blanca destacada")
+    }
+
+    // ── Vuelta 82 · Actividad, Por revisar y Patrimonio ──────────────────────────────────────────
+
+    private val hoyTexto = hoyEnAppZone().toString()
+    private val bancolombia = Account("acc-4057", "Bancolombia Ahorros 4057", AccountType.SAVINGS, 3_000_000L, "COP")
+
+    private fun avisoDelBanco(id: String, monto: String, comercio: String, hora: String) = SmsMessage(
+        id = id, time = "$hoyTexto $hora", bank = "85540", state = SMS_STATE_PENDING, det = "",
+        text = "Bancolombia: Compraste \$$monto,00 en $comercio con tu T.Deb *4057, el 28/10/2026 a las $hora.",
+    )
+
+    private val tresAvisos = listOf(
+        avisoDelBanco("uber", "18.300", "UBER RIDES", "12:05"),
+        avisoDelBanco("farma", "61.900", "FARMATODO LAURELES", "09:40"),
+        avisoDelBanco("cafe", "23.400", "JUAN VALDEZ CAFE", "08:12"),
+    )
+
+    private val propuestasDeLosTres = PropuestasDeLaBandeja(
+        propuestas = listOf(
+            PropuestaDelAviso("uber", leido = ParsedSms(18_300.0, "UBER RIDES", TransactionType.EXPENSE, "Transporte", aprendidoDe = "x")),
+            PropuestaDelAviso("farma", leido = ParsedSms(61_900.0, "FARMATODO LAURELES", TransactionType.EXPENSE, "Salud", aprendidoDe = "x")),
+            PropuestaDelAviso("cafe", leido = ParsedSms(23_400.0, "JUAN VALDEZ CAFE", TransactionType.EXPENSE, "Comida", aprendidoDe = "x")),
+        ),
+        categoriasDelDueno = listOf("Comida", "Salud", "Transporte"),
+    )
+
+    /** Un día con un almuerzo: Actividad con movimientos (sin ellos, su vacío trae su propia acción). */
+    private val unDia = listOf(
+        EventDay(
+            date = hoyTexto, total = -46_489L,
+            items = listOf(
+                FinancialEvent(
+                    id = "e1", accountId = "acc-4057", type = TransactionType.EXPENSE, amount = 46_489L, category = "Comida",
+                    description = "Señor Gol", timestamp = kotlinx.datetime.Clock.System.now().toEpochMilliseconds(),
+                    reconciliationStatus = com.jvillada.movi.shared.model.ReconciliationStatus.RECONCILED,
+                ),
+            ),
+        ),
+    )
+
+    private fun repoDeAvisos(mensajes: List<SmsMessage>, dias: List<EventDay> = emptyList()) = object : RepositorioDePruebaDeMovimientos() {
+        override suspend fun getSmsMessages(): List<SmsMessage> = mensajes
+        override suspend fun getEventsByDay(): List<EventDay> = dias
+        override suspend fun getCardPaymentCandidates(): List<FinancialEvent> = emptyList()
+        override suspend fun getAccounts(): List<Account> = listOf(bancolombia)
+        override suspend fun getDestinos(): List<com.jvillada.movi.shared.model.DestinoConocido> = emptyList()
+        override suspend fun getUserProfile(): UserProfile =
+            UserProfile(id = "u1", email = "juan@movi.test", name = "Juan", avatarColor = "#4F7CFF", periodCutoffDay = 1)
+        override suspend fun getPropuestasDeLaBandeja(): PropuestasDeLaBandeja =
+            propuestasDeLosTres.copy(propuestas = propuestasDeLosTres.propuestas.filter { p -> mensajes.any { it.id == p.avisoId } })
+    }
+
+    @After
+    fun soltarElRepositorio() {
+        Repositories.sustitutoDePrueba = null
+    }
+
+    private fun esperarTexto(texto: String) {
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText(texto, substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.waitForIdle()
+    }
+
+    @Test
+    fun `en Actividad el unico amarillo es Confirmar N, y el circulo de la tarjeta va en el tono de aviso`() {
+        Repositories.sustitutoDePrueba = repoDeAvisos(tresAvisos, unDia)
+        montar { TransactionsScreen(onNavigate = {}) }
+        esperarTexto("Confirmar 3")
+        assertEquals(1, amarillos(), "un solo amarillo en Actividad")
+        assertTrue(composeRule.onAllNodesWithText("3 por revisar", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty(), "el número del Inicio")
+        val circulo = composeRule.onAllNodes(hasTestTag(TAG_ICONO_EN_CIRCULO) and hasAnyAncestor(hasTestTag(TAG_TARJETA_DE_AVISOS)), useUnmergedTree = true)
+            .fetchSemanticsNodes().single()
+        assertEquals(TonoDeIcono.Aviso, circulo.config[TonoDeIconoKey], "la campana no es amarilla")
+    }
+
+    @Test
+    fun `en Por revisar con varios avisos el unico amarillo es el lote`() {
+        Repositories.sustitutoDePrueba = repoDeAvisos(tresAvisos)
+        montar { PorRevisarScreen(onNavigate = {}) }
+        esperarTexto("Confirmar 3")
+        assertEquals(1, amarillos(), "solo «Confirmar 3»: cada «Confirmar» de las tarjetas va secundario")
+    }
+
+    @Test
+    fun `en Por revisar con una sola tarjeta su Confirmar es el amarillo`() {
+        Repositories.sustitutoDePrueba = repoDeAvisos(tresAvisos.take(1))
+        montar { PorRevisarScreen(onNavigate = {}) }
+        esperarTexto("UBER")
+        composeRule.waitUntil(timeoutMillis = 5_000) { amarillos() == 1 }
+        assertEquals(1, amarillos())
+    }
+
+    @Test
+    fun `en Patrimonio la B de Bancolombia va en la capa 3, sin amarillo`() {
+        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+            override suspend fun getAccounts(): List<Account> = listOf(bancolombia)
+            override suspend fun getCredits(): List<CreditSummary> = emptyList()
+            override suspend fun getCards(): List<CardSummary> = emptyList()
+            override suspend fun getDestinos(): List<com.jvillada.movi.shared.model.DestinoConocido> = emptyList()
+            override suspend fun getUserProfile(): UserProfile =
+                UserProfile(id = "u1", email = "juan@movi.test", name = "Juan", avatarColor = "#4F7CFF", periodCutoffDay = 1)
+        }
+        montar { AccountsScreen(onNavigate = {}) }
+        esperarTexto("Bancolombia Ahorros 4057")
+        assertEquals(0, amarillos(), "Patrimonio no tiene acción amarilla")
+        val avatares = composeRule.onAllNodesWithTag(TAG_AVATAR_DE_MARCA, useUnmergedTree = true).fetchSemanticsNodes()
+        assertTrue(avatares.isNotEmpty())
+        avatares.forEach { assertEquals(TonoDeIcono.Neutro, it.config.getOrNull(TonoDeIconoKey), "la «B» en la capa 3 con la tinta") }
     }
 }
