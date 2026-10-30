@@ -118,7 +118,8 @@ class CadaEscrituraVaciaLoRecordadoTest {
 
     private companion object {
         // `parseSms` es `GET /api/sms/{id}/parse`: interpreta el mensaje, no escribe nada.
-        val LECTURAS_SIN_GET = setOf("isScreenAdmin", "parseSms", "leerParaReconciliar")
+        // Vuelta 82: `elServerYaTieneElMovimiento` mira los sellos del espejo; no escribe nada.
+        val LECTURAS_SIN_GET = setOf("isScreenAdmin", "parseSms", "leerParaReconciliar", "elServerYaTieneElMovimiento")
 
         val CONTINUACION = object : Continuation<Any?> {
             override val context: CoroutineContext = EmptyCoroutineContext

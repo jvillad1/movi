@@ -137,6 +137,9 @@ internal class InvalidaElInicioAlEscribir(
         trasEscribir { delegado.guardarEspacio(espacio) }
     override suspend fun repartirMovimiento(espacioId: String, eventoId: String) =
         trasEscribir { delegado.repartirMovimiento(espacioId, eventoId) }
+    // Vuelta 82: subir lo pendiente cambia lo que el server contesta.
+    override suspend fun subirLoPendienteAhora(): Unit =
+        trasEscribir { delegado.subirLoPendienteAhora() }
     override suspend fun quitarDelEspacio(espacioId: String, eventoId: String): Unit =
         trasEscribir { delegado.quitarDelEspacio(espacioId, eventoId) }
     override suspend fun quitarGastoDelEspacio(espacioId: String, gastoId: String): Unit =
