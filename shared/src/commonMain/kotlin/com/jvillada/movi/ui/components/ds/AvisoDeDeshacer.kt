@@ -98,10 +98,15 @@ fun partesDelAviso(texto: String): PartesDelAviso {
     val i = texto.indexOf(" · ")
     val cabeza = if (i <= 0) texto else texto.substring(0, i)
     val resto = if (i <= 0) null else texto.substring(i + 1)
-    val espacio = cabeza.lastIndexOf(' ')
+    var espacio = cabeza.lastIndexOf(' ')
     val ultima = if (espacio < 0) cabeza else cabeza.substring(espacio + 1)
-    return if (espacio > 0 && ultima.any { it.isDigit() }) PartesDelAviso(cabeza.substring(0, espacio), ultima, resto)
-    else PartesDelAviso(cabeza, null, resto)
+    if (espacio <= 0 || ultima.none { it.isDigit() }) return PartesDelAviso(cabeza, null, resto)
+    // Re-revisión de la vuelta 82: una moneda que no es pesos ni dólares se escribe «EUR 45»
+    // (`formatMoney`): el código va con la cifra, entero, y no en el verbo que se puede cortar.
+    val anterior = cabeza.lastIndexOf(' ', espacio - 1)
+    val palabraAnterior = cabeza.substring(anterior + 1, espacio)
+    if (anterior > 0 && palabraAnterior.length == 3 && palabraAnterior.all { it in 'A'..'Z' }) espacio = anterior
+    return PartesDelAviso(cabeza.substring(0, espacio), cabeza.substring(espacio + 1), resto)
 }
 
 /**
