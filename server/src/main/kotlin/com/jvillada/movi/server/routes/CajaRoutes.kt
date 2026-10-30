@@ -156,6 +156,8 @@ internal suspend fun cajaProyectadaDe(uid: String, hoy: LocalDate = AppClock.tod
         hoy = hoy.toString(),
         ultimoDiaDelPeriodo = ultimoDia.toString(),
         ahorro = ahorro,
+        // Vuelta 75: sin salario, hasta el arranque del período siguiente si el dueño eligió su período.
+        conElPeriodoElegido = !ajustes.esMesDeCalendario,
         apartadoFueraDe = { filas -> conApartados.apartadoParaElDisponible(filas) },
     )
     val filas = caja?.let { filasDeLaCaja(delPeriodo, delSiguiente, it.alCierre.fecha) } ?: delPeriodo

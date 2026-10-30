@@ -48,7 +48,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.shared.model.ScreenSection
-import com.jvillada.movi.shared.model.rangoLegibleDe
+import com.jvillada.movi.shared.model.nombreDelPeriodo
 import com.jvillada.movi.shared.model.ventanaDe
 import com.jvillada.movi.shared.time.epochMillisToAppDate
 import com.jvillada.movi.theme.Espacio
@@ -105,7 +105,9 @@ import com.jvillada.movi.ui.dashboard.TeQuedanDeHoy
 import com.jvillada.movi.ui.dashboard.alcanzaParaElDisponible
 import com.jvillada.movi.ui.dashboard.HojaDeDondeSale
 import com.jvillada.movi.ui.dashboard.conteoPorRevisarDelInicio
-import com.jvillada.movi.ui.dashboard.rememberCifraQueCambia
+import com.jvillada.movi.ui.dashboard.EstadoDelHeroe
+import com.jvillada.movi.ui.dashboard.rememberEstadoQueCambia
+import androidx.compose.ui.graphics.graphicsLayer
 import com.jvillada.movi.ui.porrevisar.desgloseDePorRevisar
 import com.jvillada.movi.ui.porrevisar.ConteoPorRevisar
 import com.jvillada.movi.ui.porrevisar.textoDePorRevisar
@@ -116,6 +118,10 @@ import com.jvillada.movi.ui.dashboard.VER_TUS_PERIODOS
 import com.jvillada.movi.ui.dashboard.disponibleDelInicio
 import com.jvillada.movi.ui.dashboard.teQuedanDeHoy
 import com.jvillada.movi.ui.dashboard.elHeroePideLaCuenta
+import com.jvillada.movi.ui.dashboard.FilaMeAlcanza
+import com.jvillada.movi.ui.dashboard.rememberRenglonMeAlcanza
+import com.jvillada.movi.ui.dashboard.esUnCambioDelHeroe
+import com.jvillada.movi.ui.dashboard.EstadoQueSeVe
 import kotlinx.datetime.Clock
 import kotlinx.datetime.LocalDate
 
@@ -159,7 +165,7 @@ const val TAG_ENLACE_TU_PLATA: String = "inicio-enlace-tu-plata"
  *   avisos» ([FranjaPorConfirmar]), solo si hay algo que espera en Por revisar.
  *
  * **Mientras carga, nada dice $0**: sin instantánea, cada pieza es un esqueleto con su alto; con ella,
- * su cifra, que cambia a la nueva sin pasar por cero ([rememberCifraQueCambia]).
+ * su cifra; un cambio después pasa entero, cifra, línea y «Tu plata» juntas ([rememberEstadoQueCambia], vuelta 75).
  *
  * El ojo de «Ocultar los saldos» se mudó al encabezado, sobre la banda (como en la maqueta). La frase
  * del veredicto («Gastaste $X · lo que más: Mercado») salió de la tarjeta: lo que se gastó está en «En
@@ -173,6 +179,21 @@ internal fun HeroDeUnVistazo(
     onShowCreateSheet: () -> Unit = {},
     hoy: LocalDate = epochMillisToAppDate(Clock.System.now().toEpochMilliseconds()),
 ) {
+    // Vuelta 75 · la cifra grande, su línea, «Tu plata» y el renglón «¿Me alcanza?» salen de UN estado
+    // y cambian juntos (ver [EstadoDelHeroe]): nunca la cifra vieja junto a la línea nueva. Revisión de
+    // la 75: mientras la carga del Inicio está en vuelo lo visible se queda —las cuentas llegan antes que
+    // el resumen y los pagos— y al terminar cambia entero.
+    val disponible = disponibleDelInicio(data, hoy)
+    val renglon = rememberRenglonMeAlcanza(data, hoy)
+    val visto = rememberEstadoQueCambia(
+        EstadoDelHeroe(
+            teQuedan = disponible?.let(::teQuedanDeHoy),
+            tuPlata = data.accounts?.let { heroBalance(it, data.apartados.orEmpty()).tuPlata },
+            renglon = renglon,
+        ),
+        congelado = LocalCargandoElInicio.current,
+        seAnima = ::esUnCambioDelHeroe,
+    )
     Superficie(
         modifier = Modifier
             .padding(horizontal = Medida.margenDePantalla)
@@ -201,7 +222,11 @@ internal fun HeroDeUnVistazo(
             }
             return@Superficie
         }
-        CuerpoDelHeroe(section, data, onNavigate, hoy)
+        CuerpoDelHeroe(section, data, onNavigate, disponible, visto)
+        // Vuelta 75: «¿Me alcanza?», la caja de Pagos en un renglón, siempre a la vista; del MISMO estado.
+        visto.mostrado.renglon?.let { r ->
+            FilaMeAlcanza(r, onNavigate, modifier = Modifier.graphicsLayer { alpha = visto.opacidad })
+        }
         FranjaPorConfirmar(data, onNavigate)
     }
 }
@@ -211,12 +236,12 @@ private fun CuerpoDelHeroe(
     section: ScreenSection,
     data: DashboardData,
     onNavigate: (Screen) -> Unit,
-    hoy: LocalDate,
+    disponible: com.jvillada.movi.ui.dashboard.DisponibleDelPeriodo?,
+    visto: EstadoQueSeVe<EstadoDelHeroe>,
 ) {
     // Vuelta de diseño 28: con «Te quedan», tocar la cifra abre «¿De dónde sale?» (la cascada del MISMO
     // disponible); sin él —«Tu plata»— lleva a «Tus períodos» como siempre.
-    val disponible = disponibleDelInicio(data, hoy)
-    val teQuedan = disponible?.let(::teQuedanDeHoy)
+    val teQuedan = visto.mostrado.teQuedan
     var verDeDondeSale by rememberSaveable { mutableStateOf(false) }
     if (verDeDondeSale && disponible != null) {
         HojaDeDondeSale(
@@ -233,7 +258,7 @@ private fun CuerpoDelHeroe(
     // plata» y cambiarla por otra cifra un segundo después sería un salto y dos respuestas a la misma
     // pregunta. Si las lecturas llegaron y no hay disponible que afirmar, vuelve «Tu plata».
     val modoTeQuedan = teQuedan != null || (hayCargaEnVuelo && !alcanzaParaElDisponible(data))
-    val tuPlata = data.accounts?.let { heroBalance(it, data.apartados.orEmpty()).tuPlata }
+    val tuPlata = visto.mostrado.tuPlata
 
     Column(
         modifier = Modifier
@@ -246,6 +271,7 @@ private fun CuerpoDelHeroe(
                 },
             )
             .padding(Medida.rellenoDeSuperficie)
+            .graphicsLayer { alpha = visto.opacidad }
             .testTag(TAG_TARJETA_DEL_HERO),
     ) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -275,7 +301,7 @@ private fun CuerpoDelHeroe(
                 // El MISMO valor que la frase del disponible de Plan, entero: «$4.963.400», no «$5M». Sin
                 // signo: el rótulo ya dice de qué lado está.
                 Cifra(
-                    rememberCifraQueCambia(teQuedan.monto),
+                    teQuedan.monto,
                     VarianteDeCifra.Heroe,
                     tono = if (teQuedan.enRojo) TonoDeCifra.Alerta else TonoDeCifra.Neutro,
                     modifier = Modifier.testTag(TAG_CIFRA_TE_QUEDAN),
@@ -303,7 +329,7 @@ private fun CuerpoDelHeroe(
                 Text(text = "—", style = Movi.textos.cifra, color = Movi.colores.texto)
             } else {
                 Cifra(
-                    rememberCifraQueCambia(tuPlata),
+                    tuPlata,
                     VarianteDeCifra.Heroe,
                     tono = if (tuPlata < 0) TonoDeCifra.Alerta else TonoDeCifra.Neutro,
                 )
@@ -475,7 +501,9 @@ internal fun BarraDeDosTramos(
  */
 internal fun encabezadoDelPeriodo(data: DashboardData, conDias: Boolean = true): String? {
     val periodo = data.periodoActual ?: return null
-    val rango = rangoLegibleDe(periodo, data.ajustesDePeriodo) ?: return null
+    // Vuelta 75: el nombre único del período; con el mes de calendario el héroe no lo repite.
+    if (data.ajustesDePeriodo.esMesDeCalendario) return null
+    val rango = nombreDelPeriodo(periodo, data.ajustesDePeriodo)
     if (!conDias) return rango
     val ahora = Clock.System.now().toEpochMilliseconds()
     val fin = ventanaDe(periodo, data.ajustesDePeriodo).last

@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.plan
 
+import androidx.compose.runtime.LaunchedEffect
+import com.jvillada.movi.shared.repository.ApiException
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -125,6 +127,8 @@ internal fun NavegadorDelPeriodoDePagos(
     puedeAdelante: Boolean,
     onAnterior: () -> Unit,
     onSiguiente: () -> Unit,
+    /** Revisión de la 75: apagada en un período sin historia (anterior al primer movimiento). */
+    puedeAtras: Boolean = true,
 ) {
     Column(modifier = Modifier.fillMaxWidth().testTag(TAG_NAVEGADOR_DEL_PERIODO_DE_PAGOS)) {
         Row(
@@ -134,7 +138,7 @@ internal fun NavegadorDelPeriodoDePagos(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            BotonDeIcono(Icons.Rounded.KeyboardArrowLeft, "Período anterior", onClick = onAnterior, habilitado = habilitado)
+            BotonDeIcono(Icons.Rounded.KeyboardArrowLeft, "Período anterior", onClick = onAnterior, habilitado = habilitado && puedeAtras)
             Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
                 when {
                     texto != null -> Text(
@@ -172,6 +176,7 @@ internal fun LazyListScope.pagosDeOtroPeriodo(
     periodoDeHoy: PeriodoFinanciero,
     ajustes: PeriodSettings,
     estado: EstadoDelTableroDeRecurrentes,
+    onSinHistoria: (PeriodoFinanciero) -> Unit = {},
 ) {
     item(key = "pagos-de-otro-periodo-${periodo.prefijo}") {
         Column(
@@ -180,7 +185,7 @@ internal fun LazyListScope.pagosDeOtroPeriodo(
                 .padding(bottom = Medida.entreSecciones)
                 .testTag(TAG_PAGOS_DE_OTRO_PERIODO),
         ) {
-            if (esAnterior(periodo, periodoDeHoy)) PagosDeUnPeriodoAnterior(periodo, periodoDeHoy)
+            if (esAnterior(periodo, periodoDeHoy)) PagosDeUnPeriodoAnterior(periodo, periodoDeHoy, onSinHistoria)
             else PagosDelPeriodoSiguiente(estado, periodo, ajustes)
         }
     }
@@ -188,15 +193,32 @@ internal fun LazyListScope.pagosDeOtroPeriodo(
 
 /** Un período cerrado: sus pagos fijos como en «Tus períodos» (lo pagado, lo que no se pagó). */
 @Composable
-private fun PagosDeUnPeriodoAnterior(periodo: PeriodoFinanciero, periodoDeHoy: PeriodoFinanciero) {
+private fun PagosDeUnPeriodoAnterior(
+    periodo: PeriodoFinanciero,
+    periodoDeHoy: PeriodoFinanciero,
+    onSinHistoria: (PeriodoFinanciero) -> Unit,
+) {
     var reintento by remember { mutableStateOf(0) }
     val detalle = rememberLectura(ClaveDeLectura.DetalleDePeriodo(periodo.prefijo), reintento, periodoDeHoy.prefijo) {
         Repositories.wallets.getDetalleDePeriodo(periodo.prefijo)
     }
     val hoy = remember { epochMillisToAppDate(Clock.System.now().toEpochMilliseconds()) }
     val leido = detalle.valor
+    // Revisión de la 75: un período anterior al primer movimiento no existe para el server (404). No es
+    // un error que se reintente: es que Movi no tiene ese período, y ‹ no lleva más atrás.
+    val sinHistoria = (detalle.error as? ApiException)?.status == 404
+    LaunchedEffect(sinHistoria) { if (sinHistoria) onSinHistoria(periodo) }
     when {
         leido != null -> PagosFijos(leido.pagosFijos, enCurso = false, hoy = hoy, onAgregar = null)
+        sinHistoria -> {
+            Seccion(titulo = TITULO_CHECKLIST_DEL_PERIODO)
+            Text(
+                text = PERIODO_SIN_HISTORIA,
+                style = Movi.textos.cuerpo,
+                color = Movi.colores.textoMedio,
+                modifier = Modifier.testTag(TAG_PERIODO_SIN_HISTORIA),
+            )
+        }
         detalle.fallo -> NoSePudoLeerEnLaPantalla(
             clave = "pagos-de-otro-periodo",
             texto = "No pudimos leer los pagos de ese período",
@@ -324,3 +346,9 @@ private fun EsqueletoDeLaLista(titulo: String) {
         LineaEsqueleto(fraccionDelAncho = 0.6f, estilo = Movi.textos.cuerpo)
     }
 }
+
+/** Revisión de la 75: lo que dice Pagos en un período anterior al primer movimiento. */
+const val PERIODO_SIN_HISTORIA: String = "Movi todavía no llevaba tus cuentas en este período."
+
+/** El tag de esa frase. */
+const val TAG_PERIODO_SIN_HISTORIA: String = "pagos-periodo-sin-historia"

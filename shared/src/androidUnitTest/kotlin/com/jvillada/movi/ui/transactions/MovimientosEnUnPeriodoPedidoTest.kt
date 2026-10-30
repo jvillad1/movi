@@ -18,10 +18,9 @@ import com.jvillada.movi.shared.model.PeriodoFinanciero
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UserProfile
-import com.jvillada.movi.shared.model.nombreDe
+import com.jvillada.movi.shared.model.nombreDelPeriodo
 import com.jvillada.movi.shared.model.periodoActual
 import com.jvillada.movi.shared.model.periodoAnterior
-import com.jvillada.movi.shared.model.rangoLegibleDe
 import com.jvillada.movi.shared.model.ventanaDe
 import com.jvillada.movi.shared.time.epochMillisToAppDate
 import com.jvillada.movi.theme.MoviTheme
@@ -102,7 +101,8 @@ class MovimientosEnUnPeriodoPedidoTest {
         DiasPlegadosStore.clear()
     }
 
-    private fun rotulo(periodo: PeriodoFinanciero) = nombreDe(periodo).replaceFirstChar { it.uppercase() }
+    /** Vuelta 75: el nombre único del período («26 sep – 25 oct»). */
+    private fun rotulo(periodo: PeriodoFinanciero) = nombreDelPeriodo(periodo, ajustes)
 
     private fun hay(texto: String): Boolean =
         composeRule.onAllNodesWithText(texto, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
@@ -118,8 +118,8 @@ class MovimientosEnUnPeriodoPedidoTest {
     @Test
     fun `sin periodo pedido arranca en el de hoy, como siempre`() {
         montar(null)
-        // La línea del rango aparece recién cuando el perfil (corte 26) contestó.
-        composeRule.waitUntil(timeoutMillis = 5_000) { hay(rangoLegibleDe(hoy, ajustes)!!) }
+        // El nombre por sus fechas aparece recién cuando el perfil (corte 26) contestó.
+        composeRule.waitUntil(timeoutMillis = 5_000) { hay(rotulo(hoy)) }
         assertTrue(hay(rotulo(hoy)))
         assertTrue(!hay("Almuerzo del período anterior"))
     }

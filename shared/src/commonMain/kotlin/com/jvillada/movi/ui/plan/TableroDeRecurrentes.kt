@@ -397,9 +397,16 @@ class EstadoDelTableroDeRecurrentes internal constructor(
      */
     internal var tipoDelNuevoRecurrente by mutableStateOf(TransactionType.EXPENSE)
 
-    /** «Agregar mi salario»: la hoja de alta, ya en Ingreso. */
-    internal fun agregarSalario() {
+    /**
+     * Vuelta 75 · el día con el que abre la hoja de alta, o `null` (sin elegir). «Agregar» de la caja sin
+     * salario la abre con el día del corte; vuelve a `null` al cerrarla.
+     */
+    internal var diaDelNuevoRecurrente by mutableStateOf<Int?>(null)
+
+    /** «Agregar mi salario»: la hoja de alta, ya en Ingreso (y, desde la caja, con el día del corte). */
+    internal fun agregarSalario(dia: Int? = null) {
         tipoDelNuevoRecurrente = TransactionType.INCOME
+        diaDelNuevoRecurrente = dia
         nuevoRecurrenteAbierto = true
     }
     /**
@@ -1366,14 +1373,19 @@ fun HojasDelTableroDeRecurrentes(estado: EstadoDelTableroDeRecurrentes, onNaviga
             onDismiss = {
                 estado.nuevoRecurrenteAbierto = false
                 estado.tipoDelNuevoRecurrente = TransactionType.EXPENSE
+                estado.diaDelNuevoRecurrente = null
             },
             onSaved = {
                 estado.nuevoRecurrenteAbierto = false
                 estado.tipoDelNuevoRecurrente = TransactionType.EXPENSE
+                estado.diaDelNuevoRecurrente = null
                 RecurringOfferGate.olvidarLoCacheado()
                 estado.recargar()
             },
             tipoNuevo = estado.tipoDelNuevoRecurrente,
+            diaNuevo = estado.diaDelNuevoRecurrente,
+            // Revisión de la 75: «Agregar» de la caja sin salario trae el nombre «Salario».
+            nombreNuevo = if (estado.diaDelNuevoRecurrente != null) "Salario" else null,
         )
     }
 }

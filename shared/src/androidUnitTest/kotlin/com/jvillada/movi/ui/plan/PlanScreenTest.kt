@@ -869,12 +869,12 @@ class PlanScreenTest {
 
         val hoy = Clock.System.todayIn(TimeZone.of("America/Bogota"))
         val mes = listOf(
-            "enero", "febrero", "marzo", "abril", "mayo", "junio",
-            "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+            "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+            "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
         )[hoy.monthNumber - 1]
         assertEquals(1, contarTag(TAG_LINEA_DEL_PERIODO_DE_PLAN))
-        // El mes una vez: «Del 1 al 31 de octubre».
-        assertTrue(hay("Del 1 al ", substring = true) && hay(" de $mes", substring = true), "«Del 1 al … de $mes»")
+        // Vuelta 75: el nombre único del período; con el mes de calendario, el mes («Octubre»).
+        assertTrue(hay(mes), "«$mes»")
     }
 }
 

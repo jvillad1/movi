@@ -1,7 +1,5 @@
 package com.jvillada.movi.ui.dashboard
 
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.TrendingDown
 import androidx.compose.runtime.Composable
@@ -11,155 +9,151 @@ import com.jvillada.movi.data.ClaveDeLectura
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.rememberLectura
 import com.jvillada.movi.shared.model.CajaProyectada
-import com.jvillada.movi.theme.Medida
-import com.jvillada.movi.theme.Movi
+import com.jvillada.movi.shared.model.GastoDelDiaADia
 import com.jvillada.movi.ui.Screen
-import com.jvillada.movi.ui.components.BloqueEsqueleto
-import com.jvillada.movi.ui.components.altoDeUnRenglon
+import com.jvillada.movi.ui.components.conCifrasOcultas
 import com.jvillada.movi.ui.components.ds.Chevron
-import com.jvillada.movi.ui.components.ds.Cifra
 import com.jvillada.movi.ui.components.ds.Fila
 import com.jvillada.movi.ui.components.ds.IconoEnCirculo
-import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
-import com.jvillada.movi.ui.components.ds.Superficie
-import com.jvillada.movi.ui.components.ds.TonoDeCifra
+import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
+import com.jvillada.movi.ui.components.ds.Separador
 import com.jvillada.movi.ui.components.ds.TonoDeFila
 import com.jvillada.movi.ui.components.ds.TonoDeIcono
-import com.jvillada.movi.ui.fecha.fechaEnPalabras
+import com.jvillada.movi.ui.components.formatMoneyAbreviadaSinOcultar
+import com.jvillada.movi.ui.accounts.ESPACIO_QUE_NO_SE_PARTE
+import com.jvillada.movi.ui.accounts.UNION_QUE_NO_SE_PARTE
+import com.jvillada.movi.ui.fecha.MESES_DEL_ANIO
 import com.jvillada.movi.ui.plan.SEGMENTO_PAGOS
 import com.jvillada.movi.ui.plan.cajaDelPeriodoDe
 import kotlinx.datetime.LocalDate
 
 /**
- * # «Tu día más justo» en Hoy
+ * # «¿Me alcanza?» en el héroe de Inicio (vuelta 75)
  *
- * Plan ya dibuja la caja proyectada día a día («Tu plata, día a día», Ola 4). Hoy dice lo único que
- * de ella hace falta de un vistazo: **cuál es el día más justo hasta que te pagan y cuánto te queda
- * libre ese día** —«Tu día más justo es el 5 de noviembre · $180.000»—, o el primer día que no te
- * alcanzaría. Tocarla lleva a Plan, donde está la línea entera.
+ * La respuesta a «¿me alcanza hasta que me paguen?» vivía en la caja de Pagos, dos pantallas más abajo, y
+ * en Inicio dentro de «Disponible», una sección opcional que el dueño puede esconder (y que la revisión 5
+ * encontró escondida). Ahora es **un renglón del héroe**: siempre se ve, aunque «Disponible» esté oculto, y
+ * un APK viejo simplemente no lo pinta —va dentro de `HERO_BALANCE`, sin tocar la definición SDUI—.
  *
- * **Es el mismo dato que Plan, no otra cuenta**: la caja sale de [cajaDelPeriodoDe] —la función que
- * usa la sección de Plan— sobre los mismos datos del Inicio (la lista del período y Tu plata), y el
- * supuesto del gasto del día a día es la MISMA lectura recordada ([ClaveDeLectura.GastoDelDiaADia]).
+ * - «Te alcanza hasta el 25 nov · tu día más justo, el 5 nov» cuando lo libre del peor día es ≥ 0;
+ * - «No te alcanza: el 5 nov quedarías en −$1,3M» si es negativo.
  *
- * **Nada salta al llegar el dato**: mientras viaja el supuesto se pinta la misma fila con un esqueleto
- * en lugar de la frase y la cifra, del mismo alto (un renglón cada una, sin partirse), y si la lectura
- * falla la fila lo dice en el mismo lugar en vez de desaparecer. Lo mide `CajaEnHoyTest`.
+ * **Es la MISMA cuenta que la caja de Pagos**: [cajaDelPeriodoDe] → `cajaHastaQueTePaguen`, sobre los
+ * mismos datos del Inicio, con el mismo supuesto del gasto del día a día (la lectura recordada
+ * [ClaveDeLectura.GastoDelDiaADia]). Tocarlo abre Pagos en la caja ([Screen.Plan.enLaCaja]).
+ *
+ * Si la caja no se puede calcular —sin período, sin la lista, sin cuentas, o con la lectura del supuesto
+ * caída o en camino— **no se pinta**: un renglón que no afirma nada no le sirve a nadie en el héroe.
  */
 
-/** El tag de la fila, cargando o cargada: el mismo en las dos para medir que no salte. */
-const val TAG_CAJA_EN_HOY: String = "caja-en-hoy"
-
-/** El tag del esqueleto de la cifra — está solo mientras carga. */
-const val TAG_ESQUELETO_CAJA_EN_HOY: String = "esqueleto-caja-en-hoy"
-
-/** Lo que dice la fila: el rótulo, cuándo, la cifra y si va en rojo. Puro, para las pruebas. */
-data class CajaDeHoy(val rotulo: String, val cuando: String, val saldo: Long, val enRojo: Boolean)
+/** El tag del renglón «¿Me alcanza?» del héroe. */
+const val TAG_ME_ALCANZA: String = "inicio-me-alcanza"
 
 /**
- * [CajaDeHoy] de la proyección. **El rojo manda**: si algún día lo libre queda en negativo se dice el
- * primero —eso es lo que hay que atender—, aunque el más bajo sea otro más adelante. Si no, el día más
- * justo.
- *
- * Vuelta 70: la cifra es **lo libre** (sin tu ahorro del período ni lo apartado), la misma de la frase
- * de puente de Pagos, y el horizonte es hasta que te pagan (o 30 días sin un salario anotado).
+ * Lo que dice el renglón: el título («Te alcanza hasta el 25 nov»), el detalle («tu día más justo, el 5
+ * nov») y si va en rojo. Se pinta en dos renglones de la `Fila` —a 360 dp con la letra al 130 % una frase
+ * sola no entraba—; [texto] es la frase entera, como se lee. Puro, para las pruebas.
  */
-fun cajaDeHoy(caja: CajaProyectada, hoy: LocalDate): CajaDeHoy {
-    caja.primerDiaEnRojo?.let { rojo ->
-        // Revisión de la 70: sin un salario anotado, «No te alcanza» en rojo no decía por qué ni hasta
-        // cuándo se miró. El porqué va primero: la caja mira 30 días y no cuenta ningún ingreso.
-        val cuando = when {
-            !caja.hastaElSalario -> if (caja.salarioQueNoCuenta) SIN_SALARIO_EN_PESOS else SIN_SALARIO_ANOTADO
-            rojo.fecha == hoy.toString() -> "Hoy quedarías en"
-            else -> "El ${fechaEnPalabras(rojo.fecha, hoy)} quedarías en"
-        }
-        return CajaDeHoy(ROTULO_NO_TE_ALCANZA, cuando, rojo.libre, enRojo = true)
-    }
-    val bajo = caja.diaMasBajo
-    val cuando = if (bajo.fecha == hoy.toString()) "Tu día más justo es hoy" else "Tu día más justo es el ${fechaEnPalabras(bajo.fecha, hoy)}"
-    val rotulo = if (caja.hastaElSalario) ROTULO_HASTA_QUE_TE_PAGUEN else ROTULO_PROXIMOS_30_DIAS
-    return CajaDeHoy(rotulo, cuando, bajo.libre, enRojo = false)
+data class RenglonMeAlcanza(val titulo: String, val detalle: String, val enRojo: Boolean) {
+    val texto: String get() = if (enRojo) "$titulo: $detalle" else "$titulo · $detalle"
 }
 
-/** El subtítulo de «No te alcanza» sin un salario anotado: por qué, y hasta dónde se miró. */
-const val SIN_SALARIO_ANOTADO: String = "Sin salario anotado: miramos 30 días"
-
-/** Lo mismo cuando el ingreso fijo que hay está en otra moneda o sin monto: no puede cerrar la caja. */
-const val SIN_SALARIO_EN_PESOS: String = "Sin un salario en pesos anotado: miramos 30 días"
-
-/** El rótulo de la fila cuando lo libre no alcanza (vuelta 70). */
-const val ROTULO_NO_TE_ALCANZA: String = "No te alcanza"
-
-/** El rótulo con un salario anotado: la caja mira hasta ese día. */
-const val ROTULO_HASTA_QUE_TE_PAGUEN: String = "Libre hasta que te paguen"
-
-/** El rótulo sin un salario anotado: la caja mira 30 días. */
-const val ROTULO_PROXIMOS_30_DIAS: String = "Libre en los próximos 30 días"
-
-/** El rótulo de la fila mientras no hay frase (cargando o sin poder leer): no afirma nada. */
-const val ROTULO_CAJA_SIN_DATO: String = "Tu plata, día a día"
+/**
+ * [RenglonMeAlcanza] de la caja. Se mide en **el peor día** ([CajaProyectada.diaMasBajo]) —la misma cifra
+ * titular de la caja de Pagos—: si lo libre ese día es negativo, no alcanza.
+ */
+fun renglonMeAlcanza(caja: CajaProyectada, hoy: LocalDate): RenglonMeAlcanza {
+    val bajo = caja.diaMasBajo
+    val cuando = if (bajo.fecha == hoy.toString()) "hoy" else "el ${fechaCortaDelRenglon(bajo.fecha)}"
+    if (bajo.libre < 0L) {
+        // Revisión de la 75: el menos pegado al «$» y la cifra pegada a «en»: el renglón no se parte ahí.
+        return RenglonMeAlcanza("No te alcanza", "$cuando quedarías en$ESPACIO_QUE_NO_SE_PARTE${cifraCortaQueNoSeParte(bajo.libre)}", enRojo = true)
+    }
+    // Revisión de la 75: «hasta el 25 nov» solo cuando ese día entra el salario; sin él, nada entra ese
+    // día, y decirlo con fecha sonaba a que sí.
+    val hasta = when {
+        caja.hastaElSalario -> "Te alcanza hasta el ${fechaCortaDelRenglon(caja.alCierre.fecha)}"
+        caja.hastaElPeriodoSiguiente -> TE_ALCANZA_HASTA_EL_FIN_DEL_PERIODO
+        else -> TE_ALCANZA_30_DIAS
+    }
+    return RenglonMeAlcanza(hasta, "tu día más justo, $cuando", enRojo = false)
+}
 
 /**
- * La fila de Hoy. `null` del todo —ni el esqueleto— cuando no hay nada honesto que proyectar: sin
- * período, sin la lista del período o sin cuentas (lo mismo que hace la sección de Plan).
+ * El renglón con lo que el Inicio tiene, o `null` si la caja no se puede calcular (sin período, sin la
+ * lista, sin cuentas, o sin el supuesto del gasto del día a día): entonces no se pinta. Es la MISMA
+ * [cajaDelPeriodoDe] de la caja de Pagos.
+ */
+fun renglonMeAlcanzaDe(data: DashboardData, gasto: GastoDelDiaADia?, hoy: LocalDate): RenglonMeAlcanza? {
+    val supuesto = gasto ?: return null
+    return cajaDelPeriodoDe(data, supuesto, hoy)?.let { renglonMeAlcanza(it, hoy) }
+}
+
+/** Sin salario y con el período elegido: la caja mira hasta que arranca el siguiente. */
+const val TE_ALCANZA_HASTA_EL_FIN_DEL_PERIODO: String = "Te alcanza hasta el fin del período"
+
+/** Sin salario y con el mes de calendario: la caja mira 30 días. */
+const val TE_ALCANZA_30_DIAS: String = "Te alcanza los próximos 30 días"
+
+/**
+ * Una cifra corta que no se parte en dos renglones (revisión de la 75): «−$1,2M» con el menos pegado al
+ * «$» por [UNION_QUE_NO_SE_PARTE] (no se ve). Sin «Ocultar los saldos»: el renglón lo tapa entero.
+ */
+internal fun cifraCortaQueNoSeParte(monto: Long): String =
+    formatMoneyAbreviadaSinOcultar(monto).replace("\u2212$", "\u2212$UNION_QUE_NO_SE_PARTE$")
+
+/** «5 nov». */
+private fun fechaCortaDelRenglon(iso: String): String {
+    val fecha = runCatching { LocalDate.parse(iso) }.getOrNull() ?: return iso
+    return "${fecha.dayOfMonth} ${MESES_DEL_ANIO[fecha.monthNumber - 1].take(3)}"
+}
+
+/**
+ * El renglón que el Inicio puede afirmar ahora, o `null` (ver [renglonMeAlcanzaDe]). Pide el supuesto del
+ * gasto del día a día —la misma lectura recordada de Pagos— solo si hay con qué proyectar.
  */
 @Composable
-internal fun CajaEnHoy(
+internal fun rememberRenglonMeAlcanza(data: DashboardData, hoy: LocalDate): RenglonMeAlcanza? {
+    // Sin la lista del período o sin Tu plata, la caja de Pagos tampoco proyecta: no hay renglón (y no se
+    // pide el supuesto, que no serviría para nada).
+    val sePuedeProyectar = data.periodoActual != null && data.upcoming != null && data.ocurrencias != null &&
+        (data.accounts != null || data.patrimonio != null)
+    if (!sePuedeProyectar) return null
+    val gastoLeido = rememberLectura(ClaveDeLectura.GastoDelDiaADia, reintento = 0) {
+        Repositories.wallets.getGastoDelDiaADia()
+    }
+    return renglonMeAlcanzaDe(data, gastoLeido.valor, hoy)
+}
+
+/** El renglón suelto, con el hilo de arriba (lo que pinta el héroe, para montarlo solo en una prueba). */
+@Composable
+internal fun RenglonMeAlcanzaDelHeroe(
     data: DashboardData,
     hoy: LocalDate,
     onNavigate: (Screen) -> Unit,
 ) {
-    // Sin la lista del período o sin Tu plata, la sección de Plan tampoco proyecta: no hay fila (y no
-    // se pide el supuesto, que no serviría para nada).
-    val sePuedeProyectar = data.periodoActual != null && data.upcoming != null && data.ocurrencias != null &&
-        (data.accounts != null || data.patrimonio != null)
-    if (!sePuedeProyectar) return
-    val gastoLeido = rememberLectura(ClaveDeLectura.GastoDelDiaADia, reintento = 0) {
-        Repositories.wallets.getGastoDelDiaADia()
-    }
-    val gasto = gastoLeido.valor
-    val caja = gasto?.let { cajaDelPeriodoDe(data, it, hoy) }
-    val noSePudo = gasto == null && gastoLeido.terminada && !gastoLeido.actualizando
+    val renglon = rememberRenglonMeAlcanza(data, hoy) ?: return
+    FilaMeAlcanza(renglon, onNavigate)
+}
 
-    // Vuelta de diseño 19: la `Fila` del sistema en una `Superficie` de lista. Arriba lo que es
-    // («Tu día más justo del período», en `sale` si quedaría en rojo), debajo cuándo y al final la
-    // `Cifra`. Cargando, el subtítulo vacío reserva su renglón y la cifra es un bloque del mismo alto:
-    // la fila mide lo mismo con dato y sin él.
-    val fila = caja?.let { cajaDeHoy(it, hoy) }
-    Superficie(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = Medida.margenDePantalla)
-            .testTag(TAG_CAJA_EN_HOY),
-        relleno = RellenoDeSuperficie.Lista,
-    ) {
-        Fila(
-            titulo = fila?.rotulo ?: ROTULO_CAJA_SIN_DATO,
-            subtitulo = when {
-                fila != null -> fila.cuando
-                noSePudo -> "No pudimos proyectarla: tócala para verla en Pagos"
-                else -> ""
-            },
-            tonoDelTitulo = if (fila?.enRojo == true) TonoDeFila.Alerta else TonoDeFila.Normal,
-            inicio = {
-                IconoEnCirculo(
-                    Icons.AutoMirrored.Rounded.TrendingDown,
-                    tono = if (fila?.enRojo == true) TonoDeIcono.Peligro else TonoDeIcono.Neutro,
-                )
-            },
-            final = {
-                when {
-                    fila != null -> Cifra(fila.saldo, tono = if (fila.enRojo) TonoDeCifra.Alerta else TonoDeCifra.Neutro)
-                    noSePudo -> Chevron()
-                    else -> BloqueEsqueleto(
-                        alto = altoDeUnRenglon(Movi.textos.monto),
-                        ancho = Medida.avatar * 2,
-                        modifier = Modifier.testTag(TAG_ESQUELETO_CAJA_EN_HOY),
-                    )
-                }
-            },
-            onClick = { onNavigate(Screen.Plan(SEGMENTO_PAGOS)) },
-            onClickLabel = "Ver tu plata día a día en Pagos",
-        )
-    }
+/** La fila del renglón, con el hilo de arriba. */
+@Composable
+internal fun FilaMeAlcanza(renglon: RenglonMeAlcanza, onNavigate: (Screen) -> Unit, modifier: Modifier = Modifier) {
+    Separador(SangriaDeSeparador.Ninguna)
+    Fila(
+        titulo = renglon.titulo,
+        subtitulo = conCifrasOcultas(renglon.detalle.replaceFirstChar { it.uppercase() }),
+        lineasDelSubtitulo = 2,
+        tonoDelTitulo = if (renglon.enRojo) TonoDeFila.Alerta else TonoDeFila.Normal,
+        modifier = modifier.testTag(TAG_ME_ALCANZA),
+        inicio = {
+            IconoEnCirculo(
+                Icons.AutoMirrored.Rounded.TrendingDown,
+                tono = if (renglon.enRojo) TonoDeIcono.Peligro else TonoDeIcono.Neutro,
+            )
+        },
+        final = { Chevron() },
+        onClick = { onNavigate(Screen.Plan(SEGMENTO_PAGOS, enLaCaja = true)) },
+        onClickLabel = "Ver tu plata día a día en Pagos",
+    )
 }

@@ -8,6 +8,7 @@ import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onFirst
@@ -285,12 +286,22 @@ class PagosHastaQueTePaguenTest {
     }
 
     @Test
-    fun `con los pagos la caja se pinta, con lo libre`() {
+    fun `con los pagos la caja se pinta con una cifra y una frase corta`() {
         conLaInstantanea()
         montarPagos()
         composeRule.waitUntil(timeoutMillis = 5_000) { contarTag(TAG_FRASE_DE_PUENTE) == 1 }
         assertEquals(0, contarTag(TAG_AVISO_DE_LA_PANTALLA))
-        assertTrue(hay("libres en tus cuentas", substring = true))
+        // Vuelta 75: UNA cifra titular —lo libre del día más justo— y debajo la frase sin cifras.
+        assertEquals(1, contarTag(TAG_CIFRA_DE_LA_CAJA))
+        assertTrue(hay("tu día más justo es", substring = true))
+        val frase = composeRule.onNodeWithTag(TAG_FRASE_DE_PUENTE, useUnmergedTree = true).fetchSemanticsNode()
+            .config[androidx.compose.ui.semantics.SemanticsProperties.Text].joinToString { it.text }
+        assertTrue("\$" !in frase, "la frase no repite cifras: $frase")
+        // Lo demás espera en «¿Qué supone?».
+        assertEquals(0, contarTag(TAG_LO_QUE_SUPONE))
+        // Sin salario y con el período elegido: la línea de encima lo dice, con «Agregar».
+        assertEquals(1, contarTag(TAG_LINEA_SIN_SALARIO))
+        assertTrue(hay(SIN_TU_SALARIO))
     }
 
     @Test

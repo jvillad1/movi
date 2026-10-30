@@ -431,7 +431,8 @@ private val HERRAMIENTAS_DE_LECTURA: List<Tool> = listOf(
         .name(PROYECTAR_CAJA)
         .description(
             "Proyecta cuánta plata libre va a tener el usuario cada día hasta que le paguen (el día del " +
-                "próximo salario esperado, ese día incluido; sin salario, 30 días) y cuál es el día más " +
+                "próximo salario esperado, ese día incluido; sin salario, el día que arranca su período " +
+                "siguiente, o 30 días si nunca eligió su período) y cuál es el día más " +
                 "justo. Parte de lo que hay en sus cuentas, resta los pagos pendientes de su período y los " +
                 "del siguiente que vencen antes (una tarjeta, su pago mínimo), suma los ingresos que faltan " +
                 "y resta un gasto del día a día estimado de sus períodos cerrados. Lo libre es el saldo menos " +

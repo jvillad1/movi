@@ -56,8 +56,13 @@ import com.jvillada.movi.ui.components.LineaEsqueleto
 import com.jvillada.movi.ui.components.NoSePudoLeer
 import com.jvillada.movi.ui.components.NoSePudoLeerEnLaPantalla
 import com.jvillada.movi.ui.components.LocalErroresDeLaPantalla
-import com.jvillada.movi.ui.components.formatCOP
-import com.jvillada.movi.ui.components.formatMoneyCompact
+import com.jvillada.movi.ui.components.formatMoneyAbreviada
+import com.jvillada.movi.ui.accounts.ESPACIO_QUE_NO_SE_PARTE
+import com.jvillada.movi.ui.accounts.UNION_QUE_NO_SE_PARTE
+import com.jvillada.movi.ui.components.ds.Cifra
+import com.jvillada.movi.ui.components.ds.FormaDeCifra
+import com.jvillada.movi.ui.components.ds.TonoDeCifra
+import com.jvillada.movi.ui.components.ds.VarianteDeCifra
 import com.jvillada.movi.ui.dashboard.DashboardData
 import com.jvillada.movi.ui.dashboard.checklistDelPeriodoDe
 import com.jvillada.movi.ui.dashboard.disponibleDelInicio
@@ -88,7 +93,11 @@ import kotlinx.datetime.minus
  *
  * **Vuelta 70 · hasta que te paguen.** La línea llega al próximo salario (o a 30 días) y dibuja **lo
  * libre**: el saldo menos tu ahorro del período y lo apartado. Una sola frase dice la cifra
- * ([fraseDePuente]) y la liga con «Te quedan»; el renglón de abajo ya no la repite.
+ * y la liga con «Te quedan»; el renglón de abajo ya no la repite.
+ *
+ * **Vuelta 75 · una cifra y una frase.** La cifra titular es lo libre del día más justo; debajo, «Hasta el
+ * 25 nov · tu día más justo es el 5 nov»; todo lo demás, en «¿Qué supone?» ([loQueSupone]). Sin salario,
+ * una línea encima lo dice con «Agregar» ([lineaSinSalario]).
  */
 
 /** El título de la sección. */
@@ -142,6 +151,8 @@ internal fun cajaDelPeriodoDe(
         hoy = hoy.toString(),
         ultimoDiaDelPeriodo = ultimoDia.toString(),
         ahorro = ahorro,
+        // Vuelta 75: sin salario, hasta el arranque del período siguiente si el dueño eligió su período.
+        conElPeriodoElegido = !data.ajustesDePeriodo.esMesDeCalendario,
         apartadoFueraDe = apartadoFuera,
     )
 }
@@ -152,68 +163,66 @@ private fun sinCuentas(data: DashboardData): Boolean = data.accounts?.isEmpty() 
 // ── Lo que dice ─────────────────────────────────────────────────────────────
 //
 // Puro y aparte para que las pruebas lean las frases exactas. Todo en tuteo.
+//
+// Vuelta 75 · **una cifra y una frase.** La caja decía cinco renglones en rojo con seis cifras en dos
+// formas («−$683.361» junto a «−$1,3M», `r5-dia-09-pagos-s2.png`). Ahora arriba va UNA cifra —lo libre
+// del día más justo ([CajaProyectada.diaMasBajo]), en rojo solo ella si es negativa— y debajo una frase
+// corta sin cifras ([fraseCortaDeLaCaja]). Todo lo demás —lo que habrá en las cuentas, el ahorro, la
+// diferencia con «Te quedan» y su causa, el primer día en rojo, el supuesto— va a «¿Qué supone?»
+// ([loQueSupone]). **Una sola forma de cifra**, la abreviada en todas las escalas ([formatMoneyAbreviada]:
+// «$683 mil», «$1,3M»), en la cifra, las frases, la leyenda y la gráfica.
 
 /**
- * **La frase de puente** (vuelta 70): la única frase de la caja con su cifra, y la que la liga con «Te
- * quedan». La cifra es **lo libre** del día más justo —lo que no es tu ahorro del período ni está
- * apartado—, hasta el día que te pagan; y, si hay ahorro o apartados, lo que habrá en las cuentas ese
- * día y de dónde sale la diferencia. Antes la caja decía «tu saldo proyectado es $10,5M» tres veces
- * debajo de un «Te quedan $1,4M» que sí descontaba el ahorro: dos cifras que se contradecían.
- *
- * «Hasta el 25 de nov, en tu peor día (el 5 de nov) tendrás $X libres en tus cuentas · en las cuentas
- * habrá $Y, de eso $8M es tu ahorro». **No dice «te quedan»** (revisión de la 70): ese verbo es del
- * héroe, y las dos cifras miden cosas distintas —«Te quedan» cuenta tus compras con tarjeta como
- * gastadas; la caja, cuando se pagan—. Si lo libre de hoy no coincide con «Te quedan», [comparacion]
- * agrega la diferencia, con su causa solo cuando se puede saber ([clausulaDeLaDiferencia]).
+ * **La frase de debajo de la cifra**: hasta cuándo mira la caja y cuál es el día más justo. «Hasta el 25
+ * nov · tu día más justo es el 5 nov»; si ese día lo libre no alcanza, «Hasta el 25 nov · el 5 nov no te
+ * alcanza». Sin cifras: la cifra ya está arriba. Es la misma regla del renglón «¿Me alcanza?» de Inicio.
  */
-internal fun fraseDePuente(caja: CajaProyectada, hoy: LocalDate, comparacion: ComparacionConTeQuedan? = null): String {
-    val hasta = "Hasta el ${fechaCortaConDe(caja.alCierre.fecha)}"
+internal fun fraseCortaDeLaCaja(caja: CajaProyectada, hoy: LocalDate): String {
+    val hasta = "Hasta el ${fechaCorta(caja.alCierre.fecha)}"
     val bajo = caja.diaMasBajo
-    val esHoy = bajo.fecha == hoy.toString()
-    val libre = formatMoneyCompact(bajo.libre)
-    // Revisión de la 70: si el peor día es el último del horizonte, la fecha se dice una vez.
-    val esElUltimo = !esHoy && bajo.fecha == caja.alCierre.fecha
-    val base = when {
-        bajo.libre < 0L -> "$hasta no te alcanza: " + when {
-            esHoy -> "hoy"
-            esElUltimo -> "ese día"
-            else -> "el ${fechaCortaConDe(bajo.fecha)}"
-        } + " quedarías en $libre libres"
-        esHoy -> "$hasta, tu peor día es hoy: tienes $libre libres en tus cuentas"
-        esElUltimo -> "$hasta, tu peor día es ese mismo día: tendrás $libre libres en tus cuentas"
-        else -> "$hasta, en tu peor día (el ${fechaCortaConDe(bajo.fecha)}) tendrás $libre libres en tus cuentas"
-    }
-    val habra = if (esHoy) "hay" else "habrá"
-    val cuentas = when {
-        caja.reservado <= 0L -> null
-        // Revisión de la 70: con el ahorro más grande que el saldo, «de eso $8M es tu ahorro» sobre
-        // $6,8M se contradecía. Lo que hay no alcanza a cubrir lo reservado, y eso es lo que se dice.
-        bajo.saldo < caja.reservado -> "en las cuentas $habra ${formatMoneyCompact(bajo.saldo)}: menos que ${loReservado(caja)}"
-        else -> {
-            val deEso = buildList {
-                if (caja.ahorro > 0L) add("${formatMoneyCompact(caja.ahorro)} es tu ahorro")
-                if (caja.apartado > 0L) add("${formatMoneyCompact(caja.apartado)} está apartado")
-            }.joinToString(" y ")
-            "en las cuentas $habra ${formatMoneyCompact(bajo.saldo)}, de eso $deEso"
-        }
-    }
-    // Con el peor día hoy, la base ya dijo lo libre de hoy (la misma cifra que compara la cláusula).
-    val diferencia = comparacion?.let { clausulaDeLaDiferencia(caja, it, conLoLibreDeHoy = !esHoy) }
-    return listOfNotNull(base, cuentas, diferencia).joinToString(" · ")
+    val cuando = if (bajo.fecha == hoy.toString()) "hoy" else "el ${fechaCorta(bajo.fecha)}"
+    // Revisión de la 75: si el peor día es el último del horizonte, la fecha va una vez («ese día»).
+    val ese = if (bajo.fecha == caja.alCierre.fecha && cuando != "hoy") "ese día" else cuando
+    return if (bajo.libre < 0L) "$hasta · $ese no te alcanza" else "$hasta · tu día más justo es $cuando"
 }
 
-/** «tu ahorro de $8M», «lo apartado ($500.000)» o «tu ahorro y lo apartado ($8,5M)». */
+/** Lo que dice el lector de pantalla de la cifra titular: qué es, además de cuánto. */
+internal fun descripcionDeLaCifraDeLaCaja(caja: CajaProyectada): String =
+    "Libre en tu día más justo: ${formatMoneyAbreviada(caja.diaMasBajo.libre)}"
+
+/**
+ * **Lo que habrá en las cuentas el día más justo** y de dónde sale la diferencia con lo libre (el
+ * ahorro, lo apartado), o `null` sin ahorro ni apartados. «En las cuentas habrá $9,4M el 5 nov; de eso
+ * $8M es tu ahorro.»; con el ahorro más grande que el saldo, «… habrá $6,8M el 5 nov: menos que tu ahorro
+ * de $8M.».
+ */
+internal fun lineaDeLasCuentas(caja: CajaProyectada, hoy: LocalDate): String? {
+    if (caja.reservado <= 0L) return null
+    val bajo = caja.diaMasBajo
+    val cuando = if (bajo.fecha == hoy.toString()) "En las cuentas hay hoy ${cifraQueNoSeParte(bajo.saldo)}"
+    else "En las cuentas habrá ${cifraQueNoSeParte(bajo.saldo)} el ${fechaCorta(bajo.fecha)}"
+    // Revisión de la 70: con el ahorro más grande que el saldo, «de eso $8M es tu ahorro» sobre $6,8M se
+    // contradecía. Lo que hay no alcanza a cubrir lo reservado, y eso es lo que se dice.
+    if (bajo.saldo < caja.reservado) return "$cuando: menos que ${loReservado(caja)}."
+    val deEso = buildList {
+        if (caja.ahorro > 0L) add("${formatMoneyAbreviada(caja.ahorro)} es tu ahorro")
+        if (caja.apartado > 0L) add("${formatMoneyAbreviada(caja.apartado)} está apartado")
+    }.joinToString(" y ")
+    return "$cuando; de eso $deEso."
+}
+
+/** «tu ahorro de $8M», «lo apartado ($500 mil)» o «tu ahorro y lo apartado ($8,5M)». */
 private fun loReservado(caja: CajaProyectada): String = when {
-    caja.apartado <= 0L -> "tu ahorro de ${formatMoneyCompact(caja.ahorro)}"
-    caja.ahorro <= 0L -> "lo apartado (${formatMoneyCompact(caja.apartado)})"
-    else -> "tu ahorro y lo apartado (${formatMoneyCompact(caja.reservado)})"
+    caja.apartado <= 0L -> "tu ahorro de ${formatMoneyAbreviada(caja.ahorro)}"
+    caja.ahorro <= 0L -> "lo apartado (${formatMoneyAbreviada(caja.apartado)})"
+    else -> "tu ahorro y lo apartado (${formatMoneyAbreviada(caja.reservado)})"
 }
 
 /**
  * Lo que se sabe para comparar lo libre de hoy con «Te quedan» (revisión de la 70).
  *
  * «Lo libre de hoy» es el del primer día de la caja —al cerrar hoy, con lo que vence hoy o ya venció
- * restado—, la MISMA cifra que la frase dice cuando el peor día es hoy: una sola cifra de «hoy».
+ * restado—: una sola cifra de «hoy».
  *
  * @property teQuedan la cifra del héroe ([DisponibleDelPeriodo.periodo] `.teQuedan`).
  * @property fijosQueFaltan los pagos del período, en pesos, que vencen **después de hoy**: «Te quedan» ya
@@ -238,7 +247,7 @@ internal const val TOLERANCIA_CON_TE_QUEDAN: Long = 1_000L
 internal const val LO_QUE_TE_QUEDA_PARA_GASTAR: String = "lo que te queda para gastar"
 
 /**
- * **La diferencia entre lo libre de hoy y «Te quedan»**, en una cláusula, o `null` si no la hay (más de
+ * **La diferencia entre lo libre de hoy y «Te quedan»**, en una frase, o `null` si no la hay (más de
  * [TOLERANCIA_CON_TE_QUEDAN]). Nombra una causa solo si **una medida** la explica, con un margen del
  * 10 % (o $1.000):
  *
@@ -250,16 +259,16 @@ internal const val LO_QUE_TE_QUEDA_PARA_GASTAR: String = "lo que te queda para g
  *   del período siguiente;
  * - si no, la diferencia sola, sin inventar la causa.
  *
- * Es una explicación, no una cuenta nueva: ninguna cifra de la app cambia por esto.
+ * Es una explicación, no una cuenta nueva: ninguna cifra de la app cambia por esto. Vuelta 75: va en
+ * «¿Qué supone?», como frase propia.
  */
-internal fun clausulaDeLaDiferencia(caja: CajaProyectada, c: ComparacionConTeQuedan, conLoLibreDeHoy: Boolean = true): String? {
+internal fun clausulaDeLaDiferencia(caja: CajaProyectada, c: ComparacionConTeQuedan): String? {
     val libreDeHoy = caja.dias.first().libre
     val diferencia = libreDeHoy - c.teQuedan
     if (kotlin.math.abs(diferencia) <= TOLERANCIA_CON_TE_QUEDAN) return null
-    val cifra = formatMoneyCompact(kotlin.math.abs(diferencia))
+    val cifra = formatMoneyAbreviada(kotlin.math.abs(diferencia))
     val sentido = if (diferencia > 0L) "más" else "menos"
-    val inicio = if (conLoLibreDeHoy) "hoy tienes ${formatMoneyCompact(libreDeHoy)} libres, " else ""
-    val base = "$inicio$cifra $sentido que $LO_QUE_TE_QUEDA_PARA_GASTAR"
+    val base = "Hoy tienes ${formatMoneyAbreviada(libreDeHoy)} libres, $cifra $sentido que $LO_QUE_TE_QUEDA_PARA_GASTAR"
     val margen = maxOf(TOLERANCIA_CON_TE_QUEDAN, kotlin.math.abs(diferencia) / 10)
     val porLoQueFalta = c.fijosQueFaltan - c.porRecibir
     val resto = diferencia - porLoQueFalta
@@ -273,7 +282,7 @@ internal fun clausulaDeLaDiferencia(caja: CajaProyectada, c: ComparacionConTeQue
             "tus compras con tarjeta se pagan después"
         else -> null
     }
-    return if (causa != null) "$base: $causa" else base
+    return if (causa != null) "$base: $causa." else "$base."
 }
 
 /**
@@ -296,14 +305,14 @@ internal fun comparacionConTeQuedan(data: DashboardData, hoy: LocalDate): Compar
 
 /**
  * **El primer día en que no alcanza**, con la fecha y lo que lo causa, cuando NO es el día más justo
- * (ese ya lo dice [fraseDePuente]); `null` si lo libre no queda en negativo o si es el mismo día.
+ * (ese ya lo dice la cifra); `null` si lo libre no queda en negativo o si es el mismo día.
  */
 internal fun fraseDelRojo(caja: CajaProyectada, hoy: LocalDate): String? {
     val rojo = caja.primerDiaEnRojo ?: return null
     if (rojo.fecha == caja.diaMasBajo.fecha) return null
     val cuando = if (rojo.fecha == hoy.toString()) "Hoy" else "El ${fechaEnPalabras(rojo.fecha, hoy)}"
-    val porque = rojo.pagoMasGrande?.let { "por ${it.nombre} (${formatCOP(-it.monto)})" } ?: "por tu gasto del día a día"
-    return "$cuando ya quedarías en ${formatMoneyCompact(rojo.libre)} libres $porque"
+    val porque = rojo.pagoMasGrande?.let { "por ${it.nombre} (${formatMoneyAbreviada(-it.monto)})" } ?: "por tu gasto del día a día"
+    return "$cuando ya quedarías en$ESPACIO_QUE_NO_SE_PARTE${cifraQueNoSeParte(rojo.libre)} libres $porque."
 }
 
 /**
@@ -315,41 +324,88 @@ internal fun fraseDelSupuesto(gasto: GastoDelDiaADia): String {
     val porDia = gasto.porDia
         ?: return "Todavía no hay un período cerrado para estimar tu gasto del día a día: la línea solo resta tus pagos del período."
     val deDonde = when (gasto.periodos.size) {
-        1 -> "en tu período de ${nombreDelPeriodo(gasto.periodos.single().periodo)}"
+        1 -> "en tu período de ${mesDelPrefijo(gasto.periodos.single().periodo)}"
         else -> "en tus últimos ${gasto.periodos.size} períodos"
     }
-    return "Supone que sigues como siempre: $GASTAS_EN_PROMEDIO ${formatMoneyCompact(porDia)} por día ($deDonde)."
+    return "Supone que sigues como siempre: $GASTAS_EN_PROMEDIO ${formatMoneyAbreviada(porDia)} por día ($deDonde)."
 }
 
 /** «2026-09» → «septiembre», o el prefijo tal cual si no se entiende. */
-private fun nombreDelPeriodo(prefijo: String): String =
+private fun mesDelPrefijo(prefijo: String): String =
     periodoDelPrefijo(prefijo)?.let { MESES_DEL_ANIO[it.month - 1] } ?: prefijo
 
 /** De dónde sale la línea, en renglones cortos. */
 internal fun deDondeSaleLaCaja(caja: CajaProyectada): List<String> = buildList {
     val hasta = when {
         caja.hastaElSalario -> "hasta el día que llega tu salario"
+        // Vuelta 75: sin salario y con tu período elegido, hasta que arranca el siguiente.
+        caja.hastaElPeriodoSiguiente -> "hasta el día que empieza tu próximo período, sin sumar ningún ingreso"
         caja.salarioQueNoCuenta -> "30 días (tu ingreso fijo no está anotado en pesos con su monto)"
         else -> "30 días (no tienes un ingreso fijo anotado)"
     }
     add(
-        "Parte de lo que hay hoy en tus cuentas (${formatMoneyCompact(caja.tuPlataHoy)}) y mira $hasta. Resta lo que " +
+        "Parte de lo que hay hoy en tus cuentas (${formatMoneyAbreviada(caja.tuPlataHoy)}) y mira $hasta. Resta lo que " +
             "falta de «Pagos del período», y del siguiente lo que vence antes, el día que vence (una tarjeta, su pago " +
             "mínimo), y suma lo que falta por cobrar.",
     )
     if (caja.reservado > 0L) {
         val que = buildList {
-            if (caja.ahorro > 0L) add("tu ahorro del período (${formatMoneyCompact(caja.ahorro)})")
-            if (caja.apartado > 0L) add("lo apartado (${formatMoneyCompact(caja.apartado)})")
+            if (caja.ahorro > 0L) add("tu ahorro del período (${formatMoneyAbreviada(caja.ahorro)})")
+            if (caja.apartado > 0L) add("lo apartado (${formatMoneyAbreviada(caja.apartado)})")
         }.joinToString(" y ")
         add("Lo libre es ese saldo menos $que: siguen en tus cuentas, pero no son para gastar.")
     }
     add("Tu gasto del día a día se resta desde mañana, como si saliera de tu plata ese mismo día aunque lo pagues con tarjeta.")
 }
 
+/**
+ * **«¿Qué supone?»**, en orden (vuelta 75): lo que habrá en las cuentas y tu ahorro, la diferencia con
+ * «Te quedan» y su causa medida, el primer día en rojo si no es el más justo, el supuesto del gasto del
+ * día a día y de dónde sale la línea. Todo lo que antes iba en el párrafo rojo de arriba.
+ */
+internal fun loQueSupone(
+    caja: CajaProyectada,
+    gasto: GastoDelDiaADia,
+    hoy: LocalDate,
+    comparacion: ComparacionConTeQuedan?,
+): List<String> = listOfNotNull(
+    lineaDeLasCuentas(caja, hoy),
+    comparacion?.let { clausulaDeLaDiferencia(caja, it) },
+    fraseDelRojo(caja, hoy),
+    fraseDelSupuesto(gasto),
+) + deDondeSaleLaCaja(caja)
+
+/**
+ * Una cifra corta con el menos pegado al «$» (revisión de la 75): «quedarías en −» y «$1,2M» quedaban en
+ * dos renglones. [UNION_QUE_NO_SE_PARTE] no se ve.
+ */
+private fun cifraQueNoSeParte(monto: Long): String =
+    formatMoneyAbreviada(monto).replace("\u2212$", "\u2212$UNION_QUE_NO_SE_PARTE$")
+
 /** Lo que no entró a la cuenta, en una frase, o `null` si entró todo. */
 internal fun fraseDeLoQueFalta(caja: CajaProyectada): String? =
     caja.sinContar.takeIf { it.isNotEmpty() }?.let { "No entra a la cuenta: ${it.joinToString(" · ")}." }
+
+/**
+ * Vuelta 75 · **la línea de encima de la caja sin salario**: con un ingreso fijo en pesos anotado no hay
+ * nada que decir (`null`); sin él, Movi no suma ningún ingreso, y lo dice antes de la cifra con «Agregar».
+ * Con un ingreso fijo en otra moneda o sin monto tampoco se dice: ya hay uno, y «¿Qué supone?» explica por
+ * qué no cuenta.
+ */
+internal fun lineaSinSalario(caja: CajaProyectada): String? =
+    if (caja.hastaElSalario || caja.salarioQueNoCuenta) null else SIN_TU_SALARIO
+
+/** La línea de [lineaSinSalario]. */
+const val SIN_TU_SALARIO: String = "Sin tu salario, Movi supone que no te entra nada"
+
+/** El enlace de [lineaSinSalario]: abre la hoja de ingreso recurrente con el día del corte. */
+const val AGREGAR_SALARIO: String = "Agregar"
+
+/** El tag de la línea sin salario. */
+const val TAG_LINEA_SIN_SALARIO: String = "caja-sin-salario"
+
+/** El tag de la cifra titular de la caja (vuelta 75). */
+const val TAG_CIFRA_DE_LA_CAJA: String = "cifra-de-la-caja"
 
 // ── La sección ──────────────────────────────────────────────────────────────
 
@@ -372,6 +428,11 @@ internal fun SeccionCajaProyectada(
      * pantalla, como las demás secciones (`r4-err-pagos.png`: «$10,5M» debajo del error).
      */
     fuenteCaida: Boolean = false,
+    /**
+     * Vuelta 75 · «Agregar» de la línea sin salario: abre la hoja de ingreso recurrente ya en Ingreso y
+     * con el día del corte. `null` = no se ofrece (sin la línea).
+     */
+    onAgregarSalario: (() -> Unit)? = null,
 ) {
     // Sin cuentas no hay nada que proyectar, y se sabe sin esperar el gasto del día a día: ni el
     // esqueleto, ni el error de esa lectura (ver [cajaDelPeriodoDe]).
@@ -410,12 +471,14 @@ internal fun SeccionCajaProyectada(
             sinFuente ->
                 NoSePudoLeer("No pudimos proyectar tu plata", onReintentar = { reintento++ })
             caja != null -> Superficie(modifier = Modifier.fillMaxWidth()) {
-                CuerpoDeLaCaja(caja, gasto, hoy, verDeDondeSale, onNavigate, remember(data, hoy) { comparacionConTeQuedan(data, hoy) })
+                CuerpoDeLaCaja(caja, gasto, hoy, verDeDondeSale, onNavigate, remember(data, hoy) { comparacionConTeQuedan(data, hoy) }, onAgregarSalario)
             }
             noSePudo ->
                 NoSePudoLeer("No pudimos proyectar tu plata", onReintentar = { reintento++ })
             gastoLeido.actualizando || cargando -> Superficie(modifier = Modifier.fillMaxWidth()) {
-                LineaEsqueleto(fraccionDelAncho = 0.8f, estilo = Movi.textos.cuerpo)
+                // Vuelta 75: el mismo esqueleto que la cifra y su frase.
+                LineaEsqueleto(fraccionDelAncho = 0.4f, estilo = Movi.textos.cifraDeTarjeta)
+                LineaEsqueleto(fraccionDelAncho = 0.6f, estilo = Movi.textos.apoyo)
                 Spacer(Modifier.height(Movi.espacios.medio))
                 Spacer(Modifier.height(ALTO_DE_LA_GRAFICA))
             }
@@ -435,16 +498,39 @@ private fun CuerpoDeLaCaja(
     verDeDondeSale: Boolean,
     onNavigate: (Screen) -> Unit,
     comparacion: ComparacionConTeQuedan?,
+    onAgregarSalario: (() -> Unit)?,
 ) {
-    val rojo = fraseDelRojo(caja, hoy)
-    if (rojo != null) {
-        Text(rojo, style = Movi.textos.cuerpo, color = Movi.colores.sale)
-        Spacer(Modifier.height(Movi.espacios.minimo))
+    // Vuelta 75: sin salario, antes de la cifra, lo que la caja supone y cómo cambiarlo.
+    val sinSalario = lineaSinSalario(caja)
+    if (sinSalario != null && onAgregarSalario != null) {
+        Row(
+            modifier = Modifier.fillMaxWidth().testTag(TAG_LINEA_SIN_SALARIO),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Movi.espacios.corto),
+        ) {
+            Text(sinSalario, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.weight(1f))
+            Boton(
+                texto = AGREGAR_SALARIO,
+                onClick = onAgregarSalario,
+                variante = VarianteDeBoton.Fantasma,
+                tamano = TamanoDeBoton.S,
+            )
+        }
+        Spacer(Modifier.height(Movi.espacios.corto))
     }
+    // Vuelta 75: UNA cifra —lo libre del día más justo, en rojo solo ella si no alcanza— y una frase corta.
+    val descripcion = descripcionDeLaCifraDeLaCaja(caja)
+    Cifra(
+        caja.diaMasBajo.libre,
+        VarianteDeCifra.Grande,
+        tono = if (caja.diaMasBajo.libre < 0L) TonoDeCifra.Alerta else TonoDeCifra.Neutro,
+        forma = FormaDeCifra.Abreviada,
+        modifier = Modifier.testTag(TAG_CIFRA_DE_LA_CAJA).semantics { contentDescription = descripcion },
+    )
     Text(
-        fraseDePuente(caja, hoy, comparacion),
-        style = Movi.textos.cuerpo,
-        color = if (caja.diaMasBajo.libre < 0L) Movi.colores.sale else Movi.colores.texto,
+        fraseCortaDeLaCaja(caja, hoy),
+        style = Movi.textos.apoyo,
+        color = Movi.colores.textoMedio,
         modifier = Modifier.testTag(TAG_FRASE_DE_PUENTE),
     )
     Spacer(Modifier.height(Movi.espacios.medio))
@@ -477,10 +563,8 @@ private fun CuerpoDeLaCaja(
         )
         Text(fechaCorta(caja.dias.last().fecha), style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
     }
-    Spacer(Modifier.height(Movi.espacios.medio))
-    Text(fraseDelSupuesto(gasto), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
     fraseDeLoQueFalta(caja)?.let { falta ->
-        Spacer(Modifier.height(Movi.espacios.corto))
+        Spacer(Modifier.height(Movi.espacios.medio))
         Text(falta, style = Movi.textos.apoyo, color = Movi.colores.aviso)
         Spacer(Modifier.height(Movi.espacios.corto))
         Boton(
@@ -491,13 +575,18 @@ private fun CuerpoDeLaCaja(
         )
     }
     if (verDeDondeSale) {
-        Spacer(Modifier.height(Movi.espacios.corto))
-        deDondeSaleLaCaja(caja).forEach {
-            Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
-            Spacer(Modifier.height(Movi.espacios.minimo))
+        Spacer(Modifier.height(Movi.espacios.medio))
+        Column(modifier = Modifier.testTag(TAG_LO_QUE_SUPONE)) {
+            loQueSupone(caja, gasto, hoy, comparacion).forEach {
+                Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                Spacer(Modifier.height(Movi.espacios.minimo))
+            }
         }
     }
 }
+
+/** El tag de lo que abre «¿Qué supone?» (vuelta 75). */
+const val TAG_LO_QUE_SUPONE: String = "caja-lo-que-supone"
 
 /** El rótulo de lo que se gasta por día en la caja: un promedio, dicho como promedio. */
 const val GASTAS_EN_PROMEDIO: String = "gastas en promedio"
@@ -514,24 +603,18 @@ const val TOCA_UN_DIA: String = "Toca un día para verlo"
  * dice lo que lo sube al final («Llega tu salario: +$7M»); sin él, cómo leer la línea.
  */
 internal fun leyendaDelCierre(caja: CajaProyectada): String =
-    caja.salario?.let { "Llega tu salario: +${formatMoneyCompact(it.monto)}" } ?: TOCA_UN_DIA
+    caja.salario?.let { "Llega tu salario: +${formatMoneyAbreviada(it.monto)}" } ?: TOCA_UN_DIA
 
 /** Lo que oye el lector de pantalla en el renglón de abajo: lo libre del último día, con su fecha. */
 internal fun descripcionDelCierre(caja: CajaProyectada): String {
     val cuando = if (caja.salario != null) "el ${fechaCorta(caja.alCierre.fecha)}, al llegar tu salario" else "el ${fechaCorta(caja.alCierre.fecha)}"
-    return "Libre $cuando: ${formatMoneyCompact(caja.alCierre.libre)}"
+    return "Libre $cuando: ${formatMoneyAbreviada(caja.alCierre.libre)}"
 }
 
 /** «17 oct». */
 private fun fechaCorta(iso: String): String {
     val fecha = runCatching { LocalDate.parse(iso) }.getOrNull() ?: return iso
     return "${fecha.dayOfMonth} ${MESES_DEL_ANIO[fecha.monthNumber - 1].take(3)}"
-}
-
-/** «17 de oct», para las frases. */
-private fun fechaCortaConDe(iso: String): String {
-    val fecha = runCatching { LocalDate.parse(iso) }.getOrNull() ?: return iso
-    return "${fecha.dayOfMonth} de ${MESES_DEL_ANIO[fecha.monthNumber - 1].take(3)}"
 }
 
 /** El renglón de la leyenda de la caja. */
@@ -544,7 +627,7 @@ const val TAG_LEYENDA_DE_LA_CAJA = "leyenda-de-la-caja"
 internal fun leyendaDelDiaDeLaCaja(dia: DiaDeLaCaja): String {
     // Vuelta 70: lo libre de ese día (la cifra titular), no el saldo de las cuentas.
     val pagos = dia.movimientos.filter { it.monto < 0 }.joinToString(", ") { it.nombre }
-    val base = "${fechaCorta(dia.fecha)}: ${formatMoneyCompact(dia.libre)} libres"
+    val base = "${fechaCorta(dia.fecha)}: ${cifraQueNoSeParte(dia.libre)} libres"
     return if (pagos.isEmpty()) base else "$base · $pagos"
 }
 
@@ -584,9 +667,9 @@ private fun GraficaDeLaCaja(caja: CajaProyectada, elegido: Int?, alElegir: (Int?
     val conPago = remember(caja) { diasConPago(caja) }
     val medidor = rememberTextMeasurer()
     val estiloDeLaCifra = Movi.textos.apoyo.copy(color = if (caja.diaMasBajo.libre < 0) rojo else Movi.colores.texto)
-    val cifraDelMasBajo = formatMoneyCompact(caja.diaMasBajo.libre)
-    val descripcion = "Gráfica de tu plata libre día a día: de ${formatMoneyCompact(saldos.first())} hoy a " +
-        "${formatMoneyCompact(saldos.last())} el ${fechaCorta(caja.alCierre.fecha)}, el punto más bajo $cifraDelMasBajo"
+    val cifraDelMasBajo = formatMoneyAbreviada(caja.diaMasBajo.libre)
+    val descripcion = "Gráfica de tu plata libre día a día: de ${formatMoneyAbreviada(saldos.first())} hoy a " +
+        "${formatMoneyAbreviada(saldos.last())} el ${fechaCorta(caja.alCierre.fecha)}, el punto más bajo $cifraDelMasBajo"
     Canvas(
         modifier = Modifier
             .fillMaxWidth()

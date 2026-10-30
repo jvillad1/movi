@@ -47,6 +47,15 @@ import com.jvillada.movi.ui.components.ds.coloresDelBotonApagado
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.auth.RegisterScreen
 import com.jvillada.movi.ui.components.TAG_AVATAR_DE_MARCA
+import com.jvillada.movi.ui.components.ds.TAG_SELECTOR_DE_DIA_DEL_MES
+import com.jvillada.movi.ui.components.ds.tagDelDiaDelMes
+import com.jvillada.movi.shared.model.DashboardSummary
+import com.jvillada.movi.shared.model.FinanceSummary
+import com.jvillada.movi.shared.model.OccurrenceState
+import com.jvillada.movi.shared.model.Scope
+import com.jvillada.movi.shared.model.UpcomingPayment
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.unit.height
 import kotlinx.coroutines.runBlocking
 import org.junit.Rule
 import org.junit.Test
@@ -231,6 +240,8 @@ class PrimerUsoEnPantallaTest {
         assertTrue(seVe("Paso 6 de 6"))
         assertTrue(sinSaltar(), "el final no tiene nada que saltar")
         assertTrue(seVe("Ninguna todavía"), "el resumen dice que no quedó ninguna cuenta")
+        // Vuelta 75: sin cuentas, el final no inventa una cifra.
+        composeRule.waitUntil(5_000) { seVe(YA_PUEDES_EMPEZAR) }
         assertTrue(seVe("Primeros pasos", parcial = true), "lo saltado queda en Primeros pasos")
         assertFalse(seVe(AHORA_NO), "en el final ya no hay «Ahora no»")
         assertTrue(repo.reglas.isEmpty())
@@ -318,7 +329,9 @@ class PrimerUsoEnPantallaTest {
         composeRule.waitForIdle()
         val campos = composeRule.onAllNodes(hasSetTextAction())
         campos[0].performTextInput("1200000")
-        campos[1].performTextInput("5")
+        // Vuelta 75: el día se elige en el selector de la vuelta 72, no se escribe.
+        composeRule.onNodeWithTag(TAG_SELECTOR_DE_DIA_DEL_MES).assertExists()
+        composeRule.onNodeWithTag(tagDelDiaDelMes(5)).performScrollTo().performClick()
         composeRule.onNodeWithText("Guardar").performScrollTo().performClick()
         composeRule.waitForIdle()
 
@@ -348,7 +361,7 @@ class PrimerUsoEnPantallaTest {
         composeRule.waitForIdle()
         val campos = composeRule.onAllNodes(hasSetTextAction())
         campos[0].performTextInput("1200000")
-        if (dia.isNotEmpty()) campos[1].performTextInput(dia)
+        if (dia.isNotEmpty()) composeRule.onNodeWithTag(tagDelDiaDelMes(dia.toInt())).performScrollTo().performClick()
         composeRule.waitForIdle()
     }
 
@@ -574,6 +587,155 @@ class PrimerUsoEnPantallaTest {
         assertEquals(AccountType.CASH, repo.cuentasCreadas.single().type)
         assertTrue(seVe("Efectivo"), "la fila de la cuenta creada dice su tipo")
     }
+    // ── Vuelta 75 · el salario como ancla ──────────────────────────────────────────────────────
+
+    /** La guía con lo que el final necesita para su cifra: las lecturas de siempre del disponible. */
+    private open inner class RepoConCifra : RepoDeLaGuia() {
+        override suspend fun getFinanceSummary(scope: Scope): FinanceSummary =
+            FinanceSummary(scope = Scope.SELF, balance = 0, ingresos = 5_000_000, egresos = 0)
+        override suspend fun getDashboardSummary(scope: Scope): DashboardSummary = DashboardSummary(gastoVariablePorDia = emptyMap())
+        override suspend fun getUpcomingPayments(): List<UpcomingPayment> = emptyList()
+        override suspend fun getOccurrenceStates(): List<OccurrenceState> = emptyList()
+    }
+
+    @Test
+    fun `el periodo pregunta el salario y al terminar crea la regla de ingreso de siempre`() {
+        val repo = RepoConCifra()
+        montar(repo, paso = PasoDePrimerUso.PERIODO)
+        assertFalse(seVe(PREGUNTA_DEL_SALARIO), "sin un día elegido todavía no se pregunta")
+        composeRule.onNodeWithText("25").performClick()
+        composeRule.waitForIdle()
+        assertTrue(seVe(PREGUNTA_DEL_SALARIO))
+        assertTrue(seVe("primera cuenta que agregues", parcial = true), "sin cuentas, dice a cuál llega")
+        composeRule.onAllNodes(hasSetTextAction())[0].performScrollTo().performTextInput("7000000")
+        composeRule.waitForIdle()
+        avanzar()
+        assertTrue(repo.reglas.isEmpty(), "sin escrituras propias: la regla se crea al terminar, con las cuentas")
+
+        // Las cuentas: la del salario es la primera de dinero que se agrega.
+        composeRule.onNodeWithText("Bancolombia").performClick()
+        composeRule.waitForIdle()
+        composeRule.onAllNodes(hasSetTextAction())[1].performTextInput("1500000")
+        avanzar()
+        saltar()
+        saltar()
+        assertTrue(seVe("Paso 6 de 6"))
+        composeRule.waitUntil(5_000) { repo.reglas.isNotEmpty() }
+
+        val salario = repo.reglas.single()
+        assertEquals(TransactionType.INCOME, salario.type)
+        assertEquals(7_000_000L, salario.amount)
+        assertEquals(25, salario.dayOfMonth, "el día del corte: el que reconoce fechaEsperadaDelIngreso")
+        assertEquals("Salario", salario.category)
+        assertEquals(repo.cuentasCreadas.single().id, salario.accountId)
+        // Revisión de la 75: «¿Ya te pagaron este período?» viene en sí: la regla arranca en el siguiente,
+        // y el salario de este (que ya está en el saldo) no cuenta como plata por llegar.
+        assertEquals(
+            arranqueDelPeriodoSiguiente(25, SiElCorteCaeEnFinDeSemana.DIA_HABIL_ANTERIOR, kotlinx.datetime.Clock.System.now().toEpochMilliseconds()),
+            salario.activeFrom,
+        )
+
+        // «Listo» con una cifra real, la del héroe de Inicio.
+        composeRule.waitUntil(5_000) { composeRule.onAllNodesWithTag(TAG_CIFRA_DEL_LISTO).fetchSemanticsNodes().isNotEmpty() }
+        composeRule.onNodeWithTag(TAG_CIFRA_DEL_LISTO).assertTextContains("Te quedan \$", substring = true)
+        composeRule.onNodeWithTag(TAG_CIFRA_DEL_LISTO).assertTextContains("hasta el", substring = true)
+        avanzar()
+        assertEquals(1, repo.reglas.size, "terminar no la vuelve a crear")
+    }
+
+    /** Escribe el salario, crea una cuenta y llega al final. */
+    private fun hastaElFinalConElSalario(repo: RepoDeLaGuia, yaMePagaron: Boolean = true) {
+        montar(repo, paso = PasoDePrimerUso.PERIODO)
+        composeRule.onNodeWithText("25").performClick()
+        composeRule.waitForIdle()
+        composeRule.onAllNodes(hasSetTextAction())[0].performScrollTo().performTextInput("7000000")
+        composeRule.waitForIdle()
+        if (!yaMePagaron) {
+            composeRule.onNodeWithTag(TAG_YA_TE_PAGARON).performScrollTo().performClick()
+            composeRule.waitForIdle()
+        }
+        avanzar()
+        composeRule.onNodeWithText("Bancolombia").performClick()
+        composeRule.waitForIdle()
+        composeRule.onAllNodes(hasSetTextAction())[1].performTextInput("1500000")
+        avanzar()
+        saltar()
+        saltar()
+    }
+
+    /** Revisión de la 75: «Ir a Inicio» a los 30 ms creaba dos reglas «Salario». */
+    @Test
+    fun `tocar Ir a Inicio mientras se crea el salario no lo crea dos veces`() {
+        val puerta = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val repo = object : RepoConCifra() {
+            override suspend fun createRecurringRule(rule: RecurringRule): RecurringRule {
+                puerta.await()
+                return super.createRecurringRule(rule)
+            }
+        }
+        hastaElFinalConElSalario(repo)
+        assertTrue(seVe("Paso 6 de 6"))
+        // Mientras se crea, «Ir a Inicio» está apagado: un toque no hace nada.
+        composeRule.onNodeWithTag(TAG_AVANZAR_EN_LA_GUIA).assertIsNotEnabled()
+        composeRule.onNodeWithTag(TAG_AVANZAR_EN_LA_GUIA).performClick()
+        composeRule.onNodeWithTag(TAG_AVANZAR_EN_LA_GUIA).performClick()
+        composeRule.waitForIdle()
+        assertTrue(navegaciones.isEmpty())
+
+        puerta.complete(Unit)
+        composeRule.waitUntil(5_000) { repo.reglas.isNotEmpty() }
+        composeRule.waitForIdle()
+        avanzar()
+        assertEquals(1, repo.reglas.size, "una sola regla «Salario»")
+        assertEquals(listOf<Screen>(Screen.Dashboard), navegaciones)
+    }
+
+    @Test
+    fun `si todavia no te pagaron, el salario cuenta desde este periodo`() {
+        val repo = RepoConCifra()
+        hastaElFinalConElSalario(repo, yaMePagaron = false)
+        composeRule.waitUntil(5_000) { repo.reglas.isNotEmpty() }
+        assertNull(repo.reglas.single().activeFrom, "sin arranque: la ocurrencia de este período cuenta")
+    }
+
+    /** Revisión de la 75: la guía promete «a la primera cuenta que agregues»; sin ninguna, no se crea. */
+    @Test
+    fun `Ahora no antes de agregar cuentas no deja un salario sin cuenta`() {
+        val repo = RepoDeLaGuia()
+        montar(repo, paso = PasoDePrimerUso.PERIODO)
+        composeRule.onNodeWithText("25").performClick()
+        composeRule.waitForIdle()
+        composeRule.onAllNodes(hasSetTextAction())[0].performScrollTo().performTextInput("7000000")
+        composeRule.waitForIdle()
+        avanzar()
+        composeRule.onNodeWithText(AHORA_NO).performClick()
+        composeRule.waitForIdle()
+        assertTrue(repo.reglas.isEmpty())
+        assertEquals(listOf<Screen>(Screen.Dashboard), navegaciones)
+    }
+
+    @Test
+    fun `sin escribir el salario no se crea ninguna regla`() {
+        val repo = RepoDeLaGuia()
+        montar(repo, paso = PasoDePrimerUso.PERIODO)
+        composeRule.onNodeWithText("25").performClick()
+        composeRule.waitForIdle()
+        avanzar()
+        composeRule.onNodeWithText(AHORA_NO).performClick()
+        composeRule.waitForIdle()
+        assertTrue(repo.reglas.isEmpty())
+    }
+
+    @Test
+    fun `el paso es un rotulo chico y el titulo grande es el del paso`() {
+        montar(RepoDeLaGuia(), paso = PasoDePrimerUso.PERIODO)
+        composeRule.onNodeWithTag(TAG_ROTULO_DEL_PASO).assertTextContains("Paso 2 de 6")
+        val rotulo = composeRule.onNodeWithTag(TAG_ROTULO_DEL_PASO).getUnclippedBoundsInRoot()
+        val titulo = composeRule.onNodeWithTag(TAG_TITULO_DEL_PASO).getUnclippedBoundsInRoot()
+        assertTrue(rotulo.height < titulo.height, "el rótulo (${rotulo.height}) es más chico que el título (${titulo.height})")
+        assertTrue(rotulo.bottom <= titulo.top, "el rótulo va arriba del título")
+    }
+
 }
 
 /** Todos los textos debajo de [nodo], para el mensaje de una prueba que falla. */
@@ -581,4 +743,5 @@ private fun textosDe(nodo: androidx.compose.ui.semantics.SemanticsNode): List<St
     val propios: List<androidx.compose.ui.text.AnnotatedString> =
         nodo.config.getOrElseNullable(androidx.compose.ui.semantics.SemanticsProperties.Text) { null } ?: emptyList()
     return propios.map { a -> a.text }.filter { t -> t.isNotBlank() } + nodo.children.flatMap { c -> textosDe(c) }
+
 }
