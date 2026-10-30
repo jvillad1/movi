@@ -4260,3 +4260,80 @@ peticiones sobre un `MockEngine`), `RenglonMeAlcanzaTest` y `ElHeroeConUnSoloHor
 `ElFlujoLibrePideElSalarioTest` y `PagosHastaQueTePaguenTest` (una sola invitación), `BuscarCuentaComoEnQueSeVaTest`
 y `BuscarMuestraTuParteDelGrupoTest`, `ElHeroeReservaSuAltoTest` (≤ 8 dp), `ElWidgetEmpiezaComoElAvisoTest` (el widget empieza por el segundo de la cola) y
 `LaMemoriaSeEscribeAManoTest`. **Las líneas base** no cambian, y las guardas en 0 siguen en 0.
+
+## 77. Vuelta 79: que tocar se sienta bien
+
+Viene de la revisión visual 7 del 30-oct (puntos 1, 2, 3, 4, 6, 12 y 13; capturas `r7-*.png`): lo que dejaba a Movi
+por debajo de Revolut, Monzo o Copilot era que **se sentía barata al tocarla** y que **el amarillo estaba en todas
+partes**. **Sin reglas de plata.**
+
+1. **Un solo presionado** (`ds/AlPresionar.kt`). **Regla general:** todo lo que se toca en `ds/`, la barra de pestañas
+   y el rail pasa por `Modifier.alPresionar` (o `alAlternar`, o el par `hundimientoAlPresionar` + `toqueSinRipple`):
+   - **sin ripple** (`indication = null`): nada pinta un rectángulo encima;
+   - **se hunde**: escala `Movimiento.ESCALA_AL_PRESIONAR` (0,96) en `PRESIONAR_MS` (100 ms) con la curva estándar; el
+     `Boton` 0,97 y la `Fila` de lista 0,985;
+   - **el velo** (`ColoresDeMovi.velo`, la tinta al 6 %), recortado a la forma del componente, en hover (la web) y,
+     con el sistema pidiendo menos movimiento, al presionar (sin escala). **Nunca sobre el amarillo**: el `Boton`
+     principal se queda en `marca` al presionar (con menos movimiento pasa a `marcaPresionada`, `#F5B800`, un
+     amarillo un paso más hondo) y la `AccionRapida` pone su círculo en la `capa3` (la destacada sigue en la marca).
+   - **Barra y rail**: la celda entera se toca, pero la escala y el velo van **solo en la píldora** del destino
+     (`TAG_PILDORA_DE_PESTANA`); la activa no lleva velo. El destino del rail ancho, recortado a su píldora.
+   - Va **después del `anilloDeFoco` y antes del `clip`/`background`** (si no, la escala solo achica lo de adentro).
+     La `Superficie` tocable se hunde con su sombra (`hundimientoAlPresionar` antes de la sombra).
+   - `ElToqueEsDelSistemaTest` (en 0): en `ds/`, `MinBottomNav.kt` y `MinNavRail.kt` no hay `clickable`,
+     `combinedClickable`, `toggleable` ni `selectable` sueltos, ni `ripple(`, `rememberRipple` o `LocalIndication`;
+     `TodoLoEnfocableDibujaElAnilloTest` cuenta `alPresionar` como un toque (lleva anillo).
+2. **Cambio de pestaña con fade-through** (`transicionEntrePantallas`, la rama del fundido): sale lo viejo
+   (`fadeOut`, `SALIDA_DEL_FUNDIDO_MS` = 90 ms) y **después** entra lo nuevo (`fadeIn` de `MEDIO_MS` con `delay` 90 y
+   `scaleIn` desde 0,98). Nunca las dos a la vez (`DobleExposicionTest` muestrea cada ms). Apilar y volver no cambian;
+   con menos movimiento, corte en seco.
+3. **Un solo amarillo por vista.** **Regla nueva del sistema: un solo `Boton` principal (amarillo) —o una acción
+   destacada— visible por vista.** Lo dicen en su semántica (`llevaElAmarillo`) y `UnSoloAmarilloPorVistaTest` lo
+   cuenta en Inicio (390 y 1280) y en Pagos.
+   - **Inicio**: «Anotar gasto» es la acción amarilla. «Anotar pago» (Próximo pago) y la acción de «Movi propone hoy»
+     pasan a `Secundario` (`TarjetaDePropuesta(varianteDeLaAccion = …)`, que por defecto sigue `Principal`); el círculo
+     de la propuesta va en el tinte si urge (`TonoDeIcono.Aviso`) o en la capa 3 (`Neutro`). Sin cuentas, la acción
+     amarilla es «Crear mi primera cuenta» y «Anotar gasto» no se destaca.
+   - **A 1280**: el destino activo del rail sigue en el `tinte` con la tinta. **«Agregar» del rail pasa a secundario**
+     (tarjeta, `bordeDeBoton`, tinta; también el «+» del rail compacto): el rail está en todas las vistas, y el amarillo
+     de cada vista es su propia acción («Anotar gasto» en Inicio, el pago más urgente en Pagos), no el del chrome.
+   - **Pagos**: «Falta por pagar» es una `Superficie` blanca destacada con la `BarraDeProgreso` en tinta sobre la capa
+     3 (`FondoDeBarra.Destacada`). El amarillo deja de ser superficie (`ElAmarilloEsDeLaAccionTest`).
+   - **Avatares de banco** (`TarjetaDeCuenta`): la letra del banco en la tinta sobre la capa 3
+     (`coloresDelAvatarDelBanco`), nunca el color del banco: el amarillo de Bancolombia era el de la acción.
+   - **Revisado con la misma regla**: Actividad (sin amarillo de acción: la píldora de la barra es navegación), Tú,
+     Grupos, Créditos y Patrimonio no tienen más de un principal a la vista; los que dependen de componentes de `ds/`
+     (`TarjetaDePropuesta`, `TarjetaDeCuenta`, el rail) se arreglaron ahí. La píldora activa de la barra del teléfono
+     sigue en la marca: es navegación, no una acción (duda abierta para el dueño).
+4. **Encabezados que se separan al hacer scroll** (`ds/SeparadoAlDesplazar.kt`). `Encabezado(desplazado = …)` y
+   `MinScreenHeader(desplazado = …)`: con scroll > 0, fondo `fondo` y un `hilo` de 1 dp abajo, en `CORTO_MS`
+   (`desplazadoDe(lista)` / `desplazadoDe(scroll)`). Lo usan Pagos (el título), Actividad (los chips, abajo de lo fijo)
+   e Inicio: **la banda amarilla se vuelve crema al bajar** —el encabezado y lo de detrás de la barra del sistema
+   (`LocalBandaDelInicioDesplazada`)—, y sus botones redondos pasan a la tarjeta con borde. El amarillo es de arriba,
+   no del chrome.
+5. **La cuadrícula de acciones**: rótulos de **un renglón** y cortos («Comprobante», «Preguntar»; el lector de pantalla
+   dice la frase entera), `Espacio.m` entre filas, círculos de `Medida.circuloDeAccion` (52) y, a pantalla ancha,
+   dentro de una `Superficie`. Si con la letra agrandada un rótulo no entra, se achica hasta la letra de siempre
+   (`seAchicaHastaLaBase`). `LasOchoAccionesDelInicioTest`: a 360 dp con ×1,12 y con el 130 % (×1,456), ninguno en dos
+   renglones ni con «…».
+6. **Actualizar a mano en la web y en el escritorio.** `actualizarAMano()` (`LoFresco`) olvida lo fresco y sube
+   `LoFresco.recargasPedidas`; el Inicio, Actividad y Pagos lo escuchan con `AlPedirseUnaRecarga` y vuelven a
+   preguntar. Lo llaman el **↻ del rail ancho** (`BotonDeIcono` junto al logotipo, `TAG_ACTUALIZAR_DEL_RAIL`) y, en la
+   web, **la vuelta del foco a la ventana** (`AlVolverElFocoALaVentana`: `focus` y `visibilitychange`), como mucho una
+   vez cada `ESPERA_ENTRE_RECARGAS_POR_FOCO_MS` (5 s).
+7. **El aviso «Anotado» es un snackbar oscuro de un renglón**: fondo en la tinta (`texto`), letra en `sobreTinta`,
+   acciones como texto sin bordes en `enlaceSobreTinta` —«Repartir» · «Deshacer»; el lector de pantalla dice «Repartir
+   con Caro» (`AvisoDeDeshacer.Accion.rotuloCorto`)— y la falla en `saleSobreTinta`. Lo que no cabe a 360 se corta con
+   «…» y las acciones quedan enteras. Va **en el flujo**, entre la pantalla y la barra (le quita su alto al hueco):
+   no tapa la propuesta ni la barra. **La cifra del héroe cuenta** (`rememberCifraQueCuenta`, `LARGO_MS`, curva
+   estándar) cuando el cambio lo hizo el dueño: el aviso marca `CambioDelDueno` al anotar, al anular y al deshacer, y
+   el héroe la toma una vez (vale 15 s); al deshacer cuenta hacia atrás. Lo demás sigue cambiando entero (vuelta 75).
+
+**Tokens nuevos**: `marcaPresionada`, `velo`, `sobreTinta`, `enlaceSobreTinta`, `saleSobreTinta` (`Tokens.kt`, medidos
+en `ContrasteDeLosTokensTest`), `Medida.circuloDeAccion`, y en `Movimiento` `PRESIONAR_MS`, `ESCALA_AL_PRESIONAR`,
+`ESCALA_DEL_BOTON_AL_PRESIONAR`, `ESCALA_DE_LA_FILA_AL_PRESIONAR`, `SALIDA_DEL_FUNDIDO_MS`, `ESCALA_AL_ENTRAR_LA_PESTANA`.
+
+Lo vigilan `TocarSeSienteBienTest` (la escala en la semántica y una `IndicationNodeFactory` espía que nadie pide; la
+barra sin nada fuera de la píldora; el encabezado con hilo al bajar; el ↻ a pantalla ancha; la recarga pedida; la
+cifra que cuenta), `UnSoloAmarilloPorVistaTest`, `DobleExposicionTest`, `LasOchoAccionesDelInicioTest`,
+`ElAvisoDeAbajoNoSeParteTest` (un renglón a 360 y 390), `ElToqueEsDelSistemaTest` y `ElAmarilloEsDeLaAccionTest`.
