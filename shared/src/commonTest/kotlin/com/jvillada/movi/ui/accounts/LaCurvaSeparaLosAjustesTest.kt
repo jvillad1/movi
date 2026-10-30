@@ -38,7 +38,7 @@ class LaCurvaSeparaLosAjustesTest {
     @Test
     fun `la nota dice cuanto son ajustes y que son`() {
         assertEquals(
-            "Sin contar \$35,5M de ajustes de saldo: deudas y saldos que ya tenías y anotaste después.",
+            "Sin contar −\$35,5M de ajustes de saldo: deudas y saldos que ya tenías y anotaste después.",
             notaDeLosAjustes(puntos),
         )
         // Vuelta 77: la leyenda abre con el cambio sin ajustes, con un solo verbo; la nota no lleva verbo.

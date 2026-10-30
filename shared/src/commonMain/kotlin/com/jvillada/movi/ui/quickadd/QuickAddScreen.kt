@@ -2720,7 +2720,7 @@ internal fun FilaDeCuentaEnAgregar(
                 }
             }
         },
-        final = { Cifra(saldo.monto, moneda = saldo.moneda, tono = saldo.tono) },
+        final = if (saldo.conCifra) ({ Cifra(saldo.monto, moneda = saldo.moneda, tono = saldo.tono) }) else null,
         onClick = onClick,
         modifier = Modifier
             .heightIn(min = Medida.altoDeFilaDoble)
@@ -2755,6 +2755,8 @@ internal data class SaldoEnAgregar(
     val moneda: String,
     val subtitulo: String?,
     val tono: TonoDeCifra,
+    /** Vuelta 77: sin cifra al final (un préstamo sin saldo en Movi: no hay deuda que mostrar). */
+    val conCifra: Boolean = true,
 )
 
 internal fun saldoDeLaCuenta(account: com.jvillada.movi.shared.model.Account): SaldoEnAgregar {
@@ -2769,6 +2771,17 @@ internal fun saldoDeLaCuenta(account: com.jvillada.movi.shared.model.Account): S
                 esDeUsoCondicionado(account) -> TonoDeCifra.Apagado
                 else -> TonoDeCifra.Neutro
             },
+        )
+    }
+    // Vuelta 77 (revisión): un préstamo en negativo no es plata a favor —es un crédito sin su saldo en
+    // Movi (`prestamoSinSaldo`)—: «Sin saldo en Movi», sin cifra. Una tarjeta a favor sí es «A favor».
+    if (com.jvillada.movi.shared.model.prestamoSinSaldo(account)) {
+        return SaldoEnAgregar(
+            monto = 0L,
+            moneda = moneda,
+            subtitulo = com.jvillada.movi.ui.credits.SIN_SALDO_EN_MOVI,
+            tono = TonoDeCifra.Neutro,
+            conCifra = false,
         )
     }
     val saldo = saldoDeDeuda(monto, moneda)

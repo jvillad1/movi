@@ -100,7 +100,7 @@ class CurvaDelPatrimonioEnPantallaTest {
         val descripcion = composeRule.onNodeWithTag(TAG_CURVA_DEL_PATRIMONIO, useUnmergedTree = true)
             .fetchSemanticsNode().config[SemanticsProperties.ContentDescription].joinToString(" ")
         assertTrue(HOY_INCLUYE_UN_AJUSTE in descripcion, descripcion)
-        assertTrue(hay("Sin contar \$35,5M de ajustes de saldo"))
+        assertTrue(hay("Sin contar −\$35,5M de ajustes de saldo"))
     }
 
     @Test

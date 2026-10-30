@@ -107,13 +107,14 @@ private fun haciaDonde(cambio: Long): String = when {
  *
  * Vuelta 77: la leyenda ya abre con el cambio **sin** los ajustes ([leyendaDeLaCurva]), así que la nota
  * no lleva verbo —antes decía «bajó $17,7M» arriba y «Sin ellos, subió $837.900» debajo, dos verbos que
- * se contradecían—: solo cuánto se dejó afuera y qué es. «Sin contar $35,5M de ajustes de saldo: deudas y
+ * se contradecían—: solo cuánto se dejó afuera, con su signo, y qué es. «Sin contar −$35,5M de ajustes de saldo: deudas y
  * saldos que ya tenías y anotaste después.» Una resta, ninguna cifra inventada.
  */
 internal fun notaDeLosAjustes(puntos: List<PuntoDelPatrimonio>): String? {
     val cambio = cambioDelPatrimonio(puntos) ?: return null
     if (cambio.porAjustes == 0L) return null
-    return "Sin contar ${formatMoneyCompact(kotlin.math.abs(cambio.porAjustes))} de ajustes de saldo: $QUE_SON_LOS_AJUSTES."
+    // Con su signo (revisión): «−$36,8M» dice que los ajustes bajaron el neto; sin signo no se sabía.
+    return "Sin contar ${conSigno(cambio.porAjustes)} de ajustes de saldo: $QUE_SON_LOS_AJUSTES."
 }
 
 /** Qué es un ajuste, en las palabras del dueño. */

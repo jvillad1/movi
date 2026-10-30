@@ -9,6 +9,9 @@ import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.PeriodoFinanciero
 import com.jvillada.movi.shared.model.PreguntaSugerida
 import com.jvillada.movi.shared.model.mesDeLaPrimeraCuota
+import com.jvillada.movi.shared.model.mesDeLaPrimeraCuotaDelCredito
+import com.jvillada.movi.ui.quickadd.queSeAnoto
+import com.jvillada.movi.ui.quickadd.saldoDeLaCuenta
 import com.jvillada.movi.ui.ai.PREGUNTAS_PARA_TOCAR_DE_RESPALDO
 import com.jvillada.movi.ui.ai.PreguntaParaTocar
 import com.jvillada.movi.ui.ai.preguntasDelArranque
@@ -131,5 +134,31 @@ class Vuelta77Test {
         assertEquals(delModelo.take(2), arranque.drop(3))
         // Sin la IA, solo las tres.
         assertEquals(PREGUNTAS_PARA_TOCAR_DE_RESPALDO, preguntasDelArranque(delModelo, iaDisponible = false))
+    }
+
+    // ── La revisión ────────────────────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `la primera cuota del credito, con ya pague o desembolsado hace poco`() {
+        assertEquals(PeriodoFinanciero(2026, 11), credito(cuotasDesde = "2026-11-01").terms!!.mesDeLaPrimeraCuotaDelCredito())
+        assertEquals(PeriodoFinanciero(2026, 11), credito(desde = "2026-10-20").terms!!.mesDeLaPrimeraCuotaDelCredito())
+        assertEquals(PeriodoFinanciero(2025, 6), credito().terms!!.mesDeLaPrimeraCuotaDelCredito())
+    }
+
+    @Test
+    fun `en Pagar un prestamo sin saldo dice Sin saldo en Movi, sin cifra, y una tarjeta a favor sigue a favor`() {
+        val prestamo = saldoDeLaCuenta(Account("acc_veh", "Vehículo 4083", AccountType.LOAN, -980_000L))
+        assertEquals(com.jvillada.movi.ui.credits.SIN_SALDO_EN_MOVI, prestamo.subtitulo)
+        assertTrue(!prestamo.conCifra)
+        val tarjeta = saldoDeLaCuenta(Account("acc_nu", "Nu", AccountType.CREDIT_CARD, -50_000L))
+        assertEquals("A favor", tarjeta.subtitulo)
+        assertTrue(tarjeta.conCifra)
+    }
+
+    @Test
+    fun `el aviso de un abono dice abono`() {
+        assertEquals("Abono a Vehículo 4083", queSeAnoto(esPago = true, esAbono = true, destino = "Vehículo 4083"))
+        assertEquals("Pago a Nu", queSeAnoto(esPago = true, esAbono = false, destino = "Nu"))
+        assertEquals("Traspaso", queSeAnoto(esPago = false, esAbono = false, destino = "Ahorros"))
     }
 }
