@@ -4594,3 +4594,105 @@ avisos y su esqueleto del mismo alto con el círculo de aviso, la superficie con
 5. **Aceptado**: lo dudoso no tiene optimista, tampoco sin señal. En ese caso las dos cifras esperan juntas el final
    de una carga, y sin señal esa carga puede traer las cuentas del espejo (ya con el gasto) y el resumen de antes:
    es el síntoma original de la revisión 8, que queda solo para lo dudoso y sin conexión.
+
+## 81. Vuelta 83: filas densas y limpias, Agregar útil y Pagos sin repetir
+
+Viene de la revisión 8 del 30-oct (puntos 3, 6, 8, 10, 11, 12 y 15, el amarillo de Pagos del punto 1 y los
+detalles 2 y 7 del top 10; capturas `r8-*.png`). **Sin reglas de plata**: nada se guarda solo. Ningún token
+nuevo; `Fila` gana dos parámetros (`lineasDelTitulo` y `iconoDelSubtitulo`).
+
+1. **El nombre corto de la cuenta** (`ui/components/NombreCortoDeCuenta.kt`, `nombreCortoDeCuenta`). Con
+   número, el banco (la primera palabra) y los últimos cuatro del primer número: «Bancolombia Ahorros 4057» →
+   «Bancolombia ·4057»; si el nombre dice la moneda va al final («Master ·3684 USD»: la tarjeta vive en dos
+   cuentas con el mismo número). Sin número, el nombre tal cual hasta `LARGO_MAXIMO_DEL_NOMBRE_CORTO` (20)
+   letras («Nu», «Efectivo», «Bancolombia Ahorros») y si es más largo, **recortado por el medio** con «…».
+   Lo usan la fila «Cuenta» de Agregar, las filas de movimientos (Inicio, Actividad, Buscar) y el subtítulo
+   de un traspaso («De Bancolombia ·4057 a Nu»). Lo guardado no cambia. Desde y Hacia del traspaso siguen
+   con el nombre entero como título de su fila (vuelta 47: ahí cabe en dos renglones), y la lista del
+   selector de cuentas también.
+   - **En Agregar, la celda de la cuenta ocupa lo que deja el rótulo** (`FilaDeLaHoja(valorHastaElRotulo =
+     true)`: el rótulo «Cuenta» se mide y el valor toma el resto). El porqué de debajo («La que usas para
+     Restaurantes») se corta con «…» si no le alcanza. Se fue `FRACCION_DEL_VALOR_CON_ROTULO_LARGO`.
+2. **La cuenta solo cuando difiere** (`textosDeLaFilaEnLaLista`). En Inicio, Actividad y Buscar una fila no
+   nombra la **cuenta habitual** (`cuentaHabitual`); la regla:
+   1. la más usada que ya calcula la app (`CuentaMasUsadaCache`, la de más gastos en 30 días, la misma que
+      propone Agregar);
+   2. si todavía no se sabe (Actividad antes que el Inicio), la que más movimientos tiene en la lista;
+   3. con un empate en el paso 2, ninguna: si la lista mezcla cuentas por partes iguales, todas las filas
+      dicen la suya.
+
+   Si sin la cuenta la fila quedaría sin subtítulo (la descripción es la categoría y no hay comercio), la
+   nombra igual: todas las filas tienen dos renglones. Por revisar, el detalle de una cuenta y los ajustes
+   la nombran siempre (en su nombre corto).
+3. **«Repetir uno reciente» en Agregar** (`ui/quickadd/RepetirUnReciente.kt`). En el hueco de la hoja sin
+   teclado a 390, debajo de «Nota»: «Repetir uno reciente» y tres píldoras que se tocan (`PildoraDeFiltro`
+   compacta) con los últimos gastos distintos —«Uber Rides · $8.400»—. Tocar una **llena** el monto, la
+   categoría, la cuenta (como elegida a mano) y el concepto; el dueño toca Guardar. Solo en «Gasto», sin
+   teclado en pantalla y fuera del modo pago: con el teclado no hay hueco y cada dp empuja el pie. Los
+   recientes salen de la historia que la app ya tiene (`getEventsByDay`, la lectura sin repetir), sin
+   pedir nada nuevo al server (`gastosRecientesParaRepetir`: gastos en pesos, sin patas de traspaso, cuotas,
+   ajustes ni tu parte de otro, en las cuentas de «Gasto», distintos por lo que dice la píldora). Sin
+   recientes no se pinta nada. Las pestañas fijas y «Guardar» siempre a la vista (vuelta 71) no cambian.
+4. **Pagos sin repetir.**
+   - «Período» dice **lo gastado de su meta** («$2.105.350 de $3.556.300», `TAG_PERIODO_GASTADO_DE_LA_META`),
+     no «Te quedan» otra vez.
+   - **Un solo formato por tarjeta**: la tarjeta de Pagos va **entera** —«Te quedan», «Disponible del
+     período», Período, Semana, Meta de hoy y el desglose de «¿De dónde sale?»—; eran «$1.450.950» junto a
+     «$1,5M». Entera y no compacta porque «Te quedan» es la misma cifra del héroe del Inicio, que va entera.
+     El Inicio sigue con sus tres columnas compactas.
+   - **Los recordatorios** son una `TarjetaDePropuesta` de un renglón: la campana tachada en el tono de
+     aviso, «Tus recordatorios no llegan», y debajo «Activar» (o «Ver avisos», con las notificaciones
+     bloqueadas en el navegador) y el enlace «Ahora no». Van solos, sin otra superficie alrededor.
+   - **El mes** del navegador es un título: `tituloMedio` (15 sp semibold) en la tinta. Iba en gris de 11.
+   - **Suscripciones plegadas, una sola `Fila`**: «Suscripciones activas» con «1 cobro · $63.338 al mes»
+     debajo y el chevrón (`TAG_SUSCRIPCIONES_PLEGADAS`). Abiertas, el título de la sección con «Ocultar».
+   - **Un solo amarillo en Pagos**, a 390 y 1.280: «Anotar pago» de la primera factura. «Guardar en la
+     regla» y «Activar» van en `Secundario`, **explícito** en Pagos (no se depende del default de
+     `TarjetaDePropuesta`, que la vuelta 82 cambia). Lo cuenta `UnSoloAmarilloPorVistaTest`.
+5. **La ficha a 1.280**: el «⋯» de «Más» va a la derecha del renglón del título (`MasDeLaFicha`,
+   `EncabezadoDelMovimiento(alFinalDelTitulo = …)`), y abajo «Editar · Repetir · Repartir» caben en un
+   renglón. Iba al final de las acciones y quedaba solo en un segundo renglón.
+6. **«En qué se va» más denso**: cada categoría mide ~52 dp —el nombre, la `Pildora` de la diferencia junto
+   al monto, y la `BarraDeProgreso` a `Espacio.xs` debajo del nombre—. Era una `Fila` de 56 con la barra y la
+   píldora en otro renglón (~72 dp, tres categorías en ~275 px).
+7. **Filas de Actividad de una altura**: el título va en un renglón con «…» (`Fila(lineasDelTitulo = 1)`) y
+   el ↻ del recurrente pasa al subtítulo (`Fila(iconoDelSubtitulo = …)`, `TAG_ICONO_DEL_SUBTITULO`; el lector
+   dice «Recurrente»). «Cuota de Vehículo 4083» se partía en dos renglones por el ↻ y el monto. Vale para
+   `MovementSingleRow` y `TransferRow` (Inicio, Actividad, Por revisar, el detalle de una cuenta).
+8. **El panel derecho de Actividad a 1.280** se titula «Resumen del período»
+   (`TITULO_DEL_RESUMEN_EN_EL_PANEL`): decía «Octubre 2026», el mismo mes del navegador de la lista.
+
+Lo vigilan `Vuelta83Test` (commonTest: el nombre corto, la cuenta habitual sí/no, la fila que la nombra
+igual y los recientes distintos), `Vuelta83EnPantallaTest` (Robolectric: la cuenta entera en Agregar a 390 y
+1.280, «Repetir uno reciente» llena el formulario, el Período con lo gastado y sin cifras compactas, los
+recordatorios en un renglón, el widget con filas de ≤ 56 dp y las filas de Actividad del mismo alto a 360
+con la letra al 130 %), `UnSoloAmarilloPorVistaTest` (Pagos con la propuesta y los recordatorios, a 390 y
+1.280) y `MovimientosListaYDetalleEnPantallaTest` (el «⋯» arriba y las acciones en un renglón; el panel
+«Resumen del período»). Se actualizaron `Vuelta80EnPantallaTest` (el nombre corto en Agregar; el widget ya no
+es una `Fila`), `LosRecordatoriosVanDebajoDeLosPagosTest`, `LoQueSeVeEnteroTest` y `LaFranjaSigueAlChipTest`.
+
+**Revisión visual de la 83** (`r83-*.png`):
+
+- **Agregar sin recientes va arriba**: debajo de las pestañas, con su espaciado fijo; centrado dejaba el aire
+  partido en dos huecos. Con recientes sigue centrado.
+- **Los recientes, en un renglón** que se desplaza de lado (`TAG_RENGLON_DE_RECIENTES`, ~40 dp), y **solo si
+  caben**: si con ellos el cuerpo no entra en el hueco (360 × 640), se esconden. Guardar y las pestañas no
+  cambian.
+- **Buscar**: con la cuenta (que no es la habitual), ella primero y la fecha corta, «Nu · Mercado · 21 oct»:
+  al final era lo que se cortaba. En la habitual, «Mercado · 21 de octubre».
+- **Un recurrente cuyo título es la categoría** («Internet ↻») dice «↻ Recurrente», no la cuenta habitual
+  (`textosDeLaFilaEnLaLista(respaldo = …)`). Dice «Recurrente» y no «Mensual» porque la fila no sabe la
+  frecuencia: una suscripción puede ser anual.
+- **Pagos**: sin el renglón «Disponible del período» (el «de $X» del Período ya lo dice) y la semana se calla
+  con `DIAS_PARA_CALLAR_LA_SEMANA` (7) días o menos por delante (`seVeLaSemanaEnPagos`): casi igual a «Te
+  quedan».
+- **Los recordatorios fuera del teléfono** (≥ 600 dp): el título y «Activar · Ahora no» en un renglón.
+- **«Cuenta» en Agregar va centrada** cuando su aviso está reservado y vacío (se reserva el alto, sin
+  pintar un renglón vacío).
+- **La categoría de Gasto elegida a mano vuelve con Gasto**: elegir un reciente (Comida), pasar a Ingreso y
+  volver deja Comida. El monto y la nota siguen viajando entre pestañas (vuelta 71: Agregar no pierde nada);
+  la categoría no puede viajar —no sirve para el otro tipo—, así que se guarda al salir y vuelve.
+- **La ficha a 1.280**: el «⋯» va junto a la X, en su renglón (`SheetHandleWithClose(antesDeLaX = …)`).
+- **«Gasto por categoría» del panel de Actividad**: la fila densa del Inicio (la píldora junto al monto, la
+  barra dentro de la fila).
+- «¿Qué cuenta?» alineado con el texto de su tarjeta.

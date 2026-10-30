@@ -378,7 +378,8 @@ class MovimientosListaYDetalleEnPantallaTest {
     fun `cambiar la categoria en el panel actualiza la fila de la lista sin cerrar el panel`() {
         val repo = montar()
         elegir("Señor Gol")
-        assertTrue(filaConSubtitulo("Señor Gol", "Comida · Bancolombia"))
+        // Vuelta 83: con una sola cuenta, es la habitual y la fila no la repite.
+        assertTrue(filaConSubtitulo("Señor Gol", "Comida"))
 
         // «Mercado» ya es una categoría usada (la tiene el supermercado): el selector la ofrece.
         tocarAccion(AccionDelMovimiento.Categoria)
@@ -387,7 +388,7 @@ class MovimientosListaYDetalleEnPantallaTest {
         celda.performScrollTo()
         celda.performClick()
 
-        esperar { filaConSubtitulo("Señor Gol", "Mercado · Bancolombia") }
+        esperar { filaConSubtitulo("Señor Gol", "Mercado") }
         assertEquals(listOf("e1" to "Mercado"), repo.categoriasCambiadas)
         assertTrue(hayEnElPanel("Señor Gol"), "el panel sigue abierto con el mismo movimiento")
         assertTrue(!hayTag(TAG_RESUMEN_DEL_PERIODO_EN_EL_PANEL))
@@ -584,7 +585,7 @@ class MovimientosListaYDetalleEnPantallaTest {
         // Sin contestar: otra fila.
         elegir("Las Doce")
 
-        esperar { filaConSubtitulo("Señor Gol", "Mercado · Bancolombia") }
+        esperar { filaConSubtitulo("Señor Gol", "Mercado") }
         assertTrue(!hayEnElPanel("¿Y los parecidos?"))
     }
 
@@ -711,6 +712,65 @@ class MovimientosListaYDetalleEnPantallaTest {
             useUnmergedTree = true,
         ).fetchSemanticsNodes()
         assertEquals(1, amarillas.size, "un solo amarillo por vista")
+    }
+
+    /**
+     * Vuelta 83 · **el «⋯» a la derecha del título**, y abajo «Editar · Repetir · Repartir» en un solo
+     * renglón. Iba al final de las acciones y no cabía: quedaba solo en un segundo renglón.
+     */
+    @Test
+    @Config(qualifiers = "w1280dp-h900dp-mdpi")
+    fun `a 1280 el mas de la ficha va arriba junto a la X, y las acciones en un renglon`() {
+        montar()
+        elegir("Las Doce")
+        val mas = nodos(tagDeAccionDelMovimiento(AccionDelMovimiento.Mas), enElPanel).single().boundsInRoot
+        val primerDato = nodos(TAG_DATO_DE_LA_FICHA, enElPanel).minOf { it.boundsInRoot.top }
+        assertTrue(mas.bottom <= primerDato + 0.5f, "el «⋯» va arriba de los datos: $mas")
+        // Revisión de la 83: lado a lado con la X, en su mismo renglón (iban apilados).
+        val x = composeRule.onAllNodes(androidx.compose.ui.test.hasContentDescription("Cerrar") and enElPanel, useUnmergedTree = true)
+            .fetchSemanticsNodes().single().boundsInRoot
+        assertEquals(x.center.y, mas.center.y, 1f, "el «⋯» y la X en el mismo renglón: $mas / $x")
+        assertTrue(mas.right <= x.left + 0.5f, "el «⋯» a la izquierda de la X: $mas / $x")
+        assertTrue(
+            nodos(tagDeAccionDelMovimiento(AccionDelMovimiento.Mas), hasAnyAncestor(hasTestTag(TAG_ACCIONES_DE_LA_FICHA))).isEmpty(),
+            "ya no está entre las acciones de abajo",
+        )
+        val acciones = nodos(TAG_ACCIONES_DE_LA_FICHA, enElPanel).single()
+        val botones = AccionDelMovimiento.entries
+            .mapNotNull { a -> nodos(tagDeAccionDelMovimiento(a), hasAnyAncestor(hasTestTag(TAG_ACCIONES_DE_LA_FICHA))).firstOrNull() }
+            .map { it.boundsInRoot }
+        assertTrue(botones.size >= 2, "$botones")
+        assertTrue(botones.all { kotlin.math.abs(it.top - botones.first().top) < 1f }, "en un solo renglón: $botones")
+        assertTrue(acciones.boundsInRoot.height < 48f + 0.5f, "un renglón de botones chicos: ${acciones.boundsInRoot}")
+    }
+
+    /** Revisión de la 83: «Gasto por categoría» con la fila densa del Inicio (la barra dentro de la fila). */
+    @Test
+    @Config(qualifiers = "w1280dp-h900dp-mdpi")
+    fun `a 1280 las categorias del resumen son filas densas con la barra adentro`() {
+        montar()
+        esperar { hayTag(TAG_RESUMEN_DEL_PERIODO_EN_EL_PANEL) }
+        val categorias = nodos(TAG_CATEGORIA_DEL_RESUMEN, enElResumen)
+        assertTrue(categorias.isNotEmpty())
+        categorias.forEach { assertTrue(it.boundsInRoot.height <= 66f, "cada categoría mide ${it.boundsInRoot.height} (eran ~74)") }
+        val barras = nodos(TAG_BARRA_DEL_RESUMEN, enElResumen)
+        assertEquals(categorias.size, barras.size)
+        barras.zip(categorias).forEach { (b, c) -> assertTrue(b.boundsInRoot.bottom <= c.boundsInRoot.bottom + 0.5f, "la barra va dentro de su fila") }
+    }
+
+    /** Vuelta 83: el panel se titula «Resumen del período»; el mes ya lo dice el navegador de la lista. */
+    @Test
+    @Config(qualifiers = "w1280dp-h900dp-mdpi")
+    fun `a 1280 el panel se titula Resumen del periodo y el mes no se repite`() {
+        montar()
+        esperar { hayTag(TAG_RESUMEN_DEL_PERIODO_EN_EL_PANEL) }
+        assertTrue(hayEnElResumen(TITULO_DEL_RESUMEN_EN_EL_PANEL))
+        val conAnio = composeRule.onAllNodes(hasText(" 20", substring = true) and enElResumen, useUnmergedTree = true)
+            .fetchSemanticsNodes()
+            .flatMap { it.config.getOrElseNullable(androidx.compose.ui.semantics.SemanticsProperties.Text) { null }.orEmpty() }
+            .map { it.text }
+            .filter { Regex("""^[A-ZÁÉÍÓÚ][a-záéíóú]+ \d{4}""").containsMatchIn(it) }
+        assertTrue(conAnio.isEmpty(), "el panel no repite «Octubre 2026»: $conAnio")
     }
 
     /** A 1.920 el panel mide 575: la ficha se queda en 520. */

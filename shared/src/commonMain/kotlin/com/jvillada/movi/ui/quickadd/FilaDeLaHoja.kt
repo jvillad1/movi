@@ -9,6 +9,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.platform.testTag
+import androidx.compose.runtime.remember
+import androidx.compose.foundation.layout.heightIn
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.components.ds.Chevron
@@ -22,6 +27,9 @@ import com.jvillada.movi.ui.components.ds.Fila
  * por letra (era `rightMaxFraction` de `CardRow`, con el mismo porqué).
  */
 internal const val FRACCION_DEL_VALOR_DE_LA_HOJA = 0.55f
+
+/** El valor de una [FilaDeLaHoja] que ocupa lo que deja el rótulo (vuelta 83: la cuenta). */
+internal const val TAG_VALOR_HASTA_EL_ROTULO: String = "agregar:valor-hasta-el-rotulo"
 
 /** Desde qué escala de letra el valor de una fila de la hoja vuelve a partirse en dos (vuelta 80). */
 internal const val ESCALA_DE_LETRA_QUE_PARTE_LA_CUENTA: Float = 1.2f
@@ -58,13 +66,47 @@ internal fun FilaDeLaHoja(
     fraccionDelValor: Float = FRACCION_DEL_VALOR_DE_LA_HOJA,
     /** Vuelta 80: la cuenta va en uno (con «…»); lo demás, hasta dos. */
     renglones: Int = 2,
+    /**
+     * Vuelta 83 · **el valor ocupa lo que deja el rótulo** ([titulo], medido): en vez de un tope fijo
+     * ([fraccionDelValor]), el valor toma el ancho que necesita hasta el borde del rótulo, y el [aviso]
+     * de debajo se corta con «…» si no le alcanza. Para la cuenta, cuyo nombre corto entra entero.
+     */
+    valorHastaElRotulo: Boolean = false,
 ) {
+    val medidor = rememberTextMeasurer()
+    val estiloDelRotulo = Movi.textos.cuerpo
+    val anchoDelRotulo = remember(titulo, estiloDelRotulo, medidor) {
+        medidor.measure(titulo, estiloDelRotulo, maxLines = 1).size.width
+    }
+    // Revisión de la 83: con el renglón del aviso reservado y vacío, el rótulo va **centrado** (antes
+    // quedaba ~8 px arriba de su valor por el renglón vacío de abajo). Se reserva el mismo alto —los dos
+    // renglones medidos más el relleno de la fila— sin pintar un subtítulo vacío.
+    val estiloDelAviso = Movi.textos.apoyo
+    val densidad = LocalDensity.current
+    val altoConAviso = remember(estiloDelRotulo, estiloDelAviso, medidor, densidad) {
+        with(densidad) {
+            (medidor.measure("Ag", estiloDelRotulo).size.height + medidor.measure("Ag", estiloDelAviso).size.height).toDp()
+        } + Espacio.xxs * 2
+    }
+    val reservaVacia = aviso == null && reservarAviso
     Fila(
         titulo = titulo,
-        subtitulo = if (aviso != null || reservarAviso) aviso.orEmpty() else null,
+        subtitulo = aviso,
         final = {
             Row(
-                modifier = Modifier.fillMaxWidth(fraccionDelValor),
+                modifier = if (valorHastaElRotulo) {
+                    Modifier.testTag(TAG_VALOR_HASTA_EL_ROTULO).layout { medible, restricciones ->
+                        val tope = if (restricciones.hasBoundedWidth) {
+                            (restricciones.maxWidth - anchoDelRotulo - Espacio.xs.roundToPx()).coerceAtLeast(0)
+                        } else {
+                            restricciones.maxWidth
+                        }
+                        val colocable = medible.measure(restricciones.copy(minWidth = 0, maxWidth = tope))
+                        layout(colocable.width, colocable.height) { colocable.place(0, 0) }
+                    }
+                } else {
+                    Modifier.fillMaxWidth(fraccionDelValor)
+                },
                 horizontalArrangement = Arrangement.spacedBy(Espacio.xxs, Alignment.End),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -85,7 +127,7 @@ internal fun FilaDeLaHoja(
             }
         },
         onClick = onClick,
-        modifier = modifier,
+        modifier = if (reservaVacia) modifier.heightIn(min = altoConAviso) else modifier,
         densidad = DensidadDeFila.Compacta,
     )
 }

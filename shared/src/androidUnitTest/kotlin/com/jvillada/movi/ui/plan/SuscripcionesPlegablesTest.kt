@@ -125,8 +125,8 @@ class SuscripcionesPlegablesTest {
     }
 
     @Test
-    fun `Ver abre las filas y Ocultar las vuelve a cerrar`() {
-        composeRule.onNodeWithText("Ver", useUnmergedTree = true).performClick()
+    fun `tocar la fila abre las filas y Ocultar las vuelve a cerrar`() {
+        composeRule.onNodeWithText("Suscripciones activas", useUnmergedTree = true).performClick() // Vuelta 83: plegada es una sola Fila
         esperarTexto("Netflix")
 
         composeRule.onNodeWithText("Netflix", useUnmergedTree = true).assertIsDisplayed()

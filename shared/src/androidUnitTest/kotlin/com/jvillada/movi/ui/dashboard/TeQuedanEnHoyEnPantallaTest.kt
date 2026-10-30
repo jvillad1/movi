@@ -159,22 +159,24 @@ class TeQuedanEnHoyEnPantallaTest {
         assertEquals(2, composeRule.onAllNodesWithText("Para 4 días · \$1,7M por día", useUnmergedTree = true).fetchSemanticsNodes().size)
         assertEquals(2, composeRule.onAllNodesWithText(ROTULO_TE_QUEDAN, useUnmergedTree = true).fetchSemanticsNodes().size)
         // Vuelta 60: la semana mide contra lo que quedaba el lunes, y esta es la última del período, así
-        // que su columna dice lo mismo que queda ($6,8M). Vuelta 70: las tres columnas con el mismo patrón,
-        // así que la del período también dice lo que queda —la MISMA cifra del héroe, compacta—, y debajo
-        // lo gastado y de cuánto.
+        // que su renglón dice lo mismo que queda. Vuelta 83: entera, como el resto de la tarjeta (un solo
+        // formato), y el «Período» dice lo gastado de su meta, no otra vez lo que queda.
         assertEquals(
-            2,
+            0,
             composeRule.onAllNodesWithText(formatMoneyCompact(esperado), useUnmergedTree = true).fetchSemanticsNodes().size,
-            "la semana y el período dicen ${formatMoneyCompact(esperado)}, lo que queda",
+            "nada compacto en la tarjeta de Pagos",
         )
-        // El total del período, en su renglón con el nombre de la vuelta 28.
-        composeRule.onNodeWithText(ROTULO_DISPONIBLE_DEL_PERIODO, useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithText("\$6.900.000", useUnmergedTree = true).assertIsDisplayed()
-        // Vuelta 80: lo gastado y de cuánto van al desglose de «¿De dónde sale?».
-        assertTrue(composeRule.onAllNodesWithText("de \$6,9M", substring = true, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+        // Hoy y Pagos; la semana, a 4 días del cierre, se calla (revisión de la 83).
+        assertEquals(2, composeRule.onAllNodesWithText("\$6.800.000", useUnmergedTree = true).fetchSemanticsNodes().size, "Hoy y Pagos")
+        composeRule.onNodeWithTag(com.jvillada.movi.ui.sdui.TAG_PERIODO_GASTADO_DE_LA_META, useUnmergedTree = true).assertExists()
+        // Revisión de la 83: sin el renglón «Disponible del período»: el total lo dice el «de $X» del Período.
+        assertTrue(composeRule.onAllNodesWithText(ROTULO_DISPONIBLE_DEL_PERIODO, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+        assertTrue(composeRule.onAllNodesWithText("\$6.900.000", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
+        // Vuelta 80: lo gastado y de cuánto, en frase, van al desglose de «¿De dónde sale?».
+        assertTrue(composeRule.onAllNodesWithText("de \$6.900.000", substring = true, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
         composeRule.onNodeWithText("¿De dónde sale?", useUnmergedTree = true).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
         composeRule.waitForIdle()
-        assertTrue(composeRule.onAllNodesWithText("de \$6,9M", substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
+        assertTrue(composeRule.onAllNodesWithText("de \$6.900.000", substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
         assertEquals(normal, color(cifraDeHoy()))
         assertEquals(normal, color(cifraDePagos()))
     }
@@ -191,15 +193,16 @@ class TeQuedanEnHoyEnPantallaTest {
         // La frase vieja se fue: la cifra ya dice «Te pasaste por».
         assertEquals(0, composeRule.onAllNodesWithText("Te pasaste del disponible del período por \$100.000", useUnmergedTree = true)
             .fetchSemanticsNodes().size)
-        // Vuelta 70: la columna «Período» dice lo que queda —−$100.000, la cifra del héroe con su signo—
-        // en el mismo rojo, y debajo lo gastado ($7M), apagado.
-        val quedaEnPlan = composeRule.onAllNodesWithText("−\$100.000", useUnmergedTree = true).fetchSemanticsNodes()
-        assertEquals(1, quedaEnPlan.size, "la columna «Período» dice lo que queda")
-        assertEquals(rojo, color(quedaEnPlan.single()))
+        // Vuelta 83: el «Período» dice lo gastado ($7.000.000) de su meta, en el rojo de la alerta; ya no
+        // repite lo que queda (la cifra de arriba).
+        assertEquals(0, composeRule.onAllNodesWithText("−\$100.000", useUnmergedTree = true).fetchSemanticsNodes().size)
+        val gastadoEnElRenglon = composeRule.onAllNodesWithText("\$7.000.000", useUnmergedTree = true).fetchSemanticsNodes()
+        assertEquals(1, gastadoEnElRenglon.size, "el «Período» dice lo gastado")
+        assertEquals(rojo, color(gastadoEnElRenglon.single()))
         // Vuelta 80: lo gastado ($7M) va al desglose de «¿De dónde sale?», apagado.
         composeRule.onNodeWithText("¿De dónde sale?", useUnmergedTree = true).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
         composeRule.waitForIdle()
-        val gastadoEnPlan = composeRule.onAllNodesWithText("en el día a día \$7M", substring = true, useUnmergedTree = true).fetchSemanticsNodes()
+        val gastadoEnPlan = composeRule.onAllNodesWithText("en el día a día \$7.000.000", substring = true, useUnmergedTree = true).fetchSemanticsNodes()
         assertEquals(1, gastadoEnPlan.size)
         assertTrue(color(gastadoEnPlan.single()) != rojo, "lo gastado va apagado, no en rojo")
     }
@@ -245,9 +248,8 @@ class TeQuedanEnHoyEnPantallaTest {
         total.assert(hasAnyDescendant(hasText(heroe)))
         // Y lo de arriba, con los nombres de las cifras de Plan.
         listOf(ROTULO_FIJOS_DEL_PERIODO, ROTULO_DISPONIBLE_DEL_PERIODO, ROTULO_GASTASTE_EN_EL_PERIODO).forEach {
-            composeRule.onAllNodesWithText(it, useUnmergedTree = true).assertCountEquals(
-                if (it == ROTULO_DISPONIBLE_DEL_PERIODO) 2 else 1,
-            )
+            // Revisión de la 83: «Disponible del período» ya no tiene renglón en la tarjeta de Pagos: solo la cascada.
+            composeRule.onAllNodesWithText(it, useUnmergedTree = true).assertCountEquals(1)
         }
 
         // El botón (árbol mezclado: su texto es parte de él), con la acción de semántica: la hoja entra

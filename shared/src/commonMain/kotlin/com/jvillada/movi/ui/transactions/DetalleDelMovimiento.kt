@@ -693,25 +693,39 @@ internal fun AccionesDeLaFicha(
     ) {
         acciones.forEach { accion ->
             val elegida = accion == abierta
+            if (accion == AccionDelMovimiento.Mas) {
+                MasDeLaFicha(abierta = abierta, onElegir = onElegir)
+                return@forEach
+            }
             // El tag en su propio nodo: el botón trae el suyo.
             Box(modifier = Modifier.testTag(tagDeAccionDelMovimiento(accion)).semantics { selected = elegida }) {
-                if (accion == AccionDelMovimiento.Mas) {
-                    com.jvillada.movi.ui.components.ds.BotonDeIcono(
-                        icono = accion.icono,
-                        descripcion = "Más acciones",
-                        onClick = { onElegir(accion) },
-                        variante = com.jvillada.movi.ui.components.ds.VarianteDeBotonDeIcono.Secundario,
-                    )
-                } else {
-                    Boton(
-                        accion.rotulo,
-                        onClick = { onElegir(accion) },
-                        variante = if (accion == principal) VarianteDeBoton.Principal else VarianteDeBoton.Secundario,
-                        tamano = TamanoDeBoton.S,
-                        icono = accion.icono,
-                    )
-                }
+                Boton(
+                    accion.rotulo,
+                    onClick = { onElegir(accion) },
+                    variante = if (accion == principal) VarianteDeBoton.Principal else VarianteDeBoton.Secundario,
+                    tamano = TamanoDeBoton.S,
+                    icono = accion.icono,
+                )
             }
         }
+    }
+}
+
+/**
+ * **El «⋯» de «Más» de la ficha** (vuelta 83). A 1.280 iba al final del renglón de acciones y, con
+ * «Editar · Repetir · Repartir», no cabía: quedaba solo en un segundo renglón (`r8-1280-detalle.png`).
+ * Ahora va arriba a la derecha, junto a la X y en su renglón (`SheetHandleWithClose(antesDeLaX = …)`), y
+ * abajo las acciones caben en uno. Lleva el tag de «Más», como su botón del teléfono.
+ */
+@Composable
+internal fun MasDeLaFicha(abierta: AccionDelMovimiento?, onElegir: (AccionDelMovimiento) -> Unit) {
+    val accion = AccionDelMovimiento.Mas
+    Box(modifier = Modifier.testTag(tagDeAccionDelMovimiento(accion)).semantics { selected = accion == abierta }) {
+        com.jvillada.movi.ui.components.ds.BotonDeIcono(
+            icono = accion.icono,
+            descripcion = "Más acciones",
+            onClick = { onElegir(accion) },
+            variante = com.jvillada.movi.ui.components.ds.VarianteDeBotonDeIcono.Secundario,
+        )
     }
 }

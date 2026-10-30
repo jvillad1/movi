@@ -150,10 +150,9 @@ fun avisoDeCuenta(origen: OrigenCuenta, cuentasDisponibles: Int, para: String? =
         // comentario de arriba.
         OrigenCuenta.MAS_USADA -> "Más usada"
         OrigenCuenta.PRIMERA -> "Por defecto"
-        // Vuelta 43: el porqué de la cuenta que la hoja eligió mirando QUÉ se anota. «La que usas
-        // para Mercado» es más largo que doce caracteres: la fila le da más ancho al rótulo cuando lo
-        // lleva (ver [FRACCION_DEL_VALOR_CON_ROTULO_LARGO]) y, si ni así entra, se corta con «…» sin
-        // partir la fila.
+        // Vuelta 43: el porqué de la cuenta que la hoja eligió mirando QUÉ se anota. Vuelta 83: la
+        // cuenta (su nombre corto) se lleva lo que deja el rótulo «Cuenta», y si este porqué no entra
+        // se corta con «…» sin partir la fila.
         OrigenCuenta.REGLA -> "La de la regla"
         OrigenCuenta.DEBITO_AUTOMATICO -> "Débito automático"
         OrigenCuenta.EFECTIVO -> "Es en efectivo"
@@ -163,11 +162,6 @@ fun avisoDeCuenta(origen: OrigenCuenta, cuentasDisponibles: Int, para: String? =
     }
 }
 
-/**
- * Vuelta 43: el valor de la fila «Cuenta» cede ancho al rótulo cuando el rótulo es una frase («La
- * que usas para Mercado») y no una etiqueta de doce letras.
- */
-internal const val FRACCION_DEL_VALOR_CON_ROTULO_LARGO = 0.42f
 
 /**
  * **La cuenta que Agregar propone para un gasto o un ingreso** (vuelta 43), mirando QUÉ se anota.

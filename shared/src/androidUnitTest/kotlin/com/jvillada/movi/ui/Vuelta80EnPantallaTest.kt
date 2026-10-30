@@ -219,7 +219,8 @@ class Vuelta80EnPantallaTest {
         assertEquals(3, categorias.size)
         categorias.forEach { c ->
             val adentro = descendientes(c)
-            assertTrue(adentro.any { it.config.getOrNull(SemanticsProperties.TestTag) == TAG_FILA }, "cada categoría es una Fila: ${textos(c)}")
+            // Vuelta 83: ya no es una Fila (medía ~72 con la barra aparte): el nombre y el monto en un renglón.
+            assertTrue(textos(c).size >= 2, "cada categoría dice su nombre y su monto: ${textos(c)}")
             assertTrue(adentro.any { it.config.getOrNull(SemanticsProperties.TestTag) == TAG_BARRA_DE_PROGRESO }, "con su barra: ${textos(c)}")
         }
         // La diferencia va en una píldora con su texto adentro.
@@ -245,20 +246,22 @@ class Vuelta80EnPantallaTest {
                 }
             }
         }
+        // Vuelta 83: la cuenta va en su nombre corto («Bancolombia ·4057»).
+        val corto = com.jvillada.movi.ui.components.nombreCortoDeCuenta(ahorros.name)
         composeRule.waitUntil(5_000) {
-            composeRule.onAllNodes(hasText(ahorros.name, substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodes(hasText(corto, substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
         }
-        val nota = composeRule.onNodeWithText("Nota", useUnmergedTree = true).getUnclippedBoundsInRoot()
-        val guardar = composeRule.onNodeWithText("Guardar movimiento", useUnmergedTree = true).getUnclippedBoundsInRoot()
-        val hueco = guardar.top - nota.bottom
-        assertTrue(hueco < 200.dp, "entre «Nota» y «Guardar movimiento» quedan $hueco (eran ~350)")
+        // Revisión de la 83: sin recientes (esta cuenta no tiene historia) el cuerpo va arriba, debajo de las
+        // pestañas, en vez de centrado con el aire partido en dos huecos.
+        val pestanas = composeRule.onNodeWithTag(com.jvillada.movi.ui.quickadd.TAG_PESTANAS_DE_AGREGAR, useUnmergedTree = true).getUnclippedBoundsInRoot()
         val cabeza = composeRule.onNodeWithTag(TAG_CABEZA_DEL_MONTO, useUnmergedTree = true).getUnclippedBoundsInRoot()
+        assertTrue(cabeza.top - pestanas.bottom < 100.dp, "pegado arriba: ${cabeza.top - pestanas.bottom}")
         assertTrue(cabeza.bottom - cabeza.top > 85.dp, "la cifra protagonista (~54 sp; sin ella mide ~69): ${cabeza.bottom - cabeza.top}")
         // La cuenta en un renglón.
-        val cuenta = composeRule.onAllNodesWithText(ahorros.name, substring = true, useUnmergedTree = true).fetchSemanticsNodes().first()
+        val cuenta = composeRule.onAllNodesWithText(corto, substring = true, useUnmergedTree = true).fetchSemanticsNodes().first()
         val r = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
         cuenta.config[androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult].action?.invoke(r)
-        assertEquals(1, r.single().lineCount, "«${ahorros.name}» en un renglón")
+        assertEquals(1, r.single().lineCount, "«$corto» en un renglón")
     }
 
     // ── (6) La tarjeta de avisos, de un renglón ──────────────────────────────

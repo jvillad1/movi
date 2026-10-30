@@ -129,6 +129,7 @@ class AhorroDelPeriodoEnHoyYPlanTest {
         // Vuelta 45: Pagos lleva la misma cifra entera y el mismo detalle (el rótulo, dos veces).
         assertEquals(2, cuantos(ROTULO_TE_QUEDAN))
         assertEquals(2, cuantos("Para 4 días · \$1,2M por día"))
+        // Hoy y Pagos (la semana, a 4 días del cierre, se calla desde la revisión de la 83).
         assertEquals(2, cuantos("\$4.800.000"))
         assertTrue(!hay("ahorro"), "el ahorro no se nombra hasta abrir «¿De dónde sale?»")
     }

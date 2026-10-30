@@ -9,6 +9,7 @@ import com.jvillada.movi.shared.model.enFormaDeTitulo
 import com.jvillada.movi.shared.model.montoContado
 import com.jvillada.movi.shared.model.normalizarParaBuscar
 import com.jvillada.movi.ui.components.formatMoney
+import com.jvillada.movi.ui.components.nombreCortoDeCuenta
 
 /**
  * # Lo que dice la fila de un movimiento (vuelta de diseño 30)
@@ -64,6 +65,31 @@ fun textosDeLaFila(tx: FinancialEvent, nombreDeLaCuenta: String?): TextosDeLaFil
         comercio != null -> TextosDeLaFila(enFormaDeTitulo(comercio), deSiempre.subtitulo)
         else -> TextosDeLaFila(enFormaDeTitulo(tx.category.trim().ifEmpty { descripcion }), cuenta)
     }
+}
+
+/**
+ * **Título y subtítulo de la fila en una lista** (vuelta 83): [textosDeLaFila] con la cuenta en su
+ * nombre corto ([nombreCortoDeCuenta]: «Bancolombia ·4057») y **solo si no es la [habitual]**
+ * ([cuentaEnLaFila]): un gasto en la cuenta de siempre dice «Transporte»; uno en Nu, «Transporte · Nu».
+ * Si sin la cuenta la fila se quedaría sin subtítulo (la descripción es la categoría y no hay comercio),
+ * la nombra igual: todas las filas tienen dos renglones y miden lo mismo. [nombres] puede traer los
+ * nombres enteros: acá se acortan. Pura.
+ */
+fun textosDeLaFilaEnLaLista(
+    tx: FinancialEvent,
+    nombres: Map<String, String>,
+    habitual: String?,
+    /**
+     * Revisión de la 83: lo que dice el subtítulo cuando sin la cuenta habitual quedaría vacío, antes de
+     * volver a nombrarla. La fila de un recurrente («Internet ↻») dice «Recurrente» con su ↻, no la
+     * cuenta de siempre.
+     */
+    respaldo: String? = null,
+): TextosDeLaFila {
+    val nombreCorto = nombres[tx.accountId]?.let(::nombreCortoDeCuenta)
+    val textos = textosDeLaFila(tx, nombreCorto.takeIf { habitual == null || tx.accountId != habitual })
+    if (textos.subtitulo != null) return textos
+    return respaldo?.let { textos.copy(subtitulo = it) } ?: textosDeLaFila(tx, nombreCorto)
 }
 
 /**

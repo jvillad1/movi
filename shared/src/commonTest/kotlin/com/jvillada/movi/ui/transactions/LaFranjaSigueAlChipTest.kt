@@ -76,8 +76,8 @@ class LaFranjaSigueAlChipTest {
     }
 
     @Test
-    fun `a 1280 el panel con un chip puesto dice que es del periodo`() {
-        assertEquals("Noviembre 2026", tituloDelPanel(noviembre, conChip = false))
-        assertEquals("Noviembre 2026 · del período", tituloDelPanel(noviembre, conChip = true))
+    fun `a 1280 el panel se titula Resumen del periodo, con o sin chip`() {
+        // Vuelta 83: el mes ya lo dice el navegador de la lista de al lado.
+        assertEquals("Resumen del período", TITULO_DEL_RESUMEN_EN_EL_PANEL)
     }
 }

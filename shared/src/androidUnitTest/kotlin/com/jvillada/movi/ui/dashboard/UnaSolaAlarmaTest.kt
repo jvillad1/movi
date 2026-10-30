@@ -131,7 +131,8 @@ class UnaSolaAlarmaTest {
         assertEquals(1, cuantos(TAG_ALERTA_DEL_DISPONIBLE))
         assertEquals(0, cuantosDicen("pasaste de la meta"))
         assertEquals(1, cuantos(TAG_BARRA_EN_ALERTA), "solo la del período")
-        assertEquals(2, cuantos(TAG_BARRA_DE_VENTANA), "la semana y hoy, en tinta")
+        // Revisión de la 83: a 4 días del cierre la semana se calla; queda hoy, en tinta.
+        assertEquals(1, cuantos(TAG_BARRA_DE_VENTANA), "hoy, en tinta")
     }
 
     @Test

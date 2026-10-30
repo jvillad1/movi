@@ -197,9 +197,9 @@ const val TITULO_NO_LLEGO = "No llegó"
  *   deja sin toque.
  * @param planesDeCuotas el plan de cada crédito, por id de regla (ver [planesDeLasCuotas]). Vacío
  *   deja las filas sin estimación.
- * @param debajoDelResumen una fila que va justo debajo del resumen («Falta por pagar · Ya pagaste»),
- *   dentro de la lista: en Plan, «Tus recordatorios no te van a llegar» (vuelta de diseño 28). Era una
- *   tarjeta de propuesta encima de toda la sección, la segunda más grande de la pantalla.
+ * @param debajoDelResumen lo que va justo debajo del resumen («Falta por pagar · Ya pagaste»): en Plan,
+ *   «Tus recordatorios no llegan», que desde la vuelta 83 es una propuesta de un renglón con su propia
+ *   superficie (va sola, sin otra alrededor).
  */
 @Composable
 fun SeccionChecklistDelPeriodo(
@@ -396,7 +396,11 @@ fun SeccionChecklistDelPeriodo(
                         style = Movi.textos.cuerpo,
                         color = Movi.colores.textoMedio,
                     )
-                    debajoDelResumen?.invoke()
+                }
+                // Vuelta 83: los recordatorios son su propia tarjeta (una propuesta), no van adentro.
+                if (debajoDelResumen != null) {
+                    Spacer(Modifier.height(Medida.dentroDeSeccion))
+                    debajoDelResumen()
                 }
             }
             else -> {
@@ -408,10 +412,10 @@ fun SeccionChecklistDelPeriodo(
                 // «Tus recordatorios no llegan» (vuelta de diseño 28): un aviso propio, compacto y en
                 // tono de aviso, entre la tarjeta amarilla y la lista. No es una factura: va afuera
                 // de la lista (revisión de la vuelta 40).
+                // Vuelta 83: una [TarjetaDePropuesta] de un renglón (ver `FilaDeRecordatoriosSinCanal`): va
+                // sola, sin otra superficie alrededor.
                 if (debajoDelResumen != null) {
-                    Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
-                        debajoDelResumen()
-                    }
+                    debajoDelResumen()
                     Spacer(Modifier.height(Medida.entreSecciones))
                 }
                 // ── Tus facturas del período ─────────────────────────────────────────────────

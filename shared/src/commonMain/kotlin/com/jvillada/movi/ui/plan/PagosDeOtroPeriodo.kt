@@ -22,6 +22,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
 import com.jvillada.movi.data.ClaveDeLectura
@@ -141,17 +143,20 @@ internal fun NavegadorDelPeriodoDePagos(
             BotonDeIcono(Icons.Rounded.KeyboardArrowLeft, "Período anterior", onClick = onAnterior, habilitado = habilitado && puedeAtras)
             Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
                 when {
+                    // Vuelta 83: el mes es un título (`tituloMedio`, 15 sp semibold, en la tinta). Iba en
+                    // gris de 11 px y no se leía como lo que es: de qué período es todo lo de abajo.
                     texto != null -> Text(
                         text = texto,
-                        style = Movi.textos.apoyo,
-                        color = Movi.colores.textoMedio,
+                        style = Movi.textos.tituloMedio,
+                        color = Movi.colores.texto,
                         textAlign = TextAlign.Center,
                         maxLines = 1,
-                        modifier = Modifier.testTag(TAG_LINEA_DEL_PERIODO_DE_PLAN),
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier.testTag(TAG_LINEA_DEL_PERIODO_DE_PLAN).semantics { heading() },
                     )
                     reservar -> LineaEsqueleto(
                         fraccionDelAncho = 0.7f,
-                        estilo = Movi.textos.apoyo,
+                        estilo = Movi.textos.tituloMedio,
                         modifier = Modifier.testTag(TAG_LINEA_DEL_PERIODO_DE_PLAN_ESQUELETO),
                     )
                 }

@@ -46,6 +46,8 @@ import com.jvillada.movi.ui.components.ds.Seccion
 import com.jvillada.movi.ui.components.ds.Superficie
 import com.jvillada.movi.ui.components.ds.TonoDeBarra
 import com.jvillada.movi.ui.components.formatMoneyCompact
+import com.jvillada.movi.ui.components.formatMoney
+import com.jvillada.movi.ui.components.ds.RotuloConValor
 import com.jvillada.movi.ui.dashboard.DashboardData
 import com.jvillada.movi.ui.dashboard.NivelDelGasto
 import com.jvillada.movi.ui.dashboard.VentanaDelDisponible
@@ -251,16 +253,8 @@ private fun CuerpoDelDisponible(
             color = colorDeLaFrase(teQuedan.nivelDelDetalle),
             modifier = if (detalle == null) Modifier.alpha(0f).clearAndSetSemantics {} else Modifier.testTag(TAG_DETALLE_TE_QUEDAN_EN_PAGOS),
         )
-        Spacer(Modifier.height(Movi.espacios.minimo))
-        // El total del período, en su renglón: es el punto de partida, no la noticia. Con el nombre que
-        // le fijó la vuelta 28 («un nombre por concepto»), el mismo de la cascada.
-        CifraConRotulo(
-            rotulo = ROTULO_DISPONIBLE_DEL_PERIODO,
-            monto = disponible.disponible,
-            variante = VarianteDeCifra.Chica,
-            tono = if (disponible.disponible < 0L) TonoDeCifra.Alerta else TonoDeCifra.Neutro,
-            disposicion = DisposicionDeCifraConRotulo.EnRenglon,
-        )
+        // Vuelta 83: sin el renglón «Disponible del período $X»: quedaba justo encima de «Período $Y de $X»,
+        // que ya lo dice (y la cascada de «¿De dónde sale?» lo nombra).
         alertaDelDisponible(disponible)?.let { alerta ->
             Spacer(Modifier.height(Movi.espacios.minimo))
             AlertaDeLaTarjeta(alerta, onVerEnQueSeVa)
@@ -304,18 +298,31 @@ private fun CuerpoDelDisponible(
     }
 }
 
+/** El renglón «Período … $X de $Y» de la tarjeta de Pagos (vuelta 83: lo gastado, no lo que queda). */
+const val TAG_PERIODO_GASTADO_DE_LA_META: String = "disponible:periodo-gastado-de-la-meta"
+
 /** El tag de cada ventana en renglón de la tarjeta de Pagos (vuelta 80). */
 const val TAG_VENTANA_EN_RENGLON: String = "disponible:ventana-en-renglon"
 
 /** El tag del desglose de las ventanas, dentro de «¿De dónde sale?» (vuelta 80). */
 const val TAG_DESGLOSE_DE_LAS_VENTANAS: String = "disponible:desglose-de-las-ventanas"
 
-/** Las tres ventanas en su orden: el rótulo, la ventana y si es la del período. */
-private fun ventanasDe(disponible: DisponibleDelPeriodo): List<Triple<String, VentanaDelDisponible, Boolean>> = listOf(
+/**
+ * Las ventanas de Pagos en su orden: el rótulo, la ventana y si es la del período. **Vuelta 83: la semana se
+ * calla con [DIAS_PARA_CALLAR_LA_SEMANA] días o menos por delante** ([seVeLaSemanaEnPagos]): lo que le queda
+ * es casi «Te quedan», dos renglones más arriba.
+ */
+private fun ventanasDe(disponible: DisponibleDelPeriodo): List<Triple<String, VentanaDelDisponible, Boolean>> = listOfNotNull(
     Triple("Período", disponible.periodo, true),
-    Triple(rotuloDeLaSemana(disponible), disponible.semana, false),
+    Triple(rotuloDeLaSemana(disponible), disponible.semana, false).takeIf { seVeLaSemanaEnPagos(disponible) },
     Triple(ROTULO_META_DE_HOY, disponible.hoy, false),
 )
+
+/** Con cuántos días por delante (o menos) la semana de Pagos se calla (vuelta 83). */
+const val DIAS_PARA_CALLAR_LA_SEMANA: Int = 7
+
+/** ¿Pagos dice la semana? No con [DIAS_PARA_CALLAR_LA_SEMANA] días o menos en el período (vuelta 83). Pura. */
+internal fun seVeLaSemanaEnPagos(disponible: DisponibleDelPeriodo): Boolean = disponible.diasQueQuedan > DIAS_PARA_CALLAR_LA_SEMANA
 
 /**
  * **Lo que queda en cada ventana, en un renglón con su barra** (vuelta 80, la tarjeta de Pagos). Eran
@@ -332,14 +339,31 @@ private fun VentanasEnRenglones(disponible: DisponibleDelPeriodo, entrada: Float
                 (delPeriodo && !disponible.hayMargen && ventana.nivel == NivelDelGasto.PASADO)
             val sinNadaQueRepartir = !delPeriodo && disponible.yaTePasaste
             Column(modifier = Modifier.fillMaxWidth().testTag(TAG_VENTANA_EN_RENGLON)) {
-                CifraConRotulo(
-                    rotulo = rotulo,
-                    monto = if (sinNadaQueRepartir) 0L else ventana.teQuedan,
-                    tono = if (enAlerta) TonoDeCifra.Alerta else TonoDeCifra.Neutro,
-                    // Compacta, como las columnas: el período repite «Te quedan» de arriba, y entera se leía doble.
-                    forma = FormaDeCifra.Compacta,
-                    disposicion = DisposicionDeCifraConRotulo.EnRenglon,
-                )
+                val tono = if (enAlerta) TonoDeCifra.Alerta else TonoDeCifra.Neutro
+                if (delPeriodo) {
+                    // Vuelta 83: el período dice lo gastado de su meta («$2.105.350 de $3.556.300»). Decía lo
+                    // que queda, la misma cifra de «Te quedan» dos renglones más arriba.
+                    RotuloConValor(rotulo = rotulo, disposicion = DisposicionDeCifraConRotulo.EnRenglon) {
+                        Row(
+                            modifier = Modifier.testTag(TAG_PERIODO_GASTADO_DE_LA_META),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            CifraDelSistema(ventana.gastado, VarianteDeCifra.Fila, tono = tono)
+                            Text(" de ", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                            CifraDelSistema(ventana.meta, VarianteDeCifra.Chica, tono = TonoDeCifra.Apagado)
+                        }
+                    }
+                } else {
+                    CifraConRotulo(
+                        rotulo = rotulo,
+                        monto = if (sinNadaQueRepartir) 0L else ventana.teQuedan,
+                        tono = tono,
+                        // Vuelta 83: enteras, como «Te quedan» y «Disponible del período» de la misma tarjeta
+                        // (un solo formato por tarjeta: «$1.450.950» junto a «$1,5M» se leía como dos cifras).
+                        forma = FormaDeCifra.Entera,
+                        disposicion = DisposicionDeCifraConRotulo.EnRenglon,
+                    )
+                }
                 if (disponible.hayMargen) {
                     Spacer(Modifier.height(Movi.espacios.minimo))
                     BarraDeLaVentana(ventana, enAlerta, entrada)
@@ -364,8 +388,9 @@ private fun BarraDeLaVentana(ventana: VentanaDelDisponible, enAlerta: Boolean, e
  * iba en los renglones chicos de cada columna (vuelta 80). Pura.
  */
 internal fun desgloseDeLaVentana(rotulo: String, ventana: VentanaDelDisponible, delPeriodo: Boolean, sinNadaQueRepartir: Boolean): String =
-    "$rotulo: ${if (delPeriodo) ROTULO_DIA_A_DIA_DEL_PERIODO else GASTASTE} ${formatMoneyCompact(ventana.gastado)} " +
-        if (sinNadaQueRepartir) YA_TE_PASASTE else deLaMeta(ventana.meta)
+    // Vuelta 83: enteras, como el resto de la tarjeta de Pagos (un solo formato por tarjeta).
+    "$rotulo: ${if (delPeriodo) ROTULO_DIA_A_DIA_DEL_PERIODO else GASTASTE} ${formatMoney(ventana.gastado, "COP")} " +
+        if (sinNadaQueRepartir) YA_TE_PASASTE else "de ${formatMoney(ventana.meta, "COP")}"
 
 @Composable
 private fun DesgloseDeLasVentanas(disponible: DisponibleDelPeriodo) {
@@ -418,9 +443,7 @@ private fun CuerpoDelDisponibleEsqueleto() {
     )
     Spacer(Modifier.height(Movi.espacios.minimo))
     LineaEsqueleto(fraccionDelAncho = 0.75f, estilo = Movi.textos.apoyo)
-    Spacer(Modifier.height(Movi.espacios.minimo))
-    // El renglón «Disponible del período … $X».
-    LineaEsqueleto(fraccionDelAncho = 1f, estilo = Movi.textos.apoyo)
+    // Vuelta 83: sin el renglón «Disponible del período … $X» (la tarjeta ya no lo lleva).
     Spacer(Modifier.height(Movi.espacios.medio))
     // Vuelta 80: las tres ventanas en renglón (ver [VentanasEnRenglones]), con su barra.
     Column(verticalArrangement = Arrangement.spacedBy(Espacio.s)) {
