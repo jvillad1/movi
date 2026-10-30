@@ -763,10 +763,10 @@ class WalletRepositoryImpl(
         client.delete("$baseUrl/api/recurring-rules/$id")
     }
 
-    override suspend fun pausarRegla(id: String): RecurringRule =
+    override suspend fun pausarRegla(id: String, desde: String?): RecurringRule =
         client.post("$baseUrl/api/recurring-rules/$id/pausar") {
             contentType(ContentType.Application.Json)
-            setBody(com.jvillada.movi.shared.model.PausarReglaRequest())
+            setBody(com.jvillada.movi.shared.model.PausarReglaRequest(desde))
         }.exigirExito().body()
 
     override suspend fun reanudarRegla(id: String): RecurringRule =

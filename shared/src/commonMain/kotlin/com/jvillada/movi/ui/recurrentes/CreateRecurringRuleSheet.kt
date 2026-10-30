@@ -136,6 +136,13 @@ fun CreateRecurringRuleSheet(
      * salario» del flujo libre de Plan abre la hoja ya en Ingreso. El dueño lo puede cambiar.
      */
     tipoNuevo: TransactionType = TransactionType.EXPENSE,
+    /**
+     * Revisión de la vuelta 72 · **lo de esta regla que venció sin pagarse**, si lo hay: «Pausar» primero
+     * pregunta qué hacer con eso ([PreguntaDeLoVencidoAlPausar]). `null` pausa desde hoy sin preguntar.
+     */
+    vencidoSinPagar: com.jvillada.movi.shared.model.PagoDelPeriodo? = null,
+    /** «Ya lo pagué»: después de pausar, abre «Anotar pago» de esa fila. */
+    onYaLoPague: ((com.jvillada.movi.shared.model.PagoDelPeriodo) -> Unit)? = null,
 ) {
     val coroutine = rememberCoroutineScope()
 
@@ -443,16 +450,16 @@ fun CreateRecurringRuleSheet(
     }
 
     // Vuelta 72: pausar o reanudar es su propia escritura (el PUT no toca la pausa).
-    fun cambiarLaPausa(pausar: Boolean) {
+    fun cambiarLaPausa(pausar: Boolean, desde: String?, despues: (() -> Unit)?) {
         if (existing == null || saving) return
         saving = true
         error = null
         coroutine.launch {
             val result = runCatching {
-                if (pausar) Repositories.wallets.pausarRegla(existing.id) else Repositories.wallets.reanudarRegla(existing.id)
+                if (pausar) Repositories.wallets.pausarRegla(existing.id, desde) else Repositories.wallets.reanudarRegla(existing.id)
             }
             saving = false
-            result.onSuccess { onSaved() }
+            result.onSuccess { onSaved(); despues?.invoke() }
                 .onFailure { error = it.toUserMessage() }
         }
     }
@@ -931,7 +938,9 @@ fun CreateRecurringRuleSheet(
                 LaPausaDeLaRegla(
                     regla = existing,
                     ocupado = saving,
-                    onCambiar = { pausar -> cambiarLaPausa(pausar) },
+                    onCambiar = { pausar, desde, despues -> cambiarLaPausa(pausar, desde, despues) },
+                    vencido = vencidoSinPagar,
+                    onYaLoPague = onYaLoPague,
                 )
             }
         }

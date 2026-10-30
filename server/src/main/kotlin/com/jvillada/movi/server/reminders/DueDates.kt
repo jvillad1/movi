@@ -320,11 +320,10 @@ fun dueDateFor(
 }
 
 /**
- * Vuelta 72 · **¿el vencimiento sin pagar [due] de [rule] cae en su pausa, mirado en [today]?** La regla de `:core`
+ * Vuelta 72 · **¿el vencimiento sin pagar [due] de [rule] cae en su pausa?** La regla de `:core`
  * ([com.jvillada.movi.shared.model.pausadaParaElVencimiento]) con la fecha de `java.time`.
  */
-fun pausadaEn(rule: RecurringRule, due: LocalDate, today: LocalDate): Boolean =
-    rule.pausadaParaElVencimiento(due.toString(), today.toString())
+fun pausadaEn(rule: RecurringRule, due: LocalDate): Boolean = rule.pausadaParaElVencimiento(due.toString())
 
 fun statusFor(dueDate: LocalDate, today: LocalDate, leadDays: Int): PaymentStatus = when {
     dueDate.isBefore(today) -> PaymentStatus.OVERDUE
@@ -350,7 +349,7 @@ fun upcomingPayments(
         val vigente = dueDateFor(rule, today, DEFAULT_GRACE_DAYS, ocurridos, settings)
         // Vuelta 72: una regla pausada no tiene próximo vencimiento desde su pausa. Lo ya pagado del
         // período viaja en su ocurrencia (`OccurrenceState.reglaPausada`), no acá.
-        if (pausadaEn(rule, vigente, today)) return@mapNotNull null
+        if (pausadaEn(rule, vigente)) return@mapNotNull null
         // El salario del día de corte se muestra el día en que de verdad se espera (ver [fechaEsperada]).
         val due = fechaEsperada(rule, vigente, settings)
         UpcomingPayment(
@@ -380,7 +379,7 @@ fun siguienteVencimiento(
     val siguiente = dueDateFor(rule, today, DEFAULT_GRACE_DAYS, occurredPeriods + periodOf(vigente), settings)
     if (!siguiente.isAfter(vigente)) return null
     // Vuelta 72: el siguiente de una regla pausada no existe.
-    if (pausadaEn(rule, siguiente, today)) return null
+    if (pausadaEn(rule, siguiente)) return null
     return fechaEsperada(rule, siguiente, settings)
 }
 
@@ -422,7 +421,7 @@ fun selectDueForReminder(
             rule.remindMe &&
                 rule.type == TransactionType.EXPENSE &&
                 // Vuelta 72: una regla pausada no avisa por lo que vence en su pausa.
-                !pausadaEn(rule, due, today) &&
+                !pausadaEn(rule, due) &&
                 lastRemindedPeriod != reminderKeyFor(rule, today, DEFAULT_GRACE_DAYS, ocurridos, settings) &&
                 statusFor(due, today, leadDays) != PaymentStatus.UPCOMING
         }

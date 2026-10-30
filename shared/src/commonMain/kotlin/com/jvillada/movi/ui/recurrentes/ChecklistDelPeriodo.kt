@@ -239,7 +239,7 @@ fun SeccionChecklistDelPeriodo(
      * vacío («Agregar un pago fijo»). `null` lo esconde.
      */
     onAgregar: (() -> Unit)? = null,
-    /** Vuelta 72 · las reglas pausadas, para «Pausados (N)» al final, plegada, con «Reanudar». */
+    /** Vuelta 72 · las reglas pausadas, para «Pausados · N» al final, plegada, con «Reanudar». */
     pausadas: List<RecurringRule> = emptyList(),
     onReanudar: ((RecurringRule) -> Unit)? = null,
     /** Vuelta 72 · tocar una pausada abre su hoja (donde también se reanuda o se elimina). */
@@ -255,6 +255,11 @@ fun SeccionChecklistDelPeriodo(
     onNoUsarSiempreLaCuenta: ((pago: PagoDelPeriodo, cuentaId: String) -> Unit)? = null,
     /** Las propuestas de cuenta que el dueño ya descartó ([claveDeLaCuentaDeLaRegla]). */
     cuentasDescartadas: Set<String> = emptySet(),
+    /**
+     * Vuelta 72 (revisión) · «Pausar» en el «⋯» de una fila sin pagar (solo reglas de verdad: ni la cuota
+     * de un crédito, ni el pago de una tarjeta, ni un abono). `null` no lo ofrece.
+     */
+    onPausar: ((PagoDelPeriodo) -> Unit)? = null,
 ) {
     // ── El momento de celebrar (Ola 1 · «Que Movi se sienta viva») ──────────────────────────────
     // Cuando el dueño completa la lista —pasa de «falta 1» a «todo pagado» por algo que hizo acá:
@@ -330,6 +335,11 @@ fun SeccionChecklistDelPeriodo(
                         ETIQUETA_VER_MOVIMIENTO to { pago.eventId?.let { ver(it) }; Unit }
                     }
                 }
+            },
+            accionesDelMenuPendiente = if (onPausar != null && !pago.hecho && !pago.esAbono && deudaDeLaRegla(pago.ruleId) == null) {
+                listOf(ETIQUETA_PAUSAR to { onPausar(pago) })
+            } else {
+                emptyList()
             },
             debajo = if (!pago.pagado && (estimacion != null || parecido != null || pago.esAbono || ofreceAlgoDebajo(pago, conPropuesta))) {
                 {
@@ -475,7 +485,7 @@ fun SeccionChecklistDelPeriodo(
                 }
             }
         }
-        // ── Vuelta 72 · Pausados (N): al final, plegada ─────────────────────────────
+        // ── Vuelta 72 · Pausados · N: al final, plegada ─────────────────────────────
         if (pausadas.isNotEmpty() && !cargando && pudoLeer) {
             SeccionDePausados(
                 pausadas = pausadas,
@@ -1235,6 +1245,7 @@ internal fun fechaLegibleDelChecklist(vence: String): String {
  */
 internal fun textoDelMontoDelChecklist(pago: PagoDelPeriodo): String {
     // Vuelta 72: una tarjeta pagada por debajo del mínimo sigue mostrando su saldo (lo pagado va en la línea).
-    val monto = if (pago.hecho) pago.montoPagado ?: pago.monto else pago.monto
+    // Vuelta 72 (revisión): lo pagado en el período entero, no solo el último pago.
+    val monto = if (pago.hecho && pago.pagado) pago.pagadoParaMostrar ?: pago.monto else pago.monto
     return if (pago.moneda != "COP") formatMoney(monto, pago.moneda) else formatCOP(monto)
 }

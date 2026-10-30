@@ -210,6 +210,45 @@ class EstadoDelTableroDeRecurrentes internal constructor(
     internal var reglas by mutableStateOf<List<RecurringRule>>(emptyList())
     /** Vuelta 72 · las cuentas, por id, para «¿Usar siempre Nu para Carro?». Vacío: no se propone. */
     internal var nombresDeCuentas by mutableStateOf<Map<String, String>>(emptyMap())
+    /**
+     * Vuelta 72 (revisión) · las cuentas leídas con los vencimientos, o `null` si no contestaron. La caja
+     * de Pagos sale de acá (no de lo que el Inicio dejó guardado): después de «Anotar pago» los
+     * vencimientos se vuelven a leer y Tu plata con ellos; antes la caja quedaba con el saldo viejo.
+     */
+    internal var cuentasLeidas by mutableStateOf<List<Account>?>(null)
+
+    /**
+     * Vuelta 72 (revisión) · las filas del período (y lo que quedó de antes) que Pagos está mostrando: de
+     * acá sale lo vencido sin pagar que la pausa pregunta ([vencidoSinPagarDe]).
+     */
+    internal var filasDelPeriodo by mutableStateOf<List<PagoDelPeriodo>>(emptyList())
+
+    /** Lo vencido y sin pagar de [ruleId], si hay: lo que «Pausar» pregunta antes de pausar. */
+    internal fun vencidoSinPagarDe(ruleId: String): PagoDelPeriodo? =
+        filasDelPeriodo.firstOrNull { it.ruleId == ruleId && !it.hecho && it.vencido && !it.esIngreso }
+
+    /** Vuelta 72 (revisión) · la fila cuya pausa espera la respuesta de «… no aparece pagado». */
+    internal var pausaPorDecidir by mutableStateOf<PagoDelPeriodo?>(null)
+
+    /**
+     * Vuelta 72 (revisión) · **«Pausar» desde el «⋯» de una fila sin pagar.** Con algo vencido sin pagar,
+     * primero pregunta ([pausaPorDecidir]); si no, pausa desde hoy.
+     */
+    internal fun pedirPausa(pago: PagoDelPeriodo) {
+        if (vencidoSinPagarDe(pago.ruleId) != null) pausaPorDecidir = pago else pausar(pago.ruleId, desde = null)
+    }
+
+    /** Pausa [ruleId] desde [desde] (hoy si es `null`), y después [luego]. */
+    internal fun pausar(ruleId: String, desde: String?, luego: (() -> Unit)? = null) {
+        if (ruleId in marcando) return
+        marcando = marcando + ruleId
+        alcance.launch {
+            runCatching { Repositories.wallets.pausarRegla(ruleId, desde) }
+                .onSuccess { RecurringOfferGate.olvidarLoCacheado(); recargas++; luego?.invoke() }
+                .onFailure { error = it.toUserMessage() }
+            marcando = marcando - ruleId
+        }
+    }
     /** Vuelta 72 · los «Ahora no» de esa propuesta (persisten, como las demás propuestas descartadas). */
     internal var cuentasDescartadas by mutableStateOf(PropuestasDescartadasStore.descartadas())
 
@@ -771,7 +810,12 @@ fun rememberEstadoDelTableroDeRecurrentes(
                 // afirmación sin respaldo, que es lo único que esta pieza no puede permitirse.
                 val estados = porOcurrir.await()
                 todas.await().onSuccess { if (vigente()) estado.reglas = it }
-                cuentas.await().onSuccess { lista -> if (vigente()) estado.nombresDeCuentas = lista.associate { it.id to it.name } }
+                cuentas.await().onSuccess { lista ->
+                    if (vigente()) {
+                        estado.nombresDeCuentas = lista.associate { it.id to it.name }
+                        estado.cuentasLeidas = lista
+                    }
+                }
                 if (vigente()) {
                     estados
                         .onSuccess { estado.ocurrencias = it; estado.ocurrenciasOk = true }
@@ -981,6 +1025,7 @@ fun LazyListScope.tableroDeRecurrentes(
                     settings = ajustesDelPeriodo,
                 )
             }
+            SideEffect { estado.filasDelPeriodo = checklist + anteriores }
             SeccionChecklistDelPeriodo(
                 // Vuelta 63 (revisión): el abono a una tarjeta dice que no cambia «Te quedan».
                 checklist = remember(checklist, tarjetasDelTablero.valor) {
@@ -1040,6 +1085,7 @@ fun LazyListScope.tableroDeRecurrentes(
                 },
                 // Vuelta 72: «+ Agregar» siempre, «Pausados (N)» al final y la cuenta que se propone guardar.
                 onAgregar = { estado.nuevoRecurrenteAbierto = true },
+                onPausar = { estado.pedirPausa(it) },
                 pausadas = estado.pausadas,
                 onReanudar = { estado.reanudar(it) },
                 onAbrirPausada = { estado.reglaRecurrenteAEditar = it },
@@ -1273,7 +1319,27 @@ fun HojasDelTableroDeRecurrentes(estado: EstadoDelTableroDeRecurrentes, onNaviga
                 estado.recargar()
             },
             existing = regla,
+            // Vuelta 72 (revisión): si algo de esta regla venció sin pagarse, «Pausar» pregunta qué hacer.
+            vencidoSinPagar = estado.vencidoSinPagarDe(regla.id),
+            onYaLoPague = { vencido -> onNavigate(hojaParaAnotar(vencido)) },
         )
+    }
+
+    // Vuelta 72 (revisión): «Pausar» desde el «⋯» de una fila con algo vencido sin pagar.
+    estado.pausaPorDecidir?.let { pago ->
+        val vencido = estado.vencidoSinPagarDe(pago.ruleId) ?: pago
+        MarcoDeHoja(onDismiss = { estado.pausaPorDecidir = null }, dismissEnabled = pago.ruleId !in estado.marcando) {
+            com.jvillada.movi.ui.components.ds.EncabezadoDeHoja(com.jvillada.movi.ui.recurrentes.tituloDePausar(pago.nombre))
+            Spacer(Modifier.height(Espacio.m))
+            com.jvillada.movi.ui.recurrentes.PreguntaDeLoVencidoAlPausar(
+                vencido = vencido,
+                ocupado = pago.ruleId in estado.marcando,
+                onDejarPendiente = { estado.pausar(pago.ruleId, desde = null) { estado.pausaPorDecidir = null } },
+                onYaLoPague = { estado.pausar(pago.ruleId, desde = null) { estado.pausaPorDecidir = null; onNavigate(hojaParaAnotar(vencido)) } },
+                onNoSeDebe = { estado.pausar(pago.ruleId, desde = vencido.vence) { estado.pausaPorDecidir = null } },
+            )
+            Spacer(Modifier.height(Espacio.m))
+        }
     }
 
     // La misma hoja, en modo suscripción. Al guardar se recarga la sección por el mismo camino

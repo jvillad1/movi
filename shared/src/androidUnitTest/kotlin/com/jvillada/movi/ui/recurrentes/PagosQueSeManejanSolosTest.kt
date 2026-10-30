@@ -12,6 +12,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performSemanticsAction
@@ -131,7 +132,8 @@ class PagosQueSeManejanSolosTest {
             "rr_gym", "Gimnasio", "Gimnasio", 180_000L, 5, TransactionType.EXPENSE, pausadaDesde = "2026-10-29",
         )
         montar(listOf(arriendo), pausadas = listOf(gym))
-        assertTrue(hay(tituloDeLosPausados(1)))
+        assertTrue(hay(TITULO_DE_LOS_PAUSADOS))
+        assertTrue(hay(" · 1"), "el conteo como en el resto del sistema: «Pausados · 1»")
         assertFalse(hay("Gimnasio"), "plegada: la regla no se ve hasta abrirla")
         tocar("Ver")
         assertTrue(hay("Pausado desde el 29 oct"))
@@ -143,10 +145,12 @@ class PagosQueSeManejanSolosTest {
 
     @Test
     fun `la tarjeta pagada por debajo del minimo dice cuanto falta y no Pagado`() {
+        // La fila que vence en la fecha de pago del extracto, tildada por un pago de $100.000 desde el corte.
         val tarjeta = PagoDelPeriodo(
             ruleId = "${CARD_RULE_PREFIX}acc_nu", nombre = "Pago tarjeta Nu", monto = 1_583_000L, pagado = true,
-            diasParaVencer = 7, vence = "2026-11-05", montoEsSaldo = true, pagoMinimo = 180_000L,
+            diasParaVencer = 7, vence = "2026-11-05", montoEsSaldo = true, pagoMinimo = 80_000L,
             montoPagado = 100_000L, pagadoEnElPeriodo = 100_000L, derivado = true, eventId = "ev_pago",
+            restoDelMinimo = 80_000L, pagadoDesdeElCorte = 100_000L,
         )
         montar(listOf(tarjeta, arriendo))
         composeRule.onNodeWithTag(TAG_FALTA_DEL_MINIMO, useUnmergedTree = true).assertExists()
@@ -186,6 +190,104 @@ class PagosQueSeManejanSolosTest {
         assertEquals(VarianteDeBoton.Secundario, variante(GUARDAR_EN_LA_REGLA))
         tocar(GUARDAR_EN_LA_REGLA)
         assertEquals(listOf("rr_carro" to nu.id), cuentasGuardadas)
+    }
+
+    @Test
+    fun `una regla pausada no propone guardar la cuenta`() {
+        val carro = PagoDelPeriodo(
+            ruleId = "rr_carro", nombre = "Carro", monto = 9_000L, pagado = true, diasParaVencer = -3,
+            vence = "2026-10-20", eventId = "ev_carro", cuentaDelPago = nu.id, pausada = true,
+        )
+        montar(listOf(carro), nombres = mapOf(nu.id to nu.name))
+        assertFalse(hay("¿Usar siempre"))
+    }
+
+    @Test
+    fun `Llevas pagados suma lo pagado en el periodo entero`() {
+        val tarjeta = PagoDelPeriodo(
+            ruleId = "${CARD_RULE_PREFIX}acc_nu", nombre = "Pago tarjeta Nu", monto = 1_583_000L, pagado = true,
+            diasParaVencer = -20, vence = "2026-10-05", montoEsSaldo = true, montoPagado = 80_000L,
+            pagadoEnElPeriodo = 180_000L, derivado = true, eventId = "ev_80",
+        )
+        montar(listOf(tarjeta, arriendo))
+        assertTrue(hay("Llevas \$180.000 pagados"), "el total, no el último pago")
+        assertEquals("\$180.000", resumenDeLaFacturaPagada(tarjeta), "la fila dice el total pagado")
+    }
+
+    // ── «Pausar» en el «⋯» de una fila sin pagar ───────────────────────────────
+
+    @Test
+    fun `Pausar esta en el menu de una fila sin pagar`() {
+        val pausadas = mutableListOf<String>()
+        composeRule.setContent {
+            MoviTheme {
+                SeccionChecklistDelPeriodo(
+                    checklist = listOf(arriendo), cargando = false, pudoLeer = true, marcando = emptySet(),
+                    onConfirmar = { _, _ -> }, onNoFueEste = { _, _ -> }, onAnotarMovimiento = {}, onQuitarLaMarca = {},
+                    onReintentar = {}, onPausar = { pausadas += it.ruleId },
+                )
+            }
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithContentDescription(descripcionDelMenuDeLaFila("Arriendo")).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        tocar(ETIQUETA_PAUSAR)
+        assertEquals(listOf("rr_arriendo"), pausadas)
+    }
+
+    @Test
+    fun `con algo vencido sin pagar, Pausar pregunta y No se debe pausa desde ese vencimiento`() {
+        val pedidos = mutableListOf<Pair<String, String?>>()
+        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+            override suspend fun getAccounts(): List<Account> = listOf(nu)
+            override suspend fun getDestinos(): List<DestinoConocido> = emptyList()
+            override suspend fun pausarRegla(id: String, desde: String?): RecurringRule {
+                pedidos += id to desde
+                return carroRegla.copy(pausadaDesde = desde ?: "2026-10-29")
+            }
+        }
+        val vencido = PagoDelPeriodo(
+            ruleId = "rr_carro", nombre = "Carro", monto = 9_000L, pagado = false, diasParaVencer = -9,
+            vence = "2026-10-20", periodoDelDueno = "2026-10",
+        )
+        composeRule.setContent {
+            MoviTheme { CreateRecurringRuleSheet(onDismiss = {}, onSaved = {}, existing = carroRegla, vencidoSinPagar = vencido) }
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(TAG_PAUSAR_LA_REGLA).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        assertTrue(hay("Carro de octubre (\$9.000) no aparece pagado"))
+        assertTrue(hay(DEJARLO_PENDIENTE) && hay(YA_LO_PAGUE))
+        assertTrue(pedidos.isEmpty(), "preguntar no pausa")
+        tocar(NO_SE_DEBE)
+        composeRule.waitUntil(5_000) { pedidos.isNotEmpty() }
+        assertEquals(listOf<Pair<String, String?>>("rr_carro" to "2026-10-20"), pedidos)
+    }
+
+    @Test
+    fun `Dejarlo pendiente pausa desde hoy`() {
+        val pedidos = mutableListOf<Pair<String, String?>>()
+        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+            override suspend fun getAccounts(): List<Account> = listOf(nu)
+            override suspend fun getDestinos(): List<DestinoConocido> = emptyList()
+            override suspend fun pausarRegla(id: String, desde: String?): RecurringRule {
+                pedidos += id to desde
+                return carroRegla.copy(pausadaDesde = "2026-10-29")
+            }
+        }
+        val vencido = PagoDelPeriodo(
+            ruleId = "rr_carro", nombre = "Carro", monto = 9_000L, pagado = false, diasParaVencer = -9,
+            vence = "2026-10-20", periodoDelDueno = "2026-10",
+        )
+        composeRule.setContent {
+            MoviTheme { CreateRecurringRuleSheet(onDismiss = {}, onSaved = {}, existing = carroRegla, vencidoSinPagar = vencido) }
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(TAG_PAUSAR_LA_REGLA).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        tocar(DEJARLO_PENDIENTE)
+        composeRule.waitUntil(5_000) { pedidos.isNotEmpty() }
+        assertEquals(listOf<Pair<String, String?>>("rr_carro" to null), pedidos)
     }
 
     @Test

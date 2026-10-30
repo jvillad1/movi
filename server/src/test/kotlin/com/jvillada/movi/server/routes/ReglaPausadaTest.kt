@@ -246,7 +246,7 @@ class ReglaPausadaTest {
 
     @Test
     fun `una pausada sin pagar no sale en upcoming, ocurrencias ni el checklist, y reanudar la devuelve`() {
-        regla("rr_carro", "Carro", 20, 9_000, pausadaDesde = "2026-10-29")
+        regla("rr_carro", "Carro", 30, 9_000, pausadaDesde = "2026-10-29")
         regla("rr_arriendo", "Arriendo", 30, 1_800_000)
 
         assertTrue(proximos().none { it.rule.id == "rr_carro" })
@@ -256,6 +256,52 @@ class ReglaPausadaTest {
         pausarEnLaBase("rr_carro", null)
         assertTrue(proximos().any { it.rule.id == "rr_carro" })
         assertTrue(checklist().any { it.ruleId == "rr_carro" && !it.pagado }, "reanudada, vuelve a deber el de octubre")
+    }
+
+    @Test
+    fun `lo vencido sin pagar antes de la pausa sigue pendiente, y No se debe lo saca`() {
+        // Carro venció el 20 sin pagarse; se pausa el 29.
+        regla("rr_carro", "Carro", 20, 9_000, pausadaDesde = "2026-10-29")
+        assertTrue(proximos().none { it.rule.id == "rr_carro" }, "el de noviembre ya cae en la pausa")
+        val estado = ocurrencias().single { it.ruleId == "rr_carro" }
+        assertFalse(estado.occurred)
+        assertEquals("rr_carro", estado.reglaPausada?.id)
+        val fila = checklist().single { it.ruleId == "rr_carro" }
+        assertFalse(fila.pagado, "una deuda vencida no se esconde al pausar")
+        assertEquals(9_000L, com.jvillada.movi.shared.model.faltaPorPagar(checklist()))
+        // «No se debe»: la pausa arranca en ese vencimiento.
+        pausarEnLaBase("rr_carro", "2026-10-20")
+        assertTrue(ocurrencias().none { it.ruleId == "rr_carro" })
+        assertTrue(checklist().none { it.ruleId == "rr_carro" })
+    }
+
+    @Test
+    fun `pagar hoy y pausar hoy no pierde el pago`() = testApplication {
+        application { testModule() }
+        val hoyDeVerdad = AppClock.today()
+        regla("rr_gym", "Gimnasio", hoyDeVerdad.dayOfMonth, 180_000)
+        gasto("ev_gym_hoy", 180_000, hoyDeVerdad, "Gimnasio")
+        assertTrue(ocurrencias(hoyDeVerdad).single { it.ruleId == "rr_gym" }.occurred, "Movi lo empareja sola")
+        val pausa = enviar("/api/recurring-rules/rr_gym/pausar")
+        assertEquals(HttpStatusCode.OK, pausa.status, pausa.bodyAsText())
+        // Quedó sellado con su movimiento, y sigue pagado en la lista.
+        val sello = transaction {
+            RecurringOccurrences.selectAll().where { RecurringOccurrences.ruleId eq "rr_gym" }.single()
+        }
+        assertEquals("ev_gym_hoy", sello[RecurringOccurrences.eventId])
+        val estado = ocurrencias(hoyDeVerdad).single { it.ruleId == "rr_gym" }
+        assertTrue(estado.occurred)
+        assertEquals("ev_gym_hoy", estado.eventId)
+    }
+
+    @Test
+    fun `sin el sello, un pago del mismo dia de la pausa igual cuenta`() {
+        val hoyDeVerdad = AppClock.today()
+        regla("rr_gym", "Gimnasio", hoyDeVerdad.dayOfMonth, 180_000, pausadaDesde = hoyDeVerdad.toString())
+        gasto("ev_gym_hoy", 180_000, hoyDeVerdad, "Gimnasio")
+        val estado = ocurrencias(hoyDeVerdad).single { it.ruleId == "rr_gym" }
+        assertTrue(estado.occurred)
+        assertEquals("ev_gym_hoy", estado.eventId)
     }
 
     @Test
@@ -309,7 +355,8 @@ class ReglaPausadaTest {
 
     @Test
     fun `los debitos automaticos no proponen una regla pausada`() {
-        regla("rr_seguro", "Seguro Sura", 10, 98_500, pausadaDesde = "2026-10-29", debita = true, categoria = "Seguros")
+        // Pausada desde su vencimiento («No se debe»): no se propone como cobrada.
+        regla("rr_seguro", "Seguro Sura", 10, 98_500, pausadaDesde = "2026-10-10", debita = true, categoria = "Seguros")
         val ahora = appDateToEpochMillis(hoy) + 12 * 3_600_000L
         assertTrue(runBlocking { debitosPorConfirmar(duenoId, hoy, ahora) }.isEmpty())
         pausarEnLaBase("rr_seguro", null)
@@ -335,7 +382,7 @@ class ReglaPausadaTest {
 
     @Test
     fun `Tus periodos no lista lo pendiente de una pausada, y lo pagado si`() {
-        regla("rr_carro", "Carro", 20, 9_000, pausadaDesde = "2026-10-29")
+        regla("rr_carro", "Carro", 30, 9_000, pausadaDesde = "2026-10-29")
         regla("rr_gym", "Gimnasio", 5, 180_000, pausadaDesde = "2026-10-29")
         gasto("ev_gym", 180_000, LocalDate.of(2026, 10, 5), "Gimnasio")
         val octubre = periodoDe(appDateToEpochMillis(hoy) + 12 * 3_600_000L, PeriodSettings())
@@ -350,8 +397,9 @@ class ReglaPausadaTest {
     @Test
     fun `Movi AI no cuenta una regla pausada`() {
         val hoyDeVerdad = AppClock.today()
-        regla("rr_internet", "Internet", 28, 95_000, pausadaDesde = hoyDeVerdad.toString())
-        regla("rr_arriendo", "Arriendo", 28, 1_800_000)
+        // Vence hoy, el día de la pausa: cae en ella.
+        regla("rr_internet", "Internet", hoyDeVerdad.dayOfMonth, 95_000, pausadaDesde = hoyDeVerdad.toString())
+        regla("rr_arriendo", "Arriendo", hoyDeVerdad.dayOfMonth, 1_800_000)
         val nombres = runBlocking { contextoDelPeriodoDe(duenoId) }.recurrentes.map { it.nombre }
         assertTrue("Arriendo" in nombres, nombres.toString())
         assertFalse("Internet" in nombres, nombres.toString())

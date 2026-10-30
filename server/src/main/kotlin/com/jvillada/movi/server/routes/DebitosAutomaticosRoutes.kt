@@ -447,7 +447,7 @@ internal fun vencimientoPorProponer(rule: RecurringRule, hoy: LocalDate, setting
     if (vence.isAfter(hoy)) return null
     if (!ruleIsActiveOn(rule, vence, settings)) return null
     // Vuelta 72: lo que vence en la pausa de una regla no se propone como cobrado.
-    if (pausadaEn(rule, vence, hoy)) return null
+    if (pausadaEn(rule, vence)) return null
     return vence
 }
 

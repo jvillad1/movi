@@ -251,7 +251,7 @@ open class NoOpRepository(
     override suspend fun createRecurringRule(rule: RecurringRule) = rule
     override suspend fun updateRecurringRule(id: String, rule: RecurringRule) = rule
     override suspend fun deleteRecurringRule(id: String) {}
-    override suspend fun pausarRegla(id: String) = RecurringRule(id, "", "", 0, 1, com.jvillada.movi.shared.model.TransactionType.EXPENSE)
+    override suspend fun pausarRegla(id: String, desde: String?) = RecurringRule(id, "", "", 0, 1, com.jvillada.movi.shared.model.TransactionType.EXPENSE)
     override suspend fun reanudarRegla(id: String) = RecurringRule(id, "", "", 0, 1, com.jvillada.movi.shared.model.TransactionType.EXPENSE)
     override suspend fun getUpcomingPayments() = emptyList<com.jvillada.movi.shared.model.UpcomingPayment>()
     override suspend fun getReminderChannels() = com.jvillada.movi.shared.model.ReminderChannels()

@@ -161,37 +161,46 @@ data class PagoDelPeriodo(
      */
     val abonoATarjeta: Boolean = false,
     /**
-     * Vuelta 72 · todo lo pagado a esta tarjeta en el período que la tilda (`OccurrenceState.pagadoEnElPeriodo`),
-     * o `null`. Solo lo lee [faltaDelMinimo].
+     * Vuelta 72 · **todo lo pagado a esta tarjeta en el período que la tilda** (`OccurrenceState.pagadoEnElPeriodo`),
+     * o `null`. Es lo que dice la fila pagada y lo que suma «Llevas $X pagados» ([pagadoParaMostrar]):
+     * [montoPagado] es el último pago y con dos pagos el resumen bajaba al pagar más.
      */
     val pagadoEnElPeriodo: Long? = null,
     /** Vuelta 72 · la cuenta del movimiento que tilda esta fila (`OccurrenceState.cuentaDelPago`), o `null`. */
     val cuentaDelPago: String? = null,
+    /**
+     * Vuelta 72 (revisión) · **lo que le falta al mínimo del extracto**, en pesos, solo en la fila de la
+     * tarjeta que vence en la fecha de pago de ese extracto ([RecurringRule.minimoDelExtracto]); `null` en
+     * todo lo demás (otra fila de la tarjeta, sin mínimo, sin corte, en otra moneda). Cuando está, también
+     * es el [pagoMinimo] de la fila: la caja, la cola y «Lo que viene» restan esto, una vez, en su fecha.
+     */
+    val restoDelMinimo: Long? = null,
+    /** Vuelta 72 (revisión) · lo pagado a la tarjeta desde el corte de ese extracto (con [restoDelMinimo]). */
+    val pagadoDesdeElCorte: Long = 0L,
+    /** Vuelta 72 (revisión) · la regla de esta fila está pausada (no se le propone guardar una cuenta). */
+    val pausada: Boolean = false,
 ) {
     /**
-     * Vuelta 72 · un pago que **sí cuenta como hecho**: pagado y, si es una tarjeta con su mínimo
-     * cargado, con el mínimo cubierto. «queda 1 de 5», la cola, la campana y el orden de la lista leen
-     * esto; [pagado] sigue diciendo que hay un movimiento que tilda la fila.
+     * Vuelta 72 · un pago que **sí cuenta como hecho**. Lo de siempre es [pagado]; la fila de la tarjeta
+     * que vence en la fecha de pago del extracto está hecha cuando **su mínimo está cubierto**
+     * ([restoDelMinimo] en cero), aunque la haya tildado un pago por debajo («Pagaste $100.000 · faltan
+     * $80.000 para el mínimo») o ninguno. «queda N de M», la cola, la campana, la caja y el orden de la
+     * lista leen esto; [pagado] sigue diciendo que hay un movimiento que tilda la fila.
      */
-    val hecho: Boolean get() = pagado && faltaDelMinimo == null
+    val hecho: Boolean get() = restoDelMinimo?.let { it == 0L } ?: pagado
 
     /**
-     * Vuelta 72 · **lo que falta para el mínimo** de una tarjeta que ya tiene un pago en el período pero
-     * por debajo de su mínimo: «Pagaste $100.000 · faltan $80.000 para el mínimo». `null` en todo lo
-     * demás: una fila sin pagar, cualquier cosa que no sea una tarjeta, una tarjeta sin el mínimo
-     * cargado (queda como siempre) o en otra moneda que el mínimo (que está en pesos), y una pagada con
-     * el mínimo cubierto. La regla del mínimo es la de siempre (`pagoMinimoCop`, el del extracto): acá
-     * solo cambia qué se considera hecho. Lo suman [faltaPorPagar] y la caja; nada más.
+     * Vuelta 72 · **lo que falta para el mínimo cuando ya hubo un pago por debajo**: «Pagaste $100.000 ·
+     * faltan $80.000 para el mínimo». `null` sin pagos desde el corte (la fila pendiente de siempre), con
+     * el mínimo cubierto, o fuera de la fila del extracto.
      */
-    val faltaDelMinimo: Long? get() {
-        if (!pagado || !montoEsSaldo || esIngreso || moneda != "COP") return null
-        val minimo = pagoMinimo?.takeIf { it > 0L } ?: return null
-        val pagadoAca = pagadoEnElPeriodo ?: montoPagado ?: return null
-        return (minimo - pagadoAca).takeIf { it > 0L }
-    }
+    val faltaDelMinimo: Long? get() = restoDelMinimo?.takeIf { it > 0L && pagadoDesdeElCorte > 0L }
 
     /** Vuelta 72 · lo pagado que [faltaDelMinimo] compara con el mínimo. */
-    val pagadoContraElMinimo: Long get() = pagadoEnElPeriodo ?: montoPagado ?: 0L
+    val pagadoContraElMinimo: Long get() = pagadoDesdeElCorte
+
+    /** Vuelta 72 (revisión) · lo que de verdad salió por esta fila pagada: el total del período si se sabe. */
+    val pagadoParaMostrar: Long? get() = pagadoEnElPeriodo ?: montoPagado
 
     /** Vuelta 63: un abono planeado no «vence» — si el día pasó sin hacerlo, sigue siendo un recordatorio. */
     val vencido: Boolean get() = !hecho && !esAbono && diasParaVencer < 0
@@ -327,10 +336,14 @@ fun checklistDelPeriodo(
     // ventana no debería pasar — y si pasara, gana la última, que es la más cercana al presente.
     val delPeriodo = ocurrencias.filter { epochDeFecha(it.dueDate) in ventana }.associateBy { it.ruleId }
     val conVencimiento = upcoming.mapTo(mutableSetOf()) { it.rule.id }
-    // Vuelta 72: lo ya pagado de una regla pausada queda. El server no la manda en `upcoming` (su
-    // vencimiento vigente cae en la pausa), así que la regla viaja en la ocurrencia pagada.
+    // Vuelta 72: de una regla pausada queda lo ya pagado y lo que venció antes de la pausa sin pagarse.
+    // El server no la manda en `upcoming` (su vencimiento vigente cae en la pausa), así que la regla viaja
+    // en la ocurrencia.
     val pagadasEnPausa = delPeriodo.values
-        .filter { it.occurred && it.reglaPausada != null && it.ruleId !in conVencimiento }
+        .filter { o ->
+            val regla = o.reglaPausada
+            regla != null && o.ruleId !in conVencimiento && (o.occurred || !regla.pausadaParaElVencimiento(o.dueDate))
+        }
         .map { o ->
             val regla = o.reglaPausada!!
             val dias = diasEntre(hoy, o.dueDate) ?: 0
@@ -346,7 +359,7 @@ fun checklistDelPeriodo(
                 }
                 ?: return@mapNotNull null
             // Vuelta 72: una ocurrencia sin pagar que vence en la pausa de su regla no existe.
-            if (ocurrencia?.occurred != true && pago.rule.pausadaParaElVencimiento(vence, hoy?.toString())) return@mapNotNull null
+            if (ocurrencia?.occurred != true && pago.rule.pausadaParaElVencimiento(vence)) return@mapNotNull null
             filaDelPago(pago, ocurrencia, vence, hoy)
         } + pagadasEnPausa)
         .sortedWith(
@@ -380,7 +393,12 @@ fun pendientesDePeriodosAnteriores(
     return ocurrencias
         .filter { !it.occurred && epochDeFecha(it.dueDate) < empieza }
         .mapNotNull { ocurrencia ->
-            val pago = reglas[ocurrencia.ruleId] ?: return@mapNotNull null
+            // Vuelta 72: lo que venció antes de pausar sigue pendiente; su regla viaja en la ocurrencia.
+            val pago = reglas[ocurrencia.ruleId]
+                ?: ocurrencia.reglaPausada
+                    ?.takeIf { !it.pausadaParaElVencimiento(ocurrencia.dueDate) }
+                    ?.let { UpcomingPayment(it, ocurrencia.dueDate, diasEntre(hoy, ocurrencia.dueDate) ?: 0, PaymentStatus.OVERDUE) }
+                ?: return@mapNotNull null
             filaDelPago(pago, ocurrencia, ocurrencia.dueDate, hoy)
         }
         .sortedWith(compareBy<PagoDelPeriodo> { it.vence }.thenBy { it.nombre.lowercase() })
@@ -402,7 +420,12 @@ private fun filaDelPago(
     diasParaVencer = if (ocurrencia == null && vence == pago.dueDate) pago.daysUntil
     else diasEntre(hoy, vence) ?: pago.daysUntil,
     montoEsSaldo = pago.rule.montoEsSaldo,
-    pagoMinimo = pago.rule.pagoMinimoCop.takeIf { pago.rule.montoEsSaldo },
+    // Vuelta 72 (revisión): en la fila que vence en la fecha de pago del extracto, lo que le falta al
+    // mínimo de ESE extracto (la misma cuenta que la hoja «Pagar»); en las demás, el mínimo de siempre.
+    pagoMinimo = delExtracto(pago.rule, vence)?.resto ?: pago.rule.pagoMinimoCop.takeIf { pago.rule.montoEsSaldo },
+    restoDelMinimo = delExtracto(pago.rule, vence)?.resto,
+    pagadoDesdeElCorte = delExtracto(pago.rule, vence)?.pagadoDesdeElCorte ?: 0L,
+    pausada = !pago.rule.pausadaDesde.isNullOrBlank(),
     moneda = pago.rule.currency,
     vence = vence,
     periodoDelSello = ocurrencia?.period,
@@ -433,6 +456,10 @@ private fun filaDelPago(
         ?.pagadoEnElPeriodo,
     cuentaDelPago = ocurrencia?.takeIf { it.occurred }?.cuentaDelPago,
 )
+
+/** El mínimo del extracto de [regla] si [vence] es su fecha de pago (y la regla es una tarjeta en pesos). */
+private fun delExtracto(regla: RecurringRule, vence: String): MinimoDelExtracto? =
+    regla.minimoDelExtracto?.takeIf { regla.montoEsSaldo && regla.currency == "COP" && it.fechaDePago == vence }
 
 /**
  * Qué día es hoy **según la misma respuesta** que trajo los vencimientos.

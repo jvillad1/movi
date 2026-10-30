@@ -261,10 +261,10 @@ data class OccurrenceState(
      */
     val cuentaDelPago: String? = null,
     /**
-     * Vuelta 72 · **la regla, cuando está en pausa y esta ocurrencia ya está pagada.** Una regla pausada
-     * no viaja en `/api/payments/upcoming` desde que su vencimiento vigente cae en la pausa, pero lo ya
-     * pagado del período queda en la lista: el checklist arma esa fila con esta regla. `null` en todo lo
-     * demás (y en un server viejo).
+     * Vuelta 72 · **la regla, cuando está pausada.** Una regla pausada no viaja en `/api/payments/upcoming`
+     * desde que su vencimiento vigente cae en la pausa, pero lo ya pagado del período y lo que venció antes
+     * de la pausa sin pagarse quedan en la lista: el checklist arma esas filas con esta regla. `null` en
+     * toda regla activa (y en un server viejo).
      */
     val reglaPausada: RecurringRule? = null,
 )

@@ -382,7 +382,7 @@ internal fun Transaction.pagosFijosDelPeriodo(
     val delPeriodoResueltas = resueltas.filter { it.due in dias }
         // Vuelta 72: en el período en curso, lo pendiente de una regla pausada no es un pago fijo (lo
         // pagado sí queda). Un período cerrado se lee como estaba.
-        .filterNot { enCurso && pausadaEn(it.rule, it.due, hoy) && it.resolucion !is Resolucion.Sellada && it.resolucion !is Resolucion.Emparejada }
+        .filterNot { enCurso && pausadaEn(it.rule, it.due) && it.resolucion !is Resolucion.Sellada && it.resolucion !is Resolucion.Emparejada }
         .let { if (enCurso) it else existiaEnElPeriodo(uid, it, lectura, inicioDeLaHistoria, dias.start, hoy, ajustes, destinos) }
 
     // Lo que se movió de verdad en un pago sellado a mano con su movimiento: ese movimiento puede

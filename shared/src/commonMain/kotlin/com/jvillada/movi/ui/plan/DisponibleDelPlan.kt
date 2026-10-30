@@ -74,7 +74,13 @@ internal class DisponibleDelPlan(
      */
     val data: DashboardData by derivedStateOf {
         if (tablero.vencimientosOk && tablero.ocurrenciasOk) {
-            propio.copy(upcoming = tablero.upcomingRecurrentes, ocurrencias = tablero.ocurrencias)
+            // Vuelta 72 (revisión): y las cuentas que el tablero leyó con ellos, para que la caja no quede
+            // con Tu plata vieja después de «Anotar pago».
+            propio.copy(
+                upcoming = tablero.upcomingRecurrentes,
+                ocurrencias = tablero.ocurrencias,
+                accounts = tablero.cuentasLeidas ?: propio.accounts,
+            )
         } else {
             propio
         }
