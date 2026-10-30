@@ -4166,7 +4166,7 @@ en `ds/` ni token nuevo.
    interés en total» (se leía al revés). Los supuestos van detrás de **«¿Qué supone?»** (`Boton` `Fantasma`), en el
    plan de salida y en el simulador de la ficha: el resultado primero. El pie («no es una recomendación») queda.
 7. **La curva con un solo verbo.** La leyenda abre con el cambio **sin** ajustes —«Desde ago 2026, subió $837.900»—
-   y la nota no lleva verbo: «Sin contar $18,5M de ajustes de saldo: deudas y saldos que ya tenías y anotaste
+   y la nota no lleva verbo: «Sin contar −$18,5M de ajustes de saldo: deudas y saldos que ya tenías y anotaste
    después». Antes: «bajó $17,7M» arriba y «Sin ellos, subió $837.900» debajo.
 8. **Movi AI.** En una conversación nueva, las tres preguntas que se contestan sin IA (gratis) van **siempre primero**
    y después hasta dos de las que arman las reglas (`preguntasDelArranque`); sin IA, solo las tres. «¿En qué se me
@@ -4186,3 +4186,23 @@ gratis primero). Se actualizaron `LosCreditosDicenLaVerdadTest`, `LaCurvaSeparaL
 `CurvaDelPatrimonioEnPantallaTest`, `ElHeroeDeCreditosVaJuntoTest` (Créditos a 1.280), `ElExtractoYElAbonoEnPantallaTest`
 y `ElAbonoQueSeTildaEnPantallaTest` (el abono en Pagar), `LaGuiaDelAbonoCabeTest` y `SimuladorDeAbonoEnPantallaTest`
 («¿Qué supone?»). **Las líneas base** no cambian, y las guardas en 0 siguen en 0.
+
+### La revisión de la vuelta 77, y lo que cambió
+
+1. **[Plata] Un pago antes de la primera cuota salda la primera cuota.** Con «ya pagué» (`cuotasDesde = 2026-11-01`)
+   y el pago del 30-oct desde «Pagar la cuota de noviembre», `periodoQueSalda` sellaba «2026-10» (una cuota que no
+   existe) y noviembre seguía pendiente. Pasaba igual con un crédito desembolsado pagado antes de su primera cuota.
+   Ahora nunca devuelve un período anterior a la primera cuota vigente (`primeraCuotaVigente`: la primera en el piso
+   de `arranqueDeLaRegla` o después); el encabezado de Agregar → Pagar usa la misma regla
+   (`CreditTerms.mesDeLaPrimeraCuotaDelCredito`). `ElPagoAdelantadoSaldaLaPrimeraCuotaTest`: el pago del 30-oct da
+   `2026-11`, `/upcoming` el 15-dic, y la ficha «Cuota de noviembre · pagada».
+2. **[Plata] El server solo acepta «ya pagué» si la cuota de este período ya venció**
+   (`laCuotaDeEstePeriodoYaVencioEl`, con los ajustes del dueño; el piso, `arranqueDeLasCuotasSiYaPagasteEl`). La hoja no
+   muestra la pregunta hasta leer el perfil.
+3. **Una sola fila de saldo.** Con el plan completo, «Según tu plan debes unos $X y terminas en … · Usar este»; «Usar
+   este» abre la hoja de ajustar el saldo **ya llena** con esa cifra («Es la cifra de tu plan. Si el banco dice otra,
+   escríbela aquí.») y se guarda con «Registrar ajuste». Sin plan, «Cargarlo». En la ficha y en Patrimonio.
+4. En Agregar → «¿Qué pagas?», un préstamo sin saldo dice «Sin saldo en Movi», sin cifra (era «A favor $980.000»).
+5. La nota de la curva lleva el signo: «Sin contar −$36,8M de ajustes de saldo…».
+6. Al guardar un abono, «Anotado · Abono a …» (`queSeAnoto`), no «Pago a …».
+
