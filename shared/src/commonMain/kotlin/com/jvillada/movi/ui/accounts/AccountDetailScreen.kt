@@ -62,6 +62,10 @@ import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.ui.credits.AvisoDeFaltanDatos
 import com.jvillada.movi.ui.credits.CUADRAR_LAS_DEUDAS_SIN_SALDO
 import com.jvillada.movi.ui.credits.FALTA_EL_SALDO_DE_LA_DEUDA
+import com.jvillada.movi.ui.credits.FALTA_EL_SALDO_DEL_CREDITO
+import com.jvillada.movi.ui.credits.CARGAR_EL_SALDO_DEL_CREDITO
+import com.jvillada.movi.ui.credits.CUANTO_DEBES_SEGUN_EL_BANCO
+import com.jvillada.movi.shared.model.creditoSinSaldo
 import com.jvillada.movi.ui.credits.HojaDeLaDeuda
 import com.jvillada.movi.ui.credits.SIN_SALDO_EN_MOVI
 import com.jvillada.movi.ui.credits.saldoDeUnaDeuda
@@ -323,6 +327,8 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                             // Vuelta 59: un préstamo en cero sin un movimiento no está pagado, está sin
                             // saldo; una tarjeta en cero sí está al día.
                             deudaPagada = deuda?.prestamo?.hasMovements ?: true,
+                            // Vuelta 73: un crédito con condiciones y sin saldo lo dice con sus palabras.
+                            creditoSinSaldo = deuda?.prestamo?.let(::creditoSinSaldo) == true,
                             // La deuda sin saldo se cuadra con la hoja de siempre de la ficha.
                             onAjustarLaDeuda = deuda?.let { d -> { d.hoja = HojaDeLaDeuda.Saldo } }
                                 ?: { onNavigate(Screen.CuadrarLaCuenta(acc.id)) },
@@ -734,6 +740,8 @@ private fun EncabezadoDeLaCuenta(
     onCuadrar: () -> Unit,
     onCuadrarEsta: () -> Unit,
     deudaPagada: Boolean = true,
+    /** Vuelta 73: «Falta el saldo de este crédito · Cargarlo» (ver `creditoSinSaldo`). */
+    creditoSinSaldo: Boolean = false,
     onAjustarLaDeuda: () -> Unit = onCuadrarEsta,
 ) {
     val isCard = isDebtAccount(acc.type)
@@ -790,7 +798,8 @@ private fun EncabezadoDeLaCuenta(
                 )
             } else {
                 Text(
-                    SIN_SALDO_EN_MOVI,
+                    // Vuelta 73: un crédito con condiciones dice qué le falta, con las palabras de Patrimonio.
+                    if (creditoSinSaldo) FALTA_EL_SALDO_DEL_CREDITO else SIN_SALDO_EN_MOVI,
                     style = Movi.textos.titulo,
                     color = Movi.colores.aviso,
                     modifier = Modifier.testTag(TAG_DEUDA_SIN_SALDO),
@@ -802,13 +811,13 @@ private fun EncabezadoDeLaCuenta(
                     horizontalArrangement = Arrangement.spacedBy(Espacio.s),
                 ) {
                     Text(
-                        FALTA_EL_SALDO_DE_LA_DEUDA,
+                        if (creditoSinSaldo) CUANTO_DEBES_SEGUN_EL_BANCO else FALTA_EL_SALDO_DE_LA_DEUDA,
                         style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,
                         modifier = Modifier.weight(1f),
                     )
                     Boton(
-                        texto = CUADRAR_LAS_DEUDAS_SIN_SALDO,
+                        texto = if (creditoSinSaldo) CARGAR_EL_SALDO_DEL_CREDITO else CUADRAR_LAS_DEUDAS_SIN_SALDO,
                         onClick = onAjustarLaDeuda,
                         variante = VarianteDeBoton.Secundario,
                         tamano = TamanoDeBoton.S,
