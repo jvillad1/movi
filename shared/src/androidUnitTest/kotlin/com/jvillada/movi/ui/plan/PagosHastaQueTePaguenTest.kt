@@ -193,7 +193,7 @@ class PagosHastaQueTePaguenTest {
      */
     @Test
     @Config(qualifiers = "w1280dp-h900dp-mdpi")
-    fun `a 1280 dp el navegador va con los pagos y la izquierda dice que es el periodo en curso`() {
+    fun `a 1280 dp el navegador va arriba de las dos columnas y la izquierda dice que es el periodo en curso`() {
         composeRule.setContent {
             com.jvillada.movi.ConClaseDeAncho {
                 com.jvillada.movi.EsqueletoDeLaCascara(
@@ -207,9 +207,11 @@ class PagosHastaQueTePaguenTest {
         }
         composeRule.waitUntil(timeoutMillis = 5_000) { habilitada("Período anterior") }
         fun limites(tag: String) = composeRule.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().single().boundsInRoot
+        // Vuelta 81: el navegador va en el encabezado a lo ancho, arriba de las dos columnas.
         val pagos = limites(TAG_COLUMNA_DE_LOS_PAGOS)
         val navegador = limites(TAG_NAVEGADOR_DEL_PERIODO_DE_PAGOS)
-        assertTrue(navegador.left >= pagos.left - 0.5f, "el navegador va en la columna de los pagos: $navegador")
+        assertTrue(navegador.bottom <= pagos.top + 0.5f, "el navegador va arriba de las columnas: $navegador / $pagos")
+        assertTrue(navegador.left < limites(TAG_COLUMNA_DEL_DISPONIBLE).right, "empieza a la izquierda: $navegador")
         assertEquals(0, contarTag(TAG_PERIODO_EN_CURSO))
 
         flecha("Período anterior").performClick()
