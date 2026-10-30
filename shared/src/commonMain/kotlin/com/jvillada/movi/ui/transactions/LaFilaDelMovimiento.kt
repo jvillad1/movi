@@ -75,10 +75,21 @@ fun textosDeLaFila(tx: FinancialEvent, nombreDeLaCuenta: String?): TextosDeLaFil
  * la nombra igual: todas las filas tienen dos renglones y miden lo mismo. [nombres] puede traer los
  * nombres enteros: acá se acortan. Pura.
  */
-fun textosDeLaFilaEnLaLista(tx: FinancialEvent, nombres: Map<String, String>, habitual: String?): TextosDeLaFila {
+fun textosDeLaFilaEnLaLista(
+    tx: FinancialEvent,
+    nombres: Map<String, String>,
+    habitual: String?,
+    /**
+     * Revisión de la 83: lo que dice el subtítulo cuando sin la cuenta habitual quedaría vacío, antes de
+     * volver a nombrarla. La fila de un recurrente («Internet ↻») dice «Recurrente» con su ↻, no la
+     * cuenta de siempre.
+     */
+    respaldo: String? = null,
+): TextosDeLaFila {
     val nombreCorto = nombres[tx.accountId]?.let(::nombreCortoDeCuenta)
     val textos = textosDeLaFila(tx, nombreCorto.takeIf { habitual == null || tx.accountId != habitual })
-    return if (textos.subtitulo == null) textosDeLaFila(tx, nombreCorto) else textos
+    if (textos.subtitulo != null) return textos
+    return respaldo?.let { textos.copy(subtitulo = it) } ?: textosDeLaFila(tx, nombreCorto)
 }
 
 /**

@@ -253,10 +253,20 @@ fun nombreDelComercio(delComercio: List<FinancialEvent>): String {
  * ([textosDeLaFila]) con la fecha, porque acá no hay días: «Mercado · 27 de octubre · Nu». La categoría
  * no se repite si ya es el título. Pura.
  */
-fun subtituloDeUnMovimientoEnBuscar(evento: FinancialEvent, nombreDeLaCuenta: String?, fecha: String): String {
+fun subtituloDeUnMovimientoEnBuscar(
+    evento: FinancialEvent,
+    nombreDeLaCuenta: String?,
+    fecha: String,
+    /** Revisión de la 83: la fecha corta («21 oct»), para cuando va la cuenta. */
+    fechaCorta: String = fecha,
+): String {
     val titulo = textosDeLaFila(evento, nombreDeLaCuenta).titulo
     val categoria = evento.category.takeIf { it.isNotBlank() && normalizarParaBuscar(it) != normalizarParaBuscar(titulo) }
-    return listOfNotNull(categoria, fecha, nombreDeLaCuenta?.takeIf { it.isNotBlank() }).joinToString(" · ")
+    // Revisión de la 83: la cuenta solo va cuando no es la habitual, y entonces **primero** y con la fecha
+    // corta («Nu · Mercado · 21 oct»): al final era lo que se cortaba con dos renglones a la derecha.
+    val cuenta = nombreDeLaCuenta?.takeIf { it.isNotBlank() }
+    return if (cuenta != null) listOfNotNull(cuenta, categoria, fechaCorta).joinToString(" · ")
+    else listOfNotNull(categoria, fecha).joinToString(" · ")
 }
 
 /**

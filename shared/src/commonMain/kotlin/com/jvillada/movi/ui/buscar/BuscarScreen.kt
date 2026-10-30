@@ -433,6 +433,7 @@ private fun FilaDeResultado(
                 laCuenta?.name?.takeIf { cuentaHabitual == null || e.accountId != cuentaHabitual }
                     ?.let { com.jvillada.movi.ui.components.nombreCortoDeCuenta(it) },
                 fecha,
+                com.jvillada.movi.ui.fecha.etiquetaCortaDeFecha(epochMillisToAppDate(e.timestamp), hoy),
             )
             // Vuelta 50: de un par se lista la pata que cuenta (`unaPataPorPar`), así que la cuota sale
             // como el gasto que es, «−$980.000».

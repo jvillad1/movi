@@ -2385,7 +2385,9 @@ internal fun MovementSingleRow(
     // Vuelta de diseño 30: «Mercado / Mercado» no repite la categoría (ver [textosDeLaFila]).
     val espacioDelMovimiento = tx.espacioId?.let { espacios[it] }
     val textos = if (esTuParteDeOtro(tx)) textosDeTuParteDeOtro(tx, espacioDelMovimiento)
-    else textosDeLaFilaEnLaLista(tx, accountNames, cuentaHabitual)
+    else textosDeLaFilaEnLaLista(tx, accountNames, cuentaHabitual, respaldo = RECURRENTE.takeIf { esRecurrente })
+    // Si el subtítulo ya dice «Recurrente», el ↻ no lo repite al lector de pantalla.
+    val elSubtituloLoDice = esRecurrente && textos.subtitulo == RECURRENTE
     // Vuelta de diseño 30: en un gasto repartido la cifra es tu parte, y debajo de cuánto y con quién.
     // Con el tono forzado (el detalle de una cuenta, cuyo total del día es lo que movió el saldo) la
     // cifra sigue siendo lo que salió de la cuenta, con tu parte debajo.
@@ -2401,7 +2403,7 @@ internal fun MovementSingleRow(
             // Vuelta 83: un renglón de título con «…» y el ↻ en el subtítulo: todas las filas del mismo alto.
             lineasDelTitulo = 1,
             iconoDelSubtitulo = if (esRecurrente) Icons.Rounded.Repeat else null,
-            descripcionDelIconoDelSubtitulo = if (esRecurrente) RECURRENTE else null,
+            descripcionDelIconoDelSubtitulo = if (esRecurrente && !elSubtituloLoDice) RECURRENTE else null,
             // La marca del comercio si Movi la reconoce (Ola 2a), y si no el ícono de la categoría.
             inicio = { IconoDeMovimiento(tx) },
             final = {
