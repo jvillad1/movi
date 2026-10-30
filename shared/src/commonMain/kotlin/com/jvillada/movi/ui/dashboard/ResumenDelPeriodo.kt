@@ -256,7 +256,8 @@ fun ingresosRecibidos(checklist: List<PagoDelPeriodo>): List<PagoDelPeriodo> =
  */
 fun yaPagadoEnElPeriodo(checklist: List<PagoDelPeriodo>): Long =
     // Vuelta 63: el abono hecho no es uno de los pagos del período («Llevas $X pagados» de «de $Y»).
-    pagosHechos(checklist).filter { it.moneda == "COP" && !it.esAbono }.sumOf { it.montoPagado ?: if (it.montoEsSaldo) 0L else it.monto }
+    // Vuelta 72 (revisión): lo pagado en el período entero (dos abonos a la tarjeta), no solo el último.
+    pagosHechos(checklist).filter { it.moneda == "COP" && !it.esAbono }.sumOf { it.pagadoParaMostrar ?: if (it.montoEsSaldo) 0L else it.monto }
 
 /** Lo que falta que llegue: el total de «Por cobrar», con el mismo criterio que [faltaPorPagar]. */
 fun faltaPorCobrar(checklist: List<PagoDelPeriodo>): Long =
@@ -276,7 +277,8 @@ fun yaRecibidoEnElPeriodo(checklist: List<PagoDelPeriodo>): Long =
 fun avanceDelChecklist(checklist: List<PagoDelPeriodo>): Pair<Int, Int> {
     // Vuelta 63: un abono planeado tampoco es uno de los pagos del período (Hoy y Pagos cuentan igual).
     val pagos = checklist.filter { !it.esIngreso && !it.esAbono }
-    return pagos.count { it.pagado } to pagos.size
+    // Vuelta 72: una tarjeta pagada por debajo de su mínimo no cuenta como hecha («queda 1 de 5»).
+    return pagos.count { it.hecho } to pagos.size
 }
 
 /**

@@ -66,6 +66,19 @@ data class ExtractoDeLaTarjeta(
     val puedeIncluirDiferidos: Boolean = false,
 )
 
+/**
+ * Re-revisión de la vuelta 72 · **el mínimo que de verdad se puede pagar**: el tecleado, pero nunca más que lo
+ * facturado al corte ([ExtractoDeLaTarjeta.facturado] + lo ya pagado contra él). Sin ese tope, un mínimo de
+ * $180.000 sobre $60.000 facturados (o sobre una tarjeta pagada entera antes del corte) no se saldaba nunca:
+ * [ExtractoDeLaTarjeta.pagadoDesdeElCorte] ya está limitado a lo facturado. `null` sin mínimo cargado.
+ */
+val ExtractoDeLaTarjeta.minimoEfectivo: Long?
+    get() = minimo?.let { minOf(it, facturado + pagadoDesdeElCorte) }
+
+/** Lo que le falta al [minimoEfectivo], nunca negativo; `null` sin mínimo cargado. */
+val ExtractoDeLaTarjeta.minimoQueFalta: Long?
+    get() = minimoEfectivo?.let { (it - pagadoDesdeElCorte).coerceAtLeast(0L) }
+
 /** Una compra de la tarjeta cuyas cuotas Movi conoce. */
 data class DiferidoConocido(val eventoId: String, val cuotas: Int)
 

@@ -52,8 +52,11 @@ internal fun PropuestaDeMovimiento(
     onDescartar: () -> Unit,
     /** Vuelta 57: «Sí, es la cuota» en la cuota que se parece; si no, «Sí, fue este». */
     textoConfirmar: String = ETIQUETA_SI_FUE_ESTE,
-    /** Vuelta 58: un solo amarillo en Pagos; en las filas que no son la más urgente, el sí va con borde. */
-    confirmarEsPrincipal: Boolean = true,
+    /**
+     * Vuelta 58: un solo amarillo en Pagos. Vuelta 72: «Sí, fue este» va con borde por defecto —tildar es
+     * decisión del dueño, no la acción que la pantalla empuja—; solo «Sí, es la cuota» lo pide lleno.
+     */
+    confirmarEsPrincipal: Boolean = false,
 ) {
     // Alineado arriba y con aire entre las dos columnas: en un teléfono angosto (390 px)
     // la descripción se envuelve en dos líneas, y con `CenterVertically` y sin separación

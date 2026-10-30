@@ -200,7 +200,7 @@ internal suspend fun queAvisarle(userId: String, today: LocalDate, leadDays: Int
             .where { RecurringRules.userId eq userId }
             .map { row -> row.toRulePair() }
     }
-    val sinteticas = loadCreditRulePairs(userId) + loadCardRulePairs(userId)
+    val sinteticas = loadCreditRulePairs(userId) + loadCardRulePairs(userId, today)
     val allPairs = rulePairs + sinteticas
     // Lo que el dueño ya dio por ocurrido no vuelve a avisar ESTE mes (y sí el que viene): el
     // filtro no necesita un `if` nuevo — el vencimiento vigente de una regla cerrada ya rodó al
@@ -358,6 +358,8 @@ private fun ResultRow.toRulePair(): Pair<RecurringRule, String?> {
         // hoy, pero si algún día lo hiciera (para decidir SI avisar), que ya lea la columna evita
         // exactamente la trampa que el comentario de arriba describe.
         destinoConocidoId = this[RecurringRules.destinoConocidoId],
+        // Vuelta 72: una regla pausada no avisa (`selectDueForReminder` la lee). Mismo motivo que arriba.
+        pausadaDesde = this[RecurringRules.pausadaDesde],
     )
     val lastReminded = this[RecurringRules.lastRemindedPeriod]
     return rule to lastReminded

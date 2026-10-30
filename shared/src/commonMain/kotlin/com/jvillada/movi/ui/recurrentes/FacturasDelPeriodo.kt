@@ -173,13 +173,27 @@ internal fun nombreParaElIconoDeLaFactura(categoria: String, nombre: String): St
 fun enOrdenDeFacturas(pagos: List<PagoDelPeriodo>): List<PagoDelPeriodo> =
     pagos.sortedWith(
         compareBy<PagoDelPeriodo>(
-            { if (it.pagado) 2 else if (it.vencido) 0 else 1 },
+            // Vuelta 72: una tarjeta pagada por debajo de su mínimo va con lo pendiente.
+            { if (it.hecho) 2 else if (it.vencido) 0 else 1 },
             { it.diasParaVencer },
         ).thenByDescending { it.monto },
     )
 
 /** La factura cuyo «Anotar pago» va en amarillo: la primera sin pagar del orden. `null` sin ninguna. */
-fun laMasUrgente(ordenadas: List<PagoDelPeriodo>): PagoDelPeriodo? = ordenadas.firstOrNull { !it.pagado && !it.esAbono }
+fun laMasUrgente(ordenadas: List<PagoDelPeriodo>): PagoDelPeriodo? = ordenadas.firstOrNull { !it.hecho && !it.esAbono }
+
+/**
+ * Vuelta 72 · **la línea de una tarjeta pagada por debajo de su mínimo**: «Pagaste $100.000 · faltan
+ * $80.000 para el mínimo», o `null` si la fila no es eso ([PagoDelPeriodo.faltaDelMinimo]). Va en tono de
+ * aviso donde iría la pastilla de vencimiento. Pura.
+ */
+fun lineaDelMinimo(pago: PagoDelPeriodo): String? {
+    val falta = pago.faltaDelMinimo ?: return null
+    return "Pagaste ${formatCOP(pago.pagadoContraElMinimo)} · faltan ${formatCOP(falta)} para el mínimo"
+}
+
+/** El tag de esa línea. */
+const val TAG_FALTA_DEL_MINIMO: String = "pagos:falta-del-minimo"
 
 private val MESES_CORTOS = listOf("ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic")
 
@@ -296,8 +310,11 @@ internal fun FilaDeFactura(
      * fila de siempre.
      */
     extracto: ExtractoDeLaTarjeta? = null,
+    /** Vuelta 72 (revisión) · el «⋯» de una fila sin pagar: «Pausar». Vacío, sin «⋯». */
+    accionesDelMenuPendiente: List<Pair<String, () -> Unit>> = emptyList(),
 ) {
-    if (pago.pagado) {
+    // Vuelta 72: solo lo HECHO es compacto; una tarjeta pagada por debajo de su mínimo sigue pendiente.
+    if (pago.hecho) {
         FilaDeFacturaPagada(
             pago = pago,
             enVuelo = enVuelo,
@@ -380,15 +397,30 @@ internal fun FilaDeFactura(
         // lado de «Anotar pago», a 360 dp, «Venció hace 23 días» se cortaba en «Venció hace 23». Lo
         // mide `LaPastillaCabeEnteraTest`. El renglón también abre la regla (es parte de lo que se lee
         // de la fila).
+        // Vuelta 72 (revisión): el «⋯» con «Pausar» va al final de ESTE renglón, no al lado de «Anotar pago»:
+        // ahí le quitaba al nombre y a la cifra el ancho que necesitan con la letra al 130 % a 360 dp.
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
+                .weight(1f)
                 .then(if (onAbrir != null) Modifier.clickable(onClickLabel = etiquetaDeAbrir, onClick = onAbrir) else Modifier)
-                .padding(start = SANGRIA_DEL_TEXTO_DE_LA_FILA, end = Medida.margenDePantalla, bottom = Espacio.s),
+                .padding(
+                    start = SANGRIA_DEL_TEXTO_DE_LA_FILA,
+                    end = if (accionesDelMenuPendiente.isEmpty()) Medida.margenDePantalla else Espacio.xxs,
+                    bottom = Espacio.s,
+                ),
             verticalArrangement = Arrangement.spacedBy(Espacio.xxs),
         ) {
             when {
                 enVuelo -> Text("Guardando…", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                // Vuelta 72: la tarjeta con un pago por debajo del mínimo dice cuánto falta, en aviso.
+                // Un texto y no una pastilla: la frase es larga y a 360 dp tiene que poder partirse.
+                lineaDelMinimo(pago) != null -> Text(
+                    lineaDelMinimo(pago)!!,
+                    style = Movi.textos.apoyoMedio,
+                    color = Movi.colores.aviso,
+                    modifier = Modifier.testTag(TAG_FALTA_DEL_MINIMO),
+                )
                 else -> {
                     val (texto, tono) = pastillaDeVencimiento(pago, conPropuesta)
                     Pildora(texto, tono)
@@ -399,6 +431,11 @@ internal fun FilaDeFactura(
                 if (e.puedeIncluirDiferidos) Text(PUEDE_INCLUIR_DIFERIDOS, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
             }
         }
+        if (accionesDelMenuPendiente.isNotEmpty()) {
+            MenuDeLaFila(pago.nombre, accionesDelMenuPendiente, nota = null, enVuelo = enVuelo, tag = TAG_MENU_DE_LA_FILA_PENDIENTE)
+            Spacer(Modifier.width(Espacio.xs))
+        }
+        }
     }
     debajo?.let { BajoLaFila { it() } }
 }
@@ -408,7 +445,14 @@ internal fun FilaDeFactura(
  * verdad salió ([textoDelMontoDelChecklist]) y el día en que salió, si se sabe. Pura.
  */
 fun resumenDeLaFacturaPagada(pago: PagoDelPeriodo): String =
-    listOfNotNull(textoDelMontoDelChecklist(pago), pago.pagadoEl?.let(::fechaCortaDeFactura)).joinToString(" · ")
+    if (!pago.pagado && pago.restoDelMinimo == 0L) {
+        // Re-revisión: con lo facturado en cero no hay nada que pagar de ese extracto.
+        if (pago.pagadoDesdeElCorte > 0L) "pagaste ${formatCOP(pago.pagadoDesdeElCorte)}" else "sin saldo facturado"
+    }
+    else listOfNotNull(textoDelMontoDelChecklist(pago), pago.pagadoEl?.let(::fechaCortaDeFactura)).joinToString(" · ")
+
+/** Vuelta 72 (revisión) · la fila del extracto con el mínimo cubierto, sin un pago que la tilde. */
+const val MINIMO_CUBIERTO: String = "Mínimo cubierto"
 
 /** El tag de una factura pagada (vuelta 48) y el de su «⋯». */
 const val TAG_FILA_PAGADA: String = "pagos:fila-pagada"
@@ -466,7 +510,12 @@ private fun FilaDeFacturaPagada(
                     Text("Guardando…", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                 } else {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        val estado = if (pago.esIngreso) "Recibido" else "Pagado"
+                        val estado = when {
+                            pago.esIngreso -> "Recibido"
+                            // Vuelta 72 (revisión): el mínimo del extracto ya está cubierto sin un pago propio.
+                            !pago.pagado -> MINIMO_CUBIERTO
+                            else -> "Pagado"
+                        }
                         Text(estado, style = Movi.textos.apoyoMedio, color = Movi.colores.entra)
                         Icon(
                             Icons.Rounded.Check,
@@ -492,36 +541,54 @@ private fun FilaDeFacturaPagada(
             }
         }
         if (accionesDelMenu.isNotEmpty()) {
-            Box(modifier = Modifier.testTag(TAG_MENU_DE_LA_FILA_PAGADA)) {
-                var abierto by remember { mutableStateOf(false) }
-                BotonDeIcono(
-                    icono = Icons.Rounded.MoreHoriz,
-                    descripcion = descripcionDelMenuDeLaFila(pago.nombre),
-                    onClick = { abierto = true },
-                    habilitado = !enVuelo,
-                )
-                DropdownMenu(expanded = abierto, onDismissRequest = { abierto = false }, containerColor = Movi.colores.tarjeta) {
-                    if (notaDelMenu != null) {
-                        Text(
-                            notaDelMenu,
-                            style = Movi.textos.apoyo,
-                            color = Movi.colores.textoMedio,
-                            modifier = Modifier.padding(horizontal = Espacio.m, vertical = Espacio.xs),
-                        )
-                    }
-                    accionesDelMenu.forEach { (texto, accion) ->
-                        DropdownMenuItem(
-                            text = { Text(texto, style = Movi.textos.cuerpo, color = Movi.colores.texto) },
-                            onClick = { abierto = false; accion() },
-                        )
-                    }
-                }
-            }
+            MenuDeLaFila(pago.nombre, accionesDelMenu, notaDelMenu, enVuelo, TAG_MENU_DE_LA_FILA_PAGADA)
             Spacer(Modifier.width(Espacio.xs))
         } else {
             Spacer(Modifier.width(Medida.margenDePantalla))
         }
     }
+    }
+}
+
+/** El tag del «⋯» de una factura sin pagar (vuelta 72: «Pausar»). */
+const val TAG_MENU_DE_LA_FILA_PENDIENTE: String = "pagos:menu-de-la-fila-pendiente"
+
+/**
+ * **El «⋯» de una factura** (vuelta 48 en la pagada; vuelta 72 también en la pendiente, con «Pausar»): el
+ * botón redondo con su menú, y arriba la [nota] si la hay.
+ */
+@Composable
+private fun MenuDeLaFila(
+    nombre: String,
+    acciones: List<Pair<String, () -> Unit>>,
+    nota: String?,
+    enVuelo: Boolean,
+    tag: String,
+) {
+    Box(modifier = Modifier.testTag(tag)) {
+        var abierto by remember { mutableStateOf(false) }
+        BotonDeIcono(
+            icono = Icons.Rounded.MoreHoriz,
+            descripcion = descripcionDelMenuDeLaFila(nombre),
+            onClick = { abierto = true },
+            habilitado = !enVuelo,
+        )
+        DropdownMenu(expanded = abierto, onDismissRequest = { abierto = false }, containerColor = Movi.colores.tarjeta) {
+            if (nota != null) {
+                Text(
+                    nota,
+                    style = Movi.textos.apoyo,
+                    color = Movi.colores.textoMedio,
+                    modifier = Modifier.padding(horizontal = Espacio.m, vertical = Espacio.xs),
+                )
+            }
+            acciones.forEach { (texto, accion) ->
+                DropdownMenuItem(
+                    text = { Text(texto, style = Movi.textos.cuerpo, color = Movi.colores.texto) },
+                    onClick = { abierto = false; accion() },
+                )
+            }
+        }
     }
 }
 

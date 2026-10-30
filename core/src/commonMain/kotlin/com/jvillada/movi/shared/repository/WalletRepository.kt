@@ -458,6 +458,16 @@ interface WalletRepository {
     suspend fun createRecurringRule(rule: RecurringRule): RecurringRule
     suspend fun updateRecurringRule(id: String, rule: RecurringRule): RecurringRule
     suspend fun deleteRecurringRule(id: String)
+
+    /**
+     * Vuelta 72 · **pausar una regla** (`POST /api/recurring-rules/{id}/pausar`) desde [desde] (ISO; `null` =
+     * hoy): deja de contar lo que vence desde ese día; lo ya pagado y lo vencido antes quedan. Devuelve la
+     * regla con su `pausadaDesde`.
+     */
+    suspend fun pausarRegla(id: String, desde: String? = null): RecurringRule
+
+    /** Vuelta 72 · **reanudar una regla pausada** (`POST /api/recurring-rules/{id}/reanudar`). */
+    suspend fun reanudarRegla(id: String): RecurringRule
     suspend fun getUpcomingPayments(): List<UpcomingPayment>
 
     /**

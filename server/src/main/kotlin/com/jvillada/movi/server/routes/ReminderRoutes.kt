@@ -34,11 +34,13 @@ import com.jvillada.movi.server.reminders.ocurrenciasConcluyentes
 import com.jvillada.movi.server.reminders.occurrenceInMonth
 import com.jvillada.movi.server.reminders.pagosDeDeudaPorPeriodo
 import com.jvillada.movi.server.reminders.plataQueSalio
+import com.jvillada.movi.server.reminders.pagadoALaTarjetaEnElPeriodo
 import com.jvillada.movi.server.reminders.periodosSaldados
 import com.jvillada.movi.server.reminders.unirOcurridos
 import com.jvillada.movi.server.reminders.emparejadasComoSellos
 import com.jvillada.movi.server.reminders.periodosPorRegla
 import com.jvillada.movi.server.reminders.ruleIsActiveOn
+import com.jvillada.movi.server.reminders.pausadaEn
 import com.jvillada.movi.server.reminders.ReminderConfig
 import com.jvillada.movi.server.reminders.periodOf
 import com.jvillada.movi.server.reminders.fechaEsperada
@@ -104,6 +106,8 @@ internal fun org.jetbrains.exposed.sql.ResultRow.toRule() = RecurringRule(
     seDebitaSolo = this[RecurringRules.seDebitaSolo] ?: false,
     // Vuelta 63: la deuda del abono mensual, si esta regla es uno.
     haciaDeuda = this[RecurringRules.haciaDeuda],
+    // Vuelta 72: desde cuándo está en pausa (ver `RecurringRule.pausadaDesde`).
+    pausadaDesde = this[RecurringRules.pausadaDesde],
 )
 
 /**
@@ -169,6 +173,32 @@ internal fun org.jetbrains.exposed.sql.Transaction.destinoConocidoIdIfOwned(uid:
         .where { (KnownDestinations.id eq id) and (KnownDestinations.userId eq uid) }
         .firstOrNull() != null
     return if (exists) id else null
+}
+
+/**
+ * Revisión de la vuelta 72 · **sella con su movimiento lo que Movi emparejó sola** para la regla [id] en el
+ * período en curso, con el mismo `sellarOcurrencia` del «Sí, fue este». Un sello que no se puede poner no
+ * frena la pausa: la rama de la pausa en [resolverOcurrencias] igual acepta un pago de hasta ese día.
+ */
+internal suspend fun sellarLoEmparejadoAntesDePausar(uid: String, id: String, hoy: java.time.LocalDate) = dbQuery {
+    val regla = RecurringRules.selectAll()
+        .where { (RecurringRules.id eq id) and (RecurringRules.userId eq uid) }
+        .firstOrNull()?.toRule() ?: return@dbQuery
+    val ajustes = com.jvillada.movi.server.time.ajustesDelPeriodoSinSuspender(uid)
+    estadosDeLasOcurrenciasReales(uid, hoy, ajustes)
+        .filter { it.ruleId == id && it.occurred && it.automatica && it.eventId != null }
+        .forEach { runCatching { sellarOcurrencia(uid, regla, it.period, it.eventId, hoy) } }
+}
+
+/** Vuelta 72 · pone (o quita, con `null`) la pausa de la regla [id] de [uid]; la regla como quedó, o `null` si no es suya. */
+private suspend fun cambiarLaPausa(uid: String, id: String, desde: String?): RecurringRule? = dbQuery {
+    val cambiadas = RecurringRules.update({ (RecurringRules.id eq id) and (RecurringRules.userId eq uid) }) {
+        it[pausadaDesde] = desde
+    }
+    if (cambiadas == 0) return@dbQuery null
+    RecurringRules.selectAll()
+        .where { (RecurringRules.id eq id) and (RecurringRules.userId eq uid) }
+        .firstOrNull()?.toRule()
 }
 
 /**
@@ -296,6 +326,8 @@ fun Route.reminderRoutes() {
                 eventoDeOrigen = null,
                 seDebitaSolo = body.seDebitaSolo == true && storedDeudaId == null,
                 haciaDeuda = storedDeudaId,
+                // Vuelta 72: el alta nunca nace pausada (solo `…/pausar` escribe la pausa).
+                pausadaDesde = null,
             ),
         )
     }
@@ -314,6 +346,7 @@ fun Route.reminderRoutes() {
         var storedSeDebitaSolo = false
         var storedDeudaId: String? = null
         var problemaDelDebito: String? = null
+        var storedPausadaDesde: String? = null
         val updated = dbQuery {
             // Ola 9 · D — **un cliente viejo NO puede borrar la cuenta sin querer.**
             //
@@ -378,6 +411,9 @@ fun Route.reminderRoutes() {
                 return@dbQuery 0
             }
             storedSeDebitaSolo = debitoPedido && motivo == null
+            // Vuelta 72: la pausa no se escribe en un PUT (solo `…/pausar` y `…/reanudar`); la respuesta
+            // dice la que quedó.
+            storedPausadaDesde = filaActual?.get(RecurringRules.pausadaDesde)
             RecurringRules.update({ (RecurringRules.id eq id) and (RecurringRules.userId eq uid) }) {
                 it[name] = body.name
                 it[category] = body.category
@@ -402,8 +438,47 @@ fun Route.reminderRoutes() {
                 activeFrom = storedActiveFrom,
                 seDebitaSolo = storedSeDebitaSolo,
                 haciaDeuda = storedDeudaId,
+                pausadaDesde = storedPausadaDesde,
             ),
         )
+    }
+
+    /**
+     * **Vuelta 72 · pausar una regla**: desde [PausarReglaRequest.desde] (hoy si no viene) ninguna
+     * ocurrencia sin pagar que venza ese día o después existe (ver `RecurringRule.pausadaDesde`). No
+     * borra nada: lo ya pagado queda, y `…/reanudar` la devuelve. 200 con la regla; 404 si no es del
+     * usuario; 400 con una fecha que no se entiende. Las reglas sintéticas (la cuota de un crédito, el
+     * pago de una tarjeta) no se pausan: viven de su deuda.
+     */
+    post("/api/recurring-rules/{id}/pausar") {
+        val uid = call.userId()
+        val id = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
+        val pedido = runCatching { call.receive<com.jvillada.movi.shared.model.PausarReglaRequest>() }
+            .getOrDefault(com.jvillada.movi.shared.model.PausarReglaRequest())
+        val desde = if (pedido.desde.isNullOrBlank()) AppClock.today().toString()
+            else fechaIsoValida(pedido.desde) ?: return@post call.respond(HttpStatusCode.BadRequest, "Fecha inválida: usa \"AAAA-MM-DD\".")
+        // Revisión de la vuelta 72: lo que Movi emparejó sola en el período en curso se sella ANTES de
+        // pausar. El emparejamiento se deriva en cada lectura; sin el sello, pagar y pausar el mismo día
+        // podía perder el pago (y «Gastaste» y los fijos saltaban por su monto).
+        sellarLoEmparejadoAntesDePausar(uid, id, AppClock.today())
+        // Re-revisión: una regla ya pausada conserva la fecha MÁS TEMPRANA. Pausar otra vez nunca corre la
+        // pausa hacia adelante (eso devolvería lo que el dueño ya sacó con «No se debe»); sí la adelanta.
+        val yaPausada = dbQuery {
+            RecurringRules.selectAll()
+                .where { (RecurringRules.id eq id) and (RecurringRules.userId eq uid) }
+                .firstOrNull()?.get(RecurringRules.pausadaDesde)
+        }?.let { fechaIsoValida(it) }
+        val laQueQueda = if (yaPausada != null && yaPausada < desde) yaPausada else desde
+        val regla = cambiarLaPausa(uid, id, laQueQueda) ?: return@post call.respond(HttpStatusCode.NotFound)
+        call.respond(regla)
+    }
+
+    /** **Vuelta 72 · reanudar una regla pausada**: quita la pausa. Idempotente; 404 si no es del usuario. */
+    post("/api/recurring-rules/{id}/reanudar") {
+        val uid = call.userId()
+        val id = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
+        val regla = cambiarLaPausa(uid, id, null) ?: return@post call.respond(HttpStatusCode.NotFound)
+        call.respond(regla)
     }
 
     delete("/api/recurring-rules/{id}") {
@@ -667,7 +742,7 @@ internal suspend fun proximosPagos(uid: String, hoy: java.time.LocalDate): List<
     }
     val creditRules = loadCreditRulePairs(uid).map { it.first }
     // F20: el pago de la tarjeta también es un próximo pago — con la deuda actual como monto.
-    val cardRules = loadCardRulePairs(uid).map { it.first }
+    val cardRules = loadCardRulePairs(uid, hoy).map { it.first }
     val sinteticas = creditRules + cardRules
     val ocurridos = ocurridosDeLosVencimientos(uid, hoy, periodo, sinteticas)
     return upcomingPayments(rules + sinteticas, hoy, leadDays, ocurridos, periodo)
@@ -1089,6 +1164,8 @@ internal fun org.jetbrains.exposed.sql.Transaction.ocurrenciasReales(
                     periodoDelDueno = nombreDelPeriodo,
                     montoDelPago = delSello?.amount,
                     monedaDelPago = delSello?.currency,
+                    cuentaDelPago = delSello?.accountId,
+                    reglaPausada = rule.takeIf { !it.pausadaDesde.isNullOrBlank() },
                 )
             }
             is Resolucion.Emparejada -> OccurrenceState(
@@ -1109,6 +1186,8 @@ internal fun org.jetbrains.exposed.sql.Transaction.ocurrenciasReales(
                 montoDelPago = resolucion.evento.amount,
                 monedaDelPago = resolucion.evento.currency,
                 periodoDelDueno = nombreDelPeriodo,
+                cuentaDelPago = resolucion.evento.accountId,
+                reglaPausada = rule.takeIf { !it.pausadaDesde.isNullOrBlank() },
             )
             // El día todavía no llegó: no se pregunta nada. Preguntar «¿ya ocurrió?» por
             // algo que vence dentro de tres semanas es ruido, y peor: invita a cerrar un
@@ -1131,6 +1210,8 @@ internal fun org.jetbrains.exposed.sql.Transaction.ocurrenciasReales(
                     destinos = destinos,
                 ),
                 periodoDelDueno = nombreDelPeriodo,
+                // Vuelta 72: lo que venció antes de pausar sigue pendiente; la regla viaja acá.
+                reglaPausada = rule.takeIf { !it.pausadaDesde.isNullOrBlank() },
             )
         }
     }
@@ -1349,6 +1430,24 @@ internal fun resolverOcurrencias(
     fun usadosParaDecidir(): Set<String> = lectura.usadosPara(rule)
     val resolucion = when {
         clave in lectura.ocurridos[rule.id].orEmpty() -> Resolucion.Sellada(lectura.sellos[rule.id to clave])
+        // Vuelta 72: una ocurrencia que vence en la pausa de su regla no pregunta ni propone. Lo único
+        // que la sostiene es un pago hecho HASTA el día de la pausa (lo ya pagado queda; pagar y pausar el
+        // mismo día no pierde el pago): solo un concluyente de entonces la empareja; un movimiento
+        // posterior nunca se lo lleva una regla pausada. Un período que ya cerró no se toca.
+        pausadaEn(rule, due) && !due.isBefore(diasDelPeriodo(today, periodo).start) -> {
+            val desde = java.time.LocalDate.parse(rule.pausadaDesde!!.trim())
+            val antes = lectura.evidenciaPara(rule, due, today)
+                .filter { !epochMillisToAppDate(it.timestamp).isAfter(desde) }
+            val unico = ocurrenciasConcluyentes(
+                rule, due, antes, usadosParaDecidir(), settings = periodo, destinos = destinos,
+            ).singleOrNull()
+            if (unico != null) {
+                lectura.reservados += unico.id
+                Resolucion.Emparejada(unico)
+            } else {
+                Resolucion.PorLlegar
+            }
+        }
         // **Lo que llegó ANTES del vencimiento** (1-oct-2026: la recarga de Glim del día 2 entró el 1 y
         // Plan seguía diciendo «llega mañana»). Si ya hay un movimiento concluyente en la ventana, se
         // empareja igual que el día del vencimiento: pagar o cobrar antes es lo normal, no ruido. Y si
@@ -1474,6 +1573,9 @@ internal suspend fun ocurrenciasDelPeriodo(uid: String, today: java.time.LocalDa
                 derivadaDeUnMovimiento = true,
                 montoDelPago = salida.amount,
                 monedaDelPago = salida.currency,
+                // Vuelta 72: la suma de lo pagado a la tarjeta en el período, para «faltan $X para el mínimo».
+                pagadoEnElPeriodo = pagadoALaTarjetaEnElPeriodo(rule, pagos, periodOf(due), salida.currency, settings = periodo),
+                cuentaDelPago = salida.accountId,
             )
         }
     }

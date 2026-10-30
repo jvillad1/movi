@@ -616,7 +616,8 @@ class OccurrenceMatchingTest {
             id = "ev_mercado",
             day = 25,
             month = 9,
-            amount = 2_000_000,
+            // Vuelta 72: dentro del doble del monto de la regla (lo que pasa del doble ya no se propone).
+            amount = 150_000,
             category = "Otra categoría",
             description = "Transferencia a la cuenta *31973270756",
             type = TransactionType.EXPENSE,
@@ -647,7 +648,8 @@ class OccurrenceMatchingTest {
         val destinos = mapOf("dst_caro" to destino(id = "dst_caro"))
         val vencimiento = LocalDate.of(2026, 9, 25)
         val otroMonto = evento(
-            id = "ev_otro", day = 25, month = 9, amount = 2_000_000,
+            // Vuelta 72: dentro del doble del monto de la regla (lo que pasa del doble ya no se propone).
+            id = "ev_otro", day = 25, month = 9, amount = 150_000,
             category = "Otra categoría", description = "Transferencia a la cuenta *31973270756",
             type = TransactionType.EXPENSE,
         )

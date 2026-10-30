@@ -96,6 +96,8 @@ open class RepositorioDePrueba : WalletRepository {
     override suspend fun createRecurringRule(rule: RecurringRule): RecurringRule = noUsado("createRecurringRule")
     override suspend fun updateRecurringRule(id: String, rule: RecurringRule): RecurringRule = noUsado("updateRecurringRule")
     override suspend fun deleteRecurringRule(id: String) = noUsado("deleteRecurringRule")
+    override suspend fun pausarRegla(id: String, desde: String?): RecurringRule = noUsado("pausarRegla")
+    override suspend fun reanudarRegla(id: String): RecurringRule = noUsado("reanudarRegla")
     override suspend fun getUpcomingPayments(): List<UpcomingPayment> = noUsado("getUpcomingPayments")
     override suspend fun getReminderChannels(): ReminderChannels = noUsado("getReminderChannels")
     override suspend fun getOccurrenceStates(): List<OccurrenceState> = noUsado("getOccurrenceStates")

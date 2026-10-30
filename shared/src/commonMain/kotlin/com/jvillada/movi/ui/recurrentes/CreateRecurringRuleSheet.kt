@@ -54,6 +54,10 @@ import kotlinx.coroutines.launch
 import com.jvillada.movi.ui.components.ds.Campo
 import com.jvillada.movi.ui.components.ds.CampoDeMonto
 import com.jvillada.movi.ui.components.ds.PieDeHoja
+import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
+import com.jvillada.movi.ui.components.ds.SelectorDeDiaDelMes
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import com.jvillada.movi.ui.components.ds.RotuloDeCampo
 import com.jvillada.movi.ui.components.ds.AyudaDeCampo
 
@@ -132,6 +136,13 @@ fun CreateRecurringRuleSheet(
      * salario» del flujo libre de Plan abre la hoja ya en Ingreso. El dueño lo puede cambiar.
      */
     tipoNuevo: TransactionType = TransactionType.EXPENSE,
+    /**
+     * Revisión de la vuelta 72 · **lo de esta regla que venció sin pagarse**, si lo hay: «Pausar» primero
+     * pregunta qué hacer con eso ([PreguntaDeLoVencidoAlPausar]). `null` pausa desde hoy sin preguntar.
+     */
+    vencidoSinPagar: com.jvillada.movi.shared.model.PagoDelPeriodo? = null,
+    /** «Ya lo pagué»: después de pausar, abre «Anotar pago» de esa fila. */
+    onYaLoPague: ((com.jvillada.movi.shared.model.PagoDelPeriodo) -> Unit)? = null,
 ) {
     val coroutine = rememberCoroutineScope()
 
@@ -142,7 +153,7 @@ fun CreateRecurringRuleSheet(
     // El cobro REAL, sin prorratear: un anual llega como sus $369.900, que es lo que el dueño
     // reconoce del extracto y lo que la hoja tiene que dejarle corregir. Ver Subscription.amount.
     var amount by remember { mutableStateOf(existingSub?.amount ?: existing?.amount ?: prefill?.amount) }
-    // Ola 11: el día se ELIGE, no se escribe (ver [DayOfMonthPicker]). Por eso es un `Int?` y no
+    // Ola 11: el día se ELIGE, no se escribe (ver [SelectorDeDiaDelMes]). Por eso es un `Int?` y no
     // una cadena: el estado ya no puede contener «45», así que no hay nada que validar después.
     var dayOfMonth by remember {
         mutableStateOf(existingSub?.dayOfMonth ?: existing?.dayOfMonth ?: prefill?.dayOfMonth)
@@ -438,6 +449,21 @@ fun CreateRecurringRuleSheet(
         }
     }
 
+    // Vuelta 72: pausar o reanudar es su propia escritura (el PUT no toca la pausa).
+    fun cambiarLaPausa(pausar: Boolean, desde: String?, despues: (() -> Unit)?) {
+        if (existing == null || saving) return
+        saving = true
+        error = null
+        coroutine.launch {
+            val result = runCatching {
+                if (pausar) Repositories.wallets.pausarRegla(existing.id, desde) else Repositories.wallets.reanudarRegla(existing.id)
+            }
+            saving = false
+            result.onSuccess { onSaved(); despues?.invoke() }
+                .onFailure { error = it.toUserMessage() }
+        }
+    }
+
     fun delete() {
         if (existing == null || saving) return
         saving = true
@@ -478,34 +504,35 @@ fun CreateRecurringRuleSheet(
                 .weight(1f, fill = false)
                 .verticalScroll(rememberScrollState()),
         ) {
-            // Title row: sheet title + optional delete action in edit mode
+            // Vuelta 72: el encabezado de hoja del sistema (título grande; la X la pone el marco) y
+            // «Eliminar» como acción destructiva (`Boton` `Peligro`), igual que la hoja de un tercero.
+            // Era un `tituloMedio` con un texto rojo suelto al lado.
+            //
+            // `existing != null` y no `isEditMode`: editando una suscripción `delete()` sale en la
+            // primera línea (`existing == null`); para ella el camino es «Quitar» desde la fila, que
+            // sabe distinguir borrar de marcar DISMISSED.
             Row(
                 modifier = Modifier.fillMaxWidth().padding(bottom = Espacio.m),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = when {
+                EncabezadoDeHoja(
+                    when {
                         editandoSuscripcion -> "Editar suscripción"
                         esAbono -> TITULO_DEL_EDITOR_DEL_ABONO
-                        isEditMode -> "Editar recurrente"
+                        isEditMode -> TITULO_EDITAR_RECURRENTE
                         else -> "Nuevo recurrente"
                     },
-                    style = Movi.textos.tituloMedio,
-                    color = Movi.colores.texto,
                     modifier = Modifier.weight(1f),
                 )
-                // `existing != null` y no `isEditMode`: desde que editar una
-                // suscripción también hace `isEditMode`, este enlace se pintaba sobre una
-                // hoja donde `delete()` sale en la primera línea (`existing == null`).
-                // Un enlace rojo destructivo que no hacía absolutamente nada, ni siquiera
-                // fallar. Para una suscripción el camino es «Quitar» desde la fila, que
-                // además sabe distinguir borrar de marcar DISMISSED.
                 if (existing != null) {
-                    Text(
-                        text = if (saving) "…" else "Eliminar",
-                        style = Movi.textos.cuerpo,
-                        color = Movi.colores.sale,
-                        modifier = Modifier.clickable(enabled = !saving) { pidiendoBorrar = true },
+                    Spacer(Modifier.width(Espacio.xs))
+                    Boton(
+                        ETIQUETA_ELIMINAR_LA_REGLA,
+                        onClick = { pidiendoBorrar = true },
+                        variante = VarianteDeBoton.Peligro,
+                        tamano = TamanoDeBoton.S,
+                        habilitado = !saving,
+                        modifier = Modifier.testTag(TAG_ELIMINAR_LA_REGLA),
                     )
                 }
             }
@@ -628,11 +655,17 @@ fun CreateRecurringRuleSheet(
             // suscripciones tiene `dayOfMonth` y nada más. La consecuencia se dice abajo,
             // en la nota, en vez de dejar que el dueño la deduzca cuando el aviso no llegue.
             RotuloDeCampo("Día del mes")
-            DayOfMonthPicker(
-                selected = dayOfMonth,
-                enabled = !saving,
-                onPick = { dayOfMonth = it },
+            // Vuelta 72: el selector del sistema, el mismo de «Inicio del período» (eran cuadrados acá
+            // y círculos allá). La nota de los meses cortos va debajo, solo cuando aplica.
+            SelectorDeDiaDelMes(
+                elegido = dayOfMonth,
+                onElegir = { dayOfMonth = it },
+                habilitado = !saving,
             )
+            diaCortoHint(dayOfMonth)?.let { nota ->
+                Spacer(Modifier.height(Espacio.xs))
+                Text(text = nota, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+            }
 
             Spacer(Modifier.height(Espacio.m))
 
@@ -898,6 +931,18 @@ fun CreateRecurringRuleSheet(
                 }
             }
 
+            // --- PAUSAR --- (vuelta 72): una regla que por ahora no se paga se pausa en vez de
+            // borrarse. Solo en una regla de verdad (ni una suscripción, ni el abono a una deuda).
+            if (existing != null && !esAbono && !editandoSuscripcion) {
+                Spacer(Modifier.height(Espacio.m))
+                LaPausaDeLaRegla(
+                    regla = existing,
+                    ocupado = saving,
+                    onCambiar = { pausar, desde, despues -> cambiarLaPausa(pausar, desde, despues) },
+                    vencido = vencidoSinPagar,
+                    onYaLoPague = onYaLoPague,
+                )
+            }
         }
 
         Spacer(Modifier.height(Espacio.l))
@@ -925,7 +970,13 @@ fun CreateRecurringRuleSheet(
     }
 }
 
-/** El título de la casilla «se debita solo» en la hoja de un recurrente. */
+/** Vuelta 72 · el título de la hoja al editar una regla. */
+const val TITULO_EDITAR_RECURRENTE: String = "Editar recurrente"
+
+/** Vuelta 72 · la acción destructiva del encabezado de la hoja, y su tag. */
+const val ETIQUETA_ELIMINAR_LA_REGLA: String = "Eliminar"
+const val TAG_ELIMINAR_LA_REGLA: String = "regla:eliminar"
+
 /** Vuelta 63 · el título de la hoja al editar la regla del abono mensual. */
 const val TITULO_DEL_EDITOR_DEL_ABONO: String = "Editar abono"
 
@@ -1223,112 +1274,6 @@ private fun RowScope.SheetChip(
                 !enabled -> Movi.colores.textoApagado
                 selected -> coloresDeLoElegido(Movi.colores).second
                 else     -> Movi.colores.textoMedio
-            },
-        )
-    }
-}
-
-/**
- * **El día del mes se elige, no se escribe.**
- *
- * Era un campo de texto libre: se escribía «45», la hoja lo aceptaba, y el dueño se enteraba
- * recién al tocar «Crear recurrente» («El día del mes tiene que estar entre 1 y 31»). Con una
- * cuadrícula de 1 a 31 —un mes de calendario— el valor inválido **no existe**: no hay nada que
- * validar porque no hay nada que escribir, y se resuelve con un toque y sin teclado.
- *
- * ## Por qué siempre abierta, y no un desplegable
- *
- * La forma obvia sería un campo que se abre al tocarlo, como el de CUENTA acá al lado. Se
- * descartó por dos razones, y la segunda es la que manda:
- *
- * 1. **Un toque.** Con un desplegable, elegir el día son dos gestos (abrir y tocar); el punto
- *    entero del cambio es que sea uno.
- * 2. **La cuadrícula no se mueve, y casi nunca mueve nada.** Esta sección está en el MEDIO de una
- *    hoja anclada abajo: un control que crece ~200dp al abrirse empujaría TIPO, CATEGORÍA, CUENTA
- *    y RECORDATORIO hacia abajo justo mientras el dedo está apoyado. La cuadrícula mide siempre
- *    lo mismo —cinco filas de siete, haya o no día elegido—, así que **lo que está bajo el dedo
- *    nunca se mueve**.
- *
- *    Lo de abajo tampoco, salvo en un caso: elegir 29, 30 o 31 estrena la nota de los meses
- *    cortos y empuja lo que sigue **29 px** (medido: con el 25, TIPO/Gasto/CATEGORÍA quedan en
- *    y=216/246/281; con el 31, en 245/275/310). Es el precio de decir la verdad justo cuando
- *    corresponde, y ocurre por debajo del dedo, no bajo él.
- *
- *    El campo de CUENTA sí crece al abrirse, y **no es aire lo que empuja**: debajo suyo está
- *    toda la sección RECORDATORIO (casilla, líneas de entrega y, si aplica, el cartel ámbar).
- *    Es un patrón que ya estaba en esta hoja y no lo trajo esta rama; se nombra para que nadie
- *    lo cite como precedente de que «abrir en su lugar no molesta».
- *
- * El alto no queda librado a nada: cinco filas fijas dentro del `verticalScroll` de la hoja, con
- * el botón «Crear recurrente» fuera del scroll (ver el comentario sobre el tope del 92 %, arriba
- * de `MarcoDeHoja`).
- */
-@Composable
-private fun DayOfMonthPicker(
-    selected: Int?,
-    enabled: Boolean,
-    onPick: (Int) -> Unit,
-) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        // 5 filas × 7 columnas = 35 casillas para 31 días. Las cuatro sobrantes van como huecos
-        // del mismo ancho para que la última fila no se estire: una cuadrícula que cambia de paso
-        // en la última línea se lee como otra cosa.
-        for (fila in 0 until 5) {
-            if (fila > 0) Spacer(Modifier.height(Espacio.xs))
-            // 4dp entre columnas y no 6: son seis huecos, y cada 2dp que se les saca va a parar
-            // al ancho de la casilla, que es la dimensión que en un teléfono no sobra.
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(Espacio.xxs),
-            ) {
-                for (columna in 0 until 7) {
-                    val dia = fila * 7 + columna + 1
-                    if (dia <= 31) {
-                        DayCell(day = dia, selected = dia == selected, enabled = enabled, onPick = onPick)
-                    } else {
-                        Spacer(Modifier.weight(1f))
-                    }
-                }
-            }
-        }
-        // La nota de los meses cortos, SOLO cuando aplica (ver [diaCortoHint]). Va debajo de la
-        // cuadrícula: arriba movería la cuadrícula misma bajo el dedo al elegir un 29, 30 o 31.
-        diaCortoHint(selected)?.let { nota ->
-            Spacer(Modifier.height(Espacio.xs))
-            Text(text = nota, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-        }
-    }
-}
-
-/**
- * Una casilla de la cuadrícula. Sin borde: 31 recuadros dibujados serían más ruido que ayuda.
- *
- * **44dp de alto, y el ancho es lo que dan siete columnas.** En un teléfono de 375px, con los
- * 20dp de margen de la hoja a cada lado y 4dp entre columnas, cada casilla mide ~44,4 × 44 — por
- * debajo de los 48dp que recomienda Material. No es un descuido ni es evitable: siete columnas de
- * 48dp necesitan 336dp de casillas sobre 335 disponibles, así que **ningún calendario entra en
- * 48dp en este ancho** (el propio DatePicker de Material3 usa casillas de 40dp). Lo que sí se
- * podía elegir es el alto, y por eso se le dio 44 en vez de los 38 con los que nació: es la
- * dimensión que no está limitada por la geometría. Verificado a ojo a 375×812.
- */
-@Composable
-private fun RowScope.DayCell(day: Int, selected: Boolean, enabled: Boolean, onPick: (Int) -> Unit) {
-    Box(
-        modifier = Modifier
-            .weight(1f)
-            .height(Medida.objetivoTactil)
-            .clip(RoundedCornerShape(Radio.s))
-            .background(if (selected) coloresDeLoElegido(Movi.colores).first else Movi.colores.capa3)
-            .clickable(enabled = enabled) { onPick(day) },
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = day.toString(),
-            style = if (selected) Movi.textos.cuerpo else Movi.textos.cuerpoRegular,
-            color = when {
-                !enabled -> Movi.colores.textoApagado
-                selected -> coloresDeLoElegido(Movi.colores).second
-                else -> Movi.colores.textoMedio
             },
         )
     }

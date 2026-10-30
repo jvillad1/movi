@@ -1,5 +1,9 @@
 package com.jvillada.movi.server.reminders
 
+import com.jvillada.movi.server.time.AppClock
+import com.jvillada.movi.shared.model.MinimoDelExtracto
+import com.jvillada.movi.shared.model.extractoDeLaTarjetaAl
+import com.jvillada.movi.shared.model.minimoEfectivo
 import com.jvillada.movi.server.balance.computeBalances
 import com.jvillada.movi.server.balance.loadNonVoidedEvents
 import com.jvillada.movi.server.balance.toAccount
@@ -110,7 +114,7 @@ internal fun minimoEnPesos(pagoMinimo: Long?, accountCurrency: String, tasa: Tas
  * La deuda se toma en la moneda de la cuenta (una tarjeta USD debe dólares, no pesos) — el
  * mismo criterio que `cardSummaryFor`.
  */
-suspend fun loadCardRulePairs(userId: String): List<Pair<RecurringRule, String?>> {
+suspend fun loadCardRulePairs(userId: String, hoy: java.time.LocalDate = AppClock.today()): List<Pair<RecurringRule, String?>> {
     val rows = dbQuery {
         Cards.join(Accounts, JoinType.INNER, Cards.accountId, Accounts.id)
             .selectAll()
@@ -121,7 +125,16 @@ suspend fun loadCardRulePairs(userId: String): List<Pair<RecurringRule, String?>
     val eventsByAccount = loadNonVoidedEvents(userId).groupBy { it.accountId }
     val conDeuda = rows.mapNotNull { (terms, account, lastReminded) ->
         val debt = computeBalances(account.type, eventsByAccount[account.id] ?: emptyList())[account.currency] ?: 0L
-        if (debt <= 0L) null else TarjetaConDeuda(terms, account.name, account.currency, debt, lastReminded)
+        if (debt <= 0L) return@mapNotNull null
+        // Vuelta 72 (revisión): el mínimo del extracto más reciente, pegado a su fecha de pago, con lo
+        // pagado desde el corte — la misma cuenta que la hoja «Pagar» (`ExtractoDeLaTarjeta`). Solo en
+        // pesos: el mínimo de una tarjeta en dólares no se compara con pagos en pesos.
+        val extracto = if (account.currency == "COP") {
+            extractoDeLaTarjetaAl(terms, account.currency, eventsByAccount[account.id].orEmpty(), hoy.toString(), AppClock.zone.id)
+        } else null
+        // Re-revisión: el mínimo efectivo, nunca más que lo facturado al corte (`minimoEfectivo`).
+        val minimo = extracto?.minimoEfectivo?.let { MinimoDelExtracto(extracto.fechaDePago, it, extracto.pagadoDesdeElCorte) }
+        TarjetaConDeuda(terms, account.name, account.currency, debt, lastReminded, minimo)
     }
     if (conDeuda.isEmpty()) return emptyList()
     // Una sola consulta de TRM para todas las tarjetas, y **solo si alguna está en otra moneda**:
@@ -133,7 +146,7 @@ suspend fun loadCardRulePairs(userId: String): List<Pair<RecurringRule, String?>
     return conDeuda.map { tarjeta ->
         virtualRuleForCard(
             tarjeta.terms, tarjeta.nombre, tarjeta.deuda, tarjeta.moneda, tasa,
-        ) to tarjeta.lastReminded
+        ).copy(minimoDelExtracto = tarjeta.minimoDelExtracto) to tarjeta.lastReminded
     }
 }
 
@@ -144,4 +157,5 @@ private data class TarjetaConDeuda(
     val moneda: String,
     val deuda: Long,
     val lastReminded: String?,
+    val minimoDelExtracto: MinimoDelExtracto? = null,
 )

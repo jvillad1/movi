@@ -298,6 +298,32 @@ fun plataQueSalio(pagoDeLaDeuda: FinancialEvent, pagos: List<FinancialEvent>): F
     } ?: pagoDeLaDeuda
 }
 
+/**
+ * Vuelta 72 · **todo lo que salió de las cuentas hacia la tarjeta de [rule] y saldó [periodo]**, en
+ * [moneda]: la suma de [plataQueSalio] de cada pago que [pagosDeDeudaPorPeriodo] asigna a ese período
+ * (ella se queda con el último; acá van todos). Solo la lee `PagoDelPeriodo.faltaDelMinimo`: dos abonos
+ * de $50.000 son $100.000 contra el mínimo. `null` si [rule] no es una tarjeta o no hay pagos.
+ */
+fun pagadoALaTarjetaEnElPeriodo(
+    rule: RecurringRule,
+    pagos: List<FinancialEvent>,
+    periodo: String,
+    moneda: String,
+    graceDays: Int = DEFAULT_GRACE_DAYS,
+    zone: ZoneId = AppClock.zone,
+    settings: PeriodSettings = PeriodSettings(),
+): Long? {
+    if (!rule.id.startsWith(CARD_RULE_PREFIX)) return null
+    val cuenta = cuentaDeLaDeudaDe(rule.id) ?: return null
+    val categoria = categoriaQueSalda(rule.id) ?: return null
+    val delPeriodo = pagos
+        .filter { it.accountId == cuenta && it.category == categoria && it.type == TransactionType.INCOME }
+        .filter { periodoQueSalda(rule, epochMillisToAppDate(it.timestamp, zone), graceDays, settings, zone) == periodo }
+        .map { plataQueSalio(it, pagos) }
+        .filter { it.currency == moneda }
+    return if (delPeriodo.isEmpty()) null else delPeriodo.sumOf { it.amount }
+}
+
 /** Lo mismo que [pagosDeDeudaPorPeriodo] pero en la forma que espera `dueDateFor`: solo periodos. */
 fun periodosSaldados(
     rules: List<RecurringRule>,

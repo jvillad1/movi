@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.reminders
 
+import com.jvillada.movi.shared.model.candidatoFueraDeProporcion
 import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.server.time.epochMillisToAppDate
@@ -41,6 +42,10 @@ import kotlin.math.abs
  *  - **Ordena** por lo variable: entre los candidatos, el más cercano al monto esperado va
  *    primero — pero uno con una retención de más **no** queda descartado, solo va después.
  *  - **Decide el dueño.** Con confirmación humana no hace falta clavar un margen y rezar.
+ *  - **Vuelta 72, el único filtro de monto, y ancho a propósito:** lo que pasa del doble o queda por
+ *    debajo de la mitad del monto de la regla no se PROPONE («Carro $9.000» preguntaba por un tanqueo
+ *    de $260.000). Una retención de más en el sueldo no se acerca a eso. Lo que Movi decide sola no
+ *    pasa por este filtro (ver `candidatoFueraDeProporcion` en `:core`).
  *
  * ## Las cuatro puertas cerradas (lo que NUNCA es candidato)
  *
@@ -207,6 +212,14 @@ fun occurrenceCandidatesFor(
     destinos: Map<String, DestinoConocido> = emptyMap(),
 ): List<FinancialEvent> =
     candidatosPuntuados(rule, dueDate, events, usedEventIds, zone, windowDays, settings, destinos)
+        // Vuelta 72: lo que pasa del doble del monto de la regla o queda por debajo de la mitad no se
+        // PROPONE (umbrales elegidos, ver `candidatoFueraDeProporcion` en `:core`). Solo acá, en la
+        // lista del «¿Es este?»: lo que Movi decide sola (concluyente, identidad fuerte) y lo que el
+        // Disponible absorbe (`parteFijaDelChecklist`, que lee [candidatosPuntuados] entero) no cambian.
+        .filterNot { c ->
+            !c.concluyente && !c.identidadFuerte &&
+                candidatoFueraDeProporcion(rule.amount, rule.montoEsSaldo, MONEDA_DE_LAS_REGLAS, c.event)
+        }
         .take(max)
         .map { it.event }
 
@@ -343,6 +356,7 @@ fun candidatosPuntuados(
             // Vuelta 45: fuera de la ventana angosta solo se propone — ni identidad fuerte (no absorbe
             // un fijo del Disponible) ni concluyente (no se empareja solo).
             val identidadFuerte = enLaVentana && (nombrePega || (destinoPega && montoExacto))
+            val concluyente = enLaVentana && (identidadFuerte || (categoriaPega && laCuentaPega && montoExacto))
             CandidatoPuntuado(
                 event = event,
                 senas = senas,
@@ -350,7 +364,7 @@ fun candidatosPuntuados(
                 distanciaDias = abs(dias),
                 identidadFuerte = identidadFuerte,
                 // Las TRES puertas de «sin lugar a dudas» — ver el KDoc de [ocurrenciaConcluyente].
-                concluyente = enLaVentana && (identidadFuerte || (categoriaPega && laCuentaPega && montoExacto)),
+                concluyente = concluyente,
                 enLaVentana = enLaVentana,
             )
         }

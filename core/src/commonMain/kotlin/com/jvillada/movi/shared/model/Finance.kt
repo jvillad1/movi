@@ -865,7 +865,71 @@ data class RecurringRule(
      * tarjeta; si no, se guarda `null`). Columna nueva y nullable, `recurring_rules.hacia_deuda`.
      */
     val haciaDeuda: String? = null,
+    /**
+     * **Vuelta 72 · la regla está en pausa desde este día** (ISO `"2026-10-29"`), o `null` = activa.
+     *
+     * Pausar no borra nada: lo que ya se pagó queda (sus sellos, sus movimientos y los períodos
+     * cerrados de «Tus períodos»), y «Reanudar» la devuelve tal cual. Lo único que hace es que **ninguna
+     * ocurrencia que vence ese día o después exista** mientras no esté pagada: no aparece en el
+     * checklist, en `/api/payments/upcoming`, en la caja, en los fijos del Disponible, en los avisos, en
+     * los recordatorios, en los débitos automáticos ni en Movi AI. La regla de cuál ocurrencia cae en la
+     * pausa vive en [pausadaParaElVencimiento], una sola vez.
+     *
+     * Columna nueva y nullable, `recurring_rules.pausada_desde`. **Ni el PUT ni el POST la escriben**
+     * (un APK que no la conoce no puede reanudar una regla sin querer): se pausa y se reanuda con
+     * `POST /api/recurring-rules/{id}/pausar` y `…/reanudar`.
+     */
+    val pausadaDesde: String? = null,
+    /**
+     * **Vuelta 72 (revisión) · el mínimo del extracto más reciente de esta tarjeta**, o `null` (toda regla
+     * que no es el pago de una tarjeta en pesos con su mínimo cargado y su día de corte, y un server viejo).
+     * Lo arma `loadCardRulePairs` con [ExtractoDeLaTarjeta], la misma fuente que la hoja «Pagar»: el mínimo
+     * es de la fila que vence en [MinimoDelExtracto.fechaDePago], y lo que falta es el mínimo menos lo
+     * pagado desde el corte. Ver `PagoDelPeriodo.restoDelMinimo`.
+     */
+    val minimoDelExtracto: MinimoDelExtracto? = null,
 )
+
+/**
+ * Vuelta 72 (revisión) · el mínimo de un extracto de tarjeta, en pesos, pegado a la fecha en que se paga
+ * ([fechaDePago], ISO), con lo que ya se le pagó desde el corte ([pagadoDesdeElCorte]).
+ */
+@Serializable
+data class MinimoDelExtracto(
+    val fechaDePago: String,
+    val minimo: Long,
+    val pagadoDesdeElCorte: Long = 0L,
+) {
+    /** Lo que le falta al mínimo, nunca negativo. */
+    val resto: Long get() = (minimo - pagadoDesdeElCorte).coerceAtLeast(0L)
+}
+
+/** Vuelta 72 · el cuerpo de `POST /api/recurring-rules/{id}/pausar`: desde qué día (ISO); `null` = hoy. */
+@Serializable
+data class PausarReglaRequest(val desde: String? = null)
+
+/**
+ * Vuelta 72 · **¿la ocurrencia sin pagar que vence [vence] (ISO) cae en la pausa de esta regla?** `true` si
+ * vence el día de la pausa o después. Lo que venció antes y no se pagó **sigue pendiente** (revisión de la
+ * vuelta 72: en un hogar, esconderlo puede tapar una deuda real; la hoja pregunta qué hacer con eso al
+ * pausar), y lo que ya se pagó queda (quien llama no le pregunta esto a una ocurrencia pagada). Una fecha
+ * ilegible no pausa nada (ante la duda, mejor avisar de más). Es la única regla de la pausa: el server y la
+ * app la llaman igual.
+ */
+fun RecurringRule.pausadaParaElVencimiento(vence: String): Boolean {
+    val desde = fechaIsoONulo(pausadaDesde) ?: return false
+    val dia = fechaIsoONulo(vence) ?: return false
+    return dia >= desde
+}
+
+/** Vuelta 72 · ¿la regla está en pausa en [hoy] (ISO)? La sección «Pausados · N» de Pagos. */
+fun RecurringRule.estaPausadaEl(hoy: String): Boolean = pausadaParaElVencimiento(hoy)
+
+/** Una fecha ISO `"AAAA-MM-DD"` normalizada, o `null` si no lo es. */
+private fun fechaIsoONulo(texto: String?): String? {
+    val t = texto?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    return runCatching { kotlinx.datetime.LocalDate.parse(t).toString() }.getOrNull()
+}
 
 @Serializable
 data class Budget(

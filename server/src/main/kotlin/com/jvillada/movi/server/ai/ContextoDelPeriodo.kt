@@ -8,6 +8,8 @@ import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.Goals
 import com.jvillada.movi.server.db.RecurringOccurrences
 import com.jvillada.movi.server.db.RecurringRules
+import com.jvillada.movi.shared.model.estaPausadaEl
+import com.jvillada.movi.shared.model.pausadaParaElVencimiento
 import com.jvillada.movi.server.db.SmsMessages
 import com.jvillada.movi.server.db.Subscriptions
 import com.jvillada.movi.server.db.VoidEvents
@@ -370,7 +372,7 @@ internal suspend fun contextoDelPeriodoDe(uid: String): ContextoDelPeriodo {
         val tarjetasDelDueno = Accounts.selectAll()
             .where { (Accounts.userId eq uid) and (Accounts.type eq com.jvillada.movi.shared.model.AccountType.CREDIT_CARD.name) }
             .mapTo(mutableSetOf()) { it[Accounts.id] }
-        val recurrentes = RecurringRules.selectAll().where { RecurringRules.userId eq uid }.map { fila ->
+        val recurrentes = RecurringRules.selectAll().where { RecurringRules.userId eq uid }.mapNotNull { fila ->
             val regla = RecurringRule(
                 id = fila[RecurringRules.id],
                 name = fila[RecurringRules.name],
@@ -384,18 +386,25 @@ internal suspend fun contextoDelPeriodoDe(uid: String): ContextoDelPeriodo {
                 // pero que quede completo evita el «campo leído en uno y no en el otro».
                 destinoConocidoId = fila[RecurringRules.destinoConocidoId],
                 haciaDeuda = fila[RecurringRules.haciaDeuda],
+                pausadaDesde = fila[RecurringRules.pausadaDesde],
             )
             // `null` = este período no tiene ninguna ocurrencia que preguntar (un período acortado
             // a mano que no alcanza a contener el día de la regla). Ahí no hay sello que mirar.
-            val sello = ocurrenciaPorPreguntar(hoy, regla, ajustes)?.let(::periodOf)
+            val enJuego = ocurrenciaPorPreguntar(hoy, regla, ajustes)
+            val sello = enJuego?.let(::periodOf)
+            val yaOcurrio = regla.id in ocurridasEnElPeriodo ||
+                (sello != null && sello in selladasPorRegla[regla.id].orEmpty())
+            // Vuelta 72: lo que vence en la pausa de una regla no es algo que el dueño tenga que pagar;
+            // Movi AI no lo cuenta. Lo pagado y lo vencido antes de pausar sí quedan, como en Pagos.
+            val enPausa = enJuego?.let { regla.pausadaParaElVencimiento(it.toString()) } ?: regla.estaPausadaEl(hoy.toString())
+            if (!yaOcurrio && enPausa) return@mapNotNull null
             RecurrenteParaContexto(
                 nombre = regla.name,
                 categoria = regla.category,
                 monto = regla.amount,
                 dia = regla.dayOfMonth,
                 esIngreso = regla.type == TransactionType.INCOME,
-                yaOcurrioEnElPeriodo = regla.id in ocurridasEnElPeriodo ||
-                    (sello != null && sello in selladasPorRegla[regla.id].orEmpty()),
+                yaOcurrioEnElPeriodo = yaOcurrio,
                 esAbono = regla.esAbonoADeuda,
                 abonoATarjeta = regla.esAbonoADeuda && regla.haciaDeuda in tarjetasDelDueno,
             )

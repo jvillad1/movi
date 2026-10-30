@@ -177,9 +177,10 @@ internal const val FRACCION_DEL_VALOR_CON_ROTULO_LARGO = 0.42f
  *
  * 1. **[contexto]** — el detalle de una cuenta desde el que se abrió la hoja (como siempre).
  * 2. **Modo pago: la cuenta de la regla** ([deLaRegla]) — «La de la regla». Si la regla no tiene
- *    cuenta, **la hoja no elige**: devuelve [OrigenCuenta.POR_ELEGIR] con la sugerencia de los pasos
- *    que siguen en [CuentaElegida.sugerida]. Poner en silencio la tarjeta más usada para pagar un
- *    arriendo es lo que pasó.
+ *    cuenta, **vuelta 72**: la hoja propone la cuenta con la MISMA lógica que un gasto (los pasos que
+ *    siguen, con su rótulo: «La que usas para Mercado», «Más usada»…), y la fila sigue editable. Hasta la
+ *    vuelta 71 no elegía nada y pedía la cuenta cada mes («Falta la cuenta» en «Carro» todos los meses);
+ *    ahora, después de guardar, Pagos ofrece «¿Usar siempre Nu para Carro?» (nunca se guarda sola).
  * 3. **«Efectivo»** en la categoría o en el título → la cuenta de efectivo, si hay una.
  * 4. **La última cuenta con ese nombre** ([CuentasDeCadaUso.porNombre]) — «La que usas para Rappi».
  * 5. **La última cuenta con esa categoría** ([CuentasDeCadaUso.porCategoria]) — «La que usas para
@@ -216,11 +217,8 @@ fun resolverCuentaDelMovimiento(
         if (existe(porCategoria)) return@run CuentaElegida(porCategoria, OrigenCuenta.POR_CATEGORIA, para = categoria.trim())
         null
     }
-    val propuesta = porLoQueSeAnota ?: resolverCuenta(cuentas, ultima = ultima, masUsada = masUsada)
-    // Modo pago sin cuenta en la regla: se pide, con la propuesta de arriba como sugerencia. Con una
-    // sola cuenta no hay nada que preguntar.
-    if (modoPago && cuentas.size > 1) return CuentaElegida(null, OrigenCuenta.POR_ELEGIR, sugerida = propuesta.takeIf { it.id != null })
-    return propuesta
+    // Vuelta 72: también en modo pago sin cuenta en la regla, la misma propuesta que un gasto.
+    return porLoQueSeAnota ?: resolverCuenta(cuentas, ultima = ultima, masUsada = masUsada)
 }
 
 /** «Efectivo», «Retiro en efectivo», «efectivo para el taxi»: la palabra, sin tildes ni mayúsculas. */
