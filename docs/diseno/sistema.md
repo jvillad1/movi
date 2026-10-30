@@ -3849,10 +3849,10 @@ de siempre. Ninguna cifra existente cambió. **Un componente pasó a `ds/`**: el
      `confirmSmsCon(id, eventoId)`, un comprobante por `confirmarComprobante`, un pago avisado varias veces por
      `confirmarElMismoPago(…, eventoExistenteId)`. **Nunca crea un movimiento.** Con dos o más candidatos no
      hay un toque: «Puede ser uno de 2 anotados» y **«Elegir»** (amarillo) abre Revisar aviso.
-   - **Revisar aviso**: con un candidato, la barra de abajo es «Anotarlo como nuevo» (secundario) · **«Es
-     este»** (principal), y debajo «Anotarlo como nuevo» crea otro movimiento, aparte del que ya está
-     anotado.» con «Ignorar» como fantasma; la fila del candidato ya no lleva su propio botón. Con varios,
-     cada fila lleva «Es este» principal y abajo no hay amarillo («Ignorar» · «Anotarlo como nuevo»).
+   - **Revisar aviso**: con un candidato, la barra de abajo es «Anotar aparte» (secundario) · **«Es
+     este»** (principal, peso mayor), y debajo «Anotar aparte» crea otro movimiento, además del que ya
+     está anotado.» con «Ignorar» como fantasma; la fila del candidato ya no lleva su propio botón. Con
+     varios, cada fila lleva «Es este» principal y abajo no hay amarillo («Ignorar» · «Anotar aparte»).
    - **La cuota** ($980.000 que coincide con la cuota ya anotada) va por lo mismo: «Es este» vincula el aviso
      a la pata del dinero que ya estaba. No hay un camino nuevo de cuotas y nada salta
      `escribirLasPatasDelAviso` (no se escribe ninguna pata).
@@ -3896,6 +3896,41 @@ deshacer un aviso que creó su movimiento = desvincular + anular, y las cifras v
 `Vuelta74LogicaTest` (commonTest: las líneas, lo que se repone, los textos del aviso, la acción que se dice a
 sí misma y la elección) y, Robolectric, `EsEsteEnLaFilaTest` (la tarjeta con «Es este», «Puede ser uno de 2 ·
 Elegir», «Es este» sin esqueleto y con la lista quieta y su Deshacer, la falla que devuelve la tarjeta),
-`EsEsteEnRevisarAvisoTest` («Es este» principal y «Anotarlo como nuevo» secundario, con varios y sin
+`EsEsteEnRevisarAvisoTest` («Es este» principal y «Anotar aparte» secundario, con varios y sin
 ninguno) y `AnotadoConDeshacerTest` (Agregar: «Anotado · Deshacer» que anula, «Repartir con Caro» con grupo
 y ausente sin él, varios grupos, sin señal). **Las líneas base** no cambian, y las guardas en 0 siguen en 0.
+
+### La revisión de la vuelta 74, y lo que cambió
+
+La plata cuadraba («Es este» no crea nada; cada Deshacer deja las cifras exactas). Lo que encontró:
+
+1. **[P1] Un movimiento vinculado a un aviso se ofrecía a otro.** Dos compras reales de $32.000 en Crepes
+   (12:45 y 12:58): tras «Es este» en la primera, la segunda decía «Ya anotado… Es este», el server lo
+   aceptaba y los dos avisos quedaban con el mismo `evento_id` (una compra perdida). Ahora
+   `movimientosYaReclamados` (el `evento_id` y las `partes_eventos` de los avisos confirmados del usuario)
+   sale de las coincidencias (`coincidenciasDelAviso`, con las dos patas de un traspaso reclamado), y
+   vincular uno de esos contesta **409** «Ese movimiento ya está vinculado a otro aviso del banco.»
+   (`…/confirm?eventoId=` y `confirmarElMismoPago` con `eventoExistenteId`). Los avisos **del mismo
+   pago** (su grupo) sí lo comparten: es lo que hace «Cerrar los avisos».
+2. **[P2] Falsos «ya anotado» en un pago de tarjeta.** Un pago de Nu por $50.000 decía «Puede ser uno de 3»
+   (las dos patas de un traspaso a Efectivo y un Mercado). `coincidenciasDelSms` ahora, para
+   `CARD_PAYMENT_CATEGORY`, acepta solo esa categoría o lo que **entra a una cuenta `CREDIT_CARD`**
+   (la pata del pago o el abono anotado a mano; recibe los tipos de cuenta); para un gasto, **nunca la
+   pata que entra** de un traspaso; y deja **un candidato por `transferId`** (el que sale).
+3. **«Anotar aparte».** «Anotarlo como nuevo» se cortaba a 390 y a 360; el rótulo es corto y «Es este» va
+   con peso 1,2 contra 1.
+4. **El aviso de abajo no se parte por letras.** Con una acción, el texto va a lo ancho (hasta
+   `RENGLONES_DEL_AVISO` = 2, con «…») y «Repartir con Caro» · «Deshacer» en un segundo renglón a la
+   derecha; sin acción, como antes. A 360 ocupaba 9 renglones y ~210 px.
+5. **Doble toque.** Al resolver una tarjeta (Es este, Confirmar, Ignorar), la lista ignora los toques
+   `PAUSA_TRAS_RESOLVER_MS` (300 ms): la de abajo sube bajo el dedo.
+6. **Textos.** «Es este» dice «Ya estaba anotado · Restaurantes $32.000» (`textoDeLoQueYaEstaba`). El lote
+   de Actividad también usa el aviso de `ds/`. En el Inicio, al bajar el conteo baja la suma
+   (`porConfirmarSuman` menos el monto del aviso; si no se sabe en pesos, la suma se calla hasta la
+   lectura, nunca a medias).
+
+Lo vigilan `EsEsteYSuDeshacerTest` (las dos compras: no se ofrece ni se acepta, y vuelve a estar libre al
+deshacer; el pago de Nu con su traspaso, su Mercado y las patas), `CoincidenciasDelSmsTest`,
+`Vuelta74LogicaTest` (el texto y la suma del Inicio), `EsEsteEnLaFilaTest` (el doble toque),
+`EsEsteEnRevisarAvisoTest` a 390 y 360 (los dos botones enteros, «Es este» no más angosto) y
+`ElAvisoDeAbajoNoSeParteA360Test` / `A390Test` (dos renglones, a lo ancho, ≤ 140 dp, con un comercio largo).
