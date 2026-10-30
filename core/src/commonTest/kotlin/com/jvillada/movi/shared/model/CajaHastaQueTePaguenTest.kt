@@ -117,6 +117,23 @@ class CajaHastaQueTePaguenTest {
     }
 
     @Test
+    fun `un salario en dolares o sin monto no cierra el horizonte, y se sabe por que`() {
+        val hoy = "2026-10-29"
+        val enDolares = PagoDelPeriodo(
+            ruleId = "salario", nombre = "Salario", monto = 2_000L, pagado = false, diasParaVencer = 3,
+            moneda = "USD", vence = "2026-11-01", esIngreso = true,
+        )
+        val horizonte = assertNotNull(horizonteDeLaCaja(hoy, "2026-10-31", listOf(enDolares)))
+        assertNull(horizonte.salario)
+        assertTrue(horizonte.salarioQueNoCuenta)
+        val sinMonto = enDolares.copy(moneda = "COP", monto = 0L)
+        assertTrue(assertNotNull(horizonteDeLaCaja(hoy, "2026-10-31", listOf(sinMonto))).salarioQueNoCuenta)
+        assertFalse(assertNotNull(horizonteDeLaCaja(hoy, "2026-10-31", emptyList())).salarioQueNoCuenta)
+        val caja = assertNotNull(cajaHastaQueTePaguen(1_000_000L, emptyList(), listOf(enDolares), null, hoy, "2026-10-31"))
+        assertTrue(caja.salarioQueNoCuenta && !caja.hastaElSalario)
+    }
+
+    @Test
     fun `el salario que ya llego no cierra el horizonte`() {
         val hoy = "2026-10-29"
         val salario = PagoDelPeriodo(

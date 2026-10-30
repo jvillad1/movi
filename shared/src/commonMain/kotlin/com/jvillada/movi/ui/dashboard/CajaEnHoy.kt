@@ -69,7 +69,7 @@ fun cajaDeHoy(caja: CajaProyectada, hoy: LocalDate): CajaDeHoy {
         // Revisión de la 70: sin un salario anotado, «No te alcanza» en rojo no decía por qué ni hasta
         // cuándo se miró. El porqué va primero: la caja mira 30 días y no cuenta ningún ingreso.
         val cuando = when {
-            !caja.hastaElSalario -> SIN_SALARIO_ANOTADO
+            !caja.hastaElSalario -> if (caja.salarioQueNoCuenta) SIN_SALARIO_EN_PESOS else SIN_SALARIO_ANOTADO
             rojo.fecha == hoy.toString() -> "Hoy quedarías en"
             else -> "El ${fechaEnPalabras(rojo.fecha, hoy)} quedarías en"
         }
@@ -83,6 +83,9 @@ fun cajaDeHoy(caja: CajaProyectada, hoy: LocalDate): CajaDeHoy {
 
 /** El subtítulo de «No te alcanza» sin un salario anotado: por qué, y hasta dónde se miró. */
 const val SIN_SALARIO_ANOTADO: String = "Sin salario anotado: miramos 30 días"
+
+/** Lo mismo cuando el ingreso fijo que hay está en otra moneda o sin monto: no puede cerrar la caja. */
+const val SIN_SALARIO_EN_PESOS: String = "Sin un salario en pesos anotado: miramos 30 días"
 
 /** El rótulo de la fila cuando lo libre no alcanza (vuelta 70). */
 const val ROTULO_NO_TE_ALCANZA: String = "No te alcanza"

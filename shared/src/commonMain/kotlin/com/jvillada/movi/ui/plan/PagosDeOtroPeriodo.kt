@@ -209,8 +209,9 @@ private fun PagosDeUnPeriodoAnterior(periodo: PeriodoFinanciero, periodoDeHoy: P
 
 /**
  * **El período siguiente, solo lectura**: lo que vencerá, con las filas de [checklistDelPeriodo] sobre
- * las MISMAS respuestas que el tablero ya trajo. Su total es «Falta por pagar» de ese período (la misma
- * regla: sin el saldo de una tarjeta ni los ingresos).
+ * las MISMAS respuestas que el tablero ya trajo, con el vencimiento siguiente de lo que en este período
+ * sigue pendiente (`conElSiguienteVencimiento`). Su total es lo que va a salir de las cuentas, con la
+ * regla de la caja ([loQueSaleDe]): una tarjeta suma su pago mínimo; un ingreso, nada.
  */
 @Composable
 private fun PagosDelPeriodoSiguiente(estado: EstadoDelTableroDeRecurrentes, periodo: PeriodoFinanciero, ajustes: PeriodSettings) {

@@ -179,6 +179,11 @@ data class DashboardData(
      */
     val plataDelDisponible: PlataDelDisponible? = null,
     /**
+     * Vuelta 70 · las compras con tarjeta del período sin pagar (`DashboardSummary.comprasConTarjetaSinPagar`),
+     * o `null` si el server no las mide. Solo explica la diferencia de la caja con «Te quedan».
+     */
+    val comprasConTarjetaSinPagar: Long? = null,
+    /**
      * El patrimonio ya partido que manda `/api/dashboard/summary` (entrega A). `null` = no llegó o
      * el server es anterior. La tarjeta del patrimonio lo usa solo si las cuentas no llegaron:
      * ver `patrimonioDelInicio`, que explica por qué prefiere `accounts`.
@@ -1345,6 +1350,8 @@ internal fun DashboardData.conResumenDelInicio(s: DashboardSummary): DashboardDa
     // «vs. período pasado». Misma respuesta, ninguna llamada nueva.
     gastoDelAnterior = s.gastoDelAnteriorAMismaAltura,
     diasComparados = s.diasComparados,
+    // Vuelta 70: solo para explicar la diferencia entre la caja y «Te quedan».
+    comprasConTarjetaSinPagar = s.comprasConTarjetaSinPagar,
 )
 
 /**

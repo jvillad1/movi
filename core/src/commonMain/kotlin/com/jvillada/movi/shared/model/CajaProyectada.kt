@@ -103,6 +103,11 @@ data class CajaProyectada(
     val apartado: Long = 0L,
     /** Vuelta 70 · el horizonte termina el día que llega el salario (y no a 30 días, sin él). */
     val hastaElSalario: Boolean = false,
+    /**
+     * Sin salario, ¿es porque el ingreso fijo que hay está en otra moneda o sin monto? Solo cambia lo que
+     * se dice («Sin un salario en pesos anotado»), no la cuenta.
+     */
+    val salarioQueNoCuenta: Boolean = false,
 ) {
     /** Lo que de las cuentas no es para gastar: el ahorro y lo apartado. Igual todos los días. */
     val reservado: Long get() = ahorro + apartado
@@ -235,7 +240,12 @@ fun cajaProyectada(
  * @property hasta el último día que se proyecta, incluido.
  * @property salario la fila del ingreso que lo cierra, o `null` si no hay (entonces son 30 días).
  */
-data class HorizonteDeLaCaja(val hasta: LocalDate, val salario: PagoDelPeriodo?)
+data class HorizonteDeLaCaja(
+    val hasta: LocalDate,
+    val salario: PagoDelPeriodo?,
+    /** Sin salario: hay un ingreso fijo en el período siguiente, pero en otra moneda o sin monto. */
+    val salarioQueNoCuenta: Boolean = false,
+)
 
 /**
  * **El horizonte de la caja**: el día del próximo ingreso esperado, ese día incluido.
@@ -259,7 +269,8 @@ fun horizonteDeLaCaja(hoy: String, ultimoDiaDelPeriodo: String, delSiguiente: Li
         .minByOrNull { (_, fecha) -> fecha }
     if (salario != null) return HorizonteDeLaCaja(salario.second, salario.first)
     val treinta = desde.plus(DIAS_DE_LA_CAJA_SIN_SALARIO, DateTimeUnit.DAY)
-    return HorizonteDeLaCaja(if (treinta > cierre) treinta else cierre, null)
+    val queNoCuenta = delSiguiente.any { it.esIngreso && !it.pagado && !it.esAbono && !esIngresoEsperado(it) }
+    return HorizonteDeLaCaja(if (treinta > cierre) treinta else cierre, null, salarioQueNoCuenta = queNoCuenta)
 }
 
 /** Un ingreso recurrente que todavía no llega, en pesos y con monto: el que puede cerrar el horizonte. */
@@ -318,7 +329,7 @@ fun cajaHastaQueTePaguen(
         ahorro = ahorro,
         apartado = apartadoFueraDe(filas),
         salario = horizonte.salario,
-    )
+    )?.copy(salarioQueNoCuenta = horizonte.salarioQueNoCuenta)
 }
 
 // ── El gasto del día a día ───────────────────────────────────────────────────

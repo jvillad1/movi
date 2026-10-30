@@ -42,6 +42,9 @@ class CajaDeHoyTest {
     fun `sin salario anotado no te alcanza dice que se miraron 30 dias`() {
         val fila = cajaDeHoy(caja("2026-10-13" to 100_000, "2026-10-20" to -5_000), hoy)
         assertEquals(CajaDeHoy(ROTULO_NO_TE_ALCANZA, SIN_SALARIO_ANOTADO, -5_000, enRojo = true), fila)
+        // Con un salario en dólares o sin monto: lo hay, pero no cierra la caja.
+        val conSalarioEnDolares = cajaDeHoy(caja("2026-10-13" to 100_000, "2026-10-20" to -5_000).copy(salarioQueNoCuenta = true), hoy)
+        assertEquals(SIN_SALARIO_EN_PESOS, conSalarioEnDolares.cuando)
     }
 
     @Test

@@ -3,6 +3,7 @@ package com.jvillada.movi.server.routes
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import com.jvillada.movi.server.ai.textoDeLaCaja
+import com.jvillada.movi.server.balance.accountTypesFor
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Apartados
 import com.jvillada.movi.server.db.Cards
@@ -306,5 +307,41 @@ class CajaProyectadaRoutesTest {
         val movimientos = caja.dias.flatMap { it.movimientos }
         assertEquals(1, movimientos.count { it.nombre == "Carro" }, "el Carro de noviembre (26) queda pasado el horizonte")
         assertEquals(1, movimientos.count { it.nombre == "Llega tu salario (esperado)" })
+    }
+    /**
+     * Revisión de la 70 · **las compras con tarjeta sin pagar** que manda el resumen del Inicio: el gasto
+     * contado en la tarjeta en el período menos lo que entró a la tarjeta en el período. Un traspaso a la
+     * tarjeta la baja, un ajuste de saldo no; lo de otro período no cuenta.
+     */
+    @Test
+    fun `las compras con tarjeta sin pagar son las del periodo menos lo pagado en el periodo`() {
+        val desde = LocalDate.of(2026, 10, 1)
+        val hasta = LocalDate.of(2026, 11, 1)
+        transaction {
+            Accounts.insert {
+                it[id] = "tc_$duenoId"; it[userId] = duenoId; it[name] = "Master Black"; it[type] = "CREDIT_CARD"; it[balance] = 0L
+            }
+        }
+        fun enLaTarjeta(id: String, monto: Long, fecha: LocalDate, categoria: String, tipo: String) = transaction {
+            Events.insert {
+                it[Events.id] = id; it[userId] = duenoId; it[accountId] = "tc_$duenoId"; it[type] = tipo; it[amount] = monto
+                it[currency] = "COP"; it[category] = categoria; it[description] = id
+                it[timestamp] = appDateToEpochMillis(fecha) + 12 * 3_600_000L; it[reconciliationStatus] = "RECONCILED"
+            }
+        }
+        enLaTarjeta("mercado", 400_000L, LocalDate.of(2026, 10, 5), "Comida", "EXPENSE")
+        enLaTarjeta("viaje", 900_000L, LocalDate.of(2026, 10, 12), "Viajes", "EXPENSE")
+        enLaTarjeta("de-septiembre", 2_000_000L, LocalDate.of(2026, 9, 20), "Viajes", "EXPENSE")
+        enLaTarjeta("pago", 300_000L, LocalDate.of(2026, 10, 20), "Traspaso", "INCOME")
+        enLaTarjeta("ajuste", 5_000_000L, LocalDate.of(2026, 10, 21), "Ajuste de saldo", "INCOME")
+        // Un gasto de la cuenta de ahorros no es una compra con tarjeta.
+        anotar(duenoId, "almuerzo", 50_000L, LocalDate.of(2026, 10, 6), "Comida")
+        val compras = transaction {
+            val tipos = accountTypesFor(duenoId)
+            val inicio = appDateToEpochMillis(desde)
+            val fin = appDateToEpochMillis(hasta)
+            comprasConTarjetaSinPagarDe(duenoId, inicio, fin, emptySet(), tipos, movimientosDeFlujo(duenoId, inicio, fin, emptySet(), tipos))
+        }
+        assertEquals(400_000L + 900_000L - 300_000L, compras)
     }
 }

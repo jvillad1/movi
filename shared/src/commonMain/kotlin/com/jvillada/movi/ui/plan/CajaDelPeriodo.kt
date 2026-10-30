@@ -61,7 +61,6 @@ import com.jvillada.movi.ui.components.formatMoneyCompact
 import com.jvillada.movi.ui.dashboard.DashboardData
 import com.jvillada.movi.ui.dashboard.checklistDelPeriodoDe
 import com.jvillada.movi.ui.dashboard.disponibleDelInicio
-import com.jvillada.movi.shared.model.faltaPorPagar
 import com.jvillada.movi.ui.fecha.MESES_DEL_ANIO
 import com.jvillada.movi.ui.fecha.fechaEnPalabras
 import com.jvillada.movi.theme.Grafica
@@ -172,9 +171,16 @@ internal fun fraseDePuente(caja: CajaProyectada, hoy: LocalDate, comparacion: Co
     val bajo = caja.diaMasBajo
     val esHoy = bajo.fecha == hoy.toString()
     val libre = formatMoneyCompact(bajo.libre)
+    // Revisión de la 70: si el peor día es el último del horizonte, la fecha se dice una vez.
+    val esElUltimo = !esHoy && bajo.fecha == caja.alCierre.fecha
     val base = when {
-        bajo.libre < 0L -> "$hasta no te alcanza: ${if (esHoy) "hoy" else "el ${fechaCortaConDe(bajo.fecha)}"} quedarías en $libre libres"
+        bajo.libre < 0L -> "$hasta no te alcanza: " + when {
+            esHoy -> "hoy"
+            esElUltimo -> "ese día"
+            else -> "el ${fechaCortaConDe(bajo.fecha)}"
+        } + " quedarías en $libre libres"
         esHoy -> "$hasta, tu peor día es hoy: tienes $libre libres en tus cuentas"
+        esElUltimo -> "$hasta, tu peor día es ese mismo día: tendrás $libre libres en tus cuentas"
         else -> "$hasta, en tu peor día (el ${fechaCortaConDe(bajo.fecha)}) tendrás $libre libres en tus cuentas"
     }
     val habra = if (esHoy) "hay" else "habrá"
@@ -191,7 +197,8 @@ internal fun fraseDePuente(caja: CajaProyectada, hoy: LocalDate, comparacion: Co
             "en las cuentas $habra ${formatMoneyCompact(bajo.saldo)}, de eso $deEso"
         }
     }
-    val diferencia = comparacion?.let { clausulaDeLaDiferencia(caja, it, conLoLibreDeHoy = !(esHoy && bajo.libre == caja.libreHoy)) }
+    // Con el peor día hoy, la base ya dijo lo libre de hoy (la misma cifra que compara la cláusula).
+    val diferencia = comparacion?.let { clausulaDeLaDiferencia(caja, it, conLoLibreDeHoy = !esHoy) }
     return listOfNotNull(base, cuentas, diferencia).joinToString(" · ")
 }
 
@@ -205,18 +212,23 @@ private fun loReservado(caja: CajaProyectada): String = when {
 /**
  * Lo que se sabe para comparar lo libre de hoy con «Te quedan» (revisión de la 70).
  *
+ * «Lo libre de hoy» es el del primer día de la caja —al cerrar hoy, con lo que vence hoy o ya venció
+ * restado—, la MISMA cifra que la frase dice cuando el peor día es hoy: una sola cifra de «hoy».
+ *
  * @property teQuedan la cifra del héroe ([DisponibleDelPeriodo.periodo] `.teQuedan`).
- * @property fijosQueFaltan lo que falta pagar del período ([faltaPorPagar]): «Te quedan» ya lo restó y
- *   lo libre de hoy todavía no (sale el día que vence).
- * @property porRecibir lo que falta por cobrar del período: «Te quedan» ya lo cuenta y las cuentas no.
- * @property deudaDeTarjetas la deuda en pesos de las tarjetas de la lista: lo que se compró con tarjeta
- *   y todavía no salió de las cuentas.
+ * @property fijosQueFaltan los pagos del período, en pesos, que vencen **después de hoy**: «Te quedan» ya
+ *   los restó y la caja de hoy todavía no.
+ * @property porRecibir los ingresos del período, en pesos, que se esperan después de hoy: «Te quedan» ya
+ *   los cuenta y las cuentas no.
+ * @property comprasConTarjetaSinPagar las compras con tarjeta del período todavía sin pagar, medidas por
+ *   el server (`DashboardSummary.comprasConTarjetaSinPagar`): «Te quedan» las contó como gastadas y las
+ *   cuentas no. `null` si no se pudieron medir: entonces esa causa no se nombra.
  */
 internal data class ComparacionConTeQuedan(
     val teQuedan: Long,
     val fijosQueFaltan: Long,
     val porRecibir: Long,
-    val deudaDeTarjetas: Long,
+    val comprasConTarjetaSinPagar: Long?,
 )
 
 /** Hasta cuánto lo libre de hoy y «Te quedan» se dan por iguales: un redondeo no es una diferencia. */
@@ -227,31 +239,37 @@ internal const val LO_QUE_TE_QUEDA_PARA_GASTAR: String = "lo que te queda para g
 
 /**
  * **La diferencia entre lo libre de hoy y «Te quedan»**, en una cláusula, o `null` si no la hay (más de
- * [TOLERANCIA_CON_TE_QUEDAN]). Nombra la causa solo si una explica la mayor parte, y con lo que se sabe:
+ * [TOLERANCIA_CON_TE_QUEDAN]). Nombra una causa solo si **una medida** la explica, con un margen del
+ * 10 % (o $1.000):
  *
- * - **los pagos que faltan del período** (menos lo que falta por cobrar): si explican la diferencia casi
- *   entera (un 10 %), es eso —«Te quedan» ya los descontó—;
- * - **las compras con tarjeta**: si lo que sobra después de eso es la mayor parte de la diferencia, va
- *   en el sentido de «tienes más en las cuentas», y la deuda de las tarjetas lo cubre;
+ * - **los pagos que faltan del período** menos lo que falta por cobrar: si explican la diferencia entera;
+ * - **las compras con tarjeta sin pagar** (medidas, no supuestas): si lo que queda después de lo de
+ *   arriba es la mayor parte de la diferencia y las compras lo explican. No basta con tener deuda en la
+ *   tarjeta: la de una tarjeta con diferidos a 36 cuotas siempre «alcanzaría», y lo que sobra puede ser
+ *   tu parte de un gasto que pagó otro, una liquidación que te pagaron o un apartado cruzado con un fijo
+ *   del período siguiente;
  * - si no, la diferencia sola, sin inventar la causa.
  *
  * Es una explicación, no una cuenta nueva: ninguna cifra de la app cambia por esto.
  */
 internal fun clausulaDeLaDiferencia(caja: CajaProyectada, c: ComparacionConTeQuedan, conLoLibreDeHoy: Boolean = true): String? {
-    val diferencia = caja.libreHoy - c.teQuedan
+    val libreDeHoy = caja.dias.first().libre
+    val diferencia = libreDeHoy - c.teQuedan
     if (kotlin.math.abs(diferencia) <= TOLERANCIA_CON_TE_QUEDAN) return null
     val cifra = formatMoneyCompact(kotlin.math.abs(diferencia))
     val sentido = if (diferencia > 0L) "más" else "menos"
-    val inicio = if (conLoLibreDeHoy) "hoy tienes ${formatMoneyCompact(caja.libreHoy)} libres, " else ""
+    val inicio = if (conLoLibreDeHoy) "hoy tienes ${formatMoneyCompact(libreDeHoy)} libres, " else ""
     val base = "$inicio$cifra $sentido que $LO_QUE_TE_QUEDA_PARA_GASTAR"
+    val margen = maxOf(TOLERANCIA_CON_TE_QUEDAN, kotlin.math.abs(diferencia) / 10)
     val porLoQueFalta = c.fijosQueFaltan - c.porRecibir
     val resto = diferencia - porLoQueFalta
-    val casiNada = maxOf(TOLERANCIA_CON_TE_QUEDAN, kotlin.math.abs(diferencia) / 10)
+    val compras = c.comprasConTarjetaSinPagar
     val causa = when {
-        porLoQueFalta != 0L && kotlin.math.abs(resto) <= casiNada ->
+        porLoQueFalta != 0L && kotlin.math.abs(resto) <= margen ->
             if (porLoQueFalta > 0L) "ahí ya están descontados los pagos que faltan del período"
             else "ahí ya cuenta lo que falta por cobrar"
-        diferencia > 0L && resto * 2 >= diferencia && c.deudaDeTarjetas >= resto ->
+        diferencia > 0L && compras != null && compras > 0L && resto * 2 >= diferencia &&
+            kotlin.math.abs(resto - compras) <= margen ->
             "tus compras con tarjeta se pagan después"
         else -> null
     }
@@ -260,25 +278,19 @@ internal fun clausulaDeLaDiferencia(caja: CajaProyectada, c: ComparacionConTeQue
 
 /**
  * [ComparacionConTeQuedan] de lo que la pantalla tiene, o `null` si no hay «Te quedan» que comparar.
- * Las mismas funciones del héroe ([disponibleDelInicio]) y de la lista ([checklistDelPeriodoDe]).
+ * Las mismas funciones del héroe ([disponibleDelInicio]) y de la lista ([checklistDelPeriodoDe]); las
+ * compras con tarjeta, del server.
  */
 internal fun comparacionConTeQuedan(data: DashboardData, hoy: LocalDate): ComparacionConTeQuedan? {
     val disponible = disponibleDelInicio(data, hoy) ?: return null
-    val periodo = data.periodoActual ?: return null
-    val pagos = checklistDelPeriodoDe(data)
-    val delSiguiente = checklistDelPeriodo(
-        data.upcoming.orEmpty(), data.ocurrencias.orEmpty(), periodoSiguiente(periodo), data.ajustesDePeriodo,
-        conElSiguienteVencimiento = true,
-    )
-    val tarjetas = (pagos + delSiguiente)
-        .filter { it.montoEsSaldo && !it.pagado && it.moneda == "COP" }
-        .distinctBy { it.ruleId }
-        .sumOf { it.monto }
+    // Lo que vence hoy o ya venció lo resta la caja hoy: queda fuera de la explicación.
+    val porVenir = checklistDelPeriodoDe(data)
+        .filter { !it.pagado && !it.esAbono && !it.montoEsSaldo && it.moneda == "COP" && it.vence > hoy.toString() }
     return ComparacionConTeQuedan(
         teQuedan = disponible.periodo.teQuedan,
-        fijosQueFaltan = faltaPorPagar(pagos),
-        porRecibir = disponible.ingresosPorRecibir,
-        deudaDeTarjetas = tarjetas,
+        fijosQueFaltan = porVenir.filter { !it.esIngreso }.sumOf { it.monto },
+        porRecibir = porVenir.filter { it.esIngreso }.sumOf { it.monto },
+        comprasConTarjetaSinPagar = data.comprasConTarjetaSinPagar,
     )
 }
 
@@ -315,7 +327,11 @@ private fun nombreDelPeriodo(prefijo: String): String =
 
 /** De dónde sale la línea, en renglones cortos. */
 internal fun deDondeSaleLaCaja(caja: CajaProyectada): List<String> = buildList {
-    val hasta = if (caja.hastaElSalario) "hasta el día que llega tu salario" else "30 días (no tienes un ingreso fijo anotado)"
+    val hasta = when {
+        caja.hastaElSalario -> "hasta el día que llega tu salario"
+        caja.salarioQueNoCuenta -> "30 días (tu ingreso fijo no está anotado en pesos con su monto)"
+        else -> "30 días (no tienes un ingreso fijo anotado)"
+    }
     add(
         "Parte de lo que hay hoy en tus cuentas (${formatMoneyCompact(caja.tuPlataHoy)}) y mira $hasta. Resta lo que " +
             "falta de «Pagos del período», y del siguiente lo que vence antes, el día que vence (una tarjeta, su pago " +
