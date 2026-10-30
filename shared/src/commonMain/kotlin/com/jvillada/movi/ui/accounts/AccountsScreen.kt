@@ -62,6 +62,7 @@ import com.jvillada.movi.ui.components.TAG_FILA_DE_LISTA_ESQUELETO
 import com.jvillada.movi.ui.components.saldoEnSuMoneda
 import com.jvillada.movi.ui.components.signedMoney
 import com.jvillada.movi.ui.components.toUserMessage
+import kotlinx.coroutines.launch
 import com.jvillada.movi.ui.components.valorEnPesos
 import com.jvillada.movi.ui.components.ds.Chevron
 import com.jvillada.movi.ui.components.ds.Cifra
@@ -163,6 +164,9 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
     // Lectura propia —`null` = no contestó, no vacía por default— e independiente de `accounts`:
     // esta tarjeta tiene que poder aparecer aunque Cuentas siga cargando o se haya rendido.
     val creditosLeidos = rememberLectura(ClaveDeLectura.Creditos, reintento = refreshKey) { Repositories.wallets.getCredits() }
+    // Vuelta 77: «Usar este» (el saldo según el plan del crédito sin saldo) mientras guarda.
+    var usandoElDelPlan by remember { mutableStateOf(false) }
+    val alcanceDelPlan = androidx.compose.runtime.rememberCoroutineScope()
     val tarjetasLeidas = rememberLectura(ClaveDeLectura.Tarjetas, reintento = refreshKey) { Repositories.wallets.getCards() }
     // Un «Sin deudas registradas» recordado no se afirma si la lectura de esta visita falló: se
     // trata como no leído (el «No pudimos cargar» de la sección). Con deudas a la vista se quedan.
@@ -274,6 +278,22 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                                 .distinctBy { it.id },
                             creditosSinSaldo = creditos.orEmpty().filter(::creditoSinSaldo).map { it.account.id }.toSet(),
                             onCuadrar = { id -> onNavigate(id?.let { Screen.CuadrarLaCuenta(it) } ?: Screen.CuadreDeSaldos) },
+                            // Vuelta 77: lo que dice el plan del crédito sin saldo, con «Usar este».
+                            saldosDelPlan = remember(creditos) {
+                                creditos.orEmpty().mapNotNull { c ->
+                                    com.jvillada.movi.ui.credits.saldoDelPlanEnLaFicha(c, com.jvillada.movi.ui.fecha.hoyEnAppZone())?.let { c.account.id to it }
+                                }.toMap()
+                            },
+                            usandoElDelPlan = usandoElDelPlan,
+                            onUsarElDelPlan = { id, saldo ->
+                                usandoElDelPlan = true
+                                alcanceDelPlan.launch {
+                                    runCatching { Repositories.wallets.adjustCreditBalance(id, saldo) }
+                                        .onSuccess { refreshKey++ }
+                                        .onFailure { error = it.toUserMessage() }
+                                    usandoElDelPlan = false
+                                }
+                            },
                         )
                     }
                     if (conCuentas) {
@@ -516,6 +536,11 @@ private fun TarjetaDelPatrimonio(
     creditosSinSaldo: Set<String> = emptySet(),
     /** Abre Cuadre de saldos con esa deuda arriba (o sin ninguna, con varias). */
     onCuadrar: (String?) -> Unit = {},
+    /** Vuelta 77: el saldo según el plan de cada crédito sin saldo con sus condiciones completas, por id. */
+    saldosDelPlan: Map<String, com.jvillada.movi.ui.credits.ElSaldoDelPlanEnLaFicha> = emptyMap(),
+    usandoElDelPlan: Boolean = false,
+    /** «Usar este»: el ajuste de saldo de siempre del crédito [id], con esa cifra y fechado hoy. */
+    onUsarElDelPlan: (id: String, saldo: Long) -> Unit = { _, _ -> },
 ) {
     Superficie(modifier = Modifier.fillMaxWidth().testTag(TAG_TARJETA_DEL_PATRIMONIO)) {
         Text(ROTULO_DEL_PATRIMONIO_NETO, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
@@ -541,8 +566,9 @@ private fun TarjetaDelPatrimonio(
             // Los bienes: sin este renglón la cifra de arriba subía con la casa y nada decía por qué.
             if (balance.bienes > 0L) RenglonDelPatrimonio("Bienes", balance.bienes)
             if (balance.deudas > 0 || deudasSinSaldo.isNotEmpty()) RenglonDelPatrimonio("Deudas", -balance.deudas)
-            // Vuelta 59: «Deudas» es la cuenta del patrimonio (cada deuda con su signo), así que una sin
-            // saldo en Movi le resta; Créditos no la resta. Sin esta línea las dos cifras se contradecían.
+            // Vuelta 59: «Deudas» es la cuenta del patrimonio. Vuelta 77: un préstamo sin saldo cuenta
+            // cero ahí (`prestamoSinSaldo`), como en Créditos: «Deudas» y «Créditos y tarjetas» dicen lo
+            // mismo (salvo una tarjeta a favor, que sigue con su signo). La línea dice qué falta.
             // Vuelta 73: con un solo crédito con condiciones sin su saldo, se dice cuál y se ofrece
             // cargarlo, con las palabras de su ficha.
             val unCreditoSinSaldo = deudasSinSaldo.singleOrNull()?.takeIf { it.id in creditosSinSaldo }
@@ -565,6 +591,29 @@ private fun TarjetaDelPatrimonio(
                         variante = VarianteDeBoton.Fantasma,
                         tamano = TamanoDeBoton.S,
                     )
+                }
+                // Vuelta 77: con un solo crédito sin saldo y sus condiciones completas, lo que dice su plan.
+                unCreditoSinSaldo?.let { saldosDelPlan[it.id] }?.let { plan ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().testTag(com.jvillada.movi.ui.credits.TAG_SALDO_SEGUN_EL_PLAN),
+                        horizontalArrangement = Arrangement.spacedBy(Espacio.s),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            com.jvillada.movi.ui.credits.textoDelSaldoDelPlanEnLaFicha(plan),
+                            style = Movi.textos.apoyo,
+                            color = Movi.colores.textoMedio,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Boton(
+                            texto = com.jvillada.movi.ui.credits.USAR_EL_SALDO_DEL_PLAN,
+                            onClick = { onUsarElDelPlan(unCreditoSinSaldo.id, plan.saldo) },
+                            variante = VarianteDeBoton.Fantasma,
+                            tamano = TamanoDeBoton.S,
+                            cargando = usandoElDelPlan,
+                            habilitado = !usandoElDelPlan,
+                        )
+                    }
                 }
             }
         }

@@ -27,6 +27,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.platform.testTag
 import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.ui.credits.saldoDelPlanEnLaFicha
+import kotlinx.coroutines.launch
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.Apartado
 import com.jvillada.movi.shared.model.mesDelGastoDe
@@ -100,6 +102,9 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
     var loading by remember { mutableStateOf(true) }  // true de entrada: antes de la primera lectura no se afirma ni vacío ni error
     var error by remember { mutableStateOf<String?>(null) }
     var refreshKey by remember { mutableStateOf(0) }
+    // Vuelta 77: «Usar este» (el saldo según el plan) mientras guarda.
+    var usandoElDelPlan by remember { mutableStateOf(false) }
+    val alcanceDelPlan = androidx.compose.runtime.rememberCoroutineScope()
     // Ver [NoSePudoLeer]: «Sin movimientos aún» solo si la lectura contestó.
     var leida by remember { mutableStateOf(false) }
     var selectedEvent by remember { mutableStateOf<FinancialEvent?>(null) }
@@ -332,6 +337,20 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                             // La deuda sin saldo se cuadra con la hoja de siempre de la ficha.
                             onAjustarLaDeuda = deuda?.let { d -> { d.hoja = HojaDeLaDeuda.Saldo } }
                                 ?: { onNavigate(Screen.CuadrarLaCuenta(acc.id)) },
+                            // Vuelta 77: con sus condiciones completas, el saldo que da el plan, con «Usar
+                            // este» (el ajuste de saldo de siempre, fechado hoy; nunca se escribe solo).
+                            saldoDelPlan = deuda?.prestamo?.let { saldoDelPlanEnLaFicha(it, hoyEnAppZone()) },
+                            usandoElDelPlan = usandoElDelPlan,
+                            onUsarElDelPlan = { saldo ->
+                                val credito = deuda?.prestamo ?: return@EncabezadoDeLaCuenta
+                                usandoElDelPlan = true
+                                alcanceDelPlan.launch {
+                                    runCatching { Repositories.wallets.adjustCreditBalance(credito.account.id, saldo) }
+                                        .onSuccess { refreshKey++ }
+                                        .onFailure { error = it.toUserMessage() }
+                                    usandoElDelPlan = false
+                                }
+                            },
                         )
                         Spacer(Modifier.height(Medida.entreSecciones))
                     }
@@ -345,6 +364,8 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                                 deuda,
                                 // Vuelta de diseño 32: la misma hoja que «Anotar este pago» de Plan.
                                 onRegistrarPagoDeLaTarjeta = { onNavigate(Screen.QuickAdd(presetDeudaId = acc.id)) },
+                                // Vuelta 77: «Pagar la cuota de noviembre · $770.000» abre Agregar → Pagar.
+                                onPagarLaCuota = onNavigate,
                             )
                             Spacer(Modifier.height(Medida.entreSecciones))
                         }
@@ -743,6 +764,10 @@ private fun EncabezadoDeLaCuenta(
     /** Vuelta 73: «Falta el saldo de este crédito · Cargarlo» (ver `creditoSinSaldo`). */
     creditoSinSaldo: Boolean = false,
     onAjustarLaDeuda: () -> Unit = onCuadrarEsta,
+    /** Vuelta 77: «Según tu plan debes unos $X y terminas en … · Usar este» (ver `saldoDelPlanEnLaFicha`). */
+    saldoDelPlan: com.jvillada.movi.ui.credits.ElSaldoDelPlanEnLaFicha? = null,
+    usandoElDelPlan: Boolean = false,
+    onUsarElDelPlan: (Long) -> Unit = {},
 ) {
     val isCard = isDebtAccount(acc.type)
     val (typeIcon, typeLabel) = accountTypeIcon(acc.type)
@@ -822,6 +847,31 @@ private fun EncabezadoDeLaCuenta(
                         variante = VarianteDeBoton.Secundario,
                         tamano = TamanoDeBoton.S,
                     )
+                }
+                // Vuelta 77: lo que dice el plan, con un toque para usarlo. Escribe el ajuste de saldo de
+                // siempre con esa cifra, fechado hoy; nunca solo.
+                if (creditoSinSaldo && saldoDelPlan != null) {
+                    Spacer(Modifier.height(Espacio.xs))
+                    Row(
+                        modifier = Modifier.fillMaxWidth().testTag(com.jvillada.movi.ui.credits.TAG_SALDO_SEGUN_EL_PLAN),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(Espacio.s),
+                    ) {
+                        Text(
+                            com.jvillada.movi.ui.credits.textoDelSaldoDelPlanEnLaFicha(saldoDelPlan),
+                            style = Movi.textos.apoyo,
+                            color = Movi.colores.textoMedio,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Boton(
+                            texto = com.jvillada.movi.ui.credits.USAR_EL_SALDO_DEL_PLAN,
+                            onClick = { onUsarElDelPlan(saldoDelPlan.saldo) },
+                            variante = VarianteDeBoton.Fantasma,
+                            tamano = TamanoDeBoton.S,
+                            cargando = usandoElDelPlan,
+                            habilitado = !usandoElDelPlan,
+                        )
+                    }
                 }
             }
         } else {

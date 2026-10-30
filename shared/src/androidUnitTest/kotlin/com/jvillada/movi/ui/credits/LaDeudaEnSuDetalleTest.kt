@@ -145,7 +145,10 @@ class LaDeudaEnSuDetalleTest {
         composeRule.montarElDetalleDe(vehiculo.account, RepositorioDeLaDeuda(creditos = listOf(vehiculo)))
 
         assertTrue(hay("Faltan los datos de este préstamo"))
-        assertEquals(1, tocables(AJUSTAR_EL_SALDO))
+        // Vuelta 77: sin saldo, el saldo se ajusta con «Cuadrar» del encabezado (la misma hoja); «Ajustar
+        // saldo» no se repite en «Qué puedes hacer».
+        assertEquals(1, tocables(CUADRAR_LAS_DEUDAS_SIN_SALDO))
+        assertEquals(0, tocables(AJUSTAR_EL_SALDO))
         val aviso = composeRule.onNodeWithTag(TAG_FALTAN_DATOS_DE_LA_DEUDA, useUnmergedTree = true).fetchSemanticsNode()
         val saldo = composeRule.onNodeWithTag(TAG_ENCABEZADO_DE_LA_CUENTA, useUnmergedTree = true).fetchSemanticsNode()
         assertTrue(aviso.boundsInRoot.bottom <= saldo.boundsInRoot.top, "el aviso va arriba del saldo")
