@@ -39,6 +39,7 @@ import com.jvillada.movi.ui.sdui.TAG_BANDA_DEL_INICIO
 import com.jvillada.movi.ui.sdui.SduiRenderer
 import com.jvillada.movi.ui.sdui.TAG_DOS_COLUMNAS_DEL_INICIO
 import com.jvillada.movi.ui.sdui.TAG_NOMBRE_DEL_PROXIMO_PAGO
+import com.jvillada.movi.ui.sdui.TAG_SUPERFICIE_DE_LAS_ACCIONES
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -52,8 +53,8 @@ import kotlin.test.assertTrue
  * # El Inicio de la opción 3 a 360, 390 y 1.280 (la revisión de la vuelta 39)
  *
  * - Ningún círculo amarillo de la cuadrícula queda sobre la banda amarilla, en ningún ancho: la banda
- *   llega hasta media tarjeta héroe y las acciones van sobre el crema. A 1.280 la banda va solo detrás
- *   del héroe y las acciones suben a su lado (vuelta 41).
+ *   llega hasta media tarjeta héroe y las acciones van sobre el crema. A 1.280 la banda va a lo ancho,
+ *   sin muesca, y las acciones van en su superficie blanca, montada sobre ella como el héroe (vuelta 81).
  * - A 1.280 las dos columnas quedan parejas: la más corta mide al menos el 70 % de la más larga.
  * - A 360, el nombre del próximo pago no se parte («Arrien / do»).
  *
@@ -105,18 +106,16 @@ class ElInicioEnPantallaAnchaYAngostaTest {
 
     private fun montar() {
         composeRule.setContent {
-            val base = LocalDensity.current
-            CompositionLocalProvider(LocalDensity provides Density(base.density, base.fontScale * 1.12f)) {
-                MoviTheme {
-                    Box(Modifier.fillMaxSize()) {
-                        SduiRenderer(
-                            definition = defaultDashboardDefinition(),
-                            data = datos,
-                            modifier = Modifier.fillMaxSize(),
-                            onNavigate = {},
-                            conBanda = true,
-                        )
-                    }
+            // Vuelta 81: con la clase de ancho de verdad (a 1.280, la cuadrícula va en su superficie).
+            com.jvillada.movi.ConClaseDeAncho {
+                Box(Modifier.fillMaxSize()) {
+                    SduiRenderer(
+                        definition = defaultDashboardDefinition(),
+                        data = datos,
+                        modifier = Modifier.fillMaxSize(),
+                        onNavigate = {},
+                        conBanda = true,
+                    )
                 }
             }
         }
@@ -149,25 +148,28 @@ class ElInicioEnPantallaAnchaYAngostaTest {
     }
 
     /**
-     * Vuelta 41: a 1.280 la banda va solo detrás de la columna del héroe y la derecha sube a su lado. Antes
-     * cruzaba también la derecha y dejaba ~110 dp de amarillo vacío encima de las acciones.
+     * Vuelta 81: a 1.280 la banda es **una franja limpia a lo ancho** —sin la muesca de la vuelta 41, que
+     * bajaba solo por la izquierda mientras el encabezado seguía a lo ancho— y las dos columnas arrancan a
+     * la misma altura, montadas sobre ella: el héroe a la izquierda y la cuadrícula, en su superficie
+     * blanca, a la derecha. Ningún amarillo vacío encima de las acciones.
      */
     @Test
     @Config(qualifiers = "w1280dp-h3000dp-mdpi")
-    fun `a 1280 la banda no queda vacia sobre la columna derecha`() {
+    fun `a 1280 la banda es una franja a lo ancho sin muesca`() {
         montar()
-        val columnas = composeRule.onNodeWithTag(TAG_DOS_COLUMNAS_DEL_INICIO).fetchSemanticsNode().boundsInRoot
-        val mitad = columnas.left + columnas.width / 2
-        assertTrue(anchoDeLaBandaEnPx() <= mitad + 1f, "la banda (${anchoDeLaBandaEnPx()} px) cruza la mitad ($mitad px)")
+        val columnas = composeRule.onNodeWithTag(TAG_DOS_COLUMNAS_DEL_INICIO).fetchSemanticsNode()
+        val ancho = composeRule.onNodeWithTag(TAG_BANDA_DEL_INICIO).fetchSemanticsNode().boundsInRoot.width
+        assertTrue(anchoDeLaBandaEnPx() >= ancho - 1f, "la banda (${anchoDeLaBandaEnPx()} px) no llega al borde ($ancho px): muesca")
+        val mitad = columnas.boundsInRoot.left + columnas.boundsInRoot.width / 2
+        val hijos = columnas.children.map { it.boundsInRoot }
+        val arribaIzquierda = hijos.filter { it.left < mitad }.minOf { it.top }
+        val arribaDerecha = hijos.filter { it.left >= mitad }.minOf { it.top }
+        assertTrue(kotlin.math.abs(arribaIzquierda - arribaDerecha) <= 1f, "las columnas arrancan a $arribaIzquierda y $arribaDerecha px")
         val acciones = composeRule.onAllNodesWithTag(TAG_ACCION_RAPIDA).fetchSemanticsNodes()
         assertTrue(acciones.all { it.boundsInRoot.left >= mitad }, "las acciones van en la columna derecha")
         val finDeLaBanda = with(composeRule.density) { ALTO_DE_LA_BANDA_EN_EL_SCROLL.toPx() }
-        val arribaDeLasAcciones = acciones.minOf { it.boundsInRoot.top }
-        assertTrue(
-            arribaDeLasAcciones < finDeLaBanda,
-            "las acciones arrancan a $arribaDeLasAcciones px: debajo de donde acaba la banda ($finDeLaBanda px) " +
-                "quedaría un hueco encima de ellas",
-        )
+        val superficie = composeRule.onNodeWithTag(TAG_SUPERFICIE_DE_LAS_ACCIONES, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertTrue(superficie.top < finDeLaBanda, "la superficie de las acciones se monta sobre la banda, como el héroe: ${superficie.top}")
     }
 
     /** En una columna la banda sigue a todo el ancho. */
@@ -179,12 +181,24 @@ class ElInicioEnPantallaAnchaYAngostaTest {
         assertTrue(anchoDeLaBandaEnPx() >= ancho - 1f, "la banda (${anchoDeLaBandaEnPx()} px) no llega al borde ($ancho px)")
     }
 
+    /**
+     * Vuelta 81: a 1.280 ninguna acción queda **sobre** la banda: todas van dentro de su superficie blanca
+     * (el círculo amarillo de «Gasto» nunca sobre el amarillo).
+     */
     @Test
     @Config(qualifiers = "w1280dp-h3000dp-mdpi")
     fun `a 1280 ninguna accion queda sobre la banda`() {
         montar()
         assertTrue(composeRule.onAllNodesWithTag(TAG_DOS_COLUMNAS_DEL_INICIO).fetchSemanticsNodes().isNotEmpty(), "dos columnas")
-        ningunaAccionSobreLaBanda()
+        val superficie = composeRule.onNodeWithTag(TAG_SUPERFICIE_DE_LAS_ACCIONES, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        composeRule.onAllNodesWithTag(TAG_ACCION_RAPIDA).fetchSemanticsNodes().forEach { accion ->
+            val b = accion.boundsInRoot
+            assertTrue(
+                b.left >= superficie.left - 0.5f && b.right <= superficie.right + 0.5f &&
+                    b.top >= superficie.top - 0.5f && b.bottom <= superficie.bottom + 0.5f,
+                "una acción en $b sale de su superficie ($superficie)",
+            )
+        }
     }
 
     @Test
