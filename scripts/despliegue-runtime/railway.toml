@@ -1,6 +1,7 @@
 # El `railway.toml` de la carpeta que sube `scripts/desplegar.sh` (vuelta 69). El `[deploy]` es el
-# mismo del `railway.toml` de la raíz, healthcheck incluido; el `Dockerfile` es el de runtime, que
-# solo empaqueta el JAR que armó GitHub Actions.
+# mismo del `railway.toml` de la raíz, healthcheck incluido; el `Dockerfile` es el de runtime
+# (`Dockerfile.plantilla` ya lleno), que baja del release `paquete-<sha>` el JAR que armó GitHub
+# Actions y verifica su huella (vuelta 84).
 [build]
 builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
