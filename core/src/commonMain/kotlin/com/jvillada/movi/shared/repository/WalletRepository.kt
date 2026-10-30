@@ -87,6 +87,13 @@ import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.shared.model.VoidEvent
 import com.jvillada.movi.shared.model.RecategorizarEnLoteResponse
 
+/**
+ * Vuelta 82 · lo que contesta [WalletRepository.desdeCuandoLoTieneElServer] cuando el server lo tiene desde
+ * que volvió la escritura (la web), o cuando nunca va a necesitarlo (una fila anulada antes de subir: el
+ * efecto neto es cero).
+ */
+const val DESDE_LA_ESCRITURA: Long = 0L
+
 interface WalletRepository {
     suspend fun getCredits(): List<CreditSummary>
     suspend fun createCredit(request: CreateCreditRequest): CreditSummary
@@ -160,12 +167,14 @@ interface WalletRepository {
     suspend fun getDetalleDelEspacio(id: String): com.jvillada.movi.shared.model.DetalleDelEspacio =
         noLoTiene("getDetalleDelEspacio")
     /**
-     * Vuelta 82 · **¿el server ya tiene el movimiento [eventoId] tal como está acá?** (también su
-     * anulación, si la hay). Para el optimista del héroe del Inicio: una carga del server solo confirma lo
-     * que el dueño hizo si el server ya lo tenía. Contra el server (la web) siempre `true`: se escribe ahí.
-     * El espejo local del teléfono mira los sellos de sus filas. No sube nada ni lanza.
+     * Vuelta 82 · **¿desde cuándo el server tiene el movimiento [eventoId] tal como está acá?** (también
+     * su anulación, si la hay), en epoch ms; `null` si todavía no. Para el optimista del héroe del Inicio:
+     * una carga del server solo confirma lo que el dueño hizo si empezó cuando el server ya lo tenía.
+     * [DESDE_LA_ESCRITURA] es «desde que volvió la escritura»: contra el server (la web) siempre, porque se
+     * escribe ahí. El espejo local del teléfono contesta con el `syncedAt` real de sus filas. No sube nada
+     * ni lanza.
      */
-    suspend fun elServerYaTieneElMovimiento(eventoId: String): Boolean = true
+    suspend fun desdeCuandoLoTieneElServer(eventoId: String): Long? = DESDE_LA_ESCRITURA
 
     /**
      * Vuelta 82 · sube lo pendiente **ya** (una vuelta del `SyncEngine` en el teléfono; nada en la web).

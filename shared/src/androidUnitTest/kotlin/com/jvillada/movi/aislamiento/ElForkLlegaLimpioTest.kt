@@ -253,7 +253,7 @@ class ElForkLlegaLimpioTest {
         assertNull("El lector de huellas de otra clase sigue enchufado", Huella.sustitutoDePrueba)
         assertNull("El destino de un aviso tocado en otra prueba sigue pendiente", DestinoDesdeAfuera.pendiente)
         assertFalse("Un cambio del dueño de otra prueba sigue pendiente", com.jvillada.movi.ui.components.ds.CambioDelDueno.pendiente())
-        assertTrue("Un movimiento del dueño de otra prueba sigue adelantándose", com.jvillada.movi.ui.dashboard.MovimientosDelDueno.pendientes(null).isEmpty())
+        assertTrue("Un movimiento del dueño de otra prueba sigue adelantándose", com.jvillada.movi.ui.dashboard.MovimientosDelDueno.estado.value.movimientos.isEmpty())
         assertTrue("Un archivo compartido en otra prueba sigue esperando", PapelesCompartidos.pendientes.isEmpty())
         assertNull("La oferta de avisos de otra clase sigue enchufada", AvisosEnHoy.sustitutoDePrueba)
         assertNull("El repositorio de Compartir de otra clase sigue enchufado", Repositories.sustitutoDeCompartirDePrueba)

@@ -2073,13 +2073,22 @@ class LocalRepository(
     }
 
     /**
-     * Vuelta 82: el movimiento está sellado (subió) y ninguna de sus anulaciones espera subir. Una fila que
-     * no está acá (ya se borró, o nunca fue de este espejo) no espera nada.
+     * Vuelta 82: desde el `syncedAt` real del movimiento y de sus anulaciones (el más tardío), `null` si
+     * alguno espera subir. Una fila que no está acá (ya se borró, o nunca fue de este espejo) no espera
+     * nada; **una fila sin sello que ya está anulada acá tampoco** (`selectUnsynced` la excluye: nunca va
+     * a subir, y su efecto neto es cero) — sin esto, anotar sin señal y deshacer dejaba esperando para
+     * siempre.
      */
-    override suspend fun elServerYaTieneElMovimiento(eventoId: String): Boolean = enDisco {
+    override suspend fun desdeCuandoLoTieneElServer(eventoId: String): Long? = enDisco {
         val fila = db.financialEventQueries.selectById(eventoId, userId()).executeAsOneOrNull()
-        val anulacionesPorSubir = db.voidEventQueries.selectFor(eventoId).executeAsList().any { it.syncedAt == null }
-        (fila == null || fila.syncedAt != null) && !anulacionesPorSubir
+            ?: return@enDisco DESDE_LA_ESCRITURA
+        val anulaciones = db.voidEventQueries.selectFor(eventoId).executeAsList()
+        when {
+            fila.syncedAt == null && anulaciones.isNotEmpty() -> DESDE_LA_ESCRITURA
+            fila.syncedAt == null -> null
+            anulaciones.any { it.syncedAt == null } -> null
+            else -> (anulaciones.mapNotNull { it.syncedAt } + listOfNotNull(fila.syncedAt)).max()
+        }
     }
 
     /** Vuelta 82: una vuelta del ciclo del `SyncEngine`, ya (con su candado). */

@@ -116,7 +116,9 @@ import com.jvillada.movi.ui.dashboard.conteoPorRevisarDelInicio
 import com.jvillada.movi.ui.dashboard.EstadoDelHeroe
 import com.jvillada.movi.ui.dashboard.rememberEstadoQueCambia
 import com.jvillada.movi.ui.dashboard.MovimientosDelDueno
-import com.jvillada.movi.ui.dashboard.LocalCargaBuenaDelInicioEmpezadaEn
+import com.jvillada.movi.ui.dashboard.adelanto
+import com.jvillada.movi.ui.dashboard.proximoVencimiento
+import androidx.compose.runtime.collectAsState
 import com.jvillada.movi.ui.dashboard.datosConLosMovimientosDelDueno
 import androidx.compose.ui.graphics.graphicsLayer
 import com.jvillada.movi.ui.porrevisar.desgloseDePorRevisar
@@ -200,17 +202,21 @@ internal fun HeroDeUnVistazo(
     // que había cuando lo hizo ([datosConLosMovimientosDelDueno]); «Te quedan» y «Tu plata» salen de las
     // funciones de siempre y cambian juntas, en el acto. Dudoso → `null`, y se espera al server.
     val cargandoElInicio = LocalCargandoElInicio.current
-    // Revisión de la vuelta 82: el optimista vence, y nada más recompone cuando vence: se espera hasta
-    // entonces y se vuelve a mirar.
+    // Re-revisión de la vuelta 82: la base y los movimientos viven en [MovimientosDelDueno] (la base se fija
+    // al registrar el primero; no se vuelve a tomar al volver al Inicio). El optimista vence, y nada más
+    // recompone cuando vence: se espera hasta entonces, se poda y se vuelve a mirar.
+    val estadoDelOptimista by MovimientosDelDueno.estado.collectAsState()
     var vueltaPorVencimiento by remember { mutableStateOf(0) }
-    val pendientes = vueltaPorVencimiento.let { MovimientosDelDueno.pendientes(LocalCargaBuenaDelInicioEmpezadaEn.current) }
-    LaunchedEffect(pendientes) {
-        val enMs = MovimientosDelDueno.proximoVencimiento(pendientes) ?: return@LaunchedEffect
+    val ahoraDelOptimista = vueltaPorVencimiento.let { Clock.System.now().toEpochMilliseconds() }
+    LaunchedEffect(estadoDelOptimista) {
+        val enMs = estadoDelOptimista.proximoVencimiento(Clock.System.now().toEpochMilliseconds()) ?: return@LaunchedEffect
         delay(enMs + 1)
+        MovimientosDelDueno.podar()
         vueltaPorVencimiento++
     }
-    val base = remember(pendientes.firstOrNull()?.id) { data }
-    val optimista = if (pendientes.isEmpty()) null else datosConLosMovimientosDelDueno(base, pendientes, hoy)
+    val optimista = estadoDelOptimista.adelanto(ahoraDelOptimista)?.let { (base, movimientos) ->
+        datosConLosMovimientosDelDueno(base, movimientos, hoy)
+    }
     val datos = optimista ?: data
     val disponible = disponibleDelInicio(datos, hoy)
     val renglon = rememberRenglonMeAlcanza(datos, hoy)

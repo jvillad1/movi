@@ -111,14 +111,6 @@ object DashboardDataCache {
         cargadoEn = 0L
     }
 
-    /**
-     * Vuelta 82: cuándo **empezó** la última carga **buena** del Inicio (resumen y cuentas del server, sin
-     * fallar), en epoch ms; `null` si ninguna en este proceso ([cargaBuenaEmpezadaEn]). El héroe la compara
-     * con lo que hizo el dueño ([MovimientosDelDueno]): solo una carga que empezó cuando el server ya lo
-     * tenía lo trae. Revisión de la vuelta 82: era cuándo **terminaba** cualquier carga, y una que empezó
-     * antes (o que falló) soltaba el optimista con cifras que no lo traían.
-     */
-    var cargaBuenaEmpezadaEn: Long? = null
 
     /**
      * Qué bloques del Inicio ya hicieron su entrada animada (la cifra que cuenta, las barras que
@@ -131,7 +123,6 @@ object DashboardDataCache {
     fun clear() {
         data = null
         cargadoEn = 0L
-        cargaBuenaEmpezadaEn = null
         tickDeLaCarga = 0
         // El próximo que entre ve su Inicio llegar, como la primera vez.
         entradasHechas.clear()
@@ -572,15 +563,17 @@ fun DashboardScreen(
             }
             if (SessionManager.userId == usuario) InstantaneaDelInicio.delAparato.guardarDatos(usuario, instantanea)
         }
-        // Vuelta 82: antes de soltar `loading`, para que el héroe lo vea en el mismo cuadro (ver
-        // [LocalCargaBuenaDelInicioEmpezadaEn]). Solo una carga buena, y por cuándo EMPEZÓ.
-        DashboardDataCache.cargaBuenaEmpezadaEn = cargaBuenaEmpezadaEn(
-            anterior = DashboardDataCache.cargaBuenaEmpezadaEn,
+        // Vuelta 82: antes de soltar `loading`, para que el héroe lo vea en el mismo cuadro. Solo una carga
+        // buena (resumen y cuentas del server, sin fallar), y por cuándo EMPEZÓ: suelta lo que el dueño hizo
+        // y el server ya tenía cuando arrancó (ver [MovimientosDelDueno]).
+        val buena = cargaBuenaEmpezadaEn(
+            anterior = null,
             empezo = empezoLaCarga,
             resumenLlego = resumenDelInicioLlego,
             cuentasLlegaron = llegado.accounts != null,
             fallo = falloLaCarga,
         )
+        if (buena != null) MovimientosDelDueno.cargaBuenaEmpezo(buena)
         loading = false
     }
 
@@ -688,10 +681,7 @@ fun DashboardScreen(
             // `loading` — ver su KDoc para el porqué (Task 7, fix round 1).
             // Tirar hacia abajo pide lo mismo que el «Reintentar» del aviso de error: `refreshKey`
             // (ver [TirarParaActualizar]). No es otra recarga.
-            CompositionLocalProvider(
-                LocalCargandoElInicio provides loading,
-                LocalCargaBuenaDelInicioEmpezadaEn provides DashboardDataCache.cargaBuenaEmpezadaEn,
-            ) {
+            CompositionLocalProvider(LocalCargandoElInicio provides loading) {
                 TirarParaActualizar(
                     cargando = loading,
                     onActualizar = { refreshKey++ }, // TirarParaActualizar ya olvidó lo fresco

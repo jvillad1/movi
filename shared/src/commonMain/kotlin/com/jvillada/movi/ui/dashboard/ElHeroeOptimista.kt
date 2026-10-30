@@ -1,7 +1,5 @@
 package com.jvillada.movi.ui.dashboard
 
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.staticCompositionLocalOf
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.FinancialEvent
@@ -21,7 +19,12 @@ import com.jvillada.movi.ui.components.ds.VIGENCIA_DEL_CAMBIO_DEL_DUENO_MS
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import kotlinx.datetime.LocalDate
@@ -51,7 +54,7 @@ import kotlinx.datetime.LocalDate
  *    segundo antes que «Te quedan». Ahora las dos esperan juntas el final de la carga.
  *
  * El server confirma después: cuando termina **bien** una carga que **empezó** después de que el server
- * tuviera el cambio ([LocalCargaBuenaDelInicioEmpezadaEn] ≥ [MovimientoDelDueno.listoEn]), el héroe deja el
+ * tuviera el cambio ([EstadoDelOptimista.cargaBuenaEmpezadaEn] ≥ [MovimientoDelDueno.listoEn]), el héroe deja el
  * optimista y muestra lo que leyó; si difiere, la cifra cuenta hasta la del server
  * ([com.jvillada.movi.ui.components.ds.rememberCifraQueCuenta]). En el teléfono, «el server lo tiene» es
  * cuando la fila subió (ver [MovimientosDelDueno]).
@@ -61,9 +64,29 @@ import kotlinx.datetime.LocalDate
  * Un movimiento que el dueño acaba de anotar ([signo] +1) o de anular o deshacer (−1), registrado en [en]
  * (epoch ms). [listoEn] es desde cuándo **el server ya lo tiene**: `null` mientras no (la escritura del
  * dueño no terminó, o en el teléfono la fila todavía no subió). Solo una carga buena que **empezó** desde
- * [listoEn] puede traerlo, así que solo esa lo suelta.
+ * [listoEn] lo trae.
  */
 data class MovimientoDelDueno(val id: Long, val evento: FinancialEvent, val signo: Int, val en: Long, val listoEn: Long? = null)
+
+/**
+ * **Lo que el héroe adelanta**, todo en un valor (re-revisión de la vuelta 82):
+ *
+ * - [base]: los datos del Inicio **de antes** del primer movimiento, fijados al pasar de ninguno a alguno
+ *   (lo último que leyó el Inicio, `DashboardDataCache.data`). No se vuelve a tomar al volver al Inicio ni
+ *   al soltarse un movimiento: sin señal, las cuentas que se leen después ya traen el gasto del espejo local,
+ *   y retomar la base lo restaba dos veces.
+ * - [movimientos]: **todos** los que el dueño hizo desde entonces; el héroe muestra [base] con todos.
+ * - [cargaBuenaEmpezadaEn]: cuándo empezó la última carga buena del Inicio.
+ *
+ * Mientras alguno siga [pendiente], se adelanta todo sobre [base]; cuando ninguno, se suelta todo (y la
+ * [base]) y el héroe muestra lo que leyó.
+ */
+data class EstadoDelOptimista(
+    val base: DashboardData? = null,
+    val movimientos: List<MovimientoDelDueno> = emptyList(),
+    val cargaBuenaEmpezadaEn: Long? = null,
+    val siguienteId: Long = 1L,
+)
 
 /**
  * Cuánto puede quedar adelantado algo que nunca llegó al server (sin señal, o rechazado): pasado esto se
@@ -71,8 +94,45 @@ data class MovimientoDelDueno(val id: Long, val evento: FinancialEvent, val sign
  */
 const val VIGENCIA_SIN_SUBIR_MS: Long = 10 * 60_000L
 
-/** Cada cuánto se vuelve a mirar si lo que no subió ya subió (el ciclo del `SyncEngine`). */
+/** Cada cuánto, como mucho, se vuelve a mirar si lo que no subió ya subió (el ciclo del `SyncEngine`). */
 const val ESPERA_ENTRE_SUBIDAS_MS: Long = 30_000L
+
+/**
+ * ¿[m] sigue sin llegar a lo que lee el Inicio? Sin [MovimientoDelDueno.listoEn], o sin una carga buena
+ * que haya empezado desde entonces. Pura.
+ */
+fun pendiente(m: MovimientoDelDueno, cargaBuenaEmpezadaEn: Long?): Boolean {
+    val listo = m.listoEn ?: return true
+    return cargaBuenaEmpezadaEn == null || cargaBuenaEmpezadaEn < listo
+}
+
+/** Cuándo vence [m]: 15 s después de estar listo; sin estar listo, [VIGENCIA_SIN_SUBIR_MS] después de hecho. */
+fun venceEn(m: MovimientoDelDueno): Long = m.listoEn?.let { it + VIGENCIA_DEL_CAMBIO_DEL_DUENO_MS } ?: (m.en + VIGENCIA_SIN_SUBIR_MS)
+
+/**
+ * [e] sin lo que ya no se adelanta: si alguno venció, o si ya ninguno está [pendiente], se suelta todo (los
+ * movimientos y la base). Pura.
+ */
+fun EstadoDelOptimista.podado(ahora: Long): EstadoDelOptimista = when {
+    movimientos.isEmpty() -> copy(base = null)
+    movimientos.any { ahora > venceEn(it) } -> copy(base = null, movimientos = emptyList())
+    movimientos.none { pendiente(it, cargaBuenaEmpezadaEn) } -> copy(base = null, movimientos = emptyList())
+    else -> this
+}
+
+/**
+ * **Lo que el héroe adelanta ahora**: la base y todos los movimientos, o `null` si no hay nada pendiente
+ * (o falta la base: el Inicio nunca leyó nada, y el héroe espera al server). Pura.
+ */
+fun EstadoDelOptimista.adelanto(ahora: Long): Pair<DashboardData, List<MovimientoDelDueno>>? {
+    val vigente = podado(ahora)
+    val base = vigente.base ?: return null
+    return if (vigente.movimientos.isEmpty()) null else base to vigente.movimientos
+}
+
+/** En cuántos ms vence el primero de los movimientos de [e] (para recomponer entonces), o `null`. */
+fun EstadoDelOptimista.proximoVencimiento(ahora: Long): Long? =
+    movimientos.minOfOrNull { venceEn(it) - ahora }?.coerceAtLeast(0L)
 
 /**
  * **Los movimientos que el dueño acaba de hacer**, para el optimista del héroe. Los registra el aviso de
@@ -80,27 +140,37 @@ const val ESPERA_ENTRE_SUBIDAS_MS: Long = 30_000L
  * «Deshacer»): [registrar] cuando empieza, [listo] cuando su escritura terminó. Cada registro también
  * marca [CambioDelDueno]: la cifra cuenta. Lo limpia `SessionManager.clear`.
  *
- * **Revisión de la vuelta 82 · el teléfono.** Allá `postEvent` y `voidEvent` escriben en el espejo local y
- * el `SyncEngine` sube hasta 30 s después, pero el Inicio lee del server: la carga que arranca al guardar
- * leía el server **sin** el gasto, y si soltaba el optimista la cifra volvía a la vieja. Ahora [listo]
- * pregunta si el server ya lo tiene ([com.jvillada.movi.shared.repository.WalletRepository.elServerYaTieneElMovimiento]);
- * si no, pide una vuelta del `SyncEngine` ya (`subirLoPendienteAhora`), y cuando sube anota [MovimientoDelDueno.listoEn]
- * y pide recargar la pantalla a la vista. Sin señal, sigue intentando cada [ESPERA_ENTRE_SUBIDAS_MS] y el
- * optimista se queda (hasta [VIGENCIA_SIN_SUBIR_MS]). En la web el server ya lo tiene al volver la escritura.
+ * **El teléfono.** Allá `postEvent` y `voidEvent` escriben en el espejo local y el `SyncEngine` sube hasta
+ * 30 s después, pero el Inicio lee del server. [listo] pregunta
+ * [com.jvillada.movi.shared.repository.WalletRepository.desdeCuandoLoTieneElServer] (el `syncedAt` real de
+ * la fila); si todavía no, pide una vuelta del `SyncEngine` (`subirLoPendienteAhora`) y espera
+ * [ESPERA_ENTRE_SUBIDAS_MS], o menos si [despertar] avisa que algo subió (`alSubirAlgo`). Cuando sube, anota
+ * [MovimientoDelDueno.listoEn] y pide recargar la pantalla a la vista. El bucle se corta si el movimiento
+ * venció o salió. En la web el server ya lo tiene al volver la escritura.
+ *
+ * **Todo el estado es un [MutableStateFlow]** que se cambia con `update {}`: [listo] escribe desde otro hilo,
+ * y un `mutableStateOf` leído y escrito desde dos hilos podía perder un registro o revivir uno después de
+ * [limpiar].
  */
 object MovimientosDelDueno {
-    private var siguiente = 0L
-    private val lista = mutableStateOf<List<MovimientoDelDueno>>(emptyList())
+    private val _estado = MutableStateFlow(EstadoDelOptimista())
+
+    /** Lo que el héroe lee (`collectAsState`). */
+    val estado: StateFlow<EstadoDelOptimista> = _estado.asStateFlow()
+
+    private val despertador = MutableStateFlow(0)
     private val alcance = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     /** Cómo se habla con el repositorio y con la pantalla. Las pruebas lo cambian por uno sin red. */
     class Costuras(
-        val elServerLoTiene: suspend (eventoId: String) -> Boolean = { id ->
-            runCatching { com.jvillada.movi.data.Repositories.wallets.elServerYaTieneElMovimiento(id) }.getOrDefault(false)
+        val desdeCuando: suspend (eventoId: String) -> Long? = { id ->
+            runCatching { com.jvillada.movi.data.Repositories.wallets.desdeCuandoLoTieneElServer(id) }.getOrNull()
         },
         val subirAhora: suspend () -> Unit = { runCatching { com.jvillada.movi.data.Repositories.wallets.subirLoPendienteAhora() } },
         val pedirRecarga: () -> Unit = { com.jvillada.movi.data.actualizarAMano() },
-        val esperar: suspend (Long) -> Unit = { delay(it) },
+        /** La base al registrar el primero: lo último que leyó el Inicio. */
+        val base: () -> DashboardData? = { DashboardDataCache.data },
+        val ahora: () -> Long = { Clock.System.now().toEpochMilliseconds() },
     )
 
     /** Ver [Costuras]. `null`: las de la app. */
@@ -109,84 +179,89 @@ object MovimientosDelDueno {
     private val COSTURAS_DE_LA_APP = Costuras()
 
     /** El dueño empezó a anotar ([signo] +1) o anular (−1) [evento]. Devuelve su id, para [listo] o [quitar]. */
-    fun registrar(evento: FinancialEvent, signo: Int, ahora: Long = Clock.System.now().toEpochMilliseconds()): Long {
+    fun registrar(evento: FinancialEvent, signo: Int, ahora: Long = costuras.ahora()): Long {
         CambioDelDueno.marcar(ahora)
-        val m = MovimientoDelDueno(++siguiente, evento, signo, ahora)
-        lista.value = lista.value.filter { vigente(it, ahora) } + m
-        return m.id
+        val base = costuras.base
+        var id = 0L
+        _estado.update { antes ->
+            val e = antes.podado(ahora)
+            id = e.siguienteId
+            e.copy(
+                // La base se fija al pasar de ninguno a alguno, y no se vuelve a tomar hasta soltarlos todos.
+                base = if (e.movimientos.isEmpty()) base() else e.base,
+                movimientos = e.movimientos + MovimientoDelDueno(id, evento, signo, ahora),
+                siguienteId = id + 1,
+            )
+        }
+        return id
     }
 
     /**
-     * La escritura de [id] terminó (en [ahora]): si el server ya la tiene, queda lista desde [ahora]; si no
-     * (el teléfono), se sube y queda lista cuando subió, y la pantalla a la vista recarga.
+     * La escritura de [id] terminó: listo desde que el server lo tiene (nunca antes de ahora, cuando la
+     * escritura volvió). Si todavía no lo tiene (el teléfono), se sube y se espera.
      */
-    fun listo(id: Long, ahora: Long = Clock.System.now().toEpochMilliseconds()) {
-        val m = lista.value.firstOrNull { it.id == id } ?: return
+    fun listo(id: Long) {
         val c = costuras
+        val llamada = c.ahora()
+        val evento = _estado.value.movimientos.firstOrNull { it.id == id }?.evento ?: return
         alcance.launch {
-            if (c.elServerLoTiene(m.evento.id)) {
-                marcarListo(id, ahora)
-                return@launch
-            }
-            while (lista.value.any { it.id == id && it.listoEn == null }) {
-                c.subirAhora()
-                if (c.elServerLoTiene(m.evento.id)) {
-                    marcarListo(id, Clock.System.now().toEpochMilliseconds())
-                    c.pedirRecarga()
+            var vuelta = 0
+            while (true) {
+                val m = _estado.value.movimientos.firstOrNull { it.id == id } ?: return@launch
+                if (m.listoEn != null) return@launch
+                if (c.ahora() > venceEn(m)) {
+                    podar(c.ahora())
                     return@launch
                 }
-                c.esperar(ESPERA_ENTRE_SUBIDAS_MS)
+                if (vuelta > 0) c.subirAhora()
+                val desde = c.desdeCuando(evento.id)
+                if (desde != null) {
+                    marcarListo(id, maxOf(desde, llamada))
+                    if (vuelta > 0) c.pedirRecarga()
+                    return@launch
+                }
+                val visto = despertador.value
+                if (vuelta > 0) withTimeoutOrNull(ESPERA_ENTRE_SUBIDAS_MS) { despertador.first { it != visto } }
+                vuelta++
             }
         }
+    }
+
+    /** Algo subió (`alSubirAlgo` del `SyncEngine`): lo que espera vuelve a mirar ya. */
+    fun despertar() {
+        despertador.update { it + 1 }
     }
 
     /** Anota que el server tiene [id] desde [en]. */
     fun marcarListo(id: Long, en: Long) {
-        lista.value = lista.value.map { if (it.id == id && it.listoEn == null) it.copy(listoEn = en) else it }
+        _estado.update { e -> e.copy(movimientos = e.movimientos.map { if (it.id == id && it.listoEn == null) it.copy(listoEn = en) else it }) }
     }
 
     /** Lo que se registró con [id] no pasó (deshacer falló): sale. */
     fun quitar(id: Long) {
-        lista.value = lista.value.filterNot { it.id == id }
+        _estado.update { e -> e.copy(movimientos = e.movimientos.filterNot { it.id == id }).let { if (it.movimientos.isEmpty()) it.copy(base = null) else it } }
     }
 
-    /**
-     * Los que el héroe todavía tiene que adelantar: los que el server no tiene ([MovimientoDelDueno.listoEn]
-     * en `null`) y los que tiene pero ninguna carga buena **empezada** después ([cargaBuenaEmpezadaEn])
-     * trajo todavía. Una carga caída, o una que empezó antes, no suelta nada.
-     */
-    fun pendientes(cargaBuenaEmpezadaEn: Long?, ahora: Long = Clock.System.now().toEpochMilliseconds()): List<MovimientoDelDueno> =
-        lista.value.filter { m ->
-            val listo = m.listoEn
-            vigente(m, ahora) && (listo == null || cargaBuenaEmpezadaEn == null || cargaBuenaEmpezadaEn < listo)
-        }
+    /** Terminó bien una carga del Inicio que empezó en [en]: lo que ya trae se suelta. */
+    fun cargaBuenaEmpezo(en: Long, ahora: Long = costuras.ahora()) {
+        _estado.update { it.copy(cargaBuenaEmpezadaEn = en).podado(ahora) }
+    }
 
-    /** En cuántos ms vence el primero de [pendientes] (para recomponer entonces), o `null`. */
-    fun proximoVencimiento(pendientes: List<MovimientoDelDueno>, ahora: Long = Clock.System.now().toEpochMilliseconds()): Long? =
-        pendientes.minOfOrNull { venceEn(it) - ahora }?.coerceAtLeast(0L)
-
-    private fun venceEn(m: MovimientoDelDueno): Long =
-        m.listoEn?.let { it + VIGENCIA_DEL_CAMBIO_DEL_DUENO_MS } ?: (m.en + VIGENCIA_SIN_SUBIR_MS)
-
-    private fun vigente(m: MovimientoDelDueno, ahora: Long): Boolean = ahora <= venceEn(m) && ahora >= m.en
+    /** Suelta lo vencido (el héroe lo pide al vencer). */
+    fun podar(ahora: Long = costuras.ahora()) {
+        _estado.update { it.podado(ahora) }
+    }
 
     fun limpiar() {
-        lista.value = emptyList()
+        _estado.value = EstadoDelOptimista()
         costurasDePrueba = null
     }
 }
 
 /**
- * Cuándo **empezó** la última carga **buena** del Inicio (epoch ms): una que trajo el resumen y las cuentas
- * del server sin fallar. `null` si ninguna en esta sesión. La provee la pantalla del Inicio; el héroe la
- * compara con [MovimientoDelDueno.listoEn] para saber si lo que lee ya trae lo que hizo el dueño.
- */
-val LocalCargaBuenaDelInicioEmpezadaEn = staticCompositionLocalOf<Long?> { null }
-
-/**
- * **El sello de la última carga buena** (revisión de la vuelta 82): la carga que empezó en [empezo] lo
- * reemplaza solo si trajo el resumen ([resumenLlego]) y las cuentas ([cuentasLlegaron]) y nada de lo que
- * sostiene el héroe falló ([fallo]); si no, queda el [anterior]. Pura.
+ * **¿La carga que empezó en [empezo] fue buena?** Si trajo el resumen ([resumenLlego]) y las cuentas
+ * ([cuentasLlegaron]) y nada de lo que sostiene el héroe falló ([fallo]); entonces cuenta desde [empezo],
+ * si no, queda el [anterior]. Pura.
  */
 fun cargaBuenaEmpezadaEn(anterior: Long?, empezo: Long, resumenLlego: Boolean, cuentasLlegaron: Boolean, fallo: Boolean): Long? =
     if (resumenLlego && cuentasLlegaron && !fallo) empezo else anterior
