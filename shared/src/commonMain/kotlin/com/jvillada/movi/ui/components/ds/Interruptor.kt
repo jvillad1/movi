@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -93,7 +94,8 @@ fun Interruptor(
     // objetivo táctil de la app): en «Editar inicio» va suelto junto a las flechas. Lo que se ve no cambia.
     Box(
         modifier = modifier
-            .anilloDeFoco(forma)
+            // El anillo va alrededor del riel (52 × 32), no de la caja del toque (52 × 48).
+            .anilloDeFoco(forma, alrededorDeLaCaja = DpSize(Medida.anchoDelInterruptor, Medida.altoDelInterruptor))
             .alAlternar(valor = encendido, onCambiar = onCambio, habilitado = habilitado, rol = Role.Switch, forma = forma)
             .semantics {
                 interruptorEncendido = encendido
