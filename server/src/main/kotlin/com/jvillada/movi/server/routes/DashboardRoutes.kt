@@ -80,6 +80,7 @@ import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.sum
 import org.jetbrains.exposed.sql.min
 import com.jvillada.movi.shared.model.OPENING_CATEGORY
+import com.jvillada.movi.shared.model.ADJUSTMENT_CATEGORY
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.greaterEq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
@@ -160,7 +161,10 @@ fun Route.dashboardRoutes() {
                 .map { it[VoidEvents.originalEventId] }
                 .toSet()
 
-            val (income, spentByCategory) = monthCashFlow(uid, monthStart, monthEnd, voidedIds, accountTypeById)
+            // Las filas una vez: de ellas salen «Entró»/«Salió» (la suma de [monthCashFlow]) y las compras
+            // con tarjeta sin pagar (vuelta 70).
+            val movimientosDelPeriodo = movimientosDeFlujo(uid, monthStart, monthEnd, voidedIds, accountTypeById)
+            val (income, spentByCategory) = flujoDeCaja(movimientosDelPeriodo)
             // «vs. período pasado»: el mismo gasto, del período anterior a la misma altura.
             val contraElAnterior = gastoDelAnteriorAMismaAltura(uid, ahora, periodo, voidedIds, accountTypeById)
 
@@ -250,6 +254,10 @@ fun Route.dashboardRoutes() {
                 cuentaMasUsada = cuentaMasUsada(uid, ahora, voidedIds),
                 gastoDelAnteriorAMismaAltura = contraElAnterior?.first,
                 diasComparados = contraElAnterior?.second,
+                // Sin compras con tarjeta sin pagar no viaja (nulo = ninguna), como el ahorro.
+                comprasConTarjetaSinPagar = comprasConTarjetaSinPagarDe(
+                    uid, monthStart, monthEnd, voidedIds, accountTypeById, movimientosDelPeriodo,
+                ).takeIf { it > 0L },
             )
         }
         call.respond(summary)
@@ -477,6 +485,43 @@ internal fun Transaction.movimientosDeFlujo(
             )
         }
     return propios + deOtros
+}
+
+/**
+ * Vuelta 70 (revisión) · **las compras con tarjeta del período que todavía no se pagaron**: el gasto
+ * contado en cuentas de tarjeta (las filas de [movimientosDeFlujo], tu parte, en pesos) menos lo que
+ * entró a esas tarjetas en el período (pagos, traspasos, devoluciones; vivos, en pesos, fuera de «Por
+ * confirmar»; sin saldos iniciales ni ajustes). Nunca negativo. Es lo que el héroe ya contó como
+ * gastado y todavía no salió de las cuentas: la caja de Pagos lo usa para decir, solo si lo explica,
+ * por qué lo libre de hoy es más que «Te quedan». Un pago de deuda de antes del período lo achica:
+ * del lado prudente (la causa se calla).
+ */
+internal fun Transaction.comprasConTarjetaSinPagarDe(
+    uid: String,
+    desde: Long,
+    hastaExclusivo: Long,
+    voidedIds: Set<String>,
+    accountTypeById: Map<String, AccountType>,
+    movimientos: List<MovimientoDeFlujo>,
+): Long {
+    val tarjetas = accountTypeById.filterValues { it == AccountType.CREDIT_CARD }.keys
+    if (tarjetas.isEmpty()) return 0L
+    val compras = movimientos.filter { it.type == TransactionType.EXPENSE && it.accountId in tarjetas }.sumOf { it.amount }
+    if (compras <= 0L) return 0L
+    val pagos = Events.select(Events.id, Events.amount, Events.category, Events.reconciliationStatus)
+        .where {
+            (Events.userId eq uid) and
+                (Events.currency eq "COP") and
+                (Events.type eq TransactionType.INCOME.name) and
+                (Events.accountId inList tarjetas.toList()) and
+                (Events.timestamp greaterEq desde) and
+                (Events.timestamp less hastaExclusivo)
+        }
+        .filterNot { it[Events.id] in voidedIds }
+        .filterNot { esperaEnPorConfirmar(it[Events.reconciliationStatus]) }
+        .filterNot { it[Events.category] == OPENING_CATEGORY || it[Events.category] == ADJUSTMENT_CATEGORY }
+        .sumOf { it[Events.amount] }
+    return (compras - pagos).coerceAtLeast(0L)
 }
 
 /** Ingresos y gasto por categoría de [movimientos] — la suma de [monthCashFlow]. */

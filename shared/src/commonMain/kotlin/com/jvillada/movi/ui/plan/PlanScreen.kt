@@ -34,6 +34,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.History
 import com.jvillada.movi.shared.model.periodoActual
+import com.jvillada.movi.shared.model.periodoAnterior
+import com.jvillada.movi.shared.model.nombreDelMesDe
+import androidx.compose.ui.draw.alpha
+import com.jvillada.movi.shared.model.periodoDelPrefijo
+import com.jvillada.movi.shared.model.periodoSiguiente
 import com.jvillada.movi.shared.model.rangoDelPeriodo
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.Screen
@@ -159,6 +164,14 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
     val periodoDeHoy = remember(ajustesDelPeriodo) {
         periodoActual(Clock.System.now().toEpochMilliseconds(), ajustesDelPeriodo)
     }
+    // Vuelta 70 · ‹ › en «Facturas», como en Actividad: el período que se mira. `null` = el de hoy (y lo
+    // sigue si el corte llega después). Solo se va hasta el siguiente.
+    var prefijoVisible by rememberSaveable { mutableStateOf<String?>(null) }
+    val periodoVisible = prefijoVisible?.let { periodoDelPrefijo(it) } ?: periodoDeHoy
+    val viendoOtroPeriodo = enPagos && periodoVisible != periodoDeHoy
+    fun irAlPeriodo(periodo: com.jvillada.movi.shared.model.PeriodoFinanciero) {
+        prefijoVisible = periodo.prefijo.takeIf { periodo != periodoDeHoy }
+    }
     // El tablero enumera el período del dueño; mientras su corte todavía viene en camino, cualquier
     // checklist sería el del mes de calendario — y cambiaría de filas al llegar el perfil. Esqueleto.
     val esqueletoDePagos = pagos.estado.primeraLecturaEnCurso || (data.periodoActual == null && disponible.cargando)
@@ -175,12 +188,17 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
     // Las piezas de Plan, una sola vez: en una columna van todas en la misma lista; en dos, las tres
     // primeras a la izquierda y el selector con su segmento a la derecha.
     val lineaDelPeriodo: @Composable () -> Unit = {
-        LineaDelPeriodo(
-            // Vuelta 40: «Del 25 de octubre al 24 de noviembre», sin «quedan N días» (la opción 3), y
-            // **siempre**: también con el mes de calendario (corte 1, el del usuario demo), que antes
-            // se callaba por diseño —«no hay nada que aclarar»— y dejaba a Pagos sin fechas.
-            texto = lineaDelPeriodoDePagos(data),
+        // Vuelta 40: «Del 25 de octubre al 24 de noviembre», sin «quedan N días» (la opción 3), y
+        // **siempre**: también con el mes de calendario (corte 1, el del usuario demo), que antes
+        // se callaba por diseño —«no hay nada que aclarar»— y dejaba a Pagos sin fechas.
+        // Vuelta 70: con ‹ › a los lados, que mueven el período de «Facturas».
+        NavegadorDelPeriodoDePagos(
+            texto = if (viendoOtroPeriodo) rangoDelPeriodo(periodoVisible, ajustesDelPeriodo) else lineaDelPeriodoDePagos(data),
             reservar = data.periodoActual == null && disponible.cargando,
+            habilitado = enPagos && data.periodoActual != null,
+            puedeAdelante = puedeIrAlSiguiente(periodoVisible, periodoDeHoy),
+            onAnterior = { irAlPeriodo(periodoAnterior(periodoVisible)) },
+            onSiguiente = { irAlPeriodo(periodoSiguiente(periodoVisible)) },
         )
     }
     val cuantoPuedesGastar: @Composable () -> Unit = {
@@ -209,6 +227,8 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
             onNavigate = onNavigate,
             aireArriba = arriba,
             aireAbajo = abajo,
+            // Vuelta 70: sin los pagos (o sin el resumen o el perfil) la caja no se pinta con lo de antes.
+            fuenteCaida = disponible.fallo,
         )
     }
     val tusPeriodos: @Composable () -> Unit = {
@@ -231,10 +251,18 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
     fun LazyListScope.loDeAbajo(conCaja: Boolean) {
         item(key = "disponible") { cuantoPuedesGastar() }
         item(key = "tus-periodos") { tusPeriodos() }
-        if (conCaja) item(key = "caja-proyectada") { cajaProyectada(true, true) }
+        if (conCaja) item(key = "caja-proyectada") { cajaProyectada(true, false) }
+        // Revisión de la 70: el aire de abajo va siempre, y no dentro de la caja. Con la caja oculta (su
+        // fuente caída, o nada que proyectar) «Tus períodos» quedaba pegado a «Lo que se repite al mes».
+        if (conCaja) item(key = "aire-despues-de-la-caja") { Spacer(Modifier.height(Medida.entreSecciones)) }
     }
     fun LazyListScope.segmentoElegido(dosColumnas: Boolean) {
-        if (enPagos) {
+        if (viendoOtroPeriodo) {
+            // Vuelta 70: otro período a la vista: solo su lista, de solo lectura. El disponible, «Tus
+            // períodos» y la caja son del período en curso (en dos columnas siguen a la izquierda).
+            item(key = "aire-de-pagos") { Spacer(Modifier.height(AIRE_DEBAJO_DEL_SELECTOR)) }
+            pagosDeOtroPeriodo(periodoVisible, periodoDeHoy, ajustesDelPeriodo, pagos.estado)
+        } else if (enPagos) {
             item(key = "aire-de-pagos") { Spacer(Modifier.height(AIRE_DEBAJO_DEL_SELECTOR)) }
             val caja: (LazyListScope.() -> Unit)? = if (dosColumnas) null else {
                 { loDeAbajo(conCaja = true) }
@@ -311,19 +339,41 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
                             .verticalScroll(scrollDelDisponible)
                             .padding(bottom = Medida.botonFlotante + Espacio.xl),
                     ) {
-                        lineaDelPeriodo()
-                        cuantoPuedesGastar()
-                        tusPeriodos()
-                        cajaProyectada(true, false)
+                        // Revisión de la 70: el navegador ‹ › va a la derecha, encima de «Facturas |
+                        // Presupuestos», que es lo que mueve. Mirando otro período, esta columna sigue
+                        // siendo la del período en curso: lo dice y se atenúa.
+                        // El renglón tiene el alto del navegador de la derecha, con rótulo o sin él: la
+                        // tarjeta queda a la altura del selector y nada se corre al cambiar de período.
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(Medida.objetivoTactil + Espacio.xs)
+                                .padding(horizontal = Medida.margenDePantalla),
+                            contentAlignment = Alignment.CenterStart,
+                        ) {
+                            if (viendoOtroPeriodo) {
+                                Text(
+                                    text = "$PERIODO_EN_CURSO · ${nombreDelMesDe(periodoDeHoy)}",
+                                    style = Movi.textos.apoyo,
+                                    color = Movi.colores.textoMedio,
+                                    modifier = Modifier.testTag(TAG_PERIODO_EN_CURSO),
+                                )
+                            }
+                        }
+                        Column(modifier = Modifier.alpha(if (viendoOtroPeriodo) OPACIDAD_DE_LO_ATENUADO else 1f)) {
+                            cuantoPuedesGastar()
+                            tusPeriodos()
+                            cajaProyectada(true, false)
+                        }
                     }
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.weight(1f).fillMaxHeight().testTag(TAG_COLUMNA_DE_LOS_PAGOS),
                         contentPadding = PaddingValues(bottom = Medida.botonFlotante + Espacio.xl),
                     ) {
+                        item(key = "periodo") { lineaDelPeriodo() }
                         item(key = "segmentos") {
-                            // A la altura de la línea del período de la izquierda (su aire `corto`).
-                            Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(top = Espacio.xs)) {
+                            Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla)) {
                                 selector()
                             }
                         }
@@ -356,44 +406,6 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS) {
         HojasDePresupuestos(presupuestos)
     }
     } // CompositionLocalProvider
-}
-
-/**
- * «Del 25 de agosto al 24 de septiembre · quedan 9 días» — la misma línea que el hero del Inicio
- * ([encabezadoDelPeriodo]). Vuelta 40: va siempre, también con el mes de calendario (ver
- * [lineaDelPeriodoDePagos]); lo que sigue es la historia de antes: con el mes de calendario no se pintaba, igual
- * que allá. [reservar]: el perfil (de donde sale el período) todavía viene en camino y la última vez
- * la línea iba — un esqueleto de su alto, para que al llegar no empuje la tarjeta de abajo.
- */
-@Composable
-private fun LineaDelPeriodo(texto: String?, reservar: Boolean) {
-    // El aire de arriba es de la línea y no del encabezado: el encabezado lo comparten todas las
-    // pantallas y su respiro de abajo (`medio`) es para el título solo; esta línea es otra cosa y
-    // sin su propio aire quedaba pegada a él.
-    // Sin línea (mes de calendario) no hay nada a lo que darle aire: quedan solo los `amplio` de
-    // abajo, como siempre, y no 8 + 16 vacíos sobre la tarjeta.
-    val hayLinea = texto != null || reservar
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = Medida.margenDePantalla).then(
-            if (hayLinea) Modifier.padding(top = Espacio.xs) else Modifier,
-        ),
-    ) {
-        when {
-            // Vuelta 40: en texto medio (era apagado), como en la maqueta.
-            texto != null -> Text(
-                text = texto,
-                style = Movi.textos.apoyo,
-                color = Movi.colores.textoMedio,
-                modifier = Modifier.testTag(TAG_LINEA_DEL_PERIODO_DE_PLAN),
-            )
-            reservar -> LineaEsqueleto(
-                fraccionDelAncho = 0.7f,
-                estilo = Movi.textos.apoyo,
-                modifier = Modifier.testTag(TAG_LINEA_DEL_PERIODO_DE_PLAN_ESQUELETO),
-            )
-        }
-        Spacer(Modifier.height(Espacio.m))
-    }
 }
 
 /**

@@ -1148,4 +1148,14 @@ data class UpcomingPayment(
     val dueDate: String,    // ISO "2026-06-05", current month
     val daysUntil: Int,     // negative if overdue
     val status: PaymentStatus,
+    /**
+     * Vuelta 70 · **el vencimiento que viene después de [dueDate]**, ISO, ya calculado por el server con
+     * `dueDateFor` (como si [dueDate] estuviera saldado) y `fechaEsperadaDelIngreso`; `null` en un pago
+     * único, o de un server anterior. Existe porque [dueDate] no rueda mientras su ocurrencia siga
+     * pendiente: el día del salario, sin emparejar, el período siguiente no tenía su salario (ni el
+     * Carro del 26) y la caja caía a 30 días. Lo usa [checklistDelPeriodo] solo para el período
+     * siguiente (`conElSiguienteVencimiento`), y solo si [dueDate] cae antes: nunca cuenta dos veces.
+     * Un APK viejo lo ignora (default `null`).
+     */
+    val siguienteVencimiento: String? = null,
 )

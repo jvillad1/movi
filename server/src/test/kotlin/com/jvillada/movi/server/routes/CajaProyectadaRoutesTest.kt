@@ -3,6 +3,7 @@ package com.jvillada.movi.server.routes
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import com.jvillada.movi.server.ai.textoDeLaCaja
+import com.jvillada.movi.server.balance.accountTypesFor
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Apartados
 import com.jvillada.movi.server.db.Cards
@@ -40,6 +41,8 @@ import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.update
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.time.LocalDate
 import java.util.Date
@@ -195,7 +198,9 @@ class CajaProyectadaRoutesTest {
         val caja = assertNotNull(d.caja)
         assertEquals(5_000_000L, caja.tuPlataHoy)
         assertEquals(hoy.toString(), caja.dias.first().fecha)
-        assertEquals(hoy.withDayOfMonth(hoy.lengthOfMonth()).toString(), caja.alCierre.fecha)
+        // Vuelta 70: sin un ingreso recurrente la caja mira 30 días (nunca menos que el cierre del mes).
+        assertEquals(hoy.plusDays(30).toString(), caja.alCierre.fecha)
+        assertTrue(!caja.hastaElSalario)
         assertEquals(listOf("Gimnasio"), caja.dias.first().movimientos.map { it.nombre })
         assertEquals(4_820_000L, caja.alCierre.saldo, "sin período cerrado no hay gasto del día a día que restar")
         assertNull(d.gasto.porDia)
@@ -218,10 +223,125 @@ class CajaProyectadaRoutesTest {
                 gasto = GastoDelDiaADia(100_000L, listOf(GastoVariableDeUnPeriodo("2026-09", 3_100_000L, 31))),
             ),
         )
-        assertTrue("Tu plata hoy: 1000000" in texto, texto)
+        assertTrue("En sus cuentas hoy: 1000000" in texto, texto)
+        assertTrue("Libre hoy: 1000000" in texto, texto)
         assertTrue("SUPUESTO: gasta como siempre, 100000 por día" in texto, texto)
         assertTrue("2026-09: 3100000 en 31 días" in texto, texto)
         assertTrue("NO ENTRAN" in texto && "AMEX: falta el pago mínimo" in texto, texto)
-        assertTrue("PRIMER DÍA EN NEGATIVO: 2026-10-17, queda en -3201123 por Cuota Vehiculo 8761 (4101123)" in texto, texto)
+        assertTrue("PRIMER DÍA EN NEGATIVO: 2026-10-17, lo libre queda en -3201123 (saldo -3201123) por Cuota Vehiculo 8761 (4101123)" in texto, texto)
+        assertTrue("30 días desde hoy" in texto, texto)
+    }
+
+    /**
+     * Vuelta 70: Movi AI arma la caja con la MISMA función de Pagos: hasta el salario, con el pago del
+     * período siguiente que vence antes, y lo libre sin el ahorro del período (que no cambia el saldo).
+     * Fecha fija (revisión de la 70): martes 20-oct-2026, mes de calendario. El salario y el internet del
+     * 1 ya se saldaron en octubre, así que los dos vencen el 1-nov, en el período siguiente.
+     */
+    @Test
+    fun `la caja de movi ai llega al salario, cuenta el pago del siguiente y lo libre sin el ahorro`() {
+        val dia = LocalDate.of(2026, 10, 20)
+        anotar(duenoId, "apertura", 5_000_000L, dia, OPENING_CATEGORY, tipo = "INCOME")
+        transaction {
+            RecurringRules.insert {
+                it[id] = "rr_salario"; it[userId] = duenoId; it[name] = "Salario"; it[category] = "Ingreso"
+                it[amount] = 7_000_000L; it[dayOfMonth] = 1; it[type] = "INCOME"
+            }
+            RecurringRules.insert {
+                it[id] = "rr_internet"; it[userId] = duenoId; it[name] = "Internet"; it[category] = "Servicios"
+                it[amount] = 100_000L; it[dayOfMonth] = 1; it[type] = "EXPENSE"
+            }
+            listOf("rr_salario", "rr_internet").forEach { regla ->
+                RecurringOccurrences.insert {
+                    it[userId] = duenoId; it[ruleId] = regla; it[period] = "2026-10"; it[confirmedAt] = 1L
+                }
+            }
+            Users.update({ Users.id eq duenoId }) {
+                it[ahorroDelPeriodoTipo] = "MONTO"; it[ahorroDelPeriodoValor] = 2_000_000L
+            }
+        }
+        val d = runBlocking { cajaProyectadaDe(duenoId, dia) }
+        val caja = assertNotNull(d.caja)
+        assertEquals("2026-11-01", caja.alCierre.fecha)
+        assertTrue(caja.hastaElSalario)
+        assertEquals(
+            setOf(MovimientoDeLaCaja("Llega tu salario (esperado)", 7_000_000L), MovimientoDeLaCaja("Internet", -100_000L)),
+            caja.alCierre.movimientos.toSet(),
+            "el pago del período siguiente entra el día que vence",
+        )
+        assertEquals(5_000_000L, caja.tuPlataHoy, "el ahorro no mueve plata")
+        assertEquals(2_000_000L, caja.ahorro)
+        assertEquals(3_000_000L, caja.libreHoy)
+        assertTrue(caja.dias.all { it.saldo - it.libre == 2_000_000L })
+        assertTrue("NO ES LIBRE: 2000000 de ahorro" in textoDeLaCaja(d), textoDeLaCaja(d))
+    }
+
+    /**
+     * Revisión de la 70 · **el día del salario sin emparejar**, con el corte del dueño (25, día hábil
+     * anterior): el viernes 23-oct arranca el período y el salario no llegó todavía. Su vencimiento
+     * vigente se queda hoy, y el del período siguiente llega por `siguienteVencimiento`: la caja cierra
+     * en el salario del 25-nov, no a 30 días. El Carro del 26 entra una vez (el de octubre).
+     */
+    @Test
+    fun `el dia del salario sin emparejar la caja cierra en el salario siguiente`() {
+        val dia = LocalDate.of(2026, 10, 23)
+        anotar(duenoId, "apertura", 5_000_000L, dia, OPENING_CATEGORY, tipo = "INCOME")
+        transaction {
+            Users.update({ Users.id eq duenoId }) {
+                it[periodCutoffDay] = 25; it[periodWeekendRule] = "DIA_HABIL_ANTERIOR"
+            }
+            RecurringRules.insert {
+                it[id] = "rr_salario"; it[userId] = duenoId; it[name] = "Salario"; it[category] = "Ingreso"
+                it[amount] = 9_000_000L; it[dayOfMonth] = 25; it[type] = "INCOME"
+            }
+            RecurringRules.insert {
+                it[id] = "rr_carro"; it[userId] = duenoId; it[name] = "Carro"; it[category] = "Créditos"
+                it[amount] = 980_000L; it[dayOfMonth] = 26; it[type] = "EXPENSE"
+            }
+        }
+        val d = runBlocking { cajaProyectadaDe(duenoId, dia) }
+        val caja = assertNotNull(d.caja)
+        assertEquals("2026-11-25", caja.alCierre.fecha)
+        assertTrue(caja.hastaElSalario)
+        assertEquals(MovimientoDeLaCaja("Llega tu salario (esperado)", 9_000_000L), caja.salario)
+        val movimientos = caja.dias.flatMap { it.movimientos }
+        assertEquals(1, movimientos.count { it.nombre == "Carro" }, "el Carro de noviembre (26) queda pasado el horizonte")
+        assertEquals(1, movimientos.count { it.nombre == "Llega tu salario (esperado)" })
+    }
+    /**
+     * Revisión de la 70 · **las compras con tarjeta sin pagar** que manda el resumen del Inicio: el gasto
+     * contado en la tarjeta en el período menos lo que entró a la tarjeta en el período. Un traspaso a la
+     * tarjeta la baja, un ajuste de saldo no; lo de otro período no cuenta.
+     */
+    @Test
+    fun `las compras con tarjeta sin pagar son las del periodo menos lo pagado en el periodo`() {
+        val desde = LocalDate.of(2026, 10, 1)
+        val hasta = LocalDate.of(2026, 11, 1)
+        transaction {
+            Accounts.insert {
+                it[id] = "tc_$duenoId"; it[userId] = duenoId; it[name] = "Master Black"; it[type] = "CREDIT_CARD"; it[balance] = 0L
+            }
+        }
+        fun enLaTarjeta(id: String, monto: Long, fecha: LocalDate, categoria: String, tipo: String) = transaction {
+            Events.insert {
+                it[Events.id] = id; it[userId] = duenoId; it[accountId] = "tc_$duenoId"; it[type] = tipo; it[amount] = monto
+                it[currency] = "COP"; it[category] = categoria; it[description] = id
+                it[timestamp] = appDateToEpochMillis(fecha) + 12 * 3_600_000L; it[reconciliationStatus] = "RECONCILED"
+            }
+        }
+        enLaTarjeta("mercado", 400_000L, LocalDate.of(2026, 10, 5), "Comida", "EXPENSE")
+        enLaTarjeta("viaje", 900_000L, LocalDate.of(2026, 10, 12), "Viajes", "EXPENSE")
+        enLaTarjeta("de-septiembre", 2_000_000L, LocalDate.of(2026, 9, 20), "Viajes", "EXPENSE")
+        enLaTarjeta("pago", 300_000L, LocalDate.of(2026, 10, 20), "Traspaso", "INCOME")
+        enLaTarjeta("ajuste", 5_000_000L, LocalDate.of(2026, 10, 21), "Ajuste de saldo", "INCOME")
+        // Un gasto de la cuenta de ahorros no es una compra con tarjeta.
+        anotar(duenoId, "almuerzo", 50_000L, LocalDate.of(2026, 10, 6), "Comida")
+        val compras = transaction {
+            val tipos = accountTypesFor(duenoId)
+            val inicio = appDateToEpochMillis(desde)
+            val fin = appDateToEpochMillis(hasta)
+            comprasConTarjetaSinPagarDe(duenoId, inicio, fin, emptySet(), tipos, movimientosDeFlujo(duenoId, inicio, fin, emptySet(), tipos))
+        }
+        assertEquals(400_000L + 900_000L - 300_000L, compras)
     }
 }

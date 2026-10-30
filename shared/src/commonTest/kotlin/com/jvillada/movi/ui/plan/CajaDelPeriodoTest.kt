@@ -35,48 +35,171 @@ class CajaDelPeriodoTest {
         DiaDeLaCaja(fecha, saldo, movimientos.map { MovimientoDeLaCaja(it.first, it.second) })
 
     @Test
-    fun `el dia mas bajo nombra el pago de ese dia`() {
+    fun `una sola frase con la cifra libre, hasta el salario, y el peor dia`() {
         val caja = CajaProyectada(
             tuPlataHoy = 12_900_000L,
             gastoDiario = null,
             dias = listOf(
                 dia("2026-10-02", 12_900_000L),
                 dia("2026-10-17", 8_798_877L, "Cuota Vehiculo 8761" to -4_101_123L),
-                dia("2026-10-20", 17_798_877L, "Sueldo" to 9_000_000L),
+                dia("2026-10-25", 17_798_877L, "Llega tu salario (esperado)" to 9_000_000L),
             ),
+            hastaElSalario = true,
         )
-        assertEquals("El 17 de octubre tu saldo proyectado es \$8,8M, el día de Cuota Vehiculo 8761", fraseDelDiaMasBajo(caja, hoy))
+        assertEquals("Hasta el 25 de oct, en tu peor día (el 17 de oct) tendrás \$8,8M libres en tus cuentas", fraseDePuente(caja, hoy))
+        assertTrue("te quedan" !in fraseDePuente(caja, hoy), "el verbo de «Te quedan» es del héroe")
         assertNull(fraseDelRojo(caja, hoy))
     }
 
+    /** El ejemplo de la revisión 4: «Te quedan» descuenta el ahorro y la caja ahora también. */
     @Test
-    fun `sin pago ese dia, el dia mas bajo es la vispera del sueldo`() {
+    fun `con ahorro la frase dice lo libre y lo que habra en las cuentas, una vez`() {
+        val ahorro = 8_000_000L
         val caja = CajaProyectada(
-            tuPlataHoy = 3_000_000L,
-            gastoDiario = 100_000L,
+            tuPlataHoy = 10_500_000L,
+            gastoDiario = null,
             dias = listOf(
-                dia("2026-10-18", 3_000_000L),
-                dia("2026-10-19", 2_900_000L),
-                dia("2026-10-20", 11_800_000L, "Sueldo" to 9_000_000L),
+                DiaDeLaCaja("2026-10-29", 10_500_000L, libre = 10_500_000L - ahorro),
+                DiaDeLaCaja("2026-11-05", 6_137_000L, listOf(MovimientoDeLaCaja("Arriendo", -1_800_000L)), libre = 6_137_000L - ahorro),
+                DiaDeLaCaja("2026-11-25", 13_137_000L, listOf(MovimientoDeLaCaja("Llega tu salario (esperado)", 7_000_000L)), libre = 13_137_000L - ahorro),
+            ),
+            ahorro = ahorro,
+            hastaElSalario = true,
+        )
+        val frase = fraseDePuente(caja, LocalDate(2026, 10, 29))
+        // Revisión de la 70: con el ahorro más grande que el saldo no dice «de eso $8M es tu ahorro» sobre $6,1M.
+        assertEquals(
+            "Hasta el 25 de nov no te alcanza: el 5 de nov quedarías en −\$1,9M libres · en las cuentas habrá \$6,1M: " +
+                "menos que tu ahorro de \$8M",
+            frase,
+        )
+        assertEquals(
+            "Hasta el 25 de nov no te alcanza: el 5 de nov quedarías en −\$2,4M libres · en las cuentas habrá \$6,1M: " +
+                "menos que tu ahorro y lo apartado (\$8,5M)",
+            fraseDePuente(
+                caja.copy(apartado = 500_000L, dias = caja.dias.map { it.copy(libre = it.saldo - 8_500_000L) }),
+                LocalDate(2026, 10, 29),
             ),
         )
-        assertTrue(fraseDelDiaMasBajo(caja, hoy).endsWith("un día antes de que llegue Sueldo"), fraseDelDiaMasBajo(caja, hoy))
+        // La cifra de las cuentas sale una sola vez en toda la sección: ni la leyenda ni la gráfica la repiten.
+        assertEquals("Llega tu salario: +\$7M", leyendaDelCierre(caja))
+        assertEquals("Libre el 25 nov, al llegar tu salario: \$5,1M", descripcionDelCierre(caja))
     }
 
     @Test
-    fun `una fecha en negativo se dice con el pago que la causa`() {
+    fun `con un apartado lo dice tambien, y si el peor dia es hoy dice hay`() {
+        val caja = CajaProyectada(
+            tuPlataHoy = 5_000_000L,
+            gastoDiario = null,
+            dias = listOf(DiaDeLaCaja("2026-10-02", 5_000_000L, libre = 3_000_000L), DiaDeLaCaja("2026-10-03", 5_100_000L, libre = 3_100_000L)),
+            ahorro = 1_500_000L,
+            apartado = 500_000L,
+        )
+        assertEquals(
+            "Hasta el 3 de oct, tu peor día es hoy: tienes \$3M libres en tus cuentas · en las cuentas hay \$5M, de eso " +
+                "\$1,5M es tu ahorro y \$500.000 está apartado",
+            fraseDePuente(caja, hoy),
+        )
+        assertEquals(TOCA_UN_DIA, leyendaDelCierre(caja))
+    }
+
+    // ── Lo libre de hoy contra «Te quedan» (revisión de la 70) ──────────────
+
+    /** El héroe dice «Te quedan $1,5M»; las cuentas tienen $2,6M libres hoy y $1,6M de deuda de tarjeta. */
+    private val conAhorro = CajaProyectada(
+        tuPlataHoy = 10_600_000L,
+        gastoDiario = null,
+        dias = listOf(
+            DiaDeLaCaja("2026-10-29", 10_600_000L, libre = 2_600_000L),
+            DiaDeLaCaja("2026-11-05", 10_000_000L, listOf(MovimientoDeLaCaja("Arriendo", -600_000L)), libre = 2_000_000L),
+        ),
+        ahorro = 8_000_000L,
+    )
+    private val octubre29 = LocalDate(2026, 10, 29)
+
+    @Test
+    fun `la diferencia con te quedan por las compras con tarjeta se nombra si las compras la explican`() {
+        val c = ComparacionConTeQuedan(teQuedan = 1_500_000L, fijosQueFaltan = 0L, porRecibir = 0L, comprasConTarjetaSinPagar = 1_080_000L)
+        assertEquals("hoy tienes \$2,6M libres, \$1,1M más que lo que te queda para gastar: tus compras con tarjeta se pagan después", clausulaDeLaDiferencia(conAhorro, c))
+        // El peor día es el último del horizonte: la fecha va una vez.
+        assertEquals(
+            "Hasta el 5 de nov, tu peor día es ese mismo día: tendrás \$2M libres en tus cuentas · en las cuentas habrá \$10M, " +
+                "de eso \$8M es tu ahorro · hoy tienes \$2,6M libres, \$1,1M más que lo que te queda para gastar: tus compras " +
+                "con tarjeta se pagan después",
+            fraseDePuente(conAhorro, octubre29, c),
+        )
+    }
+
+    /**
+     * Revisión de la 70 · **los contraejemplos**: tener deuda en la tarjeta no prueba la causa. Lo que sobra
+     * puede ser tu parte de un gasto que pagó otro (Espacios), una liquidación que te pagaron o un apartado
+     * cruzado con un fijo del período siguiente. Solo las compras **medidas** que lo explican la nombran.
+     */
+    @Test
+    fun `sin compras con tarjeta medidas que la expliquen la diferencia se dice sin causa`() {
+        val sinMedir = ComparacionConTeQuedan(teQuedan = 1_500_000L, fijosQueFaltan = 0L, porRecibir = 0L, comprasConTarjetaSinPagar = null)
+        val sinCausa = "hoy tienes \$2,6M libres, \$1,1M más que lo que te queda para gastar"
+        assertEquals(sinCausa, clausulaDeLaDiferencia(conAhorro, sinMedir), "sin medirlas no se nombran")
+        // Lo que sobra es tu parte de un gasto de Espacios o una liquidación: las compras medidas son poquitas.
+        assertEquals(sinCausa, clausulaDeLaDiferencia(conAhorro, sinMedir.copy(comprasConTarjetaSinPagar = 300_000L)))
+        // La Master Black con diferidos a 36 cuotas: muchas compras sin pagar, mucho más que la diferencia.
+        assertEquals(sinCausa, clausulaDeLaDiferencia(conAhorro, sinMedir.copy(comprasConTarjetaSinPagar = 5_000_000L)))
+        // Sin compras sin pagar (todas pagadas en el período).
+        assertEquals(sinCausa, clausulaDeLaDiferencia(conAhorro, sinMedir.copy(comprasConTarjetaSinPagar = 0L)))
+    }
+
+    /**
+     * Revisión de la 70: con el peor día hoy y un pago que vence hoy, la frase decía dos cifras de «hoy»
+     * ($2M en la base y $2,6M en la cláusula). Ahora la cláusula compara lo libre al cerrar hoy, la misma
+     * cifra de la base, y no la repite.
+     */
+    @Test
+    fun `con el peor dia hoy y un pago de hoy hay una sola cifra de hoy`() {
+        val conPagoHoy = CajaProyectada(
+            tuPlataHoy = 10_600_000L,
+            gastoDiario = null,
+            dias = listOf(
+                DiaDeLaCaja("2026-10-29", 10_000_000L, listOf(MovimientoDeLaCaja("Arriendo", -600_000L)), libre = 2_000_000L),
+                DiaDeLaCaja("2026-11-05", 10_100_000L, libre = 2_100_000L),
+            ),
+            ahorro = 8_000_000L,
+        )
+        val c = ComparacionConTeQuedan(teQuedan = 1_500_000L, fijosQueFaltan = 0L, porRecibir = 0L, comprasConTarjetaSinPagar = 500_000L)
+        val frase = fraseDePuente(conPagoHoy, octubre29, c)
+        assertEquals(
+            "Hasta el 5 de nov, tu peor día es hoy: tienes \$2M libres en tus cuentas · en las cuentas hay \$10M, de eso \$8M es " +
+                "tu ahorro · \$500.000 más que lo que te queda para gastar: tus compras con tarjeta se pagan después",
+            frase,
+        )
+        assertTrue("2,6M" !in frase, "lo libre antes de los pagos de hoy no aparece")
+    }
+
+    @Test
+    fun `si coinciden con te quedan, hasta mil pesos, no se dice nada`() {
+        val c = ComparacionConTeQuedan(teQuedan = 2_599_200L, fijosQueFaltan = 0L, porRecibir = 0L, comprasConTarjetaSinPagar = null)
+        assertNull(clausulaDeLaDiferencia(conAhorro, c))
+        assertTrue("lo que te queda para gastar" !in fraseDePuente(conAhorro, octubre29, c))
+    }
+
+    @Test
+    fun `el primer dia que no alcanza se dice con el pago que lo causa si no es el peor`() {
         val caja = CajaProyectada(
             tuPlataHoy = 1_000_000L,
             gastoDiario = null,
             dias = listOf(
                 dia("2026-10-02", 1_000_000L),
-                dia("2026-10-17", -3_101_123L, "Cuota Vehiculo 8761" to -4_101_123L),
+                dia("2026-10-10", -100_000L, "Gimnasio" to -1_100_000L),
+                dia("2026-10-17", -4_201_123L, "Cuota Vehiculo 8761" to -4_101_123L),
             ),
         )
         val rojo = fraseDelRojo(caja, hoy)
         assertNotNull(rojo)
-        assertTrue(rojo.startsWith("El 17 de octubre quedarías en"), rojo)
-        assertTrue("por Cuota Vehiculo 8761 (\$4.101.123)" in rojo, rojo)
+        assertTrue(rojo.startsWith("El 10 de octubre ya quedarías en"), rojo)
+        assertTrue("por Gimnasio (\$1.100.000)" in rojo, rojo)
+        // El peor día es el último: la fecha se dice una vez.
+        assertTrue(fraseDePuente(caja, hoy).startsWith("Hasta el 17 de oct no te alcanza: ese día quedarías en"), fraseDePuente(caja, hoy))
+        // Si el primero en rojo es el peor, ya lo dice la frase de puente: no se repite.
+        assertNull(fraseDelRojo(caja.copy(dias = caja.dias.take(2)), hoy))
     }
 
     @Test
@@ -121,9 +244,42 @@ class CajaDelPeriodoTest {
         val caja = cajaDelPeriodoDe(data, GastoDelDiaADia(), hoy)
         assertNotNull(caja)
         assertEquals(5_000_000L, caja.tuPlataHoy, "la tarjeta es deuda: no está en Tu plata")
-        assertEquals("2026-10-24", caja.alCierre.fecha)
+        // Vuelta 70: sin un ingreso recurrente la caja mira 30 días.
+        assertEquals("2026-11-01", caja.alCierre.fecha)
         assertEquals(3_000_000L, caja.alCierre.saldo)
         assertNull(cajaDelPeriodoDe(data.copy(ocurrencias = null), GastoDelDiaADia(), hoy), "sin la lista no se proyecta")
+    }
+
+    /**
+     * Vuelta 70: la sección mira hasta el salario, cuenta el pago del período siguiente que vence antes y
+     * descuenta el ahorro del período de lo libre (el mismo de «Te quedan»).
+     */
+    @Test
+    fun `la caja de pagos llega al salario, con el pago del siguiente y sin el ahorro en lo libre`() {
+        val octubre = LocalDate(2026, 10, 29)
+        fun regla(id: String, monto: Long, dia: Int, tipo: TransactionType = TransactionType.EXPENSE) =
+            RecurringRule(id = id, name = id, category = "Varios", amount = monto, dayOfMonth = dia, type = tipo)
+        val data = DashboardData(
+            accounts = listOf(Account("a1", "Bancolombia", AccountType.SAVINGS, 10_500_000L, "COP")),
+            upcoming = listOf(
+                UpcomingPayment(regla("Varios", 9_000L, 30), "2026-10-30", 1, PaymentStatus.UPCOMING),
+                UpcomingPayment(regla("Arriendo", 1_800_000L, 5), "2026-11-05", 7, PaymentStatus.UPCOMING),
+                UpcomingPayment(regla("Salario", 7_000_000L, 25, TransactionType.INCOME), "2026-11-25", 27, PaymentStatus.UPCOMING),
+            ),
+            ocurrencias = emptyList(),
+            ajustesDePeriodo = PeriodSettings(cutoffDay = 1),
+            periodoActual = PeriodoFinanciero(2026, 10),
+            plataDelDisponible = com.jvillada.movi.shared.model.PlataDelDisponible(
+                saldoAlInicio = 0L, entradas = 0L, guardado = 0L, ahorroDelPeriodo = 8_000_000L,
+            ),
+        )
+        val caja = assertNotNull(cajaDelPeriodoDe(data, GastoDelDiaADia(), octubre))
+        assertEquals("2026-11-25", caja.alCierre.fecha)
+        assertTrue(caja.hastaElSalario)
+        assertEquals(8_000_000L, caja.ahorro)
+        assertEquals(10_500_000L - 9_000L - 1_800_000L, caja.diaMasBajo.saldo)
+        assertEquals(10_500_000L - 9_000L - 1_800_000L - 8_000_000L, caja.diaMasBajo.libre)
+        assertEquals("2026-11-05", caja.diaMasBajo.fecha)
     }
 
     /**
@@ -148,8 +304,11 @@ class CajaDelPeriodoTest {
         )
         val caja = assertNotNull(cajaDelPeriodoDe(data, GastoDelDiaADia(), hoy))
 
-        assertEquals(4_217_464L, caja.tuPlataHoy)
-        assertEquals(217_464L, caja.alCierre.saldo, "lo libre de Nu, no $4M menos")
+        // Vuelta 70: parte de lo que hay en las cuentas (lo apartado sigue ahí) y lo libre resta lo apartado
+        // que el pago no cubre: $4M.
+        assertEquals(8_217_464L, caja.tuPlataHoy)
+        assertEquals(4_217_464L, caja.libreHoy)
+        assertEquals(217_464L, caja.alCierre.libre, "lo libre de Nu, no $4M menos")
     }
 
     // ── Ola 4 · Ver la plata: la caja con forma ─────────────────────────────
@@ -185,7 +344,7 @@ class CajaDelPeriodoTest {
         )
         // El sueldo no es un pago: solo el 17 lleva marcador.
         assertEquals(listOf(1), diasConPago(caja))
-        assertEquals("17 oct: \$8,8M · Cuota Vehiculo 8761, Netflix", leyendaDelDiaDeLaCaja(caja.dias[1]))
-        assertEquals("2 oct: \$12,9M", leyendaDelDiaDeLaCaja(caja.dias[0]))
+        assertEquals("17 oct: \$8,8M libres · Cuota Vehiculo 8761, Netflix", leyendaDelDiaDeLaCaja(caja.dias[1]))
+        assertEquals("2 oct: \$12,9M libres", leyendaDelDiaDeLaCaja(caja.dias[0]))
     }
 }
