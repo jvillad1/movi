@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.profile
 
+import com.jvillada.movi.ui.components.ds.SelectorDeDiaDelMes
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
@@ -133,7 +134,7 @@ fun InicioDelPeriodoSheet(
             Spacer(Modifier.height(Medida.entreSecciones))
 
             // Solo los días del mes en que ESTE período puede arrancar. Ver el KDoc.
-            CalendarioDeDias(
+            SelectorDeDiaDelMes(
                 dias = diasDelMes,
                 elegido = dia,
                 habilitado = !saving,

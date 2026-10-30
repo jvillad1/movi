@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.profile
 
+import com.jvillada.movi.ui.components.ds.SelectorDeDiaDelMes
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -103,8 +104,8 @@ fun PeriodoSheet(
             Spacer(Modifier.height(Medida.entreSecciones))
 
             // Cinco filas de siete, no un `LazyVerticalGrid`: el grid tenía un alto fijo de 196 dp
-            // para un contenido de 224 y cortaba el 29, el 30 y el 31 (ver [CalendarioDeDias]).
-            CalendarioDeDias(
+            // para un contenido de 224 y cortaba el 29, el 30 y el 31 (ver [SelectorDeDiaDelMes]).
+            SelectorDeDiaDelMes(
                 dias = 31,
                 elegido = dia,
                 habilitado = !saving,
