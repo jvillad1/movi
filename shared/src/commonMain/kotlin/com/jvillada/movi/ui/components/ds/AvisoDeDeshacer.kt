@@ -1,10 +1,26 @@
 package com.jvillada.movi.ui.components.ds
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import com.jvillada.movi.theme.Icono
+import com.jvillada.movi.theme.Radio
+import com.jvillada.movi.theme.Sombra
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -64,8 +80,11 @@ const val TAG_ACCION_DEL_AVISO: String = "aviso-de-deshacer:accion"
 const val TAG_ELEGIR_EN_EL_AVISO: String = "aviso-de-deshacer:elegir"
 const val TAG_TEXTO_DEL_AVISO: String = "aviso-de-deshacer:texto"
 
-/** Como mucho, dos renglones de texto: lo que no cabe se corta con «…» (el comercio largo). */
-const val RENGLONES_DEL_AVISO: Int = 2
+/**
+ * **Un renglón** (vuelta 79; eran dos): el aviso es un snackbar oscuro, y lo que no cabe a 360 dp se corta
+ * con «…» —las acciones quedan siempre a la vista—.
+ */
+const val RENGLONES_DEL_AVISO: Int = 1
 
 /** Lo que dice el aviso al anular. */
 const val ANULADO: String = "Anulado"
@@ -97,6 +116,11 @@ class AvisoDeDeshacer(private val alCambiar: () -> Unit = {}) {
         val hacer: suspend () -> Unit = {},
         val opciones: List<Opcion>? = null,
         val tituloDeLaEleccion: String = rotulo,
+        /**
+         * Vuelta 79: lo que se lee en el aviso de un renglón («Repartir»); el lector de pantalla dice el
+         * [rotulo] entero («Repartir con Caro»). Sin él, el [rotulo].
+         */
+        val rotuloCorto: String? = null,
     )
 
     /** Lo que se ve, o `null`. [vez] distingue dos avisos con el mismo texto. Sin [deshacer], sin el botón. */
@@ -125,6 +149,8 @@ class AvisoDeDeshacer(private val alCambiar: () -> Unit = {}) {
     private var veces = 0L
 
     fun mostrar(texto: String, accion: Accion? = null, deshacer: (suspend () -> Unit)? = null) {
+        // Vuelta 79: lo que dice el aviso lo acaba de hacer el dueño; la cifra del héroe lo cuenta.
+        CambioDelDueno.marcar()
         error = null
         trabajando = false
         eligiendo = false
@@ -181,6 +207,8 @@ class AvisoDeDeshacer(private val alCambiar: () -> Unit = {}) {
         error = null
         try {
             bloque()
+            // Vuelta 79: deshacer (o repartir) también es un cambio del dueño: la cifra cuenta hacia atrás.
+            CambioDelDueno.marcar()
             if (actual?.vez == aviso.vez) cerrar(aviso.vez)
             alCambiar()
         } catch (e: CancellationException) {
@@ -218,72 +246,38 @@ fun AnfitrionDelAvisoDeDeshacer(aviso: AvisoDeDeshacer, modifier: Modifier = Mod
             aviso.cerrar(actual.vez)
         }
     }
+    // Vuelta 79: entra **en el flujo** (abajo de la pantalla, arriba de la barra): crece y le quita su alto
+    // al hueco de la pantalla, así no tapa lo de abajo —la propuesta de Inicio— ni la barra.
     AnimatedVisibility(
         visible = actual != null,
         modifier = modifier,
-        enter = fadeIn(Movimiento.alEntrar(reducido)) + slideInVertically(Movimiento.alEntrar(reducido)) { it / 2 },
-        exit = fadeOut(Movimiento.alSalir(reducido)) + slideOutVertically(Movimiento.alSalir(reducido)) { it / 2 },
+        enter = fadeIn(Movimiento.alEntrar(reducido)) + expandVertically(Movimiento.alEntrar(reducido), expandFrom = Alignment.Top),
+        exit = fadeOut(Movimiento.alSalir(reducido)) + shrinkVertically(Movimiento.alSalir(reducido), shrinkTowards = Alignment.Top),
     ) {
         val visto = actual ?: ultimo[0] ?: return@AnimatedVisibility
-        Superficie(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = Medida.margenDePantalla, vertical = Espacio.xs)
-                .testTag(TAG_AVISO_DE_DESHACER),
-            nivel = NivelDeSuperficie.Propuesta,
-        ) {
-            // Revisión de la vuelta 74: con una acción, el texto va a lo ancho (dos renglones como mucho,
-            // con «…») y los botones en un segundo renglón, a la derecha. Antes los tres compartían un
-            // renglón y a 360 dp el texto quedaba de una palabra por línea: nueve renglones, ~210 px.
-            val texto: @Composable (Modifier) -> Unit = { mod ->
-                Text(
-                    aviso.error ?: visto.texto,
-                    style = Movi.textos.cuerpo,
-                    color = if (aviso.error != null) Movi.colores.sale else Movi.colores.texto,
-                    maxLines = RENGLONES_DEL_AVISO,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = mod.testTag(TAG_TEXTO_DEL_AVISO),
+        SnackbarDeMovi(
+            texto = aviso.error ?: visto.texto,
+            esError = aviso.error != null,
+            accion = visto.accion?.let { accion ->
+                AccionDelSnackbar(
+                    rotulo = accion.rotuloCorto ?: accion.rotulo,
+                    descripcion = accion.rotulo,
+                    tag = TAG_ACCION_DEL_AVISO,
+                    habilitada = !aviso.trabajando,
+                    alTocar = { coroutine.launch { aviso.tocarLaAccion() } },
                 )
-            }
-            val deshacer: @Composable () -> Unit = {
-                if (visto.deshacer != null) {
-                    Boton(
-                        DESHACER,
-                        onClick = { coroutine.launch { aviso.deshacer() } },
-                        variante = VarianteDeBoton.Fantasma,
-                        tamano = TamanoDeBoton.S,
-                        cargando = aviso.trabajando,
-                        modifier = Modifier.testTag(TAG_DESHACER_DEL_AVISO),
-                    )
-                }
-            }
-            val accion = visto.accion
-            if (accion == null) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
-                    texto(Modifier.weight(1f))
-                    deshacer()
-                }
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(Espacio.xs)) {
-                    texto(Modifier.fillMaxWidth())
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(Espacio.xs, Alignment.End),
-                    ) {
-                        Boton(
-                            accion.rotulo,
-                            onClick = { coroutine.launch { aviso.tocarLaAccion() } },
-                            variante = VarianteDeBoton.Secundario,
-                            tamano = TamanoDeBoton.S,
-                            habilitado = !aviso.trabajando,
-                            modifier = Modifier.testTag(TAG_ACCION_DEL_AVISO),
-                        )
-                        deshacer()
-                    }
-                }
-            }
-        }
+            },
+            deshacer = visto.deshacer?.let {
+                AccionDelSnackbar(
+                    rotulo = DESHACER,
+                    descripcion = DESHACER,
+                    tag = TAG_DESHACER_DEL_AVISO,
+                    habilitada = !aviso.trabajando,
+                    cargando = aviso.trabajando,
+                    alTocar = { coroutine.launch { aviso.deshacer() } },
+                )
+            },
+        )
     }
     // La elección de una acción con opciones (varios grupos): una hoja con una fila por opción.
     val opciones = actual?.accion?.opciones
@@ -303,6 +297,92 @@ fun AnfitrionDelAvisoDeDeshacer(aviso: AvisoDeDeshacer, modifier: Modifier = Mod
                     }
                 }
             }
+        }
+    }
+}
+
+/** Una acción de texto del snackbar: «Repartir», «Deshacer». */
+internal data class AccionDelSnackbar(
+    val rotulo: String,
+    val descripcion: String,
+    val tag: String,
+    val habilitada: Boolean,
+    val alTocar: () -> Unit,
+    val cargando: Boolean = false,
+)
+
+/**
+ * **El snackbar de Movi** (vuelta 79): un renglón oscuro —fondo en la tinta (`texto`), la letra en
+ * `sobreTinta`— con las acciones **como texto, sin bordes**, en `enlaceSobreTinta` («Repartir · Deshacer»).
+ * El texto se corta con «…» si no cabe; las acciones nunca. `ContrasteDeLosTokensTest` mide los tres pares.
+ * La falla de deshacer se dice en `saleSobreTinta`.
+ */
+@Composable
+internal fun SnackbarDeMovi(
+    texto: String,
+    esError: Boolean,
+    accion: AccionDelSnackbar?,
+    deshacer: AccionDelSnackbar?,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = Medida.margenDePantalla, vertical = Espacio.xs)
+            .shadow(Sombra.destacada, RoundedCornerShape(Radio.m), clip = false, ambientColor = Movi.colores.sombra, spotColor = Movi.colores.sombra)
+            .clip(RoundedCornerShape(Radio.m))
+            .background(Movi.colores.texto)
+            .heightIn(min = Medida.objetivoTactil)
+            .testTag(TAG_AVISO_DE_DESHACER)
+            .padding(start = Espacio.m, end = Espacio.xxs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            texto,
+            style = Movi.textos.cuerpo,
+            color = if (esError) Movi.colores.saleSobreTinta else Movi.colores.sobreTinta,
+            maxLines = RENGLONES_DEL_AVISO,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f).testTag(TAG_TEXTO_DEL_AVISO),
+        )
+        val acciones = listOfNotNull(accion, deshacer)
+        acciones.forEachIndexed { i, a ->
+            if (i > 0) {
+                Text("·", style = Movi.textos.cuerpo, color = Movi.colores.sobreTinta, modifier = Modifier.clearAndSetSemantics {})
+            }
+            AccionDeTextoDelSnackbar(a)
+        }
+    }
+}
+
+@Composable
+private fun AccionDeTextoDelSnackbar(accion: AccionDelSnackbar) {
+    val forma = RoundedCornerShape(Radio.s)
+    Box(
+        modifier = Modifier
+            .heightIn(min = Medida.objetivoTactil)
+            .anilloDeFoco(forma, adentro = true)
+            .alPresionar(onClick = accion.alTocar, habilitado = accion.habilitada, rol = Role.Button, forma = forma)
+            .semantics { if (accion.descripcion != accion.rotulo) contentDescription = accion.descripcion }
+            .testTag(accion.tag)
+            .padding(horizontal = Espacio.s),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (accion.cargando) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(Icono.s).semantics { stateDescription = ROTULO_CARGANDO },
+                color = Movi.colores.enlaceSobreTinta,
+                strokeWidth = Medida.trazoDeCarga,
+            )
+        } else {
+            Text(
+                accion.rotulo,
+                style = Movi.textos.cuerpoFuerte,
+                color = Movi.colores.enlaceSobreTinta,
+                maxLines = 1,
+                softWrap = false,
+            )
         }
     }
 }

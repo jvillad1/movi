@@ -121,6 +121,8 @@ class ElForkLlegaLimpioTest {
         Huella.sustitutoDePrueba = LECTOR_DE_OTRA_PRUEBA
         // Ola 1: la pantalla que dejó pendiente un aviso tocado, y la oferta de avisos de prueba.
         DestinoDesdeAfuera.pendiente = Screen.PorRevisar
+        // Vuelta 79: un «el dueño cambió la plata» sin tomar haría contar la cifra de la prueba siguiente.
+        com.jvillada.movi.ui.components.ds.CambioDelDueno.marcar()
         // Ola 2: un archivo compartido que esperaba la puerta.
         PapelesCompartidos.recibir(listOf(ArchivoCompartido("recibo.png", byteArrayOf(1), "image/png")))
         // Ola 4: un «Está bien» de otra prueba.
@@ -242,6 +244,7 @@ class ElForkLlegaLimpioTest {
         assertNull("El repositorio de prueba de otra clase sigue enchufado", Repositories.sustitutoDePrueba)
         assertNull("El lector de huellas de otra clase sigue enchufado", Huella.sustitutoDePrueba)
         assertNull("El destino de un aviso tocado en otra prueba sigue pendiente", DestinoDesdeAfuera.pendiente)
+        assertFalse("Un cambio del dueño de otra prueba sigue pendiente", com.jvillada.movi.ui.components.ds.CambioDelDueno.pendiente())
         assertTrue("Un archivo compartido en otra prueba sigue esperando", PapelesCompartidos.pendientes.isEmpty())
         assertNull("La oferta de avisos de otra clase sigue enchufada", AvisosEnHoy.sustitutoDePrueba)
         assertNull("El repositorio de Compartir de otra clase sigue enchufado", Repositories.sustitutoDeCompartirDePrueba)

@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performSemanticsAction
@@ -184,7 +185,8 @@ class AnotadoConDeshacerTest {
         guardarUnGasto()
 
         composeRule.onNodeWithTag(TAG_ACCION_DEL_AVISO, useUnmergedTree = true).assertExists()
-        composeRule.onNodeWithText("Repartir con Caro").assertExists()
+        // Vuelta 79: el aviso de un renglón dice «Repartir»; el lector de pantalla, la acción entera.
+        composeRule.onNodeWithContentDescription("Repartir con Caro", useUnmergedTree = true).assertExists()
         composeRule.onNodeWithTag(TAG_ACCION_DEL_AVISO).performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitUntil(5_000) { repartidos.isNotEmpty() }
         composeRule.waitForIdle()

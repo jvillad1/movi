@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.sdui
 
+import com.jvillada.movi.ui.components.ds.CambioDelDueno
+import com.jvillada.movi.ui.components.ds.rememberCifraQueCuenta
 import com.jvillada.movi.data.FormaDelHeroe
 import com.jvillada.movi.data.FormaRecordada
 import com.jvillada.movi.data.SessionManager
@@ -199,7 +201,9 @@ internal fun HeroDeUnVistazo(
             renglon = renglon,
         ),
         congelado = LocalCargandoElInicio.current,
-        seAnima = ::esUnCambioDelHeroe,
+        // Vuelta 79: si el cambio lo hizo el dueño (anotar, anular, deshacer), no se desvanece: la cifra
+        // cuenta hasta la nueva ([rememberCifraQueCuenta], en el cuerpo).
+        seAnima = { antes, despues -> esUnCambioDelHeroe(antes, despues) && !CambioDelDueno.pendiente() },
     )
     Superficie(
         modifier = Modifier
@@ -316,6 +320,10 @@ private fun CuerpoDelHeroe(
     // pregunta. Si las lecturas llegaron y no hay disponible que afirmar, vuelve «Tu plata».
     val modoTeQuedan = teQuedan != null || (hayCargaEnVuelo && !alcanzaParaElDisponible(data))
     val tuPlata = visto.mostrado.tuPlata
+    // Vuelta 79: la cifra grande cuenta de la vieja a la nueva cuando el cambio lo hizo el dueño. Cuenta
+    // con el signo (lo que te pasaste es negativo) y se pinta sin él, como siempre.
+    val montoQueCuenta = rememberCifraQueCuenta(teQuedan?.let { if (it.enRojo) -it.monto else it.monto })?.let { kotlin.math.abs(it) }
+    val tuPlataQueCuenta = rememberCifraQueCuenta(if (teQuedan == null) tuPlata else null)
 
     Column(
         modifier = Modifier
@@ -356,9 +364,9 @@ private fun CuerpoDelHeroe(
         if (modoTeQuedan) {
             if (teQuedan != null) {
                 // El MISMO valor que la frase del disponible de Plan, entero: «$4.963.400», no «$5M». Sin
-                // signo: el rótulo ya dice de qué lado está.
+                // signo: el rótulo ya dice de qué lado está. Vuelta 79: si la cambió el dueño, cuenta.
                 Cifra(
-                    teQuedan.monto,
+                    montoQueCuenta ?: teQuedan.monto,
                     VarianteDeCifra.Heroe,
                     tono = if (teQuedan.enRojo) TonoDeCifra.Alerta else TonoDeCifra.Neutro,
                     modifier = Modifier.testTag(TAG_CIFRA_TE_QUEDAN),
@@ -390,7 +398,7 @@ private fun CuerpoDelHeroe(
                 Text(text = "—", style = Movi.textos.cifra, color = Movi.colores.texto)
             } else {
                 Cifra(
-                    tuPlata,
+                    tuPlataQueCuenta ?: tuPlata,
                     VarianteDeCifra.Heroe,
                     tono = if (tuPlata < 0) TonoDeCifra.Alerta else TonoDeCifra.Neutro,
                 )

@@ -99,7 +99,7 @@ fun accionDeRepartir(
         aviso.mostrar(textoDeRepartido(espacio, tuParte)) { repo.quitarDelEspacio(espacio.id, evento.id) }
     }
     val unico = espacios.singleOrNull()
-    if (unico != null) return AvisoDeDeshacer.Accion(rotuloDeRepartirCon(unico), hacer = { repartirEn(unico) })
+    if (unico != null) return AvisoDeDeshacer.Accion(rotuloDeRepartirCon(unico), hacer = { repartirEn(unico) }, rotuloCorto = REPARTIR)
     return AvisoDeDeshacer.Accion(
         rotulo = REPARTIR,
         opciones = espacios.map { e -> AvisoDeDeshacer.Opcion(e.nombre, detalle = quienesComparten(e)) { repartirEn(e) } },
