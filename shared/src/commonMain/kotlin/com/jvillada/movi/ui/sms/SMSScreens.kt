@@ -59,6 +59,7 @@ import com.jvillada.movi.ui.components.ds.TonoDePildora
 import com.jvillada.movi.ui.components.ds.TonoDeSubtitulo
 import com.jvillada.movi.ui.components.ds.AyudaDeCampo
 import androidx.compose.material.icons.rounded.Inbox
+import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -390,6 +391,17 @@ fun CapturaDelBancoScreen(onNavigate: (Screen) -> Unit) {
                 // que lo que no matchea nunca sale del teléfono.
                 SmsSensorSetupSection(onSynced = { refreshKey++ })
 
+                // Vuelta 73: los avisos de Movi ya no viven acá (la tarjeta «Avisos de Movi» del
+                // teléfono se mudó): todos sus interruptores están en Tú → Avisos. Queda la puerta.
+                Spacer(Modifier.height(Medida.entreSecciones))
+                com.jvillada.movi.ui.components.ds.FilaDeNavegacion(
+                    titulo = TITULO_DE_LOS_AVISOS_EN_CAPTURA,
+                    icono = Icons.Rounded.Notifications,
+                    onClick = { onNavigate(Screen.Tu) },
+                    subtitulo = SUBTITULO_DE_LOS_AVISOS_EN_CAPTURA,
+                    modifier = Modifier.testTag(TAG_AVISOS_EN_TU),
+                )
+
                 Spacer(Modifier.height(Medida.entreSecciones))
                 Seccion(titulo = "Historial", conteo = if (smsItems == null) null else mensajes.size)
                 if (smsItems == null && !leyendo) {
@@ -464,6 +476,15 @@ const val TAG_MOTIVO_DEL_APARTADO: String = "motivo-del-apartado"
 
 /** El tag de la fila «Último mensaje · …» de Captura del banco / Mensajes del banco. */
 const val TAG_ULTIMO_MENSAJE: String = "ultimo-mensaje-del-banco"
+
+/** Vuelta 73: la fila de Captura del banco que lleva a los avisos, en Tú. */
+const val TAG_AVISOS_EN_TU: String = "captura:avisos-en-tu"
+
+/** Lo que dice esa fila. */
+const val TITULO_DE_LOS_AVISOS_EN_CAPTURA: String = "Avisos"
+
+/** Debajo: dónde se encienden y se apagan. */
+const val SUBTITULO_DE_LOS_AVISOS_EN_CAPTURA: String = "Se encienden y se apagan en Tú"
 
 /** El tag de la tarjeta del aviso de banco mudo en Captura del banco. */
 const val TAG_AJUSTE_DE_BANCO_MUDO: String = "ajuste-de-banco-mudo"

@@ -14,8 +14,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -34,11 +32,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.data.SessionManager
-import com.jvillada.movi.avisos.PARA_QUE_SON_LOS_AVISOS
-import com.jvillada.movi.avisos.PreferenciasDeAvisos
-import com.jvillada.movi.avisos.avisosPidenPermiso
-import com.jvillada.movi.avisos.puedeAvisar
-import com.jvillada.movi.avisos.tienePermisoDeAvisos
 import com.jvillada.movi.notificaciones.AlmacenDeNotificaciones
 import com.jvillada.movi.sensor.InstallSource
 import com.jvillada.movi.sensor.OnResume
@@ -109,10 +102,9 @@ actual fun SmsSensorSetupSection(onSynced: () -> Unit) {
     // El segundo sensor, y hoy el que más falta hace: el banco dejó de mandar SMS (el más nuevo
     // del teléfono del dueño es del 15-sep) pero sigue publicando una notificación por movimiento.
     SensorNotificationsCard(installSource)
-    // Ola 1 · Movi avisa: el permiso de notificaciones de Movi —el otro sentido: no leer las del
-    // banco sino mostrar las propias— y sus dos interruptores. Acá porque es donde ya se piden los
-    // permisos de este teléfono; Hoy lo ofrece una sola vez, y esta es la puerta permanente.
-    AvisosDelTelefonoCard()
+    // Vuelta 73: los avisos de Movi (el permiso y sus interruptores) se mudaron a Tú → Avisos, la
+    // casa de todos los avisos (ver `AvisosDeEsteTelefono`). Esta pantalla queda con la captura y un
+    // enlace a ellos (en `CapturaDelBancoScreen`).
     // Se dibuja a sí misma solo cuando el aviso aplica; el Spacer va adentro para no
     // dejar un hueco doble cuando la app ya está exenta.
     SensorHibernationCard()
@@ -305,179 +297,6 @@ private fun SensorNotificationsCard(installSource: InstallSource) {
             }
         }
     }
-}
-
-/**
- * **Avisos de Movi en este teléfono** (Ola 1): el permiso de notificaciones (Android 13+) y los dos
- * interruptores —«Avisarme cuando llegue un movimiento» y «Avisarme antes de que venza un pago»—,
- * encendidos por defecto (regla del dueño: todo se configura desde la app).
- *
- * Sin el permiso los interruptores se ven pero no se mueven: prenderlos no haría sonar nada, y un
- * interruptor encendido que no hace nada es la misma mentira que «AUTO-LECTURA ACTIVA» con la
- * captura muda. Si Android ya no muestra el diálogo (se negó dos veces), el botón lleva a los
- * ajustes de notificaciones de la app.
- */
-@Composable
-internal fun AvisosDelTelefonoCard() {
-    val context = LocalContext.current
-    val activity = remember(context) { context.findComponentActivity() }
-    var puede by remember { mutableStateOf(puedeAvisar(context)) }
-    var conPermiso by remember { mutableStateOf(tienePermisoDeAvisos(context)) }
-    var aAjustes by remember { mutableStateOf(false) }
-    var movimientos by remember { mutableStateOf(PreferenciasDeAvisos.avisarMovimientos(context)) }
-    var vencimientos by remember { mutableStateOf(PreferenciasDeAvisos.avisarVencimientos(context)) }
-    var bancoMudo by remember { mutableStateOf(PreferenciasDeAvisos.avisarBancoMudo(context)) }
-    var debitos by remember { mutableStateOf(PreferenciasDeAvisos.avisarDebitos(context)) }
-    var cierre by remember { mutableStateOf(PreferenciasDeAvisos.avisarCierre(context)) }
-    var manana by remember { mutableStateOf(PreferenciasDeAvisos.avisarResumenDeLaManana(context)) }
-    var semanal by remember { mutableStateOf(PreferenciasDeAvisos.avisarResumenSemanal(context)) }
-
-    fun refrescar() {
-        puede = puedeAvisar(context)
-        conPermiso = tienePermisoDeAvisos(context)
-    }
-
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { concedido ->
-        refrescar()
-        // Negado y sin poder volver a preguntar: el próximo toque lleva a los ajustes del sistema.
-        if (!concedido) aAjustes = !canShowRationaleFor(activity, Manifest.permission.POST_NOTIFICATIONS)
-    }
-    // Se concede y se apaga FUERA de la app (ajustes del sistema): se relee al volver.
-    OnResume(activity) { refrescar() }
-
-    Spacer(Modifier.height(10.dp))
-    Superficie(modifier = Modifier.fillMaxWidth()) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("Avisos de Movi", fontSize = 14.sp, color = Movi.colores.texto)
-            Text(
-                if (puede) "Activos" else "Apagados",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = if (puede) Movi.colores.entra else Movi.colores.sale,
-            )
-        }
-        Spacer(Modifier.height(10.dp))
-        Text(PARA_QUE_SON_LOS_AVISOS, fontSize = 13.sp, color = Movi.colores.textoMedio)
-        if (!puede) {
-            Spacer(Modifier.height(12.dp))
-            SensorButton(if (conPermiso || aAjustes) "Abrir ajustes de notificaciones" else "Permitir avisos") {
-                if (!conPermiso && !aAjustes && avisosPidenPermiso()) {
-                    launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                } else {
-                    abrirAjustesDeAvisos(context)
-                }
-            }
-        }
-        Spacer(Modifier.height(6.dp))
-        FilaDeInterruptor(
-            texto = "Avisarme cuando llegue un movimiento",
-            encendido = movimientos,
-            habilitado = puede,
-        ) {
-            movimientos = it
-            PreferenciasDeAvisos.ponerAvisarMovimientos(context, it)
-        }
-        FilaDeInterruptor(
-            texto = "Avisarme antes de que venza un pago",
-            encendido = vencimientos,
-            habilitado = puede,
-        ) {
-            vencimientos = it
-            PreferenciasDeAvisos.ponerAvisarVencimientos(context, it)
-        }
-        // Ola 2 · banco mudo: cuántos días cuentan como silencio se elige arriba, en esta misma
-        // pantalla (vale para la web y el teléfono); acá solo si este teléfono suena.
-        FilaDeInterruptor(
-            texto = "Avisarme si mi banco deja de avisar",
-            encendido = bancoMudo,
-            habilitado = puede,
-        ) {
-            bancoMudo = it
-            PreferenciasDeAvisos.ponerAvisarBancoMudo(context, it)
-        }
-        // Lo que el banco cobra solo (cuotas y recurrentes marcados «se debita solo»): el banco no
-        // manda nada ese día, así que el aviso es de Movi. Una vez por débito y período.
-        FilaDeInterruptor(
-            texto = "Avisarme el día de un débito automático",
-            encendido = debitos,
-            habilitado = puede,
-        ) {
-            debitos = it
-            PreferenciasDeAvisos.ponerAvisarDebitos(context, it)
-        }
-        // «Cerró tu período»: el día siguiente al corte, el resumen del período que terminó. El correo
-        // con el mismo resumen se apaga aparte, en Perfil → Avisos (es de la cuenta, no del teléfono).
-        FilaDeInterruptor(
-            texto = "Avisarme cuando cierre mi período",
-            encendido = cierre,
-            habilitado = puede,
-        ) {
-            cierre = it
-            PreferenciasDeAvisos.ponerAvisarCierre(context, it)
-        }
-        // Vuelta 68: los dos resúmenes, sin IA y con las cifras del Inicio. Encendidos por defecto.
-        FilaDeInterruptor(
-            texto = TEXTO_INTERRUPTOR_RESUMEN_DE_LA_MANANA,
-            encendido = manana,
-            habilitado = puede,
-        ) {
-            manana = it
-            PreferenciasDeAvisos.ponerAvisarResumenDeLaManana(context, it)
-        }
-        FilaDeInterruptor(
-            texto = TEXTO_INTERRUPTOR_RESUMEN_SEMANAL,
-            encendido = semanal,
-            habilitado = puede,
-        ) {
-            semanal = it
-            PreferenciasDeAvisos.ponerAvisarResumenSemanal(context, it)
-        }
-    }
-}
-
-/** Vuelta 68: el interruptor del resumen de la mañana. */
-internal const val TEXTO_INTERRUPTOR_RESUMEN_DE_LA_MANANA = "Resumen de la mañana, a las 8:00"
-
-/** Vuelta 68: el interruptor del resumen semanal de los grupos. */
-internal const val TEXTO_INTERRUPTOR_RESUMEN_SEMANAL = "Resumen semanal de tus grupos, el domingo"
-
-/** Una fila «texto … interruptor»: toda la fila alterna, como en Perfil. */
-@Composable
-private fun FilaDeInterruptor(texto: String, encendido: Boolean, habilitado: Boolean, onCambio: (Boolean) -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(48.dp)
-            .noRippleClickable { if (habilitado) onCambio(!encendido) },
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            texto,
-            fontSize = 14.sp,
-            color = if (habilitado) Movi.colores.texto else Movi.colores.textoApagado,
-            modifier = Modifier.weight(1f),
-        )
-        Switch(
-            checked = encendido && habilitado,
-            onCheckedChange = { onCambio(it) },
-            enabled = habilitado,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = Movi.colores.sobreMarca,
-                checkedTrackColor = Movi.colores.marca,
-                uncheckedThumbColor = Movi.colores.textoApagado,
-                uncheckedTrackColor = Movi.colores.tarjeta,
-                uncheckedBorderColor = Movi.colores.borde,
-            ),
-        )
-    }
-}
-
-/** Los ajustes de notificaciones de Movi en el sistema (Android 8+), o la ficha de la app si no. */
-private fun abrirAjustesDeAvisos(context: android.content.Context) {
-    val intent = android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-        .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)
-        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-    if (runCatching { context.startActivity(intent) }.isFailure) openAppSettings(context)
 }
 
 /**
