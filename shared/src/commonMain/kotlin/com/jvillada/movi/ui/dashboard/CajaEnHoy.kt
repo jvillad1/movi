@@ -20,6 +20,8 @@ import com.jvillada.movi.ui.components.ds.Separador
 import com.jvillada.movi.ui.components.ds.TonoDeFila
 import com.jvillada.movi.ui.components.ds.TonoDeIcono
 import com.jvillada.movi.ui.components.formatMoneyAbreviadaSinOcultar
+import com.jvillada.movi.ui.accounts.ESPACIO_QUE_NO_SE_PARTE
+import com.jvillada.movi.ui.accounts.UNION_QUE_NO_SE_PARTE
 import com.jvillada.movi.ui.fecha.MESES_DEL_ANIO
 import com.jvillada.movi.ui.plan.SEGMENTO_PAGOS
 import com.jvillada.movi.ui.plan.cajaDelPeriodoDe
@@ -64,13 +66,17 @@ fun renglonMeAlcanza(caja: CajaProyectada, hoy: LocalDate): RenglonMeAlcanza {
     val bajo = caja.diaMasBajo
     val cuando = if (bajo.fecha == hoy.toString()) "hoy" else "el ${fechaCortaDelRenglon(bajo.fecha)}"
     if (bajo.libre < 0L) {
-        return RenglonMeAlcanza("No te alcanza", "$cuando quedarías en ${formatMoneyAbreviadaSinOcultar(bajo.libre)}", enRojo = true)
+        // Revisión de la 75: el menos pegado al «$» y la cifra pegada a «en»: el renglón no se parte ahí.
+        return RenglonMeAlcanza("No te alcanza", "$cuando quedarías en$ESPACIO_QUE_NO_SE_PARTE${cifraCortaQueNoSeParte(bajo.libre)}", enRojo = true)
     }
-    return RenglonMeAlcanza(
-        "Te alcanza hasta el ${fechaCortaDelRenglon(caja.alCierre.fecha)}",
-        "tu día más justo, $cuando",
-        enRojo = false,
-    )
+    // Revisión de la 75: «hasta el 25 nov» solo cuando ese día entra el salario; sin él, nada entra ese
+    // día, y decirlo con fecha sonaba a que sí.
+    val hasta = when {
+        caja.hastaElSalario -> "Te alcanza hasta el ${fechaCortaDelRenglon(caja.alCierre.fecha)}"
+        caja.hastaElPeriodoSiguiente -> TE_ALCANZA_HASTA_EL_FIN_DEL_PERIODO
+        else -> TE_ALCANZA_30_DIAS
+    }
+    return RenglonMeAlcanza(hasta, "tu día más justo, $cuando", enRojo = false)
 }
 
 /**
@@ -83,6 +89,19 @@ fun renglonMeAlcanzaDe(data: DashboardData, gasto: GastoDelDiaADia?, hoy: LocalD
     return cajaDelPeriodoDe(data, supuesto, hoy)?.let { renglonMeAlcanza(it, hoy) }
 }
 
+/** Sin salario y con el período elegido: la caja mira hasta que arranca el siguiente. */
+const val TE_ALCANZA_HASTA_EL_FIN_DEL_PERIODO: String = "Te alcanza hasta el fin del período"
+
+/** Sin salario y con el mes de calendario: la caja mira 30 días. */
+const val TE_ALCANZA_30_DIAS: String = "Te alcanza los próximos 30 días"
+
+/**
+ * Una cifra corta que no se parte en dos renglones (revisión de la 75): «−$1,2M» con el menos pegado al
+ * «$» por [UNION_QUE_NO_SE_PARTE] (no se ve). Sin «Ocultar los saldos»: el renglón lo tapa entero.
+ */
+internal fun cifraCortaQueNoSeParte(monto: Long): String =
+    formatMoneyAbreviadaSinOcultar(monto).replace("\u2212$", "\u2212$UNION_QUE_NO_SE_PARTE$")
+
 /** «5 nov». */
 private fun fechaCortaDelRenglon(iso: String): String {
     val fecha = runCatching { LocalDate.parse(iso) }.getOrNull() ?: return iso
@@ -90,30 +109,43 @@ private fun fechaCortaDelRenglon(iso: String): String {
 }
 
 /**
- * El renglón, con el hilo de arriba. No pinta nada mientras no hay caja (ver arriba).
+ * El renglón que el Inicio puede afirmar ahora, o `null` (ver [renglonMeAlcanzaDe]). Pide el supuesto del
+ * gasto del día a día —la misma lectura recordada de Pagos— solo si hay con qué proyectar.
  */
+@Composable
+internal fun rememberRenglonMeAlcanza(data: DashboardData, hoy: LocalDate): RenglonMeAlcanza? {
+    // Sin la lista del período o sin Tu plata, la caja de Pagos tampoco proyecta: no hay renglón (y no se
+    // pide el supuesto, que no serviría para nada).
+    val sePuedeProyectar = data.periodoActual != null && data.upcoming != null && data.ocurrencias != null &&
+        (data.accounts != null || data.patrimonio != null)
+    if (!sePuedeProyectar) return null
+    val gastoLeido = rememberLectura(ClaveDeLectura.GastoDelDiaADia, reintento = 0) {
+        Repositories.wallets.getGastoDelDiaADia()
+    }
+    return renglonMeAlcanzaDe(data, gastoLeido.valor, hoy)
+}
+
+/** El renglón suelto, con el hilo de arriba (lo que pinta el héroe, para montarlo solo en una prueba). */
 @Composable
 internal fun RenglonMeAlcanzaDelHeroe(
     data: DashboardData,
     hoy: LocalDate,
     onNavigate: (Screen) -> Unit,
 ) {
-    // Sin la lista del período o sin Tu plata, la caja de Pagos tampoco proyecta: no hay renglón (y no se
-    // pide el supuesto, que no serviría para nada).
-    val sePuedeProyectar = data.periodoActual != null && data.upcoming != null && data.ocurrencias != null &&
-        (data.accounts != null || data.patrimonio != null)
-    if (!sePuedeProyectar) return
-    val gastoLeido = rememberLectura(ClaveDeLectura.GastoDelDiaADia, reintento = 0) {
-        Repositories.wallets.getGastoDelDiaADia()
-    }
-    val renglon = renglonMeAlcanzaDe(data, gastoLeido.valor, hoy) ?: return
+    val renglon = rememberRenglonMeAlcanza(data, hoy) ?: return
+    FilaMeAlcanza(renglon, onNavigate)
+}
+
+/** La fila del renglón, con el hilo de arriba. */
+@Composable
+internal fun FilaMeAlcanza(renglon: RenglonMeAlcanza, onNavigate: (Screen) -> Unit, modifier: Modifier = Modifier) {
     Separador(SangriaDeSeparador.Ninguna)
     Fila(
         titulo = renglon.titulo,
         subtitulo = conCifrasOcultas(renglon.detalle.replaceFirstChar { it.uppercase() }),
         lineasDelSubtitulo = 2,
         tonoDelTitulo = if (renglon.enRojo) TonoDeFila.Alerta else TonoDeFila.Normal,
-        modifier = Modifier.testTag(TAG_ME_ALCANZA),
+        modifier = modifier.testTag(TAG_ME_ALCANZA),
         inicio = {
             IconoEnCirculo(
                 Icons.AutoMirrored.Rounded.TrendingDown,

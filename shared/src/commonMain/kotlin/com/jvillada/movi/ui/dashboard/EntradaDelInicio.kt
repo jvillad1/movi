@@ -76,7 +76,24 @@ fun cifraContando(valor: Long, progreso: Float): Long =
  * sistema pidiendo menos movimiento ([LocalMovimientoReducido]) el cambio es inmediato, y el primer dato
  * (después del esqueleto o del «—») se muestra sin esperar.
  */
-data class EstadoDelHeroe(val teQuedan: TeQuedanDeHoy?, val tuPlata: Long?)
+data class EstadoDelHeroe(
+    val teQuedan: TeQuedanDeHoy?,
+    val tuPlata: Long?,
+    /** «¿Me alcanza?» (revisión de la 75): el renglón cambia con la cifra, no antes. */
+    val renglon: RenglonMeAlcanza? = null,
+)
+
+/**
+ * **¿El paso de [antes] a [despues] es una cifra que cambia?** Solo entre dos cifras del mismo tipo (las
+ * dos «Te quedan» o las dos «Tu plata»): el primer dato después del esqueleto o del «—» llega sin esperar,
+ * y pasar de «Tu plata» a «Te quedan» no es una cifra que cambia. Que aparezca el renglón «¿Me alcanza?»
+ * donde no había, sin que cambie nada más, tampoco: entra sin hacer parpadear la cifra. Pura.
+ */
+fun esUnCambioDelHeroe(antes: EstadoDelHeroe, despues: EstadoDelHeroe): Boolean {
+    if (antes.renglon == null && antes == despues.copy(renglon = null)) return false
+    return (antes.teQuedan != null && despues.teQuedan != null) ||
+        (antes.teQuedan == null && despues.teQuedan == null && antes.tuPlata != null && despues.tuPlata != null)
+}
 
 /** Lo que se pinta en un cuadro: el estado que se ve y con qué opacidad (0 a 1). */
 data class EstadoQueSeVe<T>(val mostrado: T, val opacidad: Float)
@@ -91,16 +108,26 @@ const val DURACION_DEL_CAMBIO_DEL_HEROE_MS: Int = Movimiento.LARGO_MS
  *
  * @param seAnima si el paso de uno a otro se anima; si no (el primer dato después del esqueleto), es
  *   inmediato.
+ * @param congelado revisión de la 75: **mientras la carga está en curso** lo visible no cambia por un
+ *   valor que se animaría —las cuentas llegan antes que el resumen, y el estado intermedio junta piezas
+ *   de dos cargas—; al terminar la carga, cambia entero al último. Lo que no se anima (el primer dato)
+ *   entra igual.
  */
 @Composable
-fun <T> rememberEstadoQueCambia(valor: T, seAnima: (antes: T, despues: T) -> Boolean): EstadoQueSeVe<T> {
+fun <T> rememberEstadoQueCambia(
+    valor: T,
+    congelado: Boolean = false,
+    seAnima: (antes: T, despues: T) -> Boolean,
+): EstadoQueSeVe<T> {
     val reducido = LocalMovimientoReducido.current
     var desde by remember { mutableStateOf(valor) }
     var hasta by remember { mutableStateOf(valor) }
     val progreso = remember { Animatable(1f) }
-    LaunchedEffect(valor) {
+    LaunchedEffect(valor, congelado) {
         if (valor == hasta && progreso.value >= 1f) return@LaunchedEffect
         val visible = estadoEnElCambio(desde, hasta, progreso.value)
+        // Con la carga en vuelo, lo que ya se ve se queda: el cambio llega entero cuando termina.
+        if (congelado && visible != valor && seAnima(visible, valor)) return@LaunchedEffect
         if (reducido || visible == valor || !seAnima(visible, valor)) {
             desde = valor
             hasta = valor

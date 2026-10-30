@@ -118,7 +118,10 @@ import com.jvillada.movi.ui.dashboard.VER_TUS_PERIODOS
 import com.jvillada.movi.ui.dashboard.disponibleDelInicio
 import com.jvillada.movi.ui.dashboard.teQuedanDeHoy
 import com.jvillada.movi.ui.dashboard.elHeroePideLaCuenta
-import com.jvillada.movi.ui.dashboard.RenglonMeAlcanzaDelHeroe
+import com.jvillada.movi.ui.dashboard.FilaMeAlcanza
+import com.jvillada.movi.ui.dashboard.rememberRenglonMeAlcanza
+import com.jvillada.movi.ui.dashboard.esUnCambioDelHeroe
+import com.jvillada.movi.ui.dashboard.EstadoQueSeVe
 import kotlinx.datetime.Clock
 import kotlinx.datetime.LocalDate
 
@@ -176,6 +179,21 @@ internal fun HeroDeUnVistazo(
     onShowCreateSheet: () -> Unit = {},
     hoy: LocalDate = epochMillisToAppDate(Clock.System.now().toEpochMilliseconds()),
 ) {
+    // Vuelta 75 · la cifra grande, su línea, «Tu plata» y el renglón «¿Me alcanza?» salen de UN estado
+    // y cambian juntos (ver [EstadoDelHeroe]): nunca la cifra vieja junto a la línea nueva. Revisión de
+    // la 75: mientras la carga del Inicio está en vuelo lo visible se queda —las cuentas llegan antes que
+    // el resumen y los pagos— y al terminar cambia entero.
+    val disponible = disponibleDelInicio(data, hoy)
+    val renglon = rememberRenglonMeAlcanza(data, hoy)
+    val visto = rememberEstadoQueCambia(
+        EstadoDelHeroe(
+            teQuedan = disponible?.let(::teQuedanDeHoy),
+            tuPlata = data.accounts?.let { heroBalance(it, data.apartados.orEmpty()).tuPlata },
+            renglon = renglon,
+        ),
+        congelado = LocalCargandoElInicio.current,
+        seAnima = ::esUnCambioDelHeroe,
+    )
     Superficie(
         modifier = Modifier
             .padding(horizontal = Medida.margenDePantalla)
@@ -204,9 +222,11 @@ internal fun HeroDeUnVistazo(
             }
             return@Superficie
         }
-        CuerpoDelHeroe(section, data, onNavigate, hoy)
-        // Vuelta 75: «¿Me alcanza?», la caja de Pagos en un renglón, siempre a la vista.
-        RenglonMeAlcanzaDelHeroe(data, hoy, onNavigate)
+        CuerpoDelHeroe(section, data, onNavigate, disponible, visto)
+        // Vuelta 75: «¿Me alcanza?», la caja de Pagos en un renglón, siempre a la vista; del MISMO estado.
+        visto.mostrado.renglon?.let { r ->
+            FilaMeAlcanza(r, onNavigate, modifier = Modifier.graphicsLayer { alpha = visto.opacidad })
+        }
         FranjaPorConfirmar(data, onNavigate)
     }
 }
@@ -216,24 +236,11 @@ private fun CuerpoDelHeroe(
     section: ScreenSection,
     data: DashboardData,
     onNavigate: (Screen) -> Unit,
-    hoy: LocalDate,
+    disponible: com.jvillada.movi.ui.dashboard.DisponibleDelPeriodo?,
+    visto: EstadoQueSeVe<EstadoDelHeroe>,
 ) {
     // Vuelta de diseño 28: con «Te quedan», tocar la cifra abre «¿De dónde sale?» (la cascada del MISMO
     // disponible); sin él —«Tu plata»— lleva a «Tus períodos» como siempre.
-    val disponible = disponibleDelInicio(data, hoy)
-    // Vuelta 75 · la cifra grande, su línea y «Tu plata» salen de UN estado y cambian juntos (ver
-    // [EstadoDelHeroe]): nunca la cifra vieja junto a la línea nueva.
-    val visto = rememberEstadoQueCambia(
-        EstadoDelHeroe(
-            teQuedan = disponible?.let(::teQuedanDeHoy),
-            tuPlata = data.accounts?.let { heroBalance(it, data.apartados.orEmpty()).tuPlata },
-        ),
-    ) { antes, despues ->
-        // Solo de una cifra a otra del mismo tipo: el primer dato (después del esqueleto o del «—») llega
-        // sin esperar, y pasar de «Tu plata» a «Te quedan» no es una cifra que cambia.
-        (antes.teQuedan != null && despues.teQuedan != null) ||
-            (antes.teQuedan == null && despues.teQuedan == null && antes.tuPlata != null && despues.tuPlata != null)
-    }
     val teQuedan = visto.mostrado.teQuedan
     var verDeDondeSale by rememberSaveable { mutableStateOf(false) }
     if (verDeDondeSale && disponible != null) {

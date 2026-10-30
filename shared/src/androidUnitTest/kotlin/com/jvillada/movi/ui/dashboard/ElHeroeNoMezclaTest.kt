@@ -124,4 +124,55 @@ class ElHeroeNoMezclaTest {
         assertTrue(vistos.any { it == antes } || vistos.first() == despues, "el cambio pasa por lo de antes, entero")
         assertEquals(despues, vistos.last(), "y termina en lo nuevo, entero")
     }
+
+    /**
+     * Revisión de la 75 · **las cuentas llegan antes que el resumen**: durante la carga, el estado de la
+     * pantalla junta «Tu plata» nueva con el resumen viejo. El héroe no lo muestra: mientras la carga está
+     * en vuelo se queda con lo de antes, entero, y al terminar cambia entero a lo nuevo.
+     */
+    @Test
+    fun `con las cuentas antes que el resumen, el heroe espera a que termine la carga`() {
+        val viejo = datos(gasto = mapOf("2026-08-26" to 100_000L), saldo = 2_345_678L)
+        var data by mutableStateOf(viejo)
+        var cargando by mutableStateOf(false)
+        composeRule.mainClock.autoAdvance = false
+        composeRule.setContent {
+            MoviTheme {
+                CompositionLocalProvider(LocalMovimientoReducido provides false, LocalCargandoElInicio provides cargando) {
+                    Column(Modifier.fillMaxSize()) {
+                        HeroDeUnVistazo(section = ScreenSection(type = "HERO_BALANCE"), data = data, onNavigate = {}, hoy = hoy)
+                    }
+                }
+            }
+        }
+        composeRule.mainClock.advanceTimeBy(1_000L)
+        val antes = textosDelHeroe()
+
+        // Arranca la carga y llegan las cuentas: el resumen sigue siendo el de antes.
+        cargando = true
+        data = viejo.copy(accounts = listOf(Account(id = "a1", name = "Ahorros", type = AccountType.SAVINGS, balance = 10_497_508L)))
+        val vistos = mutableListOf<Set<String>>()
+        repeat(40) {
+            composeRule.mainClock.advanceTimeByFrame()
+            vistos += textosDelHeroe()
+        }
+        vistos.forEachIndexed { cuadro, textos ->
+            assertEquals(antes, textos, "En el cuadro $cuadro, con la carga en vuelo, el héroe cambió a medias: $textos")
+        }
+
+        // Llega el resumen y termina la carga: cambia entero.
+        data = datos(gasto = mapOf("2026-08-26" to 100_000L, "2026-09-20" to 500_000L), saldo = 10_497_508L)
+        cargando = false
+        val despuesDeLaCarga = mutableListOf<Set<String>>()
+        repeat(40) {
+            composeRule.mainClock.advanceTimeByFrame()
+            despuesDeLaCarga += textosDelHeroe()
+        }
+        composeRule.mainClock.advanceTimeBy(1_000L)
+        val despues = textosDelHeroe()
+        assertTrue(despues.any { it.startsWith("Tu plata \$10.497.508") }, "TEXTOS: $despues")
+        despuesDeLaCarga.forEachIndexed { cuadro, textos ->
+            assertTrue(textos == antes || textos == despues, "En el cuadro $cuadro el héroe mezcló: $textos")
+        }
+    }
 }
