@@ -144,6 +144,7 @@ import com.jvillada.movi.shared.model.inicioDelPeriodo
 import com.jvillada.movi.shared.model.periodoSiguiente
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.minus
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 
@@ -205,6 +206,12 @@ fun PrimerUsoScreen(
     var salario by remember { mutableStateOf<Long?>(null) }
     var cuentaDelSalario by remember { mutableStateOf<String?>(null) }
     var salarioCreado by remember { mutableStateOf(false) }
+    // Revisión de la 75: «¿Ya te pagaron este período?» (sí por defecto). Con sí, la regla arranca en el
+    // período siguiente: el salario de este ya está en el saldo que escribió.
+    var yaTePagaron by remember { mutableStateOf(true) }
+    // Revisión de la 75: UNA creación del salario a la vez. «Ir a Inicio» la espera (y se apaga mientras).
+    var trabajoDelSalario by remember { mutableStateOf<Job?>(null) }
+    var creandoElSalario by remember { mutableStateOf(false) }
     // «Listo» con una cifra real: lo que dice el final, cuando se sabe.
     var fraseDelListo by remember { mutableStateOf<String?>(null) }
 
@@ -237,7 +244,9 @@ fun PrimerUsoScreen(
             tarjetas = runCatching { Repositories.wallets.getCards() }.getOrNull()?.size ?: 0,
             fijos = runCatching { Repositories.wallets.getRecurringRules() }.getOrNull()?.also { reglas ->
                 tieneIngresoFijo = reglas.any { it.type == TransactionType.INCOME }
-            }?.map { it.id }.orEmpty(),
+            }
+                // Revisión de la 75: «Lo que pagas cada mes» son gastos; el salario no cuenta.
+                ?.filter { it.type == TransactionType.EXPENSE }?.map { it.id }.orEmpty(),
             movimientos = runCatching { Repositories.wallets.getFinanceSummary(Scope.SELF) }.getOrNull()?.eventCount ?: 0,
         )
     }
@@ -340,9 +349,25 @@ fun PrimerUsoScreen(
         val monto = salario?.takeIf { it > 0L } ?: return
         val elDia = dia ?: return
         if (salarioCreado || periodoGuardado == null) return
-        val cuenta = cuentaDelSalario ?: cuentaPorDefecto()
-        runCatching { Repositories.wallets.createRecurringRule(reglaDelSalario(monto, elDia, cuenta)) }
+        // Revisión de la 75: sin una cuenta de dinero no se crea (la guía promete «a la primera cuenta que
+        // agregues»; sin ninguna, un salario sin cuenta no llega a ningún lado).
+        val cuenta = cuentaDelSalario ?: cuentaPorDefecto() ?: return
+        val arranque = if (yaTePagaron) arranqueDelPeriodoSiguiente(elDia, regla, Clock.System.now().toEpochMilliseconds()) else null
+        runCatching { Repositories.wallets.createRecurringRule(reglaDelSalario(monto, elDia, cuenta, arranque)) }
             .onSuccess { salarioCreado = true }
+    }
+
+    /**
+     * La creación del salario en curso, o una nueva: nunca dos a la vez (revisión de la 75: «Ir a Inicio»
+     * tocado a los 30 ms creaba dos reglas). [creandoElSalario] se prende acá mismo, antes del primer
+     * cuadro, y apaga el botón del final hasta que termine.
+     */
+    fun asegurarElSalario(): Job {
+        trabajoDelSalario?.let { if (it.isActive || salarioCreado) return it }
+        creandoElSalario = true
+        return alcance.launch {
+            try { crearElSalario() } finally { creandoElSalario = false }
+        }.also { trabajoDelSalario = it }
     }
 
     /** «Te quedan $X hasta el 24 nov» con las lecturas de siempre del disponible, o «Ya puedes empezar». */
@@ -364,8 +389,9 @@ fun PrimerUsoScreen(
         // Vuelta 75: al llegar al final, el salario se crea y «Listo» lee su cifra.
         if (destino == PasoDePrimerUso.LISTO) {
             fraseDelListo = null
+            val salarioEnCurso = asegurarElSalario()
             alcance.launch {
-                crearElSalario()
+                salarioEnCurso.join()
                 leerLaCifraDelListo()
             }
         }
@@ -376,8 +402,9 @@ fun PrimerUsoScreen(
         if (guardando) return
         guardando = true
         alcance.launch {
-            // Vuelta 75: el salario escrito no se pierde por salir antes del final.
-            crearElSalario()
+            // Vuelta 75: el salario escrito no se pierde por salir antes del final; la creación en curso se
+            // espera, no se repite.
+            asegurarElSalario().join()
             runCatching { Repositories.wallets.marcarPrimerUso() }
             GuiaDePrimerUso.cerrar()
             guardando = false
@@ -535,6 +562,8 @@ fun PrimerUsoScreen(
                         cuentas = yaHabia.cuentas,
                         cuentaDelSalario = cuentaDelSalario,
                         onCuentaDelSalario = { cuentaDelSalario = it },
+                        yaTePagaron = yaTePagaron,
+                        onYaTePagaron = { yaTePagaron = it },
                     )
                     PasoDePrimerUso.CUENTAS -> PasoCuentas(
                         cuentas = (yaHabia.cuentas + cuentas).distinctBy { it.id },
@@ -594,8 +623,9 @@ fun PrimerUsoScreen(
                 Boton(
                     if (escritos.isNotEmpty()) GUARDAR_Y_SEGUIR else textoDeAvanzar,
                     onClick = { if (escritos.isNotEmpty()) guardarYSeguir(escritos) else avanzar() },
-                    cargando = guardando,
-                    habilitado = if (escritos.isNotEmpty()) razon == null else sePuedeAvanzar,
+                    cargando = guardando || (paso == PasoDePrimerUso.LISTO && creandoElSalario),
+                    habilitado = (if (escritos.isNotEmpty()) razon == null else sePuedeAvanzar) &&
+                        !(paso == PasoDePrimerUso.LISTO && creandoElSalario),
                     modifier = Modifier.weight(1f).testTag(TAG_AVANZAR_EN_LA_GUIA),
                 )
             }
@@ -766,6 +796,8 @@ private fun PasoPeriodo(
     cuentas: List<Account>,
     cuentaDelSalario: String?,
     onCuentaDelSalario: (String?) -> Unit,
+    yaTePagaron: Boolean,
+    onYaTePagaron: (Boolean) -> Unit,
 ) {
     Text(
         "¿Qué día te pagan o empieza tu mes? Movi cuenta tu mes desde ese día. Si te pagan el 25, toca el 25.",
@@ -816,7 +848,7 @@ private fun PasoPeriodo(
         VistaPrevia(vistaPreviaDelPeriodo(hoy, settings), detalle = detalleDelInicioDelPeriodo(dia, ejemplo))
         if (preguntaElSalario) {
             Spacer(Modifier.height(Medida.entreSecciones))
-            SalarioDelPeriodo(dia, salario, onSalario, cuentas, cuentaDelSalario, onCuentaDelSalario, habilitado)
+            SalarioDelPeriodo(dia, salario, onSalario, cuentas, cuentaDelSalario, onCuentaDelSalario, yaTePagaron, onYaTePagaron, habilitado)
         }
     }
 }
@@ -835,6 +867,8 @@ private fun SalarioDelPeriodo(
     cuentas: List<Account>,
     cuentaDelSalario: String?,
     onCuentaDelSalario: (String?) -> Unit,
+    yaTePagaron: Boolean,
+    onYaTePagaron: (Boolean) -> Unit,
     habilitado: Boolean,
 ) {
     Seccion(PREGUNTA_DEL_SALARIO)
@@ -848,7 +882,7 @@ private fun SalarioDelPeriodo(
     val deDinero = cuentas.filter { it.type in CUENTAS_QUE_PAGAN }
     if (deDinero.isEmpty()) {
         Text(
-            "Llega el día $dia a la primera cuenta que agregues en el paso siguiente.",
+            "Llega el día $dia a la primera cuenta que agregues en el paso siguiente. Sin una cuenta no se guarda.",
             style = Movi.textos.apoyo,
             color = Movi.colores.textoMedio,
         )
@@ -867,6 +901,20 @@ private fun SalarioDelPeriodo(
                     onClick = { if (habilitado) onCuentaDelSalario(c.id) },
                 )
             }
+        }
+    }
+    // Revisión de la 75: el salario de este período casi seguro ya llegó y está en el saldo de tus
+    // cuentas. Con «sí» la regla arranca en el siguiente: no cuenta dos veces como plata por llegar.
+    if ((salario ?: 0L) > 0L) {
+        Spacer(Modifier.height(Medida.dentroDeSeccion))
+        Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
+            Fila(
+                titulo = YA_TE_PAGARON_ESTE_PERIODO,
+                subtitulo = if (yaTePagaron) "Movi lo espera desde el próximo período" else "Movi lo espera en este período",
+                final = { Casilla(marcada = yaTePagaron) },
+                onClick = if (habilitado) ({ onYaTePagaron(!yaTePagaron) }) else null,
+                modifier = Modifier.semantics { selected = yaTePagaron }.testTag(TAG_YA_TE_PAGARON),
+            )
         }
     }
 }

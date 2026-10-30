@@ -1,6 +1,11 @@
 package com.jvillada.movi.ui.primeruso
 
+import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.RecurringRule
+import com.jvillada.movi.shared.model.SiElCorteCaeEnFinDeSemana
+import com.jvillada.movi.shared.model.inicioDelPeriodo
+import com.jvillada.movi.shared.model.periodoDe
+import com.jvillada.movi.shared.model.periodoSiguiente
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.ui.components.formatCOPSinOcultar
 import com.jvillada.movi.ui.fecha.MESES_DEL_ANIO
@@ -33,7 +38,7 @@ const val NOMBRE_DEL_SALARIO: String = "Salario"
  * corte es el que abre el período») y lo espera el día que arranca el período, corrido si cae en fin de
  * semana o festivo. Pura.
  */
-fun reglaDelSalario(monto: Long, diaDelCorte: Int, cuenta: String?): RecurringRule = RecurringRule(
+fun reglaDelSalario(monto: Long, diaDelCorte: Int, cuenta: String?, arranque: String? = null): RecurringRule = RecurringRule(
     id = "",
     name = NOMBRE_DEL_SALARIO,
     category = NOMBRE_DEL_SALARIO,
@@ -41,7 +46,29 @@ fun reglaDelSalario(monto: Long, diaDelCorte: Int, cuenta: String?): RecurringRu
     dayOfMonth = diaDelCorte,
     type = TransactionType.INCOME,
     accountId = cuenta,
+    activeFrom = arranque,
 )
+
+/**
+ * **Desde cuándo corre el salario cuando ya te pagaron este período** (revisión de la 75): el arranque
+ * del período siguiente, ISO. Con `activeFrom` en esa fecha (y `arranqueEsDesembolso` en `false`, el de
+ * siempre para una regla escrita a mano), el server toma como piso **el primer día del período de esa
+ * fecha** (`arranqueDeLaRegla`): la ocurrencia de este período no existe —ni vencida, ni por cobrar, ni en
+ * «Te quedan», ni en la caja— y la del siguiente sí. No inventa historia: solo dice que la regla empieza
+ * a esperar el salario desde el próximo período, porque el de este ya está en el saldo que escribiste.
+ *
+ * Los ajustes son los que el dueño acaba de elegir (el día y la regla del fin de semana). Pura.
+ */
+fun arranqueDelPeriodoSiguiente(diaDelCorte: Int, regla: SiElCorteCaeEnFinDeSemana, ahoraMillis: Long): String {
+    val ajustes = PeriodSettings(cutoffDay = diaDelCorte, siCaeEnFinDeSemana = regla)
+    return inicioDelPeriodo(periodoSiguiente(periodoDe(ahoraMillis, ajustes)), ajustes).toString()
+}
+
+/** La pregunta de debajo del monto del salario. */
+const val YA_TE_PAGARON_ESTE_PERIODO: String = "¿Ya te pagaron este período?"
+
+/** El tag de esa fila. */
+const val TAG_YA_TE_PAGARON: String = "primer-uso-ya-te-pagaron"
 
 /** Lo que dice el final de la guía sin cuentas (o sin poder leer la cifra). */
 const val YA_PUEDES_EMPEZAR: String = "Ya puedes empezar"

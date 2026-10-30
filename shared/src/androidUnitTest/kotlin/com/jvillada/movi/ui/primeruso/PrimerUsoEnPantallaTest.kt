@@ -590,7 +590,7 @@ class PrimerUsoEnPantallaTest {
     // ── Vuelta 75 · el salario como ancla ──────────────────────────────────────────────────────
 
     /** La guía con lo que el final necesita para su cifra: las lecturas de siempre del disponible. */
-    private inner class RepoConCifra : RepoDeLaGuia() {
+    private open inner class RepoConCifra : RepoDeLaGuia() {
         override suspend fun getFinanceSummary(scope: Scope): FinanceSummary =
             FinanceSummary(scope = Scope.SELF, balance = 0, ingresos = 5_000_000, egresos = 0)
         override suspend fun getDashboardSummary(scope: Scope): DashboardSummary = DashboardSummary(gastoVariablePorDia = emptyMap())
@@ -628,6 +628,12 @@ class PrimerUsoEnPantallaTest {
         assertEquals(25, salario.dayOfMonth, "el día del corte: el que reconoce fechaEsperadaDelIngreso")
         assertEquals("Salario", salario.category)
         assertEquals(repo.cuentasCreadas.single().id, salario.accountId)
+        // Revisión de la 75: «¿Ya te pagaron este período?» viene en sí: la regla arranca en el siguiente,
+        // y el salario de este (que ya está en el saldo) no cuenta como plata por llegar.
+        assertEquals(
+            arranqueDelPeriodoSiguiente(25, SiElCorteCaeEnFinDeSemana.DIA_HABIL_ANTERIOR, kotlinx.datetime.Clock.System.now().toEpochMilliseconds()),
+            salario.activeFrom,
+        )
 
         // «Listo» con una cifra real, la del héroe de Inicio.
         composeRule.waitUntil(5_000) { composeRule.onAllNodesWithTag(TAG_CIFRA_DEL_LISTO).fetchSemanticsNodes().isNotEmpty() }
@@ -635,6 +641,77 @@ class PrimerUsoEnPantallaTest {
         composeRule.onNodeWithTag(TAG_CIFRA_DEL_LISTO).assertTextContains("hasta el", substring = true)
         avanzar()
         assertEquals(1, repo.reglas.size, "terminar no la vuelve a crear")
+    }
+
+    /** Escribe el salario, crea una cuenta y llega al final. */
+    private fun hastaElFinalConElSalario(repo: RepoDeLaGuia, yaMePagaron: Boolean = true) {
+        montar(repo, paso = PasoDePrimerUso.PERIODO)
+        composeRule.onNodeWithText("25").performClick()
+        composeRule.waitForIdle()
+        composeRule.onAllNodes(hasSetTextAction())[0].performScrollTo().performTextInput("7000000")
+        composeRule.waitForIdle()
+        if (!yaMePagaron) {
+            composeRule.onNodeWithTag(TAG_YA_TE_PAGARON).performScrollTo().performClick()
+            composeRule.waitForIdle()
+        }
+        avanzar()
+        composeRule.onNodeWithText("Bancolombia").performClick()
+        composeRule.waitForIdle()
+        composeRule.onAllNodes(hasSetTextAction())[1].performTextInput("1500000")
+        avanzar()
+        saltar()
+        saltar()
+    }
+
+    /** Revisión de la 75: «Ir a Inicio» a los 30 ms creaba dos reglas «Salario». */
+    @Test
+    fun `tocar Ir a Inicio mientras se crea el salario no lo crea dos veces`() {
+        val puerta = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val repo = object : RepoConCifra() {
+            override suspend fun createRecurringRule(rule: RecurringRule): RecurringRule {
+                puerta.await()
+                return super.createRecurringRule(rule)
+            }
+        }
+        hastaElFinalConElSalario(repo)
+        assertTrue(seVe("Paso 6 de 6"))
+        // Mientras se crea, «Ir a Inicio» está apagado: un toque no hace nada.
+        composeRule.onNodeWithTag(TAG_AVANZAR_EN_LA_GUIA).assertIsNotEnabled()
+        composeRule.onNodeWithTag(TAG_AVANZAR_EN_LA_GUIA).performClick()
+        composeRule.onNodeWithTag(TAG_AVANZAR_EN_LA_GUIA).performClick()
+        composeRule.waitForIdle()
+        assertTrue(navegaciones.isEmpty())
+
+        puerta.complete(Unit)
+        composeRule.waitUntil(5_000) { repo.reglas.isNotEmpty() }
+        composeRule.waitForIdle()
+        avanzar()
+        assertEquals(1, repo.reglas.size, "una sola regla «Salario»")
+        assertEquals(listOf<Screen>(Screen.Dashboard), navegaciones)
+    }
+
+    @Test
+    fun `si todavia no te pagaron, el salario cuenta desde este periodo`() {
+        val repo = RepoConCifra()
+        hastaElFinalConElSalario(repo, yaMePagaron = false)
+        composeRule.waitUntil(5_000) { repo.reglas.isNotEmpty() }
+        assertNull(repo.reglas.single().activeFrom, "sin arranque: la ocurrencia de este período cuenta")
+    }
+
+    /** Revisión de la 75: la guía promete «a la primera cuenta que agregues»; sin ninguna, no se crea. */
+    @Test
+    fun `Ahora no antes de agregar cuentas no deja un salario sin cuenta`() {
+        val repo = RepoDeLaGuia()
+        montar(repo, paso = PasoDePrimerUso.PERIODO)
+        composeRule.onNodeWithText("25").performClick()
+        composeRule.waitForIdle()
+        composeRule.onAllNodes(hasSetTextAction())[0].performScrollTo().performTextInput("7000000")
+        composeRule.waitForIdle()
+        avanzar()
+        composeRule.onNodeWithText(AHORA_NO).performClick()
+        composeRule.waitForIdle()
+        assertTrue(repo.reglas.isEmpty())
+        assertEquals(listOf<Screen>(Screen.Dashboard), navegaciones)
     }
 
     @Test

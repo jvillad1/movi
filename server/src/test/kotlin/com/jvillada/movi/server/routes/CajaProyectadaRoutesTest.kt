@@ -330,6 +330,46 @@ class CajaProyectadaRoutesTest {
     }
 
     /**
+     * Revisión de la 75 · **el salario que la guía crea cuando «ya te pagaron este período»**: la regla
+     * nace con `activeFrom` en el arranque del período siguiente (el 25-nov, con corte 25), así que la
+     * ocurrencia de este período (la del 25-oct, esperada el viernes 23) **no existe**: ni vencida en
+     * `/upcoming`, ni por cobrar en la lista del período —de donde salen «Te quedan», «Listo» y la caja—;
+     * y la del siguiente sí, la que cierra la caja.
+     */
+    @Test
+    fun `el salario que arranca en el periodo siguiente no cuenta en este y si en el siguiente`() {
+        val dia = LocalDate.of(2026, 10, 30)
+        anotar(duenoId, "apertura", 2_000_000L, dia, OPENING_CATEGORY, tipo = "INCOME")
+        transaction {
+            Users.update({ Users.id eq duenoId }) {
+                it[periodCutoffDay] = 25; it[periodWeekendRule] = "DIA_HABIL_ANTERIOR"
+            }
+            RecurringRules.insert {
+                it[id] = "rr_salario"; it[userId] = duenoId; it[name] = "Salario"; it[category] = "Salario"
+                it[amount] = 6_500_000L; it[dayOfMonth] = 25; it[type] = "INCOME"; it[activeFrom] = "2026-11-25"
+            }
+        }
+        val upcoming = runBlocking { proximosPagos(duenoId, dia) }
+        val delSalario = upcoming.filter { it.rule.id == "rr_salario" }
+        assertTrue(delSalario.none { it.status == com.jvillada.movi.shared.model.PaymentStatus.OVERDUE }, "$delSalario")
+        assertTrue(delSalario.all { it.dueDate >= "2026-11-25" }, "$delSalario")
+
+        val ajustes = runBlocking { com.jvillada.movi.server.time.ajustesDePeriodoDe(duenoId) }
+        val periodo = com.jvillada.movi.shared.model.periodoDe(appDateToEpochMillis(dia) + 12L * 3_600_000L, ajustes)
+        val ocurrencias = runBlocking { ocurrenciasDelPeriodo(duenoId, dia) }
+        val delPeriodo = com.jvillada.movi.shared.model.checklistDelPeriodo(upcoming, ocurrencias, periodo, ajustes)
+        assertTrue(delPeriodo.none { it.ruleId == "rr_salario" }, "el salario de este período ya está en el saldo: $delPeriodo")
+        assertEquals(0L, com.jvillada.movi.shared.model.ingresosPorRecibirDelPeriodo(delPeriodo), "nada por cobrar en «Te quedan»")
+
+        val caja = assertNotNull(runBlocking { cajaProyectadaDe(duenoId, dia) }.caja)
+        assertEquals("2026-11-25", caja.alCierre.fecha, "la del período siguiente sí: cierra la caja")
+        assertTrue(caja.hastaElSalario)
+        assertEquals(MovimientoDeLaCaja("Llega tu salario (esperado)", 6_500_000L), caja.salario)
+        assertEquals(2_000_000L, caja.dias.first().saldo, "hoy no sube nada: lo de las cuentas, tal cual")
+        assertEquals(1, caja.dias.flatMap { it.movimientos }.count { it.monto > 0 }, "una sola subida, la del 25-nov")
+    }
+
+    /**
      * Revisión de la 70 · **las compras con tarjeta sin pagar** que manda el resumen del Inicio: el gasto
      * contado en la tarjeta en el período menos lo que entró a la tarjeta en el período. Un traspaso a la
      * tarjeta la baja, un ajuste de saldo no; lo de otro período no cuenta.
