@@ -19,6 +19,12 @@ import com.jvillada.movi.ui.credits.ElSaldoDelPlanEnLaFicha
 import com.jvillada.movi.ui.credits.lineaDeLasDeudasSinSaldo
 import com.jvillada.movi.ui.dashboard.DashboardData
 import com.jvillada.movi.ui.dashboard.MovimientoDelDueno
+import com.jvillada.movi.ui.dashboard.MovimientosDelDueno
+import com.jvillada.movi.ui.dashboard.VIGENCIA_SIN_SUBIR_MS
+import com.jvillada.movi.ui.dashboard.cargaBuenaEmpezadaEn
+import com.jvillada.movi.ui.components.ds.VIGENCIA_DEL_CAMBIO_DEL_DUENO_MS
+import com.jvillada.movi.ui.components.ds.partesDelAviso
+import com.jvillada.movi.ui.components.ds.PartesDelAviso
 import com.jvillada.movi.ui.dashboard.datosConElMovimiento
 import com.jvillada.movi.ui.dashboard.datosConLosMovimientosDelDueno
 import com.jvillada.movi.ui.dashboard.disponibleDelInicio
@@ -66,15 +72,17 @@ class Vuelta82Test {
 
     @Test
     fun `debajo de la deuda total va el prestamo sin saldo con lo que dice su plan`() {
-        assertEquals("+ Vehículo 4083 sin saldo (unos \$35,8M según el plan)", lineaDeLasDeudasSinSaldo(listOf(vehiculo), mapOf("v4083" to plan)))
-        assertEquals("+ 1 préstamo sin saldo", lineaDeLasDeudasSinSaldo(listOf(vehiculo), emptyMap()))
-        assertEquals("+ 1 tarjeta sin saldo", lineaDeLasDeudasSinSaldo(listOf(nu), emptyMap()))
-        assertEquals("+ 2 préstamos sin saldo", lineaDeLasDeudasSinSaldo(listOf(vehiculo, otro), mapOf("v4083" to plan)))
+        // Revisión de la vuelta 82: sin «+» (debajo de una cifra negativa se leía raro).
+        assertEquals("Falta Vehículo 4083, sin saldo (unos \$35,8M según el plan)", lineaDeLasDeudasSinSaldo(listOf(vehiculo), mapOf("v4083" to plan)))
+        assertEquals("Falta Vehículo 4083, sin saldo", lineaDeLasDeudasSinSaldo(listOf(vehiculo), emptyMap()))
+        assertEquals("Falta Nu, sin saldo", lineaDeLasDeudasSinSaldo(listOf(nu), emptyMap()))
+        assertEquals("Faltan 2 préstamos, sin saldo", lineaDeLasDeudasSinSaldo(listOf(vehiculo, otro), mapOf("v4083" to plan)))
         assertEquals(
-            "+ 2 préstamos sin saldo (unos \$71,6M según el plan)",
+            "Faltan 2 préstamos, sin saldo (unos \$71,6M según el plan)",
             lineaDeLasDeudasSinSaldo(listOf(vehiculo, otro), mapOf("v4083" to plan, "l9695" to plan)),
         )
-        assertEquals("+ 2 deudas sin saldo", lineaDeLasDeudasSinSaldo(listOf(vehiculo, nu), emptyMap()))
+        assertEquals("Faltan 2 deudas, sin saldo", lineaDeLasDeudasSinSaldo(listOf(vehiculo, nu), emptyMap()))
+        assertFalse(lineaDeLasDeudasSinSaldo(listOf(vehiculo), emptyMap())!!.startsWith("+"))
         assertNull(lineaDeLasDeudasSinSaldo(emptyList(), emptyMap()))
         // Sin «≈»: Figtree no tiene ese glifo.
         assertFalse(lineaDeLasDeudasSinSaldo(listOf(vehiculo), mapOf("v4083" to plan))!!.contains('≈'))
@@ -145,6 +153,111 @@ class Vuelta82Test {
         assertNull(datosConElMovimiento(inicio, gasto("no-esta", 10_000), 1, hoy), "una cuenta que no se leyó")
         // Uno dudoso entre varios: nada se adelanta.
         assertNull(datosConLosMovimientosDelDueno(inicio, listOf(MovimientoDelDueno(1, gasto("ah", 1), 1, 0), MovimientoDelDueno(2, gasto("ah", 5, categoria = "Vivienda"), 1, 0)), hoy))
+    }
+
+    // ── Revisión · lo que el server no adelantaría ───────────────────────────────────────────────
+
+    @Test
+    fun `un gasto desde una cuenta que no es de Tu plata espera al server`() {
+        val nuAhorro = Account("nu-ah", "Nu ahorro", AccountType.SAVINGS, 2_000_000L, condicionadaA = "El viaje")
+        val datos = inicio.copy(accounts = listOf(ahorros, tarjeta, nuAhorro))
+        assertNull(datosConElMovimiento(datos, gasto("nu-ah", 50_000), 1, hoy), "variable +X y pagado desde fuera −X: no cambia «Te quedan»")
+    }
+
+    @Test
+    fun `un gasto en la categoria de un apartado de esa cuenta espera al server`() {
+        val colegio = com.jvillada.movi.shared.model.Apartado(
+            id = "ap1", accountId = "ah", proposito = "Colegio", monto = 8_000_000L, categoria = "Educación", desde = 0L,
+        )
+        val datos = inicio.copy(apartados = listOf(colegio))
+        assertNull(datosConElMovimiento(datos, gasto("ah", 400_000, categoria = "educacion"), 1, hoy), "baja el apartado, no las cifras")
+        // En otra cuenta, o en otra categoría, sí se adelanta.
+        assertNotNull(datosConElMovimiento(datos, gasto("tc", 400_000, categoria = "Educación"), 1, hoy))
+        assertNotNull(datosConElMovimiento(datos, gasto("ah", 40_000), 1, hoy))
+    }
+
+    @Test
+    fun `lo que se empareja por nombre con un pago del periodo espera al server`() {
+        val netflix = UpcomingPayment(
+            rule = RecurringRule(id = "nf", name = "Netflix", category = "Suscripciones", amount = 44_900, dayOfMonth = 3, type = TransactionType.EXPENSE),
+            dueDate = "2026-10-03", daysUntil = -12, status = PaymentStatus.OVERDUE,
+        )
+        val datos = inicio.copy(upcoming = inicio.upcoming!! + netflix)
+        val aviso = gasto("ah", 44_900, categoria = "Entretenimiento").copy(description = "NETFLIX.COM", merchant = "Netflix")
+        assertNull(datosConElMovimiento(datos, aviso, -1, hoy), "por nombre puede ser el fijo de Netflix")
+        // Sellado a una regla (aunque no se parezca): también.
+        val sellado = inicio.copy(ocurrencias = listOf(com.jvillada.movi.shared.model.OccurrenceState(ruleId = "x", period = "2026-10", dueDate = "2026-10-03", occurred = true, eventId = "g-ah-12300")))
+        assertNull(datosConElMovimiento(sellado, gasto("ah", 12_300), -1, hoy))
+        // Anular lo que no está en el gasto del día lo dejaría en negativo: dudoso.
+        assertNull(datosConElMovimiento(inicio, gasto("ah", 12_300), -1, hoy))
+    }
+
+    @Test
+    fun `una carga que termina sin el gasto no suelta, una caida tampoco, y una posterior si`() {
+        MovimientosDelDueno.limpiar()
+        try {
+            val id = MovimientosDelDueno.registrar(gasto("ah", 12_300), signo = 1, ahora = 1_000)
+            // Sin listo (en el teléfono, sin subir): ninguna carga lo suelta.
+            assertEquals(1, MovimientosDelDueno.pendientes(cargaBuenaEmpezadaEn = 5_000, ahora = 6_000).size)
+            MovimientosDelDueno.marcarListo(id, en = 2_000)
+            // La carga que arrancó al guardar (antes de que el server lo tuviera) termina sin el gasto: no suelta.
+            assertEquals(1, MovimientosDelDueno.pendientes(cargaBuenaEmpezadaEn = 1_500, ahora = 3_000).size)
+            // Una carga que empezó después pero falló no cuenta como buena: el sello sigue en la anterior.
+            val sello = cargaBuenaEmpezadaEn(anterior = 1_500, empezo = 2_500, resumenLlego = true, cuentasLlegaron = true, fallo = true)
+            assertEquals(1_500L, sello)
+            assertEquals(1_500L, cargaBuenaEmpezadaEn(anterior = 1_500, empezo = 2_500, resumenLlego = false, cuentasLlegaron = true, fallo = false))
+            assertEquals(1, MovimientosDelDueno.pendientes(sello, ahora = 3_000).size)
+            // Una carga buena que empezó después: suelta.
+            val buena = cargaBuenaEmpezadaEn(anterior = 1_500, empezo = 2_500, resumenLlego = true, cuentasLlegaron = true, fallo = false)
+            assertEquals(0, MovimientosDelDueno.pendientes(buena, ahora = 3_000).size)
+        } finally {
+            MovimientosDelDueno.limpiar()
+        }
+    }
+
+    @Test
+    fun `una carga que termina en medio de deshacer no suelta la ida y la vuelta juntas`() {
+        MovimientosDelDueno.limpiar()
+        try {
+            val ida = MovimientosDelDueno.registrar(gasto("ah", 12_300), signo = 1, ahora = 1_000)
+            MovimientosDelDueno.marcarListo(ida, en = 1_000)
+            val vuelta = MovimientosDelDueno.registrar(gasto("ah", 12_300), signo = -1, ahora = 1_200)
+            // L1 empezó a 1.100 y terminó a 1.300, antes de que la anulación terminara (1.400).
+            val quedan = MovimientosDelDueno.pendientes(cargaBuenaEmpezadaEn = 1_100, ahora = 1_300)
+            assertEquals(listOf(vuelta), quedan.map { it.id }, "suelta la ida (L1 la trae) pero no la vuelta")
+            MovimientosDelDueno.marcarListo(vuelta, en = 1_400)
+            assertEquals(listOf(vuelta), MovimientosDelDueno.pendientes(cargaBuenaEmpezadaEn = 1_100, ahora = 1_500).map { it.id })
+            assertTrue(MovimientosDelDueno.pendientes(cargaBuenaEmpezadaEn = 1_450, ahora = 1_600).isEmpty())
+        } finally {
+            MovimientosDelDueno.limpiar()
+        }
+    }
+
+    @Test
+    fun `el optimista vence, y dice cuando`() {
+        MovimientosDelDueno.limpiar()
+        try {
+            val id = MovimientosDelDueno.registrar(gasto("ah", 1), signo = 1, ahora = 1_000)
+            MovimientosDelDueno.marcarListo(id, en = 1_000)
+            val vence = 1_000 + VIGENCIA_DEL_CAMBIO_DEL_DUENO_MS
+            assertEquals(VIGENCIA_DEL_CAMBIO_DEL_DUENO_MS, MovimientosDelDueno.proximoVencimiento(MovimientosDelDueno.pendientes(null, 1_000), 1_000))
+            assertTrue(MovimientosDelDueno.pendientes(null, vence + 1).isEmpty())
+            // Lo que no subió dura más (sin señal), pero no para siempre.
+            MovimientosDelDueno.registrar(gasto("ah", 2), signo = 1, ahora = 2_000)
+            assertEquals(1, MovimientosDelDueno.pendientes(null, 2_000 + VIGENCIA_DEL_CAMBIO_DEL_DUENO_MS + 1).size)
+            assertTrue(MovimientosDelDueno.pendientes(null, 2_000 + VIGENCIA_SIN_SUBIR_MS + 1).isEmpty())
+        } finally {
+            MovimientosDelDueno.limpiar()
+        }
+    }
+
+    @Test
+    fun `el aviso se parte en el monto, que no se corta, y lo demas`() {
+        assertEquals(PartesDelAviso("Anotado", "\$12.300", "· Restaurantes"), partesDelAviso("Anotado \$12.300 · Restaurantes"))
+        assertEquals(PartesDelAviso("Ya estaba anotado", "US\$45", "· Netflix"), partesDelAviso("Ya estaba anotado US\$45 · Netflix"))
+        assertEquals(PartesDelAviso("Tu parte", "\$16.000", "· repartido con Caro"), partesDelAviso("Tu parte \$16.000 · repartido con Caro"))
+        assertEquals(PartesDelAviso("Anotado", "\$12.300", null), partesDelAviso("Anotado \$12.300"))
+        assertEquals(PartesDelAviso("Deshecho", null, null), partesDelAviso("Deshecho"))
     }
 
     // ── 4 · El snackbar con el monto ─────────────────────────────────────────────────────────────

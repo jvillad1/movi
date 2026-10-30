@@ -64,7 +64,7 @@ import com.jvillada.movi.ui.credits.CreditosScreen
 import com.jvillada.movi.ui.credits.TAG_DEUDAS_SIN_SALDO
 import com.jvillada.movi.ui.credits.TAG_PRESTAMO_SIN_SALDO
 import com.jvillada.movi.ui.dashboard.DashboardData
-import com.jvillada.movi.ui.dashboard.LocalCargaDelInicioTerminadaEn
+import com.jvillada.movi.ui.dashboard.LocalCargaBuenaDelInicioEmpezadaEn
 import com.jvillada.movi.ui.dashboard.LocalCargandoElInicio
 import com.jvillada.movi.ui.dashboard.MovimientosDelDueno
 import com.jvillada.movi.ui.espacios.textoDeLoAnotado
@@ -148,7 +148,7 @@ class Vuelta82EnPantallaTest {
         composeRule.waitForIdle()
 
         val linea = texto(TAG_DEUDAS_SIN_SALDO)
-        assertTrue(linea.startsWith("+ Vehículo 4083 sin saldo (unos \$"), "la línea debajo de la deuda total: $linea")
+        assertTrue(linea.startsWith("Falta Vehículo 4083, sin saldo (unos \$"), "la línea debajo de la deuda total: $linea")
         assertTrue(linea.endsWith("según el plan)"), linea)
         assertEquals(1, cuantosConTag(TAG_PRESTAMO_SIN_SALDO), "la pieza sale una vez, en la fila del préstamo")
         // El signo de Patrimonio («Deudas −$1.583.000»): la cifra grande y la fila de Nu.
@@ -186,7 +186,7 @@ class Vuelta82EnPantallaTest {
         composeRule.mainClock.autoAdvance = false
         composeRule.setContent {
             MoviTheme {
-                CompositionLocalProvider(LocalCargandoElInicio provides false, LocalCargaDelInicioTerminadaEn provides terminada) {
+                CompositionLocalProvider(LocalCargandoElInicio provides false, LocalCargaBuenaDelInicioEmpezadaEn provides terminada) {
                     Box(Modifier.fillMaxSize()) {
                         SduiRenderer(definition = defaultDashboardDefinition(), data = datos, modifier = Modifier.fillMaxSize(), onNavigate = {})
                     }
@@ -230,16 +230,20 @@ class Vuelta82EnPantallaTest {
     fun `al llegar el server con otra cifra, el heroe se corrige contando`() {
         montarElHeroe()
         val (q0, p0) = teQuedan() to tuPlata()
-        Snapshot.withMutableSnapshot { MovimientosDelDueno.registrar(gasto("ah", 12_300), signo = 1) }
+        var id = 0L
+        Snapshot.withMutableSnapshot { id = MovimientosDelDueno.registrar(gasto("ah", 12_300), signo = 1) }
         composeRule.mainClock.advanceTimeBy(1_000)
         assertEquals(q0 - 12_300, teQuedan())
+        // El server ya lo tiene (la web: al volver la escritura).
+        val listoEn = Clock.System.now().toEpochMilliseconds()
+        Snapshot.withMutableSnapshot { MovimientosDelDueno.marcarListo(id, listoEn) }
         // El server leyó otra cosa: el gasto fue de $15.000 (y la carga terminó después del cambio).
         Snapshot.withMutableSnapshot {
             datos = inicio.copy(
                 accounts = listOf(ahorros.copy(balance = 10_000_000L - 15_000L), tarjeta),
                 gastoVariablePorDia = mapOf(hoy.toString() to 15_000L),
             )
-            terminada = Clock.System.now().toEpochMilliseconds() + 1
+            terminada = listoEn + 1
         }
         composeRule.mainClock.advanceTimeBy(16 * 4)
         val enMedio = teQuedan()
@@ -267,12 +271,15 @@ class Vuelta82EnPantallaTest {
         }
         composeRule.waitForIdle()
         val r = mutableListOf<TextLayoutResult>()
-        composeRule.onNodeWithTag(TAG_TEXTO_DEL_AVISO, useUnmergedTree = true).fetchSemanticsNode()
+        composeRule.onNodeWithTag(com.jvillada.movi.ui.components.ds.TAG_CIFRA_DEL_AVISO, useUnmergedTree = true).fetchSemanticsNode()
             .config[SemanticsActions.GetTextLayoutResult].action?.invoke(r)
-        val visible = r.single().getLineEnd(0, visibleEnd = true)
-        val finDelMonto = t.indexOf("\$12.300") + "\$12.300".length
-        assertTrue(r.single().hasVisualOverflow, "la frase larga no cabe")
-        assertTrue(visible >= finDelMonto, "el monto se ve entero (visible hasta $visible, el monto termina en $finDelMonto)")
+        assertEquals("Anotado", texto(TAG_TEXTO_DEL_AVISO))
+        assertEquals("\$12.300", texto(com.jvillada.movi.ui.components.ds.TAG_CIFRA_DEL_AVISO), "el monto va en su propia pieza")
+        assertFalse(r.single().hasVisualOverflow, "el monto se ve entero")
+        val resto = mutableListOf<TextLayoutResult>()
+        composeRule.onNodeWithTag(com.jvillada.movi.ui.components.ds.TAG_RESTO_DEL_AVISO, useUnmergedTree = true).fetchSemanticsNode()
+            .config[SemanticsActions.GetTextLayoutResult].action?.invoke(resto)
+        assertTrue(resto.single().isLineEllipsized(0), "la categoría larga se corta con «…»")
     }
 
     @Test
@@ -355,5 +362,82 @@ class Vuelta82EnPantallaTest {
         composeRule.waitForIdle()
         assertTrue(encendido)
         assertEquals(true, composeRule.onNodeWithTag(TAG_INTERRUPTOR, useUnmergedTree = true).fetchSemanticsNode().config[InterruptorEncendidoKey])
+    }
+
+    // ── Revisión de la vuelta 82 ─────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `una carga que empezo antes de que el server lo tuviera no suelta el optimista`() {
+        montarElHeroe()
+        val q0 = teQuedan()
+        var id = 0L
+        Snapshot.withMutableSnapshot { id = MovimientosDelDueno.registrar(gasto("ah", 12_300), signo = 1) }
+        composeRule.mainClock.advanceTimeBy(1_000)
+        // En el teléfono la fila no subió: la carga que arrancó al guardar terminó bien pero sin el gasto.
+        Snapshot.withMutableSnapshot { terminada = Clock.System.now().toEpochMilliseconds() + 5 }
+        composeRule.mainClock.advanceTimeBy(1_000)
+        assertEquals(q0 - 12_300, teQuedan(), "sigue adelantado: el server todavía no lo tiene")
+        assertTrue(id > 0)
+    }
+
+    @Test
+    fun `en el telefono, lo que no subio se sube, queda listo y la pantalla recarga`() {
+        var subidas = 0
+        var recargas = 0
+        MovimientosDelDueno.costurasDePrueba = MovimientosDelDueno.Costuras(
+            elServerLoTiene = { subidas > 0 },
+            subirAhora = { subidas++ },
+            pedirRecarga = { recargas++ },
+            esperar = {},
+        )
+        val id = MovimientosDelDueno.registrar(gasto("ah", 12_300), signo = 1)
+        MovimientosDelDueno.listo(id)
+        val hasta = System.currentTimeMillis() + 5_000
+        while (MovimientosDelDueno.pendientes(null).firstOrNull()?.listoEn == null && System.currentTimeMillis() < hasta) Thread.sleep(10)
+        assertEquals(1, subidas, "pidió una vuelta del SyncEngine")
+        assertTrue(MovimientosDelDueno.pendientes(null).single().listoEn != null, "y quedó listo")
+        val hasta2 = System.currentTimeMillis() + 2_000
+        while (recargas == 0 && System.currentTimeMillis() < hasta2) Thread.sleep(10)
+        assertEquals(1, recargas, "y la pantalla a la vista recarga para traerlo")
+    }
+
+    @Test
+    fun `el interruptor tiene 48 dp de toque sin cambiar el riel`() {
+        composeRule.setContent { MoviTheme { Box { Interruptor(encendido = false, onCambio = {}) } } }
+        composeRule.waitForIdle()
+        val b = composeRule.onNodeWithTag(TAG_INTERRUPTOR, useUnmergedTree = true).getUnclippedBoundsInRoot()
+        assertTrue(b.bottom - b.top >= com.jvillada.movi.theme.Medida.objetivoTactil, "alto de toque ${b.bottom - b.top}")
+        assertTrue(b.right - b.left >= com.jvillada.movi.theme.Medida.objetivoTactil, "ancho de toque ${b.right - b.left}")
+    }
+
+    @Test
+    @Config(qualifiers = "w360dp-h800dp-xhdpi")
+    fun `con la letra grande y un monto de ocho cifras se corta la categoria y nunca el monto`() {
+        val t = textoDeLoAnotado("Restaurantes y bares del parque Lleras", 12_300_000, "COP")
+        composeRule.setContent {
+            val d = androidx.compose.ui.platform.LocalDensity.current
+            CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(d.density, fontScale = 1.3f)) {
+                MoviTheme {
+                    SnackbarDeMovi(
+                        texto = t,
+                        esError = false,
+                        accion = com.jvillada.movi.ui.components.ds.AccionDelSnackbar("Repartir", "Repartir con Caro", "a", true, {}),
+                        deshacer = com.jvillada.movi.ui.components.ds.AccionDelSnackbar("Deshacer", "Deshacer", "d", true, {}),
+                    )
+                }
+            }
+        }
+        composeRule.waitForIdle()
+        fun disposicion(tag: String): TextLayoutResult {
+            val r = mutableListOf<TextLayoutResult>()
+            composeRule.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().config[SemanticsActions.GetTextLayoutResult].action?.invoke(r)
+            return r.single()
+        }
+        val cifra = disposicion(com.jvillada.movi.ui.components.ds.TAG_CIFRA_DEL_AVISO)
+        assertEquals("\$12.300.000", texto(com.jvillada.movi.ui.components.ds.TAG_CIFRA_DEL_AVISO))
+        assertFalse(cifra.hasVisualOverflow, "el monto se ve entero")
+        val bordesDeLaCifra = composeRule.onNodeWithTag(com.jvillada.movi.ui.components.ds.TAG_CIFRA_DEL_AVISO, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val bordesDeLaAccion = composeRule.onNodeWithTag("a", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertTrue(bordesDeLaCifra.right <= bordesDeLaAccion.left, "y no se mete debajo de las acciones")
     }
 }

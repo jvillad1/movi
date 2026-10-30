@@ -4497,8 +4497,8 @@ decir, con las funciones de siempre. Un componente nuevo en `ds/` (`Interruptor`
    donde se nombre una cuenta) usa `coloresDelAvatarDelBanco`: la «B» en la capa 3 con la tinta.
    `UnSoloAmarilloPorVistaTest` cuenta ahora también Actividad, Por revisar (con lote y con una tarjeta) y Patrimonio.
 2. **La deuda total, honesta.** Debajo de la cifra grande de Créditos va **una línea**
-   (`lineaDeLasDeudasSinSaldo`): «+ Vehículo 4083 sin saldo (unos $35,8M según el plan)» con `saldoSegunElPlan`;
-   sin plan, «+ 1 préstamo sin saldo»; varias, «+ 2 préstamos sin saldo». «Unos» y no «≈»: Figtree no tiene ese
+   (`lineaDeLasDeudasSinSaldo`): «Falta Vehículo 4083, sin saldo (unos $35,8M según el plan)» con
+   `saldoSegunElPlan`; sin plan, «Falta Vehículo 4083, sin saldo»; varias, «Faltan 2 préstamos, sin saldo». «Unos» y no «≈»: Figtree no tiene ese
    glifo. **La pieza `ElPrestamoSinSaldo` sale una vez por vista**, en la fila del préstamo; el resumen lleva solo
    la línea. **El signo** es el de Patrimonio (`cifraDeLasDeudasEnLaFila`): «Deuda total −$1.583.000» y las filas de
    Créditos con «−».
@@ -4546,3 +4546,30 @@ Actividad, el borde de hover), `ContrasteDeLosTokensTest` (el hilo y el interrup
 tarjeta solo en «Te quedan», la corrección del server, el monto que no se corta a 360, «Deshecho», la tarjeta de
 avisos y su esqueleto del mismo alto con el círculo de aviso, la superficie con borde y el interruptor) y
 `UnSoloAmarilloPorVistaTest` ampliado.
+
+### La revisión de la vuelta 82, y lo que cambió
+
+1. **[Plata] El optimista no se suelta antes de tiempo.** Se soltaba con cualquier carga que *terminara* después
+   del cambio. En el teléfono `postEvent`/`voidEvent` escriben en el espejo y el `SyncEngine` sube hasta 30 s
+   después, pero el Inicio lee del server: la carga que arranca al guardar traía la cifra sin el gasto, y sin
+   señal se sellaba igual. Ahora cada `MovimientoDelDueno` tiene `listoEn` —desde cuándo el server lo tiene— y
+   solo lo suelta una carga **buena** (resumen y cuentas del server, sin fallar: `cargaBuenaEmpezadaEn`) que
+   **empezó** desde entonces (`DashboardDataCache.cargaBuenaEmpezadaEn`, `LocalCargaBuenaDelInicioEmpezadaEn`).
+   `MovimientosDelDueno.listo` (cuando la escritura terminó) pregunta al repositorio
+   `elServerYaTieneElMovimiento` —la web, siempre; el teléfono, por el sello de la fila y de sus anulaciones—;
+   si no, pide `subirLoPendienteAhora` (una vuelta del `SyncEngine`), y cuando subió anota `listoEn` y pide
+   recargar (`actualizarAMano`). Sin señal reintenta cada 30 s y el optimista se queda hasta
+   `VIGENCIA_SIN_SUBIR_MS` (10 min); listo, vence a los 15 s, y el héroe recompone al vencer (un
+   `LaunchedEffect` que espera `proximoVencimiento`). Se eligió mantener el pendiente hasta que la fila suba, y no
+   subir antes de cerrar Agregar: guardar sigue sin esperar la red, y no se tocó Agregar.
+2. **[Plata] Más casos dudosos** (`datosConElMovimiento`): una cuenta que no es de Tu plata (`esDeTuPlata`: el
+   server lo compensa con «pagado desde fuera»), la categoría de un apartado de esa cuenta (baja el apartado), y lo
+   que se parece a un pago del período con las señas del emparejador (`pareceUnPagoDelPeriodo`: categoría,
+   `nombreDeMovimientoPegaConRegla` contra el nombre o el comercio, un destino con el mismo monto, un sello o
+   candidato en las ocurrencias, el nombre de una suscripción). Quitar más de lo que hay en el gasto del día
+   también espera al server.
+3. **El interruptor toca 48 dp** de alto (`sizeIn(minHeight = Medida.objetivoTactil)` en la capa del toque); el
+   riel sigue de 52 × 32.
+4. **El snackbar en dos partes** (`partesDelAviso`): lo de antes de « · » («Anotado $12.300») se mide entero, lo de
+   después (`TAG_RESTO_DEL_AVISO`) es lo que se corta. «Tu parte $16.000 · repartido con Caro» (`textoDeRepartido`).
+5. **Créditos sin «+»**: «Falta Vehículo 4083, sin saldo (unos $35,8M según el plan)».
