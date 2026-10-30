@@ -1,5 +1,8 @@
 package com.jvillada.movi.ui.sms
 
+import com.jvillada.movi.ui.components.ds.marcaDelComercio
+import com.jvillada.movi.ui.components.ds.IconoResuelto
+import com.jvillada.movi.ui.components.ds.IconoDeMovimiento
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Inbox
 import androidx.compose.material3.Text
@@ -250,7 +253,9 @@ fun cabezaDelAviso(
         // marca se busca en el texto crudo, y lo que se guarda sigue siendo lo que leyó Movi.
         titulo = nombreParaMostrar(comercio),
         subtitulo = subtitulo,
-        marca = marcaDelTexto(comercio) ?: enElTexto,
+        // Vuelta 80: un banco no es un comercio (`marcaDelComercio`): con el comercio de título, la
+        // marca es la del comercio o ninguna (y entonces va la categoría).
+        marca = marcaDelComercio(comercio, "") ?: enElTexto,
         categoria = (leido?.category ?: sinLeer?.categoria)?.takeIf { it.isNotBlank() },
         monto = monto,
         moneda = moneda,
@@ -260,15 +265,18 @@ fun cabezaDelAviso(
 
 /**
  * **El avatar de la cabeza**: la marca, o el ícono de la categoría que leyó Movi (como la fila de un
- * movimiento, `AvatarDelComercio`), o el ícono de los avisos.
+ * movimiento, `IconoDeMovimiento`), o el ícono de los avisos.
  */
 @Composable
 internal fun AvatarDeLaCabeza(cabeza: CabezaDelAviso, pideDecision: Boolean = true) {
     val marca = cabeza.marca
     val categoria = cabeza.categoria
     when {
+        // Vuelta 80: el comercio y la categoría con el ícono de todo movimiento; el banco, cuando el
+        // título es el banco, con su marca.
+        marca != null && marca.rubro != RubroDeMarca.BANCOS_Y_BILLETERAS -> IconoDeMovimiento(IconoResuelto.DeMarca(marca))
+        categoria != null -> IconoDeMovimiento(IconoResuelto.DeCategoria(categoria))
         marca != null -> CirculoDeMarca(marca, tamano = TamanoDeAvatar.Fila)
-        categoria != null -> IconoDeCategoria(categoria)
         else -> IconoEnCirculo(Icons.Rounded.Inbox, tono = if (pideDecision) TonoDeIcono.Aviso else TonoDeIcono.Neutro)
     }
 }

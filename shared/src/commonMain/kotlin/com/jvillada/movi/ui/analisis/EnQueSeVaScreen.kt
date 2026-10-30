@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.analisis
 
+import com.jvillada.movi.ui.components.ds.IconoDeMovimiento
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -78,7 +79,6 @@ import com.jvillada.movi.theme.Movimiento
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.categorias.IconoDeCategoria
 import com.jvillada.movi.ui.components.AvatarDeLaCuenta
-import com.jvillada.movi.ui.components.AvatarDelComercio
 import com.jvillada.movi.ui.components.Cifra
 import com.jvillada.movi.ui.components.HeaderLeading
 import com.jvillada.movi.ui.components.LineaEsqueleto
@@ -590,7 +590,7 @@ private fun FilaDeLaLista(
         inicio = {
             when (vista) {
                 VistaDelAnalisis.CATEGORIA -> IconoDeCategoria(fila.nombre)
-                VistaDelAnalisis.COMERCIO -> AvatarDelComercio(fila.muestra)
+                VistaDelAnalisis.COMERCIO -> IconoDeMovimiento(fila.muestra)
                 VistaDelAnalisis.CUENTA -> AvatarDeLaCuenta(nombre = fila.nombre, tipo = tipoDeCuenta ?: AccountType.CHECKING)
             }
         },

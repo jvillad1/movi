@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.transactions
 
+import com.jvillada.movi.ui.components.ds.IconoDeMovimiento
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -36,7 +37,6 @@ import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.analisis.fechaCorta
-import com.jvillada.movi.ui.components.AvatarDelComercio
 import com.jvillada.movi.ui.components.HeaderLeading
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.NoSePudoLeer
@@ -206,7 +206,7 @@ internal fun ListaDeAnulados(
                         titulo = textosDeLaFila(e, nombresDeCuentas[e.accountId]).titulo,
                         subtitulo = lineaDelAnulado(a),
                         lineasDelSubtitulo = if (a.porQueNo != null) 4 else 2,
-                        inicio = { AvatarDelComercio(e) },
+                        inicio = { IconoDeMovimiento(e) },
                         // Lo que anuló el sistema no se restaura: la frase de abajo dice por qué.
                         final = if (a.porQueNo != null) null else {
                             {

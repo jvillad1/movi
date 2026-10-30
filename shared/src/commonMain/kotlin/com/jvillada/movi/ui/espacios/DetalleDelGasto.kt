@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.espacios
 
+import com.jvillada.movi.ui.components.ds.AvatarDeTercero
+import com.jvillada.movi.ui.components.ds.IconoDeMovimiento
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -195,7 +197,7 @@ internal fun HojaDelGasto(espacio: Espacio, gasto: GastoDelEspacio, onCerrar: ()
                 Fila(
                     titulo = if (pagoOtro) "Pagó $quien" else "Pagaste tú",
                     subtitulo = if (pagoOtro) "No salió de tus cuentas" else null,
-                    inicio = { AvatarDePersona(quien, tono = if (pagoOtro) TonoDeIcono.Info else TonoDeIcono.Propio) },
+                    inicio = { if (pagoOtro) AvatarDeTercero(quien) else AvatarDelMiembro(MIEMBRO_YO, quien) },
                 )
                 Separador()
                 Fila(
@@ -209,7 +211,7 @@ internal fun HojaDelGasto(espacio: Espacio, gasto: GastoDelEspacio, onCerrar: ()
                     Fila(
                         titulo = gasto.categoria,
                         subtitulo = "Categoría",
-                        inicio = { IconoDeCategoria(gasto.categoria) },
+                        inicio = { IconoDeMovimiento(null, gasto.descripcion, gasto.categoria) },
                     )
                 }
                 if (gasto.fecha > 0L) {

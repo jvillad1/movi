@@ -61,10 +61,11 @@ class ElAmarilloEsDeLaAccionTest {
 
     @Test
     fun `los circulos de ds no son amarillos por defecto`() {
-        val fila = ds.entries.single { it.key.endsWith("/Fila.kt") }.value
+        // Vuelta 80: `AvatarDePersona` vive en su archivo (`ds/AvatarDePersona.kt`); se busca en todo `ds/`.
+        val todoDs = ds.values.joinToString("\n")
         for (componente in listOf("IconoEnCirculo", "AvatarDePersona")) {
-            val firma = Regex("""fun $componente\(([^)]*)\)""").find(fila)?.groupValues?.get(1)
-                ?: error("No encontré $componente en Fila.kt")
+            val firma = Regex("""fun $componente\(([^)]*)\)""").find(todoDs)?.groupValues?.get(1)
+                ?: error("No encontré $componente en ds/")
             assertTrue("tono: TonoDeIcono = TonoDeIcono.Neutro" in firma, "$componente tiene que ser neutro por defecto: $firma")
         }
     }
