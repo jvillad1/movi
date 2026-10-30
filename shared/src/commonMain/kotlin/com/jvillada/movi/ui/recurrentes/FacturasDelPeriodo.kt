@@ -392,19 +392,23 @@ internal fun FilaDeFactura(
                     habilitado = !enVuelo,
                 )
             }
-            if (accionesDelMenuPendiente.isNotEmpty()) {
-                MenuDeLaFila(pago.nombre, accionesDelMenuPendiente, nota = null, enVuelo = enVuelo, tag = TAG_MENU_DE_LA_FILA_PENDIENTE)
-            }
         }
         // **La pastilla va en su renglón**, a todo el ancho desde el texto (vuelta 40, revisión): al
         // lado de «Anotar pago», a 360 dp, «Venció hace 23 días» se cortaba en «Venció hace 23». Lo
         // mide `LaPastillaCabeEnteraTest`. El renglón también abre la regla (es parte de lo que se lee
         // de la fila).
+        // Vuelta 72 (revisión): el «⋯» con «Pausar» va al final de ESTE renglón, no al lado de «Anotar pago»:
+        // ahí le quitaba al nombre y a la cifra el ancho que necesitan con la letra al 130 % a 360 dp.
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
+                .weight(1f)
                 .then(if (onAbrir != null) Modifier.clickable(onClickLabel = etiquetaDeAbrir, onClick = onAbrir) else Modifier)
-                .padding(start = SANGRIA_DEL_TEXTO_DE_LA_FILA, end = Medida.margenDePantalla, bottom = Espacio.s),
+                .padding(
+                    start = SANGRIA_DEL_TEXTO_DE_LA_FILA,
+                    end = if (accionesDelMenuPendiente.isEmpty()) Medida.margenDePantalla else Espacio.xxs,
+                    bottom = Espacio.s,
+                ),
             verticalArrangement = Arrangement.spacedBy(Espacio.xxs),
         ) {
             when {
@@ -426,6 +430,11 @@ internal fun FilaDeFactura(
                 alternativaDelMinimo(e)?.let { Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio) }
                 if (e.puedeIncluirDiferidos) Text(PUEDE_INCLUIR_DIFERIDOS, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
             }
+        }
+        if (accionesDelMenuPendiente.isNotEmpty()) {
+            MenuDeLaFila(pago.nombre, accionesDelMenuPendiente, nota = null, enVuelo = enVuelo, tag = TAG_MENU_DE_LA_FILA_PENDIENTE)
+            Spacer(Modifier.width(Espacio.xs))
+        }
         }
     }
     debajo?.let { BajoLaFila { it() } }
