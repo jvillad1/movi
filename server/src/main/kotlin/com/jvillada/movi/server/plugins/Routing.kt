@@ -111,6 +111,8 @@ fun Application.configureRouting() {
             pushRoutes()
             reminderRoutes()
             smsRoutes()
+            // Vuelta 74: el «Deshacer» de «Es este» (y de confirmar un aviso): el aviso vuelve a pendiente.
+            desvincularElAvisoRoutes()
             elMismoPagoRoutes()
             bandejaQueSeVaciaRoutes()
             repartoRoutes()
