@@ -79,6 +79,9 @@ class CompresionTest {
 
         assertNull(plano.headers[HttpHeaders.ContentEncoding], "sin Accept-Encoding no se comprime")
         assertEquals("gzip", comprimido.headers[HttpHeaders.ContentEncoding])
+        // Revisión de la 78: un caché intermedio sabe que la respuesta depende de Accept-Encoding.
+        assertEquals(HttpHeaders.AcceptEncoding, comprimido.headers[HttpHeaders.Vary])
+        assertEquals(HttpHeaders.AcceptEncoding, plano.headers[HttpHeaders.Vary])
         val bytes = comprimido.body<ByteArray>()
         val abierto = gunzip(bytes)
         val textoPlano = plano.bodyAsText()

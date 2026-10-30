@@ -125,7 +125,7 @@ class ElFlujoLibrePideElSalarioTest {
     @Test
     fun `las dos cifras se dicen en una frase, y solo si son distintas`() {
         assertEquals(
-            "\$3.625.338 al mes en promedio · \$3.662.500 este período, con lo que de verdad pagaste y el mínimo de tus tarjetas",
+            "\$3.625.338 al mes · \$3.662.500 este período, con lo que de verdad pagaste y el mínimo de tus tarjetas",
             lineaDeLasDosCifras(3_625_338L, 3_662_500L),
         )
         kotlin.test.assertNull(lineaDeLasDosCifras(3_625_338L, 3_625_338L))

@@ -111,7 +111,9 @@ class RenglonMeAlcanzaTest {
         val hoy30 = LocalDate(2026, 10, 30)
         val dias = caja("2026-10-30" to 1_450_950, "2026-10-31" to 1_400_000, "2026-11-05" to -200_000, "2026-11-29" to -1_100_000)
         val renglon = renglonMeAlcanza(dias, hoy30, ultimoDiaDelPeriodo = LocalDate(2026, 10, 31))
-        assertEquals("Desde el 1 nov, sin salario anotado, no te alcanzaría · Agregar salario", renglon.texto)
+        assertEquals("El 5 nov, sin salario anotado, no te alcanzaría · Agregar salario", renglon.texto)
+        // Pagos dice lo mismo debajo de su cifra (revisión de la 78).
+        assertEquals("El 5 nov, sin salario anotado, no te alcanzaría", com.jvillada.movi.ui.plan.fraseCortaDeLaCaja(dias, hoy30, LocalDate(2026, 10, 31)))
         assertEquals(AGREGAR_SALARIO_EN_EL_RENGLON, renglon.detalle)
         assertTrue(renglon.noAlcanza, "el héroe calla la línea de los días")
         assertTrue(!renglon.enRojo, "no es un rojo de este período")
@@ -121,7 +123,7 @@ class RenglonMeAlcanzaTest {
     fun `con el periodo elegido, desde el dia que arranca el siguiente`() {
         val dias = caja("2026-10-29" to 300_000, "2026-11-24" to 50_000, "2026-11-25" to -400_000).copy(hastaElPeriodoSiguiente = true)
         val renglon = renglonMeAlcanza(dias, hoy, ultimoDiaDelPeriodo = LocalDate(2026, 11, 24))
-        assertEquals("Desde el 25 nov, sin salario anotado, no te alcanzaría · Agregar salario", renglon.texto)
+        assertEquals("El 25 nov, sin salario anotado, no te alcanzaría · Agregar salario", renglon.texto)
     }
 
     @Test

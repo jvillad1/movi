@@ -418,8 +418,9 @@ private fun FilaDeResultado(
             val e = resultado.evento
             val laCuenta = cuentas.firstOrNull { it.id == e.accountId }
             val fecha = etiquetaDeFecha(epochMillisToAppDate(e.timestamp), hoy)
-            // Vuelta 78: tu parte de lo que pagó otro dice quién pagó («Pagó Caro · 25 de octubre»).
-            val linea = if (esTuParteDeOtro(e)) subtituloDeTuParteEnBuscar(e, e.espacioId?.let { espacios[it] }, fecha)
+            // Vuelta 78: tu parte de lo que pagó otro dice debajo de la cifra de cuánto fue y quién pagó.
+            val tuParteDeOtro = esTuParteDeOtro(e)
+            val linea = if (tuParteDeOtro) subtituloDeTuParteEnBuscar(e, fecha)
             else subtituloDeUnMovimientoEnBuscar(e, laCuenta?.name, fecha)
             // Vuelta 50: de un par se lista la pata que cuenta (`unaPataPorPar`), así que la cuota sale
             // como el gasto que es, «−$980.000».
@@ -434,7 +435,8 @@ private fun FilaDeResultado(
                     tono = tono,
                     porConfirmar = e.reconciliationStatus == com.jvillada.movi.shared.model.ReconciliationStatus.UNCONFIRMED,
                     esRecurrente = false,
-                    debajo = debajoDeLaCifra(e, e.espacioId?.let { espacios[it] }),
+                    debajo = if (tuParteDeOtro) debajoDeTuParteEnBuscar(e, e.espacioId?.let { espacios[it] })
+                    else debajoDeLaCifra(e, e.espacioId?.let { espacios[it] }),
                 )
             }
         }

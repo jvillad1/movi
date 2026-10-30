@@ -23,6 +23,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import com.jvillada.movi.ui.components.BloqueEsqueleto
 import com.jvillada.movi.ui.components.LineaEsqueleto
 import com.jvillada.movi.ui.components.altoDeUnRenglon
@@ -177,6 +179,8 @@ internal fun TarjetaDelDisponible(
      * tiene el héroe arriba): el total del período como cifra y las tres columnas, sin frase ni alarma.
      */
     comoEnPagos: Boolean = true,
+    /** Vuelta 78 (revisión): el renglón «¿Me alcanza?», para callar «Para N días» como el héroe. */
+    renglon: com.jvillada.movi.ui.dashboard.RenglonMeAlcanza? = null,
     /** «Mira en qué se fue ›»: abre «En qué se va». `null` no pinta el enlace. */
     onVerEnQueSeVa: (() -> Unit)? = null,
 ) {
@@ -197,11 +201,14 @@ internal fun TarjetaDelDisponible(
             if (disponible == null) {
                 CuerpoDelDisponibleEsqueleto()
             } else {
-                CuerpoDelDisponible(disponible, verDeDondeSale, entrada, comoEnPagos, onVerEnQueSeVa)
+                CuerpoDelDisponible(disponible, verDeDondeSale, entrada, comoEnPagos, onVerEnQueSeVa, renglon)
             }
         }
     }
 }
+
+/** Vuelta 78: la línea de abajo de «Te quedan» en Pagos, cuando se dice. */
+const val TAG_DETALLE_TE_QUEDAN_EN_PAGOS: String = "detalle-te-quedan-en-pagos"
 
 /** La cifra «Te quedan» de la tarjeta de Pagos: la misma del héroe del Inicio. */
 const val TAG_CIFRA_TE_QUEDAN_EN_PAGOS: String = "cifra-te-quedan-en-pagos"
@@ -216,6 +223,7 @@ private fun CuerpoDelDisponible(
     entrada: Float,
     comoEnPagos: Boolean,
     onVerEnQueSeVa: (() -> Unit)?,
+    renglon: com.jvillada.movi.ui.dashboard.RenglonMeAlcanza? = null,
 ) {
     if (comoEnPagos) {
         // Vuelta 45: la protagonista es «Te quedan», la MISMA cifra del héroe del Inicio, con la MISMA
@@ -232,10 +240,15 @@ private fun CuerpoDelDisponible(
             modifier = Modifier.testTag(TAG_CIFRA_TE_QUEDAN_EN_PAGOS),
         )
         Spacer(Modifier.height(Movi.espacios.minimo))
+        // Vuelta 78 (revisión): la misma regla del héroe ([detalleDelHeroe]): a tres días del cierre o si no
+        // alcanza, «Para N días · $X por día» se calla. Su renglón queda (sin verse ni leerse): el renglón
+        // «¿Me alcanza?» llega después que el disponible, y la tarjeta no puede saltar (`PlanScreenTest`).
+        val detalle = com.jvillada.movi.ui.dashboard.detalleDelHeroe(teQuedan, renglon)
         Text(
-            text = teQuedan.detalle.replaceFirstChar { it.uppercase() },
+            text = detalle ?: teQuedan.detalle.replaceFirstChar { it.uppercase() },
             style = Movi.textos.apoyo,
             color = colorDeLaFrase(teQuedan.nivelDelDetalle),
+            modifier = if (detalle == null) Modifier.alpha(0f).clearAndSetSemantics {} else Modifier.testTag(TAG_DETALLE_TE_QUEDAN_EN_PAGOS),
         )
         Spacer(Modifier.height(Movi.espacios.minimo))
         // El total del período, en su renglón: es el punto de partida, no la noticia. Con el nombre que

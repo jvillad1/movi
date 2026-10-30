@@ -38,8 +38,8 @@ import kotlin.test.assertTrue
 /**
  * # Vuelta 78 · Buscar muestra tu parte de lo que pagó otra persona
  *
- * «mercado» lista «Mercado del sábado» —pagado por Caro— con «Pagó Caro» debajo del nombre, tu parte
- * como cifra y «Tu parte» debajo, como en Actividad.
+ * «mercado» lista «Mercado del sábado» —pagado por Caro— con tu parte como cifra y debajo «de $240.000 ·
+ * pagó Caro» (revisión de la 78).
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w390dp-h2400dp-xhdpi")
@@ -86,10 +86,10 @@ class BuscarMuestraTuParteDelGrupoTest {
         fun dentro(texto: String, substring: Boolean = false) =
             composeRule.onAllNodes(hasText(texto, substring = substring) and hasAnyAncestor(hasTestTag(tag)), useUnmergedTree = true)
                 .fetchSemanticsNodes().isNotEmpty()
-        composeRule.waitUntil(5_000) { dentro("Pagó Caro", substring = true) }
+        composeRule.waitUntil(5_000) { dentro("pagó Caro", substring = true) }
         assertTrue(dentro("Mercado del sábado"), "se llama como en Actividad")
         assertTrue(dentro("−\$120.000"), "la cifra es tu parte")
-        assertTrue(dentro("Tu parte"), "y lo dice debajo")
+        assertTrue(dentro("de \$240.000 · pagó Caro"), "y debajo, de cuánto fue y quién pagó")
         // Y tus propios movimientos siguen ahí.
         assertTrue(composeRule.onAllNodesWithTag(TAG_RESULTADO_DE_BUSCAR + "mov:d1", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
     }

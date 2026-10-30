@@ -1,6 +1,8 @@
 package com.jvillada.movi.server.plugins
 
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
+import io.ktor.server.application.createApplicationPlugin
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
 import io.ktor.server.plugins.compression.Compression
@@ -44,6 +46,22 @@ fun Application.configureCompression() {
             priority = 0.9
             minimumSize(TAMANO_MINIMO_PARA_COMPRIMIR)
             matchContentType(*TIPOS_QUE_SE_COMPRIMEN)
+        }
+    }
+    install(VariaSegunLaCompresion)
+}
+
+/**
+ * **`Vary: Accept-Encoding`** (revisión de la 78). La misma URL contesta comprimida o no según lo que pidió
+ * el cliente, y el plugin de Ktor no lo dice: un caché intermedio podría servirle el gzip a quien no lo
+ * pidió. Va en toda respuesta —lo que hoy sale plano puede salir comprimido mañana, o con otro tamaño—, y
+ * se suma a un `Vary` que ya hubiera.
+ */
+private val VariaSegunLaCompresion = createApplicationPlugin("VariaSegunLaCompresion") {
+    onCallRespond { call, _ ->
+        val vary = call.response.headers.values(HttpHeaders.Vary)
+        if (vary.none { it.contains(HttpHeaders.AcceptEncoding, ignoreCase = true) }) {
+            call.response.headers.append(HttpHeaders.Vary, HttpHeaders.AcceptEncoding)
         }
     }
 }

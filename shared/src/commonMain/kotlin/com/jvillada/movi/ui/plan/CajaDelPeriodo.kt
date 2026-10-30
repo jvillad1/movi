@@ -177,7 +177,9 @@ private fun sinCuentas(data: DashboardData): Boolean = data.accounts?.isEmpty() 
  * nov · tu día más justo es el 5 nov»; si ese día lo libre no alcanza, «Hasta el 25 nov · el 5 nov no te
  * alcanza». Sin cifras: la cifra ya está arriba. Es la misma regla del renglón «¿Me alcanza?» de Inicio.
  */
-internal fun fraseCortaDeLaCaja(caja: CajaProyectada, hoy: LocalDate): String {
+internal fun fraseCortaDeLaCaja(caja: CajaProyectada, hoy: LocalDate, ultimoDiaDelPeriodo: LocalDate? = null): String {
+    // Vuelta 78: sin salario y con el rojo después del cierre, la misma frase que el renglón de Inicio.
+    com.jvillada.movi.ui.dashboard.noTeAlcanzariaSinSalario(caja, ultimoDiaDelPeriodo)?.let { return it }
     val hasta = "Hasta el ${fechaCorta(caja.alCierre.fecha)}"
     val bajo = caja.diaMasBajo
     val cuando = if (bajo.fecha == hoy.toString()) "hoy" else "el ${fechaCorta(bajo.fecha)}"
@@ -471,7 +473,10 @@ internal fun SeccionCajaProyectada(
             sinFuente ->
                 NoSePudoLeer("No pudimos proyectar tu plata", onReintentar = { reintento++ })
             caja != null -> Superficie(modifier = Modifier.fillMaxWidth()) {
-                CuerpoDeLaCaja(caja, gasto, hoy, verDeDondeSale, onNavigate, remember(data, hoy) { comparacionConTeQuedan(data, hoy) }, onAgregarSalario)
+                CuerpoDeLaCaja(
+                    caja, gasto, hoy, verDeDondeSale, onNavigate, remember(data, hoy) { comparacionConTeQuedan(data, hoy) }, onAgregarSalario,
+                    ultimoDiaDelPeriodo = remember(data) { com.jvillada.movi.ui.dashboard.ultimoDiaDelPeriodoDe(data) },
+                )
             }
             noSePudo ->
                 NoSePudoLeer("No pudimos proyectar tu plata", onReintentar = { reintento++ })
@@ -499,6 +504,7 @@ private fun CuerpoDeLaCaja(
     onNavigate: (Screen) -> Unit,
     comparacion: ComparacionConTeQuedan?,
     onAgregarSalario: (() -> Unit)?,
+    ultimoDiaDelPeriodo: LocalDate? = null,
 ) {
     // Vuelta 75: sin salario, antes de la cifra, lo que la caja supone y cómo cambiarlo.
     val sinSalario = lineaSinSalario(caja)
@@ -528,7 +534,7 @@ private fun CuerpoDeLaCaja(
         modifier = Modifier.testTag(TAG_CIFRA_DE_LA_CAJA).semantics { contentDescription = descripcion },
     )
     Text(
-        fraseCortaDeLaCaja(caja, hoy),
+        fraseCortaDeLaCaja(caja, hoy, ultimoDiaDelPeriodo),
         style = Movi.textos.apoyo,
         color = Movi.colores.textoMedio,
         modifier = Modifier.testTag(TAG_FRASE_DE_PUENTE),

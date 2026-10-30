@@ -224,11 +224,18 @@ class EstadoDelTableroDeRecurrentes internal constructor(
     internal var filasDelPeriodo by mutableStateOf<List<PagoDelPeriodo>>(emptyList())
 
     /**
-     * Vuelta 78 · el «de $X» de la tarjeta amarilla «Falta por pagar» (lo pagado + lo que falta del
-     * período): «Lo que se repite» lo nombra junto a sus gastos al mes, para que las dos cifras no se
-     * lean como la misma. `null` mientras la lista del período no se pinta.
+     * Vuelta 78 · el «de $X» de la tarjeta amarilla «Falta por pagar» (lo pagado + lo que falta de
+     * [periodo]): «Lo que se repite» lo nombra junto a sus gastos al mes, para que las dos cifras no se
+     * lean como la misma. Sale de lo que este estado ya leyó —la misma lista y los mismos abonos que la
+     * tarjeta amarilla—; `null` mientras los vencimientos o las ocurrencias no están.
      */
-    internal var totalDeFacturasDelPeriodo by mutableStateOf<Long?>(null)
+    internal fun totalDeFacturasDelPeriodo(periodo: PeriodoFinanciero, ajustes: PeriodSettings, tarjetas: Set<String>): Long? {
+        if (!vencimientosOk || !ocurrenciasOk) return null
+        val checklist = checklistDelPeriodo(upcoming = upcomingRecurrentes, ocurrencias = ocurrencias, periodo = periodo, settings = ajustes)
+        return com.jvillada.movi.ui.recurrentes.resumenDeFacturas(
+            com.jvillada.movi.ui.quickadd.conLosAbonosATarjeta(checklist, tarjetas),
+        ).total
+    }
 
     /** Lo vencido y sin pagar de [ruleId], si hay: lo que «Pausar» pregunta antes de pausar. */
     internal fun vencidoSinPagarDe(ruleId: String): PagoDelPeriodo? =
@@ -1046,12 +1053,7 @@ fun LazyListScope.tableroDeRecurrentes(
                     checklist, tarjetasDelTablero.valor.orEmpty().map { it.account.id }.toSet(),
                 )
             }
-            SideEffect {
-                estado.filasDelPeriodo = checklist + anteriores
-                // Vuelta 78: el mismo «de $X» de la tarjeta amarilla, para nombrarlo en «Lo que se repite».
-                estado.totalDeFacturasDelPeriodo = com.jvillada.movi.ui.recurrentes.resumenDeFacturas(checklistConAbonos).total
-                    .takeIf { estado.vencimientosOk && estado.ocurrenciasOk }
-            }
+            SideEffect { estado.filasDelPeriodo = checklist + anteriores }
             SeccionChecklistDelPeriodo(
                 checklist = checklistConAbonos,
                 anteriores = anteriores,
@@ -1179,6 +1181,18 @@ fun LazyListScope.tableroDeRecurrentes(
 
     // ── El resumen, abajo, pegado a lo que resume ───────────────────────────
     item {
+        // Vuelta 78: el total de este período (el «de $X» de «Falta por pagar»), del estado, solo con el de
+        // hoy a la vista. Las tarjetas, de la misma lectura recordada que la lista (no sale a la red).
+        val tarjetasDelResumen = com.jvillada.movi.data.rememberLectura(com.jvillada.movi.data.ClaveDeLectura.Tarjetas, reintento = 0) {
+            Repositories.wallets.getCards()
+        }
+        val totalDelPeriodo = remember(
+            estado.upcomingRecurrentes, estado.ocurrencias, estado.vencimientosOk, estado.ocurrenciasOk,
+            periodoVisible, periodoDeHoy, ajustesDelPeriodo, tarjetasDelResumen.valor,
+        ) {
+            if (periodoVisible != periodoDeHoy) null
+            else estado.totalDeFacturasDelPeriodo(periodoVisible, ajustesDelPeriodo, tarjetasDelResumen.valor.orEmpty().map { it.account.id }.toSet())
+        }
         Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(bottom = Medida.entreSecciones)) {
             // «Buscar cobros» va en este encabezado —que se pinta siempre con el tablero
             // a la vista— y no en el de las candidatas, que solo existe cuando ya hay
@@ -1192,7 +1206,7 @@ fun LazyListScope.tableroDeRecurrentes(
             )
             ResumenFlujoLibreCard(
                 // Vuelta 78: el total de este período (el «de $X» de «Falta por pagar»), solo con el de hoy a la vista.
-                totalDelPeriodo = estado.totalDeFacturasDelPeriodo.takeIf { periodoVisible == periodoDeHoy },
+                totalDelPeriodo = totalDelPeriodo,
                 // **Sin los vencimientos no hay cifra.** Las cuotas de los créditos
                 // llegan solo por ahí y son la mitad del mes del dueño: si esa
                 // llamada falló, el total saldría plausible y $5.445.772 más alto
@@ -1466,7 +1480,7 @@ fun rememberTableroMontadoSolo(
         error.value = null
         // `recargar()` y no una clave local: la tarjeta del disponible de Plan escucha
         // `estado.recargas`, y reintentar solo el tablero la dejaba con lo de antes.
-        if (result == SnackbarResult.ActionPerformed) estado.recargar()
+        if (result == SnackbarResult.ActionPerformed) { com.jvillada.movi.data.olvidarLoFresco(); estado.recargar() }
     }
     return remember(estado, aviso) { TableroMontadoSolo(estado, aviso, cuentas) }
 }
@@ -1609,7 +1623,7 @@ const val TAG_LAS_DOS_CIFRAS: String = "plan-las-dos-cifras"
  */
 fun lineaDeLasDosCifras(gastosAlMes: Long, delPeriodo: Long?): String? {
     if (delPeriodo == null || delPeriodo <= 0L || delPeriodo == gastosAlMes) return null
-    return "${formatCOP(gastosAlMes)} al mes en promedio · ${formatCOP(delPeriodo)} este período, " +
+    return "${formatCOP(gastosAlMes)} al mes · ${formatCOP(delPeriodo)} este período, " +
         "con lo que de verdad pagaste y el mínimo de tus tarjetas"
 }
 

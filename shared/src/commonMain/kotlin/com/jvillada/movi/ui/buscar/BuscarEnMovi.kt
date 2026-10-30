@@ -12,6 +12,9 @@ import com.jvillada.movi.shared.model.conTuParteDeOtros
 import com.jvillada.movi.shared.model.esTuParteDeOtro
 import com.jvillada.movi.shared.model.tuParteComoEventos
 import com.jvillada.movi.ui.transactions.textosDeTuParteDeOtro
+import com.jvillada.movi.ui.transactions.quienPagoTuParte
+import com.jvillada.movi.ui.transactions.TU_PARTE
+import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.claveDelComercio
@@ -266,11 +269,26 @@ fun eventosParaBuscar(dias: List<EventDay>, tuParteDeOtros: List<FinancialEvent>
     conTuParteDeOtros(dias, tuParteDeOtros).flatMap { it.items }
 
 /**
- * **El subtítulo de tu parte de un gasto que pagó otro** (vuelta 78): el de su fila en Actividad
- * ([textosDeTuParteDeOtro]: «Pagó Caro», y la categoría si no es el título) con la fecha. Pura.
+ * **El subtítulo de tu parte de un gasto que pagó otro** (vuelta 78): la categoría si no es el título,
+ * y la fecha. Quién pagó va debajo de la cifra ([debajoDeTuParteEnBuscar]). Pura.
  */
-fun subtituloDeTuParteEnBuscar(evento: FinancialEvent, espacio: Espacio?, fecha: String): String =
-    listOfNotNull(textosDeTuParteDeOtro(evento, espacio).subtitulo, fecha).filter { it.isNotBlank() }.joinToString(" · ")
+fun subtituloDeTuParteEnBuscar(evento: FinancialEvent, fecha: String): String {
+    val titulo = textosDeTuParteDeOtro(evento, espacio = null).titulo
+    val categoria = evento.category.takeIf { it.isNotBlank() && normalizarParaBuscar(it) != normalizarParaBuscar(titulo) }
+    return listOfNotNull(categoria, fecha.takeIf { it.isNotBlank() }).joinToString(" · ")
+}
+
+/**
+ * **Debajo de tu parte de un gasto que pagó otro, en Buscar** (revisión de la 78): «de $240.000 · pagó
+ * Caro» —de cuánto fue el gasto del grupo ([FinancialEvent.montoDelGrupo]) y quién lo pagó—, como «de
+ * $88.600 · con Caro» en un gasto tuyo repartido. Sin el monto del grupo (un server viejo), «Tu parte ·
+ * pagó Caro». Pura.
+ */
+fun debajoDeTuParteEnBuscar(evento: FinancialEvent, espacio: Espacio?): String {
+    val quien = quienPagoTuParte(evento, espacio).replaceFirstChar { it.lowercase() }
+    val deCuanto = evento.montoDelGrupo?.let { "de ${formatCOP(it)}" } ?: TU_PARTE
+    return "$deCuanto · $quien"
+}
 
 /**
  * **Buscar [consulta] en lo que hay a mano.** Vacío con la consulta en blanco. Los grupos sin

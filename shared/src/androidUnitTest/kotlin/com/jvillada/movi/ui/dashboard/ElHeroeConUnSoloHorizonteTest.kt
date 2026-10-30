@@ -3,6 +3,8 @@ package com.jvillada.movi.ui.dashboard
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
@@ -105,5 +107,27 @@ class ElHeroeConUnSoloHorizonteTest {
         assertTrue(hay("Te quedan"))
         assertTrue(!hay("por día"), "y la línea de los días se calla")
         assertEquals(0, lineasDeDetalle())
+    }
+
+    /** Revisión de la 78: la tarjeta «Cuánto puedes gastar» de Pagos calla la misma línea, con la misma regla. */
+    @Test
+    fun `Pagos calla la linea de los dias con la misma regla`() {
+        val hoy = LocalDate(2026, 9, 21)
+        val disponible = disponibleDelInicio(datos(), hoy)!!
+        val noAlcanza = RenglonMeAlcanza("No te alcanza", "el 24 sep quedarías en −$1M", enRojo = true)
+        var renglon by androidx.compose.runtime.mutableStateOf<RenglonMeAlcanza?>(null)
+        composeRule.setContent {
+            MoviTheme {
+                com.jvillada.movi.ui.sdui.TarjetaDelDisponible(titulo = "Cuánto puedes gastar", disponible = disponible, renglon = renglon)
+            }
+        }
+        composeRule.waitForIdle()
+        fun detalles() = composeRule.onAllNodesWithTag(com.jvillada.movi.ui.sdui.TAG_DETALLE_TE_QUEDAN_EN_PAGOS, useUnmergedTree = true).fetchSemanticsNodes().size
+        assertEquals(1, detalles())
+        assertTrue(hay("Para 4 días"))
+        renglon = noAlcanza
+        composeRule.waitForIdle()
+        assertEquals(0, detalles(), "si no alcanza, se calla")
+        assertTrue(!hay("por día"))
     }
 }

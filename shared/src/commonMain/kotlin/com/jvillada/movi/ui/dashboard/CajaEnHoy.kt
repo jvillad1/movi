@@ -82,17 +82,10 @@ fun renglonMeAlcanza(caja: CajaProyectada, hoy: LocalDate, ultimoDiaDelPeriodo: 
     // Vuelta 78 · un solo horizonte. Sin salario la caja sigue mirando después del cierre (30 días con el
     // mes de calendario), y «No te alcanza: el 29 nov quedarías en −$1,1M» iba debajo de «Te quedan
     // $1.450.950 · para 2 días», que habla del período. Si lo que no alcanza cae **después** del período,
-    // se dice desde cuándo y por qué —no hay salario anotado— y cómo se arregla. Si ya dentro del período
-    // hay un día en rojo, manda ese: es lo de ahora.
-    val primerRojo = caja.primerDiaEnRojo?.let { runCatching { LocalDate.parse(it.fecha) }.getOrNull() }
-    if (bajo.libre < 0L && !caja.hastaElSalario && ultimoDiaDelPeriodo != null && primerRojo != null && primerRojo > ultimoDiaDelPeriodo) {
-        val desde = ultimoDiaDelPeriodo.plus(1, DateTimeUnit.DAY)
-        return RenglonMeAlcanza(
-            titulo = "Desde el ${fechaCortaDelRenglon(desde.toString())}, sin salario anotado, no te alcanzaría",
-            detalle = AGREGAR_SALARIO_EN_EL_RENGLON,
-            enRojo = false,
-            noAlcanza = true,
-        )
+    // se dice cuándo y por qué —no hay salario anotado— y cómo se arregla. Si ya dentro del período hay un
+    // día en rojo, manda ese: es lo de ahora. Pagos dice la misma frase ([noTeAlcanzariaSinSalario]).
+    noTeAlcanzariaSinSalario(caja, ultimoDiaDelPeriodo)?.let { frase ->
+        return RenglonMeAlcanza(titulo = frase, detalle = AGREGAR_SALARIO_EN_EL_RENGLON, enRojo = false, noAlcanza = true)
     }
     if (bajo.libre < 0L) {
         // Revisión de la 75: el menos pegado al «$» y la cifra pegada a «en»: el renglón no se parte ahí.
@@ -115,9 +108,25 @@ fun renglonMeAlcanza(caja: CajaProyectada, hoy: LocalDate, ultimoDiaDelPeriodo: 
  */
 fun renglonMeAlcanzaDe(data: DashboardData, gasto: GastoDelDiaADia?, hoy: LocalDate): RenglonMeAlcanza? {
     val supuesto = gasto ?: return null
-    val ultimoDia = data.periodoActual?.let { inicioDelPeriodo(periodoSiguiente(it), data.ajustesDePeriodo).minus(1, DateTimeUnit.DAY) }
-    return cajaDelPeriodoDe(data, supuesto, hoy)?.let { renglonMeAlcanza(it, hoy, ultimoDia) }
+    return cajaDelPeriodoDe(data, supuesto, hoy)?.let { renglonMeAlcanza(it, hoy, ultimoDiaDelPeriodoDe(data)) }
 }
+
+/**
+ * **«El 5 nov, sin salario anotado, no te alcanzaría»** (vuelta 78), o `null`: sin salario en la caja y
+ * con el **primer día en rojo** después del cierre del período ([ultimoDiaDelPeriodo]). La dicen igual el
+ * renglón «¿Me alcanza?» de Inicio y la frase de la caja de Pagos. Pura.
+ */
+fun noTeAlcanzariaSinSalario(caja: CajaProyectada, ultimoDiaDelPeriodo: LocalDate?): String? {
+    if (caja.hastaElSalario || ultimoDiaDelPeriodo == null) return null
+    val rojo = caja.primerDiaEnRojo ?: return null
+    val dia = runCatching { LocalDate.parse(rojo.fecha) }.getOrNull() ?: return null
+    if (dia <= ultimoDiaDelPeriodo) return null
+    return "El ${fechaCortaDelRenglon(rojo.fecha)}, sin salario anotado, no te alcanzaría"
+}
+
+/** El último día del período de [data] (el anterior al arranque del siguiente), o `null` sin período. */
+internal fun ultimoDiaDelPeriodoDe(data: DashboardData): LocalDate? =
+    data.periodoActual?.let { inicioDelPeriodo(periodoSiguiente(it), data.ajustesDePeriodo).minus(1, DateTimeUnit.DAY) }
 
 /** Vuelta 78: lo que dice debajo el renglón que no alcanzaría sin salario. Tocarlo lleva a la caja de Pagos. */
 const val AGREGAR_SALARIO_EN_EL_RENGLON: String = "Agregar salario"
@@ -152,6 +161,9 @@ internal fun rememberRenglonMeAlcanza(data: DashboardData, hoy: LocalDate): Reng
     val sePuedeProyectar = data.periodoActual != null && data.upcoming != null && data.ocurrencias != null &&
         (data.accounts != null || data.patrimonio != null)
     if (!sePuedeProyectar) return null
+    // Vuelta 78 (revisión): con el supuesto ya en la carga del Inicio (o en su instantánea), el renglón sale
+    // con el resto del héroe; si no vino, se pide como antes.
+    data.gastoDelDiaADia?.let { return renglonMeAlcanzaDe(data, it, hoy) }
     val gastoLeido = rememberLectura(ClaveDeLectura.GastoDelDiaADia, reintento = 0) {
         Repositories.wallets.getGastoDelDiaADia()
     }
