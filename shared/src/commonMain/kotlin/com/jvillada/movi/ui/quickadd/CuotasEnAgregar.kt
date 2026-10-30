@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextOverflow
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.CUOTAS_FRECUENTES
 import com.jvillada.movi.shared.model.MAXIMO_DE_CUOTAS
@@ -58,21 +59,27 @@ fun tagDeLaPastillaDeCuotas(cuotas: Int?): String = "agregar:cuotas:${cuotas ?: 
 internal fun preguntaLasCuotas(tipoDeLaCuenta: AccountType?, esGasto: Boolean, enModoPago: Boolean): Boolean =
     esGasto && !enModoPago && tipoDeLaCuenta == AccountType.CREDIT_CARD
 
-/** «≈ $100.000 al mes, sin intereses», o `null` con una sola cuota o sin monto. */
-internal fun lineaDeLaCuotaDelMes(monto: Long, cuotas: Int, moneda: String): String? =
-    if (cuotas <= 1 || monto <= 0L) null
-    else "≈ ${formatMoneySinOcultar(cuotaDeLaCompra(monto, cuotas), moneda)} al mes, sin intereses"
+/**
+ * **Las cuotas que se guardan**: las elegidas si la fila se ve y el dueño la tocó; si no, `null` (no se
+ * sabe). Vuelta 71 (revisión): un «1» que nadie eligió no se manda, porque el extracto solo llena las
+ * cuotas de un movimiento que no las tiene.
+ */
+internal fun cuotasParaGuardar(cuotas: Int, elegidas: Boolean, seVeLaFila: Boolean): Int? =
+    cuotas.takeIf { elegidas && seVeLaFila }
 
 /**
- * **La ayuda de las cuotas**: que la compra cuenta entera hoy y qué va al extracto. Es la regla de
- * siempre dicha en voz alta, no una nueva.
+ * «En el extracto, unos $100.000 al mes, sin intereses», o `null` con una sola cuota o sin monto. Con
+ * palabras y no con «≈»: Figtree no tiene ese glifo (salía un cuadro vacío).
  */
-internal fun ayudaDeLasCuotas(monto: Long, cuotas: Int, moneda: String): String = when {
-    cuotas <= 1 -> "Cuenta completa hoy en tus gastos y en el extracto de la tarjeta."
-    monto <= 0L -> "Cuenta completa hoy en tus gastos; en el extracto de la tarjeta va una cuota por mes."
-    else -> "Cuenta completa hoy en tus gastos; en el extracto de la tarjeta va " +
-        "${formatMoneySinOcultar(cuotaDeLaCompra(monto, cuotas), moneda)} por mes."
-}
+internal fun lineaDeLaCuotaDelMes(monto: Long, cuotas: Int, moneda: String): String? =
+    if (cuotas <= 1 || monto <= 0L) null
+    else "En el extracto, unos ${formatMoneySinOcultar(cuotaDeLaCompra(monto, cuotas), moneda)} al mes, sin intereses."
+
+/**
+ * **La ayuda de las cuotas**: la compra cuenta entera hoy (la regla de siempre dicha en voz alta, no
+ * una nueva). Un renglón: con [lineaDeLaCuotaDelMes] la ayuda entera son dos.
+ */
+internal fun ayudaDeLasCuotas(): String = "Cuenta completa hoy en tus gastos."
 
 /**
  * La fila «¿A cuántas cuotas?» de Agregar, dentro de la tarjeta de la hoja (después de «Cuenta»). Las
@@ -139,11 +146,14 @@ internal fun FilaDeCuotas(
         }
         val delMes = lineaDeLaCuotaDelMes(monto, cuotas, moneda)
         Text(
-            text = listOfNotNull(delMes, ayudaDeLasCuotas(monto, cuotas, moneda)).joinToString("\n"),
+            text = listOfNotNull(delMes, ayudaDeLasCuotas()).joinToString("\n"),
             style = Movi.textos.apoyo,
             color = Movi.colores.textoMedio,
-            minLines = 3,
-            maxLines = 3,
+            // Dos renglones reservados (vuelta 71, revisión: con tres, a 360 «Guardar» se iba de la
+            // pantalla): elegir las cuotas no cambia el alto.
+            minLines = 2,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
             modifier = Modifier
                 .padding(start = Medida.margenDePantalla, end = Medida.margenDePantalla, top = Espacio.xxs, bottom = Espacio.xs)
                 .testTag(TAG_AYUDA_DE_LAS_CUOTAS),

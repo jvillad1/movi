@@ -150,9 +150,9 @@ class HojaAgregarGeometriaTest {
     @Test
     fun guardarSeAlcanzaEnElTelefonoChico() {
         montarHoja()
-        composeRule.onNodeWithText(GUARDAR).performScrollTo()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithText(GUARDAR).assertSeVeEntero("«$GUARDAR» tras desplazar")
+        // Vuelta 71 (revisión): la barra de guardar va debajo del desplazamiento, así que «Guardar» se
+        // ve entero sin ningún gesto también acá.
+        composeRule.onNodeWithText(GUARDAR).assertSeVeEntero("«$GUARDAR» sin desplazar")
     }
 
     /**
@@ -193,7 +193,9 @@ class HojaAgregarGeometriaTest {
         montarHoja()
         val enReposo = tecla9SinRecortar()
 
-        composeRule.onNodeWithText(GUARDAR).performScrollTo()
+        // Vuelta 71 (revisión): «Guardar» ya no se desplaza (va debajo, siempre a la vista); para
+        // desplazar la hoja hasta abajo se baja hasta la última fila del teclado.
+        composeRule.onNodeWithText("000").performScrollTo()
         composeRule.waitForIdle()
         val desplazado = tecla9SinRecortar()
         assertTrue(

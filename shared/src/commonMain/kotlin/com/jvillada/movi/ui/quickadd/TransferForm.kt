@@ -696,6 +696,13 @@ internal fun TransferBody(
      */
     onMontoPropuesto: (String) -> Unit = {},
     /**
+     * Vuelta 71 (revisión) · **la cifra que la hoja puso sola** (la cuota del crédito elegido), aparte
+     * de [onMontoPropuesto] (lo que el dueño eligió tocando una pastilla). La hoja de Agregar no la
+     * cuenta como escrita: no viaja a Gasto ni pregunta «¿Descartar?». `null` = la misma que
+     * [onMontoPropuesto].
+     */
+    onMontoPropuestoPorLaHoja: ((String) -> Unit)? = null,
+    /**
      * Vuelta 49 · «Cuadrar ›» del renglón de un crédito cuyo saldo Movi no tiene: lleva a donde se
      * ajusta (Créditos). `null` deja el renglón sin acción.
      */
@@ -1003,7 +1010,7 @@ internal fun TransferBody(
     // después de las cuentas, así que la propuesta se rehace cuando llegan.
     var montoPropuesto by remember { mutableStateOf<String?>(null) }
     val montoActual by rememberUpdatedState(monto)
-    val proponerMonto by rememberUpdatedState(onMontoPropuesto)
+    val proponerMonto by rememberUpdatedState(onMontoPropuestoPorLaHoja ?: onMontoPropuesto)
     LaunchedEffect(toId, terminosCargados, abonoExtra) {
         if (!esPago) return@LaunchedEffect
         val deuda = elegiblesDestino.firstOrNull { it.id == toId } ?: return@LaunchedEffect
