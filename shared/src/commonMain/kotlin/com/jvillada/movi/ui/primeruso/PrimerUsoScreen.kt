@@ -91,7 +91,6 @@ import com.jvillada.movi.ui.components.ds.BarraDeProgreso
 import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.ui.components.ds.Chevron
 import com.jvillada.movi.ui.components.ds.Cifra
-import com.jvillada.movi.ui.components.ds.Encabezado
 import com.jvillada.movi.ui.components.ds.Fila
 import com.jvillada.movi.ui.components.ds.IconoEnCirculo
 import com.jvillada.movi.ui.components.ds.Pildora
@@ -132,6 +131,19 @@ import com.jvillada.movi.ui.profile.ejemploCortoDelCorte
 import com.jvillada.movi.ui.profile.vistaPreviaDelPeriodo
 import androidx.compose.runtime.mutableStateMapOf
 import com.jvillada.movi.ui.components.ConfirmarEnHoja
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.ui.semantics.heading
+import com.jvillada.movi.ui.components.ds.PildoraDeFiltro
+import com.jvillada.movi.ui.components.ds.SelectorDeDiaDelMes
+import com.jvillada.movi.ui.components.LineaEsqueleto
+import com.jvillada.movi.ui.components.conCifrasOcultas
+import com.jvillada.movi.ui.transactions.leerDatosDelDiaADia
+import com.jvillada.movi.ui.dashboard.disponibleDelInicio
+import com.jvillada.movi.shared.time.epochMillisToAppDate
+import com.jvillada.movi.shared.model.inicioDelPeriodo
+import com.jvillada.movi.shared.model.periodoSiguiente
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.minus
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 
@@ -188,12 +200,21 @@ fun PrimerUsoScreen(
     var dia by remember { mutableStateOf<Int?>(null) }
     var regla by remember { mutableStateOf(SiElCorteCaeEnFinDeSemana.DIA_HABIL_ANTERIOR) }
     var periodoGuardado by remember { mutableStateOf<String?>(null) }
+    // Vuelta 75 · «¿Cuánto te pagan?» del paso del período: el monto y la cuenta a la que llega (`null` =
+    // la primera cuenta de dinero que haya al terminar). La regla se crea al terminar ([crearElSalario]).
+    var salario by remember { mutableStateOf<Long?>(null) }
+    var cuentaDelSalario by remember { mutableStateOf<String?>(null) }
+    var salarioCreado by remember { mutableStateOf(false) }
+    // «Listo» con una cifra real: lo que dice el final, cuando se sabe.
+    var fraseDelListo by remember { mutableStateOf<String?>(null) }
 
     // Lo que se creó en la guía, y lo que ya había (para quien la abre desde «Te faltan N pasos»).
     val cuentas = remember { mutableStateListOf<Account>() }
     val tarjetas = remember { mutableStateListOf<String>() }
     val recurrentes = remember { mutableStateListOf<RecurringRule>() }
     var yaHabia by remember { mutableStateOf(LoQueYaHabia()) }
+    // Vuelta 75: con un ingreso fijo ya anotado, el período no vuelve a preguntar el salario.
+    var tieneIngresoFijo by remember { mutableStateOf(false) }
     var direccionCopiada by remember { mutableStateOf(false) }
     var extractoSubido by remember { mutableStateOf<String?>(null) }
 
@@ -214,7 +235,9 @@ fun PrimerUsoScreen(
             cuentas = runCatching { Repositories.wallets.getAccounts() }.getOrNull()
                 ?.filter { it.type in TIPOS_DE_CUENTA_DE_DINERO }.orEmpty(),
             tarjetas = runCatching { Repositories.wallets.getCards() }.getOrNull()?.size ?: 0,
-            fijos = runCatching { Repositories.wallets.getRecurringRules() }.getOrNull()?.map { it.id }.orEmpty(),
+            fijos = runCatching { Repositories.wallets.getRecurringRules() }.getOrNull()?.also { reglas ->
+                tieneIngresoFijo = reglas.any { it.type == TransactionType.INCOME }
+            }?.map { it.id }.orEmpty(),
             movimientos = runCatching { Repositories.wallets.getFinanceSummary(Scope.SELF) }.getOrNull()?.eventCount ?: 0,
         )
     }
@@ -260,12 +283,10 @@ fun PrimerUsoScreen(
     // Lo que se hace después de «Descartar» en la pregunta (saltar el paso o salir de la guía).
     var porDescartar by remember { mutableStateOf<(() -> Unit)?>(null) }
 
-    fun irA(destino: PasoDePrimerUso) {
-        error = null
-        paso = destino
-    }
-
     fun cuentaPorDefecto(): String? = (cuentas + yaHabia.cuentas).firstOrNull { it.type in CUENTAS_QUE_PAGAN }?.id
+
+    fun cuentasDeDineroAhora(): Int =
+        (yaHabia.cuentas.map { it.id } + cuentas.filter { it.type in TIPOS_DE_CUENTA_DE_DINERO }.map { it.id }).toSet().size
 
     fun alternarRecurrente(clave: String, nombreFijo: String?, categoria: String) {
         if (recurrenteAbierto == clave) {
@@ -309,11 +330,54 @@ fun PrimerUsoScreen(
         if (preguntaDeDescartar(borradoresDe(paso)) != null) porDescartar = accion else accion()
     }
 
+    /**
+     * Vuelta 75 · **el salario, al terminar**: la regla de ingreso recurrente de siempre
+     * (`createRecurringRule`, sin escrituras propias), el día del corte —el que [fechaEsperadaDelIngreso]
+     * reconoce como el salario— y la categoría «Salario». Llega a la cuenta elegida o a la primera cuenta de
+     * dinero que haya. Una sola vez; si falla no frena la guía (queda en Pagos, «Agregar»).
+     */
+    suspend fun crearElSalario() {
+        val monto = salario?.takeIf { it > 0L } ?: return
+        val elDia = dia ?: return
+        if (salarioCreado || periodoGuardado == null) return
+        val cuenta = cuentaDelSalario ?: cuentaPorDefecto()
+        runCatching { Repositories.wallets.createRecurringRule(reglaDelSalario(monto, elDia, cuenta)) }
+            .onSuccess { salarioCreado = true }
+    }
+
+    /** «Te quedan $X hasta el 24 nov» con las lecturas de siempre del disponible, o «Ya puedes empezar». */
+    suspend fun leerLaCifraDelListo() {
+        val conCuentas = cuentasDeDineroAhora() > 0
+        fraseDelListo = if (!conCuentas) YA_PUEDES_EMPEZAR else runCatching {
+            val ahora = Clock.System.now().toEpochMilliseconds()
+            val datos = leerDatosDelDiaADia(Repositories.wallets.getUserProfile(), ahora)
+            val hoy = epochMillisToAppDate(ahora)
+            val teQuedan = disponibleDelInicio(datos, hoy)?.periodo?.teQuedan
+            val ultimo = datos.periodoActual?.let { inicioDelPeriodo(periodoSiguiente(it), datos.ajustesDePeriodo).minus(1, DateTimeUnit.DAY) }
+            fraseDelFinalDeLaGuia(teQuedan, ultimo, hayCuentas = true)
+        }.getOrDefault(YA_PUEDES_EMPEZAR)
+    }
+
+    fun irA(destino: PasoDePrimerUso) {
+        error = null
+        paso = destino
+        // Vuelta 75: al llegar al final, el salario se crea y «Listo» lee su cifra.
+        if (destino == PasoDePrimerUso.LISTO) {
+            fraseDelListo = null
+            alcance.launch {
+                crearElSalario()
+                leerLaCifraDelListo()
+            }
+        }
+    }
+
     /** Terminada o descartada: se sella en el server y se va al Inicio, haya contestado o no. */
     fun salir() {
         if (guardando) return
         guardando = true
         alcance.launch {
+            // Vuelta 75: el salario escrito no se pierde por salir antes del final.
+            crearElSalario()
             runCatching { Repositories.wallets.marcarPrimerUso() }
             GuiaDePrimerUso.cerrar()
             guardando = false
@@ -391,19 +455,30 @@ fun PrimerUsoScreen(
 
     Box(modifier = Modifier.fillMaxSize()) {
     Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
-        Encabezado(
-            titulo = "Paso ${numeroDelPaso(paso, pasos)} de ${pasos.size}",
-            acciones = {
-                if (paso != PasoDePrimerUso.LISTO) {
-                    Boton(
-                        AHORA_NO,
-                        onClick = { preguntandoSiHayAlgoEscrito(::salir) },
-                        variante = VarianteDeBoton.Fantasma,
-                        habilitado = !guardando,
-                    )
-                }
-            },
-        )
+        // Vuelta 75: «Paso 2 de 6» es un rótulo chico; el título grande es el del paso (abajo), o el de la
+        // bienvenida. Antes «Paso 1 de 6» era el título de la pantalla y le ganaba a «Te damos la bienvenida».
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = Medida.altoDeEncabezado)
+                .padding(horizontal = Medida.margenDePantalla),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                rotuloDelPaso(numeroDelPaso(paso, pasos), pasos.size),
+                style = Movi.textos.apoyoMedio,
+                color = Movi.colores.textoMedio,
+                modifier = Modifier.weight(1f).testTag(TAG_ROTULO_DEL_PASO),
+            )
+            if (paso != PasoDePrimerUso.LISTO) {
+                Boton(
+                    AHORA_NO,
+                    onClick = { preguntandoSiHayAlgoEscrito(::salir) },
+                    variante = VarianteDeBoton.Fantasma,
+                    habilitado = !guardando,
+                )
+            }
+        }
         BarraDeProgreso(
             fraccion = progresoDelPaso(paso, pasos),
             modifier = Modifier.fillMaxWidth().padding(horizontal = Medida.margenDePantalla),
@@ -433,7 +508,12 @@ fun PrimerUsoScreen(
             ) {
                 // La bienvenida lleva su propio título, grande y centrado (ver [PasoBienvenida]).
                 if (p != PasoDePrimerUso.BIENVENIDA) {
-                    Text(p.titulo(modoDeCaptura), style = Movi.textos.titular, color = Movi.colores.texto)
+                    Text(
+                        p.titulo(modoDeCaptura),
+                        style = Movi.textos.titular,
+                        color = Movi.colores.texto,
+                        modifier = Modifier.testTag(TAG_TITULO_DEL_PASO).semantics { heading() },
+                    )
                     Spacer(Modifier.height(Espacio.xs))
                 }
                 when (p) {
@@ -448,6 +528,13 @@ fun PrimerUsoScreen(
                         habilitado = !guardando,
                         onDia = { dia = it },
                         onRegla = { regla = it },
+                        // Vuelta 75: el salario, opcional, si todavía no hay un ingreso fijo anotado.
+                        preguntaElSalario = !tieneIngresoFijo,
+                        salario = salario,
+                        onSalario = { salario = it },
+                        cuentas = yaHabia.cuentas,
+                        cuentaDelSalario = cuentaDelSalario,
+                        onCuentaDelSalario = { cuentaDelSalario = it },
                     )
                     PasoDePrimerUso.CUENTAS -> PasoCuentas(
                         cuentas = (yaHabia.cuentas + cuentas).distinctBy { it.id },
@@ -468,6 +555,7 @@ fun PrimerUsoScreen(
                         onAlternar = ::alternarRecurrente,
                     )
                     PasoDePrimerUso.LISTO -> PasoListo(
+                        fraseDelListo,
                         lista,
                         ResumenDelPrimerUso(
                             periodo = periodoGuardado ?: periodoDelPerfil,
@@ -672,6 +760,12 @@ private fun PasoPeriodo(
     habilitado: Boolean,
     onDia: (Int) -> Unit,
     onRegla: (SiElCorteCaeEnFinDeSemana) -> Unit,
+    preguntaElSalario: Boolean,
+    salario: Long?,
+    onSalario: (Long?) -> Unit,
+    cuentas: List<Account>,
+    cuentaDelSalario: String?,
+    onCuentaDelSalario: (String?) -> Unit,
 ) {
     Text(
         "¿Qué día te pagan o empieza tu mes? Movi cuenta tu mes desde ese día. Si te pagan el 25, toca el 25.",
@@ -720,6 +814,60 @@ private fun PasoPeriodo(
         val ejemplo = remember(settings, hoy) { ejemploCortoDelCorte(hoy, settings) }
         Spacer(Modifier.height(Medida.dentroDeSeccion))
         VistaPrevia(vistaPreviaDelPeriodo(hoy, settings), detalle = detalleDelInicioDelPeriodo(dia, ejemplo))
+        if (preguntaElSalario) {
+            Spacer(Modifier.height(Medida.entreSecciones))
+            SalarioDelPeriodo(dia, salario, onSalario, cuentas, cuentaDelSalario, onCuentaDelSalario, habilitado)
+        }
+    }
+}
+
+/**
+ * Vuelta 75 · **«¿Cuánto te pagan? (opcional)»**: sin el salario, la caja supone que no te entra nada y
+ * todo sale en rojo. La cifra y la cuenta a la que llega —con las cuentas que ya hay; si no hay ninguna,
+ * la primera que agregues en el paso siguiente—. La regla se crea al terminar la guía, con la creación de
+ * siempre, el día del corte.
+ */
+@Composable
+private fun SalarioDelPeriodo(
+    dia: Int,
+    salario: Long?,
+    onSalario: (Long?) -> Unit,
+    cuentas: List<Account>,
+    cuentaDelSalario: String?,
+    onCuentaDelSalario: (String?) -> Unit,
+    habilitado: Boolean,
+) {
+    Seccion(PREGUNTA_DEL_SALARIO)
+    MoneyField(
+        value = salario,
+        onValueChange = onSalario,
+        label = "Cuánto te pagan",
+        modifier = Modifier.testTag(TAG_SALARIO_EN_LA_GUIA),
+    )
+    Spacer(Modifier.height(Espacio.xs))
+    val deDinero = cuentas.filter { it.type in CUENTAS_QUE_PAGAN }
+    if (deDinero.isEmpty()) {
+        Text(
+            "Llega el día $dia a la primera cuenta que agregues en el paso siguiente.",
+            style = Movi.textos.apoyo,
+            color = Movi.colores.textoMedio,
+        )
+    } else {
+        Text("¿A qué cuenta te llega?", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+        Spacer(Modifier.height(Espacio.xs))
+        val elegida = cuentaDelSalario ?: deDinero.first().id
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
+        ) {
+            deDinero.forEach { c ->
+                PildoraDeFiltro(
+                    texto = c.name,
+                    seleccionada = c.id == elegida,
+                    onClick = { if (habilitado) onCuentaDelSalario(c.id) },
+                )
+            }
+        }
     }
 }
 
@@ -1044,12 +1192,12 @@ private fun FormularioDeRecurrente(borrador: BorradorDeRecurrente) {
         }
         MoneyField(value = borrador.monto, onValueChange = { borrador.monto = it }, label = "Cuánto pagas")
         Spacer(Modifier.height(Medida.dentroDeSeccion))
-        CampoDeTexto(
-            "Qué día del mes (1 a 31)",
-            borrador.dia,
-            { nuevo -> borrador.dia = nuevo.filter(Char::isDigit).take(2) },
-            marcador = "Ej: 5",
-            teclado = KeyboardType.Number,
+        // Vuelta 75: el día se elige, no se escribe: el selector de la vuelta 72 (`SelectorDeDiaDelMes`).
+        RotuloDelCampo("Qué día del mes")
+        SelectorDeDiaDelMes(
+            elegido = borrador.diaValido,
+            onElegir = { borrador.dia = it.toString() },
+            habilitado = !borrador.guardando,
         )
         borrador.error?.let {
             Spacer(Modifier.height(Espacio.xs))
@@ -1074,7 +1222,20 @@ private fun FormularioDeRecurrente(borrador: BorradorDeRecurrente) {
 // ── 6 · Listo ──────────────────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun PasoListo(lista: List<EstadoDelPrimerPaso>, resumen: ResumenDelPrimerUso) {
+private fun PasoListo(frase: String?, lista: List<EstadoDelPrimerPaso>, resumen: ResumenDelPrimerUso) {
+    // Vuelta 75: el final dice una cifra real —«Te quedan $X hasta el 24 nov»—, la del héroe de Inicio, o
+    // «Ya puedes empezar» sin cuentas. Mientras se lee, un esqueleto del mismo alto.
+    if (frase != null) {
+        Text(
+            conCifrasOcultas(frase),
+            style = Movi.textos.titulo,
+            color = Movi.colores.texto,
+            modifier = Modifier.testTag(TAG_CIFRA_DEL_LISTO),
+        )
+    } else {
+        LineaEsqueleto(fraccionDelAncho = 0.7f, estilo = Movi.textos.titulo)
+    }
+    Spacer(Modifier.height(Medida.dentroDeSeccion))
     // Los renglones y si quedaron hechos salen de la lista única: la misma de «Te faltan N pasos».
     val lineas = lineasDelResumen(lista, resumen)
     Text("Esto es lo que quedó:", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
