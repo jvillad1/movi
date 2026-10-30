@@ -34,8 +34,10 @@ class CajaDelPeriodoTest {
     private fun dia(fecha: String, saldo: Long, vararg movimientos: Pair<String, Long>) =
         DiaDeLaCaja(fecha, saldo, movimientos.map { MovimientoDeLaCaja(it.first, it.second) })
 
+    // ── Vuelta 75 · una cifra y una frase ──────────────────────────────────
+
     @Test
-    fun `una sola frase con la cifra libre, hasta el salario, y el peor dia`() {
+    fun `la frase corta dice hasta cuando y el dia mas justo, sin cifras`() {
         val caja = CajaProyectada(
             tuPlataHoy = 12_900_000L,
             gastoDiario = null,
@@ -46,14 +48,32 @@ class CajaDelPeriodoTest {
             ),
             hastaElSalario = true,
         )
-        assertEquals("Hasta el 25 de oct, en tu peor día (el 17 de oct) tendrás \$8,8M libres en tus cuentas", fraseDePuente(caja, hoy))
-        assertTrue("te quedan" !in fraseDePuente(caja, hoy), "el verbo de «Te quedan» es del héroe")
+        assertEquals("Hasta el 25 oct · tu día más justo es el 17 oct", fraseCortaDeLaCaja(caja, hoy))
+        assertTrue("\$" !in fraseCortaDeLaCaja(caja, hoy), "la cifra va arriba, una vez")
+        assertTrue("te quedan" !in fraseCortaDeLaCaja(caja, hoy).lowercase(), "el verbo de «Te quedan» es del héroe")
+        assertEquals("Libre en tu día más justo: \$8,8M", descripcionDeLaCifraDeLaCaja(caja))
         assertNull(fraseDelRojo(caja, hoy))
+        assertNull(lineaSinSalario(caja), "con salario no hay línea encima")
+    }
+
+    @Test
+    fun `si el dia mas justo es hoy, o no alcanza, la frase lo dice`() {
+        val hoyEsElPeor = CajaProyectada(
+            tuPlataHoy = 5_000_000L, gastoDiario = null,
+            dias = listOf(DiaDeLaCaja("2026-10-02", 5_000_000L, libre = 3_000_000L), DiaDeLaCaja("2026-10-03", 5_100_000L, libre = 3_100_000L)),
+        )
+        assertEquals("Hasta el 3 oct · tu día más justo es hoy", fraseCortaDeLaCaja(hoyEsElPeor, hoy))
+        val enRojo = CajaProyectada(
+            tuPlataHoy = 1_000_000L, gastoDiario = null,
+            dias = listOf(dia("2026-10-02", 1_000_000L), dia("2026-10-10", -683_361L, "Gimnasio" to -1_683_361L), dia("2026-10-25", 1_000_000L)),
+        )
+        assertEquals("Hasta el 25 oct · el 10 oct no te alcanza", fraseCortaDeLaCaja(enRojo, hoy))
+        assertEquals("Libre en tu día más justo: −\$683\u00A0mil", descripcionDeLaCifraDeLaCaja(enRojo), "una sola forma de cifra: la corta")
     }
 
     /** El ejemplo de la revisión 4: «Te quedan» descuenta el ahorro y la caja ahora también. */
     @Test
-    fun `con ahorro la frase dice lo libre y lo que habra en las cuentas, una vez`() {
+    fun `que supone dice lo que habra en las cuentas y el ahorro, con cifras cortas`() {
         val ahorro = 8_000_000L
         val caja = CajaProyectada(
             tuPlataHoy = 10_500_000L,
@@ -66,22 +86,16 @@ class CajaDelPeriodoTest {
             ahorro = ahorro,
             hastaElSalario = true,
         )
-        val frase = fraseDePuente(caja, LocalDate(2026, 10, 29))
+        val octubre29 = LocalDate(2026, 10, 29)
         // Revisión de la 70: con el ahorro más grande que el saldo no dice «de eso $8M es tu ahorro» sobre $6,1M.
+        assertEquals("En las cuentas habrá \$6,1M el 5 nov: menos que tu ahorro de \$8M.", lineaDeLasCuentas(caja, octubre29))
         assertEquals(
-            "Hasta el 25 de nov no te alcanza: el 5 de nov quedarías en −\$1,9M libres · en las cuentas habrá \$6,1M: " +
-                "menos que tu ahorro de \$8M",
-            frase,
+            "En las cuentas habrá \$6,1M el 5 nov: menos que tu ahorro y lo apartado (\$8,5M).",
+            lineaDeLasCuentas(caja.copy(apartado = 500_000L, dias = caja.dias.map { it.copy(libre = it.saldo - 8_500_000L) }), octubre29),
         )
-        assertEquals(
-            "Hasta el 25 de nov no te alcanza: el 5 de nov quedarías en −\$2,4M libres · en las cuentas habrá \$6,1M: " +
-                "menos que tu ahorro y lo apartado (\$8,5M)",
-            fraseDePuente(
-                caja.copy(apartado = 500_000L, dias = caja.dias.map { it.copy(libre = it.saldo - 8_500_000L) }),
-                LocalDate(2026, 10, 29),
-            ),
-        )
-        // La cifra de las cuentas sale una sola vez en toda la sección: ni la leyenda ni la gráfica la repiten.
+        val supone = loQueSupone(caja, GastoDelDiaADia(), octubre29, comparacion = null)
+        assertEquals(lineaDeLasCuentas(caja, octubre29), supone.first(), "lo primero, lo que habrá en las cuentas")
+        // La cifra de las cuentas no sale arriba: ni la leyenda ni la gráfica la repiten.
         assertEquals("Llega tu salario: +\$7M", leyendaDelCierre(caja))
         assertEquals("Libre el 25 nov, al llegar tu salario: \$5,1M", descripcionDelCierre(caja))
     }
@@ -96,14 +110,25 @@ class CajaDelPeriodoTest {
             apartado = 500_000L,
         )
         assertEquals(
-            "Hasta el 3 de oct, tu peor día es hoy: tienes \$3M libres en tus cuentas · en las cuentas hay \$5M, de eso " +
-                "\$1,5M es tu ahorro y \$500.000 está apartado",
-            fraseDePuente(caja, hoy),
+            "En las cuentas hay hoy \$5M; de eso \$1,5M es tu ahorro y \$500\u00A0mil está apartado.",
+            lineaDeLasCuentas(caja, hoy),
         )
+        assertNull(lineaDeLasCuentas(caja.copy(ahorro = 0L, apartado = 0L), hoy), "sin ahorro ni apartados, nada")
         assertEquals(TOCA_UN_DIA, leyendaDelCierre(caja))
     }
 
-    // ── Lo libre de hoy contra «Te quedan» (revisión de la 70) ──────────────
+    @Test
+    fun `sin salario la linea de encima lo dice, y con un ingreso fijo que no cuenta no`() {
+        val caja = CajaProyectada(tuPlataHoy = 1_000_000L, gastoDiario = null, dias = listOf(dia("2026-10-02", 1_000_000L)), hastaElPeriodoSiguiente = true)
+        assertEquals("Sin tu salario, Movi supone que no te entra nada", lineaSinSalario(caja))
+        assertNull(lineaSinSalario(caja.copy(salarioQueNoCuenta = true)))
+        assertTrue(
+            deDondeSaleLaCaja(caja).first().contains("hasta el día que empieza tu próximo período"),
+            deDondeSaleLaCaja(caja).first(),
+        )
+    }
+
+    // ── Lo libre de hoy contra «Te quedan» (revisión de la 70), en «¿Qué supone?» ──
 
     /** El héroe dice «Te quedan $1,5M»; las cuentas tienen $2,6M libres hoy y $1,6M de deuda de tarjeta. */
     private val conAhorro = CajaProyectada(
@@ -120,14 +145,9 @@ class CajaDelPeriodoTest {
     @Test
     fun `la diferencia con te quedan por las compras con tarjeta se nombra si las compras la explican`() {
         val c = ComparacionConTeQuedan(teQuedan = 1_500_000L, fijosQueFaltan = 0L, porRecibir = 0L, comprasConTarjetaSinPagar = 1_080_000L)
-        assertEquals("hoy tienes \$2,6M libres, \$1,1M más que lo que te queda para gastar: tus compras con tarjeta se pagan después", clausulaDeLaDiferencia(conAhorro, c))
-        // El peor día es el último del horizonte: la fecha va una vez.
-        assertEquals(
-            "Hasta el 5 de nov, tu peor día es ese mismo día: tendrás \$2M libres en tus cuentas · en las cuentas habrá \$10M, " +
-                "de eso \$8M es tu ahorro · hoy tienes \$2,6M libres, \$1,1M más que lo que te queda para gastar: tus compras " +
-                "con tarjeta se pagan después",
-            fraseDePuente(conAhorro, octubre29, c),
-        )
+        val diferencia = "Hoy tienes \$2,6M libres, \$1,1M más que lo que te queda para gastar: tus compras con tarjeta se pagan después."
+        assertEquals(diferencia, clausulaDeLaDiferencia(conAhorro, c))
+        assertTrue(diferencia in loQueSupone(conAhorro, GastoDelDiaADia(), octubre29, c), "va en «¿Qué supone?»")
     }
 
     /**
@@ -138,23 +158,16 @@ class CajaDelPeriodoTest {
     @Test
     fun `sin compras con tarjeta medidas que la expliquen la diferencia se dice sin causa`() {
         val sinMedir = ComparacionConTeQuedan(teQuedan = 1_500_000L, fijosQueFaltan = 0L, porRecibir = 0L, comprasConTarjetaSinPagar = null)
-        val sinCausa = "hoy tienes \$2,6M libres, \$1,1M más que lo que te queda para gastar"
+        val sinCausa = "Hoy tienes \$2,6M libres, \$1,1M más que lo que te queda para gastar."
         assertEquals(sinCausa, clausulaDeLaDiferencia(conAhorro, sinMedir), "sin medirlas no se nombran")
-        // Lo que sobra es tu parte de un gasto de Espacios o una liquidación: las compras medidas son poquitas.
         assertEquals(sinCausa, clausulaDeLaDiferencia(conAhorro, sinMedir.copy(comprasConTarjetaSinPagar = 300_000L)))
-        // La Master Black con diferidos a 36 cuotas: muchas compras sin pagar, mucho más que la diferencia.
         assertEquals(sinCausa, clausulaDeLaDiferencia(conAhorro, sinMedir.copy(comprasConTarjetaSinPagar = 5_000_000L)))
-        // Sin compras sin pagar (todas pagadas en el período).
         assertEquals(sinCausa, clausulaDeLaDiferencia(conAhorro, sinMedir.copy(comprasConTarjetaSinPagar = 0L)))
     }
 
-    /**
-     * Revisión de la 70: con el peor día hoy y un pago que vence hoy, la frase decía dos cifras de «hoy»
-     * ($2M en la base y $2,6M en la cláusula). Ahora la cláusula compara lo libre al cerrar hoy, la misma
-     * cifra de la base, y no la repite.
-     */
+    /** Lo libre de hoy es el del primer día, con el pago de hoy ya restado: una sola cifra de «hoy». */
     @Test
-    fun `con el peor dia hoy y un pago de hoy hay una sola cifra de hoy`() {
+    fun `con un pago de hoy lo libre de hoy ya lo resta`() {
         val conPagoHoy = CajaProyectada(
             tuPlataHoy = 10_600_000L,
             gastoDiario = null,
@@ -165,20 +178,17 @@ class CajaDelPeriodoTest {
             ahorro = 8_000_000L,
         )
         val c = ComparacionConTeQuedan(teQuedan = 1_500_000L, fijosQueFaltan = 0L, porRecibir = 0L, comprasConTarjetaSinPagar = 500_000L)
-        val frase = fraseDePuente(conPagoHoy, octubre29, c)
         assertEquals(
-            "Hasta el 5 de nov, tu peor día es hoy: tienes \$2M libres en tus cuentas · en las cuentas hay \$10M, de eso \$8M es " +
-                "tu ahorro · \$500.000 más que lo que te queda para gastar: tus compras con tarjeta se pagan después",
-            frase,
+            "Hoy tienes \$2M libres, \$500\u00A0mil más que lo que te queda para gastar: tus compras con tarjeta se pagan después.",
+            clausulaDeLaDiferencia(conPagoHoy, c),
         )
-        assertTrue("2,6M" !in frase, "lo libre antes de los pagos de hoy no aparece")
     }
 
     @Test
     fun `si coinciden con te quedan, hasta mil pesos, no se dice nada`() {
         val c = ComparacionConTeQuedan(teQuedan = 2_599_200L, fijosQueFaltan = 0L, porRecibir = 0L, comprasConTarjetaSinPagar = null)
         assertNull(clausulaDeLaDiferencia(conAhorro, c))
-        assertTrue("lo que te queda para gastar" !in fraseDePuente(conAhorro, octubre29, c))
+        assertTrue(loQueSupone(conAhorro, GastoDelDiaADia(), octubre29, c).none { "lo que te queda para gastar" in it })
     }
 
     @Test
@@ -195,10 +205,10 @@ class CajaDelPeriodoTest {
         val rojo = fraseDelRojo(caja, hoy)
         assertNotNull(rojo)
         assertTrue(rojo.startsWith("El 10 de octubre ya quedarías en"), rojo)
-        assertTrue("por Gimnasio (\$1.100.000)" in rojo, rojo)
-        // El peor día es el último: la fecha se dice una vez.
-        assertTrue(fraseDePuente(caja, hoy).startsWith("Hasta el 17 de oct no te alcanza: ese día quedarías en"), fraseDePuente(caja, hoy))
-        // Si el primero en rojo es el peor, ya lo dice la frase de puente: no se repite.
+        assertTrue("por Gimnasio (\$1,1M)" in rojo, rojo)
+        assertTrue(rojo in loQueSupone(caja, GastoDelDiaADia(), hoy, null), "va en «¿Qué supone?», no en rojo arriba")
+        assertEquals("Hasta el 17 oct · el 17 oct no te alcanza", fraseCortaDeLaCaja(caja, hoy))
+        // Si el primero en rojo es el peor, ya lo dice la cifra: no se repite.
         assertNull(fraseDelRojo(caja.copy(dias = caja.dias.take(2)), hoy))
     }
 
@@ -206,14 +216,14 @@ class CajaDelPeriodoTest {
     fun `el supuesto dice de que periodos sale, y si no hay, que no hay`() {
         val uno = GastoDelDiaADia(100_000L, listOf(GastoVariableDeUnPeriodo("2026-09", 3_100_000L, 31)))
         assertEquals(
-            "Supone que sigues como siempre: gastas en promedio \$100.000 por día (en tu período de septiembre).",
+            "Supone que sigues como siempre: gastas en promedio \$100\u00A0mil por día (en tu período de septiembre).",
             fraseDelSupuesto(uno),
         )
         val dos = GastoDelDiaADia(
             100_000L,
             listOf(GastoVariableDeUnPeriodo("2026-09", 3_100_000L, 31), GastoVariableDeUnPeriodo("2026-08", 2_900_000L, 29)),
         )
-        assertTrue("gastas en promedio \$100.000 por día (en tus últimos 2 períodos)" in fraseDelSupuesto(dos))
+        assertTrue("gastas en promedio \$100\u00A0mil por día (en tus últimos 2 períodos)" in fraseDelSupuesto(dos))
         assertTrue(fraseDelSupuesto(GastoDelDiaADia()).startsWith("Todavía no hay un período cerrado"))
     }
 
@@ -244,8 +254,10 @@ class CajaDelPeriodoTest {
         val caja = cajaDelPeriodoDe(data, GastoDelDiaADia(), hoy)
         assertNotNull(caja)
         assertEquals(5_000_000L, caja.tuPlataHoy, "la tarjeta es deuda: no está en Tu plata")
-        // Vuelta 70: sin un ingreso recurrente la caja mira 30 días.
-        assertEquals("2026-11-01", caja.alCierre.fecha)
+        // Vuelta 75: sin un ingreso recurrente y con el período elegido (corte 25), la caja llega al arranque
+        // del siguiente —el 25 de octubre—, no a 30 días (eran hasta el 1 de noviembre).
+        assertEquals("2026-10-25", caja.alCierre.fecha)
+        assertTrue(caja.hastaElPeriodoSiguiente)
         assertEquals(3_000_000L, caja.alCierre.saldo)
         assertNull(cajaDelPeriodoDe(data.copy(ocurrencias = null), GastoDelDiaADia(), hoy), "sin la lista no se proyecta")
     }

@@ -245,6 +245,13 @@ fun formatCOPSinOcultar(amount: Long): String = (if (amount < 0) MINUS_SIGN else
 fun formatMoneyCompact(amount: Long): String =
     if (SaldosOcultosStore.ocultos) PLATA_OCULTA else formatMoneyCompactSinOcultar(amount)
 
+/**
+ * [formatMoneyAbreviadaSinOcultar] mirando «Ocultar los saldos»: «$683 mil», «$1,3M». Vuelta 75: la
+ * forma de **todas** las cifras de la caja de Pagos, para que «−$683.361» no conviva con «−$1,3M».
+ */
+fun formatMoneyAbreviada(amount: Long): String =
+    if (SaldosOcultosStore.ocultos) PLATA_OCULTA else formatMoneyAbreviadaSinOcultar(amount)
+
 /** [formatMoneyCompact] sin mirar «Ocultar los saldos». Ver [formatCOPSinOcultar]. */
 fun formatMoneyCompactSinOcultar(amount: Long): String {
     val abs = kotlin.math.abs(amount)

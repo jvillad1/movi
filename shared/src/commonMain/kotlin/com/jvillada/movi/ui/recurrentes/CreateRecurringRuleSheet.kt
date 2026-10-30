@@ -137,6 +137,11 @@ fun CreateRecurringRuleSheet(
      */
     tipoNuevo: TransactionType = TransactionType.EXPENSE,
     /**
+     * Vuelta 75 · el día con el que arranca un alta sin [existing] ni [prefill]: «Agregar» de la caja sin
+     * salario la abre con el día del corte del dueño. Se puede cambiar.
+     */
+    diaNuevo: Int? = null,
+    /**
      * Revisión de la vuelta 72 · **lo de esta regla que venció sin pagarse**, si lo hay: «Pausar» primero
      * pregunta qué hacer con eso ([PreguntaDeLoVencidoAlPausar]). `null` pausa desde hoy sin preguntar.
      */
@@ -156,7 +161,7 @@ fun CreateRecurringRuleSheet(
     // Ola 11: el día se ELIGE, no se escribe (ver [SelectorDeDiaDelMes]). Por eso es un `Int?` y no
     // una cadena: el estado ya no puede contener «45», así que no hay nada que validar después.
     var dayOfMonth by remember {
-        mutableStateOf(existingSub?.dayOfMonth ?: existing?.dayOfMonth ?: prefill?.dayOfMonth)
+        mutableStateOf(existingSub?.dayOfMonth ?: existing?.dayOfMonth ?: prefill?.dayOfMonth ?: diaNuevo)
     }
     var selectedType by remember {
         mutableStateOf(existing?.type ?: prefill?.type ?: tipoNuevo)
