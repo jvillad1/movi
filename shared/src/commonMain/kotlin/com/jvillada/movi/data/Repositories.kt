@@ -19,8 +19,17 @@ object Repositories {
             if (pendiente != SessionManager.userId) runCatching { repo.olvidarDatosLocales(pendiente) }
             SessionManager.borradoLocalPendiente = null
         }
-        InvalidaElInicioAlEscribir(repo)
+        paraLaApp(repo)
     }
+
+    /**
+     * **Cómo envuelve la app su repositorio**, en este orden: por fuera [InvalidaElInicioAlEscribir]
+     * (cada escritura vuelve viejo lo recordado) y por dentro [LecturasSinRepetir] (vuelta 78: una
+     * lectura igual no sale dos veces a la vez, ni otra vez dentro de medio minuto). Aparte para que
+     * `ElInicioNoRepitePeticionesTest` monte exactamente esta cadena sobre un cliente HTTP falso.
+     */
+    internal fun paraLaApp(repo: WalletRepository): WalletRepository =
+        InvalidaElInicioAlEscribir(LecturasSinRepetir(repo))
     private val real: WalletRepository by realPerezoso
 
     /**
