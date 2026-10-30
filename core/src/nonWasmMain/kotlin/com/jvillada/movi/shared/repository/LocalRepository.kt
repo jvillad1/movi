@@ -625,6 +625,9 @@ class LocalRepository(
                 // que ganarle (ver FinancialEvent.lastEditedAt). Lo escriben las correcciones.
                 resolved.lastEditedAt,
             )
+            // Vuelta 71: las cuotas de una compra con tarjeta no tienen columna local; esperan aparte
+            // a la subida (ver [CuotasPorSubir]). Sin migrar el esquema.
+            resolved.cuotas?.let { CuotasPorSubir.guardar(db, userId(), resolved.id, it) }
             val acct = db.accountQueries.selectById(resolved.accountId).executeAsOneOrNull()
             if (acct != null) {
                 // signedDelta, no un `if INCOME suma` a secas (Hallazgo bloqueante 2 de la
@@ -2683,7 +2686,9 @@ class LocalRepository(
             db.voidEventQueries.deleteSyncedForUser(userId)
             db.financialEventQueries.deleteSyncedForUser(userId)
             db.accountQueries.deleteSyncedForUser(userId)
-            db.remoteCacheQueries.deleteForUser(userId)
+            // Vuelta 71 (revisión): las cuotas que esperan su subida se quedan, como los movimientos
+            // pendientes a los que pertenecen (ver [CuotasPorSubir]). Las borra [olvidarTodoLoDe].
+            db.remoteCacheQueries.deleteForUserSalvo(userId, CuotasPorSubir.CLAVE)
         }
     }
 

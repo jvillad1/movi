@@ -222,6 +222,8 @@ internal fun movimientoDeLaHoja(
     categoria: String,
     nota: String,
     timestamp: Long,
+    /** Vuelta 71: a cuántas cuotas fue la compra con tarjeta («¿A cuántas cuotas?»), o `null`. */
+    cuotas: Int? = null,
 ): FinancialEvent = FinancialEvent(
     // El id viene de afuera, no se genera acá: un reintento tras un fallo tiene que llevar el
     // mismo, o el server no tiene cómo saber que es el mismo movimiento. Ver `idDelBorrador`.
@@ -239,6 +241,7 @@ internal fun movimientoDeLaHoja(
     // excluye lo pendiente.
     reconciliationStatus = ReconciliationStatus.RECONCILED,
     timestamp = timestamp,
+    cuotas = cuotas,
 )
 
 /**
@@ -339,7 +342,17 @@ fun QuickAddScreen(
     var amount by remember {
         mutableStateOf(presetMonto?.takeIf { it > 0 && presetDeudaId == null }?.toString() ?: "")
     }
+    // Vuelta 71: la nota es UNA para las cuatro pestañas (Traspaso y Pagar la reciben de acá): viaja
+    // al cambiar de pestaña, como el monto y la fecha.
     var note by remember { mutableStateOf(presetNota?.trim().orEmpty()) }
+    /** Vuelta 71 · «¿A cuántas cuotas?» de una compra con tarjeta (ver `CuotasEnAgregar.kt`). */
+    var cuotas by remember { mutableStateOf(1) }
+    /**
+     * Vuelta 71 (revisión) · **el dueño tocó la fila de cuotas.** Sin eso se manda `null`, no el «1» de
+     * la pantalla: un «1» que nadie eligió le cerraría la puerta al extracto, que solo llena las cuotas
+     * de un movimiento que no las tiene (`StatementRoutes`).
+     */
+    var cuotasElegidas by remember { mutableStateOf(false) }
     // F35: arranca en la primera categoría predefinida de Gastos, como antes arrancaba en
     // "Mercado" — y se cambia desde la cuadrícula de [SelectorDeCategoria] (Ola B).
     //
@@ -957,8 +970,65 @@ fun QuickAddScreen(
     // Un campo de texto de Cuota (el interés, lo que bajó la deuda en otra moneda) con el foco: sus
     // dígitos son suyos, no del monto.
     var campoDelTraspasoConFoco by remember { mutableStateOf(false) }
+    /**
+     * Vuelta 71 (revisión) · la cifra de Pagar que **puso la hoja sola** (la cuota del crédito elegido),
+     * o `null`. Mientras [montoDelTraspaso] sea esa, no es algo que el dueño escribió: no viaja a Gasto
+     * ni pregunta «¿Descartar?». Teclear o tocar una pastilla la vuelve suya.
+     */
+    var montoPropuestoPorLaHoja by remember { mutableStateOf<String?>(null) }
     fun onKeyDelTraspaso(key: String) {
         montoDelTraspaso = conLaTecla(montoDelTraspaso, key)
+        montoPropuestoPorLaHoja = null
+    }
+    /** Lo que el dueño escribió en Traspaso o Pagar: vacío si la cifra la puso la hoja. */
+    fun montoEscritoDelTraspaso(): String =
+        if (montoPropuestoPorLaHoja != null && montoDelTraspaso == montoPropuestoPorLaHoja) "" else montoDelTraspaso
+    // Vuelta 71: la moneda de la cifra en Traspaso y Pagar (la de la cuenta de origen), para la pregunta
+    // de «¿Descartar …?». La dice [TransferBody].
+    var monedaDelTraspaso by remember { mutableStateOf("COP") }
+
+    /**
+     * **Vuelta 71 · cambiar de pestaña no pierde lo escrito.** Gasto e Ingreso escriben [amount];
+     * Traspaso y Pagar, [montoDelTraspaso] (los guardan aparte porque Pagar propone la cuota del crédito
+     * y no puede pisar lo que se escribió en Gasto). Al cruzar de un grupo al otro la cifra se lleva tal
+     * cual: con $45.000 en Gasto, Traspaso arranca en $45.000 y no en $0. La fecha y la nota ya son
+     * una sola para las cuatro; la categoría no viaja, porque es de cada tipo.
+     */
+    fun cambiarDePestana(nueva: Int) {
+        val antes = pickers.typeIndex
+        if (antes < TIPO_TRASPASO && nueva >= TIPO_TRASPASO) {
+            montoDelTraspaso = amount
+            montoPropuestoPorLaHoja = null
+        }
+        if (antes >= TIPO_TRASPASO && nueva < TIPO_TRASPASO) amount = montoEscritoDelTraspaso()
+        pasarA(pickers.conTipo(nueva))
+    }
+
+    // Vuelta 71 · lo que la hoja trajo al abrirse: cerrarla sin tocar nada no pregunta.
+    val montoAlAbrir = remember { amount }
+    val montoDelTraspasoAlAbrir = remember { montoDelTraspaso }
+    val notaAlAbrir = remember { note }
+    /** «¿Descartar $1.250.000?» abierta (ver `DescartarEnAgregar.kt`). */
+    var preguntandoDescartar by remember { mutableStateOf(false) }
+
+    /** Lee el estado en el momento: la llaman el marco de la hoja, Escape y el «atrás». */
+    fun hayAlgoQuePerderAhora(): Boolean {
+        val enTraspaso = pickers.typeIndex >= TIPO_TRASPASO
+        return hayAlgoQuePerder(
+            monto = if (enTraspaso) montoEscritoDelTraspaso() else amount,
+            montoAlAbrir = if (enTraspaso) montoDelTraspasoAlAbrir else montoAlAbrir,
+            nota = note,
+            notaAlAbrir = notaAlAbrir,
+        )
+    }
+
+    /**
+     * **Cerrar la hoja** desde afuera (la X, el velo, arrastrarla, Escape, el «atrás»): con algo escrito
+     * pregunta antes; sin nada, cierra. Guardar no pasa por acá.
+     */
+    fun pedirCerrar() {
+        if (saving) return
+        if (hayAlgoQuePerderAhora()) preguntandoDescartar = true else onDismiss()
     }
 
     val parsedAmount = amount.toDoubleOrNull() ?: 0.0
@@ -1041,6 +1111,8 @@ fun QuickAddScreen(
         if (selectedAccountId != null) origenCuenta = OrigenCuenta.ELEGIDA
         amount = ""
         note = ""
+        cuotas = 1
+        cuotasElegidas = false
         category = categoriaPorDefectoPara(tipo, usedCategories, categoryPrefs, usosRecientes)
         categoriaElegidaAMano = false
         sugerenciaVigente = null
@@ -1094,6 +1166,12 @@ fun QuickAddScreen(
             // siendo `Clock.System.now()` exactamente como antes — ver [timestampParaFecha],
             // que explica por qué otro día va al mediodía de Bogotá y hoy no.
             timestamp = timestampParaFecha(fecha, hoy),
+            // Vuelta 71: solo con una tarjeta de crédito en «Gasto» (la fila solo se ve ahí).
+            cuotas = cuotasParaGuardar(
+                cuotas = cuotas,
+                elegidas = cuotasElegidas,
+                seVeLaFila = preguntaLasCuotas(accounts.firstOrNull { it.id == cuenta }?.type, pickers.typeIndex == 0, presetPago != null),
+            ),
         )
         val event = elAviso?.let { movimientoConElAviso(deLaHoja, it, ahora = Clock.System.now().toEpochMilliseconds()) }
             ?: deLaHoja
@@ -1228,6 +1306,24 @@ fun QuickAddScreen(
         if (pedidosDeGuardarYOtro > 0) save(yAnotarOtro = true)
     }
 
+    // Vuelta 71: el «atrás» de Android con algo escrito pregunta antes de cerrar (se anota encima de
+    // la línea de `App.kt` que cierra la hoja), y con la pregunta abierta la cierra a ella.
+    if (!hayPicker && !preguntandoDescartar && hayAlgoQuePerderAhora()) AtrasCierraEstaHoja { pedirCerrar() }
+    if (preguntandoDescartar) AtrasCierraEstaHoja { preguntandoDescartar = false }
+
+    // Vuelta 71 · la hoja mide lo mismo en las cuatro pestañas (ver «Las pestañas quedan quietas»).
+    // Salvo con la Nota abierta: es un campo y un botón, y desde la vuelta de diseño 13 la hoja se
+    // acorta a ella en vez de dejar media pantalla vacía (al volver, `volviendoDeUnSubEditor`).
+    //
+    // Vuelta 71 (revisión): también sin teclado en pantalla si la ventana es angosta (< 600 dp: la hoja
+    // desde abajo, la web con mouse a 390). Ahí no hay teclado que anclar, así que el cuerpo va arriba
+    // ([cuerpoAbajo] solo con teclado). Solo la hoja centrada (≥ 600 dp, sin teclado) crece sin encogerse.
+    val altoFijo = (conTecladoEnPantalla || LocalWindowWidthClass.current == WindowWidthClass.Compact) &&
+        pickers.propio != Picker.Note
+    val cuerpoAbajo = altoFijo && conTecladoEnPantalla
+    var contenidoMaximoPx by remember { mutableStateOf(0) }
+    val densidadDeLaHoja = LocalDensity.current
+
     Box(modifier = Modifier.fillMaxSize()) {
         // La X de la hoja la dibuja `MarcoDeHoja` y queda FUERA de lo que se desplaza (ver el bloque
         // de abajo): en iOS la X es la única salida de esta hoja —no hay botón atrás, y el gesto de
@@ -1237,7 +1333,9 @@ fun QuickAddScreen(
         // pantalla (vuelta 34: frente a un computador) no hay nada que respire, y va del ancho de
         // las demás hojas.
         MarcoDeHoja(
-            onDismiss = onDismiss,
+            // Vuelta 71: la X, el velo y arrastrarla pasan por [pedirCerrar]: con algo escrito,
+            // «¿Descartar …?». El marco la vuelve a su lugar si no se cerró (ver `EstadoDeLaHoja.cerrar`).
+            onDismiss = { pedirCerrar() },
             dismissEnabled = !saving,
             anchoMaximo = if (conTecladoEnPantalla) ANCHO_DE_LA_HOJA_DE_AGREGAR else ANCHO_DE_HOJA,
             // Escape (la web) sale del sub-editor abierto —Nota, Categoría, Cuenta, Fecha o los de
@@ -1245,8 +1343,9 @@ fun QuickAddScreen(
             // movimiento entero. Mismo destino que la X de cada sub-editor.
             onEscape = {
                 when {
+                    preguntandoDescartar -> preguntandoDescartar = false
                     pickers.hayPicker -> volverAlFormulario()
-                    !saving -> onDismiss()
+                    !saving -> pedirCerrar()
                 }
             },
             onTecla = ::alTeclear,
@@ -1345,16 +1444,70 @@ fun QuickAddScreen(
             // que dejaba 4 categorías a la vista con una losa vacía debajo. Lo que las
             // contiene no es un tope propio sino el desplazamiento de la hoja, uno solo. Por
             // eso la cuadrícula no es una `LazyVerticalGrid` (ver el KDoc del selector).
+            // ── Vuelta 71 · LAS PESTAÑAS QUEDAN QUIETAS ──────────────────────────────────────
+            //
+            // Vivían adentro del desplazamiento, arriba del cuerpo: al pasar de Cuota a Traspaso el
+            // cuerpo se acortaba, la hoja (anclada abajo) se encogía y las pestañas subían ~120 px; el
+            // segundo toque caía en la fecha. Ahora van FUERA del desplazamiento, fijas arriba, y lo que
+            // cambia de alto queda debajo. Con el teclado en pantalla la hoja ocupa todo el alto que
+            // tiene ([altoFijo]) y el cuerpo se apoya abajo: las pestañas no se mueven arriba y el
+            // teclado no se mueve abajo, en ningún tipo. Sin teclado en pantalla (frente a un
+            // computador) la hoja no se encoge mientras está abierta: crece hasta lo más alto que midió.
+            if (presetPago != null) {
+                // Vuelta 43 · modo pago: en vez de las pestañas, de qué es el pago. Cambiar a
+                // «Traspaso» o «Cuota» no tiene sentido acá (el guardado salda ESTA factura), y
+                // el encabezado es lo que le dice al dueño que no es un gasto cualquiera.
+                EncabezadoDelPago(encabezadoDelPago(presetPago))
+            } else {
+            Box(Modifier.fillMaxWidth().testTag(TAG_PESTANAS_DE_AGREGAR)) {
+                SelectorSegmentado(
+                    // «Gasto», no «Egreso»: es la palabra que la gente usa. Toda la app
+                    // habla igual — Inicio y Movimientos también dicen «Gastos».
+                    // Vuelta 71: «Pagar» (era «Cuota»): la pestaña paga una tarjeta o la cuota de un
+                    // crédito, y su destino pregunta «¿Qué pagas?». Cuatro segmentos en ~90 px cada uno.
+                    labels = ETIQUETAS_DE_LAS_PESTANAS_DE_AGREGAR,
+                    selected = pickers.typeIndex,
+                    // Cambiar de pestaña saca de composición al formulario de la pestaña
+                    // vieja: si era Traspaso, su sub-picker se fue con él y el estado tiene
+                    // que enterarse. Eso lo hace `conTipo` — ver [PickersDeLaHoja].
+                    onSelect = { cambiarDePestana(it) },
+                    enabled = !saving,
+                )
+            }
+            }
             Column(
                 modifier = Modifier
                     // El peso va primero por lectura: no mide nada, solo le dice a la Column
                     // de la hoja que este hijo se lleva lo que sobre (y nada más).
-                    .weight(1f, fill = false)
+                    .weight(1f, fill = altoFijo)
+                    // Vuelta 71, sin teclado en pantalla: nunca más baja que lo más alto que midió.
+                    .then(
+                        if (!altoFijo && contenidoMaximoPx > 0 && pickers.propio != Picker.Note) {
+                            Modifier.heightIn(min = with(densidadDeLaHoja) { contenidoMaximoPx.toDp() })
+                        } else {
+                            Modifier
+                        },
+                    )
                     // AFUERA del scroll: el alto que la hoja ocupa DE VERDAD en pantalla.
                     .onSizeChanged { huecoVisiblePx = it.height }
                     .verticalScroll(sheetScroll)
+                    // Vuelta 71, con teclado en pantalla: el cuerpo ocupa al menos el hueco y se apoya
+                    // abajo (ver `verticalArrangement`), así el teclado queda donde siempre.
+                    .then(
+                        if (cuerpoAbajo && !hayPicker && huecoVisiblePx > 0) {
+                            Modifier.heightIn(min = with(densidadDeLaHoja) { huecoVisiblePx.toDp() })
+                        } else {
+                            Modifier
+                        },
+                    )
                     // ADENTRO del scroll: el alto del contenido, que puede pasarse del hueco.
-                    .onSizeChanged { if (cuerpoCompuesto) contenidoPx = it.height },
+                    .onSizeChanged {
+                        if (cuerpoCompuesto) {
+                            contenidoPx = it.height
+                            if (!altoFijo) contenidoMaximoPx = maxOf(contenidoMaximoPx, it.height)
+                        }
+                    },
+                verticalArrangement = if (cuerpoAbajo && !hayPicker) Arrangement.Bottom else Arrangement.Top,
             ) {
                 // Ola 8 · V2 — LA HOJA NO CAMBIA DE ALTURA AL ABRIR UN SUB-PICKER, Y NINGÚN
                 // CONTROL APARECE DEBAJO DE LA X DEL SUB-PICKER.
@@ -1415,27 +1568,6 @@ fun QuickAddScreen(
                 // El selector de tipo elige entre DOS formularios distintos: un movimiento
                 // (gasto/ingreso) y un traspaso, que no tiene ni categoría ni tipo pero sí dos
                 // cuentas — por eso decide qué se dibuja abajo en vez de vivir en [EditorBody].
-                if (presetPago != null) {
-                    // Vuelta 43 · modo pago: en vez de las pestañas, de qué es el pago. Cambiar a
-                    // «Traspaso» o «Cuota» no tiene sentido acá (el guardado salda ESTA factura), y
-                    // el encabezado es lo que le dice al dueño que no es un gasto cualquiera.
-                    EncabezadoDelPago(encabezadoDelPago(presetPago))
-                } else {
-                SelectorSegmentado(
-                    // «Gasto», no «Egreso»: es la palabra que la gente usa. Toda la app
-                    // habla igual — Inicio y Movimientos también dicen «Gastos».
-                    // «Cuota» y no «Pago de cuota»: son cuatro segmentos en una fila que en
-                    // un teléfono de 375 px reparte ~90 px a cada uno. La palabra completa no
-                    // entra; la corta se entiende en contexto y el formulario lo dice entero.
-                    labels = listOf("Gasto", "Ingreso", "Traspaso", "Cuota"),
-                    selected = pickers.typeIndex,
-                    // Cambiar de pestaña saca de composición al formulario de la pestaña
-                    // vieja: si era Traspaso, su sub-picker se fue con él y el estado tiene
-                    // que enterarse. Eso lo hace `conTipo` — ver [PickersDeLaHoja].
-                    onSelect = { pasarA(pickers.conTipo(it)) },
-                    enabled = !saving,
-                )
-                }
 
                 val density = LocalDensity.current
                 // El alto que el sub-picker va a respetar: NO el del cuerpo entero, sino el
@@ -1450,8 +1582,13 @@ fun QuickAddScreen(
                 // mañana cambia. Cuando el contenido SÍ entra, `huecoVisiblePx` es el
                 // contenido entero y esto da exactamente `bodyHeightPx`: el comportamiento
                 // viejo, intacto.
+                //
+                // Vuelta 71: con las pestañas afuera, lo único que hay adentro del scroll además del
+                // cuerpo es el respiro de abajo ([Espacio.s]). Con la hoja a todo el alto el contenido
+                // se estira hasta el hueco, así que `contenidoPx - bodyHeightPx` ya no es «lo demás»:
+                // se resta el respiro, que es lo mismo que esa resta daba antes.
                 val pinnedHeight = with(density) {
-                    (huecoVisiblePx - (contenidoPx - bodyHeightPx)).coerceAtLeast(0).toDp()
+                    (huecoVisiblePx - Espacio.s.roundToPx()).coerceAtLeast(0).toDp()
                 }
                 Box(
                     modifier = Modifier
@@ -1571,12 +1708,26 @@ fun QuickAddScreen(
                                 onCampoDeTextoConFoco = { campoDelTraspasoConFoco = it },
                                 // Vuelta 48: el crédito elegido propone su cuota, y la fila de Pagos
                                 // dice de qué mes es.
-                                onMontoPropuesto = { montoDelTraspaso = it },
+                                onMontoPropuesto = {
+                                    montoDelTraspaso = it
+                                    montoPropuestoPorLaHoja = null
+                                },
+                                // Vuelta 71 (revisión): la cuota que pone la hoja sola no es del dueño.
+                                onMontoPropuestoPorLaHoja = {
+                                    montoDelTraspaso = it
+                                    montoPropuestoPorLaHoja = it.takeIf { m -> m.isNotBlank() }
+                                },
                                 presetMesDeLaCuota = presetMesDeLaCuota,
                                 // Vuelta 49: un crédito sin saldo en Movi se cuadra en Créditos.
                                 onCuadrarElCredito = { onNavigate(Screen.Credits) },
                                 // Vuelta 63: al guardar, el abono mensual de Pagos queda sellado.
                                 abonoQueSalda = presetAbono,
+                                // Vuelta 71: la fecha y la nota son las de la hoja: viajan entre pestañas.
+                                fechaDeLaHoja = fecha,
+                                onFecha = { fecha = it },
+                                notaDeLaHoja = note,
+                                onNota = { note = it },
+                                onMonedaDelMonto = { monedaDelTraspaso = it },
                                 // La misma hoja sirve las dos pestañas: un pago de cuota es un
                                 // traspaso con otras categorías y otro endpoint. Ver
                                 // [ModoDeTraspaso].
@@ -1665,6 +1816,14 @@ fun QuickAddScreen(
                                 } else {
                                     null
                                 },
+                                // Vuelta 71: «¿A cuántas cuotas?» con una tarjeta de crédito en «Gasto».
+                                cuotas = cuotas.takeIf {
+                                    preguntaLasCuotas(selectedAccount?.type, pickers.typeIndex == 0, presetPago != null)
+                                },
+                                onCuotas = {
+                                    cuotas = it
+                                    cuotasElegidas = true
+                                },
                             )
                         }
                     }
@@ -1673,6 +1832,50 @@ fun QuickAddScreen(
 
                 Spacer(Modifier.height(Espacio.s))
             }
+            // Vuelta 71 (revisión) · **«Guardar movimiento» siempre a la vista**: la barra va debajo del
+            // desplazamiento, no al final del cuerpo. Solo en Gasto e Ingreso y con el formulario a la
+            // vista (un sub-editor tiene su propio botón).
+            if (pickers.typeIndex < TIPO_TRASPASO && pickers.propio == Picker.None) Column(
+                // Al volver de un sub-editor la barra reaparece: el segundo toque de un doble toque no
+                // puede caer en «Guardar» (ver `volviendoDeUnSubEditor`).
+                Modifier.fillMaxWidth().then(if (volviendoDeUnSubEditor) Modifier.ignoraLosToques() else Modifier),
+            ) {
+                BarraDeGuardarDeAgregar(
+                    hasNoAccounts = accountsLoaded && accounts.isEmpty(),
+                    onCreateAccount = { showCreateSheet = true },
+                    onRepartir = if (presetPago == null && pickers.typeIndex == PestanaDeAgregar.GASTO.indice && espaciosParaRepartir.isNotEmpty()) {
+                        { repartiendo = true }
+                    } else {
+                        null
+                    },
+                    onSubirPapel = elegirPapel,
+                    saving = saving,
+                    canSave = canSave,
+                    onSave = { save() },
+                    missingFieldMessage = missingFieldMessage,
+                    // Vuelta 43: en modo pago no hay «otro»: cada pago es de su factura.
+                    onSaveYOtro = if (presetPago == null) ({ save(yAnotarOtro = true) }) else null,
+                )
+                Spacer(Modifier.height(Espacio.s))
+            }
+        }
+
+        if (preguntandoDescartar) {
+            val enTraspaso = pickers.typeIndex >= TIPO_TRASPASO
+            ConfirmarEnHoja(
+                pregunta = preguntaDeDescartar(
+                    monto = if (enTraspaso) montoDelTraspaso else amount,
+                    moneda = if (enTraspaso) monedaDelTraspaso else monedaDeLaHoja,
+                ),
+                detalle = DETALLE_DE_DESCARTAR,
+                textoConfirmar = DESCARTAR,
+                ocupado = false,
+                onConfirmar = {
+                    preguntandoDescartar = false
+                    onDismiss()
+                },
+                onCancelar = { preguntandoDescartar = false },
+            )
         }
 
         if (showCreateSheet) {
@@ -1808,6 +2011,12 @@ private fun EditorBody(
     onSubirPapel: (() -> Unit)? = null,
     /** «Repartir este gasto» (vuelta de diseño 23). `null` sin espacios o fuera de «Gasto». */
     onRepartir: (() -> Unit)? = null,
+    /**
+     * Vuelta 71 · «¿A cuántas cuotas?»: las cuotas elegidas, o `null` cuando la fila no va (la cuenta
+     * no es una tarjeta de crédito, o no es un gasto). Ver `CuotasEnAgregar.kt`.
+     */
+    cuotas: Int? = null,
+    onCuotas: (Int) -> Unit = {},
 ) {
     // Ola 13 — DE DÓNDE SALIERON ESTOS DOS SPACERS MÁS CHICOS (22→16 y 8→2).
     //
@@ -1899,6 +2108,17 @@ private fun EditorBody(
             // toque lleva directo a crear la cuenta, que es lo único que de verdad hace algo acá.
             onClick = if (hasNoAccounts) onCreateAccount else onPickWallet,
         )
+        // Vuelta 71: con una tarjeta de crédito, a cuántas cuotas fue la compra.
+        if (cuotas != null) {
+            Separador(SangriaDeSeparador.Margen)
+            FilaDeCuotas(
+                cuotas = cuotas,
+                onCuotas = onCuotas,
+                monto = amount.toLongOrNull() ?: 0L,
+                moneda = moneda,
+                habilitada = !saving,
+            )
+        }
         Separador(SangriaDeSeparador.Margen)
         FilaDeLaHoja(
             titulo = "Nota",
@@ -1967,14 +2187,37 @@ private fun EditorBody(
         }
     }
 
-    Spacer(Modifier.height(Espacio.s))
-
     // Vuelta 34: frente a un computador no hay teclado en pantalla (ver [conTecladoEnPantalla]).
+    // Vuelta 71 (revisión): el respiro de abajo lo pone ya la hoja (el `Spacer` del final del
+    // desplazamiento, antes de la barra de guardar): acá solo el de arriba del teclado.
     if (conTecladoEnPantalla) {
-        TecladoNumericoDeAgregar(onKey)
         Spacer(Modifier.height(Espacio.s))
+        TecladoNumericoDeAgregar(onKey)
     }
 
+    // Vuelta 71 (revisión): la barra de guardar ya no va acá adentro, que se desplaza: la dibuja
+    // [QuickAddScreen] debajo del desplazamiento ([BarraDeGuardarDeAgregar]), así «Guardar movimiento»
+    // se ve siempre, también a 360 × 780 con la fila de cuotas.
+}
+
+/**
+ * **La barra de guardar de Gasto e Ingreso** (vuelta 71, revisión): «Repartir», «Subir comprobante» y
+ * «Guardar movimiento», y debajo el renglón reservado de «Falta el monto» / «Guardar y anotar otro».
+ * Vivía al final del cuerpo, adentro del desplazamiento, y con la fila de cuotas a 360 × 780 quedaba
+ * fuera de la pantalla hasta desplazarse. Ahora va debajo del desplazamiento: siempre a la vista.
+ */
+@Composable
+internal fun BarraDeGuardarDeAgregar(
+    hasNoAccounts: Boolean,
+    onCreateAccount: () -> Unit,
+    onRepartir: (() -> Unit)?,
+    onSubirPapel: (() -> Unit)?,
+    saving: Boolean,
+    canSave: Boolean,
+    onSave: () -> Unit,
+    missingFieldMessage: String?,
+    onSaveYOtro: (() -> Unit)?,
+) {
     if (hasNoAccounts) {
         Column(
             modifier = Modifier.fillMaxWidth(),
@@ -2266,6 +2509,9 @@ internal const val TAG_TARJETA_DE_AGREGAR: String = "agregar:tarjeta"
 
 /** La píldora de la fecha, al lado del monto. */
 internal const val TAG_FECHA_EN_AGREGAR: String = "agregar:fecha"
+
+/** Vuelta 71: la fila de pestañas (Gasto · Ingreso · Traspaso · Pagar), fija arriba de la hoja. */
+const val TAG_PESTANAS_DE_AGREGAR: String = "agregar:pestanas"
 
 /** La pastilla «Nueva» de los chips de frecuentes de «Agregar». */
 const val TAG_PASTILLA_NUEVA_CATEGORIA_AGREGAR: String = "agregar:pastilla-nueva-categoria"

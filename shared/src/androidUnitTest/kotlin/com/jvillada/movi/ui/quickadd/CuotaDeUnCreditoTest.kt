@@ -155,7 +155,7 @@ class CuotaDeUnCreditoTest {
 
     @Test
     fun `elegir un credito deja la hoja en la cuota del mes, con su monto y el debito automatico`() {
-        montar("Cuota")
+        montar("Pagar")
         assertEquals(CUOTA_SIN_ELEGIR, encabezado())
 
         elegirLaDeuda(libre.name)
@@ -185,7 +185,7 @@ class CuotaDeUnCreditoTest {
      */
     @Test
     fun `un credito sin saldo en Movi no muestra una deuda negativa y ofrece cuadrarlo`() {
-        montar("Cuota", credito = libre.copy(balance = 0L))
+        montar("Pagar", credito = libre.copy(balance = 0L))
         elegirLaDeuda(libre.name)
         esperar("\$1.204.064")
 
@@ -200,7 +200,7 @@ class CuotaDeUnCreditoTest {
 
     @Test
     fun `en Cuota los creditos se eligen para pagar su cuota, no para un desembolso`() {
-        montar("Cuota")
+        montar("Pagar")
         tocarElTag(TAG_FILA_HACIA)
 
         assertTrue(hay(AYUDA_DE_CREDITOS_EN_CUOTA))
@@ -209,7 +209,7 @@ class CuotaDeUnCreditoTest {
 
     @Test
     fun `el abono extra es la opcion secundaria y guarda un traspaso`() {
-        montar("Cuota")
+        montar("Pagar")
         elegirLaDeuda(libre.name)
         esperar("\$1.204.064")
 
@@ -256,7 +256,7 @@ class CuotaDeUnCreditoTest {
 
     @Test
     fun `la hoja de Cuota no salta al elegir la tarjeta ni al llegar la cifra`() {
-        montar("Cuota")
+        montar("Pagar")
         val sinElegir = alto()
 
         elegirLaDeuda(nuTarjeta.name)
@@ -271,7 +271,7 @@ class CuotaDeUnCreditoTest {
 
     @Test
     fun `la hoja de un credito no salta al borrar ni escribir el monto`() {
-        montar("Cuota")
+        montar("Pagar")
         elegirLaDeuda(libre.name)
         esperar("bajan la deuda")
         val conLaCuota = alto()

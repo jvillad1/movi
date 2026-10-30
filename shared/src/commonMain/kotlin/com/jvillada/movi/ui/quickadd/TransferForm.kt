@@ -98,6 +98,7 @@ import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import kotlinx.datetime.LocalDate
 
 /**
  * Hoy, en la zona de la app, como "AAAA-MM-DD".
@@ -695,6 +696,13 @@ internal fun TransferBody(
      */
     onMontoPropuesto: (String) -> Unit = {},
     /**
+     * Vuelta 71 (revisión) · **la cifra que la hoja puso sola** (la cuota del crédito elegido), aparte
+     * de [onMontoPropuesto] (lo que el dueño eligió tocando una pastilla). La hoja de Agregar no la
+     * cuenta como escrita: no viaja a Gasto ni pregunta «¿Descartar?». `null` = la misma que
+     * [onMontoPropuesto].
+     */
+    onMontoPropuestoPorLaHoja: ((String) -> Unit)? = null,
+    /**
      * Vuelta 49 · «Cuadrar ›» del renglón de un crédito cuyo saldo Movi no tiene: lleva a donde se
      * ajusta (Créditos). `null` deja el renglón sin acción.
      */
@@ -706,6 +714,16 @@ internal fun TransferBody(
      * poner, el traspaso queda igual: Movi lo empareja solo si el monto está a ±5 %.
      */
     abonoQueSalda: AbonoDeLaRegla? = null,
+    /**
+     * Vuelta 71 · **la fecha y la nota son las de la hoja**, no de esta pestaña: viajan con el monto al
+     * cambiar entre Gasto, Ingreso, Traspaso y Pagar. `null` = esta pestaña las lleva sola (como antes).
+     */
+    fechaDeLaHoja: LocalDate? = null,
+    onFecha: (LocalDate) -> Unit = {},
+    notaDeLaHoja: String? = null,
+    onNota: (String) -> Unit = {},
+    /** Vuelta 71: la moneda de la cifra (la de la cuenta de origen), para «¿Descartar …?» de la hoja. */
+    onMonedaDelMonto: (String) -> Unit = {},
     onSaved: () -> Unit,
 ) {
     val coroutine = rememberCoroutineScope()
@@ -869,8 +887,13 @@ internal fun TransferBody(
     // sobre un formato correcto es peor que no tener mensaje. Lo que queda valida el traspaso en
     // sí ([validateTransfer], el mismo texto que devuelve el server en su 422).
     val hoy = remember { hoyEnAppZone() }
-    var fecha by remember { mutableStateOf(hoy) }
-    var note by remember { mutableStateOf("") }
+    var fechaPropia by remember { mutableStateOf(hoy) }
+    var notaPropia by remember { mutableStateOf("") }
+    // Vuelta 71: con la hoja dueña de la fecha y la nota, se leen y se escriben allá.
+    val fecha: LocalDate = fechaDeLaHoja ?: fechaPropia
+    val note: String = notaDeLaHoja ?: notaPropia
+    fun ponerFecha(valor: LocalDate) { if (fechaDeLaHoja != null) onFecha(valor) else fechaPropia = valor }
+    fun ponerNota(valor: String) { if (notaDeLaHoja != null) onNota(valor) else notaPropia = valor }
     // Vuelta 47: la nota se escribe en su sub-editor, como en Gasto (la fila «Nota · Agregar nota…»).
     var editandoNota by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
@@ -987,7 +1010,7 @@ internal fun TransferBody(
     // después de las cuentas, así que la propuesta se rehace cuando llegan.
     var montoPropuesto by remember { mutableStateOf<String?>(null) }
     val montoActual by rememberUpdatedState(monto)
-    val proponerMonto by rememberUpdatedState(onMontoPropuesto)
+    val proponerMonto by rememberUpdatedState(onMontoPropuestoPorLaHoja ?: onMontoPropuesto)
     LaunchedEffect(toId, terminosCargados, abonoExtra) {
         if (!esPago) return@LaunchedEffect
         val deuda = elegiblesDestino.firstOrNull { it.id == toId } ?: return@LaunchedEffect
@@ -1170,7 +1193,7 @@ internal fun TransferBody(
         } else if (editandoNota) {
             NoteEditor(
                 initial = note,
-                onSave = { note = it; cerrarNota() },
+                onSave = { ponerNota(it); cerrarNota() },
                 onVolver = { cerrarNota() },
             )
         } else if (pickingDate) {
@@ -1181,7 +1204,7 @@ internal fun TransferBody(
                 SelectorDeFecha(
                     seleccionada = fecha,
                     hoy = hoy,
-                    onPick = { fecha = it; cerrarFecha() },
+                    onPick = { ponerFecha(it); cerrarFecha() },
                     enabled = !saving,
                 )
                 Spacer(Modifier.height(Espacio.xs))
@@ -1191,7 +1214,7 @@ internal fun TransferBody(
                 title = when {
                     picking == TransferSide.FROM && esPago -> "¿De dónde sale la plata?"
                     picking == TransferSide.FROM -> "Desde"
-                    esPago -> "¿Qué estás pagando?"
+                    esPago -> QUE_PAGAS
                     else -> "Hacia"
                 },
                 accounts = if (picking == TransferSide.FROM) elegibles else elegiblesDestino,
@@ -1281,6 +1304,8 @@ internal fun TransferBody(
         // Vuelta 47 · **la cifra protagonista y la píldora de la fecha, como en Gasto** (la cabeza
         // de Agregar, [CabezaDelMonto]). Eran un campo de monto chico y una caja «Hoy».
         val monedaDelMonto = from?.currency ?: "COP"
+        val avisarLaMoneda by rememberUpdatedState(onMonedaDelMonto)
+        LaunchedEffect(monedaDelMonto) { avisarLaMoneda(monedaDelMonto) }
         if (esPago) {
             // Vuelta 48 · **qué se está anotando**, en un renglón: «Cuota de Libre inversión 9695 ·
             // octubre». Desde la fila de Pagos, el mes es el de esa cuota.
@@ -1330,6 +1355,8 @@ internal fun TransferBody(
             // Menos una: el destino no puede ser el origen (con dos cuentas no hay decisión que confesar).
             FilaDeCuentaDelTraspaso(
                 rotulo = if (esPago) ROTULO_PAGAS else "Hacia",
+                // Vuelta 71: sin deuda elegida, la fila pregunta «¿Qué pagas?» (no «Elegir cuenta · Pagas»).
+                vacia = if (esPago) QUE_PAGAS else ELEGIR_CUENTA,
                 cuenta = to,
                 aviso = avisoDeCuenta(origenTo, elegibles.size - 1),
                 onClick = { abrirPicker(TransferSide.TO) },
@@ -1721,9 +1748,15 @@ internal const val TAG_CAMPO_DE_MONTO_EN_LA_DEUDA = "campo_de_monto_en_la_moneda
 internal fun ayudaDelTraspaso(esPago: Boolean): String =
     if (esPago) "Se guarda en línea: la salida y el pago, juntos." else "Se guarda en línea: las dos puntas, juntas."
 
-/** «Sale de» y «Pagas»: los rótulos de las dos filas en Cuota. */
+/** «Sale de» y «Pagas»: los rótulos de las dos filas en Pagar. */
 internal const val ROTULO_SALE_DE: String = "Sale de"
 internal const val ROTULO_PAGAS: String = "Pagas"
+
+/** Vuelta 71: el destino de Pagar sin deuda elegida. */
+const val QUE_PAGAS: String = "¿Qué pagas?"
+
+/** Una punta del traspaso sin cuenta. */
+internal const val ELEGIR_CUENTA: String = "Elegir cuenta"
 
 /** Las filas de las dos cuentas, la tarjeta, la fecha y la ayuda de Traspaso y Cuota (vuelta 47). */
 internal const val TAG_FILA_DESDE = "traspaso:fila-desde"
@@ -1745,10 +1778,16 @@ internal fun FilaDeCuentaDelTraspaso(
     aviso: String?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * Vuelta 71 · lo que dice la fila sin cuenta: «Elegir cuenta», o «¿Qué pagas?» en el destino de
+     * Pagar. Con una pregunta, el rótulo no se repite debajo.
+     */
+    vacia: String = ELEGIR_CUENTA,
 ) {
     Fila(
-        titulo = cuenta?.name ?: "Elegir cuenta",
-        subtitulo = listOfNotNull(rotulo, aviso).joinToString(" · "),
+        titulo = cuenta?.name ?: vacia,
+        subtitulo = (if (cuenta == null && vacia != ELEGIR_CUENTA) listOfNotNull(aviso) else listOfNotNull(rotulo, aviso))
+            .joinToString(" · ").ifEmpty { null },
         inicio = cuenta?.let { c -> { AvatarDeLaCuenta(nombre = c.name, tipo = c.type) } },
         final = { Chevron() },
         onClick = onClick,

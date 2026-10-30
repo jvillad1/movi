@@ -249,7 +249,13 @@ data class FinancialEvent(
      * cuotas, al crear o conciliar el movimiento (el SMS no la dice). No cambia [amount] —la compra
      * sigue siendo el total, y el gasto del período la cuenta entera el día que se hizo—: solo sirve
      * para que el extracto de la tarjeta (`extractoDeLaTarjeta`) cuente la cuota del mes y no el total.
-     * Columna `financial_events.cuotas`, nullable; un `POST /api/events` no la toca.
+     * Columna `financial_events.cuotas`, nullable.
+     *
+     * **Vuelta 71:** también lo llena Agregar («¿A cuántas cuotas?» con una tarjeta de crédito en
+     * «Gasto»), y `POST /api/events` lo acepta como campo opcional: solo en un gasto de una tarjeta y
+     * entre 1 y [MAXIMO_DE_CUOTAS]; si no llega (un APK viejo), no cambia nada. En el teléfono no hay
+     * columna local: viaja aparte hasta la subida (`CuotasPorSubir`). Al dividir una compra en
+     * categorías, cada parte hereda las cuotas del original.
      */
     val cuotas: Int? = null,
     /**

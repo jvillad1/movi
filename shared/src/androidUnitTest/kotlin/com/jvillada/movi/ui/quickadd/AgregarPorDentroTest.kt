@@ -157,11 +157,31 @@ class AgregarPorDentroTest {
             apretarAtras()
             composeRule.onNodeWithTag(TAG_VOLVER_DEL_SUB_EDITOR).assertDoesNotExist()
             assertFalse(cerrada, "el atrás con «$fila» abierto vuelve al formulario, no cierra la hoja")
-            assertEquals(1, hojas.cuantas)
+            // Vuelta 71: la hoja, y encima su «¿Descartar?» (hay $45 escritos).
+            assertEquals(2, hojas.cuantas)
             assertTrue(montoEnPantalla("$45"), "el monto sigue ahí después de volver de «$fila»")
         }
 
-        // Sin sub-editor, el atrás cierra la hoja, como siempre.
+        // Vuelta 71: sin sub-editor y con algo escrito, el atrás pregunta antes de cerrar…
+        apretarAtras()
+        assertFalse(cerrada, "con $45 escritos, el atrás no tira el movimiento sin preguntar")
+        assertTrue(montoEnPantalla("¿Descartar $45?"))
+        // …y otro atrás cierra la pregunta, no la hoja.
+        apretarAtras()
+        assertFalse(cerrada)
+        assertFalse(montoEnPantalla("¿Descartar $45?"))
+        assertTrue(montoEnPantalla("$45"))
+        // «Descartar» sí cierra.
+        apretarAtras()
+        tocar(DESCARTAR)
+        assertTrue(cerrada)
+    }
+
+    /** Vuelta 71: sin nada escrito, el atrás cierra la hoja directo, como siempre. */
+    @Test
+    fun atras_sin_nada_escrito_cierra_directo() {
+        montar()
+        assertEquals(1, hojas.cuantas)
         apretarAtras()
         assertTrue(cerrada)
     }

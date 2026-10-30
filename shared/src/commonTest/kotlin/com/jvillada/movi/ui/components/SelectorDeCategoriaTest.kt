@@ -239,7 +239,7 @@ class SelectorDeCategoriaTest {
     @Test
     fun `el rotulo de las celdas especiales dice lo que hace`() {
         assertEquals("Comida", rotuloDeLaCelda(CeldaDeCategoria.Existente("Comida")))
-        assertEquals("Crear \"Colegio\"", rotuloDeLaCelda(CeldaDeCategoria.Crear("Colegio")))
-        assertEquals("Usar \"Carro\"", rotuloDeLaCelda(CeldaDeCategoria.Usar("Carro", porQue = "x")))
+        assertEquals("Crear «Colegio»", rotuloDeLaCelda(CeldaDeCategoria.Crear("Colegio")))
+        assertEquals("Usar «Carro»", rotuloDeLaCelda(CeldaDeCategoria.Usar("Carro", porQue = "x")))
     }
 }

@@ -25,8 +25,11 @@ fun tituloDelExtracto(e: ExtractoDeLaTarjeta): String = "Del extracto del ${fech
 /** ¿Ya se pagó todo lo que pedía el extracto? */
 fun extractoPagado(e: ExtractoDeLaTarjeta): Boolean = e.facturado <= 0L
 
-/** «Extracto del 20 oct · pagado ✓»: el título de la ficha cuando no queda nada del extracto. */
-fun tituloDelExtractoPagado(e: ExtractoDeLaTarjeta): String = "Extracto del ${fechaCortaDeFactura(e.corte) ?: e.corte} · pagado ✓"
+/**
+ * «Extracto del 20 oct · pagado»: el título de la ficha cuando no queda nada del extracto. Vuelta 71
+ * (revisión): sin «✓», que Figtree no tiene (`GlifosDeFigtreeScanTest`).
+ */
+fun tituloDelExtractoPagado(e: ExtractoDeLaTarjeta): String = "Extracto del ${fechaCortaDeFactura(e.corte) ?: e.corte} · pagado"
 
 /**
  * **Lo que falta del mínimo**, descontando lo ya pagado desde el corte (revisión de la vuelta 62: con

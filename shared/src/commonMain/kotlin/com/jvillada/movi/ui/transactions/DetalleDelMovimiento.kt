@@ -226,10 +226,18 @@ internal fun EncabezadoDelMovimiento(
             color = Movi.colores.textoMedio,
             modifier = Modifier.testTag(TAG_TOTAL_DEL_REPARTIDO),
         )
+    } else {
+        // Vuelta 71 (revisión): una compra diferida dice a cuántas cuotas, como su fila en Actividad.
+        textoDeLasCuotas(evento.cuotas)?.let { cuotas ->
+            Text(cuotas, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio, modifier = Modifier.testTag(TAG_CUOTAS_DEL_MOVIMIENTO))
+        }
     }
     Spacer(Modifier.height(Espacio.xxs))
     Text(linea, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
 }
+
+/** Vuelta 71 (revisión): «a 3 cuotas» debajo de la cifra del detalle de una compra diferida. */
+const val TAG_CUOTAS_DEL_MOVIMIENTO: String = "movimiento:cuotas"
 
 /**
  * La categoría como chip: su ícono, su nombre y una flecha. Tocarlo abre (o cierra) el selector.

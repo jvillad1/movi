@@ -428,6 +428,34 @@ class SyncEngineTest {
         Unit
     }
 
+    /**
+     * Vuelta 71 · **las cuotas de una compra con tarjeta llegan al server en la subida**, aunque la
+     * tabla local no tenga columna para ellas (esperan en `remote_cache`, ver `CuotasPorSubir`). Subido
+     * el movimiento, se olvidan: un segundo ciclo no las vuelve a mandar. El esquema local no cambia.
+     */
+    @Test
+    fun syncEvents_sube_las_cuotas_de_una_compra_con_tarjeta_sin_migrar_el_esquema() = runBlocking {
+        val db = createDatabase("sync-test.db")
+        val local = LocalRepository(db = db, remote = NoOpRepository(), userId = { testUserId })
+        local.createAccount(Account("acc-nu-cuotas", "Nu", AccountType.CREDIT_CARD, 0L))
+        local.postEvent(event("ev-cuotas", "acc-nu-cuotas", TransactionType.EXPENSE, 1_200_000L).copy(cuotas = 12))
+        local.postEvent(event("ev-sin-cuotas", "acc-nu-cuotas", TransactionType.EXPENSE, 50_000L))
+
+        val subidos = mutableListOf<FinancialEvent>()
+        val remote = object : NoOpRepository() {
+            override suspend fun postEvent(event: FinancialEvent): FinancialEvent { subidos += event; return event }
+        }
+        SyncEngine(db = db, remote = remote, userId = { testUserId }).syncEvents()
+
+        assertEquals(12, subidos.single { it.id == "ev-cuotas" }.cuotas)
+        assertNull(subidos.single { it.id == "ev-sin-cuotas" }.cuotas)
+        assertTrue(
+            com.jvillada.movi.shared.repository.CuotasPorSubir.todas(db, testUserId).isEmpty(),
+            "subido el movimiento, sus cuotas se olvidan",
+        )
+        Unit
+    }
+
     /** Y marcarlo mientras el POST viaja no sella la fila con la marca vieja. */
     @Test
     fun syncEvents_no_sella_si_la_marca_de_no_se_repite_cambio_en_vuelo() = runBlocking {

@@ -164,7 +164,8 @@ fun CurrencyBreakdown(account: Account) {
                 BreakdownRow(label, signedMoney(amt, cur))
             }
         }
-        if (trm != null) BreakdownRow("TRM aplicada", "≈$" + groupThousands(trm) + "/USD")
+        // Vuelta 71 (revisión): «Unos» y no «≈», que Figtree no tiene (salía un cuadro vacío).
+        if (trm != null) BreakdownRow("TRM aplicada", "Unos $" + groupThousands(trm) + " por dólar")
     }
 }
 

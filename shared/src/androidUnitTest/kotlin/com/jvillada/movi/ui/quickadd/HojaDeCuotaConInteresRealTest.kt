@@ -100,7 +100,7 @@ class HojaDeCuotaConInteresRealTest {
             }
         }
         composeRule.waitForIdle()
-        tocar("Cuota")
+        tocar("Pagar")
         // La deuda que se paga la elige el dueño con el dedo: no hay preselección en un pago.
         // Vuelta 47: la fila «Pagas» (era «Hacia»), por su tag.
         composeRule.onNodeWithTag(TAG_FILA_HACIA).performSemanticsAction(SemanticsActions.OnClick)

@@ -206,6 +206,6 @@ class OfrecerLosParecidosTest {
 
         assertEquals(listOf("Comida"), repo.categoriasPedidas)
         assertEquals("Comida", cambiado?.category)
-        composeRule.onAllNodesWithText("Usar \"", substring = true, useUnmergedTree = true).assertCountEquals(0)
+        composeRule.onAllNodesWithText("Usar «", substring = true, useUnmergedTree = true).assertCountEquals(0)
     }
 }

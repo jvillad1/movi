@@ -6,12 +6,28 @@ import com.jvillada.movi.ui.Screen
  * Las cuatro pestañas de la hoja de «Agregar», con su índice en el selector de arriba. Las usan los
  * atajos (Ola 5) para abrir la hoja directo donde se viene a anotar.
  */
-enum class PestanaDeAgregar(internal val indice: Int) {
-    GASTO(0),
-    INGRESO(1),
-    TRASPASO(TIPO_TRASPASO),
-    PAGO_DE_TARJETA(TIPO_PAGO_CUOTA),
+enum class PestanaDeAgregar(internal val indice: Int, val rotulo: String) {
+    GASTO(0, "Gasto"),
+    INGRESO(1, "Ingreso"),
+    TRASPASO(TIPO_TRASPASO, "Traspaso"),
+
+    /**
+     * Vuelta 71: **«Pagar»** (era «Cuota»). Paga una tarjeta o la cuota de un crédito: su destino dice
+     * «¿Qué pagas?». Una sola pestaña y no dos: es la misma operación de dos patas, y lo que se paga lo
+     * dice el destino elegido (el encabezado pasa a «Cuota de …» o «Pago de …»).
+     */
+    PAGO_DE_TARJETA(TIPO_PAGO_CUOTA, "Pagar"),
 }
+
+/** Los rótulos de las pestañas de Agregar, en orden. */
+val ETIQUETAS_DE_LAS_PESTANAS_DE_AGREGAR: List<String> = PestanaDeAgregar.entries.map { it.rotulo }
+
+/**
+ * **El nombre de la acción de pagar una tarjeta**, el mismo en todos lados (vuelta 71): la acción del
+ * Inicio, el menú del «+» y del rail, y los atajos. Antes era «Pagar tarjeta» en el Inicio, «Pago de
+ * tarjeta» en el menú y «Cuota» en la pestaña.
+ */
+const val PAGAR_TARJETA: String = "Pagar tarjeta"
 
 /**
  * # Ola 5 · los atajos del «+»
@@ -30,7 +46,7 @@ enum class AtajoDeAgregar(val rotulo: String) {
     GASTO("Gasto"),
     INGRESO("Ingreso"),
     TRASPASO("Traspaso"),
-    PAGO_DE_TARJETA("Pago de tarjeta"),
+    PAGO_DE_TARJETA(PAGAR_TARJETA),
     REPARTIR("Repartir"),
     SUBIR_COMPROBANTE("Subir comprobante"),
 }
@@ -68,7 +84,7 @@ fun hacerElAtajo(
 
 /**
  * La pestaña con que arranca la hoja: [presetPestana] si vino, y si no lo de siempre —una deuda que
- * pagar abre «Cuota», un ingreso abre «Ingreso», y lo demás «Gasto»—.
+ * pagar abre «Pagar», un ingreso abre «Ingreso», y lo demás «Gasto»—.
  */
 internal fun pestanaInicialDeAgregar(presetPestana: PestanaDeAgregar?, presetDeudaId: String?, presetEsIngreso: Boolean): Int =
     when {

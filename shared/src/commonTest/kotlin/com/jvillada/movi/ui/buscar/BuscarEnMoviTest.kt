@@ -166,7 +166,7 @@ class BuscarEnMoviTest {
     @Test
     fun `el menu del mas tiene las cuatro que salieron de Hoy, sin repetir, y cada una hace lo suyo`() {
         assertEquals(
-            listOf("Gasto", "Ingreso", "Traspaso", "Pago de tarjeta", "Repartir", "Subir comprobante"),
+            listOf("Gasto", "Ingreso", "Traspaso", "Pagar tarjeta", "Repartir", "Subir comprobante"),
             AtajoDeAgregar.entries.map { it.rotulo },
         )
         val hecho = mutableListOf<String>()

@@ -27,3 +27,10 @@ SELECT * FROM remote_cache WHERE cacheKey = :cacheKey AND userId = :userId;
 -- Al cerrar sesión: lo cacheado es de ese usuario y no puede quedar visible para otro.
 deleteForUser:
 DELETE FROM remote_cache WHERE userId = :userId;
+
+-- Vuelta 71 (revisión): al cerrar la sesión (o tras un 401) se borra el caché de lectura, salvo
+-- `cuotas-por-subir` (`CuotasPorSubir`): no es una copia del server sino algo que todavía no subió,
+-- como los movimientos pendientes que `olvidarDatosLocales` también conserva. Solo una consulta nueva:
+-- el esquema no cambia.
+deleteForUserSalvo:
+DELETE FROM remote_cache WHERE userId = :userId AND cacheKey != :cacheKey;

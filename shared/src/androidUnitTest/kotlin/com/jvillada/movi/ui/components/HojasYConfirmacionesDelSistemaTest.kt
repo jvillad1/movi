@@ -150,7 +150,7 @@ class HojasYConfirmacionesDelSistemaTest {
             )
         }
         assertTrue(hayEncabezadoCon("Eliminar cuenta"))
-        assertTrue(hayEncabezadoCon("Se borra \"Nu\" y sus 3 movimientos. Esto no se puede deshacer."))
+        assertTrue(hayEncabezadoCon("Se borra «Nu» y sus 3 movimientos. Esto no se puede deshacer."))
         assertEquals(
             listOf("Cancelar" to VarianteDeBoton.Fantasma, "Eliminar cuenta" to VarianteDeBoton.Peligro),
             botones(),

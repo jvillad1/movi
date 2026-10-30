@@ -241,6 +241,11 @@ fun EditorDePartes(
     modifier: Modifier = Modifier,
     /** Vuelta 67: `false` en un movimiento sin aviso (anotado a mano): cuadrado dice «Suma $X». */
     conAviso: Boolean = true,
+    /**
+     * Vuelta 71 · qué puede ser cada parte. Todo ([TIPOS_DE_PARTE]) salvo al dividir una compra con
+     * tarjeta, donde solo [QueFueLaParte.GASTO]: con un solo tipo no se pregunta «¿Qué fue?».
+     */
+    tipos: List<QueFueLaParte> = TIPOS_DE_PARTE,
 ) {
     val cuadre = cuadreDeLasPartes(total, partes.map { it.parte.monto })
     // La categoría de un gasto nuevo: la que propone Movi para el aviso, o la primera de las suyas.
@@ -273,6 +278,7 @@ fun EditorDePartes(
                         tercero = tercero,
                         categoriaPropuesta = categoriaPropuesta,
                         habilitado = habilitado,
+                        tipos = tipos,
                         onCambiar = { cambiar(enPantalla.clave, it) },
                         onQuitar = if (partes.size > 1) {
                             { onPartes(partes.filter { it.clave != enPantalla.clave }) }
@@ -306,7 +312,7 @@ fun EditorDePartes(
                     // Las que ya estaban conservan su clave; la nueva (si hay) toma la siguiente.
                     onPartes(nuevas.mapIndexed { i, p -> partes.getOrNull(i)?.copy(parte = p) ?: ParteEnPantalla(partes.siguienteClave(), p) })
                 }
-                if (tercero != null) {
+                if (tercero != null && QueFueLaParte.A_UN_TERCERO in tipos) {
                     PildoraDeAccion(elRestoA(tercero), habilitada = habilitado, onClick = {
                         conResto(parteDeTipo(QueFueLaParte.A_UN_TERCERO, ParteElegida(QueFueLaParte.GASTO), tercero, categoriaPropuesta))
                     })
@@ -364,6 +370,7 @@ private fun TarjetaDeLaParte(
     tercero: TerceroDelAviso?,
     categoriaPropuesta: String?,
     habilitado: Boolean,
+    tipos: List<QueFueLaParte>,
     onCambiar: (ParteElegida) -> Unit,
     onQuitar: (() -> Unit)?,
 ) {
@@ -380,11 +387,11 @@ private fun TarjetaDeLaParte(
                     Boton("Quitar", onClick = onQuitar, variante = VarianteDeBoton.Fantasma, tamano = TamanoDeBoton.S, habilitado = habilitado)
                 }
             }
-            // Qué fue.
-            Column(modifier = Modifier.testTag(tagDelTipoDeLaParte(indice))) {
+            // Qué fue (vuelta 71: con un solo tipo posible no se pregunta).
+            if (tipos.size > 1) Column(modifier = Modifier.testTag(tagDelTipoDeLaParte(indice))) {
                 RotuloDeCampo(ROTULO_QUE_FUE)
                 FilaDePildoras {
-                    TIPOS_DE_PARTE.forEach { tipo ->
+                    tipos.forEach { tipo ->
                         PildoraDeFiltro(
                             texto = nombreDelTipoDeParte(tipo),
                             seleccionada = parte.tipo == tipo,

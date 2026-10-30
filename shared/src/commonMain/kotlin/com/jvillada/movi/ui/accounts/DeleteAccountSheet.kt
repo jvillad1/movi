@@ -124,7 +124,7 @@ fun DeleteAccountSheet(
             // Vuelta de diseño 18: es el subtítulo del encabezado de la hoja (`cuerpo`, `textoMedio`).
             EncabezadoDeHoja(
                 "Eliminar cuenta",
-                subtitulo = "Se borra \"$accountName\" y ${eventCountLabel(eventCount)}. " +
+                subtitulo = "Se borra «$accountName» y ${eventCountLabel(eventCount)}. " +
                     "Esto no se puede deshacer.",
                 modifier = Modifier.padding(top = Espacio.xxs),
             )

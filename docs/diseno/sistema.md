@@ -3601,3 +3601,70 @@ apartado que es un fijo, las invariantes y `loQueViene`), `CajaProyectadaRoutesT
 `PagosHastaQueTePaguenTest` (‹ ›, «Lo que viene», la caja oculta con el error), `DisponibleEnInicioTest`
 y `LasCifrasDelDisponibleEntranTest` (las tres columnas), `CajaEnHoyTest`, `UnNombrePorConceptoTest` y
 `PlanScreenTest` (nada salta más de 8 dp). **Las líneas base** no cambian, y las guardas en 0 siguen en 0.
+
+## 69. Vuelta 71: Agregar no pierde nada, y la compra con tarjeta queda completa
+
+De la revisión fresca 4 del 29-oct (capturas `r4-agregar-*.png`, `r4-mov-mas.png`). **Sin reglas de plata
+nuevas**: una compra con tarjeta sigue contando entera el día que se hizo, y solo el extracto de la
+tarjeta (`extractoDeLaTarjeta`) la reparte entre los cortes.
+
+1. **Lo escrito viaja entre pestañas.** El monto se lleva al cruzar entre Gasto/Ingreso y Traspaso/Pagar
+   (`cambiarDePestana`): con $45.000 en Gasto, Traspaso arranca en $45.000. La fecha y la nota son **una**
+   para las cuatro (`TransferBody` las recibe de la hoja: `fechaDeLaHoja`, `notaDeLaHoja`). La categoría
+   no viaja: es de cada tipo.
+2. **«¿Descartar $1.250.000?».** Con un monto o una nota escritos (distintos de lo que la hoja trajo al
+   abrirse: un «Anotar pago» cerrado sin tocar no pregunta, `hayAlgoQuePerder`), la X, el velo, el
+   arrastre, Escape y el «atrás» de Android pasan por `pedirCerrar` y abren `ConfirmarEnHoja`
+   («¿Descartar $X?» o «¿Descartar la nota?» · «Lo que escribiste no se guarda.» · Cancelar / Descartar en
+   `Peligro`). Sin nada escrito, cierran directo. El marco devuelve la hoja a su lugar si no se cerró.
+3. **Las pestañas no saltan.** La fila Gasto · Ingreso · Traspaso · Pagar (`TAG_PESTANAS_DE_AGREGAR`) va
+   **fuera** del desplazamiento, fija arriba. Con teclado en pantalla la hoja ocupa todo el alto que tiene
+   y el cuerpo se apoya abajo: las pestañas no se mueven arriba y el teclado no se mueve abajo en ningún
+   tipo; lo que cambia de alto queda en el medio. Con la Nota abierta la hoja se acorta a ella, como desde
+   la vuelta de diseño 13. Sin teclado en pantalla (frente a un computador) la hoja nunca se encoge
+   mientras está abierta: crece hasta lo más alto que midió.
+4. **«¿A cuántas cuotas?»** (`CuotasEnAgregar.kt`). Con una tarjeta de crédito en «Gasto» (no en modo
+   pago), debajo de «Cuenta»: pastillas `PildoraDeFiltro` compactas `1 · 3 · 6 · 12 · 24 · 36 · Otra` en un
+   renglón que se desliza, 1 por defecto; «Otra» se corre con «−» y «+» (`PildoraDeAccion` compactas) en el
+   mismo renglón, de 2 a 72. Debajo, en `apoyo` con tres renglones reservados (elegir no cambia el alto):
+   «≈ $100.000 al mes, sin intereses» (con más de una) y «Cuenta completa hoy en tus gastos; en el extracto
+   de la tarjeta va $100.000 por mes». Se guarda en `FinancialEvent.cuotas`.
+5. **Dividir una compra con tarjeta.** «Dividir en categorías» se ofrece en un gasto suelto de una
+   tarjeta de crédito; el editor no pregunta «Qué fue»: solo gastos con su categoría
+   (`tiposDeParteDesde`).
+6. **Un solo nombre.** «Pagar tarjeta» (`PAGAR_TARJETA`) en la acción del Inicio, el menú del «+» y del
+   rail. La pestaña de Agregar que paga una tarjeta o la cuota de un crédito se llama **«Pagar»** (una
+   sola: es la misma operación y lo que se paga lo dice el destino), y su destino vacío dice **«¿Qué
+   pagas?»** (sin «Elegir cuenta · Pagas»); el selector se titula igual.
+7. **Comillas.** Movi cita con «»: «Crear «Mascotas»», «¿«Netflix» se repite todos los meses?». Las
+   catorce comillas rectas de `ui/` se cambiaron, y `ComillasRectasScanTest` no deja volver un `\"` dentro
+   de un literal de `ui/`.
+
+**La revisión de la vuelta 71** (capturas `rev71-*.png`) cambió cinco cosas:
+
+- **La cuota que propone Pagar no es algo escrito.** `TransferBody` la avisa aparte
+  (`onMontoPropuestoPorLaHoja`): mientras la cifra sea esa, no viaja a Gasto ni pregunta «¿Descartar?».
+  Teclear encima o tocar una pastilla del extracto la vuelve del dueño.
+- **Las cuotas se mandan solo si el dueño tocó la fila** (`cuotasElegidas`, `cuotasParaGuardar`): un «1»
+  que nadie eligió no se guarda, porque el extracto solo llena las cuotas de un movimiento que no las
+  tiene.
+- **La hoja toma todo el alto también sin teclado en pantalla si es angosta** (< 600 dp, la web con
+  mouse): ahí el cuerpo va arriba. Solo la centrada sin teclado crece sin encogerse.
+- **«Guardar movimiento» siempre a la vista**: la barra (Repartir · Subir comprobante · Guardar, y el
+  renglón de «Falta el monto» / «Guardar y anotar otro») va **debajo** del desplazamiento
+  (`BarraDeGuardarDeAgregar`), no al final del cuerpo. La ayuda de las cuotas reserva dos renglones:
+  «En el extracto, unos $100.000 al mes, sin intereses.» y «Cuenta completa hoy en tus gastos.».
+- **Sin glifos que Figtree no tiene.** «≈» salía como un cuadro vacío: se dice «unos» (las cuotas, la
+  TRM: «Unos $4.100 por dólar»), «~» en la deuda estimada de una tarjeta, y «pagado» sin «✓».
+  `GlifosDeFigtreeScanTest` abre `figtree_regular.ttf` y no deja en un literal de `ui/` un carácter que la
+  letra no dibuje («⌫» es la clave de una tecla con ícono y queda afuera).
+
+También: el detalle de una compra diferida dice «a 3 cuotas» debajo de la cifra, y al dividir un
+movimiento cuya descripción es solo su categoría cada parte lleva la suya.
+
+Lo vigilan `AgregarNoPierdeNadaTest` (el monto, la nota y la fecha que viajan; «¿Descartar?» y el cierre
+directo; las pestañas quietas en los cuatro tipos; la fila de cuotas solo con tarjeta y las cuotas que
+llegan a `postEvent`; «Pagar» y «¿Qué pagas?»), `AgregarPorDentroTest` (el «atrás» que pregunta),
+`DividirUnaCompraConTarjetaTest`, y en el server `LaCompraConTarjetaTest`. **Las líneas base** no cambian,
+y las guardas en 0 siguen en 0.
+

@@ -8,6 +8,7 @@ import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.ReconciliationStatus
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.repository.ApiException
+import com.jvillada.movi.shared.repository.CuotasPorSubir
 import com.jvillada.movi.shared.repository.WalletRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -174,6 +175,8 @@ class SyncEngine(
      */
     internal suspend fun syncEvents() {
         val unsynced = db.financialEventQueries.selectUnsynced(userId()).executeAsList()
+        // Vuelta 71: las cuotas de las compras con tarjeta que esperan su subida (no hay columna local).
+        val cuotasPorSubir = if (unsynced.isEmpty()) emptyMap() else CuotasPorSubir.todas(db, userId())
         for (row in unsynced) {
             try {
                 remote.postEvent(
@@ -208,8 +211,11 @@ class SyncEngine(
                         // le permite al server distinguir esto de un APK viejo. Ver
                         // `FinancialEvent.lastEditedAt` y `pisaElReenvio` en EventRoutes.kt.
                         lastEditedAt = row.lastEditedAt,
+                        // Vuelta 71: a cuántas cuotas fue la compra con tarjeta, si Agregar lo dijo.
+                        cuotas = cuotasPorSubir[row.id],
                     )
                 )
+                if (row.id in cuotasPorSubir) CuotasPorSubir.olvidar(db, row.userId, row.id)
                 db.financialEventQueries.markSyncedIfUnchanged(
                     Clock.System.now().toEpochMilliseconds(), row.id, row.category, row.timestamp,
                     // Y el monto, la cuenta y el concepto desde que se pueden corregir (ver
