@@ -70,6 +70,8 @@ fun SelectorDeDiaDelMes(
                         modifier = Modifier
                             .weight(1f)
                             .height(Medida.objetivoTactil)
+                            // El foco del teclado se ve en el círculo del día (vuelta 55).
+                            .anilloDeFoco(CircleShape)
                             .clickable(enabled = habilitado, role = Role.RadioButton) { onElegir(d) }
                             .semantics { selected = esElElegido }
                             .testTag(tagDelDiaDelMes(d)),

@@ -212,6 +212,14 @@ fun occurrenceCandidatesFor(
     destinos: Map<String, DestinoConocido> = emptyMap(),
 ): List<FinancialEvent> =
     candidatosPuntuados(rule, dueDate, events, usedEventIds, zone, windowDays, settings, destinos)
+        // Vuelta 72: lo que pasa del doble del monto de la regla o queda por debajo de la mitad no se
+        // PROPONE (umbrales elegidos, ver `candidatoFueraDeProporcion` en `:core`). Solo acá, en la
+        // lista del «¿Es este?»: lo que Movi decide sola (concluyente, identidad fuerte) y lo que el
+        // Disponible absorbe (`parteFijaDelChecklist`, que lee [candidatosPuntuados] entero) no cambian.
+        .filterNot { c ->
+            !c.concluyente && !c.identidadFuerte &&
+                candidatoFueraDeProporcion(rule.amount, rule.montoEsSaldo, MONEDA_DE_LAS_REGLAS, c.event)
+        }
         .take(max)
         .map { it.event }
 
@@ -349,13 +357,6 @@ fun candidatosPuntuados(
             // un fijo del Disponible) ni concluyente (no se empareja solo).
             val identidadFuerte = enLaVentana && (nombrePega || (destinoPega && montoExacto))
             val concluyente = enLaVentana && (identidadFuerte || (categoriaPega && laCuentaPega && montoExacto))
-            // Vuelta 72: lo que pasa del doble del monto de la regla o queda por debajo de la mitad no
-            // se PROPONE (umbrales elegidos, ver `candidatoFueraDeProporcion` en `:core`). Lo que Movi
-            // decide sola —concluyente, identidad fuerte— no cambia: ninguna fila tildada se destilda y
-            // nada del Disponible se mueve. Una regla de monto variable (una tarjeta) no se compara.
-            if (!concluyente && !identidadFuerte &&
-                candidatoFueraDeProporcion(rule.amount, rule.montoEsSaldo, MONEDA_DE_LAS_REGLAS, event)
-            ) return@mapNotNull null
             CandidatoPuntuado(
                 event = event,
                 senas = senas,

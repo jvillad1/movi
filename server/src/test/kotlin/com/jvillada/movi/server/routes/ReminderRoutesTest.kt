@@ -804,7 +804,8 @@ class ReminderRoutesTest {
             )
         }.body<RecurringRule>()
         sembrarMovimiento(
-            "ev-mercado", amount = 2_000_000, category = "Otra categoría",
+            // Vuelta 72: dentro del doble del monto de la regla (lo que pasa del doble ya no se propone).
+            "ev-mercado", amount = 150_000, category = "Otra categoría",
             description = "Transferencia a la cuenta *31973270757", type = "EXPENSE",
         )
 
