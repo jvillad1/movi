@@ -33,8 +33,15 @@ class CajaDeHoyTest {
 
     @Test
     fun `el primer dia en rojo manda sobre el mas bajo`() {
-        val fila = cajaDeHoy(caja("2026-10-13" to 100_000, "2026-10-20" to -5_000, "2026-10-24" to -90_000), hoy)
+        val fila = cajaDeHoy(caja("2026-10-13" to 100_000, "2026-10-20" to -5_000, "2026-10-24" to -90_000).copy(hastaElSalario = true), hoy)
         assertEquals(CajaDeHoy(ROTULO_NO_TE_ALCANZA, "El 20 de octubre quedarías en", -5_000, enRojo = true), fila)
+    }
+
+    /** Revisión de la 70: sin un salario anotado, «No te alcanza» dice por qué y hasta dónde se miró. */
+    @Test
+    fun `sin salario anotado no te alcanza dice que se miraron 30 dias`() {
+        val fila = cajaDeHoy(caja("2026-10-13" to 100_000, "2026-10-20" to -5_000), hoy)
+        assertEquals(CajaDeHoy(ROTULO_NO_TE_ALCANZA, SIN_SALARIO_ANOTADO, -5_000, enRojo = true), fila)
     }
 
     @Test

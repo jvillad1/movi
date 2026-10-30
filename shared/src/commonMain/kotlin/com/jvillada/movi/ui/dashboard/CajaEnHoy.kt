@@ -66,7 +66,13 @@ data class CajaDeHoy(val rotulo: String, val cuando: String, val saldo: Long, va
  */
 fun cajaDeHoy(caja: CajaProyectada, hoy: LocalDate): CajaDeHoy {
     caja.primerDiaEnRojo?.let { rojo ->
-        val cuando = if (rojo.fecha == hoy.toString()) "Hoy quedarías en" else "El ${fechaEnPalabras(rojo.fecha, hoy)} quedarías en"
+        // Revisión de la 70: sin un salario anotado, «No te alcanza» en rojo no decía por qué ni hasta
+        // cuándo se miró. El porqué va primero: la caja mira 30 días y no cuenta ningún ingreso.
+        val cuando = when {
+            !caja.hastaElSalario -> SIN_SALARIO_ANOTADO
+            rojo.fecha == hoy.toString() -> "Hoy quedarías en"
+            else -> "El ${fechaEnPalabras(rojo.fecha, hoy)} quedarías en"
+        }
         return CajaDeHoy(ROTULO_NO_TE_ALCANZA, cuando, rojo.libre, enRojo = true)
     }
     val bajo = caja.diaMasBajo
@@ -74,6 +80,9 @@ fun cajaDeHoy(caja: CajaProyectada, hoy: LocalDate): CajaDeHoy {
     val rotulo = if (caja.hastaElSalario) ROTULO_HASTA_QUE_TE_PAGUEN else ROTULO_PROXIMOS_30_DIAS
     return CajaDeHoy(rotulo, cuando, bajo.libre, enRojo = false)
 }
+
+/** El subtítulo de «No te alcanza» sin un salario anotado: por qué, y hasta dónde se miró. */
+const val SIN_SALARIO_ANOTADO: String = "Sin salario anotado: miramos 30 días"
 
 /** El rótulo de la fila cuando lo libre no alcanza (vuelta 70). */
 const val ROTULO_NO_TE_ALCANZA: String = "No te alcanza"
