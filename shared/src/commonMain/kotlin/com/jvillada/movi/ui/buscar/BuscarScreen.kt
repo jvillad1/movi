@@ -55,6 +55,8 @@ import com.jvillada.movi.data.ahoraEnMs
 import com.jvillada.movi.data.intentar
 import com.jvillada.movi.data.rememberLectura
 import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.esTuParteDeOtro
+import com.jvillada.movi.ui.espacios.AbrirTuParteDeOtro
 import com.jvillada.movi.shared.model.ajustesDelPeriodo
 import com.jvillada.movi.shared.model.groupLabel
 import com.jvillada.movi.shared.model.periodoActual
@@ -128,6 +130,7 @@ fun BuscarScreen(onNavigate: (Screen) -> Unit) {
     var filtros by remember { mutableStateOf(FiltrosDeBusqueda()) }
     var recarga by remember { mutableStateOf(0) }
     var eventoAbierto by remember { mutableStateOf<FinancialEvent?>(null) }
+    var tuParteAbierta by remember { mutableStateOf<FinancialEvent?>(null) }
 
     val perfil = rememberLectura(ClaveDeLectura.Perfil, reintento = recarga) { Repositories.wallets.getUserProfile() }
     val eventos = rememberLectura(ClaveDeLectura.EventosPorDia, reintento = recarga) { Repositories.wallets.getEventsByDay() }
@@ -144,7 +147,14 @@ fun BuscarScreen(onNavigate: (Screen) -> Unit) {
             RangoDelPeriodo(ventana.first, ventana.last + 1)
         }
     }
-    val todosLosEventos = remember(eventos.valor) { eventos.valor.orEmpty().flatMap { it.items } }
+    // Vuelta 78: tu parte de lo que pagó otra persona en un grupo («Mercado del sábado · Pagó Caro»), como
+    // en Actividad. Sin estas filas, «mercado» sumaba $120.000 menos que En qué se va, el widget y Movi
+    // AI, que sí la cuentan. Secundaria: si falla, Buscar sigue con tus movimientos.
+    var tuParteDeOtros by remember { mutableStateOf<List<FinancialEvent>>(emptyList()) }
+    LaunchedEffect(recarga) {
+        intentar { Repositories.wallets.getTuParteDeOtros() }.onSuccess { tuParteDeOtros = it }
+    }
+    val todosLosEventos = remember(eventos.valor, tuParteDeOtros) { eventosParaBuscar(eventos.valor.orEmpty(), tuParteDeOtros) }
     val datos = remember(todosLosEventos, cuentas.valor, destinos.valor, categoriasDelDueno, UsedCategoriesCache.used) {
         DatosDeBusqueda(
             eventos = todosLosEventos,
@@ -167,7 +177,10 @@ fun BuscarScreen(onNavigate: (Screen) -> Unit) {
         anotar()
         val destino = resultado.destino
         if (destino != null) onNavigate(destino)
-        else if (resultado is ResultadoDeBusqueda.Movimiento) eventoAbierto = resultado.evento
+        else if (resultado is ResultadoDeBusqueda.Movimiento) {
+            // Tu parte de lo que pagó otro se abre como en Actividad: el gasto del grupo.
+            if (esTuParteDeOtro(resultado.evento)) tuParteAbierta = resultado.evento else eventoAbierto = resultado.evento
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
@@ -243,6 +256,10 @@ fun BuscarScreen(onNavigate: (Screen) -> Unit) {
                 }
             }
         }
+    }
+
+    tuParteAbierta?.let { parte ->
+        AbrirTuParteDeOtro(parte, onCerrar = { tuParteAbierta = null }, onCambio = { tuParteAbierta = null; recarga++ })
     }
 
     eventoAbierto?.let { evento ->
@@ -400,7 +417,10 @@ private fun FilaDeResultado(
         is ResultadoDeBusqueda.Movimiento -> {
             val e = resultado.evento
             val laCuenta = cuentas.firstOrNull { it.id == e.accountId }
-            val linea = subtituloDeUnMovimientoEnBuscar(e, laCuenta?.name, etiquetaDeFecha(epochMillisToAppDate(e.timestamp), hoy))
+            val fecha = etiquetaDeFecha(epochMillisToAppDate(e.timestamp), hoy)
+            // Vuelta 78: tu parte de lo que pagó otro dice quién pagó («Pagó Caro · 25 de octubre»).
+            val linea = if (esTuParteDeOtro(e)) subtituloDeTuParteEnBuscar(e, e.espacioId?.let { espacios[it] }, fecha)
+            else subtituloDeUnMovimientoEnBuscar(e, laCuenta?.name, fecha)
             // Vuelta 50: de un par se lista la pata que cuenta (`unaPataPorPar`), así que la cuota sale
             // como el gasto que es, «−$980.000».
             val tono = tonoDelEvento(e, laCuenta?.type)
