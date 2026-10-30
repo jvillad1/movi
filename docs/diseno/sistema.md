@@ -3854,7 +3854,9 @@ del horizonte sin salario (punto 1); ninguna otra cifra cambió. La §72 es de l
    renglón tocable dentro de la tarjeta del héroe, debajo de la cifra y encima de «Por confirmar»: **siempre
    se ve**, también con «Disponible» oculto, y un APK viejo no lo pinta (va dentro de `HERO_BALANCE`, la
    definición SDUI no cambió). «Te alcanza hasta el 25 nov · tu día más justo, el 5 nov» si lo libre del peor
-   día es ≥ 0; «No te alcanza: el 5 nov quedarías en −$1,3M» si no (`renglonMeAlcanza`, en rojo). Sale de
+   día es ≥ 0; «No te alcanza: el 5 nov quedarías en −$1,3M» si no (`renglonMeAlcanza`, en rojo). Se pinta
+   como `Fila` de dos renglones —«Te alcanza hasta el 25 nov» y debajo «Tu día más justo, el 5 nov»—: en
+   uno solo, a 360 dp con la letra al 130 %, se cortaba con «…» (`ElTextoAl130NoSeCortaTest`). Sale de
    `cajaDelPeriodoDe` → `cajaHastaQueTePaguen`, la MISMA de Pagos (`renglonMeAlcanzaDe`); sin período, lista,
    cuentas o el supuesto del gasto del día a día, no se pinta. Tocarlo abre `Screen.Plan(SEGMENTO_PAGOS,
    enLaCaja = true)`: en una columna, Pagos baja hasta la caja (`LlevarALaCaja`, una vez). «Tu día más justo»
@@ -3887,7 +3889,8 @@ del horizonte sin salario (punto 1); ninguna otra cifra cambió. La §72 es de l
    guía crea la regla con `createRecurringRule` de siempre (`reglaDelSalario`: «Salario», categoría
    «Salario», INCOME, **el día del corte** —el que `fechaEsperadaDelIngreso` reconoce como el salario—, la
    cuenta elegida o la primera de dinero), una sola vez y sin escrituras propias. El día de un pago de cada
-   mes se elige con `SelectorDeDiaDelMes` (vuelta 72). «Listo» abre con una cifra real: «Te quedan
+   mes se elige con `SelectorDeDiaDelMes` (vuelta 72); su número ahora se mide a lo ancho del círculo, como
+   el día del período de la guía, para no recortarse con la letra grande (`NadaSeRecortaEnLaGuiaTest`). «Listo» abre con una cifra real: «Te quedan
    $4.963.400 hasta el 24 nov» (`fraseDelFinalDeLaGuia`: `teQuedanDeHoy` sobre `disponibleDelInicio` con
    `leerDatosDelDiaADia`, las lecturas de siempre), o «Ya puedes empezar» sin cuentas o sin cifra.
 7. **El héroe cambia entero** (`rememberEstadoQueCambia`, `EstadoDelHeroe` en `ui/dashboard/EntradaDelInicio.kt`).
