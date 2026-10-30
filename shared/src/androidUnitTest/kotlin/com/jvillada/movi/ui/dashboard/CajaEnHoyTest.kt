@@ -111,7 +111,7 @@ class CajaEnHoyTest {
             .fetchSemanticsNodes()
         assertEquals(1, textos.size, "el renglón dice hasta cuándo alcanza")
         assertTrue(
-            composeRule.onAllNodesWithText("tu día más justo", substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty(),
+            composeRule.onAllNodesWithText("Tu día más justo, ", substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty(),
         )
 
         composeRule.onNodeWithTag(TAG_ME_ALCANZA, useUnmergedTree = true).performScrollTo().performClick()
@@ -125,7 +125,7 @@ class CajaEnHoyTest {
         puerta.complete(Unit)
         composeRule.waitUntil(5_000) { contarTag(TAG_ME_ALCANZA) == 1 }
         assertTrue(
-            composeRule.onAllNodesWithText("No te alcanza:", substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty(),
+            composeRule.onAllNodesWithText("No te alcanza", substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty(),
         )
     }
 

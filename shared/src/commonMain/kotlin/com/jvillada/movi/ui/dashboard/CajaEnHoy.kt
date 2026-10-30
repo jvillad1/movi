@@ -47,8 +47,14 @@ import kotlinx.datetime.LocalDate
 /** El tag del renglón «¿Me alcanza?» del héroe. */
 const val TAG_ME_ALCANZA: String = "inicio-me-alcanza"
 
-/** Lo que dice el renglón: el texto y si va en rojo. Puro, para las pruebas. */
-data class RenglonMeAlcanza(val texto: String, val enRojo: Boolean)
+/**
+ * Lo que dice el renglón: el título («Te alcanza hasta el 25 nov»), el detalle («tu día más justo, el 5
+ * nov») y si va en rojo. Se pinta en dos renglones de la `Fila` —a 360 dp con la letra al 130 % una frase
+ * sola no entraba—; [texto] es la frase entera, como se lee. Puro, para las pruebas.
+ */
+data class RenglonMeAlcanza(val titulo: String, val detalle: String, val enRojo: Boolean) {
+    val texto: String get() = if (enRojo) "$titulo: $detalle" else "$titulo · $detalle"
+}
 
 /**
  * [RenglonMeAlcanza] de la caja. Se mide en **el peor día** ([CajaProyectada.diaMasBajo]) —la misma cifra
@@ -58,10 +64,11 @@ fun renglonMeAlcanza(caja: CajaProyectada, hoy: LocalDate): RenglonMeAlcanza {
     val bajo = caja.diaMasBajo
     val cuando = if (bajo.fecha == hoy.toString()) "hoy" else "el ${fechaCortaDelRenglon(bajo.fecha)}"
     if (bajo.libre < 0L) {
-        return RenglonMeAlcanza("No te alcanza: $cuando quedarías en ${formatMoneyAbreviadaSinOcultar(bajo.libre)}", enRojo = true)
+        return RenglonMeAlcanza("No te alcanza", "$cuando quedarías en ${formatMoneyAbreviadaSinOcultar(bajo.libre)}", enRojo = true)
     }
     return RenglonMeAlcanza(
-        "Te alcanza hasta el ${fechaCortaDelRenglon(caja.alCierre.fecha)} · tu día más justo, $cuando",
+        "Te alcanza hasta el ${fechaCortaDelRenglon(caja.alCierre.fecha)}",
+        "tu día más justo, $cuando",
         enRojo = false,
     )
 }
@@ -102,7 +109,9 @@ internal fun RenglonMeAlcanzaDelHeroe(
     val renglon = renglonMeAlcanzaDe(data, gastoLeido.valor, hoy) ?: return
     Separador(SangriaDeSeparador.Ninguna)
     Fila(
-        titulo = conCifrasOcultas(renglon.texto),
+        titulo = renglon.titulo,
+        subtitulo = conCifrasOcultas(renglon.detalle.replaceFirstChar { it.uppercase() }),
+        lineasDelSubtitulo = 2,
         tonoDelTitulo = if (renglon.enRojo) TonoDeFila.Alerta else TonoDeFila.Normal,
         modifier = Modifier.testTag(TAG_ME_ALCANZA),
         inicio = {

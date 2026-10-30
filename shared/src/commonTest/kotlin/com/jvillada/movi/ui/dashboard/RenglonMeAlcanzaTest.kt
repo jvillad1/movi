@@ -15,6 +15,7 @@ import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * # Vuelta 75 · el renglón «¿Me alcanza?» del héroe, sin pantalla
@@ -32,7 +33,8 @@ class RenglonMeAlcanzaTest {
     @Test
     fun `te alcanza dice hasta cuando y el dia mas justo`() {
         val renglon = renglonMeAlcanza(caja("2026-10-29" to 900_000, "2026-11-05" to 180_000, "2026-11-25" to 400_000), hoy)
-        assertEquals(RenglonMeAlcanza("Te alcanza hasta el 25 nov · tu día más justo, el 5 nov", enRojo = false), renglon)
+        assertEquals("Te alcanza hasta el 25 nov · tu día más justo, el 5 nov", renglon.texto)
+        assertEquals(RenglonMeAlcanza("Te alcanza hasta el 25 nov", "tu día más justo, el 5 nov", enRojo = false), renglon)
     }
 
     @Test
@@ -47,7 +49,8 @@ class RenglonMeAlcanzaTest {
             caja("2026-10-29" to 100_000, "2026-11-03" to -100_000, "2026-11-05" to -1_320_000, "2026-11-25" to 5_000_000),
             hoy,
         )
-        assertEquals(RenglonMeAlcanza("No te alcanza: el 5 nov quedarías en −\$1,3M", enRojo = true), renglon)
+        assertEquals("No te alcanza: el 5 nov quedarías en −\$1,3M", renglon.texto)
+        assertTrue(renglon.enRojo)
         val chico = renglonMeAlcanza(caja("2026-10-29" to -683_361, "2026-11-25" to 1_000_000), hoy)
         assertEquals("No te alcanza: hoy quedarías en −\$683\u00A0mil", chico.texto, "la cifra corta, como en la caja")
     }
