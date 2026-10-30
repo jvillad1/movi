@@ -172,8 +172,8 @@ fun categoriasFijas(
     reglas: List<com.jvillada.movi.shared.model.RecurringRule>,
     saldanUnPago: Collection<String> = emptyList(),
 ): Set<String> =
-    reglas.filter { it.type == com.jvillada.movi.shared.model.TransactionType.EXPENSE }.map { it.category }.toSet() +
-        com.jvillada.movi.shared.model.CUOTA_CATEGORY + saldanUnPago
+    // Vuelta 77: la regla vive en `:core`, para que la sugerida de Movi AI («¿En qué se va?») diga lo mismo.
+    com.jvillada.movi.shared.model.categoriasFijas(reglas, saldanUnPago)
 
 /**
  * La diferencia de [categoria] contra el período pasado, o `null` sin con qué comparar. **Ninguna

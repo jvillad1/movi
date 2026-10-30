@@ -209,3 +209,19 @@ internal fun preguntasQueSePuedenHacer(fuente: List<PreguntaParaTocar>, iaDispon
     else (fuente.filter { it.sugerida != null } + PREGUNTAS_PARA_TOCAR_DE_RESPALDO)
         .distinctBy { it.sugerida }
         .take(CUANTAS_PREGUNTAS_SUGERIDAS)
+
+/** Vuelta 77: cuántas de las que arman las reglas (van al modelo) se ofrecen, después de las tres gratis. */
+internal const val PREGUNTAS_DEL_MODELO_EN_EL_ARRANQUE: Int = 2
+
+/**
+ * **Las preguntas de una conversación nueva** (vuelta 77): las tres que Movi contesta sin el modelo
+ * ([PREGUNTAS_PARA_TOCAR_DE_RESPALDO], gratis) van **siempre primero**; después, hasta
+ * [PREGUNTAS_DEL_MODELO_EN_EL_ARRANQUE] de las que arman las reglas con las cifras del dueño (esas van
+ * al modelo). Antes el arranque solo ofrecía las de las reglas: con tres señales, las gratis no se veían
+ * nunca. Sin la IA, solo las tres ([preguntasQueSePuedenHacer]).
+ */
+internal fun preguntasDelArranque(fuente: List<PreguntaParaTocar>, iaDisponible: Boolean): List<PreguntaParaTocar> {
+    if (!iaDisponible) return preguntasQueSePuedenHacer(fuente, iaDisponible = false)
+    val delModelo = fuente.filter { it.sugerida == null }.take(PREGUNTAS_DEL_MODELO_EN_EL_ARRANQUE)
+    return (PREGUNTAS_PARA_TOCAR_DE_RESPALDO + delModelo).distinctBy { it.texto }
+}

@@ -313,7 +313,8 @@ fun AIChatScreen(
                 item {
                     ArranqueDelChat(
                         nombre = nombre,
-                        preguntas = sugeridas,
+                        // Vuelta 77: las tres gratis (sin la IA) siempre primero.
+                        preguntas = preguntasDelArranque(todasLasSugeridas, iaDisponible),
                         onPregunta = { enviar(it.texto, it.sugerida) },
                     )
                 }

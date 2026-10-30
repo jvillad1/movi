@@ -45,6 +45,7 @@ import com.jvillada.movi.shared.model.PropuestaDeCuadrePorAviso
 import com.jvillada.movi.shared.model.SMS_STATE_PENDING
 import com.jvillada.movi.shared.model.Tendencia
 import com.jvillada.movi.shared.model.checklistDelPeriodo
+import com.jvillada.movi.shared.model.categoriasFijas
 import com.jvillada.movi.shared.model.contraElAnterior
 import com.jvillada.movi.shared.model.cuantosPagosPorRevisar
 import com.jvillada.movi.shared.model.cuentasSinCuadrar
@@ -157,6 +158,11 @@ internal data class DatosDeLasSugeridas(
      * dueño no resolvió. «En qué se va» los compara donde estaban (ver `comoEnElPeriodoAnterior`).
      */
     val cambiosDeCategoria: List<CambioDeCategoriaDeUnRecurrente> = emptyList(),
+    /**
+     * Vuelta 77: las categorías de lo fijo ([categoriasFijas], la misma regla del widget «En qué se va»):
+     * una cuota o un fijo sin gasto a esta altura del período pasado no se dice «$X más».
+     */
+    val fijas: Set<String> = emptySet(),
 ) {
     val salio: Long get() = gastoPorCategoria.values.sum()
 }
@@ -197,6 +203,8 @@ internal suspend fun datosDeLasSugeridas(
         emptyList()
     }
     val reglasDeCredito = if (conPagos) loadCreditRulePairs(uid).map { it.first } else emptyList()
+    // Vuelta 77: lo fijo, de las mismas reglas que lee Inicio (`UpcomingPayment.rule` de `/upcoming`).
+    val fijas = if (pregunta == PreguntaSugerida.EN_QUE_SE_VA) categoriasFijas(proximosPagos(uid, hoy).map { it.rule }) else emptySet()
     val debitos = if (revisar) debitosPorConfirmar(uid, hoy, ahora) else emptyList()
 
     // La tasa solo si hace falta, para el saldo de lo apartado (ver el resumen del Inicio).
@@ -271,6 +279,7 @@ internal suspend fun datosDeLasSugeridas(
             },
             sinCuadrar = if (revisar) cuentasSinCuadrar(cuentasConSusSellos(uid, anulados), ahora) else emptyList(),
             sinSaldo = if (revisar) deudasSinSaldoDe(cuentasConSaldo(uid, anulados, usdToCop)) else emptyList(),
+            fijas = fijas,
         )
     }
 }
@@ -458,6 +467,10 @@ internal fun enQueSeVa(d: DatosDeLasSugeridas): String {
         }
         val comparacion = d.anterior?.let { anterior ->
             val antes = anterior[categoria] ?: 0L
+            // Vuelta 77: una cuota o un fijo que a esta altura del período pasado todavía no había caído
+            // no es «$X más que el período pasado» (la cuota de $980.000 lo decía): como el widget de
+            // Inicio con «nuevo» (`diferenciaDeLaCategoria`), ahí no se compara.
+            if (antes == 0L && categoria in d.fijas) return@let null
             contraElAnterior(paraComparar[categoria] ?: 0L, antes)?.let { c ->
                 when (c.tendencia) {
                     Tendencia.SUBE -> " · ${pesosDelCierre(c.diferencia)} más que el período pasado"
