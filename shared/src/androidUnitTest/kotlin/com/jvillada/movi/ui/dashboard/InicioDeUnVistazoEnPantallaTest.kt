@@ -152,7 +152,7 @@ class InicioDeUnVistazoEnPantallaTest {
         val acciones = arriba("Anotar gasto")
         val propuestas = arriba("Movi propone hoy")
         val cuentas = arriba("Tus cuentas")
-        val widgets = arriba(com.jvillada.movi.ui.sdui.TITULO_DE_LOS_WIDGETS)
+        val widgets = arriba(com.jvillada.movi.ui.sdui.TITULO_DEL_WIDGET_EN_QUE_SE_VA)
         assertTrue(hero < acciones, "la cuadrícula va debajo del héroe")
         assertTrue(acciones < propuestas, "las propuestas debajo de la cuadrícula")
         assertTrue(propuestas < cuentas, "las cuentas debajo de las propuestas")

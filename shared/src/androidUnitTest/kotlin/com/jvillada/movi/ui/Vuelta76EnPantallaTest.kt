@@ -200,7 +200,9 @@ class Vuelta76EnPantallaTest {
         )
         composeRule.setContent { MoviTheme { Column(Modifier.fillMaxWidth()) { WidgetEnQueSeVa(data, onNavigate = {}) } } }
         composeRule.waitForIdle()
-        val diferencias = conTag(TAG_DIFERENCIA_DEL_WIDGET)
+        // Vuelta 80: la diferencia va en una Pildora; su texto está adentro.
+        fun conTexto(n: SemanticsNode): List<SemanticsNode> = (if (texto(n).isNotEmpty()) listOf(n) else emptyList()) + n.children.flatMap(::conTexto)
+        val diferencias = conTag(TAG_DIFERENCIA_DEL_WIDGET).map { d -> conTexto(d).single() }
         assertEquals(listOf(CATEGORIA_NUEVA, CATEGORIA_NUEVA), diferencias.map(::texto), "la cuota no dice «nuevo»")
         val colores = diferencias.map { layoutDe(it)!!.layoutInput.style.color }.toSet()
         assertEquals(1, colores.size, "un solo color para «nuevo»: $colores")
