@@ -5,6 +5,7 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.performSemanticsAction
@@ -216,10 +217,14 @@ class SimuladorDeAbonoEnPantallaTest {
      * habla del futuro sino de la cifra misma. Ver [SUPUESTO_DE_LA_ESTIMACION].
      */
     @Test
-    fun `la hoja declara los tres supuestos`() {
+    fun `la hoja declara los tres supuestos, detras de que supone`() {
         montar(listOf(libreInversion))
         abrirElSimulador()
 
+        // Vuelta 77: cerrados de entrada; «¿Qué supone?» los abre.
+        composeRule.onNodeWithText(SUPUESTO_DEL_ABONO, useUnmergedTree = true).assertDoesNotExist()
+        composeRule.onNodeWithTag(TAG_QUE_SUPONE_EL_ABONO, useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
         composeRule.onNodeWithText(SUPUESTO_DEL_ABONO, useUnmergedTree = true).assertExists()
         composeRule.onNodeWithText(SUPUESTO_DE_LA_ESTIMACION, useUnmergedTree = true).assertExists()
         // La hoja trae su propia copia: se abre desde el detalle de la deuda, donde el resumen de

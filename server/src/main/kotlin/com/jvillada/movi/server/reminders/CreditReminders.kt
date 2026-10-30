@@ -9,6 +9,7 @@ import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.CreditTerms
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.cuotasDesdeVigente
 import org.jetbrains.exposed.sql.JoinType
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.selectAll
@@ -59,13 +60,19 @@ fun virtualRuleFor(terms: CreditTerms, accountName: String): RecurringRule =
         remindMe   = terms.remindMe,
         // La primera cuota va DESPUÉS del desembolso, no el mismo día. Sin esto, un crédito
         // desembolsado el 1 con pago el día 1 anunciaba su primera cuota para ese mismo día.
-        activeFrom = terms.startDate,
+        //
+        // **Vuelta 77:** salvo que el alta haya dicho «ya pagué la cuota de este período»
+        // ([CreditTerms.cuotasDesde], posterior al desembolso): entonces el arranque es ESE período, con
+        // la semántica de período (el piso es su primer día) y no la del desembolso. La cuota de este
+        // período no existe en ningún lado: ni vencida en Inicio, ni en `/occurrences`, ni en `/upcoming`.
+        activeFrom = terms.cuotasDesdeVigente() ?: terms.startDate,
         // **Y esta fecha es un desembolso, no una ocurrencia de la regla.** Va junto con la
         // línea de arriba y no se separa de ella: sin este `true`, `arranqueDeLaRegla` la lee con
         // la semántica de período —la que necesitan las reglas nacidas de un movimiento— y el
         // crédito del dueño vuelve a deber su primera cuota el mismo día del desembolso. Los dos
-        // significados y por qué son dos están en [RecurringRule.arranqueEsDesembolso].
-        arranqueEsDesembolso = true,
+        // significados y por qué son dos están en [RecurringRule.arranqueEsDesembolso]. Con
+        // `cuotasDesde` (vuelta 77) es justamente la de período: `false`.
+        arranqueEsDesembolso = terms.cuotasDesdeVigente() == null,
         // El tercero al que le gira la cuota (el papá): con esto un envío a él se puede repartir
         // entre las cuotas que le corresponden (ver `RepartirUnEnvio.kt`).
         destinoConocidoId = terms.destinoConocidoId,

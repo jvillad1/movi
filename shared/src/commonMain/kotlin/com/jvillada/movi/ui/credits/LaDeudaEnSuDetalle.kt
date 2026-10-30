@@ -43,6 +43,7 @@ import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.components.ds.BarraDeProgreso
+import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.ui.components.ds.Chevron
 import com.jvillada.movi.ui.components.ds.Cifra
 import com.jvillada.movi.ui.components.ds.Fila
@@ -117,6 +118,8 @@ class DeudaDelDetalle internal constructor(
      * («la última en noviembre de 2030»), no del mes en curso. Ver [mesDeLaPrimeraCuota].
      */
     val primeraCuota: PeriodoFinanciero = periodoActual,
+    /** Vuelta 77: los ajustes del período del dueño, para saber cuál es la cuota de este período. */
+    val ajustes: PeriodSettings = PeriodSettings(),
 ) {
     /** La hoja abierta. Vive aparte: releer la deuda (otro objeto) no cierra la hoja. */
     var hoja: HojaDeLaDeuda?
@@ -127,12 +130,18 @@ class DeudaDelDetalle internal constructor(
     var registrando: CreditSummary?
         get() = abierto.registrando
         set(valor) { abierto.registrando = valor }
+
+    /** Vuelta 77: la cifra con que se abre la hoja del saldo («Usar este», la del plan), o `null`. */
+    var cifraPropuesta: Long?
+        get() = abierto.cifraPropuesta
+        set(valor) { abierto.cifraPropuesta = valor }
 }
 
 /** Lo que el dueño abrió en la deuda: sobrevive a que la deuda se relea. */
 internal class LoAbiertoDeLaDeuda {
     var hoja: HojaDeLaDeuda? by mutableStateOf(null)
     var registrando: CreditSummary? by mutableStateOf(null)
+    var cifraPropuesta: Long? by mutableStateOf(null)
 }
 
 /**
@@ -164,8 +173,8 @@ fun rememberDeudaDelDetalle(accountId: String, tipo: AccountType?, reintento: In
     val primeraCuota = remember(prestamo, periodoActual) {
         prestamo?.let { mesDeLaPrimeraCuota(it, hoyEnAppZone()) } ?: periodoActual
     }
-    val deuda = remember(prestamo, tarjeta, plan, periodoActual, abierto, primeraCuota) {
-        DeudaDelDetalle(prestamo, tarjeta, plan, periodoActual, abierto, primeraCuota)
+    val deuda = remember(prestamo, tarjeta, plan, periodoActual, abierto, primeraCuota, ajustes) {
+        DeudaDelDetalle(prestamo, tarjeta, plan, periodoActual, abierto, primeraCuota, ajustes)
     }
     return deuda
 }
@@ -183,14 +192,44 @@ fun SeccionDeLaDeuda(
      * ya hace «Anotar este pago» desde Plan). `null` = sin esa acción.
      */
     onRegistrarPagoDeLaTarjeta: (() -> Unit)? = null,
+    /**
+     * Vuelta 77 · **«Pagar la cuota»**, la acción principal del préstamo: abre Agregar → Pagar con el
+     * crédito y su cuota ([pantallaDePagarLaCuota]). `null` = sin el botón.
+     */
+    onPagarLaCuota: ((com.jvillada.movi.ui.Screen) -> Unit)? = null,
 ) {
     val prestamo = deuda.prestamo
     val tarjeta = deuda.tarjeta
     if (prestamo == null && tarjeta == null) return
     val acciones = accionesDeLaDeuda(deuda, onRegistrarPagoDeLaTarjeta)
     val conCondiciones = !faltanLosDatos(deuda)
-    if (!conCondiciones && acciones.isEmpty()) return
+    val laCuota = if (prestamo != null && onPagarLaCuota != null) {
+        laCuotaEnLaFicha(prestamo, deuda.primeraCuota, hoyEnAppZone(), deuda.ajustes)
+    } else {
+        null
+    }
+    if (!conCondiciones && acciones.isEmpty() && laCuota == null) return
     Column(modifier = modifier.fillMaxWidth().testTag(TAG_SECCION_DE_LA_DEUDA)) {
+        // Vuelta 77: la acción principal de un préstamo es pagar su cuota («Pagar la cuota de noviembre ·
+        // $770.000»); si la de este período ya está saldada, lo dice («Cuota de noviembre · pagada»).
+        if (laCuota != null && prestamo != null) {
+            if (laCuota.pagada) {
+                Superficie(modifier = Modifier.fillMaxWidth().testTag(TAG_CUOTA_PAGADA), relleno = RellenoDeSuperficie.Lista) {
+                    Fila(
+                        titulo = textoDeLaCuotaEnLaFicha(laCuota),
+                        inicio = { IconoEnCirculo(Icons.Rounded.TaskAlt, tono = TonoDeIcono.Exito) },
+                    )
+                }
+            } else {
+                Boton(
+                    texto = textoDeLaCuotaEnLaFicha(laCuota),
+                    onClick = { onPagarLaCuota?.invoke(pantallaDePagarLaCuota(prestamo, laCuota)) },
+                    anchoCompleto = true,
+                    modifier = Modifier.testTag(TAG_PAGAR_LA_CUOTA),
+                )
+            }
+            Spacer(Modifier.height(Medida.entreSecciones))
+        }
         // Sin términos no hay nada que decir de la cuota ni del pago: lo dice el aviso de arriba del
         // detalle ([AvisoDeFaltanDatos]) con «Completar datos», y acá queda lo que sí se puede hacer.
         if (conCondiciones) {
@@ -235,7 +274,10 @@ private fun accionesDeLaDeuda(deuda: DeudaDelDetalle, onRegistrarPagoDeLaTarjeta
     // Vuelta 33: la tarjeta también se cuadra contra el banco, con la misma hoja que un préstamo
     // ([CardBalanceSheet]). Con o sin sus datos: lo que se debe no depende del corte ni del cupo.
     if (deuda.tarjeta != null) {
-        add(AccionDeLaDeuda(AJUSTAR_EL_SALDO, "Cuando no cuadra con lo que dice el banco", Icons.Rounded.Tune) { deuda.hoja = HojaDeLaDeuda.Saldo })
+        // Vuelta 77: sin saldo, la ficha ya ofrece arriba «Cuadrar» con la misma hoja: una sola acción.
+        if (!laFichaOfreceCargarElSaldo(deuda)) {
+            add(AccionDeLaDeuda(AJUSTAR_EL_SALDO, "Cuando no cuadra con lo que dice el banco", Icons.Rounded.Tune) { deuda.hoja = HojaDeLaDeuda.Saldo })
+        }
     }
     val prestamo = deuda.prestamo
     val terms = prestamo?.terms
@@ -250,11 +292,26 @@ private fun accionesDeLaDeuda(deuda: DeudaDelDetalle, onRegistrarPagoDeLaTarjeta
         if (terms?.payrollDeduction == true) {
             add(AccionDeLaDeuda("Registrar descuento", "La cuota que te descontaron de la nómina", Icons.Rounded.TaskAlt) { deuda.registrando = prestamo })
         }
-        add(AccionDeLaDeuda(AJUSTAR_EL_SALDO, "Cuando no cuadra con lo que dice el banco", Icons.Rounded.Tune) { deuda.hoja = HojaDeLaDeuda.Saldo })
+        // Vuelta 77: «Cargarlo» (sin saldo, arriba de la ficha) y «Ajustar saldo» abren la misma hoja y no
+        // conviven: sin saldo, «Cargarlo»; con saldo, «Ajustar saldo».
+        if (!laFichaOfreceCargarElSaldo(deuda)) {
+            add(AccionDeLaDeuda(AJUSTAR_EL_SALDO, "Cuando no cuadra con lo que dice el banco", Icons.Rounded.Tune) { deuda.hoja = HojaDeLaDeuda.Saldo })
+        }
     }
     if (deuda.prestamo?.terms != null || deuda.tarjeta?.terms != null) {
         add(AccionDeLaDeuda(EDITAR_LAS_CONDICIONES, null, Icons.Rounded.Edit) { deuda.hoja = HojaDeLaDeuda.Condiciones })
     }
+}
+
+/**
+ * **¿El encabezado de la ficha ya ofrece cargar el saldo?** (vuelta 77) Sí cuando la deuda no tiene saldo
+ * en Movi (`saldoDeUnaDeuda(...).conSaldo` falso: en negativo, o un préstamo en cero sin movimientos): ahí
+ * va «Cargarlo» (o «Cuadrar»), y «Ajustar saldo» sería el mismo botón dos veces. Pura.
+ */
+fun laFichaOfreceCargarElSaldo(deuda: DeudaDelDetalle): Boolean {
+    val cuenta = deuda.prestamo?.account ?: deuda.tarjeta?.account ?: return false
+    val (monto, _) = com.jvillada.movi.ui.components.cardDebt(cuenta)
+    return !saldoDeUnaDeuda(monto, pagada = deuda.prestamo?.hasMovements ?: true).conSaldo
 }
 
 /** Un préstamo: la cuota con quién la paga, el avance y lo que se sabe del plan. */
@@ -451,8 +508,9 @@ fun HojasDeLaDeuda(
         HojaDeLaDeuda.Saldo -> when {
             prestamo != null -> CreditBalanceSheet(
                 credit = prestamo,
-                onDismiss = { deuda.hoja = null },
-                onSaved = { deuda.hoja = null; onCambiada() },
+                onDismiss = { deuda.hoja = null; deuda.cifraPropuesta = null },
+                onSaved = { deuda.hoja = null; deuda.cifraPropuesta = null; onCambiada() },
+                cifraPropuesta = deuda.cifraPropuesta,
             )
             tarjeta != null -> CardBalanceSheet(
                 card = tarjeta,

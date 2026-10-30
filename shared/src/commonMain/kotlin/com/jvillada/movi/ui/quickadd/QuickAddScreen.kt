@@ -316,6 +316,8 @@ fun QuickAddScreen(
     presetPago: PagoDeLaFactura? = null,
     /** Vuelta 63 · el abono mensual que este traspaso salda. Ver [Screen.QuickAdd.presetAbono]. */
     presetAbono: AbonoDeLaRegla? = null,
+    /** Vuelta 77 · Pagar arranca en modo abono con [presetDeudaId]. Ver [Screen.QuickAdd.presetAbonoExtra]. */
+    presetAbonoExtra: Boolean = false,
     /**
      * Ola 9 · B: el movimiento que se acaba de guardar, para que quien sobreviva a esta hoja
      * (App.kt) pueda ofrecer convertirlo en recurrente. Se llama **después** de que el POST
@@ -1718,6 +1720,7 @@ fun QuickAddScreen(
                                 // «Anotar este pago» desde una cuota o una tarjeta del checklist:
                                 // la deuda en «Hacia» y la cuota como monto.
                                 presetDestinoId = presetDeudaId,
+                                presetAbonoExtra = presetAbonoExtra,
                                 // Vuelta 47: el monto, la cifra y el teclado de Gasto.
                                 monto = montoDelTraspaso,
                                 onKey = ::onKeyDelTraspaso,
@@ -2717,7 +2720,7 @@ internal fun FilaDeCuentaEnAgregar(
                 }
             }
         },
-        final = { Cifra(saldo.monto, moneda = saldo.moneda, tono = saldo.tono) },
+        final = if (saldo.conCifra) ({ Cifra(saldo.monto, moneda = saldo.moneda, tono = saldo.tono) }) else null,
         onClick = onClick,
         modifier = Modifier
             .heightIn(min = Medida.altoDeFilaDoble)
@@ -2752,6 +2755,8 @@ internal data class SaldoEnAgregar(
     val moneda: String,
     val subtitulo: String?,
     val tono: TonoDeCifra,
+    /** Vuelta 77: sin cifra al final (un préstamo sin saldo en Movi: no hay deuda que mostrar). */
+    val conCifra: Boolean = true,
 )
 
 internal fun saldoDeLaCuenta(account: com.jvillada.movi.shared.model.Account): SaldoEnAgregar {
@@ -2766,6 +2771,17 @@ internal fun saldoDeLaCuenta(account: com.jvillada.movi.shared.model.Account): S
                 esDeUsoCondicionado(account) -> TonoDeCifra.Apagado
                 else -> TonoDeCifra.Neutro
             },
+        )
+    }
+    // Vuelta 77 (revisión): un préstamo en negativo no es plata a favor —es un crédito sin su saldo en
+    // Movi (`prestamoSinSaldo`)—: «Sin saldo en Movi», sin cifra. Una tarjeta a favor sí es «A favor».
+    if (com.jvillada.movi.shared.model.prestamoSinSaldo(account)) {
+        return SaldoEnAgregar(
+            monto = 0L,
+            moneda = moneda,
+            subtitulo = com.jvillada.movi.ui.credits.SIN_SALDO_EN_MOVI,
+            tono = TonoDeCifra.Neutro,
+            conCifra = false,
         )
     }
     val saldo = saldoDeDeuda(monto, moneda)

@@ -19,6 +19,7 @@ import com.jvillada.movi.shared.model.deudaTotalDe
 import com.jvillada.movi.shared.model.proximoVencimientoDelDia
 import com.jvillada.movi.shared.model.mesDeLaPrimeraCuota
 import com.jvillada.movi.shared.model.vencimientoDelMes
+import com.jvillada.movi.shared.model.mesDeLaPrimeraCuotaDelCredito
 import com.jvillada.movi.shared.model.nombreDelMesDe
 import com.jvillada.movi.shared.model.marcaDelBanco
 import com.jvillada.movi.shared.model.mas
@@ -1041,3 +1042,115 @@ fun textoDelSaldoDelPlan(plan: SaldoSegunElPlan): String {
     }
 }
 
+
+// ── Vuelta 77 · el saldo según el plan, en la ficha y en Patrimonio ─────────────────────────────
+
+/**
+ * **Lo que el plan dice de un crédito sin saldo** (vuelta 77): cuánto debería deber hoy y en qué mes cae
+ * su última cuota. Solo para un crédito que `creditoSinSaldo` marca y que tiene todas sus condiciones
+ * (capital, tasa —o «no cobra intereses»—, plazo, cuota, día e inicio): con un dato de menos no hay saldo
+ * honesto que proponer ([saldoSegunElPlan]).
+ *
+ * @property saldo lo que el plan dice que debes hoy (`0` si por el plan ya terminaste).
+ * @property ultimaCuota el mes de la última cuota del plan: la primera después del desembolso más el
+ *   plazo. `null` si por el plan ya terminaste.
+ */
+data class ElSaldoDelPlanEnLaFicha(val saldo: Long, val ultimaCuota: PeriodoFinanciero?)
+
+/** Ver [ElSaldoDelPlanEnLaFicha]. `null` si el crédito tiene saldo o le falta un dato. Pura. */
+fun saldoDelPlanEnLaFicha(credit: CreditSummary, hoy: LocalDate): ElSaldoDelPlanEnLaFicha? {
+    if (!com.jvillada.movi.shared.model.creditoSinSaldo(credit)) return null
+    val t = credit.terms ?: return null
+    val desde = runCatching { LocalDate.parse(t.startDate.trim()) }.getOrNull()
+    val plan = saldoSegunElPlan(
+        capital = t.principal,
+        tasaEa = t.rateEa,
+        sinIntereses = t.sinIntereses,
+        plazoMeses = t.termMonths,
+        cuota = t.installment,
+        seguroMensual = t.insuranceMonthly,
+        otrosCargosMensuales = t.otrosCargosMensuales,
+        diaDePago = t.dayOfMonth,
+        desde = desde,
+        hoy = hoy,
+    )
+    val saldo = plan.saldo ?: return null
+    val ultima = if (saldo <= 0L || desde == null) null else {
+        val primera = com.jvillada.movi.shared.model.mesDeLaPrimeraCuotaSinPagar(t.dayOfMonth, desde, pagadas = emptyList(), desde = desde)
+        com.jvillada.movi.shared.model.mesDeLaUltimaCuota(primera, t.termMonths)
+    }
+    return ElSaldoDelPlanEnLaFicha(saldo = saldo.coerceAtLeast(0L), ultimaCuota = ultima)
+}
+
+/**
+ * «Según tu plan debes unos $34,5M y terminas en enero de 2031» (vuelta 77), o «Según tu plan ya lo
+ * terminaste de pagar». Al lado va «Usar este», que escribe el ajuste de saldo de siempre con esa cifra.
+ */
+fun textoDelSaldoDelPlanEnLaFicha(p: ElSaldoDelPlanEnLaFicha): String =
+    if (p.saldo <= 0L) "Según tu plan ya lo terminaste de pagar"
+    else "Según tu plan debes unos ${formatMoneyCompact(p.saldo)}" + (p.ultimaCuota?.let { " y terminas en ${nombreDe(it)}" }.orEmpty())
+
+/** El tag de la propuesta del plan en la ficha y en Patrimonio (vuelta 77). */
+const val TAG_SALDO_SEGUN_EL_PLAN: String = "credito:saldo-segun-el-plan"
+
+// ── Vuelta 77 · «Pagar la cuota» en la ficha del préstamo ────────────────────────────────────────
+
+/**
+ * **La cuota que la ficha ofrece pagar** (vuelta 77): la del período en curso del dueño —o la primera del
+ * crédito, si arranca después—, o la primera sin pagar si hay una anterior vencida.
+ *
+ * @property mes el mes de la cuota («noviembre»).
+ * @property pagada la cuota que corresponde ya está saldada: la ficha dice «Cuota de noviembre · pagada».
+ */
+data class LaCuotaEnLaFicha(val mes: PeriodoFinanciero, val pagada: Boolean, val monto: Long)
+
+/**
+ * Ver [LaCuotaEnLaFicha]. `null` si el préstamo no tiene condiciones, si su cuota la paga la nómina o un
+ * tercero (tienen su propia acción) o si ya está pagado entero. [primeraCuota] es la primera sin pagar
+ * (`mesDeLaPrimeraCuota`). Sin `cuotasPagadas` (un server viejo) no se afirma que esté pagada. Pura.
+ */
+fun laCuotaEnLaFicha(
+    credit: CreditSummary,
+    primeraCuota: PeriodoFinanciero,
+    hoy: LocalDate,
+    ajustes: com.jvillada.movi.shared.model.PeriodSettings,
+): LaCuotaEnLaFicha? {
+    val t = credit.terms ?: return null
+    if (t.payrollDeduction || !t.paidBy.isNullOrBlank() || t.installment <= 0L) return null
+    val deuda = credit.account.balancesByCurrency[credit.account.currency] ?: credit.account.balance
+    if (deuda == 0L && credit.hasMovements) return null
+    val periodo = com.jvillada.movi.shared.model.periodoDeLaFecha(hoy.toString(), ajustes) ?: PeriodoFinanciero(hoy.year, hoy.monthNumber)
+    val vence = com.jvillada.movi.shared.model.vencimientoEnElPeriodo(t.dayOfMonth, periodo, ajustes)
+        ?: proximoVencimientoDelDia(t.dayOfMonth, hoy)
+    val delPeriodo = PeriodoFinanciero(vence.year, vence.monthNumber)
+    // La primera cuota que el crédito tuvo nunca (después del desembolso, o del período desde el que corren
+    // sus cuotas): un crédito que arranca el período que viene no tiene «cuota de este período».
+    val laPrimeraDelCredito = t.mesDeLaPrimeraCuotaDelCredito()
+    val queCorresponde = if (laPrimeraDelCredito != null && laPrimeraDelCredito.prefijo > delPeriodo.prefijo) laPrimeraDelCredito else delPeriodo
+    val pagada = credit.cuotasPagadas != null && primeraCuota.prefijo > queCorresponde.prefijo
+    return if (pagada) LaCuotaEnLaFicha(queCorresponde, pagada = true, monto = t.installment)
+    else LaCuotaEnLaFicha(primeraCuota, pagada = false, monto = t.installment)
+}
+
+/** «Pagar la cuota de noviembre · $770.000», o «Cuota de noviembre · pagada» (vuelta 77). */
+fun textoDeLaCuotaEnLaFicha(c: LaCuotaEnLaFicha): String =
+    if (c.pagada) "Cuota de ${nombreDelMesDe(c.mes)} · pagada"
+    else "Pagar la cuota de ${nombreDelMesDe(c.mes)} · ${formatCOP(c.monto)}"
+
+/** Los tags del botón «Pagar la cuota» y de «Cuota de … · pagada» (vuelta 77). */
+const val TAG_PAGAR_LA_CUOTA: String = "credito:pagar-la-cuota"
+const val TAG_CUOTA_PAGADA: String = "credito:cuota-pagada"
+
+/**
+ * **Agregar → Pagar con la cuota de [credit]** (vuelta 77): el crédito en «¿Qué pagas?», la cuota como
+ * monto, el mes de la cuota en el encabezado y, si se debita solo de una cuenta, esa en «Sale de». Lo que
+ * se guarda es el pago de dos patas de siempre (`pagoDeCuotaLegs`).
+ */
+fun pantallaDePagarLaCuota(credit: CreditSummary, cuota: LaCuotaEnLaFicha): com.jvillada.movi.ui.Screen.QuickAdd =
+    com.jvillada.movi.ui.Screen.QuickAdd(
+        presetAccountId = credit.terms?.debitoAutomaticoDesde,
+        presetMonto = cuota.monto,
+        presetDeudaId = credit.account.id,
+        presetMesDeLaCuota = nombreDelMesDe(cuota.mes),
+        presetPestana = com.jvillada.movi.ui.quickadd.PestanaDeAgregar.PAGO_DE_TARJETA,
+    )

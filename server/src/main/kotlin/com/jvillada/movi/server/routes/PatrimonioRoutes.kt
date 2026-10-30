@@ -20,6 +20,7 @@ import com.jvillada.movi.shared.model.MESES_DE_HISTORIA
 import com.jvillada.movi.shared.model.PuntoDelPatrimonio
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.patrimonioDe
+import com.jvillada.movi.shared.model.prestamosSinSaldoDe
 import com.jvillada.movi.shared.model.signedDelta
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
@@ -48,6 +49,7 @@ import java.time.LocalDate
  * **Una sola regla del patrimonio**: cada punto es [patrimonioDe] sobre las cuentas con el saldo de
  * ese instante, armadas con [conSaldos] —la misma función que arma `GET /api/accounts` y el resumen
  * del Inicio—. El último punto, entonces, es exactamente el patrimonio neto que Patrimonio dice hoy.
+ * Un préstamo sin saldo en ese instante cuenta cero (vuelta 77, `prestamoSinSaldo`).
  *
  * **Una consulta agregada**: los movimientos del usuario (sin anulados) se suman en SQL por cuenta,
  * tipo, moneda y **tramo** —un `CASE` que dice entre qué cierres de mes cayó cada uno—, así que
@@ -101,13 +103,14 @@ internal fun Transaction.historiaDelPatrimonioSinSuspender(
         .where { Accounts.userId eq uid }
         .mapNotNull { row -> runCatching { row.toAccount() }.getOrNull() }
 
-    fun patrimonioHasta(tramo: Int, sinAjustes: Boolean = false): Long {
-        // El saldo de cada cuenta con todo lo que cayó antes del cierre: los tramos 0..tramo-1.
+    // Las cuentas con el saldo de ese cierre: los tramos 0..tramo-1. Sin ajustes, lo mismo sin los
+    // ajustes de saldo ni las aperturas.
+    fun cuentasHasta(tramo: Int, sinAjustes: Boolean): List<Account> {
         fun delta(lista: List<SumaDelTramo>, cuenta: Account): Map<String, Long> =
             lista.filter { it.accountId == cuenta.id && it.tramo < tramo }
                 .groupBy { it.moneda }
                 .mapValues { (_, l) -> l.sumOf { signedDelta(cuenta.type, it.tipo, it.monto) } }
-        val conSaldo: List<Account> = cuentas.map { cuenta ->
+        return cuentas.map { cuenta ->
             val todo = delta(sumas, cuenta)
             val saldos = if (!sinAjustes) {
                 todo
@@ -117,15 +120,22 @@ internal fun Transaction.historiaDelPatrimonioSinSuspender(
             }
             conSaldos(cuenta, saldos, usdToCop)
         }
-        // Sin apartados: no cambian el neto (ver `Patrimonio.apartado`).
-        return patrimonioDe(conSaldo).neto
     }
 
     // El neto y cuánto de él son ajustes: el neto con todo menos el neto sin ellos (no se supone que
-    // `patrimonioDe` sea una suma: se calcula dos veces).
+    // `patrimonioDe` sea una suma: se calcula dos veces). Sin apartados: no cambian el neto (ver
+    // `Patrimonio.apartado`).
+    //
+    // Vuelta 77: los préstamos sin saldo de ese cierre (`prestamoSinSaldo`, con todo) cuentan cero en
+    // los DOS netos. Si el neto sin ajustes decidiera por su cuenta, un préstamo sano —cargado con un
+    // ajuste y que sin él queda en negativo por sus cuotas— contaría cero ahí y movería la cifra de los
+    // ajustes de datos sanos.
     fun punto(mes: String, fecha: String, tramo: Int, esHoy: Boolean = false): PuntoDelPatrimonio {
-        val neto = patrimonioHasta(tramo)
-        val ajustes = if (sumasDeAjustes.isEmpty()) 0L else neto - patrimonioHasta(tramo, sinAjustes = true)
+        val conTodo = cuentasHasta(tramo, sinAjustes = false)
+        val enCero = prestamosSinSaldoDe(conTodo)
+        val neto = patrimonioDe(conTodo, prestamosEnCero = enCero).neto
+        val ajustes = if (sumasDeAjustes.isEmpty()) 0L
+            else neto - patrimonioDe(cuentasHasta(tramo, sinAjustes = true), prestamosEnCero = enCero).neto
         return PuntoDelPatrimonio(mes = mes, fecha = fecha, neto = neto, esHoy = esHoy, ajustes = ajustes)
     }
 

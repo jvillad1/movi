@@ -31,6 +31,23 @@ import kotlinx.serialization.Serializable
  * Y `neto = tuPlata + apartado + condicionado + bienes − deudas`. Sin bienes da exactamente lo que daba
  * `assetsDebtsNet` (activos no-deuda − deudas): tuPlata + condicionado SON los activos de antes.
  *
+ * ## Un préstamo sin saldo cuenta cero (vuelta 77)
+ *
+ * Cada deuda suma con su signo, **salvo un préstamo (`LOAN`) en negativo** ([prestamoSinSaldo]): ese
+ * cuenta **cero** mientras no tenga saldo. Decisión de la vuelta 77, la única regla de plata nueva de
+ * esa vuelta. Un préstamo en negativo no es plata a favor: es un crédito cargado con sus condiciones y
+ * sin su deuda (la primera cuota lo deja en −$980.000; ver `creditoSinSaldo`), y sumarlo con su signo
+ * le subía $980.000 al neto, hacía que «Deudas» dijera $603.000 al lado de «Créditos y tarjetas»
+ * $1.583.000 y metía esos $980.000 en el «subió» de la curva. Lo que cambia es solo eso:
+ *
+ * - **Una tarjeta** con saldo a favor (pagó de más) **sigue con su signo**: es plata real que el banco
+ *   le debe.
+ * - **Un préstamo con saldo** (lo sano) suma igual que siempre: nada de lo que el dueño ya ve se mueve.
+ * - Un préstamo en cero ya sumaba cero.
+ *
+ * La historia del patrimonio usa esta misma función punto por punto, así que un préstamo sin saldo
+ * tampoco entra al «subió/bajó» de la curva.
+ *
  * ## Lo apartado
  *
  * Un [Apartado] no es un quinto balde: es una parte de «Tu plata» que ya tiene dueño. Se resta de
@@ -57,7 +74,8 @@ data class Patrimonio(
     val bienes: Long = 0L,
     /**
      * Lo que debes: tarjetas y préstamos, en pesos (estimado cuando hay saldo en otra moneda).
-     * Puede ser negativo: una tarjeta sobrepagada queda a favor.
+     * Puede ser negativo: una tarjeta sobrepagada queda a favor. Un préstamo sin saldo cuenta cero
+     * (vuelta 77, [prestamoSinSaldo]).
      */
     val deudas: Long = 0L,
     /**
@@ -92,10 +110,32 @@ fun valorEnPesosDe(account: Account): Long =
     account.bien?.valor ?: (account.estimatedTotalCop ?: account.balance)
 
 /**
+ * **Vuelta 77 · ¿este préstamo cuenta cero en el patrimonio?** Un `LOAN` (que no es un bien) con la
+ * deuda en pesos en negativo: Movi no tiene su saldo. Toda cuenta que `creditoSinSaldo` marca y pesa
+ * algo cae acá (la otra mitad de esa regla, un préstamo en cero sin movimientos, ya suma cero). Una
+ * tarjeta nunca: su saldo a favor es plata real. Pura.
+ */
+fun prestamoSinSaldo(cuenta: Account): Boolean =
+    cuenta.type == AccountType.LOAN && !cuenta.esBien && valorEnPesosDe(cuenta) < 0L
+
+/** Los ids de los préstamos de [accounts] que cuentan cero en el patrimonio ([prestamoSinSaldo]). */
+fun prestamosSinSaldoDe(accounts: List<Account>): Set<String> =
+    accounts.filter(::prestamoSinSaldo).mapTo(mutableSetOf()) { it.id }
+
+/**
  * Parte [accounts] en los cuatro baldes de [Patrimonio]. **La regla del patrimonio**, y el único
  * sitio donde está escrita: ver el KDoc de arriba.
+ *
+ * [prestamosEnCero] son los préstamos que cuentan cero (vuelta 77): por defecto, los que hoy están sin
+ * saldo en [accounts]. Solo la historia del patrimonio pasa otros: el neto «sin ajustes» de un punto
+ * tiene que dejar en cero los mismos préstamos que el neto con todo, para que la resta entre los dos
+ * diga cuánto fueron los ajustes y nada más.
  */
-fun patrimonioDe(accounts: List<Account>, apartados: List<Apartado> = emptyList()): Patrimonio {
+fun patrimonioDe(
+    accounts: List<Account>,
+    apartados: List<Apartado> = emptyList(),
+    prestamosEnCero: Set<String> = prestamosSinSaldoDe(accounts),
+): Patrimonio {
     val bienes = accounts.filter { it.esBien }
     val resto = accounts.filterNot { it.esBien }
     val deudas = resto.filter { esCuentaDeDeuda(it.type) }
@@ -122,7 +162,8 @@ fun patrimonioDe(accounts: List<Account>, apartados: List<Apartado> = emptyList(
             .distinct()
             .singleOrNull(),
         bienes = bienes.sumOf { valorEnPesosDe(it) },
-        deudas = deudas.sumOf { valorEnPesosDe(it) },
+        // Vuelta 77: un préstamo sin saldo cuenta cero; todo lo demás, con su signo.
+        deudas = deudas.sumOf { if (it.id in prestamosEnCero) 0L else valorEnPesosDe(it) },
         apartado = efectivoPorCuenta.values.sum(),
         apartadoPara = conEfecto.map { it.proposito.trim() }.distinct().singleOrNull(),
     )

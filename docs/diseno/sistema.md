@@ -4112,3 +4112,97 @@ correo con y sin dirección, «Movi propone hoy · 4», Traspaso y Pagar con la 
 sin cortes con y sin lista). Se actualizaron `MasScreenTest`, `LosAvisosApagadosSeVenTest`,
 `AvisosEnElIphoneTest`, `TarjetaDeAvisosTest`, `RepartirDesdeElMasTest` e `InicioDelRedisenoTest`. **Las líneas
 base** no cambian, y las guardas en 0 siguen en 0.
+
+## 75. Vuelta 77: una deuda, una cifra
+
+De la revisión fresca 6 del 30-oct (`r6-patrimonio-390-a.png`, `r6-1280-patrimonio.png`, `r6-inicio-tras-credito.png`,
+`r6-pagos-390-a.png`, `r6-credito-ficha-390-a.png`, `r6-abono-390-d.png`, `r6-salida-390-d.png`/`-f.png`,
+`r6-apartado-patrimonio.png`, `r6-ai-390-b.png`, `r6-ai-390-d1.png`, `r6-1280-creditos.png`), puntos 1, 2, 3, 9, 10,
+11, 12, 14 y la parte de Créditos del 15. **Una sola regla de plata nueva** (la del punto 1). Ningún componente nuevo
+en `ds/` ni token nuevo.
+
+1. **Un préstamo sin saldo cuenta cero en el patrimonio** (la regla nueva, decisión de esta vuelta). `patrimonioDe`
+   suma cada deuda con su signo **salvo un `LOAN` en negativo** (`prestamoSinSaldo`): ese cuenta 0 mientras no tenga
+   saldo. Toda cuenta que `creditoSinSaldo` marca y pesa algo cae ahí (la otra mitad, en cero sin movimientos, ya
+   sumaba cero). Una **tarjeta** a favor sigue con su signo (es plata real); un préstamo **con** saldo suma igual que
+   siempre. Así «Deudas» de Patrimonio dice lo mismo que «Créditos y tarjetas» ($1.583.000, no $603.000), el neto ya
+   no sube $980.000 por el Vehículo 4083, y la curva tampoco: la historia (`/api/patrimonio/historia`) usa la misma
+   función punto por punto, y el neto «sin ajustes» de cada punto deja en cero **los mismos** préstamos que el neto con
+   todo (`patrimonioDe(…, prestamosEnCero)`): si decidiera por su cuenta, un préstamo sano cargado con un ajuste
+   (que sin él queda en negativo por sus cuotas) movería la cifra de los ajustes. **Datos sanos, cifras de siempre**:
+   lo prueba `ElPrestamoSinSaldoCuentaCeroTest` contra la cuenta de antes escrita a mano, y la historia con un
+   préstamo sano, `HistoriaDelPatrimonioTest`. Esto reemplaza la decisión de las vueltas 59 y 73 («`patrimonioDe` no
+   cambia») solo para los préstamos.
+2. **Un crédito creado hoy no nace con la cuota vencida.** El alta de un crédito que ya venía (con la deuda de hoy, sin
+   desembolso) pregunta **«¿Ya pagaste la cuota de este período?»** —una `Fila` con `Casilla`, sí por defecto, «Movi
+   la espera desde el próximo período» / «en este período»— solo si la cuota de este período (con el período del
+   dueño) ya venció (`laCuotaDeEstePeriodoYaVencio`). Con «Sí», `CreateCreditRequest.yaPagoLaCuotaDeEstePeriodo` y el
+   server guarda `CreditTerms.cuotasDesde` = el arranque del período siguiente (el día después del último de este, `diasDelPeriodo`; en `:core`, `arranqueDeLasCuotasSiYaPagaste`;
+   columna `credit_terms.cuotas_desde`, sin `@EncodeDefault`, el `PUT` sin la clave la conserva). `virtualRuleFor`
+   la usa (`cuotasDesdeVigente`: solo si es posterior al desembolso) como `activeFrom` **con el significado de período** (`arranqueEsDesembolso = false`, el piso es su primer
+   día), no el del desembolso: la cuota de este período no existe en `/occurrences`, `/upcoming`, la lista de Pagos
+   (Inicio: «Pago vencido», «Te quedan»), Créditos (`mesDeLaPrimeraCuota` respeta el piso) ni Movi AI.
+3. **El saldo según el plan.** Un crédito sin saldo con sus condiciones completas (`saldoDelPlanEnLaFicha`: capital,
+   tasa o «no cobra intereses», plazo, cuota, día e inicio; la cuenta es `saldoSegunElPlan`) dice en la ficha, debajo
+   de «Cargarlo», y en Patrimonio, debajo de «Falta el saldo de Vehículo 4083 · Cargarlo», **«Según tu plan debes unos
+   $34,5M y terminas en diciembre de 2030 · Usar este»** (`TAG_SALDO_SEGUN_EL_PLAN`). «Usar este» escribe el ajuste de
+   saldo de siempre (`adjustCreditBalance`, fechado hoy); **nunca se escribe solo**. **Una sola acción de saldo**:
+   sin saldo, la ficha ofrece «Cargarlo» arriba y «Qué puedes hacer» ya no trae «Ajustar saldo»
+   (`laFichaOfreceCargarElSaldo`, también para una tarjeta en negativo); con saldo, «Ajustar saldo».
+4. **«Pagar la cuota» en la ficha del préstamo** (`laCuotaEnLaFicha`): la acción principal, un `Boton` a lo ancho
+   arriba de «El préstamo» —«Pagar la cuota de noviembre · $770.000»—, con la cuota que corresponde: la del período en
+   curso, o la primera del crédito si arranca después, o una anterior vencida sin pagar. Si la que corresponde ya está
+   saldada (`cuotasPagadas`), una `Fila` con `TaskAlt` en `Exito`: «Cuota de noviembre · pagada» (sin «✓»: Figtree no
+   lo tiene). Sin `cuotasPagadas` (un server viejo) no afirma que esté pagada; la nómina y «la paga otro» siguen con su
+   acción. Abre Agregar → Pagar con el crédito, la cuota y su mes (`pantallaDePagarLaCuota`): el pago de dos patas de
+   siempre.
+5. **«Anotar este abono» abre Pagar en modo abono** (`Screen.QuickAdd.presetAbonoExtra`, `TransferBody(presetAbonoExtra)`):
+   «Abono extra a …», «Registrar abono»; no la pestaña Traspaso con «Guardar traspaso». Vale para ese crédito: elegir
+   otra deuda vuelve a la cuota. Lo usan el simulador de la ficha, el plan de salida y la fila del abono mensual de
+   Pagos (`hojaDelAbono`, a un crédito). Lo que se guarda es el traspaso de siempre.
+6. **«Cómo salir de tus deudas».** Debajo del selector, cuánto cuesta elegir un orden (`compararEstrategias`, la misma
+   simulación de `planDeSalida` con el mismo abono): «Avalancha te ahorra $X más que bola de nieve», al revés, o «Con
+   tus deudas, los dos órdenes dan igual»; sin abono, nada. Avalancha dice «Primero la de mayor tasa: así pagas menos
+   interés en total» (se leía al revés). Los supuestos van detrás de **«¿Qué supone?»** (`Boton` `Fantasma`), en el
+   plan de salida y en el simulador de la ficha: el resultado primero. El pie («no es una recomendación») queda.
+7. **La curva con un solo verbo.** La leyenda abre con el cambio **sin** ajustes —«Desde ago 2026, subió $837.900»—
+   y la nota no lleva verbo: «Sin contar −$18,5M de ajustes de saldo: deudas y saldos que ya tenías y anotaste
+   después». Antes: «bajó $17,7M» arriba y «Sin ellos, subió $837.900» debajo.
+8. **Movi AI.** En una conversación nueva, las tres preguntas que se contestan sin IA (gratis) van **siempre primero**
+   y después hasta dos de las que arman las reglas (`preguntasDelArranque`); sin IA, solo las tres. «¿En qué se me
+   está yendo más la plata?» usa `categoriasFijas` (ahora en `:core`, la misma del widget de la vuelta 76): una cuota
+   o un fijo sin gasto a esta altura del período pasado no se dice «$X más que el período pasado». Como en el widget,
+   un fijo que de verdad subió sigue diciéndolo.
+9. **Créditos a 1.280.** Los renglones de «Deuda total» y «1 crédito sin saldo · Cuadrar» van a lo ancho de la
+   tarjeta: las cifras y «Cuadrar» terminan en el borde derecho, en la columna de la acción de una fila. Se fue
+   `ANCHO_MAXIMO_DEL_RESUMEN_DE_DEUDA` (vuelta 61): topados a una columna, las cifras terminaban a mitad de la tarjeta.
+
+Lo vigilan `ElPrestamoSinSaldoCuentaCeroTest` y `Vuelta77CoreTest` (`:core`: la regla con datos sanos y una tarjeta a
+favor, la cuota de este período, `cuotasDesde`, avalancha contra bola de nieve, lo fijo), `HistoriaDelPatrimonioTest`,
+`ElCreditoNuevoNoNaceVencidoTest` (el alta con «ya pagué» en `/occurrences`, `/upcoming`, la lista y Movi AI) y
+`EnQueSeVaNoCuentaLoFijoComoMasTest` (`:server`), `Vuelta77Test` (commonTest) y `Vuelta77EnPantallaTest` (Robolectric:
+«Usar este», una sola acción de saldo, «Pagar la cuota» y «pagada», la comparación, la curva con un verbo, las tres
+gratis primero). Se actualizaron `LosCreditosDicenLaVerdadTest`, `LaCurvaSeparaLosAjustesTest`,
+`CurvaDelPatrimonioEnPantallaTest`, `ElHeroeDeCreditosVaJuntoTest` (Créditos a 1.280), `ElExtractoYElAbonoEnPantallaTest`
+y `ElAbonoQueSeTildaEnPantallaTest` (el abono en Pagar), `LaGuiaDelAbonoCabeTest` y `SimuladorDeAbonoEnPantallaTest`
+(«¿Qué supone?»). **Las líneas base** no cambian, y las guardas en 0 siguen en 0.
+
+### La revisión de la vuelta 77, y lo que cambió
+
+1. **[Plata] Un pago antes de la primera cuota salda la primera cuota.** Con «ya pagué» (`cuotasDesde = 2026-11-01`)
+   y el pago del 30-oct desde «Pagar la cuota de noviembre», `periodoQueSalda` sellaba «2026-10» (una cuota que no
+   existe) y noviembre seguía pendiente. Pasaba igual con un crédito desembolsado pagado antes de su primera cuota.
+   Ahora nunca devuelve un período anterior a la primera cuota vigente (`primeraCuotaVigente`: la primera en el piso
+   de `arranqueDeLaRegla` o después); el encabezado de Agregar → Pagar usa la misma regla
+   (`CreditTerms.mesDeLaPrimeraCuotaDelCredito`). `ElPagoAdelantadoSaldaLaPrimeraCuotaTest`: el pago del 30-oct da
+   `2026-11`, `/upcoming` el 15-dic, y la ficha «Cuota de noviembre · pagada».
+2. **[Plata] El server solo acepta «ya pagué» si la cuota de este período ya venció**
+   (`laCuotaDeEstePeriodoYaVencioEl`, con los ajustes del dueño; el piso, `arranqueDeLasCuotasSiYaPagasteEl`). La hoja no
+   muestra la pregunta hasta leer el perfil.
+3. **Una sola fila de saldo.** Con el plan completo, «Según tu plan debes unos $X y terminas en … · Usar este»; «Usar
+   este» abre la hoja de ajustar el saldo **ya llena** con esa cifra («Es la cifra de tu plan. Si el banco dice otra,
+   escríbela aquí.») y se guarda con «Registrar ajuste». Sin plan, «Cargarlo». En la ficha y en Patrimonio.
+4. En Agregar → «¿Qué pagas?», un préstamo sin saldo dice «Sin saldo en Movi», sin cifra (era «A favor $980.000»).
+5. La nota de la curva lleva el signo: «Sin contar −$36,8M de ajustes de saldo…».
+6. Al guardar un abono, «Anotado · Abono a …» (`queSeAnoto`), no «Pago a …».
+

@@ -105,7 +105,11 @@ private const val MAX_CUOTAS_ADELANTADAS = 24
 /** [mesDeLaPrimeraCuotaSinPagar] de un crédito, o `null` sin términos. */
 fun mesDeLaPrimeraCuota(credit: CreditSummary, hoy: LocalDate): PeriodoFinanciero? {
     val terms = credit.terms ?: return null
-    val desde = runCatching { LocalDate.parse(terms.startDate.trim()) }.getOrNull()
+    // Vuelta 77: con «ya pagué la cuota de este período» las cuotas corren desde el arranque del período
+    // siguiente ([CreditTerms.cuotasDesde], un piso inclusivo); el de acá es «estrictamente después de»,
+    // como el desembolso: el día anterior.
+    val desde = terms.arranqueDeLasCuotas()?.minus(1, DateTimeUnit.DAY)
+        ?: runCatching { LocalDate.parse(terms.startDate.trim()) }.getOrNull()
     val fijado = credit.saldoFijadoEn?.let {
         Instant.fromEpochMilliseconds(it).toLocalDateTime(AppTimeZone.zone).date
     }

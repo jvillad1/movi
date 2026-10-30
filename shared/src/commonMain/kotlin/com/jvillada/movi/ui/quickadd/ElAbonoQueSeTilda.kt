@@ -41,8 +41,10 @@ fun hojaDelAbono(pago: PagoDelPeriodo, esTarjeta: Boolean): Screen.QuickAdd = Sc
     presetAccountId = pago.cuentaId,
     presetMonto = pago.monto.takeIf { it > 0L },
     presetDeudaId = pago.haciaDeuda,
-    presetPestana = if (esTarjeta) null else PestanaDeAgregar.TRASPASO,
+    // Vuelta 77: a un crédito, Pagar en modo abono («Registrar abono»), como desde su ficha.
+    presetPestana = if (esTarjeta) null else PestanaDeAgregar.PAGO_DE_TARJETA,
     presetAbono = abonoDeLaFila(pago),
+    presetAbonoExtra = !esTarjeta,
 )
 
 /**
