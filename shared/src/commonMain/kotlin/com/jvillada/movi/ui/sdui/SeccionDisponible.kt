@@ -65,7 +65,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import com.jvillada.movi.ui.dashboard.rememberProgresoDeEntrada
 import com.jvillada.movi.ui.dashboard.rotuloDeLaSemana
-import com.jvillada.movi.ui.dashboard.CajaEnHoy
 import com.jvillada.movi.ui.Screen
 
 /**
@@ -107,10 +106,8 @@ internal fun DisponibleDelPeriodoSection(
         // (`teQuedanDeHoy` sobre el mismo `disponibleDelInicio`), y la sección solo se pinta cuando
         // el héroe la tiene. En Hoy quedan la cifra y las tres columnas; en Plan, la frase sigue.
         TarjetaDelDisponible(titulo = section.title ?: "Disponible", disponible = disponible, comoEnPagos = false)
-        // Después de cuánto puedes gastar, cómo llegas al cierre: el día más justo de la caja
-        // proyectada de Plan, con la MISMA cuenta (ver `CajaEnHoy`).
-        Spacer(Modifier.height(Movi.espacios.medio))
-        CajaEnHoy(data = data, hoy = hoy, onNavigate = onNavigate)
+        // Vuelta 75: «Tu día más justo» ya no va acá: es el renglón «¿Me alcanza?» del héroe, que se ve
+        // aunque esta sección esté oculta (ver `RenglonMeAlcanzaDelHeroe`). Dos veces sería repetirlo.
     }
 }
 

@@ -473,7 +473,7 @@ fun App() {
                 Screen.Credits           -> CreditosScreen(navigate)
                 Screen.SalidaDeDeudas    -> SalidaDeDeudasScreen(navigate)
                 Screen.Budgets           -> PresupuestosScreen(navigate)
-                is Screen.Plan           -> PlanScreen(navigate, segmento = pantalla.segmento)
+                is Screen.Plan           -> PlanScreen(navigate, segmento = pantalla.segmento, enLaCaja = pantalla.enLaCaja)
                 Screen.Categorias        -> CategoriasScreen(navigate)
                 is Screen.Destinos       -> DestinosScreen(navigate, abrir = pantalla.abrir, conSugeridosAbiertos = pantalla.sugeridos)
                 Screen.Documentos        -> DocumentosScreen(navigate)

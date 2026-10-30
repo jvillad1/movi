@@ -166,7 +166,14 @@ sealed class Screen {
      * viaja en la pila, así que entrar a Presupuestos desde un acceso y a Pagos desde la pestaña
      * son dos pantallas para [NavStack.shouldPush] y para el `SaveableStateProvider` de App.kt.
      */
-    data class Plan(val segmento: Int = SEGMENTO_PAGOS) : Screen()
+    data class Plan(
+        val segmento: Int = SEGMENTO_PAGOS,
+        /**
+         * Vuelta 75 · llegar con la caja («Tu plata, día a día») a la vista: lo pide el renglón «¿Me
+         * alcanza?» del héroe de Inicio. Solo la primera vez que se compone la pantalla.
+         */
+        val enLaCaja: Boolean = false,
+    ) : Screen()
     /**
      * Ola 10 — «Más → Categorías»: ver, renombrar, unificar, esconder y fijar el tipo.
      *

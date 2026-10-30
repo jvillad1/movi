@@ -44,7 +44,7 @@ import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.accounts.VoidEventSheet
 import com.jvillada.movi.ui.budgets.PresupuestosScreen
 import com.jvillada.movi.ui.components.PLATA_OCULTA
-import com.jvillada.movi.ui.dashboard.CajaEnHoy
+import com.jvillada.movi.ui.dashboard.RenglonMeAlcanzaDelHeroe
 import com.jvillada.movi.ui.dashboard.DashboardData
 import com.jvillada.movi.ui.plan.TableroDeRecurrentesDePrueba
 import com.jvillada.movi.ui.sdui.ParaRevisarSection
@@ -304,11 +304,11 @@ class LasCifrasDelSistemaSeOcultanTest {
         montar {
             Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
                 PatrimonioSection(ScreenSection(type = "PATRIMONIO", title = "Tu patrimonio"), datosDeHoy) {}
-                CajaEnHoy(data = datosDeHoy, hoy = hoy, onNavigate = {})
+                RenglonMeAlcanzaDelHeroe(data = datosDeHoy, hoy = hoy, onNavigate = {})
                 ParaRevisarSection(ScreenSection(type = "ALERTS", title = "Para revisar"), datosDeHoy) {}
             }
         }
-        esperar("Tu día más justo")
+        esperar("tu día más justo")
         composeRule.onAllNodesWithText("Ver los movimientos", useUnmergedTree = true)[0].performClick()
         esperar("28 de septiembre · RAPPI COLOMBIA · Bancolombia")
     }
