@@ -3724,3 +3724,30 @@ Robolectric `PagosQueSeManejanSolosTest` («+ Agregar», «Pausados (N)» y «Re
 mínimo, «Sí, fue este» con borde, la propuesta de la cuenta, el selector único y el encabezado),
 `AnotarPagoSaldaLaFacturaTest` y `LaCuentaQueProponeAgregarTest` (la cuenta propuesta). **Las líneas base**
 no cambian, y las guardas en 0 siguen en 0.
+
+### La revisión de la vuelta 72, y lo que cambió
+
+1. **Pagar y pausar el mismo día no pierde el pago.** La rama de la pausa acepta un pago de **hasta** el día
+   de la pausa, y `/pausar` sella antes lo que Movi emparejó sola en el período en curso.
+2. **Lo que falta del mínimo va con su extracto.** El mínimo de $180.000 es del extracto cortado el 20-oct,
+   que vence el 5-nov; el pago de $100.000 tilda la fila del 5-oct. Ahora la regla de la tarjeta trae
+   `minimoDelExtracto` (fecha de pago, mínimo y lo pagado desde el corte, de `ExtractoDeLaTarjeta`, la misma
+   fuente que la hoja «Pagar»), y solo **la fila que vence en esa fecha** lleva lo que falta: su urgencia es
+   la de esa fecha, la caja lo resta una vez ahí, y con el mínimo cubierto la fila está hecha («Mínimo
+   cubierto») y no queda nada en la caja ni en «Lo que viene». La fila de octubre, pagada, queda «Pagado ✓».
+3. **«Llevas $X pagados» y la fila pagada dicen el total del período** (`pagadoParaMostrar`), no el último pago.
+4. **La pausa rige desde su día; lo vencido sin pagar sigue pendiente.** «Pausar» con algo vencido pregunta
+   «Carro de octubre ($9.000) no aparece pagado» (`PreguntaDeLoVencidoAlPausar`): «Dejarlo pendiente» (por
+   defecto), «Ya lo pagué» (pausa y abre «Anotar pago») y «No se debe» (no hay un descarte de ocurrencia en
+   Movi: pausa desde ese vencimiento). Desde Pagos va en una hoja con `EncabezadoDeHoja` «Pausar «Carro»».
+5. **Menores.** «Pausados · N» como el resto del sistema; «¿Usar siempre…?» no aparece en una pausada;
+   «Pausar» también en el «⋯» de una fila sin pagar (`TAG_MENU_DE_LA_FILA_PENDIENTE`, el mismo menú de la
+   pagada); y la caja de Pagos sale de las cuentas que el tablero lee con los vencimientos, así que tras
+   «Anotar pago» Tu plata no queda vieja.
+
+Lo vigilan `Vuelta72LogicaTest` (la fila del extracto, la caja que resta $80.000 una vez el 5-nov y nada al
+pagarlo, la fila de octubre sin «vencido», el total pagado, lo vencido que sigue y «No se debe»),
+`ReglaPausadaTest` (pagar hoy y pausar hoy, con y sin sello; lo vencido que sigue pendiente),
+`ElMinimoDelExtractoEnLaReglaTest` y, en Robolectric, `PagosQueSeManejanSolosTest` («Pausados · 1», el
+«⋯» con «Pausar», la pregunta con «No se debe» y «Dejarlo pendiente», sin propuesta de cuenta en una pausada,
+«Llevas $180.000 pagados»).
