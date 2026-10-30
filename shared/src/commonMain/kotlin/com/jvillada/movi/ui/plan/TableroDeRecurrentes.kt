@@ -79,6 +79,7 @@ import com.jvillada.movi.ui.components.ds.Separador
 import com.jvillada.movi.ui.components.ds.Superficie
 import com.jvillada.movi.ui.components.ds.TamanoDeBoton
 import com.jvillada.movi.ui.components.ds.TonoDeIcono
+import com.jvillada.movi.ui.components.ds.TarjetaDePropuesta
 import com.jvillada.movi.ui.components.ds.IconoEnCirculo
 import com.jvillada.movi.ui.components.ds.TonoDeSubtitulo
 import com.jvillada.movi.data.PropuestasDescartadasStore
@@ -1260,43 +1261,35 @@ fun LazyListScope.tableroDeRecurrentes(
 }
 
 /**
- * **«Tus recordatorios no te van a llegar»** (vuelta de diseño 28): pediste que te avisaran de un pago
- * y no hay canal por donde. Una [Fila] compacta en tono de aviso —el ícono y el subtítulo en `aviso`—,
- * debajo del resumen de «Pagos del período»: tocarla prende las notificaciones (o, si el navegador las
- * bloqueó, lleva a Ajustes, donde están los avisos), y «Ahora no» la descarta hasta el período que
- * viene. Era una `TarjetaDePropuesta` encima de toda la lista. Ver [shouldShowReminderWarning] para
- * cuándo sale.
+ * **«Tus recordatorios no llegan»**: pediste que te avisaran de un pago y no hay canal por donde. Vuelta
+ * 83: una [TarjetaDePropuesta] **de un renglón** —la campana tachada en el tono de aviso, el título, y
+ * debajo «Activar» (o «Ver avisos», si el navegador las bloqueó: lleva a Tú) con el enlace «Ahora no»,
+ * que la descarta hasta el período que viene—. Era una fila con el subtítulo y «Ahora no» solo en un
+ * tercer renglón (`r8-pagos-390-a.png`). La acción va [VarianteDeBoton.Secundario] y explícita: el
+ * amarillo de Pagos es «Anotar pago» (un solo amarillo por vista, vuelta 79). Ver
+ * [shouldShowReminderWarning] para cuándo sale.
  */
 @Composable
 internal fun FilaDeRecordatoriosSinCanal(bloqueadas: Boolean, onActivar: () -> Unit, onAhoraNo: () -> Unit) {
-    // Vuelta 29: «Ahora no» baja debajo del texto, con su sangría. Al final de la fila le quitaba
-    // ~100 dp al título y con Figtree el título se partía y el subtítulo se cortaba en «…notifi…».
-    // El subtítulo va en hasta dos renglones (el bloqueado es largo). Lo vigila `LoQueSeVeEnteroTest`.
-    Column(modifier = Modifier.testTag(TAG_FILA_DE_RECORDATORIOS)) {
-        Fila(
+    Column(modifier = Modifier.fillMaxWidth().testTag(TAG_FILA_DE_RECORDATORIOS)) {
+        TarjetaDePropuesta(
+            icono = Icons.Rounded.NotificationsOff,
             titulo = TITULO_RECORDATORIOS_SIN_CANAL,
-            subtitulo = if (bloqueadas) SUBTITULO_RECORDATORIOS_BLOQUEADOS else SUBTITULO_RECORDATORIOS_APAGADOS,
-            tonoDelSubtitulo = TonoDeSubtitulo.Aviso,
-            lineasDelSubtitulo = 2,
-            inicio = { IconoEnCirculo(Icons.Rounded.NotificationsOff, tono = TonoDeIcono.Aviso) },
-            onClick = onActivar,
-            onClickLabel = if (bloqueadas) "Ver tus notificaciones" else "Activar notificaciones",
-        )
-        Boton(
-            AHORA_NO,
-            onClick = onAhoraNo,
-            variante = VarianteDeBoton.Fantasma,
-            tamano = TamanoDeBoton.S,
-            modifier = Modifier.padding(start = SANGRIA_DEL_TEXTO_DE_LA_FILA - Espacio.s),
+            accion = if (bloqueadas) VER_LOS_AVISOS else ACTIVAR_LOS_RECORDATORIOS,
+            onAccion = onActivar,
+            tono = TonoDeIcono.Aviso,
+            accionSecundaria = AHORA_NO,
+            onAccionSecundaria = onAhoraNo,
+            varianteDeLaAccion = VarianteDeBoton.Secundario,
         )
     }
 }
 
-/** Lo que dice la fila cuando las notificaciones están apagadas: qué pasa al tocarla. */
-const val SUBTITULO_RECORDATORIOS_APAGADOS: String = "Toca para activar las notificaciones"
+/** La acción de la tarjeta de los recordatorios con las notificaciones apagadas (vuelta 83). */
+const val ACTIVAR_LOS_RECORDATORIOS: String = "Activar"
 
-/** Lo que dice la fila cuando el navegador las bloqueó: desde acá no se pueden prender. */
-const val SUBTITULO_RECORDATORIOS_BLOQUEADOS: String = "Las bloqueaste en el navegador: toca para ver tus notificaciones"
+/** La acción con las notificaciones bloqueadas en el navegador: desde acá no se prenden (vuelta 83). */
+const val VER_LOS_AVISOS: String = "Ver avisos"
 
 /** El descarte por el período. */
 const val AHORA_NO: String = "Ahora no"
@@ -1524,6 +1517,12 @@ fun LazyListScope.tableroDeRecurrentesEsqueleto() {
         }
     }
 }
+
+/** El título de las suscripciones de Pagos. */
+const val TITULO_SUSCRIPCIONES_ACTIVAS: String = "Suscripciones activas"
+
+/** La fila única de las suscripciones plegadas (vuelta 83). */
+const val TAG_SUSCRIPCIONES_PLEGADAS: String = "pagos:suscripciones-plegadas"
 
 /**
  * **Lo que dice «Suscripciones activas» cuando está plegada.**
@@ -1871,24 +1870,26 @@ private fun SeccionSuscripcionesActivas(
 ) {
     if (activas.isEmpty()) return
     Column(modifier = modifier) {
-        Seccion(
-            titulo = "Suscripciones activas",
-            conteo = activas.size,
-            accion = if (abierta) "Ocultar" else "Ver",
-            onAccion = onAlternar,
-        )
         if (!abierta) {
-            // Plegada: una fila que dice lo que se mira de reojo —cuántas y cuánto al mes— y se
-            // abre al tocarla.
-            Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
+            // Vuelta 83 · plegada, **una sola [Fila]**: «Suscripciones activas» y debajo lo que se mira de
+            // reojo —cuántas y cuánto al mes—; se abre al tocarla. Eran el título de la sección con «· 1» y
+            // «Ver», y debajo otra fila con «1 cobro · $63.338 al mes ›»: dos veces lo mismo.
+            Superficie(modifier = Modifier.fillMaxWidth().testTag(TAG_SUSCRIPCIONES_PLEGADAS), relleno = RellenoDeSuperficie.Lista) {
                 Fila(
-                    titulo = resumenPlegadoDeSuscripciones(activas.size, totalMensual),
-                    final = { Chevron() },
+                    titulo = TITULO_SUSCRIPCIONES_ACTIVAS,
+                    subtitulo = resumenPlegadoDeSuscripciones(activas.size, totalMensual),
                     onClick = onAlternar,
+                    onClickLabel = "Ver las suscripciones",
                 )
             }
             return@Column
         }
+        Seccion(
+            titulo = TITULO_SUSCRIPCIONES_ACTIVAS,
+            conteo = activas.size,
+            accion = "Ocultar",
+            onAccion = onAlternar,
+        )
         Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
             // Cada suscripción es una [Fila]: el día del cobro en el círculo, el nombre, con qué se
             // paga y su monto (en SU moneda y con «al año» si es anual: ver

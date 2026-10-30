@@ -296,6 +296,9 @@ internal fun PropuestasDeLaCuentaDeLaRegla(propuestas: List<PropuestaDeCuentaDeL
                     tono = TonoDeIcono.Neutro,
                     accionSecundaria = "Ahora no",
                     onAccionSecundaria = { if (!p.enVuelo) p.onAhoraNo() },
+                    // Vuelta 83: un solo amarillo en Pagos —«Anotar pago» de la primera factura—; la
+                    // propuesta va en `Secundario`, dicho acá y no por el default del componente.
+                    varianteDeLaAccion = VarianteDeBoton.Secundario,
                 )
             }
         }
