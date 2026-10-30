@@ -135,10 +135,29 @@ private fun MarcoDelMovimiento(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     when (lugar) {
-        LugarDelMovimiento.Hoja -> BottomSheetScaffold(onDismiss = onDismiss, dismissEnabled = dismissEnabled, content = content)
-        LugarDelMovimiento.Panel -> Column(modifier = Modifier.fillMaxSize().padding(horizontal = Medida.margenDePantalla)) {
-            SheetHandleWithClose(onClose = onDismiss, enabled = dismissEnabled, conManija = false)
+        // Vuelta 81: fuera del teléfono la hoja es un diálogo del ancho de la ficha (520); en el teléfono
+        // `anchoMaximo` no cuenta.
+        LugarDelMovimiento.Hoja -> MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = dismissEnabled, anchoMaximo = Medida.anchoDeFicha) {
             content()
+        }
+        // Vuelta 81: en el panel de Actividad el detalle es una ficha —una superficie de 520 como mucho,
+        // pegada a la izquierda del panel—, no un texto suelto sobre el crema.
+        LugarDelMovimiento.Panel -> Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = Medida.margenDePantalla)
+                .padding(top = Medida.dentroDeSeccion, bottom = Medida.entreSecciones),
+        ) {
+            com.jvillada.movi.ui.components.ds.Superficie(
+                modifier = Modifier
+                    .widthIn(max = Medida.anchoDeFicha)
+                    .fillMaxWidth()
+                    .weight(1f, fill = false)
+                    .testTag(TAG_FICHA_DEL_MOVIMIENTO),
+            ) {
+                SheetHandleWithClose(onClose = onDismiss, enabled = dismissEnabled, conManija = false)
+                content()
+            }
         }
     }
 }
@@ -428,6 +447,11 @@ internal fun ContenidoDelMovimiento(
     enEsteComercio: EnEsteComercio? = null,
     /** Abrir Movimientos con esta búsqueda. `null`: la línea se muestra sin acción. */
     onVerElComercio: ((String) -> Unit)? = null,
+    /**
+     * Vuelta 81 · hay otro amarillo a la vista (la tarjeta de los avisos del banco, en la lista de al
+     * lado): la ficha no suma el suyo (ver [principalDeLaFicha]).
+     */
+    otroAmarilloALaVista: Boolean = false,
 ) {
     val coroutine = rememberCoroutineScope()
     var saving by remember { mutableStateOf(false) }
@@ -918,7 +942,15 @@ internal fun ContenidoDelMovimiento(
             if (!desdeLaSugerencia) PreguntaDelAbonoExtra()
         }
     }
-    val repartirEnMas = repartirVaEnMas(ofreceRepartir, acciones)
+    // Vuelta 81 · fuera del teléfono, la ficha: los datos en filas y las acciones a la izquierda.
+    val ficha = com.jvillada.movi.ui.components.LocalWindowWidthClass.current != com.jvillada.movi.ui.components.WindowWidthClass.Compact
+    val accionesFicha = accionesDeLaFicha(
+        ofreceRepetir = ofreceRepetir,
+        ofreceRepartir = ofreceRepartir,
+        conTercero = tercero != null || ofreceGuardarElTercero,
+        conMas = onAnular != null || ofreceVincular || ofreceEnPartes || puedeSerCuota,
+    )
+    val repartirEnMas = !ficha && repartirVaEnMas(ofreceRepartir, acciones)
     val reducido = LocalMovimientoReducido.current
     fun alternar(a: AccionDelMovimiento) {
         accion = if (accion == a) null else a
@@ -932,14 +964,30 @@ internal fun ContenidoDelMovimiento(
                 cuentas = cuentas,
                 onEditar = { accion = AccionDelMovimiento.Nota },
                 espacios = espacios,
+                ficha = ficha,
             )
             Spacer(Modifier.height(Espacio.s))
-            ChipDeCategoria(
-                nombre = event.category,
-                abierto = accion == AccionDelMovimiento.Categoria,
-                habilitado = !saving,
-                onClick = { alternar(AccionDelMovimiento.Categoria) },
-            )
+            if (ficha) {
+                // Vuelta 81: cuenta, fecha, categoría, nota, origen, cuotas y grupo, como filas.
+                val hoyDeLaFicha = remember { com.jvillada.movi.ui.fecha.hoyEnAppZone() }
+                DatosDeLaFicha(
+                    datos = datosDeLaFicha(
+                        evento = renombradoAca ?: event,
+                        nombreDeLaCuenta = cuentas.firstOrNull { it.id == event.accountId }?.name,
+                        espacio = espacios.firstOrNull { it.id == event.espacioId },
+                        hoy = hoyDeLaFicha,
+                    ),
+                    abierta = accion,
+                    onElegir = { if (!saving) alternar(it) },
+                )
+            } else {
+                ChipDeCategoria(
+                    nombre = event.category,
+                    abierto = accion == AccionDelMovimiento.Categoria,
+                    habilitado = !saving,
+                    onClick = { alternar(AccionDelMovimiento.Categoria) },
+                )
+            }
             if (enEsteComercio != null) {
                 Spacer(Modifier.height(Espacio.xs))
                 LineaEnEsteComercio(enEsteComercio, onVer = onVerElComercio?.let { ver -> { ver(enEsteComercio.busqueda) } })
@@ -1014,7 +1062,20 @@ internal fun ContenidoDelMovimiento(
                 }
             }
             Spacer(Modifier.height(Espacio.m))
-            FilaDeAcciones(acciones = acciones, abierta = accion, onElegir = ::alternar)
+            if (ficha) {
+                AccionesDeLaFicha(
+                    acciones = accionesFicha,
+                    principal = principalDeLaFicha(
+                        accionesFicha,
+                        porConfirmar = event.reconciliationStatus == ReconciliationStatus.UNCONFIRMED,
+                        otroAmarilloALaVista = otroAmarilloALaVista,
+                    ),
+                    abierta = accion,
+                    onElegir = ::alternar,
+                )
+            } else {
+                FilaDeAcciones(acciones = acciones, abierta = accion, onElegir = ::alternar)
+            }
 
             // ── La sección abierta, debajo de la fila. Cada una guarda como siempre. ──
             Column(modifier = Modifier.fillMaxWidth().animateContentSize(Movimiento.alEntrar(reducido))) {

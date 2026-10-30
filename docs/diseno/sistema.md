@@ -4408,3 +4408,71 @@ widgets», Agregar sin hueco a 390, la tarjeta de avisos de un renglón, la curv
 pieza sin saldo) y la guarda `UnSoloIconoYUnSoloAvatarTest` (`:core`). Se actualizaron las pruebas que leían la
 diferencia del widget, la nota del pago de tarjeta en el día, los botones de la tarjeta de avisos, la propuesta de
 cuenta y el «⋯» de Pagos, y `ElAmarilloEsDeLaAccionTest` (el avatar vive en su archivo).
+
+## 79. Vuelta 81: la pantalla ancha como app de escritorio
+
+Viene de la revisión visual 7 del 30-oct, punto 11 (`r7-1280-*.png`): a 1.280 Movi todavía parecía un teléfono
+estirado en lo fino. **Sin reglas de plata.** Dos tokens nuevos en `Escalas.kt`: **`Medida.anchoMaximoDeLectura`**
+(720, la columna de lectura de `Disposicion`, que ahora lo nombra: `ANCHO_DE_LECTURA = Medida.anchoMaximoDeLectura`)
+y **`Medida.anchoDeFicha`** (520). **Regla de lo adaptable:** una lista o un formulario de una sola columna nunca
+pasa del ancho máximo de lectura; cuando hay dos cosas, van en dos columnas en vez de estirar una. Lo que ya se
+sentía de escritorio (el rail, Tú en dos columnas, Agregar como diálogo) fue la referencia.
+
+1. **El detalle de un movimiento es una ficha** (`DetalleDelMovimiento.kt`, sección de la vuelta 81). Fuera del
+   teléfono —en el panel de Actividad y como diálogo— el detalle va en una superficie de `anchoDeFicha` como mucho
+   (`TAG_FICHA_DEL_MOVIMIENTO` en el panel, pegada al margen izquierdo; el diálogo es `MarcoDeHoja` con
+   `anchoMaximo = anchoDeFicha`):
+   - arriba **el título y la cifra** (`EncabezadoDelMovimiento(ficha = true)`: sin la línea «Hoy, 07:59 · Nu» ni
+     «a 3 cuotas», que pasan a las filas);
+   - **los datos como `Fila`s** (`datosDeLaFicha`, en una `Superficie` de capa 2): Cuenta, Fecha, Categoría (con su
+     ícono), Nota (lo que va después de « · » en el concepto, `notaDeLaFicha`), Origen («Anotado a mano», «Aviso
+     del banco», «Comprobante», «Extracto»), Cuotas y Grupo; solo lo que hay. Tocar Cuenta o Nota abre «Editar»,
+     Fecha y Categoría sus secciones (las filas llevan el tag de su acción, así se encuentran como en el teléfono);
+     Origen, Cuotas y Grupo solo informan;
+   - **las acciones a la izquierda, en un renglón** (`AccionesDeLaFicha`, un `FlowRow` con `Espacio.xs`): `Boton`
+     chicos con su ícono —Editar, Repetir, Repartir, Tercero— y «Más» como «⋯» (`BotonDeIcono` secundario). Sin
+     Categoría ni Fecha (son filas) y sin el tope de seis: «Repartir» siempre cabe (`accionesDeLaFicha`).
+     **Una sola principal** (`principalDeLaFicha`): «Editar»; ninguna si el movimiento espera confirmación (el
+     amarillo es «Confirmar», arriba) o si la lista de al lado ya muestra la tarjeta de los avisos con su
+     «Confirmar 2» (`otroAmarilloALaVista`, que pasa Actividad).
+
+   Las secciones de edición son las de siempre y se abren debajo de las acciones. **El teléfono no cambia**: chip
+   de categoría y la fila de seis acciones.
+2. **Pagos a 1.280** (`PlanScreen.kt`). El encabezado —el título, el período con ‹ › y «Facturas | Presupuestos»—
+   va **a lo ancho de las dos columnas** (`EncabezadoDePagosALoAncho`, `TAG_ENCABEZADO_DE_PAGOS_A_LO_ANCHO`): el
+   navegador a la izquierda y el selector a la derecha, cada uno de `anchoMaximoDeBoton`. Debajo, las dos columnas
+   arrancan a la misma altura (las dos con `AIRE_DEBAJO_DEL_SELECTOR` arriba; Presupuestos también). Mirando otro
+   período, la izquierda sigue diciendo «Período en curso · …» arriba de sus piezas, atenuada (vuelta 70).
+3. **Inicio a 1.280: la banda es una franja limpia a lo ancho.** Decisión, con el estado de la vuelta 79: la banda
+   **vuelve a ir a todo el ancho** (`anchoDeLaBanda(ancho) = ancho`), sin la «L» que dejaba la vuelta 41 (bajaba
+   solo por la columna del héroe mientras el encabezado seguía a lo ancho, con un rincón cóncavo debajo de la
+   derecha). Se pudo porque desde la vuelta 79 la cuadrícula va en su `Superficie` blanca a pantalla ancha: se
+   monta sobre la banda igual que el héroe, y su círculo amarillo nunca queda sobre el amarillo. Las dos columnas
+   arrancan juntas (`arribaDeLaDerecha = 0`). Al bajar, la banda sigue volviéndose crema (vuelta 79).
+4. **Actividad a 1.280: la lista es la protagonista** (`anchoDeLaListaDeMovimientos`): el 60 % de lo que queda sin
+   el divisor; el detalle o el desglose, el 40 %, nunca menos de 380. A 1.280, 638 y 425 (eran 420 y 643); a
+   1.024, 427 y 380; el umbral de aparición (801) no cambia. **El desglose es una columna lateral**
+   (`ResumenDelPeriodoEnElPanel`): Entró, Salió y Neto en filas, una debajo de la otra y enteras
+   (`TAG_CIFRAS_DEL_RESUMEN`), y cada categoría como `Fila` con su `BarraDeProgreso` de 4 dp relativa a la mayor
+   (`fraccionDeLaBarraDelResumen`, `TAG_BARRA_DEL_RESUMEN`) y la diferencia contra el período pasado en una
+   `Pildora`, como «En qué se va» del Inicio (vuelta 80).
+5. **El barrido** (Tú, Grupos, Créditos, Patrimonio, Buscar, Por revisar, Tus períodos), a 1.280:
+   - **Créditos** — lo único estirado: «Deuda total» y «Cómo salir de tus deudas» iban a lo ancho (1.032 dp), con
+     las cifras de «Intereses este mes» a ~1.000 px de su rótulo y el chevrón al otro lado de la pantalla. Ahora
+     son dos cosas en dos columnas: a la izquierda el resumen y «Cómo salir», a la derecha Préstamos y debajo
+     Tarjetas (también en el esqueleto, para que nada salte). Se fue `repartirEnDos`. Con una sola deuda sigue la
+     columna de lectura.
+   - **Sin cambios** (ya cumplían): Tú, Patrimonio, Grupos con un espacio y Por revisar con mensajes van en dos
+     columnas iguales (508 a 1.280, 616 como mucho a 1.920); Grupos con varios espacios, Por revisar sin mensajes,
+     Créditos con una deuda y Buscar van en la columna de lectura (720); Tus períodos es lista + detalle con el
+     detalle en dos columnas.
+
+Lo vigilan `Vuelta81Test` (commonTest: los datos y las acciones de la ficha, el amarillo, el 60 %, la barra, la
+banda y el ancho de lectura de las pantallas del barrido en una y dos columnas a 1.280, 1.440 y 1.920) y, en
+Robolectric, `MovimientosListaYDetalleEnPantallaTest` (la ficha ≤ 520 con las acciones a la izquierda y un solo
+amarillo; 520 a 1.920; la fila de la categoría; el desglose con una barra por categoría; el diálogo de 520 a 800;
+el teléfono igual; los anchos nuevos a 1.024, 1.280 y 1.440), `PlanScreenTest` (el encabezado a lo ancho y las
+columnas a ≤ 8 dp), `PagosHastaQueTePaguenTest`, `ElInicioEnPantallaAnchaYAngostaTest` (la franja sin muesca, las
+columnas a la misma altura, las acciones dentro de su superficie; ahora monta con la clase de ancho de verdad),
+`CreditosEnColumnasEnPantallaTest` y `Vuelta81EnPantallaTest` (el barrido en la cáscara a 1.280 × 800). La línea
+base `dp_sueltos` baja a 113 (el 720 de `Disposicion` pasó al token).

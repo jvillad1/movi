@@ -296,6 +296,8 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS, enL
                 )
             }
         } else {
+            // Vuelta 81: en dos columnas, el mismo aire de arriba que la del disponible.
+            if (dosColumnas) item(key = "aire-de-presupuestos") { Spacer(Modifier.height(AIRE_DEBAJO_DEL_SELECTOR)) }
             presupuestos(presupuestos)
             if (!dosColumnas) {
                 item(key = "aire-del-disponible") { Spacer(Modifier.height(Medida.entreSecciones)) }
@@ -344,6 +346,11 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS, enL
                 modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(bottom = Medida.dentroDeSeccion),
             )
             if (dosColumnas) {
+                // Vuelta 81: el encabezado va a lo ancho de las dos columnas, arriba de las dos —el período
+                // con ‹ › a la izquierda y «Facturas | Presupuestos» a la derecha—, y las dos columnas
+                // arrancan a la misma altura. Antes el navegador y el selector iban en la columna de la
+                // derecha y parecían gobernar solo esa; la izquierda arrancaba ~60 px más arriba.
+                EncabezadoDePagosALoAncho(navegador = lineaDelPeriodo, selector = selector)
                 // Las mismas piezas que en una columna, en los mismos lugares relativos: cargando o
                 // cargadas, cada una ya está en su columna, así que al llegar los datos nada cambia
                 // de lado. El esqueleto del disponible y el del tablero se reparten igual.
@@ -354,28 +361,21 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS, enL
                             .fillMaxHeight()
                             .testTag(TAG_COLUMNA_DEL_DISPONIBLE)
                             .verticalScroll(scrollDelDisponible)
+                            .padding(top = AIRE_DEBAJO_DEL_SELECTOR)
                             .padding(bottom = Medida.botonFlotante + Espacio.xl),
                     ) {
-                        // Revisión de la 70: el navegador ‹ › va a la derecha, encima de «Facturas |
-                        // Presupuestos», que es lo que mueve. Mirando otro período, esta columna sigue
-                        // siendo la del período en curso: lo dice y se atenúa.
-                        // El renglón tiene el alto del navegador de la derecha, con rótulo o sin él: la
-                        // tarjeta queda a la altura del selector y nada se corre al cambiar de período.
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(Medida.objetivoTactil + Espacio.xs)
-                                .padding(horizontal = Medida.margenDePantalla),
-                            contentAlignment = Alignment.CenterStart,
-                        ) {
-                            if (viendoOtroPeriodo) {
-                                Text(
-                                    text = "$PERIODO_EN_CURSO · ${nombreDelPeriodo(periodoDeHoy, ajustesDelPeriodo)}",
-                                    style = Movi.textos.apoyo,
-                                    color = Movi.colores.textoMedio,
-                                    modifier = Modifier.testTag(TAG_PERIODO_EN_CURSO),
-                                )
-                            }
+                        // Vuelta 70: mirando otro período (el navegador de arriba), esta columna sigue siendo
+                        // la del período en curso: lo dice y se atenúa.
+                        if (viendoOtroPeriodo) {
+                            Text(
+                                text = "$PERIODO_EN_CURSO · ${nombreDelPeriodo(periodoDeHoy, ajustesDelPeriodo)}",
+                                style = Movi.textos.apoyo,
+                                color = Movi.colores.textoMedio,
+                                modifier = Modifier
+                                    .padding(horizontal = Medida.margenDePantalla)
+                                    .padding(bottom = Medida.dentroDeSeccion)
+                                    .testTag(TAG_PERIODO_EN_CURSO),
+                            )
                         }
                         Column(modifier = Modifier.alpha(if (viendoOtroPeriodo) OPACIDAD_DE_LO_ATENUADO else 1f)) {
                             cuantoPuedesGastar()
@@ -388,12 +388,6 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS, enL
                         modifier = Modifier.weight(1f).fillMaxHeight().testTag(TAG_COLUMNA_DE_LOS_PAGOS),
                         contentPadding = PaddingValues(bottom = Medida.botonFlotante + Espacio.xl),
                     ) {
-                        item(key = "periodo") { lineaDelPeriodo() }
-                        item(key = "segmentos") {
-                            Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla)) {
-                                selector()
-                            }
-                        }
                         segmentoElegido(dosColumnas = true)
                     }
                 }
@@ -560,3 +554,25 @@ private fun LlevarALaCaja(pedido: Boolean, listo: Boolean, listState: androidx.c
 
 /** Hasta cuántas pantallas se baja buscando la caja: la lista de pagos nunca es tan larga. */
 private const val MAXIMO_DE_PANTALLAS_HASTA_LA_CAJA = 20
+
+
+/** El encabezado de Pagos a lo ancho de las dos columnas (vuelta 81). */
+const val TAG_ENCABEZADO_DE_PAGOS_A_LO_ANCHO: String = "plan-encabezado-a-lo-ancho"
+
+/**
+ * **El encabezado de Pagos en dos columnas** (vuelta 81): un solo renglón a lo ancho de las dos, debajo
+ * del título —el período con ‹ › a la izquierda y «Facturas | Presupuestos» a la derecha—, cada uno del
+ * ancho de un botón ancho ([Medida.anchoMaximoDeBoton]): estirados a media pantalla las flechas quedaban
+ * a 600 dp una de la otra.
+ */
+@Composable
+private fun EncabezadoDePagosALoAncho(navegador: @Composable () -> Unit, selector: @Composable () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().testTag(TAG_ENCABEZADO_DE_PAGOS_A_LO_ANCHO),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(modifier = Modifier.width(Medida.anchoMaximoDeBoton)) { navegador() }
+        Spacer(Modifier.weight(1f))
+        Box(modifier = Modifier.width(Medida.anchoMaximoDeBoton).padding(end = Medida.margenDePantalla)) { selector() }
+    }
+}

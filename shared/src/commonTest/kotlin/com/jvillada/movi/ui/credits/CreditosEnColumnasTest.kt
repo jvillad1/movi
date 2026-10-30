@@ -49,10 +49,4 @@ class CreditosEnColumnasTest {
         assertFalse(hayDeudasParaDosColumnas(cargando = false, sinDeudas = false, noSeLeyo = false, cuantasDeudas = 1), "una sola deuda")
         assertTrue(hayDeudasParaDosColumnas(cargando = false, sinDeudas = false, noSeLeyo = false, cuantasDeudas = 2))
     }
-
-    @Test
-    fun `un solo grupo se reparte alternando en las dos columnas`() {
-        assertEquals(listOf(1, 3, 5) to listOf(2, 4), repartirEnDos(listOf(1, 2, 3, 4, 5)))
-        assertEquals(listOf(1) to emptyList<Int>(), repartirEnDos(listOf(1)))
-    }
 }

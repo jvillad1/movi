@@ -2,6 +2,7 @@ package com.jvillada.movi.ui.components
 
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.ui.Screen
 
 /**
@@ -56,8 +57,8 @@ fun disposicionDe(pantalla: Screen): Disposicion = when (pantalla) {
     else -> Disposicion.Lectura
 }
 
-/** El ancho de la columna de lectura en mediano y expandido. */
-val ANCHO_DE_LECTURA: Dp = 720.dp
+/** El ancho de la columna de lectura en mediano y expandido: [Medida.anchoMaximoDeLectura] (vuelta 81). */
+val ANCHO_DE_LECTURA: Dp = Medida.anchoMaximoDeLectura
 
 /** El tope de un tablero o de una lista con detalle en una ventana mediana. */
 val ANCHO_ANCHO_EN_MEDIANO: Dp = 840.dp

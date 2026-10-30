@@ -110,21 +110,29 @@ class CreditosEnColumnasEnPantallaTest {
     private fun limitesDelTexto(texto: String): Rect =
         composeRule.onAllNodesWithText(texto, useUnmergedTree = true).fetchSemanticsNodes().first().boundsInRoot
 
-    /** El resumen a lo ancho; Préstamos a la izquierda y Tarjetas a la derecha, debajo. */
+    /**
+     * Vuelta 81: dos cosas, dos columnas. A la izquierda el resumen y «Cómo salir de tus deudas»; a la
+     * derecha Préstamos y debajo Tarjetas. Nada a lo ancho: el resumen mide su columna, nunca más que
+     * el ancho de lectura.
+     */
     private fun comprobarDosColumnas(anchoDelPanel: Float) {
         esperar("Master Black")
         val resumen = limites(TAG_TARJETA_DEL_RESUMEN_DE_DEUDA)
         val izquierda = limites(TAG_COLUMNA_IZQUIERDA_DE_CREDITOS)
         val derecha = limites(TAG_COLUMNA_DERECHA_DE_CREDITOS)
-        // El resumen no se parte: ocupa el panel menos los 16 de cada lado.
-        assertEquals(anchoDelPanel - 32f, resumen.width, 0.5f, "el resumen va a lo ancho: $resumen")
-        assertTrue(izquierda.top >= resumen.bottom, "las columnas van debajo del resumen")
+        assertEquals((anchoDelPanel - 48f) / 2, izquierda.width, 0.5f)
+        assertEquals(izquierda.width, resumen.width, 0.5f, "el resumen va en la columna de la izquierda: $resumen")
+        assertTrue(resumen.width <= com.jvillada.movi.theme.Medida.anchoMaximoDeLectura.value, "nunca más que el ancho de lectura")
+        assertEquals(izquierda.top, resumen.top, 0.5f)
         assertTrue(derecha.left >= izquierda.right, "$izquierda / $derecha")
         assertEquals(izquierda.top, derecha.top, 0.5f)
         assertEquals(izquierda.width, derecha.width, 0.5f)
         assertTrue(izquierda.width >= ANCHO_MINIMO_DE_COLUMNA_DE_CREDITOS.value, "${izquierda.width}")
-        assertTrue(limitesDelTexto("Libre inversión 9695").right <= izquierda.right + 0.5f)
+        val comoSalir = limites(TAG_FILA_COMO_SALIR_DE_TUS_DEUDAS)
+        assertTrue(comoSalir.right <= izquierda.right + 0.5f && comoSalir.top >= resumen.bottom, "«Cómo salir», debajo del resumen: $comoSalir")
+        assertTrue(limitesDelTexto("Libre inversión 9695").left >= derecha.left - 0.5f)
         assertTrue(limitesDelTexto("Master Black").left >= derecha.left - 0.5f)
+        assertTrue(limitesDelTexto("Master Black").top > limitesDelTexto("Libranza 7788").top, "las tarjetas, debajo de los préstamos")
     }
 
     // ── Escritorio ─────────────────────────────────────────────────────────────
@@ -204,23 +212,24 @@ class CreditosEnColumnasEnPantallaTest {
         assertTrue(prestamo.left >= resumen.left - 0.5f && prestamo.right <= resumen.right + 0.5f, "$prestamo")
     }
 
-    /** Solo préstamos: se reparten en las dos columnas bajo un solo título, sin una columna vacía. */
+    /** Solo préstamos: van todos a la derecha, bajo un solo título; el resumen a la izquierda. */
     @Test
     @Config(qualifiers = "w1280dp-h900dp-mdpi")
-    fun `solo con prestamos a 1280 dp se reparten en las dos columnas`() {
+    fun `solo con prestamos a 1280 dp van a la derecha del resumen`() {
         montar(tarjetas = emptyList())
         esperar("Libranza 7788")
         val izquierda = limites(TAG_COLUMNA_IZQUIERDA_DE_CREDITOS)
         val derecha = limites(TAG_COLUMNA_DERECHA_DE_CREDITOS)
-        assertTrue(limitesDelTexto("Libre inversión 9695").right <= izquierda.right + 0.5f)
+        assertTrue(limites(TAG_TARJETA_DEL_RESUMEN_DE_DEUDA).right <= izquierda.right + 0.5f)
+        assertTrue(limitesDelTexto("Libre inversión 9695").left >= derecha.left - 0.5f)
         assertTrue(limitesDelTexto("Vehículo 4411").left >= derecha.left - 0.5f)
-        assertTrue(limitesDelTexto("Libranza 7788").right <= izquierda.right + 0.5f)
+        assertTrue(limitesDelTexto("Libranza 7788").left >= derecha.left - 0.5f)
         assertEquals(1, composeRule.onAllNodesWithText("Préstamos", substring = true, useUnmergedTree = true)
             .fetchSemanticsNodes().size, "un solo título para el grupo")
         assertTrue(!hay("Tarjetas"))
     }
 
-    /** Mientras carga, el resumen esqueleto ya va a lo ancho: al llegar no cambia de lugar ni de ancho. */
+    /** Mientras carga, el resumen esqueleto ya va en su columna: al llegar no cambia de lugar ni de ancho. */
     @Test
     @Config(qualifiers = "w1280dp-h900dp-mdpi")
     fun `a 1280 dp el resumen esqueleto no se mueve al llegar los datos`() {
@@ -228,7 +237,7 @@ class CreditosEnColumnasEnPantallaTest {
         montar(puerta = puerta)
         assertTrue(hayTag(TAG_ESQUELETO_DEL_RESUMEN_DE_DEUDA), "carga con esqueleto")
         val cargando = limites(TAG_TARJETA_DEL_RESUMEN_DE_DEUDA)
-        assertEquals(1_064f - 32f, cargando.width, 0.5f)
+        assertEquals((1_064f - 48f) / 2, cargando.width, 0.5f)
 
         puerta.complete(Unit)
         esperar("Master Black")

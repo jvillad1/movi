@@ -8,10 +8,10 @@ import com.jvillada.movi.ui.components.cabenDosColumnasIguales
 /**
  * # Créditos en dos columnas (Ola W3)
  *
- * En pantalla ancha la tarjeta de «Deuda total» va arriba, a lo ancho (no se parte: es UNA cifra
- * con su desglose), y debajo **Préstamos y Tarjetas uno al lado del otro**. Con uno solo de los
- * dos grupos, sus tarjetas se reparten en las dos columnas bajo un solo título: una columna vacía
- * al lado de otra llena no es un tablero, es un hueco.
+ * En pantalla ancha, **dos cosas en dos columnas** (vuelta 81): a la izquierda la tarjeta de «Deuda
+ * total» (no se parte: es UNA cifra con su desglose) y «Cómo salir de tus deudas»; a la derecha las
+ * deudas, Préstamos y debajo Tarjetas. Hasta la vuelta 80 el resumen iba arriba a lo ancho y sus cifras
+ * quedaban a ~1.000 px de su rótulo.
  *
  * Sin deudas (el vacío que enseña de la Ola I), con una sola (quedaría sola a la izquierda) o sin
  * poder leerlas, la pantalla va en una sola columna de lectura, como en una ventana angosta ([hayDeudasParaDosColumnas]).
@@ -61,14 +61,9 @@ fun creditosEnDosColumnas(anchoDelPanel: Dp): Boolean =
 internal fun hayDeudasParaDosColumnas(cargando: Boolean, sinDeudas: Boolean, noSeLeyo: Boolean, cuantasDeudas: Int): Boolean =
     !noSeLeyo && (cargando || (!sinDeudas && cuantasDeudas >= 2))
 
-/** Las dos columnas debajo del resumen, para medirlas en una prueba. */
+/**
+ * Las dos columnas, para medirlas en una prueba. Vuelta 81: la izquierda lleva el resumen («Deuda total»
+ * y «Cómo salir de tus deudas») y la derecha las deudas, Préstamos y debajo Tarjetas.
+ */
 const val TAG_COLUMNA_IZQUIERDA_DE_CREDITOS: String = "creditos-columna-izquierda"
 const val TAG_COLUMNA_DERECHA_DE_CREDITOS: String = "creditos-columna-derecha"
-
-/**
- * Reparte [elementos] en dos columnas, alternando (el 1.º a la izquierda, el 2.º a la derecha…):
- * así las dos quedan con el mismo número de tarjetas, ± 1, y la lectura sigue el orden de la lista
- * de izquierda a derecha y de arriba abajo.
- */
-internal fun <T> repartirEnDos(elementos: List<T>): Pair<List<T>, List<T>> =
-    elementos.withIndex().partition { it.index % 2 == 0 }.let { (i, d) -> i.map { it.value } to d.map { it.value } }

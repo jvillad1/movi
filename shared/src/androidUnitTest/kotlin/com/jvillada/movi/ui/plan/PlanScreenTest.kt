@@ -697,8 +697,9 @@ class PlanScreenTest {
         assertTrue(limites(TAG_TARJETA_DEL_DISPONIBLE).right <= disponible.right + 0.5f)
         assertTrue(limites(TAG_FILA_DE_TUS_PERIODOS).right <= disponible.right + 0.5f)
         val selector = selectorDePagos().fetchSemanticsNode().boundsInRoot
-        assertTrue(selector.left >= pagos.left, "el selector va con los pagos: $selector")
-        assertTrue(selector.top < limites(TAG_TARJETA_DEL_DISPONIBLE).top, "el selector va arriba, a la altura de la línea del período")
+        // Vuelta 81: el selector va en el encabezado a lo ancho, a la derecha y arriba de las dos columnas.
+        assertTrue(selector.left >= pagos.left, "el selector va a la derecha: $selector")
+        assertTrue(selector.bottom <= pagos.top + 0.5f, "el selector va arriba de las columnas")
         val vacio = composeRule.onNodeWithText("Aquí van tus pagos fijos", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         assertTrue(vacio.left >= pagos.left)
     }
@@ -711,6 +712,40 @@ class PlanScreenTest {
         puerta.complete(Unit)
         montarConElRail()
         comprobarDosColumnas(anchoDeLosPagos = 664f)
+    }
+
+    /**
+     * Vuelta 81: a 1.280 el encabezado —el período con ‹ › y «Facturas | Presupuestos»— va a lo ancho de
+     * las dos columnas, arriba de las dos, y las dos arrancan a la misma altura (su primer contenido, a
+     * 8 dp o menos). Antes el navegador y el selector iban en la derecha y la izquierda arrancaba ~60 px
+     * más arriba.
+     */
+    @Test
+    @Config(qualifiers = "w1280dp-h900dp-mdpi")
+    fun `a 1280 dp el encabezado va a lo ancho y las dos columnas arrancan a la misma altura`() {
+        conElInicioFresco()
+        puerta.complete(Unit)
+        montarConElRail()
+        composeRule.waitUntil(timeoutMillis = 5_000) { hay("Aquí van tus pagos fijos") }
+        val disponible = limites(TAG_COLUMNA_DEL_DISPONIBLE)
+        val pagos = limites(TAG_COLUMNA_DE_LOS_PAGOS)
+        val encabezado = limites(TAG_ENCABEZADO_DE_PAGOS_A_LO_ANCHO)
+        assertEquals(disponible.left, encabezado.left, 0.5f, "el encabezado arranca con la columna de la izquierda")
+        assertEquals(pagos.right, encabezado.right, 0.5f, "y termina con la de la derecha")
+        assertTrue(encabezado.bottom <= disponible.top + 0.5f && encabezado.bottom <= pagos.top + 0.5f)
+        val navegador = limites(TAG_NAVEGADOR_DEL_PERIODO_DE_PAGOS)
+        assertTrue(navegador.right <= disponible.right + 0.5f, "el período, a la izquierda: $navegador")
+        val selector = selectorDePagos().fetchSemanticsNode().boundsInRoot
+        assertTrue(selector.top < disponible.top && selector.top < pagos.top, "el selector va en el encabezado: $selector")
+        assertTrue(abs(primerContenido(TAG_COLUMNA_DEL_DISPONIBLE) - primerContenido(TAG_COLUMNA_DE_LOS_PAGOS)) <= 8f)
+    }
+
+    /** Lo más alto que se ve dentro de la columna [tag]: el borde de arriba de su primer contenido. */
+    private fun primerContenido(tag: String): Float {
+        val columna = composeRule.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode()
+        fun todos(n: androidx.compose.ui.semantics.SemanticsNode): List<androidx.compose.ui.semantics.SemanticsNode> =
+            n.children.flatMap { listOf(it) + todos(it) }
+        return todos(columna).map { it.boundsInRoot }.filter { it.height > 0f }.minOf { it.top }
     }
 
     /** 1440 − 216 = 1224 de panel: 400 y 824. */

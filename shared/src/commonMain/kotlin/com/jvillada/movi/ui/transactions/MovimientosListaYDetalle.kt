@@ -78,7 +78,9 @@ import com.jvillada.movi.theme.Medida
  */
 
 /**
- * El ancho de la lista al lado del detalle: 420 dp desde la Ola X (antes 360, el de un teléfono).
+ * **Lo mínimo** que mide la lista al lado del detalle: 420 dp desde la Ola X (antes 360, el de un
+ * teléfono). Desde la vuelta 81 la lista se lleva el 60 % ([anchoDeLaListaDeMovimientos]) y esto es
+ * su piso, el que fija el umbral.
  * El dueño la vio apretada en la web ancha, en ancho y en alto (ver `paddingVerticalDeLaFila` en
  * `TransactionsScreen.kt` para el alto). Subir esto sube el umbral de aparición del panel —ver
  * [ANCHO_MINIMO_DEL_PANEL_DEL_MOVIMIENTO], que se bajó un poco para compensar.
@@ -107,6 +109,32 @@ val UMBRAL_DE_MOVIMIENTOS_CON_PANEL: Dp =
 
 /** Si Movimientos, con [anchoDeLaPantalla] (ya sin el rail), va en lista + detalle. */
 fun movimientosConPanel(anchoDeLaPantalla: Dp): Boolean = anchoDeLaPantalla >= UMBRAL_DE_MOVIMIENTOS_CON_PANEL
+
+/**
+ * **La lista es la protagonista** (vuelta 81): se lleva el 60 % de lo que queda sin el divisor, y el
+ * detalle (o el desglose del período) el 40 %. A 1.280 la lista iba a 420 y el desglose a 643: la
+ * prioridad estaba invertida.
+ */
+const val FRACCION_DE_LA_LISTA_DE_MOVIMIENTOS: Float = 0.6f
+
+/**
+ * **El ancho de la lista al lado del detalle** en una pantalla de [anchoDeLaPantalla] (ya sin el rail).
+ * El detalle se lleva el 40 % pero nunca menos de [ANCHO_MINIMO_DEL_PANEL_DEL_MOVIMIENTO]; la lista,
+ * lo demás, y nunca menos de [ANCHO_DE_LA_LISTA_DE_MOVIMIENTOS]. El umbral de aparición no cambia
+ * (801: ahí el 40 % no llega a 380 y la lista se queda con 420). Pura.
+ *
+ * | Ventana | Ancho | Lista | Detalle |
+ * |---------|-------|-------|---------|
+ * | 1024    | 808   | 427   | 380     |
+ * | 1280    | 1064  | 638   | 425     |
+ * | 1440    | 1224  | 734   | 489     |
+ * | 1920    | 1440  | 864   | 575     |
+ */
+fun anchoDeLaListaDeMovimientos(anchoDeLaPantalla: Dp): Dp {
+    val disponible = anchoDeLaPantalla - ANCHO_DEL_DIVISOR_DE_MOVIMIENTOS
+    val detalle = maxOf(ANCHO_MINIMO_DEL_PANEL_DEL_MOVIMIENTO, disponible * (1f - FRACCION_DE_LA_LISTA_DE_MOVIMIENTOS))
+    return maxOf(ANCHO_DE_LA_LISTA_DE_MOVIMIENTOS, disponible - detalle)
+}
 
 const val TAG_LISTA_DE_MOVIMIENTOS_AL_LADO: String = "movimientos-panel-de-la-lista"
 const val TAG_PANEL_DEL_MOVIMIENTO: String = "movimientos-panel-del-detalle"
@@ -165,10 +193,13 @@ internal fun ListaYPanelDeMovimientos(
         lista()
         return
     }
+    // Vuelta 81: el ancho de la lista sale de lo que de verdad quedó (ver [anchoDeLaListaDeMovimientos]).
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+    val anchoDeLaLista = anchoDeLaListaDeMovimientos(maxWidth)
     Row(modifier = Modifier.fillMaxSize()) {
         Box(
             modifier = if (conPanel) {
-                Modifier.width(ANCHO_DE_LA_LISTA_DE_MOVIMIENTOS).fillMaxHeight().testTag(TAG_LISTA_DE_MOVIMIENTOS_AL_LADO)
+                Modifier.width(anchoDeLaLista).fillMaxHeight().testTag(TAG_LISTA_DE_MOVIMIENTOS_AL_LADO)
             } else {
                 Modifier.weight(1f).fillMaxHeight()
             },
@@ -198,6 +229,7 @@ internal fun ListaYPanelDeMovimientos(
             }
         }
     }
+    } // BoxWithConstraints
 }
 
 /**

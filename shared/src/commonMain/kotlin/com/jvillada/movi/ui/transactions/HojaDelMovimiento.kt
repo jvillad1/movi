@@ -129,10 +129,13 @@ internal fun PanelDelMovimiento(
     accionInicial: AccionDelMovimiento? = null,
     enEsteComercio: EnEsteComercio? = null,
     onVerElComercio: ((String) -> Unit)? = null,
+    /** Vuelta 81: la lista de al lado ya lleva un amarillo (ver [principalDeLaFicha]). */
+    otroAmarilloALaVista: Boolean = false,
 ) {
     JuegoDelMovimiento(
         event = event,
         lugar = LugarDelMovimiento.Panel,
+        otroAmarilloALaVista = otroAmarilloALaVista,
         cuentas = cuentas,
         onDismiss = onCerrar,
         onCambiado = onCambiado,
@@ -158,6 +161,7 @@ private fun JuegoDelMovimiento(
     accionInicial: AccionDelMovimiento?,
     enEsteComercio: EnEsteComercio?,
     onVerElComercio: ((String) -> Unit)?,
+    otroAmarilloALaVista: Boolean = false,
 ) {
     var pidioAnular by remember(event.id) { mutableStateOf(false) }
     // Vuelta 67: al anular, «Anulado · Deshacer» abajo de la pantalla (ver [AvisoDeDeshacer]).
@@ -190,6 +194,7 @@ private fun JuegoDelMovimiento(
         accionInicial = accionInicial,
         enEsteComercio = enEsteComercio,
         onVerElComercio = onVerElComercio,
+        otroAmarilloALaVista = otroAmarilloALaVista,
     )
 
     // Guardar el recurrente cierra las dos y recarga: el movimiento no cambió, pero Recurrentes sí

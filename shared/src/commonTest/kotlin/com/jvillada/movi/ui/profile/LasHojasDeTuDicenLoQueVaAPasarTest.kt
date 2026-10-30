@@ -77,12 +77,12 @@ class LasHojasDeTuDicenLoQueVaAPasarTest {
         assertTrue(seVeVolverAlOrdenDeMovi(PreferenciasDelInicio(orden = listOf("GASTO_POR_CATEGORIA", "CUENTAS"))))
     }
 
-    // ── El Inicio a 1.280: la banda solo detrás del héroe ──────────────────────────────────────
+    // ── El Inicio a 1.280: la banda es una franja a lo ancho (vuelta 81) ──────────────────────
 
     @Test
-    fun `en dos columnas la banda va solo detras de la del heroe`() {
-        assertEquals(532.dp, anchoDeLaBanda(1064.dp, sonDos = true))
-        assertEquals(390.dp, anchoDeLaBanda(390.dp, sonDos = false))
+    fun `la banda va a lo ancho, en una y en dos columnas`() {
+        assertEquals(1064.dp, anchoDeLaBanda(1064.dp))
+        assertEquals(390.dp, anchoDeLaBanda(390.dp))
     }
 
     // ── Una sola función de iniciales para los avatares del usuario ────────────────────────────

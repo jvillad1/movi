@@ -633,9 +633,9 @@ fun inicioEnDosColumnas(bloques: Int, ancho: Dp): Boolean = ancho >= ANCHO_PARA_
  * revisión: la izquierda acababa en ~600 px y la derecha seguía con movimientos, cuentas y widgets). A
  * igual alto, la izquierda. Dentro de cada columna se conserva el orden.
  *
- * La derecha arranca en [arribaDeLaDerecha]. Desde la vuelta 41 la banda amarilla va solo detrás de la
- * izquierda (`anchoDeLaBanda`), así que la derecha —la cuadrícula, con su círculo amarillo— arranca
- * arriba, sobre el crema, y nunca sobre el amarillo. Entre bloques, [separacion]; un bloque de alto cero
+ * La derecha arranca en [arribaDeLaDerecha] (cero desde la vuelta 81: la banda va a lo ancho y las dos
+ * columnas arrancan juntas, montadas sobre ella; la cuadrícula va en su superficie blanca, así que su
+ * círculo amarillo nunca queda sobre el amarillo). Entre bloques, [separacion]; un bloque de alto cero
  * (una sección que esta vez no pintó nada) no suma separación.
  */
 fun repartoEnDosColumnas(

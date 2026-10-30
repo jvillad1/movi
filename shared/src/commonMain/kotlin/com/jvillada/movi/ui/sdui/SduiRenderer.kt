@@ -15,12 +15,10 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.semantics.SemanticsPropertyReceiver
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.graphics.Path
 import com.jvillada.movi.shared.model.renderableSections
 import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.text.font.FontFamily
@@ -159,23 +157,24 @@ fun SduiRenderer(
     BoxWithConstraints(modifier = modifier) {
         val bloques = bloquesDelInicio(sections)
         val sonDos = inicioEnDosColumnas(bloques.size, maxWidth)
-        // Vuelta 41: en dos columnas la banda va solo detrás de la del héroe (ver [anchoDeLaBanda]).
-        val anchoDeLaBandaEnPantalla = anchoDeLaBanda(maxWidth, sonDos)
+        // Vuelta 81: la banda es una franja limpia a lo ancho, en una y en dos columnas (ver [anchoDeLaBanda]).
+        val anchoDeLaBandaEnPantalla = anchoDeLaBanda(maxWidth)
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(scroll)
                 // Después del scroll: la banda se dibuja en el contenido y sube con él.
-                .then(if (conBanda) Modifier.bandaDelInicio(colorDeLaBanda, anchoDeLaBandaEnPantalla, maxWidth) else Modifier)
+                .then(if (conBanda) Modifier.bandaDelInicio(colorDeLaBanda, anchoDeLaBandaEnPantalla) else Modifier)
                 .padding(bottom = Movi.espacios.seccion),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             if (sonDos) {
                 // Vuelta 39: dos columnas parejas. El héroe (y la guía, si va arriba) a la izquierda; los
-                // demás bloques, a la columna más corta (`repartoEnDosColumnas`). Vuelta 41: la banda
-                // va solo detrás de la izquierda, así que la derecha arranca arriba, sobre el crema —ni
-                // ~110 dp de amarillo vacío encima de las acciones, ni su círculo amarillo sobre el
-                // amarillo—.
+                // demás bloques, a la columna más corta (`repartoEnDosColumnas`). Vuelta 81: la banda va a
+                // lo ancho y las dos columnas arrancan a la misma altura, montadas sobre ella: el héroe a
+                // la izquierda y la cuadrícula —en su superficie blanca— a la derecha. Ni la muesca de la
+                // vuelta 41 (la banda bajaba solo por la izquierda) ni amarillo vacío encima de las
+                // acciones, ni su círculo amarillo sobre el amarillo.
                 val fijos = buildSet {
                     if (guiaArriba != null) add(0)
                     val heroe = bloques.indexOfFirst { b -> b.any { it.type == "HERO_BALANCE" } }
@@ -183,7 +182,7 @@ fun SduiRenderer(
                 }
                 DosColumnasParejas(
                     fijosALaIzquierda = fijos,
-                    arribaDeLaDerecha = if (conBanda) Medida.dentroDeSeccion else Dp(0f),
+                    arribaDeLaDerecha = Dp(0f),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     if (guiaArriba != null) {
@@ -290,12 +289,15 @@ private class AccionesDelRenderer(
 const val TAG_BANDA_DEL_INICIO: String = "inicio-banda"
 
 /**
- * **Hasta dónde llega la banda amarilla, a lo ancho** (vuelta 41). En una columna, todo el ancho. En dos
- * ([sonDos]), solo la columna del héroe —la mitad izquierda—: a todo el ancho cruzaba también la
- * columna derecha y dejaba ~110 dp de amarillo vacío encima de las acciones, que no pueden subir a la
- * banda porque su primer círculo es amarillo. Pura.
+ * **Hasta dónde llega la banda amarilla, a lo ancho**: todo el Inicio, en una columna y en dos (vuelta 81).
+ *
+ * La vuelta 41 la dejó solo detrás de la columna del héroe; con el encabezado —fijo arriba, a todo el
+ * ancho y en el mismo amarillo— eso dibujaba una «L» con una muesca debajo de la columna derecha. Desde
+ * la vuelta 79 la cuadrícula de acciones va en una superficie blanca a pantalla ancha, así que puede
+ * montarse sobre la banda igual que el héroe: la banda vuelve a ser una franja limpia a lo ancho, y las
+ * dos columnas arrancan a la misma altura. Pura.
  */
-fun anchoDeLaBanda(anchoDelInicio: Dp, sonDos: Boolean): Dp = if (sonDos) anchoDelInicio / 2 else anchoDelInicio
+fun anchoDeLaBanda(anchoDelInicio: Dp): Dp = anchoDelInicio
 
 /** El ancho de la banda del Inicio en su semántica, para vigilarlo sin leer píxeles (vuelta 41). */
 val AnchoDeLaBandaKey: SemanticsPropertyKey<Dp> = SemanticsPropertyKey("AnchoDeLaBanda")
@@ -307,13 +309,10 @@ var SemanticsPropertyReceiver.anchoDeLaBandaDelInicio: Dp by AnchoDeLaBandaKey
  * **La banda amarilla del Inicio** (vuelta 39, la opción 3), dibujada detrás del contenido del scroll:
  * lo que le falta de [Medida.altoDeLaBandaDelInicio] al encabezado (que va fijo arriba, en el mismo
  * amarillo), con [Radio.xxl] en las esquinas de abajo. La tarjeta héroe se monta encima: la banda le
- * llega a la mitad. Nunca va detrás del rail.
- *
- * [ancho] es el de [anchoDeLaBanda]: todo el Inicio en una columna, la del héroe en dos. Cuando no llega
- * al borde derecho, la esquina donde se junta con el encabezado (que sigue a todo el ancho) se redondea
- * hacia adentro con el mismo radio, para que el amarillo baje como una sola pieza y no como un escalón.
+ * llega a la mitad. Nunca va detrás del rail. [ancho] es el de [anchoDeLaBanda]: todo el Inicio
+ * (vuelta 81: también en dos columnas, sin muesca).
  */
-private fun Modifier.bandaDelInicio(color: androidx.compose.ui.graphics.Color, ancho: Dp, anchoDelInicio: Dp): Modifier =
+private fun Modifier.bandaDelInicio(color: androidx.compose.ui.graphics.Color, ancho: Dp): Modifier =
     this.testTag(TAG_BANDA_DEL_INICIO)
         .semantics { anchoDeLaBandaDelInicio = ancho }
         .drawBehind {
@@ -322,16 +321,6 @@ private fun Modifier.bandaDelInicio(color: androidx.compose.ui.graphics.Color, a
             val anchoPx = ancho.toPx().coerceAtMost(size.width)
             drawRect(color, size = Size(anchoPx, alto - radio))
             drawRoundRect(color, size = Size(anchoPx, alto), cornerRadius = CornerRadius(radio, radio))
-            if (ancho < anchoDelInicio) {
-                // El rincón cóncavo entre la banda y el borde de abajo del encabezado.
-                val rincon = Path().apply {
-                    moveTo(anchoPx, 0f)
-                    lineTo(anchoPx + radio, 0f)
-                    arcTo(Rect(anchoPx, 0f, anchoPx + 2 * radio, 2 * radio), 270f, -90f, false)
-                    close()
-                }
-                drawPath(rincon, color)
-            }
         }
 
 /**
