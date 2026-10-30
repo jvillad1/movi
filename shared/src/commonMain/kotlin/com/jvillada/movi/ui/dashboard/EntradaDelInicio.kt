@@ -10,6 +10,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.jvillada.movi.theme.LocalMovimientoReducido
+import com.jvillada.movi.theme.Movimiento
 
 /**
  * Cuánto dura la entrada del Inicio: la cifra grande contando desde cero y las barras creciendo.
@@ -60,37 +61,67 @@ fun cifraContando(valor: Long, progreso: Float): Long =
     if (progreso >= 1f) valor else (valor * progreso.toDouble()).toLong()
 
 /**
- * **La cifra del héroe nunca arranca en $0** (vuelta 39). Hasta acá entraba contando desde cero
- * ([rememberProgresoDeEntrada]), y en la web, al recargar con la instantánea a la vista, el héroe decía
- * «Te quedan $0 · para 4 días · $696.137 por día» varios segundos: la cuenta se quedaba esperando
- * cuadros que la página, ocupada con las diez lecturas, no le daba. Un «$0» de 40 px es la afirmación
- * más fuerte de la pantalla, y era falsa.
+ * # Vuelta 75 · **el héroe cambia entero, nunca a medias**
  *
- * Ahora la primera cifra se muestra **tal cual llega** (la de la instantánea o la de la carga), y solo
- * un cambio después —la carga nueva que reemplaza a la de ayer— se anima, de la cifra vieja a la nueva:
- * en el medio solo hay valores entre dos cifras reales. Con el sistema pidiendo menos movimiento
- * ([LocalMovimientoReducido]) el cambio es inmediato.
+ * **La cifra del héroe nunca arranca en $0** (vuelta 39): la primera se muestra tal cual llega (la de la
+ * instantánea o la de la carga). Hasta la 74, un cambio después —la carga nueva que reemplaza a la de
+ * ayer— animaba **solo la cifra grande**, de la vieja a la nueva en 600 ms, mientras «Tu plata» y «para N
+ * días · $X por día» cambiaban en el acto. En la web, con la página ocupada en las diez lecturas, la cuenta
+ * se quedaba sin cuadros y durante un segundo convivían la cifra vieja y la línea nueva: «$1.417.943» junto
+ * a «$441.916 por día», que es de «$1.325.750» (`r5-volver-300.png`).
+ *
+ * Ahora el héroe muestra **un solo estado a la vez** ([EstadoDelHeroe]: la cifra, su línea y «Tu plata»,
+ * de la MISMA lectura): al llegar uno nuevo, el viejo se desvanece entero y el nuevo aparece entero
+ * ([rememberEstadoQueCambia]). En ningún cuadro se ve una pieza del viejo con otra del nuevo. Con el
+ * sistema pidiendo menos movimiento ([LocalMovimientoReducido]) el cambio es inmediato, y el primer dato
+ * (después del esqueleto o del «—») se muestra sin esperar.
+ */
+data class EstadoDelHeroe(val teQuedan: TeQuedanDeHoy?, val tuPlata: Long?)
+
+/** Lo que se pinta en un cuadro: el estado que se ve y con qué opacidad (0 a 1). */
+data class EstadoQueSeVe<T>(val mostrado: T, val opacidad: Float)
+
+/** Cuánto dura el cambio del héroe: la mitad se va el viejo, la otra mitad llega el nuevo. */
+const val DURACION_DEL_CAMBIO_DEL_HEROE_MS: Int = Movimiento.LARGO_MS
+
+/**
+ * **Un estado que cambia entero.** Mientras dura el cambio, la primera mitad se ve [valor] viejo
+ * desvaneciéndose y la segunda el nuevo apareciendo: nunca los dos, nunca una mezcla. Antes de que el
+ * efecto corra (el primer cuadro después del cambio) se sigue viendo el viejo, entero.
+ *
+ * @param seAnima si el paso de uno a otro se anima; si no (el primer dato después del esqueleto), es
+ *   inmediato.
  */
 @Composable
-fun rememberCifraQueCambia(valor: Long): Long {
+fun <T> rememberEstadoQueCambia(valor: T, seAnima: (antes: T, despues: T) -> Boolean): EstadoQueSeVe<T> {
     val reducido = LocalMovimientoReducido.current
     var desde by remember { mutableStateOf(valor) }
     var hasta by remember { mutableStateOf(valor) }
     val progreso = remember { Animatable(1f) }
     LaunchedEffect(valor) {
-        if (valor == hasta) return@LaunchedEffect
-        desde = cifraEntre(desde, hasta, progreso.value)
-        hasta = valor
-        if (reducido) {
+        if (valor == hasta && progreso.value >= 1f) return@LaunchedEffect
+        val visible = estadoEnElCambio(desde, hasta, progreso.value)
+        if (reducido || visible == valor || !seAnima(visible, valor)) {
+            desde = valor
+            hasta = valor
             progreso.snapTo(1f)
-        } else {
-            progreso.snapTo(0f)
-            progreso.animateTo(1f, tween(DURACION_DE_LA_ENTRADA_MS, easing = FastOutSlowInEasing))
+            return@LaunchedEffect
         }
+        desde = visible
+        hasta = valor
+        progreso.snapTo(0f)
+        progreso.animateTo(1f, tween(DURACION_DEL_CAMBIO_DEL_HEROE_MS, easing = FastOutSlowInEasing))
     }
-    // Antes de que el efecto corra (el primer cuadro después del cambio) se sigue viendo la de antes.
-    return cifraEntre(desde, hasta, progreso.value)
+    val p = progreso.value
+    return EstadoQueSeVe(estadoEnElCambio(desde, hasta, p), opacidadEnElCambio(p))
 }
+
+/** El estado que se ve a [progreso] del cambio: el viejo hasta la mitad, el nuevo desde ahí. Pura. */
+fun <T> estadoEnElCambio(desde: T, hasta: T, progreso: Float): T = if (progreso < 0.5f) desde else hasta
+
+/** La opacidad a [progreso] del cambio: 1 → 0 hasta la mitad, 0 → 1 después. Pura. */
+fun opacidadEnElCambio(progreso: Float): Float =
+    if (progreso >= 1f) 1f else kotlin.math.abs(1f - 2f * progreso.coerceIn(0f, 1f))
 
 /** La cifra a [progreso] del camino de [desde] a [hasta]; exactamente [hasta] al terminar. Pura. */
 fun cifraEntre(desde: Long, hasta: Long, progreso: Float): Long =
