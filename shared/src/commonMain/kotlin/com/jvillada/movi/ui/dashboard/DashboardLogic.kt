@@ -1153,7 +1153,9 @@ fun visibleSections(def: ScreenDefinition, data: DashboardData): List<ScreenSect
             PARA_REVISAR_COMPACTO -> cosasParaRevisarDe(data).any { it.urgente }
             // Vuelta 73: con «Próximo pago» arriba y ese pago como el único pendiente, el widget solo
             // lo repetiría (ver `elWidgetDeFaltaSoloRepiteElProximoPago`): no ocupa lugar.
-            "CHECKLIST_DEL_PERIODO" -> checklistDelPeriodoDe(data).isNotEmpty() &&
+            // Vuelta 76: con todo pagado tampoco: era una tarjeta de ~300 px que solo decía «Ya salió
+            // todo lo del período» (la revisión `r5`); «En qué se va» toma el ancho.
+            "CHECKLIST_DEL_PERIODO" -> pagosPendientes(checklistDelPeriodoDe(data)).isNotEmpty() &&
                 !(hayProximoPago && elWidgetDeFaltaSoloRepiteElProximoPago(data, sinElProximoPago = true))
             "GASTO_POR_CATEGORIA" -> data.spentByCategory.orEmpty().any { it.value > 0 }
             // Solo con todo lo que la cuenta necesita ya leído, y con ingresos que medir. Ver
