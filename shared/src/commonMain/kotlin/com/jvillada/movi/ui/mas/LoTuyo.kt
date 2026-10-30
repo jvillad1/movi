@@ -37,6 +37,7 @@ import com.jvillada.movi.ui.components.ds.Superficie
 import com.jvillada.movi.ui.components.ds.TonoDeIcono
 import com.jvillada.movi.ui.dashboard.heroBalance
 import com.jvillada.movi.ui.espacios.TITULO_DE_PERSONAS
+import com.jvillada.movi.ui.destinos.FilaDePersonasYComercios
 import com.jvillada.movi.ui.espacios.fraseDelSaldo
 import kotlinx.coroutines.CancellationException
 
@@ -103,6 +104,7 @@ fun resumenDePersonas(detalles: List<DetalleDelEspacio>?): ResumenDePersonas {
  * - **Tu patrimonio** con el neto de `patrimonioDe` (la MISMA cuenta que Patrimonio, [heroBalance]):
  *   abre Patrimonio, con sus cuentas, sus deudas, «Entre cuentas» y los bienes;
  * - **Personas** (antes Espacios) con el saldo pendiente si lo hay ([resumenDePersonas]);
+ * - **Personas y comercios** (vuelta 73): las cuentas y llaves de otros, con sus nombres;
  * - **Cuadre de saldos**: tus cuentas contra el banco, con su modo «Tarjetas».
  *
  * Las lecturas son las de siempre: las cuentas y los apartados por el caché de lecturas (lo último que
@@ -124,6 +126,8 @@ internal fun LoTuyo(onNavigate: (Screen) -> Unit) {
             null
         }
     }
+    // Los nombres de «Personas y comercios» para el subtítulo de su fila; sin lectura, invita a guardar.
+    val destinos = rememberLectura(ClaveDeLectura.Destinos, reintento = 0) { Repositories.wallets.getDestinos() }.valor
     val neto = cuentas?.let { heroBalance(it, apartados).patrimonio }
     val personas = resumenDePersonas(espacios)
 
@@ -146,6 +150,9 @@ internal fun LoTuyo(onNavigate: (Screen) -> Unit) {
                 final = { CifraYChevron(personas.monto) },
                 onClick = { onNavigate(Screen.Espacios) },
             )
+            Separador()
+            // Vuelta 73: «Personas y comercios» vive acá, al lado de Grupos (antes, al final de un grupo).
+            FilaDePersonasYComercios(destinos = destinos, onClick = { onNavigate(Screen.Destinos()) })
             Separador()
             Fila(
                 titulo = FILA_CUADRE_DE_SALDOS,

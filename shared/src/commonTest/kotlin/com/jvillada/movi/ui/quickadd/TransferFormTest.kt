@@ -103,7 +103,7 @@ class TransferFormTest {
     @Test
     fun `un desembolso muestra la deuda subiendo`() {
         assertEquals(
-            "Deuda de Libranza: $257.000.000 pasa a $277.000.000",
+            "Debes $257.000.000 · después del desembolso, $277.000.000",
             deudaDespuesDelTraspaso(libranza, ahorros, 20_000_000L),
         )
     }
@@ -111,7 +111,7 @@ class TransferFormTest {
     @Test
     fun `un abono extraordinario muestra la deuda bajando`() {
         assertEquals(
-            "Deuda de Libranza: $257.000.000 pasa a $252.000.000",
+            "Debes $257.000.000 · después del abono, $252.000.000",
             deudaDespuesDelTraspaso(ahorros, libranza, 5_000_000L),
         )
     }

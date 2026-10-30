@@ -116,13 +116,16 @@ class ElInicioDeLaOpcion3Test {
         assertTrue(heroe < acciones && acciones < proximo && proximo < ultimos, "$heroe / $acciones / $proximo / $ultimos")
     }
 
-    /** Con un aviso y un movimiento, la pastilla no dice «2 avisos»: dice «2 por revisar». */
+    /**
+     * Con un aviso y un movimiento, nada dice «2 avisos». Vuelta 73: el renglón ya dice qué espera, así
+     * que la franja no repite la cuenta en una pastilla (le quitaba el ancho a 360 dp).
+     */
     @Test
-    fun `la pastilla de la franja no contradice su desglose`() {
+    fun `la franja no contradice su desglose ni lo repite en una pastilla`() {
         montar(datos.copy(pendingSms = 1, movimientosPorConfirmar = 1))
-        composeRule.onNodeWithText("2 por revisar", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("1 aviso · 1 movimiento", useUnmergedTree = true).assertIsDisplayed()
         assertEquals(0, composeRule.onAllNodesWithText("2 avisos", useUnmergedTree = true).fetchSemanticsNodes().size)
+        assertEquals(0, composeRule.onAllNodesWithText("2 por revisar", useUnmergedTree = true).fetchSemanticsNodes().size)
     }
 
     @Test

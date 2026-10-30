@@ -261,8 +261,13 @@ fun deudaDespuesDelTraspaso(from: Account?, to: Account?, amount: Long?): String
     // 2. **El signo.** [formatMoney] lo descarta, y una deuda que queda negativa —abonar de más,
     //    que es exactamente lo que hace quien cancela un crédito— tiene que leerse «−$500.000»
     //    y no «$500.000».
-    return "Deuda de ${credito.name}: ${signedMoney(deudaActual, moneda)} " +
-        "pasa a ${signedMoney(despues, moneda)}"
+    // Vuelta 73 · **palabras de deuda positiva**: «Debes $980.000 · después del abono, $480.000». Con
+    // «Deuda de X: −$980.000 pasa a −$1.480.000» (la revisión `r4`) el abono se leía como si la
+    // deuda creciera. La cuenta no tenía un error de signo: el abono baja la deuda (−monto) y el
+    // desembolso la sube (+monto); lo que estaba mal era el punto de partida, un crédito sin su saldo
+    // en Movi, y eso ahora lo ataja quien llama con [creditoSinSaldoEnMovi] antes de hacer la cuenta.
+    val que = if (credito.id == from.id) "del desembolso" else "del abono"
+    return "Debes ${signedMoney(deudaActual, moneda)} · después $que, ${signedMoney(despues, moneda)}"
 }
 
 /**
@@ -489,11 +494,14 @@ fun creditoSinSaldoEnMovi(deuda: Account?, bajaLaDeuda: Long?): Boolean {
     return actual <= 0L || (bajaLaDeuda != null && bajaLaDeuda > 0L && actual - bajaLaDeuda < 0L)
 }
 
-/** Lo que dice el renglón de la deuda cuando Movi no tiene su saldo (vuelta 49). */
-const val SIN_EL_SALDO_DEL_CREDITO: String = "Movi no tiene el saldo de este crédito"
+/**
+ * Lo que dice el renglón de la deuda cuando Movi no tiene su saldo (vuelta 49). Vuelta 73: las mismas
+ * palabras que la ficha del crédito y Patrimonio ([com.jvillada.movi.ui.credits.FALTA_EL_SALDO_DEL_CREDITO]).
+ */
+const val SIN_EL_SALDO_DEL_CREDITO: String = com.jvillada.movi.ui.credits.FALTA_EL_SALDO_DEL_CREDITO
 
-/** La acción de ese renglón: abre Créditos, donde está «Ajustar saldo» del crédito. */
-const val CUADRAR_EL_CREDITO: String = "Cuadrar ›"
+/** La acción de ese renglón: abre el crédito, donde está su ajuste de saldo de siempre. */
+const val CUADRAR_EL_CREDITO: String = com.jvillada.movi.ui.credits.CARGAR_EL_SALDO_DEL_CREDITO + " ›"
 
 /** «Deuda de Nu: $1.683.000» — la deuda de hoy, antes de que haya monto con qué decir en qué queda. */
 fun deudaDeHoy(deuda: Account?): String? {
@@ -1422,9 +1430,29 @@ internal fun TransferBody(
                 style = Movi.textos.apoyo,
                 color = Movi.colores.textoMedio,
             )
-            deudaDespuesDelTraspaso(from, to, amount)?.let { renglon ->
+            // Vuelta 73: el abono sobre un crédito sin su saldo en Movi no hace la cuenta («−$980.000
+            // pasa a −$1.480.000» parecía una deuda que crecía): dice que falta el saldo y ofrece
+            // cargarlo, como la pestaña Cuota desde la vuelta 49.
+            val abonoSinSaldo = claseDeTraspaso == TransferKind.ABONO_EXTRAORDINARIO && creditoSinSaldoEnMovi(to, bajaLaDeuda = amount)
+            if (abonoSinSaldo) {
                 Spacer(Modifier.height(Espacio.xs))
-                Text(renglon, style = Movi.textos.apoyoMedio, color = Movi.colores.texto)
+                Text(
+                    if (onCuadrarElCredito != null) "$SIN_EL_SALDO_DEL_CREDITO · $CUADRAR_EL_CREDITO" else SIN_EL_SALDO_DEL_CREDITO,
+                    style = Movi.textos.apoyoMedio,
+                    color = if (onCuadrarElCredito != null) Movi.colores.enlace else Movi.colores.texto,
+                    modifier = Modifier
+                        .then(
+                            if (onCuadrarElCredito != null) {
+                                Modifier.clickable(onClickLabel = "Cargar el saldo de ${to?.name.orEmpty()}", onClick = onCuadrarElCredito)
+                            } else Modifier,
+                        )
+                        .testTag(TAG_RENGLON_DE_LA_DEUDA),
+                )
+            } else {
+                deudaDespuesDelTraspaso(from, to, amount)?.let { renglon ->
+                    Spacer(Modifier.height(Espacio.xs))
+                    Text(renglon, style = Movi.textos.apoyoMedio, color = Movi.colores.texto, modifier = Modifier.testTag(TAG_RENGLON_DE_LA_DEUDA))
+                }
             }
         }
 

@@ -80,6 +80,8 @@ import com.jvillada.movi.ui.credits.totalDebtCop
 import com.jvillada.movi.ui.credits.CUADRAR_LAS_DEUDAS_SIN_SALDO
 import com.jvillada.movi.ui.credits.textoDeLasDeudasSinSaldo
 import com.jvillada.movi.shared.model.deudasSinSaldoDe
+import com.jvillada.movi.shared.model.creditoSinSaldo
+import com.jvillada.movi.ui.credits.CARGAR_EL_SALDO_DEL_CREDITO
 import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.ui.components.ds.TamanoDeBoton
 import com.jvillada.movi.ui.components.ds.VarianteDeBoton
@@ -266,7 +268,11 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
                             historia = historiaLeida.valor,
                             historiaEnCamino = historiaLeida.actualizando,
                             // Vuelta 59: las deudas sin saldo, que «Deudas» cuenta con su signo.
-                            deudasSinSaldo = deudasSinSaldoDe(cuentas),
+                            // Vuelta 73: más los créditos con condiciones en $0 sin movimientos (ver
+                            // `creditoSinSaldo`), que no restan pero tampoco tienen su deuda.
+                            deudasSinSaldo = (deudasSinSaldoDe(cuentas) + creditos.orEmpty().filter(::creditoSinSaldo).map { it.account })
+                                .distinctBy { it.id },
+                            creditosSinSaldo = creditos.orEmpty().filter(::creditoSinSaldo).map { it.account.id }.toSet(),
                             onCuadrar = { id -> onNavigate(id?.let { Screen.CuadrarLaCuenta(it) } ?: Screen.CuadreDeSaldos) },
                         )
                     }
@@ -506,6 +512,8 @@ private fun TarjetaDelPatrimonio(
     historia: com.jvillada.movi.shared.model.HistoriaDelPatrimonio?,
     historiaEnCamino: Boolean,
     deudasSinSaldo: List<Account> = emptyList(),
+    /** Vuelta 73: cuáles de [deudasSinSaldo] son créditos con condiciones (ver `creditoSinSaldo`). */
+    creditosSinSaldo: Set<String> = emptySet(),
     /** Abre Cuadre de saldos con esa deuda arriba (o sin ninguna, con varias). */
     onCuadrar: (String?) -> Unit = {},
 ) {
@@ -535,18 +543,24 @@ private fun TarjetaDelPatrimonio(
             if (balance.deudas > 0 || deudasSinSaldo.isNotEmpty()) RenglonDelPatrimonio("Deudas", -balance.deudas)
             // Vuelta 59: «Deudas» es la cuenta del patrimonio (cada deuda con su signo), así que una sin
             // saldo en Movi le resta; Créditos no la resta. Sin esta línea las dos cifras se contradecían.
-            textoDeLasDeudasSinSaldo(
-                creditos = deudasSinSaldo.count { it.type == AccountType.LOAN },
-                tarjetas = deudasSinSaldo.count { it.type != AccountType.LOAN },
-            )?.let { sinSaldo ->
+            // Vuelta 73: con un solo crédito con condiciones sin su saldo, se dice cuál y se ofrece
+            // cargarlo, con las palabras de su ficha.
+            val unCreditoSinSaldo = deudasSinSaldo.singleOrNull()?.takeIf { it.id in creditosSinSaldo }
+            (
+                unCreditoSinSaldo?.let { textoDelCreditoSinSaldoEnElPatrimonio(it.name) }
+                    ?: textoDeLasDeudasSinSaldo(
+                        creditos = deudasSinSaldo.count { it.type == AccountType.LOAN },
+                        tarjetas = deudasSinSaldo.count { it.type != AccountType.LOAN },
+                    )?.let { "Incluye $it" }
+                )?.let { sinSaldo ->
                 Row(
                     modifier = Modifier.fillMaxWidth().testTag(TAG_DEUDAS_SIN_SALDO_EN_EL_PATRIMONIO),
                     horizontalArrangement = Arrangement.spacedBy(Espacio.s),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("Incluye $sinSaldo", style = Movi.textos.apoyo, color = Movi.colores.aviso, modifier = Modifier.weight(1f))
+                    Text(sinSaldo, style = Movi.textos.apoyo, color = Movi.colores.aviso, modifier = Modifier.weight(1f))
                     Boton(
-                        texto = CUADRAR_LAS_DEUDAS_SIN_SALDO,
+                        texto = if (unCreditoSinSaldo != null) CARGAR_EL_SALDO_DEL_CREDITO else CUADRAR_LAS_DEUDAS_SIN_SALDO,
                         onClick = { onCuadrar(deudasSinSaldo.singleOrNull()?.id) },
                         variante = VarianteDeBoton.Fantasma,
                         tamano = TamanoDeBoton.S,
@@ -556,6 +570,13 @@ private fun TarjetaDelPatrimonio(
         }
     }
 }
+
+/**
+ * Vuelta 73: la línea de Patrimonio con un solo crédito con condiciones y sin su saldo —«Falta el saldo
+ * de Vehículo 4083», con «Cargarlo» al lado—. Su ficha dice lo mismo («Falta el saldo de este
+ * crédito»). Pura.
+ */
+internal fun textoDelCreditoSinSaldoEnElPatrimonio(nombre: String): String = "Falta el saldo de $nombre"
 
 /** La línea «Incluye 1 crédito sin saldo · Cuadrar» debajo de «Deudas» (vuelta 59). */
 const val TAG_DEUDAS_SIN_SALDO_EN_EL_PATRIMONIO: String = "patrimonio:deudas-sin-saldo"

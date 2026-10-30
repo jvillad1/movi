@@ -47,3 +47,26 @@ fun deudaTotalDe(cuentas: List<Account>): Long = cuentas.filter(::esDeuda).sumOf
  */
 fun deudasSinSaldoDe(cuentas: List<Account>): List<Account> =
     cuentas.filter { esDeuda(it) && valorEnPesosDe(it) < 0L }
+
+/**
+ * **Vuelta 73 · ¿a este crédito le falta su saldo en Movi?** Un préstamo (`LOAN`) con condiciones
+ * (`CreditTerms.principal > 0`) cuya deuda en su moneda es negativa, o es cero sin un solo movimiento
+ * que la haya llevado ahí ([CreditSummary.hasMovements]: en cero CON movimientos está pagado, y eso es
+ * cierto).
+ *
+ * Cómo se llega ahí: la deuda de un préstamo sale de sus movimientos (positiva = lo que se debe). Las
+ * condiciones (`PUT /api/credits/{id}`) no escriben ningún movimiento, así que un crédito cargado con
+ * sus condiciones y sin el desembolso ni un ajuste queda en $0; la primera cuota le resta su capital y
+ * queda en negativo —la demo: Vehículo 4083, capital $40M, deuda −$980.000—. [patrimonioDe] suma cada
+ * deuda con su signo, así que ese −$980.000 sube el neto: es el síntoma, y la causa es el saldo que
+ * falta. **[patrimonioDe] no cambia** (ver el KDoc de arriba y el reporte de la vuelta 73): quitarle el
+ * signo movería cifras que hoy ve el dueño —p. ej. la curva del patrimonio en los meses antes de un
+ * ajuste de saldo— sin hacerlas más ciertas. Lo que cambia es que se dice: «Falta el saldo de este
+ * crédito · Cargarlo», con el ajuste de saldo de siempre. Pura.
+ */
+fun creditoSinSaldo(credito: CreditSummary): Boolean {
+    val cuenta = credito.account
+    if (cuenta.type != AccountType.LOAN || (credito.terms?.principal ?: 0L) <= 0L) return false
+    val deuda = cuenta.balancesByCurrency[cuenta.currency] ?: cuenta.balance
+    return deuda < 0L || (deuda == 0L && !credito.hasMovements)
+}

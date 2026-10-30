@@ -15,6 +15,7 @@ import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -153,7 +154,7 @@ class MasScreenTest {
 
         // Cada fila en su sección, en el orden pedido.
         val enOrden = listOf(
-            FILA_TU_PATRIMONIO, TITULO_DE_PERSONAS, FILA_CUADRE_DE_SALDOS,
+            FILA_TU_PATRIMONIO, TITULO_DE_PERSONAS, com.jvillada.movi.shared.model.PERSONAS_Y_COMERCIOS, FILA_CUADRE_DE_SALDOS,
             "Inicio del período", "Ahorro de cada período", "Categorías", "Captura del banco",
             "Movi AI", "Lo que Movi sabe de ti", "Editar inicio",
             "Ocultar los saldos",
@@ -178,6 +179,8 @@ class MasScreenTest {
         montar()
         mapOf(
             "Categorías" to Screen.Categorias,
+            // Vuelta 73: «Personas y comercios» es una fila de Tú.
+            com.jvillada.movi.shared.model.PERSONAS_Y_COMERCIOS to Screen.Destinos(),
             "Captura del banco" to Screen.CapturaDelBanco,
             "Movi AI" to Screen.AIChat(),
             "Lo que Movi sabe de ti" to Screen.LoQueMoviSabe,
@@ -351,10 +354,14 @@ class MasScreenTest {
         }
     }
 
+    /**
+     * Vuelta 73: «Personas y comercios» vive en Tú, una sola vez, en «Lo tuyo» (antes al final de un
+     * grupo, donde había que saber buscarla).
+     */
     @Test
-    fun `Personas y comercios vive en Espacios, no tambien en Ajustes`() {
+    fun `Personas y comercios vive en Tu, una sola vez`() {
         montar()
-        composeRule.onNodeWithText("Personas y comercios", useUnmergedTree = true).assertDoesNotExist()
+        assertEquals(1, composeRule.onAllNodesWithText("Personas y comercios", useUnmergedTree = true).fetchSemanticsNodes().size)
     }
 
     @Test

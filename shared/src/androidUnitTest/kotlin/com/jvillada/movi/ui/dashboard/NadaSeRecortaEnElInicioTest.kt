@@ -67,12 +67,17 @@ class NadaSeRecortaEnElInicioTest {
         ),
         credits = emptyList<CreditSummary>(),
         cards = emptyList<CardSummary>(),
-        // Un pago pendiente: así «Falta por pagar» también se pinta y los dos widgets van lado a lado,
-        // cada uno con media pantalla (que es donde se recortaba).
+        // Dos pagos pendientes: así «Falta por pagar» también se pinta y los dos widgets van lado a
+        // lado, cada uno con media pantalla (que es donde se recortaba). Vuelta 73: con uno solo, ese
+        // ya está en «Próximo pago» y el widget no se pinta.
         upcoming = listOf(
             UpcomingPayment(
                 rule = RecurringRule(id = "r_arr", name = "Arriendo", category = "Vivienda", amount = 1_850_000, dayOfMonth = 20, type = TransactionType.EXPENSE),
                 dueDate = "2026-09-20", daysUntil = 6, status = PaymentStatus.UPCOMING,
+            ),
+            UpcomingPayment(
+                rule = RecurringRule(id = "r_int", name = "Internet", category = "Servicios", amount = 80_000, dayOfMonth = 24, type = TransactionType.EXPENSE),
+                dueDate = "2026-09-24", daysUntil = 10, status = PaymentStatus.UPCOMING,
             ),
         ),
         ocurrencias = emptyList(),

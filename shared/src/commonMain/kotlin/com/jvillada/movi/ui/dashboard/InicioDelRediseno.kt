@@ -261,6 +261,19 @@ fun filasDelWidgetDeFalta(data: DashboardData, sinElProximoPago: Boolean = false
     return FilasDelWidgetDeFalta(filas = filas, masSinFila = pendientes.size - filas.size, elDeArriba = elDeArriba)
 }
 
+/**
+ * **¿El widget «Falta por pagar» solo repetiría «Próximo pago»?** (vuelta 73). Con «Próximo pago» en
+ * el Inicio ([sinElProximoPago]) y ese pago como el único pendiente, el widget era una tarjeta de
+ * ~300 px que decía «Es el de «Próximo pago»» (la revisión `r4`). Entonces no se pinta: en pantalla
+ * ancha «En qué se va» toma el ancho, y solo, el hueco se cierra (`visibleSections`). Con dos o más
+ * pendientes, o sin «Próximo pago» arriba, el widget sigue como siempre. Pura.
+ */
+fun elWidgetDeFaltaSoloRepiteElProximoPago(data: DashboardData, sinElProximoPago: Boolean): Boolean {
+    if (!sinElProximoPago) return false
+    val lista = filasDelWidgetDeFalta(data, sinElProximoPago = true)
+    return lista.elDeArriba != null && lista.filas.isEmpty() && lista.masSinFila == 0
+}
+
 /** «y 2 más»: lo pendiente que el widget no lista (ver [FilasDelWidgetDeFalta.masSinFila]). */
 fun yNMas(n: Int): String? = if (n > 0) "y $n más" else null
 

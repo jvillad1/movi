@@ -172,7 +172,8 @@ val SECCIONES_DE_AJUSTES: List<String> =
  * - **Movi**: Movi AI, Lo que Movi sabe de ti, Editar inicio (y Primeros pasos, mientras falte algo);
  * - **Cómo se ve**: «Ocultar los saldos» (de este aparato). El tema se fue en la vuelta 29: la opción 3
  *   es clara y nada más;
- * - **Avisos**: las notificaciones con un solo «Activar avisos», cuántos días antes avisar y el resumen por correo;
+ * - **Avisos**: las notificaciones con un solo «Activar avisos», cuántos días antes avisar y el resumen por
+ *   correo; y, en Android, **todos** los avisos del teléfono (vuelta 73, ver [AvisosDeEsteTelefono]);
  * - **Tus datos**: Documentos, Descargar tus datos, Compartir;
  * - **Entrar** (solo con lector de huella) y **Cuenta**: la contraseña y cerrar la sesión;
  * - y al final, aparte y sin relleno rojo, «Borrar mi cuenta».
@@ -471,6 +472,10 @@ fun MasScreen(
                         },
                         onClick = alternarCierre,
                     )
+                    // Vuelta 73: lo que suena en el teléfono Android (permiso, movimientos, pagos,
+                    // banco mudo, débitos, cierre, resúmenes) vive acá con lo demás; antes estaba en
+                    // Captura del banco → «Avisos de Movi». En la web y en iOS no pinta nada.
+                    AvisosDeEsteTelefono()
                 }
                 NotaDeSeccion(
                     errorCierre ?: when (profile?.cierrePorCorreo) {

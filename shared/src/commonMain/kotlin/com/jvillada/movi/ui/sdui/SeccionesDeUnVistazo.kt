@@ -345,6 +345,18 @@ internal fun textosDeLaFranjaPorConfirmar(conteo: ConteoPorRevisar, suman: Long?
     return "Por confirmar" to (if (antiguos == null) linea else "$linea · $antiguos")
 }
 
+/** Vuelta 73: los renglones del desglose de la franja, a todo el ancho de la fila (ver [pastillaDeLaFranja]). */
+internal const val LINEAS_DE_LA_FRANJA_POR_CONFIRMAR: Int = 3
+
+/**
+ * **¿La franja lleva la pastilla «N por revisar»?** (vuelta 73): solo sin renglón de abajo. Cuando el
+ * renglón ya dice lo que espera —«$1.100.200 en 5 avisos · y 1 movimiento», «1 aviso · 1 movimiento»—,
+ * la pastilla era la misma cuenta dicha otra vez, y a 360 dp le quitaba al renglón el ancho que
+ * necesitaba: se cortaba en «y 1 movimien…» (la revisión `r4`). Sin renglón —«Por confirmar» con una
+ * sola fuente y sin suma— la pastilla es lo único que dice cuántos son, y se queda. Pura.
+ */
+internal fun pastillaDeLaFranja(subtitulo: String?): Boolean = subtitulo.isNullOrBlank()
+
 /**
  * **La franja «Por confirmar»** de la tarjeta héroe (vuelta 39): debajo del hilo, en la capa 2, el reloj
  * en el tinte, «Por confirmar», la pastilla «N por revisar» —el mismo número de la insignia de «Revisar
@@ -365,13 +377,18 @@ private fun FranjaPorConfirmar(data: DashboardData, onNavigate: (Screen) -> Unit
             titulo = conCifrasOcultas(titulo),
             subtitulo = subtitulo?.let { conCifrasOcultas(it) },
             // Vuelta 55: con la letra al 130 %, «3 avisos · 1 movimiento» no entra al lado de la
-            // pastilla; baja a un segundo renglón en vez de cortarse.
-            lineasDelSubtitulo = 2,
+            // pastilla; baja a un segundo renglón en vez de cortarse. Vuelta 73: con la pastilla al
+            // lado, a 360 dp ni dos renglones alcanzaban («… y 1 movimien…»); ahora el renglón tiene
+            // el ancho de la fila, y el tercero queda para «y 2 antiguos» con la letra grande.
+            lineasDelSubtitulo = LINEAS_DE_LA_FRANJA_POR_CONFIRMAR,
             modifier = Modifier.testTag(TAG_FRANJA_POR_CONFIRMAR),
             inicio = { IconoEnCirculo(Icons.Rounded.Schedule, tono = TonoDeIcono.Aviso) },
             final = {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
-                    Pildora(textoDeLaPastillaDeAvisos(conteo.total), tono = TonoDePildora.Aviso)
+                    // Vuelta 73: la pastilla solo cuando el renglón de abajo no dice qué espera. Con
+                    // «$1.100.200 en 5 avisos · y 1 movimiento» debajo, «6 por revisar» repetía la
+                    // cuenta y le comía al renglón el ancho que necesitaba a 360 dp.
+                    if (pastillaDeLaFranja(subtitulo)) Pildora(textoDeLaPastillaDeAvisos(conteo.total), tono = TonoDePildora.Aviso)
                     Chevron()
                 }
             },

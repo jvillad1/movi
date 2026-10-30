@@ -3769,3 +3769,64 @@ pagarlo, la fila de octubre sin «vencido», el total pagado, lo vencido que sig
    abono—, como lo resta la caja: abonar ya no la hace subir.
 5. La pregunta de «Pausar» desde el «⋯» usa la fila tocada; Movi AI dice «falta $80.000 del mínimo de
    $180.000»; y el barrido de recordatorios no avisa por un mínimo del extracto ya cubierto (`minimoCubiertoEn`).
+
+## 71. Vuelta 73: Inicio sin cortes, Tú ordenado, los terceros que cuadran con los grupos
+
+De la revisión 4 del 29-oct (`r4-inicio-360.png`, `r4-inicio-390-b.png`, `r4-inicio-1280-b.png`,
+`r4-terceros-390.png`, `r4-tercero-caro-390.png`, `r4-anotar-abono.png`), puntos 8, 9, 10, 11 y la parte de
+Tú del 14. **Sin reglas de plata nuevas**: ninguna cifra de datos sanos cambió; `patrimonioDe` quedó igual.
+Ningún componente nuevo en `ds/`.
+
+1. **La franja «Por confirmar» no se corta a 360** (regresión de la vuelta 68). Con la pastilla «6 por
+   revisar» y la flecha a la derecha, el renglón «$1.100.200 en 5 avisos · y 1 movimiento» tenía ~100 dp a
+   360 y se cortaba en «y 1 movimien…». Ahora **la pastilla va solo cuando no hay renglón**
+   (`pastillaDeLaFranja`): el renglón ya dice qué espera, la pastilla repetía la cuenta. Sin renglón («Por
+   confirmar» con una sola fuente y sin suma) la pastilla es lo único que dice cuántos son, y se queda. El
+   renglón llega hasta 3 líneas (`LINEAS_DE_LA_FRANJA_POR_CONFIRMAR`, para «· y 2 antiguos» con la letra
+   grande). La cifra sigue pegada a lo que nombra (vuelta 68).
+2. **El widget «Falta por pagar» no queda casi vacío.** Si su único pendiente es el de «Próximo pago», no se
+   pinta (`elWidgetDeFaltaSoloRepiteElProximoPago`, en `visibleSections`): en pantalla ancha y en el
+   teléfono «En qué se va» queda solo en su bloque, a todo el ancho (`bloquesDelInicio` ya pintaba así un
+   widget suelto); si el widget iba solo, el hueco se cierra. Con dos o más pendientes, como siempre.
+3. **El tercero cuadra con los grupos.** La ficha de un tercero miembro de un grupo lleva arriba, por grupo,
+   una `Fila` en una `Superficie` de lista: «En Casa con Caro» y debajo «Puso $240.000 · te debe $168.050»
+   (o «le debes $X», «están a mano», «a mano contigo» con más de dos), con el círculo neutro y la flecha;
+   tocarla abre el grupo. Las cifras salen **tal cual** del `DetalleDelEspacio` que arma el server con
+   `saldoDelEspacio`: el `puso` del período (lo de «Quién puso qué») y el reembolso entre los dos (lo de la
+   tarjeta del saldo); nada se recalcula (`elTerceroEnLosGrupos`). «Le enviaste / Te envió» siguen siendo
+   las transferencias, con el rótulo «Transferencias este período»; sin ninguna y con un grupo de por medio,
+   **«Sin transferencias este período»** en vez de dos «Nada». **«Personas y comercios» se mudó a Tú**: una
+   `Fila` de «Lo tuyo» (`FilaDePersonasYComercios`, ícono `Contacts`), entre Grupos y Cuadre de saldos; ya
+   no vive al final de un grupo, y su «volver» cae en Tú. Desde un grupo se llega con «Nuevo grupo».
+4. **El crédito sin saldo.** Causa: la deuda de un préstamo sale de sus movimientos, y las condiciones no
+   escriben ninguno; sin desembolso ni ajuste queda en $0 y la primera cuota la deja negativa (la demo:
+   Vehículo 4083, capital $40M, −$980.000). `patrimonioDe` suma cada deuda con su signo (decisión de la
+   vuelta 59), así que ese negativo sube el neto. **`patrimonioDe` no cambió**: sacarle el signo movería
+   cifras de datos sanos (la curva del patrimonio en los meses anteriores a un ajuste de saldo) sin
+   hacerlas más ciertas. Lo que cambió es que se dice: `creditoSinSaldo` (`:core`; LOAN con `principal > 0`
+   y deuda < 0, o en 0 sin movimientos) hace que **la ficha** diga «Falta el saldo de este crédito» con
+   «Escribe lo que debes hoy según el banco» y **«Cargarlo»** (la hoja de ajuste de siempre), y que
+   **Patrimonio**, con ese solo crédito sin saldo, diga «Falta el saldo de Vehículo 4083» con «Cargarlo» en
+   vez de «Incluye 1 crédito sin saldo · Cuadrar». **«Anotar este abono»** habla de deuda positiva:
+   «Debes $980.000 · después del abono, $480.000» (y «después del desembolso» al revés). La cuenta no tenía
+   un error de signo —el abono resta, el desembolso suma—; lo que fallaba era el punto de partida, y un
+   abono sobre un crédito sin saldo ahora dice «Falta el saldo de este crédito · Cargarlo ›», como la
+   pestaña Cuota desde la vuelta 49.
+5. **Los avisos en un solo lugar: Tú → Avisos.** En Android, `AvisosDeEsteTelefono` (expect; vacío en web e
+   iOS, donde esos avisos no existen) pinta en la misma lista, después del correo de cierre, la fila «Avisos
+   en este teléfono» (activos, o «Permitir» / «Abrir ajustes») y los siete interruptores del teléfono:
+   movimientos, pagos por vencer, banco mudo, débitos automáticos, cierre del período, resumen de la mañana
+   y resumen semanal, como `Fila` + `Interruptor` del sistema (era una tarjeta con `Switch` y `sp` sueltos).
+   Se guardan donde siempre (`PreferenciasDeAvisos`): no se migró nada. **Captura del banco** perdió
+   «Avisos de Movi»; queda con la captura (permisos, notificaciones del banco, hibernación, historial y el
+   umbral de banco mudo, que es de la captura) y una `FilaDeNavegacion` «Avisos · Se encienden y se apagan
+   en Tú».
+
+Lo vigilan `Vuelta73Test` (commonTest: la pastilla, el widget en `visibleSections` y `bloquesDelInicio`, las
+líneas del tercero con `saldoDelEspacio`, el texto del abono, `creditoSinSaldo` y `patrimonioDe` igual con
+créditos sanos) y `Vuelta73EnPantallaTest` (Robolectric, 360 dp, `NATIVE`: la franja a ×1,12 y a ×1,456 sin
+«…», el widget oculto con «En qué se va» a lo ancho, la ficha de Caro con su grupo, los avisos en Tú y
+Captura sin ellos y con el enlace). Se actualizaron `ElInicioDeLaOpcion3Test`, `MasScreenTest`,
+`LosResumenesSeApaganTest` (ahora en `ui/mas`), `LosCreditosDicenLaVerdadEnPantallaTest`,
+`EspaciosEnDosColumnasTest`, `TransferFormTest` y `ElAmarilloEsDeLaAccionTest`. **Las líneas base** no
+cambian, y las guardas en 0 siguen en 0.

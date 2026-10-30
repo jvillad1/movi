@@ -98,7 +98,8 @@ class ElAmarilloEsDeLaAccionTest {
             "credits/CreditosScreen.kt" to "TITULO_SALIDA_DE_DEUDAS",
             "plan/PlanScreen.kt" to "\"Tus períodos\"",
             "porrevisar/PorRevisarScreen.kt" to "FilaQueLleva",
-            "destinos/AccesoAPersonasYComercios.kt" to "PERSONAS_Y_COMERCIOS",
+            // Vuelta 73: «Personas y comercios» es una fila más de la lista de «Lo tuyo» (una [Fila] con su
+            // círculo neutro dentro de la superficie de la sección), ya no una tarjeta suelta.
         )
         esperadas.forEach { (archivo, donde) ->
             val codigo = ui.entries.single { nombre(it.key) == archivo }.value

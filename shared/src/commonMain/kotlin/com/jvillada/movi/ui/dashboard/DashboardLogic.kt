@@ -1151,7 +1151,10 @@ fun visibleSections(def: ScreenDefinition, data: DashboardData): List<ScreenSect
             // Ola 3 · «Editar inicio»: «Para revisar» escondida deja esta línea en su lugar, y solo
             // ocupa lugar con algo urgente — lo urgente nunca desaparece del todo de Hoy.
             PARA_REVISAR_COMPACTO -> cosasParaRevisarDe(data).any { it.urgente }
-            "CHECKLIST_DEL_PERIODO" -> checklistDelPeriodoDe(data).isNotEmpty()
+            // Vuelta 73: con «Próximo pago» arriba y ese pago como el único pendiente, el widget solo
+            // lo repetiría (ver `elWidgetDeFaltaSoloRepiteElProximoPago`): no ocupa lugar.
+            "CHECKLIST_DEL_PERIODO" -> checklistDelPeriodoDe(data).isNotEmpty() &&
+                !(hayProximoPago && elWidgetDeFaltaSoloRepiteElProximoPago(data, sinElProximoPago = true))
             "GASTO_POR_CATEGORIA" -> data.spentByCategory.orEmpty().any { it.value > 0 }
             // Solo con todo lo que la cuenta necesita ya leído, y con ingresos que medir. Ver
             // `disponibleDelInicio`: sin datos no se afirma un disponible.

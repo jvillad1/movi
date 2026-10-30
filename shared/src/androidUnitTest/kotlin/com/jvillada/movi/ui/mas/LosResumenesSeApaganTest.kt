@@ -1,8 +1,8 @@
-package com.jvillada.movi.ui.sms
+package com.jvillada.movi.ui.mas
 
 import android.Manifest
 import android.app.Application
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -29,7 +29,7 @@ import kotlin.test.assertTrue
 /**
  * # Vuelta 68 · los dos resúmenes se apagan donde viven los demás avisos del teléfono
  *
- * Ajustes → «Captura del banco» → «Avisos de Movi»: junto a «Avisarme cuando cierre mi período» van
+ * Tú → Avisos (vuelta 73; antes Captura del banco → «Avisos de Movi»): junto a «Avisarme cuando cierre mi período» van
  * «Resumen de la mañana, a las 8:00» y «Resumen semanal de tus grupos, el domingo». Prendidos por
  * defecto (decisión del dueño, para quien ya usa Movi y para las cuentas nuevas), y cada uno se guarda
  * aparte en las preferencias de avisos del teléfono, como los otros.
@@ -50,7 +50,7 @@ class LosResumenesSeApaganTest {
     private fun montar() {
         composeRule.setContent {
             MoviTheme {
-                Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) { AvisosDelTelefonoCard() }
+                Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) { AvisosDeEsteTelefono() }
             }
         }
         composeRule.waitForIdle()

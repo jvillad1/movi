@@ -50,6 +50,19 @@ fun totalDebtCop(credits: List<CreditSummary>, cards: List<CardSummary>): Long =
 /** Lo que dice una deuda cuyo saldo en Movi no es positivo y no se llegó ahí pagándola. */
 const val SIN_SALDO_EN_MOVI: String = "Sin saldo en Movi"
 
+/**
+ * **Vuelta 73 · un crédito con condiciones y sin su saldo** ([com.jvillada.movi.shared.model.creditoSinSaldo]):
+ * lo que dicen su ficha, Patrimonio y el abono de Agregar, con las mismas palabras. «Cargarlo» abre el
+ * ajuste de saldo de siempre: Movi no inventa la deuda, la escribe el dueño con la del banco.
+ */
+const val FALTA_EL_SALDO_DEL_CREDITO: String = "Falta el saldo de este crédito"
+
+/** La acción de [FALTA_EL_SALDO_DEL_CREDITO]: el ajuste de saldo de siempre. */
+const val CARGAR_EL_SALDO_DEL_CREDITO: String = "Cargarlo"
+
+/** Lo que va al lado de «Cargarlo» en la ficha del crédito: qué se escribe. */
+const val CUANTO_DEBES_SEGUN_EL_BANCO: String = "Escribe lo que debes hoy según el banco"
+
 /** Lo que cuelga debajo de una deuda sin saldo, en la lista y en su detalle: qué hacer. */
 const val FALTA_EL_SALDO_DE_LA_DEUDA: String = "Movi no tiene su saldo: cuádrala con el banco"
 

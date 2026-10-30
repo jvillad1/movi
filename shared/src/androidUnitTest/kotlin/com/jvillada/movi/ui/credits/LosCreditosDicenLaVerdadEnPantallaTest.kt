@@ -85,15 +85,17 @@ class LosCreditosDicenLaVerdadEnPantallaTest {
             composeRule.onAllNodesWithTag(TAG_DEUDA_SIN_SALDO, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
         }
 
-        assertTrue(hay(SIN_SALDO_EN_MOVI))
-        assertEquals(1, cuantos(FALTA_EL_SALDO_DE_LA_DEUDA), "la ficha lo decía dos veces")
+        // Vuelta 73: un crédito con condiciones dice qué le falta, con «Cargarlo».
+        assertEquals(1, cuantos(com.jvillada.movi.ui.credits.FALTA_EL_SALDO_DEL_CREDITO), "la ficha lo dice una vez")
+        assertEquals(0, cuantos(FALTA_EL_SALDO_DE_LA_DEUDA), "sin la frase de las tarjetas")
         assertFalse(hay("+\$980.000"), "el «+$980.000» en verde de antes")
         assertFalse(hay("−\$980.000"))
-        // «Cuadrar» abre la hoja de ajustar el saldo de su ficha, que tampoco dice la cifra al revés.
-        composeRule.onNode(hasText(CUADRAR_LAS_DEUDAS_SIN_SALDO) and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
+        // «Cargarlo» abre la hoja de ajustar el saldo de su ficha, que tampoco dice la cifra al revés.
+        composeRule.onNode(hasText(com.jvillada.movi.ui.credits.CARGAR_EL_SALDO_DEL_CREDITO) and hasClickAction())
+            .performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitUntil(5_000) { hay("Deuda en Movi") }
         assertFalse(hay("−\$980.000"), "la hoja decía «Deuda en Movi −$980.000»")
-        assertTrue(cuantos(SIN_SALDO_EN_MOVI) >= 2, "la ficha y la hoja dicen lo mismo")
+        assertTrue(hay(SIN_SALDO_EN_MOVI), "la hoja dice que Movi no tiene el saldo")
     }
 
     @Test
@@ -135,10 +137,12 @@ class LosCreditosDicenLaVerdadEnPantallaTest {
         composeRule.setContent {
             MoviTheme { Box(Modifier.fillMaxSize()) { com.jvillada.movi.ui.accounts.AccountsScreen(onNavigate = { destinos += it }) } }
         }
-        composeRule.waitUntil(5_000) { hay("Incluye 1 crédito sin saldo") }
+        // Vuelta 73: con un solo crédito con condiciones sin saldo, dice cuál y ofrece cargarlo.
+        composeRule.waitUntil(5_000) { hay("Falta el saldo de Vehículo 4083") }
         composeRule.onAllNodesWithTag(com.jvillada.movi.ui.accounts.TAG_DEUDAS_SIN_SALDO_EN_EL_PATRIMONIO, useUnmergedTree = true)
             .fetchSemanticsNodes().single()
-        composeRule.onNode(hasText(CUADRAR_LAS_DEUDAS_SIN_SALDO) and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.onNode(hasText(com.jvillada.movi.ui.credits.CARGAR_EL_SALDO_DEL_CREDITO) and hasClickAction())
+            .performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
         assertEquals(Screen.CuadrarLaCuenta("acc_4083"), destinos.last())
     }
