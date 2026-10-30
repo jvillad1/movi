@@ -3751,3 +3751,21 @@ pagarlo, la fila de octubre sin «vencido», el total pagado, lo vencido que sig
 `ElMinimoDelExtractoEnLaReglaTest` y, en Robolectric, `PagosQueSeManejanSolosTest` («Pausados · 1», el
 «⋯» con «Pausar», la pregunta con «No se debe» y «Dejarlo pendiente», sin propuesta de cuenta en una pausada,
 «Llevas $180.000 pagados»).
+
+### La re-revisión de la vuelta 72
+
+1. **El mínimo efectivo nunca pasa de lo facturado al corte** (`ExtractoDeLaTarjeta.minimoEfectivo` y
+   `minimoQueFalta`, en `:core`; los usan `loadCardRulePairs` y la hoja «Pagar»). Un mínimo tecleado de $180.000
+   sobre $60.000 facturados se salda pagando $60.000, y con lo facturado en cero no se pide nada («Mínimo
+   cubierto · sin saldo facturado»).
+2. **Una tarjeta sin extracto** (sin día de corte) vuelve a la regla de la primera ronda: lo pagado en el
+   período contra su `pagoMinimo` decide si está hecha, y la caja y la cola dicen lo que falta. Con el mínimo de
+   un extracto en la regla, las otras filas de la tarjeta (de un extracto anterior, cuyo mínimo no se conoce)
+   quedan como siempre: compararlas con el mínimo del extracto nuevo era el «Pago vencido · hace 24 días» falso.
+3. **«Pausar» no se ofrece en la fila vencida de una regla ya pausada**, y `/pausar` sobre una regla pausada
+   **conserva la fecha más temprana** (la adelanta, nunca la corre hacia adelante): un segundo «Pausar» no
+   devuelve lo que «No se debe» sacó.
+4. **«Falta por pagar» suma siempre el mínimo pendiente del extracto** —entero sin pagos, lo que falta con un
+   abono—, como lo resta la caja: abonar ya no la hace subir.
+5. La pregunta de «Pausar» desde el «⋯» usa la fila tocada; Movi AI dice «falta $80.000 del mínimo de
+   $180.000»; y el barrido de recordatorios no avisa por un mínimo del extracto ya cubierto (`minimoCubiertoEn`).
