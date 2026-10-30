@@ -15,6 +15,15 @@
 #
 # **Cómo lo encuentra el script.** Por el título de la corrida, «Paquete <sha completo>»: en una
 # corrida a mano, `headSha` es la punta de master al dispararla, no el commit que se armó.
+#
+# **Lo publica en un release (vuelta 84, 30-oct-2026).** Subir el JAR (87 MB) desde la Mac a
+# Railway se cortaba por timeout y cada despliegue caía en `--desde-fuente`. Ahora el JAR va a un
+# release **público** `paquete-<sha completo>` (prerelease, nunca «latest») con `server-all.jar`,
+# `server-all.jar.sha256` y `commit.txt`, y la imagen de runtime de Railway lo baja de ahí y
+# verifica la huella. El repo es público, así que el JAR también: lo aprobó el dueño (es código
+# compilado y la web, sin secretos). Se conservan los 5 `paquete-*` más recientes; los demás se
+# borran con su tag, y nada que no empiece por `paquete-` se toca. Ya no se sube el artefacto
+# `server-all`: `desplegar.sh` baja del release, por la misma URL pública que usa Railway.
 name: Paquete para Railway
 run-name: Paquete ${{ inputs.commit || github.sha }}
 
@@ -37,6 +46,9 @@ jobs:
     name: JAR del server con la web
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    # Escribir releases y tags (`gh release create/delete`), solo en este job (vuelta 84).
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
@@ -106,16 +118,54 @@ jobs:
             || { echo "══ El JAR no trae figtree_regular.ttf"; exit 1; }
           echo "── JAR para Java 17, con la web y las fuentes: ok"
 
-      - name: Preparar el artefacto
+      - name: Preparar el paquete
         run: |
           mkdir -p paquete-railway
           cp server/build/libs/server-all.jar paquete-railway/
           git rev-parse HEAD > paquete-railway/commit.txt
+          # El formato de `sha256sum` («<hash>  server-all.jar»): `desplegar.sh` lee el primer campo.
+          (cd paquete-railway && sha256sum server-all.jar > server-all.jar.sha256)
           echo "── commit $(cat paquete-railway/commit.txt), JAR de $(du -h paquete-railway/server-all.jar | cut -f1)"
+          cat paquete-railway/server-all.jar.sha256
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: server-all
-          path: paquete-railway/
-          retention-days: 7
-          if-no-files-found: error
+      # **El release que Railway baja (vuelta 84).** Tag `paquete-<sha completo>` (el mismo sha de
+      # `commit.txt` y del título de la corrida), prerelease y nunca «latest». Si ya existe (una
+      # corrida repetida del mismo commit), se reemplazan los tres archivos.
+      - name: Publicar el release paquete-<sha>
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          SHA=$(cat paquete-railway/commit.txt)
+          TAG="paquete-$SHA"
+          ARCHIVOS="paquete-railway/server-all.jar paquete-railway/server-all.jar.sha256 paquete-railway/commit.txt"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "── $TAG ya existe: reemplazo sus archivos"
+            gh release upload "$TAG" $ARCHIVOS --clobber
+          else
+            gh release create "$TAG" $ARCHIVOS \
+              --target "$SHA" --prerelease --latest=false \
+              --title "Paquete ${SHA:0:12}" \
+              --notes "JAR del server con la web, armado por la corrida ${{ github.run_id }} para el commit $SHA. Lo baja la imagen de runtime de Railway (scripts/despliegue-runtime/). Se conservan solo los 5 paquete-* más recientes."
+          fi
+          gh release view "$TAG" --json tagName,isPrerelease,assets \
+            --jq '"\(.tagName) prerelease=\(.isPrerelease) archivos=\([.assets[].name] | join(","))"'
+
+      # **Limpieza:** quedan los 5 `paquete-*` publicados más recientemente (`publishedAt`: el
+      # `createdAt` de `gh release list` es la fecha del COMMIT, y un paquete recién armado de un
+      # commit viejo —volver atrás— saldría primero en la fila de borrar); los demás se
+      # borran con su tag. Solo se mira lo que empieza por `paquete-`: ningún otro release ni tag se
+      # toca. Un borrado que falla no tumba la corrida (el paquete ya está publicado).
+      - name: Borrar los paquete-* viejos (quedan 5)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          viejos=$(gh release list --limit 1000 --json tagName,publishedAt,createdAt \
+            --jq '[.[] | select(.tagName | startswith("paquete-"))] | sort_by(.publishedAt // .createdAt) | reverse | .[5:] | .[].tagName')
+          if [ -z "$viejos" ]; then echo "── Nada que borrar"; exit 0; fi
+          for tag in $viejos; do
+            case "$tag" in paquete-*) ;; *) echo "══ «$tag» no es un paquete: no lo toco"; continue ;; esac
+            echo "── Borro $tag"
+            gh release delete "$tag" --cleanup-tag --yes || echo "   No pude borrar $tag; sigo"
+          done
