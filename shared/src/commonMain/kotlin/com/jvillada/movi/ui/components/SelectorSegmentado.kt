@@ -35,7 +35,7 @@ fun colorDelSegmento(elegido: Boolean, colores: ColoresDeMovi): Pair<Color, Colo
 /**
  * **El selector segmentado de Movi**: una fila de pastillas a todo el ancho, una elegida.
  *
- * Nació como el selector de arriba de la hoja de «Agregar» (Gasto · Ingreso · Traspaso · Cuota), donde
+ * Nació como el selector de arriba de la hoja de «Agregar» (Gasto · Ingreso · Traspaso · Pagar), donde
  * elige entre formularios distintos —por eso lo dibuja quien decide cuál se muestra, afuera del
  * cuerpo de la hoja—. Ola C: la pestaña Plan elige con el mismo entre «Pagos del mes» y
  * «Presupuestos», así que se mudó acá en vez de copiarse.

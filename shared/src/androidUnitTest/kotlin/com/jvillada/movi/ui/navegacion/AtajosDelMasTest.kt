@@ -166,7 +166,7 @@ class AtajosDelMasTest {
     fun `el menu del mas tiene las cuatro que salieron de Hoy`() {
         montarRail(compacto = true)
         mantenerElMas()
-        listOf("Traspaso", "Pago de tarjeta", "Repartir", "Subir comprobante").forEach {
+        listOf("Traspaso", "Pagar tarjeta", "Repartir", "Subir comprobante").forEach {
             assertEquals(1, composeRule.onAllNodesWithText(it, useUnmergedTree = true).fetchSemanticsNodes().size, "«$it» una vez")
         }
         composeRule.onNodeWithText(AtajoDeAgregar.REPARTIR.rotulo, useUnmergedTree = true).performClick()

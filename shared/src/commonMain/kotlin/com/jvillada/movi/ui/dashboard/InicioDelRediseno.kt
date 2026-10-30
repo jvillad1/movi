@@ -139,7 +139,7 @@ enum class AccionDelInicio(val rotulo: String, val descripcion: String, val dest
     ANOTAR_GASTO("Anotar gasto", "Anotar un gasto", DestinoDeLaAccion.Atajo(AtajoDeAgregar.GASTO)),
     ANOTAR_INGRESO("Anotar ingreso", "Anotar un ingreso", DestinoDeLaAccion.Atajo(AtajoDeAgregar.INGRESO)),
     TRASPASAR("Traspasar", "Anotar un traspaso entre tus cuentas", DestinoDeLaAccion.Atajo(AtajoDeAgregar.TRASPASO)),
-    PAGAR_TARJETA("Pagar tarjeta", "Anotar el pago de una tarjeta", DestinoDeLaAccion.Atajo(AtajoDeAgregar.PAGO_DE_TARJETA)),
+    PAGAR_TARJETA(com.jvillada.movi.ui.quickadd.PAGAR_TARJETA, "Anotar el pago de una tarjeta", DestinoDeLaAccion.Atajo(AtajoDeAgregar.PAGO_DE_TARJETA)),
     REPARTIR("Repartir", "Repartir un gasto con alguien", DestinoDeLaAccion.Atajo(AtajoDeAgregar.REPARTIR)),
     SUBIR_COMPROBANTE("Subir comprobante", "Subir un comprobante para que Movi lo lea", DestinoDeLaAccion.Atajo(AtajoDeAgregar.SUBIR_COMPROBANTE)),
     REVISAR_AVISOS("Revisar avisos", "Revisar los avisos", DestinoDeLaAccion.Pantalla(Screen.PorRevisar)),

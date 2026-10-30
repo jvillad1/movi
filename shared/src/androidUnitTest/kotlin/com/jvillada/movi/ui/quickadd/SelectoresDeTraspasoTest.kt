@@ -132,7 +132,7 @@ class SelectoresDeTraspasoTest {
 
     @Test
     fun la_cuota_elige_la_deuda_con_la_misma_fila() {
-        montar("Cuota")
+        montar("Pagar")
 
         tocarLaFila(TAG_FILA_HACIA)
         fila(libre).performScrollTo().assertIsDisplayed()

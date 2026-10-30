@@ -152,7 +152,7 @@ class TraspasoYCuotaComoGastoTest {
     fun `Traspaso cabe a 360`() = cabeA360("Traspaso", "Guardar traspaso")
 
     @Test
-    fun `Cuota cabe a 360`() = cabeA360("Cuota", "Registrar pago")
+    fun `Cuota cabe a 360`() = cabeA360("Pagar", "Registrar pago")
 
     @Test
     fun `el traspaso guarda lo mismo que antes`() {
@@ -171,7 +171,7 @@ class TraspasoYCuotaComoGastoTest {
 
     @Test
     fun `la cuota guarda lo mismo que antes`() {
-        montar("Cuota")
+        montar("Pagar")
         tocarElTag(TAG_FILA_HACIA)
         tocar(libre.name)
         teclear("1204064")
