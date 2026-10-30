@@ -22,6 +22,7 @@ import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.semantics.SemanticsPropertyReceiver
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpSize
 import com.jvillada.movi.theme.LocalColores
 import com.jvillada.movi.theme.Medida
 
@@ -56,7 +57,16 @@ fun Modifier.anilloDeFoco(
     adentro: Boolean = false,
     alrededorDe: Dp? = null,
     deLoDeAdentro: Boolean = false,
-): Modifier = this then AnilloDeFocoElement(forma, adentro, alrededorDe, deLoDeAdentro)
+    /** Vuelta 82: como [alrededorDe], para lo que se ve que no es cuadrado (el riel del `Interruptor`). */
+    alrededorDeLaCaja: DpSize? = null,
+): Modifier = this then AnilloDeFocoElement(forma, adentro, alrededorDe, deLoDeAdentro, alrededorDeLaCaja)
+
+/**
+ * **Lo que rodea el anillo** (en px): la caja que se ve si se dio ([alrededorDeLaCaja], el riel de un
+ * `Interruptor`), o el cuadrado de [alrededorDe] (una `Casilla`), o el componente entero ([tamano]). Pura.
+ */
+fun cajaQueRodeaElAnillo(tamano: Size, alrededorDe: Float?, alrededorDeLaCaja: Size?): Size =
+    alrededorDeLaCaja ?: alrededorDe?.let { Size(it, it) } ?: tamano
 
 /**
  * **¿Se dibuja el anillo?** Solo si el componente tiene el foco y el foco llegó por teclado. Pura:
@@ -75,14 +85,16 @@ private data class AnilloDeFocoElement(
     val adentro: Boolean,
     val alrededorDe: Dp?,
     val deLoDeAdentro: Boolean,
+    val alrededorDeLaCaja: DpSize?,
 ) : ModifierNodeElement<AnilloDeFocoNode>() {
-    override fun create(): AnilloDeFocoNode = AnilloDeFocoNode(forma, adentro, alrededorDe, deLoDeAdentro)
+    override fun create(): AnilloDeFocoNode = AnilloDeFocoNode(forma, adentro, alrededorDe, deLoDeAdentro, alrededorDeLaCaja)
 
     override fun update(node: AnilloDeFocoNode) {
         node.forma = forma
         node.adentro = adentro
         node.alrededorDe = alrededorDe
         node.deLoDeAdentro = deLoDeAdentro
+        node.alrededorDeLaCaja = alrededorDeLaCaja
         node.invalidateDraw()
     }
 
@@ -98,6 +110,7 @@ private class AnilloDeFocoNode(
     var adentro: Boolean,
     var alrededorDe: Dp?,
     var deLoDeAdentro: Boolean,
+    var alrededorDeLaCaja: DpSize?,
 ) : Modifier.Node(), FocusEventModifierNode, DrawModifierNode, SemanticsModifierNode, CompositionLocalConsumerModifierNode {
 
     private var enfocado = false
@@ -126,7 +139,7 @@ private class AnilloDeFocoNode(
         // El centro del trazo: afuera, a la separación más medio trazo; adentro, lo mismo hacia el centro.
         val corrimiento = (separacion + trazo / 2f) * if (adentro) -1f else 1f
         // Lo que rodea: el componente entero, o lo que se ve de él, centrado.
-        val base = alrededorDe?.toPx()?.let { Size(it, it) } ?: size
+        val base = cajaQueRodeaElAnillo(size, alrededorDe?.toPx(), alrededorDeLaCaja?.let { Size(it.width.toPx(), it.height.toPx()) })
         val origenX = (size.width - base.width) / 2f
         val origenY = (size.height - base.height) / 2f
         val tamano = Size(base.width + 2 * corrimiento, base.height + 2 * corrimiento)

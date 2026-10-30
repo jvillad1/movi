@@ -295,6 +295,8 @@ fun AIChatScreen(
                 cuerpo = CUERPO_DE_LA_CONVERSACION_VIEJA,
                 accion = EMPEZAR_UNA_CONVERSACION_NUEVA,
                 onAccion = { nuevaConversacion() },
+                // Vuelta 82: la única acción principal del chat.
+                varianteDeLaAccion = com.jvillada.movi.ui.components.ds.VarianteDeBoton.Principal,
                 accionSecundaria = SEGUIR_ESTA,
                 onAccionSecundaria = { seguirConLaVieja = true },
                 modifier = Modifier

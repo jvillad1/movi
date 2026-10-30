@@ -103,12 +103,24 @@ class FormaRecordada(
      * con esto —y solo tras un perfil que contestó bien— y las dos la leen de [movimientos] para
      * reservarla (o no) antes de que el perfil conteste.
      *
-     * **Reemplaza la [FormaDeMovimientos] entera**, no solo este campo: hoy es el único que tiene.
-     * Si mañana se le agrega otro, esto tiene que leer la guardada y copiarla con el campo nuevo,
-     * o cada visita a Plan borraría lo que Movimientos recordó.
+     * Vuelta 82: la [FormaDeMovimientos] ya tiene otro campo ([FormaDeMovimientos.tarjetaPorRevisar]),
+     * así que se lee la guardada y se copia con este cambiado: si no, cada visita a Plan borraría lo que
+     * Actividad recordó.
      */
     fun recordarLineaDePeriodo(userId: String?, periodoDeHoy: PeriodoFinanciero, ajustes: PeriodSettings) =
-        guardarMovimientos(userId, FormaDeMovimientos(lineaDePeriodo = rangoLegibleDe(periodoDeHoy, ajustes) != null))
+        guardarMovimientos(
+            userId,
+            (movimientos(userId) ?: FormaDeMovimientos()).copy(lineaDePeriodo = rangoLegibleDe(periodoDeHoy, ajustes) != null),
+        )
+
+    /**
+     * Vuelta 82: si Actividad llevaba la tarjeta de «Por revisar» la última vez que se contó, para que el
+     * esqueleto de un arranque en frío reserve su lugar (o no). Copia lo demás de la forma guardada.
+     */
+    fun recordarTarjetaPorRevisar(userId: String?, conTarjeta: Boolean) {
+        val antes = movimientos(userId) ?: FormaDeMovimientos()
+        if (antes.tarjetaPorRevisar != conTarjeta) guardarMovimientos(userId, antes.copy(tarjetaPorRevisar = conTarjeta))
+    }
 
     /**
      * Vuelta 78: qué renglones llevaba la tarjeta del héroe del Inicio la última vez que su carga salió
@@ -240,6 +252,8 @@ data class FormaDeCuentas(
 @Serializable
 data class FormaDeMovimientos(
     val lineaDePeriodo: Boolean = true,
+    /** Vuelta 82: si Actividad llevaba la tarjeta de «Por revisar» (ver [FormaRecordada.recordarTarjetaPorRevisar]). */
+    val tarjetaPorRevisar: Boolean = false,
 )
 
 /**

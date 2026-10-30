@@ -120,13 +120,11 @@ import com.jvillada.movi.shared.model.comoSePresentaElPar
 import com.jvillada.movi.shared.model.laPataQueCuenta
 import com.jvillada.movi.shared.model.cuentaEnGastosEIngresos
 import com.jvillada.movi.shared.model.esperaEnPorConfirmar
-import com.jvillada.movi.ui.porrevisar.RenglonPorRevisar
 import com.jvillada.movi.ui.porrevisar.pagosPorRevisar
 import com.jvillada.movi.ui.sms.conLoResueltoEnLaBandeja
 import com.jvillada.movi.shared.model.SMS_STATE_CONFIRMED
 import com.jvillada.movi.ui.porrevisar.ConteoPorRevisar
 import com.jvillada.movi.ui.porrevisar.conteoPorRevisar
-import com.jvillada.movi.ui.porrevisar.desgloseDePorRevisar
 import com.jvillada.movi.ui.porrevisar.rememberLecturasPorRevisar
 import com.jvillada.movi.ui.quickadd.todayIsoInAppZone
 import com.jvillada.movi.ui.recurrentes.nombreRecurrenteDe
@@ -1566,6 +1564,12 @@ fun TransactionsScreen(
         }
         SideEffect { if (conteoFresco != null) ultimoConteoPorRevisar.value = conteoFresco }
         val cuantosPorRevisarAhora = conteoFresco ?: ultimoConteoPorRevisar.value
+        // Vuelta 82: cuando se contó de lecturas terminadas, se anota si iba la tarjeta de Por revisar, para
+        // que el próximo arranque en frío reserve su lugar (o no).
+        val conTarjetaPorRevisar = (conteoFresco?.total ?: 0) > 0
+        LaunchedEffect(conteoFresco != null, conTarjetaPorRevisar) {
+            if (conteoFresco != null) FormaRecordada.delAparato.recordarTarjetaPorRevisar(SessionManager.userId, conTarjetaPorRevisar)
+        }
         // Adentro de un modo sin chip («Entre cuentas») lo de arriba de las filas que habla de todo
         // el período no va: ver [loDeArribaEnElModo]. El modo lo dice su chip marcado, arriba.
         val conLoDeArriba = loDeArribaEnElModo(activeFilter)
@@ -1606,34 +1610,29 @@ fun TransactionsScreen(
                     }
                 }
             }
-            // Vuelta 40: con avisos del banco por confirmar, su tarjeta —«Confirmar los N» y «Revisar
-            // uno por uno»— en lugar del renglón «N por revisar». Sin avisos (solo movimientos que
-            // entraron solos, pagos de tarjeta o débitos), el renglón de siempre.
+            // Vuelta 40: con avisos del banco por confirmar, su tarjeta —«Confirmar 2» y «Revisar»—.
             // Vuelta 68: lo que espera por revisar es de hoy, no de un período pasado: en septiembre
             // no se ofrece «Confirmar los 2» (ver [loPendienteSeVeEn]).
+            // Vuelta 82 · **una sola tarjeta, con el número del Inicio**: «6 por revisar · 5 avisos · 1
+            // movimiento», con «Confirmar 2» cuando Movi entendió avisos y «Revisar» siempre. Antes eran
+            // dos («N por revisar» sin avisos, «5 avisos del banco» con ellos) y en frío se pasaba de una
+            // a la otra con un salto. Mientras se cuenta, si la última visita la tenía, su esqueleto.
             val conLoPendiente = loPendienteSeVeEn(periodoVisible, periodoDeHoy)
             val avisosALaVista = avisosDelBanco?.takeIf { it.cuantos > 0 && conLoPendiente }
-            if (conLoDeArriba && avisosALaVista != null) {
+            val conteoALaVista = cuantosPorRevisarAhora?.takeIf { conLoPendiente && it.total > 0 }
+            if (conLoDeArriba && conteoALaVista != null) {
                 item(contentType = "arriba") {
                     TarjetaDeAvisosDelBanco(
                         avisos = avisosALaVista,
+                        conteo = conteoALaVista,
                         ocupado = confirmarLosAvisos.confirmando,
                         onConfirmar = { confirmarLosAvisos.pedir() },
                         onRevisar = { onNavigate(Screen.PorRevisar) },
                         modifier = arribaDeLaLista,
                     )
                 }
-            } else if (conLoDeArriba && conLoPendiente && cuantosPorRevisarAhora != null && cuantosPorRevisarAhora.total > 0) {
-                item(contentType = "arriba") {
-                    RenglonPorRevisar(
-                        cuantos = cuantosPorRevisarAhora.total,
-                        // Vuelta de diseño 22: de qué es el número («2 avisos · 1 movimiento»), el
-                        // mismo desglose que la insignia y «Movi propone hoy» del Inicio.
-                        desglose = desgloseDePorRevisar(cuantosPorRevisarAhora),
-                        onClick = { onNavigate(Screen.PorRevisar) },
-                        modifier = arribaDeLaLista,
-                    )
-                }
+            } else if (conLoDeArriba && conLoPendiente && cuantosPorRevisarAhora == null && formaDeMovimientos?.tarjetaPorRevisar == true) {
+                item(contentType = "arriba") { EsqueletoDeLaTarjetaDeAvisos(modifier = arribaDeLaLista) }
             }
             // Con algo ya pintado, recargar lo dice «Actualizando…» en la cabecera (arriba), como el
             // Inicio; sin nada pintado todavía, las filas esqueleto de más abajo ya dicen «cargando»

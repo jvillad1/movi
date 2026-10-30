@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.dashboard
 
+import com.jvillada.movi.ui.components.ds.Interruptor
+
 import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.ui.components.ds.EsqueletoDeFila
 import com.jvillada.movi.ui.components.ds.Fila
@@ -33,8 +35,6 @@ import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -318,18 +318,11 @@ private fun FilaDelEditor(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Flecha(Icons.Rounded.KeyboardArrowUp, rotuloDeSubir(seccion.nombre), puedeSubir, onSubir)
                 Flecha(Icons.Rounded.KeyboardArrowDown, rotuloDeBajar(seccion.nombre), puedeBajar, onBajar)
-                Switch(
-                    checked = seccion.visible,
-                    onCheckedChange = onMostrar,
-                    modifier = Modifier.semantics { contentDescription = rotuloDeMostrar(seccion.nombre) },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = Movi.colores.tarjeta,
-                        // Encendido en tinta, el «seleccionado» de toda la app (vuelta 29).
-                        checkedTrackColor = Movi.colores.texto,
-                        uncheckedThumbColor = Movi.colores.textoApagado,
-                        uncheckedTrackColor = Movi.colores.tarjeta,
-                        uncheckedBorderColor = Movi.colores.borde,
-                    ),
+                // Vuelta 82: el interruptor de `ds/`, el mismo de toda la app.
+                Interruptor(
+                    encendido = seccion.visible,
+                    onCambio = onMostrar,
+                    descripcion = rotuloDeMostrar(seccion.nombre),
                 )
             }
         },

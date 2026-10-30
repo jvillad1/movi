@@ -20,16 +20,15 @@ import kotlin.test.assertTrue
  *   por defecto no es la marca. El amarillo **suave** sí se permite: «Tú» va en `TonoDeIcono.Propio`
  *   (el `tinte` con la letra en `aviso`); lo prohibido es el **lleno** (`marca`).
  * - **un círculo amarillo en una fila**: `IconoEnCirculo` es neutro por defecto, y `TonoDeIcono.Marca`
- *   solo aparece fuera de `ds/` en **las dos únicas excepciones**, las propuestas que la maqueta pinta
- *   así: la campana de la tarjeta de los avisos del banco en Actividad y el ícono de «Movi propone hoy»
- *   en Inicio. Están con nombre en [PROPUESTAS], y la guarda falla si sobra o falta alguna.
+ *   no aparece fuera de `ds/` (vuelta 82: la última excepción, la campana de la tarjeta de avisos de
+ *   Actividad, pasó al tono de aviso). [PROPUESTAS] queda vacía, y la guarda falla si alguien la usa.
  * - **una fila de navegación armada a mano**: las cinco que había usan `FilaDeNavegacion`.
  */
 class ElAmarilloEsDeLaAccionTest {
 
     /** Los únicos archivos de `ui/` (fuera de `ds/`) que pueden pintar un ícono en el círculo amarillo. */
-    private val PROPUESTAS = setOf(
-        "transactions/TarjetaDeAvisosDelBanco.kt",
+    private val PROPUESTAS = setOf<String>(
+        // Vuelta 82: la campana de la tarjeta de avisos de Actividad va en `TonoDeIcono.Aviso`.
         // Vuelta 79 · un solo amarillo por vista: «Movi propone hoy» en Inicio ya no va en el círculo
         // amarillo (el de la vista es «Anotar gasto»): tinte si urge, capa 3 si no.
     )

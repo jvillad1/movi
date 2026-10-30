@@ -236,7 +236,7 @@ class LosAvisosDeUnVistazoTest {
         composeRule.onAllNodesWithTag(TAG_CONFIRMAR_EN_LA_FILA)[0].performSemanticsAction(SemanticsActions.OnClick)
         esperar { confirmados.isNotEmpty() }
         assertEquals(listOf("uber"), confirmados)
-        esperar { cuantos("Anotado · Uber Rides \$18.300") == 1 }
+        esperar { cuantos("Anotado \$18.300 · Uber Rides") == 1 }
         esperar { conTag(TAG_CONFIRMAR_EN_LA_FILA) == 2 }
     }
 

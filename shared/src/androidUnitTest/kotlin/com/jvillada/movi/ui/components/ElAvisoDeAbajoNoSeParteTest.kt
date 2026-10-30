@@ -19,6 +19,7 @@ import com.jvillada.movi.ui.components.ds.TAG_ACCION_DEL_AVISO
 import com.jvillada.movi.ui.components.ds.TAG_AVISO_DE_DESHACER
 import com.jvillada.movi.ui.components.ds.TAG_DESHACER_DEL_AVISO
 import com.jvillada.movi.ui.components.ds.TAG_TEXTO_DEL_AVISO
+import com.jvillada.movi.ui.components.ds.TAG_RESTO_DEL_AVISO
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -26,6 +27,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -51,9 +53,9 @@ abstract class ElAvisoDeAbajoNoSeParteBase {
         composeRule.waitForIdle()
     }
 
-    private fun disposicion(): TextLayoutResult {
+    private fun disposicion(tag: String = TAG_TEXTO_DEL_AVISO): TextLayoutResult {
         val resultados = mutableListOf<TextLayoutResult>()
-        composeRule.onNodeWithTag(TAG_TEXTO_DEL_AVISO, useUnmergedTree = true).fetchSemanticsNode()
+        composeRule.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode()
             .config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(resultados)
         return resultados.single()
     }
@@ -71,11 +73,12 @@ abstract class ElAvisoDeAbajoNoSeParteBase {
             assertTrue(b.width > 0f && b.left >= aviso.left && b.right <= aviso.right, "$tag se sale del aviso: $b de $aviso")
         }
         assertTrue(bordes(TAG_TEXTO_DEL_AVISO).right <= bordes(TAG_ACCION_DEL_AVISO).left, "el texto se mete debajo de las acciones")
+        assertTrue(bordes(TAG_RESTO_DEL_AVISO).right <= bordes(TAG_ACCION_DEL_AVISO).left, "la categoría se mete debajo de las acciones")
     }
 
     @Test
     fun `con Repartir y Deshacer, el aviso es de un renglon`() {
-        montar("Anotado · Restaurantes \$12.500")
+        montar("Anotado \$12.500 · Restaurantes")
 
         assertEquals(1, disposicion().lineCount)
         assertTrue(alto() <= 64.dp, "el aviso mide ${alto()}")
@@ -87,9 +90,11 @@ abstract class ElAvisoDeAbajoNoSeParteBase {
 
     @Test
     fun `un comercio muy largo se corta con puntos y las acciones siguen a la vista`() {
-        montar("Anotado · Panaderia y Pasteleria El Trigal de la Avenida Oriental Sucursal Laureles \$32.000")
+        montar("Anotado \$32.000 · Panaderia y Pasteleria El Trigal de la Avenida Oriental Sucursal Laureles")
 
-        val d = disposicion()
+        // Revisión de la vuelta 82: el monto va entero en su parte; lo que se corta es el comercio.
+        assertFalse(disposicion(com.jvillada.movi.ui.components.ds.TAG_CIFRA_DEL_AVISO).hasVisualOverflow, "el monto se ve entero")
+        val d = disposicion(TAG_RESTO_DEL_AVISO)
         assertEquals(1, d.lineCount)
         assertTrue(d.isLineEllipsized(0), "el texto largo se corta con «…»")
         assertTrue(alto() <= 64.dp, "el aviso mide ${alto()}")

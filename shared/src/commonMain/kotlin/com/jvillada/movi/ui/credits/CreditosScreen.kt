@@ -1,5 +1,8 @@
 package com.jvillada.movi.ui.credits
 
+import com.jvillada.movi.ui.accounts.cifraDeLasDeudasEnLaFila
+import com.jvillada.movi.ui.components.signedMoney
+
 import com.jvillada.movi.ui.components.ds.CifraConRotulo
 import com.jvillada.movi.ui.components.ds.DisposicionDeCifraConRotulo
 import com.jvillada.movi.ui.components.ds.RotuloConValor
@@ -312,9 +315,12 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                     // F20: préstamos + tarjetas — la MISMA función que usa el Inicio.
                     // La protagonista de esta pantalla, igual que «Tu plata» en el Inicio: misma
                     // letra, mismo tamaño, y un renglón siempre. Ver [CifraProtagonista].
-                    Cifra(totalDebtCop(creditosALaVista, tarjetasALaVista), VarianteDeCifra.Heroe)
-                    // Vuelta 59: las deudas en negativo no restan arriba; se nombran acá, con «Cuadrar».
-                    DeudasSinSaldo(creditosALaVista, tarjetasALaVista, alTocarSinSaldo)
+                    // Vuelta 82: con el signo de Patrimonio («Deudas −$1.583.000»): la misma cifra no se dice
+                    // positiva en una pantalla y negativa en la otra.
+                    Cifra(cifraDeLasDeudasEnLaFila(totalDebtCop(creditosALaVista, tarjetasALaVista)), VarianteDeCifra.Heroe)
+                    // Vuelta 59: las deudas en negativo no restan arriba; vuelta 82: se nombran en una línea
+                    // («Falta Vehículo 4083, sin saldo (unos $35,8M según el plan)»). La acción, en su fila.
+                    DeudasSinSaldo(creditosALaVista, tarjetasALaVista)
                     // Lo que esa deuda CUESTA, que es lo que la pantalla no decía. La deuda
                     // total de arriba cuenta todos los créditos —quién paga la cuota no cambia
                     // de quién es el pasivo—; el costo mensual de acá sí separa. Ver
@@ -343,7 +349,8 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                     nombre = c.account.name,
                     icono = Icons.Rounded.AccountBalance,
                     deuda = prestamoEnLaLista(c, planes[c.account.id], periodoActual, hoy),
-                    saldo = { Cifra(c.account.balance) },
+                    // Vuelta 82: con el signo de las deudas de Patrimonio.
+                    saldo = { Cifra(cifraDeLasDeudasEnLaFila(c.account.balance)) },
                     onAbrir = { onNavigate(Screen.AccountDetail(c.account.id, c.account.type.group)) },
                     // Vuelta 80: sin saldo, la pieza de toda la app debajo, con «Usar este» si hay plan.
                     sinSaldo = loQueSeDiceSinSaldo(
@@ -361,8 +368,8 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                     icono = Icons.Rounded.CreditCard,
                     deuda = tarjetaEnLaLista(c, hoy),
                     // La deuda en SU moneda: una Mastercard en USD debe dólares, y su componente COP
-                    // sería $0, un número que miente.
-                    saldo = { MontoDeFila(formatMoney(c.account.balancesByCurrency[moneda] ?: c.account.balance, moneda)) },
+                    // sería $0, un número que miente. Vuelta 82: con el signo de las deudas de Patrimonio.
+                    saldo = { MontoDeFila(signedMoney(cifraDeLasDeudasEnLaFila(c.account.balancesByCurrency[moneda] ?: c.account.balance), moneda)) },
                     onAbrir = { onNavigate(Screen.AccountDetail(c.account.id, c.account.type.group)) },
                 )
             }
@@ -588,23 +595,25 @@ private fun LoQueCuestaLaDeuda(
 const val TAG_DEUDAS_SIN_SALDO: String = "creditos:deudas-sin-saldo"
 
 /**
- * **Las deudas sin saldo, debajo de «Deuda total»** (vuelta 59): «1 crédito sin saldo · Cuadrar». No
- * restan arriba ([totalDebtCop]) y por eso se dicen acá, con la salida a la mano: «Cuadrar» abre Cuadre
- * de saldos —que desde esta vuelta lista los préstamos— con la deuda arriba si es una sola. Nada si no hay.
+ * **Las deudas sin saldo, debajo de «Deuda total»** (vuelta 59). No restan arriba ([totalDebtCop]) y por
+ * eso se dicen acá. Vuelta 82: **solo la línea** ([lineaDeLasDeudasSinSaldo]): la pieza con su acción
+ * ([ElPrestamoSinSaldo]) sale una sola vez por vista, en la fila del préstamo; la revisión 8 la vio dos
+ * veces en la misma pantalla. Las mismas deudas que Patrimonio (`deudasSinSaldoParaDecir`). Nada si no hay.
  */
 @Composable
-private fun DeudasSinSaldo(creditos: List<CreditSummary>, tarjetas: List<CardSummary>, onAccion: (AccionSinSaldo) -> Unit) {
-    // Vuelta 80: la pieza del préstamo sin saldo de toda la app, con las mismas deudas que Patrimonio
-    // (`deudasSinSaldoParaDecir`) y el mismo texto: con un crédito y su plan, «Usar este».
+private fun DeudasSinSaldo(creditos: List<CreditSummary>, tarjetas: List<CardSummary>) {
     val hoy = hoyEnAppZone()
-    val dice = loQueSeDiceSinSaldo(
+    val linea = lineaDeLasDeudasSinSaldo(
         deudasSinSaldo = deudasSinSaldoParaDecir(creditos, tarjetas),
-        creditosConCondiciones = creditos.filter(::creditoSinSaldo).map { it.account.id }.toSet(),
         planes = creditos.mapNotNull { c -> saldoDelPlanEnLaFicha(c, hoy)?.let { c.account.id to it } }.toMap(),
     ) ?: return
-    Spacer(Modifier.height(Espacio.xs))
-    // Vuelta 77: a lo ancho de la tarjeta: el botón va al borde derecho, en la columna de las cifras.
-    ElPrestamoSinSaldo(dice, onAccion = onAccion, modifier = Modifier.testTag(TAG_DEUDAS_SIN_SALDO))
+    Spacer(Modifier.height(Espacio.xxs))
+    Text(
+        linea,
+        style = Movi.textos.apoyo,
+        color = Movi.colores.textoMedio,
+        modifier = Modifier.testTag(TAG_DEUDAS_SIN_SALDO),
+    )
 }
 
 /** El rótulo de un grupo de filas del resumen: qué se está midiendo, antes de con qué alcance. */

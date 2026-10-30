@@ -170,15 +170,15 @@ class PorConfirmarEnMovimientosTest {
     fun `el renglon suma las tres fuentes y abre la bandeja`() {
         montar(
             listOf(aMano, porSms),
-            esperar = "por confirmar",
+            esperar = "por revisar",
             mensajes = listOf(sms("s1", SMS_STATE_PENDING), sms("s2", SMS_STATE_PENDING), sms("s3", SMS_STATE_CONFIRMED)),
             candidatos = listOf(pagoDeTarjeta),
         )
 
-        // Vuelta 40: con avisos del banco por confirmar, su tarjeta reemplaza al renglón; «Revisar uno
-        // por uno» abre la misma bandeja, con todo lo demás adentro.
-        composeRule.onNodeWithText("2 avisos del banco por confirmar", useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithText("4 por revisar", useUnmergedTree = true).assertDoesNotExist()
+        // Vuelta 82: una sola tarjeta con el número del Inicio —las cuatro fuentes— y de qué es.
+        composeRule.onNodeWithText("4 por revisar", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("2 avisos · 1 movimiento · 1 pago de tarjeta", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("2 avisos del banco por confirmar", useUnmergedTree = true).assertDoesNotExist()
         composeRule.onNodeWithText("entró solo", substring = true, useUnmergedTree = true).assertDoesNotExist()
         composeRule.onNodeWithText("sin marcar", substring = true, useUnmergedTree = true).assertDoesNotExist()
 
@@ -233,7 +233,7 @@ class PorConfirmarEnMovimientosTest {
         tick.value++
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithTag(TAG_RENGLON_POR_REVISAR, useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithTag(TAG_TARJETA_DE_AVISOS, useUnmergedTree = true).assertExists()
         composeRule.onNodeWithText("2 por revisar", useUnmergedTree = true).assertExists()
 
         cerrada.complete(Unit)
@@ -244,9 +244,11 @@ class PorConfirmarEnMovimientosTest {
     /** Vuelta 40: si solo hay mensajes del banco, va su tarjeta (y no el renglón). */
     @Test
     fun `con solo mensajes del banco aparece la tarjeta de avisos`() {
-        montar(listOf(aMano), esperar = "por confirmar", mensajes = listOf(sms("s1", SMS_STATE_PENDING)))
+        montar(listOf(aMano), esperar = "por revisar", mensajes = listOf(sms("s1", SMS_STATE_PENDING)))
 
-        composeRule.onNodeWithText("1 aviso del banco por confirmar", useUnmergedTree = true).assertIsDisplayed()
+        // Vuelta 82: la tarjeta de siempre, con el número del Inicio y de qué es.
+        composeRule.onNodeWithText("1 por revisar", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("1 aviso", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithTag(TAG_RENGLON_POR_REVISAR, useUnmergedTree = true).assertDoesNotExist()
     }
 

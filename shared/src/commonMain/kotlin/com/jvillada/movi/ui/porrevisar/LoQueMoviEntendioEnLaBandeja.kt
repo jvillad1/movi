@@ -228,12 +228,17 @@ suspend fun confirmarLoEntendido(
 }
 
 /**
- * **«Anotado · Uber Rides $18.300»** (vuelta 44): lo que dice el aviso de abajo al confirmar desde la
+ * **«Anotado $18.300 · Uber Rides»** (vuelta 44): lo que dice el aviso de abajo al confirmar desde la
  * fila. Sin «Deshacer»: confirmar un aviso no tiene vuelta en Movi (se anula el movimiento, como
- * siempre).
+ * siempre). Vuelta 82: el monto primero, como [com.jvillada.movi.ui.espacios.textoDeLoAnotado]: si no
+ * cabe, se corta el comercio, nunca el monto.
  */
 fun textoDeAnotado(anotacion: AnotacionEntendida): String =
-    "Anotado · ${com.jvillada.movi.shared.model.nombreParaMostrar(anotacion.leido.merchant)} ${formatMoney(anotacion.monto, anotacion.leido.currency)}"
+    com.jvillada.movi.ui.espacios.textoDeLoAnotado(
+        com.jvillada.movi.shared.model.nombreParaMostrar(anotacion.leido.merchant),
+        anotacion.monto,
+        anotacion.leido.currency,
+    )
 
 /** Cómo terminó el lote: lo que se anotó y lo que quedó en la bandeja, con por qué. */
 data class ResultadoDelLote(

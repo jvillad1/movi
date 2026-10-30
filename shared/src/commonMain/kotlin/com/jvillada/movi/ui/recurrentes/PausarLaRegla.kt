@@ -292,6 +292,8 @@ internal fun PropuestasDeLaCuentaDeLaRegla(propuestas: List<PropuestaDeCuentaDeL
                     titulo = p.pregunta,
                     accion = GUARDAR_EN_LA_REGLA,
                     onAccion = { if (!p.enVuelo) p.onGuardar() },
+                    // Vuelta 82: el default pasó a secundario; Pagos queda como estaba (lo decide la vuelta 83).
+                    varianteDeLaAccion = com.jvillada.movi.ui.components.ds.VarianteDeBoton.Principal,
                     // Neutro: el círculo amarillo es solo de las dos propuestas de la maqueta.
                     tono = TonoDeIcono.Neutro,
                     accionSecundaria = "Ahora no",

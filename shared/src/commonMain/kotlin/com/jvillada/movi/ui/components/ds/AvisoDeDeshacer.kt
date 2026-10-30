@@ -80,6 +80,78 @@ const val TAG_ACCION_DEL_AVISO: String = "aviso-de-deshacer:accion"
 const val TAG_ELEGIR_EN_EL_AVISO: String = "aviso-de-deshacer:elegir"
 const val TAG_TEXTO_DEL_AVISO: String = "aviso-de-deshacer:texto"
 
+/** Revisión de la vuelta 82: lo que va después de « · » en el aviso (la categoría), lo que se corta. */
+const val TAG_RESTO_DEL_AVISO: String = "aviso-de-deshacer:resto"
+
+/** Revisión de la vuelta 82: el monto del aviso, en su propia pieza (nunca se corta). */
+const val TAG_CIFRA_DEL_AVISO: String = "aviso-de-deshacer:cifra"
+
+/**
+ * **El aviso en partes** (revisión de la vuelta 82): el [verbo] («Anotado», «Ya estaba anotado», «Tu
+ * parte», o todo el texto si no trae cifra: «Deshecho»), la [cifra] («$12.300», «US$45») —la última palabra
+ * antes del primer « · », si tiene un dígito— y el [resto] desde « · » («· Restaurantes»).
+ */
+data class PartesDelAviso(val verbo: String, val cifra: String?, val resto: String?)
+
+/** Ver [PartesDelAviso]. Pura. */
+fun partesDelAviso(texto: String): PartesDelAviso {
+    val i = texto.indexOf(" · ")
+    val cabeza = if (i <= 0) texto else texto.substring(0, i)
+    val resto = if (i <= 0) null else texto.substring(i + 1)
+    var espacio = cabeza.lastIndexOf(' ')
+    val ultima = if (espacio < 0) cabeza else cabeza.substring(espacio + 1)
+    if (espacio <= 0 || ultima.none { it.isDigit() }) return PartesDelAviso(cabeza, null, resto)
+    // Re-revisión de la vuelta 82: una moneda que no es pesos ni dólares se escribe «EUR 45»
+    // (`formatMoney`): el código va con la cifra, entero, y no en el verbo que se puede cortar.
+    val anterior = cabeza.lastIndexOf(' ', espacio - 1)
+    val palabraAnterior = cabeza.substring(anterior + 1, espacio)
+    if (anterior > 0 && palabraAnterior.length == 3 && palabraAnterior.all { it in 'A'..'Z' }) espacio = anterior
+    return PartesDelAviso(cabeza.substring(0, espacio), cabeza.substring(espacio + 1), resto)
+}
+
+/**
+ * **El texto del aviso, acomodado** (revisión de la vuelta 82): la cifra se mide primero y entera (si cabe
+ * ella sola en el ancho); el verbo toma lo que le queda antes de ella (se corta, o se va, si no cabe); lo
+ * que se corta con «…» es el resto. Un renglón, como siempre.
+ */
+@Composable
+private fun TextoDelAviso(partes: PartesDelAviso, color: androidx.compose.ui.graphics.Color, modifier: Modifier = Modifier) {
+    val estilo = Movi.textos.cuerpo
+    androidx.compose.ui.layout.Layout(
+        modifier = modifier.semantics(mergeDescendants = true) {},
+        content = {
+            Text(partes.verbo, style = estilo, color = color, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis, modifier = Modifier.testTag(TAG_TEXTO_DEL_AVISO))
+            if (partes.cifra != null) {
+                Text(partes.cifra, style = estilo, color = color, maxLines = 1, softWrap = false, modifier = Modifier.padding(start = Espacio.xxs).testTag(TAG_CIFRA_DEL_AVISO))
+            }
+            if (partes.resto != null) {
+                Text(partes.resto, style = estilo, color = color, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = Espacio.xxs).testTag(TAG_RESTO_DEL_AVISO))
+            }
+        },
+    ) { medibles, restricciones ->
+        val ancho = if (restricciones.hasBoundedWidth) restricciones.maxWidth else Int.MAX_VALUE
+        val verbo = medibles[0]
+        val cifra = if (partes.cifra != null) medibles[1] else null
+        val resto = if (partes.resto != null) medibles.last() else null
+        val libre = androidx.compose.ui.unit.Constraints()
+        fun hasta(max: Int) = androidx.compose.ui.unit.Constraints(maxWidth = max.coerceAtLeast(0))
+        val pc = cifra?.let { it.measure(hasta(minOf(it.maxIntrinsicWidth(libre.maxHeight), ancho))) }
+        val anchoDeLaCifra = pc?.width ?: 0
+        val pv = verbo.measure(hasta(minOf(verbo.maxIntrinsicWidth(libre.maxHeight), ancho - anchoDeLaCifra)))
+        val pr = resto?.measure(hasta(ancho - anchoDeLaCifra - pv.width))
+        val piezas = listOfNotNull(pv, pc, pr)
+        val alto = piezas.maxOf { it.height }
+        val total = piezas.sumOf { it.width }
+        layout(if (restricciones.hasBoundedWidth) restricciones.maxWidth else total, alto) {
+            var x = 0
+            piezas.forEach { p ->
+                p.place(x, (alto - p.height) / 2)
+                x += p.width
+            }
+        }
+    }
+}
+
 /**
  * **Un renglón** (vuelta 79; eran dos): el aviso es un snackbar oscuro, y lo que no cabe a 360 dp se corta
  * con «…» —las acciones quedan siempre a la vista—.
@@ -88,6 +160,15 @@ const val RENGLONES_DEL_AVISO: Int = 1
 
 /** Lo que dice el aviso al anular. */
 const val ANULADO: String = "Anulado"
+
+/**
+ * Vuelta 82: lo que dice el aviso cuando «Deshacer» salió bien, durante [DURACION_DEL_DESHECHO]. Antes el
+ * aviso se iba sin decir nada y el dueño no sabía si el toque había llegado.
+ */
+const val DESHECHO: String = "Deshecho"
+
+/** Cuánto se ve «Deshecho» (ms): lo justo para leerlo. */
+const val DURACION_DEL_DESHECHO: Long = 1_500L
 
 /** El botón de deshacer. */
 const val DESHACER: String = "Deshacer"
@@ -129,6 +210,8 @@ class AvisoDeDeshacer(private val alCambiar: () -> Unit = {}) {
         val vez: Long,
         val deshacer: (suspend () -> Unit)?,
         val accion: Accion? = null,
+        /** Cuánto se ve (ms). Vuelta 82: «Deshecho» dura menos ([DURACION_DEL_DESHECHO]). */
+        val duracion: Long = DURACION_DEL_AVISO_DE_DESHACER,
     )
 
     var actual by mutableStateOf<Aviso?>(null)
@@ -171,6 +254,9 @@ class AvisoDeDeshacer(private val alCambiar: () -> Unit = {}) {
         correr(aviso) {
             accion()
             deshechos++
+            // Vuelta 82: «Deshecho», un momento, sin botones. `correr` no lo cierra: es otro aviso.
+            error = null
+            actual = Aviso(DESHECHO, ++veces, deshacer = null, duracion = DURACION_DEL_DESHECHO)
         }
     }
 
@@ -242,7 +328,7 @@ fun AnfitrionDelAvisoDeDeshacer(aviso: AvisoDeDeshacer, modifier: Modifier = Mod
     if (actual != null) {
         LaunchedEffect(actual.vez, aviso.trabajando, aviso.eligiendo) {
             if (aviso.trabajando || aviso.eligiendo) return@LaunchedEffect
-            delay(DURACION_DEL_AVISO_DE_DESHACER)
+            delay(actual.duracion)
             aviso.cerrar(actual.vez)
         }
     }
@@ -337,14 +423,14 @@ internal fun SnackbarDeMovi(
             .padding(start = Espacio.m, end = Espacio.xxs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            texto,
-            style = Movi.textos.cuerpo,
+        // Revisión de la vuelta 82: el aviso en tres partes ([partesDelAviso]) —«Anotado», «$12.300» y
+        // «· Restaurantes»— que [TextoDelAviso] acomoda con el monto primero: entero siempre que quepa él
+        // solo; después el verbo; lo que se corta es la categoría. Con la letra grande a 360 dp y un monto de
+        // ocho cifras, cae el verbo antes que una cifra del monto.
+        TextoDelAviso(
+            partes = partesDelAviso(texto),
             color = if (esError) Movi.colores.saleSobreTinta else Movi.colores.sobreTinta,
-            maxLines = RENGLONES_DEL_AVISO,
-            softWrap = false,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f).testTag(TAG_TEXTO_DEL_AVISO),
+            modifier = Modifier.weight(1f),
         )
         val acciones = listOfNotNull(accion, deshacer)
         acciones.forEachIndexed { i, a ->

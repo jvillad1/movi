@@ -100,7 +100,9 @@ class LoAnuladoSeRestauraTest {
         assertEquals("Anulado", aviso.actual?.texto)
         aviso.deshacer()
         assertTrue(restaurado)
-        assertNull(aviso.actual)
+        // Vuelta 82: «Deshecho» un momento, sin botones (después se cierra solo).
+        assertEquals(com.jvillada.movi.ui.components.ds.DESHECHO, aviso.actual?.texto)
+        assertNull(aviso.actual?.deshacer)
         assertEquals(1, cambios, "las pantallas releen")
     }
 

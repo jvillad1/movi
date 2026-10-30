@@ -21,6 +21,7 @@ import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.ui.components.ds.TamanoDeBoton
 import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import com.jvillada.movi.ui.components.formatMoneyCompact
 
 /**
  * # El préstamo sin saldo, una sola pieza (vuelta 80)
@@ -155,4 +156,39 @@ fun ElPrestamoSinSaldo(
         )
     }
     }
+}
+
+// ── Vuelta 82 · la deuda total, honesta ─────────────────────────────────────────────────────────
+
+/**
+ * **Lo que la «Deuda total» no cuenta, en una línea** (vuelta 82): la cifra grande es lo que Movi sabe
+ * —un préstamo sin saldo suma cero ([totalDebtCop])—, y debajo se dice lo que falta:
+ *
+ * - una deuda con su plan completo ([planes]): «Falta Vehículo 4083, sin saldo (unos $35,8M según el plan)»;
+ * - una sin plan: «Falta Vehículo 4083, sin saldo»;
+ * - varias: «Faltan 2 préstamos, sin saldo» (o tarjetas, o deudas), con «(unos $X según el plan)» solo si
+ *   **todas** tienen plan.
+ *
+ * Revisión de la vuelta 82: decía «+ Vehículo 4083 sin saldo…», y un «+» debajo de una cifra negativa se
+ * leía raro. **No es una regla de plata**: no suma nada a la cifra de arriba, nombra lo que falta. La acción
+ * vive en la fila del préstamo ([ElPrestamoSinSaldo], una sola vez por vista). «Unos» y no «≈»: Figtree no
+ * tiene ese glifo. `null` sin deudas sin saldo. Pura.
+ */
+fun lineaDeLasDeudasSinSaldo(
+    deudasSinSaldo: List<Account>,
+    planes: Map<String, ElSaldoDelPlanEnLaFicha>,
+): String? {
+    if (deudasSinSaldo.isEmpty()) return null
+    val conPlan = deudasSinSaldo.mapNotNull { d -> planes[d.id]?.saldo?.takeIf { it > 0L } }
+    val segunElPlan = if (conPlan.size == deudasSinSaldo.size) " (unos ${formatMoneyCompact(conPlan.sum())} según el plan)" else ""
+    val una = deudasSinSaldo.singleOrNull()
+    if (una != null) return "Falta ${una.name}, sin saldo$segunElPlan"
+    val prestamos = deudasSinSaldo.count { it.type == AccountType.LOAN }
+    val tarjetas = deudasSinSaldo.size - prestamos
+    val cuantas = when {
+        tarjetas == 0 -> "$prestamos préstamos"
+        prestamos == 0 -> "$tarjetas tarjetas"
+        else -> "${deudasSinSaldo.size} deudas"
+    }
+    return "Faltan $cuantas, sin saldo$segunElPlan"
 }

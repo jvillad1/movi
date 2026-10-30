@@ -56,7 +56,11 @@ actual fun createRepository(): WalletRepository {
     // El mismo que corre cada 30 s es el que «Repartir» le pide subir ya (vuelta de diseño 24):
     // comparten el candado y no empujan la misma fila a la vez.
     // Vuelta 78: lo que sube cambia lo que el server contesta: lo leído hace menos de 30 s ya no es fresco.
-    val sincronizador = SyncEngine(db, remote, userId, alSubirAlgo = { olvidarLoFresco() }).also { it.start() }
+    val sincronizador = SyncEngine(db, remote, userId, alSubirAlgo = {
+        olvidarLoFresco()
+        // Vuelta 82: lo que el héroe del Inicio adelantaba puede haber subido: que vuelva a mirar ya.
+        com.jvillada.movi.ui.dashboard.MovimientosDelDueno.despertar()
+    }).also { it.start() }
     return LocalRepository(db, remote, userId, sincronizador = sincronizador)
 }
 

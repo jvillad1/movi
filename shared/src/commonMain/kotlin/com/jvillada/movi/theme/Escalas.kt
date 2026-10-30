@@ -212,6 +212,16 @@ object Medida {
     /** El borde de un botón secundario: 1,5, como en la maqueta de la opción 3. */
     val trazoDeBoton: Dp = 1.5.dp
 
+    /** Vuelta 82 · el riel del interruptor de `ds/` (`Interruptor`): 52 × 32, como el de Material. */
+    val anchoDelInterruptor: Dp = 52.dp
+    val altoDelInterruptor: Dp = 32.dp
+
+    /** Vuelta 82 · la perilla del interruptor: 24, la misma encendido y apagado (apagado no se achica). */
+    val perillaDelInterruptor: Dp = 24.dp
+
+    /** Vuelta 82 · la sombra que despega la perilla blanca del riel claro. */
+    val sombraDeLaPerilla: Dp = 1.dp
+
     /**
      * El borde de la insignia de una acción rápida (2 en la maqueta): la recorta del círculo que tapa.
      */

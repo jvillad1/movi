@@ -95,7 +95,7 @@ class LoDeArribaSeVaConElScrollTest {
         }
         composeRule.waitUntil(timeoutMillis = 5_000) {
             // Vuelta 40: con un aviso del banco, la tarjeta de los avisos (antes «N por revisar»).
-            composeRule.onAllNodesWithText("por confirmar", substring = true, useUnmergedTree = true)
+            composeRule.onAllNodesWithText("por revisar", substring = true, useUnmergedTree = true)
                 .fetchSemanticsNodes().isNotEmpty() &&
                 composeRule.onAllNodesWithText("Compra 01", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
         }

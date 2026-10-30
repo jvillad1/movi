@@ -373,6 +373,7 @@ object SessionManager {
         DashboardDataCache.clear()
         // Vuelta 79: un «el dueño cambió la plata» sin tomar es de quien se va.
         com.jvillada.movi.ui.components.ds.CambioDelDueno.limpiar()
+        com.jvillada.movi.ui.dashboard.MovimientosDelDueno.limpiar()
         // Y lo último que leyó cada pantalla: son SUS movimientos, SUS cuentas.
         CacheDeLecturas.borrarTodo()
         // Y el sello de cuándo se leyó de verdad lo del «Día a día» de Movimientos.

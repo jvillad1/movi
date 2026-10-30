@@ -45,6 +45,7 @@ import com.jvillada.movi.ui.components.ds.Vacio
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.getValue
@@ -132,6 +133,8 @@ import com.jvillada.movi.theme.Movimiento
 import com.jvillada.movi.ui.components.ds.LocalAvisoDeDeshacer
 import com.jvillada.movi.ui.espacios.deshacerLoAnotado
 import com.jvillada.movi.ui.espacios.mostrarLoAnotado
+import com.jvillada.movi.ui.sms.LocalLaTarjetaLlevaElAmarillo
+import com.jvillada.movi.ui.sms.laTarjetaLlevaElAmarillo
 import com.jvillada.movi.ui.espacios.rememberEspaciosParaRepartir
 import com.jvillada.movi.ui.sms.YaAnotadoEnLaFila
 
@@ -870,6 +873,11 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
     val lista = rememberListaQueSeConserva(conDatos = !cargando)
     val laDeLaDerecha = rememberListaQueSeConserva(conDatos = !cargando)
 
+    // Vuelta 82 · un amarillo por vista: con el lote «Confirmar N» a la vista, o con más de una tarjeta,
+    // la acción de cada tarjeta va secundaria ([laTarjetaLlevaElAmarillo]); sola, sigue en amarillo.
+    val conLote = (avisosDelLote?.confirmables?.size ?: 0) >= MINIMO_PARA_EL_LOTE
+    val tarjetasConAccion = (mensajes?.let { pagosPorRevisar(it).size } ?: 0) + (debitos?.size ?: 0)
+    CompositionLocalProvider(LocalLaTarjetaLlevaElAmarillo provides laTarjetaLlevaElAmarillo(tarjetasConAccion, conLote)) {
     Box(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
     PanelDeTablero(enDosColumnas = { porRevisarEnDosColumnas(it) && conDosLados }) { dosColumnas ->
     Column(modifier = Modifier.fillMaxSize()) {
@@ -954,6 +962,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
         modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = Medida.dentroDeSeccion),
     )
     }
+    } // LocalLaTarjetaLlevaElAmarillo
 
     // Vuelta 46: «Todas ›» de la tarjeta que pide la categoría: el selector completo, en una hoja.
     todasLasCategoriasPara?.let { cabezaId ->
