@@ -829,8 +829,12 @@ internal fun evidenciaDePagoFijo(pago: PagoFijoDelPeriodo): String? = when (pago
 /** Lo que dice una fila con dudas en el detalle, donde no hay propuesta que mostrar. */
 const val TEXTO_CON_DUDAS = "Con dudas: Movi encontró más de un movimiento que podría ser este."
 
+/**
+ * Los pagos fijos de un período, de solo lectura. Vuelta 70: también los pinta Pagos al ir con ‹ al
+ * período anterior ([onAgregar] `null`: ahí no se ofrece agregar nada).
+ */
 @Composable
-private fun PagosFijos(pagos: List<PagoFijoDelPeriodo>, enCurso: Boolean, hoy: LocalDate?, onAgregar: () -> Unit) {
+internal fun PagosFijos(pagos: List<PagoFijoDelPeriodo>, enCurso: Boolean, hoy: LocalDate?, onAgregar: (() -> Unit)?) {
     Column {
         Seccion(titulo = TITULO_CHECKLIST_DEL_PERIODO, conteo = pagos.size.takeIf { it > 0 })
         if (pagos.isEmpty()) {
@@ -838,7 +842,7 @@ private fun PagosFijos(pagos: List<PagoFijoDelPeriodo>, enCurso: Boolean, hoy: L
                 titulo = "Sin pagos fijos en este período",
                 detalle = "Arriendo, colegio, cuotas, suscripciones: anótalos una vez y cada período Movi " +
                     "te dice cuáles faltan y los marca solos cuando salen.",
-                accion = "Agregar un pago fijo",
+                accion = if (onAgregar != null) "Agregar un pago fijo" else null,
                 onAccion = onAgregar,
             )
             return@Column

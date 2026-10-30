@@ -45,7 +45,8 @@ import kotlin.test.assertTrue
  * llegar no cambia de alto (máximo 8 dp, la regla de `PlanScreenTest`). Tocarla lleva a Plan.
  *
  * Octubre del dueño (corte 25: 25-sep → 24-oct), hoy 13-oct, $2M en la cuenta, el arriendo de $800.000
- * el 20 y $20.000 de gasto diario: el día más justo es el 24, con $980.000.
+ * el 20, el salario el 25 y $20.000 de gasto diario: la caja mira hasta el salario (vuelta 70) y el día
+ * más justo es el 24, con $980.000 libres.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "w390dp-h844dp-xhdpi")
@@ -67,6 +68,15 @@ class CajaEnHoyTest {
                 ),
                 dueDate = "2026-10-20",
                 daysUntil = 7,
+                status = PaymentStatus.UPCOMING,
+            ),
+            UpcomingPayment(
+                rule = RecurringRule(
+                    id = "rr_salario", name = "Salario", category = "Salario", amount = 5_000_000L,
+                    dayOfMonth = 25, type = TransactionType.INCOME,
+                ),
+                dueDate = "2026-10-25",
+                daysUntil = 12,
                 status = PaymentStatus.UPCOMING,
             ),
         ),
@@ -119,8 +129,8 @@ class CajaEnHoyTest {
         composeRule.waitForIdle()
 
         assertEquals(0, contarTag(TAG_ESQUELETO_CAJA_EN_HOY))
-        assertTrue(hay("Tu día más justo del período"))
-        assertTrue(hay("El 24 de octubre quedas en"))
+        assertTrue(hay(ROTULO_HASTA_QUE_TE_PAGUEN))
+        assertTrue(hay("Tu día más justo es el 24 de octubre"))
         assertTrue(hay("\$980.000"))
         val altoCargado = composeRule.onNodeWithTag(TAG_CAJA_EN_HOY).getUnclippedBoundsInRoot().height
         val diferencia = abs(altoCargado.value - altoCargando.value)
@@ -136,7 +146,7 @@ class CajaEnHoyTest {
         puerta.complete(Unit)
         composeRule.waitForIdle()
 
-        assertTrue(hay("Quedarías en rojo"))
+        assertTrue(hay(ROTULO_NO_TE_ALCANZA))
         assertTrue(hay("El 24 de octubre quedarías en"))
         composeRule.onNodeWithTag(TAG_CAJA_EN_HOY).performClick()
         assertEquals(listOf<Screen>(Screen.Plan(SEGMENTO_PAGOS)), navegado)

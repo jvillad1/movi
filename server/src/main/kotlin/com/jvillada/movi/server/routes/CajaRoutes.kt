@@ -20,7 +20,10 @@ import com.jvillada.movi.shared.model.GastoVariableDeUnPeriodo
 import com.jvillada.movi.shared.model.PagoDelPeriodo
 import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.PeriodoFinanciero
-import com.jvillada.movi.shared.model.cajaProyectada
+import com.jvillada.movi.shared.model.cajaHastaQueTePaguen
+import com.jvillada.movi.shared.model.filasDeLaCaja
+import com.jvillada.movi.shared.model.periodoSiguiente
+import com.jvillada.movi.server.balance.accountTypesFor
 import com.jvillada.movi.shared.model.checklistDelPeriodo
 import com.jvillada.movi.shared.model.gastoDelDiaADia
 import com.jvillada.movi.shared.model.gastoVariablePorDia
@@ -104,10 +107,14 @@ internal fun Transaction.gastoDelDiaADiaSinSuspender(uid: String, hoy: LocalDate
 private const val PERIODOS_HACIA_ATRAS = 3
 
 /**
- * **La caja proyectada del dueño, armada del lado del server** para Movi AI: Tu plata de
- * [patrimonioDe], la lista del período de [checklistDelPeriodo] sobre las mismas respuestas que lee
- * Plan, y el gasto del día a día de [gastoDelDiaADiaDe]. Devuelve también la lista y el supuesto,
- * que el asistente necesita para decir de dónde sale cada cifra.
+ * **La caja proyectada del dueño, armada del lado del server** para Movi AI: lo de sus cuentas de
+ * [patrimonioDe], las listas del período y del siguiente de [checklistDelPeriodo] sobre las mismas
+ * respuestas que lee Pagos, el gasto del día a día de [gastoDelDiaADiaDe], el ahorro del período
+ * ([montoDelAhorroDe], sobre el mismo «Entró» del Inicio) y lo apartado fuera de los fijos. La cuenta
+ * es la de Pagos y la de «Tu día más justo» de Inicio: [cajaHastaQueTePaguen].
+ *
+ * @property pagos las filas que la caja proyecta: las del período y las del siguiente dentro del
+ *   horizonte ([filasDeLaCaja]).
  */
 internal data class CajaDelDueno(
     val caja: CajaProyectada?,
@@ -118,30 +125,41 @@ internal data class CajaDelDueno(
 internal suspend fun cajaProyectadaDe(uid: String, hoy: LocalDate = AppClock.today()): CajaDelDueno {
     val ajustes = ajustesDePeriodoDe(uid)
     val periodo = periodoDe(appDateToEpochMillis(hoy) + MEDIO_DIA, ajustes)
-    val pagos = checklistDelPeriodo(
-        upcoming = proximosPagos(uid, hoy),
-        ocurrencias = ocurrenciasDelPeriodo(uid, hoy),
-        periodo = periodo,
-        settings = ajustes,
+    val upcoming = proximosPagos(uid, hoy)
+    val ocurrencias = ocurrenciasDelPeriodo(uid, hoy)
+    val delPeriodo = checklistDelPeriodo(upcoming = upcoming, ocurrencias = ocurrencias, periodo = periodo, settings = ajustes)
+    // Vuelta 70: el período siguiente, sobre las MISMAS respuestas (lo que vence antes del salario).
+    val delSiguiente = checklistDelPeriodo(
+        upcoming = upcoming, ocurrencias = ocurrencias, periodo = periodoSiguiente(periodo), settings = ajustes,
+        conElSiguienteVencimiento = true,
     )
     // La tasa solo si hace falta, igual que el resumen del Inicio: sin un movimiento en otra moneda
     // no se usa, y pedirla puede esperar un timeout.
     val usdToCop = if (dbQuery { hayMovimientosEnOtraMoneda(uid) }) FxRateService.usdToCop() else 0.0
-    val tuPlata = dbQuery {
+    val ventana = ventanaDe(periodo, ajustes)
+    val (conApartados, ahorro) = dbQuery {
         val anulados = VoidEvents.selectAll().where { VoidEvents.userId eq uid }
             .map { it[VoidEvents.originalEventId] }.toSet()
-        // Tu plata ya resta todo lo apartado; lo que un pago pendiente de [pagos] cubre se devuelve,
-        // porque ese pago lo resta el día que vence (ver `apartadoCubiertoPorLosFijos`).
-        val conApartados = tuPlataConApartados(uid, anulados, usdToCop)
-        conApartados.patrimonio.tuPlata + conApartados.apartadoCubierto(pagos)
+        // El ahorro del período, sobre el «Entró» de siempre (como el resumen del Inicio).
+        val (entro, _) = flujoDeCaja(movimientosDeFlujo(uid, ventana.first, ventana.last + 1, anulados, accountTypesFor(uid)))
+        tuPlataConApartados(uid, anulados, usdToCop) to montoDelAhorroDe(uid, entro)
     }
     val gasto = gastoDelDiaADiaDe(uid, hoy)
-    val ultimoDia = epochMillisToAppDate(ventanaDe(periodo, ajustes).last)
-    return CajaDelDueno(
-        caja = cajaProyectada(tuPlata, pagos, gasto.porDia, hoy.toString(), ultimoDia.toString()),
-        pagos = pagos,
-        gasto = gasto,
+    val ultimoDia = epochMillisToAppDate(ventana.last)
+    // Lo de las cuentas, sin restar lo apartado: un apartado no mueve plata. Lo libre lo resta.
+    val enLasCuentas = conApartados.patrimonio.tuPlata + conApartados.patrimonio.apartado
+    val caja = cajaHastaQueTePaguen(
+        enLasCuentasHoy = enLasCuentas,
+        delPeriodo = delPeriodo,
+        delSiguiente = delSiguiente,
+        gastoDiario = gasto.porDia,
+        hoy = hoy.toString(),
+        ultimoDiaDelPeriodo = ultimoDia.toString(),
+        ahorro = ahorro,
+        apartadoFueraDe = { filas -> conApartados.apartadoParaElDisponible(filas) },
     )
+    val filas = caja?.let { filasDeLaCaja(delPeriodo, delSiguiente, it.alCierre.fecha) } ?: delPeriodo
+    return CajaDelDueno(caja = caja, pagos = filas, gasto = gasto)
 }
 
 /** Mediodía: un instante cualquiera del día que no cae en el borde de una ventana. */

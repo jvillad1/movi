@@ -32,6 +32,7 @@ import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.sdui.DisponibleDelPeriodoSection
 import com.jvillada.movi.ui.sdui.TAG_BARRA_DE_VENTANA
+import com.jvillada.movi.ui.sdui.GASTASTE
 import com.jvillada.movi.ui.sdui.ROTULO_DIA_A_DIA_DEL_PERIODO
 import com.jvillada.movi.ui.sdui.YA_TE_PASASTE
 import kotlinx.datetime.LocalDate
@@ -135,21 +136,19 @@ class DisponibleEnInicioTest {
         assertEquals(cuantas, contar(texto, color), "«$texto» grande tendría que estar $cuantas veces")
 
     /**
-     * Abajo, «gastaste» y la cifra en gris: [texto] en [cuantas] columnas. «gastaste» va en la semana y
-     * hoy; el período dice «en el día a día» (vuelta 60).
+     * Abajo, «gastaste» (en el período, «en el día a día»), la cifra y «de $X» en gris: [texto] en
+     * [cuantas] columnas. Vuelta 70: las tres columnas con el mismo patrón.
      */
     private fun assertGastaste(texto: String, cuantas: Int) {
-        composeRule.onAllNodesWithText("gastaste", useUnmergedTree = true).assertCountEquals(2)
+        composeRule.onAllNodesWithText(GASTASTE, useUnmergedTree = true).assertCountEquals(2)
         composeRule.onAllNodesWithText(ROTULO_DIA_A_DIA_DEL_PERIODO, useUnmergedTree = true).assertCountEquals(1)
         assertEquals(cuantas, contar(texto, apagado), "«gastaste $texto» tendría que estar $cuantas veces")
     }
 
-    /** Vuelta 60: ya no queda nada, así que la semana y hoy dicen «$0 · ya te pasaste · llevas $X». */
-    private fun assertYaTePasaste(llevas: String) {
+    /** Vuelta 60: ya no queda nada, así que la semana y hoy dicen «$0 · gastaste $X · ya te pasaste». */
+    private fun assertYaTePasaste(gastado: String, cuantas: Int) {
         assertEquals(2, nodos(YA_TE_PASASTE).size, "«ya te pasaste» en la semana y hoy")
-        assertEquals(2, nodos("llevas $llevas").size, "«llevas $llevas» en la semana y hoy")
-        composeRule.onAllNodesWithText("gastaste", useUnmergedTree = true).assertCountEquals(0)
-        composeRule.onAllNodesWithText(ROTULO_DIA_A_DIA_DEL_PERIODO, useUnmergedTree = true).assertCountEquals(1)
+        assertGastaste(gastado, cuantas)
     }
 
     private fun barras(): Int = composeRule.onAllNodesWithTag(TAG_BARRA_DE_VENTANA, useUnmergedTree = true)
@@ -176,11 +175,14 @@ class DisponibleEnInicioTest {
         composeRule.onNodeWithText("Semana · 4 días", useUnmergedTree = true).assertIsDisplayed()
         // Vuelta de diseño 28: la columna de hoy dice que es la meta, no otra cifra «por día».
         composeRule.onNodeWithText("Meta de hoy", useUnmergedTree = true).assertIsDisplayed()
-        assertCifras("\$150.000", 1, normal)
-        composeRule.onNodeWithText("de \$6,9M", useUnmergedTree = true).assertIsDisplayed()
-        assertCifras("\$6,8M", 1, normal)
+        // Vuelta 70: el período también dice lo que queda en grande —la cifra de «Te quedan»— y abajo
+        // «gastaste $150.000 de $6,9M», como la semana.
+        assertCifras("\$150.000", 0, normal)
+        assertEquals(2, nodos("de \$6,9M").size, "la meta del período y la de la semana")
+        assertEquals(1, nodos("de \$1,7M").size, "la meta de hoy")
+        assertCifras("\$6,8M", 2, normal)
         assertCifras("\$1,6M", 1, normal)
-        assertGastaste("\$150.000", 2)
+        assertGastaste("\$150.000", 3)
         assertEquals(3, barras(), "con margen, cada columna tiene su barra")
         // Que las cifras entren en su columna lo mide `LasCifrasDelDisponibleEntranTest`, con el
         // motor de texto real: acá Robolectric mide con uno que no sirve para anchos.
@@ -207,14 +209,15 @@ class DisponibleEnInicioTest {
         // La frase la dice el héroe (Ola 3); acá quedan las columnas.
         composeRule.onNodeWithText("Te pasaste del disponible del período por \$1,1M", useUnmergedTree = true)
             .assertDoesNotExist()
-        // Te pasaste: el período dice lo gastado en rojo, de cuánto, y no repite el «−$1,1M» del héroe.
-        assertCifras("\$8M", 1, rojo)
+        // Te pasaste: vuelta 70, el período dice lo que queda (−$1,1M, la cifra del héroe) en rojo, y abajo
+        // lo gastado de cuánto.
+        assertCifras("−\$1,1M", 1, rojo)
+        assertCifras("\$8M", 1, apagado)
         composeRule.onNodeWithText("de \$6,9M", useUnmergedTree = true).assertIsDisplayed()
-        assertEquals(0, nodos("−\$1,1M").size)
         // Vuelta 60: ya no queda nada que repartir: la semana y hoy dicen «$0 · ya te pasaste», no una
         // meta (antes, «$890.320» y «$222.580» al lado del «Te pasaste» del héroe).
         assertCifras("\$0", 2, normal)
-        assertYaTePasaste("\$0")
+        assertYaTePasaste("\$0", 2)
         composeRule.onNodeWithText("bien", substring = true, ignoreCase = true, useUnmergedTree = true).assertDoesNotExist()
     }
 
@@ -229,10 +232,9 @@ class DisponibleEnInicioTest {
 
         // Vuelta 45: en tinta. La alarma, con qué hacer, sale una vez en Pagos (`UnaSolaAlarmaTest`).
         assertCifras("−\$75.000", 1, normal)
-        assertCifras("\$5,1M", 1, normal)
-        // El período: lo gastado en grande (no en rojo: al período le sobra) y de cuánto.
-        assertCifras("\$1,8M", 1, normal)
-        assertGastaste("\$1,8M", 2)
+        // La semana y el período (vuelta 70: lo que queda, no en rojo: al período le sobra).
+        assertCifras("\$5,1M", 2, normal)
+        assertGastaste("\$1,8M", 3)
         // La frase la dice el héroe (Ola 3); acá quedan las columnas.
         composeRule.onNodeWithText(
             "Hoy te pasaste de la meta por \$75.000 · a la semana le quedan \$5,1M",
@@ -279,8 +281,9 @@ class DisponibleEnInicioTest {
         // medir. El período dice lo gastado en rojo «de $0».
         composeRule.onNodeWithText("Período", useUnmergedTree = true).assertIsDisplayed()
         assertCifras("\$0", 2, normal)
-        assertCifras("\$90.000", 1, rojo)
-        assertYaTePasaste("\$90.000")
+        // Vuelta 70: el período dice lo que queda —menos lo gastado, en rojo— y abajo lo gastado «de $0».
+        assertCifras("−\$90.000", 1, rojo)
+        assertYaTePasaste("\$90.000", 3)
         composeRule.onNodeWithText("de \$0", useUnmergedTree = true).assertIsDisplayed()
         assertEquals(0, barras(), "sin margen no hay barras")
     }
@@ -294,7 +297,7 @@ class DisponibleEnInicioTest {
             .assertDoesNotExist()
         assertCifras("\$0", 3, normal)
         // Los fijos ya se llevaron todo: la semana y hoy no tienen nada que repartir (vuelta 60).
-        assertYaTePasaste("\$0")
+        assertYaTePasaste("\$0", 3)
         composeRule.onNodeWithText("de \$0", useUnmergedTree = true).assertIsDisplayed()
         assertEquals(0, barras())
     }

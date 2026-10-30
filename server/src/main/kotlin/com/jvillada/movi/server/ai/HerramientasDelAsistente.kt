@@ -95,7 +95,7 @@ const val BUSCAR_MOVIMIENTOS = "buscar_movimientos"
 const val TOTALES_POR_CATEGORIA = "totales_por_categoria"
 const val BUSCAR_DOCUMENTOS = "buscar_documentos"
 
-/** Ola 4: la caja proyectada día a día hasta el cierre del período. Ver `CajaRoutes.kt`. */
+/** Ola 4: la caja proyectada día a día; desde la vuelta 70, hasta el próximo salario. Ver `CajaRoutes.kt`. */
 const val PROYECTAR_CAJA = "proyectar_caja"
 
 /** Ola 4: el plan de salida de deudas con un abono extra al mes. Ver `PlanDeSalida.kt` en :core. */
@@ -538,9 +538,19 @@ internal fun textoDeLaCaja(d: CajaDelDueno): String {
     val desde = caja.dias.first().fecha
     val hasta = caja.dias.last().fecha
     return buildString {
-        appendLine("Caja proyectada día a día del $desde al $hasta (cierre del período del usuario), en pesos.")
+        // Vuelta 70: hasta el próximo salario (o 30 días), con lo libre como cifra titular.
+        val horizonte = if (caja.hastaElSalario) "el día que se espera su próximo salario, ese día incluido"
+        else "30 días desde hoy: no tiene un ingreso recurrente anotado"
+        appendLine("Caja proyectada día a día del $desde al $hasta ($horizonte), en pesos.")
         appendLine("DE DÓNDE SALE:")
-        appendLine("- Tu plata hoy: ${caja.tuPlataHoy} (la misma cifra de «Tu plata» de la app).")
+        appendLine("- En sus cuentas hoy: ${caja.tuPlataHoy} (Tu plata de la app más lo apartado, que sigue en las cuentas).")
+        if (caja.reservado > 0L) {
+            appendLine(
+                "- NO ES LIBRE: ${caja.ahorro} de ahorro del período (lo eligió en Ajustes; no mueve plata) y " +
+                    "${caja.apartado} apartado (sin lo que un pago pendiente ya resta). Lo libre de cada día = saldo − ${caja.reservado}.",
+            )
+        }
+        appendLine("- Libre hoy: ${caja.libreHoy}.")
         val gasto = d.gasto
         if (gasto.porDia != null) {
             val cuales = gasto.periodos.joinToString("; ") { "${it.periodo}: ${it.total} en ${it.dias} días" }
@@ -558,7 +568,10 @@ internal fun textoDeLaCaja(d: CajaDelDueno): String {
         val pendientes = d.pagos.filter { !it.pagado }
         if (pendientes.isEmpty()) appendLine("- No quedan pagos ni ingresos pendientes en la lista del período.")
         else {
-            appendLine("- Pagos e ingresos pendientes de la lista «Pagos del período» (lo ya pagado no se vuelve a restar):")
+            appendLine(
+                "- Pagos e ingresos pendientes de «Pagos del período» y, del período siguiente, los que vencen " +
+                    "antes del horizonte (lo ya pagado no se vuelve a restar):",
+            )
             caja.dias.forEach { dia ->
                 dia.movimientos.forEach { m ->
                     appendLine("  ${dia.fecha}: ${m.nombre} ${if (m.monto >= 0) "+" else "-"}${kotlin.math.abs(m.monto)}")
@@ -568,17 +581,20 @@ internal fun textoDeLaCaja(d: CajaDelDueno): String {
         if (caja.sinContar.isNotEmpty()) {
             appendLine("- NO ENTRAN a la cuenta (falta un dato; no lo estimes): ${caja.sinContar.joinToString("; ")}.")
         }
-        appendLine("RESULTADO:")
+        appendLine("RESULTADO (la cifra para el usuario es LO LIBRE; el saldo es lo que habrá en las cuentas):")
         val bajo = caja.diaMasBajo
-        appendLine("- Día más justo: ${bajo.fecha}, con ${bajo.saldo}" + (bajo.pagoMasGrande?.let { " (ese día sale ${it.nombre})" } ?: "") + ".")
+        appendLine(
+            "- Día más justo: ${bajo.fecha}, con ${bajo.libre} libres (saldo ${bajo.saldo})" +
+                (bajo.pagoMasGrande?.let { " (ese día sale ${it.nombre})" } ?: "") + ".",
+        )
         val rojo = caja.primerDiaEnRojo
-        if (rojo == null) appendLine("- Ningún día queda en negativo.")
+        if (rojo == null) appendLine("- Ningún día lo libre queda en negativo.")
         else appendLine(
-            "- PRIMER DÍA EN NEGATIVO: ${rojo.fecha}, queda en ${rojo.saldo}" +
+            "- PRIMER DÍA EN NEGATIVO: ${rojo.fecha}, lo libre queda en ${rojo.libre} (saldo ${rojo.saldo})" +
                 (rojo.pagoMasGrande?.let { " por ${it.nombre} (${-it.monto})" } ?: " por el gasto del día a día") + ".",
         )
-        appendLine("- Al cierre ($hasta): ${caja.alCierre.saldo}.")
-        appendLine("Saldo al cerrar cada día: " + caja.dias.joinToString("; ") { "${it.fecha} ${it.saldo}" } + ".")
+        appendLine("- Al final ($hasta): ${caja.alCierre.libre} libres, saldo ${caja.alCierre.saldo}.")
+        appendLine("Libre al cerrar cada día: " + caja.dias.joinToString("; ") { "${it.fecha} ${it.libre}" } + ".")
     }.trim()
 }
 

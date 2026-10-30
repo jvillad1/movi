@@ -186,6 +186,14 @@ data class DashboardSummary(
     val gastoDelAnteriorAMismaAltura: Map<String, Long>? = null,
     /** Cuántos días del período pasado se compararon. `null` junto con [gastoDelAnteriorAMismaAltura]. */
     val diasComparados: Int? = null,
+    /**
+     * Vuelta 70 (revisión) · **las compras con tarjeta del período que todavía no se pagaron**: el gasto
+     * contado en cuentas de tarjeta menos lo que entró a esas tarjetas en el período. «Te quedan» ya las
+     * contó como gastadas y las cuentas todavía no las ven. Solo sirve para EXPLICAR la diferencia entre lo
+     * libre de la caja y «Te quedan»; ninguna cifra se calcula con esto. `null` = ninguna (o un server
+     * anterior): la caja no nombra esa causa. Un APK viejo lo ignora.
+     */
+    val comprasConTarjetaSinPagar: Long? = null,
 )
 
 /**
