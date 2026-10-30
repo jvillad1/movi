@@ -300,6 +300,56 @@ class CajaHastaQueTePaguenTest {
         assertFalse(sinNada.reservado > 0L)
     }
 
+    // ── El vencimiento siguiente (revisión de la 70) ─────────────────────────
+
+    /**
+     * El día del salario sin emparejar, con el corte del dueño: el viernes 23-oct arranca el período, el
+     * salario de hoy sigue pendiente y su vencimiento no rodó. El server manda el siguiente (25-nov) y la
+     * caja cierra ahí; el Carro de octubre (26) cuenta una vez, y el de noviembre en «Lo que vencerá».
+     */
+    @Test
+    fun `el dia del salario sin emparejar la caja cierra en el siguiente salario`() {
+        val hoy = "2026-10-23"
+        val salario = regla("salario", 9_000_000L, 25, tipo = TransactionType.INCOME)
+        val carro = regla("carro", 980_000L, 26)
+        val arriendo = regla("arriendo", 1_800_000L, 25)
+        val upcoming = listOf(
+            vence(salario, "2026-10-23", hoy).copy(siguienteVencimiento = "2026-11-25"),
+            vence(carro, "2026-10-26", hoy).copy(siguienteVencimiento = "2026-11-26"),
+            // Ya rodó (se pagó en octubre): su vigente cae en el siguiente y su «siguiente» es diciembre.
+            vence(arriendo, "2026-11-25", hoy).copy(siguienteVencimiento = "2026-12-24"),
+        )
+        val l = listas(hoy, delDueno, upcoming)
+        // La lista del período en curso no cambia: el siguiente vencimiento no entra ahí.
+        assertEquals(setOf("salario", "carro"), l.delPeriodo.map { it.ruleId }.toSet())
+        val conElSiguiente = checklistDelPeriodo(upcoming, emptyList(), periodoSiguiente(l.periodo), delDueno, conElSiguienteVencimiento = true)
+        assertEquals(
+            listOf("arriendo" to "2026-11-25", "carro" to "2026-11-26", "salario" to "2026-11-25").sortedBy { it.first },
+            conElSiguiente.map { it.ruleId to it.vence }.sortedBy { it.first },
+            "el arriendo, con su vigente (no dos veces); el carro y el salario, con su siguiente",
+        )
+        assertEquals(34, conElSiguiente.first { it.ruleId == "carro" }.diasParaVencer, "los días cuentan hasta el siguiente")
+
+        val caja = assertNotNull(cajaHastaQueTePaguen(5_000_000L, l.delPeriodo, conElSiguiente, null, hoy, l.ultimoDia))
+        assertEquals("2026-11-25", caja.alCierre.fecha)
+        assertTrue(caja.hastaElSalario)
+        val movimientos = caja.dias.flatMap { it.movimientos }
+        assertEquals(1, movimientos.count { it.nombre == "Carro" })
+        assertEquals(1, movimientos.count { it.nombre == "Arriendo" })
+        assertEquals(1, movimientos.count { it.nombre == LLEGA_TU_SALARIO })
+        // Sin el campo (un server viejo) el siguiente no tiene salario y la caja cae al cierre del período.
+        val sinElCampo = checklistDelPeriodo(upcoming.map { it.copy(siguienteVencimiento = null) }, emptyList(), periodoSiguiente(l.periodo), delDueno, conElSiguienteVencimiento = true)
+        assertEquals("2026-11-24", assertNotNull(cajaHastaQueTePaguen(5_000_000L, l.delPeriodo, sinElCampo, null, hoy, l.ultimoDia)).alCierre.fecha)
+    }
+
+    @Test
+    fun `lo que sale de una tarjeta es su minimo, y sin minimo nada`() {
+        val conMinimo = PagoDelPeriodo("nu", "Nu", 1_583_000L, false, 7, montoEsSaldo = true, pagoMinimo = 180_000L, vence = "2026-11-05")
+        val arriendo = PagoDelPeriodo("arr", "Arriendo", 1_800_000L, false, 7, vence = "2026-11-05")
+        val sinMinimo = conMinimo.copy(ruleId = "amex", pagoMinimo = null)
+        assertEquals(1_980_000L, loQueSaleDe(listOf(conMinimo, arriendo, sinMinimo)))
+    }
+
     // ── Lo que viene ────────────────────────────────────────────────────────
 
     @Test
@@ -314,7 +364,7 @@ class CajaHastaQueTePaguenTest {
         )
         val viene = assertNotNull(loQueViene(upcoming, emptyList(), PeriodoFinanciero(2026, 10), mesDeCalendario))
         assertEquals(listOf("Arriendo", "Cuota", "Nu"), viene.filas.map { it.nombre }.sorted())
-        assertEquals(2_780_000L, viene.total, "con la regla de «Falta por pagar»: sin el saldo de la tarjeta")
+        assertEquals(2_780_000L + 1_583_000L, viene.total, "con la regla de la caja: la tarjeta suma su mínimo")
 
         // A mitad de período no va.
         val temprano = upcoming.map { it.copy(daysUntil = it.daysUntil + 14) }

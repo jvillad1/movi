@@ -129,7 +129,10 @@ internal suspend fun cajaProyectadaDe(uid: String, hoy: LocalDate = AppClock.tod
     val ocurrencias = ocurrenciasDelPeriodo(uid, hoy)
     val delPeriodo = checklistDelPeriodo(upcoming = upcoming, ocurrencias = ocurrencias, periodo = periodo, settings = ajustes)
     // Vuelta 70: el período siguiente, sobre las MISMAS respuestas (lo que vence antes del salario).
-    val delSiguiente = checklistDelPeriodo(upcoming = upcoming, ocurrencias = ocurrencias, periodo = periodoSiguiente(periodo), settings = ajustes)
+    val delSiguiente = checklistDelPeriodo(
+        upcoming = upcoming, ocurrencias = ocurrencias, periodo = periodoSiguiente(periodo), settings = ajustes,
+        conElSiguienteVencimiento = true,
+    )
     // La tasa solo si hace falta, igual que el resumen del Inicio: sin un movimiento en otra moneda
     // no se usa, y pedirla puede esperar un timeout.
     val usdToCop = if (dbQuery { hayMovimientosEnOtraMoneda(uid) }) FxRateService.usdToCop() else 0.0

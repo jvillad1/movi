@@ -139,6 +139,14 @@ private fun porQueNoEntra(pago: PagoDelPeriodo): String? = when {
     else -> null
 }
 
+/**
+ * **Lo que va a salir de las cuentas por [filas]**, con la MISMA regla de la caja: un fijo, su monto;
+ * una tarjeta, su pago mínimo (sin él, nada: va a «No entra a la cuenta»); lo pagado, un ingreso, un
+ * abono planeado o algo en otra moneda, nada. Es el total de «Lo que viene» y de «Lo que vencerá»
+ * (vuelta 70): la misma cifra que la caja resta.
+ */
+fun loQueSaleDe(filas: List<PagoDelPeriodo>): Long = filas.sumOf { fila -> (montoDeLaFila(fila) ?: 0L).let { if (it < 0L) -it else 0L } }
+
 /** Lo que mueve esta fila, con signo, o `null` si no mueve nada (pagada, o no entra). */
 private fun montoDeLaFila(pago: PagoDelPeriodo): Long? {
     if (pago.pagado || porQueNoEntra(pago) != null) return null

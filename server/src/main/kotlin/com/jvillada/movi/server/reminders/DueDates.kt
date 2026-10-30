@@ -338,15 +338,38 @@ fun upcomingPayments(
     settings: PeriodSettings = PeriodSettings(),
 ): List<UpcomingPayment> =
     rules.map { rule ->
+        val ocurridos = occurredBy[rule.id].orEmpty()
+        val vigente = dueDateFor(rule, today, DEFAULT_GRACE_DAYS, ocurridos, settings)
         // El salario del día de corte se muestra el día en que de verdad se espera (ver [fechaEsperada]).
-        val due = fechaEsperada(rule, dueDateFor(rule, today, DEFAULT_GRACE_DAYS, occurredBy[rule.id].orEmpty(), settings), settings)
+        val due = fechaEsperada(rule, vigente, settings)
         UpcomingPayment(
             rule = rule,
             dueDate = due.toString(),
             daysUntil = ChronoUnit.DAYS.between(today, due).toInt(),
             status = statusFor(due, today, leadDays),
+            siguienteVencimiento = siguienteVencimiento(rule, today, vigente, ocurridos, settings)?.toString(),
         )
     }.sortedBy { it.dueDate }
+
+/**
+ * Vuelta 70 · **el vencimiento que viene después de [vigente]**: el de [dueDateFor] como si [vigente]
+ * ya estuviera sellado, con [fechaEsperada] (el salario del día de corte, el día que arranca su
+ * período). `null` en un pago único (no hay otro) o si no rueda hacia adelante. Viaja en
+ * `UpcomingPayment.siguienteVencimiento` para que la caja y «Lo que viene» vean el período siguiente
+ * aunque el vencimiento vigente siga pendiente (el día del salario, antes de emparejarlo).
+ */
+fun siguienteVencimiento(
+    rule: RecurringRule,
+    today: LocalDate,
+    vigente: LocalDate,
+    occurredPeriods: Set<String>,
+    settings: PeriodSettings,
+): LocalDate? {
+    if (rule.esPagoUnico) return null
+    val siguiente = dueDateFor(rule, today, DEFAULT_GRACE_DAYS, occurredPeriods + periodOf(vigente), settings)
+    if (!siguiente.isAfter(vigente)) return null
+    return fechaEsperada(rule, siguiente, settings)
+}
 
 /**
  * Pure sweep-selection filter.

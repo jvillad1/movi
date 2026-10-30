@@ -280,6 +280,14 @@ fun checklistDelPeriodo(
     ocurrencias: List<OccurrenceState>,
     periodo: PeriodoFinanciero,
     settings: PeriodSettings,
+    /**
+     * Vuelta 70 · **solo para el período siguiente** (la caja, «Lo que viene», «Lo que vencerá»): una
+     * regla cuyo [UpcomingPayment.dueDate] cae ANTES de [periodo] —sigue pendiente, no rodó— entra
+     * con su [UpcomingPayment.siguienteVencimiento] si cae en [periodo]. Su vencimiento vigente se
+     * queda en la lista de hoy y este es otro, así que nada se cuenta dos veces. Apagado, la lista
+     * de siempre: «Falta por pagar» del período en curso no cambia.
+     */
+    conElSiguienteVencimiento: Boolean = false,
 ): List<PagoDelPeriodo> {
     val ventana = ventanaDe(periodo, settings)
     val hoy = hoySegunLosVencimientos(upcoming)
@@ -291,6 +299,9 @@ fun checklistDelPeriodo(
             val ocurrencia = delPeriodo[pago.rule.id]
             val vence = ocurrencia?.dueDate
                 ?: pago.dueDate.takeIf { epochDeFecha(it) in ventana }
+                ?: pago.siguienteVencimiento?.takeIf {
+                    conElSiguienteVencimiento && epochDeFecha(it) in ventana && epochDeFecha(pago.dueDate) < ventana.first
+                }
                 ?: return@mapNotNull null
             filaDelPago(pago, ocurrencia, vence, hoy)
         }
@@ -344,7 +355,7 @@ private fun filaDelPago(
     pagado = ocurrencia?.occurred == true,
     // Con la fecha de la ocurrencia, el `daysUntil` que mandó el server habla de OTRO
     // vencimiento: se recalcula contra el mismo «hoy» del que salió esa respuesta.
-    diasParaVencer = if (ocurrencia == null) pago.daysUntil
+    diasParaVencer = if (ocurrencia == null && vence == pago.dueDate) pago.daysUntil
     else diasEntre(hoy, vence) ?: pago.daysUntil,
     montoEsSaldo = pago.rule.montoEsSaldo,
     pagoMinimo = pago.rule.pagoMinimoCop.takeIf { pago.rule.montoEsSaldo },
@@ -449,8 +460,9 @@ const val DIAS_DE_LO_QUE_VIENE: Int = 15
  * días, con su total.
  *
  * @property filas [pagosPendientes] del período siguiente, en el orden del checklist.
- * @property total con la regla de [faltaPorPagar] (sin el saldo de una tarjeta, sin ingresos, sin
- *   abonos). **No cuenta en «Falta por pagar» del período**, que sigue siendo del período.
+ * @property total lo que va a salir de las cuentas, con la regla de la caja ([loQueSaleDe]): una tarjeta
+ *   suma su pago mínimo (no su deuda). **No cuenta en «Falta por pagar» del período**, que sigue
+ *   siendo del período.
  */
 data class LoQueViene(val filas: List<PagoDelPeriodo>, val total: Long)
 
@@ -473,8 +485,9 @@ fun loQueViene(
     val quedan = hoy.daysUntil(ultimoDia) + 1
     if (quedan > DIAS_PARA_MOSTRAR_LO_QUE_VIENE) return null
     val hasta = hoy.plus(DIAS_DE_LO_QUE_VIENE, DateTimeUnit.DAY)
-    val filas = pagosPendientes(checklistDelPeriodo(upcoming, ocurrencias, periodoSiguiente(periodo), settings))
-        .filter { fila -> fechaDe(fila.vence)?.let { it <= hasta } ?: false }
+    val filas = pagosPendientes(
+        checklistDelPeriodo(upcoming, ocurrencias, periodoSiguiente(periodo), settings, conElSiguienteVencimiento = true),
+    ).filter { fila -> fechaDe(fila.vence)?.let { it <= hasta } ?: false }
     if (filas.isEmpty()) return null
-    return LoQueViene(filas = filas, total = faltaPorPagar(filas))
+    return LoQueViene(filas = filas, total = loQueSaleDe(filas))
 }

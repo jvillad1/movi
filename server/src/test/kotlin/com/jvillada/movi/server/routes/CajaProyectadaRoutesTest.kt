@@ -234,35 +234,77 @@ class CajaProyectadaRoutesTest {
     /**
      * Vuelta 70: Movi AI arma la caja con la MISMA función de Pagos: hasta el salario, con el pago del
      * período siguiente que vence antes, y lo libre sin el ahorro del período (que no cambia el saldo).
+     * Fecha fija (revisión de la 70): martes 20-oct-2026, mes de calendario. El salario y el internet del
+     * 1 ya se saldaron en octubre, así que los dos vencen el 1-nov, en el período siguiente.
      */
     @Test
     fun `la caja de movi ai llega al salario, cuenta el pago del siguiente y lo libre sin el ahorro`() {
-        // El mes que viene: el salario del 1 y el arriendo del 1 (este mes ya se pagó: su vencimiento rueda).
-        val proximo = hoy.withDayOfMonth(1).plusMonths(1)
-        anotar(duenoId, "apertura", 5_000_000L, hoy, OPENING_CATEGORY, tipo = "INCOME")
+        val dia = LocalDate.of(2026, 10, 20)
+        anotar(duenoId, "apertura", 5_000_000L, dia, OPENING_CATEGORY, tipo = "INCOME")
         transaction {
             RecurringRules.insert {
                 it[id] = "rr_salario"; it[userId] = duenoId; it[name] = "Salario"; it[category] = "Ingreso"
                 it[amount] = 7_000_000L; it[dayOfMonth] = 1; it[type] = "INCOME"
             }
+            RecurringRules.insert {
+                it[id] = "rr_internet"; it[userId] = duenoId; it[name] = "Internet"; it[category] = "Servicios"
+                it[amount] = 100_000L; it[dayOfMonth] = 1; it[type] = "EXPENSE"
+            }
+            listOf("rr_salario", "rr_internet").forEach { regla ->
+                RecurringOccurrences.insert {
+                    it[userId] = duenoId; it[ruleId] = regla; it[period] = "2026-10"; it[confirmedAt] = 1L
+                }
+            }
             Users.update({ Users.id eq duenoId }) {
                 it[ahorroDelPeriodoTipo] = "MONTO"; it[ahorroDelPeriodoValor] = 2_000_000L
             }
         }
-        val d = runBlocking { cajaProyectadaDe(duenoId, hoy) }
+        val d = runBlocking { cajaProyectadaDe(duenoId, dia) }
         val caja = assertNotNull(d.caja)
-        if (hoy.dayOfMonth == 1) {
-            // El salario de hoy es de este período: entra hoy y no cierra el horizonte.
-            assertEquals(hoy.plusDays(30).toString(), caja.alCierre.fecha)
-        } else {
-            assertEquals(proximo.toString(), caja.alCierre.fecha)
-            assertTrue(caja.hastaElSalario)
-            assertEquals(MovimientoDeLaCaja("Llega tu salario (esperado)", 7_000_000L), caja.alCierre.movimientos.single())
-        }
+        assertEquals("2026-11-01", caja.alCierre.fecha)
+        assertTrue(caja.hastaElSalario)
+        assertEquals(
+            setOf(MovimientoDeLaCaja("Llega tu salario (esperado)", 7_000_000L), MovimientoDeLaCaja("Internet", -100_000L)),
+            caja.alCierre.movimientos.toSet(),
+            "el pago del período siguiente entra el día que vence",
+        )
         assertEquals(5_000_000L, caja.tuPlataHoy, "el ahorro no mueve plata")
         assertEquals(2_000_000L, caja.ahorro)
         assertEquals(3_000_000L, caja.libreHoy)
         assertTrue(caja.dias.all { it.saldo - it.libre == 2_000_000L })
         assertTrue("NO ES LIBRE: 2000000 de ahorro" in textoDeLaCaja(d), textoDeLaCaja(d))
+    }
+
+    /**
+     * Revisión de la 70 · **el día del salario sin emparejar**, con el corte del dueño (25, día hábil
+     * anterior): el viernes 23-oct arranca el período y el salario no llegó todavía. Su vencimiento
+     * vigente se queda hoy, y el del período siguiente llega por `siguienteVencimiento`: la caja cierra
+     * en el salario del 25-nov, no a 30 días. El Carro del 26 entra una vez (el de octubre).
+     */
+    @Test
+    fun `el dia del salario sin emparejar la caja cierra en el salario siguiente`() {
+        val dia = LocalDate.of(2026, 10, 23)
+        anotar(duenoId, "apertura", 5_000_000L, dia, OPENING_CATEGORY, tipo = "INCOME")
+        transaction {
+            Users.update({ Users.id eq duenoId }) {
+                it[periodCutoffDay] = 25; it[periodWeekendRule] = "DIA_HABIL_ANTERIOR"
+            }
+            RecurringRules.insert {
+                it[id] = "rr_salario"; it[userId] = duenoId; it[name] = "Salario"; it[category] = "Ingreso"
+                it[amount] = 9_000_000L; it[dayOfMonth] = 25; it[type] = "INCOME"
+            }
+            RecurringRules.insert {
+                it[id] = "rr_carro"; it[userId] = duenoId; it[name] = "Carro"; it[category] = "Créditos"
+                it[amount] = 980_000L; it[dayOfMonth] = 26; it[type] = "EXPENSE"
+            }
+        }
+        val d = runBlocking { cajaProyectadaDe(duenoId, dia) }
+        val caja = assertNotNull(d.caja)
+        assertEquals("2026-11-25", caja.alCierre.fecha)
+        assertTrue(caja.hastaElSalario)
+        assertEquals(MovimientoDeLaCaja("Llega tu salario (esperado)", 9_000_000L), caja.salario)
+        val movimientos = caja.dias.flatMap { it.movimientos }
+        assertEquals(1, movimientos.count { it.nombre == "Carro" }, "el Carro de noviembre (26) queda pasado el horizonte")
+        assertEquals(1, movimientos.count { it.nombre == "Llega tu salario (esperado)" })
     }
 }
