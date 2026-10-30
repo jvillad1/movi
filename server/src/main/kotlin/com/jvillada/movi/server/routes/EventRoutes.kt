@@ -324,15 +324,25 @@ fun Route.eventRoutes() {
                 return@post call.respond(HttpStatusCode.BadRequest, "Esa fecha no es de este siglo.")
             }
 
-            val monedaDeLaCuenta = dbQuery {
+            // Vuelta 71: el tipo de la cuenta también, para las cuotas de una compra con tarjeta.
+            val (monedaDeLaCuenta, tipoDeLaCuenta) = dbQuery {
                 Accounts.selectAll()
                     .where { (Accounts.id eq event.accountId) and (Accounts.userId eq uid) }
-                    .firstOrNull()?.get(Accounts.currency)
+                    .firstOrNull()?.let { it[Accounts.currency] to runCatching { AccountType.valueOf(it[Accounts.type]) }.getOrNull() }
             } ?: return@post call.respond(HttpStatusCode.NotFound, "Account not found")
             // Sin moneda en el pedido, la de la cuenta: es la única que un movimiento de esa cuenta
             // puede tener si nadie dijo otra cosa. Un US$120 anotado en el teléfono sobre la Master
             // Black USD se guardaba como $120 pesos.
             if (!mandoLaMoneda) event = event.copy(currency = monedaDeLaCuenta)
+
+            // **Vuelta 71 · las cuotas de una compra con tarjeta** («¿A cuántas cuotas?» de Agregar).
+            // Campo opcional: un APK viejo no lo manda y no cambia nada. Fuera de rango es un 400 (la
+            // hoja no deja escribirlo); en algo que no es un gasto de una tarjeta se ignora, porque
+            // solo `extractoDeLaTarjeta` lo lee. No cambia cómo cuenta la compra: entera, el día que se hizo.
+            event.cuotas?.let { cuotas ->
+                if (!cuotasValidas(cuotas)) return@post call.respond(HttpStatusCode.BadRequest, CUOTAS_FUERA_DE_RANGO)
+            }
+            if (event.type != TransactionType.EXPENSE || tipoDeLaCuenta != AccountType.CREDIT_CARD) event = event.copy(cuotas = null)
 
             // **Un id que ya existe no es un error: es el mismo movimiento que vuelve.**
             //
@@ -384,6 +394,9 @@ fun Route.eventRoutes() {
                         // contra ella y no contra la que había. Solo si vino: un APK viejo no tiene
                         // ninguna que ofrecer y la guardada se deja como está.
                         if (event.lastEditedAt != null) it[Events.lastEditedAt] = event.lastEditedAt
+                        // Vuelta 71: las cuotas, solo si vinieron (el teléfono las manda una vez, en
+                        // la subida; un reenvío sin ellas no borra las que ya están).
+                        if (event.cuotas != null) it[Events.cuotas] = event.cuotas
                         // Confirmado en el teléfono (`confirmEvent` sin señal) → confirmado acá.
                         // Solo en esa dirección: un reenvío viejo no puede devolver a «por
                         // confirmar» algo que ya se confirmó en la web.
@@ -429,6 +442,8 @@ fun Route.eventRoutes() {
                     // la edición viaje con él — si no, el server lo guardaría como «nunca editado»
                     // y la comparación del próximo reenvío arrancaría de cero.
                     it[Events.lastEditedAt]  = event.lastEditedAt
+                    // Vuelta 71: a cuántas cuotas fue la compra con tarjeta, si la hoja lo dijo.
+                    it[Events.cuotas]        = event.cuotas
                 }
             }
             // El eco lleva la bandera derivada, no la que mandó el cliente: countsAsCashFlow
