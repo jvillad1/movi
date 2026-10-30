@@ -257,9 +257,10 @@ data class FilasDelWidgetDeFalta(
 const val PAGOS_EN_EL_WIDGET: Int = 2
 
 /**
- * @param sinElProximoPago **vuelta 68**: el Inicio ya muestra «Próximo pago», que es el primero de esta
- *   misma cola ([proximoPagoDelInicio]): el widget no lo repite como primer renglón (la revisión `r3`:
- *   «Carro $9.000» dos veces, una debajo de la otra). Sigue contando en la cifra y en «Falta 1 de 5».
+ * @param sinElProximoPago **vuelta 68**: sin el primero de la cola, el de «Próximo pago». **Desde la vuelta
+ *   78 el widget ya no lo salta** —empieza por el mismo pago que el aviso de arriba, en el mismo orden
+ *   ([pagosEnOrdenDeUrgencia], el de [colaDePendientes])—; esto queda solo para decidir si el widget
+ *   repetiría «Próximo pago» y nada más ([elWidgetDeFaltaSoloRepiteElProximoPago]).
  */
 fun filasDelWidgetDeFalta(data: DashboardData, sinElProximoPago: Boolean = false): FilasDelWidgetDeFalta {
     val todos = pagosEnOrdenDeUrgencia(checklistDelPeriodoDe(data))

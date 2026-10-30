@@ -65,7 +65,8 @@ import com.jvillada.movi.ui.components.ds.Campo
  * nadie: una frase equivocada acá es un asistente que se equivoca siempre en lo mismo.
  *
  * Lo que Movi recuerda nace casi siempre de una conversación, con una propuesta que el dueño
- * confirma. **Vuelta 61: también se escribe a mano** («Agregar», arriba, y en el vacío), con el mismo
+ * confirma. **Vuelta 61: también se escribe a mano** («Agregar», arriba; con la memoria vacía, «Escribir un
+ * recuerdo» del vacío —vuelta 78: una sola de las dos a la vez—), con el mismo
  * `POST /api/asistente/memoria` de siempre y el origen `A_MANO` («Lo escribiste tú»): sin crédito en
  * Anthropic el chat no propone nada, y la memoria no se podía llenar de ninguna forma.
  */
@@ -145,12 +146,17 @@ fun LoQueMoviSabeScreen(onNavigate: (Screen) -> Unit) {
         cargando = false
     }
 
+    // Vuelta 78 · **una sola acción para agregar**. Con la memoria vacía, el vacío trae «Escribir un
+    // recuerdo» y el encabezado traía además «Agregar», que hacía lo mismo: dos botones, una acción. Con
+    // el vacío a la vista va la suya; con recuerdos (o cargando, o caída la lectura), la del encabezado.
+    val vacioConSuAccion = !cargando && !fallo && recuerdos.isEmpty()
     Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         MinScreenHeader(
             title = TITULO_LO_QUE_MOVI_SABE,
             leading = HeaderLeading.Back(fallback = Screen.Tu),
             // Vuelta 61: escribir un recuerdo a mano (sin la IA, era la única forma que faltaba).
-            accion = AccionDeEncabezado(AGREGAR, Icons.Rounded.Add, onClick = { agregando = true; aviso = null }, habilitado = !agregando),
+            accion = if (vacioConSuAccion) null
+            else AccionDeEncabezado(AGREGAR, Icons.Rounded.Add, onClick = { agregando = true; aviso = null }, habilitado = !agregando),
         )
         LazyColumn(
             contentPadding = PaddingValues(horizontal = Medida.margenDePantalla, vertical = Medida.dentroDeSeccion),
