@@ -167,7 +167,7 @@ class SuscripcionesActivasEnElTableroTest {
         // recurrentes»). Todo lo que esta clase afirma es sobre las FILAS, así que se abre acá una
         // vez en vez de repetir el toque en cada test. Que arranque plegada tiene su propia prueba
         // en `SuscripcionesPlegablesTest`.
-        composeRule.onNodeWithText("Ver", useUnmergedTree = true).performClick()
+        composeRule.onNodeWithText("Suscripciones activas", useUnmergedTree = true).performClick() // Vuelta 83: plegada es una sola Fila
         esperarTexto("Quitar")
     }
 

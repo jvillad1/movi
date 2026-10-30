@@ -30,7 +30,7 @@ import com.jvillada.movi.ui.components.ds.TonoDeIcono
 import com.jvillada.movi.ui.espacios.MontoYTuParte
 import com.jvillada.movi.ui.plan.AHORA_NO
 import com.jvillada.movi.ui.plan.FilaDeRecordatoriosSinCanal
-import com.jvillada.movi.ui.plan.SUBTITULO_RECORDATORIOS_APAGADOS
+import com.jvillada.movi.ui.plan.ACTIVAR_LOS_RECORDATORIOS
 import com.jvillada.movi.ui.plan.TITULO_RECORDATORIOS_SIN_CANAL
 import com.jvillada.movi.ui.transactions.AccionDelMovimiento
 import com.jvillada.movi.ui.transactions.FilaDeAcciones
@@ -191,11 +191,10 @@ class LoQueSeVeEnteroTest {
 
     // ── Plan: los recordatorios que no van a llegar ───────────────────────────────────────────
 
+    // Vuelta 83: una propuesta de un renglón (sin el subtítulo), con «Activar» y «Ahora no».
     private fun recordatorios() = montar {
         EnLaPantalla {
-            Superficie(relleno = RellenoDeSuperficie.Lista) {
-                FilaDeRecordatoriosSinCanal(bloqueadas = false, onActivar = {}, onAhoraNo = {})
-            }
+            FilaDeRecordatoriosSinCanal(bloqueadas = false, onActivar = {}, onAhoraNo = {})
         }
     }
 
@@ -204,7 +203,7 @@ class LoQueSeVeEnteroTest {
     fun `a 390 los recordatorios se leen enteros`() {
         recordatorios()
         enteroEnUnRenglon(TITULO_RECORDATORIOS_SIN_CANAL)
-        enteroEnUnRenglon(SUBTITULO_RECORDATORIOS_APAGADOS)
+        enteroEnUnRenglon(ACTIVAR_LOS_RECORDATORIOS)
         composeRule.onNodeWithText(AHORA_NO, useUnmergedTree = true).fetchSemanticsNode()
     }
 
@@ -213,8 +212,7 @@ class LoQueSeVeEnteroTest {
     fun `a 360 los recordatorios se leen enteros`() {
         recordatorios()
         enteroEnUnRenglon(TITULO_RECORDATORIOS_SIN_CANAL)
-        val sub = medida(SUBTITULO_RECORDATORIOS_APAGADOS)
-        assertFalse((0 until sub.lineCount).any { sub.isLineEllipsized(it) }, "el subtítulo con «…»")
+        enteroEnUnRenglon(AHORA_NO)
     }
 
     // ── El menos de una cifra, pegado al «$» ──────────────────────────────────────────────────

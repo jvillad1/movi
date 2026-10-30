@@ -82,7 +82,7 @@ class LosRecordatoriosVanDebajoDeLosPagosTest {
     }
 
     @Test
-    fun `la fila va debajo del resumen de los pagos, compacta, y no es una tarjeta`() {
+    fun `va debajo del resumen de los pagos, como una propuesta de un renglon`() {
         montar()
         val fila = composeRule.onNodeWithTag(TAG_FILA_DE_RECORDATORIOS, useUnmergedTree = true).fetchSemanticsNode()
         // Vuelta 40: el resumen es la tarjeta amarilla «Falta por pagar», arriba de la lista.
@@ -90,15 +90,15 @@ class LosRecordatoriosVanDebajoDeLosPagosTest {
         val primerPago = composeRule.onNodeWithText("Arriendo", useUnmergedTree = true).fetchSemanticsNode()
         assertTrue(resumen.boundsInRoot.bottom <= fila.boundsInRoot.top, "debajo del resumen")
         assertTrue(fila.boundsInRoot.bottom <= primerPago.boundsInRoot.top, "y encima de los pagos")
-        assertEquals(0, composeRule.onAllNodesWithTag(TAG_TARJETA_DE_PROPUESTA, useUnmergedTree = true).fetchSemanticsNodes().size)
+        // Vuelta 83: una TarjetaDePropuesta de un renglón, con «Activar» y el enlace «Ahora no».
+        assertEquals(1, composeRule.onAllNodesWithTag(TAG_TARJETA_DE_PROPUESTA, useUnmergedTree = true).fetchSemanticsNodes().size)
         composeRule.onNodeWithText(TITULO_RECORDATORIOS_SIN_CANAL, useUnmergedTree = true).assertExists()
-        composeRule.onNodeWithText(SUBTITULO_RECORDATORIOS_APAGADOS, useUnmergedTree = true).assertExists()
 
-        // Tocarla activa; «Ahora no» la descarta.
+        // «Activar» activa; «Ahora no» la descarta.
         composeRule.onNodeWithText(AHORA_NO, useUnmergedTree = true).performClick()
         assertEquals(1, ahoraNo)
         assertEquals(0, activadas)
-        composeRule.onNodeWithTag(TAG_FILA_DE_RECORDATORIOS, useUnmergedTree = true).performClick()
+        composeRule.onNodeWithText(ACTIVAR_LOS_RECORDATORIOS, useUnmergedTree = true).performClick()
         assertEquals(1, activadas)
     }
 

@@ -109,7 +109,7 @@ class SuscripcionAnualEnElTableroTest {
         esperarTexto("Suscripciones activas")
         // La sección arranca plegada (ver `SuscripcionesPlegablesTest`); todo lo que esta clase
         // afirma es sobre las FILAS, así que se abre una vez acá.
-        composeRule.onNodeWithText("Ver", useUnmergedTree = true).performClick()
+        composeRule.onNodeWithText("Suscripciones activas", useUnmergedTree = true).performClick() // Vuelta 83: plegada es una sola Fila
         composeRule.waitForIdle()
     }
 

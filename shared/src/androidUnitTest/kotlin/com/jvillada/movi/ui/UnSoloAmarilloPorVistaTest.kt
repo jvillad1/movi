@@ -40,6 +40,9 @@ import com.jvillada.movi.ui.dashboard.DashboardData
 import com.jvillada.movi.ui.dashboard.LocalCargandoElInicio
 import com.jvillada.movi.ui.dashboard.PagoDelPeriodo
 import com.jvillada.movi.ui.recurrentes.SeccionChecklistDelPeriodo
+import com.jvillada.movi.ui.recurrentes.TAG_CUENTA_DE_LA_REGLA
+import com.jvillada.movi.ui.plan.FilaDeRecordatoriosSinCanal
+import com.jvillada.movi.ui.plan.TAG_FILA_DE_RECORDATORIOS
 import com.jvillada.movi.ui.recurrentes.TAG_TARJETA_FALTA_POR_PAGAR
 import com.jvillada.movi.ui.sdui.SduiRenderer
 import com.jvillada.movi.ui.sdui.TAG_SUPERFICIE_DE_LAS_ACCIONES
@@ -163,5 +166,48 @@ class UnSoloAmarilloPorVistaTest {
         assertEquals(1, amarillos(), "un solo amarillo en Pagos")
         val tarjeta = composeRule.onNodeWithTag(TAG_TARJETA_FALTA_POR_PAGAR, useUnmergedTree = true).fetchSemanticsNode()
         assertEquals(true, tarjeta.config.getOrNull(SuperficieDestacadaKey), "«Falta por pagar» es una superficie blanca destacada")
+    }
+
+    /**
+     * Vuelta 83 · **un solo amarillo en Pagos también con propuestas**: la de «¿Usar siempre … para
+     * Arriendo?» («Guardar en la regla») y los recordatorios («Activar») van en `Secundario`, dicho en
+     * Pagos y no por el default de la tarjeta; el amarillo es «Anotar pago» de la primera factura.
+     */
+    @Test
+    fun `en Pagos con propuestas y recordatorios sigue habiendo un solo amarillo`() {
+        val lista = listOf(
+            PagoDelPeriodo(ruleId = "r_carro", nombre = "Carro", monto = 9_000, pagado = false, diasParaVencer = -4, vence = "2026-09-06"),
+            PagoDelPeriodo(
+                ruleId = "r_arr", nombre = "Arriendo", monto = 1_800_000, pagado = true, diasParaVencer = 2, vence = "2026-09-12",
+                eventId = "ev_arr", cuentaDelPago = "a1",
+            ),
+            PagoDelPeriodo(ruleId = "r_gym", nombre = "Gimnasio", monto = 139_900, pagado = false, diasParaVencer = 9, vence = "2026-09-19"),
+        )
+        montar {
+            SeccionChecklistDelPeriodo(
+                checklist = lista,
+                cargando = false,
+                pudoLeer = true,
+                marcando = emptySet(),
+                onConfirmar = { _, _ -> },
+                onNoFueEste = { _, _ -> },
+                onAnotarMovimiento = {},
+                onQuitarLaMarca = {},
+                onReintentar = {},
+                nombresDeCuentas = mapOf("a1" to "Bancolombia Ahorros 4057"),
+                onUsarSiempreLaCuenta = { _, _ -> },
+                onNoUsarSiempreLaCuenta = { _, _ -> },
+                debajoDelResumen = { FilaDeRecordatoriosSinCanal(bloqueadas = false, onActivar = {}, onAhoraNo = {}) },
+            )
+        }
+        composeRule.onNodeWithTag(TAG_CUENTA_DE_LA_REGLA, useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithTag(TAG_FILA_DE_RECORDATORIOS, useUnmergedTree = true).assertExists()
+        assertEquals(1, amarillos(), "un solo amarillo en Pagos, con la propuesta y los recordatorios")
+    }
+
+    @Test
+    @Config(qualifiers = "w1280dp-h3200dp-mdpi")
+    fun `a 1280 tambien, en Pagos con propuestas, un solo amarillo`() {
+        `en Pagos con propuestas y recordatorios sigue habiendo un solo amarillo`()
     }
 }
