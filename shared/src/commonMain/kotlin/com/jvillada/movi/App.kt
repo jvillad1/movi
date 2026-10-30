@@ -187,7 +187,7 @@ fun App() {
             // la composición) seguiría mostrando la lista de antes de guardar. Ver [LocalRefreshTick].
             var refreshTick by remember { mutableStateOf(0) }
             // Vuelta 67: «Anulado · Deshacer». Deshacer bien relee como cualquier guardado.
-            val avisoDeDeshacer = remember { com.jvillada.movi.ui.components.AvisoDeDeshacer(alCambiar = { refreshTick++ }) }
+            val avisoDeDeshacer = remember { com.jvillada.movi.ui.components.ds.AvisoDeDeshacer(alCambiar = { refreshTick++ }) }
             // Ola 9 · B — «¿esto se repite todos los meses?», ofrecido DESPUÉS de guardar.
             //
             // Vive acá, y no en la hoja de Agregar, por una razón concreta: guardar cierra esa
@@ -211,8 +211,16 @@ fun App() {
                 RecurringOfferGate.ofrecerPara(evento, comoSeGuardo)?.let { ofrecimientoRecurrente = it }
             }
             // La barra se esconde mientras haya una hoja abierta encima (ver más abajo).
+            // Vuelta 74: y espera a que se vaya «Anotado · Deshacer» (los dos van abajo, en el mismo lugar).
             val ofrecimientoALaVista = ofrecimientoRecurrente != null &&
-                quickAdd == null && hojaRecurrentePrellenada == null
+                quickAdd == null && hojaRecurrentePrellenada == null && avisoDeDeshacer.actual == null
+            // Lo guardado se deshizo: el «¿se repite?» de ese movimiento ya no tiene a qué referirse.
+            LaunchedEffect(avisoDeDeshacer.deshechos) {
+                if (avisoDeDeshacer.deshechos > 0) {
+                    ofrecimientoRecurrente = null
+                    movimientoRecienGuardado = null
+                }
+            }
             // Se va sola. Es la mitad del diseño: si la barra se quedara hasta que alguien la
             // cierre, "ignorarla" costaría un toque y anotar el almuerzo de todos los días
             // sería una molestia diaria. Así, no contestar ES la respuesta.
@@ -409,7 +417,7 @@ fun App() {
                 val relevoDeScroll = remember { RelevoDeScroll() }
                 CompositionLocalProvider(
                     LocalRefreshTick provides refreshTick,
-                    com.jvillada.movi.ui.components.LocalAvisoDeDeshacer provides avisoDeDeshacer,
+                    com.jvillada.movi.ui.components.ds.LocalAvisoDeDeshacer provides avisoDeDeshacer,
                     LocalRelevoDeScroll provides relevoDeScroll,
                     // Para que cualquier pantalla pueda anotar su hoja sin que App.kt tenga que
                     // conocerla (Perfil y sus cuatro overlays). Ver [PilaDeHojas].
@@ -727,8 +735,8 @@ internal fun EsqueletoDeLaCascara(
                 Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                     contenido()
                     // Vuelta 67: «Anulado · Deshacer», abajo de la pantalla y encima de su contenido.
-                    com.jvillada.movi.ui.components.LocalAvisoDeDeshacer.current?.let { aviso ->
-                        com.jvillada.movi.ui.components.AnfitrionDelAvisoDeDeshacer(aviso, Modifier.align(Alignment.BottomCenter))
+                    com.jvillada.movi.ui.components.ds.LocalAvisoDeDeshacer.current?.let { aviso ->
+                        com.jvillada.movi.ui.components.ds.AnfitrionDelAvisoDeDeshacer(aviso, Modifier.align(Alignment.BottomCenter))
                     }
                 }
 

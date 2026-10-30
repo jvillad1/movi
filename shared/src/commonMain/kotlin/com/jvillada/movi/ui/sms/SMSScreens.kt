@@ -1,5 +1,8 @@
 package com.jvillada.movi.ui.sms
 
+import com.jvillada.movi.ui.espacios.deshacerLoAnotado
+import com.jvillada.movi.ui.espacios.mostrarLoAnotado
+import com.jvillada.movi.ui.espacios.textoDeLoAnotado
 import com.jvillada.movi.shared.model.enFormaDeTitulo
 import com.jvillada.movi.shared.model.nombreParaMostrar
 import com.jvillada.movi.ui.components.ds.Boton
@@ -665,6 +668,12 @@ internal fun TarjetaDeMensajeDelBanco(
      * que no es la categoría (la cuenta, el monto, el comercio). Sin esto, el enlace no se pinta.
      */
     onMasCambios: (() -> Unit)? = null,
+    /**
+     * Vuelta 74 · **«¿Ya lo anotaste?» encontró el movimiento**: la tarjeta lo dice («Ya anotado:
+     * Restaurantes $32.000 · hoy») y su botón amarillo es «Es este» (o «Elegir» con varios). Solo la
+     * bandeja lo pasa. Ver [YaAnotadoEnLaFila].
+     */
+    yaAnotado: YaAnotadoEnLaFila? = null,
 ) {
     val apartado = loApartoMovi(sms)
     var eligiendoLaCategoria by remember(sms.id) { mutableStateOf(false) }
@@ -698,6 +707,10 @@ internal fun TarjetaDeMensajeDelBanco(
         estado = estado,
         pideDecision = pendiente,
         acciones = when {
+            // Vuelta 74: ya está anotado. «Es este» va primero —antes que «Confirmar», que crearía otro—.
+            pendiente && yaAnotado != null -> {
+                { AccionesDelYaAnotado(yaAnotado, trabajando, onRevisar, onIgnorar) }
+            }
             // La bandeja que se vacía sola: «Confirmar» solo cuando Movi ya tiene todo (ver
             // `loQueMoviEntendio`).
             confirmable -> {
@@ -752,6 +765,8 @@ internal fun TarjetaDeMensajeDelBanco(
         },
         pie = pie,
     ) {
+        // Vuelta 74: lo primero que se lee, si ya está anotado.
+        if (pendiente && yaAnotado != null) LineaDelYaAnotado(lineaDelYaAnotado(yaAnotado.coincidencias, hoyEnAppZone()))
         // Antes de aprobar, que se sepa que otro aviso parece el mismo pago: dos avisos de un pago
         // aprobados por separado son dos movimientos.
         if (pendiente && sms.parecidoA != null) LineaDelMismoPago(parecidoA)
@@ -978,17 +993,37 @@ fun SMSReconcileScreen(
         }
     }
 
-    /** «Es este»: el SMS queda confirmado sin crear nada, porque el movimiento ya existía. */
-    fun esElQueYaEstaba(eventoId: String) {
+    // Vuelta 74: el aviso de abajo de la cáscara —«Anotado · … · Deshacer»— y los grupos para
+    // ofrecer «Repartir con Caro» en él.
+    val avisoDeLaCascara = com.jvillada.movi.ui.components.ds.LocalAvisoDeDeshacer.current
+    val espaciosParaRepartir = com.jvillada.movi.ui.espacios.rememberEspaciosParaRepartir()
+    /** Los avisos que cierra este: los pendientes del pago entero, o este solo. */
+    fun avisosQueCierra(): List<String> =
+        pagoActual?.miembros?.filter { it.state == SMS_STATE_PENDING }?.map { it.id }?.ifEmpty { null } ?: listOf(smsId)
+
+    /**
+     * «Es este»: el SMS queda confirmado sin crear nada, porque el movimiento ya existía. Vuelta 74:
+     * sin vaciar lo que la bandeja recuerda (al volver no hay esqueleto, ver [sinVaciarLaBandeja]) y
+     * con «Anotado · … · Deshacer» abajo: deshacer lo desvincula y el aviso vuelve a «Por revisar».
+     */
+    fun esElQueYaEstaba(evento: FinancialEvent) {
         if (working) return
         working = true
         error = null
+        val cierra = avisosQueCierra()
         coroutine.launch {
-            intentar { confirmarElAviso(eventoId) }
+            intentar { com.jvillada.movi.ui.porrevisar.sinVaciarLaBandeja(cierra.toSet()) { confirmarElAviso(evento.id) } }
                 .onSuccess {
                     working = false
                     sms = sms?.copy(state = SMS_STATE_CONFIRMED)
                     vibrador.confirmar()
+                    avisoDeLaCascara?.mostrarLoAnotado(
+                        evento, espaciosParaRepartir,
+                        deshacer = if (esComprobante) null else {
+                            { deshacerLoAnotado(eventoId = null, avisos = cierra) }
+                        },
+                        yaEstaba = true,
+                    )
                     goBack(Screen.PorRevisar)
                 }
                 .onFailure { working = false; error = it.toUserMessage() }
@@ -1257,6 +1292,11 @@ fun SMSReconcileScreen(
             // Si el movimiento se crea y marcar el aviso falla, el aviso sigue pendiente: sin volver
             // a revisar, el siguiente «Confirmar» crearía un segundo movimiento en silencio.
             var movimientoCreado = false
+            // Vuelta 74: lo que se creó, para «Anotado · … · Deshacer»: el movimiento suelto, o el id de
+            // la pata del dinero de las dos patas (anularla anula las dos). `null` = ya estaba anotado.
+            var suelto: FinancialEvent? = null
+            var pataDelDinero: String? = null
+            val cierra = avisosQueCierra()
             intentar {
                 // Cuando llegó el mensaje, no cuando se confirma: ver [momentoDelMovimientoDelAviso].
                 val momento = momentoDelMovimientoDelAviso(sms, pagoActual, p, ahora = Clock.System.now().toEpochMilliseconds())
@@ -1268,11 +1308,12 @@ fun SMSReconcileScreen(
                         dosPatas, p, momento, montoEnLaMonedaDeLaDeuda = enLaDeuda, comoAbono = comoAbono, nuevoId = ::newId,
                     )
                     val elPago = pagoActual
-                    if (elPago != null) {
+                    val hecho = if (elPago != null) {
                         Repositories.wallets.confirmarElMismoPago(elPago.grupoId, ConfirmarElMismoPago(idsDelPago, patas = pedido))
                     } else {
                         Repositories.wallets.confirmarConLasDosPatas(smsId, pedido)
                     }
+                    pataDelDinero = hecho.eventoId?.takeIf { hecho.creado }
                     return@intentar
                 }
                 // Un movimiento suelto: el MISMO camino que la fila y el lote de «Por revisar» (ver
@@ -1286,12 +1327,28 @@ fun SMSReconcileScreen(
                     textoDelAviso = (avisoDeLaPropuesta ?: sms)?.text.orEmpty(),
                     esComprobante = esComprobante,
                 )
-                anotarElMovimientoDelAviso(smsId, pagoActual, event, esComprobante, alCrearElMovimiento = { movimientoCreado = true })
+                suelto = anotarElMovimientoDelAviso(smsId, pagoActual, event, esComprobante, alCrearElMovimiento = { movimientoCreado = true })
             }.onSuccess {
                 working = false
                 cuotaYaPagada = null
                 sms = sms?.copy(state = SMS_STATE_CONFIRMED)
                 vibrador.confirmar()
+                // Vuelta 74: «Anotado · … · Deshacer» abajo. Deshacer anula lo que se creó (con las dos
+                // patas, las dos) y el aviso vuelve a «Por revisar»; un comprobante no lo ofrece (su
+                // papel ya quedó colgado de la cuenta). Un gasto suelto ofrece además «Repartir con …».
+                val deshacerEsto: (String) -> (suspend () -> Unit)? = { id ->
+                    if (esComprobante) null else { { deshacerLoAnotado(id, cierra) } }
+                }
+                val creadoSuelto = suelto
+                val creadaLaPata = pataDelDinero
+                when {
+                    creadoSuelto != null ->
+                        avisoDeLaCascara?.mostrarLoAnotado(creadoSuelto, espaciosParaRepartir, deshacerEsto(creadoSuelto.id))
+                    creadaLaPata != null -> avisoDeLaCascara?.mostrar(
+                        textoDeLoAnotado(nombreParaMostrar(p.merchant).ifBlank { cat }, p.amount.roundToLong(), p.currency),
+                        deshacer = deshacerEsto(creadaLaPata),
+                    )
+                }
                 // Ola 2 #1: pop, no push — un segundo tap en ‹ desde la bandeja no debe volver
                 // a este detalle ya confirmado (evita duplicar el movimiento).
                 goBack(Screen.PorRevisar)
@@ -1386,6 +1443,9 @@ fun SMSReconcileScreen(
                 working = false
                 sms = sms?.copy(state = SMS_STATE_CONFIRMED)
                 vibrador.confirmar()
+                // Vuelta 74: el mismo aviso de abajo, sin «Deshacer»: varias partes (con sus patas y sus
+                // sellos de cuota) no tienen una sola vuelta atrás limpia. Se anula parte por parte.
+                avisoDeLaCascara?.mostrar(textoDeLoAnotado("${elegidas.size} partes", totalDelAviso, p.currency))
                 goBack(Screen.PorRevisar)
             }.onFailure {
                 working = false
@@ -1466,6 +1526,11 @@ fun SMSReconcileScreen(
         // la cuenta, ya anotado), lo que Movi propone y los datos para ajustar—, cada bloque con su
         // [Seccion] y [Medida.entreSecciones] entre uno y otro.
         val pendiente = currentSms == null || currentSms.state == SMS_STATE_PENDING
+        // Vuelta 74: «¿Ya lo anotaste?» encontró algo (y el aviso espera, sin otro aviso del pago ya
+        // anotado ni partes abiertas): «Es este» es lo principal y crear otro pasa a ser lo secundario.
+        val conYaAnotado = !coincidencias.isNullOrEmpty() && currentSms != null && currentSms.state == SMS_STATE_PENDING &&
+            yaAnotadoCon == null && !enPartes
+        val unicoYaAnotado = coincidencias?.singleOrNull()?.takeIf { conYaAnotado }
         val densidad = LocalDensity.current
         LazyColumn(
             modifier = Modifier.weight(1f).testTag(TAG_LISTA_DE_REVISAR_AVISO),
@@ -1570,14 +1635,19 @@ fun SMSReconcileScreen(
                                 Fila(
                                     titulo = ev.description,
                                     subtitulo = "${etiquetaDeFecha(fechaDeEpoch(ev.timestamp), hoyEnAppZone())} · ${formatMoney(ev.amount, ev.currency)}",
-                                    final = {
-                                        Boton(
-                                            texto = "Es este",
-                                            onClick = { esElQueYaEstaba(ev.id) },
-                                            variante = VarianteDeBoton.Secundario,
-                                            tamano = TamanoDeBoton.S,
-                                            habilitado = !working,
-                                        )
+                                    // Vuelta 74: con uno solo, «Es este» es el botón amarillo de abajo; con
+                                    // varios, cada fila lleva el suyo, y es la acción principal.
+                                    final = if (unicoYaAnotado != null) null else {
+                                        {
+                                            Boton(
+                                                texto = ES_ESTE,
+                                                onClick = { esElQueYaEstaba(ev) },
+                                                variante = VarianteDeBoton.Principal,
+                                                tamano = TamanoDeBoton.S,
+                                                habilitado = !working,
+                                                modifier = Modifier.testTag("$TAG_ES_ESTE_EN_RECONCILIAR:$i"),
+                                            )
+                                        }
                                     },
                                 )
                             }
@@ -1999,21 +2069,23 @@ fun SMSReconcileScreen(
                     .padding(horizontal = Medida.margenDePantalla, vertical = Espacio.s)
                     .testTag(TAG_CUOTA_YA_PAGADA_EN_EL_AVISO),
             )
-        } else Row(
+        } else Column(modifier = Modifier.fillMaxWidth().onSizeChanged { altoDeLaBarra = with(densidad) { it.height.toDp() } }) {
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .onSizeChanged { altoDeLaBarra = with(densidad) { it.height.toDp() } }
                 .padding(horizontal = Medida.margenDePantalla, vertical = Espacio.s),
             horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
         ) {
-            Boton(
-                texto = "Ignorar",
-                onClick = { ignore() },
-                modifier = Modifier.weight(1f),
-                variante = VarianteDeBoton.Secundario,
-                habilitado = !working && !alreadyResolved,
-                anchoCompleto = true,
-            )
+            if (unicoYaAnotado == null) {
+                Boton(
+                    texto = "Ignorar",
+                    onClick = { ignore() },
+                    modifier = Modifier.weight(1f),
+                    variante = VarianteDeBoton.Secundario,
+                    habilitado = !working && !alreadyResolved,
+                    anchoCompleto = true,
+                )
+            }
             // Hasta que la revisión de «¿ya lo anotaste?» conteste, no se anota. Si falló, se puede,
             // pero con un segundo toque que dice lo que hace.
             val revisionContesto = coincidencias != null || noSePudoRevisar
@@ -2040,8 +2112,11 @@ fun SMSReconcileScreen(
                     soloCerrar -> "Cerrar los avisos"
                     ofreceAnotarloIgual -> ANOTARLO_IGUAL
                     anotarSinRevisar -> "Anotar de todas formas"
+                    // Vuelta 74: ya está anotado; crear otro es lo secundario, y lo dice.
+                    conYaAnotado -> ANOTAR_APARTE
                     else -> "Confirmar"
                 },
+                variante = if (conYaAnotado) VarianteDeBoton.Secundario else VarianteDeBoton.Principal,
                 onClick = {
                     when {
                         enPartesYa -> confirmarLasPartes()
@@ -2054,10 +2129,46 @@ fun SMSReconcileScreen(
                         else -> confirm()
                     }
                 },
-                modifier = Modifier.weight(1.7f),
+                modifier = Modifier.weight(if (unicoYaAnotado != null) 1f else 1.7f).testTag(TAG_ANOTAR_APARTE),
                 habilitado = if (enPartesYa) !working && partesListas else canConfirm,
                 anchoCompleto = true,
             )
+            // Vuelta 74: con un solo movimiento que ya está anotado, «Es este» es el botón amarillo: lo
+            // cierra sin crear nada. «Ignorar» baja al renglón de abajo.
+            unicoYaAnotado?.let { yaEstaba ->
+                Boton(
+                    texto = ES_ESTE,
+                    onClick = { esElQueYaEstaba(yaEstaba) },
+                    modifier = Modifier.weight(1.2f).testTag(TAG_ES_ESTE_EN_RECONCILIAR),
+                    variante = VarianteDeBoton.Principal,
+                    habilitado = !working,
+                    anchoCompleto = true,
+                )
+            }
+        }
+        if (conYaAnotado) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = Medida.margenDePantalla).padding(bottom = Espacio.xs),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
+            ) {
+                Text(
+                    ANOTAR_APARTE_CREA_OTRO,
+                    style = Movi.textos.apoyo,
+                    color = Movi.colores.textoMedio,
+                    modifier = Modifier.weight(1f).testTag(TAG_ANOTAR_APARTE_CREA_OTRO),
+                )
+                if (unicoYaAnotado != null) {
+                    Boton(
+                        texto = "Ignorar",
+                        onClick = { ignore() },
+                        variante = VarianteDeBoton.Fantasma,
+                        tamano = TamanoDeBoton.S,
+                        habilitado = !working && !alreadyResolved,
+                    )
+                }
+            }
+        }
         }
         // Vuelta 57: una cuota sin su crédito dice por qué Confirmar no prende, en el mismo lugar.
         if (!enPartes && !alreadyResolved && yaAnotadoCon == null && preguntaDelAbono == null && faltaElCredito != null) {

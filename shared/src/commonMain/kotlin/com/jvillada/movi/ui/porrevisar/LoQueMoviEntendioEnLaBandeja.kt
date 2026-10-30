@@ -5,6 +5,7 @@ import com.jvillada.movi.data.intentar
 import com.jvillada.movi.shared.model.newId
 import com.jvillada.movi.shared.repository.WalletRepository
 import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.DudaDelAviso
 import com.jvillada.movi.shared.model.GrupoDeAvisos
 import com.jvillada.movi.shared.model.ParsedSms
@@ -198,6 +199,7 @@ fun loQueMoviEntendio(
  * **Anota lo que Movi entendió**, por el MISMO camino que Reconciliar: el mismo movimiento
  * ([movimientoDelAviso], con el comercio que leyó Movi) y la misma confirmación
  * ([anotarElMovimientoDelAviso]: el pago entero en una transacción, o el movimiento y el aviso).
+ * Devuelve el movimiento creado, o `null` si ya estaba anotado (ver [anotarElMovimientoDelAviso]).
  */
 suspend fun confirmarLoEntendido(
     anotacion: AnotacionEntendida,
@@ -211,7 +213,7 @@ suspend fun confirmarLoEntendido(
      * /api/events` es idempotente por id) en vez de anotar otro.
      */
     idDelMovimiento: String = newId("ev"),
-) {
+): FinancialEvent? {
     val evento = movimientoDelAviso(
         leido = anotacion.leido,
         cuentaId = anotacion.cuenta.id,
@@ -222,7 +224,7 @@ suspend fun confirmarLoEntendido(
         esComprobante = esIdDeComprobante(anotacion.sms.id),
         id = idDelMovimiento,
     )
-    anotarElMovimientoDelAviso(anotacion.sms.id, anotacion.pago, evento, esIdDeComprobante(anotacion.sms.id), alCrearElMovimiento, repo)
+    return anotarElMovimientoDelAviso(anotacion.sms.id, anotacion.pago, evento, esIdDeComprobante(anotacion.sms.id), alCrearElMovimiento, repo)
 }
 
 /**

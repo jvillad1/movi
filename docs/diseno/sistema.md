@@ -3831,6 +3831,110 @@ Captura sin ellos y con el enlace). Se actualizaron `ElInicioDeLaOpcion3Test`, `
 `EspaciosEnDosColumnasTest`, `TransferFormTest` y `ElAmarilloEsDeLaAccionTest`. **Las líneas base** no
 cambian, y las guardas en 0 siguen en 0.
 
+## 72. Vuelta 74: un toque por movimiento
+
+De la revisión fresca 5 del 30-oct (`r5-dia-05-avisos-nuevos.png`, `r5-dia-06-revisar-crepes.png`,
+`r5-dia-07-es-este-a.png`, `r5-dia-08-confirmar-a.png`, `r5-dia-17-cuota-aviso.png`, `r5-dia-03-guardado-*.png`),
+puntos 1, 5 y 13. **Sin reglas de plata nuevas**: «Es este» vincula (lo que ya hacía `…/confirm?eventoId=`),
+«Deshacer» es anular (vuelta 67) o desvincular (la vuelta exacta del vincular), y repartir es el `…/compartir`
+de siempre. Ninguna cifra existente cambió. **Un componente pasó a `ds/`**: el aviso de abajo
+(`ds/AvisoDeDeshacer.kt`, antes en `ui/components`).
+
+1. **El aviso que ya está anotado se cierra con «Es este».** Con la MISMA detección de «¿Ya lo anotaste?»
+   (`PropuestaDelAviso.coincidencias`, lo que contesta `GET /api/sms/{id}/coincidencias`):
+   - **La tarjeta de Por revisar** (`TarjetaDeMensajeDelBanco` y `TarjetaDelMismoPago`, parámetro
+     `yaAnotado: YaAnotadoEnLaFila`) dice primero «Ya anotado: Restaurantes $32.000 · hoy»
+     (`lineaDelYaAnotado`, `apoyoMedio`) y sus acciones son **«Es este»** (`PastillaDelPago` principal, el
+     amarillo) · «Revisar» · «Ignorar». «Es este» se resuelve en el toque, sin abrir nada: el aviso suelto por
+     `confirmSmsCon(id, eventoId)`, un comprobante por `confirmarComprobante`, un pago avisado varias veces por
+     `confirmarElMismoPago(…, eventoExistenteId)`. **Nunca crea un movimiento.** Con dos o más candidatos no
+     hay un toque: «Puede ser uno de 2 anotados» y **«Elegir»** (amarillo) abre Revisar aviso.
+   - **Revisar aviso**: con un candidato, la barra de abajo es «Anotar aparte» (secundario) · **«Es
+     este»** (principal, peso mayor), y debajo «Anotar aparte» crea otro movimiento, además del que ya
+     está anotado.» con «Ignorar» como fantasma; la fila del candidato ya no lleva su propio botón. Con
+     varios, cada fila lleva «Es este» principal y abajo no hay amarillo («Ignorar» · «Anotar aparte»).
+   - **La cuota** ($980.000 que coincide con la cuota ya anotada) va por lo mismo: «Es este» vincula el aviso
+     a la pata del dinero que ya estaba. No hay un camino nuevo de cuotas y nada salta
+     `escribirLasPatasDelAviso` (no se escribe ninguna pata).
+2. **«Anotado · Deshacer», y repartir en un toque.** El aviso de abajo (`AvisoDeDeshacer`, en la cáscara por
+   `LocalAvisoDeDeshacer`) es **el** aviso de la app: anular (vuelta 67) y ahora guardar en Agregar (gasto,
+   ingreso, traspaso o pago), confirmar un aviso (en la fila o en Revisar aviso) y «Es este». Dice qué quedó
+   («Anotado · Restaurantes $32.000»: el comercio si lo hay, si no la categoría — `textoDeLoAnotado`), lleva
+   **Deshacer** 8 s (`DURACION_DEL_AVISO_DE_DESHACER`, también para «Anulado»; la cuenta se para mientras
+   trabaja o se elige) y **una acción** (`AvisoDeDeshacer.Accion`): **«Repartir con Caro»** si es un gasto que
+   se puede repartir (`sePuedeRepartir`, sin grupo todavía) y el dueño tiene grupos; con varios, «Repartir»
+   abre una hoja «¿Con qué grupo lo repartes?» (`Accion.opciones`). Repartir usa `repartirMovimiento` (el
+   `…/compartir`, con la regla del grupo) y el aviso pasa a «Repartido con Caro · tu parte $16.000 ·
+   Deshacer» (deshacer = `quitarDelEspacio`). En el teléfono sin señal, `LocalRepository.repartirMovimiento`
+   lanza `MovimientoSinSubir` y el aviso dice `REPARTO_SIN_CONEXION` (vuelta de diseño 24) sin pedir nada.
+   **Cómo se deshace cada cosa** (`deshacerLoAnotado`):
+   - Agregar (gasto/ingreso): anula el movimiento (`voidEvent`); si se guardó con «Es el aviso de hace 2 h»,
+     ese aviso vuelve a Por revisar (desvincular). Traspaso y pago: anula la pata que salió (la otra se
+     anula con ella por su `transferId`).
+   - Confirmar un aviso que creó su movimiento (fila o Revisar aviso, suelto, pago avisado varias veces o de
+     dos patas): primero el aviso vuelve a pendiente (`POST /api/sms/desvincular`), después se anula lo creado.
+   - «Es este»: solo desvincula. El movimiento queda igual.
+   - **Sin Deshacer** (no hay vuelta limpia): un comprobante (su papel quedó colgado de la cuenta), un aviso
+     repartido en partes (varias partes con sus sellos), el modo pago de Agregar y un abono que se tilda (los
+     dos dejarían un sello de período apuntando a un anulado). Ahí el aviso dice «Anotado» sin el botón (o no
+     sale, en el modo pago, como antes).
+   El aviso vive abajo del hueco de la pantalla: encima de la barra de pestañas (no la tapa) y a la derecha
+   del rail (donde está el «+»). Entra y sale con `Movimiento.alEntrar` / `alSalir`, que con movimiento
+   reducido son un corte. El «¿esto se repite?» de App.kt espera a que se vaya y se descarta si se deshizo.
+3. **«Es este» sin recargar la bandeja.** En la fila, la tarjeta sale enseguida (lo resuelto se anota antes
+   de que conteste el server) con `animateItem` (sin animación con movimiento reducido), la lista no pasa a
+   esqueleto (las lecturas conservan su valor; «Actualizando…» arriba) y el scroll queda donde estaba. Si el
+   server falla, la tarjeta vuelve y el error se dice arriba de los mensajes. En Revisar aviso, «Es este»
+   pasa por `sinVaciarLaBandeja`: la única escritura de la que se sabe exactamente qué cambió (el estado de
+   esos avisos), así que lo que la bandeja recordaba se repone con ellos confirmados y al volver no hay
+   esqueleto. El conteo del Inicio y de la campana baja enseguida (`elInicioCuentaOtrosAvisos`, sobre
+   `DashboardDataCache.data`; la lectura de verdad llega igual y manda).
+
+Lo vigilan, en el server, `EsEsteYSuDeshacerTest` («Es este» no crea un movimiento y las cifras siguen
+iguales; desvincular devuelve el aviso sin tocar el movimiento; segundo deshacer 404; aislado por usuario;
+deshacer un aviso que creó su movimiento = desvincular + anular, y las cifras vuelven); en `:shared`
+`Vuelta74LogicaTest` (commonTest: las líneas, lo que se repone, los textos del aviso, la acción que se dice a
+sí misma y la elección) y, Robolectric, `EsEsteEnLaFilaTest` (la tarjeta con «Es este», «Puede ser uno de 2 ·
+Elegir», «Es este» sin esqueleto y con la lista quieta y su Deshacer, la falla que devuelve la tarjeta),
+`EsEsteEnRevisarAvisoTest` («Es este» principal y «Anotar aparte» secundario, con varios y sin
+ninguno) y `AnotadoConDeshacerTest` (Agregar: «Anotado · Deshacer» que anula, «Repartir con Caro» con grupo
+y ausente sin él, varios grupos, sin señal). **Las líneas base** no cambian, y las guardas en 0 siguen en 0.
+
+### La revisión de la vuelta 74, y lo que cambió
+
+La plata cuadraba («Es este» no crea nada; cada Deshacer deja las cifras exactas). Lo que encontró:
+
+1. **[P1] Un movimiento vinculado a un aviso se ofrecía a otro.** Dos compras reales de $32.000 en Crepes
+   (12:45 y 12:58): tras «Es este» en la primera, la segunda decía «Ya anotado… Es este», el server lo
+   aceptaba y los dos avisos quedaban con el mismo `evento_id` (una compra perdida). Ahora
+   `movimientosYaReclamados` (el `evento_id` y las `partes_eventos` de los avisos confirmados del usuario)
+   sale de las coincidencias (`coincidenciasDelAviso`, con las dos patas de un traspaso reclamado), y
+   vincular uno de esos contesta **409** «Ese movimiento ya está vinculado a otro aviso del banco.»
+   (`…/confirm?eventoId=` y `confirmarElMismoPago` con `eventoExistenteId`). Los avisos **del mismo
+   pago** (su grupo) sí lo comparten: es lo que hace «Cerrar los avisos».
+2. **[P2] Falsos «ya anotado» en un pago de tarjeta.** Un pago de Nu por $50.000 decía «Puede ser uno de 3»
+   (las dos patas de un traspaso a Efectivo y un Mercado). `coincidenciasDelSms` ahora, para
+   `CARD_PAYMENT_CATEGORY`, acepta solo esa categoría o lo que **entra a una cuenta `CREDIT_CARD`**
+   (la pata del pago o el abono anotado a mano; recibe los tipos de cuenta); para un gasto, **nunca la
+   pata que entra** de un traspaso; y deja **un candidato por `transferId`** (el que sale).
+3. **«Anotar aparte».** «Anotarlo como nuevo» se cortaba a 390 y a 360; el rótulo es corto y «Es este» va
+   con peso 1,2 contra 1.
+4. **El aviso de abajo no se parte por letras.** Con una acción, el texto va a lo ancho (hasta
+   `RENGLONES_DEL_AVISO` = 2, con «…») y «Repartir con Caro» · «Deshacer» en un segundo renglón a la
+   derecha; sin acción, como antes. A 360 ocupaba 9 renglones y ~210 px.
+5. **Doble toque.** Al resolver una tarjeta (Es este, Confirmar, Ignorar), la lista ignora los toques
+   `PAUSA_TRAS_RESOLVER_MS` (300 ms): la de abajo sube bajo el dedo.
+6. **Textos.** «Es este» dice «Ya estaba anotado · Restaurantes $32.000» (`textoDeLoQueYaEstaba`). El lote
+   de Actividad también usa el aviso de `ds/`. En el Inicio, al bajar el conteo baja la suma
+   (`porConfirmarSuman` menos el monto del aviso; si no se sabe en pesos, la suma se calla hasta la
+   lectura, nunca a medias).
+
+Lo vigilan `EsEsteYSuDeshacerTest` (las dos compras: no se ofrece ni se acepta, y vuelve a estar libre al
+deshacer; el pago de Nu con su traspaso, su Mercado y las patas), `CoincidenciasDelSmsTest`,
+`Vuelta74LogicaTest` (el texto y la suma del Inicio), `EsEsteEnLaFilaTest` (el doble toque),
+`EsEsteEnRevisarAvisoTest` a 390 y 360 (los dos botones enteros, «Es este» no más angosto) y
+`ElAvisoDeAbajoNoSeParteA360Test` / `A390Test` (dos renglones, a lo ancho, ≤ 140 dp, con un comercio largo).
+
 ## 73. Vuelta 75: el salario como ancla
 
 De la revisión fresca 5 del 30-oct (`r5-*.png`), puntos 2, 3, 4, 8, 11 y 12. **Una sola regla nueva**, la

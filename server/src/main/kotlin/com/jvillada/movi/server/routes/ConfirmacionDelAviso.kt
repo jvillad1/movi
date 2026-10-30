@@ -49,6 +49,13 @@ internal fun Transaction.confirmarElAviso(uid: String, smsId: String, eventoPedi
         .where { (Events.id eq eventoPedido) and (Events.userId neq uid) }
         .count() > 0
     val yaTenia = fila[SmsMessages.eventoId]
+    // Revisión de la vuelta 74: un movimiento que ya es de OTRO aviso (dos compras iguales de $32.000
+    // en Crepes, la segunda con «Es este» al movimiento de la primera) no se vuelve a vincular: los dos
+    // avisos quedarían con el mismo movimiento y una compra se perdería. Los avisos del mismo pago sí
+    // lo comparten (ver [avisosDelMismoPagoQue]).
+    if (yaTenia == null && eventoPedido != null && !ajeno &&
+        eventoPedido in movimientosYaReclamados(uid, excepto = avisosDelMismoPagoQue(uid, smsId, ahora))
+    ) return CONFIRMAR_YA_RECLAMADO
     val evento = yaTenia
         ?: eventoPedido?.takeIf { !ajeno }
         ?: eventoDeLaConfirmacion(uid, fila.toSmsMessage(), ahora)
@@ -62,6 +69,32 @@ internal fun Transaction.confirmarElAviso(uid: String, smsId: String, eventoPedi
     if (yaTenia == null && evento != null) aprenderElComercioDelAviso(uid, fila.toSmsMessage(), evento)
     return 1
 }
+
+/** Lo que contesta [confirmarElAviso] cuando el movimiento pedido ya es de otro aviso: la ruta da 409. */
+internal const val CONFIRMAR_YA_RECLAMADO: Int = -1
+
+/** La frase del 409 de un movimiento que ya tiene su aviso. */
+internal const val YA_ES_DE_OTRO_AVISO: String = "Ese movimiento ya está vinculado a otro aviso del banco."
+
+/**
+ * **Los movimientos que ya tienen su aviso**: el `evento_id` y las `partes_eventos` de los avisos
+ * confirmados del usuario, salvo los de [excepto] (el aviso que se está vinculando y los de su mismo
+ * pago). Revisión de la vuelta 74: es lo que impide proponer, o aceptar, un movimiento que ya es de otro
+ * aviso.
+ */
+internal fun Transaction.movimientosYaReclamados(uid: String, excepto: Collection<String> = emptyList()): Set<String> =
+    SmsMessages.selectAll()
+        .where { (SmsMessages.userId eq uid) and (SmsMessages.state eq SMS_STATE_CONFIRMED) }
+        .filter { it[SmsMessages.id] !in excepto }
+        .flatMap { fila -> listOfNotNull(fila[SmsMessages.eventoId]) + partesDeLaFila(fila) }
+        .toSet()
+
+/**
+ * [smsId] y los avisos del mismo pago (el SMS, la notificación y el correo de una sola compra, ver
+ * `gruposDelMismoPago`): esos sí comparten movimiento, es lo que hace «Cerrar los avisos».
+ */
+internal fun Transaction.avisosDelMismoPagoQue(uid: String, smsId: String, ahora: Long): Set<String> =
+    setOf(smsId) + bandejaConLosPagos(uid, ahora).firstOrNull { it.id == smsId }?.miembrosDelGrupo.orEmpty()
 
 /**
  * **El movimiento con que se confirmó [sms], cuando la app no lo dijo** (un APK viejo). Dos pistas,

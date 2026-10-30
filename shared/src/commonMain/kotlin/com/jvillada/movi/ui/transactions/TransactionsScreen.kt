@@ -1914,13 +1914,18 @@ fun TransactionsScreen(
     // Vuelta 40 · «Confirmar los N»: una pregunta con la lista corta y el total, y después cada aviso
     // por el MISMO camino que su fila en «Por revisar» (`confirmarLoEntendido`, uno por uno con
     // `confirmarElLote`). Solo los que Movi entendió; los demás se quedan para revisarlos.
+    val avisoDeLaCascaraDeActividad = com.jvillada.movi.ui.components.ds.LocalAvisoDeDeshacer.current
     HojaDeConfirmarLosAvisos(confirmarLosAvisos, avisosDelBanco) { resultado ->
         if (resultado.anotados.isNotEmpty()) vibrador.confirmar()
         avisosConfirmadosAca = avisosConfirmadosAca +
             resultado.anotados.flatMap { it.avisos }.associateWith { SMS_STATE_CONFIRMED }
         avisosQueFallaronAca = avisosQueFallaronAca + resultado.quedaron.map { it.first.cabezaId }
         refreshKey++
-        snackbarHostState.showSnackbar(textoDeLosConfirmados(resultado))
+        // Revisión de la vuelta 74: el aviso de abajo de toda la app (`ds/`), no el snackbar viejo. Sin
+        // cáscara (una prueba que monta solo Actividad), el de siempre.
+        val avisoDeLaCascara = avisoDeLaCascaraDeActividad
+        if (avisoDeLaCascara != null) avisoDeLaCascara.mostrar(textoDeLosConfirmados(resultado))
+        else snackbarHostState.showSnackbar(textoDeLosConfirmados(resultado))
     }
 
     if (showCreateSheet) {

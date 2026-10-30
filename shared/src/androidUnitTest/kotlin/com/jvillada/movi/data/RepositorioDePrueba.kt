@@ -72,6 +72,7 @@ open class RepositorioDePrueba : WalletRepository {
     override suspend fun ignorarElMismoPago(grupoId: String, miembros: List<String>): Unit = noUsado("ignorarElMismoPago")
     override suspend fun noSonElMismoPago(grupoId: String, miembros: List<String>): Unit = noUsado("noSonElMismoPago")
     override suspend fun esteEsOtroPago(id: String): Unit = noUsado("esteEsOtroPago")
+    override suspend fun desvincularAvisos(avisos: List<String>): Unit = noUsado("desvincularAvisos")
     override suspend fun getFinanceSummary(scope: Scope): FinanceSummary = noUsado("getFinanceSummary")
     override suspend fun getDashboardSummary(scope: Scope): DashboardSummary = noUsado("getDashboardSummary")
     override suspend fun getPeriodos(): List<ResumenDePeriodo> = noUsado("getPeriodos")

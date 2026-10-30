@@ -221,6 +221,7 @@ open class NoOpRepository(
     override suspend fun ignorarElMismoPago(grupoId: String, miembros: List<String>) {}
     override suspend fun noSonElMismoPago(grupoId: String, miembros: List<String>) {}
     override suspend fun esteEsOtroPago(id: String) {}
+    override suspend fun desvincularAvisos(avisos: List<String>) {}
     override suspend fun getFinanceSummary(scope: Scope) = error("stub")
     override suspend fun getDashboardSummary(scope: Scope) = error("stub")
     override suspend fun getPeriodos(): List<ResumenDePeriodo> = error("stub")

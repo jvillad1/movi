@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.quickadd
 
+import com.jvillada.movi.ui.espacios.deshacerLoAnotado
+import com.jvillada.movi.ui.espacios.mostrarLoAnotado
 import com.jvillada.movi.ui.components.ds.coloresDeLoElegido
 import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.ui.components.ds.BotonDeIcono
@@ -333,6 +335,8 @@ fun QuickAddScreen(
     val coroutine = rememberCoroutineScope()
     // Guardar vibra (ver [Vibrador]): el movimiento quedó anotado.
     val vibrador = rememberVibrador()
+    // Vuelta 74: «Anotado · Restaurantes $32.000 · Repartir con Caro · Deshacer», abajo de la cáscara.
+    val avisoAbajo = com.jvillada.movi.ui.components.ds.LocalAvisoDeDeshacer.current
     // El monto viaja como cadena de dígitos, que es lo que teclea el teclado numérico: un preset
     // se escribe igual que si lo hubiera tecleado él. Un cero o un negativo no se pone —«0» dejaría
     // el botón deshabilitado con un campo que parece lleno— y se cae al vacío de siempre.
@@ -1220,10 +1224,22 @@ fun QuickAddScreen(
         saving = true
         error = null
         ultimoAnotado = null
+        // Vuelta 74: el aviso del banco con que se va a confirmar (si dijo «Es este»), para que
+        // «Deshacer» lo devuelva a «Por revisar». Se lee antes, como en [guardarElMovimiento].
+        val avisoVinculado = avisoParecido?.takeIf { conElAviso }?.id
         coroutine.launch {
             val result = runCatching { guardarElMovimiento() }
             saving = false
             result.onSuccess { event ->
+                // Vuelta 74: el aviso de abajo, con «Deshacer» (anula el movimiento —y devuelve el aviso
+                // del banco, si se confirmó con él—) y «Repartir con …». No con «Guardar y anotar otro»
+                // (la hoja sigue abierta y tiene su propia confirmación) ni en modo pago: el pago sella
+                // su factura, y anularlo dejaría el sello apuntando a un anulado.
+                if (!yAnotarOtro && presetPago == null) {
+                    avisoAbajo?.mostrarLoAnotado(event, espaciosParaRepartir, deshacer = {
+                        deshacerLoAnotado(event.id, listOfNotNull(avisoVinculado))
+                    })
+                }
                 // Ola 9 · B: el movimiento YA está guardado; recién ahora se ofrece el
                 // recurrente, y quien lo ofrece es App.kt (esta hoja se cierra en este mismo
                 // paso, así que un ofrecimiento suyo se iría con ella). Vuelta 43: el pago de una

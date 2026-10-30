@@ -43,7 +43,11 @@ class CoincidenciasDelSmsTest {
     fun `un pago de tarjeta encuentra el abono anotado en la cuenta de la tarjeta`() {
         val pago = ParsedSms(9_809_799.0, "Pago de tarjeta", TransactionType.EXPENSE, com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY)
         val abono = ev("abono-amex", 9_809_799, momento, tipo = TransactionType.INCOME)
-        assertEquals(listOf("abono-amex"), coincidenciasDelSms(pago, momento, listOf(abono)).map { it.id })
+        // Vuelta 74: el abono entra a una cuenta de tarjeta (o lleva la categoría del pago); sin saber que
+        // «a» es una tarjeta, un ingreso cualquiera del mismo monto ya no es el pago.
+        val tarjeta = mapOf("a" to com.jvillada.movi.shared.model.AccountType.CREDIT_CARD)
+        assertEquals(listOf("abono-amex"), coincidenciasDelSms(pago, momento, listOf(abono), tarjeta).map { it.id })
+        assertEquals(emptyList(), coincidenciasDelSms(pago, momento, listOf(abono)).map { it.id })
         // Fuera de los pagos de tarjeta, el tipo sigue identificando.
         assertEquals(emptyList(), coincidenciasDelSms(sms, momento, listOf(ev("ingreso", 18_500, momento, tipo = TransactionType.INCOME))).map { it.id })
     }
