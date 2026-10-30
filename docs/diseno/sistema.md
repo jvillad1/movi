@@ -3550,6 +3550,28 @@ tarjeta (`extractoDeLaTarjeta`) la reparte entre los cortes.
    catorce comillas rectas de `ui/` se cambiaron, y `ComillasRectasScanTest` no deja volver un `\"` dentro
    de un literal de `ui/`.
 
+**La revisión de la vuelta 71** (capturas `rev71-*.png`) cambió cinco cosas:
+
+- **La cuota que propone Pagar no es algo escrito.** `TransferBody` la avisa aparte
+  (`onMontoPropuestoPorLaHoja`): mientras la cifra sea esa, no viaja a Gasto ni pregunta «¿Descartar?».
+  Teclear encima o tocar una pastilla del extracto la vuelve del dueño.
+- **Las cuotas se mandan solo si el dueño tocó la fila** (`cuotasElegidas`, `cuotasParaGuardar`): un «1»
+  que nadie eligió no se guarda, porque el extracto solo llena las cuotas de un movimiento que no las
+  tiene.
+- **La hoja toma todo el alto también sin teclado en pantalla si es angosta** (< 600 dp, la web con
+  mouse): ahí el cuerpo va arriba. Solo la centrada sin teclado crece sin encogerse.
+- **«Guardar movimiento» siempre a la vista**: la barra (Repartir · Subir comprobante · Guardar, y el
+  renglón de «Falta el monto» / «Guardar y anotar otro») va **debajo** del desplazamiento
+  (`BarraDeGuardarDeAgregar`), no al final del cuerpo. La ayuda de las cuotas reserva dos renglones:
+  «En el extracto, unos $100.000 al mes, sin intereses.» y «Cuenta completa hoy en tus gastos.».
+- **Sin glifos que Figtree no tiene.** «≈» salía como un cuadro vacío: se dice «unos» (las cuotas, la
+  TRM: «Unos $4.100 por dólar»), «~» en la deuda estimada de una tarjeta, y «pagado» sin «✓».
+  `GlifosDeFigtreeScanTest` abre `figtree_regular.ttf` y no deja en un literal de `ui/` un carácter que la
+  letra no dibuje («⌫» es la clave de una tecla con ícono y queda afuera).
+
+También: el detalle de una compra diferida dice «a 3 cuotas» debajo de la cifra, y al dividir un
+movimiento cuya descripción es solo su categoría cada parte lleva la suya.
+
 Lo vigilan `AgregarNoPierdeNadaTest` (el monto, la nota y la fecha que viajan; «¿Descartar?» y el cierre
 directo; las pestañas quietas en los cuatro tipos; la fila de cuotas solo con tarjeta y las cuotas que
 llegan a `postEvent`; «Pagar» y «¿Qué pagas?»), `AgregarPorDentroTest` (el «atrás» que pregunta),
