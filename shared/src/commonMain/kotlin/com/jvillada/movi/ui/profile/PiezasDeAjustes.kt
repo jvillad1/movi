@@ -4,8 +4,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -74,23 +72,13 @@ internal fun NotaDeSeccion(texto: String?, esError: Boolean = false) {
     )
 }
 
-/** El interruptor de Ajustes, en los colores de la marca (los dos temas). */
+/**
+ * El interruptor de Ajustes. Vuelta 82: es el de `ds/` ([com.jvillada.movi.ui.components.ds.Interruptor]),
+ * el mismo en toda la app; apagado ya no parece deshabilitado.
+ */
 @Composable
-internal fun Interruptor(encendido: Boolean, onCambio: (Boolean) -> Unit, habilitado: Boolean = true) {
-    Switch(
-        checked = encendido,
-        enabled = habilitado,
-        onCheckedChange = onCambio,
-        colors = SwitchDefaults.colors(
-            checkedThumbColor = Movi.colores.tarjeta,
-            // Encendido en tinta, el «seleccionado» de toda la app (vuelta 29).
-                        checkedTrackColor = Movi.colores.texto,
-            uncheckedThumbColor = Movi.colores.textoApagado,
-            uncheckedTrackColor = Movi.colores.tarjeta,
-            uncheckedBorderColor = Movi.colores.borde,
-        ),
-    )
-}
+internal fun Interruptor(encendido: Boolean, onCambio: (Boolean) -> Unit, habilitado: Boolean = true) =
+    com.jvillada.movi.ui.components.ds.Interruptor(encendido = encendido, onCambio = onCambio, habilitado = habilitado)
 
 /** La fila de Ajustes que baja el ZIP con todos los datos de la cuenta. */
 const val DESCARGAR_TUS_DATOS: String = "Descargar tus datos"
