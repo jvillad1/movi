@@ -48,6 +48,7 @@ import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.server.reminders.periodosSaldados
 import com.jvillada.movi.server.reminders.virtualRuleFor
 import com.jvillada.movi.server.time.ajustesDePeriodoDe
+import com.jvillada.movi.server.reminders.diasDelPeriodo
 import com.jvillada.movi.server.time.appDateToEpochMillis
 import java.time.LocalDate
 import io.ktor.http.HttpStatusCode
@@ -192,8 +193,19 @@ fun Route.creditRoutes() {
                 balance  = deudaDeApertura,
                 currency = "COP",
             )
+            // Vuelta 77 · «¿Ya pagaste la cuota de este período?» → «Sí»: la deuda de hoy ya la tiene
+            // descontada, así que las cuotas corren desde el arranque del período siguiente del dueño
+            // (`CreditTerms.cuotasDesde`). Solo sin desembolso: el de un crédito nuevo ya pone la primera
+            // cuota después. Lo que mande el cliente en `terms.cuotasDesde` no cuenta: lo calcula el server.
+            val cuotasDesde = if (disbursement == null && body.yaPagoLaCuotaDeEstePeriodo) {
+                // El arranque del período siguiente: el día después del último de este (`diasDelPeriodo`,
+                // la misma regla del período con la que `arranqueDeLaRegla` pone el piso).
+                diasDelPeriodo(AppClock.today(), ajustesDePeriodoDe(uid)).endInclusive.plusDays(1).toString()
+            } else {
+                null
+            }
             val terms = body.terms
-                .copy(accountId = accountId)
+                .copy(accountId = accountId, cuotasDesde = cuotasDesde)
                 .let { it.copy(dayOfMonth = it.dayOfMonth.coerceIn(1, 31)) }
             // La misma regla que apaga el botón de la hoja. Ver `validarTasaDelCredito`.
             validarTasaDelCredito(terms)?.let { return@post call.respond(HttpStatusCode.BadRequest, it) }
@@ -350,6 +362,9 @@ fun Route.creditRoutes() {
                     if ("interesReal" in crudo) it
                     else it.copy(interesReal = previo?.interesReal, interesRealCuota = previo?.interesRealCuota)
                 }
+                // Vuelta 77: desde cuándo corren las cuotas lo escribe el alta («ya pagué la cuota de este
+                // período»), no la hoja de condiciones, que no lo manda: sin la clave se conserva.
+                .let { if ("cuotasDesde" in crudo) it else it.copy(cuotasDesde = previo?.cuotasDesde) }
             // Crear y editar validan igual: la misma función que el alta y que la hoja.
             validarTasaDelCredito(body)?.let { return@put call.respond(HttpStatusCode.BadRequest, it) }
             dbQuery { motivoDelDebitoAutomatico(uid, body, account.currency) }
@@ -711,6 +726,8 @@ private fun fillTerms(
     it[Credits.destinoConocidoId] = terms.destinoConocidoId?.takeIf { v -> v.isNotBlank() }
     it[Credits.interesReal] = terms.interesReal?.takeIf { v -> v >= 0L }
     it[Credits.interesRealCuota] = terms.interesRealCuota?.takeIf { v -> Regex("""\d{4}-\d{2}""").matches(v) }
+    // Vuelta 77: solo una fecha ISO legible; lo demás se guarda como «desde el desembolso».
+    it[Credits.cuotasDesde] = terms.cuotasDesde?.trim()?.takeIf { v -> runCatching { LocalDate.parse(v) }.isSuccess }
 }
 
 private fun summaryFor(

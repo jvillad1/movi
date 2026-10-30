@@ -44,4 +44,5 @@ fun ResultRow.toCreditTerms() = CreditTerms(
     destinoConocidoId = this[Credits.destinoConocidoId]?.takeIf { it.isNotBlank() },
     interesReal = this[Credits.interesReal],
     interesRealCuota = this[Credits.interesRealCuota]?.takeIf { it.isNotBlank() },
+    cuotasDesde = this[Credits.cuotasDesde]?.takeIf { it.isNotBlank() },
 )

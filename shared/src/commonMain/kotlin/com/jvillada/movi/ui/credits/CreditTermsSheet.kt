@@ -61,6 +61,8 @@ import com.jvillada.movi.shared.model.cuentasParaElDebito
 import com.jvillada.movi.shared.model.DEBITO_SIN_CUENTA
 import com.jvillada.movi.shared.model.validateCreditDisbursement
 import com.jvillada.movi.shared.model.saldoSegunElPlan
+import com.jvillada.movi.shared.model.ajustesDelPeriodo
+import androidx.compose.ui.semantics.selected
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.recurrentes.ReminderOptInField
 import com.jvillada.movi.ui.components.*
@@ -294,6 +296,16 @@ fun CreditTermsSheet(
     // del plan ([saldoSegunElPlan]) o dice qué dato le falta para calcularla, y no guarda sin una cifra:
     // así nació «Vehículo 4083», $40M de capital en −$980.000 después de la primera cuota.
     val faltaLaDeudaActual = preguntaVisible && recienRecibido == false && newAccountDebt == null
+    // Vuelta 77: «¿Ya pagaste la cuota de este período?» — sí por defecto; solo en un crédito que ya venía
+    // y cuya cuota de este período (con el período del dueño) ya venció.
+    var yaPagoLaCuota by remember { mutableStateOf(true) }
+    val ajustesDelDueno = com.jvillada.movi.data.rememberLectura(com.jvillada.movi.data.ClaveDeLectura.Perfil, reintento = 0, activa = editing == null) {
+        Repositories.wallets.getUserProfile()
+    }.valor?.ajustesDelPeriodo() ?: com.jvillada.movi.shared.model.PeriodSettings()
+    val preguntaDeLaCuotaVisible = editing == null && newAccountMode && preguntaVisible && recienRecibido == false &&
+        dayOfMonth.toIntOrNull()?.takeIf { it in 1..31 }?.let { dia ->
+            com.jvillada.movi.shared.model.laCuotaDeEstePeriodoYaVencio(dia, com.jvillada.movi.ui.fecha.hoyEnAppZone(), ajustesDelDueno)
+        } == true
     val saldoDelPlan = saldoSegunElPlan(
         capital = principal,
         tasaEa = rateEa.toDoubleOrNull(),
@@ -396,6 +408,8 @@ fun CreditTermsSheet(
                             initialDebt = if (desembolso != null) 0L else (newAccountDebt ?: 0L),
                             terms = terms,
                             disbursement = desembolso,
+                            // Vuelta 77: con «Sí», las cuotas corren desde el período siguiente.
+                            yaPagoLaCuotaDeEstePeriodo = desembolso == null && preguntaDeLaCuotaVisible && yaPagoLaCuota,
                         )
                     )
                 } else {
@@ -640,6 +654,26 @@ fun CreditTermsSheet(
             // (pendiente, ver KDoc de isValidCreditDate más abajo).
             Campo(startDate, { startDate = filterDateInput(it) }, rotulo = "Fecha del desembolso", guia = "AAAA-MM-DD")
             Campo(notes, { notes = it }, rotulo = "Notas (opcional)")
+            }
+
+            // ── Vuelta 77 · «¿Ya pagaste la cuota de este período?» ───────────────────────────
+            //
+            // Un crédito que ya venía, creado con la deuda de hoy, nacía con la cuota de este período
+            // vencida («Pago vencido · hace 15 días», y «Te quedan» bajaba la cuota). La deuda que
+            // escribió ya la tiene descontada: con «Sí» (por defecto) las cuotas corren desde el período
+            // siguiente. Solo si la de este período ya venció: si no, no hay nada vencido que esconder.
+            if (preguntaDeLaCuotaVisible) {
+                Spacer(Modifier.height(Medida.entreSecciones))
+                Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
+                    Fila(
+                        titulo = YA_PAGASTE_LA_CUOTA_DE_ESTE_PERIODO,
+                        subtitulo = if (yaPagoLaCuota) LA_PRIMERA_CUOTA_ES_LA_DEL_SIGUIENTE else LA_CUOTA_DE_ESTE_PERIODO_QUEDA_POR_PAGAR,
+                        lineasDelSubtitulo = 2,
+                        final = { Casilla(marcada = yaPagoLaCuota) },
+                        onClick = if (!saving) ({ yaPagoLaCuota = !yaPagoLaCuota }) else null,
+                        modifier = Modifier.semantics { selected = yaPagoLaCuota }.testTag(TAG_YA_PAGASTE_LA_CUOTA),
+                    )
+                }
             }
 
             // ── El desembolso ────────────────────────────────────────────────────────
@@ -1260,3 +1294,11 @@ private fun PropuestaDelSaldoDelPlan(texto: String, onUsar: (() -> Unit)?, habil
         }
     }
 }
+
+/** Vuelta 77: la pregunta del alta de un crédito que ya venía, y lo que dice debajo según la respuesta. */
+const val YA_PAGASTE_LA_CUOTA_DE_ESTE_PERIODO: String = "¿Ya pagaste la cuota de este período?"
+const val LA_PRIMERA_CUOTA_ES_LA_DEL_SIGUIENTE: String = "Movi la espera desde el próximo período"
+const val LA_CUOTA_DE_ESTE_PERIODO_QUEDA_POR_PAGAR: String = "Movi la espera en este período"
+
+/** El tag de esa fila (vuelta 77). */
+const val TAG_YA_PAGASTE_LA_CUOTA: String = "credito:ya-pagaste-la-cuota"

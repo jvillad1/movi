@@ -971,6 +971,13 @@ object Credits : Table("credit_terms") {
      */
     val interesReal = long("interes_real").nullable()
     val interesRealCuota = varchar("interes_real_cuota", 7).nullable()
+
+    /**
+     * Vuelta 77 · desde cuándo corren las cuotas (ISO, el arranque de un período) cuando el alta dijo
+     * «ya pagué la cuota de este período»; ver `CreditTerms.cuotasDesde`. Nullable por lo mismo que las
+     * de arriba: `ADD COLUMN … NULL` no puede fallar sobre los créditos que ya están.
+     */
+    val cuotasDesde = varchar("cuotas_desde", 10).nullable()
     val accountId          = varchar("account_id", 50)   // 1:1 con cuenta LOAN
     val userId             = varchar("user_id", 50)
     val bank               = varchar("bank", 80)
