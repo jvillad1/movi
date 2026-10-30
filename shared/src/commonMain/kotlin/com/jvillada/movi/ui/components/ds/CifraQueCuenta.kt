@@ -95,7 +95,11 @@ fun rememberCifraQueCuenta(valor: Long?): Long? {
     }
     val d = desde
     val h = hasta
-    // Antes de que el efecto corra (el primer cuadro con el valor nuevo) se sigue viendo lo de antes.
-    if (valor != h) return if (progreso.value >= 1f) h else d?.let { inicio -> h?.let { cifraEnLaCuenta(inicio, it, progreso.value) } }
+    if (valor != h) {
+        // Un cambio que no hizo el dueño (o con menos movimiento) se ve en el mismo cuadro: la cifra nunca
+        // se queda un cuadro atrás de su línea (`ElHeroeNoMezclaTest`). Uno del dueño arranca de lo de antes.
+        if (reducido || valor == null || h == null || !CambioDelDueno.pendiente()) return valor
+        return if (progreso.value >= 1f) h else d?.let { cifraEnLaCuenta(it, h, progreso.value) }
+    }
     return if (d == null || h == null) h else cifraEnLaCuenta(d, h, progreso.value)
 }
