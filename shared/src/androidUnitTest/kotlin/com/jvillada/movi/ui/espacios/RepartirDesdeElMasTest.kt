@@ -161,7 +161,7 @@ class RepartirDesdeElMasTest {
     fun `sin espacios, Repartir abre la creacion del espacio`() {
         montar(emptyList())
         tocarRepartir()
-        esperar { hay("¿Con quién compartes?") }
+        esperar { hay(com.jvillada.movi.ui.espacios.ELIGE_A_LA_PERSONA) }
         assertEquals(emptyList(), navegado)
     }
 
