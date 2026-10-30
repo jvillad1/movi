@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.transactions
 
+import com.jvillada.movi.ui.components.ds.alPresionar
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -348,44 +350,62 @@ private fun FilaDeCifraDelResumen(rotulo: String, monto: Long, tono: TonoDeCifra
 
 /**
  * Una categoría (vuelta 81, como «En qué se va» del Inicio): su ícono, su nombre y cuántas veces; a la
- * derecha el monto; debajo, una [BarraDeProgreso] de 4 dp relativa a la mayor y la diferencia contra el
- * período pasado. Tocarla filtra la lista de al lado.
+ * derecha el monto; debajo, una [BarraDeProgreso] de 4 dp relativa a la mayor. Tocarla filtra la lista de
+ * al lado. **Revisión de la 83: la misma fila densa que el widget del Inicio** —la diferencia contra el
+ * período pasado en una [Pildora] **junto al monto**, y la barra a `Espacio.xs` debajo del texto—; la
+ * píldora iba en el renglón de la barra.
  */
 @Composable
 private fun FilaDeCategoriaDelResumen(fila: FilaDelAnalisis, fijas: Set<String>, mayor: Long, onClick: () -> Unit) {
     val diferencia = diferenciaDeLaFila(fila, fijas)
-    Column(modifier = Modifier.testTag(TAG_CATEGORIA_DEL_RESUMEN)) {
-        Fila(
-            titulo = fila.nombre,
-            subtitulo = "${(fila.fraccion * 100).toInt()} % · ${if (fila.veces == 1) "1 movimiento" else "${fila.veces} movimientos"}",
-            inicio = { IconoDeCategoria(fila.nombre) },
-            final = { Cifra(fila.gasto) },
-            onClick = onClick,
-            onClickLabel = "Ver los movimientos",
-            chevron = false,
-        )
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = Medida.margenDePantalla + Medida.avatar + Espacio.s, end = Medida.margenDePantalla)
-                .padding(bottom = Espacio.s),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
-        ) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(TAG_CATEGORIA_DEL_RESUMEN)
+            .alPresionar(
+                onClick = onClick,
+                onClickLabel = "Ver los movimientos",
+                escala = com.jvillada.movi.theme.Movimiento.ESCALA_DE_LA_FILA_AL_PRESIONAR,
+                velo = true,
+            )
+            .padding(horizontal = Medida.margenDePantalla, vertical = Espacio.xs),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Espacio.s),
+    ) {
+        IconoDeCategoria(fila.nombre)
+        Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
+                Text(
+                    fila.nombre,
+                    style = Movi.textos.cuerpo,
+                    color = Movi.colores.texto,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                if (diferencia != null) {
+                    Box(
+                        modifier = Modifier
+                            .testTag(TAG_DIFERENCIA_DEL_RESUMEN)
+                            .semantics { contentDescription = diferencia.descripcion },
+                    ) {
+                        Pildora(texto = diferencia.texto, tono = if (diferencia.tono == TonoDeCifra.Alerta) TonoDePildora.Peligro else TonoDePildora.Neutra)
+                    }
+                }
+                Cifra(fila.gasto)
+            }
+            Text(
+                "${(fila.fraccion * 100).toInt()} % · ${if (fila.veces == 1) "1 movimiento" else "${fila.veces} movimientos"}",
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoMedio,
+                maxLines = 1,
+            )
+            Spacer(Modifier.height(Espacio.xs))
             BarraDeProgreso(
                 fraccion = fraccionDeLaBarraDelResumen(fila.gasto, mayor),
                 tono = TonoDeBarra.Marca,
-                modifier = Modifier.weight(1f).testTag(TAG_BARRA_DEL_RESUMEN),
+                modifier = Modifier.fillMaxWidth().testTag(TAG_BARRA_DEL_RESUMEN),
             )
-            if (diferencia != null) {
-                Box(
-                    modifier = Modifier
-                        .testTag(TAG_DIFERENCIA_DEL_RESUMEN)
-                        .semantics { contentDescription = diferencia.descripcion },
-                ) {
-                    Pildora(texto = diferencia.texto, tono = if (diferencia.tono == TonoDeCifra.Alerta) TonoDePildora.Peligro else TonoDePildora.Neutra)
-                }
-            }
         }
     }
 }
