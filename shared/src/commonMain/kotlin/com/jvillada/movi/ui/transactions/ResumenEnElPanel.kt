@@ -108,6 +108,8 @@ data class ResumenDelPanel(
     val entro: Long,
     val salio: Long,
     val categorias: List<FilaDelAnalisis>,
+    /** Vuelta 76: las categorías fijas, que no dicen «nuevo» (ver `categoriasFijas`). */
+    val fijas: Set<String> = emptySet(),
 ) {
     /** Lo que entró menos lo que salió. */
     val neto: Long get() = entro - salio
@@ -259,9 +261,10 @@ private fun anchoDeCadaCifra(ancho: Dp, cuantas: Int = 3): Dp = (ancho - Espacio
  * La diferencia de una fila contra el período pasado, dicha como en el widget «En qué se va» del
  * Inicio: la MISMA [diferenciaDeLaCategoria] («$120.000 más», «nuevo»…). `null` sin comparación.
  */
-fun diferenciaDeLaFila(fila: FilaDelAnalisis): DiferenciaDeLaCategoria? =
+fun diferenciaDeLaFila(fila: FilaDelAnalisis, fijas: Set<String> = emptySet()): DiferenciaDeLaCategoria? =
     diferenciaDeLaCategoria(
         CategoriaDelPeriodo(nombre = fila.nombre, gastado = fila.gasto, fraccion = fila.fraccion, anterior = fila.anterior),
+        fijas,
     )
 
 /**
@@ -330,7 +333,7 @@ internal fun ResumenDelPeriodoEnElPanel(
             Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
                 resumen.categorias.forEachIndexed { i, fila ->
                     if (i > 0) Separador()
-                    FilaDeCategoriaDelResumen(fila, onClick = { onCategoria(fila) })
+                    FilaDeCategoriaDelResumen(fila, resumen.fijas, onClick = { onCategoria(fila) })
                 }
             }
         }
@@ -354,8 +357,8 @@ private fun CifraDelResumen(rotulo: String, monto: Long, tono: TonoDeCifra, form
  * diferencia contra el período pasado. Tocarla filtra la lista de al lado.
  */
 @Composable
-private fun FilaDeCategoriaDelResumen(fila: FilaDelAnalisis, onClick: () -> Unit) {
-    val diferencia = diferenciaDeLaFila(fila)
+private fun FilaDeCategoriaDelResumen(fila: FilaDelAnalisis, fijas: Set<String>, onClick: () -> Unit) {
+    val diferencia = diferenciaDeLaFila(fila, fijas)
     Fila(
         titulo = fila.nombre,
         subtitulo = "${(fila.fraccion * 100).toInt()} % · ${if (fila.veces == 1) "1 movimiento" else "${fila.veces} movimientos"}",

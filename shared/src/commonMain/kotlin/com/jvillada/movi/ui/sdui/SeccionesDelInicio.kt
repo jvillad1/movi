@@ -91,6 +91,7 @@ import com.jvillada.movi.ui.dashboard.cuentasDelCarrusel
 import com.jvillada.movi.ui.dashboard.CONTRA_EL_PERIODO_PASADO
 import com.jvillada.movi.ui.dashboard.DiferenciaDeLaCategoria
 import com.jvillada.movi.ui.dashboard.diferenciaDeLaCategoria
+import com.jvillada.movi.ui.dashboard.cuantasCosasProponen
 import com.jvillada.movi.ui.components.ds.colorDeLaCifra
 import com.jvillada.movi.ui.components.ds.estiloDeLaCifra
 import com.jvillada.movi.ui.dashboard.dueLabel
@@ -278,7 +279,8 @@ internal fun PropuestasDelInicioSection(
     ) {
         Seccion(
             titulo = "Movi propone hoy",
-            conteo = todas.size.takeIf { it > 0 },
+            // Vuelta 76: cuenta lo que dicen las tarjetas, con sus «y N más» (ver `cuantasCosasProponen`).
+            conteo = cuantasCosasProponen(todas).takeIf { it > 0 },
             accion = "Ver todo",
             onAccion = { onNavigate(Screen.PorRevisar) },
         )
@@ -728,7 +730,9 @@ internal fun WidgetEnQueSeVa(data: DashboardData, onNavigate: (Screen) -> Unit, 
         cuantas = CATEGORIAS_EN_EL_WIDGET,
         gastoDelAnterior = data.gastoDelAnterior,
     ).take(CATEGORIAS_EN_EL_WIDGET)
-    val diferencias = categorias.map(::diferenciaDeLaCategoria)
+    // Vuelta 76: lo fijo (las reglas y la cuota) nunca dice «nuevo» (ver `categoriasFijas`).
+    val fijas = com.jvillada.movi.ui.dashboard.categoriasFijas(data.upcoming.orEmpty().map { it.rule })
+    val diferencias = categorias.map { diferenciaDeLaCategoria(it, fijas) }
     Widget(
         titulo = "En qué se va",
         onClick = { onNavigate(Screen.EnQueSeVa()) },
