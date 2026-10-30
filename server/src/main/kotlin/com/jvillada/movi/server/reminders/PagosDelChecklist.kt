@@ -207,7 +207,9 @@ fun parteFijaDelChecklist(
         }
         if (eventoDelSello != null && eventoDelSello in porId) conPagoYaVisto += regla.id
         val resto = regla.amount - yaPagado
-        if (resto > 0L) {
+        // Vuelta 72: lo que falta de una regla pausada no es un fijo (el checklist no la lista): nada
+        // del variable se absorbe por ella. Lo ya pagado, arriba, sí sale como siempre.
+        if (resto > 0L && !pausadaEn(regla, vence, hoy)) {
             falta[regla.id] = resto
             vencimientos[regla.id] = vence
         }

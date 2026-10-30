@@ -358,6 +358,8 @@ private fun ResultRow.toRulePair(): Pair<RecurringRule, String?> {
         // hoy, pero si algún día lo hiciera (para decidir SI avisar), que ya lea la columna evita
         // exactamente la trampa que el comentario de arriba describe.
         destinoConocidoId = this[RecurringRules.destinoConocidoId],
+        // Vuelta 72: una regla pausada no avisa (`selectDueForReminder` la lee). Mismo motivo que arriba.
+        pausadaDesde = this[RecurringRules.pausadaDesde],
     )
     val lastReminded = this[RecurringRules.lastRemindedPeriod]
     return rule to lastReminded

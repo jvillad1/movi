@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.recurrentes
 
+import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.ExtractoDeLaTarjeta
 import com.jvillada.movi.ui.credits.extractoDeLaFila
 import androidx.compose.foundation.background
@@ -233,6 +234,27 @@ fun SeccionChecklistDelPeriodo(
      * «Pago tarjeta Nu» dice lo facturado al corte, con el mínimo como alternativa. Vacío: la de siempre.
      */
     extractosDeTarjetas: Map<String, ExtractoDeLaTarjeta> = emptyMap(),
+    /**
+     * Vuelta 72 · «+ Agregar» en el encabezado de «Tus facturas del período»: la MISMA hoja de alta que el
+     * vacío («Agregar un pago fijo»). `null` lo esconde.
+     */
+    onAgregar: (() -> Unit)? = null,
+    /** Vuelta 72 · las reglas pausadas, para «Pausados (N)» al final, plegada, con «Reanudar». */
+    pausadas: List<RecurringRule> = emptyList(),
+    onReanudar: ((RecurringRule) -> Unit)? = null,
+    /** Vuelta 72 · tocar una pausada abre su hoja (donde también se reanuda o se elimina). */
+    onAbrirPausada: ((RecurringRule) -> Unit)? = null,
+    /**
+     * Vuelta 72 · los nombres de las cuentas, para proponer «¿Usar siempre Nu para Carro?» en una factura
+     * pagada cuya regla no tiene cuenta ([cuentaParaGuardarEnLaRegla]). Vacío: no se propone.
+     */
+    nombresDeCuentas: Map<String, String> = emptyMap(),
+    /** «Guardar en la regla»: la regla pasa a tener esa cuenta. Nunca se guarda sola. */
+    onUsarSiempreLaCuenta: ((pago: PagoDelPeriodo, cuentaId: String) -> Unit)? = null,
+    /** «Ahora no»: la propuesta deja de ofrecerse para esa regla y esa cuenta. */
+    onNoUsarSiempreLaCuenta: ((pago: PagoDelPeriodo, cuentaId: String) -> Unit)? = null,
+    /** Las propuestas de cuenta que el dueño ya descartó ([claveDeLaCuentaDeLaRegla]). */
+    cuentasDescartadas: Set<String> = emptySet(),
 ) {
     // ── El momento de celebrar (Ola 1 · «Que Movi se sienta viva») ──────────────────────────────
     // Cuando el dueño completa la lista —pasa de «falta 1» a «todo pagado» por algo que hizo acá:
@@ -331,11 +353,24 @@ fun SeccionChecklistDelPeriodo(
                 }
             } else null,
         )
+        // Vuelta 72: la factura pagada desde una cuenta, cuya regla no tiene ninguna, propone guardarla.
+        val cuentaParaGuardar = cuentaParaGuardarEnLaRegla(pago, nombresDeCuentas)
+            ?.takeIf { onUsarSiempreLaCuenta != null && claveDeLaCuentaDeLaRegla(pago.ruleId, it) !in cuentasDescartadas }
+        if (cuentaParaGuardar != null) {
+            BajoLaFila {
+                PropuestaDeLaCuentaDeLaRegla(
+                    pregunta = preguntaDeLaCuentaDeLaRegla(nombresDeCuentas.getValue(cuentaParaGuardar), pago.nombre),
+                    enVuelo = enVuelo,
+                    onGuardar = { onUsarSiempreLaCuenta?.invoke(pago, cuentaParaGuardar) },
+                    onAhoraNo = { onNoUsarSiempreLaCuenta?.invoke(pago, cuentaParaGuardar) },
+                )
+            }
+        }
     }
 
     Column(modifier = modifier) {
         when {
-            cargando -> Seccion(titulo = TITULO_TUS_FACTURAS)
+            cargando -> Seccion(titulo = TITULO_TUS_FACTURAS, accion = onAgregar?.let { AGREGAR_UN_PAGO }, onAccion = onAgregar)
             // Vuelta 68: en Pagos, el aviso único de arriba lo dice (ver [NoSePudoLeerEnLaPantalla]).
             !pudoLeer -> NoSePudoLeerEnLaPantalla(
                 clave = "facturas",
@@ -344,7 +379,7 @@ fun SeccionChecklistDelPeriodo(
                 contenidoSuelto = { Seccion(titulo = TITULO_TUS_FACTURAS) },
             )
             checklist.isEmpty() && anteriores.isEmpty() -> {
-                Seccion(titulo = TITULO_TUS_FACTURAS)
+                Seccion(titulo = TITULO_TUS_FACTURAS, accion = onAgregar?.let { AGREGAR_UN_PAGO }, onAccion = onAgregar)
                 Superficie(modifier = Modifier.fillMaxWidth()) {
                     Text(
                         text = "Este período no tiene pagos anotados",
@@ -370,7 +405,8 @@ fun SeccionChecklistDelPeriodo(
                     Spacer(Modifier.height(Medida.entreSecciones))
                 }
                 // ── Tus facturas del período ─────────────────────────────────────────────────
-                Seccion(titulo = TITULO_TUS_FACTURAS)
+                // Vuelta 72: «+ Agregar» siempre, no solo en el vacío.
+                Seccion(titulo = TITULO_TUS_FACTURAS, accion = onAgregar?.let { AGREGAR_UN_PAGO }, onAccion = onAgregar)
                 Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
                     if (celebrar) {
                         Box(Modifier.padding(horizontal = Medida.margenDePantalla).padding(top = Espacio.s)) {
@@ -438,6 +474,15 @@ fun SeccionChecklistDelPeriodo(
                     }
                 }
             }
+        }
+        // ── Vuelta 72 · Pausados (N): al final, plegada ─────────────────────────────
+        if (pausadas.isNotEmpty() && !cargando && pudoLeer) {
+            SeccionDePausados(
+                pausadas = pausadas,
+                enVuelo = marcando,
+                onReanudar = onReanudar,
+                onAbrir = onAbrirPausada,
+            )
         }
     }
 }
@@ -877,7 +922,8 @@ private fun LoQueOfreceLaFila(
                         enVuelo = enVuelo,
                         onConfirmar = { acciones.onConfirmar(pago, propuesta.id) },
                         onDescartar = { acciones.onNoFueEste(pago, propuesta.id) },
-                        confirmarEsPrincipal = esLaMasUrgente,
+                        // Vuelta 72: «Sí, fue este» nunca es el amarillo; tildar es decisión del dueño.
+                        confirmarEsPrincipal = false,
                     )
                 }
             } else {
@@ -977,7 +1023,10 @@ internal fun accionPrincipalDeLaFila(
     hayGastoParecido: Boolean,
 ): AccionPrincipalDeLaFila = when {
     // Un solo amarillo en Pagos, y solo en la fila más urgente (vuelta 40): en otra fila, el candidato va con borde.
-    conPropuesta || hayGastoParecido -> if (esLaMasUrgente) AccionPrincipalDeLaFila.EL_CANDIDATO else AccionPrincipalDeLaFila.NINGUNA
+    // Vuelta 72: con una propuesta («Sí, fue este») no hay amarillo en la fila: tildar es decisión del
+    // dueño y «Anotar pago» duplicaría el gasto. Va todo con borde.
+    conPropuesta -> AccionPrincipalDeLaFila.NINGUNA
+    hayGastoParecido -> if (esLaMasUrgente) AccionPrincipalDeLaFila.EL_CANDIDATO else AccionPrincipalDeLaFila.NINGUNA
     esLaMasUrgente -> AccionPrincipalDeLaFila.ANOTAR
     else -> AccionPrincipalDeLaFila.NINGUNA
 }
@@ -1021,6 +1070,7 @@ internal fun LaCuotaQueSeParece(
                     onConfirmar = onEsLaCuota,
                     onDescartar = onNoEs,
                     textoConfirmar = SI_ES_LA_CUOTA,
+                    confirmarEsPrincipal = true,
                 )
             }
         }
@@ -1184,6 +1234,7 @@ internal fun fechaLegibleDelChecklist(vence: String): String {
  * tarjeta en dólares se dice con su prefijo.
  */
 internal fun textoDelMontoDelChecklist(pago: PagoDelPeriodo): String {
-    val monto = if (pago.pagado) pago.montoPagado ?: pago.monto else pago.monto
+    // Vuelta 72: una tarjeta pagada por debajo del mínimo sigue mostrando su saldo (lo pagado va en la línea).
+    val monto = if (pago.hecho) pago.montoPagado ?: pago.monto else pago.monto
     return if (pago.moneda != "COP") formatMoney(monto, pago.moneda) else formatCOP(monto)
 }

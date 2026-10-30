@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.server.reminders.pausadaEn
 import com.jvillada.movi.shared.model.esAbonoADeuda
 import com.jvillada.movi.server.espacios.loCompartidoDelUsuario
 import com.jvillada.movi.shared.model.conLoCompartido
@@ -379,6 +380,9 @@ internal fun Transaction.pagosFijosDelPeriodo(
     val resueltas = resolverOcurrencias(primero, lectura, hoy, ajustes, destinos) +
         resolverOcurrencias(resto, lectura, hoy, ajustes, destinos)
     val delPeriodoResueltas = resueltas.filter { it.due in dias }
+        // Vuelta 72: en el período en curso, lo pendiente de una regla pausada no es un pago fijo (lo
+        // pagado sí queda). Un período cerrado se lee como estaba.
+        .filterNot { enCurso && pausadaEn(it.rule, it.due, hoy) && it.resolucion !is Resolucion.Sellada && it.resolucion !is Resolucion.Emparejada }
         .let { if (enCurso) it else existiaEnElPeriodo(uid, it, lectura, inicioDeLaHistoria, dias.start, hoy, ajustes, destinos) }
 
     // Lo que se movió de verdad en un pago sellado a mano con su movimiento: ese movimiento puede

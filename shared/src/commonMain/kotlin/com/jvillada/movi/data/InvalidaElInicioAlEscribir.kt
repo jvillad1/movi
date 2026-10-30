@@ -100,6 +100,8 @@ internal class InvalidaElInicioAlEscribir(
     override suspend fun createRecurringRule(rule: RecurringRule): RecurringRule = trasEscribir { delegado.createRecurringRule(rule) }
     override suspend fun updateRecurringRule(id: String, rule: RecurringRule): RecurringRule = trasEscribir { delegado.updateRecurringRule(id, rule) }
     override suspend fun deleteRecurringRule(id: String): Unit = trasEscribir { delegado.deleteRecurringRule(id) }
+    override suspend fun pausarRegla(id: String): RecurringRule = trasEscribir { delegado.pausarRegla(id) }
+    override suspend fun reanudarRegla(id: String): RecurringRule = trasEscribir { delegado.reanudarRegla(id) }
     override suspend fun markOccurrence(ruleId: String, period: String, eventId: String?): RecurringOccurrence = trasEscribir { delegado.markOccurrence(ruleId, period, eventId) }
     override suspend fun anotarElPagoDeLaOcurrencia(ruleId: String, pedido: AnotarElPagoDeLaOcurrencia): PagoDeLaOcurrenciaAnotado =
         trasEscribir { delegado.anotarElPagoDeLaOcurrencia(ruleId, pedido) }

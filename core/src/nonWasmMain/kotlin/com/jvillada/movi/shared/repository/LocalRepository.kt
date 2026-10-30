@@ -2396,6 +2396,8 @@ class LocalRepository(
     override suspend fun createRecurringRule(rule: RecurringRule): RecurringRule = remote.createRecurringRule(rule)
     override suspend fun updateRecurringRule(id: String, rule: RecurringRule): RecurringRule = remote.updateRecurringRule(id, rule)
     override suspend fun deleteRecurringRule(id: String) = remote.deleteRecurringRule(id)
+    override suspend fun pausarRegla(id: String): RecurringRule = remote.pausarRegla(id)
+    override suspend fun reanudarRegla(id: String): RecurringRule = remote.reanudarRegla(id)
     /** Con caché, por el mismo motivo que [getRecurringRules]: es lo que vence. */
     override suspend fun getUpcomingPayments(): List<UpcomingPayment> =
         leerConCache("upcoming_payments") { remote.getUpcomingPayments() }

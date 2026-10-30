@@ -662,6 +662,13 @@ object RecurringRules : Table("recurring_rules") {
      * la regla del abono (sin la deuda no hay a dónde abonar). Su caso está en `SchemaDeArranqueTest`.
      */
     val haciaDeuda         = varchar("hacia_deuda", 50).nullable()
+    /**
+     * Vuelta 72 · desde qué día está en pausa la regla (ISO), o NULL = activa (ver
+     * [com.jvillada.movi.shared.model.RecurringRule.pausadaDesde]). Nullable: `createMissingTablesAndColumns`
+     * emite `ADD COLUMN pausada_desde VARCHAR(10) NULL` y toda regla que ya existe queda activa, como
+     * estaba. Solo la escriben `POST …/pausar` y `…/reanudar`. Su caso está en `SchemaDeArranqueTest`.
+     */
+    val pausadaDesde       = varchar("pausada_desde", 10).nullable()
     override val primaryKey = PrimaryKey(id)
     init { index("idx_recurring_rules_user_id", false, userId) }
 }

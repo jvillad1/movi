@@ -865,7 +865,50 @@ data class RecurringRule(
      * tarjeta; si no, se guarda `null`). Columna nueva y nullable, `recurring_rules.hacia_deuda`.
      */
     val haciaDeuda: String? = null,
+    /**
+     * **Vuelta 72 · la regla está en pausa desde este día** (ISO `"2026-10-29"`), o `null` = activa.
+     *
+     * Pausar no borra nada: lo que ya se pagó queda (sus sellos, sus movimientos y los períodos
+     * cerrados de «Tus períodos»), y «Reanudar» la devuelve tal cual. Lo único que hace es que **ninguna
+     * ocurrencia que vence ese día o después exista** mientras no esté pagada: no aparece en el
+     * checklist, en `/api/payments/upcoming`, en la caja, en los fijos del Disponible, en los avisos, en
+     * los recordatorios, en los débitos automáticos ni en Movi AI. La regla de cuál ocurrencia cae en la
+     * pausa vive en [pausadaParaElVencimiento], una sola vez.
+     *
+     * Columna nueva y nullable, `recurring_rules.pausada_desde`. **Ni el PUT ni el POST la escriben**
+     * (un APK que no la conoce no puede reanudar una regla sin querer): se pausa y se reanuda con
+     * `POST /api/recurring-rules/{id}/pausar` y `…/reanudar`.
+     */
+    val pausadaDesde: String? = null,
 )
+
+/** Vuelta 72 · el cuerpo de `POST /api/recurring-rules/{id}/pausar`: desde qué día (ISO); `null` = hoy. */
+@Serializable
+data class PausarReglaRequest(val desde: String? = null)
+
+/**
+ * Vuelta 72 · **¿la ocurrencia sin pagar que vence [vence] (ISO) cae en la pausa de esta regla, mirada
+ * en [hoy]?** `true` si la regla está pausada desde el día del vencimiento o antes, **o** si ya está
+ * pausada hoy: pausar quita de una vez todo lo pendiente —también lo que venció antes y no se pagó—, y
+ * deja lo que ya se pagó (quien llama no le pregunta esto a una ocurrencia pagada). Un período que cerró
+ * antes de la pausa se mira con su propio «hoy» y queda como estaba. Una fecha ilegible no pausa nada
+ * (ante la duda, mejor avisar de más). Es la única regla de la pausa: el server y la app la llaman igual.
+ */
+fun RecurringRule.pausadaParaElVencimiento(vence: String, hoy: String? = null): Boolean {
+    val desde = fechaIsoONulo(pausadaDesde) ?: return false
+    val dia = fechaIsoONulo(vence) ?: return false
+    val ahora = fechaIsoONulo(hoy)
+    return dia >= desde || (ahora != null && ahora >= desde)
+}
+
+/** Vuelta 72 · ¿la regla está en pausa en [hoy] (ISO)? La sección «Pausados (N)» de Pagos. */
+fun RecurringRule.estaPausadaEl(hoy: String): Boolean = pausadaParaElVencimiento(hoy, hoy)
+
+/** Una fecha ISO `"AAAA-MM-DD"` normalizada, o `null` si no lo es. */
+private fun fechaIsoONulo(texto: String?): String? {
+    val t = texto?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    return runCatching { kotlinx.datetime.LocalDate.parse(t).toString() }.getOrNull()
+}
 
 @Serializable
 data class Budget(

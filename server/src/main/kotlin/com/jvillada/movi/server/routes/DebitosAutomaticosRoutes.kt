@@ -18,6 +18,7 @@ import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.server.reminders.cargarPagosDeDeuda
 import com.jvillada.movi.server.reminders.entraAlBarridoDeAvisos
 import com.jvillada.movi.server.reminders.ocurrenciaPorPreguntar
+import com.jvillada.movi.server.reminders.pausadaEn
 import com.jvillada.movi.server.reminders.periodOf
 import com.jvillada.movi.server.reminders.periodosSaldados
 import com.jvillada.movi.server.reminders.ruleIsActiveOn
@@ -445,6 +446,8 @@ internal fun vencimientoPorProponer(rule: RecurringRule, hoy: LocalDate, setting
     val vence = ocurrenciaPorPreguntar(hoy, rule, settings) ?: return null
     if (vence.isAfter(hoy)) return null
     if (!ruleIsActiveOn(rule, vence, settings)) return null
+    // Vuelta 72: lo que vence en la pausa de una regla no se propone como cobrado.
+    if (pausadaEn(rule, vence, hoy)) return null
     return vence
 }
 

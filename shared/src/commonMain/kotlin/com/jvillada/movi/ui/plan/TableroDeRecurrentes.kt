@@ -50,6 +50,10 @@ import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.PeriodoFinanciero
 import com.jvillada.movi.shared.model.PlanDelCredito
 import com.jvillada.movi.shared.model.RecurringRule
+import com.jvillada.movi.shared.model.estaPausadaEl
+import com.jvillada.movi.shared.model.esAbonoADeuda
+import com.jvillada.movi.shared.time.epochMillisToAppDate
+import com.jvillada.movi.ui.recurrentes.claveDeLaCuentaDeLaRegla
 import com.jvillada.movi.shared.model.SubStatus
 import com.jvillada.movi.shared.model.Subscription
 import com.jvillada.movi.shared.model.SubscriptionsResult
@@ -197,6 +201,61 @@ class EstadoDelTableroDeRecurrentes internal constructor(
     // vuelven a traer tras cada marca con `recargas`.
     internal var upcomingRecurrentes by mutableStateOf<List<UpcomingPayment>>(emptyList())
     internal var vencimientosOk by mutableStateOf(false)
+    /**
+     * Vuelta 72 · **todas las reglas del dueño** (`GET /api/recurring-rules`), leídas con los vencimientos:
+     * de acá salen las pausadas («Pausados (N)»), que `upcoming` ya no trae, y la regla de una fila pagada
+     * en pausa al abrirla. Un fallo deja la lista vacía (no se pintan pausadas): no es un error de la
+     * pantalla.
+     */
+    internal var reglas by mutableStateOf<List<RecurringRule>>(emptyList())
+    /** Vuelta 72 · las cuentas, por id, para «¿Usar siempre Nu para Carro?». Vacío: no se propone. */
+    internal var nombresDeCuentas by mutableStateOf<Map<String, String>>(emptyMap())
+    /** Vuelta 72 · los «Ahora no» de esa propuesta (persisten, como las demás propuestas descartadas). */
+    internal var cuentasDescartadas by mutableStateOf(PropuestasDescartadasStore.descartadas())
+
+    /** Vuelta 72 · las reglas pausadas hoy, para la sección del final. */
+    internal val pausadas: List<RecurringRule>
+        get() {
+            val hoy = epochMillisToAppDate(Clock.System.now().toEpochMilliseconds()).toString()
+            return reglas.filter { it.estaPausadaEl(hoy) && !it.esAbonoADeuda }.sortedBy { it.name.lowercase() }
+        }
+
+    /** Vuelta 72 · «Reanudar» desde «Pausados (N)». */
+    internal fun reanudar(regla: RecurringRule) {
+        if (regla.id in marcando) return
+        marcando = marcando + regla.id
+        alcance.launch {
+            runCatching { Repositories.wallets.reanudarRegla(regla.id) }
+                .onSuccess { RecurringOfferGate.olvidarLoCacheado(); recargas++ }
+                .onFailure { error = it.toUserMessage() }
+            marcando = marcando - regla.id
+        }
+    }
+
+    /** Vuelta 72 · la regla de una fila (las pausadas no están en `upcoming`). */
+    internal fun reglaDe(ruleId: String): RecurringRule? =
+        upcomingRecurrentes.firstOrNull { it.rule.id == ruleId }?.rule ?: reglas.firstOrNull { it.id == ruleId }
+
+    /**
+     * Vuelta 72 · «Guardar en la regla»: la regla de [pago] pasa a tener [cuentaId]. Es el PUT de siempre
+     * con la regla tal como está y solo la cuenta cambiada; nunca se llama sin el toque del dueño.
+     */
+    internal fun usarSiempreLaCuenta(pago: PagoDelPeriodo, cuentaId: String) {
+        val regla = reglaDe(pago.ruleId) ?: return
+        if (pago.ruleId in marcando) return
+        marcando = marcando + pago.ruleId
+        alcance.launch {
+            runCatching { Repositories.wallets.updateRecurringRule(regla.id, regla.copy(accountId = cuentaId)) }
+                .onSuccess { RecurringOfferGate.olvidarLoCacheado(); recargas++ }
+                .onFailure { error = it.toUserMessage() }
+            marcando = marcando - pago.ruleId
+        }
+    }
+
+    /** Vuelta 72 · «Ahora no»: no se vuelve a proponer esa cuenta para esa regla. */
+    internal fun noUsarSiempreLaCuenta(pago: PagoDelPeriodo, cuentaId: String) {
+        cuentasDescartadas = PropuestasDescartadasStore.marcar(claveDeLaCuentaDeLaRegla(pago.ruleId, cuentaId))
+    }
     internal var ocurrencias by mutableStateOf<List<OccurrenceState>>(emptyList())
     internal var ocurrenciasOk by mutableStateOf(false)
     /**
@@ -697,6 +756,9 @@ fun rememberEstadoDelTableroDeRecurrentes(
             coroutineScope {
                 val porVencer = async { intentar { Repositories.wallets.getUpcomingPayments() } }
                 val porOcurrir = async { intentar { Repositories.wallets.getOccurrenceStates() } }
+                // Vuelta 72: las reglas (las pausadas no vienen en `upcoming`) y las cuentas.
+                val todas = async { intentar { Repositories.wallets.getRecurringRules() } }
+                val cuentas = async { intentar { Repositories.wallets.getAccounts() } }
                 if (vigente()) estado.recurrentesNoSePudieronLeer = false
                 val vencimientos = porVencer.await()
                 if (vigente()) {
@@ -708,6 +770,8 @@ fun rememberEstadoDelTableroDeRecurrentes(
                 // antes de que existiera. Un «ya ocurrió» que en realidad no se pudo leer sería una
                 // afirmación sin respaldo, que es lo único que esta pieza no puede permitirse.
                 val estados = porOcurrir.await()
+                todas.await().onSuccess { if (vigente()) estado.reglas = it }
+                cuentas.await().onSuccess { lista -> if (vigente()) estado.nombresDeCuentas = lista.associate { it.id to it.name } }
                 if (vigente()) {
                     estados
                         .onSuccess { estado.ocurrencias = it; estado.ocurrenciasOk = true }
@@ -838,7 +902,9 @@ fun LazyListScope.tableroDeRecurrentes(
     // «$0», ver [ResumenFlujoLibreCard]— por una sola tarjeta. Las suscripciones activas ya se
     // cuidan solas con este vacío: sin ninguna no tienen nada que enumerar y no pintan nada.
     val sinPagosFijos = estado.vencimientosOk && estado.subsParaRecurrentesOk &&
-        estado.upcomingRecurrentes.isEmpty() && estado.candidatas.isEmpty() && estado.activas.isEmpty()
+        estado.upcomingRecurrentes.isEmpty() && estado.candidatas.isEmpty() && estado.activas.isEmpty() &&
+        // Vuelta 72: con todo pausado no es un vacío: «Pausados (N)» tiene qué mostrar.
+        estado.pausadas.isEmpty()
     if (sinPagosFijos) {
         item {
             VacioQueEnsena(
@@ -952,8 +1018,8 @@ fun LazyListScope.tableroDeRecurrentes(
                     if (pago.ruleId.startsWith(CREDIT_RULE_PREFIX) || pago.ruleId.startsWith(CARD_RULE_PREFIX)) {
                         onNavigate(Screen.Credits)
                     } else {
-                        estado.upcomingRecurrentes.firstOrNull { it.rule.id == pago.ruleId }
-                            ?.let { estado.reglaRecurrenteAEditar = it.rule }
+                        // Vuelta 72: una pagada en pausa no está en `upcoming`: se busca en las reglas.
+                        estado.reglaDe(pago.ruleId)?.let { estado.reglaRecurrenteAEditar = it }
                     }
                 },
                 onReintentar = { estado.recargar() },
@@ -972,6 +1038,15 @@ fun LazyListScope.tableroDeRecurrentes(
                 extractosDeTarjetas = remember(tarjetasDelTablero.valor) {
                     tarjetasDelTablero.valor.orEmpty().mapNotNull { t -> t.extracto?.let { t.account.id to it } }.toMap()
                 },
+                // Vuelta 72: «+ Agregar» siempre, «Pausados (N)» al final y la cuenta que se propone guardar.
+                onAgregar = { estado.nuevoRecurrenteAbierto = true },
+                pausadas = estado.pausadas,
+                onReanudar = { estado.reanudar(it) },
+                onAbrirPausada = { estado.reglaRecurrenteAEditar = it },
+                nombresDeCuentas = estado.nombresDeCuentas,
+                onUsarSiempreLaCuenta = { pago, cuenta -> estado.usarSiempreLaCuenta(pago, cuenta) },
+                onNoUsarSiempreLaCuenta = { pago, cuenta -> estado.noUsarSiempreLaCuenta(pago, cuenta) },
+                cuentasDescartadas = estado.cuentasDescartadas,
             )
         }
     }

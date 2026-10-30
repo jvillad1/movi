@@ -34,11 +34,13 @@ import com.jvillada.movi.server.reminders.ocurrenciasConcluyentes
 import com.jvillada.movi.server.reminders.occurrenceInMonth
 import com.jvillada.movi.server.reminders.pagosDeDeudaPorPeriodo
 import com.jvillada.movi.server.reminders.plataQueSalio
+import com.jvillada.movi.server.reminders.pagadoALaTarjetaEnElPeriodo
 import com.jvillada.movi.server.reminders.periodosSaldados
 import com.jvillada.movi.server.reminders.unirOcurridos
 import com.jvillada.movi.server.reminders.emparejadasComoSellos
 import com.jvillada.movi.server.reminders.periodosPorRegla
 import com.jvillada.movi.server.reminders.ruleIsActiveOn
+import com.jvillada.movi.server.reminders.pausadaEn
 import com.jvillada.movi.server.reminders.ReminderConfig
 import com.jvillada.movi.server.reminders.periodOf
 import com.jvillada.movi.server.reminders.fechaEsperada
@@ -104,6 +106,8 @@ internal fun org.jetbrains.exposed.sql.ResultRow.toRule() = RecurringRule(
     seDebitaSolo = this[RecurringRules.seDebitaSolo] ?: false,
     // Vuelta 63: la deuda del abono mensual, si esta regla es uno.
     haciaDeuda = this[RecurringRules.haciaDeuda],
+    // Vuelta 72: desde cuándo está en pausa (ver `RecurringRule.pausadaDesde`).
+    pausadaDesde = this[RecurringRules.pausadaDesde],
 )
 
 /**
@@ -169,6 +173,17 @@ internal fun org.jetbrains.exposed.sql.Transaction.destinoConocidoIdIfOwned(uid:
         .where { (KnownDestinations.id eq id) and (KnownDestinations.userId eq uid) }
         .firstOrNull() != null
     return if (exists) id else null
+}
+
+/** Vuelta 72 · pone (o quita, con `null`) la pausa de la regla [id] de [uid]; la regla como quedó, o `null` si no es suya. */
+private suspend fun cambiarLaPausa(uid: String, id: String, desde: String?): RecurringRule? = dbQuery {
+    val cambiadas = RecurringRules.update({ (RecurringRules.id eq id) and (RecurringRules.userId eq uid) }) {
+        it[pausadaDesde] = desde
+    }
+    if (cambiadas == 0) return@dbQuery null
+    RecurringRules.selectAll()
+        .where { (RecurringRules.id eq id) and (RecurringRules.userId eq uid) }
+        .firstOrNull()?.toRule()
 }
 
 /**
@@ -296,6 +311,8 @@ fun Route.reminderRoutes() {
                 eventoDeOrigen = null,
                 seDebitaSolo = body.seDebitaSolo == true && storedDeudaId == null,
                 haciaDeuda = storedDeudaId,
+                // Vuelta 72: el alta nunca nace pausada (solo `…/pausar` escribe la pausa).
+                pausadaDesde = null,
             ),
         )
     }
@@ -314,6 +331,7 @@ fun Route.reminderRoutes() {
         var storedSeDebitaSolo = false
         var storedDeudaId: String? = null
         var problemaDelDebito: String? = null
+        var storedPausadaDesde: String? = null
         val updated = dbQuery {
             // Ola 9 · D — **un cliente viejo NO puede borrar la cuenta sin querer.**
             //
@@ -378,6 +396,9 @@ fun Route.reminderRoutes() {
                 return@dbQuery 0
             }
             storedSeDebitaSolo = debitoPedido && motivo == null
+            // Vuelta 72: la pausa no se escribe en un PUT (solo `…/pausar` y `…/reanudar`); la respuesta
+            // dice la que quedó.
+            storedPausadaDesde = filaActual?.get(RecurringRules.pausadaDesde)
             RecurringRules.update({ (RecurringRules.id eq id) and (RecurringRules.userId eq uid) }) {
                 it[name] = body.name
                 it[category] = body.category
@@ -402,8 +423,35 @@ fun Route.reminderRoutes() {
                 activeFrom = storedActiveFrom,
                 seDebitaSolo = storedSeDebitaSolo,
                 haciaDeuda = storedDeudaId,
+                pausadaDesde = storedPausadaDesde,
             ),
         )
+    }
+
+    /**
+     * **Vuelta 72 · pausar una regla**: desde [PausarReglaRequest.desde] (hoy si no viene) ninguna
+     * ocurrencia sin pagar que venza ese día o después existe (ver `RecurringRule.pausadaDesde`). No
+     * borra nada: lo ya pagado queda, y `…/reanudar` la devuelve. 200 con la regla; 404 si no es del
+     * usuario; 400 con una fecha que no se entiende. Las reglas sintéticas (la cuota de un crédito, el
+     * pago de una tarjeta) no se pausan: viven de su deuda.
+     */
+    post("/api/recurring-rules/{id}/pausar") {
+        val uid = call.userId()
+        val id = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
+        val pedido = runCatching { call.receive<com.jvillada.movi.shared.model.PausarReglaRequest>() }
+            .getOrDefault(com.jvillada.movi.shared.model.PausarReglaRequest())
+        val desde = if (pedido.desde.isNullOrBlank()) AppClock.today().toString()
+            else fechaIsoValida(pedido.desde) ?: return@post call.respond(HttpStatusCode.BadRequest, "Fecha inválida: usa \"AAAA-MM-DD\".")
+        val regla = cambiarLaPausa(uid, id, desde) ?: return@post call.respond(HttpStatusCode.NotFound)
+        call.respond(regla)
+    }
+
+    /** **Vuelta 72 · reanudar una regla pausada**: quita la pausa. Idempotente; 404 si no es del usuario. */
+    post("/api/recurring-rules/{id}/reanudar") {
+        val uid = call.userId()
+        val id = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
+        val regla = cambiarLaPausa(uid, id, null) ?: return@post call.respond(HttpStatusCode.NotFound)
+        call.respond(regla)
     }
 
     delete("/api/recurring-rules/{id}") {
@@ -1089,6 +1137,8 @@ internal fun org.jetbrains.exposed.sql.Transaction.ocurrenciasReales(
                     periodoDelDueno = nombreDelPeriodo,
                     montoDelPago = delSello?.amount,
                     monedaDelPago = delSello?.currency,
+                    cuentaDelPago = delSello?.accountId,
+                    reglaPausada = rule.takeIf { pausadaEn(it, due, today) },
                 )
             }
             is Resolucion.Emparejada -> OccurrenceState(
@@ -1109,6 +1159,8 @@ internal fun org.jetbrains.exposed.sql.Transaction.ocurrenciasReales(
                 montoDelPago = resolucion.evento.amount,
                 monedaDelPago = resolucion.evento.currency,
                 periodoDelDueno = nombreDelPeriodo,
+                cuentaDelPago = resolucion.evento.accountId,
+                reglaPausada = rule.takeIf { pausadaEn(it, due, today) },
             )
             // El día todavía no llegó: no se pregunta nada. Preguntar «¿ya ocurrió?» por
             // algo que vence dentro de tres semanas es ruido, y peor: invita a cerrar un
@@ -1349,6 +1401,24 @@ internal fun resolverOcurrencias(
     fun usadosParaDecidir(): Set<String> = lectura.usadosPara(rule)
     val resolucion = when {
         clave in lectura.ocurridos[rule.id].orEmpty() -> Resolucion.Sellada(lectura.sellos[rule.id to clave])
+        // Vuelta 72: una ocurrencia que vence en la pausa de su regla no pregunta ni propone. Lo único
+        // que la sostiene es un pago HECHO ANTES de pausar (lo ya pagado queda): solo un concluyente
+        // anterior a la pausa la empareja; un movimiento posterior nunca se lo lleva una regla pausada.
+        // Un período que ya cerró («Tus períodos») no se toca: se lee como estaba.
+        pausadaEn(rule, due, today) && !due.isBefore(diasDelPeriodo(today, periodo).start) -> {
+            val desde = java.time.LocalDate.parse(rule.pausadaDesde!!.trim())
+            val antes = lectura.evidenciaPara(rule, due, today)
+                .filter { epochMillisToAppDate(it.timestamp).isBefore(desde) }
+            val unico = ocurrenciasConcluyentes(
+                rule, due, antes, usadosParaDecidir(), settings = periodo, destinos = destinos,
+            ).singleOrNull()
+            if (unico != null) {
+                lectura.reservados += unico.id
+                Resolucion.Emparejada(unico)
+            } else {
+                Resolucion.PorLlegar
+            }
+        }
         // **Lo que llegó ANTES del vencimiento** (1-oct-2026: la recarga de Glim del día 2 entró el 1 y
         // Plan seguía diciendo «llega mañana»). Si ya hay un movimiento concluyente en la ventana, se
         // empareja igual que el día del vencimiento: pagar o cobrar antes es lo normal, no ruido. Y si
@@ -1474,6 +1544,9 @@ internal suspend fun ocurrenciasDelPeriodo(uid: String, today: java.time.LocalDa
                 derivadaDeUnMovimiento = true,
                 montoDelPago = salida.amount,
                 monedaDelPago = salida.currency,
+                // Vuelta 72: la suma de lo pagado a la tarjeta en el período, para «faltan $X para el mínimo».
+                pagadoEnElPeriodo = pagadoALaTarjetaEnElPeriodo(rule, pagos, periodOf(due), salida.currency, settings = periodo),
+                cuentaDelPago = salida.accountId,
             )
         }
     }
