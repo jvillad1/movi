@@ -137,7 +137,7 @@ const val DIAS_DE_LA_CAJA_SIN_SALARIO: Int = 30
 
 /** Por qué una fila de la lista no entra a la cuenta, en palabras. `null` = entra. */
 private fun porQueNoEntra(pago: PagoDelPeriodo): String? = when {
-    pago.pagado -> null
+    pago.hecho -> null
     pago.montoEsSaldo && pago.pagoMinimo == null -> "${pago.nombre}: falta el pago mínimo"
     pago.montoEsSaldo -> null // el mínimo ya está en pesos (ver RecurringRule.pagoMinimoCop)
     pago.moneda != "COP" -> "${pago.nombre}: está en ${pago.moneda}"
@@ -154,9 +154,9 @@ fun loQueSaleDe(filas: List<PagoDelPeriodo>): Long = filas.sumOf { fila -> (mont
 
 /** Lo que mueve esta fila, con signo, o `null` si no mueve nada (pagada, o no entra). */
 private fun montoDeLaFila(pago: PagoDelPeriodo): Long? {
-    // Vuelta 72: la tarjeta pagada por debajo de su mínimo sale por lo que le falta al mínimo.
-    pago.faltaDelMinimo?.let { return -it }
-    if (pago.pagado || porQueNoEntra(pago) != null) return null
+    // Vuelta 72: lo hecho no sale. La fila del extracto de una tarjeta está hecha con el mínimo cubierto;
+    // si no, su `pagoMinimo` ya es lo que le falta a ese mínimo (una vez, en su fecha).
+    if (pago.hecho || porQueNoEntra(pago) != null) return null
     // Vuelta 63: el abono planeado a una deuda no es una salida que la caja dé por hecha: es una
     // intención. El día que se hace, el traspaso baja Tu plata y la caja arranca de ahí.
     if (pago.esAbono) return null
