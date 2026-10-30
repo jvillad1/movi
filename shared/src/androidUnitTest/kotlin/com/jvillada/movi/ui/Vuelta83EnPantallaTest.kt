@@ -146,10 +146,10 @@ class Vuelta83EnPantallaTest {
         ),
     )
 
-    private fun montarAgregar(ancho: WindowWidthClass) {
+    private fun montarAgregar(ancho: WindowWidthClass, conHistoria: Boolean = true) {
         Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
             override suspend fun getAccounts(): List<Account> = listOf(ahorros, nu)
-            override suspend fun getEventsByDay(): List<EventDay> = historia
+            override suspend fun getEventsByDay(): List<EventDay> = if (conHistoria) historia else emptyList()
         }
         composeRule.setContent {
             CompositionLocalProvider(LocalPunteroFino provides true, LocalWindowWidthClass provides ancho) {
@@ -197,6 +197,66 @@ class Vuelta83EnPantallaTest {
         assertFalse(hay("Falta el monto"), "Guardar ya se puede tocar")
     }
 
+    private fun dp(px: Float) = px / composeRule.density.density
+
+    @Test
+    fun `los recientes van en un solo renglon que se desplaza`() {
+        montarAgregar(WindowWidthClass.Compact)
+        composeRule.waitUntil(5_000) { conTag(TAG_RECIENTE_PARA_REPETIR).size == 3 }
+        // Sin recortar: la tercera puede quedar fuera, a la derecha (el renglón se desplaza).
+        val tops = conTag(TAG_RECIENTE_PARA_REPETIR).map { it.positionInRoot.y }
+        assertTrue(tops.all { kotlin.math.abs(it - tops.first()) < 1f }, "un renglón: $tops")
+        val renglon = composeRule.onNodeWithTag(com.jvillada.movi.ui.quickadd.TAG_RENGLON_DE_RECIENTES, useUnmergedTree = true).fetchSemanticsNode()
+        assertTrue(dp(renglon.boundsInRoot.height) <= 48f, "~40 dp: ${dp(renglon.boundsInRoot.height)}")
+    }
+
+    @Test
+    fun `sin recientes el cuerpo de Agregar va arriba, debajo de las pestanas`() {
+        montarAgregar(WindowWidthClass.Compact, conHistoria = false)
+        composeRule.waitForIdle()
+        assertTrue(conTag(TAG_REPETIR_UNO_RECIENTE).isEmpty(), "sin recientes, nada")
+        val pestanas = composeRule.onNodeWithTag(com.jvillada.movi.ui.quickadd.TAG_PESTANAS_DE_AGREGAR, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val cabeza = composeRule.onNodeWithTag(TAG_CABEZA_DEL_MONTO, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val aire = dp(cabeza.top - pestanas.bottom)
+        assertTrue(aire < 100f, "pegado arriba con su espaciado fijo, no centrado: $aire dp")
+    }
+
+    @Test
+    @Config(qualifiers = "w360dp-h640dp-xhdpi")
+    fun `a 360x640 los recientes no quedan bajo la barra, si no caben se esconden`() {
+        montarAgregar(WindowWidthClass.Compact)
+        composeRule.mainClock.advanceTimeBy(1_000)
+        composeRule.waitForIdle()
+        val guardar = composeRule.onNodeWithText("Guardar movimiento", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val recientes = conTag(TAG_RECIENTE_PARA_REPETIR)
+        assertTrue(
+            recientes.all { it.boundsInRoot.bottom <= guardar.top + 0.5f },
+            "a la vista sin desplazar, o escondidos: ${recientes.map { it.boundsInRoot }} / $guardar",
+        )
+    }
+
+    @Test
+    fun `tras un reciente la Cuenta va centrada y su categoria vuelve al volver de Ingreso`() {
+        montarAgregar(WindowWidthClass.Compact)
+        composeRule.waitUntil(5_000) { conTag(TAG_RECIENTE_PARA_REPETIR).size == 3 }
+        composeRule.onNodeWithText("Juan Valdez Cafe · \$13.900").performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        // La cuenta, elegida como a mano: sin aviso debajo, el rótulo centrado con su valor.
+        val rotulo = composeRule.onNodeWithText("Cuenta", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val valor = composeRule.onNodeWithText("Bancolombia ·4057", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertEquals(valor.center.y, rotulo.center.y, 2f * composeRule.density.density, "«Cuenta» centrado: $rotulo / $valor")
+        // Ingreso y de vuelta a Gasto: la categoría del reciente sigue (no «Restaurantes»).
+        composeRule.onNodeWithText("Ingreso").performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Gasto").performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        assertTrue(
+            composeRule.onAllNodes(hasText("Comida") and androidx.compose.ui.test.isSelected()).fetchSemanticsNodes().isNotEmpty(),
+            "«Comida» sigue elegida",
+        )
+        assertFalse(hay("Movi la reconoce", substring = true))
+    }
+
     // ── (4) Pagos ────────────────────────────────────────────────────────────
 
     private val hoy = LocalDate(2026, 9, 21)
@@ -224,7 +284,10 @@ class Vuelta83EnPantallaTest {
         composeRule.setContent { MoviTheme { TarjetaDelDisponible(titulo = TITULO_CUANTO_PUEDES_GASTAR, disponible = disponible) } }
         composeRule.mainClock.advanceTimeBy(DURACION_DE_LA_ENTRADA_MS.toLong() + 200L)
         composeRule.waitForIdle()
-        assertEquals(3, conTag(TAG_VENTANA_EN_RENGLON).size)
+        // Revisión de la 83: con 7 días o menos por delante la semana se calla (casi igual a «Te quedan»).
+        assertEquals(if (com.jvillada.movi.ui.sdui.seVeLaSemanaEnPagos(disponible)) 3 else 2, conTag(TAG_VENTANA_EN_RENGLON).size)
+        // Y sin el renglón «Disponible del período»: lo dice el «de $X» del Período.
+        assertFalse(hay(com.jvillada.movi.ui.dashboard.ROTULO_DISPONIBLE_DEL_PERIODO))
         val periodo = composeRule.onNodeWithTag(TAG_PERIODO_GASTADO_DE_LA_META, useUnmergedTree = true).fetchSemanticsNode()
         val textos = descendientesConTexto(periodo)
         val gastado = com.jvillada.movi.ui.components.formatMoney(disponible.periodo.gastado, "COP")
@@ -245,6 +308,31 @@ class Vuelta83EnPantallaTest {
     private fun androidx.compose.ui.semantics.SemanticsConfiguration.getOrNull(
         key: androidx.compose.ui.semantics.SemanticsPropertyKey<List<androidx.compose.ui.text.AnnotatedString>>,
     ) = if (contains(key)) get(key) else null
+
+    @Test
+    fun `la semana se calla con 7 dias o menos por delante`() {
+        val alPrincipio = disponibleDelInicio(datosDePagos, LocalDate(2026, 8, 30))!!
+        val alFinal = disponibleDelInicio(datosDePagos, LocalDate(2026, 9, 21))!!
+        assertTrue(alPrincipio.diasQueQuedan > 7 && com.jvillada.movi.ui.sdui.seVeLaSemanaEnPagos(alPrincipio))
+        assertTrue(alFinal.diasQueQuedan <= 7 && !com.jvillada.movi.ui.sdui.seVeLaSemanaEnPagos(alFinal))
+    }
+
+    @Test
+    @Config(qualifiers = "w1280dp-h800dp-mdpi")
+    fun `a pantalla ancha los recordatorios van en un renglon con Activar y Ahora no`() {
+        composeRule.setContent {
+            CompositionLocalProvider(LocalWindowWidthClass provides WindowWidthClass.Expanded) {
+                MoviTheme { FilaDeRecordatoriosSinCanal(bloqueadas = false, onActivar = {}, onAhoraNo = {}) }
+            }
+        }
+        composeRule.waitForIdle()
+        val titulo = composeRule.onNodeWithText(TITULO_RECORDATORIOS_SIN_CANAL, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val activar = composeRule.onNodeWithText(ACTIVAR_LOS_RECORDATORIOS, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val luego = composeRule.onNodeWithText(AHORA_NO, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertEquals(titulo.center.y, activar.center.y, 1f, "título y botones en un renglón")
+        assertEquals(activar.center.y, luego.center.y, 1f)
+        assertTrue(titulo.right <= activar.left)
+    }
 
     @Test
     fun `los recordatorios son una propuesta de un renglon con Activar y Ahora no lado a lado`() {

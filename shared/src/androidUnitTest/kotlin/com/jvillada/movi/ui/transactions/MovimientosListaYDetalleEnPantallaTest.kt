@@ -720,14 +720,17 @@ class MovimientosListaYDetalleEnPantallaTest {
      */
     @Test
     @Config(qualifiers = "w1280dp-h900dp-mdpi")
-    fun `a 1280 el mas de la ficha va arriba, a la derecha del titulo, y las acciones en un renglon`() {
+    fun `a 1280 el mas de la ficha va arriba junto a la X, y las acciones en un renglon`() {
         montar()
         elegir("Las Doce")
-        val ficha = limites(TAG_FICHA_DEL_MOVIMIENTO)
         val mas = nodos(tagDeAccionDelMovimiento(AccionDelMovimiento.Mas), enElPanel).single().boundsInRoot
         val primerDato = nodos(TAG_DATO_DE_LA_FICHA, enElPanel).minOf { it.boundsInRoot.top }
-        assertTrue(mas.bottom <= primerDato + 0.5f, "el «⋯» va en el renglón del título, arriba de los datos: $mas")
-        assertTrue(ficha.right - mas.right <= 16f + 0.5f, "a la derecha: $mas / $ficha")
+        assertTrue(mas.bottom <= primerDato + 0.5f, "el «⋯» va arriba de los datos: $mas")
+        // Revisión de la 83: lado a lado con la X, en su mismo renglón (iban apilados).
+        val x = composeRule.onAllNodes(androidx.compose.ui.test.hasContentDescription("Cerrar") and enElPanel, useUnmergedTree = true)
+            .fetchSemanticsNodes().single().boundsInRoot
+        assertEquals(x.center.y, mas.center.y, 1f, "el «⋯» y la X en el mismo renglón: $mas / $x")
+        assertTrue(mas.right <= x.left + 0.5f, "el «⋯» a la izquierda de la X: $mas / $x")
         assertTrue(
             nodos(tagDeAccionDelMovimiento(AccionDelMovimiento.Mas), hasAnyAncestor(hasTestTag(TAG_ACCIONES_DE_LA_FICHA))).isEmpty(),
             "ya no está entre las acciones de abajo",
@@ -739,6 +742,20 @@ class MovimientosListaYDetalleEnPantallaTest {
         assertTrue(botones.size >= 2, "$botones")
         assertTrue(botones.all { kotlin.math.abs(it.top - botones.first().top) < 1f }, "en un solo renglón: $botones")
         assertTrue(acciones.boundsInRoot.height < 48f + 0.5f, "un renglón de botones chicos: ${acciones.boundsInRoot}")
+    }
+
+    /** Revisión de la 83: «Gasto por categoría» con la fila densa del Inicio (la barra dentro de la fila). */
+    @Test
+    @Config(qualifiers = "w1280dp-h900dp-mdpi")
+    fun `a 1280 las categorias del resumen son filas densas con la barra adentro`() {
+        montar()
+        esperar { hayTag(TAG_RESUMEN_DEL_PERIODO_EN_EL_PANEL) }
+        val categorias = nodos(TAG_CATEGORIA_DEL_RESUMEN, enElResumen)
+        assertTrue(categorias.isNotEmpty())
+        categorias.forEach { assertTrue(it.boundsInRoot.height <= 66f, "cada categoría mide ${it.boundsInRoot.height} (eran ~74)") }
+        val barras = nodos(TAG_BARRA_DEL_RESUMEN, enElResumen)
+        assertEquals(categorias.size, barras.size)
+        barras.zip(categorias).forEach { (b, c) -> assertTrue(b.boundsInRoot.bottom <= c.boundsInRoot.bottom + 0.5f, "la barra va dentro de su fila") }
     }
 
     /** Vuelta 83: el panel se titula «Resumen del período»; el mes ya lo dice el navegador de la lista. */

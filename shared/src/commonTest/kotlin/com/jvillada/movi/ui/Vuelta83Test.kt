@@ -86,6 +86,14 @@ class Vuelta83Test {
     }
 
     @Test
+    fun `un recurrente con el titulo igual a la categoria dice Recurrente, no la cuenta habitual`() {
+        val internet = gasto("i", "ahorros", "Internet", categoria = "Internet")
+        assertEquals("Recurrente", textosDeLaFilaEnLaLista(internet, nombres, "ahorros", respaldo = "Recurrente").subtitulo)
+        // En otra cuenta sí la dice.
+        assertEquals("Nu", textosDeLaFilaEnLaLista(internet.copy(accountId = "nu"), nombres, "ahorros", respaldo = "Recurrente").subtitulo)
+    }
+
+    @Test
     fun `la cuenta habitual es la mas usada, o la que mas aparece, y con un empate ninguna`() {
         assertEquals("nu", cuentaHabitual(listOf("ahorros", "ahorros"), masUsada = "nu"))
         assertEquals("ahorros", cuentaHabitual(listOf("ahorros", "nu", "ahorros"), masUsada = null))

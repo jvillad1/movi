@@ -251,11 +251,11 @@ class Vuelta80EnPantallaTest {
         composeRule.waitUntil(5_000) {
             composeRule.onAllNodes(hasText(corto, substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
         }
-        val nota = composeRule.onNodeWithText("Nota", useUnmergedTree = true).getUnclippedBoundsInRoot()
-        val guardar = composeRule.onNodeWithText("Guardar movimiento", useUnmergedTree = true).getUnclippedBoundsInRoot()
-        val hueco = guardar.top - nota.bottom
-        assertTrue(hueco < 200.dp, "entre «Nota» y «Guardar movimiento» quedan $hueco (eran ~350)")
+        // Revisión de la 83: sin recientes (esta cuenta no tiene historia) el cuerpo va arriba, debajo de las
+        // pestañas, en vez de centrado con el aire partido en dos huecos.
+        val pestanas = composeRule.onNodeWithTag(com.jvillada.movi.ui.quickadd.TAG_PESTANAS_DE_AGREGAR, useUnmergedTree = true).getUnclippedBoundsInRoot()
         val cabeza = composeRule.onNodeWithTag(TAG_CABEZA_DEL_MONTO, useUnmergedTree = true).getUnclippedBoundsInRoot()
+        assertTrue(cabeza.top - pestanas.bottom < 100.dp, "pegado arriba: ${cabeza.top - pestanas.bottom}")
         assertTrue(cabeza.bottom - cabeza.top > 85.dp, "la cifra protagonista (~54 sp; sin ella mide ~69): ${cabeza.bottom - cabeza.top}")
         // La cuenta en un renglón.
         val cuenta = composeRule.onAllNodesWithText(corto, substring = true, useUnmergedTree = true).fetchSemanticsNodes().first()

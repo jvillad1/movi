@@ -4552,3 +4552,29 @@ con la letra al 130 %), `UnSoloAmarilloPorVistaTest` (Pagos con la propuesta y l
 1.280) y `MovimientosListaYDetalleEnPantallaTest` (el «⋯» arriba y las acciones en un renglón; el panel
 «Resumen del período»). Se actualizaron `Vuelta80EnPantallaTest` (el nombre corto en Agregar; el widget ya no
 es una `Fila`), `LosRecordatoriosVanDebajoDeLosPagosTest`, `LoQueSeVeEnteroTest` y `LaFranjaSigueAlChipTest`.
+
+**Revisión visual de la 83** (`r83-*.png`):
+
+- **Agregar sin recientes va arriba**: debajo de las pestañas, con su espaciado fijo; centrado dejaba el aire
+  partido en dos huecos. Con recientes sigue centrado.
+- **Los recientes, en un renglón** que se desplaza de lado (`TAG_RENGLON_DE_RECIENTES`, ~40 dp), y **solo si
+  caben**: si con ellos el cuerpo no entra en el hueco (360 × 640), se esconden. Guardar y las pestañas no
+  cambian.
+- **Buscar**: con la cuenta (que no es la habitual), ella primero y la fecha corta, «Nu · Mercado · 21 oct»:
+  al final era lo que se cortaba. En la habitual, «Mercado · 21 de octubre».
+- **Un recurrente cuyo título es la categoría** («Internet ↻») dice «↻ Recurrente», no la cuenta habitual
+  (`textosDeLaFilaEnLaLista(respaldo = …)`). Dice «Recurrente» y no «Mensual» porque la fila no sabe la
+  frecuencia: una suscripción puede ser anual.
+- **Pagos**: sin el renglón «Disponible del período» (el «de $X» del Período ya lo dice) y la semana se calla
+  con `DIAS_PARA_CALLAR_LA_SEMANA` (7) días o menos por delante (`seVeLaSemanaEnPagos`): casi igual a «Te
+  quedan».
+- **Los recordatorios fuera del teléfono** (≥ 600 dp): el título y «Activar · Ahora no» en un renglón.
+- **«Cuenta» en Agregar va centrada** cuando su aviso está reservado y vacío (se reserva el alto, sin
+  pintar un renglón vacío).
+- **La categoría de Gasto elegida a mano vuelve con Gasto**: elegir un reciente (Comida), pasar a Ingreso y
+  volver deja Comida. El monto y la nota siguen viajando entre pestañas (vuelta 71: Agregar no pierde nada);
+  la categoría no puede viajar —no sirve para el otro tipo—, así que se guarda al salir y vuelve.
+- **La ficha a 1.280**: el «⋯» va junto a la X, en su renglón (`SheetHandleWithClose(antesDeLaX = …)`).
+- **«Gasto por categoría» del panel de Actividad**: la fila densa del Inicio (la píldora junto al monto, la
+  barra dentro de la fila).
+- «¿Qué cuenta?» alineado con el texto de su tarjeta.

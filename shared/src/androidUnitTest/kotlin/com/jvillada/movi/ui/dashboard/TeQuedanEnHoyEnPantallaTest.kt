@@ -166,10 +166,11 @@ class TeQuedanEnHoyEnPantallaTest {
             composeRule.onAllNodesWithText(formatMoneyCompact(esperado), useUnmergedTree = true).fetchSemanticsNodes().size,
             "nada compacto en la tarjeta de Pagos",
         )
-        assertEquals(3, composeRule.onAllNodesWithText("\$6.800.000", useUnmergedTree = true).fetchSemanticsNodes().size, "Hoy, Pagos y la semana")
+        // Hoy y Pagos; la semana, a 4 días del cierre, se calla (revisión de la 83).
+        assertEquals(2, composeRule.onAllNodesWithText("\$6.800.000", useUnmergedTree = true).fetchSemanticsNodes().size, "Hoy y Pagos")
         composeRule.onNodeWithTag(com.jvillada.movi.ui.sdui.TAG_PERIODO_GASTADO_DE_LA_META, useUnmergedTree = true).assertExists()
-        // El total del período, en su renglón con el nombre de la vuelta 28.
-        composeRule.onNodeWithText(ROTULO_DISPONIBLE_DEL_PERIODO, useUnmergedTree = true).assertIsDisplayed()
+        // Revisión de la 83: sin el renglón «Disponible del período»: el total lo dice el «de $X» del Período.
+        assertTrue(composeRule.onAllNodesWithText(ROTULO_DISPONIBLE_DEL_PERIODO, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
         assertTrue(composeRule.onAllNodesWithText("\$6.900.000", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
         // Vuelta 80: lo gastado y de cuánto, en frase, van al desglose de «¿De dónde sale?».
         assertTrue(composeRule.onAllNodesWithText("de \$6.900.000", substring = true, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
@@ -247,9 +248,8 @@ class TeQuedanEnHoyEnPantallaTest {
         total.assert(hasAnyDescendant(hasText(heroe)))
         // Y lo de arriba, con los nombres de las cifras de Plan.
         listOf(ROTULO_FIJOS_DEL_PERIODO, ROTULO_DISPONIBLE_DEL_PERIODO, ROTULO_GASTASTE_EN_EL_PERIODO).forEach {
-            composeRule.onAllNodesWithText(it, useUnmergedTree = true).assertCountEquals(
-                if (it == ROTULO_DISPONIBLE_DEL_PERIODO) 2 else 1,
-            )
+            // Revisión de la 83: «Disponible del período» ya no tiene renglón en la tarjeta de Pagos: solo la cascada.
+            composeRule.onAllNodesWithText(it, useUnmergedTree = true).assertCountEquals(1)
         }
 
         // El botón (árbol mezclado: su texto es parte de él), con la acción de semántica: la hoja entra
