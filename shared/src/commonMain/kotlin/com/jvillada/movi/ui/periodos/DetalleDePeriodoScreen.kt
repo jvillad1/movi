@@ -377,7 +377,7 @@ private fun CuerpoDelDetalle(
     conFlecha: Boolean,
     enDosColumnas: Boolean,
 ) {
-    val titulo = estado.detalle?.resumen?.nombre ?: nombreDelId(id) ?: id
+    val titulo = estado.detalle?.resumen?.let { nombreDelResumen(it) } ?: nombreDelId(id, estado.ajustes) ?: id
     // Por período: al elegir otro en la lista de al lado, el detalle nuevo arranca desde arriba.
     val desplazamiento = rememberSaveable(id, saver = ScrollState.Saver) { ScrollState(0) }
 

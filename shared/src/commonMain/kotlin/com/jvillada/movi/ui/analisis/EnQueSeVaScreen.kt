@@ -71,8 +71,7 @@ import com.jvillada.movi.shared.model.periodoAnterior
 import com.jvillada.movi.shared.model.periodoDeLaFecha
 import com.jvillada.movi.shared.model.periodoDelPrefijo
 import com.jvillada.movi.shared.model.periodoSiguiente
-import com.jvillada.movi.shared.model.rangoLegibleDe
-import com.jvillada.movi.shared.model.tituloDelPeriodo
+import com.jvillada.movi.shared.model.nombreDelPeriodo
 import com.jvillada.movi.theme.LocalMovimientoReducido
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.theme.Movimiento
@@ -312,14 +311,12 @@ private fun SelectorDelPeriodo(
     ) {
         BotonDeIcono(Icons.Rounded.KeyboardArrowLeft, "Período anterior", onClick = onAnterior)
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
+            // Vuelta 75: un solo nombre del período, el de toda la app.
             Text(
-                text = tituloDelPeriodo(periodo),
+                text = nombreDelPeriodo(periodo, ajustes),
                 style = Movi.textos.cuerpo,
                 color = Movi.colores.texto,
             )
-            rangoLegibleDe(periodo, ajustes)?.let { rango ->
-                Text(rango, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-            }
         }
         if (puedeAvanzar) {
             BotonDeIcono(Icons.Rounded.KeyboardArrowRight, "Período siguiente", onClick = onSiguiente)

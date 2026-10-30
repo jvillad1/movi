@@ -44,6 +44,11 @@ import com.jvillada.movi.ui.components.ActualizandoEnLaCabecera
 import com.jvillada.movi.ui.components.NoSePudoActualizar
 import com.jvillada.movi.shared.model.ResumenDePeriodo
 import com.jvillada.movi.shared.model.diaLegible
+import com.jvillada.movi.shared.model.nombreEntre
+import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.shared.model.nombreDelPeriodo
+import com.jvillada.movi.shared.time.epochMillisToAppDate
+import kotlinx.datetime.Clock
 import com.jvillada.movi.shared.model.periodoDelPrefijo
 import com.jvillada.movi.shared.model.tituloDelPeriodo
 import com.jvillada.movi.theme.Movi
@@ -351,6 +356,22 @@ internal fun textoDeLaRachaDeVacios(racha: List<ResumenDePeriodo>): String {
 }
 
 /** «Del 24 de septiembre al 24 de octubre», o `null` si alguna de las dos fechas no se pudo leer. */
+/**
+ * **El nombre del período de un resumen**, el mismo de toda la app (vuelta 75, [nombreEntre] sobre sus
+ * bordes): «23 oct – 24 nov», «Octubre», y el año solo si no es el de hoy. Sale de `desde` y `hasta`
+ * —que el server manda con el corte y las excepciones del dueño ya aplicados—, así que un APK nuevo lo
+ * dice igual con un server viejo. Si las fechas no se entienden, el nombre que mandó el server.
+ */
+internal fun nombreDelResumen(
+    resumen: ResumenDePeriodo,
+    anioDeHoy: Int? = epochMillisToAppDate(Clock.System.now().toEpochMilliseconds()).year,
+): String {
+    val inicio = runCatching { LocalDate.parse(resumen.desde) }.getOrNull() ?: return resumen.nombre
+    val ultimo = runCatching { LocalDate.parse(resumen.hasta) }.getOrNull() ?: return resumen.nombre
+    val anio = periodoDelPrefijo(resumen.id)?.year ?: ultimo.year
+    return nombreEntre(inicio, ultimo, anio.takeIf { anioDeHoy != null && it != anioDeHoy })
+}
+
 internal fun rangoDelResumen(resumen: ResumenDePeriodo): String? {
     val inicio = diaLegible(resumen.desde) ?: return null
     val fin = diaLegible(resumen.hasta) ?: return null
@@ -413,12 +434,8 @@ private fun FilaDePeriodo(resumen: ResumenDePeriodo, elegida: Boolean, onClick: 
     ) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = resumen.nombre, style = Movi.textos.titulo, color = Movi.colores.texto)
-                val rango = rangoDelResumen(resumen)
-                if (rango != null) {
-                    Spacer(Modifier.height(Espacio.xxs))
-                    Text(text = rango, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                }
+                // Vuelta 75: el nombre único del período (`nombreDelPeriodo`), sin el rango largo debajo.
+                Text(text = nombreDelResumen(resumen), style = Movi.textos.titulo, color = Movi.colores.texto)
                 // «En curso» y «Empezó el 24» son estados del período: píldoras, no texto de color.
                 val marcas = marcasDe(resumen)
                 if (marcas.isNotEmpty()) {
@@ -561,4 +578,7 @@ internal fun CifrasDelPeriodoEsqueleto() {
 }
 
 /** [id] es el prefijo del período («2026-09») → «Septiembre 2026»; `null` si no se pudo leer. */
-internal fun nombreDelId(id: String): String? = periodoDelPrefijo(id)?.let { tituloDelPeriodo(it) }
+internal fun nombreDelId(id: String, ajustes: PeriodSettings? = null): String? = periodoDelPrefijo(id)?.let {
+    // Vuelta 75: con los ajustes del dueño, el nombre único del período; sin ellos, el del mes.
+    if (ajustes != null) nombreDelPeriodo(it, ajustes) else tituloDelPeriodo(it)
+}

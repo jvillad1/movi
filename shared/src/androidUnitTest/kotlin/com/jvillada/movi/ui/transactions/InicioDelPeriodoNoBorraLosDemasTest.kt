@@ -24,7 +24,7 @@ import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UpdateProfileRequest
 import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.shared.model.inicioDelPeriodo
-import com.jvillada.movi.shared.model.nombreDe
+import com.jvillada.movi.shared.model.nombreDelPeriodo
 import com.jvillada.movi.shared.model.periodoActual
 import com.jvillada.movi.shared.time.epochMillisToAppDate
 import com.jvillada.movi.theme.MoviTheme
@@ -103,7 +103,7 @@ class InicioDelPeriodoNoBorraLosDemasTest {
         }
         composeRule.waitUntil(timeoutMillis = 5_000) { hay("Carnes y Legumbres") }
 
-        val rotulo = nombreDe(mesVisible).replaceFirstChar { it.uppercase() }
+        val rotulo = nombreDelPeriodo(mesVisible, sinPerfil)
         composeRule.onNode(hasClickAction() and hasAnyDescendant(hasText(rotulo)), useUnmergedTree = true)
             .performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
