@@ -223,6 +223,8 @@ internal fun TarjetaDelMismoPago(
      */
     loEntendido: String? = null,
     modifier: Modifier = Modifier,
+    /** Vuelta 74: «¿Ya lo anotaste?» encontró el movimiento del pago (ver [YaAnotadoEnLaFila]). */
+    yaAnotado: YaAnotadoEnLaFila? = null,
 ) {
     var abiertos by remember { mutableStateOf(false) }
     val yaAnotadoCon = avisos.firstNotNullOfOrNull { it.yaAnotadoCon }?.let { id -> avisos.firstOrNull { it.id == id } }
@@ -244,6 +246,9 @@ internal fun TarjetaDelMismoPago(
         acciones = {
             if (anotado) {
                 PastillaDelPago("Cerrar", principal = true, habilitada = !trabajando, onClick = onCerrar)
+            } else if (yaAnotado != null) {
+                // Vuelta 74: ya está anotado a mano; «Es este» lo cierra sin crear otro.
+                AccionesDelYaAnotado(yaAnotado, trabajando, onRevisar, onIgnorar)
             } else if (confirmable) {
                 PastillaDelPago(
                     CONFIRMAR_EN_LA_FILA, principal = true, habilitada = !trabajando, onClick = onConfirmar!!,
@@ -259,6 +264,7 @@ internal fun TarjetaDelMismoPago(
         },
     ) {
         if (anotado) Text(avisoYaAnotado(yaAnotadoCon), style = Movi.textos.apoyo, color = Movi.colores.aviso)
+        if (!anotado && yaAnotado != null) LineaDelYaAnotado(lineaDelYaAnotado(yaAnotado.coincidencias, hoyEnAppZone()))
         if (!anotado) advertencia?.let { LineaDeAdvertenciaDeBancos(it) }
         // El texto del primero siempre; los demás, plegados: dicen lo mismo con otras palabras.
         TextoDelAviso(primero, plegable = true)
