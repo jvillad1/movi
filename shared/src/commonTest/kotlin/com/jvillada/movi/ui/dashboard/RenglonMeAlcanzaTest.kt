@@ -99,4 +99,68 @@ class RenglonMeAlcanzaTest {
         assertNull(renglonMeAlcanzaDe(data.copy(accounts = emptyList()), GastoDelDiaADia(porDia = 20_000L), hoy), "sin cuentas")
         assertNull(renglonMeAlcanzaDe(data.copy(periodoActual = null), GastoDelDiaADia(porDia = 20_000L), hoy), "sin período")
     }
+
+    // ── Vuelta 78 · un solo horizonte ────────────────────────────────────────
+
+    /**
+     * La revisión 6: mes de calendario, sin salario, el 30 de octubre. La caja mira 30 días y el rojo cae
+     * el 29 nov, después del cierre: el renglón dice desde cuándo y por qué, no «No te alcanza: el 29 nov».
+     */
+    @Test
+    fun `sin salario y con el rojo despues del cierre dice desde cuando no alcanzaria`() {
+        val hoy30 = LocalDate(2026, 10, 30)
+        val dias = caja("2026-10-30" to 1_450_950, "2026-10-31" to 1_400_000, "2026-11-05" to -200_000, "2026-11-29" to -1_100_000)
+        val renglon = renglonMeAlcanza(dias, hoy30, ultimoDiaDelPeriodo = LocalDate(2026, 10, 31))
+        assertEquals("Desde el 1 nov, sin salario anotado, no te alcanzaría · Agregar salario", renglon.texto)
+        assertEquals(AGREGAR_SALARIO_EN_EL_RENGLON, renglon.detalle)
+        assertTrue(renglon.noAlcanza, "el héroe calla la línea de los días")
+        assertTrue(!renglon.enRojo, "no es un rojo de este período")
+    }
+
+    @Test
+    fun `con el periodo elegido, desde el dia que arranca el siguiente`() {
+        val dias = caja("2026-10-29" to 300_000, "2026-11-24" to 50_000, "2026-11-25" to -400_000).copy(hastaElPeriodoSiguiente = true)
+        val renglon = renglonMeAlcanza(dias, hoy, ultimoDiaDelPeriodo = LocalDate(2026, 11, 24))
+        assertEquals("Desde el 25 nov, sin salario anotado, no te alcanzaría · Agregar salario", renglon.texto)
+    }
+
+    @Test
+    fun `si ya dentro del periodo hay un dia en rojo, manda ese`() {
+        val dias = caja("2026-10-30" to 100_000, "2026-10-31" to -50_000, "2026-11-29" to -1_100_000)
+        val renglon = renglonMeAlcanza(dias, LocalDate(2026, 10, 30), ultimoDiaDelPeriodo = LocalDate(2026, 10, 31))
+        assertEquals("No te alcanza: el 29 nov quedarías en\u00A0−\u2060\$1,1M", renglon.texto)
+        assertTrue(renglon.enRojo && renglon.noAlcanza)
+    }
+
+    @Test
+    fun `con salario el rojo de despues del cierre sigue siendo no te alcanza`() {
+        val dias = caja("2026-10-30" to 100_000, "2026-11-05" to -300_000, "2026-11-25" to 4_000_000).copy(hastaElSalario = true)
+        val renglon = renglonMeAlcanza(dias, LocalDate(2026, 10, 30), ultimoDiaDelPeriodo = LocalDate(2026, 10, 31))
+        assertTrue(renglon.texto.startsWith("No te alcanza: el 5 nov"), renglon.texto)
+    }
+
+    private fun teQuedan(dias: Int, soloLosDias: Boolean = true) = TeQuedanDeHoy(
+        rotulo = ROTULO_TE_QUEDAN, teQuedan = 1_450_950, enRojo = false,
+        detalle = if (soloLosDias) "para $dias días · \$725.475 por día" else "para $dias días · vas \$300.000 por encima de lo previsto a hoy",
+        nivelDelDetalle = com.jvillada.movi.shared.model.NivelDelGasto.BIEN,
+        diasQueQuedan = dias, esLaLineaDeLosDias = soloLosDias,
+    )
+
+    private val alcanza = RenglonMeAlcanza("Te alcanza hasta el 25 nov", "tu día más justo, el 5 nov", enRojo = false)
+    private val noAlcanza = RenglonMeAlcanza("No te alcanza", "el 5 nov quedarías en −\$1,3M", enRojo = true)
+
+    @Test
+    fun `la linea de los dias se calla a tres dias del cierre o si no alcanza`() {
+        assertEquals("Para 10 días · \$725.475 por día", detalleDelHeroe(teQuedan(10), alcanza))
+        assertEquals("Para 4 días · \$725.475 por día", detalleDelHeroe(teQuedan(4), null))
+        assertNull(detalleDelHeroe(teQuedan(3), alcanza), "a tres días del cierre")
+        assertNull(detalleDelHeroe(teQuedan(2), null))
+        assertNull(detalleDelHeroe(teQuedan(10), noAlcanza), "si «¿Me alcanza?» dice que no")
+        assertNull(detalleDelHeroe(teQuedan(10), renglonMeAlcanza(caja("2026-10-30" to 10, "2026-11-29" to -10), LocalDate(2026, 10, 30), LocalDate(2026, 10, 31))))
+    }
+
+    @Test
+    fun `un aviso se dice siempre`() {
+        assertEquals("Para 2 días · vas \$300.000 por encima de lo previsto a hoy", detalleDelHeroe(teQuedan(2, soloLosDias = false), noAlcanza))
+    }
 }

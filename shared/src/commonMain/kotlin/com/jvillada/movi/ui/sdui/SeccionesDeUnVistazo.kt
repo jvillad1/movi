@@ -119,6 +119,8 @@ import com.jvillada.movi.ui.dashboard.disponibleDelInicio
 import com.jvillada.movi.ui.dashboard.teQuedanDeHoy
 import com.jvillada.movi.ui.dashboard.elHeroePideLaCuenta
 import com.jvillada.movi.ui.dashboard.FilaMeAlcanza
+import com.jvillada.movi.ui.dashboard.TAG_DETALLE_DEL_HEROE
+import com.jvillada.movi.ui.dashboard.detalleDelHeroe
 import com.jvillada.movi.ui.dashboard.rememberRenglonMeAlcanza
 import com.jvillada.movi.ui.dashboard.esUnCambioDelHeroe
 import com.jvillada.movi.ui.dashboard.EstadoQueSeVe
@@ -306,11 +308,15 @@ private fun CuerpoDelHeroe(
                     tono = if (teQuedan.enRojo) TonoDeCifra.Alerta else TonoDeCifra.Neutro,
                     modifier = Modifier.testTag(TAG_CIFRA_TE_QUEDAN),
                 )
-                Text(
-                    text = teQuedan.detalle.replaceFirstChar { it.uppercase() },
-                    style = Movi.textos.apoyo,
-                    color = colorDelDetalle(teQuedan.nivelDelDetalle),
-                )
+                // Vuelta 78: cerca del cierre, o si «¿Me alcanza?» dice que no, la línea de los días se calla.
+                detalleDelHeroe(teQuedan, visto.mostrado.renglon)?.let { detalle ->
+                    Text(
+                        text = detalle,
+                        style = Movi.textos.apoyo,
+                        color = colorDelDetalle(teQuedan.nivelDelDetalle),
+                        modifier = Modifier.testTag(TAG_DETALLE_DEL_HEROE),
+                    )
+                }
             } else {
                 LineaEsqueleto(
                     fraccionDelAncho = 0.55f,

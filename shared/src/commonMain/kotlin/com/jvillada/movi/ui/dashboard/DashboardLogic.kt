@@ -431,6 +431,9 @@ const val TAG_ESQUELETO_VEREDICTO_DEL_HERO: String = "esqueleto-veredicto-del-he
 const val TAG_CIFRA_TE_QUEDAN: String = "cifra-te-quedan"
 const val TAG_ESQUELETO_DETALLE_DEL_HERO: String = "esqueleto-detalle-del-hero"
 
+/** Vuelta 78: la línea de abajo de «Te quedan» en el héroe (ver `detalleDelHeroe`). */
+const val TAG_DETALLE_DEL_HEROE: String = "detalle-del-heroe"
+
 /**
  * **¿Hay una carga del Inicio EN VUELO ahora mismo?** Lo provee `DashboardScreen`, con su propio
  * `loading`, alrededor de `SduiRenderer` — Task 7, fix round 1.

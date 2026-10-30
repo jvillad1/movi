@@ -399,6 +399,13 @@ data class TeQuedanDeHoy(
     val enRojo: Boolean,
     val detalle: String,
     val nivelDelDetalle: NivelDelGasto,
+    /** Vuelta 78: cuántos días le quedan al período, hoy incluido (los de «para N días»). */
+    val diasQueQuedan: Int = Int.MAX_VALUE,
+    /**
+     * Vuelta 78: [detalle] es solo «para N días · $X por día» (o «para hoy»), sin ningún aviso. Es la
+     * línea que el héroe calla cerca del cierre o si «¿Me alcanza?» dice que no ([detalleDelHeroe]).
+     */
+    val esLaLineaDeLosDias: Boolean = false,
 ) {
     val monto: Long get() = kotlin.math.abs(teQuedan)
 }
@@ -444,13 +451,37 @@ fun teQuedanDeHoy(d: DisponibleDelPeriodo): TeQuedanDeHoy {
         d.diasQueQuedan <= 1 -> dias to periodo.nivel
         else -> "$dias · ${porDiaQueQueda(d)}" to periodo.nivel
     }
+    val soloLosDias = d.hayMargen && periodo.teQuedan > 0L && periodo.contraElRitmo <= 0L
     return TeQuedanDeHoy(
         rotulo = rotulo,
         teQuedan = periodo.teQuedan,
         enRojo = enRojo,
         detalle = detalle,
         nivelDelDetalle = nivel,
+        diasQueQuedan = d.diasQueQuedan,
+        esLaLineaDeLosDias = soloLosDias,
     )
+}
+
+/**
+ * Hasta cuántos días antes del cierre el héroe calla «Para N días · $X por día» (vuelta 78). Con tres
+ * días o menos esa cifra por día no ayuda a decidir nada, y la caja ya mira más allá del cierre.
+ */
+const val DIAS_PARA_CALLAR_EL_POR_DIA: Int = 3
+
+/**
+ * **La línea de abajo de «Te quedan» en el héroe**, o `null` si se calla (vuelta 78: un solo horizonte).
+ *
+ * «Te quedan $1.450.950 · Para 2 días · $725.475 por día» iba encima de «No te alcanza: el 29 nov
+ * quedarías en −$1,1M»: el primero habla del período, el segundo de la caja que sigue mirando 30 días.
+ * La línea de los días se calla si quedan [DIAS_PARA_CALLAR_EL_POR_DIA] o menos, o si el renglón «¿Me
+ * alcanza?» dice que no ([RenglonMeAlcanza.noAlcanza]). Los avisos (te pasaste, sin margen, vas por
+ * encima de lo previsto) se dicen siempre. Pura.
+ */
+fun detalleDelHeroe(teQuedan: TeQuedanDeHoy, renglon: RenglonMeAlcanza?): String? {
+    val callar = teQuedan.esLaLineaDeLosDias &&
+        (teQuedan.diasQueQuedan <= DIAS_PARA_CALLAR_EL_POR_DIA || renglon?.noAlcanza == true)
+    return if (callar) null else teQuedan.detalle.replaceFirstChar { it.uppercase() }
 }
 
 // ── La alarma del disponible: una vez, en Pagos, y con qué hacer ─────────────

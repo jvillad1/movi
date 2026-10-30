@@ -25,7 +25,12 @@ import com.jvillada.movi.ui.accounts.UNION_QUE_NO_SE_PARTE
 import com.jvillada.movi.ui.fecha.MESES_DEL_ANIO
 import com.jvillada.movi.ui.plan.SEGMENTO_PAGOS
 import com.jvillada.movi.ui.plan.cajaDelPeriodoDe
+import com.jvillada.movi.shared.model.inicioDelPeriodo
+import com.jvillada.movi.shared.model.periodoSiguiente
+import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.minus
+import kotlinx.datetime.plus
 
 /**
  * # «¿Me alcanza?» en el héroe de Inicio (vuelta 75)
@@ -54,7 +59,16 @@ const val TAG_ME_ALCANZA: String = "inicio-me-alcanza"
  * nov») y si va en rojo. Se pinta en dos renglones de la `Fila` —a 360 dp con la letra al 130 % una frase
  * sola no entraba—; [texto] es la frase entera, como se lee. Puro, para las pruebas.
  */
-data class RenglonMeAlcanza(val titulo: String, val detalle: String, val enRojo: Boolean) {
+data class RenglonMeAlcanza(
+    val titulo: String,
+    val detalle: String,
+    val enRojo: Boolean,
+    /**
+     * Vuelta 78: dice que no alcanza —en rojo dentro del período, o «no te alcanzaría» pasado el cierre
+     * sin salario—. Con esto el héroe calla «Para N días · $X por día»: una pantalla, un horizonte.
+     */
+    val noAlcanza: Boolean = enRojo,
+) {
     val texto: String get() = if (enRojo) "$titulo: $detalle" else "$titulo · $detalle"
 }
 
@@ -62,9 +76,24 @@ data class RenglonMeAlcanza(val titulo: String, val detalle: String, val enRojo:
  * [RenglonMeAlcanza] de la caja. Se mide en **el peor día** ([CajaProyectada.diaMasBajo]) —la misma cifra
  * titular de la caja de Pagos—: si lo libre ese día es negativo, no alcanza.
  */
-fun renglonMeAlcanza(caja: CajaProyectada, hoy: LocalDate): RenglonMeAlcanza {
+fun renglonMeAlcanza(caja: CajaProyectada, hoy: LocalDate, ultimoDiaDelPeriodo: LocalDate? = null): RenglonMeAlcanza {
     val bajo = caja.diaMasBajo
     val cuando = if (bajo.fecha == hoy.toString()) "hoy" else "el ${fechaCortaDelRenglon(bajo.fecha)}"
+    // Vuelta 78 · un solo horizonte. Sin salario la caja sigue mirando después del cierre (30 días con el
+    // mes de calendario), y «No te alcanza: el 29 nov quedarías en −$1,1M» iba debajo de «Te quedan
+    // $1.450.950 · para 2 días», que habla del período. Si lo que no alcanza cae **después** del período,
+    // se dice desde cuándo y por qué —no hay salario anotado— y cómo se arregla. Si ya dentro del período
+    // hay un día en rojo, manda ese: es lo de ahora.
+    val primerRojo = caja.primerDiaEnRojo?.let { runCatching { LocalDate.parse(it.fecha) }.getOrNull() }
+    if (bajo.libre < 0L && !caja.hastaElSalario && ultimoDiaDelPeriodo != null && primerRojo != null && primerRojo > ultimoDiaDelPeriodo) {
+        val desde = ultimoDiaDelPeriodo.plus(1, DateTimeUnit.DAY)
+        return RenglonMeAlcanza(
+            titulo = "Desde el ${fechaCortaDelRenglon(desde.toString())}, sin salario anotado, no te alcanzaría",
+            detalle = AGREGAR_SALARIO_EN_EL_RENGLON,
+            enRojo = false,
+            noAlcanza = true,
+        )
+    }
     if (bajo.libre < 0L) {
         // Revisión de la 75: el menos pegado al «$» y la cifra pegada a «en»: el renglón no se parte ahí.
         return RenglonMeAlcanza("No te alcanza", "$cuando quedarías en$ESPACIO_QUE_NO_SE_PARTE${cifraCortaQueNoSeParte(bajo.libre)}", enRojo = true)
@@ -86,8 +115,12 @@ fun renglonMeAlcanza(caja: CajaProyectada, hoy: LocalDate): RenglonMeAlcanza {
  */
 fun renglonMeAlcanzaDe(data: DashboardData, gasto: GastoDelDiaADia?, hoy: LocalDate): RenglonMeAlcanza? {
     val supuesto = gasto ?: return null
-    return cajaDelPeriodoDe(data, supuesto, hoy)?.let { renglonMeAlcanza(it, hoy) }
+    val ultimoDia = data.periodoActual?.let { inicioDelPeriodo(periodoSiguiente(it), data.ajustesDePeriodo).minus(1, DateTimeUnit.DAY) }
+    return cajaDelPeriodoDe(data, supuesto, hoy)?.let { renglonMeAlcanza(it, hoy, ultimoDia) }
 }
+
+/** Vuelta 78: lo que dice debajo el renglón que no alcanzaría sin salario. Tocarlo lleva a la caja de Pagos. */
+const val AGREGAR_SALARIO_EN_EL_RENGLON: String = "Agregar salario"
 
 /** Sin salario y con el período elegido: la caja mira hasta que arranca el siguiente. */
 const val TE_ALCANZA_HASTA_EL_FIN_DEL_PERIODO: String = "Te alcanza hasta el fin del período"
@@ -154,6 +187,7 @@ internal fun FilaMeAlcanza(renglon: RenglonMeAlcanza, onNavigate: (Screen) -> Un
         },
         final = { Chevron() },
         onClick = { onNavigate(Screen.Plan(SEGMENTO_PAGOS, enLaCaja = true)) },
-        onClickLabel = "Ver tu plata día a día en Pagos",
+        // Vuelta 78: sin salario, la caja de Pagos abre con su «Agregar» arriba.
+        onClickLabel = if (renglon.detalle == AGREGAR_SALARIO_EN_EL_RENGLON) "Agregar tu salario en Pagos" else "Ver tu plata día a día en Pagos",
     )
 }
