@@ -48,6 +48,9 @@ import com.jvillada.movi.shared.model.ParteDelReparto
 import com.jvillada.movi.shared.model.PropuestaDeReparto
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.DE_UNA_TARJETA_SOLO_GASTOS
+import com.jvillada.movi.shared.model.partesQueSeAceptanDesde
 import com.jvillada.movi.shared.model.checklistDelPeriodo
 import com.jvillada.movi.shared.model.destinoQueNombra
 import com.jvillada.movi.shared.model.esIdDeComprobante
@@ -424,6 +427,12 @@ internal fun Transaction.repartirUnMovimiento(uid: String, eventoId: String, par
         ?: return no("Solo se reparte la plata que salió.")
     val origenes = partes.map { it.patas?.origenId ?: it.evento?.accountId }.distinct()
     if (origenes != listOf(salida.accountId)) return no("Las partes salen de la cuenta del movimiento.")
+    // Vuelta 71: una compra con tarjeta se divide solo en gastos con su categoría (ver
+    // `DividirUnaCompraConTarjeta.kt`). Desde una deuda, una cuota o un traspaso no tienen sentido.
+    val tipoDeLaCuenta = Accounts.selectAll()
+        .where { (Accounts.userId eq uid) and (Accounts.id eq salida.accountId) }
+        .firstOrNull()?.let { runCatching { AccountType.valueOf(it[Accounts.type]) }.getOrNull() }
+    if (tipoDeLaCuenta != null && !partesQueSeAceptanDesde(tipoDeLaCuenta, partes)) return no(DE_UNA_TARJETA_SOLO_GASTOS)
 
     // 1. Anular, como siempre (antes de escribir: el desglose de una cuota no puede ver el original).
     hermanas.forEach { pata ->
@@ -447,6 +456,12 @@ internal fun Transaction.repartirUnMovimiento(uid: String, eventoId: String, par
     // partes de una división anterior que se deshizo se desligan antes: ya no son de esta compra.
     Events.update({ (Events.userId eq uid) and (Events.repartoDe eq salida.id) and (Events.id notInList hecho.ids) }) { it[Events.repartoDe] = null }
     Events.update({ (Events.userId eq uid) and (Events.id inList hecho.ids) }) { it[Events.repartoDe] = salida.id }
+    // Vuelta 71: los gastos de una compra diferida heredan sus cuotas, para que el extracto de la
+    // tarjeta (`extractoDeLaTarjeta`) siga contando la cuota del mes de cada parte y no el total.
+    val gastosDeLasPartes = partes.mapNotNull { it.evento?.id }
+    if (salida.cuotas != null && gastosDeLasPartes.isNotEmpty()) {
+        Events.update({ (Events.userId eq uid) and (Events.id inList gastosDeLasPartes) }) { it[Events.cuotas] = salida.cuotas }
+    }
 
     // 3. Los avisos que apuntaban al original, a la primera parte.
     val avisos = SmsMessages.selectAll()
