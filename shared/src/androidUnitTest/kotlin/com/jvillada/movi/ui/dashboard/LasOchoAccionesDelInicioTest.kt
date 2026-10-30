@@ -21,7 +21,6 @@ import com.jvillada.movi.ui.components.LocalAtajosDeAgregar
 import com.jvillada.movi.ui.components.ds.COLUMNAS_DE_ACCIONES
 import com.jvillada.movi.ui.components.ds.TAG_ACCION_RAPIDA
 import com.jvillada.movi.ui.components.ds.TAG_ROTULO_DE_ACCION
-import com.jvillada.movi.ui.components.ds.partePalabras
 import com.jvillada.movi.ui.quickadd.AtajoDeAgregar
 import com.jvillada.movi.ui.sdui.AccionesDelInicioSection
 import org.junit.Rule
@@ -37,9 +36,9 @@ import kotlin.test.assertTrue
 /**
  * # Las 8 acciones del Inicio (vuelta 39, la opción 3)
  *
- * En dos filas de cuatro y en el orden de la maqueta; los rótulos en dos renglones de alto fijo, y a
- * 360 dp —el teléfono más angosto— con la letra que la app le pone a todo (×1,12) **ninguno parte una
- * palabra** ni se corta con «…». Y una prueba por acción: cada una abre lo mismo que su atajo del menú
+ * En dos filas de cuatro y en el orden de la maqueta; desde la vuelta 79 los rótulos van en **un
+ * renglón** («Comprobante», «Preguntar»), y a 360 dp —el teléfono más angosto— con la letra de la app
+ * (×1,12) y con la del teléfono al 130 % **ninguno pasa a dos renglones** ni se corta con «…». Y una prueba por acción: cada una abre lo mismo que su atajo del menú
  * del «+» (la cáscara, por `LocalAtajosDeAgregar`) o su pantalla de siempre.
  *
  * Se monta la sección como la monta el Inicio. `sdk = [34]` y `NATIVE` para el motor de texto real.
@@ -89,7 +88,7 @@ class LasOchoAccionesDelInicioTest {
         assertEquals(
             listOf(
                 "Anotar gasto", "Anotar ingreso", "Traspasar", "Pagar tarjeta",
-                "Repartir", "Subir comprobante", "Revisar avisos", "Preguntar a Movi",
+                "Repartir", "Comprobante", "Revisar avisos", "Preguntar",
             ),
             rotulos().map(::texto),
         )
@@ -101,18 +100,38 @@ class LasOchoAccionesDelInicioTest {
         assertEquals(1, acciones.map { it.size.height }.distinct().size, "todas del mismo alto: el rótulo tiene alto fijo")
     }
 
-    /** A 360 dp con la letra de la app: ninguna palabra partida, ninguna «…», a lo sumo dos renglones. */
-    @Test
-    fun `a 360 dp ningun rotulo parte una palabra`() {
-        montar()
+    /**
+     * Vuelta 79: **un renglón**, sin «…» y sin salirse, a 360 dp con la letra de la app (×1,12) y con la del
+     * teléfono al 130 % (×1,3 × 1,12). Antes «Subir comprobante» y «Preguntar a Movi» iban en dos.
+     */
+    private fun cadaRotuloEnUnRenglon(escala: Float) {
+        montar(escala)
         rotulos().forEach { nodo ->
             val d = disposicion(nodo)
             val t = texto(nodo)
-            assertTrue(d.lineCount <= 2, "«$t» en ${d.lineCount} renglones")
-            assertFalse(partePalabras(d, t), "«$t» parte una palabra")
-            assertFalse((0 until d.lineCount).any { d.isLineEllipsized(it) }, "«$t» se corta con «…»")
-            assertFalse(d.hasVisualOverflow, "«$t» se sale de su lugar")
+            assertEquals(1, d.lineCount, "«$t» en ${d.lineCount} renglones a ×$escala")
+            assertFalse(d.isLineEllipsized(0), "«$t» se corta con «…» a ×$escala")
+            assertFalse(d.hasVisualOverflow, "«$t» se sale de su lugar a ×$escala")
         }
+    }
+
+    @Test
+    fun `a 360 dp cada rotulo va en un renglon`() = cadaRotuloEnUnRenglon(1.12f)
+
+    @Test
+    fun `a 360 dp con la letra al 130 por ciento cada rotulo sigue en un renglon`() =
+        cadaRotuloEnUnRenglon(com.jvillada.movi.ui.ESCALA_DEL_TELEFONO_AL_130)
+
+    /** Vuelta 79: entre las dos filas, `Espacio.m`; el círculo, de 52. */
+    @Test
+    fun `las dos filas van a Espacio m y los circulos miden 52`() {
+        montar()
+        val acciones = composeRule.onAllNodesWithTag(TAG_ACCION_RAPIDA).fetchSemanticsNodes()
+        val primera = acciones.first().boundsInRoot
+        val quinta = acciones[COLUMNAS_DE_ACCIONES].boundsInRoot
+        val aire = with(composeRule.density) { (quinta.top - primera.bottom).toDp() }
+        assertEquals(com.jvillada.movi.theme.Espacio.m.value, aire.value, 0.6f)
+        assertEquals(52f, com.jvillada.movi.theme.Medida.circuloDeAccion.value)
     }
 
     @Test

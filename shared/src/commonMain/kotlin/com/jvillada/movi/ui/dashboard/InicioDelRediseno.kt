@@ -138,9 +138,10 @@ fun elHeroePideLaCuenta(data: DashboardData): Boolean = data.accounts?.isEmpty()
  * la vuelta 38 sacó el «+» del teléfono y puso «Más formas de anotar» de provisional. Ahora vuelven a
  * la cuadrícula, y el «+» con su menú queda solo en el rail de pantalla ancha.
  *
- * [rotulo] es lo que se lee debajo del círculo, en **dos renglones de alto fijo** («Anotar / gasto»):
- * a 360 dp ninguno parte una palabra (ver `SinPartirPalabras`). [descripcion] es la frase entera que
- * dice el lector de pantalla. Los pinta el cliente: la definición SDUI solo trae la sección
+ * [rotulo] es lo que se lee debajo del círculo, en **un renglón** (vuelta 79; eran dos de alto fijo, y
+ * «Subir comprobante» y «Preguntar a Movi» se partían): por eso cortos, «Comprobante» y «Preguntar». A
+ * 360 dp con la letra al 130 % ninguno pasa a dos renglones ni se corta (`LasOchoAccionesDelInicioTest`).
+ * [descripcion] es la frase entera que dice el lector de pantalla. Los pinta el cliente: la definición SDUI solo trae la sección
  * `ACCIONES`, así que un APK viejo sigue con las suyas y el server no cambia.
  */
 enum class AccionDelInicio(val rotulo: String, val descripcion: String, val destino: DestinoDeLaAccion) {
@@ -149,9 +150,9 @@ enum class AccionDelInicio(val rotulo: String, val descripcion: String, val dest
     TRASPASAR("Traspasar", "Anotar un traspaso entre tus cuentas", DestinoDeLaAccion.Atajo(AtajoDeAgregar.TRASPASO)),
     PAGAR_TARJETA(com.jvillada.movi.ui.quickadd.PAGAR_TARJETA, "Anotar el pago de una tarjeta", DestinoDeLaAccion.Atajo(AtajoDeAgregar.PAGO_DE_TARJETA)),
     REPARTIR("Repartir", "Repartir un gasto con alguien", DestinoDeLaAccion.Atajo(AtajoDeAgregar.REPARTIR)),
-    SUBIR_COMPROBANTE("Subir comprobante", "Subir un comprobante para que Movi lo lea", DestinoDeLaAccion.Atajo(AtajoDeAgregar.SUBIR_COMPROBANTE)),
+    SUBIR_COMPROBANTE("Comprobante", "Subir un comprobante para que Movi lo lea", DestinoDeLaAccion.Atajo(AtajoDeAgregar.SUBIR_COMPROBANTE)),
     REVISAR_AVISOS("Revisar avisos", "Revisar los avisos", DestinoDeLaAccion.Pantalla(Screen.PorRevisar)),
-    PREGUNTAR_A_MOVI("Preguntar a Movi", "Preguntarle a Movi", DestinoDeLaAccion.Pantalla(Screen.AIChat())),
+    PREGUNTAR_A_MOVI("Preguntar", "Preguntarle a Movi", DestinoDeLaAccion.Pantalla(Screen.AIChat())),
 }
 
 /**

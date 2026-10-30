@@ -79,6 +79,7 @@ import com.jvillada.movi.ui.dashboard.AccionDelInicio
 import com.jvillada.movi.ui.dashboard.AnomaliasDescartadasEnLaSesion
 import com.jvillada.movi.ui.dashboard.aceptarElCambioDeCategoria
 import com.jvillada.movi.ui.dashboard.DashboardData
+import com.jvillada.movi.ui.dashboard.elHeroePideLaCuenta
 import com.jvillada.movi.ui.dashboard.LocalCargandoElInicio
 import com.jvillada.movi.ui.dashboard.PropuestaDelInicio
 import com.jvillada.movi.ui.dashboard.TOPE_DE_PROPUESTAS
@@ -194,9 +195,10 @@ internal fun hacerLaAccion(
 
 /**
  * **La cuadrícula de acciones** (camino 3): **ocho, en dos filas de cuatro** (vuelta 39, la opción 3).
- * «Anotar gasto» es la destacada —lo que más se hace— y «Revisar avisos» lleva la insignia de lo que
- * espera en Por revisar. Cada una abre lo que ya existe (ver [hacerLaAccion]). Los rótulos van en dos
- * renglones de alto fijo y nunca parten una palabra ([RenglonesDelRotulo.Dos]).
+ * «Anotar gasto» es la destacada —lo que más se hace, y el único amarillo del Inicio (vuelta 79)— y
+ * «Revisar avisos» lleva la insignia de lo que espera en Por revisar. Cada una abre lo que ya existe
+ * (ver [hacerLaAccion]). Vuelta 79: los rótulos van en **un renglón** y son cortos («Comprobante»,
+ * «Preguntar»); a pantalla ancha, dentro de una [Superficie].
  */
 @Composable
 internal fun AccionesDelInicioSection(
@@ -205,22 +207,40 @@ internal fun AccionesDelInicioSection(
 ) {
     val insignia = pendientesPorRevisar(data)
     val atajos = LocalAtajosDeAgregar.current
+    val cuadricula: @Composable (Modifier) -> Unit = { modificador ->
     CuadriculaDeAcciones(
         acciones = accionesDelInicio().map { accion ->
             Accion(
                 rotulo = accion.rotulo,
                 icono = iconoDe(accion),
                 onClick = { hacerLaAccion(accion, onNavigate, atajos) },
-                destacada = accion == AccionDelInicio.ANOTAR_GASTO,
+                // Vuelta 79: sin cuentas, la acción amarilla es «Crear mi primera cuenta» del héroe.
+                destacada = accion == AccionDelInicio.ANOTAR_GASTO && !elHeroePideLaCuenta(data),
                 insignia = if (accion == AccionDelInicio.REVISAR_AVISOS) insignia else null,
                 // Vuelta de diseño 22: la insignia dice de qué es su número («2 avisos · 1 movimiento»).
                 descripcion = if (accion == AccionDelInicio.REVISAR_AVISOS) descripcionDeLaInsignia(data) else accion.descripcion,
             )
         },
-        modifier = Modifier.padding(horizontal = Medida.margenDePantalla),
-        renglones = RenglonesDelRotulo.Dos,
+        modifier = modificador,
+        // Vuelta 79: un renglón, con rótulos cortos («Comprobante», «Preguntar»): las dos filas son parejas
+        // y bajan de ~220 a ~170 dp.
+        renglones = RenglonesDelRotulo.Uno,
     )
+    }
+    // Vuelta 79: a pantalla ancha la cuadrícula flotaba sin contenedor; va dentro de una superficie.
+    if (LocalWindowWidthClass.current != WindowWidthClass.Compact) {
+        Superficie(
+            modifier = Modifier.padding(horizontal = Medida.margenDePantalla).fillMaxWidth().testTag(TAG_SUPERFICIE_DE_LAS_ACCIONES),
+        ) {
+            cuadricula(Modifier)
+        }
+    } else {
+        cuadricula(Modifier.padding(horizontal = Medida.margenDePantalla))
+    }
 }
+
+/** La superficie de la cuadrícula del Inicio a pantalla ancha (vuelta 79). */
+const val TAG_SUPERFICIE_DE_LAS_ACCIONES: String = "inicio-superficie-de-las-acciones"
 
 // ── Movi propone hoy ─────────────────────────────────────────────────────────
 
@@ -306,7 +326,10 @@ private fun TarjetaDelFeed(propuesta: PropuestaDelInicio, hacer: (AccionDeLaProp
         cifra = propuesta.cifra,
         moneda = propuesta.moneda,
         cuerpo = propuesta.cuerpo?.let { conCifrasOcultas(it) },
-        tono = if (propuesta.urgente) TonoDeIcono.Aviso else TonoDeIcono.Marca,
+        // Vuelta 79 · un solo amarillo por vista: el amarillo del Inicio es «Anotar gasto». El círculo de
+        // la propuesta va en el tinte si urge (con el ocre) o en la capa 3, y su acción, secundaria.
+        tono = if (propuesta.urgente) TonoDeIcono.Aviso else TonoDeIcono.Neutro,
+        varianteDeLaAccion = VarianteDeBoton.Secundario,
         accion = propuesta.accion,
         onAccion = { hacer(propuesta.alTocar) },
         accionSecundaria = propuesta.accionSecundaria,
@@ -382,7 +405,8 @@ internal fun ProximoPagoSection(data: DashboardData, onNavigate: (Screen) -> Uni
                 // Una tarjeta sin mínimo conocido no tiene cifra que decir: su «monto» es el saldo.
                 cifraDelPago(pago)?.let { Cifra(it, VarianteDeCifra.Fila, moneda = pago.moneda) }
             }
-            Boton(proximo.accion, onClick = { onNavigate(proximo.alTocar) }, tamano = TamanoDeBoton.S)
+            // Vuelta 79: secundario. El único amarillo del Inicio es «Anotar gasto».
+            Boton(proximo.accion, onClick = { onNavigate(proximo.alTocar) }, variante = VarianteDeBoton.Secundario, tamano = TamanoDeBoton.S)
         }
         yNMas(proximo.masPagos)?.let { mas ->
             Boton(

@@ -1,7 +1,6 @@
 package com.jvillada.movi.ui.components.ds
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -108,9 +107,9 @@ fun TarjetaDeCuenta(
                 // Un mínimo, no un alto fijo: con la letra del sistema agrandada la tarjeta crece en vez de cortar.
                 .heightIn(min = Medida.altoDeTarjetaDeCuenta)
                 .anilloDeFoco(RoundedCornerShape(Radio.xl))
+                .alPresionar(onClick = onClick, onClickLabel = "Ver $nombre", velo = true, forma = RoundedCornerShape(Radio.xl))
                 .clip(RoundedCornerShape(Radio.xl))
                 .background(colores.tarjeta)
-                .clickable(onClickLabel = "Ver $nombre", onClick = onClick)
                 .testTag(TAG_TARJETA_DE_CUENTA)
                 .padding(Medida.rellenoDeSuperficie),
             verticalArrangement = Arrangement.SpaceBetween,
@@ -167,23 +166,35 @@ fun TarjetaDeCuenta(
 /** El `testTag` de la nota de una [TarjetaDeCuenta] («$2.000.000 apartado», vuelta 64). */
 const val TAG_NOTA_DE_LA_TARJETA_DE_CUENTA: String = "tarjeta-de-cuenta:nota"
 
-/** El logotipo tipográfico de la marca en su color, sobre la tarjeta blanca: «B» en el amarillo de Bancolombia. */
+/**
+ * **El avatar del banco**: su letra («B», «nu») en un círculo. Vuelta 79 · un solo amarillo por vista: iba en
+ * el color del banco, y el amarillo de Bancolombia era el amarillo de la acción de Movi (en Inicio, «B»
+ * era una mancha amarilla más). Ahora va **en la capa 3 con la letra en la tinta**, como un ícono neutro
+ * ([coloresDelAvatarDelBanco]): el banco lo dice su letra, no un color que compite con la acción.
+ */
 @Composable
 private fun AvatarDeLaMarca(marca: Marca) {
+    val (fondo, letra) = coloresDelAvatarDelBanco(Movi.colores)
     Box(
         modifier = Modifier
             .size(Medida.avatar)
-            .background(Color(marca.fondo), CircleShape)
-            .semantics { contentDescription = marca.nombre }
+            .background(fondo, CircleShape)
+            .semantics {
+                contentDescription = marca.nombre
+                tonoDeIcono = TonoDeIcono.Neutro
+            }
             .testTag(TAG_MARCA_DE_LA_TARJETA),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = marca.corta,
             style = Movi.textos.titulo,
-            color = Color(marca.texto),
+            color = letra,
             maxLines = 1,
             softWrap = false,
         )
     }
 }
+
+/** El fondo y la letra del avatar de un banco (vuelta 79): la capa 3 y la tinta, nunca la marca. Pura. */
+fun coloresDelAvatarDelBanco(colores: ColoresDeMovi): Pair<Color, Color> = colores.capa3 to colores.texto

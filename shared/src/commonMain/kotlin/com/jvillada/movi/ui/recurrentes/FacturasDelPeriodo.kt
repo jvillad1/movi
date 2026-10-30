@@ -61,6 +61,7 @@ import com.jvillada.movi.ui.components.ds.ESPACIO_ANTES_DEL_FINAL_DE_FILA
 import com.jvillada.movi.ui.components.ds.ESPACIO_ANTES_DEL_TEXTO_DE_FILA
 import com.jvillada.movi.ui.components.ds.FondoDeBarra
 import com.jvillada.movi.ui.components.ds.Pildora
+import com.jvillada.movi.ui.components.ds.Superficie
 import com.jvillada.movi.ui.components.ds.TamanoDeBoton
 import com.jvillada.movi.ui.components.ds.TonoDeCifra
 import com.jvillada.movi.ui.components.ds.TonoDePildora
@@ -246,37 +247,39 @@ fun pastillaDelDebito(pago: PagoDelPeriodo): Pair<String, TonoDePildora>? {
 fun textoDeVerTodas(cuantas: Int): String = "Ver los $cuantas pagos del período"
 
 /**
- * **La tarjeta amarilla «Falta por pagar»** (vuelta 40): el fondo de la marca con la tinta encima, la
- * cifra héroe de la pantalla, «de $X · quedan N de M pagos», la barra en tinta sobre el amarillo
- * suave y «Llevas $X pagados». Es la única cifra héroe de Pagos (`UnaSolaCifraHeroePorPantallaTest`):
- * el Disponible, más abajo, va en la de tarjeta.
+ * **La tarjeta «Falta por pagar»** (vuelta 40): la cifra héroe de la pantalla, «de $X · quedan N de M
+ * pagos», la barra en tinta y «Llevas $X pagados». Es la única cifra héroe de Pagos
+ * (`UnaSolaCifraHeroePorPantallaTest`): el Disponible, más abajo, va en la de tarjeta.
+ *
+ * **Vuelta 79 · el amarillo deja de ser superficie**: era el fondo de la marca con la tinta encima. Ahora
+ * es una [Superficie] blanca destacada (con la sombra del héroe de Inicio) y la barra en tinta sobre la
+ * capa 3 ([FondoDeBarra.Destacada]). El amarillo de Pagos es la acción de la factura más urgente.
  */
 @Composable
 internal fun TarjetaFaltaPorPagar(resumen: ResumenDeFacturas, modifier: Modifier = Modifier) {
-    Column(
+    Superficie(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(Radio.xl))
-            .background(Movi.colores.marca)
-            .testTag(TAG_TARJETA_FALTA_POR_PAGAR)
-            .padding(Medida.rellenoDeSuperficie),
-        verticalArrangement = Arrangement.spacedBy(Espacio.xs),
+            .testTag(TAG_TARJETA_FALTA_POR_PAGAR),
+        destacada = true,
     ) {
-        Column {
-            Text(TITULO_FALTA_POR_PAGAR, style = Movi.textos.cuerpo, color = Movi.colores.sobreMarcaMedio)
-            Cifra(resumen.falta, VarianteDeCifra.Heroe, tono = TonoDeCifra.Neutro)
-            Text(lineaDeLoQueQueda(resumen), style = Movi.textos.cuerpoRegular, color = Movi.colores.sobreMarcaMedio)
-            // Vuelta 63: el abono planeado no es parte de lo que falta: se dice aparte.
-            if (resumen.abonos > 0L) {
-                Text(lineaDelAbonoPlaneado(resumen.abonos), style = Movi.textos.apoyo, color = Movi.colores.sobreMarcaMedio)
+        Column(verticalArrangement = Arrangement.spacedBy(Espacio.xs)) {
+            Column {
+                Text(TITULO_FALTA_POR_PAGAR, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
+                Cifra(resumen.falta, VarianteDeCifra.Heroe, tono = TonoDeCifra.Neutro)
+                Text(lineaDeLoQueQueda(resumen), style = Movi.textos.cuerpoRegular, color = Movi.colores.textoMedio)
+                // Vuelta 63: el abono planeado no es parte de lo que falta: se dice aparte.
+                if (resumen.abonos > 0L) {
+                    Text(lineaDelAbonoPlaneado(resumen.abonos), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                }
             }
+            BarraDeProgreso(
+                resumen.fraccionPagada,
+                modifier = Modifier.semantics { contentDescription = "${lineaDeLoPagado(resumen)} de ${formatCOP(resumen.total)}" },
+                fondo = FondoDeBarra.Destacada,
+            )
+            Text(lineaDeLoPagado(resumen), style = Movi.textos.apoyoMedio, color = Movi.colores.textoMedio)
         }
-        BarraDeProgreso(
-            resumen.fraccionPagada,
-            modifier = Modifier.semantics { contentDescription = "${lineaDeLoPagado(resumen)} de ${formatCOP(resumen.total)}" },
-            fondo = FondoDeBarra.SobreLaMarca,
-        )
-        Text(lineaDeLoPagado(resumen), style = Movi.textos.apoyoMedio, color = Movi.colores.sobreMarcaMedio)
     }
 }
 

@@ -30,7 +30,8 @@ class ElAmarilloEsDeLaAccionTest {
     /** Los únicos archivos de `ui/` (fuera de `ds/`) que pueden pintar un ícono en el círculo amarillo. */
     private val PROPUESTAS = setOf(
         "transactions/TarjetaDeAvisosDelBanco.kt",
-        "sdui/SeccionesDelInicio.kt",
+        // Vuelta 79 · un solo amarillo por vista: «Movi propone hoy» en Inicio ya no va en el círculo
+        // amarillo (el de la vista es «Anotar gasto»): tinte si urge, capa 3 si no.
     )
 
     private val ui by lazy { LecturaDelCodigo.archivos(LecturaDelCodigo.UI, LecturaDelCodigo.DS) }
@@ -70,9 +71,25 @@ class ElAmarilloEsDeLaAccionTest {
     }
 
     @Test
-    fun `las dos excepciones siguen siendo amarillas, y son solo dos`() {
+    fun `las excepciones siguen siendo amarillas, y son solo esas`() {
         val conMarca = ui.filterValues { Regex("""TonoDeIcono\.Marca\b""").containsMatchIn(it) }.keys.map(::nombre).toSet()
         assertEquals(PROPUESTAS, conMarca, "las únicas que pintan el círculo amarillo lleno fuera de ds/")
+    }
+
+    /**
+     * Vuelta 79: **el amarillo no es superficie.** «Falta por pagar» de Pagos era una tarjeta con el fondo de
+     * la marca; ahora es una superficie blanca destacada. Ninguna tarjeta de `recurrentes/` ni de `plan/`
+     * vuelve a pintarse de `colores.marca`, y el avatar del banco no lleva su color.
+     */
+    @Test
+    fun `el amarillo no es superficie ni identidad`() {
+        val dondeSuperficie = LecturaDelCodigo.dondeAparece(
+            ui.filterKeys { "/ui/recurrentes/" in it || "/ui/plan/" in it },
+            Regex("""background\(\s*Movi\.colores\.marca\s*\)"""),
+        )
+        assertTrue(dondeSuperficie.isEmpty(), "Una tarjeta pintada de amarillo lleno:\n" + dondeSuperficie.joinToString("\n"))
+        val tarjeta = ds.entries.single { it.key.endsWith("/TarjetaDeCuenta.kt") }.value
+        assertTrue("Color(marca.fondo)" !in tarjeta, "el avatar del banco va en la capa 3, no en el color del banco")
     }
 
     @Test

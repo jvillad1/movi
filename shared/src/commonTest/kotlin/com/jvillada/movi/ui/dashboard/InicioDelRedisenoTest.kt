@@ -163,7 +163,7 @@ class InicioDelRedisenoTest {
         assertEquals(
             listOf(
                 "Anotar gasto", "Anotar ingreso", "Traspasar", "Pagar tarjeta",
-                "Repartir", "Subir comprobante", "Revisar avisos", "Preguntar a Movi",
+                "Repartir", "Comprobante", "Revisar avisos", "Preguntar",
             ),
             accionesDelInicio().map { it.rotulo },
         )
