@@ -247,4 +247,24 @@ data class OccurrenceState(
      */
     val montoDelPago: Long? = null,
     val monedaDelPago: String? = null,
+    /**
+     * Vuelta 72 · **todo lo que se pagó a esta tarjeta en el período que la tilda**, en [monedaDelPago],
+     * o `null` (toda fila que no es el pago de una tarjeta, o un server viejo). [montoDelPago] es el
+     * ÚLTIMO pago, y así se queda: lo leen «Llevas $X pagados» y los fijos, y cambiarlo movería cifras
+     * de siempre. Esto lo lee solo `PagoDelPeriodo.faltaDelMinimo`, que necesita la suma: dos abonos de
+     * $50.000 son $100.000 contra el mínimo.
+     */
+    val pagadoEnElPeriodo: Long? = null,
+    /**
+     * Vuelta 72 · **la cuenta del movimiento que tilda esta fila**, o `null`. Con ella Pagos propone
+     * «¿Usar siempre Nu para Carro?» cuando la regla no tiene cuenta (nunca se guarda sola).
+     */
+    val cuentaDelPago: String? = null,
+    /**
+     * Vuelta 72 · **la regla, cuando está en pausa y esta ocurrencia ya está pagada.** Una regla pausada
+     * no viaja en `/api/payments/upcoming` desde que su vencimiento vigente cae en la pausa, pero lo ya
+     * pagado del período queda en la lista: el checklist arma esa fila con esta regla. `null` en todo lo
+     * demás (y en un server viejo).
+     */
+    val reglaPausada: RecurringRule? = null,
 )

@@ -87,13 +87,16 @@ fun clavePendienteDelPago(pago: PagoDelPeriodo): String = "pago:${pago.ruleId}"
  * La cifra que se dice de un pago: una tarjeta no tiene cuota, su «monto» es el saldo, así que va su
  * mínimo si se sabe (y si no, ninguna). La misma regla que ya usaban «Movi propone hoy» y el widget.
  */
-fun cifraDelPago(pago: PagoDelPeriodo): Long? = if (pago.montoEsSaldo) pago.pagoMinimo else pago.monto
+fun cifraDelPago(pago: PagoDelPeriodo): Long? =
+    // Vuelta 72: lo que le falta al mínimo, si ya hubo un pago por debajo.
+    pago.faltaDelMinimo ?: if (pago.montoEsSaldo) pago.pagoMinimo else pago.monto
 
 /**
  * Por cuánto se ordena un pago, en pesos. El mínimo de una tarjeta ya viene en pesos
  * (`pagoMinimoCop`); un monto en otra moneda no se compara con pesos y va al final de su grupo.
  */
 private fun montoParaOrdenar(pago: PagoDelPeriodo): Long? = when {
+    pago.faltaDelMinimo != null -> pago.faltaDelMinimo
     pago.montoEsSaldo -> pago.pagoMinimo
     pago.moneda == "COP" -> pago.monto
     else -> null
@@ -106,7 +109,8 @@ private fun montoParaOrdenar(pago: PagoDelPeriodo): Long? = when {
  */
 fun urgenciaDelPago(pago: PagoDelPeriodo, diasPorVencer: Int = DIAS_POR_VENCER_EN_LA_COLA): UrgenciaDelPendiente? = when {
     // Vuelta 63: un abono planeado no vence ni apura: es un recordatorio que vive en Pagos.
-    pago.pagado || pago.esIngreso || pago.esAbono -> null
+    // Vuelta 72: una tarjeta pagada por debajo de su mínimo sigue en la cola (no está hecha).
+    pago.hecho || pago.esIngreso || pago.esAbono -> null
     pago.diasParaVencer < 0 -> UrgenciaDelPendiente.VENCIDO
     pago.diasParaVencer == 0 -> UrgenciaDelPendiente.VENCE_HOY
     pago.diasParaVencer <= diasPorVencer -> UrgenciaDelPendiente.POR_VENCER

@@ -276,7 +276,8 @@ fun yaRecibidoEnElPeriodo(checklist: List<PagoDelPeriodo>): Long =
 fun avanceDelChecklist(checklist: List<PagoDelPeriodo>): Pair<Int, Int> {
     // Vuelta 63: un abono planeado tampoco es uno de los pagos del período (Hoy y Pagos cuentan igual).
     val pagos = checklist.filter { !it.esIngreso && !it.esAbono }
-    return pagos.count { it.pagado } to pagos.size
+    // Vuelta 72: una tarjeta pagada por debajo de su mínimo no cuenta como hecha («queda 1 de 5»).
+    return pagos.count { it.hecho } to pagos.size
 }
 
 /**

@@ -154,6 +154,8 @@ fun loQueSaleDe(filas: List<PagoDelPeriodo>): Long = filas.sumOf { fila -> (mont
 
 /** Lo que mueve esta fila, con signo, o `null` si no mueve nada (pagada, o no entra). */
 private fun montoDeLaFila(pago: PagoDelPeriodo): Long? {
+    // Vuelta 72: la tarjeta pagada por debajo de su mínimo sale por lo que le falta al mínimo.
+    pago.faltaDelMinimo?.let { return -it }
     if (pago.pagado || porQueNoEntra(pago) != null) return null
     // Vuelta 63: el abono planeado a una deuda no es una salida que la caja dé por hecha: es una
     // intención. El día que se hace, el traspaso baja Tu plata y la caja arranca de ahí.

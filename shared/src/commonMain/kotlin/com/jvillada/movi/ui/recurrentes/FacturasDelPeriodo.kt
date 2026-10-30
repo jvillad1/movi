@@ -173,13 +173,27 @@ internal fun nombreParaElIconoDeLaFactura(categoria: String, nombre: String): St
 fun enOrdenDeFacturas(pagos: List<PagoDelPeriodo>): List<PagoDelPeriodo> =
     pagos.sortedWith(
         compareBy<PagoDelPeriodo>(
-            { if (it.pagado) 2 else if (it.vencido) 0 else 1 },
+            // Vuelta 72: una tarjeta pagada por debajo de su mínimo va con lo pendiente.
+            { if (it.hecho) 2 else if (it.vencido) 0 else 1 },
             { it.diasParaVencer },
         ).thenByDescending { it.monto },
     )
 
 /** La factura cuyo «Anotar pago» va en amarillo: la primera sin pagar del orden. `null` sin ninguna. */
-fun laMasUrgente(ordenadas: List<PagoDelPeriodo>): PagoDelPeriodo? = ordenadas.firstOrNull { !it.pagado && !it.esAbono }
+fun laMasUrgente(ordenadas: List<PagoDelPeriodo>): PagoDelPeriodo? = ordenadas.firstOrNull { !it.hecho && !it.esAbono }
+
+/**
+ * Vuelta 72 · **la línea de una tarjeta pagada por debajo de su mínimo**: «Pagaste $100.000 · faltan
+ * $80.000 para el mínimo», o `null` si la fila no es eso ([PagoDelPeriodo.faltaDelMinimo]). Va en tono de
+ * aviso donde iría la pastilla de vencimiento. Pura.
+ */
+fun lineaDelMinimo(pago: PagoDelPeriodo): String? {
+    val falta = pago.faltaDelMinimo ?: return null
+    return "Pagaste ${formatCOP(pago.pagadoContraElMinimo)} · faltan ${formatCOP(falta)} para el mínimo"
+}
+
+/** El tag de esa línea. */
+const val TAG_FALTA_DEL_MINIMO: String = "pagos:falta-del-minimo"
 
 private val MESES_CORTOS = listOf("ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic")
 
@@ -297,7 +311,8 @@ internal fun FilaDeFactura(
      */
     extracto: ExtractoDeLaTarjeta? = null,
 ) {
-    if (pago.pagado) {
+    // Vuelta 72: solo lo HECHO es compacto; una tarjeta pagada por debajo de su mínimo sigue pendiente.
+    if (pago.hecho) {
         FilaDeFacturaPagada(
             pago = pago,
             enVuelo = enVuelo,
@@ -389,6 +404,14 @@ internal fun FilaDeFactura(
         ) {
             when {
                 enVuelo -> Text("Guardando…", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                // Vuelta 72: la tarjeta con un pago por debajo del mínimo dice cuánto falta, en aviso.
+                // Un texto y no una pastilla: la frase es larga y a 360 dp tiene que poder partirse.
+                lineaDelMinimo(pago) != null -> Text(
+                    lineaDelMinimo(pago)!!,
+                    style = Movi.textos.apoyoMedio,
+                    color = Movi.colores.aviso,
+                    modifier = Modifier.testTag(TAG_FALTA_DEL_MINIMO),
+                )
                 else -> {
                     val (texto, tono) = pastillaDeVencimiento(pago, conPropuesta)
                     Pildora(texto, tono)
