@@ -13,17 +13,15 @@ package com.jvillada.movi.shared.model
  * **cero** en la deuda total, y se nombra aparte ([deudasSinSaldoDe]) para que el dueño la cuadre. Una
  * tarjeta sobrepagada de verdad también suma cero, y eso es cierto: no se debe nada.
  *
- * ## Lo que NO cambia: [patrimonioDe]
+ * ## Y [patrimonioDe] (vuelta 59, vuelta 73 y vuelta 77)
  *
- * [patrimonioDe] suma cada deuda **con su signo** (`deudas = Σ valorEnPesosDe`), así que una deuda a
- * favor le resta a [Patrimonio.deudas] y le suma al [Patrimonio.neto]. Se deja así a propósito:
- *
- * - En una tarjeta sobrepagada es la verdad contable: el banco le debe esa plata al dueño, y el neto la
- *   tiene que contar.
- * - En un crédito sin saldo, cambiar la regla movería el neto en $980.000 y lo dejaría igual de lejos
- *   de la verdad: al vehículo le faltan sus ~$34M de deuda real, y eso solo lo arregla cuadrarlo. Mover
- *   el patrimonio neto del dueño para corregir un síntoma sería cambiar una cifra que él ya conoce sin
- *   hacerla más cierta.
+ * Las vueltas 59 y 73 dejaron [patrimonioDe] sumando cada deuda **con su signo**: en una tarjeta
+ * sobrepagada es la verdad contable (el banco le debe esa plata al dueño), y en un crédito sin saldo
+ * cambiar la regla «no lo hacía más cierto». **La vuelta 77 lo cambió solo para los préstamos**
+ * ([prestamoSinSaldo]): un `LOAN` en negativo cuenta cero en el patrimonio, mientras no tenga saldo.
+ * Contarlo con su signo le subía $980.000 al neto y a la curva, y Patrimonio decía «Deudas $603.000»
+ * al lado de «Créditos y tarjetas $1.583.000». Una tarjeta a favor sigue con su signo; un préstamo
+ * con saldo suma igual que siempre.
  *
  * Por eso lo que cambia es «Deuda total» (Créditos y el acceso del Inicio, con [deudaTotalDe]) y la
  * presentación: la deuda sin saldo se dice como tal, nunca como una cifra con el signo al revés.
@@ -57,12 +55,9 @@ fun deudasSinSaldoDe(cuentas: List<Account>): List<Account> =
  * Cómo se llega ahí: la deuda de un préstamo sale de sus movimientos (positiva = lo que se debe). Las
  * condiciones (`PUT /api/credits/{id}`) no escriben ningún movimiento, así que un crédito cargado con
  * sus condiciones y sin el desembolso ni un ajuste queda en $0; la primera cuota le resta su capital y
- * queda en negativo —la demo: Vehículo 4083, capital $40M, deuda −$980.000—. [patrimonioDe] suma cada
- * deuda con su signo, así que ese −$980.000 sube el neto: es el síntoma, y la causa es el saldo que
- * falta. **[patrimonioDe] no cambia** (ver el KDoc de arriba y el reporte de la vuelta 73): quitarle el
- * signo movería cifras que hoy ve el dueño —p. ej. la curva del patrimonio en los meses antes de un
- * ajuste de saldo— sin hacerlas más ciertas. Lo que cambia es que se dice: «Falta el saldo de este
- * crédito · Cargarlo», con el ajuste de saldo de siempre. Pura.
+ * queda en negativo —la demo: Vehículo 4083, capital $40M, deuda −$980.000—. Desde la vuelta 77 ese
+ * negativo cuenta cero en [patrimonioDe] ([prestamoSinSaldo]); la vuelta 73 hizo que se diga: «Falta el
+ * saldo de este crédito · Cargarlo», con el ajuste de saldo de siempre. Pura.
  */
 fun creditoSinSaldo(credito: CreditSummary): Boolean {
     val cuenta = credito.account

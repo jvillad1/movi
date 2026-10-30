@@ -36,14 +36,16 @@ class LosCreditosDicenLaVerdadTest {
     }
 
     /**
-     * **La decisión sobre [patrimonioDe]**: sigue sumando cada deuda con su signo. Una tarjeta
-     * sobrepagada es plata a favor, y el neto la cuenta; la deuda total de Créditos no la resta.
+     * **La decisión sobre [patrimonioDe]** (vuelta 59, cambiada en la vuelta 77): una tarjeta
+     * sobrepagada sigue sumando con su signo —es plata a favor—, pero un préstamo sin saldo cuenta
+     * cero. Antes esta prueba fijaba «Deudas $603.000»; ahora dice lo mismo que la deuda total.
      */
     @Test
-    fun `el patrimonio sigue contando la deuda con su signo`() {
+    fun `el patrimonio cuenta cero un prestamo sin saldo`() {
         val p = patrimonioDe(listOf(nu, vehiculo, ahorros))
-        assertEquals(603_000L, p.deudas)
-        assertEquals(5_000_000L - 603_000L, p.neto)
+        assertEquals(1_583_000L, p.deudas)
+        assertEquals(deudaTotalDe(listOf(nu, vehiculo, ahorros)), p.deudas)
+        assertEquals(5_000_000L - 1_583_000L, p.neto)
     }
 
     // ── 2. Un solo interés del mes ───────────────────────────────────────────

@@ -38,11 +38,11 @@ class LaCurvaSeparaLosAjustesTest {
     @Test
     fun `la nota dice cuanto son ajustes y que son`() {
         assertEquals(
-            "Los ajustes suman −\$35,5M: deudas y saldos que ya tenías y anotaste después. Sin ellos, subió \$900.000.",
+            "Sin contar \$35,5M de ajustes de saldo: deudas y saldos que ya tenías y anotaste después.",
             notaDeLosAjustes(puntos),
         )
-        // La leyenda de siempre no cambia: la cifra es el neto.
-        assertEquals("Desde ago 2026, bajó \$34,6M", leyendaDeLaCurva(puntos))
+        // Vuelta 77: la leyenda abre con el cambio sin ajustes, con un solo verbo; la nota no lleva verbo.
+        assertEquals("Desde ago 2026, subió \$900.000", leyendaDeLaCurva(puntos))
     }
 
     @Test
@@ -68,11 +68,11 @@ class LaCurvaSeparaLosAjustesTest {
         // Movimientos desde agosto de 2025: la curva arranca en ago 2026, pero el dueño no empezó ahí.
         val conHistoria = HistoriaDelPatrimonio(puntos = puntos, primerMovimiento = "2025-08-14")
         assertFalse(arrancaConElDueno(conHistoria, puntos))
-        assertEquals("Desde ago 2026, bajó \$34,6M", leyendaDeLaCurva(puntos, arrancaConElDueno(conHistoria, puntos)))
+        assertEquals("Desde ago 2026, subió \$900.000", leyendaDeLaCurva(puntos, arrancaConElDueno(conHistoria, puntos)))
 
         val desdeAgosto = HistoriaDelPatrimonio(puntos = puntos, primerMovimiento = "2026-08-03")
         assertTrue(arrancaConElDueno(desdeAgosto, puntos))
-        assertEquals("Desde que usas Movi (ago 2026), bajó \$34,6M", leyendaDeLaCurva(puntos, true))
+        assertEquals("Desde que usas Movi (ago 2026), subió \$900.000", leyendaDeLaCurva(puntos, true))
 
         assertFalse(arrancaConElDueno(HistoriaDelPatrimonio(puntos = puntos), puntos), "sin el dato no se afirma")
     }

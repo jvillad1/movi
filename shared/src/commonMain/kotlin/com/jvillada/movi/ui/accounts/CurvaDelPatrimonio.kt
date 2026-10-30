@@ -102,17 +102,18 @@ private fun haciaDonde(cambio: Long): String = when {
 }
 
 /**
- * **La nota de los ajustes** (vuelta 60), o `null` si no hubo. Registrar una deuda que ya existía con
- * «Ajustar saldo» hacía decir «Desde ago 2026, bajó $34,6M» sin que se hubiera gastado nada. La cifra
- * no cambia —es el neto de siempre—; la nota dice cuánto de ese cambio son correcciones y cuánto queda
- * sin ellas (una resta, ninguna cifra inventada): «Los ajustes suman −$35,5M: deudas y saldos que ya
- * tenías y anotaste después. Sin ellos, subió $900.000.»
+ * **La nota de los ajustes** (vuelta 60; vuelta 77), o `null` si no hubo. Registrar una deuda que ya
+ * existía con «Ajustar saldo» hacía decir «Desde ago 2026, bajó $34,6M» sin que se hubiera gastado nada.
+ *
+ * Vuelta 77: la leyenda ya abre con el cambio **sin** los ajustes ([leyendaDeLaCurva]), así que la nota
+ * no lleva verbo —antes decía «bajó $17,7M» arriba y «Sin ellos, subió $837.900» debajo, dos verbos que
+ * se contradecían—: solo cuánto se dejó afuera y qué es. «Sin contar $35,5M de ajustes de saldo: deudas y
+ * saldos que ya tenías y anotaste después.» Una resta, ninguna cifra inventada.
  */
 internal fun notaDeLosAjustes(puntos: List<PuntoDelPatrimonio>): String? {
     val cambio = cambioDelPatrimonio(puntos) ?: return null
     if (cambio.porAjustes == 0L) return null
-    return "Los ajustes suman ${conSigno(cambio.porAjustes)}: $QUE_SON_LOS_AJUSTES. " +
-        "Sin ellos, ${haciaDonde(cambio.sinAjustes)}."
+    return "Sin contar ${formatMoneyCompact(kotlin.math.abs(cambio.porAjustes))} de ajustes de saldo: $QUE_SON_LOS_AJUSTES."
 }
 
 /** Qué es un ajuste, en las palabras del dueño. */
@@ -160,10 +161,15 @@ internal fun arrancaConElDueno(historia: HistoriaDelPatrimonio, puntos: List<Pun
 /**
  * Lo que dice sin nada elegido: de dónde a dónde. «Desde que usas Movi (ago 2026), subió $5M» si la
  * curva arranca con el dueño ([arrancaConElDueno]); si no, «Desde oct 2025, subió $5M».
+ *
+ * **Vuelta 77: la cifra es la del cambio sin ajustes** ([CambioDelPatrimonio.sinAjustes]): lo que de
+ * verdad se movió. Los ajustes de saldo los dice la nota de abajo ([notaDeLosAjustes]), sin verbo. Sin
+ * ajustes en el tramo es el cambio de siempre.
  */
 internal fun leyendaDeLaCurva(puntos: List<PuntoDelPatrimonio>, desdeQueUsasMovi: Boolean = false): String {
     val primero = puntos.first()
-    val hacia = haciaDonde(puntos.last().neto - primero.neto)
+    val cambio = cambioDelPatrimonio(puntos)
+    val hacia = haciaDonde(cambio?.sinAjustes ?: (puntos.last().neto - primero.neto))
     val desde = if (desdeQueUsasMovi) "Desde que usas Movi (${nombreDelPunto(primero)})" else "Desde ${nombreDelPunto(primero)}"
     return "$desde, $hacia"
 }
