@@ -119,6 +119,12 @@ sealed class Screen {
          * `AbonoDeLaRegla`. `null` = Agregar de siempre.
          */
         val presetAbono: com.jvillada.movi.ui.quickadd.AbonoDeLaRegla? = null,
+        /**
+         * Vuelta 77 · **el abono a un crédito va por «Pagar», en modo abono**: con [presetDeudaId] en un
+         * préstamo, la pestaña Pagar arranca como «Abono extra a …» con «Registrar abono» (el traspaso
+         * de siempre). Lo ponen «Anotar este abono» del simulador y del plan de salida.
+         */
+        val presetAbonoExtra: Boolean = false,
     ) : Screen()
     /**
      * Movi AI, opcionalmente **con una pregunta ya lista**.

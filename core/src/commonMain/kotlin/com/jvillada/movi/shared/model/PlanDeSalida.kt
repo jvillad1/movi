@@ -290,3 +290,32 @@ private fun simular(deudas: List<DeudaParaSalir>, abonoMensual: Long): List<Reco
     }
     return recorridos
 }
+
+/**
+ * **Vuelta 77 · cuánto cuesta elegir un orden.** «Cómo salir de tus deudas» decía qué hace cada orden,
+ * pero no cuánto se gana con uno u otro, ni que con algunas deudas dan igual.
+ *
+ * @property interesAvalancha / [interesBolaDeNieve] el interés que falta pagar con el abono, en cada
+ *   orden ([SalidaDeUnaDeuda.interesConAbono] de todas las deudas del cálculo).
+ */
+data class ComparacionDeEstrategias(val interesAvalancha: Long, val interesBolaDeNieve: Long) {
+    /** Lo que avalancha ahorra de más que bola de nieve; negativo si ahorra menos, 0 si dan igual. */
+    val loQueAhorraAvalancha: Long get() = interesBolaDeNieve - interesAvalancha
+}
+
+/**
+ * Los dos órdenes con el mismo [abonoMensual], sobre las mismas [deudas] y la misma simulación de
+ * [planDeSalida]. `null` sin abono (sin abono el orden no cambia nada), sin deudas en el cálculo, o si
+ * alguna no se termina ni con el abono en algún orden (su interés no tiene fin). Pura.
+ */
+fun compararEstrategias(deudas: List<DeudaParaSalir>, abonoMensual: Long): ComparacionDeEstrategias? {
+    if (abonoMensual <= 0L) return null
+    fun interes(estrategia: EstrategiaDeSalida): Long? {
+        val plan = planDeSalida(deudas, abonoMensual, estrategia)
+        if (plan.enElCalculo.isEmpty() || plan.enElCalculo.any { it.interesConAbono == null }) return null
+        return plan.enElCalculo.sumOf { it.interesConAbono!! }
+    }
+    val avalancha = interes(EstrategiaDeSalida.AVALANCHA) ?: return null
+    val bola = interes(EstrategiaDeSalida.BOLA_DE_NIEVE) ?: return null
+    return ComparacionDeEstrategias(interesAvalancha = avalancha, interesBolaDeNieve = bola)
+}

@@ -11,6 +11,7 @@ import com.jvillada.movi.server.plugins.configureSerialization
 import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.server.time.appDateToEpochMillis
 import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.ADJUSTMENT_CATEGORY
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.Bien
 import com.jvillada.movi.shared.model.HistoriaDelPatrimonio
@@ -138,6 +139,51 @@ class HistoriaDelPatrimonioTest {
         anotar(duenoId, "pago-tarjeta-sep", "tarjeta", "INCOME", 800_000L, LocalDate.of(2026, 9, 5))
         anotar(duenoId, "pago-desde-ahorros-sep", "ahorros", "EXPENSE", 800_000L, LocalDate.of(2026, 9, 5))
         anotar(duenoId, "sueldo-oct", "ahorros", "INCOME", 5_000_000L, LocalDate.of(2026, 10, 10))
+    }
+
+    /**
+     * **Vuelta 77 · un préstamo sin saldo no entra a la curva.** El vehículo (sin deuda cargada, una cuota
+     * de $980.000 lo deja en −$980.000) cuenta cero en cada punto: el neto no sube por él y el cambio sin
+     * ajustes es la plata que de verdad salió. Un préstamo sano (cargado con un ajuste de $20M y que, sin
+     * ese ajuste, queda en −$500.000 por su cuota) deja los ajustes exactamente como antes: −$20M.
+     */
+    @Test
+    fun `un prestamo sin saldo cuenta cero en cada punto y uno sano deja los ajustes como antes`() {
+        cuenta(duenoId, "ahorros", AccountType.SAVINGS)
+        cuenta(duenoId, "libre", AccountType.LOAN)
+        cuenta(duenoId, "vehiculo", AccountType.LOAN)
+        anotar(duenoId, "sueldo-jul", "ahorros", "INCOME", 5_000_000L, LocalDate.of(2026, 7, 10))
+        anotar(duenoId, "deuda-libre", "libre", "EXPENSE", 20_000_000L, LocalDate.of(2026, 8, 1), categoria = ADJUSTMENT_CATEGORY)
+        anotar(duenoId, "cuota-libre", "libre", "INCOME", 500_000L, LocalDate.of(2026, 9, 15))
+        anotar(duenoId, "cuota-libre-plata", "ahorros", "EXPENSE", 500_000L, LocalDate.of(2026, 9, 15))
+        anotar(duenoId, "cuota-veh", "vehiculo", "INCOME", 980_000L, LocalDate.of(2026, 9, 5))
+        anotar(duenoId, "cuota-veh-plata", "ahorros", "EXPENSE", 980_000L, LocalDate.of(2026, 9, 5))
+
+        val puntos = historia(duenoId).puntos
+        val porMes = puntos.filterNot { it.esHoy }.associateBy { it.mes }
+        assertEquals(5_000_000L, porMes.getValue("2026-07").neto)
+        assertEquals(5_000_000L - 20_000_000L, porMes.getValue("2026-08").neto)
+        assertEquals(-20_000_000L, porMes.getValue("2026-08").ajustes)
+        // Septiembre: ahorros $3.520.000, libre $19.500.000, el vehículo en −$980.000 cuenta cero.
+        assertEquals(3_520_000L - 19_500_000L, porMes.getValue("2026-09").neto)
+        // Los ajustes del préstamo sano, como antes de la vuelta 77: sin el ajuste, el libre queda en
+        // −$500.000 y resta con su signo (no es un préstamo sin saldo en ese cierre).
+        assertEquals(-20_000_000L, porMes.getValue("2026-09").ajustes)
+        assertEquals(3_520_000L - 19_500_000L, puntos.last().neto)
+
+        // El cambio sin ajustes no sube por el vehículo: es lo que salió de la plata por su cuota.
+        val cambio = cambioDelPatrimonio(puntos)!!
+        assertEquals(-20_000_000L, cambio.porAjustes)
+        assertEquals(-980_000L, cambio.sinAjustes)
+        // Y el último punto es el patrimonio de hoy, con la misma regla.
+        val hoyComoLoVePatrimonio = patrimonioDe(
+            listOf(
+                acc("ahorros", AccountType.SAVINGS, 3_520_000L),
+                acc("libre", AccountType.LOAN, 19_500_000L),
+                acc("vehiculo", AccountType.LOAN, -980_000L),
+            ),
+        ).neto
+        assertEquals(hoyComoLoVePatrimonio, puntos.last().neto)
     }
 
     @Test

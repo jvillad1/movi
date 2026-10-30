@@ -249,7 +249,43 @@ data class CreditTerms(
     val interesReal: Long? = null,
     /** La cuota (`"2026-10"`, la de [cuotaMasCercana] a su vencimiento) en que vale [interesReal]. */
     val interesRealCuota: String? = null,
+    /**
+     * **Vuelta 77 · desde cuándo corren las cuotas, si no es desde el desembolso.** ISO, el arranque de
+     * un período del dueño (`"2026-11-01"`). `null` = desde el desembolso ([startDate]), como siempre.
+     *
+     * Lo escribe el alta de un crédito que ya venía (con la deuda de hoy, sin desembolso) cuando el
+     * dueño contesta «Sí» a «¿Ya pagaste la cuota de este período?»: la deuda que escribió ya tiene esa
+     * cuota descontada, así que la cuota de este período no existe —ni vencida en Inicio, ni en
+     * `/occurrences`, ni en `/upcoming`— y la primera es la del período siguiente. Antes, un crédito
+     * creado el 30-oct con pago el 15 decía al instante «Pago vencido · hace 15 días · $770.000».
+     *
+     * **Con qué significado de `activeFrom`**: el de una regla que arranca en un período
+     * (`arranqueEsDesembolso = false`, el piso es el primer día del período de esta fecha), no el del
+     * desembolso (el día siguiente). Ver `virtualRuleFor` y `RecurringRule.arranqueEsDesembolso`.
+     *
+     * Sin `@EncodeDefault`, como [interesReal]: la hoja de condiciones no lo manda, y un `PUT` sin la
+     * clave conserva el guardado.
+     */
+    val cuotasDesde: String? = null,
 )
+
+/**
+ * **Vuelta 77 · el piso de las cuotas de este crédito, como fecha**: [CreditTerms.cuotasDesde] si es
+ * posterior al desembolso; si no, `null` (manda el desembolso, como siempre). Una fecha ilegible, `null`.
+ */
+fun CreditTerms.arranqueDeLasCuotas(): kotlinx.datetime.LocalDate? =
+    cuotasDesdeVigente()?.let { kotlinx.datetime.LocalDate.parse(it) }
+
+/**
+ * [arranqueDeLasCuotas] como el ISO guardado (`"2026-11-01"`), para quien no usa `kotlinx.datetime` (el
+ * server). `null` si no hay, es ilegible o no es posterior al desembolso.
+ */
+fun CreditTerms.cuotasDesdeVigente(): String? {
+    val desde = cuotasDesde?.trim()?.takeIf { runCatching { kotlinx.datetime.LocalDate.parse(it) }.isSuccess } ?: return null
+    val desembolso = startDate.trim().takeIf { runCatching { kotlinx.datetime.LocalDate.parse(it) }.isSuccess }
+    // Dos ISO `AAAA-MM-DD` se comparan como texto.
+    return desde.takeIf { desembolso == null || it > desembolso }
+}
 
 /**
  * **El interés del extracto, si vale para la cuota [cuota]** (`"2026-10"`). `null` si no hay, o si es
@@ -429,6 +465,14 @@ data class CreateCreditRequest(
      * que pueda pedir deuda inicial **y** desembolso a la vez.
      */
     val disbursement: CreditDisbursement? = null,
+    /**
+     * **Vuelta 77 · «¿Ya pagaste la cuota de este período?»**, la pregunta del alta de un crédito que ya
+     * venía (con [initialDebt], sin [disbursement]). `true` = sí: el server escribe
+     * [CreditTerms.cuotasDesde] = el arranque del período siguiente del dueño, y la cuota de este
+     * período no existe. `false` (o un cliente viejo, que no lo manda) = como siempre. Con desembolso
+     * se ignora: la primera cuota de un crédito nuevo ya va después del desembolso.
+     */
+    val yaPagoLaCuotaDeEstePeriodo: Boolean = false,
 )
 
 /**

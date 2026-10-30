@@ -587,10 +587,10 @@ private fun DeudasSinSaldo(creditos: List<CreditSummary>, tarjetas: List<CardSum
         tarjetas = sinSaldo.count { it.type != com.jvillada.movi.shared.model.AccountType.LOAN },
     ) ?: return
     Spacer(Modifier.height(Espacio.xs))
-    // Topada al ancho de los renglones del resumen (vuelta 61): así «Cuadrar» y la cifra del interés
-    // del mes quedan alineadas al mismo borde derecho, también a 1.280.
+    // Vuelta 77: a lo ancho de la tarjeta, como los renglones del resumen: «Cuadrar» va al borde derecho,
+    // en la columna de las cifras (el lugar de la acción de una fila del sistema), también a 1.280.
     Row(
-        modifier = Modifier.widthIn(max = ANCHO_MAXIMO_DEL_RESUMEN_DE_DEUDA).fillMaxWidth().testTag(TAG_DEUDAS_SIN_SALDO),
+        modifier = Modifier.fillMaxWidth().testTag(TAG_DEUDAS_SIN_SALDO),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Espacio.s),
     ) {
@@ -622,15 +622,16 @@ const val TAG_TITULO_DEL_GRUPO_DEL_RESUMEN: String = "titulo-del-grupo-del-resum
  * `CifraConRotulo` del sistema, en renglón (la cifra con su letra, su signo y «Ocultar los saldos»).
  *
  * Vuelta 61: **sin sangría** —iba 8 dp corrida a la derecha de su grupo, el único renglón de la app
- * así— y **topada** a [ANCHO_MAXIMO_DEL_RESUMEN_DE_DEUDA], para que a 1.280 el rótulo y la cifra no
- * queden a lados opuestos de la tarjeta.
+ * así—. Vuelta 77: **a lo ancho de la tarjeta**, con la cifra al borde derecho como en toda fila del
+ * sistema. Topado a una columna (vuelta 61), a 1.280 las cifras terminaban a mitad de la tarjeta y
+ * «Cuadrar» flotaba en el centro.
  */
 @Composable
 private fun FilaDelResumen(alcance: String, monto: Long) {
     CifraConRotulo(
         alcance,
         monto,
-        Modifier.widthIn(max = ANCHO_MAXIMO_DEL_RESUMEN_DE_DEUDA),
+        Modifier.fillMaxWidth(),
         disposicion = DisposicionDeCifraConRotulo.EnRenglon,
     )
 }
@@ -640,7 +641,7 @@ private fun FilaDelResumen(alcance: String, monto: Long) {
 private fun FechaDelResumen(alcance: String, fecha: String) {
     RotuloConValor(
         alcance,
-        Modifier.widthIn(max = ANCHO_MAXIMO_DEL_RESUMEN_DE_DEUDA),
+        Modifier.fillMaxWidth(),
         disposicion = DisposicionDeCifraConRotulo.EnRenglon,
     ) { MontoDeFila(fecha) }
 }

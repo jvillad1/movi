@@ -98,6 +98,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
+import com.jvillada.movi.shared.model.mesDeLaPrimeraCuotaDelCredito
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.datetime.LocalDate
@@ -682,6 +683,12 @@ internal fun TransferBody(
      */
     presetDestinoId: String? = null,
     /**
+     * Vuelta 77 · **«Anotar este abono» abre Pagar en modo abono**: con [presetDestinoId] en un crédito,
+     * la hoja arranca como abono extra («Abono extra a …», «Registrar abono»: el traspaso de siempre que
+     * baja el capital) y no como la cuota. Vale para esa deuda: elegir otra vuelve a la cuota.
+     */
+    presetAbonoExtra: Boolean = false,
+    /**
      * Vuelta 47 · **el monto, como en Gasto**: los dígitos escritos (los guarda la hoja, que los
      * escribe con [onKey] desde el teclado en pantalla y el físico), en la moneda de la cuenta de
      * origen. Era un campo de texto chico.
@@ -1009,11 +1016,12 @@ internal fun TransferBody(
     // `abonoExtra` vale solo sobre un crédito: el enlace «Es un abono extra, no la cuota» lo prende y
     // la hoja pasa a guardar un TRASPASO puro (el de siempre: baja el capital, no salda la cuota del
     // período, no cuenta en el mes). Se apaga al cambiar de deuda: el abono es de ESE crédito.
-    var abonoExtra by remember { mutableStateOf(false) }
+    var abonoExtra by remember { mutableStateOf(presetAbonoExtra) }
     LaunchedEffect(toId) {
         interesEscrito = null
         interesTocado = false
-        abonoExtra = false
+        // Vuelta 77: el abono pedido desde la ficha vale para ESE crédito; cualquier otro, la cuota.
+        abonoExtra = presetAbonoExtra && toId != null && toId == presetDestinoId
     }
     val termsDelDestino = to?.let { terminosPorCuenta[it.id] }
     val esCredito = esPago && to?.type == AccountType.LOAN
@@ -1107,7 +1115,8 @@ internal fun TransferBody(
         val avisoDelGuardado: () -> Unit = {
             avisoAbajo?.mostrar(
                 com.jvillada.movi.ui.espacios.textoDeLoAnotado(
-                    if (esPago) "Pago a ${destino.name}" else "Traspaso", amount ?: 0L, origen.currency,
+                    // Vuelta 77 (revisión): un abono dice que es un abono, no un pago.
+                    queSeAnoto(esPago = esPago, esAbono = esAbono, destino = destino.name), amount ?: 0L, origen.currency,
                 ),
                 deshacer = if (abonoQueSalda != null) null else {
                     { Repositories.wallets.voidEvent(idsDelGuardado.fromEventId) }
@@ -1365,8 +1374,20 @@ internal fun TransferBody(
             val extractoDelDestino = to?.takeIf { it.type == AccountType.CREDIT_CARD }
                 ?.let { tarjetasPorCuenta[it.id]?.extracto }
                 ?.takeIf { !extractoPagado(it) }
+            // Vuelta 77 (revisión): un crédito cuya primera cuota es posterior al período de hoy (con «ya
+            // pagué la de este período», o recién desembolsado) salda esa primera cuota, no «octubre»:
+            // la misma regla que `periodoQueSalda` en el server.
+            val mesDeLaPrimera = to?.takeIf { it.type == AccountType.LOAN }
+                ?.let { terminosPorCuenta[it.id]?.mesDeLaPrimeraCuotaDelCredito() }
+                ?.takeIf { primera ->
+                    val deHoy = com.jvillada.movi.shared.model.periodoDe(Clock.System.now().toEpochMilliseconds(), ajustesDelPeriodo ?: com.jvillada.movi.shared.model.PeriodSettings())
+                    primera.prefijo > deHoy.prefijo
+                }
+                ?.let { com.jvillada.movi.shared.model.nombreDelMesDe(it) }
             val mes = extractoDelDestino?.let { mesDelPagoDeLaTarjeta(it) }
-                ?: presetMesDeLaCuota?.takeIf { it.isNotBlank() && to?.id == presetDestinoId } ?: mesDeHoy
+                ?: presetMesDeLaCuota?.takeIf { it.isNotBlank() && to?.id == presetDestinoId }
+                ?: mesDeLaPrimera
+                ?: mesDeHoy
             Text(
                 encabezadoDeLaCuota(to, abonoExtra, mes),
                 style = Movi.textos.cuerpoFuerte,
@@ -1903,4 +1924,11 @@ internal fun FilaDeCuentaDelTraspaso(
         modifier = modifier,
         densidad = DensidadDeFila.Compacta,
     )
+}
+
+/** Vuelta 77: lo que dice «Anotado · … · Deshacer» al guardar en Traspaso o Pagar. Pura. */
+internal fun queSeAnoto(esPago: Boolean, esAbono: Boolean, destino: String): String = when {
+    esAbono -> "Abono a $destino"
+    esPago -> "Pago a $destino"
+    else -> "Traspaso"
 }

@@ -119,6 +119,10 @@ fun SalidaDeDeudasScreen(onNavigate: (Screen) -> Unit) {
     val plan = remember(deudas, abono, estrategia) {
         deudas?.let { planDeSalida(it, abono ?: 0L, estrategiaDelIndice(estrategia)) }
     }
+    // Vuelta 77: cuánto cuesta elegir un orden, con el mismo abono y la misma simulación.
+    val comparacion = remember(deudas, abono) {
+        deudas?.let { com.jvillada.movi.shared.model.compararEstrategias(it, abono ?: 0L) }
+    }
     // Vuelta 59: el interés del mes de Créditos (créditos y tarjetas, `interesDelMes` de :core) y la
     // primera cuota sin pagar de cada deuda, de donde se cuentan sus fechas.
     val hoy = hoyEnAppZone()
@@ -161,6 +165,7 @@ fun SalidaDeDeudasScreen(onNavigate: (Screen) -> Unit) {
                         }
                         else -> ContenidoDelPlan(
                             plan = plan,
+                            comparacion = comparacion,
                             interes = interes,
                             periodoActual = periodoActual,
                             primeras = primeras,
@@ -213,6 +218,7 @@ fun SalidaDeDeudasScreen(onNavigate: (Screen) -> Unit) {
 @Composable
 private fun ContenidoDelPlan(
     plan: com.jvillada.movi.shared.model.PlanDeSalida,
+    comparacion: com.jvillada.movi.shared.model.ComparacionDeEstrategias?,
     interes: com.jvillada.movi.shared.model.InteresDelMes?,
     periodoActual: com.jvillada.movi.shared.model.PeriodoFinanciero,
     primeras: Map<String, com.jvillada.movi.shared.model.PeriodoFinanciero>,
@@ -312,6 +318,16 @@ private fun ContenidoDelPlan(
         Seccion(titulo = "En qué orden abonar")
         SelectorSegmentado(labels = ROTULOS_DE_LAS_ESTRATEGIAS, selected = estrategia, onSelect = onEstrategia)
         Spacer(Modifier.height(Movi.espacios.corto))
+        // Vuelta 77: cuánto cuesta elegir uno u otro, antes de qué hace cada uno.
+        textoDeLaComparacion(comparacion)?.let { compara ->
+            Text(
+                compara,
+                style = Movi.textos.apoyoMedio,
+                color = Movi.colores.texto,
+                modifier = Modifier.testTag(TAG_COMPARACION_DE_ESTRATEGIAS),
+            )
+            Spacer(Modifier.height(Movi.espacios.minimo))
+        }
         Text(explicacionDe(plan.estrategia), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
         Spacer(Modifier.height(Movi.espacios.medio))
         Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
@@ -403,12 +419,31 @@ private fun ContenidoDelPlan(
     }
 
     Spacer(Modifier.height(Medida.entreSecciones))
-    // La nota de abajo: los supuestos del cálculo y que no es asesoría (vuelta 42: los supuestos
-    // iban dentro del simulador).
+    // La nota de abajo: que no es asesoría. Vuelta 77: los supuestos del cálculo, detrás de «¿Qué
+    // supone?» (el resultado va primero; los supuestos, para quien los pida).
+    var verSupuestos by rememberSaveable { mutableStateOf(false) }
+    Boton(
+        texto = if (verSupuestos) OCULTAR_LOS_SUPUESTOS else QUE_SUPONE,
+        onClick = { verSupuestos = !verSupuestos },
+        variante = VarianteDeBoton.Fantasma,
+        tamano = TamanoDeBoton.S,
+        modifier = Modifier.testTag(TAG_QUE_SUPONE_EL_PLAN),
+    )
+    if (verSupuestos) {
+        Text(SUPUESTOS_DEL_PLAN_DE_SALIDA, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+        Spacer(Modifier.height(Espacio.xs))
+    }
     Text(
-        notaDelPlanDeSalida(),
+        PIE_DEL_PLAN_DE_SALIDA,
         style = Movi.textos.apoyo,
         color = Movi.colores.textoApagado,
         modifier = Modifier.testTag(TAG_NOTA_DEL_PLAN_DE_SALIDA),
     )
 }
+
+/** Vuelta 77: lo que abre los supuestos de un simulador, y lo que los cierra. */
+const val QUE_SUPONE: String = "¿Qué supone?"
+const val OCULTAR_LOS_SUPUESTOS: String = "Ocultar supuestos"
+
+/** El tag de «¿Qué supone?» del plan de salida (vuelta 77). */
+const val TAG_QUE_SUPONE_EL_PLAN: String = "salida:que-supone"

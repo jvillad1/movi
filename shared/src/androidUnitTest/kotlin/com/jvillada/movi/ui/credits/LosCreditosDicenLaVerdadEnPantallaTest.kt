@@ -90,8 +90,9 @@ class LosCreditosDicenLaVerdadEnPantallaTest {
         assertEquals(0, cuantos(FALTA_EL_SALDO_DE_LA_DEUDA), "sin la frase de las tarjetas")
         assertFalse(hay("+\$980.000"), "el «+$980.000» en verde de antes")
         assertFalse(hay("−\$980.000"))
-        // «Cargarlo» abre la hoja de ajustar el saldo de su ficha, que tampoco dice la cifra al revés.
-        composeRule.onNode(hasText(com.jvillada.movi.ui.credits.CARGAR_EL_SALDO_DEL_CREDITO) and hasClickAction())
+        // «Cargarlo» —o, con sus condiciones completas, «Usar este» (vuelta 77: una sola acción de saldo)—
+        // abre la hoja de ajustar el saldo de su ficha, que tampoco dice la cifra al revés.
+        composeRule.onNode(hasText(com.jvillada.movi.ui.credits.USAR_EL_SALDO_DEL_PLAN) and hasClickAction())
             .performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitUntil(5_000) { hay("Deuda en Movi") }
         assertFalse(hay("−\$980.000"), "la hoja decía «Deuda en Movi −$980.000»")
@@ -141,10 +142,13 @@ class LosCreditosDicenLaVerdadEnPantallaTest {
         composeRule.waitUntil(5_000) { hay("Falta el saldo de Vehículo 4083") }
         composeRule.onAllNodesWithTag(com.jvillada.movi.ui.accounts.TAG_DEUDAS_SIN_SALDO_EN_EL_PATRIMONIO, useUnmergedTree = true)
             .fetchSemanticsNodes().single()
-        composeRule.onNode(hasText(com.jvillada.movi.ui.credits.CARGAR_EL_SALDO_DEL_CREDITO) and hasClickAction())
+        // Vuelta 77: con sus condiciones completas la fila ofrece «Usar este», que abre la hoja del saldo ya
+        // llena con la cifra del plan (sin «Cargarlo» al lado).
+        assertFalse(hay(com.jvillada.movi.ui.credits.CARGAR_EL_SALDO_DEL_CREDITO))
+        composeRule.onNode(hasText(com.jvillada.movi.ui.credits.USAR_EL_SALDO_DEL_PLAN) and hasClickAction())
             .performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
-        assertEquals(Screen.CuadrarLaCuenta("acc_4083"), destinos.last())
+        assertTrue(hay(com.jvillada.movi.ui.credits.ES_LA_CIFRA_DE_TU_PLAN), "la hoja llega con la cifra del plan")
     }
 
     @Test

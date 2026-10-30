@@ -6,6 +6,7 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
 import com.jvillada.movi.ConClaseDeAncho
 import com.jvillada.movi.EsqueletoDeLaCascara
 import com.jvillada.movi.data.Repositories
@@ -31,12 +32,12 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * # El héroe de Créditos sin sangrías, y con el rótulo junto a su cifra (vuelta 61)
+ * # El héroe de Créditos sin sangrías, con las cifras al borde derecho (vuelta 61, vuelta 77)
  *
- * La revisión a 1.280: «Los pagas tú» y «Contando todas tus deudas» iban corridos 8 dp a la derecha de
- * su grupo, y el rótulo y la cifra quedaban a ~900 px uno del otro (la tarjeta de «Deuda total» va a lo
- * ancho del tablero). Ahora cada renglón arranca donde arranca su grupo y mide a lo sumo
- * [ANCHO_MAXIMO_DEL_RESUMEN_DE_DEUDA]. Solo la forma: las cifras son de la vuelta 59.
+ * La revisión a 1.280 de la vuelta 61: «Los pagas tú» y «Contando todas tus deudas» iban corridos 8 dp a
+ * la derecha de su grupo. Ahora cada renglón arranca donde arranca su grupo. Vuelta 77: los renglones
+ * —y «Cuadrar»— van a lo ancho de la tarjeta, con la cifra al borde derecho; topados a una columna, a
+ * 1.280 las cifras terminaban a mitad de la tarjeta y «Cuadrar» flotaba en el centro. Solo la forma.
  *
  * Montado en la cáscara de verdad con la letra ×1,12; `sdk = [34]` y `NATIVE` para el texto real.
  */
@@ -56,6 +57,9 @@ class ElHeroeDeCreditosVaJuntoTest {
         paidPct = 0.5,
     )
 
+    /** Un préstamo sin saldo, para que «1 crédito sin saldo · Cuadrar» aparezca (vuelta 77). */
+    private val sinSaldo = prestamo("acc_3", "Crédito sin saldo").let { it.copy(account = it.account.copy(balance = -980_000L)) }
+
     private val tarjeta = CardSummary(
         account = Account("acc_mb", "Master Black", AccountType.CREDIT_CARD, balance = 3_200_000L),
         terms = null,
@@ -63,7 +67,8 @@ class ElHeroeDeCreditosVaJuntoTest {
 
     private fun montar() {
         Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
-            override suspend fun getCredits(): List<CreditSummary> = listOf(prestamo("acc_1", "Vehículo 4083"), prestamo("acc_2", "Libranza 7788"))
+            override suspend fun getCredits(): List<CreditSummary> =
+                listOf(prestamo("acc_1", "Vehículo 4083"), prestamo("acc_2", "Libranza 7788"), sinSaldo)
             override suspend fun getCards(): List<CardSummary> = listOf(tarjeta)
             override suspend fun getUserProfile(): UserProfile =
                 UserProfile(id = "u1", email = "u@local", name = "U", avatarColor = "#000000", periodCutoffDay = 25)
@@ -100,13 +105,18 @@ class ElHeroeDeCreditosVaJuntoTest {
         ).fetchSemanticsNodes().map { it.boundsInRoot }
         assertTrue(renglones.size >= 2, "no encontré los renglones del resumen: $renglones")
         val izquierda = titulos.first().left
+        val derecha = renglones.maxOf { it.right }
         renglones.forEach { r ->
             assertEquals(izquierda, r.left, 0.5f, "el renglón va sin sangría, donde arranca su grupo: $r / $izquierda")
-            assertTrue(
-                r.width <= ANCHO_MAXIMO_DEL_RESUMEN_DE_DEUDA.value + 0.5f,
-                "el rótulo y su cifra quedan juntos: el renglón mide ${r.width} dp",
-            )
+            assertEquals(derecha, r.right, 0.5f, "todas las cifras terminan en el mismo borde: $r / $derecha")
         }
+        // El borde derecho es el de la tarjeta (menos su relleno), no la mitad de la tarjeta.
+        val tarjeta = composeRule.onNodeWithTag(TAG_TARJETA_DEL_RESUMEN_DE_DEUDA, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val relleno = izquierda - tarjeta.left
+        assertEquals(tarjeta.right - relleno, derecha, 0.5f, "las cifras van al borde derecho de la tarjeta")
+        // «Cuadrar» va en la columna de las cifras.
+        val cuadrar = composeRule.onNodeWithTag(TAG_DEUDAS_SIN_SALDO, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertEquals(derecha, cuadrar.right, 0.5f, "«Cuadrar» termina donde terminan las cifras")
     }
 
     @Test
