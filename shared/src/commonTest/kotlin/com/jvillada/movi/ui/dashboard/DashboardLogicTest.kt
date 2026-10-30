@@ -836,7 +836,8 @@ class DashboardLogicTest {
     @Test
     fun `el checklist y el gasto por categoria aparecen solo cuando hay algo`() {
         val conCosas = DashboardData(
-            upcoming = listOf(upcoming("r1", "Arriendo", 1_000, daysUntil = 2)),
+            // Vuelta 73: dos pagos; con uno solo, ese ya está en «Próximo pago» y el widget no se pinta.
+            upcoming = listOf(upcoming("r1", "Arriendo", 1_000, daysUntil = 2), upcoming("r2", "Internet", 500, daysUntil = 2)),
             cardCandidates = 1,
             spentByCategory = mapOf("Vivienda" to 1_000L),
             // El período del vencimiento que arma `upcoming(...)`: «2026-08-22».
