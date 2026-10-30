@@ -5,6 +5,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.swipeDown
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.onRoot
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.shared.model.Account
@@ -59,6 +63,9 @@ class ElInicioNoRepitePeticionesTest {
     private val pedidos = ConcurrentHashMap<String, AtomicInteger>()
     private val json = Json { encodeDefaults = true }
 
+    /** Los avisos que el server dice que esperan: un aviso que sube el worker lo cambia por fuera. */
+    @Volatile private var avisosEnElServer = 6
+
     private fun respuestaDe(ruta: String): String? = when (ruta) {
         "/api/users/me" -> json.encodeToString(UserProfile.serializer(), UserProfile(id = "u1", email = "juan@ejemplo.com", name = "Juan", avatarColor = "#1D4E9E"))
         "/api/accounts" -> json.encodeToString(
@@ -66,7 +73,7 @@ class ElInicioNoRepitePeticionesTest {
             listOf(Account("a1", "Nu", AccountType.SAVINGS, 1_200_000)),
         )
         "/api/finance-summary" -> json.encodeToString(FinanceSummary.serializer(), FinanceSummary(Scope.SELF, balance = 1_200_000, ingresos = 3_000_000, egresos = 1_800_000))
-        "/api/dashboard/summary" -> json.encodeToString(DashboardSummary.serializer(), DashboardSummary())
+        "/api/dashboard/summary" -> json.encodeToString(DashboardSummary.serializer(), DashboardSummary(pendingSms = avisosEnElServer))
         "/api/caja-proyectada/gasto-del-dia-a-dia" -> json.encodeToString(GastoDelDiaADia.serializer(), GastoDelDiaADia(porDia = 40_000))
         "/api/subscriptions" -> json.encodeToString(SubscriptionsResult.serializer(), SubscriptionsResult(subscriptions = emptyList(), monthlyTotalCop = 0))
         // 304: «la definición que tienes sigue vigente» (el Inicio usa la de siempre).
@@ -132,9 +139,7 @@ class ElInicioNoRepitePeticionesTest {
         val alAbrir = total()
 
         // Ir a otra pestaña y volver: el Inicio sale de la composición y entra de nuevo.
-        enElInicio = false
-        composeRule.waitForIdle()
-        enElInicio = true
+        salirYVolver(cambiar = { enElInicio = it })
         esperarQueSeQuede()
 
         assertEquals(alAbrir, total(), "al volver antes de 30 s no sale ninguna: ${pedidos.mapValues { it.value.get() }}")
@@ -150,5 +155,68 @@ class ElInicioNoRepitePeticionesTest {
         repo.ignoreSms("sms-1")
         repo.getAccounts()
         assertEquals(2, cuantas("/api/accounts"))
+    }
+
+    private fun hayInicio() =
+        composeRule.onAllNodesWithTag(com.jvillada.movi.ui.sdui.TAG_HEROE_EN_TARJETA, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+
+    /** Sale del Inicio (y comprueba que salió de la composición), hace [alSalir] y vuelve. */
+    private fun salirYVolver(alSalir: () -> Unit = {}, cambiar: (Boolean) -> Unit) {
+        composeRule.runOnUiThread { cambiar(false) }
+        composeRule.waitUntil(5_000) { !hayInicio() }
+        alSalir()
+        composeRule.runOnUiThread { cambiar(true) }
+        composeRule.waitUntil(5_000) { hayInicio() }
+    }
+
+    private fun montarElInicio(enElInicio: () -> Boolean, conGesto: Boolean = false) {
+        composeRule.setContent {
+            MoviTheme {
+                androidx.compose.runtime.CompositionLocalProvider(com.jvillada.movi.ui.components.LocalTirarParaActualizar provides conGesto) {
+                    if (enElInicio()) DashboardScreen(onNavigate = {})
+                }
+            }
+        }
+        esperarQueSeQuede()
+    }
+
+    /**
+     * Revisión de la 78 · **tirar para actualizar dentro de los 30 s sale a la red**: el dueño pidió lo de
+     * ahora, no lo recordado.
+     */
+    @Test
+    fun `tirar para actualizar dentro de los 30 s sale a la red`() {
+        montarElInicio(enElInicio = { true }, conGesto = true)
+        assertEquals(1, cuantas("/api/dashboard/summary"))
+
+        composeRule.onRoot().performTouchInput { swipeDown(startY = top + height * 0.3f, endY = bottom, durationMillis = 400) }
+        composeRule.waitUntil(10_000) { cuantas("/api/dashboard/summary") >= 2 }
+        esperarQueSeQuede()
+
+        assertEquals(2, cuantas("/api/dashboard/summary"), "${pedidos.mapValues { it.value.get() }}")
+        assertEquals(2, cuantas("/api/accounts"), "las cuentas también, aunque eran de hace un instante")
+    }
+
+    /**
+     * Revisión de la 78 · **un aviso que sube el worker se ve al volver**. El worker no pasa por el
+     * repositorio de la app: tras subir, olvida lo fresco (`LoFresco`), y volver al Inicio antes de los 30
+     * s vuelve a preguntar. En la revisión el Inicio decía «6 avisos» y Actividad «7».
+     */
+    @Test
+    fun `un aviso que entra por el worker se ve al volver al Inicio`() {
+        var enElInicio by mutableStateOf(true)
+        montarElInicio(enElInicio = { enElInicio })
+        assertEquals(6, DashboardDataCache.data?.pendingSms)
+
+        salirYVolver(alSalir = {
+            // Lo que hace `SmsSyncWorker` después de una subida buena.
+            avisosEnElServer = 7
+            com.jvillada.movi.data.olvidarLoFresco()
+        }, cambiar = { enElInicio = it })
+        composeRule.waitUntil(20_000) { cuantas("/api/dashboard/summary") >= 2 && DashboardDataCache.cargadoEn > 0L }
+        esperarQueSeQuede()
+
+        assertEquals(2, cuantas("/api/dashboard/summary"))
+        assertEquals(7, DashboardDataCache.data?.pendingSms)
     }
 }

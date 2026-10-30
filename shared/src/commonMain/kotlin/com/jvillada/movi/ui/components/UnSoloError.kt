@@ -39,7 +39,7 @@ class ErroresDeLaPantalla {
     fun quitar(clave: String) { reintentos.remove(clave) }
 
     /** Reintenta todo lo anotado. Cada sección se borra sola cuando vuelve a leer bien. */
-    fun reintentarTodo() { reintentos.values.toList().forEach { it() } }
+    fun reintentarTodo() { com.jvillada.movi.data.olvidarLoFresco(); reintentos.values.toList().forEach { it() } }
 }
 
 /** Quien junta los errores de la pantalla, o `null` (cada sección pinta el suyo). */

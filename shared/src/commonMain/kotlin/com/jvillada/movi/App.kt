@@ -350,6 +350,9 @@ fun App() {
                 backStack.clear()
                 backStack.add(Screen.Login)
             }
+            // Vuelta 78: al volver del segundo plano, lo leído hace menos de 30 s ya no se da por fresco —
+            // mientras tanto pudo entrar un aviso del banco o algo desde otro aparato (ver `LoFresco`).
+            AlVolverDelSegundoPlano { _, _ -> com.jvillada.movi.data.olvidarLoFresco() }
             if (huella != null) {
                 AlVolverDelSegundoPlano { fueraDesde, ahora ->
                     val enLaPuerta = backStack.lastOrNull()?.let { NavStack.esDeAutenticacion(it) } ?: true

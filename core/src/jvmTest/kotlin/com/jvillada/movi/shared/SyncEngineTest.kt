@@ -778,4 +778,21 @@ class SyncEngineTest {
             source = EventSource.MANUAL,
             reconciliationStatus = ReconciliationStatus.UNCONFIRMED,
         )
+
+    /**
+     * Vuelta 78: cuando una vuelta sube algo, avisa (la app olvida ahí lo que tenía por fresco); sin
+     * nada pendiente, no.
+     */
+    @Test
+    fun subirLoPendiente_avisa_solo_cuando_subio_algo() = runBlocking {
+        val db = createDatabase("sync-test.db")
+        val local = LocalRepository(db = db, remote = FailingCreateAccountRepository(), userId = { testUserId })
+        local.createAccount(Account("acc-aviso", "Efectivo", AccountType.CASH, 10_000L))
+        var avisos = 0
+        val engine = SyncEngine(db = db, remote = OrderSensitiveRemote(), userId = { testUserId }, alSubirAlgo = { avisos++ })
+        engine.subirLoPendiente()
+        assertTrue(avisos == 1, "subió la cuenta: avisa una vez ($avisos)")
+        engine.subirLoPendiente()
+        assertTrue(avisos == 1, "sin nada pendiente, no vuelve a avisar ($avisos)")
+    }
 }

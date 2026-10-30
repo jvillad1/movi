@@ -155,7 +155,7 @@ fun AccountsScreen(onNavigate: (Screen) -> Unit) {
         val msg = error ?: return@LaunchedEffect
         val result = snackbarHostState.showSnackbar(msg, actionLabel = "Reintentar")
         error = null
-        if (result == SnackbarResult.ActionPerformed) refreshKey++
+        if (result == SnackbarResult.ActionPerformed) { com.jvillada.movi.data.olvidarLoFresco(); refreshKey++ }
     }
 
     // ── «Deudas» (Ola C, tarea 4): el mismo total y el mismo conteo que el encabezado de

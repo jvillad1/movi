@@ -878,7 +878,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
             leading = HeaderLeading.Back(fallback = Screen.Transactions()),
             action = {
                 if (actualizandoConAlgoALaVista) ActualizandoEnLaCabecera()
-                BotonDeIcono(Icons.Rounded.Refresh, "Actualizar", onClick = { recarga++ })
+                BotonDeIcono(Icons.Rounded.Refresh, "Actualizar", onClick = { com.jvillada.movi.data.olvidarLoFresco(); recarga++ })
             },
         )
 

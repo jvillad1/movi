@@ -105,7 +105,8 @@ suspend fun confirmarDesdeLaNotificacion(
     intentar {
         confirmarLoEntendido(anotacion, ahora, repo = repo, idDelMovimiento = idDelMovimientoDeLaNotificacion(avisoId))
     }.fold(
-        onSuccess = { ResultadoDeConfirmar.Anotado },
+        // Vuelta 78: este cliente no pasa por el repositorio de la app; lo leído ya no es fresco.
+        onSuccess = { com.jvillada.movi.data.olvidarLoFresco(); ResultadoDeConfirmar.Anotado },
         onFailure = { ResultadoDeConfirmar.NoSePudo("sin conexión") },
     )
 }

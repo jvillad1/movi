@@ -23,6 +23,12 @@ class SyncEngine(
     private val db: MoviDatabase,
     private val remote: WalletRepository,
     private val userId: () -> String,
+    /**
+     * Vuelta 78: se llama cuando una vuelta subió algo (quedan menos pendientes que al empezar). La app
+     * olvida ahí lo que tenía por fresco (`LoFresco` en `:shared`): lo que subió puede cambiar lo que el
+     * server contesta (un traspaso que se arma, un aviso que se empareja).
+     */
+    private val alSubirAlgo: () -> Unit = {},
 ) {
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
@@ -49,6 +55,7 @@ class SyncEngine(
      */
     suspend fun subirLoPendiente() {
         subiendo.withLock {
+            val antes = runCatching { pendientes() }.getOrNull()
             // syncAccounts ANTES que syncEvents: una cuenta creada offline (ver
             // LocalRepository.createAccount) tiene que existir en el server antes que sus
             // eventos, o EventRoutes.kt POST la rechaza con 404 "Account not found" — y ese
@@ -57,7 +64,17 @@ class SyncEngine(
             try { syncAccounts() } catch (e: Exception) { logSyncFailure("syncAccounts", e) }
             try { syncEvents() } catch (e: Exception) { logSyncFailure("syncEvents", e) }
             try { syncVoids() } catch (e: Exception) { logSyncFailure("syncVoids", e) }
+            val despues = runCatching { pendientes() }.getOrNull()
+            if (antes != null && despues != null && despues < antes) runCatching { alSubirAlgo() }
         }
+    }
+
+    /** Cuántas filas esperan subir: cuentas, movimientos y anulaciones de quien está adentro. */
+    private fun pendientes(): Int {
+        val quien = userId()
+        return db.accountQueries.selectUnsynced(quien).executeAsList().size +
+            db.financialEventQueries.selectUnsynced(quien).executeAsList().size +
+            db.voidEventQueries.selectUnsynced(quien).executeAsList().size
     }
 
     /**

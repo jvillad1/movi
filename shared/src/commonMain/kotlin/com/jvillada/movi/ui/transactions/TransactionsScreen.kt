@@ -1215,7 +1215,7 @@ fun TransactionsScreen(
         val msg = error ?: return@LaunchedEffect
         val result = snackbarHostState.showSnackbar(msg, actionLabel = "Reintentar")
         error = null
-        if (result == SnackbarResult.ActionPerformed) refreshKey++
+        if (result == SnackbarResult.ActionPerformed) { com.jvillada.movi.data.olvidarLoFresco(); refreshKey++ }
     }
 
     val reglaDelFinDeSemana = perfilVigente?.periodWeekendRule

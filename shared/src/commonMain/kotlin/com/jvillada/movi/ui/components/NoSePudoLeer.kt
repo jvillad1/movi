@@ -71,7 +71,8 @@ fun BotonReintentar(onReintentar: () -> Unit, modifier: Modifier = Modifier) {
             .heightIn(min = Medida.altoChico)
             .clip(RoundedCornerShape(Radio.pill))
             .background(Movi.colores.lavado(Movi.colores.enlace))
-            .clickable(onClick = onReintentar)
+            // Vuelta 78: reintentar sale a la red, aunque lo de antes sea de hace 20 s (ver `LoFresco`).
+            .clickable(onClick = { com.jvillada.movi.data.olvidarLoFresco(); onReintentar() })
             .padding(horizontal = Espacio.l),
         contentAlignment = Alignment.Center,
     ) {

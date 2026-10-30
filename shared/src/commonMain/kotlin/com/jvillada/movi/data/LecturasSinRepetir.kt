@@ -126,7 +126,8 @@ internal class LecturaAbandonada : Exception("La lectura compartida se canceló"
  */
 internal class LecturasCompartidas(
     private val reloj: () -> Long = { Clock.System.now().toEpochMilliseconds() },
-    private val generacion: () -> Int = { CacheDeLecturas.generacion },
+    // Una escritura propia (CacheDeLecturas) o algo que entró por fuera (LoFresco): cualquiera de las dos.
+    private val generacion: () -> Int = { CacheDeLecturas.generacion + LoFresco.vueltas },
     private val usuario: () -> String? = { SessionManager.userId },
     private val frescura: Long = FRESCURA_DE_UNA_LECTURA_MS,
 ) {
