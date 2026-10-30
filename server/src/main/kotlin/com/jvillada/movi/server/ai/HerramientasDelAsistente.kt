@@ -539,8 +539,12 @@ internal fun textoDeLaCaja(d: CajaDelDueno): String {
     val hasta = caja.dias.last().fecha
     return buildString {
         // Vuelta 70: hasta el próximo salario (o 30 días), con lo libre como cifra titular.
-        val horizonte = if (caja.hastaElSalario) "el día que se espera su próximo salario, ese día incluido"
-        else "30 días desde hoy: no tiene un ingreso recurrente anotado"
+        val horizonte = when {
+            caja.hastaElSalario -> "el día que se espera su próximo salario, ese día incluido"
+            // Vuelta 75: sin salario pero con su período elegido, hasta el día que arranca el siguiente.
+            caja.hastaElPeriodoSiguiente -> "el día que arranca su período siguiente: no tiene un ingreso recurrente anotado, así que no suma ninguno"
+            else -> "30 días desde hoy: no tiene un ingreso recurrente anotado"
+        }
         appendLine("Caja proyectada día a día del $desde al $hasta ($horizonte), en pesos.")
         appendLine("DE DÓNDE SALE:")
         appendLine("- En sus cuentas hoy: ${caja.tuPlataHoy} (Tu plata de la app más lo apartado, que sigue en las cuentas).")

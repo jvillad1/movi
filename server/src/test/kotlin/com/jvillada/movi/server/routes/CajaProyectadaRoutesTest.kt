@@ -309,6 +309,27 @@ class CajaProyectadaRoutesTest {
         assertEquals(1, movimientos.count { it.nombre == "Llega tu salario (esperado)" })
     }
     /**
+     * Vuelta 75 · **sin salario, con el período elegido**: el dueño dijo «25 · es el día que me pagan» y
+     * no anotó ningún ingreso. La caja de Movi AI llega al arranque del período siguiente (el 25-nov,
+     * miércoles), no a 30 días, y el texto lo dice.
+     */
+    @Test
+    fun `sin salario y con el corte elegido la caja de movi ai llega al periodo siguiente`() {
+        val dia = LocalDate.of(2026, 10, 29)
+        anotar(duenoId, "apertura", 5_000_000L, dia, OPENING_CATEGORY, tipo = "INCOME")
+        transaction {
+            Users.update({ Users.id eq duenoId }) {
+                it[periodCutoffDay] = 25; it[periodWeekendRule] = "DIA_HABIL_ANTERIOR"
+            }
+        }
+        val d = runBlocking { cajaProyectadaDe(duenoId, dia) }
+        val caja = assertNotNull(d.caja)
+        assertEquals("2026-11-25", caja.alCierre.fecha)
+        assertTrue(caja.hastaElPeriodoSiguiente && !caja.hastaElSalario)
+        assertTrue("el día que arranca su período siguiente" in textoDeLaCaja(d), textoDeLaCaja(d))
+    }
+
+    /**
      * Revisión de la 70 · **las compras con tarjeta sin pagar** que manda el resumen del Inicio: el gasto
      * contado en la tarjeta en el período menos lo que entró a la tarjeta en el período. Un traspaso a la
      * tarjeta la baja, un ajuste de saldo no; lo de otro período no cuenta.

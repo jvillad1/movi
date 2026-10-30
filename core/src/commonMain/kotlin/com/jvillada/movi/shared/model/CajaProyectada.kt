@@ -108,6 +108,12 @@ data class CajaProyectada(
      * se dice («Sin un salario en pesos anotado»), no la cuenta.
      */
     val salarioQueNoCuenta: Boolean = false,
+    /**
+     * Vuelta 75 · sin salario, el horizonte es **el arranque del período siguiente** (el dueño eligió su
+     * período: ese día es el que dijo que le pagan) y no 30 días. Solo cambia lo que se dice («hasta el
+     * 25 nov»), no la cuenta de cada día.
+     */
+    val hastaElPeriodoSiguiente: Boolean = false,
 ) {
     /** Lo que de las cuentas no es para gastar: el ahorro y lo apartado. Igual todos los días. */
     val reservado: Long get() = ahorro + apartado
@@ -248,6 +254,8 @@ data class HorizonteDeLaCaja(
     val salario: PagoDelPeriodo?,
     /** Sin salario: hay un ingreso fijo en el período siguiente, pero en otra moneda o sin monto. */
     val salarioQueNoCuenta: Boolean = false,
+    /** Vuelta 75 · sin salario y con el período elegido: [hasta] es el arranque del período siguiente. */
+    val alPeriodoSiguiente: Boolean = false,
 )
 
 /**
@@ -259,10 +267,22 @@ data class HorizonteDeLaCaja(
  * semana o festivo). Sin uno, [DIAS_DE_LA_CAJA_SIN_SALARIO] días desde hoy, y nunca antes del cierre
  * del período (la caja de siempre llegaba hasta ahí).
  *
+ * **Vuelta 75 · sin salario pero con el período elegido** ([conElPeriodoElegido]: el corte no es el mes
+ * de calendario que tiene quien nunca lo tocó), el horizonte es **el arranque del período siguiente**,
+ * el día después de [ultimoDiaDelPeriodo]: el día que el dueño dijo que empieza su mes es el que la
+ * caja con salario ya miraba (`fechaEsperadaDelIngreso`). Es la única regla nueva de la vuelta: sin
+ * ella, quien eligió «25 · es el día que me pagan» veía la caja «hasta el 28 de nov».
+ *
  * @param delSiguiente las filas de [checklistDelPeriodo] del período siguiente.
+ * @param conElPeriodoElegido el dueño eligió su período (`!PeriodSettings.esMesDeCalendario`).
  * @return `null` si las fechas no se entienden.
  */
-fun horizonteDeLaCaja(hoy: String, ultimoDiaDelPeriodo: String, delSiguiente: List<PagoDelPeriodo>): HorizonteDeLaCaja? {
+fun horizonteDeLaCaja(
+    hoy: String,
+    ultimoDiaDelPeriodo: String,
+    delSiguiente: List<PagoDelPeriodo>,
+    conElPeriodoElegido: Boolean = false,
+): HorizonteDeLaCaja? {
     val desde = runCatching { LocalDate.parse(hoy) }.getOrNull() ?: return null
     val cierre = runCatching { LocalDate.parse(ultimoDiaDelPeriodo) }.getOrNull() ?: return null
     val salario = delSiguiente
@@ -271,8 +291,11 @@ fun horizonteDeLaCaja(hoy: String, ultimoDiaDelPeriodo: String, delSiguiente: Li
         .filter { (_, fecha) -> fecha > cierre && fecha >= desde }
         .minByOrNull { (_, fecha) -> fecha }
     if (salario != null) return HorizonteDeLaCaja(salario.second, salario.first)
-    val treinta = desde.plus(DIAS_DE_LA_CAJA_SIN_SALARIO, DateTimeUnit.DAY)
     val queNoCuenta = delSiguiente.any { it.esIngreso && !it.pagado && !it.esAbono && !esIngresoEsperado(it) }
+    if (conElPeriodoElegido) {
+        return HorizonteDeLaCaja(cierre.plus(1, DateTimeUnit.DAY), null, salarioQueNoCuenta = queNoCuenta, alPeriodoSiguiente = true)
+    }
+    val treinta = desde.plus(DIAS_DE_LA_CAJA_SIN_SALARIO, DateTimeUnit.DAY)
     return HorizonteDeLaCaja(if (treinta > cierre) treinta else cierre, null, salarioQueNoCuenta = queNoCuenta)
 }
 
@@ -310,6 +333,9 @@ fun filasDeLaCaja(delPeriodo: List<PagoDelPeriodo>, delSiguiente: List<PagoDelPe
  * **Invariantes** (las prueba `CajaHastaQueTePaguenTest`): hoy, lo libre = lo de las cuentas − el
  * ahorro − lo apartado fuera de los fijos, que es Tu plata + lo apartado que cubre un fijo − el
  * ahorro; el ahorro no cambia el saldo de ningún día.
+ *
+ * @param conElPeriodoElegido vuelta 75: sin salario, llegar al arranque del período siguiente (ver
+ *   [horizonteDeLaCaja]). La app y el server pasan `!PeriodSettings.esMesDeCalendario`.
  */
 fun cajaHastaQueTePaguen(
     enLasCuentasHoy: Long,
@@ -319,9 +345,10 @@ fun cajaHastaQueTePaguen(
     hoy: String,
     ultimoDiaDelPeriodo: String,
     ahorro: Long = 0L,
+    conElPeriodoElegido: Boolean = false,
     apartadoFueraDe: (List<PagoDelPeriodo>) -> Long = { 0L },
 ): CajaProyectada? {
-    val horizonte = horizonteDeLaCaja(hoy, ultimoDiaDelPeriodo, delSiguiente) ?: return null
+    val horizonte = horizonteDeLaCaja(hoy, ultimoDiaDelPeriodo, delSiguiente, conElPeriodoElegido) ?: return null
     val filas = filasDeLaCaja(delPeriodo, delSiguiente, horizonte.hasta.toString())
     return cajaProyectada(
         tuPlataHoy = enLasCuentasHoy,
@@ -332,7 +359,7 @@ fun cajaHastaQueTePaguen(
         ahorro = ahorro,
         apartado = apartadoFueraDe(filas),
         salario = horizonte.salario,
-    )?.copy(salarioQueNoCuenta = horizonte.salarioQueNoCuenta)
+    )?.copy(salarioQueNoCuenta = horizonte.salarioQueNoCuenta, hastaElPeriodoSiguiente = horizonte.alPeriodoSiguiente)
 }
 
 // ── El gasto del día a día ───────────────────────────────────────────────────
