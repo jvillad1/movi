@@ -107,7 +107,8 @@ class LasCifrasDelDisponibleEntranTest {
         // «$0» y, en el último renglón, «ya te pasaste»; el período dice «−$888.888» y «de $0».
         listOf(
             "ya te pasaste" to 2,
-            "gastaste" to 3,
+            "gastaste" to 2,
+            "en el día a día" to 1,
             "\$888.888" to 3,
             "−\$888.888" to 1,
             "de \$0" to 1,
@@ -154,7 +155,7 @@ class LasCifrasDelDisponibleEntranTest {
             }
         }
         composeRule.waitForIdle()
-        listOf("\$888.888", "de \$12,5M", "gastaste", "\$11,6M").forEach { texto ->
+        listOf("\$888.888", "de \$12,5M", "gastaste", "en el día a día", "\$11,6M").forEach { texto ->
             val nodos = composeRule.onAllNodesWithText(texto, useUnmergedTree = true).fetchSemanticsNodes()
             assertTrue("«$texto» tendría que estar", nodos.isNotEmpty())
             nodos.forEach { nodo ->

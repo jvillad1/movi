@@ -129,8 +129,16 @@ const val ROTULO_META_DE_HOY: String = "Meta de hoy"
  */
 const val YA_TE_PASASTE: String = "ya te pasaste"
 
-/** El renglón que va debajo de lo que queda, en las tres columnas (vuelta 70): «gastaste», y la cifra. */
+/** El renglón que va debajo de lo que queda en la semana y hoy: «gastaste», y la cifra. */
 const val GASTASTE: String = "gastaste"
+
+/**
+ * El mismo renglón en la columna del período (vuelta 60): su cifra es el gasto **del día a día** —sin
+ * los fijos—, y «gastaste» es el verbo con el que «En qué se va» dice todo lo que salió («Llevas
+ * gastado $4.888.850»). Dos cifras distintas con el mismo nombre en pantallas vecinas; la revisión de
+ * la 70 lo volvió a ver. Se queda «en el día a día».
+ */
+const val ROTULO_DIA_A_DIA_DEL_PERIODO: String = "en el día a día"
 
 /** El último renglón de una columna: «de $3,6M», la meta de esa ventana. */
 internal fun deLaMeta(meta: Long): String = "de ${formatMoneyCompact(meta)}"
@@ -349,7 +357,8 @@ private fun CuerpoDelDisponibleEsqueleto() {
  * hoy decían lo que queda («$1,4M · gastaste $603.100»): tres columnas lado a lado midiendo cosas
  * distintas. Ahora las tres dicen lo mismo: en grande lo que queda —en el período, la MISMA cifra que
  * «Te quedan» del héroe de Inicio y de la tarjeta de Pagos ([teQuedanDeHoy] lee el mismo
- * `periodo.teQuedan`)—, y debajo «gastaste» · $Y · «de $Z». Ninguna cifra cambió, solo dónde va.
+ * `periodo.teQuedan`)—, y debajo «gastaste» · $Y · «de $Z» (en el período, «en el día a día» en vez de
+ * «gastaste», ver [ROTULO_DIA_A_DIA_DEL_PERIODO]). Ninguna cifra cambió, solo dónde va.
  *
  * Tres renglones chicos y no «gastaste $X de $Y» en uno: a 390 dp, con la letra de la app, ni
  * «gastaste $440.000» entra en su tercio de tarjeta (`LasCifrasDelDisponibleEntranTest`). Los mismos
@@ -387,7 +396,12 @@ private fun ColumnaDeVentana(
             tono = if (enAlerta) TonoDeCifra.Alerta else TonoDeCifra.Neutro,
             forma = FormaDeCifra.Compacta,
         )
-        Text(text = GASTASTE, style = Movi.textos.apoyo, color = Movi.colores.textoApagado, maxLines = 1)
+        Text(
+            text = if (delPeriodo) ROTULO_DIA_A_DIA_DEL_PERIODO else GASTASTE,
+            style = Movi.textos.apoyo,
+            color = Movi.colores.textoApagado,
+            maxLines = 1,
+        )
         Text(
             text = formatMoneyCompact(ventana.gastado),
             style = Movi.textos.apoyo,

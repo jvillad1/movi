@@ -33,6 +33,7 @@ import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.sdui.DisponibleDelPeriodoSection
 import com.jvillada.movi.ui.sdui.TAG_BARRA_DE_VENTANA
 import com.jvillada.movi.ui.sdui.GASTASTE
+import com.jvillada.movi.ui.sdui.ROTULO_DIA_A_DIA_DEL_PERIODO
 import com.jvillada.movi.ui.sdui.YA_TE_PASASTE
 import kotlinx.datetime.LocalDate
 import org.junit.Rule
@@ -135,11 +136,12 @@ class DisponibleEnInicioTest {
         assertEquals(cuantas, contar(texto, color), "«$texto» grande tendría que estar $cuantas veces")
 
     /**
-     * Abajo, «gastaste», la cifra y «de $X» en gris: [texto] en [cuantas] columnas. Vuelta 70: las tres
-     * columnas con el mismo patrón, también el período (antes decía «en el día a día»).
+     * Abajo, «gastaste» (en el período, «en el día a día»), la cifra y «de $X» en gris: [texto] en
+     * [cuantas] columnas. Vuelta 70: las tres columnas con el mismo patrón.
      */
     private fun assertGastaste(texto: String, cuantas: Int) {
-        composeRule.onAllNodesWithText(GASTASTE, useUnmergedTree = true).assertCountEquals(3)
+        composeRule.onAllNodesWithText(GASTASTE, useUnmergedTree = true).assertCountEquals(2)
+        composeRule.onAllNodesWithText(ROTULO_DIA_A_DIA_DEL_PERIODO, useUnmergedTree = true).assertCountEquals(1)
         assertEquals(cuantas, contar(texto, apagado), "«gastaste $texto» tendría que estar $cuantas veces")
     }
 
