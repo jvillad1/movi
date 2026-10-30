@@ -965,6 +965,12 @@ internal fun ContenidoDelMovimiento(
                 onEditar = { accion = AccionDelMovimiento.Nota },
                 espacios = espacios,
                 ficha = ficha,
+                // Vuelta 83: en la ficha, «⋯» a la derecha del título; abajo, las acciones en un renglón.
+                alFinalDelTitulo = if (ficha && AccionDelMovimiento.Mas in accionesFicha) {
+                    { MasDeLaFicha(abierta = accion, onElegir = { if (!saving) alternar(it) }) }
+                } else {
+                    null
+                },
             )
             Spacer(Modifier.height(Espacio.s))
             if (ficha) {
@@ -1064,7 +1070,7 @@ internal fun ContenidoDelMovimiento(
             Spacer(Modifier.height(Espacio.m))
             if (ficha) {
                 AccionesDeLaFicha(
-                    acciones = accionesFicha,
+                    acciones = accionesFicha - AccionDelMovimiento.Mas,
                     principal = principalDeLaFicha(
                         accionesFicha,
                         porConfirmar = event.reconciliationStatus == ReconciliationStatus.UNCONFIRMED,
