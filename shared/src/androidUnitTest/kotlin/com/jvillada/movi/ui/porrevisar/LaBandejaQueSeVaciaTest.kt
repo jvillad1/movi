@@ -187,7 +187,7 @@ class LaBandejaQueSeVaciaTest {
         montar()
 
         assertEquals(1, conTag(TAG_LOTE_DE_LA_BANDEJA))
-        tocarElBoton("Confirmar los 2 que Movi entendió")
+        tocarElBoton("Confirmar 2")
         // Pregunta una vez, con la hoja de Actividad.
         assertEquals(1, cuantos("¿Confirmar estos 2 avisos?"))
         assertTrue(publicados.isEmpty())

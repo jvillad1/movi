@@ -149,11 +149,11 @@ class NadaSeRecortaEnElInicioTest {
 
     private fun nadaSeRecorta(escalaDeLetra: Float = 1f) {
         montar(escalaDeLetra)
-        // Los dos widgets, lado a lado.
-        assertEquals(
-            composeRule.onAllNodesWithTag(TAG_WIDGET_FALTA_POR_PAGAR, useUnmergedTree = true).fetchSemanticsNodes().single().boundsInRoot.top,
-            composeRule.onAllNodesWithTag(TAG_TARJETA_EN_QUE_SE_VA, useUnmergedTree = true).fetchSemanticsNodes().single().boundsInRoot.top,
-        )
+        // Vuelta 80: los dos widgets, uno debajo del otro y a todo el ancho.
+        val falta = composeRule.onAllNodesWithTag(TAG_WIDGET_FALTA_POR_PAGAR, useUnmergedTree = true).fetchSemanticsNodes().single().boundsInRoot
+        val enQueSeVa = composeRule.onAllNodesWithTag(TAG_TARJETA_EN_QUE_SE_VA, useUnmergedTree = true).fetchSemanticsNodes().single().boundsInRoot
+        assertEquals(falta.left, enQueSeVa.left)
+        assertTrue(falta.bottom <= enQueSeVa.top)
         val delWidget = cifrasDentroDe(TAG_TARJETA_EN_QUE_SE_VA) + cifrasDentroDe(TAG_WIDGET_FALTA_POR_PAGAR)
         assertTrue(delWidget.isNotEmpty(), "el widget pinta sus cifras")
         // El monto completo, no «$12.392.1».

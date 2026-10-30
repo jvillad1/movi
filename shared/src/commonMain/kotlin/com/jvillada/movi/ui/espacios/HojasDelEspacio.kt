@@ -172,6 +172,8 @@ fun HojaSaldar(detalle: DetalleDelEspacio, onDismiss: () -> Unit, onSaldado: () 
                                 null
                             },
                             onClick = { vinculada = if (vinculada == p.eventoId) null else p.eventoId },
+                            // Vuelta 80: se elige, no se abre.
+                            chevron = false,
                         )
                     }
                 }

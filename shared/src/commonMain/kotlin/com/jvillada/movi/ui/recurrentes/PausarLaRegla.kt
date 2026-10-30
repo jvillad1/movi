@@ -1,5 +1,9 @@
 package com.jvillada.movi.ui.recurrentes
 
+import com.jvillada.movi.ui.components.ds.TonoDeIcono
+import com.jvillada.movi.ui.components.ds.TarjetaDePropuesta
+import androidx.compose.material.icons.rounded.AccountBalanceWallet
+import androidx.compose.material.icons.Icons
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -261,26 +265,39 @@ fun claveDeLaCuentaDeLaRegla(ruleId: String, cuentaId: String): String = "cuenta
 const val GUARDAR_EN_LA_REGLA: String = "Guardar en la regla"
 const val TAG_CUENTA_DE_LA_REGLA: String = "pagos:cuenta-de-la-regla"
 
+/** Una propuesta «¿Usar siempre Nu para Carro?», lista para pintar (vuelta 80). */
+internal data class PropuestaDeCuentaDeLaRegla(
+    val pregunta: String,
+    val enVuelo: Boolean,
+    val onGuardar: () -> Unit,
+    val onAhoraNo: () -> Unit,
+)
+
 /**
- * La propuesta, colgando de la fila pagada: la pregunta y dos botones chicos —«Guardar en la regla»
- * (`Secundario`) y «Ahora no» (`Fantasma`)—. Sin amarillo: no es lo que la pantalla pide hacer.
+ * **Las propuestas de cuenta, arriba de la lista** (vuelta 80): cada una es una [TarjetaDePropuesta]
+ * —«¿Usar siempre Bancolombia Ahorros 4057 para Arriendo?» con «Guardar en la regla» y «Ahora no»—.
+ * Iba metida dentro de la fila pagada, con dos botones (`r7-pagos-390-a.png`, `-b.png`): una fila
+ * resuelta se leía como una pendiente. Nunca se guarda sola.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun PropuestaDeLaCuentaDeLaRegla(
-    pregunta: String,
-    enVuelo: Boolean,
-    onGuardar: () -> Unit,
-    onAhoraNo: () -> Unit,
-) {
+internal fun PropuestasDeLaCuentaDeLaRegla(propuestas: List<PropuestaDeCuentaDeLaRegla>) {
     Column(
-        modifier = Modifier.fillMaxWidth().testTag(TAG_CUENTA_DE_LA_REGLA),
-        verticalArrangement = Arrangement.spacedBy(Espacio.xs),
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion),
     ) {
-        Text(pregunta, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
-            Boton(GUARDAR_EN_LA_REGLA, onClick = onGuardar, variante = VarianteDeBoton.Secundario, tamano = TamanoDeBoton.S, habilitado = !enVuelo)
-            Boton("Ahora no", onClick = onAhoraNo, variante = VarianteDeBoton.Fantasma, tamano = TamanoDeBoton.S, habilitado = !enVuelo)
+        propuestas.forEach { p ->
+            Column(modifier = Modifier.fillMaxWidth().testTag(TAG_CUENTA_DE_LA_REGLA)) {
+                TarjetaDePropuesta(
+                    icono = Icons.Rounded.AccountBalanceWallet,
+                    titulo = p.pregunta,
+                    accion = GUARDAR_EN_LA_REGLA,
+                    onAccion = { if (!p.enVuelo) p.onGuardar() },
+                    // Neutro: el círculo amarillo es solo de las dos propuestas de la maqueta.
+                    tono = TonoDeIcono.Neutro,
+                    accionSecundaria = "Ahora no",
+                    onAccionSecundaria = { if (!p.enVuelo) p.onAhoraNo() },
+                )
+            }
         }
     }
 }

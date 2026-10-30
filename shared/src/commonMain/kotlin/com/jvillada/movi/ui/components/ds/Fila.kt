@@ -116,7 +116,7 @@ fun colorDelTituloDeFila(tono: TonoDeFila, colores: ColoresDeMovi): Color = when
  * - **Toque**: la fila entera, de borde a borde.
  *
  * Las ranuras:
- * - [inicio]: un avatar de comercio (`AvatarDelComercio`), un [IconoEnCirculo] o el avatar de una
+ * - [inicio]: un avatar de comercio (`IconoDeMovimiento`), un [IconoEnCirculo] o el avatar de una
  *   persona. Mide [Medida.avatar].
  * - [titulo]: hasta [LINEAS_DEL_TITULO_DE_FILA] renglones, y recién ahí «…»: un nombre largo
  *   («Bancolombia Ahorros» al lado de «$13.845.800» a 360 dp) baja a un segundo renglón en vez de
@@ -137,7 +137,7 @@ fun colorDelTituloDeFila(tono: TonoDeFila, colores: ColoresDeMovi): Color = when
  * Fila(
  *     titulo = "Rappi · Las Doce",
  *     subtitulo = "Restaurantes · Nu",
- *     inicio = { AvatarDelComercio(evento) },
+ *     inicio = { IconoDeMovimiento(evento) },
  *     final = { Cifra(-27_500) },
  *     onClick = { abrir(evento) },
  * )
@@ -156,6 +156,12 @@ fun Fila(
     tonoDelTitulo: TonoDeFila = TonoDeFila.Normal,
     tonoDelSubtitulo: TonoDeSubtitulo = TonoDeSubtitulo.Normal,
     densidad: DensidadDeFila = DensidadDeFila.Normal,
+    /**
+     * Vuelta 80: **toda fila tocable lleva el chevrón al final**. Sola, cuando tiene [onClick] y no
+     * trae [final]; con un [final] (un monto que se abre), quien llama lo pide con `true` y va
+     * después del monto. `false` lo quita (una fila que se elige, no que se abre).
+     */
+    chevron: Boolean = onClick != null && final == null,
 ) {
     Row(
         modifier = modifier
@@ -205,6 +211,10 @@ fun Fila(
         if (final != null) {
             Spacer(Modifier.width(ESPACIO_ANTES_DEL_FINAL_DE_FILA))
             final()
+        }
+        if (chevron) {
+            Spacer(Modifier.width(if (final != null) Espacio.xxs else ESPACIO_ANTES_DEL_FINAL_DE_FILA))
+            Chevron()
         }
     }
 }
@@ -290,6 +300,9 @@ fun IconoEnCirculo(
     }
 }
 
+/** El `testTag` de un [Chevron] (vuelta 80: para vigilar que toda fila tocable lo lleve). */
+const val TAG_CHEVRON: String = "ds:chevron"
+
 /** **La flecha de «esto se abre»**, al final de una [Fila]. [Icono.m], en texto apagado. */
 @Composable
 fun Chevron(modifier: Modifier = Modifier) {
@@ -297,40 +310,8 @@ fun Chevron(modifier: Modifier = Modifier) {
         Icons.AutoMirrored.Rounded.KeyboardArrowRight,
         contentDescription = null,
         tint = Movi.colores.textoApagado,
-        modifier = modifier.size(Icono.m),
+        modifier = modifier.size(Icono.m).testTag(TAG_CHEVRON),
     )
-}
-
-/** La inicial con que [AvatarDePersona] nombra a alguien: la primera letra, en mayúscula. */
-fun inicialDe(nombre: String): String = nombre.trim().firstOrNull()?.uppercase() ?: "?"
-
-/** El `testTag` de [AvatarDePersona]. */
-const val TAG_AVATAR_DE_PERSONA: String = "ds:avatar-de-persona"
-
-/**
- * **Una persona**: su inicial en un círculo de [Medida.avatar], en el fondo de su [tono]. Para los
- * miembros de un espacio («J» y «C» en «Casa con Caro») y quien pagó un gasto. Neutro por defecto;
- * «Tú» va en [TonoDeIcono.Propio], el tinte con el ocre (vuelta 42: iba lleno de amarillo, y una
- * lista de gastos tuyos era una columna de círculos amarillos). Una persona **nunca** va en
- * [TonoDeIcono.Marca]: el amarillo lleno es de la acción; el suave, sí.
- */
-@Composable
-fun AvatarDePersona(
-    nombre: String,
-    modifier: Modifier = Modifier,
-    tono: TonoDeIcono = TonoDeIcono.Neutro,
-) {
-    val color = colorDelTonoDeIcono(tono, Movi.colores)
-    Box(
-        modifier = modifier
-            .size(Medida.avatar)
-            .background(fondoDelTonoDeIcono(tono, Movi.colores), CircleShape)
-            .testTag(TAG_AVATAR_DE_PERSONA)
-            .semantics { tonoDeIcono = tono },
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(inicialDe(nombre), style = Movi.textos.titulo, color = color, maxLines = 1)
-    }
 }
 
 /**

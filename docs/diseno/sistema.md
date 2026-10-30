@@ -4260,3 +4260,74 @@ peticiones sobre un `MockEngine`), `RenglonMeAlcanzaTest` y `ElHeroeConUnSoloHor
 `ElFlujoLibrePideElSalarioTest` y `PagosHastaQueTePaguenTest` (una sola invitación), `BuscarCuentaComoEnQueSeVaTest`
 y `BuscarMuestraTuParteDelGrupoTest`, `ElHeroeReservaSuAltoTest` (≤ 8 dp), `ElWidgetEmpiezaComoElAvisoTest` (el widget empieza por el segundo de la cola) y
 `LaMemoriaSeEscribeAManoTest`. **Las líneas base** no cambian, y las guardas en 0 siguen en 0.
+
+## 78. Vuelta 80: un solo sistema de íconos, y listas que respiran
+
+Viene de la revisión visual 7 del 30-oct (puntos 5, 7, 8, 9, 10, 14 y 15; `r7-*.png`). **Sin reglas de plata.**
+Dos componentes nuevos en `ds/` (`IconoDeMovimiento` y el archivo propio de `AvatarDePersona`) y una pieza de
+Créditos (`ElPrestamoSinSaldo`). Ningún token nuevo.
+
+1. **Un solo ícono por movimiento** (`ds/IconoDeMovimiento.kt`). Una prioridad, en `iconoDelMovimiento`: la
+   marca del **comercio** si Movi la conoce (`marcaDelComercio`: el `merchant` y si no la descripción, con el
+   catálogo de `:core`) y si no, la categoría con su ícono y su color. **Un banco no es un comercio**: «Cuota de
+   Vehículo 4083» con el `merchant` «Banco de Occidente» llevaba la «O» azul en el detalle de la cuenta y el ícono
+   lila de su categoría en el Inicio; ahora la categoría en los dos (y «Pago desde Bancolombia» ya no lleva la
+   «B»). Lo pintan **todos** los lugares que muestran un movimiento: `MovementSingleRow` y `TransferRow` (Inicio,
+   Actividad, el detalle de la cuenta), la hoja del movimiento, Buscar, Por revisar (la cabeza de un aviso, salvo
+   cuando su título es el banco), los gastos de un grupo y su detalle, los anulados, el detalle de un período y la
+   vista por comercio de En qué se va. `AvatarDelComercio` se fue. La semántica `ClaveDelIconoKey`
+   («marca:uber», «categoria:Mercado») deja comparar dos lugares sin leer píxeles.
+2. **Un solo avatar por persona** (`ds/AvatarDePersona.kt`). El dueño es `AvatarDelDueno`: sus iniciales
+   (`inicialesDelDueno`, «DM») en el tinte (`TONO_DEL_DUENO`, `Propio`) **en todas partes**: el encabezado del
+   Inicio, la tarjeta del perfil en Tú, el botón de los encabezados (`AvatarButton`) y los miembros de un grupo
+   (`AvatarDelMiembro`). Nunca en rojo: el color que guardaba el perfil ya no pinta nada, y «Tu perfil» ya no lo
+   ofrece (era un selector muerto). Un tercero es `AvatarDeTercero`: su inicial en su tono estable
+   (`TONO_DE_UN_TERCERO`, `Info`) en Grupos, Personas y comercios y el detalle de un gasto. Los avatares de banco
+   no se tocaron (son de la vuelta 79).
+3. **«En qué se va» en el Inicio**: una `Superficie` blanca de lista con su título; cada categoría es una `Fila`
+   (nombre y monto) con una `BarraDeProgreso` de 4 dp relativa a la mayor (`fraccionDeLaCategoriaEnElWidget`) y la
+   diferencia contra el período anterior en una `Pildora` (`Peligro` solo si sube mucho; la regla de «nuevo» de la
+   vuelta 76). Sin «Tus widgets»: cada widget lleva su título. En el teléfono los dos widgets van uno debajo del
+   otro, a todo el ancho: a media pantalla y con la letra agrandada, nombre y monto no entraban en una fila. En una
+   columna de 450 dp o más siguen lado a lado (`ParDeWidgets`, `ANCHO_PARA_LOS_WIDGETS_LADO_A_LADO`), para que las
+   dos columnas del Inicio ancho queden parejas.
+4. **Pagos con aire.** «Cuánto puedes gastar» son tres `CifraConRotulo` en renglón —Período, Semana, Meta de hoy—
+   con su barra (`VentanasEnRenglones`); lo gastado y la meta de cada una van a «¿De dónde sale?»
+   (`desgloseDeLaVentana`). Las cifras van compactas, como en las columnas (la del período repite «Te quedan»).
+   El Inicio sigue con las tres columnas. «Lo que se repite al mes» muestra la cifra y el
+   aviso de lo que no se pudo convertir; los párrafos (las dos cifras, la TRM, lo anual, las cuotas, los pagos
+   únicos) van detrás de **«¿Qué cuenta?»** (`Boton` `Fantasma`, `hayQueExplicarElTotal`). La fila de una factura
+   lleva **una** acción al final (`accionDeLaFilaPendiente`): «Anotar pago» o el «⋯», nunca los dos apilados; con
+   el botón, «Pausar» queda en la hoja de la regla. «¿Usar siempre X para Y?» salió de la fila: es una
+   `TarjetaDePropuesta` arriba de la lista (`PropuestasDeLaCuentaDeLaRegla`), con el ícono neutro.
+5. **Agregar sin hueco a 390.** Sin teclado en pantalla y en una ventana angosta la hoja sigue ocupando todo el
+   alto (las pestañas quietas de la vuelta 71), pero el cuerpo va centrado y **la cifra es la protagonista**:
+   `cifra` × 1,5 (~54 sp, `ESCALA_DE_LA_CIFRA_GRANDE`) con `Espacio.xxxl` arriba y abajo. Con teclado no cambia
+   nada. Sin teclado en pantalla, `Espacio.s` entre los chips y la fila de «Cuenta» (con teclado cada dp empuja el
+   pie: `HojaAgregarGeometriaTest`). La cuenta va en un renglón con «…» (`FilaDeLaHoja`, `renglones = 1`); con la
+   letra agrandada por encima de ×1,2 vuelve a dos (la vuelta 55: «Bancolombia Ahorros» a ×1,3 no entra en uno).
+6. **La tarjeta de avisos de Actividad** es una `TarjetaDePropuesta` de un renglón: «5 avisos del banco por
+   confirmar», «Confirmar 2» en un `Boton` chico (`botonCompactoDeConfirmar`) y «Revisar» como enlace. La nota del
+   pago de tarjeta salió del encabezado del día: la dice el detalle del pago
+   (`NOTA_DEL_PAGO_DE_TARJETA_EN_EL_DETALLE`).
+7. **Patrimonio.** Con menos de 4 puntos (`PUNTOS_PARA_EL_RELLENO`) la curva va con sus puntos y una línea simple,
+   sin el degradado (`CurvaConRellenoKey`). **`Fila` pone el chevrón sola** cuando tiene `onClick` y no trae
+   `final` (`chevron`); con un monto que se abre, quien llama pide `chevron = true` (las cuentas, los bienes y
+   «Créditos y tarjetas»), y una lista que se elige pasa `false`. «Créditos y tarjetas» dice «−$1.583.000», con el
+   signo del renglón «Deudas» del resumen (`cifraDeLasDeudasEnLaFila`).
+8. **El préstamo sin saldo, una sola pieza** (`ui/credits/ElPrestamoSinSaldo.kt`): el título en el tono de aviso
+   («Falta el saldo de Vehículo 4083», o «2 deudas sin saldo»), el detalle (lo que dice el plan, qué escribir o
+   cómo cuadrarla) y el mismo `Boton` `Secundario` chico («Usar este», «Cargarlo» o «Cuadrar»), con el texto de
+   `loQueSeDiceSinSaldo`. La usan Patrimonio, la ficha, la fila del préstamo en Créditos (sin la píldora «Sin saldo
+   en Movi» ni «cuádrala con el banco» repetidos) y el resumen de Créditos, que ahora cuenta las mismas deudas que
+   Patrimonio (`deudasSinSaldoParaDecir`) y también ofrece «Usar este». En la hoja, la diferencia se explica:
+   «Se registrará un cargo de $36.810.084 (incluye los $980.000 que Movi tenía a favor)»
+   (`loQueSeRegistraAlAjustar`).
+
+Lo vigilan `Vuelta80Test` (commonTest: la prioridad del ícono, las iniciales, la barra del widget, una acción por
+factura, la curva, el signo, la pieza sin saldo y la frase del cargo), `Vuelta80EnPantallaTest` (Robolectric: el
+mismo ícono en cuatro lugares, el dueño en el tinte en Inicio, Tú y Grupos, el widget con filas y barras y sin «Tus
+widgets», Agregar sin hueco a 390, la tarjeta de avisos de un renglón, la curva de tres puntos, el chevrón y la
+pieza sin saldo) y la guarda `UnSoloIconoYUnSoloAvatarTest` (`:core`). Se actualizaron las pruebas que leían la
+diferencia del widget, la nota del pago de tarjeta en el día, los botones de la tarjeta de avisos, la propuesta de
+cuenta y el «⋯» de Pagos, y `ElAmarilloEsDeLaAccionTest` (el avatar vive en su archivo).

@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.transactions
 
+import com.jvillada.movi.ui.components.ds.IconoDeMovimiento
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.text.BasicText
@@ -67,7 +68,6 @@ import com.jvillada.movi.ui.components.ds.VarianteDeCifra
 import com.jvillada.movi.ui.categorias.IconoDeCategoria
 import com.jvillada.movi.ui.categorias.TamanoDeIconoDeCategoria
 import com.jvillada.movi.ui.categorias.colorDeCategoria
-import com.jvillada.movi.ui.components.AvatarDelComercio
 import com.jvillada.movi.ui.components.TamanoDeAvatar
 import com.jvillada.movi.ui.components.formatMoney
 import com.jvillada.movi.ui.fecha.hoyEnAppZone
@@ -196,7 +196,7 @@ internal fun EncabezadoDelMovimiento(
         horizontalArrangement = Arrangement.spacedBy(Espacio.s),
     ) {
         Box(modifier = Modifier.size(TamanoDeAvatar.Encabezado.circulo), contentAlignment = Alignment.Center) {
-            AvatarDelComercio(evento, tamano = TamanoDeAvatar.Encabezado)
+            IconoDeMovimiento(evento, tamano = TamanoDeAvatar.Encabezado)
         }
         // Vuelta de diseño 36: el mismo título que su fila («Éxito Suba», no «Mercado»).
         Text(
@@ -234,7 +234,26 @@ internal fun EncabezadoDelMovimiento(
     }
     Spacer(Modifier.height(Espacio.xxs))
     Text(linea, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
+    // Vuelta 80: lo que decía el encabezado del día en Actividad, ahora en el pago mismo.
+    if (esPagoDeTarjetaQueSale(evento)) {
+        Text(
+            NOTA_DEL_PAGO_DE_TARJETA_EN_EL_DETALLE,
+            style = Movi.textos.apoyo,
+            color = Movi.colores.textoMedio,
+            modifier = Modifier.testTag(TAG_NOTA_DEL_PAGO_DE_TARJETA),
+        )
+    }
 }
+
+/** Lo que dice el detalle de un pago de tarjeta (vuelta 80; antes iba en el encabezado del día de Actividad). */
+const val NOTA_DEL_PAGO_DE_TARJETA_EN_EL_DETALLE: String = "No suma en tus gastos: la compra ya contó cuando la hiciste."
+
+/** El `testTag` de [NOTA_DEL_PAGO_DE_TARJETA_EN_EL_DETALLE]. */
+const val TAG_NOTA_DEL_PAGO_DE_TARJETA: String = "movimiento:nota-del-pago-de-tarjeta"
+
+/** ¿Es la pata que sale de un pago de tarjeta (la que el encabezado del día explicaba)? Pura. */
+internal fun esPagoDeTarjetaQueSale(evento: FinancialEvent): Boolean =
+    evento.category == com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY && evento.type == com.jvillada.movi.shared.model.TransactionType.EXPENSE
 
 /** Vuelta 71 (revisión): «a 3 cuotas» debajo de la cifra del detalle de una compra diferida. */
 const val TAG_CUOTAS_DEL_MOVIMIENTO: String = "movimiento:cuotas"

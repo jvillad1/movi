@@ -98,6 +98,21 @@ fun CardBalanceSheet(
 }
 
 /**
+ * **Lo que dice la hoja antes de registrar el ajuste** de [delta] sobre una deuda que en Movi está en
+ * [deudaEnMovi]. Pura.
+ *
+ * Vuelta 80: con la deuda en negativo (un préstamo sin saldo), el cargo es más grande que la cifra
+ * escrita —$35.830.084 escritos, «cargo de $36.810.084»— y la diferencia no se explicaba. Ahora se dice:
+ * «Se registrará un cargo de $36.810.084 (incluye los $980.000 que Movi tenía a favor)».
+ */
+fun loQueSeRegistraAlAjustar(delta: Long, deudaEnMovi: Long, moneda: String = "COP"): String = when {
+    delta > 0L && deudaEnMovi < 0L ->
+        "Se registrará un cargo de ${formatMoney(delta, moneda)} (incluye los ${formatMoney(-deudaEnMovi, moneda)} que Movi tenía a favor)."
+    delta > 0L -> "Se registrará un cargo de ${formatMoney(delta, moneda)} para subir la deuda."
+    else -> "Se registrará un abono de ${formatMoney(-delta, moneda)} para bajar la deuda."
+}
+
+/**
  * La hoja de ajustar el saldo de una deuda, préstamo o tarjeta: la deuda en Movi, el campo con lo que
  * dice el banco, qué se va a registrar y «Registrar ajuste». [ajustar] manda el saldo objetivo; el
  * server escribe la diferencia.
@@ -184,8 +199,7 @@ private fun HojaDeAjustarLaDeuda(
                     overCap        -> "Saldo fuera de rango — revisa el monto."
                     parsed == null -> ayuda
                     delta == 0L    -> "Ya coincide con Movi — no hay nada que registrar."
-                    delta!! > 0L   -> "Se registrará un cargo de ${formatMoney(delta, moneda)} para subir la deuda."
-                    else           -> "Se registrará un abono de ${formatMoney(-delta, moneda)} para bajar la deuda."
+                    else           -> loQueSeRegistraAlAjustar(delta!!, current, moneda)
                 },
                 style = Movi.textos.apoyo,
                 color = Movi.colores.textoMedio,

@@ -1,6 +1,13 @@
 package com.jvillada.movi.ui.sdui
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.text.style.TextAlign
+import com.jvillada.movi.ui.components.ds.TAG_WIDGET
+import com.jvillada.movi.ui.components.ds.TonoDeBarra
+import com.jvillada.movi.ui.components.ds.BarraDeProgreso
+import com.jvillada.movi.ui.components.ds.Fila
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Spacer
@@ -157,8 +164,6 @@ const val TAG_WIDGET_FALTA_POR_PAGAR: String = "inicio-widget-falta-por-pagar"
 /** El renglón «y N más» (o «Está arriba…») del widget «Falta por pagar». */
 const val TAG_RESTO_DEL_WIDGET_FALTA_POR_PAGAR: String = "inicio-widget-falta-por-pagar-resto"
 
-/** El título de la fila de los widgets. */
-const val TITULO_DE_LOS_WIDGETS: String = "Tus widgets"
 
 // ── La cuadrícula de acciones ────────────────────────────────────────────────
 
@@ -594,7 +599,8 @@ private fun GrillaDeCuentas(cuentas: List<CuentaDelCarrusel>, porRenglon: Int, o
 
 /**
  * **Los widgets del Inicio** —«Falta por pagar» y «En qué se va», los que el dueño elige en «Editar
- * inicio»—, lado a lado cuando llegan los dos ([ParDeWidgets]) o a todo el ancho si llega uno. Cada uno
+ * inicio»—, uno debajo del otro y a todo el ancho en el teléfono (vuelta 80), y lado a lado ([ParDeWidgets])
+ * en una ventana ancha. Cada uno
  * **resume** y lleva a su casa: Plan y «En qué se va».
  */
 @Composable
@@ -611,16 +617,27 @@ internal fun WidgetsDelInicio(
         else -> WidgetEnQueSeVa(data, onNavigate, modifier)
     }
     Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla)) {
-        // Vuelta 68: sin «Editar» al lado. Era una segunda entrada a lo mismo que «Editar inicio», al
-        // final del Inicio: una sola puerta.
-        Seccion(titulo = TITULO_DE_LOS_WIDGETS)
-        if (tipos.size >= 2) {
-            ParDeWidgets(izquierdo = { Uno(tipos[0], it) }, derecho = { Uno(tipos[1], it) })
-        } else {
-            Uno(tipos.first(), Modifier.fillMaxWidth())
+        // Vuelta 80: sin «Tus widgets» (palabra de desarrollador). Cada widget lleva su propio título.
+        // Vuelta 80: en el teléfono, uno debajo del otro y a todo el ancho. «En qué se va» es una lista de filas
+        // (nombre a la izquierda, monto a la derecha y su barra): a media pantalla de un teléfono, con la letra
+        // agrandada, no entraban. En una ventana ancha siguen lado a lado (las dos columnas del Inicio parejas).
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            if (tipos.size >= 2 && maxWidth >= ANCHO_PARA_LOS_WIDGETS_LADO_A_LADO) {
+                ParDeWidgets(izquierdo = { Uno(tipos[0], it) }, derecho = { Uno(tipos[1], it) })
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion)) {
+                    tipos.forEach { Uno(it, Modifier.fillMaxWidth()) }
+                }
+            }
         }
     }
 }
+
+/**
+ * Vuelta 80: desde qué ancho los dos widgets van lado a lado (tres cuartos del mediano, 450 dp). Un teléfono
+ * (hasta ~430 dp) los apila; una columna del Inicio ancho, no.
+ */
+internal val ANCHO_PARA_LOS_WIDGETS_LADO_A_LADO = com.jvillada.movi.ui.components.ANCHO_DEL_MEDIANO * 0.75f
 
 /** Vuelta 68: lo que dice el widget cuando lo único que falta es el pago de «Próximo pago». */
 const val EL_DE_PROXIMO_PAGO: String = "Es el de «Próximo pago»"
@@ -714,13 +731,12 @@ private const val CATEGORIAS_EN_EL_WIDGET = 3
  * misma del análisis), cada una con su monto y **cuánto más o menos que el período pasado a la misma
  * altura** (`diferenciaDeLaCategoria`). Lleva a «En qué se va».
  *
- * Vuelta de diseño 7: contesta «¿en qué gasto más que el período pasado?». Antes el rótulo «vs.
- * período pasado» iba a la derecha del título y, a media pantalla, se lo comía entero; cada fila
- * llevaba una flecha sin número y una barra casi vacía que no decía contra qué se medía. Ahora el
- * título se ve, la comparación se dice una vez debajo, y cada categoría va en tres renglones: el
- * ícono y el nombre (lo único que puede cortarse con «…»), el monto con [Cifra] entero, y la
- * diferencia en palabras («$120.000 más», «nuevo»), en `sale` solo si sube mucho. El monto va neutro
- * siempre (vuelta de diseño 16): el tono va solo en la diferencia.
+ * Vuelta 80 (revisión 7): se veía sin terminar —rótulo arriba, cifra debajo, sin barras—. Ahora va en
+ * una [Superficie] blanca de lista, con su título, y **cada categoría es una [Fila]**: el nombre a la
+ * izquierda y el monto a la derecha, y debajo una [BarraDeProgreso] de 4 dp relativa a la mayor
+ * ([fraccionDeLaCategoriaEnElWidget]) con la diferencia en una [Pildora] (la regla de «nuevo» de la
+ * vuelta 76: lo fijo nunca es nuevo). El monto va neutro siempre (vuelta de diseño 16): el tono va
+ * solo en la píldora, en `Peligro` solo si sube mucho.
  */
 @Composable
 internal fun WidgetEnQueSeVa(data: DashboardData, onNavigate: (Screen) -> Unit, modifier: Modifier = Modifier) {
@@ -733,45 +749,82 @@ internal fun WidgetEnQueSeVa(data: DashboardData, onNavigate: (Screen) -> Unit, 
     // Vuelta 76: lo fijo (las reglas y la cuota) nunca dice «nuevo» (ver `categoriasFijas`).
     val fijas = com.jvillada.movi.ui.dashboard.categoriasFijas(data.upcoming.orEmpty().map { it.rule })
     val diferencias = categorias.map { diferenciaDeLaCategoria(it, fijas) }
-    Widget(
-        titulo = "En qué se va",
+    val mayor = categorias.maxOfOrNull { it.gastado } ?: 0L
+    Superficie(
+        modifier = modifier.testTag(TAG_TARJETA_EN_QUE_SE_VA).testTag(TAG_WIDGET),
+        relleno = RellenoDeSuperficie.Lista,
         onClick = { onNavigate(Screen.EnQueSeVa()) },
-        modifier = modifier.testTag(TAG_TARJETA_EN_QUE_SE_VA),
+        onClickLabel = "Ver En qué se va",
     ) {
-        // Contra qué se compara, dicho una vez (cada diferencia dice la frase entera al lector).
-        if (diferencias.any { it != null }) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Medida.margenDePantalla)
+                .padding(top = Espacio.s),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
+        ) {
             Text(
-                CONTRA_EL_PERIODO_PASADO,
-                style = Movi.textos.apoyo,
-                color = Movi.colores.textoMedio,
-                modifier = Modifier.testTag(TAG_CONTRA_EL_PERIODO_PASADO),
+                text = TITULO_DEL_WIDGET_EN_QUE_SE_VA,
+                style = Movi.textos.titulo,
+                color = Movi.colores.texto,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.semantics { heading() },
             )
+            // Contra qué se compara, dicho una vez (cada píldora dice la frase entera al lector).
+            if (diferencias.any { it != null }) {
+                Text(
+                    CONTRA_EL_PERIODO_PASADO,
+                    style = Movi.textos.apoyo,
+                    color = Movi.colores.textoMedio,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.End,
+                    modifier = Modifier.weight(1f).testTag(TAG_CONTRA_EL_PERIODO_PASADO),
+                )
+            }
         }
         categorias.zip(diferencias).forEach { (categoria, diferencia) ->
-            Column(verticalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
-                    // El ícono de la categoría, como en Movimientos (ola B): «Comida» se reconoce igual
-                    // en toda la app.
-                    IconoDeCategoria(categoria.nombre, tamano = TamanoDeIconoDeCategoria.Chico)
-                    Text(
-                        text = categoria.nombre,
-                        style = Movi.textos.apoyo,
-                        color = Movi.colores.texto,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+            Column(modifier = Modifier.testTag(TAG_CATEGORIA_DEL_WIDGET)) {
+                Fila(
+                    titulo = categoria.nombre,
+                    // **Siempre neutro** (vuelta de diseño 16): un gasto no es una alarma.
+                    final = { Cifra(categoria.gastado, VarianteDeCifra.Fila, tono = TonoDeCifra.Neutro) },
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Medida.margenDePantalla)
+                        .padding(bottom = Espacio.s),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
+                ) {
+                    BarraDeProgreso(
+                        fraccion = fraccionDeLaCategoriaEnElWidget(categoria.gastado, mayor),
+                        tono = TonoDeBarra.Marca,
                         modifier = Modifier.weight(1f),
                     )
+                    if (diferencia != null) DiferenciaDelWidget(diferencia)
                 }
-                // En su renglón: entero siempre, aun a media pantalla y con la letra agrandada.
-                // **Siempre neutro** (vuelta de diseño 16): un gasto no es una alarma. Lo que sube
-                // mucho lo dice la diferencia de abajo, en `sale`; antes el monto de Mercado también
-                // iba en rojo y la señal salía dos veces.
-                Cifra(categoria.gastado, VarianteDeCifra.Fila, tono = TonoDeCifra.Neutro)
-                if (diferencia != null) DiferenciaDelWidget(diferencia)
             }
         }
     }
 }
+
+/** El título del widget «En qué se va»: cada widget lleva el suyo (vuelta 80, sin «Tus widgets»). */
+const val TITULO_DEL_WIDGET_EN_QUE_SE_VA: String = "En qué se va"
+
+/** El tag de cada categoría del widget «En qué se va» (la fila con su barra). */
+const val TAG_CATEGORIA_DEL_WIDGET: String = "inicio-categoria-del-widget"
+
+/** Cuánto de la barra llena una categoría: relativa a la mayor del widget (la mayor llena la barra). Pura. */
+internal fun fraccionDeLaCategoriaEnElWidget(gastado: Long, mayor: Long): Float =
+    if (mayor <= 0L) 0f else (gastado.toFloat() / mayor).coerceIn(0f, 1f)
+
+/** El tono de la píldora de la diferencia: `Peligro` solo si sube mucho (la cifra en alerta); si no, neutra. Pura. */
+internal fun tonoDeLaPildoraDeLaDiferencia(tono: TonoDeCifra): TonoDePildora =
+    if (tono == TonoDeCifra.Alerta) TonoDePildora.Peligro else TonoDePildora.Neutra
 
 /** El tag de la línea «Contra el período pasado» del widget. */
 const val TAG_CONTRA_EL_PERIODO_PASADO: String = "inicio-contra-el-periodo-pasado"
@@ -780,17 +833,13 @@ const val TAG_CONTRA_EL_PERIODO_PASADO: String = "inicio-contra-el-periodo-pasad
 const val TAG_DIFERENCIA_DEL_WIDGET: String = "inicio-diferencia-del-widget"
 
 /**
- * «$120.000 más», «$45.000 menos», «igual» o «nuevo», con la letra de una cifra chica y el color de su
- * tono (`colorDeLaCifra`). La frase entera es para el lector de pantalla.
+ * «$120.000 más», «$45.000 menos», «igual» o «nuevo», en una [Pildora] (vuelta 80) del tono de
+ * [tonoDeLaPildoraDeLaDiferencia]. La frase entera es para el lector de pantalla.
  */
 @Composable
 private fun DiferenciaDelWidget(diferencia: DiferenciaDeLaCategoria) {
-    Text(
-        text = diferencia.texto,
-        style = estiloDeLaCifra(VarianteDeCifra.Chica, Movi.textos),
-        color = colorDeLaCifra(diferencia.tono, Movi.colores),
-        modifier = Modifier
-            .testTag(TAG_DIFERENCIA_DEL_WIDGET)
-            .semantics { contentDescription = diferencia.descripcion },
-    )
+    // El tag en su propio nodo: la Pildora trae el suyo.
+    Box(modifier = Modifier.testTag(TAG_DIFERENCIA_DEL_WIDGET).semantics { contentDescription = diferencia.descripcion }) {
+        Pildora(texto = diferencia.texto, tono = tonoDeLaPildoraDeLaDiferencia(diferencia.tono))
+    }
 }

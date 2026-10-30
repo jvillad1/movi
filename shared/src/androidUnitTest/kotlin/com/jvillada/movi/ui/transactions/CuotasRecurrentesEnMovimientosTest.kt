@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.transactions
 
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
@@ -260,6 +262,10 @@ class CuotasRecurrentesEnMovimientosTest {
     @Test
     fun `el card de Flujo libre cuenta las cuotas y dice cuanto`() {
         montarTablero()
+        // Vuelta 80: los párrafos del total van detrás de «¿Qué cuenta?».
+        composeRule.onNodeWithTag(com.jvillada.movi.ui.plan.TAG_QUE_CUENTA, useUnmergedTree = true)
+            .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
+        composeRule.waitForIdle()
 
         composeRule.onAllNodesWithText(
             "Las cuotas de tus créditos entran en este total: $4.215.223 al mes.",
@@ -275,6 +281,10 @@ class CuotasRecurrentesEnMovimientosTest {
     @Test
     fun `el card explica el credito que se paga de una sola vez`() {
         montarTablero()
+        // Vuelta 80: los párrafos del total van detrás de «¿Qué cuenta?».
+        composeRule.onNodeWithTag(com.jvillada.movi.ui.plan.TAG_QUE_CUENTA, useUnmergedTree = true)
+            .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
+        composeRule.waitForIdle()
 
         composeRule.onAllNodesWithText(
             "Un crédito tuyo se paga de una sola vez", substring = true, useUnmergedTree = true,

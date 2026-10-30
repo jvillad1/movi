@@ -230,9 +230,9 @@ class ElOtrosSeResuelveEnLaTarjetaTest {
         montarDesdeElInicio()
         tocarElTag(TAG_ELEGIR_CATEGORIA_EN_LA_FILA)
         tocarElTag(tagDeCategoriaEnLaTarjeta("Papelería"))
-        esperar { cuantos("Confirmar los 4") > 0 }
+        esperar { cuantos("Confirmar 4") > 0 }
 
-        tocarElBoton("Confirmar los 4")
+        tocarElBoton("Confirmar 4")
         // La hoja lista los avisos como filas: comercio, «Categoría · Cuenta» y el monto.
         composeRule.onNodeWithTag(TAG_LISTA_DE_LA_CONFIRMACION, useUnmergedTree = true).assertExists()
         listOf("Panamericana Laureles", "Juan Valdez Cafe", "Uber Rides", "Farmatodo Laureles").forEach { comercio ->

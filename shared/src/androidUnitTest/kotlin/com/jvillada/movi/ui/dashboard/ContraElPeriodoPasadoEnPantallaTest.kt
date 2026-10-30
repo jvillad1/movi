@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.dashboard
 
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
@@ -49,7 +50,12 @@ class ContraElPeriodoPasadoEnPantallaTest {
 
     private fun diferencias(): List<String> =
         composeRule.onAllNodesWithTag(TAG_DIFERENCIA_DEL_WIDGET, useUnmergedTree = true).fetchSemanticsNodes()
-            .map { n -> n.config[androidx.compose.ui.semantics.SemanticsProperties.Text].joinToString("") { it.text } }
+            // Vuelta 80: la diferencia va en una Pildora; su texto está en el hijo.
+            .map { n -> textoAdentro(n) }
+
+    private fun textoAdentro(n: androidx.compose.ui.semantics.SemanticsNode): String =
+        n.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Text)?.joinToString("") { it.text }
+            ?: n.children.map(::textoAdentro).firstOrNull { it.isNotEmpty() }.orEmpty()
 
     @Test
     fun `el widget tiene titulo y cada fila dice su diferencia o nuevo`() {

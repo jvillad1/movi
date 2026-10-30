@@ -133,24 +133,12 @@ class Vuelta52Test {
         composeRule.onAllNodesWithContentDescription("Recurrente", useUnmergedTree = true).assertCountEquals(2)
     }
 
+    /** Vuelta 80: la nota del pago de tarjeta salió del encabezado del día (un tercer renglón) y va al detalle. */
     @Test
-    fun `a 360 dp con la letra al 112 la nota del pago de tarjeta es un solo renglon y se lee entera`() {
+    fun `la nota del pago de tarjeta ya no va en el encabezado del dia`() {
         montar()
-        val nodo = composeRule.onAllNodesWithTag(TAG_PAGO_DE_TARJETA_EN_EL_DIA, useUnmergedTree = true)
-            .fetchSemanticsNodes().single()
-        val resultados = mutableListOf<TextLayoutResult>()
-        nodo.config[SemanticsActions.GetTextLayoutResult].action?.invoke(resultados)
-        val layout = resultados.single()
-        assertEquals(1, layout.lineCount, "la nota ocupa un solo renglón")
-        assertTrue(!layout.didOverflowWidth, "y no se sale del ancho: o cabe la nota o cabe la corta")
-        val texto = nodo.config.getOrNull(SemanticsProperties.Text)!!.joinToString("") { it.text }
-        assertTrue(texto.startsWith("+ \$1.929.536 a tu tarjeta"), "dice cuánto fue a la tarjeta, vi «$texto»")
-        // Con la nota recortada o no, el lector de pantalla oye la explicación completa.
-        val descripcion = nodo.config.getOrNull(SemanticsProperties.ContentDescription)!!.joinToString(" ")
-        assertEquals(
-            "Además, \$1.929.536 fueron a pagar tarjeta — ya contado en tu gasto del mes cuando compraste, " +
-                "no se duplica.",
-            descripcion,
-        )
+        assertTrue(composeRule.onAllNodesWithTag(TAG_PAGO_DE_TARJETA_EN_EL_DIA, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+        assertTrue(composeRule.onAllNodesWithText("a tu tarjeta", substring = true, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
     }
+
 }

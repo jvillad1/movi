@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.espacios
 
+import com.jvillada.movi.ui.components.ds.AvatarDeTercero
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -184,11 +185,13 @@ fun HojaNuevoEspacio(onDismiss: () -> Unit, onCreado: (Espacio) -> Unit, onIrATe
                     val elegida = d.id in elegidas
                     Fila(
                         titulo = d.nombre,
-                        inicio = { AvatarDePersona(d.nombre) },
+                        inicio = { AvatarDeTercero(d.nombre) },
                         final = if (elegida) {
                             { Icon(Icons.Rounded.Check, contentDescription = "Elegida", tint = Movi.colores.texto) }
                         } else null,
                         onClick = { elegidas = if (elegida) elegidas - d.id else elegidas + d.id },
+                        // Vuelta 80: se elige, no se abre.
+                        chevron = false,
                         onClickLabel = if (elegida) "Quitar a ${d.nombre}" else "Compartir con ${d.nombre}",
                     )
                 }
@@ -434,7 +437,7 @@ fun PagosEntreUstedes(detalle: DetalleDelEspacio, ahora: Long, onCambio: () -> U
                     // Vuelta 67: la fecha y, abajo, cómo se pagó; en un renglón se cortaba «Esperando la transfere…».
                     subtitulo = detalleDelPago(l, ahora),
                     lineasDelSubtitulo = RENGLONES_DEL_DETALLE_DEL_PAGO,
-                    inicio = { AvatarDePersona(nombreEnElEspacio(espacio, if (l.a == MIEMBRO_YO) l.de else l.a), tono = TonoDeIcono.Info) },
+                    inicio = { AvatarDeTercero(nombreEnElEspacio(espacio, if (l.a == MIEMBRO_YO) l.de else l.a)) },
                     final = {
                         Boton(
                             "Deshacer",

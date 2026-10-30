@@ -86,7 +86,8 @@ class LosCreditosDicenLaVerdadEnPantallaTest {
         }
 
         // Vuelta 73: un crédito con condiciones dice qué le falta, con «Cargarlo».
-        assertEquals(1, cuantos(com.jvillada.movi.ui.credits.FALTA_EL_SALDO_DEL_CREDITO), "la ficha lo dice una vez")
+        // Vuelta 80: la pieza de toda la app, con el nombre («Falta el saldo de Vehículo 4083»).
+        assertEquals(1, cuantos(com.jvillada.movi.ui.credits.textoDelCreditoSinSaldo("Vehículo 4083")), "la ficha lo dice una vez")
         assertEquals(0, cuantos(FALTA_EL_SALDO_DE_LA_DEUDA), "sin la frase de las tarjetas")
         assertFalse(hay("+\$980.000"), "el «+$980.000» en verde de antes")
         assertFalse(hay("−\$980.000"))
@@ -110,17 +111,21 @@ class LosCreditosDicenLaVerdadEnPantallaTest {
         composeRule.waitUntil(5_000) { hay("Vehículo 4083") }
         composeRule.waitForIdle()
 
-        assertTrue(hay(SIN_SALDO_EN_MOVI), "la píldora de la fila, la misma frase de la ficha")
+        // Vuelta 80: la fila lleva la pieza del préstamo sin saldo (la misma de la ficha), no la píldora.
+        assertFalse(hay(SIN_SALDO_EN_MOVI), "sin la píldora: la pieza de abajo ya lo dice")
         assertFalse(hay("−\$980.000"), "la fila decía «−$980.000»")
         // Deuda total: los $1.583.000 de Nu, no $603.000.
         assertTrue(hay("\$1.583.000"))
         assertFalse(hay("\$603.000"))
-        // Y el crédito sin saldo se nombra con su salida.
-        assertTrue(hay("1 crédito sin saldo"))
+        // Y el crédito sin saldo se nombra con su salida: la misma pieza que Patrimonio y la ficha (vuelta 80),
+        // en el resumen y en su fila, con «Usar este» (sus condiciones están completas).
+        assertEquals(2, cuantos(com.jvillada.movi.ui.credits.textoDelCreditoSinSaldo("Vehículo 4083")))
         composeRule.onAllNodesWithTag(TAG_DEUDAS_SIN_SALDO, useUnmergedTree = true).fetchSemanticsNodes().single()
-        composeRule.onNode(hasText(CUADRAR_LAS_DEUDAS_SIN_SALDO) and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.onAllNodes(hasText(com.jvillada.movi.ui.credits.USAR_EL_SALDO_DEL_PLAN) and hasClickAction())[0]
+            .performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
-        assertEquals(Screen.CuadrarLaCuenta("acc_4083"), destinos.last())
+        assertTrue(hay(com.jvillada.movi.ui.credits.ES_LA_CIFRA_DE_TU_PLAN), "la hoja llega con la cifra del plan")
+        assertTrue(destinos.isEmpty())
     }
 
     /** Patrimonio decía «Deudas −$603.000» y abajo «Créditos y tarjetas $1.583.000», sin explicar por qué. */

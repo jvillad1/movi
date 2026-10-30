@@ -37,7 +37,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * # Vuelta 53 · los botones de la tarjeta de avisos nunca se cortan
+ * # Vuelta 53 · los botones de la tarjeta de avisos nunca se cortan (vuelta 80: «Confirmar 2» · «Revisar»)
  *
  * La revisión de la vuelta 51 vio «Revisar uno por» a 390 dp: el `FlowRow` con `weight` decidía el
  * renglón con el ancho mínimo (la palabra más larga) y dejaba los dos botones lado a lado aunque no
@@ -92,9 +92,12 @@ class LosBotonesDeLosAvisosCabenTest {
     /** Cada rótulo de los botones de las dos tarjetas: entero, en un renglón y dentro de la pantalla. */
     private fun losRotulos(ancho: Int): List<String> {
         val nodos = composeRule.onAllNodes(
-            hasAnyAncestor(hasTestTag(TAG_BOTONES_DE_LOS_AVISOS)) and SemanticsMatcher.keyIsDefined(SemanticsProperties.Text),
+            hasAnyAncestor(hasTestTag(TAG_TARJETA_DE_AVISOS)) and SemanticsMatcher.keyIsDefined(SemanticsProperties.Text),
             useUnmergedTree = true,
-        ).fetchSemanticsNodes()
+        ).fetchSemanticsNodes().filter { n ->
+            val t = n.config[SemanticsProperties.Text].joinToString("") { it.text }
+            t.startsWith("Confirmar") || t == REVISAR_LOS_AVISOS
+        }
         return nodos.map { nodo ->
             val texto = nodo.config[SemanticsProperties.Text].joinToString("") { it.text }
             val r = mutableListOf<TextLayoutResult>()
@@ -110,18 +113,14 @@ class LosBotonesDeLosAvisosCabenTest {
     }
 
     /**
-     * Las dos tarjetas: «Confirmar los 2» y «Revisar uno por uno» en las dos; en la segunda, el rótulo
-     * largo si cabe ([largoCabe]) y si no, el corto (`botonCortoDeConfirmarLosAvisos`).
+     * Vuelta 80: las dos tarjetas son una propuesta de un renglón con «Confirmar 2» (chico) y «Revisar»
+     * (enlace). Los rótulos son cortos y caben siempre; [largoCabe] quedó de la vuelta 53.
      */
+    @Suppress("UNUSED_PARAMETER")
     private fun losCuatroRotulos(ancho: Int, largoCabe: Boolean) {
         val rotulos = losRotulos(ancho)
-        val largo = "Confirmar los 2 que Movi entendió"
-        assertEquals(2, rotulos.count { it == REVISAR_UNO_POR_UNO }, rotulos.toString())
-        if (largoCabe) {
-            assertEquals(listOf("Confirmar los 2", largo), rotulos.filter { it.startsWith("Confirmar") }, rotulos.toString())
-        } else {
-            assertEquals(listOf("Confirmar los 2", "Confirmar los 2"), rotulos.filter { it.startsWith("Confirmar") }, rotulos.toString())
-        }
+        assertEquals(2, rotulos.count { it == REVISAR_LOS_AVISOS }, rotulos.toString())
+        assertEquals(listOf("Confirmar 2", "Confirmar 2"), rotulos.filter { it.startsWith("Confirmar") }, rotulos.toString())
     }
 
     @Test @Config(sdk = [34], qualifiers = "w360dp-h800dp-xhdpi")
@@ -138,14 +137,14 @@ class LosBotonesDeLosAvisosCabenTest {
     fun `a 390 con la letra de la app`() { montar(1.12f); losCuatroRotulos(390, largoCabe = true) }
 
     @Test @Config(sdk = [34], qualifiers = "w390dp-h844dp-xhdpi")
-    fun `a 390 con la letra agrandada`() { montar(1.3f); assertEquals(2, losRotulos(390).count { it == REVISAR_UNO_POR_UNO }) }
+    fun `a 390 con la letra agrandada`() { montar(1.3f); assertEquals(2, losRotulos(390).count { it == REVISAR_LOS_AVISOS }) }
 
-    /** Y cuando caben, siguen lado a lado y llenan el ancho, como en la maqueta. */
+    /** «Confirmar 2» y «Revisar» van lado a lado (vuelta 80: la anatomía de la propuesta). */
     @Test @Config(sdk = [34], qualifiers = "w600dp-h800dp-xhdpi")
     fun `con lugar van lado a lado`() {
         montar(1.12f)
-        val confirmar = composeRule.onAllNodesWithText("Confirmar los 2", useUnmergedTree = true).fetchSemanticsNodes().first()
-        val revisar = composeRule.onAllNodesWithText(REVISAR_UNO_POR_UNO, useUnmergedTree = true).fetchSemanticsNodes().first()
+        val confirmar = composeRule.onAllNodesWithText("Confirmar 2", useUnmergedTree = true).fetchSemanticsNodes().first()
+        val revisar = composeRule.onAllNodesWithText(REVISAR_LOS_AVISOS, useUnmergedTree = true).fetchSemanticsNodes().first()
         assertEquals(confirmar.boundsInRoot.center.y, revisar.boundsInRoot.center.y, 1f)
         assertTrue(revisar.boundsInRoot.left > confirmar.boundsInRoot.right, "uno al lado del otro")
     }

@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.periodos
 
+import com.jvillada.movi.ui.components.ds.IconoDeMovimiento
 import com.jvillada.movi.ui.transactions.tituloDelMovimiento
 import com.jvillada.movi.ui.transactions.CifraDelMovimiento
 import com.jvillada.movi.ui.transactions.tonoDelEvento
@@ -1030,7 +1031,7 @@ private fun LosMasGrandes(eventos: List<FinancialEvent>, onAbrir: (FinancialEven
                 Fila(
                     titulo = tituloDelMovimiento(evento),
                     subtitulo = diaLegible(epochMillisToAppDate(evento.timestamp)),
-                    inicio = { IconoDeCategoria(evento.category) },
+                    inicio = { IconoDeMovimiento(evento) },
                     // Vuelta 50: la cifra de la fila de un movimiento, como en Actividad: «−$980.000»
                     // en tinta (la cuota de un crédito incluida), con la misma regla ([tonoDelEvento]).
                     final = { CifraDelMovimiento(evento.amount, evento.currency, tonoDelEvento(evento)) },

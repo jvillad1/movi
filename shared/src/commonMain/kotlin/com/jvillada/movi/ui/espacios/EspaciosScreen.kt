@@ -1,5 +1,9 @@
 package com.jvillada.movi.ui.espacios
 
+import com.jvillada.movi.data.SessionManager
+import com.jvillada.movi.ui.components.ds.AvatarDeTercero
+import com.jvillada.movi.ui.components.ds.AvatarDelDueno
+import com.jvillada.movi.ui.components.ds.IconoDeMovimiento
 import androidx.compose.material.icons.rounded.Add
 import com.jvillada.movi.ui.components.ds.AccionDeEncabezado
 import androidx.compose.foundation.background
@@ -518,7 +522,7 @@ private fun EncabezadoDelEspacio(detalle: DetalleDelEspacio, onEditar: () -> Uni
     Superficie {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(EspacioDeDiseno.s)) {
             Row(horizontalArrangement = Arrangement.spacedBy(EspacioDeDiseno.xxs)) {
-                espacio.miembros.forEach { m -> AvatarDePersona(m.nombre, tono = tonoDe(m.id)) }
+                espacio.miembros.forEach { m -> AvatarDelMiembro(m.id, m.nombre) }
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(espacio.nombre, style = Movi.textos.titulo, color = Movi.colores.texto, maxLines = 1)
@@ -533,8 +537,14 @@ private fun EncabezadoDelEspacio(detalle: DetalleDelEspacio, onEditar: () -> Uni
     }
 }
 
-/** El dueño en la marca; los demás en neutro. */
-private fun tonoDe(miembroId: String): TonoDeIcono = if (miembroId == MIEMBRO_YO) TonoDeIcono.Propio else TonoDeIcono.Info
+/**
+ * **El avatar de un miembro** (vuelta 80): el dueño con sus iniciales en el tinte, como en el Inicio y
+ * en Tú ([AvatarDelDueno]); los demás, con su inicial en su tono estable ([AvatarDeTercero]).
+ */
+@Composable
+internal fun AvatarDelMiembro(miembroId: String, nombre: String) {
+    if (miembroId == MIEMBRO_YO) AvatarDelDueno(SessionManager.userName ?: nombre) else AvatarDeTercero(nombre)
+}
 
 /** «Quién puso qué»: una barra por miembro, con la marca de lo que le tocaba. */
 @Composable
@@ -548,7 +558,7 @@ private fun QuienPusoQue(detalle: DetalleDelEspacio) {
             Column(verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion)) {
                 periodo.miembros.forEach { m ->
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(EspacioDeDiseno.s)) {
-                        AvatarDePersona(nombreDelPagador(espacio, m.miembroId), tono = tonoDe(m.miembroId))
+                        AvatarDelMiembro(m.miembroId, nombreDelPagador(espacio, m.miembroId))
                         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(EspacioDeDiseno.xxs)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
@@ -695,7 +705,8 @@ private fun GastosDelEspacio(
                         titulo = tituloDelGasto(g),
                         // Vuelta de diseño 32: un renglón; si no cabe, se corta la categoría (va al final).
                         subtitulo = quienPagoElGasto(espacio, g),
-                        inicio = { AvatarDePersona(nombreDelPagador(espacio, g.pagadoPor), tono = tonoDe(g.pagadoPor)) },
+                        // Vuelta 80: el gasto con el ícono de todo movimiento; quién pagó lo dice el subtítulo.
+                        inicio = { IconoDeMovimiento(null, g.descripcion, g.categoria) },
                         final = { MontoYTuParte(g.monto, g.partes[MIEMBRO_YO] ?: 0L) },
                         onClick = { abierto = g },
                         onClickLabel = "Ver el gasto",
@@ -760,7 +771,7 @@ private fun ColumnScope.LoQuePagaOtraPersona(creditos: List<CreditSummary>) {
                 Fila(
                     titulo = c.account.name,
                     subtitulo = "La paga $quien · cada mes",
-                    inicio = { AvatarDePersona(quien, tono = TonoDeIcono.Info) },
+                    inicio = { AvatarDeTercero(quien) },
                     final = { Cifra(c.terms?.installment ?: 0L) },
                 )
             }

@@ -217,7 +217,7 @@ class LosAvisosDeUnVistazoTest {
         montarDesdeElInicio(propuestas("Salud"))
         entrarAPorRevisar()
 
-        tocarElBoton("Confirmar los 3")
+        tocarElBoton("Confirmar 3")
         assertEquals(1, cuantos("¿Confirmar estos 3 avisos?"))
         assertEquals(1, cuantos("Total \$103.600"))
         tocarElBoton("Confirmar", elUltimo = true)
@@ -281,7 +281,7 @@ class LosAvisosDeUnVistazoTest {
         tocarElTag(TAG_CAMBIAR_EN_LA_FILA, indice = 1)
         tocarElTag(tagDeCategoriaEnLaTarjeta("Salud"))
         esperar { cuantos("Salud · Bancolombia Ahorros 4057") == 1 }
-        tocarElBoton("Confirmar los 3")
+        tocarElBoton("Confirmar 3")
         tocarElBoton("Confirmar", elUltimo = true)
         esperar { confirmados.size == 3 }
         assertEquals(5, toques, "eran 6 con Revisar aviso de por medio")
