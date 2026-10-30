@@ -11,12 +11,19 @@ import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.plugins.configureRouting
 import com.jvillada.movi.server.plugins.configureSerialization
+import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.AvisosDelMismoPago
+import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
+import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.ParsedSms
+import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.SMS_STATE_CONFIRMED
 import com.jvillada.movi.shared.model.SMS_STATE_PENDING
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.momentoDelSms
+import io.ktor.client.call.body
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -44,6 +51,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * # Vuelta 74 · «Es este» en un toque, y su «Deshacer»
@@ -251,6 +259,59 @@ class EsEsteYSuDeshacerTest {
 
         assertEquals(HttpStatusCode.NotFound, desvincular(a, "sms_crepes"))
         assertEquals(SMS_STATE_PENDING, fila("sms_crepes").first)
+    }
+
+    // ── Revisión de la vuelta 74: dos compras iguales ───────────────────────────────────────
+
+    private fun crepesDe(id: String, hora: String) = SmsMessage(
+        id = id, time = "2026-10-29 $hora", bank = "85540", state = "", det = "",
+        text = "Bancolombia: Compraste \$32.000,00 en CREPES Y WAFFLES OVIEDO con tu T.Deb *4057, el 29/10/2026 a las $hora.",
+    )
+
+    private suspend fun ApplicationTestBuilder.coincidencias(uid: String, smsId: String): List<FinancialEvent> =
+        cliente().get("/api/sms/$smsId/coincidencias") { header(HttpHeaders.Authorization, "Bearer ${token(uid)}") }.body()
+
+    @Test
+    fun `dos compras iguales - el movimiento de la primera no se ofrece ni se acepta para la segunda`() = testApplication {
+        application { testModule() }
+        anotadoAMano("ev_crepes")
+        subir(a, crepesDe("sms_1245", "12:45"), crepesDe("sms_1258", "12:58"))
+        assertEquals(listOf("ev_crepes"), coincidencias(a, "sms_1258").map { it.id }, "antes, las dos lo ven")
+
+        assertEquals(HttpStatusCode.OK, esEste(a, "sms_1245", "ev_crepes"))
+
+        assertEquals(emptyList(), coincidencias(a, "sms_1258").map { it.id }, "ya es de la primera: no se ofrece")
+        assertEquals(HttpStatusCode.Conflict, esEste(a, "sms_1258", "ev_crepes"), "ni se acepta")
+        assertEquals(Triple(SMS_STATE_PENDING, null, null), fila("sms_1258"), "la segunda compra sigue esperando")
+        assertEquals("ev_crepes", fila("sms_1245").second)
+        // Deshecha la primera, el movimiento vuelve a estar libre.
+        desvincular(a, "sms_1245")
+        assertEquals(listOf("ev_crepes"), coincidencias(a, "sms_1258").map { it.id })
+    }
+
+    @Test
+    fun `un pago de tarjeta solo coincide con su categoria o la pata que entra a la tarjeta, una por traspaso`() {
+        val tipos = mapOf("ahorros" to AccountType.SAVINGS, "efectivo" to AccountType.CASH, "nu" to AccountType.CREDIT_CARD)
+        fun ev(id: String, cuenta: String, tipo: TransactionType, categoria: String, par: String? = null) = FinancialEvent(
+            id = id, accountId = cuenta, type = tipo, amount = 50_000L, category = categoria, description = categoria,
+            timestamp = momento, transferId = par,
+        )
+        val eventos = listOf(
+            ev("tr_sale", "ahorros", TransactionType.EXPENSE, "Traspaso", par = "tr1"),
+            ev("tr_entra", "efectivo", TransactionType.INCOME, "Traspaso", par = "tr1"),
+            ev("mercado", "ahorros", TransactionType.EXPENSE, "Mercado"),
+            ev("pago_sale", "ahorros", TransactionType.EXPENSE, CARD_PAYMENT_CATEGORY, par = "tr2"),
+            ev("pago_entra", "nu", TransactionType.INCOME, CARD_PAYMENT_CATEGORY, par = "tr2"),
+        )
+        val pago = ParsedSms(50_000.0, "Nu", TransactionType.EXPENSE, CARD_PAYMENT_CATEGORY)
+        assertEquals(listOf("pago_sale"), coincidenciasDelSms(pago, momento, eventos, tipos).map { it.id })
+        // Sin la pata que sale, la que entra a la tarjeta también vale.
+        assertEquals(listOf("pago_entra"), coincidenciasDelSms(pago, momento, eventos.filter { it.id != "pago_sale" }, tipos).map { it.id })
+        // Un gasto nunca coincide con la pata que entra de un traspaso, y un traspaso es un candidato.
+        val gasto = ParsedSms(50_000.0, "Exito", TransactionType.EXPENSE, "Mercado")
+        val ids = coincidenciasDelSms(gasto, momento, eventos, tipos).map { it.id }
+        assertTrue("tr_entra" !in ids && "pago_entra" !in ids, "ninguna pata que entra: $ids")
+        assertEquals(1, ids.count { it.startsWith("tr_") }, "un candidato por traspaso")
     }
 
     @Test

@@ -46,6 +46,7 @@ import com.jvillada.movi.shared.model.SMS_STATE_IGNORED
 import com.jvillada.movi.shared.model.SMS_STATE_PENDING
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.esIdDeComprobante
 import com.jvillada.movi.shared.model.esUnComprobante
 import io.ktor.http.ContentType
@@ -583,16 +584,42 @@ internal const val DIAS_PARA_COINCIDIR: Long = 3
  * El monto sí filtra acá, a diferencia del emparejador de recurrentes: un SMS dice la cifra exacta
  * que se movió, así que un movimiento con otro monto no es este.
  */
-internal fun coincidenciasDelSms(parsed: ParsedSms, momento: Long, eventos: List<FinancialEvent>): List<FinancialEvent> {
+internal fun coincidenciasDelSms(
+    parsed: ParsedSms,
+    momento: Long,
+    eventos: List<FinancialEvent>,
+    /**
+     * Revisión de la vuelta 74: el tipo de cada cuenta, para reconocer la pata que **entra a una
+     * tarjeta** en un pago de tarjeta. Sin él, un pago de tarjeta solo coincide con su categoría.
+     */
+    tiposDeCuenta: Map<String, AccountType> = emptyMap(),
+): List<FinancialEvent> {
     val monto = parsed.amount.roundToLong()
     val margen = DIAS_PARA_COINCIDIR * 86_400_000L
+    val esPagoDeTarjeta = parsed.category == CARD_PAYMENT_CATEGORY
+    // Lo que entra a una tarjeta: la pata del pago, o el abono anotado a mano en la cuenta de la tarjeta.
+    fun entraAUnaTarjeta(e: FinancialEvent) =
+        e.type == TransactionType.INCOME && tiposDeCuenta[e.accountId] == AccountType.CREDIT_CARD
     return eventos
-        // Un pago de tarjeta se anota en Movi como abono a la cuenta de la tarjeta (un ingreso ahí),
-        // mientras el SMS lo lee como salida: con el tipo exigido, los abonos a la AMEX de 9.000.000 y
-        // 9.809.799 nunca se encontraban. En esa categoría el tipo no identifica.
         .filter { it.amount == monto && it.currency == parsed.currency }
-        .filter { parsed.category == CARD_PAYMENT_CATEGORY || it.type == parsed.type }
+        .filter { e ->
+            if (esPagoDeTarjeta) {
+                // Un pago de tarjeta se anota en Movi como abono a la cuenta de la tarjeta (un ingreso
+                // ahí), mientras el SMS lo lee como salida: el tipo no identifica. Lo que sí: su
+                // categoría, o la pata que entra a una tarjeta. Un traspaso a Efectivo o un Mercado del
+                // mismo monto no son el pago (vuelta 74: «Puede ser uno de 3» con $50.000 de Nu).
+                e.category == CARD_PAYMENT_CATEGORY || entraAUnaTarjeta(e)
+            } else {
+                // La pata que ENTRA de un traspaso nunca es un gasto (vuelta 74).
+                e.type == parsed.type && !(parsed.type == TransactionType.EXPENSE && e.transferId != null && e.type == TransactionType.INCOME)
+            }
+        }
         .filter { abs(it.timestamp - momento) <= margen }
+        .sortedBy { abs(it.timestamp - momento) }
+        // Un traspaso son dos patas y un solo movimiento: un candidato por `transferId`, el que sale
+        // (es el que lleva el aviso, como `evento_id` = la pata del dinero).
+        .groupBy { it.transferId ?: it.id }
+        .map { (_, patas) -> patas.firstOrNull { it.type != TransactionType.INCOME } ?: patas.first() }
         .sortedBy { abs(it.timestamp - momento) }
         .take(3)
 }
@@ -734,7 +761,13 @@ fun Route.smsRoutes() {
                 .where { (SmsMessages.id eq id) and (SmsMessages.userId eq uid) }
                 .firstOrNull()?.toSmsMessage()
         } ?: return@get call.respond(HttpStatusCode.NotFound)
-        call.respond(dbQuery { coincidenciasDelAviso(uid, sms, ahora = System.currentTimeMillis()) })
+        val ahora = System.currentTimeMillis()
+        // Con su pago marcado (vuelta 74): lo que ya tiene otro aviso no se ofrece, salvo que sea del
+        // mismo pago.
+        call.respond(dbQuery {
+            val marcado = if (sms.state == SMS_STATE_PENDING) bandejaConLosPagos(uid, ahora).firstOrNull { it.id == sms.id } ?: sms else sms
+            coincidenciasDelAviso(uid, marcado, ahora = ahora)
+        })
     }
 
     post("/api/sms/{id}/confirm") {
@@ -790,7 +823,11 @@ fun Route.smsRoutes() {
             if (n > 0 && eventoId != null && esIdDeComprobante(id)) enlazarElComprobante(uid, id, eventoId)
             n
         }
-        if (updated == 0) call.respond(HttpStatusCode.NotFound) else call.respond(HttpStatusCode.OK)
+        when (updated) {
+            0 -> call.respond(HttpStatusCode.NotFound)
+            CONFIRMAR_YA_RECLAMADO -> call.respond(HttpStatusCode.Conflict, YA_ES_DE_OTRO_AVISO)
+            else -> call.respond(HttpStatusCode.OK)
+        }
     }
 
     post("/api/sms/{id}/ignore") {
