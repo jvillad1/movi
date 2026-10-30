@@ -64,7 +64,6 @@ import com.jvillada.movi.ui.credits.CreditosScreen
 import com.jvillada.movi.ui.credits.TAG_DEUDAS_SIN_SALDO
 import com.jvillada.movi.ui.credits.TAG_PRESTAMO_SIN_SALDO
 import com.jvillada.movi.ui.dashboard.DashboardData
-import com.jvillada.movi.ui.dashboard.LocalCargaBuenaDelInicioEmpezadaEn
 import com.jvillada.movi.ui.dashboard.LocalCargandoElInicio
 import com.jvillada.movi.ui.dashboard.MovimientosDelDueno
 import com.jvillada.movi.ui.espacios.textoDeLoAnotado
@@ -180,13 +179,14 @@ class Vuelta82EnPantallaTest {
     )
 
     private var datos by mutableStateOf(inicio)
-    private var terminada by mutableStateOf<Long?>(null)
 
     private fun montarElHeroe() {
+        // La base del optimista: lo último que leyó el Inicio (acá, lo que se monta).
+        MovimientosDelDueno.costurasDePrueba = MovimientosDelDueno.Costuras(base = { inicio })
         composeRule.mainClock.autoAdvance = false
         composeRule.setContent {
             MoviTheme {
-                CompositionLocalProvider(LocalCargandoElInicio provides false, LocalCargaBuenaDelInicioEmpezadaEn provides terminada) {
+                CompositionLocalProvider(LocalCargandoElInicio provides false) {
                     Box(Modifier.fillMaxSize()) {
                         SduiRenderer(definition = defaultDashboardDefinition(), data = datos, modifier = Modifier.fillMaxSize(), onNavigate = {})
                     }
@@ -243,8 +243,8 @@ class Vuelta82EnPantallaTest {
                 accounts = listOf(ahorros.copy(balance = 10_000_000L - 15_000L), tarjeta),
                 gastoVariablePorDia = mapOf(hoy.toString() to 15_000L),
             )
-            terminada = listoEn + 1
         }
+        MovimientosDelDueno.cargaBuenaEmpezo(listoEn + 1)
         composeRule.mainClock.advanceTimeBy(16 * 4)
         val enMedio = teQuedan()
         assertTrue(enMedio in (q0 - 15_000 + 1)..(q0 - 12_300), "la corrección cuenta: $enMedio")
@@ -374,31 +374,80 @@ class Vuelta82EnPantallaTest {
         Snapshot.withMutableSnapshot { id = MovimientosDelDueno.registrar(gasto("ah", 12_300), signo = 1) }
         composeRule.mainClock.advanceTimeBy(1_000)
         // En el teléfono la fila no subió: la carga que arrancó al guardar terminó bien pero sin el gasto.
-        Snapshot.withMutableSnapshot { terminada = Clock.System.now().toEpochMilliseconds() + 5 }
+        MovimientosDelDueno.cargaBuenaEmpezo(Clock.System.now().toEpochMilliseconds() + 5)
         composeRule.mainClock.advanceTimeBy(1_000)
         assertEquals(q0 - 12_300, teQuedan(), "sigue adelantado: el server todavía no lo tiene")
         assertTrue(id > 0)
     }
 
+    private fun esperarHasta(condicion: () -> Boolean) {
+        val hasta = System.currentTimeMillis() + 5_000
+        while (!condicion() && System.currentTimeMillis() < hasta) Thread.sleep(10)
+    }
+
+    private fun listoEn(): Long? = MovimientosDelDueno.estado.value.movimientos.firstOrNull()?.listoEn
+
     @Test
-    fun `en el telefono, lo que no subio se sube, queda listo y la pantalla recarga`() {
+    fun `en el telefono, lo que no subio se sube y queda listo desde el sello real de la fila`() {
         var subidas = 0
         var recargas = 0
         MovimientosDelDueno.costurasDePrueba = MovimientosDelDueno.Costuras(
-            elServerLoTiene = { subidas > 0 },
+            desdeCuando = { if (subidas > 0) 12_345L else null },
             subirAhora = { subidas++ },
             pedirRecarga = { recargas++ },
-            esperar = {},
+            base = { inicio },
+            ahora = { 1_000L },
         )
         val id = MovimientosDelDueno.registrar(gasto("ah", 12_300), signo = 1)
         MovimientosDelDueno.listo(id)
-        val hasta = System.currentTimeMillis() + 5_000
-        while (MovimientosDelDueno.pendientes(null).firstOrNull()?.listoEn == null && System.currentTimeMillis() < hasta) Thread.sleep(10)
+        esperarHasta { listoEn() != null && recargas > 0 }
         assertEquals(1, subidas, "pidió una vuelta del SyncEngine")
-        assertTrue(MovimientosDelDueno.pendientes(null).single().listoEn != null, "y quedó listo")
-        val hasta2 = System.currentTimeMillis() + 2_000
-        while (recargas == 0 && System.currentTimeMillis() < hasta2) Thread.sleep(10)
+        assertEquals(12_345L, listoEn(), "listo desde el syncedAt de la fila, no desde cuando lo notó")
         assertEquals(1, recargas, "y la pantalla a la vista recarga para traerlo")
+    }
+
+    @Test
+    fun `cuando algo sube, el que espera vuelve a mirar sin esperar 30 s`() {
+        var subio = false
+        MovimientosDelDueno.costurasDePrueba = MovimientosDelDueno.Costuras(
+            desdeCuando = { if (subio) 2_000L else null },
+            subirAhora = {},
+            pedirRecarga = {},
+            base = { inicio },
+            ahora = { 1_000L },
+        )
+        val id = MovimientosDelDueno.registrar(gasto("ah", 12_300), signo = 1)
+        MovimientosDelDueno.listo(id)
+        Thread.sleep(200)
+        assertEquals(null, listoEn(), "sin subir, espera")
+        subio = true
+        MovimientosDelDueno.despertar()
+        esperarHasta { listoEn() != null }
+        assertEquals(2_000L, listoEn(), "el SyncEngine subió algo: miró ya")
+    }
+
+    @Test
+    fun `el bucle se corta cuando el movimiento vence, y lo vencido sale`() {
+        var reloj = 1_000L
+        var preguntas = 0
+        MovimientosDelDueno.costurasDePrueba = MovimientosDelDueno.Costuras(
+            desdeCuando = { preguntas++; null },
+            subirAhora = {},
+            pedirRecarga = {},
+            base = { inicio },
+            ahora = { reloj },
+        )
+        val id = MovimientosDelDueno.registrar(gasto("ah", 12_300), signo = 1, ahora = 1_000L)
+        MovimientosDelDueno.listo(id)
+        esperarHasta { preguntas >= 2 }
+        reloj = 1_000L + com.jvillada.movi.ui.dashboard.VIGENCIA_SIN_SUBIR_MS + 1
+        MovimientosDelDueno.despertar()
+        esperarHasta { MovimientosDelDueno.estado.value.movimientos.isEmpty() }
+        assertTrue(MovimientosDelDueno.estado.value.movimientos.isEmpty(), "lo vencido salió")
+        val antes = preguntas
+        MovimientosDelDueno.despertar()
+        Thread.sleep(200)
+        assertEquals(antes, preguntas, "y ya nadie vuelve a preguntar")
     }
 
     @Test

@@ -4573,3 +4573,24 @@ avisos y su esqueleto del mismo alto con el círculo de aviso, la superficie con
 4. **El snackbar en dos partes** (`partesDelAviso`): lo de antes de « · » («Anotado $12.300») se mide entero, lo de
    después (`TAG_RESTO_DEL_AVISO`) es lo que se corta. «Tu parte $16.000 · repartido con Caro» (`textoDeRepartido`).
 5. **Créditos sin «+»**: «Falta Vehículo 4083, sin saldo (unos $35,8M según el plan)».
+
+### La re-revisión de la vuelta 82
+
+1. **La base no se vuelve a tomar.** La base y los movimientos viven en `MovimientosDelDueno.estado`
+   (`EstadoDelOptimista`, un `MutableStateFlow` que se cambia con `update {}`: `listo` escribe desde otro hilo). La
+   base es lo último que leyó el Inicio (`DashboardDataCache.data`) al registrar el **primero**, y se suelta recién
+   cuando ninguno queda pendiente (`podado`); mientras tanto el héroe muestra la base con **todos** los movimientos
+   (`adelanto`). Antes se retomaba al volver al Inicio: sin señal las cuentas del espejo ya traían el gasto y se
+   restaba dos veces, y al soltarse el primero de dos también. En el teléfono `listoEn` es el `syncedAt` real de la
+   fila y de sus anulaciones (`desdeCuandoLoTieneElServer`, nunca antes de que volviera la escritura), y
+   `alSubirAlgo` despierta la espera (`despertar`) en vez de esperar 30 s. Una carga buena avisa con
+   `cargaBuenaEmpezo`.
+2. **La espera termina.** El bucle de `listo` se corta cuando el movimiento venció o salió, y lo vencido sale del
+   estado. Una fila anulada antes de subir cuenta como lista (`DESDE_LA_ESCRITURA`: nunca sube, efecto neto cero).
+   `subirLoPendienteAhora` ya no vacía lo recordado al pasar: lo hace `alSubirAlgo` → `olvidarLoFresco` solo cuando
+   de verdad subió algo (sin señal, cada reintento dejaba las pantallas en esqueleto).
+3. El anillo de foco del interruptor rodea el riel (`anilloDeFoco(alrededorDeLaCaja = …)`), no la caja del toque.
+4. `partesDelAviso` deja el código de una moneda que no es pesos ni dólares con su cifra («EUR 45»).
+5. **Aceptado**: lo dudoso no tiene optimista, tampoco sin señal. En ese caso las dos cifras esperan juntas el final
+   de una carga, y sin señal esa carga puede traer las cuentas del espejo (ya con el gasto) y el resumen de antes:
+   es el síntoma original de la revisión 8, que queda solo para lo dudoso y sin conexión.

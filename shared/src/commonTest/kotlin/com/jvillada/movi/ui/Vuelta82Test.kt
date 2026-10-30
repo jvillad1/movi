@@ -21,6 +21,8 @@ import com.jvillada.movi.ui.dashboard.DashboardData
 import com.jvillada.movi.ui.dashboard.MovimientoDelDueno
 import com.jvillada.movi.ui.dashboard.MovimientosDelDueno
 import com.jvillada.movi.ui.dashboard.VIGENCIA_SIN_SUBIR_MS
+import com.jvillada.movi.ui.dashboard.adelanto
+import com.jvillada.movi.ui.dashboard.proximoVencimiento
 import com.jvillada.movi.ui.dashboard.cargaBuenaEmpezadaEn
 import com.jvillada.movi.ui.components.ds.VIGENCIA_DEL_CAMBIO_DEL_DUENO_MS
 import com.jvillada.movi.ui.components.ds.partesDelAviso
@@ -192,63 +194,102 @@ class Vuelta82Test {
         assertNull(datosConElMovimiento(inicio, gasto("ah", 12_300), -1, hoy))
     }
 
-    @Test
-    fun `una carga que termina sin el gasto no suelta, una caida tampoco, y una posterior si`() {
+    /** Sin red ni pantalla: la base es la que diga la prueba, y el reloj también. */
+    private fun conElOptimista(base: DashboardData? = inicio, bloque: () -> Unit) {
         MovimientosDelDueno.limpiar()
+        var fija = base
+        MovimientosDelDueno.costurasDePrueba = MovimientosDelDueno.Costuras(base = { fija }, ahora = { 0L })
         try {
-            val id = MovimientosDelDueno.registrar(gasto("ah", 12_300), signo = 1, ahora = 1_000)
-            // Sin listo (en el teléfono, sin subir): ninguna carga lo suelta.
-            assertEquals(1, MovimientosDelDueno.pendientes(cargaBuenaEmpezadaEn = 5_000, ahora = 6_000).size)
-            MovimientosDelDueno.marcarListo(id, en = 2_000)
-            // La carga que arrancó al guardar (antes de que el server lo tuviera) termina sin el gasto: no suelta.
-            assertEquals(1, MovimientosDelDueno.pendientes(cargaBuenaEmpezadaEn = 1_500, ahora = 3_000).size)
-            // Una carga que empezó después pero falló no cuenta como buena: el sello sigue en la anterior.
-            val sello = cargaBuenaEmpezadaEn(anterior = 1_500, empezo = 2_500, resumenLlego = true, cuentasLlegaron = true, fallo = true)
-            assertEquals(1_500L, sello)
-            assertEquals(1_500L, cargaBuenaEmpezadaEn(anterior = 1_500, empezo = 2_500, resumenLlego = false, cuentasLlegaron = true, fallo = false))
-            assertEquals(1, MovimientosDelDueno.pendientes(sello, ahora = 3_000).size)
-            // Una carga buena que empezó después: suelta.
-            val buena = cargaBuenaEmpezadaEn(anterior = 1_500, empezo = 2_500, resumenLlego = true, cuentasLlegaron = true, fallo = false)
-            assertEquals(0, MovimientosDelDueno.pendientes(buena, ahora = 3_000).size)
+            bloque()
+        } finally {
+            MovimientosDelDueno.limpiar()
+        }
+    }
+
+    private val estado get() = MovimientosDelDueno.estado.value
+
+    @Test
+    fun `una carga que termina sin el gasto no suelta, una caida tampoco, y una posterior si`() = conElOptimista {
+        val id = MovimientosDelDueno.registrar(gasto("ah", 12_300), signo = 1, ahora = 1_000)
+        // Sin listo (en el teléfono, sin subir): ninguna carga lo suelta.
+        MovimientosDelDueno.cargaBuenaEmpezo(5_000, ahora = 6_000)
+        assertNotNull(estado.adelanto(6_000))
+        MovimientosDelDueno.marcarListo(id, en = 7_000)
+        // La carga que arrancó al guardar (antes de que el server lo tuviera) terminó sin el gasto: no suelta.
+        MovimientosDelDueno.cargaBuenaEmpezo(6_500, ahora = 8_000)
+        assertNotNull(estado.adelanto(8_000))
+        // Una carga caída no cuenta como buena: no se sella.
+        assertNull(cargaBuenaEmpezadaEn(anterior = null, empezo = 7_500, resumenLlego = true, cuentasLlegaron = true, fallo = true))
+        assertNull(cargaBuenaEmpezadaEn(anterior = null, empezo = 7_500, resumenLlego = false, cuentasLlegaron = true, fallo = false))
+        assertNotNull(estado.adelanto(8_000))
+        // Una carga buena que empezó después: suelta todo, también la base.
+        MovimientosDelDueno.cargaBuenaEmpezo(7_500, ahora = 9_000)
+        assertNull(estado.adelanto(9_000))
+        assertNull(estado.base)
+        assertTrue(estado.movimientos.isEmpty())
+    }
+
+    @Test
+    fun `la base se fija con el primero y no se vuelve a tomar`() {
+        var leidoDespues: DashboardData = inicio
+        MovimientosDelDueno.limpiar()
+        MovimientosDelDueno.costurasDePrueba = MovimientosDelDueno.Costuras(base = { leidoDespues }, ahora = { 0L })
+        try {
+            MovimientosDelDueno.registrar(gasto("ah", 12_300), signo = 1, ahora = 1_000)
+            // Sin señal, lo que el Inicio lee después ya trae el gasto del espejo local.
+            leidoDespues = assertNotNull(datosConElMovimiento(inicio, gasto("ah", 12_300), 1, hoy))
+            MovimientosDelDueno.registrar(gasto("ah", 5_000), signo = 1, ahora = 1_100)
+            val (base, movimientos) = assertNotNull(estado.adelanto(1_200))
+            assertEquals(inicio, base, "la base es la de antes del primero")
+            val adelantado = assertNotNull(datosConLosMovimientosDelDueno(base, movimientos, hoy))
+            assertEquals(-17_300L, tuPlata(adelantado) - tuPlata(inicio), "cada gasto se resta una vez")
         } finally {
             MovimientosDelDueno.limpiar()
         }
     }
 
     @Test
-    fun `una carga que termina en medio de deshacer no suelta la ida y la vuelta juntas`() {
-        MovimientosDelDueno.limpiar()
-        try {
-            val ida = MovimientosDelDueno.registrar(gasto("ah", 12_300), signo = 1, ahora = 1_000)
-            MovimientosDelDueno.marcarListo(ida, en = 1_000)
-            val vuelta = MovimientosDelDueno.registrar(gasto("ah", 12_300), signo = -1, ahora = 1_200)
-            // L1 empezó a 1.100 y terminó a 1.300, antes de que la anulación terminara (1.400).
-            val quedan = MovimientosDelDueno.pendientes(cargaBuenaEmpezadaEn = 1_100, ahora = 1_300)
-            assertEquals(listOf(vuelta), quedan.map { it.id }, "suelta la ida (L1 la trae) pero no la vuelta")
-            MovimientosDelDueno.marcarListo(vuelta, en = 1_400)
-            assertEquals(listOf(vuelta), MovimientosDelDueno.pendientes(cargaBuenaEmpezadaEn = 1_100, ahora = 1_500).map { it.id })
-            assertTrue(MovimientosDelDueno.pendientes(cargaBuenaEmpezadaEn = 1_450, ahora = 1_600).isEmpty())
-        } finally {
-            MovimientosDelDueno.limpiar()
-        }
+    fun `una carga que termina en medio de deshacer no suelta la ida sin la vuelta`() = conElOptimista {
+        val ida = MovimientosDelDueno.registrar(gasto("ah", 12_300), signo = 1, ahora = 1_000)
+        MovimientosDelDueno.marcarListo(ida, en = 1_000)
+        val vuelta = MovimientosDelDueno.registrar(gasto("ah", 12_300), signo = -1, ahora = 1_200)
+        // L1 empezó a 1.100 y terminó a 1.300, antes de que la anulación terminara (1.400).
+        MovimientosDelDueno.cargaBuenaEmpezo(1_100, ahora = 1_300)
+        val (base, movimientos) = assertNotNull(estado.adelanto(1_300))
+        assertEquals(listOf(ida, vuelta), movimientos.map { it.id }, "se adelantan los dos sobre la misma base")
+        assertEquals(tuPlata(inicio), tuPlata(assertNotNull(datosConLosMovimientosDelDueno(base, movimientos, hoy))))
+        MovimientosDelDueno.marcarListo(vuelta, en = 1_400)
+        MovimientosDelDueno.cargaBuenaEmpezo(1_450, ahora = 1_600)
+        assertNull(estado.adelanto(1_600))
     }
 
     @Test
-    fun `el optimista vence, y dice cuando`() {
-        MovimientosDelDueno.limpiar()
-        try {
-            val id = MovimientosDelDueno.registrar(gasto("ah", 1), signo = 1, ahora = 1_000)
-            MovimientosDelDueno.marcarListo(id, en = 1_000)
-            val vence = 1_000 + VIGENCIA_DEL_CAMBIO_DEL_DUENO_MS
-            assertEquals(VIGENCIA_DEL_CAMBIO_DEL_DUENO_MS, MovimientosDelDueno.proximoVencimiento(MovimientosDelDueno.pendientes(null, 1_000), 1_000))
-            assertTrue(MovimientosDelDueno.pendientes(null, vence + 1).isEmpty())
-            // Lo que no subió dura más (sin señal), pero no para siempre.
-            MovimientosDelDueno.registrar(gasto("ah", 2), signo = 1, ahora = 2_000)
-            assertEquals(1, MovimientosDelDueno.pendientes(null, 2_000 + VIGENCIA_DEL_CAMBIO_DEL_DUENO_MS + 1).size)
-            assertTrue(MovimientosDelDueno.pendientes(null, 2_000 + VIGENCIA_SIN_SUBIR_MS + 1).isEmpty())
-        } finally {
-            MovimientosDelDueno.limpiar()
-        }
+    fun `el optimista vence, y dice cuando`() = conElOptimista {
+        val id = MovimientosDelDueno.registrar(gasto("ah", 1), signo = 1, ahora = 1_000)
+        MovimientosDelDueno.marcarListo(id, en = 1_000)
+        assertEquals(VIGENCIA_DEL_CAMBIO_DEL_DUENO_MS, estado.proximoVencimiento(1_000))
+        assertNull(estado.adelanto(1_000 + VIGENCIA_DEL_CAMBIO_DEL_DUENO_MS + 1))
+        MovimientosDelDueno.podar(1_000 + VIGENCIA_DEL_CAMBIO_DEL_DUENO_MS + 1)
+        assertTrue(estado.movimientos.isEmpty(), "lo vencido sale de la lista")
+        // Lo que no subió dura más (sin señal), pero no para siempre.
+        MovimientosDelDueno.registrar(gasto("ah", 2), signo = 1, ahora = 20_000)
+        assertNotNull(estado.adelanto(20_000 + VIGENCIA_DEL_CAMBIO_DEL_DUENO_MS + 1))
+        assertNull(estado.adelanto(20_000 + VIGENCIA_SIN_SUBIR_MS + 1))
+    }
+
+    @Test
+    fun `sin lo que leyo el Inicio no hay base, y el heroe espera al server`() = conElOptimista(base = null) {
+        MovimientosDelDueno.registrar(gasto("ah", 12_300), signo = 1, ahora = 1_000)
+        assertNull(estado.adelanto(1_100))
+    }
+
+    @Test
+    fun `el anillo del interruptor rodea el riel, no la caja del toque`() {
+        val caja = androidx.compose.ui.geometry.Size(52f, 48f)
+        val riel = androidx.compose.ui.geometry.Size(52f, 32f)
+        assertEquals(riel, com.jvillada.movi.ui.components.ds.cajaQueRodeaElAnillo(caja, null, riel))
+        assertEquals(androidx.compose.ui.geometry.Size(24f, 24f), com.jvillada.movi.ui.components.ds.cajaQueRodeaElAnillo(caja, 24f, null))
+        assertEquals(caja, com.jvillada.movi.ui.components.ds.cajaQueRodeaElAnillo(caja, null, null))
     }
 
     @Test
@@ -258,6 +299,8 @@ class Vuelta82Test {
         assertEquals(PartesDelAviso("Tu parte", "\$16.000", "· repartido con Caro"), partesDelAviso("Tu parte \$16.000 · repartido con Caro"))
         assertEquals(PartesDelAviso("Anotado", "\$12.300", null), partesDelAviso("Anotado \$12.300"))
         assertEquals(PartesDelAviso("Deshecho", null, null), partesDelAviso("Deshecho"))
+        // Una moneda que no es pesos ni dólares: el código va con la cifra.
+        assertEquals(PartesDelAviso("Anotado", "EUR 45", "· Hotel"), partesDelAviso("Anotado EUR 45 · Hotel"))
     }
 
     // ── 4 · El snackbar con el monto ─────────────────────────────────────────────────────────────
