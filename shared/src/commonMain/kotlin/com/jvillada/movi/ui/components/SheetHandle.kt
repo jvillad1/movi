@@ -3,6 +3,7 @@ package com.jvillada.movi.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
@@ -38,6 +39,11 @@ fun SheetHandleWithClose(
     // Ola W1: una hoja centrada en pantalla ancha (ver [MarcoDeHoja]) no se arrastra desde abajo,
     // así que no lleva manija — solo la X, en el mismo renglón de 44 dp.
     conManija: Boolean = true,
+    /**
+     * Vuelta 83 · lo que va a la izquierda de la X, en su mismo renglón (el «⋯» de la ficha de un
+     * movimiento a pantalla ancha: iban apilados, la X sola arriba y el «⋯» en el renglón del título).
+     */
+    antesDeLaX: (@Composable () -> Unit)? = null,
 ) {
     Box(
         modifier = Modifier
@@ -54,20 +60,26 @@ fun SheetHandleWithClose(
                 // justo lo que menos se veía. `borde` es el rol de una línea, no de un texto.
                 .background(Movi.colores.borde),
         )
-        Box(
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .size(44.dp)
-                .clip(CircleShape)
-                .clickable(enabled = enabled, onClick = onClose),
-            contentAlignment = Alignment.Center,
+        // Vuelta 83: con algo antes de la X, los dos en un renglón a la derecha.
+        Row(
+            modifier = Modifier.align(Alignment.CenterEnd),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                imageVector = Icons.Rounded.Close,
-                contentDescription = "Cerrar",
-                tint = Movi.colores.textoMedio,
-                modifier = Modifier.size(Icono.m),
-            )
+            antesDeLaX?.invoke()
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .clickable(enabled = enabled, onClick = onClose),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Close,
+                    contentDescription = "Cerrar",
+                    tint = Movi.colores.textoMedio,
+                    modifier = Modifier.size(Icono.m),
+                )
+            }
         }
     }
 }

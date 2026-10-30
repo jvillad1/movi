@@ -186,8 +186,6 @@ internal fun EncabezadoDelMovimiento(
      * dónde y las cuotas los dicen las filas de [datosDeLaFicha].
      */
     ficha: Boolean = false,
-    /** Vuelta 83 · en la ficha, el «⋯» de «Más» a la derecha del renglón del título ([MasDeLaFicha]). */
-    alFinalDelTitulo: (@Composable () -> Unit)? = null,
 ) {
     val hoy = remember { hoyEnAppZone() }
     val cuenta = cuentas.firstOrNull { it.id == evento.accountId }?.name
@@ -214,7 +212,6 @@ internal fun EncabezadoDelMovimiento(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
-        alFinalDelTitulo?.invoke()
     }
     Spacer(Modifier.height(Medida.dentroDeSeccion))
     val tono = tonoDelEvento(evento)
@@ -717,7 +714,7 @@ internal fun AccionesDeLaFicha(
 /**
  * **El «⋯» de «Más» de la ficha** (vuelta 83). A 1.280 iba al final del renglón de acciones y, con
  * «Editar · Repetir · Repartir», no cabía: quedaba solo en un segundo renglón (`r8-1280-detalle.png`).
- * Ahora va a la derecha del renglón del título ([EncabezadoDelMovimiento] con `alFinalDelTitulo`), y
+ * Ahora va arriba a la derecha, junto a la X y en su renglón (`SheetHandleWithClose(antesDeLaX = …)`), y
  * abajo las acciones caben en uno. Lleva el tag de «Más», como su botón del teléfono.
  */
 @Composable

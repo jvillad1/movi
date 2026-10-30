@@ -132,12 +132,22 @@ private fun MarcoDelMovimiento(
     lugar: LugarDelMovimiento,
     onDismiss: () -> Unit,
     dismissEnabled: Boolean,
+    /** Vuelta 83: el «⋯» de la ficha, a la izquierda de la X y en su renglón. */
+    antesDeLaX: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     when (lugar) {
         // Vuelta 81: fuera del teléfono la hoja es un diálogo del ancho de la ficha (520); en el teléfono
-        // `anchoMaximo` no cuenta.
-        LugarDelMovimiento.Hoja -> MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = dismissEnabled, anchoMaximo = Medida.anchoDeFicha) {
+        // `anchoMaximo` no cuenta. Vuelta 83: con el «⋯», el renglón de la X lo pone la ficha (los dos juntos).
+        LugarDelMovimiento.Hoja -> MarcoDeHoja(
+            onDismiss = onDismiss,
+            dismissEnabled = dismissEnabled,
+            anchoMaximo = Medida.anchoDeFicha,
+            conCierre = antesDeLaX == null,
+        ) {
+            if (antesDeLaX != null) {
+                SheetHandleWithClose(onClose = onDismiss, enabled = dismissEnabled, conManija = false, antesDeLaX = antesDeLaX)
+            }
             content()
         }
         // Vuelta 81: en el panel de Actividad el detalle es una ficha —una superficie de 520 como mucho,
@@ -155,7 +165,7 @@ private fun MarcoDelMovimiento(
                     .weight(1f, fill = false)
                     .testTag(TAG_FICHA_DEL_MOVIMIENTO),
             ) {
-                SheetHandleWithClose(onClose = onDismiss, enabled = dismissEnabled, conManija = false)
+                SheetHandleWithClose(onClose = onDismiss, enabled = dismissEnabled, conManija = false, antesDeLaX = antesDeLaX)
                 content()
             }
         }
@@ -956,7 +966,17 @@ internal fun ContenidoDelMovimiento(
         accion = if (accion == a) null else a
     }
 
-    MarcoDelMovimiento(lugar, onDismiss = alCerrar, dismissEnabled = !saving) {
+    MarcoDelMovimiento(
+        lugar,
+        onDismiss = alCerrar,
+        dismissEnabled = !saving,
+        // Vuelta 83: en la ficha, «⋯» junto a la X, arriba a la derecha; abajo, las acciones en un renglón.
+        antesDeLaX = if (ficha && AccionDelMovimiento.Mas in accionesFicha) {
+            { MasDeLaFicha(abierta = accion, onElegir = { if (!saving) alternar(it) }) }
+        } else {
+            null
+        },
+    ) {
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
             // ── Lo que se lee primero: quién, cuánto, cuándo y en qué categoría. ──
             EncabezadoDelMovimiento(
@@ -965,12 +985,6 @@ internal fun ContenidoDelMovimiento(
                 onEditar = { accion = AccionDelMovimiento.Nota },
                 espacios = espacios,
                 ficha = ficha,
-                // Vuelta 83: en la ficha, «⋯» a la derecha del título; abajo, las acciones en un renglón.
-                alFinalDelTitulo = if (ficha && AccionDelMovimiento.Mas in accionesFicha) {
-                    { MasDeLaFicha(abierta = accion, onElegir = { if (!saving) alternar(it) }) }
-                } else {
-                    null
-                },
             )
             Spacer(Modifier.height(Espacio.s))
             if (ficha) {
