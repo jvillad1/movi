@@ -56,7 +56,7 @@ class ElCreditoNuevoNoNaceVencidoTest {
         a = AndamioDelAsistente("credito_nuevo_no_vencido")
     }
 
-    private fun crear(yaPago: Boolean): CreditSummary {
+    private fun crear(yaPago: Boolean, dia: Int = 1): CreditSummary {
         var creado: CreditSummary? = null
         testApplication {
             application { with(a) { modulo { creditRoutes() } } }
@@ -70,7 +70,7 @@ class ElCreditoNuevoNoNaceVencidoTest {
                             initialDebt = 18_500_000L,
                             terms = CreditTerms(
                                 accountId = "", bank = "Bancolombia", principal = 25_000_000L, rateEa = 21.0,
-                                termMonths = 48, installment = 770_000L, dayOfMonth = 1, startDate = "2025-06-01",
+                                termMonths = 48, installment = 770_000L, dayOfMonth = dia, startDate = "2025-06-01",
                             ),
                             yaPagoLaCuotaDeEstePeriodo = yaPago,
                         ),
@@ -122,5 +122,16 @@ class ElCreditoNuevoNoNaceVencidoTest {
         val fila = checklist().firstOrNull { it.ruleId == ruleId }
         assertEquals(primeroDeEsteMes.toString(), assertNotNull(fila, "la cuota de este período está").vence)
         assertTrue(!fila.pagado)
+    }
+
+    /** Revisión: si la cuota de este período todavía no vence, el server no acepta «ya pagué». */
+    @Test
+    fun `si la cuota de este periodo no ha vencido el server ignora ya pague`() {
+        val dia = hoy.dayOfMonth + 1
+        org.junit.Assume.assumeTrue("el último día del mes ya venció todo", dia <= hoy.lengthOfMonth())
+        val credito = crear(yaPago = true, dia = dia)
+        assertNull(credito.terms?.cuotasDesde, "la cuota del ${hoy.withDayOfMonth(dia)} sigue esperándose")
+        val proxima = runBlocking { proximosPagos(a.duenoA, hoy) }.firstOrNull { it.rule.id == "credit_${credito.account.id}" }
+        assertEquals(hoy.withDayOfMonth(dia).toString(), assertNotNull(proxima).dueDate)
     }
 }

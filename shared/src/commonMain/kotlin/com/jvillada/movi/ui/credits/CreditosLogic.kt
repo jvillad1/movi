@@ -19,8 +19,7 @@ import com.jvillada.movi.shared.model.deudaTotalDe
 import com.jvillada.movi.shared.model.proximoVencimientoDelDia
 import com.jvillada.movi.shared.model.mesDeLaPrimeraCuota
 import com.jvillada.movi.shared.model.vencimientoDelMes
-import com.jvillada.movi.shared.model.arranqueDeLasCuotas
-import kotlinx.datetime.minus
+import com.jvillada.movi.shared.model.mesDeLaPrimeraCuotaDelCredito
 import com.jvillada.movi.shared.model.nombreDelMesDe
 import com.jvillada.movi.shared.model.marcaDelBanco
 import com.jvillada.movi.shared.model.mas
@@ -1126,20 +1125,12 @@ fun laCuotaEnLaFicha(
     val delPeriodo = PeriodoFinanciero(vence.year, vence.monthNumber)
     // La primera cuota que el crédito tuvo nunca (después del desembolso, o del período desde el que corren
     // sus cuotas): un crédito que arranca el período que viene no tiene «cuota de este período».
-    val desdeEfectivo = t.arranqueDeLasCuotasComoDesde()
-    val laPrimeraDelCredito = desdeEfectivo?.let {
-        com.jvillada.movi.shared.model.mesDeLaPrimeraCuotaSinPagar(t.dayOfMonth, it, pagadas = emptyList(), desde = it)
-    }
+    val laPrimeraDelCredito = t.mesDeLaPrimeraCuotaDelCredito()
     val queCorresponde = if (laPrimeraDelCredito != null && laPrimeraDelCredito.prefijo > delPeriodo.prefijo) laPrimeraDelCredito else delPeriodo
     val pagada = credit.cuotasPagadas != null && primeraCuota.prefijo > queCorresponde.prefijo
     return if (pagada) LaCuotaEnLaFicha(queCorresponde, pagada = true, monto = t.installment)
     else LaCuotaEnLaFicha(primeraCuota, pagada = false, monto = t.installment)
 }
-
-/** El «desde» de las cuotas (estrictamente después): el día antes de `cuotasDesde`, o el desembolso. */
-private fun CreditTerms.arranqueDeLasCuotasComoDesde(): LocalDate? =
-    arranqueDeLasCuotas()?.minus(1, kotlinx.datetime.DateTimeUnit.DAY)
-        ?: runCatching { LocalDate.parse(startDate.trim()) }.getOrNull()
 
 /** «Pagar la cuota de noviembre · $770.000», o «Cuota de noviembre · pagada» (vuelta 77). */
 fun textoDeLaCuotaEnLaFicha(c: LaCuotaEnLaFicha): String =

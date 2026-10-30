@@ -231,6 +231,35 @@ fun periodoQueSalda(
     settings: PeriodSettings = PeriodSettings(),
     zone: ZoneId = AppClock.zone,
 ): String {
+    val salda = periodoQueSaldaSinPiso(rule, fecha, graceDays, settings, zone)
+    // **Vuelta 77 (revisión): nunca una cuota anterior al arranque de la regla.** Un pago adelantado de
+    // la primera cuota —un crédito con «ya pagué la de este período» (`cuotasDesde`), o uno recién
+    // desembolsado que se paga antes de su primera cuota— caía en el mes del pago: sellaba una cuota que
+    // no existe (octubre revivía como pagado) y la primera seguía pendiente (riesgo de pagarla dos
+    // veces). Salda la primera cuota vigente: la primera en el piso ([arranqueDeLaRegla]) o después.
+    val primera = primeraCuotaVigente(rule, settings, zone) ?: return salda
+    val dePrimera = periodOf(primera)
+    return if (salda < dePrimera) dePrimera else salda
+}
+
+/**
+ * **La primera cuota que existe de [rule]**: el primer vencimiento en su piso ([arranqueDeLaRegla]) o
+ * después. `null` si la regla corre desde siempre.
+ */
+fun primeraCuotaVigente(rule: RecurringRule, settings: PeriodSettings = PeriodSettings(), zone: ZoneId = AppClock.zone): LocalDate? {
+    val piso = arranqueDeLaRegla(rule, settings, zone) ?: return null
+    val enSuMes = occurrenceInMonth(YearMonth.from(piso), rule.dayOfMonth)
+    return if (enSuMes.isBefore(piso)) occurrenceInMonth(YearMonth.from(piso).plusMonths(1), rule.dayOfMonth) else enSuMes
+}
+
+/** [periodoQueSalda] sin el piso de la regla: la regla de siempre (#416). */
+private fun periodoQueSaldaSinPiso(
+    rule: RecurringRule,
+    fecha: LocalDate,
+    graceDays: Int,
+    settings: PeriodSettings,
+    zone: ZoneId,
+): String {
     val vigente = dueDateFor(rule, fecha, graceDays, settings = settings)
     val topeado = periodOf(minOf(vigente, fecha))
     // El tope no movió nada: el vencimiento vigente ya había llegado (en su día o en la gracia).

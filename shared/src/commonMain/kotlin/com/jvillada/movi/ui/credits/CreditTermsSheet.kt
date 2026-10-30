@@ -301,8 +301,11 @@ fun CreditTermsSheet(
     var yaPagoLaCuota by remember { mutableStateOf(true) }
     val ajustesDelDueno = com.jvillada.movi.data.rememberLectura(com.jvillada.movi.data.ClaveDeLectura.Perfil, reintento = 0, activa = editing == null) {
         Repositories.wallets.getUserProfile()
-    }.valor?.ajustesDelPeriodo() ?: com.jvillada.movi.shared.model.PeriodSettings()
+    }.valor?.ajustesDelPeriodo()
+    // Revisión: sin el perfil leído no se sabe cuál es «este período» (con corte 25 no es el mes): la
+    // pregunta no se muestra hasta tenerlo, y el server vuelve a comprobar que la cuota ya venció.
     val preguntaDeLaCuotaVisible = editing == null && newAccountMode && preguntaVisible && recienRecibido == false &&
+        ajustesDelDueno != null &&
         dayOfMonth.toIntOrNull()?.takeIf { it in 1..31 }?.let { dia ->
             com.jvillada.movi.shared.model.laCuotaDeEstePeriodoYaVencio(dia, com.jvillada.movi.ui.fecha.hoyEnAppZone(), ajustesDelDueno)
         } == true

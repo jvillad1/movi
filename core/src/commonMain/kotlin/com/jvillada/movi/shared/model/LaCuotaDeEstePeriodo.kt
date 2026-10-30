@@ -56,3 +56,27 @@ fun arranqueDeLasCuotasSiYaPagaste(hoy: LocalDate, ajustes: PeriodSettings): Loc
     val periodo = periodoDeLaFecha(hoy.toString(), ajustes) ?: PeriodoFinanciero(hoy.year, hoy.monthNumber)
     return inicioDelPeriodo(periodoSiguiente(periodo), ajustes)
 }
+
+/**
+ * [laCuotaDeEstePeriodoYaVencio] con «hoy» en ISO (`"2026-10-30"`), para el server, que no usa
+ * `kotlinx.datetime`. Una fecha ilegible da `false` (no se acepta «ya pagué»).
+ */
+fun laCuotaDeEstePeriodoYaVencioEl(dia: Int, hoyIso: String, ajustes: PeriodSettings): Boolean =
+    runCatching { LocalDate.parse(hoyIso.trim()) }.getOrNull()?.let { laCuotaDeEstePeriodoYaVencio(dia, it, ajustes) } ?: false
+
+/** [arranqueDeLasCuotasSiYaPagaste] en ISO, para el server. `null` con una fecha ilegible. */
+fun arranqueDeLasCuotasSiYaPagasteEl(hoyIso: String, ajustes: PeriodSettings): String? =
+    runCatching { LocalDate.parse(hoyIso.trim()) }.getOrNull()?.let { arranqueDeLasCuotasSiYaPagaste(it, ajustes).toString() }
+
+/**
+ * **El mes de la primera cuota que tuvo el crédito**: la primera después del desembolso o, con
+ * [CreditTerms.cuotasDesde], la primera en ese período o después. Lo usan la ficha («Pagar la cuota de
+ * …») y el encabezado de Agregar → Pagar: un pago antes de esa cuota la salda a ella (el server, con
+ * `periodoQueSalda`, dice lo mismo). `null` con fechas ilegibles. Pura.
+ */
+fun CreditTerms.mesDeLaPrimeraCuotaDelCredito(): PeriodoFinanciero? {
+    val desde = arranqueDeLasCuotas()?.let { kotlinx.datetime.LocalDate.fromEpochDays(it.toEpochDays() - 1) }
+        ?: runCatching { LocalDate.parse(startDate.trim()) }.getOrNull()
+        ?: return null
+    return mesDeLaPrimeraCuotaSinPagar(dayOfMonth, desde, pagadas = emptyList(), desde = desde)
+}

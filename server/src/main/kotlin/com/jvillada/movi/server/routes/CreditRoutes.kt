@@ -48,7 +48,8 @@ import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.server.reminders.periodosSaldados
 import com.jvillada.movi.server.reminders.virtualRuleFor
 import com.jvillada.movi.server.time.ajustesDePeriodoDe
-import com.jvillada.movi.server.reminders.diasDelPeriodo
+import com.jvillada.movi.shared.model.arranqueDeLasCuotasSiYaPagasteEl
+import com.jvillada.movi.shared.model.laCuotaDeEstePeriodoYaVencioEl
 import com.jvillada.movi.server.time.appDateToEpochMillis
 import java.time.LocalDate
 import io.ktor.http.HttpStatusCode
@@ -197,10 +198,16 @@ fun Route.creditRoutes() {
             // descontada, así que las cuotas corren desde el arranque del período siguiente del dueño
             // (`CreditTerms.cuotasDesde`). Solo sin desembolso: el de un crédito nuevo ya pone la primera
             // cuota después. Lo que mande el cliente en `terms.cuotasDesde` no cuenta: lo calcula el server.
+            // Revisión: solo si la cuota de este período ya venció (con el período del dueño). Si todavía no
+            // vence, no hay nada vencido que esconder, y aceptar «ya pagué» se comería una cuota pendiente.
             val cuotasDesde = if (disbursement == null && body.yaPagoLaCuotaDeEstePeriodo) {
-                // El arranque del período siguiente: el día después del último de este (`diasDelPeriodo`,
-                // la misma regla del período con la que `arranqueDeLaRegla` pone el piso).
-                diasDelPeriodo(AppClock.today(), ajustesDePeriodoDe(uid)).endInclusive.plusDays(1).toString()
+                val ajustes = ajustesDePeriodoDe(uid)
+                val hoy = AppClock.today().toString()
+                if (laCuotaDeEstePeriodoYaVencioEl(body.terms.dayOfMonth.coerceIn(1, 31), hoy, ajustes)) {
+                    arranqueDeLasCuotasSiYaPagasteEl(hoy, ajustes)
+                } else {
+                    null
+                }
             } else {
                 null
             }
