@@ -397,6 +397,12 @@ fun QuickAddScreen(
     }
 
     /**
+     * Revisión de la 83: la categoría de Gasto elegida a mano (o por un reciente) mientras se mira Ingreso,
+     * para que vuelva al volver a Gasto. `null` si no hay nada que devolver.
+     */
+    var categoriaDelGastoAMano by remember { mutableStateOf<String?>(null) }
+
+    /**
      * Task 5 — **la sugerencia hoy vigente** (para la línea «Movi la reconoce: …» bajo la fila
      * «Categoría»), **la categoría que había antes de que esa sugerencia la pisara** —para poder
      * volver a ella si la sugerencia desaparece porque la NOTA cambió— y **con qué tipo (Gasto o
@@ -499,6 +505,9 @@ fun QuickAddScreen(
     // Las tres viven acá arriba porque el modificador de la Column que se desplaza y el alto
     // fijado del sub-picker las usan de los dos lados.
     var huecoVisiblePx by remember { mutableStateOf(0) }
+    /** Revisión de la 83: con «Repetir uno reciente» el cuerpo no entró en el hueco; se esconde (ver abajo). */
+    var recientesNoCaben by remember { mutableStateOf(false) }
+    val densidadDeLaHojaParaRecientes = LocalDensity.current
     var contenidoPx by remember { mutableStateOf(0) }
     var bodyHeightPx by remember { mutableStateOf(0) }
     val sheetScroll = rememberScrollState()
@@ -849,6 +858,27 @@ fun QuickAddScreen(
         // la suya es reservada— así que no hay nada que reconciliar al entrar ni al salir.
         if (pickers.typeIndex > 1) return@LaunchedEffect
         val newType = if (pickers.typeIndex == 0) TransactionType.EXPENSE else TransactionType.INCOME
+        // Revisión de la 83 · **la categoría de Gasto elegida a mano vuelve con Gasto.** Elegir un reciente
+        // («Juan Valdez Cafe», Comida), pasar a Ingreso y volver dejaba «Restaurantes» con «Movi la
+        // reconoce…». El monto y la nota sí viajan entre pestañas (la vuelta 71: Agregar no pierde nada);
+        // la categoría no puede viajar (no sirve para el otro tipo), así que se guarda al salir y vuelve.
+        if (newType == TransactionType.INCOME && categoriaElegidaAMano &&
+            categoriaSirveParaTipo(category, TransactionType.EXPENSE, usedCategories, categoryPrefs)
+        ) {
+            categoriaDelGastoAMano = category
+        }
+        val vuelve = categoriaDelGastoAMano
+        if (newType == TransactionType.EXPENSE && vuelve != null) {
+            categoriaDelGastoAMano = null
+            if (categoriaSirveParaTipo(vuelve, newType, usedCategories, categoryPrefs)) {
+                category = vuelve
+                categoriaElegidaAMano = true
+                sugerenciaVigente = null
+                categoriaAntesDeLaSugerencia = null
+                tipoDeLaSugerenciaVigente = null
+                return@LaunchedEffect
+            }
+        }
         if (!categoriaSirveParaTipo(category, newType, usedCategories, categoryPrefs)) {
             category = categoriaPorDefectoPara(newType, usedCategories, categoryPrefs, usosRecientes)
             // Task 5: esto acaba de pisar por su cuenta lo que hubiera puesto una sugerencia —
@@ -1374,7 +1404,27 @@ fun QuickAddScreen(
     // Vuelta 80 · sin hueco a 390: sin teclado en pantalla y en una ventana angosta la hoja sigue
     // ocupando todo el alto (las pestañas quietas de la vuelta 71), pero el cuerpo va **centrado** y la
     // cifra es la protagonista ([CabezaDelMonto] con `grande`): eran ~350 px vacíos entre «Nota» y el pie.
-    val cuerpoAlCentro = altoFijo && !conTecladoEnPantalla
+    // Revisión de la 83 · «Repetir uno reciente» se ofrece solo en Gasto, sin teclado en pantalla, fuera
+    // del modo pago, **y si cabe**: si con él el cuerpo no entra en el hueco (360 × 640), se esconde.
+    val recientesAOfrecer = if (
+        presetPago == null && !conTecladoEnPantalla && !recientesNoCaben &&
+        pickers.typeIndex == PestanaDeAgregar.GASTO.indice
+    ) {
+        recientesParaRepetir
+    } else {
+        emptyList()
+    }
+    // Revisión de la 83 · **sin recientes, el cuerpo va arriba** (debajo de las pestañas, con su espaciado
+    // fijo), no centrado: centrado dejaba el aire partido en dos huecos (~170 px arriba y ~150 abajo).
+    // Con recientes sigue centrado: la fila de píldoras es lo útil del hueco.
+    val cuerpoAlCentro = altoFijo && !conTecladoEnPantalla && recientesAOfrecer.isNotEmpty()
+    LaunchedEffect(bodyHeightPx, huecoVisiblePx, recientesAOfrecer.isNotEmpty()) {
+        if (recientesAOfrecer.isNotEmpty() && bodyHeightPx > 0 && huecoVisiblePx > 0 &&
+            bodyHeightPx + with(densidadDeLaHojaParaRecientes) { Espacio.s.roundToPx() } > huecoVisiblePx
+        ) {
+            recientesNoCaben = true
+        }
+    }
     var contenidoMaximoPx by remember { mutableStateOf(0) }
     val densidadDeLaHoja = LocalDensity.current
 
@@ -1881,14 +1931,7 @@ fun QuickAddScreen(
                                 },
                                 // Vuelta 83 · «Repetir uno reciente»: solo en Gasto, sin teclado en pantalla y
                                 // fuera del modo pago.
-                                recientes = if (
-                                    presetPago == null && !conTecladoEnPantalla &&
-                                    pickers.typeIndex == PestanaDeAgregar.GASTO.indice
-                                ) {
-                                    recientesParaRepetir
-                                } else {
-                                    emptyList()
-                                },
+                                recientes = recientesAOfrecer,
                                 onRepetir = ::repetir,
                                 // Vuelta 71: «¿A cuántas cuotas?» con una tarjeta de crédito en «Gasto».
                                 cuotas = cuotas.takeIf {

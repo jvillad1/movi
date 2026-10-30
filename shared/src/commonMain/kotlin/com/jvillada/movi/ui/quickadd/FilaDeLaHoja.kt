@@ -13,6 +13,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.testTag
 import androidx.compose.runtime.remember
+import androidx.compose.foundation.layout.heightIn
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.components.ds.Chevron
@@ -77,9 +78,20 @@ internal fun FilaDeLaHoja(
     val anchoDelRotulo = remember(titulo, estiloDelRotulo, medidor) {
         medidor.measure(titulo, estiloDelRotulo, maxLines = 1).size.width
     }
+    // Revisión de la 83: con el renglón del aviso reservado y vacío, el rótulo va **centrado** (antes
+    // quedaba ~8 px arriba de su valor por el renglón vacío de abajo). Se reserva el mismo alto —los dos
+    // renglones medidos más el relleno de la fila— sin pintar un subtítulo vacío.
+    val estiloDelAviso = Movi.textos.apoyo
+    val densidad = LocalDensity.current
+    val altoConAviso = remember(estiloDelRotulo, estiloDelAviso, medidor, densidad) {
+        with(densidad) {
+            (medidor.measure("Ag", estiloDelRotulo).size.height + medidor.measure("Ag", estiloDelAviso).size.height).toDp()
+        } + Espacio.xxs * 2
+    }
+    val reservaVacia = aviso == null && reservarAviso
     Fila(
         titulo = titulo,
-        subtitulo = if (aviso != null || reservarAviso) aviso.orEmpty() else null,
+        subtitulo = aviso,
         final = {
             Row(
                 modifier = if (valorHastaElRotulo) {
@@ -115,7 +127,7 @@ internal fun FilaDeLaHoja(
             }
         },
         onClick = onClick,
-        modifier = modifier,
+        modifier = if (reservaVacia) modifier.heightIn(min = altoConAviso) else modifier,
         densidad = DensidadDeFila.Compacta,
     )
 }

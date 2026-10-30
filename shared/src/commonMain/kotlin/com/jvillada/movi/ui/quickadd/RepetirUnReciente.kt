@@ -2,8 +2,9 @@ package com.jvillada.movi.ui.quickadd
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
@@ -39,7 +40,8 @@ import com.jvillada.movi.ui.transactions.textosDeLaFila
  * guarda sola** (sin reglas de plata).
  *
  * - Solo en «Gasto», sin teclado en pantalla (la web, el escritorio): con el teclado no hay hueco, y
- *   cada dp de la hoja empuja el pie (`HojaAgregarGeometriaTest`).
+ *   cada dp de la hoja empuja el pie (`HojaAgregarGeometriaTest`). Y solo si cabe: si con la fila el
+ *   cuerpo no entra en el hueco, se esconde (revisión de la 83).
  * - Los recientes salen de **los movimientos que la app ya tiene** (la historia de Actividad, la misma
  *   lectura sin repetir), no de un pedido nuevo al server.
  * - Sin recientes, no hay nada: el hueco se cierra.
@@ -123,10 +125,10 @@ internal fun conceptoParaRepetir(e: FinancialEvent): String = when {
 fun textoDelReciente(reciente: GastoReciente): String = "${reciente.rotulo} · ${formatMoney(reciente.monto, "COP")}"
 
 /**
- * **La fila de recientes** (vuelta 83): el título y las píldoras, que pasan al renglón de abajo si no
- * caben. Tocar una llama a [onRepetir], que llena el formulario.
+ * **La fila de recientes** (vuelta 83): el título y las píldoras **en un solo renglón que se desplaza de
+ * lado** (revisión de la 83: iban una debajo de otra, ~130 px, y a 360 × 640 quedaban bajo la barra
+ * fija). Tocar una llama a [onRepetir], que llena el formulario.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun RepetirUnReciente(
     recientes: List<GastoReciente>,
@@ -142,10 +144,14 @@ internal fun RepetirUnReciente(
             color = Movi.colores.textoMedio,
             modifier = Modifier.padding(horizontal = Medida.margenDePantalla).semantics { heading() },
         )
-        FlowRow(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = Medida.margenDePantalla).padding(top = Espacio.xs),
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag(TAG_RENGLON_DE_RECIENTES)
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = Medida.margenDePantalla)
+                .padding(top = Espacio.xxs),
             horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
-            verticalArrangement = Arrangement.spacedBy(Espacio.xs),
         ) {
             recientes.forEach { reciente ->
                 // La píldora que se toca del sistema (la de los chips de categoría, en su alto compacto).
@@ -160,3 +166,6 @@ internal fun RepetirUnReciente(
         }
     }
 }
+
+/** El renglón de las píldoras de los recientes (revisión de la 83: uno solo, que se desplaza). */
+const val TAG_RENGLON_DE_RECIENTES: String = "agregar:renglon-de-recientes"
