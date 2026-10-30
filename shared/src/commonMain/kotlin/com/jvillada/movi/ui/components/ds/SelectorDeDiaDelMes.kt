@@ -93,6 +93,11 @@ fun SelectorDeDiaDelMes(
                                     else -> Movi.colores.texto
                                 },
                                 textAlign = TextAlign.Center,
+                                maxLines = 1,
+                                // Vuelta 75: a lo ancho del círculo, centrado por el párrafo y no por la caja,
+                                // que a la letra agrandada medía el número con un pelo menos de lo que ocupa
+                                // (lo mismo que el día del período de la guía).
+                                modifier = Modifier.fillMaxWidth(),
                             )
                         }
                     }
