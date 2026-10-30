@@ -1,0 +1,25 @@
+name: Mirar la web
+on:
+  push:
+    branches: ['mirar/**']
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - id: jdk
+        uses: actions/setup-java@v5
+        continue-on-error: true
+        with: { distribution: jetbrains, java-version: '21', token: '${{ github.token }}' }
+      - if: steps.jdk.outcome == 'failure'
+        run: sleep 45
+      - if: steps.jdk.outcome == 'failure'
+        uses: actions/setup-java@v5
+        with: { distribution: jetbrains, java-version: '21', token: '${{ github.token }}' }
+      - uses: gradle/actions/setup-gradle@v4
+      - run: rm -rf ~/.gradle/yarn ~/.gradle/nodejs
+      - run: rm -f local.properties
+      - run: ./gradlew :webApp:wasmJsBrowserDevelopmentExecutableDistribution -Pkotlin.daemon.jvmargs=-Xmx6g
+      - uses: actions/upload-artifact@v4
+        with: { name: web, path: webApp/build/dist/wasmJs/developmentExecutable/, retention-days: 2 }
