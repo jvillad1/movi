@@ -256,6 +256,6 @@ class PresupuestosNoAfirmanMientrasCarganTest {
         puertaDelGasto.complete(gastoDelServer)
         composeRule.waitForIdle()
 
-        assertTrue(hay("Ya llevas \$1.200.000 gastados en \"Comida\""))
+        assertTrue(hay("Ya llevas \$1.200.000 gastados en «Comida»"))
     }
 }

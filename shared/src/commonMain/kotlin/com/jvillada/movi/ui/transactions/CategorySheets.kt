@@ -1324,7 +1324,7 @@ fun CardPaymentCandidatesSheet(
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
             SheetLabel("Pagos de tarjeta sin marcar")
             Text(
-                "Marcarlos como \"$CARD_PAYMENT_CATEGORY\" evita contar esta plata dos veces: " +
+                "Marcarlos como «$CARD_PAYMENT_CATEGORY» evita contar esta plata dos veces: " +
                     "ya se contó como gasto el día que se compró con la tarjeta.",
                 style = Movi.textos.apoyo,
                 color = Movi.colores.textoMedio,

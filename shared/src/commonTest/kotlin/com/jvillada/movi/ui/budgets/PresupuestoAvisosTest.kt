@@ -28,7 +28,7 @@ class PresupuestoAvisosTest {
         val aviso = avisoDeCategoria("Mercado", gastoDelMes, ::plata)!!
 
         assertTrue(aviso.esAdvertencia, "va como advertencia, no como dato")
-        assertTrue(aviso.texto.contains("No tienes gastos en \"Mercado\""))
+        assertTrue(aviso.texto.contains("No tienes gastos en «Mercado»"))
         assertTrue(aviso.texto.contains("no vigilaría nada"), "dice la consecuencia, no solo el hecho")
         assertEquals(listOf("Crédito", "Comida", "Gimnasio"), aviso.sugerencias, "de mayor a menor")
     }
@@ -38,7 +38,7 @@ class PresupuestoAvisosTest {
     fun una_categoria_con_gastos_muestra_cuanto_lleva() {
         val aviso = avisoDeCategoria("Comida", gastoDelMes, ::plata)!!
 
-        assertEquals("Ya llevas \$2113575 gastados en \"Comida\" este período.", aviso.texto)
+        assertEquals("Ya llevas \$2113575 gastados en «Comida» este período.", aviso.texto)
         assertTrue(!aviso.esAdvertencia)
         assertTrue(aviso.sugerencias.isEmpty())
     }

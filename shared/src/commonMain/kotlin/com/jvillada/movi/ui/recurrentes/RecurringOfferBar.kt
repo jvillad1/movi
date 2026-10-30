@@ -71,7 +71,7 @@ fun RecurringOfferBar(
                     Text(
                         // Una sola línea de pregunta, corta: si necesita dos renglones para
                         // entenderse, ya es una interrupción y no un ofrecimiento.
-                        text = "¿\"${prefill.name}\" se repite todos los meses?",
+                        text = "¿«${prefill.name}» se repite todos los meses?",
                         style = Movi.textos.cuerpo,
                         color = Movi.colores.texto,
                     )

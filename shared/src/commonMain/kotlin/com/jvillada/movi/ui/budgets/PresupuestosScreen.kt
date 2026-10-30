@@ -974,8 +974,8 @@ private fun BudgetSheet(
                 if (onDelete != null) {
                     Spacer(Modifier.height(Espacio.xs))
                     Text(
-                        text = "El gasto se cruza por nombre: si renombras \"$initialCategory\" a otra cosa, " +
-                            "los movimientos que digan \"$initialCategory\" dejan de contar aquí.",
+                        text = "El gasto se cruza por nombre: si renombras «$initialCategory» a otra cosa, " +
+                            "los movimientos que digan «$initialCategory» dejan de contar aquí.",
                         style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,
                     )
@@ -1006,13 +1006,13 @@ private fun BudgetSheet(
                         Text(
                             text = when {
                                 candidatos.size == 1 && soloExactas ->
-                                    "Tienes un movimiento llamado \"${category.trim()}\" en otra categoría:"
+                                    "Tienes un movimiento llamado «${category.trim()}» en otra categoría:"
                                 candidatos.size == 1 ->
-                                    "Tienes un movimiento que menciona \"${category.trim()}\" en otra categoría:"
+                                    "Tienes un movimiento que menciona «${category.trim()}» en otra categoría:"
                                 soloExactas ->
-                                    "Tienes ${candidatos.size} movimientos llamados \"${category.trim()}\" en otras categorías:"
+                                    "Tienes ${candidatos.size} movimientos llamados «${category.trim()}» en otras categorías:"
                                 else ->
-                                    "Tienes ${candidatos.size} movimientos que mencionan \"${category.trim()}\" en otras categorías:"
+                                    "Tienes ${candidatos.size} movimientos que mencionan «${category.trim()}» en otras categorías:"
                             },
                             style = Movi.textos.apoyo,
                             color = Movi.colores.textoMedio,
@@ -1029,7 +1029,7 @@ private fun BudgetSheet(
                             ) {
                                 Column(Modifier.weight(1f)) {
                                     Text(tituloDelMovimiento(ev), style = Movi.textos.cuerpo, color = Movi.colores.texto)
-                                    Text("Hoy en \"${ev.category}\" · toca para moverlo aquí", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                                    Text("Hoy en «${ev.category}» · toca para moverlo aquí", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                                 }
                                 Cifra(ev.amount)
                             }

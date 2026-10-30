@@ -277,8 +277,8 @@ internal fun columnasParaQueEntrenLasPalabras(
 /** Lo que dice una celda: el nombre, o «Crear "…"» / «Usar "…"» para las especiales. */
 internal fun rotuloDeLaCelda(celda: CeldaDeCategoria): String = when (celda) {
     is CeldaDeCategoria.Existente -> celda.nombre
-    is CeldaDeCategoria.Crear -> "Crear \"${celda.nombre}\""
-    is CeldaDeCategoria.Usar -> "Usar \"${celda.nombre}\""
+    is CeldaDeCategoria.Crear -> "Crear «${celda.nombre}»"
+    is CeldaDeCategoria.Usar -> "Usar «${celda.nombre}»"
 }
 
 /**

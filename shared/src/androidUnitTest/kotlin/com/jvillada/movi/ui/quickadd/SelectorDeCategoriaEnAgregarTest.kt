@@ -134,7 +134,7 @@ class SelectorDeCategoriaEnAgregarTest {
 
         composeRule.onNodeWithTag(tagDeCeldaDeCategoria("Transporte")).assertExists()
         composeRule.onNodeWithTag(tagDeCeldaDeCategoria("Comida")).assertDoesNotExist()
-        composeRule.onNodeWithText("Crear \"Tra\"", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithText("Crear «Tra»", useUnmergedTree = true).assertExists()
     }
 
     /** Tocar una celda elige esa categoría y cierra el sub-picker. */
