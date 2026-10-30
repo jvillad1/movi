@@ -102,7 +102,7 @@ actual fun SmsSensorSetupSection(onSynced: () -> Unit) {
     // El segundo sensor, y hoy el que más falta hace: el banco dejó de mandar SMS (el más nuevo
     // del teléfono del dueño es del 15-sep) pero sigue publicando una notificación por movimiento.
     SensorNotificationsCard(installSource)
-    // Vuelta 73: los avisos de Movi (el permiso y sus interruptores) se mudaron a Tú → Avisos, la
+    // Vuelta 73: los avisos de Movi (el permiso y sus interruptores) se mudaron a Tú → Notificaciones, la
     // casa de todos los avisos (ver `AvisosDeEsteTelefono`). Esta pantalla queda con la captura y un
     // enlace a ellos (en `CapturaDelBancoScreen`).
     // Se dibuja a sí misma solo cuando el aviso aplica; el Spacer va adentro para no

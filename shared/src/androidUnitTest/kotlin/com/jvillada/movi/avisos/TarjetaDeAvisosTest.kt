@@ -46,7 +46,7 @@ class TarjetaDeAvisosTest {
     @Test
     fun `activar pide el permiso y la tarjeta se va`() {
         montar()
-        composeRule.onNodeWithText("Activar avisos").performClick()
+        composeRule.onNodeWithText("Activar notificaciones").performClick()
         assertEquals(1, pidio)
         assertEquals(0, descarto)
         composeRule.onNodeWithTag(TAG_TARJETA_DE_AVISOS).assertDoesNotExist()

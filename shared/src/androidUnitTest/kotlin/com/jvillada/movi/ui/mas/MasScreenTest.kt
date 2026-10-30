@@ -148,7 +148,7 @@ class MasScreenTest {
         val vistas = secciones()
         // En Android de prueba no hay lector de huella ni es administrador: sin «Entrar» ni «Administración».
         // Vuelta 38: «Lo tuyo» primero, y después las de Ajustes.
-        assertEquals(listOf(SECCION_LO_TUYO, "Tu plata", "Movi", "Cómo se ve", "Avisos", "Tus datos", "Cuenta"), vistas.map { it.first })
+        assertEquals(listOf(SECCION_LO_TUYO, "Tu plata", "Movi", "Cómo se ve", TITULO_DE_NOTIFICACIONES, "Tus datos", "Cuenta"), vistas.map { it.first })
         assertEquals(SECCIONES_DE_AJUSTES.filter { it in vistas.map { v -> v.first } }, vistas.drop(1).map { it.first }, "el orden de SECCIONES_DE_AJUSTES")
         assertTrue(tarjeta.boundsInRoot.bottom <= vistas.first().second, "el perfil va arriba de todo")
 

@@ -34,7 +34,7 @@ import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import com.jvillada.movi.ui.profile.Interruptor
 
 /** El título de la fila del permiso: si Android deja que Movi avise en este teléfono. */
-internal const val AVISOS_EN_ESTE_TELEFONO = "Avisos en este teléfono"
+internal const val AVISOS_EN_ESTE_TELEFONO = "En este teléfono"
 
 /** Vuelta 68: el interruptor del resumen de la mañana. */
 internal const val TEXTO_INTERRUPTOR_RESUMEN_DE_LA_MANANA = "Resumen de la mañana, a las 8:00"
@@ -71,7 +71,7 @@ private val INTERRUPTORES: List<InterruptorDeAviso> = listOf(
 
 /**
  * Android: el permiso de notificaciones (Android 13+) y los interruptores de lo que suena en este
- * teléfono, como filas de Tú → Avisos. Lo que era la tarjeta «Avisos de Movi» de Captura del banco.
+ * teléfono, como filas de Tú → Notificaciones. Lo que era la tarjeta «Avisos de Movi» de Captura del banco.
  *
  * Sin el permiso los interruptores se ven pero no se mueven: prenderlos no haría sonar nada, y un
  * interruptor encendido que no hace nada es la misma mentira que «AUTO-LECTURA ACTIVA» con la captura

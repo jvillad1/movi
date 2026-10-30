@@ -28,7 +28,7 @@ class AvisosEnElIphoneTest {
     @Test
     fun `la tarjeta dice el paso que falta`() {
         composeRule.setContent { MoviTheme { AvisosEnElIphone() } }
-        composeRule.onNodeWithText("Avisos en tu iPhone").assertIsDisplayed()
+        composeRule.onNodeWithText("Notificaciones en tu iPhone").assertIsDisplayed()
         composeRule.onNodeWithText("Agregar a Inicio", substring = true).assertIsDisplayed()
     }
 

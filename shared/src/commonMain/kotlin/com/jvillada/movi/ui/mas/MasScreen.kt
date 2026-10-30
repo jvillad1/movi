@@ -146,8 +146,14 @@ const val CERRAR_SESION: String = "Cerrar sesión"
  * Las secciones de Ajustes, en el orden en que se ven (en «Tú», debajo de «Lo tuyo»). «Entrar» (la huella) solo existe donde hay
  * lector, y «Administración» solo para quien administra el Inicio; las demás están siempre.
  */
+/**
+ * Vuelta 76 · **«Notificaciones»: lo que suena y sus interruptores.** Era «Avisos», y en Movi «avisos» son
+ * los mensajes del banco (la acción «Avisos» del Inicio, Por revisar). Una palabra por cosa.
+ */
+const val TITULO_DE_NOTIFICACIONES: String = "Notificaciones"
+
 val SECCIONES_DE_AJUSTES: List<String> =
-    listOf("Tu plata", "Movi", "Cómo se ve", "Avisos", "Tus datos", "Entrar", "Cuenta", "Administración")
+    listOf("Tu plata", "Movi", "Cómo se ve", TITULO_DE_NOTIFICACIONES, "Tus datos", "Entrar", "Cuenta", "Administración")
 
 /**
  * # «Tú» — la cuarta pestaña (vuelta 38), con todo lo que era Ajustes
@@ -342,7 +348,9 @@ fun MasScreen(
                     )
                     // Donde no se leen SMS, la captura es reenviar los correos del banco: la
                     // dirección y el paso a paso, con la misma pieza de la guía de primer uso.
-                    if (!esAndroid) {
+                    // Vuelta 76: solo con una dirección de verdad (`seVeLaFilaDeCorreo`): nunca una fila
+                    // muerta que diga «Todavía no está disponible».
+                    if (seVeLaFilaDeCorreo(esAndroid, direccionDeMovi.direccion)) {
                         Separador()
                         FilaDeAlertasPorCorreo(direccionDeMovi, onAbrir = { showCorreo = true })
                     }
@@ -400,7 +408,7 @@ fun MasScreen(
             }
         }
 
-        // ── Avisos: lo que era Perfil → Avisos y Perfil → Notificaciones ───────────
+        // ── Notificaciones (vuelta 76; era «Avisos»): lo que era Perfil → Avisos y Perfil → Notificaciones ──
         item(key = "avisos") {
             // El flujo JS del permiso es async: se relee el estado unas veces tras cada toque.
             var pushStatus by remember { mutableStateOf(PushOptIn.status()) }
@@ -431,7 +439,7 @@ fun MasScreen(
                 }
             }
             Column {
-                Seccion(titulo = "Avisos")
+                Seccion(titulo = TITULO_DE_NOTIFICACIONES)
                 Superficie(relleno = RellenoDeSuperficie.Lista) {
                     // Las notificaciones push del navegador, donde se pueden pedir, con un solo
                     // «Activar avisos» (vuelta 31), y cuántos días antes avisar.

@@ -153,7 +153,7 @@ internal val PANTALLAS_BUSCABLES: List<PantallaBuscable> = listOf(
     PantallaBuscable(TITULO_DE_PAGOS, "Pestaña", Screen.Plan(), listOf("plan", "pagos del mes", "disponible")),
     PantallaBuscable("Presupuestos", TITULO_DE_PAGOS, Screen.Budgets),
     PantallaBuscable("Tus períodos", TITULO_DE_PAGOS, Screen.Periodos, listOf("periodos", "como me fue")),
-    PantallaBuscable(TITULO_DE_TU, "Pestaña", Screen.Tu, listOf("ajustes", "perfil", "huella", "ocultar los saldos", "tema", "como se ve", "avisos por correo", "corte del periodo", "contrasena", "cerrar sesion", "descargar tus datos")),
+    PantallaBuscable(TITULO_DE_TU, "Pestaña", Screen.Tu, listOf("ajustes", "perfil", "huella", "ocultar los saldos", "tema", "como se ve", "notificaciones", "avisos por correo", "corte del periodo", "contrasena", "cerrar sesion", "descargar tus datos")),
     PantallaBuscable("Patrimonio", TITULO_DE_TU, Screen.Accounts, listOf("cuentas", "tu plata")),
     PantallaBuscable("Créditos", "Patrimonio", Screen.Credits, listOf("deudas", "tarjetas", "prestamos")),
     PantallaBuscable("Cómo salir de tus deudas", "Créditos", Screen.SalidaDeDeudas, listOf("abono", "avalancha", "bola de nieve")),

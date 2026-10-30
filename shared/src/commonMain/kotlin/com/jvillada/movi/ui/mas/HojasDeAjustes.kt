@@ -29,6 +29,14 @@ const val RECIBE_TUS_ALERTAS_POR_CORREO: String = "Recibe tus alertas por correo
 const val TAG_HOJA_DE_ALERTAS_POR_CORREO: String = "ajustes:hoja-de-alertas-por-correo"
 
 /**
+ * **¿Se pinta la fila de las alertas por correo?** (vuelta 76). Solo donde el aparato no lee SMS y el
+ * server contestó una dirección de reenvío (`GET /api/correo-entrante/direccion`, configurada). Mientras
+ * lee, o sin reenvío en el server, no hay fila: antes quedaba «Todavía no está disponible», una fila que
+ * no llevaba a ningún lado. Pura.
+ */
+fun seVeLaFilaDeCorreo(esAndroid: Boolean, direccion: String?): Boolean = !esAndroid && !direccion.isNullOrBlank()
+
+/**
  * **«Recibe tus alertas por correo»**, la fila (vuelta 31). Solo donde el aparato no lee SMS (la web,
  * iOS): ahí la captura del banco es reenviar sus correos a Movi. Dice la dirección para que se vea sin
  * abrir nada, y abre [HojaDeAlertasPorCorreo] con «Copiar» y el paso a paso.
@@ -38,11 +46,9 @@ internal fun FilaDeAlertasPorCorreo(direccion: DireccionDeMovi, onAbrir: () -> U
     val laDireccion = direccion.direccion
     Fila(
         titulo = RECIBE_TUS_ALERTAS_POR_CORREO,
-        subtitulo = when {
-            laDireccion != null -> laDireccion
-            !direccion.leida -> CARGANDO
-            else -> "Todavía no está disponible"
-        },
+        // Vuelta 76: sin dirección la fila no se pinta (`seVeLaFilaDeCorreo`); el «Cargando…» queda
+        // por si se monta sola.
+        subtitulo = laDireccion ?: CARGANDO,
         // La dirección es larga («alertas+3f2a…@…resend.app»): en dos renglones, no cortada.
         lineasDelSubtitulo = 2,
         inicio = { IconoEnCirculo(Icons.Rounded.Email, tono = TonoDeIcono.Neutro) },

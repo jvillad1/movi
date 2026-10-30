@@ -339,6 +339,12 @@ data class PropuestaDelInicio(
     val alTocarSecundaria: AccionDeLaPropuesta? = null,
     /** Vencido, vence hoy o ya se cobró: el ícono va en aviso, no en la marca. */
     val urgente: Boolean = false,
+    /**
+     * Vuelta 76 · **cuántas cosas dice esta tarjeta**: la suya y las de su «y N más». El encabezado
+     * «Movi propone hoy · N» suma esto ([cuantasCosasProponen]): con una tarjeta que dice «· y 3 cosas
+     * más para revisar», el encabezado dice 4, no 1.
+     */
+    val cuantas: Int = 1,
     /** Para ordenar: menor primero. */
     internal val rango: Int = 0,
 )
@@ -372,6 +378,13 @@ fun propuestasDelInicio(data: DashboardData, conElPago: Boolean = true): List<Pr
     propuestaDeAnomalia(data)?.let(::add)
     propuestaDeCierre(data)?.let(::add)
 }.sortedBy { it.rango }
+
+/**
+ * **El número del encabezado «Movi propone hoy»** (vuelta 76): cuenta exactamente lo que dicen las
+ * tarjetas —cada una lo suyo y su «y N más» ([PropuestaDelInicio.cuantas])—. Antes contaba tarjetas:
+ * «Movi propone hoy · 1» encima de una tarjeta que decía «· y 3 avisos más». Pura.
+ */
+fun cuantasCosasProponen(propuestas: List<PropuestaDelInicio>): Int = propuestas.sumOf { it.cuantas }
 
 /** Las propuestas que se ven: las primeras [TOPE_DE_PROPUESTAS]. */
 fun propuestasALaVista(propuestas: List<PropuestaDelInicio>): List<PropuestaDelInicio> =
@@ -411,6 +424,8 @@ private fun propuestaDePago(data: DashboardData): PropuestaDelInicio? {
         alTocarSecundaria = if (conCandidatos) null else AccionDeLaPropuesta.Ir(Screen.Plan(SEGMENTO_PAGOS)),
         urgente = pago.diasParaVencer <= 0,
         rango = if (pago.diasParaVencer <= 0) 0 else 3,
+        // Lo que la tarjeta dice: con candidatos no nombra a los otros.
+        cuantas = if (conCandidatos) 1 else 1 + otros,
     )
 }
 
@@ -428,6 +443,7 @@ private fun propuestaDeDebitos(data: DashboardData): PropuestaDelInicio? {
         alTocar = AccionDeLaPropuesta.Ir(Screen.PorRevisar),
         urgente = true,
         rango = 1,
+        cuantas = debitos.size,
     )
 }
 
@@ -531,6 +547,7 @@ private fun propuestaDeCuadre(data: DashboardData): PropuestaDelInicio? {
         accion = "Revisar",
         alTocar = AccionDeLaPropuesta.Ir(Screen.CuadreDeSaldos),
         rango = 4,
+        cuantas = cuadres.size,
     )
 }
 
@@ -550,6 +567,7 @@ private fun propuestaDeAnomalia(data: DashboardData): PropuestaDelInicio? {
             accionSecundaria = NO_CAMBIAR,
             alTocarSecundaria = AccionDeLaPropuesta.DescartarAnomalia(cambio.huella),
             rango = 5,
+            cuantas = anomalias.size,
         )
     }
     val anomalia = anomalias.firstOrNull() ?: return null
@@ -563,19 +581,23 @@ private fun propuestaDeAnomalia(data: DashboardData): PropuestaDelInicio? {
         accionSecundaria = "Está bien",
         alTocarSecundaria = AccionDeLaPropuesta.DescartarAnomalia(anomalia.huella),
         rango = 5,
+        cuantas = anomalias.size,
     )
 }
 
 /**
- * **El cuerpo de la tarjeta de una anomalía**: su detalle y, si hay más, «y N avisos más» después de
- * « · ». El detalle viene como frase, con su punto final («… (el promedio de los 3 anteriores).»), y
- * pegado a « · » quedaba «…anteriores). · y 1 aviso más»: el punto final se saca antes de unir
- * (vuelta de diseño 28). Solo, el detalle queda tal cual.
+ * **El cuerpo de la tarjeta de una anomalía**: su detalle y, si hay más, «y N cosas más para revisar»
+ * después de « · ». El detalle viene como frase, con su punto final («… (el promedio de los 3
+ * anteriores).»), y pegado a « · » quedaba «…anteriores). · y 1 más»: el punto final se saca antes de
+ * unir (vuelta de diseño 28). Solo, el detalle queda tal cual.
+ *
+ * Vuelta 76: decía «y 3 avisos más», y en Movi «avisos» son los mensajes del banco (Por revisar); lo que
+ * se sale de lo normal es algo **para revisar**.
  */
 internal fun cuerpoDeLaAnomalia(detalle: String, otras: Int): String {
     val mas = when {
-        otras == 1 -> "y 1 aviso más"
-        otras > 1 -> "y $otras avisos más"
+        otras == 1 -> "y 1 cosa más para revisar"
+        otras > 1 -> "y $otras cosas más para revisar"
         else -> return detalle
     }
     val sinPunto = detalle.trimEnd().removeSuffix(".").trimEnd()

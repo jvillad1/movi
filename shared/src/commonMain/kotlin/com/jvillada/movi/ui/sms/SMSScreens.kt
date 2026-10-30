@@ -395,7 +395,7 @@ fun CapturaDelBancoScreen(onNavigate: (Screen) -> Unit) {
                 SmsSensorSetupSection(onSynced = { refreshKey++ })
 
                 // Vuelta 73: los avisos de Movi ya no viven acá (la tarjeta «Avisos de Movi» del
-                // teléfono se mudó): todos sus interruptores están en Tú → Avisos. Queda la puerta.
+                // teléfono se mudó): todos sus interruptores están en Tú → Notificaciones. Queda la puerta.
                 Spacer(Modifier.height(Medida.entreSecciones))
                 com.jvillada.movi.ui.components.ds.FilaDeNavegacion(
                     titulo = TITULO_DE_LOS_AVISOS_EN_CAPTURA,
@@ -484,7 +484,7 @@ const val TAG_ULTIMO_MENSAJE: String = "ultimo-mensaje-del-banco"
 const val TAG_AVISOS_EN_TU: String = "captura:avisos-en-tu"
 
 /** Lo que dice esa fila. */
-const val TITULO_DE_LOS_AVISOS_EN_CAPTURA: String = "Avisos"
+const val TITULO_DE_LOS_AVISOS_EN_CAPTURA: String = "Notificaciones"
 
 /** Debajo: dónde se encienden y se apagan. */
 const val SUBTITULO_DE_LOS_AVISOS_EN_CAPTURA: String = "Se encienden y se apagan en Tú"

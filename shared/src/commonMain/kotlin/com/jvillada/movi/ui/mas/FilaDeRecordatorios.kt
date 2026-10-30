@@ -23,7 +23,7 @@ import com.jvillada.movi.ui.recurrentes.RECORDATORIOS_APAGADOS
 import com.jvillada.movi.ui.recurrentes.estadoDeLosRecordatorios
 import com.jvillada.movi.ui.recurrentes.reminderLeadHint
 
-/** El título de la fila de recordatorios de Ajustes → Avisos. */
+/** El título de la fila de recordatorios de Tú → Notificaciones. */
 const val TITULO_DE_LOS_RECORDATORIOS: String = "Avisarme antes de un vencimiento"
 
 /** El tag de la fila, para sus pruebas. */
@@ -78,8 +78,14 @@ internal fun FilaDeRecordatorios(
     )
 }
 
-/** El único botón que prende los avisos en Ajustes (vuelta 31). */
-const val ACTIVAR_AVISOS: String = "Activar avisos"
+/**
+ * El único botón que prende las notificaciones en Tú (vuelta 31). Vuelta 76: «Activar», a secas —la
+ * sección ya se llama «Notificaciones»; «Activar avisos» mezclaba la palabra de los mensajes del banco—.
+ */
+const val ACTIVAR_AVISOS: String = "Activar"
+
+/** Vuelta 76: la fila de las notificaciones del navegador, dentro de la sección «Notificaciones». */
+const val EN_ESTE_NAVEGADOR: String = "En este navegador"
 
 /**
  * **Las filas de los avisos**: las notificaciones (donde se pueden pedir) con **un solo** botón,
@@ -102,7 +108,8 @@ internal fun FilasDeAvisos(
         Fila(
             // Título corto y subtítulo en dos líneas: el botón ocupa la mitad de la fila, y con
             // «Notificaciones push» el título partía en dos y la frase se cortaba.
-            titulo = "Notificaciones",
+            // Vuelta 76: la sección ya se llama «Notificaciones»; la fila dice dónde.
+            titulo = EN_ESTE_NAVEGADOR,
             subtitulo = when (pushStatus) {
                 "enabled" -> "Activadas en este dispositivo"
                 "denied" -> "Bloqueadas por el navegador"
