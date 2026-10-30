@@ -38,9 +38,13 @@ import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.categorias.IconoDeCategoria
 import com.jvillada.movi.ui.components.ds.Cifra
+import com.jvillada.movi.ui.components.ds.BarraDeProgreso
+import com.jvillada.movi.ui.components.ds.TonoDeBarra
+import com.jvillada.movi.ui.components.ds.Pildora
+import com.jvillada.movi.ui.components.ds.TonoDePildora
+import androidx.compose.foundation.layout.Box
 import com.jvillada.movi.ui.components.ds.CifraConRotulo
 import com.jvillada.movi.ui.components.ds.EsqueletoDeCifraConRotulo
-import com.jvillada.movi.ui.components.ds.FormaDeCifra
 import com.jvillada.movi.ui.components.ds.renglonTocable
 import com.jvillada.movi.ui.components.ds.Fila
 import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
@@ -49,8 +53,6 @@ import com.jvillada.movi.ui.components.ds.Separador
 import com.jvillada.movi.ui.components.ds.Superficie
 import com.jvillada.movi.ui.components.ds.TonoDeCifra
 import com.jvillada.movi.ui.components.ds.VarianteDeCifra
-import com.jvillada.movi.ui.components.ds.colorDeLaCifra
-import com.jvillada.movi.ui.components.ds.estiloDeLaCifra
 import com.jvillada.movi.ui.components.ds.rememberFormaComunDeLasCifras
 import com.jvillada.movi.ui.dashboard.CONTRA_EL_PERIODO_PASADO
 import com.jvillada.movi.ui.dashboard.CategoriaDelPeriodo
@@ -304,20 +306,14 @@ internal fun ResumenDelPeriodoEnElPanel(
             .testTag(TAG_RESUMEN_DEL_PERIODO_EN_EL_PANEL),
     ) {
         Seccion(titulo = tituloDelPanel(resumen.periodo, conChip))
-        Superficie(modifier = Modifier.fillMaxWidth()) {
-            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-                // Vuelta de diseño 32: la misma regla que la franja del teléfono. Si una no cabe
-                // entera, las tres van abreviadas (antes cada una se achicaba por su cuenta).
-                val forma = rememberFormaComunDeLasCifras(cifrasDelResumen(resumen), VarianteDeCifra.Grande, anchoDeCadaCifra(maxWidth))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(Espacio.s),
-                ) {
-                    CifraDelResumen("Entró", resumen.entro, TonoDeCifra.Ingreso, forma, Modifier.weight(1f))
-                    CifraDelResumen("Salió", resumen.salio, TonoDeCifra.Neutro, forma, Modifier.weight(1f))
-                    CifraDelResumen("Neto", resumen.neto, tonoDelNeto(resumen.neto), forma, Modifier.weight(1f))
-                }
-            }
+        // Vuelta 81: el panel es una columna lateral (el 40 % del ancho): Entró, Salió y Neto van uno
+        // debajo del otro, como filas, y cada cifra entera —lado a lado, a 425 dp, se abreviaban—.
+        Superficie(modifier = Modifier.fillMaxWidth().testTag(TAG_CIFRAS_DEL_RESUMEN), relleno = RellenoDeSuperficie.Lista) {
+            FilaDeCifraDelResumen("Entró", resumen.entro, TonoDeCifra.Ingreso)
+            Separador()
+            FilaDeCifraDelResumen("Salió", resumen.salio, TonoDeCifra.Neutro)
+            Separador()
+            FilaDeCifraDelResumen("Neto", resumen.neto, tonoDelNeto(resumen.neto))
         }
 
         Spacer(Modifier.height(Medida.entreSecciones))
@@ -331,9 +327,10 @@ internal fun ResumenDelPeriodoEnElPanel(
                 Spacer(Modifier.height(Espacio.xs))
             }
             Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
-                resumen.categorias.forEachIndexed { i, fila ->
-                    if (i > 0) Separador()
-                    FilaDeCategoriaDelResumen(fila, resumen.fijas, onClick = { onCategoria(fila) })
+                // Vuelta 81: cada categoría con su barra de 4 dp relativa a la mayor, como el widget.
+                val mayor = resumen.categorias.maxOfOrNull { it.gasto } ?: 0L
+                resumen.categorias.forEach { fila ->
+                    FilaDeCategoriaDelResumen(fila, resumen.fijas, mayor, onClick = { onCategoria(fila) })
                 }
             }
         }
@@ -343,47 +340,65 @@ internal fun ResumenDelPeriodoEnElPanel(
     }
 }
 
-/** Un rótulo («Entró») y su cifra, en un tercio de la superficie. */
+/** El tag de las tres cifras del resumen (Entró, Salió, Neto) en el panel. */
+const val TAG_CIFRAS_DEL_RESUMEN: String = "movimientos-cifras-del-resumen"
+
+/** El tag de la barra de una categoría del resumen (vuelta 81). */
+const val TAG_BARRA_DEL_RESUMEN: String = "movimientos-barra-del-resumen"
+
+/** Un rótulo («Entró») y su cifra, en una fila (vuelta 81: el panel es una columna lateral). */
 @Composable
-private fun CifraDelResumen(rotulo: String, monto: Long, tono: TonoDeCifra, forma: FormaDeCifra, modifier: Modifier) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
-        Text(rotulo, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, maxLines = 1)
-        Cifra(monto, VarianteDeCifra.Grande, tono = tono, forma = forma)
-    }
+private fun FilaDeCifraDelResumen(rotulo: String, monto: Long, tono: TonoDeCifra) {
+    Fila(titulo = rotulo, final = { Cifra(monto, VarianteDeCifra.Fila, tono = tono) })
 }
 
 /**
- * Una categoría: su ícono, su nombre, cuánto pesa y cuántas veces; a la derecha el monto y la
- * diferencia contra el período pasado. Tocarla filtra la lista de al lado.
+ * Una categoría (vuelta 81, como «En qué se va» del Inicio): su ícono, su nombre y cuántas veces; a la
+ * derecha el monto; debajo, una [BarraDeProgreso] de 4 dp relativa a la mayor y la diferencia contra el
+ * período pasado. Tocarla filtra la lista de al lado.
  */
 @Composable
-private fun FilaDeCategoriaDelResumen(fila: FilaDelAnalisis, fijas: Set<String>, onClick: () -> Unit) {
+private fun FilaDeCategoriaDelResumen(fila: FilaDelAnalisis, fijas: Set<String>, mayor: Long, onClick: () -> Unit) {
     val diferencia = diferenciaDeLaFila(fila, fijas)
-    Fila(
-        titulo = fila.nombre,
-        subtitulo = "${(fila.fraccion * 100).toInt()} % · ${if (fila.veces == 1) "1 movimiento" else "${fila.veces} movimientos"}",
-        modifier = Modifier.testTag(TAG_CATEGORIA_DEL_RESUMEN),
-        inicio = { IconoDeCategoria(fila.nombre) },
-        final = {
-            Column(horizontalAlignment = Alignment.End) {
-                Cifra(fila.gasto)
-                if (diferencia != null) {
-                    Text(
-                        text = diferencia.texto,
-                        style = estiloDeLaCifra(VarianteDeCifra.Chica, Movi.textos),
-                        color = colorDeLaCifra(diferencia.tono, Movi.colores),
-                        maxLines = 1,
-                        modifier = Modifier
-                            .testTag(TAG_DIFERENCIA_DEL_RESUMEN)
-                            .semantics { contentDescription = diferencia.descripcion },
-                    )
+    Column(modifier = Modifier.testTag(TAG_CATEGORIA_DEL_RESUMEN)) {
+        Fila(
+            titulo = fila.nombre,
+            subtitulo = "${(fila.fraccion * 100).toInt()} % · ${if (fila.veces == 1) "1 movimiento" else "${fila.veces} movimientos"}",
+            inicio = { IconoDeCategoria(fila.nombre) },
+            final = { Cifra(fila.gasto) },
+            onClick = onClick,
+            onClickLabel = "Ver los movimientos",
+            chevron = false,
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = Medida.margenDePantalla + Medida.avatar + Espacio.s, end = Medida.margenDePantalla)
+                .padding(bottom = Espacio.s),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
+        ) {
+            BarraDeProgreso(
+                fraccion = fraccionDeLaBarraDelResumen(fila.gasto, mayor),
+                tono = TonoDeBarra.Marca,
+                modifier = Modifier.weight(1f).testTag(TAG_BARRA_DEL_RESUMEN),
+            )
+            if (diferencia != null) {
+                Box(
+                    modifier = Modifier
+                        .testTag(TAG_DIFERENCIA_DEL_RESUMEN)
+                        .semantics { contentDescription = diferencia.descripcion },
+                ) {
+                    Pildora(texto = diferencia.texto, tono = if (diferencia.tono == TonoDeCifra.Alerta) TonoDePildora.Peligro else TonoDePildora.Neutra)
                 }
             }
-        },
-        onClick = onClick,
-        onClickLabel = "Ver los movimientos",
-    )
+        }
+    }
 }
+
+/** Cuánto de la barra llena una categoría del resumen: relativa a la mayor (la mayor la llena). Pura. */
+fun fraccionDeLaBarraDelResumen(gasto: Long, mayor: Long): Float =
+    if (mayor <= 0L) 0f else (gasto.toFloat() / mayor).coerceIn(0f, 1f)
 
 /** El título del panel: «Octubre 2026», o «Octubre 2026 · del período» con un chip puesto. Pura. */
 fun tituloDelPanel(periodo: PeriodoFinanciero, conChip: Boolean): String =

@@ -241,6 +241,22 @@ object Medida {
      * no se lee como un botón. En el teléfono nunca llega a este tope (390 − 64 = 326).
      */
     val anchoMaximoDeBoton: Dp = 360.dp
+
+    /**
+     * **El ancho máximo de lectura** (vuelta 81): lo más que mide una lista o un formulario de una sola
+     * columna fuera del teléfono. Más ancha, una fila deja la cifra a 1.000 px de su nombre y no se lee
+     * mejor, se lee peor. Es la columna de lectura de `Disposicion` (`ANCHO_DE_LECTURA`); cuando hay dos
+     * cosas que mostrar, van en dos columnas en vez de estirar una.
+     */
+    val anchoMaximoDeLectura: Dp = 720.dp
+
+    /**
+     * **El ancho de una ficha** (vuelta 81): el detalle de un movimiento fuera del teléfono —en el panel
+     * de Actividad o como diálogo— va en una superficie de este ancho como mucho, con sus datos en filas
+     * y las acciones a la izquierda. A 1.280 flotaba sobre el crema con seis acciones repartidas cada
+     * 100 px.
+     */
+    val anchoDeFicha: Dp = 520.dp
 }
 
 /**

@@ -181,6 +181,11 @@ internal fun EncabezadoDelMovimiento(
     onEditar: () -> Unit,
     /** Los espacios del dueño, para decir con quién se repartió un gasto («con Caro»). */
     espacios: List<EspacioCompartido> = emptyList(),
+    /**
+     * Vuelta 81 · en la ficha (fuera del teléfono) el encabezado es solo el título y la cifra: cuándo,
+     * dónde y las cuotas los dicen las filas de [datosDeLaFicha].
+     */
+    ficha: Boolean = false,
 ) {
     val hoy = remember { hoyEnAppZone() }
     val cuenta = cuentas.firstOrNull { it.id == evento.accountId }?.name
@@ -226,14 +231,16 @@ internal fun EncabezadoDelMovimiento(
             color = Movi.colores.textoMedio,
             modifier = Modifier.testTag(TAG_TOTAL_DEL_REPARTIDO),
         )
-    } else {
+    } else if (!ficha) {
         // Vuelta 71 (revisión): una compra diferida dice a cuántas cuotas, como su fila en Actividad.
         textoDeLasCuotas(evento.cuotas)?.let { cuotas ->
             Text(cuotas, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio, modifier = Modifier.testTag(TAG_CUOTAS_DEL_MOVIMIENTO))
         }
     }
-    Spacer(Modifier.height(Espacio.xxs))
-    Text(linea, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
+    if (!ficha) {
+        Spacer(Modifier.height(Espacio.xxs))
+        Text(linea, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
+    }
     // Vuelta 80: lo que decía el encabezado del día en Actividad, ahora en el pago mismo.
     if (esPagoDeTarjetaQueSale(evento)) {
         Text(
@@ -474,6 +481,236 @@ internal fun FilaDeAcciones(
                         maxFontSize = estiloDelRotulo.fontSize,
                     ),
                 )
+            }
+        }
+    }
+}
+
+// ── Vuelta 81: la ficha de un movimiento, fuera del teléfono ─────────────────────────────────────
+
+/**
+ * # La ficha (vuelta 81)
+ *
+ * A 1.280 el detalle de un movimiento flotaba sobre el crema: la cifra arriba, el chip de la categoría
+ * y seis acciones repartidas cada 100 px, con el 70 % de la pantalla vacío. Fuera del teléfono —en el
+ * panel de Actividad o como diálogo— el detalle es una **ficha**: una superficie de
+ * [com.jvillada.movi.theme.Medida.anchoDeFicha] (520) como mucho, con
+ *
+ * 1. la cifra y el título arriba ([EncabezadoDelMovimiento] con `ficha = true`, sin la línea de cuándo
+ *    y dónde: eso ya lo dicen las filas);
+ * 2. los datos como [Fila]s ([datosDeLaFicha]): cuenta, fecha, categoría, nota, origen, cuotas y grupo;
+ *    tocar uno abre la sección que lo corrige;
+ * 3. las acciones **alineadas a la izquierda, en un renglón** ([AccionesDeLaFicha]): una sola principal
+ *    ([principalDeLaFicha], la regla del amarillo) y el resto secundarias; «Más» va en «⋯».
+ *
+ * Las secciones de edición son las mismas de siempre y se abren debajo. **El teléfono no cambia.**
+ */
+
+/** El `testTag` de la superficie de la ficha, en el panel de Actividad. */
+const val TAG_FICHA_DEL_MOVIMIENTO: String = "movimiento:ficha"
+
+/** El `testTag` del renglón de acciones de la ficha. */
+const val TAG_ACCIONES_DE_LA_FICHA: String = "movimiento:acciones-de-la-ficha"
+
+/** El `testTag` de cada dato de la ficha (una [Fila]). */
+const val TAG_DATO_DE_LA_FICHA: String = "movimiento:dato-de-la-ficha"
+
+/** Cuánto del ancho de un dato de la ficha se lleva el valor: el rótulo («Categoría») cabe en el resto. */
+const val FRACCION_DEL_VALOR_DE_LA_FICHA: Float = 0.62f
+
+/** Qué dice cada fila de la ficha, en su orden. */
+enum class ClaveDelDato(val rotulo: String) {
+    Cuenta("Cuenta"),
+    Fecha("Fecha"),
+    Categoria("Categoría"),
+    Nota("Nota"),
+    Origen("Origen"),
+    Cuotas("Cuotas"),
+    Grupo("Grupo"),
+}
+
+/** Un dato de la ficha: su [clave], lo que dice y la sección que lo corrige (`null`: solo informa). */
+data class DatoDeLaFicha(val clave: ClaveDelDato, val valor: String, val accion: AccionDelMovimiento?)
+
+/** De dónde vino un movimiento, dicho en una palabra o dos. Pura. */
+fun origenDelMovimiento(fuente: com.jvillada.movi.shared.model.EventSource): String = when (fuente) {
+    com.jvillada.movi.shared.model.EventSource.MANUAL -> "Anotado a mano"
+    com.jvillada.movi.shared.model.EventSource.SMS -> "Aviso del banco"
+    com.jvillada.movi.shared.model.EventSource.OCR -> "Comprobante"
+    com.jvillada.movi.shared.model.EventSource.STATEMENT -> "Extracto"
+}
+
+/**
+ * **Los datos de la ficha** de [evento], en el orden de [ClaveDelDato]. Solo va lo que hay: sin cuenta
+ * conocida no va «Cuenta», la nota solo si dice algo distinto del título, las cuotas solo en una compra
+ * diferida, el grupo solo en un gasto repartido. Pura.
+ */
+fun datosDeLaFicha(
+    evento: FinancialEvent,
+    nombreDeLaCuenta: String?,
+    espacio: EspacioCompartido?,
+    hoy: kotlinx.datetime.LocalDate,
+): List<DatoDeLaFicha> = buildList {
+    nombreDeLaCuenta?.takeIf { it.isNotBlank() }?.let { add(DatoDeLaFicha(ClaveDelDato.Cuenta, it, AccionDelMovimiento.Nota)) }
+    add(DatoDeLaFicha(ClaveDelDato.Fecha, lineaDeCuandoYDonde(evento, null, hoy), AccionDelMovimiento.Fecha))
+    add(DatoDeLaFicha(ClaveDelDato.Categoria, evento.category, AccionDelMovimiento.Categoria))
+    notaDeLaFicha(evento, tituloDelMovimiento(evento, nombreDeLaCuenta))
+        ?.let { add(DatoDeLaFicha(ClaveDelDato.Nota, it, AccionDelMovimiento.Nota)) }
+    add(DatoDeLaFicha(ClaveDelDato.Origen, origenDelMovimiento(evento.source), null))
+    evento.cuotas?.takeIf { it > 1 }?.let { add(DatoDeLaFicha(ClaveDelDato.Cuotas, "$it cuotas", null)) }
+    if (evento.espacioId != null) {
+        add(DatoDeLaFicha(ClaveDelDato.Grupo, espacio?.nombre?.trim()?.ifEmpty { null } ?: "Repartido", null))
+    }
+}
+
+/**
+ * **La nota de la ficha**: lo que va después de « · » en el concepto («Mercado del sábado · con Caro» →
+ * «con Caro», la forma en que Movi guarda la nota del dueño); sin « · », el concepto si dice algo que el
+ * título y la categoría no dicen. `null` si no hay nada que agregar. Pura.
+ */
+fun notaDeLaFicha(evento: FinancialEvent, titulo: String): String? {
+    val descripcion = descripcionParaMostrar(evento).trim()
+    if (SEPARADOR_DE_LA_NOTA in descripcion) return descripcion.substringAfter(SEPARADOR_DE_LA_NOTA).trim().ifEmpty { null }
+    return descripcion.takeIf { it.isNotEmpty() && !it.equals(titulo, ignoreCase = true) && !it.equals(evento.category, ignoreCase = true) }
+}
+
+/** Lo que separa el concepto de la nota del dueño en `description`. */
+private const val SEPARADOR_DE_LA_NOTA: String = " · "
+
+/**
+ * **Las acciones de la ficha**: las de la fila del teléfono sin «Categoría» ni «Fecha» —en la ficha son
+ * filas que se tocan— y sin el tope de [MAXIMO_DE_ACCIONES_DEL_MOVIMIENTO]: con dos menos, «Repartir»
+ * siempre cabe en el renglón. Pura.
+ */
+internal fun accionesDeLaFicha(
+    ofreceRepetir: Boolean,
+    ofreceRepartir: Boolean,
+    conTercero: Boolean,
+    conMas: Boolean,
+): List<AccionDelMovimiento> = buildList {
+    add(AccionDelMovimiento.Nota)
+    if (ofreceRepetir) add(AccionDelMovimiento.Repetir)
+    if (ofreceRepartir) add(AccionDelMovimiento.Repartir)
+    if (conTercero) add(AccionDelMovimiento.Tercero)
+    if (conMas) add(AccionDelMovimiento.Mas)
+}
+
+/**
+ * **La acción amarilla de la ficha** (la regla del amarillo, vuelta 79: uno por vista). «Editar»,
+ * que es lo que más se hace con un movimiento ya anotado; ninguna si [porConfirmar] —ahí el amarillo es
+ * «Confirmar», que va arriba— o si [otroAmarilloALaVista] (la tarjeta de los avisos del banco, en la
+ * lista de al lado). Pura.
+ */
+internal fun principalDeLaFicha(
+    acciones: List<AccionDelMovimiento>,
+    porConfirmar: Boolean,
+    otroAmarilloALaVista: Boolean,
+): AccionDelMovimiento? =
+    AccionDelMovimiento.Nota.takeIf { it in acciones && !porConfirmar && !otroAmarilloALaVista }
+
+/** Los datos de la ficha, en una superficie de lista dentro de la ficha (sin relleno propio a los lados). */
+@Composable
+internal fun DatosDeLaFicha(
+    datos: List<DatoDeLaFicha>,
+    abierta: AccionDelMovimiento?,
+    onElegir: (AccionDelMovimiento) -> Unit,
+) {
+    Superficie(
+        modifier = Modifier.fillMaxWidth(),
+        nivel = NivelDeSuperficie.Capa2,
+        relleno = RellenoDeSuperficie.Lista,
+    ) {
+        datos.forEachIndexed { i, dato ->
+            if (i > 0) com.jvillada.movi.ui.components.ds.Separador(com.jvillada.movi.ui.components.ds.SangriaDeSeparador.Ninguna)
+            val accion = dato.accion
+            // Dos nodos: el tag de todo dato, y el de la acción cuando la fila es su puerta («Categoría»,
+            // «Fecha»), el mismo tag que su botón del teléfono.
+            Box(modifier = Modifier.testTag(TAG_DATO_DE_LA_FICHA)) {
+            Box(
+                modifier = Modifier
+                    .then(if (accion != null && dato.clave.esLaPuertaDe(accion)) Modifier.testTag(tagDeAccionDelMovimiento(accion)) else Modifier)
+                    .semantics { if (accion != null) selected = accion == abierta },
+            ) {
+                Fila(
+                    titulo = dato.clave.rotulo,
+                    tonoDelTitulo = com.jvillada.movi.ui.components.ds.TonoDeFila.Apagado,
+                    final = { ValorDelDato(dato) },
+                    onClick = accion?.let { { onElegir(it) } },
+                    chevron = accion != null,
+                )
+            }
+            }
+        }
+    }
+}
+
+/**
+ * ¿Es esta fila la que hace de la acción [accion] (la que lleva su tag, para que se encuentre como la del
+ * teléfono)? «Categoría» y «Fecha»: sus filas. «Editar» tiene su botón; la cuenta y la nota también lo
+ * abren, sin su tag.
+ */
+private fun ClaveDelDato.esLaPuertaDe(accion: AccionDelMovimiento): Boolean =
+    (this == ClaveDelDato.Categoria && accion == AccionDelMovimiento.Categoria) ||
+        (this == ClaveDelDato.Fecha && accion == AccionDelMovimiento.Fecha)
+
+@Composable
+private fun ValorDelDato(dato: DatoDeLaFicha) {
+    Row(
+        modifier = Modifier.fillMaxWidth(FRACCION_DEL_VALOR_DE_LA_FICHA),
+        horizontalArrangement = Arrangement.spacedBy(Espacio.xs, Alignment.End),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (dato.clave == ClaveDelDato.Categoria) IconoDeCategoria(dato.valor, tamano = TamanoDeIconoDeCategoria.Chico)
+        Text(
+            dato.valor,
+            style = Movi.textos.cuerpo,
+            color = Movi.colores.texto,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.End,
+        )
+    }
+}
+
+/**
+ * **Las acciones de la ficha, alineadas a la izquierda en un renglón** (si no caben, siguen abajo, también
+ * a la izquierda): un [Boton] chico por acción, la [principal] en amarillo y el resto secundarias; «Más»
+ * es el «⋯». La abierta lo declara con `selected`; tocarla otra vez la cierra.
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+internal fun AccionesDeLaFicha(
+    acciones: List<AccionDelMovimiento>,
+    principal: AccionDelMovimiento?,
+    abierta: AccionDelMovimiento?,
+    onElegir: (AccionDelMovimiento) -> Unit,
+) {
+    androidx.compose.foundation.layout.FlowRow(
+        modifier = Modifier.fillMaxWidth().testTag(TAG_ACCIONES_DE_LA_FICHA),
+        horizontalArrangement = Arrangement.spacedBy(Espacio.xs, Alignment.Start),
+        verticalArrangement = Arrangement.spacedBy(Espacio.xs),
+        itemVerticalAlignment = Alignment.CenterVertically,
+    ) {
+        acciones.forEach { accion ->
+            val elegida = accion == abierta
+            // El tag en su propio nodo: el botón trae el suyo.
+            Box(modifier = Modifier.testTag(tagDeAccionDelMovimiento(accion)).semantics { selected = elegida }) {
+                if (accion == AccionDelMovimiento.Mas) {
+                    com.jvillada.movi.ui.components.ds.BotonDeIcono(
+                        icono = accion.icono,
+                        descripcion = "Más acciones",
+                        onClick = { onElegir(accion) },
+                        variante = com.jvillada.movi.ui.components.ds.VarianteDeBotonDeIcono.Secundario,
+                    )
+                } else {
+                    Boton(
+                        accion.rotulo,
+                        onClick = { onElegir(accion) },
+                        variante = if (accion == principal) VarianteDeBoton.Principal else VarianteDeBoton.Secundario,
+                        tamano = TamanoDeBoton.S,
+                        icono = accion.icono,
+                    )
+                }
             }
         }
     }

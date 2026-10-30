@@ -1858,6 +1858,11 @@ fun TransactionsScreen(
                         enEsteComercio = remember(enElPanel, allDays, ajustesDelPeriodo) { enEsteComercioDe(enElPanel) },
                         // En el panel el movimiento sigue a la vista: solo cambia la lista de al lado.
                         onVerElComercio = ::buscarElComercio,
+                        // Vuelta 81: con la tarjeta de los avisos («Confirmar 2», amarilla) en la lista, la
+                        // ficha no suma otro amarillo.
+                        otroAmarilloALaVista = loDeArribaEnElModo(activeFilter) &&
+                            loPendienteSeVeEn(periodoVisible, periodoDeHoy) &&
+                            avisosDelBanco?.let { it.cuantos > 0 && botonCompactoDeConfirmar(it) != null } == true,
                     )
                 }
             }

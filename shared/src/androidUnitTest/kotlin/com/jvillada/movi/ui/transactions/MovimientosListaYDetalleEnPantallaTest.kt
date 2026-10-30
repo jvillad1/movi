@@ -220,10 +220,10 @@ class MovimientosListaYDetalleEnPantallaTest {
 
         val lista = limites(TAG_LISTA_DE_MOVIMIENTOS_AL_LADO)
         val panel = limites(TAG_PANEL_DEL_MOVIMIENTO)
-        // Ola X: la lista subió de 360 a 420 dp — el dueño la vio apretada.
-        assertEquals(420f, lista.width, 0.5f)
-        // 1280 − 216 del rail − 420 de la lista − 1 del divisor.
-        assertEquals(643f, panel.width, 0.5f, "el panel se lleva lo que sobra")
+        // Vuelta 81: la lista es la protagonista, el 60 % de 1280 − 216 del rail − 1 del divisor.
+        assertEquals(637.8f, lista.width, 0.5f)
+        assertEquals(425.2f, panel.width, 0.5f, "el desglose, el 40 %")
+        assertTrue(lista.width > panel.width, "la lista, más ancha que el desglose")
         assertTrue(panel.left >= lista.right, "$lista / $panel")
         // La lista es la de siempre (desde la vuelta de diseño 14, el día sin el rótulo «Flujo del día»).
         assertTrue(hayEnLaLista("Señor Gol"))
@@ -474,11 +474,11 @@ class MovimientosListaYDetalleEnPantallaTest {
 
     @Test
     @Config(qualifiers = "w1024dp-h900dp-mdpi")
-    fun `a 1024 tambien va en lista y detalle, con 387 de detalle`() {
+    fun `a 1024 tambien va en lista y detalle, con 380 de detalle`() {
         montar()
-        assertEquals(420f, limites(TAG_LISTA_DE_MOVIMIENTOS_AL_LADO).width, 0.5f)
-        // 1024 − 216 − 420 − 1.
-        assertEquals(387f, limites(TAG_PANEL_DEL_MOVIMIENTO).width, 0.5f)
+        // Vuelta 81: el 40 % de 807 no llega al mínimo del detalle (380); la lista se lleva el resto.
+        assertEquals(427f, limites(TAG_LISTA_DE_MOVIMIENTOS_AL_LADO).width, 0.5f)
+        assertEquals(380f, limites(TAG_PANEL_DEL_MOVIMIENTO).width, 0.5f)
 
         elegir("Las Doce")
         assertTrue(!hayTag(TAG_PANEL_DE_HOJA))
@@ -486,15 +486,18 @@ class MovimientosListaYDetalleEnPantallaTest {
 
     @Test
     @Config(qualifiers = "w1440dp-h900dp-mdpi")
-    fun `a 1440 el detalle mide 803 y su contenido va en la columna de lectura`() {
+    fun `a 1440 el detalle mide 489 y su contenido va en la ficha`() {
         montar()
-        assertEquals(803f, limites(TAG_PANEL_DEL_MOVIMIENTO).width, 0.5f)
+        // Vuelta 81: el 40 % de 1440 − 216 − 1.
+        assertEquals(489.2f, limites(TAG_PANEL_DEL_MOVIMIENTO).width, 0.5f)
         elegir("Las Doce")
         val monto = composeRule.onNode(hasTestTag(TAG_MONTO_DEL_MOVIMIENTO) and enElPanel, useUnmergedTree = true)
             .fetchSemanticsNode().boundsInRoot
         val panel = limites(TAG_PANEL_DEL_MOVIMIENTO)
-        // Centrado en 720: (803 − 720) / 2 = 41.5 de aire, más el margen de la pantalla (16, ola R4).
-        assertEquals(panel.left + 41.5f + 16f, monto.left, 1f)
+        val ficha = limites(TAG_FICHA_DEL_MOVIMIENTO)
+        // La ficha, al margen de la pantalla (16) del panel; la cifra, a su relleno (16).
+        assertEquals(panel.left + 16f, ficha.left, 1f)
+        assertEquals(ficha.left + 16f, monto.left, 1f)
     }
 
     /**
@@ -661,6 +664,106 @@ class MovimientosListaYDetalleEnPantallaTest {
         fila("Las Doce").performClick()
 
         esperar { hayTag(TAG_PANEL_DE_HOJA) }
+        // Vuelta 81: el teléfono no cambia: la fila de acciones de siempre, sin la ficha.
+        assertTrue(!hayTag(TAG_ACCIONES_DE_LA_FICHA))
+        assertTrue(!hayTag(TAG_DATO_DE_LA_FICHA))
+        assertTrue(hayTag(TAG_CHIP_DE_CATEGORIA))
+    }
+
+    // ── Vuelta 81: la pantalla ancha como app de escritorio ─────────────────────────
+
+    /** Los nodos de [tag] dentro de [dentro], sin fusionar. */
+    private fun nodos(tag: String, dentro: SemanticsMatcher) =
+        composeRule.onAllNodes(hasTestTag(tag) and dentro, useUnmergedTree = true).fetchSemanticsNodes()
+
+    /**
+     * A 1.280 el detalle es una **ficha**: una superficie de 520 dp como mucho, con sus datos en filas
+     * (cuenta, fecha, categoría, origen) y las acciones **alineadas a la izquierda en un renglón**, la
+     * primera al relleno de la ficha y cada una pegada a la anterior (antes, seis repartidas cada 100 px).
+     * Una sola amarilla: «Editar».
+     */
+    @Test
+    @Config(qualifiers = "w1280dp-h900dp-mdpi")
+    fun `a 1280 el detalle es una ficha de 520 como mucho con las acciones a la izquierda`() {
+        montar()
+        elegir("Las Doce")
+        val panel = limites(TAG_PANEL_DEL_MOVIMIENTO)
+        val ficha = limites(TAG_FICHA_DEL_MOVIMIENTO)
+        assertTrue(ficha.width <= 520f + 0.5f, "la ficha mide ${ficha.width}")
+        assertTrue(ficha.left >= panel.left && ficha.right <= panel.right, "$ficha / $panel")
+        // Los datos, como filas.
+        assertTrue(nodos(TAG_DATO_DE_LA_FICHA, enElPanel).size >= 4)
+        listOf("Cuenta", "Fecha", "Categoría", "Origen").forEach { assertTrue(hayEnElPanel(it), "falta «$it»") }
+        assertTrue(!hayTag(TAG_CHIP_DE_CATEGORIA), "la categoría es una fila, no el chip")
+        // Las acciones: a la izquierda, juntas.
+        val acciones = AccionDelMovimiento.entries
+            .mapNotNull { a -> nodos(tagDeAccionDelMovimiento(a), hasAnyAncestor(hasTestTag(TAG_ACCIONES_DE_LA_FICHA))).firstOrNull() }
+            .map { it.boundsInRoot }
+            .sortedBy { it.left }
+        assertTrue(acciones.size >= 2, "$acciones")
+        assertEquals(ficha.left + 16f, acciones.first().left, 1f, "la primera, al relleno de la ficha")
+        acciones.zipWithNext().forEach { (a, b) ->
+            if (kotlin.math.abs(a.top - b.top) < 1f) assertTrue(b.left - a.right <= 8f + 0.5f, "repartidas: $a / $b")
+        }
+        // Una sola amarilla a la vista.
+        val amarillas = composeRule.onAllNodes(
+            SemanticsMatcher.expectValue(com.jvillada.movi.ui.components.ds.LlevaElAmarilloKey, true),
+            useUnmergedTree = true,
+        ).fetchSemanticsNodes()
+        assertEquals(1, amarillas.size, "un solo amarillo por vista")
+    }
+
+    /** A 1.920 el panel mide 575: la ficha se queda en 520. */
+    @Test
+    @Config(qualifiers = "w1920dp-h900dp-mdpi")
+    fun `a 1920 la ficha no pasa de 520`() {
+        montar()
+        elegir("Las Doce")
+        assertEquals(520f, limites(TAG_FICHA_DEL_MOVIMIENTO).width, 0.5f)
+    }
+
+    /** Tocar la fila de la categoría abre la sección de siempre, debajo de las acciones. */
+    @Test
+    @Config(qualifiers = "w1280dp-h900dp-mdpi")
+    fun `en la ficha la fila de la categoria abre el selector`() {
+        montar()
+        elegir("Las Doce")
+        tocarAccion(AccionDelMovimiento.Categoria)
+        esperar { hayEnElPanel("Categoría · Comida") }
+    }
+
+    /**
+     * A 1.280 la lista es la protagonista y el desglose es una columna lateral: Entró, Salió y Neto en
+     * filas, y cada categoría con su barra de 4 dp.
+     */
+    @Test
+    @Config(qualifiers = "w1280dp-h900dp-mdpi")
+    fun `a 1280 el desglose es una columna lateral con barras`() {
+        montar()
+        esperar { hayTag(TAG_RESUMEN_DEL_PERIODO_EN_EL_PANEL) }
+        assertTrue(limites(TAG_LISTA_DE_MOVIMIENTOS_AL_LADO).width > limites(TAG_PANEL_DEL_MOVIMIENTO).width)
+        val cifras = limites(TAG_CIFRAS_DEL_RESUMEN)
+        val filas = composeRule.onAllNodes(hasTestTag(com.jvillada.movi.ui.components.ds.TAG_FILA) and hasAnyAncestor(hasTestTag(TAG_CIFRAS_DEL_RESUMEN)), useUnmergedTree = true)
+            .fetchSemanticsNodes().map { it.boundsInRoot }
+        assertEquals(3, filas.size, "Entró, Salió y Neto, una debajo de la otra")
+        assertTrue(filas.zipWithNext().all { (a, b) -> b.top >= a.bottom - 0.5f })
+        assertTrue(filas.all { it.width >= cifras.width - 0.5f })
+        val categorias = nodos(TAG_CATEGORIA_DEL_RESUMEN, hasAnyAncestor(hasTestTag(TAG_RESUMEN_DEL_PERIODO_EN_EL_PANEL)))
+        val barras = nodos(TAG_BARRA_DEL_RESUMEN, hasAnyAncestor(hasTestTag(TAG_RESUMEN_DEL_PERIODO_EN_EL_PANEL)))
+        assertEquals(categorias.size, barras.size, "una barra por categoría")
+        barras.forEach { assertEquals(4f, it.boundsInRoot.height, 0.5f, "la barra mide 4 dp") }
+    }
+
+    /** Sin lugar para el panel (800 dp), el detalle se abre como diálogo con la misma ficha, de 520. */
+    @Test
+    @Config(qualifiers = "w800dp-h900dp-mdpi")
+    fun `en una ventana mediana el dialogo del detalle es la misma ficha`() {
+        montar()
+        fila("Las Doce").performClick()
+        esperar { hayTag(TAG_PANEL_DE_HOJA) }
+        assertTrue(limites(TAG_PANEL_DE_HOJA).width <= 520f + 0.5f, "${limites(TAG_PANEL_DE_HOJA)}")
+        assertTrue(hayTag(TAG_ACCIONES_DE_LA_FICHA))
+        assertTrue(hayTag(TAG_DATO_DE_LA_FICHA))
     }
 
 }
