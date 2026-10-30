@@ -1271,11 +1271,43 @@ fun LazyListScope.tableroDeRecurrentes(
  */
 @Composable
 internal fun FilaDeRecordatoriosSinCanal(bloqueadas: Boolean, onActivar: () -> Unit, onAhoraNo: () -> Unit) {
+    val accion = if (bloqueadas) VER_LOS_AVISOS else ACTIVAR_LOS_RECORDATORIOS
+    // Revisión de la 83: fuera del teléfono (≥ 600 dp) el título y «Activar · Ahora no» van en un renglón;
+    // en el teléfono, la propuesta de siempre (el título arriba, los botones abajo).
+    if (com.jvillada.movi.ui.components.LocalWindowWidthClass.current != com.jvillada.movi.ui.components.WindowWidthClass.Compact) {
+        com.jvillada.movi.ui.components.ds.Superficie(
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag(TAG_FILA_DE_RECORDATORIOS)
+                .testTag(com.jvillada.movi.ui.components.ds.TAG_TARJETA_DE_PROPUESTA),
+            nivel = com.jvillada.movi.ui.components.ds.NivelDeSuperficie.Propuesta,
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Espacio.s),
+            ) {
+                IconoEnCirculo(Icons.Rounded.NotificationsOff, tono = TonoDeIcono.Aviso)
+                Text(
+                    TITULO_RECORDATORIOS_SIN_CANAL,
+                    style = Movi.textos.titulo,
+                    color = Movi.colores.texto,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
+                    Boton(accion, onClick = onActivar, variante = VarianteDeBoton.Secundario, tamano = TamanoDeBoton.S)
+                    Boton(AHORA_NO, onClick = onAhoraNo, variante = VarianteDeBoton.Fantasma, tamano = TamanoDeBoton.S)
+                }
+            }
+        }
+        return
+    }
     Column(modifier = Modifier.fillMaxWidth().testTag(TAG_FILA_DE_RECORDATORIOS)) {
         TarjetaDePropuesta(
             icono = Icons.Rounded.NotificationsOff,
             titulo = TITULO_RECORDATORIOS_SIN_CANAL,
-            accion = if (bloqueadas) VER_LOS_AVISOS else ACTIVAR_LOS_RECORDATORIOS,
+            accion = accion,
             onAccion = onActivar,
             tono = TonoDeIcono.Aviso,
             accionSecundaria = AHORA_NO,
@@ -1600,7 +1632,9 @@ private fun ResumenFlujoLibreCard(
                 onClick = { verQueCuenta = !verQueCuenta },
                 variante = VarianteDeBoton.Fantasma,
                 tamano = TamanoDeBoton.S,
-                modifier = Modifier.testTag(TAG_QUE_CUENTA),
+                // Revisión de la 83: el texto del enlace alineado con el de la tarjeta (el botón fantasma
+                // trae su relleno de `Espacio.s` a los lados).
+                modifier = Modifier.offset(x = -Espacio.s).testTag(TAG_QUE_CUENTA),
             )
             if (verQueCuenta) {
                 // Vuelta 78: qué es esta cifra y qué es el «de $X» de «Falta por pagar», en una frase.

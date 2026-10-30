@@ -253,16 +253,8 @@ private fun CuerpoDelDisponible(
             color = colorDeLaFrase(teQuedan.nivelDelDetalle),
             modifier = if (detalle == null) Modifier.alpha(0f).clearAndSetSemantics {} else Modifier.testTag(TAG_DETALLE_TE_QUEDAN_EN_PAGOS),
         )
-        Spacer(Modifier.height(Movi.espacios.minimo))
-        // El total del período, en su renglón: es el punto de partida, no la noticia. Con el nombre que
-        // le fijó la vuelta 28 («un nombre por concepto»), el mismo de la cascada.
-        CifraConRotulo(
-            rotulo = ROTULO_DISPONIBLE_DEL_PERIODO,
-            monto = disponible.disponible,
-            variante = VarianteDeCifra.Chica,
-            tono = if (disponible.disponible < 0L) TonoDeCifra.Alerta else TonoDeCifra.Neutro,
-            disposicion = DisposicionDeCifraConRotulo.EnRenglon,
-        )
+        // Vuelta 83: sin el renglón «Disponible del período $X»: quedaba justo encima de «Período $Y de $X»,
+        // que ya lo dice (y la cascada de «¿De dónde sale?» lo nombra).
         alertaDelDisponible(disponible)?.let { alerta ->
             Spacer(Modifier.height(Movi.espacios.minimo))
             AlertaDeLaTarjeta(alerta, onVerEnQueSeVa)
@@ -315,12 +307,22 @@ const val TAG_VENTANA_EN_RENGLON: String = "disponible:ventana-en-renglon"
 /** El tag del desglose de las ventanas, dentro de «¿De dónde sale?» (vuelta 80). */
 const val TAG_DESGLOSE_DE_LAS_VENTANAS: String = "disponible:desglose-de-las-ventanas"
 
-/** Las tres ventanas en su orden: el rótulo, la ventana y si es la del período. */
-private fun ventanasDe(disponible: DisponibleDelPeriodo): List<Triple<String, VentanaDelDisponible, Boolean>> = listOf(
+/**
+ * Las ventanas de Pagos en su orden: el rótulo, la ventana y si es la del período. **Vuelta 83: la semana se
+ * calla con [DIAS_PARA_CALLAR_LA_SEMANA] días o menos por delante** ([seVeLaSemanaEnPagos]): lo que le queda
+ * es casi «Te quedan», dos renglones más arriba.
+ */
+private fun ventanasDe(disponible: DisponibleDelPeriodo): List<Triple<String, VentanaDelDisponible, Boolean>> = listOfNotNull(
     Triple("Período", disponible.periodo, true),
-    Triple(rotuloDeLaSemana(disponible), disponible.semana, false),
+    Triple(rotuloDeLaSemana(disponible), disponible.semana, false).takeIf { seVeLaSemanaEnPagos(disponible) },
     Triple(ROTULO_META_DE_HOY, disponible.hoy, false),
 )
+
+/** Con cuántos días por delante (o menos) la semana de Pagos se calla (vuelta 83). */
+const val DIAS_PARA_CALLAR_LA_SEMANA: Int = 7
+
+/** ¿Pagos dice la semana? No con [DIAS_PARA_CALLAR_LA_SEMANA] días o menos en el período (vuelta 83). Pura. */
+internal fun seVeLaSemanaEnPagos(disponible: DisponibleDelPeriodo): Boolean = disponible.diasQueQuedan > DIAS_PARA_CALLAR_LA_SEMANA
 
 /**
  * **Lo que queda en cada ventana, en un renglón con su barra** (vuelta 80, la tarjeta de Pagos). Eran
@@ -441,9 +443,7 @@ private fun CuerpoDelDisponibleEsqueleto() {
     )
     Spacer(Modifier.height(Movi.espacios.minimo))
     LineaEsqueleto(fraccionDelAncho = 0.75f, estilo = Movi.textos.apoyo)
-    Spacer(Modifier.height(Movi.espacios.minimo))
-    // El renglón «Disponible del período … $X».
-    LineaEsqueleto(fraccionDelAncho = 1f, estilo = Movi.textos.apoyo)
+    // Vuelta 83: sin el renglón «Disponible del período … $X» (la tarjeta ya no lo lleva).
     Spacer(Modifier.height(Movi.espacios.medio))
     // Vuelta 80: las tres ventanas en renglón (ver [VentanasEnRenglones]), con su barra.
     Column(verticalArrangement = Arrangement.spacedBy(Espacio.s)) {
