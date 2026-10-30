@@ -141,6 +141,8 @@ fun CreateRecurringRuleSheet(
      * salario la abre con el día del corte del dueño. Se puede cambiar.
      */
     diaNuevo: Int? = null,
+    /** Revisión de la 75 · el nombre con el que arranca ese alta («Salario», desde la caja). */
+    nombreNuevo: String? = null,
     /**
      * Revisión de la vuelta 72 · **lo de esta regla que venció sin pagarse**, si lo hay: «Pausar» primero
      * pregunta qué hacer con eso ([PreguntaDeLoVencidoAlPausar]). `null` pausa desde hoy sin preguntar.
@@ -152,7 +154,7 @@ fun CreateRecurringRuleSheet(
     val coroutine = rememberCoroutineScope()
 
     // Prefill state from existing rule when in edit mode
-    var name by remember { mutableStateOf(existingSub?.displayName ?: existing?.name ?: prefill?.name ?: "") }
+    var name by remember { mutableStateOf(existingSub?.displayName ?: existing?.name ?: prefill?.name ?: nombreNuevo ?: "") }
     // Borrar pregunta antes (ver [ConfirmacionEnLinea]).
     var pidiendoBorrar by remember { mutableStateOf(false) }
     // El cobro REAL, sin prorratear: un anual llega como sus $369.900, que es lo que el dueño

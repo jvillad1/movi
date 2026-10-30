@@ -168,6 +168,9 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS, enL
     // Vuelta 70 · ‹ › en «Facturas», como en Actividad: el período que se mira. `null` = el de hoy (y lo
     // sigue si el corte llega después). Solo se va hasta el siguiente.
     var prefijoVisible by rememberSaveable { mutableStateOf<String?>(null) }
+    // Revisión de la 75: el primer período que el server no tiene (anterior al primer movimiento): ‹ no
+    // pasa de ahí.
+    var sinHistoria by rememberSaveable { mutableStateOf<String?>(null) }
     val periodoVisible = prefijoVisible?.let { periodoDelPrefijo(it) } ?: periodoDeHoy
     val viendoOtroPeriodo = enPagos && periodoVisible != periodoDeHoy
     fun irAlPeriodo(periodo: com.jvillada.movi.shared.model.PeriodoFinanciero) {
@@ -198,6 +201,7 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS, enL
             reservar = data.periodoActual == null && disponible.cargando,
             habilitado = enPagos && data.periodoActual != null,
             puedeAdelante = puedeIrAlSiguiente(periodoVisible, periodoDeHoy),
+            puedeAtras = sinHistoria.let { it == null || periodoVisible.prefijo > it },
             onAnterior = { irAlPeriodo(periodoAnterior(periodoVisible)) },
             onSiguiente = { irAlPeriodo(periodoSiguiente(periodoVisible)) },
         )
@@ -264,7 +268,7 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS, enL
             // Vuelta 70: otro período a la vista: solo su lista, de solo lectura. El disponible, «Tus
             // períodos» y la caja son del período en curso (en dos columnas siguen a la izquierda).
             item(key = "aire-de-pagos") { Spacer(Modifier.height(AIRE_DEBAJO_DEL_SELECTOR)) }
-            pagosDeOtroPeriodo(periodoVisible, periodoDeHoy, ajustesDelPeriodo, pagos.estado)
+            pagosDeOtroPeriodo(periodoVisible, periodoDeHoy, ajustesDelPeriodo, pagos.estado) { sinHistoria = it.prefijo }
         } else if (enPagos) {
             item(key = "aire-de-pagos") { Spacer(Modifier.height(AIRE_DEBAJO_DEL_SELECTOR)) }
             val caja: (LazyListScope.() -> Unit)? = if (dosColumnas) null else {

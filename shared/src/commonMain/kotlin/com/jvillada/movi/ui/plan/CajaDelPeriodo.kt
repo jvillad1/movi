@@ -57,6 +57,8 @@ import com.jvillada.movi.ui.components.NoSePudoLeer
 import com.jvillada.movi.ui.components.NoSePudoLeerEnLaPantalla
 import com.jvillada.movi.ui.components.LocalErroresDeLaPantalla
 import com.jvillada.movi.ui.components.formatMoneyAbreviada
+import com.jvillada.movi.ui.accounts.ESPACIO_QUE_NO_SE_PARTE
+import com.jvillada.movi.ui.accounts.UNION_QUE_NO_SE_PARTE
 import com.jvillada.movi.ui.components.ds.Cifra
 import com.jvillada.movi.ui.components.ds.FormaDeCifra
 import com.jvillada.movi.ui.components.ds.TonoDeCifra
@@ -179,7 +181,9 @@ internal fun fraseCortaDeLaCaja(caja: CajaProyectada, hoy: LocalDate): String {
     val hasta = "Hasta el ${fechaCorta(caja.alCierre.fecha)}"
     val bajo = caja.diaMasBajo
     val cuando = if (bajo.fecha == hoy.toString()) "hoy" else "el ${fechaCorta(bajo.fecha)}"
-    return if (bajo.libre < 0L) "$hasta · $cuando no te alcanza" else "$hasta · tu día más justo es $cuando"
+    // Revisión de la 75: si el peor día es el último del horizonte, la fecha va una vez («ese día»).
+    val ese = if (bajo.fecha == caja.alCierre.fecha && cuando != "hoy") "ese día" else cuando
+    return if (bajo.libre < 0L) "$hasta · $ese no te alcanza" else "$hasta · tu día más justo es $cuando"
 }
 
 /** Lo que dice el lector de pantalla de la cifra titular: qué es, además de cuánto. */
@@ -195,8 +199,8 @@ internal fun descripcionDeLaCifraDeLaCaja(caja: CajaProyectada): String =
 internal fun lineaDeLasCuentas(caja: CajaProyectada, hoy: LocalDate): String? {
     if (caja.reservado <= 0L) return null
     val bajo = caja.diaMasBajo
-    val cuando = if (bajo.fecha == hoy.toString()) "En las cuentas hay hoy ${formatMoneyAbreviada(bajo.saldo)}"
-    else "En las cuentas habrá ${formatMoneyAbreviada(bajo.saldo)} el ${fechaCorta(bajo.fecha)}"
+    val cuando = if (bajo.fecha == hoy.toString()) "En las cuentas hay hoy ${cifraQueNoSeParte(bajo.saldo)}"
+    else "En las cuentas habrá ${cifraQueNoSeParte(bajo.saldo)} el ${fechaCorta(bajo.fecha)}"
     // Revisión de la 70: con el ahorro más grande que el saldo, «de eso $8M es tu ahorro» sobre $6,8M se
     // contradecía. Lo que hay no alcanza a cubrir lo reservado, y eso es lo que se dice.
     if (bajo.saldo < caja.reservado) return "$cuando: menos que ${loReservado(caja)}."
@@ -308,7 +312,7 @@ internal fun fraseDelRojo(caja: CajaProyectada, hoy: LocalDate): String? {
     if (rojo.fecha == caja.diaMasBajo.fecha) return null
     val cuando = if (rojo.fecha == hoy.toString()) "Hoy" else "El ${fechaEnPalabras(rojo.fecha, hoy)}"
     val porque = rojo.pagoMasGrande?.let { "por ${it.nombre} (${formatMoneyAbreviada(-it.monto)})" } ?: "por tu gasto del día a día"
-    return "$cuando ya quedarías en ${formatMoneyAbreviada(rojo.libre)} libres $porque."
+    return "$cuando ya quedarías en$ESPACIO_QUE_NO_SE_PARTE${cifraQueNoSeParte(rojo.libre)} libres $porque."
 }
 
 /**
@@ -370,6 +374,13 @@ internal fun loQueSupone(
     fraseDelRojo(caja, hoy),
     fraseDelSupuesto(gasto),
 ) + deDondeSaleLaCaja(caja)
+
+/**
+ * Una cifra corta con el menos pegado al «$» (revisión de la 75): «quedarías en −» y «$1,2M» quedaban en
+ * dos renglones. [UNION_QUE_NO_SE_PARTE] no se ve.
+ */
+private fun cifraQueNoSeParte(monto: Long): String =
+    formatMoneyAbreviada(monto).replace("\u2212$", "\u2212$UNION_QUE_NO_SE_PARTE$")
 
 /** Lo que no entró a la cuenta, en una frase, o `null` si entró todo. */
 internal fun fraseDeLoQueFalta(caja: CajaProyectada): String? =
@@ -616,7 +627,7 @@ const val TAG_LEYENDA_DE_LA_CAJA = "leyenda-de-la-caja"
 internal fun leyendaDelDiaDeLaCaja(dia: DiaDeLaCaja): String {
     // Vuelta 70: lo libre de ese día (la cifra titular), no el saldo de las cuentas.
     val pagos = dia.movimientos.filter { it.monto < 0 }.joinToString(", ") { it.nombre }
-    val base = "${fechaCorta(dia.fecha)}: ${formatMoneyAbreviada(dia.libre)} libres"
+    val base = "${fechaCorta(dia.fecha)}: ${cifraQueNoSeParte(dia.libre)} libres"
     return if (pagos.isEmpty()) base else "$base · $pagos"
 }
 

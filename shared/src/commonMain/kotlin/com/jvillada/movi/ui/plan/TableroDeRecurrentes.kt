@@ -1384,6 +1384,8 @@ fun HojasDelTableroDeRecurrentes(estado: EstadoDelTableroDeRecurrentes, onNaviga
             },
             tipoNuevo = estado.tipoDelNuevoRecurrente,
             diaNuevo = estado.diaDelNuevoRecurrente,
+            // Revisión de la 75: «Agregar» de la caja sin salario trae el nombre «Salario».
+            nombreNuevo = if (estado.diaDelNuevoRecurrente != null) "Salario" else null,
         )
     }
 }

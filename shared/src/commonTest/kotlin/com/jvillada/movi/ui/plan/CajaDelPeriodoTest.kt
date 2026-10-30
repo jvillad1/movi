@@ -207,7 +207,7 @@ class CajaDelPeriodoTest {
         assertTrue(rojo.startsWith("El 10 de octubre ya quedarías en"), rojo)
         assertTrue("por Gimnasio (\$1,1M)" in rojo, rojo)
         assertTrue(rojo in loQueSupone(caja, GastoDelDiaADia(), hoy, null), "va en «¿Qué supone?», no en rojo arriba")
-        assertEquals("Hasta el 17 oct · el 17 oct no te alcanza", fraseCortaDeLaCaja(caja, hoy))
+        assertEquals("Hasta el 17 oct · ese día no te alcanza", fraseCortaDeLaCaja(caja, hoy))
         // Si el primero en rojo es el peor, ya lo dice la cifra: no se repite.
         assertNull(fraseDelRojo(caja.copy(dias = caja.dias.take(2)), hoy))
     }
