@@ -66,8 +66,8 @@ import kotlin.test.assertTrue
  *
  * Acá, con la hoja de verdad y un repositorio falso, **desde cada lugar que tiene el botón** —Pagos,
  * «Próximo pago» / «Pago vencido» de Inicio y «Movi propone hoy»—: la hoja abre en modo pago («Pago
- * de Arriendo · octubre», el monto, la categoría y el título de la regla), pide la cuenta porque la
- * regla no tiene (no pone la tarjeta en silencio), y al guardar manda el movimiento **con la
+ * de Arriendo · octubre», el monto, la categoría y el título de la regla), propone una cuenta con la
+ * lógica de Gasto aunque la regla no tenga (vuelta 72: antes la pedía cada mes), y al guardar manda el movimiento **con la
  * ocurrencia que paga**, nunca un `postEvent` suelto. Lo que eso hace con la fila y con «Te quedan» lo
  * prueban las del server (`AnotarPagoSaldaLaFacturaTest` en `:server`), con la regla de verdad.
  */
@@ -234,7 +234,7 @@ class AnotarPagoSaldaLaFacturaTest {
 
     /** La hoja en modo pago, la cuenta elegida, Guardar: el pago sale con su ocurrencia. */
     private fun pagarYComprobar() {
-        composeRule.waitUntil(5_000) { hay(ELIGE_LA_CUENTA) }
+        composeRule.waitUntil(5_000) { hay("Pago de Arriendo · octubre") && hay(bancolombia.name) }
         // El encabezado dice de qué es el pago; el monto, la categoría y el título son los de la regla.
         composeRule.onNodeWithTag(TAG_ENCABEZADO_DEL_PAGO, useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("Pago de Arriendo · octubre").assertIsDisplayed()
@@ -242,11 +242,12 @@ class AnotarPagoSaldaLaFacturaTest {
         assertTrue(hay("Otros"), "la categoría de la regla")
         assertTrue(hay("Arriendo"), "el título es el nombre de la regla")
         assertTrue(hay("Hoy"), "la fecha es hoy")
-        // La regla no tiene cuenta: la hoja la pide en vez de poner la tarjeta más usada.
-        composeRule.onNodeWithText("Falta la cuenta").assertIsDisplayed()
+        // Vuelta 72: la regla no tiene cuenta y la hoja igual propone una (la de Gasto, editable): no
+        // pide «Falta la cuenta» cada mes.
+        assertTrue(!hay("Falta la cuenta"), "con una cuenta propuesta no falta nada")
+        assertTrue(!hay(ELIGE_LA_CUENTA), "ya no pide elegirla")
 
-        tocar("Cuenta")
-        tocar(bancolombia.name)
+        // Se guarda con la propuesta (la primera cuenta de dinero: sin costumbre, «Por defecto»).
         tocar("Guardar movimiento")
         composeRule.waitUntil(5_000) { pagos.isNotEmpty() }
 

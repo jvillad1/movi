@@ -59,14 +59,16 @@ class LaCuentaQueProponeAgregarTest {
     }
 
     @Test
-    fun `en modo pago sin cuenta en la regla la hoja la pide, con la sugerencia arriba`() {
+    fun `en modo pago sin cuenta en la regla propone la misma cuenta que un gasto`() {
+        // Vuelta 72: ya no pide la cuenta cada mes; propone con la lógica de Gasto y dice por qué.
         val elegida = proponer(categoria = "Mercado", nombre = "Arriendo", modoPago = true)
-        assertNull(elegida.id, "no pone una tarjeta en silencio")
-        assertEquals(OrigenCuenta.POR_ELEGIR, elegida.origen)
-        assertEquals("Elige de dónde sale", rotulo(elegida))
-        val sugerida = assertNotNull(elegida.sugerida)
-        assertEquals(bancolombia.id, sugerida.id, "la que usa para Mercado")
-        assertEquals(listOf(bancolombia, nu, efectivo), conLaSugeridaArriba(listOf(nu, efectivo, bancolombia), sugerida.id))
+        assertEquals(bancolombia.id, elegida.id, "la que usa para Mercado")
+        assertEquals(OrigenCuenta.POR_CATEGORIA, elegida.origen)
+        assertEquals("La que usas para Mercado", rotulo(elegida))
+        // Sin nada que diga qué se anota, la más usada, igual que en un gasto.
+        val sinUso = proponer(categoria = "Carro", nombre = "Carro", modoPago = true)
+        assertEquals(nu.id, sinUso.id)
+        assertEquals(OrigenCuenta.MAS_USADA, sinUso.origen)
     }
 
     @Test
