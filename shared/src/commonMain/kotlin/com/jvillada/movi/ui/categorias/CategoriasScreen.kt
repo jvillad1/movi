@@ -674,6 +674,8 @@ private fun TarjetaDeOrden(cantidad: Int, onRevisar: () -> Unit, onRenglones: (I
             titulo = textoDeLaTarjetaDeOrden(cantidad),
             accion = "Revisar",
             onAccion = onRevisar,
+            // Vuelta 82: la única acción principal de Categorías.
+            varianteDeLaAccion = com.jvillada.movi.ui.components.ds.VarianteDeBoton.Principal,
             // Cuántos renglones ocupó, para que la próxima carga reserve ese alto (ver
             // `FormaRecordada`).
             alMedirElTitulo = onRenglones,

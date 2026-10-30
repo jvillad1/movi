@@ -50,6 +50,14 @@ fun fondoDelEncabezado(desplazado: Boolean, arriba: Color, colores: com.jvillada
     if (desplazado) colores.fondo else arriba
 
 /**
+ * **El hilo de abajo de un encabezado desplazado** (vuelta 82). Era el `hilo` (`#EFEAE1`), que sobre el
+ * crema da ~1,06:1: la revisión 8 no lo vio. Ahora es el borde de los controles (`bordeDeBoton`,
+ * `#D9D1C3`), que da 1,34:1 sobre el `fondo` —el piso de 1,3:1 que `ContrasteDeLosTokensTest` mide para
+ * lo que separa sin ser texto—. El `borde` (`#E7E1D7`) daba 1,15:1, por debajo del piso. Pura.
+ */
+fun colorDelHiloAlDesplazar(colores: com.jvillada.movi.theme.ColoresDeMovi): Color = colores.bordeDeBoton
+
+/**
  * El fondo y el hilo de abajo de un encabezado fijo según [desplazado] (ver el KDoc del archivo).
  * [arriba] es el fondo cuando no hay scroll. Sin [conHilo], solo el fondo (lo de detrás de la barra del
  * sistema, que va arriba del encabezado: el hilo es del encabezado).
@@ -71,7 +79,7 @@ fun Modifier.separadoAlDesplazar(
         Movimiento.alVolver(reducido, Movimiento.CORTO_MS),
         label = "hilo-del-encabezado",
     )
-    val colorDelHilo = colores.hilo
+    val colorDelHilo = colorDelHiloAlDesplazar(colores)
     this
         .semantics { encabezadoDesplazado = desplazado }
         .background(fondo)

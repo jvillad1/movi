@@ -60,7 +60,12 @@ fun TarjetaDePropuesta(
     cifra: Long? = null,
     moneda: String = "COP",
     cuerpo: String? = null,
-    tono: TonoDeIcono = TonoDeIcono.Marca,
+    /**
+     * Vuelta 82 · **el amarillo se pide a propósito**: el círculo va neutro (la capa 3) salvo que quien
+     * llama pida otro tono —[TonoDeIcono.Aviso] si urge—. Era [TonoDeIcono.Marca]: toda propuesta nueva
+     * traía un círculo amarillo.
+     */
+    tono: TonoDeIcono = TonoDeIcono.Neutro,
     accionSecundaria: String? = null,
     onAccionSecundaria: (() -> Unit)? = null,
     /**
@@ -69,10 +74,11 @@ fun TarjetaDePropuesta(
      */
     alMedirElTitulo: ((renglones: Int) -> Unit)? = null,
     /**
-     * Vuelta 79 · un solo amarillo por vista: donde la vista ya tiene su acción amarilla (el Inicio, con
-     * «Anotar gasto»), la de la propuesta va [VarianteDeBoton.Secundario]. Sola en su vista, principal.
+     * Vuelta 79 · un solo amarillo por vista. Vuelta 82: **por defecto [VarianteDeBoton.Secundario]**;
+     * quien llama pide [VarianteDeBoton.Principal] solo si es la única acción principal de su vista (la
+     * tarjeta de avisos de Actividad con «Confirmar 2», el lote de Por revisar, «Revisar» en Categorías).
      */
-    varianteDeLaAccion: VarianteDeBoton = VarianteDeBoton.Principal,
+    varianteDeLaAccion: VarianteDeBoton = VarianteDeBoton.Secundario,
 ) {
     Superficie(
         modifier = modifier.fillMaxWidth().testTag(TAG_TARJETA_DE_PROPUESTA),

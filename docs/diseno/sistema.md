@@ -4477,6 +4477,124 @@ columnas a la misma altura, las acciones dentro de su superficie; ahora monta co
 `CreditosEnColumnasEnPantallaTest` y `Vuelta81EnPantallaTest` (el barrido en la cáscara a 1.280 × 800). La línea
 base `dp_sueltos` baja a 113 (el 720 de `Disposicion` pasó al token).
 
+## 80. Vuelta 82: jerarquía en las colas, y una cifra que no se contradice
+
+Viene de la revisión 8 del 30-oct (puntos 1, 2, 4, 5, 7, 9, 13 y 14; capturas `r8-*.png`). **Sin reglas de plata
+nuevas**: la deuda total sigue siendo lo que Movi sabe y el optimista del héroe solo adelanta lo que el server va a
+decir, con las funciones de siempre. Un componente nuevo en `ds/` (`Interruptor`) y cuatro medidas en `Escalas.kt`
+(`anchoDelInterruptor`, `altoDelInterruptor`, `perillaDelInterruptor`, `sombraDeLaPerilla`). Ningún color nuevo.
+
+1. **El amarillo se pide a propósito.** `TarjetaDePropuesta` va por defecto con la acción `Secundario` y el círculo
+   `Neutro`; quien llama pide `Principal` solo si es la única acción principal de su vista. Quedan explícitas: la
+   tarjeta de avisos de Actividad («Confirmar N»; «Revisar» solo, que navega, va secundario), el lote de Por revisar,
+   «Revisar» en Categorías, «Empezar una conversación nueva» en Movi AI, «Completar datos» en la ficha de una deuda
+   sin condiciones y, **sin cambiar**, «¿Usar siempre X para Y?» de Pagos (`PausarLaRegla.kt`, explícita como
+   estaba: Pagos lo decide la vuelta 83). Lo demás pasa a secundario (Reconciliar, el saldo del aviso en Cuadre,
+   saldar en Grupos). **El círculo de la tarjeta de avisos va en `TonoDeIcono.Aviso`**. **En Por revisar** el único
+   amarillo es el lote «Confirmar N»: `LocalLaTarjetaLlevaElAmarillo` apaga la acción principal de cada tarjeta
+   («Confirmar», «Es este», «Elegir», «Sí, se cobró», vía `PastillaDelPago`) cuando hay lote o más de una tarjeta
+   (`laTarjetaLlevaElAmarillo`); sola, sigue amarilla. **La fila de cuenta** (`AvatarDeLaCuenta`, en Patrimonio y
+   donde se nombre una cuenta) usa `coloresDelAvatarDelBanco`: la «B» en la capa 3 con la tinta.
+   `UnSoloAmarilloPorVistaTest` cuenta ahora también Actividad, Por revisar (con lote y con una tarjeta) y Patrimonio.
+2. **La deuda total, honesta.** Debajo de la cifra grande de Créditos va **una línea**
+   (`lineaDeLasDeudasSinSaldo`): «Falta Vehículo 4083, sin saldo (unos $35,8M según el plan)» con
+   `saldoSegunElPlan`; sin plan, «Falta Vehículo 4083, sin saldo»; varias, «Faltan 2 préstamos, sin saldo». «Unos» y no «≈»: Figtree no tiene ese
+   glifo. **La pieza `ElPrestamoSinSaldo` sale una vez por vista**, en la fila del préstamo; el resumen lleva solo
+   la línea. **El signo** es el de Patrimonio (`cifraDeLasDeudasEnLaFila`): «Deuda total −$1.583.000» y las filas de
+   Créditos con «−».
+3. **«Te quedan» y «Tu plata» cambian juntas** (`ui/dashboard/ElHeroeOptimista.kt`).
+   - **El optimista**: anotar (`mostrarLoAnotado`), anular (la hoja del movimiento) y sus «Deshacer» registran el
+     movimiento en `MovimientosDelDueno` (y marcan `CambioDelDueno`). El héroe toma los datos que tenía cuando el
+     dueño lo hizo y los adelanta con `datosConLosMovimientosDelDueno`: el `montoContado` se suma al gasto del día
+     (`gastoVariablePorDia`) y el monto se resta del saldo de su cuenta si es de dinero; «Te quedan» y «Tu plata»
+     salen de `disponibleDelInicio` y `heroBalance`, como siempre. Un gasto de una cuenta de Tu plata resta en las
+     dos; con tarjeta, solo «Te quedan». Lo que cuenta lo dicen `esGastoDelPeriodo` y `cuentaEnGastosEIngresos`.
+     **Dudoso → nada**: un ingreso, otra moneda, un traspaso, otro período, por confirmar, una cuenta que no es de
+     dinero ni tarjeta, o la categoría de un pago del período (puede ser ese fijo, ya restado).
+   - **El server confirma**: cuando termina una carga del Inicio después del cambio
+     (`DashboardDataCache.terminadaEn`, por `LocalCargaDelInicioTerminadaEn`), el héroe deja el optimista y muestra lo
+     leído; si difiere, **la cifra cuenta** hasta la del server.
+   - **Sin optimista, las dos esperan juntas**: `rememberEstadoQueCambia(seCongela = …)` congela todo cambio de cifra
+     del héroe mientras la carga está en vuelo, también el del dueño (antes se saltaba la congelación y las cuentas
+     pintaban «Tu plata» un segundo antes que «Te quedan»).
+   - **Las dos cifras cuentan juntas**: `rememberCifraQueCuenta` ya no consume la marca de `CambioDelDueno` (cuentan
+     «Te quedan», el enlace «Tu plata» y la corrección del server mientras la marca vale, 15 s).
+4. **El snackbar con el monto**: «Anotado $12.300 · Restaurantes» (`textoDeLoAnotado`; «Ya estaba anotado $12.300 ·
+   …»). El aviso es de un renglón y se corta al final: ahora se corta la categoría, nunca el monto. Después de
+   «Deshacer» sale **«Deshecho»** sin botones durante `DURACION_DEL_DESHECHO` (1,5 s).
+5. **El hilo se ve**: el de los encabezados desplazados es `colorDelHiloAlDesplazar` = `bordeDeBoton` (`#D9D1C3`,
+   1,34:1 sobre el crema). El `borde` (`#E7E1D7`) daba 1,15:1, por debajo del piso. `ContrasteDeLosTokensTest` mide lo
+   que no es texto: el hilo ≥ 1,3:1 contra el fondo y la tarjeta.
+6. **El mismo conteo en todos lados**: la tarjeta de Actividad es una sola —«6 por revisar», debajo «5 avisos · 1
+   movimiento» (`textoDePorRevisar` y `desgloseDePorRevisar` sobre el `ConteoPorRevisar`), con «Confirmar N» cuando
+   Movi entendió avisos y «Revisar» siempre—; antes eran dos (el renglón sin avisos y «5 avisos del banco» con ellos)
+   y en frío se pasaba de una a la otra. Recuerda su forma (`FormaDeMovimientos.tarjetaPorRevisar`,
+   `recordarTarjetaPorRevisar`) y mientras se cuenta pinta `EsqueletoDeLaTarjetaDeAvisos`, del mismo alto.
+   `recordarLineaDePeriodo` ya copia la forma guardada en vez de reemplazarla.
+7. **Hover en superficies grandes**: una `Superficie` tocable y la `TarjetaDeCuenta` no se velan enteras; cambian su
+   borde a la tinta al 20 % (`conBordeAlEncima`, `colorDelBordeAlEncima`, `BordeAlEncimaKey`). El velo queda para lo
+   chico (botón, fila, píldora).
+8. **El interruptor apagado se ve activo** (`ds/Interruptor.kt`): apagado, el riel en la capa 3 con el borde en
+   `neutro` (≥ 3:1 contra la tarjeta y el crema: el contorno de un control, WCAG 1.4.11) y la perilla blanca con
+   una sombra de 1 dp; encendido, el riel en la tinta y la perilla blanca. Lo usan Tú (el `Interruptor` de Ajustes lo
+   envuelve) y «Editar inicio»; ya no queda un `Switch` de Material en la app.
+
+Lo vigilan `Vuelta82Test` (commonTest: el amarillo de Por revisar, la línea de la deuda total, el optimista con
+cuenta de dinero, con tarjeta, ida y vuelta y lo dudoso, el snackbar con el monto, el mismo número en Inicio y
+Actividad, el borde de hover), `ContrasteDeLosTokensTest` (el hilo y el interruptor), `Vuelta82EnPantallaTest`
+(Robolectric: la línea y la pieza una vez con el signo en Créditos, las dos cifras del héroe cuadro a cuadro, la
+tarjeta solo en «Te quedan», la corrección del server, el monto que no se corta a 360, «Deshecho», la tarjeta de
+avisos y su esqueleto del mismo alto con el círculo de aviso, la superficie con borde y el interruptor) y
+`UnSoloAmarilloPorVistaTest` ampliado.
+
+### La revisión de la vuelta 82, y lo que cambió
+
+1. **[Plata] El optimista no se suelta antes de tiempo.** Se soltaba con cualquier carga que *terminara* después
+   del cambio. En el teléfono `postEvent`/`voidEvent` escriben en el espejo y el `SyncEngine` sube hasta 30 s
+   después, pero el Inicio lee del server: la carga que arranca al guardar traía la cifra sin el gasto, y sin
+   señal se sellaba igual. Ahora cada `MovimientoDelDueno` tiene `listoEn` —desde cuándo el server lo tiene— y
+   solo lo suelta una carga **buena** (resumen y cuentas del server, sin fallar: `cargaBuenaEmpezadaEn`) que
+   **empezó** desde entonces (`DashboardDataCache.cargaBuenaEmpezadaEn`, `LocalCargaBuenaDelInicioEmpezadaEn`).
+   `MovimientosDelDueno.listo` (cuando la escritura terminó) pregunta al repositorio
+   `elServerYaTieneElMovimiento` —la web, siempre; el teléfono, por el sello de la fila y de sus anulaciones—;
+   si no, pide `subirLoPendienteAhora` (una vuelta del `SyncEngine`), y cuando subió anota `listoEn` y pide
+   recargar (`actualizarAMano`). Sin señal reintenta cada 30 s y el optimista se queda hasta
+   `VIGENCIA_SIN_SUBIR_MS` (10 min); listo, vence a los 15 s, y el héroe recompone al vencer (un
+   `LaunchedEffect` que espera `proximoVencimiento`). Se eligió mantener el pendiente hasta que la fila suba, y no
+   subir antes de cerrar Agregar: guardar sigue sin esperar la red, y no se tocó Agregar.
+2. **[Plata] Más casos dudosos** (`datosConElMovimiento`): una cuenta que no es de Tu plata (`esDeTuPlata`: el
+   server lo compensa con «pagado desde fuera»), la categoría de un apartado de esa cuenta (baja el apartado), y lo
+   que se parece a un pago del período con las señas del emparejador (`pareceUnPagoDelPeriodo`: categoría,
+   `nombreDeMovimientoPegaConRegla` contra el nombre o el comercio, un destino con el mismo monto, un sello o
+   candidato en las ocurrencias, el nombre de una suscripción). Quitar más de lo que hay en el gasto del día
+   también espera al server.
+3. **El interruptor toca 48 dp** de alto (`sizeIn(minHeight = Medida.objetivoTactil)` en la capa del toque); el
+   riel sigue de 52 × 32.
+4. **El snackbar en dos partes** (`partesDelAviso`): lo de antes de « · » («Anotado $12.300») se mide entero, lo de
+   después (`TAG_RESTO_DEL_AVISO`) es lo que se corta. «Tu parte $16.000 · repartido con Caro» (`textoDeRepartido`).
+5. **Créditos sin «+»**: «Falta Vehículo 4083, sin saldo (unos $35,8M según el plan)».
+
+### La re-revisión de la vuelta 82
+
+1. **La base no se vuelve a tomar.** La base y los movimientos viven en `MovimientosDelDueno.estado`
+   (`EstadoDelOptimista`, un `MutableStateFlow` que se cambia con `update {}`: `listo` escribe desde otro hilo). La
+   base es lo último que leyó el Inicio (`DashboardDataCache.data`) al registrar el **primero**, y se suelta recién
+   cuando ninguno queda pendiente (`podado`); mientras tanto el héroe muestra la base con **todos** los movimientos
+   (`adelanto`). Antes se retomaba al volver al Inicio: sin señal las cuentas del espejo ya traían el gasto y se
+   restaba dos veces, y al soltarse el primero de dos también. En el teléfono `listoEn` es el `syncedAt` real de la
+   fila y de sus anulaciones (`desdeCuandoLoTieneElServer`, nunca antes de que volviera la escritura), y
+   `alSubirAlgo` despierta la espera (`despertar`) en vez de esperar 30 s. Una carga buena avisa con
+   `cargaBuenaEmpezo`.
+2. **La espera termina.** El bucle de `listo` se corta cuando el movimiento venció o salió, y lo vencido sale del
+   estado. Una fila anulada antes de subir cuenta como lista (`DESDE_LA_ESCRITURA`: nunca sube, efecto neto cero).
+   `subirLoPendienteAhora` ya no vacía lo recordado al pasar: lo hace `alSubirAlgo` → `olvidarLoFresco` solo cuando
+   de verdad subió algo (sin señal, cada reintento dejaba las pantallas en esqueleto).
+3. El anillo de foco del interruptor rodea el riel (`anilloDeFoco(alrededorDeLaCaja = …)`), no la caja del toque.
+4. `partesDelAviso` deja el código de una moneda que no es pesos ni dólares con su cifra («EUR 45»).
+5. **Aceptado**: lo dudoso no tiene optimista, tampoco sin señal. En ese caso las dos cifras esperan juntas el final
+   de una carga, y sin señal esa carga puede traer las cuentas del espejo (ya con el gasto) y el resumen de antes:
+   es el síntoma original de la revisión 8, que queda solo para lo dudoso y sin conexión.
+
 ## 81. Vuelta 83: filas densas y limpias, Agregar útil y Pagos sin repetir
 
 Viene de la revisión 8 del 30-oct (puntos 3, 6, 8, 10, 11, 12 y 15, el amarillo de Pagos del punto 1 y los

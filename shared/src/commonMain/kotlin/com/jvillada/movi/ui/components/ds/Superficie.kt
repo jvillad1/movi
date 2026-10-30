@@ -173,7 +173,8 @@ private fun SuperficieConRellenoLibre(
         modifier = modifier
             // Vuelta 79: una superficie que se toca se hunde entera —con su sombra— y lleva el velo de su
             // forma en hover; el toque, sin ripple, va después del anillo de foco.
-            .then(if (onClick != null) Modifier.hundimientoAlPresionar(toque, velo = true, forma = forma) else Modifier)
+            // Vuelta 82: en hover no se vela entera (se leía «deshabilitada»): cambia su borde a la tinta al 20 %.
+            .then(if (onClick != null) Modifier.hundimientoAlPresionar(toque, forma = forma, conBordeAlEncima = true) else Modifier)
             .then(
                 if (destacada) {
                     Modifier

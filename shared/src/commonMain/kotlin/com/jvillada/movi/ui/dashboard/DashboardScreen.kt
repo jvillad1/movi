@@ -111,6 +111,7 @@ object DashboardDataCache {
         cargadoEn = 0L
     }
 
+
     /**
      * Qué bloques del Inicio ya hicieron su entrada animada (la cifra que cuenta, las barras que
      * crecen) en este proceso. Ver [rememberProgresoDeEntrada]: la animación es **una vez**, no cada
@@ -322,6 +323,8 @@ fun DashboardScreen(
         loading = true
         error = null
         falloLaCarga = false
+        // Vuelta 82: cuándo empezó, para el optimista del héroe (ver [DashboardDataCache.cargaBuenaEmpezadaEn]).
+        val empezoLaCarga = Clock.System.now().toEpochMilliseconds()
         // De quién es esta carga. Se vuelve a mirar antes de guardar la instantánea: si en el medio
         // se cerró la sesión, `clear()` ya borró la de este usuario y escribirla de nuevo dejaría su
         // plata en el aparato.
@@ -560,6 +563,17 @@ fun DashboardScreen(
             }
             if (SessionManager.userId == usuario) InstantaneaDelInicio.delAparato.guardarDatos(usuario, instantanea)
         }
+        // Vuelta 82: antes de soltar `loading`, para que el héroe lo vea en el mismo cuadro. Solo una carga
+        // buena (resumen y cuentas del server, sin fallar), y por cuándo EMPEZÓ: suelta lo que el dueño hizo
+        // y el server ya tenía cuando arrancó (ver [MovimientosDelDueno]).
+        val buena = cargaBuenaEmpezadaEn(
+            anterior = null,
+            empezo = empezoLaCarga,
+            resumenLlego = resumenDelInicioLlego,
+            cuentasLlegaron = llegado.accounts != null,
+            fallo = falloLaCarga,
+        )
+        if (buena != null) MovimientosDelDueno.cargaBuenaEmpezo(buena)
         loading = false
     }
 

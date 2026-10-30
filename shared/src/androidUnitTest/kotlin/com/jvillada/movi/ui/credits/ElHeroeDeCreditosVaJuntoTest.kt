@@ -114,9 +114,11 @@ class ElHeroeDeCreditosVaJuntoTest {
         val tarjeta = composeRule.onNodeWithTag(TAG_TARJETA_DEL_RESUMEN_DE_DEUDA, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         val relleno = izquierda - tarjeta.left
         assertEquals(tarjeta.right - relleno, derecha, 0.5f, "las cifras van al borde derecho de la tarjeta")
-        // «Cuadrar» va en la columna de las cifras.
-        val cuadrar = composeRule.onNodeWithTag(TAG_DEUDAS_SIN_SALDO, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
-        assertEquals(derecha, cuadrar.right, 0.5f, "«Cuadrar» termina donde terminan las cifras")
+        // Vuelta 82: debajo de la deuda total va solo la línea de lo que falta («+ … sin saldo»), sin sangría;
+        // la acción («Cuadrar», «Usar este») vive en la fila de la deuda.
+        val linea = composeRule.onNodeWithTag(TAG_DEUDAS_SIN_SALDO, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertEquals(izquierda, linea.left, 0.5f, "la línea arranca donde arranca la tarjeta")
+        assertTrue(linea.right <= derecha + 0.5f, "y no se sale de la columna de las cifras")
     }
 
     @Test

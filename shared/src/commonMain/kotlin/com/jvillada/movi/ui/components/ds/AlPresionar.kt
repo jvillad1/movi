@@ -1,5 +1,8 @@
 package com.jvillada.movi.ui.components.ds
 
+import androidx.compose.ui.graphics.drawscope.Stroke
+import com.jvillada.movi.theme.Medida
+
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
@@ -62,6 +65,26 @@ val VeloAlPresionarKey: SemanticsPropertyKey<Boolean> = SemanticsPropertyKey("Ve
 var SemanticsPropertyReceiver.veloAlPresionar: Boolean by VeloAlPresionarKey
 
 /**
+ * Vuelta 82: ¿el borde de hover de una superficie grande está a la vista? ([bordeAlEncima]). En su semántica.
+ */
+val BordeAlEncimaKey: SemanticsPropertyKey<Boolean> = SemanticsPropertyKey("BordeAlEncima")
+
+/** Ver [BordeAlEncimaKey]. */
+var SemanticsPropertyReceiver.bordeAlEncima: Boolean by BordeAlEncimaKey
+
+/**
+ * **El borde de hover de una superficie grande** (vuelta 82): la tinta al 20 %. La revisión 8 vio el
+ * widget «En qué se va» entero ponerse gris con el mouse encima: el velo (la tinta al 6 % sobre toda la
+ * superficie) está bien en un componente chico —un botón, una fila, una píldora—, pero en una tarjeta
+ * entera se lee como «deshabilitado». Una `Superficie` o una tarjeta tocable cambia su borde. Pura.
+ */
+fun colorDelBordeAlEncima(colores: com.jvillada.movi.theme.ColoresDeMovi): androidx.compose.ui.graphics.Color =
+    colores.texto.copy(alpha = ALFA_DEL_BORDE_AL_ENCIMA)
+
+/** La opacidad de la tinta en el borde de hover de una superficie grande. */
+const val ALFA_DEL_BORDE_AL_ENCIMA: Float = 0.2f
+
+/**
  * **¿Se ve el velo?** Con el mouse encima, siempre; presionado, solo con menos movimiento (con
  * movimiento, el toque lo dice la escala). Pura.
  */
@@ -92,10 +115,12 @@ fun Modifier.alPresionar(
     fuente: MutableInteractionSource? = null,
     velo: Boolean = false,
     forma: Shape = RectangleShape,
+    /** Vuelta 82: una tarjeta grande no se vela entera: cambia su borde ([colorDelBordeAlEncima]). */
+    conBordeAlEncima: Boolean = false,
 ): Modifier = composed {
     val interacciones = fuente ?: remember { MutableInteractionSource() }
     this
-        .hundimiento(interacciones, escala, velo, forma, habilitado)
+        .hundimiento(interacciones, escala, velo, forma, habilitado, conBordeAlEncima)
         .clickable(
             interactionSource = interacciones,
             indication = null,
@@ -141,7 +166,9 @@ fun Modifier.hundimientoAlPresionar(
     escala: Float = Movimiento.ESCALA_AL_PRESIONAR,
     velo: Boolean = false,
     forma: Shape = RectangleShape,
-): Modifier = hundimiento(fuente, escala, velo, forma, habilitado = true)
+    /** Vuelta 82: una superficie grande no se vela entera: cambia su borde ([colorDelBordeAlEncima]). */
+    conBordeAlEncima: Boolean = false,
+): Modifier = hundimiento(fuente, escala, velo, forma, habilitado = true, conBordeAlEncima = conBordeAlEncima)
 
 /**
  * **Solo el toque, sin ripple ni lo que se ve**: para quien pone [hundimientoAlPresionar] más afuera en
@@ -169,6 +196,7 @@ private fun Modifier.hundimiento(
     velo: Boolean,
     forma: Shape,
     habilitado: Boolean,
+    conBordeAlEncima: Boolean = false,
 ): Modifier = composed {
     val reducido = LocalMovimientoReducido.current
     val presionado by fuente.collectIsPressedAsState()
@@ -176,16 +204,30 @@ private fun Modifier.hundimiento(
     val objetivo = if (habilitado) escalaDelToque(presionado, reducido, escala) else 1f
     val actual by animateFloatAsState(objetivo, Movimiento.alPresionar(reducido), label = "presionado")
     val conVelo = velo && habilitado && seVeElVelo(presionado, encima, reducido)
+    val conBorde = conBordeAlEncima && habilitado && seVeElVelo(presionado, encima, reducido)
     val colorDelVelo = Movi.colores.velo
+    val colorDelBorde = colorDelBordeAlEncima(Movi.colores)
     this
         .semantics {
             escalaAlPresionar = objetivo
             veloAlPresionar = conVelo
+            bordeAlEncima = conBorde
         }
         .graphicsLayer {
             scaleX = actual
             scaleY = actual
         }
+        .then(
+            if (conBorde) {
+                Modifier.drawWithContent {
+                    drawContent()
+                    val trazo = Medida.trazo.toPx()
+                    drawOutline(forma.createOutline(size, layoutDirection, this), colorDelBorde, style = Stroke(width = trazo))
+                }
+            } else {
+                Modifier
+            },
+        )
         .then(
             if (conVelo) {
                 Modifier.drawWithContent {

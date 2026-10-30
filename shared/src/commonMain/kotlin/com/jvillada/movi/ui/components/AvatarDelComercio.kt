@@ -39,6 +39,9 @@ import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.categorias.IconoDeCategoria
 import com.jvillada.movi.ui.categorias.TamanoDeIconoDeCategoria
 import com.jvillada.movi.theme.Medida
+import com.jvillada.movi.ui.components.ds.TonoDeIcono
+import com.jvillada.movi.ui.components.ds.coloresDelAvatarDelBanco
+import com.jvillada.movi.ui.components.ds.tonoDeIcono
 
 /**
  * # El comercio, protagonista de la fila
@@ -69,7 +72,13 @@ enum class TamanoDeAvatar(val circulo: Dp) {
 // Vuelta 80: el avatar de un movimiento es `IconoDeMovimiento` (en `ds/`), con una sola prioridad:
 // la marca del comercio (un banco no lo es) y si no, la categoría.
 
-/** El avatar de una cuenta: la marca de su banco, o el ícono de su tipo en un círculo neutro. */
+/**
+ * El avatar de una cuenta: la letra de su banco, o el ícono de su tipo en un círculo neutro.
+ *
+ * Vuelta 82: **la letra del banco va en la capa 3 con la tinta** ([coloresDelAvatarDelBanco], la regla de
+ * la vuelta 79 para la tarjeta de cuenta), no en el color del banco: la «B» de Bancolombia en Patrimonio
+ * era el único amarillo de la vista, el mismo de la acción. Una cuenta es un banco, nunca un comercio.
+ */
 @Composable
 fun AvatarDeLaCuenta(
     cuenta: Account,
@@ -87,7 +96,7 @@ fun AvatarDeLaCuenta(
 ) {
     val marca = remember(nombre) { marcaDelBanco(nombre) }
     if (marca != null) {
-        CirculoDeMarca(marca, modifier, tamano)
+        CirculoDeMarca(marca, modifier, tamano, comoBanco = true)
     } else {
         val (icono, rotulo) = iconoDelTipoDeCuenta(tipo)
         Box(
@@ -113,7 +122,14 @@ fun AvatarDeLaCuenta(
  * negro de Uber o de Zara sobre el fondo oscuro: sin él, el círculo no tiene orilla.
  */
 @Composable
-fun CirculoDeMarca(marca: Marca, modifier: Modifier = Modifier, tamano: TamanoDeAvatar = TamanoDeAvatar.Fila) {
+fun CirculoDeMarca(
+    marca: Marca,
+    modifier: Modifier = Modifier,
+    tamano: TamanoDeAvatar = TamanoDeAvatar.Fila,
+    /** Vuelta 82: el avatar de un banco (una cuenta) va neutro, como [coloresDelAvatarDelBanco]. */
+    comoBanco: Boolean = false,
+) {
+    val (fondo, letra) = if (comoBanco) coloresDelAvatarDelBanco(Movi.colores) else Color(marca.fondo) to Color(marca.texto)
     // En dp y no en sp: el logotipo es un dibujo del tamaño del círculo, no texto que deba crecer
     // con la letra del sistema (con letra grande, tres letras se salían del círculo).
     //
@@ -124,9 +140,12 @@ fun CirculoDeMarca(marca: Marca, modifier: Modifier = Modifier, tamano: TamanoDe
     Box(
         modifier = modifier
             .testTag(TAG_AVATAR_DE_MARCA)
-            .semantics { contentDescription = marca.nombre }
+            .semantics {
+                contentDescription = marca.nombre
+                if (comoBanco) tonoDeIcono = TonoDeIcono.Neutro
+            }
             .size(tamano.circulo)
-            .background(Color(marca.fondo), CircleShape)
+            .background(fondo, CircleShape)
             .border(Medida.trazo, Movi.colores.hilo, CircleShape),
         contentAlignment = Alignment.Center,
     ) {
@@ -136,7 +155,7 @@ fun CirculoDeMarca(marca: Marca, modifier: Modifier = Modifier, tamano: TamanoDe
                 fontSize = tamanoDeLetra,
                 lineHeight = tamanoDeLetra,
                 letterSpacing = (-0.02).em,
-                color = Color(marca.texto),
+                color = letra,
                 textAlign = TextAlign.Center,
             ),
             maxLines = 1,

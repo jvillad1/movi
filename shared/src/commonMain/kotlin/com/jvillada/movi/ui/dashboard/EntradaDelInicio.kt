@@ -112,12 +112,16 @@ const val DURACION_DEL_CAMBIO_DEL_HEROE_MS: Int = Movimiento.LARGO_MS
  *   valor que se animaría —las cuentas llegan antes que el resumen, y el estado intermedio junta piezas
  *   de dos cargas—; al terminar la carga, cambia entero al último. Lo que no se anima (el primer dato)
  *   entra igual.
+ * @param seCongela vuelta 82: qué cambios espera [congelado]; por defecto los que [seAnima]. El héroe
+ *   congela **todo** cambio de cifra, también el que hizo el dueño (que no se desvanece: cuenta): antes las
+ *   cuentas llegaban primero y «Tu plata» cambiaba un segundo antes que «Te quedan».
  */
 @Composable
 fun <T> rememberEstadoQueCambia(
     valor: T,
     congelado: Boolean = false,
     seAnima: (antes: T, despues: T) -> Boolean,
+    seCongela: (antes: T, despues: T) -> Boolean = seAnima,
 ): EstadoQueSeVe<T> {
     val reducido = LocalMovimientoReducido.current
     var desde by remember { mutableStateOf(valor) }
@@ -127,7 +131,7 @@ fun <T> rememberEstadoQueCambia(
         if (valor == hasta && progreso.value >= 1f) return@LaunchedEffect
         val visible = estadoEnElCambio(desde, hasta, progreso.value)
         // Con la carga en vuelo, lo que ya se ve se queda: el cambio llega entero cuando termina.
-        if (congelado && visible != valor && seAnima(visible, valor)) return@LaunchedEffect
+        if (congelado && visible != valor && seCongela(visible, valor)) return@LaunchedEffect
         if (reducido || visible == valor || !seAnima(visible, valor)) {
             desde = valor
             hasta = valor

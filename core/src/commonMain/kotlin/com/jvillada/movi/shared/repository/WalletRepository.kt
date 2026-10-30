@@ -87,6 +87,13 @@ import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.shared.model.VoidEvent
 import com.jvillada.movi.shared.model.RecategorizarEnLoteResponse
 
+/**
+ * Vuelta 82 · lo que contesta [WalletRepository.desdeCuandoLoTieneElServer] cuando el server lo tiene desde
+ * que volvió la escritura (la web), o cuando nunca va a necesitarlo (una fila anulada antes de subir: el
+ * efecto neto es cero).
+ */
+const val DESDE_LA_ESCRITURA: Long = 0L
+
 interface WalletRepository {
     suspend fun getCredits(): List<CreditSummary>
     suspend fun createCredit(request: CreateCreditRequest): CreditSummary
@@ -159,6 +166,22 @@ interface WalletRepository {
         noLoTiene("guardarEspacio")
     suspend fun getDetalleDelEspacio(id: String): com.jvillada.movi.shared.model.DetalleDelEspacio =
         noLoTiene("getDetalleDelEspacio")
+    /**
+     * Vuelta 82 · **¿desde cuándo el server tiene el movimiento [eventoId] tal como está acá?** (también
+     * su anulación, si la hay), en epoch ms; `null` si todavía no. Para el optimista del héroe del Inicio:
+     * una carga del server solo confirma lo que el dueño hizo si empezó cuando el server ya lo tenía.
+     * [DESDE_LA_ESCRITURA] es «desde que volvió la escritura»: contra el server (la web) siempre, porque se
+     * escribe ahí. El espejo local del teléfono contesta con el `syncedAt` real de sus filas. No sube nada
+     * ni lanza.
+     */
+    suspend fun desdeCuandoLoTieneElServer(eventoId: String): Long? = DESDE_LA_ESCRITURA
+
+    /**
+     * Vuelta 82 · sube lo pendiente **ya** (una vuelta del `SyncEngine` en el teléfono; nada en la web).
+     * No lanza: lo que no sube se queda pendiente, como en el ciclo de 30 s.
+     */
+    suspend fun subirLoPendienteAhora() {}
+
     /** «Repartir»: el movimiento propio [eventoId] pasa a ser del espacio. Idempotente. */
     suspend fun repartirMovimiento(espacioId: String, eventoId: String): com.jvillada.movi.shared.model.GastoDelEspacio =
         noLoTiene("repartirMovimiento")
