@@ -19,7 +19,9 @@ import kotlinx.serialization.json.Json
  * `SyncEngine` las pone en el `POST /api/events` de la subida. Subido el movimiento, la entrada se
  * borra. Nada de lo local las lee: solo las usa `extractoDeLaTarjeta`, que corre en el server.
  *
- * Cerrar la sesión borra `remote_cache` del usuario (`deleteForUser`), igual que lo no subido.
+ * Cerrar la sesión (o un 401) **no** las borra: `olvidarDatosLocales` conserva lo que no subió, y
+ * estas cuotas son de esos movimientos (`deleteForUserSalvo`). Solo `olvidarTodoLoDe` (la cuenta se
+ * borró) se las lleva.
  */
 internal object CuotasPorSubir {
     /** La fila de `remote_cache` con el mapa `{ id del movimiento → cuotas }`. */

@@ -2686,7 +2686,9 @@ class LocalRepository(
             db.voidEventQueries.deleteSyncedForUser(userId)
             db.financialEventQueries.deleteSyncedForUser(userId)
             db.accountQueries.deleteSyncedForUser(userId)
-            db.remoteCacheQueries.deleteForUser(userId)
+            // Vuelta 71 (revisión): las cuotas que esperan su subida se quedan, como los movimientos
+            // pendientes a los que pertenecen (ver [CuotasPorSubir]). Las borra [olvidarTodoLoDe].
+            db.remoteCacheQueries.deleteForUserSalvo(userId, CuotasPorSubir.CLAVE)
         }
     }
 

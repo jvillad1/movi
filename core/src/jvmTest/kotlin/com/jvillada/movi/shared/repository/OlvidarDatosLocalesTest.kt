@@ -192,6 +192,24 @@ class OlvidarDatosLocalesTest {
         assertTrue(migrada.voidEventQueries.selectUnsynced(b).executeAsList().isEmpty())
     }
 
+    // ── Vuelta 71 (revisión) · las cuotas que esperan su subida ─────────────────────────
+
+    /**
+     * Cerrar la sesión (o un 401) conserva las cuotas de las compras con tarjeta que todavía no
+     * subieron, como conserva sus movimientos; el resto del caché de lectura se va. Borrar la cuenta
+     * se las lleva.
+     */
+    @Test
+    fun cerrar_la_sesion_conserva_las_cuotas_por_subir_y_borrar_la_cuenta_no() {
+        CuotasPorSubir.guardar(db, a, "pendiente-$a", 12)
+        repo().olvidarDatosLocales(a)
+        assertEquals(mapOf("pendiente-$a" to 12), CuotasPorSubir.todas(db, a), "las cuotas del pendiente se quedan")
+        assertEquals(null, db.remoteCacheQueries.get("recurrentes", a).executeAsOneOrNull(), "el caché de lectura se va")
+
+        repo().olvidarTodoLoDe(a)
+        assertTrue(CuotasPorSubir.todas(db, a).isEmpty(), "borrar la cuenta se lleva también las cuotas")
+    }
+
     // ── Borrar la cuenta: olvidarTodoLoDe ──────────────────────────────────────────────
 
     /**
