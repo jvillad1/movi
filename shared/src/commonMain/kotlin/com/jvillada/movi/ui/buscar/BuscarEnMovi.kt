@@ -6,6 +6,15 @@ import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.laPataQueCuenta
 import com.jvillada.movi.shared.model.DestinoConocido
 import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.EventDay
+import com.jvillada.movi.shared.model.Espacio
+import com.jvillada.movi.shared.model.conTuParteDeOtros
+import com.jvillada.movi.shared.model.esTuParteDeOtro
+import com.jvillada.movi.shared.model.tuParteComoEventos
+import com.jvillada.movi.ui.transactions.textosDeTuParteDeOtro
+import com.jvillada.movi.ui.transactions.quienPagoTuParte
+import com.jvillada.movi.ui.transactions.TU_PARTE
+import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.claveDelComercio
@@ -87,9 +96,12 @@ sealed class ResultadoDeBusqueda {
         // El mismo título que la fila de Movimientos ([textosDeLaFila]): en forma de título (vuelta 32) y,
         // si la descripción es la categoría, el comercio (vuelta 30). Antes Buscar decía «Mercado» donde
         // Movimientos decía «Éxito Suba».
-        override val titulo get() =
-            if (evento.description.isBlank()) enFormaDeTitulo(evento.merchant ?: evento.category)
-            else textosDeLaFila(evento, nombreDeLaCuenta = null).titulo
+        override val titulo get() = when {
+            // Vuelta 78: tu parte de lo que pagó otro se llama como en Actividad («Mercado del sábado»).
+            esTuParteDeOtro(evento) -> textosDeTuParteDeOtro(evento, espacio = null).titulo
+            evento.description.isBlank() -> enFormaDeTitulo(evento.merchant ?: evento.category)
+            else -> textosDeLaFila(evento, nombreDeLaCuenta = null).titulo
+        }
         override val destino: Screen? get() = null
     }
 
@@ -245,6 +257,37 @@ fun subtituloDeUnMovimientoEnBuscar(evento: FinancialEvent, nombreDeLaCuenta: St
     val titulo = textosDeLaFila(evento, nombreDeLaCuenta).titulo
     val categoria = evento.category.takeIf { it.isNotBlank() && normalizarParaBuscar(it) != normalizarParaBuscar(titulo) }
     return listOfNotNull(categoria, fecha, nombreDeLaCuenta?.takeIf { it.isNotBlank() }).joinToString(" · ")
+}
+
+/**
+ * **Los movimientos en los que busca Buscar** (vuelta 78): la historia y **tu parte de lo que pagó otra
+ * persona en un grupo** ([tuParteComoEventos], de `/api/espacios/tu-parte`), cada una en su día con
+ * [conTuParteDeOtros] —la misma de Actividad—. Así «mercado» suma lo mismo que la categoría en En qué se
+ * va, el widget y Movi AI, que la cuentan el día del gasto. Pura.
+ */
+fun eventosParaBuscar(dias: List<EventDay>, tuParteDeOtros: List<FinancialEvent>): List<FinancialEvent> =
+    conTuParteDeOtros(dias, tuParteDeOtros).flatMap { it.items }
+
+/**
+ * **El subtítulo de tu parte de un gasto que pagó otro** (vuelta 78): la categoría si no es el título,
+ * y la fecha. Quién pagó va debajo de la cifra ([debajoDeTuParteEnBuscar]). Pura.
+ */
+fun subtituloDeTuParteEnBuscar(evento: FinancialEvent, fecha: String): String {
+    val titulo = textosDeTuParteDeOtro(evento, espacio = null).titulo
+    val categoria = evento.category.takeIf { it.isNotBlank() && normalizarParaBuscar(it) != normalizarParaBuscar(titulo) }
+    return listOfNotNull(categoria, fecha.takeIf { it.isNotBlank() }).joinToString(" · ")
+}
+
+/**
+ * **Debajo de tu parte de un gasto que pagó otro, en Buscar** (revisión de la 78): «de $240.000 · pagó
+ * Caro» —de cuánto fue el gasto del grupo ([FinancialEvent.montoDelGrupo]) y quién lo pagó—, como «de
+ * $88.600 · con Caro» en un gasto tuyo repartido. Sin el monto del grupo (un server viejo), «Tu parte ·
+ * pagó Caro». Pura.
+ */
+fun debajoDeTuParteEnBuscar(evento: FinancialEvent, espacio: Espacio?): String {
+    val quien = quienPagoTuParte(evento, espacio).replaceFirstChar { it.lowercase() }
+    val deCuanto = evento.montoDelGrupo?.let { "de ${formatCOP(it)}" } ?: TU_PARTE
+    return "$deCuanto · $quien"
 }
 
 /**

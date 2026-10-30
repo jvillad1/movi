@@ -110,6 +110,16 @@ class FormaRecordada(
     fun recordarLineaDePeriodo(userId: String?, periodoDeHoy: PeriodoFinanciero, ajustes: PeriodSettings) =
         guardarMovimientos(userId, FormaDeMovimientos(lineaDePeriodo = rangoLegibleDe(periodoDeHoy, ajustes) != null))
 
+    /**
+     * Vuelta 78: qué renglones llevaba la tarjeta del héroe del Inicio la última vez que su carga salió
+     * bien —«¿Me alcanza?» y «Por confirmar»—, para que el esqueleto de un arranque en frío los reserve
+     * (o no). `null` (nada recordado) es reservar los dos.
+     */
+    fun heroe(userId: String?): FormaDelHeroe? = leerForma(userId, PANTALLA_HEROE, FormaDelHeroe.serializer())
+
+    fun guardarHeroe(userId: String?, forma: FormaDelHeroe) =
+        guardarForma(userId, PANTALLA_HEROE, forma, FormaDelHeroe.serializer())
+
     /** Al cerrar sesión: todas las formas de [userId]. */
     fun borrar(userId: String?) {
         val id = userId?.takeIf { it.isNotBlank() } ?: return
@@ -154,8 +164,9 @@ class FormaRecordada(
         private const val PANTALLA_CUENTAS = "cuentas"
         private const val PANTALLA_MOVIMIENTOS = "movimientos"
         private const val PANTALLA_PERIODOS = "periodos"
+        private const val PANTALLA_HEROE = "heroe"
         private val PANTALLAS =
-            listOf(PANTALLA_CREDITOS, PANTALLA_CATEGORIAS, PANTALLA_CUENTAS, PANTALLA_MOVIMIENTOS, PANTALLA_PERIODOS)
+            listOf(PANTALLA_CREDITOS, PANTALLA_CATEGORIAS, PANTALLA_CUENTAS, PANTALLA_MOVIMIENTOS, PANTALLA_PERIODOS, PANTALLA_HEROE)
 
         private fun clave(pantalla: String, userId: String) = "forma_${pantalla}_$userId"
     }
@@ -236,6 +247,13 @@ data class FormaDeMovimientos(
  *
  * @property filas cuántos períodos trajo `GET /api/periodos` la última vez que contestó bien.
  */
+/** Vuelta 78: los renglones de abajo de la tarjeta del héroe del Inicio (ver [FormaRecordada.heroe]). */
+@Serializable
+data class FormaDelHeroe(
+    val meAlcanza: Boolean = true,
+    val porConfirmar: Boolean = true,
+)
+
 @Serializable
 data class FormaDePeriodos(val filas: Int = 0) {
     internal fun esValida(): Boolean = filas in 0..MAX_ELEMENTOS

@@ -115,6 +115,9 @@ kotlin {
             // Trae el `<activity android:name="ComponentActivity">` que `createComposeRule()`
             // lanza. Sin él, Robolectric muere con «Unable to find explicit activity class».
             implementation(libs.androidx.compose.ui.test.manifest)
+            // Vuelta 78: el contador de peticiones del Inicio, con el cliente HTTP de verdad
+            // (`WalletRepositoryImpl`) sobre un motor falso. Ver `ElInicioNoRepitePeticionesTest`.
+            implementation(libs.ktor.client.mock)
         }
     }
 }

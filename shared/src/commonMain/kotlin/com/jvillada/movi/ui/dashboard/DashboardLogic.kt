@@ -246,6 +246,13 @@ data class DashboardData(
      * llegó, y no se dice nada. No viaja en la instantánea (`llegado` no la lleva).
      */
     val propuestasDeSaldar: List<com.jvillada.movi.shared.model.PropuestaDeSaldar>? = null,
+    /**
+     * Vuelta 78 (revisión) · **el supuesto del gasto del día a día** (`/api/caja-proyectada/gasto-del-dia-a-dia`),
+     * del que sale el renglón «¿Me alcanza?» del héroe. Va en el primer lote del Inicio y en la
+     * instantánea: pedido aparte, llegaba después que el resto y el héroe saltaba 66 px al aparecer el
+     * renglón. `null` = no llegó (el renglón lo pide por su cuenta, como antes).
+     */
+    val gastoDelDiaADia: com.jvillada.movi.shared.model.GastoDelDiaADia? = null,
 ) {
     val hasAccount: Boolean get() = !accounts.isNullOrEmpty()
     /**
@@ -430,6 +437,9 @@ const val TAG_ESQUELETO_VEREDICTO_DEL_HERO: String = "esqueleto-veredicto-del-he
  */
 const val TAG_CIFRA_TE_QUEDAN: String = "cifra-te-quedan"
 const val TAG_ESQUELETO_DETALLE_DEL_HERO: String = "esqueleto-detalle-del-hero"
+
+/** Vuelta 78: la línea de abajo de «Te quedan» en el héroe (ver `detalleDelHeroe`). */
+const val TAG_DETALLE_DEL_HEROE: String = "detalle-del-heroe"
 
 /**
  * **¿Hay una carga del Inicio EN VUELO ahora mismo?** Lo provee `DashboardScreen`, con su propio

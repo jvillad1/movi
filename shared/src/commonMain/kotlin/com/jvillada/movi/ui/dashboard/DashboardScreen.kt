@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import kotlinx.datetime.Clock
 import com.jvillada.movi.data.CuentaMasUsadaCache
 import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.data.olvidarLoFresco
 import com.jvillada.movi.data.ScreenDefCache
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.data.UsedCategoriesCache
@@ -245,6 +246,11 @@ fun DashboardScreen(
     }
     var falloLaCarga by remember { mutableStateOf(false) }
     var refreshKey by remember { mutableStateOf(0) }
+    // Vuelta 78: si la app vuelve del segundo plano con el Inicio a la vista, se vuelve a preguntar (la
+    // vuelta ya olvidó lo fresco y marcó vieja esta carga: ver `LoFresco`). No es un reintento: con el
+    // Inicio recién cargado y nada olvidado, no sale nada.
+    var vueltasDelSegundoPlano by remember { mutableStateOf(0) }
+    com.jvillada.movi.ui.auth.AlVolverDelSegundoPlano { _, _ -> vueltasDelSegundoPlano++ }
     var showCreateSheet by remember { mutableStateOf(false) }
     var showNotifications by remember { mutableStateOf(false) }
     // Vuelta 41: el nombre del saludo y de las iniciales, el mismo que dice «Tú». Arranca con el del
@@ -285,7 +291,7 @@ fun DashboardScreen(
     //  último que había, en vez de arrancar en blanco.
     //
     //  Ya existe una rama para esto: `origin/perf/inicio-endpoints-livianos`.
-    LaunchedEffect(refreshKey, refreshTick) {
+    LaunchedEffect(refreshKey, refreshTick, vueltasDelSegundoPlano) {
         // ¿Hace falta pedir las diez otra vez? Ver [debeRecargarElInicio] — el TODO de la Ola 8
         // que documentaba este derroche queda cerrado acá.
         //
@@ -451,6 +457,12 @@ fun DashboardScreen(
                 runCatching { Repositories.wallets.getSubscriptions() }
                     .onSuccess { s -> data = data.copy(subscriptions = s); llegado = llegado.copy(subscriptions = s) }
             }
+            // Vuelta 78 (revisión): el supuesto del gasto del día a día, para que «¿Me alcanza?» llegue con el
+            // resto del héroe y no 66 px después. Secundario: si falla, el renglón lo pide por su cuenta.
+            launch {
+                runCatching { Repositories.wallets.getGastoDelDiaADia() }
+                    .onSuccess { g -> data = data.copy(gastoDelDiaADia = g); llegado = llegado.copy(gastoDelDiaADia = g) }
+            }
             // Ola 4: lo que se sale de lo normal. Secundario: si falla, «Para revisar» sigue con lo
             // demás y no avisa nada de esto esta vez.
             launch {
@@ -556,7 +568,7 @@ fun DashboardScreen(
         }
         val result = snackbarHostState.showSnackbar(msg, actionLabel = "Reintentar")
         error = null
-        if (result == SnackbarResult.ActionPerformed) refreshKey++
+        if (result == SnackbarResult.ActionPerformed) { olvidarLoFresco(); refreshKey++ }
     }
 
     Box(
@@ -581,7 +593,7 @@ fun DashboardScreen(
                     ahora = Clock.System.now().toEpochMilliseconds(),
                 ),
                 descripcionDelSubtitulo = if (actualizandoConDatos || sinConexion) null else descripcionDelPeriodoDelEncabezado(data),
-                onSubtitulo = if (sinConexion) ({ refreshKey++ }) else null,
+                onSubtitulo = if (sinConexion) ({ olvidarLoFresco(); refreshKey++ }) else null,
                 iniciales = inicialesDelUsuario(nombreDelDueno),
                 conPunto = campanaConPunto(notifications),
                 onAvatar = { onNavigate(Screen.Tu) },
@@ -644,7 +656,7 @@ fun DashboardScreen(
             CompositionLocalProvider(LocalCargandoElInicio provides loading) {
                 TirarParaActualizar(
                     cargando = loading,
-                    onActualizar = { refreshKey++ },
+                    onActualizar = { refreshKey++ }, // TirarParaActualizar ya olvidó lo fresco
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                 ) {
                 SduiRenderer(

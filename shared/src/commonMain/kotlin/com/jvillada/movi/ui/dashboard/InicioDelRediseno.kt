@@ -257,12 +257,25 @@ data class FilasDelWidgetDeFalta(
 const val PAGOS_EN_EL_WIDGET: Int = 2
 
 /**
+ * **Los pagos pendientes en el orden de la cola del Inicio** (vuelta 78): primero los pagos de
+ * [colaDelInicio] —la misma [colaDePendientes] que leen la campana y «Movi propone hoy»—, en su orden, y
+ * después lo pendiente que la cola no trae (lo que vence más adelante en el período, o una cuota que ya
+ * pregunta su débito), con la misma regla ([pagosEnOrdenDeUrgencia]). «Próximo pago» es el primero y el
+ * widget «Falta por pagar» sigue desde el segundo: un solo criterio de orden. Pura.
+ */
+fun pagosEnElOrdenDeLaCola(data: DashboardData): List<PagoDelPeriodo> {
+    val deLaCola = colaDelInicio(data).filterIsInstance<Pendiente.Pago>().map { it.pago }
+    val enLaCola = deLaCola.map { it.ruleId }.toSet()
+    return deLaCola + pagosEnOrdenDeUrgencia(checklistDelPeriodoDe(data)).filter { it.ruleId !in enLaCola }
+}
+
+/**
  * @param sinElProximoPago **vuelta 68**: el Inicio ya muestra «Próximo pago», que es el primero de esta
  *   misma cola ([proximoPagoDelInicio]): el widget no lo repite como primer renglón (la revisión `r3`:
  *   «Carro $9.000» dos veces, una debajo de la otra). Sigue contando en la cifra y en «Falta 1 de 5».
  */
 fun filasDelWidgetDeFalta(data: DashboardData, sinElProximoPago: Boolean = false): FilasDelWidgetDeFalta {
-    val todos = pagosEnOrdenDeUrgencia(checklistDelPeriodoDe(data))
+    val todos = pagosEnElOrdenDeLaCola(data)
     val elDeArriba = if (sinElProximoPago) todos.firstOrNull() else null
     val pendientes = if (elDeArriba != null) todos.drop(1) else todos
     val filas = pendientes.take(PAGOS_EN_EL_WIDGET)
@@ -499,7 +512,7 @@ data class ProximoPagoDelInicio(
 
 /** [ProximoPagoDelInicio], o `null` sin pagos pendientes en el período (la sección no se pinta). */
 fun proximoPagoDelInicio(data: DashboardData): ProximoPagoDelInicio? {
-    val pendientes = pagosEnOrdenDeUrgencia(checklistDelPeriodoDe(data))
+    val pendientes = pagosEnElOrdenDeLaCola(data)
     val pago = pendientes.firstOrNull() ?: return null
     val (accion, destino) = accionDelPago(pago)
     return ProximoPagoDelInicio(

@@ -4206,3 +4206,57 @@ y `ElAbonoQueSeTildaEnPantallaTest` (el abono en Pagar), `LaGuiaDelAbonoCabeTest
 5. La nota de la curva lleva el signo: «Sin contar −$36,8M de ajustes de saldo…».
 6. Al guardar un abono, «Anotado · Abono a …» (`queSeAnoto`), no «Pago a …».
 
+## 76. Vuelta 78: rápida y coherente
+
+Viene de la revisión fresca 6 (puntos 5, 6, 7, 8, 13 y 15, sin Créditos). **Sin reglas de plata nuevas**: todo
+lo que se dice sale de funciones que ya existían.
+
+1. **Respuestas livianas** (server). El JSON sale sin sangría y con gzip (`plugins/Compresion.kt`, desde 1 KB, solo
+   respuestas, solo JSON y texto; el `.wasm`, las fuentes y los documentos van tal cual), con `Vary: Accept-Encoding`. Los tres clientes piden y
+   abren gzip solos. Con la demo local, `/api/events/by-day` pasó de 62,6 KB a 5,9 KB y `/api/dashboard/summary` de
+   5,5 KB a 0,9 KB. Ver la sección del server en `CLAUDE.md`.
+2. **Peticiones sin repetir** (cliente). `LecturasSinRepetir` une los pedidos iguales en vuelo y devuelve lo que
+   contestó hace menos de 30 s; una escritura propia lo vuelve viejo. Al abrir el Inicio `users/me` y `accounts`
+   salen una vez (antes dos: el Inicio y la guía de primer uso a la vez), Pagos pide `accounts` una vez, y Actividad
+   no vuelve a bajar la historia si la tiene de hace menos de 30 s. La bandeja «Por revisar» siempre pregunta.
+   **Lo que entra por fuera de la app** (revisión): `olvidarLoFresco()` (`LoFresco`) da por viejo lo leído —sin
+   borrar lo que se ve— y lo llaman tirar para actualizar, «Reintentar», el ↻ de Por revisar, la vuelta del segundo
+   plano (el Inicio a la vista vuelve a preguntar) y, en el teléfono, `SmsSyncWorker` tras subir,
+   `confirmarDesdeLaNotificacion` tras anotar y el `SyncEngine` cuando sube algo.
+3. **El héroe con un solo horizonte.** «Para N días · $X por día» (`detalleDelHeroe`) **se calla** con
+   `DIAS_PARA_CALLAR_EL_POR_DIA` = 3 días o menos para el cierre, o si «¿Me alcanza?» dice que no
+   (`RenglonMeAlcanza.noAlcanza`). Los avisos de la línea (te pasaste, sin margen, vas por encima de lo previsto)
+   se dicen siempre. Sin salario, si el primer día en rojo de la caja cae **después** del cierre, el renglón ya no
+   dice «No te alcanza: el 29 nov quedarías en −$1,1M» debajo de un «Te quedan» positivo: dice «El 5 nov, sin
+   salario anotado, no te alcanzaría · Agregar salario» (`noTeAlcanzariaSinSalario`, la primera fecha en rojo; sin
+   rojo; tocarlo abre la caja de Pagos, con su «Agregar» arriba). La caja de Pagos dice la misma frase debajo de su
+   cifra, y la tarjeta «Cuánto puedes gastar» de Pagos calla su «Para N días» con la misma regla
+   (`detalleDelHeroe`). Con salario, o con un rojo dentro del período, lo de siempre. El supuesto del gasto del día a
+   día va en el primer lote del Inicio y en su instantánea (`DashboardData.gastoDelDiaADia`): el renglón llega con
+   el resto del héroe y no 66 px después.
+4. **Pagos: una sola invitación al salario.** La de la caja («Sin tu salario, Movi supone… · Agregar»). La tarjeta
+   de «Lo que se repite» sin ingresos muestra solo «Gastos recurrentes» (`TAG_SOLO_LOS_GASTOS_RECURRENTES`), sin
+   «Agrega tu salario… · Agregar mi salario». Y **las dos cifras se nombran**: debajo de los gastos,
+   `lineaDeLasDosCifras` dice «$3.625.338 al mes · $3.662.500 este período, con lo que de verdad pagaste
+   y el mínimo de tus tarjetas» —la primera es `ResumenRecurrentes.gastos` (un mes cualquiera, lo anual en doce,
+   sin el pago de las tarjetas); la segunda, el «de $X» de la tarjeta amarilla (`ResumenDeFacturas.total`)—. Si
+   coinciden, o no hay lista del período, no se dice nada.
+5. **Buscar cuenta lo mismo que En qué se va.** Tu parte de lo que pagó otra persona en un grupo (`getTuParteDeOtros`)
+   entra a Buscar con `eventosParaBuscar` (la misma `conTuParteDeOtros` de Actividad): «Mercado del sábado»,
+   «Mercado · 25 de octubre», la cifra es tu parte y debajo «de $240.000 · pagó Caro» (`debajoDeTuParteEnBuscar`,
+   con `FinancialEvent.montoDelGrupo`, que solo se muestra: ningún total lo lee); tocarla abre el gasto del grupo. La suma de las filas de «mercado» en el período es la de la categoría en En qué se va.
+6. **El esqueleto reserva el alto real.** Mientras carga el Inicio, la tarjeta del héroe reserva con
+   `EsqueletoDeFila` los renglones de «¿Me alcanza?» y «Por confirmar» que llevaba la última vez
+   (`FormaRecordada.heroe`, `FormaDelHeroe`; la primera vez, los dos). En frío sin instantánea ya no baja ~110 px.
+7. **Pulido.**
+   - **El widget «Falta por pagar» y «Próximo pago» ordenan con la misma cola** (`pagosEnElOrdenDeLaCola`: los
+     pagos de `colaDePendientes` en su orden y después lo pendiente que la cola no trae). «Próximo pago» es el
+     primero; el widget sigue sin repetirlo (vuelta 68, `sinElProximoPago`) y empieza por el segundo.
+   - **«Lo que Movi sabe de ti»: una sola acción para agregar.** Con la memoria vacía va «Escribir un recuerdo» del
+     vacío y el encabezado no lleva «Agregar»; con recuerdos, «Agregar» arriba.
+
+Lo vigilan `CompresionTest` (server), `LecturasSinRepetirTest` y `ElInicioNoRepitePeticionesTest` (el contador de
+peticiones sobre un `MockEngine`), `RenglonMeAlcanzaTest` y `ElHeroeConUnSoloHorizonteTest`,
+`ElFlujoLibrePideElSalarioTest` y `PagosHastaQueTePaguenTest` (una sola invitación), `BuscarCuentaComoEnQueSeVaTest`
+y `BuscarMuestraTuParteDelGrupoTest`, `ElHeroeReservaSuAltoTest` (≤ 8 dp), `ElWidgetEmpiezaComoElAvisoTest` (el widget empieza por el segundo de la cola) y
+`LaMemoriaSeEscribeAManoTest`. **Las líneas base** no cambian, y las guardas en 0 siguen en 0.

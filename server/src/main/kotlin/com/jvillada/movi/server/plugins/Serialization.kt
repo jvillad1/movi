@@ -24,10 +24,16 @@ val jsonDeLaApi: Json = Json {
     ignoreUnknownKeys = true
 }
 
+/**
+ * Vuelta 78: **el JSON sale compacto**, sin sangría. Con `prettyPrint` la historia de movimientos
+ * (`/api/events/by-day`) pesaba 61,9 KB, y 35,8 KB sin los espacios: el 42 % de cada respuesta eran
+ * blancos que ningún cliente lee. Para mirarlo a mano, `curl … | jq`. Va junto con la compresión
+ * (`configureCompression`).
+ */
 fun Application.configureSerialization() {
     install(ContentNegotiation) {
         json(Json {
-            prettyPrint = true
+            prettyPrint = false
             isLenient = true
             ignoreUnknownKeys = true
         })

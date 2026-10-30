@@ -12,6 +12,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import com.jvillada.movi.data.Repositories
@@ -83,7 +84,7 @@ class LaMemoriaSeEscribeAManoTest {
     @Test
     fun `Agregar escribe un recuerdo a mano con el endpoint de siempre`() {
         montar()
-        composeRule.onNodeWithTag(TAG_ACCION_DEL_ENCABEZADO, useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
+        tocarBoton(AGREGAR_UN_RECUERDO)
         composeRule.waitUntil(5_000) { hay(ROTULO_DEL_RECUERDO_NUEVO) }
 
         composeRule.onNode(hasTestTag(TAG_CAMPO) and hasAnyAncestor(hasTestTag(TAG_RECUERDO_NUEVO)), useUnmergedTree = true)
@@ -105,5 +106,29 @@ class LaMemoriaSeEscribeAManoTest {
         tocarBoton(CANCELAR)
         composeRule.waitUntil(5_000) { hay(NADA_TODAVIA) }
         assertTrue(guardados.isEmpty())
+    }
+
+    /**
+     * Vuelta 78 · **una sola acción para agregar un recuerdo**. Con la memoria vacía, el encabezado traía
+     * «Agregar» y el vacío «Escribir un recuerdo»: hacían lo mismo. Ahora va la del vacío; con un recuerdo
+     * guardado, vuelve la del encabezado (y el vacío ya no está).
+     */
+    @Test
+    fun `una sola accion para agregar, en el vacio o en el encabezado`() {
+        montar()
+        fun enElEncabezado() = composeRule.onAllNodesWithTag(TAG_ACCION_DEL_ENCABEZADO, useUnmergedTree = true).fetchSemanticsNodes().size
+        assertEquals(0, enElEncabezado(), "con el vacío, el encabezado no repite la acción")
+        assertTrue(hay(AGREGAR_UN_RECUERDO))
+
+        tocarBoton(AGREGAR_UN_RECUERDO)
+        composeRule.waitUntil(5_000) { hay(ROTULO_DEL_RECUERDO_NUEVO) }
+        composeRule.onNode(hasTestTag(TAG_CAMPO) and hasAnyAncestor(hasTestTag(TAG_RECUERDO_NUEVO)), useUnmergedTree = true)
+            .performTextInput("Caro es mi esposa")
+        composeRule.waitForIdle()
+        tocarBoton(GUARDAR)
+        composeRule.waitUntil(5_000) { hay("Lo escribiste tú") }
+
+        assertEquals(1, enElEncabezado(), "con recuerdos, la acción va arriba")
+        assertTrue(!hay(AGREGAR_UN_RECUERDO), "y es la única")
     }
 }

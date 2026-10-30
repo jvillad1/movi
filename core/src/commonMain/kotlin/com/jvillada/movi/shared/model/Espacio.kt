@@ -390,6 +390,7 @@ fun tuParteComoEventos(gastos: List<GastoDelEspacio>): List<FinancialEvent> =
                 countsAsCashFlow = true,
                 espacioId = g.espacioId,
                 pagadoPor = g.pagadoPor,
+                montoDelGrupo = g.monto,
             )
         }
 

@@ -304,6 +304,24 @@ class PagosHastaQueTePaguenTest {
         assertTrue(hay(SIN_TU_SALARIO))
     }
 
+    /**
+     * Vuelta 78 · **una sola invitación al salario**. Pagos la tenía dos veces, con tres botones: «Sin tu
+     * salario… Agregar» en la caja y «Agrega tu salario… Agregar mi salario» en «Lo que se repite».
+     */
+    @Test
+    fun `sin salario la invitacion vive solo en la caja`() {
+        // Con un pago fijo (sin ninguno, «Lo que se repite» es su vacío y no habla del salario).
+        upcoming = listOf(vence(regla("rr_arriendo", "Arriendo", 1_800_000L, dia = hoy.dayOfMonth), hoy))
+        conLaInstantanea()
+        montarPagos()
+        composeRule.waitUntil(timeoutMillis = 5_000) { contarTag(TAG_LINEA_SIN_SALARIO) == 1 }
+        composeRule.onAllNodes(androidx.compose.ui.test.hasScrollToNodeAction()).onFirst()
+            .performScrollToNode(androidx.compose.ui.test.hasTestTag(TAG_SOLO_LOS_GASTOS_RECURRENTES))
+        composeRule.waitUntil(timeoutMillis = 5_000) { contarTag(TAG_SOLO_LOS_GASTOS_RECURRENTES) == 1 }
+        assertEquals(1, contarTag(TAG_LINEA_SIN_SALARIO), "la de la caja")
+        assertTrue(!hay("Agrega tu salario", substring = true) && !hay("Agregar mi salario"), "y ninguna más")
+    }
+
     @Test
     fun `sin los pagos la caja no se pinta y lo dice el aviso unico`() {
         conLaInstantanea()

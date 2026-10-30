@@ -14,6 +14,7 @@ import com.jvillada.movi.server.correo.tokenDeCorreoDe
 import com.jvillada.movi.server.db.PushSubscriptions
 import com.jvillada.movi.server.db.SmsMessages
 import com.jvillada.movi.server.db.Users
+import com.jvillada.movi.server.plugins.configureCompression
 import com.jvillada.movi.server.plugins.configureRouting
 import com.jvillada.movi.server.plugins.configureSerialization
 import io.ktor.client.HttpClient
@@ -108,6 +109,9 @@ class CorreoEntranteResendRoutesTest {
 
     private fun Application.testModule() {
         configureSerialization()
+        // Vuelta 78: con la compresión de `Application.module`, que solo toca respuestas: la firma Svix
+        // se sigue calculando sobre el cuerpo crudo que llegó.
+        configureCompression()
         val verifier = JWT.require(Algorithm.HMAC256(testSecret)).withIssuer("movi").withAudience("movi-client").build()
         authentication {
             jwt("jwt") {

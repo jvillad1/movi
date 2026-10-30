@@ -62,6 +62,8 @@ fun TirarParaActualizar(
             enabled = disponible,
             onRefresh = {
                 porElDedo = true
+                // Vuelta 78: lo de ahora, no lo de hace 20 s (ver `LoFresco`).
+                com.jvillada.movi.data.olvidarLoFresco()
                 onActualizar()
             },
         ),

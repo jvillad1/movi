@@ -230,7 +230,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
         val msg = error ?: return@LaunchedEffect
         val result = snackbarHostState.showSnackbar(msg, actionLabel = "Reintentar")
         error = null
-        if (result == SnackbarResult.ActionPerformed) refreshKey++
+        if (result == SnackbarResult.ActionPerformed) { com.jvillada.movi.data.olvidarLoFresco(); refreshKey++ }
     }
 
     // **Filas, no `movementCount`** — y desde la Ola 16 conviene decir por qué, porque el resto de

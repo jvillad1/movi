@@ -81,6 +81,9 @@ class SmsSyncWorker(context: Context, params: WorkerParameters) : CoroutineWorke
                 // sale no puede convertir un upload exitoso en reintento.
                 runCatching { Avisador.avisarMovimientos(applicationContext, result.porRevisar) }
                     .onFailure { Log.w(TAG, "no se pudo avisar el movimiento", it) }
+                // Vuelta 78: entró un aviso por fuera de la app (mismo proceso que la pantalla): lo
+                // leído hace menos de 30 s ya no es fresco, y el Inicio vuelve a preguntar.
+                com.jvillada.movi.data.olvidarLoFresco()
                 Result.success()
             }
             SmsSyncResult.Unauthorized -> {

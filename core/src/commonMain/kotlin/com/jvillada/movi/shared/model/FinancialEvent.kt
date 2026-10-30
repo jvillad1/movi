@@ -266,6 +266,12 @@ data class FinancialEvent(
      */
     val pagadoPor: String? = null,
     /**
+     * **Vuelta 78 · cuánto fue el gasto entero del grupo**, solo en tu parte de un gasto que pagó otro
+     * ([tuParteComoEventos]): Buscar dice «de $240.000 · pagó Caro» debajo de tu parte. Derivado y solo para
+     * mostrar: **ningún total lo lee** (lo que cuenta es [amount], tu parte). `null` en todo lo demás.
+     */
+    val montoDelGrupo: Long? = null,
+    /**
      * **Vuelta 67 · de qué compra es parte** este movimiento: el id del movimiento original cuando se
      * dividió en categorías («Repartir en partes» de un movimiento ya anotado, `POST
      * /api/events/{id}/repartir`). Todas las patas de todas las partes llevan el mismo. Con él, el

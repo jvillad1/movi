@@ -456,8 +456,11 @@ private fun SeccionCuantoPuedesGastar(
         !disponible.cargando && disponible.fallo -> NoSePudoLeerElDisponible(onReintentar)
         alcanza -> {
             val cifras = disponibleDelInicio(data)
+            // Vuelta 78 (revisión): el mismo renglón «¿Me alcanza?» del Inicio, para callar «Para N días» con
+            // la misma regla (`detalleDelHeroe`).
+            val renglon = com.jvillada.movi.ui.dashboard.rememberRenglonMeAlcanza(data, com.jvillada.movi.shared.time.epochMillisToAppDate(Clock.System.now().toEpochMilliseconds()))
             if (cifras != null) {
-                TarjetaDelDisponible(titulo = TITULO_CUANTO_PUEDES_GASTAR, disponible = cifras, onVerEnQueSeVa = onVerEnQueSeVa)
+                TarjetaDelDisponible(titulo = TITULO_CUANTO_PUEDES_GASTAR, disponible = cifras, onVerEnQueSeVa = onVerEnQueSeVa, renglon = renglon)
             } else {
                 Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla)) {
                     Seccion(titulo = TITULO_CUANTO_PUEDES_GASTAR)
