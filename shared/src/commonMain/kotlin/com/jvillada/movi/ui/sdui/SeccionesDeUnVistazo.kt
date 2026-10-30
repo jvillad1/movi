@@ -233,24 +233,30 @@ internal fun HeroDeUnVistazo(
         // Vuelta 78: mientras la carga está en vuelo, los renglones que la tarjeta llevaba la última vez
         // (o los dos, la primera vez) se reservan con su esqueleto: en un arranque en frío sin instantánea,
         // el héroe medía ~115 px y al llegar los datos ~235: todo el Inicio bajaba ~110 px a los 1,3 s.
-        // Solo con el héroe en esqueleto (nada que pintar todavía): con la instantánea a la vista, sus
-        // renglones salen de ella, como siempre.
+        // Solo con el héroe en esqueleto —lo que se VE, que se queda quieto mientras la carga está en vuelo
+        // ([rememberEstadoQueCambia]); no lo que va llegando—: con la instantánea a la vista, sus renglones
+        // salen de ella, como siempre.
         val cargando = LocalCargandoElInicio.current
-        val enEsqueleto = cargando && !data.puedeAfirmarVacio
+        // Si esta carga empezó con el héroe vacío (un arranque en frío sin instantánea), la reserva dura toda
+        // la carga: las cuentas llegan antes que el supuesto del gasto, y el cuerpo ya no es esqueleto.
+        val empezoVacio = remember(cargando) { cargando && visto.mostrado.teQuedan == null && visto.mostrado.tuPlata == null }
+        val enEsqueleto = cargando && empezoVacio
         val hayPorConfirmar = conteoPorRevisarDelInicio(data).total > 0
         val forma = remember { FormaRecordada.delAparato.heroe(SessionManager.userId) ?: FormaDelHeroe() }
         // Vuelta 75: «¿Me alcanza?», la caja de Pagos en un renglón, siempre a la vista; del MISMO estado.
-        val renglon = visto.mostrado.renglon
+        val renglonVisto = visto.mostrado.renglon
         when {
-            renglon != null -> FilaMeAlcanza(renglon, onNavigate, modifier = Modifier.graphicsLayer { alpha = visto.opacidad })
-            enEsqueleto && forma.meAlcanza -> RenglonEsqueletoDelHeroe(TAG_ESQUELETO_ME_ALCANZA, enLaFranja = false)
+            renglonVisto != null -> FilaMeAlcanza(renglonVisto, onNavigate, modifier = Modifier.graphicsLayer { alpha = visto.opacidad })
+            // El renglón ya se sabe pero el héroe todavía muestra lo de antes (la primera mitad del cambio):
+            // su lugar se reserva igual, o el héroe crecería al llegar.
+            renglon != null || (enEsqueleto && forma.meAlcanza) -> RenglonEsqueletoDelHeroe(TAG_ESQUELETO_ME_ALCANZA, enLaFranja = false)
         }
         when {
             hayPorConfirmar -> FranjaPorConfirmar(data, onNavigate)
             enEsqueleto && forma.porConfirmar -> RenglonEsqueletoDelHeroe(TAG_ESQUELETO_POR_CONFIRMAR, enLaFranja = true)
         }
         // Y cuando la carga terminó bien, se anota cómo quedó para el próximo arranque en frío.
-        val tieneMeAlcanza = renglon != null
+        val tieneMeAlcanza = renglonVisto != null
         LaunchedEffect(cargando, tieneMeAlcanza, hayPorConfirmar, data.puedeAfirmarVacio) {
             if (!cargando && data.puedeAfirmarVacio) {
                 FormaRecordada.delAparato.guardarHeroe(SessionManager.userId, FormaDelHeroe(meAlcanza = tieneMeAlcanza, porConfirmar = hayPorConfirmar))
