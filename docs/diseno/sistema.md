@@ -3910,3 +3910,38 @@ caja), `PagosHastaQueTePaguenTest` (una cifra, la frase sin cifras, la línea si
 empezar») y `ElHeroeNoMezclaTest` (cuadro por cuadro, nunca lo viejo con lo nuevo). Se actualizaron las
 pruebas del nombre del período en Inicio, Actividad, Tus períodos y `LasCifrasDelSistemaSeOcultanTest`.
 **Las líneas base** no cambian, y las guardas en 0 siguen en 0.
+
+### La revisión de la vuelta 75, y lo que cambió
+
+1. **El salario se crea una vez** (`asegurarElSalario`): llegar a «Listo» y «Ir a Inicio» comparten UNA
+   creación (un `Job`); «Ir a Inicio» la espera y está apagado (con su indicador) mientras corre. Antes,
+   tocarlo a los 30 ms creaba dos reglas «Salario» (el POST no es un upsert: el id lo pone el server).
+2. **«¿Ya te pagaron este período?»** (sí por defecto, debajo del monto). Con sí, la regla nace con
+   `activeFrom` en el arranque del período siguiente (`arranqueDelPeriodoSiguiente`), con
+   `arranqueEsDesembolso = false`, el de siempre de una regla escrita a mano: el server toma como piso el
+   primer día del período de esa fecha (`arranqueDeLaRegla`), así que la ocurrencia de este período **no
+   existe** —ni «Debió llegar hace 7 días» en `/upcoming`, ni por cobrar en la lista del período, que es
+   de donde salen «Te quedan», «Listo» y la caja— y la del siguiente sí. No inventa historia: los períodos
+   anteriores al arranque no existen, que es lo único que `activeFrom` garantizó siempre. Con no, sin
+   arranque (cuenta desde este período). Antes «Listo» decía «Te quedan $7.300.000» con $2M en las cuentas.
+3. **El héroe se congela mientras carga** (`rememberEstadoQueCambia(congelado = LocalCargandoElInicio)`): el
+   estado intermedio de una carga junta las cuentas nuevas con el resumen viejo, y el héroe ya no lo
+   muestra; al terminar cambia entero. El renglón «¿Me alcanza?» va dentro del MISMO estado
+   (`EstadoDelHeroe.renglon`, `esUnCambioDelHeroe`) y cambia con la cifra, no antes; si solo aparece el
+   renglón, entra sin hacer parpadear la cifra.
+4. **Sin una cuenta de dinero, el salario no se crea** («Ahora no» antes de agregar cuentas): la nota lo
+   dice («Sin una cuenta no se guarda»).
+5. **El menos pegado a la cifra** en el renglón y en las frases de la caja: «quedarías en −$1,2M» va con un
+   espacio que no se parte antes del menos y `UNION_QUE_NO_SE_PARTE` entre el menos y el «$».
+6. **«Lo que pagas cada mes» cuenta solo gastos** (en la guía y en «Primeros pasos» del Inicio): el salario
+   no lo tilda.
+7. **‹ antes del primer período**: el server contesta 404 para un período anterior al primer movimiento;
+   Pagos ya no lo dice como error: «Movi todavía no llevaba tus cuentas en este período» y ‹ se apaga ahí.
+8. **Lo barato**: «Hasta el 29 nov · ese día no te alcanza»; sin salario el renglón dice «Te alcanza hasta
+   el fin del período» (o «los próximos 30 días»), no una fecha en la que no entra nada; «Agregar» de la caja
+   trae el nombre «Salario»; el detalle del período ya no repite el rango largo debajo del título.
+
+Lo vigilan `CajaProyectadaRoutesTest` (server: el salario con arranque en el siguiente no está vencido, no
+está en la lista del período, y cierra la caja en el siguiente), `PrimerUsoEnPantallaTest` (el doble toque, el
+arranque con y sin «ya te pagaron», sin cuenta no se crea), `ElHeroeNoMezclaTest` (las cuentas antes que el
+resumen) y `RenglonMeAlcanzaTest`/`CajaDelPeriodoTest`.
