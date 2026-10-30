@@ -1,6 +1,7 @@
 package com.jvillada.movi.ui.plan
 
 import com.jvillada.movi.ui.components.ds.AccionDeEncabezado
+import com.jvillada.movi.ui.components.ds.desplazadoDe
 import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -189,6 +190,12 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS, enL
     // Re-tocar «Plan» estando acá vuelve arriba, las dos columnas (ver [SubirAlRetocarLaPestana]).
     SubirAlRetocarLaPestana(listState, scrollDelDisponible)
 
+    // Vuelta 79: el ↻ del rail y la vuelta del foco a la ventana (la web) vuelven a preguntar.
+    com.jvillada.movi.ui.components.AlPedirseUnaRecarga { pagos.estado.recargar() }
+    // Vuelta 79: el título se separa del contenido con el hilo cuando la lista se desplazó.
+    val listaDesplazada = desplazadoDe(listState)
+    val disponibleDesplazado = desplazadoDe(scrollDelDisponible)
+
     // Las piezas de Plan, una sola vez: en una columna van todas en la misma lista; en dos, las tres
     // primeras a la izquierda y el selector con su segmento a la derecha.
     val lineaDelPeriodo: @Composable () -> Unit = {
@@ -309,6 +316,9 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS, enL
             // así que ponerlo o sacarlo no mueve nada.
             MinScreenHeader(
                 title = TITULO_DE_PAGOS,
+                // Vuelta 79: con la lista desplazada, el título se separa con el hilo (en dos columnas,
+                // cualquiera de las dos).
+                desplazado = listaDesplazada || (dosColumnas && disponibleDesplazado),
                 // Vuelta 38: el avatar va solo en Inicio, como en la maqueta.
                 leading = HeaderLeading.Ninguno,
                 action = {

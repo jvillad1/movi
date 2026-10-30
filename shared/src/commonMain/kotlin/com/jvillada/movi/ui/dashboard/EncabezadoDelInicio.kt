@@ -1,5 +1,10 @@
 package com.jvillada.movi.ui.dashboard
 
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.graphics.Color
+import com.jvillada.movi.theme.ColoresDeMovi
+import com.jvillada.movi.ui.components.ds.alPresionar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -83,6 +88,12 @@ fun EncabezadoDelInicio(
     descripcionDelSubtitulo: String? = null,
     /** Vuelta 68: con «Sin conexión · cifras de las 9:06», tocar la línea reintenta. */
     onSubtitulo: (() -> Unit)? = null,
+    /**
+     * Vuelta 79: el Inicio se desplazó y el encabezado ya no va sobre el amarillo sino sobre el crema
+     * (el fondo lo pone quien lo monta, con `separadoAlDesplazar`): los botones redondos pasan del
+     * amarillo suave a la tarjeta con su borde.
+     */
+    desplazado: Boolean = false,
 ) {
     Row(
         modifier = modifier
@@ -100,9 +111,10 @@ fun EncabezadoDelInicio(
                 // el amarillo, sin anillo. Ahora el anillo de tinta (entra en los 56 del encabezado: el
                 // círculo mide 44 y el anillo sale 4) y el resaltado redondo, recortado al círculo.
                 .anilloDeFoco(CircleShape)
+                .alPresionar(onClick = onAvatar, rol = Role.Button, onClickLabel = "Abrir Tú", forma = CircleShape)
                 .clip(CircleShape)
                 .background(Movi.colores.tarjeta, CircleShape)
-                .clickable(role = Role.Button, onClickLabel = "Abrir Tú", onClick = onAvatar)
+                .then(if (desplazado) Modifier.border(Medida.trazo, Movi.colores.borde, CircleShape) else Modifier)
                 .semantics { contentDescription = "Tú" }
                 .testTag(TAG_AVATAR_DEL_INICIO),
             contentAlignment = Alignment.Center,
@@ -138,16 +150,16 @@ fun EncabezadoDelInicio(
                 )
             }
         }
-        OjoDeLaBanda()
+        OjoDeLaBanda(desplazado)
         Box {
-            BotonDeLaBanda(Icons.Rounded.Notifications, ROTULO_DE_LA_CAMPANA, onCampana)
+            BotonDeLaBanda(Icons.Rounded.Notifications, ROTULO_DE_LA_CAMPANA, onCampana, desplazado = desplazado)
             if (conPunto) {
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(top = Espacio.xs, end = Espacio.xs)
                         .size(Espacio.s)
-                        .border(Medida.trazoDeInsignia, Movi.colores.marcaSuave, CircleShape)
+                        .border(Medida.trazoDeInsignia, fondoDelBotonDeLaBanda(desplazado, Movi.colores), CircleShape)
                         .background(Movi.colores.sobreMarca, CircleShape)
                         .testTag(TAG_PUNTO_DE_LA_CAMPANA),
                 )
@@ -156,6 +168,19 @@ fun EncabezadoDelInicio(
     }
 }
 
+/**
+ * **El fondo de un botón redondo del encabezado** (vuelta 79): el amarillo suave sobre la banda; con el
+ * Inicio desplazado (el encabezado en crema), la tarjeta. Pura.
+ */
+fun fondoDelBotonDeLaBanda(desplazado: Boolean, colores: ColoresDeMovi): Color =
+    if (desplazado) colores.tarjeta else colores.marcaSuave
+
+/**
+ * **¿El Inicio se desplazó?** Lo escribe el Inicio y lo lee la cáscara, que pinta detrás de la barra del
+ * sistema el amarillo de la banda o, desplazado, el crema (vuelta 79). `null` fuera de la cáscara.
+ */
+val LocalBandaDelInicioDesplazada = staticCompositionLocalOf<MutableState<Boolean>?> { null }
+
 /** Un botón redondo del encabezado del Inicio: el ícono en tinta sobre un círculo `marcaSuave` de 44. */
 @Composable
 private fun BotonDeLaBanda(
@@ -163,14 +188,17 @@ private fun BotonDeLaBanda(
     descripcion: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    desplazado: Boolean = false,
 ) {
     Box(
         modifier = modifier
             .size(Medida.circuloDeLaBanda)
             .anilloDeFoco(CircleShape)
+            // Vuelta 79: sin ripple, se hunde al presionar.
+            .alPresionar(onClick = onClick, rol = Role.Button, onClickLabel = descripcion, forma = CircleShape)
             .clip(CircleShape)
-            .background(Movi.colores.marcaSuave, CircleShape)
-            .clickable(role = Role.Button, onClickLabel = descripcion, onClick = onClick),
+            .background(fondoDelBotonDeLaBanda(desplazado, Movi.colores), CircleShape)
+            .then(if (desplazado) Modifier.border(Medida.trazo, Movi.colores.borde, CircleShape) else Modifier),
         contentAlignment = Alignment.Center,
     ) {
         Icon(icono, contentDescription = descripcion, tint = Movi.colores.sobreMarca, modifier = Modifier.size(Icono.l))
@@ -182,7 +210,7 @@ private fun BotonDeLaBanda(
  * vibración de alternar, el mismo rótulo y el mismo tag), con la forma de los botones del encabezado.
  */
 @Composable
-private fun OjoDeLaBanda() {
+private fun OjoDeLaBanda(desplazado: Boolean) {
     val ocultos = LocalSaldosOcultos.current
     val vibrador = rememberVibrador()
     BotonDeLaBanda(
@@ -193,5 +221,6 @@ private fun OjoDeLaBanda() {
             vibrador.alternar(prendido = SaldosOcultosStore.ocultos)
         },
         modifier = Modifier.testTag(TAG_OJO_DE_LOS_SALDOS),
+        desplazado = desplazado,
     )
 }

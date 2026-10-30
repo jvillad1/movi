@@ -1,5 +1,6 @@
 package com.jvillada.movi
 
+import com.jvillada.movi.ui.components.ds.separadoAlDesplazar
 import com.jvillada.movi.ui.ai.LoQueMoviSabeScreen
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
@@ -353,6 +354,16 @@ fun App() {
             // Vuelta 78: al volver del segundo plano, lo leído hace menos de 30 s ya no se da por fresco —
             // mientras tanto pudo entrar un aviso del banco o algo desde otro aparato (ver `LoFresco`).
             AlVolverDelSegundoPlano { _, _ -> com.jvillada.movi.data.olvidarLoFresco() }
+            // Vuelta 79: en la web no hay segundo plano del teléfono; al volver el foco a la ventana (o
+            // la pestaña a la vista) se olvida lo fresco y la pantalla a la vista vuelve a preguntar.
+            var ultimaRecargaPorFoco by remember { mutableStateOf<Long?>(null) }
+            com.jvillada.movi.platform.AlVolverElFocoALaVentana {
+                val ahora = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+                if (com.jvillada.movi.data.debeRecargarAlVolverElFoco(ultimaRecargaPorFoco, ahora)) {
+                    ultimaRecargaPorFoco = ahora
+                    com.jvillada.movi.data.actualizarAMano()
+                }
+            }
             if (huella != null) {
                 AlVolverDelSegundoPlano { fueraDesde, ahora ->
                     val enLaPuerta = backStack.lastOrNull()?.let { NavStack.esDeAutenticacion(it) } ?: true
@@ -687,10 +698,16 @@ internal fun EsqueletoDeLaCascara(
     val showRail = widthClass != WindowWidthClass.Compact && conNavegacion
     val showBottomNav = widthClass == WindowWidthClass.Compact && conNavegacion
     val tecladoALaVista = elTecladoEstaALaVista()
+    // Vuelta 79: el Inicio dice si se desplazó; detrás de la barra del sistema va el amarillo de su banda
+    // o, desplazado, el crema (`LocalBandaDelInicioDesplazada`).
+    val bandaDesplazada = remember { mutableStateOf(false) }
     // Las hojas centradas (mediano y expandido) se dibujan acá, encima de todo — ver
     // [AnfitrionDeHojas]. Así su velo tapa también el rail y los márgenes.
     val anfitrionDeHojas = remember { AnfitrionDeHojas() }
-    CompositionLocalProvider(LocalAnfitrionDeHojas provides anfitrionDeHojas) {
+    CompositionLocalProvider(
+        LocalAnfitrionDeHojas provides anfitrionDeHojas,
+        com.jvillada.movi.ui.dashboard.LocalBandaDelInicioDesplazada provides bandaDesplazada,
+    ) {
     Box(modifier = Modifier.fillMaxSize()) {
     Row(modifier = Modifier.fillMaxSize()) {
         if (showRail) {
@@ -699,6 +716,8 @@ internal fun EsqueletoDeLaCascara(
                 onTabSelected = onTabSelected,
                 compacto = widthClass == WindowWidthClass.Medium,
                 onAtajo = onAtajo,
+                // Vuelta 79: el ↻ del rail ancho: olvida lo fresco y recarga la pantalla a la vista.
+                onActualizar = { com.jvillada.movi.data.actualizarAMano() },
             )
         }
         Box(
@@ -733,16 +752,19 @@ internal fun EsqueletoDeLaCascara(
                         .widthIn(max = anchoDeInicio)
                         .fillMaxWidth()
                         .windowInsetsTopHeight(WindowInsets.statusBars)
-                        .background(Movi.colores.marca),
+                        // Vuelta 79: con el Inicio desplazado, el crema (como su encabezado).
+                        .separadoAlDesplazar(bandaDesplazada.value, arriba = Movi.colores.marca, conHilo = false),
                 )
             }
             Column(modifier = Modifier.widthIn(max = anchoMaximoDeLaPantalla(pantalla, widthClass)).fillMaxSize().statusBarsPadding().then(sinBarraInferior).imePadding()) {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                     contenido()
-                    // Vuelta 67: «Anulado · Deshacer», abajo de la pantalla y encima de su contenido.
-                    com.jvillada.movi.ui.components.ds.LocalAvisoDeDeshacer.current?.let { aviso ->
-                        com.jvillada.movi.ui.components.ds.AnfitrionDelAvisoDeDeshacer(aviso, Modifier.align(Alignment.BottomCenter))
-                    }
+                }
+                // Vuelta 67: «Anulado · Deshacer», abajo de la pantalla. Vuelta 79: en el flujo, entre la
+                // pantalla y la barra —le quita su alto al hueco de la pantalla—, así no tapa lo de abajo
+                // (la propuesta de Inicio) ni la barra.
+                com.jvillada.movi.ui.components.ds.LocalAvisoDeDeshacer.current?.let { aviso ->
+                    com.jvillada.movi.ui.components.ds.AnfitrionDelAvisoDeDeshacer(aviso, Modifier.fillMaxWidth())
                 }
 
                 // Y con el teclado arriba la barra se esconde: no sirve para nada mientras se
