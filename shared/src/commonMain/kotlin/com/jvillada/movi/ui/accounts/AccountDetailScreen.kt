@@ -784,7 +784,8 @@ private fun EncabezadoDeLaCuenta(
             val saldo = saldoDeUnaDeuda(debt, pagada = deudaPagada)
             if (saldo.conSaldo) {
                 CifraProtagonista(
-                    text = "${if (isEstimate) "≈" else ""}${saldo.magnitud}",
+                    // Vuelta 71 (revisión): «~» y no «≈», que Figtree no tiene (salía un cuadro vacío).
+                    text = "${if (isEstimate) "~" else ""}${saldo.magnitud}",
                     color = Movi.colores.texto,
                 )
             } else {

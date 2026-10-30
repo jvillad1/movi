@@ -376,7 +376,7 @@ class ElExtractoYElAbonoEnPantallaTest {
         val pagado = tarjeta.copy(extracto = extracto.copy(facturado = 0L, pagadoDesdeElCorte = 1_392_700L))
         composeRule.montarElDetalleDe(nu, RepositorioDeLaDeuda(tarjetas = listOf(pagado)))
 
-        assertTrue(hay("Extracto del 20 oct · pagado ✓"))
+        assertTrue(hay("Extracto del 20 oct · pagado"))
         assertFalse(hay("Mínimo", substring = true))
         assertFalse(hay("pagar antes", substring = true))
         assertFalse(hay(PUEDE_INCLUIR_DIFERIDOS))
@@ -388,6 +388,6 @@ class ElExtractoYElAbonoEnPantallaTest {
         val hoy = kotlinx.datetime.LocalDate(2026, 10, 29)
         assertEquals("Extracto \$1.292.700 · pagar antes del 5 nov", tarjetaEnLaLista(tarjeta, hoy).subtitulo)
         val pagado = tarjeta.copy(extracto = extracto.copy(facturado = 0L))
-        assertEquals("Extracto del 20 oct · pagado ✓", tarjetaEnLaLista(pagado, hoy).subtitulo)
+        assertEquals("Extracto del 20 oct · pagado", tarjetaEnLaLista(pagado, hoy).subtitulo)
     }
 }
