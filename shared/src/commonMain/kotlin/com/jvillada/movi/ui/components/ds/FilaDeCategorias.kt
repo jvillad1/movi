@@ -1,6 +1,5 @@
 package com.jvillada.movi.ui.components.ds
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -132,8 +131,14 @@ private fun EncabezadoDeLaFilaDeCategorias(
             modifier = Modifier
                 .heightIn(min = Medida.objetivoTactil)
                 .anilloDeFoco(RoundedCornerShape(Radio.s))
+                .alPresionar(
+                    onClick = onTodas,
+                    rol = Role.Button,
+                    onClickLabel = "Ver todas las categorías",
+                    velo = true,
+                    forma = RoundedCornerShape(Radio.s),
+                )
                 .clip(RoundedCornerShape(Radio.s))
-                .clickable(role = Role.Button, onClickLabel = "Ver todas las categorías", onClick = onTodas)
                 .padding(horizontal = Espacio.xs)
                 .testTag(tags.todas),
             verticalAlignment = Alignment.CenterVertically,

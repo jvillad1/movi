@@ -18,7 +18,8 @@ class TodoLoEnfocableDibujaElAnilloTest {
 
     private val TOPE = 30
 
-    private val toque = Regex("""\.(?:clickable|toggleable|selectable|combinedClickable)\s*[({]""")
+    // Vuelta 79: el toque del sistema (`alPresionar`, `alAlternar`, `toqueSinRipple`) también lleva el anillo.
+    private val toque = Regex("""\.(?:clickable|toggleable|selectable|combinedClickable|alPresionar|alAlternar|toqueSinRipple)\s*[({]""")
 
     private val vecinos = listOf(
         "MinBottomNav.kt",
@@ -47,6 +48,7 @@ class TodoLoEnfocableDibujaElAnilloTest {
 
     private fun cadenaDe(lineas: List<String>, n: Int): List<String> {
         val antesDelToque = lineas[n].substringBefore(".clickable").substringBefore(".toggleable").substringBefore(".selectable")
+            .substringBefore(".alPresionar").substringBefore(".alAlternar").substringBefore(".toqueSinRipple")
         val cadena = mutableListOf(antesDelToque)
         // `Modifier.size(…).toggleable(…)`: el toque está en la cabeza misma; la cadena es ese renglón.
         if (!lineas[n].trim().startsWith(".")) return cadena
@@ -66,7 +68,8 @@ class TodoLoEnfocableDibujaElAnilloTest {
     @Test
     fun `cada toque de ds y de las pestanas lleva el anillo de foco`() {
         val raiz = LecturaDelCodigo.raiz()
-        val archivos = LecturaDelCodigo.archivos(LecturaDelCodigo.DS) +
+        // `AlPresionar.kt` es el toque mismo (vuelta 79): el anillo va donde se usa, no donde se define.
+        val archivos = LecturaDelCodigo.archivos(LecturaDelCodigo.DS).filterKeys { !it.endsWith("/AlPresionar.kt") } +
             vecinos.associateWith { LecturaDelCodigo.sinComentarios(raiz.resolve(it).readText()) }
         assertTrue(archivos.size > vecinos.size, "No encontré ${LecturaDelCodigo.DS}")
         val fallas = sinAnillo(archivos)

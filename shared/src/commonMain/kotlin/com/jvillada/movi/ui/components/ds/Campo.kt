@@ -2,7 +2,6 @@ package com.jvillada.movi.ui.components.ds
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -250,7 +249,7 @@ fun Campo(
                     modifier = Modifier
                         .size(Icono.m)
                         .anilloDeFoco(CircleShape)
-                        .clickable(role = Role.Button) { mostrarSecreto = !mostrarSecreto },
+                        .alPresionar(onClick = { mostrarSecreto = !mostrarSecreto }, rol = Role.Button),
                 )
             }
         }
@@ -622,7 +621,7 @@ fun AyudaDeCampo(
                         modifier = Modifier
                             .testTag(TAG_QUE_ES_ESTO)
                             .anilloDeFoco(RoundedCornerShape(Radio.s))
-                            .clickable(role = Role.Button) { ayudaAbierta = !ayudaAbierta },
+                            .alPresionar(onClick = { ayudaAbierta = !ayudaAbierta }, rol = Role.Button),
                     )
                 }
             }

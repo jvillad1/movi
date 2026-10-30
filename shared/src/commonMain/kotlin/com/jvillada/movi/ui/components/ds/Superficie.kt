@@ -1,7 +1,8 @@
 package com.jvillada.movi.ui.components.ds
 
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.runtime.remember
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -167,8 +168,12 @@ private fun SuperficieConRellenoLibre(
 ) {
     val forma = RoundedCornerShape(if (destacada) Radio.xl else Radio.l)
     val sombra = Movi.colores.sombra
+    val toque = remember { MutableInteractionSource() }
     Column(
         modifier = modifier
+            // Vuelta 79: una superficie que se toca se hunde entera —con su sombra— y lleva el velo de su
+            // forma en hover; el toque, sin ripple, va después del anillo de foco.
+            .then(if (onClick != null) Modifier.hundimientoAlPresionar(toque, velo = true, forma = forma) else Modifier)
             .then(
                 if (destacada) {
                     Modifier
@@ -179,9 +184,9 @@ private fun SuperficieConRellenoLibre(
                 },
             )
             .anilloDeFoco(forma)
+            .then(if (onClick != null) Modifier.toqueSinRipple(toque, onClick = onClick, onClickLabel = onClickLabel) else Modifier)
             .clip(forma)
             .background(colorDeLaSuperficie(nivel, Movi.colores))
-            .then(if (onClick != null) Modifier.clickable(onClickLabel = onClickLabel, onClick = onClick) else Modifier)
             .padding(relleno),
         content = contenido,
     )

@@ -1,7 +1,6 @@
 package com.jvillada.movi.ui.components.ds
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -32,6 +31,7 @@ import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Icono
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
+import com.jvillada.movi.theme.Movimiento
 import com.jvillada.movi.theme.Radio
 import androidx.compose.foundation.shape.RoundedCornerShape
 
@@ -166,7 +166,14 @@ fun Fila(
                     // Hacia adentro: la superficie de la lista recorta lo que sale de la fila.
                     Modifier
                         .anilloDeFoco(RoundedCornerShape(Radio.m), adentro = true)
-                        .clickable(onClickLabel = onClickLabel, onClick = onClick)
+                        // Vuelta 79: sin ripple; se hunde apenas y lleva el velo (hover, o presionada con
+                        // menos movimiento) a lo ancho de la fila, que la superficie recorta.
+                        .alPresionar(
+                            onClick = onClick,
+                            onClickLabel = onClickLabel,
+                            escala = Movimiento.ESCALA_DE_LA_FILA_AL_PRESIONAR,
+                            velo = true,
+                        )
                 } else {
                     Modifier
                 },

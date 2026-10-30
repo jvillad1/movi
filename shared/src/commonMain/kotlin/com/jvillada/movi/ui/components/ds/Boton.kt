@@ -2,7 +2,7 @@ package com.jvillada.movi.ui.components.ds
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -14,6 +14,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -29,8 +30,10 @@ import androidx.compose.ui.unit.Dp
 import com.jvillada.movi.theme.ColoresDeMovi
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Icono
+import com.jvillada.movi.theme.LocalMovimientoReducido
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
+import com.jvillada.movi.theme.Movimiento
 import com.jvillada.movi.theme.Radio
 
 /** Tag estable de un [Boton]. */
@@ -70,6 +73,16 @@ val VarianteDeBotonKey: SemanticsPropertyKey<VarianteDeBoton> = SemanticsPropert
 var SemanticsPropertyReceiver.varianteDeBoton: VarianteDeBoton by VarianteDeBotonKey
 
 /**
+ * **¿Lleva el amarillo lleno de la acción?** (vuelta 79): el `Boton` principal habilitado y la acción
+ * destacada de la cuadrícula lo dicen en su semántica. La regla nueva del sistema es **un solo amarillo
+ * por vista** (`UnSoloAmarilloPorVistaTest` lo cuenta en Inicio y en Pagos, sin leer píxeles).
+ */
+val LlevaElAmarilloKey: SemanticsPropertyKey<Boolean> = SemanticsPropertyKey("LlevaElAmarillo")
+
+/** Ver [LlevaElAmarilloKey]. */
+var SemanticsPropertyReceiver.llevaElAmarillo: Boolean by LlevaElAmarilloKey
+
+/**
  * **El tamaño de un botón.** [M] (48 dp, el objetivo táctil) es el de siempre; [S] (36 dp) va solo
  * dentro de una tarjeta —una propuesta, una fila de acciones— y su área de toque igual llega a 48,
  * porque Compose la extiende sin ocupar lugar.
@@ -93,6 +106,17 @@ fun coloresDelBoton(variante: VarianteDeBoton, colores: ColoresDeMovi): Pair<Col
  */
 fun bordeDelBoton(variante: VarianteDeBoton, colores: ColoresDeMovi): Color? =
     if (variante == VarianteDeBoton.Secundario) colores.bordeDeBoton else null
+
+/**
+ * **El fondo de un botón presionado con menos movimiento** (vuelta 79): sin la escala, el toque se ve en
+ * el fondo. El principal pasa a `marcaPresionada` (un amarillo más hondo, no mostaza); los demás, a la
+ * capa 3. Pura.
+ */
+fun fondoDelBotonPresionado(variante: VarianteDeBoton, colores: ColoresDeMovi): Color = when (variante) {
+    VarianteDeBoton.Principal -> colores.marcaPresionada
+    VarianteDeBoton.Peligro -> colores.lavado(colores.sale)
+    else -> colores.capa3
+}
 
 /**
  * El fondo y el texto de una variante **apagada**: la capa 3 y el texto apagado, para que se siga
@@ -134,8 +158,14 @@ fun Boton(
     habilitado: Boolean = true,
     anchoCompleto: Boolean = false,
 ) {
+    val toque = remember { MutableInteractionSource() }
+    // Vuelta 79: con el sistema pidiendo menos movimiento no hay escala, y el toque se ve en el fondo
+    // (`fondoDelBotonPresionado`): nunca un velo de tinta sobre el amarillo.
+    val presionadoSinEscala = toque.estaPresionado() && LocalMovimientoReducido.current
     val (fondo, color) = if (habilitado) {
-        coloresDelBoton(variante, Movi.colores)
+        coloresDelBoton(variante, Movi.colores).let { (f, c) ->
+            (if (presionadoSinEscala) fondoDelBotonPresionado(variante, Movi.colores) else f) to c
+        }
     } else {
         coloresDelBotonApagado(variante, Movi.colores)
     }
@@ -146,12 +176,24 @@ fun Boton(
             .then(if (anchoCompleto) Modifier.fillMaxWidth() else Modifier)
             .height(tamano.alto)
             .anilloDeFoco(forma)
+            // Vuelta 79: se hunde al 0,97 sin ripple (ver [alPresionar]); el principal se queda en la marca.
+            .alPresionar(
+                onClick = onClick,
+                habilitado = habilitado && !cargando,
+                rol = Role.Button,
+                escala = Movimiento.ESCALA_DEL_BOTON_AL_PRESIONAR,
+                fuente = toque,
+                velo = variante != VarianteDeBoton.Principal,
+                forma = forma,
+            )
             .clip(forma)
             .background(fondo)
             .then(if (borde != null) Modifier.border(Medida.trazoDeBoton, borde, forma) else Modifier)
-            .clickable(enabled = habilitado && !cargando, role = Role.Button, onClick = onClick)
             .then(if (cargando) Modifier.semantics { stateDescription = ROTULO_CARGANDO } else Modifier)
-            .semantics { varianteDeBoton = variante }
+            .semantics {
+                varianteDeBoton = variante
+                if (variante == VarianteDeBoton.Principal && habilitado) llevaElAmarillo = true
+            }
             .testTag(TAG_BOTON)
             .padding(horizontal = if (tamano == TamanoDeBoton.M) Espacio.l else Espacio.s),
         horizontalArrangement = Arrangement.spacedBy(Espacio.xs, Alignment.CenterHorizontally),

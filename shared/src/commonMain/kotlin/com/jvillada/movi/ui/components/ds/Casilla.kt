@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
@@ -57,7 +56,7 @@ fun Casilla(
         modifier
             .size(Medida.objetivoTactil)
             .anilloDeFoco(RoundedCornerShape(Radio.s), alrededorDe = Icono.l)
-            .toggleable(value = marcada, enabled = habilitada, role = Role.Checkbox, onValueChange = onCambiar)
+            .alAlternar(valor = marcada, onCambiar = onCambiar, habilitado = habilitada, rol = Role.Checkbox)
     } else {
         modifier
     }

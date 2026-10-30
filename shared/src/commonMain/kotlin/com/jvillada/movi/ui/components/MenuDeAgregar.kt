@@ -2,6 +2,8 @@ package com.jvillada.movi.ui.components
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import com.jvillada.movi.ui.components.ds.hundimientoAlPresionar
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
@@ -67,9 +69,13 @@ fun BotonDeAgregarConAtajos(
 ) {
     var abierto by remember { mutableStateOf(false) }
     val conAtajos = alElegirAtajo != null
+    // Vuelta 79: sin ripple. El botón entero se hunde al presionar (ver `alPresionar`).
+    val toque = remember { MutableInteractionSource() }
     val gestos = Modifier
         .let { if (conAtajos) it.abreConClicDerecho { abierto = true } else it }
         .combinedClickable(
+            interactionSource = toque,
+            indication = null,
             onClickLabel = "Agregar",
             onLongClickLabel = if (conAtajos) ROTULO_ATAJOS_DE_AGREGAR else null,
             onLongClick = if (conAtajos) ({ abierto = true }) else null,
@@ -77,12 +83,12 @@ fun BotonDeAgregarConAtajos(
         )
     Box {
         if (conFlecha && conAtajos) {
-            Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+            Row(modifier = Modifier.hundimientoAlPresionar(toque).then(modifier), verticalAlignment = Alignment.CenterVertically) {
                 Box(modifier = Modifier.weight(1f).then(gestos), contentAlignment = Alignment.CenterStart) { contenido() }
                 FlechaDeAtajos(onClick = { abierto = true })
             }
         } else {
-            Box(modifier = modifier.then(gestos), contentAlignment = Alignment.Center) { contenido() }
+            Box(modifier = Modifier.hundimientoAlPresionar(toque).then(modifier).then(gestos), contentAlignment = Alignment.Center) { contenido() }
         }
         if (alElegirAtajo != null) {
             MenuDeAtajosDeAgregar(abierto = abierto, alCerrar = { abierto = false }, alElegir = alElegirAtajo)

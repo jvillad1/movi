@@ -187,6 +187,28 @@ data class ColoresDeMovi(
      * blanco encima. `ContrasteDeLosTokensTest` mide cada color de la paleta contra este.
      */
     val sobreAvatar: Color = Color(0xFFFFFFFF),
+    /**
+     * **La marca presionada** (vuelta 79): el tono del `Boton` principal mientras se presiona **con el
+     * sistema pidiendo menos movimiento** (sin la escala, el toque tiene que verse en algo). Un amarillo
+     * un paso más hondo, nunca un velo de tinta encima: la tinta sobre el amarillo lo volvía mostaza.
+     * `ContrasteDeLosTokensTest` mide la tinta encima.
+     */
+    val marcaPresionada: Color = Color(0xFFF5B800),
+    /**
+     * **El velo de un toque** (vuelta 79): lo que se pone encima de una superficie neutra mientras el
+     * mouse está encima (web) o mientras se presiona con menos movimiento. La tinta al 6 %, recortada a
+     * la forma del componente (`Modifier.alPresionar`). **Nunca va sobre el amarillo.**
+     */
+    val velo: Color = Color(0x0F1F1B16),
+    /**
+     * **La letra sobre la tinta** (vuelta 79): el aviso «Anotado» de abajo es un snackbar oscuro, con
+     * el fondo en [texto] y la letra en el crema del [fondo].
+     */
+    val sobreTinta: Color = Color(0xFFF4F1EC),
+    /** Las acciones de texto sobre la tinta («Deshacer», «Repartir»): el [enlace], aclarado. */
+    val enlaceSobreTinta: Color = Color(0xFFA9C7F5),
+    /** Una falla dicha sobre la tinta (el aviso que no pudo deshacer): el [sale], aclarado. */
+    val saleSobreTinta: Color = Color(0xFFFFB4AB),
 ) {
     /**
      * El color de una categoría **por su clave** (`"naranja"`, `"ambar"`…): el del ícono, y el de
