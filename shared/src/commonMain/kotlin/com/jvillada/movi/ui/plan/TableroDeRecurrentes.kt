@@ -235,7 +235,8 @@ class EstadoDelTableroDeRecurrentes internal constructor(
      * primero pregunta ([pausaPorDecidir]); si no, pausa desde hoy.
      */
     internal fun pedirPausa(pago: PagoDelPeriodo) {
-        if (vencidoSinPagarDe(pago.ruleId) != null) pausaPorDecidir = pago else pausar(pago.ruleId, desde = null)
+        val hayVencido = (!pago.hecho && pago.vencido) || vencidoSinPagarDe(pago.ruleId) != null
+        if (hayVencido) pausaPorDecidir = pago else pausar(pago.ruleId, desde = null)
     }
 
     /** Pausa [ruleId] desde [desde] (hoy si es `null`), y después [luego]. */
@@ -1327,7 +1328,8 @@ fun HojasDelTableroDeRecurrentes(estado: EstadoDelTableroDeRecurrentes, onNaviga
 
     // Vuelta 72 (revisión): «Pausar» desde el «⋯» de una fila con algo vencido sin pagar.
     estado.pausaPorDecidir?.let { pago ->
-        val vencido = estado.vencidoSinPagarDe(pago.ruleId) ?: pago
+        // Re-revisión: la fila tocada, si es la vencida; si no, la primera vencida de esa regla.
+        val vencido = pago.takeIf { !it.hecho && it.vencido } ?: estado.vencidoSinPagarDe(pago.ruleId) ?: pago
         MarcoDeHoja(onDismiss = { estado.pausaPorDecidir = null }, dismissEnabled = pago.ruleId !in estado.marcando) {
             com.jvillada.movi.ui.components.ds.EncabezadoDeHoja(com.jvillada.movi.ui.recurrentes.tituloDePausar(pago.nombre))
             Spacer(Modifier.height(Espacio.m))

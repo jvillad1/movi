@@ -336,7 +336,8 @@ fun SeccionChecklistDelPeriodo(
                     }
                 }
             },
-            accionesDelMenuPendiente = if (onPausar != null && !pago.hecho && !pago.esAbono && deudaDeLaRegla(pago.ruleId) == null) {
+            // Re-revisión: no en la fila vencida de una regla YA pausada (pisaría su fecha).
+            accionesDelMenuPendiente = if (onPausar != null && !pago.hecho && !pago.pausada && !pago.esAbono && deudaDeLaRegla(pago.ruleId) == null) {
                 listOf(ETIQUETA_PAUSAR to { onPausar(pago) })
             } else {
                 emptyList()

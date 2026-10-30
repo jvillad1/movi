@@ -222,6 +222,19 @@ class ReglaPausadaTest {
     }
 
     @Test
+    fun `pausar una regla ya pausada conserva la fecha mas temprana`() = testApplication {
+        application { testModule() }
+        regla("rr_carro", "Carro", 20, 9_000, pausadaDesde = "2026-10-20")
+        // «Dejarlo pendiente» desde el «⋯» mandaría hoy: no corre la pausa hacia adelante.
+        val otra = enviar("/api/recurring-rules/rr_carro/pausar", """{"desde":"2026-10-29"}""")
+        assertEquals(HttpStatusCode.OK, otra.status, otra.bodyAsText())
+        assertEquals("2026-10-20", pausadaDe("rr_carro"))
+        // Una fecha más temprana sí la adelanta.
+        enviar("/api/recurring-rules/rr_carro/pausar", """{"desde":"2026-10-05"}""")
+        assertEquals("2026-10-05", pausadaDe("rr_carro"))
+    }
+
+    @Test
     fun `editar desde un APK viejo no reanuda la regla`() = testApplication {
         application { testModule() }
         regla("rr_gym", "Gimnasio", 5, 180_000, pausadaDesde = "2026-10-29")

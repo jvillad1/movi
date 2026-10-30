@@ -236,6 +236,22 @@ class PagosQueSeManejanSolosTest {
     }
 
     @Test
+    fun `la fila vencida de una regla ya pausada no ofrece Pausar`() {
+        val vencidaPausada = arriendo.copy(diasParaVencer = -9, vence = "2026-10-20", pausada = true)
+        composeRule.setContent {
+            MoviTheme {
+                SeccionChecklistDelPeriodo(
+                    checklist = listOf(vencidaPausada), cargando = false, pudoLeer = true, marcando = emptySet(),
+                    onConfirmar = { _, _ -> }, onNoFueEste = { _, _ -> }, onAnotarMovimiento = {}, onQuitarLaMarca = {},
+                    onReintentar = {}, onPausar = {},
+                )
+            }
+        }
+        composeRule.waitForIdle()
+        assertTrue(composeRule.onAllNodesWithTag(TAG_MENU_DE_LA_FILA_PENDIENTE, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
     fun `con algo vencido sin pagar, Pausar pregunta y No se debe pausa desde ese vencimiento`() {
         val pedidos = mutableListOf<Pair<String, String?>>()
         Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {

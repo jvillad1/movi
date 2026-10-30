@@ -461,7 +461,15 @@ fun Route.reminderRoutes() {
         // pausar. El emparejamiento se deriva en cada lectura; sin el sello, pagar y pausar el mismo día
         // podía perder el pago (y «Gastaste» y los fijos saltaban por su monto).
         sellarLoEmparejadoAntesDePausar(uid, id, AppClock.today())
-        val regla = cambiarLaPausa(uid, id, desde) ?: return@post call.respond(HttpStatusCode.NotFound)
+        // Re-revisión: una regla ya pausada conserva la fecha MÁS TEMPRANA. Pausar otra vez nunca corre la
+        // pausa hacia adelante (eso devolvería lo que el dueño ya sacó con «No se debe»); sí la adelanta.
+        val yaPausada = dbQuery {
+            RecurringRules.selectAll()
+                .where { (RecurringRules.id eq id) and (RecurringRules.userId eq uid) }
+                .firstOrNull()?.get(RecurringRules.pausadaDesde)
+        }?.let { fechaIsoValida(it) }
+        val laQueQueda = if (yaPausada != null && yaPausada < desde) yaPausada else desde
+        val regla = cambiarLaPausa(uid, id, laQueQueda) ?: return@post call.respond(HttpStatusCode.NotFound)
         call.respond(regla)
     }
 
