@@ -3668,3 +3668,59 @@ llegan a `postEvent`; «Pagar» y «¿Qué pagas?»), `AgregarPorDentroTest` (el
 `DividirUnaCompraConTarjetaTest`, y en el server `LaCompraConTarjetaTest`. **Las líneas base** no cambian,
 y las guardas en 0 siguen en 0.
 
+
+## 70. Vuelta 72: pagos que se manejan solos
+
+De la revisión 4 del 29-oct (`r4-pagos-es-el-de.png`, `r4-regla-carro*.png`, `r4-anotar-pago-carro.png`),
+puntos 4, 5, 6, 13 y la parte de Pagos del 14. **Sin reglas de plata nuevas** más allá de dos: una regla
+pausada no cuenta, y una tarjeta pagada por debajo de su mínimo no está hecha. Ninguna cifra de una regla
+activa cambió. Un componente nuevo en `ds/`, `SelectorDeDiaDelMes`; `ui/profile/CalendarioDeDias` se fue.
+
+1. **La tarjeta pagada por debajo del mínimo no queda «Pagado ✓»** (`PagoDelPeriodo.faltaDelMinimo` y
+   `hecho`, `:core`). Si lo pagado a la tarjeta en el período (`OccurrenceState.pagadoEnElPeriodo`: la suma
+   de todos los pagos que la tildan; `montoDelPago` sigue siendo el último y «Llevas $X pagados» no cambia)
+   es menor que su `pagoMinimo`, la fila va con lo pendiente y, donde iría la pastilla de vencimiento,
+   dice **«Pagaste $100.000 · faltan $80.000 para el mínimo»** en `apoyoMedio` color `aviso` (un texto y no
+   una `Pildora`: a 360 dp la frase se parte). No cuenta en «queda 1 de 5» (`avanceDelChecklist` y
+   `pagosPendientes` miran `hecho`), `faltaPorPagar` y la caja suman lo que falta del mínimo, y la cola —la
+   campana, «Movi propone hoy», «Próximo pago»— lo dice con esa cifra (`cifraDelPago`). Sin mínimo, en otra
+   moneda o con el mínimo cubierto, como siempre.
+2. **El emparejamiento con sentido** (`candidatoFueraDeProporcion`, `:core`; `candidatosPuntuados`,
+   `:server`). Un candidato que pasa del **doble** del monto de la regla o queda por debajo de la **mitad**
+   no se propone (el doble y la mitad exactos sí; umbrales elegidos). Solo filtra la lista del «¿Es este?»:
+   lo que Movi empareja sola (el nombre que pega; categoría + cuenta + monto exacto; el destino con monto
+   exacto) no pasa por ahí, así que ninguna fila tildada se destilda ni se mueve el Disponible. Una tarjeta
+   (`montoEsSaldo`), una regla sin monto o un candidato en otra moneda no se comparan; el abono a una deuda
+   tiene su emparejador. **«Sí, fue este» va con borde** (`PropuestaDeMovimiento(confirmarEsPrincipal =
+   false)` por defecto; `accionPrincipalDeLaFila` con propuesta da `NINGUNA`): tildar es decisión del dueño.
+   «Sí, es la cuota» de la cuota que se parece sigue como estaba.
+3. **«+ Agregar» siempre y «Pausar».** «Tus facturas del período» lleva **«+ Agregar»** en su `Seccion`
+   (`AGREGAR_UN_PAGO`), que abre la misma hoja de alta que el vacío. La hoja de una regla trae **«Pausar»**
+   (`LaPausaDeLaRegla`: una frase y `Boton` `Secundario` `S`; pausada, «Pausado desde el 29 oct: …» y
+   «Reanudar»), sin confirmación —no borra nada—; «Eliminar» sigue preguntando. Al final de Pagos,
+   **«Pausados (N)»** plegada («Ver» / «Ocultar»), cada una con «Pausado desde el 29 oct · $180.000» y
+   «Reanudar»; tocarla abre su hoja. Con todo pausado no se pinta el vacío. Qué excluye la pausa está en
+   `CLAUDE.md` (una sola regla, `pausadaParaElVencimiento`).
+4. **«Anotar pago» de una regla sin cuenta** ya no pide la cuenta cada mes: Agregar en modo pago la propone
+   con la lógica de Gasto (`resolverCuentaDelMovimiento`: «La que usas para Mercado», «Más usada»…), editable.
+   Después, la fila pagada en Pagos propone **«¿Usar siempre Nu para Carro?»** con «Guardar en la regla»
+   (`Secundario`) y «Ahora no» (`Fantasma`, recordado en `PropuestasDescartadasStore` por regla y cuenta),
+   con la cuenta del movimiento que la pagó (`OccurrenceState.cuentaDelPago`). Nunca se guarda sola.
+5. **Una sola forma de elegir el día del mes**: `ds/SelectorDeDiaDelMes`, filas de siete círculos de
+   `Medida.avatar` (lo elegido en tinta, lo demás en la capa 2), la celda entera tocable (un séptimo del
+   ancho × `Medida.objetivoTactil`: a 360 dp siete círculos con su aire no cabían), cada día un radio con su
+   estado. Lo usan la hoja del pago fijo (eran cuadrados), «Inicio del período» y «¿Cuándo empezó…?».
+6. **«Editar recurrente» con el encabezado de hoja del sistema** (§45): `EncabezadoDeHoja` (título grande;
+   la X la pone el marco) y **«Eliminar» como `Boton` `Peligro` `S`** a su lado, como la hoja de un tercero
+   (era un `tituloMedio` con un texto rojo suelto).
+
+Lo vigilan, en `:core`, `Vuelta72LogicaTest` (el mínimo debajo, igual, encima y sin mínimo; la lista, la
+caja, la cola y «Falta por pagar» de acuerdo; los umbrales; la pausa en el checklist y lo pagado que queda);
+en `:server`, `ReglaPausadaTest` (pausar y reanudar por API con aislamiento, el PUT viejo que no reanuda, y
+la pausada fuera de upcoming, ocurrencias, checklist, caja, recordatorios, débitos, gasto variable, Tus
+períodos y Movi AI), `ElEmparejamientoConSentidoTest` (Carro $9.000 contra Terpel $260.000, los bordes, lo
+concluyente que no cambia), `LoPagadoALaTarjetaTest` y `SchemaDeArranqueTest` (`pausada_desde`); y en
+Robolectric `PagosQueSeManejanSolosTest` («+ Agregar», «Pausados (N)» y «Reanudar», la tarjeta bajo el
+mínimo, «Sí, fue este» con borde, la propuesta de la cuenta, el selector único y el encabezado),
+`AnotarPagoSaldaLaFacturaTest` y `LaCuentaQueProponeAgregarTest` (la cuenta propuesta). **Las líneas base**
+no cambian, y las guardas en 0 siguen en 0.
