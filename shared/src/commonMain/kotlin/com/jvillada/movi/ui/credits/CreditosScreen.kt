@@ -300,9 +300,12 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
 
             // Las piezas de la pantalla, una sola vez: la lista de una columna y la página de dos
             // columnas las ponen en lugares distintos, con el mismo contenido.
+            // Vuelta 81: en dos columnas el resumen va en la de la izquierda, que ya trae su margen.
             val resumenDeDeuda: @Composable (List<CreditSummary>, List<CardSummary>) -> Unit = { creditosALaVista, tarjetasALaVista ->
                 Superficie(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = Medida.margenDePantalla).testTag(TAG_TARJETA_DEL_RESUMEN_DE_DEUDA),
+                    modifier = Modifier.fillMaxWidth()
+                        .then(if (dosColumnas) Modifier else Modifier.padding(horizontal = Medida.margenDePantalla))
+                        .testTag(TAG_TARJETA_DEL_RESUMEN_DE_DEUDA),
                 ) {
                     Text("Deuda total", style = Movi.textos.apoyoMedio, color = Movi.colores.textoMedio)
                     Spacer(Modifier.height(Espacio.xs))
@@ -367,51 +370,35 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
             if (cargando) {
                 CreditosEsqueleto(forma = formaRecordada, dosColumnas = dosColumnas, modifier = Modifier.weight(1f))
             } else if (creditosListos != null && tarjetasListas != null && dosColumnas) {
-                // ── Dos columnas (Ola W3) ─────────────────────────────────────────────────
-                // Solo con deudas (ver [hayDeudasParaDosColumnas]): el resumen a lo ancho, y debajo
-                // Préstamos a la izquierda y Tarjetas a la derecha. Con uno solo de los dos grupos,
-                // sus tarjetas se reparten en las dos columnas bajo un solo título.
+                // ── Dos columnas (Ola W3; vuelta 81) ──────────────────────────────────────
+                // Solo con deudas (ver [hayDeudasParaDosColumnas]). Vuelta 81: **dos cosas, dos columnas**:
+                // a la izquierda lo que dice de todas las deudas —«Deuda total», lo que cuestan y «Cómo
+                // salir de tus deudas»—; a la derecha las deudas, Préstamos y debajo Tarjetas. A lo ancho, las
+                // cifras del resumen quedaban a ~1.000 px de su rótulo y «Cómo salir» con el chevrón al
+                // otro lado de la pantalla.
                 Column(
                     modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(scrollDeDosColumnas)
                         .padding(bottom = Medida.botonFlotante + Espacio.xl),
                 ) {
-                    resumenDeDeuda(creditosListos, tarjetasListas)
-                    FilaComoSalirDeTusDeudas(onClick = { onNavigate(Screen.SalidaDeDeudas) })
-                    Spacer(Modifier.height(Medida.entreSecciones))
-                    val ambos = creditosListos.isNotEmpty() && tarjetasListas.isNotEmpty()
-                    if (!ambos) {
-                        Box(modifier = Modifier.padding(horizontal = Espacio.m)) {
-                            if (creditosListos.isNotEmpty()) {
-                                Seccion(titulo = "Préstamos", conteo = creditosListos.size)
-                            } else {
-                                Seccion(titulo = "Tarjetas", conteo = tarjetasListas.size)
-                            }
-                        }
-                    }
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = Espacio.m),
                         horizontalArrangement = Arrangement.spacedBy(Medida.margenDePantalla),
                         verticalAlignment = Alignment.Top,
                     ) {
-                        val izquierda = Modifier.weight(1f).testTag(TAG_COLUMNA_IZQUIERDA_DE_CREDITOS)
-                        val derecha = Modifier.weight(1f).testTag(TAG_COLUMNA_DERECHA_DE_CREDITOS)
-                        if (ambos) {
-                            Column(modifier = izquierda) {
+                        Column(modifier = Modifier.weight(1f).testTag(TAG_COLUMNA_IZQUIERDA_DE_CREDITOS)) {
+                            resumenDeDeuda(creditosListos, tarjetasListas)
+                            FilaComoSalirDeTusDeudas(onClick = { onNavigate(Screen.SalidaDeDeudas) }, conMargen = false)
+                        }
+                        Column(modifier = Modifier.weight(1f).testTag(TAG_COLUMNA_DERECHA_DE_CREDITOS)) {
+                            if (creditosListos.isNotEmpty()) {
                                 Seccion(titulo = "Préstamos", conteo = creditosListos.size)
                                 GrupoDeDeudas(creditosListos, filaDePrestamo)
                             }
-                            Column(modifier = derecha) {
+                            if (tarjetasListas.isNotEmpty()) {
+                                if (creditosListos.isNotEmpty()) Spacer(Modifier.height(Medida.entreSecciones))
                                 Seccion(titulo = "Tarjetas", conteo = tarjetasListas.size)
                                 GrupoDeDeudas(tarjetasListas, filaDeTarjeta)
                             }
-                        } else if (creditosListos.isNotEmpty()) {
-                            val (pares, impares) = repartirEnDos(creditosListos)
-                            Column(modifier = izquierda) { GrupoDeDeudas(pares, filaDePrestamo) }
-                            Column(modifier = derecha) { if (impares.isNotEmpty()) GrupoDeDeudas(impares, filaDePrestamo) }
-                        } else {
-                            val (pares, impares) = repartirEnDos(tarjetasListas)
-                            Column(modifier = izquierda) { GrupoDeDeudas(pares, filaDeTarjeta) }
-                            Column(modifier = derecha) { if (impares.isNotEmpty()) GrupoDeDeudas(impares, filaDeTarjeta) }
                         }
                     }
                 }
@@ -879,12 +866,11 @@ private const val MAX_PRESTAMOS_ESQUELETO = 12
 private fun CreditosEsqueleto(forma: FormaDeCreditos?, dosColumnas: Boolean = false, modifier: Modifier = Modifier) {
     val grupos = forma?.gruposDelResumen ?: listOf(1, 1, 1)
     val prestamos = (forma?.prestamos ?: 3).coerceAtMost(MAX_PRESTAMOS_ESQUELETO)
-    LazyColumn(modifier = modifier, contentPadding = PaddingValues(bottom = Medida.botonFlotante + Espacio.xl), userScrollEnabled = false) {
-        item {
+    // El resumen esqueleto, en su lugar: a lo ancho en una columna, en la izquierda en dos (vuelta 81).
+    val resumenEsqueleto: @Composable (Modifier) -> Unit = { lugar ->
             Superficie(
-                modifier = Modifier
+                modifier = lugar
                     .fillMaxWidth()
-                    .padding(horizontal = Medida.margenDePantalla)
                     .testTag(TAG_TARJETA_DEL_RESUMEN_DE_DEUDA),
             ) {
                 LineaEsqueleto(fraccionDelAncho = 0.3f, estilo = Movi.textos.apoyo)
@@ -934,27 +920,38 @@ private fun CreditosEsqueleto(forma: FormaDeCreditos?, dosColumnas: Boolean = fa
                     LineaEsqueleto(fraccionDelAncho = 0.6f, estilo = Movi.textos.apoyo)
                 }
             }
+    }
+    val prestamosEsqueleto: @Composable () -> Unit = {
+        RotuloDeSeccionEsqueleto()
+        Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
+            repeat(prestamos) { i ->
+                if (i > 0) Separador()
+                EsqueletoDeFila(modifier = Modifier.testTag(TAG_ESQUELETO_TARJETA_DE_PRESTAMO))
+            }
         }
-        if (prestamos > 0) {
+    }
+    LazyColumn(modifier = modifier, contentPadding = PaddingValues(bottom = Medida.botonFlotante + Espacio.xl), userScrollEnabled = false) {
+        if (dosColumnas) {
+            // Vuelta 81: el resumen a la izquierda y los préstamos a la derecha, donde van a quedar.
             item {
-                Spacer(Modifier.height(Medida.entreSecciones))
-                // En dos columnas (Ola W3) los préstamos caen a la izquierda, donde van a quedar: la
-                // derecha es de las tarjetas, que la forma recordada no cuenta.
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = Espacio.m),
                     horizontalArrangement = Arrangement.spacedBy(Medida.margenDePantalla),
+                    verticalAlignment = Alignment.Top,
                 ) {
-                    Column(modifier = if (dosColumnas) Modifier.weight(1f).testTag(TAG_COLUMNA_IZQUIERDA_DE_CREDITOS) else Modifier.weight(1f)) {
-                        RotuloDeSeccionEsqueleto()
-                        Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
-                            repeat(prestamos) { i ->
-                                if (i > 0) Separador()
-                                EsqueletoDeFila(modifier = Modifier.testTag(TAG_ESQUELETO_TARJETA_DE_PRESTAMO))
-                            }
-                        }
+                    Column(modifier = Modifier.weight(1f).testTag(TAG_COLUMNA_IZQUIERDA_DE_CREDITOS)) { resumenEsqueleto(Modifier) }
+                    Column(modifier = Modifier.weight(1f).testTag(TAG_COLUMNA_DERECHA_DE_CREDITOS)) {
+                        if (prestamos > 0) prestamosEsqueleto()
                     }
-                    if (dosColumnas) Spacer(Modifier.weight(1f))
                 }
+            }
+            return@LazyColumn
+        }
+        item { resumenEsqueleto(Modifier.padding(horizontal = Medida.margenDePantalla)) }
+        if (prestamos > 0) {
+            item {
+                Spacer(Modifier.height(Medida.entreSecciones))
+                Column(modifier = Modifier.fillMaxWidth().padding(horizontal = Espacio.m)) { prestamosEsqueleto() }
             }
         }
     }
@@ -981,8 +978,8 @@ const val TAG_FILA_COMO_SALIR_DE_TUS_DEUDAS: String = "fila-como-salir-de-tus-de
  * enlace fijo, sin cifra propia: lo que calcula vive en su pantalla.
  */
 @Composable
-private fun FilaComoSalirDeTusDeudas(onClick: () -> Unit) {
-    Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla)) {
+private fun FilaComoSalirDeTusDeudas(onClick: () -> Unit, conMargen: Boolean = true) {
+    Column(modifier = if (conMargen) Modifier.padding(horizontal = Medida.margenDePantalla) else Modifier) {
         Spacer(Modifier.height(Medida.dentroDeSeccion))
         // Vuelta 42: la fila de navegación del sistema (el círculo neutro, no el amarillo).
         FilaDeNavegacion(
