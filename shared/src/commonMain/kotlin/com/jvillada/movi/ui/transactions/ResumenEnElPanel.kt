@@ -31,7 +31,6 @@ import com.jvillada.movi.shared.model.filasDelAnalisis
 import com.jvillada.movi.shared.model.isCashFlow
 import com.jvillada.movi.shared.model.montoContado
 import com.jvillada.movi.shared.model.movimientosDelAnalisis
-import com.jvillada.movi.shared.model.tituloDelPeriodo
 import com.jvillada.movi.shared.time.epochMillisToAppDate
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Medida
@@ -291,11 +290,6 @@ internal fun ResumenDelPeriodoEnElPanel(
     resumen: ResumenDelPanel,
     onCategoria: (FilaDelAnalisis) -> Unit,
     onVerEnQueSeVa: () -> Unit,
-    /**
-     * Vuelta 67 (revisión): con un chip puesto la lista de al lado muestra menos que el período; el
-     * panel lo dice («Octubre 2026 · del período»): sus cifras son de todo el período.
-     */
-    conChip: Boolean = false,
 ) {
     Column(
         modifier = Modifier
@@ -305,7 +299,7 @@ internal fun ResumenDelPeriodoEnElPanel(
             .padding(top = Medida.dentroDeSeccion, bottom = Medida.entreSecciones)
             .testTag(TAG_RESUMEN_DEL_PERIODO_EN_EL_PANEL),
     ) {
-        Seccion(titulo = tituloDelPanel(resumen.periodo, conChip))
+        Seccion(titulo = TITULO_DEL_RESUMEN_EN_EL_PANEL)
         // Vuelta 81: el panel es una columna lateral (el 40 % del ancho): Entró, Salió y Neto van uno
         // debajo del otro, como filas, y cada cifra entera —lado a lado, a 425 dp, se abreviaban—.
         Superficie(modifier = Modifier.fillMaxWidth().testTag(TAG_CIFRAS_DEL_RESUMEN), relleno = RellenoDeSuperficie.Lista) {
@@ -400,6 +394,9 @@ private fun FilaDeCategoriaDelResumen(fila: FilaDelAnalisis, fijas: Set<String>,
 fun fraccionDeLaBarraDelResumen(gasto: Long, mayor: Long): Float =
     if (mayor <= 0L) 0f else (gasto.toFloat() / mayor).coerceIn(0f, 1f)
 
-/** El título del panel: «Octubre 2026», o «Octubre 2026 · del período» con un chip puesto. Pura. */
-fun tituloDelPanel(periodo: PeriodoFinanciero, conChip: Boolean): String =
-    if (conChip) "${tituloDelPeriodo(periodo)} · del período" else tituloDelPeriodo(periodo)
+/**
+ * El título del panel derecho de Actividad a pantalla ancha (vuelta 83): **«Resumen del período»**, con o
+ * sin chip. Decía «Octubre 2026», y el navegador de la lista de al lado dice el mismo mes
+ * (`r8-1280-actividad.png`); con un chip puesto, «del período» ya aclara que no son las cifras del chip.
+ */
+const val TITULO_DEL_RESUMEN_EN_EL_PANEL: String = "Resumen del período"

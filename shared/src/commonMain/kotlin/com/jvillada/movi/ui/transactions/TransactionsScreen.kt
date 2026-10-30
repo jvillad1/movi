@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.transactions
 
+import com.jvillada.movi.ui.components.nombreCortoDeCuenta
 import com.jvillada.movi.ui.components.ds.iconoDelMovimiento
 import com.jvillada.movi.ui.components.ds.IconoResuelto
 import com.jvillada.movi.ui.components.ds.IconoDeMovimiento
@@ -1117,6 +1118,12 @@ fun TransactionsScreen(
     // Los nombres de las cuentas, para que el renglón de un traspaso diga de dónde a dónde fue la
     // plata (ver [transferRowSubtitle]). Un evento suelto no los necesita: la cuenta no se muestra.
     val accountNames = remember(accounts) { accounts.associate { it.id to it.name } }
+    // Vuelta 83: la cuenta que las filas no repiten (ver [cuentaHabitual]): la más usada, o la que más
+    // aparece en la lista mientras el Inicio no la dijo.
+    val masUsada = com.jvillada.movi.data.CuentaMasUsadaCache.id
+    val habitual = remember(eventos.valor, masUsada) {
+        com.jvillada.movi.ui.components.cuentaHabitual(eventos.valor.orEmpty().flatMap { d -> d.items.map { it.accountId } }, masUsada)
+    }
     // Y sus tipos, para que el renglón de un traspaso con un crédito de una punta se llame
     // «Desembolso» o «Abono extraordinario» en vez de «Traspaso» (ver [transferRowTitle]).
     val accountTypes = remember(accounts) { accounts.associate { it.id to it.type } }
@@ -1773,6 +1780,7 @@ fun TransactionsScreen(
                                                 ) != null,
                                                 elegido = conPanel && selectedEvent?.id == row.event.id,
                                                 espacios = espaciosDelDueno,
+                                                cuentaHabitual = habitual,
                                                 onClick = { elegir(row.event) },
                                             )
                                         }
@@ -1831,7 +1839,6 @@ fun TransactionsScreen(
             if (enElPanel == null && resumen != null && loDeArribaEnElModo(activeFilter)) {
                 ResumenDelPeriodoEnElPanel(
                     resumen = resumen,
-                    conChip = activeFilter != CHIP_TODO,
                     // Como desde «En qué se va»: los gastos de esa categoría, con su chip y su ×.
                     onCategoria = { fila ->
                         filtro = FiltroDeMovimientos.deLaFila(fila, VistaDelAnalisis.CATEGORIA)
@@ -2211,7 +2218,8 @@ internal fun FinalDeLaFila(
     moneda: String,
     tono: TonoDelMonto,
     porConfirmar: Boolean,
-    esRecurrente: Boolean,
+    /** Vuelta 83: las filas de movimientos lo dicen en el subtítulo; Buscar no lo dice. */
+    esRecurrente: Boolean = false,
     debajo: String? = null,
 ) {
     Row(
@@ -2224,7 +2232,7 @@ internal fun FinalDeLaFila(
         if (esRecurrente) {
             Icon(
                 imageVector = Icons.Rounded.Repeat,
-                contentDescription = "Recurrente",
+                contentDescription = RECURRENTE,
                 tint = Movi.colores.textoMedio,
                 modifier = Modifier.size(Icono.s),
             )
@@ -2274,12 +2282,18 @@ internal fun TransferRow(
     elegido: Boolean = false,
     onClick: () -> Unit,
 ) {
-    val subtitulo = transferRowSubtitle(row, accountNames)
+    // Vuelta 83: «De Bancolombia ·4057 a Nu», con los nombres cortos (ver [nombreCortoDeCuenta]).
+    val nombresCortos = remember(accountNames) { accountNames.mapValues { nombreCortoDeCuenta(it.value) } }
+    val subtitulo = transferRowSubtitle(row, nombresCortos)
     Fila(
         titulo = transferRowTitle(row, accountTypes),
         // El desembolso dice que la plata es prestada; el resto, de dónde a dónde fue.
         subtitulo = if (esDesembolso(row, accountTypes)) "$NOTA_DE_DESEMBOLSO · $subtitulo" else subtitulo,
         modifier = Modifier.marcaDeElegido(elegido),
+        // Vuelta 83: un renglón de título con «…» y el ↻ en el subtítulo: todas las filas del mismo alto.
+        lineasDelTitulo = 1,
+        iconoDelSubtitulo = if (esRecurrente) Icons.Rounded.Repeat else null,
+        descripcionDelIconoDelSubtitulo = if (esRecurrente) RECURRENTE else null,
         // Vuelta 50: el ícono de lo que cuenta. La cuota lleva el de «Cuota de crédito» y el desembolso
         // el suyo (los de su categoría); lo que no cuenta —un traspaso, un pago de tarjeta, un abono—
         // las flechas: no es una categoría del dueño, es plata que cambió de cuenta.
@@ -2293,7 +2307,6 @@ internal fun TransferRow(
                 moneda = pata.currency,
                 tono = tonoDelRenglon(row, accountTypes),
                 porConfirmar = false,
-                esRecurrente = esRecurrente,
             )
         },
         onClick = onClick,
@@ -2359,6 +2372,11 @@ internal fun MovementSingleRow(
     tonoForzado: TonoDelMonto? = null,
     /** Los espacios del dueño por id, para decir con quién se repartió un gasto («con Caro»). */
     espacios: Map<String, EspacioCompartido> = emptyMap(),
+    /**
+     * Vuelta 83: la cuenta habitual de la lista ([cuentaHabitual]): una fila en ella no la nombra. `null`
+     * (Por revisar, el detalle de una cuenta, los ajustes): todas la nombran.
+     */
+    cuentaHabitual: String? = null,
     onClick: () -> Unit,
 ) {
     // Texto el gasto, verde el ingreso, gris lo que no movió plata del bolsillo — la apertura de una
@@ -2367,7 +2385,7 @@ internal fun MovementSingleRow(
     // Vuelta de diseño 30: «Mercado / Mercado» no repite la categoría (ver [textosDeLaFila]).
     val espacioDelMovimiento = tx.espacioId?.let { espacios[it] }
     val textos = if (esTuParteDeOtro(tx)) textosDeTuParteDeOtro(tx, espacioDelMovimiento)
-    else textosDeLaFila(tx, accountNames[tx.accountId])
+    else textosDeLaFilaEnLaLista(tx, accountNames, cuentaHabitual)
     // Vuelta de diseño 30: en un gasto repartido la cifra es tu parte, y debajo de cuánto y con quién.
     // Con el tono forzado (el detalle de una cuenta, cuyo total del día es lo que movió el saldo) la
     // cifra sigue siendo lo que salió de la cuenta, con tu parte debajo.
@@ -2380,6 +2398,10 @@ internal fun MovementSingleRow(
             subtitulo = textos.subtitulo,
             // El tag de la fila va en la fila misma —la que se toca—, no en lo que la envuelve.
             modifier = Modifier.testTag(TAG_FILA_DE_MOVIMIENTO_SUELTO).marcaDeElegido(elegido),
+            // Vuelta 83: un renglón de título con «…» y el ↻ en el subtítulo: todas las filas del mismo alto.
+            lineasDelTitulo = 1,
+            iconoDelSubtitulo = if (esRecurrente) Icons.Rounded.Repeat else null,
+            descripcionDelIconoDelSubtitulo = if (esRecurrente) RECURRENTE else null,
             // La marca del comercio si Movi la reconoce (Ola 2a), y si no el ícono de la categoría.
             inicio = { IconoDeMovimiento(tx) },
             final = {
@@ -2389,7 +2411,6 @@ internal fun MovementSingleRow(
                     moneda = tx.currency,
                     tono = tono,
                     porConfirmar = tx.reconciliationStatus == ReconciliationStatus.UNCONFIRMED,
-                    esRecurrente = esRecurrente,
                     // R3 · un gasto repartido: la plata salió entera, pero en tus gastos cuenta solo
                     // tu parte (ver `montoContado` en :core).
                     debajo = debajo,
@@ -2424,6 +2445,9 @@ fun debajoDeLaCifra(tx: FinancialEvent, espacio: EspacioCompartido?, porElSaldo:
     porElSaldo -> "Tu parte ${formatMoney(montoContado(tx), tx.currency)}"
     else -> lineaDelRepartido(tx, espacio)
 }
+
+/** Lo que dice el ↻ de un movimiento que se repite, al lector de pantalla. */
+const val RECURRENTE: String = "Recurrente"
 
 /** Lo que dice la píldora de un movimiento que entró solo y espera confirmación (vuelta 42). */
 const val SIN_CONFIRMAR: String = "Sin confirmar"

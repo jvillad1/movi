@@ -155,6 +155,11 @@ fun BuscarScreen(onNavigate: (Screen) -> Unit) {
         intentar { Repositories.wallets.getTuParteDeOtros() }.onSuccess { tuParteDeOtros = it }
     }
     val todosLosEventos = remember(eventos.valor, tuParteDeOtros) { eventosParaBuscar(eventos.valor.orEmpty(), tuParteDeOtros) }
+    // Vuelta 83: la cuenta habitual no se repite en cada resultado (ver `cuentaHabitual`).
+    val masUsada = com.jvillada.movi.data.CuentaMasUsadaCache.id
+    val habitual = remember(todosLosEventos, masUsada) {
+        com.jvillada.movi.ui.components.cuentaHabitual(todosLosEventos.map { it.accountId }, masUsada)
+    }
     val datos = remember(todosLosEventos, cuentas.valor, destinos.valor, categoriasDelDueno, UsedCategoriesCache.used) {
         DatosDeBusqueda(
             eventos = todosLosEventos,
@@ -248,7 +253,7 @@ fun BuscarScreen(onNavigate: (Screen) -> Unit) {
                             ) {
                                 grupo.resultados.forEachIndexed { j, resultado ->
                                     if (j > 0) Separador()
-                                    FilaDeResultado(resultado, cuentas = datos.cuentas, espacios = espacios, alTocar = { alTocar(resultado) })
+                                    FilaDeResultado(resultado, cuentas = datos.cuentas, espacios = espacios, cuentaHabitual = habitual, alTocar = { alTocar(resultado) })
                                 }
                             }
                         }
@@ -408,6 +413,8 @@ private fun FilaDeResultado(
     resultado: ResultadoDeBusqueda,
     cuentas: List<com.jvillada.movi.shared.model.Account>,
     espacios: Map<String, com.jvillada.movi.shared.model.Espacio> = emptyMap(),
+    /** Vuelta 83: un resultado en la cuenta habitual no la nombra. */
+    cuentaHabitual: String? = null,
     alTocar: () -> Unit,
 ) {
     val hoy = remember { epochMillisToAppDate(ahoraEnMs()) }
@@ -421,7 +428,12 @@ private fun FilaDeResultado(
             // Vuelta 78: tu parte de lo que pagó otro dice debajo de la cifra de cuánto fue y quién pagó.
             val tuParteDeOtro = esTuParteDeOtro(e)
             val linea = if (tuParteDeOtro) subtituloDeTuParteEnBuscar(e, fecha)
-            else subtituloDeUnMovimientoEnBuscar(e, laCuenta?.name, fecha)
+            else subtituloDeUnMovimientoEnBuscar(
+                e,
+                laCuenta?.name?.takeIf { cuentaHabitual == null || e.accountId != cuentaHabitual }
+                    ?.let { com.jvillada.movi.ui.components.nombreCortoDeCuenta(it) },
+                fecha,
+            )
             // Vuelta 50: de un par se lista la pata que cuenta (`unaPataPorPar`), así que la cuota sale
             // como el gasto que es, «−$980.000».
             val tono = tonoDelEvento(e, laCuenta?.type)

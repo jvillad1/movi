@@ -454,6 +454,11 @@ internal fun UltimosMovimientosSection(
     val cuentas = data.accounts.orEmpty()
     val nombres = remember(cuentas) { cuentas.associate { it.id to it.name } }
     val tipos = remember(cuentas) { cuentas.associate { it.id to it.type } }
+    // Vuelta 83: la cuenta habitual no se repite en cada fila (ver `cuentaHabitual`).
+    val masUsada = com.jvillada.movi.data.CuentaMasUsadaCache.id
+    val habitual = remember(eventos, masUsada) {
+        com.jvillada.movi.ui.components.cuentaHabitual(eventos.orEmpty().map { it.accountId }, masUsada)
+    }
     var abierto by remember { mutableStateOf<FinancialEvent?>(null) }
     Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla).testTag(TAG_ULTIMOS_MOVIMIENTOS)) {
         Seccion(
@@ -475,6 +480,7 @@ internal fun UltimosMovimientosSection(
                             is MovementRow.Single -> MovementSingleRow(
                                 tx = fila.event,
                                 accountNames = nombres,
+                                cuentaHabitual = habitual,
                                 onClick = { abierto = fila.event },
                             )
                             is MovementRow.Transfer -> TransferRow(
@@ -809,30 +815,43 @@ internal fun WidgetEnQueSeVa(data: DashboardData, onNavigate: (Screen) -> Unit, 
                 )
             }
         }
+        // Vuelta 83 · más denso: cada categoría mide ~52 dp —el nombre, la píldora junto al monto, y la
+        // barra a `Espacio.xs` debajo del nombre—. Era una [Fila] de 56 con la barra y la píldora en un
+        // renglón aparte (~72 dp por categoría, ~275 px tres).
+        Spacer(Modifier.height(Espacio.xxs))
         categorias.zip(diferencias).forEach { (categoria, diferencia) ->
-            Column(modifier = Modifier.testTag(TAG_CATEGORIA_DEL_WIDGET)) {
-                Fila(
-                    titulo = categoria.nombre,
-                    // **Siempre neutro** (vuelta de diseño 16): un gasto no es una alarma.
-                    final = { Cifra(categoria.gastado, VarianteDeCifra.Fila, tono = TonoDeCifra.Neutro) },
-                )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag(TAG_CATEGORIA_DEL_WIDGET)
+                    .padding(horizontal = Medida.margenDePantalla, vertical = Espacio.xs),
+            ) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = Medida.margenDePantalla)
-                        .padding(bottom = Espacio.s),
+                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
                 ) {
-                    BarraDeProgreso(
-                        fraccion = fraccionDeLaCategoriaEnElWidget(categoria.gastado, mayor),
-                        tono = TonoDeBarra.Marca,
+                    Text(
+                        text = categoria.nombre,
+                        style = Movi.textos.cuerpo,
+                        color = Movi.colores.texto,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
                     )
                     if (diferencia != null) DiferenciaDelWidget(diferencia)
+                    // **Siempre neutro** (vuelta de diseño 16): un gasto no es una alarma.
+                    Cifra(categoria.gastado, VarianteDeCifra.Fila, tono = TonoDeCifra.Neutro)
                 }
+                Spacer(Modifier.height(Espacio.xs))
+                BarraDeProgreso(
+                    fraccion = fraccionDeLaCategoriaEnElWidget(categoria.gastado, mayor),
+                    tono = TonoDeBarra.Marca,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         }
+        Spacer(Modifier.height(Espacio.xs))
     }
 }
 

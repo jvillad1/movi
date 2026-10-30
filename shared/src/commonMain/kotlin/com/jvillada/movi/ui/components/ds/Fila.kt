@@ -35,6 +35,9 @@ import com.jvillada.movi.theme.Movimiento
 import com.jvillada.movi.theme.Radio
 import androidx.compose.foundation.shape.RoundedCornerShape
 
+/** El ícono chico antes del subtítulo de una [Fila] (vuelta 83: el ↻ de un recurrente). */
+const val TAG_ICONO_DEL_SUBTITULO: String = "ds-fila-icono-del-subtitulo"
+
 /** Cuántos renglones puede ocupar el título de una [Fila] antes de cortarse con «…». */
 const val LINEAS_DEL_TITULO_DE_FILA: Int = 2
 
@@ -162,6 +165,14 @@ fun Fila(
      * después del monto. `false` lo quita (una fila que se elige, no que se abre).
      */
     chevron: Boolean = onClick != null && final == null,
+    /** Vuelta 83: las filas de movimientos van en uno, con «…» (todas del mismo alto). */
+    lineasDelTitulo: Int = LINEAS_DEL_TITULO_DE_FILA,
+    /**
+     * Vuelta 83: un ícono chico antes del subtítulo (el ↻ de un movimiento recurrente, que al final de la
+     * fila le quitaba ancho al título y lo partía). Dice [descripcionDelIconoDelSubtitulo] al lector.
+     */
+    iconoDelSubtitulo: ImageVector? = null,
+    descripcionDelIconoDelSubtitulo: String? = null,
 ) {
     Row(
         modifier = modifier
@@ -199,20 +210,32 @@ fun Fila(
                 text = titulo,
                 style = Movi.textos.cuerpo,
                 color = colorDelTituloDeFila(tonoDelTitulo, Movi.colores),
-                maxLines = LINEAS_DEL_TITULO_DE_FILA,
+                maxLines = lineasDelTitulo,
                 overflow = TextOverflow.Ellipsis,
             )
             if (subtitulo != null) {
-                Text(
-                    text = subtitulo,
-                    style = Movi.textos.apoyo,
-                    color = when (tonoDelSubtitulo) {
-                        TonoDeSubtitulo.Normal -> Movi.colores.textoMedio
-                        TonoDeSubtitulo.Aviso -> Movi.colores.aviso
-                    },
-                    maxLines = lineasDelSubtitulo,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                val colorDelSubtitulo = when (tonoDelSubtitulo) {
+                    TonoDeSubtitulo.Normal -> Movi.colores.textoMedio
+                    TonoDeSubtitulo.Aviso -> Movi.colores.aviso
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (iconoDelSubtitulo != null) {
+                        Icon(
+                            imageVector = iconoDelSubtitulo,
+                            contentDescription = descripcionDelIconoDelSubtitulo,
+                            tint = colorDelSubtitulo,
+                            modifier = Modifier.size(Icono.s).testTag(TAG_ICONO_DEL_SUBTITULO),
+                        )
+                        Spacer(Modifier.width(Espacio.xxs))
+                    }
+                    Text(
+                        text = subtitulo,
+                        style = Movi.textos.apoyo,
+                        color = colorDelSubtitulo,
+                        maxLines = lineasDelSubtitulo,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
         }
         if (final != null) {
