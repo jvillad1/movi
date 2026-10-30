@@ -682,6 +682,12 @@ internal fun TransferBody(
      */
     presetDestinoId: String? = null,
     /**
+     * Vuelta 77 · **«Anotar este abono» abre Pagar en modo abono**: con [presetDestinoId] en un crédito,
+     * la hoja arranca como abono extra («Abono extra a …», «Registrar abono»: el traspaso de siempre que
+     * baja el capital) y no como la cuota. Vale para esa deuda: elegir otra vuelve a la cuota.
+     */
+    presetAbonoExtra: Boolean = false,
+    /**
      * Vuelta 47 · **el monto, como en Gasto**: los dígitos escritos (los guarda la hoja, que los
      * escribe con [onKey] desde el teclado en pantalla y el físico), en la moneda de la cuenta de
      * origen. Era un campo de texto chico.
@@ -1009,11 +1015,12 @@ internal fun TransferBody(
     // `abonoExtra` vale solo sobre un crédito: el enlace «Es un abono extra, no la cuota» lo prende y
     // la hoja pasa a guardar un TRASPASO puro (el de siempre: baja el capital, no salda la cuota del
     // período, no cuenta en el mes). Se apaga al cambiar de deuda: el abono es de ESE crédito.
-    var abonoExtra by remember { mutableStateOf(false) }
+    var abonoExtra by remember { mutableStateOf(presetAbonoExtra) }
     LaunchedEffect(toId) {
         interesEscrito = null
         interesTocado = false
-        abonoExtra = false
+        // Vuelta 77: el abono pedido desde la ficha vale para ESE crédito; cualquier otro, la cuota.
+        abonoExtra = presetAbonoExtra && toId != null && toId == presetDestinoId
     }
     val termsDelDestino = to?.let { terminosPorCuenta[it.id] }
     val esCredito = esPago && to?.type == AccountType.LOAN

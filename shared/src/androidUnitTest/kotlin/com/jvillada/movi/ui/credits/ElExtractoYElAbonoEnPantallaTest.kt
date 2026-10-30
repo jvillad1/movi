@@ -40,6 +40,7 @@ import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.dashboard.PagoDelPeriodo
 import com.jvillada.movi.ui.quickadd.PestanaDeAgregar
+import com.jvillada.movi.ui.quickadd.QUE_ES_UN_ABONO_EXTRA
 import com.jvillada.movi.ui.quickadd.QuickAddScreen
 import com.jvillada.movi.ui.quickadd.TAG_FILA_HACIA
 import com.jvillada.movi.ui.quickadd.TAG_PASTILLAS_DEL_PAGO_DE_LA_TARJETA
@@ -210,7 +211,7 @@ class ElExtractoYElAbonoEnPantallaTest {
     )
 
     @Test
-    fun `anotar este abono desde la ficha abre Traspaso con el credito, la cuenta y el monto`() {
+    fun `anotar este abono desde la ficha abre Pagar en modo abono con el credito, la cuenta y el monto`() {
         val navegado = mutableListOf<Screen>()
         composeRule.montarElDetalleDe(libre.account, RepositorioDeLaDeuda(creditos = listOf(libre)), onNavigate = { navegado += it })
         composeRule.onNode(hasText(ACCION_SIMULAR_ABONO) and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
@@ -220,14 +221,16 @@ class ElExtractoYElAbonoEnPantallaTest {
         tocar(ANOTAR_ESTE_ABONO)
 
         val hoja = assertIs<Screen.QuickAdd>(navegado.last())
-        assertEquals(PestanaDeAgregar.TRASPASO, hoja.presetPestana)
+        // Vuelta 77: Pagar en modo abono, no la pestaña Traspaso.
+        assertEquals(PestanaDeAgregar.PAGO_DE_TARJETA, hoja.presetPestana)
+        assertTrue(hoja.presetAbonoExtra)
         assertEquals(libre.account.id, hoja.presetDeudaId)
         assertEquals(nuAhorros.id, hoja.presetAccountId, "desde la cuenta del débito automático")
         assertEquals(1_204_064L, hoja.presetMonto)
     }
 
     @Test
-    fun `la hoja de Traspaso llega llena y guarda el abono de siempre`() {
+    fun `la hoja de Pagar llega en modo abono, llena, y guarda el abono de siempre`() {
         val traspasos = mutableListOf<CreateTransferRequest>()
         val bancolombia = Account("a1", "Bancolombia Ahorros", AccountType.SAVINGS, 13_845_800)
         Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
@@ -250,6 +253,7 @@ class ElExtractoYElAbonoEnPantallaTest {
                             presetMonto = hoja.presetMonto,
                             presetDeudaId = hoja.presetDeudaId,
                             presetPestana = hoja.presetPestana,
+                            presetAbonoExtra = hoja.presetAbonoExtra,
                         )
                     }
                 }
@@ -259,9 +263,11 @@ class ElExtractoYElAbonoEnPantallaTest {
 
         composeRule.onNode(hasText(libre.account.name) and hasAnyAncestor(hasTestTag(TAG_FILA_HACIA)), useUnmergedTree = true).assertExists()
         assertTrue(hay("\$1.204.064"), "el monto simulado en la cifra")
-        assertTrue(hay("Abono extraordinario:", substring = true), "dice que es un abono extraordinario")
+        assertTrue(hay(QUE_ES_UN_ABONO_EXTRA), "dice que es un abono extra, no la cuota")
+        assertTrue(hay("Abono extra a ${libre.account.name}", substring = true), "el encabezado del abono")
+        assertTrue(!hay("Guardar traspaso"), "no abre la pestaña Traspaso")
 
-        composeRule.onNodeWithText("Guardar traspaso").performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.onNodeWithText("Registrar abono").performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitUntil(5_000) { traspasos.isNotEmpty() }
         val abono = traspasos.single()
         assertEquals(1_204_064L, abono.amount)
@@ -300,7 +306,8 @@ class ElExtractoYElAbonoEnPantallaTest {
 
         tocar(ANOTAR_ESTE_ABONO)
         val hoja = assertIs<Screen.QuickAdd>(navegado.last())
-        assertEquals(PestanaDeAgregar.TRASPASO, hoja.presetPestana)
+        assertEquals(PestanaDeAgregar.PAGO_DE_TARJETA, hoja.presetPestana)
+        assertTrue(hoja.presetAbonoExtra)
         assertEquals(libre.account.id, hoja.presetDeudaId)
         assertEquals(500_000L, hoja.presetMonto)
 

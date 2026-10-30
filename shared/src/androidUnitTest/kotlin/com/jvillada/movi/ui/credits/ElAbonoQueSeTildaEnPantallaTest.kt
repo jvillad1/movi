@@ -255,6 +255,7 @@ class ElAbonoQueSeTildaEnPantallaTest {
                                 presetDeudaId = hoja.presetDeudaId,
                                 presetPestana = hoja.presetPestana,
                                 presetAbono = hoja.presetAbono,
+                                presetAbonoExtra = hoja.presetAbonoExtra,
                             )
                         }
                     } else {
@@ -272,7 +273,9 @@ class ElAbonoQueSeTildaEnPantallaTest {
         assertTrue(hay("El día 15"))
         tocar(ANOTAR_ESTE_ABONO)
         val hoja = assertIs<Screen.QuickAdd>(hojaAbierta.value)
-        assertEquals(PestanaDeAgregar.TRASPASO, hoja.presetPestana)
+        // Vuelta 77: a un crédito, Pagar en modo abono (era Traspaso).
+        assertEquals(PestanaDeAgregar.PAGO_DE_TARJETA, hoja.presetPestana)
+        assertTrue(hoja.presetAbonoExtra)
         assertEquals(libre.account.id, hoja.presetDeudaId)
         assertEquals(nuAhorros.id, hoja.presetAccountId)
         assertEquals(500_000L, hoja.presetMonto)
@@ -280,7 +283,7 @@ class ElAbonoQueSeTildaEnPantallaTest {
 
         composeRule.waitUntil(5_000) { hay(libre.account.name, substring = true) }
         assertTrue(hay("\$500.000"), "el monto planeado en la cifra")
-        composeRule.onNodeWithText("Guardar traspaso").performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.onNodeWithText("Registrar abono").performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitUntil(5_000) { sellos.isNotEmpty() && hojaAbierta.value == null }
 
         val traspaso = traspasos.single()

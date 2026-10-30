@@ -14,8 +14,9 @@ import com.jvillada.movi.ui.quickadd.PestanaDeAgregar
  * # El abono que se puede hacer (vuelta 62) y que se recuerda (vuelta 63)
  *
  * La revisión del 29-oct: en «¿Y si abonas de más?» y en «Cómo salir de tus deudas» la única acción
- * era «Cerrar». Ahora el monto simulado se anota con el camino de siempre —Agregar → Traspaso, ya
- * lleno: desde la cuenta del débito automático (si la tiene), hacia el crédito, por ese monto—, y se
+ * era «Cerrar». Ahora el monto simulado se anota con el camino de siempre —Agregar → Pagar en modo abono
+ * (vuelta 77), ya lleno: desde la cuenta del débito automático (si la tiene), hacia el crédito, por ese
+ * monto—, y se
  * puede pedir que Movi lo recuerde cada mes.
  *
  * ## «Recordármelo cada mes» crea una regla recurrente (vuelta 63)
@@ -47,15 +48,17 @@ const val EL_ABONO_NO_ES_UN_FIJO: String =
     "No queda como un pago fijo. El mes que lo hagas, sale de tu plata y baja «Te quedan»."
 
 /**
- * **Agregar, listo para anotar el abono a [credit]** por [monto]: la pestaña Traspaso con el crédito en
- * «Hacia» y, si el crédito se debita solo de una cuenta, esa en «Desde». Es el traspaso de siempre
- * (`transferLegsFor`): baja el capital y no salda la cuota del período.
+ * **Agregar, listo para anotar el abono a [credit]** por [monto]: la pestaña **Pagar en modo abono**
+ * (vuelta 77; era Traspaso, con «Guardar traspaso») con el crédito en «¿Qué pagas?», «Abono extra a …» y
+ * «Registrar abono», y si el crédito se debita solo de una cuenta, esa en «Sale de». Lo que se guarda es
+ * el traspaso de siempre (`transferLegsFor`): baja el capital y no salda la cuota del período.
  */
 fun pantallaDelAbono(credit: CreditSummary, monto: Long): Screen.QuickAdd = Screen.QuickAdd(
     presetAccountId = credit.terms?.debitoAutomaticoDesde,
     presetMonto = monto,
     presetDeudaId = credit.account.id,
-    presetPestana = PestanaDeAgregar.TRASPASO,
+    presetPestana = PestanaDeAgregar.PAGO_DE_TARJETA,
+    presetAbonoExtra = true,
 )
 
 /**
@@ -67,7 +70,12 @@ fun pantallaDelAbono(deuda: DeudaParaSalir, monto: Long, creditos: List<CreditSu
         Screen.QuickAdd(presetMonto = monto, presetDeudaId = deuda.id)
     } else {
         creditos.firstOrNull { it.account.id == deuda.id }?.let { pantallaDelAbono(it, monto) }
-            ?: Screen.QuickAdd(presetMonto = monto, presetDeudaId = deuda.id, presetPestana = PestanaDeAgregar.TRASPASO)
+            ?: Screen.QuickAdd(
+                presetMonto = monto,
+                presetDeudaId = deuda.id,
+                presetPestana = PestanaDeAgregar.PAGO_DE_TARJETA,
+                presetAbonoExtra = true,
+            )
     }
 
 /**

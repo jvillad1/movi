@@ -316,6 +316,8 @@ fun QuickAddScreen(
     presetPago: PagoDeLaFactura? = null,
     /** Vuelta 63 · el abono mensual que este traspaso salda. Ver [Screen.QuickAdd.presetAbono]. */
     presetAbono: AbonoDeLaRegla? = null,
+    /** Vuelta 77 · Pagar arranca en modo abono con [presetDeudaId]. Ver [Screen.QuickAdd.presetAbonoExtra]. */
+    presetAbonoExtra: Boolean = false,
     /**
      * Ola 9 · B: el movimiento que se acaba de guardar, para que quien sobreviva a esta hoja
      * (App.kt) pueda ofrecer convertirlo en recurrente. Se llama **después** de que el POST
@@ -1718,6 +1720,7 @@ fun QuickAddScreen(
                                 // «Anotar este pago» desde una cuota o una tarjeta del checklist:
                                 // la deuda en «Hacia» y la cuota como monto.
                                 presetDestinoId = presetDeudaId,
+                                presetAbonoExtra = presetAbonoExtra,
                                 // Vuelta 47: el monto, la cifra y el teclado de Gasto.
                                 monto = montoDelTraspaso,
                                 onKey = ::onKeyDelTraspaso,
