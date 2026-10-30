@@ -1,5 +1,9 @@
 package com.jvillada.movi.ui.sdui
 
+import com.jvillada.movi.data.FormaDelHeroe
+import com.jvillada.movi.data.FormaRecordada
+import com.jvillada.movi.data.SessionManager
+import com.jvillada.movi.ui.components.ds.EsqueletoDeFila
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -33,6 +37,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -225,11 +230,55 @@ internal fun HeroDeUnVistazo(
             return@Superficie
         }
         CuerpoDelHeroe(section, data, onNavigate, disponible, visto)
+        // Vuelta 78: mientras la carga está en vuelo, los renglones que la tarjeta llevaba la última vez
+        // (o los dos, la primera vez) se reservan con su esqueleto: en un arranque en frío sin instantánea,
+        // el héroe medía ~115 px y al llegar los datos ~235: todo el Inicio bajaba ~110 px a los 1,3 s.
+        // Solo con el héroe en esqueleto (nada que pintar todavía): con la instantánea a la vista, sus
+        // renglones salen de ella, como siempre.
+        val cargando = LocalCargandoElInicio.current
+        val enEsqueleto = cargando && !data.puedeAfirmarVacio
+        val hayPorConfirmar = conteoPorRevisarDelInicio(data).total > 0
+        val forma = remember { FormaRecordada.delAparato.heroe(SessionManager.userId) ?: FormaDelHeroe() }
         // Vuelta 75: «¿Me alcanza?», la caja de Pagos en un renglón, siempre a la vista; del MISMO estado.
-        visto.mostrado.renglon?.let { r ->
-            FilaMeAlcanza(r, onNavigate, modifier = Modifier.graphicsLayer { alpha = visto.opacidad })
+        val renglon = visto.mostrado.renglon
+        when {
+            renglon != null -> FilaMeAlcanza(renglon, onNavigate, modifier = Modifier.graphicsLayer { alpha = visto.opacidad })
+            enEsqueleto && forma.meAlcanza -> RenglonEsqueletoDelHeroe(TAG_ESQUELETO_ME_ALCANZA, enLaFranja = false)
         }
-        FranjaPorConfirmar(data, onNavigate)
+        when {
+            hayPorConfirmar -> FranjaPorConfirmar(data, onNavigate)
+            enEsqueleto && forma.porConfirmar -> RenglonEsqueletoDelHeroe(TAG_ESQUELETO_POR_CONFIRMAR, enLaFranja = true)
+        }
+        // Y cuando la carga terminó bien, se anota cómo quedó para el próximo arranque en frío.
+        val tieneMeAlcanza = renglon != null
+        LaunchedEffect(cargando, tieneMeAlcanza, hayPorConfirmar, data.puedeAfirmarVacio) {
+            if (!cargando && data.puedeAfirmarVacio) {
+                FormaRecordada.delAparato.guardarHeroe(SessionManager.userId, FormaDelHeroe(meAlcanza = tieneMeAlcanza, porConfirmar = hayPorConfirmar))
+            }
+        }
+    }
+}
+
+/** Vuelta 78: el esqueleto de «¿Me alcanza?» en el héroe, mientras carga. */
+const val TAG_ESQUELETO_ME_ALCANZA: String = "inicio-esqueleto-me-alcanza"
+
+/** Vuelta 78: el esqueleto de la franja «Por confirmar» en el héroe, mientras carga. */
+const val TAG_ESQUELETO_POR_CONFIRMAR: String = "inicio-esqueleto-por-confirmar"
+
+/**
+ * Un renglón del héroe mientras carga (vuelta 78): el hilo de arriba y una [EsqueletoDeFila] con su
+ * círculo y sus dos líneas —el alto de [FilaMeAlcanza] y de [FranjaPorConfirmar]—; la franja, en la capa 2.
+ */
+@Composable
+private fun RenglonEsqueletoDelHeroe(tag: String, enLaFranja: Boolean) {
+    Separador(SangriaDeSeparador.Ninguna)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (enLaFranja) Modifier.background(Movi.colores.capa2) else Modifier)
+            .testTag(tag),
+    ) {
+        EsqueletoDeFila(conFinal = false)
     }
 }
 
