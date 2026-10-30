@@ -1008,7 +1008,14 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
         avisosResueltos = avisosResueltos + resultado.anotados.flatMap { it.avisos }.associateWith { SMS_STATE_CONFIRMED }
         fallaronAca = fallaronAca + resultado.quedaron.map { it.first.cabezaId }
         recarga++
-        avisoAbajo.showSnackbar(textoDeLosConfirmados(resultado))
+        // Vuelta 74: el mismo aviso de abajo de toda la app (sin «Deshacer»: varios a la vez se anulan
+        // uno por uno). Sin cáscara, el de siempre.
+        if (avisoDeLaCascara != null) {
+            elInicioCuentaOtrosAvisos(-resultado.anotados.size)
+            avisoDeLaCascara.mostrar(textoDeLosConfirmados(resultado))
+        } else {
+            avisoAbajo.showSnackbar(textoDeLosConfirmados(resultado))
+        }
     }
 
     movimientoAbierto?.let { evento ->

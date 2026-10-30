@@ -201,9 +201,10 @@ val LocalAvisoDeDeshacer = staticCompositionLocalOf<AvisoDeDeshacer?> { null }
 fun AnfitrionDelAvisoDeDeshacer(aviso: AvisoDeDeshacer, modifier: Modifier = Modifier) {
     val actual = aviso.actual
     val reducido = LocalMovimientoReducido.current
-    // Lo último que se vio, para que el aviso salga animado con su texto (no en blanco).
-    val ultimo = remember { mutableStateOf<AvisoDeDeshacer.Aviso?>(null) }
-    if (actual != null) ultimo.value = actual
+    // Lo último que se vio, para que el aviso salga animado con su texto (no en blanco). Un simple
+    // recuerdo, no un estado: escribirlo mientras se compone no tiene que recomponer nada.
+    val ultimo = remember { arrayOfNulls<AvisoDeDeshacer.Aviso>(1) }
+    if (actual != null) ultimo[0] = actual
     val coroutine = rememberCoroutineScope()
     if (actual != null) {
         LaunchedEffect(actual.vez, aviso.trabajando, aviso.eligiendo) {
@@ -218,7 +219,7 @@ fun AnfitrionDelAvisoDeDeshacer(aviso: AvisoDeDeshacer, modifier: Modifier = Mod
         enter = fadeIn(Movimiento.alEntrar(reducido)) + slideInVertically(Movimiento.alEntrar(reducido)) { it / 2 },
         exit = fadeOut(Movimiento.alSalir(reducido)) + slideOutVertically(Movimiento.alSalir(reducido)) { it / 2 },
     ) {
-        val visto = actual ?: ultimo.value ?: return@AnimatedVisibility
+        val visto = actual ?: ultimo[0] ?: return@AnimatedVisibility
         Superficie(
             modifier = Modifier
                 .fillMaxWidth()
