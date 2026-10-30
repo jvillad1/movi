@@ -17,12 +17,9 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.data.intentar
 import com.jvillada.movi.shared.model.Account
-import com.jvillada.movi.shared.model.AccountGroup
-import com.jvillada.movi.shared.model.AccountType
-import com.jvillada.movi.shared.model.isReservedCategory
 import com.jvillada.movi.shared.model.tiposDeParteDesde
+import com.jvillada.movi.shared.model.seDivideLoQueSalioDe
 import com.jvillada.movi.ui.sms.TIPOS_DE_PARTE
-import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.EventSource
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.ParteElegida
@@ -85,8 +82,8 @@ fun sePuedeRepartirEnPartes(evento: FinancialEvent, cuentas: List<Account>): Boo
     if (evento.reconciliationStatus == ReconciliationStatus.UNCONFIRMED) return false
     val cuenta = cuentas.firstOrNull { it.id == evento.accountId } ?: return false
     if (cuenta.esBien) return false
-    if (cuenta.type.group != AccountGroup.DEUDA) return true
-    return cuenta.type == AccountType.CREDIT_CARD && evento.transferId == null && !isReservedCategory(evento.category)
+    // La misma regla que el server (`repartirUnMovimiento`).
+    return seDivideLoQueSalioDe(cuenta.type, evento.transferId, evento.category)
 }
 
 /** La sección «Repartir en partes» de «Más»: un botón que abre el editor, y el editor con su confirmar. */
@@ -167,7 +164,10 @@ internal fun SeccionDeRepartirEnPartes(
                             // Cada parte hereda el texto del original: su descripción y su comercio.
                             aParteDelReparto(
                                 it, desde, evento.timestamp, evento.rawPayload.orEmpty(), evento.merchant,
-                                evento.source, ::newId, descripcionHeredada = evento.description,
+                                evento.source, ::newId,
+                                // Vuelta 71 (revisión): si la descripción es solo la categoría («Restaurantes»),
+                                // no es un texto que heredar: cada parte lleva la suya.
+                                descripcionHeredada = evento.description.takeIf { it.trim() != evento.category.trim() },
                             )
                         }
                         Repositories.wallets.repartirElMovimiento(evento.id, PartesDelAviso(enPartes))

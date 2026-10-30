@@ -15,6 +15,21 @@ package com.jvillada.movi.shared.model
 const val DE_UNA_TARJETA_SOLO_GASTOS: String =
     "Una compra con tarjeta se divide solo en gastos, cada uno con su categoría."
 
+/**
+ * **¿Lo que salió de una cuenta de tipo [tipo] se puede dividir?** De una cuenta de dinero, sí (como
+ * siempre). De una deuda, solo una compra con tarjeta: una `CREDIT_CARD`, sin `transferId` (la pata de un
+ * avance o de un desembolso no: al anularla la plata de la otra punta desaparecería) y en una categoría
+ * que se elige, no un ajuste ni un saldo inicial. La usan la app (`sePuedeRepartirEnPartes`) y el server
+ * (`repartirUnMovimiento`), así dicen lo mismo.
+ */
+fun seDivideLoQueSalioDe(tipo: AccountType, transferId: String?, categoria: String): Boolean =
+    tipo.group != AccountGroup.DEUDA ||
+        (tipo == AccountType.CREDIT_CARD && transferId == null && !isReservedCategory(categoria))
+
+/** Lo que contesta el server cuando lo que se quiere dividir salió de una deuda y no es una compra con tarjeta. */
+const val DE_UNA_DEUDA_SOLO_COMPRAS_CON_TARJETA: String =
+    "De una deuda solo se divide una compra con tarjeta: no un desembolso, un avance ni un ajuste."
+
 /** Los tipos de parte que se ofrecen al dividir lo que salió de una cuenta de tipo [tipo]. */
 fun tiposDeParteDesde(tipo: AccountType): List<QueFueLaParte>? =
     if (tipo.group == AccountGroup.DEUDA) listOf(QueFueLaParte.GASTO) else null

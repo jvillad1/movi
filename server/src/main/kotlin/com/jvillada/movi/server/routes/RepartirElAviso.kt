@@ -51,6 +51,8 @@ import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.DE_UNA_TARJETA_SOLO_GASTOS
 import com.jvillada.movi.shared.model.partesQueSeAceptanDesde
+import com.jvillada.movi.shared.model.seDivideLoQueSalioDe
+import com.jvillada.movi.shared.model.DE_UNA_DEUDA_SOLO_COMPRAS_CON_TARJETA
 import com.jvillada.movi.shared.model.checklistDelPeriodo
 import com.jvillada.movi.shared.model.destinoQueNombra
 import com.jvillada.movi.shared.model.esIdDeComprobante
@@ -432,6 +434,9 @@ internal fun Transaction.repartirUnMovimiento(uid: String, eventoId: String, par
     val tipoDeLaCuenta = Accounts.selectAll()
         .where { (Accounts.userId eq uid) and (Accounts.id eq salida.accountId) }
         .firstOrNull()?.let { runCatching { AccountType.valueOf(it[Accounts.type]) }.getOrNull() }
+    if (tipoDeLaCuenta != null && !seDivideLoQueSalioDe(tipoDeLaCuenta, salida.transferId, salida.category)) {
+        return no(DE_UNA_DEUDA_SOLO_COMPRAS_CON_TARJETA)
+    }
     if (tipoDeLaCuenta != null && !partesQueSeAceptanDesde(tipoDeLaCuenta, partes)) return no(DE_UNA_TARJETA_SOLO_GASTOS)
 
     // 1. Anular, como siempre (antes de escribir: el desglose de una cuota no puede ver el original).

@@ -245,11 +245,11 @@ class LaCompraConTarjetaTest {
     private suspend fun ApplicationTestBuilder.deshacer(id: String): HttpResponse =
         cliente().post("/api/events/$id/deshacer-reparto") { header(HttpHeaders.Authorization, "Bearer ${token()}") }
 
-    private fun parteDeGasto(id: String, monto: Long, categoria: String) = ParteDelReparto(
+    private fun parteDeGasto(id: String, monto: Long, categoria: String, cuenta: String = nu) = ParteDelReparto(
         monto = monto,
         tipo = QueFueLaParte.GASTO,
         evento = FinancialEvent(
-            id = id, accountId = nu, type = TransactionType.EXPENSE, amount = monto, category = categoria,
+            id = id, accountId = cuenta, type = TransactionType.EXPENSE, amount = monto, category = categoria,
             description = "Éxito", merchant = "Éxito", timestamp = momento, source = EventSource.MANUAL,
             reconciliationStatus = ReconciliationStatus.RECONCILED,
         ),
@@ -305,5 +305,52 @@ class LaCompraConTarjetaTest {
         assertEquals(DE_UNA_TARJETA_SOLO_GASTOS, respuesta.bodyAsText())
         assertTrue(anulados().isEmpty())
         assertEquals(mapOf("Mercado" to compra), gastosPorCategoria())
+    }
+
+    // ── Revisión de la vuelta 71 · de una deuda solo se divide una compra con tarjeta ──────────
+
+    /** Las dos patas de un par (`transferId`): la que sale de [deuda] y la que entra a ahorros. */
+    private fun par(tr: String, deuda: String, monto: Long, categoria: String) = transaction {
+        listOf("$tr-deuda" to (deuda to "EXPENSE"), "$tr-ahorros" to (ahorros to "INCOME")).forEach { (id, cuentaYTipo) ->
+            Events.insert {
+                it[Events.id] = id
+                it[userId] = uid
+                it[accountId] = cuentaYTipo.first
+                it[type] = cuentaYTipo.second
+                it[amount] = monto
+                it[category] = categoria
+                it[description] = categoria
+                it[timestamp] = momento
+                it[eventSource] = "MANUAL"
+                it[reconciliationStatus] = "RECONCILED"
+                it[transferId] = tr
+            }
+        }
+    }
+
+    @Test
+    fun `de una deuda no se divide un desembolso, un avance ni un ajuste, y nada desaparece`() = testApplication {
+        application { testModule() }
+        // El desembolso de un crédito: la pata del crédito sale, la de ahorros entra.
+        par("tr-desembolso", libranza, 5_000_000L, "Desembolso de crédito")
+        val desembolso = PartesDelAviso(
+            listOf(parteDeGasto("p-d1", 3_000_000L, "Mercado", libranza), parteDeGasto("p-d2", 2_000_000L, "Hogar", libranza)),
+        )
+        val r1 = dividir("tr-desembolso-deuda", desembolso)
+        assertEquals(HttpStatusCode.UnprocessableEntity, r1.status)
+        assertEquals(com.jvillada.movi.shared.model.DE_UNA_DEUDA_SOLO_COMPRAS_CON_TARJETA, r1.bodyAsText())
+
+        // Un avance de la tarjeta: la pata de la tarjeta lleva `transferId`.
+        par("tr-avance", nu, 400_000L, "Traspaso")
+        val avance = PartesDelAviso(listOf(parteDeGasto("p-a1", 300_000L, "Mercado"), parteDeGasto("p-a2", 100_000L, "Salud")))
+        assertEquals(HttpStatusCode.UnprocessableEntity, dividir("tr-avance-deuda", avance).status)
+
+        // Un ajuste de saldo de la tarjeta.
+        transaction { evento("ev-ajuste", nu, "EXPENSE", 50_000L, "Ajuste de saldo") }
+        val ajuste = PartesDelAviso(listOf(parteDeGasto("p-j1", 30_000L, "Mercado"), parteDeGasto("p-j2", 20_000L, "Salud")))
+        assertEquals(HttpStatusCode.UnprocessableEntity, dividir("ev-ajuste", ajuste).status)
+
+        assertTrue(anulados().isEmpty(), "nada se anuló: la plata sigue donde estaba")
+        assertEquals(deudaInicial + 400_000L + 50_000L, deudaDeNu())
     }
 }
