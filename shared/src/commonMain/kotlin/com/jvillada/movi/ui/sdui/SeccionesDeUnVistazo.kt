@@ -40,6 +40,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.delay
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -115,7 +116,7 @@ import com.jvillada.movi.ui.dashboard.conteoPorRevisarDelInicio
 import com.jvillada.movi.ui.dashboard.EstadoDelHeroe
 import com.jvillada.movi.ui.dashboard.rememberEstadoQueCambia
 import com.jvillada.movi.ui.dashboard.MovimientosDelDueno
-import com.jvillada.movi.ui.dashboard.LocalCargaDelInicioTerminadaEn
+import com.jvillada.movi.ui.dashboard.LocalCargaBuenaDelInicioEmpezadaEn
 import com.jvillada.movi.ui.dashboard.datosConLosMovimientosDelDueno
 import androidx.compose.ui.graphics.graphicsLayer
 import com.jvillada.movi.ui.porrevisar.desgloseDePorRevisar
@@ -199,7 +200,15 @@ internal fun HeroDeUnVistazo(
     // que había cuando lo hizo ([datosConLosMovimientosDelDueno]); «Te quedan» y «Tu plata» salen de las
     // funciones de siempre y cambian juntas, en el acto. Dudoso → `null`, y se espera al server.
     val cargandoElInicio = LocalCargandoElInicio.current
-    val pendientes = MovimientosDelDueno.pendientes(LocalCargaDelInicioTerminadaEn.current)
+    // Revisión de la vuelta 82: el optimista vence, y nada más recompone cuando vence: se espera hasta
+    // entonces y se vuelve a mirar.
+    var vueltaPorVencimiento by remember { mutableStateOf(0) }
+    val pendientes = vueltaPorVencimiento.let { MovimientosDelDueno.pendientes(LocalCargaBuenaDelInicioEmpezadaEn.current) }
+    LaunchedEffect(pendientes) {
+        val enMs = MovimientosDelDueno.proximoVencimiento(pendientes) ?: return@LaunchedEffect
+        delay(enMs + 1)
+        vueltaPorVencimiento++
+    }
     val base = remember(pendientes.firstOrNull()?.id) { data }
     val optimista = if (pendientes.isEmpty()) null else datosConLosMovimientosDelDueno(base, pendientes, hoy)
     val datos = optimista ?: data

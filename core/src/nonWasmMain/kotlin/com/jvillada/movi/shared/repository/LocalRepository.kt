@@ -2072,6 +2072,21 @@ class LocalRepository(
         return remote.repartirMovimiento(espacioId, eventoId)
     }
 
+    /**
+     * Vuelta 82: el movimiento está sellado (subió) y ninguna de sus anulaciones espera subir. Una fila que
+     * no está acá (ya se borró, o nunca fue de este espejo) no espera nada.
+     */
+    override suspend fun elServerYaTieneElMovimiento(eventoId: String): Boolean = enDisco {
+        val fila = db.financialEventQueries.selectById(eventoId, userId()).executeAsOneOrNull()
+        val anulacionesPorSubir = db.voidEventQueries.selectFor(eventoId).executeAsList().any { it.syncedAt == null }
+        (fila == null || fila.syncedAt != null) && !anulacionesPorSubir
+    }
+
+    /** Vuelta 82: una vuelta del ciclo del `SyncEngine`, ya (con su candado). */
+    override suspend fun subirLoPendienteAhora() {
+        runCatching { sincronizador.subirLoPendiente() }
+    }
+
     /** Ver [repartirMovimiento]. Lanza [MovimientoSinSubir] si la fila sigue sin sello. */
     private suspend fun asegurarQueSubio(eventoId: String) {
         val fila = db.financialEventQueries.selectById(eventoId, userId()).executeAsOneOrNull() ?: return

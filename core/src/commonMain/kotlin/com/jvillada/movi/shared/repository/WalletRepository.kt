@@ -159,6 +159,20 @@ interface WalletRepository {
         noLoTiene("guardarEspacio")
     suspend fun getDetalleDelEspacio(id: String): com.jvillada.movi.shared.model.DetalleDelEspacio =
         noLoTiene("getDetalleDelEspacio")
+    /**
+     * Vuelta 82 · **¿el server ya tiene el movimiento [eventoId] tal como está acá?** (también su
+     * anulación, si la hay). Para el optimista del héroe del Inicio: una carga del server solo confirma lo
+     * que el dueño hizo si el server ya lo tenía. Contra el server (la web) siempre `true`: se escribe ahí.
+     * El espejo local del teléfono mira los sellos de sus filas. No sube nada ni lanza.
+     */
+    suspend fun elServerYaTieneElMovimiento(eventoId: String): Boolean = true
+
+    /**
+     * Vuelta 82 · sube lo pendiente **ya** (una vuelta del `SyncEngine` en el teléfono; nada en la web).
+     * No lanza: lo que no sube se queda pendiente, como en el ciclo de 30 s.
+     */
+    suspend fun subirLoPendienteAhora() {}
+
     /** «Repartir»: el movimiento propio [eventoId] pasa a ser del espacio. Idempotente. */
     suspend fun repartirMovimiento(espacioId: String, eventoId: String): com.jvillada.movi.shared.model.GastoDelEspacio =
         noLoTiene("repartirMovimiento")

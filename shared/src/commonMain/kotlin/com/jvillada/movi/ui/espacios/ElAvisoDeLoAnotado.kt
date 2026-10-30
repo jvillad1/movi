@@ -127,7 +127,8 @@ fun AvisoDeDeshacer.mostrarLoAnotado(
 ) {
     // Vuelta 82: lo anotado lo adelanta el héroe del Inicio, y su «Deshacer» también ([MovimientosDelDueno]).
     // «Es este» no anotó nada nuevo: no se adelanta.
-    if (!yaEstaba) MovimientosDelDueno.registrar(evento, signo = 1)
+    // Ya está guardado: listo (en el teléfono, cuando suba).
+    if (!yaEstaba) MovimientosDelDueno.listo(MovimientosDelDueno.registrar(evento, signo = 1))
     mostrar(
         if (yaEstaba) textoDeLoQueYaEstaba(evento) else textoDeLoAnotado(evento),
         accion = accionDeRepartir(evento, espacios, this, repo),
@@ -142,6 +143,8 @@ fun AvisoDeDeshacer.mostrarLoAnotado(
                         MovimientosDelDueno.quitar(id)
                         throw e
                     }
+                    // Recién ahora el server (o el espejo del teléfono) lo tiene.
+                    MovimientosDelDueno.listo(id)
                 }
             }
         },

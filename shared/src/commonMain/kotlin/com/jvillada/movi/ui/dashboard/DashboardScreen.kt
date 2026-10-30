@@ -112,11 +112,13 @@ object DashboardDataCache {
     }
 
     /**
-     * Vuelta 82: cuándo **terminó** la última carga del Inicio (bien o mal), en epoch ms; `null` si ninguna
-     * en este proceso. El héroe la compara con lo que hizo el dueño ([MovimientosDelDueno]): lo de antes de
-     * esta carga ya viene en lo que leyó; lo de después, lo adelanta.
+     * Vuelta 82: cuándo **empezó** la última carga **buena** del Inicio (resumen y cuentas del server, sin
+     * fallar), en epoch ms; `null` si ninguna en este proceso ([cargaBuenaEmpezadaEn]). El héroe la compara
+     * con lo que hizo el dueño ([MovimientosDelDueno]): solo una carga que empezó cuando el server ya lo
+     * tenía lo trae. Revisión de la vuelta 82: era cuándo **terminaba** cualquier carga, y una que empezó
+     * antes (o que falló) soltaba el optimista con cifras que no lo traían.
      */
-    var terminadaEn: Long? = null
+    var cargaBuenaEmpezadaEn: Long? = null
 
     /**
      * Qué bloques del Inicio ya hicieron su entrada animada (la cifra que cuenta, las barras que
@@ -129,7 +131,7 @@ object DashboardDataCache {
     fun clear() {
         data = null
         cargadoEn = 0L
-        terminadaEn = null
+        cargaBuenaEmpezadaEn = null
         tickDeLaCarga = 0
         // El próximo que entre ve su Inicio llegar, como la primera vez.
         entradasHechas.clear()
@@ -330,6 +332,8 @@ fun DashboardScreen(
         loading = true
         error = null
         falloLaCarga = false
+        // Vuelta 82: cuándo empezó, para el optimista del héroe (ver [DashboardDataCache.cargaBuenaEmpezadaEn]).
+        val empezoLaCarga = Clock.System.now().toEpochMilliseconds()
         // De quién es esta carga. Se vuelve a mirar antes de guardar la instantánea: si en el medio
         // se cerró la sesión, `clear()` ya borró la de este usuario y escribirla de nuevo dejaría su
         // plata en el aparato.
@@ -569,8 +573,14 @@ fun DashboardScreen(
             if (SessionManager.userId == usuario) InstantaneaDelInicio.delAparato.guardarDatos(usuario, instantanea)
         }
         // Vuelta 82: antes de soltar `loading`, para que el héroe lo vea en el mismo cuadro (ver
-        // [LocalCargaDelInicioTerminadaEn]).
-        DashboardDataCache.terminadaEn = Clock.System.now().toEpochMilliseconds()
+        // [LocalCargaBuenaDelInicioEmpezadaEn]). Solo una carga buena, y por cuándo EMPEZÓ.
+        DashboardDataCache.cargaBuenaEmpezadaEn = cargaBuenaEmpezadaEn(
+            anterior = DashboardDataCache.cargaBuenaEmpezadaEn,
+            empezo = empezoLaCarga,
+            resumenLlego = resumenDelInicioLlego,
+            cuentasLlegaron = llegado.accounts != null,
+            fallo = falloLaCarga,
+        )
         loading = false
     }
 
@@ -680,7 +690,7 @@ fun DashboardScreen(
             // (ver [TirarParaActualizar]). No es otra recarga.
             CompositionLocalProvider(
                 LocalCargandoElInicio provides loading,
-                LocalCargaDelInicioTerminadaEn provides DashboardDataCache.terminadaEn,
+                LocalCargaBuenaDelInicioEmpezadaEn provides DashboardDataCache.cargaBuenaEmpezadaEn,
             ) {
                 TirarParaActualizar(
                     cargando = loading,
