@@ -553,9 +553,8 @@ private fun FilaDePeriodoEsqueleto(conMarca: Boolean) {
     Superficie(modifier = Modifier.fillMaxWidth().testTag(TAG_FILA_DE_PERIODO_ESQUELETO)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
+                // Vuelta 75: el nombre del período solo, sin el rango largo debajo (como la fila cargada).
                 LineaEsqueleto(fraccionDelAncho = 0.4f, estilo = Movi.textos.titulo)
-                Spacer(Modifier.height(Espacio.xxs))
-                LineaEsqueleto(fraccionDelAncho = 0.65f, estilo = Movi.textos.apoyo)
                 if (conMarca) {
                     Spacer(Modifier.height(Espacio.xs))
                     BloqueEsqueleto(alto = Medida.altoDePildora, ancho = Medida.avatar * 2)

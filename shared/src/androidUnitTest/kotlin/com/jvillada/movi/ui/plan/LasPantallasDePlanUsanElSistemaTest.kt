@@ -223,7 +223,7 @@ class LasPantallasDePlanUsanElSistemaTest {
     @Test
     fun `Tus periodos usa el sistema`() {
         montar { PeriodosScreen(onNavigate = {}) }
-        composeRule.waitUntil(timeoutMillis = 5_000) { hay("Septiembre 2026") }
+        composeRule.waitUntil(timeoutMillis = 5_000) { hay("25 ago – 24 sep") } // vuelta 75: el nombre único del período
         // La lista no tiene secciones: es una sola. Las marcas del período son píldoras.
         assertTrue(nodos(TAG_PILDORA).any { "En curso" in textosDentro(it) })
         assertTrue(nodos(TAG_SECCION).flatMap(::textosDentro).none { t -> t.any(Char::isLetter) && t == t.uppercase() })
