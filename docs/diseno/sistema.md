@@ -3546,16 +3546,25 @@ toda suma sin anulados. Ninguna cifra existente cambió; cambió hasta dónde mi
      ahorro más grande que el saldo: «… en las cuentas habrá $6,8M: menos que tu ahorro de $8M». Sin ahorro
      ni apartados, sin la segunda mitad. La frase del rojo solo sale si el primer día en rojo no es el
      peor («El 3 de noviembre ya quedarías en −$100.000 libres por Arriendo…»).
-   - **Lo libre de hoy contra «Te quedan»** (`clausulaDeLaDiferencia`): si difieren en más de $1.000, una
-     cláusula dice cuánto —«hoy tienes $2,6M libres, $1,1M más que lo que te queda para gastar»— y la causa
-     solo si una explica la mayor parte: los pagos que faltan del período (o lo que falta por cobrar), o
-     las compras con tarjeta (lo que sobra, cubierto por la deuda de las tarjetas). Si no, sin causa.
+   - **Lo libre de hoy contra «Te quedan»** (`clausulaDeLaDiferencia`): «lo libre de hoy» es el del primer
+     día de la caja (con lo que vence hoy ya restado), la misma cifra que la frase dice si el peor día es
+     hoy: una sola cifra de «hoy». Si difiere de «Te quedan» en más de $1.000, una cláusula dice cuánto
+     —«hoy tienes $2,6M libres, $1,1M más que lo que te queda para gastar»— y la causa solo si **una
+     medida** la explica con un margen del 10 %: los pagos en pesos que vencen después de hoy (o lo que
+     falta por cobrar), o **las compras con tarjeta del período sin pagar** que mide el server
+     (`DashboardSummary.comprasConTarjetaSinPagar`: el gasto contado en tarjetas menos lo que entró a ellas en
+     el período). No basta con tener deuda en la tarjeta (la Master Black con diferidos a 36 cuotas
+     siempre «alcanzaría»): lo que sobra puede ser tu parte de un gasto que pagó otro, una liquidación o
+     un apartado cruzado con un fijo del siguiente. Si no se puede medir, sin causa.
+   - Si el peor día es el último del horizonte, la fecha va una vez: «Hasta el 5 de nov, tu peor día es
+     ese mismo día: tendrás…».
    - El renglón de abajo **ya no repite la cifra** («Saldo proyectado: $10,5M» era la tercera vez): con
      salario, «Llega tu salario: +$7M»; sin él, «Toca un día para verlo». Un día elegido dice
      «5 nov: $1,4M libres · Arriendo».
    - «Tu día más justo» de Inicio (`cajaDeHoy`) dice lo mismo: «Libre hasta que te paguen» (o «Libre en
      los próximos 30 días») · «Tu día más justo es el 5 de noviembre» · la cifra libre; si no alcanza, «No te
      alcanza» · «El 5 de noviembre quedarías en» (sin un salario anotado, «Sin salario anotado: miramos 30
+     días»; con un ingreso fijo en otra moneda o sin monto, «Sin un salario en pesos anotado: miramos 30
      días»). Movi AI (`proyectar_caja`) usa la misma función.
 3. **Las tres columnas del Disponible con el mismo patrón** (`ColumnaDeVentana`). Las tres dicen en grande
    **lo que queda** —en el período, `periodo.teQuedan`, la MISMA cifra del héroe de Inicio y de «Te
