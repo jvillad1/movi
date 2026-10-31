@@ -4726,7 +4726,7 @@ nuevas**: el reparto recordado solo sugiere, el salario usa la escritura de siem
      tocarla abre el campo del monto (con el día del período ya puesto: «Cuánto te pagan el día 25») y, con
      monto, «¿Ya te pagaron este período?». Es **el mismo estado** del paso del período: se crea al terminar
      con `createRecurringRule`, el día del corte, una sola vez (nada de escrituras nuevas). Sin el día, la
-     fila lo dice («Primero elige el día de tu período») y lleva al paso del período. No se pregunta si ya hay
+     fila lo dice («Elige antes el día de pago») y lleva al paso del período. No se pregunta si ya hay
      un ingreso fijo. De paso, si el día venía del perfil y el paso del período se saltó, el salario también se
      crea (antes `periodoGuardado == null` lo frenaba).
    - **«Siguiente» habilitado en los pasos opcionales** (captura y lo que pagas cada mes): decían «Es

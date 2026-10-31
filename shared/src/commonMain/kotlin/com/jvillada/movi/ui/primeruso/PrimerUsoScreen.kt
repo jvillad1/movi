@@ -1270,7 +1270,7 @@ const val TAG_SALARIO_EN_FIJOS: String = "primer-uso-salario-en-fijos"
  * llegaría; con monto, «$3.500.000 · el día 25». Pura.
  */
 fun subtituloDeTuSalario(dia: Int?, monto: Long?): String = when {
-    dia == null -> "Primero elige el día de tu período"
+    dia == null -> "Elige antes el día de pago"
     (monto ?: 0L) > 0L -> "${formatCOP(monto!!)} · el día $dia"
     else -> "Cuánto te pagan el día $dia"
 }

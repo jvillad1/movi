@@ -6,7 +6,6 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
@@ -164,7 +163,7 @@ private fun TextoDelAviso(partes: PartesDelAviso, color: androidx.compose.ui.gra
 }
 
 /** Vuelta 87: lo mínimo que se le deja al resto del aviso («· Juan Valdez») en el primer renglón; menos, baja al segundo. */
-val ANCHO_MINIMO_DEL_RESTO_DEL_AVISO = 88.dp
+val ANCHO_MINIMO_DEL_RESTO_DEL_AVISO = Medida.anchoMinimoDelRestoDelAviso
 
 /**
  * **Un renglón** (vuelta 79; eran dos): el aviso es un snackbar oscuro, y lo que no cabe a 360 dp se corta

@@ -134,7 +134,7 @@ class Vuelta87Test {
 
     @Test
     fun `el subtitulo de Tu salario pide el dia, o dice cuanto y cuando`() {
-        assertEquals("Primero elige el día de tu período", subtituloDeTuSalario(null, null))
+        assertEquals("Elige antes el día de pago", subtituloDeTuSalario(null, null))
         assertEquals("Cuánto te pagan el día 25", subtituloDeTuSalario(25, null))
         assertEquals("\$6.500.000 · el día 25", subtituloDeTuSalario(25, 6_500_000))
     }

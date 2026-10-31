@@ -906,10 +906,10 @@ enum class FormaDeLaCategoriaDelWidget { UN_RENGLON, PILDORA_ABAJO }
  * Lo que mide, a escala de letra 1 (la de la app ya es ×1,12: se multiplica por la escala), lo más ancho de
  * un renglón: la píldora «$494.300 más», el monto «$1.800.000» y los espacios. Medido en la web a 1280.
  */
-private val ANCHO_DE_LA_PILDORA_Y_EL_MONTO_EN_EL_WIDGET = 170.dp
+private val ANCHO_DE_LA_PILDORA_Y_EL_MONTO_EN_EL_WIDGET = Medida.anchoDeLaPildoraYElMontoDelWidget
 
 /** Lo mínimo que se le deja al nombre de una categoría («Restaurantes», «Entretenimiento»), a escala 1. */
-val ANCHO_MINIMO_DEL_NOMBRE_EN_EL_WIDGET = 90.dp
+val ANCHO_MINIMO_DEL_NOMBRE_EN_EL_WIDGET = Medida.anchoMinimoDelNombreEnElWidget
 
 /** Ver [FormaDeLaCategoriaDelWidget]. [anchoUtil] = el ancho del renglón sin los márgenes. Pura. */
 fun formaDeLaCategoriaDelWidget(anchoUtil: Dp, escalaDeLetra: Float): FormaDeLaCategoriaDelWidget =
@@ -920,7 +920,7 @@ fun formaDeLaCategoriaDelWidget(anchoUtil: Dp, escalaDeLetra: Float): FormaDeLaC
     }
 
 /** Sin saber el ancho: el de un teléfono de 390 dp con sus márgenes. */
-private val ANCHO_DE_UN_TELEFONO_PARA_EL_WIDGET = 358.dp
+private val ANCHO_DE_UN_TELEFONO_PARA_EL_WIDGET = Medida.anchoDelWidgetEnUnTelefono
 
 /** «Contra el período pasado» cuando cabe junto al título; si no, más corto y con el mismo sentido. */
 const val CONTRA_EL_PERIODO_PASADO_CORTO: String = "vs. período pasado"
@@ -930,8 +930,8 @@ const val CONTRA_EL_PASADO_MUY_CORTO: String = "vs. el pasado"
 
 /** Ver [CONTRA_EL_PERIODO_PASADO]: la frase que cabe junto al título «En qué se va» en [anchoUtil]. Pura. */
 fun textoDeContraQue(anchoUtil: Dp, escalaDeLetra: Float): String = when {
-    anchoUtil >= 235.dp * escalaDeLetra -> CONTRA_EL_PERIODO_PASADO
-    anchoUtil >= 200.dp * escalaDeLetra -> CONTRA_EL_PERIODO_PASADO_CORTO
+    anchoUtil >= Medida.anchoParaContraElPeriodoPasado * escalaDeLetra -> CONTRA_EL_PERIODO_PASADO
+    anchoUtil >= Medida.anchoParaContraElPeriodoCorto * escalaDeLetra -> CONTRA_EL_PERIODO_PASADO_CORTO
     else -> CONTRA_EL_PASADO_MUY_CORTO
 }
 

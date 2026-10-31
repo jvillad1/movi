@@ -812,7 +812,7 @@ class PrimerUsoEnPantallaTest {
     @Test
     fun `sin el dia del periodo Tu salario manda a elegirlo`() {
         montar(RepoConCifra(), paso = PasoDePrimerUso.RECURRENTES)
-        assertTrue(seVe("Primero elige el día de tu período"))
+        assertTrue(seVe("Elige antes el día de pago"))
         composeRule.onNodeWithTag(TAG_FILA_DEL_SALARIO).performClick()
         composeRule.waitForIdle()
         assertTrue(seVe("Paso 2 de 6"), "lleva al paso del período")
