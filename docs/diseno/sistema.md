@@ -4696,3 +4696,69 @@ es una `Fila`), `LosRecordatoriosVanDebajoDeLosPagosTest`, `LoQueSeVeEnteroTest`
 - **«Gasto por categoría» del panel de Actividad**: la fila densa del Inicio (la píldora junto al monto, la
   barra dentro de la fila).
 - «¿Qué cuenta?» alineado con el texto de su tarjeta.
+
+## 83. Vuelta 86: una cifra por pregunta
+
+Viene de la revisión 9 del 30-oct (puntos 3, 4, 5 y 6; capturas `r9-pagos-390-a/b/c/d`, `r9-inicio-390-fin`,
+`r9-inicio-360-a`, `r9-grupos-390-a`). **Sin reglas de plata nuevas**: «Falta por pagar», «Te quedan», el flujo
+libre y el saldo de un grupo suman lo mismo que antes; cambia dónde se dicen, cómo se rotulan y en qué orden.
+Ningún token ni componente nuevo.
+
+1. **Pagos contesta dos preguntas.** «¿Cuánto me queda?» es «Te quedan» (con su «por día» y su «meta de hoy»
+   dentro de la misma tarjeta) y «¿Cuánto me falta pagar?» es «Falta por pagar».
+   - **«Flujo libre» y «Libre sin las tarjetas» se mudaron a «Tus períodos»** como el bloque **«Tu mes
+     típico»** (`ui/plan/TuMesTipico.kt`), al final de la lista de períodos: es la referencia contra la que
+     se lee cada ciclo. Es la misma tarjeta (`ResumenFlujoLibreCard`) con las mismas cuentas
+     (`resumenRecurrentes` sobre las suscripciones y los vencimientos) y su «¿Qué cuenta?». Lo monta
+     `rememberEstadoDelMesTipico` —el estado del tablero con `soloElMesTipico`: sin créditos, movimientos ni
+     permiso de avisos—. Sin pagos fijos ni suscripciones no se pinta; **si su lectura falla tampoco** (la
+     pantalla ya tiene su aviso y su «Reintentar», que también lo reintenta: un solo error por pantalla).
+   - En Pagos, «Lo que se repite al mes» conserva «Buscar cobros» y las suscripciones; donde estaba la tarjeta
+     va la fila **«Tu mes típico» · «Lo que entra y sale cada mes, en Tus períodos»**, que lleva allá.
+   - **La caja se rotula con lo que dice**: encima de la cifra, «Lo más bajo que llega Tu plata»; debajo, la
+     frase de siempre con el día («Hasta el 25 nov · tu día más justo es el 24 nov»). El lector oye «Lo más
+     bajo que llega Tu plata: $5,6M el 24 nov» (`descripcionDeLaCifraDeLaCaja`). El esqueleto reserva el
+     renglón del rótulo.
+   - **Un formato por tarjeta** (regla de la 83): «Te quedan», «Falta por pagar» y «Tu mes típico» enteras;
+     la caja, abreviada en todo (cifra, leyenda y gráfica).
+2. **Lo que no suma se dice ahí mismo** (`ui/recurrentes/LoQueNoSuma.kt`).
+   - `aporteALoQueFalta(pago)` es lo que cada fila aporta a `faltaPorPagar`, con su misma regla (la suma
+     sobre el checklist es esa cifra: lo vigila `Vuelta86Test`). `porQueNoSuma(pago)` dice por qué una
+     fila pendiente aporta cero: solo puede pasarle a una tarjeta (su monto es el saldo) —
+     **`FALTA_EL_MINIMO`** sin mínimo cargado, **`FALTA_EL_CORTE`** con mínimo pero sin el del extracto de
+     esa fecha (`faltaPorPagar` solo suma el mínimo del extracto; esa regla no cambió).
+   - **La fila de Pagos** lleva, debajo de su vencimiento, la píldora de aviso «No suma: falta el mínimo» y
+     el botón fantasma **«Cargar mínimo»** («Cargar corte»), fuera del renglón que abre la regla. Abre la
+     **misma** `CardTermsSheet` de Créditos sobre esa tarjeta (`estado.tarjetaACargar`, la cuenta sale de
+     `card_<cuenta>`); al guardar se vuelven a leer los vencimientos. Lo de períodos anteriores no lleva la
+     píldora: no está en ningún total.
+   - **Bajo el total**, en la tarjeta de Pagos y en el widget de Inicio: «+ Tarjeta Nu sin contar»
+     (`lineaDeLoQueNoSuma`: «+ Nu y Master sin contar», «+ 3 tarjetas sin contar»; sin cifra, porque es lo
+     que no se sabe). `ResumenDeFacturas.sinContar`.
+   - **En Inicio**, la fila del widget «Falta por pagar» y «Próximo pago» dicen «No suma: falta el mínimo»
+     donde antes iban sin monto, callados (`LoQueNoSumaDelPago`).
+3. **Grupos cuadra: se agrega la línea de lo de antes** (no se cambió la ventana de «Quién puso qué», que
+   sigue siendo el período). En la tarjeta del saldo, debajo de «para quedar 50/50»: «$198.250 de este
+   período + $341.375 que venía de antes» (`desgloseDelSaldo`, `lineaDelDesgloseDelSaldo`). Lo del período
+   es el neto del dueño en `DetalleDelEspacio.delPeriodo` (lo mismo que «Quién puso qué»); lo de antes, el
+   saldo menos eso (gastos anteriores y todo lo saldado). Las dos partes suman exacto el saldo, que sigue
+   saliendo solo de `saldoDelEspacio`. Si lo saldado se come parte del período: «$198.250 de este período −
+   $58.625 ya saldado o de antes»; si todo es de antes, «Todo venía de antes de este período»; si todo es
+   del período, no hay línea. Se eligió esta opción y no la ventana desde el último saldado porque no mueve
+   ninguna cifra que ya se ve y vale con saldados parciales.
+4. **«Próximo pago» es el que vence primero.** `pagosEnElOrdenDePagos` (antes `pagosEnElOrdenDeLaCola`)
+   ordena los mismos pendientes con **`enOrdenDeFacturas`, la función de la lista de Pagos**: lo vencido
+   primero (lo que venció hace más, arriba), después por fecha y, a igual fecha, el monto más grande. El
+   primero es «Próximo pago» y es la misma fila que lleva el «Anotar pago» amarillo en Pagos; el widget sigue
+   desde el segundo. Se eligió la fecha y no «Lo que más pesa»: «próximo» dice cuándo, y así Inicio y Pagos
+   nombran el mismo pago. La cola (`colaDePendientes`: la campana y «Movi propone hoy») conserva su orden
+   por monto dentro de cada urgencia.
+
+Lo vigilan `Vuelta86Test` (commonTest: el orden del próximo pago contra la primera de Pagos, la suma fila por
+fila igual a `faltaPorPagar`, las razones y la línea «sin contar», el desglose del saldo que suma exacto con
+y sin saldados) y `Vuelta86EnPantallaTest` (Robolectric: Pagos a 390 y 1.280 sin «Flujo libre» ni «Libre sin
+las tarjetas», con la píldora, «Cargar mínimo» que abre la hoja y «+ Tarjeta Nu sin contar»; el widget y
+«Próximo pago» del Inicio con la fila etiquetada; «Tu mes típico» en Tus períodos, y sin pintarse si su
+lectura falla; Grupos con la línea). `UnSoloAmarilloPorVistaTest` cuenta Pagos con la fila que no suma, a 390
+y 1.280. Las pruebas de siempre del flujo libre lo miran con `TableroDeRecurrentesDePrueba`, que pone
+«Tu mes típico» en su lugar de antes (`debajoDeLoQueSeRepite`) con el mismo estado.
