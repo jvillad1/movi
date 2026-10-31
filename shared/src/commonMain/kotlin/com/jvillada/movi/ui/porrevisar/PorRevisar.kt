@@ -124,15 +124,16 @@ data class ConteoPorRevisar(
 }
 
 /**
- * **De qué es el número**, en una línea: «2 avisos · 1 movimiento», «1 pago de tarjeta · 1 débito
- * automático». Solo las fuentes que tienen algo; `null` sin nada. [conDebitos] en `false` deja afuera
+ * **De qué es el número**, en una línea: «2 avisos · 1 movimiento», «1 pago de tarjeta · 1 movimiento
+ * esperado». Solo las fuentes que tienen algo; `null` sin nada. [conDebitos] en `false` deja afuera
  * los débitos (cuando la cifra que acompaña es [ConteoPorRevisar.loQueEntroSolo]).
  */
 fun desgloseDePorRevisar(conteo: ConteoPorRevisar, conDebitos: Boolean = true): String? = listOfNotNull(
     conteo.avisos.takeIf { it > 0 }?.let { if (it == 1) "1 aviso" else "$it avisos" },
     conteo.movimientos.takeIf { it > 0 }?.let { if (it == 1) "1 movimiento" else "$it movimientos" },
     conteo.pagosDeTarjeta.takeIf { it > 0 }?.let { if (it == 1) "1 pago de tarjeta" else "$it pagos de tarjeta" },
-    conteo.debitos.takeIf { it > 0 && conDebitos }?.let { if (it == 1) "1 débito automático" else "$it débitos automáticos" },
+    // Vuelta 90: el bloque ya no es solo débitos automáticos (también la nómina que no se ve).
+    conteo.debitos.takeIf { it > 0 && conDebitos }?.let { if (it == 1) "1 movimiento esperado" else "$it movimientos esperados" },
     conteo.saldar.takeIf { it > 0 }?.let { if (it == 1) "1 para saldar" else "$it para saldar" },
 ).joinToString(" · ").ifEmpty { null }
 

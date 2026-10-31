@@ -2,6 +2,7 @@ package com.jvillada.movi.ui.dashboard
 
 import com.jvillada.movi.shared.model.DebitoAutomaticoPorConfirmar
 import com.jvillada.movi.shared.model.OrigenDelDebito
+import com.jvillada.movi.shared.model.TransactionType
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -64,5 +65,20 @@ class DebitosAutomaticosEnHoyTest {
         assertTrue(cosasParaRevisarDe(DashboardData()).none { it.destino == DestinoDeRevision.POR_REVISAR })
         val conDebito = cosasParaRevisarDe(DashboardData(debitosPorConfirmar = listOf(libre)))
         assertEquals("¿Se cobró la cuota de Libre inversión 9695?", conDebito.single { it.destino == DestinoDeRevision.POR_REVISAR }.texto)
+    }
+
+    // ── Vuelta 90 · lo esperado ─────────────────────────────────────────────────
+
+    @Test
+    fun la_nomina_esperada_pregunta_si_llego_y_el_gasto_si_se_pago() {
+        val salario = debito("rule-salario", "Salario", OrigenDelDebito.RECURRENTE)
+            .copy(tipo = TransactionType.INCOME, esperado = true)
+        val netflix = debito("rule-netflix", "Netflix", OrigenDelDebito.RECURRENTE).copy(esperado = true)
+        assertEquals("¿Te llegó Salario?", cosas(listOf(salario)).single().texto)
+        assertEquals("¿Se pagó Netflix?", cosas(listOf(netflix)).single().texto)
+        assertEquals("2 movimientos esperados sin anotar", cosas(listOf(libre, salario)).single().texto)
+        // La nómina esperada que también vence en el checklist no se repite como «venció».
+        val filaDelSalario = PagoDelPeriodo("rule-salario", "Salario", 8_500_000L, pagado = false, diasParaVencer = -3)
+        assertEquals(1, cosas(listOf(salario), checklist = listOf(filaDelSalario)).size)
     }
 }

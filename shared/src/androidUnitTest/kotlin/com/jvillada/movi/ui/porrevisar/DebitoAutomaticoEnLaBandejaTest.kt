@@ -18,6 +18,7 @@ import com.jvillada.movi.shared.model.EventDay
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.OrigenDelDebito
 import com.jvillada.movi.shared.model.SmsMessage
+import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.theme.MoviTheme
 import org.junit.After
@@ -91,12 +92,12 @@ class DebitoAutomaticoEnLaBandejaTest {
         Repositories.sustitutoDePrueba = null
     }
 
-    private fun montar() {
+    private fun montar(esperar: String = "¿se cobró?") {
         Repositories.sustitutoDePrueba = Repo()
         composeRule.setContent {
             MoviTheme { Box(Modifier.fillMaxSize()) { PorRevisarScreen(onNavigate = {}) } }
         }
-        composeRule.waitUntil(5_000) { hay("¿se cobró?") }
+        composeRule.waitUntil(5_000) { hay(esperar) }
     }
 
     private fun hay(texto: String): Boolean =
@@ -162,5 +163,40 @@ class DebitoAutomaticoEnLaBandejaTest {
         composeRule.onNodeWithText(CAMBIAR_MONTO).performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
         assertTrue(hay("Lo que cobró el banco"))
+    }
+
+    // ── Vuelta 90 · lo esperado ─────────────────────────────────────────────────
+
+    private val salario = debito.copy(
+        ruleId = "rr_salario", origen = OrigenDelDebito.RECURRENTE, nombre = "Salario", monto = 8_500_000L,
+        categoria = "Salario", pataDelDineroId = "ev_deb_sal_s", deudaId = null, pataDeLaDeudaId = null, transferId = null,
+        tipo = TransactionType.INCOME, esperado = true, ultimoMonto = 8_731_000L,
+    )
+
+    @Test
+    fun `la nomina esperada pregunta si llego y cambiar monto abre con el de la ultima vez`() {
+        debitos = listOf(salario)
+        montar(esperar = TEXTO_DE_LO_ESPERADO_EN_LA_BANDEJA)
+        assertTrue(hay(TITULO_DE_LOS_DEBITOS))
+        assertTrue(hay("$ROTULO_DE_LO_ESPERADO · Bancolombia Ahorros · el"))
+        assertTrue(hay(SI_ME_LLEGO) && hay(NO_ME_LLEGO))
+        assertFalse(hay(SI_SE_COBRO), "no es un débito: no se pregunta si se cobró")
+        composeRule.onNodeWithText(CAMBIAR_MONTO).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        assertTrue(hay("Lo que te llegó"))
+        composeRule.onNodeWithText(SI_ME_LLEGO).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitUntil(5_000) { confirmado != null }
+        assertEquals(ConfirmarDebitoAutomatico("rr_salario", "2026-10", 8_731_000L, "ev_deb_sal_s"), confirmado)
+    }
+
+    @Test
+    fun `un gasto esperado se descarta con no se pago`() {
+        debitos = listOf(salario.copy(ruleId = "rr_netflix", nombre = "Netflix", monto = 49_900L, tipo = TransactionType.EXPENSE, ultimoMonto = null))
+        montar(esperar = TEXTO_DE_LO_ESPERADO_EN_LA_BANDEJA)
+        assertTrue(hay(SI_SE_PAGO))
+        composeRule.onNodeWithText(NO_SE_PAGO).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitUntil(5_000) { descartado != null }
+        assertEquals("rr_netflix" to "2026-10", descartado)
+        assertEquals(null, confirmado)
     }
 }

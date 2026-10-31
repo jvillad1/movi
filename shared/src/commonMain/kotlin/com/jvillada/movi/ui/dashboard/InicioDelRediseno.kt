@@ -5,6 +5,7 @@ import com.jvillada.movi.shared.model.candidatosParecidos
 import com.jvillada.movi.ui.accounts.tipoSiElNombreNoLoDice
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.Apartado
+import com.jvillada.movi.shared.model.dondeDeLoEsperado
 import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.shared.model.AccountType
@@ -461,7 +462,7 @@ private fun propuestaDeDebitos(data: DashboardData): PropuestaDelInicio? {
         titulo = titulo,
         cifra = uno?.monto,
         moneda = uno?.moneda ?: "COP",
-        cuerpo = uno?.let { "desde ${it.cuentaNombre}" },
+        cuerpo = uno?.let(::dondeDeLoEsperado),
         accion = "Confirmar",
         alTocar = AccionDeLaPropuesta.Ir(Screen.PorRevisar),
         urgente = true,

@@ -2,6 +2,7 @@ package com.jvillada.movi.avisos
 
 import com.jvillada.movi.shared.model.DebitoAutomaticoPorConfirmar
 import com.jvillada.movi.shared.model.OrigenDelDebito
+import com.jvillada.movi.shared.model.TransactionType
 import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -82,5 +83,33 @@ class AvisoDeDebitosAutomaticosTest {
     @Test
     fun tocarlo_abre_por_revisar() {
         assertEquals(com.jvillada.movi.ui.Screen.PorRevisar, destinoDeAviso(ABRIR_POR_REVISAR))
+    }
+
+    // ── Vuelta 90 · lo esperado ─────────────────────────────────────────────────
+
+    private val salario = debito("rule-salario", "2026-10", vence = "2026-10-03", origen = OrigenDelDebito.RECURRENTE, nombre = "Salario", monto = 8_500_000L)
+        .copy(tipo = TransactionType.INCOME, esperado = true, categoria = "Salario")
+    private val netflix = debito("rule-netflix", "2026-10", vence = "2026-10-03", origen = OrigenDelDebito.RECURRENTE, nombre = "Netflix", monto = 49_900L)
+        .copy(esperado = true, cuentaNombre = "Master Black")
+
+    @Test
+    fun la_nomina_que_no_se_ve_pregunta_si_llego() {
+        val texto = textoDeDebitosAutomaticos(listOf(salario), hoy)!!
+        assertEquals("¿Te llegó Salario?", texto.titulo)
+        assertEquals("Movi esperaba Salario (\$8.500.000) el 3 de octubre y no ve el movimiento. ¿Te llegó?", texto.texto)
+    }
+
+    @Test
+    fun un_gasto_esperado_pregunta_si_se_pago() {
+        val texto = textoDeDebitosAutomaticos(listOf(netflix), hoy)!!
+        assertEquals("¿Se pagó Netflix?", texto.titulo)
+        assertEquals("Movi esperaba Netflix (\$49.900) el 3 de octubre y no ve el movimiento. ¿Se pagó?", texto.texto)
+    }
+
+    @Test
+    fun varios_con_algo_esperado_no_dicen_que_todos_son_debitos() {
+        val texto = textoDeDebitosAutomaticos(listOf(libre, salario), hoy)!!
+        assertEquals("2 movimientos esperados sin anotar", texto.titulo)
+        assertEquals(listOf("La cuota de Libre inversión 9695 · \$1.204.064", "Salario · \$8.500.000"), texto.lineas)
     }
 }

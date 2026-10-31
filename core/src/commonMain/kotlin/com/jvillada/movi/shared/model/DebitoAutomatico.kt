@@ -138,18 +138,74 @@ data class DebitoAutomaticoPorConfirmar(
     val deudaId: String? = null,
     val pataDeLaDeudaId: String? = null,
     val transferId: String? = null,
+    /**
+     * **Vuelta 90 · gasto o ingreso.** `INCOME` solo en lo esperado ([esperado]): la nómina que no se
+     * ve llegar («¿Te llegó Salario?»). Lo que el banco debita solo es siempre un gasto. Default
+     * `EXPENSE`: un server viejo no lo manda y todo lo que mandaba era un gasto.
+     */
+    val tipo: TransactionType = TransactionType.EXPENSE,
+    /**
+     * **Vuelta 90 · Movi lo esperaba, pero nadie dijo que el banco lo cobra solo.** `false` (default, y
+     * lo único que manda un server viejo o `GET /api/debitos-automaticos` sin `?conEsperados=1`) = un
+     * débito automático marcado por el dueño (`seDebitaSolo` / `debitoAutomaticoDesde`). `true` = un
+     * recurrente con cuenta (una suscripción en la Master, la nómina) que ya debió pasar, lleva
+     * [GRACIA_DE_LO_ESPERADO_DIAS] días sin movimiento que lo salde, y se pregunta igual: «¿Pasó esto?».
+     */
+    val esperado: Boolean = false,
+    /**
+     * **Vuelta 90 · lo que se anotó la última vez**, solo cuando es distinto de [monto]: el movimiento
+     * del último período sellado de esta regla. Es la evidencia de que el monto no es fijo (el sueldo
+     * varía); «Cambiar monto» abre lleno con este. `null` = no hay historia o coincide: no se inventa.
+     */
+    val ultimoMonto: Long? = null,
 ) {
     /** La llave de la tarjeta en la bandeja: una por regla y período. */
     val clave: String get() = "$ruleId@$periodo"
+
+    /** ¿Es plata que entra? Solo lo esperado puede serlo (la nómina). */
+    val esIngreso: Boolean get() = tipo == TransactionType.INCOME
 }
+
+/**
+ * **Vuelta 90 · cuántos días después de la fecha esperada se pregunta por lo esperado** que no tiene
+ * movimiento. Elegido, no medido: un pago con tarjeta o una transferencia tarda uno o dos días en
+ * verse, y el dueño suele anotar al día siguiente; antes de eso preguntar sería ruido. Lo marcado
+ * como débito automático no espera: el banco debita ese día ([DebitoAutomaticoPorConfirmar.esperado]
+ * en `false`).
+ */
+const val GRACIA_DE_LO_ESPERADO_DIAS: Int = 2
 
 /** La nota con que queda anotado lo que se confirmó desde la propuesta: dice de dónde salió. */
 const val NOTA_DEL_DEBITO_AUTOMATICO: String = "Débito automático"
 
-/** «Débito automático: Cuota Libre inversión 9695 · $1.204.064 desde Bancolombia Ahorros — ¿se cobró?» */
-fun textoDelDebitoAutomatico(debito: DebitoAutomaticoPorConfirmar): String =
-    "$NOTA_DEL_DEBITO_AUTOMATICO: ${debito.nombre} · ${montoDelDebito(debito.monto, debito.moneda)} " +
-        "desde ${debito.cuentaNombre} — ¿se cobró?"
+/**
+ * «Débito automático: Cuota Libre inversión 9695 · $1.204.064 desde Bancolombia Ahorros — ¿se cobró?».
+ * Lo esperado (vuelta 90): «Netflix · $49.900 desde Master Black — ¿se pagó?» y «Salario · $8.500.000
+ * a Bancolombia Ahorros — ¿te llegó?».
+ */
+fun textoDelDebitoAutomatico(debito: DebitoAutomaticoPorConfirmar): String {
+    val monto = montoDelDebito(debito.monto, debito.moneda)
+    return when {
+        debito.esIngreso -> "${debito.nombre} · $monto a ${debito.cuentaNombre} — ¿te llegó?"
+        debito.esperado -> "${debito.nombre} · $monto desde ${debito.cuentaNombre} — ¿se pagó?"
+        else -> "$NOTA_DEL_DEBITO_AUTOMATICO: ${debito.nombre} · $monto desde ${debito.cuentaNombre} — ¿se cobró?"
+    }
+}
+
+/** «desde Bancolombia Ahorros» (lo que sale), o «a Bancolombia Ahorros» (la nómina que entra). */
+fun dondeDeLoEsperado(debito: DebitoAutomaticoPorConfirmar): String =
+    if (debito.esIngreso) "a ${debito.cuentaNombre}" else "desde ${debito.cuentaNombre}"
+
+/**
+ * **La pregunta de una propuesta, en una línea** (vuelta 90): «¿Se cobró la cuota de Libre inversión
+ * 9695?» para un débito automático, «¿Se pagó Netflix?» para un gasto esperado y «¿Te llegó Salario?»
+ * para la nómina. La dicen la fila de Hoy, la campana y el aviso del teléfono.
+ */
+fun preguntaDeLoEsperado(debito: DebitoAutomaticoPorConfirmar): String = when {
+    debito.esIngreso -> "¿Te llegó ${debito.nombre.trim()}?"
+    debito.esperado -> "¿Se pagó ${debito.nombre.trim()}?"
+    else -> "¿Se cobró ${loQueSeCobra(debito)}?"
+}
 
 /**
  * **Lo que el banco debió cobrar, dicho dentro de una frase**: «la cuota de Libre inversión 9695» para
@@ -163,14 +219,15 @@ fun loQueSeCobra(debito: DebitoAutomaticoPorConfirmar): String = when (debito.or
 }
 
 /**
- * «¿Se cobró la cuota de Libre inversión 9695?», o «2 débitos automáticos por confirmar». `null` sin
- * ninguno. La fila de «Para revisar» en Hoy y la respuesta de «¿Qué me recomiendas revisar primero?»
+ * «¿Se cobró la cuota de Libre inversión 9695?», o «2 débitos automáticos por confirmar» (con algo
+ * esperado entre ellos, vuelta 90: «3 movimientos esperados sin anotar»). `null` sin ninguno. La fila de «Para revisar» en Hoy y la respuesta de «¿Qué me recomiendas revisar primero?»
  * en Movi AI dicen lo mismo con estas mismas palabras.
  */
-fun textoDeDebitosEnHoy(debitos: List<DebitoAutomaticoPorConfirmar>): String? = when (debitos.size) {
-    0 -> null
-    1 -> "¿Se cobró ${loQueSeCobra(debitos.single())}?"
-    else -> "${debitos.size} débitos automáticos por confirmar"
+fun textoDeDebitosEnHoy(debitos: List<DebitoAutomaticoPorConfirmar>): String? = when {
+    debitos.isEmpty() -> null
+    debitos.size == 1 -> preguntaDeLoEsperado(debitos.single())
+    debitos.none { it.esperado } -> "${debitos.size} débitos automáticos por confirmar"
+    else -> "${debitos.size} movimientos esperados sin anotar"
 }
 
 /** El monto con su símbolo: pesos con «$», cualquier otra moneda con su código adelante. */
