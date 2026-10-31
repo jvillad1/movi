@@ -4696,3 +4696,85 @@ es una `Fila`), `LosRecordatoriosVanDebajoDeLosPagosTest`, `LoQueSeVeEnteroTest`
 - **«Gasto por categoría» del panel de Actividad**: la fila densa del Inicio (la píldora junto al monto, la
   barra dentro de la fila).
 - «¿Qué cuenta?» alineado con el texto de su tarjeta.
+
+## 84. Vuelta 87: el día uno y los bordes
+
+Viene de la revisión 9 del 30-oct (puntos 8 a 12 y tres menores; capturas `r9-*.png`). **Sin reglas de plata
+nuevas**: el reparto recordado solo sugiere, el salario usa la escritura de siempre y todo SUM excluye
+`void_events`. Ningún token nuevo.
+
+1. **La cola «·4057» nunca se corta** (`ui/components/NombreCortoDeCuenta.kt`, `partirLaColaDelNombreCorto`).
+   A 360 el subtítulo «Vivienda · Bancolombia ·4057» terminaba en «Bancolombia …», justo donde está lo que
+   distingue a la 4057 de la 8133. El nombre corto tiene dos partes —la cabeza (el banco, y la categoría que
+   le preceda) y la cola («·4057», «·3684 USD»)— y **se recorta la cabeza, nunca la cola**: «Vivienda ·
+   Bancol… ·4057». Una sola regla, en `NombreCortoDeCuenta.kt`; `Fila` la aplica a todo subtítulo de un
+   renglón que **termina** en un nombre corto con número (Inicio, Actividad, Buscar, Agregar), y el lector de
+   pantalla (y una prueba) sigue viendo el subtítulo entero (`TAG_CABEZA_DEL_SUBTITULO`,
+   `TAG_COLA_DEL_SUBTITULO`).
+2. **«En qué se va» en media columna** (`sdui/SeccionesDelInicio.kt`, `formaDeLaCategoriaDelWidget`,
+   `textoDeContraQue`). A 1280 el widget mide ~244 dp y el nombre se quedaba en «R…» entre la píldora
+   («$494.300 más») y el monto. La forma sale del ancho que de verdad hay (lo sabe quien coloca el widget y se
+   lo pasa: `WidgetEnQueSeVa(ancho = …)`; **no** `BoxWithConstraints` adentro, porque `ParDeWidgets` pide
+   `IntrinsicSize.Min`): `UN_RENGLON` (nombre · píldora · monto) solo si al nombre le quedan 90 dp a letra 1;
+   si no, `PILDORA_ABAJO`: el nombre y el monto arriba y la píldora en el renglón de la barra. La frase de
+   arriba se acorta con sentido: «Contra el período pasado» → «vs. período pasado» → «vs. el pasado» (el lector
+   de pantalla dice siempre la entera). Las medidas se multiplican por la escala de letra (la de la app ya es
+   ×1,12): a 390 y 360 sigue en un renglón; con la letra grande a 360, la píldora baja antes de cortar el nombre.
+3. **El primer día** (`ui/primeruso/`, `ui/dashboard/CajaEnHoy.kt`).
+   - **«Tu salario» en «Lo que pagas cada mes»** (`FilaDelSalario`): la pregunta ya estaba en el paso del
+     período, debajo del calendario, donde no se veía. Ahora hay una fila a la vista junto a lo que pagas;
+     tocarla abre el campo del monto (con el día del período ya puesto: «Cuánto te pagan el día 25») y, con
+     monto, «¿Ya te pagaron este período?». Es **el mismo estado** del paso del período: se crea al terminar
+     con `createRecurringRule`, el día del corte, una sola vez (nada de escrituras nuevas). Sin el día, la
+     fila lo dice («Primero elige el día de tu período») y lleva al paso del período. No se pregunta si ya hay
+     un ingreso fijo. De paso, si el día venía del perfil y el paso del período se saltó, el salario también se
+     crea (antes `periodoGuardado == null` lo frenaba).
+   - **«Siguiente» habilitado en los pasos opcionales** (captura y lo que pagas cada mes): decían «Es
+     opcional» y el botón principal estaba gris. El período y las cuentas siguen pidiendo algo (sin eso Movi
+     no calcula nada); «Saltar este paso» sigue ahí.
+   - **«Te alcanza hasta el fin del período · tu día más justo, hoy»** era una frase sin contenido en una
+     cuenta recién creada: la caja es plana (sin pagos ni ingresos por venir ni gasto estimado:
+     `CajaProyectada.nadaPendiente`) y el día más justo es hoy por construcción. Ahora dice **«sin pagos
+     pendientes»** (`SIN_PAGOS_PENDIENTES`). Con cualquier pago por venir o un gasto del día a día estimado,
+     la frase de siempre.
+4. **Buscar con totales** (`ui/buscar/BuscarEnMovi.kt`, `totalesDeLaBusqueda`, `lineasDeLosTotales`). Bajo
+   «Movimientos · N»: «Gastaste $412.300 en total · $98.000 este período». **Reglas elegidas**: suma
+   **todos** los que coinciden (no solo los 30 listados); solo lo que cuenta como gasto o ingreso
+   (`comoSePresenta`, la regla de «Gastos»: sin traspasos, pagos de tarjeta ni ajustes); **tu parte** de lo
+   compartido (`montoContado`); solo pesos; gastos e ingresos **aparte** (no se restan: «Gastaste» y «Te
+   entró» son dos cosas) y solo sale la línea que tiene algo; con el chip «Este período» prendido, una sola
+   vez («Gastaste $98.000 este período»). Lo que no entra se dice: «Sin contar 1 por confirmar», «Sin
+   contar 1 en otra moneda»; si hay más que los listados, «Los 30 más recientes de 47». **Un solo formato de
+   fecha** en las filas: el corto («Hoy», «Ayer», «28 oct», con año solo si no es el actual); no más «28 oct»
+   con la cuenta y «27 de octubre» sin ella.
+5. **«Anotar pago» recuerda el reparto** (`ui/quickadd/RepartoRecordado.kt`). Si el **último** pago de esa
+   regla (el gasto más reciente cuya descripción empieza por su nombre, con su categoría) se repartió en un
+   grupo que todavía existe, la hoja en modo pago muestra «Repartir en Casa con Andrés, como el mes pasado»
+   (o «como la última vez» pasados 45 días) **ya marcado**, encima de «Guardar movimiento». El dueño lo
+   desmarca con un toque; **nunca reparte solo**: marcado, **después** de guardar el pago (y saldar su
+   factura) llama el mismo `…/compartir` (`repartirMovimiento`) sobre el movimiento recién guardado, y el
+   aviso de abajo dice «Tu parte $X · repartido con Andrés» con «Deshacer» (sacarlo del grupo). Si el reparto
+   falla, el pago queda guardado y el aviso dice por qué. Solo mira el último pago: si la vez pasada no se
+   repartió, no se sugiere el de hace dos meses. Sin tabla ni endpoint nuevos: la historia es la de
+   `getEventsByDay` que Agregar ya lee.
+6. **Menores.**
+   - **El aviso de abajo con un comercio largo** (`TextoDelAviso`): si el resto («· Juan Valdez Cafe») no
+     cabe en el primer renglón y le quedan menos de 88 dp, **baja entero a un segundo renglón** (con «…» si ni
+     ahí cabe) en vez de dejar «Anotado $32.000 · Ju…». El monto y las dos acciones siguen siempre a la vista.
+   - **Un presupuesto pasado se propone** (`TipoDePropuesta.PRESUPUESTO`): «Restaurantes va al 167 % de su
+     presupuesto», con lo que se pasó como cifra y «Ver presupuestos». **La regla es la que ya usan la
+     campana y Presupuestos** (`overBudgetCategories` → `estadoDePresupuesto(...).estaSuperado`: gastó más
+     que el límite), sin umbrales nuevos. Una tarjeta, la categoría que más se pasó y «y N presupuestos
+     más».
+   - **«Repetir uno reciente» por frecuencia** (`gastosRecientesParaRepetir`): los gastos distintos que más
+     se repiten entre los últimos 150 (a igual número, el más reciente) con el monto del último. Antes era
+     el último distinto, y un aviso recién confirmado (Carulla $186.450) le ganaba a Uber, que se repite 30
+     veces.
+
+Lo vigilan `Vuelta87Test` (commonTest: la cola, las formas del widget, el primer día, los totales de Buscar
+con lo compartido, los recientes por frecuencia, el reparto recordado y el presupuesto pasado),
+`Vuelta87EnPantallaTest` (Robolectric: la cola a 360 con la letra al 130 %, «En qué se va» a 1280, 390 y 360,
+el aviso con un comercio largo, los totales y las fechas de Buscar, la propuesta de presupuesto) y
+`AnotarPagoRecuerdaElRepartoTest` (la casilla marcada, guardar y repartir en ese orden, desmarcada, sin
+reparto previo y reparto que falla). `PrimerUsoEnPantallaTest` suma «Siguiente» en los pasos opcionales y
+la fila «Tu salario» creando la regla.
