@@ -7,7 +7,6 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import com.jvillada.movi.theme.Medida
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.unit.dp
@@ -17,6 +16,7 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
 import com.jvillada.movi.shared.model.UserProfile
 import com.jvillada.movi.ui.accounts.TAG_BANCOS_DE_UN_TOQUE
+import com.jvillada.movi.ui.accounts.TAG_FORMULARIO_DE_CUENTA
 import com.jvillada.movi.ui.accounts.TAG_TIPOS_DE_CUENTA
 import org.junit.Rule
 import org.junit.Test
@@ -27,12 +27,15 @@ import org.robolectric.annotation.GraphicsMode
 import kotlin.test.assertTrue
 
 /**
- * **El paso de las cuentas deja a la vista lo esencial** (vuelta 54). Con los siete bancos en varios
- * renglones, a 390 dp el nombre, el saldo y «Agregar cuenta» quedaban debajo del pliegue (nuevo-04).
- * Ahora los bancos y los tipos van cada uno en una fila que se desplaza de lado y «Agregar cuenta» va
- * dentro de la tarjeta del formulario, debajo del saldo (revisión: fijo en el pie se confundía con
- * agregar una tarjeta): sin desplazar nada, el campo del saldo y el botón se ven enteros, a 390 × 844 y
- * a 360 × 760, con la letra de la app (×1,12).
+ * **El paso de las cuentas, en orden** (vuelta 54): «Agregar cuenta» va dentro de la tarjeta del
+ * formulario, debajo del saldo (revisión: fijo en el pie se confundía con agregar una tarjeta), antes de
+ * «Tarjetas de crédito», y «Siguiente» se ve sin desplazar, a 390 × 844 y a 360 × 760, con la letra de la
+ * app (×1,12).
+ *
+ * Vuelta 88: **los bancos y los tipos bajan en renglones dentro de la tarjeta**. La vuelta 54 los había
+ * puesto en una fila que se desplazaba de lado para que «Agregar cuenta» se viera sin desplazar; en el
+ * teléfono del papá del dueño esa fila se veía con píldoras cortadas por los dos lados y solo dos
+ * bancos. Ganó que se vea todo: «Agregar cuenta» puede quedar un desplazamiento más abajo.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -67,20 +70,20 @@ class ElPasoDeCuentasALaVistaTest {
         val tarjetas = composeRule.onNodeWithText("Tarjetas de crédito").getUnclippedBoundsInRoot()
         assertTrue(nombre.bottom <= saldo.top && saldo.bottom <= boton.top, "el botón va debajo del saldo, en el formulario")
         assertTrue(boton.bottom <= tarjetas.top, "«Agregar cuenta» va antes de la sección de tarjetas, no debajo")
-        // El pie de la guía empieza `dentroDeSeccion` arriba de «Siguiente»: el botón se ve entero antes.
-        assertTrue(boton.bottom <= avanzar.top - Medida.dentroDeSeccion, "«Agregar cuenta» ($boton) se ve sin desplazar, arriba del pie ($avanzar)")
         assertTrue(avanzar.bottom <= alto, "«Siguiente» a la vista")
 
-        // Los bancos y los tipos: una fila cada uno, del alto de un chip.
+        // Vuelta 88: los bancos y los tipos bajan en renglones, a lo ancho del formulario (no se salen).
+        val formulario = composeRule.onNodeWithTag(TAG_FORMULARIO_DE_CUENTA).getUnclippedBoundsInRoot()
         val bancos = composeRule.onNodeWithTag(TAG_BANCOS_DE_UN_TOQUE).getUnclippedBoundsInRoot()
         val tipos = composeRule.onNodeWithTag(TAG_TIPOS_DE_CUENTA).getUnclippedBoundsInRoot()
-        assertTrue(bancos.height < 56.dp, "los bancos van en una sola fila: ${bancos.height}")
-        assertTrue(tipos.height < 56.dp, "los tipos van en una sola fila: ${tipos.height}")
+        assertTrue(bancos.height > 56.dp, "los bancos bajan en más de un renglón: ${bancos.height}")
+        assertTrue(bancos.left >= formulario.left && bancos.right <= formulario.right, "los bancos, dentro del formulario")
+        assertTrue(tipos.left >= formulario.left && tipos.right <= formulario.right, "los tipos, dentro del formulario")
     }
 
     @Test
     @Config(sdk = [34], qualifiers = "w390dp-h844dp-xhdpi")
-    fun `a 390 el nombre, el saldo y Agregar cuenta se ven sin desplazar`() = loEsencialSeVe()
+    fun `a 390 el formulario va en orden y los bancos bajan en renglones`() = loEsencialSeVe()
 
     @Test
     @Config(sdk = [34], qualifiers = "w360dp-h760dp-xhdpi")
