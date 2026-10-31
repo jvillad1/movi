@@ -3,11 +3,13 @@ package com.jvillada.movi.ui.components.ds
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -22,6 +24,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import com.jvillada.movi.theme.ColoresDeMovi
 import com.jvillada.movi.theme.Espacio
@@ -151,7 +154,10 @@ fun PildoraDeFiltro(
     val forma = RoundedCornerShape(Radio.pill)
     Row(
         modifier = modifier
-            .height(if (alto == AltoDeFiltro.Compacto) Medida.altoChico else Medida.altoDeFiltro)
+            // Vuelta 88: alto mínimo. En una fila que baja en renglones (los bancos de la guía a 320 dp con la
+            // letra grande) un nombre que no cabe en el ancho de la fila baja a un segundo renglón y la
+            // píldora crece, en vez de cortarse. En una fila que se desplaza de lado nunca pasa.
+            .heightIn(min = if (alto == AltoDeFiltro.Compacto) Medida.altoChico else Medida.altoDeFiltro)
             .anilloDeFoco(forma)
             // Vuelta 79: se hunde sin ripple; sin elegir, el velo en hover (la elegida es tinta: sin velo).
             .alPresionar(onClick = onClick, rol = Role.Tab, velo = !seleccionada, forma = forma)
@@ -160,7 +166,8 @@ fun PildoraDeFiltro(
             .then(if (seleccionada) Modifier else Modifier.border(Medida.trazo, Movi.colores.bordeDePildora, forma))
             .semantics { selected = seleccionada }
             .testTag(TAG_PILDORA_DE_FILTRO)
-            .padding(start = if (inicio != null) Espacio.xs else Espacio.m, end = Espacio.m),
+            .padding(start = if (inicio != null) Espacio.xs else Espacio.m, end = Espacio.m)
+            .padding(vertical = Espacio.xxs),
         // Centrado: una píldora que ocupa más que su texto (los atajos «Hoy · Ayer» del selector de
         // fecha, a medias del ancho) lo lleva al medio. Del ancho de su texto, no cambia nada.
         horizontalArrangement = Arrangement.spacedBy(if (inicio != null) Espacio.xs else Espacio.xxs, Alignment.CenterHorizontally),
@@ -168,7 +175,14 @@ fun PildoraDeFiltro(
     ) {
         inicio?.invoke()
         if (icono != null) Icon(icono, contentDescription = null, tint = color, modifier = Modifier.size(Icono.s))
-        Text(text = texto, style = if (seleccionada) Movi.textos.cuerpoFuerte else Movi.textos.cuerpo, color = color, maxLines = 1)
+        Text(
+            text = texto,
+            style = if (seleccionada) Movi.textos.cuerpoFuerte else Movi.textos.cuerpo,
+            color = color,
+            textAlign = TextAlign.Center,
+            // Del ancho de su renglón (ver `Boton`): centrado sin dibujarse fuera de su caja.
+            modifier = Modifier.width(IntrinsicSize.Max),
+        )
     }
 }
 
