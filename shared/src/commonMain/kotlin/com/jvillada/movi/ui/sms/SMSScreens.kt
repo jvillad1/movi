@@ -92,10 +92,10 @@ import com.jvillada.movi.shared.model.esIdDeComprobante
 import com.jvillada.movi.shared.model.soloLoQueLlegoSolo
 import com.jvillada.movi.shared.model.loApartoMovi
 import com.jvillada.movi.shared.model.textoDelApartado
-import com.jvillada.movi.shared.model.Captura
+import com.jvillada.movi.shared.model.CorreosDescartados
 import com.jvillada.movi.shared.model.MAX_DIAS_PARA_BANCO_MUDO
 import com.jvillada.movi.shared.model.OrigenMudo
-import com.jvillada.movi.shared.model.origenesMudos
+import com.jvillada.movi.shared.model.textoDeCorreosDescartados
 import com.jvillada.movi.shared.model.textoDeOrigenMudo
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.CategoryPref
@@ -219,6 +219,14 @@ fun CapturaDelBancoScreen(onNavigate: (Screen) -> Unit) {
                 silenciada = it.smsAlertMuted
                 diasParaBancoMudo = it.diasParaBancoMudo
             }
+    }
+    /** Vuelta 90: los orígenes mudos, como los decide el server (con el motivo). `null` hasta que contesta. */
+    var mudosDelServer by remember { mutableStateOf<List<OrigenMudo>?>(null) }
+    /** Vuelta 90: los correos que llegaron y no se pudieron guardar en los últimos 30 días. */
+    var correosDescartados by remember { mutableStateOf<CorreosDescartados?>(null) }
+    LaunchedEffect(refreshKey) {
+        intentar { Repositories.wallets.getOrigenesMudos() }.onSuccess { mudosDelServer = it }
+        intentar { Repositories.wallets.getCorreosDescartados() }.onSuccess { correosDescartados = it }
     }
     val mensajes = mensajesMasRecientesPrimero(smsItems.orEmpty())
     // Vuelta 67 · el historial: su chip, el mensaje abierto y, para abrir un confirmado, su movimiento.
@@ -358,20 +366,12 @@ fun CapturaDelBancoScreen(onNavigate: (Screen) -> Unit) {
                         }
                     }
                 }
-                // Ola 2 · «banco mudo»: qué origen se calló (la misma regla del server, sobre la
-                // lista que ya está bajada) y cuántos días de silencio avisan.
+                // Ola 2 · «banco mudo»: qué origen se calló y cuántos días de silencio avisan. Vuelta
+                // 90: lo dice el server (`GET /api/sms/origenes-mudos`), porque solo él sabe qué aviso
+                // es un movimiento (un rechazo o una promoción no prueban que la captura viva) y por qué
+                // está mudo un origen que sigue mandando avisos.
                 diasParaBancoMudo?.let { dias ->
-                    val mudos = smsItems?.let { lista ->
-                        val ahora = Clock.System.now().toEpochMilliseconds()
-                        origenesMudos(
-                            soloLoQueLlegoSolo(lista).mapNotNull { sms ->
-                                momentoDelSms(sms.time, ahora = Long.MAX_VALUE).takeIf { it != Long.MAX_VALUE }
-                                    ?.let { Captura(sms.bank, it) }
-                            },
-                            ahora,
-                            dias,
-                        )
-                    }.orEmpty()
+                    val mudos = if (dias <= 0) emptyList() else mudosDelServer.orEmpty()
                     Spacer(Modifier.height(Medida.entreSecciones))
                     AjusteDeBancoMudo(
                         dias = dias,
@@ -383,9 +383,18 @@ fun CapturaDelBancoScreen(onNavigate: (Screen) -> Unit) {
                                 intentar { Repositories.wallets.updateUserProfile(UpdateProfileRequest(diasParaBancoMudo = nuevo)) }
                                     // Sin snackbar acá, como el silencio de arriba: se revierte.
                                     .onFailure { diasParaBancoMudo = antes }
+                                    // Con los días nuevos el server vuelve a decidir quién está mudo.
+                                    .onSuccess { intentar { Repositories.wallets.getOrigenesMudos() }.onSuccess { mudosDelServer = it } }
                             }
                         },
                     )
+                }
+                // Vuelta 90 · el correo que no se pudo guardar no se pierde en silencio.
+                correosDescartados?.let { descartados ->
+                    textoDeCorreosDescartados(descartados)?.let { linea ->
+                        Spacer(Modifier.height(Medida.entreSecciones))
+                        LineaDeCorreosDescartados(linea)
+                    }
                 }
                 // Solo Android pinta algo acá: la configuración de la captura de SMS (permisos,
                 // hibernación, historial) que antes vivía en la pantalla del APK sensor.
@@ -527,6 +536,23 @@ private fun AjusteDeBancoMudo(dias: Int, mudos: List<OrigenMudo>, onCambio: (Int
             )
             BotonDeDias("+", habilitado = dias < MAX_DIAS_PARA_BANCO_MUDO) { onCambio(dias + 1) }
         }
+    }
+}
+
+/** Tag de la línea de los correos que no se pudieron guardar (vuelta 90). */
+const val TAG_CORREOS_DESCARTADOS: String = "captura:correos-descartados"
+
+/**
+ * **Vuelta 90 · «2 correos no se pudieron atribuir en los últimos 30 días»**: una línea de aviso en la
+ * pantalla de la captura, con el motivo, solo si hubo alguno. El correo que llega y no se guarda ya no
+ * se pierde en silencio (`GET /api/correo-entrante/descartados`).
+ */
+@Composable
+private fun LineaDeCorreosDescartados(linea: String) {
+    Superficie(modifier = Modifier.fillMaxWidth().testTag(TAG_CORREOS_DESCARTADOS)) {
+        Text("Correos del banco", style = Movi.textos.titulo, color = Movi.colores.texto)
+        Spacer(Modifier.height(Espacio.xs))
+        Text(linea, style = Movi.textos.cuerpo, color = Movi.colores.aviso)
     }
 }
 

@@ -791,8 +791,38 @@ object SmsMessages : Table("sms_messages") {
      * vez». Sin tabla nueva. `NULL` en un aviso que no se repartió.
      */
     val reparto = text("reparto").nullable()
+    /**
+     * **Vuelta 90 · el id del correo en el proveedor** (el `email_id` de Resend) cuando la fila llegó por
+     * correo. Es lo que mira el reproceso diario (`ReprocesoDeCorreos.kt`) para saber qué correos de la
+     * lista de Resend ya están en la bandeja. `NULL` en todo lo demás (SMS, notificaciones, correos de
+     * antes de esta columna). NULLABLE por lo mismo que [motivoApartado].
+     */
+    val idDelProveedor = varchar("id_del_proveedor", 100).nullable()
     override val primaryKey = PrimaryKey(id, userId)  // per-user: the same SMS id may exist for different users
     init { index("idx_sms_messages_user_id", false, userId) }
+}
+
+/**
+ * # Vuelta 90 · los correos del banco que llegaron y no se guardaron
+ *
+ * Lo que el webhook del correo contestaba con un 202 sin escribir nada (sin el código de Movi en la
+ * dirección, de un código que no es de nadie, demasiado grande, ilegible, un aviso sin id) deja acá una
+ * fila: cuándo, por qué, el **dominio** del remitente, el tamaño y el id del proveedor. **Nunca el cuerpo
+ * ni la dirección completa**: un correo que no es de nadie puede ser de cualquiera.
+ *
+ * [userId] es `""` cuando no se le pudo atribuir a nadie (la mayoría de los casos): esas filas no son de
+ * ninguna cuenta y no se borran con ninguna. Con dueño, entra a `TABLAS_DEL_USUARIO`.
+ */
+object CorreosDescartados : Table("correos_descartados") {
+    val id             = varchar("id", 64)
+    val userId         = varchar("user_id", 50)
+    val recibidoEn     = long("recibido_en")
+    val motivo         = varchar("motivo", 40)
+    val dominio        = varchar("dominio", 100).nullable()
+    val tamano         = integer("tamano").nullable()
+    val idDelProveedor = varchar("id_del_proveedor", 100).nullable()
+    override val primaryKey = PrimaryKey(id)
+    init { index("idx_correos_descartados_user_id", false, userId) }
 }
 
 /**
