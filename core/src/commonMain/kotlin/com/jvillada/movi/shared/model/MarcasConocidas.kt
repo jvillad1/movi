@@ -212,9 +212,58 @@ val BANCOS_CONOCIDOS: List<Marca> = listOf(
     banco("colfondos", "Colfondos", "C", 0xFFC8102EL, BLANCO, listOf("colfondos")),
     banco("glim", "Glim", "G", 0xFF5B2C83L, BLANCO, listOf("glim")),
     banco("movii", "MOVii", "M", 0xFFC8006EL, BLANCO, listOf("movii")),
-    banco("visa", "Visa", "V", 0xFF1A1F71L, BLANCO, emptyList(), listOf("visa")),
+    // Vuelta 88 · los bancos comunes que faltaban para «Otro banco». Patrones **conservadores**: el
+    // nombre entero o una palabra que no es de uso diario; la palabra suelta que sí lo es («agrario»,
+    // «pichincha», «coomeva» —también es una EPS—, «confiar», «iris») va solo en el nombre de una cuenta.
+    banco(
+        "caja_social", "Banco Caja Social", "CS", 0xFF004B93L, BLANCO,
+        listOf("banco caja social", "bco caja social", "caja social", "bcsc"),
+    ),
+    banco(
+        "banco_agrario", "Banco Agrario", "BA", 0xFF00713DL, BLANCO,
+        listOf("banco agrario", "bco agrario", "bancoagrario"), listOf("agrario"),
+    ),
+    banco("pichincha", "Banco Pichincha", "P", 0xFFFFDD00L, OSCURO, listOf("banco pichincha", "bco pichincha"), listOf("pichincha")),
+    banco("bancoomeva", "Bancoomeva", "Bc", 0xFF006B35L, BLANCO, listOf("bancoomeva"), listOf("coomeva")),
+    banco("finandina", "Banco Finandina", "F", 0xFF005F6BL, BLANCO, listOf("banco finandina", "finandina")),
+    banco("serfinanza", "Banco Serfinanza", "S", 0xFF003DA5L, BLANCO, listOf("banco serfinanza", "serfinanza")),
+    banco(
+        "coopcentral", "Banco Coopcentral", "CC", 0xFF1B5E20L, BLANCO,
+        listOf("banco cooperativo coopcentral", "banco coopcentral", "coopcentral"),
+    ),
+    banco("confiar", "Confiar", "C", 0xFFE30613L, BLANCO, listOf("confiar cooperativa", "cooperativa confiar"), listOf("confiar")),
+    banco("iris", "Iris", "I", 0xFF3C1E70L, BLANCO, listOf("iris bank", "irisbank"), listOf("iris")),
+    banco("uala", "Ualá", "U", 0xFF2A4FD6L, BLANCO, listOf("uala")),
+    banco("banco_w", "Banco W", "W", 0xFFF58220L, OSCURO, listOf("banco w", "bco w")),
+    banco("mibanco", "Mibanco", "Mi", 0xFF007A3DL, BLANCO, listOf("mibanco")),
+    banco("visa","Visa", "V", 0xFF1A1F71L, BLANCO, emptyList(), listOf("visa")),
     banco("mastercard", "Mastercard", "MC", 0xFF1A1A1AL, 0xFFF79E1BL, listOf("mastercard", "master card")),
 )
+
+/**
+ * Vuelta 88 · **lo que no es una cuenta donde se tiene plata**: las redes de tarjeta (Visa,
+ * Mastercard) y la American Express, que es una tarjeta y va en «Tarjetas de crédito». Los fondos
+ * (Skandia, Porvenir, Protección, Colfondos, la Fiducuenta) sí quedan: el formulario ofrece «Inversión»
+ * y ahí van las cesantías y la pensión voluntaria.
+ */
+private val NO_SON_CUENTAS_DE_PLATA: Set<String> = setOf("visa", "mastercard", "amex")
+
+/**
+ * **«Otro banco»** (vuelta 88): todos los bancos y billeteras de [BANCOS_CONOCIDOS] que pueden ser
+ * una cuenta (sin [NO_SON_CUENTAS_DE_PLATA]; con [paraTarjetas], la AMEX sí), en orden alfabético y
+ * filtrados por [consulta]. La consulta se compara como en toda búsqueda de la app
+ * ([normalizarParaBuscar]: sin tildes ni mayúsculas, «bogota» encuentra «Banco de Bogotá») contra el
+ * nombre y contra sus patrones («colpatria» encuentra Scotiabank Colpatria). Vacía, van todos. Pura.
+ */
+fun bancosParaElegir(consulta: String = "", paraTarjetas: Boolean = false): List<Marca> {
+    val q = normalizarParaBuscar(consulta)
+    return BANCOS_CONOCIDOS
+        .filter { it.id !in NO_SON_CUENTAS_DE_PLATA || (paraTarjetas && it.id == "amex") }
+        .filter { m ->
+            q.isEmpty() || (listOf(m.nombre) + m.patrones + m.patronesDeCuenta).any { q in normalizarParaBuscar(it) }
+        }
+        .sortedBy { normalizarParaBuscar(it.nombre) }
+}
 
 /** Todas, sin repetir: lo que recorre una prueba. */
 val MARCAS_CONOCIDAS: List<Marca> = COMERCIOS_CONOCIDOS + BANCOS_CONOCIDOS
