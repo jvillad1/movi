@@ -72,6 +72,53 @@ fun fraseDelSaldo(espacio: Espacio, saldo: SaldoDelEspacio): FraseDelSaldo {
     }
 }
 
+/**
+ * **De dónde sale el saldo** (vuelta 86): lo de este período y lo que venía de antes, en la dirección del
+ * saldo (lo que te deben, o lo que debes). La revisión 9 vio «Quién puso qué» del período —Tú $658.900,
+ * Andrés $262.400, mitad $460.650: Andrés debía $198.250 de este período— y debajo «Andrés te debe
+ * $539.625», que arrastraba lo de antes (el arriendo de agosto). Las dos cifras eran ciertas y nada las unía.
+ *
+ * **No es otra cuenta del saldo**: [SaldoDelEspacio] (`saldoDelEspacio`) sigue siendo la única. Lo de este
+ * período es el neto del dueño en [DetalleDelEspacio.delPeriodo] (sus gastos, sin liquidaciones: lo mismo
+ * que «Quién puso qué»), y lo de antes es el resto: `saldo − período` (gastos de antes y todo lo saldado).
+ *
+ * @property delPeriodo lo de este período, con signo en la dirección del saldo (negativo = lo achica).
+ * @property deAntes lo que venía de antes, con el mismo criterio. `delPeriodo + deAntes` = el monto del saldo.
+ */
+data class DesgloseDelSaldo(val delPeriodo: Long, val deAntes: Long)
+
+/**
+ * [DesgloseDelSaldo] de [detalle], o `null` si no hay nada que explicar: están a mano, o todo el saldo es de
+ * este período (lo de antes es cero). Pura.
+ */
+fun desgloseDelSaldo(detalle: DetalleDelEspacio): DesgloseDelSaldo? {
+    val neto = detalle.saldo.netoDe(MIEMBRO_YO)
+    if (neto == 0L) return null
+    val delPeriodo = detalle.delPeriodo.netoDe(MIEMBRO_YO)
+    val deAntes = neto - delPeriodo
+    if (deAntes == 0L) return null
+    val signo = if (neto > 0L) 1L else -1L
+    return DesgloseDelSaldo(delPeriodo = delPeriodo * signo, deAntes = deAntes * signo)
+}
+
+/**
+ * La línea del desglose, debajo de «para quedar 50/50»: «$198.250 de este período + $341.375 que venía de
+ * antes». Si este período achica el saldo, «$600.000 que venía de antes − $60.375 de este período»; sin nada
+ * del período, «Todo venía de antes de este período». Las dos cifras suman (o restan) exacto el saldo. Pura.
+ */
+fun lineaDelDesgloseDelSaldo(desglose: DesgloseDelSaldo): String {
+    val periodo = desglose.delPeriodo
+    val antes = desglose.deAntes
+    val delPeriodo = "${formatCOP(kotlin.math.abs(periodo))} de este período"
+    val queVenia = "${formatCOP(kotlin.math.abs(antes))} que venía de antes"
+    return when {
+        periodo == 0L -> "Todo venía de antes de este período"
+        periodo > 0L && antes > 0L -> "$delPeriodo + $queVenia"
+        periodo > 0L -> "$delPeriodo \u2212 ${formatCOP(-antes)} ya saldado o de antes"
+        else -> "$queVenia \u2212 $delPeriodo"
+    }
+}
+
 /** «Compartido · Juan y Caro». */
 fun quienesComparten(espacio: Espacio): String {
     val nombres = espacio.miembros.map { it.nombre.ifBlank { nombreEnElEspacio(espacio, it.id) } }

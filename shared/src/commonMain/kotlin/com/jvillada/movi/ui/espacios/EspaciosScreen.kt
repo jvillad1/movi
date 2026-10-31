@@ -616,6 +616,18 @@ private fun SaldoDelEspacioTarjeta(
         )
         if (frase.monto > 0L) Cifra(frase.monto, VarianteDeCifra.Grande)
         frase.apoyo?.let { Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio) }
+        // Vuelta 86: de dónde sale el saldo —lo de este período («Quién puso qué», arriba) y lo que venía de
+        // antes—, para que las dos cifras se expliquen. El saldo no cambia: es el de `saldoDelEspacio`.
+        if (frase.monto > 0L) {
+            desgloseDelSaldo(detalle)?.let { desglose ->
+                Text(
+                    lineaDelDesgloseDelSaldo(desglose),
+                    style = Movi.textos.apoyo,
+                    color = Movi.colores.textoMedio,
+                    modifier = Modifier.testTag(TAG_DESGLOSE_DEL_SALDO),
+                )
+            }
+        }
         when (val principal = principalDelSaldo(detalle.espacio, detalle.saldo)) {
             is PrincipalDelSaldo.Pedir -> {
                 Spacer(Modifier.height(Medida.dentroDeSeccion))
@@ -659,6 +671,9 @@ private fun SaldoDelEspacioTarjeta(
         }
     }
 }
+
+/** El tag de la línea «$198.250 de este período + $341.375 que venía de antes» (vuelta 86). */
+const val TAG_DESGLOSE_DEL_SALDO: String = "espacio:desglose-del-saldo"
 
 /**
  * La lista de gastos del espacio, con «Pagó otro» para anotar lo que pagó Caro. Vuelta 31: cada gasto
