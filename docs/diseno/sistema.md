@@ -4697,6 +4697,65 @@ es una `Fila`), `LosRecordatoriosVanDebajoDeLosPagosTest`, `LoQueSeVeEnteroTest`
   barra dentro de la fila).
 - «¿Qué cuenta?» alineado con el texto de su tarjeta.
 
+## 85. Vuelta 88: la guía de primer uso en el teléfono del papá
+
+Viene de tres fotos del Samsung del papá del dueño (pantalla curva, **navegación de tres botones** y la letra
+del sistema agrandada): «Empezar» debajo de la barra del sistema, las píldoras de los bancos cortadas por los
+dos lados con solo dos bancos a la vista («faltan más opciones de bancos») y «Dar acceso a las
+notificaciones» partido en dos renglones con el segundo afuera del botón, un interlineado enorme y el aviso
+de los permisos en rojo. **Sin reglas de plata**; ningún token nuevo.
+
+1. **La barra del sistema la descuenta la cáscara** (`EsqueletoDeLaCascara` en `App.kt`). En el teléfono solo
+   la descontaba `MinBottomNav`; toda pantalla **sin la barra de pestañas** dibujaba su pie debajo de la
+   barra del sistema. Ahora, sin barra inferior, la columna lleva `navigationBarsPadding()` (con
+   `statusBarsPadding()` arriba e `imePadding()`, como siempre). Arregla con una línea la guía de primer uso,
+   Entrar, Crear cuenta, la revisión de un extracto, el detalle de una importación y el editor de pantallas
+   (las que no muestran la barra; Borrar la cuenta sí la muestra y ya estaba bien). Las hojas siguen con su
+   propio descuento (`MarcoDeHoja`), que ve lo ya consumido y no lo dobla.
+2. **Un botón nunca se corta.** `Boton` tiene alto **mínimo** (`heightIn`, 48 o 36) en vez de fijo, el texto
+   sin tope de renglones (centrado por la fila, sin `TextAlign.Center`: un párrafo centrado se reportaba
+   dibujado fuera de su caja), con `Espacio.xxs` arriba y abajo: un rótulo que no cabe baja entero a un
+   segundo renglón y el botón crece. Se eligió **crecer y no acortar los rótulos**: «Dar acceso a las
+   notificaciones» sigue diciendo lo que hace. `PildoraDeFiltro` igual (alto mínimo, el texto baja si la fila
+   que la contiene es más angosta que el nombre; en una fila que se desplaza de lado nunca pasa).
+   - **`ParDeBotones`** (`ds/Boton.kt`): «Atrás» y «Siguiente» lado a lado, mitad y mitad, si los dos rótulos
+     caben en un renglón de su mitad; si no (×1,5 a 320 dp, «Guardar y seguir»), **apilados con el principal
+     arriba** y a todo el ancho. Lo usa el pie de la guía (`TAG_ATRAS_EN_LA_GUIA`).
+3. **Los bancos: todos y sin cortes** (`ui/accounts/FormularioDeCuenta.kt`). La causa de las píldoras
+   cortadas era la fila que se desplazaba de lado (`enUnaFila`, vuelta 54): se fue. Los bancos y los tipos
+   **bajan en renglones** (`FlowRow`) dentro de la tarjeta, en la guía y en «Nueva cuenta». Lo de la vuelta
+   54 —«Agregar cuenta» sin desplazar a 390— se cedió: que se vea todo ganó.
+   - **«Otro banco»**: la última píldora abre ahí mismo una búsqueda (`CampoDeBusqueda`) con **todos** los
+     bancos y billeteras del catálogo (`bancosParaElegir` en `:core`, alfabético, con
+     `normalizarParaBuscar` contra el nombre y los patrones: «bogota» → Banco de Bogotá, «colpatria» →
+     Scotiabank Colpatria). **Fuera de la lista**: Visa, Mastercard y la American Express (son tarjetas; la
+     AMEX sí está en el selector de tarjetas). **Dentro**: los fondos (Skandia, Porvenir, Protección,
+     Colfondos, Fiducuenta), porque el formulario tiene «Inversión» (cesantías, pensión voluntaria). El
+     elegido de la lista queda a la vista y elegido antes de «Otro banco»; si el banco no está, «Usar «lo
+     escrito»» lo toma tal cual (en una cuenta también se puede escribir el nombre a mano, como siempre).
+   - **Bancos nuevos en `MarcasConocidas`**: Banco Caja Social, Banco Agrario, Banco Pichincha, Bancoomeva,
+     Banco Finandina, Banco Serfinanza, Banco Coopcentral, Confiar, Iris, Ualá, Banco W y Mibanco (Banco
+     Falabella ya estaba). Patrones **conservadores**: el nombre entero o una palabra que no es de uso diario;
+     «agrario», «pichincha», «coomeva» (también es una EPS), «confiar» e «iris» solo en el nombre de una
+     cuenta. `BancosParaElegirTest` prueba que lo que se reconocía antes sigue yendo al mismo banco.
+4. **El paso de captura con aire normal** (`SmsSensorSetupSection.android.kt`). Los textos pasaban
+   `fontSize` suelto y heredaban el `lineHeight` de 24 sp de `bodyLarge`: 12 sp de letra con 24 de renglón.
+   Ahora usan `Movi.textos` (`cuerpo`, `apoyo`), con su interlineado. El aviso de la hibernación va en tinta
+   (es información; el rojo es para errores) y el estado de cada permiso es una `Pildora` («Concedido» en
+   éxito, «Falta» neutra). Los botones son el `Boton` del sistema (eran una caja de 44 fijos con el texto en
+   crema sobre el amarillo).
+5. **Un amarillo por paso.** `SmsSensorSetupSection(conAccionPrincipal)`: con `true`, lo primero que falta (el
+   permiso de SMS; si no, las notificaciones; si no, la hibernación) es el principal y lo demás secundario;
+   la guía pasa `!sePuedeAvanzar`, así que si su «Siguiente» está encendido la sección no pone otro amarillo.
+   «Ahora no» y «Saltar este paso» siguen siendo botones de texto (`Fantasma`).
+
+**Pruebas**: `LaGuiaEnElTelefonoDelPapaTest` recorre cada paso de la guía de Android a 320, 360 y 390 dp con
+la letra a ×1,0, ×1,3 y ×1,5 (sobre el ×1,12 de la app): ningún rótulo de botón con «…», renglones de más ni
+fuera de su botón (medido sin recortar), un solo amarillo, y en las cuentas ninguna píldora fuera del
+formulario; el pie apilado a ×1,5; «Otro banco» con «bogota»; y la guía dentro de la cáscara con 48 dp de
+barra de navegación simulada (`ViewCompat.dispatchApplyWindowInsets`): el principal y «Saltar este paso»
+quedan arriba de la barra.
+
 ## Vuelta 89 · Un descarte vive más que su tarjeta
 
 **Regla: lo que se quita en el acto («Está bien», «No», «Sí, cambiar») no lanza su pedido en un

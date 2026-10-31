@@ -491,9 +491,16 @@ class LasPreguntasSugeridasTest {
 
         val caja = assertNotNull(cajaProyectadaDe(a.duenoA, hoy).caja)
         // Vuelta 70: la caja parte de lo que hay en las cuentas (lo apartado sigue ahí) y lo libre resta
-        // solo lo apartado que el arriendo pendiente no cubre: el $1M cubierto no se resta dos veces.
+        // solo lo apartado que los arriendos que la caja resta no cubren: lo cubierto no se resta dos veces.
         assertEquals(con.patrimonio!!.tuPlata + 5_000_000L, caja.tuPlataHoy)
-        assertEquals(con.patrimonio!!.tuPlata + 1_000_000L, caja.libreHoy)
+        // Las rutas leen el reloj de verdad, así que la fecha no se puede fijar acá. La caja (mes de
+        // calendario, sin salario) mira 30 días: el arriendo del mes que viene (el mismo día, o el último
+        // si no lo tiene) cae adentro en un mes de 30 días, en febrero y el 31 de un mes seguido de uno de
+        // 30. Ese día son dos arriendos, cada uno cubre $1M del apartado (`CajaHastaQueTePaguenTest` lo
+        // fija con fechas). El 31-oct-2026 esta prueba esperaba uno solo y falló.
+        val arriendosEnLaCaja = if (hoy.plusMonths(1) <= hoy.plusDays(30)) 2 else 1
+        assertEquals(arriendosEnLaCaja, caja.dias.sumOf { d -> d.movimientos.count { it.nombre == "Arriendo" } })
+        assertEquals(con.patrimonio!!.tuPlata + arriendosEnLaCaja * 1_000_000L, caja.libreHoy)
     }
 
     @Test

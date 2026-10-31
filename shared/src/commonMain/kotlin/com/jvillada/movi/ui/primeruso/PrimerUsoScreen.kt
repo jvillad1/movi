@@ -93,6 +93,7 @@ import com.jvillada.movi.ui.components.ds.Chevron
 import com.jvillada.movi.ui.components.ds.Cifra
 import com.jvillada.movi.ui.components.ds.Fila
 import com.jvillada.movi.ui.components.ds.IconoEnCirculo
+import com.jvillada.movi.ui.components.ds.ParDeBotones
 import com.jvillada.movi.ui.components.ds.Pildora
 import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
 import com.jvillada.movi.ui.components.ds.Seccion
@@ -573,6 +574,9 @@ fun PrimerUsoScreen(
                     )
                     PasoDePrimerUso.CAPTURA -> PasoCaptura(
                         modo = modoDeCaptura,
+                        // Vuelta 88 · un amarillo por paso: si el pie ya lleva el principal encendido, la
+                        // sección de permisos no pone otro.
+                        conAccionPrincipal = !sePuedeAvanzar,
                         extractoSubido = extractoSubido,
                         onExtracto = { extractoSubido = it },
                         onCopiada = { direccionCopiada = true },
@@ -610,25 +614,31 @@ fun PrimerUsoScreen(
                 Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
                 Spacer(Modifier.height(Espacio.xs))
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
-                if (anterior != null && paso != PasoDePrimerUso.LISTO) {
+            // Vuelta 88: lado a lado si los dos rótulos caben en su mitad; si no (la letra grande a 320
+            // o 360 dp), apilados con el principal arriba. Ver [ParDeBotones].
+            ParDeBotones(
+                principal = {
                     Boton(
-                        "Atrás",
-                        onClick = { irA(anterior) },
-                        variante = VarianteDeBoton.Secundario,
-                        habilitado = !guardando,
-                        modifier = Modifier.weight(1f),
+                        if (escritos.isNotEmpty()) GUARDAR_Y_SEGUIR else textoDeAvanzar,
+                        onClick = { if (escritos.isNotEmpty()) guardarYSeguir(escritos) else avanzar() },
+                        cargando = guardando || (paso == PasoDePrimerUso.LISTO && creandoElSalario),
+                        habilitado = (if (escritos.isNotEmpty()) razon == null else sePuedeAvanzar) &&
+                            !(paso == PasoDePrimerUso.LISTO && creandoElSalario),
+                        modifier = Modifier.testTag(TAG_AVANZAR_EN_LA_GUIA),
                     )
-                }
-                Boton(
-                    if (escritos.isNotEmpty()) GUARDAR_Y_SEGUIR else textoDeAvanzar,
-                    onClick = { if (escritos.isNotEmpty()) guardarYSeguir(escritos) else avanzar() },
-                    cargando = guardando || (paso == PasoDePrimerUso.LISTO && creandoElSalario),
-                    habilitado = (if (escritos.isNotEmpty()) razon == null else sePuedeAvanzar) &&
-                        !(paso == PasoDePrimerUso.LISTO && creandoElSalario),
-                    modifier = Modifier.weight(1f).testTag(TAG_AVANZAR_EN_LA_GUIA),
-                )
-            }
+                },
+                secundario = if (anterior != null && paso != PasoDePrimerUso.LISTO) {
+                    {
+                        Boton(
+                            "Atrás",
+                            onClick = { irA(anterior) },
+                            variante = VarianteDeBoton.Secundario,
+                            habilitado = !guardando,
+                            modifier = Modifier.testTag(TAG_ATRAS_EN_LA_GUIA),
+                        )
+                    }
+                } else null,
+            )
             // Lo que falta para guardar lo escrito, en una línea centrada justo debajo (como `PieDeHoja`).
             if (razon != null) {
                 Text(
@@ -677,6 +687,9 @@ fun PrimerUsoScreen(
     }
     }
 }
+
+/** El tag de «Atrás» en el pie de la guía. */
+const val TAG_ATRAS_EN_LA_GUIA: String = "primer-uso-atras"
 
 /** El tag de la razón del pie («Falta el monto del arriendo»). */
 const val TAG_RAZON_DEL_PIE: String = "primer-uso-razon-del-pie"
@@ -946,11 +959,11 @@ private fun DiaParaElegir(dia: Int, elegido: Boolean, habilitado: Boolean, onCli
 // ── 3 · Tus cuentas ────────────────────────────────────────────────────────────────────────────
 
 /**
- * **Las cuentas, con lo esencial a la vista** (vuelta 54): los bancos y los tipos van cada uno en una
- * fila de chips que se desplaza de lado ([FormularioDeCuenta] `enUnaFila`), y «Agregar cuenta» va
- * **dentro de la tarjeta del formulario**, debajo de «Saldo de hoy» (revisión de la vuelta 54: fijo en el
- * pie quedaba justo debajo de «Tarjetas de crédito» y se leía como agregar una tarjeta). A 390 dp se ven
- * el nombre, el saldo y el botón sin desplazar. Con algo escrito, el pie ofrece «Guardar y seguir».
+ * **Las cuentas** (vuelta 54): «Agregar cuenta» va **dentro de la tarjeta del formulario**, debajo de
+ * «Saldo de hoy» (revisión de la vuelta 54: fijo en el pie quedaba justo debajo de «Tarjetas de crédito»
+ * y se leía como agregar una tarjeta). Con algo escrito, el pie ofrece «Guardar y seguir». Vuelta 88: los
+ * bancos y los tipos bajan en renglones dentro de la tarjeta (la fila que se desplazaba de lado se veía
+ * cortada por los dos lados en el teléfono del papá del dueño), y «Otro banco» abre la lista de todos.
  */
 @Composable
 private fun PasoCuentas(
@@ -972,7 +985,7 @@ private fun PasoCuentas(
     // dónde está la plata.
     Seccion(if (cuentas.isEmpty()) "Agrega una cuenta" else "Agrega otra")
     Superficie(modifier = Modifier.fillMaxWidth()) {
-        FormularioDeCuenta(borrador.formulario, habilitado = !borrador.creando, enUnaFila = true)
+        FormularioDeCuenta(borrador.formulario, habilitado = !borrador.creando)
         borrador.error?.let {
             Spacer(Modifier.height(Espacio.xs))
             Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
@@ -1047,7 +1060,7 @@ private fun PasoTarjetas(tarjetas: List<String>, borrador: BorradorDeTarjeta) {
     }
     Superficie(modifier = Modifier.fillMaxWidth()) {
         RotuloDelCampo("Banco")
-        SelectorDeBanco(elegido = borrador.banco, onElegir = { borrador.banco = it }, enUnaFila = true)
+        SelectorDeBanco(elegido = borrador.banco, onElegir = { borrador.banco = it }, paraTarjetas = true)
         Spacer(Modifier.height(Medida.dentroDeSeccion))
         MoneyField(value = borrador.cupo, onValueChange = { borrador.cupo = it }, label = "Cupo")
         Spacer(Modifier.height(Medida.dentroDeSeccion))
@@ -1090,6 +1103,7 @@ private fun rotuloDelTipo(tipo: AccountType): String =
 @Composable
 private fun PasoCaptura(
     modo: ModoDeCaptura,
+    conAccionPrincipal: Boolean,
     extractoSubido: String?,
     onExtracto: (String) -> Unit,
     onCopiada: () -> Unit,
@@ -1103,7 +1117,7 @@ private fun PasoCaptura(
                 color = Movi.colores.textoMedio,
             )
             // La misma sección de Ajustes → «Captura del banco»: los permisos se piden en un solo lugar.
-            SmsSensorSetupSection(onSynced = {})
+            SmsSensorSetupSection(onSynced = {}, conAccionPrincipal = conAccionPrincipal)
         }
         ModoDeCaptura.SUBIR_UN_EXTRACTO -> PasoCapturaConUnExtracto(extractoSubido, onExtracto, onCopiada)
         // Sin captura posible el paso no está en la lista (ver `pasosDeLaGuia`): nunca se llega acá.
