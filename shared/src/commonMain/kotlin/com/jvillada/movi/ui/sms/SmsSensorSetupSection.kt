@@ -14,9 +14,14 @@ import androidx.compose.runtime.Composable
  * dice la tarjeta de arriba en [CapturaDelBancoScreen].
  *
  * [onSynced] se invoca tras un backfill subido con éxito, para que la bandeja se refresque.
+ *
+ * [conAccionPrincipal] (vuelta 88, un amarillo por vista): con `true`, lo primero que falta —el permiso
+ * de SMS, si no, el acceso a las notificaciones, si no, la hibernación— va en el botón principal y todo
+ * lo demás en secundario; con `false` (la guía, cuando su «Siguiente» ya está encendido) ninguno es
+ * principal.
  */
 @Composable
-expect fun SmsSensorSetupSection(onSynced: () -> Unit)
+expect fun SmsSensorSetupSection(onSynced: () -> Unit, conAccionPrincipal: Boolean = true)
 
 /**
  * ¿Está concedido, AHORA y en este dispositivo, el permiso que la captura necesita? Solo

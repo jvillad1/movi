@@ -454,4 +454,143 @@ class CajaHastaQueTePaguenTest {
         val temprano = upcoming.map { it.copy(daysUntil = it.daysUntil + 14) }
         assertNull(loQueViene(temprano, emptyList(), PeriodoFinanciero(2026, 10), mesDeCalendario))
     }
+
+    // ── El fin de mes (31-oct-2026: dos pruebas del server fallaban ese día) ──
+
+    /**
+     * Las listas como las arma el server ([checklistDelPeriodo] del siguiente con
+     * `conElSiguienteVencimiento`), para una regla mensual que vence HOY, pendiente, y cuyo vencimiento
+     * siguiente es [siguiente] (el mismo día del mes que viene, o su último día si no lo tiene: el del 31
+     * en noviembre vence el 30).
+     */
+    private fun vencidaHoyConSiguiente(hoy: String, ajustes: PeriodSettings, regla: RecurringRule, siguiente: String): Listas {
+        val upcoming = listOf(vence(regla, hoy, hoy).copy(siguienteVencimiento = siguiente))
+        val periodo = assertNotNull(periodoDeLaFecha(hoy, ajustes))
+        return Listas(
+            periodo = periodo,
+            delPeriodo = checklistDelPeriodo(upcoming, emptyList(), periodo, ajustes),
+            delSiguiente = checklistDelPeriodo(upcoming, emptyList(), periodoSiguiente(periodo), ajustes, conElSiguienteVencimiento = true),
+            ultimoDia = ultimoDia(periodo, ajustes),
+        )
+    }
+
+    /** Las fechas en que la caja resta [nombre]: cada vencimiento una vez, el día que vence. */
+    private fun fechasDe(caja: CajaProyectada, nombre: String): List<String> =
+        caja.dias.flatMap { dia -> dia.movimientos.filter { it.nombre == nombre }.map { dia.fecha } }
+
+    /**
+     * **El último día de un mes de 31 días.** La caja mira 30 días (hasta el 30-nov) y la regla del 31
+     * vence dos veces adentro: hoy (la de octubre, pendiente) y el 30-nov (la de noviembre, que no tiene
+     * 31). Son **dos pagos distintos**, cada uno el día que vence: ninguno se cuenta dos veces. El 20 de
+     * octubre, la regla del 20 vence el 20-nov, pasado el horizonte (19-nov): uno solo. La caja no
+     * cambia de regla el día 31; lo que cambia es cuántos vencimientos caen en 30 días.
+     */
+    @Test
+    fun `el 31 de octubre la regla del 31 vence hoy y el 30 de noviembre, una vez cada una`() {
+        val gym = regla("gimnasio", 180_000L, 31)
+        val l = vencidaHoyConSiguiente("2026-10-31", mesDeCalendario, gym, "2026-11-30")
+        assertEquals("2026-10-31", l.ultimoDia)
+        assertEquals(listOf("2026-10-31"), l.delPeriodo.map { it.vence }, "en la lista de hoy, el de octubre")
+        assertEquals(listOf("2026-11-30"), l.delSiguiente.map { it.vence }, "en la del siguiente, el de noviembre")
+        val caja = assertNotNull(cajaHastaQueTePaguen(5_000_000L, l.delPeriodo, l.delSiguiente, null, "2026-10-31", l.ultimoDia))
+        assertEquals("2026-11-30", caja.alCierre.fecha)
+        assertEquals(listOf("2026-10-31", "2026-11-30"), fechasDe(caja, "Gimnasio"))
+        assertEquals(5_000_000L - 180_000L, caja.dias.first().saldo, "el de hoy sale hoy")
+        assertEquals(5_000_000L - 2 * 180_000L, caja.alCierre.saldo)
+
+        // Un día cualquiera de un mes de 31 días: el siguiente cae pasado el horizonte.
+        val medio = vencidaHoyConSiguiente("2026-10-20", mesDeCalendario, regla("gimnasio", 180_000L, 20), "2026-11-20")
+        val cajaMedio = assertNotNull(cajaHastaQueTePaguen(5_000_000L, medio.delPeriodo, medio.delSiguiente, null, "2026-10-20", medio.ultimoDia))
+        assertEquals("2026-11-19", cajaMedio.alCierre.fecha)
+        assertEquals(listOf("2026-10-20"), fechasDe(cajaMedio, "Gimnasio"))
+        assertEquals(5_000_000L - 180_000L, cajaMedio.alCierre.saldo)
+    }
+
+    /** **Un mes de 30 días**: 30 días más llegan al mismo día del mes siguiente, que entra (cualquier día). */
+    @Test
+    fun `en abril el pago del mes siguiente cae dentro de los 30 dias y se cuenta el dia que vence`() {
+        listOf("2027-04-30" to "2027-05-30", "2027-04-15" to "2027-05-15").forEach { (hoy, siguiente) ->
+            val dia = LocalDate.parse(hoy).dayOfMonth
+            val l = vencidaHoyConSiguiente(hoy, mesDeCalendario, regla("arriendo", 1_000_000L, dia), siguiente)
+            assertEquals("2027-04-30", l.ultimoDia)
+            val caja = assertNotNull(cajaHastaQueTePaguen(5_000_000L, l.delPeriodo, l.delSiguiente, null, hoy, l.ultimoDia))
+            assertEquals(siguiente, caja.alCierre.fecha, hoy)
+            assertEquals(listOf(hoy, siguiente), fechasDe(caja, "Arriendo"), hoy)
+            assertEquals(3_000_000L, caja.alCierre.saldo, hoy)
+        }
+    }
+
+    /**
+     * **Febrero**, sin y con bisiesto: el período cierra el 28 (o el 29) y la caja llega al 30-mar. La
+     * regla del 28 vence otra vez el 28-mar (adentro); la del 31, que en febrero vence el 28, vuelve el
+     * 31-mar (afuera); la del 29 en 2028 vuelve el 29-mar (adentro).
+     */
+    @Test
+    fun `en febrero el cierre es el 28 o el 29 y cada vencimiento se cuenta una vez`() {
+        val del28 = vencidaHoyConSiguiente("2026-02-28", mesDeCalendario, regla("arriendo", 1_000_000L, 28), "2026-03-28")
+        assertEquals("2026-02-28", del28.ultimoDia)
+        val caja28 = assertNotNull(cajaHastaQueTePaguen(5_000_000L, del28.delPeriodo, del28.delSiguiente, null, "2026-02-28", del28.ultimoDia))
+        assertEquals("2026-03-30", caja28.alCierre.fecha)
+        assertEquals(listOf("2026-02-28", "2026-03-28"), fechasDe(caja28, "Arriendo"))
+
+        val del31 = vencidaHoyConSiguiente("2026-02-28", mesDeCalendario, regla("arriendo", 1_000_000L, 31), "2026-03-31")
+        val caja31 = assertNotNull(cajaHastaQueTePaguen(5_000_000L, del31.delPeriodo, del31.delSiguiente, null, "2026-02-28", del31.ultimoDia))
+        assertEquals(listOf("2026-02-28"), fechasDe(caja31, "Arriendo"), "el del 31-mar queda pasado el horizonte")
+        assertEquals(4_000_000L, caja31.alCierre.saldo)
+
+        val bisiesto = vencidaHoyConSiguiente("2028-02-29", mesDeCalendario, regla("arriendo", 1_000_000L, 29), "2028-03-29")
+        assertEquals("2028-02-29", bisiesto.ultimoDia)
+        val cajaB = assertNotNull(cajaHastaQueTePaguen(5_000_000L, bisiesto.delPeriodo, bisiesto.delSiguiente, null, "2028-02-29", bisiesto.ultimoDia))
+        assertEquals("2028-03-30", cajaB.alCierre.fecha)
+        assertEquals(listOf("2028-02-29", "2028-03-29"), fechasDe(cajaB, "Arriendo"))
+    }
+
+    /**
+     * **El último día del período del dueño** (corte 25, día hábil anterior): el 25-oct-2026 es domingo,
+     * así que el período que arrancó el 25-sep cierra el jueves 22-oct y el siguiente arranca el viernes
+     * 23. Sin salario, la caja llega a ese arranque; el pago de hoy sale una vez y el del 22-nov queda
+     * pasado el horizonte.
+     */
+    @Test
+    fun `el ultimo dia del periodo del dueno con el corte en domingo el pago de hoy sale una vez`() {
+        val l = vencidaHoyConSiguiente("2026-10-22", delDueno, regla("arriendo", 1_000_000L, 22), "2026-11-22")
+        assertEquals("2026-10-22", l.ultimoDia)
+        assertEquals(listOf("2026-11-22"), l.delSiguiente.map { it.vence })
+        val caja = assertNotNull(
+            cajaHastaQueTePaguen(5_000_000L, l.delPeriodo, l.delSiguiente, null, "2026-10-22", l.ultimoDia, conElPeriodoElegido = true),
+        )
+        assertEquals("2026-10-23", caja.alCierre.fecha)
+        assertTrue(caja.hastaElPeriodoSiguiente)
+        assertEquals(listOf("2026-10-22"), fechasDe(caja, "Arriendo"))
+        assertEquals(4_000_000L, caja.alCierre.saldo)
+    }
+
+    /**
+     * **El apartado el 31 de octubre** (el caso de `LasPreguntasSugeridasTest`): «Arriendo y más», $5M
+     * en Vivienda, con el arriendo de $1M del 31. La caja resta el de hoy y el del 30-nov, así que lo
+     * apartado que cubren los fijos es $2M y lo libre de hoy es Tu plata + $2M (la regla del cruce, sobre
+     * las filas que la caja resta). El 20, con un solo arriendo adentro, es Tu plata + $1M.
+     */
+    @Test
+    fun `el 31 el apartado lo cubren los dos arriendos que la caja resta, y el 20 uno`() {
+        val cuentas = listOf(Account("ba", "Bancolombia", AccountType.SAVINGS, 29_680_000L, "COP"))
+        val apartados = listOf(Apartado(id = "ap", accountId = "ba", proposito = "Arriendo y más", monto = 5_000_000L, categoria = "Vivienda"))
+        val p = patrimonioDe(cuentas, apartados)
+        listOf(
+            Triple("2026-10-31", "2026-11-30", 2_000_000L),
+            Triple("2026-10-20", "2026-11-20", 1_000_000L),
+        ).forEach { (hoy, siguiente, cubierto) ->
+            val arriendo = regla("arriendo", 1_000_000L, LocalDate.parse(hoy).dayOfMonth, cuenta = "ba", categoria = "Vivienda")
+            val l = vencidaHoyConSiguiente(hoy, mesDeCalendario, arriendo, siguiente)
+            val caja = assertNotNull(
+                cajaHastaQueTePaguen(p.tuPlata + p.apartado, l.delPeriodo, l.delSiguiente, null, hoy, l.ultimoDia) {
+                    apartadoFueraDeLosFijos(cuentas, apartados, it)
+                },
+            )
+            assertEquals(p.tuPlata + cubierto, caja.libreHoy, hoy)
+            assertEquals(5_000_000L - cubierto, caja.apartado, hoy)
+            // «Te quedan» mira solo la lista del período: el arriendo de hoy cubre $1M cualquier día.
+            assertEquals(4_000_000L, apartadoFueraDeLosFijos(cuentas, apartados, l.delPeriodo), hoy)
+        }
+    }
 }
