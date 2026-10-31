@@ -49,6 +49,12 @@ data class PropuestaDelAviso(
      * [DudaDelAviso.NO_SE_LEYO] y lo manda a Reconciliar, que es donde se anota igual.
      */
     val sinLeer: AvisoSinLeer? = null,
+    /**
+     * Vuelta 85 · **el grupo que este aviso saldaría** si se confirma («¿Salda Casa con Andrés?»): la
+     * tarjeta lo dice antes de confirmar. Solo informa: nada se salda solo, y la fila confirma igual
+     * (saldar sigue siendo «Sí, saldar» sobre el movimiento ya anotado). Con default para APKs viejos.
+     */
+    val saldaUnGrupo: GrupoQueSaldaElAviso? = null,
 )
 
 /**
@@ -169,6 +175,18 @@ fun dudasDelAviso(
     if (seReparte) dudas += DudaDelAviso.SE_REPARTE
     return dudas
 }
+
+/**
+ * **¿Este aviso entendido entra al lote «Confirmar N»?** (vuelta 85) Solo si es plata que sale.
+ *
+ * La regla, simple: **ningún ingreso entra al lote**. Sigue en la lista con su propio «Confirmar»,
+ * igual de entendido, pero se confirma de a uno. Un ingreso de origen desconocido («+$480.000 de la
+ * cuenta \*7700…») no tiene quién lo explique en una lista de diez, y uno de un tercero conocido puede
+ * ser la plata que saldaba un grupo («¿Salda Casa con Andrés?», ver [GrupoQueSaldaElAviso]) o la que
+ * Movi no sabe en qué cuenta o grupo poner: en los dos casos es una decisión, no un trámite. Los gastos
+ * entendidos son el trámite que el lote acelera; los ingresos son pocos.
+ */
+fun entraEnElLote(leido: ParsedSms): Boolean = leido.type != TransactionType.INCOME
 
 /**
  * ¿El aviso es de antes del primer movimiento de la cuenta en Movi? La misma regla de

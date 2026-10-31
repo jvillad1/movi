@@ -594,6 +594,37 @@ class DashboardRoutesTest {
     }
 
     /**
+     * Vuelta 85 · **«Por confirmar» con signo**: dos gastos y un ingreso de origen desconocido. La suma de
+     * siempre (la que lee un APK viejo) no cambia; aparte van lo que sale y lo que entra, con su conteo.
+     */
+    @Test
+    fun `parte lo que dicen los avisos en lo que sale y lo que entra`() = testApplication {
+        wireApp()
+        sms("s-carulla", SMS_STATE_PENDING, origen = "85540", cuando = "${ayer}T12:05:00",
+            texto = "Bancolombia: Compraste \$262.400,00 en CARULLA con tu T.Deb *4057, el 01/08/2026 a las 12:05.")
+        sms("s-uber", SMS_STATE_PENDING, origen = "85540", cuando = "${ayer}T09:20:00",
+            texto = "Bancolombia: Compraste \$15.500,00 en UBER RIDES con tu T.Deb *4057, el 01/08/2026 a las 09:20.")
+        sms("s-ingreso", SMS_STATE_PENDING, origen = "85540", cuando = "${ayer}T10:00:00",
+            texto = "Bancolombia: Recibiste \$480.000 de la cuenta *77700012345 en tu cuenta *4057 el 01/08/2026 a las 10:00.")
+
+        val body = summary()
+        assertEquals(3L, body.long("pendingSms"))
+        assertEquals(757_900L, body.long("porConfirmarSuman"), "la suma de antes sigue igual para los APKs viejos")
+        assertEquals(277_900L, body.long("porConfirmarSalen"))
+        assertEquals(2L, body.long("avisosQueSalen"))
+        assertEquals(480_000L, body.long("porConfirmarEntran"))
+        assertEquals(1L, body.long("avisosQueEntran"))
+
+        // Uno que no se lee: nada de la partición tampoco.
+        sms("s-raro", SMS_STATE_PENDING, origen = "85540", cuando = "${ayer}T13:00:00", texto = "Bancolombia te informa que tu clave cambió.")
+        val conUnoIlegible = summary()
+        for (campo in listOf("porConfirmarSalen", "porConfirmarEntran")) {
+            val valor = conUnoIlegible[campo]
+            assertTrue(valor == null || valor is kotlinx.serialization.json.JsonNull, "$campo sin cifra a medias: $valor")
+        }
+    }
+
+    /**
      * El bug que cerró este test: la ingesta escribía `"new"` y todos los lectores filtraban
      * por `"pending"`, así que un SMS capturado de verdad nunca disparaba la alerta del Inicio
      * ni se podía abrir en la bandeja. Se ejercita el camino COMPLETO — sync real, no un insert

@@ -49,6 +49,7 @@ import com.jvillada.movi.shared.model.MontoDelAviso
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.esUnComprobante
 import com.jvillada.movi.shared.model.sumaDeLoPorConfirmar
+import com.jvillada.movi.shared.model.loPorConfirmarPorSigno
 import com.jvillada.movi.shared.model.pagosRecientesPorConfirmar
 import com.jvillada.movi.shared.model.cuantosPagosAntiguos
 import kotlin.math.roundToLong
@@ -206,6 +207,9 @@ fun Route.dashboardRoutes() {
                 reglasDeCredito = reglasDeCredito,
             )
             val plata = disponible.plata
+            // Vuelta 44 + 85: lo que dicen los avisos por confirmar, una vez, para la suma y su partición por signo.
+            val montosPorConfirmar = bandejaPendiente?.let { montosDeLoPorConfirmarDe(uid, it, ahora) }
+            val porSigno = montosPorConfirmar?.let { loPorConfirmarPorSigno(it) }
 
             DashboardSummary(
                 scope = scope,
@@ -223,7 +227,12 @@ fun Route.dashboardRoutes() {
                 avisosAntiguos = bandejaPendiente?.let { cuantosPagosAntiguos(it, ahora) } ?: 0,
                 // Vuelta 44: «Por confirmar $103.600» — cuánto dicen esos mismos pagos, o nada si
                 // alguno no se lee entero (ver `sumaDeLoPorConfirmar` en :core). Vuelta 51: sin los antiguos.
-                porConfirmarSuman = bandejaPendiente?.let { porConfirmarSumanDe(uid, it, ahora) },
+                porConfirmarSuman = montosPorConfirmar?.let { sumaDeLoPorConfirmar(it) },
+                // Vuelta 85: la misma cifra partida en lo que sale y lo que entra (ver `loPorConfirmarPorSigno`).
+                porConfirmarSalen = porSigno?.salen,
+                porConfirmarEntran = porSigno?.entran,
+                avisosQueSalen = porSigno?.avisosQueSalen ?: 0,
+                avisosQueEntran = porSigno?.avisosQueEntran ?: 0,
                 // Vuelta de diseño 22: los movimientos que esperan en «Por confirmar», contados como
                 // los cuenta Movimientos (un traspaso es un renglón), para que Hoy diga su número.
                 movimientosPorConfirmar = movimientosPorConfirmarDe(uid, voidedIds),
@@ -813,17 +822,20 @@ internal fun Transaction.movimientosPorConfirmarDe(uid: String, voidedIds: Set<S
 /**
  * **Cuánto dicen los avisos por confirmar** (vuelta 44), uno por pago: el monto que lee Movi del aviso
  * que propone cada pago ([propuestaDelGrupo], el mismo de la bandeja), o la lectura guardada de un
- * comprobante. Sin la memoria ni los terceros del dueño: eso cambia la categoría, nunca el monto. Si
- * alguno no se lee, o no es en pesos, `null` ([sumaDeLoPorConfirmar]): la franja dice solo el conteo.
+ * comprobante, y desde la vuelta 85 si es plata que entra. Sin la memoria ni los terceros del dueño: eso
+ * cambia la categoría, nunca el monto ni el tipo. Si alguno no se lee, o no es en pesos, la suma es
+ * `null` ([sumaDeLoPorConfirmar], [loPorConfirmarPorSigno]): la franja dice solo el conteo.
  */
 internal fun Transaction.porConfirmarSumanDe(uid: String, bandeja: List<SmsMessage>, ahora: Long): Long? =
-    sumaDeLoPorConfirmar(
-        // Vuelta 51: los avisos de más de 30 días no inflan la suma (ver `esPagoAntiguo` en :core).
-        pagosRecientesPorConfirmar(bandeja, ahora).map { cabeza ->
-            val miembros = cabeza.grupoId?.let { grupo -> bandeja.filter { it.grupoId == grupo } }?.ifEmpty { null } ?: listOf(cabeza)
-            val propuesta = if (miembros.size > 1) propuestaDelGrupo(miembros) else cabeza
-            val leido = (if (esUnComprobante(propuesta)) parsedDeUnComprobante(uid, propuesta.id, propuesta.text) else null)
-                ?: parseSms(propuesta.text, propuesta.bank)
-            leido?.let { MontoDelAviso(it.amount.roundToLong(), it.currency) }
-        },
-    )
+    sumaDeLoPorConfirmar(montosDeLoPorConfirmarDe(uid, bandeja, ahora))
+
+/** Lo que dice cada pago reciente por confirmar ([porConfirmarSumanDe]); `null` el que no se lee. */
+internal fun Transaction.montosDeLoPorConfirmarDe(uid: String, bandeja: List<SmsMessage>, ahora: Long): List<MontoDelAviso?> =
+    // Vuelta 51: los avisos de más de 30 días no inflan la suma (ver `esPagoAntiguo` en :core).
+    pagosRecientesPorConfirmar(bandeja, ahora).map { cabeza ->
+        val miembros = cabeza.grupoId?.let { grupo -> bandeja.filter { it.grupoId == grupo } }?.ifEmpty { null } ?: listOf(cabeza)
+        val propuesta = if (miembros.size > 1) propuestaDelGrupo(miembros) else cabeza
+        val leido = (if (esUnComprobante(propuesta)) parsedDeUnComprobante(uid, propuesta.id, propuesta.text) else null)
+            ?: parseSms(propuesta.text, propuesta.bank)
+        leido?.let { MontoDelAviso(it.amount.roundToLong(), it.currency, entra = it.type == TransactionType.INCOME) }
+    }
