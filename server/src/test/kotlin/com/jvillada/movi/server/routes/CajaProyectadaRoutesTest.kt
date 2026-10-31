@@ -179,31 +179,62 @@ class CajaProyectadaRoutesTest {
         assertEquals(HttpStatusCode.Unauthorized, client.get("/api/caja-proyectada/gasto-del-dia-a-dia").status)
     }
 
-    /** Movi AI arma la caja con la lista del período: un pago de hoy, pendiente, sale hoy. */
+    /**
+     * Movi AI arma la caja con la lista del período: un pago de hoy, pendiente, sale hoy.
+     *
+     * Fecha fija (arreglo del 31-oct-2026): con el reloj de verdad, la regla del día de hoy volvía a
+     * vencer DENTRO de los 30 días de la caja cualquier día de un mes de 30 días (o de febrero) y el 31
+     * de octubre (la del 31 vence el 30-nov), y la prueba esperaba un solo vencimiento. La caja tenía
+     * razón: son dos pagos distintos. Ese borde lo fija la prueba siguiente.
+     */
     @Test
     fun `la caja de movi ai resta lo pendiente de la lista del periodo`() {
-        anotar(duenoId, "apertura", 5_000_000L, hoy, OPENING_CATEGORY, tipo = "INCOME")
-        transaction {
-            RecurringRules.insert {
-                it[id] = "rr_gym"; it[userId] = duenoId; it[name] = "Gimnasio"; it[category] = "Salud"
-                it[amount] = 180_000L; it[dayOfMonth] = hoy.dayOfMonth; it[type] = "EXPENSE"
-            }
-            // La del otro dueño no puede colarse en la caja de este.
-            RecurringRules.insert {
-                it[id] = "rr_otro"; it[userId] = otroId; it[name] = "Arriendo del otro"; it[category] = "Vivienda"
-                it[amount] = 2_000_000L; it[dayOfMonth] = hoy.dayOfMonth; it[type] = "EXPENSE"
-            }
-        }
-        val d = runBlocking { cajaProyectadaDe(duenoId, hoy) }
+        val dia = LocalDate.of(2026, 10, 20)
+        anotar(duenoId, "apertura", 5_000_000L, dia, OPENING_CATEGORY, tipo = "INCOME")
+        reglasDelDiaDeHoy(dia)
+        val d = runBlocking { cajaProyectadaDe(duenoId, dia) }
         val caja = assertNotNull(d.caja)
         assertEquals(5_000_000L, caja.tuPlataHoy)
-        assertEquals(hoy.toString(), caja.dias.first().fecha)
+        assertEquals(dia.toString(), caja.dias.first().fecha)
         // Vuelta 70: sin un ingreso recurrente la caja mira 30 días (nunca menos que el cierre del mes).
-        assertEquals(hoy.plusDays(30).toString(), caja.alCierre.fecha)
+        assertEquals("2026-11-19", caja.alCierre.fecha)
         assertTrue(!caja.hastaElSalario)
         assertEquals(listOf("Gimnasio"), caja.dias.first().movimientos.map { it.nombre })
+        assertEquals(1, caja.dias.flatMap { it.movimientos }.count { it.nombre == "Gimnasio" }, "el del 20-nov queda pasado el horizonte")
         assertEquals(4_820_000L, caja.alCierre.saldo, "sin período cerrado no hay gasto del día a día que restar")
         assertNull(d.gasto.porDia)
+    }
+
+    /**
+     * **El último día de un mes de 31 días** (31-oct-2026, el día que la prueba de arriba falló con el
+     * reloj de verdad): la caja mira hasta el 30-nov y la regla del 31 vence hoy (la de octubre) y el
+     * 30-nov (la de noviembre, que no tiene 31). Cada una sale una vez, el día que vence.
+     */
+    @Test
+    fun `el 31 la caja cuenta el pago de hoy y el del 30 de noviembre, una vez cada uno`() {
+        val dia = LocalDate.of(2026, 10, 31)
+        anotar(duenoId, "apertura", 5_000_000L, dia, OPENING_CATEGORY, tipo = "INCOME")
+        reglasDelDiaDeHoy(dia)
+        val caja = assertNotNull(runBlocking { cajaProyectadaDe(duenoId, dia) }.caja)
+        assertEquals("2026-11-30", caja.alCierre.fecha)
+        assertEquals(listOf("Gimnasio"), caja.dias.first().movimientos.map { it.nombre })
+        assertEquals(listOf("Gimnasio"), caja.alCierre.movimientos.map { it.nombre })
+        assertEquals(2, caja.dias.flatMap { it.movimientos }.count { it.nombre == "Gimnasio" })
+        assertEquals(5_000_000L - 180_000L, caja.dias.first().saldo)
+        assertEquals(5_000_000L - 2 * 180_000L, caja.alCierre.saldo)
+    }
+
+    /** El gimnasio del dueño y el arriendo del otro, los dos el día del mes de [dia]. */
+    private fun reglasDelDiaDeHoy(dia: LocalDate) = transaction {
+        RecurringRules.insert {
+            it[id] = "rr_gym"; it[userId] = duenoId; it[name] = "Gimnasio"; it[category] = "Salud"
+            it[amount] = 180_000L; it[dayOfMonth] = dia.dayOfMonth; it[type] = "EXPENSE"
+        }
+        // La del otro dueño no puede colarse en la caja de este.
+        RecurringRules.insert {
+            it[id] = "rr_otro"; it[userId] = otroId; it[name] = "Arriendo del otro"; it[category] = "Vivienda"
+            it[amount] = 2_000_000L; it[dayOfMonth] = dia.dayOfMonth; it[type] = "EXPENSE"
+        }
     }
 
     @Test
