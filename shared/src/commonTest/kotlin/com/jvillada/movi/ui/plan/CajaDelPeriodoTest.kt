@@ -51,7 +51,8 @@ class CajaDelPeriodoTest {
         assertEquals("Hasta el 25 oct · tu día más justo es el 17 oct", fraseCortaDeLaCaja(caja, hoy))
         assertTrue("\$" !in fraseCortaDeLaCaja(caja, hoy), "la cifra va arriba, una vez")
         assertTrue("te quedan" !in fraseCortaDeLaCaja(caja, hoy).lowercase(), "el verbo de «Te quedan» es del héroe")
-        assertEquals("Libre en tu día más justo: \$8,8M", descripcionDeLaCifraDeLaCaja(caja))
+        // Vuelta 86: la cifra dice lo que es y su día.
+        assertEquals("Lo más bajo que llega Tu plata: \$8,8M el 17 oct", descripcionDeLaCifraDeLaCaja(caja, hoy))
         assertNull(fraseDelRojo(caja, hoy))
         assertNull(lineaSinSalario(caja), "con salario no hay línea encima")
     }
@@ -68,7 +69,7 @@ class CajaDelPeriodoTest {
             dias = listOf(dia("2026-10-02", 1_000_000L), dia("2026-10-10", -683_361L, "Gimnasio" to -1_683_361L), dia("2026-10-25", 1_000_000L)),
         )
         assertEquals("Hasta el 25 oct · el 10 oct no te alcanza", fraseCortaDeLaCaja(enRojo, hoy))
-        assertEquals("Libre en tu día más justo: −\$683\u00A0mil", descripcionDeLaCifraDeLaCaja(enRojo), "una sola forma de cifra: la corta")
+        assertEquals("Lo más bajo que llega Tu plata: −\$683\u00A0mil el 10 oct", descripcionDeLaCifraDeLaCaja(enRojo, hoy), "una sola forma de cifra: la corta")
     }
 
     /** El ejemplo de la revisión 4: «Te quedan» descuenta el ahorro y la caja ahora también. */

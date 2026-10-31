@@ -90,6 +90,8 @@ import com.jvillada.movi.ui.recurrentes.MontoDeFila
 import com.jvillada.movi.ui.recurrentes.NumeroEnCirculo
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.NotificationsOff
+import androidx.compose.material.icons.rounded.Repeat
+import com.jvillada.movi.ui.components.ds.FilaDeNavegacion
 import com.jvillada.movi.ui.dashboard.checklistDelPeriodo
 import com.jvillada.movi.ui.dashboard.pendientesDePeriodosAnteriores
 import com.jvillada.movi.ui.recurrentes.CreateRecurringRuleSheet
@@ -375,6 +377,12 @@ class EstadoDelTableroDeRecurrentes internal constructor(
      * corregido.
      */
     internal var reglaRecurrenteAEditar by mutableStateOf<RecurringRule?>(null)
+
+    /**
+     * Vuelta 86 · la tarjeta cuyos términos se editan desde «Cargar mínimo» (la fila que no suma en
+     * «Falta por pagar»): la MISMA hoja de Créditos ([com.jvillada.movi.ui.credits.CardTermsSheet]).
+     */
+    internal var tarjetaACargar by mutableStateOf<com.jvillada.movi.shared.model.CardSummary?>(null)
     // Ola 18: la suscripción abierta para editar. Hasta acá la fila solo ofrecía «Quitar», así
     // que corregirle el monto a un cobro era quitarlo y volver a escribirlo entero — y en una
     // detectada eso ni siquiera funcionaba: «Quitar» la marca DISMISSED, no la borra.
@@ -771,6 +779,11 @@ fun rememberEstadoDelTableroDeRecurrentes(
     recarga: Int,
     error: MutableState<String?>,
     vencimientosSiempre: Boolean = false,
+    /**
+     * Vuelta 86 · solo lo que «Tu mes típico» necesita (en «Tus períodos»): las suscripciones y los
+     * vencimientos. Sin los créditos, los movimientos de la cuota parecida ni el permiso de avisos.
+     */
+    soloElMesTipico: Boolean = false,
 ): EstadoDelTableroDeRecurrentes {
     val alcance = rememberCoroutineScope()
     val estado = remember(alcance, error) { EstadoDelTableroDeRecurrentes(alcance, error) }
@@ -856,7 +869,7 @@ fun rememberEstadoDelTableroDeRecurrentes(
 
     // Ver [EstadoDelTableroDeRecurrentes.planesDeCuotas].
     LaunchedEffect(activo, estado.recargas, refreshTick, recarga) {
-        if (!activo) return@LaunchedEffect
+        if (!activo || soloElMesTipico) return@LaunchedEffect
         intentar { Repositories.wallets.getCredits() }
             .onSuccess { estado.planesDeCuotas = planesDeLasCuotas(it) }
             // Sin plan no hay estimación, y eso ya lo dice la ausencia de la línea.
@@ -867,7 +880,7 @@ fun rememberEstadoDelTableroDeRecurrentes(
     // Solo si hay la cuota de un crédito sin pagar: sin ella el tablero no tiene por qué leer los movimientos.
     val hayCuotaSinPagar = estado.hayCuotaDeCreditoSinPagar
     LaunchedEffect(activo, hayCuotaSinPagar, estado.recargas, refreshTick, recarga) {
-        if (!activo || !hayCuotaSinPagar) return@LaunchedEffect
+        if (!activo || !hayCuotaSinPagar || soloElMesTipico) return@LaunchedEffect
         estado.cuentasDelTablero = intentar { Repositories.wallets.getAccounts() }.getOrDefault(emptyList())
         estado.gastosDelTablero = intentar { Repositories.wallets.getEventsByDay() }.getOrNull()
             ?.flatMap { it.items }.orEmpty()
@@ -877,7 +890,7 @@ fun rememberEstadoDelTableroDeRecurrentes(
     // veces para que el aviso desaparezca sin reabrir la app. Solo donde el push existe Y con el
     // tablero a la vista — en Android/iOS `status()` es una constante, y con otro segmento de
     // Plan a la vista este bucle no tendría a quién servir.
-    if (PushOptIn.supported) {
+    if (PushOptIn.supported && !soloElMesTipico) {
         LaunchedEffect(estado.pushRefreshTick, activo) {
             if (!activo) return@LaunchedEffect
             repeat(20) {
@@ -923,6 +936,12 @@ fun LazyListScope.tableroDeRecurrentes(
     accountNames: Map<String, String>,
     onNavigate: (Screen) -> Unit,
     despuesDeLaLista: (LazyListScope.() -> Unit)? = null,
+    /**
+     * Vuelta 86 · lo que va justo debajo de «Lo que se repite al mes», antes de las suscripciones. Pagos no
+     * pone nada (el flujo libre se mudó a «Tus períodos»); las pruebas del tablero ponen ahí
+     * [TuMesTipico] con el mismo estado, en el lugar donde estaba, para seguir mirando sus cuentas.
+     */
+    debajoDeLoQueSeRepite: (LazyListScope.() -> Unit)? = null,
 ) {
     // ── Aviso: pediste recordatorios y no hay por dónde mandártelos ──────────
     // Ola R4 lo había llevado al FINAL del segmento, como propuesta. Vuelta de diseño 22: subió encima
@@ -1118,6 +1137,13 @@ fun LazyListScope.tableroDeRecurrentes(
                 onUsarSiempreLaCuenta = { pago, cuenta -> estado.usarSiempreLaCuenta(pago, cuenta) },
                 onNoUsarSiempreLaCuenta = { pago, cuenta -> estado.noUsarSiempreLaCuenta(pago, cuenta) },
                 cuentasDescartadas = estado.cuentasDescartadas,
+                // Vuelta 86: «Cargar mínimo» abre los términos de esa tarjeta aquí mismo; si la tarjeta no
+                // está en la lectura (no debería pasar), Créditos, donde vive su lápiz.
+                onCargarMinimo = { pago ->
+                    val cuenta = com.jvillada.movi.ui.recurrentes.cuentaDeLaTarjetaDe(pago)
+                    val tarjeta = tarjetasDelTablero.valor.orEmpty().firstOrNull { it.account.id == cuenta }
+                    if (tarjeta != null) estado.tarjetaACargar = tarjeta else onNavigate(Screen.Credits)
+                },
             )
         }
     }
@@ -1181,43 +1207,32 @@ fun LazyListScope.tableroDeRecurrentes(
         }
     }
 
-    // ── El resumen, abajo, pegado a lo que resume ───────────────────────────
+    // ── Lo que se repite al mes: las suscripciones, y el total en «Tus períodos» ──
+    // Vuelta 86 · **una cifra por pregunta**: Pagos contesta «¿cuánto me queda?» («Te quedan») y «¿cuánto
+    // me falta pagar?» («Falta por pagar»). El «Flujo libre» y «Libre sin las tarjetas» contestan otra
+    // cosa —cuánto queda en un mes típico— y se mudaron a «Tus períodos» como «Tu mes típico»
+    // ([TuMesTipico], la misma tarjeta con las mismas cuentas). Aquí queda el encabezado con «Buscar
+    // cobros» y una fila que lleva allá; debajo, las suscripciones.
     item {
-        // Vuelta 78: el total de este período (el «de $X» de «Falta por pagar»), del estado, solo con el de
-        // hoy a la vista. Las tarjetas, de la misma lectura recordada que la lista (no sale a la red).
-        val tarjetasDelResumen = com.jvillada.movi.data.rememberLectura(com.jvillada.movi.data.ClaveDeLectura.Tarjetas, reintento = 0) {
-            Repositories.wallets.getCards()
-        }
-        val totalDelPeriodo = remember(
-            estado.upcomingRecurrentes, estado.ocurrencias, estado.vencimientosOk, estado.ocurrenciasOk,
-            periodoVisible, periodoDeHoy, ajustesDelPeriodo, tarjetasDelResumen.valor,
-        ) {
-            if (periodoVisible != periodoDeHoy) null
-            else estado.totalDeFacturasDelPeriodo(periodoVisible, ajustesDelPeriodo, tarjetasDelResumen.valor.orEmpty().map { it.account.id }.toSet())
-        }
         Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(bottom = Medida.entreSecciones)) {
             // «Buscar cobros» va en este encabezado —que se pinta siempre con el tablero
             // a la vista— y no en el de las candidatas, que solo existe cuando ya hay
             // alguna. Ver [EstadoDelTableroDeRecurrentes.buscarCobros].
-            // «Lo que se repite al mes» y no «Recurrentes»: son totales mensuales, no pagos del
-            // período, y debajo de la lista del período el rótulo tiene que decir eso.
             Seccion(
                 titulo = TITULO_LO_QUE_SE_REPITE,
                 accion = if (estado.buscandoCobros) "Buscando…" else "Buscar cobros",
                 onAccion = { estado.buscarCobros() },
             )
-            ResumenFlujoLibreCard(
-                // Vuelta 78: el total de este período (el «de $X» de «Falta por pagar»), solo con el de hoy a la vista.
-                totalDelPeriodo = totalDelPeriodo,
-                // **Sin los vencimientos no hay cifra.** Las cuotas de los créditos
-                // llegan solo por ahí y son la mitad del mes del dueño: si esa
-                // llamada falló, el total saldría plausible y $5.445.772 más alto
-                // que la verdad, sin nada que lo delate. Un guion se entiende; un
-                // número optimista, no. Mismo criterio que `subsParaRecurrentesOk`.
-                cifras = estado.resumen?.takeIf { estado.vencimientosOk },
+            FilaDeNavegacion(
+                titulo = TITULO_TU_MES_TIPICO,
+                icono = Icons.Rounded.Repeat,
+                onClick = { onNavigate(Screen.Periodos) },
+                subtitulo = SUBTITULO_DE_LA_FILA_DEL_MES_TIPICO,
+                modifier = Modifier.testTag(TAG_FILA_DEL_MES_TIPICO),
             )
         }
     }
+    debajoDeLoQueSeRepite?.invoke(this)
 
     // ── Suscripciones activas · el desglose de «Gastos recurrentes» ─────────
     // Pegado al card de arriba a propósito: es lo que ese total tiene adentro, con
@@ -1384,6 +1399,20 @@ fun HojasDelTableroDeRecurrentes(estado: EstadoDelTableroDeRecurrentes, onNaviga
             // Vuelta 72 (revisión): si algo de esta regla venció sin pagarse, «Pausar» pregunta qué hacer.
             vencidoSinPagar = estado.vencidoSinPagarDe(regla.id),
             onYaLoPague = { vencido -> onNavigate(hojaParaAnotar(vencido)) },
+        )
+    }
+
+    // Vuelta 86: «Cargar mínimo» de la fila que no suma: la hoja de los términos de la tarjeta, la de Créditos.
+    // Al guardar, la tarjeta y los vencimientos se vuelven a leer (el mínimo llega en la regla sintética).
+    estado.tarjetaACargar?.let { tarjeta ->
+        com.jvillada.movi.ui.credits.CardTermsSheet(
+            editing = tarjeta,
+            onDismiss = { estado.tarjetaACargar = null },
+            onSaved = {
+                estado.tarjetaACargar = null
+                com.jvillada.movi.data.olvidarLoFresco()
+                estado.recargar()
+            },
         )
     }
 
@@ -1600,7 +1629,7 @@ fun resumenPlegadoDeSuscripciones(cuantas: Int, totalMensual: Long): String {
  * sería falso.
  */
 @Composable
-private fun ResumenFlujoLibreCard(
+internal fun ResumenFlujoLibreCard(
     cifras: ResumenRecurrentes?,
     totalDelPeriodo: Long?,
 ) {

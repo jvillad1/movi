@@ -39,6 +39,8 @@ fun TableroDeRecurrentesDePrueba(
      * de cada fila salen de `daysUntil`, no del reloj, así que fijar esto alcanza.
      */
     periodoFijo: PeriodoFinanciero? = null,
+    /** Vuelta 86: con «Tu mes típico» debajo (ver arriba). */
+    conElMesTipico: Boolean = true,
 ) {
     val solo = rememberTableroMontadoSolo()
     val periodoDeHoy = remember(ajustesDelPeriodo, periodoFijo) {
@@ -58,6 +60,21 @@ fun TableroDeRecurrentesDePrueba(
                 ajustesDelPeriodo = ajustesDelPeriodo,
                 accountNames = solo.accountNames,
                 onNavigate = onNavigate,
+                // Vuelta 86: «Tu mes típico» (el flujo libre) se mudó de Pagos a «Tus períodos». Sus pruebas
+                // de siempre lo miran con el MISMO estado del tablero y en el lugar donde estaba: la tarjeta y
+                // sus cuentas no cambiaron, solo dónde se pinta (la pantalla la prueba `Vuelta86EnPantallaTest`).
+                debajoDeLoQueSeRepite = if (!conElMesTipico) null else {
+                    {
+                        item(key = "tu-mes-tipico-de-prueba") {
+                            TuMesTipico(
+                                estado = solo.estado,
+                                periodoDeHoy = periodoDeHoy,
+                                ajustes = ajustesDelPeriodo,
+                                modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 24.dp),
+                            )
+                        }
+                    }
+                },
             )
         }
         SnackbarHost(
