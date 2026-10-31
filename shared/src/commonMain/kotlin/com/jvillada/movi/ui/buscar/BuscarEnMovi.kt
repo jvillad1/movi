@@ -4,6 +4,10 @@ import com.jvillada.movi.shared.model.enFormaDeTitulo
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.laPataQueCuenta
+import com.jvillada.movi.shared.model.PresentacionDelMovimiento
+import com.jvillada.movi.shared.model.comoSePresenta
+import com.jvillada.movi.shared.model.esperaEnPorConfirmar
+import com.jvillada.movi.shared.model.montoContado
 import com.jvillada.movi.shared.model.DestinoConocido
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.EventDay
@@ -256,16 +260,18 @@ fun nombreDelComercio(delComercio: List<FinancialEvent>): String {
 fun subtituloDeUnMovimientoEnBuscar(
     evento: FinancialEvent,
     nombreDeLaCuenta: String?,
+    /**
+     * **Un solo formato** (vuelta 87): la fecha corta («28 oct», «Hoy», «Ayer»; el año solo si no es el
+     * actual). Antes la fila decía «28 oct» con la cuenta y «27 de octubre» sin ella.
+     */
     fecha: String,
-    /** Revisión de la 83: la fecha corta («21 oct»), para cuando va la cuenta. */
-    fechaCorta: String = fecha,
 ): String {
     val titulo = textosDeLaFila(evento, nombreDeLaCuenta).titulo
     val categoria = evento.category.takeIf { it.isNotBlank() && normalizarParaBuscar(it) != normalizarParaBuscar(titulo) }
     // Revisión de la 83: la cuenta solo va cuando no es la habitual, y entonces **primero** y con la fecha
     // corta («Nu · Mercado · 21 oct»): al final era lo que se cortaba con dos renglones a la derecha.
     val cuenta = nombreDeLaCuenta?.takeIf { it.isNotBlank() }
-    return if (cuenta != null) listOfNotNull(cuenta, categoria, fechaCorta).joinToString(" · ")
+    return if (cuenta != null) listOfNotNull(cuenta, categoria, fecha).joinToString(" · ")
     else listOfNotNull(categoria, fecha).joinToString(" · ")
 }
 
@@ -301,6 +307,119 @@ fun debajoDeTuParteEnBuscar(evento: FinancialEvent, espacio: Espacio?): String {
 }
 
 /**
+ * **Todos los movimientos que coinciden** con [consulta] y los chips, del más reciente al más viejo y con
+ * una fila por par ([unaPataPorPar]). Sin el tope de [TOPE_DE_MOVIMIENTOS_EN_LA_BUSQUEDA]: la lista de
+ * Buscar muestra los más recientes, pero los totales ([totalesDeLaBusqueda]) suman **todos**.
+ */
+fun movimientosQueCoinciden(
+    consulta: String,
+    datos: DatosDeBusqueda,
+    filtros: FiltrosDeBusqueda = FiltrosDeBusqueda(),
+    periodo: RangoDelPeriodo? = null,
+): List<FinancialEvent> {
+    if (normalizarParaBuscar(consulta).isEmpty()) return emptyList()
+    val monto = montoDeLaConsulta(consulta)
+    return datos.eventos
+        .filter { (monto != null && it.amount == monto) || matchesQuery(it, consulta) }
+        .filter { pasaLosFiltros(it, filtros, periodo) }
+        .sortedByDescending { it.timestamp }
+        // Un traspaso son dos patas con el mismo `transferId`: se lista una — la que cuenta (vuelta 50).
+        .let { unaPataPorPar(it, datos.cuentas.associate { c -> c.id to c.type }) }
+}
+
+/** Lo que suman los movimientos de un tipo en una búsqueda: en total y en el período en curso. */
+data class SumaDeLaBusqueda(val total: Long, val delPeriodo: Long)
+
+/**
+ * **Los totales de Buscar** (vuelta 87): «uber» daba «Movimientos · 30» sin decir cuánto sumaban.
+ *
+ * - **Solo lo que cuenta como gasto o ingreso** (`comoSePresenta`, la regla de «Gastos» de Actividad y
+ *   de En qué se va): sin traspasos, pagos de tarjeta ni ajustes, y sin lo que espera en «Por revisar»
+ *   (`esperaEnPorConfirmar`: se cuenta en [porConfirmar] y se dice). Es lo que el dueño ya llama «lo que gasté».
+ * - **Tu parte**: un gasto repartido suma `montoContado` (tu parte), igual que En qué se va; tu parte de lo
+ *   que pagó otro ya viene como un movimiento de [DatosDeBusqueda.eventos].
+ * - **Solo pesos**: lo que está en otra moneda no se mezcla; se cuenta en [enOtraMoneda] y se dice.
+ * - **Gastos e ingresos van aparte** (no se restan: «Gastaste» y «Te entró» son dos cosas): cada uno
+ *   con su suma, y solo aparece el que tiene algo.
+ * - **Todos los que coinciden**, no solo los [TOPE_DE_MOVIMIENTOS_EN_LA_BUSQUEDA] de la lista.
+ *
+ * [cuantos] son todos los movimientos que coinciden (listados o no).
+ */
+data class TotalesDeLaBusqueda(
+    val cuantos: Int,
+    val gastos: SumaDeLaBusqueda?,
+    val ingresos: SumaDeLaBusqueda?,
+    val enOtraMoneda: Int,
+    /** Los que esperan en «Por revisar» (`esperaEnPorConfirmar`): no cuentan todavía, y se dice. */
+    val porConfirmar: Int = 0,
+)
+
+/** Ver [TotalesDeLaBusqueda]. `null` sin consulta o sin ningún movimiento. Pura. */
+fun totalesDeLaBusqueda(
+    consulta: String,
+    datos: DatosDeBusqueda,
+    filtros: FiltrosDeBusqueda = FiltrosDeBusqueda(),
+    periodo: RangoDelPeriodo? = null,
+): TotalesDeLaBusqueda? {
+    val coinciden = movimientosQueCoinciden(consulta, datos, filtros, periodo)
+    if (coinciden.isEmpty()) return null
+    val tipos = datos.cuentas.associate { it.id to it.type }
+    var gastoTotal = 0L; var gastoPeriodo = 0L; var hayGastos = false
+    var ingresoTotal = 0L; var ingresoPeriodo = 0L; var hayIngresos = false
+    var otraMoneda = 0
+    var porConfirmar = 0
+    coinciden.forEach { e ->
+        val presentacion = comoSePresenta(e, tipos[e.accountId])
+        if (presentacion == PresentacionDelMovimiento.NEUTRO) return@forEach
+        if (esperaEnPorConfirmar(e.reconciliationStatus)) { porConfirmar++; return@forEach }
+        if (e.currency != "COP") { otraMoneda++; return@forEach }
+        val monto = montoContado(e)
+        val enElPeriodo = periodo != null && e.timestamp in periodo
+        if (presentacion == PresentacionDelMovimiento.GASTO) {
+            hayGastos = true; gastoTotal += monto; if (enElPeriodo) gastoPeriodo += monto
+        } else {
+            hayIngresos = true; ingresoTotal += monto; if (enElPeriodo) ingresoPeriodo += monto
+        }
+    }
+    return TotalesDeLaBusqueda(
+        cuantos = coinciden.size,
+        gastos = if (hayGastos) SumaDeLaBusqueda(gastoTotal, gastoPeriodo) else null,
+        ingresos = if (hayIngresos) SumaDeLaBusqueda(ingresoTotal, ingresoPeriodo) else null,
+        enOtraMoneda = otraMoneda,
+        porConfirmar = porConfirmar,
+    )
+}
+
+/**
+ * **Las líneas de los totales** de [totales], bajo «Movimientos · 30»: «Gastaste $412.300 en total · $98.000
+ * este período» y, si la búsqueda trae ingresos, «Te entró $1.500.000 en total · $0 este período». Con el
+ * chip «Este período» prendido ([soloEstePeriodo]) todo es del período y se dice una sola vez («Gastaste
+ * $98.000 este período»). Si hay más movimientos que los listados, una línea lo dice. Vacía sin nada que sumar.
+ * Pura.
+ */
+fun lineasDeLosTotales(
+    totales: TotalesDeLaBusqueda?,
+    soloEstePeriodo: Boolean = false,
+    listados: Int = TOPE_DE_MOVIMIENTOS_EN_LA_BUSQUEDA,
+): List<String> {
+    if (totales == null) return emptyList()
+    fun linea(verbo: String, suma: SumaDeLaBusqueda): String =
+        if (soloEstePeriodo) "$verbo ${formatCOP(suma.total)} este período"
+        else "$verbo ${formatCOP(suma.total)} en total · ${formatCOP(suma.delPeriodo)} este período"
+    return buildList {
+        if (totales.cuantos > listados) add("Los $listados más recientes de ${totales.cuantos}")
+        totales.gastos?.let { add(linea("Gastaste", it)) }
+        totales.ingresos?.let { add(linea("Te entró", it)) }
+        if (totales.porConfirmar > 0) {
+            add(if (totales.porConfirmar == 1) "Sin contar 1 por confirmar" else "Sin contar ${totales.porConfirmar} por confirmar")
+        }
+        if (totales.enOtraMoneda > 0) {
+            add(if (totales.enOtraMoneda == 1) "Sin contar 1 en otra moneda" else "Sin contar ${totales.enOtraMoneda} en otra moneda")
+        }
+    }
+}
+
+/**
  * **Buscar [consulta] en lo que hay a mano.** Vacío con la consulta en blanco. Los grupos sin
  * resultados no vienen.
  *
@@ -323,12 +442,7 @@ fun buscarEnMovi(
     if (q.isEmpty()) return emptyList()
     val monto = montoDeLaConsulta(consulta)
 
-    val coinciden = datos.eventos
-        .filter { (monto != null && it.amount == monto) || matchesQuery(it, consulta) }
-        .filter { pasaLosFiltros(it, filtros, periodo) }
-        .sortedByDescending { it.timestamp }
-        // Un traspaso son dos patas con el mismo `transferId`: se lista una — la que cuenta (vuelta 50).
-        .let { unaPataPorPar(it, datos.cuentas.associate { c -> c.id to c.type }) }
+    val coinciden = movimientosQueCoinciden(consulta, datos, filtros, periodo)
 
     val movimientos = coinciden.take(TOPE_DE_MOVIMIENTOS_EN_LA_BUSQUEDA).map { ResultadoDeBusqueda.Movimiento(it) }
 
