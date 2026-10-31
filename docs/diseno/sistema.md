@@ -4713,8 +4713,9 @@ de los permisos en rojo. **Sin reglas de plata**; ningún token nuevo.
    (las que no muestran la barra; Borrar la cuenta sí la muestra y ya estaba bien). Las hojas siguen con su
    propio descuento (`MarcoDeHoja`), que ve lo ya consumido y no lo dobla.
 2. **Un botón nunca se corta.** `Boton` tiene alto **mínimo** (`heightIn`, 48 o 36) en vez de fijo, el texto
-   centrado y sin tope de renglones, con `Espacio.xxs` arriba y abajo: un rótulo que no cabe baja entero a
-   un segundo renglón y el botón crece. Se eligió **crecer y no acortar los rótulos**: «Dar acceso a las
+   sin tope de renglones (centrado por la fila, sin `TextAlign.Center`: un párrafo centrado se reportaba
+   dibujado fuera de su caja), con `Espacio.xxs` arriba y abajo: un rótulo que no cabe baja entero a un
+   segundo renglón y el botón crece. Se eligió **crecer y no acortar los rótulos**: «Dar acceso a las
    notificaciones» sigue diciendo lo que hace. `PildoraDeFiltro` igual (alto mínimo, el texto baja si la fila
    que la contiene es más angosta que el nombre; en una fila que se desplaza de lado nunca pasa).
    - **`ParDeBotones`** (`ds/Boton.kt`): «Atrás» y «Siguiente» lado a lado, mitad y mitad, si los dos rótulos

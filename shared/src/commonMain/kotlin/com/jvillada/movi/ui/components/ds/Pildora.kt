@@ -3,13 +3,11 @@ package com.jvillada.movi.ui.components.ds
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -24,7 +22,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import com.jvillada.movi.theme.ColoresDeMovi
 import com.jvillada.movi.theme.Espacio
@@ -179,9 +176,6 @@ fun PildoraDeFiltro(
             text = texto,
             style = if (seleccionada) Movi.textos.cuerpoFuerte else Movi.textos.cuerpo,
             color = color,
-            textAlign = TextAlign.Center,
-            // Del ancho de su renglón (ver `Boton`): centrado sin dibujarse fuera de su caja.
-            modifier = Modifier.width(IntrinsicSize.Max),
         )
     }
 }

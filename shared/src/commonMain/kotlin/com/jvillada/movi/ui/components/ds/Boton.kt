@@ -4,13 +4,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -29,7 +27,6 @@ import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.semantics.SemanticsPropertyReceiver
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import com.jvillada.movi.theme.ColoresDeMovi
@@ -138,7 +135,7 @@ fun coloresDelBotonApagado(variante: VarianteDeBoton, colores: ColoresDeMovi): P
  * principales de 46, 48, 50 y 54 dp de alto, con radios de 10, 12, 14 y píldora—.
  *
  * - **Píldora** ([Radio.pill], opción 3), alto **mínimo** por [tamano], texto en `cuerpoFuerte` (15/700),
- *   centrado. Vuelta 88: un rótulo que no cabe en un renglón baja a dos y el botón crece (antes el alto
+ *   centrado por la fila. Vuelta 88: un rótulo que no cabe en un renglón baja a dos y el botón crece (antes el alto
  *   era fijo y el segundo renglón quedaba afuera, en el teléfono del papá del dueño).
  *   El secundario lleva el borde de botón ([bordeDelBoton]).
  * - [icono] opcional a la izquierda, a [Icono.m].
@@ -217,16 +214,14 @@ fun Boton(
             )
             icono != null -> Icon(icono, contentDescription = null, tint = color, modifier = Modifier.size(Icono.m))
         }
-        // Vuelta 88: sin tope de renglones y centrado: si no cabe en uno, baja entero a dos (nunca se
-        // corta ni se sale del botón).
+        // Vuelta 88: sin tope de renglones: si no cabe en uno, baja entero a dos (nunca se corta ni se
+        // sale del botón). El texto va centrado por el `Row`; sin `TextAlign.Center` a propósito: un
+        // párrafo centrado más angosto que su ancho de diseño se reportaba dibujado fuera de su caja, y
+        // medirlo con `IntrinsicSize` dejaba la ruedita de «cargando» sin terminar nunca de medir.
         Text(
             text = texto,
             style = Movi.textos.cuerpoFuerte,
             color = color,
-            textAlign = TextAlign.Center,
-            // Del ancho de su renglón (o del que haya, si baja a dos): centrar un texto más angosto que su
-            // párrafo lo dejaba dibujado fuera de su caja.
-            modifier = Modifier.width(IntrinsicSize.Max),
         )
     }
 }

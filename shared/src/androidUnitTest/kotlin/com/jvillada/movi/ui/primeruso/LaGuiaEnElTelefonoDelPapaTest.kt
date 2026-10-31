@@ -132,7 +132,12 @@ class LaGuiaEnElTelefonoDelPapaTest {
             val caja = limites(boton)
             for (t in descendientes(boton).filter { it.config.getOrNull(SemanticsProperties.Text) != null }) {
                 val d = disposicion(t)
-                val entero = d == null || ((0 until d.lineCount).none(d::isLineEllipsized) && !d.hasVisualOverflow)
+                // Sin «…», sin renglones que no entran de alto (el segundo renglón afuera de una caja de alto
+                // fijo) y cada renglón del ancho que su texto tiene en pantalla.
+                val entero = d == null || (
+                    (0 until d.lineCount).none(d::isLineEllipsized) && !d.didOverflowHeight &&
+                        (0 until d.lineCount).all { d.getLineRight(it) - d.getLineLeft(it) <= t.size.width + 0.5f }
+                    )
                 if (!entero || !caja.contiene(limites(t))) malos += "«${texto(t)}» (${limites(t)} en $caja)"
             }
         }
