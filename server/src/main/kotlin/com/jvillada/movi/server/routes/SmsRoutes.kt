@@ -34,6 +34,8 @@ import com.jvillada.movi.shared.model.TipoDeIdentificador
 import com.jvillada.movi.shared.model.categoriaProbablePorElNombre
 import com.jvillada.movi.shared.model.huellaDeUnMovimiento
 import com.jvillada.movi.shared.model.laHuellaEsUnNumero
+import com.jvillada.movi.shared.model.nombreQueNoSePropone
+import com.jvillada.movi.shared.model.numeroDelOrigenDelIngreso
 import com.jvillada.movi.shared.model.ParsedSms
 import com.jvillada.movi.shared.model.NoSePudoLeerElAviso
 import com.jvillada.movi.shared.model.PARAMETRO_ANOTARLO_IGUAL
@@ -398,7 +400,7 @@ internal fun parseSms(text: String, origen: String? = null): ParsedSms? {
             ?: "Avance de tarjeta"
         recargaDeBeneficios != null ->
             limpio(recargaDeBeneficios.groupValues[1])?.let { "Recarga de beneficios · $it" } ?: "Recarga de beneficios"
-        type == TransactionType.INCOME -> limpio(merchantOfRegex.find(text)?.groupValues?.get(1)) ?: "Transferencia recibida"
+        type == TransactionType.INCOME -> quienMandoElIngreso(text, ::limpio)
         looksLikeCardPayment(text, category = "") || esPagoDeNu -> "Pago de tarjeta"
         // Un pago por QR puede venir con el nombre del comercio («por codigo QR en Mora Soccer»);
         // cuando no, la llave es lo único que lo distingue del pago por QR de mañana.
@@ -436,6 +438,33 @@ internal fun parseSms(text: String, origen: String? = null): ParsedSms? {
         identificadorEsLlave = identificador?.tipo == TipoDeIdentificador.LLAVE,
     )
 }
+
+/**
+ * **De quién vino un ingreso, en un nombre que se lee** (vuelta 85).
+ *
+ * El «de …» de [merchantOfRegex] corría hasta el primer punto, y en Bancolombia eso es la cola entera
+ * del aviso: «Recibiste $539.625 de la cuenta \*31234567890 en tu cuenta \*4057 el 30/10/2026 a las
+ * 13:05.» se leía «la cuenta \*31234567890 en tu cuenta \*4057 el 30/10/2026 a las 13:05», y así se
+ * titulaba la fila. Además ese texto no era «ilegible» para la regla de los terceros (le quedaban
+ * palabras), así que ni Andrés guardado le ponía su nombre.
+ *
+ * - **Si el aviso nombra la cuenta de origen** ([numeroDelOrigenDelIngreso], «de la cuenta \*N»):
+ *   «Transferencia de \*7890», con los últimos cuatro. Es ilegible a propósito: si el número es de un
+ *   tercero guardado, `conElDestinoConocido` lo cambia por «Transferencia de Andrés Rojas»; si es de
+ *   una cuenta del dueño, `conElOrigenPropioDelIngreso` por «Desde Fiducuenta 9586».
+ * - **Si nombra a una persona** («de PERSONA DE PRUEBA en tu cuenta \*3333 el 2026/10/01»): el nombre,
+ *   cortado antes de «en tu cuenta», de la fecha o de la hora.
+ * - Si no queda nada que se lea, «Transferencia recibida».
+ */
+internal fun quienMandoElIngreso(text: String, limpio: (String?) -> String?): String {
+    numeroDelOrigenDelIngreso(text)?.let { return "Transferencia de *${it.takeLast(4)}" }
+    val crudo = merchantOfRegex.find(text)?.groupValues?.get(1) ?: return "Transferencia recibida"
+    val cortado = colaDelIngreso.split(crudo, limit = 2).first()
+    return limpio(cortado)?.takeUnless { nombreQueNoSePropone(it) } ?: "Transferencia recibida"
+}
+
+/** Donde termina el nombre de quien mandó plata: «en tu cuenta», «el 30/10/2026», «a las 13:05». */
+private val colaDelIngreso = Regex("""\s+(?:en\s+tu\s|el\s+\d|a\s+las\s)""", RegexOption.IGNORE_CASE)
 
 /**
  * [text] es el SMS completo, no solo [merchant]: "pago tc"/"pago tarjeta" viven en frases como
@@ -485,11 +514,14 @@ internal const val SIN_CATEGORIA = "Otros"
  */
 internal fun conLoQueMoviRecuerda(parsed: ParsedSms, memoria: MemoriaDeCategorias): ParsedSms {
     if (parsed.category in CATEGORIAS_QUE_LA_MEMORIA_NO_TOCA) return parsed
-    val recuerdo = memoria.recuerdoDe(parsed.merchant) ?: return conLasCategoriasDelDueno(parsed, memoria)
+    // Vuelta 85: lo que entró se busca en lo que entró, y lo que salió en lo que salió.
+    val recuerdo = memoria.recuerdoDe(parsed.merchant, parsed.type) ?: return conLasCategoriasDelDueno(parsed, memoria)
     val huella = huellaDeUnMovimiento(parsed.merchant)
+    // Vuelta 85: un nombre con «tu cuenta», una fecha o «cuenta 3123…» no se propone (`nombreQueNoSePropone`).
+    val conNombre = huella != null && laHuellaEsUnNumero(huella) && !nombreQueNoSePropone(recuerdo.nombre)
     return parsed.copy(
         category = recuerdo.categoria,
-        merchant = if (huella != null && laHuellaEsUnNumero(huella)) recuerdo.nombre else parsed.merchant,
+        merchant = if (conNombre) recuerdo.nombre else parsed.merchant,
         aprendidoDe = if (recuerdo.cuantos == 1) {
             "Así lo anotaste la última vez"
         } else {
@@ -519,7 +551,7 @@ internal fun conLaMemoriaYLosTerceros(
     val conDestino = conElDestinoConocido(recordado, textoDelMensaje, destinos)
     if (recordado.aprendidoDe != null || conDestino.merchant == recordado.merchant) return conDestino
     if (conDestino.category in CATEGORIAS_QUE_LA_MEMORIA_NO_TOCA) return conDestino
-    return if (memoria.recuerdoDe(conDestino.merchant) != null) conLoQueMoviRecuerda(conDestino, memoria) else conDestino
+    return if (memoria.recuerdoDe(conDestino.merchant, conDestino.type) != null) conLoQueMoviRecuerda(conDestino, memoria) else conDestino
 }
 
 /**

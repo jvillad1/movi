@@ -94,7 +94,7 @@ fun cargoDeLaFila(fila: ParsedTransaction): CargoDelBanco? =
  * que traía (no se crea ninguna).
  */
 fun conLaCategoriaDelCargo(fila: ParsedTransaction, cargo: CargoDelBanco, memoria: MemoriaDeCategorias): ParsedTransaction {
-    val recordada = memoria.recuerdoDe(fila.merchant)?.categoria
+    val recordada = memoria.recuerdoDe(fila.merchant, fila.type)?.categoria
         ?.takeUnless { esDeOtraClaseDeCargo(it, cargo.clase) }
     val categoria = recordada ?: categoriaDelCargo(cargo, memoria.categoriasDelDueno) ?: return fila
     return fila.copy(category = categoria)

@@ -4,6 +4,7 @@ import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.shared.model.AnotacionPasada
 import com.jvillada.movi.shared.model.MemoriaDeCategorias
+import com.jvillada.movi.shared.model.TransactionType
 import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.Transaction
@@ -20,7 +21,7 @@ private const val CUANTOS_MOVIMIENTOS_RECUERDA = 2_000
 /**
  * **Lo que el dueño ya anotó, listo para que Movi lo recuerde.**
  *
- * Es una proyección de cuatro columnas y no [com.jvillada.movi.server.balance.loadNonVoidedEvents]
+ * Es una proyección de unas pocas columnas y no [com.jvillada.movi.server.balance.loadNonVoidedEvents]
  * a propósito: la memoria no necesita saldos ni tipos de cuenta, y esto corre en cada apertura de
  * un mensaje del banco.
  *
@@ -38,7 +39,7 @@ fun Transaction.anotacionesPasadasDe(uid: String): List<AnotacionPasada> {
         .map { it[VoidEvents.originalEventId] }
         .toSet()
     return Events
-        .select(Events.id, Events.merchant, Events.description, Events.category, Events.timestamp)
+        .select(Events.id, Events.merchant, Events.description, Events.category, Events.timestamp, Events.type)
         .where { Events.userId eq uid }
         .orderBy(Events.timestamp to SortOrder.DESC)
         .limit(CUANTOS_MOVIMIENTOS_RECUERDA)
@@ -50,6 +51,8 @@ fun Transaction.anotacionesPasadasDe(uid: String): List<AnotacionPasada> {
                 nombre = fila[Events.description],
                 categoria = fila[Events.category],
                 cuando = fila[Events.timestamp],
+                // Vuelta 85: lo que entró va a su propia memoria (ver `AnotacionPasada.tipo`).
+                tipo = runCatching { TransactionType.valueOf(fila[Events.type]) }.getOrNull(),
             )
         }
 }
