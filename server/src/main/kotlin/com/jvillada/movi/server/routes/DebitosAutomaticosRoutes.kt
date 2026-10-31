@@ -355,7 +355,7 @@ internal suspend fun debitosPorConfirmar(
 
 /** Vuelta 90 · el 422 de confirmar un recurrente que no se propone (sin cuenta, un abono, una cuenta que no va). */
 internal const val NO_SE_PUEDE_CONFIRMAR_ASI: String =
-    "Ese pago no se confirma desde acá: anótalo desde «Agregar»."
+    "Ese pago no se confirma desde aquí: anótalo desde «Agregar»."
 
 /**
  * **Vuelta 90 · ¿Movi puede preguntar por esta regla aunque no esté marcada «se debita solo»?** Un
