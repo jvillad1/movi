@@ -1,17 +1,16 @@
 package com.jvillada.movi.ui.accounts
 
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -24,13 +23,16 @@ import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.BANCOS_CONOCIDOS
 import com.jvillada.movi.shared.model.Marca
+import com.jvillada.movi.shared.model.bancosParaElegir
 import com.jvillada.movi.shared.model.newId
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.ui.components.CirculoDeMarca
 import com.jvillada.movi.ui.components.TamanoDeAvatar
 import com.jvillada.movi.ui.components.ds.Campo
+import com.jvillada.movi.ui.components.ds.CampoDeBusqueda
 import com.jvillada.movi.ui.components.ds.CampoDeMonto
+import com.jvillada.movi.ui.components.ds.NivelDeSuperficie
 import com.jvillada.movi.ui.components.ds.PildoraDeFiltro
 import com.jvillada.movi.ui.components.ds.RotuloDeCampo
 
@@ -42,7 +44,7 @@ const val TAG_TIPO_BIEN: String = "formulario-de-cuenta-bien"
 
 /**
  * Los bancos que se ofrecen de un toque, por su id de `MarcasConocidas` y en el orden en que se ven.
- * Los más comunes en Colombia; cualquier otro se escribe a mano en el nombre.
+ * Los más comunes en Colombia; los demás, en «Otro banco» (vuelta 88), y cualquier otro se escribe a mano.
  */
 val BANCOS_DE_UN_TOQUE: List<String> = listOf(
     "bancolombia", "nu", "davivienda", "nequi", "banco_de_bogota", "bbva", "daviplata",
@@ -159,9 +161,10 @@ private val MARCAS_DE_UN_TOQUE: List<Marca> =
  * No crea nada: quien lo pinta crea [EstadoDelFormularioDeCuenta.cuentaNueva] con
  * `crearCuentaConSaldo`, la creación de siempre.
  *
- * [enUnaFila] (vuelta 54, la guía): los bancos y los tipos van cada uno en **una sola fila de chips
- * que se desplaza de lado**, en vez de bajar en varios renglones. Con los siete bancos en varios
- * renglones, a 390 dp el nombre, el saldo y «Agregar cuenta» quedaban debajo del pliegue.
+ * Vuelta 88: los bancos y los tipos **siempre bajan en renglones** dentro de la tarjeta. La guía los
+ * llevaba en una fila que se desplazaba de lado (vuelta 54, `enUnaFila`) y en el teléfono del papá del
+ * dueño, con la letra grande, se veían píldoras cortadas por los dos lados y solo dos bancos. Los que
+ * no están de un toque salen de «Otro banco» ([SelectorDeBanco]).
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -170,15 +173,14 @@ fun FormularioDeCuenta(
     modifier: Modifier = Modifier,
     onElegirBien: ((nombre: String) -> Unit)? = null,
     habilitado: Boolean = true,
-    enUnaFila: Boolean = false,
 ) {
     Column(modifier = modifier.fillMaxWidth().testTag(TAG_FORMULARIO_DE_CUENTA)) {
         RotuloDeCampo("Banco")
-        SelectorDeBanco(elegido = estado.banco, onElegir = { if (habilitado) estado.elegirBanco(it) }, enUnaFila = enUnaFila)
+        SelectorDeBanco(elegido = estado.banco, onElegir = { if (habilitado) estado.elegirBanco(it) })
         Spacer(Modifier.height(Medida.dentroDeSeccion))
 
         RotuloDeCampo("Tipo")
-        ChipsEnFilas(enUnaFila, Modifier.testTag(TAG_TIPOS_DE_CUENTA)) {
+        ChipsEnFilas(Modifier.testTag(TAG_TIPOS_DE_CUENTA)) {
             TIPOS_DE_CUENTA.forEach { (rotulo, tipo) ->
                 PildoraDeFiltro(rotulo, seleccionada = estado.tipo == tipo, onClick = { if (habilitado) estado.elegirTipo(tipo) })
             }
@@ -206,10 +208,25 @@ fun FormularioDeCuenta(
  * círculo de color con la marca corta que la app pinta en las filas y las tarjetas de cuenta
  * ([CirculoDeMarca]), a [TamanoDeAvatar.Linea] dentro de la píldora. Lo usan este bloque y las
  * tarjetas de crédito de la guía.
+ *
+ * Vuelta 88 · **«Otro banco»**: la última píldora abre, ahí mismo, una búsqueda con **todos** los bancos
+ * y billeteras del catálogo ([bancosParaElegir]: «bogota» encuentra «Banco de Bogotá»), en píldoras que
+ * bajan en renglones. El elegido de esa lista queda a la vista, elegido, antes de «Otro banco». Si nada
+ * coincide con lo escrito, «Usar «lo que escribiste»» lo toma tal cual (en una cuenta también se puede escribir
+ * el nombre a mano, como siempre). [paraTarjetas] suma la AMEX a la lista.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun SelectorDeBanco(elegido: String?, onElegir: (String) -> Unit, enUnaFila: Boolean = false) {
-    ChipsEnFilas(enUnaFila, Modifier.testTag(TAG_BANCOS_DE_UN_TOQUE)) {
+internal fun SelectorDeBanco(elegido: String?, onElegir: (String) -> Unit, paraTarjetas: Boolean = false) {
+    var abierto by remember { mutableStateOf(false) }
+    var consulta by remember { mutableStateOf("") }
+    fun elegir(nombre: String) {
+        onElegir(nombre)
+        abierto = false
+        consulta = ""
+    }
+    val deOtraLista = elegido?.takeIf { e -> MARCAS_DE_UN_TOQUE.none { it.nombre == e } }
+    ChipsEnFilas(Modifier.testTag(TAG_BANCOS_DE_UN_TOQUE)) {
         MARCAS_DE_UN_TOQUE.forEach { marca ->
             PildoraDeFiltro(
                 marca.nombre,
@@ -218,32 +235,88 @@ internal fun SelectorDeBanco(elegido: String?, onElegir: (String) -> Unit, enUna
                 inicio = { CirculoDeMarca(marca, tamano = TamanoDeAvatar.Linea) },
             )
         }
+        if (deOtraLista != null) {
+            val marca = BANCOS_CONOCIDOS.firstOrNull { it.nombre == deOtraLista }
+            PildoraDeFiltro(
+                deOtraLista,
+                seleccionada = true,
+                onClick = { abierto = true },
+                inicio = marca?.let { m -> { CirculoDeMarca(m, tamano = TamanoDeAvatar.Linea) } },
+            )
+        }
+        PildoraDeFiltro(
+            OTRO_BANCO,
+            seleccionada = false,
+            onClick = { abierto = !abierto },
+            icono = Icons.Rounded.Search,
+            modifier = Modifier.testTag(TAG_OTRO_BANCO),
+        )
+    }
+    if (abierto) {
+        Spacer(Modifier.height(Espacio.xs))
+        CampoDeBusqueda(
+            consulta,
+            { consulta = it },
+            guia = "Busca tu banco",
+            nivel = NivelDeSuperficie.Capa2,
+            tag = TAG_BUSCAR_BANCO,
+        )
+        Spacer(Modifier.height(Espacio.xs))
+        val lista = bancosParaElegir(consulta, paraTarjetas)
+        val escrito = consulta.trim()
+        ChipsEnFilas(Modifier.testTag(TAG_LISTA_DE_BANCOS)) {
+            lista.forEach { marca ->
+                PildoraDeFiltro(
+                    marca.nombre,
+                    seleccionada = marca.nombre == elegido,
+                    onClick = { elegir(marca.nombre) },
+                    inicio = { CirculoDeMarca(marca, tamano = TamanoDeAvatar.Linea) },
+                )
+            }
+            if (escrito.isNotEmpty() && lista.isEmpty()) {
+                PildoraDeFiltro(
+                    "Usar «$escrito»",
+                    seleccionada = false,
+                    onClick = { elegir(escrito) },
+                    icono = Icons.Rounded.Add,
+                    modifier = Modifier.testTag(TAG_USAR_LO_ESCRITO),
+                )
+            }
+        }
     }
 }
 
+/** Lo que dice la píldora que abre la lista de todos los bancos. */
+const val OTRO_BANCO: String = "Otro banco"
+
 /** El tag de la fila de bancos del bloque. */
 const val TAG_BANCOS_DE_UN_TOQUE: String = "formulario-de-cuenta-bancos"
+
+/** El tag de «Otro banco». */
+const val TAG_OTRO_BANCO: String = "formulario-de-cuenta-otro-banco"
+
+/** El tag de la búsqueda de «Otro banco». */
+const val TAG_BUSCAR_BANCO: String = "formulario-de-cuenta-buscar-banco"
+
+/** El tag de la lista de «Otro banco». */
+const val TAG_LISTA_DE_BANCOS: String = "formulario-de-cuenta-lista-de-bancos"
+
+/** El tag de «Usar «lo escrito»» cuando el banco no está en la lista. */
+const val TAG_USAR_LO_ESCRITO: String = "formulario-de-cuenta-usar-lo-escrito"
 
 /** El tag de la fila de tipos del bloque. */
 const val TAG_TIPOS_DE_CUENTA: String = "formulario-de-cuenta-tipos"
 
 /**
- * Chips que bajan en varios renglones ([enUnaFila] `false`) o van en **una sola fila que se desplaza de
- * lado** (vuelta 54): la fila mide un chip de alto, y lo que no cabe asoma en el borde.
+ * Chips que **bajan en varios renglones** dentro del ancho que tienen: nunca se salen de la tarjeta
+ * (vuelta 88; antes la guía los llevaba en una fila que se desplazaba de lado).
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ChipsEnFilas(enUnaFila: Boolean, modifier: Modifier = Modifier, contenido: @Composable () -> Unit) {
-    if (enUnaFila) {
-        Row(
-            modifier = modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
-        ) { contenido() }
-    } else {
-        FlowRow(
-            modifier = modifier,
-            horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
-            verticalArrangement = Arrangement.spacedBy(Espacio.xs),
-        ) { contenido() }
-    }
+private fun ChipsEnFilas(modifier: Modifier = Modifier, contenido: @Composable () -> Unit) {
+    FlowRow(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
+        verticalArrangement = Arrangement.spacedBy(Espacio.xs),
+    ) { contenido() }
 }
