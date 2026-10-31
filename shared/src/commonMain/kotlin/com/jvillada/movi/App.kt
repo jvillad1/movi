@@ -741,7 +741,11 @@ internal fun EsqueletoDeLaCascara(
             // El tope depende de la pantalla y del ancho (ver `anchoMaximoDeLaPantalla`).
             // Desde 600 dp no hay barra inferior que descuente la barra de navegación del sistema
             // (la de Android, abajo o al costado en horizontal): la descuenta la columna.
-            val sinBarraInferior = if (widthClass == WindowWidthClass.Compact) Modifier else Modifier.navigationBarsPadding()
+            // Vuelta 88: en el teléfono, **sin la barra inferior** (la guía de primer uso, el login, cualquier
+            // pantalla sin pestañas) también la descuenta la columna. Antes solo la descontaba `MinBottomNav`,
+            // así que esas pantallas dibujaban su pie debajo de la barra del sistema: con la navegación de
+            // tres botones del Samsung del papá del dueño, «Empezar» quedaba tapado por ||| ◻ <.
+            val sinBarraInferior = if (showBottomNav) Modifier else Modifier.navigationBarsPadding()
             // Vuelta 39: en Inicio, detrás de la barra del sistema va el amarillo de la banda (con los
             // íconos oscuros de siempre, `AjustarBarrasDelSistema`): sin esto quedaba una franja crema
             // arriba del encabezado amarillo. Del ancho del contenido, nunca detrás del rail.
