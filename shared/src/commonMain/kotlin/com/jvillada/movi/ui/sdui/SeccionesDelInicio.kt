@@ -44,6 +44,7 @@ import androidx.compose.material.icons.rounded.AccountBalance
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Inbox
 import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.Savings
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -51,7 +52,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -253,6 +257,7 @@ private fun iconoDe(tipo: TipoDePropuesta): ImageVector = when (tipo) {
     TipoDePropuesta.PAGO -> Icons.Rounded.Schedule
     TipoDePropuesta.DEBITO -> Icons.Rounded.AccountBalance
     TipoDePropuesta.CUADRE -> Icons.Rounded.Tune
+    TipoDePropuesta.PRESUPUESTO -> Icons.Rounded.Savings
     TipoDePropuesta.ANOMALIA -> Icons.AutoMirrored.Rounded.TrendingUp
     TipoDePropuesta.CIERRE -> Icons.AutoMirrored.Rounded.EventNote
 }
@@ -642,9 +647,9 @@ internal fun WidgetsDelInicio(
     sinElProximoPago: Boolean = false,
 ) {
     @Composable
-    fun Uno(tipo: String, modifier: Modifier) = when (tipo) {
+    fun Uno(tipo: String, modifier: Modifier, ancho: Dp?) = when (tipo) {
         "CHECKLIST_DEL_PERIODO" -> WidgetFaltaPorPagar(data, onNavigate, modifier, sinElProximoPago = sinElProximoPago)
-        else -> WidgetEnQueSeVa(data, onNavigate, modifier)
+        else -> WidgetEnQueSeVa(data, onNavigate, modifier, ancho = ancho)
     }
     Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla)) {
         // Vuelta 80: sin «Tus widgets» (palabra de desarrollador). Cada widget lleva su propio título.
@@ -653,10 +658,13 @@ internal fun WidgetsDelInicio(
         // agrandada, no entraban. En una ventana ancha siguen lado a lado (las dos columnas del Inicio parejas).
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             if (tipos.size >= 2 && maxWidth >= ANCHO_PARA_LOS_WIDGETS_LADO_A_LADO) {
-                ParDeWidgets(izquierdo = { Uno(tipos[0], it) }, derecho = { Uno(tipos[1], it) })
+                // Vuelta 87: cada uno sabe cuánto mide (la mitad menos el espacio), para que «En qué se va» elija su forma.
+                val mitad = (maxWidth - Medida.dentroDeSeccion) / 2
+                ParDeWidgets(izquierdo = { Uno(tipos[0], it, mitad) }, derecho = { Uno(tipos[1], it, mitad) })
             } else {
+                val todo = maxWidth
                 Column(verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion)) {
-                    tipos.forEach { Uno(it, Modifier.fillMaxWidth()) }
+                    tipos.forEach { Uno(it, Modifier.fillMaxWidth(), todo) }
                 }
             }
         }
@@ -769,7 +777,13 @@ private const val CATEGORIAS_EN_EL_WIDGET = 3
  * solo en la píldora, en `Peligro` solo si sube mucho.
  */
 @Composable
-internal fun WidgetEnQueSeVa(data: DashboardData, onNavigate: (Screen) -> Unit, modifier: Modifier = Modifier) {
+internal fun WidgetEnQueSeVa(
+    data: DashboardData,
+    onNavigate: (Screen) -> Unit,
+    modifier: Modifier = Modifier,
+    /** Vuelta 87: cuánto mide el widget (lo sabe quien lo coloca); `null` = como a todo el ancho de un teléfono. */
+    ancho: Dp? = null,
+) {
     val categorias = categoriasDelPeriodo(
         gastoPorCategoria = data.spentByCategory.orEmpty(),
         presupuestos = data.budgets.orEmpty(),
@@ -780,6 +794,12 @@ internal fun WidgetEnQueSeVa(data: DashboardData, onNavigate: (Screen) -> Unit, 
     val fijas = com.jvillada.movi.ui.dashboard.categoriasFijas(data.upcoming.orEmpty().map { it.rule })
     val diferencias = categorias.map { diferenciaDeLaCategoria(it, fijas) }
     val mayor = categorias.maxOfOrNull { it.gastado } ?: 0L
+    // Vuelta 87: a media columna (1280) el nombre se quedaba en «R…» entre la píldora y el monto: la forma
+    // y la frase de arriba las decide el ancho que de verdad hay ([formaDeLaCategoriaDelWidget]).
+    val anchoUtil = (ancho ?: ANCHO_DE_UN_TELEFONO_PARA_EL_WIDGET) - Medida.margenDePantalla * 2
+    val escala = LocalDensity.current.fontScale
+    val forma = formaDeLaCategoriaDelWidget(anchoUtil, escala)
+    val contra = textoDeContraQue(anchoUtil, escala)
     Superficie(
         modifier = modifier.testTag(TAG_TARJETA_EN_QUE_SE_VA).testTag(TAG_WIDGET),
         relleno = RellenoDeSuperficie.Lista,
@@ -805,13 +825,14 @@ internal fun WidgetEnQueSeVa(data: DashboardData, onNavigate: (Screen) -> Unit, 
             // Contra qué se compara, dicho una vez (cada píldora dice la frase entera al lector).
             if (diferencias.any { it != null }) {
                 Text(
-                    CONTRA_EL_PERIODO_PASADO,
+                    contra,
                     style = Movi.textos.apoyo,
                     color = Movi.colores.textoMedio,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.End,
-                    modifier = Modifier.weight(1f).testTag(TAG_CONTRA_EL_PERIODO_PASADO),
+                    modifier = Modifier.weight(1f).testTag(TAG_CONTRA_EL_PERIODO_PASADO)
+                        .semantics { contentDescription = CONTRA_EL_PERIODO_PASADO },
                 )
             }
         }
@@ -839,20 +860,79 @@ internal fun WidgetEnQueSeVa(data: DashboardData, onNavigate: (Screen) -> Unit, 
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
                     )
-                    if (diferencia != null) DiferenciaDelWidget(diferencia)
+                    // Una columna estrecha: la píldora baja al renglón de la barra y el nombre se queda con lo suyo.
+                    if (diferencia != null && forma == FormaDeLaCategoriaDelWidget.UN_RENGLON) DiferenciaDelWidget(diferencia)
                     // **Siempre neutro** (vuelta de diseño 16): un gasto no es una alarma.
                     Cifra(categoria.gastado, VarianteDeCifra.Fila, tono = TonoDeCifra.Neutro)
                 }
                 Spacer(Modifier.height(Espacio.xs))
-                BarraDeProgreso(
-                    fraccion = fraccionDeLaCategoriaEnElWidget(categoria.gastado, mayor),
-                    tono = TonoDeBarra.Marca,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                if (diferencia != null && forma == FormaDeLaCategoriaDelWidget.PILDORA_ABAJO) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
+                    ) {
+                        BarraDeProgreso(
+                            fraccion = fraccionDeLaCategoriaEnElWidget(categoria.gastado, mayor),
+                            tono = TonoDeBarra.Marca,
+                            modifier = Modifier.weight(1f),
+                        )
+                        DiferenciaDelWidget(diferencia)
+                    }
+                } else {
+                    BarraDeProgreso(
+                        fraccion = fraccionDeLaCategoriaEnElWidget(categoria.gastado, mayor),
+                        tono = TonoDeBarra.Marca,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
             }
         }
         Spacer(Modifier.height(Espacio.xs))
     }
+}
+
+/**
+ * **La forma de una categoría del widget** (vuelta 87). La revisión 9 vio, a 1280 (el widget ocupa media
+ * columna, ~210 dp), «R…» y «M…» donde iba el nombre: la píldora («$494.300 más») y el monto le dejaban
+ * ~40 dp. Con el ancho que hay, [UN_RENGLON] (nombre · píldora · monto) solo si al nombre le quedan
+ * [ANCHO_MINIMO_DEL_NOMBRE_EN_EL_WIDGET]; si no, [PILDORA_ABAJO]: el nombre y el monto arriba, y la píldora
+ * en el renglón de la barra. A 390 y 360 con la letra de siempre sigue en un renglón; con la letra grande
+ * baja la píldora antes de cortar el nombre.
+ */
+enum class FormaDeLaCategoriaDelWidget { UN_RENGLON, PILDORA_ABAJO }
+
+/**
+ * Lo que mide, a escala de letra 1 (la de la app ya es ×1,12: se multiplica por la escala), lo más ancho de
+ * un renglón: la píldora «$494.300 más», el monto «$1.800.000» y los espacios. Medido en la web a 1280.
+ */
+private val ANCHO_DE_LA_PILDORA_Y_EL_MONTO_EN_EL_WIDGET = 170.dp
+
+/** Lo mínimo que se le deja al nombre de una categoría («Restaurantes», «Entretenimiento»), a escala 1. */
+val ANCHO_MINIMO_DEL_NOMBRE_EN_EL_WIDGET = 90.dp
+
+/** Ver [FormaDeLaCategoriaDelWidget]. [anchoUtil] = el ancho del renglón sin los márgenes. Pura. */
+fun formaDeLaCategoriaDelWidget(anchoUtil: Dp, escalaDeLetra: Float): FormaDeLaCategoriaDelWidget =
+    if (anchoUtil >= (ANCHO_DE_LA_PILDORA_Y_EL_MONTO_EN_EL_WIDGET + ANCHO_MINIMO_DEL_NOMBRE_EN_EL_WIDGET) * escalaDeLetra) {
+        FormaDeLaCategoriaDelWidget.UN_RENGLON
+    } else {
+        FormaDeLaCategoriaDelWidget.PILDORA_ABAJO
+    }
+
+/** Sin saber el ancho: el de un teléfono de 390 dp con sus márgenes. */
+private val ANCHO_DE_UN_TELEFONO_PARA_EL_WIDGET = 358.dp
+
+/** «Contra el período pasado» cuando cabe junto al título; si no, más corto y con el mismo sentido. */
+const val CONTRA_EL_PERIODO_PASADO_CORTO: String = "vs. período pasado"
+
+/** El más corto: «vs. el pasado». */
+const val CONTRA_EL_PASADO_MUY_CORTO: String = "vs. el pasado"
+
+/** Ver [CONTRA_EL_PERIODO_PASADO]: la frase que cabe junto al título «En qué se va» en [anchoUtil]. Pura. */
+fun textoDeContraQue(anchoUtil: Dp, escalaDeLetra: Float): String = when {
+    anchoUtil >= 235.dp * escalaDeLetra -> CONTRA_EL_PERIODO_PASADO
+    anchoUtil >= 200.dp * escalaDeLetra -> CONTRA_EL_PERIODO_PASADO_CORTO
+    else -> CONTRA_EL_PASADO_MUY_CORTO
 }
 
 /** El título del widget «En qué se va»: cada widget lleva el suyo (vuelta 80, sin «Tus widgets»). */

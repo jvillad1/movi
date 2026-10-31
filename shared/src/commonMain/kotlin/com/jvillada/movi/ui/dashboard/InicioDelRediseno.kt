@@ -306,7 +306,7 @@ fun yNMas(n: Int): String? = if (n > 0) "y $n más" else null
 const val TOPE_DE_PROPUESTAS: Int = 4
 
 /** De qué es una propuesta. Una tarjeta por tipo: varias cosas del mismo tipo se dicen en una. */
-enum class TipoDePropuesta { PAGO, DEBITO, CUADRE, ANOMALIA, CIERRE }
+enum class TipoDePropuesta { PAGO, DEBITO, CUADRE, PRESUPUESTO, ANOMALIA, CIERRE }
 
 /** Lo que hace tocar un botón de una propuesta. */
 sealed interface AccionDeLaPropuesta {
@@ -398,6 +398,7 @@ fun propuestasDelInicio(data: DashboardData, conElPago: Boolean = true): List<Pr
     if (conElPago) propuestaDePago(data)?.let(::add)
     propuestaDeDebitos(data)?.let(::add)
     propuestaDeCuadre(data)?.let(::add)
+    propuestaDePresupuesto(data)?.let(::add)
     propuestaDeAnomalia(data)?.let(::add)
     propuestaDeCierre(data)?.let(::add)
 }.sortedBy { it.rango }
@@ -571,6 +572,39 @@ private fun propuestaDeCuadre(data: DashboardData): PropuestaDelInicio? {
         alTocar = AccionDeLaPropuesta.Ir(Screen.CuadreDeSaldos),
         rango = 4,
         cuantas = cuadres.size,
+    )
+}
+
+/**
+ * **Un presupuesto que se pasó** (vuelta 87): «Restaurantes va al 167 % de su presupuesto». La revisión 9
+ * vio a Restaurantes en 167 % y nada en «Movi propone hoy»: solo lo decían la campana y Presupuestos.
+ * **La regla es la que ya usa Presupuestos y la campana**, sin umbrales nuevos: [overBudgetCategories] →
+ * `estadoDePresupuesto(...).estaSuperado` (gastó más que el límite). Una tarjeta por todos: la categoría que
+ * más se pasó y «y N presupuestos más». La cifra es lo que se pasó, en pesos; «Ver presupuestos» lleva a la
+ * lista. Es un aviso, no una decisión: no escribe nada.
+ */
+private fun propuestaDePresupuesto(data: DashboardData): PropuestaDelInicio? {
+    val gastado = data.spentByCategory ?: return null
+    val superados = (data.budgets ?: return null)
+        .filter { it.category in overBudgetCategories(data.budgets, gastado) }
+        .map { it to (gastado[it.category] ?: 0L) }
+    val peor = superados.maxByOrNull { (b, g) -> g - b.monthlyLimit } ?: return null
+    val (presupuesto, lo) = peor
+    val otros = superados.size - 1
+    val porcentaje = lo * 100 / presupuesto.monthlyLimit
+    return PropuestaDelInicio(
+        tipo = TipoDePropuesta.PRESUPUESTO,
+        titulo = "${presupuesto.category} va al $porcentaje % de su presupuesto",
+        cifra = lo - presupuesto.monthlyLimit,
+        cuerpo = when {
+            otros == 1 -> "de más · y 1 presupuesto más"
+            otros > 1 -> "de más · y $otros presupuestos más"
+            else -> "de más sobre su límite"
+        },
+        accion = "Ver presupuestos",
+        alTocar = AccionDeLaPropuesta.Ir(Screen.Budgets),
+        rango = 5,
+        cuantas = superados.size,
     )
 }
 

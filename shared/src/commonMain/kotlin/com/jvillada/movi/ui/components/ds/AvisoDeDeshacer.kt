@@ -6,6 +6,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
@@ -138,19 +139,32 @@ private fun TextoDelAviso(partes: PartesDelAviso, color: androidx.compose.ui.gra
         val pc = cifra?.let { it.measure(hasta(minOf(it.maxIntrinsicWidth(libre.maxHeight), ancho))) }
         val anchoDeLaCifra = pc?.width ?: 0
         val pv = verbo.measure(hasta(minOf(verbo.maxIntrinsicWidth(libre.maxHeight), ancho - anchoDeLaCifra)))
-        val pr = resto?.measure(hasta(ancho - anchoDeLaCifra - pv.width))
-        val piezas = listOfNotNull(pv, pc, pr)
-        val alto = piezas.maxOf { it.height }
-        val total = piezas.sumOf { it.width }
+        // Vuelta 87 · **un comercio que no cabe pasa a un segundo renglón**: con las dos acciones, a 390 dp
+        // quedaban ~35 dp para el resto y el aviso decía «Anotado $32.000 · Ju…». Si el resto no entra en el
+        // primer renglón y lo que le queda es menos que [ANCHO_MINIMO_DEL_RESTO_DEL_AVISO], baja entero a su
+        // propio renglón (con «…» si ni ahí cabe): el monto y las dos acciones siguen a la vista.
+        val restoEnLinea = ancho - anchoDeLaCifra - pv.width
+        val aDosRenglones = resto != null &&
+            resto.maxIntrinsicWidth(libre.maxHeight) > restoEnLinea &&
+            restoEnLinea < ANCHO_MINIMO_DEL_RESTO_DEL_AVISO.roundToPx()
+        val pr = resto?.measure(hasta(if (aDosRenglones) ancho else restoEnLinea))
+        val primera = listOfNotNull(pv, pc) + listOfNotNull(pr.takeIf { !aDosRenglones })
+        val altoDeLaPrimera = primera.maxOf { it.height }
+        val alto = if (aDosRenglones && pr != null) altoDeLaPrimera + pr.height else altoDeLaPrimera
+        val total = maxOf(primera.sumOf { it.width }, if (aDosRenglones) pr?.width ?: 0 else 0)
         layout(if (restricciones.hasBoundedWidth) restricciones.maxWidth else total, alto) {
             var x = 0
-            piezas.forEach { p ->
-                p.place(x, (alto - p.height) / 2)
+            primera.forEach { p ->
+                p.place(x, (altoDeLaPrimera - p.height) / 2)
                 x += p.width
             }
+            if (aDosRenglones && pr != null) pr.place(0, altoDeLaPrimera)
         }
     }
 }
+
+/** Vuelta 87: lo mínimo que se le deja al resto del aviso («· Juan Valdez») en el primer renglón; menos, baja al segundo. */
+val ANCHO_MINIMO_DEL_RESTO_DEL_AVISO = 88.dp
 
 /**
  * **Un renglón** (vuelta 79; eran dos): el aviso es un snackbar oscuro, y lo que no cabe a 360 dp se corta
