@@ -409,6 +409,8 @@ internal fun ProximoPagoSection(data: DashboardData, onNavigate: (Screen) -> Uni
                 )
                 // Una tarjeta sin mínimo conocido no tiene cifra que decir: su «monto» es el saldo.
                 cifraDelPago(pago)?.let { Cifra(it, VarianteDeCifra.Fila, moneda = pago.moneda) }
+                // Vuelta 86: y lo dice, como su fila en Pagos.
+                LoQueNoSumaDelPago(pago)
             }
             // Vuelta 79: secundario. El único amarillo del Inicio es «Anotar gasto».
             Boton(proximo.accion, onClick = { onNavigate(proximo.alTocar) }, variante = VarianteDeBoton.Secundario, tamano = TamanoDeBoton.S)
@@ -423,6 +425,27 @@ internal fun ProximoPagoSection(data: DashboardData, onNavigate: (Screen) -> Uni
         }
     }
 }
+
+/**
+ * **«No suma: falta el mínimo»** bajo un pago del Inicio que no entra en «Falta por pagar» (vuelta 86,
+ * [com.jvillada.movi.ui.recurrentes.porQueNoSuma]): el mismo texto que la píldora de su fila en Pagos, donde
+ * está «Cargar mínimo». Nada si suma.
+ */
+@Composable
+private fun LoQueNoSumaDelPago(pago: com.jvillada.movi.ui.dashboard.PagoDelPeriodo) {
+    val razon = com.jvillada.movi.ui.recurrentes.porQueNoSuma(pago) ?: return
+    Text(
+        com.jvillada.movi.ui.recurrentes.pildoraDeLoQueNoSuma(razon),
+        style = Movi.textos.apoyoMedio,
+        color = Movi.colores.aviso,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.testTag(TAG_NO_SUMA_EN_EL_INICIO),
+    )
+}
+
+/** El tag de «No suma: …» en el widget «Falta por pagar» y en «Próximo pago». */
+const val TAG_NO_SUMA_EN_EL_INICIO: String = "inicio:no-suma"
 
 /** El nombre del pago de «Próximo pago»: a 360 dp va entero (en un renglón con la letra de siempre). */
 const val TAG_NOMBRE_DEL_PROXIMO_PAGO: String = "inicio-nombre-del-proximo-pago"
@@ -712,6 +735,15 @@ internal fun WidgetFaltaPorPagar(
         // Dice que lo de abajo es lo que FALTA, y de cuántos pagos del período (el reclamo del dueño
         // sobre la tarjeta vieja: «solo muestra los faltantes; debería indicarlo»).
         Text(lineaCortaDeLoQueFalta(pendientes.size, total), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+        // Vuelta 86: lo pendiente que no está en la cifra, como en la tarjeta de Pagos (la misma línea).
+        com.jvillada.movi.ui.recurrentes.lineaDeLoQueNoSuma(checklist)?.let {
+            Text(
+                it,
+                style = Movi.textos.apoyoMedio,
+                color = Movi.colores.aviso,
+                modifier = Modifier.testTag(com.jvillada.movi.ui.recurrentes.TAG_SIN_CONTAR),
+            )
+        }
         lista.filas.forEach { pago ->
             Column {
                 // Vuelta 29: el nombre en su renglón y el monto debajo, como en «En qué se va». Al lado
@@ -728,6 +760,8 @@ internal fun WidgetFaltaPorPagar(
                 // Una tarjeta no tiene cuota: su monto es el saldo, y no se muestra como un pago.
                 val monto = cifraDelPago(pago)
                 if (monto != null) Cifra(monto, VarianteDeCifra.Chica, moneda = pago.moneda)
+                // Vuelta 86: la fila que no suma lo dice (antes iba sin monto, callada).
+                LoQueNoSumaDelPago(pago)
                 Text(
                     text = dueLabel(pago.diasParaVencer),
                     style = Movi.textos.apoyo,
