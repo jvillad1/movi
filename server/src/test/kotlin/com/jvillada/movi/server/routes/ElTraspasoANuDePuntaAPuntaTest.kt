@@ -280,7 +280,7 @@ class ElTraspasoANuDePuntaAPuntaTest {
     }
 
     @Test
-    fun `con una sola cuenta Nu y sin tarjeta Nu, el SMS solo ya propone esa cuenta`() = testApplication {
+    fun `con una sola cuenta Nu y sin tarjeta Nu, el SMS solo la ofrece pero no la elige por el nombre`() = testApplication {
         application { testModule() }
         transaction {
             Accounts.deleteWhere { Accounts.id eq NU_TARJETA }
@@ -288,7 +288,21 @@ class ElTraspasoANuDePuntaAPuntaTest {
         }
         val p = leer<ParsedSms>("/api/sms/$SMS/parse")
         assertEquals(TRANSFER_CATEGORY, p.category)
-        assertEquals(NU, p.traspasoHaciaId)
+        assertNull(p.traspasoHaciaId, "el nombre del banco solo no basta (revisión de la 91)")
+        assertEquals(listOf(NU), p.destinosPosibles)
+    }
+
+    @Test
+    fun `Pagaste a DAVIBANK, la cuota del hipotecario, no se llena como traspaso a la AFC`() = testApplication {
+        application { testModule() }
+        transaction {
+            cuenta("acc-afc", "AFC Davibank 9497", "SAVINGS")
+            cuenta("acc-hip", "Hipoteca Papá (Davibank)", "LOAN")
+            aviso("sms_davibank", "85784", "10:00", "Bancolombia: Pagaste \$9,147,408.00 a DAVIBANK desde tu producto 8133 el 30/10/2026 10:00:00.")
+        }
+        val p = leer<ParsedSms>("/api/sms/sms_davibank/parse")
+        assertNull(p.traspasoHaciaId, "nada queda elegido por el nombre")
+        assertEquals(listOf("acc-afc", "acc-hip"), p.destinosPosibles, "la AFC y el crédito, a elegir: el crédito la vuelve cuota")
     }
 
     @Test

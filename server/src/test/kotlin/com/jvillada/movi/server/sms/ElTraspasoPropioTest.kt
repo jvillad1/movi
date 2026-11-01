@@ -130,11 +130,12 @@ class ElTraspasoPropioTest {
     }
 
     @Test
-    fun `PSE a otros bancos con una sola cuenta ahi es un traspaso a esa cuenta`() {
+    fun `PSE a otros bancos con una cuenta ahi es un traspaso con esa cuenta a elegir`() {
         val aDavivienda = sms("dv", "85784", "Bancolombia: Pagaste \$300,000.00 a DAVIVIENDA desde tu producto 8133 el 31/10/2026 09:00:00.")
         val p = conElTraspasoPropio(leido(aDavivienda), aDavivienda, emptyList(), cuentas + davivienda)
         assertEquals(TRANSFER_CATEGORY, p.category)
-        assertEquals("davi", p.traspasoHaciaId)
+        assertNull(p.traspasoHaciaId, "el nombre solo no elige el destino")
+        assertEquals(listOf("davi"), p.destinosPosibles)
         // Sin cuenta en ese banco, sigue siendo lo que era (un pago a alguien más).
         val aBogota = sms("bb", "85784", "Bancolombia: Pagaste \$300,000.00 a BANCO DE BOGOTA desde tu producto 8133 el 31/10/2026 09:00:00.")
         val sinCuenta = conElTraspasoPropio(leido(aBogota), aBogota, emptyList(), cuentas)

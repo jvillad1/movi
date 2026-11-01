@@ -5050,9 +5050,10 @@ como ingreso).
 - **«Anotarlo como traspaso»** (`botonDeAnotarloIgual`): el botón principal de un aviso sin leer que habla de un
   depósito tuyo; la frase dice «Anótalo como traspaso desde otra cuenta tuya» y Reconciliar pide de qué cuenta
   vino. Un depósito así nunca se ofrece como ingreso.
-- **A dónde fue**, cuando no es una sola cuenta: el selector de destino de Revisar aviso lista primero las
-  cuentas suyas de ese banco (`ParsedSms.destinosPosibles`), **con la tarjeta**; elegir la tarjeta pasa la
-  pantalla al pago de esa tarjeta, como «Es el pago de una tarjeta ›».
+- **A dónde fue**, cuando el aviso solo nombra el banco: el selector de destino de Revisar aviso lista primero
+  las cuentas suyas de ese banco (`ParsedSms.destinosPosibles`), **con sus tarjetas y créditos**, y nada queda
+  elegido; elegir la tarjeta pasa la pantalla al pago de esa tarjeta y un crédito a su cuota, como «Es el pago
+  de una tarjeta ›» / «Es la cuota de un crédito ›».
 - **La comisión del traslado** (`lineaDeLaComisionDelTraslado`): debajo de «Sale de … · entra a …», en
   `apoyo`/`textoMedio`, «Bancolombia suele cobrar la comisión del traslado: llega en el extracto.» Solo informa:
   Movi no la anota ni calcula la cifra.

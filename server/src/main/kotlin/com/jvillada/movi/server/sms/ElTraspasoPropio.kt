@@ -32,8 +32,9 @@ import com.jvillada.movi.shared.model.puntasDelPagoDeLaTarjetaNu
  *    - con el aviso de **ese pago de la tarjeta Nu** en el mismo pago: es el pago de la tarjeta;
  *    - con el **depósito que entró** en el mismo pago («Recibimos tu depósito…» de Nu): un traspaso a
  *      la cuenta que lo avisa;
- *    - si no, por el nombre del banco ([destinoEnOtroBanco]): un traspaso a su única cuenta ahí, o
- *      a elegir entre las suyas de ese banco ([ParsedSms.destinosPosibles]).
+ *    - si no, por el nombre del banco ([destinoEnOtroBanco]): un traspaso con el destino **a elegir**
+ *      entre las suyas de ese banco ([ParsedSms.destinosPosibles], con tarjetas y créditos); solo los
+ *      últimos cuatro escritos en el aviso lo dejan elegido. El nombre solo no basta.
  *
  * El lado que entra suelto (el depósito de Nu sin el aviso de salida) ya sale de `parseSms` como un
  * ingreso en «Traspaso»: la app pide de qué cuenta vino. Nunca un ingreso.
@@ -64,7 +65,9 @@ fun conElTraspasoPropio(
     val delDeposito = otrosDelPago.firstNotNullOfOrNull { cuentaDelDepositoPropio(it.bank, it.text, cuentas) }
     if (delDeposito != null) return comoTraspaso(parsed, delDeposito.id, listOf(delDeposito.id))
 
-    val destino = destinoEnOtroBanco(parsed.merchant, cuentas, marcaDelRemitente(sms.bank, sms.text)) ?: return parsed
+    // Con solo el nombre del banco, el destino queda a elegir (incluidos sus créditos: «Pagaste $X a
+    // DAVIBANK» puede ser la cuota del hipotecario); lo llena solo un número de cuenta escrito en el aviso.
+    val destino = destinoEnOtroBanco(parsed.merchant, cuentas, marcaDelRemitente(sms.bank, sms.text), sms.text) ?: return parsed
     return comoTraspaso(parsed, destino.haciaId, destino.posibles)
 }
 

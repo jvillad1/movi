@@ -109,6 +109,9 @@ fun dosPatasPropuestas(
         // Vuelta 91: si la cuenta elegida es una tarjeta (la «Nu Tarjeta» de «Pagaste $X a NU…»), es su pago.
         categoria == TRANSFER_CATEGORY && destinoElegido != null && destinoElegido.type == AccountType.CREDIT_CARD ->
             si(OperacionDelAviso.PAGO_DE_TARJETA, cuenta, destinoElegido)
+        // Revisión de la 91: y si es un crédito («Pagaste $X a DAVIBANK» → el hipotecario), es su cuota.
+        categoria == TRANSFER_CATEGORY && destinoElegido != null && destinoElegido.type == AccountType.LOAN ->
+            destinoElegido.takeIf { it.currency == cuenta.currency }?.let { si(OperacionDelAviso.CUOTA, cuenta, it) }
         categoria == TRANSFER_CATEGORY ->
             destinoElegido?.takeIf { it.currency == cuenta.currency }?.let { si(OperacionDelAviso.TRASPASO, cuenta, it) }
         else -> null
@@ -176,13 +179,14 @@ fun destinoPropuestoDelAviso(
  * Las cuentas que se pueden elegir como destino: suyas, de dinero o inversión, distintas del origen.
  *
  * Vuelta 91: primero las [posibles] que propuso el server (`ParsedSms.destinosPosibles`: las suyas del
- * banco al que fue un traspaso), **incluida la tarjeta de ese banco** —«Pagaste $X a NU…» puede ser el
- * depósito a la cuenta Nu o el abono a la Nu Tarjeta—; elegir la tarjeta lo vuelve el pago de la
- * tarjeta ([dosPatasPropuestas]). Después, las demás de siempre.
+ * banco al que fue un traspaso), **incluidas la tarjeta y los créditos de ese banco** —«Pagaste $X a
+ * NU…» puede ser el depósito a la cuenta Nu o el abono a la Nu Tarjeta; «a DAVIBANK», la cuota del
+ * hipotecario—; elegir la tarjeta lo vuelve su pago y un crédito su cuota ([dosPatasPropuestas]).
+ * Después, las demás de siempre.
  */
 fun destinosElegibles(accounts: List<Account>, origen: Account?, posibles: List<String> = emptyList()): List<Account> {
     val primero = posibles.mapNotNull { id -> accounts.firstOrNull { it.id == id } }
-        .filter { it.id != origen?.id && !it.esBien && (it.type.group != AccountGroup.DEUDA || it.type == AccountType.CREDIT_CARD) }
+        .filter { it.id != origen?.id && !it.esBien }
     val resto = accounts.filter { it.id != origen?.id && it.type.group != AccountGroup.DEUDA && !it.esBien }
     return (primero + resto).distinctBy { it.id }
 }

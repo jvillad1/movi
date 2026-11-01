@@ -57,6 +57,10 @@ class ElTraspasoAOtroBancoTest {
         assertFalse(esUnDepositoPropio("¡Bravo! Pagaste tu tarjeta de crédito Nu: Recibimos tu pago por \$150.000,00."))
         assertTrue(hablaDeUnDepositoPropio("Listo: tu depósito quedó en camino"))
         assertFalse(hablaDeUnDepositoPropio("Recargaste \$20.000 a tu celular"), "una recarga de celular es un gasto")
+        // Revisión de la 91: un depósito hacia otra persona es plata que sale.
+        assertFalse(esUnDepositoPropio("Tu depósito de \$200.000 a la cuenta de Pedro Pérez fue exitoso"))
+        assertFalse(esUnDepositoPropio("Recibimos tu depósito por \$200.000 a nombre de Pedro Pérez"))
+        assertFalse(hablaDeUnDepositoPropio("Tu depósito de \$200.000 a la cuenta de Pedro Pérez fue exitoso"))
         assertTrue(esElPagoDeLaTarjetaNu("Notificación · Nu", "¡Bravo! Pagaste tu tarjeta de crédito Nu: Recibimos tu pago por \$1.306.937,91."))
         assertFalse(esElPagoDeLaTarjetaNu("85540", "Bancolombia: Recibimos tu pago"), "solo si lo avisa Nu")
         assertFalse(esElPagoDeLaTarjetaNu("Notificación · Nu", "Compra aprobada por \$79.000,00: Tu compra en DLO*GOOGLE con tu tarjeta terminada en 1336"))
@@ -74,8 +78,8 @@ class ElTraspasoAOtroBancoTest {
     fun `a donde fue, una sola cuenta de plata sin tarjeta, o a elegir con la tarjeta`() {
         // Nu: la cuenta y la tarjeta → a elegir, las dos.
         assertEquals(DestinoEnOtroBanco(null, listOf("nu", "nut")), destinoEnOtroBanco("NU Compania de Financiamiento", cuentas, bancolombia))
-        // Sin la tarjeta Nu → la cuenta Nu.
-        assertEquals(DestinoEnOtroBanco("nu", listOf("nu")), destinoEnOtroBanco("NU Compania de Financiamiento", cuentas - nuTarjeta, bancolombia))
+        // Sin la tarjeta Nu, el nombre solo tampoco elige: la cuenta Nu se ofrece, a elegir.
+        assertEquals(DestinoEnOtroBanco(null, listOf("nu")), destinoEnOtroBanco("NU Compania de Financiamiento", cuentas - nuTarjeta, bancolombia))
         // Sin cuenta de plata en ese banco: no es un traspaso propio (pagar la tarjeta va por su camino).
         assertNull(destinoEnOtroBanco("NU Compania de Financiamiento", cuentas - nu, bancolombia))
         // A su propio banco (el que avisa): no.
@@ -83,6 +87,19 @@ class ElTraspasoAOtroBancoTest {
         // Dos cuentas de plata en el banco → a elegir entre las dos.
         val dosDavi = listOf(cuenta("d1", "Davivienda Ahorros", AccountType.SAVINGS), cuenta("d2", "Davivienda Corriente", AccountType.CHECKING))
         assertEquals(DestinoEnOtroBanco(null, listOf("d1", "d2")), destinoEnOtroBanco("DAVIVIENDA", cuentas + dosDavi, bancolombia))
+    }
+
+    @Test
+    fun `Pagaste a DAVIBANK es a elegir con el hipotecario, y solo los ultimos cuatro eligen la AFC`() {
+        val afc = cuenta("afc", "AFC Davibank 9497", AccountType.SAVINGS)
+        val hipoteca = cuenta("hip", "Hipoteca Papá (Davibank)", AccountType.LOAN)
+        val todas = cuentas + afc + hipoteca
+        val sms = "Bancolombia: Pagaste \$9,147,408.00 a DAVIBANK desde tu producto 8133 el 30/10/2026 10:00:00."
+        assertEquals(DestinoEnOtroBanco(null, listOf("afc", "hip")), destinoEnOtroBanco("DAVIBANK", todas, bancolombia, sms))
+        assertEquals(
+            DestinoEnOtroBanco("afc", listOf("afc", "hip")),
+            destinoEnOtroBanco("DAVIBANK", todas, bancolombia, "Pagaste \$300,000.00 a DAVIBANK cuenta *9497 desde tu producto 8133"),
+        )
     }
 
     @Test

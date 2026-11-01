@@ -19,20 +19,23 @@ package com.jvillada.movi.shared.model
  */
 
 /**
- * «Recibimos tu depósito por 1.500.000,00: ¡No te preocupes! …» (Nu), «Tu depósito de $X …»: la plata
- * que el dueño mismo puso en esa cuenta —un depósito por PSE desde otro banco—. Lo que manda un
- * tercero no se escribe así («Te llegó dinero de …», «Recibiste $X de …»).
+ * «Recibimos tu depósito por 1.500.000,00: ¡No te preocupes! …» (Nu): la plata que el dueño mismo puso
+ * en esa cuenta —un depósito por PSE desde otro banco—, dicha por el banco que la **recibió**. Solo con
+ * «recibimos» (revisión de la 91): «Tu depósito de $X a la cuenta de Pedro» es plata que sale hacia un
+ * tercero. Lo que manda un tercero tampoco se escribe así («Te llegó dinero de …», «Recibiste $X de …»).
  */
-private val DEPOSITO_PROPIO = Regex(
-    """\brecibimos\s+tu\s+dep[oó]sito\b|\btu\s+dep[oó]sito\s+(?:de|por)\b""",
-    RegexOption.IGNORE_CASE,
-)
+private val DEPOSITO_PROPIO = Regex("""\brecibimos\s+tu\s+dep[oó]sito\b""", RegexOption.IGNORE_CASE)
+
+/** «… a la cuenta de Pedro», «… a nombre de Pedro»: el depósito fue a otra persona, no a una cuenta suya. */
+private val A_OTRA_PERSONA = Regex("""\ba\s+(?:la\s+cuenta\s+de|nombre\s+de)\b""", RegexOption.IGNORE_CASE)
 
 /**
  * **¿El aviso es el lado que entra de un traspaso propio?** Un depósito del dueño a su propia cuenta
- * ([DEPOSITO_PROPIO]). Solo mira el texto; a qué cuenta entró lo dice el banco que avisa.
+ * ([DEPOSITO_PROPIO]), que no nombra a otra persona ([A_OTRA_PERSONA]). Solo mira el texto; a qué cuenta
+ * entró lo dice el banco que avisa.
  */
-fun esUnDepositoPropio(texto: String): Boolean = DEPOSITO_PROPIO.containsMatchIn(texto)
+fun esUnDepositoPropio(texto: String): Boolean =
+    DEPOSITO_PROPIO.containsMatchIn(texto) && !A_OTRA_PERSONA.containsMatchIn(texto)
 
 /**
  * Más ancho que [esUnDepositoPropio]: el texto **habla** de un depósito del dueño («tu depósito», «su
@@ -43,7 +46,8 @@ fun esUnDepositoPropio(texto: String): Boolean = DEPOSITO_PROPIO.containsMatchIn
 private val HABLA_DE_UN_DEPOSITO = Regex("""\b(?:tu|su)\s+dep[oó]sito\b""", RegexOption.IGNORE_CASE)
 
 /** ¿El texto habla de un depósito del dueño? Ver [HABLA_DE_UN_DEPOSITO]. */
-fun hablaDeUnDepositoPropio(texto: String): Boolean = HABLA_DE_UN_DEPOSITO.containsMatchIn(texto)
+fun hablaDeUnDepositoPropio(texto: String): Boolean =
+    HABLA_DE_UN_DEPOSITO.containsMatchIn(texto) && !A_OTRA_PERSONA.containsMatchIn(texto)
 
 /** Las redes de tarjeta no son un banco donde se tenga plata: «a VISA» no es un traspaso. */
 private val NO_RECIBEN_TRASPASOS = setOf("visa", "mastercard")
@@ -82,22 +86,24 @@ fun marcaDelRemitente(origen: String, texto: String): Marca? {
 
 /**
  * Las cuentas del dueño que son de [marca], por su nombre ([marcaDeLaCuenta]): las de plata (sin el
- * efectivo ni los bienes) y las tarjetas de crédito. Un crédito no recibe un depósito.
+ * efectivo ni los bienes), las tarjetas de crédito y los créditos (revisión de la 91: «Pagaste $X a
+ * DAVIBANK» puede ser la cuota del hipotecario, no un depósito a la AFC).
  */
-data class CuentasDelBanco(val dePlata: List<Account>, val tarjetas: List<Account>)
+data class CuentasDelBanco(val dePlata: List<Account>, val tarjetas: List<Account>, val creditos: List<Account> = emptyList())
 
 fun cuentasDelBanco(marca: Marca, cuentas: List<Account>): CuentasDelBanco {
     val delBanco = cuentas.filter { !it.esBien && marcaDeLaCuenta(it)?.id == marca.id }
     return CuentasDelBanco(
         dePlata = delBanco.filter { it.type.group == AccountGroup.DINERO && it.type != AccountType.CASH },
         tarjetas = delBanco.filter { it.type == AccountType.CREDIT_CARD },
+        creditos = delBanco.filter { it.type == AccountType.LOAN },
     )
 }
 
 /**
  * A dónde fue un traspaso a otro banco: [haciaId] la cuenta propuesta (`null` = a elegir) y
  * [posibles] las cuentas suyas de ese banco que se ofrecen primero (las de plata y, si las hay, las
- * tarjetas: elegir una tarjeta lo vuelve el pago de esa tarjeta).
+ * tarjetas y los créditos: elegir una tarjeta lo vuelve su pago; un crédito, su cuota).
  */
 data class DestinoEnOtroBanco(val haciaId: String?, val posibles: List<String>)
 
@@ -110,20 +116,27 @@ data class DestinoEnOtroBanco(val haciaId: String?, val posibles: List<String>)
  *    comisión—).
  * 2. El dueño tiene **al menos una cuenta de plata** en ese banco ([cuentasDelBanco]). Sin ninguna, el
  *    pago sigue siendo lo que era (a una tarjeta o un crédito de ese banco se le paga por su camino).
- * 3. **Exactamente una** de plata y ninguna tarjeta de ese banco: esa es el destino ([DestinoEnOtroBanco.haciaId]).
- *    Con varias, o con una tarjeta además (¿depósito a la cuenta Nu o abono a la tarjeta Nu?), el
- *    destino queda **a elegir**, con esas cuentas primero.
+ * 3. **El nombre solo no elige el destino** (revisión de la 91): «Pagaste $9.147.408 a DAVIBANK desde
+ *    tu producto 8133» es la cuota del hipotecario, no un depósito a la «AFC Davibank 9497». El
+ *    destino queda **a elegir**, con las cuentas de ese banco primero —las de plata, las tarjetas y los
+ *    créditos—, salvo que el aviso ([texto]) escriba los últimos cuatro de **una** cuenta de plata de
+ *    ese banco: esa es [DestinoEnOtroBanco.haciaId]. La otra evidencia (el depósito que entró en el mismo
+ *    pago, el «Depósito a tu cuenta NU» del correo de PSE) la ponen quienes llaman.
  *
  * `null` si no es un traspaso propio. Pura.
  */
-fun destinoEnOtroBanco(beneficiario: String, cuentas: List<Account>, remitente: Marca?): DestinoEnOtroBanco? {
+fun destinoEnOtroBanco(beneficiario: String, cuentas: List<Account>, remitente: Marca?, texto: String = ""): DestinoEnOtroBanco? {
     val marca = marcaDelBeneficiario(beneficiario) ?: return null
     if (remitente != null && grupoDelBanco(remitente.id) == grupoDelBanco(marca.id)) return null
-    val (dePlata, tarjetas) = cuentasDelBanco(marca, cuentas)
+    val (dePlata, tarjetas, creditos) = cuentasDelBanco(marca, cuentas)
     if (dePlata.isEmpty()) return null
-    val hacia = dePlata.singleOrNull()?.takeIf { tarjetas.isEmpty() }
-    return DestinoEnOtroBanco(haciaId = hacia?.id, posibles = (dePlata + tarjetas).map { it.id })
+    val numeros = NUMEROS_DEL_AVISO.findAll(texto).map { it.value.takeLast(4) }.toSet()
+    val hacia = dePlata.filter { cuenta -> NUMEROS_DEL_AVISO.findAll(cuenta.name).any { it.value.takeLast(4) in numeros } }.singleOrNull()
+    return DestinoEnOtroBanco(haciaId = hacia?.id, posibles = (dePlata + tarjetas + creditos).map { it.id })
 }
+
+/** Las corridas de 4+ dígitos de un aviso o del nombre de una cuenta («AFC Davibank 9497» → 9497). */
+private val NUMEROS_DEL_AVISO = Regex("""\d{4,}""")
 
 /**
  * **La cuenta a la que entró un depósito propio** ([esUnDepositoPropio]): la única cuenta de plata del

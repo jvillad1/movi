@@ -1763,8 +1763,9 @@ fun SMSReconcileScreen(
                                         // Vuelta 91: la tarjeta de ese banco («Nu Tarjeta») no recibe un
                                         // traspaso: es su pago. La pantalla pasa al pago de esa tarjeta,
                                         // como «Es el pago de una tarjeta ›»; «Traspaso» la devuelve.
-                                        cuenta.type == AccountType.CREDIT_CARD -> {
-                                            selectedCategory = CARD_PAYMENT_CATEGORY
+                                        cuenta.type == AccountType.CREDIT_CARD || cuenta.type == AccountType.LOAN -> {
+                                            // …y un crédito de ese banco, su cuota (revisión de la 91).
+                                            selectedCategory = if (cuenta.type == AccountType.LOAN) CUOTA_CATEGORY else CARD_PAYMENT_CATEGORY
                                             deudaTocadaAMano = true
                                             alElegirLaDeuda(cuenta)
                                         }

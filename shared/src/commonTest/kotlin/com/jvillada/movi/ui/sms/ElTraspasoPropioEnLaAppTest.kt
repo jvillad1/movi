@@ -93,6 +93,10 @@ class ElTraspasoPropioEnLaAppTest {
         val leido = ParsedSms(1_500_000.0, "NU Compania de Financiamiento", TransactionType.EXPENSE, TRANSFER_CATEGORY, destinosPosibles = listOf("nu", "nut"))
         assertEquals(OperacionDelAviso.TRASPASO, dosPatasPropuestas(leido, TRANSFER_CATEGORY, b8133, null, nu)?.operacion)
         assertEquals(OperacionDelAviso.PAGO_DE_TARJETA, dosPatasPropuestas(leido, TRANSFER_CATEGORY, b8133, null, nuTarjeta)?.operacion)
+        // Revisión de la 91: «Pagaste $X a DAVIBANK» → el hipotecario de ese banco es su cuota.
+        val hipoteca = Account("hip", "Hipoteca Papá (Davibank)", AccountType.LOAN, 0L)
+        assertEquals(listOf(hipoteca, b0031, nu), destinosElegibles(cuentas + hipoteca, b8133, posibles = listOf("hip")))
+        assertEquals(OperacionDelAviso.CUOTA, dosPatasPropuestas(leido, TRANSFER_CATEGORY, b8133, null, hipoteca)?.operacion)
     }
 
     @Test
