@@ -9,7 +9,6 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.onAllNodes
 import androidx.compose.ui.test.hasScrollAction
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
@@ -32,6 +31,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
  * Vuelta 102 · «Fallos y uso» abre en la pestaña «Servidor» y la pinta con lo que contesta el server:
@@ -81,7 +81,10 @@ class PestanaServidorEnPantallaTest {
         composeRule.onAllNodes(hasScrollAction()).fetchSemanticsNodes().let { lista ->
             if (lista.isNotEmpty()) composeRule.onAllNodes(hasScrollAction())[lista.size - 1].performScrollToNode(hasText(texto, substring = true))
         }
-        composeRule.onNodeWithText(texto, substring = true, useUnmergedTree = true).assertExists()
+        assertTrue(
+            composeRule.onAllNodesWithText(texto, substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty(),
+            "falta «$texto»",
+        )
     }
 
     @Test
@@ -96,7 +99,7 @@ class PestanaServidorEnPantallaTest {
         verQue("GET /api/patrimonio/historia")
         verQue("POST /api/ai/chat")
         verQue("31 sin crédito")
-        verQue("24.000 por usuario")
+        verQue("48.000 por usuario")
         verQue("IllegalStateException: sin red")
         verQue("Faltan: RESEND_API_KEY")
     }
