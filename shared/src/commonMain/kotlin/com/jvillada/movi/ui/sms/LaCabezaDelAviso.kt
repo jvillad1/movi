@@ -13,6 +13,7 @@ import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AvisoSinLeer
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
+import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.COMERCIO_DE_UN_AVISO_SIN_LEER
 import com.jvillada.movi.shared.model.Marca
 import com.jvillada.movi.shared.model.ParsedSms
@@ -20,6 +21,7 @@ import com.jvillada.movi.shared.model.RubroDeMarca
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.horaLegibleDeSms
+import com.jvillada.movi.shared.model.grupoDelBanco
 import com.jvillada.movi.shared.model.marcaDeLaCuenta
 import com.jvillada.movi.shared.model.marcaDelBanco
 import com.jvillada.movi.shared.model.marcaDelTexto
@@ -156,7 +158,7 @@ internal fun fechaEnElTexto(texto: String): LocalDate? {
  *
  * Calla cuando no hay con qué comparar —un SMS que llega con el código del remitente, un comprobante,
  * una cuenta cuyo nombre no dice el banco—, con una red de tarjeta (Visa, Mastercard: «Bancolombia
- * Visa» es Bancolombia) y entre marcas del mismo banco ([GRUPOS_DE_BANCOS]: la AMEX y la Fiducuenta
+ * Visa» es Bancolombia) y entre marcas del mismo banco ([grupoDelBanco]: la AMEX y la Fiducuenta
  * son de Bancolombia). En un pago avisado varias veces basta con que un aviso sea del banco de la cuenta.
  */
 fun advertenciaDeBancos(origenes: List<String>, cuenta: Account?): String? {
@@ -173,16 +175,8 @@ private fun esUnBanco(marca: Marca): Boolean =
 
 private val REDES_DE_TARJETA = setOf("visa", "mastercard")
 
-/** Las marcas que son del mismo banco: la tarjeta o la fiducia que el banco emite con otro nombre. */
-private val GRUPOS_DE_BANCOS: Map<String, String> = mapOf(
-    "amex" to "bancolombia",
-    "fiducuenta" to "bancolombia",
-    "nequi" to "bancolombia",
-    "daviplata" to "davivienda",
-    "davibank" to "davivienda",
-)
-
-private fun grupoDelBanco(id: String): String = GRUPOS_DE_BANCOS[id] ?: id
+// Vuelta 91: los grupos de bancos (la AMEX y la Fiducuenta son de Bancolombia) bajaron a `:core`
+// (`grupoDelBanco`, en `ElTraspasoAOtroBanco.kt`): el server los usa para saber si un pago es a otro banco.
 
 /** Un comercio que no dice nada: vacío, o el «Movimiento» que Movi pone cuando el aviso no nombra a nadie. */
 private fun comercioQueDiceAlgo(comercio: String?): String? =
@@ -224,8 +218,11 @@ fun cabezaDelAviso(
     val comercio = comercioQueDiceAlgo(leido?.merchant) ?: comercioQueDiceAlgo(sinLeer?.comercio) ?: enElTexto?.nombre
     val monto = leido?.amount?.roundToLong()?.takeIf { it > 0 } ?: sinLeer?.monto?.roundToLong()?.takeIf { it > 0 }
     val tipo = leido?.type ?: sinLeer?.tipo
-    val entreCuentas = leido != null &&
-        (leido.traspasoHaciaId != null || leido.traspasoDesdeId != null || leido.category == CARD_PAYMENT_CATEGORY)
+    // Vuelta 91: un «Traspaso» (el depósito de Nu, el pago a otro banco suyo) y un depósito sin leer
+    // tampoco son plata que entra ni que sale: van en el tono de entre cuentas, sin el verde del ingreso.
+    val entreCuentas = (leido != null &&
+        (leido.traspasoHaciaId != null || leido.traspasoDesdeId != null || leido.category == CARD_PAYMENT_CATEGORY ||
+            leido.category == TRANSFER_CATEGORY)) || (leido == null && sinLeer?.deposito == true)
     val tono = when {
         entreCuentas -> TonoDeCifra.EntreCuentas
         tipo == TransactionType.INCOME -> TonoDeCifra.Ingreso

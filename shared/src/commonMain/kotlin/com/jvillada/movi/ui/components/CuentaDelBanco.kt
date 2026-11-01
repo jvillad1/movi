@@ -7,6 +7,7 @@ import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.UsoDeCuenta
 import com.jvillada.movi.shared.model.cuentasPara
 import com.jvillada.movi.shared.model.esBien
+import com.jvillada.movi.shared.model.esElPagoDeLaTarjetaNu
 import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.normalizarParaBuscar
 
@@ -105,8 +106,13 @@ data class CuentaDelBanco(
  * pago con la Glim del 25-sep no leía el número que traía escrito y caía en la primera cuenta.
  * Solo las viñetas de verdad (• y ●), no el punto medio «·»: ese es el separador de los rótulos de
  * Movi («Notificación · Glim») y un «· 2026» no es un número de cuenta.
+ *
+ * Vuelta 91: y el «desde tu producto 8133» con que Bancolombia avisa un pago por PSE («Pagaste
+ * $1,500,000.00 a NU Compania de Financiamiento desde tu producto 8133»): sin él la cuenta caía en la
+ * primera de banco (la 0031), y en el traspaso del 31-oct, juntado con el depósito de Nu, en la cuenta
+ * Nu —el traspaso quedaba de Nu a Nu—.
  */
-private val numerosQueNombraElMensaje = Regex("""(?:\*|\bterminada\s+en|[•●]+)\s*(\d{4,})""", RegexOption.IGNORE_CASE)
+private val numerosQueNombraElMensaje = Regex("""(?:\*|\bterminada\s+en|\bproducto|[•●]+)\s*(\d{4,})""", RegexOption.IGNORE_CASE)
 
 /** Las corridas de dígitos de un nombre de cuenta: «Fiducuenta 9586» → 9586. */
 private val digitosDelNombre = Regex("""\d+""")
@@ -254,6 +260,9 @@ private val palabraNu = Regex("""\bnu(?:bank)?\b""", RegexOption.IGNORE_CASE)
 internal fun tarjetaDeNu(banco: String, texto: String, candidatas: List<Account>): Account? {
     if (!palabraNu.containsMatchIn(banco)) return null
     if (!texto.contains("tarjeta", ignoreCase = true)) return null
+    // Vuelta 91: «¡Bravo! Pagaste tu tarjeta de crédito Nu» no es una compra CON la tarjeta: la plata
+    // sale de la cuenta Nu y entra a la tarjeta ([cuentaDeNu]). Anotado en la tarjeta, le SUBÍA la deuda.
+    if (esElPagoDeLaTarjetaNu(banco, texto)) return null
     return candidatas
         .filter { it.type == AccountType.CREDIT_CARD && palabraNu.containsMatchIn(it.name) }
         .singleOrNull()
@@ -267,10 +276,13 @@ internal fun tarjetaDeNu(banco: String, texto: String, candidatas: List<Account>
  *
  * Mismo criterio que [tarjetaDeNu], del otro lado: el mensaje viene de Nu, NO habla de una tarjeta,
  * y entre las candidatas hay **exactamente una** cuenta que no es tarjeta de crédito y se llama Nu.
+ * Vuelta 91: salvo el pago de la tarjeta («¡Bravo! Pagaste tu tarjeta de crédito Nu…»), que sale de
+ * esta cuenta ([esElPagoDeLaTarjetaNu]).
  */
 internal fun cuentaDeNu(banco: String, texto: String, candidatas: List<Account>): Account? {
     if (!palabraNu.containsMatchIn(banco)) return null
-    if (texto.contains("tarjeta", ignoreCase = true)) return null
+    // Vuelta 91: el pago de la tarjeta habla de la tarjeta, pero sale de la cuenta.
+    if (texto.contains("tarjeta", ignoreCase = true) && !esElPagoDeLaTarjetaNu(banco, texto)) return null
     return candidatas
         .filter { it.type != AccountType.CREDIT_CARD && palabraNu.containsMatchIn(it.name) }
         .singleOrNull()

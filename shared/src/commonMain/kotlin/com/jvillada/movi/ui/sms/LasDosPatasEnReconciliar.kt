@@ -20,6 +20,8 @@ import com.jvillada.movi.shared.model.ParsedSms
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.esBien
+import com.jvillada.movi.shared.model.COMISION_DEL_TRASLADO
+import com.jvillada.movi.shared.model.diceLaComisionDelTraslado
 import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.operacionEntre
 import com.jvillada.movi.shared.model.resumenDeLasDosPatas
@@ -104,6 +106,9 @@ fun dosPatasPropuestas(
                 else -> null
             }
         }
+        // Vuelta 91: si la cuenta elegida es una tarjeta (la «Nu Tarjeta» de «Pagaste $X a NU…»), es su pago.
+        categoria == TRANSFER_CATEGORY && destinoElegido != null && destinoElegido.type == AccountType.CREDIT_CARD ->
+            si(OperacionDelAviso.PAGO_DE_TARJETA, cuenta, destinoElegido)
         categoria == TRANSFER_CATEGORY ->
             destinoElegido?.takeIf { it.currency == cuenta.currency }?.let { si(OperacionDelAviso.TRASPASO, cuenta, it) }
         else -> null
@@ -167,9 +172,33 @@ fun destinoPropuestoDelAviso(
     }
 }
 
-/** Las cuentas que se pueden elegir como destino: suyas, de dinero o inversión, distintas del origen. */
-fun destinosElegibles(accounts: List<Account>, origen: Account?): List<Account> =
-    accounts.filter { it.id != origen?.id && it.type.group != AccountGroup.DEUDA && !it.esBien }
+/**
+ * Las cuentas que se pueden elegir como destino: suyas, de dinero o inversión, distintas del origen.
+ *
+ * Vuelta 91: primero las [posibles] que propuso el server (`ParsedSms.destinosPosibles`: las suyas del
+ * banco al que fue un traspaso), **incluida la tarjeta de ese banco** —«Pagaste $X a NU…» puede ser el
+ * depósito a la cuenta Nu o el abono a la Nu Tarjeta—; elegir la tarjeta lo vuelve el pago de la
+ * tarjeta ([dosPatasPropuestas]). Después, las demás de siempre.
+ */
+fun destinosElegibles(accounts: List<Account>, origen: Account?, posibles: List<String> = emptyList()): List<Account> {
+    val primero = posibles.mapNotNull { id -> accounts.firstOrNull { it.id == id } }
+        .filter { it.id != origen?.id && !it.esBien && (it.type.group != AccountGroup.DEUDA || it.type == AccountType.CREDIT_CARD) }
+    val resto = accounts.filter { it.id != origen?.id && it.type.group != AccountGroup.DEUDA && !it.esBien }
+    return (primero + resto).distinctBy { it.id }
+}
+
+/**
+ * Vuelta 91 · **la línea de la comisión del traslado**, debajo de «Sale de … · entra a …»: un traspaso
+ * por PSE de Bancolombia a otro banco ([diceLaComisionDelTraslado]). Solo informa: Movi no anota ni
+ * calcula esa comisión (la dice el extracto). `null` en todo lo demás. Pura.
+ */
+fun lineaDeLaComisionDelTraslado(propuestas: DosPatasPropuestas?, textos: List<String>): String? =
+    propuestas?.takeIf { it.operacion == OperacionDelAviso.TRASPASO && !it.entrante }
+        ?.takeIf { diceLaComisionDelTraslado(it.origen, it.destino, textos) }
+        ?.let { COMISION_DEL_TRASLADO }
+
+/** El tag de la línea de la comisión del traslado. */
+const val TAG_COMISION_DEL_TRASLADO: String = "sms:dos-patas:comision-del-traslado"
 
 /**
  * **¿Hay que preguntar cuánto bajó la deuda en su moneda?** Al pagar una tarjeta en otra moneda (la
@@ -272,6 +301,8 @@ internal fun LasDosPatasEnElResumen(
     onElegir: (Account) -> Unit,
     /** Un traspaso que entra: lo que se elige es la cuenta de la que vino, no a la que fue. */
     entrante: Boolean = false,
+    /** Vuelta 91: «Bancolombia suele cobrar la comisión del traslado…» ([lineaDeLaComisionDelTraslado]). */
+    comision: String? = null,
 ) {
     if (propuestas == null && !pideDestino) return
     Separador(SangriaDeSeparador.Ninguna, Modifier.padding(vertical = Espacio.s))
@@ -295,6 +326,14 @@ internal fun LasDosPatasEnElResumen(
                     .wrapContentHeight(),
             )
         }
+    }
+    if (comision != null) {
+        Text(
+            comision,
+            style = Movi.textos.apoyo,
+            color = Movi.colores.textoMedio,
+            modifier = Modifier.padding(top = Espacio.xxs).testTag(TAG_COMISION_DEL_TRASLADO),
+        )
     }
     if (pideDestino && eligiendo) {
         Spacer(Modifier.height(Espacio.xs))

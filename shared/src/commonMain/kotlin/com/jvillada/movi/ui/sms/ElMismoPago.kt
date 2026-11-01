@@ -162,6 +162,7 @@ fun conLoResueltoEnLaBandeja(
  * lectura —la elegida a mano, después la que salió del número escrito, después la del banco, y
  * recién al final la de por defecto—. Así un pago por QR toma la cuenta *8133 del SMS aunque la
  * propuesta (el comercio) salga de Google Wallet. A igualdad, el primero de [avisos] (la propuesta).
+ * El depósito que entró (vuelta 91) no vota: dice el destino, no el origen.
  */
 internal fun resolverCuentaDelPago(
     accounts: List<com.jvillada.movi.shared.model.Account>,
@@ -169,7 +170,7 @@ internal fun resolverCuentaDelPago(
     avisos: List<SmsMessage>,
     elegidaAMano: String?,
 ): com.jvillada.movi.ui.components.CuentaDelBanco {
-    val lecturas = avisos.map { aviso ->
+    val lecturas = avisosQueDicenLaCuenta(avisos).map { aviso ->
         com.jvillada.movi.ui.components.resolverCuentaDelBanco(
             accounts = accounts, uso = uso, banco = aviso.bank, elegidaAMano = elegidaAMano, textoDelMensaje = aviso.text,
         )
@@ -185,6 +186,15 @@ internal fun resolverCuentaDelPago(
     return lecturas.minByOrNull { orden.indexOf(it.origen).let { i -> if (i < 0) orden.size else i } }
         ?: com.jvillada.movi.ui.components.CuentaDelBanco(null, com.jvillada.movi.ui.components.OrigenDeLaCuentaDelBanco.NINGUNA)
 }
+
+/**
+ * Vuelta 91 · **los avisos de un pago que dicen de qué cuenta salió la plata**: todos, menos el lado que
+ * entra de un traspaso propio («Recibimos tu depósito…» de Nu), que nombra la cuenta a la que FUE.
+ * Con él votando, el traspaso del 31-oct quedaba de Nu a Nu, y la tarjeta advertía «el aviso es de Nu y
+ * la cuenta es de Bancolombia». Si no queda ninguno, todos.
+ */
+internal fun avisosQueDicenLaCuenta(avisos: List<SmsMessage>): List<SmsMessage> =
+    avisos.filterNot { com.jvillada.movi.shared.model.esUnDepositoPropio(it.text) }.ifEmpty { avisos }
 
 /** Los textos de la tarjeta del mismo pago, para las pruebas. */
 const val NO_SON_EL_MISMO_PAGO: String = "No son el mismo pago"
@@ -226,6 +236,11 @@ internal fun TarjetaDelMismoPago(
     modifier: Modifier = Modifier,
     /** Vuelta 74: «¿Ya lo anotaste?» encontró el movimiento del pago (ver [YaAnotadoEnLaFila]). */
     yaAnotado: YaAnotadoEnLaFila? = null,
+    /**
+     * Vuelta 91 · el título de un traspaso entre cuentas suyas avisado varias veces («Traspaso de
+     * Bancolombia ·8133 a Nu», ver `LoQueMoviEntendio.titulo`). Sin esto, el comercio de siempre.
+     */
+    titulo: String? = null,
 ) {
     var abiertos by remember { mutableStateOf(false) }
     val yaAnotadoCon = avisos.firstNotNullOfOrNull { it.yaAnotadoCon }?.let { id -> avisos.firstOrNull { it.id == id } }
@@ -235,7 +250,7 @@ internal fun TarjetaDelMismoPago(
     val cabeza = remember(avisos, leido, sinLeer) { cabezaDelAviso(avisos, leido, hoyEnAppZone(), sinLeer) }
     val conLoEntendido = loEntendido != null && !anotado
     TarjetaDeAviso(
-        titulo = cabeza.titulo,
+        titulo = titulo?.takeIf { !anotado } ?: cabeza.titulo,
         subtitulo = if (conLoEntendido) loEntendido else cabeza.subtitulo,
         tagDelSubtitulo = if (conLoEntendido) TAG_LINEA_DE_LO_ENTENDIDO else null,
         modifier = modifier.testTag(TAG_TARJETA_DEL_MISMO_PAGO),
