@@ -339,6 +339,9 @@ sealed class Screen {
     data class ImportDetail(val importId: String) : Screen()
     data object ScreenEditor : Screen()
 
+    /** Vuelta 102 · «Fallos y uso», solo admin (Ajustes → Administración). La pestaña «Servidor» es de la 102. */
+    data object FallosYUso : Screen()
+
     /**
      * **«Tus períodos»** — cómo le fue al dueño en cada ciclo (entró, salió, te
      * quedó), del en curso hacia atrás. Se llega desde el rango del hero del Inicio (que se vuelve

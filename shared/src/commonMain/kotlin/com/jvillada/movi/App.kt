@@ -549,6 +549,7 @@ fun App() {
                     importId = pantalla.importId,
                 )
                 Screen.ScreenEditor      -> ScreenEditorScreen(navigate)
+                Screen.FallosYUso        -> com.jvillada.movi.ui.admin.FallosYUsoScreen(navigate)
                 // Ola W2: en el teléfono son las dos pantallas de siempre; en la web, una lista con
                 // el detalle del período elegido al lado (ver [PeriodosListaYDetalle]).
                 Screen.Periodos          -> PeriodosListaYDetalle(navigate, idPedido = null)

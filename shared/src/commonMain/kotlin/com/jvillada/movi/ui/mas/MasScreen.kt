@@ -39,6 +39,7 @@ import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Sms
 import androidx.compose.material.icons.rounded.Summarize
 import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.MonitorHeart
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material.icons.rounded.DeleteForever
 import androidx.compose.material3.Text
@@ -603,6 +604,14 @@ fun MasScreen(
                             Screen.ScreenEditor,
                             onNavigate,
                             subtitulo = "Reordena y edita las secciones de Inicio",
+                        )
+                        // Vuelta 102: cómo responde el servidor (y, con la vuelta 100, los fallos y el uso de la app).
+                        FilaQueLleva(
+                            "Fallos y uso",
+                            Icons.Rounded.MonitorHeart,
+                            Screen.FallosYUso,
+                            onNavigate,
+                            subtitulo = "Cómo responde el servidor",
                         )
                     }
                 }

@@ -1484,6 +1484,15 @@ class WalletRepositoryImpl(
             setBody(request)
         }.exigirExito()
     }
+
+    // Vuelta 102: las cuatro lecturas del panel del servidor, una tras otra (son de un admin, y pocas).
+    override suspend fun getPanelDelServidor(horas: Int, dias: Int): com.jvillada.movi.shared.model.PanelDelServidor =
+        com.jvillada.movi.shared.model.PanelDelServidor(
+            resumen = client.get("$baseUrl/api/admin/servidor/resumen?horas=$horas").exigirExito().body(),
+            servicios = client.get("$baseUrl/api/admin/servidor/servicios?dias=$dias").exigirExito().body(),
+            jobs = client.get("$baseUrl/api/admin/servidor/jobs").exigirExito().body(),
+            salud = client.get("$baseUrl/api/admin/servidor/salud").exigirExito().body(),
+        )
 }
 
 /**
