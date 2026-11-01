@@ -95,6 +95,8 @@ fun AIChatScreen(
     comoRaiz: Boolean = false,
 ) {
     val coroutine = rememberCoroutineScope()
+    val puerta = rememberPuertaDeLaIa(onNavigate)
+    puerta.Hoja()
     // **Arranca vacía.** El saludo ya no es un mensaje del asistente sembrado en la lista: es el
     // arranque de [ArranqueDelChat], que se pinta mientras no haya conversación. Así no hay nada
     // que descartar antes de mandar (la API exige que el primer mensaje sea del usuario; ver
@@ -153,7 +155,7 @@ fun AIChatScreen(
      * las tres pasan por el mismo recorte de [mensajesParaEnviar] y la misma guarda de «ya hay
      * una pregunta en camino».
      */
-    fun enviar(texto: String, delChip: PreguntaSugerida? = null) {
+    fun mandar(texto: String, delChip: PreguntaSugerida? = null) {
         val text = texto.trim()
         // Vuelta 61: lo escrito a mano casi igual que una de las tres («¿Cómo voy?») viaja con su id,
         // como el chip, y se contesta sin la IA. Con una foto pendiente no: la foto es para el modelo.
@@ -195,6 +197,17 @@ fun AIChatScreen(
             else if (reply.isSuccess && sugerida == null) iaDisponible = true
             loading = false
         }
+    }
+
+    /**
+     * Vuelta 95 · **la puerta de lo que va a Claude**: lo escrito a mano o con foto pasa por el aviso
+     * «Qué ve la IA» la primera vez; las tres preguntas sugeridas (que contesta Movi sin la IA) no.
+     */
+    fun enviar(texto: String, delChip: PreguntaSugerida? = null) {
+        val sugerida = delChip ?: PreguntaSugerida.delTexto(texto.trim()).takeIf { pendingImage == null }
+        if (sugerida != null) return mandar(texto, delChip)
+        if ((texto.isBlank() && pendingImage == null) || loading) return
+        puerta.pasar { mandar(texto, delChip) }
     }
 
     fun send() = enviar(input)

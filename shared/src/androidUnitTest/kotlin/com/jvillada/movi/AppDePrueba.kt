@@ -67,6 +67,9 @@ class AppDePrueba : Application(), TestLifecycleApplication {
 
     override fun beforeTest(method: Method) {
         SessionManager.clear()
+        // Vuelta 95: el aviso «Qué ve la IA» ya visto. Sin esto toda prueba que mande algo a la IA
+        // (el chat libre, leer un papel) se quedaría esperando la hoja; las que la prueban lo ponen en `null`.
+        com.jvillada.movi.ui.ai.AvisoDeLaIa.visto = true
         Repositories.sustitutoDePrueba = null
         // Ola D, Task 2: la costura de «Compartir» — mismo motivo que la de arriba, un olvido
         // ajeno no tiene por qué cobrarse en la clase siguiente.
