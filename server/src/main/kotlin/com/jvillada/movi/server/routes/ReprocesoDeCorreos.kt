@@ -15,13 +15,15 @@ import io.ktor.http.HttpStatusCode
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.greaterEq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.less
+import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.slf4j.LoggerFactory
 import java.time.Instant
 import java.time.LocalDate
-import java.util.UUID
+import java.security.MessageDigest
 
 /*
  * # Vuelta 90 · el correo que no se pierde en silencio
@@ -58,7 +60,10 @@ internal suspend fun registrarCorreoDescartado(
 ) {
     runCatching {
         dbQuery {
-            val id = idDelProveedor?.let { "resend_" + it.take(57) } ?: ("desc_" + UUID.randomUUID().toString())
+            // Sin id del proveedor (Postmark, un evento ilegible), una huella determinista: el mismo correo
+            // reintentado en el mismo minuto no suma filas (revisión de la vuelta 90).
+            val id = idDelProveedor?.let { "resend_" + it.take(57) }
+                ?: ("desc_" + huellaDelDescarte(uid, motivo, remitente, tamano, ahora))
             val ya = CorreosDescartados.selectAll().where { CorreosDescartados.id eq id }.any()
             if (!ya) {
                 CorreosDescartados.insert {
@@ -74,6 +79,22 @@ internal suspend fun registrarCorreoDescartado(
             }
         }
     }.onFailure { log.warn("no pude anotar un correo descartado (${motivo.name}): ${it.javaClass.simpleName}") }
+}
+
+/** Motivo, dueño, dominio del remitente, tamaño y el minuto: lo que identifica un reintento. */
+private fun huellaDelDescarte(uid: String?, motivo: MotivoDeCorreoDescartado, remitente: String?, tamano: Int?, ahora: Long): String =
+    MessageDigest.getInstance("SHA-256")
+        .digest("${uid.orEmpty()}|${motivo.name}|${remitente?.substringAfter('@')?.lowercase().orEmpty()}|${tamano ?: -1}|${ahora / 60_000L}".toByteArray())
+        .joinToString("") { "%02x".format(it) }
+        .take(32)
+
+/**
+ * Las filas **sin dueño** de más de [DIAS_DE_CORREOS_DESCARTADOS] días se borran: no son de nadie, nadie
+ * las puede borrar con su cuenta y la pantalla solo cuenta 30 días. Las de un dueño se van con su cuenta.
+ */
+internal suspend fun purgarDescartadosSinDueno(ahora: Long): Int = dbQuery {
+    val limite = ahora - DIAS_DE_CORREOS_DESCARTADOS * 86_400_000L
+    CorreosDescartados.deleteWhere { (CorreosDescartados.userId eq "") and (CorreosDescartados.recibidoEn less limite) }
 }
 
 /** ¿Ese id del proveedor ya está en la bandeja o entre los descartados? */
@@ -100,16 +121,18 @@ private suspend fun idsYaVistos(ids: List<String>): Set<String> {
  * Sin la clave de la API ([ListadoDeResend.SinClave]) o si Resend falla, no hace nada: el próximo
  * barrido lo vuelve a intentar. Un correo que Resend todavía no encuentra (502) queda sin anotar y se
  * intenta otra vez mañana.
+ *
+ * Devuelve `null` si Resend falló (el día no se da por hecho: el próximo barrido reintenta).
  */
 internal suspend fun reprocesarCorreosDeResend(
     ahora: Long,
     lector: LectorDeCorreosRecibidos = LectorDeCorreosRecibidos.actual,
-): Int {
+): Int? {
     val desde = Instant.ofEpochMilli(ahora).minusSeconds(DIAS_DEL_REPROCESO * 86_400L)
     val recibidos = when (val listado = lector.listarRecibidos(desde)) {
         is ListadoDeResend.Recibidos -> listado.correos
         ListadoDeResend.SinClave -> return 0
-        is ListadoDeResend.Fallo -> return 0
+        is ListadoDeResend.Fallo -> return null
     }
     val vistos = idsYaVistos(recibidos.map { it.id })
     var procesados = 0
@@ -131,13 +154,25 @@ internal suspend fun reprocesarCorreosDeResend(
 private var ultimoDiaDelReproceso: LocalDate? = null
 
 /**
- * El reproceso **una vez por día** (el barrido de recordatorios corre cada 12 h). En memoria: un
- * reinicio lo vuelve a correr, y como es idempotente no pasa nada.
+ * El reproceso **una vez por día** (el barrido de recordatorios corre cada 12 h), y la purga de lo
+ * descartado sin dueño. El día se da por hecho **solo si el reproceso terminó** (sin clave también
+ * cuenta: no hay nada que hacer); si Resend falló o algo lanzó, el próximo barrido lo vuelve a intentar.
+ * En memoria: un reinicio lo vuelve a correr, y como es idempotente no pasa nada.
  */
-internal suspend fun reprocesarUnaVezAlDia(hoy: LocalDate = AppClock.today(), ahora: Long = System.currentTimeMillis()) {
+internal suspend fun reprocesarUnaVezAlDia(
+    hoy: LocalDate = AppClock.today(),
+    ahora: Long = System.currentTimeMillis(),
+    lector: LectorDeCorreosRecibidos = LectorDeCorreosRecibidos.actual,
+) {
     if (ultimoDiaDelReproceso == hoy) return
-    ultimoDiaDelReproceso = hoy
-    reprocesarCorreosDeResend(ahora)
+    runCatching { purgarDescartadosSinDueno(ahora) }
+        .onFailure { log.warn("no pude purgar los correos descartados sin dueño: ${it.javaClass.simpleName}") }
+    if (reprocesarCorreosDeResend(ahora, lector) != null) ultimoDiaDelReproceso = hoy
+}
+
+/** Solo para pruebas: olvida el último día del reproceso. */
+internal fun olvidarElDiaDelReproceso() {
+    ultimoDiaDelReproceso = null
 }
 
 /**

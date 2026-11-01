@@ -342,8 +342,9 @@ class CorreosQueNoSePierdenTest {
         application { testModule() }
         System.setProperty("movi.admin.userIds", userAId)
         runBlocking {
-            registrarCorreoDescartado(null, MotivoDeCorreoDescartado.SIN_CODIGO, "alertas@banco.co")
-            registrarCorreoDescartado(null, MotivoDeCorreoDescartado.SIN_CODIGO, "alertas@banco.co")
+            // Dos correos distintos (otro tamaño): la huella sin id los distingue.
+            registrarCorreoDescartado(null, MotivoDeCorreoDescartado.SIN_CODIGO, "alertas@banco.co", tamano = 4_100)
+            registrarCorreoDescartado(null, MotivoDeCorreoDescartado.SIN_CODIGO, "alertas@banco.co", tamano = 5_300)
             registrarCorreoDescartado(userBId, MotivoDeCorreoDescartado.ILEGIBLE, "x@banco.co", idDelProveedor = "e1")
             registrarCorreoDescartado(userBId, MotivoDeCorreoDescartado.DUPLICADO, "x@banco.co", idDelProveedor = "e2")
             // Más viejo que la ventana: no cuenta.
@@ -370,5 +371,48 @@ class CorreosQueNoSePierdenTest {
     fun `sin nada descartado no hay linea`() = testApplication {
         application { testModule() }
         assertNull(textoDeCorreosDescartados(client.verDescartados(userAId)))
+    }
+
+    // ── Revisión de la vuelta 90 ────────────────────────────────────────────────
+
+    @Test
+    fun `si Resend falla el dia no se da por hecho y el proximo barrido reintenta`() = testApplication {
+        application { testModule() }
+        olvidarElDiaDelReproceso()
+        val hoy = java.time.LocalDate.of(2026, 10, 31)
+        val id = "eeeeeeee-0000-0000-0000-000000000005"
+        enResend[id] = ContenidoDeResend.Encontrado(contenidoDeResend(recibidoPara = listOf(direccionDeA), messageId = "<reintento@banco>"))
+        listado = ListadoDeResend.Fallo(500)
+        runBlocking { reprocesarUnaVezAlDia(hoy, System.currentTimeMillis(), lectorFalso) }
+        assertTrue(bandeja().isEmpty())
+        // Resend vuelve: el mismo día, el barrido siguiente sí lo trae.
+        listado = ListadoDeResend.Recibidos(listOf(recibido(id)))
+        runBlocking { reprocesarUnaVezAlDia(hoy, System.currentTimeMillis(), lectorFalso) }
+        assertEquals(1, bandeja().size)
+        // Y ya hecho, el tercero del día no vuelve a pedir nada.
+        pedidos.clear()
+        runBlocking { reprocesarUnaVezAlDia(hoy, System.currentTimeMillis(), lectorFalso) }
+        assertTrue(pedidos.isEmpty())
+        olvidarElDiaDelReproceso()
+    }
+
+    @Test
+    fun `el mismo correo sin id reintentado en el minuto deja una sola fila`() = testApplication {
+        application { testModule() }
+        repeat(3) { client.postmark(alertaPostmark("alertas@inbound.postmarkapp.com")) }
+        assertEquals(1, descartados().size)
+    }
+
+    @Test
+    fun `lo descartado sin duenio de mas de 30 dias se purga, lo propio no`() {
+        val viejo = System.currentTimeMillis() - 31L * 86_400_000L
+        runBlocking {
+            registrarCorreoDescartado(null, MotivoDeCorreoDescartado.SIN_CODIGO, "a@banco.co", ahora = viejo)
+            registrarCorreoDescartado(userAId, MotivoDeCorreoDescartado.ILEGIBLE, "a@banco.co", ahora = viejo)
+            registrarCorreoDescartado(null, MotivoDeCorreoDescartado.SIN_CODIGO, "b@banco.co")
+            assertEquals(1, purgarDescartadosSinDueno(System.currentTimeMillis()))
+        }
+        assertEquals(setOf("", userAId), descartados().map { it.usuario }.toSet())
+        assertEquals(2, descartados().size)
     }
 }
