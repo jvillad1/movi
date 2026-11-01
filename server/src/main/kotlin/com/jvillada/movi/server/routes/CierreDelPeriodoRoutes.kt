@@ -34,6 +34,7 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insertIgnore
 import org.jetbrains.exposed.sql.min
 import org.jetbrains.exposed.sql.update
@@ -82,7 +83,8 @@ fun Route.cierreDelPeriodoRoutes() {
     /**
      * Vuelta 95 · **«Actualizar»**: la foto del cierre de [ActualizarCierreRequest.periodo] se reemplaza por
      * el cálculo de hoy y se devuelve el cierre nuevo. Solo se puede actualizar el último período
-     * cerrado (el que sirve `GET`); otro contesta 404 y no toca nada.
+     * cerrado (el que sirve `GET`); otro contesta 404 y no toca nada. Si hoy no queda nada que contar
+     * (se anuló todo), la foto se borra y contesta 204.
      */
     post("/api/cierre-del-periodo/actualizar") {
         val uid = call.userId()
@@ -90,13 +92,23 @@ fun Route.cierreDelPeriodoRoutes() {
         if (periodo == null || periodoDelPrefijo(periodo) == null) {
             return@post call.respond(HttpStatusCode.BadRequest, "Falta el período")
         }
-        val cierre = cierreDelPeriodoDe(uid, AppClock.today(), reemplazarLaFoto = true, soloElPeriodo = periodo)
-            ?: return@post call.respond(HttpStatusCode.NotFound)
+        // Otro período que el último cerrado: 404, y no se toca nada. Si es el último pero ya no queda
+        // nada que contar (se anuló todo), la foto se borra y contesta 204: la tarjeta se va.
+        val hoy = AppClock.today()
+        if (periodoCerradoDe(uid, hoy) != periodo) return@post call.respond(HttpStatusCode.NotFound)
+        val cierre = cierreDelPeriodoDe(uid, hoy, reemplazarLaFoto = true, soloElPeriodo = periodo)
+            ?: return@post call.respond(HttpStatusCode.NoContent)
         call.respond(cierre)
     }
 }
 
 private const val MEDIO_DIA_MS = 12L * 60 * 60 * 1000
+
+/** El prefijo del último período cerrado a [hoy] (el que `GET /api/cierre-del-periodo` resume). */
+private suspend fun periodoCerradoDe(uid: String, hoy: LocalDate): String {
+    val ajustes = ajustesDePeriodoDe(uid)
+    return periodoAnterior(periodoDe(appDateToEpochMillis(hoy) + MEDIO_DIA_MS, ajustes)).prefijo
+}
 
 /**
  * **El resumen de cierre del período anterior al que contiene [hoy]**, o `null` si no hay nada que
@@ -170,6 +182,14 @@ private suspend fun conLaFoto(
     reemplazar: Boolean,
 ): CierreDelPeriodo? {
     val guardada = leerLaFoto(uid, periodo)
+    if (reemplazar && fresco == null) {
+        // «Actualizar» y hoy no queda nada (se anuló todo): la foto vieja ya no dice la verdad, y una
+        // foto vacía tampoco sirve. Se borra, y la tarjeta deja de decir «Cambió…».
+        dbQuery {
+            CierresGuardados.deleteWhere { (CierresGuardados.userId eq uid) and (CierresGuardados.periodo eq periodo) }
+        }
+        return null
+    }
     if (guardada == null || (reemplazar && fresco != null)) {
         val nuevo = fresco ?: return null
         val ahora = System.currentTimeMillis()

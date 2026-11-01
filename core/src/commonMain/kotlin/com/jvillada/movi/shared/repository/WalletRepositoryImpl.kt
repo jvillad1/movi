@@ -608,7 +608,10 @@ class WalletRepositoryImpl(
             contentType(ContentType.Application.Json)
             setBody(com.jvillada.movi.shared.model.ActualizarCierreRequest(periodo))
         }
-        if (respuesta.status == HttpStatusCode.NotFound) return null
+        // 404: ya no es el último período cerrado. 204: no queda nada que contar (se anuló todo) y la
+        // foto se borró; la tarjeta se va.
+        if (respuesta.status == HttpStatusCode.NotFound) throw com.jvillada.movi.shared.model.CierreYaNoSeActualiza()
+        if (respuesta.status == HttpStatusCode.NoContent) return null
         return respuesta.exigirExito().body()
     }
 

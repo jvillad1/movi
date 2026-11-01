@@ -16,7 +16,9 @@ import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.sql.deleteAll
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.update
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.time.LocalDate
 import kotlin.test.BeforeTest
@@ -99,6 +101,20 @@ class ResumenDeLoQueMoviSabeTest {
         assertEquals(2, r.recuerdos)
         assertTrue(r.reglasAprendidas > 0, "Rappi y Éxito enseñaron algo")
         assertEquals(transaction { memoriaDe(a.duenoA).cuantasHuellas }, r.reglasAprendidas)
+    }
+
+    @Test
+    fun `un traspaso de dos patas cuenta como un solo movimiento`() = testApplication {
+        montar()
+        anotar(a.duenoA, a.cuentaDeA, LocalDate.of(2026, 8, 12), "Rappi", "Restaurantes")
+        val salida = anotar(a.duenoA, a.cuentaDeA, LocalDate.of(2026, 9, 1), "Traspaso a Efectivo", "Traspaso")
+        val entrada = anotar(a.duenoA, a.cuentaDeA, LocalDate.of(2026, 9, 1), "Traspaso desde Nu", "Traspaso")
+        transaction {
+            Events.update({ Events.id inList listOf(salida, entrada) }) { it[transferId] = "tr_1" }
+        }
+        val r = leer(a.duenoA)
+        assertEquals(2, r.movimientos, "el gasto y el traspaso, no tres")
+        assertEquals("2026-08-12", r.desde)
     }
 
     @Test

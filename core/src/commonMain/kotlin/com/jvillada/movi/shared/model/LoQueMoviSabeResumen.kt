@@ -9,10 +9,11 @@ import kotlinx.serialization.Serializable
  * Cuatro conteos que dicen cuánto sabe Movi del dueño, para que la confianza no dependa de adivinar:
  * cuántos movimientos tiene y desde cuándo, cuántas cuentas, cuántas reglas de categoría aprendió de
  * cómo las anotas ([MemoriaDeCategorias.cuantasHuellas]) y cuántos recuerdos le pediste guardar. **No
- * hay datos nuevos**: son las mismas tablas de siempre contadas por `GET /api/asistente/resumen`,
- * una consulta liviana que no lee ninguna fila entera.
+ * hay datos nuevos**: son las mismas tablas de siempre contadas por `GET /api/asistente/resumen` (tres son agregados de la base; las reglas aprendidas salen de
+ * la memoria de categorías, que mira hasta 2.000 movimientos).
  *
- * - [movimientos]: los no anulados, sin el «Saldo inicial» (no es algo que el dueño anotó).
+ * - [movimientos]: los no anulados, sin el «Saldo inicial» (no es algo que el dueño anotó); un traspaso, que
+ *   son dos patas, cuenta como uno.
  * - [desde]: la fecha ISO (día de la app) del primero; `null` sin movimientos.
  */
 @Serializable

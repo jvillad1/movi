@@ -88,6 +88,12 @@ data class CambioDesdeElCierre(
 @Serializable
 data class ActualizarCierreRequest(val periodo: String)
 
+/** Vuelta 95 · «Actualizar» contestó 404: ese cierre ya no es el último período cerrado. */
+const val CIERRE_YA_NO_SE_ACTUALIZA: String = "Este cierre ya no se puede actualizar"
+
+/** Lo lanza `actualizarCierre` con un 404; la pantalla muestra [CIERRE_YA_NO_SE_ACTUALIZA]. */
+class CierreYaNoSeActualiza : Exception(CIERRE_YA_NO_SE_ACTUALIZA)
+
 /** Lo que entró y salió en el período anterior al que cerró. */
 @Serializable
 data class CifrasDelAnterior(val periodo: String, val nombre: String, val entro: Long, val salio: Long)

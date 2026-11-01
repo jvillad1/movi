@@ -29,6 +29,7 @@ import com.jvillada.movi.data.ScreenDefCache
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.data.isAndroid
+import com.jvillada.movi.shared.model.CIERRE_YA_NO_SE_ACTUALIZA
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.ScreenDefinition
@@ -679,10 +680,18 @@ fun DashboardScreen(
             // tarjeta no se mueve hasta que el server contesta (no hay nada que adivinar).
             val actualizarCierre: (String) -> Unit = { periodo ->
                 alcanceDelCierre.launch {
-                    runCatching { Repositories.wallets.actualizarCierre(periodo) }.getOrNull()?.let { nuevo ->
-                        data = data.copy(cierre = nuevo)
-                        DashboardDataCache.data = DashboardDataCache.data?.copy(cierre = nuevo)
-                    }
+                    runCatching { Repositories.wallets.actualizarCierre(periodo) }
+                        .onSuccess { nuevo ->
+                            // `null` = no queda nada que contar: la tarjeta se va.
+                            data = data.copy(cierre = nuevo)
+                            DashboardDataCache.data = DashboardDataCache.data?.copy(cierre = nuevo)
+                        }
+                        .onFailure { falla ->
+                            snackbarHostState.showSnackbar(
+                                if (falla is com.jvillada.movi.shared.model.CierreYaNoSeActualiza) CIERRE_YA_NO_SE_ACTUALIZA
+                                else "No pude actualizar el cierre. Inténtalo de nuevo.",
+                            )
+                        }
                 }
             }
             // SDUI: la definición del server si la hay; si no, la misma lista que el server

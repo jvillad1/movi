@@ -387,7 +387,8 @@ interface WalletRepository {
     suspend fun descartarCierre(periodo: String) {}
     /**
      * `POST /api/cierre-del-periodo/actualizar` (vuelta 95): la foto del cierre de [periodo] se reemplaza
-     * por el cálculo de hoy y vuelve el cierre nuevo; `null` si ya no es el último período cerrado.
+     * por el cálculo de hoy y vuelve el cierre nuevo; `null` (204) si ya no queda nada que contar; lanza
+     * [com.jvillada.movi.shared.model.CierreYaNoSeActualiza] (404) si ya no es el último período cerrado.
      * Default `null` para los dobles de prueba.
      */
     suspend fun actualizarCierre(periodo: String): com.jvillada.movi.shared.model.CierreDelPeriodo? = null

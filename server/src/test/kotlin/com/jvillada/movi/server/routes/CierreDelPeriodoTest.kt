@@ -393,6 +393,29 @@ class CierreDelPeriodoTest {
     }
 
     @Test
+    fun `Actualizar cuando se anulo todo borra la foto y la tarjeta se va`() = runBlocking<Unit> {
+        val ingreso = anotar(LocalDate.of(2026, 9, 26), 5_000_000, "Salario", tipo = "INCOME")
+        val gasto = anotar(LocalDate.of(2026, 10, 8), 600_000, "Comida")
+        assertNotNull(cierreDelPeriodoDe(uid, diaUnoDeNoviembre))
+        transaction {
+            for (id in listOf(gasto, ingreso)) {
+                VoidEvents.insert {
+                    it[VoidEvents.id] = "void_$id"; it[userId] = uid; it[originalEventId] = id
+                    it[reason] = "prueba"; it[timestamp] = 1L
+                }
+            }
+        }
+        // Antes de actualizar, la foto sigue y dice que cambió.
+        val antes = assertNotNull(cierreDelPeriodoDe(uid, diaUnoDeNoviembre))
+        assertEquals(0, assertNotNull(antes.cambio).salioAhora)
+        assertEquals(1L, transaction { CierresGuardados.selectAll().count() })
+
+        assertNull(cierreDelPeriodoDe(uid, diaUnoDeNoviembre, reemplazarLaFoto = true, soloElPeriodo = "2026-10"))
+        assertEquals(0L, transaction { CierresGuardados.selectAll().count() }, "la foto se borra")
+        assertNull(cierreDelPeriodoDe(uid, diaUnoDeNoviembre), "y la tarjeta ya no dice «Cambió…»")
+    }
+
+    @Test
     fun `un movimiento anulado despues tambien aparece como cambio`() = runBlocking<Unit> {
         octubreDelDueno()
         val foto = assertNotNull(cierreDelPeriodoDe(uid, diaUnoDeNoviembre))
