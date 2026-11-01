@@ -46,6 +46,8 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.LARGO_MAXIMO_DE_UN_RECUERDO
 import com.jvillada.movi.shared.model.OrigenDelRecuerdo
 import com.jvillada.movi.shared.model.RecuerdoDelAsistente
+import com.jvillada.movi.shared.model.ResumenDeLoQueMoviSabe
+import com.jvillada.movi.shared.model.fraseDeLoQueMoviSabe
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.BotonReintentar
@@ -137,6 +139,12 @@ fun LoQueMoviSabeScreen(onNavigate: (Screen) -> Unit) {
         }
     }
 
+    // Vuelta 95: el resumen de arriba. Es aparte de los recuerdos: si no llega, la pantalla sigue igual.
+    var resumen by remember { mutableStateOf<ResumenDeLoQueMoviSabe?>(null) }
+    LaunchedEffect(intento) {
+        runCatching { Repositories.wallets.getResumenDeLoQueMoviSabe() }.onSuccess { resumen = it }
+    }
+
     LaunchedEffect(intento) {
         cargando = true
         fallo = false
@@ -165,6 +173,16 @@ fun LoQueMoviSabeScreen(onNavigate: (Screen) -> Unit) {
         ) {
             item {
                 Text(QUE_ES_LO_QUE_MOVI_SABE, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+            }
+            // Los recuerdos se cuentan de la lista de abajo, que se corrige y se borra en esta misma
+            // pantalla: el número no se queda viejo.
+            resumen?.let { r ->
+                item(key = "resumen") {
+                    ResumenDeUnVistazo(
+                        if (cargando && recuerdos.isEmpty()) r else r.copy(recuerdos = recuerdos.size),
+                        onNavigate,
+                    )
+                }
             }
             aviso?.let { texto ->
                 item { Text(texto, style = Movi.textos.apoyo, color = Movi.colores.sale) }
@@ -213,6 +231,32 @@ fun LoQueMoviSabeScreen(onNavigate: (Screen) -> Unit) {
                             }
                         },
                     )
+                }
+            }
+        }
+    }
+}
+
+/** El tag del resumen de arriba, para las pruebas. */
+internal const val TAG_RESUMEN_DE_LO_QUE_MOVI_SABE = "ai-resumen-de-lo-que-movi-sabe"
+
+internal const val VER_MOVIMIENTOS = "Ver movimientos"
+internal const val VER_CUENTAS = "Ver cuentas"
+
+/**
+ * **Lo que Movi sabe de ti, de un vistazo** (vuelta 95): una frase con los cuatro conteos y, para los
+ * que ya tienen pantalla —los movimientos y las cuentas—, el botón que la abre. Las reglas aprendidas no
+ * tienen pantalla propia (se ven en cómo Movi propone categorías) y los recuerdos están debajo.
+ */
+@Composable
+private fun ResumenDeUnVistazo(r: ResumenDeLoQueMoviSabe, onNavigate: (Screen) -> Unit) {
+    Superficie(modifier = Modifier.fillMaxWidth().testTag(TAG_RESUMEN_DE_LO_QUE_MOVI_SABE)) {
+        Column(verticalArrangement = Arrangement.spacedBy(Espacio.xs)) {
+            Text(fraseDeLoQueMoviSabe(r), style = Movi.textos.cuerpo, color = Movi.colores.texto)
+            if (r.movimientos > 0 || r.cuentas > 0) {
+                Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
+                    if (r.movimientos > 0) Accion(VER_MOVIMIENTOS) { onNavigate(Screen.Transactions()) }
+                    if (r.cuentas > 0) Accion(VER_CUENTAS) { onNavigate(Screen.Accounts) }
                 }
             }
         }
