@@ -205,7 +205,7 @@ internal suspend fun datosDeLasSugeridas(
     val reglasDeCredito = if (conPagos) loadCreditRulePairs(uid).map { it.first } else emptyList()
     // Vuelta 77: lo fijo, de las mismas reglas que lee Inicio (`UpcomingPayment.rule` de `/upcoming`).
     val fijas = if (pregunta == PreguntaSugerida.EN_QUE_SE_VA) categoriasFijas(proximosPagos(uid, hoy).map { it.rule }) else emptySet()
-    val debitos = if (revisar) debitosPorConfirmar(uid, hoy, ahora) else emptyList()
+    val debitos = if (revisar) debitosPorConfirmar(uid, hoy, ahora, conEsperados = true) else emptyList()
 
     // La tasa solo si hace falta, para el saldo de lo apartado (ver el resumen del Inicio).
     val usdToCop = if (conPagos && dbQuery { hayMovimientosEnOtraMoneda(uid) }) FxRateService.usdToCop() else 0.0

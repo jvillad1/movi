@@ -111,6 +111,13 @@ private suspend fun sweep(apiKey: String?, from: String, leadDays: Int) {
     }.onFailure {
         org.slf4j.LoggerFactory.getLogger("ReminderScheduler").warn("ReminderScheduler: el resumen de cierre falló: ${it.message}", it)
     }
+
+    // Vuelta 90 · el correo que el webhook no recibió: una vez al día, lo que Resend tiene de los últimos
+    // tres días y Movi no, por el camino de siempre. Sin la clave de la API no hace nada (ver
+    // `ReprocesoDeCorreos.kt`).
+    runCatching { com.jvillada.movi.server.routes.reprocesarUnaVezAlDia(today) }.onFailure {
+        org.slf4j.LoggerFactory.getLogger("ReminderScheduler").warn("ReminderScheduler: el reproceso del correo falló: ${it.message}", it)
+    }
 }
 
 private suspend fun processUser(

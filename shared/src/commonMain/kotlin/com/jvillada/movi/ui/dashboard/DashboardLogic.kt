@@ -44,7 +44,8 @@ import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.renderableSections
 import com.jvillada.movi.shared.model.Pendiente
-import com.jvillada.movi.shared.model.loQueSeCobra
+import com.jvillada.movi.shared.model.dondeDeLoEsperado
+import com.jvillada.movi.shared.model.preguntaDeLoEsperado
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.plan.SEGMENTO_PAGOS
 import com.jvillada.movi.ui.plan.SEGMENTO_PRESUPUESTOS
@@ -1078,10 +1079,11 @@ fun notificationRows(data: DashboardData): List<NotificationRow> = buildList {
             }
             is Pendiente.Debito -> add(
                 NotificationRow(
-                    titulo = "¿Se cobró ${loQueSeCobra(pendiente.debito)}?",
+                    // Vuelta 90: también lo esperado («¿Se pagó Netflix?», «¿Te llegó Salario?»).
+                    titulo = preguntaDeLoEsperado(pendiente.debito),
                     target = Screen.PorRevisar,
                     tipo = TipoDeNotificacion.DebitoPorConfirmar,
-                    subtitulo = "Desde ${pendiente.debito.cuentaNombre}",
+                    subtitulo = dondeDeLoEsperado(pendiente.debito).replaceFirstChar(Char::uppercase),
                     monto = pendiente.debito.monto.takeIf { it > 0 },
                     moneda = pendiente.debito.moneda,
                 ),

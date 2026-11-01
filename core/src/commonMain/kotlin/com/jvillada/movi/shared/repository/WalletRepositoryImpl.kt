@@ -1105,7 +1105,9 @@ class WalletRepositoryImpl(
     }
 
     override suspend fun getDebitosAutomaticos(): List<DebitoAutomaticoPorConfirmar> =
-        client.get("$baseUrl/api/debitos-automaticos").exigirExito().body()
+        // Vuelta 90: `conEsperados=1` suma lo esperado (la nómina, una suscripción con cuenta) que no
+        // se ve. Este cliente sabe pintarlo; un APK viejo no lo pide y recibe solo los débitos.
+        client.get("$baseUrl/api/debitos-automaticos?conEsperados=1").exigirExito().body()
 
     override suspend fun confirmarDebitoAutomatico(pedido: com.jvillada.movi.shared.model.ConfirmarDebitoAutomatico): List<FinancialEvent> =
         client.post("$baseUrl/api/debitos-automaticos/confirmar") {
@@ -1341,6 +1343,9 @@ class WalletRepositoryImpl(
 
     override suspend fun getOrigenesMudos(): List<com.jvillada.movi.shared.model.OrigenMudo> =
         client.get("$baseUrl/api/sms/origenes-mudos").exigirExito().body()
+
+    override suspend fun getCorreosDescartados(): com.jvillada.movi.shared.model.CorreosDescartados =
+        client.get("$baseUrl/api/correo-entrante/descartados").exigirExito().body()
 
     /** La comprobación de status del archivo, extraída para no repetirla cuatro veces. */
     private suspend fun HttpResponse.exigirExito(): HttpResponse {
