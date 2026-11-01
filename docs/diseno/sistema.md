@@ -4697,6 +4697,82 @@ es una `Fila`), `LosRecordatoriosVanDebajoDeLosPagosTest`, `LoQueSeVeEnteroTest`
   barra dentro de la fila).
 - «¿Qué cuenta?» alineado con el texto de su tarjeta.
 
+## 82. Vuelta 85: avisos que nombran a alguien, y un «Por confirmar» que no mezcla entradas con salidas
+
+La revisión 9 (30-oct) con los datos de prueba: Andrés Rojas guardado con la cuenta \*31234567890.
+
+**(1) El ingreso de un tercero se titula con su nombre.** «Recibiste $539.625 de la cuenta \*31234567890
+en tu cuenta \*4057 el 30/10/2026 a las 13:05» se titulaba «La Cuenta 31234567890 en Tu Cuenta 4057 El 3…»:
+el «de …» del parser corría hasta el primer punto. Ahora `quienMandoElIngreso` (server, `SmsRoutes.kt`):
+si el aviso nombra la cuenta de origen (`numeroDelOrigenDelIngreso`, la de «el traspaso que entra»),
+«Transferencia de \*7890»; si nombra a una persona, el nombre cortado antes de «en tu cuenta», de la fecha o
+de la hora; si no, «Transferencia recibida». «Transferencia de \*7890» es ilegible a propósito: con el
+tercero guardado, la regla única de `NombreDelTercero.kt` (`conElDestinoConocido`) lo cambia por
+«Transferencia de Andrés Rojas» (un comercio, por su nombre); con una cuenta propia, «Desde Fiducuenta 9586».
+El texto viejo no se reconocía como ilegible (le quedaban «la en tu el a las»), por eso ni Andrés guardado le
+ponía su nombre.
+
+**(2) La memoria no aprende basura y no cruza lo que entra con lo que sale** (`MemoriaDeCategorias.kt`):
+
+- `AnotacionPasada.tipo`: **un ingreso va a su propia memoria** y solo un ingreso la consulta
+  (`recuerdoDe(texto, tipo)`). «Lo que me mandó Andrés» y «lo que le mandé a Andrés» comparten la huella
+  (`cuenta:…`, `nombre:andresrojas`) y nada más. `RecuerdoDeCategoria.ingreso` lo dice en el wire (default
+  `false`: un APK viejo lo ignora).
+- `textoQueNoSeAprende`: «tu cuenta/tu producto» o una fecha. Una anotación con eso en el texto del banco o en
+  el nombre no deja huella ni categoría: es una lectura rota del aviso, no algo que el dueño decidió. Así lo ya
+  contaminado no vuelve a proponerse.
+- `nombreQueNoSePropone`: además, «cuenta» seguida de dígitos. La categoría de «Transferencia a la cuenta
+  \*4127…» sí se aprende (la eligió él), pero ese texto nunca reemplaza el nombre de un aviso nuevo.
+
+**(3) «¿Salda Casa con Andrés?» antes de confirmar.** `PropuestaDelAviso.saldaUnGrupo`
+(`grupoQueSaldaElAviso`, `:core` `ElAvisoQueSaldaUnGrupo.kt`): la misma `transferenciasParaSaldar` aplicada
+al movimiento que el aviso va a crear, con los saldados del grupo: si el dueño ya marcó «saldado» y este es el
+giro que ese saldado esperaba (vuelta 66), dice «¿Es el saldado de Casa con Andrés? Marcaste $X con Andrés
+Rojas como saldado.» (`GrupoQueSaldaElAviso.yaMarcadoSaldado`). La tarjeta de Por revisar lo dice en un renglón de apoyo
+(`LineaDelGrupoQueSalda`, `TAG_GRUPO_QUE_SALDA`): «¿Salda Casa con Andrés? Andrés Rojas te debe $539.625. Al
+confirmarlo, Movi te lo pregunta.» **Solo informa**: confirmar anota el ingreso como siempre y saldar sigue
+siendo «Sí, saldar» sobre el movimiento ya anotado. Nada se salda solo.
+
+**(4) El lote no lleva ingresos** (`entraEnElLote`): la regla, simple, es que **ningún ingreso entra a
+«Confirmar N»**. Cada uno sigue en la lista con su propio «Confirmar». Uno de origen desconocido no tiene
+quién lo explique en una lista; uno de un tercero conocido puede ser la plata que salda un grupo o una que
+Movi no sabe a qué cuenta o grupo va. Los gastos son el trámite que el lote acelera; los ingresos son pocos.
+Agregar también separa los lados: la pestaña Ingreso solo sugiere con lo que entró (`recuerdosDelLado`).
+
+**(5) «Por confirmar» con signo.** `loPorConfirmarPorSigno` (`:core`, misma regla de entera o nada que
+`sumaDeLoPorConfirmar`) parte lo que dicen los avisos en lo que sale y lo que entra; el server lo manda en
+`DashboardSummary.porConfirmarSalen`/`porConfirmarEntran`/`avisosQueSalen`/`avisosQueEntran` (con default;
+`porConfirmarSuman` sigue igual para los APKs viejos). El lado lo decide `entraPlata`, no el tipo crudo: «Recibimos
+pago por $X a tu tarjeta» llega como ingreso (lo recibe la tarjeta) pero es una **salida**, igual que la cuota de
+un crédito; un avance o una recarga de beneficios sí entran. La franja del Inicio y la tarjeta de Actividad dicen
+**las dos cifras, no el neto**: «−$262.400 en 2 salidas · +$480.000 en 1 entrada» (`textoDeLoPorConfirmarConSigno`).
+El neto de una compra y un giro que llega es una cifra que no está en ningún aviso. **«Salidas» y no
+«gastos»**: lo que espera puede ser un pago de tarjeta o un traspaso, que no son gasto. Sin los campos nuevos
+(un server viejo), la franja dice la suma de antes. La campana solo cuenta (no dice cifras): no cambió. Al
+confirmar en la bandeja, `elInicioCuentaOtrosAvisos(…, entra)` mueve el lado que corresponde; si no sabe de
+qué lado era, calla la cifra hasta la próxima lectura.
+
+**(6) La memoria busca también por marca.** Sin huella exacta ni por prefijo, lo que sale busca por la marca
+de comercio del catálogo (`marcaDeComercioDe`: `marcaDelTexto` de `COMERCIOS_CONOCIDOS`, sin bancos ni
+billeteras): «RAPPI COLOMBIA» toma la categoría de los 25 «Rappi» anotados. Solo la categoría propuesta; el
+nombre del aviso no cambia (la huella es de nombre). Tras la revisión independiente, la marca es **una pista,
+no una decisión**:
+
+- solo marcas **unánimes** en lo anotado (Google en Tecnología y en Entretenimiento no propone nada), y nunca
+  las pasarelas (`google`, `apple`, `mercado_libre`: «DLO\*GOOGLE Duolingo» cobra lo de otro);
+- solo en una **compra** (`laMarcaPuedeHablar`: «Compraste… en», «Pagaste en», «with»), nunca en un envío a una
+  persona que se llama como una tienda («Le enviaste a ZARA RESTREPO»), ni si el aviso nombra una cuenta o una
+  llave; `recuerdoDe(…, conMarca = true)` lo pide quien sabe eso, y por defecto la marca no habla;
+- la propuesta dice «Como tus 25 de Rappi» (no «Así lo anotaste») y lleva `ParsedSms.porMarca`, que
+  `categoriaEntendida` **no** da por entendida: la tarjeta pide la categoría y el aviso no entra al lote.
+
+**Pruebas:** `LaMemoriaNoAprendeBasuraTest`, `ElAvisoQueSaldaUnGrupoTest` y `LoQueSumanLosAvisosTest`
+(`:core`); `LosAvisosQueNombranAAlguienTest` (server: el parser, la memoria con los terceros y la bandeja de
+punta a punta con el caso de la revisión) y `DashboardRoutesTest` (la partición por signo); en pantalla,
+`Vuelta85EnPantallaTest` (la franja a 360 sin cortarse, el server viejo, el lote sin ingresos con cada
+«Confirmar» en su fila, el renglón de «¿Salda…?» y la tarjeta de Actividad). `ActividadPorDentroEnPantallaTest`
+ahora espera «−$135.000 en 3 salidas» donde decía «3 avisos».
+
 ## 84. Vuelta 87: el día uno y los bordes
 
 Viene de la revisión 9 del 30-oct (puntos 8 a 12 y tres menores; capturas `r9-*.png`). **Sin reglas de plata
@@ -4799,6 +4875,7 @@ el aviso con un comercio largo, los totales y las fechas de Buscar, la propuesta
 `AnotarPagoRecuerdaElRepartoTest` (la casilla marcada, guardar y repartir en ese orden, desmarcada, sin
 reparto previo y reparto que falla). `PrimerUsoEnPantallaTest` suma «Siguiente» en los pasos opcionales y
 la fila «Tu salario» creando la regla.
+
 
 ## 85. Vuelta 88: la guía de primer uso en el teléfono del papá
 

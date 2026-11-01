@@ -1,5 +1,8 @@
 package com.jvillada.movi.ui.sdui
 
+import com.jvillada.movi.shared.model.LoPorConfirmarPorSigno
+import com.jvillada.movi.ui.porrevisar.loPorConfirmarPorSignoDe
+import com.jvillada.movi.ui.porrevisar.textoDeLoPorConfirmarConSigno
 import com.jvillada.movi.ui.components.ds.CambioDelDueno
 import com.jvillada.movi.ui.components.ds.rememberCifraQueCuenta
 import com.jvillada.movi.data.FormaDelHeroe
@@ -456,15 +459,26 @@ internal fun textoDeLaPastillaDeAvisos(n: Int): String = textoDePorRevisar(n)
  * Vuelta 68: la cifra iba en el título («Por confirmar $1.100.200») y el desglose debajo («En 5 avisos
  * · y 1 movimiento»): se leía como la suma de los seis, y era solo la de los avisos (la revisión `r3`).
  */
-internal fun textosDeLaFranjaPorConfirmar(conteo: ConteoPorRevisar, suman: Long?): Pair<String, String?> {
+internal fun textosDeLaFranjaPorConfirmar(
+    conteo: ConteoPorRevisar,
+    suman: Long?,
+    /**
+     * Vuelta 85: la suma partida por signo. Con ella, en vez de «$1.632.025 en 6 avisos» (dos ingresos
+     * sumados a los gastos), «−$1.152.025 en 4 salidas · +$480.000 en 1 entrada» ([textoDeLoPorConfirmarConSigno]).
+     * `null` (un server viejo): la suma de antes.
+     */
+    porSigno: LoPorConfirmarPorSigno? = null,
+): Pair<String, String?> {
     val desglose = desgloseDePorRevisar(conteo)
     // Vuelta 51: los avisos de más de 30 días no entran en la cifra ni en el número; se mencionan aparte.
     val antiguos = conteo.avisosAntiguos.takeIf { it > 0 }?.let { if (it == 1) "y 1 antiguo" else "y $it antiguos" }
-    if (suman == null || suman <= 0L || conteo.avisos <= 0) {
+    val conSigno = porSigno?.takeIf { conteo.avisos > 0 }?.let(::textoDeLoPorConfirmarConSigno)
+    if (conSigno == null && (suman == null || suman <= 0L || conteo.avisos <= 0)) {
         val base = desglose?.takeIf { it.contains(" · ") }
         return "Por confirmar" to (if (antiguos == null) base else listOfNotNull(base ?: desglose, antiguos).joinToString(" · "))
     }
-    val avisos = if (conteo.avisos == 1) "${formatCOP(suman)} en 1 aviso" else "${formatCOP(suman)} en ${conteo.avisos} avisos"
+    val avisos = conSigno
+        ?: if (conteo.avisos == 1) "${formatCOP(suman!!)} en 1 aviso" else "${formatCOP(suman!!)} en ${conteo.avisos} avisos"
     val resto = desgloseDePorRevisar(conteo.copy(avisos = 0))
     val linea = if (resto == null) avisos else "$avisos · y $resto"
     return "Por confirmar" to (if (antiguos == null) linea else "$linea · $antiguos")
@@ -495,7 +509,7 @@ internal fun pastillaDeLaFranja(subtitulo: String?): Boolean = subtitulo.isNullO
 private fun FranjaPorConfirmar(data: DashboardData, onNavigate: (Screen) -> Unit) {
     val conteo = conteoPorRevisarDelInicio(data)
     if (conteo.total <= 0) return
-    val (titulo, subtitulo) = textosDeLaFranjaPorConfirmar(conteo, data.porConfirmarSuman)
+    val (titulo, subtitulo) = textosDeLaFranjaPorConfirmar(conteo, data.porConfirmarSuman, loPorConfirmarPorSignoDe(data))
     Separador(SangriaDeSeparador.Ninguna)
     Box(modifier = Modifier.fillMaxWidth().background(Movi.colores.capa2)) {
         Fila(

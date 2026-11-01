@@ -53,6 +53,18 @@ data class DashboardSummary(
      */
     val porConfirmarSuman: Long? = null,
     /**
+     * Vuelta 85 · **[porConfirmarSuman] partida por signo** ([loPorConfirmarPorSigno]): lo que suman los
+     * avisos de plata que sale y cuántos son, y lo mismo de la que entra. «Por confirmar» dice
+     * «−$262.400 en 2 salidas · +$480.000 en 1 entrada» en vez de sumar un ingreso a los gastos. `null`
+     * cuando [porConfirmarSuman] también lo es (entera o nada). Con default: un server viejo no los
+     * manda —y la franja dice la suma de antes— y un APK viejo los ignora (sigue leyendo
+     * [porConfirmarSuman], que no cambia).
+     */
+    val porConfirmarSalen: Long? = null,
+    val porConfirmarEntran: Long? = null,
+    val avisosQueSalen: Int = 0,
+    val avisosQueEntran: Int = 0,
+    /**
      * **Los movimientos que entraron solos y esperan en «Por confirmar»**, contados como renglones de
      * la bandeja (un traspaso es uno, ver [renglonesPorConfirmar]). Vuelta de diseño 22: con esto la
      * insignia de «Avisos» y «Movi propone hoy» dicen el mismo número que «N por revisar» de

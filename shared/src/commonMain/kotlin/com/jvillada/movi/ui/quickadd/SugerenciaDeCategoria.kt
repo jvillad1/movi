@@ -1,6 +1,7 @@
 package com.jvillada.movi.ui.quickadd
 
 import com.jvillada.movi.shared.model.RecuerdoDeCategoria
+import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.huellaDeUnMovimiento
 import com.jvillada.movi.shared.model.isReservedCategory
 
@@ -66,3 +67,12 @@ fun sugerenciaPorNombre(nota: String, recuerdos: List<RecuerdoDeCategoria>): Rec
     if (candidatos.map { it.categoria }.toSet().size > 1) return null
     return candidatos.maxByOrNull { it.cuantos }
 }
+
+/**
+ * Vuelta 85 · **la memoria del lado que se está anotando**: en la pestaña Ingreso, lo que el dueño anotó
+ * como ingreso ([RecuerdoDeCategoria.ingreso]); en Gasto, lo demás. Lo que entra y lo que sale son dos
+ * memorias en el server; mezcladas, «Andrés» en Ingreso podía sugerir la categoría de lo que se le mandó
+ * a él, o volverse ambiguo y no sugerir nada. Pura.
+ */
+fun recuerdosDelLado(recuerdos: List<RecuerdoDeCategoria>, tipo: TransactionType): List<RecuerdoDeCategoria> =
+    recuerdos.filter { it.ingreso == (tipo == TransactionType.INCOME) }
