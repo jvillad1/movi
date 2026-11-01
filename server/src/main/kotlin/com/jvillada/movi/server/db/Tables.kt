@@ -1369,6 +1369,13 @@ object GastosDelEspacio : Table("gastos_del_espacio") {
     val fecha       = long("fecha")
     val partes      = text("partes")
     val createdAt   = long("created_at")
+    /**
+     * Vuelta 97 · el reparto propio del gasto (`RepartoDelGasto` en JSON: porcentajes, montos o
+     * «Solo de …»); `NULL` = la regla del grupo, que es lo que tienen todos los gastos de antes.
+     * Nullable y sin default: el `ADD COLUMN` de `createMissingTablesAndColumns` no puede fallar sobre
+     * las filas que ya están.
+     */
+    val reparto     = text("reparto").nullable()
     override val primaryKey = PrimaryKey(id)
     init { index("idx_gastos_del_espacio_user_id", false, userId) }
 }
@@ -1390,4 +1397,23 @@ object LiquidacionesDelEspacio : Table("liquidaciones_del_espacio") {
     val createdAt = long("created_at")
     override val primaryKey = PrimaryKey(id)
     init { index("idx_liquidaciones_del_espacio_user_id", false, userId) }
+}
+
+/**
+ * **Los recurrentes del hogar** (vuelta 97): «Se reparte en Casa con Caro», marcado en el detalle de un
+ * recurrente. Con la marca, Movi propone repartir el gasto que es ese recurrente
+ * (`propuestasDeRepartir`); nunca lo reparte solo.
+ *
+ * Tabla aparte y no una columna de `recurring_rules`, a propósito: la regla se edita con un `PUT` que
+ * reescribe la fila entera, y un APK viejo —que no conoce el campo— borraría la marca cada vez que el
+ * dueño le cambiara el monto o el día. Acá la marca solo la tocan sus dos rutas. Una regla por fila
+ * (la clave es el usuario y la regla): un recurrente se reparte en un grupo o en ninguno. Borrar el
+ * grupo borra sus marcas; una marca de una regla que ya no existe no propone nada.
+ */
+object RecurrentesDelHogar : Table("recurrentes_del_hogar") {
+    val userId    = varchar("user_id", 50)
+    val reglaId   = varchar("regla_id", 60)
+    val espacioId = varchar("espacio_id", 60)
+    val createdAt = long("created_at")
+    override val primaryKey = PrimaryKey(userId, reglaId)
 }

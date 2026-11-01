@@ -140,6 +140,10 @@ class SchemaDeArranqueTest {
         // Vuelta 90 — el `email_id` de Resend de lo que llegó por correo. `toSmsMessage` y el guardado
         // del correo la nombran: sin el ALTER, la bandeja entera caería con «column does not exist».
         "sms_messages" to "id_del_proveedor",
+        // Vuelta 97 — el reparto propio de un gasto compartido. `gastosDe` —toda lectura de los grupos y
+        // `loCompartidoDelUsuario`, o sea TODA lectura de movimientos— la nombra: sin el ALTER, la app
+        // entera caería con «column does not exist».
+        "gastos_del_espacio" to "reparto",
     )
 
     /**
@@ -169,7 +173,7 @@ class SchemaDeArranqueTest {
         Users, Accounts, StatementImports, Events, VoidEvents, Budgets, RecurringRules,
         RecurringOccurrences, OccurrenceRejections, SmsMessages, Credits, Cards, Subscriptions, PushSubscriptions,
         Screens, PasswordResetTokens, CardPaymentDismissals, Goals, CategoryPrefs, Documents,
-        StatementImportMatches, KnownDestinations, InicioPersonalizado, Apartados,
+        StatementImportMatches, KnownDestinations, InicioPersonalizado, Apartados, GastosDelEspacio,
     )
 
     @BeforeTest

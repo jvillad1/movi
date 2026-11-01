@@ -6,7 +6,10 @@ import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.GastosDelEspacio
 import com.jvillada.movi.server.db.KnownDestinations
 import com.jvillada.movi.server.db.LiquidacionesDelEspacio
+import com.jvillada.movi.server.db.RecurrentesDelHogar
+import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.VoidEvents
+import com.jvillada.movi.server.db.toFinancialEvent
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.espacios.espaciosDe
 import com.jvillada.movi.server.espacios.gastosDe
@@ -14,12 +17,24 @@ import com.jvillada.movi.server.espacios.liquidacionesDe
 import com.jvillada.movi.server.espacios.loCompartidoDelUsuario
 import com.jvillada.movi.server.espacios.miembrosComoJson
 import com.jvillada.movi.server.espacios.partesComoJson
+import com.jvillada.movi.server.espacios.recurrentesDelHogarDe
+import com.jvillada.movi.server.espacios.repartoComoJson
+import com.jvillada.movi.server.espacios.repartoDeLaFila
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.server.reminders.loadEventsBetween
 import com.jvillada.movi.server.sms.destinosDelDueno
 import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.server.time.ajustesDelPeriodoSinSuspender
 import com.jvillada.movi.shared.model.CompartirMovimientoRequest
+import com.jvillada.movi.shared.model.DIAS_DE_MEMORIA_DEL_REPARTO
+import com.jvillada.movi.shared.model.DIAS_PARA_PROPONER_REPARTIR
+import com.jvillada.movi.shared.model.GastoRepartido
+import com.jvillada.movi.shared.model.PropuestaDeRepartir
+import com.jvillada.movi.shared.model.RecurrenteDelHogar
+import com.jvillada.movi.shared.model.RepartoDelGasto
+import com.jvillada.movi.shared.model.problemaDelReparto
+import com.jvillada.movi.shared.model.repartoParaOtroMonto
+import com.jvillada.movi.shared.model.propuestasDeRepartir
 import com.jvillada.movi.shared.model.DetalleDelEspacio
 import com.jvillada.movi.shared.model.Espacio
 import com.jvillada.movi.shared.model.GastoDelEspacio
@@ -45,6 +60,7 @@ import io.ktor.server.routing.Route
 import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
+import io.ktor.server.routing.put
 import io.ktor.server.routing.route
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.Transaction
@@ -53,6 +69,7 @@ import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.exists
 import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.upsert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
 import java.util.UUID
@@ -75,6 +92,15 @@ import java.util.UUID
  *   `DELETE /api/espacios/{id}/compartir/{eventoId}`
  * - `POST /api/espacios/{id}/gastos` (lo que pagó otro miembro) · `DELETE …/gastos/{gastoId}`
  * - `POST /api/espacios/{id}/liquidaciones` («Marcar como saldado») · `DELETE …/liquidaciones/{id}`
+ *
+ * Vuelta 97:
+ * - `POST …/compartir` y `POST …/gastos` aceptan un `reparto` propio (porcentajes, montos o «Solo de
+ *   …»), validado con `problemaDelReparto`: inválido es **422 sin tocar nada**. Con el movimiento ya
+ *   repartido en ese grupo, `…/compartir` con un `reparto` lo **edita**.
+ * - `GET /api/espacios/propuestas-de-reparto`: lo que Movi propone repartir (`propuestasDeRepartir`),
+ *   derivado en cada lectura. Los descartes van por `POST /api/anomalias/descartar`.
+ * - `GET /api/espacios/recurrentes-del-hogar` · `PUT`/`DELETE /api/espacios/{id}/recurrentes/{reglaId}`:
+ *   «Se reparte en …», el interruptor del detalle de un recurrente.
  */
 fun Route.espacioRoutes() {
     route("/api/espacios") {
@@ -89,6 +115,40 @@ fun Route.espacioRoutes() {
         get("/propuestas") {
             val ahora = AppClock.now().toInstant().toEpochMilli()
             call.respond(dbQuery { propuestasDeSaldarDe(call.userId(), ahora) })
+        }
+
+        // Vuelta 97: lo que Movi propone repartir («Movi propone hoy» y Por revisar). Nunca reparte solo.
+        get("/propuestas-de-reparto") {
+            val ahora = AppClock.now().toInstant().toEpochMilli()
+            call.respond(dbQuery { propuestasDeRepartirDe(call.userId(), ahora) })
+        }
+
+        // Vuelta 97: «Se reparte en …» de cada recurrente marcado.
+        get("/recurrentes-del-hogar") {
+            val uid = call.userId()
+            call.respond(dbQuery { recurrentesDelHogarDe(uid).map { (regla, espacio) -> RecurrenteDelHogar(regla, espacio) } })
+        }
+
+        put("/{id}/recurrentes/{reglaId}") {
+            val uid = call.userId()
+            val espacioId = call.parameters["id"] ?: return@put call.respond(HttpStatusCode.BadRequest)
+            val reglaId = call.parameters["reglaId"] ?: return@put call.respond(HttpStatusCode.BadRequest)
+            val r = dbQuery { marcarDelHogar(uid, espacioId, reglaId) }
+            if (r.valor != null) call.respond(r.estado, r.valor) else call.respond(r.estado, r.motivo)
+        }
+
+        delete("/{id}/recurrentes/{reglaId}") {
+            val uid = call.userId()
+            val espacioId = call.parameters["id"] ?: return@delete call.respond(HttpStatusCode.BadRequest)
+            val reglaId = call.parameters["reglaId"] ?: return@delete call.respond(HttpStatusCode.BadRequest)
+            dbQuery {
+                RecurrentesDelHogar.deleteWhere {
+                    (RecurrentesDelHogar.userId eq uid) and (RecurrentesDelHogar.espacioId eq espacioId) and
+                        (RecurrentesDelHogar.reglaId eq reglaId)
+                }
+            }
+            // Idempotente: quitar una marca que no está es quitarla.
+            call.respond(HttpStatusCode.NoContent)
         }
 
         post {
@@ -149,6 +209,7 @@ fun Route.espacioRoutes() {
                     LiquidacionesDelEspacio.deleteWhere {
                         (LiquidacionesDelEspacio.espacioId eq id) and (LiquidacionesDelEspacio.userId eq uid)
                     }
+                    RecurrentesDelHogar.deleteWhere { (RecurrentesDelHogar.espacioId eq id) and (RecurrentesDelHogar.userId eq uid) }
                 }
                 n
             }
@@ -360,11 +421,22 @@ internal fun Transaction.compartirMovimiento(
     if (yaEsta != null && yaEsta[GastosDelEspacio.espacioId] != espacioId) {
         throw Rechazo(HttpStatusCode.Conflict, "Ese movimiento ya está repartido en otro grupo")
     }
+    // Vuelta 97: el reparto propio se valida antes de escribir nada (422 y no toca nada).
+    val monto = fila[Events.amount]
+    problemaDelReparto(body.reparto, monto, espacio)?.let { throw Rechazo(HttpStatusCode.UnprocessableEntity, it) }
+    if (yaEsta != null && body.reparto != null) {
+        // Editar el reparto de un gasto ya compartido: las partes nuevas, y el saldo se recalcula solo.
+        // Sin reparto (un APK viejo que reintenta), nada cambia.
+        GastosDelEspacio.update({ (GastosDelEspacio.id eq yaEsta[GastosDelEspacio.id]) and (GastosDelEspacio.userId eq uid) }) {
+            it[GastosDelEspacio.monto] = monto
+            it[partes] = partesComoJson(partesDelGasto(monto, espacio, MIEMBRO_YO, body.reparto))
+            it[reparto] = repartoComoJson(body.reparto)
+        }
+    }
     if (yaEsta == null) {
         val id = body.gastoId.trim().ifBlank { "gde_${UUID.randomUUID()}" }
         val ajeno = GastosDelEspacio.selectAll().where { GastosDelEspacio.id eq id }.firstOrNull()
         if (ajeno != null) throw Rechazo(HttpStatusCode.Conflict, "Ese id ya existe")
-        val monto = fila[Events.amount]
         GastosDelEspacio.insert {
             it[GastosDelEspacio.id] = id
             it[userId] = uid
@@ -375,7 +447,8 @@ internal fun Transaction.compartirMovimiento(
             it[categoria] = fila[Events.category].take(100)
             it[descripcion] = fila[Events.description].take(200)
             it[fecha] = fila[Events.timestamp]
-            it[partes] = partesComoJson(partesDelGasto(monto, espacio, MIEMBRO_YO))
+            it[partes] = partesComoJson(partesDelGasto(monto, espacio, MIEMBRO_YO, body.reparto))
+            it[reparto] = repartoComoJson(body.reparto)
             it[createdAt] = System.currentTimeMillis()
         }
     }
@@ -404,7 +477,14 @@ internal fun Transaction.gastoQuePagoOtro(
     if (existente != null && existente[GastosDelEspacio.userId] != uid) throw Rechazo(HttpStatusCode.Conflict, "Ese id ya existe")
     val fecha = if (body.fecha > 0L) body.fecha else System.currentTimeMillis()
     val descripcion = body.descripcion.trim().ifBlank { categoria }.take(200)
-    val partes = partesComoJson(partesDelGasto(body.monto, espacio, body.pagadoPor))
+    // Vuelta 97: sin reparto en el cuerpo, uno que ya estaba se conserva (el reenvío de un APK viejo no
+    // lo borra); el cliente nuevo siempre lo manda, también «Partes iguales».
+    val reparto: RepartoDelGasto? = body.reparto
+        ?: existente?.get(GastosDelEspacio.reparto)?.let(::repartoDeLaFila)
+            ?.let { repartoParaOtroMonto(it, body.monto, espacio, body.pagadoPor) }
+            ?.takeIf { problemaDelReparto(it, body.monto, espacio) == null }
+    problemaDelReparto(reparto, body.monto, espacio)?.let { throw Rechazo(HttpStatusCode.UnprocessableEntity, it) }
+    val partes = partesComoJson(partesDelGasto(body.monto, espacio, body.pagadoPor, reparto))
     if (existente == null) {
         GastosDelEspacio.insert {
             it[GastosDelEspacio.id] = id
@@ -417,6 +497,7 @@ internal fun Transaction.gastoQuePagoOtro(
             it[GastosDelEspacio.descripcion] = descripcion
             it[GastosDelEspacio.fecha] = fecha
             it[GastosDelEspacio.partes] = partes
+            it[GastosDelEspacio.reparto] = repartoComoJson(reparto)
             it[createdAt] = System.currentTimeMillis()
         }
     } else {
@@ -428,6 +509,7 @@ internal fun Transaction.gastoQuePagoOtro(
             it[GastosDelEspacio.descripcion] = descripcion
             it[GastosDelEspacio.fecha] = fecha
             it[GastosDelEspacio.partes] = partes
+            it[GastosDelEspacio.reparto] = repartoComoJson(reparto)
         }
     }
     val gasto = gastosDe(uid, listOf(espacio), espacioId).first { it.id == id }
@@ -513,4 +595,62 @@ private fun Transaction.validarElVinculo(uid: String, eventoId: String, body: Li
         .where { (GastosDelEspacio.userId eq uid) and (GastosDelEspacio.eventoId eq eventoId) }
         .any()
     if (yaSalda || repartido) throw Rechazo(HttpStatusCode.Conflict, "Ese movimiento ya está en un grupo")
+}
+
+/**
+ * Vuelta 97 · **lo que Movi propone repartir** a [uid], derivado en cada lectura con
+ * [propuestasDeRepartir]: sus movimientos de los últimos días (sin anulados, con lo que dicen los
+ * grupos), lo repartido en los últimos [DIAS_DE_MEMORIA_DEL_REPARTO] días con su movimiento, sus
+ * recurrentes con la marca del hogar y lo que descartó. Cada propuesta lleva su grupo con los nombres.
+ */
+internal fun Transaction.propuestasDeRepartirDe(uid: String, ahora: Long): List<PropuestaDeRepartir> {
+    val espacios = espaciosDe(uid)
+    if (espacios.isEmpty()) return emptyList()
+    val anulados = anuladosDe(uid)
+    val desdeLaMemoria = ahora - DIAS_DE_MEMORIA_DEL_REPARTO * UN_DIA
+    val gastos = gastosDe(uid, espacios)
+        .filterNot { it.eventoId != null && it.eventoId in anulados }
+        .filter { it.fecha >= desdeLaMemoria }
+    val ids = gastos.mapNotNull { it.eventoId }
+    val suyos = if (ids.isEmpty()) emptyMap() else Events.selectAll()
+        .where { (Events.userId eq uid) and (Events.id inList ids) }
+        .associate { it[Events.id] to it.toFinancialEvent() }
+    val reglas = RecurringRules.selectAll().where { RecurringRules.userId eq uid }.map { it.toRule() }
+    return propuestasDeRepartir(
+        eventos = loadEventsBetween(uid, ahora - DIAS_PARA_PROPONER_REPARTIR * UN_DIA, ahora + 1),
+        repartidos = gastos.map { GastoRepartido(it, it.eventoId?.let(suyos::get)) },
+        espacios = espacios,
+        reglas = reglas,
+        delHogar = recurrentesDelHogarDe(uid),
+        descartadas = descartesDeRepartir(uid),
+        ahora = ahora,
+    )
+}
+
+/** Las huellas de «No es compartido» y «Nunca para este comercio»; vacío si la tabla no existe. */
+private fun Transaction.descartesDeRepartir(uid: String): Set<String> =
+    if (!runCatching { AnomaliasDescartadas.exists() }.getOrDefault(false)) emptySet()
+    else AnomaliasDescartadas.selectAll().where { AnomaliasDescartadas.userId eq uid }
+        .map { it[AnomaliasDescartadas.huella] }.filter { it.startsWith("repartir") }.toSet()
+
+/**
+ * Vuelta 97 · **«Se reparte en …»**: marca la regla [reglaId] como del hogar en [espacioId]. Una regla
+ * va a un grupo o a ninguno: marcarla en otro grupo la mueve. Solo un recurrente de gasto del dueño.
+ */
+internal fun Transaction.marcarDelHogar(uid: String, espacioId: String, reglaId: String): Respuesta<RecurrenteDelHogar> = try {
+    espacioDelUsuario(uid, espacioId) ?: throw Rechazo(HttpStatusCode.NotFound, "Grupo no encontrado")
+    val regla = RecurringRules.selectAll().where { (RecurringRules.id eq reglaId) and (RecurringRules.userId eq uid) }
+        .firstOrNull() ?: throw Rechazo(HttpStatusCode.NotFound, "Recurrente no encontrado")
+    if (regla[RecurringRules.type] != TransactionType.EXPENSE.name) {
+        throw Rechazo(HttpStatusCode.BadRequest, "Solo se reparte un recurrente de gasto")
+    }
+    RecurrentesDelHogar.upsert {
+        it[userId] = uid
+        it[RecurrentesDelHogar.reglaId] = reglaId
+        it[RecurrentesDelHogar.espacioId] = espacioId
+        it[createdAt] = System.currentTimeMillis()
+    }
+    Respuesta(HttpStatusCode.OK, RecurrenteDelHogar(reglaId, espacioId))
+} catch (r: Rechazo) {
+    Respuesta(r.estado, null, r.motivo)
 }

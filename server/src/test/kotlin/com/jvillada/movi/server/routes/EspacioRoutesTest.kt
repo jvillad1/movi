@@ -32,6 +32,7 @@ import com.jvillada.movi.server.db.KnownDestinations
 import com.jvillada.movi.server.db.LiquidacionesDelEspacio
 import com.jvillada.movi.server.db.OccurrenceRejections
 import com.jvillada.movi.server.db.PushSubscriptions
+import com.jvillada.movi.server.db.RecurrentesDelHogar
 import com.jvillada.movi.server.db.RecurringOccurrences
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.SmsMessages
@@ -48,6 +49,11 @@ import com.jvillada.movi.shared.model.LiquidacionDelEspacio
 import com.jvillada.movi.shared.model.MIEMBRO_YO
 import com.jvillada.movi.shared.model.netoDe
 import com.jvillada.movi.shared.model.PropuestaDeSaldar
+import com.jvillada.movi.shared.model.PropuestaDeRepartir
+import com.jvillada.movi.shared.model.MotivoDeReparto
+import com.jvillada.movi.shared.model.RecurrenteDelHogar
+import com.jvillada.movi.shared.model.FormaDeRepartir
+import io.ktor.client.request.put
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -104,6 +110,8 @@ class EspacioRoutesTest {
         Documents, Subscriptions,
         // Vuelta 66: el «No» de una propuesta de saldar se guarda como huella descartada.
         AnomaliasDescartadas,
+        // Vuelta 97: «Se reparte en …» de un recurrente.
+        RecurrentesDelHogar,
     )
 
     @BeforeTest
@@ -146,7 +154,7 @@ class EspacioRoutesTest {
 
     private val hoy = System.currentTimeMillis() - 60_000
 
-    private fun evento(id: String, monto: Long, tipo: String = "EXPENSE", categoria: String = "Mercado", descripcion: String = "Mercado", uid: String = a, cuenta: String = ahorros, estado: String = "RECONCILED") =
+    private fun evento(id: String, monto: Long, tipo: String = "EXPENSE", categoria: String = "Mercado", descripcion: String = "Mercado", uid: String = a, cuenta: String = ahorros, estado: String = "RECONCILED", momento: Long = hoy) =
         transaction {
             Events.insert {
                 it[Events.id] = id
@@ -157,7 +165,7 @@ class EspacioRoutesTest {
                 it[currency] = "COP"
                 it[category] = categoria
                 it[description] = descripcion
-                it[timestamp] = hoy
+                it[timestamp] = momento
                 it[eventSource] = "MANUAL"
                 it[reconciliationStatus] = estado
             }
@@ -575,5 +583,195 @@ class EspacioRoutesTest {
         assertEquals(HttpStatusCode.NoContent, post("/api/anomalias/descartar", """{"huella":"saldar:e_de_caro"}""").status)
         assertTrue(detalle().propuestas.isEmpty())
         assertEquals(168_050L, monthIncome(), "descartarla no la vincula: sigue siendo ingreso")
+    }
+
+    // ── Vuelta 97 · partes distintas por gasto ────────────────────────────────
+
+    private val setentaTreinta = """{"forma":"PORCENTAJES","porcentajes":{"yo":70,"dst_caro":30}}"""
+
+    /**
+     * Un gasto repartido 70/30: el saldo dice que Caro debe el 30 %, y **todas** las cifras de gasto (Hoy,
+     * Plan, «En qué se va», Movi AI) cuentan tu 70 % — `montoContado` no cambió de entrada: la parte ajena
+     * sigue saliendo de las partes.
+     */
+    @Test
+    fun `un reparto 70 30 cuenta tu 70 en Hoy, Plan, En que se va y Movi AI`() = conApp {
+        post("/api/espacios", casa)
+        evento("e_mercado", 200_000)
+        val r = post("/api/espacios/esp_casa/compartir", """{"eventoId":"e_mercado","gastoId":"g1","reparto":$setentaTreinta}""")
+        assertEquals(HttpStatusCode.Created, r.status)
+        val gasto = json.decodeFromString<GastoDelEspacio>(r.bodyAsText())
+        assertEquals(mapOf(MIEMBRO_YO to 140_000L, "dst_caro" to 60_000L), gasto.partes)
+        assertEquals(FormaDeRepartir.PORCENTAJES, gasto.reparto?.forma)
+        assertEquals(60_000L, detalle().saldo.netoDe(MIEMBRO_YO), "Caro te debe su 30 %")
+
+        val tuParte = 140_000L
+        val tablero = Json.parseToJsonElement(get("/api/dashboard/summary").bodyAsText()).jsonObject
+        assertEquals(tuParte, tablero["monthSpent"]!!.jsonPrimitive.long, "Hoy")
+        val plan = Json.parseToJsonElement(get("/api/finance-summary").bodyAsText()).jsonObject
+        assertEquals(tuParte, plan["egresos"]!!.jsonPrimitive.long, "Plan")
+        val eventos = runBlocking { loadNonVoidedEvents(a) }
+        assertEquals(tuParte, eventos.filter { esGastoDelPeriodo(it, AccountType.SAVINGS) }.sumOf { montoContado(it) }, "En qué se va")
+        val datos = runBlocking { cargarDatosDelUsuario(a) }
+        assertEquals(tuParte, datos.egresos, "el contexto de Movi AI")
+        val hoyEnBogota = AppClock.today()
+        val totales = runBlocking {
+            ejecutarHerramienta(a, LlamadaDeHerramienta("t1", TOTALES_POR_CATEGORIA, mapOf("desde" to hoyEnBogota.minusDays(1).toString(), "hasta" to hoyEnBogota.toString())))
+        }
+        assertTrue("- Salió: $tuParte" in totales, totales)
+        assertEquals(200_000, eventos.single { it.id == "e_mercado" }.amount, "el saldo no cambia: la plata salió entera")
+    }
+
+    @Test
+    fun `solo de Caro - tu parte es cero y Caro te debe el gasto entero`() = conApp {
+        post("/api/espacios", casa)
+        evento("e_regalo", 90_000)
+        post("/api/espacios/esp_casa/compartir", """{"eventoId":"e_regalo","reparto":{"forma":"SOLO_DE","soloDe":"dst_caro"}}""")
+        assertEquals(90_000L, detalle().saldo.netoDe(MIEMBRO_YO))
+        val tablero = Json.parseToJsonElement(get("/api/dashboard/summary").bodyAsText()).jsonObject
+        assertEquals(0L, tablero["monthSpent"]?.jsonPrimitive?.long ?: 0L)
+    }
+
+    @Test
+    fun `un reparto invalido da 422 y no toca nada, al crear y al editar`() = conApp {
+        post("/api/espacios", casa)
+        evento("e_mercado", 100_000)
+        val malo = post("/api/espacios/esp_casa/compartir", """{"eventoId":"e_mercado","reparto":{"forma":"PORCENTAJES","porcentajes":{"yo":60,"dst_caro":30}}}""")
+        assertEquals(HttpStatusCode.UnprocessableEntity, malo.status)
+        assertEquals("Faltan 10 %", malo.bodyAsText())
+        assertEquals(0L, transaction { GastosDelEspacio.selectAll().count() })
+
+        // Con el gasto ya repartido 50/50, una edición con montos que no suman tampoco toca nada.
+        post("/api/espacios/esp_casa/compartir", """{"eventoId":"e_mercado","gastoId":"g1"}""")
+        val montosMalos = """{"eventoId":"e_mercado","reparto":{"forma":"MONTOS","montos":{"yo":30000,"dst_caro":30000}}}"""
+        assertEquals(HttpStatusCode.UnprocessableEntity, post("/api/espacios/esp_casa/compartir", montosMalos).status)
+        assertEquals(50_000L, detalle().saldo.netoDe(MIEMBRO_YO))
+
+        // «Pagó otro» con un reparto que nombra a alguien de afuera: 422, sin fila.
+        val deOtro = """{"id":"g_caro","pagadoPor":"dst_caro","monto":100000,"categoria":"Mercado","reparto":{"forma":"SOLO_DE","soloDe":"dst_nadie"}}"""
+        assertEquals(HttpStatusCode.UnprocessableEntity, post("/api/espacios/esp_casa/gastos", deOtro).status)
+        assertEquals(1L, transaction { GastosDelEspacio.selectAll().count() })
+    }
+
+    @Test
+    fun `editar el reparto recalcula el saldo, y un reintento sin reparto no lo borra`() = conApp {
+        post("/api/espacios", casa)
+        evento("e_mercado", 100_000)
+        post("/api/espacios/esp_casa/compartir", """{"eventoId":"e_mercado","gastoId":"g1"}""")
+        assertEquals(50_000L, detalle().saldo.netoDe(MIEMBRO_YO))
+
+        val editado = post("/api/espacios/esp_casa/compartir", """{"eventoId":"e_mercado","reparto":{"forma":"MONTOS","montos":{"yo":20000,"dst_caro":80000}}}""")
+        assertEquals(HttpStatusCode.OK, editado.status)
+        assertEquals(80_000L, detalle().saldo.netoDe(MIEMBRO_YO))
+        assertEquals(1L, transaction { GastosDelEspacio.selectAll().count() })
+
+        // Un APK viejo que reintenta (sin reparto) no lo borra.
+        post("/api/espacios/esp_casa/compartir", """{"eventoId":"e_mercado","gastoId":"g1"}""")
+        assertEquals(80_000L, detalle().saldo.netoDe(MIEMBRO_YO))
+
+        // Volver a «Partes iguales» es un reparto explícito.
+        post("/api/espacios/esp_casa/compartir", """{"eventoId":"e_mercado","reparto":{"forma":"DEL_GRUPO"}}""")
+        assertEquals(50_000L, detalle().saldo.netoDe(MIEMBRO_YO))
+        assertEquals(null, detalle().gastos.single().reparto)
+    }
+
+    @Test
+    fun `pago otro con montos exactos y su edicion`() = conApp {
+        post("/api/espacios", casa)
+        val cuerpo = """{"id":"g_caro","pagadoPor":"dst_caro","monto":100000,"categoria":"Mercado","reparto":{"forma":"MONTOS","montos":{"yo":70000,"dst_caro":30000}}}"""
+        assertEquals(HttpStatusCode.Created, post("/api/espacios/esp_casa/gastos", cuerpo).status)
+        assertEquals(-70_000L, detalle().saldo.netoDe(MIEMBRO_YO))
+        // El reenvío de un APK viejo, sin reparto: lo conserva.
+        post("/api/espacios/esp_casa/gastos", """{"id":"g_caro","pagadoPor":"dst_caro","monto":100000,"categoria":"Mercado"}""")
+        assertEquals(-70_000L, detalle().saldo.netoDe(MIEMBRO_YO))
+    }
+
+    // ── Vuelta 97 · Movi propone repartir ─────────────────────────────────────
+
+    private fun regla(id: String, nombre: String, monto: Long) = transaction {
+        RecurringRules.insert {
+            it[RecurringRules.id] = id
+            it[userId] = a
+            it[name] = nombre
+            it[category] = "Vivienda"
+            it[amount] = monto
+            it[dayOfMonth] = 1
+            it[type] = "EXPENSE"
+            it[accountId] = ahorros
+        }
+    }
+
+    private suspend fun ApplicationTestBuilder.propuestasDeRepartir(): List<PropuestaDeRepartir> =
+        json.decodeFromString(get("/api/espacios/propuestas-de-reparto").bodyAsText())
+
+    @Test
+    fun `un recurrente del hogar se propone, y repartir desde la propuesta dos veces es repartir una`() = conApp {
+        post("/api/espacios", casa)
+        regla("rr_arriendo", "Arriendo", 2_400_000)
+        evento("e_arriendo", 2_400_000, categoria = "Vivienda", descripcion = "Arriendo")
+        assertTrue(propuestasDeRepartir().isEmpty(), "sin la marca del hogar no se propone")
+
+        val marca = client.put("/api/espacios/esp_casa/recurrentes/rr_arriendo") { header(HttpHeaders.Authorization, "Bearer ${token(a)}") }
+        assertEquals(HttpStatusCode.OK, marca.status)
+        val marcas: List<RecurrenteDelHogar> = json.decodeFromString(get("/api/espacios/recurrentes-del-hogar").bodyAsText())
+        assertEquals(listOf(RecurrenteDelHogar("rr_arriendo", "esp_casa")), marcas)
+
+        val p = propuestasDeRepartir().single()
+        assertEquals("e_arriendo", p.eventoId)
+        assertEquals(MotivoDeReparto.RECURRENTE, p.motivo)
+        assertEquals("Casa con Caro", p.espacio.nombre)
+        assertEquals(listOf("Juan", "Caro"), p.espacio.miembros.map { it.nombre })
+
+        // «Repartir» desde la propuesta es el `…/compartir` de siempre: dos toques, un reparto.
+        val pedido = """{"eventoId":"e_arriendo","gastoId":"g_arr","reparto":$setentaTreinta}"""
+        assertEquals(HttpStatusCode.Created, post("/api/espacios/esp_casa/compartir", pedido).status)
+        assertEquals(HttpStatusCode.OK, post("/api/espacios/esp_casa/compartir", pedido.replace("g_arr", "g_otro")).status)
+        assertEquals(1L, transaction { GastosDelEspacio.selectAll().count() })
+        assertTrue(propuestasDeRepartir().isEmpty(), "ya repartido, no se propone")
+    }
+
+    @Test
+    fun `no es compartido y nunca para este recurrente descartan, y otro usuario no marca una regla ajena`() = conApp {
+        post("/api/espacios", casa)
+        regla("rr_arriendo", "Arriendo", 2_400_000)
+        evento("e_arriendo", 2_400_000, categoria = "Vivienda", descripcion = "Arriendo")
+        client.put("/api/espacios/esp_casa/recurrentes/rr_arriendo") { header(HttpHeaders.Authorization, "Bearer ${token(a)}") }
+        assertEquals(1, propuestasDeRepartir().size)
+
+        assertEquals(HttpStatusCode.NoContent, post("/api/anomalias/descartar", """{"huella":"repartir:e_arriendo"}""").status)
+        assertTrue(propuestasDeRepartir().isEmpty())
+
+        evento("e_arriendo_2", 2_400_000, categoria = "Vivienda", descripcion = "Arriendo")
+        assertEquals(listOf("e_arriendo_2"), propuestasDeRepartir().map { it.eventoId })
+        post("/api/anomalias/descartar", """{"huella":"repartir-nunca:regla:rr_arriendo"}""")
+        assertTrue(propuestasDeRepartir().isEmpty())
+
+        // B no puede marcar la regla de A en un grupo (ni en uno suyo: no hay grupo de B).
+        val ajena = client.put("/api/espacios/esp_casa/recurrentes/rr_arriendo") { header(HttpHeaders.Authorization, "Bearer ${token(b)}") }
+        assertEquals(HttpStatusCode.NotFound, ajena.status)
+    }
+
+    @Test
+    fun `un comercio repartido dos veces se propone con el reparto de la ultima vez`() = conApp {
+        post("/api/espacios", casa)
+        evento("e_1", 200_000, descripcion = "Éxito Laureles", momento = hoy - 3 * 3_600_000)
+        evento("e_2", 300_000, descripcion = "Éxito Laureles", momento = hoy - 2 * 3_600_000)
+        post("/api/espacios/esp_casa/compartir", """{"eventoId":"e_1"}""")
+        post("/api/espacios/esp_casa/compartir", """{"eventoId":"e_2","reparto":$setentaTreinta}""")
+        evento("e_3", 250_000, descripcion = "Éxito Laureles")
+
+        val p = propuestasDeRepartir().single()
+        assertEquals("e_3", p.eventoId)
+        assertEquals(MotivoDeReparto.COMERCIO, p.motivo)
+        assertEquals(mapOf(MIEMBRO_YO to 70, "dst_caro" to 30), p.reparto?.porcentajes)
+    }
+
+    @Test
+    fun `borrar el grupo borra sus recurrentes del hogar`() = conApp {
+        post("/api/espacios", casa)
+        regla("rr_arriendo", "Arriendo", 2_400_000)
+        client.put("/api/espacios/esp_casa/recurrentes/rr_arriendo") { header(HttpHeaders.Authorization, "Bearer ${token(a)}") }
+        client.delete("/api/espacios/esp_casa") { header(HttpHeaders.Authorization, "Bearer ${token(a)}") }
+        assertEquals(0L, transaction { RecurrentesDelHogar.selectAll().count() })
     }
 }

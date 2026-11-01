@@ -56,7 +56,7 @@ class LaCuentaAMedioCrearArrancaTest {
         KnownDestinations, EnlacesCompartidos, LecturasDePapeles, ConversacionesDelAsistente, AccionesPropuestas,
         MemoriaDelAsistente, AnomaliasDescartadas, DestinosDescartados, DebitosDescartados, ReglasDeComercio,
         CierresEnviados, CierresDescartados, Apartados, InicioPersonalizado, Espacios, GastosDelEspacio,
-        LiquidacionesDelEspacio, CorreosDescartados, CierresGuardados,
+        LiquidacionesDelEspacio, CorreosDescartados, CierresGuardados, RecurrentesDelHogar,
     )
 
     /** Lo que piden el Inicio, la guía de primer uso y la hoja «Agregar» al arrancar (logs de prod y del navegador). */
@@ -73,6 +73,9 @@ class LaCuentaAMedioCrearArrancaTest {
         "/api/finance-summary?scope=SELF",
         "/api/anomalias?conDeudas=1&conRecurrentes=1",
         "/api/espacios/propuestas",
+        // Vuelta 97: lo que Movi propone repartir (Inicio y Por revisar) y los recurrentes del hogar.
+        "/api/espacios/propuestas-de-reparto",
+        "/api/espacios/recurrentes-del-hogar",
         "/api/debitos-automaticos?conEsperados=1",
         "/api/payments/upcoming?conAbonos=1",
         "/api/payments/occurrences?conAbonos=1",
