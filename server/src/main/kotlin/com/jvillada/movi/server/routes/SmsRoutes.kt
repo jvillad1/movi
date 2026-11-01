@@ -938,6 +938,9 @@ fun Route.smsRoutes() {
     post("/api/sms/sync") {
         val uid = call.userId()
         val messages = call.receive<List<SmsMessage>>()
+        // Vuelta 100: la captura de este teléfono funcionó hoy (una fila por origen y día, nunca lanza).
+        messages.map { com.jvillada.movi.server.observabilidad.Observabilidad.origenDeLaCaptura(it.bank) }.distinct()
+            .forEach { com.jvillada.movi.server.observabilidad.Observabilidad.registrarCapturaActiva(uid, it, System.currentTimeMillis()) }
         val inserted = mutableListOf<SmsMessage>()
         // Lo que entró apartado no se avisa: ni la push, ni el «Movi anotó» del teléfono.
         val apartadosAhora = mutableSetOf<String>()

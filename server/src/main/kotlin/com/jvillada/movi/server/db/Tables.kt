@@ -1391,3 +1391,76 @@ object LiquidacionesDelEspacio : Table("liquidaciones_del_espacio") {
     override val primaryKey = PrimaryKey(id)
     init { index("idx_liquidaciones_del_espacio_user_id", false, userId) }
 }
+
+/**
+ * **Los fallos de la app** (vuelta 100, ver `routes/ObservabilidadRoutes.kt`): lo que tumbó la app
+ * en Android o iOS, lo que un Worker atrapó, y el «Algo falló» de la web. Sin datos del usuario: el
+ * mensaje y el stack llegan recortados y limpios (`limpiarTextoDelFallo` en `:core`) y el server los
+ * vuelve a limpiar. `user_id` es `""` cuando el fallo llegó sin sesión. `id` es el del cliente: el
+ * mismo reporte subido dos veces se guarda una. Lo de más de 90 días lo borra el barrido diario.
+ * Tabla nueva: entra solo al `SchemaUtils.create` del arranque, y a `TABLAS_DEL_USUARIO`.
+ */
+object FallosDeLaApp : Table("fallos_de_la_app") {
+    val id         = varchar("id", 80)
+    val userId     = varchar("user_id", 50)
+    val plataforma = varchar("plataforma", 20)
+    val version    = varchar("version", 30)
+    val tipo       = varchar("tipo", 120)
+    val mensaje    = varchar("mensaje", 400)
+    val stack      = text("stack")
+    val hilo       = varchar("hilo", 80)
+    val componente = varchar("componente", 120)
+    val modelo     = varchar("modelo", 80)
+    val sistema    = varchar("sistema", 60)
+    val huella     = varchar("huella", 320)
+    val atrapado   = bool("atrapado")
+    val ocurridoEn = long("ocurrido_en")
+    val recibidoEn = long("recibido_en")
+    override val primaryKey = PrimaryKey(id)
+    init {
+        index("idx_fallos_de_la_app_recibido_en", false, recibidoEn)
+        index("idx_fallos_de_la_app_user_id", false, userId)
+    }
+}
+
+/**
+ * **El uso de la app** (vuelta 100): un evento por fila, de una lista cerrada (`EventoDeUso` en
+ * `:core`) con propiedades de otra lista cerrada, nunca contenido financiero ni texto del usuario.
+ *
+ * - `tipo` (PANTALLA / ACCION / SISTEMA), `nombre`, `ruta` (la pila de pantallas,
+ *   «Dashboard>PorRevisar»), `sesion_id` y `secuencia` (el orden dentro de la sesión) y
+ *   `propiedades` (JSON) son lo que manda el cliente.
+ * - `detalle` es el valor de la propiedad principal del evento (la pantalla, el paso, el origen) y
+ *   `valor` los segundos de una sesión: columnas para contar sin leer el JSON.
+ * - `dia` (días desde 1970 en la hora de Bogotá) y `semana` (semanas desde 1970, de lunes a domingo)
+ *   son enteros a propósito: así los activos por día y la retención por cohorte se cuentan con SQL
+ *   de enteros, igual en Postgres y en el H2 de las pruebas.
+ *
+ * La clave es `(user_id, id)`: el mismo lote reenviado no duplica. Lo de más de 90 días lo borra el
+ * barrido diario. Tabla nueva: entra solo al `SchemaUtils.create` del arranque, y a
+ * `TABLAS_DEL_USUARIO`.
+ */
+object UsoDeLaApp : Table("uso_de_la_app") {
+    val id          = varchar("id", 80)
+    val userId      = varchar("user_id", 50)
+    val tipo        = varchar("tipo", 12)
+    val nombre      = varchar("nombre", 40)
+    val ruta        = varchar("ruta", 300)
+    val sesionId    = varchar("sesion_id", 80)
+    val secuencia   = integer("secuencia")
+    val propiedades = text("propiedades")
+    val detalle     = varchar("detalle", 60).nullable()
+    val valor       = long("valor").nullable()
+    val plataforma  = varchar("plataforma", 20)
+    val version     = varchar("version", 30)
+    val ocurridoEn  = long("ocurrido_en")
+    val dia         = integer("dia")
+    val semana      = integer("semana")
+    val recibidoEn  = long("recibido_en")
+    override val primaryKey = PrimaryKey(userId, id)
+    init {
+        index("idx_uso_de_la_app_dia", false, dia)
+        index("idx_uso_de_la_app_nombre_dia", false, nombre, dia)
+        index("idx_uso_de_la_app_recibido_en", false, recibidoEn)
+    }
+}
