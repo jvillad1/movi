@@ -4755,3 +4755,22 @@ fuera de su botón (medido sin recortar), un solo amarillo, y en las cuentas nin
 formulario; el pie apilado a ×1,5; «Otro banco» con «bogota»; y la guía dentro de la cáscara con 48 dp de
 barra de navegación simulada (`ViewCompat.dispatchApplyWindowInsets`): el principal y «Saltar este paso»
 quedan arriba de la barra.
+
+## Vuelta 89 · Un descarte vive más que su tarjeta
+
+**Regla: lo que se quita en el acto («Está bien», «No», «Sí, cambiar») no lanza su pedido en un
+`rememberCoroutineScope` de lo que se quita.** Sacar la última tarjeta de «Movi propone hoy» (o de «Para
+revisar») saca la sección entera de la composición; su alcance se cancelaba con el pedido en vuelo, el
+`runCatching` tomaba esa `CancellationException` como una falla y deshacía el descarte: la tarjeta volvía en
+el mismo cuadro y el dueño veía que «Está bien» no hacía nada, mientras el server sí lo guardaba (31-oct,
+`deuda:…:2026-10` y `categoria:Tecnología:2026-11` en `anomalias_descartadas`). Las pruebas no lo veían
+porque su repositorio falso contestaba sin suspender.
+
+- Las anomalías van por `AnomaliasDescartadasEnLaSesion.descartarYGuardar(huella) { … }`: saca la huella y
+  corre el pedido en un alcance propio (no de ninguna pantalla), con `intentar`, que deja pasar la
+  cancelación; solo una falla de verdad devuelve la tarjeta.
+- Una prueba de un descarte optimista usa un repositorio que **tarda** (un `CompletableDeferred`), no uno
+  que contesta en el acto: `EstaBienSeVaYNoVuelveTest` monta el Inicio entero y «Para revisar».
+- Revisados con el mismo patrón y sin el fallo: «Ya lo vi» del cierre (alcance de `DashboardScreen`, que no
+  sale, y no deshace), «No ajustar» de los cuadres por aviso, «No se cobró» de los débitos y la bandeja de
+  Por revisar (la tarjeta espera la respuesta antes de irse, y su alcance es el de la pantalla).
