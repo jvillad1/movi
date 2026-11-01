@@ -8,10 +8,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import com.jvillada.movi.shared.model.Espacio
+import com.jvillada.movi.shared.model.EventOccurrenceMark
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.esTuParteDeOtro
-import com.jvillada.movi.shared.model.normalizarParaBuscar
 import com.jvillada.movi.theme.Espacio as EscalaDeEspacio
 import com.jvillada.movi.ui.components.ds.Casilla
 import com.jvillada.movi.ui.components.ds.Fila
@@ -51,33 +51,60 @@ private const val MS_POR_DIA: Long = 24L * 60L * 60L * 1000L
 /** El grupo en que se repartió la vez pasada, y cuándo fue. */
 data class RepartoRecordado(val espacio: Espacio, val fechaDelPago: Long)
 
+/** Cuántos días hacia atrás se busca el último pago de la regla (dos períodos y un poco). */
+const val DIAS_HACIA_ATRAS_DEL_ULTIMO_PAGO: Int = 75
+
+/** A cuántos movimientos, como mucho, se les pregunta si son un pago de la regla (una lectura cada uno). */
+const val MAXIMO_DE_MARCAS_A_PREGUNTAR: Int = 10
+
+/** Un pago de la regla se parece al monto de la regla en este porcentaje (el arriendo sube un poco cada año). */
+const val TOLERANCIA_DEL_MONTO_EN_PORCENTAJE: Long = 25
+
 /**
- * **El grupo en el que se repartió el último pago de [nombreDeLaRegla]**, o `null` si no se sabe. El
- * último pago de la regla es el gasto más reciente de [historia] con su nombre (la descripción empieza
- * por él, sin tildes ni mayúsculas) y su [categoria] (si la sabemos); si ese pago estaba repartido en uno
- * de [espacios] ([FinancialEvent.espacioId]) y todavía se puede repartir ([sePuedeRepartir]), es ese.
+ * **Los movimientos que pueden ser el último pago** de una regla de [monto], del más reciente al más viejo: gastos
+ * en pesos de los últimos [DIAS_HACIA_ATRAS_DEL_ULTIMO_PAGO] días, sin patas de traspaso ni tu parte de lo que
+ * pagó otro, de un monto parecido (±[TOLERANCIA_DEL_MONTO_EN_PORCENTAJE] %). **No mira el nombre ni la categoría**:
+ * un pago emparejado con un aviso del banco se llama «Transferencia a Andrés», y «Gas» no es «Gasolina». Quién es
+ * de la regla lo dice su marca ([repartoDeLaVezPasada]). Pura.
+ */
+fun candidatosAlUltimoPago(monto: Long, historia: List<FinancialEvent>, ahoraMs: Long): List<FinancialEvent> {
+    if (monto <= 0L) return emptyList()
+    val desde = ahoraMs - DIAS_HACIA_ATRAS_DEL_ULTIMO_PAGO * MS_POR_DIA
+    val holgura = monto * TOLERANCIA_DEL_MONTO_EN_PORCENTAJE / 100
+    return historia.asSequence()
+        .filter { it.type == TransactionType.EXPENSE && it.currency == "COP" && !esTuParteDeOtro(it) && it.transferId == null }
+        .filter { it.timestamp >= desde && it.amount in (monto - holgura)..(monto + holgura) }
+        .sortedByDescending { it.timestamp }
+        .take(MAXIMO_DE_MARCAS_A_PREGUNTAR)
+        .toList()
+}
+
+/**
+ * **El grupo en el que se repartió el último pago de la regla [ruleId]**, o `null` si no se sabe. El último pago
+ * es el movimiento más reciente de [candidatosAlUltimoPago] cuya **marca de ocurrencia** ([marcaDe]: el sello que
+ * dice «este movimiento fue la ocurrencia de tal regla», `GET /api/events/{id}/occurrence`) es de la regla;
+ * si ese pago estaba repartido en uno de [espacios] ([FinancialEvent.espacioId]) y todavía se puede repartir
+ * ([sePuedeRepartir]), es ese. Sin marca de la regla en ninguno, **no se sugiere nada**.
  *
  * Mira **solo el último**: si la vez pasada no se repartió, no se sugiere el reparto de hace dos meses.
- * Pura.
  */
-fun repartoDeLaVezPasada(
-    nombreDeLaRegla: String,
-    categoria: String?,
+suspend fun repartoDeLaVezPasada(
+    ruleId: String,
+    monto: Long,
     historia: List<FinancialEvent>,
     espacios: List<Espacio>,
+    ahoraMs: Long,
+    marcaDe: suspend (eventoId: String) -> EventOccurrenceMark?,
 ): RepartoRecordado? {
-    val nombre = normalizarParaBuscar(nombreDeLaRegla)
-    if (nombre.isEmpty() || espacios.isEmpty()) return null
-    val categoriaBuscada = categoria?.takeIf { it.isNotBlank() }?.let(::normalizarParaBuscar)
-    val ultimo = historia.asSequence()
-        .filter { it.type == TransactionType.EXPENSE && !esTuParteDeOtro(it) && it.transferId == null }
-        .filter { normalizarParaBuscar(it.description).startsWith(nombre) }
-        .filter { categoriaBuscada == null || normalizarParaBuscar(it.category) == categoriaBuscada }
-        .maxByOrNull { it.timestamp } ?: return null
-    val espacioId = ultimo.espacioId ?: return null
-    if (!sePuedeRepartir(ultimo)) return null
-    val espacio = espacios.firstOrNull { it.id == espacioId } ?: return null
-    return RepartoRecordado(espacio, ultimo.timestamp)
+    if (espacios.isEmpty()) return null
+    for (candidato in candidatosAlUltimoPago(monto, historia, ahoraMs)) {
+        if (marcaDe(candidato.id)?.ruleId != ruleId) continue
+        val espacioId = candidato.espacioId ?: return null
+        if (!sePuedeRepartir(candidato)) return null
+        val espacio = espacios.firstOrNull { it.id == espacioId } ?: return null
+        return RepartoRecordado(espacio, candidato.timestamp)
+    }
+    return null
 }
 
 /**

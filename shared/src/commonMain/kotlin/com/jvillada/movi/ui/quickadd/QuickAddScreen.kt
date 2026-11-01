@@ -693,9 +693,20 @@ fun QuickAddScreen(
     // sugiere: guardar el pago con la casilla marcada llama el mismo `…/compartir` de siempre, DESPUÉS de
     // guardarlo (ver [repartoRecordado] en [save]).
     var repartirComoAntes by remember { mutableStateOf(true) }
-    val repartoRecordado = remember(presetPago, presetCategoria, historiaParaRepetir, espaciosParaRepartir) {
-        if (presetPago == null || presetPago.esIngreso) null
-        else repartoDeLaVezPasada(presetPago.nombre, presetCategoria, historiaParaRepetir, espaciosParaRepartir)
+    var repartoRecordado by remember { mutableStateOf<RepartoRecordado?>(null) }
+    LaunchedEffect(presetPago?.ruleId, presetMonto, historiaParaRepetir, espaciosParaRepartir) {
+        repartoRecordado = if (presetPago == null || presetPago.esIngreso || presetMonto == null || espaciosParaRepartir.isEmpty()) null
+        else runCatching {
+            // El último pago de la regla lo dice su marca de ocurrencia, no su nombre (ver [repartoDeLaVezPasada]).
+            repartoDeLaVezPasada(
+                ruleId = presetPago.ruleId,
+                monto = presetMonto,
+                historia = historiaParaRepetir,
+                espacios = espaciosParaRepartir,
+                ahoraMs = Clock.System.now().toEpochMilliseconds(),
+                marcaDe = { id -> Repositories.wallets.getEventOccurrenceMark(id) },
+            )
+        }.getOrNull()
     }
     val elegirPapel = rememberFilePicker(TiposDeArchivo.EXTRACTOS) { nombre, bytes, mime ->
         PapelesCompartidos.recibir(listOf(ArchivoCompartido(nombre, bytes, mime)))
@@ -1306,9 +1317,10 @@ fun QuickAddScreen(
             result.onSuccess { event ->
                 // Vuelta 87: el pago ya está guardado (y su factura saldada); recién ahora, y solo si la casilla
                 // sigue marcada, se reparte como la vez pasada. Falle o no, el pago queda guardado.
-                if (presetPago != null && repartoRecordado != null && repartirComoAntes) {
+                val reparto = repartoRecordado
+                if (presetPago != null && reparto != null && repartirComoAntes) {
                     saving = true
-                    repartirElPagoComoAntes(event, repartoRecordado.espacio, avisoAbajo)
+                    repartirElPagoComoAntes(event, reparto.espacio, avisoAbajo)
                     saving = false
                 }
                 // Vuelta 74: el aviso de abajo, con «Deshacer» (anula el movimiento —y devuelve el aviso
