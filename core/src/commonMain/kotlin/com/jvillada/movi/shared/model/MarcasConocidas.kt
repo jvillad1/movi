@@ -181,7 +181,14 @@ val BANCOS_CONOCIDOS: List<Marca> = listOf(
     banco("rappipay", "RappiPay", "RP", 0xFFFF441FL, OSCURO, listOf("rappipay", "rappi pay", "rappicard", "rappi card")),
     banco("nequi", "Nequi", "N", 0xFF200020L, 0xFFFF4FB8L, listOf("nequi")),
     banco("bancolombia", "Bancolombia", "B", 0xFFFDDA24L, OSCURO, listOf("bancolombia", "bcolombia")),
-    banco("nu", "Nu", "nu", 0xFF820AD1L, BLANCO, listOf("nubank", "nu colombia", "nu financiera"), listOf("nu")),
+    // Vuelta 91: así nombran a Nu el SMS de Bancolombia («Pagaste $X a NU Compania de Financiamiento») y
+    // el correo de PSE («Empresa: NU Compañía de Financiamiento»). Las palabras van enteras: «Nu» suelta
+    // sigue siendo solo de cuenta (en un texto puede ser cualquier cosa).
+    banco(
+        "nu", "Nu", "nu", 0xFF820AD1L, BLANCO,
+        listOf("nubank", "nu colombia", "nu financiera", "nu compania de financiamiento", "nu compania financiamiento"),
+        listOf("nu"),
+    ),
     banco("daviplata", "Daviplata", "DP", 0xFFC8102EL, BLANCO, listOf("daviplata")),
     banco("davibank", "Davibank", "Db", 0xFF9E1B32L, BLANCO, listOf("davibank")),
     banco("davivienda", "Davivienda", "D", 0xFFD31920L, BLANCO, listOf("davivienda")),

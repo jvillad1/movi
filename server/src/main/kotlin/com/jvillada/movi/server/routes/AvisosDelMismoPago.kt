@@ -6,6 +6,12 @@ import com.jvillada.movi.shared.model.SMS_STATE_CONFIRMED
 import com.jvillada.movi.shared.model.SMS_STATE_PENDING
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.esIdDeComprobante
+import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
+import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.esUnDepositoPropio
+import com.jvillada.movi.shared.model.grupoDelBanco
+import com.jvillada.movi.shared.model.marcaDelBeneficiario
+import com.jvillada.movi.shared.model.marcaDelRemitente
 import com.jvillada.movi.shared.model.momentoDelSms
 import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.selectAll
@@ -98,6 +104,13 @@ internal class GrupoDelMismoPago(val id: String, val miembros: List<SmsMessage>)
  * como se guarda), la misma moneda y el mismo tipo, llegaron a [minutosParaElMismoPago] o menos
  * (según [momentoDelSms]) y vienen de **orígenes distintos** ([origenDelAviso]).
  *
+ * **Vuelta 91 · las dos mitades de un traspaso propio** también son el mismo pago aunque una sea un
+ * gasto y la otra un ingreso: el pago que sale hacia un banco («Pagaste $1,500,000.00 a NU Compania de
+ * Financiamiento», o el correo de PSE a esa empresa) y el depósito que ese mismo banco avisa que entró
+ * («Recibimos tu depósito por 1.500.000,00», de Nu), con el mismo monto y moneda y a
+ * [MINUTOS_PARA_EL_MISMO_PAGO] o menos. Así el traspaso del 31-oct es UNA tarjeta, no un gasto y un
+ * ingreso sueltos. Ver `Leido.seJuntaCon`.
+ *
  * **Un pago junta en cadena**: si A es el mismo pago que B y B que C, A, B y C son uno, aunque A y C
  * estén más lejos entre sí. Con una condición que nunca se rompe: **dos avisos del mismo origen
  * nunca van en el mismo pago**. Por eso no es «todo lo conectado» a secas: se une primero lo más
@@ -163,7 +176,7 @@ internal fun gruposDelMismoPago(
         while (j < leidos.size && leidos[j].momento - a.momento <= margenMaximo) {
             val b = leidos[j]
             val distancia = b.momento - a.momento
-            if (a.origen != b.origen && a.llave == b.llave && distancia <= ventana(a.sms.bank, b.sms.bank) * 60_000L) {
+            if (a.origen != b.origen && a.seJuntaCon(b) && distancia <= a.ventanaCon(b, ventana(a.sms.bank, b.sms.bank)) * 60_000L) {
                 uniones += Union(i, j, distancia)
             }
             j++
@@ -239,6 +252,9 @@ internal fun conLosAvisosEnGrupo(
  *    después Google Wallet, después el correo; y entre iguales, el más viejo, para que la elección
  *    no cambie al recargar.
  *
+ * Y antes que todo (vuelta 91), **nunca el lado que entra de un traspaso propio** («Recibimos tu
+ * depósito…»), si hay otro aviso: ese no dice de qué cuenta salió la plata.
+ *
  * La cuenta, además, no sale solo de este: la app prueba con el texto de todos los avisos del pago
  * y se queda con la mejor lectura (`resolverCuentaDelGrupo` en `:shared`). Así un pago por QR toma
  * el comercio de Google Wallet y la cuenta *8133 del SMS.
@@ -250,7 +266,10 @@ internal fun propuestaDelGrupo(
     require(miembros.isNotEmpty())
     val comercios = miembros.associate { it.id to leer(it)?.merchant }
     return miembros.sortedWith(
-        compareByDescending<SmsMessage> { comercios[it.id]?.let(::comercioLegible) == true }
+        // Vuelta 91: el lado que entra de un traspaso propio (el depósito de Nu) no propone: no dice de
+        // qué cuenta salió la plata, y el pago sí lo dice (o el correo de PSE, a qué cuenta fue).
+        compareBy<SmsMessage> { esUnDepositoPropio(it.text) && miembros.size > 1 }
+            .thenByDescending { comercios[it.id]?.let(::comercioLegible) == true }
             .thenByDescending { traeLaCuenta(it.text) }
             .thenBy { ordenDelCanal(it.bank) }
             .thenBy { momentoDelSms(it.time, Long.MAX_VALUE) }
@@ -323,4 +342,40 @@ private class Leido(val sms: SmsMessage, leido: ParsedSms, val momento: Long) {
     val origen: String = origenDelAviso(sms.bank)
     /** Lo que tienen que compartir dos avisos para ser el mismo pago. */
     val llave: String = "${leido.amount.roundToLong()}|${leido.currency}|${leido.type}"
+    /** El monto y la moneda, sin el tipo: los dos lados de un traspaso propio los comparten. */
+    private val montoYMoneda: String = "${leido.amount.roundToLong()}|${leido.currency}"
+    /**
+     * Vuelta 91 · **el lado que entra de un traspaso propio**: un depósito del dueño a su cuenta
+     * («Recibimos tu depósito por 1.500.000,00», ver `esUnDepositoPropio`), con el banco que lo avisa
+     * (Nu). `null` en todo lo demás.
+     */
+    private val entraA: String? =
+        if (leido.type == TransactionType.INCOME && leido.category == TRANSFER_CATEGORY && esUnDepositoPropio(sms.text)) {
+            marcaDelRemitente(sms.bank, sms.text)?.id?.let(::grupoDelBanco)
+        } else null
+    /**
+     * …y **el lado que sale**: un pago a un banco («Pagaste $X a NU Compania de Financiamiento», el
+     * correo de PSE con «Empresa: NU Compañía de Financiamiento»), con ese banco. `null` en lo demás.
+     */
+    private val saleHacia: String? =
+        if (leido.type == TransactionType.EXPENSE) marcaDelBeneficiario(leido.merchant)?.id?.let(::grupoDelBanco) else null
+
+    /** ¿Este lado de un traspaso propio es la otra mitad de [otro]? Mismo monto y moneda, y el banco del depósito. */
+    private fun esLaOtraMitadDe(otro: Leido): Boolean =
+        montoYMoneda == otro.montoYMoneda &&
+            ((entraA != null && entraA == otro.saleHacia) || (otro.entraA != null && otro.entraA == saleHacia))
+
+    /**
+     * ¿[otro] puede ser el mismo pago? La misma llave (monto, moneda y tipo), o —vuelta 91— las dos
+     * mitades de un traspaso propio: el pago que sale hacia Nu y el depósito que Nu dice que entró.
+     */
+    fun seJuntaCon(otro: Leido): Boolean = llave == otro.llave || esLaOtraMitadDe(otro)
+
+    /**
+     * La ventana con [otro]: la de siempre ([porCanal]) y, entre las dos mitades de un traspaso, no
+     * más de [MINUTOS_PARA_EL_MISMO_PAGO] (el banco que recibe avisa en el acto: en el caso del 31-oct,
+     * en el mismo minuto). Así un depósito no se pega a un pago de otra hora por coincidir el monto.
+     */
+    fun ventanaCon(otro: Leido, porCanal: Long): Long =
+        if (llave != otro.llave && esLaOtraMitadDe(otro)) minOf(porCanal, MINUTOS_PARA_EL_MISMO_PAGO) else porCanal
 }

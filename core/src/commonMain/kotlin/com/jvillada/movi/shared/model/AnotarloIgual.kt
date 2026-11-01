@@ -41,6 +41,13 @@ data class AvisoSinLeer(
     val comercio: String? = null,
     val categoria: String? = null,
     val aprendidoDe: String? = null,
+    /**
+     * Vuelta 91 · **el aviso habla de un depósito del dueño** («Recibimos tu depósito…», «tu depósito»,
+     * `hablaDeUnDepositoPropio`): es el lado que entra de un traspaso entre sus cuentas, nunca un
+     * ingreso. [comoLectura] lo propone como «Traspaso» y la app pide de qué cuenta vino. Un APK viejo
+     * lo ignora.
+     */
+    val deposito: Boolean = false,
 )
 
 /**
@@ -80,7 +87,8 @@ fun AvisoSinLeer.comoLectura(monto: Double = this.monto, tipo: TransactionType =
     amount = monto,
     merchant = comercio?.takeIf { it.isNotBlank() } ?: COMERCIO_DE_UN_AVISO_SIN_LEER,
     type = tipo,
-    category = categoria.orEmpty(),
+    // Vuelta 91: un depósito propio que entra es el lado que entra de un traspaso, nunca un ingreso.
+    category = if (deposito && tipo == TransactionType.INCOME) TRANSFER_CATEGORY else categoria.orEmpty(),
     currency = moneda,
     aprendidoDe = aprendidoDe,
 )
