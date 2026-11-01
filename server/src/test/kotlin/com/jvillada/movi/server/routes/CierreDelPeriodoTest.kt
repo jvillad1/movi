@@ -9,6 +9,7 @@ import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.Cards
 import com.jvillada.movi.server.db.CierresDescartados
 import com.jvillada.movi.server.db.CierresEnviados
+import com.jvillada.movi.server.db.CierresGuardados
 import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.KnownDestinations
@@ -25,6 +26,7 @@ import com.jvillada.movi.server.reminders.mandarLosCierres
 import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.server.time.appDateToEpochMillis
 import com.jvillada.movi.shared.model.CierreDelPeriodo
+import com.jvillada.movi.shared.model.lineaDelCambioDelCierre
 import com.jvillada.movi.shared.model.OPENING_CATEGORY
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -91,7 +93,7 @@ class CierreDelPeriodoTest {
             val tablas = arrayOf(
                 Apartados, Users, Accounts, Events, VoidEvents, Credits, Cards, RecurringRules, RecurringOccurrences,
                 OccurrenceRejections, KnownDestinations, Budgets, Subscriptions, AnomaliasDescartadas,
-                CierresEnviados, CierresDescartados,
+                CierresEnviados, CierresDescartados, CierresGuardados,
             )
             SchemaUtils.create(tables = tablas)
             SchemaUtils.drop(tables = tablas.reversedArray())
@@ -327,6 +329,119 @@ class CierreDelPeriodoTest {
         assertFalse(html.contains("<b>Gym</b>"))
     }
 
+    // ── La foto del cierre (vuelta 95) ────────────────────────────────────────
+
+    @Test
+    fun `la primera lectura guarda la foto y la siguiente la devuelve igual`() = runBlocking<Unit> {
+        octubreDelDueno()
+        assertEquals(0L, transaction { CierresGuardados.selectAll().count() })
+        val primera = assertNotNull(cierreDelPeriodoDe(uid, diaUnoDeNoviembre))
+        assertEquals(1L, transaction { CierresGuardados.selectAll().count() }, "queda una foto")
+        assertNotNull(primera.cerradoEn)
+        assertNull(primera.cambio)
+        val segunda = assertNotNull(cierreDelPeriodoDe(uid, diaUnoDeNoviembre.plusDays(1)))
+        assertEquals(primera.entro, segunda.entro)
+        assertEquals(primera.salio, segunda.salio)
+        assertEquals(primera.cerradoEn, segunda.cerradoEn, "es la misma foto, no otra")
+        // Lo que depende de «hoy» sí se mueve: es cuándo se muestra, no qué dice.
+        assertEquals(2, segunda.diaDelPeriodoNuevo)
+        assertEquals(1L, transaction { CierresGuardados.selectAll().count() }, "y no se guarda otra")
+    }
+
+    @Test
+    fun `una edicion posterior no cambia la foto pero aparece la diferencia`() = runBlocking<Unit> {
+        octubreDelDueno()
+        val foto = assertNotNull(cierreDelPeriodoDe(uid, diaUnoDeNoviembre))
+        // Llega tarde un gasto del 20 de octubre (un SMS que entró el día 2).
+        anotar(LocalDate.of(2026, 10, 20), 250_000, "Comida", "Cena")
+        val despues = assertNotNull(cierreDelPeriodoDe(uid, diaUnoDeNoviembre.plusDays(1)))
+        assertEquals(foto.salio, despues.salio, "las cifras siguen siendo las de la foto")
+        assertEquals(foto.categorias, despues.categorias)
+        val cambio = assertNotNull(despues.cambio)
+        assertEquals(foto.salio, cambio.salioAntes)
+        assertEquals(foto.salio + 250_000, cambio.salioAhora)
+        assertEquals(foto.entro, cambio.entroAntes)
+        assertEquals(foto.entro, cambio.entroAhora)
+        assertEquals(
+            "Cambió desde el cierre: Salió \$2.591.800 → \$2.841.800",
+            lineaDelCambioDelCierre(despues),
+        )
+    }
+
+    @Test
+    fun `Actualizar reemplaza la foto por el calculo de hoy`() = runBlocking<Unit> {
+        octubreDelDueno()
+        val foto = assertNotNull(cierreDelPeriodoDe(uid, diaUnoDeNoviembre))
+        anotar(LocalDate.of(2026, 10, 20), 250_000, "Comida", "Cena")
+        assertNotNull(cierreDelPeriodoDe(uid, diaUnoDeNoviembre)?.cambio)
+
+        val nuevo = assertNotNull(cierreDelPeriodoDe(uid, diaUnoDeNoviembre, reemplazarLaFoto = true, soloElPeriodo = "2026-10"))
+        assertEquals(foto.salio + 250_000, nuevo.salio)
+        assertNull(nuevo.cambio)
+        val leida = assertNotNull(cierreDelPeriodoDe(uid, diaUnoDeNoviembre))
+        assertEquals(foto.salio + 250_000, leida.salio, "la foto nueva es la de hoy")
+        assertNull(leida.cambio)
+    }
+
+    @Test
+    fun `Actualizar de otro periodo no toca nada`() = runBlocking<Unit> {
+        octubreDelDueno()
+        val foto = assertNotNull(cierreDelPeriodoDe(uid, diaUnoDeNoviembre))
+        anotar(LocalDate.of(2026, 10, 20), 250_000, "Comida", "Cena")
+        assertNull(cierreDelPeriodoDe(uid, diaUnoDeNoviembre, reemplazarLaFoto = true, soloElPeriodo = "2026-09"))
+        assertEquals(foto.salio, assertNotNull(cierreDelPeriodoDe(uid, diaUnoDeNoviembre)).salio)
+    }
+
+    @Test
+    fun `un movimiento anulado despues tambien aparece como cambio`() = runBlocking<Unit> {
+        octubreDelDueno()
+        val foto = assertNotNull(cierreDelPeriodoDe(uid, diaUnoDeNoviembre))
+        val id = anotar(LocalDate.of(2026, 10, 21), 90_000, "Comida", "Almuerzo")
+        // La foto se tomó antes del gasto y el gasto aparece: cambio. Anulado, vuelve a coincidir.
+        assertEquals(foto.salio + 90_000, assertNotNull(cierreDelPeriodoDe(uid, diaUnoDeNoviembre)?.cambio).salioAhora)
+        transaction {
+            VoidEvents.insert {
+                it[VoidEvents.id] = "void_$id"; it[userId] = uid; it[originalEventId] = id
+                it[reason] = "prueba"; it[timestamp] = 1L
+            }
+        }
+        assertNull(cierreDelPeriodoDe(uid, diaUnoDeNoviembre)?.cambio)
+    }
+
+    @Test
+    fun `el correo dice lo que dijo la foto aunque algo haya cambiado`() = runBlocking<Unit> {
+        octubreDelDueno()
+        // La foto se toma al leer la tarjeta el día 1; después llega un gasto y recién ahí sale el correo.
+        val foto = assertNotNull(cierreDelPeriodoDe(uid, diaUnoDeNoviembre))
+        anotar(LocalDate.of(2026, 10, 20), 250_000, "Comida", "Cena")
+        val buzon = Buzon()
+        assertEquals(1, mandarLosCierres(diaUnoDeNoviembre.plusDays(1), "re_clave", buzon::enviar))
+        val html = buzon.enviados.single().third
+        assertTrue(html.contains("\$2.591.800"), "el correo usa la foto: $foto")
+        assertFalse(html.contains("\$2.841.800"))
+        assertFalse(html.contains("Cambió desde el cierre"), "la línea de cambio es de la tarjeta, no del correo")
+    }
+
+    @Test
+    fun `la foto de un duenio no la ve otro`() = runBlocking<Unit> {
+        octubreDelDueno()
+        anotar(LocalDate.of(2026, 9, 27), 7_777_000, "Salario", tipo = "INCOME", usuario = otro)
+        anotar(LocalDate.of(2026, 10, 2), 333_000, "Comida", usuario = otro)
+        val delDueno = assertNotNull(cierreDelPeriodoDe(uid, diaUnoDeNoviembre))
+        val delOtro = assertNotNull(cierreDelPeriodoDe(otro, diaUnoDeNoviembre))
+        assertEquals(5_000_000, delDueno.entro)
+        assertEquals(7_777_000, delOtro.entro)
+        assertEquals(2L, transaction { CierresGuardados.selectAll().count() })
+        assertEquals(
+            setOf(uid, otro),
+            transaction { CierresGuardados.selectAll().map { it[CierresGuardados.userId] }.toSet() },
+        )
+        // Cambiar lo del otro no le mueve nada al dueño.
+        anotar(LocalDate.of(2026, 10, 3), 111_000, "Comida", usuario = otro)
+        assertNull(assertNotNull(cierreDelPeriodoDe(uid, diaUnoDeNoviembre)).cambio)
+        assertNotNull(assertNotNull(cierreDelPeriodoDe(otro, diaUnoDeNoviembre)).cambio)
+    }
+
     // ── La tarjeta de Hoy ────────────────────────────────────────────────────
 
     private fun token(u: String) = JWT.create()
@@ -377,6 +492,47 @@ class CierreDelPeriodoTest {
         assertEquals(HttpStatusCode.NoContent, res.status)
         assertNull(leer(uid), "descartada, no vuelve")
         assertNotNull(leer(otro), "la del otro dueño sigue")
+    }
+
+    @Test
+    fun `Actualizar por la ruta reemplaza la foto, y solo la del que pide`() = testApplication {
+        application { testModule() }
+        val hoy = AppClock.today()
+        transaction {
+            listOf(uid, otro).forEach { u -> Users.update({ Users.id eq u }) { it[periodCutoffDay] = hoy.dayOfMonth } }
+        }
+        listOf(uid, otro).forEach { u -> anotar(hoy.minusDays(1), 80_000, "Comida", usuario = u) }
+
+        val foto = assertNotNull(leer(uid))
+        assertNotNull(leer(otro))
+        anotar(hoy.minusDays(2), 20_000, "Comida", usuario = uid)
+        val conCambio = assertNotNull(leer(uid))
+        assertEquals(foto.salio, conCambio.salio)
+        assertEquals(foto.salio + 20_000, assertNotNull(conCambio.cambio).salioAhora)
+
+        val res = client.post("/api/cierre-del-periodo/actualizar") {
+            header(HttpHeaders.Authorization, "Bearer ${token(uid)}")
+            contentType(ContentType.Application.Json)
+            setBody("""{"periodo":"${foto.periodo}"}""")
+        }
+        assertEquals(HttpStatusCode.OK, res.status)
+        val nuevo = json.decodeFromString(CierreDelPeriodo.serializer(), res.bodyAsText())
+        assertEquals(foto.salio + 20_000, nuevo.salio)
+        assertNull(nuevo.cambio)
+        assertNull(assertNotNull(leer(uid)).cambio)
+
+        val mal = client.post("/api/cierre-del-periodo/actualizar") {
+            header(HttpHeaders.Authorization, "Bearer ${token(uid)}")
+            contentType(ContentType.Application.Json)
+            setBody("""{"periodo":"2001-01"}""")
+        }
+        assertEquals(HttpStatusCode.NotFound, mal.status)
+        val sinPeriodo = client.post("/api/cierre-del-periodo/actualizar") {
+            header(HttpHeaders.Authorization, "Bearer ${token(uid)}")
+            contentType(ContentType.Application.Json)
+            setBody("""{}""")
+        }
+        assertEquals(HttpStatusCode.BadRequest, sinPeriodo.status)
     }
 
     private val ajustes25 = com.jvillada.movi.shared.model.PeriodSettings(cutoffDay = 25)

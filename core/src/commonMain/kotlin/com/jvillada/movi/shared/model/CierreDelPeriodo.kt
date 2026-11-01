@@ -57,7 +57,36 @@ data class CierreDelPeriodo(
     val diaDelPeriodoNuevo: Int = 1,
     /** El dueño ya cerró la tarjeta de Hoy de este período. */
     val descartado: Boolean = false,
+    /**
+     * **Vuelta 95 · cuándo se tomó la foto de este cierre** (millis). Las cifras de arriba son las de esa
+     * foto —la primera vez que se armó el cierre, ya cerrado el período—, no las de hoy. `null` en un
+     * server anterior a la foto: un APK viejo ni lo lee y uno nuevo lo trata como «sin foto».
+     */
+    val cerradoEn: Long? = null,
+    /**
+     * Vuelta 95 · **lo que cambió desde la foto**, si algo cambió: un movimiento viejo que se editó,
+     * se anuló o llegó tarde. `null` = el cálculo de hoy coincide con la foto. «Actualizar» (el server)
+     * reemplaza la foto y lo deja en `null`.
+     */
+    val cambio: CambioDesdeElCierre? = null,
 )
+
+/**
+ * Vuelta 95 · **lo que dijo la foto del cierre y lo que dice el cálculo de hoy**, para lo que se cuenta
+ * en la frase del resumen: lo que entró y lo que salió. Se compara el total, no cada categoría: es el
+ * aviso de «esto ya no es lo que te mostramos», no otro resumen.
+ */
+@Serializable
+data class CambioDesdeElCierre(
+    val entroAntes: Long,
+    val entroAhora: Long,
+    val salioAntes: Long,
+    val salioAhora: Long,
+)
+
+/** `POST /api/cierre-del-periodo/actualizar`: reemplazar la foto del cierre de [periodo] por el cálculo de hoy. */
+@Serializable
+data class ActualizarCierreRequest(val periodo: String)
 
 /** Lo que entró y salió en el período anterior al que cerró. */
 @Serializable
@@ -267,6 +296,33 @@ fun disponibleDelCierre(c: CierreDelPeriodo): String? {
         quedo < 0 -> "Te pasaste del disponible por ${pesosDelCierre(-quedo)}"
         else -> "Usaste todo el disponible, ni un peso más"
     }
+}
+
+/**
+ * Vuelta 95 · **¿cambió algo desde la foto del cierre?** Compara lo que entró y lo que salió de la [foto]
+ * con el cálculo de [hoy] (`null` = hoy no hay nada que contar: cuenta como cero). `null` si coinciden.
+ * Pura: la usa el server al leer y las pruebas.
+ */
+fun cambioDesdeElCierre(foto: CierreDelPeriodo, hoy: CierreDelPeriodo?): CambioDesdeElCierre? {
+    val entroAhora = hoy?.entro ?: 0L
+    val salioAhora = hoy?.salio ?: 0L
+    if (entroAhora == foto.entro && salioAhora == foto.salio) return null
+    return CambioDesdeElCierre(foto.entro, entroAhora, foto.salio, salioAhora)
+}
+
+/**
+ * Vuelta 95 · **«Cambió desde el cierre: Salió $18.200.000 → $18.350.000»**, o `null` si no cambió nada.
+ * Solo nombra lo que cambió (entró, salió o los dos). No va en [lineasDelCierre]: el correo y el aviso
+ * dicen lo que dijo la foto; esta línea es de la tarjeta de Hoy, que es donde se puede «Actualizar».
+ */
+fun lineaDelCambioDelCierre(c: CierreDelPeriodo): String? {
+    val x = c.cambio ?: return null
+    val partes = listOfNotNull(
+        "Entró ${pesosDelCierre(x.entroAntes)} → ${pesosDelCierre(x.entroAhora)}".takeIf { x.entroAntes != x.entroAhora },
+        "Salió ${pesosDelCierre(x.salioAntes)} → ${pesosDelCierre(x.salioAhora)}".takeIf { x.salioAntes != x.salioAhora },
+    )
+    if (partes.isEmpty()) return null
+    return "Cambió desde el cierre: " + partes.joinToString(" · ")
 }
 
 /**
