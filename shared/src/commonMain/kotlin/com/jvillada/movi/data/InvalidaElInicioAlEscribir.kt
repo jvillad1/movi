@@ -138,6 +138,13 @@ internal class InvalidaElInicioAlEscribir(
         trasEscribir { delegado.guardarEspacio(espacio) }
     override suspend fun repartirMovimiento(espacioId: String, eventoId: String) =
         trasEscribir { delegado.repartirMovimiento(espacioId, eventoId) }
+    // Vuelta 97: repartir con un reparto propio (o editarlo), y la marca «Se reparte en …».
+    override suspend fun repartirMovimiento(espacioId: String, eventoId: String, reparto: com.jvillada.movi.shared.model.RepartoDelGasto?) =
+        trasEscribir { delegado.repartirMovimiento(espacioId, eventoId, reparto) }
+    override suspend fun marcarRecurrenteDelHogar(espacioId: String, reglaId: String): Unit =
+        trasEscribir { delegado.marcarRecurrenteDelHogar(espacioId, reglaId) }
+    override suspend fun quitarRecurrenteDelHogar(espacioId: String, reglaId: String): Unit =
+        trasEscribir { delegado.quitarRecurrenteDelHogar(espacioId, reglaId) }
     override suspend fun quitarDelEspacio(espacioId: String, eventoId: String): Unit =
         trasEscribir { delegado.quitarDelEspacio(espacioId, eventoId) }
     override suspend fun quitarGastoDelEspacio(espacioId: String, gastoId: String): Unit =

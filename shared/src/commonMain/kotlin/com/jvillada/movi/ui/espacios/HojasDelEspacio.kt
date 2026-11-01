@@ -45,6 +45,8 @@ import com.jvillada.movi.shared.model.GastoDelEspacio
 import com.jvillada.movi.shared.model.LiquidacionDelEspacio
 import com.jvillada.movi.shared.model.MIEMBRO_YO
 import com.jvillada.movi.shared.model.MiembroDelEspacio
+import com.jvillada.movi.shared.model.RepartoDelGasto
+import com.jvillada.movi.shared.model.problemaDelReparto
 import com.jvillada.movi.shared.model.TipoDeTercero
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.montoContado
@@ -222,8 +224,10 @@ fun HojaPagoOtro(
     var hojaDeCategorias by remember { mutableStateOf(false) }
     var pedidosDeFoco by remember { mutableStateOf(0) }
     val pagador = quien
-    val tuParte = if (pagador != null && (monto ?: 0L) > 0L) partesDelGasto(monto ?: 0L, espacio, pagador)[MIEMBRO_YO] ?: 0L else 0L
-    val puede = pagador != null && (monto ?: 0L) > 0L && categoria.isNotBlank() && !trabajando
+    // Vuelta 97: el reparto de este gasto (de entrada, la regla del grupo).
+    var reparto by remember { mutableStateOf(RepartoDelGasto.DEL_GRUPO) }
+    val faltaEnElReparto = problemaDelReparto(reparto, monto ?: 0L, espacio).takeIf { (monto ?: 0L) > 0L }
+    val puede = pagador != null && (monto ?: 0L) > 0L && categoria.isNotBlank() && faltaEnElReparto == null && !trabajando
 
     fun guardar() {
         if (!puede || pagador == null) return
@@ -241,6 +245,8 @@ fun HojaPagoOtro(
                         categoria = categoria.trim(),
                         descripcion = descripcionDelPagoOtro(nota, categoria),
                         fecha = kotlinx.datetime.Clock.System.now().toEpochMilliseconds(),
+                        // Vuelta 97: siempre viaja, también «Partes iguales».
+                        reparto = reparto,
                     ),
                 )
                 onGuardado()
@@ -299,16 +305,24 @@ fun HojaPagoOtro(
                 habilitado = !trabajando,
                 tag = TAG_NOTA_PAGO_OTRO,
             )
-            if (tuParte > 0L) {
-                Spacer(Modifier.height(EspacioDeDiseno.xs))
-                Text("Tu parte ${formatCOP(tuParte)}", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+            // Vuelta 97: cómo se reparte este gasto, con la línea en vivo («Te toca $X · a Caro $Y»).
+            if (pagador != null) {
+                Spacer(Modifier.height(Medida.dentroDeSeccion))
+                SelectorDeReparto(
+                    espacio = espacio,
+                    monto = monto ?: 0L,
+                    pagadoPor = pagador,
+                    reparto = reparto,
+                    onReparto = { reparto = it },
+                    habilitado = !trabajando,
+                )
             }
             Spacer(Modifier.height(Medida.dentroDeSeccion))
             PieDeHoja(
                 "Guardar",
                 onClick = ::guardar,
                 habilitado = puede,
-                razon = if (categoria.isBlank() && (monto ?: 0L) > 0L) "Falta la categoría" else null,
+                razon = if (categoria.isBlank() && (monto ?: 0L) > 0L && faltaEnElReparto == null) "Falta la categoría" else null,
                 cargando = trabajando,
                 error = error,
                 modifier = Modifier.testTag(TAG_GUARDAR_PAGO_OTRO),
@@ -388,23 +402,15 @@ private class EscrituraDeRepartir(private val coroutine: kotlinx.coroutines.Coro
     var trabajandoEn by mutableStateOf<String?>(null)
     var error by mutableStateOf<String?>(null)
 
-    fun repartir(espacio: Espacio) {
+    /**
+     * Vuelta 97 · la escritura de la hoja «Repartir» ([HojaDeRepartirElGasto]): reparte (o cambia el
+     * reparto de) este gasto en [espacio] y avisa con la parte ajena nueva. Lanza si no se pudo: la hoja
+     * lo dice y queda abierta.
+     */
+    suspend fun repartirCon(espacio: Espacio, reparto: RepartoDelGasto) {
         val e = evento ?: return
-        if (trabajandoEn != null) return
-        trabajandoEn = espacio.id
-        error = null
-        coroutine.launch {
-            try {
-                val gasto = Repositories.wallets.repartirMovimiento(espacio.id, e.id)
-                trabajandoEn = null
-                onCambiado(e.copy(parteAjena = gasto.monto - (gasto.partes[MIEMBRO_YO] ?: gasto.monto), espacioId = espacio.id))
-            } catch (x: CancellationException) {
-                throw x
-            } catch (x: Throwable) {
-                error = mensajeDelEspacio(x)
-                trabajandoEn = null
-            }
-        }
+        val gasto = Repositories.wallets.repartirMovimiento(espacio.id, e.id, reparto)
+        onCambiado(e.copy(parteAjena = gasto.monto - (gasto.partes[MIEMBRO_YO] ?: gasto.monto), espacioId = espacio.id))
     }
 
     fun quitar(espacioId: String) {
@@ -441,12 +447,40 @@ internal fun BloqueDeRepartido(
     val repartidoEn = evento.espacioId ?: return
     val escritura = rememberEscrituraDeRepartir(evento, onCambiado)
     val actual = espacios.firstOrNull { it.id == repartidoEn }
+    val coroutine = rememberCoroutineScope()
+    // Vuelta 97 · «Cambiar»: el reparto que tiene este gasto (lo dice el detalle del grupo) y la hoja con él.
+    var cambiando by remember(evento.id) { mutableStateOf<Pair<Espacio, RepartoDelGasto?>?>(null) }
+    var leyendo by remember(evento.id) { mutableStateOf(false) }
     Superficie(nivel = NivelDeSuperficie.Capa2, modifier = Modifier.fillMaxWidth().testTag(TAG_REPARTIR)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(EspacioDeDiseno.s)) {
             Column(modifier = Modifier.weight(1f)) {
                 Text("Repartido en ${actual?.nombre ?: "un grupo"}", style = Movi.textos.cuerpo, color = Movi.colores.texto)
                 Text("Tu parte ${formatCOP(montoContado(evento))}", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
             }
+            Boton(
+                "Cambiar",
+                onClick = {
+                    if (leyendo || escritura.trabajandoEn != null) return@Boton
+                    leyendo = true
+                    escritura.error = null
+                    coroutine.launch {
+                        try {
+                            val detalle = Repositories.wallets.getDetalleDelEspacio(repartidoEn)
+                            cambiando = detalle.espacio to detalle.gastos.firstOrNull { it.eventoId == evento.id }?.reparto
+                        } catch (x: CancellationException) {
+                            throw x
+                        } catch (x: Throwable) {
+                            escritura.error = mensajeDelEspacio(x)
+                        } finally {
+                            leyendo = false
+                        }
+                    }
+                },
+                variante = VarianteDeBoton.Fantasma,
+                tamano = TamanoDeBoton.S,
+                cargando = leyendo,
+                modifier = Modifier.testTag(TAG_CAMBIAR_EL_REPARTO),
+            )
             Boton(
                 "Quitar",
                 onClick = { escritura.quitar(repartidoEn) },
@@ -457,7 +491,24 @@ internal fun BloqueDeRepartido(
         }
         ErrorDeLaHoja(escritura.error)
     }
+    cambiando?.let { (espacio, reparto) ->
+        HojaDeRepartirElGasto(
+            espacio = espacio,
+            monto = evento.amount,
+            concepto = evento.description,
+            repartoInicial = reparto,
+            onDismiss = { cambiando = null },
+            onRepartir = { nuevo ->
+                escritura.repartirCon(espacio, nuevo)
+                cambiando = null
+            },
+            textoDelBoton = "Guardar el reparto",
+        )
+    }
 }
+
+/** El botón «Cambiar» del bloque de un gasto repartido (vuelta 97). */
+const val TAG_CAMBIAR_EL_REPARTO: String = "espacios:cambiar-el-reparto"
 
 /**
  * **La sección de la acción «Repartir»** (vuelta de diseño 17). Hasta acá cada gasto llevaba debajo
@@ -475,29 +526,39 @@ internal fun SeccionDeRepartir(
     onCambiado: (FinancialEvent) -> Unit,
 ) {
     val escritura = rememberEscrituraDeRepartir(evento, onCambiado)
+    // Vuelta 97: tocar un grupo abre la hoja «Repartir» con el selector («Partes iguales» de entrada).
+    var abierta by remember(evento.id) { mutableStateOf<Espacio?>(null) }
     Column(modifier = Modifier.fillMaxWidth().testTag(TAG_SECCION_DE_REPARTIR)) {
         Text("En tus gastos cuenta solo tu parte.", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
         Spacer(Modifier.height(EspacioDeDiseno.xs))
         Superficie(nivel = NivelDeSuperficie.Capa2, relleno = RellenoDeSuperficie.Lista, modifier = Modifier.fillMaxWidth()) {
             espacios.forEach { espacio ->
                 val tuParte = partesDelGasto(evento.amount, espacio, MIEMBRO_YO)[MIEMBRO_YO]
-                val trabajando = escritura.trabajandoEn == espacio.id
                 Fila(
                     titulo = espacio.nombre,
-                    subtitulo = when {
-                        trabajando -> "Repartiendo…"
-                        tuParte != null -> "Tu parte ${formatCOP(tuParte)}"
-                        else -> null
-                    },
+                    subtitulo = tuParte?.let { "Tu parte ${formatCOP(it)}" },
                     inicio = { IconoEnCirculo(Icons.Rounded.Groups) },
                     final = {
                         Text("Repartir", style = Movi.textos.cuerpo, color = Movi.colores.enlace)
                     },
-                    onClick = { escritura.repartir(espacio) },
+                    onClick = { abierta = espacio },
                     onClickLabel = "Repartir en ${espacio.nombre}",
                 )
             }
         }
         ErrorDeLaHoja(escritura.error)
+    }
+    abierta?.let { espacio ->
+        HojaDeRepartirElGasto(
+            espacio = espacio,
+            monto = evento.amount,
+            concepto = evento.description,
+            repartoInicial = null,
+            onDismiss = { abierta = null },
+            onRepartir = { reparto ->
+                escritura.repartirCon(espacio, reparto)
+                abierta = null
+            },
+        )
     }
 }

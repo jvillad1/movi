@@ -2096,6 +2096,22 @@ class LocalRepository(
         runCatching { sincronizador.subirLoPendiente() }
     }
 
+    /** Vuelta 97: el mismo camino, con el reparto propio del gasto (primero sube el movimiento). */
+    override suspend fun repartirMovimiento(
+        espacioId: String,
+        eventoId: String,
+        reparto: com.jvillada.movi.shared.model.RepartoDelGasto?,
+    ): com.jvillada.movi.shared.model.GastoDelEspacio {
+        enDisco { asegurarQueSubio(eventoId) }
+        return remote.repartirMovimiento(espacioId, eventoId, reparto)
+    }
+
+    // Vuelta 97: como las propuestas de saldar, se piden al server (las escrituras piden red).
+    override suspend fun getPropuestasDeRepartir(): List<com.jvillada.movi.shared.model.PropuestaDeRepartir> = remote.getPropuestasDeRepartir()
+    override suspend fun getRecurrentesDelHogar(): List<com.jvillada.movi.shared.model.RecurrenteDelHogar> = remote.getRecurrentesDelHogar()
+    override suspend fun marcarRecurrenteDelHogar(espacioId: String, reglaId: String) = remote.marcarRecurrenteDelHogar(espacioId, reglaId)
+    override suspend fun quitarRecurrenteDelHogar(espacioId: String, reglaId: String) = remote.quitarRecurrenteDelHogar(espacioId, reglaId)
+
     /** Ver [repartirMovimiento]. Lanza [MovimientoSinSubir] si la fila sigue sin sello. */
     private suspend fun asegurarQueSubio(eventoId: String) {
         val fila = db.financialEventQueries.selectById(eventoId, userId()).executeAsOneOrNull() ?: return

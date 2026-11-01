@@ -23,6 +23,9 @@ import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.GastoDelEspacio
 import com.jvillada.movi.shared.model.MIEMBRO_YO
 import com.jvillada.movi.shared.model.RepartoDelEspacio
+import com.jvillada.movi.shared.model.RepartoDelGasto
+import com.jvillada.movi.shared.model.esDelGrupo
+import com.jvillada.movi.shared.model.problemaDelReparto
 import com.jvillada.movi.shared.model.idsDeMiembros
 import com.jvillada.movi.shared.model.newId
 import com.jvillada.movi.shared.model.partesDelGasto
@@ -69,8 +72,9 @@ import kotlinx.datetime.LocalDate
  * - **Pagó otro**: lo mismo que la hoja «Pagó otro» (`POST /api/espacios/{id}/gastos`), con la fecha
  *   que se eligió en Agregar en vez de «ahora».
  *
- * **Cómo se reparte no se elige acá**: la proporción es del espacio ([Espacio.reparto], mitad y mitad
- * o porcentajes), y no existe una por gasto. La hoja la dice; inventar otra sería lógica de plata nueva.
+ * **Cómo se reparte** (vuelta 97): el selector de reparto ([SelectorDeReparto]) con «Partes iguales»
+ * de entrada —la regla del grupo, la de siempre— y las otras formas (porcentajes, montos exactos, «Solo
+ * de …») por gasto. No deja confirmar hasta que cuadre. El reparto viaja con la escritura de siempre.
  *
  * **En el teléfono el gasto se guarda primero en la base local** y lo sube el `SyncEngine` cada 30 s.
  * El reparto lo hace el server, así que antes de pedirlo `LocalRepository.repartirMovimiento` da una
@@ -101,8 +105,8 @@ data class GastoParaRepartir(
     val faltaParaGuardar: String? = null,
 )
 
-/** Quién pagó, y en qué espacio. */
-data class DecisionDeRepartir(val espacio: Espacio, val pagadoPor: String) {
+/** Quién pagó, en qué espacio y (vuelta 97) cómo se reparte; `null` = la regla del grupo. */
+data class DecisionDeRepartir(val espacio: Espacio, val pagadoPor: String, val reparto: RepartoDelGasto? = null) {
     val pagueYo: Boolean get() = pagadoPor == MIEMBRO_YO
 }
 
@@ -114,6 +118,11 @@ class CaminosDeRepartir(
     val repartirMovimiento: suspend (espacioId: String, eventoId: String) -> Unit,
     /** La hoja «Pagó otro». */
     val anotarGastoDeOtro: suspend (espacioId: String, gasto: GastoDelEspacio) -> Unit,
+    /**
+     * Vuelta 97 · el «Repartir» con el reparto elegido en la hoja. Sin él (las pruebas de antes), va
+     * [repartirMovimiento]: la regla del grupo.
+     */
+    val repartirConReparto: (suspend (espacioId: String, eventoId: String, reparto: RepartoDelGasto) -> Unit)? = null,
 )
 
 /** Cómo terminó un intento. */
@@ -141,6 +150,7 @@ fun gastoDeOtroDesdeAgregar(gasto: GastoParaRepartir, decision: DecisionDeRepart
         categoria = gasto.categoria.trim(),
         descripcion = descripcionDelPagoOtro(gasto.nota, gasto.categoria),
         fecha = gasto.momento,
+        reparto = decision.reparto?.takeIf { !esDelGrupo(it) },
     )
 
 /**
@@ -160,7 +170,11 @@ suspend fun repartirDesdeAgregar(
     }
     val evento = yaGuardado ?: intentar { caminos.guardarElGasto() }
         .getOrElse { return ResultadoDeRepartir.NoSeGuardo(it.toUserMessage()) }
-    return intentar { caminos.repartirMovimiento(decision.espacio.id, evento.id) }
+    return intentar {
+        val conReparto = caminos.repartirConReparto
+        if (conReparto != null) conReparto(decision.espacio.id, evento.id, decision.reparto ?: RepartoDelGasto.DEL_GRUPO)
+        else caminos.repartirMovimiento(decision.espacio.id, evento.id)
+    }
         .fold({ ResultadoDeRepartir.Listo(evento) }, { ResultadoDeRepartir.GuardadoSinRepartir(evento, motivoDelRepartoPendiente(it)) })
 }
 
@@ -254,9 +268,12 @@ fun HojaRepartirEsteGasto(
     var trabajando by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var yaGuardado by remember { mutableStateOf<FinancialEvent?>(null) }
-    val decision = DecisionDeRepartir(espacio, pagador)
+    // Vuelta 97: el reparto de este gasto; vuelve a «Partes iguales» si cambia el grupo (otra gente).
+    var repartoElegido by remember { mutableStateOf(RepartoDelGasto.DEL_GRUPO to primero.id) }
+    val reparto = repartoElegido.first.takeIf { repartoElegido.second == espacio.id } ?: RepartoDelGasto.DEL_GRUPO
+    val decision = DecisionDeRepartir(espacio, pagador, reparto)
     val falta = queFaltaParaRepartir(gasto, decision.pagueYo)
-    val tuParte = if (gasto.monto > 0L) partesDelGasto(gasto.monto, espacio, pagador)[MIEMBRO_YO] ?: 0L else 0L
+        ?: problemaDelReparto(reparto, gasto.monto, espacio)
     // Con el gasto ya guardado, lo único que queda es el reparto: no se cambia nada de lo de arriba.
     val bloqueado = trabajando || yaGuardado != null
 
@@ -364,11 +381,13 @@ fun HojaRepartirEsteGasto(
                 color = Movi.colores.textoMedio,
             )
             Spacer(Modifier.height(Medida.dentroDeSeccion))
-            RotuloDeCampo("¿Cómo se reparte?")
-            Text(
-                if (tuParte > 0L) "${comoSeReparte(espacio)} · Tu parte ${formatCOP(tuParte)}" else comoSeReparte(espacio),
-                style = Movi.textos.cuerpo,
-                color = Movi.colores.texto,
+            SelectorDeReparto(
+                espacio = espacio,
+                monto = gasto.monto,
+                pagadoPor = pagador,
+                reparto = reparto,
+                onReparto = { repartoElegido = it to espacio.id },
+                habilitado = !bloqueado,
             )
             Spacer(Modifier.height(Medida.entreSecciones))
             PieDeHoja(
@@ -379,7 +398,8 @@ fun HojaRepartirEsteGasto(
                 },
                 onClick = ::confirmar,
                 habilitado = falta == null && !trabajando,
-                razon = falta,
+                // Lo que no cuadra del reparto ya lo dice la línea en vivo, arriba.
+                razon = falta?.takeIf { queFaltaParaRepartir(gasto, decision.pagueYo) != null },
                 cargando = trabajando,
                 error = error,
                 modifier = Modifier.testTag(TAG_CONFIRMAR_REPARTIR_ESTE_GASTO),

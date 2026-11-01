@@ -341,6 +341,38 @@ class WalletRepositoryImpl(
             },
         ) { it.body() }
 
+    override suspend fun repartirMovimiento(
+        espacioId: String,
+        eventoId: String,
+        reparto: com.jvillada.movi.shared.model.RepartoDelGasto?,
+    ): com.jvillada.movi.shared.model.GastoDelEspacio =
+        conRespuesta(
+            client.post("$baseUrl/api/espacios/$espacioId/compartir") {
+                contentType(ContentType.Application.Json)
+                setBody(com.jvillada.movi.shared.model.CompartirMovimientoRequest(eventoId = eventoId, gastoId = newId("gde"), reparto = reparto))
+            },
+        ) { it.body() }
+
+    override suspend fun getPropuestasDeRepartir(): List<com.jvillada.movi.shared.model.PropuestaDeRepartir> {
+        val response = client.get("$baseUrl/api/espacios/propuestas-de-reparto")
+        if (response.status == HttpStatusCode.NotFound) return emptyList()
+        return conRespuesta(response) { it.body() }
+    }
+
+    override suspend fun getRecurrentesDelHogar(): List<com.jvillada.movi.shared.model.RecurrenteDelHogar> {
+        val response = client.get("$baseUrl/api/espacios/recurrentes-del-hogar")
+        if (response.status == HttpStatusCode.NotFound) return emptyList()
+        return conRespuesta(response) { it.body() }
+    }
+
+    override suspend fun marcarRecurrenteDelHogar(espacioId: String, reglaId: String) {
+        conRespuesta(client.put("$baseUrl/api/espacios/$espacioId/recurrentes/$reglaId")) { }
+    }
+
+    override suspend fun quitarRecurrenteDelHogar(espacioId: String, reglaId: String) {
+        conRespuesta(client.delete("$baseUrl/api/espacios/$espacioId/recurrentes/$reglaId")) { }
+    }
+
     override suspend fun quitarDelEspacio(espacioId: String, eventoId: String) {
         conRespuesta(client.delete("$baseUrl/api/espacios/$espacioId/compartir/$eventoId")) { }
     }

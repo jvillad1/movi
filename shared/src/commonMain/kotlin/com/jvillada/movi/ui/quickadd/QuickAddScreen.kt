@@ -2061,6 +2061,8 @@ fun QuickAddScreen(
                     guardarElGasto = { guardarElMovimiento() },
                     repartirMovimiento = { espacioId, eventoId -> Repositories.wallets.repartirMovimiento(espacioId, eventoId) },
                     anotarGastoDeOtro = { espacioId, gasto -> Repositories.wallets.anotarGastoDeOtro(espacioId, gasto) },
+                    // Vuelta 97: con el reparto que se eligió en la hoja.
+                    repartirConReparto = { espacioId, eventoId, reparto -> Repositories.wallets.repartirMovimiento(espacioId, eventoId, reparto) },
                 ),
                 // El campo de la hoja es el monto de Agregar, no una copia.
                 onMonto = { amount = it?.toString().orEmpty() },
