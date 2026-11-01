@@ -5087,3 +5087,18 @@ se ve solo si llegó: contra un server viejo la guía sigue con los tres pasos y
 Movi arma al momento es `HojaDeCompartir.descargar` (un `Blob` en la web; las otras plataformas no la ofrecen).
 
 **Pruebas**: `FiltroDeGmailEnPantallaTest` (`:shared` androidUnitTest).
+
+## Vuelta 95 · La hoja de aviso previo («puerta»)
+
+Cuando una acción manda datos a un tercero por primera vez (hoy: lo que va a Claude, `ui/ai/AvisoDeLaIa.kt`),
+no se pide permiso en una pantalla aparte: se abre una **hoja corta antes de la acción**, con `MarcoDeHoja` y
+`EncabezadoDeHoja`. Reglas del patrón:
+
+- Tres bloques de frases cortas —lo que se manda, lo que no, lo que dice la política—, sin jerga legal.
+- **Dos botones a todo el ancho**: «Entendido» (`Principal`, sigue lo que el usuario iba a hacer) y una
+  salida que enseña (`Fantasma`, «Ver qué sabe Movi»). **Nunca «Cancelar»**: la × y el arrastre ya cierran, y
+  cerrar sin elegir no hace la acción ni da el aviso por visto.
+- Se guarda **por usuario en el servidor**, no en el aparato, para que no vuelva en otro; y siempre tiene una
+  fila en Ajustes que la vuelve a abrir.
+- Lo que no usa el tercero (las tres preguntas sugeridas) no pasa por la puerta.
+- Una puerta por pantalla que dispara la acción (`rememberPuertaDeLaIa` + `puerta.Hoja()`).

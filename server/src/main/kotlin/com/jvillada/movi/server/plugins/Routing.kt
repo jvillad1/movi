@@ -122,6 +122,8 @@ fun Application.configureRouting() {
             direccionDeCorreoRoutes()
             filtroDeGmailRoutes()
             aiRoutes()
+            // Vuelta 95: «Lo que Movi sabe de ti» de un vistazo (cuatro conteos).
+            resumenDeLoQueMoviSabeRoutes()
             statementRoutes()
             documentRoutes()
             papelesRoutes()

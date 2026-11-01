@@ -304,6 +304,22 @@ fun Route.userRoutes() {
             call.respond(perfil.toProfile())
         }
 
+        /**
+         * **«Qué ve la IA» visto** (vuelta 95): la hoja que explica qué se manda a Claude y qué no.
+         * Sella `users.aviso_ia_visto_en` **solo la primera vez**: llamarlo de nuevo —otro aparato, un
+         * reintento— no mueve la fecha. Sin cuerpo; devuelve el perfil como el `PUT`.
+         */
+        post("/aviso-ia") {
+            val uid = call.userId()
+            val perfil = dbQuery {
+                Users.update({ (Users.id eq uid) and Users.avisoIaVistoEn.isNull() }) {
+                    it[Users.avisoIaVistoEn] = System.currentTimeMillis()
+                }
+                Users.selectAll().where { Users.id eq uid }.firstOrNull()
+            } ?: return@post call.respond(HttpStatusCode.NotFound)
+            call.respond(perfil.toProfile())
+        }
+
         post("/cerrar-sesiones") {
             val uid = call.userId()
             val versionNueva = dbQuery {
@@ -340,6 +356,8 @@ private fun ResultRow.toProfile() = UserProfile(
     cierrePorCorreo = this[Users.cierrePorCorreo] ?: true,
     // Sin tocar = la guía nunca se terminó ni se descartó.
     primerUsoEn = this[Users.primerUsoEn],
+    // Sin ver = la hoja «Qué ve la IA» se abre la primera vez que algo va a Claude.
+    avisoIaVistoEn = this[Users.avisoIaVistoEn],
     // Sin elegir = no aparta nada: «Te quedan» da lo de siempre.
     ahorroDelPeriodoTipo = tipoDeAhorroDe(this[Users.ahorroDelPeriodoTipo]).name,
     ahorroDelPeriodoValor = if (tipoDeAhorroDe(this[Users.ahorroDelPeriodoTipo]) == TipoDeAhorro.NINGUNO) 0L

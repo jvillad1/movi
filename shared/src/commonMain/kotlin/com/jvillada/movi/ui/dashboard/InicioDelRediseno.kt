@@ -12,6 +12,7 @@ import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.TipoDeAnomalia
 import com.jvillada.movi.shared.model.CambioDeCategoriaDeUnRecurrente
 import com.jvillada.movi.shared.model.fraseDelCierre
+import com.jvillada.movi.shared.model.lineaDelCambioDelCierre
 import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.tituloDelPeriodo
 import com.jvillada.movi.shared.model.nombreDelPeriodo
@@ -323,6 +324,12 @@ sealed interface AccionDeLaPropuesta {
 
     /** «Ya lo vi»: la tarjeta del cierre no vuelve en este período. */
     data class DescartarCierre(val periodo: String) : AccionDeLaPropuesta
+
+    /**
+     * Vuelta 95 · «Actualizar»: la foto del cierre se reemplaza por el cálculo de hoy
+     * (`POST /api/cierre-del-periodo/actualizar`). Solo cuando el cierre cambió desde que se mostró.
+     */
+    data class ActualizarCierre(val periodo: String) : AccionDeLaPropuesta
 
     /**
      * Vuelta 60: «Sí, cambiar»: el movimiento vuelve a la categoría del período anterior y, si la regla
@@ -698,6 +705,21 @@ internal fun destinoDeLaAnomalia(anomalia: com.jvillada.movi.shared.model.Anomal
 
 private fun propuestaDeCierre(data: DashboardData): PropuestaDelInicio? {
     val cierre = cierreParaHoy(data) ?: return null
+    // Vuelta 95 · el cierre es una foto: si lo de hoy ya no coincide (un movimiento viejo se editó, se
+    // anuló o llegó tarde), la tarjeta lo dice con las dos cifras y ofrece «Actualizar». El resto del
+    // resumen no cambia hasta que el dueño lo pida.
+    lineaDelCambioDelCierre(cierre)?.let { cambio ->
+        return PropuestaDelInicio(
+            tipo = TipoDePropuesta.CIERRE,
+            titulo = "Resumen de ${cierre.nombre.replaceFirstChar { it.lowercase() }}",
+            cuerpo = fraseDelCierre(cierre) + ". " + cambio,
+            accion = "Actualizar",
+            alTocar = AccionDeLaPropuesta.ActualizarCierre(cierre.periodo),
+            accionSecundaria = "Ver el período",
+            alTocarSecundaria = AccionDeLaPropuesta.Ir(Screen.DetalleDePeriodo(cierre.periodo)),
+            rango = 6,
+        )
+    }
     return PropuestaDelInicio(
         tipo = TipoDePropuesta.CIERRE,
         titulo = "Resumen de ${cierre.nombre.replaceFirstChar { it.lowercase() }}",

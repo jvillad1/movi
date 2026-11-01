@@ -129,6 +129,21 @@ class InicioDelRedisenoTest {
     }
 
     @Test
+    fun `si el cierre cambio desde la foto la tarjeta lo dice y ofrece Actualizar`() {
+        val conCambio = cierre.copy(cambio = com.jvillada.movi.shared.model.CambioDesdeElCierre(10, 10, 5, 8))
+        val data = DashboardData(cierre = conCambio)
+        val c = propuestasDelInicio(data).single { it.tipo == TipoDePropuesta.CIERRE }
+        assertTrue(c.cuerpo!!.contains("Cambió desde el cierre: Salió \$5 → \$8"), c.cuerpo)
+        assertEquals("Actualizar", c.accion)
+        assertEquals(AccionDeLaPropuesta.ActualizarCierre("2026-08"), c.alTocar)
+        assertEquals(AccionDeLaPropuesta.Ir(Screen.DetalleDePeriodo("2026-08")), c.alTocarSecundaria)
+        // Sin cambio, la tarjeta es la de siempre.
+        val igual = propuestasDelInicio(DashboardData(cierre = cierre)).single { it.tipo == TipoDePropuesta.CIERRE }
+        assertEquals("Ver el período", igual.accion)
+        assertFalse(igual.cuerpo!!.contains("Cambió"))
+    }
+
+    @Test
     fun `un pago que vence en dos dias todavia no es una propuesta`() {
         val data = todoPendiente.copy(upcoming = listOf(pago("r_cel", "Celular", 53_000, 2)))
         assertTrue(propuestasDelInicio(data).none { it.tipo == TipoDePropuesta.PAGO })

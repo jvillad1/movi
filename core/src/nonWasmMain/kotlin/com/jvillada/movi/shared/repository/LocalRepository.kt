@@ -2218,6 +2218,7 @@ class LocalRepository(
     override suspend fun getCierreDelPeriodo(): com.jvillada.movi.shared.model.CierreDelPeriodo? = remote.getCierreDelPeriodo()
     override suspend fun getExtractosPorSubir(): List<com.jvillada.movi.shared.model.ExtractoPorSubir> = remote.getExtractosPorSubir()
     override suspend fun descartarCierre(periodo: String) = remote.descartarCierre(periodo)
+    override suspend fun actualizarCierre(periodo: String) = remote.actualizarCierre(periodo)
     // El saldo del aviso contra el de Movi: se deriva en el server en cada lectura, sin nada que
     // espejar. «Ajustar» sí escribe un movimiento, y ese se espeja como el de cualquier cuadre.
     override suspend fun getCuadresPorAviso(): List<com.jvillada.movi.shared.model.PropuestaDeCuadrePorAviso> =
@@ -2686,6 +2687,8 @@ class LocalRepository(
     override suspend fun getUserProfile(): UserProfile = remote.getUserProfile()
     override suspend fun updateUserProfile(request: UpdateProfileRequest): UserProfile = remote.updateUserProfile(request)
     override suspend fun marcarPrimerUso(): UserProfile = remote.marcarPrimerUso()
+    override suspend fun marcarAvisoDeLaIa() = remote.marcarAvisoDeLaIa()
+    override suspend fun getResumenDeLoQueMoviSabe() = remote.getResumenDeLoQueMoviSabe()
     override suspend fun getDireccionDeCorreo() = remote.getDireccionDeCorreo()
     override suspend fun getFiltroDeCorreo() = remote.getFiltroDeCorreo()
     override suspend fun changePassword(request: ChangePasswordRequest): String? = remote.changePassword(request)

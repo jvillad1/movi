@@ -168,6 +168,8 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
     var importando by remember { mutableStateOf<String?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutine = rememberCoroutineScope()
+    val puerta = com.jvillada.movi.ui.ai.rememberPuertaDeLaIa(onNavigate)
+    puerta.Hoja()
     val uriHandler = LocalUriHandler.current
 
     LaunchedEffect(refreshKey) {
@@ -237,7 +239,7 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
      * el motivo que explica el server («no encontramos movimientos», «falta la clave») es lo
      * único que el dueño puede usar.
      */
-    fun importar(doc: Documento) {
+    fun importarYa(doc: Documento) {
         if (importando != null) return
         importando = doc.id
         coroutine.launch {
@@ -248,6 +250,12 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
                 .onFailure { error = "No pude procesar el extracto: ${it.toUserMessage()}" }
             importando = null
         }
+    }
+
+    fun importar(doc: Documento) {
+        if (importando != null) return
+        // Vuelta 95: leer un extracto es lo que va a Claude; la primera vez, el aviso «Qué ve la IA».
+        puerta.pasar { importarYa(doc) }
     }
 
     fun borrar(doc: Documento) {

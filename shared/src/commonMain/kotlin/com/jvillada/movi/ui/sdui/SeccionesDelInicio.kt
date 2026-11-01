@@ -272,6 +272,8 @@ internal fun PropuestasDelInicioSection(
     data: DashboardData,
     onNavigate: (Screen) -> Unit,
     onDescartarCierre: (String) -> Unit,
+    /** Vuelta 95: «Actualizar» la foto del cierre (el estado vive en `DashboardScreen`). */
+    onActualizarCierre: (String) -> Unit = {},
     /** Vuelta 39: `false` cuando «Próximo pago» ya lo dice arriba (ver `visibleSections`). */
     conElPago: Boolean = true,
 ) {
@@ -283,6 +285,7 @@ internal fun PropuestasDelInicioSection(
         when (accion) {
             is AccionDeLaPropuesta.Ir -> onNavigate(accion.pantalla)
             is AccionDeLaPropuesta.DescartarCierre -> onDescartarCierre(accion.periodo)
+            is AccionDeLaPropuesta.ActualizarCierre -> onActualizarCierre(accion.periodo)
             // «Está bien»: se va en el mismo toque; si el server no lo guarda, vuelve. Vuelta 89: el pedido
             // no va en un alcance de esta sección, que se va con la última tarjeta (ver `descartarYGuardar`).
             is AccionDeLaPropuesta.DescartarAnomalia ->
