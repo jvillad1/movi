@@ -8,6 +8,7 @@ import com.jvillada.movi.shared.model.DIAS_PARA_BANCO_MUDO_POR_DEFECTO
 import com.jvillada.movi.shared.model.MOTIVO_DEVUELTO
 import com.jvillada.movi.shared.model.MotivoDeApartado
 import com.jvillada.movi.shared.model.OrigenMudo
+import com.jvillada.movi.shared.model.SMS_STATE_CONFIRMED
 import com.jvillada.movi.shared.model.esIdDeComprobante
 import com.jvillada.movi.shared.model.momentoDelSms
 import com.jvillada.movi.shared.model.motivoDeApartado
@@ -33,7 +34,10 @@ fun Transaction.origenesMudosDe(uid: String, ahora: Long): List<OrigenMudo> {
         .firstOrNull()?.get(Users.diasParaBancoMudo) ?: DIAS_PARA_BANCO_MUDO_POR_DEFECTO
     if (dias <= 0) return emptyList()
     val desdeQueSeLee = ahora - DIAS_QUE_SE_LEEN_CON_EL_PARSER * 86_400_000L
-    val capturas = SmsMessages.select(SmsMessages.id, SmsMessages.bank, SmsMessages.time, SmsMessages.text, SmsMessages.motivoApartado)
+    val capturas = SmsMessages.select(
+        SmsMessages.id, SmsMessages.bank, SmsMessages.time, SmsMessages.text, SmsMessages.motivoApartado,
+        SmsMessages.state, SmsMessages.eventoId,
+    )
         .where { SmsMessages.userId eq uid }
         .mapNotNull { fila ->
             if (esIdDeComprobante(fila[SmsMessages.id])) return@mapNotNull null
@@ -47,6 +51,8 @@ fun Transaction.origenesMudosDe(uid: String, ahora: Long): List<OrigenMudo> {
                     texto = fila[SmsMessages.text],
                     origen = bank,
                     motivoGuardado = fila[SmsMessages.motivoApartado],
+                    estado = fila[SmsMessages.state],
+                    eventoId = fila[SmsMessages.eventoId],
                     conElParser = momento >= desdeQueSeLee,
                 ),
             )
@@ -68,15 +74,27 @@ internal const val DIAS_QUE_SE_LEEN_CON_EL_PARSER: Int = 120
  *
  * 1. «Era un movimiento» del dueño ([MOTIVO_DEVUELTO]) manda: es movimiento.
  * 2. El motivo con que Movi la apartó al llegar (`motivo_apartado`).
- * 3. Si se lee con el parser ([conElParser]): lo que reconoce [motivoParaApartar] (rechazo, promoción,
+ * 3. **Lo que el dueño ya confirmó** (`state = confirmed`) o tiene un movimiento detrás (`evento_id`) es
+ *    movimiento, sin leerlo: él ya lo dijo. Así el parser solo corre sobre lo pendiente o ignorado sin
+ *    motivo, que es poco — esto corre en `/api/dashboard/summary`, la ruta más caliente (revisión de la
+ *    vuelta 90: parsear la bandeja entera costaba ~170 ms en caliente).
+ * 4. Si se lee con el parser ([conElParser]): lo que reconoce [motivoParaApartar] (rechazo, promoción,
  *    código, seguridad, confirmación de reenvío…), y si `parseSms` no saca un monto, «aviso sin monto».
  *
  * Ante la duda, movimiento: la misma regla de oro que `queEsEsteMensaje`. Un origen que se ve vivo de
  * más es el error de antes; uno que se ve mudo sin estarlo sería una alarma falsa.
  */
-internal fun queTraeLaCaptura(texto: String, origen: String, motivoGuardado: String?, conElParser: Boolean): MotivoDeApartado? {
+internal fun queTraeLaCaptura(
+    texto: String,
+    origen: String,
+    motivoGuardado: String?,
+    estado: String?,
+    eventoId: String?,
+    conElParser: Boolean,
+): MotivoDeApartado? {
     if (motivoGuardado == MOTIVO_DEVUELTO) return null
     motivoDeApartado(motivoGuardado)?.let { return it }
+    if (estado == SMS_STATE_CONFIRMED || !eventoId.isNullOrBlank()) return null
     if (!conElParser) return null
     motivoParaApartar(texto, origen)?.let { return it }
     val leido = parseSms(texto, origen)

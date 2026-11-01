@@ -109,6 +109,8 @@ class BancoMudoRoutesTest {
         id: String = "sms_${uid}_${bank}_$diasAtras",
         texto: String = "Compraste $10.000 en algo",
         motivo: String? = null,
+        estado: String = SMS_STATE_CONFIRMED,
+        eventoId: String? = null,
     ) = transaction {
         SmsMessages.insert {
             it[SmsMessages.id] = id
@@ -116,8 +118,9 @@ class BancoMudoRoutesTest {
             it[time] = ZonedDateTime.now(bogota).minusDays(diasAtras).minusMinutes(1).format(formato)
             it[SmsMessages.bank] = bank
             it[text] = texto
-            it[state] = SMS_STATE_CONFIRMED
+            it[state] = estado
             it[motivoApartado] = motivo
+            it[SmsMessages.eventoId] = eventoId
             it[det] = ""
         }
     }
@@ -196,10 +199,11 @@ class BancoMudoRoutesTest {
         wireApp()
         glimConComprasHastaHaceCinco(duenoId)
         // Después de la última compra siguen llegando avisos todos los días… pero ninguno es una compra.
-        (0L..4L).forEach { sembrar(duenoId, glim, it, id = "glim_rechazo_$it", texto = rechazoDeGlim) }
-        sembrar(duenoId, glim, 1, id = "glim_promo_1", texto = promoDeGlim)
+        // Los rechazos los ignoró el dueño (llegaron antes de que Movi los apartara solo).
+        (0L..4L).forEach { sembrar(duenoId, glim, it, id = "glim_rechazo_$it", texto = rechazoDeGlim, estado = "ignored") }
+        sembrar(duenoId, glim, 1, id = "glim_promo_1", texto = promoDeGlim, estado = "pending")
         // Una promoción que Movi ya apartó al llegar cuenta por su motivo guardado.
-        sembrar(duenoId, glim, 2, id = "glim_promo_2", texto = "Cualquier cosa", motivo = "PROMOCION")
+        sembrar(duenoId, glim, 2, id = "glim_promo_2", texto = "Cualquier cosa", motivo = "PROMOCION", estado = "ignored")
 
         val mudo = mudos(duenoId).single()
         assertEquals("Glim", mudo.nombre)
@@ -216,8 +220,8 @@ class BancoMudoRoutesTest {
     fun `con compras el origen esta vivo aunque tambien lleguen rechazos`() = testApplication {
         wireApp()
         glimConComprasHastaHaceCinco(duenoId)
-        (0L..4L).forEach { sembrar(duenoId, glim, it, id = "glim_rechazo_$it", texto = rechazoDeGlim) }
-        sembrar(duenoId, glim, 0, id = "glim_compra_hoy", texto = compraDeGlim)
+        (0L..4L).forEach { sembrar(duenoId, glim, it, id = "glim_rechazo_$it", texto = rechazoDeGlim, estado = "ignored") }
+        sembrar(duenoId, glim, 0, id = "glim_compra_hoy", texto = compraDeGlim, estado = "pending")
         assertTrue(mudos(duenoId).isEmpty())
     }
 
@@ -225,7 +229,7 @@ class BancoMudoRoutesTest {
     fun `lo que el duenio devolvio como movimiento cuenta como movimiento`() = testApplication {
         wireApp()
         glimConComprasHastaHaceCinco(duenoId)
-        sembrar(duenoId, glim, 0, id = "glim_devuelto", texto = rechazoDeGlim, motivo = MOTIVO_DEVUELTO)
+        sembrar(duenoId, glim, 0, id = "glim_devuelto", texto = rechazoDeGlim, motivo = MOTIVO_DEVUELTO, estado = "pending")
         assertTrue(mudos(duenoId).isEmpty(), "«Era un movimiento» gana sobre lo que lee Movi")
     }
 
@@ -234,5 +238,14 @@ class BancoMudoRoutesTest {
         wireApp()
         bancolombiaCalladoHaceCuatroDias(duenoId)
         assertNull(mudos(duenoId).single().motivo)
+    }
+
+    @Test
+    fun `lo que el duenio confirmo o tiene movimiento es movimiento aunque el parser no lo lea`() = testApplication {
+        wireApp()
+        glimConComprasHastaHaceCinco(duenoId)
+        // Un texto que el parser no entiende, pero el dueño lo confirmó con su movimiento: el banco sí avisó.
+        sembrar(duenoId, glim, 0, id = "glim_raro_confirmado", texto = "Glim: movimiento en tu tarjeta", eventoId = "ev_1")
+        assertTrue(mudos(duenoId).isEmpty())
     }
 }
