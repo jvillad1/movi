@@ -29,6 +29,7 @@ import com.jvillada.movi.data.ScreenDefCache
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.data.isAndroid
+import com.jvillada.movi.shared.model.CIERRE_YA_NO_SE_ACTUALIZA
 import com.jvillada.movi.shared.model.Scope
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.ScreenDefinition
@@ -496,6 +497,11 @@ fun DashboardScreen(
                 runCatching { Repositories.wallets.getCierreDelPeriodo() }
                     .onSuccess { c -> data = data.copy(cierre = c) }
             }
+            // Vuelta 94: los extractos que faltan subir. Secundario y solo en `data`, como el cierre.
+            launch {
+                runCatching { Repositories.wallets.getExtractosPorSubir() }
+                    .onSuccess { e -> data = data.copy(extractosPorSubir = e) }
+            }
             // Vuelta 39 · «Últimos movimientos»: las primeras filas de Actividad. Solo los días de los
             // últimos movimientos (`/by-day?ultimos=N`), no la historia entera en cada carga de la web;
             // en el teléfono sale de lo local. Secundario: si falla, la sección no se pinta esta vez.
@@ -675,6 +681,24 @@ fun DashboardScreen(
                 DashboardDataCache.data = DashboardDataCache.data?.copy(cierre = null)
                 alcanceDelCierre.launch { runCatching { Repositories.wallets.descartarCierre(periodo) } }
             }
+            // Vuelta 95 · «Actualizar»: el cierre es una foto; si cambió, el dueño pide la de hoy. La
+            // tarjeta no se mueve hasta que el server contesta (no hay nada que adivinar).
+            val actualizarCierre: (String) -> Unit = { periodo ->
+                alcanceDelCierre.launch {
+                    runCatching { Repositories.wallets.actualizarCierre(periodo) }
+                        .onSuccess { nuevo ->
+                            // `null` = no queda nada que contar: la tarjeta se va.
+                            data = data.copy(cierre = nuevo)
+                            DashboardDataCache.data = DashboardDataCache.data?.copy(cierre = nuevo)
+                        }
+                        .onFailure { falla ->
+                            snackbarHostState.showSnackbar(
+                                if (falla is com.jvillada.movi.shared.model.CierreYaNoSeActualiza) CIERRE_YA_NO_SE_ACTUALIZA
+                                else "No pude actualizar el cierre. Inténtalo de nuevo.",
+                            )
+                        }
+                }
+            }
             // SDUI: la definición del server si la hay; si no, la misma lista que el server
             // siembra (anti-rotura capa 3) — una sola fuente en :core, idéntica por construcción.
             // `LocalCargandoElInicio`: el hero y «Pregúntale a Movi» solo reciben `data`, no
@@ -703,6 +727,7 @@ fun DashboardScreen(
                     // [EditarInicioScreen]). Al final, siempre, para no competir con lo que Hoy dice.
                     footer = { BotonEditarInicio { onNavigate(Screen.EditarInicio) } },
                     onDescartarCierre = descartarCierre,
+                    onActualizarCierre = actualizarCierre,
                     // Un movimiento de «Últimos movimientos» se editó o se anuló en su hoja: las cifras
                     // de arriba ya no son las de antes.
                     onRecargar = {

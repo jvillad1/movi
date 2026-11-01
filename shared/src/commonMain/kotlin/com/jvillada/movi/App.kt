@@ -29,6 +29,7 @@ import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.theme.LocalMovimientoReducido
 import com.jvillada.movi.platform.movimientoReducidoDelSistema
 import com.jvillada.movi.ui.direccionDe
+import com.jvillada.movi.ui.abrirLaGuiaAlArrancar
 import com.jvillada.movi.ui.transicionEntrePantallas
 import com.jvillada.movi.ui.components.LocalRetoqueDePestana
 import com.jvillada.movi.ui.components.LocalAtajosDeAgregar
@@ -298,12 +299,17 @@ fun App() {
             // En la web, además, se puede soltar el archivo sobre la ventana.
             EscucharArchivosSoltados()
             val hayPapeles = PapelesCompartidos.pendientes.isNotEmpty()
+            // Vuelta 95: leer un papel es lo que va a Claude; la primera vez, antes, la hoja «Qué ve la IA».
+            val puertaDeLaIa = com.jvillada.movi.ui.ai.rememberPuertaDeLaIa(navigate)
             LaunchedEffect(hayPapeles, papelesALeer, currentScreen, SessionManager.loggedIn) {
                 if (!hayPapeles || papelesALeer != null) return@LaunchedEffect
                 if (!sePuedeLeerLoCompartido(SessionManager.loggedIn, currentScreen)) return@LaunchedEffect
-                // Agregar se cierra: la hoja de lectura va encima de la pantalla, no de otra hoja.
-                quickAdd = null
-                papelesALeer = PapelesCompartidos.tomarTodos()
+                puertaDeLaIa.pasar {
+                    if (PapelesCompartidos.pendientes.isEmpty() || papelesALeer != null) return@pasar
+                    // Agregar se cierra: la hoja de lectura va encima de la pantalla, no de otra hoja.
+                    quickAdd = null
+                    papelesALeer = PapelesCompartidos.tomarTodos()
+                }
             }
 
             // **La guía de primer uso, para quien no pasó por Registro** (en la web se crea la cuenta
@@ -312,7 +318,11 @@ fun App() {
             // Inicio con sesión; ver [revisarLaGuiaDePrimerUso] para la regla.
             LaunchedEffect(SessionManager.loggedIn, currentScreen) {
                 if (!SessionManager.loggedIn || currentScreen != Screen.Dashboard) return@LaunchedEffect
-                if (revisarLaGuiaDePrimerUso(Repositories.wallets)) navigate(Screen.PrimerUso())
+                // Sin animación y sin el Inicio debajo: ver [abrirLaGuiaAlArrancar].
+                if (revisarLaGuiaDePrimerUso(Repositories.wallets)) {
+                    quickAdd = null
+                    abrirLaGuiaAlArrancar(backStack)
+                }
             }
 
             BackHandlerEffect(
@@ -620,6 +630,7 @@ fun App() {
                         modifier = Modifier.align(Alignment.BottomCenter),
                     )
                 }
+                puertaDeLaIa.Hoja()
                 // «Movi está leyendo tu comprobante…». Encima de la pantalla, como Agregar.
                 papelesALeer?.let { archivos ->
                     CompositionLocalProvider(LocalGoBack provides goBackTo, LocalNavigate provides navigate) {

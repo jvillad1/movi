@@ -144,6 +144,8 @@ class SmsFilterConfigTest {
                 "com.app.prontomas",
                 "com.google.android.apps.walletnfcrel",
                 "com.nu.production",
+                // Vuelta 92: el paquete de Davivienda, leído del mismo teléfono el 19-sep.
+                "com.todo1.davivienda.mobileapp",
             ),
             paquetes,
         )

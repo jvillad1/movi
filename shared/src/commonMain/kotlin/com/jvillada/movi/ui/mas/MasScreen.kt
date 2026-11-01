@@ -33,6 +33,7 @@ import androidx.compose.material.icons.rounded.Inbox
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Password
 import androidx.compose.material.icons.rounded.Psychology
+import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.Savings
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Sms
@@ -207,6 +208,8 @@ fun MasScreen(
     // SessionManager tenía del login (sin parpadeo), y al llegar deja SessionManager al día para que
     // el avatar de las otras pantallas tenga el color correcto.
     var profile by remember { mutableStateOf<UserProfile?>(null) }
+    val puertaDeLaIa = com.jvillada.movi.ui.ai.rememberPuertaDeLaIa(onNavigate)
+    puertaDeLaIa.Hoja()
     // Qué pasó con la lectura, que no es lo mismo que «todavía no llegó». Sin esto las filas que
     // dependen del perfil pintaban el valor por defecto como si fuera el suyo (ver AJUSTES_NO_LEIDOS).
     var falloElPerfil by remember { mutableStateOf(false) }
@@ -366,6 +369,16 @@ fun MasScreen(
                     FilaQueLleva("Movi AI", Icons.Rounded.AutoAwesome, Screen.AIChat(), onNavigate)
                     Separador()
                     FilaQueLleva(TITULO_LO_QUE_MOVI_SABE, Icons.Rounded.Psychology, Screen.LoQueMoviSabe, onNavigate)
+                    Separador()
+                    // Vuelta 95: la hoja «Qué ve la IA» de nuevo, sin nada pendiente.
+                    Fila(
+                        titulo = com.jvillada.movi.ui.ai.TITULO_QUE_VE_LA_IA,
+                        subtitulo = "Qué le llega a Claude y qué no",
+                        lineasDelSubtitulo = 2,
+                        inicio = { IconoDeAjuste(Icons.Rounded.Visibility) },
+                        final = { Chevron() },
+                        onClick = { puertaDeLaIa.abrir() },
+                    )
                     Separador()
                     // Ola 3 · «Editar inicio»: es del dueño (se guarda en el server).
                     FilaQueLleva(

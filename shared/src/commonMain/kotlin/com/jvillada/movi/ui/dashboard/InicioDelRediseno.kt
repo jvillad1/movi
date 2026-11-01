@@ -12,6 +12,7 @@ import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.TipoDeAnomalia
 import com.jvillada.movi.shared.model.CambioDeCategoriaDeUnRecurrente
 import com.jvillada.movi.shared.model.fraseDelCierre
+import com.jvillada.movi.shared.model.lineaDelCambioDelCierre
 import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.tituloDelPeriodo
 import com.jvillada.movi.shared.model.nombreDelPeriodo
@@ -311,7 +312,7 @@ fun yNMas(n: Int): String? = if (n > 0) "y $n más" else null
 const val TOPE_DE_PROPUESTAS: Int = 4
 
 /** De qué es una propuesta. Una tarjeta por tipo: varias cosas del mismo tipo se dicen en una. */
-enum class TipoDePropuesta { PAGO, DEBITO, CUADRE, PRESUPUESTO, ANOMALIA, CIERRE }
+enum class TipoDePropuesta { PAGO, DEBITO, CUADRE, EXTRACTO, PRESUPUESTO, ANOMALIA, CIERRE }
 
 /** Lo que hace tocar un botón de una propuesta. */
 sealed interface AccionDeLaPropuesta {
@@ -325,10 +326,22 @@ sealed interface AccionDeLaPropuesta {
     data class DescartarCierre(val periodo: String) : AccionDeLaPropuesta
 
     /**
+     * Vuelta 95 · «Actualizar»: la foto del cierre se reemplaza por el cálculo de hoy
+     * (`POST /api/cierre-del-periodo/actualizar`). Solo cuando el cierre cambió desde que se mostró.
+     */
+    data class ActualizarCierre(val periodo: String) : AccionDeLaPropuesta
+
+    /**
      * Vuelta 60: «Sí, cambiar»: el movimiento vuelve a la categoría del período anterior y, si la regla
      * tiene la otra, también la regla. Lo hace el dueño con el toque; Movi nunca lo cambia solo.
      */
     data class CambiarLaCategoria(val cambio: CambioDeCategoriaDeUnRecurrente) : AccionDeLaPropuesta
+
+    /**
+     * Vuelta 94: «Subir el extracto»: la subida de siempre de un papel (el «Subir comprobante o
+     * extracto» de Agregar, que lo lee y abre la revisión del extracto).
+     */
+    data object SubirElExtracto : AccionDeLaPropuesta
 }
 
 /**
@@ -386,6 +399,7 @@ data class PropuestaDelInicio(
  * 2. lo que el banco cobró solo y falta confirmar;
  * 3. un pago que vence mañana;
  * 5. un saldo que no cuadra con el que dijo el banco;
+ *    (y, a la par, un extracto de tarjeta que falta subir, vuelta 94);
  * 6. algo que se sale de lo normal;
  * 7. el cierre del período que terminó.
  *
@@ -403,6 +417,7 @@ fun propuestasDelInicio(data: DashboardData, conElPago: Boolean = true): List<Pr
     if (conElPago) propuestaDePago(data)?.let(::add)
     propuestaDeDebitos(data)?.let(::add)
     propuestaDeCuadre(data)?.let(::add)
+    propuestaDeExtracto(data)?.let(::add)
     propuestaDePresupuesto(data)?.let(::add)
     propuestaDeAnomalia(data)?.let(::add)
     propuestaDeCierre(data)?.let(::add)
@@ -690,6 +705,21 @@ internal fun destinoDeLaAnomalia(anomalia: com.jvillada.movi.shared.model.Anomal
 
 private fun propuestaDeCierre(data: DashboardData): PropuestaDelInicio? {
     val cierre = cierreParaHoy(data) ?: return null
+    // Vuelta 95 · el cierre es una foto: si lo de hoy ya no coincide (un movimiento viejo se editó, se
+    // anuló o llegó tarde), la tarjeta lo dice con las dos cifras y ofrece «Actualizar». El resto del
+    // resumen no cambia hasta que el dueño lo pida.
+    lineaDelCambioDelCierre(cierre)?.let { cambio ->
+        return PropuestaDelInicio(
+            tipo = TipoDePropuesta.CIERRE,
+            titulo = "Resumen de ${cierre.nombre.replaceFirstChar { it.lowercase() }}",
+            cuerpo = fraseDelCierre(cierre) + ". " + cambio,
+            accion = "Actualizar",
+            alTocar = AccionDeLaPropuesta.ActualizarCierre(cierre.periodo),
+            accionSecundaria = "Ver el período",
+            alTocarSecundaria = AccionDeLaPropuesta.Ir(Screen.DetalleDePeriodo(cierre.periodo)),
+            rango = 6,
+        )
+    }
     return PropuestaDelInicio(
         tipo = TipoDePropuesta.CIERRE,
         titulo = "Resumen de ${cierre.nombre.replaceFirstChar { it.lowercase() }}",
@@ -701,6 +731,46 @@ private fun propuestaDeCierre(data: DashboardData): PropuestaDelInicio? {
         accionSecundaria = "Ya lo vi",
         alTocarSecundaria = AccionDeLaPropuesta.DescartarCierre(cierre.periodo),
         rango = 6,
+    )
+}
+
+/** Vuelta 94: el botón que abre la subida del extracto. */
+const val SUBIR_EL_EXTRACTO: String = "Subir el extracto"
+
+/** Vuelta 94: el que dice que no se va a subir (ese corte no vuelve a pedirse). */
+const val YA_NO: String = "Ya no"
+
+/**
+ * Vuelta 94 · **los extractos que faltan, sin los que se descartaron en esta sesión** (el «Ya no» se va
+ * en el mismo toque, como el «Está bien» de una anomalía: la misma huella, la misma tabla).
+ */
+internal fun extractosVisiblesDe(data: DashboardData): List<com.jvillada.movi.shared.model.ExtractoPorSubir> =
+    data.extractosPorSubir.orEmpty().filterNot { it.huella in AnomaliasDescartadasEnLaSesion.huellas }
+
+/**
+ * Vuelta 94 · **«¿Ya bajaste el extracto de Nu de octubre?»**: una tarjeta por todos los que faltan, la
+ * primera con su pregunta y «y N extractos más». «Subir el extracto» abre la subida de siempre; «Ya no»
+ * descarta ese corte de esa tarjeta. No escribe nada más: el extracto, al leerse, pasa por la revisión
+ * de siempre y nada se anota solo.
+ */
+private fun propuestaDeExtracto(data: DashboardData): PropuestaDelInicio? {
+    val extractos = extractosVisiblesDe(data)
+    val primero = extractos.firstOrNull() ?: return null
+    val otros = extractos.size - 1
+    return PropuestaDelInicio(
+        tipo = TipoDePropuesta.EXTRACTO,
+        titulo = com.jvillada.movi.shared.model.preguntaDelExtractoPorSubir(primero, extractos),
+        cuerpo = com.jvillada.movi.shared.model.CUERPO_DEL_EXTRACTO_POR_SUBIR + when {
+            otros == 1 -> " Y falta 1 extracto más."
+            otros > 1 -> " Y faltan $otros extractos más."
+            else -> ""
+        },
+        accion = SUBIR_EL_EXTRACTO,
+        alTocar = AccionDeLaPropuesta.SubirElExtracto,
+        accionSecundaria = YA_NO,
+        alTocarSecundaria = AccionDeLaPropuesta.DescartarAnomalia(primero.huella),
+        rango = 4,
+        cuantas = extractos.size,
     )
 }
 

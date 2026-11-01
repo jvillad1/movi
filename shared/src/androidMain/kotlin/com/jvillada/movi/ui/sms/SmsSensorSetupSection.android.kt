@@ -31,6 +31,9 @@ import com.jvillada.movi.ui.components.ds.TonoDePildora
 import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.notificaciones.AlmacenDeNotificaciones
+import com.jvillada.movi.notificaciones.BOTON_RECONECTAR
+import com.jvillada.movi.notificaciones.debeOfrecerLaExencionDeBateria
+import com.jvillada.movi.notificaciones.textoDelEstadoDeLaCaptura
 import com.jvillada.movi.sensor.InstallSource
 import com.jvillada.movi.sensor.OnResume
 import com.jvillada.movi.sensor.SmsPermissionVerdict
@@ -38,6 +41,9 @@ import com.jvillada.movi.sensor.SmsPermissions
 import com.jvillada.movi.sensor.abrirAjustesDeNotificaciones
 import com.jvillada.movi.sensor.canShowRationale
 import com.jvillada.movi.sensor.canShowRationaleFor
+import com.jvillada.movi.sensor.estaExentaDelAhorroDeBateria
+import com.jvillada.movi.sensor.pedirLaExencionDeBateria
+import com.jvillada.movi.sensor.pedirQueReconecte
 import com.jvillada.movi.sensor.findComponentActivity
 import com.jvillada.movi.sensor.hasReadSmsPermission
 import com.jvillada.movi.sensor.hasSmsPermissions
@@ -114,6 +120,9 @@ actual fun SmsSensorSetupSection(onSynced: () -> Unit, conAccionPrincipal: Boole
     // Se dibuja a sí misma solo cuando el aviso aplica; el Spacer va adentro para no
     // dejar un hueco doble cuando la app ya está exenta.
     SensorHibernationCard(principal = conAccionPrincipal && smsConcedido && notificacionesConcedidas)
+    // Vuelta 92: el ahorro de batería, que también desenchufa la lectura de notificaciones. Se
+    // ofrece con un botón y se dice por qué; nunca se pide solo.
+    SensorBateriaCard(hayCaptura = smsConcedido || notificacionesConcedidas)
     Spacer(Modifier.height(Medida.dentroDeSeccion))
     SensorBackfillCard(installSource, outageSince, onSynced)
 }
@@ -217,17 +226,48 @@ private fun SensorNotificationsCard(installSource: InstallSource, principal: Boo
     val activity = remember(context) { context.findComponentActivity() }
     var concedido by remember { mutableStateOf(tieneAccesoANotificaciones(context)) }
     var ultima by remember { mutableStateOf(AlmacenDeNotificaciones.ultimaAt(context)) }
+    // Vuelta 92: «Concedido» no prueba que Android le esté pasando las notificaciones a Movi. Lo que
+    // lo dice es si el listener está conectado y cuándo llegó la última de un banco.
+    var conectada by remember { mutableStateOf(AlmacenDeNotificaciones.estaConectada(context)) }
+    var ultimaDelBanco by remember { mutableStateOf(AlmacenDeNotificaciones.ultimaDelBancoAt(context)) }
 
     // Se concede y se revoca FUERA de la app, como los permisos de SMS: sin releer al volver, la
     // tarjeta seguiría diciendo «Falta» sobre un acceso ya concedido.
     OnResume(activity) {
         concedido = tieneAccesoANotificaciones(context)
         ultima = AlmacenDeNotificaciones.ultimaAt(context)
+        conectada = AlmacenDeNotificaciones.estaConectada(context)
+        ultimaDelBanco = AlmacenDeNotificaciones.ultimaDelBancoAt(context)
+        // Concedido y desenchufado: se le pide a Android que lo vuelva a enchufar, sin preguntar.
+        if (concedido && !conectada) pedirQueReconecte(context)
     }
+    val estado = textoDelEstadoDeLaCaptura(concedido, conectada, ultimaDelBanco, System.currentTimeMillis())
 
     Spacer(Modifier.height(Medida.dentroDeSeccion))
     Superficie(modifier = Modifier.fillMaxWidth()) {
         EstadoDelPermiso("Acceso a notificaciones", concedido)
+        if (estado != null) {
+            Spacer(Modifier.height(Espacio.xs))
+            Text(
+                estado.texto,
+                style = Movi.textos.apoyo,
+                color = if (estado.conectada) Movi.colores.textoMedio else Movi.colores.aviso,
+                modifier = Modifier.testTag(TAG_ESTADO_DE_LA_ESCUCHA),
+            )
+            if (!estado.conectada) {
+                Spacer(Modifier.height(Espacio.s))
+                SensorButton(BOTON_RECONECTAR, principal = false) {
+                    pedirQueReconecte(context)
+                    abrirAjustesDeNotificaciones(context)
+                }
+                Spacer(Modifier.height(Espacio.xs))
+                Text(
+                    "Se abre la lista del sistema: apaga el interruptor de Movi y vuélvelo a encender.",
+                    style = Movi.textos.apoyo,
+                    color = Movi.colores.textoMedio,
+                )
+            }
+        }
         Spacer(Modifier.height(Espacio.s))
         Text(
             "Hay bancos que ya no mandan un SMS por cada movimiento, pero su app sí muestra una " +
@@ -298,7 +338,8 @@ private fun SensorNotificationsCard(installSource: InstallSource, principal: Boo
  * silencio. Abrir la PWA no cuenta — es otra app.
  *
  * Nada que ver con la optimización de batería / Doze: eso es otro problema, con otras
- * APIs, y WorkManager ya lo sobrevive.
+ * APIs, y tiene su propia tarjeta ([SensorBateriaCard], vuelta 92): WorkManager lo sobrevive,
+ * pero el listener de notificaciones no siempre.
  */
 @Composable
 private fun SensorHibernationCard(principal: Boolean) {
@@ -341,6 +382,40 @@ private fun SensorHibernationCard(principal: Boolean) {
             // que nombramos la sección, que sí es estable.
             "Se abre la ficha de la app: hasta abajo, en «Apps sin usar», apaga el " +
                 "interruptor. Al volver aquí, este aviso desaparece.",
+            style = Movi.textos.apoyo,
+            color = Movi.colores.textoMedio,
+        )
+    }
+}
+
+/**
+ * Vuelta 92 · **El ahorro de batería.** Con la optimización encendida, Android puede matar el proceso
+ * de Movi y no volver a enchufar el listener de notificaciones (y posterga los trabajos que suben las
+ * capturas). La exención se OFRECE aquí, con la razón al lado, solo si falta y si hay una captura que
+ * cuidar ([debeOfrecerLaExencionDeBateria]); el diálogo lo abre el botón, nunca la app sola.
+ */
+@Composable
+private fun SensorBateriaCard(hayCaptura: Boolean) {
+    val context = LocalContext.current
+    val activity = remember(context) { context.findComponentActivity() }
+    var exenta by remember { mutableStateOf(estaExentaDelAhorroDeBateria(context)) }
+    OnResume(activity) { exenta = estaExentaDelAhorroDeBateria(context) }
+
+    if (!debeOfrecerLaExencionDeBateria(Build.VERSION.SDK_INT, exenta, hayCaptura)) return
+
+    Spacer(Modifier.height(Medida.dentroDeSeccion))
+    Superficie(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            "Con el ahorro de batería, Android puede apagar la captura del banco sin avisar.",
+            style = Movi.textos.cuerpo,
+            color = Movi.colores.texto,
+            modifier = Modifier.testTag(TAG_AVISO_DE_BATERIA),
+        )
+        Spacer(Modifier.height(Espacio.s))
+        SensorButton(BOTON_QUITAR_EL_AHORRO_DE_BATERIA, principal = false) { pedirLaExencionDeBateria(context) }
+        Spacer(Modifier.height(Espacio.xs))
+        Text(
+            "Android te pregunta si Movi puede seguir activa en segundo plano: elige «Permitir».",
             style = Movi.textos.apoyo,
             color = Movi.colores.textoMedio,
         )
@@ -525,6 +600,13 @@ private fun EstadoDelPermiso(nombre: String, concedido: Boolean) {
         Pildora(if (concedido) "Concedido" else "Falta", if (concedido) TonoDePildora.Exito else TonoDePildora.Neutra)
     }
 }
+
+/** Vuelta 92 · el tag de la frase del estado del listener, y el del aviso del ahorro de batería. */
+const val TAG_ESTADO_DE_LA_ESCUCHA: String = "captura-estado-de-la-escucha"
+const val TAG_AVISO_DE_BATERIA: String = "captura-aviso-de-bateria"
+
+/** El botón que ofrece la exención del ahorro de batería. */
+const val BOTON_QUITAR_EL_AHORRO_DE_BATERIA: String = "Quitar el ahorro de batería"
 
 /** El tag del aviso de hibernación (para la prueba de su tono). */
 const val TAG_AVISO_DE_HIBERNACION: String = "captura-aviso-de-hibernacion"

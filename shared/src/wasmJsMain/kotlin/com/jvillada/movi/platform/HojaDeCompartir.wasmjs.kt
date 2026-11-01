@@ -26,6 +26,13 @@ private fun jsPuedeCompartir(): Boolean =
 private fun jsCompartirMensaje(texto: String): Boolean =
     js("(function(t){try{var p=function(){window.prompt('Copia este mensaje:', t);};var c=function(){if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).catch(p);}else{p();}};navigator.share({text:t}).catch(function(e){if(!e||e.name!=='AbortError'){c();}});return true;}catch(e){return false;}})(texto)")
 
+/**
+ * Descarga [contenido] como el archivo [nombre]: un `Blob` y un `<a download>` que se pulsa solo. Con el
+ * `try` por la misma razón que arriba.
+ */
+private fun jsDescargar(nombre: String, contenido: String, tipo: String): Boolean =
+    js("(function(n,c,t){try{var b=new Blob([c],{type:t});var u=URL.createObjectURL(b);var a=document.createElement('a');a.href=u;a.download=n;a.style.display='none';document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(function(){URL.revokeObjectURL(u);},10000);return true;}catch(e){return false;}})(nombre,contenido,tipo)")
+
 @Composable
 internal actual fun hojaDeCompartirDeLaPlataforma(): HojaDeCompartir = HojaDeLaWeb
 
@@ -33,6 +40,9 @@ private object HojaDeLaWeb : HojaDeCompartir {
     override val abreLaHojaDelSistema: Boolean = false
     override fun compartir(texto: String) { jsCopiar(texto) }
     override fun copiar(texto: String) { jsCopiar(texto) }
+
+    override val puedeDescargar: Boolean = true
+    override fun descargar(nombre: String, contenido: String, tipo: String): Boolean = jsDescargar(nombre, contenido, tipo)
 
     /**
      * Vuelta de diseño 26: con `navigator.share` (el teléfono, Safari, Chrome en Windows o macOS), la

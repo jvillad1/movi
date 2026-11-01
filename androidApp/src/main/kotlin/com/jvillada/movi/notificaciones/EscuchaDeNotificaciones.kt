@@ -1,6 +1,7 @@
 package com.jvillada.movi.notificaciones
 
 import android.app.Notification
+import android.content.ComponentName
 import android.os.Bundle
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
@@ -11,6 +12,8 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
+import com.jvillada.movi.avisos.Avisador
+import com.jvillada.movi.sms.CLAVE_SILENCIOSA
 import com.jvillada.movi.sms.ORIGEN_NOTIFICACION
 import com.jvillada.movi.sms.SmsFilterConfigStore
 import com.jvillada.movi.sms.SmsSyncWorker
@@ -60,74 +63,108 @@ import java.util.concurrent.TimeUnit
 class EscuchaDeNotificaciones : NotificationListenerService() {
 
     /**
-     * El sistema acaba de enchufar el servicio: el usuario recién concedió el acceso, o el teléfono
-     * arrancó. Es el momento exacto en que conviene traer la lista de apps del server —si el dueño
-     * concede el permiso hoy y su app de banco se agregó ayer, sin esto el teléfono capturaría
-     * recién cuando venza el TTL de 24 h.
+     * El sistema acaba de enchufar el servicio: el usuario recién concedió el acceso, el teléfono
+     * arrancó, o Android lo volvió a conectar después de una caída. Es el momento exacto en que
+     * conviene traer la lista de apps del server —si el dueño concede el permiso hoy y su app de
+     * banco se agregó ayer, sin esto el teléfono capturaría recién cuando venza el TTL de 24 h.
+     *
+     * Vuelta 92: además anota que está conectado (lo lee la sección y la vigía), quita el aviso de
+     * «se revocó el acceso» si estaba, y barre la bandeja: lo que llegó mientras el listener estaba
+     * caído y sigue a la vista entra por el mismo camino, sin duplicar lo ya subido.
      */
     override fun onListenerConnected() {
-        SmsFilterConfigStore.refreshIfStale(applicationContext, force = true)
+        val contexto = applicationContext
+        AlmacenDeNotificaciones.marcarConectada(contexto)
+        Avisador.quitarAccesoRevocado(contexto)
+        SmsFilterConfigStore.refreshIfStale(contexto, force = true)
+        val enLaBandeja = runCatching { activeNotifications?.toList() }.getOrNull().orEmpty()
+        procesar(enLaBandeja, barridoHecho = System.currentTimeMillis())
+    }
+
+    /**
+     * Vuelta 92 · **Android desenchufó el servicio.** Se anota, y se le pide que lo vuelva a
+     * enchufar: después de una actualización de la app o del ahorro de batería, Android a veces no
+     * lo hace solo, y la captura quedaba muda sin que nada lo dijera. Si el dueño revocó el acceso,
+     * el pedido no hace nada; lo nota la vigía (`VigiaDeLaEscuchaWorker`), que avisa una vez.
+     */
+    override fun onListenerDisconnected() {
+        AlmacenDeNotificaciones.marcarDesconectada(applicationContext)
+        runCatching { requestRebind(ComponentName(this, EscuchaDeNotificaciones::class.java)) }
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
-        val notificacion = sbn ?: return
-        val paquete = notificacion.packageName ?: return
+        procesar(listOfNotNull(sbn))
+    }
 
-        // ── La frontera de privacidad. Nada de lo de abajo corre para una app ajena. ──
-        val apps = SmsFilterConfigStore.loadNotificationApps(applicationContext)
-        if (!FiltroDeNotificaciones.laAppEstaEnLaLista(paquete, apps)) return
+    /**
+     * **El camino único**, para la notificación que acaba de llegar y para el barrido de la bandeja.
+     * La regla —qué se sube y qué es una repetición— es `procesarNotificaciones` (`:shared`, pura).
+     */
+    private fun procesar(notificaciones: List<StatusBarNotification>, barridoHecho: Long? = null) {
+        if (notificaciones.isEmpty()) return
+        val contexto = applicationContext
+        val apps = SmsFilterConfigStore.loadNotificationApps(contexto)
+        val entrantes = notificaciones.mapNotNull { sbn ->
+            val paquete = sbn.packageName ?: return@mapNotNull null
+            // ── La frontera de privacidad. Nada de lo de abajo corre para una app ajena. ──
+            if (!FiltroDeNotificaciones.laAppEstaEnLaLista(paquete, apps)) return@mapNotNull null
+            entranteDe(sbn, paquete)
+        }
+        if (entrantes.isEmpty()) return
+        // «Conectada · última notificación del banco hace 2 h»: llegó algo de una app de la lista,
+        // se suba o no. Del barrido cuenta la hora en que se publicó, no la de ahora.
+        AlmacenDeNotificaciones.marcarLlegoDelBanco(contexto, entrantes.maxOf { it.cuando })
 
-        val contenido = notificacion.notification ?: return
+        // Una descartada (persistente, resumen de grupo, sin cuerpo) termina acá: no se encola, no
+        // se sube y —porque la marca de «última captura» la escribe el Worker recién cuando el POST
+        // sale bien— tampoco cuenta como una captura. Las apps de banco re-publican: actualizan la
+        // misma notificación, la reponen al desbloquear, la repiten al abrir la app; la memoria
+        // (`anotarSiEsNueva`) evita que cada re-post sea una fila más en la bandeja del dueño.
+        val resultado = procesarNotificaciones(entrantes, apps, AlmacenDeNotificaciones.memoria(contexto), barridoHecho)
+        if (resultado.subidas.isEmpty()) return
+        AlmacenDeNotificaciones.guardarMemoria(contexto, resultado.memoria)
+        resultado.subidas.forEach { encolar(it) }
+    }
+
+    /** Lo que la decisión necesita de una notificación de una app de la lista. */
+    private fun entranteDe(sbn: StatusBarNotification, paquete: String): NotificacionEntrante? {
+        val contenido = sbn.notification ?: return null
         // De qué extra sale cada cosa, y por qué en ese orden: [cuerpoDeLaNotificacion] en `:shared`.
         val datos = loQueMoviMiraDe(contenido.extras)
-        val titulo = tituloDeLaNotificacion(datos)
-        val texto = cuerpoDeLaNotificacion(datos)
-
         // postTime y no `Notification.when`: `when` puede venir en 0 (la app no lo pobló) y ahí el
         // mensaje quedaría fechado en 1970, fuera de cualquier período.
-        val cuando = if (notificacion.postTime > 0L) notificacion.postTime else System.currentTimeMillis()
-
-        val decision = decidirNotificacion(
-            NotificacionEntrante(
-                paquete = paquete,
-                titulo = titulo,
-                texto = texto,
-                esPersistente = (contenido.flags and Notification.FLAG_ONGOING_EVENT) != 0,
-                esResumenDeGrupo = (contenido.flags and Notification.FLAG_GROUP_SUMMARY) != 0,
-                cuando = cuando,
-            ),
-            apps,
+        val cuando = if (sbn.postTime > 0L) sbn.postTime else System.currentTimeMillis()
+        return NotificacionEntrante(
+            paquete = paquete,
+            titulo = tituloDeLaNotificacion(datos),
+            texto = cuerpoDeLaNotificacion(datos),
+            esPersistente = (contenido.flags and Notification.FLAG_ONGOING_EVENT) != 0,
+            esResumenDeGrupo = (contenido.flags and Notification.FLAG_GROUP_SUMMARY) != 0,
+            cuando = cuando,
+            llave = runCatching { sbn.key }.getOrNull().orEmpty(),
         )
-        // Una descartada termina acá: no se encola, no se sube y —porque la marca de «última
-        // captura» la escribe el Worker recién cuando el POST sale bien— tampoco cuenta como una
-        // captura. Un título sin cuerpo no puede volverse un movimiento: subirlo dejaría una fila
-        // imparseable en la bandeja Y haría decir a la pantalla que el sensor anda.
-        if (decision !is DecisionDeNotificacion.Subir) return
+    }
 
-        // Las apps de banco re-publican: actualizan la misma notificación, la reponen al
-        // desbloquear, la repiten al abrir la app. Sin esta memoria, cada re-post sería una fila
-        // más en la bandeja del dueño.
-        val huella = huellaDeLaNotificacion(paquete, titulo, texto, cuando)
-        if (!AlmacenDeNotificaciones.esNuevaYAnotala(applicationContext, huella)) return
-
-        val id = idDeNotificacion(huella)
+    private fun encolar(subida: SubidaDeNotificacion) {
         val trabajo = OneTimeWorkRequestBuilder<SmsSyncWorker>()
             .setInputData(
                 workDataOf(
-                    "id" to id,
+                    "id" to subida.id,
                     // El Worker escribe esto en el campo `bank` del wire, que es el rótulo que la
                     // bandeja pinta arriba del mensaje.
-                    "sender" to marcaDeOrigen(etiquetaDe(paquete)),
-                    "body" to decision.texto,
-                    "ts" to cuando,
+                    "sender" to marcaDeOrigen(etiquetaDe(subida.paquete)),
+                    "body" to subida.texto,
+                    "ts" to subida.cuando,
                     "origen" to ORIGEN_NOTIFICACION,
+                    // Lo del barrido sube sin hacer sonar un «Movi anotó…» por cada uno.
+                    CLAVE_SILENCIOSA to subida.silenciosa,
                 )
             )
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
             .build()
         // Único por id, igual que el camino de SMS: una re-entrega no encola dos veces.
-        WorkManager.getInstance(applicationContext).enqueueUniqueWork(id, ExistingWorkPolicy.KEEP, trabajo)
+        WorkManager.getInstance(applicationContext).enqueueUniqueWork(subida.id, ExistingWorkPolicy.KEEP, trabajo)
     }
 
     /**

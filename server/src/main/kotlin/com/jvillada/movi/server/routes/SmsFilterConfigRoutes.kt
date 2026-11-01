@@ -80,6 +80,13 @@ private val CURRENT_FILTER = SmsFilterConfig(
         // Nu Colombia: sus compras con tarjeta de crédito solo llegan como notificación de la app
         // («Compra aprobada por $130.200,00»), nunca por SMS. Paquete leído del teléfono del dueño.
         "com.nu.production",
+        // Vuelta 92 · Davivienda: el mismo paquete que se leyó del teléfono del dueño el 19-sep (ver
+        // arriba). De los bancos que la vuelta 88 sumó al primer uso es el único con el id
+        // confirmado; los demás (BBVA, Banco de Bogotá, Occidente, AV Villas, Popular, Colpatria,
+        // Itaú, Falabella, Lulo, Nequi, Daviplata, RappiPay, Davibank, Mercado Pago…) entran cuando
+        // alguien lea su paquete en un teléfono: una conjetura equivocada captura las notificaciones
+        // de OTRA app.
+        "com.todo1.davivienda.mobileapp",
     ),
 )
 

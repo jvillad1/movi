@@ -212,6 +212,18 @@ class ElForkLlegaLimpioTest {
         assertTrue("La guía de primer uso no quedó abierta", com.jvillada.movi.ui.primeruso.GuiaDePrimerUso.enCurso)
     }
 
+    /**
+     * Vuelta 95 · «Qué ve la IA» visto es del perfil de quien se va: el logout lo olvida (el siguiente lo
+     * lee del suyo). `AppDePrueba` lo deja en `true` al arrancar cada método, así que acá se afirma el
+     * olvido, no el arranque en cero.
+     */
+    @Test
+    fun cElAvisoDeLaIaSeOlvidaAlCerrarSesion() {
+        com.jvillada.movi.ui.ai.AvisoDeLaIa.visto = true
+        SessionManager.clear()
+        assertNull("El aviso de la IA sigue visto después del logout", com.jvillada.movi.ui.ai.AvisoDeLaIa.visto)
+    }
+
     @Test
     fun bLosGlobalesLleganEnCero() {
         assertFalse("La guía de primer uso trae la resaca de otra prueba", com.jvillada.movi.ui.primeruso.GuiaDePrimerUso.revisada)

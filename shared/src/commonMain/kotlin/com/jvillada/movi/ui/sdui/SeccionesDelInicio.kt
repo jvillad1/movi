@@ -254,6 +254,7 @@ private fun iconoDe(tipo: TipoDePropuesta): ImageVector = when (tipo) {
     TipoDePropuesta.PAGO -> Icons.Rounded.Schedule
     TipoDePropuesta.DEBITO -> Icons.Rounded.AccountBalance
     TipoDePropuesta.CUADRE -> Icons.Rounded.Tune
+    TipoDePropuesta.EXTRACTO -> Icons.Rounded.Receipt
     TipoDePropuesta.PRESUPUESTO -> Icons.Rounded.Savings
     TipoDePropuesta.ANOMALIA -> Icons.AutoMirrored.Rounded.TrendingUp
     TipoDePropuesta.CIERRE -> Icons.AutoMirrored.Rounded.EventNote
@@ -271,22 +272,30 @@ internal fun PropuestasDelInicioSection(
     data: DashboardData,
     onNavigate: (Screen) -> Unit,
     onDescartarCierre: (String) -> Unit,
+    /** Vuelta 95: «Actualizar» la foto del cierre (el estado vive en `DashboardScreen`). */
+    onActualizarCierre: (String) -> Unit = {},
     /** Vuelta 39: `false` cuando «Próximo pago» ya lo dice arriba (ver `visibleSections`). */
     conElPago: Boolean = true,
 ) {
     val todas = propuestasDelInicio(data, conElPago)
     val aLaVista = propuestasALaVista(todas)
     val cargando = LocalCargandoElInicio.current
+    val atajos = LocalAtajosDeAgregar.current
     val hacer: (AccionDeLaPropuesta) -> Unit = { accion ->
         when (accion) {
             is AccionDeLaPropuesta.Ir -> onNavigate(accion.pantalla)
             is AccionDeLaPropuesta.DescartarCierre -> onDescartarCierre(accion.periodo)
+            is AccionDeLaPropuesta.ActualizarCierre -> onActualizarCierre(accion.periodo)
             // «Está bien»: se va en el mismo toque; si el server no lo guarda, vuelve. Vuelta 89: el pedido
             // no va en un alcance de esta sección, que se va con la última tarjeta (ver `descartarYGuardar`).
             is AccionDeLaPropuesta.DescartarAnomalia ->
                 AnomaliasDescartadasEnLaSesion.descartarYGuardar(accion.huella) {
                     Repositories.wallets.descartarAnomalia(accion.huella)
                 }
+            // Vuelta 94: la subida de siempre (la de «Subir comprobante o extracto»), que hace la cáscara;
+            // fuera de la app (una prueba que monta el Inicio solo), Documentos, donde también se sube.
+            AccionDeLaPropuesta.SubirElExtracto ->
+                atajos?.invoke(AtajoDeAgregar.SUBIR_COMPROBANTE) ?: onNavigate(Screen.Documentos)
             // Vuelta 60: «Sí, cambiar». Se va en el mismo toque; si no se pudo, vuelve.
             is AccionDeLaPropuesta.CambiarLaCategoria ->
                 AnomaliasDescartadasEnLaSesion.descartarYGuardar(accion.cambio.huella) {

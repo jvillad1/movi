@@ -42,6 +42,9 @@ internal const val TEXTO_INTERRUPTOR_RESUMEN_DE_LA_MANANA = "Resumen de la maña
 /** Vuelta 68: el interruptor del resumen semanal de los grupos. */
 internal const val TEXTO_INTERRUPTOR_RESUMEN_SEMANAL = "Resumen semanal de tus grupos, el domingo"
 
+/** Vuelta 94: el interruptor del aviso del extracto que falta subir. */
+internal const val TEXTO_INTERRUPTOR_EXTRACTO = "Avisarme cuando falte el extracto de una tarjeta"
+
 /** El tag de cada interruptor de los avisos del teléfono en Tú, para las pruebas. */
 internal const val TAG_AVISO_DEL_TELEFONO = "tu:aviso-del-telefono"
 
@@ -65,6 +68,8 @@ private val INTERRUPTORES: List<InterruptorDeAviso> = listOf(
     InterruptorDeAviso("Avisarme el día de un débito automático", PreferenciasDeAvisos::avisarDebitos, PreferenciasDeAvisos::ponerAvisarDebitos),
     // El correo con el mismo resumen se apaga arriba, en «Resumen del período por correo» (es de la cuenta).
     InterruptorDeAviso("Avisarme cuando cierre mi período", PreferenciasDeAvisos::avisarCierre, PreferenciasDeAvisos::ponerAvisarCierre),
+    // Vuelta 94: «¿Ya bajaste el extracto de Nu de octubre?», una vez por tarjeta y corte.
+    InterruptorDeAviso(TEXTO_INTERRUPTOR_EXTRACTO, PreferenciasDeAvisos::avisarExtracto, PreferenciasDeAvisos::ponerAvisarExtracto),
     InterruptorDeAviso(TEXTO_INTERRUPTOR_RESUMEN_DE_LA_MANANA, PreferenciasDeAvisos::avisarResumenDeLaManana, PreferenciasDeAvisos::ponerAvisarResumenDeLaManana),
     InterruptorDeAviso(TEXTO_INTERRUPTOR_RESUMEN_SEMANAL, PreferenciasDeAvisos::avisarResumenSemanal, PreferenciasDeAvisos::ponerAvisarResumenSemanal),
 )

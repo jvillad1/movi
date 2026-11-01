@@ -59,6 +59,7 @@ fun Application.configureRouting() {
     routing {
         get("/health") { call.respondText("OK") }
         versionRoutes()                   // public — qué commit está corriendo (ver VersionRoutes.kt)
+        erroresDelClienteRoutes()         // public — el «Algo falló» de la web deja su error en el log (ver ErroresDelClienteRoutes.kt)
         authRoutes()                     // public — no auth required
         pushPublicRoutes()                // public — no auth required
         smsFilterConfigRoutes()           // public — no auth required
@@ -95,6 +96,7 @@ fun Application.configureRouting() {
             anomaliasRoutes()
             cuadrePorAvisoRoutes()
             debitosAutomaticosRoutes()
+            extractosPorSubirRoutes()
             periodosRoutes()
             cierreDelPeriodoRoutes()
             creditRoutes()
@@ -119,7 +121,10 @@ fun Application.configureRouting() {
             // Vuelta 67: restaurar un anulado, deshacer una compra dividida y los anulados.
             restaurarYDeshacerRoutes()
             direccionDeCorreoRoutes()
+            filtroDeGmailRoutes()
             aiRoutes()
+            // Vuelta 95: «Lo que Movi sabe de ti» de un vistazo (cuatro conteos).
+            resumenDeLoQueMoviSabeRoutes()
             statementRoutes()
             documentRoutes()
             papelesRoutes()

@@ -117,6 +117,15 @@ object Users : Table("users") {
      */
     val ahorroDelPeriodoTipo = varchar("ahorro_del_periodo_tipo", 16).nullable()
     val ahorroDelPeriodoValor = long("ahorro_del_periodo_valor").nullable()
+    /**
+     * **Cuándo vio el aviso «Qué ve la IA»** (vuelta 95), en milisegundos; `null` = nunca. Es la hoja que
+     * se abre la primera vez que algo va a Claude (el chat libre, leer un papel o un extracto con IA) y
+     * explica qué se manda y qué no. Por usuario y en el server, para que no vuelva en otro aparato; la
+     * escribe `POST /api/users/me/aviso-ia` (la primera vez; después no se mueve). Nullable por lo mismo
+     * que sus vecinas: es el único DDL que `createMissingTablesAndColumns` agrega sin riesgo sobre una
+     * tabla con filas. Columna de `users`: borrar la cuenta la lleva con la fila.
+     */
+    val avisoIaVistoEn = long("aviso_ia_visto_en").nullable()
     override val primaryKey = PrimaryKey(id)
 }
 
@@ -451,6 +460,23 @@ object CierresEnviados : Table("cierres_enviados") {
     val userId    = varchar("user_id", 50)
     val periodo   = varchar("periodo", 7)
     val enviadoEn = long("enviado_en")
+    override val primaryKey = PrimaryKey(userId, periodo)
+}
+
+/**
+ * **La foto del resumen de cierre** (vuelta 95), una por usuario y período. `cierreDelPeriodo` se
+ * recalculaba en cada lectura, y si después se editaba un movimiento viejo el resumen de un período ya
+ * cerrado cambiaba sin avisar. Ahora la primera vez que se arma, con el período cerrado, se guarda
+ * acá —el JSON del `CierreDelPeriodo` sin lo que depende de «hoy» (día del período nuevo, descartado)
+ * ni lo que se deriva al leer (cambio)— y las lecturas siguientes devuelven la foto. Si el cálculo de
+ * hoy difiere, la tarjeta lo dice y «Actualizar» reemplaza la foto (`POST /api/cierre-del-periodo/actualizar`).
+ * Tabla nueva: entra solo al `SchemaUtils.create` del arranque, y a `TABLAS_DEL_USUARIO`.
+ */
+object CierresGuardados : Table("cierres_guardados") {
+    val userId     = varchar("user_id", 50)
+    val periodo    = varchar("periodo", 7)
+    val datos      = text("datos")
+    val guardadoEn = long("guardado_en")
     override val primaryKey = PrimaryKey(userId, periodo)
 }
 

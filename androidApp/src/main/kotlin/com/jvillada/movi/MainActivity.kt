@@ -11,6 +11,7 @@ import androidx.fragment.app.FragmentActivity
 import com.jvillada.movi.avisos.AvisoDeBancoMudoWorker
 import com.jvillada.movi.avisos.AvisoDeDebitosAutomaticosWorker
 import com.jvillada.movi.avisos.AvisoDeCierreWorker
+import com.jvillada.movi.avisos.AvisoDeExtractoWorker
 import com.jvillada.movi.avisos.AvisoDeLaMananaWorker
 import com.jvillada.movi.avisos.AvisoSemanalDeLaParejaWorker
 import com.jvillada.movi.avisos.AvisoDeVencimientosWorker
@@ -21,6 +22,7 @@ import com.jvillada.movi.avisos.destinoDeAviso
 import com.jvillada.movi.compartir.esCompartirConMovi
 import com.jvillada.movi.compartir.leerLoCompartido
 import com.jvillada.movi.compartir.urisCompartidos
+import com.jvillada.movi.notificaciones.VigiaDeLaEscuchaWorker
 import com.jvillada.movi.ui.papeles.PapelesCompartidos
 import com.jvillada.movi.shared.db.DatabaseDriverFactory
 import com.jvillada.movi.sms.SmsBackfillWorker
@@ -64,6 +66,10 @@ class MainActivity : FragmentActivity() {
         // Y uno ahora mismo: abrir la app es cuando va a mirar los números, y el periódico puede
         // estar a horas de su turno.
         SmsBackfillWorker.barrerAhora(applicationContext)
+        // Vuelta 92: la vigía del listener de notificaciones, cada 6 h como el barrido (reconecta
+        // o avisa UNA vez si se revocó el acceso), y una revisión ahora que solo reconecta.
+        VigiaDeLaEscuchaWorker.programar(applicationContext)
+        VigiaDeLaEscuchaWorker.revisar(applicationContext, conAviso = false)
         // Y un refresh oportunista en cada apertura — reemplaza el que disparaba la
         // pantalla del sensor cuando era la única UI del APK.
         SmsFilterConfigStore.refreshIfStale(applicationContext)
@@ -78,6 +84,7 @@ class MainActivity : FragmentActivity() {
         AvisoDeDebitosAutomaticosWorker.programar(applicationContext)
         // «Cerró tu período»: la mañana siguiente al corte (decide al correr, como los otros).
         AvisoDeCierreWorker.programar(applicationContext)
+        AvisoDeExtractoWorker.programar(applicationContext)
         // Vuelta 68: el resumen de la mañana (8:00) y el semanal de los grupos (domingo, 19:00).
         // Deciden al correr, como los otros: con su interruptor apagado no hacen nada.
         AvisoDeLaMananaWorker.programar(applicationContext)

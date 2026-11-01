@@ -14,6 +14,13 @@ import kotlinx.coroutines.withContext
 const val ORIGEN_NOTIFICACION = "notificacion"
 
 /**
+ * Vuelta 92 · `true` para una captura que sale del barrido de la bandeja al reconectarse el listener:
+ * sube igual, pero no hace sonar «Movi anotó…» (serían varias seguidas de cosas que el banco ya
+ * mostró). Solo decide el aviso local; el pedido al server es el mismo.
+ */
+const val CLAVE_SILENCIOSA = "silenciosa"
+
+/**
  * Sube UN mensaje capturado al endpoint idempotente /api/sms/sync (ver SmsSync.kt,
  * compartido con el backfill de la pantalla).
  * IOException/5xx → retry con backoff: sin red la sesión sigue y el mensaje espera.
@@ -79,8 +86,10 @@ class SmsSyncWorker(context: Context, params: WorkerParameters) : CoroutineWorke
                 // Ola 1 · Movi avisa: «Movi anotó $180.000», con lo que el server leyó y dejó en
                 // «Por revisar» (nada de lo que entró ya resuelto). Best-effort: un aviso que no
                 // sale no puede convertir un upload exitoso en reintento.
-                runCatching { Avisador.avisarMovimientos(applicationContext, result.porRevisar) }
-                    .onFailure { Log.w(TAG, "no se pudo avisar el movimiento", it) }
+                if (!inputData.getBoolean(CLAVE_SILENCIOSA, false)) {
+                    runCatching { Avisador.avisarMovimientos(applicationContext, result.porRevisar) }
+                        .onFailure { Log.w(TAG, "no se pudo avisar el movimiento", it) }
+                }
                 // Vuelta 78: entró un aviso por fuera de la app (mismo proceso que la pantalla): lo
                 // leído hace menos de 30 s ya no es fresco, y el Inicio vuelve a preguntar.
                 com.jvillada.movi.data.olvidarLoFresco()

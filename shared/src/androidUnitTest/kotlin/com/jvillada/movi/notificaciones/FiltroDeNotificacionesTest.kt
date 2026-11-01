@@ -340,6 +340,13 @@ class FiltroDeNotificacionesTest {
     }
 
     @Test
+    fun `Davivienda esta en la lista de respaldo con el paquete leido del telefono`() {
+        assertTrue(FiltroDeNotificaciones.laAppEstaEnLaLista("com.todo1.davivienda.mobileapp", FiltroDeNotificaciones.DEFAULTS))
+        // La conjetura vieja sigue afuera: era el proveedor de Davivienda, no un banco.
+        assertFalse(FiltroDeNotificaciones.laAppEstaEnLaLista("com.todo1.mobile", FiltroDeNotificaciones.DEFAULTS))
+    }
+
+    @Test
     fun `Bancolombia y Glim siguen en las dos listas`() {
         listOf("co.com.bancolombia.personas.superapp", "com.app.prontomas").forEach { paquete ->
             assertTrue(FiltroDeNotificaciones.laAppEstaEnLaLista(paquete, deLaConfigDelServer), paquete)

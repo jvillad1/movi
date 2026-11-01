@@ -367,6 +367,54 @@ class UserRoutesTest {
         assertTrue(dbPrimerUso(userId) != null)
     }
 
+    // ── El aviso «Qué ve la IA» (vuelta 95) ───────────────────────────────────
+
+    private suspend fun ApplicationTestBuilder.marcarAvisoIa(tokenDe: String = token) =
+        client.post("/api/users/me/aviso-ia") { header(HttpHeaders.Authorization, "Bearer $tokenDe") }
+
+    private fun dbAvisoIa(de: String): Long? = transaction {
+        Users.selectAll().where { Users.id eq de }.single()[Users.avisoIaVistoEn]
+    }
+
+    private fun avisoIaDe(cuerpo: String): Long? =
+        Json.parseToJsonElement(cuerpo).jsonObject["avisoIaVistoEn"]?.jsonPrimitive?.content?.toLongOrNull()
+
+    @Test
+    fun `el aviso de la IA se marca una vez, el servidor guarda la marca y no se mueve`() = testApplication {
+        wireApp()
+        assertEquals(null, avisoIaDe(getProfile().bodyAsText()), "sin ver: el perfil no la trae")
+        assertEquals(null, dbAvisoIa(userId))
+
+        val primera = marcarAvisoIa()
+        assertEquals(HttpStatusCode.OK, primera.status)
+        val sellada = avisoIaDe(primera.bodyAsText())
+        assertTrue(sellada != null && sellada > 0, "el POST devuelve el perfil ya sellado")
+        assertEquals(sellada, dbAvisoIa(userId), "el servidor guarda la marca")
+        assertEquals(sellada, avisoIaDe(getProfile().bodyAsText()), "y otro aparato la lee en el perfil")
+
+        Thread.sleep(5)
+        assertEquals(sellada, avisoIaDe(marcarAvisoIa().bodyAsText()))
+        assertEquals(sellada, dbAvisoIa(userId), "verlo de nuevo no mueve la fecha")
+    }
+
+    @Test
+    fun `marcar el aviso de la IA de un usuario no toca el de otro`() = testApplication {
+        wireApp()
+        val otro = "user-c-profile"
+        transaction {
+            Users.insert {
+                it[id] = otro
+                it[email] = "c@profile.test"
+                it[name] = "Caro"
+                it[passwordHash] = BCrypt.withDefaults().hashToString(BCRYPT_COST, userPassword.toCharArray())
+            }
+        }
+        assertEquals(HttpStatusCode.OK, marcarAvisoIa(tokenFor(otro, "c@profile.test")).status)
+        assertTrue(dbAvisoIa(otro) != null)
+        assertEquals(null, dbAvisoIa(userId))
+        assertEquals(null, avisoIaDe(getProfile().bodyAsText()))
+    }
+
     private fun dbSmsAlertMuted(): Boolean? = transaction {
         Users.selectAll().where { Users.id eq userId }.single()[Users.smsAlertMuted]
     }

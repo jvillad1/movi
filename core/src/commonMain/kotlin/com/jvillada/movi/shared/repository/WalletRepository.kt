@@ -386,6 +386,19 @@ interface WalletRepository {
     /** `POST /api/cierre-del-periodo/descartar`: la tarjeta de [periodo] no vuelve a salir en Hoy. */
     suspend fun descartarCierre(periodo: String) {}
     /**
+     * Vuelta 94 · `GET /api/extractos-por-subir`: las tarjetas cuyo corte pasó hace unos días sin que se
+     * subiera su extracto («¿Ya bajaste el extracto de Nu de octubre?»). Solo lee; «Ya no» es
+     * [descartarAnomalia] con la huella de la propuesta. Default vacío para los dobles de prueba.
+     */
+    suspend fun getExtractosPorSubir(): List<com.jvillada.movi.shared.model.ExtractoPorSubir> = emptyList()
+    /**
+     * `POST /api/cierre-del-periodo/actualizar` (vuelta 95): la foto del cierre de [periodo] se reemplaza
+     * por el cálculo de hoy y vuelve el cierre nuevo; `null` (204) si ya no queda nada que contar; lanza
+     * [com.jvillada.movi.shared.model.CierreYaNoSeActualiza] (404) si ya no es el último período cerrado.
+     * Default `null` para los dobles de prueba.
+     */
+    suspend fun actualizarCierre(periodo: String): com.jvillada.movi.shared.model.CierreDelPeriodo? = null
+    /**
      * `GET /api/cuadres-por-aviso`: el saldo que dijo un aviso confirmado contra el que dice Movi en
      * ese instante, cuando no coinciden. Una propuesta por cuenta como mucho. Default vacío para los
      * dobles de prueba.
@@ -842,8 +855,28 @@ interface WalletRepository {
      */
     suspend fun marcarPrimerUso(): UserProfile
 
+    /**
+     * `POST /api/users/me/aviso-ia` (vuelta 95): el usuario vio la hoja «Qué ve la IA». El server sella
+     * `avisoIaVistoEn` la primera vez y no la mueve después. Default sin operación para los dobles.
+     */
+    suspend fun marcarAvisoDeLaIa() {}
+
+    /**
+     * `GET /api/asistente/resumen` (vuelta 95): cuánto sabe Movi del usuario, en cuatro conteos. Default
+     * vacío para los dobles de prueba.
+     */
+    suspend fun getResumenDeLoQueMoviSabe(): com.jvillada.movi.shared.model.ResumenDeLoQueMoviSabe =
+        com.jvillada.movi.shared.model.ResumenDeLoQueMoviSabe()
+
     /** `GET /api/correo-entrante/direccion`: a qué dirección reenviar los correos del banco. */
     suspend fun getDireccionDeCorreo(): com.jvillada.movi.shared.model.DireccionDeCorreo
+
+    /**
+     * `GET /api/correo-entrante/filtro` (vuelta 93): el filtro de Gmail que Movi arma —la búsqueda, el XML de
+     * importación y el código de confirmación del reenvío—. Falla contra un server que no lo tiene (404): la
+     * guía lo lee con `runCatching` y sigue sin él.
+     */
+    suspend fun getFiltroDeCorreo(): com.jvillada.movi.shared.model.FiltroDeGmail
 
     /**
      * `PUT /api/users/me/password`. Lanza [ApiException] con 403 si [ChangePasswordRequest.current]

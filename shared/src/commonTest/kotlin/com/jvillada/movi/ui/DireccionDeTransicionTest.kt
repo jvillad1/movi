@@ -70,4 +70,24 @@ class DireccionDeTransicionTest {
             direccionDe(listOf(hoy, movimientos), listOf(hoy, movimientos, Screen.Transactions(CHIP_ENTRE_CUENTAS))),
         )
     }
+
+    /**
+     * Vuelta 96: una cuenta recién creada no entraba desde un iPhone («Algo falló»). La guía que se
+     * abre sola al arrancar ya no se apila encima del Inicio con animación: queda sola en la pila y
+     * aparece en el acto.
+     */
+    @Test
+    fun `la guia que se abre sola al arrancar queda sola en la pila y sin animacion`() {
+        val pila = mutableListOf<Screen>(hoy)
+        val antes = pila.toList()
+        abrirLaGuiaAlArrancar(pila)
+        assertEquals(listOf<Screen>(Screen.PrimerUso()), pila)
+        assertEquals(DireccionDeTransicion.NINGUNA, direccionDe(antes, pila.toList()))
+    }
+
+    @Test
+    fun `la guia abierta desde Primeros pasos sigue apilandose`() {
+        val desde = Screen.PrimerUso(com.jvillada.movi.shared.model.PrimerPaso.entries.first())
+        assertEquals(DireccionDeTransicion.APILAR, direccionDe(listOf(hoy), listOf(hoy, desde)))
+    }
 }

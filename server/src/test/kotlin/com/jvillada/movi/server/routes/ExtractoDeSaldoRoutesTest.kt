@@ -469,6 +469,36 @@ class ExtractoDeSaldoRoutesTest {
         assertEquals(2, r.cargosDelBanco.size)
     }
 
+    /** Vuelta 94: el extracto de la tarjeta de Nu, con la forma del real (cifras y comercios inventados). */
+    private val extractoDeNu = """
+        Nu Financiera
+        • • • • 1111 • • • • 2222
+        PAGO MÍNIMO $32.395,00
+        Fecha de corte
+        12 OCT 2026
+        Periodo facturado
+        11 SEP 2026 - 11 OCT 2026
+        Fecha Descripción Valor Cuotas Valor
+        05 OCT
+        2026
+        Drogueria Norte $31.895,00 1 de 1 $31.895,00 2.09%        $0,00 $31.895,00 $0,00
+        18 JUL 2026 Tienda Vieja $60.000,00 $0,00 2.10%        $500,00 $500,00 $0,00
+        Nu Financiera
+    """.trimIndent()
+
+    @Test
+    fun `el extracto de Nu se lee sin IA, con los intereses en los cargos del banco`() = testApplication {
+        application { testModule() }
+        val res = subir(extractoDeNu, conSaldos = false, nombre = "TC_Nu_10_2026.txt")
+        assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
+        val r = json.decodeFromString(StatementParseResult.serializer(), res.bodyAsText())
+        assertEquals("Nu", r.bankName)
+        assertTrue("1111" in r.numerosDeCuenta, r.numerosDeCuenta.toString())
+        // La compra del período y los intereses (la compra de julio ya se anotó cuando se hizo).
+        assertEquals(2, r.newTransactions.size)
+        assertEquals(1, r.cargosDelBanco.size)
+    }
+
     @Test
     fun `compartida como PDF, la lista de Bancolombia se reconoce sin preguntarle a la IA`() = testApplication {
         application { testModule() }
