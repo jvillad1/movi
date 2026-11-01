@@ -56,7 +56,7 @@ class LaCuentaAMedioCrearArrancaTest {
         KnownDestinations, EnlacesCompartidos, LecturasDePapeles, ConversacionesDelAsistente, AccionesPropuestas,
         MemoriaDelAsistente, AnomaliasDescartadas, DestinosDescartados, DebitosDescartados, ReglasDeComercio,
         CierresEnviados, CierresDescartados, Apartados, InicioPersonalizado, Espacios, GastosDelEspacio,
-        LiquidacionesDelEspacio, CorreosDescartados,
+        LiquidacionesDelEspacio, CorreosDescartados, CierresGuardados,
     )
 
     /** Lo que piden el Inicio, la guía de primer uso y la hoja «Agregar» al arrancar (logs de prod y del navegador). */
@@ -88,6 +88,8 @@ class LaCuentaAMedioCrearArrancaTest {
         "/api/espacios",
         "/api/cuentas/de-cada-uso",
         "/api/categorias/memoria",
+        "/api/extractos-por-subir",
+        "/api/asistente/resumen",
     )
 
     @BeforeTest
