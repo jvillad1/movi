@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -365,11 +366,14 @@ fun IconoEnCirculo(
 /** El `testTag` de un [Chevron] (vuelta 80: para vigilar que toda fila tocable lo lleve). */
 const val TAG_CHEVRON: String = "ds:chevron"
 
-/** **La flecha de «esto se abre»**, al final de una [Fila]. [Icono.m], en texto apagado. */
+/**
+ * **La flecha de «esto se abre»**, al final de una [Fila]. [Icono.m], en texto apagado. Con [abierto]
+ * (lo que abre ya está a la vista: «Tu salario» con su campo) mira hacia abajo (vuelta 87).
+ */
 @Composable
-fun Chevron(modifier: Modifier = Modifier) {
+fun Chevron(modifier: Modifier = Modifier, abierto: Boolean = false) {
     Icon(
-        Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+        if (abierto) Icons.Rounded.KeyboardArrowDown else Icons.AutoMirrored.Rounded.KeyboardArrowRight,
         contentDescription = null,
         tint = Movi.colores.textoApagado,
         modifier = modifier.size(Icono.m).testTag(TAG_CHEVRON),

@@ -100,6 +100,7 @@ import com.jvillada.movi.ui.components.ds.Pildora
 import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
 import com.jvillada.movi.ui.components.ds.Seccion
 import com.jvillada.movi.ui.components.ds.Separador
+import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
 import com.jvillada.movi.ui.components.ds.Superficie
 import com.jvillada.movi.ui.components.ds.TamanoDeBoton
 import com.jvillada.movi.ui.components.ds.TonoDePildora
@@ -215,6 +216,12 @@ fun PrimerUsoScreen(
     // Revisión de la 75: UNA creación del salario a la vez. «Ir a Inicio» la espera (y se apaga mientras).
     var trabajoDelSalario by remember { mutableStateOf<Job?>(null) }
     var creandoElSalario by remember { mutableStateOf(false) }
+    // Vuelta 87: el paso al que se vuelve tras guardar el período cuando se vino a elegirlo desde «Tu salario»
+    // (en «Lo que pagas cada mes»): no se sigue a Cuentas, se vuelve a donde se estaba.
+    var volverAlPaso by remember { mutableStateOf<PasoDePrimerUso?>(null) }
+    // Vuelta 87: el salario que había al llegar a «Lo que pagas cada mes» (el del paso del período, si lo escribió
+    // ahí): «Saltar este paso» deja eso, no lo escrito en este paso.
+    var salarioAlLlegarALosFijos by remember { mutableStateOf<Long?>(null) }
     // «Listo» con una cifra real: lo que dice el final, cuando se sabe.
     var fraseDelListo by remember { mutableStateOf<String?>(null) }
 
@@ -332,6 +339,8 @@ fun PrimerUsoScreen(
             PasoDePrimerUso.RECURRENTES -> {
                 borradoresDeRecurrentes.clear()
                 recurrenteAbierto = null
+                // Vuelta 87: «Saltar este paso» es saltar: el salario escrito en él no se crea.
+                salario = salarioAlLlegarALosFijos
             }
             else -> Unit
         }
@@ -389,6 +398,8 @@ fun PrimerUsoScreen(
 
     fun irA(destino: PasoDePrimerUso) {
         error = null
+        if (destino != PasoDePrimerUso.PERIODO) volverAlPaso = null
+        if (destino == PasoDePrimerUso.RECURRENTES) salarioAlLlegarALosFijos = salario
         paso = destino
         // Vuelta 75: al llegar al final, el salario se crea y «Listo» lee su cifra.
         if (destino == PasoDePrimerUso.LISTO) {
@@ -430,7 +441,7 @@ fun PrimerUsoScreen(
                         .onSuccess {
                             periodoGuardado = textoDelInicioDelMes(elegido, regla)
                             guardando = false
-                            siguiente?.let(::irA)
+                            (volverAlPaso ?: siguiente)?.let(::irA)
                         }
                         .onFailure {
                             guardando = false
@@ -594,13 +605,18 @@ fun PrimerUsoScreen(
                         onAlternar = ::alternarRecurrente,
                         // Vuelta 87: «Tu salario», la misma regla del paso del período (el mismo monto y el mismo día).
                         preguntaElSalario = !tieneIngresoFijo,
-                        dia = dia,
+                        // Solo con el período **guardado** (o ya elegido en el perfil): es lo que exige
+                        // [crearElSalario]. Con un día solo tocado en el calendario la fila no deja escribir.
+                        dia = dia.takeIf { periodoGuardado != null || periodoDelPerfil != null },
                         salario = salario,
                         onSalario = { salario = it },
                         yaTePagaron = yaTePagaron,
                         onYaTePagaron = { yaTePagaron = it },
                         habilitado = !guardando,
-                        onElegirElDia = { irA(PasoDePrimerUso.PERIODO) },
+                        onElegirElDia = {
+                            irA(PasoDePrimerUso.PERIODO)
+                            volverAlPaso = PasoDePrimerUso.RECURRENTES
+                        },
                     )
                     PasoDePrimerUso.LISTO -> PasoListo(
                         fraseDelListo,
@@ -673,7 +689,7 @@ fun PrimerUsoScreen(
                 Boton(
                     SALTAR_ESTE_PASO,
                     // Con algo escrito pregunta antes: el arriendo escrito no se pierde por un toque.
-                    onClick = { preguntandoSiHayAlgoEscrito { descartarLoEscrito(paso); irA(siguiente) } },
+                    onClick = { preguntandoSiHayAlgoEscrito { descartarLoEscrito(paso); irA(volverAlPaso ?: siguiente) } },
                     variante = VarianteDeBoton.Fantasma,
                     tamano = TamanoDeBoton.S,
                     habilitado = !guardando,
@@ -1309,7 +1325,7 @@ private fun FilaDelSalario(
             titulo = TU_SALARIO,
             subtitulo = subtituloDeTuSalario(dia, salario),
             inicio = { IconoEnCirculo(Icons.Rounded.SouthWest, tono = TonoDeIcono.Exito) },
-            final = { Chevron() },
+            final = { Chevron(abierto = abierta && dia != null) },
             onClick = { if (dia == null) onElegirElDia() else abierta = !abierta },
             modifier = Modifier.testTag(TAG_FILA_DEL_SALARIO),
         )
@@ -1323,12 +1339,13 @@ private fun FilaDelSalario(
                 MoneyField(
                     value = salario,
                     onValueChange = onSalario,
-                    label = "Cuánto te pagan",
+                    label = "Salario mensual",
                     modifier = Modifier.testTag(TAG_SALARIO_EN_FIJOS),
                 )
             }
             if ((salario ?: 0L) > 0L) {
-                Separador()
+                // Sin sangría: la fila de abajo no lleva avatar y el separador por defecto arranca después de uno.
+                Separador(SangriaDeSeparador.Ninguna)
                 FilaDeYaTePagaron(yaTePagaron, onYaTePagaron, habilitado)
             }
         }

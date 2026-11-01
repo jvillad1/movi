@@ -817,6 +817,64 @@ class PrimerUsoEnPantallaTest {
         composeRule.waitForIdle()
         assertTrue(seVe("Paso 2 de 6"), "lleva al paso del período")
     }
+
+    /** Período saltado (el día solo tocado en el calendario) y una cuenta: llega a «Lo que pagas cada mes». */
+    private fun hastaLoQuePagasConElPeriodoSaltado(repo: RepoDeLaGuia) {
+        montar(repo, paso = PasoDePrimerUso.PERIODO)
+        composeRule.onNodeWithText("25").performClick()
+        composeRule.waitForIdle()
+        saltar()
+        composeRule.onNodeWithText("Bancolombia").performClick()
+        composeRule.waitForIdle()
+        composeRule.onAllNodes(hasSetTextAction())[1].performTextInput("1500000")
+        avanzar()
+        saltar()
+        assertTrue(seVe("Paso 5 de 6"))
+    }
+
+    @Test
+    fun `con el periodo saltado Tu salario no deja escribir y al guardar el periodo vuelve a Lo que pagas`() {
+        val repo = RepoConCifra()
+        hastaLoQuePagasConElPeriodoSaltado(repo)
+        // El día 25 solo se tocó: no está guardado, así que la fila no se fía de él.
+        assertTrue(seVe("Elige antes el día de pago"))
+        composeRule.onNodeWithTag(TAG_FILA_DEL_SALARIO).performClick()
+        composeRule.waitForIdle()
+        assertTrue(seVe("Paso 2 de 6"), "lleva al paso del período")
+        avanzar()
+        assertTrue(seVe("Paso 5 de 6"), "tras guardar el período vuelve a donde estaba, no sigue a Cuentas")
+        assertTrue(seVe("Cuánto te pagan el día 25"))
+        composeRule.onNodeWithTag(TAG_FILA_DEL_SALARIO).performClick()
+        composeRule.waitForIdle()
+        composeRule.onAllNodes(hasSetTextAction())[0].performTextInput("5000000")
+        composeRule.waitForIdle()
+        avanzar()
+        composeRule.waitUntil(5_000) { repo.reglas.isNotEmpty() }
+        assertEquals(5_000_000L, repo.reglas.single().amount)
+        assertEquals(25, repo.reglas.single().dayOfMonth)
+    }
+
+    @Test
+    fun `Saltar este paso es saltar y el salario escrito en lo que pagas no se crea`() {
+        val repo = RepoConCifra()
+        montar(repo, paso = PasoDePrimerUso.PERIODO)
+        composeRule.onNodeWithText("25").performClick()
+        composeRule.waitForIdle()
+        avanzar()
+        composeRule.onNodeWithText("Bancolombia").performClick()
+        composeRule.waitForIdle()
+        composeRule.onAllNodes(hasSetTextAction())[1].performTextInput("1500000")
+        avanzar()
+        saltar()
+        composeRule.onNodeWithTag(TAG_FILA_DEL_SALARIO).performClick()
+        composeRule.waitForIdle()
+        composeRule.onAllNodes(hasSetTextAction())[0].performTextInput("5000000")
+        composeRule.waitForIdle()
+        saltar()
+        assertTrue(seVe("Paso 6 de 6"))
+        composeRule.waitForIdle()
+        assertTrue(repo.reglas.isEmpty(), "saltar el paso no crea el salario escrito en él")
+    }
 }
 
 /** Todos los textos debajo de [nodo], para el mensaje de una prueba que falla. */
