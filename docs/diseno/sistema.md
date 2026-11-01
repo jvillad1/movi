@@ -5102,3 +5102,21 @@ no se pide permiso en una pantalla aparte: se abre una **hoja corta antes de la 
   fila en Ajustes que la vuelve a abrir.
 - Lo que no usa el tercero (las tres preguntas sugeridas) no pasa por la puerta.
 - Una puerta por pantalla que dispara la acción (`rememberPuertaDeLaIa` + `puerta.Hoja()`).
+
+## Vuelta 100 · Pantallas de administración con pestañas, y el uso desde los componentes
+
+«Fallos y uso» (`ui/admin/FallosYUsoScreen.kt`, solo admin) es la primera pantalla de **herramienta interna**.
+Reglas del patrón, para la próxima:
+
+- **Las pestañas son un `SelectorSegmentado`** debajo del `MinScreenHeader`, no una barra nueva; el contenido de
+  cada pestaña es su propio `@Composable` (y, si lo llena otra vuelta, su propio archivo, como
+  `PestanaDelServidor.kt`).
+- Todo sale de las piezas de siempre: `Seccion` + `Superficie(Lista)` + `Fila` con el número en `final`
+  (`cuerpoFuerte`), `Vacio` para lo que no hay, `EsqueletoDeFila` mientras carga. Una barra de conteo es una
+  píldora (`Radio.pill`) de `Medida.altoDeBarraEnTarjeta` en tinta, con el ancho como fracción del máximo.
+- Un recorrido se navega **dentro de la pestaña** (personas → sesiones → línea de tiempo) con la `accion` de
+  la `Seccion` para volver un nivel; los filtros son `PildoraDeFiltro` en fila y el buscador `CampoDeBusqueda`.
+
+**El uso**: `Uso.evento` (`observabilidad/Uso.kt`) es el único punto de entrada. Un componente de `ds/` que
+quiera anotar sus toques lo llama con `EventoDeUso.TOQUE` y claves de `ClaveDeUso` (la acción, el componente);
+**nunca** con el texto que muestra si ese texto puede ser del usuario (un monto, un nombre, un comercio).
