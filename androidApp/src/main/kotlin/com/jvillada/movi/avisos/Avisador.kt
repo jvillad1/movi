@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.os.Build
+import android.provider.Settings
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -15,6 +16,9 @@ import androidx.core.content.ContextCompat
 import com.jvillada.movi.app.R
 import com.jvillada.movi.data.SaldosOcultosStore
 import com.jvillada.movi.data.SessionManager
+import com.jvillada.movi.notificaciones.BOTON_ACTIVAR_EL_ACCESO
+import com.jvillada.movi.notificaciones.TEXTO_DEL_ACCESO_REVOCADO
+import com.jvillada.movi.notificaciones.TITULO_DEL_ACCESO_REVOCADO
 import com.jvillada.movi.shared.model.AvisoPorRevisar
 import com.jvillada.movi.shared.model.marcaDelAviso
 import com.jvillada.movi.ui.dashboard.InstantaneaDelInicio
@@ -51,6 +55,10 @@ object Avisador {
     private const val ID_SESION_CERRADA = 7106
     private const val ID_RESUMEN_DE_LA_MANANA = 7107
     private const val ID_RESUMEN_SEMANAL = 7108
+
+    /** Vuelta 92 · «Movi dejó de leer las notificaciones del banco» (y su botón «Activar»). */
+    private const val ID_ACCESO_REVOCADO = 7120
+    private const val CODIGO_ACTIVAR_EL_ACCESO = 7121
 
     /** Los `requestCode` de los botones de la notificación de un aviso: distintos del de tocarla. */
     private const val CODIGO_OTRA_CATEGORIA = 7111
@@ -248,6 +256,34 @@ object Avisador {
 
     fun quitarSesionCerrada(context: Context) {
         runCatching { NotificationManagerCompat.from(context).cancel(ID_SESION_CERRADA) }
+    }
+
+    /**
+     * Vuelta 92 · el dueño (o Android) revocó el acceso a las notificaciones: la captura del banco
+     * por notificaciones se apagó. UNA notificación —la vigía no la repite con la misma huella, ver
+     * `queHaceLaVigia`— que abre Captura del banco, con «Activar», que lleva directo a la pantalla
+     * del sistema donde se concede. Se quita sola cuando el listener vuelve a conectarse.
+     */
+    fun avisarAccesoRevocado(context: Context) {
+        val activar = PendingIntent.getActivity(
+            context,
+            CODIGO_ACTIVAR_EL_ACCESO,
+            Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        publicar(
+            context,
+            ID_ACCESO_REVOCADO,
+            CANAL_CAPTURA,
+            TextoDeAviso(titulo = TITULO_DEL_ACCESO_REVOCADO, texto = TEXTO_DEL_ACCESO_REVOCADO),
+            ABRIR_CAPTURA,
+            cuantos = 1,
+            acciones = listOf(NotificationCompat.Action(0, BOTON_ACTIVAR_EL_ACCESO, activar)),
+        )
+    }
+
+    fun quitarAccesoRevocado(context: Context) {
+        runCatching { NotificationManagerCompat.from(context).cancel(ID_ACCESO_REVOCADO) }
     }
 
     /** «Cerró tu período de septiembre»: tocarlo abre el detalle de ese período. */

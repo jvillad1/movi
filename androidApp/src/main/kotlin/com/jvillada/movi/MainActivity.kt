@@ -21,6 +21,7 @@ import com.jvillada.movi.avisos.destinoDeAviso
 import com.jvillada.movi.compartir.esCompartirConMovi
 import com.jvillada.movi.compartir.leerLoCompartido
 import com.jvillada.movi.compartir.urisCompartidos
+import com.jvillada.movi.notificaciones.VigiaDeLaEscuchaWorker
 import com.jvillada.movi.ui.papeles.PapelesCompartidos
 import com.jvillada.movi.shared.db.DatabaseDriverFactory
 import com.jvillada.movi.sms.SmsBackfillWorker
@@ -64,6 +65,10 @@ class MainActivity : FragmentActivity() {
         // Y uno ahora mismo: abrir la app es cuando va a mirar los números, y el periódico puede
         // estar a horas de su turno.
         SmsBackfillWorker.barrerAhora(applicationContext)
+        // Vuelta 92: la vigía del listener de notificaciones, cada 6 h como el barrido (reconecta
+        // o avisa UNA vez si se revocó el acceso), y una revisión ahora que solo reconecta.
+        VigiaDeLaEscuchaWorker.programar(applicationContext)
+        VigiaDeLaEscuchaWorker.revisar(applicationContext, conAviso = false)
         // Y un refresh oportunista en cada apertura — reemplaza el que disparaba la
         // pantalla del sensor cuando era la única UI del APK.
         SmsFilterConfigStore.refreshIfStale(applicationContext)

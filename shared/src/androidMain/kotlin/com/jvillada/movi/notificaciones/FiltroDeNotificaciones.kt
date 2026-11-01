@@ -74,6 +74,8 @@ sealed interface DecisionDeNotificacion {
  * la regla es una función pura que se prueba sin Android, igual que `BankSenderFilter.matches`.
  *
  * @param cuando el `when` de la notificación (epoch-ms) — el mismo reloj que `System.currentTimeMillis`.
+ * @param llave `StatusBarNotification.key`: la misma en cada actualización de una notificación. Solo
+ *   sirve para reconocer una reposición con el mismo texto (ver `anotarSiEsNueva`); no decide nada.
  */
 data class NotificacionEntrante(
     val paquete: String,
@@ -82,6 +84,7 @@ data class NotificacionEntrante(
     val esPersistente: Boolean,
     val esResumenDeGrupo: Boolean,
     val cuando: Long,
+    val llave: String = "",
 )
 
 /**
