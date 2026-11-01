@@ -254,6 +254,7 @@ private fun iconoDe(tipo: TipoDePropuesta): ImageVector = when (tipo) {
     TipoDePropuesta.PAGO -> Icons.Rounded.Schedule
     TipoDePropuesta.DEBITO -> Icons.Rounded.AccountBalance
     TipoDePropuesta.CUADRE -> Icons.Rounded.Tune
+    TipoDePropuesta.EXTRACTO -> Icons.Rounded.Receipt
     TipoDePropuesta.PRESUPUESTO -> Icons.Rounded.Savings
     TipoDePropuesta.ANOMALIA -> Icons.AutoMirrored.Rounded.TrendingUp
     TipoDePropuesta.CIERRE -> Icons.AutoMirrored.Rounded.EventNote
@@ -277,6 +278,7 @@ internal fun PropuestasDelInicioSection(
     val todas = propuestasDelInicio(data, conElPago)
     val aLaVista = propuestasALaVista(todas)
     val cargando = LocalCargandoElInicio.current
+    val atajos = LocalAtajosDeAgregar.current
     val hacer: (AccionDeLaPropuesta) -> Unit = { accion ->
         when (accion) {
             is AccionDeLaPropuesta.Ir -> onNavigate(accion.pantalla)
@@ -288,6 +290,10 @@ internal fun PropuestasDelInicioSection(
                     Repositories.wallets.descartarAnomalia(accion.huella)
                 }
             // Vuelta 60: «Sí, cambiar». Se va en el mismo toque; si no se pudo, vuelve.
+            // Vuelta 94: la subida de siempre (la de «Subir comprobante o extracto»), que hace la cáscara;
+            // fuera de la app (una prueba que monta el Inicio solo), Documentos, donde también se sube.
+            AccionDeLaPropuesta.SubirElExtracto ->
+                atajos?.invoke(AtajoDeAgregar.SUBIR_COMPROBANTE) ?: onNavigate(Screen.Documentos)
             is AccionDeLaPropuesta.CambiarLaCategoria ->
                 AnomaliasDescartadasEnLaSesion.descartarYGuardar(accion.cambio.huella) {
                     aceptarElCambioDeCategoria(Repositories.wallets, accion.cambio)

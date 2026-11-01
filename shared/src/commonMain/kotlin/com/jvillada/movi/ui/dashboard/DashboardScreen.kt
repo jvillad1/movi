@@ -496,6 +496,11 @@ fun DashboardScreen(
                 runCatching { Repositories.wallets.getCierreDelPeriodo() }
                     .onSuccess { c -> data = data.copy(cierre = c) }
             }
+            // Vuelta 94: los extractos que faltan subir. Secundario y solo en `data`, como el cierre.
+            launch {
+                runCatching { Repositories.wallets.getExtractosPorSubir() }
+                    .onSuccess { e -> data = data.copy(extractosPorSubir = e) }
+            }
             // Vuelta 39 · «Últimos movimientos»: las primeras filas de Actividad. Solo los días de los
             // últimos movimientos (`/by-day?ultimos=N`), no la historia entera en cada carga de la web;
             // en el teléfono sale de lo local. Secundario: si falla, la sección no se pinta esta vez.

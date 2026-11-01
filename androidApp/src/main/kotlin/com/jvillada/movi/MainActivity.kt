@@ -11,6 +11,7 @@ import androidx.fragment.app.FragmentActivity
 import com.jvillada.movi.avisos.AvisoDeBancoMudoWorker
 import com.jvillada.movi.avisos.AvisoDeDebitosAutomaticosWorker
 import com.jvillada.movi.avisos.AvisoDeCierreWorker
+import com.jvillada.movi.avisos.AvisoDeExtractoWorker
 import com.jvillada.movi.avisos.AvisoDeLaMananaWorker
 import com.jvillada.movi.avisos.AvisoSemanalDeLaParejaWorker
 import com.jvillada.movi.avisos.AvisoDeVencimientosWorker
@@ -78,6 +79,7 @@ class MainActivity : FragmentActivity() {
         AvisoDeDebitosAutomaticosWorker.programar(applicationContext)
         // «Cerró tu período»: la mañana siguiente al corte (decide al correr, como los otros).
         AvisoDeCierreWorker.programar(applicationContext)
+        AvisoDeExtractoWorker.programar(applicationContext)
         // Vuelta 68: el resumen de la mañana (8:00) y el semanal de los grupos (domingo, 19:00).
         // Deciden al correr, como los otros: con su interruptor apagado no hacen nada.
         AvisoDeLaMananaWorker.programar(applicationContext)

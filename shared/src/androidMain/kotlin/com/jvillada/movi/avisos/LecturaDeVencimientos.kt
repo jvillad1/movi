@@ -89,6 +89,20 @@ suspend fun leerCierreDelPeriodo(): com.jvillada.movi.shared.model.CierreDelPeri
 }
 
 /**
+ * Vuelta 94 · **los extractos de tarjeta que faltan subir**, leídos desde un Worker (`GET
+ * /api/extractos-por-subir`, la misma lista que propone Hoy). Contra el server directo, por lo mismo que
+ * [leerPagosDelPeriodo]. Lanza si la lectura falla; quien llama decide reintentar.
+ */
+suspend fun leerExtractosPorSubir(): List<com.jvillada.movi.shared.model.ExtractoPorSubir> {
+    val cliente = createHttpClient()
+    try {
+        return WalletRepositoryImpl(cliente, apiBaseUrl).getExtractosPorSubir()
+    } finally {
+        cliente.close()
+    }
+}
+
+/**
  * Vuelta 68 · **lo que necesita el resumen de la mañana**, leído desde un Worker: las cifras del héroe
  * del Inicio y el conteo de «Por revisar» —las mismas lecturas y traducciones que el Inicio
  * (`conResumenDelInicio`, `conElPerfil`): perfil, `/api/finance/summary`, `/api/dashboard/summary`,

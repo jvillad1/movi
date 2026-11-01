@@ -596,6 +596,9 @@ class WalletRepositoryImpl(
         return respuesta.exigirExito().body()
     }
 
+    override suspend fun getExtractosPorSubir(): List<com.jvillada.movi.shared.model.ExtractoPorSubir> =
+        client.get("$baseUrl/api/extractos-por-subir").exigirExito().body()
+
     override suspend fun descartarCierre(periodo: String) {
         client.post("$baseUrl/api/cierre-del-periodo/descartar") {
             contentType(ContentType.Application.Json)
