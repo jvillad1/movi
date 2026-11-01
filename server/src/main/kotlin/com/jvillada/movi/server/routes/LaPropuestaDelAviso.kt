@@ -9,6 +9,9 @@ import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.server.reminders.loadEventsBetween
+import com.jvillada.movi.server.espacios.espaciosDe
+import com.jvillada.movi.server.espacios.gastosDe
+import com.jvillada.movi.server.espacios.liquidacionesDe
 import com.jvillada.movi.server.sms.conElOrigenPropioDelIngresoDe
 import com.jvillada.movi.server.sms.destinosDelDueno
 import com.jvillada.movi.server.sms.loQueMoviSabeDelPagoDe
@@ -18,6 +21,9 @@ import com.jvillada.movi.server.sms.sinLaCuentaPropia
 import com.jvillada.movi.shared.model.AvisoSinLeer
 import com.jvillada.movi.shared.model.DestinoConocido
 import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.GrupoConSuSaldo
+import com.jvillada.movi.shared.model.grupoQueSaldaElAviso
+import com.jvillada.movi.shared.model.saldoDelEspacio
 import com.jvillada.movi.shared.model.MemoriaDeCategorias
 import com.jvillada.movi.shared.model.ParsedSms
 import com.jvillada.movi.shared.model.PropuestaDelAviso
@@ -177,6 +183,7 @@ internal fun Transaction.propuestasDeLaBandeja(uid: String, ahora: Long): Propue
     val cuentas = Accounts.selectAll().where { Accounts.userId eq uid }.map { it.toAccount() }
     val descartados = DestinosDescartados.selectAll().where { DestinosDescartados.userId eq uid }
         .map { it[DestinosDescartados.clave] }.toSet()
+    val grupos = gruposConSuSaldoDe(uid)
     val propuestas = unoPorPago(bandeja).mapNotNull { cabeza ->
         val miembros = cabeza.grupoId?.let { grupo -> bandeja.filter { it.grupoId == grupo } }?.ifEmpty { null } ?: listOf(cabeza)
         if (miembros.any { it.state == SMS_STATE_CONFIRMED }) return@mapNotNull null
@@ -194,6 +201,10 @@ internal fun Transaction.propuestasDeLaBandeja(uid: String, ahora: Long): Propue
                 leido = lectura.parsed,
                 coincidencias = coincidenciasDelAviso(uid, propuesta, ahora),
                 destinoSinNombre = ofreceGuardarElDestino(lectura.parsed.identificador(), sabe.destinos, cuentas, descartados),
+                // Vuelta 85: «¿Salda Casa con Andrés?» se dice antes de confirmar (solo lo dice).
+                saldaUnGrupo = grupoQueSaldaElAviso(
+                    lectura.parsed, propuesta.text, momentoDelSms(propuesta.time, ahora = ahora), grupos, sabe.destinos,
+                ),
             )
         }
     }
@@ -202,6 +213,28 @@ internal fun Transaction.propuestasDeLaBandeja(uid: String, ahora: Long): Propue
         categoriasDelDueno = sabe.memoria.categoriasDelDueno.sorted(),
         inicioDeLasCuentas = inicioDeLasCuentasDe(uid),
     )
+}
+
+/**
+ * Vuelta 85 · **los grupos del dueño con su saldo de hoy**, para [grupoQueSaldaElAviso]: el mismo
+ * [saldoDelEspacio] que arma `GET /api/espacios/propuestas` (sin los gastos ni saldados de movimientos
+ * anulados). Sin grupos, una lista vacía y ninguna consulta más.
+ */
+internal fun Transaction.gruposConSuSaldoDe(uid: String): List<GrupoConSuSaldo> {
+    val espacios = espaciosDe(uid)
+    if (espacios.isEmpty()) return emptyList()
+    val anulados = VoidEvents.selectAll().where { VoidEvents.userId eq uid }.map { it[VoidEvents.originalEventId] }.toSet()
+    val gastos = gastosDe(uid, espacios).filterNot { it.eventoId != null && it.eventoId in anulados }
+    val liquidaciones = liquidacionesDe(uid).filterNot { it.eventoId != null && it.eventoId in anulados }
+    return espacios.map { espacio ->
+        val suyas = liquidaciones.filter { it.espacioId == espacio.id }
+        GrupoConSuSaldo(
+            espacio,
+            saldoDelEspacio(espacio, gastos.filter { it.espacioId == espacio.id }, suyas, anulados),
+            // Vuelta 85 (revisión): el «saldado» que espera su transferencia también la reconoce.
+            liquidaciones = suyas,
+        )
+    }
 }
 
 /** Cuenta → su primer movimiento vivo (epoch ms): de ahí arranca la cuenta en Movi. */

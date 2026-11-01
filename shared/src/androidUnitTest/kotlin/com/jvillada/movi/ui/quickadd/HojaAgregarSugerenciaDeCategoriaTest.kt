@@ -84,12 +84,16 @@ class HojaAgregarSugerenciaDeCategoriaTest {
         cuantos = 2,
     )
 
-    /** «Arriendo recibido» es del catálogo y de ingreso: se ofrece en la pestaña Ingreso. */
+    /**
+     * «Arriendo recibido» es del catálogo y de ingreso: se ofrece en la pestaña Ingreso. Vuelta 85: es de la
+     * memoria de lo que ENTRA (`ingreso = true`), la única que consulta esa pestaña (`recuerdosDelLado`).
+     */
     private val recuerdoInquilino = RecuerdoDeCategoria(
         huella = "nombre:inquilinoperez",
         categoria = "Arriendo recibido",
         nombre = "Inquilino Pérez",
         cuantos = 4,
+        ingreso = true,
     )
 
     @After

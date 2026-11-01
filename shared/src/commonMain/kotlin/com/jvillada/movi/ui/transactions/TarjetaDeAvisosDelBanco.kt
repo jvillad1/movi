@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.transactions
 
+import com.jvillada.movi.ui.sdui.textosDeLaFranjaPorConfirmar
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -92,7 +93,13 @@ internal fun TarjetaDeAvisosDelBanco(
             TarjetaDePropuesta(
                 icono = Icons.Rounded.NotificationsNone,
                 titulo = titulo,
-                cuerpo = conteo?.let { desgloseDePorRevisar(it) },
+                // Vuelta 85: con lo que dicen los avisos, la misma línea con signo de la franja del Inicio
+                // («−$262.400 en 2 salidas · +$480.000 en 1 entrada · y 1 movimiento»).
+                cuerpo = conteo?.let { c ->
+                    avisos?.porSigno?.takeIf { c.avisos > 0 }
+                        ?.let { textosDeLaFranjaPorConfirmar(c, avisos?.suman, it).second }
+                        ?: desgloseDePorRevisar(c)
+                },
                 accion = accion,
                 onAccion = onAccion,
                 tono = TonoDeIcono.Aviso,

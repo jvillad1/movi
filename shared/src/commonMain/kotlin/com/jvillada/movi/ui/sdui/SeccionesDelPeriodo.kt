@@ -18,7 +18,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -34,7 +33,6 @@ import com.jvillada.movi.ui.dashboard.AnomaliasDescartadasEnLaSesion
 import com.jvillada.movi.ui.dashboard.anomaliasVisiblesDe
 import com.jvillada.movi.ui.fecha.fechaEnPalabras
 import com.jvillada.movi.ui.recurrentes.ActionChip
-import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -218,7 +216,6 @@ internal fun ParaRevisarSection(
     // Ola 4: lo que se sale de lo normal va en la misma tarjeta, debajo, con su evidencia.
     val anomalias = anomaliasVisiblesDe(data)
     if (cosas.isEmpty() && anomalias.isEmpty()) return
-    val coroutine = rememberCoroutineScope()
 
     Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio)) {
         Seccion(titulo = section.title ?: "Para revisar", conteo = cosas.size + anomalias.size)
@@ -232,11 +229,10 @@ internal fun ParaRevisarSection(
             }
             anomalias.forEachIndexed { i, anomalia ->
                 FilaDeAnomalia(anomalia) {
-                    // «Está bien»: se va en el mismo toque; si el server no lo guarda, vuelve.
-                    AnomaliasDescartadasEnLaSesion.descartar(anomalia.huella)
-                    coroutine.launch {
-                        runCatching { Repositories.wallets.descartarAnomalia(anomalia.huella) }
-                            .onFailure { AnomaliasDescartadasEnLaSesion.deshacer(anomalia.huella) }
+                    // «Está bien»: se va en el mismo toque; si el server no lo guarda, vuelve. Vuelta 89: sin
+                    // un alcance de esta sección, que con el último aviso sale de la composición.
+                    AnomaliasDescartadasEnLaSesion.descartarYGuardar(anomalia.huella) {
+                        Repositories.wallets.descartarAnomalia(anomalia.huella)
                     }
                 }
                 if (i < anomalias.lastIndex) Separador()
