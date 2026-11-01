@@ -69,6 +69,9 @@ fun queEsEsteMensaje(texto: String, origen: String?): QueEsElMensaje {
         return QueEsElMensaje.NoEsMovimiento(MotivoDeApartado.NO_PASO)
     }
     if (tieneLaFormaDeUnMovimiento(t)) return QueEsElMensaje.Movimiento
+    // Vuelta 99: «DAVIVIENDA Descuento en internet, $64,900,Cta de Ahorros *0136,Hora 16:49,…» es un
+    // gasto, y su «Descuento» lo apartaba como promoción. La forma entera de Davivienda manda.
+    if (tieneLaFormaDeDavivienda(texto)) return QueEsElMensaje.Movimiento
     if (LOS_DECIDE_EL_DUENO.any { it in t }) return QueEsElMensaje.Movimiento
 
     val motivo = when {

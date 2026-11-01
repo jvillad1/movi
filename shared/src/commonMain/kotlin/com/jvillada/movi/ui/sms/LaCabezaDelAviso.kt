@@ -27,6 +27,7 @@ import com.jvillada.movi.shared.model.marcaDelBanco
 import com.jvillada.movi.shared.model.marcaDelTexto
 import com.jvillada.movi.shared.model.nombreParaMostrar
 import com.jvillada.movi.shared.model.nombreDelOrigenDeCaptura
+import com.jvillada.movi.shared.model.marcaDelRemitente
 import com.jvillada.movi.ui.categorias.IconoDeCategoria
 import com.jvillada.movi.ui.components.CirculoDeMarca
 import com.jvillada.movi.ui.components.TamanoDeAvatar
@@ -82,11 +83,15 @@ data class CabezaDelAviso(
  * La revisión de «un día del dueño» vio «85540» como título de Revisar aviso. Un código que Movi no
  * conoce no se adivina: «SMS», que es lo único que ese número dice.
  */
-fun bancoDelAviso(bank: String): String {
+fun bancoDelAviso(bank: String, texto: String = ""): String {
     val limpio = bank.replace(' ', ' ').trim()
     if (limpio.startsWith("Comprobante", ignoreCase = true)) return "Comprobante"
     val origen = origenLegibleDelAviso(limpio)
-    if (origen.isEmpty() || origen.all { it.isDigit() || it == '+' }) return nombreDelOrigenDeCaptura(limpio) ?: "SMS"
+    if (origen.isEmpty() || origen.all { it.isDigit() || it == '+' }) {
+        // Vuelta 99: un código que Movi no conoce (Davivienda, 871…) se nombra por cómo firma el texto
+        // («DAVIVIENDA Descuento en internet…» → «Davivienda»).
+        return nombreDelOrigenDeCaptura(limpio) ?: marcaDelRemitente(limpio, texto)?.nombre ?: "SMS"
+    }
     return origen
 }
 
@@ -212,7 +217,7 @@ fun cabezaDelAviso(
     val subtitulo = if (avisos.size > 1) {
         "${canalesDelMismoPago(avisos)} · $cuando"
     } else {
-        "${bancoDelAviso(primero.bank)} · $cuando"
+        "${bancoDelAviso(primero.bank, primero.text)} · $cuando"
     }
     val enElTexto = marcaDeComercioEn(avisos)
     val comercio = comercioQueDiceAlgo(leido?.merchant) ?: comercioQueDiceAlgo(sinLeer?.comercio) ?: enElTexto?.nombre
@@ -230,7 +235,7 @@ fun cabezaDelAviso(
     }
     val moneda = leido?.currency ?: sinLeer?.moneda ?: "COP"
     if (comercio == null) {
-        val banco = bancoDelAviso(primero.bank)
+        val banco = bancoDelAviso(primero.bank, primero.text)
         return CabezaDelAviso(
             titulo = when (banco) {
                 "Comprobante" -> primero.bank.trim() // «Comprobante · transferencia.png»

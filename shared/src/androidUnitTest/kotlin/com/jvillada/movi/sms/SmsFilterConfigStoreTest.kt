@@ -32,7 +32,9 @@ class SmsFilterConfigStoreTest {
         val remote = FilterConfig(senderCodes = listOf("85540", "999999"), bodyKeywords = listOf("bancolombia", "nequi"))
         val result = SmsFilterConfigStore.withDefaults(remote)
         assertEquals(listOf("85540", "999999", "891333", "87400"), result.senderCodes)
-        assertEquals(listOf("bancolombia", "nequi"), result.bodyKeywords)
+        // Lo remoto va primero y nada se repite.
+        assertEquals(listOf("bancolombia", "nequi"), result.bodyKeywords.take(2))
+        assertEquals((remote.bodyKeywords + BankSenderFilter.DEFAULTS.bodyKeywords).distinct(), result.bodyKeywords)
     }
 
     @Test
@@ -61,7 +63,8 @@ class SmsFilterConfigStoreTest {
         )
         val result = SmsFilterConfigStore.withDefaults(remote)
         assertEquals(listOf("85540", "891333", "87400"), result.senderCodes)
-        assertEquals(listOf("bancolombia"), result.bodyKeywords)
+        assertEquals(BankSenderFilter.DEFAULTS.bodyKeywords, result.bodyKeywords)
+        assertEquals(result.bodyKeywords.distinct(), result.bodyKeywords)
     }
 
     @Test

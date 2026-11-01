@@ -81,8 +81,14 @@ fun grupoDelBanco(id: String): String = GRUPOS_DE_BANCOS[id] ?: id
 fun marcaDelRemitente(origen: String, texto: String): Marca? {
     nombreDelOrigenDeCaptura(origen)?.let { nombre -> marcaDelBanco(nombre)?.let { return it } }
     val prefijo = texto.substringBefore(':', missingDelimiterValue = "").trim()
-    return prefijo.takeIf { it.isNotEmpty() && it.length <= 30 }?.let(::marcaDelBanco)
+    prefijo.takeIf { it.isNotEmpty() && it.length <= 30 }?.let(::marcaDelBanco)?.let { return it }
+    // Vuelta 99: Davivienda firma sin dos puntos («DAVIVIENDA Descuento en internet, $64,900,…»), y su
+    // código corto (871…) no es uno que Movi conozca. La primera palabra, si es un banco.
+    val primeraPalabra = primeraPalabraDelTexto.find(texto)?.value ?: return null
+    return marcaDelBanco(primeraPalabra)?.takeIf { it.rubro == RubroDeMarca.BANCOS_Y_BILLETERAS }
 }
+
+private val primeraPalabraDelTexto = Regex("""^\s*[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+""")
 
 /**
  * Las cuentas del dueño que son de [marca], por su nombre ([marcaDeLaCuenta]): las de plata (sin el
