@@ -40,6 +40,15 @@ interface HojaDeCompartir {
         compartir(texto)
         return if (abreLaHojaDelSistema) ComoSalioElMensaje.POR_LA_HOJA else ComoSalioElMensaje.COPIADO
     }
+
+    /**
+     * Vuelta 93: ¿esta plataforma puede **guardar un archivo de texto** que Movi arma en el momento (el XML del
+     * filtro de Gmail)? Solo la web (un `Blob` con `download`); en el teléfono el filtro se pega, no se importa.
+     */
+    val puedeDescargar: Boolean get() = false
+
+    /** Guarda [contenido] como [nombre] en lo que la persona descarga. `false` si no se pudo. */
+    fun descargar(nombre: String, contenido: String, tipo: String = "text/plain"): Boolean = false
 }
 
 /** Cómo salió un mensaje de [HojaDeCompartir.mandarMensaje]. */

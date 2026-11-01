@@ -5061,3 +5061,29 @@ como ingreso).
   fue la plata, no de dónde salió.
 
 **Pruebas**: `ElTraspasoPropioEnLaAppTest` (`:shared` commonTest) con los textos reales.
+
+## Vuelta 93 · Una guía en pasos, con lo que cada paso necesita adentro
+
+**Patrón: cuando una guía tiene pasos que se dan en OTRA app (Gmail), cada paso es un título corto y, debajo, lo
+que hace falta para darlo, sin sacar a la persona de Movi.** El reenvío por correo (`ReenvioPorCorreo`, la pieza
+del primer uso y de Ajustes → «Recibe tus alertas por correo») pasó de cuatro frases a tres pasos:
+
+1. «Agrega a Movi como dirección de reenvío en Gmail.» Debajo, dónde se toca (`DONDE_AGREGAR_EL_REENVIO`); la
+   dirección con «Copiar» queda arriba, en su propia `Superficie`.
+2. «Movi te muestra el código de confirmación.» El código es `FiltroDeGmail.codigoDeConfirmacion`, en
+   `cuerpoFuerte`, con «Copiar el código». Si todavía no llegó: la frase de apoyo y un «Buscar el código»
+   (relee a pedido; **sin sondeo** en segundo plano, que dejaría la pantalla sin quedar quieta); si esa búsqueda no
+   trae nada, o el server es viejo, dice «Todavía no llega. Puede tardar un minuto.» para que el toque no sea mudo.
+3. «Crea el filtro.» Debajo, **la línea de privacidad** (`AVISO_DE_PRIVACIDAD_DEL_FILTRO`: reenvía todo el correo de
+   esos bancos, también promociones; Movi solo usa los movimientos) y «Copiar la búsqueda» (una por búsqueda: «Copiar la búsqueda 1 de 2» si no cupo en
+   una) y, **solo si la plataforma descarga** (`HojaDeCompartir.puedeDescargar`: la web), «Descargar el filtro»
+   con el paso de importación.
+
+**Reglas del patrón.** Los botones de pasos son `Secundario` y `TamanoDeBoton.S` (el amarillo de la vista es de
+quien la cierra: `UnSoloAmarilloPorVistaTest`). Todo botón que copia **lo dice** al terminar («Copiado»,
+«Copiada»); un copiar mudo parece roto. Lo que depende de un server más nuevo (el código, la búsqueda, el XML)
+se ve solo si llegó: contra un server viejo la guía sigue con los tres pasos y sin esos botones. La línea final
+(`ALGUNOS_BANCOS_PIDEN_ACTIVARLO`) va en `apoyo`/`textoMedio`, debajo de la lista. La descarga de un archivo que
+Movi arma al momento es `HojaDeCompartir.descargar` (un `Blob` en la web; las otras plataformas no la ofrecen).
+
+**Pruebas**: `FiltroDeGmailEnPantallaTest` (`:shared` androidUnitTest).
