@@ -17,6 +17,8 @@ import com.jvillada.movi.server.sms.origenesMudosDe
 import com.jvillada.movi.server.sms.destinosDelDueno
 import com.jvillada.movi.server.sms.SmsKey
 import com.jvillada.movi.server.sms.motivoParaApartar
+import com.jvillada.movi.server.sms.comercioDelAvisoDeDavivienda
+import com.jvillada.movi.server.sms.leerElAvisoDeDavivienda
 import com.jvillada.movi.server.sms.loQueMoviSabeDelPagoDe
 import com.jvillada.movi.server.sms.conElOrigenPropioDelIngresoDe
 import com.jvillada.movi.server.sms.numerosPropiosDe
@@ -376,6 +378,15 @@ internal fun parseSms(text: String, origen: String? = null): ParsedSms? {
     if (NO_PASARON.any { it in minusculas }) return null
     // El correo de PSE tiene su propia forma (Valor/Empresa/Descripción/CUS): ver `ElCorreoDePse.kt`.
     if (esUnCorreoDePse(text)) return leerElCorreoDePse(text)
+    // Vuelta 99: el SMS de Davivienda tiene su propia forma (qué pasó, monto, «Cta de Ahorros *0136»,
+    // «Hora», «Lugar»): ver `ElAvisoDeDavivienda.kt`.
+    leerElAvisoDeDavivienda(text)?.let { aviso ->
+        val comercio = comercioDelAvisoDeDavivienda(aviso)
+        return ParsedSms(
+            aviso.monto, comercio, aviso.tipo,
+            categoryFor(text, comercio, aviso.tipo, esPagoDeNu = false), aviso.moneda,
+        )
+    }
     if (origen != null && origenNu.containsMatchIn(origen) && !loDeNuEsUnMovimiento(minusculas)) return null
     val (amount, currency) = montoYMonedaDelTexto(text) ?: return null
     val recargaDeBeneficios = if ("tarjeta de beneficios" in minusculas) recargaDeBeneficiosRegex.find(text) else null
