@@ -126,6 +126,35 @@ class FiltroDeGmailEnPantallaTest {
     }
 
     @Test
+    fun `si Buscar el codigo no encuentra nada, lo dice`() {
+        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+            override suspend fun getFiltroDeCorreo(): FiltroDeGmail = filtroCompleto.copy(codigoDeConfirmacion = null)
+        }
+        montar(filtroCompleto.copy(codigoDeConfirmacion = null), HojaDePrueba(web = false))
+        assertFalse(hay(TODAVIA_NO_LLEGA_EL_CODIGO), "antes de buscar no dice nada")
+        tocar("Buscar el código")
+        composeRule.waitUntil(5_000) { hay(TODAVIA_NO_LLEGA_EL_CODIGO) }
+        assertEquals("Todavía no llega. Puede tardar un minuto.", TODAVIA_NO_LLEGA_EL_CODIGO)
+    }
+
+    @Test
+    fun `contra un server viejo Buscar el codigo tambien lo dice`() {
+        // El repositorio de prueba base lanza en getFiltroDeCorreo, como un 404 de un server sin /filtro.
+        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {}
+        montar(null, HojaDePrueba(web = false))
+        tocar("Buscar el código")
+        composeRule.waitUntil(5_000) { hay(TODAVIA_NO_LLEGA_EL_CODIGO) }
+    }
+
+    @Test
+    fun `avisa que el filtro reenvia todo el correo de esos bancos y que Movi solo usa los movimientos`() {
+        montar(filtroCompleto, HojaDePrueba(web = false))
+        assertTrue(hay(AVISO_DE_PRIVACIDAD_DEL_FILTRO))
+        assertTrue(hay("también las promociones"))
+        assertTrue(hay("Movi solo usa los movimientos"))
+    }
+
+    @Test
     fun `copiar la busqueda copia el from de Gmail`() {
         val hoja = HojaDePrueba(web = false)
         montar(filtroCompleto, hoja)

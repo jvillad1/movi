@@ -39,6 +39,18 @@ class RemitentesFinancierosTest {
     }
 
     @Test
+    fun `los dominios cortos sin verificar que atrapan a otros se quedan afuera`() {
+        val dominios = REMITENTES_FINANCIEROS.map { it.dominio }
+        assertFalse("bold.co" in dominios)
+        assertFalse("itau.co" in dominios)
+        assertFalse("bold.co" in busquedasDeGmail().joinToString(" ") || "itau.co" in busquedasDeGmail().joinToString(" "))
+        // La regla: un dominio sin verificar con el nombre pegado a un sufijo de dos letras (`x.co`) es de
+        // los que pueden atrapar remitentes ajenos y no entra sin un subdominio de alertas.
+        val atrapones = REMITENTES_FINANCIEROS.filter { !it.verificado && Regex("""^[a-z0-9]{1,6}\.[a-z]{2}$""").matches(it.dominio) }
+        assertEquals(emptyList(), atrapones.map { it.dominio })
+    }
+
+    @Test
     fun `la busqueda de hoy cabe en una sola y trae cada dominio una vez`() {
         val busquedas = busquedasDeGmail()
         assertEquals(1, busquedas.size)
@@ -106,6 +118,18 @@ class RemitentesFinancierosTest {
         assertTrue("<apps:property name='hasTheWord' value='from:(a.com OR b.com)'/>" in xml)
         assertEquals(2, Regex("<apps:property name='forwardTo' value='alertas\\+abc123@x\\.resend\\.app'/>").findAll(xml).count())
         assertTrue(xml.trimEnd().endsWith("</feed>"))
+    }
+
+    @Test
+    fun `el XML lleva id y updated en el feed y en cada entrada, como el que exporta Gmail`() {
+        val xml = filtroDeGmailXml(listOf("from:(a.com)", "from:(b.com)"), "a@b.com", actualizadoEn = "2026-11-01T12:00:00Z")
+        assertTrue("\t<id>tag:mail.google.com,2008:filters:movi1,movi2</id>" in xml)
+        assertEquals(1, Regex("\n\t<updated>2026-11-01T12:00:00Z</updated>").findAll(xml).count(), "el del feed")
+        assertEquals(2, Regex("<id>tag:mail.google.com,2008:filter:movi\\d</id>").findAll(xml).count(), "uno por entrada")
+        assertEquals(2, Regex("\n\t\t<updated>2026-11-01T12:00:00Z</updated>").findAll(xml).count(), "uno por entrada")
+        assertEquals(2, Regex("<content></content>").findAll(xml).count())
+        // Con la hora de ahora por defecto también: «AAAA-MM-DDThh:mm:ssZ».
+        assertTrue(Regex("<updated>\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z</updated>").containsMatchIn(filtroDeGmailXml(listOf("from:(a.com)"), "a@b.com")))
     }
 
     @Test

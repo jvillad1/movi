@@ -1,5 +1,6 @@
 package com.jvillada.movi.shared.model
 
+import kotlinx.datetime.Clock
 import kotlinx.serialization.Serializable
 
 /*
@@ -38,6 +39,11 @@ data class RemitenteFinanciero(
  * `notificacionesbancolombia.com` (`alertasynotificaciones@…`) y `achcolombia.com.co`
  * (`serviciopse@…`, el correo de cada pago por PSE).
  *
+ * **Afuera a propósito (revisión de la vuelta 93): `bold.co` e `itau.co`.** Son dominios cortos y sin verificar:
+ * `from:bold.co` / `from:itau.co` pueden atrapar remitentes ajenos (cualquier dirección que contenga esas
+ * letras), y el filtro reenvía **todo** lo que atrapa. Vuelven solo con un subdominio de alertas que se pueda
+ * sostener (algo como `alertas.banco.co`), no con el dominio pelado.
+ *
  * Los de Nu y Davibank llegan del dueño (sus alertas) pero el repo no tiene un correo de ninguno de los
  * dos: por eso `verificado = false`. Rappi Pay no está: no hubo un dominio que sostener.
  */
@@ -54,11 +60,9 @@ val REMITENTES_FINANCIEROS: List<RemitenteFinanciero> = listOf(
     RemitenteFinanciero("avvillas.com.co", "AV Villas"),
     RemitenteFinanciero("bancopopular.com.co", "Banco Popular"),
     RemitenteFinanciero("scotiabankcolpatria.com", "Scotiabank Colpatria"),
-    RemitenteFinanciero("itau.co", "Itaú"),
     RemitenteFinanciero("bancofalabella.com.co", "Banco Falabella"),
     RemitenteFinanciero("lulobank.com", "Lulo Bank"),
     RemitenteFinanciero("nequi.com.co", "Nequi"),
-    RemitenteFinanciero("bold.co", "Bold"),
     RemitenteFinanciero("pse.com.co", "PSE"),
     RemitenteFinanciero("mercadopago.com", "Mercado Pago"),
     RemitenteFinanciero("skandia.com.co", "Skandia"),
@@ -119,19 +123,31 @@ private fun armarLaBusqueda(dominios: List<String>): String =
  * de Gmail es que reenviar desde un filtro exige que la dirección ya esté verificada como dirección de
  * reenvío: por eso la guía pone la confirmación antes del filtro.
  *
- * Todo valor se escapa (`& < > ' "`). Lanza [IllegalArgumentException] si [direccion] no parece un correo
- * (sin `@`, con espacios o caracteres de control): un XML con una dirección rota no se entrega.
+ * Como en lo que exporta Gmail, el feed y cada `entry` llevan `<id>` (`tag:mail.google.com,2008:…`, aquí
+ * `movi1`, `movi2`…) y `<updated>` ([actualizadoEn]), y la `entry` un `<content>` vacío; no se verificó que
+ * Gmail los use al importar, pero así el archivo se parece al que él mismo exporta. Todo valor se escapa (`& < > ' "`). Lanza [IllegalArgumentException] si [direccion] no parece un
+ * correo (sin `@`, con espacios o caracteres de control): un XML con una dirección rota no se entrega.
  */
-fun filtroDeGmailXml(busquedas: List<String>, direccion: String): String {
+fun filtroDeGmailXml(
+    busquedas: List<String>,
+    direccion: String,
+    actualizadoEn: String = ahoraParaGmail(),
+): String {
     require(direccionParecidaAUnCorreo(direccion)) { "La dirección de reenvío no parece un correo" }
+    val fecha = escaparXml(actualizadoEn)
     val sb = StringBuilder()
     sb.append("<?xml version='1.0' encoding='UTF-8'?>\n")
     sb.append("<feed xmlns='http://www.w3.org/2005/Atom' xmlns:apps='http://schemas.google.com/apps/2006'>\n")
     sb.append("\t<title>Mail Filters</title>\n")
-    for (busqueda in busquedas) {
+    sb.append("\t<id>tag:mail.google.com,2008:filters:").append(busquedas.indices.joinToString(",") { "movi${it + 1}" }).append("</id>\n")
+    sb.append("\t<updated>").append(fecha).append("</updated>\n")
+    busquedas.forEachIndexed { i, busqueda ->
         sb.append("\t<entry>\n")
         sb.append("\t\t<category term='filter'></category>\n")
         sb.append("\t\t<title>Mail Filter</title>\n")
+        sb.append("\t\t<id>tag:mail.google.com,2008:filter:movi").append(i + 1).append("</id>\n")
+        sb.append("\t\t<updated>").append(fecha).append("</updated>\n")
+        sb.append("\t\t<content></content>\n")
         sb.append("\t\t<apps:property name='hasTheWord' value='").append(escaparXml(busqueda)).append("'/>\n")
         sb.append("\t\t<apps:property name='forwardTo' value='").append(escaparXml(direccion)).append("'/>\n")
         sb.append("\t</entry>\n")
@@ -139,6 +155,9 @@ fun filtroDeGmailXml(busquedas: List<String>, direccion: String): String {
     sb.append("</feed>\n")
     return sb.toString()
 }
+
+/** «2026-11-01T12:34:56Z»: el instante de ahora, a los segundos, como lo escribe Gmail en `<updated>`. */
+private fun ahoraParaGmail(): String = Clock.System.now().toString().substringBefore('.').removeSuffix("Z") + "Z"
 
 private fun direccionParecidaAUnCorreo(direccion: String): Boolean {
     val arroba = direccion.indexOf('@')

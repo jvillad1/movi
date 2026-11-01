@@ -5072,8 +5072,10 @@ del primer uso y de Ajustes → «Recibe tus alertas por correo») pasó de cuat
    dirección con «Copiar» queda arriba, en su propia `Superficie`.
 2. «Movi te muestra el código de confirmación.» El código es `FiltroDeGmail.codigoDeConfirmacion`, en
    `cuerpoFuerte`, con «Copiar el código». Si todavía no llegó: la frase de apoyo y un «Buscar el código»
-   (relee a pedido; **sin sondeo** en segundo plano, que dejaría la pantalla sin quedar quieta).
-3. «Crea el filtro.» Debajo, «Copiar la búsqueda» (una por búsqueda: «Copiar la búsqueda 1 de 2» si no cupo en
+   (relee a pedido; **sin sondeo** en segundo plano, que dejaría la pantalla sin quedar quieta); si esa búsqueda no
+   trae nada, o el server es viejo, dice «Todavía no llega. Puede tardar un minuto.» para que el toque no sea mudo.
+3. «Crea el filtro.» Debajo, **la línea de privacidad** (`AVISO_DE_PRIVACIDAD_DEL_FILTRO`: reenvía todo el correo de
+   esos bancos, también promociones; Movi solo usa los movimientos) y «Copiar la búsqueda» (una por búsqueda: «Copiar la búsqueda 1 de 2» si no cupo en
    una) y, **solo si la plataforma descarga** (`HojaDeCompartir.puedeDescargar`: la web), «Descargar el filtro»
    con el paso de importación.
 

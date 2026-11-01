@@ -78,10 +78,19 @@ const val DONDE_IMPORTAR_EL_FILTRO: String =
     "O impórtalo: en «Filtros y direcciones bloqueadas» toca «Importar filtros», elige el archivo y " +
         "«Crear filtros»."
 
+/** Lo que el filtro hace con el correo (revisión de la vuelta 93): reenvía todo, Movi usa solo los movimientos. */
+const val AVISO_DE_PRIVACIDAD_DEL_FILTRO: String =
+    "El filtro reenvía a Movi todo el correo de esos bancos, también las promociones. " +
+        "Movi solo usa los movimientos."
+
+/** Lo que se dice si «Buscar el código» no encontró nada (o el server no contestó). */
+const val TODAVIA_NO_LLEGA_EL_CODIGO: String = "Todavía no llega. Puede tardar un minuto."
+
 /** La línea que avisa que algunos bancos no mandan nada hasta que se les pide. */
 const val ALGUNOS_BANCOS_PIDEN_ACTIVARLO: String =
     "Algunos bancos solo mandan alertas por correo si las activas en su app."
 
+const val TAG_TODAVIA_NO_LLEGA: String = "todavia-no-llega-el-codigo"
 const val TAG_CODIGO_DE_GMAIL: String = "codigo-de-gmail"
 const val TAG_BUSCAR_EL_CODIGO: String = "buscar-el-codigo-de-gmail"
 const val TAG_COPIAR_LA_BUSQUEDA: String = "copiar-la-busqueda-de-gmail"
@@ -187,6 +196,8 @@ private fun PasosDelReenvio(direccion: DireccionDeMovi) {
     val alcance = rememberCoroutineScope()
     // Qué se copió último ("codigo" o "b0", "b1"…): el botón lo dice, para que copiar no sea mudo.
     var copiado by remember { mutableStateOf<String?>(null) }
+    // «Buscar el código» ya se tocó y no trajo nada: se dice, para que el toque no parezca mudo.
+    var busqueFallida by remember { mutableStateOf(false) }
     val filtro = direccion.filtro
     val titulos = PASOS_DEL_REENVIO_EN_GMAIL
     Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
@@ -223,8 +234,9 @@ private fun PasosDelReenvio(direccion: DireccionDeMovi) {
                     "Buscar el código",
                     onClick = {
                         alcance.launch {
-                            runCatching { Repositories.wallets.getFiltroDeCorreo() }.getOrNull()
-                                ?.let { direccion.filtro = it }
+                            val nuevo = runCatching { Repositories.wallets.getFiltroDeCorreo() }.getOrNull()
+                            if (nuevo != null) direccion.filtro = nuevo
+                            busqueFallida = nuevo?.codigoDeConfirmacion == null
                         }
                     },
                     variante = VarianteDeBoton.Secundario,
@@ -232,12 +244,23 @@ private fun PasosDelReenvio(direccion: DireccionDeMovi) {
                     icono = Icons.Rounded.Refresh,
                     modifier = Modifier.testTag(TAG_BUSCAR_EL_CODIGO),
                 )
+                if (busqueFallida) {
+                    Spacer(Modifier.height(Espacio.xs))
+                    Text(
+                        TODAVIA_NO_LLEGA_EL_CODIGO,
+                        style = Movi.textos.apoyo,
+                        color = Movi.colores.textoMedio,
+                        modifier = Modifier.testTag(TAG_TODAVIA_NO_LLEGA),
+                    )
+                }
             }
         }
         Separador()
         PasoDelReenvio(3, titulos[2]) {
             val busquedas = filtro?.busquedas.orEmpty()
             Text(DONDE_PEGAR_LA_BUSQUEDA, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+            Spacer(Modifier.height(Espacio.xs))
+            Text(AVISO_DE_PRIVACIDAD_DEL_FILTRO, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
             if (busquedas.isNotEmpty()) {
                 Spacer(Modifier.height(Medida.dentroDeSeccion))
                 busquedas.forEachIndexed { i, busqueda ->
