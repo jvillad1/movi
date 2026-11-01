@@ -263,12 +263,12 @@ object Avisador {
         publicar(context, ID_CIERRE, CANAL_CIERRE, texto, abrirElPeriodo(periodo), cuantos = 1)
     }
 
-    /** Vuelta 68 · el resumen de la mañana: tocarlo abre el Inicio. */
     /** Vuelta 94: el extracto de una tarjeta que falta subir. Tocarlo abre el Inicio, donde se sube. */
     fun avisarExtracto(context: Context, texto: TextoDeAviso) {
         publicar(context, ID_EXTRACTO, CANAL_EXTRACTO, texto, ABRIR_INICIO, cuantos = maxOf(1, texto.lineas.size))
     }
 
+    /** Vuelta 68 · el resumen de la mañana: tocarlo abre el Inicio. */
     fun avisarResumenDeLaManana(context: Context, texto: TextoDeAviso) {
         publicar(context, ID_RESUMEN_DE_LA_MANANA, CANAL_RESUMEN_DE_LA_MANANA, texto, ABRIR_INICIO, cuantos = 1)
     }

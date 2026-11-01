@@ -289,11 +289,11 @@ internal fun PropuestasDelInicioSection(
                 AnomaliasDescartadasEnLaSesion.descartarYGuardar(accion.huella) {
                     Repositories.wallets.descartarAnomalia(accion.huella)
                 }
-            // Vuelta 60: «Sí, cambiar». Se va en el mismo toque; si no se pudo, vuelve.
             // Vuelta 94: la subida de siempre (la de «Subir comprobante o extracto»), que hace la cáscara;
             // fuera de la app (una prueba que monta el Inicio solo), Documentos, donde también se sube.
             AccionDeLaPropuesta.SubirElExtracto ->
                 atajos?.invoke(AtajoDeAgregar.SUBIR_COMPROBANTE) ?: onNavigate(Screen.Documentos)
+            // Vuelta 60: «Sí, cambiar». Se va en el mismo toque; si no se pudo, vuelve.
             is AccionDeLaPropuesta.CambiarLaCategoria ->
                 AnomaliasDescartadasEnLaSesion.descartarYGuardar(accion.cambio.huella) {
                     aceptarElCambioDeCategoria(Repositories.wallets, accion.cambio)

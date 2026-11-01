@@ -41,6 +41,8 @@ class AvisoDeExtractoTest {
         val uno = textoDelAvisoDeExtracto(listOf(nuOctubre))!!
         assertEquals("¿Ya bajaste el extracto de Nu de octubre?", uno.titulo)
         assertEquals(CUERPO_DEL_EXTRACTO_POR_SUBIR, uno.texto)
+        // Genérica: no nombra la cuota de manejo, que Nu no cobra.
+        assertEquals("Súbelo y Movi anota los intereses y los cargos del banco.", uno.texto)
         val dos = textoDelAvisoDeExtracto(listOf(nuOctubre, master))!!
         assertEquals("Faltan 2 extractos por subir", dos.titulo)
         assertEquals(listOf("Nu · octubre", "Bancolombia · octubre"), dos.lineas)

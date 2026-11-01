@@ -37,8 +37,8 @@ fun recordarExtractosAvisados(previos: List<String>, avisados: List<ExtractoPorS
     (previos + avisados.map { it.huella }).distinct().takeLast(TOPE_DE_EXTRACTOS_AVISADOS)
 
 /**
- * **El texto del aviso.** Uno: la pregunta de Hoy y «Súbelo y Movi anota los intereses y la cuota de
- * manejo.». Varios: «Faltan 2 extractos por subir», con uno por renglón. `null` sin nada que decir.
+ * **El texto del aviso.** Uno: la pregunta de Hoy y «Súbelo y Movi anota los intereses y los cargos
+ * del banco.» (genérica: Nu, por ejemplo, no cobra cuota de manejo). Varios: «Faltan 2 extractos por subir», con uno por renglón. `null` sin nada que decir.
  */
 fun textoDelAvisoDeExtracto(extractos: List<ExtractoPorSubir>): TextoDeAviso? {
     if (extractos.isEmpty()) return null

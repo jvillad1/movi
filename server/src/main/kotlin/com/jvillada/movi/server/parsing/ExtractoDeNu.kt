@@ -54,8 +54,9 @@ import kotlin.math.abs
  * - **Lo que se propone**: las compras y los pagos **del período facturado** (entre su primer día y la
  *   fecha de corte) con su valor entero y sus cuotas —como la tarjeta de Bancolombia—; los intereses
  *   del extracto, sumados en «Intereses corrientes» y en «Intereses de mora» con la fecha de corte; y
- *   cada cargo «↪» con la fecha de su compra. Una compra de un período anterior (una cuota «2 de 12»)
- *   ya se anotó cuando se hizo: de ella solo cuentan sus intereses.
+ *   cada cargo «↪» de una compra del período (o de su cuota 1) con la fecha de su compra. Una compra de
+ *   un período anterior (una cuota «2 de 12») ya se anotó cuando se hizo, con sus cargos: de ella solo
+ *   cuentan sus intereses (su «↪» suma en el pago mínimo, pero no se propone otra vez).
  * - **Tiene que cuadrar**, en centavos, o se devuelve `null` y el extracto sigue el camino de siempre:
  *   en cada fila, el valor del mes más sus intereses da el total; en una compra del período, el valor
  *   del mes más lo restante da el valor; el desglose de un pago suma el pago; y **la suma de los
@@ -159,7 +160,11 @@ fun leerElExtractoDeNu(texto: String): ExtractoDeNu? {
         if (f.fecha in inicio..corte && (f.cuotaNumero ?: 1) == 1) {
             movimiento(f.fecha, f.descripcion, f.valor, cuotas = f.cuotasTotales.takeIf { !f.esPago })?.let { propuestas += it }
         }
-        f.cargos.forEach { (rotulo, centavos) -> movimiento(f.fecha, rotulo, centavos)?.let { propuestas += it } }
+        // Los cargos «↪» de una compra del período, o de su primera cuota: el de una cuota «2 de 12» ya
+        // se cobró (y se propuso) con esa cuota, y volvería con una fecha vieja.
+        if (f.fecha in inicio..corte || f.cuotaNumero == 1) {
+            f.cargos.forEach { (rotulo, centavos) -> movimiento(f.fecha, rotulo, centavos)?.let { propuestas += it } }
+        }
     }
     val corrientes = filas.sumOf { f -> if (f.conMora) f.intereses.dropLast(1).sum() else f.intereses.sum() }
     val mora = filas.sumOf { f -> if (f.conMora) f.intereses.lastOrNull() ?: 0L else 0L }

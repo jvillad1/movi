@@ -28,7 +28,7 @@ import kotlinx.serialization.Serializable
 const val DIAS_PARA_PEDIR_EL_EXTRACTO: Int = 3
 
 /** Lo que dice la propuesta debajo de la pregunta. */
-const val CUERPO_DEL_EXTRACTO_POR_SUBIR: String = "Súbelo y Movi anota los intereses y la cuota de manejo."
+const val CUERPO_DEL_EXTRACTO_POR_SUBIR: String = "Súbelo y Movi anota los intereses y los cargos del banco."
 
 /**
  * **Un extracto que falta**: el de la tarjeta [cuentaId] que cerró el [corte] (ISO). [banco] es el de

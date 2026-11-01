@@ -157,6 +157,19 @@ class ExtractoDeNuTest {
     }
 
     @Test
+    fun `el cargo de una cuota de otro periodo no se propone otra vez`() {
+        // La cuota «2 de 12» del curso trae su comisión: suma en el pago mínimo, pero ya se propuso con la
+        // cuota 1, y volvería con la fecha de agosto.
+        val conComision = extracto(pagoMinimo = "\$101.540,00").replace(
+            "Curso Online \$240.000,00 2 de 12 \$20.000,00 2.09%        \$3.800,00 \$23.800,00 \$200.000,00",
+            "Curso Online \$240.000,00 2 de 12 \$20.000,00 2.09%        \$3.800,00 \$23.800,00 \$200.000,00\n↪ Comisión por cambio de moneda \$300,00",
+        )
+        val leido = assertNotNull(leerElExtractoDeNu(conComision))
+        val comisiones = leido.filas.filter { it.description == "Comisión por cambio de moneda" }
+        assertEquals(listOf("2026-10-04" to 540L), comisiones.map { it.date to it.amount })
+    }
+
+    @Test
     fun `un extracto que no cuadra con su pago minimo no se lee`() {
         // Un peso de diferencia.
         assertNull(leerElExtractoDeNu(extracto(pagoMinimo = "\$101.241,00")))
