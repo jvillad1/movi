@@ -207,7 +207,9 @@ fun AIChatScreen(
         val sugerida = delChip ?: PreguntaSugerida.delTexto(texto.trim()).takeIf { pendingImage == null }
         if (sugerida != null) return mandar(texto, delChip)
         if ((texto.isBlank() && pendingImage == null) || loading) return
-        puerta.pasar { mandar(texto, delChip) }
+        // Si la hoja se cierra sin «Entendido», lo escrito (o la pregunta con la que se abrió el chat)
+        // queda en el campo de texto: no se pierde.
+        puerta.pasar(alNoSeguir = { if (input.isBlank()) input = texto }) { mandar(texto, delChip) }
     }
 
     fun send() = enviar(input)

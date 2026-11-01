@@ -50,10 +50,15 @@ import kotlinx.coroutines.launch
  * la abren**: no van a la IA (las contesta el servidor con sus números), y quien las llama ni pasa
  * por la [PuertaDeLaIa]. En Ajustes → Movi, «Qué ve la IA» la vuelve a abrir (sin nada pendiente).
  *
- * Sobre el entrenamiento: la política de privacidad de Anthropic dice que, por defecto, no usa las
- * entradas ni las salidas de sus productos comerciales —entre ellos su API— para entrenar sus modelos
- * (privacy.claude.com, «Is my data used for model training?»). La hoja lo cuenta tal cual y con ese
- * «por defecto»: no promete más de lo que la política dice.
+ * Sobre el entrenamiento: los términos comerciales de Anthropic (anthropic.com/legal/commercial-terms,
+ * «Customer Content») dicen que Anthropic no puede entrenar modelos con el contenido del cliente —lo
+ * que se envía y lo que se recibe— de sus servicios, entre ellos la API. La hoja lo cuenta con esas
+ * palabras y no promete más. (Antes citaba la página de privacidad de claude.com, que habla de los
+ * productos de consumo y dice «por defecto».)
+ *
+ * **Lo que se manda, completo**: el contexto de cuentas y movimientos, los recuerdos de «Lo que Movi sabe
+ * de ti», la foto que se adjunta en el chat y el archivo de un papel o extracto. Lo que se omite pesa más
+ * que lo que se afirma: si el chat manda algo nuevo, esta hoja se actualiza en el mismo cambio.
  */
 object AvisoDeLaIa {
     /** ¿Ya la vio este usuario? `null` = todavía no se sabe (se lee del perfil la primera vez que hace falta). */
@@ -72,12 +77,16 @@ internal const val SUBTITULO_QUE_VE_LA_IA =
 
 internal const val SE_MANDA_EL_CHAT =
     "Movi AI, cuando le escribes: un resumen de tus cuentas y movimientos para poder contestarte."
+internal const val SE_MANDA_LOS_RECUERDOS =
+    "Los recuerdos de «Lo que Movi sabe de ti», para que te entienda mejor."
+internal const val SE_MANDA_LA_FOTO =
+    "La foto que adjuntes en el chat."
 internal const val SE_MANDA_EL_ARCHIVO =
     "Leer un comprobante o un extracto con IA: el archivo que elegiste."
 internal const val NO_SE_MANDA =
     "Tu contraseña ni tu sesión. Nunca salen de Movi."
 internal const val NO_ENTRENA =
-    "Según la política de Anthropic, por defecto no usa lo que llega por su API para entrenar sus modelos."
+    "Según los términos comerciales de Anthropic, no puede entrenar sus modelos con lo que se envía por su API."
 internal const val LAS_SUGERIDAS_NO_VAN =
     "Las tres preguntas sugeridas de Movi AI las contesta Movi con sus números, sin la IA."
 
@@ -99,8 +108,14 @@ class PuertaDeLaIa internal constructor(
     var abierta: Boolean by mutableStateOf(false)
         private set
     private var pendiente: (() -> Unit)? = null
+    private var siNoSigue: (() -> Unit)? = null
 
-    fun pasar(luego: () -> Unit) {
+    /**
+     * Corre [luego] ya si el usuario vio el aviso; si no, abre la hoja. [alNoSeguir] corre si la hoja se
+     * cierra sin «Entendido» (la X, el velo, «Atrás» o «Ver qué sabe Movi»): lo que el usuario iba a mandar
+     * no se pierde —el chat lo deja en el campo de texto—.
+     */
+    fun pasar(alNoSeguir: (() -> Unit)? = null, luego: () -> Unit) {
         if (abierta) return
         if (AvisoDeLaIa.visto == true) return luego()
         alcance.launch {
@@ -112,6 +127,7 @@ class PuertaDeLaIa internal constructor(
                 luego()
             } else {
                 pendiente = luego
+                siNoSigue = alNoSeguir
                 abierta = true
             }
         }
@@ -120,6 +136,7 @@ class PuertaDeLaIa internal constructor(
     /** «Ajustes → Qué ve la IA»: la hoja sin nada pendiente. */
     fun abrir() {
         pendiente = null
+        siNoSigue = null
         abierta = true
     }
 
@@ -128,6 +145,7 @@ class PuertaDeLaIa internal constructor(
         abierta = false
         val seguir = pendiente
         pendiente = null
+        siNoSigue = null
         seguir?.invoke()
     }
 
@@ -135,12 +153,20 @@ class PuertaDeLaIa internal constructor(
         marcarVisto()
         abierta = false
         pendiente = null
+        soltar()
         alNavegar(Screen.LoQueMoviSabe)
     }
 
     internal fun cerrar() {
         abierta = false
         pendiente = null
+        soltar()
+    }
+
+    private fun soltar() {
+        val alNoSeguir = siNoSigue
+        siNoSigue = null
+        alNoSeguir?.invoke()
     }
 
     /** Se anota ya, en la sesión; si el servidor no contesta, se vuelve a preguntar la próxima vez. */
@@ -177,7 +203,7 @@ internal fun HojaQueVeLaIa(onEntendido: () -> Unit, onVer: () -> Unit, onCerrar:
         ) {
             EncabezadoDeHoja(TITULO_QUE_VE_LA_IA, subtitulo = SUBTITULO_QUE_VE_LA_IA)
             Spacer(Modifier.height(Medida.dentroDeSeccion))
-            Bloque("Lo que se manda", listOf(SE_MANDA_EL_CHAT, SE_MANDA_EL_ARCHIVO))
+            Bloque("Lo que se manda", listOf(SE_MANDA_EL_CHAT, SE_MANDA_LOS_RECUERDOS, SE_MANDA_LA_FOTO, SE_MANDA_EL_ARCHIVO))
             Spacer(Modifier.height(Medida.dentroDeSeccion))
             Bloque("Lo que no se manda", listOf(NO_SE_MANDA))
             Spacer(Modifier.height(Medida.dentroDeSeccion))

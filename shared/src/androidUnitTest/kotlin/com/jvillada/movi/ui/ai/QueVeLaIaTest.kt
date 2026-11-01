@@ -10,6 +10,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.hasSetTextAction
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
 import com.jvillada.movi.shared.model.AiChatRequest
@@ -142,10 +143,35 @@ class QueVeLaIaTest {
     }
 
     @Test
+    fun `la hoja dice tambien la foto, los recuerdos y la cita de los terminos comerciales`() {
+        servidor(vistoEn = null)
+        chat("¿Cuánto gasté en Rappi?")
+        composeRule.waitUntil(5_000) { hay(TITULO_QUE_VE_LA_IA) }
+        assertTrue(hay(SE_MANDA_LA_FOTO))
+        assertTrue(hay(SE_MANDA_LOS_RECUERDOS))
+        assertTrue(hay("términos comerciales de Anthropic"))
+    }
+
+    @Test
+    fun `si la pregunta inicial abre la hoja y no se sigue, queda en el campo de texto`() {
+        servidor(vistoEn = null)
+        chat("¿Cuánto gasté en Rappi?")
+        composeRule.waitUntil(5_000) { hay(VER_QUE_SABE_MOVI) }
+        // «Ver qué sabe Movi» suelta lo pendiente por el mismo camino que la X y el velo (`soltar`).
+        tocar(VER_QUE_SABE_MOVI)
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodes(hasSetTextAction() and hasText("¿Cuánto gasté en Rappi?"), useUnmergedTree = true)
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        assertTrue(mandados.isEmpty(), "no seguir no manda nada")
+    }
+
+    @Test
     fun `cerrar la hoja sin elegir no manda ni la da por vista`() {
         servidor(vistoEn = null)
         val puerta = arrayOfNulls<PuertaDeLaIa>(1)
         var corrio = false
+        var soltado = false
         composeRule.setContent {
             MoviTheme {
                 Box(Modifier.fillMaxSize()) {
@@ -155,11 +181,12 @@ class QueVeLaIaTest {
                 }
             }
         }
-        composeRule.runOnIdle { puerta[0]!!.pasar { corrio = true } }
+        composeRule.runOnIdle { puerta[0]!!.pasar(alNoSeguir = { soltado = true }) { corrio = true } }
         composeRule.waitUntil(5_000) { puerta[0]!!.abierta }
         composeRule.runOnIdle { puerta[0]!!.cerrar() }
         composeRule.waitForIdle()
         assertFalse(corrio)
+        assertTrue(soltado, "cerrar con la X, el velo o Atrás avisa que no se siguió")
         assertFalse(puerta[0]!!.abierta)
         assertTrue(AvisoDeLaIa.visto != true)
     }
