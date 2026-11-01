@@ -58,3 +58,17 @@ fun estadoDePresupuesto(gastado: Long, limite: Long): EstadoDePresupuesto = when
     gastado * 100 >= limite * 80 -> EstadoDePresupuesto.CERCA
     else -> EstadoDePresupuesto.DENTRO
 }
+
+/**
+ * **El porcentaje gastado de un presupuesto**, con enteros (ver el porqué de no usar `Float` en
+ * [estadoDePresupuesto]). Hasta el límite se trunca (79,9 % dice 79: no promete un 80 que no llegó); pasado
+ * el límite se redondea hacia ARRIBA (100,87 % → 101; 166,9 % → 167), para no contradecir el rótulo de «te
+ * pasaste». Justo en el límite, 100. Es **la** cuenta: Presupuestos y «Movi propone hoy» la comparten (la
+ * propuesta decía 166 % donde Presupuestos decía 167 %). Un límite en cero, 0.
+ */
+fun porcentajeDePresupuesto(gastado: Long, limite: Long): Int {
+    if (limite == 0L) return 0
+    val centuplo = gastado * 100
+    val truncado = centuplo / limite
+    return (if (gastado > limite && centuplo % limite != 0L) truncado + 1 else truncado).toInt()
+}

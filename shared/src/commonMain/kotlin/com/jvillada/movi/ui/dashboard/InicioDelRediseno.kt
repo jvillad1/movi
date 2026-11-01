@@ -18,6 +18,7 @@ import com.jvillada.movi.shared.time.epochMillisToAppDate
 import kotlinx.datetime.Clock
 import com.jvillada.movi.shared.model.rangoDelPeriodo
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.shared.model.porcentajeDePresupuesto
 import com.jvillada.movi.ui.components.ANCHO_DE_LECTURA
 import com.jvillada.movi.ui.components.WindowWidthClass
 import androidx.compose.ui.unit.Dp
@@ -591,10 +592,10 @@ private fun propuestaDePresupuesto(data: DashboardData): PropuestaDelInicio? {
     val peor = superados.maxByOrNull { (b, g) -> g - b.monthlyLimit } ?: return null
     val (presupuesto, lo) = peor
     val otros = superados.size - 1
-    val porcentaje = lo * 100 / presupuesto.monthlyLimit
+    val porcentaje = porcentajeDePresupuesto(lo, presupuesto.monthlyLimit)
     return PropuestaDelInicio(
         tipo = TipoDePropuesta.PRESUPUESTO,
-        titulo = "${presupuesto.category} va al $porcentaje % de su presupuesto",
+        titulo = "${presupuesto.category} va al $porcentaje\u00A0% de su presupuesto",
         cifra = lo - presupuesto.monthlyLimit,
         cuerpo = when {
             otros == 1 -> "de más · y 1 presupuesto más"
@@ -608,8 +609,18 @@ private fun propuestaDePresupuesto(data: DashboardData): PropuestaDelInicio? {
     )
 }
 
+/**
+ * La categoría de una anomalía «va muy por encima de lo normal» (su huella es `categoria:<nombre>:<período>`),
+ * o `null` si no es de ese tipo. Pura.
+ */
+internal fun categoriaDeLaAnomalia(a: com.jvillada.movi.shared.model.Anomalia): String? =
+    if (a.tipo == TipoDeAnomalia.CATEGORIA_POR_ENCIMA) a.huella.removePrefix("categoria:").substringBeforeLast(':') else null
+
 private fun propuestaDeAnomalia(data: DashboardData): PropuestaDelInicio? {
-    val anomalias = anomaliasVisiblesDe(data)
+    // Vuelta 87: una categoría que ya sale por **presupuesto pasado** (su propia tarjeta) no sale otra vez como
+    // «va muy por encima de lo normal»: dos tarjetas, la misma plata.
+    val porPresupuesto = overBudgetCategories(data.budgets, data.spentByCategory).toSet()
+    val anomalias = anomaliasVisiblesDe(data).filter { categoriaDeLaAnomalia(it) !in porPresupuesto }
     // Vuelta 60: un recurrente que cambió de categoría va primero: es lo único que se resuelve con un
     // toque, y mientras siga, otras pantallas cuentan mal (Presupuestos, «En qué se va»).
     val cambio = anomalias.firstOrNull { it.cambioDeCategoria != null }
