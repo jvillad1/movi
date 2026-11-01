@@ -29,6 +29,7 @@ import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.theme.LocalMovimientoReducido
 import com.jvillada.movi.platform.movimientoReducidoDelSistema
 import com.jvillada.movi.ui.direccionDe
+import com.jvillada.movi.ui.abrirLaGuiaAlArrancar
 import com.jvillada.movi.ui.transicionEntrePantallas
 import com.jvillada.movi.ui.components.LocalRetoqueDePestana
 import com.jvillada.movi.ui.components.LocalAtajosDeAgregar
@@ -317,7 +318,11 @@ fun App() {
             // Inicio con sesión; ver [revisarLaGuiaDePrimerUso] para la regla.
             LaunchedEffect(SessionManager.loggedIn, currentScreen) {
                 if (!SessionManager.loggedIn || currentScreen != Screen.Dashboard) return@LaunchedEffect
-                if (revisarLaGuiaDePrimerUso(Repositories.wallets)) navigate(Screen.PrimerUso())
+                // Sin animación y sin el Inicio debajo: ver [abrirLaGuiaAlArrancar].
+                if (revisarLaGuiaDePrimerUso(Repositories.wallets)) {
+                    quickAdd = null
+                    abrirLaGuiaAlArrancar(backStack)
+                }
             }
 
             BackHandlerEffect(

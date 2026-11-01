@@ -128,6 +128,12 @@
         #crash-overlay.hidden, #viejo-overlay.hidden { display: none; }
         #crash-overlay .lg-box, #viejo-overlay .lg-box { text-align: center; }
         #crash-overlay .lg-sub, #viejo-overlay .lg-sub { margin: 6px 0 22px; }
+        /* El texto del error, chico y seleccionable: es lo que se le pide a quien manda una captura. */
+        .lg-detalle {
+            margin-top: 18px; color: var(--textoMedio); font-size: 11px; line-height: 1.4;
+            text-align: left; word-break: break-word; max-height: 30vh; overflow: auto; user-select: text;
+        }
+        .lg-detalle:empty { display: none; }
         /* El navegador sin WasmGC (ver el cargador al final): mismo aspecto que el de arriba. */
     </style>
 </head>
@@ -260,6 +266,8 @@
                 <div class="lg-title" id="crash-title">Algo falló.</div>
                 <div class="lg-sub">Recarga la página.</div>
                 <button class="lg-btn" id="crash-reload" type="button">Recargar</button>
+                <button class="lg-alt" id="crash-salir" type="button">Salir y entrar de nuevo</button>
+                <div class="lg-detalle" id="crash-detalle"></div>
             </div>
         </div>
     </div>
@@ -667,7 +675,62 @@
                 return !!o && !o.classList.contains('hidden');
             }
 
-            function avisar() {
+            // El primer síntoma, en texto: se muestra chico en el aviso (es lo que se pide en una
+            // captura) y se manda al server, que lo deja en su log. Sin esto, un «Algo falló» en el
+            // teléfono de alguien no dejaba ningún rastro: el 1-nov una cuenta nueva no podía entrar
+            // desde un iPhone y no había cómo saber qué excepción era.
+            var primerError = '';
+
+            function textoDe(x) {
+                try {
+                    if (x == null) return '';
+                    var t = (x && x.message) ? String(x.message) : String(x);
+                    var pila = (x && typeof x.stack === 'string') ? x.stack : '';
+                    if (pila && pila.indexOf(t) < 0) t = t + ' | ' + pila;
+                    else if (pila) t = pila;
+                    return t.replace(/\s+/g, ' ').slice(0, 900);
+                } catch (e) { return ''; }
+            }
+
+            function reportar(texto) {
+                try {
+                    var usuario = null;
+                    try { usuario = localStorage.getItem('user_id'); } catch (e) {}
+                    var cuerpo = JSON.stringify({
+                        mensaje: texto || '(sin texto)',
+                        navegador: String(navigator.userAgent || '').slice(0, 200),
+                        usuario: usuario,
+                    });
+                    if (navigator.sendBeacon) {
+                        navigator.sendBeacon('/api/errores-del-cliente', new Blob([cuerpo], { type: 'application/json' }));
+                    } else {
+                        fetch('/api/errores-del-cliente', { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: cuerpo }).catch(function () {});
+                    }
+                } catch (e) {}
+            }
+
+            // «Salir y entrar de nuevo»: lo mismo que borra `SessionManager.cerrar` del lado de este
+            // navegador —el token, la identidad y todo lo guardado con el id del usuario—, sin depender
+            // del wasm, que es justamente lo que se cayó. Así, si lo que tumba la app es una sesión
+            // guardada que ya no sirve, la salida está a un toque y no en Ajustes de Safari. El correo
+            // recordado se queda: es lo que la persona necesita en el paso siguiente.
+            function salir() {
+                try {
+                    var uid = localStorage.getItem('user_id') || '';
+                    var claves = [];
+                    for (var i = 0; i < localStorage.length; i++) claves.push(localStorage.key(i));
+                    claves.forEach(function (k) {
+                        if (k === 'auth_token' || k === 'user_id' || k === 'user_email' || k === 'user_name' ||
+                            k === 'avatar_color' || k === 'entrar_con_huella' || (uid && k.indexOf(uid) >= 0)) {
+                            localStorage.removeItem(k);
+                        }
+                    });
+                } catch (e) {}
+                window.location.reload();
+            }
+
+            function avisar(texto) {
+                if (!primerError && texto) primerError = texto;
                 if (mostrado || pendiente) return;
                 pendiente = setTimeout(function () {
                     pendiente = null;
@@ -676,6 +739,11 @@
                     if (!c) return;
                     mostrado = true;
                     c.classList.remove('hidden');
+                    var d = document.getElementById('crash-detalle');
+                    if (d) d.textContent = primerError;
+                    reportar(primerError);
+                    var s = document.getElementById('crash-salir');
+                    if (s) s.onclick = salir;
                     var b = document.getElementById('crash-reload');
                     if (b) { b.onclick = function () { window.location.reload(); }; b.focus(); }
                 }, 300);
@@ -685,19 +753,19 @@
                 var original = console.error;
                 console.error = function () {
                     try {
-                        if (!mostrado && pareceDeKotlin(arguments[0])) avisar();
+                        if (!mostrado && pareceDeKotlin(arguments[0])) avisar(textoDe(arguments[0]));
                     } catch (e) {}
                     return original.apply(console, arguments);
                 };
                 window.addEventListener('error', function (ev) {
                     try {
                         if (!mostrado && (vieneDelWasm(ev.error) || pareceDeKotlin(ev.message) ||
-                            /composeApp\.js|\.wasm\b/.test(ev.filename || ''))) avisar();
+                            /composeApp\.js|\.wasm\b/.test(ev.filename || ''))) avisar(textoDe(ev.error || ev.message));
                     } catch (e) {}
                 });
                 window.addEventListener('unhandledrejection', function (ev) {
                     try {
-                        if (!mostrado && vieneDelWasm(ev.reason)) avisar();
+                        if (!mostrado && vieneDelWasm(ev.reason)) avisar(textoDe(ev.reason));
                     } catch (e) {}
                 });
             } catch (e) {
