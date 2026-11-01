@@ -227,14 +227,12 @@ internal fun Transaction.gruposConSuSaldoDe(uid: String): List<GrupoConSuSaldo> 
     val gastos = gastosDe(uid, espacios).filterNot { it.eventoId != null && it.eventoId in anulados }
     val liquidaciones = liquidacionesDe(uid).filterNot { it.eventoId != null && it.eventoId in anulados }
     return espacios.map { espacio ->
+        val suyas = liquidaciones.filter { it.espacioId == espacio.id }
         GrupoConSuSaldo(
             espacio,
-            saldoDelEspacio(
-                espacio,
-                gastos.filter { it.espacioId == espacio.id },
-                liquidaciones.filter { it.espacioId == espacio.id },
-                anulados,
-            ),
+            saldoDelEspacio(espacio, gastos.filter { it.espacioId == espacio.id }, suyas, anulados),
+            // Vuelta 85 (revisión): el «saldado» que espera su transferencia también la reconoce.
+            liquidaciones = suyas,
         )
     }
 }

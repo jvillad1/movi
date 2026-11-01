@@ -23,6 +23,8 @@ import kotlin.math.roundToLong
  * @property quien la otra persona («Andrés Rojas»).
  * @property debe lo que se deben hoy entre los dos en ese grupo (el reembolso de [saldoDelEspacio]).
  * @property entra `true` si la otra persona le paga al dueño (un ingreso); `false` si el dueño le paga.
+ * @property yaMarcadoSaldado el dueño ya marcó «saldado» por [debe] y este aviso es la transferencia que
+ *   ese saldado espera (vuelta 66, [transferenciasQueEsperan]): ya no se deben, se vincula.
  */
 @Serializable
 data class GrupoQueSaldaElAviso(
@@ -31,10 +33,18 @@ data class GrupoQueSaldaElAviso(
     val quien: String,
     val debe: Long,
     val entra: Boolean = true,
+    val yaMarcadoSaldado: Boolean = false,
 )
 
-/** Un grupo con su saldo de hoy: lo que [grupoQueSaldaElAviso] necesita de cada uno. */
-data class GrupoConSuSaldo(val espacio: Espacio, val saldo: SaldoDelEspacio)
+/**
+ * Un grupo con su saldo de hoy y sus saldados (para el que espera su transferencia): lo que
+ * [grupoQueSaldaElAviso] necesita de cada uno.
+ */
+data class GrupoConSuSaldo(
+    val espacio: Espacio,
+    val saldo: SaldoDelEspacio,
+    val liquidaciones: List<LiquidacionDelEspacio> = emptyList(),
+)
 
 /**
  * **¿Este aviso saldaría un grupo?** El primero de [grupos] en el que [transferenciasParaSaldar]
@@ -63,11 +73,15 @@ fun grupoQueSaldaElAviso(
         rawPayload = textoDelAviso,
     )
     for (grupo in grupos) {
-        val propuesta = transferenciasParaSaldar(grupo.saldo, listOf(comoMovimiento), destinos, ahora = momento)
+        // Con los saldados del grupo: un «saldado» marcado antes de que llegara la plata espera este giro.
+        val propuesta = transferenciasParaSaldar(grupo.saldo, listOf(comoMovimiento), destinos, ahora = momento, liquidaciones = grupo.liquidaciones)
             .firstOrNull() ?: continue
         val entra = propuesta.a == MIEMBRO_YO
         val otro = if (entra) propuesta.de else propuesta.a
-        val debe = grupo.saldo.reembolsos.firstOrNull { it.de == propuesta.de && it.a == propuesta.a }?.monto ?: continue
+        val saldado = propuesta.liquidacionId?.let { id -> grupo.liquidaciones.firstOrNull { it.id == id } }
+        val debe = saldado?.monto
+            ?: grupo.saldo.reembolsos.firstOrNull { it.de == propuesta.de && it.a == propuesta.a }?.monto
+            ?: continue
         return GrupoQueSaldaElAviso(
             espacioId = grupo.espacio.id,
             nombreDelEspacio = grupo.espacio.nombre,
@@ -75,6 +89,7 @@ fun grupoQueSaldaElAviso(
                 ?: destinos.firstOrNull { it.id == otro }?.nombre.orEmpty(),
             debe = debe,
             entra = entra,
+            yaMarcadoSaldado = saldado != null,
         )
     }
     return null

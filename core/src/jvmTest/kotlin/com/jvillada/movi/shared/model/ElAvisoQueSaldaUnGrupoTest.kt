@@ -77,4 +77,34 @@ class ElAvisoQueSaldaUnGrupoTest {
         assertFalse(entraEnElLote(ingreso(480_000.0, "Transferencia de *2345")))
         assertTrue(entraEnElLote(ParsedSms(32_000.0, "Juan Valdez Cafe", TransactionType.EXPENSE, "Restaurantes")))
     }
+
+    @Test
+    fun `si ya marco saldado, el giro que esperaba ese saldado se reconoce`() {
+        // Vuelta 66: «Andrés ya me pagó» se marcó antes de que llegara la plata; la deuda quedó en cero.
+        val gasto = GastoDelEspacio(
+            id = "g1", espacioId = casa.id, pagadoPor = MIEMBRO_YO, monto = 1_079_250L, categoria = "Vivienda",
+            descripcion = "Arriendo", fecha = ahora - 3 * 86_400_000L, partes = partesDelGasto(1_079_250L, casa, MIEMBRO_YO),
+        )
+        val saldado = LiquidacionDelEspacio(
+            id = "liq1", espacioId = casa.id, de = andres.id, a = MIEMBRO_YO, monto = 539_625L, fecha = ahora - 86_400_000L,
+        )
+        val grupo = GrupoConSuSaldo(casa, saldoDelEspacio(casa, listOf(gasto), listOf(saldado)), listOf(saldado))
+        assertTrue(grupo.saldo.reembolsos.isEmpty(), "ya no se deben")
+
+        val salda = assertNotNull(grupoQueSaldaElAviso(ingreso(), textoDeAndres, ahora, listOf(grupo), listOf(andres)))
+        assertTrue(salda.yaMarcadoSaldado)
+        assertEquals(539_625L, salda.debe)
+        // Sin pasarle los saldados, no se veía.
+        assertNull(grupoQueSaldaElAviso(ingreso(), textoDeAndres, ahora, listOf(grupo.copy(liquidaciones = emptyList())), listOf(andres)))
+    }
+
+    @Test
+    fun `un pago a la tarjeta llega como ingreso pero es una salida, y un avance si entra`() {
+        val pagoATarjeta = ParsedSms(500_000.0, "Pago de tarjeta", TransactionType.INCOME, CARD_PAYMENT_CATEGORY)
+        assertFalse(entraPlata(pagoATarjeta))
+        assertFalse(entraPlata(ParsedSms(1_300_000.0, "Cuota", TransactionType.INCOME, CUOTA_CATEGORY)))
+        assertTrue(entraPlata(ParsedSms(800_000.0, "Avance de la tarjeta *9208", TransactionType.INCOME, AVANCE_DE_TARJETA_CATEGORY)))
+        assertTrue(entraPlata(ingreso()))
+        assertFalse(entraPlata(ParsedSms(32_000.0, "Juan Valdez Cafe", TransactionType.EXPENSE, "Restaurantes")))
+    }
 }
