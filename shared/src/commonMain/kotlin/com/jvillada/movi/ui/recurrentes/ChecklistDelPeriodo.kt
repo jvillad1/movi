@@ -260,6 +260,11 @@ fun SeccionChecklistDelPeriodo(
      * de un crédito, ni el pago de una tarjeta, ni un abono). `null` no lo ofrece.
      */
     onPausar: ((PagoDelPeriodo) -> Unit)? = null,
+    /**
+     * Vuelta 86 · «Cargar mínimo» en la fila de una tarjeta que no suma en «Falta por pagar»
+     * ([porQueNoSuma]): abre la edición de los términos de esa tarjeta. `null`: la píldora va sin botón.
+     */
+    onCargarMinimo: ((PagoDelPeriodo) -> Unit)? = null,
 ) {
     // ── El momento de celebrar (Ola 1 · «Que Movi se sienta viva») ──────────────────────────────
     // Cuando el dueño completa la lista —pasa de «falta 1» a «todo pagado» por algo que hizo acá:
@@ -305,7 +310,7 @@ fun SeccionChecklistDelPeriodo(
     val ingresos = enOrdenDeFacturas(checklist.filter { it.esIngreso })
     val urgente = laMasUrgente(facturas)
     @Composable
-    fun FilaDe(pago: PagoDelPeriodo, conAnotar: Boolean = true) {
+    fun FilaDe(pago: PagoDelPeriodo, conAnotar: Boolean = true, enElTotal: Boolean = true) {
         val propuesta = propuestaDeLaFila(pago, descartadas)
         // Vuelta 51: una propuesta muy distinta del monto no es «Por confirmar»: la fila ofrece «Anotar pago».
         val conPropuesta = pago.estado == EstadoDeLaFila.CON_DUDAS && propuesta != null && !esPropuestaLejana(pago, propuesta)
@@ -325,6 +330,9 @@ fun SeccionChecklistDelPeriodo(
             etiquetaDeAbrir = etiquetaDeAbrir(pago.ruleId),
             evidencia = evidenciaDeLaFila(pago),
             extracto = extractoDeLaFila(pago, extractosDeTarjetas),
+            // Vuelta 86: solo las filas del período (las de «Falta por pagar»); lo de antes no suma en nada.
+            noSuma = if (enElTotal) porQueNoSuma(pago) else null,
+            onCargarMinimo = onCargarMinimo?.let { cargar -> { cargar(pago) } },
             // Vuelta 48: lo de una fila pagada va en su «⋯»; tocarla abre el movimiento.
             accionesDelMenu = accionesDelMenuDeLaFilaPagada(pago).mapNotNull { accion ->
                 when (accion) {
@@ -496,7 +504,7 @@ fun SeccionChecklistDelPeriodo(
                     Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
                         anteriores.forEachIndexed { i, pago ->
                             if (i > 0) Separador(SangriaDeSeparador.ConInicio)
-                            FilaDe(pago)
+                            FilaDe(pago, enElTotal = false)
                         }
                     }
                 }

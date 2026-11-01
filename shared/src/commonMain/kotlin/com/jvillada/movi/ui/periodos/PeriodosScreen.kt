@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Text
@@ -40,6 +41,7 @@ import com.jvillada.movi.data.Lectura
 import com.jvillada.movi.data.periodoVigenteSegun
 import com.jvillada.movi.data.rememberLectura
 import com.jvillada.movi.shared.model.UserProfile
+import com.jvillada.movi.shared.model.ajustesDelPeriodo
 import com.jvillada.movi.ui.components.ActualizandoEnLaCabecera
 import com.jvillada.movi.ui.components.NoSePudoActualizar
 import com.jvillada.movi.shared.model.ResumenDePeriodo
@@ -138,6 +140,10 @@ internal class EstadoDePeriodos internal constructor(
         refreshKey++
         alReintentar()
     }
+
+    /** Vuelta 86 · los ajustes del período del dueño (para «Tu mes típico»), o `null` sin perfil todavía. */
+    internal val ajustes: PeriodSettings?
+        get() = perfil?.valor?.ajustesDelPeriodo()
 }
 
 /**
@@ -190,6 +196,9 @@ internal fun ListaDePeriodos(
 ) {
     // La cantidad de filas de la última carga que salió bien, para que el esqueleto no invente un
     // largo distinto del que el dueño va a ver — mismo patrón que Créditos/Categorías/Cuentas.
+    // Vuelta 86 · «Tu mes típico»: lo que se repite cada mes, mudado desde Pagos. Sus propias lecturas (las
+    // suscripciones y los vencimientos); el «Reintentar» de la pantalla también lo reintenta.
+    val mesTipico = com.jvillada.movi.ui.plan.rememberEstadoDelMesTipico(recarga = estado.refreshKey)
     val filasRecordadas = remember {
         FormaRecordada.delAparato.periodos(SessionManager.userId)?.filas?.takeIf { it > 0 } ?: FILAS_POR_DEFECTO
     }
@@ -255,6 +264,21 @@ internal fun ListaDePeriodos(
                                 ),
                             )
                         }
+                    }
+                    // Vuelta 86 · después de los períodos, la referencia contra la que se leen: lo que entra y
+                    // sale en un mes cualquiera. Al final, para que llegar no mueva la lista.
+                    item(key = "tu-mes-tipico") {
+                        val ajustes = estado.ajustes
+                        val hoy = remember(ajustes) {
+                            ajustes?.let { com.jvillada.movi.shared.model.periodoActual(Clock.System.now().toEpochMilliseconds(), it) }
+                        }
+                        com.jvillada.movi.ui.plan.TuMesTipico(
+                            estado = mesTipico.estado,
+                            periodoDeHoy = hoy,
+                            ajustes = ajustes,
+                            fallo = mesTipico.fallo,
+                            modifier = Modifier.padding(top = Medida.entreSecciones - Medida.dentroDeSeccion),
+                        )
                     }
                 }
             }

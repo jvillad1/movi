@@ -317,9 +317,11 @@ class PagosHastaQueTePaguenTest {
         conLaInstantanea()
         montarPagos()
         composeRule.waitUntil(timeoutMillis = 5_000) { contarTag(TAG_LINEA_SIN_SALARIO) == 1 }
+        // Vuelta 86: «Lo que se repite» ya no lleva su tarjeta en Pagos (se mudó a «Tu mes típico»): solo la fila.
         composeRule.onAllNodes(androidx.compose.ui.test.hasScrollToNodeAction()).onFirst()
-            .performScrollToNode(androidx.compose.ui.test.hasTestTag(TAG_SOLO_LOS_GASTOS_RECURRENTES))
-        composeRule.waitUntil(timeoutMillis = 5_000) { contarTag(TAG_SOLO_LOS_GASTOS_RECURRENTES) == 1 }
+            .performScrollToNode(androidx.compose.ui.test.hasTestTag(TAG_FILA_DEL_MES_TIPICO))
+        composeRule.waitUntil(timeoutMillis = 5_000) { contarTag(TAG_FILA_DEL_MES_TIPICO) == 1 }
+        assertEquals(0, contarTag(TAG_SOLO_LOS_GASTOS_RECURRENTES))
         assertEquals(1, contarTag(TAG_LINEA_SIN_SALARIO), "la de la caja")
         assertTrue(!hay("Agrega tu salario", substring = true) && !hay("Agregar mi salario"), "y ninguna más")
     }
