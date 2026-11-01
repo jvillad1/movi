@@ -69,9 +69,11 @@ const val TAG_REPETIR_UNO_RECIENTE: String = "agregar:repetir-uno-reciente"
 const val TAG_RECIENTE_PARA_REPETIR: String = "agregar:reciente-para-repetir"
 
 /**
- * **Los últimos gastos distintos** de [eventos] (vuelta 83), del más nuevo al más viejo, como mucho
+ * **Los gastos distintos que más se repiten** de [eventos] (vuelta 83; frecuencia en la 87), como mucho
  * [cuantos]. Distintos por lo que dice la píldora (el comercio, el concepto o la categoría, sin
- * mayúsculas ni tildes): dos Uber seguidos son un solo «Uber Rides», con el monto del último.
+ * mayúsculas ni tildes): dos Uber seguidos son un solo «Uber Rides», con el monto del último. **Orden
+ * (vuelta 87): los que más veces aparecen** entre los últimos [MOVIMIENTOS_PARA_LA_FRECUENCIA] gastos, y a
+ * igual número el más reciente.
  *
  * Solo gastos en pesos que se anotarían igual a mano: ni una pata de traspaso, ni una cuota o un ajuste
  * (categorías de Movi), ni tu parte de lo que pagó otro, ni una cuenta que la pestaña no ofrece
@@ -82,8 +84,7 @@ fun gastosRecientesParaRepetir(
     cuentas: Set<String>,
     cuantos: Int = RECIENTES_PARA_REPETIR,
 ): List<GastoReciente> {
-    val vistos = mutableSetOf<String>()
-    return eventos.asSequence()
+    val candidatos = eventos.asSequence()
         .filter { e ->
             e.type == TransactionType.EXPENSE &&
                 e.currency == "COP" &&
@@ -97,20 +98,32 @@ fun gastosRecientesParaRepetir(
                 e.category != ADJUSTMENT_CATEGORY
         }
         .sortedByDescending { it.timestamp }
-        .mapNotNull { e ->
-            val rotulo = textosDeLaFila(e, null).titulo.trim()
-            if (rotulo.isEmpty() || !vistos.add(normalizarParaBuscar(rotulo))) return@mapNotNull null
+        .take(MOVIMIENTOS_PARA_LA_FRECUENCIA)
+        .toList()
+    // Vuelta 87 · **los más repetidos, no el último confirmado**: la revisión 9 vio «Carulla $186.450» (un
+    // aviso recién confirmado) en vez de Uber, que se repite 30 veces. Se cuentan las veces de cada píldora
+    // entre los últimos [MOVIMIENTOS_PARA_LA_FRECUENCIA] gastos; ganan las que más se repiten y, a igual
+    // número, la más reciente (con una sola vez cada una, el orden es el de siempre). El monto es el del
+    // último de ese comercio.
+    val grupos = candidatos.groupBy { normalizarParaBuscar(textosDeLaFila(it, null).titulo.trim()) }
+        .filterKeys { it.isNotEmpty() }
+    return grupos.values
+        .sortedWith(compareByDescending<List<FinancialEvent>> { it.size }.thenByDescending { it.first().timestamp })
+        .take(cuantos)
+        .map { delComercio ->
+            val e = delComercio.first()
             GastoReciente(
-                rotulo = rotulo,
+                rotulo = textosDeLaFila(e, null).titulo.trim(),
                 monto = e.amount,
                 categoria = e.category,
                 cuentaId = e.accountId,
                 concepto = conceptoParaRepetir(e),
             )
         }
-        .take(cuantos)
-        .toList()
 }
+
+/** Vuelta 87: de cuántos gastos recientes se cuenta la frecuencia de cada comercio. */
+const val MOVIMIENTOS_PARA_LA_FRECUENCIA: Int = 150
 
 /**
  * Lo que va en «Nota» al repetir [e]: su concepto como se lee en la fila; si el concepto es la

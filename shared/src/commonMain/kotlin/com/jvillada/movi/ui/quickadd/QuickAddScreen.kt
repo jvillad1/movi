@@ -688,6 +688,26 @@ fun QuickAddScreen(
     LaunchedEffect(Unit) {
         espaciosParaRepartir = runCatching { Repositories.wallets.getEspacios() }.getOrDefault(emptyList())
     }
+    // Vuelta 87 · «Anotar pago» recuerda el reparto: si el último pago de esta regla se repartió en un grupo,
+    // la hoja ofrece repartir este igual, con la casilla **marcada** (el dueño puede desmarcarla). Solo
+    // sugiere: guardar el pago con la casilla marcada llama el mismo `…/compartir` de siempre, DESPUÉS de
+    // guardarlo (ver [repartoRecordado] en [save]).
+    var repartirComoAntes by remember { mutableStateOf(true) }
+    var repartoRecordado by remember { mutableStateOf<RepartoRecordado?>(null) }
+    LaunchedEffect(presetPago?.ruleId, presetMonto, historiaParaRepetir, espaciosParaRepartir) {
+        repartoRecordado = if (presetPago == null || presetPago.esIngreso || presetMonto == null || espaciosParaRepartir.isEmpty()) null
+        else runCatching {
+            // El último pago de la regla lo dice su marca de ocurrencia, no su nombre (ver [repartoDeLaVezPasada]).
+            repartoDeLaVezPasada(
+                ruleId = presetPago.ruleId,
+                monto = presetMonto,
+                historia = historiaParaRepetir,
+                espacios = espaciosParaRepartir,
+                ahoraMs = Clock.System.now().toEpochMilliseconds(),
+                marcaDe = { id -> Repositories.wallets.getEventOccurrenceMark(id) },
+            )
+        }.getOrNull()
+    }
     val elegirPapel = rememberFilePicker(TiposDeArchivo.EXTRACTOS) { nombre, bytes, mime ->
         PapelesCompartidos.recibir(listOf(ArchivoCompartido(nombre, bytes, mime)))
         onDismiss()
@@ -1296,6 +1316,14 @@ fun QuickAddScreen(
             val result = runCatching { guardarElMovimiento() }
             saving = false
             result.onSuccess { event ->
+                // Vuelta 87: el pago ya está guardado (y su factura saldada); recién ahora, y solo si la casilla
+                // sigue marcada, se reparte como la vez pasada. Falle o no, el pago queda guardado.
+                val reparto = repartoRecordado
+                if (presetPago != null && reparto != null && repartirComoAntes) {
+                    saving = true
+                    repartirElPagoComoAntes(event, reparto.espacio, avisoAbajo)
+                    saving = false
+                }
                 // Vuelta 74: el aviso de abajo, con «Deshacer» (anula el movimiento —y devuelve el aviso
                 // del banco, si se confirmó con él—) y «Repartir con …». No con «Guardar y anotar otro»
                 // (la hoja sigue abierta y tiene su propia confirmación) ni en modo pago: el pago sella
@@ -1973,6 +2001,10 @@ fun QuickAddScreen(
                     missingFieldMessage = missingFieldMessage,
                     // Vuelta 43: en modo pago no hay «otro»: cada pago es de su factura.
                     onSaveYOtro = if (presetPago == null) ({ save(yAnotarOtro = true) }) else null,
+                    // Vuelta 87: «Repartir en Casa con Andrés, como el mes pasado», marcado.
+                    repartoRecordado = repartoRecordado?.let { textoDelRepartoRecordado(it, Clock.System.now().toEpochMilliseconds()) },
+                    repartirComoAntes = repartirComoAntes,
+                    onRepartirComoAntes = { repartirComoAntes = it },
                 )
                 Spacer(Modifier.height(Espacio.s))
             }
@@ -2354,6 +2386,10 @@ internal fun BarraDeGuardarDeAgregar(
     onSave: () -> Unit,
     missingFieldMessage: String?,
     onSaveYOtro: (() -> Unit)?,
+    /** Vuelta 87 · la sugerencia de reparto de «Anotar pago» («Repartir en Casa, como el mes pasado»), o `null`. */
+    repartoRecordado: String? = null,
+    repartirComoAntes: Boolean = true,
+    onRepartirComoAntes: (Boolean) -> Unit = {},
 ) {
     if (hasNoAccounts) {
         Column(
@@ -2370,6 +2406,14 @@ internal fun BarraDeGuardarDeAgregar(
             Boton("Crear cuenta", onClick = { onCreateAccount() }, icono = Icons.Rounded.Add, anchoCompleto = true)
         }
     } else {
+        if (repartoRecordado != null) {
+            FilaDelRepartoRecordado(
+                texto = repartoRecordado,
+                marcada = repartirComoAntes,
+                onCambiar = onRepartirComoAntes,
+                habilitada = !saving,
+            )
+        }
         // Aquí había un botón de cámara que abría un «escáner de recibos» con un recibo INVENTADO
         // («ÉXITO COUNTRY», $312.400) y un «Guardar» que solo volvía al Inicio: la única pantalla de
         // Movi que mostraba datos falsos. Se quitó entero (revisión del 29-sep). En su lugar —el
