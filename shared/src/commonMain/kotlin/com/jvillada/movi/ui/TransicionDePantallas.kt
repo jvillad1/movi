@@ -45,6 +45,9 @@ enum class DireccionDeTransicion {
  * - Cualquier otro cambio (cambiar de pestaña, entrar, cerrar sesión, el destino de reserva de la
  *   flecha ‹) → [DireccionDeTransicion.FUNDIDO].
  *
+ * - La guía de primer uso que se abre sola, sola en la pila ([abrirLaGuiaAlArrancar]) →
+ *   [DireccionDeTransicion.NINGUNA]: aparece en el acto, sin el Inicio dibujándose debajo.
+ *
  * Pura y sin Compose, para poder probarla (`DireccionDeTransicionTest`).
  */
 fun direccionDe(antes: List<Screen>, despues: List<Screen>): DireccionDeTransicion {
@@ -52,6 +55,7 @@ fun direccionDe(antes: List<Screen>, despues: List<Screen>): DireccionDeTransici
     val a = despues.lastOrNull()
     if (de == null || a == null) return DireccionDeTransicion.FUNDIDO
     if (de == a) return DireccionDeTransicion.NINGUNA
+    if (a is Screen.PrimerUso && despues.size == 1) return DireccionDeTransicion.NINGUNA
     val cambiaDePestana = destinoResaltado(de) != destinoResaltado(a)
     val seApilo = despues.size > antes.size && despues.subList(0, antes.size) == antes
     val seSaco = despues.size < antes.size && antes.subList(0, despues.size) == despues
@@ -127,3 +131,19 @@ fun opacidadesDelFundido(ms: Long): Pair<Float, Float> {
 
 /** Cuánto dura el fade-through entero, en ms: la salida y, después, la entrada. */
 val DURACION_DEL_FUNDIDO_MS: Int = Movimiento.SALIDA_DEL_FUNDIDO_MS + Movimiento.MEDIO_MS
+
+/**
+ * **La guía de primer uso que se abre sola al arrancar** (vuelta 96): reemplaza la pila entera por la
+ * guía, sin el Inicio debajo, y [direccionDe] la muestra sin animación.
+ *
+ * El 1-nov-2026 una cuenta recién creada no podía entrar desde un iPhone: la web cargaba y mostraba
+ * «Algo falló». La única diferencia con las cuentas que sí entraban era que a esta le tocaba la guía,
+ * que hasta acá se apilaba ENCIMA del Inicio con la transición de apilar: durante la animación Safari
+ * dibujaba las dos pantallas a la vez, cada una en su capa. La sospecha (no probada en el teléfono)
+ * es que ahí se queda sin memoria de WebGL. La guía no necesita nada de eso: tapa la pantalla entera y
+ * al terminar (o con «Ahora no») navega al Inicio, que es raíz de pestaña y arma su pila de cero.
+ */
+fun abrirLaGuiaAlArrancar(pila: MutableList<Screen>) {
+    pila.clear()
+    pila.add(Screen.PrimerUso())
+}
