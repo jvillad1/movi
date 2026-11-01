@@ -188,9 +188,24 @@ internal fun fraseCortaDeLaCaja(caja: CajaProyectada, hoy: LocalDate, ultimoDiaD
     return if (bajo.libre < 0L) "$hasta · $ese no te alcanza" else "$hasta · tu día más justo es $cuando"
 }
 
-/** Lo que dice el lector de pantalla de la cifra titular: qué es, además de cuánto. */
-internal fun descripcionDeLaCifraDeLaCaja(caja: CajaProyectada): String =
-    "Libre en tu día más justo: ${formatMoneyAbreviada(caja.diaMasBajo.libre)}"
+/**
+ * **El rótulo de la cifra titular** (vuelta 86): lo que la cifra es. La revisión 9 leía «$5,6M» suelto debajo
+ * de «Tu plata, día a día», junto a «Te quedan $7.797.700» y «Flujo libre $3.184.400»: cinco cifras de «lo
+ * que queda» y ninguna decía de qué. Esta es lo más bajo que llega lo libre de Tu plata en lo que mira la caja.
+ */
+const val ROTULO_DE_LA_CIFRA_DE_LA_CAJA: String = "Lo más bajo que llega Tu plata"
+
+/** El tag de ese rótulo. */
+const val TAG_ROTULO_DE_LA_CAJA: String = "rotulo-de-la-cifra-de-la-caja"
+
+/**
+ * Lo que dice el lector de pantalla de la cifra titular: qué es, cuánto y cuándo. «Lo más bajo que llega Tu
+ * plata: $5,6M el 24 nov» (vuelta 86).
+ */
+internal fun descripcionDeLaCifraDeLaCaja(caja: CajaProyectada, hoy: LocalDate? = null): String {
+    val cuando = if (hoy != null && caja.diaMasBajo.fecha == hoy.toString()) "hoy" else "el ${fechaCorta(caja.diaMasBajo.fecha)}"
+    return "$ROTULO_DE_LA_CIFRA_DE_LA_CAJA: ${formatMoneyAbreviada(caja.diaMasBajo.libre)} $cuando"
+}
 
 /**
  * **Lo que habrá en las cuentas el día más justo** y de dónde sale la diferencia con lo libre (el
@@ -481,7 +496,8 @@ internal fun SeccionCajaProyectada(
             noSePudo ->
                 NoSePudoLeer("No pudimos proyectar tu plata", onReintentar = { reintento++ })
             gastoLeido.actualizando || cargando -> Superficie(modifier = Modifier.fillMaxWidth()) {
-                // Vuelta 75: el mismo esqueleto que la cifra y su frase.
+                // Vuelta 75: el mismo esqueleto que la cifra y su frase (vuelta 86: y su rótulo).
+                LineaEsqueleto(fraccionDelAncho = 0.5f, estilo = Movi.textos.apoyo)
                 LineaEsqueleto(fraccionDelAncho = 0.4f, estilo = Movi.textos.cifraDeTarjeta)
                 LineaEsqueleto(fraccionDelAncho = 0.6f, estilo = Movi.textos.apoyo)
                 Spacer(Modifier.height(Movi.espacios.medio))
@@ -525,7 +541,14 @@ private fun CuerpoDeLaCaja(
         Spacer(Modifier.height(Movi.espacios.corto))
     }
     // Vuelta 75: UNA cifra —lo libre del día más justo, en rojo solo ella si no alcanza— y una frase corta.
-    val descripcion = descripcionDeLaCifraDeLaCaja(caja)
+    val descripcion = descripcionDeLaCifraDeLaCaja(caja, hoy)
+    // Vuelta 86: la cifra dice lo que es: «Lo más bajo que llega Tu plata», y debajo, el día.
+    Text(
+        ROTULO_DE_LA_CIFRA_DE_LA_CAJA,
+        style = Movi.textos.apoyo,
+        color = Movi.colores.textoMedio,
+        modifier = Modifier.testTag(TAG_ROTULO_DE_LA_CAJA),
+    )
     Cifra(
         caja.diaMasBajo.libre,
         VarianteDeCifra.Grande,

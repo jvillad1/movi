@@ -239,9 +239,9 @@ private fun pagosParaProponer(data: DashboardData): List<PagoDelPeriodo> =
     colaDelInicio(data).filterIsInstance<Pendiente.Pago>().map { it.pago }.filter { it.diasParaVencer <= 1 }
 
 /**
- * Lo que el widget «Falta por pagar» lista: los pagos pendientes **en el orden de la cola** —lo más
- * urgente primero: lo vencido, y dentro de cada grupo el monto más grande—, hasta [PAGOS_EN_EL_WIDGET];
- * y cuántos quedan sin fila, para decir «y N más». Las filas más ese número dan lo que dice «Faltan N».
+ * Lo que el widget «Falta por pagar» lista: los pagos pendientes **en el orden de Pagos** (vuelta 86,
+ * [pagosEnElOrdenDePagos]: lo vencido primero, después por fecha), hasta [PAGOS_EN_EL_WIDGET]; y cuántos
+ * quedan sin fila, para decir «y N más». Las filas más ese número dan lo que dice «Faltan N».
  *
  * **Vuelta de diseño 28: ya no se salta el pago de «Movi propone hoy».** La vuelta 22 lo sacaba para no
  * repetirlo, y con eso el Arriendo de $1,8M vencido hace 22 días quedaba en «y 1 más» mientras se veían
@@ -261,17 +261,20 @@ data class FilasDelWidgetDeFalta(
 const val PAGOS_EN_EL_WIDGET: Int = 2
 
 /**
- * **Los pagos pendientes en el orden de la cola del Inicio** (vuelta 78): primero los pagos de
- * [colaDelInicio] —la misma [colaDePendientes] que leen la campana y «Movi propone hoy»—, en su orden, y
- * después lo pendiente que la cola no trae (lo que vence más adelante en el período, o una cuota que ya
- * pregunta su débito), con la misma regla ([pagosEnOrdenDeUrgencia]). «Próximo pago» es el primero y el
- * widget «Falta por pagar» sigue desde el segundo: un solo criterio de orden. Pura.
+ * **Los pagos pendientes en el orden de Pagos** (vuelta 86): los mismos pendientes de siempre
+ * ([pagosEnOrdenDeUrgencia]: sin lo hecho, los ingresos ni los abonos) **por fecha de vencimiento** —lo
+ * vencido primero (lo que venció hace más, arriba), después lo que vence antes; a igual fecha, el monto más
+ * grande—, con la MISMA función que ordena la lista de Pagos
+ * ([com.jvillada.movi.ui.recurrentes.enOrdenDeFacturas]). «Próximo pago» es el primero y el widget «Falta
+ * por pagar» sigue desde el segundo.
+ *
+ * Antes (vuelta 78) seguía la cola de la campana, que dentro de «esta semana» ordena por monto: la revisión
+ * 9 vio «Próximo pago · vence el 5 nov» con la cuota mientras Bodytech vencía el 3, y el widget de abajo
+ * ponía Bodytech primero. «Próximo» quiere decir el que vence antes; la cola (la campana, «Movi propone
+ * hoy») sigue con su orden por monto. Pura.
  */
-fun pagosEnElOrdenDeLaCola(data: DashboardData): List<PagoDelPeriodo> {
-    val deLaCola = colaDelInicio(data).filterIsInstance<Pendiente.Pago>().map { it.pago }
-    val enLaCola = deLaCola.map { it.ruleId }.toSet()
-    return deLaCola + pagosEnOrdenDeUrgencia(checklistDelPeriodoDe(data)).filter { it.ruleId !in enLaCola }
-}
+fun pagosEnElOrdenDePagos(data: DashboardData): List<PagoDelPeriodo> =
+    com.jvillada.movi.ui.recurrentes.enOrdenDeFacturas(pagosEnOrdenDeUrgencia(checklistDelPeriodoDe(data)))
 
 /**
  * @param sinElProximoPago **vuelta 68**: el Inicio ya muestra «Próximo pago», que es el primero de esta
@@ -279,7 +282,7 @@ fun pagosEnElOrdenDeLaCola(data: DashboardData): List<PagoDelPeriodo> {
  *   «Carro $9.000» dos veces, una debajo de la otra). Sigue contando en la cifra y en «Falta 1 de 5».
  */
 fun filasDelWidgetDeFalta(data: DashboardData, sinElProximoPago: Boolean = false): FilasDelWidgetDeFalta {
-    val todos = pagosEnElOrdenDeLaCola(data)
+    val todos = pagosEnElOrdenDePagos(data)
     val elDeArriba = if (sinElProximoPago) todos.firstOrNull() else null
     val pendientes = if (elDeArriba != null) todos.drop(1) else todos
     val filas = pendientes.take(PAGOS_EN_EL_WIDGET)
@@ -488,10 +491,9 @@ fun accionDelPago(pago: PagoDelPeriodo): Pair<String, Screen> =
 // ── Próximo pago ─────────────────────────────────────────────────────────────
 
 /**
- * **El próximo pago del Inicio** (vuelta 39): el pago pendiente más urgente del período —lo vencido
- * primero, y dentro de cada grupo el de más monto; después lo que vence antes— con la regla de
- * siempre ([pagosEnOrdenDeUrgencia], la del widget «Falta por pagar» y de la cola). [masPagos] son los
- * demás pendientes, que «y N más» lleva a Pagos.
+ * **El próximo pago del Inicio** (vuelta 39): el pago pendiente que vence primero —lo vencido primero—, el
+ * mismo que va primero en la lista de Pagos con su «Anotar pago» en amarillo ([pagosEnElOrdenDePagos],
+ * vuelta 86). [masPagos] son los demás pendientes, que «y N más» lleva a Pagos.
  */
 data class ProximoPagoDelInicio(
     val pago: PagoDelPeriodo,
@@ -517,7 +519,7 @@ data class ProximoPagoDelInicio(
 
 /** [ProximoPagoDelInicio], o `null` sin pagos pendientes en el período (la sección no se pinta). */
 fun proximoPagoDelInicio(data: DashboardData): ProximoPagoDelInicio? {
-    val pendientes = pagosEnElOrdenDeLaCola(data)
+    val pendientes = pagosEnElOrdenDePagos(data)
     val pago = pendientes.firstOrNull() ?: return null
     val (accion, destino) = accionDelPago(pago)
     return ProximoPagoDelInicio(

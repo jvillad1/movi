@@ -233,6 +233,45 @@ class UnSoloAmarilloPorVistaTest {
         `en Pagos con propuestas y recordatorios sigue habiendo un solo amarillo`()
     }
 
+    /**
+     * Vuelta 86 · **la fila que no suma no agrega amarillo**: «No suma: falta el mínimo» es una píldora de
+     * aviso y «Cargar mínimo» un botón fantasma; el amarillo sigue siendo «Anotar pago» de la primera.
+     */
+    @Test
+    fun `en Pagos con una tarjeta sin minimo sigue habiendo un solo amarillo`() {
+        val lista = listOf(
+            PagoDelPeriodo(ruleId = "r_carro", nombre = "Carro", monto = 9_000, pagado = false, diasParaVencer = -4, vence = "2026-09-06"),
+            PagoDelPeriodo(
+                ruleId = "card_nu", nombre = "Pago tarjeta Tarjeta Nu", monto = 540_000, pagado = false, diasParaVencer = 5,
+                vence = "2026-09-15", montoEsSaldo = true,
+            ),
+            PagoDelPeriodo(ruleId = "r_gym", nombre = "Gimnasio", monto = 139_900, pagado = false, diasParaVencer = 9, vence = "2026-09-19"),
+        )
+        montar {
+            SeccionChecklistDelPeriodo(
+                checklist = lista,
+                cargando = false,
+                pudoLeer = true,
+                marcando = emptySet(),
+                onConfirmar = { _, _ -> },
+                onNoFueEste = { _, _ -> },
+                onAnotarMovimiento = {},
+                onQuitarLaMarca = {},
+                onReintentar = {},
+                onCargarMinimo = {},
+            )
+        }
+        composeRule.onNodeWithTag(com.jvillada.movi.ui.recurrentes.TAG_NO_SUMA, useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithTag(com.jvillada.movi.ui.recurrentes.TAG_CARGAR_MINIMO, useUnmergedTree = true).assertExists()
+        assertEquals(1, amarillos(), "un solo amarillo en Pagos, con la fila que no suma")
+    }
+
+    @Test
+    @Config(qualifiers = "w1280dp-h3200dp-mdpi")
+    fun `a 1280 tambien, con una tarjeta sin minimo, un solo amarillo`() {
+        `en Pagos con una tarjeta sin minimo sigue habiendo un solo amarillo`()
+    }
+
     // ── Vuelta 82 · Actividad, Por revisar y Patrimonio ──────────────────────────────────────────
 
     private val hoyTexto = hoyEnAppZone().toString()

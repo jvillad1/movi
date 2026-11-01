@@ -192,7 +192,8 @@ class ChecklistEnInicioTest {
 
         composeRule.onNodeWithText("Faltan 3 de 3 pagos", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("Arriendo", useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithText("Gimnasio", useUnmergedTree = true).assertIsDisplayed()
+        // Vuelta 86: después de lo vencido, por fecha (el orden de Pagos): Celular vence antes que Gimnasio.
+        composeRule.onNodeWithText("Celular", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("y 1 más", useUnmergedTree = true).assertIsDisplayed()
     }
 
@@ -207,8 +208,8 @@ class ChecklistEnInicioTest {
         montar(data)
 
         val arriendo = composeRule.onNodeWithText("Arriendo", useUnmergedTree = true).fetchSemanticsNode()
-        val gimnasio = composeRule.onNodeWithText("Gimnasio", useUnmergedTree = true).fetchSemanticsNode()
-        assertTrue(arriendo.boundsInRoot.top < gimnasio.boundsInRoot.top, "el Arriendo, primero")
+        val celular = composeRule.onNodeWithText("Celular", useUnmergedTree = true).fetchSemanticsNode()
+        assertTrue(arriendo.boundsInRoot.top < celular.boundsInRoot.top, "el Arriendo, primero")
         composeRule.onNodeWithText("Vencido", substring = true, useUnmergedTree = true).assertIsDisplayed()
         // Las dos filas y «y 1 más» dan los tres de «Faltan 3 de 3 pagos».
         composeRule.onNodeWithText("y 1 más", useUnmergedTree = true).assertIsDisplayed()

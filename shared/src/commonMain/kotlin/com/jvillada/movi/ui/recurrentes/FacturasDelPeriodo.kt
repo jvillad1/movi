@@ -124,6 +124,11 @@ data class ResumenDeFacturas(
     val de: Int,
     /** Vuelta 63: los abonos planeados que faltan ([abonosPlaneados]). No suman en [falta]: van aparte. */
     val abonos: Long = 0L,
+    /**
+     * Vuelta 86: «+ Tarjeta Nu sin contar» ([lineaDeLoQueNoSuma]): lo pendiente que no suma en [falta], dicho
+     * debajo del total. `null` si todo suma.
+     */
+    val sinContar: String? = null,
 ) {
     val total: Long get() = falta + pagado
 
@@ -139,6 +144,7 @@ fun resumenDeFacturas(checklist: List<PagoDelPeriodo>): ResumenDeFacturas = Resu
     // Vuelta 63: un abono planeado no es un pago del período (no cuenta en «quedan 4 de 7»).
     de = checklist.count { !it.esIngreso && !it.esAbono },
     abonos = abonosPlaneados(checklist),
+    sinContar = lineaDeLoQueNoSuma(checklist),
 )
 
 /** «de $5.950.600 · quedan 4 de 7 pagos». */
@@ -272,6 +278,10 @@ internal fun TarjetaFaltaPorPagar(resumen: ResumenDeFacturas, modifier: Modifier
                 if (resumen.abonos > 0L) {
                     Text(lineaDelAbonoPlaneado(resumen.abonos), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                 }
+                // Vuelta 86: lo que está en la lista y no en la cifra, dicho bajo la cifra (sin monto: no se sabe).
+                resumen.sinContar?.let {
+                    Text(it, style = Movi.textos.apoyoMedio, color = Movi.colores.aviso, modifier = Modifier.testTag(TAG_SIN_CONTAR))
+                }
             }
             BarraDeProgreso(
                 resumen.fraccionPagada,
@@ -290,6 +300,7 @@ internal fun TarjetaFaltaPorPagar(resumen: ResumenDeFacturas, modifier: Modifier
  * propuesta, la estimación de una cuota). **Pagada, es compacta** ([FilaDeFacturaPagada], vuelta 48):
  * tocarla abre el movimiento ([onVerMovimiento]) y lo demás va en su «⋯» ([accionesDelMenu]).
  */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 internal fun FilaDeFactura(
     pago: PagoDelPeriodo,
@@ -315,6 +326,12 @@ internal fun FilaDeFactura(
     extracto: ExtractoDeLaTarjeta? = null,
     /** Vuelta 72 (revisión) · el «⋯» de una fila sin pagar: «Pausar». Vacío, sin «⋯». */
     accionesDelMenuPendiente: List<Pair<String, () -> Unit>> = emptyList(),
+    /**
+     * Vuelta 86 · la fila no suma en «Falta por pagar» ([porQueNoSuma]): lleva la píldora «No suma: falta el
+     * mínimo» y, con [onCargarMinimo], «Cargar mínimo» ahí mismo (la hoja de los términos de la tarjeta).
+     */
+    noSuma: PorQueNoSuma? = null,
+    onCargarMinimo: (() -> Unit)? = null,
 ) {
     // Vuelta 72: solo lo HECHO es compacto; una tarjeta pagada por debajo de su mínimo sigue pendiente.
     if (pago.hecho) {
@@ -440,6 +457,30 @@ internal fun FilaDeFactura(
                 if (e.puedeIncluirDiferidos) Text(PUEDE_INCLUIR_DIFERIDOS, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
             }
         }
+        }
+        // Vuelta 86: lo que no suma lo dice la fila, con cómo arreglarlo, no tres pantallas abajo. Fuera
+        // del renglón que abre la regla: un botón adentro de otro tocable se lee (y se toca) mal.
+        if (noSuma != null && !enVuelo) {
+            // A 360 con la letra al 130 % la píldora y el botón no caben juntos: el botón baja.
+            androidx.compose.foundation.layout.FlowRow(
+                modifier = Modifier
+                    .padding(start = SANGRIA_DEL_TEXTO_DE_LA_FILA, end = Medida.margenDePantalla)
+                    .padding(bottom = Espacio.xs),
+                horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
+            ) {
+                Box(Modifier.align(Alignment.CenterVertically).testTag(TAG_NO_SUMA)) {
+                    Pildora(pildoraDeLoQueNoSuma(noSuma), TonoDePildora.Aviso)
+                }
+                if (onCargarMinimo != null) {
+                    Boton(
+                        accionDeLoQueNoSuma(noSuma),
+                        onClick = onCargarMinimo,
+                        variante = VarianteDeBoton.Fantasma,
+                        tamano = TamanoDeBoton.S,
+                        modifier = Modifier.align(Alignment.CenterVertically).testTag(TAG_CARGAR_MINIMO),
+                    )
+                }
+            }
         }
     }
     debajo?.let { BajoLaFila { it() } }
