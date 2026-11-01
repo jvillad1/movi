@@ -114,6 +114,9 @@ object FiltroDeNotificaciones {
             "com.app.prontomas",
             "com.google.android.apps.walletnfcrel",
             "com.nu.production",
+            // Vuelta 92: Davivienda. El paquete se leyó del teléfono del dueño el 19-sep (ver
+            // `SmsFilterConfigRoutes`); es el único de los bancos de la vuelta 88 con el id confirmado.
+            "com.todo1.davivienda.mobileapp",
         ),
     )
 
