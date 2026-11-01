@@ -77,7 +77,20 @@ data class UserProfile(
     val ahorroDelPeriodoTipo: String = TipoDeAhorro.NINGUNO.name,
     /** Pesos con `MONTO`, porcentaje entero con `PORCENTAJE`, 0 con `NINGUNO`. */
     val ahorroDelPeriodoValor: Long = 0L,
+    /**
+     * **Cuándo vio el aviso «Qué ve la IA»** (vuelta 95), en milisegundos; `null` = nunca. La hoja se
+     * abre la primera vez que algo va a Claude (ver [hayQueAvisarDeLaIa]). Lo escribe
+     * `POST /api/users/me/aviso-ia` y vive en el server para que no vuelva en otro aparato.
+     */
+    val avisoIaVistoEn: Long? = null,
 )
+
+/**
+ * **¿Hay que abrir la hoja «Qué ve la IA» antes de mandar algo a Claude?** (vuelta 95). Sí mientras el
+ * usuario no la haya visto ([UserProfile.avisoIaVistoEn] `null`). Las tres preguntas sugeridas no van a
+ * la IA (las contesta el server con sus números): [vaALaIa] `false` no la dispara nunca.
+ */
+fun hayQueAvisarDeLaIa(vistoEn: Long?, vaALaIa: Boolean = true): Boolean = vaALaIa && vistoEn == null
 
 /**
  * **¿Se abre sola la guía «Primer uso»?** Solo si nunca se terminó ni se descartó
