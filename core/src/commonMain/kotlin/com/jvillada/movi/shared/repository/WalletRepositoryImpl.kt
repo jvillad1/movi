@@ -1309,7 +1309,7 @@ class WalletRepositoryImpl(
             setBody(clave)
         }.exigirExito().body()
 
-    override suspend fun estadoDeLaClaveDeExtractos(): com.jvillada.movi.shared.model.EstadoDeLaClaveDeExtractos =
+    override suspend fun getEstadoDeLaClaveDeExtractos(): com.jvillada.movi.shared.model.EstadoDeLaClaveDeExtractos =
         client.get("$baseUrl/api/extractos/clave").exigirExito().body()
 
     override suspend fun olvidarLaClaveDeExtractos() {

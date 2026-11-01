@@ -1010,7 +1010,7 @@ interface WalletRepository {
         throw UnsupportedOperationException("abrirPapelConClave")
 
     /** `GET /api/extractos/clave`: si hay una clave recordada y si se puede recordar. Nunca la clave. */
-    suspend fun estadoDeLaClaveDeExtractos(): com.jvillada.movi.shared.model.EstadoDeLaClaveDeExtractos =
+    suspend fun getEstadoDeLaClaveDeExtractos(): com.jvillada.movi.shared.model.EstadoDeLaClaveDeExtractos =
         com.jvillada.movi.shared.model.EstadoDeLaClaveDeExtractos()
 
     /** `DELETE /api/extractos/clave`: «Olvidarla». */

@@ -104,7 +104,7 @@ class CompartirConMoviTest {
             claves += documentoId to clave
             return conClave(clave)
         }
-        override suspend fun estadoDeLaClaveDeExtractos() =
+        override suspend fun getEstadoDeLaClaveDeExtractos() =
             EstadoDeLaClaveDeExtractos(guardada = false, sePuedeRecordar = sePuedeRecordar)
         override suspend fun subirPapel(fileName: String, bytes: ByteArray, mimeType: String): Documento {
             subidos += fileName

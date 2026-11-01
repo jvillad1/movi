@@ -38,7 +38,7 @@ internal fun FilaDeLaClaveDeExtractos() {
     var olvidando by remember { mutableStateOf(false) }
     val alcance = rememberCoroutineScope()
     LaunchedEffect(Unit) {
-        guardada = intentar { Repositories.wallets.estadoDeLaClaveDeExtractos() }.getOrNull()?.guardada == true
+        guardada = intentar { Repositories.wallets.getEstadoDeLaClaveDeExtractos() }.getOrNull()?.guardada == true
     }
     if (!guardada) return
     Separador()

@@ -121,7 +121,7 @@ fun HojaLeyendoElPapel(
     var sePuedeRecordar by remember { mutableStateOf(false) }
     LaunchedEffect(pideClave) {
         if (pideClave) {
-            sePuedeRecordar = intentar { Repositories.wallets.estadoDeLaClaveDeExtractos() }.getOrNull()?.sePuedeRecordar == true
+            sePuedeRecordar = intentar { Repositories.wallets.getEstadoDeLaClaveDeExtractos() }.getOrNull()?.sePuedeRecordar == true
         }
     }
 

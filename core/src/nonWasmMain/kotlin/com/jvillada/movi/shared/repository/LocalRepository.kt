@@ -2573,7 +2573,7 @@ class LocalRepository(
         remote.leerPapel(documentoId, anotarAunqueEsteAnotado)
     override suspend fun abrirPapelConClave(documentoId: String, clave: com.jvillada.movi.shared.model.ClaveDelPdf) =
         remote.abrirPapelConClave(documentoId, clave)
-    override suspend fun estadoDeLaClaveDeExtractos() = remote.estadoDeLaClaveDeExtractos()
+    override suspend fun getEstadoDeLaClaveDeExtractos() = remote.getEstadoDeLaClaveDeExtractos()
     override suspend fun olvidarLaClaveDeExtractos() = remote.olvidarLaClaveDeExtractos()
     override suspend fun confirmarComprobante(smsId: String, eventoId: String) =
         remote.confirmarComprobante(smsId, eventoId)
