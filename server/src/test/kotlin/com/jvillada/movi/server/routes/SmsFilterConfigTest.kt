@@ -120,7 +120,35 @@ class SmsFilterConfigTest {
         assertEquals(HttpStatusCode.OK, res.status)
         val obj = Json.parseToJsonElement(res.bodyAsText()).jsonObject
         assertEquals(listOf("85540", "891333", "87400"), obj["senderCodes"]!!.jsonArray.map { it.jsonPrimitive.content })
-        assertEquals(listOf("bancolombia", "nubank"), obj["bodyKeywords"]!!.jsonArray.map { it.jsonPrimitive.content })
+        assertEquals(PALABRAS_DE_BANCOS, obj["bodyKeywords"]!!.jsonArray.map { it.jsonPrimitive.content })
+        assertEquals(listOf("bancolombia", "nubank"), PALABRAS_DE_BANCOS.take(2))
+    }
+
+    /**
+     * **Vuelta 99 · los otros bancos, por el nombre.** Los SMS de Davivienda del papá del dueño llegan
+     * de un código 871… que nadie confirmó: la palabra del cuerpo es lo que los deja pasar, y llega a
+     * un APK instalado (1.87) sin reinstalar porque el teléfono baja este filtro cada día.
+     *
+     * Y ninguna palabra genérica: «popular» u «occidente» sueltos dejarían pasar SMS personales.
+     */
+    @Test
+    fun `el filtro nombra a los otros bancos y ninguna palabra generica`() = testApplication {
+        wireApp()
+        val keywords = Json.parseToJsonElement(client.get("/api/sms/filter-config").bodyAsText())
+            .jsonObject["bodyKeywords"]!!.jsonArray.map { it.jsonPrimitive.content }
+        val esperadas = listOf(
+            "davivienda", "davibank", "daviplata", "bbva", "banco de bogota", "av villas", "banco de occidente",
+            "colpatria", "scotiabank", "itau", "falabella", "lulo bank", "nequi", "rappipay",
+        )
+        assertEquals(true, keywords.containsAll(esperadas), "faltan: ${esperadas - keywords.toSet()}")
+        for (generica in listOf("popular", "occidente", "bogota", "banco", "villas", "nu", "davi")) {
+            assertEquals(false, generica in keywords, "«$generica» suelta mete ruido")
+        }
+        // El cliente compara en minúsculas y por substring: el texto real de Davivienda tiene que pasar.
+        val real = "DAVIVIENDA Descuento en internet, \$64,900,Cta de Ahorros *0136,Hora 16:49,Lugar PSE MERCADOPAGO COLOMBIA."
+        assertEquals(true, keywords.any { real.lowercase().contains(it) })
+        // Y las palabras con tilde van también sin ella (y al revés): el cliente no quita tildes.
+        assertEquals(true, keywords.containsAll(listOf("banco de bogotá", "itaú")))
     }
 
     /**

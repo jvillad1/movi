@@ -17,7 +17,13 @@ object BankSenderFilter {
     /** Fallback compilado — piso mínimo garantizado, no un espejo del server (ver arriba). */
     val DEFAULTS = FilterConfig(
         senderCodes = listOf("85540", "891333", "87400"),
-        bodyKeywords = listOf("bancolombia"),
+        // Vuelta 99: los mismos nombres que sirve el server (`PALABRAS_DE_BANCOS`), para que un APK nuevo
+        // los traiga desde la instalación. Un APK viejo los recibe del server (SmsFilterRefreshWorker).
+        bodyKeywords = listOf(
+            "bancolombia", "nubank", "davivienda", "davibank", "daviplata", "bbva",
+            "banco de bogota", "banco de bogotá", "av villas", "banco de occidente",
+            "colpatria", "scotiabank", "itau", "itaú", "falabella", "lulo bank", "nequi", "rappipay",
+        ),
     )
 
     fun matches(sender: String?, body: String, config: FilterConfig = DEFAULTS): Boolean {
