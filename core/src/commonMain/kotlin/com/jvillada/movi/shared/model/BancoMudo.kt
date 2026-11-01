@@ -32,6 +32,16 @@ import kotlinx.serialization.Serializable
  *
  * Un origen sin ninguna captura no aparece (no hay historia que comparar): ese caso ya lo dice
  * «Movi nunca ha recibido un mensaje de tu banco».
+ *
+ * ## Vuelta 90 · vivo es que lleguen MOVIMIENTOS
+ *
+ * Glim dejó de avisar compras el 2-oct-2026 pero siguió mandando rechazos y promociones, y como la
+ * regla contaba cualquier aviso, Glim se veía vivo. Ahora las tres condiciones se miden **solo sobre
+ * las capturas que son movimientos** ([Captura.noEsMovimiento] en `null`: el parser saca un monto y no
+ * es un rechazo, una promoción, un código, un aviso de seguridad ni una confirmación de reenvío; lo
+ * decide el server). Si de un origen callado siguen llegando avisos que no son movimientos, el
+ * episodio lleva un [OrigenMudo.motivo]: «llegan rechazos y promociones». El umbral
+ * del dueño ([diasDeSilencio]) no cambia.
  */
 
 /** Cuántos días de silencio avisan, si el dueño no eligió otra cosa. */
@@ -55,8 +65,13 @@ private const val DIA_MS: Long = 86_400_000L
 @Serializable
 enum class CanalDeCaptura { SMS, NOTIFICACION, CORREO }
 
-/** Una captura: el rótulo de origen tal como quedó en `sms_messages.bank`, y cuándo pasó. */
-data class Captura(val origen: String, val momento: Long)
+/**
+ * Una captura: el rótulo de origen tal como quedó en `sms_messages.bank`, y cuándo pasó.
+ *
+ * [noEsMovimiento] (vuelta 90): `null` si es un movimiento (o podría serlo), o **qué es** si se sabe que
+ * no lo es — un rechazo, una promoción, un aviso sin monto—. Default `null`: lo de antes contaba todo.
+ */
+data class Captura(val origen: String, val momento: Long, val noEsMovimiento: MotivoDeApartado? = null)
 
 /**
  * Un origen que se calló. [clave] identifica el origen (canal + nombre) y [ultima] es su última
@@ -70,6 +85,12 @@ data class OrigenMudo(
     val nombre: String,
     val diasSinCaptura: Int,
     val ultima: Long,
+    /**
+     * **Vuelta 90 · por qué está mudo aunque sigan llegando avisos**: «llegan rechazos y promociones».
+     * `null` cuando de ese origen no llega nada. Campo nuevo y opcional: un cliente viejo
+     * lo ignora (`ignoreUnknownKeys`) y dice lo de siempre.
+     */
+    val motivo: String? = null,
 )
 
 /**
@@ -133,7 +154,10 @@ fun origenesMudos(capturas: List<Captura>, ahora: Long, diasDeSilencio: Int): Li
         .groupBy { claveYNombre(it.origen).first }
         .mapNotNull { (clave, deEsteOrigen) ->
             val nombre = claveYNombre(deEsteOrigen.first().origen).second
-            val momentos = deEsteOrigen.map { it.momento }.sorted()
+            // Vuelta 90: la regla se mide sobre los movimientos; lo demás solo explica el silencio.
+            val movimientos = deEsteOrigen.filter { it.noEsMovimiento == null }
+            if (movimientos.isEmpty()) return@mapNotNull null
+            val momentos = movimientos.map { it.momento }.sorted()
             val ultima = momentos.last()
             val silencio = ahora - ultima
             if (silencio < diasDeSilencio * DIA_MS) return@mapNotNull null
@@ -151,9 +175,39 @@ fun origenesMudos(capturas: List<Captura>, ahora: Long, diasDeSilencio: Int): Li
                 nombre = nombre,
                 diasSinCaptura = (silencio / DIA_MS).toInt(),
                 ultima = ultima,
+                motivo = motivoDelSilencio(deEsteOrigen.filter { it.noEsMovimiento != null && it.momento > ultima }),
             )
         }
         .sortedByDescending { it.diasSinCaptura }
+}
+
+/** Cómo se nombra, en plural, lo que llega en vez de movimientos. */
+private fun enPlural(motivo: MotivoDeApartado): String = when (motivo) {
+    MotivoDeApartado.NO_PASO -> "rechazos"
+    MotivoDeApartado.PROMOCION -> "promociones"
+    MotivoDeApartado.CODIGO_DE_VERIFICACION -> "códigos"
+    MotivoDeApartado.AVISO_DE_SEGURIDAD -> "avisos de seguridad"
+    MotivoDeApartado.RECORDATORIO_DE_PAGO -> "recordatorios de pago"
+    MotivoDeApartado.EXTRACTO_DISPONIBLE -> "avisos de extracto"
+    MotivoDeApartado.RESUMEN_DE_GASTOS -> "resúmenes de gastos"
+    MotivoDeApartado.SIN_MONTO -> "avisos sin monto"
+    MotivoDeApartado.CONFIRMACION_DE_REENVIO -> "confirmaciones de reenvío"
+    MotivoDeApartado.DUPLICADO -> "copias de avisos"
+}
+
+/**
+ * «llegan rechazos y promociones»: lo que llegó de un origen después de su último
+ * movimiento, de lo más frecuente a lo menos (máximo tres clases). `null` si no llegó nada.
+ */
+internal fun motivoDelSilencio(despues: List<Captura>): String? {
+    val clases = despues.mapNotNull { it.noEsMovimiento }
+        .groupingBy { it }.eachCount()
+        .entries.sortedWith(compareByDescending<Map.Entry<MotivoDeApartado, Int>> { it.value }.thenBy { it.key.ordinal })
+        .map { enPlural(it.key) }
+        .take(3)
+    if (clases.isEmpty()) return null
+    val lista = if (clases.size == 1) clases.single() else clases.dropLast(1).joinToString(", ") + " y " + clases.last()
+    return "llegan $lista"
 }
 
 /** «los SMS de Bancolombia», «las notificaciones de Nu», «los correos de Bancolombia». */
@@ -163,6 +217,13 @@ fun queNoLlega(origen: OrigenMudo): String = when (origen.canal) {
     CanalDeCaptura.CORREO -> "los correos de ${origen.nombre}"
 }
 
-/** «Hace 4 días no llegan los SMS de Bancolombia. Revisa la captura». */
-fun textoDeOrigenMudo(origen: OrigenMudo): String =
-    "Hace ${origen.diasSinCaptura} días no llegan ${queNoLlega(origen)}. Revisa la captura"
+/**
+ * «Hace 4 días no llegan los SMS de Bancolombia. Revisa la captura». Con motivo (vuelta 90): «Hace 29
+ * días las notificaciones de Glim no traen movimientos: llegan rechazos y promociones. Revisa la
+ * captura».
+ */
+fun textoDeOrigenMudo(origen: OrigenMudo): String {
+    val motivo = origen.motivo?.takeIf { it.isNotBlank() }
+        ?: return "Hace ${origen.diasSinCaptura} días no llegan ${queNoLlega(origen)}. Revisa la captura"
+    return "Hace ${origen.diasSinCaptura} días ${queNoLlega(origen)} no traen movimientos: $motivo. Revisa la captura"
+}

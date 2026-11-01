@@ -70,7 +70,7 @@ import com.jvillada.movi.ui.components.AvatarDeLaCuenta
 import com.jvillada.movi.ui.components.HeaderLeading
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.formatMoney
-import com.jvillada.movi.ui.fecha.etiquetaDeFecha
+import com.jvillada.movi.ui.components.conCifrasOcultas
 import com.jvillada.movi.ui.transactions.HojaDelMovimiento
 import com.jvillada.movi.ui.transactions.FinalDeLaFila
 import com.jvillada.movi.ui.transactions.debajoDeLaCifra
@@ -87,6 +87,9 @@ const val TAG_RESULTADO_DE_BUSCAR: String = "buscar-resultado-"
  * [TipoDeResultado] («MOVIMIENTO», «COMERCIO»…), o «recientes».
  */
 const val TAG_GRUPO_DE_BUSCAR: String = "buscar-grupo-"
+
+/** Vuelta 87: las líneas de totales bajo «Movimientos · N». */
+const val TAG_TOTALES_DE_BUSCAR: String = "buscar-totales"
 
 /** El `testTag` de una búsqueda reciente: el prefijo y el texto. */
 const val TAG_RECIENTE_DE_BUSCAR: String = "buscar-reciente-"
@@ -169,6 +172,10 @@ fun BuscarScreen(onNavigate: (Screen) -> Unit) {
         )
     }
     val grupos = remember(consulta, filtros, datos, periodo) { buscarEnMovi(consulta, datos, filtros, periodo) }
+    // Vuelta 87: cuánto suman los movimientos que coinciden (todos, no solo los listados).
+    val lineasDeTotales = remember(consulta, filtros, datos, periodo) {
+        lineasDeLosTotales(totalesDeLaBusqueda(consulta, datos, filtros, periodo), soloEstePeriodo = filtros.soloEstePeriodo && periodo != null)
+    }
     // Vuelta 67: los grupos, para que un gasto repartido diga «de $88.600 · con Caro» como en Actividad.
     // Solo si la historia tiene alguno repartido; si la lectura falla, la fila dice «de $88.600».
     val hayRepartidos = remember(todosLosEventos) { todosLosEventos.any { it.espacioId != null } }
@@ -248,6 +255,7 @@ fun BuscarScreen(onNavigate: (Screen) -> Unit) {
                             GrupoDeBuscar(
                                 titulo = grupo.tipo.titulo,
                                 conteo = grupo.resultados.size,
+                                resumen = if (grupo.tipo == TipoDeResultado.MOVIMIENTO) lineasDeTotales else emptyList(),
                                 tag = TAG_GRUPO_DE_BUSCAR + grupo.tipo.name,
                                 modifier = conMargen.padding(top = if (i == 0) Espacio.xxs else Medida.entreSecciones),
                             ) {
@@ -386,10 +394,19 @@ private fun GrupoDeBuscar(
     tag: String,
     modifier: Modifier = Modifier,
     conteo: Int? = null,
+    /** Vuelta 87: las líneas de totales bajo el conteo («Gastaste $X en total · $Y este período»). */
+    resumen: List<String> = emptyList(),
     filas: @Composable () -> Unit,
 ) {
     Column(modifier = modifier) {
         Seccion(titulo = titulo, conteo = conteo)
+        if (resumen.isNotEmpty()) {
+            Column(modifier = Modifier.padding(bottom = Espacio.xs).testTag(TAG_TOTALES_DE_BUSCAR)) {
+                resumen.forEach { linea ->
+                    Text(conCifrasOcultas(linea), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                }
+            }
+        }
         Superficie(modifier = Modifier.fillMaxWidth().testTag(tag), relleno = RellenoDeSuperficie.Lista) {
             filas()
         }
@@ -424,7 +441,8 @@ private fun FilaDeResultado(
         is ResultadoDeBusqueda.Movimiento -> {
             val e = resultado.evento
             val laCuenta = cuentas.firstOrNull { it.id == e.accountId }
-            val fecha = etiquetaDeFecha(epochMillisToAppDate(e.timestamp), hoy)
+            // Vuelta 87: un solo formato de fecha, el corto («28 oct»; con año solo si no es el actual).
+            val fecha = com.jvillada.movi.ui.fecha.etiquetaCortaDeFecha(epochMillisToAppDate(e.timestamp), hoy)
             // Vuelta 78: tu parte de lo que pagó otro dice debajo de la cifra de cuánto fue y quién pagó.
             val tuParteDeOtro = esTuParteDeOtro(e)
             val linea = if (tuParteDeOtro) subtituloDeTuParteEnBuscar(e, fecha)
@@ -433,7 +451,6 @@ private fun FilaDeResultado(
                 laCuenta?.name?.takeIf { cuentaHabitual == null || e.accountId != cuentaHabitual }
                     ?.let { com.jvillada.movi.ui.components.nombreCortoDeCuenta(it) },
                 fecha,
-                com.jvillada.movi.ui.fecha.etiquetaCortaDeFecha(epochMillisToAppDate(e.timestamp), hoy),
             )
             // Vuelta 50: de un par se lista la pata que cuenta (`unaPataPorPar`), así que la cuota sale
             // como el gasto que es, «−$980.000».

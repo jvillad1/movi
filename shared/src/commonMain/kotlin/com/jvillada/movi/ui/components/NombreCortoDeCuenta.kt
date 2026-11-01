@@ -38,6 +38,26 @@ fun nombreCortoDeCuenta(nombre: String): String {
 /** Hasta cuántas letras va entero un nombre sin número (vuelta 83): «Bancolombia Ahorros» entra. */
 const val LARGO_MAXIMO_DEL_NOMBRE_CORTO: Int = 20
 
+/**
+ * **La cola que nunca se corta** (vuelta 87). A 360 dp «Vivienda · Bancolombia ·4057» no cabe en el
+ * renglón del subtítulo y «…» se comía justo lo que distingue a la 4057 de la 8133: el final. El nombre
+ * corto tiene dos partes —la [cabeza] (el banco, y lo que le preceda en el subtítulo: la categoría) y la
+ * [cola] («·4057», o «·3684 USD»)— y **lo que se recorta es la cabeza, nunca la cola**: «Vivienda ·
+ * Bancol… ·4057». Es la regla del nombre corto, y [com.jvillada.movi.ui.components.ds.Fila] la usa para
+ * todo subtítulo que **termina** en uno.
+ */
+data class NombreCortoPartido(val cabeza: String, val cola: String)
+
+/**
+ * Parte [texto] en su cabeza y su cola si **termina** en un nombre corto con número («… ·4057»,
+ * «… ·3684 USD»); `null` si no (un subtítulo de fecha, un nombre sin número). Pura.
+ */
+fun partirLaColaDelNombreCorto(texto: String): NombreCortoPartido? {
+    val m = COLA_DEL_NOMBRE_CORTO.find(texto.trim()) ?: return null
+    return NombreCortoPartido(cabeza = m.groupValues[1], cola = m.groupValues[2])
+}
+
+private val COLA_DEL_NOMBRE_CORTO = Regex("""^(.*\S) (·\d{4}(?: [A-Z]{3})?)$""")
 private val ESPACIOS = Regex("""\s+""")
 private val PRIMER_NUMERO = Regex("""\d{3,}""")
 private val MONEDAS = setOf("USD", "EUR", "COP")

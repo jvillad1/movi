@@ -47,11 +47,40 @@ import com.jvillada.movi.ui.components.toUserMessage
 import com.jvillada.movi.ui.recurrentes.fechaLegibleDelChecklist
 import kotlinx.coroutines.launch
 
-/** El título de la sección de «Por revisar» con lo que el banco cobró solo. */
-const val TITULO_DE_LOS_DEBITOS: String = "Lo que el banco cobró solo"
+/**
+ * El título de la sección de «Por revisar» con lo que el banco cobró solo y, desde la vuelta 90, lo
+ * esperado que no se ve (la nómina, una suscripción): ya no es solo «lo que el banco cobró solo».
+ */
+const val TITULO_DE_LOS_DEBITOS: String = "¿Pasó esto?"
 const val SI_SE_COBRO: String = "Sí, se cobró"
 const val CAMBIAR_MONTO: String = "Cambiar monto"
 const val NO_SE_COBRO: String = "No se cobró"
+/** Vuelta 90 · los botones de un gasto esperado sin la marca de débito (un recurrente con cuenta). */
+const val SI_SE_PAGO: String = "Sí, se pagó"
+const val NO_SE_PAGO: String = "No se pagó"
+/**
+ * Revisión de la vuelta 90 · **«Ya lo anoté»**: el dueño lo anotó por su lado (otro nombre, otra
+ * cuenta) y Movi no lo reconoció. No anota nada: saca la propuesta de ese período, igual que «No se
+ * pagó» —el mismo `…/descartar`—, para que no quede la tentación de anotarlo otra vez.
+ */
+const val YA_LO_ANOTE: String = "Ya lo anoté"
+/** Vuelta 90 · los de la nómina que no se ve llegar. */
+const val SI_ME_LLEGO: String = "Sí, me llegó"
+const val NO_ME_LLEGO: String = "No me llegó"
+
+/** «Sí, se cobró» / «Sí, se pagó» / «Sí, me llegó»: el principal, según lo que se pregunta. */
+internal fun siDeLaPropuesta(debito: DebitoAutomaticoPorConfirmar): String = when {
+    debito.esIngreso -> SI_ME_LLEGO
+    debito.esperado -> SI_SE_PAGO
+    else -> SI_SE_COBRO
+}
+
+/** «No se cobró» / «No se pagó» / «No me llegó». */
+internal fun noDeLaPropuesta(debito: DebitoAutomaticoPorConfirmar): String = when {
+    debito.esIngreso -> NO_ME_LLEGO
+    debito.esperado -> NO_SE_PAGO
+    else -> NO_SE_COBRO
+}
 const val TAG_TARJETA_DEL_DEBITO: String = "tarjeta-del-debito-automatico"
 
 /**
@@ -71,9 +100,29 @@ internal suspend fun confirmarElDebitoAutomatico(debito: DebitoAutomaticoPorConf
 const val TEXTO_DEL_DEBITO_EN_LA_BANDEJA: String =
     "¿Se cobró? El banco no avisa cuando la cobra: Movi no la anota hasta que confirmes."
 
-/** «Débito automático · Bancolombia Ahorros · vence el 5 de octubre»: de dónde sale y cuándo. */
-internal fun subtituloDelDebito(debito: DebitoAutomaticoPorConfirmar): String =
-    "$NOTA_DEL_DEBITO_AUTOMATICO · ${debito.cuentaNombre} · vence el ${fechaLegibleDelChecklist(debito.vence).ifEmpty { debito.vence }}"
+/** Vuelta 90 · lo que dice la tarjeta de algo esperado: no hay débito marcado, solo falta el movimiento. */
+const val TEXTO_DE_LO_ESPERADO_EN_LA_BANDEJA: String =
+    "Movi lo esperaba y no ve el movimiento. No lo anota hasta que confirmes."
+
+/** Vuelta 90 · la etiqueta del subtítulo de lo esperado, en lugar de «Débito automático». */
+const val ROTULO_DE_LO_ESPERADO: String = "Esperado"
+
+/**
+ * «Débito automático · Bancolombia Ahorros · vence el 5 de octubre»: de dónde sale y cuándo. Lo
+ * esperado (vuelta 90): «Esperado · Master Black · el 5 de octubre».
+ */
+internal fun subtituloDelDebito(debito: DebitoAutomaticoPorConfirmar): String {
+    val fecha = fechaLegibleDelChecklist(debito.vence).ifEmpty { debito.vence }
+    return if (debito.esperado) "$ROTULO_DE_LO_ESPERADO · ${debito.cuentaNombre} · el $fecha"
+    else "$NOTA_DEL_DEBITO_AUTOMATICO · ${debito.cuentaNombre} · vence el $fecha"
+}
+
+/** El rótulo del campo de «Cambiar monto». */
+internal fun rotuloDelMontoDeLaPropuesta(debito: DebitoAutomaticoPorConfirmar): String = when {
+    debito.esIngreso -> "Lo que te llegó"
+    debito.esperado -> "Lo que pagaste"
+    else -> "Lo que cobró el banco"
+}
 
 /**
  * **Una tarjeta de «Por revisar» por cada débito automático vencido sin movimiento**: lo que Movi
@@ -89,8 +138,9 @@ internal fun TarjetaDelDebitoAutomatico(
     debito: DebitoAutomaticoPorConfirmar,
     onResuelto: () -> Unit,
 ) {
-    var cambiando by remember(debito.clave) { mutableStateOf(false) }
-    var monto by remember(debito.clave) { mutableStateOf<Long?>(debito.monto) }
+    // Sin monto (una regla vieja en 0 sin historia) el campo arranca vacío y abierto: no se inventa.
+    var cambiando by remember(debito.clave) { mutableStateOf(debito.monto <= 0L) }
+    var monto by remember(debito.clave) { mutableStateOf<Long?>(debito.monto.takeIf { it > 0 }) }
     var trabajando by remember(debito.clave) { mutableStateOf(false) }
     var error by remember(debito.clave) { mutableStateOf<String?>(null) }
     val alcance = rememberCoroutineScope()
@@ -117,10 +167,10 @@ internal fun TarjetaDelDebitoAutomatico(
         subtitulo = subtituloDelDebito(debito),
         modifier = Modifier.padding(bottom = Medida.dentroDeSeccion).testTag(TAG_TARJETA_DEL_DEBITO),
         inicio = { IconoEnCirculo(Icons.Rounded.AccountBalance, tono = TonoDeIcono.Aviso) },
-        cifra = monto?.takeIf { it > 0 }?.let { m -> { Cifra(-m, moneda = debito.moneda) } },
+        cifra = monto?.takeIf { it > 0 }?.let { m -> { Cifra(if (debito.esIngreso) m else -m, moneda = debito.moneda) } },
         acciones = {
             PastillaDelPago(
-                if (trabajando) "Anotando…" else SI_SE_COBRO,
+                if (trabajando) "Anotando…" else siDeLaPropuesta(debito),
                 principal = true,
                 habilitada = !trabajando && montoValido,
             ) {
@@ -128,19 +178,26 @@ internal fun TarjetaDelDebitoAutomatico(
                 hacer { confirmarElDebitoAutomatico(debito, elMonto) }
             }
             if (!cambiando) {
-                PastillaDelPago(CAMBIAR_MONTO, habilitada = !trabajando) { cambiando = true }
+                PastillaDelPago(CAMBIAR_MONTO, habilitada = !trabajando) {
+                    // Vuelta 90: si la última vez fue otra cifra (el sueldo varía), abre lleno con esa.
+                    debito.ultimoMonto?.let { monto = it }
+                    cambiando = true
+                }
             }
-            PastillaDelPago(NO_SE_COBRO, habilitada = !trabajando) {
+            PastillaDelPago(noDeLaPropuesta(debito), habilitada = !trabajando) {
+                hacer { Repositories.wallets.descartarDebitoAutomatico(debito.ruleId, debito.periodo) }
+            }
+            PastillaDelPago(YA_LO_ANOTE, habilitada = !trabajando) {
                 hacer { Repositories.wallets.descartarDebitoAutomatico(debito.ruleId, debito.periodo) }
             }
         },
     ) {
         Text(
-            TEXTO_DEL_DEBITO_EN_LA_BANDEJA,
+            if (debito.esperado) TEXTO_DE_LO_ESPERADO_EN_LA_BANDEJA else TEXTO_DEL_DEBITO_EN_LA_BANDEJA,
             style = Movi.textos.apoyo,
             color = Movi.colores.textoMedio,
         )
-        if (cambiando) MoneyField(monto, { monto = it }, label = "Lo que cobró el banco")
+        if (cambiando) MoneyField(monto, { monto = it }, label = rotuloDelMontoDeLaPropuesta(debito))
         error?.let { Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale) }
     }
 }

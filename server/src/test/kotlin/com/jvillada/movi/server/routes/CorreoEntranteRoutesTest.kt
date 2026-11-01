@@ -9,6 +9,7 @@ import com.jvillada.movi.server.correo.alertaMailgunFormulario
 import com.jvillada.movi.server.correo.alertaMailgunJson
 import com.jvillada.movi.server.correo.alertaPostmark
 import com.jvillada.movi.server.correo.tokenDeCorreoDe
+import com.jvillada.movi.server.db.CorreosDescartados
 import com.jvillada.movi.server.db.PushSubscriptions
 import com.jvillada.movi.server.db.SmsMessages
 import com.jvillada.movi.server.db.Users
@@ -74,9 +75,9 @@ class CorreoEntranteRoutesTest {
             driver = "org.h2.Driver",
         )
         transaction {
-            SchemaUtils.create(Users, SmsMessages, PushSubscriptions)
-            SchemaUtils.drop(SmsMessages, PushSubscriptions, Users)
-            SchemaUtils.create(Users, SmsMessages, PushSubscriptions)
+            SchemaUtils.create(Users, SmsMessages, PushSubscriptions, CorreosDescartados)
+            SchemaUtils.drop(CorreosDescartados, SmsMessages, PushSubscriptions, Users)
+            SchemaUtils.create(Users, SmsMessages, PushSubscriptions, CorreosDescartados)
             Users.insert {
                 it[id] = userAId
                 it[email] = "a@correo.test"

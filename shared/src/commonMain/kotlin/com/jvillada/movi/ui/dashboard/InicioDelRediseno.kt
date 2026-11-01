@@ -5,6 +5,7 @@ import com.jvillada.movi.shared.model.candidatosParecidos
 import com.jvillada.movi.ui.accounts.tipoSiElNombreNoLoDice
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.Apartado
+import com.jvillada.movi.shared.model.dondeDeLoEsperado
 import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.shared.model.AccountType
@@ -18,6 +19,7 @@ import com.jvillada.movi.shared.time.epochMillisToAppDate
 import kotlinx.datetime.Clock
 import com.jvillada.movi.shared.model.rangoDelPeriodo
 import com.jvillada.movi.ui.Screen
+import com.jvillada.movi.shared.model.porcentajeDePresupuesto
 import com.jvillada.movi.ui.components.ANCHO_DE_LECTURA
 import com.jvillada.movi.ui.components.WindowWidthClass
 import androidx.compose.ui.unit.Dp
@@ -309,7 +311,7 @@ fun yNMas(n: Int): String? = if (n > 0) "y $n más" else null
 const val TOPE_DE_PROPUESTAS: Int = 4
 
 /** De qué es una propuesta. Una tarjeta por tipo: varias cosas del mismo tipo se dicen en una. */
-enum class TipoDePropuesta { PAGO, DEBITO, CUADRE, ANOMALIA, CIERRE }
+enum class TipoDePropuesta { PAGO, DEBITO, CUADRE, PRESUPUESTO, ANOMALIA, CIERRE }
 
 /** Lo que hace tocar un botón de una propuesta. */
 sealed interface AccionDeLaPropuesta {
@@ -401,6 +403,7 @@ fun propuestasDelInicio(data: DashboardData, conElPago: Boolean = true): List<Pr
     if (conElPago) propuestaDePago(data)?.let(::add)
     propuestaDeDebitos(data)?.let(::add)
     propuestaDeCuadre(data)?.let(::add)
+    propuestaDePresupuesto(data)?.let(::add)
     propuestaDeAnomalia(data)?.let(::add)
     propuestaDeCierre(data)?.let(::add)
 }.sortedBy { it.rango }
@@ -464,7 +467,7 @@ private fun propuestaDeDebitos(data: DashboardData): PropuestaDelInicio? {
         titulo = titulo,
         cifra = uno?.monto,
         moneda = uno?.moneda ?: "COP",
-        cuerpo = uno?.let { "desde ${it.cuentaNombre}" },
+        cuerpo = uno?.let(::dondeDeLoEsperado),
         accion = "Confirmar",
         alTocar = AccionDeLaPropuesta.Ir(Screen.PorRevisar),
         urgente = true,
@@ -576,8 +579,51 @@ private fun propuestaDeCuadre(data: DashboardData): PropuestaDelInicio? {
     )
 }
 
+/**
+ * **Un presupuesto que se pasó** (vuelta 87): «Restaurantes va al 167 % de su presupuesto». La revisión 9
+ * vio a Restaurantes en 167 % y nada en «Movi propone hoy»: solo lo decían la campana y Presupuestos.
+ * **La regla es la que ya usa Presupuestos y la campana**, sin umbrales nuevos: [overBudgetCategories] →
+ * `estadoDePresupuesto(...).estaSuperado` (gastó más que el límite). Una tarjeta por todos: la categoría que
+ * más se pasó y «y N presupuestos más». La cifra es lo que se pasó, en pesos; «Ver presupuestos» lleva a la
+ * lista. Es un aviso, no una decisión: no escribe nada.
+ */
+private fun propuestaDePresupuesto(data: DashboardData): PropuestaDelInicio? {
+    val gastado = data.spentByCategory ?: return null
+    val superados = (data.budgets ?: return null)
+        .filter { it.category in overBudgetCategories(data.budgets, gastado) }
+        .map { it to (gastado[it.category] ?: 0L) }
+    val peor = superados.maxByOrNull { (b, g) -> g - b.monthlyLimit } ?: return null
+    val (presupuesto, lo) = peor
+    val otros = superados.size - 1
+    val porcentaje = porcentajeDePresupuesto(lo, presupuesto.monthlyLimit)
+    return PropuestaDelInicio(
+        tipo = TipoDePropuesta.PRESUPUESTO,
+        titulo = "${presupuesto.category} va al $porcentaje\u00A0% de su presupuesto",
+        cifra = lo - presupuesto.monthlyLimit,
+        cuerpo = when {
+            otros == 1 -> "de más · y 1 presupuesto más"
+            otros > 1 -> "de más · y $otros presupuestos más"
+            else -> "de más sobre su límite"
+        },
+        accion = "Ver presupuestos",
+        alTocar = AccionDeLaPropuesta.Ir(Screen.Budgets),
+        rango = 5,
+        cuantas = superados.size,
+    )
+}
+
+/**
+ * La categoría de una anomalía «va muy por encima de lo normal» (su huella es `categoria:<nombre>:<período>`),
+ * o `null` si no es de ese tipo. Pura.
+ */
+internal fun categoriaDeLaAnomalia(a: com.jvillada.movi.shared.model.Anomalia): String? =
+    if (a.tipo == TipoDeAnomalia.CATEGORIA_POR_ENCIMA) a.huella.removePrefix("categoria:").substringBeforeLast(':') else null
+
 private fun propuestaDeAnomalia(data: DashboardData): PropuestaDelInicio? {
-    val anomalias = anomaliasVisiblesDe(data)
+    // Vuelta 87: una categoría que ya sale por **presupuesto pasado** (su propia tarjeta) no sale otra vez como
+    // «va muy por encima de lo normal»: dos tarjetas, la misma plata.
+    val porPresupuesto = overBudgetCategories(data.budgets, data.spentByCategory).toSet()
+    val anomalias = anomaliasVisiblesDe(data).filter { categoriaDeLaAnomalia(it) !in porPresupuesto }
     // Vuelta 60: un recurrente que cambió de categoría va primero: es lo único que se resuelve con un
     // toque, y mientras siga, otras pantallas cuentan mal (Presupuestos, «En qué se va»).
     val cambio = anomalias.firstOrNull { it.cambioDeCategoria != null }

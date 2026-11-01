@@ -303,6 +303,9 @@ fun marcaDeOrigenDelCorreo(nombre: String, remitente: String): String {
  * («Compra aprobada» / «por $21.640 en …»). Si el cuerpo ya arranca con el asunto no se repite —
  * eso solo le daría al dedupe por texto una cadena distinta para el mismo hecho.
  *
+ * Si pasa del tope y el monto quedaría afuera, se guarda el bloque del monto (vuelta 90, ver
+ * [conElBloqueDelMonto]).
+ *
  * **No se toca el parser.** Una alerta por correo es más verbosa que un SMS y a veces no va a
  * parsear: esa fila igual entra a la bandeja como «por confirmar» sin propuesta, exactamente igual
  * que un SMS que no parsea, y él la confirma a mano. Perder el aviso sería peor.
@@ -316,7 +319,34 @@ fun textoDelCorreo(asunto: String, cuerpo: String): String {
         c.startsWith(a, ignoreCase = true) -> c
         else -> "$a: $c"
     }
-    return junto.take(MAX_TEXTO_DE_CORREO)
+    if (junto.length <= MAX_TEXTO_DE_CORREO) return junto
+    return conElBloqueDelMonto(a, junto)
+}
+
+/** El primer monto de un correo: «$», «COP» o «USD» pegado (o casi) a una cifra. */
+private val montoEnElCorreo = Regex("""(?i)(\$|\bcop|\busd)\s?[0-9]""")
+
+/** Lo que se conserva antes del monto: el verbo («Compraste», «Recibiste») y el comercio. */
+private const val CONTEXTO_ANTES_DEL_MONTO = 300
+
+/** Lo que el monto y su cola necesitan para no quedar cortados («$1.234.567,89 en …»). */
+private const val ESPACIO_PARA_EL_MONTO = 60
+
+/**
+ * **Vuelta 90 · el monto de una alerta larga no se corta.** El tope de [MAX_TEXTO_DE_CORREO] se queda
+ * (el texto es la clave del dedupe, y una alerta corta se guarda igual que siempre), pero si el primer
+ * monto del correo caía después del corte —un reenvío a mano con cabeceras, un HTML con el pie legal
+ * arriba—, se guarda el asunto y **el bloque alrededor de ese monto**, en vez de las primeras mil letras
+ * de relleno: «Alerta de compra: … Compraste $86.900 en …». Sin ningún monto, el corte de siempre.
+ */
+private fun conElBloqueDelMonto(asunto: String, junto: String): String {
+    val monto = montoEnElCorreo.find(junto) ?: return junto.take(MAX_TEXTO_DE_CORREO)
+    if (monto.range.first + ESPACIO_PARA_EL_MONTO <= MAX_TEXTO_DE_CORREO) return junto.take(MAX_TEXTO_DE_CORREO)
+    val cabeza = if (asunto.isEmpty()) "" else asunto.take(200) + ": "
+    val desde = maxOf(monto.range.first - CONTEXTO_ANTES_DEL_MONTO, cabeza.length)
+    // Desde el principio de una palabra, para no empezar con media.
+    val inicio = junto.lastIndexOf(' ', desde).let { if (it in cabeza.length until monto.range.first) it + 1 else desde }
+    return (cabeza + "… " + junto.substring(inicio)).take(MAX_TEXTO_DE_CORREO)
 }
 
 /** Una línea que abre una respuesta citada. Cortar acá tira la cita y deja lo que se escribió. */

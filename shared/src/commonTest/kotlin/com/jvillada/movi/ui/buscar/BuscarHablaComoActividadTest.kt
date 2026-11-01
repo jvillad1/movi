@@ -53,10 +53,10 @@ class BuscarHablaComoActividadTest {
     @Test
     fun `el subtitulo no repite la categoria si ya es el titulo`() {
         val mercado = ev("m", "Mercado", 20_000, 1_500_000L)
-        // Revisión de la 83: con la cuenta (porque no es la habitual), ella primero y la fecha corta.
-        assertEquals("Nu · 27 oct", subtituloDeUnMovimientoEnBuscar(mercado, "Nu", "27 de octubre", "27 oct"))
-        assertEquals("Nu · Mercado · 27 oct", subtituloDeUnMovimientoEnBuscar(datos.eventos.first(), "Nu", "27 de octubre", "27 oct"))
+        // Vuelta 87: con la cuenta (porque no es la habitual), al final como en Actividad.
+        assertEquals("27 oct · Nu", subtituloDeUnMovimientoEnBuscar(mercado, "Nu", "27 oct"))
+        assertEquals("Mercado · 27 oct · Nu", subtituloDeUnMovimientoEnBuscar(datos.eventos.first(), "Nu", "27 oct"))
         // En la habitual (sin cuenta), la fecha entera.
-        assertEquals("Mercado · 27 de octubre", subtituloDeUnMovimientoEnBuscar(datos.eventos.first(), null, "27 de octubre", "27 oct"))
+        assertEquals("Mercado · 27 oct", subtituloDeUnMovimientoEnBuscar(datos.eventos.first(), null, "27 oct"))
     }
 }

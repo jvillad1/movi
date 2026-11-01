@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -24,6 +25,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.semantics.SemanticsPropertyReceiver
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.text
+import androidx.compose.ui.text.AnnotatedString
+import com.jvillada.movi.ui.components.partirLaColaDelNombreCorto
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import com.jvillada.movi.theme.ColoresDeMovi
@@ -37,6 +42,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 
 /** El ícono chico antes del subtítulo de una [Fila] (vuelta 83: el ↻ de un recurrente). */
 const val TAG_ICONO_DEL_SUBTITULO: String = "ds-fila-icono-del-subtitulo"
+
+/** Vuelta 87: la cabeza y la cola («·4057») de un subtítulo que termina en un nombre corto de cuenta. */
+const val TAG_CABEZA_DEL_SUBTITULO: String = "ds-fila-cabeza-del-subtitulo"
+const val TAG_COLA_DEL_SUBTITULO: String = "ds-fila-cola-del-subtitulo"
 
 /** Cuántos renglones puede ocupar el título de una [Fila] antes de cortarse con «…». */
 const val LINEAS_DEL_TITULO_DE_FILA: Int = 2
@@ -228,13 +237,37 @@ fun Fila(
                         )
                         Spacer(Modifier.width(Espacio.xxs))
                     }
-                    Text(
-                        text = subtitulo,
-                        style = Movi.textos.apoyo,
-                        color = colorDelSubtitulo,
-                        maxLines = lineasDelSubtitulo,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    // Vuelta 87: un subtítulo que termina en «·4057» recorta la cabeza, nunca esa cola.
+                    val partido = if (lineasDelSubtitulo == 1) partirLaColaDelNombreCorto(subtitulo) else null
+                    if (partido == null) {
+                        Text(
+                            text = subtitulo,
+                            style = Movi.textos.apoyo,
+                            color = colorDelSubtitulo,
+                            maxLines = lineasDelSubtitulo,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    } else {
+                        // El lector (y una prueba) ve el subtítulo entero, no dos pedazos.
+                        Row(modifier = Modifier.clearAndSetSemantics { text = AnnotatedString(subtitulo) }) {
+                            Text(
+                                text = partido.cabeza,
+                                style = Movi.textos.apoyo,
+                                color = colorDelSubtitulo,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false).testTag(TAG_CABEZA_DEL_SUBTITULO),
+                            )
+                            Text(
+                                text = " ${partido.cola}",
+                                style = Movi.textos.apoyo,
+                                color = colorDelSubtitulo,
+                                maxLines = 1,
+                                softWrap = false,
+                                modifier = Modifier.testTag(TAG_COLA_DEL_SUBTITULO),
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -333,11 +366,14 @@ fun IconoEnCirculo(
 /** El `testTag` de un [Chevron] (vuelta 80: para vigilar que toda fila tocable lo lleve). */
 const val TAG_CHEVRON: String = "ds:chevron"
 
-/** **La flecha de «esto se abre»**, al final de una [Fila]. [Icono.m], en texto apagado. */
+/**
+ * **La flecha de «esto se abre»**, al final de una [Fila]. [Icono.m], en texto apagado. Con [abierto]
+ * (lo que abre ya está a la vista: «Tu salario» con su campo) mira hacia abajo (vuelta 87).
+ */
 @Composable
-fun Chevron(modifier: Modifier = Modifier) {
+fun Chevron(modifier: Modifier = Modifier, abierto: Boolean = false) {
     Icon(
-        Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+        if (abierto) Icons.Rounded.KeyboardArrowDown else Icons.AutoMirrored.Rounded.KeyboardArrowRight,
         contentDescription = null,
         tint = Movi.colores.textoApagado,
         modifier = modifier.size(Icono.m).testTag(TAG_CHEVRON),

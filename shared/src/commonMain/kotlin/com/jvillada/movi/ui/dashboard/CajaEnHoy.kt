@@ -98,8 +98,22 @@ fun renglonMeAlcanza(caja: CajaProyectada, hoy: LocalDate, ultimoDiaDelPeriodo: 
         caja.hastaElPeriodoSiguiente -> TE_ALCANZA_HASTA_EL_FIN_DEL_PERIODO
         else -> TE_ALCANZA_30_DIAS
     }
+    // Vuelta 87 · el primer día: sin ningún pago ni ingreso por venir y sin gasto estimado, la caja es plana
+    // y «tu día más justo, hoy» no dice nada (la revisión 9 lo vio en una cuenta recién creada). Se dice lo
+    // que es cierto: no hay pagos pendientes.
+    if (caja.nadaPendiente && cuando == "hoy") return RenglonMeAlcanza(hasta, SIN_PAGOS_PENDIENTES, enRojo = false)
     return RenglonMeAlcanza(hasta, "tu día más justo, $cuando", enRojo = false)
 }
+
+/** Vuelta 87: lo que dice el renglón «¿Me alcanza?» cuando la caja no tiene nada por venir. */
+const val SIN_PAGOS_PENDIENTES: String = "sin pagos pendientes"
+
+/**
+ * ¿La caja no tiene **nada por venir**? Ningún día lleva un pago o un ingreso, nada quedó sin contar y no
+ * hay gasto del día a día estimado: lo libre de hoy es lo libre de todos los días. Pura.
+ */
+val CajaProyectada.nadaPendiente: Boolean
+    get() = sinContar.isEmpty() && (gastoDiario ?: 0L) == 0L && dias.all { it.movimientos.isEmpty() }
 
 /**
  * El renglón con lo que el Inicio tiene, o `null` si la caja no se puede calcular (sin período, sin la

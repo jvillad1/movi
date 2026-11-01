@@ -98,7 +98,7 @@ class BuscarCuentaComoEnQueSeVaTest {
         val fila = grupos.single { it.tipo == TipoDeResultado.MOVIMIENTO }.resultados.single() as ResultadoDeBusqueda.Movimiento
         assertEquals("Mercado del sábado", fila.titulo)
         assertEquals(120_000L, montoPrincipalDelMovimiento(fila.evento))
-        assertEquals("Mercado · 25 de octubre", subtituloDeTuParteEnBuscar(fila.evento, "25 de octubre"))
+        assertEquals("Mercado · 25 oct", subtituloDeTuParteEnBuscar(fila.evento, "25 oct"))
         // Revisión de la 78: debajo de tu parte, de cuánto fue el gasto del grupo y quién lo pagó.
         assertEquals("de \$240.000 · pagó Caro", debajoDeTuParteEnBuscar(fila.evento, casa))
         assertEquals("Tu parte · pagó Caro", debajoDeTuParteEnBuscar(fila.evento.copy(montoDelGrupo = null), casa))
