@@ -10,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.test.core.app.ApplicationProvider
+import com.jvillada.movi.notificaciones.AlmacenDeNotificaciones
 import com.jvillada.movi.theme.MoviTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -101,5 +102,42 @@ class AccesoANotificacionesEnLaSeccionTest {
         // qué llegó. Sin ninguna notificación todavía, eso es «ninguna aún».
         assertTrue("Falta el hecho observado", cuantos("Última notificación capturada") > 0)
         assertTrue("Debería decir que todavía no llegó ninguna", cuantos("ninguna aún") > 0)
+    }
+
+    // ── Vuelta 92 · ¿está vivo? ──────────────────────────────────────────────
+
+    @Test
+    fun `concedido pero desconectado lo dice y ofrece Reconectar`() {
+        concederAcceso()
+        montar()
+
+        assertTrue("Falta decir que está desconectada", cuantos("Desconectada ·") > 0)
+        assertTrue("Falta el botón que lleva al ajuste del sistema", cuantos("Reconectar") > 0)
+    }
+
+    @Test
+    fun `concedido y conectado dice Conectada y no ofrece Reconectar`() {
+        concederAcceso()
+        AlmacenDeNotificaciones.marcarConectada(contexto)
+        AlmacenDeNotificaciones.marcarLlegoDelBanco(contexto, System.currentTimeMillis() - 2 * 60 * 60 * 1000L)
+        montar()
+
+        assertTrue("Falta el estado conectado", cuantos("Conectada · última notificación del banco hace 2 horas") > 0)
+        assertEquals("Ofrece reconectar algo que está conectado", 0, cuantos("Reconectar"))
+    }
+
+    @Test
+    fun `con una captura que cuidar se ofrece quitar el ahorro de bateria, con su porque`() {
+        concederAcceso()
+        montar()
+
+        assertTrue("Falta el botón de la exención", cuantos("Quitar el ahorro de batería") > 0)
+        assertTrue("Falta la línea que dice por qué", cuantos("Android puede apagar la captura del banco sin avisar") > 0)
+    }
+
+    @Test
+    fun `sin ninguna captura no se ofrece el ahorro de bateria`() {
+        montar()
+        assertEquals(0, cuantos("Quitar el ahorro de batería"))
     }
 }

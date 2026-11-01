@@ -8,6 +8,10 @@
          pide en tiempo de ejecución, y Movi lo pide EN CONTEXTO (una tarjeta de Hoy, o Ajustes →
          Captura del banco), nunca al abrir la app en frío. Antes de 13 viene concedido. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Vuelta 92: el diálogo «¿Permitir que Movi se ejecute en segundo plano?» de Captura del banco.
+         Lo abre SOLO un botón de esa sección, con una línea que dice por qué: con el ahorro de
+         batería, Android desenchufa la lectura de las notificaciones del banco sin avisar. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <!-- READ_SMS implies telephony hardware; mark it optional so the app stays
          installable on ChromeOS/tablets without telephony (SMS reader is a no-op there). -->
