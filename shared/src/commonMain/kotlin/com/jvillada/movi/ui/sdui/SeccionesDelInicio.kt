@@ -48,7 +48,6 @@ import androidx.compose.material.icons.rounded.Savings
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -115,7 +114,6 @@ import com.jvillada.movi.ui.dashboard.descripcionDeLaInsignia
 import com.jvillada.movi.ui.dashboard.filasDelWidgetDeFalta
 import com.jvillada.movi.ui.dashboard.yNMas
 import com.jvillada.movi.shared.model.cifraDelPago
-import kotlinx.coroutines.launch
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -279,28 +277,21 @@ internal fun PropuestasDelInicioSection(
     val todas = propuestasDelInicio(data, conElPago)
     val aLaVista = propuestasALaVista(todas)
     val cargando = LocalCargandoElInicio.current
-    val alcance = rememberCoroutineScope()
     val hacer: (AccionDeLaPropuesta) -> Unit = { accion ->
         when (accion) {
             is AccionDeLaPropuesta.Ir -> onNavigate(accion.pantalla)
             is AccionDeLaPropuesta.DescartarCierre -> onDescartarCierre(accion.periodo)
-            is AccionDeLaPropuesta.DescartarAnomalia -> {
-                // «Está bien»: se va en el mismo toque; si el server no lo guarda, vuelve.
-                AnomaliasDescartadasEnLaSesion.descartar(accion.huella)
-                alcance.launch {
-                    runCatching { Repositories.wallets.descartarAnomalia(accion.huella) }
-                        .onFailure { AnomaliasDescartadasEnLaSesion.deshacer(accion.huella) }
+            // «Está bien»: se va en el mismo toque; si el server no lo guarda, vuelve. Vuelta 89: el pedido
+            // no va en un alcance de esta sección, que se va con la última tarjeta (ver `descartarYGuardar`).
+            is AccionDeLaPropuesta.DescartarAnomalia ->
+                AnomaliasDescartadasEnLaSesion.descartarYGuardar(accion.huella) {
+                    Repositories.wallets.descartarAnomalia(accion.huella)
                 }
-            }
-            is AccionDeLaPropuesta.CambiarLaCategoria -> {
-                // Vuelta 60: «Sí, cambiar». Se va en el mismo toque; si no se pudo, vuelve.
-                val huella = accion.cambio.huella
-                AnomaliasDescartadasEnLaSesion.descartar(huella)
-                alcance.launch {
-                    runCatching { aceptarElCambioDeCategoria(Repositories.wallets, accion.cambio) }
-                        .onFailure { AnomaliasDescartadasEnLaSesion.deshacer(huella) }
+            // Vuelta 60: «Sí, cambiar». Se va en el mismo toque; si no se pudo, vuelve.
+            is AccionDeLaPropuesta.CambiarLaCategoria ->
+                AnomaliasDescartadasEnLaSesion.descartarYGuardar(accion.cambio.huella) {
+                    aceptarElCambioDeCategoria(Repositories.wallets, accion.cambio)
                 }
-            }
         }
     }
     Column(
