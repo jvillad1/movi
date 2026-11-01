@@ -45,6 +45,7 @@ object Avisador {
     const val CANAL_CIERRE = "cierre"
     const val CANAL_RESUMEN_DE_LA_MANANA = "resumen_de_la_manana"
     const val CANAL_RESUMEN_SEMANAL = "resumen_semanal"
+    const val CANAL_EXTRACTO = "extracto_por_subir"
 
     /** Un id fijo por tipo: la notificación de «Por revisar» se reemplaza, no se apila. */
     private const val ID_MOVIMIENTOS = 7101
@@ -55,6 +56,7 @@ object Avisador {
     private const val ID_SESION_CERRADA = 7106
     private const val ID_RESUMEN_DE_LA_MANANA = 7107
     private const val ID_RESUMEN_SEMANAL = 7108
+    private const val ID_EXTRACTO = 7109
 
     /** Vuelta 92 · «Movi dejó de leer las notificaciones del banco» (y su botón «Activar»). */
     private const val ID_ACCESO_REVOCADO = 7120
@@ -111,6 +113,12 @@ object Avisador {
         gestor.createNotificationChannel(
             NotificationChannel(CANAL_RESUMEN_SEMANAL, "Resumen semanal", NotificationManager.IMPORTANCE_DEFAULT).apply {
                 description = "El domingo en la noche, cuánto gastaron juntos en tus grupos y cómo quedan las cuentas."
+            },
+        )
+        // Vuelta 94.
+        gestor.createNotificationChannel(
+            NotificationChannel(CANAL_EXTRACTO, "Extractos por subir", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = "Unos días después del corte de una tarjeta, si todavía no subiste su extracto."
             },
         )
     }
@@ -289,6 +297,11 @@ object Avisador {
     /** «Cerró tu período de septiembre»: tocarlo abre el detalle de ese período. */
     fun avisarCierre(context: Context, periodo: String, texto: TextoDeAviso) {
         publicar(context, ID_CIERRE, CANAL_CIERRE, texto, abrirElPeriodo(periodo), cuantos = 1)
+    }
+
+    /** Vuelta 94: el extracto de una tarjeta que falta subir. Tocarlo abre el Inicio, donde se sube. */
+    fun avisarExtracto(context: Context, texto: TextoDeAviso) {
+        publicar(context, ID_EXTRACTO, CANAL_EXTRACTO, texto, ABRIR_INICIO, cuantos = maxOf(1, texto.lineas.size))
     }
 
     /** Vuelta 68 · el resumen de la mañana: tocarlo abre el Inicio. */

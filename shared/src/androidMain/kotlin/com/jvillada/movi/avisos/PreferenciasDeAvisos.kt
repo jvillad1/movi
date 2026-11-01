@@ -38,6 +38,8 @@ object PreferenciasDeAvisos {
     private const val KEY_MANANA_AVISADO = "resumen_de_la_manana_avisado"
     private const val KEY_SEMANAL = "avisar_resumen_semanal"
     private const val KEY_SEMANAL_AVISADO = "resumen_semanal_avisado"
+    private const val KEY_EXTRACTO = "avisar_extracto_por_subir"
+    private const val KEY_EXTRACTOS_AVISADOS = "extractos_por_subir_avisados"
 
     private val json = Json { ignoreUnknownKeys = true }
     private val listaDeAvisos = ListSerializer(AvisoPorRevisar.serializer())
@@ -124,6 +126,25 @@ object PreferenciasDeAvisos {
     fun resumenSemanalAvisado(context: Context): String? = prefs(context).getString(KEY_SEMANAL_AVISADO, null)
     fun guardarResumenSemanalAvisado(context: Context, huella: String) {
         prefs(context).edit().putString(KEY_SEMANAL_AVISADO, huella).apply()
+    }
+
+    /** Vuelta 94 · «Avisarme cuando falte el extracto de una tarjeta». Encendido por defecto, como los otros. */
+    fun avisarExtracto(context: Context): Boolean = prefs(context).getBoolean(KEY_EXTRACTO, true)
+    fun ponerAvisarExtracto(context: Context, valor: Boolean) {
+        prefs(context).edit().putBoolean(KEY_EXTRACTO, valor).apply()
+    }
+
+    /**
+     * Las huellas (tarjeta y corte) de los extractos que este teléfono ya pidió, de la más vieja a la más
+     * nueva (ver `extractosParaAvisar` y `recordarExtractosAvisados`).
+     */
+    fun extractosAvisados(context: Context): List<String> =
+        prefs(context).getString(KEY_EXTRACTOS_AVISADOS, null)
+            ?.split('\n')?.filter { it.isNotBlank() }
+            .orEmpty()
+
+    fun guardarExtractosAvisados(context: Context, huellas: List<String>) {
+        prefs(context).edit().putString(KEY_EXTRACTOS_AVISADOS, huellas.joinToString("\n")).apply()
     }
 
     /** La tarjeta de Hoy ya se contestó («Activar avisos» o «Ahora no»): no vuelve a salir. */

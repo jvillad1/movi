@@ -95,6 +95,7 @@ fun Application.configureRouting() {
             anomaliasRoutes()
             cuadrePorAvisoRoutes()
             debitosAutomaticosRoutes()
+            extractosPorSubirRoutes()
             periodosRoutes()
             cierreDelPeriodoRoutes()
             creditRoutes()

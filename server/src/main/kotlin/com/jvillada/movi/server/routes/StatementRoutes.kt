@@ -25,6 +25,7 @@ import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.db.toFinancialEvent
 import com.jvillada.movi.server.ai.FallaDeLaIa
 import com.jvillada.movi.server.ai.conLaIa
+import com.jvillada.movi.server.parsing.leerElExtractoDeNu
 import com.jvillada.movi.server.parsing.leerLosMovimientosDeBancolombia
 import com.jvillada.movi.server.parsing.ClaudeStatementParser
 import com.jvillada.movi.server.parsing.LectorDePapeles
@@ -376,6 +377,17 @@ internal suspend fun leerElExtracto(
                 esFamirios = false,
                 numerosDeCuenta = (listOfNotNull(movimientos.numero) +
                     StatementParser.numerosDeCuenta(fileName, text)).distinct(),
+            )
+        }
+        // **El extracto de la tarjeta de Nu** (vuelta 94) también se lee sin IA: las compras y los pagos
+        // del período facturado, los intereses y la comisión por cambio de moneda, solo si todo suma el
+        // pago mínimo del extracto. Ver `leerElExtractoDeNu`.
+        leerElExtractoDeNu(text)?.let { nu ->
+            return ExtractoLeido(
+                bankName = "Nu",
+                filas = nu.filas,
+                esFamirios = false,
+                numerosDeCuenta = (nu.numeros + StatementParser.numerosDeCuenta(fileName, text)).distinct(),
             )
         }
         val docType = StatementParser.detectDocumentType(text)

@@ -233,6 +233,12 @@ data class DashboardData(
      */
     val cierre: com.jvillada.movi.shared.model.CierreDelPeriodo? = null,
     /**
+     * Vuelta 94 · **los extractos que faltan** (`GET /api/extractos-por-subir`): «¿Ya bajaste el
+     * extracto de Nu de octubre?». Se pide aparte, como el cierre, y tampoco va en la instantánea: se
+     * descarta en otro aparato. `null` = no llegó, y no se dice nada.
+     */
+    val extractosPorSubir: List<com.jvillada.movi.shared.model.ExtractoPorSubir>? = null,
+    /**
      * El saldo que dijo un aviso del banco y no coincide con Movi (`GET /api/cuadres-por-aviso`). Se
      * pide aparte, como los débitos automáticos. `null` = no llegó, y no se dice nada.
      */

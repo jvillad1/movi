@@ -56,6 +56,7 @@ import com.jvillada.movi.ui.mas.AvisosDeEsteTelefono
 import com.jvillada.movi.ui.mas.TAG_AVISO_DEL_TELEFONO
 import com.jvillada.movi.ui.mas.TEXTO_INTERRUPTOR_RESUMEN_DE_LA_MANANA
 import com.jvillada.movi.ui.mas.TEXTO_INTERRUPTOR_RESUMEN_SEMANAL
+import com.jvillada.movi.ui.mas.TEXTO_INTERRUPTOR_EXTRACTO
 import com.jvillada.movi.ui.sdui.SduiRenderer
 import com.jvillada.movi.ui.sdui.TAG_FRANJA_POR_CONFIRMAR
 import com.jvillada.movi.ui.sdui.TAG_PROXIMO_PAGO
@@ -258,8 +259,10 @@ class Vuelta73EnPantallaTest {
             "Avisarme cuando llegue un movimiento", "Avisarme antes de que venza un pago", "Avisarme si mi banco deja de avisar",
             "Avisarme el día de un débito automático", "Avisarme cuando cierre mi período",
             TEXTO_INTERRUPTOR_RESUMEN_DE_LA_MANANA, TEXTO_INTERRUPTOR_RESUMEN_SEMANAL,
+            // Vuelta 94.
+            TEXTO_INTERRUPTOR_EXTRACTO,
         ).forEach { assertTrue(hay(it), "falta «$it»") }
-        assertEquals(7, conTag(TAG_AVISO_DEL_TELEFONO).size)
+        assertEquals(8, conTag(TAG_AVISO_DEL_TELEFONO).size)
     }
 
     @Test

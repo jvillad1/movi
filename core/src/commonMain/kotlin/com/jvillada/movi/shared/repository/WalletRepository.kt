@@ -386,6 +386,12 @@ interface WalletRepository {
     /** `POST /api/cierre-del-periodo/descartar`: la tarjeta de [periodo] no vuelve a salir en Hoy. */
     suspend fun descartarCierre(periodo: String) {}
     /**
+     * Vuelta 94 · `GET /api/extractos-por-subir`: las tarjetas cuyo corte pasó hace unos días sin que se
+     * subiera su extracto («¿Ya bajaste el extracto de Nu de octubre?»). Solo lee; «Ya no» es
+     * [descartarAnomalia] con la huella de la propuesta. Default vacío para los dobles de prueba.
+     */
+    suspend fun getExtractosPorSubir(): List<com.jvillada.movi.shared.model.ExtractoPorSubir> = emptyList()
+    /**
      * `GET /api/cuadres-por-aviso`: el saldo que dijo un aviso confirmado contra el que dice Movi en
      * ese instante, cuando no coinciden. Una propuesta por cuenta como mucho. Default vacío para los
      * dobles de prueba.

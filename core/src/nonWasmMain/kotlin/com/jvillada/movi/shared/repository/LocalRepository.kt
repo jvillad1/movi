@@ -2216,6 +2216,7 @@ class LocalRepository(
     override suspend fun descartarAnomalia(huella: String) = remote.descartarAnomalia(huella)
     // El resumen de cierre lo arma el server con toda la historia; sin red no hay tarjeta.
     override suspend fun getCierreDelPeriodo(): com.jvillada.movi.shared.model.CierreDelPeriodo? = remote.getCierreDelPeriodo()
+    override suspend fun getExtractosPorSubir(): List<com.jvillada.movi.shared.model.ExtractoPorSubir> = remote.getExtractosPorSubir()
     override suspend fun descartarCierre(periodo: String) = remote.descartarCierre(periodo)
     // El saldo del aviso contra el de Movi: se deriva en el server en cada lectura, sin nada que
     // espejar. «Ajustar» sí escribe un movimiento, y ese se espeja como el de cualquier cuadre.
