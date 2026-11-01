@@ -45,6 +45,7 @@ import com.jvillada.movi.ui.components.ds.TAG_CIFRA_DEL_AVISO
 import com.jvillada.movi.ui.components.ds.TAG_COLA_DEL_SUBTITULO
 import com.jvillada.movi.ui.components.ds.TAG_DESHACER_DEL_AVISO
 import com.jvillada.movi.ui.components.ds.TAG_RESTO_DEL_AVISO
+import com.jvillada.movi.ui.components.ds.TAG_TEXTO_DEL_AVISO
 import com.jvillada.movi.ui.components.ds.TAG_CABEZA_DEL_SUBTITULO
 import com.jvillada.movi.ui.dashboard.CONTRA_EL_PERIODO_PASADO
 import com.jvillada.movi.ui.dashboard.DashboardData
@@ -144,6 +145,15 @@ class Vuelta87EnPantallaTest {
         montarFila(letra = 1f)
         laColaSeVeEntera()
         assertFalse(disposicion(conTag(TAG_CABEZA_DEL_SUBTITULO).single()).isLineEllipsized(0))
+    }
+
+    @Test
+    @Config(qualifiers = "w360dp-h800dp-xhdpi")
+    fun `a 360 la fila de Buscar con la cuenta al final recorta la cabeza y no los digitos`() {
+        montarFila(letra = 1.3f, subtitulo = "Transporte · 27 oct · Bancolombia ·4057")
+        laColaSeVeEntera()
+        assertTrue(disposicion(conTag(TAG_CABEZA_DEL_SUBTITULO).single()).isLineEllipsized(0))
+        assertTrue(hay("Transporte · 27 oct · Bancolombia ·4057"))
     }
 
     @Test
@@ -249,6 +259,10 @@ class Vuelta87EnPantallaTest {
             assertTrue(b.width > 0f && b.left >= aviso.left && b.right <= aviso.right, "$tag dentro del aviso")
         }
         assertTrue(resto.right <= bordes(TAG_ACCION_DEL_AVISO).left, "el comercio no se mete debajo de las acciones")
+        // El segundo renglón empieza en la palabra: sin «· » y alineado con el principio del aviso.
+        assertTrue(resto.left <= bordes(TAG_TEXTO_DEL_AVISO).left + 1f, "alineado con «Anotado»: $resto")
+        assertFalse(hay("· Juan Valdez Cafe"))
+        assertTrue(hay("Juan Valdez Cafe"))
     }
 
     @Test
@@ -312,7 +326,7 @@ class Vuelta87EnPantallaTest {
         }
         composeRule.waitForIdle()
         assertTrue(conTag(TAG_PROPUESTAS_DEL_INICIO).isNotEmpty())
-        assertTrue(hay("Restaurantes va al 167 % de su presupuesto"))
+        assertTrue(hay("Restaurantes va al 167\u00A0% de su presupuesto"))
         assertTrue(hay("Ver presupuestos"))
     }
 }

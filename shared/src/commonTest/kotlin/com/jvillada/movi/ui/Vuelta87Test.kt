@@ -2,6 +2,9 @@ package com.jvillada.movi.ui
 
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.Anomalia
+import com.jvillada.movi.shared.model.TipoDeAnomalia
+import com.jvillada.movi.shared.model.porcentajeDePresupuesto
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.Budget
 import com.jvillada.movi.shared.model.CajaProyectada
@@ -29,8 +32,7 @@ import com.jvillada.movi.ui.dashboard.propuestasDelInicio
 import com.jvillada.movi.ui.dashboard.renglonMeAlcanza
 import com.jvillada.movi.ui.primeruso.subtituloDeTuSalario
 import com.jvillada.movi.ui.quickadd.gastosRecientesParaRepetir
-import com.jvillada.movi.ui.quickadd.repartoDeLaVezPasada
-import com.jvillada.movi.ui.quickadd.textoDelRepartoRecordado
+import com.jvillada.movi.ui.quickadd.candidatosAlUltimoPago
 import com.jvillada.movi.ui.sdui.CONTRA_EL_PASADO_MUY_CORTO
 import com.jvillada.movi.ui.sdui.FormaDeLaCategoriaDelWidget
 import com.jvillada.movi.ui.sdui.formaDeLaCategoriaDelWidget
@@ -262,40 +264,27 @@ class Vuelta87Test {
 
     // ── (12) Anotar pago recuerda el reparto ─────────────────────────────────
 
-    private fun arriendo(id: String, ts: Long, espacio: Boolean) = FinancialEvent(
-        id = id, accountId = "nu", type = TransactionType.EXPENSE, amount = 1_800_000, category = "Vivienda",
-        description = "Arriendo", timestamp = ts, createdAt = ts,
+    private val ahora = 100L * 24 * 60 * 60 * 1000
+    private val dia = 24L * 60 * 60 * 1000
+
+    private fun pago(id: String, descripcion: String, ts: Long, monto: Long = 1_800_000, espacio: Boolean = false) = FinancialEvent(
+        id = id, accountId = "nu", type = TransactionType.EXPENSE, amount = monto, category = "Vivienda",
+        description = descripcion, timestamp = ts, createdAt = ts,
         parteAjena = if (espacio) 900_000 else 0, espacioId = if (espacio) casa.id else null,
     )
 
-    private val ahora = 100L * 24 * 60 * 60 * 1000
-    private val haceUnMes = ahora - 30L * 24 * 60 * 60 * 1000
-
     @Test
-    fun `si el ultimo pago de la regla se repartio, se sugiere repartir igual`() {
-        val historia = listOf(arriendo("ago", haceUnMes - 30L * 24 * 60 * 60 * 1000, espacio = true), arriendo("sep", haceUnMes, espacio = true))
-        val recordado = repartoDeLaVezPasada("Arriendo", "Vivienda", historia, listOf(casa))
-        assertNotNull(recordado)
-        assertEquals("esp", recordado.espacio.id)
-        assertEquals("Repartir en Casa con Andrés, como el mes pasado", textoDelRepartoRecordado(recordado, ahora))
-    }
-
-    @Test
-    fun `solo mira el ultimo pago y no sugiere si la vez pasada no se repartio`() {
-        val historia = listOf(arriendo("ago", haceUnMes - 30L * 24 * 60 * 60 * 1000, espacio = true), arriendo("sep", haceUnMes, espacio = false))
-        assertNull(repartoDeLaVezPasada("Arriendo", "Vivienda", historia, listOf(casa)))
-        // Otro nombre, otra categoría o un grupo que ya no existe: nada.
-        val conReparto = listOf(arriendo("sep", haceUnMes, espacio = true))
-        assertNull(repartoDeLaVezPasada("Internet", "Vivienda", conReparto, listOf(casa)))
-        assertNull(repartoDeLaVezPasada("Arriendo", "Servicios", conReparto, listOf(casa)))
-        assertNull(repartoDeLaVezPasada("Arriendo", "Vivienda", conReparto, emptyList()))
-    }
-
-    @Test
-    fun `con mas de mes y medio dice como la ultima vez`() {
-        val viejo = listOf(arriendo("ago", ahora - 70L * 24 * 60 * 60 * 1000, espacio = true))
-        val recordado = repartoDeLaVezPasada("Arriendo", null, viejo, listOf(casa))!!
-        assertEquals("Repartir en Casa con Andrés, como la última vez", textoDelRepartoRecordado(recordado, ahora))
+    fun `los candidatos al ultimo pago se eligen por monto y fecha, nunca por nombre`() {
+        val historia = listOf(
+            pago("viejo", "Arriendo", ahora - 100 * dia),
+            pago("aviso", "Transferencia a Andrés", ahora - 30 * dia),
+            pago("otro-monto", "Arriendo", ahora - 20 * dia, monto = 50_000),
+            pago("reciente", "Arriendo", ahora - 2 * dia, monto = 1_850_000),
+            pago("traspaso", "Arriendo", ahora - 1 * dia).copy(transferId = "t"),
+        )
+        // Más reciente primero; sin el viejo (fuera de 75 días), el de otro monto ni la pata de un traspaso.
+        assertEquals(listOf("reciente", "aviso"), candidatosAlUltimoPago(1_800_000, historia, ahora).map { it.id })
+        assertTrue(candidatosAlUltimoPago(0, historia, ahora).isEmpty())
     }
 
     // ── Menores: un presupuesto pasado se propone ────────────────────────────
@@ -309,7 +298,7 @@ class Vuelta87Test {
             spentByCategory = mapOf("Restaurantes" to 1_002_000L, "Mercado" to 400_000L),
         )
         val propuesta = propuestasDelInicio(datos).single { it.tipo == TipoDePropuesta.PRESUPUESTO }
-        assertEquals("Restaurantes va al 167 % de su presupuesto", propuesta.titulo)
+        assertEquals("Restaurantes va al 167\u00A0% de su presupuesto", propuesta.titulo)
         assertEquals(402_000L, propuesta.cifra, "lo que se pasó")
         assertEquals(AccionDeLaPropuesta.Ir(Screen.Budgets), propuesta.alTocar)
         assertEquals(1, propuesta.cuantas)
@@ -331,5 +320,54 @@ class Vuelta87Test {
         assertTrue(propuesta.titulo.startsWith("Restaurantes"))
         assertEquals(2, propuesta.cuantas)
         assertEquals("de más · y 1 presupuesto más", propuesta.cuerpo)
+    }
+
+    @Test
+    fun `el porcentaje de la propuesta es el de Presupuestos, redondeado hacia arriba al pasarse`() {
+        assertEquals(167, porcentajeDePresupuesto(1_001_000, 600_000), "166,8 % pasado el límite sube a 167")
+        assertEquals(100, porcentajeDePresupuesto(600_000, 600_000))
+        assertEquals(79, porcentajeDePresupuesto(479_999, 600_000), "hasta el límite se trunca")
+        assertEquals(0, porcentajeDePresupuesto(10, 0))
+        val datos = DashboardData(
+            periodoActual = PeriodoFinanciero(2026, 10),
+            ajustesDePeriodo = PeriodSettings(),
+            budgets = listOf(Budget("Restaurantes", 600_000)),
+            spentByCategory = mapOf("Restaurantes" to 1_001_000L),
+        )
+        assertEquals("Restaurantes va al 167\u00A0% de su presupuesto", propuestasDelInicio(datos).single().titulo)
+    }
+
+    private fun porEncima(categoria: String) = Anomalia(
+        huella = "categoria:$categoria:2026-10", tipo = TipoDeAnomalia.CATEGORIA_POR_ENCIMA,
+        titulo = "$categoria va muy por encima de lo normal", detalle = "Llevas \$1.000.000.", evidencia = emptyList(),
+    )
+
+    @Test
+    fun `una categoria que ya sale por presupuesto no sale tambien como por encima de lo normal`() {
+        val datos = DashboardData(
+            periodoActual = PeriodoFinanciero(2026, 10),
+            ajustesDePeriodo = PeriodSettings(),
+            budgets = listOf(Budget("Restaurantes", 600_000)),
+            spentByCategory = mapOf("Restaurantes" to 1_002_000L),
+            anomalias = listOf(porEncima("Restaurantes")),
+        )
+        val tipos = propuestasDelInicio(datos).map { it.tipo }
+        assertEquals(listOf(TipoDePropuesta.PRESUPUESTO), tipos, "una sola tarjeta para la misma plata")
+        // Otra categoría por encima, sin presupuesto pasado: sigue saliendo.
+        val conOtra = datos.copy(anomalias = listOf(porEncima("Restaurantes"), porEncima("Salud")))
+        val propuesta = propuestasDelInicio(conOtra).single { it.tipo == TipoDePropuesta.ANOMALIA }
+        assertTrue(propuesta.titulo.startsWith("Salud"))
+        assertEquals(1, propuesta.cuantas)
+    }
+
+    // ── Buscar: la cuenta al final ───────────────────────────────────────────
+
+    @Test
+    fun `en Buscar la cuenta va al final y su cola queda protegida`() {
+        val e = ev("m", "Uber", 8_000, ts = 15_000)
+        val linea = com.jvillada.movi.ui.buscar.subtituloDeUnMovimientoEnBuscar(e, "Bancolombia ·4057", "27 oct")
+        assertEquals("Transporte · 27 oct · Bancolombia ·4057", linea)
+        assertEquals("·4057", partirLaColaDelNombreCorto(linea)?.cola)
+        assertEquals("Transporte · 27 oct", com.jvillada.movi.ui.buscar.subtituloDeUnMovimientoEnBuscar(e, null, "27 oct"))
     }
 }

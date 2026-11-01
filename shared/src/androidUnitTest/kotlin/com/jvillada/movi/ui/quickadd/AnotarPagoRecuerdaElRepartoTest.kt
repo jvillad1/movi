@@ -18,6 +18,7 @@ import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.AnotarElPagoDeLaOcurrencia
 import com.jvillada.movi.shared.model.Espacio
 import com.jvillada.movi.shared.model.EventDay
+import com.jvillada.movi.shared.model.EventOccurrenceMark
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.GastoDelEspacio
 import com.jvillada.movi.shared.model.MIEMBRO_YO
@@ -58,9 +59,9 @@ class AnotarPagoRecuerdaElRepartoTest {
     private val ahora = Clock.System.now().toEpochMilliseconds()
     private val haceUnMes = ahora - 30L * 24 * 60 * 60 * 1000
 
-    private fun arriendoDeAntes(repartido: Boolean) = FinancialEvent(
-        id = "ev_ago", accountId = bancolombia.id, type = TransactionType.EXPENSE, amount = 1_800_000, category = "Otros",
-        description = "Arriendo", timestamp = haceUnMes, createdAt = haceUnMes,
+    private fun arriendoDeAntes(repartido: Boolean, id: String = "ev_ago", descripcion: String = "Arriendo", ts: Long = haceUnMes) = FinancialEvent(
+        id = id, accountId = bancolombia.id, type = TransactionType.EXPENSE, amount = 1_800_000, category = "Otros",
+        description = descripcion, timestamp = ts, createdAt = ts,
         parteAjena = if (repartido) 900_000 else 0, espacioId = if (repartido) casa.id else null,
     )
 
@@ -74,11 +75,17 @@ class AnotarPagoRecuerdaElRepartoTest {
         Repositories.sustitutoDePrueba = null
     }
 
+    /** Los movimientos que el sello de la regla reconoce como su ocurrencia: id del movimiento → id de la regla. */
+    private var marcas: Map<String, String> = mapOf("ev_ago" to "rr-arriendo")
+
     private fun montar(historia: List<FinancialEvent>, falla: Boolean = false) {
         Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
             override suspend fun getAccounts(): List<Account> = listOf(bancolombia)
             override suspend fun getEventsByDay(): List<EventDay> = listOf(EventDay("2026-09-30", 0L, historia))
             override suspend fun getEspacios(): List<Espacio> = listOf(casa)
+            override suspend fun getEventOccurrenceMark(id: String) = marcas[id]?.let {
+                EventOccurrenceMark(ruleId = it, ruleName = "Arriendo", period = "2026-10", validFrom = "2026-10-01", validTo = "2026-10-31")
+            }
             override suspend fun anotarElPagoDeLaOcurrencia(ruleId: String, pedido: AnotarElPagoDeLaOcurrencia): PagoDeLaOcurrenciaAnotado {
                 orden += "pago"
                 pagos += pedido
@@ -175,5 +182,35 @@ class AnotarPagoRecuerdaElRepartoTest {
         composeRule.waitUntil(5_000) { orden.contains("reparto") }
         assertEquals(1, pagos.size, "el pago ya estaba guardado")
         assertTrue(guardo, "la hoja se cierra: lo guardado no se pierde")
+    }
+
+    @Test
+    fun `un pago emparejado con un aviso del banco con otro nombre tambien se recuerda`() {
+        marcas = mapOf("ev_aviso" to "rr-arriendo")
+        montar(listOf(arriendoDeAntes(repartido = true, id = "ev_aviso", descripcion = "Transferencia a Andrés")))
+        composeRule.waitUntil(5_000) { hay("Repartir en Casa con Andrés, como el mes pasado") }
+    }
+
+    @Test
+    fun `sin la marca de la regla no se sugiere, aunque el nombre se parezca`() {
+        // Un movimiento que se llama «Arriendo» y se repartió, pero que el sello no reconoce como de esta regla.
+        marcas = mapOf("ev_ago" to "otra-regla")
+        montar(listOf(arriendoDeAntes(repartido = true)))
+        composeRule.waitForIdle()
+        assertTrue(filaDelReparto().isEmpty())
+    }
+
+    @Test
+    fun `solo cuenta el ultimo pago de la regla, no uno de hace dos meses`() {
+        val haceDosMeses = ahora - 60L * 24 * 60 * 60 * 1000
+        marcas = mapOf("ev_sep" to "rr-arriendo", "ev_jul" to "rr-arriendo")
+        montar(
+            listOf(
+                arriendoDeAntes(repartido = false, id = "ev_sep", ts = haceUnMes),
+                arriendoDeAntes(repartido = true, id = "ev_jul", ts = haceDosMeses),
+            ),
+        )
+        composeRule.waitForIdle()
+        assertTrue(filaDelReparto().isEmpty())
     }
 }

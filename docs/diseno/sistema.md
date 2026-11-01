@@ -4771,6 +4771,27 @@ nuevas**: el reparto recordado solo sugiere, el salario usa la escritura de siem
      el último distinto, y un aviso recién confirmado (Carulla $186.450) le ganaba a Uber, que se repite 30
      veces.
 
+**Revisión independiente de la 87** (`r87-*.png`):
+
+- **El salario escrito ya no se pierde**: la fila «Tu salario» solo toma el día del período **guardado** (o ya
+  elegido en el perfil), que es lo que exige `crearElSalario`; con un día solo tocado en el calendario dice «Elige
+  antes el día de pago» y no deja escribir. Esa fila lleva al paso del período y, al guardarlo, **vuelve a «Lo que
+  pagas cada mes»** (`volverAlPaso`), no sigue a Cuentas. «Saltar este paso» es saltar: el salario escrito en ese
+  paso no se crea (queda el que ya había al llegar). El chevron de la fila mira hacia abajo al abrirse
+  (`Chevron(abierto)`), el separador de «¿Ya te pagaron…?» va sin sangría y el campo se llama «Salario mensual».
+- **Buscar deja la cuenta al final** («Transporte · 27 oct · Bancolombia ·4057»), como Actividad: `Fila` solo
+  protege una cola que termina el subtítulo, y con la cuenta primero a 360 se recortaba justo «·4057» y la fecha.
+- **Un solo porcentaje de presupuesto** (`porcentajeDePresupuesto`, `:core`): Presupuestos y la propuesta de
+  «Movi propone hoy» (166 % contra 167 %). Una categoría que ya sale por presupuesto pasado no sale también como
+  «va muy por encima de lo normal» en las propuestas (`categoriaDeLaAnomalia`).
+- **El último pago de la regla lo dice su marca**, no su nombre (`candidatosAlUltimoPago`, `repartoDeLaVezPasada`):
+  los gastos en pesos de los últimos 75 días de un monto parecido (±25 %) se examinan del más reciente al más
+  viejo (10 como mucho) con `getEventOccurrenceMark`; el primero cuya marca es de la regla es «el último». Un pago
+  emparejado con un aviso («Transferencia a Andrés») cuenta, y «Gas» ya no confunde «Gasolina». Sin marca de la
+  regla, no se sugiere nada.
+- **El aviso de abajo en dos renglones** ya no empieza con «· »: el punto es su propia pieza y el segundo renglón
+  arranca en la palabra, alineado con «Anotado».
+
 Lo vigilan `Vuelta87Test` (commonTest: la cola, las formas del widget, el primer día, los totales de Buscar
 con lo compartido, los recientes por frecuencia, el reparto recordado y el presupuesto pasado),
 `Vuelta87EnPantallaTest` (Robolectric: la cola a 360 con la letra al 130 %, «En qué se va» a 1280, 390 y 360,
