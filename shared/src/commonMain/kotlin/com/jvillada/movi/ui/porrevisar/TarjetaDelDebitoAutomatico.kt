@@ -55,9 +55,15 @@ const val TITULO_DE_LOS_DEBITOS: String = "¿Pasó esto?"
 const val SI_SE_COBRO: String = "Sí, se cobró"
 const val CAMBIAR_MONTO: String = "Cambiar monto"
 const val NO_SE_COBRO: String = "No se cobró"
-/** Vuelta 90 · los botones de un gasto esperado sin la marca de débito (Netflix en la Master). */
+/** Vuelta 90 · los botones de un gasto esperado sin la marca de débito (un recurrente con cuenta). */
 const val SI_SE_PAGO: String = "Sí, se pagó"
 const val NO_SE_PAGO: String = "No se pagó"
+/**
+ * Revisión de la vuelta 90 · **«Ya lo anoté»**: el dueño lo anotó por su lado (otro nombre, otra
+ * cuenta) y Movi no lo reconoció. No anota nada: saca la propuesta de ese período, igual que «No se
+ * pagó» —el mismo `…/descartar`—, para que no quede la tentación de anotarlo otra vez.
+ */
+const val YA_LO_ANOTE: String = "Ya lo anoté"
 /** Vuelta 90 · los de la nómina que no se ve llegar. */
 const val SI_ME_LLEGO: String = "Sí, me llegó"
 const val NO_ME_LLEGO: String = "No me llegó"
@@ -179,6 +185,9 @@ internal fun TarjetaDelDebitoAutomatico(
                 }
             }
             PastillaDelPago(noDeLaPropuesta(debito), habilitada = !trabajando) {
+                hacer { Repositories.wallets.descartarDebitoAutomatico(debito.ruleId, debito.periodo) }
+            }
+            PastillaDelPago(YA_LO_ANOTE, habilitada = !trabajando) {
                 hacer { Repositories.wallets.descartarDebitoAutomatico(debito.ruleId, debito.periodo) }
             }
         },

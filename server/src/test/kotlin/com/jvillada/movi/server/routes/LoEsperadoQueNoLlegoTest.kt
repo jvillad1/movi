@@ -470,4 +470,79 @@ class LoEsperadoQueNoLlegoTest {
         assertEquals(comoNuevo.ruleId, comoViejo.ruleId)
         assertNotNull(comoViejo.pataDelDineroId)
     }
+
+    // ── Revisión de la vuelta 90 ────────────────────────────────────────────────
+
+    @Test
+    fun `una tarjeta vieja no anota dos veces lo que ya se anoto a mano`() = testApplication {
+        application { testModule() }
+        // Relativo a hoy: la ruta confirma contra el checklist de hoy.
+        val hoy = com.jvillada.movi.server.time.AppClock.today()
+        val vence = hoy.minusDays(3)
+        regla(dia = vence.dayOfMonth)
+        val d = propuestas(hoy).single()
+        // Mientras la tarjeta seguía abierta en el teléfono, el dueño lo anotó a mano.
+        transaction { evento("ev_a_mano", master, "EXPENSE", netflix, "Suscripciones", vence, "Netflix") }
+        val res = confirmar(confirmacionDelDebito(d, d.monto))
+        assertEquals(HttpStatusCode.Conflict, res.status, res.bodyAsText())
+        assertEquals(YA_ESTA_ANOTADO, res.bodyAsText())
+        assertTrue(eventos().none { it.id == d.pataDelDineroId }, "un solo gasto")
+    }
+
+    @Test
+    fun `una tarjeta vieja no pisa un sello con otro movimiento ni un candidato`() = testApplication {
+        application { testModule() }
+        val hoy = com.jvillada.movi.server.time.AppClock.today()
+        val vence = hoy.minusDays(3)
+        regla(dia = vence.dayOfMonth)
+        val d = propuestas(hoy).single()
+        transaction {
+            evento("ev_sellado", ahorros, "EXPENSE", 52_000L, "Varios", vence, "Pago raro")
+            RecurringOccurrences.insert {
+                it[userId] = duenoId; it[ruleId] = "rr_netflix"; it[period] = d.periodo; it[eventId] = "ev_sellado"; it[confirmedAt] = 1L
+            }
+        }
+        assertEquals(HttpStatusCode.Conflict, confirmar(confirmacionDelDebito(d, d.monto)).status)
+        assertTrue(eventos().none { it.id == d.pataDelDineroId })
+        assertEquals("ev_sellado", ocurrenciasEn(hoy).single { it.ruleId == "rr_netflix" }.eventId, "el sello sigue en el suyo")
+    }
+
+    @Test
+    fun `una tarjeta vieja no anota lo que se descarto`() = testApplication {
+        application { testModule() }
+        regla()
+        val d = propuestas(dia5.plusDays(3)).single()
+        descartar(d)
+        val res = confirmar(confirmacionDelDebito(d, d.monto))
+        assertEquals(HttpStatusCode.Conflict, res.status)
+        assertEquals(YA_SE_DESCARTO, res.bodyAsText())
+        assertTrue(eventos().none { it.id == d.pataDelDineroId })
+    }
+
+    @Test
+    fun `un aviso pendiente con otro monto cercano tambien apaga la pregunta`() {
+        regla()
+        transaction {
+            SmsMessages.insert {
+                // Subió de $49.900 a $52.900 (6 %), y el aviso llegó el día del cobro, hace tres días.
+                it[id] = "sms_netflix_subio"; it[userId] = duenoId; it[time] = "2026-10-05 06:10"; it[bank] = "85540"
+                it[text] = "Bancolombia: Compraste COP52.900,00 en NETFLIX con tu T.Cred *3684, el 05/10/2026 a las 06:10."
+                it[state] = SMS_STATE_PENDING; it[det] = "NETFLIX"
+            }
+        }
+        assertTrue(propuestas(dia5.plusDays(3)).isEmpty())
+    }
+
+    @Test
+    fun `un aviso pendiente muy distinto no la apaga`() {
+        regla()
+        transaction {
+            SmsMessages.insert {
+                it[id] = "sms_otra_cosa"; it[userId] = duenoId; it[time] = "2026-10-05 06:10"; it[bank] = "85540"
+                it[text] = "Bancolombia: Compraste COP186.900,00 en ALMACEN con tu T.Cred *3684, el 05/10/2026 a las 06:10."
+                it[state] = SMS_STATE_PENDING; it[det] = "ALMACEN"
+            }
+        }
+        assertEquals(1, propuestas(dia5.plusDays(3)).size)
+    }
 }

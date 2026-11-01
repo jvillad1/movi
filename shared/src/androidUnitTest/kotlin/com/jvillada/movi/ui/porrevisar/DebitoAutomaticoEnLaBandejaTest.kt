@@ -199,4 +199,14 @@ class DebitoAutomaticoEnLaBandejaTest {
         assertEquals("rr_netflix" to "2026-10", descartado)
         assertEquals(null, confirmado)
     }
+
+    @Test
+    fun `ya lo anote saca la propuesta sin anotar nada`() {
+        debitos = listOf(salario)
+        montar(esperar = TEXTO_DE_LO_ESPERADO_EN_LA_BANDEJA)
+        composeRule.onNodeWithText(YA_LO_ANOTE).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitUntil(5_000) { descartado != null }
+        assertEquals("rr_salario" to "2026-10", descartado)
+        assertEquals(null, confirmado, "«Ya lo anoté» no anota otra vez")
+    }
 }

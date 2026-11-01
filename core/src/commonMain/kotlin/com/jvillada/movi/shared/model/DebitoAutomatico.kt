@@ -148,7 +148,7 @@ data class DebitoAutomaticoPorConfirmar(
      * **Vuelta 90 · Movi lo esperaba, pero nadie dijo que el banco lo cobra solo.** `false` (default, y
      * lo único que manda un server viejo o `GET /api/debitos-automaticos` sin `?conEsperados=1`) = un
      * débito automático marcado por el dueño (`seDebitaSolo` / `debitoAutomaticoDesde`). `true` = un
-     * recurrente con cuenta (una suscripción en la Master, la nómina) que ya debió pasar, lleva
+     * recurrente con cuenta (un gasto fijo, la nómina; una regla, no una fila de `subscriptions`) que ya debió pasar, lleva
      * [GRACIA_DE_LO_ESPERADO_DIAS] días sin movimiento que lo salde, y se pregunta igual: «¿Pasó esto?».
      */
     val esperado: Boolean = false,
