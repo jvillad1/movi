@@ -3,6 +3,7 @@ package com.jvillada.movi.server
 import com.jvillada.movi.server.auth.JwtConfig
 import com.jvillada.movi.server.db.DatabaseFactory
 import com.jvillada.movi.server.documentos.Cifrado
+import com.jvillada.movi.server.observabilidad.startVolcadoDeMetricas
 import com.jvillada.movi.server.plugins.configureAuth
 import com.jvillada.movi.server.plugins.configureAutoHead
 import com.jvillada.movi.server.plugins.configureCORS
@@ -50,4 +51,6 @@ fun Application.module() {
     configureAuth()
     configureRouting()
     startReminderScheduler()  // no-op if RESEND_API_KEY is absent
+    // Vuelta 102: las métricas de cada minuto van a la base (aparte del scheduler: medir no depende de Resend).
+    startVolcadoDeMetricas()
 }

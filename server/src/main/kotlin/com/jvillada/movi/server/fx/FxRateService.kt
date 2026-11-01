@@ -1,5 +1,8 @@
 package com.jvillada.movi.server.fx
 
+import com.jvillada.movi.server.observabilidad.Servicio
+import com.jvillada.movi.server.observabilidad.desenlaceHttp
+import com.jvillada.movi.server.observabilidad.medirLlamada
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -89,7 +92,9 @@ object FxRateService {
 
     private fun fetchTrm(): Double? {
         val req = HttpRequest.newBuilder(URI.create(URL)).timeout(TIMEOUT).GET().build()
-        val res = http.send(req, HttpResponse.BodyHandlers.ofString())
+        val res = medirLlamada(Servicio.TRM, "consulta", { r: HttpResponse<String> -> desenlaceHttp(r.statusCode()) }) {
+            http.send(req, HttpResponse.BodyHandlers.ofString())
+        }
         if (res.statusCode() !in 200..299) return null
         return parseTrm(res.body())
     }

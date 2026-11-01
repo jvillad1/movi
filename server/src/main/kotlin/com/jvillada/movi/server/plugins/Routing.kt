@@ -131,6 +131,8 @@ fun Application.configureRouting() {
             enlaceCompartidoRoutes()
             exportRoutes()
             borrarLaCuentaRoutes()
+            // Vuelta 102: `/health/detalle` y `/api/admin/servidor/...`, solo para un admin.
+            adminServidorRoutes()
         }
 
         // /api/** que nadie registró → 404 JSON, nunca el index.html de la SPA.

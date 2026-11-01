@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.parsing
 
+import com.jvillada.movi.server.observabilidad.crearMensaje
 import com.anthropic.client.AnthropicClient
 import com.anthropic.client.okhttp.AnthropicOkHttpClient
 import com.anthropic.models.messages.Base64ImageSource
@@ -263,7 +264,7 @@ Aplicá las reglas del usuario cuando el merchant coincida.
                 .conLoDeSiempre(rules)
                 .messages(listOf(MessageParam.builder().role(MessageParam.Role.USER).content(cuerpo).build()))
                 .build()
-            val response = withContext(Dispatchers.IO) { c.messages().create(params) }
+            val response = withContext(Dispatchers.IO) { crearMensaje(c, params) }
             val rawText = textoDe(response)
             if (quedoCortada(rawText, response.stopReason().orElse(null)?.asString())) return Lectura.Incompleta
             filas += parseJson(rawText)
@@ -297,7 +298,7 @@ Aplicá las reglas del usuario cuando el merchant coincida.
             .conLoDeSiempre(rules)
             .addUserMessageOfBlockParams(listOf(imageBlock, textBlock))
             .build()
-        val response = withContext(Dispatchers.IO) { c.messages().create(params) }
+        val response = withContext(Dispatchers.IO) { crearMensaje(c, params) }
         val rawText = textoDe(response)
         if (quedoCortada(rawText, response.stopReason().orElse(null)?.asString())) return Lectura.Incompleta
         return Lectura.Ok(parseJson(rawText))
@@ -340,7 +341,7 @@ Aplicá las reglas del usuario cuando el merchant coincida.
             .systemOfTextBlockParams(listOf(TextBlockParam.builder().text(promptDelPapel()).build()))
             .addUserMessageOfBlockParams(bloques)
             .build()
-        val response = withContext(Dispatchers.IO) { c.messages().create(params) }
+        val response = withContext(Dispatchers.IO) { crearMensaje(c, params) }
         return queDiceLaRespuesta(textoDe(response))
     }
 

@@ -12,6 +12,19 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import java.io.File
 
 object DatabaseFactory {
+    /**
+     * El pool de conexiones, para ver cuánto se usa (vuelta 102, `/health/detalle` y las métricas por
+     * minuto). `null` hasta [init], y en las pruebas, que conectan H2 sin pool.
+     */
+    @Volatile
+    var pool: HikariDataSource? = null
+        private set
+
+    /** (activas, esperando una conexión) del pool, o `null` sin pool. Leerlo no toma ninguna conexión. */
+    fun usoDelPool(): Pair<Int, Int>? = runCatching {
+        pool?.hikariPoolMXBean?.let { it.activeConnections to it.threadsAwaitingConnection }
+    }.getOrNull()
+
     fun init() {
         val rawUrl = readEnv("DATABASE_URL") ?: error("DATABASE_URL not set — add it to server/.env")
         val (dbUrl, user, pass) = parseDbUrl(rawUrl)
@@ -23,7 +36,9 @@ object DatabaseFactory {
             driverClassName = "org.postgresql.Driver"
             maximumPoolSize = 10
         }
-        Database.connect(HikariDataSource(config))
+        val fuente = HikariDataSource(config)
+        pool = fuente
+        Database.connect(fuente)
         crearYActualizarSchema()
         seedScreens()
     }
@@ -70,6 +85,9 @@ object DatabaseFactory {
             // índice único sobre el hash y el de `user_id` se crean junto con ella, sobre una tabla
             // vacía, y en los arranques siguientes `create` la ve existir y no emite nada.
             SchemaUtils.create(Users, Accounts, StatementImports, Events, VoidEvents, Budgets, RecurringRules, RecurringOccurrences, OccurrenceRejections, SmsMessages, Credits, Cards, Subscriptions, PushSubscriptions, Screens, PasswordResetTokens, CardPaymentDismissals, Goals, CategoryPrefs, Documents, StatementImportMatches, AiTurns, KnownDestinations, EnlacesCompartidos, LecturasDePapeles, ConversacionesDelAsistente, AccionesPropuestas, MemoriaDelAsistente, AnomaliasDescartadas, DestinosDescartados, DebitosDescartados, ReglasDeComercio, CierresEnviados, CierresDescartados, CierresGuardados, Apartados, InicioPersonalizado, Espacios, GastosDelEspacio, LiquidacionesDelEspacio, CorreosDescartados)
+            // Vuelta 102 · la observabilidad del servidor: seis tablas NUEVAS, sin `user_id` (ver
+            // TablasDeObservabilidad.kt). Entran solo por el `create`, como toda tabla nueva.
+            SchemaUtils.create(*TABLAS_DE_OBSERVABILIDAD)
             // Screens: `seed_version` (Ola 4) — sin esta columna una instalación ya desplegada
             // no podría recibir la generación nueva del Inicio.
             // Users: `avatar_color` (F42 · F46) — mismo motivo, columna nueva en tabla vieja.
