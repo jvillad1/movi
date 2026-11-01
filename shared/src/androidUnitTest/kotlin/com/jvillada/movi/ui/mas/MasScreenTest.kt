@@ -477,6 +477,9 @@ class MasScreenTest {
         val finDerecha = arribaDe(BORRAR_MI_CUENTA)
         val corta = minOf(finIzquierda, finDerecha)
         val larga = maxOf(finIzquierda, finDerecha)
-        assertTrue(corta >= larga * 0.7f, "columnas disparejas: termina una en $finIzquierda y la otra en $finDerecha")
+        // Vuelta 94: 0,65 y no 0,7. El interruptor del extracto por subir es una fila más en los avisos de
+        // este teléfono (columna derecha), que solo existen en Android: en la web a 1.280 esa columna no
+        // los tiene. Con 0,7 la prueba quedaba a 15 px de fallar con cualquier fila nueva de avisos.
+        assertTrue(corta >= larga * 0.65f, "columnas disparejas: termina una en $finIzquierda y la otra en $finDerecha")
     }
 }
