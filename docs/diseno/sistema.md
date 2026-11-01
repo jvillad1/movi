@@ -4850,3 +4850,30 @@ porque su repositorio falso contestaba sin suspender.
 - Revisados con el mismo patrón y sin el fallo: «Ya lo vi» del cierre (alcance de `DashboardScreen`, que no
   sale, y no deshace), «No ajustar» de los cuadres por aviso, «No se cobró» de los débitos y la bandeja de
   Por revisar (la tarjeta espera la respuesta antes de irse, y su alcance es el de la pantalla).
+
+## Vuelta 91 · Un traspaso propio avisado tres veces es una tarjeta, y nunca un ingreso
+
+**Regla: la plata que el dueño se pasa a otra cuenta suya se pinta y se propone como traspaso, con las
+cuentas de Movi.** El 31-oct el traspaso de Bancolombia ·8133 a Nu llegó por SMS, correo de PSE y Nu, y «Por
+revisar» mostraba un gasto en «Otros» y aparte «Movi no entendió este aviso… Anotarlo igual» (que lo anotaba
+como ingreso).
+
+- **El título** de la tarjeta de un traspaso es `tituloDelTraspaso` (`LoQueMoviEntendio.titulo`): «Traspaso de
+  Bancolombia ·8133 a Nu» con `nombreCortoDeCuenta`; con una sola punta, «Traspaso a Nu». Lo reciben
+  `TarjetaDelMismoPago` y `TarjetaDeMensajeDelBanco` como `titulo`; sin él, el comercio de siempre. La píldora
+  sigue diciendo «Avisado 3 veces».
+- **El tono** de la cifra de un «Traspaso» (también el depósito que entra, leído o sin leer) es `EntreCuentas`,
+  nunca el verde de `Ingreso`.
+- **«Anotarlo como traspaso»** (`botonDeAnotarloIgual`): el botón principal de un aviso sin leer que habla de un
+  depósito tuyo; la frase dice «Anótalo como traspaso desde otra cuenta tuya» y Reconciliar pide de qué cuenta
+  vino. Un depósito así nunca se ofrece como ingreso.
+- **A dónde fue**, cuando no es una sola cuenta: el selector de destino de Revisar aviso lista primero las
+  cuentas suyas de ese banco (`ParsedSms.destinosPosibles`), **con la tarjeta**; elegir la tarjeta pasa la
+  pantalla al pago de esa tarjeta, como «Es el pago de una tarjeta ›».
+- **La comisión del traslado** (`lineaDeLaComisionDelTraslado`): debajo de «Sale de … · entra a …», en
+  `apoyo`/`textoMedio`, «Bancolombia suele cobrar la comisión del traslado: llega en el extracto.» Solo informa:
+  Movi no la anota ni calcula la cifra.
+- **El depósito no vota por la cuenta** ni por la advertencia de bancos (`avisosQueDicenLaCuenta`): nombra a dónde
+  fue la plata, no de dónde salió.
+
+**Pruebas**: `ElTraspasoPropioEnLaAppTest` (`:shared` commonTest) con los textos reales.
