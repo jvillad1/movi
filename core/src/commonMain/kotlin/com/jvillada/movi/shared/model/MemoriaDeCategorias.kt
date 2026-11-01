@@ -143,6 +143,13 @@ data class AnotacionPasada(
     val categoria: String,
     /** Para desempatar: entre dos categorías con el mismo respaldo gana la más reciente. */
     val cuando: Long,
+    /**
+     * Vuelta 85 · **si entró o salió.** La memoria de lo que ENTRA es otra que la de lo que SALE: «la
+     * plata que me mandó Andrés» y «la plata que le mandé a Andrés» tienen la misma huella (su número,
+     * su nombre) y nada que ver en la categoría. Un [TransactionType.INCOME] va a su propia memoria; lo
+     * demás (y `null`, el de quien no lo sabe) a la de los gastos. Ver [MemoriaDeCategorias.recuerdoDe].
+     */
+    val tipo: TransactionType? = null,
 )
 
 /**
@@ -154,6 +161,11 @@ data class LoQueMoviRecuerda(
     val categoria: String,
     val nombre: String,
     val cuantos: Int,
+    /**
+     * Vuelta 85 · el nombre de la marca si el recuerdo salió de ella y no de este mismo comercio
+     * («Rappi»): la propuesta dice «Como tus 25 de Rappi» y no cuenta como entendida.
+     */
+    val marca: String? = null,
 )
 
 /**
@@ -171,6 +183,11 @@ data class RecuerdoDeCategoria(
     val categoria: String,
     val nombre: String,
     val cuantos: Int,
+    /**
+     * Vuelta 85: el recuerdo es de lo que ENTRA ([AnotacionPasada.tipo]). Con default: un server viejo
+     * no lo manda (todo era una sola memoria) y un APK viejo lo ignora.
+     */
+    val ingreso: Boolean = false,
 )
 
 /**
@@ -178,6 +195,7 @@ data class RecuerdoDeCategoria(
  * dueño ya anotó.
  */
 class MemoriaDeCategorias private constructor(
+    /** Lo que SALE (y lo que no dice si entró o salió): huella → recuerdo. */
     private val porHuella: Map<String, LoQueMoviRecuerda>,
     /**
      * **Las categorías que el dueño usa**, las de sus anotaciones (sin las que no se aprenden). Es su
@@ -185,33 +203,49 @@ class MemoriaDeCategorias private constructor(
      * a quien lo usa, y nunca una categoría que él no tiene.
      */
     val categoriasDelDueno: Set<String> = emptySet(),
+    /** Vuelta 85 · lo que ENTRA, aparte: un ingreso de Andrés no le enseña nada al envío a Andrés. */
+    private val porHuellaDeIngresos: Map<String, LoQueMoviRecuerda> = emptyMap(),
+    /**
+     * Vuelta 85 · **lo que salió, por marca** ([marcaDeComercioDe]): «RAPPI COLOMBIA» y «Rappi» son la
+     * misma marca aunque sus huellas de nombre (`rappicolombia`, `rappi`) no se parezcan lo bastante.
+     * Solo las marcas con **una sola** categoría en lo anotado (ver [recuerdosPorMarca]).
+     */
+    private val porMarca: Map<String, LoQueMoviRecuerda> = emptyMap(),
 ) {
-    val cuantasHuellas: Int get() = porHuella.size
+    val cuantasHuellas: Int get() = porHuella.size + porHuellaDeIngresos.size
 
     /**
      * Lo que Movi recuerda de este texto, o `null` si nunca vio nada parecido.
      *
-     * Primero la huella exacta; si no hay, **la del nombre que el banco recortó**: ver
-     * [huellaPorPrefijo].
+     * Primero la huella exacta; si no hay, **la del nombre que el banco recortó** (ver
+     * [huellaPorPrefijo]); y si tampoco y quien pregunta lo pide ([conMarca]: una compra, no una
+     * transferencia a una persona que se llama como una tienda), en lo que sale, **la marca** (vuelta
+     * 85, ver [marcaDeComercioDe]): 25 «Rappi» en Restaurantes dicen qué es un «RAPPI COLOMBIA». Ese
+     * recuerdo lleva [LoQueMoviRecuerda.marca].
+     *
+     * [tipo]: un [TransactionType.INCOME] busca solo en lo que entró; lo demás (y `null`), solo en lo
+     * que salió. Nunca se cruzan (vuelta 85).
      */
-    fun recuerdoDe(texto: String): LoQueMoviRecuerda? {
+    fun recuerdoDe(texto: String, tipo: TransactionType? = null, conMarca: Boolean = false): LoQueMoviRecuerda? {
         val huella = huellaDeUnMovimiento(texto) ?: return null
-        porHuella[huella]?.let { return it }
-        return huellaPorPrefijo(huella, porHuella.keys)?.let { porHuella[it] }
+        val delLado = if (tipo == TransactionType.INCOME) porHuellaDeIngresos else porHuella
+        delLado[huella]?.let { return it }
+        huellaPorPrefijo(huella, delLado.keys)?.let { return delLado[it] }
+        if (!conMarca || tipo == TransactionType.INCOME || !huella.startsWith("nombre:")) return null
+        return marcaDeComercioDe(texto)?.let { porMarca[it] }
     }
 
     /**
-     * Las entradas de la memoria, listas para viajar por la red — ver [RecuerdoDeCategoria]. El
-     * mapa [porHuella] sigue privado y esto es una copia de solo lectura: cómo se arma no cambia,
-     * solo se expone lo que ya había.
+     * Las entradas de la memoria, listas para viajar por la red — ver [RecuerdoDeCategoria]. Los mapas
+     * siguen privados y esto es una copia de solo lectura: cómo se arma no cambia, solo se expone lo
+     * que ya había. Primero lo que sale (lo que busca Agregar casi siempre), después lo que entra.
      */
     fun entradas(): List<RecuerdoDeCategoria> =
         porHuella.map { (huella, recuerdo) ->
+            RecuerdoDeCategoria(huella = huella, categoria = recuerdo.categoria, nombre = recuerdo.nombre, cuantos = recuerdo.cuantos)
+        } + porHuellaDeIngresos.map { (huella, recuerdo) ->
             RecuerdoDeCategoria(
-                huella = huella,
-                categoria = recuerdo.categoria,
-                nombre = recuerdo.nombre,
-                cuantos = recuerdo.cuantos,
+                huella = huella, categoria = recuerdo.categoria, nombre = recuerdo.nombre, cuantos = recuerdo.cuantos, ingreso = true,
             )
         }
 
@@ -222,38 +256,133 @@ class MemoriaDeCategorias private constructor(
          * más reciente — que es la última vez que él lo pensó.
          *
          * El nombre que se propone es el del movimiento más reciente de la categoría que ganó, no
-         * el del más viejo: si le cambió el nombre, ese cambio es la corrección.
+         * el del más viejo: si le cambió el nombre, ese cambio es la corrección. Vuelta 85: el más
+         * reciente **que se pueda proponer** ([nombreQueNoSePropone]); si ninguno, el texto del banco.
+         *
+         * Vuelta 85 · **lo que no se aprende**: una anotación cuyo texto del banco o cuyo nombre dice
+         * «tu cuenta» o trae una fecha ([textoQueNoSeAprende]) es una lectura rota del aviso, no algo que
+         * el dueño decidió: no deja huella ni categoría. Y lo que entró va a otra memoria que lo que salió.
          */
         fun de(anotaciones: List<AnotacionPasada>): MemoriaDeCategorias {
-            val porHuella = mutableMapOf<String, LoQueMoviRecuerda>()
-            anotaciones
-                .filter { it.categoria.isNotBlank() && !laMemoriaNoLaAprende(it.categoria) }
-                .groupBy { huellaDeUnMovimiento(it.comoLlego) }
-                .forEach { (huella, delMismo) ->
-                    if (huella == null) return@forEach
-                    val ganadora = delMismo
-                        .groupBy { it.categoria }
-                        .maxWithOrNull(
-                            compareBy<Map.Entry<String, List<AnotacionPasada>>> { it.value.size }
-                                .thenBy { entrada -> entrada.value.maxOf { it.cuando } },
-                        ) ?: return@forEach
-                    val masReciente = ganadora.value.maxByOrNull { it.cuando } ?: return@forEach
-                    porHuella[huella] = LoQueMoviRecuerda(
-                        categoria = ganadora.key,
-                        nombre = masReciente.nombre.ifBlank { masReciente.comoLlego },
-                        cuantos = ganadora.value.size,
-                    )
-                }
+            val aprendibles = anotaciones.filter {
+                it.categoria.isNotBlank() && !laMemoriaNoLaAprende(it.categoria) &&
+                    !textoQueNoSeAprende(it.comoLlego) && !textoQueNoSeAprende(it.nombre)
+            }
+            val (ingresos, gastos) = aprendibles.partition { it.tipo == TransactionType.INCOME }
             val categorias = anotaciones
                 .map { it.categoria.trim() }
                 .filter { it.isNotEmpty() && it !in CATEGORIAS_QUE_NO_SE_APRENDEN }
                 .toSet()
-            return MemoriaDeCategorias(porHuella, categorias)
+            // La marca, solo de lo que el banco nombra por un nombre: un número no es una marca.
+            val porMarca = recuerdosPorMarca(gastos.filter { huellaDeUnMovimiento(it.comoLlego)?.startsWith("nombre:") == true })
+            return MemoriaDeCategorias(
+                porHuella = recuerdosPor(gastos) { huellaDeUnMovimiento(it.comoLlego) },
+                categoriasDelDueno = categorias,
+                porHuellaDeIngresos = recuerdosPor(ingresos) { huellaDeUnMovimiento(it.comoLlego) },
+                porMarca = porMarca,
+            )
+        }
+
+        /** Agrupa [anotaciones] por [clave] (sin las de clave `null`) y elige el recuerdo de cada grupo. */
+        private fun recuerdosPor(
+            anotaciones: List<AnotacionPasada>,
+            clave: (AnotacionPasada) -> String?,
+        ): Map<String, LoQueMoviRecuerda> {
+            val porClave = mutableMapOf<String, LoQueMoviRecuerda>()
+            anotaciones.groupBy(clave).forEach { (k, delMismo) ->
+                if (k == null) return@forEach
+                val ganadora = delMismo
+                    .groupBy { it.categoria }
+                    .maxWithOrNull(
+                        compareBy<Map.Entry<String, List<AnotacionPasada>>> { it.value.size }
+                            .thenBy { entrada -> entrada.value.maxOf { it.cuando } },
+                    ) ?: return@forEach
+                val recientes = ganadora.value.sortedByDescending { it.cuando }
+                val masReciente = recientes.firstOrNull() ?: return@forEach
+                val nombre = recientes.firstOrNull { it.nombre.isNotBlank() && !nombreQueNoSePropone(it.nombre) }?.nombre
+                    ?: masReciente.nombre.ifBlank { masReciente.comoLlego }
+                porClave[k] = LoQueMoviRecuerda(categoria = ganadora.key, nombre = nombre, cuantos = ganadora.value.size)
+            }
+            return porClave
+        }
+
+        /**
+         * Vuelta 85 · **por marca, solo lo unánime**: una marca cuyas anotaciones tienen más de una
+         * categoría («Google» en Tecnología y en Entretenimiento) no dice qué es la próxima compra, y no
+         * se recuerda. Las pasarelas ([MARCAS_QUE_NO_DICEN_LA_CATEGORIA]) ni siquiera llegan acá.
+         */
+        private fun recuerdosPorMarca(anotaciones: List<AnotacionPasada>): Map<String, LoQueMoviRecuerda> {
+            val nombres = mutableMapOf<String, String>()
+            val grupos = anotaciones.groupBy { a ->
+                marcaDelTexto(a.comoLlego)?.takeIf { marcaDeComercioDe(a.comoLlego) != null }
+                    ?.also { nombres[it.id] = it.nombre }?.id
+            }
+            val unanimes = grupos.filter { (k, v) -> k != null && v.map { it.categoria }.distinct().size == 1 }
+            return recuerdosPor(unanimes.values.flatten()) { a -> marcaDeComercioDe(a.comoLlego) }
+                .mapValues { (id, r) -> r.copy(marca = nombres[id]) }
         }
 
         val vacia: MemoriaDeCategorias get() = MemoriaDeCategorias(emptyMap())
     }
 }
+
+// ── Vuelta 85 · lo que la memoria no aprende ni propone ─────────────────────────────
+
+/** «tu cuenta *4057», «tu producto 8133»: el aviso hablando de la cuenta del dueño, no de nadie más. */
+private val HABLA_DE_TU_CUENTA = Regex("""\btu\s+(?:cuenta|producto)\b""", RegexOption.IGNORE_CASE)
+
+/** «30/10/2026», «30/10/26», «2026/10/01», «2026-10-30»: una fecha no es parte de un nombre. */
+private val UNA_FECHA = Regex("""\b(?:\d{1,2}/\d{1,2}/\d{2,4}|\d{4}[/-]\d{1,2}[/-]\d{1,2})\b""")
+
+/** «la cuenta 31234567890», «cuenta *4057»: un número de cuenta dicho con la palabra delante. */
+private val CUENTA_CON_DIGITOS = Regex("""\bcuenta\s*\*?\s*\d""", RegexOption.IGNORE_CASE)
+
+/**
+ * **Un texto que la memoria no aprende** (vuelta 85): dice «tu cuenta» o trae una fecha. Es lo que
+ * quedaba cuando el parser se llevaba la cola entera de un aviso —«la cuenta \*31234567890 en tu
+ * cuenta \*4057 el 30/10/2026 a las 13:05»— y, aprendido bajo la huella `cuenta:31234567890`, le
+ * ponía ese mismo texto al siguiente envío a esa persona. Nunca lo escribe el dueño a propósito.
+ */
+fun textoQueNoSeAprende(texto: String): Boolean =
+    HABLA_DE_TU_CUENTA.containsMatchIn(texto) || UNA_FECHA.containsMatchIn(texto)
+
+/**
+ * **Un nombre que la memoria no propone** (vuelta 85): [textoQueNoSeAprende], o la palabra «cuenta»
+ * seguida de dígitos («Transferencia a la cuenta \*41279033068»). Ese es el texto del banco, no un
+ * nombre: la categoría de esa anotación sí se aprende (el dueño la eligió), pero el nombre que se le
+ * propone a un aviso nuevo no puede ser ese — se queda el que trae el aviso.
+ */
+fun nombreQueNoSePropone(texto: String): Boolean =
+    textoQueNoSeAprende(texto) || CUENTA_CON_DIGITOS.containsMatchIn(texto)
+
+/**
+ * **La marca de comercio que nombra [texto]** (vuelta 85), para la memoria: el id de
+ * [marcaDelTexto] si es de [COMERCIOS_CONOCIDOS] —no un banco ni una billetera, que en el texto de un gasto pueden
+ * ser cualquier cosa («Transferencia a Nequi»)—, o `null`.
+ */
+fun marcaDeComercioDe(texto: String): String? =
+    marcaDelTexto(texto)
+        ?.takeIf { marca -> marca.id !in MARCAS_QUE_NO_DICEN_LA_CATEGORIA && COMERCIOS_CONOCIDOS.any { it.id == marca.id } }
+        ?.id
+
+/**
+ * Vuelta 85 · **las pasarelas**: «DLO\*GOOGLE Duolingo», «APPLE.COM/BILL», «MERCADO PAGO\*…» cobran lo de
+ * otros. Que el dueño haya anotado tres cosas de Google como Tecnología no dice qué es la cuarta.
+ */
+private val MARCAS_QUE_NO_DICEN_LA_CATEGORIA: Set<String> = setOf("google", "apple", "mercado_libre")
+
+/** «Compraste … en», «Pagaste en», «Pago aprobado», el «with» de Google Wallet: una compra. */
+private val UNA_COMPRA = Regex("""\bcompr(?:a|aste|aron)\b|\bpagaste\s+en\b|\bpago\s+(?:en|aprobado)\b|\bwith\b""", RegexOption.IGNORE_CASE)
+
+/** «Le enviaste a ZARA …», «Transferiste», «Recibiste»: plata entre personas, aunque se llamen como una tienda. */
+private val ENTRE_PERSONAS = Regex("""\benvi(?:aste|o|ó)\b|\btransfer|\brecibiste\b|\bte\s+lleg""", RegexOption.IGNORE_CASE)
+
+/**
+ * **¿La marca puede hablar por este aviso?** (vuelta 85) Solo si es una compra y no una transferencia: «Le
+ * enviaste a ZARA RESTREPO» nombra a una persona, no a la tienda.
+ */
+fun laMarcaPuedeHablar(textoDelAviso: String): Boolean =
+    UNA_COMPRA.containsMatchIn(textoDelAviso) && !ENTRE_PERSONAS.containsMatchIn(textoDelAviso)
 
 /**
  * Lo mínimo que tiene que medir el más corto de dos nombres para que uno valga por el otro cuando

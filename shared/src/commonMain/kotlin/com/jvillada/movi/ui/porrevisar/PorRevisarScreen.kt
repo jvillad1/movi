@@ -309,9 +309,9 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
      * Se saca de lo resuelto en esta visita (si no, la relectura lo traería pendiente y esto lo
      * seguiría tapando) y el Inicio lo vuelve a contar.
      */
-    fun vuelvenALaBandeja(avisos: List<String>, monto: Long, moneda: String) {
+    fun vuelvenALaBandeja(avisos: List<String>, monto: Long, moneda: String, entra: Boolean?) {
         avisosResueltos = avisosResueltos - avisos.toSet()
-        elInicioCuentaOtrosAvisos(1, monto, moneda)
+        elInicioCuentaOtrosAvisos(1, monto, moneda, entra)
     }
     fun confirmarDesdeLaFila(anotacion: AnotacionEntendida) {
         if (confirmarLosAvisos.confirmando) return
@@ -323,7 +323,8 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
         ) {
             vibrador.confirmar()
             avisosResueltos = avisosResueltos + anotacion.avisos.associateWith { SMS_STATE_CONFIRMED }
-            elInicioCuentaOtrosAvisos(-1, anotacion.monto, anotacion.leido.currency)
+            val entra = com.jvillada.movi.shared.model.entraPlata(anotacion.leido)
+            elInicioCuentaOtrosAvisos(-1, anotacion.monto, anotacion.leido.currency, entra)
             val evento = creado
             if (avisoDeLaCascara != null && evento != null) {
                 // Vuelta 74: con «Deshacer» —anula el movimiento que se creó y el aviso vuelve a la
@@ -332,7 +333,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                 avisoDeLaCascara.mostrarLoAnotado(
                     evento, espaciosParaRepartir,
                     deshacer = if (esIdDeComprobante(anotacion.sms.id)) null else {
-                        { deshacerLoAnotado(evento.id, avisos); vuelvenALaBandeja(avisos, anotacion.monto, anotacion.leido.currency) }
+                        { deshacerLoAnotado(evento.id, avisos); vuelvenALaBandeja(avisos, anotacion.monto, anotacion.leido.currency, entra) }
                     },
                 )
             } else {
@@ -370,12 +371,14 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
             alFallar = { avisosResueltos = avisosResueltos - pendientes.toSet() },
         ) {
             vibrador.confirmar()
-            elInicioCuentaOtrosAvisos(-1, evento.amount, evento.currency)
+            // Vuelta 85: el lado lo dice el aviso (lo que leyó Movi), no el movimiento al que se vinculó.
+            val entra = propuestaDelPago(propuestas, cabeza)?.leido?.let { com.jvillada.movi.shared.model.entraPlata(it) }
+            elInicioCuentaOtrosAvisos(-1, evento.amount, evento.currency, entra)
             if (avisoDeLaCascara != null) {
                 avisoDeLaCascara.mostrarLoAnotado(
                     evento, espaciosParaRepartir,
                     deshacer = if (esIdDeComprobante(cabeza.id)) null else {
-                        { deshacerLoAnotado(eventoId = null, avisos = pendientes); vuelvenALaBandeja(pendientes, evento.amount, evento.currency) }
+                        { deshacerLoAnotado(eventoId = null, avisos = pendientes); vuelvenALaBandeja(pendientes, evento.amount, evento.currency, entra) }
                     },
                     yaEstaba = true,
                 )
@@ -704,6 +707,8 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                 trabajando = pagoEnCurso == sms.id || confirmarLosAvisos.confirmando,
                 leido = propuestaDelPago(propuestas, sms)?.leido,
                 sinLeer = propuestaDelPago(propuestas, sms)?.sinLeer,
+                // Vuelta 85: «¿Salda Casa con Andrés?» antes de confirmar.
+                saldaUnGrupo = propuestaDelPago(propuestas, sms)?.saldaUnGrupo,
                 // En la bandeja todo está pendiente: la píldora no diría nada.
                 conPildoraDePendiente = false,
                 advertencia = advertencias[sms.id],
@@ -1045,6 +1050,8 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                 -resultado.anotados.size,
                 enPesos.sumOf { it.monto }.takeIf { enPesos.size == resultado.anotados.size },
                 "COP",
+                // Vuelta 85: el lote no lleva ingresos (ver `entraEnElLote`): todo lo anotado salió.
+                entra = false.takeIf { resultado.anotados.none { com.jvillada.movi.shared.model.entraPlata(it.leido) } },
             )
             avisoDeLaCascara.mostrar(textoDeLosConfirmados(resultado))
         } else {

@@ -127,6 +127,15 @@ data class DashboardData(
      * `null` si alguno no se lee entero o el server no lo manda. La franja «Por confirmar» lo dice.
      */
     val porConfirmarSuman: Long? = null,
+    /**
+     * Vuelta 85: [porConfirmarSuman] partida en lo que sale y lo que entra (`DashboardSummary.porConfirmarSalen`
+     * y compañía). `null` las dos si el server no lo manda: entonces la franja dice la suma de antes.
+     * Ver [loPorConfirmarPorSignoDe].
+     */
+    val porConfirmarSalen: Long? = null,
+    val porConfirmarEntran: Long? = null,
+    val avisosQueSalen: Int = 0,
+    val avisosQueEntran: Int = 0,
     /** Vuelta 51: los pagos avisados hace más de 30 días (`DashboardSummary.avisosAntiguos`), aparte. */
     val avisosAntiguos: Int = 0,
     /**
@@ -1346,6 +1355,10 @@ internal fun DashboardData.conResumenDelInicio(s: DashboardSummary): DashboardDa
     cardCandidates = s.cardPaymentCandidates,
     pendingSms = s.pendingSms,
     porConfirmarSuman = s.porConfirmarSuman,
+    porConfirmarSalen = s.porConfirmarSalen,
+    porConfirmarEntran = s.porConfirmarEntran,
+    avisosQueSalen = s.avisosQueSalen,
+    avisosQueEntran = s.avisosQueEntran,
     avisosAntiguos = s.avisosAntiguos,
     movimientosPorConfirmar = s.movimientosPorConfirmar,
     // Lo que se sabe de la captura de SMS. Viene en esta MISMA respuesta —no es una llamada

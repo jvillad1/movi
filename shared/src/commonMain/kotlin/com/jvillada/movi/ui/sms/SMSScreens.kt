@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.sms
 
+import com.jvillada.movi.shared.model.GrupoQueSaldaElAviso
 import com.jvillada.movi.ui.espacios.deshacerLoAnotado
 import com.jvillada.movi.ui.espacios.mostrarLoAnotado
 import com.jvillada.movi.ui.espacios.textoDeLoAnotado
@@ -700,6 +701,11 @@ internal fun TarjetaDeMensajeDelBanco(
      * bandeja lo pasa. Ver [YaAnotadoEnLaFila].
      */
     yaAnotado: YaAnotadoEnLaFila? = null,
+    /**
+     * Vuelta 85 · **el grupo que este aviso saldaría** («¿Salda Casa con Andrés?», ver
+     * [LineaDelGrupoQueSalda]): se dice antes de confirmar. Solo la bandeja lo pasa; solo informa.
+     */
+    saldaUnGrupo: GrupoQueSaldaElAviso? = null,
 ) {
     val apartado = loApartoMovi(sms)
     var eligiendoLaCategoria by remember(sms.id) { mutableStateOf(false) }
@@ -798,6 +804,8 @@ internal fun TarjetaDeMensajeDelBanco(
         if (pendiente && sms.parecidoA != null) LineaDelMismoPago(parecidoA)
         // La cuenta que propone Movi es de otro banco que el del aviso: se dice antes de confirmar.
         if (pendiente) advertencia?.let { LineaDeAdvertenciaDeBancos(it) }
+        // Vuelta 85: si confirmarlo dejaría saldado un grupo, se dice antes (nada se salda solo).
+        if (pendiente) saldaUnGrupo?.let { LineaDelGrupoQueSalda(it) }
         // Por qué no está en «Por revisar»: lo apartó Movi, no él.
         textoDelApartado(sms)?.let { porQue ->
             Text(
