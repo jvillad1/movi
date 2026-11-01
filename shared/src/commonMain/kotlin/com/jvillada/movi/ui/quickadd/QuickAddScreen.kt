@@ -945,7 +945,8 @@ fun QuickAddScreen(
             tipoDeLaSugerenciaVigente = null
         }
 
-        val recuerdosVisibles = MemoriaDeCategoriasCache.recuerdos.filter { r ->
+        // Vuelta 85: solo la memoria del lado de la pestaña (`recuerdosDelLado`).
+        val recuerdosVisibles = recuerdosDelLado(MemoriaDeCategoriasCache.recuerdos, tipoActual).filter { r ->
             seOfreceParaTipo(r.categoria, tipoActual, usedCategories[r.categoria].orEmpty(), categoryPrefs)
         }
         val sugerencia = sugerenciaPorNombre(note, recuerdosVisibles)
