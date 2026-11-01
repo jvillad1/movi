@@ -91,6 +91,7 @@ import com.jvillada.movi.shared.time.AppTimeZone
 import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.shared.model.EstadoDePresupuesto
 import com.jvillada.movi.shared.model.estadoDePresupuesto
+import com.jvillada.movi.shared.model.porcentajeDePresupuesto
 import com.jvillada.movi.shared.model.FinancialEvent
 import androidx.compose.runtime.rememberCoroutineScope
 import com.jvillada.movi.ui.categorias.IconoDeCategoria
@@ -124,13 +125,7 @@ internal data class BudgetProgress(
      * sea por un peso— se redondea hacia arriba: 100,87 % → «101%», 116,3 % → «117%». Justo en el
      * límite la división es exacta y sigue diciendo «100%», que es lo que dice «Sin margen».
      */
-    val pct: Int get() {
-        val limite = budget.monthlyLimit
-        if (limite == 0L) return 0
-        val centuplo = spent * 100
-        val truncado = centuplo / limite
-        return (if (spent > limite && centuplo % limite != 0L) truncado + 1 else truncado).toInt()
-    }
+    val pct: Int get() = porcentajeDePresupuesto(spent, budget.monthlyLimit)
     val state: EstadoDePresupuesto get() = estadoDePresupuesto(spent, budget.monthlyLimit)
 }
 

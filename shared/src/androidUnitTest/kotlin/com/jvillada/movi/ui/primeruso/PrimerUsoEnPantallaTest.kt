@@ -140,6 +140,12 @@ class PrimerUsoEnPantallaTest {
         composeRule.onNodeWithTag(TAG_AVANZAR_EN_LA_GUIA).assertIsNotEnabled()
     }
 
+    /** Vuelta 87: en los pasos opcionales, «Siguiente» avanza aunque no haya nada que guardar. */
+    private fun principalHabilitado() {
+        composeRule.onNodeWithTag(TAG_AVANZAR_EN_LA_GUIA).assertTextContains("Siguiente")
+        composeRule.onNodeWithTag(TAG_AVANZAR_EN_LA_GUIA).assertIsEnabled()
+    }
+
     private fun sinSaltar(): Boolean =
         composeRule.onAllNodesWithTag(TAG_SALTAR_EN_LA_GUIA).fetchSemanticsNodes().isEmpty()
 
@@ -231,10 +237,10 @@ class PrimerUsoEnPantallaTest {
     fun `captura y pagos de cada mes se saltan y el final lleva al Inicio marcando la guia`() {
         val repo = RepoDeLaGuia()
         montar(repo, paso = PasoDePrimerUso.CAPTURA)
-        principalApagado()
+        principalHabilitado()
         saltar()
         assertTrue(seVe("Paso 5 de 6"))
-        principalApagado()
+        principalHabilitado()
         saltar()
 
         assertTrue(seVe("Paso 6 de 6"))
@@ -469,7 +475,7 @@ class PrimerUsoEnPantallaTest {
         assertFalse(seVe("todavía no está disponible", parcial = true))
         composeRule.onNodeWithTag(TAG_SUBIR_EXTRACTO_EN_LA_GUIA).assertIsEnabled()
         assertNull(composeRule.onAllNodesWithText("Copiar").fetchSemanticsNodes().firstOrNull())
-        principalApagado()
+        principalHabilitado()
         saltar()
         assertTrue(seVe("Paso 5 de 6"))
     }
@@ -736,6 +742,139 @@ class PrimerUsoEnPantallaTest {
         assertTrue(rotulo.bottom <= titulo.top, "el rótulo va arriba del título")
     }
 
+    // ── Vuelta 87: el día uno ──────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `en los pasos opcionales Siguiente avanza aunque no haya nada que guardar`() {
+        val repo = RepoDeLaGuia()
+        montar(repo, paso = PasoDePrimerUso.CAPTURA)
+        principalHabilitado()
+        avanzar()
+        assertTrue(seVe("Paso 5 de 6"))
+        principalHabilitado()
+        avanzar()
+        assertTrue(seVe("Paso 6 de 6"))
+        assertTrue(repo.reglas.isEmpty() && repo.cuentasCreadas.isEmpty(), "avanzar sin nada no guarda nada")
+    }
+
+    @Test
+    fun `el periodo y las cuentas siguen pidiendo algo antes de Siguiente`() {
+        montar(RepoDeLaGuia(), paso = PasoDePrimerUso.PERIODO)
+        composeRule.onNodeWithTag(TAG_AVANZAR_EN_LA_GUIA).assertIsNotEnabled()
+        composeRule.onNodeWithText("Atrás").performClick()
+        composeRule.waitForIdle()
+    }
+
+    @Test
+    fun `Tu salario en Lo que pagas cada mes crea la regla de ingreso de siempre`() {
+        val repo = RepoConCifra()
+        montar(repo, paso = PasoDePrimerUso.PERIODO)
+        composeRule.onNodeWithText("25").performClick()
+        composeRule.waitForIdle()
+        avanzar()
+        composeRule.onNodeWithText("Bancolombia").performClick()
+        composeRule.waitForIdle()
+        composeRule.onAllNodes(hasSetTextAction())[1].performTextInput("1500000")
+        avanzar()
+        saltar()
+        assertTrue(seVe("Paso 5 de 6"))
+
+        composeRule.onNodeWithTag(TAG_FILA_DEL_SALARIO).assertExists()
+        assertTrue(seVe("Cuánto te pagan el día 25"), "con el día del período ya puesto")
+        assertTrue(repo.reglas.isEmpty(), "sin escrituras propias: la regla se crea al terminar")
+        composeRule.onNodeWithTag(TAG_FILA_DEL_SALARIO).performClick()
+        composeRule.waitForIdle()
+        composeRule.onAllNodes(hasSetTextAction())[0].performTextInput("6500000")
+        composeRule.waitForIdle()
+        assertTrue(seVe("\$6.500.000 · el día 25"))
+        avanzar()
+        assertTrue(seVe("Paso 6 de 6"))
+        composeRule.waitUntil(5_000) { repo.reglas.isNotEmpty() }
+
+        val salario = repo.reglas.single()
+        assertEquals(TransactionType.INCOME, salario.type)
+        assertEquals(6_500_000L, salario.amount)
+        assertEquals(25, salario.dayOfMonth)
+        assertEquals(NOMBRE_DEL_SALARIO, salario.name)
+    }
+
+    @Test
+    fun `con un ingreso fijo ya anotado la fila del salario no se pregunta`() {
+        val repo = object : RepoConCifra() {
+            override suspend fun getRecurringRules(): List<RecurringRule> =
+                listOf(RecurringRule(id = "s", name = "Salario", category = "Salario", amount = 5_000_000, dayOfMonth = 25, type = TransactionType.INCOME))
+        }
+        montar(repo, paso = PasoDePrimerUso.RECURRENTES)
+        composeRule.waitForIdle()
+        assertTrue(composeRule.onAllNodesWithTag(TAG_FILA_DEL_SALARIO).fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
+    fun `sin el dia del periodo Tu salario manda a elegirlo`() {
+        montar(RepoConCifra(), paso = PasoDePrimerUso.RECURRENTES)
+        assertTrue(seVe("Elige antes el día de pago"))
+        composeRule.onNodeWithTag(TAG_FILA_DEL_SALARIO).performClick()
+        composeRule.waitForIdle()
+        assertTrue(seVe("Paso 2 de 6"), "lleva al paso del período")
+    }
+
+    /** Período saltado (el día solo tocado en el calendario) y una cuenta: llega a «Lo que pagas cada mes». */
+    private fun hastaLoQuePagasConElPeriodoSaltado(repo: RepoDeLaGuia) {
+        montar(repo, paso = PasoDePrimerUso.PERIODO)
+        composeRule.onNodeWithText("25").performClick()
+        composeRule.waitForIdle()
+        saltar()
+        composeRule.onNodeWithText("Bancolombia").performClick()
+        composeRule.waitForIdle()
+        composeRule.onAllNodes(hasSetTextAction())[1].performTextInput("1500000")
+        avanzar()
+        saltar()
+        assertTrue(seVe("Paso 5 de 6"))
+    }
+
+    @Test
+    fun `con el periodo saltado Tu salario no deja escribir y al guardar el periodo vuelve a Lo que pagas`() {
+        val repo = RepoConCifra()
+        hastaLoQuePagasConElPeriodoSaltado(repo)
+        // El día 25 solo se tocó: no está guardado, así que la fila no se fía de él.
+        assertTrue(seVe("Elige antes el día de pago"))
+        composeRule.onNodeWithTag(TAG_FILA_DEL_SALARIO).performClick()
+        composeRule.waitForIdle()
+        assertTrue(seVe("Paso 2 de 6"), "lleva al paso del período")
+        avanzar()
+        assertTrue(seVe("Paso 5 de 6"), "tras guardar el período vuelve a donde estaba, no sigue a Cuentas")
+        assertTrue(seVe("Cuánto te pagan el día 25"))
+        composeRule.onNodeWithTag(TAG_FILA_DEL_SALARIO).performClick()
+        composeRule.waitForIdle()
+        composeRule.onAllNodes(hasSetTextAction())[0].performTextInput("5000000")
+        composeRule.waitForIdle()
+        avanzar()
+        composeRule.waitUntil(5_000) { repo.reglas.isNotEmpty() }
+        assertEquals(5_000_000L, repo.reglas.single().amount)
+        assertEquals(25, repo.reglas.single().dayOfMonth)
+    }
+
+    @Test
+    fun `Saltar este paso es saltar y el salario escrito en lo que pagas no se crea`() {
+        val repo = RepoConCifra()
+        montar(repo, paso = PasoDePrimerUso.PERIODO)
+        composeRule.onNodeWithText("25").performClick()
+        composeRule.waitForIdle()
+        avanzar()
+        composeRule.onNodeWithText("Bancolombia").performClick()
+        composeRule.waitForIdle()
+        composeRule.onAllNodes(hasSetTextAction())[1].performTextInput("1500000")
+        avanzar()
+        saltar()
+        composeRule.onNodeWithTag(TAG_FILA_DEL_SALARIO).performClick()
+        composeRule.waitForIdle()
+        composeRule.onAllNodes(hasSetTextAction())[0].performTextInput("5000000")
+        composeRule.waitForIdle()
+        saltar()
+        assertTrue(seVe("Paso 6 de 6"))
+        composeRule.waitForIdle()
+        assertTrue(repo.reglas.isEmpty(), "saltar el paso no crea el salario escrito en él")
+    }
 }
 
 /** Todos los textos debajo de [nodo], para el mensaje de una prueba que falla. */
@@ -743,5 +882,4 @@ private fun textosDe(nodo: androidx.compose.ui.semantics.SemanticsNode): List<St
     val propios: List<androidx.compose.ui.text.AnnotatedString> =
         nodo.config.getOrElseNullable(androidx.compose.ui.semantics.SemanticsProperties.Text) { null } ?: emptyList()
     return propios.map { a -> a.text }.filter { t -> t.isNotBlank() } + nodo.children.flatMap { c -> textosDe(c) }
-
 }

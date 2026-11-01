@@ -25,6 +25,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.SouthWest
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.CheckCircle
@@ -93,11 +94,13 @@ import com.jvillada.movi.ui.components.ds.Chevron
 import com.jvillada.movi.ui.components.ds.Cifra
 import com.jvillada.movi.ui.components.ds.Fila
 import com.jvillada.movi.ui.components.ds.IconoEnCirculo
+import com.jvillada.movi.ui.components.ds.TonoDeIcono
 import com.jvillada.movi.ui.components.ds.ParDeBotones
 import com.jvillada.movi.ui.components.ds.Pildora
 import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
 import com.jvillada.movi.ui.components.ds.Seccion
 import com.jvillada.movi.ui.components.ds.Separador
+import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
 import com.jvillada.movi.ui.components.ds.Superficie
 import com.jvillada.movi.ui.components.ds.TamanoDeBoton
 import com.jvillada.movi.ui.components.ds.TonoDePildora
@@ -213,6 +216,12 @@ fun PrimerUsoScreen(
     // Revisión de la 75: UNA creación del salario a la vez. «Ir a Inicio» la espera (y se apaga mientras).
     var trabajoDelSalario by remember { mutableStateOf<Job?>(null) }
     var creandoElSalario by remember { mutableStateOf(false) }
+    // Vuelta 87: el paso al que se vuelve tras guardar el período cuando se vino a elegirlo desde «Tu salario»
+    // (en «Lo que pagas cada mes»): no se sigue a Cuentas, se vuelve a donde se estaba.
+    var volverAlPaso by remember { mutableStateOf<PasoDePrimerUso?>(null) }
+    // Vuelta 87: el salario que había al llegar a «Lo que pagas cada mes» (el del paso del período, si lo escribió
+    // ahí): «Saltar este paso» deja eso, no lo escrito en este paso.
+    var salarioAlLlegarALosFijos by remember { mutableStateOf<Long?>(null) }
     // «Listo» con una cifra real: lo que dice el final, cuando se sabe.
     var fraseDelListo by remember { mutableStateOf<String?>(null) }
 
@@ -330,6 +339,8 @@ fun PrimerUsoScreen(
             PasoDePrimerUso.RECURRENTES -> {
                 borradoresDeRecurrentes.clear()
                 recurrenteAbierto = null
+                // Vuelta 87: «Saltar este paso» es saltar: el salario escrito en él no se crea.
+                salario = salarioAlLlegarALosFijos
             }
             else -> Unit
         }
@@ -349,7 +360,8 @@ fun PrimerUsoScreen(
     suspend fun crearElSalario() {
         val monto = salario?.takeIf { it > 0L } ?: return
         val elDia = dia ?: return
-        if (salarioCreado || periodoGuardado == null) return
+        // Vuelta 87: el día también puede venir del perfil (el paso del período se saltó con uno ya elegido).
+        if (salarioCreado || (periodoGuardado == null && periodoDelPerfil == null)) return
         // Revisión de la 75: sin una cuenta de dinero no se crea (la guía promete «a la primera cuenta que
         // agregues»; sin ninguna, un salario sin cuenta no llega a ningún lado).
         val cuenta = cuentaDelSalario ?: cuentaPorDefecto() ?: return
@@ -386,6 +398,8 @@ fun PrimerUsoScreen(
 
     fun irA(destino: PasoDePrimerUso) {
         error = null
+        if (destino != PasoDePrimerUso.PERIODO) volverAlPaso = null
+        if (destino == PasoDePrimerUso.RECURRENTES) salarioAlLlegarALosFijos = salario
         paso = destino
         // Vuelta 75: al llegar al final, el salario se crea y «Listo» lee su cifra.
         if (destino == PasoDePrimerUso.LISTO) {
@@ -427,7 +441,7 @@ fun PrimerUsoScreen(
                         .onSuccess {
                             periodoGuardado = textoDelInicioDelMes(elegido, regla)
                             guardando = false
-                            siguiente?.let(::irA)
+                            (volverAlPaso ?: siguiente)?.let(::irA)
                         }
                         .onFailure {
                             guardando = false
@@ -475,7 +489,10 @@ fun PrimerUsoScreen(
     }
     // El principal solo cuando hay algo que guardar (o que seguir: la bienvenida y el final). Apagado,
     // «Saltar este paso» está siempre justo debajo.
-    val sePuedeAvanzar = hayAlgoHecho
+    // Vuelta 87: los pasos que dicen «Es opcional» (la captura, lo que pagas cada mes) avanzan siempre: con
+    // «Siguiente» gris y sin nada que tocar, la guía parecía trabada («Sube un extracto», sin extracto).
+    // El período y las cuentas siguen pidiendo algo: sin eso no hay nada que Movi pueda calcular.
+    val sePuedeAvanzar = hayAlgoHecho || paso in PASOS_QUE_SE_AVANZAN_SIN_NADA
     // Revisión de la vuelta 54: con un formulario escrito, el principal lo guarda y sigue; incompleto,
     // el pie dice qué falta.
     val escritos = borradoresDe(paso).filter { it.escrito }
@@ -586,6 +603,20 @@ fun PrimerUsoScreen(
                         borradores = borradoresDeRecurrentes,
                         abierto = recurrenteAbierto,
                         onAlternar = ::alternarRecurrente,
+                        // Vuelta 87: «Tu salario», la misma regla del paso del período (el mismo monto y el mismo día).
+                        preguntaElSalario = !tieneIngresoFijo,
+                        // Solo con el período **guardado** (o ya elegido en el perfil): es lo que exige
+                        // [crearElSalario]. Con un día solo tocado en el calendario la fila no deja escribir.
+                        dia = dia.takeIf { periodoGuardado != null || periodoDelPerfil != null },
+                        salario = salario,
+                        onSalario = { salario = it },
+                        yaTePagaron = yaTePagaron,
+                        onYaTePagaron = { yaTePagaron = it },
+                        habilitado = !guardando,
+                        onElegirElDia = {
+                            irA(PasoDePrimerUso.PERIODO)
+                            volverAlPaso = PasoDePrimerUso.RECURRENTES
+                        },
                     )
                     PasoDePrimerUso.LISTO -> PasoListo(
                         fraseDelListo,
@@ -658,7 +689,7 @@ fun PrimerUsoScreen(
                 Boton(
                     SALTAR_ESTE_PASO,
                     // Con algo escrito pregunta antes: el arriendo escrito no se pierde por un toque.
-                    onClick = { preguntandoSiHayAlgoEscrito { descartarLoEscrito(paso); irA(siguiente) } },
+                    onClick = { preguntandoSiHayAlgoEscrito { descartarLoEscrito(paso); irA(volverAlPaso ?: siguiente) } },
                     variante = VarianteDeBoton.Fantasma,
                     tamano = TamanoDeBoton.S,
                     habilitado = !guardando,
@@ -687,6 +718,9 @@ fun PrimerUsoScreen(
     }
     }
 }
+
+/** Vuelta 87: los pasos opcionales, donde «Siguiente» avanza aunque no haya nada que guardar. */
+private val PASOS_QUE_SE_AVANZAN_SIN_NADA = setOf(PasoDePrimerUso.CAPTURA, PasoDePrimerUso.RECURRENTES)
 
 /** El tag de «Atrás» en el pie de la guía. */
 const val TAG_ATRAS_EN_LA_GUIA: String = "primer-uso-atras"
@@ -921,15 +955,21 @@ private fun SalarioDelPeriodo(
     if ((salario ?: 0L) > 0L) {
         Spacer(Modifier.height(Medida.dentroDeSeccion))
         Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
-            Fila(
-                titulo = YA_TE_PAGARON_ESTE_PERIODO,
-                subtitulo = if (yaTePagaron) "Movi lo espera desde el próximo período" else "Movi lo espera en este período",
-                final = { Casilla(marcada = yaTePagaron) },
-                onClick = if (habilitado) ({ onYaTePagaron(!yaTePagaron) }) else null,
-                modifier = Modifier.semantics { selected = yaTePagaron }.testTag(TAG_YA_TE_PAGARON),
-            )
+            FilaDeYaTePagaron(yaTePagaron, onYaTePagaron, habilitado)
         }
     }
+}
+
+/** «¿Ya te pagaron este período?»: la misma fila en el paso del período y en «Tu salario» (vuelta 87). */
+@Composable
+private fun FilaDeYaTePagaron(yaTePagaron: Boolean, onYaTePagaron: (Boolean) -> Unit, habilitado: Boolean) {
+    Fila(
+        titulo = YA_TE_PAGARON_ESTE_PERIODO,
+        subtitulo = if (yaTePagaron) "Movi lo espera desde el próximo período" else "Movi lo espera en este período",
+        final = { Casilla(marcada = yaTePagaron) },
+        onClick = if (habilitado) ({ onYaTePagaron(!yaTePagaron) }) else null,
+        modifier = Modifier.semantics { selected = yaTePagaron }.testTag(TAG_YA_TE_PAGARON),
+    )
 }
 
 @Composable
@@ -1192,13 +1232,29 @@ private fun PasoRecurrentes(
     borradores: Map<String, BorradorDeRecurrente>,
     abierto: String?,
     onAlternar: (clave: String, nombreFijo: String?, categoria: String) -> Unit,
+    preguntaElSalario: Boolean,
+    dia: Int?,
+    salario: Long?,
+    onSalario: (Long?) -> Unit,
+    yaTePagaron: Boolean,
+    onYaTePagaron: (Boolean) -> Unit,
+    habilitado: Boolean,
+    onElegirElDia: () -> Unit,
 ) {
     Text(
-        "Lo que pagas todos los meses. Movi te avisa antes de que venza y lo descuenta de lo que te queda. Es opcional.",
+        "Lo que te entra y lo que pagas todos los meses. Movi te avisa antes de que venza y lo descuenta de lo que te queda. Es opcional.",
         style = Movi.textos.cuerpo,
         color = Movi.colores.textoMedio,
     )
     Spacer(Modifier.height(Medida.entreSecciones))
+    // Vuelta 87 · **«Tu salario»**: la revisión 9 vio la guía entera sin preguntar cuánto te entra, y el
+    // primer día «Te quedan» era Tu plata. La pregunta ya estaba en el paso del período, debajo del
+    // calendario, donde no se veía; acá va a la vista, junto a lo que pagas. Es el MISMO monto y la MISMA
+    // regla (se crea al terminar con `createRecurringRule`, el día del período): nada nuevo se escribe.
+    if (preguntaElSalario) {
+        FilaDelSalario(dia, salario, onSalario, yaTePagaron, onYaTePagaron, habilitado, onElegirElDia)
+        Spacer(Modifier.height(Medida.entreSecciones))
+    }
     Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
         ATAJOS_DE_RECURRENTES.forEachIndexed { i, atajo ->
             if (i > 0) Separador()
@@ -1229,6 +1285,70 @@ private fun PasoRecurrentes(
         )
         val otro = borradores[CLAVE_DE_OTRO_PAGO]
         if (abierto == CLAVE_DE_OTRO_PAGO && otro != null) FormularioDeRecurrente(otro)
+    }
+}
+
+/** Lo que dice la fila del salario en «Lo que pagas cada mes» (vuelta 87). */
+const val TU_SALARIO: String = "Tu salario"
+
+/** Los tags de la fila del salario y de su campo, en el paso «Lo que pagas cada mes». */
+const val TAG_FILA_DEL_SALARIO: String = "primer-uso-fila-del-salario"
+const val TAG_SALARIO_EN_FIJOS: String = "primer-uso-salario-en-fijos"
+
+/**
+ * El subtítulo de «Tu salario» (vuelta 87): sin el día del período, pide elegirlo; sin monto, cuándo
+ * llegaría; con monto, «$3.500.000 · el día 25». Pura.
+ */
+fun subtituloDeTuSalario(dia: Int?, monto: Long?): String = when {
+    dia == null -> "Elige antes el día de pago"
+    (monto ?: 0L) > 0L -> "${formatCOP(monto!!)} · el día $dia"
+    else -> "Cuánto te pagan el día $dia"
+}
+
+/**
+ * **«Tu salario»** del paso «Lo que pagas cada mes» (vuelta 87). Tocarla abre el campo del monto; sin el
+ * día del período, lleva al paso del período a elegirlo. Escribe el mismo [salario] del paso del período.
+ */
+@Composable
+private fun FilaDelSalario(
+    dia: Int?,
+    salario: Long?,
+    onSalario: (Long?) -> Unit,
+    yaTePagaron: Boolean,
+    onYaTePagaron: (Boolean) -> Unit,
+    habilitado: Boolean,
+    onElegirElDia: () -> Unit,
+) {
+    var abierta by rememberSaveable { mutableStateOf(false) }
+    Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
+        Fila(
+            titulo = TU_SALARIO,
+            subtitulo = subtituloDeTuSalario(dia, salario),
+            inicio = { IconoEnCirculo(Icons.Rounded.SouthWest, tono = TonoDeIcono.Exito) },
+            final = { Chevron(abierto = abierta && dia != null) },
+            onClick = { if (dia == null) onElegirElDia() else abierta = !abierta },
+            modifier = Modifier.testTag(TAG_FILA_DEL_SALARIO),
+        )
+        if (abierta && dia != null) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Medida.margenDePantalla)
+                    .padding(bottom = Medida.dentroDeSeccion),
+            ) {
+                MoneyField(
+                    value = salario,
+                    onValueChange = onSalario,
+                    label = "Salario mensual",
+                    modifier = Modifier.testTag(TAG_SALARIO_EN_FIJOS),
+                )
+            }
+            if ((salario ?: 0L) > 0L) {
+                // Sin sangría: la fila de abajo no lleva avatar y el separador por defecto arranca después de uno.
+                Separador(SangriaDeSeparador.Ninguna)
+                FilaDeYaTePagaron(yaTePagaron, onYaTePagaron, habilitado)
+            }
+        }
     }
 }
 

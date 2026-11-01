@@ -96,6 +96,25 @@ object Icono {
  * lugar, para que dos pantallas no elijan distinto la misma cosa.
  */
 object Medida {
+    // Vuelta 87: anchos de decisión (a escala de letra 1; quien los usa los multiplica por la escala).
+    /** Lo mínimo que se le deja al resto del aviso de abajo («· Juan Valdez») en el primer renglón. */
+    val anchoMinimoDelRestoDelAviso: Dp = 88.dp
+
+    /** «En qué se va»: la píldora «$494.300 más», el monto y los espacios de un renglón. */
+    val anchoDeLaPildoraYElMontoDelWidget: Dp = 170.dp
+
+    /** «En qué se va»: lo mínimo que se le deja al nombre de una categoría. */
+    val anchoMinimoDelNombreEnElWidget: Dp = 90.dp
+
+    /** «En qué se va»: desde qué ancho útil cabe «Contra el período pasado» junto al título. */
+    val anchoParaContraElPeriodoPasado: Dp = 235.dp
+
+    /** «En qué se va»: desde qué ancho útil cabe «vs. período pasado». */
+    val anchoParaContraElPeriodoCorto: Dp = 200.dp
+
+    /** El ancho del widget en un teléfono de 390 dp (sin saber el real). */
+    val anchoDelWidgetEnUnTelefono: Dp = 358.dp
+
     /** El margen a cada lado de una pantalla. Era 20 (`Movi.espacios.margen`); el camino 1 usa 16. */
     val margenDePantalla: Dp = Espacio.m
 
