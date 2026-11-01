@@ -1121,6 +1121,13 @@ data class ParsedSms(
      */
     val aprendidoDe: String? = null,
     /**
+     * Vuelta 85 · **la categoría sale de la marca, no de este mismo comercio** («Como tus 25 de Rappi»,
+     * ver `MemoriaDeCategorias.recuerdoDe` con `conMarca`). Es una pista, no algo que el dueño ya
+     * decidió: [categoriaEntendida] no la da por entendida y el aviso no entra al lote. Con default: un
+     * APK viejo lo ignora.
+     */
+    val porMarca: Boolean = false,
+    /**
      * **A quién fue (o de quién vino) la plata, según el banco** (29-sep): el número de la cuenta de
      * destino («a la cuenta *31973270756» → `31973270756`), una llave («a la llave 0087» → `0087`)
      * o el nombre de quien mandó («Te llegó dinero de CAROLINA RESTREPO SALAZAR con tu llave» →

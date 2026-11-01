@@ -1,6 +1,10 @@
 package com.jvillada.movi.ui.transactions
 
+import com.jvillada.movi.shared.model.LoPorConfirmarPorSigno
 import com.jvillada.movi.shared.model.MontoDelAviso
+import com.jvillada.movi.shared.model.entraEnElLote
+import com.jvillada.movi.shared.model.entraPlata
+import com.jvillada.movi.shared.model.loPorConfirmarPorSigno
 import com.jvillada.movi.shared.model.sumaDeLoPorConfirmar
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
@@ -149,12 +153,16 @@ fun loPendienteSeVeEn(periodoVisible: PeriodoFinanciero, periodoDeHoy: PeriodoFi
  * @property comercios «Rappi, D1 y Uber», o `null` si Movi no leyó ninguno.
  * @property confirmables **solo** los que la fila de «Por revisar» confirmaría con un toque
  *   ([loQueMoviEntendio]: monto, cuenta y categoría entendidos, sin dudas). Los demás se quedan.
+ *   Vuelta 85: y sin ingresos ([entraEnElLote]): esos se confirman de a uno, en su fila.
+ * @property porSigno vuelta 85: [suman] partida en lo que sale y lo que entra ([loPorConfirmarPorSigno]),
+ *   con la misma regla de entera o nada.
  */
 data class AvisosPorConfirmar(
     val cuantos: Int,
     val suman: Long?,
     val comercios: String?,
     val confirmables: List<AnotacionEntendida>,
+    val porSigno: LoPorConfirmarPorSigno? = null,
 )
 
 /**
@@ -175,16 +183,22 @@ fun avisosPorConfirmar(
     val pagos = pagosRecientesPorRevisar(mensajes, ahora)
     val leidos = pagos.map { propuestaDelPago(propuestas, it)?.leido }
     // La misma suma que la franja «Por confirmar» del Inicio (`sumaDeLoPorConfirmar`, vuelta 44).
-    val suman = sumaDeLoPorConfirmar(leidos.map { leido -> leido?.let { MontoDelAviso(it.amount.roundToLong(), it.currency) } })
+    val montos = leidos.map { leido ->
+        leido?.let { MontoDelAviso(it.amount.roundToLong(), it.currency, entra = entraPlata(it)) }
+    }
+    val suman = sumaDeLoPorConfirmar(montos)
     val nombres = leidos.mapNotNull { leido -> leido?.merchant?.takeIf { it.isNotBlank() }?.let(::nombreParaMostrar) }.distinct()
     val confirmables = if (propuestas == null) emptyList() else pagos
         .filter { it.id !in fallaron }
         .mapNotNull { loQueMoviEntendio(it, mensajes, propuestas, cuentas, ahora, categoriasElegidas[it.id]).anotacion }
+        // Vuelta 85: un ingreso no va en el lote (ver `entraEnElLote`); su fila lo confirma igual.
+        .filter { entraEnElLote(it.leido) }
     return AvisosPorConfirmar(
         cuantos = pagos.size,
         suman = suman,
         comercios = listaDeComercios(nombres),
         confirmables = confirmables,
+        porSigno = loPorConfirmarPorSigno(montos),
     )
 }
 

@@ -136,7 +136,8 @@ class ActividadPorDentroEnPantallaTest {
         montar(listOf(cafe, pan, exito), esperar = "por revisar")
 
         assertTrue(hay("3 por revisar"))
-        assertTrue(hay("3 avisos"), "de qué es el número")
+        // Vuelta 85: de qué es el número, con lo que suman y su signo (los tres salen).
+        assertTrue(hay("\u2212\$135.000 en 3 salidas", substring = false), "de qué es el número")
         // Vuelta 80: una propuesta de un renglón, sin el renglón de la suma.
         assertTrue(!hay("Suman"))
         // Éxito tiene un «¿Ya lo anotaste?»: no entra en el lote.
