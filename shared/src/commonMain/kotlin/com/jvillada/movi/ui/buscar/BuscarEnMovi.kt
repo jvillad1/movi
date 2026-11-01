@@ -268,11 +268,12 @@ fun subtituloDeUnMovimientoEnBuscar(
 ): String {
     val titulo = textosDeLaFila(evento, nombreDeLaCuenta).titulo
     val categoria = evento.category.takeIf { it.isNotBlank() && normalizarParaBuscar(it) != normalizarParaBuscar(titulo) }
-    // Revisión de la 83: la cuenta solo va cuando no es la habitual, y entonces **primero** y con la fecha
-    // corta («Nu · Mercado · 21 oct»): al final era lo que se cortaba con dos renglones a la derecha.
+    // Vuelta 87: la cuenta solo va cuando no es la habitual, y va **al final**, como en Actividad
+    // («Transporte · 27 oct · Bancolombia ·4057»): `Fila` protege la cola «·4057» de un subtítulo que termina
+    // en un nombre corto, y a 360 se recortaba la fecha en lugar de la cabeza. (La 83 la había puesto
+    // primero, y ahí «·4057» quedaba en el medio, sin protección.)
     val cuenta = nombreDeLaCuenta?.takeIf { it.isNotBlank() }
-    return if (cuenta != null) listOfNotNull(cuenta, categoria, fecha).joinToString(" · ")
-    else listOfNotNull(categoria, fecha).joinToString(" · ")
+    return listOfNotNull(categoria, fecha, cuenta).joinToString(" · ")
 }
 
 /**
