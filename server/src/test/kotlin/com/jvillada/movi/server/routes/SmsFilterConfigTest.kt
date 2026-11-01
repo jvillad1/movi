@@ -137,11 +137,11 @@ class SmsFilterConfigTest {
         val keywords = Json.parseToJsonElement(client.get("/api/sms/filter-config").bodyAsText())
             .jsonObject["bodyKeywords"]!!.jsonArray.map { it.jsonPrimitive.content }
         val esperadas = listOf(
-            "davivienda", "davibank", "daviplata", "bbva", "banco de bogota", "av villas", "banco de occidente",
-            "colpatria", "scotiabank", "itau", "falabella", "lulo bank", "nequi", "rappipay",
+            "davivienda", "davibank", "bbva", "banco de bogota", "av villas", "banco de occidente",
+            "colpatria", "scotiabank", "itau", "falabella", "lulo bank", "rappipay",
         )
         assertEquals(true, keywords.containsAll(esperadas), "faltan: ${esperadas - keywords.toSet()}")
-        for (generica in listOf("popular", "occidente", "bogota", "banco", "villas", "nu", "davi")) {
+        for (generica in listOf("popular", "occidente", "bogota", "banco", "villas", "nu", "davi", "nequi", "daviplata")) {
             assertEquals(false, generica in keywords, "«$generica» suelta mete ruido")
         }
         // El cliente compara en minúsculas y por substring: el texto real de Davivienda tiene que pasar.

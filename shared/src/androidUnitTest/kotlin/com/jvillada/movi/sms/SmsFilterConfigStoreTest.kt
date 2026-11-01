@@ -32,7 +32,7 @@ class SmsFilterConfigStoreTest {
         val remote = FilterConfig(senderCodes = listOf("85540", "999999"), bodyKeywords = listOf("bancolombia", "nequi"))
         val result = SmsFilterConfigStore.withDefaults(remote)
         assertEquals(listOf("85540", "999999", "891333", "87400"), result.senderCodes)
-        // Vuelta 99: el piso ya trae «nequi» y los otros bancos; lo remoto va primero y nada se repite.
+        // Lo remoto va primero y nada se repite.
         assertEquals(listOf("bancolombia", "nequi"), result.bodyKeywords.take(2))
         assertEquals((remote.bodyKeywords + BankSenderFilter.DEFAULTS.bodyKeywords).distinct(), result.bodyKeywords)
     }

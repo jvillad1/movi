@@ -69,9 +69,11 @@ internal val PALABRAS_DE_BANCOS: List<String> = listOf(
     // `ninguna keyword coincide dentro de una palabra española común`): nada de «popular» ni
     // «occidente» sueltos. El cliente compara SIN quitar tildes (`lower.contains`), así que los
     // nombres que el banco puede escribir con tilde van de las dos formas.
-    "davivienda", "davibank", "daviplata", "bbva",
+    // Sin «nequi» ni «daviplata»: la gente las nombra en SMS personales («te mandé por Nequi») y esos
+    // textos saldrían del teléfono. Sus avisos reales llegan por notificación, no por SMS.
+    "davivienda", "davibank", "bbva",
     "banco de bogota", "banco de bogotá", "av villas", "banco de occidente",
-    "colpatria", "scotiabank", "itau", "itaú", "falabella", "lulo bank", "nequi", "rappipay",
+    "colpatria", "scotiabank", "itau", "itaú", "falabella", "lulo bank", "rappipay",
 )
 
 private val CURRENT_FILTER = SmsFilterConfig(
