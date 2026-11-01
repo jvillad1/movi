@@ -39,6 +39,10 @@ import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Sms
 import androidx.compose.material.icons.rounded.Summarize
 import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.BugReport
+import androidx.compose.material.icons.rounded.Insights
+import com.jvillada.movi.observabilidad.Uso
+import com.jvillada.movi.ui.admin.TITULO_DE_FALLOS_Y_USO
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material.icons.rounded.DeleteForever
 import androidx.compose.material3.Text
@@ -549,6 +553,17 @@ fun MasScreen(
                     Separador()
                     // El enlace de solo lectura para Caro o un asesor.
                     FilaQueLleva("Compartir", Icons.Rounded.Share, Screen.Compartir, onNavigate)
+                    Separador()
+                    // Vuelta 100: el uso de la app (qué se abre y qué se toca, sin contenido). De este
+                    // aparato, encendido por defecto. Los fallos no dependen de esto.
+                    Fila(
+                        titulo = MANDAR_DATOS_DE_USO,
+                        inicio = { IconoDeAjuste(Icons.Rounded.Insights) },
+                        subtitulo = NOTA_DE_LOS_DATOS_DE_USO,
+                        lineasDelSubtitulo = 4,
+                        final = { Interruptor(Uso.activo, onCambio = { Uso.poner(it) }) },
+                        onClick = { Uso.poner(!Uso.activo) },
+                    )
                 }
                 NotaDeSeccion(
                     errorDatos ?: "La descarga trae tus cuentas, movimientos, créditos y mensajes del banco.",
@@ -603,6 +618,15 @@ fun MasScreen(
                             Screen.ScreenEditor,
                             onNavigate,
                             subtitulo = "Reordena y edita las secciones de Inicio",
+                        )
+                        Separador()
+                        // Vuelta 100: los fallos de la app y cómo se usa (solo admin).
+                        FilaQueLleva(
+                            TITULO_DE_FALLOS_Y_USO,
+                            Icons.Rounded.BugReport,
+                            Screen.FallosYUso,
+                            onNavigate,
+                            subtitulo = "Qué se cae, quién vuelve y por dónde anda cada uno",
                         )
                     }
                 }
@@ -921,3 +945,10 @@ private fun SeccionEntrarConHuella() {
         )
     }
 }
+
+/** Vuelta 100 · el interruptor del uso, en Tus datos. */
+const val MANDAR_DATOS_DE_USO = "Mandar datos de uso para mejorar Movi"
+
+/** Lo que dice la fila: qué va, qué no, y que los fallos van siempre. */
+const val NOTA_DE_LOS_DATOS_DE_USO =
+    "Qué pantallas abres y qué tocas, nunca montos ni textos. Los fallos se mandan siempre: no llevan tus datos."

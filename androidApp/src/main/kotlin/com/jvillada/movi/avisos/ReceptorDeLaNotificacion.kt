@@ -89,6 +89,8 @@ class ConfirmarDesdeLaNotificacionWorker(context: Context, params: WorkerParamet
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                // Vuelta 100: lo atrapado también se reporta (sin cambiar lo que sigue); la red caída, no.
+                com.jvillada.movi.fallos.CapturaDeFallos.reportarAtrapado(applicationContext, e, "ConfirmarDesdeLaNotificacionWorker")
                 ResultadoDeConfirmar.NoSePudo("sin conexión")
             }
         }

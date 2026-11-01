@@ -93,6 +93,13 @@ class SmsSyncWorker(context: Context, params: WorkerParameters) : CoroutineWorke
                 // Vuelta 78: entró un aviso por fuera de la app (mismo proceso que la pantalla): lo
                 // leído hace menos de 30 s ya no es fresco, y el Inicio vuelve a preguntar.
                 com.jvillada.movi.data.olvidarLoFresco()
+                // Vuelta 100: en la línea de tiempo del uso, que el teléfono capturó un aviso (solo el
+                // origen, nunca el texto). Sube ya: el proceso puede morir apenas esto termina.
+                com.jvillada.movi.observabilidad.Uso.evento(
+                    com.jvillada.movi.shared.model.EventoDeUso.AVISO_CAPTURADO,
+                    mapOf(com.jvillada.movi.shared.model.ClaveDeUso.ORIGEN to if (deNotificacion) "NOTIFICACION" else "SMS"),
+                )
+                runCatching { com.jvillada.movi.observabilidad.Uso.enviar() }
                 Result.success()
             }
             SmsSyncResult.Unauthorized -> {

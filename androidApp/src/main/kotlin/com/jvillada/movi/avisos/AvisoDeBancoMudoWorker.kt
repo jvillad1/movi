@@ -32,6 +32,8 @@ class AvisoDeBancoMudoWorker(context: Context, params: WorkerParameters) : Corou
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            // Vuelta 100: lo atrapado también se reporta (sin cambiar lo que sigue); la red caída, no.
+            com.jvillada.movi.fallos.CapturaDeFallos.reportarAtrapado(applicationContext, e, "AvisoDeBancoMudoWorker")
             Log.w(TAG, "no se pudieron leer los orígenes mudos", e)
             return if (runAttemptCount < MAX_REINTENTOS) Result.retry() else Result.success()
         }

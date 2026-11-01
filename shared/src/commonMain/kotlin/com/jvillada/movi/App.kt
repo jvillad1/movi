@@ -181,6 +181,8 @@ fun App() {
             // apilarla dejaba la pila en una pantalla sin pestaña (`navTabFor` → null) y App.kt
             // escondía el rail y la barra, así que la hoja quedaba flotando sobre un vacío negro.
             var quickAdd by remember { mutableStateOf<Screen.QuickAdd?>(null) }
+            // Vuelta 100: la navegación central del uso (la ruta, la pantalla, la sesión). Una sola llamada.
+            com.jvillada.movi.observabilidad.ObservarElUso(backStack.toList(), agregarAbierto = quickAdd != null)
             // Qué hojas modales hay abiertas AHORA, las de este archivo y las que dibuja cada
             // pantalla por su cuenta (Perfil y sus cuatro). Ver [PilaDeHojas].
             val pilaDeHojas = remember { PilaDeHojas() }
@@ -549,6 +551,7 @@ fun App() {
                     importId = pantalla.importId,
                 )
                 Screen.ScreenEditor      -> ScreenEditorScreen(navigate)
+                Screen.FallosYUso        -> com.jvillada.movi.ui.admin.FallosYUsoScreen(navigate)
                 // Ola W2: en el teléfono son las dos pantallas de siempre; en la web, una lista con
                 // el detalle del período elegido al lado (ver [PeriodosListaYDetalle]).
                 Screen.Periodos          -> PeriodosListaYDetalle(navigate, idPedido = null)

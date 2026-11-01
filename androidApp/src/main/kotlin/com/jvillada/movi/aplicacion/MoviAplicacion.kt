@@ -4,6 +4,8 @@ import android.app.ActivityManager
 import android.app.Application
 import com.jvillada.movi.avisos.Avisador
 import com.jvillada.movi.data.SaldosOcultosStore
+import com.jvillada.movi.fallos.CapturaDeFallos
+import com.jvillada.movi.fallos.SubirFallosWorker
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.sms.SmsBackfillWorker
 import com.jvillada.movi.sms.SubirCapturasPorSubirWorker
@@ -22,6 +24,13 @@ class MoviAplicacion : Application() {
     override fun onCreate() {
         super.onCreate()
         val contexto = applicationContext
+        // Vuelta 100 · los fallos: lo primero, para que una caída en lo que sigue también quede. El
+        // handler guarda en disco y deja seguir al del sistema; lo guardado sube al próximo arranque
+        // (o apenas haya red), y lo que un Worker atrapa sube en cuanto lo reporta.
+        CapturaDeFallos.conocerElAparato(contexto)
+        CapturaDeFallos.instalar(CapturaDeFallos.carpeta(contexto))
+        CapturaDeFallos.alGuardarAtrapado = { SubirFallosWorker.encolarSiHayAlgo(it) }
+        runCatching { SubirFallosWorker.encolarSiHayAlgo(contexto) }
         InstantaneaDelInicio.alCambiar = { WidgetTeQuedan.pintarTodos(contexto) }
         // «Ocultar los saldos»: el widget pinta la misma cifra que el héroe, así que también se
         // tapa (o se destapa) en el acto.

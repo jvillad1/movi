@@ -371,6 +371,8 @@ object SessionManager {
         // las alertas del anterior, y si alguna carga fallara en silencio, se quedarían.
         ScreenDefCache.dashboard = null
         DashboardDataCache.clear()
+        // Vuelta 100: el uso que no subió es de quien se va; no se le atribuye a quien entre después.
+        com.jvillada.movi.observabilidad.Uso.olvidar()
         // Vuelta 79: un «el dueño cambió la plata» sin tomar es de quien se va.
         com.jvillada.movi.ui.components.ds.CambioDelDueno.limpiar()
         com.jvillada.movi.ui.dashboard.MovimientosDelDueno.limpiar()

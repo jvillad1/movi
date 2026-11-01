@@ -29,7 +29,9 @@ object Repositories {
      * `ElInicioNoRepitePeticionesTest` monte exactamente esta cadena sobre un cliente HTTP falso.
      */
     internal fun paraLaApp(repo: WalletRepository): WalletRepository =
-        InvalidaElInicioAlEscribir(LecturasSinRepetir(repo))
+        // Vuelta 100: en el medio, [com.jvillada.movi.observabilidad.UsoDelRepositorio] anota las
+        // funciones clave en el uso; delega todo y no cambia ninguna respuesta.
+        InvalidaElInicioAlEscribir(com.jvillada.movi.observabilidad.UsoDelRepositorio(LecturasSinRepetir(repo)))
     private val real: WalletRepository by realPerezoso
 
     /**

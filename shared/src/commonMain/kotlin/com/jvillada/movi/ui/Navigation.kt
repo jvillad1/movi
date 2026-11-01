@@ -338,6 +338,8 @@ sealed class Screen {
     data class StatementReview(val resultJson: String) : Screen()
     data class ImportDetail(val importId: String) : Screen()
     data object ScreenEditor : Screen()
+    /** Vuelta 100 · «Fallos y uso», solo admin: Ajustes → Administración. */
+    data object FallosYUso : Screen()
 
     /**
      * **«Tus períodos»** — cómo le fue al dueño en cada ciclo (entró, salió, te
@@ -410,7 +412,7 @@ fun navTabFor(screen: Screen): NavTab? = when (screen) {
     Screen.Accounts, Screen.Credits, Screen.SalidaDeDeudas, Screen.CuadreDeSaldos, is Screen.CuadrarLaCuenta,
     Screen.Espacios, is Screen.Espacio, is Screen.Destinos,
     Screen.CapturaDelBanco, Screen.Categorias, Screen.PrimerosPasos, Screen.Documentos, Screen.Compartir,
-    Screen.LoQueMoviSabe, Screen.BorrarLaCuenta, Screen.EditarInicio -> NavTab.TU
+    Screen.LoQueMoviSabe, Screen.BorrarLaCuenta, Screen.EditarInicio, Screen.FallosYUso -> NavTab.TU
     // El detalle hereda la pestaña de la pantalla donde vive la cuenta — así resaltar y
     // «volver» no pueden contradecirse. Las dos (Cuentas y Créditos) son Tú.
     is Screen.AccountDetail -> navTabFor(homeScreenFor(screen.group))
@@ -429,7 +431,8 @@ fun navTabFor(screen: Screen): NavTab? = when (screen) {
 fun esDeAjustes(screen: Screen): Boolean = when (screen) {
     Screen.Mas, is Screen.AIChat,
     Screen.CapturaDelBanco, Screen.Categorias, Screen.PrimerosPasos,
-    Screen.Documentos, Screen.Compartir, Screen.LoQueMoviSabe, Screen.BorrarLaCuenta, Screen.EditarInicio -> true
+    Screen.Documentos, Screen.Compartir, Screen.LoQueMoviSabe, Screen.BorrarLaCuenta, Screen.EditarInicio,
+    Screen.FallosYUso -> true
     else -> false
 }
 

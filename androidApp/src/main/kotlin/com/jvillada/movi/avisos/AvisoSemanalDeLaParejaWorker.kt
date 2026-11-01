@@ -39,6 +39,8 @@ class AvisoSemanalDeLaParejaWorker(context: Context, params: WorkerParameters) :
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            // Vuelta 100: lo atrapado también se reporta (sin cambiar lo que sigue); la red caída, no.
+            com.jvillada.movi.fallos.CapturaDeFallos.reportarAtrapado(applicationContext, e, "AvisoSemanalDeLaParejaWorker")
             Log.w(TAG, "no se pudieron leer los grupos para el resumen semanal", e)
             return if (runAttemptCount < MAX_REINTENTOS) Result.retry() else Result.success()
         }

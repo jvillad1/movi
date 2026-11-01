@@ -14,9 +14,53 @@ import io.ktor.client.plugins.defaultRequest
 import io.ktor.http.HttpHeaders
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
+import com.jvillada.movi.observabilidad.anotarElErrorDeRedParaElUso
+import com.jvillada.movi.observabilidad.anotarLaRespuestaParaElUso
+import io.ktor.client.plugins.api.createClientPlugin
 import java.io.IOException
 
+/**
+ * # Las pruebas no salen a la red (vuelta 100)
+ *
+ * En los logs de Railway había ráfagas de `401 GET /api/events/ev-hija/parecidos` y `/api/espacios`:
+ * `ev-hija` solo existe en `HojaDelMovimientoTest`. El camino: una prueba Robolectric monta una
+ * pantalla sin poner `Repositories.sustitutoDePrueba`, la pantalla lee `Repositories.wallets`, eso
+ * construye el repositorio de verdad (`createRepository`) y su cliente sale a [apiBaseUrl] —
+ * **producción**— sin token. Las pruebas no fallaban (un 401 se trata como «no hay datos») y
+ * producción recibía basura en cada corrida del CI.
+ *
+ * Con [cerradaPorLasPruebas] en `true` —lo pone `AppDePrueba` antes de cada prueba— todo cliente de
+ * [createHttpClient] falla antes de salir, con [LaRedEstaCerradaEnLasPruebas] (una `IOException`: la
+ * app la trata como «sin conexión», que es lo que esas pantallas ya sabían manejar). Lo que use
+ * `HttpURLConnection` directo lo cierra el `ProxySelector` de `AppDePrueba`. La guarda que lo vigila
+ * es `LasPruebasNoSalenALaRedTest`.
+ */
+object RedDeLaApp {
+    @Volatile
+    var cerradaPorLasPruebas: Boolean = false
+
+    /** Los pedidos que la red cerrada frenó, para la guarda (un `getParecidos` se traga su error). */
+    val frenados: java.util.concurrent.CopyOnWriteArrayList<String> = java.util.concurrent.CopyOnWriteArrayList()
+}
+
+/** El pedido que una prueba intentó mandar a la red. */
+class LaRedEstaCerradaEnLasPruebas(url: String) :
+    IOException("Una prueba intentó salir a la red ($url). Pon un sustituto: Repositories.sustitutoDePrueba, Uso.enviadorDePrueba…")
+
+private val RedCerradaEnLasPruebas = createClientPlugin("RedCerradaEnLasPruebas") {
+    onRequest { request, _ ->
+        if (RedDeLaApp.cerradaPorLasPruebas) {
+            val url = request.url.buildString()
+            RedDeLaApp.frenados += url
+            throw LaRedEstaCerradaEnLasPruebas(url)
+        }
+    }
+}
+
 actual fun createHttpClient(): HttpClient = HttpClient(Android) {
+    // Vuelta 100: en las pruebas no sale nada a la red (ver [RedDeLaApp]). Primero de todo, para que
+    // ningún otro plugin alcance a armar el pedido.
+    install(RedCerradaEnLasPruebas)
     install(ContentNegotiation) {
         json(Json { ignoreUnknownKeys = true })
     }
@@ -36,10 +80,15 @@ actual fun createHttpClient(): HttpClient = HttpClient(Android) {
             if (laSesionTras(response.status.value, response.call.request.url, tokenDelPedido, SessionManager.token) == LaSesionTras.SE_CERRO) {
                 SessionManager.seRechazoElToken(tokenDelPedido)
             }
+            // Vuelta 100: una escritura que el server rechazó queda en el uso, con su código.
+            anotarLaRespuestaParaElUso(response.status.value, response.call.request.method.value, response.call.request.url)
         }
-        handleResponseExceptionWithRequest { cause, _ ->
+        handleResponseExceptionWithRequest { cause, request ->
             // Network errors (no connectivity) — keep session alive, work offline
-            if (cause is IOException) return@handleResponseExceptionWithRequest
+            if (cause is IOException) {
+                anotarElErrorDeRedParaElUso(request.method.value, request.url)
+                return@handleResponseExceptionWithRequest
+            }
             throw cause
         }
     }
@@ -57,6 +106,11 @@ actual fun createRepository(): WalletRepository {
     // comparten el candado y no empujan la misma fila a la vez.
     // Vuelta 78: lo que sube cambia lo que el server contesta: lo leído hace menos de 30 s ya no es fresco.
     val sincronizador = SyncEngine(db, remote, userId, alSubirAlgo = {
+        // Vuelta 100: en la línea de tiempo del uso, cuándo el teléfono subió lo que tenía guardado.
+        com.jvillada.movi.observabilidad.Uso.evento(
+            com.jvillada.movi.shared.model.EventoDeUso.SINCRONIZACION,
+            mapOf(com.jvillada.movi.shared.model.ClaveDeUso.RESULTADO to "OK"),
+        )
         olvidarLoFresco()
         // Vuelta 82: lo que el héroe del Inicio adelantaba puede haber subido: que vuelva a mirar ya.
         com.jvillada.movi.ui.dashboard.MovimientosDelDueno.despertar()
