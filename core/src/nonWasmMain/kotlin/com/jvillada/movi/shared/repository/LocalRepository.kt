@@ -2686,6 +2686,7 @@ class LocalRepository(
     override suspend fun updateUserProfile(request: UpdateProfileRequest): UserProfile = remote.updateUserProfile(request)
     override suspend fun marcarPrimerUso(): UserProfile = remote.marcarPrimerUso()
     override suspend fun getDireccionDeCorreo() = remote.getDireccionDeCorreo()
+    override suspend fun getFiltroDeCorreo() = remote.getFiltroDeCorreo()
     override suspend fun changePassword(request: ChangePasswordRequest): String? = remote.changePassword(request)
     override suspend fun cerrarSesionesEnTodosLosAparatos() = remote.cerrarSesionesEnTodosLosAparatos()
     // Server-first: lo local se borra DESPUÉS, y solo si el server dijo que sí (ver [olvidarTodoLoDe]).

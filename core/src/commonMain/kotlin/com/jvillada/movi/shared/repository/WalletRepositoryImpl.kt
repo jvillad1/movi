@@ -1432,6 +1432,9 @@ class WalletRepositoryImpl(
     override suspend fun getDireccionDeCorreo(): com.jvillada.movi.shared.model.DireccionDeCorreo =
         client.get("$baseUrl/api/correo-entrante/direccion").exigirExito().body()
 
+    override suspend fun getFiltroDeCorreo(): com.jvillada.movi.shared.model.FiltroDeGmail =
+        client.get("$baseUrl/api/correo-entrante/filtro").exigirExito().body()
+
     override suspend fun changePassword(request: ChangePasswordRequest): String? {
         val response = client.put("$baseUrl/api/users/me/password") {
             contentType(ContentType.Application.Json)

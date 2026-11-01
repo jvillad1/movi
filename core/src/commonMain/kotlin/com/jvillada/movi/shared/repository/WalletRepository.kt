@@ -846,6 +846,13 @@ interface WalletRepository {
     suspend fun getDireccionDeCorreo(): com.jvillada.movi.shared.model.DireccionDeCorreo
 
     /**
+     * `GET /api/correo-entrante/filtro` (vuelta 93): el filtro de Gmail que Movi arma —la búsqueda, el XML de
+     * importación y el código de confirmación del reenvío—. Falla contra un server que no lo tiene (404): la
+     * guía lo lee con `runCatching` y sigue sin él.
+     */
+    suspend fun getFiltroDeCorreo(): com.jvillada.movi.shared.model.FiltroDeGmail
+
+    /**
      * `PUT /api/users/me/password`. Lanza [ApiException] con 403 si [ChangePasswordRequest.current]
      * no coincide, o 400 si [ChangePasswordRequest.new] no cumple [com.jvillada.movi.shared.model.PasswordPolicy]
      * — el servidor es la autoridad, la validación del cliente es solo cortesía.

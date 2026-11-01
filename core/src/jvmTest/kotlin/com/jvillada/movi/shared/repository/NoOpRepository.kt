@@ -553,6 +553,7 @@ open class NoOpRepository(
     )
     override suspend fun marcarPrimerUso() = UserProfile(id = "usr-stub", email = "stub@movi.test", name = "Stub", avatarColor = AvatarPalette.DEFAULT, primerUsoEn = 1L)
     override suspend fun getDireccionDeCorreo() = com.jvillada.movi.shared.model.DireccionDeCorreo(token = "stub", configurado = false)
+    override suspend fun getFiltroDeCorreo() = com.jvillada.movi.shared.model.FiltroDeGmail()
     override suspend fun changePassword(request: ChangePasswordRequest): String? = null
     override suspend fun cerrarSesionesEnTodosLosAparatos() {}
     override suspend fun borrarLaCuenta(request: BorrarLaCuentaRequest) {}

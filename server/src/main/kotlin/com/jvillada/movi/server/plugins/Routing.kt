@@ -119,6 +119,7 @@ fun Application.configureRouting() {
             // Vuelta 67: restaurar un anulado, deshacer una compra dividida y los anulados.
             restaurarYDeshacerRoutes()
             direccionDeCorreoRoutes()
+            filtroDeGmailRoutes()
             aiRoutes()
             statementRoutes()
             documentRoutes()
