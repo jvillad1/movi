@@ -5102,3 +5102,32 @@ no se pide permiso en una pantalla aparte: se abre una **hoja corta antes de la 
   fila en Ajustes que la vuelve a abrir.
 - Lo que no usa el tercero (las tres preguntas sugeridas) no pasa por la puerta.
 - Una puerta por pantalla que dispara la acción (`rememberPuertaDeLaIa` + `puerta.Hoja()`).
+
+## Vuelta 97 · El selector de reparto
+
+**Patrón: cuando un monto se reparte entre personas, se elige la forma en una fila de píldoras y solo la forma
+elegida despliega sus campos.** Es `SelectorDeReparto` (`ui/espacios/SelectorDeReparto.kt`), el único: va en la
+hoja «Repartir» del detalle de un gasto (`HojaDeRepartirElGasto`, que también cambia el reparto de un gasto ya
+repartido y abre la propuesta de Movi), en «Repartir este gasto» de Agregar y en «Pagó otro».
+
+- **Rótulo** «¿Cómo se reparte?» (`RotuloDeCampo`) y cuatro `PildoraDeFiltro` en un `FlowRow`: «Partes iguales»
+  (la regla del grupo; «Como el grupo» si el grupo va por porcentajes), «Porcentajes», «Montos exactos» y «Solo de
+  Caro» («Solo de una persona» con más gente, y debajo se elige quién). **«Partes iguales» viene elegida**: lo de
+  siempre no cambia.
+- Elegir una forma **la deja cuadrada** (`repartoAlElegir`: los porcentajes o los montos de la regla del grupo);
+  el dueño solo corrige lo distinto. Los campos van uno por persona: dos lado a lado, más uno debajo del otro
+  (`Campo` con sufijo «%», `CampoDeMonto`).
+- **La línea en vivo**, debajo (`lineaDelReparto`): «Te toca $70.000 · a Caro $30.000» en `cuerpo`/`textoMedio`
+  cuando cuadra; si no, el problema de `:core` (`problemaDelReparto`) en `cuerpoFuerte`: «Faltan $20.000» en
+  `texto`, «Te pasaste por 10 %» en `sale`. **El botón no se habilita hasta que cuadre**, y su razón no repite la
+  línea.
+- La validación es **la de `:core`**, la misma con que el server contesta 422: la pantalla nunca acepta algo que
+  el server rechazaría.
+
+**La propuesta de repartir** («¿Repartes Arriendo $2.400.000 con Caro?», `LaPropuestaDeRepartir.kt`) es una
+`TarjetaDePropuesta` con **tres acciones**: «Repartir» (`Secundario`: el amarillo del Inicio sigue siendo «Gasto»),
+«No es compartido» y «Nunca para este comercio» (`Fantasma`). Con la tercera, la tarjeta pone los botones en un
+`FlowRow` que se parte en dos renglones si no caben a 360 dp; nunca se cortan. Las dos que descartan se van en el
+acto (`AnomaliasDescartadasEnLaSesion`).
+
+**Pruebas**: `SelectorDeRepartoEnPantallaTest` (androidUnitTest) y `RepartoPorGastoEnLaAppTest` (commonTest).
