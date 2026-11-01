@@ -603,6 +603,15 @@ class WalletRepositoryImpl(
         }.exigirExito()
     }
 
+    override suspend fun actualizarCierre(periodo: String): com.jvillada.movi.shared.model.CierreDelPeriodo? {
+        val respuesta = client.post("$baseUrl/api/cierre-del-periodo/actualizar") {
+            contentType(ContentType.Application.Json)
+            setBody(com.jvillada.movi.shared.model.ActualizarCierreRequest(periodo))
+        }
+        if (respuesta.status == HttpStatusCode.NotFound) return null
+        return respuesta.exigirExito().body()
+    }
+
     override suspend fun getCuadresPorAviso(): List<com.jvillada.movi.shared.model.PropuestaDeCuadrePorAviso> =
         client.get("$baseUrl/api/cuadres-por-aviso").exigirExito().body()
 
@@ -1428,6 +1437,13 @@ class WalletRepositoryImpl(
 
     override suspend fun marcarPrimerUso(): UserProfile =
         client.post("$baseUrl/api/users/me/primer-uso").exigirExito().body()
+
+    override suspend fun marcarAvisoDeLaIa() {
+        client.post("$baseUrl/api/users/me/aviso-ia").exigirExito()
+    }
+
+    override suspend fun getResumenDeLoQueMoviSabe(): com.jvillada.movi.shared.model.ResumenDeLoQueMoviSabe =
+        client.get("$baseUrl/api/asistente/resumen").exigirExito().body()
 
     override suspend fun getDireccionDeCorreo(): com.jvillada.movi.shared.model.DireccionDeCorreo =
         client.get("$baseUrl/api/correo-entrante/direccion").exigirExito().body()

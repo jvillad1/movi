@@ -110,6 +110,8 @@ fun SduiRenderer(
     // «Ya lo vi» del cierre del período, que ahora es una tarjeta de «Movi propone hoy»: el estado
     // (`data`) vive en `DashboardScreen`.
     onDescartarCierre: (String) -> Unit = {},
+    // Vuelta 95: «Actualizar» la foto del cierre, que también vive en `DashboardScreen`.
+    onActualizarCierre: (String) -> Unit = {},
     // Vuelta 39: algo cambió desde el Inicio mismo (un movimiento de «Últimos movimientos» editado o
     // anulado en su hoja): `DashboardScreen` vuelve a pedir las cifras.
     onRecargar: () -> Unit = {},
@@ -131,6 +133,7 @@ fun SduiRenderer(
         onNavigate, onShowCreateSheet, onDescartarCierre, uriHandler, onRecargar,
         // Con «Próximo pago» en la definición, «Movi propone hoy» no repite el pago.
         conElPagoEnLasPropuestas = renderableSections(definition).none { it.type == "PROXIMO_PAGO" },
+        onActualizarCierre = onActualizarCierre,
     )
     val colorDeLaBanda = Movi.colores.marca
     // La rueda del mouse sobre los márgenes mueve esta pantalla (ver [ScrollDesdeLosMargenes]).
@@ -283,6 +286,7 @@ private class AccionesDelRenderer(
     val uriHandler: UriHandler,
     val onRecargar: () -> Unit,
     val conElPagoEnLasPropuestas: Boolean,
+    val onActualizarCierre: (String) -> Unit = {},
 )
 
 /** El tag del scroll del Inicio cuando lleva la banda amarilla (vuelta 39). */
@@ -399,7 +403,7 @@ private fun SduiSection(
         "HERO_BALANCE" -> HeroDeUnVistazo(section, data, onNavigate, acciones.onShowCreateSheet)
         // Generación 9 (ola R1): la cuadrícula, «Movi propone hoy» y el carrusel de cuentas.
         "ACCIONES" -> AccionesDelInicioSection(data, onNavigate)
-        "PROPUESTAS" -> PropuestasDelInicioSection(data, onNavigate, acciones.onDescartarCierre, acciones.conElPagoEnLasPropuestas)
+        "PROPUESTAS" -> PropuestasDelInicioSection(data, onNavigate, acciones.onDescartarCierre, acciones.onActualizarCierre, acciones.conElPagoEnLasPropuestas)
         // Generación 10 (vuelta 39): el próximo pago y los últimos movimientos.
         "PROXIMO_PAGO" -> ProximoPagoSection(data, onNavigate)
         "ULTIMOS_MOVIMIENTOS" -> UltimosMovimientosSection(data, onNavigate, acciones.onRecargar)

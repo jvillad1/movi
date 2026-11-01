@@ -386,6 +386,12 @@ interface WalletRepository {
     /** `POST /api/cierre-del-periodo/descartar`: la tarjeta de [periodo] no vuelve a salir en Hoy. */
     suspend fun descartarCierre(periodo: String) {}
     /**
+     * `POST /api/cierre-del-periodo/actualizar` (vuelta 95): la foto del cierre de [periodo] se reemplaza
+     * por el cálculo de hoy y vuelve el cierre nuevo; `null` si ya no es el último período cerrado.
+     * Default `null` para los dobles de prueba.
+     */
+    suspend fun actualizarCierre(periodo: String): com.jvillada.movi.shared.model.CierreDelPeriodo? = null
+    /**
      * `GET /api/cuadres-por-aviso`: el saldo que dijo un aviso confirmado contra el que dice Movi en
      * ese instante, cuando no coinciden. Una propuesta por cuenta como mucho. Default vacío para los
      * dobles de prueba.
@@ -841,6 +847,19 @@ interface WalletRepository {
      * la sella la primera vez y no la mueve después; devuelve el perfil.
      */
     suspend fun marcarPrimerUso(): UserProfile
+
+    /**
+     * `POST /api/users/me/aviso-ia` (vuelta 95): el usuario vio la hoja «Qué ve la IA». El server sella
+     * `avisoIaVistoEn` la primera vez y no la mueve después. Default sin operación para los dobles.
+     */
+    suspend fun marcarAvisoDeLaIa() {}
+
+    /**
+     * `GET /api/asistente/resumen` (vuelta 95): cuánto sabe Movi del usuario, en cuatro conteos. Default
+     * vacío para los dobles de prueba.
+     */
+    suspend fun getResumenDeLoQueMoviSabe(): com.jvillada.movi.shared.model.ResumenDeLoQueMoviSabe =
+        com.jvillada.movi.shared.model.ResumenDeLoQueMoviSabe()
 
     /** `GET /api/correo-entrante/direccion`: a qué dirección reenviar los correos del banco. */
     suspend fun getDireccionDeCorreo(): com.jvillada.movi.shared.model.DireccionDeCorreo

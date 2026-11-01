@@ -4,6 +4,7 @@ import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -190,5 +191,68 @@ class CierreDelPeriodoTest {
         assertEquals("\$1.234.567", pesosDelCierre(1_234_567))
         assertEquals("−\$500", pesosDelCierre(-500))
         assertEquals("\$0", pesosDelCierre(0))
+    }
+
+    // ── La foto del cierre (vuelta 95) ───────────────────────────────────────
+
+    @Test
+    fun `sin diferencia en lo que entro y salio no hay cambio`() {
+        val foto = cierre()
+        assertNull(cambioDesdeElCierre(foto, cierre()))
+        assertNull(lineaDelCambioDelCierre(foto))
+    }
+
+    @Test
+    fun `la linea del cambio nombra solo lo que cambio`() {
+        val foto = cierre()
+        val hoy = foto.copy(salio = foto.salio + 150_000)
+        val cambio = cambioDesdeElCierre(foto, hoy)
+        assertEquals(CambioDesdeElCierre(22_500_000, 22_500_000, 18_200_000, 18_350_000), cambio)
+        assertEquals(
+            "Cambió desde el cierre: Salió \$18.200.000 → \$18.350.000",
+            lineaDelCambioDelCierre(foto.copy(cambio = cambio)),
+        )
+        val los2 = cambioDesdeElCierre(foto, hoy.copy(entro = 23_000_000))
+        assertEquals(
+            "Cambió desde el cierre: Entró \$22.500.000 → \$23.000.000 · Salió \$18.200.000 → \$18.350.000",
+            lineaDelCambioDelCierre(foto.copy(cambio = los2)),
+        )
+    }
+
+    @Test
+    fun `si hoy no queda nada que contar, cuenta como cero`() {
+        val cambio = assertNotNull(cambioDesdeElCierre(cierre(), null))
+        assertEquals(0, cambio.entroAhora)
+        assertEquals(0, cambio.salioAhora)
+    }
+
+    @Test
+    fun `el cambio no entra en las lineas del correo`() {
+        val c = cierre().copy(cambio = CambioDesdeElCierre(1, 2, 3, 4))
+        assertTrue(lineasDelCierre(c).none { it.contains("Cambió desde el cierre") })
+    }
+
+    @Test
+    fun `la hoja de la IA se abre solo si no se vio y la pregunta va a la IA`() {
+        assertTrue(hayQueAvisarDeLaIa(null))
+        assertFalse(hayQueAvisarDeLaIa(1_700_000_000_000L))
+        assertFalse(hayQueAvisarDeLaIa(null, vaALaIa = false), "las tres sugeridas no van a la IA")
+    }
+
+    @Test
+    fun `la frase de lo que Movi sabe cuenta las cuatro cosas`() {
+        assertEquals(
+            "Movi tiene 133 movimientos desde el 12 de agosto de 2026, 3 cuentas, 24 reglas de categoría aprendidas y 2 recuerdos.",
+            fraseDeLoQueMoviSabe(ResumenDeLoQueMoviSabe(133, "2026-08-12", 3, 24, 2)),
+        )
+        assertEquals(
+            "Movi tiene 1 movimiento desde el 3 de enero de 2027, 1 cuenta, 1 regla de categoría aprendida y 1 recuerdo.",
+            fraseDeLoQueMoviSabe(ResumenDeLoQueMoviSabe(1, "2027-01-03", 1, 1, 1)),
+        )
+        assertEquals(
+            "Movi tiene 0 movimientos, 2 cuentas, 0 reglas de categoría aprendidas y 0 recuerdos.",
+            fraseDeLoQueMoviSabe(ResumenDeLoQueMoviSabe(0, null, 2, 0, 0)),
+        )
+        assertEquals("Movi todavía no sabe nada de ti.", fraseDeLoQueMoviSabe(ResumenDeLoQueMoviSabe()))
     }
 }

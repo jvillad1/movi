@@ -675,6 +675,16 @@ fun DashboardScreen(
                 DashboardDataCache.data = DashboardDataCache.data?.copy(cierre = null)
                 alcanceDelCierre.launch { runCatching { Repositories.wallets.descartarCierre(periodo) } }
             }
+            // Vuelta 95 · «Actualizar»: el cierre es una foto; si cambió, el dueño pide la de hoy. La
+            // tarjeta no se mueve hasta que el server contesta (no hay nada que adivinar).
+            val actualizarCierre: (String) -> Unit = { periodo ->
+                alcanceDelCierre.launch {
+                    runCatching { Repositories.wallets.actualizarCierre(periodo) }.getOrNull()?.let { nuevo ->
+                        data = data.copy(cierre = nuevo)
+                        DashboardDataCache.data = DashboardDataCache.data?.copy(cierre = nuevo)
+                    }
+                }
+            }
             // SDUI: la definición del server si la hay; si no, la misma lista que el server
             // siembra (anti-rotura capa 3) — una sola fuente en :core, idéntica por construcción.
             // `LocalCargandoElInicio`: el hero y «Pregúntale a Movi» solo reciben `data`, no
@@ -703,6 +713,7 @@ fun DashboardScreen(
                     // [EditarInicioScreen]). Al final, siempre, para no competir con lo que Hoy dice.
                     footer = { BotonEditarInicio { onNavigate(Screen.EditarInicio) } },
                     onDescartarCierre = descartarCierre,
+                    onActualizarCierre = actualizarCierre,
                     // Un movimiento de «Últimos movimientos» se editó o se anuló en su hoja: las cifras
                     // de arriba ya no son las de antes.
                     onRecargar = {
