@@ -2656,6 +2656,7 @@ class LocalRepository(
         moneda: String,
     ) = remote.getAvisosPendientesParecidos(monto, tipo, moneda)
     override suspend fun getOrigenesMudos() = remote.getOrigenesMudos()
+    override suspend fun getCorreosDescartados() = remote.getCorreosDescartados()
     override suspend fun getStatementImports(): List<StatementImport> =
         remote.getStatementImports()
     override suspend fun getStatementImportDetail(id: String): StatementImportDetail =

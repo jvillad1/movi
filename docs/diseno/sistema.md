@@ -4954,3 +4954,17 @@ porque su repositorio falso contestaba sin suspender.
 - Revisados con el mismo patrón y sin el fallo: «Ya lo vi» del cierre (alcance de `DashboardScreen`, que no
   sale, y no deshace), «No ajustar» de los cuadres por aviso, «No se cobró» de los débitos y la bandeja de
   Por revisar (la tarjeta espera la respuesta antes de irse, y su alcance es el de la pantalla).
+
+## 87. Vuelta 90: «¿Pasó esto?», el banco mudo con motivo y el correo que no se pierde
+
+Vuelta de servidor; la UI solo pinta lo que el server ya decide.
+
+- **El bloque de «Por revisar» se llama «¿Pasó esto?»** (`TITULO_DE_LOS_DEBITOS`). Ya no es solo lo que el banco cobró solo: también lo **esperado** que no se ve (un recurrente con cuenta, la nómina). La tarjeta es la misma (`TarjetaDelDebitoAutomatico`), con su pregunta según lo que es:
+  - débito automático: «Sí, se cobró» / «Cambiar monto» / «No se cobró», subtítulo «Débito automático · cuenta · vence el …»;
+  - gasto esperado (una regla recurrente con cuenta; las suscripciones detectadas de `subscriptions` no entran): «Sí, se pagó» / «No se pagó», subtítulo «Esperado · cuenta · el …»;
+  - nómina: «Sí, me llegó» / «No me llegó», la cifra en positivo y «Lo que te llegó» en el campo.
+  Siempre hay un cuarto botón, «Ya lo anoté» (revisión de la vuelta 90): descarta ese período sin anotar nada, para no tentar a duplicar lo que el dueño anotó por su lado.
+  «Cambiar monto» abre lleno con `ultimoMonto` cuando la última vez fue otra cifra; sin monto, el campo arranca abierto y vacío (nunca una cifra inventada).
+- **Una sola pregunta en todos lados**: `preguntaDeLoEsperado` (`:core`) — «¿Se cobró la cuota de …?», «¿Se pagó Arriendo?», «¿Te llegó Salario?» — la dicen Hoy («Para revisar» y «Movi propone hoy»), la campana y el aviso del teléfono. Varios con algo esperado: «N movimientos esperados sin anotar»; el desglose de «Por revisar» dice «N movimientos esperados».
+- **Banco mudo**: la tarjeta «Avisarme si un banco se calla» de Captura del banco ya no calcula en el cliente; pinta `GET /api/sms/origenes-mudos` (con el motivo: «Hace 29 días las notificaciones de Glim no traen movimientos: llegan rechazos y promociones. Revisa la captura.»).
+- **Correos del banco**: si hubo correos que llegaron y no se guardaron en 30 días, una `Superficie` «Correos del banco» con una línea en `aviso` (`TAG_CORREOS_DESCARTADOS`, texto de `textoDeCorreosDescartados`). Sin ninguno, no se pinta nada.

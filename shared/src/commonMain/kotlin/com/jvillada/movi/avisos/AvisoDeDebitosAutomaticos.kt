@@ -2,6 +2,8 @@ package com.jvillada.movi.avisos
 
 import com.jvillada.movi.shared.model.DebitoAutomaticoPorConfirmar
 import com.jvillada.movi.shared.model.loQueSeCobra
+import com.jvillada.movi.shared.model.preguntaDeLoEsperado
+import com.jvillada.movi.shared.model.textoDeDebitosEnHoy
 import com.jvillada.movi.shared.time.epochMillisToAppDate
 import com.jvillada.movi.ui.fecha.MESES_DEL_ANIO
 import kotlinx.datetime.LocalDate
@@ -51,20 +53,39 @@ private fun montoDe(debito: DebitoAutomaticoPorConfirmar): String = montoParaElA
  * **El texto del aviso.** Uno: «Débito automático por confirmar» y «El banco debió cobrar hoy la
  * cuota de Libre inversión 9695 ($1.204.064). ¿Se cobró?». Varios: «2 débitos automáticos por
  * confirmar», con uno por renglón. `null` sin nada que decir.
+ *
+ * Vuelta 90 · **lo esperado** (un recurrente sin la marca de débito, la nómina): «¿Te llegó Salario?» /
+ * «Movi esperaba Salario ($8.500.000) el 23 de octubre y no ve el movimiento. ¿Te llegó?». Varios con
+ * algo esperado: «3 movimientos esperados sin anotar». Los débitos solos dicen lo de siempre.
  */
 fun textoDeDebitosAutomaticos(debitos: List<DebitoAutomaticoPorConfirmar>, hoy: LocalDate): TextoDeAviso? {
     if (debitos.isEmpty()) return null
     if (debitos.size == 1) {
         val debito = debitos.single()
+        if (debito.esperado) {
+            return TextoDeAviso(
+                titulo = preguntaDeLoEsperado(debito),
+                texto = "Movi esperaba ${debito.nombre.trim()} (${montoDe(debito)}) ${cuando(debito.vence, hoy)} " +
+                    "y no ve el movimiento. ${if (debito.esIngreso) "¿Te llegó?" else "¿Se pagó?"}",
+            )
+        }
         return TextoDeAviso(
             titulo = "Débito automático por confirmar",
             texto = "El banco debió cobrar ${cuando(debito.vence, hoy)} ${loQueSeCobra(debito)} (${montoDe(debito)}). ¿Se cobró?",
         )
     }
+    val lineas = debitos.map { "${loQueSeCobra(it).replaceFirstChar(Char::uppercase)} · ${montoDe(it)}" }
+    if (debitos.any { it.esperado }) {
+        return TextoDeAviso(
+            titulo = textoDeDebitosEnHoy(debitos) ?: "${debitos.size} movimientos esperados sin anotar",
+            texto = "Movi los esperaba y no ve el movimiento. — $TOCA_PARA_REVISAR",
+            lineas = lineas,
+        )
+    }
     return TextoDeAviso(
         titulo = "${debitos.size} débitos automáticos por confirmar",
         texto = "El banco debió cobrarlos solo. ¿Se cobraron? — $TOCA_PARA_REVISAR",
-        lineas = debitos.map { "${loQueSeCobra(it).replaceFirstChar(Char::uppercase)} · ${montoDe(it)}" },
+        lineas = lineas,
     )
 }
 

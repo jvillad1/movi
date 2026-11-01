@@ -11,6 +11,7 @@ import com.jvillada.movi.server.correo.contenidoDeResend
 import com.jvillada.movi.server.correo.eventoDeResend
 import com.jvillada.movi.server.correo.firmarComoSvix
 import com.jvillada.movi.server.correo.tokenDeCorreoDe
+import com.jvillada.movi.server.db.CorreosDescartados
 import com.jvillada.movi.server.db.PushSubscriptions
 import com.jvillada.movi.server.db.SmsMessages
 import com.jvillada.movi.server.db.Users
@@ -85,9 +86,9 @@ class CorreoEntranteResendRoutesTest {
             driver = "org.h2.Driver",
         )
         transaction {
-            SchemaUtils.create(Users, SmsMessages, PushSubscriptions)
-            SchemaUtils.drop(SmsMessages, PushSubscriptions, Users)
-            SchemaUtils.create(Users, SmsMessages, PushSubscriptions)
+            SchemaUtils.create(Users, SmsMessages, PushSubscriptions, CorreosDescartados)
+            SchemaUtils.drop(CorreosDescartados, SmsMessages, PushSubscriptions, Users)
+            SchemaUtils.create(Users, SmsMessages, PushSubscriptions, CorreosDescartados)
             for ((id, correo) in listOf(userAId to "a@resend.test", userBId to "b@resend.test")) {
                 Users.insert {
                     it[Users.id] = id

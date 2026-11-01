@@ -38,6 +38,9 @@ import java.time.format.DateTimeFormatter
 import java.util.Date
 import kotlin.test.BeforeTest
 import kotlin.test.Test
+import com.jvillada.movi.shared.model.textoDeOrigenMudo
+import com.jvillada.movi.shared.model.MOTIVO_DEVUELTO
+import kotlin.test.assertNull
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -99,17 +102,37 @@ class BancoMudoRoutesTest {
     private fun ApplicationTestBuilder.wireApp() = application { testModule() }
 
     /** Un mensaje de [bank] de hace [diasAtras] días y un minuto (días enteros, a cualquier hora que corra la prueba). */
-    private fun sembrar(uid: String, bank: String, diasAtras: Long, id: String = "sms_${uid}_${bank}_$diasAtras") = transaction {
+    private fun sembrar(
+        uid: String,
+        bank: String,
+        diasAtras: Long,
+        id: String = "sms_${uid}_${bank}_$diasAtras",
+        texto: String = "Compraste $10.000 en algo",
+        motivo: String? = null,
+        estado: String = SMS_STATE_CONFIRMED,
+        eventoId: String? = null,
+    ) = transaction {
         SmsMessages.insert {
             it[SmsMessages.id] = id
             it[userId] = uid
             it[time] = ZonedDateTime.now(bogota).minusDays(diasAtras).minusMinutes(1).format(formato)
             it[SmsMessages.bank] = bank
-            it[text] = "Compraste $10.000 en algo"
-            it[state] = SMS_STATE_CONFIRMED
+            it[text] = texto
+            it[state] = estado
+            it[motivoApartado] = motivo
+            it[SmsMessages.eventoId] = eventoId
             it[det] = ""
         }
     }
+
+    private val glim = "Notificación · Glim"
+    private val compraDeGlim = "Pagaste \$15.100,00 COP con tu tarjeta de beneficios Glim en TOSTAO CAFE Y PAN."
+    private val rechazoDeGlim = "Fondos insuficientes: Se rechazó tu pago por \$17.150,00 COP."
+    private val promoDeGlim = "Usa tu Glim y obtén 20% de dcto en restaurantes aliados. Aplican TyC."
+
+    /** Glim avisó compras todos los días por tres semanas y dejó de hacerlo hace cinco días. */
+    private fun glimConComprasHastaHaceCinco(uid: String) =
+        (5L..25L).forEach { sembrar(uid, glim, it, id = "glim_compra_$it", texto = compraDeGlim) }
 
     /** Bancolombia escribió todos los días durante tres semanas y calló hace cuatro. */
     private fun bancolombiaCalladoHaceCuatroDias(uid: String) = (4L..25L).forEach { sembrar(uid, "85540", it) }
@@ -167,5 +190,62 @@ class BancoMudoRoutesTest {
 
         assertEquals(HttpStatusCode.BadRequest, ponerDias(duenoId, 31).status)
         assertEquals(HttpStatusCode.BadRequest, ponerDias(duenoId, -1).status)
+    }
+
+    // ── Vuelta 90 · vivo es que lleguen movimientos ─────────────────────────────
+
+    @Test
+    fun `un origen que solo manda rechazos y promociones esta mudo, con el motivo`() = testApplication {
+        wireApp()
+        glimConComprasHastaHaceCinco(duenoId)
+        // Después de la última compra siguen llegando avisos todos los días… pero ninguno es una compra.
+        // Los rechazos los ignoró el dueño (llegaron antes de que Movi los apartara solo).
+        (0L..4L).forEach { sembrar(duenoId, glim, it, id = "glim_rechazo_$it", texto = rechazoDeGlim, estado = "ignored") }
+        sembrar(duenoId, glim, 1, id = "glim_promo_1", texto = promoDeGlim, estado = "pending")
+        // Una promoción que Movi ya apartó al llegar cuenta por su motivo guardado.
+        sembrar(duenoId, glim, 2, id = "glim_promo_2", texto = "Cualquier cosa", motivo = "PROMOCION", estado = "ignored")
+
+        val mudo = mudos(duenoId).single()
+        assertEquals("Glim", mudo.nombre)
+        assertEquals(CanalDeCaptura.NOTIFICACION, mudo.canal)
+        assertEquals(5, mudo.diasSinCaptura, "los días se cuentan desde la última compra, no desde el último aviso")
+        assertEquals("llegan rechazos y promociones", mudo.motivo)
+        assertEquals(
+            "Hace 5 días las notificaciones de Glim no traen movimientos: llegan rechazos y promociones. Revisa la captura",
+            textoDeOrigenMudo(mudo),
+        )
+    }
+
+    @Test
+    fun `con compras el origen esta vivo aunque tambien lleguen rechazos`() = testApplication {
+        wireApp()
+        glimConComprasHastaHaceCinco(duenoId)
+        (0L..4L).forEach { sembrar(duenoId, glim, it, id = "glim_rechazo_$it", texto = rechazoDeGlim, estado = "ignored") }
+        sembrar(duenoId, glim, 0, id = "glim_compra_hoy", texto = compraDeGlim, estado = "pending")
+        assertTrue(mudos(duenoId).isEmpty())
+    }
+
+    @Test
+    fun `lo que el duenio devolvio como movimiento cuenta como movimiento`() = testApplication {
+        wireApp()
+        glimConComprasHastaHaceCinco(duenoId)
+        sembrar(duenoId, glim, 0, id = "glim_devuelto", texto = rechazoDeGlim, motivo = MOTIVO_DEVUELTO, estado = "pending")
+        assertTrue(mudos(duenoId).isEmpty(), "«Era un movimiento» gana sobre lo que lee Movi")
+    }
+
+    @Test
+    fun `un silencio total sigue sin motivo, como antes`() = testApplication {
+        wireApp()
+        bancolombiaCalladoHaceCuatroDias(duenoId)
+        assertNull(mudos(duenoId).single().motivo)
+    }
+
+    @Test
+    fun `lo que el duenio confirmo o tiene movimiento es movimiento aunque el parser no lo lea`() = testApplication {
+        wireApp()
+        glimConComprasHastaHaceCinco(duenoId)
+        // Un texto que el parser no entiende, pero el dueño lo confirmó con su movimiento: el banco sí avisó.
+        sembrar(duenoId, glim, 0, id = "glim_raro_confirmado", texto = "Glim: movimiento en tu tarjeta", eventoId = "ev_1")
+        assertTrue(mudos(duenoId).isEmpty())
     }
 }

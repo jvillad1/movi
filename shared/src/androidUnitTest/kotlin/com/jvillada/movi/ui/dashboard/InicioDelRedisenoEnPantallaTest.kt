@@ -290,7 +290,7 @@ class InicioDelRedisenoEnPantallaTest {
         composeRule.onNodeWithContentDescription("Anotar un ingreso", useUnmergedTree = true).performClick()
         assertEquals(Screen.QuickAdd(presetEsIngreso = true, presetPestana = PestanaDeAgregar.INGRESO), navegado.last())
         // La insignia dice cuánto espera en Por revisar, y de qué es (vuelta de diseño 22): 3 avisos y 1 débito.
-        composeRule.onNodeWithContentDescription("Revisar los avisos (3 avisos · 1 débito automático), 4", useUnmergedTree = true).performClick()
+        composeRule.onNodeWithContentDescription("Revisar los avisos (3 avisos · 1 movimiento esperado), 4", useUnmergedTree = true).performClick()
         assertEquals(Screen.PorRevisar, navegado.last())
         composeRule.onNodeWithContentDescription("Preguntarle a Movi", useUnmergedTree = true).performClick()
         assertEquals(Screen.AIChat(), navegado.last())

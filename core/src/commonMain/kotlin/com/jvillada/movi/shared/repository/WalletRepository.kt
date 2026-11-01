@@ -763,8 +763,10 @@ interface WalletRepository {
 
     /**
      * **Lo que el banco cobró solo y Movi propone armado**: cuotas (y recurrentes) con débito
-     * automático, vencidas y sin movimiento que las pruebe. Solo lee; se confirma con
-     * [confirmarDebitoAutomatico]. Ver [com.jvillada.movi.shared.model.DebitoAutomaticoPorConfirmar].
+     * automático, vencidas y sin movimiento que las pruebe — y desde la vuelta 90 **lo esperado**: los
+     * recurrentes con cuenta (la nómina, una suscripción) que ya debieron pasar y no se ven. Solo lee;
+     * se confirma con [confirmarDebitoAutomatico]. Ver
+     * [com.jvillada.movi.shared.model.DebitoAutomaticoPorConfirmar].
      */
     suspend fun getDebitosAutomaticos(): List<DebitoAutomaticoPorConfirmar>
 
@@ -1047,6 +1049,13 @@ interface WalletRepository {
      * Lo lee el aviso diario del teléfono; el Inicio los trae en el resumen.
      */
     suspend fun getOrigenesMudos(): List<com.jvillada.movi.shared.model.OrigenMudo> = emptyList()
+
+    /**
+     * Vuelta 90 · `GET /api/correo-entrante/descartados`: los correos del banco que llegaron en los
+     * últimos 30 días y no se pudieron guardar (los propios; los que no son de nadie, contados, solo a
+     * un admin). `null` = no se sabe (un repositorio que no habla con el server).
+     */
+    suspend fun getCorreosDescartados(): com.jvillada.movi.shared.model.CorreosDescartados? = null
     suspend fun importStatement(decision: ImportDecision)
     suspend fun getStatementImports(): List<StatementImport>
     suspend fun getStatementImportDetail(id: String): StatementImportDetail

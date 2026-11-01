@@ -86,4 +86,49 @@ class BancoMudoTest {
         val sinRemitente = origenesMudos(diarios("", desde = 30, hasta = 5), ahora, diasDeSilencio = 3)
         assertEquals("tu banco", sinRemitente.single().nombre)
     }
+
+    // ── Vuelta 90 · vivo es que lleguen movimientos ─────────────────────────────
+
+    @Test
+    fun `los rechazos y las promociones no hacen ver vivo un origen, y explican el silencio`() {
+        val glim = "Notificación · Glim"
+        val compras = diarios(glim, desde = 30, hasta = 6)
+        val ruido = (0..5).map { Captura(glim, ahora - it * dia, noEsMovimiento = MotivoDeApartado.NO_PASO) } +
+            Captura(glim, ahora - 2 * dia, noEsMovimiento = MotivoDeApartado.PROMOCION)
+        val mudo = origenesMudos(compras + ruido, ahora, diasDeSilencio = 3).single()
+        assertEquals(6, mudo.diasSinCaptura)
+        assertEquals("llegan rechazos y promociones", mudo.motivo)
+        assertEquals(
+            "Hace 6 días las notificaciones de Glim no traen movimientos: llegan rechazos y promociones. Revisa la captura",
+            textoDeOrigenMudo(mudo),
+        )
+    }
+
+    @Test
+    fun `con una compra en la ventana el origen esta vivo`() {
+        val glim = "Notificación · Glim"
+        val todo = diarios(glim, desde = 30, hasta = 6) + Captura(glim, ahora - dia) +
+            (0..5).map { Captura(glim, ahora - it * dia, noEsMovimiento = MotivoDeApartado.NO_PASO) }
+        assertTrue(origenesMudos(todo, ahora, diasDeSilencio = 3).isEmpty())
+    }
+
+    @Test
+    fun `un origen que nunca mando un movimiento no avisa`() {
+        val promos = (1..20).map { Captura("Notificación · Tienda", ahora - it * dia, noEsMovimiento = MotivoDeApartado.PROMOCION) }
+        assertTrue(origenesMudos(promos, ahora, diasDeSilencio = 3).isEmpty(), "no hay historia de movimientos que comparar")
+    }
+
+    @Test
+    fun `el motivo nombra hasta tres clases, de la mas frecuente a la menos`() {
+        val c = { m: MotivoDeApartado -> Captura("x", 0L, noEsMovimiento = m) }
+        assertEquals(
+            // Los códigos llegaron dos veces; en el empate manda el orden del motivo, no el azar.
+            "llegan códigos, promociones y rechazos",
+            motivoDelSilencio(
+                listOf(c(MotivoDeApartado.CODIGO_DE_VERIFICACION), c(MotivoDeApartado.CODIGO_DE_VERIFICACION), c(MotivoDeApartado.NO_PASO),
+                    c(MotivoDeApartado.PROMOCION), c(MotivoDeApartado.SIN_MONTO)),
+            ),
+        )
+        assertEquals(null, motivoDelSilencio(emptyList()))
+    }
 }

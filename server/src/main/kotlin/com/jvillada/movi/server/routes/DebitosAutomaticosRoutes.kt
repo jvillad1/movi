@@ -8,6 +8,7 @@ import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.DebitosDescartados
 import com.jvillada.movi.server.db.Events
+import com.jvillada.movi.server.db.RecurringOccurrences
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.insertEventRow
@@ -17,6 +18,11 @@ import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.server.reminders.cargarPagosDeDeuda
 import com.jvillada.movi.server.reminders.entraAlBarridoDeAvisos
+import com.jvillada.movi.server.reminders.fechaEsperada
+import com.jvillada.movi.server.reminders.occurrenceWindow
+import com.jvillada.movi.shared.model.SMS_STATE_PENDING
+import com.jvillada.movi.shared.model.momentoDelSms
+import kotlin.math.roundToLong
 import com.jvillada.movi.server.reminders.ocurrenciaPorPreguntar
 import com.jvillada.movi.server.reminders.pausadaEn
 import com.jvillada.movi.server.reminders.periodOf
@@ -25,9 +31,14 @@ import com.jvillada.movi.server.reminders.ruleIsActiveOn
 import com.jvillada.movi.server.reminders.virtualRuleFor
 import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.server.time.ajustesDePeriodoDe
+import com.jvillada.movi.server.time.ajustesDelPeriodoSinSuspender
 import com.jvillada.movi.server.time.appDateToEpochMillis
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountGroup
+import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.GRACIA_DE_LO_ESPERADO_DIAS
+import com.jvillada.movi.shared.model.DESEMBOLSO_CATEGORY
+import com.jvillada.movi.shared.model.isReservedCategory
 import com.jvillada.movi.shared.model.ConfirmarDebitoAutomatico
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
 import com.jvillada.movi.shared.model.CreditTerms
@@ -81,8 +92,15 @@ import java.time.YearMonth
  * - «No se cobró» es `POST /api/debitos-automaticos/descartar`.
  */
 fun Route.debitosAutomaticosRoutes() {
+    /**
+     * Vuelta 90: con `?conEsperados=1` (lo pide el cliente nuevo) la lista suma **lo esperado**: los
+     * recurrentes con cuenta que ya debieron pasar y no tienen movimiento ([recurrentesPorConfirmar]).
+     * Sin el parámetro contesta exactamente lo de antes: un APK viejo no sabe decir «¿te llegó?» y
+     * pintaría la nómina como «Débito automático … ¿se cobró?».
+     */
     get("/api/debitos-automaticos") {
-        call.respond(debitosPorConfirmar(call.userId(), AppClock.today(), System.currentTimeMillis()))
+        val conEsperados = call.request.queryParameters["conEsperados"] == "1"
+        call.respond(debitosPorConfirmar(call.userId(), AppClock.today(), System.currentTimeMillis(), conEsperados))
     }
 
     /**
@@ -240,16 +258,23 @@ private fun Transaction.confirmarElRecurrente(
         .where { (RecurringRules.id eq pedido.ruleId) and (RecurringRules.userId eq uid) }
         .firstOrNull()?.toRule()
         ?: return ConfirmacionDelDebito.Rechazada(HttpStatusCode.NotFound, "Ese recurrente no existe.")
-    if (rule.seDebitaSolo != true) {
-        return ConfirmacionDelDebito.Rechazada(HttpStatusCode.UnprocessableEntity, "Ese recurrente no se debita solo.")
-    }
-    validarDebitoDeLaRegla(true, rule.type, rule.accountId)?.let {
-        return ConfirmacionDelDebito.Rechazada(HttpStatusCode.UnprocessableEntity, it)
+    // Vuelta 90: también lo esperado (un recurrente con cuenta sin la marca, un gasto o la nómina). Lo
+    // que no se puede confirmar desde acá es lo que tampoco se propone: sin cuenta, un abono a una
+    // deuda (su ocurrencia es un traspaso, no un gasto) o una cuenta que no admite ese movimiento.
+    if (rule.seDebitaSolo == true) {
+        validarDebitoDeLaRegla(true, rule.type, rule.accountId)?.let {
+            return ConfirmacionDelDebito.Rechazada(HttpStatusCode.UnprocessableEntity, it)
+        }
+    } else if (!seEsperaConCuenta(rule)) {
+        return ConfirmacionDelDebito.Rechazada(HttpStatusCode.UnprocessableEntity, NO_SE_PUEDE_CONFIRMAR_ASI)
     }
     val cuenta = Accounts.selectAll()
         .where { (Accounts.id eq rule.accountId!!) and (Accounts.userId eq uid) }
         .firstOrNull()?.toAccount()
         ?: return ConfirmacionDelDebito.Rechazada(HttpStatusCode.UnprocessableEntity, DEBITO_DE_REGLA_SIN_CUENTA)
+    if (rule.seDebitaSolo != true && !cuentaAdmiteLoEsperado(rule.type, cuenta)) {
+        return ConfirmacionDelDebito.Rechazada(HttpStatusCode.UnprocessableEntity, NO_SE_PUEDE_CONFIRMAR_ASI)
+    }
 
     // ¿Ya está? El reintento de verdad trae el mismo id: se contesta lo que quedó, con su monto.
     val existente = Events.selectAll().where { Events.id eq pedido.eventoId }.firstOrNull()
@@ -264,12 +289,20 @@ private fun Transaction.confirmarElRecurrente(
         return ConfirmacionDelDebito.Hecha(listOf(existente.toFinancialEvent()), nueva = false)
     }
 
-    val vence = occurrenceInMonth(YearMonth.parse(pedido.periodo), rule.dayOfMonth)
+    // El día que se esperaba: el del vencimiento, salvo la nómina que cae el día de corte, que se
+    // espera el día que arranca su período (`fechaEsperada`). Con ese día se fecha el movimiento.
+    val ajustes = ajustesDelPeriodoSinSuspender(uid)
+    val vence = fechaEsperada(rule, occurrenceInMonth(YearMonth.parse(pedido.periodo), rule.dayOfMonth), ajustes)
     if (vence.isAfter(hoy)) return ConfirmacionDelDebito.Rechazada(HttpStatusCode.BadRequest, TODAVIA_NO_VENCE)
+    // Revisión de la vuelta 90 (I1): una tarjeta vieja no anota dos veces lo que ya se resolvió por otro lado.
+    porQueYaNoSeAnota(uid, rule, pedido.periodo, pedido.eventoId, hoy, ajustes)?.let {
+        return ConfirmacionDelDebito.Rechazada(HttpStatusCode.Conflict, it)
+    }
     val evento = FinancialEvent(
         id = pedido.eventoId,
         accountId = cuenta.id,
-        type = TransactionType.EXPENSE,
+        // El tipo de la regla: un gasto, o la nómina (vuelta 90). Nunca otro.
+        type = rule.type,
         amount = pedido.monto,
         currency = cuenta.currency,
         category = rule.category,
@@ -292,6 +325,56 @@ private fun Transaction.confirmarElRecurrente(
     // excepción deshace también el gasto: nada a medias.
     sellarOcurrencia(uid, rule, pedido.periodo, pedido.eventoId, hoy).alFallar()
     return ConfirmacionDelDebito.Hecha(listOf(evento), nueva = true)
+}
+
+/** Revisión de la vuelta 90 (I1) · el 409 de una tarjeta que ya no aplica. */
+internal const val YA_ESTA_ANOTADO: String =
+    "Eso ya está anotado (o hay un movimiento que podría serlo): revísalo en Pagos antes de anotarlo otra vez."
+
+/** Revisión de la vuelta 90 (I1) · el 409 de lo que el dueño ya descartó en ese período. */
+internal const val YA_SE_DESCARTO: String = "Ya dijiste que eso no pasó en ese período."
+
+/**
+ * **¿Por qué ya no se anota esta propuesta?** (revisión de la vuelta 90, I1). La tarjeta de «Por
+ * revisar» puede llevar un rato abierta —o estar en otro aparato— mientras el dueño anota el pago a mano
+ * o lo marca desde Pagos. Confirmar a ciegas dejaba dos gastos y movía el sello al segundo
+ * ([sellarOcurrencia] borra y re-sella). Dentro de la misma transacción del insert, `null` solo si:
+ *
+ * - el período no está entre lo descartado («No se pagó» / «Ya lo anoté»);
+ * - no hay un sello de (regla, período) sin movimiento, o con un movimiento VIVO distinto de [eventoId];
+ * - el checklist (la misma lectura de `GET /api/payments/occurrences`) no la da por ocurrida con otro
+ *   movimiento ni le propone candidatos.
+ */
+private fun Transaction.porQueYaNoSeAnota(
+    uid: String,
+    rule: RecurringRule,
+    periodo: String,
+    eventoId: String,
+    hoy: LocalDate,
+    ajustes: PeriodSettings,
+): String? {
+    val descartado = DebitosDescartados.selectAll()
+        .where { (DebitosDescartados.userId eq uid) and (DebitosDescartados.ruleId eq rule.id) and (DebitosDescartados.periodo eq periodo) }
+        .any()
+    if (descartado) return YA_SE_DESCARTO
+    val sello = RecurringOccurrences.selectAll()
+        .where { (RecurringOccurrences.userId eq uid) and (RecurringOccurrences.ruleId eq rule.id) and (RecurringOccurrences.period eq periodo) }
+        .firstOrNull()
+    if (sello != null) {
+        val otro = sello[RecurringOccurrences.eventId] ?: return YA_ESTA_ANOTADO
+        if (otro != eventoId && esUnMovimientoVivo(uid, otro)) return YA_ESTA_ANOTADO
+    }
+    val estado = estadosDeLasOcurrenciasReales(uid, hoy, ajustes).firstOrNull { it.ruleId == rule.id && it.period == periodo }
+    if (estado != null && ((estado.occurred && estado.eventId != eventoId) || estado.candidates.isNotEmpty())) {
+        return YA_ESTA_ANOTADO
+    }
+    return null
+}
+
+private fun Transaction.esUnMovimientoVivo(uid: String, eventoId: String): Boolean {
+    val existe = Events.selectAll().where { (Events.id eq eventoId) and (Events.userId eq uid) }.any()
+    if (!existe) return false
+    return VoidEvents.selectAll().where { (VoidEvents.originalEventId eq eventoId) and (VoidEvents.userId eq uid) }.none()
 }
 
 private fun MarcaResult.alFallar() {
@@ -321,8 +404,41 @@ private const val MEDIODIA = 12L * 60 * 60 * 1000
  * El monto propuesto es la cuota pactada. No se estima nada más: el dueño la cambia si el banco
  * cobró otra cifra.
  */
-internal suspend fun debitosPorConfirmar(uid: String, hoy: LocalDate, ahora: Long): List<DebitoAutomaticoPorConfirmar> =
-    (cuotasPorConfirmar(uid, hoy, ahora) + recurrentesPorConfirmar(uid, hoy, ahora)).sortedBy { it.vence }
+internal suspend fun debitosPorConfirmar(
+    uid: String,
+    hoy: LocalDate,
+    ahora: Long,
+    conEsperados: Boolean = false,
+): List<DebitoAutomaticoPorConfirmar> =
+    (cuotasPorConfirmar(uid, hoy, ahora) + recurrentesPorConfirmar(uid, hoy, ahora, conEsperados)).sortedBy { it.vence }
+
+/** Vuelta 90 · el 422 de confirmar un recurrente que no se propone (sin cuenta, un abono, una cuenta que no va). */
+internal const val NO_SE_PUEDE_CONFIRMAR_ASI: String =
+    "Ese pago no se confirma desde aquí: anótalo desde «Agregar»."
+
+/**
+ * **Vuelta 90 · ¿Movi puede preguntar por esta regla aunque no esté marcada «se debita solo»?** Un
+ * gasto o un ingreso **con cuenta**, que no sea el abono mensual a una deuda (`haciaDeuda`: su
+ * ocurrencia es un traspaso, y anotarlo como gasto dejaría la deuda sin bajar) ni lleve una categoría
+ * reservada o la del desembolso.
+ */
+internal fun seEsperaConCuenta(rule: RecurringRule): Boolean =
+    !rule.accountId.isNullOrBlank() && rule.haciaDeuda.isNullOrBlank() &&
+        (rule.type == TransactionType.EXPENSE || rule.type == TransactionType.INCOME) &&
+        // Un pago de tarjeta o un asiento interno no es la ocurrencia de un recurrente (el sello lo
+        // rechazaría), y el desembolso de un crédito solo lo escriben sus dos patas.
+        !isReservedCategory(rule.category) && rule.category != DESEMBOLSO_CATEGORY
+
+/**
+ * **Vuelta 90 · ¿la cuenta de la regla admite el movimiento esperado?** Un ingreso entra a una cuenta
+ * de dinero (no a una deuda). Un gasto sale de una cuenta de dinero **o de una tarjeta de crédito**
+ * (una regla recurrente cargada a la tarjeta: la compra con tarjeta es gasto, la regla de siempre); nunca de un crédito.
+ */
+internal fun cuentaAdmiteLoEsperado(tipo: TransactionType, cuenta: Account): Boolean = when (tipo) {
+    TransactionType.INCOME -> cuenta.type.group != AccountGroup.DEUDA
+    TransactionType.EXPENSE -> cuenta.type.group != AccountGroup.DEUDA || cuenta.type == AccountType.CREDIT_CARD
+    else -> false
+}
 
 /** Las cuotas de crédito de [debitosPorConfirmar]. */
 private suspend fun cuotasPorConfirmar(uid: String, hoy: LocalDate, ahora: Long): List<DebitoAutomaticoPorConfirmar> {
@@ -354,7 +470,7 @@ private suspend fun cuotasPorConfirmar(uid: String, hoy: LocalDate, ahora: Long)
             // invitaría a anotar una cuota que no existe. El saldo es el de la cuenta, en su moneda,
             // con los movimientos vivos — el mismo que muestra Créditos.
             if (saldoDeLaDeuda(uid, deuda) <= 0L) return@mapNotNull null
-            if (hayUnAvisoPendienteDelMismoPago(uid, rule.amount, cuenta.currency, vence, ahora)) return@mapNotNull null
+            if (hayUnAvisoPendienteDelMismoPago(uid, rule.amount, cuenta.currency, TransactionType.EXPENSE, vence, ahora)) return@mapNotNull null
             val ids = idsLibresDelDebito(rule.id, periodo)
             DebitoAutomaticoPorConfirmar(
                 ruleId = rule.id,
@@ -385,39 +501,104 @@ private fun Transaction.saldoDeLaDeuda(uid: String, deuda: Account): Long =
  * cuyo vencimiento en juego ya llegó y el checklist da por **abierto y sin candidatos** — la misma
  * respuesta de `GET /api/payments/occurrences` ([estadosDeLasOcurrenciasReales]). Con un candidato el
  * checklist ya pregunta «¿fue este?», y proponer anotar otro sería invitar a un duplicado.
+ *
+ * **Vuelta 90 · con [conEsperados], también lo esperado**: cualquier recurrente con cuenta
+ * ([seEsperaConCuenta]) —un gasto fijo, la nómina; solo `recurring_rules`, no `subscriptions`— con la MISMA derivación (el
+ * emparejador de siempre: nombre, categoría + cuenta + monto, sellos; y ningún aviso pendiente que lo
+ * cubra), pero solo cuando pasaron [GRACIA_DE_LO_ESPERADO_DIAS] días desde la fecha esperada
+ * (`fechaEsperada`, la del checklist: el salario del 25 que cae domingo se espera el viernes 23). Lo
+ * marcado como débito no espera: el banco debita ese día.
  */
-private suspend fun recurrentesPorConfirmar(uid: String, hoy: LocalDate, ahora: Long): List<DebitoAutomaticoPorConfirmar> {
+private suspend fun recurrentesPorConfirmar(
+    uid: String,
+    hoy: LocalDate,
+    ahora: Long,
+    conEsperados: Boolean,
+): List<DebitoAutomaticoPorConfirmar> {
     val settings = ajustesDePeriodoDe(uid)
     return dbQuery {
-        val reglas = reglasRealesDe(uid).filter { it.seDebitaSolo == true && it.type == TransactionType.EXPENSE && it.accountId != null }
+        val reglas = reglasRealesDe(uid).filter { rule ->
+            val esDebito = rule.seDebitaSolo == true && rule.type == TransactionType.EXPENSE && rule.accountId != null
+            esDebito || (conEsperados && rule.seDebitaSolo != true && seEsperaConCuenta(rule))
+        }
         if (reglas.isEmpty()) return@dbQuery emptyList()
         val estados = estadosDeLasOcurrenciasReales(uid, hoy, settings).associateBy { it.ruleId }
         val descartados = descartadosDe(uid)
+        // Los avisos pendientes, leídos una sola vez y solo si algo esperado los necesita.
+        val pendientes = lazy { avisosPendientesLeidos(uid, ahora) }
         val cuentas = Accounts.selectAll().where { Accounts.userId eq uid }.map { it.toAccount() }.associateBy { it.id }
         reglas.mapNotNull { rule ->
+            val esperado = rule.seDebitaSolo != true
             val estado = estados[rule.id] ?: return@mapNotNull null
             if (estado.occurred || estado.candidates.isNotEmpty()) return@mapNotNull null
+            // `dueDate` ya es la fecha ESPERADA (`fechaEsperada`): la del vencimiento, o la del arranque
+            // del período para la nómina del día de corte.
             val vence = runCatching { LocalDate.parse(estado.dueDate) }.getOrNull() ?: return@mapNotNull null
             if (vence.isAfter(hoy)) return@mapNotNull null
+            if (esperado && vence.plusDays(GRACIA_DE_LO_ESPERADO_DIAS.toLong()).isAfter(hoy)) return@mapNotNull null
+            // Vuelta 72: lo que vence en la pausa de una regla no se propone (la misma regla que la cuota).
+            if (pausadaEn(rule, vence)) return@mapNotNull null
             if ("${rule.id}@${estado.period}" in descartados) return@mapNotNull null
             val cuenta = cuentas[rule.accountId] ?: return@mapNotNull null
-            if (cuenta.type.group == AccountGroup.DEUDA) return@mapNotNull null
-            if (hayUnAvisoPendienteDelMismoPago(uid, rule.amount, cuenta.currency, vence, ahora)) return@mapNotNull null
+            if (esperado) {
+                if (!cuentaAdmiteLoEsperado(rule.type, cuenta)) return@mapNotNull null
+            } else if (cuenta.type.group == AccountGroup.DEUDA) {
+                return@mapNotNull null
+            }
+            val ultimo = ultimoMontoDe(uid, rule).takeIf { it != rule.amount }
+            // El aviso que lo cubre puede venir por el monto de la regla o por el de la última vez.
+            val montos = listOfNotNull(rule.amount.takeIf { it > 0 }, ultimo).distinct()
+            val cubierto = if (esperado) {
+                // Revisión de la vuelta 90 (I4): lo esperado se apaga con un aviso pendiente PARECIDO —±10 %
+                // del monto, desde que abre la ventana del vencimiento—, no solo con el mismo monto en 48 h:
+                // la suscripción que subió o la nómina con otro valor también están cubiertas por su aviso.
+                val desde = appDateToEpochMillis(occurrenceWindow(vence, settings = settings).start)
+                pendientes.value.any { it.cubre(montos, cuenta.currency, rule.type, desde, ahora) }
+            } else {
+                montos.any { hayUnAvisoPendienteDelMismoPago(uid, it, cuenta.currency, rule.type, vence, ahora) }
+            }
+            if (cubierto) return@mapNotNull null
             DebitoAutomaticoPorConfirmar(
                 ruleId = rule.id,
                 periodo = estado.period,
                 origen = OrigenDelDebito.RECURRENTE,
                 nombre = rule.name,
-                monto = rule.amount,
+                // El de la regla; si la regla no tiene monto (una vieja en 0), el de la última vez, y si
+                // tampoco hay, 0: la tarjeta pide escribirlo. Nunca una cifra inventada.
+                monto = rule.amount.takeIf { it > 0 } ?: ultimo ?: 0L,
                 moneda = cuenta.currency,
                 vence = vence.toString(),
                 cuentaId = cuenta.id,
                 cuentaNombre = cuenta.name,
                 categoria = rule.category,
                 pataDelDineroId = idDelGastoDelDebito(uid, rule.id, estado.period),
+                tipo = rule.type,
+                esperado = esperado,
+                ultimoMonto = ultimo,
             )
         }
     }
+}
+
+/**
+ * **Vuelta 90 · el monto con que se anotó la última vez [rule]**: el movimiento del período sellado más
+ * reciente (con movimiento y sin anular). `null` sin historia. Solo los sellos guardados: lo que Movi
+ * empareja solo se deriva en cada lectura y no deja rastro de períodos viejos.
+ */
+private fun Transaction.ultimoMontoDe(uid: String, rule: RecurringRule): Long? {
+    val sellos = RecurringOccurrences.selectAll()
+        .where { (RecurringOccurrences.userId eq uid) and (RecurringOccurrences.ruleId eq rule.id) }
+        .mapNotNull { fila -> fila[RecurringOccurrences.eventId]?.let { fila[RecurringOccurrences.period] to it } }
+        .sortedByDescending { it.first }
+    for ((_, eventoId) in sellos) {
+        val anulado = VoidEvents.selectAll()
+            .where { (VoidEvents.originalEventId eq eventoId) and (VoidEvents.userId eq uid) }
+            .any()
+        if (anulado) continue
+        val fila = Events.selectAll().where { (Events.id eq eventoId) and (Events.userId eq uid) }.firstOrNull() ?: continue
+        return fila[Events.amount].takeIf { it > 0 }
+    }
+    return null
 }
 
 /**
@@ -468,14 +649,39 @@ private fun Transaction.hayUnAvisoPendienteDelMismoPago(
     uid: String,
     monto: Long,
     moneda: String,
+    tipo: TransactionType,
     vence: LocalDate,
     ahora: Long,
 ): Boolean {
     val finDelVencimiento = appDateToEpochMillis(vence.plusDays(1))
     return listOf(ahora, finDelVencimiento).distinct().any { momento ->
-        avisosPendientesParecidos(uid, monto, moneda, TransactionType.EXPENSE, ahora = momento).isNotEmpty()
+        avisosPendientesParecidos(uid, monto, moneda, tipo, ahora = momento).isNotEmpty()
     }
 }
+
+/** Un aviso pendiente de la bandeja, ya leído: monto, moneda, tipo y cuándo llegó. */
+private data class AvisoPendienteLeido(val monto: Long, val moneda: String, val tipo: TransactionType, val momento: Long) {
+    /**
+     * ¿Cubre lo esperado? Mismo tipo y moneda, llegado entre [desde] y [ahora] (una hora de holgura por
+     * relojes), y un monto a ±[TOLERANCIA_DEL_AVISO_PCT] % de alguno de [montos]. Elegido, no medido.
+     */
+    fun cubre(montos: List<Long>, moneda: String, tipo: TransactionType, desde: Long, ahora: Long): Boolean =
+        this.tipo == tipo && this.moneda == moneda && momento in desde..(ahora + 3_600_000L) &&
+            montos.any { m -> m > 0 && kotlin.math.abs(monto - m) * 100 <= m * TOLERANCIA_DEL_AVISO_PCT }
+}
+
+/** Revisión de la vuelta 90 (I4) · cuánto puede diferir el aviso de lo esperado y seguir cubriéndolo. */
+internal const val TOLERANCIA_DEL_AVISO_PCT: Long = 10
+
+/** Los avisos pendientes y sin anotar de la bandeja (la misma de «Por revisar»), con lo que dice el parser. */
+private fun Transaction.avisosPendientesLeidos(uid: String, ahora: Long): List<AvisoPendienteLeido> =
+    bandejaConLosPagos(uid, ahora)
+        .filter { it.state == SMS_STATE_PENDING && it.yaAnotadoCon == null }
+        .mapNotNull { aviso ->
+            val momento = momentoDelSms(aviso.time, Long.MAX_VALUE).takeIf { it != Long.MAX_VALUE } ?: return@mapNotNull null
+            val leido = parseSms(aviso.text, aviso.bank) ?: return@mapNotNull null
+            AvisoPendienteLeido(leido.amount.roundToLong(), leido.currency, leido.type, momento)
+        }
 
 /** Los ids con que se confirma una propuesta. Ver [DebitoAutomaticoPorConfirmar] («Los ids»). */
 internal data class IdsDelDebito(val transfer: String, val dinero: String, val deuda: String)

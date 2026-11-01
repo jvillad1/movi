@@ -8,6 +8,7 @@ import com.jvillada.movi.server.db.AnomaliasDescartadas
 import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.CierresDescartados
 import com.jvillada.movi.server.db.CierresEnviados
+import com.jvillada.movi.server.db.CorreosDescartados
 import com.jvillada.movi.server.db.InicioPersonalizado
 import com.jvillada.movi.server.db.CardPaymentDismissals
 import com.jvillada.movi.server.db.Cards
@@ -114,6 +115,8 @@ internal val TABLAS_DEL_USUARIO: List<TablaDelUsuario> = listOf(
     TablaDelUsuario(DestinosDescartados, DestinosDescartados.userId),
     // Lo que llegó del banco y los papeles
     TablaDelUsuario(SmsMessages, SmsMessages.userId),
+    // Vuelta 90: los correos suyos que no se pudieron guardar (los de nadie llevan `""` y no se tocan).
+    TablaDelUsuario(CorreosDescartados, CorreosDescartados.userId),
     TablaDelUsuario(Documents, Documents.userId),
     TablaDelUsuario(LecturasDePapeles, LecturasDePapeles.userId),
     TablaDelUsuario(StatementImports, StatementImports.userId),
