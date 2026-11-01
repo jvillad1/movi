@@ -16,7 +16,8 @@ import kotlinx.serialization.Serializable
  * (BankSenderFilter.DEFAULTS) son un PISO, no un espejo — el cliente siempre une esta
  * config con esos defaults (SmsFilterConfigStore.withDefaults). Por eso AGREGAR un
  * código o keyword acá sí llega a los teléfonos, pero QUITAR uno del piso compilado
- * (los códigos 85540, 891333, 87400 y la keyword "bancolombia") NO deja de capturarlo
+ * (los códigos 85540, 891333, 87400 y, desde el APK que sigue a la vuelta 99, las palabras de
+ * [PALABRAS_DE_BANCOS]; en un APK 1.87, solo "bancolombia") NO deja de capturarlo
  * — el piso sigue vivo hasta el próximo release del APK.
  *
  * Para revertir lo que agregaste acá, volvé a servir el piso explícitamente en vez de
@@ -57,9 +58,27 @@ private data class SmsFilterConfig(
  * no cuesta nada pero tampoco captura nada. Mientras tanto esta keyword cubre los mensajes que
  * digan «Nubank» en el cuerpo.
  */
+internal val PALABRAS_DE_BANCOS: List<String> = listOf(
+    "bancolombia", "nubank",
+    // Vuelta 99 · los otros bancos, por el NOMBRE con que firman el cuerpo. Nació con el papá del dueño:
+    // sus SMS de Davivienda («DAVIVIENDA Descuento en internet, $64,900,Cta de Ahorros *0136,…») llegan
+    // de un código corto 871… que Movi no conoce, y el teléfono los descartaba antes de subirlos. El
+    // código no se agrega: ni el repo ni Davivienda lo confirman, y la palabra ya los cubre todos.
+    //
+    // Solo nombres que no aparecen dentro de palabras comunes (ver el KDoc de arriba y la prueba
+    // `ninguna keyword coincide dentro de una palabra española común`): nada de «popular» ni
+    // «occidente» sueltos. El cliente compara SIN quitar tildes (`lower.contains`), así que los
+    // nombres que el banco puede escribir con tilde van de las dos formas.
+    // Sin «nequi» ni «daviplata»: la gente las nombra en SMS personales («te mandé por Nequi») y esos
+    // textos saldrían del teléfono. Sus avisos reales llegan por notificación, no por SMS.
+    "davivienda", "davibank", "bbva",
+    "banco de bogota", "banco de bogotá", "av villas", "banco de occidente",
+    "colpatria", "scotiabank", "itau", "itaú", "falabella", "lulo bank", "rappipay",
+)
+
 private val CURRENT_FILTER = SmsFilterConfig(
     senderCodes = listOf("85540", "891333", "87400"),
-    bodyKeywords = listOf("bancolombia", "nubank"),
+    bodyKeywords = PALABRAS_DE_BANCOS,
     // **Paquetes exactos, leídos del teléfono del dueño (19-sep) y ya no conjeturados.** La
     // conjetura anterior, `com.todo1.mobile`, era falsa: Todo1 es el proveedor de **Davivienda**
     // (`com.todo1.davivienda.mobileapp` sí está instalado), y la app de Bancolombia se llama
