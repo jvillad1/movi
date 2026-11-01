@@ -606,12 +606,15 @@ class DashboardRoutesTest {
             texto = "Bancolombia: Compraste \$15.500,00 en UBER RIDES con tu T.Deb *4057, el 01/08/2026 a las 09:20.")
         sms("s-ingreso", SMS_STATE_PENDING, origen = "85540", cuando = "${ayer}T10:00:00",
             texto = "Bancolombia: Recibiste \$480.000 de la cuenta *77700012345 en tu cuenta *4057 el 01/08/2026 a las 10:00.")
+        // El pago de la tarjeta llega como ingreso (lo recibe la tarjeta), pero es plata que sale.
+        sms("s-pago-tarjeta", SMS_STATE_PENDING, origen = "85540", cuando = "${ayer}T11:00:00",
+            texto = "Bancolombia: Recibimos pago por \$500.000 a tu tarjeta de credito *9208 desde Wompi-PSE.")
 
         val body = summary()
-        assertEquals(3L, body.long("pendingSms"))
-        assertEquals(757_900L, body.long("porConfirmarSuman"), "la suma de antes sigue igual para los APKs viejos")
-        assertEquals(277_900L, body.long("porConfirmarSalen"))
-        assertEquals(2L, body.long("avisosQueSalen"))
+        assertEquals(4L, body.long("pendingSms"))
+        assertEquals(1_257_900L, body.long("porConfirmarSuman"), "la suma de antes sigue igual para los APKs viejos")
+        assertEquals(777_900L, body.long("porConfirmarSalen"), "Carulla, Uber y el pago de la tarjeta")
+        assertEquals(3L, body.long("avisosQueSalen"))
         assertEquals(480_000L, body.long("porConfirmarEntran"))
         assertEquals(1L, body.long("avisosQueEntran"))
 

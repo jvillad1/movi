@@ -50,6 +50,7 @@ import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.esUnComprobante
 import com.jvillada.movi.shared.model.sumaDeLoPorConfirmar
 import com.jvillada.movi.shared.model.loPorConfirmarPorSigno
+import com.jvillada.movi.shared.model.entraPlata
 import com.jvillada.movi.shared.model.pagosRecientesPorConfirmar
 import com.jvillada.movi.shared.model.cuantosPagosAntiguos
 import kotlin.math.roundToLong
@@ -837,5 +838,6 @@ internal fun Transaction.montosDeLoPorConfirmarDe(uid: String, bandeja: List<Sms
         val propuesta = if (miembros.size > 1) propuestaDelGrupo(miembros) else cabeza
         val leido = (if (esUnComprobante(propuesta)) parsedDeUnComprobante(uid, propuesta.id, propuesta.text) else null)
             ?: parseSms(propuesta.text, propuesta.bank)
-        leido?.let { MontoDelAviso(it.amount.roundToLong(), it.currency, entra = it.type == TransactionType.INCOME) }
+        // Vuelta 85: el signo de `entraPlata` (un pago a la tarjeta llega como ingreso y es una salida).
+        leido?.let { MontoDelAviso(it.amount.roundToLong(), it.currency, entra = entraPlata(it)) }
     }

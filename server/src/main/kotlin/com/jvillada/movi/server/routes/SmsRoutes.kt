@@ -35,6 +35,7 @@ import com.jvillada.movi.shared.model.categoriaProbablePorElNombre
 import com.jvillada.movi.shared.model.huellaDeUnMovimiento
 import com.jvillada.movi.shared.model.laHuellaEsUnNumero
 import com.jvillada.movi.shared.model.nombreQueNoSePropone
+import com.jvillada.movi.shared.model.laMarcaPuedeHablar
 import com.jvillada.movi.shared.model.numeroDelOrigenDelIngreso
 import com.jvillada.movi.shared.model.ParsedSms
 import com.jvillada.movi.shared.model.NoSePudoLeerElAviso
@@ -512,10 +513,29 @@ internal const val SIN_CATEGORIA = "Otros"
  *   número (una llave, una cuenta): «llave 0092184713» no lo puede leer nadie, y si el dueño ya le
  *   puso nombre a ese destinatario, ese nombre es suyo.
  */
-internal fun conLoQueMoviRecuerda(parsed: ParsedSms, memoria: MemoriaDeCategorias): ParsedSms {
+internal fun conLoQueMoviRecuerda(
+    parsed: ParsedSms,
+    memoria: MemoriaDeCategorias,
+    /**
+     * Vuelta 85 · el texto del aviso, para saber si la marca puede hablar ([laMarcaPuedeHablar]: una
+     * compra, no un envío a una persona). Sin él, la memoria no busca por marca.
+     */
+    textoDelMensaje: String? = null,
+): ParsedSms {
     if (parsed.category in CATEGORIAS_QUE_LA_MEMORIA_NO_TOCA) return parsed
-    // Vuelta 85: lo que entró se busca en lo que entró, y lo que salió en lo que salió.
-    val recuerdo = memoria.recuerdoDe(parsed.merchant, parsed.type) ?: return conLasCategoriasDelDueno(parsed, memoria)
+    // Vuelta 85: lo que entró se busca en lo que entró, y lo que salió en lo que salió. La marca, solo
+    // para una compra que no nombra una cuenta ni una llave.
+    val conMarca = textoDelMensaje != null && parsed.type == TransactionType.EXPENSE &&
+        parsed.identificadorDelDestino == null && laMarcaPuedeHablar(textoDelMensaje)
+    val recuerdo = memoria.recuerdoDe(parsed.merchant, parsed.type, conMarca) ?: return conLasCategoriasDelDueno(parsed, memoria)
+    recuerdo.marca?.let { marca ->
+        // Vuelta 85: por la marca, una pista que se dice como tal y que no va de un toque.
+        return parsed.copy(
+            category = recuerdo.categoria,
+            aprendidoDe = if (recuerdo.cuantos == 1) "Como tu otra compra en $marca" else "Como tus ${recuerdo.cuantos} de $marca",
+            porMarca = true,
+        )
+    }
     val huella = huellaDeUnMovimiento(parsed.merchant)
     // Vuelta 85: un nombre con «tu cuenta», una fecha o «cuenta 3123…» no se propone (`nombreQueNoSePropone`).
     val conNombre = huella != null && laHuellaEsUnNumero(huella) && !nombreQueNoSePropone(recuerdo.nombre)
@@ -547,7 +567,7 @@ internal fun conLaMemoriaYLosTerceros(
     memoria: MemoriaDeCategorias,
     destinos: List<DestinoConocido>,
 ): ParsedSms {
-    val recordado = conLoQueMoviRecuerda(parsed, memoria)
+    val recordado = conLoQueMoviRecuerda(parsed, memoria, textoDelMensaje)
     val conDestino = conElDestinoConocido(recordado, textoDelMensaje, destinos)
     if (recordado.aprendidoDe != null || conDestino.merchant == recordado.merchant) return conDestino
     if (conDestino.category in CATEGORIAS_QUE_LA_MEMORIA_NO_TOCA) return conDestino

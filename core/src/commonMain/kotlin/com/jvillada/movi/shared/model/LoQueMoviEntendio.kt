@@ -121,6 +121,7 @@ fun categoriaQueNoDiceNada(categoria: String?): Boolean =
 
 /**
  * **¿La categoría de [leido] la decidió algo que sabe del dueño?** Sí cuando la propuso su memoria
+ * (vuelta 85: salvo la memoria por marca, [ParsedSms.porMarca])
  * (`aprendidoDe`: «Así lo anotaste 4 veces», o el motivo de un envío), y sí cuando una regla
  * —las palabras clave, el correo de PSE, los cargos del banco— propuso una categoría que **él ya
  * usa**. Una del catálogo que nunca usó («Restaurantes» para quien anota «Comida») no: confirmarla
@@ -129,6 +130,9 @@ fun categoriaQueNoDiceNada(categoria: String?): Boolean =
 fun categoriaEntendida(leido: ParsedSms, categoriasDelDueno: Collection<String>): Boolean {
     val clave = claveComparableDeNombre(leido.category.trim())
     if (clave in CATEGORIAS_QUE_NO_DICEN_NADA) return false
+    // Vuelta 85: una categoría que salió de la marca («Como tus 25 de Rappi») es una pista, no una
+    // decisión del dueño sobre este comercio: se pide en la tarjeta, nunca va de un toque ni al lote.
+    if (leido.porMarca) return false
     if (leido.aprendidoDe != null) return true
     return categoriasDelDueno.any { claveComparableDeNombre(it.trim()) == clave }
 }
@@ -187,6 +191,17 @@ fun dudasDelAviso(
  * entendidos son el trámite que el lote acelera; los ingresos son pocos.
  */
 fun entraEnElLote(leido: ParsedSms): Boolean = leido.type != TransactionType.INCOME
+
+/**
+ * **¿Este aviso es plata que llega?** (vuelta 85, para «Por confirmar» con signo) Un ingreso, salvo lo
+ * que el banco escribe como abono pero es plata que el dueño pone para bajar una deuda: «Recibimos pago
+ * por $X a tu tarjeta de crédito *9208» llega como `INCOME` (lo recibe la tarjeta) con la categoría
+ * «Pago de tarjeta», y lo mismo la cuota de un crédito. Esos son **salidas**. Un avance o una recarga de
+ * beneficios sí llegan a una cuenta del dueño: entradas, como dice el parser.
+ */
+fun entraPlata(leido: ParsedSms): Boolean =
+    leido.type == TransactionType.INCOME &&
+        leido.category != CARD_PAYMENT_CATEGORY && !esCategoriaDeCuota(leido.category) && leido.deudaSugeridaId == null
 
 /**
  * ¿El aviso es de antes del primer movimiento de la cuenta en Movi? La misma regla de

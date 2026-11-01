@@ -290,4 +290,45 @@ class LosAvisosQueNombranAAlguienTest {
         // Nada se saldó solo: el grupo no tiene ningún saldado.
         assertEquals(0L, transaction { LiquidacionesDelEspacio.selectAll().count() })
     }
+
+    // ── La marca, de la revisión ────────────────────────────────────────────────
+
+    private val textoDeRappi =
+        "Bancolombia: Compraste \$42.800,00 en RAPPI COLOMBIA con tu T.Deb *4057, el 30/10/2026 a las 19:20."
+
+    private val rappis = MemoriaDeCategorias.de((1..25).map { AnotacionPasada("RAPPI", "Rappi", "Restaurantes", it.toLong(), TransactionType.EXPENSE) })
+
+    @Test
+    fun `una compra en RAPPI COLOMBIA toma la categoria de los Rappi, dicha como pista`() {
+        val leido = assertNotNull(parseSms(textoDeRappi, "85540"))
+        val propuesta = conLaMemoriaYLosTerceros(leido, textoDeRappi, rappis, emptyList())
+        assertEquals("Restaurantes", propuesta.category)
+        assertEquals("Como tus 25 de Rappi", propuesta.aprendidoDe)
+        kotlin.test.assertTrue(propuesta.porMarca, "no cuenta como entendida: no va de un toque")
+        assertEquals(leido.merchant, propuesta.merchant, "el nombre del aviso no cambia")
+        // Sin el texto del aviso (no se sabe si es una compra) la marca no habla.
+        assertNull(conLoQueMoviRecuerda(leido, rappis).aprendidoDe)
+    }
+
+    @Test
+    fun `un envio a una persona que se llama como una tienda no toma la categoria de la tienda`() {
+        val zaras = MemoriaDeCategorias.de((1..4).map { AnotacionPasada("ZARA ANDINO", "Zara", "Ropa", it.toLong(), TransactionType.EXPENSE) })
+        val envio = "Le enviaste \$50.000 a ZARA RESTREPO en su cuenta Bancolombia."
+        val leido = ParsedSms(50_000.0, "ZARA RESTREPO", TransactionType.EXPENSE, "Otros")
+        val propuesta = conLaMemoriaYLosTerceros(leido, envio, zaras, emptyList())
+        assertNotEquals("Ropa", propuesta.category)
+        kotlin.test.assertFalse(propuesta.porMarca)
+    }
+
+    @Test
+    fun `en la bandeja, la compra por marca llega como pista y no entendida`() = testApplication {
+        application { modulo() }
+        (1..3).forEach { movimiento("ev-rappi-$it", "EXPENSE", 30_000L + it, "Restaurantes", "Rappi", "RAPPI", haceDias = it.toLong()) }
+        aviso("sms_rappi", textoDeRappi, haceHoras(1))
+        val leido = assertNotNull(propuestas().propuestas.single { it.avisoId == "sms_rappi" }.leido)
+        assertEquals("Restaurantes", leido.category)
+        assertEquals("Como tus 3 de Rappi", leido.aprendidoDe)
+        kotlin.test.assertTrue(leido.porMarca)
+        kotlin.test.assertFalse(com.jvillada.movi.shared.model.categoriaEntendida(leido, listOf("Restaurantes")))
+    }
 }

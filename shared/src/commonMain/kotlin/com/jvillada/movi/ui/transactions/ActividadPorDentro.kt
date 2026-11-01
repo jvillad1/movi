@@ -2,8 +2,8 @@ package com.jvillada.movi.ui.transactions
 
 import com.jvillada.movi.shared.model.LoPorConfirmarPorSigno
 import com.jvillada.movi.shared.model.MontoDelAviso
-import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.entraEnElLote
+import com.jvillada.movi.shared.model.entraPlata
 import com.jvillada.movi.shared.model.loPorConfirmarPorSigno
 import com.jvillada.movi.shared.model.sumaDeLoPorConfirmar
 import com.jvillada.movi.shared.model.Account
@@ -184,7 +184,7 @@ fun avisosPorConfirmar(
     val leidos = pagos.map { propuestaDelPago(propuestas, it)?.leido }
     // La misma suma que la franja «Por confirmar» del Inicio (`sumaDeLoPorConfirmar`, vuelta 44).
     val montos = leidos.map { leido ->
-        leido?.let { MontoDelAviso(it.amount.roundToLong(), it.currency, entra = it.type == TransactionType.INCOME) }
+        leido?.let { MontoDelAviso(it.amount.roundToLong(), it.currency, entra = entraPlata(it)) }
     }
     val suman = sumaDeLoPorConfirmar(montos)
     val nombres = leidos.mapNotNull { leido -> leido?.merchant?.takeIf { it.isNotBlank() }?.let(::nombreParaMostrar) }.distinct()

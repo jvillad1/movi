@@ -323,7 +323,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
         ) {
             vibrador.confirmar()
             avisosResueltos = avisosResueltos + anotacion.avisos.associateWith { SMS_STATE_CONFIRMED }
-            val entra = anotacion.leido.type == com.jvillada.movi.shared.model.TransactionType.INCOME
+            val entra = com.jvillada.movi.shared.model.entraPlata(anotacion.leido)
             elInicioCuentaOtrosAvisos(-1, anotacion.monto, anotacion.leido.currency, entra)
             val evento = creado
             if (avisoDeLaCascara != null && evento != null) {
@@ -372,7 +372,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
         ) {
             vibrador.confirmar()
             // Vuelta 85: el lado lo dice el aviso (lo que leyó Movi), no el movimiento al que se vinculó.
-            val entra = propuestaDelPago(propuestas, cabeza)?.leido?.type?.let { it == com.jvillada.movi.shared.model.TransactionType.INCOME }
+            val entra = propuestaDelPago(propuestas, cabeza)?.leido?.let { com.jvillada.movi.shared.model.entraPlata(it) }
             elInicioCuentaOtrosAvisos(-1, evento.amount, evento.currency, entra)
             if (avisoDeLaCascara != null) {
                 avisoDeLaCascara.mostrarLoAnotado(
@@ -1051,7 +1051,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                 enPesos.sumOf { it.monto }.takeIf { enPesos.size == resultado.anotados.size },
                 "COP",
                 // Vuelta 85: el lote no lleva ingresos (ver `entraEnElLote`): todo lo anotado salió.
-                entra = false.takeIf { resultado.anotados.none { it.leido.type == com.jvillada.movi.shared.model.TransactionType.INCOME } },
+                entra = false.takeIf { resultado.anotados.none { com.jvillada.movi.shared.model.entraPlata(it.leido) } },
             )
             avisoDeLaCascara.mostrar(textoDeLosConfirmados(resultado))
         } else {

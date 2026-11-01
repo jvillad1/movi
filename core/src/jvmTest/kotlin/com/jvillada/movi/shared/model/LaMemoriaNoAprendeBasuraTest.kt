@@ -122,22 +122,67 @@ class LaMemoriaNoAprendeBasuraTest {
     // ── La marca ────────────────────────────────────────────────────────────────
 
     @Test
-    fun `RAPPI COLOMBIA toma la categoria de los Rappi anotados`() {
+    fun `RAPPI COLOMBIA toma la categoria de los Rappi anotados, si quien pregunta deja hablar a la marca`() {
         val rappis = (1..25).map { anotacion("RAPPI", "Restaurantes", nombre = "Rappi", cuando = it.toLong()) }
         val memoria = MemoriaDeCategorias.de(rappis + anotacion("Uber", "Transporte"))
         assertEquals("nombre:rappicolombia", huellaDeUnMovimiento("RAPPI COLOMBIA"), "la huella exacta no es la de «Rappi»")
 
-        val recuerdo = assertNotNull(memoria.recuerdoDe("RAPPI COLOMBIA"))
+        val recuerdo = assertNotNull(memoria.recuerdoDe("RAPPI COLOMBIA", conMarca = true))
         assertEquals("Restaurantes", recuerdo.categoria)
         assertEquals(25, recuerdo.cuantos)
+        assertEquals("Rappi", recuerdo.marca, "el recuerdo dice que salió de la marca")
+        assertNull(memoria.recuerdoDe("RAPPI COLOMBIA"), "sin pedirlo, la marca no habla")
     }
 
     @Test
-    fun `la huella exacta le gana a la marca`() {
+    fun `la huella exacta le gana a la marca y no se rotula como marca`() {
         val memoria = MemoriaDeCategorias.de(
             (1..3).map { anotacion("RAPPI", "Restaurantes", cuando = it.toLong()) } + anotacion("RAPPI COLOMBIA", "Mercado", cuando = 9),
         )
-        assertEquals("Mercado", memoria.recuerdoDe("RAPPI COLOMBIA")?.categoria)
+        val recuerdo = assertNotNull(memoria.recuerdoDe("RAPPI COLOMBIA", conMarca = true))
+        assertEquals("Mercado", recuerdo.categoria)
+        assertNull(recuerdo.marca)
+    }
+
+    @Test
+    fun `una marca con dos categorias no propone nada`() {
+        val memoria = MemoriaDeCategorias.de(
+            listOf(
+                anotacion("RAPPI", "Restaurantes", cuando = 1),
+                anotacion("RAPPI", "Restaurantes", cuando = 2),
+                anotacion("RAPPI LAS DOCE", "Mercado", cuando = 3),
+            ),
+        )
+        assertNull(memoria.recuerdoDe("RAPPI COLOMBIA", conMarca = true), "no es unánime: no dice qué es la próxima")
+    }
+
+    @Test
+    fun `las pasarelas no hablan por lo que cobran`() {
+        // En producción: tres cobros de Google, unos Tecnología y otros Entretenimiento. Ni unánimes que fueran.
+        val memoria = MemoriaDeCategorias.de((1..3).map { anotacion("GOOGLE *YouTube", "Entretenimiento", cuando = it.toLong()) })
+        assertNull(marcaDeComercioDe("DLO*GOOGLE Duolingo"))
+        assertNull(marcaDeComercioDe("APPLE.COM/BILL"))
+        assertNull(marcaDeComercioDe("MERCADO PAGO*TIENDA"))
+        assertNull(memoria.recuerdoDe("DLO*GOOGLE Duolingo", conMarca = true))
+    }
+
+    @Test
+    fun `la marca habla en una compra, no en un envio a una persona que se llama como una tienda`() {
+        assertTrue(laMarcaPuedeHablar("Bancolombia: Compraste \$42.800,00 en RAPPI COLOMBIA con tu T.Deb *4057, el 30/10/2026."))
+        assertTrue(laMarcaPuedeHablar("Pagaste en ZARA ANDINO con tu cuenta Nu"))
+        assertTrue(laMarcaPuedeHablar("TOSTAO CAFE: COP15,100 with Glim ••3037"))
+        assertFalse(laMarcaPuedeHablar("Le enviaste \$50.000 a ZARA RESTREPO en su cuenta Bancolombia."))
+        assertFalse(laMarcaPuedeHablar("Bancolombia: Transferiste \$50.000 desde tu cuenta *4057 a la cuenta *123456."))
+        assertFalse(laMarcaPuedeHablar("Recibiste 300.000,00 en tu cuenta: Te llegó dinero de RAPPI."))
+    }
+
+    @Test
+    fun `una categoria por marca no cuenta como entendida`() {
+        val porMarca = ParsedSms(42_800.0, "RAPPI COLOMBIA", TransactionType.EXPENSE, "Restaurantes", aprendidoDe = "Como tus 25 de Rappi", porMarca = true)
+        assertFalse(categoriaEntendida(porMarca, listOf("Restaurantes")), "aunque el dueño use «Restaurantes»")
+        assertTrue(categoriaEntendida(porMarca.copy(porMarca = false), listOf("Restaurantes")))
+        val dudas = dudasDelAviso(porMarca, 0, false, cuentaSegura = true, nombraOtraCuentaSuya = false, categoriasDelDueno = listOf("Restaurantes"))
+        assertEquals(setOf(DudaDelAviso.SIN_CATEGORIA), dudas, "se pide en la tarjeta, no va de un toque ni al lote")
     }
 
     @Test
@@ -145,7 +190,7 @@ class LaMemoriaNoAprendeBasuraTest {
         assertNull(marcaDeComercioDe("Bancolombia"))
         assertEquals("rappi", marcaDeComercioDe("RAPPI COLOMBIA"))
         val memoria = MemoriaDeCategorias.de(listOf(anotacion("RAPPI", "Restaurantes", tipo = TransactionType.INCOME)))
-        assertNull(memoria.recuerdoDe("RAPPI COLOMBIA", TransactionType.INCOME), "lo que entra solo por huella")
-        assertNull(memoria.recuerdoDe("RAPPI COLOMBIA"), "y lo que entró no le enseña a lo que sale")
+        assertNull(memoria.recuerdoDe("RAPPI COLOMBIA", TransactionType.INCOME, conMarca = true), "lo que entra solo por huella")
+        assertNull(memoria.recuerdoDe("RAPPI COLOMBIA", conMarca = true), "y lo que entró no le enseña a lo que sale")
     }
 }
