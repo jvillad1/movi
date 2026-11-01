@@ -176,6 +176,18 @@ class ElForkLlegaLimpioTest {
         FormaRecordada.delAparato.guardarCategorias("u1", FormaDeCategorias(renglonesDeLaTarjetaDeOrden = 1, filas = 20))
         FormaRecordada.delAparato.guardarCuentas("u1", FormaDeCuentas(renglonesDelPatrimonio = 4, filasPorGrupo = listOf(5, 2)))
 
+        // Vuelta 100: el uso que espera subir, su almacén de mentira y su enviador de mentira.
+        com.jvillada.movi.observabilidad.Uso.almacenDePrueba = mutableMapOf()
+        com.jvillada.movi.observabilidad.Uso.enviadorDePrueba = { true }
+        com.jvillada.movi.observabilidad.Uso.evento(com.jvillada.movi.shared.model.EventoDeUso.CUENTA_CREADA)
+        com.jvillada.movi.ui.admin.ObservabilidadParaAdmin.sustitutoDePrueba = object : com.jvillada.movi.ui.admin.ObservabilidadParaAdmin {
+            override suspend fun fallos() = com.jvillada.movi.shared.model.ResumenDeFallos()
+            override suspend fun uso() = com.jvillada.movi.shared.model.ResumenDeUso()
+            override suspend fun usuarios() = emptyList<com.jvillada.movi.shared.model.UsuarioConUso>()
+            override suspend fun sesiones(usuarioId: String) = emptyList<com.jvillada.movi.shared.model.SesionDeUso>()
+            override suspend fun eventos(sesionId: String) = emptyList<com.jvillada.movi.shared.model.EventoDelRecorrido>()
+        }
+
         // No se afirma «quedó sucio» por prolijidad: si alguno de estos setters dejara de escribir,
         // el método de abajo pasaría sin ejercitar nada y esta clase sería decorativa.
         assertTrue("«Mercado» no entró al caché", "Mercado" in UsedCategoriesCache.used)
@@ -210,6 +222,7 @@ class ElForkLlegaLimpioTest {
         assertNotNull("La forma de Cuentas no quedó guardada", FormaRecordada.delAparato.cuentas("u1"))
         assertTrue("La búsqueda reciente no quedó anotada", com.jvillada.movi.data.BusquedasRecientesStore.recientes.isNotEmpty())
         assertTrue("La guía de primer uso no quedó abierta", com.jvillada.movi.ui.primeruso.GuiaDePrimerUso.enCurso)
+        assertTrue("El uso no quedó esperando subir", com.jvillada.movi.observabilidad.Uso.pendientes.isNotEmpty())
     }
 
     /**
@@ -226,6 +239,12 @@ class ElForkLlegaLimpioTest {
 
     @Test
     fun bLosGlobalesLleganEnCero() {
+        assertTrue("El uso de otra prueba sigue esperando subir", com.jvillada.movi.observabilidad.Uso.pendientes.isEmpty())
+        assertEquals("La sesión de uso de otra prueba sigue abierta", "", com.jvillada.movi.observabilidad.Uso.sesionId)
+        assertNull("El enviador de mentira del uso sigue enchufado", com.jvillada.movi.observabilidad.Uso.enviadorDePrueba)
+        assertNull("El almacén de mentira del uso sigue enchufado", com.jvillada.movi.observabilidad.Uso.almacenDePrueba)
+        assertNull("La costura de «Fallos y uso» sigue enchufada", com.jvillada.movi.ui.admin.ObservabilidadParaAdmin.sustitutoDePrueba)
+        assertTrue("La red de las pruebas está abierta", com.jvillada.movi.data.RedDeLaApp.cerradaPorLasPruebas)
         assertFalse("La guía de primer uso trae la resaca de otra prueba", com.jvillada.movi.ui.primeruso.GuiaDePrimerUso.revisada)
         assertFalse("La guía de primer uso sigue en curso", com.jvillada.movi.ui.primeruso.GuiaDePrimerUso.enCurso)
         assertTrue(
