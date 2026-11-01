@@ -2,6 +2,8 @@ package com.jvillada.movi.server.cuenta
 
 import com.jvillada.movi.server.db.AccionesPropuestas
 import com.jvillada.movi.server.db.Accounts
+import com.jvillada.movi.server.db.ClavesDeExtractos
+import com.jvillada.movi.server.db.PdfsAbiertos
 import com.jvillada.movi.server.db.Apartados
 import com.jvillada.movi.server.db.AiTurns
 import com.jvillada.movi.server.db.AnomaliasDescartadas
@@ -121,6 +123,9 @@ internal val TABLAS_DEL_USUARIO: List<TablaDelUsuario> = listOf(
     TablaDelUsuario(CorreosDescartados, CorreosDescartados.userId),
     TablaDelUsuario(Documents, Documents.userId),
     TablaDelUsuario(LecturasDePapeles, LecturasDePapeles.userId),
+    // Vuelta 103: el PDF con clave que Movi abrió, y la clave de los extractos si pidió recordarla.
+    TablaDelUsuario(PdfsAbiertos, PdfsAbiertos.userId),
+    TablaDelUsuario(ClavesDeExtractos, ClavesDeExtractos.userId),
     TablaDelUsuario(StatementImports, StatementImports.userId),
     TablaDelUsuario(StatementImportMatches, StatementImportMatches.userId),
     TablaDelUsuario(ReglasDeComercio, ReglasDeComercio.userId),
