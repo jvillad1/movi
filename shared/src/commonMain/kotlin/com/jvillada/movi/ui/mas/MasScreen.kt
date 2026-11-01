@@ -549,6 +549,8 @@ fun MasScreen(
                     Separador()
                     // El enlace de solo lectura para Caro o un asesor.
                     FilaQueLleva("Compartir", Icons.Rounded.Share, Screen.Compartir, onNavigate)
+                    // Vuelta 103: la clave de los extractos, solo si hay una guardada.
+                    FilaDeLaClaveDeExtractos()
                 }
                 NotaDeSeccion(
                     errorDatos ?: "La descarga trae tus cuentas, movimientos, créditos y mensajes del banco.",

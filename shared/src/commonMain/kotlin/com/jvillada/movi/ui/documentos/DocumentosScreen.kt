@@ -247,7 +247,23 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
                 .onSuccess { result: StatementParseResult ->
                     onNavigate(Screen.StatementReview(Json.encodeToString(result)))
                 }
-                .onFailure { error = "No pude procesar el extracto: ${it.toUserMessage()}" }
+                .onFailure { e ->
+                    val codigo = com.jvillada.movi.ui.papeles.codigoDeLaClave(e)
+                    if (codigo == com.jvillada.movi.shared.model.PDF_CON_CLAVE) {
+                        // Vuelta 103: el PDF tiene clave. La pide la hoja «Movi está leyendo…», sobre
+                        // este mismo documento (no se vuelve a subir).
+                        com.jvillada.movi.ui.papeles.PapelesCompartidos.recibir(
+                            listOf(
+                                com.jvillada.movi.ui.papeles.ArchivoCompartido(
+                                    doc.nombre, ByteArray(0), doc.mimeType, documentoId = doc.id,
+                                ),
+                            ),
+                        )
+                    } else {
+                        val motivo = codigo?.let { com.jvillada.movi.shared.model.fraseDeLaClaveDelPdf(it) } ?: e.toUserMessage()
+                        error = "No pude procesar el extracto: $motivo"
+                    }
+                }
             importando = null
         }
     }

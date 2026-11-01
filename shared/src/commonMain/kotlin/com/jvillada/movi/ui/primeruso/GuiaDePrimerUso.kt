@@ -181,7 +181,18 @@ data class ResumenDelPrimerUso(
  * [CON_MOVIMIENTOS]: ya hay movimientos (en la web y en iOS, el paso está hecho). [DIRECCION_COPIADA]: se
  * copió la dirección de reenvío, que no prueba que el reenvío ande.
  */
-enum class EstadoDeLaCaptura { ACTIVA, EXTRACTO_SUBIDO, CON_MOVIMIENTOS, DIRECCION_COPIADA, PENDIENTE }
+enum class EstadoDeLaCaptura {
+    ACTIVA,
+    /** Se subió y se está leyendo. */
+    EXTRACTO_SUBIDO,
+    /** Vuelta 103: se leyó. */
+    EXTRACTO_LEIDO,
+    /** Vuelta 103: no se pudo leer (o espera su clave). No cuenta como hecho: un fallo nunca es «Listo». */
+    EXTRACTO_SIN_LEER,
+    CON_MOVIMIENTOS,
+    DIRECCION_COPIADA,
+    PENDIENTE,
+}
 
 /** Un renglón del resumen: qué es, cómo quedó, y si quedó hecho. */
 data class LineaDelResumen(val titulo: String, val detalle: String, val hecho: Boolean)
@@ -202,6 +213,8 @@ fun lineasDelResumen(lista: List<EstadoDelPrimerPaso>, r: ResumenDelPrimerUso): 
         PrimerPaso.CAPTURA -> when (r.captura) {
             EstadoDeLaCaptura.ACTIVA -> "Activo en este teléfono"
             EstadoDeLaCaptura.EXTRACTO_SUBIDO -> "Movi está leyendo tu extracto"
+            EstadoDeLaCaptura.EXTRACTO_LEIDO -> "Movi leyó tu extracto"
+            EstadoDeLaCaptura.EXTRACTO_SIN_LEER -> "No se pudo leer tu extracto"
             EstadoDeLaCaptura.CON_MOVIMIENTOS -> "Ya tienes movimientos en Movi"
             EstadoDeLaCaptura.DIRECCION_COPIADA -> "Dirección copiada: falta el reenvío en Gmail"
             EstadoDeLaCaptura.PENDIENTE ->

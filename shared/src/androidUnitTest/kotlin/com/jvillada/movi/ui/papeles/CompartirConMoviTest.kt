@@ -24,7 +24,21 @@ import com.jvillada.movi.shared.model.IA_NO_DISPONIBLE
 import com.jvillada.movi.shared.model.IA_SIN_CREDITO
 import com.jvillada.movi.shared.model.LecturaDelPapel
 import com.jvillada.movi.shared.model.MAX_DOCUMENTO_BYTES
-import com.jvillada.movi.shared.model.NO_SE_PUDO_LEER_EL_PAPEL
+import com.jvillada.movi.shared.model.CLAVE_INCORRECTA
+import com.jvillada.movi.shared.model.ClaveDelPdf
+import com.jvillada.movi.shared.model.EstadoDeLaClaveDeExtractos
+import com.jvillada.movi.shared.model.LA_CLAVE_NO_ABRE_EL_PDF
+import com.jvillada.movi.shared.model.PDF_CON_CLAVE
+import com.jvillada.movi.shared.model.PISTA_DE_LA_CLAVE_DEL_PDF
+import com.jvillada.movi.shared.model.RECORDAR_LA_CLAVE_DEL_PDF
+import com.jvillada.movi.shared.model.ROTULO_DE_LA_CLAVE_DEL_PDF
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.isToggleable
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performTextInput
+import kotlin.test.assertNotEquals
 import com.jvillada.movi.shared.model.ParsedSms
 import com.jvillada.movi.shared.model.QueEsElPapel
 import com.jvillada.movi.shared.model.SMS_STATE_CONFIRMED
@@ -80,9 +94,18 @@ class CompartirConMoviTest {
     private class RepoDePapeles(
         val subir: () -> Documento,
         val leer: (Boolean) -> LecturaDelPapel,
+        val conClave: (ClaveDelPdf) -> LecturaDelPapel = { error("sin clave") },
+        val sePuedeRecordar: Boolean = true,
     ) : RepositorioDePrueba() {
         val subidos = mutableListOf<String>()
         val leidos = mutableListOf<Pair<String, Boolean>>()
+        val claves = mutableListOf<Pair<String, ClaveDelPdf>>()
+        override suspend fun abrirPapelConClave(documentoId: String, clave: ClaveDelPdf): LecturaDelPapel {
+            claves += documentoId to clave
+            return conClave(clave)
+        }
+        override suspend fun estadoDeLaClaveDeExtractos() =
+            EstadoDeLaClaveDeExtractos(guardada = false, sePuedeRecordar = sePuedeRecordar)
         override suspend fun subirPapel(fileName: String, bytes: ByteArray, mimeType: String): Documento {
             subidos += fileName
             return subir()
@@ -138,7 +161,140 @@ class CompartirConMoviTest {
         val resultado = assertIs<ResultadoDelPapel.NoSePudo>(leerUnPapel(repo, archivo()))
         assertTrue(resultado.guardado)
         assertEquals("Este PDF tiene contraseña y Movi no puede abrirlo.", resultado.motivo)
-        assertEquals(NO_SE_PUDO_LEER_EL_PAPEL, tituloDelResultado(resultado))
+        // Vuelta 103: un título corto de aviso, y el motivo debajo. Nunca «Listo».
+        assertEquals(NO_SE_PUDO_LEER, tituloDelResultado(resultado))
+        assertEquals("No se pudo leer", tituloDeLaHoja(listOf(resultado)))
+        assertFalse(resultado.reintentable, "un 422 explica algo del archivo: reintentar daría lo mismo")
+    }
+
+    // ── Vuelta 103 · el PDF con clave ──────────────────────────────────────────
+
+    @Test
+    fun un_pdf_con_clave_pide_la_clave_y_no_dice_listo() = runBlocking {
+        val repo = RepoDePapeles(subir = { documento }, leer = { throw ApiException(422, PDF_CON_CLAVE) })
+        val resultado = assertIs<ResultadoDelPapel.ConClave>(leerUnPapel(repo, archivo()))
+        assertEquals("doc_1", resultado.documentoId)
+        assertNull(resultado.error)
+        assertEquals("Este PDF tiene clave", tituloDeLaHoja(listOf(resultado)))
+        assertEquals(ESTE_PDF_TIENE_CLAVE, tituloDelResultado(resultado))
+        assertTrue(esAvisoDelPapel(resultado))
+    }
+
+    @Test
+    fun abrir_con_la_clave_no_vuelve_a_subir_y_una_mala_lo_dice() = runBlocking {
+        var buena = false
+        val repo = RepoDePapeles(
+            subir = { documento },
+            leer = { throw ApiException(422, PDF_CON_CLAVE) },
+            conClave = { if (buena) propuesta else throw ApiException(422, CLAVE_INCORRECTA) },
+        )
+        val pendiente = assertIs<ResultadoDelPapel.ConClave>(leerUnPapel(repo, archivo()))
+        val mala = assertIs<ResultadoDelPapel.ConClave>(abrirConLaClave(repo, pendiente, "123", recordar = false))
+        assertEquals(LA_CLAVE_NO_ABRE_EL_PDF, mala.error)
+        buena = true
+        assertIs<ResultadoDelPapel.EnLaBandeja>(abrirConLaClave(repo, mala, "1037585071", recordar = true))
+        assertEquals(1, repo.subidos.size, "la clave va sobre el documento guardado")
+        assertEquals(listOf("doc_1" to ClaveDelPdf("123", false), "doc_1" to ClaveDelPdf("1037585071", true)), repo.claves)
+    }
+
+    @Test
+    fun un_archivo_ya_guardado_no_se_sube_otra_vez() = runBlocking {
+        val repo = RepoDePapeles(subir = { documento }, leer = { propuesta })
+        leerUnPapel(repo, ArchivoCompartido("extracto.pdf", ByteArray(0), "application/pdf", documentoId = "doc_9"))
+        assertTrue(repo.subidos.isEmpty())
+        assertEquals(listOf("doc_9" to false), repo.leidos)
+    }
+
+    @Test
+    fun la_ia_sin_credito_se_puede_reintentar() = runBlocking {
+        val repo = RepoDePapeles(subir = { documento }, leer = { throw ApiException(503, IA_SIN_CREDITO) })
+        val resultado = assertIs<ResultadoDelPapel.NoSePudo>(leerUnPapel(repo, archivo()))
+        assertTrue(resultado.reintentable)
+        assertEquals("doc_1", documentoParaReintentar(resultado))
+    }
+
+    @Test
+    fun la_fila_de_la_guia_dice_la_verdad_en_cada_estado() {
+        val leyendo = filaDelPapelEnLaGuia(null)
+        assertTrue(leyendo.leyendo)
+        assertNotEquals("Listo", leyendo.pildora)
+        assertEquals(leyendo, filaDelPapelEnLaGuia(ResultadoDelPapel.Leyendo("x")))
+        listOf(
+            ResultadoDelPapel.Extracto("x", LecturaDelPapel("doc", QueEsElPapel.EXTRACTO)),
+            ResultadoDelPapel.EnLaBandeja("x", propuesta),
+            ResultadoDelPapel.YaAnotado("x", propuesta.copy(porRevisarId = null)),
+        ).forEach { bien ->
+            val fila = filaDelPapelEnLaGuia(bien)
+            assertEquals("Listo", fila.pildora)
+            assertFalse(fila.aviso)
+        }
+        val conClave = filaDelPapelEnLaGuia(ResultadoDelPapel.ConClave("x", "doc"))
+        assertTrue(conClave.aviso)
+        assertEquals(ESTE_PDF_TIENE_CLAVE, conClave.titulo)
+        val sinIa = filaDelPapelEnLaGuia(ResultadoDelPapel.NoSePudo("x", LECTURA_CON_IA_NO_DISPONIBLE, guardado = true))
+        assertTrue(sinIa.aviso)
+        assertEquals(NO_SE_PUDO_LEER, sinIa.titulo)
+        val otro = filaDelPapelEnLaGuia(ResultadoDelPapel.NoSePudo("x", "lo que sea", guardado = true))
+        assertTrue(otro.aviso)
+        // Un fallo nunca se ve como «Listo».
+        listOf(conClave, sinIa, otro).forEach { assertNotEquals("Listo", it.pildora) }
+    }
+
+    @Test
+    fun la_hoja_pide_la_clave_con_la_casilla_apagada_y_la_manda_en_el_reintento() {
+        val repo = RepoDePapeles(
+            subir = { documento },
+            leer = { throw ApiException(422, PDF_CON_CLAVE) },
+            conClave = { propuesta },
+        )
+        Repositories.sustitutoDePrueba = repo
+        composeRule.setContent {
+            MoviTheme {
+                Box(Modifier.fillMaxSize()) {
+                    HojaLeyendoElPapel(archivos = listOf(archivo()), onCerrar = {}, onNavigate = {}, onCambio = {})
+                }
+            }
+        }
+        runCatching {
+            composeRule.waitUntil(5_000) {
+                composeRule.onAllNodes(hasTestTag(TAG_RECORDAR_LA_CLAVE), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+            }
+        }.onFailure { error(composeRule.onRoot(useUnmergedTree = true).printToString()) }
+        assertTrue(composeRule.onAllNodes(androidx.compose.ui.test.hasText("Listo")).fetchSemanticsNodes().isEmpty())
+        composeRule.onNodeWithText(ROTULO_DE_LA_CLAVE_DEL_PDF).assertExists()
+        composeRule.onNodeWithText(PISTA_DE_LA_CLAVE_DEL_PDF).assertExists()
+        composeRule.onNodeWithText(RECORDAR_LA_CLAVE_DEL_PDF).assertExists()
+        composeRule.onNode(hasTestTag(TAG_AVISO_DEL_PAPEL), useUnmergedTree = true).assertExists()
+        // La casilla arranca apagada.
+        composeRule.onNode(isToggleable().and(hasAnyAncestor(hasTestTag(TAG_RECORDAR_LA_CLAVE))), useUnmergedTree = true).assertIsOff()
+        composeRule.onNodeWithTag(TAG_CLAVE_DEL_PDF).performTextInput("1037585071")
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(TAG_ABRIR_EL_PDF).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodes(androidx.compose.ui.test.hasText("Quedó en Por revisar")).fetchSemanticsNodes().isNotEmpty()
+        }
+        assertEquals(listOf("doc_1" to ClaveDelPdf("1037585071", recordar = false)), repo.claves)
+        assertEquals(1, repo.subidos.size)
+        // La guía (debajo de la hoja) ve lo mismo que la hoja.
+        assertIs<ResultadoDelPapel.EnLaBandeja>(PapelesCompartidos.resultados["transferencia.png"])
+    }
+
+    @Test
+    fun sin_la_clave_de_movi_no_se_ofrece_recordarla() {
+        val repo = RepoDePapeles(subir = { documento }, leer = { throw ApiException(422, PDF_CON_CLAVE) }, sePuedeRecordar = false)
+        Repositories.sustitutoDePrueba = repo
+        composeRule.setContent {
+            MoviTheme {
+                Box(Modifier.fillMaxSize()) {
+                    HojaLeyendoElPapel(archivos = listOf(archivo()), onCerrar = {}, onNavigate = {}, onCambio = {})
+                }
+            }
+        }
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodes(hasTestTag(TAG_CLAVE_DEL_PDF)).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.waitForIdle()
+        assertTrue(composeRule.onAllNodes(hasTestTag(TAG_RECORDAR_LA_CLAVE), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
     }
 
     @Test

@@ -114,6 +114,7 @@ import com.jvillada.movi.ui.sms.SmsSensorSetupSection
 import com.jvillada.movi.ui.sms.rememberSmsCaptureReady
 import com.jvillada.movi.ui.transicionEntrePantallas
 import androidx.compose.material.icons.rounded.UploadFile
+import androidx.compose.material.icons.rounded.WarningAmber
 import androidx.compose.runtime.Stable
 import com.jvillada.movi.shared.model.EstadoDelPrimerPaso
 import com.jvillada.movi.shared.model.LoQueYaHay
@@ -130,6 +131,9 @@ import com.jvillada.movi.ui.extractos.TiposDeArchivo
 import com.jvillada.movi.ui.extractos.rememberFilePicker
 import com.jvillada.movi.ui.papeles.ArchivoCompartido
 import com.jvillada.movi.ui.papeles.PapelesCompartidos
+import com.jvillada.movi.ui.papeles.ResultadoDelPapel
+import com.jvillada.movi.ui.papeles.documentoParaReintentar
+import com.jvillada.movi.ui.papeles.filaDelPapelEnLaGuia
 import com.jvillada.movi.ui.profile.detalleDelInicioDelPeriodo
 import com.jvillada.movi.ui.profile.ejemploCortoDelCorte
 import com.jvillada.movi.ui.profile.vistaPreviaDelPeriodo
@@ -265,7 +269,16 @@ fun PrimerUsoScreen(
     val permisoDeSms = rememberSmsCaptureReady()
     val estadoDeLaCaptura = when {
         modoDeCaptura == ModoDeCaptura.PERMISOS_DEL_TELEFONO && permisoDeSms -> EstadoDeLaCaptura.ACTIVA
-        modoDeCaptura == ModoDeCaptura.SUBIR_UN_EXTRACTO && extractoSubido != null -> EstadoDeLaCaptura.EXTRACTO_SUBIDO
+        // Vuelta 103: lo que pasó de verdad con el extracto (lo anota la hoja que lo lee).
+        modoDeCaptura == ModoDeCaptura.SUBIR_UN_EXTRACTO && extractoSubido != null -> {
+            val resultado = PapelesCompartidos.resultados[extractoSubido]
+            val fila = filaDelPapelEnLaGuia(resultado)
+            when {
+                fila.aviso -> EstadoDeLaCaptura.EXTRACTO_SIN_LEER
+                fila.leyendo -> EstadoDeLaCaptura.EXTRACTO_SUBIDO
+                else -> EstadoDeLaCaptura.EXTRACTO_LEIDO
+            }
+        }
         modoDeCaptura == ModoDeCaptura.SUBIR_UN_EXTRACTO && yaHabia.movimientos > 0 -> EstadoDeLaCaptura.CON_MOVIMIENTOS
         direccionCopiada -> EstadoDeLaCaptura.DIRECCION_COPIADA
         else -> EstadoDeLaCaptura.PENDIENTE
@@ -283,7 +296,8 @@ fun PrimerUsoScreen(
                 laCuentaYaEstabaEnUso(yaHabia.movimientos > 0, yaHabia.cuentas.size, perfil?.primerUsoEn),
             cuentasDeDinero = cuentasDeDinero,
             capturaHecha = estadoDeLaCaptura in setOf(
-                EstadoDeLaCaptura.ACTIVA, EstadoDeLaCaptura.EXTRACTO_SUBIDO, EstadoDeLaCaptura.CON_MOVIMIENTOS,
+                EstadoDeLaCaptura.ACTIVA, EstadoDeLaCaptura.EXTRACTO_SUBIDO, EstadoDeLaCaptura.EXTRACTO_LEIDO,
+                EstadoDeLaCaptura.CON_MOVIMIENTOS,
             ),
             fijos = fijos,
         ),
@@ -1168,6 +1182,9 @@ private fun PasoCaptura(
 /** Lo que dice el botón que elige el extracto. */
 const val SUBIR_UN_EXTRACTO_EN_LA_GUIA: String = "Subir un extracto"
 
+/** El tag de la fila del extracto subido en la guía (vuelta 103). */
+const val TAG_FILA_DEL_EXTRACTO_EN_LA_GUIA: String = "primer-uso-fila-del-extracto"
+
 /** El tag del botón que elige el extracto en la guía. */
 const val TAG_SUBIR_EXTRACTO_EN_LA_GUIA: String = "primer-uso-subir-extracto"
 
@@ -1193,12 +1210,50 @@ private fun PasoCapturaConUnExtracto(extractoSubido: String?, onExtracto: (Strin
     )
     Spacer(Modifier.height(Medida.entreSecciones))
     if (extractoSubido != null) {
+        // Vuelta 103: la fila dice lo que pasó DE VERDAD con el archivo (lo anota la hoja «Movi está
+        // leyendo…» en [PapelesCompartidos.resultados]). Antes decía «Listo» con un chulo apenas se
+        // elegía, aunque la hoja dijera que no se pudo leer.
+        val resultado = PapelesCompartidos.resultados[extractoSubido]
+        val fila = filaDelPapelEnLaGuia(resultado)
+        val reintentar = documentoParaReintentar(resultado)
         Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
             Fila(
-                titulo = "Movi está leyendo tu extracto",
+                titulo = fila.titulo,
                 subtitulo = extractoSubido,
-                inicio = { IconoEnCirculo(Icons.Rounded.CheckCircle) },
-                final = { Pildora("Listo", TonoDePildora.Exito) },
+                inicio = {
+                    when {
+                        fila.aviso -> IconoEnCirculo(Icons.Rounded.WarningAmber, tono = TonoDeIcono.Aviso)
+                        fila.leyendo -> IconoEnCirculo(Icons.Rounded.UploadFile)
+                        else -> IconoEnCirculo(Icons.Rounded.CheckCircle, tono = TonoDeIcono.Exito)
+                    }
+                },
+                final = {
+                    Pildora(
+                        fila.pildora,
+                        when {
+                            fila.aviso -> TonoDePildora.Aviso
+                            fila.leyendo -> TonoDePildora.Neutra
+                            else -> TonoDePildora.Exito
+                        },
+                    )
+                },
+                modifier = Modifier.testTag(TAG_FILA_DEL_EXTRACTO_EN_LA_GUIA),
+            )
+        }
+        // La acción que corresponde: escribir la clave o intentar de nuevo, sobre el documento ya
+        // guardado (la hoja lo toma otra vez, sin volver a subirlo).
+        if (reintentar != null) {
+            Spacer(Modifier.height(Medida.dentroDeSeccion))
+            Boton(
+                if (resultado is ResultadoDelPapel.ConClave) "Escribir la clave" else "Intentar de nuevo",
+                onClick = {
+                    PapelesCompartidos.recibir(
+                        listOf(ArchivoCompartido(extractoSubido, ByteArray(0), "", documentoId = reintentar)),
+                    )
+                },
+                // Secundario: el principal de la pantalla es el de la guía (un solo amarillo por vista).
+                variante = VarianteDeBoton.Secundario,
+                anchoCompleto = true,
             )
         }
         Spacer(Modifier.height(Medida.dentroDeSeccion))
