@@ -108,15 +108,25 @@ class ElInicioNoRepitePeticionesTest {
     private fun cuantas(ruta: String): Int = pedidos[ruta]?.get() ?: 0
     private fun total(): Int = pedidos.values.sumOf { it.get() }
 
-    /** Espera a que el Inicio termine su carga y a que no salga ninguna petición más. */
+    /**
+     * Espera a que el Inicio termine su carga y a que no salga ninguna petición más.
+     *
+     * Los topes son de reloj de pared y solo cuentan si algo de verdad no llega: con la máquina cargada
+     * (CI, varias suites a la vez) 10 s no alcanzaban y la prueba fallaba sin que nada estuviera mal.
+     * «Quieto» son tres vueltas seguidas sin pedidos nuevos, no una: bajo carga, un pedido puede tardar
+     * más de 150 ms en salir.
+     */
     private fun esperarQueSeQuede() {
-        composeRule.waitUntil(10_000) { DashboardDataCache.cargadoEn > 0L }
-        var antes = -1
-        while (antes != total()) {
-            antes = total()
+        composeRule.waitUntil(ESPERA_MS) { DashboardDataCache.cargadoEn > 0L }
+        var antes = total()
+        var quietas = 0
+        while (quietas < 3) {
             composeRule.mainClock.advanceTimeBy(500)
             composeRule.waitForIdle()
             Thread.sleep(150)
+            val ahora = total()
+            quietas = if (ahora == antes) quietas + 1 else 0
+            antes = ahora
         }
     }
 
@@ -163,10 +173,10 @@ class ElInicioNoRepitePeticionesTest {
     /** Sale del Inicio (y comprueba que salió de la composición), hace [alSalir] y vuelve. */
     private fun salirYVolver(alSalir: () -> Unit = {}, cambiar: (Boolean) -> Unit) {
         composeRule.runOnUiThread { cambiar(false) }
-        composeRule.waitUntil(5_000) { !hayInicio() }
+        composeRule.waitUntil(ESPERA_MS) { !hayInicio() }
         alSalir()
         composeRule.runOnUiThread { cambiar(true) }
-        composeRule.waitUntil(5_000) { hayInicio() }
+        composeRule.waitUntil(ESPERA_MS) { hayInicio() }
     }
 
     private fun montarElInicio(enElInicio: () -> Boolean, conGesto: Boolean = false) {
@@ -190,7 +200,7 @@ class ElInicioNoRepitePeticionesTest {
         assertEquals(1, cuantas("/api/dashboard/summary"))
 
         composeRule.onRoot().performTouchInput { swipeDown(startY = top + height * 0.3f, endY = bottom, durationMillis = 400) }
-        composeRule.waitUntil(10_000) { cuantas("/api/dashboard/summary") >= 2 }
+        composeRule.waitUntil(ESPERA_MS) { cuantas("/api/dashboard/summary") >= 2 }
         esperarQueSeQuede()
 
         assertEquals(2, cuantas("/api/dashboard/summary"), "${pedidos.mapValues { it.value.get() }}")
@@ -213,10 +223,15 @@ class ElInicioNoRepitePeticionesTest {
             avisosEnElServer = 7
             com.jvillada.movi.data.olvidarLoFresco()
         }, cambiar = { enElInicio = it })
-        composeRule.waitUntil(20_000) { cuantas("/api/dashboard/summary") >= 2 && DashboardDataCache.cargadoEn > 0L }
+        composeRule.waitUntil(ESPERA_MS) { cuantas("/api/dashboard/summary") >= 2 && DashboardDataCache.cargadoEn > 0L }
         esperarQueSeQuede()
 
         assertEquals(2, cuantas("/api/dashboard/summary"))
         assertEquals(7, DashboardDataCache.data?.pendingSms)
+    }
+
+    private companion object {
+        /** Tope de las esperas por condición: vuelven apenas se cumple, así que solo alarga un fallo real. */
+        const val ESPERA_MS = 60_000L
     }
 }
