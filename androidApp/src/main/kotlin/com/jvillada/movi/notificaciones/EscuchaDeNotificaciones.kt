@@ -13,6 +13,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.jvillada.movi.avisos.Avisador
+import com.jvillada.movi.sms.CLAVE_SILENCIOSA
 import com.jvillada.movi.sms.ORIGEN_NOTIFICACION
 import com.jvillada.movi.sms.SmsFilterConfigStore
 import com.jvillada.movi.sms.SmsSyncWorker
@@ -77,7 +78,7 @@ class EscuchaDeNotificaciones : NotificationListenerService() {
         Avisador.quitarAccesoRevocado(contexto)
         SmsFilterConfigStore.refreshIfStale(contexto, force = true)
         val enLaBandeja = runCatching { activeNotifications?.toList() }.getOrNull().orEmpty()
-        procesar(enLaBandeja)
+        procesar(enLaBandeja, barridoHecho = System.currentTimeMillis())
     }
 
     /**
@@ -99,7 +100,7 @@ class EscuchaDeNotificaciones : NotificationListenerService() {
      * **El camino único**, para la notificación que acaba de llegar y para el barrido de la bandeja.
      * La regla —qué se sube y qué es una repetición— es `procesarNotificaciones` (`:shared`, pura).
      */
-    private fun procesar(notificaciones: List<StatusBarNotification>) {
+    private fun procesar(notificaciones: List<StatusBarNotification>, barridoHecho: Long? = null) {
         if (notificaciones.isEmpty()) return
         val contexto = applicationContext
         val apps = SmsFilterConfigStore.loadNotificationApps(contexto)
@@ -119,7 +120,7 @@ class EscuchaDeNotificaciones : NotificationListenerService() {
         // sale bien— tampoco cuenta como una captura. Las apps de banco re-publican: actualizan la
         // misma notificación, la reponen al desbloquear, la repiten al abrir la app; la memoria
         // (`anotarSiEsNueva`) evita que cada re-post sea una fila más en la bandeja del dueño.
-        val resultado = procesarNotificaciones(entrantes, apps, AlmacenDeNotificaciones.memoria(contexto))
+        val resultado = procesarNotificaciones(entrantes, apps, AlmacenDeNotificaciones.memoria(contexto), barridoHecho)
         if (resultado.subidas.isEmpty()) return
         AlmacenDeNotificaciones.guardarMemoria(contexto, resultado.memoria)
         resultado.subidas.forEach { encolar(it) }
@@ -155,6 +156,8 @@ class EscuchaDeNotificaciones : NotificationListenerService() {
                     "body" to subida.texto,
                     "ts" to subida.cuando,
                     "origen" to ORIGEN_NOTIFICACION,
+                    // Lo del barrido sube sin hacer sonar un «Movi anotó…» por cada uno.
+                    CLAVE_SILENCIOSA to subida.silenciosa,
                 )
             )
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())

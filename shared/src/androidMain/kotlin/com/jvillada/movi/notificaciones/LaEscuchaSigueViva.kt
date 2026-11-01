@@ -48,6 +48,9 @@ fun huellaDelAccesoRevocado(ultimaConexion: Long): String = "revocado@$ultimaCon
 /**
  * **La regla de la vigía.**
  *
+ * - No se pudo leer si está concedido ([concedido] `null`: la lectura de ajustes falló) →
+ *   [LoQueHaceLaVigia.NADA]. «No sé» no es «revocado»: avisar ahí sería decirle al dueño que algo se
+ *   apagó sin saberlo.
  * - Concedido y conectado → [LoQueHaceLaVigia.NADA].
  * - Concedido y desconectado → [LoQueHaceLaVigia.RECONECTAR] (`requestRebind`; no molesta al dueño:
  *   es lo que Android tendría que haber hecho solo).
@@ -57,11 +60,12 @@ fun huellaDelAccesoRevocado(ultimaConexion: Long): String = "revocado@$ultimaCon
  *   primera vez, y [LoQueHaceLaVigia.NADA] si esta misma huella ya sonó.
  */
 fun queHaceLaVigia(
-    concedido: Boolean,
+    concedido: Boolean?,
     conectada: Boolean,
     ultimaConexion: Long,
     huellaYaAvisada: String?,
 ): LoQueHaceLaVigia = when {
+    concedido == null -> LoQueHaceLaVigia.NADA
     concedido && conectada -> LoQueHaceLaVigia.NADA
     concedido -> LoQueHaceLaVigia.RECONECTAR
     ultimaConexion <= 0L -> LoQueHaceLaVigia.NADA

@@ -20,12 +20,16 @@ import kotlin.math.abs
 
 /**
  * **Cuánto dura «es la misma notificación, actualizada»** para una llave de Android que vuelve con el
- * mismo texto. Elegido, no medido: una app de banco repone su notificación al desbloquear el teléfono
- * o al abrirla, y eso pasa en minutos u horas, no días. Pasado esto, el mismo texto bajo la misma
- * llave vuelve a contar como un movimiento (un banco que usa un id fijo para todos sus avisos y un
- * cobro idéntico al de ayer).
+ * mismo texto. Elegido, no medido, y corto a propósito: una app de banco repone su notificación al
+ * desbloquear el teléfono o al abrirla, casi siempre en el momento.
+ *
+ * El trade-off: una reposición que llegue después de 10 min con el mismo texto sí sube otra vez (el
+ * server la vuelve a deduplicar por texto + tiempo, `SmsDedupe`, y si no la atrapa queda una fila de
+ * más en «Por revisar», que se ve y se borra). Con una ventana larga (6 h) pasaba lo contrario y peor:
+ * un banco que usa un id fijo para todos sus avisos y dos cobros idénticos el mismo día —el mismo café
+ * dos veces— perdía el segundo en silencio. Mejor una fila de más que un movimiento de menos.
  */
-internal const val VENTANA_DE_LA_MISMA_LLAVE_MS = 6L * 60 * 60 * 1000
+internal const val VENTANA_DE_LA_MISMA_LLAVE_MS = 10L * 60 * 1000
 
 /**
  * Lo que se recuerda de una notificación subida, por su llave de Android (`StatusBarNotification.key`).
@@ -85,9 +89,24 @@ fun anotarSiEsNueva(
 
 /**
  * Una notificación que hay que subir: lo que el `SmsSyncWorker` recibe. [paquete] es para el rótulo
- * («Notificación · Bancolombia»), que el servicio resuelve con el `PackageManager`.
+ * («Notificación · Bancolombia»), que el servicio resuelve con el `PackageManager`. [silenciosa]: sale
+ * del barrido de la bandeja, y al subir no hace sonar un «Movi anotó…» por cada una (ver
+ * [procesarNotificaciones]).
  */
-data class SubidaDeNotificacion(val id: String, val paquete: String, val texto: String, val cuando: Long)
+data class SubidaDeNotificacion(
+    val id: String,
+    val paquete: String,
+    val texto: String,
+    val cuando: Long,
+    val silenciosa: Boolean = false,
+)
+
+/**
+ * **Hasta dónde mira el barrido de la bandeja**: lo publicado hace más de esto se ignora. Elegido: lo
+ * que lleva dos días en la bandeja ya lo recoge el dueño a mano o el extracto, y subirlo de golpe al
+ * reconectarse llenaría «Por revisar» de cosas viejas.
+ */
+internal const val ANTIGUEDAD_MAXIMA_DEL_BARRIDO_MS = 48L * 60 * 60 * 1000
 
 /** Lo que sale de [procesarNotificaciones]: qué subir y la memoria con eso anotado. */
 data class ResultadoDelProceso(val subidas: List<SubidaDeNotificacion>, val memoria: MemoriaDeLoSubido)
@@ -98,22 +117,29 @@ data class ResultadoDelProceso(val subidas: List<SubidaDeNotificacion>, val memo
  * sin texto) y la memoria ([anotarSiEsNueva]). Van de la más vieja a la más nueva, así una
  * actualización del barrido se compara con la que la precedió.
  *
+ * [barridoHecho] es la hora del barrido (`onListenerConnected`), o `null` para una notificación que
+ * llega en vivo. En el barrido se ignora lo publicado hace más de [ANTIGUEDAD_MAXIMA_DEL_BARRIDO_MS] y
+ * lo que sube va [SubidaDeNotificacion.silenciosa]: son cosas que el banco ya mostró hace rato, y una
+ * notificación de Movi por cada una sería una ráfaga.
+ *
  * Pura: el servicio la llama, guarda la memoria y encola un Worker por subida.
  */
 fun procesarNotificaciones(
     entrantes: List<NotificacionEntrante>,
     config: AppsQueAvisan,
     memoria: MemoriaDeLoSubido,
+    barridoHecho: Long? = null,
 ): ResultadoDelProceso {
     var actual = memoria
     val subidas = mutableListOf<SubidaDeNotificacion>()
-    entrantes.sortedBy { it.cuando }.forEach { n ->
+    val vigentes = if (barridoHecho == null) entrantes else entrantes.filter { barridoHecho - it.cuando <= ANTIGUEDAD_MAXIMA_DEL_BARRIDO_MS }
+    vigentes.sortedBy { it.cuando }.forEach { n ->
         val decision = decidirNotificacion(n, config)
         if (decision !is DecisionDeNotificacion.Subir) return@forEach
         val huella = huellaDeLaNotificacion(n.paquete, n.titulo, n.texto, n.cuando)
         val vista = VistaPorLlave(n.llave, contenidoDeLaNotificacion(n.paquete, n.titulo, n.texto), n.cuando)
         actual = anotarSiEsNueva(actual, huella, vista) ?: return@forEach
-        subidas += SubidaDeNotificacion(idDeNotificacion(huella), n.paquete, decision.texto, n.cuando)
+        subidas += SubidaDeNotificacion(idDeNotificacion(huella), n.paquete, decision.texto, n.cuando, silenciosa = barridoHecho != null)
     }
     return ResultadoDelProceso(subidas, actual)
 }

@@ -9,7 +9,7 @@ import androidx.work.WorkerParameters
 import com.jvillada.movi.avisos.Avisador
 import com.jvillada.movi.avisos.puedeAvisar
 import com.jvillada.movi.sensor.pedirQueReconecte
-import com.jvillada.movi.sensor.tieneAccesoANotificaciones
+import com.jvillada.movi.sensor.accesoANotificaciones
 import java.util.concurrent.TimeUnit
 
 /**
@@ -42,7 +42,8 @@ class VigiaDeLaEscuchaWorker(context: Context, params: WorkerParameters) : Corou
             val ultimaConexion = AlmacenDeNotificaciones.conectadaAt(context)
             when (
                 queHaceLaVigia(
-                    concedido = tieneAccesoANotificaciones(context),
+                    // `null` si no se pudo leer: «no sé» no avisa nada.
+                    concedido = accesoANotificaciones(context),
                     conectada = AlmacenDeNotificaciones.estaConectada(context),
                     ultimaConexion = ultimaConexion,
                     huellaYaAvisada = AlmacenDeNotificaciones.revocadoAvisado(context),

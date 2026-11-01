@@ -46,12 +46,18 @@ internal fun elPaqueteEscuchaNotificaciones(valorDeAjustes: String?, paquete: St
  * que el sistema dejaría escuchar. Lo que prueba que anda es un mensaje que haya llegado
  * (`CapturaDeSms`, en `:core`).
  */
-fun tieneAccesoANotificaciones(context: Context): Boolean = runCatching {
+fun tieneAccesoANotificaciones(context: Context): Boolean = accesoANotificaciones(context) ?: false
+
+/**
+ * Vuelta 92 · Lo mismo, pero con «no sé»: `null` si la lectura de ajustes falló. La vigía lo usa
+ * para no confundir una falla de lectura con un acceso revocado (ver `queHaceLaVigia`).
+ */
+fun accesoANotificaciones(context: Context): Boolean? = runCatching {
     elPaqueteEscuchaNotificaciones(
         Settings.Secure.getString(context.contentResolver, OYENTES_HABILITADOS),
         context.packageName,
     )
-}.getOrDefault(false)
+}.getOrNull()
 
 /**
  * Abre «Acceso a las notificaciones» de los ajustes del sistema.

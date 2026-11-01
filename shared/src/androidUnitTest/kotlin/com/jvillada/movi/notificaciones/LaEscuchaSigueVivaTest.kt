@@ -77,6 +77,11 @@ class LaEscuchaSigueVivaTest {
     }
 
     @Test
+    fun `si no se pudo leer el acceso es no se, no revocado - no avisa ni reconecta`() {
+        assertEquals(LoQueHaceLaVigia.NADA, queHaceLaVigia(concedido = null, conectada = false, ultimaConexion = conexion, huellaYaAvisada = null))
+    }
+
+    @Test
     fun `nunca concedido - no hay notificacion, para eso esta la tarjeta`() {
         assertEquals(LoQueHaceLaVigia.NADA, queHaceLaVigia(false, false, ultimaConexion = 0L, huellaYaAvisada = null))
     }

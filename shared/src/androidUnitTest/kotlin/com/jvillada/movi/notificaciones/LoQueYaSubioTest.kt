@@ -80,8 +80,37 @@ class LoQueYaSubioTest {
     fun `una actualizacion con el mismo texto en otro minuto no duplica`() {
         val primera = procesarNotificaciones(listOf(entrante()), apps, MemoriaDeLoSubido())
         // El banco la repone al desbloquear el teléfono: misma llave, mismo texto, otra hora.
-        val repuesta = procesarNotificaciones(listOf(entrante(cuando = t0 + 40 * minuto)), apps, primera.memoria)
+        val repuesta = procesarNotificaciones(listOf(entrante(cuando = t0 + 8 * minuto)), apps, primera.memoria)
         assertTrue(repuesta.subidas.isEmpty())
+    }
+
+    @Test
+    fun `dos cobros identicos del mismo dia con un id fijo no se pierden`() {
+        // Revisión de la vuelta 92: la ventana es de 10 min, no de horas. El mismo café dos veces el
+        // mismo día, bajo la misma llave y con el mismo texto, son dos movimientos.
+        val primera = procesarNotificaciones(listOf(entrante()), apps, MemoriaDeLoSubido())
+        val segundo = procesarNotificaciones(listOf(entrante(cuando = t0 + 2 * 60 * minuto)), apps, primera.memoria)
+        assertEquals(1, segundo.subidas.size)
+        assertEquals(10 * minuto, VENTANA_DE_LA_MISMA_LLAVE_MS)
+    }
+
+    // ── El barrido: hasta 48 h y en silencio ─────────────────────────────────
+
+    @Test
+    fun `el barrido ignora lo publicado hace mas de 48 horas`() {
+        val ahora = t0 + 50 * 60 * minuto
+        val vieja = entrante(texto = "Compraste \$1.000 en VIEJA", cuando = t0, llave = "a")
+        val reciente = entrante(texto = "Compraste \$2.000 en NUEVA", cuando = ahora - 60 * minuto, llave = "b")
+        val barrido = procesarNotificaciones(listOf(vieja, reciente), apps, MemoriaDeLoSubido(), barridoHecho = ahora)
+        assertEquals(listOf("Bancolombia: Compraste \$2.000 en NUEVA"), barrido.subidas.map { it.texto })
+    }
+
+    @Test
+    fun `lo que sube del barrido va silencioso y lo que llega en vivo no`() {
+        val enVivo = procesarNotificaciones(listOf(entrante()), apps, MemoriaDeLoSubido())
+        assertEquals(listOf(false), enVivo.subidas.map { it.silenciosa })
+        val barrido = procesarNotificaciones(listOf(entrante()), apps, MemoriaDeLoSubido(), barridoHecho = t0 + 60 * minuto)
+        assertEquals(listOf(true), barrido.subidas.map { it.silenciosa })
     }
 
     @Test
