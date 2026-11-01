@@ -116,6 +116,7 @@ import com.jvillada.movi.shared.model.ConfirmarElMismoPago
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
+import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.ParteElegida
 import com.jvillada.movi.shared.model.UpdateProfileRequest
@@ -706,6 +707,11 @@ internal fun TarjetaDeMensajeDelBanco(
      * [LineaDelGrupoQueSalda]): se dice antes de confirmar. Solo la bandeja lo pasa; solo informa.
      */
     saldaUnGrupo: GrupoQueSaldaElAviso? = null,
+    /**
+     * Vuelta 91 · el título cuando Movi sabe que es un traspaso entre cuentas suyas («Traspaso de
+     * Bancolombia ·8133 a Nu», ver `LoQueMoviEntendio.titulo`). Sin esto, el de siempre (el comercio).
+     */
+    titulo: String? = null,
 ) {
     val apartado = loApartoMovi(sms)
     var eligiendoLaCategoria by remember(sms.id) { mutableStateOf(false) }
@@ -730,7 +736,7 @@ internal fun TarjetaDeMensajeDelBanco(
     val cabeza = remember(sms, leido, sinLeer) { cabezaDelAviso(listOf(sms), leido, hoyEnAppZone(), sinLeer) }
     val conLoEntendido = pendiente && loEntendido != null
     TarjetaDeAviso(
-        titulo = cabeza.titulo,
+        titulo = titulo?.takeIf { pendiente } ?: cabeza.titulo,
         subtitulo = if (conLoEntendido) loEntendido else cabeza.subtitulo,
         tagDelSubtitulo = if (conLoEntendido) TAG_LINEA_DE_LO_ENTENDIDO else null,
         modifier = Modifier.padding(bottom = Medida.dentroDeSeccion),
@@ -1147,7 +1153,7 @@ fun SMSReconcileScreen(
     // Vuelta de diseño 23: la cuenta que Movi propone es de otro banco que el del aviso. Solo se avisa;
     // la cuenta no cambia. Si la eligió el dueño, ya decidió.
     val advertenciaDeLaCuenta = if (cuentaDelSms.origen == OrigenDeLaCuentaDelBanco.A_MANO) null else advertenciaDeBancos(
-        pagoActual?.miembros?.map { it.bank } ?: listOfNotNull(currentSms?.bank),
+        pagoActual?.miembros?.let(::avisosQueDicenLaCuenta)?.map { it.bank } ?: listOfNotNull(currentSms?.bank),
         resolvedAccount,
     )
 
@@ -1747,12 +1753,31 @@ fun SMSReconcileScreen(
                                 eligiendo = eligiendoDestino,
                                 habilitado = !working && pendiente,
                                 onCambiar = { eligiendoDestino = !eligiendoDestino },
-                                elegibles = destinosElegibles(accounts, resolvedAccount),
+                                // Vuelta 91: las suyas del banco al que fue el traspaso primero, con su tarjeta.
+                                elegibles = destinosElegibles(
+                                    accounts, resolvedAccount, if (pideOrigen) emptyList() else p.destinosPosibles,
+                                ),
                                 onElegir = { cuenta ->
-                                    if (pideOrigen) origenElegidoId = cuenta.id else destinoElegidoId = cuenta.id
+                                    when {
+                                        pideOrigen -> origenElegidoId = cuenta.id
+                                        // Vuelta 91: la tarjeta de ese banco («Nu Tarjeta») no recibe un
+                                        // traspaso: es su pago. La pantalla pasa al pago de esa tarjeta,
+                                        // como «Es el pago de una tarjeta ›»; «Traspaso» la devuelve.
+                                        cuenta.type == AccountType.CREDIT_CARD || cuenta.type == AccountType.LOAN -> {
+                                            // …y un crédito de ese banco, su cuota (revisión de la 91).
+                                            selectedCategory = if (cuenta.type == AccountType.LOAN) CUOTA_CATEGORY else CARD_PAYMENT_CATEGORY
+                                            deudaTocadaAMano = true
+                                            alElegirLaDeuda(cuenta)
+                                        }
+                                        else -> destinoElegidoId = cuenta.id
+                                    }
                                     eligiendoDestino = false
                                 },
                                 entrante = pideOrigen,
+                                comision = lineaDeLaComisionDelTraslado(
+                                    lasDosPatas,
+                                    pagoActual?.miembros?.map { it.text } ?: listOfNotNull(currentSms?.text),
+                                ),
                             )
                         }
                     }
@@ -2144,7 +2169,7 @@ fun SMSReconcileScreen(
                     working -> "Guardando…"
                     enPartesYa -> botonDeConfirmarLasPartes(partesEnPantalla.size)
                     soloCerrar -> "Cerrar los avisos"
-                    ofreceAnotarloIgual -> ANOTARLO_IGUAL
+                    ofreceAnotarloIgual -> botonDeAnotarloIgual(sinLeer)
                     anotarSinRevisar -> "Anotar de todas formas"
                     // Vuelta 74: ya está anotado; crear otro es lo secundario, y lo dice.
                     conYaAnotado -> ANOTAR_APARTE

@@ -50,8 +50,18 @@ const val TAG_MONTO_DE_ANOTARLO_IGUAL: String = "sms:anotarlo-igual:monto"
 fun tagDelTipoDeAnotarloIgual(tipo: TransactionType): String = "sms:anotarlo-igual:tipo:${tipo.name}"
 
 /** «Movi no entendió este aviso, pero trae $1.000. Puedes anotarlo igual.» */
-fun textoDeAnotarloIgual(sinLeer: AvisoSinLeer): String =
-    "Movi no entendió este aviso, pero trae ${formatMoney(sinLeer.monto.roundToLong(), sinLeer.moneda)}. Puedes anotarlo igual."
+fun textoDeAnotarloIgual(sinLeer: AvisoSinLeer): String {
+    val monto = formatMoney(sinLeer.monto.roundToLong(), sinLeer.moneda)
+    // Vuelta 91: un depósito tuyo es un traspaso desde otra cuenta tuya, nunca un ingreso.
+    if (sinLeer.deposito) return "Movi no entendió este aviso, pero es un depósito de $monto a tu cuenta. Anótalo como traspaso desde otra cuenta tuya."
+    return "Movi no entendió este aviso, pero trae $monto. Puedes anotarlo igual."
+}
+
+/** Vuelta 91 · el botón principal cuando el aviso sin leer es un depósito tuyo ([AvisoSinLeer.deposito]). */
+const val ANOTARLO_COMO_TRASPASO: String = "Anotarlo como traspaso"
+
+/** El botón principal de un aviso sin leer: [ANOTARLO_COMO_TRASPASO] si es un depósito tuyo, si no [ANOTARLO_IGUAL]. */
+fun botonDeAnotarloIgual(sinLeer: AvisoSinLeer?): String = if (sinLeer?.deposito == true) ANOTARLO_COMO_TRASPASO else ANOTARLO_IGUAL
 
 /** Debajo, ya con el formulario abierto: qué falta. */
 const val AYUDA_DE_ANOTARLO_IGUAL: String = "Revisa el monto, di si salió o entró, y elige la categoría."

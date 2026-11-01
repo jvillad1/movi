@@ -13,11 +13,13 @@ import com.jvillada.movi.server.espacios.espaciosDe
 import com.jvillada.movi.server.espacios.gastosDe
 import com.jvillada.movi.server.espacios.liquidacionesDe
 import com.jvillada.movi.server.sms.conElOrigenPropioDelIngresoDe
+import com.jvillada.movi.server.sms.conElTraspasoPropio
 import com.jvillada.movi.server.sms.destinosDelDueno
 import com.jvillada.movi.server.sms.loQueMoviSabeDelPagoDe
 import com.jvillada.movi.server.sms.memoriaDe
 import com.jvillada.movi.server.sms.numerosPropiosDe
 import com.jvillada.movi.server.sms.sinLaCuentaPropia
+import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AvisoSinLeer
 import com.jvillada.movi.shared.model.DestinoConocido
 import com.jvillada.movi.shared.model.FinancialEvent
@@ -77,13 +79,20 @@ internal class LoQueMoviSabeDelDueno(
     val destinos: List<DestinoConocido>,
     val propios: Set<String>,
     leerLaBandeja: () -> List<SmsMessage>,
+    /** Vuelta 91: las cuentas del dueño, para reconocer un traspaso a otro banco suyo. */
+    leerLasCuentas: () -> List<Account> = { emptyList() },
 ) {
     /** Solo se lee si hace falta: un aviso que no está pendiente no tiene otros avisos del pago. */
     val bandeja: List<SmsMessage> by lazy(leerLaBandeja)
+    val cuentas: List<Account> by lazy(leerLasCuentas)
 }
 
 internal fun Transaction.loQueMoviSabeDelDueno(uid: String, ahora: Long): LoQueMoviSabeDelDueno =
-    LoQueMoviSabeDelDueno(memoriaDe(uid), destinosDelDueno(uid), numerosPropiosDe(uid)) { bandejaConLosPagos(uid, ahora) }
+    LoQueMoviSabeDelDueno(
+        memoriaDe(uid), destinosDelDueno(uid), numerosPropiosDe(uid),
+        leerLaBandeja = { bandejaConLosPagos(uid, ahora) },
+        leerLasCuentas = { Accounts.selectAll().where { Accounts.userId eq uid }.map { it.toAccount() } },
+    )
 
 /**
  * **Lo que Movi propone para [sms]**: el cuerpo de `GET /api/sms/{id}/parse`. Ver los comentarios de
@@ -136,8 +145,12 @@ internal fun Transaction.leerElAviso(
     // PSE: es donde falta, y así nada cambia para los demás avisos.
     val esDePse = esUnCorreoDePse(sms.text) || correoDePse != null
     val completa = if (esDePse) loQueMoviSabeDelPagoDe(uid, propuesta) else propuesta
+    // Vuelta 91: la plata que fue a otra cuenta suya —por el banco que nombra el pago, el depósito que
+    // entró en el mismo pago o el aviso de Nu del pago de su tarjeta— es un traspaso (o el pago de la
+    // tarjeta), no un gasto. Ver `ElTraspasoPropio.kt`.
+    val propia = conElTraspasoPropio(completa, sms, otrosDelPago, sabe.cuentas)
     // Un ingreso que nombra como origen una cuenta suya es un traspaso (ver `ElTraspasoQueEntra.kt`).
-    return LecturaDelAviso.Leido(conElOrigenPropioDelIngresoDe(uid, completa, sms.text))
+    return LecturaDelAviso.Leido(conElOrigenPropioDelIngresoDe(uid, propia, sms.text))
 }
 
 /** Cuánto hacia atrás se busca el último envío por el mismo monto: un año y un poco. */

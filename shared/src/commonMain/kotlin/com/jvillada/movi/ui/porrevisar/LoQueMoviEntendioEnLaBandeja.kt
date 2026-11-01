@@ -15,6 +15,8 @@ import com.jvillada.movi.shared.model.SMS_STATE_CONFIRMED
 import com.jvillada.movi.shared.model.SMS_STATE_PENDING
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
+import com.jvillada.movi.ui.components.nombreCortoDeCuenta
 import com.jvillada.movi.shared.model.UsoDeCuenta
 import com.jvillada.movi.shared.model.dudasDelAviso
 import com.jvillada.movi.shared.model.esAntesDeLaCuenta
@@ -28,6 +30,7 @@ import com.jvillada.movi.ui.components.toUserMessage
 import com.jvillada.movi.ui.sms.advertenciaDeBancos
 import com.jvillada.movi.ui.sms.anotarElMovimientoDelAviso
 import com.jvillada.movi.ui.sms.avisosDelPago
+import com.jvillada.movi.ui.sms.avisosQueDicenLaCuenta
 import com.jvillada.movi.ui.sms.deudaPropuestaDelAviso
 import com.jvillada.movi.ui.sms.destinoPropuestoDelAviso
 import com.jvillada.movi.ui.sms.momentoDelMovimientoDelAviso
@@ -96,7 +99,44 @@ data class LoQueMoviEntendio(
      * categoría») y, elegida ([loQueMoviEntendio] con `categoriaElegida`), queda confirmable.
      */
     val faltaSoloLaCategoria: Boolean = false,
+    /**
+     * Vuelta 91 · **el título de un traspaso entre cuentas suyas** («Traspaso de Bancolombia ·8133 a
+     * Nu»), en vez del nombre del beneficiario («NU Compañía de Financiamiento»): lo que pasó, dicho con
+     * las cuentas de Movi ([tituloDelTraspaso]). `null` en todo lo que no es un traspaso.
+     */
+    val titulo: String? = null,
 )
+
+/**
+ * Vuelta 91 · «Traspaso de Bancolombia ·8133 a Nu», con el nombre corto de cada cuenta; con una sola
+ * punta conocida, «Traspaso a Nu» o «Traspaso de Bancolombia ·8133». `null` sin ninguna. Pura.
+ */
+fun tituloDelTraspaso(origen: Account?, destino: Account?): String? {
+    val de = origen?.let { nombreCortoDeCuenta(it.name) }
+    val a = destino?.let { nombreCortoDeCuenta(it.name) }
+    return when {
+        de != null && a != null -> "Traspaso de $de a $a"
+        a != null -> "Traspaso a $a"
+        de != null -> "Traspaso de $de"
+        else -> null
+    }
+}
+
+/**
+ * **Las dos puntas de un traspaso entre cuentas suyas**, como las va a proponer Reconciliar: el lado
+ * que sale (un gasto en «Traspaso», o con [ParsedSms.traspasoHaciaId]) va de la cuenta del aviso a la
+ * que Movi propone; el que entra (un ingreso en «Traspaso»), de la que Movi propone a la del aviso. Un
+ * [Pair] de `null` si no es un traspaso.
+ */
+internal fun puntasDelTraspaso(leido: ParsedSms, resuelta: com.jvillada.movi.ui.components.CuentaDelBanco, cuentas: List<Account>): Pair<Account?, Account?>? {
+    val esTraspaso = leido.category == TRANSFER_CATEGORY || leido.traspasoHaciaId != null || leido.traspasoDesdeId != null
+    if (!esTraspaso) return null
+    return if (leido.type == TransactionType.INCOME) {
+        origenPropuestoDelAviso(leido, resuelta, cuentas) to resuelta.cuenta
+    } else {
+        resuelta.cuenta to destinoPropuestoDelAviso(leido, resuelta, cuentas)
+    }
+}
 
 /** El porqué de una categoría que el dueño eligió en la tarjeta de Por revisar (vuelta 46). */
 const val ELEGIDA_EN_LA_TARJETA: String = "La elegiste aquí"
@@ -169,7 +209,8 @@ fun loQueMoviEntendio(
     )
     val cuenta = resuelta.cuenta?.takeIf { resuelta.origen in CUENTAS_SEGURAS }
     // La cuenta que se propone, aunque no sea segura: es la que Reconciliar va a mostrar.
-    val advertencia = advertenciaDeBancos(avisos.map { it.bank }, resuelta.cuenta)
+    // Vuelta 91: el depósito que entró a Nu no es «el aviso de Nu» de una cuenta de Bancolombia.
+    val advertencia = advertenciaDeBancos(avisosQueDicenLaCuenta(avisos).map { it.bank }, resuelta.cuenta)
     val nombraOtraCuentaSuya = destinoPropuestoDelAviso(leido, resuelta, cuentas) != null ||
         origenPropuestoDelAviso(leido, resuelta, cuentas) != null ||
         deudaPropuestaDelAviso(resuelta, leido.deudaSugeridaId, cuentas) != null
@@ -186,12 +227,15 @@ fun loQueMoviEntendio(
     )
     val linea = lineaDeLoEntendido(leido.category, resuelta.cuenta?.name)
     val faltaSoloLaCategoria = dudas == setOf(DudaDelAviso.SIN_CATEGORIA) && cuenta != null
-    if (dudas.isNotEmpty() || cuenta == null) return LoQueMoviEntendio(null, dudas, advertencia, linea, faltaSoloLaCategoria)
+    // Vuelta 91: un traspaso entre cuentas suyas se titula con las cuentas, no con el beneficiario.
+    val titulo = puntasDelTraspaso(leido, resuelta, cuentas)?.let { (de, a) -> tituloDelTraspaso(de, a) }
+    if (dudas.isNotEmpty() || cuenta == null) return LoQueMoviEntendio(null, dudas, advertencia, linea, faltaSoloLaCategoria, titulo)
     return LoQueMoviEntendio(
         AnotacionEntendida(cabezaId = cabeza.id, sms = delQueSale, pago = pago, leido = leido, cuenta = cuenta, categoria = leido.category),
         emptySet(),
         advertencia,
         linea,
+        titulo = titulo,
     )
 }
 

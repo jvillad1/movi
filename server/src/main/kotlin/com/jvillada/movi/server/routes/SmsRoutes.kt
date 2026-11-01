@@ -37,6 +37,7 @@ import com.jvillada.movi.shared.model.laHuellaEsUnNumero
 import com.jvillada.movi.shared.model.nombreQueNoSePropone
 import com.jvillada.movi.shared.model.laMarcaPuedeHablar
 import com.jvillada.movi.shared.model.numeroDelOrigenDelIngreso
+import com.jvillada.movi.shared.model.esUnDepositoPropio
 import com.jvillada.movi.shared.model.ParsedSms
 import com.jvillada.movi.shared.model.NoSePudoLeerElAviso
 import com.jvillada.movi.shared.model.PARAMETRO_ANOTARLO_IGUAL
@@ -287,7 +288,9 @@ private fun loDeNuEsUnMovimiento(minusculas: String): Boolean {
     if (NU_NO_SON_MOVIMIENTOS.any { it in minusculas }) return false
     val esCompra = "compra" in minusculas && ("aprobada" in minusculas || "aprobado" in minusculas)
     return esCompra || pagoDeNu.containsMatchIn(minusculas) || plataQueLlegaANu.containsMatchIn(minusculas) ||
-        pagoDesdeLaCuentaDeNu.containsMatchIn(minusculas) || envioDesdeNu.containsMatchIn(minusculas)
+        pagoDesdeLaCuentaDeNu.containsMatchIn(minusculas) || envioDesdeNu.containsMatchIn(minusculas) ||
+        // Vuelta 91: «Recibimos tu depósito por 1.500.000,00» — la plata que el dueño puso en su cuenta Nu.
+        esUnDepositoPropio(minusculas)
 }
 
 /**
@@ -379,8 +382,11 @@ internal fun parseSms(text: String, origen: String? = null): ParsedSms? {
 
     val esAbonoALaTarjeta = abonoALaTarjeta.containsMatchIn(text)
     val esAvance = avanceRegex.containsMatchIn(text)
+    // Vuelta 91: el lado que entra de un traspaso propio (ver `ElTraspasoAOtroBanco.kt` en :core).
+    val esDepositoPropio = esUnDepositoPropio(text)
 
     val type = when {
+        esDepositoPropio -> TransactionType.INCOME
         recargaDeBeneficios != null -> TransactionType.INCOME
         esAbonoALaTarjeta -> TransactionType.INCOME
         esAvance -> TransactionType.INCOME
@@ -395,6 +401,7 @@ internal fun parseSms(text: String, origen: String? = null): ParsedSms? {
     fun limpio(m: String?) = m?.trim()?.trimEnd(',', '.')?.trim()?.takeIf { it.isNotEmpty() }
     val esPagoDeNu = origen != null && origenNu.containsMatchIn(origen) && pagoDeNu.containsMatchIn(text)
     val merchant = when {
+        esDepositoPropio -> DEPOSITO_A_TU_CUENTA
         text.contains("Nómina recibida", ignoreCase = true) -> "Nómina"
         esAbonoALaTarjeta -> "Pago de tarjeta"
         esAvance -> tarjetaDelAvanceRegex.find(text)?.let { "Avance de la tarjeta *${it.groupValues[1].takeLast(4)}" }
@@ -425,6 +432,8 @@ internal fun parseSms(text: String, origen: String? = null): ParsedSms? {
     }
 
     val category = when {
+        // Un traspaso entre cuentas suyas: ni ingreso ni gasto. Confirmarlo pide de qué cuenta vino.
+        esDepositoPropio -> TRANSFER_CATEGORY
         esAbonoALaTarjeta -> CARD_PAYMENT_CATEGORY
         esAvance -> AVANCE_CATEGORY
         else -> categoryFor(text, merchant, type, esPagoDeNu)
@@ -432,13 +441,19 @@ internal fun parseSms(text: String, origen: String? = null): ParsedSms? {
     // A quién fue (o de quién vino): la misma lectura que hacen la bandeja y el detalle de un
     // movimiento, en `:core`. Un pago de tarjeta no es a una persona, así que no lo lleva; un avance
     // tampoco: la cuenta que nombra («a la cuenta *8133») es la del dueño, no la de un tercero.
-    val identificador = if (category == CARD_PAYMENT_CATEGORY || esAvance) null else identificadorDelDestinoEn(text)
+    val identificador = if (category == CARD_PAYMENT_CATEGORY || esAvance || esDepositoPropio) null else identificadorDelDestinoEn(text)
     return ParsedSms(
         amount, merchant, type, category, currency,
         identificadorDelDestino = identificador?.valor,
         identificadorEsLlave = identificador?.tipo == TipoDeIdentificador.LLAVE,
     )
 }
+
+/**
+ * Vuelta 91 · el nombre de un depósito propio («Recibimos tu depósito por …»): no lo manda nadie más,
+ * lo puso el dueño desde otra cuenta suya. La bandeja lo titula «Traspaso a Nu» cuando sabe la cuenta.
+ */
+internal const val DEPOSITO_A_TU_CUENTA = "Depósito a tu cuenta"
 
 /**
  * **De quién vino un ingreso, en un nombre que se lee** (vuelta 85).

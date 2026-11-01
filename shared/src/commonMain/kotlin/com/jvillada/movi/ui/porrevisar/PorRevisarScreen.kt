@@ -435,6 +435,8 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
         entendimientos.mapNotNull { (id, e) -> e.anotacion?.let { id to it } }.toMap()
     /** Vuelta 44: «Transporte · Bancolombia Ahorros», lo que Movi entendió de cada pago, entendido o no. */
     val lineas: Map<String, String> = entendimientos.mapNotNull { (id, e) -> e.linea?.let { id to it } }.toMap()
+    /** Vuelta 91: «Traspaso de Bancolombia ·8133 a Nu», el título de un traspaso entre cuentas suyas. */
+    val titulos: Map<String, String> = entendimientos.mapNotNull { (id, e) -> e.titulo?.let { id to it } }.toMap()
     /** Lo que pinta la tarjeta de «Confirmar los N» y lo que confirma su hoja: lo de Actividad. */
     val avisosDelLote: AvisosPorConfirmar? = remember(mensajes, propuestas, cuentas, fallaronAca, categoriasElegidasAca) {
         val todos = mensajes ?: return@remember null
@@ -687,6 +689,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                     advertencia = advertencias[sms.id],
                     loEntendido = lineas[sms.id],
                     yaAnotado = yaAnotadoDe(sms),
+                    titulo = titulos[sms.id],
                 )
                 }
             }
@@ -713,6 +716,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                 conPildoraDePendiente = false,
                 advertencia = advertencias[sms.id],
                 loEntendido = lineas[sms.id],
+                titulo = titulos[sms.id],
                 eligeLaCategoria = eligeLaCategoriaDe(sms),
                 // Vuelta 51: lo que no es la categoría (cuenta, monto, comercio) sigue en Revisar aviso.
                 onMasCambios = { revisarEnReconciliar(sms.id, false) },

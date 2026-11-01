@@ -9,6 +9,7 @@ import com.jvillada.movi.shared.model.SMS_STATE_PENDING
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.esUnComprobante
+import com.jvillada.movi.shared.model.hablaDeUnDepositoPropio
 import com.jvillada.movi.shared.model.momentoDelSms
 import com.jvillada.movi.shared.model.normalizarParaBuscar
 
@@ -52,7 +53,8 @@ private val plataQueLlego = Regex("""\brecibiste\b|\bte\s+llego\b""")
  *    «Ignorar».
  *
  * El tipo propuesto es gasto, salvo que el texto diga que la plata llegó («recibiste», «te llegó»);
- * el dueño lo cambia en Reconciliar. Lo que no encaja en ningún motivo y trae un monto se ofrece: es
+ * el dueño lo cambia en Reconciliar. Vuelta 91: si habla de un depósito del dueño («tu depósito»),
+ * va marcado ([AvisoSinLeer.deposito]): es un traspaso que entra, no un ingreso. Lo que no encaja en ningún motivo y trae un monto se ofrece: es
  * la misma regla de oro de `queEsEsteMensaje` —ante la duda, que el dueño decida—, y anotarlo sigue
  * siendo un toque suyo.
  *
@@ -67,8 +69,12 @@ internal fun loQueTraeUnAvisoSinLeer(sms: SmsMessage): AvisoSinLeer? {
     if (noSonMovimientos.any { normalizarParaBuscar(it) in t }) return null
     val (monto, moneda) = montoYMonedaDelTexto(sms.text) ?: return null
     if (monto <= 0.0) return null
-    val tipo = if (plataQueLlego.containsMatchIn(t)) TransactionType.INCOME else TransactionType.EXPENSE
-    return AvisoSinLeer(monto = monto, moneda = moneda, tipo = tipo)
+    // Vuelta 91: un depósito del dueño («tu depósito») es el lado que entra de un traspaso entre sus
+    // cuentas. Se marca para que la app lo proponga como «Traspaso» (pide de qué cuenta vino), nunca
+    // como un ingreso que contaría en «Entró».
+    val deposito = hablaDeUnDepositoPropio(sms.text)
+    val tipo = if (deposito || plataQueLlego.containsMatchIn(t)) TransactionType.INCOME else TransactionType.EXPENSE
+    return AvisoSinLeer(monto = monto, moneda = moneda, tipo = tipo, deposito = deposito)
 }
 
 /**
@@ -96,8 +102,9 @@ internal fun avisoSinLeerDe(sms: SmsMessage, sabe: LoQueMoviSabeDelDueno, ahora:
         identificadorEsLlave = generico?.identificadorEsLlave ?: false,
     )
     val recordada = conLaMemoriaYLosTerceros(propuesta, sms.text, sabe.memoria, sabe.destinos)
+    // Un depósito propio no toma la categoría de la memoria: es un traspaso (ver `comoLectura`).
     val categoria = recordada.category.trim()
-        .takeIf { it.isNotEmpty() && !it.equals(SIN_CATEGORIA, ignoreCase = true) && it !in CATEGORIAS_DE_DOS_PATAS }
+        .takeIf { !base.deposito && it.isNotEmpty() && !it.equals(SIN_CATEGORIA, ignoreCase = true) && it !in CATEGORIAS_DE_DOS_PATAS }
     return base.copy(
         momento = momentoDelSms(sms.time, ahora = ahora),
         comercio = recordada.merchant.takeIf { it.isNotBlank() && it != COMERCIO_DE_UN_AVISO_SIN_LEER },

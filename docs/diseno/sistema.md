@@ -5033,3 +5033,31 @@ Vuelta de servidor; la UI solo pinta lo que el server ya decide.
 - **Una sola pregunta en todos lados**: `preguntaDeLoEsperado` (`:core`) — «¿Se cobró la cuota de …?», «¿Se pagó Arriendo?», «¿Te llegó Salario?» — la dicen Hoy («Para revisar» y «Movi propone hoy»), la campana y el aviso del teléfono. Varios con algo esperado: «N movimientos esperados sin anotar»; el desglose de «Por revisar» dice «N movimientos esperados».
 - **Banco mudo**: la tarjeta «Avisarme si un banco se calla» de Captura del banco ya no calcula en el cliente; pinta `GET /api/sms/origenes-mudos` (con el motivo: «Hace 29 días las notificaciones de Glim no traen movimientos: llegan rechazos y promociones. Revisa la captura.»).
 - **Correos del banco**: si hubo correos que llegaron y no se guardaron en 30 días, una `Superficie` «Correos del banco» con una línea en `aviso` (`TAG_CORREOS_DESCARTADOS`, texto de `textoDeCorreosDescartados`). Sin ninguno, no se pinta nada.
+
+## 88. Vuelta 91: un traspaso propio avisado tres veces es una tarjeta, y nunca un ingreso
+
+**Regla: la plata que el dueño se pasa a otra cuenta suya se pinta y se propone como traspaso, con las
+cuentas de Movi.** El 31-oct el traspaso de Bancolombia ·8133 a Nu llegó por SMS, correo de PSE y Nu, y «Por
+revisar» mostraba un gasto en «Otros» y aparte «Movi no entendió este aviso… Anotarlo igual» (que lo anotaba
+como ingreso).
+
+- **El título** de la tarjeta de un traspaso es `tituloDelTraspaso` (`LoQueMoviEntendio.titulo`): «Traspaso de
+  Bancolombia ·8133 a Nu» con `nombreCortoDeCuenta`; con una sola punta, «Traspaso a Nu». Lo reciben
+  `TarjetaDelMismoPago` y `TarjetaDeMensajeDelBanco` como `titulo`; sin él, el comercio de siempre. La píldora
+  sigue diciendo «Avisado 3 veces».
+- **El tono** de la cifra de un «Traspaso» (también el depósito que entra, leído o sin leer) es `EntreCuentas`,
+  nunca el verde de `Ingreso`.
+- **«Anotarlo como traspaso»** (`botonDeAnotarloIgual`): el botón principal de un aviso sin leer que habla de un
+  depósito tuyo; la frase dice «Anótalo como traspaso desde otra cuenta tuya» y Reconciliar pide de qué cuenta
+  vino. Un depósito así nunca se ofrece como ingreso.
+- **A dónde fue**, cuando el aviso solo nombra el banco: el selector de destino de Revisar aviso lista primero
+  las cuentas suyas de ese banco (`ParsedSms.destinosPosibles`), **con sus tarjetas y créditos**, y nada queda
+  elegido; elegir la tarjeta pasa la pantalla al pago de esa tarjeta y un crédito a su cuota, como «Es el pago
+  de una tarjeta ›» / «Es la cuota de un crédito ›».
+- **La comisión del traslado** (`lineaDeLaComisionDelTraslado`): debajo de «Sale de … · entra a …», en
+  `apoyo`/`textoMedio`, «Bancolombia suele cobrar la comisión del traslado: llega en el extracto.» Solo informa:
+  Movi no la anota ni calcula la cifra.
+- **El depósito no vota por la cuenta** ni por la advertencia de bancos (`avisosQueDicenLaCuenta`): nombra a dónde
+  fue la plata, no de dónde salió.
+
+**Pruebas**: `ElTraspasoPropioEnLaAppTest` (`:shared` commonTest) con los textos reales.

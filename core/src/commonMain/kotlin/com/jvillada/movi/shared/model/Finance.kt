@@ -1183,6 +1183,14 @@ data class ParsedSms(
      * lo ignora.
      */
     val traspasoDesdeId: String? = null,
+    /**
+     * Vuelta 91 · **las cuentas suyas a las que pudo ir un traspaso a otro banco**, cuando el destino no
+     * es uno solo: «Pagaste $X a NU Compania de Financiamiento» con la cuenta «Nu» y la «Nu Tarjeta»
+     * (¿depósito o abono?). La app las ofrece primero al elegir a dónde fue la plata; elegir la tarjeta
+     * lo vuelve el pago de esa tarjeta. Ver `destinoEnOtroBanco` en `ElTraspasoAOtroBanco.kt`. Vacía casi
+     * siempre; un APK viejo la ignora.
+     */
+    val destinosPosibles: List<String> = emptyList(),
 )
 
 @Serializable
