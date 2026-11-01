@@ -29,6 +29,7 @@ private val LO_QUE_LEE_LA_BANDEJA: List<ClaveDeLectura<*>> = listOf(
     ClaveDeLectura.CandidatosPagoDeTarjeta,
     ClaveDeLectura.DebitosAutomaticos,
     ClaveDeLectura.PropuestasDeSaldar,
+    ClaveDeLectura.PropuestasDeRepartir,
     ClaveDeLectura.EventosPorDia,
     ClaveDeLectura.Cuentas,
     ClaveDeLectura.Perfil,

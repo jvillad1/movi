@@ -491,6 +491,11 @@ fun DashboardScreen(
                 runCatching { Repositories.wallets.getPropuestasDeSaldar() }
                     .onSuccess { p -> data = data.copy(propuestasDeSaldar = p) }
             }
+            // Vuelta 97: lo que Movi propone repartir, para «Movi propone hoy». Secundaria y solo en `data`.
+            launch {
+                runCatching { Repositories.wallets.getPropuestasDeRepartir() }
+                    .onSuccess { p -> data = data.copy(propuestasDeRepartir = p) }
+            }
             // «Cerró tu período»: la tarjeta de los primeros días. Secundaria, como las anomalías, y
             // solo en `data`: no va a la instantánea (ver `DashboardData.cierre`).
             launch {

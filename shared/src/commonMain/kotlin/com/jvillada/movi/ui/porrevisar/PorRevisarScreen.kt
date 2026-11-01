@@ -492,6 +492,14 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
     var saldadasAca by remember { mutableStateOf(emptySet<String>()) }
     val propuestasDeSaldar: List<PropuestaDeSaldar> =
         lecturas.propuestasDeSaldar.orEmpty().filterNot { it.eventoId in saldadasAca }
+    // ── Vuelta 97 · lo que Movi propone repartir ── secundaria como las de saldar. Lo resuelto acá (y en
+    // el Inicio, en esta sesión) se va en el acto.
+    var repartidasAca by remember { mutableStateOf(emptySet<String>()) }
+    val propuestasDeRepartir: List<com.jvillada.movi.shared.model.PropuestaDeRepartir> =
+        com.jvillada.movi.ui.espacios.propuestasDeRepartirVisibles(
+            lecturas.propuestasDeRepartir.orEmpty().filterNot { it.eventoId in repartidasAca },
+            com.jvillada.movi.ui.dashboard.AnomaliasDescartadasEnLaSesion.huellas,
+        )
     val tiposDeCuentas = remember(cuentas) { cuentas.associate { it.id to it.type } }
 
     // La primera carga: alguna de las tres fuentes todavía no dijo nada. Con lo de antes en
@@ -515,8 +523,8 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
     var celebrar by remember { mutableStateOf(false) }
     val huboAccion = fueAReconciliar || avisosResueltos.isNotEmpty() || avisosSeparados.isNotEmpty() ||
         candidatosResueltos.isNotEmpty() || movimientosResueltos.isNotEmpty() || debitosResueltos.isNotEmpty() ||
-        saldadasAca.isNotEmpty()
-    val bandejaVacia: Boolean? = if (cargando || noSePudoActualizar) null else bandejaAlDia(mensajes, dias, candidatos, debitos, propuestasDeSaldar)
+        saldadasAca.isNotEmpty() || repartidasAca.isNotEmpty()
+    val bandejaVacia: Boolean? = if (cargando || noSePudoActualizar) null else bandejaAlDia(mensajes, dias, candidatos, debitos, propuestasDeSaldar, propuestasDeRepartir)
     LaunchedEffect(bandejaVacia) {
         val celebracion = Celebracion(ultimoEstadoDeLaBandeja)
         if (celebracion.observar(bandejaVacia, huboAccion)) {
@@ -586,8 +594,8 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
     /** Si la bandeja está al día: pinta el vacío (o nada, si no se pudo actualizar) y dice que sí. */
     fun LazyListScope.alDia(ll: LlavesDeLaLista): Boolean {
         // «Todo al día» es un vacío: se afirma solo con lecturas que contestaron en esta visita.
-        if (bandejaAlDia(mensajes, dias, candidatos, debitos, propuestasDeSaldar) && noSePudoActualizar) return true
-        if (bandejaAlDia(mensajes, dias, candidatos, debitos, propuestasDeSaldar)) {
+        if (bandejaAlDia(mensajes, dias, candidatos, debitos, propuestasDeSaldar, propuestasDeRepartir) && noSePudoActualizar) return true
+        if (bandejaAlDia(mensajes, dias, candidatos, debitos, propuestasDeSaldar, propuestasDeRepartir)) {
             if (celebrar) {
                 fila(ll, "celebracion") {
                     MomentoDeCelebracion(FRASE_DE_LA_BANDEJA_AL_DIA, Modifier.padding(bottom = Espacio.xs))
@@ -606,6 +614,21 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
             return true
         }
         return false
+    }
+
+    fun LazyListScope.losRepartos(ll: LlavesDeLaLista) {
+        if (propuestasDeRepartir.isEmpty()) return
+        fila(ll, "titulo-de-repartir") { Seccion(titulo = TITULO_DE_REPARTIR_EN_LOS_GRUPOS, conteo = propuestasDeRepartir.size) }
+        propuestasDeRepartir.forEach { p ->
+            fila(ll, "repartir-${p.eventoId}") {
+                com.jvillada.movi.ui.espacios.TarjetaDeRepartir(
+                    p = p,
+                    onHecho = { repartidasAca = repartidasAca + p.eventoId },
+                    modifier = Modifier.padding(bottom = Medida.dentroDeSeccion),
+                )
+            }
+        }
+        fila(ll, "despues-de-repartir") { Spacer(Modifier.height(Medida.entreSecciones - Medida.dentroDeSeccion)) }
     }
 
     fun LazyListScope.losSaldados(ll: LlavesDeLaLista) {
@@ -876,7 +899,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
     // Dos columnas solo con algo a cada lado: sin mensajes del banco por revisar, la izquierda
     // quedaría vacía (un hueco, no un tablero), y la bandeja al día es un vacío de una columna.
     val hayMensajesPorRevisar = mensajes?.let { pagosPorRevisar(it).isNotEmpty() } == true
-    val conDosLados = !cargando && hayMensajesPorRevisar && !bandejaAlDia(mensajes, dias, candidatos, debitos, propuestasDeSaldar)
+    val conDosLados = !cargando && hayMensajesPorRevisar && !bandejaAlDia(mensajes, dias, candidatos, debitos, propuestasDeSaldar, propuestasDeRepartir)
     val alPie = Medida.botonFlotante + Medida.margenDePantalla
     // Vuelta 44: al volver de Revisar aviso, la lista queda donde la dejaste (ver [ListaQueSeConserva]).
     val lista = rememberListaQueSeConserva(conDatos = !cargando)
@@ -931,6 +954,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                     noSePudoActualizarArriba(ll)
                     subirYCaptura(ll)
                     losSaldados(ll)
+                    losRepartos(ll)
                     losDebitos(ll)
                     entraronSolos(ll)
                     losPagosDeTarjeta(ll)
@@ -957,6 +981,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                 subirYCaptura(ll)
                 elLote(ll)
                 losSaldados(ll)
+                losRepartos(ll)
                 if (alDia(ll)) return@LazyColumn
                 losDebitos(ll)
                 losMensajes(ll)
@@ -1224,3 +1249,6 @@ const val TAG_IGNORAR_LOS_ANTIGUOS: String = "por-revisar:ignorar-los-antiguos"
 
 /** Vuelta 66: el título de las transferencias que saldan un grupo, en Por revisar. */
 const val TITULO_DE_SALDAR_EN_LOS_GRUPOS: String = "Para saldar en tus grupos"
+
+/** Vuelta 97 · el título de lo que Movi propone repartir en la bandeja. */
+const val TITULO_DE_REPARTIR_EN_LOS_GRUPOS: String = "Para repartir en tus grupos"

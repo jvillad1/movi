@@ -70,6 +70,8 @@ sealed interface ClaveDeLectura<T : Any> {
     data object DebitosAutomaticos : ClaveDeLectura<List<com.jvillada.movi.shared.model.DebitoAutomaticoPorConfirmar>>
     /** Vuelta 67 · las transferencias que saldan un grupo: cuentan en «N por revisar». */
     data object PropuestasDeSaldar : ClaveDeLectura<List<com.jvillada.movi.shared.model.PropuestaDeSaldar>>
+    /** Vuelta 97 · lo que Movi propone repartir: también cuenta en «N por revisar». */
+    data object PropuestasDeRepartir : ClaveDeLectura<List<com.jvillada.movi.shared.model.PropuestaDeRepartir>>
     /** Lo que Movi propone para cada pago pendiente: la bandeja que se vacía sola. */
     data object PropuestasDeLaBandeja : ClaveDeLectura<com.jvillada.movi.shared.model.PropuestasDeLaBandeja>
 

@@ -263,6 +263,12 @@ data class DashboardData(
      */
     val propuestasDeSaldar: List<com.jvillada.movi.shared.model.PropuestaDeSaldar>? = null,
     /**
+     * Vuelta 97 · **lo que Movi propone repartir** (`GET /api/espacios/propuestas-de-reparto`): hasta dos
+     * tarjetas en «Movi propone hoy». Se pide aparte, nunca en `/api/dashboard/summary`; `null` = no llegó,
+     * y no se dice nada. No viaja en la instantánea.
+     */
+    val propuestasDeRepartir: List<com.jvillada.movi.shared.model.PropuestaDeRepartir>? = null,
+    /**
      * Vuelta 78 (revisión) · **el supuesto del gasto del día a día** (`/api/caja-proyectada/gasto-del-dia-a-dia`),
      * del que sale el renglón «¿Me alcanza?» del héroe. Va en el primer lote del Inicio y en la
      * instantánea: pedido aparte, llegaba después que el resto y el héroe saltaba 66 px al aparecer el
