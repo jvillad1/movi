@@ -117,6 +117,9 @@ fun partesDelAviso(texto: String): PartesDelAviso {
 @Composable
 private fun TextoDelAviso(partes: PartesDelAviso, color: androidx.compose.ui.graphics.Color, modifier: Modifier = Modifier) {
     val estilo = Movi.textos.cuerpo
+    // El resto es «· Restaurantes»: el punto es su propia pieza, para que al bajar de renglón el segundo empiece
+    // en la palabra (vuelta 87) y no con «· ».
+    val cuerpoDelResto = partes.resto?.removePrefix("·")?.trimStart()
     androidx.compose.ui.layout.Layout(
         modifier = modifier.semantics(mergeDescendants = true) {},
         content = {
@@ -124,15 +127,17 @@ private fun TextoDelAviso(partes: PartesDelAviso, color: androidx.compose.ui.gra
             if (partes.cifra != null) {
                 Text(partes.cifra, style = estilo, color = color, maxLines = 1, softWrap = false, modifier = Modifier.padding(start = Espacio.xxs).testTag(TAG_CIFRA_DEL_AVISO))
             }
-            if (partes.resto != null) {
-                Text(partes.resto, style = estilo, color = color, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = Espacio.xxs).testTag(TAG_RESTO_DEL_AVISO))
+            if (cuerpoDelResto != null) {
+                Text("·", style = estilo, color = color, maxLines = 1, softWrap = false, modifier = Modifier.padding(horizontal = Espacio.xxs))
+                Text(cuerpoDelResto, style = estilo, color = color, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis, modifier = Modifier.testTag(TAG_RESTO_DEL_AVISO))
             }
         },
     ) { medibles, restricciones ->
         val ancho = if (restricciones.hasBoundedWidth) restricciones.maxWidth else Int.MAX_VALUE
         val verbo = medibles[0]
         val cifra = if (partes.cifra != null) medibles[1] else null
-        val resto = if (partes.resto != null) medibles.last() else null
+        val punto = if (cuerpoDelResto != null) medibles[medibles.size - 2] else null
+        val resto = if (cuerpoDelResto != null) medibles.last() else null
         val libre = androidx.compose.ui.unit.Constraints()
         fun hasta(max: Int) = androidx.compose.ui.unit.Constraints(maxWidth = max.coerceAtLeast(0))
         val pc = cifra?.let { it.measure(hasta(minOf(it.maxIntrinsicWidth(libre.maxHeight), ancho))) }
@@ -140,14 +145,15 @@ private fun TextoDelAviso(partes: PartesDelAviso, color: androidx.compose.ui.gra
         val pv = verbo.measure(hasta(minOf(verbo.maxIntrinsicWidth(libre.maxHeight), ancho - anchoDeLaCifra)))
         // Vuelta 87 · **un comercio que no cabe pasa a un segundo renglón**: con las dos acciones, a 390 dp
         // quedaban ~35 dp para el resto y el aviso decía «Anotado $32.000 · Ju…». Si el resto no entra en el
-        // primer renglón y lo que le queda es menos que [ANCHO_MINIMO_DEL_RESTO_DEL_AVISO], baja entero a su
-        // propio renglón (con «…» si ni ahí cabe): el monto y las dos acciones siguen a la vista.
+        // primer renglón y lo que le queda es menos que [ANCHO_MINIMO_DEL_RESTO_DEL_AVISO], baja a su
+        // propio renglón, **sin el «·»** (con «…» si ni ahí cabe): el monto y las dos acciones siguen a la vista.
+        val pp = punto?.measure(hasta(ancho))
         val restoEnLinea = ancho - anchoDeLaCifra - pv.width
-        val aDosRenglones = resto != null &&
-            resto.maxIntrinsicWidth(libre.maxHeight) > restoEnLinea &&
+        val aDosRenglones = resto != null && pp != null &&
+            pp.width + resto.maxIntrinsicWidth(libre.maxHeight) > restoEnLinea &&
             restoEnLinea < ANCHO_MINIMO_DEL_RESTO_DEL_AVISO.roundToPx()
-        val pr = resto?.measure(hasta(if (aDosRenglones) ancho else restoEnLinea))
-        val primera = listOfNotNull(pv, pc) + listOfNotNull(pr.takeIf { !aDosRenglones })
+        val pr = resto?.measure(hasta(if (aDosRenglones) ancho else (restoEnLinea - (pp?.width ?: 0))))
+        val primera = listOfNotNull(pv, pc) + if (!aDosRenglones) listOfNotNull(pp, pr) else emptyList()
         val altoDeLaPrimera = primera.maxOf { it.height }
         val alto = if (aDosRenglones && pr != null) altoDeLaPrimera + pr.height else altoDeLaPrimera
         val total = maxOf(primera.sumOf { it.width }, if (aDosRenglones) pr?.width ?: 0 else 0)
