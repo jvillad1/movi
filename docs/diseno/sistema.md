@@ -4969,7 +4969,7 @@ Vuelta de servidor; la UI solo pinta lo que el server ya decide.
 - **Banco mudo**: la tarjeta «Avisarme si un banco se calla» de Captura del banco ya no calcula en el cliente; pinta `GET /api/sms/origenes-mudos` (con el motivo: «Hace 29 días las notificaciones de Glim no traen movimientos: llegan rechazos y promociones. Revisa la captura.»).
 - **Correos del banco**: si hubo correos que llegaron y no se guardaron en 30 días, una `Superficie` «Correos del banco» con una línea en `aviso` (`TAG_CORREOS_DESCARTADOS`, texto de `textoDeCorreosDescartados`). Sin ninguno, no se pinta nada.
 
-## Vuelta 91 · Un traspaso propio avisado tres veces es una tarjeta, y nunca un ingreso
+## 88. Vuelta 91: un traspaso propio avisado tres veces es una tarjeta, y nunca un ingreso
 
 **Regla: la plata que el dueño se pasa a otra cuenta suya se pinta y se propone como traspaso, con las
 cuentas de Movi.** El 31-oct el traspaso de Bancolombia ·8133 a Nu llegó por SMS, correo de PSE y Nu, y «Por
