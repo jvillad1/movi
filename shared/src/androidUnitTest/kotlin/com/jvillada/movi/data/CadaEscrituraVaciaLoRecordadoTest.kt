@@ -126,7 +126,11 @@ class CadaEscrituraVaciaLoRecordadoTest {
          * `alSubirAlgo` → `olvidarLoFresco` **solo cuando de verdad subió algo**. Envuelto, sin señal cada
          * reintento (cada 30 s) dejaba toda pantalla en esqueleto.
          */
-        val NO_VACIAN_A_PROPOSITO = setOf("subirLoPendienteAhora")
+        /**
+         * Vuelta 95 · `marcarAvisoDeLaIa` solo sella `users.aviso_ia_visto_en`: ninguna lectura recordada
+         * (cuentas, movimientos, el Inicio) depende de esa marca, y la sesión ya la sabe por `AvisoDeLaIa`.
+         */
+        val NO_VACIAN_A_PROPOSITO = setOf("subirLoPendienteAhora", "marcarAvisoDeLaIa")
 
         val CONTINUACION = object : Continuation<Any?> {
             override val context: CoroutineContext = EmptyCoroutineContext
