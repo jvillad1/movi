@@ -338,7 +338,7 @@ sealed class Screen {
     data class StatementReview(val resultJson: String) : Screen()
     data class ImportDetail(val importId: String) : Screen()
     data object ScreenEditor : Screen()
-    /** Vuelta 100 · «Fallos y uso», solo admin: Ajustes → Administración. */
+    /** Vuelta 100 · «Fallos y uso», solo admin: Ajustes → Administración. La pestaña «Servidor» es de la 102. */
     data object FallosYUso : Screen()
 
     /**

@@ -2693,6 +2693,9 @@ class LocalRepository(
         remote.restoreScreen(slug)
     override suspend fun isScreenAdmin(): Boolean =
         remote.isScreenAdmin()
+    // Vuelta 102: lo del servidor no tiene espejo local; siempre a la red.
+    override suspend fun getPanelDelServidor(horas: Int, dias: Int): com.jvillada.movi.shared.model.PanelDelServidor =
+        remote.getPanelDelServidor(horas, dias)
     override suspend fun getScreenParaEditar(slug: String): ScreenDefinition? =
         remote.getScreenParaEditar(slug)
     override suspend fun getPreferenciasDelInicio(): com.jvillada.movi.shared.model.PreferenciasDelInicio =

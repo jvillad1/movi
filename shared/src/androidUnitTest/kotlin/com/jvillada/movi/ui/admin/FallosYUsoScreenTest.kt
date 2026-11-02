@@ -43,6 +43,7 @@ class FallosYUsoScreenTest {
     )
 
     private fun montar() {
+        com.jvillada.movi.data.Repositories.sustitutoDePrueba = com.jvillada.movi.data.RepositorioDePrueba()
         ObservabilidadParaAdmin.sustitutoDePrueba = object : ObservabilidadParaAdmin {
             override suspend fun fallos() = ResumenDeFallos(
                 grupos = listOf(GrupoDeFallos("IllegalStateException · com.jvillada.movi.sms.SmsSyncWorker.doWork(SmsSyncWorker.kt)", "IllegalStateException", "SmsSyncWorker", listOf("android"), 3, 2, listOf("1.90"), 1_800_000_000_000L, ejemplo)),
@@ -102,7 +103,8 @@ class FallosYUsoScreenTest {
         montar()
         composeRule.onNodeWithText("Servidor").performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("Todavía no hay datos del servidor").assertExists()
+        // Vuelta 102: la pestaña la llena `PestanaServidor`; sin el panel del server dice que no pudo leerlo.
+        composeRule.onNodeWithText("No pude leer cómo está el servidor.", substring = true).assertExists()
     }
 
     @Test

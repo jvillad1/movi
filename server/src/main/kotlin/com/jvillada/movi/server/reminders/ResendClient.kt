@@ -1,5 +1,8 @@
 package com.jvillada.movi.server.reminders
 
+import com.jvillada.movi.server.observabilidad.Servicio
+import com.jvillada.movi.server.observabilidad.desenlaceHttp
+import com.jvillada.movi.server.observabilidad.medirLlamada
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
@@ -54,7 +57,10 @@ object ResendClient {
             .build()
 
         val response = withContext(Dispatchers.IO) {
-            httpClient.send(request, HttpResponse.BodyHandlers.ofString())
+            // Vuelta 102: medida como «resend · envio» (status y duración, nunca el correo).
+            medirLlamada(Servicio.RESEND, "envio", { r: HttpResponse<String> -> desenlaceHttp(r.statusCode()) }) {
+                httpClient.send(request, HttpResponse.BodyHandlers.ofString())
+            }
         }
 
         if (response.statusCode() in 200..299) {

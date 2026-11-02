@@ -136,6 +136,8 @@ fun Application.configureRouting() {
             borrarLaCuentaRoutes()
             // Vuelta 100: el uso de la app en lotes, y lo que ve la pantalla de admin «Fallos y uso».
             usoRoutes()
+            // Vuelta 102: `/health/detalle` y `/api/admin/servidor/...`, solo para un admin.
+            adminServidorRoutes()
         }
 
         // /api/** que nadie registró → 404 JSON, nunca el index.html de la SPA.

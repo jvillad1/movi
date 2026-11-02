@@ -1160,6 +1160,14 @@ interface WalletRepository {
     suspend fun guardarPreferenciasDelInicio(
         preferencias: com.jvillada.movi.shared.model.PreferenciasDelInicio,
     ): com.jvillada.movi.shared.model.PreferenciasDelInicio = noLoTiene("guardarPreferenciasDelInicio")
+
+    /**
+     * Vuelta 102 · **cómo responde el servidor**, para la pestaña «Servidor» de «Fallos y uso»: las cuatro
+     * lecturas de `GET /api/admin/servidor/...` (solo un admin; a otro, 403) en [horas] horas y los
+     * servicios de afuera en [dias] días.
+     */
+    suspend fun getPanelDelServidor(horas: Int, dias: Int): com.jvillada.movi.shared.model.PanelDelServidor =
+        noLoTiene("getPanelDelServidor")
 }
 
 /** Lo que contesta un repositorio que no implementa una lectura o escritura nueva. */

@@ -5161,7 +5161,7 @@ Reglas del patrón, para la próxima:
 
 - **Las pestañas son un `SelectorSegmentado`** debajo del `MinScreenHeader`, no una barra nueva; el contenido de
   cada pestaña es su propio `@Composable` (y, si lo llena otra vuelta, su propio archivo, como
-  `PestanaDelServidor.kt`).
+  `PestanaServidor.kt`, de la vuelta 102).
 - Todo sale de las piezas de siempre: `Seccion` + `Superficie(Lista)` + `Fila` con el número en `final`
   (`cuerpoFuerte`), `Vacio` para lo que no hay, `EsqueletoDeFila` mientras carga. Una barra de conteo es una
   píldora (`Radio.pill`) de `Medida.altoDeBarraEnTarjeta` en tinta, con el ancho como fracción del máximo.

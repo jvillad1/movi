@@ -1,5 +1,8 @@
 package com.jvillada.movi.server.correo
 
+import com.jvillada.movi.server.observabilidad.Servicio
+import com.jvillada.movi.server.observabilidad.desenlaceHttp
+import com.jvillada.movi.server.observabilidad.medirLlamada
 import java.io.InputStream
 import java.net.URI
 import java.net.http.HttpClient
@@ -325,7 +328,9 @@ object LectorDeResendPorHttp : LectorDeCorreosRecibidos {
                 .GET()
                 .build()
             val respuesta = withContext(Dispatchers.IO) {
-                cliente.send(pedido, HttpResponse.BodyHandlers.ofInputStream())
+                medirLlamada(Servicio.RESEND, "lectura", { r: HttpResponse<InputStream> -> desenlaceHttp(r.statusCode()) }) {
+                    cliente.send(pedido, HttpResponse.BodyHandlers.ofInputStream())
+                }
             }
             respuesta.body().use { cuerpo ->
                 when (val estado = respuesta.statusCode()) {
@@ -367,7 +372,9 @@ object LectorDeResendPorHttp : LectorDeCorreosRecibidos {
                     .GET()
                     .build()
                 val respuesta = withContext(Dispatchers.IO) {
-                    cliente.send(pedido, HttpResponse.BodyHandlers.ofInputStream())
+                    medirLlamada(Servicio.RESEND, "listado", { r: HttpResponse<InputStream> -> desenlaceHttp(r.statusCode()) }) {
+                        cliente.send(pedido, HttpResponse.BodyHandlers.ofInputStream())
+                    }
                 }
                 val texto = respuesta.body().use { cuerpo ->
                     val estado = respuesta.statusCode()

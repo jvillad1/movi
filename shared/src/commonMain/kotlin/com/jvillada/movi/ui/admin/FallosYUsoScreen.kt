@@ -55,7 +55,7 @@ import kotlinx.datetime.toLocalDateTime
 
 const val TITULO_DE_FALLOS_Y_USO = "Fallos y uso"
 
-/** Las pestañas de la pantalla. «Servidor» la llena otra vuelta, en [PestanaDelServidor]. */
+/** Las pestañas de la pantalla. «Servidor» la llena la vuelta 102, en [PestanaServidor]. */
 val PESTANAS_DE_FALLOS_Y_USO = listOf("Fallos", "Uso", "Recorridos", "Servidor")
 
 const val TAG_FALLOS_Y_USO = "fallos-y-uso"
@@ -71,9 +71,10 @@ const val TAG_FALLOS_Y_USO = "fallos-y-uso"
  *   la adopción de cada función; la retención por cohorte semanal; las sesiones y su duración.
  * - **Recorridos**: se elige una persona, se ven sus sesiones y, al abrir una, la línea de tiempo en
  *   orden de secuencia, con filtros por tipo y un buscador por nombre.
- * - **Servidor**: el lugar que llena la vuelta de la observabilidad del servidor.
+ * - **Servidor** (vuelta 102, [PestanaServidor]): pedidos y errores por ruta, servicios de afuera,
+ *   jobs y salud, de `GET /api/admin/servidor/…`.
  *
- * Todo sale de `GET /api/admin/…` ([ObservabilidadParaAdmin]); un no admin recibe 403 y la fila de
+ * Fallos, Uso y Recorridos salen de `GET /api/admin/…` ([ObservabilidadParaAdmin]); un no admin recibe 403 y la fila de
  * Ajustes ni se pinta.
  */
 @Composable
@@ -89,7 +90,7 @@ fun FallosYUsoScreen(onNavigate: (Screen) -> Unit) {
                 0 -> PestanaDeFallos()
                 1 -> PestanaDeUso()
                 2 -> PestanaDeRecorridos()
-                else -> PestanaDelServidor()
+                else -> PestanaServidor(modifier = Modifier.fillMaxSize())
             }
         }
     }
