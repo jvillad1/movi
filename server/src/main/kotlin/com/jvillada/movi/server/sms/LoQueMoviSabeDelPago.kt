@@ -5,6 +5,7 @@ import com.jvillada.movi.server.balance.toAccount
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.RecurringRules
+import com.jvillada.movi.server.db.SmsMessages
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.shared.model.AccountType
@@ -18,6 +19,8 @@ import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.palabrasClave
 import kotlin.math.roundToLong
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.isNotNull
+import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.Transaction
 import org.jetbrains.exposed.sql.selectAll
 
@@ -87,9 +90,15 @@ fun loQueMoviSabeDelPago(
     reglas: List<ReglaDelDueno>,
     /** Los movimientos vivos del dueño, en cualquier orden. */
     eventos: List<FinancialEvent>,
+    /**
+     * Vuelta 107 · **cuántos pagos por PSE salieron de cada cuenta**: los movimientos vivos (distintos)
+     * de los avisos de PSE ya confirmados, por cuenta. Ver [cuentaQueMasUsaPse].
+     */
+    pagosPorPse: Map<String, Int> = emptyMap(),
 ): ParsedSms {
     val marca = marcaDe(parsed.merchant)
     if (marca.isEmpty()) return parsed
+    val marcaConLaNota = (marca + marcaDe(parsed.nota.orEmpty())).distinct()
     val porId = cuentas.associateBy { it.id }
 
     val deuda: Account? = when (parsed.category) {
@@ -110,16 +119,25 @@ fun loQueMoviSabeDelPago(
     val origenes = cuentas.filter { puedePagarPorPse(it) && it.id != hacia?.id }.map { it.id }.toSet()
 
     val (cuentaId, por) = deuda?.let { origenDeLosPagosA(it, eventos, origenes) }?.let { it to "La de tus pagos a ${deuda.name}" }
-        ?: reglas.filter { it.tipo == TransactionType.EXPENSE && it.cuentaId in origenes && reglaNombraALaEmpresa(it.nombre, marca) }
+        // Vuelta 107: la regla se reconoce también por la nota del pago («Coomeva Familiar» ↔ «Coomeva Pago de
+        // saldo plan familiar»): el nombre de la empresa solo («Coomeva Medicina Prepagada») no lo nombra.
+        ?: reglas.filter { it.tipo == TransactionType.EXPENSE && it.cuentaId in origenes && reglaNombraALaEmpresa(it.nombre, marcaConLaNota) }
             .map { it.cuentaId to it.nombre }
             .distinctBy { it.first }
             .singleOrNull()
             ?.let { (id, nombre) -> id to "La de tu recurrente «$nombre»" }
+        // Vuelta 107: la última vez, salvo en una cuenta casi sin pagos por PSE cuando se sabe de cuáles sale
+        // (el pago a Coomeva anotado el 25-oct en la 0031 no puede volver a proponer la 0031).
         ?: eventos.asSequence()
             .filter { it.type == TransactionType.EXPENSE && it.accountId in origenes }
+            .filter { pagosPorPse.isEmpty() || (pagosPorPse[it.accountId] ?: 0) >= MINIMO_DE_PAGOS_POR_PSE }
             .filter { nombra("${it.merchant.orEmpty()} ${it.description}", marca) }
             .maxByOrNull { it.timestamp }
             ?.let { it.accountId to "La que usaste la última vez para ${parsed.merchant}" }
+        // Vuelta 107: sin nada de esa empresa, la cuenta de la que más sale PSE. Nunca la primera del
+        // abecedario: el 25-oct el pago a Coomeva cayó así en la «Bancolombia Ahorros 0031», que casi no
+        // se usa (ver [cuentaQueMasUsaPse]).
+        ?: cuentaQueMasUsaPse(pagosPorPse, origenes)?.let { it to CUENTA_QUE_MAS_USA_PSE }
         ?: (null to null)
 
     return parsed.copy(
@@ -128,6 +146,59 @@ fun loQueMoviSabeDelPago(
         deudaSugeridaId = deuda?.id,
         traspasoHaciaId = hacia?.id,
     )
+}
+
+/** La razón de la cuenta que propone [cuentaQueMasUsaPse]. */
+const val CUENTA_QUE_MAS_USA_PSE: String = "La que más usas para pagar por PSE"
+
+/**
+ * **Cuántos pagos por PSE hacen falta para proponer una cuenta por costumbre.** Elegido, no medido: con
+ * uno solo, un pago anotado en la cuenta equivocada (el de Coomeva del 25-oct) se repetiría.
+ */
+const val MINIMO_DE_PAGOS_POR_PSE: Int = 2
+
+/** Revisión de la vuelta 107 · qué parte de los pagos por PSE tiene que salir de esa cuenta. Elegido. */
+const val PROPORCION_MINIMA_DE_PAGOS_POR_PSE: Double = 0.6
+
+/**
+ * Vuelta 107 · **la cuenta de la que más sale PSE**: la de más pagos por PSE en [pagosPorPse] entre
+ * [origenes], solo si tiene al menos [MINIMO_DE_PAGOS_POR_PSE], le gana sola a la segunda y suma al menos el
+ * [PROPORCION_MINIMA_DE_PAGOS_POR_PSE] de esos pagos. Con un empate
+ * o con muy poca historia, ninguna: la app pide elegir («Elígela tú»), nunca pone una cuenta poco usada.
+ */
+fun cuentaQueMasUsaPse(pagosPorPse: Map<String, Int>, origenes: Set<String>): String? {
+    val porCuenta = pagosPorPse.filterKeys { it in origenes }.entries.sortedByDescending { it.value }
+    val primera = porCuenta.firstOrNull() ?: return null
+    if (primera.value < MINIMO_DE_PAGOS_POR_PSE) return null
+    if (porCuenta.getOrNull(1)?.value == primera.value) return null
+    // Revisión: además, la mayoría clara de los pagos por PSE ([PROPORCION_MINIMA_DE_PAGOS_POR_PSE]).
+    if (primera.value < PROPORCION_MINIMA_DE_PAGOS_POR_PSE * porCuenta.sumOf { it.value }) return null
+    return primera.key
+}
+
+/**
+ * El pago por PSE que avisa Bancolombia por SMS: «Pagaste $138,600.00 a Coomeva Medicina Prepagada S A
+ * desde tu producto 8133». El «desde tu producto» solo lo escribe en los pagos por PSE.
+ */
+private val PAGO_POR_PSE_DEL_SMS = Regex("""\bpagaste\s+\$?\s*[\d.,]+\s+a\s+.+?\bdesde\s+tu\s+producto\b""", RegexOption.IGNORE_CASE)
+
+/** ¿[texto] es un aviso de un pago por PSE (el correo de PSE o el SMS de Bancolombia)? */
+internal fun esUnAvisoDePagoPorPse(texto: String): Boolean =
+    com.jvillada.movi.server.routes.esUnCorreoDePse(texto) || PAGO_POR_PSE_DEL_SMS.containsMatchIn(texto)
+
+/**
+ * [pagosPorPse] a partir de los avisos confirmados ([avisos]: el texto y el movimiento que lo anotó) y
+ * los movimientos vivos ([eventos]): un movimiento cuenta una vez aunque lo hayan avisado el SMS y el
+ * correo, y lo anulado no cuenta (no está en [eventos]). Pura.
+ */
+fun pagosPorPseDe(avisos: List<Pair<String, String>>, eventos: List<FinancialEvent>): Map<String, Int> {
+    val cuentaDe = eventos.associate { it.id to it.accountId }
+    return avisos.asSequence()
+        .filter { (texto, _) -> esUnAvisoDePagoPorPse(texto) }
+        .mapNotNull { (_, eventoId) -> cuentaDe[eventoId]?.let { eventoId to it } }
+        .distinctBy { it.first }
+        .groupingBy { it.second }
+        .eachCount()
 }
 
 /** Uno solo; con varios, el único que cumple [desempate]; si no, ninguno. */
@@ -180,5 +251,13 @@ fun Transaction.loQueMoviSabeDelPagoDe(uid: String, parsed: ParsedSms): ParsedSm
             tipo = runCatching { TransactionType.valueOf(it[RecurringRules.type]) }.getOrDefault(TransactionType.EXPENSE),
         )
     }
-    return loQueMoviSabeDelPago(parsed, cuentas, conCondiciones + sinCondiciones, reglas, loadNonVoidedEventsIn(uid))
+    val eventos = loadNonVoidedEventsIn(uid)
+    // Vuelta 107: los avisos confirmados con su movimiento, para saber de qué cuenta sale PSE.
+    val confirmados = SmsMessages.selectAll()
+        .where { (SmsMessages.userId eq uid) and SmsMessages.eventoId.isNotNull() }
+        .mapNotNull { fila -> fila[SmsMessages.eventoId]?.let { fila[SmsMessages.text] to it } }
+    return loQueMoviSabeDelPago(
+        parsed, cuentas, conCondiciones + sinCondiciones, reglas, eventos,
+        pagosPorPse = pagosPorPseDe(confirmados, eventos),
+    )
 }

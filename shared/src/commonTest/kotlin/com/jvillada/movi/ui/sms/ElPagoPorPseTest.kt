@@ -38,7 +38,9 @@ class ElPagoPorPseTest {
     @Test
     fun `la cuenta que sabe Movi le gana a la de por defecto`() {
         val porDefecto = resolverCuentaDelBanco(todas, UsoDeCuenta.ORIGEN_DE_GASTO, "Correo · PSE", textoDelMensaje = pse)
-        assertEquals(OrigenDeLaCuentaDelBanco.POR_DEFECTO, porDefecto.origen, "el correo de PSE no nombra ninguna cuenta")
+        // Vuelta 107: el correo de PSE no nombra ninguna cuenta, y ya no se le pone la primera del abecedario.
+        assertEquals(OrigenDeLaCuentaDelBanco.NINGUNA, porDefecto.origen, "el correo de PSE no nombra ninguna cuenta")
+        assertNull(porDefecto.cuenta)
         val conMovi = conLaCuentaQueSugiereMovi(porDefecto, todas, sugeridaId = "a1")
         assertEquals(ahorros, conMovi.cuenta)
         assertEquals(OrigenDeLaCuentaDelBanco.SUGERIDA_POR_MOVI, conMovi.origen)

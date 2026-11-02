@@ -78,7 +78,7 @@ fun leerLosMovimientosDeBancolombia(texto: String): MovimientosDeBancolombia? {
     } else if (deTarjeta) {
         lineas.firstNotNullOfOrNull { TARJETA.find(it)?.groupValues?.get(1) }
     } else {
-        lineas.firstNotNullOfOrNull { CUENTA.find(it)?.groupValues?.get(2) }?.filter { it.isDigit() }?.takeLast(4)
+        lineas.firstNotNullOfOrNull { CUENTA_DE_BANCOLOMBIA.find(it)?.groupValues?.get(2) }?.filter { it.isDigit() }?.takeLast(4)
     }
 
     val filas = mutableListOf<ParsedTransaction>()
@@ -104,7 +104,7 @@ fun leerLosMovimientosDeBancolombia(texto: String): MovimientosDeBancolombia? {
             // unidad, que no son parte de la descripción.
             val valor = VALOR_DE_FONDO.find(junto) ?: continue
             val centavos = centavosDelExtracto(valor.groupValues[1] + valor.groupValues[2]) ?: return null
-            fila(fecha!!, junto.substring(0, valor.range.first), centavos, junto)?.let { filas += it }
+            filaDeBancolombia(fecha!!, junto.substring(0, valor.range.first), centavos, junto)?.let { filas += it }
         } else if (deTarjeta) {
             val valor = VALOR_DE_TARJETA.find(junto) ?: continue
             val centavos = centavosDelExtracto(valor.groupValues[2] + valor.groupValues[3]) ?: return null
@@ -114,11 +114,11 @@ fun leerLosMovimientosDeBancolombia(texto: String): MovimientosDeBancolombia? {
             // Vuelta 63: las cuotas de la última columna, en los cobros (una compra a 12 cuotas dice
             // «12»; un cargo del banco, «0»: no se difirió, cuenta como una). Un abono no tiene cuotas.
             val cuotas = valor.groupValues[4].toIntOrNull()?.coerceAtLeast(1)?.takeIf { centavos > 0 }
-            fila(fecha!!, crudo, -centavos, junto, moneda = valor.groupValues[1], cuotas = cuotas)?.let { filas += it }
+            filaDeBancolombia(fecha!!, crudo, -centavos, junto, moneda = valor.groupValues[1], cuotas = cuotas)?.let { filas += it }
         } else {
             val valor = VALOR.find(junto) ?: continue
             val centavos = centavosDelExtracto(valor.groupValues[1] + valor.groupValues[2]) ?: return null
-            fila(fecha!!, junto.substring(0, valor.range.first), centavos, junto)?.let { filas += it }
+            filaDeBancolombia(fecha!!, junto.substring(0, valor.range.first), centavos, junto)?.let { filas += it }
         }
         fecha = null
     }
@@ -141,7 +141,7 @@ data class MovimientosDeBancolombia(
  * (un gasto), positivo lo que entró. [moneda] es la del movimiento: en la tarjeta, un cobro en dólares
  * va en dólares, como lo lleva Movi en la cuenta «USD» de la tarjeta.
  */
-private fun fila(fecha: LocalDate, crudo: String, centavos: Long, texto: String, moneda: String = "COP", cuotas: Int? = null): ParsedTransaction? {
+internal fun filaDeBancolombia(fecha: LocalDate, crudo: String, centavos: Long, texto: String, moneda: String = "COP", cuotas: Int? = null): ParsedTransaction? {
     val pesos = pesosDe(abs(centavos))
     if (pesos == 0L) return null
     val descripcion = crudo.split(Regex("""\s+""")).filter { it.isNotEmpty() && !esReferencia(it) }
@@ -202,4 +202,4 @@ private val VALOR_DE_FONDO = Regex("""(?:--|\d+(?:,\d+)?)\s+-?\$\s?\d{1,3}(?:\.\
 private val TARJETA = Regex("""^[A-Za-zÁÉÍÓÚáéíóú ]+\*(\d{4})$""")
 
 /** «Ahorros 029 - 550681 - 33» o «Corriente …»: el número de la cuenta. */
-private val CUENTA = Regex("""^(Ahorros|Corriente)\s+(\d[\d\s-]{5,}\d)$""", RegexOption.IGNORE_CASE)
+internal val CUENTA_DE_BANCOLOMBIA = Regex("""^(Ahorros|Corriente)\s+(\d[\d\s-]{5,}\d)$""", RegexOption.IGNORE_CASE)
