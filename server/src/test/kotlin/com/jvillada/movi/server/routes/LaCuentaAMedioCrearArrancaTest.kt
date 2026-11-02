@@ -164,6 +164,17 @@ class LaCuentaAMedioCrearArrancaTest {
         assertTrue(debeAbrirseLaGuiaDePrimerUso(perfil, emptyList()), "una cuenta sin nada tiene que caer en la guía")
     }
 
+    /** Vuelta 109: las páginas de las tiendas son públicas en el server de verdad (fuera de `authenticate`). */
+    @Test
+    fun `privacidad, terminos y borrar-cuenta son publicas en el server de verdad`() = testApplication {
+        application { modulo() }
+        listOf("/privacidad", "/terminos", "/borrar-cuenta").forEach { ruta ->
+            val res = client.get(ruta)
+            assertEquals(HttpStatusCode.OK, res.status, "$ruta sin sesión")
+            assertTrue(res.bodyAsText().contains("<h1>"), "$ruta no es la página (¿cayó al index.html de la web?)")
+        }
+    }
+
     @Test
     fun `el reporte de Algo fallo es publico en el server de verdad`() = testApplication {
         application { modulo() }
