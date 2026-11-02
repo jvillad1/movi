@@ -421,6 +421,12 @@ class DesdeTuIphoneTest {
         assertEquals(null, versionDeIosDelUserAgent(ua("18_6", "Mobile/15E148 Instagram 300.0")))
         // Un «Version/» de otro navegador no cuenta.
         assertEquals(null, versionDeIosDelUserAgent(ua("18_6", "Version/26.0 Mobile/15E148 FxiOS/140.0 Safari/605.1.15")))
+        // Tampoco el de Opera, Yandex ni Firefox Focus/Klar, que pueden traer su propio «Version/».
+        listOf(
+            "Version/26.0 Mobile/15E148 OPT/5.3.0 Safari/604.1",
+            "Version/26.0 YaBrowser/25.6.0.0 Mobile/15E148 Safari/604.1",
+            "Version/26.0 Mobile/15E148 Focus/140.0 Safari/605.1.15",
+        ).forEach { assertEquals(null, versionDeIosDelUserAgent(ua("18_6", it)), it) }
         // Ni un iPad (se presenta como Mac) ni una computadora.
         assertEquals(null, versionDeIosDelUserAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/26.0 Safari/605.1.15"))
         assertEquals(null, versionDeIosDelUserAgent("Mozilla/5.0 (Linux; Android 14) Chrome/140 Mobile Safari/537.36"))

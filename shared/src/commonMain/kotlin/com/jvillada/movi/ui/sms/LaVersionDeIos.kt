@@ -16,7 +16,8 @@ package com.jvillada.movi.ui.sms
  * versión mayor del sistema (Evil Martians, «How to detect Safari and iOS versions with ease», 2026). Por eso:
  *
  * - un «iPhone OS» **menor que 18** es anterior al congelamiento: es la versión real;
- * - en **Safari** (sin CriOS, FxiOS, EdgiOS, OPiOS ni la app de Google), un «Version/» de **26 o más** es la
+ * - en **Safari** (sin CriOS, FxiOS, EdgiOS, OPiOS, OPT —Opera—, YaBrowser, Focus —Firefox Focus/Klar—, la app
+ *   de Google ni DuckDuckGo), un «Version/» de **26 o más** es la
  *   versión del sistema;
  * - un «iPhone OS» de **19 o más** no puede ser el valor congelado (Chrome en iOS manda el real);
  * - Safari 18 con «iPhone OS 18_x» es iOS 18;
@@ -35,7 +36,8 @@ enum class VarianteDeLaAutomatizacion {
 }
 
 /** Los navegadores de iOS que no son Safari: su «Version/», si lo traen, no dice nada del sistema. */
-private val NAVEGADORES_QUE_NO_SON_SAFARI = listOf("CriOS", "FxiOS", "EdgiOS", "OPiOS", "GSA/", "DuckDuckGo")
+private val NAVEGADORES_QUE_NO_SON_SAFARI =
+    listOf("CriOS", "FxiOS", "EdgiOS", "OPiOS", "OPT/", "YaBrowser", "Focus/", "GSA/", "DuckDuckGo")
 
 /**
  * **La versión mayor de iOS según el *user agent***, solo si se sabe con seguridad (ver arriba); si no, `null`.
