@@ -59,9 +59,15 @@ fun reglaDelSalario(monto: Long, diaDelCorte: Int, cuenta: String?, arranque: St
  *
  * Los ajustes son los que el dueño acaba de elegir (el día y la regla del fin de semana). Pura.
  */
-fun arranqueDelPeriodoSiguiente(diaDelCorte: Int, regla: SiElCorteCaeEnFinDeSemana, ahoraMillis: Long): String {
-    val ajustes = PeriodSettings(cutoffDay = diaDelCorte, siCaeEnFinDeSemana = regla)
-    return inicioDelPeriodo(periodoSiguiente(periodoDe(ahoraMillis, ajustes)), ajustes).toString()
+fun arranqueDelPeriodoSiguiente(
+    diaDelCorte: Int,
+    regla: SiElCorteCaeEnFinDeSemana,
+    ahoraMillis: Long,
+    /** Vuelta 105 · el segundo día de la quincena; `null` = cada mes, lo de siempre. */
+    segundoDia: Int? = null,
+): String {
+    val ajustes = ajustesDeLaGuia(diaDelCorte, regla, segundoDia)
+    return inicioDelPeriodo(periodoSiguiente(periodoDe(ahoraMillis, ajustes), ajustes), ajustes).toString()
 }
 
 /** La pregunta de debajo del monto del salario. */
@@ -99,3 +105,47 @@ const val TAG_SALARIO_EN_LA_GUIA: String = "primer-uso-salario"
 
 /** El tag de la cifra del final. */
 const val TAG_CIFRA_DEL_LISTO: String = "primer-uso-cifra-del-listo"
+
+/**
+ * Vuelta 105 · **los ajustes del período que se están eligiendo** en la guía o en Ajustes: cada mes con
+ * su día, o cada quincena con sus dos días ([segundoDia] no nulo). La misma regla del fin de semana para
+ * todos los arranques. Pura.
+ */
+fun ajustesDeLaGuia(dia: Int, regla: SiElCorteCaeEnFinDeSemana, segundoDia: Int? = null): PeriodSettings =
+    if (segundoDia == null) PeriodSettings(cutoffDay = dia, siCaeEnFinDeSemana = regla)
+    else PeriodSettings(
+        cutoffDay = dia,
+        siCaeEnFinDeSemana = regla,
+        frecuencia = com.jvillada.movi.shared.model.FrecuenciaDelPeriodo.QUINCENAL,
+        segundoDia = segundoDia,
+    )
+
+/**
+ * Vuelta 105 · **el salario por quincenas son dos reglas** (D9 del diseño): la del día A y la del B, cada
+ * una con el monto de una quincena. Con «ya te pagaron» cada regla arranca en la próxima quincena SUYA
+ * (la siguiente que abre su día), no en la siguiente a secas: el piso de una obligación es el mes de
+ * referencia que contiene `activeFrom` (`arranqueDeLaRegla` en el server), y con la siguiente a secas la
+ * regla del día A volvería a esperar el pago que ya llegó. Sin «ya te pagaron», `null`: corren desde
+ * siempre. Pura; el orden es (día A, día B).
+ */
+fun reglasDelSalarioQuincenal(
+    monto: Long,
+    primerDia: Int,
+    segundoDia: Int,
+    regla: SiElCorteCaeEnFinDeSemana,
+    cuenta: String?,
+    yaTePagaron: Boolean,
+    ahoraMillis: Long,
+): List<RecurringRule> {
+    val ajustes = ajustesDeLaGuia(primerDia, regla, segundoDia)
+    val (arranqueA, arranqueB) = if (!yaTePagaron) null to null else {
+        val siguiente = periodoSiguiente(periodoDe(ahoraMillis, ajustes), ajustes)
+        val laOtra = periodoSiguiente(siguiente, ajustes)
+        val (delA, delB) = if (com.jvillada.movi.shared.model.esLaQuincenaDelDiaA(siguiente, ajustes)) siguiente to laOtra else laOtra to siguiente
+        inicioDelPeriodo(delA, ajustes).toString() to inicioDelPeriodo(delB, ajustes).toString()
+    }
+    return listOf(
+        reglaDelSalario(monto, primerDia, cuenta, arranqueA),
+        reglaDelSalario(monto, segundoDia, cuenta, arranqueB),
+    )
+}

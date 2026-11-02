@@ -197,7 +197,7 @@ fun loDeCadaPeriodo(
                 recibido = totalesHaciaElDestino(vuelta[p].orEmpty()),
             )
         }
-        .sortedWith(compareByDescending<EnviadoYRecibido> { it.periodo.year }.thenByDescending { it.periodo.month })
+        .sortedWith(compareByDescending<EnviadoYRecibido> { it.periodo })
 }
 
 /**

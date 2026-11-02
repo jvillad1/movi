@@ -1,5 +1,9 @@
 package com.jvillada.movi.ui.mas
 
+import com.jvillada.movi.ui.profile.guardarLaQuincena
+import com.jvillada.movi.ui.profile.textoDelPeriodoDelPerfil
+import com.jvillada.movi.shared.model.frecuenciaDelPeriodoDe
+import com.jvillada.movi.shared.model.FrecuenciaDelPeriodo
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -314,8 +318,8 @@ fun MasScreen(
                     Fila(
                         titulo = INICIO_DEL_PERIODO,
                         inicio = { IconoDeAjuste(Icons.Rounded.CalendarMonth) },
-                        subtitulo = cutoff?.let { d ->
-                            textoDelInicioDelMes(d, siElCorteCaeEnFinDeSemanaDe(profile?.periodWeekendRule))
+                        subtitulo = profile?.let { p ->
+                            textoDelPeriodoDelPerfil(p, siElCorteCaeEnFinDeSemanaDe(p.periodWeekendRule))
                         } ?: if (falloElPerfil) NO_PUDIMOS_LEERLO else CARGANDO,
                         lineasDelSubtitulo = 2,
                         final = if (cutoff != null) ({ Chevron() }) else null,
@@ -827,17 +831,37 @@ fun MasScreen(
         }
         if (showPeriodo && perfil != null) {
             AtrasCierraEstaHoja { showPeriodo = false; errorPeriodo = null }
+            val eraQuincena = frecuenciaDelPeriodoDe(perfil.periodFrequency) == FrecuenciaDelPeriodo.QUINCENAL
             PeriodoSheet(
                 cutoffActual = perfil.periodCutoffDay,
                 reglaActual = siElCorteCaeEnFinDeSemanaDe(perfil.periodWeekendRule),
                 saving = guardandoPeriodo,
                 error = errorPeriodo,
                 onDismiss = { showPeriodo = false; errorPeriodo = null },
+                // Vuelta 105 · «¿Cada cuánto te pagan?»: cada mes o cada quincena.
+                frecuenciaActual = frecuenciaDelPeriodoDe(perfil.periodFrequency),
+                segundoDiaActual = perfil.periodSecondDay,
+                onSaveQuincena = { primero, segundo, regla ->
+                    guardandoPeriodo = true
+                    errorPeriodo = null
+                    alcance.launch {
+                        runCatching { guardarLaQuincena(primero, segundo, regla) }
+                            .onSuccess {
+                                guardandoPeriodo = false
+                                showPeriodo = false
+                                profileReloadKey++
+                            }
+                            .onFailure {
+                                guardandoPeriodo = false
+                                errorPeriodo = "No pudimos guardar el cambio. Revisa tu conexión e inténtalo de nuevo."
+                            }
+                    }
+                },
                 onSave = { dia, regla ->
                     guardandoPeriodo = true
                     errorPeriodo = null
                     alcance.launch {
-                        runCatching { guardarElInicioDelMes(dia, regla) }
+                        runCatching { guardarElInicioDelMes(dia, regla, veniaDeUnaQuincena = eraQuincena) }
                             .onSuccess {
                                 guardandoPeriodo = false
                                 showPeriodo = false

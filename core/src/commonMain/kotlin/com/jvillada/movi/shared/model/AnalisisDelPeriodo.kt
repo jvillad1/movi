@@ -122,15 +122,19 @@ fun analisisDelPeriodo(
     tiposDeCuenta: Map<String, AccountType> = emptyMap(),
 ): AnalisisDelPeriodo {
     val inicio = inicioDelPeriodo(periodo, settings)
-    val siguiente = inicioDelPeriodo(periodoSiguiente(periodo), settings)
+    val siguiente = inicioDelPeriodo(periodoSiguiente(periodo, settings), settings)
     val dias = inicio.daysUntil(siguiente).coerceAtLeast(1)
     val transcurridos = when {
         hoy < inicio -> 0
         hoy >= siguiente -> dias
         else -> inicio.daysUntil(hoy) + 1
     }
-    val inicioDelAnterior = inicioDelPeriodo(periodoAnterior(periodo), settings)
-    val diasDelAnterior = inicioDelAnterior.daysUntil(inicio).coerceAtLeast(0)
+    // Vuelta 105 · «el anterior» es el homólogo (D6): en la quincena, la misma quincena del mes pasado.
+    // En el mensual es el inmediato y termina donde arranca este: lo de siempre.
+    val homologo = periodoHomologo(periodo, settings)
+    val inicioDelAnterior = inicioDelPeriodo(homologo, settings)
+    val finDelAnterior = inicioDelPeriodo(periodoSiguiente(homologo, settings), settings)
+    val diasDelAnterior = inicioDelAnterior.daysUntil(finDelAnterior).coerceAtLeast(0)
 
     // La guarda de siempre: el primer movimiento del dueño (cualquiera, no solo un gasto) tiene que
     // ser anterior al arranque del período anterior. Si no, ese período está a medio anotar.
@@ -149,7 +153,7 @@ fun analisisDelPeriodo(
                 porDia[inicio.daysUntil(dia)] += montoContado(e)
                 gastosDelPeriodo += e
             }
-            cubierto && dia >= inicioDelAnterior && dia < inicio -> {
+            cubierto && dia >= inicioDelAnterior && dia < finDelAnterior -> {
                 val i = inicioDelAnterior.daysUntil(dia)
                 porDiaDelAnterior[i] += montoContado(e)
                 gastosDelAnteriorEnteros += i to e

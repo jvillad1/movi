@@ -1,5 +1,7 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.shared.model.limiteDelPeriodo
+import com.jvillada.movi.shared.model.periodoDelId
 import com.jvillada.movi.server.reminders.pausadaEn
 import com.jvillada.movi.shared.model.esAbonoADeuda
 import com.jvillada.movi.server.espacios.loCompartidoDelUsuario
@@ -108,6 +110,15 @@ fun Route.periodosRoutes() {
  */
 internal const val MAX_PERIODOS: Int = 36
 
+/**
+ * Vuelta 105 · el tope con quincenas: 48, dos años (36 quincenas serían solo año y medio). Elegido, no
+ * medido, como [MAX_PERIODOS].
+ */
+internal const val MAX_PERIODOS_QUINCENALES: Int = 48
+
+/** El tope de períodos de la lista según la frecuencia. */
+internal fun maxPeriodos(ajustes: PeriodSettings): Int = if (ajustes.esQuincenal) MAX_PERIODOS_QUINCENALES else MAX_PERIODOS
+
 /** La respuesta de `GET /api/periodos`, con un «ahora» que una prueba puede fijar. */
 internal fun Transaction.resumenesDePeriodos(uid: String, ahora: Long, ajustes: PeriodSettings): List<ResumenDePeriodo> {
     val anulados = anuladosDe(uid)
@@ -144,7 +155,9 @@ internal fun Transaction.detalleDePeriodo(
     ahora: Long,
     ajustes: PeriodSettings,
 ): DetalleDePeriodo? {
-    val periodo = periodoDelPrefijo(id) ?: return null
+    // Vuelta 105 · un id de quincena («2026-10-15») también; uno de otra frecuencia no está en la lista
+    // de abajo y contesta 404, como uno que no existe.
+    val periodo = periodoDelId(id) ?: return null
     val anulados = anuladosDe(uid)
     val periodos = periodosDelUsuario(uid, ahora, ajustes, anulados)
     if (periodo !in periodos) return null
@@ -184,13 +197,21 @@ internal fun Transaction.detalleDePeriodo(
         // nombre de categoría, como las barras de Presupuestos (`spentByCategory[category]`).
         presupuestos = Budgets.selectAll()
             .where { Budgets.userId eq uid }
-            .map { PresupuestoDelPeriodo(it[Budgets.category], it[Budgets.monthlyLimit], gastoPorCategoria[it[Budgets.category]] ?: 0L) }
+            // Vuelta 105 · un presupuesto se escribe al mes y se mide prorrateado (D2): en la quincena, la
+            // mitad (`limiteDelPeriodo`, identidad en el mensual).
+            .map {
+                PresupuestoDelPeriodo(
+                    it[Budgets.category],
+                    limiteDelPeriodo(it[Budgets.monthlyLimit], periodo, ajustes),
+                    gastoPorCategoria[it[Budgets.category]] ?: 0L,
+                )
+            }
             .sortedBy { it.category.lowercase() },
         masGrandes = losMasGrandes(uid, movimientos, tipos),
         tuPlataAlEmpezar = alEmpezar,
         tuPlataAlCerrar = alCerrar,
         fuentesQueNoSonIngreso = fuentes,
-        pequenosQueSuman = pequenosDelPeriodo(uid, desde, hasta, movimientos),
+        pequenosQueSuman = pequenosDelPeriodo(uid, desde, hasta, movimientos, ajustes),
     )
 }
 
@@ -204,10 +225,15 @@ internal fun Transaction.pequenosDelPeriodo(
     desde: Long,
     hasta: Long,
     movimientos: List<MovimientoDeFlujo>,
+    ajustes: PeriodSettings = PeriodSettings(),
 ): List<com.jvillada.movi.shared.model.PequenosQueSuman> {
     val gastos = movimientos.filter { it.type == TransactionType.EXPENSE }.map { it.id }.toSet()
     if (gastos.isEmpty()) return emptyList()
-    return pequenosQueSuman(loadEventsBetween(uid, desde, hasta).filter { it.id in gastos })
+    return pequenosQueSuman(
+        loadEventsBetween(uid, desde, hasta).filter { it.id in gastos },
+        // Vuelta 105 · en la quincena, la mitad del umbral (identidad en el mensual).
+        totalQueImporta = com.jvillada.movi.shared.model.umbralDelPeriodo(com.jvillada.movi.shared.model.TOTAL_QUE_IMPORTA, ajustes),
+    )
 }
 
 /**
@@ -566,9 +592,10 @@ private fun Transaction.periodosDelUsuario(
         ?.let { periodoDe(it, ajustes) }
         ?: return listOf(enCurso)
     val periodos = mutableListOf(enCurso)
-    // `prefijo` («2026-09») ordena igual que el tiempo: año de cuatro cifras y mes con cero.
-    while (periodos.size < MAX_PERIODOS && periodos.last().prefijo > masViejo.prefijo) {
-        periodos += periodoAnterior(periodos.last())
+    // Por año, mes y día (vuelta 105: `PeriodoFinanciero` es comparable; en el mensual da lo mismo que
+    // comparar el `prefijo`, «2026-09»).
+    while (periodos.size < maxPeriodos(ajustes) && periodos.last() > masViejo) {
+        periodos += periodoAnterior(periodos.last(), ajustes)
     }
     return periodos
 }
@@ -585,7 +612,7 @@ private fun resumenDe(
     val (entradas, gastoPorCategoria) = flujoDeCaja(movimientos)
     return ResumenDePeriodo(
         id = periodo.prefijo,
-        nombre = tituloDelPeriodo(periodo),
+        nombre = tituloDelPeriodo(periodo, ajustes),
         desde = epochMillisToAppDateString(ventana.first),
         hasta = epochMillisToAppDateString(ventana.last),
         // Comparado contra el arranque que le daría el corte solo: un inicio propio que

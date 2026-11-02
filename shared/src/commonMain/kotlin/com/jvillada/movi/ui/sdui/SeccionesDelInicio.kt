@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.sdui
 
+import com.jvillada.movi.ui.dashboard.presupuestosDelPeriodo
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.semantics.heading
@@ -847,7 +848,7 @@ internal fun WidgetEnQueSeVa(
 ) {
     val categorias = categoriasDelPeriodo(
         gastoPorCategoria = data.spentByCategory.orEmpty(),
-        presupuestos = data.budgets.orEmpty(),
+        presupuestos = data.presupuestosDelPeriodo.orEmpty(),
         cuantas = CATEGORIAS_EN_EL_WIDGET,
         gastoDelAnterior = data.gastoDelAnterior,
     ).take(CATEGORIAS_EN_EL_WIDGET)

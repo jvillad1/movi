@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.analisis
 
+import com.jvillada.movi.shared.model.periodoDelId
 import com.jvillada.movi.ui.components.ds.IconoDeMovimiento
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.Canvas
@@ -168,7 +169,7 @@ fun EnQueSeVaScreen(
         Repositories.wallets.getDashboardSummary(Scope.SELF)
     }
     var periodo by remember(periodoDeHoy, periodoInicial) {
-        mutableStateOf(periodoInicial?.let { periodoDelPrefijo(it) } ?: periodoDeHoy)
+        mutableStateOf(periodoInicial?.let { periodoDelId(it) } ?: periodoDeHoy)
     }
     var vista by rememberSaveable { mutableStateOf(VistaDelAnalisis.CATEGORIA.ordinal) }
     var acumulado by rememberSaveable { mutableStateOf(false) }
@@ -201,8 +202,8 @@ fun EnQueSeVaScreen(
                         periodo = p,
                         ajustes = ajustes,
                         puedeAvanzar = p.prefijo < periodoDeHoy.prefijo,
-                        onAnterior = { periodo = periodoAnterior(p) },
-                        onSiguiente = { periodo = periodoSiguiente(p) },
+                        onAnterior = { periodo = periodoAnterior(p, ajustes) },
+                        onSiguiente = { periodo = periodoSiguiente(p, ajustes) },
                     )
                 }
 

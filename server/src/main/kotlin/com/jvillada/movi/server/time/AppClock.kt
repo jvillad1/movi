@@ -7,6 +7,7 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.shared.model.frecuenciaDelPeriodoDe
 import com.jvillada.movi.shared.model.siElCorteCaeEnFinDeSemanaDe
 import com.jvillada.movi.shared.model.periodoDe
 import com.jvillada.movi.shared.model.ventanaDe
@@ -127,5 +128,8 @@ fun ajustesDelPeriodoSinSuspender(uid: String): PeriodSettings {
             }.getOrElse { emptyMap() }
         } ?: emptyMap(),
         siCaeEnFinDeSemana = siElCorteCaeEnFinDeSemanaDe(fila?.get(Users.periodWeekendRule)),
+        // Vuelta 105 · NULL = MENSUAL; una quincena sin segundo día se lee como mes (`esQuincenal`).
+        frecuencia = frecuenciaDelPeriodoDe(fila?.get(Users.periodFrequency)),
+        segundoDia = fila?.get(Users.periodSecondDay)?.takeIf { it in 1..31 },
     )
 }

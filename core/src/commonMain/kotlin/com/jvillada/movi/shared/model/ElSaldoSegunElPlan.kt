@@ -88,7 +88,7 @@ fun saldoSegunElPlan(
         )
         saldo = (saldo - desglose.capital).coerceAtLeast(0L)
         vencidas++
-        mes = periodoSiguiente(mes)
+        mes = mesSiguiente(mes)
     }
     return SaldoSegunElPlan(saldo = saldo, cuotasVencidas = vencidas)
 }

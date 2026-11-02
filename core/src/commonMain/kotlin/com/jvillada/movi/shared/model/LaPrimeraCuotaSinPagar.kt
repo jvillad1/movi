@@ -82,7 +82,7 @@ fun mesDeLaPrimeraCuotaSinPagar(
 ): PeriodoFinanciero {
     val laPrimeraDelCredito = desde?.let { d ->
         val enSuMes = vencimientoDelMes(d.year, d.monthNumber, dia)
-        if (enSuMes > d) mesDe(enSuMes) else periodoSiguiente(mesDe(enSuMes))
+        if (enSuMes > d) mesDe(enSuMes) else mesSiguiente(mesDe(enSuMes))
     }
     // La primera cuota que vence el día que se fijó el saldo, o después.
     val laPrimeraDespuesDelSaldo = saldoFijadoEl?.let { mesDe(proximoVencimientoDelDia(dia, it)) }
@@ -93,7 +93,7 @@ fun mesDeLaPrimeraCuotaSinPagar(
         // Un tope por si alguien sella años por adelantado: nadie paga más de dos años de cuotas antes.
         var vueltas = 0
         while (mes.prefijo in pagadas && vueltas < MAX_CUOTAS_ADELANTADAS) {
-            mes = periodoSiguiente(mes)
+            mes = mesSiguiente(mes)
             vueltas++
         }
     }

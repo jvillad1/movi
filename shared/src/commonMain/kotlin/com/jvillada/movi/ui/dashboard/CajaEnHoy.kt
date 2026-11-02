@@ -165,7 +165,7 @@ fun noTeAlcanzariaSinSalario(caja: CajaProyectada, ultimoDiaDelPeriodo: LocalDat
 
 /** El último día del período de [data] (el anterior al arranque del siguiente), o `null` sin período. */
 internal fun ultimoDiaDelPeriodoDe(data: DashboardData): LocalDate? =
-    data.periodoActual?.let { inicioDelPeriodo(periodoSiguiente(it), data.ajustesDePeriodo).minus(1, DateTimeUnit.DAY) }
+    data.periodoActual?.let { inicioDelPeriodo(periodoSiguiente(it, data.ajustesDePeriodo), data.ajustesDePeriodo).minus(1, DateTimeUnit.DAY) }
 
 /** Vuelta 78: lo que dice debajo el renglón que no alcanzaría sin salario. Tocarlo lleva a la caja de Pagos. */
 const val AGREGAR_SALARIO_EN_EL_RENGLON: String = "Agregar salario"
@@ -280,7 +280,7 @@ internal fun FilaMeAlcanza(renglon: RenglonMeAlcanza, onNavigate: (Screen) -> Un
 fun preguntaDelInicio(data: DashboardData): String? {
     val periodo = data.periodoActual ?: return null
     return com.jvillada.movi.shared.model.preguntaHastaQueTePaguen(
-        inicioDelPeriodo(periodoSiguiente(periodo), data.ajustesDePeriodo),
+        inicioDelPeriodo(periodoSiguiente(periodo, data.ajustesDePeriodo), data.ajustesDePeriodo),
         conElPeriodoElegido = !data.ajustesDePeriodo.esMesDeCalendario,
     )
 }

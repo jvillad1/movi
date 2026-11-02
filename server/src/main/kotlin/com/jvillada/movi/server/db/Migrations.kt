@@ -62,7 +62,37 @@ object Migrations {
         pasarLosIdentificadoresALaLista()
         pasarLasReglasDeComercioALaBase()
         cifrarLosPapelesEnClaro()
+        agrandarLaClaveDeLosCierres()
     }
+
+    /** Las tablas cuya clave es el id de un período, que con una quincena («2026-10-15») mide 10. */
+    val TABLAS_CON_ID_DE_PERIODO = listOf("cierres_enviados", "cierres_guardados", "cierres_descartados")
+
+    /**
+     * Vuelta 105 · **la clave de los cierres pasa de `varchar(7)` a `varchar(10)`** para que quepa el id
+     * de una quincena. `createMissingTablesAndColumns` no cambia tipos (y estas tablas ni están en su
+     * lista), así que va acá.
+     *
+     * Nada que pueda tumbar el arranque: primero se pregunta el largo actual a `information_schema` y
+     * solo se emite el ALTER si es menor que 10, así que la segunda corrida no hace nada. Agrandar un
+     * `varchar` en Postgres no reescribe la tabla ni el índice de la clave, y las filas viejas
+     * («2026-10») siguen valiendo tal cual. Devuelve las tablas que tocó.
+     */
+    fun Transaction.agrandarLaClaveDeLosCierres(): List<String> =
+        TABLAS_CON_ID_DE_PERIODO.filter { tabla ->
+            val largo = largoDeLaColumna(tabla, "periodo") ?: return@filter false
+            if (largo >= LARGO_DEL_ID_DEL_PERIODO) return@filter false
+            exec("ALTER TABLE $tabla ALTER COLUMN periodo SET DATA TYPE VARCHAR($LARGO_DEL_ID_DEL_PERIODO)")
+            true
+        }
+
+    /** El largo declarado de una columna de texto, o `null` si la tabla o la columna no existen. */
+    fun Transaction.largoDeLaColumna(tabla: String, columna: String): Int? =
+        exec(
+            "SELECT character_maximum_length FROM information_schema.columns " +
+                "WHERE LOWER(table_name) = '$tabla' AND LOWER(column_name) = '$columna' " +
+                "AND LOWER(table_schema) = LOWER(CURRENT_SCHEMA)",
+        ) { rs -> if (rs.next()) rs.getObject(1)?.let { (it as Number).toInt() } else null }
 
     /** Cuántas filas cifró una corrida de [cifrarLosPapelesEnClaro]. */
     data class PapelesCifrados(val documentos: Int, val lecturas: Int)

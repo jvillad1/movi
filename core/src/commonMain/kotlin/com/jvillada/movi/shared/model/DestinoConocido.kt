@@ -708,7 +708,7 @@ fun loQueSeLeMandoPorPeriodo(
     movimientos
         .groupBy { periodoDe(it.timestamp, settings) }
         .map { (periodo, del) -> LoDeUnPeriodo(periodo, totalesHaciaElDestino(del), del.size) }
-        .sortedWith(compareByDescending<LoDeUnPeriodo> { it.periodo.year }.thenByDescending { it.periodo.month })
+        .sortedWith(compareByDescending<LoDeUnPeriodo> { it.periodo })
 
 // ── Llaves y lo que el banco dice de a quién fue la plata (29-sep) ─────────────────────
 

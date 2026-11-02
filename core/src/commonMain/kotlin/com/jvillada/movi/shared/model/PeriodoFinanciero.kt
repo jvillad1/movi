@@ -92,10 +92,34 @@ data class PeriodSettings(
      * no lo toque no ve ningún cambio.
      */
     val siCaeEnFinDeSemana: SiElCorteCaeEnFinDeSemana = SiElCorteCaeEnFinDeSemana.ESE_DIA,
+    /**
+     * Vuelta 105 · **cada cuánto arranca un período**: cada mes (lo de siempre) o cada quincena.
+     * Diseño: `docs/superpowers/specs/2026-11-02-periodo-quincenal-semanal-design.md`.
+     *
+     * Con [FrecuenciaDelPeriodo.QUINCENAL], [cutoffDay] es el primer día de la quincena (A) y
+     * [segundoDia] el segundo (B). Un ajuste quincenal incompleto o imposible (sin [segundoDia], o con
+     * dos días que no dejan dos quincenas sanas, ver [esQuincenaValida]) **se lee como mensual**: un
+     * dato roto nunca deja la app sin período. Por eso toda la lógica pregunta [esQuincenal] y no
+     * mira este campo suelto.
+     *
+     * Va al final del constructor para que ninguna construcción posicional de antes cambie de sentido.
+     */
+    val frecuencia: FrecuenciaDelPeriodo = FrecuenciaDelPeriodo.MENSUAL,
+    /** QUINCENAL: el segundo día de la quincena (B), con A < B. «El último día del mes» es 31. */
+    val segundoDia: Int? = null,
 ) {
     init {
         require(cutoffDay in 1..31) { "El día de corte va de 1 a 31" }
     }
+
+    /**
+     * `true` solo con una quincena **completa y sana**: [frecuencia] quincenal, [segundoDia] dicho y
+     * los dos días a unas dos semanas en cualquier mes ([esQuincenaValida]). Cualquier otra cosa se
+     * comporta como el mes de siempre.
+     */
+    val esQuincenal: Boolean
+        get() = frecuencia == FrecuenciaDelPeriodo.QUINCENAL && segundoDia != null &&
+            esQuincenaValida(cutoffDay, segundoDia)
 
     /**
      * `true` cuando el corte es el default **y nadie movió ningún período a mano**: ahí todo se
@@ -103,10 +127,144 @@ data class PeriodSettings(
      *
      * El segundo término no es cosmético. Con un inicio propio declarado, la ventana ya no es la
      * del mes civil aunque el corte siga siendo 1, y quien lea solo `cutoffDay` para decidir
-     * «esto es el mes de siempre» se saltearía la excepción.
+     * «esto es el mes de siempre» se saltearía la excepción. Una quincena nunca es el mes.
      */
     val esMesDeCalendario: Boolean
-        get() = cutoffDay == 1 && iniciosPropios.isEmpty() && siCaeEnFinDeSemana == SiElCorteCaeEnFinDeSemana.ESE_DIA
+        get() = !esQuincenal && cutoffDay == 1 && iniciosPropios.isEmpty() &&
+            siCaeEnFinDeSemana == SiElCorteCaeEnFinDeSemana.ESE_DIA
+}
+
+/**
+ * Vuelta 105 · **cada cuánto arranca el período.** Viaja como el nombre (`UserProfile.periodFrequency`,
+ * un `String`): un valor que no se conozca se lee como [MENSUAL] ([frecuenciaDelPeriodoDe]). La semana
+ * queda para después (el diseño la deja para cuando haya recurrentes semanales, D9).
+ */
+@Serializable
+enum class FrecuenciaDelPeriodo {
+    /** Un período por mes, con el día de corte. Lo de siempre y el default. */
+    MENSUAL,
+    /** Dos períodos por mes: del día A al día antes del B, y del B al día antes del A del mes siguiente. */
+    QUINCENAL,
+}
+
+/** El valor guardado, o [FrecuenciaDelPeriodo.MENSUAL] si falta o no se entiende. */
+fun frecuenciaDelPeriodoDe(nombre: String?): FrecuenciaDelPeriodo =
+    FrecuenciaDelPeriodo.entries.firstOrNull { it.name == nombre } ?: FrecuenciaDelPeriodo.MENSUAL
+
+/** «El 15 y el último día del mes»: la quincena que se propone cuando alguien elige «Cada quincena». */
+const val PRIMER_DIA_DE_LA_QUINCENA_POR_DEFECTO: Int = 15
+const val SEGUNDO_DIA_DE_LA_QUINCENA_POR_DEFECTO: Int = 31
+
+/**
+ * Cuántos días como mínimo separan dos arranques de quincena, en cualquier mes (también febrero, donde
+ * el 31 se recorta al 28). Con 13 días, ni el corrimiento por festivo (4 días como mucho, Semana Santa)
+ * ni una excepción a mano ([MARGEN_DE_LA_EXCEPCION_QUINCENAL]) pueden cruzar dos arranques: no queda
+ * nunca un día sin período ni una quincena vacía (13 > 5 + 5 y 13 > 5 + 4).
+ */
+const val DIAS_MINIMOS_ENTRE_QUINCENAS: Int = 13
+
+/**
+ * **¿Los días [a] y [b] arman dos quincenas sanas en cualquier mes?** A < B, y tanto del A al B como
+ * del B al A del mes siguiente pasan al menos [DIAS_MINIMOS_ENTRE_QUINCENAS] días, contando el
+ * recorte de un día que no existe en ese mes (el 31 en febrero es el 28). Pura; el server la usa para
+ * rechazar y la app para no ofrecer lo que se rechazaría.
+ *
+ * «El 15 y el último» (15, 31), «el 1 y el 16», «el 5 y el 20», «el 10 y el 25» pasan; «el 16 y el
+ * último» no (en febrero quedan 12 días del 16 al 28).
+ */
+fun esQuincenaValida(a: Int, b: Int): Boolean {
+    if (a !in 1..31 || b !in 1..31 || a >= b) return false
+    return (28..31).all { largo ->
+        val diaA = minOf(a, largo)
+        val diaB = minOf(b, largo)
+        diaB - diaA >= DIAS_MINIMOS_ENTRE_QUINCENAS && largo - diaB + a >= DIAS_MINIMOS_ENTRE_QUINCENAS
+    }
+}
+
+/**
+ * Vuelta 105 · **qué tiene de malo una quincena con los días [a] y [b]**, o `null` si está bien. La
+ * misma frase en el server (`PUT /api/users/me` la devuelve con un 400) y en la hoja, que apaga
+ * «Guardar» con ella.
+ */
+fun problemaDeLaQuincena(a: Int, b: Int?): String? = when {
+    b == null -> "Falta el segundo día de la quincena"
+    a !in 1..31 || b !in 1..31 -> "Los días de la quincena van de 1 a 31"
+    a >= b -> "El primer día de la quincena va antes que el segundo"
+    !esQuincenaValida(a, b) -> "Los dos días tienen que quedar a unas dos semanas uno del otro, también en febrero"
+    else -> null
+}
+
+/**
+ * Cuántos días puede correrse a mano el arranque de una quincena (una excepción de
+ * [PeriodSettings.iniciosPropios]): hasta 5 antes o después del día nominal. En el mensual sigue siendo
+ * «dentro del mismo mes», como siempre.
+ */
+const val MARGEN_DE_LA_EXCEPCION_QUINCENAL: Int = 5
+
+/**
+ * Vuelta 105 · **el mes de referencia** (diseño §2.6): los ajustes con los que se cuentan las
+ * obligaciones MENSUALES —recurrentes, cuotas, tarjetas, sellos, emparejamiento—, que siguen
+ * venciendo un día del mes aunque el período sea una quincena.
+ *
+ * - Mensual → **los mismos ajustes** (identidad: nada cambia para quien no eligió quincena).
+ * - Quincenal → un mes con corte en el día A, la misma regla del fin de semana y sin excepciones:
+ *   las dos quincenas de un mes caen enteras dentro de él.
+ *
+ * Idempotente: el mes de referencia de un mes de referencia es él mismo. Por eso las funciones de
+ * obligaciones la aplican al entrar y quien llama les pasa siempre los ajustes reales.
+ */
+fun PeriodSettings.mesDeReferencia(): PeriodSettings {
+    if (!esQuincenal) return this
+    // **Las excepciones de la quincena del día A viajan al mes de referencia** (revisión de la 105): el
+    // arranque de esa quincena ES el arranque del mes de referencia. Sin esto, «Empezar la quincena
+    // hoy» el 12-nov (quincena del 15) dejaba el mes de referencia arrancando el 15 y un pago del 13,
+    // vencido y sin pagar, salía de la quincena en curso al pasar la gracia (se preguntaba por el del
+    // mes siguiente). Las de la quincena del día B no mueven ningún borde del mes de referencia.
+    // [inicioDeLaQuincena] solo acepta una excepción del día A dentro del mismo mes que su nominal, que
+    // es justo lo que el mensual acepta: la excepción nunca se pierde en el camino.
+    val delDiaA = iniciosPropios.mapNotNull { (clave, inicio) ->
+        val q = periodoDelId(clave)?.takeIf { it.dia != 0 } ?: return@mapNotNull null
+        if (!esPeriodoDe(q, this) || !esLaQuincenaDelDiaA(q, this)) return@mapNotNull null
+        // Solo la que la quincena de verdad acepta (a ±5 días y en el mes de su nominal).
+        if (inicioDelPeriodo(q, this).toString() != inicio.trim()) return@mapNotNull null
+        val nominal = LocalDate(q.year, q.month, q.dia)
+        periodoPorElCorte(nominal, cutoffDay).prefijo to inicio
+    }.toMap()
+    return PeriodSettings(cutoffDay = cutoffDay, siCaeEnFinDeSemana = siCaeEnFinDeSemana, iniciosPropios = delDiaA)
+}
+
+/**
+ * **El límite de un presupuesto mensual medido en [periodo]** (D2 del diseño: se escribe al mes y se
+ * mide prorrateado). Mensual: el mismo límite. Quincenal: la mitad, y la quincena del día A se lleva
+ * el peso impar, así las dos quincenas de un mes suman exacto el mensual.
+ */
+fun limiteDelPeriodo(mensual: Long, periodo: PeriodoFinanciero, settings: PeriodSettings): Long {
+    if (!settings.esQuincenal) return mensual
+    val mitad = mensual / 2
+    return if (esLaQuincenaDelDiaA(periodo, settings)) mensual - mitad else mitad
+}
+
+/**
+ * Vuelta 105 · **los presupuestos mensuales medidos en [periodo]** ([limiteDelPeriodo] a cada uno). Sin
+ * período o con un mes, la misma lista: nada cambia para quien cuenta por mes.
+ */
+fun presupuestosDelPeriodo(presupuestos: List<Budget>, periodo: PeriodoFinanciero?, settings: PeriodSettings): List<Budget> =
+    if (periodo == null || !settings.esQuincenal) presupuestos
+    else presupuestos.map { it.copy(monthlyLimit = limiteDelPeriodo(it.monthlyLimit, periodo, settings)) }
+
+/**
+ * Vuelta 105 · **un umbral en pesos pensado para un mes, llevado al período**: el mismo en el mensual,
+ * la mitad en la quincena. Para los umbrales elegidos de «lo que se sale de lo normal» y «pequeños que
+ * suman», que comparan lo de UN período: en una quincena se gasta la mitad y el umbral entero casi
+ * nunca saltaría.
+ */
+fun umbralDelPeriodo(mensual: Long, settings: PeriodSettings): Long = if (settings.esQuincenal) mensual / 2 else mensual
+
+/** ¿[periodo] es la quincena que arranca el día A (la primera del mes)? Falso fuera de la quincena. */
+fun esLaQuincenaDelDiaA(periodo: PeriodoFinanciero, settings: PeriodSettings): Boolean {
+    if (!settings.esQuincenal) return false
+    val nominal = nominalDeLaQuincena(periodo, settings)
+    return nominal.dayOfMonth == minOf(settings.cutoffDay, diasDelMes(nominal.year, nominal.monthNumber))
 }
 
 /**
@@ -163,17 +321,38 @@ fun corteCorrido(fecha: LocalDate, regla: SiElCorteCaeEnFinDeSemana): LocalDate 
  * 26 de agosto de 2026 es `PeriodoFinanciero(2026, 9)`.
  */
 @Serializable
-data class PeriodoFinanciero(val year: Int, val month: Int) {
+data class PeriodoFinanciero(
+    val year: Int,
+    val month: Int,
+    /**
+     * Vuelta 105 · `0` = un período **mensual** (o un mes a secas: créditos, apartados y patrimonio usan
+     * este tipo como mes). Una quincena se identifica por el día de su **arranque nominal** —antes de
+     * festivos y excepciones—, porque el id no puede moverse: es la clave de las excepciones y de los
+     * cierres (diseño §2.3). Con el default no viaja (`encodeDefaults` apagado) y la igualdad de todo
+     * lo mensual queda como estaba.
+     */
+    val dia: Int = 0,
+) : Comparable<PeriodoFinanciero> {
     init {
         require(month in 1..12) { "Mes fuera de rango" }
+        require(dia in 0..31) { "Día fuera de rango" }
     }
 
-    /** «2026-09» — la misma forma que ya usaban las funciones de mes, para poder convivir. */
-    val prefijo: String get() = "$year-" + month.toString().padStart(2, '0')
+    /**
+     * «2026-09» — la misma forma que ya usaban las funciones de mes, para poder convivir. Una quincena:
+     * «2026-10-15», el día de su arranque nominal.
+     */
+    val prefijo: String
+        get() = "$year-" + month.toString().padStart(2, '0') +
+            (if (dia == 0) "" else "-" + dia.toString().padStart(2, '0'))
+
+    /** Por año, mes y día: nunca por el [prefijo] (dentro de una frecuencia coinciden, pero no hay que depender de eso). */
+    override fun compareTo(other: PeriodoFinanciero): Int =
+        compareValuesBy(this, other, { it.year }, { it.month }, { it.dia })
 }
 
 /** Cuántos días tiene un mes, contando bisiestos. */
-private fun diasDelMes(year: Int, month: Int): Int {
+internal fun diasDelMes(year: Int, month: Int): Int {
     val siguiente = if (month == 12) LocalDate(year + 1, 1, 1) else LocalDate(year, month + 1, 1)
     return siguiente.toEpochDays() - LocalDate(year, month, 1).toEpochDays()
 }
@@ -206,6 +385,8 @@ private fun inicioDe(year: Int, month: Int, cutoffDay: Int): LocalDate =
  * Ante un dato así se vuelve a la regla del corte, que siempre da una ventana sana.
  */
 fun inicioDelPeriodo(periodo: PeriodoFinanciero, settings: PeriodSettings): LocalDate {
+    if (settings.esQuincenal) return inicioDeLaQuincena(periodo, settings)
+    val periodo = comoMes(periodo, settings)
     val porCorte = inicioPorCorte(periodo, settings.cutoffDay)
     val porLaRegla = corteCorrido(porCorte, settings.siCaeEnFinDeSemana)
     val declarado = settings.iniciosPropios[periodo.prefijo]
@@ -215,6 +396,88 @@ fun inicioDelPeriodo(periodo: PeriodoFinanciero, settings: PeriodSettings): Loca
     // regla del fin de semana no cambia qué excepciones son válidas.
     return if (declarado.year == porCorte.year && declarado.month == porCorte.month) declarado
     else porLaRegla
+}
+
+/**
+ * Un id de quincena («2026-10-15») leído con ajustes mensuales: el período mensual que contiene ese
+ * día. Solo pasa si alguien cambió de frecuencia y quedó un id viejo (en una URL, un cierre guardado):
+ * se responde algo sano en vez de reventar. Un id mensual vuelve tal cual.
+ */
+private fun comoMes(periodo: PeriodoFinanciero, settings: PeriodSettings): PeriodoFinanciero {
+    if (periodo.dia == 0) return periodo
+    val fecha = LocalDate(periodo.year, periodo.month, minOf(periodo.dia, diasDelMes(periodo.year, periodo.month)))
+    return periodoPorElCorte(fecha, settings.cutoffDay)
+}
+
+// ── La quincena ────────────────────────────────────────────────────────────────────────────────
+
+/** Los dos arranques nominales de un mes: el día A y el B, cada uno recortado al largo del mes. */
+private fun arranquesDelMes(year: Int, month: Int, settings: PeriodSettings): List<LocalDate> {
+    val largo = diasDelMes(year, month)
+    return listOf(
+        LocalDate(year, month, minOf(settings.cutoffDay, largo)),
+        LocalDate(year, month, minOf(settings.segundoDia ?: settings.cutoffDay, largo)),
+    )
+}
+
+private fun mesAntesDe(year: Int, month: Int): Pair<Int, Int> = if (month == 1) (year - 1) to 12 else year to (month - 1)
+private fun mesDespuesDe(year: Int, month: Int): Pair<Int, Int> = if (month == 12) (year + 1) to 1 else year to (month + 1)
+
+/** El último arranque nominal en [fecha] o antes: el de la quincena que la contiene por la regla de los días. */
+private fun arranqueNominalHasta(fecha: LocalDate, settings: PeriodSettings): LocalDate {
+    val (a, b) = arranquesDelMes(fecha.year, fecha.monthNumber, settings)
+    if (fecha >= b) return b
+    if (fecha >= a) return a
+    val (y, m) = mesAntesDe(fecha.year, fecha.monthNumber)
+    return arranquesDelMes(y, m, settings)[1]
+}
+
+/** El primer arranque nominal estrictamente después de [fecha]. */
+private fun arranqueNominalDespuesDe(fecha: LocalDate, settings: PeriodSettings): LocalDate {
+    arranquesDelMes(fecha.year, fecha.monthNumber, settings).firstOrNull { it > fecha }?.let { return it }
+    val (y, m) = mesDespuesDe(fecha.year, fecha.monthNumber)
+    return arranquesDelMes(y, m, settings)[0]
+}
+
+/** El último arranque nominal estrictamente antes de [fecha]. */
+private fun arranqueNominalAntesDe(fecha: LocalDate, settings: PeriodSettings): LocalDate {
+    arranquesDelMes(fecha.year, fecha.monthNumber, settings).lastOrNull { it < fecha }?.let { return it }
+    val (y, m) = mesAntesDe(fecha.year, fecha.monthNumber)
+    return arranquesDelMes(y, m, settings)[1]
+}
+
+private fun quincenaQueArranca(nominal: LocalDate): PeriodoFinanciero =
+    PeriodoFinanciero(nominal.year, nominal.monthNumber, nominal.dayOfMonth)
+
+/**
+ * **El arranque nominal de la quincena [periodo]**: su día, si es uno de los dos del mes. Un id que no
+ * corresponde a estos ajustes (un id mensual, o una quincena de otros días tras cambiar los ajustes)
+ * se lleva a la quincena que contiene ese día: nunca se revienta por un id viejo.
+ */
+internal fun nominalDeLaQuincena(periodo: PeriodoFinanciero, settings: PeriodSettings): LocalDate {
+    val largo = diasDelMes(periodo.year, periodo.month)
+    val dia = if (periodo.dia == 0) minOf(settings.cutoffDay, largo) else minOf(periodo.dia, largo)
+    return arranqueNominalHasta(LocalDate(periodo.year, periodo.month, dia), settings)
+}
+
+/**
+ * El arranque efectivo de una quincena: la excepción a mano si cae a ±[MARGEN_DE_LA_EXCEPCION_QUINCENAL]
+ * días del nominal, si no el nominal corrido por fin de semana o festivo ([corteCorrido]). Es la misma
+ * regla que el mes, con el rango de la excepción acotado a la quincena (diseño §2.4).
+ */
+private fun inicioDeLaQuincena(periodo: PeriodoFinanciero, settings: PeriodSettings): LocalDate {
+    val nominal = nominalDeLaQuincena(periodo, settings)
+    val porLaRegla = corteCorrido(nominal, settings.siCaeEnFinDeSemana)
+    val declarado = settings.iniciosPropios[quincenaQueArranca(nominal).prefijo]
+        ?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+        ?: return porLaRegla
+    val distancia = declarado.toEpochDays() - nominal.toEpochDays()
+    if (distancia !in -MARGEN_DE_LA_EXCEPCION_QUINCENAL..MARGEN_DE_LA_EXCEPCION_QUINCENAL) return porLaRegla
+    // La quincena del día A abre el mes de referencia ([mesDeReferencia]): su excepción se queda en el
+    // mes de su nominal, como la del mensual, para que los dos relojes muevan el mismo borde.
+    val esDelDiaA = nominal.dayOfMonth == minOf(settings.cutoffDay, diasDelMes(nominal.year, nominal.monthNumber))
+    if (esDelDiaA && (declarado.year != nominal.year || declarado.monthNumber != nominal.monthNumber)) return porLaRegla
+    return declarado
 }
 
 /** El arranque que le tocaría por la regla del corte, sin mirar excepciones. */
@@ -244,7 +507,7 @@ fun ventanaDe(periodo: PeriodoFinanciero, settings: PeriodSettings): LongRange {
     // pidió el dueño: «el comienzo de un nuevo periodo implícitamente indica el cierre del
     // anterior».
     val inicio = inicioDelPeriodo(periodo, settings).atStartOfDayIn(zona)
-    val fin = inicioDelPeriodo(periodoSiguiente(periodo), settings).atStartOfDayIn(zona)
+    val fin = inicioDelPeriodo(periodoSiguiente(periodo, settings), settings).atStartOfDayIn(zona)
     return inicio.toEpochMilliseconds() until fin.toEpochMilliseconds()
 }
 
@@ -257,7 +520,8 @@ fun periodoDe(epochMillis: Long, settings: PeriodSettings): PeriodoFinanciero {
     val fecha = Instant.fromEpochMilliseconds(epochMillis).toLocalDateTime(AppTimeZone.zone).date
     if (settings.esMesDeCalendario) return PeriodoFinanciero(fecha.year, fecha.month.number)
 
-    val porElCorte = periodoPorElCorte(fecha, settings.cutoffDay)
+    val porElCorte = if (settings.esQuincenal) quincenaQueArranca(arranqueNominalHasta(fecha, settings))
+    else periodoPorElCorte(fecha, settings.cutoffDay)
     if (settings.iniciosPropios.isEmpty() && settings.siCaeEnFinDeSemana == SiElCorteCaeEnFinDeSemana.ESE_DIA) {
         return porElCorte
     }
@@ -272,7 +536,7 @@ fun periodoDe(epochMillis: Long, settings: PeriodSettings): PeriodoFinanciero {
     // Se pregunta por la VENTANA en vez de recalcular la regla: así esta función y [ventanaDe]
     // nunca pueden discrepar sobre dónde está un borde.
     val millis = fecha.atStartOfDayIn(AppTimeZone.zone).toEpochMilliseconds()
-    val candidatos = listOf(periodoAnterior(porElCorte), porElCorte, periodoSiguiente(porElCorte))
+    val candidatos = listOf(periodoAnterior(porElCorte, settings), porElCorte, periodoSiguiente(porElCorte, settings))
     return candidatos.firstOrNull { millis in ventanaDe(it, settings) } ?: porElCorte
 }
 
@@ -318,13 +582,38 @@ fun periodoDeLaFecha(iso: String, settings: PeriodSettings): PeriodoFinanciero? 
  */
 const val MAX_INICIOS_PROPIOS: Int = 120
 
-/** `"2026-09"` → el período; cualquier otra cosa → `null`. La forma de [PeriodoFinanciero.prefijo]. */
+/** `"2026-09"` → el período; cualquier otra cosa → `null`. La forma de [PeriodoFinanciero.prefijo] de un mes. */
 fun periodoDelPrefijo(prefijo: String): PeriodoFinanciero? {
     val partes = PREFIJO_DE_PERIODO.matchEntire(prefijo)?.groupValues ?: return null
     return PeriodoFinanciero(partes[1].toInt(), partes[2].toInt())
 }
 
+/**
+ * Vuelta 105 · **el id de un período, de cualquier frecuencia**: `"2026-09"` → el mes, `"2026-10-15"`
+ * → la quincena que arranca ese día; cualquier otra cosa → `null`. [periodoDelPrefijo] sigue leyendo
+ * solo meses (lo usan las cosas que de verdad son un mes).
+ *
+ * Sin ajustes no sabe si «2026-10-15» es un arranque de quincena de este usuario: eso lo dice
+ * [esPeriodoDe]. Quien recibe un id de afuera (una URL) pregunta las dos cosas.
+ */
+fun periodoDelId(id: String): PeriodoFinanciero? {
+    periodoDelPrefijo(id)?.let { return it }
+    val fecha = PREFIJO_DE_QUINCENA.matchEntire(id)?.let { runCatching { LocalDate.parse(id) }.getOrNull() }
+        ?: return null
+    return PeriodoFinanciero(fecha.year, fecha.monthNumber, fecha.dayOfMonth)
+}
+
+/**
+ * ¿[periodo] es un período de verdad con estos ajustes? Un id mensual con ajustes mensuales; una
+ * quincena cuyo día es uno de los dos arranques de su mes con ajustes quincenales. Lo usan las rutas
+ * que reciben un id en la URL: uno de otra frecuencia contesta como uno que no existe.
+ */
+fun esPeriodoDe(periodo: PeriodoFinanciero, settings: PeriodSettings): Boolean =
+    if (settings.esQuincenal) periodo.dia != 0 && nominalDeLaQuincena(periodo, settings).dayOfMonth == periodo.dia
+    else periodo.dia == 0
+
 private val PREFIJO_DE_PERIODO = Regex("""^(\d{4})-(0[1-9]|1[0-2])$""")
+private val PREFIJO_DE_QUINCENA = Regex("""^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$""")
 
 /**
  * El corte y los arranques propios de este perfil, como los usa toda cuenta de períodos. Una sola
@@ -336,6 +625,8 @@ fun UserProfile.ajustesDelPeriodo(): PeriodSettings =
         cutoffDay = periodCutoffDay.coerceIn(1, 31),
         iniciosPropios = periodStarts,
         siCaeEnFinDeSemana = siElCorteCaeEnFinDeSemanaDe(periodWeekendRule),
+        frecuencia = frecuenciaDelPeriodoDe(periodFrequency),
+        segundoDia = periodSecondDay?.takeIf { it in 1..31 },
     )
 
 /**
@@ -358,7 +649,15 @@ fun fechaEsperadaDelIngreso(
     vencimiento: LocalDate,
     settings: PeriodSettings,
 ): LocalDate {
-    if (tipo != TransactionType.INCOME || diaDeLaRegla != settings.cutoffDay) return vencimiento
+    if (tipo != TransactionType.INCOME) return vencimiento
+    if (settings.esQuincenal) {
+        // Las DOS reglas del salario quincenal: la del día A y la del B. Cada una abre su quincena.
+        if (diaDeLaRegla != settings.cutoffDay && diaDeLaRegla != settings.segundoDia) return vencimiento
+        val nominal = arranqueNominalHasta(vencimiento, settings)
+        if (nominal != vencimiento) return vencimiento
+        return inicioDelPeriodo(quincenaQueArranca(nominal), settings)
+    }
+    if (diaDeLaRegla != settings.cutoffDay) return vencimiento
     val periodo = periodoPorElCorte(vencimiento, settings.cutoffDay)
     // Solo si el vencimiento ES el arranque natural de ese período (con un corte 31 recortado al
     // largo del mes, el 30 de abril también lo es); si no, la regla no abre ningún período.
@@ -412,7 +711,7 @@ fun PeriodSettings.conInicioPropio(periodo: PeriodoFinanciero, inicio: String?):
  */
 fun empezarElSiguienteHoy(enCurso: PeriodoFinanciero, hoy: LocalDate, settings: PeriodSettings): PeriodSettings? {
     if (periodoDeLaFecha(hoy.toString(), settings) != enCurso) return null
-    val siguiente = periodoSiguiente(enCurso)
+    val siguiente = periodoSiguiente(enCurso, settings)
     if (inicioDelPeriodo(siguiente, settings) == hoy) return null
     val nuevos = settings.conInicioPropio(siguiente, hoy.toString())
     // Se le pregunta a la misma regla que después calcula las ventanas: si ignoraría el valor,
@@ -422,35 +721,86 @@ fun empezarElSiguienteHoy(enCurso: PeriodoFinanciero, hoy: LocalDate, settings: 
     return nuevos
 }
 
-/** El período anterior a [periodo]. */
-fun periodoAnterior(periodo: PeriodoFinanciero): PeriodoFinanciero =
-    if (periodo.month == 1) PeriodoFinanciero(periodo.year - 1, 12)
-    else PeriodoFinanciero(periodo.year, periodo.month - 1)
+/**
+ * El período anterior a [periodo] con estos ajustes: el mes anterior, o la quincena anterior.
+ *
+ * Vuelta 105 · antes no recibía ajustes porque un período era siempre un mes. Con un mensual da
+ * exactamente [mesAnterior].
+ */
+fun periodoAnterior(periodo: PeriodoFinanciero, settings: PeriodSettings): PeriodoFinanciero =
+    if (settings.esQuincenal) quincenaQueArranca(arranqueNominalAntesDe(nominalDeLaQuincena(periodo, settings), settings))
+    else mesAnterior(comoMes(periodo, settings))
 
-/** El período siguiente a [periodo]. */
-fun periodoSiguiente(periodo: PeriodoFinanciero): PeriodoFinanciero =
-    if (periodo.month == 12) PeriodoFinanciero(periodo.year + 1, 1)
-    else PeriodoFinanciero(periodo.year, periodo.month + 1)
+/** El período siguiente a [periodo] con estos ajustes. Ver [periodoAnterior]. */
+fun periodoSiguiente(periodo: PeriodoFinanciero, settings: PeriodSettings): PeriodoFinanciero =
+    if (settings.esQuincenal) quincenaQueArranca(arranqueNominalDespuesDe(nominalDeLaQuincena(periodo, settings), settings))
+    else mesSiguiente(comoMes(periodo, settings))
+
+/**
+ * **El período con el que se compara [periodo]** («vs. período pasado», la línea del pasado en «En qué
+ * se va»; D6 del diseño): el anterior en el mensual; en la quincena, **la misma quincena del mes
+ * anterior** (la del 15 contra la del 15), porque los fijos grandes caen siempre en la misma y comparar
+ * con la inmediata marcaría el arriendo, no la forma de gastar.
+ */
+fun periodoHomologo(periodo: PeriodoFinanciero, settings: PeriodSettings): PeriodoFinanciero =
+    if (settings.esQuincenal) periodoAnterior(periodoAnterior(periodo, settings), settings)
+    else periodoAnterior(periodo, settings)
+
+/**
+ * El **mes** anterior: para quien usa [PeriodoFinanciero] como mes (la cuota de un crédito, un
+ * apartado, la curva del patrimonio). No es «el período anterior» si el período es una quincena.
+ */
+fun mesAnterior(mes: PeriodoFinanciero): PeriodoFinanciero =
+    if (mes.month == 1) PeriodoFinanciero(mes.year - 1, 12)
+    else PeriodoFinanciero(mes.year, mes.month - 1)
+
+/** El **mes** siguiente. Ver [mesAnterior]. */
+fun mesSiguiente(mes: PeriodoFinanciero): PeriodoFinanciero =
+    if (mes.month == 12) PeriodoFinanciero(mes.year + 1, 1)
+    else PeriodoFinanciero(mes.year, mes.month + 1)
+
+/** El mes anterior. Vuelta 105: un período ya no es siempre un mes; usa la versión con ajustes o [mesAnterior]. */
+@Deprecated("Un período puede ser una quincena", ReplaceWith("periodoAnterior(periodo, settings)"))
+fun periodoAnterior(periodo: PeriodoFinanciero): PeriodoFinanciero = mesAnterior(periodo)
+
+/** El mes siguiente. Ver [periodoAnterior]. */
+@Deprecated("Un período puede ser una quincena", ReplaceWith("periodoSiguiente(periodo, settings)"))
+fun periodoSiguiente(periodo: PeriodoFinanciero): PeriodoFinanciero = mesSiguiente(periodo)
 
 private val MESES = listOf(
     "enero", "febrero", "marzo", "abril", "mayo", "junio",
     "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
 )
 
-/** «septiembre»: el nombre del mes que le da nombre a [periodo] (vuelta 60: «como en septiembre»). */
-fun nombreDelMesDe(periodo: PeriodoFinanciero): String = MESES[periodo.month - 1]
+/**
+ * «septiembre»: el nombre del mes que le da nombre a [periodo] (vuelta 60: «como en septiembre»).
+ * Una quincena (vuelta 105) no tiene un mes que la nombre: «la quincena del 15 de octubre».
+ */
+fun nombreDelMesDe(periodo: PeriodoFinanciero): String =
+    if (periodo.dia != 0) "la quincena del ${periodo.dia} de ${MESES[periodo.month - 1]}" else MESES[periodo.month - 1]
 
-/** «septiembre de 2026» — para encabezados. */
+/** «septiembre de 2026» — para encabezados. Una quincena: «la quincena del 15 de octubre de 2026». */
 fun nombreDe(periodo: PeriodoFinanciero): String =
-    "${MESES[periodo.month - 1]} de ${periodo.year}"
+    "${nombreDelMesDe(periodo)} de ${periodo.year}"
 
 /**
  * «Octubre 2026» — el título de un período como se lee en una lista de períodos: el mes que le da
  * nombre con mayúscula inicial, y el año. Es la única forma de escribirlo, para que el server (que
  * lo manda en `ResumenDePeriodo.nombre`) y cualquier pantalla que lo arme a mano digan lo mismo.
+ *
+ * Una quincena se nombra por sus fechas con [tituloDelPeriodo] con ajustes; sin ellos, por su arranque.
  */
 fun tituloDelPeriodo(periodo: PeriodoFinanciero): String =
-    MESES[periodo.month - 1].replaceFirstChar { it.uppercase() } + " " + periodo.year
+    if (periodo.dia != 0) "Quincena del ${periodo.dia} ${MESES_CORTOS[periodo.month - 1]} ${periodo.year}"
+    else MESES[periodo.month - 1].replaceFirstChar { it.uppercase() } + " " + periodo.year
+
+/**
+ * Vuelta 105 · el título con ajustes: el mensual, [tituloDelPeriodo] de siempre; una quincena, sus
+ * fechas con el año («15 – 30 oct 2026»), la regla única de nombre (D8 del diseño).
+ */
+fun tituloDelPeriodo(periodo: PeriodoFinanciero, settings: PeriodSettings): String =
+    if (!settings.esQuincenal) tituloDelPeriodo(periodo)
+    else nombreDelPeriodo(periodo, settings, anioDeHoy = null) + " " + periodo.year
 
 /**
  * «Del 26 de agosto al 25 de septiembre» — la explicación que hace entendible un corte que no es
@@ -570,5 +920,13 @@ fun diaLegible(iso: String): String? = runCatching { LocalDate.parse(iso) }.getO
  * corte 25, sería un día de historial. Con el anterior incluido siempre se recupera al menos un
  * período completo, y el que se está cerrando llega entero.
  */
-fun desdeDondeRecuperarSms(ahoraMillis: Long, settings: PeriodSettings): Long =
-    ventanaDe(periodoAnterior(periodoDe(ahoraMillis, settings)), settings).first
+fun desdeDondeRecuperarSms(ahoraMillis: Long, settings: PeriodSettings): Long {
+    val desde = ventanaDe(periodoAnterior(periodoDe(ahoraMillis, settings), settings), settings).first
+    // Vuelta 105 · con quincenas, «el período anterior» son 15-30 días: se recupera al menos lo de
+    // siempre (unos 35 días). Solo en la quincena: el mensual queda exactamente igual.
+    if (!settings.esQuincenal) return desde
+    return minOf(desde, ahoraMillis - DIAS_MINIMOS_DE_SMS_EN_QUINCENA * 86_400_000L)
+}
+
+/** Vuelta 105 · el piso de días que recupera el teléfono cuando el período es una quincena. */
+const val DIAS_MINIMOS_DE_SMS_EN_QUINCENA: Int = 35

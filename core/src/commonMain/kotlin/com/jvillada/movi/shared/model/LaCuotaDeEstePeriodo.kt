@@ -25,7 +25,7 @@ import kotlinx.datetime.plus
  */
 fun vencimientoEnElPeriodo(dia: Int, periodo: PeriodoFinanciero, ajustes: PeriodSettings): LocalDate? {
     val inicio = inicioDelPeriodo(periodo, ajustes)
-    val siguiente = inicioDelPeriodo(periodoSiguiente(periodo), ajustes)
+    val siguiente = inicioDelPeriodo(periodoSiguiente(periodo, ajustes), ajustes)
     var mes = LocalDate(inicio.year, inicio.monthNumber, 1)
     var vueltas = 0
     while (mes < siguiente && vueltas < 3) {
@@ -43,6 +43,8 @@ fun vencimientoEnElPeriodo(dia: Int, periodo: PeriodoFinanciero, ajustes: Period
  * cuota queda en Pagos como cualquier otra. Pura.
  */
 fun laCuotaDeEstePeriodoYaVencio(dia: Int, hoy: LocalDate, ajustes: PeriodSettings): Boolean {
+    // Vuelta 105 · una cuota es mensual: «este período» es el mes de referencia (identidad en el mensual).
+    val ajustes = ajustes.mesDeReferencia()
     val periodo = periodoDeLaFecha(hoy.toString(), ajustes) ?: return false
     val vence = vencimientoEnElPeriodo(dia, periodo, ajustes) ?: return false
     return vence <= hoy
@@ -53,8 +55,9 @@ fun laCuotaDeEstePeriodoYaVencio(dia: Int, hoy: LocalDate, ajustes: PeriodSettin
  * siguiente a [hoy], con los ajustes del dueño. Es lo que se guarda en [CreditTerms.cuotasDesde]. Pura.
  */
 fun arranqueDeLasCuotasSiYaPagaste(hoy: LocalDate, ajustes: PeriodSettings): LocalDate {
+    val ajustes = ajustes.mesDeReferencia()
     val periodo = periodoDeLaFecha(hoy.toString(), ajustes) ?: PeriodoFinanciero(hoy.year, hoy.monthNumber)
-    return inicioDelPeriodo(periodoSiguiente(periodo), ajustes)
+    return inicioDelPeriodo(periodoSiguiente(periodo, ajustes), ajustes)
 }
 
 /**

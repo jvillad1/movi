@@ -43,6 +43,15 @@ data class UserProfile(
      */
     val periodWeekendRule: String = SiElCorteCaeEnFinDeSemana.ESE_DIA.name,
     /**
+     * Vuelta 105 · **cada cuánto arranca el período**: el nombre de un [FrecuenciaDelPeriodo]
+     * («MENSUAL», «QUINCENAL»). Un `String` y no el enum, como [periodWeekendRule]: un valor nuevo no
+     * le revienta el perfil a un APK viejo, que además lo ignora (`ignoreUnknownKeys`) y sigue contando
+     * por mes con [periodCutoffDay] como corte. Se lee con [frecuenciaDelPeriodoDe].
+     */
+    val periodFrequency: String = FrecuenciaDelPeriodo.MENSUAL.name,
+    /** Vuelta 105 · QUINCENAL: el segundo día de la quincena (el primero es [periodCutoffDay]). */
+    val periodSecondDay: Int? = null,
+    /**
      * Días de anticipación del aviso de vencimiento. Nunca `null` en la respuesta: cae al default
      * del lado del server, igual que [avatarColor] y [periodCutoffDay].
      */
@@ -160,6 +169,15 @@ data class UpdateProfileRequest(
      * [SiElCorteCaeEnFinDeSemana]. `null` = no tocar; un nombre que no existe se rechaza.
      */
     val periodWeekendRule: String? = null,
+    /**
+     * Vuelta 105 · «MENSUAL» o «QUINCENAL». `null` = no tocar. Con «QUINCENAL» hacen falta los dos días
+     * ([periodCutoffDay] y [periodSecondDay], o los guardados) y que armen quincenas sanas
+     * ([esQuincenaValida]); si no, se rechaza. Cambiar de frecuencia vacía las excepciones a mano: sus
+     * claves serían de la otra forma.
+     */
+    val periodFrequency: String? = null,
+    /** Vuelta 105 · el segundo día de la quincena, 1..31. `null` = no tocar. */
+    val periodSecondDay: Int? = null,
     /** Días de aviso, 0..30. `null` = no tocar. */
     val reminderLeadDays: Int? = null,
     /**

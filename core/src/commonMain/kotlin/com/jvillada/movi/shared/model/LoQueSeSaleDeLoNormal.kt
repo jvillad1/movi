@@ -265,6 +265,8 @@ fun categoriasPorEncima(
     nombreDeCuenta: Map<String, String>,
     diaDe: (Long) -> String,
     fijosDelPeriodo: List<FinancialEvent> = emptyList(),
+    /** Vuelta 105 · [DIFERENCIA_MINIMA_DE_CATEGORIA] llevada al período (`umbralDelPeriodo`). */
+    diferenciaMinima: Long = DIFERENCIA_MINIMA_DE_CATEGORIA,
 ): List<Anomalia> {
     if (anteriores.isEmpty()) return emptyList()
     fun porCategoria(eventos: List<FinancialEvent>) = eventos
@@ -277,7 +279,7 @@ fun categoriasPorEncima(
         val gastado = eventos.sumOf { montoContado(it) }
         val promedio = antes.sumOf { it[categoria] ?: 0L } / antes.size
         val diferencia = gastado - promedio
-        if (diferencia < DIFERENCIA_MINIMA_DE_CATEGORIA) return@mapNotNull null
+        if (diferencia < diferenciaMinima) return@mapNotNull null
         if (promedio > 0L && gastado * 10 < promedio * VECES_SOBRE_EL_PROMEDIO_X10) return@mapNotNull null
         val fijosAca = fijos[categoria] ?: 0L
         val llevas = if (fijosAca > 0L) {

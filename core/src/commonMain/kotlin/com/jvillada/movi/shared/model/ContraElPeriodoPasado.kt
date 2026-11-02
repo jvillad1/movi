@@ -56,9 +56,13 @@ fun anteriorAMismaAltura(ahora: Long, settings: PeriodSettings): AnteriorAMismaA
     val inicio = inicioDelPeriodo(enCurso, settings)
     // Contando el primero y hoy: el primer día del período es el día 1, nunca el 0.
     val transcurridos = (inicio.daysUntil(hoy) + 1).coerceAtLeast(1)
-    val inicioDelAnterior = inicioDelPeriodo(periodoAnterior(enCurso), settings)
-    // El anterior termina donde arranca el en curso (ver [ventanaDe]): nunca se pasa de ahí.
-    val corte = minOf(inicioDelAnterior.plus(transcurridos, DateTimeUnit.DAY), inicio)
+    // Vuelta 105 · el anterior es el homólogo (D6): en la quincena, la misma quincena del mes pasado.
+    val homologo = periodoHomologo(enCurso, settings)
+    val inicioDelAnterior = inicioDelPeriodo(homologo, settings)
+    // El anterior termina donde arranca el que le sigue (ver [ventanaDe]; en el mensual, el en curso):
+    // nunca se pasa de ahí.
+    val finDelAnterior = inicioDelPeriodo(periodoSiguiente(homologo, settings), settings)
+    val corte = minOf(inicioDelAnterior.plus(transcurridos, DateTimeUnit.DAY), finDelAnterior)
     return AnteriorAMismaAltura(
         ventana = enEpoch(inicioDelAnterior) until enEpoch(corte),
         dias = inicioDelAnterior.daysUntil(corte),
