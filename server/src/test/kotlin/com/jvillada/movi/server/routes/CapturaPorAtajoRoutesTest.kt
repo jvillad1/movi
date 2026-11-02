@@ -19,6 +19,7 @@ import com.jvillada.movi.shared.model.CodigoDeCapturaNuevo
 import com.jvillada.movi.shared.model.ORIGEN_DE_APPLE_PAY
 import com.jvillada.movi.shared.model.SMS_STATE_PENDING
 import io.ktor.client.HttpClient
+import io.ktor.client.call.body
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -381,5 +382,21 @@ class CapturaPorAtajoRoutesTest {
         } finally {
             raiz.detachAppender(registro)
         }
+    }
+
+    // ── Los atajos firmados ────────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `el atajo de mensajes firmado se sirve y el de Apple Pay no, y la lectura del codigo lo dice`() = conApp {
+        val r = client.get("/atajos/movi-mensaje.shortcut")
+        assertEquals(HttpStatusCode.OK, r.status)
+        val bytes = r.body<ByteArray>()
+        assertEquals("AEA1", String(bytes.copyOfRange(0, 4)), "un atajo firmado empieza con la cabecera AEA1")
+        assertTrue(r.headers[HttpHeaders.ContentDisposition].orEmpty().contains("movi-mensaje.shortcut"))
+        assertEquals(HttpStatusCode.NotFound, client.get("/atajos/movi-apple-pay.shortcut").status)
+        assertEquals(HttpStatusCode.NotFound, client.get("/atajos/..%2Fapplication.conf").status)
+        val leido = client.leerCodigo()
+        assertTrue(leido.atajoDeMensajes)
+        assertFalse(leido.atajoDeApplePay)
     }
 }

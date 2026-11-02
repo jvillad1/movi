@@ -22,12 +22,14 @@ import com.jvillada.movi.shared.model.ORIGEN_DE_APPLE_PAY
 import com.jvillada.movi.shared.model.RUTA_DEL_ATAJO_DE_APPLE_PAY
 import com.jvillada.movi.shared.model.RUTA_DEL_ATAJO_DE_MENSAJES
 import com.jvillada.movi.shared.model.marcaDelRemitente
+import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.log
 import io.ktor.server.plugins.origin
 import io.ktor.server.response.respond
+import io.ktor.server.response.respondBytes
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
@@ -149,9 +151,24 @@ private fun idDelAtajo(uid: String, texto: String, tiempo: String): String =
         .joinToString("") { "%02x".format(it) }
         .take(32)
 
-/** ¿Están en el server los atajos firmados? Se sirven desde `static/` (ver `scripts/generar-atajos.py`). */
+/**
+ * Los atajos firmados que el server sabe servir, por su nombre de archivo. Viven en los recursos del JAR
+ * (`server/src/main/resources/atajos/`, los escribe `scripts/generar-atajos.py`), no en `static/`: esa
+ * carpeta está en `.gitignore` porque ahí copia la web el armado.
+ */
+private val ATAJOS_QUE_SE_SIRVEN = setOf(
+    RUTA_DEL_ATAJO_DE_MENSAJES.substringAfterLast('/'),
+    RUTA_DEL_ATAJO_DE_APPLE_PAY.substringAfterLast('/'),
+)
+
+private fun bytesDelAtajo(archivo: String): ByteArray? =
+    archivo.takeIf { it in ATAJOS_QUE_SE_SIRVEN }
+        ?.let { CodigoDeCapturaRecursos::class.java.classLoader.getResourceAsStream("atajos/$it") }
+        ?.use { it.readBytes() }
+
+/** ¿Está en el server el atajo firmado de [ruta]? */
 private fun hayAtajoFirmado(ruta: String): Boolean =
-    CodigoDeCapturaRecursos::class.java.classLoader.getResource("static${ruta}") != null
+    CodigoDeCapturaRecursos::class.java.classLoader.getResource("atajos/${ruta.substringAfterLast('/')}") != null
 
 private object CodigoDeCapturaRecursos
 
@@ -369,6 +386,20 @@ private suspend fun guardarElPago(uid: String, aviso: AvisoDelAtajo, ahora: Long
     registrarLaCaptura(uid, if (guardado) "GUARDADO" else "YA_ESTABA", esPago = true, avisoId = id, ahora)
     return HttpStatusCode.Accepted to
         if (guardado) RespuestaDelAtajo(true, id = id) else RespuestaDelAtajo(false, "Ese pago ya estaba en la bandeja.")
+}
+
+/**
+ * `GET /atajos/{archivo}`: el atajo firmado, para instalarlo con un toque desde el iPhone. Pública: el
+ * atajo no trae nada de nadie (el código se pega al importarlo). Solo los nombres de
+ * [ATAJOS_QUE_SE_SIRVEN]; cualquier otro, 404.
+ */
+fun Route.atajosRoutes() {
+    get("/atajos/{archivo}") {
+        val archivo = call.parameters["archivo"].orEmpty()
+        val bytes = bytesDelAtajo(archivo) ?: return@get call.respond(HttpStatusCode.NotFound)
+        call.response.headers.append(HttpHeaders.ContentDisposition, "attachment; filename=\"$archivo\"")
+        call.respondBytes(bytes, ContentType.Application.OctetStream)
+    }
 }
 
 /** `GET/POST/DELETE /api/captura/codigo`: autenticadas. El código se ve una sola vez, en el POST. */

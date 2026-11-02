@@ -72,6 +72,7 @@ fun Application.configureRouting() {
         // Pública porque Atajos no tiene sesión de Movi; la protege el código de captura, que viaja en
         // `Authorization: Bearer`, nunca en la ruta. Ver CapturaPorAtajoRoutes.kt.
         capturaPorAtajoRoutes()
+        atajosRoutes()                    // public — los atajos firmados, para instalarlos con un toque
         // El CONTENIDO de un documento va fuera del bloque autenticado a propósito: se abre
         // desde el navegador, que no puede mandar `Authorization`. Lo protege un token de
         // descarga aparte —otra audiencia, un solo documento, cinco minutos—. Ver
