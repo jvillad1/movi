@@ -68,7 +68,7 @@ steps (no Android Studio or Xcode UI required).
 ## Testing
 
 ```bash
-./gradlew --rerun-tasks :core:jvmTest :server:test :shared:testDebugUnitTest :shared:compileKotlinWasmJs
+./gradlew --rerun-tasks :core:jvmTest :server:test :shared:testDebugUnitTest :shared:compileKotlinWasmJs :androidApp:compileDirectaDebugKotlin :androidApp:compilePlayDebugKotlin
 ```
 
 This is exactly what CI runs on every PR — nothing more, nothing less. **Never run

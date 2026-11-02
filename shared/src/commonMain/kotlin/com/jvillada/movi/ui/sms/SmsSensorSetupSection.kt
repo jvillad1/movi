@@ -36,3 +36,15 @@ expect fun SmsSensorSetupSection(onSynced: () -> Unit, conAccionPrincipal: Boole
  */
 @Composable
 expect fun rememberSmsCaptureReady(): Boolean
+
+/**
+ * Vuelta 109 · **¿Esta instalación lee SMS?** Solo la versión de Android que se baja por fuera de la
+ * tienda (`directa`) pide los permisos de SMS; la de Google Play (`play`) no, y la web y iOS nunca.
+ * En Android lo decide el manifiesto instalado (`elAparatoPuedeLeerSms`), no un flag de build.
+ *
+ * No dice si el permiso está **concedido** (eso es [rememberSmsCaptureReady]): dice si tiene sentido
+ * ofrecerlo. Con `false`, Android hace lo de la web: la captura es por las notificaciones del banco
+ * (que la web no tiene), el correo y los extractos, y ningún texto promete leer SMS.
+ */
+@Composable
+expect fun rememberEsteAparatoLeeSms(): Boolean

@@ -36,6 +36,8 @@ import androidx.compose.material.icons.rounded.Flag
 import androidx.compose.material.icons.rounded.Inbox
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Password
+import androidx.compose.material.icons.rounded.Gavel
+import androidx.compose.material.icons.rounded.PrivacyTip
 import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.Savings
@@ -134,6 +136,7 @@ import com.jvillada.movi.ui.profile.textoDelInicioDelMes
 import com.jvillada.movi.ui.sms.tituloDeCapturaDelBanco
 import com.jvillada.movi.ui.primeruso.rememberPrimerosPasos
 import com.jvillada.movi.ui.primeruso.modoDeCapturaDe
+import com.jvillada.movi.ui.sms.rememberEsteAparatoLeeSms
 import com.jvillada.movi.shared.model.pasosQueFaltan
 import kotlinx.coroutines.launch
 import com.jvillada.movi.platform.elLectorDePantallaLeeLaApp
@@ -273,7 +276,9 @@ fun MasScreen(
     val guiaIncompleta = rememberPrimerosPasos(DashboardDataCache.data, modoDeCapturaDe(esAndroid))?.let { pasosQueFaltan(it) > 0 } == true
 
     // Vuelta 31: la dirección de Movi para reenviar los correos del banco, solo donde no se leen SMS.
-    val direccionDeMovi = if (!esAndroid) rememberDireccionDeMovi() else remember { DireccionDeMovi() }
+    // Vuelta 109: también en el teléfono con la versión de Play, que no lee SMS (lo dice su manifiesto).
+    val leeSms = esAndroid && rememberEsteAparatoLeeSms()
+    val direccionDeMovi = if (!leeSms) rememberDireccionDeMovi() else remember { DireccionDeMovi() }
 
     // Vuelta 38: «Tú» es la raíz de su pestaña. Re-tocarla sube al principio (las dos columnas en la
     // pantalla ancha), y la rueda del mouse sobre los márgenes mueve la lista.
@@ -345,7 +350,7 @@ fun MasScreen(
                     // «Captura del banco» en Android, «Mensajes del banco» donde no hay captura.
                     FilaQueLleva(
                         tituloDeCapturaDelBanco,
-                        if (esAndroid) Icons.Rounded.Sms else Icons.Rounded.Inbox,
+                        if (leeSms) Icons.Rounded.Sms else Icons.Rounded.Inbox,
                         Screen.CapturaDelBanco,
                         onNavigate,
                     )
@@ -361,7 +366,7 @@ fun MasScreen(
                     // dirección y el paso a paso, con la misma pieza de la guía de primer uso.
                     // Vuelta 76: solo con una dirección de verdad (`seVeLaFilaDeCorreo`): nunca una fila
                     // muerta que diga «Todavía no está disponible».
-                    if (seVeLaFilaDeCorreo(esAndroid, direccionDeMovi.direccion)) {
+                    if (seVeLaFilaDeCorreo(leeSms, direccionDeMovi.direccion)) {
                         Separador()
                         FilaDeAlertasPorCorreo(direccionDeMovi, onAbrir = { showCorreo = true })
                     }
@@ -617,6 +622,24 @@ fun MasScreen(
                         subtitulo = if (cerrandoTodas) "Cerrando…" else null,
                         lineasDelSubtitulo = 2,
                         onClick = if (cerrandoTodas) null else ({ errorCierreTotal = null; confirmarCierreTotal = true }),
+                    )
+                    // Vuelta 109: la política de privacidad y los términos (las páginas del server que
+                    // piden las tiendas), en el navegador.
+                    Separador()
+                    Fila(
+                        titulo = com.jvillada.movi.ui.legal.TITULO_PRIVACIDAD,
+                        subtitulo = "Qué datos guarda Movi y cómo borrarlos",
+                        lineasDelSubtitulo = 2,
+                        inicio = { IconoDeAjuste(Icons.Rounded.PrivacyTip) },
+                        final = { Chevron() },
+                        onClick = { runCatching { uriHandler.openUri(com.jvillada.movi.ui.legal.urlDePrivacidad()) } },
+                    )
+                    Separador()
+                    Fila(
+                        titulo = com.jvillada.movi.ui.legal.TITULO_TERMINOS,
+                        inicio = { IconoDeAjuste(Icons.Rounded.Gavel) },
+                        final = { Chevron() },
+                        onClick = { runCatching { uriHandler.openUri(com.jvillada.movi.ui.legal.urlDeTerminos()) } },
                     )
                 }
                 NotaDeSeccion(errorCierreTotal, esError = true)
@@ -980,10 +1003,10 @@ private fun SeccionEntrarConHuella() {
             )
         }
         // Lo que la fila no alcanza a decir: el aviso, o el alcance exacto (tapa la app, NO cifra la
-        // sesión: por eso la captura de SMS sigue sola).
+        // sesión: por eso la captura del banco sigue sola).
         NotaDeSeccion(
             avisoHuella ?: when {
-                activada -> "$EXPLICACION_HUELLA Tapa la app, no la cifra: tus SMS del banco se siguen subiendo solos aunque no abras Movi."
+                activada -> "$EXPLICACION_HUELLA Tapa la app, no la cifra: lo que avisa tu banco se sigue subiendo solo aunque no abras Movi."
                 estado == EstadoDeHuella.SIN_REGISTRAR -> "Este teléfono todavía no tiene huellas registradas."
                 else -> "Abre Movi con tu huella, sin escribir tu contraseña."
             },

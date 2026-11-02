@@ -76,7 +76,8 @@ internal const val SUBTITULO_QUE_VE_LA_IA =
     "Algunas funciones de Movi usan Claude, la IA de Anthropic. Esto es lo que le llega y lo que no."
 
 internal const val SE_MANDA_EL_CHAT =
-    "Movi AI, cuando le escribes: un resumen de tus cuentas y movimientos para poder contestarte."
+    "Movi AI, cuando le escribes: tu mensaje, los anteriores de la conversación y un resumen de tus " +
+        "cuentas y movimientos para poder contestarte."
 internal const val SE_MANDA_LOS_RECUERDOS =
     "Los recuerdos de «Lo que Movi sabe de ti», para que te entienda mejor."
 internal const val SE_MANDA_LA_FOTO =

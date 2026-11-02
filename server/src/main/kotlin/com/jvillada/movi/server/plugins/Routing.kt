@@ -77,6 +77,9 @@ fun Application.configureRouting() {
         // tiene sesión de Movi; la protege el token, que viaja en el fragmento y en el cuerpo del
         // POST, nunca en la ruta. Ver EnlaceCompartidoRoutes.kt.
         paginaCompartidaRoutes()
+        // Vuelta 109: privacidad, términos y cómo borrar la cuenta — las URL públicas que piden Google
+        // Play y el App Store. Sin sesión: las abre un revisor o alguien sin cuenta. Ver PaginasLegalesRoutes.kt.
+        paginasLegalesRoutes()
         // La descarga de «Descarga tus datos», por lo mismo que el contenido de un documento: la
         // abre el navegador, que no manda `Authorization`. La protege un permiso de dos minutos
         // con su propia audiencia y la versión de sesiones. Ver ExportRoutes.kt.

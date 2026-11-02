@@ -9,3 +9,7 @@ actual fun SmsSensorSetupSection(onSynced: () -> Unit, conAccionPrincipal: Boole
 
 @Composable
 actual fun rememberSmsCaptureReady(): Boolean = false
+
+/** Vuelta 109: aquí no hay SMS que leer. */
+@Composable
+actual fun rememberEsteAparatoLeeSms(): Boolean = false

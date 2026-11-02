@@ -28,6 +28,7 @@ import com.jvillada.movi.shared.db.DatabaseDriverFactory
 import com.jvillada.movi.sms.SmsBackfillWorker
 import com.jvillada.movi.sms.SmsFilterConfigStore
 import com.jvillada.movi.sms.SmsFilterRefreshWorker
+import com.jvillada.movi.sms.elAparatoPuedeLeerSms
 
 /**
  * `FragmentActivity` y no `ComponentActivity` por «Entrar con huella»: el `BiometricPrompt` de
@@ -61,11 +62,14 @@ class MainActivity : FragmentActivity() {
         // app ni de que haya habido una captura exitosa (ver SmsFilterRefreshWorker).
         SmsFilterRefreshWorker.schedule(applicationContext)
         // Y el barrido de SMS cada 6 horas: la captura en vivo se pierde mensajes cuando Android
-        // castiga a la app en segundo plano (ver SmsBackfillWorker).
-        SmsBackfillWorker.schedule(applicationContext)
-        // Y uno ahora mismo: abrir la app es cuando va a mirar los números, y el periódico puede
-        // estar a horas de su turno.
-        SmsBackfillWorker.barrerAhora(applicationContext)
+        // castiga a la app en segundo plano (ver SmsBackfillWorker). Vuelta 109: solo donde el
+        // manifiesto pide SMS (la versión de Drive); la de Play no los lee.
+        if (elAparatoPuedeLeerSms(applicationContext)) {
+            SmsBackfillWorker.schedule(applicationContext)
+            // Y uno ahora mismo: abrir la app es cuando va a mirar los números, y el periódico puede
+            // estar a horas de su turno.
+            SmsBackfillWorker.barrerAhora(applicationContext)
+        }
         // Vuelta 92: la vigía del listener de notificaciones, cada 6 h como el barrido (reconecta
         // o avisa UNA vez si se revocó el acceso), y una revisión ahora que solo reconecta.
         VigiaDeLaEscuchaWorker.programar(applicationContext)

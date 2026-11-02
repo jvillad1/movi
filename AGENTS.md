@@ -13,7 +13,7 @@ blind, but `CLAUDE.md` is the one that gets updated first. If the two ever disag
 - **Build with JetBrains Runtime 21**, not a plain OpenJDK — the Gradle daemon JVM is pinned to it.
 - **Test with exactly this command** (it's what CI runs, nothing more):
   ```bash
-  ./gradlew --rerun-tasks :core:jvmTest :server:test :shared:testDebugUnitTest :shared:compileKotlinWasmJs
+  ./gradlew --rerun-tasks :core:jvmTest :server:test :shared:testDebugUnitTest :shared:compileKotlinWasmJs :androidApp:compileDirectaDebugKotlin :androidApp:compilePlayDebugKotlin
   ```
 - **Never run `./gradlew build`** — it pulls in iOS release link tasks and takes ~48 minutes.
 - **All user-visible text is neutral Latin American Spanish (tuteo, no voseo)** — enforced by
