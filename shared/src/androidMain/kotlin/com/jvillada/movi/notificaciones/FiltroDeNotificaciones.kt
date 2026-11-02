@@ -85,6 +85,12 @@ data class NotificacionEntrante(
     val esResumenDeGrupo: Boolean,
     val cuando: Long,
     val llave: String = "",
+    /**
+     * Vuelta 107 · el `Notification.when` (epoch-ms): la hora que la app del banco le puso a SU aviso, que
+     * no cambia cuando la misma notificación se repone o se vuelve a entregar, y sí en un cobro nuevo. `0`
+     * si la app no lo pobló. Ver `anotarSiEsNueva`.
+     */
+    val emitida: Long = 0L,
 )
 
 /**

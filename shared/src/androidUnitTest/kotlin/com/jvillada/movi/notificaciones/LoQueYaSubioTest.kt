@@ -151,4 +151,39 @@ class LoQueYaSubioTest {
         assertEquals(listOf("k3", "k4", "k5"), memoria.porLlave.map { it.llave })
         assertEquals(listOf("h3", "h4", "h5"), memoria.huellas)
     }
+
+    // ── Vuelta 107 · dos compras iguales en Google Wallet ───────────────────
+
+    private val wallet = "com.google.android.apps.walletnfcrel"
+    private val conWallet = AppsQueAvisan(listOf(bancolombia, wallet))
+
+    /** Google Wallet avisa cada compra con la misma llave y el mismo texto; el `when` es el de cada compra. */
+    private fun deWallet(cuando: Long, emitida: Long) = NotificacionEntrante(
+        wallet, "TIENDA LIBERTARIO 93", "COP8,100 with Debito Mastercard ••4057",
+        esPersistente = false, esResumenDeGrupo = false, cuando = cuando, llave = "0|$wallet|1|null|10300", emitida = emitida,
+    )
+
+    @Test
+    fun `dos compras iguales a minutos distintos suben las dos`() {
+        val primera = procesarNotificaciones(listOf(deWallet(t0, emitida = t0)), conWallet, MemoriaDeLoSubido())
+        assertEquals(1, primera.subidas.size)
+        val segunda = procesarNotificaciones(listOf(deWallet(t0 + 6 * minuto, emitida = t0 + 6 * minuto)), conWallet, primera.memoria)
+        assertEquals(1, segunda.subidas.size, "otro cobro: el when de la app es otro")
+    }
+
+    @Test
+    fun `la misma compra repuesta por la app, con su mismo when, no sube otra vez`() {
+        val primera = procesarNotificaciones(listOf(deWallet(t0, emitida = t0)), conWallet, MemoriaDeLoSubido())
+        // Repuesta al desbloquear, tres minutos después: Android le pone otra hora de publicación.
+        val repuesta = procesarNotificaciones(listOf(deWallet(t0 + 3 * minuto, emitida = t0)), conWallet, primera.memoria)
+        assertTrue(repuesta.subidas.isEmpty())
+    }
+
+    @Test
+    fun `sin el when de la app sigue la ventana de la misma llave`() {
+        val primera = procesarNotificaciones(listOf(deWallet(t0, emitida = 0L)), conWallet, MemoriaDeLoSubido())
+        assertTrue(procesarNotificaciones(listOf(deWallet(t0 + 6 * minuto, emitida = 0L)), conWallet, primera.memoria).subidas.isEmpty())
+        // Una memoria de antes de esta vuelta (sin `emitida`) tampoco sabe: la ventana manda.
+        assertTrue(!esOtroAviso(0L, t0) && esOtroAviso(t0, t0 + minuto) && !esOtroAviso(t0, t0 + 30_000L))
+    }
 }

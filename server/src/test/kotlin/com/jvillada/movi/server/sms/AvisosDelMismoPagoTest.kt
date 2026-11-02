@@ -39,6 +39,9 @@ class AvisosDelMismoPagoTest {
         state: String = SMS_STATE_PENDING,
     ) = SmsMessage(id = id, time = time, bank = bank, text = text, state = state, det = "")
 
+    /** Un SMS de compra que no escribe su hora (otros bancos: «Compra aprobada $X en …»). */
+    private val delSmsSinHora by lazy { delSms.copy(text = "Bancolombia: Compraste \$12.300,00 en PANADERIA LA ESQ con tu T.Deb *1111.") }
+
     private val wallet = sms("w", "Notificación · Google Wallet", "PANADERIA LA ESQUINA: COP12,300 with Debito Mastercard ••1111")
     private val app = sms(
         "n", "Notificación · Bancolombia",
@@ -83,8 +86,10 @@ class AvisosDelMismoPagoTest {
     @Test
     fun `la cadena A, B, C se junta aunque A y C esten lejos`() {
         // A (Wallet, 9:00) ~ B (SMS, 9:08) ~ C (app del banco, 9:16): A y C a 16 minutos.
+        // Vuelta 107: un SMS que escribe su hora («a las 09:15») ya no se junta con una notificación lejos
+        // de esa hora (ver `DosComprasIgualesTest`); la cadena se prueba con uno que no la escribe.
         val a = wallet.copy(time = "2026-09-25 09:00")
-        val b = delSms.copy(time = "2026-09-25 09:08")
+        val b = delSmsSinHora.copy(time = "2026-09-25 09:08")
         val c = app.copy(time = "2026-09-25 09:16")
         assertEquals(listOf(setOf("w", "s", "n")), grupos(a, b, c))
     }
@@ -112,8 +117,9 @@ class AvisosDelMismoPagoTest {
     @Test
     fun `entre SMS y notificaciones, treinta minutos`() {
         assertEquals(30L, minutosParaElMismoPago("85540", "Notificación · Google Wallet"))
-        assertEquals(listOf(setOf("w", "s")), grupos(wallet, delSms.copy(time = "2026-09-25 09:45")))
-        assertEquals(emptyList(), grupos(wallet, delSms.copy(time = "2026-09-25 09:46")))
+        // Con un SMS que no escribe su hora (vuelta 107: el que la escribe va con su ventana corta).
+        assertEquals(listOf(setOf("w", "s")), grupos(wallet, delSmsSinHora.copy(time = "2026-09-25 09:45")))
+        assertEquals(emptyList(), grupos(wallet, delSmsSinHora.copy(time = "2026-09-25 09:46")))
     }
 
     /** El caso real del 2-oct: Google Wallet avisó 21 minutos después que la app de la tarjeta. */
