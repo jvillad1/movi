@@ -1436,6 +1436,9 @@ class WalletRepositoryImpl(
         client.delete("$baseUrl/api/captura/codigo").exigirExito()
     }
 
+    override suspend fun getAtajosDescartados(): com.jvillada.movi.shared.model.ResumenDeAtajosDescartados =
+        client.get("$baseUrl/api/captura/descartados").exigirExito().body()
+
     /** La comprobación de status del archivo, extraída para no repetirla cuatro veces. */
     private suspend fun HttpResponse.exigirExito(): HttpResponse {
         if (!status.isSuccess()) {

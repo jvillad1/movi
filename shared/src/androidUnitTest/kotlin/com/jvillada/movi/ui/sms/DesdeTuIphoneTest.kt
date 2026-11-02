@@ -22,6 +22,8 @@ import com.jvillada.movi.platform.HojaDeCompartir
 import com.jvillada.movi.platform.LocalHojaDeCompartir
 import com.jvillada.movi.shared.model.CodigoDeCaptura
 import com.jvillada.movi.shared.model.CodigoDeCapturaNuevo
+import com.jvillada.movi.shared.model.GrupoDeAtajosDescartados
+import com.jvillada.movi.shared.model.ResumenDeAtajosDescartados
 import com.jvillada.movi.shared.model.NOMBRE_DEL_ATAJO_DE_MENSAJES
 import com.jvillada.movi.theme.MoviTheme
 import org.junit.After
@@ -61,7 +63,11 @@ class DesdeTuIphoneTest {
     }
 
     /** Un server de mentira con un código: cuenta cuántos se crearon y cuántos se revocaron. */
-    private class ServerDeCodigos(var actual: CodigoDeCaptura) : RepositorioDePrueba() {
+    private class ServerDeCodigos(
+        var actual: CodigoDeCaptura,
+        val descartados: ResumenDeAtajosDescartados? = ResumenDeAtajosDescartados(),
+    ) : RepositorioDePrueba() {
+        override suspend fun getAtajosDescartados(): ResumenDeAtajosDescartados? = descartados
         var creados = 0
         var revocados = 0
         override suspend fun getCodigoDeCaptura(): CodigoDeCaptura = actual
@@ -200,6 +206,23 @@ class DesdeTuIphoneTest {
         assertTrue(hay("«$NOMBRE_DEL_ATAJO_DE_MENSAJES»"))
         assertTrue(hay(PRIVACIDAD_DE_LOS_ATAJOS))
         assertTrue(hay(TEXTO_DE_PRUEBA_DEL_ATAJO))
+    }
+
+    @Test
+    fun `lo que no se guardo se dice en una linea, y sin nada no se dice nada`() {
+        montar(
+            ServerDeCodigos(
+                CodigoDeCaptura(vigente = true, creadoEn = CREADO),
+                ResumenDeAtajosDescartados(grupos = listOf(GrupoDeAtajosDescartados("NO_ES_DEL_BANCO", 12))),
+            ),
+        )
+        assertEquals("12 mensajes no eran de un banco en los últimos 30 días.", textoDe(TAG_ATAJOS_DESCARTADOS))
+    }
+
+    @Test
+    fun `sin descartes no hay linea`() {
+        montar(ServerDeCodigos(CodigoDeCaptura(vigente = true, creadoEn = CREADO)))
+        composeRule.onNodeWithTag(TAG_ATAJOS_DESCARTADOS, useUnmergedTree = true).assertDoesNotExist()
     }
 
     @Test

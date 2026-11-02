@@ -34,6 +34,8 @@ import com.jvillada.movi.shared.model.NOMBRE_DEL_ATAJO_DE_MENSAJES
 import com.jvillada.movi.shared.model.RUTA_DEL_ATAJO_DE_APPLE_PAY
 import com.jvillada.movi.shared.model.RUTA_DEL_ATAJO_DE_MENSAJES
 import com.jvillada.movi.shared.model.RUTA_DE_LA_CAPTURA_POR_ATAJO
+import com.jvillada.movi.shared.model.ResumenDeAtajosDescartados
+import com.jvillada.movi.shared.model.textoDeAtajosDescartados
 import com.jvillada.movi.shared.model.lineaDelCodigoDeCaptura
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Medida
@@ -75,6 +77,9 @@ const val TAG_DESDE_TU_IPHONE: String = "desde-tu-iphone"
 
 /** El tag del código en claro, que se ve una sola vez. */
 const val TAG_CODIGO_DE_CAPTURA: String = "codigo-de-captura-en-claro"
+
+/** El tag de la línea de lo que llegó y no se guardó («12 mensajes no eran de un banco…»). */
+const val TAG_ATAJOS_DESCARTADOS: String = "atajos-descartados"
 
 /** El tag de la línea «Código creado el 2 nov · último aviso hace 2 h». */
 const val TAG_LINEA_DEL_CODIGO: String = "linea-del-codigo-de-captura"
@@ -193,9 +198,13 @@ fun DesdeTuIphone(
     var recetaAbierta by remember { mutableStateOf<String?>(null) }
     var lectura by remember { mutableStateOf(0) }
 
+    /** Lo que mandaron los atajos y no se guardó en 30 días; `null` mientras no se sabe. */
+    var descartados by remember { mutableStateOf<ResumenDeAtajosDescartados?>(null) }
+
     LaunchedEffect(lectura) {
         estado = intentar { Repositories.wallets.getCodigoDeCaptura() }
             .getOrNull()?.let { EstadoDelCodigo.Listo(it) } ?: EstadoDelCodigo.NoSePudo
+        descartados = intentar { Repositories.wallets.getAtajosDescartados() }.getOrNull()
     }
 
     fun crear() {
@@ -367,6 +376,11 @@ fun DesdeTuIphone(
                     icono = Icons.Rounded.ContentCopy,
                 )
             }
+        }
+        // Lo que llegó y no se guardó, como la línea de los correos descartados: nada se pierde en silencio.
+        descartados?.let(::textoDeAtajosDescartados)?.let { linea ->
+            Spacer(Modifier.height(Medida.dentroDeSeccion))
+            Text(linea, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.testTag(TAG_ATAJOS_DESCARTADOS))
         }
         Spacer(Modifier.height(Medida.dentroDeSeccion))
         Text(PRIVACIDAD_DE_LOS_ATAJOS, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)

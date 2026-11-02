@@ -18,6 +18,10 @@ import com.jvillada.movi.shared.model.ClaveDeUso
 import com.jvillada.movi.shared.model.CodigoDeCaptura
 import com.jvillada.movi.shared.model.CodigoDeCapturaNuevo
 import com.jvillada.movi.shared.model.EventoDeUso
+import com.jvillada.movi.shared.model.DIAS_DE_ATAJOS_DESCARTADOS
+import com.jvillada.movi.shared.model.GrupoDeAtajosDescartados
+import com.jvillada.movi.shared.model.MotivoDelAtajoDescartado
+import com.jvillada.movi.shared.model.ResumenDeAtajosDescartados
 import com.jvillada.movi.shared.model.ORIGEN_DEL_ATAJO
 import com.jvillada.movi.shared.model.ORIGEN_DE_APPLE_PAY
 import com.jvillada.movi.shared.model.RUTA_DEL_ATAJO_DE_APPLE_PAY
@@ -40,6 +44,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.greaterEq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.isNull
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.insert
@@ -111,8 +116,6 @@ internal data class RespuestaDelAtajo(
     val id: String? = null,
 )
 
-/** Por qué no se guardó lo que mandó un atajo (la columna `motivo` de `atajos_descartados`). */
-internal enum class MotivoDelAtajoDescartado { NO_ES_DEL_BANCO, VACIO }
 
 private val jsonDelAtajo = Json { ignoreUnknownKeys = true; isLenient = true }
 
@@ -267,6 +270,23 @@ internal suspend fun contarAtajoDescartado(uid: String, motivo: MotivoDelAtajoDe
     }
 }
 
+/**
+ * **Lo que los atajos de [uid] mandaron y no se guardó** en los últimos [DIAS_DE_ATAJOS_DESCARTADOS] días
+ * (hoy incluido), sumado por motivo. Solo los propios: la tabla no tiene filas de nadie.
+ */
+internal suspend fun atajosDescartadosDe(uid: String, ahora: Long): ResumenDeAtajosDescartados {
+    val hoy = Instant.ofEpochMilli(ahora).atZone(AppClock.zone).toLocalDate()
+    val desde = hoy.minusDays(DIAS_DE_ATAJOS_DESCARTADOS - 1L).toString()
+    val grupos = dbQuery {
+        AtajosDescartados.selectAll()
+            .where { (AtajosDescartados.userId eq uid) and (AtajosDescartados.dia greaterEq desde) }
+            .groupBy({ it[AtajosDescartados.motivo] }, { it[AtajosDescartados.cuantos] })
+            .map { (motivo, cuantos) -> GrupoDeAtajosDescartados(motivo, cuantos.sum()) }
+            .sortedBy { it.motivo }
+    }
+    return ResumenDeAtajosDescartados(grupos = grupos)
+}
+
 /** El evento del tracking del server: qué pasó y de qué clase era. Sin el texto. */
 private suspend fun registrarLaCaptura(uid: String, estado: String, esPago: Boolean, avisoId: String?, ahora: Long) {
     val dia = Instant.ofEpochMilli(ahora).atZone(AppClock.zone).toLocalDate().toString()
@@ -348,6 +368,8 @@ private suspend fun atajoRoute(call: ApplicationCall, ahora: Long) {
         return rechazarSinCodigo(call, if (codigo == null) "Falta el código de Movi." else "Ese código de Movi no sirve. Crea uno nuevo en la app.")
     }
     if (!RateLimiter.allow("captura-atajo:codigo:$codigoId", MAX_AVISOS_POR_MINUTO_POR_CODIGO, VENTANA_DEL_ATAJO_MS)) {
+        // Un atajo en bucle: se cuenta (sin el texto) para que «Desde tu iPhone» lo diga.
+        contarAtajoDescartado(uid, MotivoDelAtajoDescartado.DEMASIADOS, ahora)
         return call.respond(HttpStatusCode.TooManyRequests, RespuestaDelAtajo(false, "Demasiados avisos seguidos."))
     }
     val crudo = when (val leido = call.leerConTope(MAX_CUERPO_DEL_ATAJO)) {
@@ -428,12 +450,13 @@ fun Route.atajosRoutes() {
     }
 }
 
-/** `GET/POST/DELETE /api/captura/codigo`: autenticadas. El código se ve una sola vez, en el POST. */
+/** `GET/POST/DELETE /api/captura/codigo` y `GET /api/captura/descartados`: autenticadas. El código se ve una sola vez, en el POST. */
 fun Route.codigoDeCapturaRoutes(ahora: () -> Long = System::currentTimeMillis) {
     get("/api/captura/codigo") { call.respond(codigoDeCapturaDe(call.userId())) }
     post("/api/captura/codigo") {
         call.respond(HttpStatusCode.Created, crearCodigoDeCaptura(call.userId(), ahora()))
     }
+    get("/api/captura/descartados") { call.respond(atajosDescartadosDe(call.userId(), ahora())) }
     delete("/api/captura/codigo") {
         revocarCodigoDeCaptura(call.userId(), ahora())
         call.respond(HttpStatusCode.NoContent)

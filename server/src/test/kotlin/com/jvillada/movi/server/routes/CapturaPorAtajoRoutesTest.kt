@@ -284,6 +284,13 @@ class CapturaPorAtajoRoutesTest {
         assertEquals(listOf(Triple(duena, "NO_ES_DEL_BANCO", 1)), contados)
         client.avisar(codigo, mensaje("¿Vienes a comer?"))
         assertEquals(2, transaction { AtajosDescartados.selectAll().single()[AtajosDescartados.cuantos] })
+        // La app lo lee contado por motivo, solo lo propio.
+        val leido = client.get("/api/captura/descartados") { header(HttpHeaders.Authorization, "Bearer ${jwtDe(duena)}") }
+        assertEquals(HttpStatusCode.OK, leido.status)
+        val resumen = json.decodeFromString(com.jvillada.movi.shared.model.ResumenDeAtajosDescartados.serializer(), leido.bodyAsText())
+        assertEquals(listOf(com.jvillada.movi.shared.model.GrupoDeAtajosDescartados("NO_ES_DEL_BANCO", 2)), resumen.grupos)
+        val deOtra = client.get("/api/captura/descartados") { header(HttpHeaders.Authorization, "Bearer ${jwtDe(otra)}") }
+        assertTrue(json.decodeFromString(com.jvillada.movi.shared.model.ResumenDeAtajosDescartados.serializer(), deOtra.bodyAsText()).grupos.isEmpty())
     }
 
     @Test
@@ -395,6 +402,9 @@ class CapturaPorAtajoRoutesTest {
             assertEquals(HttpStatusCode.Accepted, client.avisar(codigo, mensaje("Bancolombia: Compraste \$${i + 1}.000,00 en X")).status)
         }
         assertEquals(HttpStatusCode.TooManyRequests, client.avisar(codigo, mensaje(smsDeBancolombia)).status)
+        // El 429 por código se cuenta, sin el texto.
+        val contados = transaction { AtajosDescartados.selectAll().map { it[AtajosDescartados.motivo] to it[AtajosDescartados.cuantos] } }
+        assertEquals(listOf("DEMASIADOS" to 1), contados)
     }
 
     @Test

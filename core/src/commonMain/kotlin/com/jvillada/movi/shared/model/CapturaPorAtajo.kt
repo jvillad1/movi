@@ -147,3 +147,55 @@ fun palabrasParaLaAutomatizacion(cuentas: List<Account>): List<String> =
         .distinct()
         .toList()
         .ifEmpty { listOf("Bancolombia") }
+
+/**
+ * **Por qué no se guardó lo que mandó un atajo** (la columna `motivo` de `atajos_descartados`). Nunca se
+ * guarda el texto: solo cuántos por día y motivo.
+ */
+enum class MotivoDelAtajoDescartado {
+    /** Un mensaje que no pasó el filtro de bancos (un SMS personal). */
+    NO_ES_DEL_BANCO,
+    /** Llegó sin texto, o un pago sin ningún dato. */
+    VACIO,
+    /** Pasó el límite de avisos por minuto de un código (en el server): un atajo en bucle. */
+    DEMASIADOS,
+}
+
+/** Cuántos atajos se descartaron por un mismo [motivo] (el nombre del enum) en la ventana. */
+@Serializable
+data class GrupoDeAtajosDescartados(val motivo: String, val cuantos: Int)
+
+/** `GET /api/captura/descartados`: lo que mandaron los atajos del dueño y no se guardó, en los últimos [dias] días. */
+@Serializable
+data class ResumenDeAtajosDescartados(
+    val dias: Int = DIAS_DE_ATAJOS_DESCARTADOS,
+    val grupos: List<GrupoDeAtajosDescartados> = emptyList(),
+)
+
+/** La ventana que se cuenta, como la de los correos: los últimos 30 días. */
+const val DIAS_DE_ATAJOS_DESCARTADOS: Int = 30
+
+/**
+ * **La línea de «Desde tu iPhone»**, como la de los correos descartados, o `null` si no hay nada que decir:
+ * «12 mensajes no eran de un banco en los últimos 30 días.» y, si pasó, «3 avisos llegaron demasiado
+ * seguidos y no se guardaron.» y «2 avisos llegaron vacíos.».
+ */
+fun textoDeAtajosDescartados(resumen: ResumenDeAtajosDescartados): String? {
+    fun cuantos(motivo: MotivoDelAtajoDescartado) = resumen.grupos.filter { it.motivo == motivo.name }.sumOf { it.cuantos }
+    val noDelBanco = cuantos(MotivoDelAtajoDescartado.NO_ES_DEL_BANCO)
+    val demasiados = cuantos(MotivoDelAtajoDescartado.DEMASIADOS)
+    val vacios = cuantos(MotivoDelAtajoDescartado.VACIO)
+    val frases = buildList {
+        if (noDelBanco > 0) {
+            add(
+                (if (noDelBanco == 1) "1 mensaje no era de un banco" else "$noDelBanco mensajes no eran de un banco") +
+                    " en los últimos ${resumen.dias} días.",
+            )
+        }
+        if (demasiados > 0) {
+            add(if (demasiados == 1) "1 aviso llegó demasiado seguido y no se guardó." else "$demasiados avisos llegaron demasiado seguidos y no se guardaron.")
+        }
+        if (vacios > 0) add(if (vacios == 1) "1 aviso llegó vacío." else "$vacios avisos llegaron vacíos.")
+    }
+    return frases.takeIf { it.isNotEmpty() }?.joinToString(" ")
+}

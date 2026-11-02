@@ -92,4 +92,25 @@ class CapturaPorAtajoTest {
             ),
         )
     }
+
+    @Test
+    fun `la linea de lo descartado dice cuantos y por que`() {
+        assertNull(textoDeAtajosDescartados(ResumenDeAtajosDescartados()))
+        assertEquals(
+            "12 mensajes no eran de un banco en los últimos 30 días. 3 avisos llegaron demasiado seguidos y no se guardaron.",
+            textoDeAtajosDescartados(
+                ResumenDeAtajosDescartados(
+                    grupos = listOf(GrupoDeAtajosDescartados("NO_ES_DEL_BANCO", 12), GrupoDeAtajosDescartados("DEMASIADOS", 3)),
+                ),
+            ),
+        )
+        assertEquals(
+            "1 mensaje no era de un banco en los últimos 30 días. 1 aviso llegó vacío.",
+            textoDeAtajosDescartados(
+                ResumenDeAtajosDescartados(grupos = listOf(GrupoDeAtajosDescartados("NO_ES_DEL_BANCO", 1), GrupoDeAtajosDescartados("VACIO", 1))),
+            ),
+        )
+        // Un motivo de un server más nuevo no rompe nada: no se dice.
+        assertNull(textoDeAtajosDescartados(ResumenDeAtajosDescartados(grupos = listOf(GrupoDeAtajosDescartados("OTRO", 2)))))
+    }
 }

@@ -1153,6 +1153,9 @@ interface WalletRepository {
     /** `DELETE /api/captura/codigo`: lo revoca. Lo que mande un atajo con él da 401. */
     suspend fun revocarCodigoDeCaptura(): Unit =
         throw UnsupportedOperationException("Este repositorio no revoca códigos de captura")
+
+    /** `GET /api/captura/descartados`: lo que mandaron los atajos y no se guardó, contado por motivo. `null` = no se sabe. */
+    suspend fun getAtajosDescartados(): com.jvillada.movi.shared.model.ResumenDeAtajosDescartados? = null
     suspend fun importStatement(decision: ImportDecision)
     suspend fun getStatementImports(): List<StatementImport>
     suspend fun getStatementImportDetail(id: String): StatementImportDetail
