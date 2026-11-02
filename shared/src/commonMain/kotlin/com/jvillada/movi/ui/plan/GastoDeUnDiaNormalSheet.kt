@@ -34,10 +34,12 @@ import com.jvillada.movi.ui.components.formatMoneyCompact
 /*
  * # Vuelta 108 · «Gasto de un día normal», en la caja de Pagos
  *
- * La proyección del héroe y la caja restan cada día un gasto del día a día. Movi lo estima (sin compras con
- * tarjeta ni gastos de una sola vez, ver `gastoDelDiaADia` en `:core`), pero el dueño puede escribir el suyo:
- * se guarda en el server (`UserProfile.gastoDeUnDiaNormal`, `PUT /api/users/me`) y reemplaza el estimado en
- * la caja, en el héroe del Inicio y en Movi AI. Opcional: «El de Movi» vuelve al estimado (guarda 0).
+ * La proyección del héroe y la caja restan cada día un gasto del día a día, y son dos supuestos (ver
+ * `GastoDelDiaADia` en `:core`): el del héroe es **todo** lo que se gasta en un día normal, con tarjeta o en
+ * efectivo; el de la caja, solo lo que sale en efectivo (lo de la tarjeta sale cuando pagas la tarjeta). Los
+ * dos sin gastos de una sola vez. El dueño puede escribir el suyo, que es TODO lo que gasta: se guarda en el
+ * server (`UserProfile.gastoDeUnDiaNormal`, `PUT /api/users/me`); el héroe lo usa tal cual y la caja solo su
+ * parte en efectivo (la de su historial; sin historial, todo). Opcional: «El de Movi» vuelve al estimado.
  */
 
 /** El título de la hoja y el rótulo de la fila de la caja. */
@@ -47,13 +49,17 @@ const val GASTO_DE_UN_DIA_NORMAL: String = "Gasto de un día normal"
 const val TAG_FILA_DEL_SUPUESTO: String = "caja-fila-del-supuesto"
 
 /**
- * Lo que dice la fila del supuesto en la caja: «$91.000 por día · lo estima Movi» o «$120.000 por día · lo
- * elegiste tú»; sin nada con qué estimar, que no hay estimado todavía. Pura.
+ * Lo que dice la fila del supuesto en la caja: el gasto de un día normal (todo, el del héroe) y la parte en
+ * efectivo que resta la caja. «$143.000 por día · $91.000 en efectivo · lo estima Movi» o «$120.000 por día ·
+ * $90.000 en efectivo · lo elegiste tú»; sin nada con qué estimar, que no hay estimado todavía. Pura.
  */
 fun textoDelSupuesto(gasto: GastoDelDiaADia): String {
-    val porDia = gasto.porDia ?: return "Movi todavía no lo puede estimar: escribe el tuyo"
-    return if (gasto.elegido != null) "${formatCOP(porDia)} por día · lo elegiste tú"
-    else "${formatCOP(redondeadoAMil(porDia))} por día · lo estima Movi"
+    val todo = gasto.delHeroe ?: return "Movi todavía no lo puede estimar: escribe el tuyo"
+    val enEfectivo = gasto.porDia
+    val elegido = gasto.elegido != null
+    fun cifra(monto: Long) = formatCOP(if (elegido) monto else redondeadoAMil(monto))
+    val efectivo = if (enEfectivo != null && enEfectivo != todo) " · ${cifra(enEfectivo)} en efectivo" else ""
+    return "${cifra(todo)} por día$efectivo · " + if (elegido) "lo elegiste tú" else "lo estima Movi"
 }
 
 /** Guardar el gasto de un día normal: `null` vuelve al estimado de Movi (el server guarda 0 como «ninguno»). */
@@ -83,7 +89,7 @@ fun GastoDeUnDiaNormalSheet(
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
             EncabezadoDeHoja(
                 GASTO_DE_UN_DIA_NORMAL,
-                subtitulo = "Movi lo resta cada día hasta que te paguen para decirte si te alcanza. No mueve plata.",
+                subtitulo = "Todo lo que gastas en un día cualquiera, con tarjeta o en efectivo. No mueve plata.",
             )
             Spacer(Modifier.height(Medida.entreSecciones))
             GrupoDeCampos("Cuál usar") {
@@ -96,7 +102,8 @@ fun GastoDeUnDiaNormalSheet(
                         monto, { monto = it },
                         rotulo = "Por día",
                         ejemplo = "90.000",
-                        ayuda = "Lo que se te va en un día cualquiera: comida, transporte, salidas. Sin tus pagos fijos.",
+                        ayuda = "Con tarjeta y en efectivo: comida, transporte, salidas. Sin tus pagos fijos. " +
+                            "El Inicio lo resta entero; la caja de Pagos, solo ${parteEnEfectivo(actual)}.",
                         habilitado = !saving,
                     )
                 } else {
@@ -122,21 +129,28 @@ fun GastoDeUnDiaNormalSheet(
 }
 
 /**
+ * «la parte que pagas en efectivo (el 63 %)», o «todo» sin historial con qué medirla. Pura.
+ */
+fun parteEnEfectivo(gasto: GastoDelDiaADia): String {
+    val sinHistorial = gasto.periodos.sumOf { it.total + it.conTarjeta } <= 0L
+    if (sinHistorial) return "todo, porque todavía no hay historial para saber cuánto pagas con tarjeta"
+    return "la parte que pagas en efectivo (el ${kotlin.math.round(gasto.proporcionEnEfectivo * 100).toInt()} % en tu historial)"
+}
+
+/**
  * Lo que dice la hoja del estimado de Movi: la cifra y lo que deja fuera. «$91.000 por día, el promedio de
  * tus últimos 2 períodos sin las compras con tarjeta ($3,1M, se pagan cuando pagas la tarjeta) ni 5 gastos
  * de una sola vez ($18,4M; el más grande, Gardenera).» Pura.
  */
 fun loQueEstimaMovi(gasto: GastoDelDiaADia): String {
-    val estimado = gasto.estimado ?: return "Todavía no hay un período cerrado para estimarlo."
+    val todo = gasto.estimadoConTarjetas ?: gasto.estimado ?: return "Todavía no hay un período cerrado para estimarlo."
     val periodos = if (gasto.periodos.size == 1) "tu último período" else "tus últimos ${gasto.periodos.size} períodos"
-    val fuera = buildList {
-        if (gasto.conTarjeta > 0L) add("las compras con tarjeta (${formatMoneyCompact(gasto.conTarjeta)}, se pagan cuando pagas la tarjeta)")
-        val deUnaVez = gasto.deUnaVez
-        if (deUnaVez.isNotEmpty()) {
-            val cuantos = if (deUnaVez.size == 1) "1 gasto de una sola vez" else "${deUnaVez.size} gastos de una sola vez"
-            add("$cuantos (${formatMoneyCompact(deUnaVez.sumOf { it.monto })}; el más grande, ${deUnaVez.first().nombre})")
-        }
+    val deUnaVez = gasto.deUnaVez
+    val sin = if (deUnaVez.isEmpty()) "" else {
+        val cuantos = if (deUnaVez.size == 1) "1 gasto de una sola vez" else "${deUnaVez.size} gastos de una sola vez"
+        " sin $cuantos (${formatMoneyCompact(deUnaVez.sumOf { it.monto })}; el más grande, ${deUnaVez.first().nombre})"
     }
-    val sin = if (fuera.isEmpty()) "" else " sin " + fuera.joinToString(" ni ")
-    return "${formatCOP(redondeadoAMil(estimado))} por día, el promedio de $periodos$sin."
+    val efectivo = gasto.estimado?.takeIf { gasto.conTarjeta > 0L }
+        ?.let { " La caja de Pagos resta solo lo que sale en efectivo: ${formatCOP(redondeadoAMil(it))} por día." }.orEmpty()
+    return "${formatCOP(redondeadoAMil(todo))} por día con tarjeta y en efectivo, el promedio de $periodos$sin.$efectivo"
 }

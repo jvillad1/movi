@@ -55,17 +55,20 @@ class CajaEnHoyTest {
 
     private val ajustes = PeriodSettings(cutoffDay = 25)
 
+    /** Vuelta 108 (revisión): un día fijo, lejos del cierre (el último día del período no hay proyección). */
+    private val hoy = kotlinx.datetime.LocalDate(2026, 11, 2)
+
     /** El período de hoy (el héroe usa el reloj de la app): la caja mira desde hoy hasta el siguiente. */
     private fun datos(saldo: Long, gastado: Long = 0L) = DashboardData(
         accounts = listOf(Account("acc-banco", "Bancolombia", AccountType.SAVINGS, saldo, "COP")),
         // Vuelta 108: el renglón es la proyección de la cifra del héroe, que necesita el resumen del período.
         summary = com.jvillada.movi.shared.model.FinanceSummary(scope = com.jvillada.movi.shared.model.Scope.SELF, balance = 0, ingresos = 0, egresos = 0),
         plataDelDisponible = PlataDelDisponible(saldoAlInicio = saldo, entradas = 0L, guardado = 0L),
-        gastoVariablePorDia = mapOf(com.jvillada.movi.shared.time.epochMillisToAppDate(Clock.System.now().toEpochMilliseconds()).toString() to gastado),
+        gastoVariablePorDia = mapOf(hoy.toString() to gastado),
         upcoming = emptyList(),
         ocurrencias = emptyList(),
         ajustesDePeriodo = ajustes,
-        periodoActual = periodoActual(Clock.System.now().toEpochMilliseconds(), ajustes),
+        periodoActual = com.jvillada.movi.shared.model.periodoDeLaFecha(hoy.toString(), ajustes),
     )
 
     private fun montar(data: DashboardData) {
@@ -78,12 +81,14 @@ class CajaEnHoyTest {
         composeRule.setContent {
             MoviTheme {
                 Box(Modifier.fillMaxSize()) {
+                    androidx.compose.runtime.CompositionLocalProvider(LocalHoyDelInicio provides hoy) {
                     SduiRenderer(
                         definition = defaultDashboardDefinition(),
                         data = data,
                         modifier = Modifier.fillMaxSize(),
                         onNavigate = { navegado += it },
                     )
+                    }
                 }
             }
         }

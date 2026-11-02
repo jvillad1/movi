@@ -67,7 +67,7 @@ const val EL_EFECTIVO_NO_CAMBIA_DE_TIPO: String =
 
 /** Lo que se dice cuando una inversión cambiaría de tipo, o una cuenta pasaría a ser inversión. */
 const val UNA_INVERSION_NO_CAMBIA_DE_TIPO: String =
-    "Una inversión no cuenta en tu disponible ni en tus períodos: no cambia de tipo. Crea la otra cuenta."
+    "Una inversión no cuenta en lo libre para gastar ni en tus períodos: no cambia de tipo. Crea la otra cuenta."
 
 /** Los tipos entre los que una cuenta se puede cambiar: Ahorros y Corriente. */
 val TIPOS_QUE_SE_INTERCAMBIAN: Set<AccountType> = setOf(AccountType.SAVINGS, AccountType.CHECKING)

@@ -342,20 +342,23 @@ internal fun fraseDelRojo(caja: CajaProyectada, hoy: LocalDate): String? {
 internal fun fraseDelSupuesto(gasto: GastoDelDiaADia): String {
     val porDia = gasto.porDia
         ?: return "Todavía no hay un período cerrado para estimar tu gasto del día a día: la línea solo resta tus pagos del período."
-    // Vuelta 108: el que eligió el dueño, dicho como suyo.
-    if (gasto.elegido != null) {
-        return "Supone tu gasto de un día normal, el que elegiste: ${formatMoneyAbreviada(porDia)} por día."
+    // Vuelta 108: el que eligió el dueño es todo lo que gasta; la caja resta solo su parte en efectivo.
+    val elegido = gasto.elegido
+    if (elegido != null) {
+        return "Supone la parte en efectivo de tu gasto de un día normal: ${formatMoneyAbreviada(porDia)} por día " +
+            "de los ${formatMoneyAbreviada(elegido)} que elegiste (lo de la tarjeta sale cuando la pagas)."
     }
     val deDonde = when (gasto.periodos.size) {
         1 -> "en tu período de ${mesDelPrefijo(gasto.periodos.single().periodo)}"
         else -> "en tus últimos ${gasto.periodos.size} períodos"
     }
-    // Vuelta 108: sin compras con tarjeta ni gastos de una sola vez (ver `gastoDeUnDiaNormalDelPeriodo`).
+    // Vuelta 108: en efectivo (lo de la tarjeta sale cuando la pagas) y sin gastos de una sola vez que no se
+    // repiten (ver `gastoDeUnDiaNormalDelPeriodo`).
     val sin = buildList {
         if (gasto.conTarjeta > 0L) add("compras con tarjeta")
         if (gasto.deUnaVez.isNotEmpty()) add("gastos de una sola vez de \$1M o más")
     }.takeIf { it.isNotEmpty() }?.joinToString(" ni ", prefix = ", sin ")
-    return "Supone que sigues como siempre: $GASTAS_EN_PROMEDIO ${formatMoneyAbreviada(porDia)} por día ($deDonde${sin.orEmpty()})."
+    return "Supone que sigues como siempre: $GASTAS_EN_PROMEDIO ${formatMoneyAbreviada(porDia)} por día en efectivo ($deDonde${sin.orEmpty()})."
 }
 
 /** «2026-09» → «septiembre», o el prefijo tal cual si no se entiende. */
@@ -492,8 +495,10 @@ internal fun SeccionCajaProyectada(
                         .onSuccess {
                             guardandoElGasto = false
                             ajustandoElGasto = false
-                            // Se vuelve a pedir el supuesto: la caja y el héroe restan el nuevo.
+                            // Se vuelve a pedir el supuesto: la caja, la tarjeta de arriba y el héroe del Inicio
+                            // (guardar el perfil ya invalidó la carga del Inicio) restan el nuevo.
                             reintento++
+                            com.jvillada.movi.ui.dashboard.GastoDeUnDiaNormalCambiado.avisar()
                         }
                         .onFailure {
                             guardandoElGasto = false

@@ -394,28 +394,55 @@ fun cajaHastaQueTePaguen(
 @Serializable
 data class GastoVariableDeUnPeriodo(
     val periodo: String,
-    /** Vuelta 108: lo que entra al supuesto, sin [conTarjeta] ni [deUnaVez] (ver [gastoDeUnDiaNormalDelPeriodo]). */
+    /** Vuelta 108: el día a día en efectivo, sin [conTarjeta] ni [deUnaVez] (ver [gastoDeUnDiaNormalDelPeriodo]). */
     val total: Long,
     val dias: Int,
-    /** Vuelta 108: las compras con tarjeta del período, que la caja resta cuando se paga la tarjeta. */
+    /** Vuelta 108: las compras con tarjeta del período (sin las de una sola vez). */
     val conTarjeta: Long = 0L,
     /** Vuelta 108: los gastos de una sola vez que se dejaron fuera, del más grande al más chico. */
     val deUnaVez: List<GastoDeUnaVez> = emptyList(),
+    /**
+     * Vuelta 108: los gastos desde [PISO_PARA_COMPARAR_UN_GASTO_GRANDE], para decidir si uno grande de otro
+     * período se repite ([esUnaCostumbre]). Solo lo usa el server al estimar: no viaja.
+     */
+    @kotlinx.serialization.Transient
+    val paraComparar: List<GastoDeUnaVez> = emptyList(),
 )
 
-/** Vuelta 108 · un gasto de una sola vez que el supuesto dejó fuera: «Gardenera · $6.420.000 · 29-ago». */
+/**
+ * Vuelta 108 · un gasto grande de un período: «Gardenera · $6.420.000 · 29-ago». En [GastoDelDiaADia] quedan
+ * los que no se repiten, los de una sola vez que los supuestos dejaron fuera.
+ */
 @Serializable
-data class GastoDeUnaVez(val nombre: String, val monto: Long, val fecha: String)
+data class GastoDeUnaVez(
+    val nombre: String,
+    val monto: Long,
+    val fecha: String,
+    /** El comercio como clave ([claveDeComercio]), para compararlo con los de otros períodos. */
+    val clave: String? = null,
+    val categoria: String = "",
+    val conTarjeta: Boolean = false,
+)
 
 /**
- * **El supuesto del gasto del día a día**, con lo que lo respalda.
+ * **Los dos supuestos del gasto de un día normal**, con lo que los respalda (vuelta 108). Son dos porque
+ * miden dos cosas:
  *
- * @property porDia **el que se usa**: el que el dueño eligió ([elegido]) si lo eligió, y si no el que Movi
- *   estima ([estimado]); `null` si ni uno ni otro. Los APK viejos solo leen este.
+ * - **[porDiaConTarjetas], el del héroe del Inicio**: todo lo que se gasta en un día normal, se pague como
+ *   se pague. La cifra del héroe ya resta las compras con tarjeta sin pagar, así que su proyección tiene que
+ *   restar también las que vienen.
+ * - **[porDia], el de la caja de Pagos**: solo lo que sale en efectivo de las cuentas; lo que se compra con
+ *   tarjeta sale cuando se paga la tarjeta (su pago mínimo ya es una fila de la caja). Los APK viejos solo
+ *   leen este, para la caja.
+ *
+ * Los dos sin gastos de una sola vez. Si el dueño escribió su «Gasto de un día normal» ([elegido]) —que es
+ * todo lo que se gasta—, el héroe lo usa tal cual y la caja solo su parte en efectivo
+ * ([proporcionEnEfectivo] del historial; sin historial, todo).
+ *
  * @property periodos los períodos con los que se estimó, del más reciente al más viejo.
- * @property estimado vuelta 108: el promedio de Movi, sin compras con tarjeta ni gastos de una vez.
- * @property elegido vuelta 108: «Gasto de un día normal», el que el dueño escribió en Pagos
- *   (`UserProfile.gastoDeUnDiaNormal`); `null` = usar el estimado.
+ * @property estimado el de la caja que estima Movi (en efectivo).
+ * @property estimadoConTarjetas el del héroe que estima Movi (con tarjetas).
+ * @property elegido «Gasto de un día normal» del perfil (`UserProfile.gastoDeUnDiaNormal`); `null` = el estimado.
  */
 @Serializable
 data class GastoDelDiaADia(
@@ -423,12 +450,27 @@ data class GastoDelDiaADia(
     val periodos: List<GastoVariableDeUnPeriodo> = emptyList(),
     val estimado: Long? = null,
     val elegido: Long? = null,
+    val estimadoConTarjetas: Long? = null,
+    val porDiaConTarjetas: Long? = null,
 ) {
-    /** Lo que se dejó fuera del estimado por ser compra con tarjeta, en los períodos usados. */
+    /** Lo que se dejó fuera de la caja por ser compra con tarjeta, en los períodos usados. */
     val conTarjeta: Long get() = periodos.sumOf { it.conTarjeta }
 
-    /** Los gastos de una sola vez que se dejaron fuera del estimado, del más grande al más chico. */
+    /** Los gastos de una sola vez que se dejaron fuera de los dos supuestos, del más grande al más chico. */
     val deUnaVez: List<GastoDeUnaVez> get() = periodos.flatMap { it.deUnaVez }.sortedByDescending { it.monto }
+
+    /** La parte en efectivo del día a día del historial, de 0 a 1; sin historial, 1 (todo). */
+    val proporcionEnEfectivo: Double get() {
+        val efectivo = periodos.sumOf { it.total.coerceAtLeast(0L) }
+        val todo = efectivo + periodos.sumOf { it.conTarjeta.coerceAtLeast(0L) }
+        return if (todo <= 0L) 1.0 else efectivo.toDouble() / todo
+    }
+
+    /**
+     * **El supuesto del héroe**: [porDiaConTarjetas]; con un server anterior a la vuelta 108, lo elegido o
+     * [porDia] (que entonces contaba las tarjetas).
+     */
+    val delHeroe: Long? get() = porDiaConTarjetas ?: elegido ?: porDia
 }
 
 /** Cuántos períodos cerrados se promedian como mucho: los últimos tres. */
@@ -451,10 +493,26 @@ const val PERIODOS_PARA_EL_GASTO_DIARIO = 3
  */
 fun gastoDelDiaADia(cerrados: List<GastoVariableDeUnPeriodo>, elegido: Long? = null): GastoDelDiaADia {
     val propio = elegido?.takeIf { it > 0L }
-    val usados = cerrados.filter { it.dias > 0 }.take(PERIODOS_PARA_EL_GASTO_DIARIO)
+    val crudos = cerrados.filter { it.dias > 0 }.take(PERIODOS_PARA_EL_GASTO_DIARIO)
+    // Un gasto grande que se repite en los otros períodos es una costumbre: vuelve al día a día.
+    val usados = crudos.mapIndexed { i, periodo ->
+        val otros = crudos.filterIndexed { j, _ -> j != i }
+        val (costumbres, deUnaVez) = periodo.deUnaVez.partition { esUnaCostumbre(it, otros) }
+        periodo.copy(
+            total = periodo.total + costumbres.filter { !it.conTarjeta }.sumOf { it.monto },
+            conTarjeta = periodo.conTarjeta + costumbres.filter { it.conTarjeta }.sumOf { it.monto },
+            deUnaVez = deUnaVez,
+        )
+    }
     val dias = usados.sumOf { it.dias }
-    val estimado = if (dias <= 0) null else usados.sumOf { it.total.coerceAtLeast(0L) } / dias
-    return GastoDelDiaADia(porDia = propio ?: estimado, periodos = usados, estimado = estimado, elegido = propio)
+    val efectivo = usados.sumOf { it.total.coerceAtLeast(0L) }
+    val conTarjetas = efectivo + usados.sumOf { it.conTarjeta.coerceAtLeast(0L) }
+    val estimado = if (dias <= 0) null else efectivo / dias
+    val estimadoConTarjetas = if (dias <= 0) null else conTarjetas / dias
+    val base = GastoDelDiaADia(periodos = usados, estimado = estimado, elegido = propio, estimadoConTarjetas = estimadoConTarjetas)
+    // Lo elegido es todo lo que se gasta: la caja usa solo su parte en efectivo (sin historial, todo).
+    val deLaCaja = propio?.let { (it * base.proporcionEnEfectivo).toLong() } ?: estimado
+    return base.copy(porDia = deLaCaja, porDiaConTarjetas = propio ?: estimadoConTarjetas)
 }
 
 /** Vuelta 108 · el tope de «Gasto de un día normal»: $50.000.000 por día ya no es un día normal. */

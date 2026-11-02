@@ -191,7 +191,8 @@ class CajaProyectadaRoutesTest {
         }
         val gasto = gasto(duenoId)
         val dias = inicioDelMesPasado.lengthOfMonth()
-        assertEquals(900_000L / dias, gasto.porDia, "solo el mercado y el taxi")
+        assertEquals(900_000L / dias, gasto.porDia, "la caja: solo el mercado y el taxi")
+        assertEquals(1_400_000L / dias, gasto.porDiaConTarjetas, "el héroe: también la cena con tarjeta")
         assertEquals(900_000L, gasto.periodos.single().total)
         assertEquals(500_000L, gasto.conTarjeta)
         assertEquals(listOf("Gardenera" to 2_000_000L), gasto.deUnaVez.map { it.nombre to it.monto })
@@ -203,7 +204,9 @@ class CajaProyectadaRoutesTest {
         duenoConUnMesCerrado()
         transaction { Users.update({ Users.id eq duenoId }) { it[gastoDeUnDiaNormal] = 91_000L } }
         val gasto = gasto(duenoId)
+        // Sin compras con tarjeta en el historial, todo es efectivo: la caja usa lo elegido entero.
         assertEquals(91_000L, gasto.porDia)
+        assertEquals(91_000L, gasto.porDiaConTarjetas)
         assertEquals(91_000L, gasto.elegido)
         assertEquals(900_000L / inicioDelMesPasado.lengthOfMonth(), gasto.estimado)
         // Y la caja de Movi AI resta ese, no el estimado.
@@ -318,7 +321,7 @@ class CajaProyectadaRoutesTest {
         )
         assertTrue("En sus cuentas hoy: 1000000" in texto, texto)
         assertTrue("Libre hoy: 1000000" in texto, texto)
-        assertTrue("SUPUESTO: su gasto de un día normal, 100000 por día" in texto, texto)
+        assertTrue("SUPUESTO: su gasto de un día normal en efectivo, 100000 por día" in texto, texto)
         assertTrue("2026-09: 3100000 en 31 días" in texto, texto)
         assertTrue("NO ENTRAN" in texto && "AMEX: falta el pago mínimo" in texto, texto)
         assertTrue("PRIMER DÍA EN NEGATIVO: 2026-10-17, lo libre queda en -3201123 (saldo -3201123) por Cuota Vehiculo 8761 (4101123)" in texto, texto)

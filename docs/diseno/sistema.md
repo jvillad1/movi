@@ -5252,14 +5252,15 @@ propuesta A: **una pregunta, una base, un solo rojo**. Sin tokens ni componentes
   - la línea que la explica, en `apoyo`: «Faltan $10,3M en pagos y tienes $9,7M libres, contando lo que te
     entra» (las dos cifras restan exactamente la de arriba) o «Para 23 días · $54.870 por día»;
   - el renglón (`Fila` con `IconoEnCirculo(TrendingDown)` y `Chevron`) con **la proyección de esa misma cifra**:
-    «Con tu gasto de un día normal, el 24 nov te faltarían unos $2,6M», y debajo el supuesto a la vista,
-    «Calculado con $91.000 por día · Ajustar» (lleva a la caja de Pagos). `TonoDeFila.Alerta` solo si empeora
+    «Con tu gasto de un día normal, el 24 nov te faltarían unos $3,7M», y debajo el supuesto a la vista,
+    «Calculado con $143.000 por día · Ajustar» (el supuesto del héroe: todo lo que se gasta, con tarjeta o
+    en efectivo; la caja de Pagos usa el suyo, solo en efectivo) (lleva a la caja de Pagos). `TonoDeFila.Alerta` solo si empeora
     el veredicto: «Hoy te alcanza; con tu gasto de un día normal, el 24 nov te faltarían unos $X». Con «Te
     faltan», el renglón va en tinta.
 - **Una sola función** (`teAlcanzaHastaQueTePaguen`, `:core`) arma la pregunta, la cifra, la línea y la
   proyección; la usan el héroe, «Cuánto puedes gastar» de Pagos, el widget, el resumen de la mañana y Movi AI.
   Las cifras de las frases van compactas (`pesosCortos` = `formatMoneyCompact`); el supuesto, redondeado al mil
-  («$91.000», no «$90.688»: es un supuesto); el que eligió el dueño, exacto («con tus $120.000 por día»).
+  («$143.000», no «$143.154»: es un supuesto); el que eligió el dueño, exacto («con tus $120.000 por día»).
 - **«¿De dónde sale?»** abre primero la cascada corta en `Superficie(Capa2, Lista)`: «Tienes libre hoy → Te
   entra → Faltan en pagos (N pagos) → Te faltan», y debajo, con el rótulo «La cuenta del período», la cascada
   del período de siempre. Sin margen ya no hay renglón «Sin margen, Movi cuenta desde $0»: la cifra es lo que
@@ -5274,10 +5275,12 @@ propuesta A: **una pregunta, una base, un solo rojo**. Sin tokens ni componentes
   $0»; «Lo que más pesa en lo que falta» con los 3 pagos pendientes más grandes («Cuota Vehículo 8761 · 17
   nov» y su `Cifra` `Chica` entera) y, en el Inicio, el `Boton` `Fantasma` «Ver los 9 pagos que faltan ›»
   (en Pagos están justo abajo). Las ventanas con barra vuelven cuando hay margen.
-- **«Gasto de un día normal»** en la caja de Pagos: un renglón debajo de la gráfica con el rótulo, «$91.000
-  por día · lo estima Movi» (o «lo elegiste tú») y el `Boton` `Fantasma` «Ajustar», que abre una hoja con dos
-  `PildoraDeFiltro` («El de Movi» / «El mío»), un `CampoDeMonto` y `PieDeHoja` «Guardar» con su razón. Se
-  guarda en el server; «El de Movi» vuelve al estimado.
+- **«Gasto de un día normal»** en la caja de Pagos: un renglón debajo de la gráfica con el rótulo, «$143.000
+  por día · $91.000 en efectivo · lo estima Movi» (o «lo elegiste tú») y el `Boton` `Fantasma` «Ajustar», que
+  abre una hoja con dos `PildoraDeFiltro` («El de Movi» / «El mío»), un `CampoDeMonto` y `PieDeHoja` «Guardar»
+  con su razón. La hoja dice qué es: todo lo que gastas en un día cualquiera, con tarjeta o en efectivo; el
+  Inicio lo resta entero y la caja solo la parte en efectivo de tu historial. Se guarda en el server; «El de
+  Movi» vuelve al estimado; al guardar, el héroe y la tarjeta se recalculan.
 
 Lo vigilan `TeAlcanzaHastaQueTePaguenTest` y `ElGastoDeUnDiaNormalTest` (`:core`, con las cifras del dueño al
 peso), `TeQuedanEnHoyTest`, `CascadaDelDisponibleTest` y `SinMargenParaElDiaADiaTest` (`:shared`).

@@ -135,6 +135,8 @@ class ElForkLlegaLimpioTest {
         PapelesCompartidos.recibir(listOf(ArchivoCompartido("recibo.png", byteArrayOf(1), "image/png")))
         // Ola 4: un «Está bien» de otra prueba.
         com.jvillada.movi.ui.dashboard.AnomaliasDescartadasEnLaSesion.descartar("duplicado:a,b")
+        // Vuelta 108: un «Gasto de un día normal» ajustado en otra prueba.
+        com.jvillada.movi.ui.dashboard.GastoDeUnDiaNormalCambiado.avisar()
         // La guía de primer uso, abierta en otra prueba: la siguiente no la vería revisar.
         com.jvillada.movi.ui.primeruso.GuiaDePrimerUso.abrir()
         // «Ocultar los saldos» prendido en otra prueba: la siguiente vería «$•••••» donde espera cifras.
@@ -251,6 +253,7 @@ class ElForkLlegaLimpioTest {
             "Los «Está bien» de la Ola 4 traen resaca",
             com.jvillada.movi.ui.dashboard.AnomaliasDescartadasEnLaSesion.huellas.isEmpty(),
         )
+        assertEquals("El ajuste del gasto de un día normal trae resaca", 0, com.jvillada.movi.ui.dashboard.GastoDeUnDiaNormalCambiado.version)
         assertEquals("UsedCategoriesCache trae la resaca del método anterior", emptyMap<String, Any>(), UsedCategoriesCache.used)
         assertEquals("Las preferencias de categoría traen resaca", emptyMap<String, Any>(), UsedCategoriesCache.prefs)
         assertEquals("Los usos recientes de categoría traen resaca", emptyMap<String, Int>(), UsedCategoriesCache.usosRecientes)

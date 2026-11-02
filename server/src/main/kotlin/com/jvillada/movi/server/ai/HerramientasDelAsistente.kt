@@ -560,8 +560,9 @@ internal fun textoDeLaCaja(d: CajaDelDueno): String {
         if (gasto.porDia != null && gasto.elegido != null) {
             // Vuelta 108: el que el dueño escribió en Pagos («Gasto de un día normal») manda.
             appendLine(
-                "- SUPUESTO: su gasto de un día normal, ${gasto.porDia} por día desde mañana. Lo eligió él en Pagos " +
-                    "(el estimado de Movi sería ${gasto.estimado ?: "ninguno"}). Se cambia en Pagos → Tu plata, día a día.",
+                "- SUPUESTO: la parte en efectivo de su gasto de un día normal, ${gasto.porDia} por día desde mañana. Él " +
+                    "eligió ${gasto.elegido} por día en Pagos (todo lo que gasta, con tarjeta o en efectivo); la caja " +
+                    "resta solo lo que sale en efectivo, en la proporción de su historial. Se cambia en Pagos → Tu plata, día a día.",
             )
         } else if (gasto.porDia != null) {
             val cuales = gasto.periodos.joinToString("; ") { "${it.periodo}: ${it.total} en ${it.dias} días" }
@@ -572,7 +573,7 @@ internal fun textoDeLaCaja(d: CajaDelDueno): String {
                 }
             }
             appendLine(
-                "- SUPUESTO: su gasto de un día normal, ${gasto.porDia} por día desde mañana. Es el promedio diario " +
+                "- SUPUESTO: su gasto de un día normal en efectivo, ${gasto.porDia} por día desde mañana. Es el promedio diario " +
                     "de su gasto variable en ${gasto.periodos.size} período(s) cerrado(s) ($cuales)" +
                     (if (fuera.isEmpty()) "." else ", SIN ${fuera.joinToString(" ni ")}.") +
                     " Si no se parece a su gasto, puede escribir el suyo en Pagos → Tu plata, día a día.",

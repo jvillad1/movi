@@ -1,6 +1,7 @@
 package com.jvillada.movi.shared.model
 
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.plus
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -63,7 +64,11 @@ class TeAlcanzaHastaQueTePaguenTest {
         ),
     )
 
-    private val gastoNormal = GastoDelDiaADia(porDia = 90_688L, estimado = 90_688L)
+    /**
+     * Los dos supuestos del caso real (`ElGastoDeUnDiaNormalTest`): la caja, $90.688 en efectivo; el héroe,
+     * $143.154 con las compras con tarjeta.
+     */
+    private val gastoNormal = GastoDelDiaADia(porDia = 90_688L, estimado = 90_688L, estimadoConTarjetas = 143_154L, porDiaConTarjetas = 143_154L)
 
     @Test
     fun `el caso real dice te faltan 588919 con su porque, y la proyeccion con su supuesto`() {
@@ -81,21 +86,33 @@ class TeAlcanzaHastaQueTePaguenTest {
 
         val p = assertNotNull(r.proyeccion)
         assertEquals(22, p.dias, "del 3 al 24 de noviembre")
-        assertEquals(-2_584_055L, p.alFinal, "−588.919 − 22 × 90.688")
-        assertEquals("Con tu gasto de un día normal, el 24 nov te faltarían unos $2,6M", p.texto)
-        assertEquals("Calculado con $91.000 por día", p.supuesto)
+        assertEquals(-3_738_307L, p.alFinal, "−588.919 − 22 × 143.154: el supuesto del héroe, con tarjetas")
+        assertEquals("Con tu gasto de un día normal, el 24 nov te faltarían unos $3,7M", p.texto)
+        assertEquals("Calculado con $143.000 por día", p.supuesto)
         assertFalse(p.enAlerta, "la cifra ya dice que falta: una sola alarma en rojo")
     }
 
-    /** Las dos cifras del héroe salen de la misma base: la proyección es la cifra menos los días por el supuesto. */
+    /**
+     * **El héroe contra una simulación independiente** (revisión de la 108, P3): la plata libre de hoy —Tu
+     * plata, $9.086.784 con lo gastado del caso real, sin el apartado y sin el ahorro—, día por día hasta el
+     * 24 nov: entra lo que se espera, salen los pagos que faltan, y desde mañana un día normal de gasto. No
+     * usa `loQueQueda` ni el disponible: si el héroe mezclara dos bases (la cifra con tarjetas y el supuesto
+     * sin ellas), no daría lo mismo.
+     */
     @Test
-    fun `las dos cifras del heroe tienen la misma base, con apartado y ahorro`() {
+    fun `la proyeccion del heroe da lo mismo que simular los dias, con apartado y ahorro`() {
+        val ultimoDia = LocalDate(2026, 11, 24)
         listOf(0L, 300_000L).forEach { ahorro ->
             listOf(500_000L, 1_950_929L).forEach { gastado ->
-                val d = disponible(gastado, ahorro)
-                val r = teAlcanzaHastaQueTePaguen(d, checklist, gastoNormal, hoy, conElPeriodoElegido = true)
-                assertEquals(d.loQueQueda, r.cifra)
-                assertEquals(r.cifra - 22 * 90_688L, r.proyeccion?.alFinal)
+                var libre = 9_086_784L + (1_950_929L - gastado) - ahorro
+                var dia = hoy
+                while (dia <= ultimoDia) {
+                    checklist.filter { !it.pagado && LocalDate.parse(it.vence) == dia }.forEach { libre += if (it.esIngreso) it.monto else -it.monto }
+                    if (dia > hoy) libre -= 143_154L
+                    dia = dia.plus(1, kotlinx.datetime.DateTimeUnit.DAY)
+                }
+                val r = teAlcanzaHastaQueTePaguen(disponible(gastado, ahorro), checklist, gastoNormal, hoy, conElPeriodoElegido = true)
+                assertEquals(libre, r.proyeccion?.alFinal, "ahorro $ahorro, gastado $gastado")
                 assertEquals(r.cifra, r.libres - r.pagosQueFaltan, "la línea resta exactamente la cifra")
             }
         }
@@ -109,8 +126,8 @@ class TeAlcanzaHastaQueTePaguenTest {
         assertEquals(1_262_010L, r.cifra)
         assertEquals("Para 23 días · $54.870 por día", r.explicacion)
         val p = assertNotNull(r.proyeccion)
-        assertEquals(1_262_010L - 22 * 90_688L, p.alFinal)
-        assertEquals("Hoy te alcanza; con tu gasto de un día normal, el 24 nov te faltarían unos $733.126", p.texto)
+        assertEquals(1_262_010L - 22 * 143_154L, p.alFinal)
+        assertEquals("Hoy te alcanza; con tu gasto de un día normal, el 24 nov te faltarían unos $1,9M", p.texto)
         assertTrue(p.enAlerta, "hoy alcanza y con el gasto de un día normal no: empeora el veredicto")
 
         val holgado = teAlcanzaHastaQueTePaguen(d, checklist, GastoDelDiaADia(porDia = 20_000L, elegido = 20_000L), hoy, true)

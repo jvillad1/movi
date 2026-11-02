@@ -24,8 +24,10 @@ import kotlinx.datetime.plus
  *   faltan); con sobra, «Para 23 días · $53.900 por día».
  * - **La proyección, como detalle y con su supuesto a la vista**: la MISMA cifra menos los días que
  *   faltan (sin hoy) por el gasto de un día normal ([GastoDelDiaADia.porDia]). «Con tu gasto de un día
- *   normal, el 24 nov te faltarían unos $2,6M · Calculado con $91.000 por día». Nunca una base distinta:
- *   `proyeccion.alFinal == cifra − días × porDia`, lo fija `TeAlcanzaHastaQueTePaguenTest`.
+ *   normal, el 24 nov te faltarían unos $3,7M · Calculado con $143.000 por día». Nunca una base distinta:
+ *   la cifra cuenta las compras con tarjeta (las sin pagar ya restan), así que el supuesto también
+ *   ([GastoDelDiaADia.delHeroe], no el de la caja, que es solo efectivo). Lo fija
+ *   `TeAlcanzaHastaQueTePaguenTest` contra una simulación día por día.
  *
  * **Una sola alarma en rojo**: la cifra. La proyección va en alerta solo si empeora el veredicto (hoy
  * alcanza y con el gasto de un día normal no).
@@ -47,7 +49,7 @@ const val LIBRE_PARA_GASTAR: String = "Libre para gastar"
 
 /** Lo que dice el renglón de la proyección, con su supuesto. */
 data class ProyeccionHastaQueTePaguen(
-    /** «Con tu gasto de un día normal, el 24 nov te faltarían unos $2,6M». */
+    /** «Con tu gasto de un día normal, el 24 nov te faltarían unos $3,7M». */
     val texto: String,
     /** «Calculado con $91.000 por día» (o «con tus $91.000 por día», si lo eligió el dueño). */
     val supuesto: String,
@@ -182,7 +184,9 @@ internal fun proyeccionHastaQueTePaguen(
     gasto: GastoDelDiaADia?,
     pesos: (Long) -> String,
 ): ProyeccionHastaQueTePaguen? {
-    val porDia = gasto?.porDia?.coerceAtLeast(0L) ?: return null
+    // Vuelta 108 (revisión, P1): el supuesto del HÉROE, con las compras con tarjeta. La cifra ya restó las
+    // compras con tarjeta sin pagar; si la proyección no restara las que vienen, mezclaría dos bases.
+    val porDia = gasto?.delHeroe?.coerceAtLeast(0L) ?: return null
     if (dias <= 0) return null
     val alFinal = cifra - dias * porDia
     val elDia = "el ${fechaCortaDeLaPregunta(ultimoDia)}"

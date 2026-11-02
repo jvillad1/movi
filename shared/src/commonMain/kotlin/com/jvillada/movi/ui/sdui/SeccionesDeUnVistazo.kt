@@ -198,7 +198,7 @@ internal fun HeroDeUnVistazo(
     data: DashboardData,
     onNavigate: (Screen) -> Unit,
     onShowCreateSheet: () -> Unit = {},
-    hoy: LocalDate = epochMillisToAppDate(Clock.System.now().toEpochMilliseconds()),
+    hoy: LocalDate = com.jvillada.movi.ui.dashboard.LocalHoyDelInicio.current ?: epochMillisToAppDate(Clock.System.now().toEpochMilliseconds()),
 ) {
     // Vuelta 75 · la cifra grande, su línea, «Tu plata» y el renglón «¿Me alcanza?» salen de UN estado
     // y cambian juntos (ver [EstadoDelHeroe]): nunca la cifra vieja junto a la línea nueva. Revisión de

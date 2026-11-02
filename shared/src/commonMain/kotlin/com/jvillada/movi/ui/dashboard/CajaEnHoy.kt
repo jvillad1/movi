@@ -3,6 +3,10 @@ package com.jvillada.movi.ui.dashboard
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.TrendingDown
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import com.jvillada.movi.data.ClaveDeLectura
@@ -203,14 +207,37 @@ internal fun rememberGastoDelInicio(data: DashboardData): GastoDelDiaADia? {
     val sePuedeProyectar = data.periodoActual != null && data.upcoming != null && data.ocurrencias != null &&
         (data.accounts != null || data.patrimonio != null)
     if (!sePuedeProyectar) return null
+    // Vuelta 108 (revisión): si el dueño ajustó su «Gasto de un día normal» en esta sesión, el que vino con la
+    // carga ya es viejo: se vuelve a pedir, y el héroe y la tarjeta de Pagos se recalculan con el nuevo.
+    val cambios = GastoDeUnDiaNormalCambiado.version
     // Vuelta 78 (revisión): con el supuesto ya en la carga del Inicio (o en su instantánea), el renglón sale
     // con el resto del héroe; si no vino, se pide como antes.
-    data.gastoDelDiaADia?.let { return it }
-    val gastoLeido = rememberLectura(ClaveDeLectura.GastoDelDiaADia, reintento = 0) {
+    if (cambios == 0) data.gastoDelDiaADia?.let { return it }
+    val gastoLeido = rememberLectura(ClaveDeLectura.GastoDelDiaADia, reintento = cambios) {
         Repositories.wallets.getGastoDelDiaADia()
     }
-    return gastoLeido.valor
+    return gastoLeido.valor ?: data.gastoDelDiaADia
 }
+
+/**
+ * Vuelta 108 (revisión) · **el dueño ajustó su «Gasto de un día normal»** en esta sesión: cada guardado sube
+ * [version], y [rememberGastoDelInicio] vuelve a pedir el supuesto en vez de usar el que vino con la carga.
+ * Lo limpia `SessionManager.clear()`.
+ */
+object GastoDeUnDiaNormalCambiado {
+    var version: Int by mutableStateOf(0)
+        private set
+
+    fun avisar() { version++ }
+
+    fun olvidar() { version = 0 }
+}
+
+/**
+ * Vuelta 108 (revisión) · **el «hoy» del Inicio**, para fijarlo en una prueba (el héroe se monta dentro del
+ * renderer SDUI, que no lo recibe). `null` = el de la app.
+ */
+val LocalHoyDelInicio = staticCompositionLocalOf<LocalDate?> { null }
 
 /** El renglón suelto, con el hilo de arriba (lo que pinta el héroe, para montarlo solo en una prueba). */
 @Composable

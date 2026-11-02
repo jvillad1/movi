@@ -602,9 +602,18 @@ class CajaHastaQueTePaguenTest {
             // «Te quedan» mira solo la lista del período: el arriendo de hoy cubre $1M cualquier día.
             assertEquals(4_000_000L, apartadoFueraDeLosFijos(cuentas, apartados, l.delPeriodo), hoy)
             assertEquals(apartadoFueraDeLosFijos(cuentas, apartados, l.delPeriodo), caja.apartado, hoy)
-            // El día del arriendo siguiente (si cae en la caja), lo que reserva baja lo que ese pago cubre.
-            caja.dias.firstOrNull { it.fecha == siguiente }?.let { dia ->
-                assertEquals(5_000_000L - cubierto, dia.saldo - dia.libre, hoy)
+            // El 31, el arriendo de noviembre (30-nov) cae en la caja: hasta la víspera se reservan $4M, y ese
+            // día, cuando el pago sale del saldo, lo que ese pago cubre ($1M) deja de reservarse. El 20, la caja
+            // (30 días) termina el 19-nov: el arriendo del 20 no entra y lo apartado sigue entero reservado.
+            if (cubierto == 2_000_000L) {
+                val vispera = assertNotNull(caja.dias.firstOrNull { it.fecha == "2026-11-29" }, hoy)
+                val delPago = assertNotNull(caja.dias.firstOrNull { it.fecha == siguiente }, hoy)
+                assertEquals(4_000_000L, vispera.saldo - vispera.libre, hoy)
+                assertEquals(3_000_000L, delPago.saldo - delPago.libre, hoy)
+                assertEquals(vispera.libre, delPago.libre, "el día del pago cubierto lo libre no baja otra vez")
+            } else {
+                assertNull(caja.dias.firstOrNull { it.fecha == siguiente }, "el 20-nov queda fuera de la caja")
+                assertTrue(caja.dias.all { it.saldo - it.libre == 4_000_000L })
             }
         }
     }
