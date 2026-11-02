@@ -1,6 +1,7 @@
 package com.jvillada.movi.ui.sms
 
 import com.jvillada.movi.shared.model.CapturaDeSms
+import com.jvillada.movi.shared.model.CodigoDeCaptura
 import com.jvillada.movi.shared.model.avisoDeCaptura
 import kotlinx.datetime.LocalDate
 import kotlin.test.Test
@@ -78,34 +79,40 @@ class ElUltimoMensajeTest {
 
     /**
      * Vuelta 114 · en el iPhone de Caro, con el atajo mandando avisos, la tarjeta decía «Este aparato no lee los
-     * mensajes del banco». En un iPhone la línea dice lo cierto: llegan por el atajo, o dónde configurarlo.
+     * mensajes del banco». Ahora la línea dice lo cierto, y como el código es de la cuenta (no del aparato), no
+     * dice «este iPhone»: vale en cualquier aparato de la cuenta.
      */
     @Test
-    fun `en un iPhone la linea dice si los mensajes llegan por el atajo`() {
+    fun `con el atajo mandando avisos la linea lo dice, en cualquier aparato de la cuenta`() {
         val captura = CapturaDeSms(total = 2, ultimo = "2026-11-02 08:30")
-        val conAtajo = elUltimoMensaje(captura, hoy, enAndroid = false, enIphone = true, atajoConAvisos = true)
-        assertEquals("En este iPhone los mensajes llegan por el atajo de Atajos.", conAtajo.ayuda)
-        assertFalse("teléfono Android" in conAtajo.masAyuda, conAtajo.masAyuda)
-        assertTrue("«Desde tu iPhone»" in conAtajo.masAyuda && "«Por revisar»" in conAtajo.masAyuda, conAtajo.masAyuda)
-
-        val sinAtajo = elUltimoMensaje(captura, hoy, enAndroid = false, enIphone = true, atajoConAvisos = false)
-        assertEquals("Este iPhone no los lee solo: configúralo en «Desde tu iPhone».", sinAtajo.ayuda)
-
-        // Mientras no se sabe, nada que pueda ser falso.
-        val sinSaber = elUltimoMensaje(captura, hoy, enAndroid = false, enIphone = true, atajoConAvisos = null)
-        assertEquals(EN_UN_IPHONE_LLEGAN_CON_UN_ATAJO, sinSaber.ayuda)
-
-        // En una computadora sigue lo de siempre, y en Android también.
-        assertEquals(ESTE_APARATO_NO_LEE_MENSAJES, elUltimoMensaje(captura, hoy, enAndroid = false, atajoConAvisos = true).ayuda)
-        assertEquals(LA_FECHA_DICE_LO_QUE_LLEGO, elUltimoMensaje(captura, hoy, enAndroid = true, enIphone = false).ayuda)
-        listOf(conAtajo, sinAtajo, sinSaber).forEach { assertTrue(it.ayuda.length <= 65, "«${it.ayuda}» no es una línea") }
+        val ahora = 1_793_628_000_000L
+        val usado = CodigoDeCaptura(vigente = true, creadoEn = ahora - 86_400_000L, ultimoUso = ahora - 24 * 60_000L)
+        val esperado = "Tus mensajes del banco llegan por un atajo de Atajos · último aviso hace 24 min"
+        val enIphone = elUltimoMensaje(captura, hoy, enAndroid = false, enIphone = true, codigoDelAtajo = usado, ahora = ahora)
+        assertEquals(esperado, enIphone.ayuda)
+        assertFalse("este iPhone" in enIphone.ayuda, enIphone.ayuda)
+        assertFalse("teléfono Android" in enIphone.masAyuda, enIphone.masAyuda)
+        assertTrue("«Desde tu iPhone»" in enIphone.masAyuda && "«Por revisar»" in enIphone.masAyuda, enIphone.masAyuda)
+        // En una computadora con la misma cuenta, también.
+        assertEquals(esperado, elUltimoMensaje(captura, hoy, enAndroid = false, codigoDelAtajo = usado, ahora = ahora).ayuda)
+        // En Android, la de siempre: ahí Movi lee el teléfono.
+        assertEquals(LA_FECHA_DICE_LO_QUE_LLEGO, elUltimoMensaje(captura, hoy, enAndroid = true, codigoDelAtajo = usado, ahora = ahora).ayuda)
     }
 
     @Test
-    fun `el atajo tiene avisos solo con un codigo vigente que ya se uso`() {
-        assertEquals(null, atajoConAvisos(null))
-        assertEquals(true, atajoConAvisos(com.jvillada.movi.shared.model.CodigoDeCaptura(vigente = true, creadoEn = 1, ultimoUso = 2)))
-        assertEquals(false, atajoConAvisos(com.jvillada.movi.shared.model.CodigoDeCaptura(vigente = true, creadoEn = 1)))
-        assertEquals(false, atajoConAvisos(com.jvillada.movi.shared.model.CodigoDeCaptura(vigente = false, ultimoUso = 2)))
+    fun `sin un atajo que haya mandado algo, el iPhone dice donde configurarlo y nada falso mientras no se sabe`() {
+        val captura = CapturaDeSms(total = 2, ultimo = "2026-11-02 08:30")
+        val sinUsar = CodigoDeCaptura(vigente = true, creadoEn = 1)
+        val revocado = CodigoDeCaptura(vigente = false, ultimoUso = 2)
+        listOf(sinUsar, revocado, CodigoDeCaptura()).forEach { codigo ->
+            assertEquals(
+                "Este iPhone no los lee solo: configúralo en «Desde tu iPhone».",
+                elUltimoMensaje(captura, hoy, enAndroid = false, enIphone = true, codigoDelAtajo = codigo).ayuda,
+            )
+            assertEquals(ESTE_APARATO_NO_LEE_MENSAJES, elUltimoMensaje(captura, hoy, enAndroid = false, codigoDelAtajo = codigo).ayuda)
+        }
+        // Mientras no se sabe, nada que pueda ser falso.
+        assertEquals(EN_UN_IPHONE_LLEGAN_CON_UN_ATAJO, elUltimoMensaje(captura, hoy, enAndroid = false, enIphone = true).ayuda)
+        assertEquals(ESTE_APARATO_NO_LEE_MENSAJES, elUltimoMensaje(captura, hoy, enAndroid = false).ayuda)
     }
 }

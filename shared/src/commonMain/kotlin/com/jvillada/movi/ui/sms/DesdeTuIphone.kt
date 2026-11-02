@@ -261,7 +261,8 @@ private sealed interface EstadoDelCodigo {
 /**
  * **«Desde tu iPhone»**: el código, los atajos y las automatizaciones. [palabras] son las de los bancos del
  * dueño (`palabrasParaLaAutomatizacion`); [ahora] se inyecta para las pruebas. [versionDeIos] elige los pasos de
- * la automatización (vuelta 114; `null` si no se sabe con seguridad: se ven todas las variantes).
+ * la automatización (vuelta 114; `null` si no se sabe con seguridad: se ven todas las variantes). [reintento]
+ * vuelve a leer el código (el «Reintentar» de la pantalla) y [alCambiarElCodigo] avisa cada estado del código.
  */
 @Composable
 fun DesdeTuIphone(
@@ -269,6 +270,8 @@ fun DesdeTuIphone(
     modifier: Modifier = Modifier,
     ahora: () -> Long = { kotlinx.datetime.Clock.System.now().toEpochMilliseconds() },
     versionDeIos: Int? = com.jvillada.movi.platform.versionDeIos(),
+    reintento: Int = 0,
+    alCambiarElCodigo: (CodigoDeCaptura?) -> Unit = {},
 ) {
     val alcance = rememberCoroutineScope()
     val hoja = hojaDeCompartir()
@@ -286,10 +289,21 @@ fun DesdeTuIphone(
     /** Lo que mandaron los atajos y no se guardó en 30 días; `null` mientras no se sabe. */
     var descartados by remember { mutableStateOf<ResumenDeAtajosDescartados?>(null) }
 
-    LaunchedEffect(lectura) {
+    LaunchedEffect(lectura, reintento) {
         estado = intentar { Repositories.wallets.getCodigoDeCaptura() }
             .getOrNull()?.let { EstadoDelCodigo.Listo(it) } ?: EstadoDelCodigo.NoSePudo
         descartados = intentar { Repositories.wallets.getAtajosDescartados() }.getOrNull()
+    }
+
+    // Vuelta 114 · quien la pinta (Mensajes del banco) se entera de cada estado leído, creado o desactivado: así
+    // la línea de arriba no queda diciendo un código viejo, y el código se lee una sola vez por pantalla.
+    // Mientras lee no se avisa nada (no se borra lo que ya se sabía); si no se pudo leer, `null`.
+    LaunchedEffect(estado) {
+        when (val e = estado) {
+            is EstadoDelCodigo.Listo -> alCambiarElCodigo(e.codigo)
+            EstadoDelCodigo.NoSePudo -> alCambiarElCodigo(null)
+            EstadoDelCodigo.Leyendo -> Unit
+        }
     }
 
     /**

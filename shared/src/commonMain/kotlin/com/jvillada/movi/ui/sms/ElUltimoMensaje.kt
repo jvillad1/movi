@@ -1,6 +1,8 @@
 package com.jvillada.movi.ui.sms
 
 import com.jvillada.movi.shared.model.CapturaDeSms
+import com.jvillada.movi.shared.model.CodigoDeCaptura
+import com.jvillada.movi.shared.model.haceCuantoLlegoElAviso
 import com.jvillada.movi.shared.model.avisoDeCaptura
 import com.jvillada.movi.shared.model.fechaCortaDeSms
 import kotlinx.datetime.LocalDate
@@ -36,11 +38,16 @@ const val ULTIMO_MENSAJE: String = "Último mensaje"
 const val ESTE_APARATO_NO_LEE_MENSAJES: String = "Este aparato no lee los mensajes del banco."
 
 /**
- * Vuelta 114 · **en un iPhone la línea dice lo cierto.** En el iPhone de Caro, con el atajo mandando avisos
- * (último hace 24 min), la tarjeta decía «Este aparato no lee los mensajes del banco»: falso en la práctica.
- * Con un código vigente que ya se usó, los mensajes llegan por el atajo.
+ * Vuelta 114 · **la línea dice lo cierto.** En el iPhone de Caro, con el atajo mandando avisos (último hace 24
+ * min), la tarjeta decía «Este aparato no lee los mensajes del banco»: falso en la práctica. Con un código
+ * vigente que ya se usó, los mensajes llegan por un atajo. **El código es de la cuenta, no del aparato**: la
+ * frase no dice «este iPhone», y vale en cualquier aparato de la cuenta (fuera de Android).
  */
-const val EN_ESTE_IPHONE_LLEGAN_POR_EL_ATAJO: String = "En este iPhone los mensajes llegan por el atajo de Atajos."
+const val LLEGAN_POR_UN_ATAJO: String = "Tus mensajes del banco llegan por un atajo de Atajos"
+
+/** «Tus mensajes del banco llegan por un atajo de Atajos · último aviso hace 24 min». */
+fun lineaDeLosMensajesPorElAtajo(ultimoUso: Long, ahora: Long): String =
+    "$LLEGAN_POR_UN_ATAJO · último aviso ${haceCuantoLlegoElAviso(ultimoUso, ahora)}"
 
 /** Vuelta 114 · un iPhone sin código vigente o sin ningún aviso todavía: dónde se configura. */
 const val ESTE_IPHONE_NO_LOS_LEE_SOLO: String = "Este iPhone no los lee solo: configúralo en «Desde tu iPhone»."
@@ -50,7 +57,7 @@ const val EN_UN_IPHONE_LLEGAN_CON_UN_ATAJO: String = "En un iPhone los mensajes 
 
 /** Lo que se abre en un iPhone: el atajo, y lo pendiente en «Por revisar». */
 internal const val QUIEN_LEE_LOS_MENSAJES_EN_UN_IPHONE: String =
-    "Un iPhone no deja que ninguna app lea los SMS: los manda a Movi el atajo de Atajos que se configura en " +
+    "Un iPhone no deja que ninguna app lea los SMS: los manda a Movi un atajo de Atajos que se configura en " +
         "«Desde tu iPhone». Aquí queda el historial de lo que llegó; lo pendiente se revisa en «Por revisar», " +
         "desde Actividad."
 
@@ -66,18 +73,22 @@ internal const val QUIEN_LEE_LOS_MENSAJES: String =
  * Arma [ElUltimoMensaje] con lo que dice [avisoDeCaptura] (en `:core`, la misma regla de siempre).
  * [enAndroid] decide la línea de ayuda: en la web y en iOS, que este aparato no lee mensajes. Pura.
  *
- * Vuelta 114 · [enIphone] (la app de iOS en un iPhone o la web abierta en uno, `esUnIphone`): la línea dice si
- * los mensajes llegan por el atajo. [atajoConAvisos] es `true` con un código de captura vigente que ya mandó
- * algún aviso, `false` sin código o sin ningún aviso todavía, y `null` mientras no se sabe.
+ * Vuelta 114 · fuera de Android, [codigoDelAtajo] (el código de captura de la cuenta, `null` mientras no se
+ * sabe) decide la línea: vigente y ya usado → «Tus mensajes del banco llegan por un atajo de Atajos · último
+ * aviso hace …» ([ahora] para el «hace»), en cualquier aparato. Si no, en un iPhone ([enIphone], `esUnIphone`)
+ * dónde configurarlo, o una línea que no afirma nada mientras no se sabe; en una computadora, la de siempre.
  */
 fun elUltimoMensaje(
     captura: CapturaDeSms,
     hoy: LocalDate,
     enAndroid: Boolean,
     enIphone: Boolean = false,
-    atajoConAvisos: Boolean? = null,
+    codigoDelAtajo: CodigoDeCaptura? = null,
+    ahora: Long = 0L,
 ): ElUltimoMensaje {
     val aviso = avisoDeCaptura(captura)
+    /** Cuándo mandó algo el atajo por última vez, si el código está vigente y ya se usó. */
+    val usado = codigoDelAtajo?.takeIf { it.vigente }?.ultimoUso
     val titulo = if (captura.nuncaLlegoNada) {
         NUNCA_HA_LLEGADO_UN_MENSAJE
     } else {
@@ -94,25 +105,18 @@ fun elUltimoMensaje(
         esAlerta = aviso.esAlerta,
         ayuda = when {
             enAndroid -> LA_FECHA_DICE_LO_QUE_LLEGO
+            usado != null -> lineaDeLosMensajesPorElAtajo(usado, ahora)
             !enIphone -> ESTE_APARATO_NO_LEE_MENSAJES
-            atajoConAvisos == true -> EN_ESTE_IPHONE_LLEGAN_POR_EL_ATAJO
-            atajoConAvisos == false -> ESTE_IPHONE_NO_LOS_LEE_SOLO
-            else -> EN_UN_IPHONE_LLEGAN_CON_UN_ATAJO
+            codigoDelAtajo == null -> EN_UN_IPHONE_LLEGAN_CON_UN_ATAJO
+            else -> ESTE_IPHONE_NO_LOS_LEE_SOLO
         },
         masAyuda = when {
             enAndroid -> aviso.detalle
-            enIphone -> "${aviso.detalle} $QUIEN_LEE_LOS_MENSAJES_EN_UN_IPHONE"
+            enIphone || usado != null -> "${aviso.detalle} $QUIEN_LEE_LOS_MENSAJES_EN_UN_IPHONE"
             else -> "${aviso.detalle} $QUIEN_LEE_LOS_MENSAJES"
         },
     )
 }
-
-/**
- * Vuelta 114 · ¿el atajo del iPhone ya manda avisos? Con un código vigente que ya se usó. `null` si la lectura
- * del código no contestó: no se afirma nada.
- */
-fun atajoConAvisos(codigo: com.jvillada.movi.shared.model.CodigoDeCaptura?): Boolean? =
-    codigo?.let { it.vigente && it.ultimoUso != null }
 
 /**
  * **La línea de «Avisarme si un banco se calla»** (vuelta de diseño 8): era un párrafo; ahora una

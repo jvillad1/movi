@@ -90,6 +90,9 @@ class DesdeTuIphoneTest {
 
     private var montada by mutableStateOf(true)
 
+    /** Lo que «Desde tu iPhone» le avisa a la pantalla que la pinta (vuelta 114). */
+    private val avisados = mutableListOf<CodigoDeCaptura?>()
+
     private fun montar(server: ServerDeCodigos, hoja: HojaDePrueba = HojaDePrueba(), versionDeIos: Int? = null) {
         Repositories.sustitutoDePrueba = server
         composeRule.setContent {
@@ -97,7 +100,12 @@ class DesdeTuIphoneTest {
                 MoviTheme {
                     if (montada) {
                         Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                            DesdeTuIphone(palabras = listOf("Bancolombia", "DAVIVIENDA"), ahora = { AHORA }, versionDeIos = versionDeIos)
+                            DesdeTuIphone(
+                                palabras = listOf("Bancolombia", "DAVIVIENDA"),
+                                ahora = { AHORA },
+                                versionDeIos = versionDeIos,
+                                alCambiarElCodigo = { avisados += it },
+                            )
                         }
                     }
                 }
@@ -424,5 +432,27 @@ class DesdeTuIphoneTest {
         assertEquals(VarianteDeLaAutomatizacion.ANTES_DE_IOS_17, variantesDeLaGuia(16).aLaVista.first())
         assertEquals(VarianteDeLaAutomatizacion.IOS_27_O_MAS, variantesDeLaGuia(null).aLaVista.first())
         assertTrue(variantesDeLaGuia(null).detras.isEmpty())
+    }
+
+    /**
+     * Vuelta 114 · la línea de arriba de «Mensajes del banco» sale del código que lee esta sección (una sola
+     * lectura por pantalla): se entera de lo leído y de cada código creado o desactivado.
+     */
+    @Test
+    fun `la seccion le avisa a la pantalla el codigo leido, el creado y el desactivado`() {
+        val server = object : ServerDeCodigos(CodigoDeCaptura(vigente = true, creadoEn = CREADO, ultimoUso = AHORA)) {
+            var lecturas = 0
+            override suspend fun getCodigoDeCaptura(): CodigoDeCaptura { lecturas++; return actual }
+        }
+        montar(server)
+        assertEquals(1, server.lecturas, "una sola lectura")
+        assertEquals(AHORA, avisados.last()?.ultimoUso)
+        tocar(DESACTIVAR_EL_CODIGO)
+        tocar(DESACTIVAR_EL_CODIGO, elUltimo = true)
+        assertEquals(false, avisados.last()?.vigente, "al desactivar, la pantalla deja de decir que llegan por el atajo")
+        tocar(CREAR_TU_CODIGO)
+        assertEquals(true, avisados.last()?.vigente)
+        assertEquals(null, avisados.last()?.ultimoUso, "un código nuevo todavía no mandó nada")
+        assertEquals(1, server.lecturas, "crear y desactivar no vuelven a leer")
     }
 }
