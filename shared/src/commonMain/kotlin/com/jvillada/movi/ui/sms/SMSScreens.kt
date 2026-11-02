@@ -236,6 +236,15 @@ fun CapturaDelBancoScreen(onNavigate: (Screen) -> Unit) {
         intentar { Repositories.wallets.getOrigenesMudos() }.onSuccess { mudosDelServer = it }
         intentar { Repositories.wallets.getCorreosDescartados() }.onSuccess { correosDescartados = it }
     }
+    // Vuelta 114 · en un iPhone, la línea de arriba dice si los mensajes llegan por el atajo: con un código de
+    // captura vigente que ya se usó. Solo se pregunta en un iPhone; `null` hasta que contesta.
+    val enIphone = remember { !isAndroid && com.jvillada.movi.platform.esUnIphone() }
+    var codigoDelAtajo by remember { mutableStateOf<com.jvillada.movi.shared.model.CodigoDeCaptura?>(null) }
+    if (enIphone) {
+        LaunchedEffect(refreshKey) {
+            intentar { Repositories.wallets.getCodigoDeCaptura() }.onSuccess { codigoDelAtajo = it }
+        }
+    }
     val mensajes = mensajesMasRecientesPrimero(smsItems.orEmpty())
     // Vuelta 67 · el historial: su chip, el mensaje abierto y, para abrir un confirmado, su movimiento.
     var filtroDelHistorial by remember { mutableStateOf(FiltroDelHistorial.TODOS) }
@@ -295,7 +304,13 @@ fun CapturaDelBancoScreen(onNavigate: (Screen) -> Unit) {
                     // (qué llegó y por qué este aparato no lee mensajes) se abren con «¿Qué es
                     // esto?» — se pliegan, no se pierden. Ver `elUltimoMensaje`.
                     captura?.let { c ->
-                        val ultimo = elUltimoMensaje(c, hoyEnAppZone(), enAndroid = isAndroid)
+                        val ultimo = elUltimoMensaje(
+                            c,
+                            hoyEnAppZone(),
+                            enAndroid = isAndroid,
+                            enIphone = enIphone,
+                            atajoConAvisos = atajoConAvisos(codigoDelAtajo),
+                        )
                         Fila(
                             titulo = ultimo.titulo,
                             subtitulo = ultimo.subtitulo,

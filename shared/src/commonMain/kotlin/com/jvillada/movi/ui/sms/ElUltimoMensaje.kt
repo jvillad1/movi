@@ -35,6 +35,25 @@ const val ULTIMO_MENSAJE: String = "Último mensaje"
 /** La línea de ayuda en la web y en iOS. */
 const val ESTE_APARATO_NO_LEE_MENSAJES: String = "Este aparato no lee los mensajes del banco."
 
+/**
+ * Vuelta 114 · **en un iPhone la línea dice lo cierto.** En el iPhone de Caro, con el atajo mandando avisos
+ * (último hace 24 min), la tarjeta decía «Este aparato no lee los mensajes del banco»: falso en la práctica.
+ * Con un código vigente que ya se usó, los mensajes llegan por el atajo.
+ */
+const val EN_ESTE_IPHONE_LLEGAN_POR_EL_ATAJO: String = "En este iPhone los mensajes llegan por el atajo de Atajos."
+
+/** Vuelta 114 · un iPhone sin código vigente o sin ningún aviso todavía: dónde se configura. */
+const val ESTE_IPHONE_NO_LOS_LEE_SOLO: String = "Este iPhone no los lee solo: configúralo en «Desde tu iPhone»."
+
+/** Vuelta 114 · un iPhone mientras no se sabe si tiene el atajo (la lectura del código no ha contestado). */
+const val EN_UN_IPHONE_LLEGAN_CON_UN_ATAJO: String = "En un iPhone los mensajes llegan con un atajo de Atajos."
+
+/** Lo que se abre en un iPhone: el atajo, y lo pendiente en «Por revisar». */
+internal const val QUIEN_LEE_LOS_MENSAJES_EN_UN_IPHONE: String =
+    "Un iPhone no deja que ninguna app lea los SMS: los manda a Movi el atajo de Atajos que se configura en " +
+        "«Desde tu iPhone». Aquí queda el historial de lo que llegó; lo pendiente se revisa en «Por revisar», " +
+        "desde Actividad."
+
 /** La línea de ayuda en Android: la fecha dice lo que llegó, no que la captura ande. */
 const val LA_FECHA_DICE_LO_QUE_LLEGO: String = "Dice lo que llegó, no si la captura sigue andando."
 
@@ -46,8 +65,18 @@ internal const val QUIEN_LEE_LOS_MENSAJES: String =
 /**
  * Arma [ElUltimoMensaje] con lo que dice [avisoDeCaptura] (en `:core`, la misma regla de siempre).
  * [enAndroid] decide la línea de ayuda: en la web y en iOS, que este aparato no lee mensajes. Pura.
+ *
+ * Vuelta 114 · [enIphone] (la app de iOS en un iPhone o la web abierta en uno, `esUnIphone`): la línea dice si
+ * los mensajes llegan por el atajo. [atajoConAvisos] es `true` con un código de captura vigente que ya mandó
+ * algún aviso, `false` sin código o sin ningún aviso todavía, y `null` mientras no se sabe.
  */
-fun elUltimoMensaje(captura: CapturaDeSms, hoy: LocalDate, enAndroid: Boolean): ElUltimoMensaje {
+fun elUltimoMensaje(
+    captura: CapturaDeSms,
+    hoy: LocalDate,
+    enAndroid: Boolean,
+    enIphone: Boolean = false,
+    atajoConAvisos: Boolean? = null,
+): ElUltimoMensaje {
     val aviso = avisoDeCaptura(captura)
     val titulo = if (captura.nuncaLlegoNada) {
         NUNCA_HA_LLEGADO_UN_MENSAJE
@@ -63,10 +92,27 @@ fun elUltimoMensaje(captura: CapturaDeSms, hoy: LocalDate, enAndroid: Boolean): 
         titulo = titulo,
         subtitulo = subtitulo,
         esAlerta = aviso.esAlerta,
-        ayuda = if (enAndroid) LA_FECHA_DICE_LO_QUE_LLEGO else ESTE_APARATO_NO_LEE_MENSAJES,
-        masAyuda = if (enAndroid) aviso.detalle else "${aviso.detalle} $QUIEN_LEE_LOS_MENSAJES",
+        ayuda = when {
+            enAndroid -> LA_FECHA_DICE_LO_QUE_LLEGO
+            !enIphone -> ESTE_APARATO_NO_LEE_MENSAJES
+            atajoConAvisos == true -> EN_ESTE_IPHONE_LLEGAN_POR_EL_ATAJO
+            atajoConAvisos == false -> ESTE_IPHONE_NO_LOS_LEE_SOLO
+            else -> EN_UN_IPHONE_LLEGAN_CON_UN_ATAJO
+        },
+        masAyuda = when {
+            enAndroid -> aviso.detalle
+            enIphone -> "${aviso.detalle} $QUIEN_LEE_LOS_MENSAJES_EN_UN_IPHONE"
+            else -> "${aviso.detalle} $QUIEN_LEE_LOS_MENSAJES"
+        },
     )
 }
+
+/**
+ * Vuelta 114 · ¿el atajo del iPhone ya manda avisos? Con un código vigente que ya se usó. `null` si la lectura
+ * del código no contestó: no se afirma nada.
+ */
+fun atajoConAvisos(codigo: com.jvillada.movi.shared.model.CodigoDeCaptura?): Boolean? =
+    codigo?.let { it.vigente && it.ultimoUso != null }
 
 /**
  * **La línea de «Avisarme si un banco se calla»** (vuelta de diseño 8): era un párrafo; ahora una

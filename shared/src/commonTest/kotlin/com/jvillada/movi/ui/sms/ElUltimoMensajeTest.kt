@@ -75,4 +75,37 @@ class ElUltimoMensajeTest {
         assertTrue("mensajes, avisos o correos" in porQue, porQue)
         assertEquals("Te avisa en Inicio tras 1 día sin nada.", ayudaDelBancoQueSeCalla(1).first)
     }
+
+    /**
+     * Vuelta 114 · en el iPhone de Caro, con el atajo mandando avisos, la tarjeta decía «Este aparato no lee los
+     * mensajes del banco». En un iPhone la línea dice lo cierto: llegan por el atajo, o dónde configurarlo.
+     */
+    @Test
+    fun `en un iPhone la linea dice si los mensajes llegan por el atajo`() {
+        val captura = CapturaDeSms(total = 2, ultimo = "2026-11-02 08:30")
+        val conAtajo = elUltimoMensaje(captura, hoy, enAndroid = false, enIphone = true, atajoConAvisos = true)
+        assertEquals("En este iPhone los mensajes llegan por el atajo de Atajos.", conAtajo.ayuda)
+        assertFalse("teléfono Android" in conAtajo.masAyuda, conAtajo.masAyuda)
+        assertTrue("«Desde tu iPhone»" in conAtajo.masAyuda && "«Por revisar»" in conAtajo.masAyuda, conAtajo.masAyuda)
+
+        val sinAtajo = elUltimoMensaje(captura, hoy, enAndroid = false, enIphone = true, atajoConAvisos = false)
+        assertEquals("Este iPhone no los lee solo: configúralo en «Desde tu iPhone».", sinAtajo.ayuda)
+
+        // Mientras no se sabe, nada que pueda ser falso.
+        val sinSaber = elUltimoMensaje(captura, hoy, enAndroid = false, enIphone = true, atajoConAvisos = null)
+        assertEquals(EN_UN_IPHONE_LLEGAN_CON_UN_ATAJO, sinSaber.ayuda)
+
+        // En una computadora sigue lo de siempre, y en Android también.
+        assertEquals(ESTE_APARATO_NO_LEE_MENSAJES, elUltimoMensaje(captura, hoy, enAndroid = false, atajoConAvisos = true).ayuda)
+        assertEquals(LA_FECHA_DICE_LO_QUE_LLEGO, elUltimoMensaje(captura, hoy, enAndroid = true, enIphone = false).ayuda)
+        listOf(conAtajo, sinAtajo, sinSaber).forEach { assertTrue(it.ayuda.length <= 65, "«${it.ayuda}» no es una línea") }
+    }
+
+    @Test
+    fun `el atajo tiene avisos solo con un codigo vigente que ya se uso`() {
+        assertEquals(null, atajoConAvisos(null))
+        assertEquals(true, atajoConAvisos(com.jvillada.movi.shared.model.CodigoDeCaptura(vigente = true, creadoEn = 1, ultimoUso = 2)))
+        assertEquals(false, atajoConAvisos(com.jvillada.movi.shared.model.CodigoDeCaptura(vigente = true, creadoEn = 1)))
+        assertEquals(false, atajoConAvisos(com.jvillada.movi.shared.model.CodigoDeCaptura(vigente = false, ultimoUso = 2)))
+    }
 }
