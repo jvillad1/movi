@@ -1,27 +1,56 @@
 package com.jvillada.movi.theme
 
+import com.jvillada.movi.fallos.reportarAtrapado
+import com.jvillada.movi.resources.Res
+import platform.Foundation.NSFileManager
+import platform.Foundation.NSURL
+
 /**
- * **iOS todavía no: falta verlo corriendo, no la versión de Kotlin.**
+ * # Figtree en el iPhone (vuelta 115)
  *
- * Hasta Kotlin 2.1.21 los recursos de Compose no entraban a un XCFramework, y el plugin lo decía al
- * configurar el build. Desde 2.2 ese aviso ya no aparece, pero que los archivos entren al paquete no
- * alcanza: el framework de Movi es **estático**, y lo que importa es que `Font(recurso)` los
- * encuentre al correr. Si no los encuentra tira `MissingResourceException` adentro de `MoviTheme` y
- * **la app se cae al abrir**.
+ * **Dónde las busca Compose.** El `ComposeApp.framework` de Movi es **estático**: no lleva los
+ * recursos adentro. Compose 1.8 (`components-resources`, `ResourceReader.ios.kt`) busca primero una
+ * carpeta `composeResources` dentro de algún `Frameworks/<nombre>.framework` de la app (eso es para un
+ * framework dinámico) y, si no hay, en `NSBundle.mainBundle.resourcePath + "/compose-resources"`.
+ * La ruta de cada fuente se le pega detrás, así que en la app quedan en
+ * `iosApp.app/compose-resources/composeResources/com.jvillada.movi.resources/font/figtree_regular.ttf`
+ * (y los otros cuatro pesos).
  *
- * Eso solo se sabe abriendo la app en un iPhone o en el simulador. Al subir a 2.2 no se pudo: en la
- * Mac de desarrollo `xcrun -f ld` falla porque la licencia de Xcode no está aceptada, así que ni
- * siquiera enlaza el framework.
+ * **Quién las pone ahí.** El plugin de Compose solo las copia con `embedAndSignAppleFrameworkForXcode`
+ * o con CocoaPods; Movi usa un XCFramework (`MOVI_XCFRAMEWORK_DIR`, vuelta 112). Entonces:
+ * `:shared:recursosDeComposeParaIphone<Debug|Release>` (corre solo después de
+ * `assembleComposeApp…XCFramework`) las deja junto al XCFramework, y la fase «Copiar las fuentes de
+ * Movi» del proyecto de Xcode las copia a la app. Si no las encuentra, el build de Xcode falla y lo
+ * dice: nunca sale una app sin fuentes sin que nadie se entere. Lo vigila `LasFuentesDelIphoneTest`.
  *
- * **Vuelta 29 (Figtree), medido:** la licencia de Xcode ya está aceptada y `linkDebugFrameworkIosX64`
- * enlaza, y `assembleIosX64MainResources` arma los cinco `figtree_*.ttf` en
- * `build/generated/compose/resourceGenerator/assembledResources/iosX64Main/composeResources/`. Pero
- * **el `ComposeApp.framework` enlazado no los trae adentro** (solo el binario, `Headers`, `Modules` e
- * `Info.plist`), y el proyecto de Xcode no tiene un paso que copie `composeResources` al paquete de la
- * app. Prender esto sin ese paso es la caída al abrir de arriba.
- *
- * Para prenderlo: sumar al proyecto de Xcode la copia de `composeResources` al paquete de la app (o
- * pasar al `embedAndSignAppleFrameworkForXcode`, que la hace), poner esto en `true` y abrir la app en
- * el simulador. Si abre y los títulos se ven en Figtree, queda.
+ * **La red de seguridad.** `Font(recurso)` lee el archivo mientras compone, y en iOS un archivo que
+ * falta es `MissingResourceException` adentro de `MoviTheme`: **la app se caería al abrir**. Un
+ * `try` no puede rodear una llamada `@Composable`, así que se pregunta ANTES, sin componer: por cada
+ * fuente, `Res.getUri` (la MISMA cuenta de ruta que hace Compose al leerla, no una copia) y si el
+ * archivo existe. Si falta alguna, Movi usa la letra del sistema, se ve igual de bien que antes y el
+ * hecho queda en los fallos atrapados (`reportarAtrapado`, componente `LetraPropia`), que suben al
+ * próximo arranque. Se pregunta una vez por proceso.
  */
-internal actual val laPlataformaTraeLasFuentes: Boolean = false
+internal actual val laPlataformaTraeLasFuentes: Boolean by lazy { lasFuentesEstanEnLaApp() }
+
+/** Cuando faltan fuentes en el paquete: va al reporte de fallos, nunca rompe nada. */
+internal class FuentesQueFaltanEnLaApp(faltan: List<String>) :
+    IllegalStateException("Faltan fuentes de Movi en la app: ${faltan.joinToString()} (se usa la letra del sistema)")
+
+private fun lasFuentesEstanEnLaApp(): Boolean {
+    val faltan = try {
+        ARCHIVOS_DE_FIGTREE.filterNot { archivo ->
+            val ruta = NSURL.URLWithString(Res.getUri("font/$archivo"))?.path
+            ruta != null && NSFileManager.defaultManager.fileExistsAtPath(ruta)
+        }
+    } catch (e: Throwable) {
+        println("Movi: no se pudo revisar las fuentes ($e); se usa la letra del sistema")
+        reportarAtrapado(e, componente = "LetraPropia")
+        return false
+    }
+    if (faltan.isEmpty()) return true
+    val error = FuentesQueFaltanEnLaApp(faltan)
+    println("Movi: ${error.message}")
+    reportarAtrapado(error, componente = "LetraPropia")
+    return false
+}

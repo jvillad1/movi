@@ -30,7 +30,7 @@ import org.jetbrains.compose.resources.Font
  *
  * ### Los archivos
  *
- * **Android y la web, no iOS todavía**: ver [laPlataformaTraeLasFuentes].
+ * **Android, la web y, desde la vuelta 115, el iPhone**: ver [laPlataformaTraeLasFuentes].
  *
  * Cinco TTF estáticos —400, 500, 600, 700 y 800—, no la versión variable: Compose en wasm e iOS no
  * garantiza aplicar los ejes de variación, y un peso que no se aplica cae en silencio al regular.
@@ -41,10 +41,24 @@ import org.jetbrains.compose.resources.Font
  * no como constante en `Tokens.kt`.
  */
 /**
- * ¿Los archivos de fuente llegan al aparato? En Android y la web sí. En iOS todavía no: ver el
- * `actual` de iOS, que explica por qué preguntar esto evita que la app se caiga al abrir.
+ * ¿Los archivos de fuente llegan al aparato? En Android y la web siempre. En iOS se comprueba al
+ * abrir que estén dentro de la app: ver el `actual` de iOS, que explica por qué preguntar esto evita
+ * que la app se caiga al abrir si alguna falta.
  */
 internal expect val laPlataformaTraeLasFuentes: Boolean
+
+/**
+ * Los cinco archivos de [familiaDeMovi], tal como están en `composeResources/font`. iOS los busca
+ * por nombre antes de componer; `LasFuentesDelIphoneTest` vigila que sean exactamente los de la
+ * carpeta.
+ */
+internal val ARCHIVOS_DE_FIGTREE: List<String> = listOf(
+    "figtree_regular.ttf",
+    "figtree_medium.ttf",
+    "figtree_semibold.ttf",
+    "figtree_bold.ttf",
+    "figtree_extrabold.ttf",
+)
 
 /** Figtree en sus cinco pesos; sin fuentes propias, la del sistema (con sus cifras tabulares). */
 @Composable

@@ -60,6 +60,24 @@ fun instalarLaCapturaDeFallos() {
     }
 }
 
+/**
+ * **Lo que la app atrapa y sigue** (vuelta 115, como `reportarAtrapado` de Android): el mismo
+ * reporte con `atrapado = true` y el componente, guardado para subir en el próximo arranque. Nunca
+ * lanza: reportar no puede romper lo que se estaba salvando.
+ */
+fun reportarAtrapado(error: Throwable, componente: String) {
+    runCatching {
+        val hilo = if (NSThread.isMainThread) "main" else "otro"
+        guardar(
+            falloDe(
+                error, id = newId("fallo"), plataforma = "ios", version = InfoDeLaApp.version, hilo = hilo,
+                modelo = InfoDeLaApp.modelo, sistema = InfoDeLaApp.sistema, ahora = Clock.System.now().toEpochMilliseconds(),
+                atrapado = true, componente = componente,
+            ),
+        )
+    }
+}
+
 private fun leer(): List<FalloDeLaApp> = runCatching {
     NSUserDefaults.standardUserDefaults.stringForKey(CLAVE)?.let { json.decodeFromString(lista, it) }
 }.getOrNull().orEmpty()
