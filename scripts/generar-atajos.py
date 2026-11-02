@@ -182,7 +182,8 @@ def atajo_de_mensajes(base):
     codigo = str(uuid.uuid5(uuid.NAMESPACE_URL, url + "#codigo-mensaje")).upper()
     acciones = [
         comentario(NOMBRE_DE_MENSAJES + ". Manda a Movi el SMS del banco que le pasa la automatización "
-                   "«Mensaje». Movi solo guarda los mensajes de bancos: los demás los descarta sin guardarlos."),
+                   "«Mensaje». Movi solo guarda los que empiezan como un aviso del banco y traen un monto: los "
+                   "demás los descarta sin guardarlos. Nada se anota sin que lo confirmes."),
         accion_del_codigo(codigo),
         accion_del_envio(url, codigo, [
             ("tipo", texto_plano("mensaje")),

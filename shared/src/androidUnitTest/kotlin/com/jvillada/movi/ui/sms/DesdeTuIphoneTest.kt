@@ -237,6 +237,14 @@ class DesdeTuIphoneTest {
         assertTrue(hay("«DAVIVIENDA»"))
         assertTrue(hay("«$NOMBRE_DEL_ATAJO_DE_MENSAJES»"))
         assertTrue(hay(PRIVACIDAD_DE_LOS_ATAJOS))
+        // Vuelta 114 · la línea no promete de más: el atajo no sabe quién manda, así que no puede decir
+        // «solo los mensajes de bancos»; dice la regla de verdad (empieza como un aviso y trae un monto).
+        assertEquals(
+            "Solo se guardan los mensajes que empiezan como un aviso del banco y traen un monto; los demás se " +
+                "descartan sin guardarlos. Nada se anota sin que lo confirmes.",
+            PRIVACIDAD_DE_LOS_ATAJOS,
+        )
+        assertFalse("mensajes de bancos" in PRIVACIDAD_DE_LOS_ATAJOS)
         assertTrue(hay(TEXTO_DE_PRUEBA_DEL_ATAJO))
     }
 

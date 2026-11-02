@@ -104,9 +104,14 @@ const val AGREGAR_EL_ATAJO_DE_MENSAJES: String = "Agregar el atajo de mensajes"
 const val AGREGAR_EL_ATAJO_DE_APPLE_PAY: String = "Agregar el atajo de Apple Pay"
 const val COPIAR_EL_TEXTO_DE_PRUEBA: String = "Copiar el texto de prueba"
 
-/** La línea de privacidad, tal cual la pide el dueño. */
+/**
+ * La línea de privacidad. Vuelta 114: decía «Solo se guardan los mensajes de bancos», y desde la 113 el atajo
+ * no sabe quién manda (`seGuardaElSmsDelAtajo`): se guarda lo que **empieza** como un aviso del banco y trae un
+ * monto, aunque lo escriba una persona. Ahora dice eso, y que nada se anota solo.
+ */
 const val PRIVACIDAD_DE_LOS_ATAJOS: String =
-    "Solo se guardan los mensajes de bancos: los demás que lleguen se descartan sin guardarlos."
+    "Solo se guardan los mensajes que empiezan como un aviso del banco y traen un monto; los demás se " +
+        "descartan sin guardarlos. Nada se anota sin que lo confirmes."
 
 const val INTRO_DESDE_TU_IPHONE: String =
     "Con la app Atajos, tu iPhone le avisa a Movi cada SMS del banco y cada pago con Apple Pay. " +
