@@ -111,6 +111,9 @@ class PaginasLegalesTest {
         // la política no puede decir que solo cuenta el remitente.
         assertTrue("cuyo remitente es un código bancario conocido o cuyo texto nombra un banco" in html)
         assertFalse("de remitentes bancarios de una lista cerrada; los demás" in html)
+        // Vuelta 113: un número personal nunca sale (`seSubeElSms`), y la política ya no dice que puede salir.
+        assertTrue("nunca los que vienen del número de teléfono de una persona" in html)
+        assertFalse("por eso un mensaje personal que nombre a tu banco también puede salir" in html)
         val borrar = PaginasLegales.borrarCuenta(ResponsableDeMovi.Datos(null, null))
         // Lo que borrar no alcanza (copias de los proveedores y respaldos), dicho en las dos páginas.
         assertTrue(PaginasLegales.LO_QUE_MOVI_NO_CONTROLA in borrar)
