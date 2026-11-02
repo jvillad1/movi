@@ -8,8 +8,8 @@ no puede firmar). Los firmados van a server/src/main/resources/atajos/ (no a sta
 .gitignore porque ahí copia la web el armado), y el server los sirve en /atajos/<nombre>.shortcut.
 
     python3 scripts/generar-atajos.py                       # producción
-    python3 scripts/generar-atajos.py --url http://192.168.1.20:8080 --salida /tmp/atajos-dev
-    python3 scripts/generar-atajos.py --sin-firmar          # solo los plist (cualquier sistema)
+    python3 scripts/generar-atajos.py --url http://192.168.1.20:8080 --salida /tmp/atajos-dev --plist /tmp/atajos-dev
+    python3 scripts/generar-atajos.py --sin-firmar          # solo los plist (cualquier sistema); no borra nada
 
 El formato del plist no lo documenta Apple. Las claves salen de lo que la comunidad sacó de atajos
 exportados, en particular del compilador Cherri (github.com/electrikmilk/cherri: shortcut.go,
@@ -241,12 +241,22 @@ def firmar(plist_xml, destino):
 def main():
     p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     p.add_argument("--url", default=URL_DE_PRODUCCION, help="la base del server (por defecto, producción)")
-    p.add_argument("--salida", default=str(SALIDA_FIRMADOS), help="dónde quedan los .shortcut firmados")
-    p.add_argument("--plist", default=str(SALIDA_PLIST), help="dónde quedan los plist sin firmar")
-    p.add_argument("--sin-firmar", action="store_true", help="solo escribe y verifica los plist")
+    p.add_argument("--salida", help="dónde quedan los .shortcut firmados (por defecto, los del repo)")
+    p.add_argument("--plist", help="dónde quedan los plist sin firmar (por defecto, los del repo)")
+    p.add_argument("--sin-firmar", action="store_true", help="solo escribe y verifica los plist; no borra nada")
     a = p.parse_args()
 
-    salida, carpeta_plist = Path(a.salida), Path(a.plist)
+    # Revisión de la vuelta 111: los atajos del repo apuntan a producción. Unos apuntados a otro server no
+    # pueden pisarlos: con otra --url hay que decir --plist y --salida, y las dos fuera del repo.
+    es_produccion = a.url.rstrip("/") == URL_DE_PRODUCCION
+    if not es_produccion:
+        if not a.plist or not a.salida:
+            p.error("con una --url que no es la de producción hay que dar --plist y --salida (fuera del repo)")
+        for opcion, carpeta in (("--plist", a.plist), ("--salida", a.salida)):
+            if Path(carpeta).resolve().is_relative_to(RAIZ):
+                p.error(f"{opcion} tiene que quedar fuera del repo con una --url que no es la de producción")
+    salida = Path(a.salida) if a.salida else SALIDA_FIRMADOS
+    carpeta_plist = Path(a.plist) if a.plist else SALIDA_PLIST
     salida.mkdir(parents=True, exist_ok=True)
     carpeta_plist.mkdir(parents=True, exist_ok=True)
     url = a.url.rstrip("/") + RUTA_DE_LA_CAPTURA
@@ -262,10 +272,15 @@ def main():
         verificar_plist(plist, url)
         print(f"{plist.relative_to(RAIZ) if plist.is_relative_to(RAIZ) else plist}: plist válido")
         firmado = salida / f"{nombre}.shortcut"
-        if a.sin_firmar or not se_firma:
+        if a.sin_firmar:
+            # Solo los plist: lo firmado que ya había no se toca.
+            print(f"  {nombre}: sin firmar (--sin-firmar)")
+            continue
+        if not se_firma:
+            # Un firmado viejo de un atajo que ya no se firma no puede quedar servido.
             if firmado.exists():
                 firmado.unlink()
-            print(f"  {nombre}: sin firmar" + ("" if a.sin_firmar else " (a propósito: ver el docstring)"))
+            print(f"  {nombre}: sin firmar (a propósito: ver el docstring)")
             continue
         if firmar(plist, firmado):
             print(f"  firmado: {firmado}")
