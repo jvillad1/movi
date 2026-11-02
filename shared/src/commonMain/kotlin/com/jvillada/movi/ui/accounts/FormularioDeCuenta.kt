@@ -11,6 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -22,11 +23,15 @@ import androidx.compose.ui.platform.testTag
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.BANCOS_CONOCIDOS
+import com.jvillada.movi.shared.model.MAX_ACCOUNT_NAME_LENGTH
 import com.jvillada.movi.shared.model.Marca
+import com.jvillada.movi.shared.model.marcaDeLaCuenta
+import com.jvillada.movi.shared.model.normalizarParaBuscar
 import com.jvillada.movi.shared.model.bancosParaElegir
 import com.jvillada.movi.shared.model.newId
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Medida
+import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.components.CirculoDeMarca
 import com.jvillada.movi.ui.components.TamanoDeAvatar
 import com.jvillada.movi.ui.components.ds.Campo
@@ -44,11 +49,23 @@ const val TAG_TIPO_BIEN: String = "formulario-de-cuenta-bien"
 
 /**
  * Los bancos que se ofrecen de un toque, por su id de `MarcasConocidas` y en el orden en que se ven.
- * Los más comunes en Colombia; los demás, en «Otro banco» (vuelta 88), y cualquier otro se escribe a mano.
+ * Los más comunes en Colombia; los demás, en «Ver todos los bancos» (vuelta 88), y cualquier otro se
+ * escribe a mano.
+ *
+ * Vuelta 98: el dueño pidió Davibank (estaba en el catálogo y no acá) y se sumaron los que más se usan
+ * y faltaban. Son 16, y 16 píldoras con su avatar llenaban media hoja: a la vista van los primeros
+ * [BANCOS_A_LA_VISTA] y los demás salen en «Ver todos los bancos», con el resto del catálogo.
  */
 val BANCOS_DE_UN_TOQUE: List<String> = listOf(
-    "bancolombia", "nu", "davivienda", "nequi", "banco_de_bogota", "bbva", "daviplata",
+    "bancolombia", "nu", "davivienda", "nequi", "banco_de_bogota", "bbva", "daviplata", "davibank",
+    "occidente", "av_villas", "scotiabank", "banco_popular", "banco_falabella", "lulo", "itau", "rappipay",
 )
+
+/**
+ * Cuántos de [BANCOS_DE_UN_TOQUE] se ven como píldoras (vuelta 98). Ocho son dos o tres renglones a
+ * 360 dp: la cuadrícula sigue limpia y lo de siempre queda de un toque.
+ */
+const val BANCOS_A_LA_VISTA: Int = 8
 
 /**
  * **Los tipos de cuenta, en palabras que entiende cualquiera** (vuelta de diseño 3 en la guía; desde
@@ -131,6 +148,19 @@ class EstadoDelFormularioDeCuenta {
     fun cuentaNueva(): Account =
         Account(id = newId("acc"), name = nombre.trim(), type = tipo, balance = saldo ?: 0L, currency = "COP")
 
+    /**
+     * **Llenarlo con una cuenta que ya existe** (vuelta 98, «Editar la cuenta»): su nombre, su tipo, el
+     * banco que nombra su nombre (si es uno del catálogo) y el [saldoDeHoy] que se le pasa. Con el
+     * banco puesto, cambiarlo propone el nombre nuevo solo si el de hoy es el que Movi habría propuesto
+     * («Bancolombia Ahorros» → «Davibank Ahorros»); uno escrito a mano no se toca.
+     */
+    fun cargar(cuenta: Account, saldoDeHoy: Long?) {
+        banco = marcaDeLaCuenta(cuenta)?.takeIf { m -> BANCOS_CONOCIDOS.any { it.id == m.id } }?.nombre
+        tipo = cuenta.type
+        nombre = cuenta.name
+        saldo = saldoDeHoy
+    }
+
     fun limpiar() {
         banco = null
         tipo = AccountType.SAVINGS
@@ -142,9 +172,19 @@ class EstadoDelFormularioDeCuenta {
 @Composable
 fun rememberEstadoDelFormularioDeCuenta(): EstadoDelFormularioDeCuenta = remember { EstadoDelFormularioDeCuenta() }
 
-/** Los bancos de [BANCOS_DE_UN_TOQUE], con su marca de `MarcasConocidas`. */
+/** Los bancos de [BANCOS_DE_UN_TOQUE] que se ven de entrada, con su marca de `MarcasConocidas`. */
 private val MARCAS_DE_UN_TOQUE: List<Marca> =
-    BANCOS_DE_UN_TOQUE.mapNotNull { id -> BANCOS_CONOCIDOS.firstOrNull { it.id == id } }
+    BANCOS_DE_UN_TOQUE.take(BANCOS_A_LA_VISTA).mapNotNull { id -> BANCOS_CONOCIDOS.firstOrNull { it.id == id } }
+
+/**
+ * **¿Ofrecer «Usar «lo escrito»»?** Siempre que haya algo escrito y ningún banco del catálogo se llame
+ * exactamente así (sin tildes ni mayúsculas). Antes salía solo cuando la búsqueda no encontraba nada,
+ * y «Banco Mundo Mujer» casaba «banco» con medio catálogo: no había cómo escribirlo. Pura.
+ */
+fun ofrecerLoEscrito(escrito: String, lista: List<Marca>): Boolean {
+    val q = normalizarParaBuscar(escrito)
+    return q.isNotEmpty() && lista.none { normalizarParaBuscar(it.nombre) == q }
+}
 
 /**
  * **Crear una cuenta se ve igual en todos lados** (vuelta de diseño 16). Antes la guía de primer uso
@@ -164,7 +204,7 @@ private val MARCAS_DE_UN_TOQUE: List<Marca> =
  * Vuelta 88: los bancos y los tipos **siempre bajan en renglones** dentro de la tarjeta. La guía los
  * llevaba en una fila que se desplazaba de lado (vuelta 54, `enUnaFila`) y en el teléfono del papá del
  * dueño, con la letra grande, se veían píldoras cortadas por los dos lados y solo dos bancos. Los que
- * no están de un toque salen de «Otro banco» ([SelectorDeBanco]).
+ * no están de un toque salen de «Ver todos los bancos» ([SelectorDeBanco]).
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -173,6 +213,19 @@ fun FormularioDeCuenta(
     modifier: Modifier = Modifier,
     onElegirBien: ((nombre: String) -> Unit)? = null,
     habilitado: Boolean = true,
+    /**
+     * Vuelta 98 · **el tipo no se puede cambiar** (una deuda en «Editar la cuenta»): en vez de las
+     * píldoras va su tipo con este porqué. `null` = las píldoras de siempre.
+     */
+    tipoFijo: String? = null,
+    /** Vuelta 98: sin «Saldo de hoy» (una deuda: su saldo se cuadra en su ficha). */
+    conSaldo: Boolean = true,
+    /** Vuelta 98: la línea debajo del nombre (lo que Movi deja de reconocer si se renombra). */
+    ayudaDelNombre: String? = null,
+    /** Vuelta 98: la línea debajo del saldo («Movi anota un ajuste de +$X para que cuadre»). */
+    ayudaDelSaldo: String? = null,
+    /** El símbolo del saldo: «$» en pesos, la moneda si no. */
+    monedaDelSaldo: String = "$",
 ) {
     Column(modifier = modifier.fillMaxWidth().testTag(TAG_FORMULARIO_DE_CUENTA)) {
         RotuloDeCampo("Banco")
@@ -180,7 +233,9 @@ fun FormularioDeCuenta(
         Spacer(Modifier.height(Medida.dentroDeSeccion))
 
         RotuloDeCampo("Tipo")
-        ChipsEnFilas(Modifier.testTag(TAG_TIPOS_DE_CUENTA)) {
+        if (tipoFijo != null) {
+            Text(tipoFijo, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.testTag(TAG_TIPO_FIJO))
+        } else ChipsEnFilas(Modifier.testTag(TAG_TIPOS_DE_CUENTA)) {
             TIPOS_DE_CUENTA.forEach { (rotulo, tipo) ->
                 PildoraDeFiltro(rotulo, seleccionada = estado.tipo == tipo, onClick = { if (habilitado) estado.elegirTipo(tipo) })
             }
@@ -196,10 +251,28 @@ fun FormularioDeCuenta(
         }
         Spacer(Modifier.height(Medida.dentroDeSeccion))
 
-        Campo(estado.nombre, { estado.nombre = it }, rotulo = "Nombre", guia = "Ej: Bancolombia Ahorros", habilitado = habilitado)
-        Spacer(Modifier.height(Medida.dentroDeSeccion))
+        Campo(
+            estado.nombre,
+            // Vuelta 98: el largo de la columna, como en «Para qué es esta plata»: un campo que acepta
+            // letras que después se rechazan es peor que uno que deja de aceptarlas.
+            { estado.nombre = it.take(MAX_ACCOUNT_NAME_LENGTH) },
+            rotulo = "Nombre",
+            guia = "Ej: Bancolombia Ahorros",
+            ayuda = ayudaDelNombre,
+            habilitado = habilitado,
+        )
 
-        CampoDeMonto(estado.saldo, { estado.saldo = it }, rotulo = "Saldo de hoy", habilitado = habilitado)
+        if (conSaldo) {
+            Spacer(Modifier.height(Medida.dentroDeSeccion))
+            CampoDeMonto(
+                estado.saldo,
+                { estado.saldo = it },
+                rotulo = "Saldo de hoy",
+                ayuda = ayudaDelSaldo,
+                habilitado = habilitado,
+                moneda = monedaDelSaldo,
+            )
+        }
     }
 }
 
@@ -209,9 +282,9 @@ fun FormularioDeCuenta(
  * ([CirculoDeMarca]), a [TamanoDeAvatar.Linea] dentro de la píldora. Lo usan este bloque y las
  * tarjetas de crédito de la guía.
  *
- * Vuelta 88 · **«Otro banco»**: la última píldora abre, ahí mismo, una búsqueda con **todos** los bancos
+ * Vuelta 88 · **«Otro banco»** (desde la vuelta 98, «Ver todos los bancos»): la última píldora abre, ahí mismo, una búsqueda con **todos** los bancos
  * y billeteras del catálogo ([bancosParaElegir]: «bogota» encuentra «Banco de Bogotá»), en píldoras que
- * bajan en renglones. El elegido de esa lista queda a la vista, elegido, antes de «Otro banco». Si nada
+ * bajan en renglones. El elegido de esa lista queda a la vista, elegido, antes de esa píldora. Si nada
  * coincide con lo escrito, «Usar «lo que escribiste»» lo toma tal cual (en una cuenta también se puede escribir
  * el nombre a mano, como siempre). [paraTarjetas] suma la AMEX a la lista.
  */
@@ -273,21 +346,29 @@ internal fun SelectorDeBanco(elegido: String?, onElegir: (String) -> Unit, paraT
                     inicio = { CirculoDeMarca(marca, tamano = TamanoDeAvatar.Linea) },
                 )
             }
-            if (escrito.isNotEmpty() && lista.isEmpty()) {
-                PildoraDeFiltro(
-                    "Usar «$escrito»",
-                    seleccionada = false,
-                    onClick = { elegir(escrito) },
-                    icono = Icons.Rounded.Add,
-                    modifier = Modifier.testTag(TAG_USAR_LO_ESCRITO),
-                )
-            }
+        }
+        // Fuera de la lista: no es un banco del catálogo, es lo que escribiste (vuelta 98).
+        if (ofrecerLoEscrito(escrito, lista)) {
+            Spacer(Modifier.height(Espacio.xs))
+            PildoraDeFiltro(
+                "Usar «$escrito»",
+                seleccionada = false,
+                onClick = { elegir(escrito) },
+                icono = Icons.Rounded.Add,
+                modifier = Modifier.testTag(TAG_USAR_LO_ESCRITO),
+            )
         }
     }
 }
 
-/** Lo que dice la píldora que abre la lista de todos los bancos. */
-const val OTRO_BANCO: String = "Otro banco"
+/**
+ * Lo que dice la píldora que abre la lista de todos los bancos. Vuelta 98: era «Otro banco»; con ocho a
+ * la vista y el resto adentro, lo que abre es el catálogo entero, y así se dice.
+ */
+const val OTRO_BANCO: String = "Ver todos los bancos"
+
+/** El tag del tipo que no se puede cambiar (vuelta 98). */
+const val TAG_TIPO_FIJO: String = "formulario-de-cuenta-tipo-fijo"
 
 /** El tag de la fila de bancos del bloque. */
 const val TAG_BANCOS_DE_UN_TOQUE: String = "formulario-de-cuenta-bancos"

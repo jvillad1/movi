@@ -575,7 +575,7 @@ class PrimerUsoEnPantallaTest {
     fun `los bancos llevan el avatar de su marca`() {
         montar(RepoDeLaGuia(), paso = PasoDePrimerUso.CUENTAS)
         val avatares = composeRule.onAllNodesWithTag(TAG_AVATAR_DE_MARCA, useUnmergedTree = true).fetchSemanticsNodes()
-        assertEquals(com.jvillada.movi.ui.accounts.BANCOS_DE_UN_TOQUE.size, avatares.size, "un avatar de marca por banco")
+        assertEquals(com.jvillada.movi.ui.accounts.BANCOS_A_LA_VISTA, avatares.size, "un avatar de marca por banco a la vista")
     }
 
     @Test
