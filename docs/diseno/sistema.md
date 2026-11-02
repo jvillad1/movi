@@ -5171,3 +5171,33 @@ Reglas del patrón, para la próxima:
 **El uso**: `Uso.evento` (`observabilidad/Uso.kt`) es el único punto de entrada. Un componente de `ds/` que
 quiera anotar sus toques lo llama con `EventoDeUso.TOQUE` y claves de `ClaveDeUso` (la acción, el componente);
 **nunca** con el texto que muestra si ese texto puede ser del usuario (un monto, un nombre, un comercio).
+
+## Vuelta 98 · «Editar»: el mismo formulario de crear, lleno
+
+El papá del dueño quería cambiarle el nombre y el saldo a una cuenta y no encontró cómo: el saldo vivía en
+«Cuadrar con el banco» y el nombre en ningún lado. El patrón de **Editar** para cualquier cosa que se crea con
+un formulario:
+
+- **Una fila a la vista** en el detalle de la cosa, no escondida en un menú «Más»: `Fila` con
+  `IconoEnCirculo(Icons.Rounded.Edit)`, título «Editar la cuenta» y un subtítulo que dice qué se edita
+  («Nombre, banco, tipo y saldo»). Va justo debajo de la cifra del encabezado.
+- **La hoja es el formulario de crear, lleno con lo de hoy** (`EditarCuentaSheet` pinta `FormularioDeCuenta`
+  con `EstadoDelFormularioDeCuenta.cargar`). No hay un segundo formulario parecido: crear y editar se ven
+  igual. Título «Editar la cuenta», un `PieDeHoja` con «Guardar» y, si está apagado, su razón («No has
+  cambiado nada», «El nombre no puede estar vacío»). **Sin «Cancelar»**: la × y el arrastre cancelan.
+- **Lo que no se puede cambiar no se ofrece como control**: va como texto con el porqué (`tipoFijo`: «Efectivo.
+  El efectivo no recibe extractos…»), y el server lo rechaza igual (422). En una cuenta, solo Ahorros y
+  Corriente se ofrecen como píldoras: son lo único que se cambia sin mover plata.
+- **Una cifra derivada no se edita como campo crudo.** «Saldo de hoy» se llena con el saldo que muestra la
+  pantalla; si se escribe otro, el `ayuda` del campo dice en una línea qué va a pasar —«Movi anota un ajuste de
+  +$250.000 para que cuadre.»— y guardar escribe el **mismo** ajuste que Cuadre de saldos. Vacío es «no lo
+  toques», nunca $0. Nunca se reescribe la historia.
+- **Lo que el cambio deja de hacer se dice antes** (`ayuda` del campo): renombrar una cuenta que Movi reconoce
+  por su número o por «Skandia» avisa que dejará de reconocerla sola, y si rompe el emparejamiento con su
+  hermana en otra moneda lo dice con su nombre («La cuenta en USD «…» deja de emparejarse con esta»).
+- **Lo que tiene su propia hoja no se duplica**: un bien se sigue editando en `BienSheet`.
+
+Y los bancos de un toque: **ocho a la vista** (`BANCOS_A_LA_VISTA`) y la píldora «Ver todos los bancos», que
+abre el catálogo con «Busca tu banco» (sin tildes ni mayúsculas: «davi» encuentra Davibank, Daviplata y
+Davivienda). «Usar «lo escrito»» va debajo de la lista, fuera de ella, siempre que ningún banco se llame
+exactamente así.

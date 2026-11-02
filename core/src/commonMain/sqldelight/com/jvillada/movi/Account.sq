@@ -123,6 +123,11 @@ UPDATE account SET lastEditedAt = :lastEditedAt WHERE id = :id AND userId = :use
 actualizarNombre:
 UPDATE account SET name = :name WHERE id = :id AND userId = :userId;
 
+-- Editar sin señal (vuelta 98): el nombre y el tipo de una cuenta que todavía no subió. Ver
+-- `LocalRepository.editarCuenta`.
+actualizarNombreYTipo:
+UPDATE account SET name = :name, type = :type WHERE id = :id AND userId = :userId;
+
 -- Marcar (o quitar) la condición de uso sin señal, mismo caso que `actualizarNombre`.
 actualizarCondicion:
 UPDATE account SET conditionedTo = :conditionedTo WHERE id = :id AND userId = :userId;

@@ -198,6 +198,8 @@ internal class InvalidaElInicioAlEscribir(
     override suspend fun register(request: RegisterRequest): AuthResponse = trasEscribir { delegado.register(request) }
     override suspend fun login(request: LoginRequest): AuthResponse = trasEscribir { delegado.login(request) }
     override suspend fun renameAccount(id: String, name: String): Account = trasEscribir { delegado.renameAccount(id, name) }
+    override suspend fun editarCuenta(id: String, pedido: EditarCuentaRequest): AdjustAccountBalanceResponse =
+        trasEscribir { delegado.editarCuenta(id, pedido) }
     // Marcar la condición de una cuenta cambia «Tu plata» del Inicio: sin invalidar el caché, el
     // dueño marcaba Skandia y volvía al Inicio con la cifra vieja.
     override suspend fun updateAccountCondition(id: String, condicionadaA: String?): Account = trasEscribir { delegado.updateAccountCondition(id, condicionadaA) }

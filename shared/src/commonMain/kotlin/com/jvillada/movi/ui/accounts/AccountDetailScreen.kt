@@ -55,6 +55,7 @@ import com.jvillada.movi.ui.components.ds.Vacio
 import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import com.jvillada.movi.ui.components.ds.VarianteDeCifra
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Edit
 import com.jvillada.movi.ui.LocalGoBack
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.homeScreenFor
@@ -149,6 +150,8 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
     }
     var showDeleteAccount by remember { mutableStateOf(false) }
     var showCondicion by remember { mutableStateOf(false) }
+    /** Vuelta 98: la hoja «Editar la cuenta» abierta. */
+    var showEditar by remember { mutableStateOf(false) }
     /**
      * Los apartados de ESTA cuenta, con lo que le queda a cada uno (el server lo calcula). Solo se
      * leen en una cuenta de tu plata en pesos; si la lectura falla, ninguno: la sección sigue
@@ -220,8 +223,10 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
 
     // La lista de cuentas, recién cuando el dueño toca una fila (ver [cuentas]). Un fallo acá no
     // se cuenta como error de la pantalla: no rompe nada de lo que está mirando.
-    LaunchedEffect(selectedEvent != null) {
-        if (selectedEvent != null && cuentas.isEmpty()) {
+    LaunchedEffect(selectedEvent != null, showEditar) {
+        // Vuelta 98: «Editar la cuenta» también las pide, para avisar si el nombre nuevo desempareja
+        // la hermana en otra moneda. Sin ellas, la hoja guarda igual (solo no avisa eso).
+        if ((selectedEvent != null || showEditar) && cuentas.isEmpty()) {
             cuentas = runCatching { Repositories.wallets.getAccounts() }.getOrDefault(emptyList())
         }
     }
@@ -342,6 +347,29 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                             },
                         )
                         Spacer(Modifier.height(Medida.entreSecciones))
+                    }
+
+                    // **«Editar la cuenta»** (vuelta 98): a la vista, justo debajo del saldo, y no en
+                    // un menú. El papá del dueño buscó cómo cambiarle el nombre y el saldo a una
+                    // cuenta y no lo encontró: el saldo vivía en «Cuadrar con el banco» y el nombre
+                    // en ningún lado. Un bien no la tiene: se edita en su hoja ([BienSheet]).
+                    if (acc.bien == null) {
+                        item(key = "editar") {
+                            Superficie(relleno = RellenoDeSuperficie.Lista) {
+                                Fila(
+                                    titulo = EDITAR_LA_CUENTA,
+                                    subtitulo = if (com.jvillada.movi.shared.model.seEditaElSaldo(acc)) {
+                                        "Nombre, banco, tipo y saldo"
+                                    } else {
+                                        "Nombre y banco"
+                                    },
+                                    inicio = { IconoEnCirculo(Icons.Rounded.Edit) },
+                                    onClick = { showEditar = true },
+                                    modifier = Modifier.testTag(TAG_EDITAR_LA_CUENTA),
+                                )
+                            }
+                            Spacer(Modifier.height(Medida.entreSecciones))
+                        }
                     }
 
                     // **La deuda** (vuelta de diseño 4): sus condiciones y sus acciones —«Editar las
@@ -599,6 +627,23 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                         // `InvalidaElInicioAlEscribir`).
                         account = actualizada
                         showCondicion = false
+                    },
+                )
+            }
+        }
+
+        if (showEditar) {
+            account?.let { acc ->
+                EditarCuentaSheet(
+                    cuenta = acc,
+                    onDismiss = { showEditar = false },
+                    cuentas = cuentas,
+                    onGuardada = { actualizada ->
+                        // Lo que contestó el server, al instante (el nombre del encabezado y el
+                        // saldo), y una relectura para que el ajuste, si lo hubo, salga en la lista.
+                        account = actualizada
+                        showEditar = false
+                        refreshKey++
                     },
                 )
             }

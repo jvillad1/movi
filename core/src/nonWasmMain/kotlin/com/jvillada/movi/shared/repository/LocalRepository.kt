@@ -1,6 +1,10 @@
 package com.jvillada.movi.shared.repository
 
 import com.jvillada.movi.shared.model.LoCompartido
+import com.jvillada.movi.shared.model.EditarCuentaRequest
+import com.jvillada.movi.shared.model.SALDO_DE_UNA_CUENTA_SIN_SUBIR
+import com.jvillada.movi.shared.model.problemaDelCambioDeTipo
+import com.jvillada.movi.shared.model.problemaDelNombreDeCuenta
 import com.jvillada.movi.shared.model.conLoCompartido
 import com.jvillada.movi.shared.model.ConfirmarElMismoPago
 import com.jvillada.movi.shared.model.GrupoDeAvisos
@@ -734,6 +738,51 @@ class LocalRepository(
         val actualizada = remote.renameAccount(id, name)
         db.transaction { mirrorAccountLocally(actualizada) }
         return@enDisco actualizada
+    }
+
+    /**
+     * **Editar una cuenta** (vuelta 98), con las dos ramas de [renameAccount] y el mismo motivo para
+     * cada una:
+     *
+     * - **Cuenta ya sincronizada: el server manda.** Se espeja lo que contestó —la cuenta en su fila
+     *   y el ajuste, si lo hubo, como movimiento ya sincronizado (igual que [adjustAccountBalance]:
+     *   mismo id, para que el `SyncEngine` no lo suba otra vez)—. **Sin red no hay respaldo local**:
+     *   la excepción sube y la hoja dice que no se pudo. Un nombre o un tipo escritos solo acá sobre
+     *   una cuenta que el server ya tiene no los empujaría nadie (no es una creación) y la próxima
+     *   lectura con red los borraría; y el ajuste lo calcula el server contra sus movimientos.
+     * - **Cuenta todavía sin subir: el nombre y el tipo se resuelven acá**, sellando la edad, y los
+     *   empuja `syncAccounts` (el `POST` pisa nombre y tipo). **El saldo no**: el ajuste sale del
+     *   server, y una cuenta que el server no conoce no tiene contra qué cuadrarse. Si se pidió, no
+     *   se escribe nada y se dice por qué — nunca la mitad.
+     */
+    override suspend fun editarCuenta(id: String, pedido: EditarCuentaRequest): AdjustAccountBalanceResponse = enDisco {
+        val uid = userId()
+        val nombre = pedido.name.trim()
+        val resueltaLocal = db.transactionWithResult {
+            val local = db.accountQueries.selectById(id).executeAsOneOrNull()
+            if (local != null && local.userId == uid && local.syncedAt == null) {
+                // Las mismas reglas que el server, con el mismo código: la hoja dice el porqué igual
+                // que si hubiera contestado él (ver `toUserMessage`, que lee el texto de un 4xx).
+                problemaDelNombreDeCuenta(nombre)?.let { throw ApiException(400, it) }
+                val actual = local.toAccountModel()
+                val tipo = pedido.type ?: actual.type
+                problemaDelCambioDeTipo(actual, tipo)?.let { throw ApiException(422, it) }
+                if (pedido.saldoDeHoy != null) throw ApiException(422, SALDO_DE_UNA_CUENTA_SIN_SUBIR)
+                db.accountQueries.actualizarNombreYTipo(nombre, tipo.name, id, uid)
+                marcarEditadaLaCuenta(id, uid)
+                AdjustAccountBalanceResponse(db.accountQueries.selectById(id).executeAsOne().toAccountModel())
+            } else {
+                null
+            }
+        }
+        if (resueltaLocal != null) return@enDisco resueltaLocal
+
+        val respuesta = remote.editarCuenta(id, pedido.copy(name = nombre))
+        db.transaction {
+            respuesta.adjustmentEvent?.let { mirrorEventLocally(it, uid) }
+            mirrorAccountLocally(respuesta.account)
+        }
+        return@enDisco respuesta
     }
 
     /**

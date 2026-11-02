@@ -849,6 +849,16 @@ interface WalletRepository {
     suspend fun renameAccount(id: String, name: String): Account
 
     /**
+     * **Edita una cuenta** — `PUT /api/accounts/{id}` (vuelta 98): nombre, tipo y, si viene, el saldo
+     * de hoy, que el server convierte en el MISMO ajuste que «Cuadrar con el banco». Ver
+     * [com.jvillada.movi.shared.model.EditarCuentaRequest]. Contesta la cuenta y el ajuste escrito.
+     */
+    suspend fun editarCuenta(
+        id: String,
+        pedido: com.jvillada.movi.shared.model.EditarCuentaRequest,
+    ): AdjustAccountBalanceResponse
+
+    /**
      * Marca (o desmarca) para qué se puede usar la plata de una cuenta que **ya existe**.
      *
      * Sin esto, `Account.condicionadaA` solo se podía escribir al crear la cuenta, y la cuenta
