@@ -1,12 +1,14 @@
 package com.jvillada.movi.sms
 
+import com.jvillada.movi.shared.model.seSubeElSms
 import java.security.MessageDigest
 
 data class FilterConfig(val senderCodes: List<String>, val bodyKeywords: List<String>)
 
 /**
  * Filtro de privacidad (LOCKED en el spec): SOLO los SMS que matchean aquí salen del
- * teléfono. Remitentes cortos de bancos + keyword en el cuerpo. La config es
+ * teléfono. Remitentes cortos de bancos + keyword en el cuerpo (de un remitente que no es un
+ * número personal, desde la vuelta 113). La config es
  * parametrizable (ver SmsFilterConfigStore) para agregar bancos sin reinstalar el APK;
  * DEFAULTS es el fallback compilado — hoy arranca igual a la fuente del server, pero ya
  * no es un espejo: es el PISO. SmsFilterConfigStore.load() siempre une la config remota
@@ -23,12 +25,14 @@ object BankSenderFilter {
         bodyKeywords = listOf("bancolombia", "nubank", "davivienda"),
     )
 
-    fun matches(sender: String?, body: String, config: FilterConfig = DEFAULTS): Boolean {
-        val s = sender.orEmpty()
-        if (config.senderCodes.any { s.contains(it) }) return true
-        val lower = body.lowercase()
-        return config.bodyKeywords.any { lower.contains(it.lowercase()) }
-    }
+    /**
+     * Vuelta 113 · la regla vive en `:core` ([seSubeElSms]): un remitente que contiene un código conocido
+     * sale; una palabra de banco en el cuerpo solo si hay remitente y **no es un número personal** (10 o
+     * más dígitos). La usan la captura en tiempo real (`SmsRealtimeReceiver`) y el barrido
+     * ([filterBankMessages]).
+     */
+    fun matches(sender: String?, body: String, config: FilterConfig = DEFAULTS): Boolean =
+        seSubeElSms(sender, body, config.senderCodes, config.bodyKeywords)
 }
 
 /** Id estable ante re-entregas del broadcast y reintentos del Worker (dedupe extremo a extremo). */

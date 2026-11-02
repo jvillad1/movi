@@ -63,7 +63,8 @@ import java.util.UUID
  *    aleatorio que el dueño pega en sus atajos. No es la sesión: no lee nada, solo manda avisos, y se
  *    revoca sin cerrar la sesión. Se guarda solo su SHA-256 ([CodigosDeCaptura]).
  * 2. **`POST /api/captura/atajo`** (pública, la protege el código): lo que mandó el atajo. Un SMS pasa el
- *    MISMO filtro de bancos del teléfono ([pasaElFiltroDeBancos]) y sigue el camino de los correos del
+ *    filtro de bancos ([pasaElFiltroDeBancos]: desde la vuelta 113, `seGuardaElSmsDelAtajo` de `:core`, la
+ *    misma regla del teléfono con el matiz del remitente que falta) y sigue el camino de los correos del
  *    banco —`sms_messages`, `SmsDedupe`, `queEsEsteMensaje`, «Por revisar»—; un pago con Apple Pay se
  *    guarda como un aviso con su texto legible ([textoDelPagoConApplePay]). Nada se anota solo.
  *
@@ -411,7 +412,8 @@ private suspend fun guardarElMensaje(uid: String, aviso: AvisoDelAtajo, ahora: L
         registrarLaCaptura(uid, "VACIO", esPago = false, avisoId = null, ahora)
         return HttpStatusCode.Accepted to RespuestaDelAtajo(false, "El mensaje llegó vacío.")
     }
-    // **El mismo filtro del teléfono.** Lo que no es de un banco no se guarda ni se lee más: solo se cuenta.
+    // **La regla del teléfono, en `:core`.** Lo que no es de un banco (o viene de un número personal) no se
+    // guarda ni se lee más: solo se cuenta.
     if (!pasaElFiltroDeBancos(aviso.remitente, texto)) {
         contarAtajoDescartado(uid, MotivoDelAtajoDescartado.NO_ES_DEL_BANCO, ahora)
         registrarLaCaptura(uid, "NO_ES_DEL_BANCO", esPago = false, avisoId = null, ahora)

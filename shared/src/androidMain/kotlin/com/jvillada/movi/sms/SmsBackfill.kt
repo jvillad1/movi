@@ -116,8 +116,9 @@ sealed interface BackfillOutcome {
 }
 
 /**
- * El filtro de privacidad aplicado al inbox. Idéntico al del receiver: remitente bancario
- * o keyword en el cuerpo. Función pura para poder testearla sin Android.
+ * El filtro de privacidad aplicado al inbox. Idéntico al del receiver ([BankSenderFilter.matches] →
+ * `seSubeElSms` de `:core`): remitente bancario, o keyword en el cuerpo de un remitente que no es un
+ * número personal. Función pura para poder testearla sin Android.
  */
 internal fun filterBankMessages(messages: List<SmsMessage>, config: FilterConfig): List<SmsMessage> =
     messages.filter { it.text.isNotBlank() && BankSenderFilter.matches(it.bank, it.text, config) }

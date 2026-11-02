@@ -37,6 +37,17 @@ class SmsBackfillFilterTest {
         assertTrue(filterBankMessages(listOf(sms("e", "85540", "")), config).isEmpty())
     }
 
+    /** Vuelta 113: el barrido usa la misma regla que la captura en tiempo real. */
+    @Test
+    fun `el barrido no sube el SMS de un celular aunque nombre al banco`() {
+        val inbox = listOf(
+            sms("cel", "+57 300 123 4567", "Ya te pagué por Bancolombia, \$50.000"),
+            sms("fijo", "6014567890", "Bancolombia: retiro por \$100.000"),
+            sms("corto", "87100", "Bancolombia: retiro por \$100.000"),
+        )
+        assertEquals(listOf("corto"), filterBankMessages(inbox, config).map { it.id })
+    }
+
     @Test
     fun `el inbox vacio devuelve vacio`() {
         assertTrue(filterBankMessages(emptyList(), config).isEmpty())

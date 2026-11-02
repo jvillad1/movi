@@ -15,9 +15,23 @@ class BankSenderFilterTest {
     }
 
     @Test
-    fun `keyword Bancolombia in body matches any sender`() {
+    fun `keyword Bancolombia in body matches a sender that is not a personal number`() {
         assertTrue(BankSenderFilter.matches("InfoSMS", "Bancolombia: Retiro por 200.000"))
-        assertTrue(BankSenderFilter.matches(null, "bancolombia le informa"))
+        assertTrue(BankSenderFilter.matches("87100", "bancolombia le informa"))
+    }
+
+    /**
+     * **Vuelta 113 · un SMS personal nunca sale del teléfono.** La regla es la de `:core`
+     * (`seSubeElSms`, con su tabla en `FiltroDeSmsTest`); acá, que el filtro del teléfono la usa.
+     */
+    @Test
+    fun `un celular que nombra al banco no sale, ni sin remitente`() {
+        assertFalse(BankSenderFilter.matches("3001234567", "ya pagué el arriendo por Bancolombia"))
+        assertFalse(BankSenderFilter.matches("+57 300 123 4567", "Bancolombia: Compraste \$50.000,00 en EXITO"))
+        assertFalse(BankSenderFilter.matches(null, "bancolombia le informa"))
+        assertFalse(BankSenderFilter.matches("", "bancolombia le informa"))
+        // Un celular que contiene un código conocido tampoco: «3008554012» contiene «85540».
+        assertFalse(BankSenderFilter.matches("3008554012", "aviso"))
     }
 
     @Test

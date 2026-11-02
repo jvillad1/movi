@@ -313,9 +313,40 @@ class CapturaPorAtajoRoutesTest {
     @Test
     fun `una promocion del banco entra apartada, como por SMS`() = conApp {
         val codigo = client.crearCodigo()
-        client.avisar(codigo, mensaje("Bancolombia te regala 20% dcto en Rappi. Aplican TyC. Ingresa a bancolombia.com"))
+        val promo = "Bancolombia te regala 20% dcto en Rappi. Aplican TyC. Ingresa a bancolombia.com"
+        // Vuelta 113: sin remitente y sin monto no es un movimiento: no se guarda, solo se cuenta.
+        assertTrue("\"guardado\":false" in client.avisar(codigo, mensaje(promo)).bodyAsText())
+        assertTrue(filas().isEmpty())
+        // Con el código del banco de remitente entra, y apartada.
+        client.avisar(codigo, mensaje(promo, remitente = "85540"))
         val (_, _, estado) = filas().single()
         assertEquals("ignored", estado)
+    }
+
+    /**
+     * **Vuelta 113 · un SMS personal nunca se guarda.** El atajo firmado no manda el remitente: sin él,
+     * solo entra un texto que empieza por el banco y trae un monto, como firman los avisos. Con un
+     * remitente que es un número personal no entra nada, aunque el texto sea idéntico a un aviso.
+     */
+    @Test
+    fun `sin remitente entra el aviso del banco, y un SMS personal o de un celular solo se cuenta`() = conApp {
+        val codigo = client.crearCodigo()
+        assertTrue("\"guardado\":true" in client.avisar(codigo, mensaje(smsDeBancolombia)).bodyAsText())
+        assertEquals(1, filas().size)
+
+        val personal = client.avisar(codigo, mensaje("Hola, te pagué por Bancolombia lo del almuerzo, \$25.000"))
+        assertEquals(HttpStatusCode.Accepted, personal.status)
+        assertTrue("\"guardado\":false" in personal.bodyAsText())
+
+        val otro = "Bancolombia: Compraste \$46.000,00 en TOSTAO CAFE con tu T.Deb *8133, el 10/10/2026 a las 09:12."
+        for (celular in listOf("3001234567", "+57 300 123 4567", "573001234567")) {
+            assertTrue("\"guardado\":false" in client.avisar(codigo, mensaje(otro, remitente = celular)).bodyAsText())
+        }
+        assertEquals(1, filas().size, "un SMS personal llegó a la bandeja")
+        assertEquals(4, transaction { AtajosDescartados.selectAll().single()[AtajosDescartados.cuantos] })
+
+        assertTrue("\"guardado\":true" in client.avisar(codigo, mensaje(otro, remitente = "85540")).bodyAsText())
+        assertEquals(2, filas().size)
     }
 
     @Test
