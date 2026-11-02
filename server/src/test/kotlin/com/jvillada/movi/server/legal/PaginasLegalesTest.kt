@@ -105,6 +105,8 @@ class PaginasLegalesTest {
             .forEach { assertTrue(it in aviso, "el aviso «Qué ve la IA» ya no dice «$it»: alinea la política") }
         // Los SMS solo en la versión que se instala por fuera de la tienda.
         assertTrue("La versión de Google Play no lee SMS" in html)
+        // Vuelta 111: el canal de los Atajos de iPhone, con lo que recibe y lo que descarta.
+        assertTrue("Atajos de iPhone" in html && "Apple Pay" in html && "se descarta sin guardar su texto" in html)
         // El filtro del teléfono (`BankSenderFilter.matches`) deja pasar por el remitente O por el texto:
         // la política no puede decir que solo cuenta el remitente.
         assertTrue("cuyo remitente es un código bancario conocido o cuyo texto nombra un banco" in html)

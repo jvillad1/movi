@@ -134,6 +134,12 @@ nav { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--borde); d
                 "verificación, una promoción) queda apartado, y nada se anota sin que tú lo confirmes. La versión de " +
                 "Google Play no lee SMS.</li>" +
                 "<li>Los <strong>correos de tu banco</strong> que tú decidas reenviar a tu dirección de Movi.</li>" +
+                // Vuelta 111: el canal «Atajos de iPhone» (`POST /api/captura/atajo`).
+                "<li>Desde los <strong>Atajos de iPhone</strong>, si tú los configuras: el texto de los SMS que " +
+                "tu automatización le reenvía a Movi, y de cada pago con Apple Pay el comercio, el monto y el " +
+                "nombre de la tarjeta. Los atajos usan un código que solo sirve para mandar avisos (el servidor " +
+                "guarda solo su huella, no el código, y lo puedes desactivar en la app). Un mensaje que no es de un banco de " +
+                "una lista cerrada se descarta sin guardar su texto: solo se cuenta cuántos llegaron.</li>" +
                 "</ul></li>")
             append("<li><strong>Papeles y extractos:</strong> los PDF e imágenes que subes o compartes con " +
                 "Movi y lo que se leyó de ellos. Se guardan cifrados (AES-256). Si pides que Movi recuerde " +
@@ -323,7 +329,7 @@ nav { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--borde); d
             append("<h2>Qué se borra</h2>")
             append("<p><strong>Todo lo tuyo, en el momento:</strong> tu cuenta, tus cuentas y saldos, tus " +
                 "movimientos, créditos, tarjetas, pagos recurrentes, presupuestos, apartados, grupos y " +
-                "personas, los avisos de tu banco (SMS, notificaciones y correos), tus papeles y extractos " +
+                "personas, los avisos de tu banco (SMS, notificaciones, correos y Atajos de iPhone, con su código), tus papeles y extractos " +
                 "y lo que Movi leyó de ellos, tus conversaciones y recuerdos de Movi AI, tus enlaces " +
                 "compartidos, tus suscripciones a notificaciones, y el uso de la app y los fallos asociados " +
                 "a tu cuenta. Al terminar se cierran tus sesiones en todos los aparatos.</p>")
