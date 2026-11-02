@@ -105,11 +105,17 @@ rm -f "$MARCA"
 # jarsigner y keytool vienen con el JDK: si no están en el PATH, los del JAVA_HOME.
 herramienta() { command -v "$1" 2>/dev/null || echo "${JAVA_HOME:-/usr}/bin/$1"; }
 if [ "$SIN_FIRMAR" = 0 ]; then
-  if ! "$(herramienta jarsigner)" -verify "$AAB" >/dev/null 2>&1; then
-    echo "ERROR: el AAB no quedó firmado. Revisa las propiedades MOVI_UPLOAD_* y la contraseña." >&2
+  # `jarsigner -verify` sale con 0 TAMBIÉN sobre un AAB sin firmar («jar is unsigned.»): el código de
+  # salida no prueba nada. Lo que prueba la firma es que diga «jar verified.» y que el certificado
+  # tenga huella SHA-256.
+  VERIFICACION=$("$(herramienta jarsigner)" -verify "$AAB" 2>&1 || true)
+  HUELLA=$("$(herramienta keytool)" -printcert -jarfile "$AAB" 2>/dev/null | awk -F': ' '/SHA256:/ {print $2; exit}' || true)
+  if ! printf '%s\n' "$VERIFICACION" | grep -q "jar verified\." || [ -z "$HUELLA" ]; then
+    echo "ERROR: el AAB no quedó firmado con la llave de subida (jarsigner dice: $(printf '%s' "$VERIFICACION" | tail -1))." >&2
+    echo "Revisa las propiedades MOVI_UPLOAD_* en $PROPS y la contraseña. No lo subas a Play." >&2
     exit 1
   fi
-  echo "Firma: $("$(herramienta keytool)" -printcert -jarfile "$AAB" 2>/dev/null | awk -F': ' '/SHA256:/ {print "SHA-256 " $2; exit}')"
+  echo "Firma: verificada · SHA-256 $HUELLA"
 fi
 
 # ── 4 · Lo que salió ───────────────────────────────────────────────────────────────────────────
