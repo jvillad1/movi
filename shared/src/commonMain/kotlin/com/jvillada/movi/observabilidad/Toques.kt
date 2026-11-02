@@ -76,7 +76,7 @@ fun slugDeUso(texto: String, max: Int = MAX_ID_DE_TOQUE, conDosPuntos: Boolean =
         val simple = SIN_TILDE[c] ?: c
         when {
             (simple in 'a'..'z') || (simple in '0'..'9') -> b.append(simple)
-            conDosPuntos && simple == ':' -> if (b.isNotEmpty() && b.last() != ':' && b.last() != '-') b.append(':') else if (b.isNotEmpty() && b.last() == '-') b.setCharAt(b.lastIndex, ':')
+            conDosPuntos && simple == ':' -> if (b.isNotEmpty() && b.last() != ':' && b.last() != '-') b.append(':') else if (b.isNotEmpty() && b.last() == '-') b[b.lastIndex] = ':'
             else -> if (b.isNotEmpty() && b.last() != '-' && b.last() != ':') b.append('-')
         }
     }
@@ -172,10 +172,10 @@ internal fun resolverElToque(
     val datos = toque.datos.toMutableMap()
     // El tipo de componente siempre va en los datos («Boton», «PildoraDeFiltro»): el server lo pone en
     // `detalle` para contar sin leer el JSON.
-    nombreDelComponente(componente)?.let { datos.putIfAbsent(ClaveDeUso.COMPONENTE, it) }
+    nombreDelComponente(componente)?.let { if (ClaveDeUso.COMPONENTE !in datos) datos[ClaveDeUso.COMPONENTE] = it }
     val fijo = toque.idFijo?.let { slugDeUso(it, conDosPuntos = true) }?.takeIf { it.isNotEmpty() }
     val delTag = if (fijo == null && tag != null) idDelTag(tag, tags) else null
-    delTag?.second?.forEach { (clave, valor) -> datos.putIfAbsent(clave, valor) }
+    delTag?.second?.forEach { (clave, valor) -> if (clave !in datos) datos[clave] = valor }
     val id = when {
         fijo != null -> fijo
         delTag != null -> if (toque.dinamico) "$componente:${delTag.first}" else delTag.first
