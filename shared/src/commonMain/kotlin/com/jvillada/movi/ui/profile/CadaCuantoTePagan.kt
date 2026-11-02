@@ -60,7 +60,7 @@ fun tituloDeLaFrecuencia(frecuencia: FrecuenciaDelPeriodo): String = when (frecu
 
 /** La línea de apoyo de cada frecuencia. */
 fun detalleDeLaFrecuencia(frecuencia: FrecuenciaDelPeriodo): String = when (frecuencia) {
-    FrecuenciaDelPeriodo.MENSUAL -> "Un período por mes, desde el día que te pagan"
+    FrecuenciaDelPeriodo.MENSUAL -> "Un período por mes, desde tu día de pago"
     FrecuenciaDelPeriodo.QUINCENAL -> "Dos períodos por mes, uno por cada pago"
 }
 
@@ -105,6 +105,8 @@ fun ElegirCadaCuantoTePagan(
                 Fila(
                     titulo = tituloDeLaFrecuencia(opcion),
                     subtitulo = detalleDeLaFrecuencia(opcion),
+                    // Con la letra grande en un teléfono angosto el detalle no entra en un renglón.
+                    lineasDelSubtitulo = 2,
                     final = {
                         Box(modifier = Modifier.size(Icono.l), contentAlignment = Alignment.Center) {
                             if (elegida) {

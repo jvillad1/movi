@@ -74,6 +74,9 @@ fun diasDelPeriodo(fecha: LocalDate, settings: PeriodSettings, zone: ZoneId = Ap
 
 /** El nombre del período del dueño en que cae [fecha], como `"2026-10"` — para decirlo en pantalla. */
 fun periodoDelDueno(fecha: LocalDate, settings: PeriodSettings, zone: ZoneId = AppClock.zone): String {
+    // Vuelta 105 · con quincenas, una obligación mensual se nombra por el mes de su vencimiento
+    // («la cuota de noviembre»): el id de una quincena («2026-10-31») no es un mes que se pueda decir.
+    if (settings.esQuincenal) return periodOf(fecha)
     val millis = appDateToEpochMillis(fecha, zone) + 12 * 3_600_000L
     return periodoDe(millis, settings).prefijo
 }

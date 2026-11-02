@@ -71,6 +71,14 @@ class LasObligacionesEnLaQuincenaTest {
     }
 
     @Test
+    fun `una obligacion se nombra por el mes en que vence, no por el id de la quincena`() {
+        assertEquals("2026-11", periodoDelDueno(LocalDate.of(2026, 11, 5), quinceYUltimo))
+        assertEquals("2026-10", periodoDelDueno(LocalDate.of(2026, 10, 20), quinceYUltimo))
+        // El mensual, como siempre: el período del dueño (corte 25 → el 26-oct ya es noviembre).
+        assertEquals("2026-11", periodoDelDueno(LocalDate.of(2026, 10, 26), PeriodSettings(cutoffDay = 25)))
+    }
+
+    @Test
     fun `el salario de cada quincena se espera el dia que arranca la suya`() {
         val salario15 = RecurringRule("s15", "Salario", "Salario", 2_000_000, 15, TransactionType.INCOME)
         val salario31 = RecurringRule("s31", "Salario", "Salario", 2_000_000, 31, TransactionType.INCOME)
