@@ -35,8 +35,11 @@ es una sola función de `:core`, `seSubeElSms` (`FiltroDeSms.kt`), que usan la c
 
 - su remitente **no es un número de teléfono de una persona**: quitando espacios, guiones, paréntesis y el
   «+», no son 10 dígitos o más (un celular `3001234567`, `+57 300 123 4567`, un fijo con indicativo, un
-  número internacional). Los bancos mandan desde **códigos cortos** (4 a 6 dígitos) o desde un **nombre**
-  («Bancolombia», «DAVIVIENDA»), y una persona no puede usar ninguno de los dos; **y**
+  número internacional). Lo que tiene **menos de 10 dígitos** o **letras** pasa este punto: así mandan los
+  bancos (códigos cortos de 4 a 6 dígitos, o un **nombre** como «Bancolombia» o «DAVIVIENDA»), y un
+  teléfono de una persona en Colombia siempre tiene 10 dígitos o más (un celular, o un fijo con su
+  indicativo). Un número que alguien escriba con menos dígitos (un fijo local de 7) no se reconoce como
+  personal: es el límite de la regla; **y**
 - su remitente contiene un código conocido de Bancolombia (85540, 891333, 87400), **o** su texto nombra un
   banco de una lista cerrada (`PALABRAS_DE_BANCOS` en `SmsFilterConfigRoutes.kt`: bancolombia, nubank,
   davivienda, davibank, bbva, banco de bogota/bogotá, av villas, banco de occidente, colpatria, scotiabank,
@@ -46,7 +49,8 @@ Lo que esto **sí** deja salir y hay que decir con honestidad: lo que un código
 nombre manda nombrando a un banco, aunque no sea un movimiento (una promoción del banco, una clave
 dinámica, la promoción de un comercio que dice «paga con Bancolombia»). No son SMS personales; el server
 los aparta en «Por revisar» (`queEsEsteMensaje`) y nada se anota solo. Lo que **nunca** sale: cualquier SMS
-de un número de teléfono, nombre al banco o no («ya te pagué por Bancolombia»).
+de un número de 10 dígitos o más (un celular, un fijo con indicativo, un número internacional), nombre al
+banco o no («ya te pagué por Bancolombia»).
 
 Medido en producción el 2-nov-2026 (solo lectura): los 359 SMS capturados venían de 16 remitentes, todos
 códigos cortos de 5 o 6 dígitos; ninguno de un celular. La regla nueva no habría perdido ninguno
@@ -90,7 +94,7 @@ Movi is a personal finance app for Colombia. Its core function is to keep an acc
 Colombian banks notify each card purchase, transfer and payment by SMS, and most of them do not give individuals any way to share their transactions with a third-party app. The bank SMS is the only automatic, real-time record of a movement that the user receives. Without it, the user must type every movement by hand, which is the main reason people abandon budgeting apps.
 
 How Movi uses the permissions:
-- RECEIVE_SMS: when an SMS arrives, a filter that runs on the device checks whether it comes from a bank. An SMS from a phone number (10 or more digits) never leaves the device, even if it mentions a bank. Otherwise, it leaves the device only if its sender is a short code or alphanumeric sender ID and either the sender is a known bank short code or the text names a bank from a closed list. Only messages that pass the filter are sent to the user's Movi account; every other SMS is discarded on the device and never leaves it.
+- RECEIVE_SMS: when an SMS arrives, a filter that runs on the device checks whether it comes from a bank. An SMS from a phone number (10 or more digits) never leaves the device, even if it mentions a bank. Otherwise, it leaves the device only if its sender ID is shorter than 10 digits or alphanumeric, and either the sender contains a known bank code or the text names a bank from a closed list. An SMS without a sender never leaves the device on the strength of a bank name alone. Only messages that pass the filter are sent to the user's Movi account; every other SMS is discarded on the device and never leaves it.
 - READ_SMS: when the user opens the app, and every 6 hours, Movi re-reads the inbox from the first day of the previous month with the same filter, to recover bank messages that Android did not deliver to the receiver while the app was in the background. Again, only messages that pass the same filter leave the device.
 
 Nothing is recorded automatically: each bank message appears in "Por revisar" (To review), where the user confirms, edits or ignores it. Movi never sends, deletes or modifies SMS, and does not access the call log. SMS data is never shared with third parties, never used for advertising, and the user can delete all of it at any time by deleting the account (in-app and at https://movi-project-production.up.railway.app/borrar-cuenta).
@@ -105,8 +109,8 @@ Before asking for the permission, the app shows an in-app explanation of what is
 ```
 1. Sign in with the demo account (credentials in "App access").
 2. Go to Tú (last tab) > Captura del banco > "Captura en este teléfono" and grant "Permiso de SMS".
-3. Open Actividad > "Por revisar": the bank messages already captured on the demo phone appear there as proposed movements (for example, an expense at Éxito). Tap "Confirmar" on one. The video shows a real bank SMS (sent by the bank from its short code) arriving and appearing here.
-4. Send an SMS to the test phone from any personal phone number, even one that names a bank: "Bancolombia: Compraste $25.000 en EXITO con tu T.Deb *1234." It never appears in Movi and is not uploaded: SMS from phone numbers never leave the device. A bank message can only come from the bank's short code, which a reviewer cannot send from.
+3. Open Actividad > "Por revisar": the bank messages already captured on the demo phone appear there as proposed movements (for example, an expense at Éxito). Tap "Confirmar" on one. The video shows a real bank SMS (sent by the bank from its own sender ID) arriving and appearing here.
+4. Send an SMS to the test phone from any personal phone number, even one that names a bank: "Bancolombia: Compraste $25.000 en EXITO con tu T.Deb *1234." It never appears in Movi and is not uploaded: SMS from phone numbers of 10 or more digits never leave the device. A real bank message comes from the bank's own sender ID (a short code or the bank's name), which a reviewer cannot send from.
 5. Send a personal SMS without a bank name ("Hola, ¿nos vemos mañana?"): it is not uploaded either.
 ```
 
@@ -126,7 +130,7 @@ cuenta completos. Subtítulos o una voz en español o inglés.
 | 5–15 | Tú → Captura del banco → «Captura en este teléfono»: la tarjeta «Permiso de SMS» con su explicación; tocar «Conceder permisos» y aceptar el diálogo del sistema. | «Movi pide leer los SMS de tu banco. Solo los de bancos salen del teléfono; los demás se descartan ahí.» |
 | 15–25 | Llega un SMS **real** de un banco, desde su código corto (una compra pequeña con una tarjeta de prueba o del dueño; se ven solo los últimos cuatro). Un SMS de prueba mandado desde otro celular no sirve: no pasa el filtro. | «Llega el SMS de una compra, desde el código del banco.» |
 | 25–40 | Actividad → «Por revisar»: aparece «Éxito · $25.000» propuesto; tocar «Confirmar»; el movimiento queda en Actividad y «Te quedan» baja. | «Movi lo propone y tú lo confirmas: nada se anota solo.» |
-| 40–50 | Desde otro celular llega «Bancolombia: Compraste $25.000 en EXITO» (y uno personal, «Hola, ¿nos vemos mañana?»); volver a «Por revisar»: no aparece ninguno. | «Un SMS de un número de teléfono nunca sale del teléfono, aunque nombre a tu banco.» |
+| 40–50 | Desde otro celular llega «Bancolombia: Compraste $25.000 en EXITO» (y uno personal, «Hola, ¿nos vemos mañana?»); volver a «Por revisar»: no aparece ninguno. | «Un SMS de un número de 10 dígitos o más (un celular) nunca sale del teléfono, aunque nombre a tu banco.» |
 | 50–60 | Tú → «Borrar mi cuenta» (sin confirmar). | «Puedes borrar todo cuando quieras.» |
 
 Subirlo a YouTube como **«No listado»** y pegar el enlace en el formulario.
