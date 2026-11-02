@@ -42,11 +42,16 @@ const val MODELO_DE_TODOS_LOS_DIAS = "claude-haiku-5-5"
 const val MODELO_PARA_CONSEJOS = "claude-sonnet-5-5"
 
 /**
- * El que se sabe que funciona en esta cuenta hoy: es el que contestó todo hasta este cambio. Se usa
- * **solo como reintento** si el de arriba falla — un id de modelo es un texto que viaja a la API, y
- * sin este respaldo un modelo que deje de estar disponible tumbaría el asistente entero.
+ * **El respaldo**: se usa **solo como reintento**, y solo cuando el de arriba falla por el servidor o
+ * por capacidad (5xx, 429/529, timeout o red; ver `ElModeloDeAnthropic.pedirle`). Un 400 de
+ * parámetros no cae acá: falla visible, porque reintentarlo con otro modelo escondería un error
+ * nuestro detrás de una respuesta más cara.
+ *
+ * Sonnet 5.5 desde la revisión de la vuelta 106 (antes Opus 4.7, $5/$25 por millón: el respaldo de un
+ * Haiku de $0,10 costaba 50 veces más). Es el mismo modelo del criterio, así que en ese camino el
+ * reintento vuelve a pedirle a Sonnet 5.5: ante un 529 o un timeout, otra vez es lo que sirve.
  */
-const val MODELO_DE_RESPALDO = "claude-opus-4-7"
+const val MODELO_DE_RESPALDO = "claude-sonnet-5-5"
 
 /**
  * **El que lee extractos** (`ClaudeStatementParser.leer` / `leerImagen`, y por ellos «Compartir con

@@ -30,6 +30,12 @@ object Servicio {
     const val ANTHROPIC = "anthropic"
     const val RESEND = "resend"
     const val TRM = "trm"
+    /**
+     * Vuelta 106 · cada vez que el chat cae al modelo de respaldo; la operación es «modelo · motivo»
+     * (`servidor`, `limite`, `red`). Aparte de [ANTHROPIC] para no contar dos veces la llamada (que
+     * también pasa por `crearMensaje`) ni sumarla al día de la IA.
+     */
+    const val RESPALDO_DE_LA_IA = "ia-respaldo"
 }
 
 /** Cómo salió una llamada que sí devolvió algo: con error (un 4xx/5xx que no lanzó) o con fichas. */

@@ -203,7 +203,7 @@ class ElModeloDeAnthropicTest {
      * respuesta más cara.
      */
     @Test
-    fun `si el modelo falla, reintenta una vez con el de respaldo`() = runBlocking {
+    fun `si el modelo no contesta por la red o el servidor, reintenta una vez con el de respaldo`() = runBlocking {
         val modelosPedidos = mutableListOf<String>()
         val elModelo = ElModeloDeAnthropic(
             modelo = "modelo-que-no-existe",
@@ -213,7 +213,7 @@ class ElModeloDeAnthropicTest {
             modeloDeRespaldo = MODELO_DE_PRUEBA,
             llamar = { params ->
                 modelosPedidos += params.model().toString()
-                if (modelosPedidos.size == 1) error("404 model not found")
+                if (modelosPedidos.size == 1) throw java.io.IOException("timeout")
                 respuestaConTexto("Listo.")
             },
         )
@@ -399,7 +399,7 @@ class ElModeloDeAnthropicTest {
             modeloDeRespaldo = MODELO_DE_RESPALDO,
             llamar = { params ->
                 pedidas += params.model().asString()
-                if (pedidas.size == 1) error("529 overloaded")
+                if (pedidas.size == 1) throw java.io.IOException("timeout")
                 respuestaConTexto("Listo.")
             },
         )

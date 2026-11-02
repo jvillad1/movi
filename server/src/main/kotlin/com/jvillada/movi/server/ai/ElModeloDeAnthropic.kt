@@ -1,6 +1,10 @@
 package com.jvillada.movi.server.ai
 
+import com.jvillada.movi.server.observabilidad.Servicio
+import com.jvillada.movi.server.observabilidad.TipoDeError
 import com.jvillada.movi.server.observabilidad.crearMensaje
+import com.jvillada.movi.server.observabilidad.medirLlamada
+import com.jvillada.movi.server.observabilidad.tipoDeErrorDe
 import com.anthropic.client.AnthropicClient
 import com.anthropic.core.JsonValue
 import com.anthropic.models.messages.CacheControlEphemeral
@@ -172,11 +176,15 @@ internal class ElModeloDeAnthropic(
             llamar(armar(modelo))
         } catch (falla: Exception) {
             val respaldo = modeloDeRespaldo ?: throw falla
-            // Sin saldo o con la clave rechazada, el respaldo falla igual —es la misma cuenta— y
-            // solo duplica la espera. Ver `FallaDeLaIa.sirveOtroModelo`.
-            if (fallaDeLaIa(falla)?.sirveOtroModelo == false) throw falla
+            // **Solo el servidor o la capacidad** (vuelta 106): un 5xx, un 429/529, un timeout o la
+            // red. Un 400 de parámetros es un error nuestro y tiene que fallar visible; sin saldo o con
+            // la clave rechazada el respaldo falla igual (es la misma cuenta) y solo duplica la espera.
+            val tipo = tipoDeErrorDe(falla)
+            if (tipo !in ERRORES_QUE_PRUEBAN_EL_RESPALDO) throw falla
+            val motivo = tipo.name.lowercase()
+            log.warn("movi-ai: {} falló ({}: {}), pruebo con el respaldo {}", modelo, motivo, falla.javaClass.simpleName, respaldo)
             usado = respaldo
-            llamar(armar(respaldo))
+            medirLlamada(Servicio.RESPALDO_DE_LA_IA, "$respaldo · $motivo") { llamar(armar(respaldo)) }
         }
         ultima = respuesta
         modeloQueContesto = usado
@@ -405,6 +413,12 @@ internal const val PRESUPUESTO_DE_PENSAMIENTO = 4_000L
  * quinientas alcanzan para mirar una herramienta y decidir; un techo no es un cobro.
  */
 internal const val PRESUPUESTO_DE_PENSAMIENTO_DEL_DATO = 1_500L
+
+/**
+ * Vuelta 106 · los errores que justifican probar con el modelo de respaldo: los del servidor de
+ * Anthropic (5xx), los de capacidad (429/529) y los de la red (timeout, conexión). Ver [TipoDeError].
+ */
+internal val ERRORES_QUE_PRUEBAN_EL_RESPALDO = setOf(TipoDeError.SERVIDOR, TipoDeError.LIMITE, TipoDeError.RED)
 
 /**
  * ¿Este modelo deja apagar el pensamiento con `thinking: {type: "disabled"}`? Haiku 5.5 sí (con

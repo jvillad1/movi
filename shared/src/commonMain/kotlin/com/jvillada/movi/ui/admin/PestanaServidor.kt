@@ -360,6 +360,8 @@ internal fun nombreDelServicio(servicio: String): String = when (servicio) {
     "anthropic" -> "Anthropic"
     "resend" -> "Resend"
     "trm" -> "TRM"
+    // Vuelta 106: cada vez que el chat cayó al modelo de respaldo (la operación dice cuál y por qué).
+    "ia-respaldo" -> "Respaldo de la IA"
     else -> servicio
 }
 
