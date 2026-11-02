@@ -100,6 +100,8 @@ internal fun canalLegibleDelAviso(bank: String): String {
     val limpio = bank.replace(' ', ' ').trim()
     return when {
         limpio.isEmpty() || limpio.equals("SMS", ignoreCase = true) || limpio.all { it.isDigit() } -> "SMS"
+        // Vuelta 111: el SMS que reenvió el atajo del iPhone sigue siendo un SMS; Apple Pay se nombra solo.
+        com.jvillada.movi.shared.model.esUnAtajo(limpio) && !com.jvillada.movi.shared.model.esElAtajoDeApplePay(limpio) -> "SMS"
         limpio.startsWith("Correo", ignoreCase = true) -> "Correo"
         else -> origenLegibleDelAviso(limpio)
     }

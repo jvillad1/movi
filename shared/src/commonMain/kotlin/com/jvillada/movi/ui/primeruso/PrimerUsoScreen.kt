@@ -1309,6 +1309,15 @@ private fun PasoCapturaConUnExtracto(extractoSubido: String?, onExtracto: (Strin
         PapelesCompartidos.recibir(listOf(ArchivoCompartido(nombre, bytes, mime)))
         onExtracto(nombre)
     }
+    // Vuelta 111 · en un iPhone, primero los atajos: el iPhone le avisa a Movi cada SMS del banco y cada
+    // pago con Apple Pay. El extracto sigue debajo, como alternativa.
+    if (com.jvillada.movi.ui.sms.laGuiaOfreceLosAtajos(isAndroid, com.jvillada.movi.platform.esUnIphone())) {
+        com.jvillada.movi.ui.sms.DesdeTuIphone(
+            palabras = com.jvillada.movi.shared.model.palabrasParaLaAutomatizacion(emptyList()),
+        )
+        Spacer(Modifier.height(Medida.entreSecciones))
+        Seccion("O sube un extracto")
+    }
     Text(
         "Sube el extracto de tu banco (el PDF que te mandan cada mes) y Movi lo lee: los movimientos te " +
             "esperan en «Por revisar» para que los confirmes. Es opcional.",
