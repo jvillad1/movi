@@ -297,6 +297,8 @@ class DesdeTuIphoneTest {
         assertTrue("«Mensaje contiene Texto»" in de27[3] && "«Bancolombia»" in de27[3])
         assertTrue("prendido «Automatización»" in de27[4] && "apagado «Confirmar antes de ejecutar»" in de27[4])
         assertTrue("otra tarjeta «Mensaje»" in de27[5] && "«o»" in de27[5] && "«DAVIVIENDA», «BBVA»" in de27[5])
+        // Un filtro en la misma tarjeta se une con «y»: la guía lo advierte.
+        assertTrue("no «+ Agregar filtro»" in de27[5] && "«y»" in de27[5], de27[5])
         assertEquals(PROBAR_CON_UN_SMS_REAL, de27.last())
         assertTrue(de27.none { "pestaña" in it }, "en iOS 27 no hay pestaña «Automatización»")
 

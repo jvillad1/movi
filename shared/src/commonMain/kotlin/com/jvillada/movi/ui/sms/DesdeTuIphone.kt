@@ -196,7 +196,8 @@ fun pasosDeLaAutomatizacionDeMensajes(palabras: List<String>, variante: Variante
             "Toca «Remitente» y elige «Mensaje», para que quede «Mensaje contiene Texto». Escribe «$ejemplo».",
             "Toca la flecha junto a «que»: deja prendido «Automatización» y apagado «Confirmar antes de ejecutar».",
             otras.takeIf { it.isNotEmpty() }?.let {
-                "Para cada banco más, agrega otra tarjeta «Mensaje» de la misma forma (quedan unidas por «o»): $it."
+                "Para cada banco más agrega otra tarjeta «Mensaje» (quedan unidas por «o»), no «+ Agregar filtro»: " +
+                    "un filtro se une con «y» y la automatización no correría nunca. $it."
             },
             PROBAR_CON_UN_SMS_REAL,
         )

@@ -107,8 +107,9 @@ cosa?»; si no, las dos con su rótulo, la de iOS 27 primero. Se recomiendan sie
 5. Escribe `Bancolombia`.
 6. Toca la flecha (**⌄**) junto a «que»: **«Automatización»** prendido y **«Confirmar antes de ejecutar»**
    apagado (venía apagado; hay que dejarlo así).
-7. «+ Agregar filtro» está en la misma tarjeta. Para otro banco se agrega **otra** tarjeta «Mensaje» (quedan
-   unidas por «o»): `DAVIVIENDA` y las de sus bancos.
+7. Para cada banco más agrega **otra** tarjeta «Mensaje» (quedan unidas por «o»), **no «+ Agregar filtro»**: un
+   filtro se une con «y» y la automatización no correría nunca. `DAVIVIENDA` y las de sus bancos. (La app dice
+   lo mismo.)
 
 Las imágenes del atajo muestran también «Recibir **Contenido y 20 más** de **Ningún lado** · Si no hay entrada:
 Solicitar Texto».
