@@ -152,9 +152,9 @@ Pay»):
 4. **Cuerpo de la solicitud: JSON**, campos de texto: `tipo` = `transaccion`; `comercio`, `monto` y `tarjeta` =
    esas propiedades de la **Entrada del atajo** (toca la variable y elige cada una).
 5. **iOS 17 a 26:** pestaña Automatización → «+» → **«Transacción»** → marca las tarjetas → «Ejecutar de
-   inmediato» → «Siguiente» → ese atajo. **iOS 27: por verificar en el iPhone.** Probablemente se mudó, como
-   «Mensaje», a la búsqueda dentro del atajo (Buscar → Automatización, quizás en una sección «Cartera»); la app
-   lo dice así, sin inventar los pasos.
+   inmediato» → «Siguiente» → ese atajo. **iOS 27: por verificar en el iPhone.** La app no adelanta un camino:
+   dice que todavía no se verificó y que, si no está la pestaña, se busque dentro del atajo, como la de mensajes.
+   Al probarlo, anotar dónde quedó «Transacción» para escribir los pasos.
 6. Paga algo chico con Apple Pay. En «Por revisar» tiene que aparecer «Apple Pay · <comercio> · $X · <tarjeta>».
    Si la misma compra también llegó por SMS (otra automatización), los dos avisos van en **una** tarjeta.
 

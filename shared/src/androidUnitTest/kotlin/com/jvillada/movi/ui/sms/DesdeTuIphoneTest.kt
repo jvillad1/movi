@@ -370,6 +370,7 @@ class DesdeTuIphoneTest {
         assertTrue("acción «Texto»" in DETALLE_CREAR_OTRO)
         // Apple Pay en iOS 27 no se inventa: se dice que falta verificarlo.
         assertTrue(hay(APPLE_PAY_EN_IOS_27))
+        assertFalse("Transacción" in APPLE_PAY_EN_IOS_27, "no adelanta dónde está «Transacción»: nadie lo probó")
     }
 
     @Test

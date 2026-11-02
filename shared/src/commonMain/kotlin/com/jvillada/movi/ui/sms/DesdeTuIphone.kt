@@ -226,12 +226,12 @@ val PASOS_DE_LA_AUTOMATIZACION_DE_APPLE_PAY: List<String> = listOf(
 )
 
 /**
- * Vuelta 114 · **Apple Pay en iOS 27, sin verificar**: la pestaña ya no está, y «Transacción» probablemente
- * se mudó a la búsqueda del atajo como «Mensaje». No se inventa: se dice que falta verificarlo.
+ * Vuelta 114 · **Apple Pay en iOS 27, sin verificar**: no se adelanta un camino que nadie probó; solo se dice
+ * que falta verificarlo y dónde mirar, como con la de mensajes.
  */
 const val APPLE_PAY_EN_IOS_27: String =
-    "En iOS 27 o más nuevo: la pestaña «Automatización» ya no está. «Transacción» debería estar dentro del " +
-        "atajo, en «Buscar» y la pastilla «Automatización», pero todavía no lo verificamos en un iPhone."
+    "En iOS 27 todavía no lo verificamos: si no ves la pestaña «Automatización», búscala dentro del atajo, " +
+        "como la de mensajes."
 
 /**
  * **Cómo armar un atajo a mano**, cuando Movi no tiene el atajo firmado para instalarlo con un toque. Son
