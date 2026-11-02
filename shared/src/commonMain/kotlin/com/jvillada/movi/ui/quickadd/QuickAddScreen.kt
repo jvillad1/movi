@@ -1292,6 +1292,14 @@ fun QuickAddScreen(
         // después. Es lo correcto para esta preferencia: el dueño anotó el gasto en esa
         // cuenta, y que el server todavía no se haya enterado no cambia en cuál lo anotó.
         LastAccountStore.recordAccount(event.accountId)
+        // Vuelta 100: la adopción de «agregar a mano» (solo el tipo, nunca el monto ni el concepto).
+        com.jvillada.movi.observabilidad.Uso.evento(
+            com.jvillada.movi.shared.model.EventoDeUso.MOVIMIENTO_A_MANO,
+            mapOf(
+                com.jvillada.movi.shared.model.ClaveDeUso.CLASE to
+                    if (event.type == TransactionType.INCOME) "INGRESO" else "GASTO",
+            ),
+        )
         // Task 5 (fix round 1): la memoria de categorías que trajo esta hoja puede quedar
         // vieja apenas se guarda este movimiento — se invalida, SIN pedir nada, para que
         // la próxima hoja de «Agregar» de esta sesión vuelva a preguntar. Síncrono y no un

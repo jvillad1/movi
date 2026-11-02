@@ -36,6 +36,17 @@ import com.jvillada.movi.server.time.AppClock
  * (which has a SupervisorJob cancelled on app stop), so it cleans up automatically.
  */
 fun Application.startReminderScheduler() {
+    // Vuelta 100 · la retención de la observabilidad: una vez al arrancar y después cada día, se
+    // borran los fallos y el uso de más de 90 días. Va antes del «sin canales, apagado» de abajo a
+    // propósito: borrar lo viejo no depende de que haya correo ni push.
+    launch {
+        while (true) {
+            runCatching { com.jvillada.movi.server.observabilidad.Observabilidad.borrarLoViejo(System.currentTimeMillis()) }
+                .onSuccess { if (it > 0) log.info("Observabilidad: $it filas de más de 90 días borradas") }
+                .onFailure { log.warn("Observabilidad: la retención de 90 días falló: ${it.message}") }
+            delay(24 * 3_600_000L)
+        }
+    }
     val emailEnabled = ReminderConfig.emailEnabled()
     val pushEnabled = WebPushSender.isConfigured()
     if (!emailEnabled) log.warn("ReminderScheduler: RESEND_API_KEY not set — email reminders disabled")

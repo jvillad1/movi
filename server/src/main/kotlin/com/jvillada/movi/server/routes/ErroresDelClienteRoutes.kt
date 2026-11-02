@@ -1,6 +1,9 @@
 package com.jvillada.movi.server.routes
 
 import com.jvillada.movi.server.auth.RateLimiter
+import com.jvillada.movi.server.observabilidad.Observabilidad
+import com.jvillada.movi.shared.model.FalloDeLaApp
+import com.jvillada.movi.shared.model.newId
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.plugins.origin
 import io.ktor.server.request.receiveText
@@ -50,7 +53,25 @@ internal fun lineaDelErrorDelCliente(e: ErrorDelCliente): String {
         " · navegador=${limpio(e.navegador, MAX_NAVEGADOR)} · ${limpio(e.mensaje, MAX_MENSAJE)}"
 }
 
-fun Route.erroresDelClienteRoutes() {
+/**
+ * **El error de la web como un fallo más** (vuelta 100). La web no manda stack ni id: el tipo es lo que
+ * va antes de los dos puntos («TypeError»), el id es nuevo en cada reporte, y el navegador va en el
+ * modelo. El usuario es el que dice el reporte (un id, no un secreto): solo atribuye.
+ */
+internal fun falloDeLaWeb(e: ErrorDelCliente, ahora: Long): FalloDeLaApp {
+    val tipo = e.mensaje.substringBefore(':').trim().takeIf { it.isNotEmpty() && it.length <= 60 && ' ' !in it } ?: "ErrorDeLaWeb"
+    return FalloDeLaApp(
+        id = newId("web"),
+        plataforma = "web",
+        tipo = tipo,
+        mensaje = e.mensaje,
+        componente = "web",
+        modelo = e.navegador,
+        ocurridoEn = ahora,
+    )
+}
+
+fun Route.erroresDelClienteRoutes(verificador: com.auth0.jwt.interfaces.JWTVerifier? = null) {
     post("/api/errores-del-cliente") {
         val ip = call.request.origin.remoteHost
         if (!RateLimiter.allow("errores-del-cliente:$ip", REPORTES_POR_VENTANA, VENTANA_MS)) {
@@ -62,6 +83,15 @@ fun Route.erroresDelClienteRoutes() {
         val error = crudo?.let { runCatching { json.decodeFromString(ErrorDelCliente.serializer(), it) }.getOrNull() }
             ?: return@post call.respond(HttpStatusCode.BadRequest)
         log.warn(lineaDelErrorDelCliente(error))
+        // Vuelta 100: y entra a la misma tabla que los fallos de Android e iOS, para verlos juntos en
+        // «Fallos y uso». Sin base (las pruebas de solo rutas) o con la base caída, el WARN ya quedó.
+        // Se atribuye **solo** con el usuario del token (si vino uno válido y existe), nunca con el
+        // `usuario` del cuerpo: ese lo escribe quien quiera.
+        runCatching {
+            val encabezado = call.request.headers[io.ktor.http.HttpHeaders.Authorization]
+            val uid = if (verificador != null) usuarioDelTokenDeMovi(encabezado, verificador) else usuarioDelTokenDeMovi(encabezado)
+            Observabilidad.guardarFallo(falloDeLaWeb(error, System.currentTimeMillis()), uid, System.currentTimeMillis())
+        }
         call.respond(HttpStatusCode.NoContent)
     }
 }

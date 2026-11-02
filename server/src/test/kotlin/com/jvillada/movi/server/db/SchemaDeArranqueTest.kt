@@ -107,6 +107,7 @@ class SchemaDeArranqueTest {
         // El período que se cuenta solo — el resumen de cierre por correo, encendido o no. También lo
         // nombra `toProfile()`.
         "users" to "cierre_por_correo",
+        "users" to "mandar_uso",
         // La guía «Primer uso» terminada o descartada. También la nombra `toProfile()`.
         "users" to "primer_uso_en",
         // Vuelta 95 — el aviso «Qué ve la IA» visto. También lo nombra `toProfile()`.

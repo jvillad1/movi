@@ -1,5 +1,9 @@
 package com.jvillada.movi.ui.primeruso
 
+import androidx.compose.runtime.DisposableEffect
+import com.jvillada.movi.observabilidad.Uso
+import com.jvillada.movi.shared.model.ClaveDeUso
+import com.jvillada.movi.shared.model.EventoDeUso
 import com.jvillada.movi.ui.components.ds.coloresDeLoElegido
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
@@ -410,6 +414,11 @@ fun PrimerUsoScreen(
         }.getOrDefault(YA_PUEDES_EMPEZAR)
     }
 
+    /** Vuelta 100: un toque de la guía en el uso, con el paso donde pasó. */
+    fun tocar(accion: String) {
+        Uso.evento(EventoDeUso.TOQUE, mapOf(ClaveDeUso.ACCION to accion, ClaveDeUso.PASO to paso.name))
+    }
+
     fun irA(destino: PasoDePrimerUso) {
         error = null
         if (destino != PasoDePrimerUso.PERIODO) volverAlPaso = null
@@ -430,6 +439,11 @@ fun PrimerUsoScreen(
     fun salir() {
         if (guardando) return
         guardando = true
+        // Vuelta 100: terminada en el último paso; antes, abandonada en el paso donde estaba.
+        Uso.evento(
+            EventoDeUso.GUIA_SALIDA,
+            mapOf(ClaveDeUso.PASO to paso.name, ClaveDeUso.RESULTADO to if (paso == PasoDePrimerUso.LISTO) "TERMINADA" else "ABANDONADA"),
+        )
         alcance.launch {
             // Vuelta 75: el salario escrito no se pierde por salir antes del final; la creación en curso se
             // espera, no se repite.
@@ -485,6 +499,13 @@ fun PrimerUsoScreen(
         }
     }
 
+    // Vuelta 100: el embudo de la guía (cuántos llegan a cada paso) y la ruta «PrimerUso(paso 2)».
+    LaunchedEffect(paso) {
+        Uso.ponerElDetalleDeArriba("paso ${numeroDelPaso(paso, pasos)}")
+        Uso.evento(EventoDeUso.GUIA_PASO, mapOf(ClaveDeUso.PASO to paso.name))
+    }
+    DisposableEffect(Unit) { onDispose { Uso.ponerElDetalleDeArriba(null) } }
+
     // El «atrás» del teléfono vuelve un paso, como el botón de abajo.
     val anterior = pasoAnterior(paso, pasos)
     BackHandlerEffect(enabled = anterior != null) { anterior?.let(::irA) }
@@ -532,7 +553,7 @@ fun PrimerUsoScreen(
             if (paso != PasoDePrimerUso.LISTO) {
                 Boton(
                     AHORA_NO,
-                    onClick = { preguntandoSiHayAlgoEscrito(::salir) },
+                    onClick = { tocar("AHORA_NO"); preguntandoSiHayAlgoEscrito(::salir) },
                     variante = VarianteDeBoton.Fantasma,
                     habilitado = !guardando,
                 )
@@ -665,7 +686,10 @@ fun PrimerUsoScreen(
                 principal = {
                     Boton(
                         if (escritos.isNotEmpty()) GUARDAR_Y_SEGUIR else textoDeAvanzar,
-                        onClick = { if (escritos.isNotEmpty()) guardarYSeguir(escritos) else avanzar() },
+                        onClick = {
+                            tocar(if (escritos.isNotEmpty()) "GUARDAR_Y_SEGUIR" else "SIGUIENTE")
+                            if (escritos.isNotEmpty()) guardarYSeguir(escritos) else avanzar()
+                        },
                         cargando = guardando || (paso == PasoDePrimerUso.LISTO && creandoElSalario),
                         habilitado = (if (escritos.isNotEmpty()) razon == null else sePuedeAvanzar) &&
                             !(paso == PasoDePrimerUso.LISTO && creandoElSalario),
@@ -676,7 +700,7 @@ fun PrimerUsoScreen(
                     {
                         Boton(
                             "Atrás",
-                            onClick = { irA(anterior) },
+                            onClick = { tocar("ATRAS"); irA(anterior) },
                             variante = VarianteDeBoton.Secundario,
                             habilitado = !guardando,
                             modifier = Modifier.testTag(TAG_ATRAS_EN_LA_GUIA),
@@ -703,7 +727,7 @@ fun PrimerUsoScreen(
                 Boton(
                     SALTAR_ESTE_PASO,
                     // Con algo escrito pregunta antes: el arriendo escrito no se pierde por un toque.
-                    onClick = { preguntandoSiHayAlgoEscrito { descartarLoEscrito(paso); irA(volverAlPaso ?: siguiente) } },
+                    onClick = { tocar("SALTAR"); preguntandoSiHayAlgoEscrito { descartarLoEscrito(paso); irA(volverAlPaso ?: siguiente) } },
                     variante = VarianteDeBoton.Fantasma,
                     tamano = TamanoDeBoton.S,
                     habilitado = !guardando,

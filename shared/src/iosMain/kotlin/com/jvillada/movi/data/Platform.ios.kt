@@ -35,11 +35,18 @@ actual fun createHttpClient(): HttpClient = HttpClient(Darwin) {
             if (laSesionTras(response.status.value, response.call.request.url, tokenDelPedido, SessionManager.token) == LaSesionTras.SE_CERRO) {
                 SessionManager.seRechazoElToken(tokenDelPedido)
             }
+            // Vuelta 100: una escritura que el server rechazó queda en el uso, con su código.
+            com.jvillada.movi.observabilidad.anotarLaRespuestaParaElUso(
+                response.status.value, response.call.request.method.value, response.call.request.url,
+            )
         }
-        handleResponseExceptionWithRequest { cause, _ ->
+        handleResponseExceptionWithRequest { cause, request ->
             // Network errors — keep session alive, work offline
             if (cause.message?.contains("NSURLErrorDomain") == true ||
-                cause.message?.contains("cancelled") == true) return@handleResponseExceptionWithRequest
+                cause.message?.contains("cancelled") == true) {
+                com.jvillada.movi.observabilidad.anotarElErrorDeRedParaElUso(request.method.value, request.url)
+                return@handleResponseExceptionWithRequest
+            }
             throw cause
         }
     }
