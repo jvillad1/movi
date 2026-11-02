@@ -45,4 +45,37 @@ class BankSenderFilterTest {
         assertTrue(BankSenderFilter.matches("Info", "Nequi: pago recibido", remote))
         assertFalse(BankSenderFilter.matches("890123", "cualquier cosa"))   // defaults no lo conocen
     }
+
+    /**
+     * **Vuelta 99 · el papá del dueño.** Sus SMS de Davivienda llegan de un código corto 871… que Movi
+     * no conoce: los deja pasar la palabra «DAVIVIENDA» del cuerpo, con la config del server y con el
+     * piso compilado. Los tres textos son los reales de su teléfono.
+     */
+    @Test
+    fun `un SMS de Davivienda desde un 871 entra por el nombre del banco`() {
+        val reales = listOf(
+            "DAVIVIENDA Descuento en internet, \$64,900,Cta de Ahorros *0136,Hora 16:49,Lugar PSE MERCADOPAGO COLOMBIA.",
+            "DAVIVIENDA Abono Transferencia ACH, \$419,745,Cta de Ahorros *0136,Hora 17:18,Lugar 0000000000000000000000000.",
+            "DAVIVIENDA . Retiro . \$320,000,Cta de Ahorros *0136,Hora 12:04,Lugar OVIEDO.",
+        )
+        val delServer = FilterConfig(senderCodes = listOf("85540", "891333", "87400"), bodyKeywords = listOf("bancolombia", "nubank", "davivienda"))
+        for (texto in reales) {
+            for (remitente in listOf("87100", "871", "+57871")) {
+                assertTrue(BankSenderFilter.matches(remitente, texto), "el piso no deja pasar: $texto")
+                assertTrue(BankSenderFilter.matches(remitente, texto, SmsFilterConfigStore.withDefaults(delServer)))
+            }
+        }
+        // Un APK 1.87 (piso de antes: solo Bancolombia) lo deja pasar con lo que baja del server.
+        val pisoDeAntes = FilterConfig(listOf("85540", "891333", "87400"), listOf("bancolombia"))
+        assertFalse(BankSenderFilter.matches("87100", reales.first(), pisoDeAntes))
+        assertTrue(BankSenderFilter.matches("87100", reales.first(), FilterConfig(pisoDeAntes.senderCodes, delServer.bodyKeywords)))
+    }
+
+    /** Los bancos nuevos no abren la puerta a lo personal: un SMS que no nombra ningún banco sigue afuera. */
+    @Test
+    fun `con los bancos nuevos un SMS personal sigue afuera`() {
+        assertFalse(BankSenderFilter.matches("87100", "hola papá, ya llegué a la casa"))
+        assertFalse(BankSenderFilter.matches("+573001234567", "tu numero de pedido continua en el nuevo local, nunca antes visto"))
+        assertFalse(BankSenderFilter.matches("Claro", "Tu factura de Claro está disponible por \$63.900"))
+    }
 }
