@@ -36,6 +36,8 @@ import androidx.compose.material.icons.rounded.Flag
 import androidx.compose.material.icons.rounded.Inbox
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Password
+import androidx.compose.material.icons.rounded.Gavel
+import androidx.compose.material.icons.rounded.PrivacyTip
 import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.Savings
@@ -620,6 +622,24 @@ fun MasScreen(
                         subtitulo = if (cerrandoTodas) "Cerrando…" else null,
                         lineasDelSubtitulo = 2,
                         onClick = if (cerrandoTodas) null else ({ errorCierreTotal = null; confirmarCierreTotal = true }),
+                    )
+                    // Vuelta 109: la política de privacidad y los términos (las páginas del server que
+                    // piden las tiendas), en el navegador.
+                    Separador()
+                    Fila(
+                        titulo = com.jvillada.movi.ui.legal.TITULO_PRIVACIDAD,
+                        subtitulo = "Qué datos guarda Movi y cómo borrarlos",
+                        lineasDelSubtitulo = 2,
+                        inicio = { IconoDeAjuste(Icons.Rounded.PrivacyTip) },
+                        final = { Chevron() },
+                        onClick = { runCatching { uriHandler.openUri(com.jvillada.movi.ui.legal.urlDePrivacidad()) } },
+                    )
+                    Separador()
+                    Fila(
+                        titulo = com.jvillada.movi.ui.legal.TITULO_TERMINOS,
+                        inicio = { IconoDeAjuste(Icons.Rounded.Gavel) },
+                        final = { Chevron() },
+                        onClick = { runCatching { uriHandler.openUri(com.jvillada.movi.ui.legal.urlDeTerminos()) } },
                     )
                 }
                 NotaDeSeccion(errorCierreTotal, esError = true)

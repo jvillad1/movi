@@ -113,6 +113,9 @@
         }
         .lg-check input { width: 16px; height: 16px; accent-color: var(--texto); cursor: pointer; }
         .lg-note { color: var(--textoMedio); font-size: 13px; line-height: 1.45; margin-bottom: 16px; }
+        /* Vuelta 109: «Al crear tu cuenta aceptas los Términos y la Política de privacidad». */
+        .lg-legal { color: var(--textoMedio); font-size: 12.5px; line-height: 1.45; margin: 12px 0 0; text-align: center; }
+        .lg-legal a { color: var(--enlace); font-weight: 600; }
         .lg-ok { color: var(--entra); font-size: 13px; line-height: 1.45; }
         .lg-ok:not(:empty) { margin-bottom: 14px; }
 
@@ -242,6 +245,7 @@
                         </div>
                         <div class="lg-err" id="register-err"></div>
                         <button class="lg-btn" id="register-btn" type="submit">Crear cuenta</button>
+                        <p class="lg-legal">Al crear tu cuenta aceptas los <a href="/terminos" target="_blank" rel="noopener">Términos</a> y la <a href="/privacidad" target="_blank" rel="noopener">Política de privacidad</a>.</p>
                     </form>
                     <button class="lg-alt" id="register-back" type="button">¿Ya tienes cuenta? Entra</button>
                 </div>

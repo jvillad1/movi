@@ -135,6 +135,9 @@ fun RegisterScreen(onNavigate: (Screen) -> Unit) {
 
             Spacer(Modifier.height(Espacio.l))
             Boton("Crear cuenta", onClick = { submit() }, cargando = loading, anchoCompleto = true)
+            // Vuelta 109: lo que se acepta al crear la cuenta, con sus enlaces (sin casilla).
+            Spacer(Modifier.height(Espacio.s))
+            com.jvillada.movi.ui.legal.LineaDeAceptacion(Modifier.fillMaxWidth())
         }
 
         Spacer(Modifier.height(Espacio.m))

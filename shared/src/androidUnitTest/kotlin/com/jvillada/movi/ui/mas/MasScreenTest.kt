@@ -161,6 +161,7 @@ class MasScreenTest {
             "Avisarme antes de un vencimiento", "Resumen del período por correo",
             "Documentos", "Descargar tus datos", "Compartir",
             "Cambiar contraseña", CERRAR_SESION, CERRAR_SESION_EN_TODOS,
+            com.jvillada.movi.ui.legal.TITULO_PRIVACIDAD, com.jvillada.movi.ui.legal.TITULO_TERMINOS,
             BORRAR_MI_CUENTA,
         )
         val alturas = enOrden.map { arribaDe(it) }
@@ -389,6 +390,37 @@ class MasScreenTest {
     fun `en Android no ofrece el correo porque ahi se leen los mensajes`() {
         montar()
         composeRule.onNodeWithText(RECIBE_TUS_ALERTAS_POR_CORREO, useUnmergedTree = true).assertDoesNotExist()
+    }
+
+    /** Vuelta 109: la versión de Google Play no lee SMS (lo dice su manifiesto): ofrece el correo, como la web. */
+    @Test
+    fun `en Android con la version de Play ofrece el correo, como la web`() {
+        com.jvillada.movi.comoLaVersionDePlay(androidx.test.core.app.ApplicationProvider.getApplicationContext())
+        montar()
+        composeRule.waitUntil(5_000) { hay(RECIBE_TUS_ALERTAS_POR_CORREO) }
+        assertTrue(hay("alertas+abc@movi.resend.app"))
+    }
+
+    /** Vuelta 109: «Privacidad» y «Términos de uso» abren las páginas del server en el navegador. */
+    @Test
+    fun `Privacidad y Terminos abren las paginas del server`() {
+        val abiertas = mutableListOf<String>()
+        val manejador = object : androidx.compose.ui.platform.UriHandler {
+            override fun openUri(uri: String) { abiertas += uri }
+        }
+        Repositories.sustitutoDePrueba = repo
+        composeRule.setContent {
+            CompositionLocalProvider(androidx.compose.ui.platform.LocalUriHandler provides manejador) {
+                MoviTheme { Box(Modifier.fillMaxSize()) { MasScreen(onNavigate = { navegoA = it }) } }
+            }
+        }
+        composeRule.waitUntil(5_000) { hay("Cada día 25") }
+        tocarFila(com.jvillada.movi.ui.legal.TITULO_PRIVACIDAD)
+        tocarFila(com.jvillada.movi.ui.legal.TITULO_TERMINOS)
+        assertEquals(
+            listOf("${com.jvillada.movi.data.apiBaseUrl}/privacidad", "${com.jvillada.movi.data.apiBaseUrl}/terminos"),
+            abiertas,
+        )
     }
 
     // ── Vuelta 38: «Lo tuyo», arriba de Tú ─────────────────────────────────────
