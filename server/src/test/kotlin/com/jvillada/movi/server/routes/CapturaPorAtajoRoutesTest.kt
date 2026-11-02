@@ -375,7 +375,12 @@ class CapturaPorAtajoRoutesTest {
             assertTrue("\"guardado\":false" in client.avisar(codigo, mensaje(otro, remitente = celular)).bodyAsText())
         }
         assertEquals(1, filas().size, "un SMS personal llegó a la bandeja")
-        assertEquals(4, transaction { AtajosDescartados.selectAll().single()[AtajosDescartados.cuantos] })
+        // Vuelta 114: el que nombra al banco sin empezar por él va como SIN_FORMA_DE_AVISO; los de un celular,
+        // NO_ES_DEL_BANCO (el remitente personal decide, aunque el texto sea un aviso).
+        assertEquals(
+            mapOf("SIN_FORMA_DE_AVISO" to 1, "NO_ES_DEL_BANCO" to 3),
+            transaction { AtajosDescartados.selectAll().associate { it[AtajosDescartados.motivo] to it[AtajosDescartados.cuantos] } },
+        )
 
         assertTrue("\"guardado\":true" in client.avisar(codigo, mensaje(otro, remitente = "85540")).bodyAsText())
         assertEquals(2, filas().size)
@@ -542,7 +547,7 @@ class CapturaPorAtajoRoutesTest {
         // La ruta, decodificada, también termina en el nombre del atajo (Safari la usa si falta la cabecera).
         assertEquals(
             "$nombre.shortcut",
-            io.ktor.http.decodeURLPart(com.jvillada.movi.shared.model.RUTA_DEL_ATAJO_DE_MENSAJES.substringAfterLast('/')),
+            java.net.URLDecoder.decode(com.jvillada.movi.shared.model.RUTA_DEL_ATAJO_DE_MENSAJES.substringAfterLast('/'), Charsets.UTF_8),
         )
     }
 }
