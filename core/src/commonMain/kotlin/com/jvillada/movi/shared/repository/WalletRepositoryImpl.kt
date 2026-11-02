@@ -341,6 +341,38 @@ class WalletRepositoryImpl(
             },
         ) { it.body() }
 
+    override suspend fun repartirMovimiento(
+        espacioId: String,
+        eventoId: String,
+        reparto: com.jvillada.movi.shared.model.RepartoDelGasto?,
+    ): com.jvillada.movi.shared.model.GastoDelEspacio =
+        conRespuesta(
+            client.post("$baseUrl/api/espacios/$espacioId/compartir") {
+                contentType(ContentType.Application.Json)
+                setBody(com.jvillada.movi.shared.model.CompartirMovimientoRequest(eventoId = eventoId, gastoId = newId("gde"), reparto = reparto))
+            },
+        ) { it.body() }
+
+    override suspend fun getPropuestasDeRepartir(): List<com.jvillada.movi.shared.model.PropuestaDeRepartir> {
+        val response = client.get("$baseUrl/api/espacios/propuestas-de-reparto")
+        if (response.status == HttpStatusCode.NotFound) return emptyList()
+        return conRespuesta(response) { it.body() }
+    }
+
+    override suspend fun getRecurrentesDelHogar(): List<com.jvillada.movi.shared.model.RecurrenteDelHogar> {
+        val response = client.get("$baseUrl/api/espacios/recurrentes-del-hogar")
+        if (response.status == HttpStatusCode.NotFound) return emptyList()
+        return conRespuesta(response) { it.body() }
+    }
+
+    override suspend fun marcarRecurrenteDelHogar(espacioId: String, reglaId: String) {
+        conRespuesta(client.put("$baseUrl/api/espacios/$espacioId/recurrentes/$reglaId")) { }
+    }
+
+    override suspend fun quitarRecurrenteDelHogar(espacioId: String, reglaId: String) {
+        conRespuesta(client.delete("$baseUrl/api/espacios/$espacioId/recurrentes/$reglaId")) { }
+    }
+
     override suspend fun quitarDelEspacio(espacioId: String, eventoId: String) {
         conRespuesta(client.delete("$baseUrl/api/espacios/$espacioId/compartir/$eventoId")) { }
     }
@@ -928,6 +960,22 @@ class WalletRepositoryImpl(
         return response.body()
     }
 
+    // Mismo idioma que renameAccount: los rechazos (400 nombre/saldo, 422 tipo/préstamo/bien) son
+    // texto que la hoja tiene que poder mostrar.
+    override suspend fun editarCuenta(
+        id: String,
+        pedido: com.jvillada.movi.shared.model.EditarCuentaRequest,
+    ): AdjustAccountBalanceResponse {
+        val response = client.put("$baseUrl/api/accounts/$id") {
+            contentType(ContentType.Application.Json)
+            setBody(pedido)
+        }
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
+    }
+
     override suspend fun updateAccountCondition(id: String, condicionadaA: String?): Account {
         val response = client.put("$baseUrl/api/accounts/$id/conditioned-to") {
             contentType(ContentType.Application.Json)
@@ -1500,6 +1548,15 @@ class WalletRepositoryImpl(
             setBody(request)
         }.exigirExito()
     }
+
+    // Vuelta 102: las cuatro lecturas del panel del servidor, una tras otra (son de un admin, y pocas).
+    override suspend fun getPanelDelServidor(horas: Int, dias: Int): com.jvillada.movi.shared.model.PanelDelServidor =
+        com.jvillada.movi.shared.model.PanelDelServidor(
+            resumen = client.get("$baseUrl/api/admin/servidor/resumen?horas=$horas").exigirExito().body(),
+            servicios = client.get("$baseUrl/api/admin/servidor/servicios?dias=$dias").exigirExito().body(),
+            jobs = client.get("$baseUrl/api/admin/servidor/jobs").exigirExito().body(),
+            salud = client.get("$baseUrl/api/admin/servidor/salud").exigirExito().body(),
+        )
 }
 
 /**

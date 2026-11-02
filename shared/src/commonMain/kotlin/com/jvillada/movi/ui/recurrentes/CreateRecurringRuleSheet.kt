@@ -925,6 +925,12 @@ fun CreateRecurringRuleSheet(
                             onCambiar = { seDebitaSolo = !seDebitaSolo },
                         )
                     }
+                    // Vuelta 97 · «Se reparte en Casa con Caro»: solo en una regla que ya existe (la marca
+                    // es por su id) y sin grupos no se pinta. Se guarda al tocarla.
+                    if (existing != null && !esAbono && !editandoSuscripcion) {
+                        Spacer(Modifier.height(Espacio.s))
+                        com.jvillada.movi.ui.espacios.SeRepartirEnUnGrupo(regla = existing)
+                    }
                 } else {
                     // V10: antes la casilla simplemente se esfumaba al tocar «Ingreso». Que un
                     // control desaparezca sin decir nada deja al dueño preguntándose si lo

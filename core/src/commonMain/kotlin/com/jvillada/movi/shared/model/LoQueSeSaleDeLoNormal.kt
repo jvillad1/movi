@@ -123,9 +123,13 @@ fun claveDeComercio(evento: FinancialEvent): String? {
     return claveComparableDeNombre(texto).takeIf { it.length >= 3 }
 }
 
-/** ¿Este movimiento es un gasto de consumo que un aviso puede mirar? */
+/**
+ * ¿Este movimiento es un gasto de consumo que un aviso puede mirar? Vuelta 97: uno que no te toca nada
+ * («Solo de Caro»: [montoContado] en 0) no es consumo tuyo y no cuenta como cobro, ni duplicado ni nuevo.
+ */
 private fun esGastoDeConsumo(e: FinancialEvent): Boolean =
     e.type == TransactionType.EXPENSE &&
+        montoContado(e) > 0L &&
         cuentaEnGastosEIngresos(e) &&
         e.transferId == null &&
         e.category !in CATEGORIAS_QUE_NO_SON_CONSUMO

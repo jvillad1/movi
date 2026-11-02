@@ -185,6 +185,18 @@ interface WalletRepository {
     /** «Repartir»: el movimiento propio [eventoId] pasa a ser del espacio. Idempotente. */
     suspend fun repartirMovimiento(espacioId: String, eventoId: String): com.jvillada.movi.shared.model.GastoDelEspacio =
         noLoTiene("repartirMovimiento")
+    /**
+     * Vuelta 97 · «Repartir» con un reparto propio del gasto ([com.jvillada.movi.shared.model.RepartoDelGasto]: porcentajes,
+     * montos exactos o «Solo de …»). Con el movimiento ya repartido en ese grupo, **edita** el reparto.
+     * El default es el de siempre (la regla del grupo): un doble de prueba que no lo implementa sigue
+     * repartiendo como antes, y uno que pide un reparto propio no se finge hecho.
+     */
+    suspend fun repartirMovimiento(
+        espacioId: String,
+        eventoId: String,
+        reparto: com.jvillada.movi.shared.model.RepartoDelGasto?,
+    ): com.jvillada.movi.shared.model.GastoDelEspacio =
+        if (com.jvillada.movi.shared.model.esDelGrupo(reparto)) repartirMovimiento(espacioId, eventoId) else noLoTiene("repartirMovimiento con reparto")
     /** Lo saca del espacio: vuelve a contar entero. */
     suspend fun quitarDelEspacio(espacioId: String, eventoId: String): Unit = noLoTiene("quitarDelEspacio")
     /**
@@ -209,6 +221,17 @@ interface WalletRepository {
      * (`GET /api/espacios/propuestas`): Por revisar y la campana. Un server viejo (404) = ninguna.
      */
     suspend fun getPropuestasDeSaldar(): List<com.jvillada.movi.shared.model.PropuestaDeSaldar> = emptyList()
+    /**
+     * Vuelta 97 · lo que Movi propone repartir (`GET /api/espacios/propuestas-de-reparto`): «Movi propone
+     * hoy» y Por revisar. Un server viejo (404) = ninguna.
+     */
+    suspend fun getPropuestasDeRepartir(): List<com.jvillada.movi.shared.model.PropuestaDeRepartir> = emptyList()
+    /** Vuelta 97 · los recurrentes marcados «Se reparte en …» (`GET /api/espacios/recurrentes-del-hogar`). */
+    suspend fun getRecurrentesDelHogar(): List<com.jvillada.movi.shared.model.RecurrenteDelHogar> = emptyList()
+    /** Vuelta 97 · «Se reparte en [espacioId]» para la regla [reglaId]. Una regla va a un grupo o a ninguno. */
+    suspend fun marcarRecurrenteDelHogar(espacioId: String, reglaId: String): Unit = noLoTiene("marcarRecurrenteDelHogar")
+    /** Vuelta 97 · quita la marca: el recurrente deja de proponerse para repartir. */
+    suspend fun quitarRecurrenteDelHogar(espacioId: String, reglaId: String): Unit = noLoTiene("quitarRecurrenteDelHogar")
     /** Vuelta 66 · borra el grupo con sus gastos y saldados (`DELETE /api/espacios/{id}`). */
     suspend fun borrarEspacio(id: String): Unit = noLoTiene("borrarEspacio")
     /** Vuelta 66 · «Deshacer» un saldado (`DELETE /api/espacios/{id}/liquidaciones/{liquidacionId}`). */
@@ -826,6 +849,16 @@ interface WalletRepository {
     suspend fun renameAccount(id: String, name: String): Account
 
     /**
+     * **Edita una cuenta** — `PUT /api/accounts/{id}` (vuelta 98): nombre, tipo y, si viene, el saldo
+     * de hoy, que el server convierte en el MISMO ajuste que «Cuadrar con el banco». Ver
+     * [com.jvillada.movi.shared.model.EditarCuentaRequest]. Contesta la cuenta y el ajuste escrito.
+     */
+    suspend fun editarCuenta(
+        id: String,
+        pedido: com.jvillada.movi.shared.model.EditarCuentaRequest,
+    ): AdjustAccountBalanceResponse
+
+    /**
      * Marca (o desmarca) para qué se puede usar la plata de una cuenta que **ya existe**.
      *
      * Sin esto, `Account.condicionadaA` solo se podía escribir al crear la cuenta, y la cuenta
@@ -1137,6 +1170,14 @@ interface WalletRepository {
     suspend fun guardarPreferenciasDelInicio(
         preferencias: com.jvillada.movi.shared.model.PreferenciasDelInicio,
     ): com.jvillada.movi.shared.model.PreferenciasDelInicio = noLoTiene("guardarPreferenciasDelInicio")
+
+    /**
+     * Vuelta 102 · **cómo responde el servidor**, para la pestaña «Servidor» de «Fallos y uso»: las cuatro
+     * lecturas de `GET /api/admin/servidor/...` (solo un admin; a otro, 403) en [horas] horas y los
+     * servicios de afuera en [dias] días.
+     */
+    suspend fun getPanelDelServidor(horas: Int, dias: Int): com.jvillada.movi.shared.model.PanelDelServidor =
+        noLoTiene("getPanelDelServidor")
 }
 
 /** Lo que contesta un repositorio que no implementa una lectura o escritura nueva. */

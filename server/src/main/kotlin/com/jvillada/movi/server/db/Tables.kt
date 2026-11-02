@@ -98,6 +98,12 @@ object Users : Table("users") {
      */
     val cierrePorCorreo = bool("cierre_por_correo").nullable()
     /**
+     * **«Mandar datos de uso para mejorar Movi»** (vuelta 100), del lado del server: con `false`, el
+     * server no escribe nada de uso de esta persona (ni lo que mande un aparato viejo, ni la captura
+     * activa que escribe él mismo). Nullable y se lee como `true`, por lo mismo que sus vecinas.
+     */
+    val mandarUso = bool("mandar_uso").nullable()
+    /**
      * **Cuándo terminó (o descartó) la guía «Primer uso»**, en milisegundos; `null` = nunca. Por
      * usuario y en el server, para que la guía no reaparezca en otro aparato. La escribe
      * `POST /api/users/me/primer-uso` (la primera vez; después no se mueve).
@@ -1369,6 +1375,13 @@ object GastosDelEspacio : Table("gastos_del_espacio") {
     val fecha       = long("fecha")
     val partes      = text("partes")
     val createdAt   = long("created_at")
+    /**
+     * Vuelta 97 · el reparto propio del gasto (`RepartoDelGasto` en JSON: porcentajes, montos o
+     * «Solo de …»); `NULL` = la regla del grupo, que es lo que tienen todos los gastos de antes.
+     * Nullable y sin default: el `ADD COLUMN` de `createMissingTablesAndColumns` no puede fallar sobre
+     * las filas que ya están.
+     */
+    val reparto     = text("reparto").nullable()
     override val primaryKey = PrimaryKey(id)
     init { index("idx_gastos_del_espacio_user_id", false, userId) }
 }
@@ -1390,4 +1403,98 @@ object LiquidacionesDelEspacio : Table("liquidaciones_del_espacio") {
     val createdAt = long("created_at")
     override val primaryKey = PrimaryKey(id)
     init { index("idx_liquidaciones_del_espacio_user_id", false, userId) }
+}
+
+/**
+ * **Los recurrentes del hogar** (vuelta 97): «Se reparte en Casa con Caro», marcado en el detalle de un
+ * recurrente. Con la marca, Movi propone repartir el gasto que es ese recurrente
+ * (`propuestasDeRepartir`); nunca lo reparte solo.
+ *
+ * Tabla aparte y no una columna de `recurring_rules`, a propósito: la regla se edita con un `PUT` que
+ * reescribe la fila entera, y un APK viejo —que no conoce el campo— borraría la marca cada vez que el
+ * dueño le cambiara el monto o el día. Acá la marca solo la tocan sus dos rutas. Una regla por fila
+ * (la clave es el usuario y la regla): un recurrente se reparte en un grupo o en ninguno. Borrar el
+ * grupo borra sus marcas; una marca de una regla que ya no existe no propone nada.
+ */
+object RecurrentesDelHogar : Table("recurrentes_del_hogar") {
+    val userId    = varchar("user_id", 50)
+    val reglaId   = varchar("regla_id", 60)
+    val espacioId = varchar("espacio_id", 60)
+    val createdAt = long("created_at")
+    override val primaryKey = PrimaryKey(userId, reglaId)
+}
+
+/**
+ * **Los fallos de la app** (vuelta 100, ver `routes/ObservabilidadRoutes.kt`): lo que tumbó la app
+ * en Android o iOS, lo que un Worker atrapó, y el «Algo falló» de la web. Sin datos del usuario: el
+ * mensaje y el stack llegan recortados y limpios (`limpiarTextoDelFallo` en `:core`) y el server los
+ * vuelve a limpiar. `user_id` es `""` cuando el fallo llegó sin sesión. `id` es el del cliente: el
+ * mismo reporte subido dos veces se guarda una. Lo de más de 90 días lo borra el barrido diario.
+ * Tabla nueva: entra solo al `SchemaUtils.create` del arranque, y a `TABLAS_DEL_USUARIO`.
+ */
+object FallosDeLaApp : Table("fallos_de_la_app") {
+    val id         = varchar("id", 80)
+    val userId     = varchar("user_id", 50)
+    val plataforma = varchar("plataforma", 20)
+    val version    = varchar("version", 30)
+    val tipo       = varchar("tipo", 120)
+    val mensaje    = varchar("mensaje", 400)
+    val stack      = text("stack")
+    val hilo       = varchar("hilo", 80)
+    val componente = varchar("componente", 120)
+    val modelo     = varchar("modelo", 80)
+    val sistema    = varchar("sistema", 60)
+    val huella     = varchar("huella", 320)
+    /** Cuántos más de la misma huella llegaron pasado el tope por hora: se cuentan, no se guardan. */
+    val repetidos  = integer("repetidos").default(0)
+    val atrapado   = bool("atrapado")
+    val ocurridoEn = long("ocurrido_en")
+    val recibidoEn = long("recibido_en")
+    override val primaryKey = PrimaryKey(id)
+    init {
+        index("idx_fallos_de_la_app_recibido_en", false, recibidoEn)
+        index("idx_fallos_de_la_app_user_id", false, userId)
+    }
+}
+
+/**
+ * **El uso de la app** (vuelta 100): un evento por fila, de una lista cerrada (`EventoDeUso` en
+ * `:core`) con propiedades de otra lista cerrada, nunca contenido financiero ni texto del usuario.
+ *
+ * - `tipo` (PANTALLA / ACCION / SISTEMA), `nombre`, `ruta` (la pila de pantallas,
+ *   «Dashboard>PorRevisar»), `sesion_id` y `secuencia` (el orden dentro de la sesión) y
+ *   `propiedades` (JSON) son lo que manda el cliente.
+ * - `detalle` es el valor de la propiedad principal del evento (la pantalla, el paso, el origen) y
+ *   `valor` los segundos de una sesión: columnas para contar sin leer el JSON.
+ * - `dia` (días desde 1970 en la hora de Bogotá) y `semana` (semanas desde 1970, de lunes a domingo)
+ *   son enteros a propósito: así los activos por día y la retención por cohorte se cuentan con SQL
+ *   de enteros, igual en Postgres y en el H2 de las pruebas.
+ *
+ * La clave es `(user_id, id)`: el mismo lote reenviado no duplica. Lo de más de 90 días lo borra el
+ * barrido diario. Tabla nueva: entra solo al `SchemaUtils.create` del arranque, y a
+ * `TABLAS_DEL_USUARIO`.
+ */
+object UsoDeLaApp : Table("uso_de_la_app") {
+    val id          = varchar("id", 80)
+    val userId      = varchar("user_id", 50)
+    val tipo        = varchar("tipo", 12)
+    val nombre      = varchar("nombre", 40)
+    val ruta        = varchar("ruta", 300)
+    val sesionId    = varchar("sesion_id", 80)
+    val secuencia   = integer("secuencia")
+    val propiedades = text("propiedades")
+    val detalle     = varchar("detalle", 60).nullable()
+    val valor       = long("valor").nullable()
+    val plataforma  = varchar("plataforma", 20)
+    val version     = varchar("version", 30)
+    val ocurridoEn  = long("ocurrido_en")
+    val dia         = integer("dia")
+    val semana      = integer("semana")
+    val recibidoEn  = long("recibido_en")
+    override val primaryKey = PrimaryKey(userId, id)
+    init {
+        index("idx_uso_de_la_app_dia", false, dia)
+        index("idx_uso_de_la_app_nombre_dia", false, nombre, dia)
+        index("idx_uso_de_la_app_recibido_en", false, recibidoEn)
+    }
 }

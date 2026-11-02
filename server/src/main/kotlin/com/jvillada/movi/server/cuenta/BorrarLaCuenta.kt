@@ -25,7 +25,9 @@ import com.jvillada.movi.server.db.EnlacesCompartidos
 import com.jvillada.movi.server.db.Espacios
 import com.jvillada.movi.server.db.GastosDelEspacio
 import com.jvillada.movi.server.db.LiquidacionesDelEspacio
+import com.jvillada.movi.server.db.RecurrentesDelHogar
 import com.jvillada.movi.server.db.Events
+import com.jvillada.movi.server.db.FallosDeLaApp
 import com.jvillada.movi.server.db.Goals
 import com.jvillada.movi.server.db.KnownDestinations
 import com.jvillada.movi.server.db.LecturasDePapeles
@@ -41,6 +43,7 @@ import com.jvillada.movi.server.db.StatementImportMatches
 import com.jvillada.movi.server.db.StatementImports
 import com.jvillada.movi.server.db.Subscriptions
 import com.jvillada.movi.server.db.Users
+import com.jvillada.movi.server.db.UsoDeLaApp
 import com.jvillada.movi.server.db.VoidEvents
 import org.jetbrains.exposed.sql.Column
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
@@ -107,6 +110,7 @@ internal val TABLAS_DEL_USUARIO: List<TablaDelUsuario> = listOf(
     TablaDelUsuario(Espacios, Espacios.userId),
     TablaDelUsuario(GastosDelEspacio, GastosDelEspacio.userId),
     TablaDelUsuario(LiquidacionesDelEspacio, LiquidacionesDelEspacio.userId),
+    TablaDelUsuario(RecurrentesDelHogar, RecurrentesDelHogar.userId),
     TablaDelUsuario(CategoryPrefs, CategoryPrefs.userId),
     TablaDelUsuario(AnomaliasDescartadas, AnomaliasDescartadas.userId),
     TablaDelUsuario(DebitosDescartados, DebitosDescartados.userId),
@@ -138,6 +142,10 @@ internal val TABLAS_DEL_USUARIO: List<TablaDelUsuario> = listOf(
     TablaDelUsuario(PasswordResetTokens, PasswordResetTokens.userId),
     TablaDelUsuario(PushSubscriptions, PushSubscriptions.userId),
     TablaDelUsuario(EnlacesCompartidos, EnlacesCompartidos.userId),
+    // Vuelta 100 · observabilidad: sus fallos (los que llegaron sin sesión llevan `""` y no se tocan)
+    // y su uso de la app.
+    TablaDelUsuario(FallosDeLaApp, FallosDeLaApp.userId),
+    TablaDelUsuario(UsoDeLaApp, UsoDeLaApp.userId),
 )
 
 /**

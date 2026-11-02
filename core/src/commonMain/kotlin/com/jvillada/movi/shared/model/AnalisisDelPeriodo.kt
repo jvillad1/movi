@@ -273,7 +273,9 @@ fun filasDelAnalisis(
     val total = analisis.total
     val delAnterior = analisis.gastosDelAnterior.groupBy { claveDelAnalisis(it, vista) }
         .mapValues { (_, l) -> l.sumOf { montoContado(it) } }
-    return analisis.gastos.groupBy { claveDelAnalisis(it, vista) }
+    // Vuelta 97: un gasto que no te toca nada («Solo de Caro», `montoContado` en 0) no es una vez tuya: no
+    // suma veces ni arma una fila de $0.
+    return analisis.gastos.filter { montoContado(it) > 0L }.groupBy { claveDelAnalisis(it, vista) }
         .map { (clave, movimientos) ->
             val gasto = movimientos.sumOf { montoContado(it) }
             val anterior = if (analisis.conComparacion) delAnterior[clave] ?: 0L else null

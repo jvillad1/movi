@@ -370,6 +370,12 @@ class EspaciosEnPantallaTest {
         esperarTexto("Tu parte \$120.000")
         composeRule.onAllNodesWithText("Casa con Caro").filter(hasClickAction()).onLast()
             .performSemanticsAction(SemanticsActions.OnClick)
+        // Vuelta 97: la fila abre la hoja «Repartir» con «Partes iguales» elegida; «Repartir» lo manda.
+        composeRule.waitForIdle()
+        composeRule.onNode(
+            hasClickAction() and androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag(TAG_CONFIRMAR_EL_REPARTO)),
+            useUnmergedTree = true,
+        ).performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitUntil(timeoutMillis = 5_000) { repartidos.isNotEmpty() }
 
         assertEquals(listOf("esp_casa" to "e_mercado"), repartidos)

@@ -1143,6 +1143,11 @@ internal fun TransferBody(
             saving = false
             result
                 .onSuccess { respuesta ->
+                    // Vuelta 100: la adopción de «agregar a mano», del lado del traspaso.
+                    com.jvillada.movi.observabilidad.Uso.evento(
+                        com.jvillada.movi.shared.model.EventoDeUso.MOVIMIENTO_A_MANO,
+                        mapOf(com.jvillada.movi.shared.model.ClaveDeUso.CLASE to "TRASPASO"),
+                    )
                     // Ids nuevos recién ACÁ: el traspaso siguiente es otro traspaso. Mientras el
                     // anterior no haya llegado, cada reintento tiene que ser el mismo pedido.
                     ids = TransferDraftIds.new()

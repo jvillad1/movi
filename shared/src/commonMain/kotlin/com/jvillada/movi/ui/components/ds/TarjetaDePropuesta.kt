@@ -2,6 +2,8 @@ package com.jvillada.movi.ui.components.ds
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -32,6 +34,8 @@ const val TAG_SUBTITULO_DE_PROPUESTA: String = "ds-subtitulo-de-propuesta"
  * - la [cifra], opcional, en su propio renglón (con «Ocultar los saldos» incluido);
  * - el subtítulo ([cuerpo]), opcional, debajo y a todo el ancho del texto;
  * - una acción principal y, si hace falta, una secundaria, en botones chicos ([TamanoDeBoton.S]).
+ *   Vuelta 97: y una tercera ([accionTerciaria], «Nunca para este comercio» de la propuesta de
+ *   repartir); con ella los botones van en una fila que se parte si no caben, nunca cortados.
  *
  * Vuelta de diseño 1: la cifra y el subtítulo iban en el mismo renglón, y «Arriendo venció hace 21
  * días» llevaba «$1.800.000» a la izquierda y «y 2 pagos más por vencer» partido en dos líneas a la
@@ -50,6 +54,7 @@ const val TAG_SUBTITULO_DE_PROPUESTA: String = "ds-subtitulo-de-propuesta"
  * )
  * ```
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun TarjetaDePropuesta(
     icono: ImageVector,
@@ -79,6 +84,9 @@ fun TarjetaDePropuesta(
      * tarjeta de avisos de Actividad con «Confirmar 2», el lote de Por revisar, «Revisar» en Categorías).
      */
     varianteDeLaAccion: VarianteDeBoton = VarianteDeBoton.Secundario,
+    /** Vuelta 97 · una tercera acción, fantasma como la secundaria. */
+    accionTerciaria: String? = null,
+    onAccionTerciaria: (() -> Unit)? = null,
 ) {
     Superficie(
         modifier = modifier.fillMaxWidth().testTag(TAG_TARJETA_DE_PROPUESTA),
@@ -105,10 +113,7 @@ fun TarjetaDePropuesta(
                         modifier = Modifier.fillMaxWidth().testTag(TAG_SUBTITULO_DE_PROPUESTA),
                     )
                 }
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = Espacio.xs),
-                    horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
-                ) {
+                val botones: @Composable () -> Unit = {
                     Boton(texto = accion, onClick = onAccion, variante = varianteDeLaAccion, tamano = TamanoDeBoton.S)
                     if (accionSecundaria != null && onAccionSecundaria != null) {
                         Boton(
@@ -118,6 +123,26 @@ fun TarjetaDePropuesta(
                             tamano = TamanoDeBoton.S,
                         )
                     }
+                    if (accionTerciaria != null && onAccionTerciaria != null) {
+                        Boton(
+                            texto = accionTerciaria,
+                            onClick = onAccionTerciaria,
+                            variante = VarianteDeBoton.Fantasma,
+                            tamano = TamanoDeBoton.S,
+                        )
+                    }
+                }
+                if (accionTerciaria != null && onAccionTerciaria != null) {
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth().padding(top = Espacio.xs),
+                        horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
+                        verticalArrangement = Arrangement.spacedBy(Espacio.xs),
+                    ) { botones() }
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = Espacio.xs),
+                        horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
+                    ) { botones() }
                 }
             }
         }

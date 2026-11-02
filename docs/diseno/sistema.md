@@ -5103,6 +5103,35 @@ no se pide permiso en una pantalla aparte: se abre una **hoja corta antes de la 
 - Lo que no usa el tercero (las tres preguntas sugeridas) no pasa por la puerta.
 - Una puerta por pantalla que dispara la acción (`rememberPuertaDeLaIa` + `puerta.Hoja()`).
 
+## Vuelta 97 · El selector de reparto
+
+**Patrón: cuando un monto se reparte entre personas, se elige la forma en una fila de píldoras y solo la forma
+elegida despliega sus campos.** Es `SelectorDeReparto` (`ui/espacios/SelectorDeReparto.kt`), el único: va en la
+hoja «Repartir» del detalle de un gasto (`HojaDeRepartirElGasto`, que también cambia el reparto de un gasto ya
+repartido y abre la propuesta de Movi), en «Repartir este gasto» de Agregar y en «Pagó otro».
+
+- **Rótulo** «¿Cómo se reparte?» (`RotuloDeCampo`) y cuatro `PildoraDeFiltro` en un `FlowRow`: «Partes iguales»
+  (la regla del grupo; «Como el grupo» si el grupo va por porcentajes), «Porcentajes», «Montos exactos» y «Solo de
+  Caro» («Solo de una persona» con más gente, y debajo se elige quién). **«Partes iguales» viene elegida**: lo de
+  siempre no cambia.
+- Elegir una forma **la deja cuadrada** (`repartoAlElegir`: los porcentajes o los montos de la regla del grupo);
+  el dueño solo corrige lo distinto. Los campos van uno por persona: dos lado a lado, más uno debajo del otro
+  (`Campo` con sufijo «%», `CampoDeMonto`).
+- **La línea en vivo**, debajo (`lineaDelReparto`): «Te toca $70.000 · a Caro $30.000» en `cuerpo`/`textoMedio`
+  cuando cuadra; si no, el problema de `:core` (`problemaDelReparto`) en `cuerpoFuerte`: «Faltan $20.000» en
+  `texto`, «Te pasaste por 10 %» en `sale`. **El botón no se habilita hasta que cuadre**, y su razón no repite la
+  línea.
+- La validación es **la de `:core`**, la misma con que el server contesta 422: la pantalla nunca acepta algo que
+  el server rechazaría.
+
+**La propuesta de repartir** («¿Repartes Arriendo $2.400.000 con Caro?», `LaPropuestaDeRepartir.kt`) es una
+`TarjetaDePropuesta` con **tres acciones**: «Repartir» (`Secundario`: el amarillo del Inicio sigue siendo «Gasto»),
+«No es compartido» y «Nunca para este comercio» (`Fantasma`). Con la tercera, la tarjeta pone los botones en un
+`FlowRow` que se parte en dos renglones si no caben a 360 dp; nunca se cortan. Las dos que descartan se van en el
+acto (`AnomaliasDescartadasEnLaSesion`).
+
+**Pruebas**: `SelectorDeRepartoEnPantallaTest` (androidUnitTest) y `RepartoPorGastoEnLaAppTest` (commonTest).
+
 ## Vuelta 103 · Pedir un secreto en línea (la clave del PDF)
 
 Cuando una acción se frena porque falta un secreto que solo el usuario sabe (hoy: la clave de apertura de un
@@ -5124,3 +5153,51 @@ extracto en PDF, `ui/papeles/HojaLeyendoElPapel.kt` → `PedirLaClave`), **no se
   viaja **solo en el cuerpo** del pedido, nunca en la URL ni en un header, y vive solo en el estado de la fila.
 
 **Pruebas**: `CompartirConMoviTest` (`:shared` androidUnitTest) y `PdfConClaveTest` (`:server`).
+
+## Vuelta 100 · Pantallas de administración con pestañas, y el uso desde los componentes
+
+«Fallos y uso» (`ui/admin/FallosYUsoScreen.kt`, solo admin) es la primera pantalla de **herramienta interna**.
+Reglas del patrón, para la próxima:
+
+- **Las pestañas son un `SelectorSegmentado`** debajo del `MinScreenHeader`, no una barra nueva; el contenido de
+  cada pestaña es su propio `@Composable` (y, si lo llena otra vuelta, su propio archivo, como
+  `PestanaServidor.kt`, de la vuelta 102).
+- Todo sale de las piezas de siempre: `Seccion` + `Superficie(Lista)` + `Fila` con el número en `final`
+  (`cuerpoFuerte`), `Vacio` para lo que no hay, `EsqueletoDeFila` mientras carga. Una barra de conteo es una
+  píldora (`Radio.pill`) de `Medida.altoDeBarraEnTarjeta` en tinta, con el ancho como fracción del máximo.
+- Un recorrido se navega **dentro de la pestaña** (personas → sesiones → línea de tiempo) con la `accion` de
+  la `Seccion` para volver un nivel; los filtros son `PildoraDeFiltro` en fila y el buscador `CampoDeBusqueda`.
+
+**El uso**: `Uso.evento` (`observabilidad/Uso.kt`) es el único punto de entrada. Un componente de `ds/` que
+quiera anotar sus toques lo llama con `EventoDeUso.TOQUE` y claves de `ClaveDeUso` (la acción, el componente);
+**nunca** con el texto que muestra si ese texto puede ser del usuario (un monto, un nombre, un comercio).
+
+## Vuelta 98 · «Editar»: el mismo formulario de crear, lleno
+
+El papá del dueño quería cambiarle el nombre y el saldo a una cuenta y no encontró cómo: el saldo vivía en
+«Cuadrar con el banco» y el nombre en ningún lado. El patrón de **Editar** para cualquier cosa que se crea con
+un formulario:
+
+- **Una fila a la vista** en el detalle de la cosa, no escondida en un menú «Más»: `Fila` con
+  `IconoEnCirculo(Icons.Rounded.Edit)`, título «Editar la cuenta» y un subtítulo que dice qué se edita
+  («Nombre, banco, tipo y saldo»). Va justo debajo de la cifra del encabezado.
+- **La hoja es el formulario de crear, lleno con lo de hoy** (`EditarCuentaSheet` pinta `FormularioDeCuenta`
+  con `EstadoDelFormularioDeCuenta.cargar`). No hay un segundo formulario parecido: crear y editar se ven
+  igual. Título «Editar la cuenta», un `PieDeHoja` con «Guardar» y, si está apagado, su razón («No has
+  cambiado nada», «El nombre no puede estar vacío»). **Sin «Cancelar»**: la × y el arrastre cancelan.
+- **Lo que no se puede cambiar no se ofrece como control**: va como texto con el porqué (`tipoFijo`: «Efectivo.
+  El efectivo no recibe extractos…»), y el server lo rechaza igual (422). En una cuenta, solo Ahorros y
+  Corriente se ofrecen como píldoras: son lo único que se cambia sin mover plata.
+- **Una cifra derivada no se edita como campo crudo.** «Saldo de hoy» se llena con el saldo que muestra la
+  pantalla; si se escribe otro, el `ayuda` del campo dice en una línea qué va a pasar —«Movi anota un ajuste de
+  +$250.000 para que cuadre.»— y guardar escribe el **mismo** ajuste que Cuadre de saldos. Vacío es «no lo
+  toques», nunca $0. Nunca se reescribe la historia.
+- **Lo que el cambio deja de hacer se dice antes** (`ayuda` del campo): renombrar una cuenta que Movi reconoce
+  por su número o por «Skandia» avisa que dejará de reconocerla sola, y si rompe el emparejamiento con su
+  hermana en otra moneda lo dice con su nombre («La cuenta en USD «…» deja de emparejarse con esta»).
+- **Lo que tiene su propia hoja no se duplica**: un bien se sigue editando en `BienSheet`.
+
+Y los bancos de un toque: **ocho a la vista** (`BANCOS_A_LA_VISTA`) y la píldora «Ver todos los bancos», que
+abre el catálogo con «Busca tu banco» (sin tildes ni mayúsculas: «davi» encuentra Davibank, Daviplata y
+Davivienda). «Usar «lo escrito»» va debajo de la lista, fuera de ella, siempre que ningún banco se llame
+exactamente así.

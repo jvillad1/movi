@@ -107,6 +107,7 @@ class SchemaDeArranqueTest {
         // El período que se cuenta solo — el resumen de cierre por correo, encendido o no. También lo
         // nombra `toProfile()`.
         "users" to "cierre_por_correo",
+        "users" to "mandar_uso",
         // La guía «Primer uso» terminada o descartada. También la nombra `toProfile()`.
         "users" to "primer_uso_en",
         // Vuelta 95 — el aviso «Qué ve la IA» visto. También lo nombra `toProfile()`.
@@ -140,6 +141,10 @@ class SchemaDeArranqueTest {
         // Vuelta 90 — el `email_id` de Resend de lo que llegó por correo. `toSmsMessage` y el guardado
         // del correo la nombran: sin el ALTER, la bandeja entera caería con «column does not exist».
         "sms_messages" to "id_del_proveedor",
+        // Vuelta 97 — el reparto propio de un gasto compartido. `gastosDe` —toda lectura de los grupos y
+        // `loCompartidoDelUsuario`, o sea TODA lectura de movimientos— la nombra: sin el ALTER, la app
+        // entera caería con «column does not exist».
+        "gastos_del_espacio" to "reparto",
     )
 
     /**
@@ -169,7 +174,7 @@ class SchemaDeArranqueTest {
         Users, Accounts, StatementImports, Events, VoidEvents, Budgets, RecurringRules,
         RecurringOccurrences, OccurrenceRejections, SmsMessages, Credits, Cards, Subscriptions, PushSubscriptions,
         Screens, PasswordResetTokens, CardPaymentDismissals, Goals, CategoryPrefs, Documents,
-        StatementImportMatches, KnownDestinations, InicioPersonalizado, Apartados,
+        StatementImportMatches, KnownDestinations, InicioPersonalizado, Apartados, GastosDelEspacio,
     )
 
     @BeforeTest

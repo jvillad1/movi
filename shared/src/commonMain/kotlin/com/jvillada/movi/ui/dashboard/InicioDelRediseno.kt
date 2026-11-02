@@ -197,7 +197,13 @@ fun conteoPorRevisarDelInicio(data: DashboardData): ConteoPorRevisar = ConteoPor
     avisosAntiguos = data.avisosAntiguos,
     // Vuelta 67: las transferencias que saldan un grupo también esperan en Por revisar.
     saldar = data.propuestasDeSaldar.orEmpty().size,
+    // Vuelta 97: y lo que Movi propone repartir (sin lo descartado en esta sesión).
+    repartir = propuestasDeRepartirDelInicio(data).size,
 )
+
+/** Vuelta 97 · lo que Movi propone repartir, sin lo que se descartó o repartió en esta sesión. */
+fun propuestasDeRepartirDelInicio(data: DashboardData): List<com.jvillada.movi.shared.model.PropuestaDeRepartir> =
+    com.jvillada.movi.ui.porrevisar.propuestasDeRepartirALaVista(data.propuestasDeRepartir).orEmpty()
 
 /**
  * El número de la insignia de «Revisar avisos»: **todo** lo que espera en Por revisar
@@ -312,7 +318,7 @@ fun yNMas(n: Int): String? = if (n > 0) "y $n más" else null
 const val TOPE_DE_PROPUESTAS: Int = 4
 
 /** De qué es una propuesta. Una tarjeta por tipo: varias cosas del mismo tipo se dicen en una. */
-enum class TipoDePropuesta { PAGO, DEBITO, CUADRE, EXTRACTO, PRESUPUESTO, ANOMALIA, CIERRE }
+enum class TipoDePropuesta { PAGO, DEBITO, CUADRE, EXTRACTO, PRESUPUESTO, ANOMALIA, CIERRE, REPARTO }
 
 /** Lo que hace tocar un botón de una propuesta. */
 sealed interface AccionDeLaPropuesta {
@@ -342,6 +348,12 @@ sealed interface AccionDeLaPropuesta {
      * extracto» de Agregar, que lo lee y abre la revisión del extracto).
      */
     data object SubirElExtracto : AccionDeLaPropuesta
+
+    /**
+     * Vuelta 97: «Repartir»: abre la hoja de repartir llena con el reparto de la última vez. Nunca reparte
+     * sola: el dueño confirma en la hoja.
+     */
+    data class Repartir(val propuesta: com.jvillada.movi.shared.model.PropuestaDeRepartir) : AccionDeLaPropuesta
 }
 
 /**
@@ -378,6 +390,9 @@ data class PropuestaDelInicio(
     val cuerpo: String? = null,
     val accionSecundaria: String? = null,
     val alTocarSecundaria: AccionDeLaPropuesta? = null,
+    /** Vuelta 97: una tercera acción («Nunca para este comercio» de la propuesta de repartir). */
+    val accionTerciaria: String? = null,
+    val alTocarTerciaria: AccionDeLaPropuesta? = null,
     /** Vencido, vence hoy o ya se cobró: el ícono va en aviso, no en la marca. */
     val urgente: Boolean = false,
     /**
@@ -420,8 +435,31 @@ fun propuestasDelInicio(data: DashboardData, conElPago: Boolean = true): List<Pr
     propuestaDeExtracto(data)?.let(::add)
     propuestaDePresupuesto(data)?.let(::add)
     propuestaDeAnomalia(data)?.let(::add)
+    addAll(propuestasDeRepartirComoTarjetas(data))
     propuestaDeCierre(data)?.let(::add)
 }.sortedBy { it.rango }
+
+/**
+ * Vuelta 97 · **«¿Repartes Arriendo $2.400.000 con Caro?»**: una tarjeta por propuesta de repartir (la
+ * regla de `:core` ya trae como mucho dos, `TOPE_DE_PROPUESTAS_DE_REPARTIR`), con «Repartir», «No es
+ * compartido» y «Nunca para este comercio». Van después de lo que se sale de lo normal y antes del cierre;
+ * el tope de cuatro de la pantalla ([TOPE_DE_PROPUESTAS]) sigue mandando.
+ */
+private fun propuestasDeRepartirComoTarjetas(data: DashboardData): List<PropuestaDelInicio> =
+    propuestasDeRepartirDelInicio(data).map { p ->
+        PropuestaDelInicio(
+            tipo = TipoDePropuesta.REPARTO,
+            titulo = com.jvillada.movi.ui.espacios.tituloDeLaPropuestaDeRepartir(p),
+            cuerpo = com.jvillada.movi.ui.espacios.cuerpoDeLaPropuestaDeRepartir(p),
+            accion = com.jvillada.movi.ui.espacios.REPARTIR,
+            alTocar = AccionDeLaPropuesta.Repartir(p),
+            accionSecundaria = com.jvillada.movi.ui.espacios.NO_ES_COMPARTIDO,
+            alTocarSecundaria = AccionDeLaPropuesta.DescartarAnomalia(com.jvillada.movi.shared.model.huellaDeNoEsCompartido(p.eventoId)),
+            accionTerciaria = com.jvillada.movi.ui.espacios.botonDeNuncaRepartir(p),
+            alTocarTerciaria = AccionDeLaPropuesta.DescartarAnomalia(com.jvillada.movi.shared.model.huellaDeNuncaRepartir(p.clave)),
+            rango = 5,
+        )
+    }
 
 /**
  * **El número del encabezado «Movi propone hoy»** (vuelta 76): cuenta exactamente lo que dicen las

@@ -60,6 +60,7 @@ fun Application.configureRouting() {
         get("/health") { call.respondText("OK") }
         versionRoutes()                   // public — qué commit está corriendo (ver VersionRoutes.kt)
         erroresDelClienteRoutes()         // public — el «Algo falló» de la web deja su error en el log (ver ErroresDelClienteRoutes.kt)
+        fallosRoutes()                    // public — vuelta 100: los fallos de Android/iOS, con o sin sesión (ver ObservabilidadRoutes.kt)
         authRoutes()                     // public — no auth required
         pushPublicRoutes()                // public — no auth required
         smsFilterConfigRoutes()           // public — no auth required
@@ -133,6 +134,10 @@ fun Application.configureRouting() {
             enlaceCompartidoRoutes()
             exportRoutes()
             borrarLaCuentaRoutes()
+            // Vuelta 100: el uso de la app en lotes, y lo que ve la pantalla de admin «Fallos y uso».
+            usoRoutes()
+            // Vuelta 102: `/health/detalle` y `/api/admin/servidor/...`, solo para un admin.
+            adminServidorRoutes()
         }
 
         // /api/** que nadie registró → 404 JSON, nunca el index.html de la SPA.

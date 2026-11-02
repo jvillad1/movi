@@ -126,6 +126,7 @@ import com.jvillada.movi.ui.sms.conLoResueltoEnLaBandeja
 import com.jvillada.movi.shared.model.SMS_STATE_CONFIRMED
 import com.jvillada.movi.ui.porrevisar.ConteoPorRevisar
 import com.jvillada.movi.ui.porrevisar.conteoPorRevisar
+import com.jvillada.movi.ui.porrevisar.propuestasDeRepartirALaVista
 import com.jvillada.movi.ui.porrevisar.rememberLecturasPorRevisar
 import com.jvillada.movi.ui.quickadd.todayIsoInAppZone
 import com.jvillada.movi.ui.recurrentes.nombreRecurrenteDe
@@ -1565,6 +1566,8 @@ fun TransactionsScreen(
                 debitos = porRevisar.debitos,
                 // Vuelta 67: el mismo número del Inicio y de la bandeja, con lo que salda un grupo.
                 propuestasDeSaldar = porRevisar.propuestasDeSaldar,
+                // Vuelta 97: y con lo que Movi propone repartir (la misma lista que el Inicio y la bandeja).
+                propuestasDeRepartir = propuestasDeRepartirALaVista(porRevisar.propuestasDeRepartir),
             )
         } else {
             null

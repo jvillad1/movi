@@ -46,6 +46,8 @@ class AvisoDeLaMananaWorker(context: Context, params: WorkerParameters) : Corout
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                // Vuelta 100: lo atrapado también se reporta (sin cambiar lo que sigue); la red caída, no.
+                com.jvillada.movi.fallos.CapturaDeFallos.reportarAtrapado(applicationContext, e, "AvisoDeLaMananaWorker")
                 Log.w(TAG, "no se pudieron leer las cifras del resumen de la mañana", e)
                 // Sin cifras de hoy no se dice lo de ayer como si fuera de hoy: se reintenta, y si no
                 // llegan, hoy no suena.
@@ -58,6 +60,8 @@ class AvisoDeLaMananaWorker(context: Context, params: WorkerParameters) : Corout
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            // Vuelta 100: lo atrapado también se reporta (sin cambiar lo que sigue); la red caída, no.
+            com.jvillada.movi.fallos.CapturaDeFallos.reportarAtrapado(applicationContext, e, "AvisoDeLaMananaWorker")
             null
         }
         val ocultos = runCatching { SaldosOcultosStore.ocultos }.getOrDefault(true)

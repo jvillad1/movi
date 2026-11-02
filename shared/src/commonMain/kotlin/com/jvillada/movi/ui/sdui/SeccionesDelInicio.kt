@@ -30,6 +30,7 @@ import androidx.compose.material.icons.rounded.SouthWest
 import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material.icons.rounded.CreditCard
 import androidx.compose.material.icons.rounded.Group
+import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.Receipt
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -258,6 +259,7 @@ private fun iconoDe(tipo: TipoDePropuesta): ImageVector = when (tipo) {
     TipoDePropuesta.PRESUPUESTO -> Icons.Rounded.Savings
     TipoDePropuesta.ANOMALIA -> Icons.AutoMirrored.Rounded.TrendingUp
     TipoDePropuesta.CIERRE -> Icons.AutoMirrored.Rounded.EventNote
+    TipoDePropuesta.REPARTO -> Icons.Rounded.Groups
 }
 
 /**
@@ -281,8 +283,11 @@ internal fun PropuestasDelInicioSection(
     val aLaVista = propuestasALaVista(todas)
     val cargando = LocalCargandoElInicio.current
     val atajos = LocalAtajosDeAgregar.current
+    // Vuelta 97: la propuesta de repartir cuya hoja está abierta.
+    var repartiendo by remember { mutableStateOf<com.jvillada.movi.shared.model.PropuestaDeRepartir?>(null) }
     val hacer: (AccionDeLaPropuesta) -> Unit = { accion ->
         when (accion) {
+            is AccionDeLaPropuesta.Repartir -> repartiendo = accion.propuesta
             is AccionDeLaPropuesta.Ir -> onNavigate(accion.pantalla)
             is AccionDeLaPropuesta.DescartarCierre -> onDescartarCierre(accion.periodo)
             is AccionDeLaPropuesta.ActualizarCierre -> onActualizarCierre(accion.periodo)
@@ -322,6 +327,9 @@ internal fun PropuestasDelInicioSection(
             else -> Unit
         }
     }
+    repartiendo?.let { p ->
+        com.jvillada.movi.ui.espacios.HojaDeLaPropuestaDeRepartir(p, onDismiss = { repartiendo = null })
+    }
 }
 
 @Composable
@@ -343,6 +351,8 @@ private fun TarjetaDelFeed(propuesta: PropuestaDelInicio, hacer: (AccionDeLaProp
         onAccion = { hacer(propuesta.alTocar) },
         accionSecundaria = propuesta.accionSecundaria,
         onAccionSecundaria = secundaria?.let { { hacer(it) } },
+        accionTerciaria = propuesta.accionTerciaria,
+        onAccionTerciaria = propuesta.alTocarTerciaria?.let { { hacer(it) } },
     )
 }
 

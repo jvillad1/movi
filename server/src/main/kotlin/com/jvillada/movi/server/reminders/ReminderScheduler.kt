@@ -25,6 +25,7 @@ import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
 import java.time.LocalDate
 import com.jvillada.movi.server.time.AppClock
+import com.jvillada.movi.server.observabilidad.correrJob
 
 /**
  * In-process daily email scheduler for payment reminders.
@@ -36,6 +37,17 @@ import com.jvillada.movi.server.time.AppClock
  * (which has a SupervisorJob cancelled on app stop), so it cleans up automatically.
  */
 fun Application.startReminderScheduler() {
+    // Vuelta 100 · la retención de la observabilidad: una vez al arrancar y después cada día, se
+    // borran los fallos y el uso de más de 90 días. Va antes del «sin canales, apagado» de abajo a
+    // propósito: borrar lo viejo no depende de que haya correo ni push.
+    launch {
+        while (true) {
+            runCatching { com.jvillada.movi.server.observabilidad.Observabilidad.borrarLoViejo(System.currentTimeMillis()) }
+                .onSuccess { if (it > 0) log.info("Observabilidad: $it filas de más de 90 días borradas") }
+                .onFailure { log.warn("Observabilidad: la retención de 90 días falló: ${it.message}") }
+            delay(24 * 3_600_000L)
+        }
+    }
     val emailEnabled = ReminderConfig.emailEnabled()
     val pushEnabled = WebPushSender.isConfigured()
     if (!emailEnabled) log.warn("ReminderScheduler: RESEND_API_KEY not set — email reminders disabled")
@@ -82,7 +94,39 @@ fun Application.startReminderScheduler() {
 
 private suspend fun sweep(apiKey: String?, from: String, leadDays: Int) {
     val today = AppClock.today()
+    val logger = org.slf4j.LoggerFactory.getLogger("ReminderScheduler")
 
+    // Vuelta 102: cada parte del barrido es un job con su corrida en `corridas_de_jobs` (ver
+    // `correrJob`). Cada una sigue en su propio `runCatching`: que falle una no frena a las demás.
+    runCatching { correrJob("recordatorios") { recordarATodos(today, leadDays, apiKey, from) } }
+        .onFailure { logger.warn("ReminderScheduler: los recordatorios fallaron: ${it.message}") }
+
+    // «Cerró tu período»: el resumen de cierre, una vez por usuario y período, los primeros días del
+    // período nuevo. Sin la clave de Resend no hace nada (ver `CorreoDeCierre.kt`).
+    runCatching {
+        correrJob("cierres") {
+            mandarLosCierres(today, apiKey) { para, asunto, html ->
+                ResendClient.sendEmail(to = para, subject = asunto, html = html, apiKey = apiKey.orEmpty(), from = from)
+            }
+        }
+    }.onFailure {
+        logger.warn("ReminderScheduler: el resumen de cierre falló: ${it.message}", it)
+    }
+
+    // Vuelta 90 · el correo que el webhook no recibió: una vez al día, lo que Resend tiene de los últimos
+    // tres días y Movi no, por el camino de siempre. Sin la clave de la API no hace nada (ver
+    // `ReprocesoDeCorreos.kt`).
+    runCatching { correrJob("reproceso-de-correos") { com.jvillada.movi.server.routes.reprocesarUnaVezAlDia(today) } }.onFailure {
+        logger.warn("ReminderScheduler: el reproceso del correo falló: ${it.message}", it)
+    }
+}
+
+/**
+ * Los recordatorios de pago de todos los usuarios. Que falle uno no frena a los demás (como siempre);
+ * si alguno falló, al final la corrida se da por mala con cuántos —sin decir quiénes—, para que
+ * `corridas_de_jobs` lo cuente.
+ */
+private suspend fun recordarATodos(today: LocalDate, leadDays: Int, apiKey: String?, from: String) {
     // Load all users (id + email)
     // Se lee también el aviso PROPIO de cada uno: el `leadDays` que llega por parámetro es el
     // global del server y solo vale para quien no eligió. Dos personas en la misma instancia
@@ -93,30 +137,20 @@ private suspend fun sweep(apiKey: String?, from: String, leadDays: Int) {
         }
     }
 
+    var fallaron = 0
+    var primera: Throwable? = null
     for ((userId, userEmail, leadPropio) in users) {
         runCatching { processUser(userId, userEmail, today, leadPropio ?: leadDays, apiKey, from) }
             .onFailure {
                 // One user's failure must not stop the sweep for others
                 org.slf4j.LoggerFactory.getLogger("ReminderScheduler")
                     .warn("ReminderScheduler: error processing user $userId: ${it.message}", it)
+                fallaron++
+                if (primera == null) primera = it
             }
     }
-
-    // «Cerró tu período»: el resumen de cierre, una vez por usuario y período, los primeros días del
-    // período nuevo. Sin la clave de Resend no hace nada (ver `CorreoDeCierre.kt`).
-    runCatching {
-        mandarLosCierres(today, apiKey) { para, asunto, html ->
-            ResendClient.sendEmail(to = para, subject = asunto, html = html, apiKey = apiKey.orEmpty(), from = from)
-        }
-    }.onFailure {
-        org.slf4j.LoggerFactory.getLogger("ReminderScheduler").warn("ReminderScheduler: el resumen de cierre falló: ${it.message}", it)
-    }
-
-    // Vuelta 90 · el correo que el webhook no recibió: una vez al día, lo que Resend tiene de los últimos
-    // tres días y Movi no, por el camino de siempre. Sin la clave de la API no hace nada (ver
-    // `ReprocesoDeCorreos.kt`).
-    runCatching { com.jvillada.movi.server.routes.reprocesarUnaVezAlDia(today) }.onFailure {
-        org.slf4j.LoggerFactory.getLogger("ReminderScheduler").warn("ReminderScheduler: el reproceso del correo falló: ${it.message}", it)
+    if (fallaron > 0) {
+        throw IllegalStateException("$fallaron de ${users.size} usuarios fallaron (${primera?.javaClass?.simpleName})")
     }
 }
 

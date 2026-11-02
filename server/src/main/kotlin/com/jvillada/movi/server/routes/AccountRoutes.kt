@@ -53,7 +53,6 @@ import kotlinx.serialization.json.decodeFromJsonElement
 import org.slf4j.LoggerFactory
 import io.ktor.server.routing.put
 import com.jvillada.movi.shared.model.RenameAccountRequest
-import com.jvillada.movi.shared.model.MAX_ACCOUNT_NAME_LENGTH
 import com.jvillada.movi.shared.model.MAX_ACCOUNT_CONDITION_LENGTH
 import com.jvillada.movi.shared.model.UpdateAccountConditionRequest
 import com.jvillada.movi.shared.model.normalizarCondicion
@@ -62,6 +61,10 @@ import com.jvillada.movi.shared.model.Bien
 import com.jvillada.movi.shared.model.normalizarBien
 import com.jvillada.movi.shared.model.problemaDelBien
 import com.jvillada.movi.shared.model.esCuentaDeDeuda
+import com.jvillada.movi.shared.model.EditarCuentaRequest
+import com.jvillada.movi.shared.model.FinancialEvent
+import com.jvillada.movi.shared.model.problemaDelCambioDeTipo
+import com.jvillada.movi.shared.model.problemaDelNombreDeCuenta
 import org.jetbrains.exposed.sql.statements.UpdateBuilder
 
 private val accountsLog = LoggerFactory.getLogger("AccountRoutes")
@@ -143,6 +146,75 @@ fun Route.accountRoutes() {
         // `accounts.balance` no se lee para nada más: el balance que ve el cliente sale siempre
         // de `enrichWith`/`computeBalances`, derivado de los eventos reales.
         /**
+         * **Editar una cuenta** (vuelta 98): el nombre, el tipo y el saldo de hoy, desde «Editar la
+         * cuenta» del detalle. Ver [EditarCuentaRequest] en :core.
+         *
+         * - **El nombre** con la regla de crear ([problemaDelNombreDeCuenta]); dos cuentas con el
+         *   mismo nombre se permiten, como al crear.
+         * - **El tipo** solo dentro de lo que no rompe nada ([problemaDelCambioDeTipo]): de plata a
+         *   deuda, al revés, entre tarjeta y préstamo o en un bien → 422 con el porqué.
+         * - **El saldo no es un campo**: [EditarCuentaRequest.saldoDeHoy] escribe el MISMO ajuste que
+         *   `POST /{id}/balance-adjustment` —[problemaDelSaldoObjetivo] y [anotarElAjusteDeSaldo], que
+         *   son las de esa ruta—, con las mismas reglas: un préstamo se cuadra en Créditos y un bien en
+         *   su hoja (422). Nunca se reescribe un movimiento ni el saldo inicial.
+         *
+         * Todo en UNA transacción con la fila bloqueada, como el cuadre: o queda todo o nada, y dos
+         * guardados solapados no escriben dos ajustes. **Idempotente**: sin cambio de nombre ni de
+         * tipo no se escribe la fila (ni su sello de edad), y un saldo igual al de hoy no anota nada.
+         * Contesta la cuenta enriquecida y el ajuste, como el cuadre, para que el teléfono los espeje.
+         */
+        put("/{id}") {
+            val uid = call.userId()
+            val id = call.parameters["id"] ?: return@put call.respond(HttpStatusCode.BadRequest, "Falta el id")
+            val pedido = call.receive<EditarCuentaRequest>()
+            val nombre = pedido.name.trim()
+            problemaDelNombreDeCuenta(nombre)?.let { return@put call.respond(HttpStatusCode.BadRequest, it) }
+            pedido.saldoDeHoy?.let { saldo ->
+                problemaDelSaldoObjetivo(saldo)?.let { return@put call.respond(HttpStatusCode.BadRequest, it) }
+            }
+            // Fuera de la transacción, como en el cuadre: pega contra la red.
+            val rate = FxRateService.usdToCop()
+
+            val outcome = dbQuery<EdicionOutcome> {
+                val account = Accounts.selectAll()
+                    .where { (Accounts.id eq id) and (Accounts.userId eq uid) }
+                    .forUpdate(ForUpdateOption.ForUpdate)
+                    .firstOrNull()?.toAccount()
+                    ?: return@dbQuery EdicionOutcome.NotFound
+                val tipo = pedido.type ?: account.type
+                problemaDelCambioDeTipo(account, tipo)?.let { return@dbQuery EdicionOutcome.Rechazada(it) }
+                // Las reglas del cuadre, ANTES de escribir nada: lo rechazado no deja la mitad hecha.
+                if (pedido.saldoDeHoy != null) {
+                    if (tipo == AccountType.LOAN) return@dbQuery EdicionOutcome.Rechazada("El saldo de un préstamo se cuadra en Créditos")
+                    if (account.bien != null) return@dbQuery EdicionOutcome.Rechazada("El valor de un bien se actualiza en el bien, no con un cuadre")
+                }
+                if (nombre != account.name || tipo != account.type) {
+                    Accounts.update({ (Accounts.id eq id) and (Accounts.userId eq uid) }) {
+                        it[Accounts.name] = nombre
+                        it[Accounts.type] = tipo.name
+                        // Como toda ruta que cambia la cuenta: el reenvío del teléfono pierde contra esto.
+                        it[Accounts.lastEditedAt] = System.currentTimeMillis()
+                    }
+                }
+                val editada = Accounts.selectAll()
+                    .where { (Accounts.id eq id) and (Accounts.userId eq uid) }
+                    .first().toAccount()
+                val ajuste = pedido.saldoDeHoy?.let { anotarElAjusteDeSaldo(uid, editada, it) }
+                EdicionOutcome.Ok(
+                    AdjustAccountBalanceResponse(
+                        account = enrichWith(editada, loadNonVoidedEventsIn(uid, id), rate),
+                        adjustmentEvent = ajuste,
+                    ),
+                )
+            }
+            when (outcome) {
+                EdicionOutcome.NotFound -> call.respond(HttpStatusCode.NotFound)
+                is EdicionOutcome.Rechazada -> call.respond(HttpStatusCode.UnprocessableEntity, outcome.porque)
+                is EdicionOutcome.Ok -> call.respond(outcome.response)
+            }
+        }
+
+        /**
          * Renombrar una cuenta.
          *
          * No existía, y por eso el nombre de un crédito era lo único que no se podía corregir:
@@ -169,10 +241,8 @@ fun Route.accountRoutes() {
             val uid = call.userId()
             val id = call.parameters["id"] ?: return@put call.respond(HttpStatusCode.BadRequest, "Falta el id")
             val nombre = call.receive<RenameAccountRequest>().name.trim()
-            if (nombre.isBlank()) return@put call.respond(HttpStatusCode.BadRequest, "El nombre no puede estar vacío")
-            if (nombre.length > MAX_ACCOUNT_NAME_LENGTH) {
-                return@put call.respond(HttpStatusCode.BadRequest, "El nombre no puede superar los $MAX_ACCOUNT_NAME_LENGTH caracteres")
-            }
+            // La misma regla que al crear y al editar (vuelta 98): una sola función en :core.
+            problemaDelNombreDeCuenta(nombre)?.let { return@put call.respond(HttpStatusCode.BadRequest, it) }
             val filas = dbQuery {
                 Accounts.update({ (Accounts.id eq id) and (Accounts.userId eq uid) }) {
                     it[Accounts.name] = nombre
@@ -324,12 +394,7 @@ fun Route.accountRoutes() {
             val id = call.parameters["id"]
                 ?: return@post call.respond(HttpStatusCode.BadRequest, "Falta el id")
             val target = call.receive<AdjustAccountBalanceRequest>().targetBalance
-            if (target < 0L) {
-                return@post call.respond(HttpStatusCode.BadRequest, "El saldo no puede ser negativo")
-            }
-            if (target > MAX_ACCOUNT_BALANCE_COP) {
-                return@post call.respond(HttpStatusCode.BadRequest, "Saldo fuera de rango — revisa el monto")
-            }
+            problemaDelSaldoObjetivo(target)?.let { return@post call.respond(HttpStatusCode.BadRequest, it) }
             // Fuera de la transacción a propósito: pega contra la red y no debe alargar el lock.
             val rate = FxRateService.usdToCop()
 
@@ -348,14 +413,7 @@ fun Route.accountRoutes() {
                 // `conSaldos`) y dejaría un movimiento falso en la historia.
                 if (account.bien != null) return@dbQuery CuadreOutcome.EsBien
 
-                val eventos = loadNonVoidedEventsIn(uid, id)
-                // Contra el saldo EN LA MONEDA DE LA CUENTA, que es el que la pantalla muestra y
-                // el que el dueño está comparando. Tomar `["COP"]` a secas —como hace la ruta de
-                // créditos, que por eso rechaza lo que no sea COP— le mostraría 0 a una cuenta en
-                // dólares y escribiría un ajuste por el saldo entero.
-                val current = computeBalances(account.type, eventos)[account.currency] ?: 0L
-                val ajuste = balanceAdjustmentEventFor(account, current, target, now = System.currentTimeMillis())
-                if (ajuste != null) insertEventRow(uid, ajuste)
+                val ajuste = anotarElAjusteDeSaldo(uid, account, target)
 
                 // Relectura DESPUÉS del insert: la respuesta describe el saldo que quedó, no la
                 // foto previa a escribir — y es la que el teléfono espeja en su fila local.
@@ -440,6 +498,9 @@ fun Route.accountRoutes() {
             // que no conoce el campo (el del dueño es el 1.31) y una presente en `null` es uno que
             // sí lo conoce y dice «esta copia no la editó nadie». Ver el bloque de abajo.
             val mandoLaEdicion = "lastEditedAt" in crudo
+            // Vuelta 98: la regla del nombre, la misma de renombrar y editar. Antes el POST no
+            // miraba nada y un nombre de más de 100 caracteres salía por el 500 de la columna.
+            problemaDelNombreDeCuenta(body.name)?.let { return@post call.respond(HttpStatusCode.BadRequest, it) }
             val uid = call.userId()
             // **Un bien** (la casa, el carro): ver `Account.bien` en :core. Se normaliza y se
             // valida ANTES de tocar la base, con las mismas funciones que usa la hoja del cliente.
@@ -720,6 +781,39 @@ private fun Transaction.desenlazarPatasHermanas(uid: String, accountId: String):
         }
     }
     return hermanas.size
+}
+
+/** Cómo salió una edición (ver `PUT /api/accounts/{id}`). */
+private sealed interface EdicionOutcome {
+    data object NotFound : EdicionOutcome
+    data class Rechazada(val porque: String) : EdicionOutcome
+    data class Ok(val response: AdjustAccountBalanceResponse) : EdicionOutcome
+}
+
+/**
+ * **¿El saldo objetivo de un cuadre se puede anotar?** `null` = sí. Lo comparten el cuadre
+ * (`POST /{id}/balance-adjustment`) y «Saldo de hoy» de la edición (`PUT /{id}`): las mismas reglas.
+ */
+internal fun problemaDelSaldoObjetivo(target: Long): String? = when {
+    target < 0L -> "El saldo no puede ser negativo"
+    target > MAX_ACCOUNT_BALANCE_COP -> "Saldo fuera de rango — revisa el monto"
+    else -> null
+}
+
+/**
+ * **Anota el ajuste que deja [account] en [target]**, o nada si ya está ahí — el cuerpo del cuadre,
+ * compartido con la edición. Dentro de la transacción de quien llama, con la fila ya bloqueada.
+ *
+ * Contra el saldo EN LA MONEDA DE LA CUENTA, que es el que la pantalla muestra y el que el dueño está
+ * comparando, sobre los movimientos **sin anulados** ([loadNonVoidedEventsIn]). Tomar `["COP"]` a
+ * secas —como hace la ruta de créditos, que por eso rechaza lo que no sea COP— le mostraría 0 a una
+ * cuenta en dólares y escribiría un ajuste por el saldo entero.
+ */
+private fun Transaction.anotarElAjusteDeSaldo(uid: String, account: Account, target: Long): FinancialEvent? {
+    val current = computeBalances(account.type, loadNonVoidedEventsIn(uid, account.id))[account.currency] ?: 0L
+    val ajuste = balanceAdjustmentEventFor(account, current, target, now = System.currentTimeMillis())
+    if (ajuste != null) insertEventRow(uid, ajuste)
+    return ajuste
 }
 
 /** Cómo salió un cuadre de saldo (ver `POST /api/accounts/{id}/balance-adjustment`). */

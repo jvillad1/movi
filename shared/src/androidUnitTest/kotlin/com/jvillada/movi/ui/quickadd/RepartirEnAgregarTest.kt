@@ -101,8 +101,9 @@ class RepartirEnAgregarTest {
 
         composeRule.onNodeWithText(TITULO_REPARTIR_ESTE_GASTO).assertIsDisplayed()
         assertEquals("45000", textoDelMontoDeLaHoja().filter(Char::isDigit), "el monto escrito en Agregar llega a la hoja")
-        // «Yo» viene elegido, y la regla del espacio se dice con tu parte.
-        composeRule.onNodeWithText("Mitad y mitad · Tu parte $22.500", useUnmergedTree = true).assertIsDisplayed()
+        // «Yo» viene elegido, y la regla del espacio («Partes iguales», vuelta 97) se dice con lo de cada uno.
+        composeRule.onNodeWithText("Partes iguales", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Te toca $22.500 · a Caro $22.500", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText("Guardar y repartir", useUnmergedTree = true).assertIsDisplayed()
     }
 

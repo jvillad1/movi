@@ -44,7 +44,10 @@ const val MAX_NOMBRE_DE_ESPACIO: Int = 40
 /** El espacio con que arranca Movi (decisión del dueño): la casa con Caro, mitad y mitad. */
 const val NOMBRE_DEL_PRIMER_ESPACIO: String = "Casa con Caro"
 
-/** Cómo se reparte un gasto. Hoy solo partes iguales; el modelo ya admite porcentajes. */
+/**
+ * Cómo se reparten los gastos del grupo: la regla del grupo. Desde la vuelta 97 cada gasto puede
+ * llevar la suya ([RepartoDelGasto]); sin ella vale esta.
+ */
 @Serializable
 enum class RepartoDelEspacio { PARTES_IGUALES, PORCENTAJES }
 
@@ -86,6 +89,8 @@ data class Espacio(
  *
  * @param partes lo que le toca a cada miembro, por id; suma [monto]. Lo calcula el server con
  *   [partesDelGasto] al guardarlo (y lo recalcula si el monto del movimiento cambió después).
+ * @param reparto vuelta 97: el reparto propio de este gasto (porcentajes, montos, «Solo de …»), o
+ *   `null` = la regla del grupo. Opcional en el wire: un APK viejo no lo manda ni lo lee.
  */
 @Serializable
 data class GastoDelEspacio(
@@ -98,6 +103,7 @@ data class GastoDelEspacio(
     val fecha: Long = 0L,
     val eventoId: String? = null,
     val partes: Map<String, Long> = emptyMap(),
+    val reparto: RepartoDelGasto? = null,
 )
 
 /** Lo que le toca al dueño de [g]. */
@@ -150,9 +156,19 @@ fun montoParecido(monto: Long, esperado: Long): Boolean =
 /** La huella con que «No» descarta una propuesta de saldar (en `anomalias_descartadas`). */
 fun huellaDeLaPropuestaDeSaldar(eventoId: String): String = "saldar:$eventoId"
 
-/** Body de `POST /api/espacios/{id}/compartir`: repartir un movimiento propio en el espacio. */
+/**
+ * Body de `POST /api/espacios/{id}/compartir`: repartir un movimiento propio en el espacio.
+ *
+ * @param reparto vuelta 97: el reparto propio, o `null` = la regla del grupo. Con el movimiento ya
+ *   repartido en ese grupo, un [reparto] no nulo **edita** el reparto (y el saldo se recalcula); sin
+ *   él, nada cambia (el reintento de un APK viejo no le borra el reparto a nadie).
+ */
 @Serializable
-data class CompartirMovimientoRequest(val eventoId: String, val gastoId: String = "")
+data class CompartirMovimientoRequest(
+    val eventoId: String,
+    val gastoId: String = "",
+    val reparto: RepartoDelGasto? = null,
+)
 
 /**
  * El saldo de un miembro.
@@ -191,14 +207,19 @@ data class SaldoDelEspacio(
 fun SaldoDelEspacio.netoDe(miembroId: String): Long = miembros.firstOrNull { it.miembroId == miembroId }?.neto ?: 0L
 
 /**
- * **Cómo se reparte [monto]** entre los miembros de [espacio]. Con partes iguales, cada uno su
- * división entera; con porcentajes, su porcentaje (redondeado hacia abajo). Los pesos que sobran
- * del redondeo los pone **quien pagó** ([pagadoPor]): el que tiene la plata en la mano absorbe el
- * peso, y así la parte ajena nunca pasa de la mitad exacta en un 50/50.
+ * **Cómo se reparte [monto]** entre los miembros de [espacio]: la única función que arma las partes
+ * de un gasto. Con partes iguales, cada uno su división entera; con porcentajes, su porcentaje
+ * (redondeado hacia abajo). Los pesos que sobran del redondeo los pone **quien pagó** ([pagadoPor]):
+ * el que tiene la plata en la mano absorbe el peso, y así la parte ajena nunca pasa de la mitad
+ * exacta en un 50/50.
+ *
+ * Vuelta 97: con un [reparto] propio del gasto (porcentajes, montos o «Solo de …»), ese manda (ver
+ * [partesConElReparto]); `null` o [FormaDeRepartir.DEL_GRUPO] es la regla del grupo de siempre.
  */
-fun partesDelGasto(monto: Long, espacio: Espacio, pagadoPor: String): Map<String, Long> {
+fun partesDelGasto(monto: Long, espacio: Espacio, pagadoPor: String, reparto: RepartoDelGasto? = null): Map<String, Long> {
     val ids = idsDeMiembros(espacio)
     if (ids.isEmpty() || monto <= 0L) return emptyMap()
+    if (reparto != null) partesConElReparto(monto, ids, pagadoPor, reparto)?.let { return it }
     val partes = LinkedHashMap<String, Long>()
     when (espacio.reparto) {
         RepartoDelEspacio.PARTES_IGUALES -> ids.forEach { partes[it] = monto / ids.size }

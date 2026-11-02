@@ -138,6 +138,13 @@ internal class InvalidaElInicioAlEscribir(
         trasEscribir { delegado.guardarEspacio(espacio) }
     override suspend fun repartirMovimiento(espacioId: String, eventoId: String) =
         trasEscribir { delegado.repartirMovimiento(espacioId, eventoId) }
+    // Vuelta 97: repartir con un reparto propio (o editarlo), y la marca «Se reparte en …».
+    override suspend fun repartirMovimiento(espacioId: String, eventoId: String, reparto: com.jvillada.movi.shared.model.RepartoDelGasto?) =
+        trasEscribir { delegado.repartirMovimiento(espacioId, eventoId, reparto) }
+    override suspend fun marcarRecurrenteDelHogar(espacioId: String, reglaId: String): Unit =
+        trasEscribir { delegado.marcarRecurrenteDelHogar(espacioId, reglaId) }
+    override suspend fun quitarRecurrenteDelHogar(espacioId: String, reglaId: String): Unit =
+        trasEscribir { delegado.quitarRecurrenteDelHogar(espacioId, reglaId) }
     override suspend fun quitarDelEspacio(espacioId: String, eventoId: String): Unit =
         trasEscribir { delegado.quitarDelEspacio(espacioId, eventoId) }
     override suspend fun quitarGastoDelEspacio(espacioId: String, gastoId: String): Unit =
@@ -191,6 +198,8 @@ internal class InvalidaElInicioAlEscribir(
     override suspend fun register(request: RegisterRequest): AuthResponse = trasEscribir { delegado.register(request) }
     override suspend fun login(request: LoginRequest): AuthResponse = trasEscribir { delegado.login(request) }
     override suspend fun renameAccount(id: String, name: String): Account = trasEscribir { delegado.renameAccount(id, name) }
+    override suspend fun editarCuenta(id: String, pedido: EditarCuentaRequest): AdjustAccountBalanceResponse =
+        trasEscribir { delegado.editarCuenta(id, pedido) }
     // Marcar la condición de una cuenta cambia «Tu plata» del Inicio: sin invalidar el caché, el
     // dueño marcaba Skandia y volvía al Inicio con la cifra vieja.
     override suspend fun updateAccountCondition(id: String, condicionadaA: String?): Account = trasEscribir { delegado.updateAccountCondition(id, condicionadaA) }

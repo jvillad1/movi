@@ -27,6 +27,10 @@ actual fun createHttpClient(): HttpClient = HttpClient(Js) {
             if (laSesionTras(response.status.value, response.call.request.url, tokenDelPedido, SessionManager.token) == LaSesionTras.SE_CERRO) {
                 SessionManager.seRechazoElToken(tokenDelPedido)
             }
+            // Vuelta 100: una escritura que el server rechazó queda en el uso, con su código.
+            com.jvillada.movi.observabilidad.anotarLaRespuestaParaElUso(
+                response.status.value, response.call.request.method.value, response.call.request.url,
+            )
         }
         // Un fetch caído llega acá como `kotlin.Error("Fail to fetch", JsError)`, que no es una
         // Exception: se lanza en su lugar una IOException, igual que en Android, para que los
@@ -35,8 +39,11 @@ actual fun createHttpClient(): HttpClient = HttpClient(Js) {
         // el pipeline de pedido —donde corre el motor— y el de recepción del cuerpo con un
         // `catch (Throwable)`; lo que se lanza desde acá reemplaza a la causa original.
         // La sesión sigue viva: un error de red no es un 401.
-        handleResponseExceptionWithRequest { cause, _ ->
-            comoFalloDeRed(cause)?.let { throw it }
+        handleResponseExceptionWithRequest { cause, request ->
+            comoFalloDeRed(cause)?.let {
+                com.jvillada.movi.observabilidad.anotarElErrorDeRedParaElUso(request.method.value, request.url)
+                throw it
+            }
         }
     }
 }

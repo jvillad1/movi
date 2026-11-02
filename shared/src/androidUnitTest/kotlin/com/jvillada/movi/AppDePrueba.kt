@@ -4,7 +4,9 @@ import android.app.Application
 import com.jvillada.movi.avisos.AvisosEnHoy
 import com.jvillada.movi.avisos.PreferenciasDeAvisos
 import com.jvillada.movi.data.FormaRecordada
+import com.jvillada.movi.data.RedDeLaApp
 import com.jvillada.movi.data.Repositories
+import com.jvillada.movi.data.apiBaseUrl
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.data.SaldosOcultosStore
 import com.jvillada.movi.platform.Huella
@@ -66,7 +68,15 @@ import org.robolectric.TestLifecycleApplication
 class AppDePrueba : Application(), TestLifecycleApplication {
 
     override fun beforeTest(method: Method) {
+        // Vuelta 100 · **las pruebas no salen a la red.** Antes que nada: el logout de abajo ya puede
+        // querer hablar con el server. Ver `RedDeLaApp` y `LasPruebasNoSalenALaRedTest`.
+        RedDeLaApp.cerradaPorLasPruebas = true
+        RedDeLaApp.frenados.clear()
+        cerrarHttpUrlConnectionAMovi()
         SessionManager.clear()
+        // El uso del método anterior (lo pendiente, la sesión de uso, sus costuras) y la de «Fallos y uso».
+        com.jvillada.movi.observabilidad.Uso.reiniciarParaPruebas()
+        com.jvillada.movi.ui.admin.ObservabilidadParaAdmin.sustitutoDePrueba = null
         // Vuelta 95: el aviso «Qué ve la IA» ya visto. Sin esto toda prueba que mande algo a la IA
         // (el chat libre, leer un papel) se quedaría esperando la hoja; las que la prueban lo ponen en `null`.
         com.jvillada.movi.ui.ai.AvisoDeLaIa.visto = true
@@ -100,4 +110,35 @@ class AppDePrueba : Application(), TestLifecycleApplication {
     override fun prepareTest(test: Any) = Unit
 
     override fun afterTest(method: Method) = Unit
+}
+
+/**
+ * **Lo que use `HttpURLConnection` directo tampoco sale a Movi** (vuelta 100). El cliente de Ktor ya lo
+ * frena `RedDeLaApp`; la subida de SMS y la de los filtros abren la conexión a mano. Un `ProxySelector`
+ * manda todo pedido al host de Movi (o a cualquier `*.railway.app`) a un proxy que no existe
+ * (`127.0.0.1:1`, se rechaza en el acto, sin salir de la máquina); el resto —Maven, lo que Robolectric
+ * descarga— sigue por donde iba. Se instala una vez por proceso.
+ */
+private fun cerrarHttpUrlConnectionAMovi() {
+    val actual = java.net.ProxySelector.getDefault()
+    if (actual is SelectorQueCierraMovi) return
+    java.net.ProxySelector.setDefault(SelectorQueCierraMovi(actual))
+}
+
+internal class SelectorQueCierraMovi(private val original: java.net.ProxySelector?) : java.net.ProxySelector() {
+    private val hostDeMovi = java.net.URI(apiBaseUrl).host.orEmpty().lowercase()
+    private val ninguno = java.net.Proxy(java.net.Proxy.Type.HTTP, java.net.InetSocketAddress("127.0.0.1", 1))
+
+    fun esDeMovi(host: String?): Boolean {
+        val h = host.orEmpty().lowercase()
+        return h == hostDeMovi || h.endsWith(".railway.app")
+    }
+
+    override fun select(uri: java.net.URI?): MutableList<java.net.Proxy> =
+        if (esDeMovi(uri?.host)) mutableListOf(ninguno)
+        else original?.select(uri) ?: mutableListOf(java.net.Proxy.NO_PROXY)
+
+    override fun connectFailed(uri: java.net.URI?, sa: java.net.SocketAddress?, ioe: java.io.IOException?) {
+        if (!esDeMovi(uri?.host)) original?.connectFailed(uri, sa, ioe)
+    }
 }

@@ -1,6 +1,7 @@
 package com.jvillada.movi.ui.porrevisar
 
 import com.jvillada.movi.shared.model.PropuestaDeSaldar
+import com.jvillada.movi.shared.model.PropuestaDeRepartir
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.remember
@@ -112,9 +113,14 @@ data class ConteoPorRevisar(
      * «Todo al día» debajo de una y la insignia del Inicio no la nombraba.
      */
     val saldar: Int = 0,
+    /**
+     * Vuelta 97 · **lo que Movi propone repartir** («Para repartir en tus grupos»). Como [saldar]: espera
+     * una decisión en la bandeja, así que cuenta y con una a la vista no se dice «Todo al día».
+     */
+    val repartir: Int = 0,
 ) {
     /** Todo lo que espera en la bandeja, sin los avisos antiguos ([avisosAntiguos]). */
-    val total: Int get() = avisos + movimientos + pagosDeTarjeta + debitos + saldar
+    val total: Int get() = avisos + movimientos + pagosDeTarjeta + debitos + saldar + repartir
 
     /**
      * Lo que **entró solo** —avisos, movimientos, pagos de tarjeta—, sin los débitos: en «Movi propone
@@ -135,6 +141,7 @@ fun desgloseDePorRevisar(conteo: ConteoPorRevisar, conDebitos: Boolean = true): 
     // Vuelta 90: el bloque ya no es solo débitos automáticos (también la nómina que no se ve).
     conteo.debitos.takeIf { it > 0 && conDebitos }?.let { if (it == 1) "1 movimiento esperado" else "$it movimientos esperados" },
     conteo.saldar.takeIf { it > 0 }?.let { if (it == 1) "1 para saldar" else "$it para saldar" },
+    conteo.repartir.takeIf { it > 0 }?.let { if (it == 1) "1 para repartir" else "$it para repartir" },
 ).joinToString(" · ").ifEmpty { null }
 
 /**
@@ -151,6 +158,8 @@ fun conteoPorRevisar(
     ahora: Long = ahoraEnMilis(),
     /** Vuelta 67: las transferencias que saldan un grupo (ver [ConteoPorRevisar.saldar]). */
     propuestasDeSaldar: List<PropuestaDeSaldar>? = null,
+    /** Vuelta 97: lo que Movi propone repartir (ver [ConteoPorRevisar.repartir]). */
+    propuestasDeRepartir: List<PropuestaDeRepartir>? = null,
 ): ConteoPorRevisar = ConteoPorRevisar(
     // Pagos, no avisos: el mismo pago avisado tres veces cuenta una. Vuelta 51: los de los últimos 30 días.
     avisos = mensajes?.let { pagosRecientesPorRevisar(it, ahora).size } ?: 0,
@@ -160,6 +169,7 @@ fun conteoPorRevisar(
     pagosDeTarjeta = candidatos?.size ?: 0,
     debitos = debitos?.size ?: 0,
     saldar = propuestasDeSaldar?.size ?: 0,
+    repartir = propuestasDeRepartir?.size ?: 0,
 )
 
 /** El total de [conteoPorRevisar]: lo que dice «N por revisar». */
@@ -168,7 +178,23 @@ fun cuantosPorRevisar(
     dias: List<EventDay>?,
     candidatos: List<FinancialEvent>?,
     debitos: List<DebitoAutomaticoPorConfirmar>? = null,
-): Int = conteoPorRevisar(mensajes, dias, candidatos, debitos).total
+    propuestasDeSaldar: List<PropuestaDeSaldar>? = null,
+    /** Vuelta 97: lo que Movi propone repartir, ya sin lo descartado ([propuestasDeRepartirALaVista]). */
+    propuestasDeRepartir: List<PropuestaDeRepartir>? = null,
+): Int = conteoPorRevisar(
+    mensajes, dias, candidatos, debitos,
+    propuestasDeSaldar = propuestasDeSaldar, propuestasDeRepartir = propuestasDeRepartir,
+).total
+
+/**
+ * Vuelta 97 · **las propuestas de repartir que cuentan**, sin las descartadas o repartidas en esta
+ * sesión: la misma lista para el Inicio (`propuestasDeRepartirDelInicio`), la bandeja y «N por revisar»
+ * de Movimientos, así los tres dicen el mismo número.
+ */
+fun propuestasDeRepartirALaVista(propuestas: List<PropuestaDeRepartir>?): List<PropuestaDeRepartir>? =
+    propuestas?.let {
+        com.jvillada.movi.ui.espacios.propuestasDeRepartirVisibles(it, com.jvillada.movi.ui.dashboard.AnomaliasDescartadasEnLaSesion.huellas)
+    }
 
 /** Lo que dice el renglón de Movimientos. Sin plural que conjugar: «1 por revisar», «4 por revisar». */
 fun textoDePorRevisar(cuantos: Int): String = "$cuantos por revisar"
@@ -189,10 +215,13 @@ fun bandejaAlDia(
      * (antes decía «Todo al día» debajo de la propuesta). Default vacío, como [debitos].
      */
     propuestasDeSaldar: List<PropuestaDeSaldar>? = emptyList(),
+    /** Vuelta 97: lo que Movi propone repartir. Default vacío, como [propuestasDeSaldar]. */
+    propuestasDeRepartir: List<PropuestaDeRepartir>? = emptyList(),
 ): Boolean =
     mensajes != null && dias != null && candidatos != null && debitos != null && propuestasDeSaldar != null &&
+        // Vuelta 97: si la lectura de las propuestas de repartir falla, se toma por vacía (es secundaria).
         // Los antiguos no cuentan en el número, pero esperan: con alguno, la bandeja no está al día.
-        conteoPorRevisar(mensajes, dias, candidatos, debitos, propuestasDeSaldar = propuestasDeSaldar)
+        conteoPorRevisar(mensajes, dias, candidatos, debitos, propuestasDeSaldar = propuestasDeSaldar, propuestasDeRepartir = propuestasDeRepartir.orEmpty())
             .let { it.total == 0 && it.avisosAntiguos == 0 }
 
 /**
@@ -224,6 +253,7 @@ class LecturasPorRevisar internal constructor(
     private val deCandidatos: Lectura<List<FinancialEvent>>,
     private val deDebitos: Lectura<List<DebitoAutomaticoPorConfirmar>>,
     private val deSaldar: Lectura<List<PropuestaDeSaldar>>,
+    private val deRepartir: Lectura<List<PropuestaDeRepartir>>? = null,
 ) {
     val mensajes: List<SmsMessage>? get() = deMensajes.valor
     val candidatos: List<FinancialEvent>? get() = deCandidatos.valor
@@ -239,9 +269,15 @@ class LecturasPorRevisar internal constructor(
      */
     val propuestasDeSaldar: List<PropuestaDeSaldar>? get() = deSaldar.valor
     val leyendoSaldar: Boolean get() = deSaldar.actualizando
+    /**
+     * Vuelta 97 · lo que Movi propone repartir; `null` hasta que la lectura contestó. Secundaria, como
+     * [propuestasDeSaldar]: si falla, se toma por vacía.
+     */
+    val propuestasDeRepartir: List<PropuestaDeRepartir>? get() = deRepartir?.valor
+    val leyendoRepartir: Boolean get() = deRepartir?.actualizando == true
 
     /** Las lecturas terminaron, bien o mal: ya se puede decidir qué pintar. */
-    val terminaron: Boolean get() = !leyendoMensajes && !leyendoCandidatos && !leyendoDebitos && !leyendoSaldar
+    val terminaron: Boolean get() = !leyendoMensajes && !leyendoCandidatos && !leyendoDebitos && !leyendoSaldar && !leyendoRepartir
 
     /** Alguna falló con lo de antes a la vista: lo que se ve es lo último que vimos. */
     val falloConAlgoALaVista: Boolean get() =
@@ -261,5 +297,6 @@ fun rememberLecturasPorRevisar(recarga: Int): LecturasPorRevisar {
     }
     val debitos = rememberLectura(ClaveDeLectura.DebitosAutomaticos, recarga) { Repositories.wallets.getDebitosAutomaticos() }
     val saldar = rememberLectura(ClaveDeLectura.PropuestasDeSaldar, recarga) { Repositories.wallets.getPropuestasDeSaldar() }
-    return remember(mensajes, candidatos, debitos, saldar) { LecturasPorRevisar(mensajes, candidatos, debitos, saldar) }
+    val repartir = rememberLectura(ClaveDeLectura.PropuestasDeRepartir, recarga) { Repositories.wallets.getPropuestasDeRepartir() }
+    return remember(mensajes, candidatos, debitos, saldar, repartir) { LecturasPorRevisar(mensajes, candidatos, debitos, saldar, repartir) }
 }

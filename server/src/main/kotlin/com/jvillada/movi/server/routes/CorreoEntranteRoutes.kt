@@ -250,6 +250,8 @@ internal suspend fun guardarCorreoEntrante(
             RespuestaDelCorreo(guardado = false, motivo = "Esa dirección no corresponde a ninguna cuenta.")
     }
 
+    // Vuelta 100: el reenvío por correo de este usuario funcionó hoy (una fila por día, nunca lanza).
+    com.jvillada.movi.server.observabilidad.Observabilidad.registrarCapturaActiva(uid, "CORREO", System.currentTimeMillis())
     val texto = textoDelCorreo(correo.asunto, correo.cuerpo)
     val tiempo = momentoDelCorreo(correo.fecha, ahora = System.currentTimeMillis())
     // El CUS de PSE identifica el pago: dos copias del mismo correo dan el mismo id (ver [idDeCorreo]).

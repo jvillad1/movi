@@ -12,6 +12,19 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import java.io.File
 
 object DatabaseFactory {
+    /**
+     * El pool de conexiones, para ver cuánto se usa (vuelta 102, `/health/detalle` y las métricas por
+     * minuto). `null` hasta [init], y en las pruebas, que conectan H2 sin pool.
+     */
+    @Volatile
+    var pool: HikariDataSource? = null
+        private set
+
+    /** (activas, esperando una conexión) del pool, o `null` sin pool. Leerlo no toma ninguna conexión. */
+    fun usoDelPool(): Pair<Int, Int>? = runCatching {
+        pool?.hikariPoolMXBean?.let { it.activeConnections to it.threadsAwaitingConnection }
+    }.getOrNull()
+
     fun init() {
         val rawUrl = readEnv("DATABASE_URL") ?: error("DATABASE_URL not set — add it to server/.env")
         val (dbUrl, user, pass) = parseDbUrl(rawUrl)
@@ -23,7 +36,9 @@ object DatabaseFactory {
             driverClassName = "org.postgresql.Driver"
             maximumPoolSize = 10
         }
-        Database.connect(HikariDataSource(config))
+        val fuente = HikariDataSource(config)
+        pool = fuente
+        Database.connect(fuente)
         crearYActualizarSchema()
         seedScreens()
     }
@@ -69,7 +84,10 @@ object DatabaseFactory {
             // EnlacesCompartidos (compartir con un tercero) es tabla NUEVA y entra por acá: su
             // índice único sobre el hash y el de `user_id` se crean junto con ella, sobre una tabla
             // vacía, y en los arranques siguientes `create` la ve existir y no emite nada.
-            SchemaUtils.create(Users, Accounts, StatementImports, Events, VoidEvents, Budgets, RecurringRules, RecurringOccurrences, OccurrenceRejections, SmsMessages, Credits, Cards, Subscriptions, PushSubscriptions, Screens, PasswordResetTokens, CardPaymentDismissals, Goals, CategoryPrefs, Documents, StatementImportMatches, AiTurns, KnownDestinations, EnlacesCompartidos, LecturasDePapeles, ConversacionesDelAsistente, AccionesPropuestas, MemoriaDelAsistente, AnomaliasDescartadas, DestinosDescartados, DebitosDescartados, ReglasDeComercio, CierresEnviados, CierresDescartados, CierresGuardados, Apartados, InicioPersonalizado, Espacios, GastosDelEspacio, LiquidacionesDelEspacio, CorreosDescartados, ClavesDeExtractos, PdfsAbiertos)
+            SchemaUtils.create(Users, Accounts, StatementImports, Events, VoidEvents, Budgets, RecurringRules, RecurringOccurrences, OccurrenceRejections, SmsMessages, Credits, Cards, Subscriptions, PushSubscriptions, Screens, PasswordResetTokens, CardPaymentDismissals, Goals, CategoryPrefs, Documents, StatementImportMatches, AiTurns, KnownDestinations, EnlacesCompartidos, LecturasDePapeles, ConversacionesDelAsistente, AccionesPropuestas, MemoriaDelAsistente, AnomaliasDescartadas, DestinosDescartados, DebitosDescartados, ReglasDeComercio, CierresEnviados, CierresDescartados, CierresGuardados, Apartados, InicioPersonalizado, Espacios, GastosDelEspacio, LiquidacionesDelEspacio, CorreosDescartados, RecurrentesDelHogar, ClavesDeExtractos, PdfsAbiertos, FallosDeLaApp, UsoDeLaApp)
+            // Vuelta 102 · la observabilidad del servidor: seis tablas NUEVAS, sin `user_id` (ver
+            // TablasDeObservabilidad.kt). Entran solo por el `create`, como toda tabla nueva.
+            SchemaUtils.create(*TABLAS_DE_OBSERVABILIDAD)
             // Screens: `seed_version` (Ola 4) — sin esta columna una instalación ya desplegada
             // no podría recibir la generación nueva del Inicio.
             // Users: `avatar_color` (F42 · F46) — mismo motivo, columna nueva en tabla vieja.
@@ -133,9 +151,13 @@ object DatabaseFactory {
             // SmsMessages: `id_del_proveedor` (vuelta 90, el `email_id` de Resend de lo que llegó por
             // correo) — NULLABLE, mismo caso que `confirmado_en`: un ADD COLUMN y nada más.
             // CorreosDescartados (vuelta 90) es tabla NUEVA: entra por el `create` de arriba.
+            // GastosDelEspacio: `reparto` (vuelta 97, el reparto propio de un gasto) — NULLABLE. La tabla
+            // existe en producción desde R3 con los gastos de «Casa con Caro»; su único índice (`user_id`)
+            // ya existe, así que el único DDL es el ADD COLUMN. RecurrentesDelHogar (vuelta 97) es tabla
+            // NUEVA: entra por el `create` de arriba.
             // ClavesDeExtractos y PdfsAbiertos (vuelta 103, el PDF con clave) son tablas NUEVAS: entran
             // por el `create` de arriba, con su clave primaria adentro del CREATE TABLE.
-            SchemaUtils.createMissingTablesAndColumns(Events, RecurringRules, Screens, Users, Credits, Cards, Accounts, Subscriptions, AiTurns, CategoryPrefs, KnownDestinations, SmsMessages, InicioPersonalizado, Apartados)
+            SchemaUtils.createMissingTablesAndColumns(Events, RecurringRules, Screens, Users, Credits, Cards, Accounts, Subscriptions, AiTurns, CategoryPrefs, KnownDestinations, SmsMessages, InicioPersonalizado, Apartados, GastosDelEspacio)
             // Migraciones de datos (idempotentes), después del schema — ver Migrations.kt.
             with(Migrations) { runAll() }
         }

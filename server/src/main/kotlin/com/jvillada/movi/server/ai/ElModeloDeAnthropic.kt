@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.ai
 
+import com.jvillada.movi.server.observabilidad.crearMensaje
 import com.anthropic.client.AnthropicClient
 import com.anthropic.core.JsonValue
 import com.anthropic.models.messages.CacheControlEphemeral
@@ -81,7 +82,7 @@ internal class ElModeloDeAnthropic(
         modeloDeRespaldo: String? = null,
         memoria: String? = null,
     ) : this(modelo, persona, contexto, mensajesDelDueno, maxTokens, piensa, modeloDeRespaldo, { params ->
-        withContext(Dispatchers.IO) { client.messages().create(params) }
+        withContext(Dispatchers.IO) { crearMensaje(client, params) }
     }, memoria)
 
     private val turnos: MutableList<MessageParam> = mensajesDelDueno.toMutableList()
