@@ -210,6 +210,10 @@ internal fun Transaction.loQueSeSaleDeLoNormalDe(
             diaDe = diaDe,
             // Vuelta 57: lo que se sacó por fijo, para que el texto diga su base.
             fijosDelPeriodo = delPeriodo.filter { it.id in pagosDeFacturas },
+            // Vuelta 105 · en la quincena, la mitad del umbral (identidad en el mensual).
+            diferenciaMinima = com.jvillada.movi.shared.model.umbralDelPeriodo(
+                com.jvillada.movi.shared.model.DIFERENCIA_MINIMA_DE_CATEGORIA, ajustes,
+            ),
         ) +
         comerciosNuevosConMontoAlto(delConsumo, historia, primerMovimiento, nombreDeCuenta, diaDe) +
         (if (conDeudas) loDeLasDeudas(uid, hoy, previo, ventanaPrevia, diaDe) else emptyList()) +

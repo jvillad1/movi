@@ -70,7 +70,11 @@ private val QUE_NO_ES_CONSUMO = setOf(CUOTA_CATEGORY, DESEMBOLSO_CATEGORY)
  * Los grupos de gastos chicos de [gastos], del que más suma al que menos, como mucho
  * [MAX_PEQUENOS_QUE_SUMAN]. Ver el KDoc del archivo para cómo se agrupa y los umbrales.
  */
-fun pequenosQueSuman(gastos: List<FinancialEvent>): List<PequenosQueSuman> {
+fun pequenosQueSuman(
+    gastos: List<FinancialEvent>,
+    /** Vuelta 105 · [TOTAL_QUE_IMPORTA] llevado al período (`umbralDelPeriodo`): la mitad en la quincena. */
+    totalQueImporta: Long = TOTAL_QUE_IMPORTA,
+): List<PequenosQueSuman> {
     val chicos = gastos.filter {
         it.type == TransactionType.EXPENSE &&
             it.currency == "COP" &&
@@ -98,7 +102,7 @@ fun pequenosQueSuman(gastos: List<FinancialEvent>): List<PequenosQueSuman> {
         }
 
     return (deComercio + deCategoria)
-        .filter { it.total >= TOTAL_QUE_IMPORTA }
+        .filter { it.total >= totalQueImporta }
         // A igual total, por nombre: que no cambien de lugar entre lecturas sin que nada cambie.
         .sortedWith(compareByDescending<PequenosQueSuman> { it.total }.thenBy { it.nombre.lowercase() })
         .take(MAX_PEQUENOS_QUE_SUMAN)

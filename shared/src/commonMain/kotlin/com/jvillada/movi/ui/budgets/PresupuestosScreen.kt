@@ -472,7 +472,15 @@ class EstadoDePresupuestos internal constructor(private val alcance: CoroutineSc
      * Ahora dice «En tus N presupuestos» y, aparte, «Fuera de presupuesto»: las dos suman el gasto del
      * período, con el mismo gasto por categoría de siempre ([gastoPorCategoria]).
      */
-    internal val gastoEnPresupuestos: GastoEnPresupuestos get() = gastoEnPresupuestos(budgets.orEmpty(), gastoPorCategoria)
+    internal val gastoEnPresupuestos: GastoEnPresupuestos get() = gastoEnPresupuestos(
+        // Vuelta 105 · el total con el mismo límite del período que las filas (en la quincena, la mitad).
+        com.jvillada.movi.shared.model.presupuestosDelPeriodo(
+            budgets.orEmpty(),
+            periodoDe(kotlinx.datetime.Clock.System.now().toEpochMilliseconds(), ajustesDelPeriodo),
+            ajustesDelPeriodo,
+        ),
+        gastoPorCategoria,
+    )
     // «Al límite» cuenta como aviso, no como sobrepasado: el encabezado decía «2 Sobrepasados»
     // con uno de los dos exactamente en el límite.
     internal val warnCount: Int get() =

@@ -107,16 +107,20 @@ class PeriodoQuincenalTest {
 
     @Test
     fun `el mes de referencia es un mes con corte en el dia A`() {
-        val ref = quinceYUltimoHabil.copy(iniciosPropios = mapOf("2026-10-15" to "2026-10-12")).mesDeReferencia()
-        assertEquals(PeriodSettings(cutoffDay = 15, siCaeEnFinDeSemana = SiElCorteCaeEnFinDeSemana.DIA_HABIL_ANTERIOR), ref)
+        assertEquals(PeriodSettings(cutoffDay = 15, siCaeEnFinDeSemana = SiElCorteCaeEnFinDeSemana.DIA_HABIL_ANTERIOR), quinceYUltimoHabil.mesDeReferencia())
+        // La excepción de la quincena del día A viaja al mes que esa quincena abre; la del B no.
+        val conExcepciones = quinceYUltimoHabil.copy(iniciosPropios = mapOf("2026-10-15" to "2026-10-12", "2026-10-31" to "2026-10-28"))
+        val ref = conExcepciones.mesDeReferencia()
+        assertEquals(mapOf("2026-11" to "2026-10-12"), ref.iniciosPropios)
         assertEquals(ref, ref.mesDeReferencia())
+        assertEquals(inicioDelPeriodo(PeriodoFinanciero(2026, 10, 15), conExcepciones), inicioDelPeriodo(PeriodoFinanciero(2026, 11), ref))
         // Cada quincena cae entera dentro de un mes de referencia (sin excepciones).
-        var q = periodoDeLaFecha("2024-01-01", quinceYUltimoHabil)!!
+        var q = periodoDeLaFecha("2024-01-01", conExcepciones)!!
         repeat(170) {
-            val v = ventanaDe(q, quinceYUltimoHabil)
+            val v = ventanaDe(q, conExcepciones)
             val mes = periodoDe(v.first, ref)
             assertEquals(mes, periodoDe(v.last, ref), "la quincena $q cae en un solo mes de referencia")
-            q = periodoSiguiente(q, quinceYUltimoHabil)
+            q = periodoSiguiente(q, conExcepciones)
         }
     }
 
@@ -127,6 +131,24 @@ class PeriodoQuincenalTest {
         assertEquals(400_001L, limiteDelPeriodo(800_001L, a, quinceYUltimo))
         assertEquals(400_000L, limiteDelPeriodo(800_001L, b, quinceYUltimo))
         assertEquals(800_000L, limiteDelPeriodo(800_000L, PeriodoFinanciero(2026, 10), PeriodSettings()))
+    }
+
+    @Test
+    fun `los umbrales en pesos se llevan al periodo y el total de presupuestos tambien`() {
+        assertEquals(150_000L, umbralDelPeriodo(DIFERENCIA_MINIMA_DE_CATEGORIA, quinceYUltimo))
+        assertEquals(DIFERENCIA_MINIMA_DE_CATEGORIA, umbralDelPeriodo(DIFERENCIA_MINIMA_DE_CATEGORIA, PeriodSettings(cutoffDay = 25)))
+        // Tres cafés de $20.000 = $60.000: en un mes no suman; en una quincena (umbral $50.000), sí.
+        val cafes = (1..3).map {
+            FinancialEvent(id = "c$it", accountId = "a", type = TransactionType.EXPENSE, amount = 20_000, category = "Café",
+                description = "Juan Valdez", timestamp = 1_790_000_000_000L + it)
+        }
+        assertTrue(pequenosQueSuman(cafes).isEmpty())
+        assertEquals(1, pequenosQueSuman(cafes, umbralDelPeriodo(TOTAL_QUE_IMPORTA, quinceYUltimo)).size)
+        val total = gastoEnPresupuestos(
+            presupuestosDelPeriodo(listOf(Budget("Comida", 800_001), Budget("Ropa", 200_000)), PeriodoFinanciero(2026, 10, 15), quinceYUltimo),
+            emptyMap(),
+        )
+        assertEquals(500_001L, total.limite, "el total con el mismo límite que las filas")
     }
 
     @Test
@@ -171,6 +193,7 @@ class PeriodoQuincenalTest {
                     q = periodoSiguiente(q, s)
                 }
                 for (ajustes in listOf(s, s.copy(iniciosPropios = excepciones))) {
+                    val ref = ajustes.mesDeReferencia()
                     var p = periodoDeLaFecha(desde.toString(), ajustes)!!
                     // El primero puede arrancar antes del 1-ene-2024 (corrido por festivo): se parte de ahí.
                     var esperado = inicioDelPeriodo(p, ajustes)
@@ -178,6 +201,9 @@ class PeriodoQuincenalTest {
                         val v = ventanaDe(p, ajustes)
                         assertEquals(millis(esperado), v.first, "contiguas: $p con $ajustes")
                         assertTrue(v.last > v.first, "ninguna vacía: $p con $ajustes")
+                        // Cada quincena cae entera en un mes de referencia, también con excepciones: un
+                        // pago que vence en ella se pregunta mientras ella dure.
+                        assertEquals(periodoDe(v.first, ref), periodoDe(v.last, ref), "la quincena $p en un mes de referencia con $ajustes")
                         val siguiente = periodoSiguiente(p, ajustes)
                         assertEquals(p, periodoAnterior(siguiente, ajustes))
                         // Cada día de la ventana dice que es de este período (día por día solo en las

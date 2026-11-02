@@ -254,7 +254,7 @@ internal suspend fun datosDeLasSugeridas(
             diasComparados = anterior?.second,
             disponible = disponible,
             pagos = pagos,
-            pequenos = if (pregunta == PreguntaSugerida.EN_QUE_SE_VA) pequenosDelPeriodo(uid, desde, hasta, movimientos) else emptyList(),
+            pequenos = if (pregunta == PreguntaSugerida.EN_QUE_SE_VA) pequenosDelPeriodo(uid, desde, hasta, movimientos, ajustes) else emptyList(),
             presupuestos = if (revisar) {
                 // Vuelta 105 · prorrateado al período (D2): en la quincena, la mitad del mensual.
                 Budgets.selectAll().where { Budgets.userId eq uid }

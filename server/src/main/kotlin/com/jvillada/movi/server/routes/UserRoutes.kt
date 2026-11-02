@@ -161,9 +161,15 @@ fun Route.userRoutes() {
             // Cambiar de frecuencia vacía las excepciones a mano: sus claves serían de la otra forma
             // («2026-10» contra «2026-10-15»). Salvo que el mismo PUT traiga las nuevas.
             val cambiaLaFrecuencia = frecuenciaPedida != null && frecuenciaPedida != frecuenciaAntes
+            // Una clave de quincena bien escrita pero que ya no arranca ninguna quincena (cambiaron los días
+            // A o B) no es un error de quien escribe: es una excepción vieja. Se poda en vez de rechazar
+            // todo el mapa — si no, «Empezar la quincena hoy», que manda el mapa entero, quedaría en 400
+            // para siempre (revisión de la 105).
+            fun esQuincenaVigente(clave: String) =
+                periodoDelId(clave)?.takeIf { it.dia != 0 }?.let { esPeriodoDe(it, ajustesNuevos) } == true
             val periodosMalFormados = req.periodStarts.orEmpty().filterNot { (periodo, inicio) ->
                 FECHA_VALIDA.matches(inicio) && if (ajustesNuevos.esQuincenal) {
-                    FECHA_VALIDA.matches(periodo) && periodoDelId(periodo)?.let { esPeriodoDe(it, ajustesNuevos) } == true
+                    FECHA_VALIDA.matches(periodo)
                 } else {
                     PERIODO_VALIDO.matches(periodo)
                 }
@@ -179,7 +185,17 @@ fun Route.userRoutes() {
             }
             // Un tope, porque esto se guarda entero en una columna y crece solo si alguien lo
             // llena: diez años de excepciones mensuales son 120, y nadie declara más que eso.
-            val iniciosPedidos = req.periodStarts
+            val iniciosPedidos = req.periodStarts?.let { pedidos ->
+                if (ajustesNuevos.esQuincenal) pedidos.filterKeys(::esQuincenaVigente) else pedidos
+            }
+            // Y las guardadas: si este PUT cambia los días de la quincena (también un APK viejo que solo
+            // manda `periodCutoffDay`), las que ya no arrancan ninguna quincena se podan al guardar.
+            val iniciosGuardados = guardado[Users.periodStarts]?.let { leerIniciosPropios(it) } ?: emptyMap()
+            val iniciosPodados = if (ajustesNuevos.esQuincenal && !cambiaLaFrecuencia && iniciosPedidos == null) {
+                iniciosGuardados.filterKeys(::esQuincenaVigente).takeIf { it.size != iniciosGuardados.size }
+            } else {
+                null
+            }
             if (iniciosPedidos != null && iniciosPedidos.size > MAX_INICIOS_PROPIOS) {
                 return@put call.respond(
                     HttpStatusCode.BadRequest,
@@ -227,6 +243,9 @@ fun Route.userRoutes() {
                     req.periodFrequency?.let { stmt[Users.periodFrequency] = it }
                     req.periodSecondDay?.let { stmt[Users.periodSecondDay] = it }
                     if (cambiaLaFrecuencia && iniciosPedidos == null) stmt[Users.periodStarts] = "{}"
+                    iniciosPodados?.let {
+                        stmt[Users.periodStarts] = Json.encodeToString(MapSerializer(String.serializer(), String.serializer()), it)
+                    }
                     // Reemplaza el mapa entero, incluido el vacío: mandar `{}` es cómo se dice
                     // «ninguno arranca distinto». Ver [UpdateProfileRequest.periodStarts].
                     iniciosPedidos?.let {

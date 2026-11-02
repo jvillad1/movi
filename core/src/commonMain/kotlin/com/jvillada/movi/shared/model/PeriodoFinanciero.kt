@@ -213,8 +213,25 @@ const val MARGEN_DE_LA_EXCEPCION_QUINCENAL: Int = 5
  * Idempotente: el mes de referencia de un mes de referencia es él mismo. Por eso las funciones de
  * obligaciones la aplican al entrar y quien llama les pasa siempre los ajustes reales.
  */
-fun PeriodSettings.mesDeReferencia(): PeriodSettings =
-    if (!esQuincenal) this else PeriodSettings(cutoffDay = cutoffDay, siCaeEnFinDeSemana = siCaeEnFinDeSemana)
+fun PeriodSettings.mesDeReferencia(): PeriodSettings {
+    if (!esQuincenal) return this
+    // **Las excepciones de la quincena del día A viajan al mes de referencia** (revisión de la 105): el
+    // arranque de esa quincena ES el arranque del mes de referencia. Sin esto, «Empezar la quincena
+    // hoy» el 12-nov (quincena del 15) dejaba el mes de referencia arrancando el 15 y un pago del 13,
+    // vencido y sin pagar, salía de la quincena en curso al pasar la gracia (se preguntaba por el del
+    // mes siguiente). Las de la quincena del día B no mueven ningún borde del mes de referencia.
+    // [inicioDeLaQuincena] solo acepta una excepción del día A dentro del mismo mes que su nominal, que
+    // es justo lo que el mensual acepta: la excepción nunca se pierde en el camino.
+    val delDiaA = iniciosPropios.mapNotNull { (clave, inicio) ->
+        val q = periodoDelId(clave)?.takeIf { it.dia != 0 } ?: return@mapNotNull null
+        if (!esPeriodoDe(q, this) || !esLaQuincenaDelDiaA(q, this)) return@mapNotNull null
+        // Solo la que la quincena de verdad acepta (a ±5 días y en el mes de su nominal).
+        if (inicioDelPeriodo(q, this).toString() != inicio.trim()) return@mapNotNull null
+        val nominal = LocalDate(q.year, q.month, q.dia)
+        periodoPorElCorte(nominal, cutoffDay).prefijo to inicio
+    }.toMap()
+    return PeriodSettings(cutoffDay = cutoffDay, siCaeEnFinDeSemana = siCaeEnFinDeSemana, iniciosPropios = delDiaA)
+}
 
 /**
  * **El límite de un presupuesto mensual medido en [periodo]** (D2 del diseño: se escribe al mes y se
@@ -234,6 +251,14 @@ fun limiteDelPeriodo(mensual: Long, periodo: PeriodoFinanciero, settings: Period
 fun presupuestosDelPeriodo(presupuestos: List<Budget>, periodo: PeriodoFinanciero?, settings: PeriodSettings): List<Budget> =
     if (periodo == null || !settings.esQuincenal) presupuestos
     else presupuestos.map { it.copy(monthlyLimit = limiteDelPeriodo(it.monthlyLimit, periodo, settings)) }
+
+/**
+ * Vuelta 105 · **un umbral en pesos pensado para un mes, llevado al período**: el mismo en el mensual,
+ * la mitad en la quincena. Para los umbrales elegidos de «lo que se sale de lo normal» y «pequeños que
+ * suman», que comparan lo de UN período: en una quincena se gasta la mitad y el umbral entero casi
+ * nunca saltaría.
+ */
+fun umbralDelPeriodo(mensual: Long, settings: PeriodSettings): Long = if (settings.esQuincenal) mensual / 2 else mensual
 
 /** ¿[periodo] es la quincena que arranca el día A (la primera del mes)? Falso fuera de la quincena. */
 fun esLaQuincenaDelDiaA(periodo: PeriodoFinanciero, settings: PeriodSettings): Boolean {
@@ -447,7 +472,12 @@ private fun inicioDeLaQuincena(periodo: PeriodoFinanciero, settings: PeriodSetti
         ?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
         ?: return porLaRegla
     val distancia = declarado.toEpochDays() - nominal.toEpochDays()
-    return if (distancia in -MARGEN_DE_LA_EXCEPCION_QUINCENAL..MARGEN_DE_LA_EXCEPCION_QUINCENAL) declarado else porLaRegla
+    if (distancia !in -MARGEN_DE_LA_EXCEPCION_QUINCENAL..MARGEN_DE_LA_EXCEPCION_QUINCENAL) return porLaRegla
+    // La quincena del día A abre el mes de referencia ([mesDeReferencia]): su excepción se queda en el
+    // mes de su nominal, como la del mensual, para que los dos relojes muevan el mismo borde.
+    val esDelDiaA = nominal.dayOfMonth == minOf(settings.cutoffDay, diasDelMes(nominal.year, nominal.monthNumber))
+    if (esDelDiaA && (declarado.year != nominal.year || declarado.monthNumber != nominal.monthNumber)) return porLaRegla
+    return declarado
 }
 
 /** El arranque que le tocaría por la regla del corte, sin mirar excepciones. */

@@ -48,8 +48,42 @@ class LasObligacionesEnLaQuincenaTest {
         }
     }
 
+    /**
+     * Con el default (15 y el último), el mes de referencia va del 15 al 14: lo que vence en la quincena
+     * del 15 se sigue preguntando en la del 31; lo que vence del 1 al 14 se pregunta hasta el 14 (con la
+     * gracia, unos días más), como el mensual con corte 15.
+     */
     @Test
-    fun `el arriendo del 5 sin pagar sigue preguntandose toda la quincena siguiente`() {
+    fun `con 15 y el ultimo, lo de la quincena del 15 se sigue preguntando en la del 31`() {
+        val gimnasio = regla(20)
+        assertEquals(LocalDate.of(2026, 10, 20), ocurrenciaPorPreguntar(LocalDate.of(2026, 11, 3), gimnasio, quinceYUltimo))
+        assertEquals(LocalDate.of(2026, 10, 20), ocurrenciaPorPreguntar(LocalDate.of(2026, 11, 12), gimnasio, quinceYUltimo))
+        // El arriendo del 5 (quincena del 31) se pregunta hasta que esa quincena termina; en la del 15
+        // de noviembre ya es el de diciembre, igual que con un mes de corte 15.
+        assertEquals(LocalDate.of(2026, 11, 5), ocurrenciaPorPreguntar(LocalDate.of(2026, 11, 12), regla(5), quinceYUltimo))
+        assertEquals(LocalDate.of(2026, 12, 5), ocurrenciaPorPreguntar(LocalDate.of(2026, 11, 20), regla(5), quinceYUltimo))
+    }
+
+    /**
+     * Revisión de la 105: «Empezar la quincena hoy» el jueves 12-nov (la del 15 arranca antes). Un pago
+     * del 13, vencido y sin pagar, cae en esa quincena y no puede salir del checklist ni de los
+     * pendientes al pasar la gracia: el mes de referencia arranca el 12 también.
+     */
+    @Test
+    fun `empezar la quincena antes no saca del checklist un pago vencido de esa quincena`() {
+        val conExcepcion = PeriodSettings(
+            cutoffDay = 15, frecuencia = FrecuenciaDelPeriodo.QUINCENAL, segundoDia = 31,
+            iniciosPropios = mapOf("2026-11-15" to "2026-11-12"),
+        )
+        val pago = regla(13)
+        for (hoy in listOf(LocalDate.of(2026, 11, 13), LocalDate.of(2026, 11, 20), LocalDate.of(2026, 11, 29))) {
+            assertEquals(LocalDate.of(2026, 11, 13), ocurrenciaPorPreguntar(hoy, pago, conExcepcion), "pendiente el $hoy")
+            assertEquals(LocalDate.of(2026, 11, 13), vencimientoEnElChecklist(pago, hoy, conExcepcion, emptySet()), "en el checklist el $hoy")
+        }
+    }
+
+    @Test
+    fun `con quincenas del 1 y del 16, el arriendo del 5 sin pagar se sigue preguntando en la del 16`() {
         // Quincenas del 1 y del 16: el arriendo del 5 vence en la primera. El 20 ya es la segunda, y
         // la ocurrencia sigue en juego (para «pendientes de períodos anteriores»), no se esfuma.
         assertEquals(LocalDate.of(2026, 11, 5), ocurrenciaPorPreguntar(LocalDate.of(2026, 11, 20), regla(5), unoYDieciseis))

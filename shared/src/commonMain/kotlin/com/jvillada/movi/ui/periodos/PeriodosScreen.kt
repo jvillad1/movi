@@ -377,25 +377,32 @@ const val TAG_MES_DE_LAS_QUINCENAS: String = "mes-de-las-quincenas"
 
 /**
  * Vuelta 105 · **las quincenas, agrupadas bajo su mes** (D3 del diseño): antes de la primera tarjeta de
- * cada mes va «Octubre 2026 · Entró $X · Salió $Y», con lo de todas sus quincenas de la lista. El mes de
- * una quincena es el de su arranque (su id). Con períodos mensuales devuelve [piezas] tal cual: para quien
- * cuenta por mes la lista no cambia. Pura.
+ * cada mes va «Octubre 2026 · Entró $X · Salió $Y», con lo de todas sus quincenas de la lista. **El mes
+ * de una quincena es el mes en que TERMINA** (su último día, `hasta`): con el 15 y el último, «15 – 30
+ * oct» va en Octubre y «31 oct – 14 nov» en Noviembre, que es el mes que esa plata paga (revisión de la
+ * 105: por el arranque, la del 31 quedaba en Octubre con casi todo su tiempo en noviembre). Con el 1 y
+ * el 16 da el mes de calendario. Con períodos mensuales devuelve [piezas] tal cual. Pura.
  */
 internal fun conLosMeses(piezas: List<PiezaDePeriodos>): List<ElementoDeTusPeriodos> {
+    fun mesQueCierra(r: ResumenDePeriodo): Pair<Int, Int>? {
+        val q = periodoDelId(r.id)?.takeIf { it.dia != 0 } ?: return null
+        val ultimo = runCatching { LocalDate.parse(r.hasta) }.getOrNull() ?: return q.year to q.month
+        return ultimo.year to ultimo.monthNumber
+    }
     val tarjetas = piezas.filterIsInstance<PiezaDePeriodos.Tarjeta>()
-    val quincenas = tarjetas.mapNotNull { t -> periodoDelId(t.resumen.id)?.takeIf { it.dia != 0 }?.let { t to it } }
+    val quincenas = tarjetas.mapNotNull { t -> mesQueCierra(t.resumen)?.let { t to it } }
     if (quincenas.isEmpty()) return piezas.map(::LaPieza)
-    val porMes = quincenas.groupBy({ (_, p) -> p.year to p.month }, { (t, _) -> t.resumen })
+    val porMes = quincenas.groupBy({ it.second }, { it.first.resumen })
     val vistos = mutableSetOf<Pair<Int, Int>>()
     return buildList {
         for (pieza in piezas) {
-            val periodo = (pieza as? PiezaDePeriodos.Tarjeta)?.resumen?.id?.let(::periodoDelId)
-            if (periodo != null && periodo.dia != 0 && vistos.add(periodo.year to periodo.month)) {
-                val delMes = porMes[periodo.year to periodo.month].orEmpty()
+            val mes = (pieza as? PiezaDePeriodos.Tarjeta)?.resumen?.let(::mesQueCierra)
+            if (mes != null && vistos.add(mes)) {
+                val delMes = porMes[mes].orEmpty()
                 add(
                     MesDeLasQuincenas(
-                        id = "${periodo.year}-${periodo.month}",
-                        titulo = tituloDelPeriodo(PeriodoFinanciero(periodo.year, periodo.month)),
+                        id = "${mes.first}-${mes.second}",
+                        titulo = tituloDelPeriodo(PeriodoFinanciero(mes.first, mes.second)),
                         subtitulo = "Entró ${formatMoneyCompact(delMes.sumOf { it.entradas })} · " +
                             "Salió ${formatMoneyCompact(delMes.sumOf { it.salidas })}",
                     ),

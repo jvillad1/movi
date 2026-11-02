@@ -211,7 +211,7 @@ internal fun Transaction.detalleDePeriodo(
         tuPlataAlEmpezar = alEmpezar,
         tuPlataAlCerrar = alCerrar,
         fuentesQueNoSonIngreso = fuentes,
-        pequenosQueSuman = pequenosDelPeriodo(uid, desde, hasta, movimientos),
+        pequenosQueSuman = pequenosDelPeriodo(uid, desde, hasta, movimientos, ajustes),
     )
 }
 
@@ -225,10 +225,15 @@ internal fun Transaction.pequenosDelPeriodo(
     desde: Long,
     hasta: Long,
     movimientos: List<MovimientoDeFlujo>,
+    ajustes: PeriodSettings = PeriodSettings(),
 ): List<com.jvillada.movi.shared.model.PequenosQueSuman> {
     val gastos = movimientos.filter { it.type == TransactionType.EXPENSE }.map { it.id }.toSet()
     if (gastos.isEmpty()) return emptyList()
-    return pequenosQueSuman(loadEventsBetween(uid, desde, hasta).filter { it.id in gastos })
+    return pequenosQueSuman(
+        loadEventsBetween(uid, desde, hasta).filter { it.id in gastos },
+        // Vuelta 105 · en la quincena, la mitad del umbral (identidad en el mensual).
+        totalQueImporta = com.jvillada.movi.shared.model.umbralDelPeriodo(com.jvillada.movi.shared.model.TOTAL_QUE_IMPORTA, ajustes),
+    )
 }
 
 /**

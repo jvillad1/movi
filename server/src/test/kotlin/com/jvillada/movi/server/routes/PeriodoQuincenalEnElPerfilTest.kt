@@ -199,8 +199,32 @@ class PeriodoQuincenalEnElPerfilTest {
         wireApp()
         putProfile("""{"periodFrequency":"QUINCENAL","periodCutoffDay":15,"periodSecondDay":31}""")
         assertEquals(HttpStatusCode.OK, putProfile("""{"periodStarts":{"2026-10-31":"2026-10-30"}}""").status)
-        // Un día que no es un arranque de estas quincenas no es una quincena.
-        assertEquals(HttpStatusCode.BadRequest, putProfile("""{"periodStarts":{"2026-10-20":"2026-10-19"}}""").status)
+        // Un día que no arranca ninguna de estas quincenas se poda (no tumba el mapa entero), y una
+        // clave que no es una fecha sí se rechaza.
+        assertEquals(HttpStatusCode.OK, putProfile("""{"periodStarts":{"2026-10-20":"2026-10-19","2026-11-15":"2026-11-12"}}""").status)
+        assertEquals("""{"2026-11-15":"2026-11-12"}""", fila()[Users.periodStarts])
+        assertEquals(HttpStatusCode.BadRequest, putProfile("""{"periodStarts":{"2026-11":"2026-10-30"}}""").status)
+    }
+
+    /**
+     * Revisión de la 105: cambiar los días de la quincena (también un APK viejo que solo manda el corte)
+     * deja excepciones con claves que ya no arrancan ninguna quincena. Se podan al guardar, y «Empezar
+     * la quincena hoy» —que manda el mapa entero— nunca queda en un 400 permanente.
+     */
+    @Test
+    fun `cambiar los dias de la quincena poda las excepciones viejas y empezar hoy sigue funcionando`() = testApplication {
+        wireApp()
+        putProfile("""{"periodFrequency":"QUINCENAL","periodCutoffDay":15,"periodSecondDay":31}""")
+        putProfile("""{"periodStarts":{"2026-10-31":"2026-10-30","2026-11-15":"2026-11-12"}}""")
+        // Como lo haría un APK viejo: solo el corte. La quincena pasa a 14 y 31.
+        assertEquals(HttpStatusCode.OK, putProfile("""{"periodCutoffDay":14}""").status)
+        assertEquals("""{"2026-10-31":"2026-10-30"}""", fila()[Users.periodStarts], "la del 15 ya no es una quincena")
+        // Un cliente que todavía tenía el mapa viejo y le suma la de hoy: pasa, sin la clave muerta.
+        assertEquals(
+            HttpStatusCode.OK,
+            putProfile("""{"periodStarts":{"2026-10-31":"2026-10-30","2026-11-15":"2026-11-12","2026-11-14":"2026-11-12"}}""").status,
+        )
+        assertEquals("""{"2026-10-31":"2026-10-30","2026-11-14":"2026-11-12"}""", fila()[Users.periodStarts])
     }
 
     @Test

@@ -79,18 +79,22 @@ class LaQuincenaEnLaAppTest {
         assertEquals(presupuestos, enMes.presupuestosDelPeriodo)
     }
 
-    private fun resumen(id: String, entradas: Long = 0, salidas: Long = 0) =
-        ResumenDePeriodo(id = id, nombre = id, desde = "2026-10-01", hasta = "2026-10-14", entradas = entradas, salidas = salidas)
+    private fun resumen(id: String, hasta: String = "2026-10-14", entradas: Long = 0, salidas: Long = 0) =
+        ResumenDePeriodo(id = id, nombre = id, desde = id, hasta = hasta, entradas = entradas, salidas = salidas)
 
     @Test
-    fun `tus periodos agrupan las quincenas bajo su mes, y los meses quedan igual`() {
+    fun `tus periodos agrupan cada quincena bajo el mes en que termina, y los meses quedan igual`() {
+        // 15 y el último: la del 31-oct termina el 14-nov y va en Noviembre.
         val quincenas = listOf(
-            resumen("2026-11-01", 100, 10), resumen("2026-10-16", 200, 20), resumen("2026-10-01", 300, 30),
+            resumen("2026-11-15", "2026-11-29", 100, 10),
+            resumen("2026-10-31", "2026-11-14", 200, 20),
+            resumen("2026-10-15", "2026-10-30", 300, 30),
         ).map { PiezaDePeriodos.Tarjeta(it) }
         val lista = conLosMeses(quincenas)
-        assertEquals(listOf("mes-2026-11", "2026-11-01", "mes-2026-10", "2026-10-16", "2026-10-01"), lista.map { it.clave })
-        val octubre = lista[2] as MesDeLasQuincenas
-        assertEquals("Octubre 2026", octubre.titulo)
+        assertEquals(listOf("mes-2026-11", "2026-11-15", "2026-10-31", "mes-2026-10", "2026-10-15"), lista.map { it.clave })
+        val noviembre = lista[0] as MesDeLasQuincenas
+        assertEquals("Noviembre 2026", noviembre.titulo)
+        assertTrue(noviembre.subtitulo.startsWith("Entró "))
         val meses = listOf(resumen("2026-10"), resumen("2026-09")).map { PiezaDePeriodos.Tarjeta(it) }
         assertEquals(meses.map(::LaPieza), conLosMeses(meses))
     }
