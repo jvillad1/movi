@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.components
 
+import com.jvillada.movi.observabilidad.ToqueDeUso
 import androidx.compose.foundation.background
 import androidx.compose.runtime.remember
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -242,7 +243,7 @@ private fun RailCompactoItem(dest: DestinoPrincipal, active: NavTab?, onTabSelec
             .fillMaxWidth()
             .anilloDeFoco(RoundedCornerShape(Radio.m), adentro = true)
             // Vuelta 79: sin ripple de toda la celda; lo que se ve del toque va en la píldora.
-            .alPresionar(onClick = { onTabSelected(dest.tab) }, escala = 1f, fuente = toque)
+            .alPresionar(onClick = { onTabSelected(dest.tab) }, toque = toqueDeLaPestana(dest.tab), escala = 1f, fuente = toque)
             // Un lector de pantalla dice el nombre entero UNA vez («Movimientos»), no el ícono y
             // después el rótulo corto («Movimientos, Movs»).
             .clearAndSetSemantics {
@@ -322,6 +323,7 @@ private fun RailItem(
             // Vuelta 79: sin ripple; el destino se hunde y el velo va recortado a su píldora.
             .alPresionar(
                 onClick = { onTabSelected(tab) },
+                toque = toqueDeLaPestana(tab),
                 rol = Role.Tab,
                 velo = elHoverSeVeEnElDestino(isActive),
                 forma = RoundedCornerShape(Radio.pill),

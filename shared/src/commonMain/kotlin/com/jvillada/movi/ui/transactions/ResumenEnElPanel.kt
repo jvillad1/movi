@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.transactions
 
+import com.jvillada.movi.observabilidad.ToqueDeUso
 import com.jvillada.movi.ui.components.ds.alPresionar
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.Arrangement
@@ -364,6 +365,8 @@ private fun FilaDeCategoriaDelResumen(fila: FilaDelAnalisis, fijas: Set<String>,
             .testTag(TAG_CATEGORIA_DEL_RESUMEN)
             .alPresionar(
                 onClick = onClick,
+                // Vuelta 104: una categoría del dueño: se anota la fila, nunca su nombre.
+                toque = ToqueDeUso("fila", modificador = Modifier.testTag(TAG_CATEGORIA_DEL_RESUMEN), dinamico = true),
                 onClickLabel = "Ver los movimientos",
                 escala = com.jvillada.movi.theme.Movimiento.ESCALA_DE_LA_FILA_AL_PRESIONAR,
                 velo = true,

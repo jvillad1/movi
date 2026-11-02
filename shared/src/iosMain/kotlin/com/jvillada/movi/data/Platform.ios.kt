@@ -67,8 +67,8 @@ actual fun createRepository(): WalletRepository {
         olvidarLoFresco()
         // Vuelta 82: lo que el héroe del Inicio adelantaba puede haber subido: que vuelva a mirar ya.
         com.jvillada.movi.ui.dashboard.MovimientosDelDueno.despertar()
-    }).also { it.start() }
-    return LocalRepository(db, remote, userId, sincronizador = sincronizador)
+    }, alTerminarLaVuelta = { subidos, codigo -> com.jvillada.movi.observabilidad.anotarLaSincronizacion(subidos, codigo) }).also { it.start() }
+    return LocalRepository(db, remote, userId, sincronizador = sincronizador, alBajar = { cuantos -> com.jvillada.movi.observabilidad.anotarLoQueBajo(cuantos) })
 }
 
 // No-op: no hay overlay HTML que recuperar acá. Compose navega solo al ver

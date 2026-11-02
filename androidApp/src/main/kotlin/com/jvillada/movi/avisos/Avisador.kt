@@ -372,6 +372,22 @@ object Avisador {
             }
             .build()
         runCatching { NotificationManagerCompat.from(context).notify(id, aviso) }
+            .onSuccess {
+                // Vuelta 104: que el teléfono mostró un aviso, de qué canal y de cuántas cosas; nunca su texto.
+                runCatching {
+                    com.jvillada.movi.observabilidad.Uso.eventoDeFondo(
+                        com.jvillada.movi.shared.model.EventoDeUso.NOTIFICACION_MOSTRADA,
+                        mapOf(
+                            com.jvillada.movi.shared.model.ClaveDeUso.CANAL to canalParaElUso(canal),
+                            com.jvillada.movi.shared.model.ClaveDeUso.CUANTOS to cuantos.coerceIn(0, 999_999).toString(),
+                        ),
+                    )
+                }
+            }
             .onFailure { Log.w(TAG, "no se pudo publicar el aviso $id", it) }
     }
+
+    /** Vuelta 104: el canal como lo anota el uso (`movimientos` → `MOVIMIENTOS`). Pura. */
+    fun canalParaElUso(canal: String): String =
+        canal.uppercase().map { if (it in 'A'..'Z') it else '_' }.joinToString("").trim('_').ifEmpty { "OTRO" }
 }

@@ -64,6 +64,8 @@ fun Route.cierreDelPeriodoRoutes() {
         val uid = call.userId()
         val cierre = cierreDelPeriodoDe(uid, AppClock.today(), soloSiSeMuestra = true)
         if (cierre == null || !seMuestraEnHoy(cierre)) return@get call.respond(HttpStatusCode.NoContent)
+        // Vuelta 104: en el recorrido del dueño, que Movi armó el cierre de ese período (una vez).
+        com.jvillada.movi.server.observabilidad.Observabilidad.registrarCierre(uid, cierre.periodo, origen = null, System.currentTimeMillis())
         call.respond(cierre)
     }
 

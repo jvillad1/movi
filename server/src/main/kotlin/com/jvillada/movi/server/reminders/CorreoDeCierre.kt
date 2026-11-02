@@ -100,6 +100,8 @@ private suspend fun mandarElCierreDe(uid: String, correo: String, hoy: LocalDate
         return false
     }
     log.info("CorreoDeCierre: resumen de ${cierre.periodo} enviado a $uid")
+    // Vuelta 104: en el recorrido del dueño, que el cierre salió por correo.
+    com.jvillada.movi.server.observabilidad.Observabilidad.registrarCierre(uid, cierre.periodo, origen = "CORREO", System.currentTimeMillis())
     return true
 }
 

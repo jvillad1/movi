@@ -33,7 +33,10 @@ import java.util.concurrent.TimeUnit
  */
 class SmsBackfillWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
 
-    override suspend fun doWork(): Result {
+    // Vuelta 104: cada corrida, en el uso (nombre, resultado y duración; ver `workers/CorridaDelWorker.kt`).
+    override suspend fun doWork(): Result = com.jvillada.movi.workers.medirLaCorrida("SmsBackfillWorker") { trabajar() }
+
+    private suspend fun trabajar(): Result {
         // El período de calendario alcanza y evita pedir el perfil: lee desde el inicio del mes
         // pasado, que cubre cualquier corte. Ver SmsBackfill.conElPeriodo.
         return when (val resultado = SmsBackfill.conElPeriodo(applicationContext, PeriodSettings())) {
