@@ -157,9 +157,13 @@ const val CUENTA_QUE_MAS_USA_PSE: String = "La que más usas para pagar por PSE"
  */
 const val MINIMO_DE_PAGOS_POR_PSE: Int = 2
 
+/** Revisión de la vuelta 107 · qué parte de los pagos por PSE tiene que salir de esa cuenta. Elegido. */
+const val PROPORCION_MINIMA_DE_PAGOS_POR_PSE: Double = 0.6
+
 /**
  * Vuelta 107 · **la cuenta de la que más sale PSE**: la de más pagos por PSE en [pagosPorPse] entre
- * [origenes], solo si tiene al menos [MINIMO_DE_PAGOS_POR_PSE] y le gana sola a la segunda. Con un empate
+ * [origenes], solo si tiene al menos [MINIMO_DE_PAGOS_POR_PSE], le gana sola a la segunda y suma al menos el
+ * [PROPORCION_MINIMA_DE_PAGOS_POR_PSE] de esos pagos. Con un empate
  * o con muy poca historia, ninguna: la app pide elegir («Elígela tú»), nunca pone una cuenta poco usada.
  */
 fun cuentaQueMasUsaPse(pagosPorPse: Map<String, Int>, origenes: Set<String>): String? {
@@ -167,6 +171,8 @@ fun cuentaQueMasUsaPse(pagosPorPse: Map<String, Int>, origenes: Set<String>): St
     val primera = porCuenta.firstOrNull() ?: return null
     if (primera.value < MINIMO_DE_PAGOS_POR_PSE) return null
     if (porCuenta.getOrNull(1)?.value == primera.value) return null
+    // Revisión: además, la mayoría clara de los pagos por PSE ([PROPORCION_MINIMA_DE_PAGOS_POR_PSE]).
+    if (primera.value < PROPORCION_MINIMA_DE_PAGOS_POR_PSE * porCuenta.sumOf { it.value }) return null
     return primera.key
 }
 

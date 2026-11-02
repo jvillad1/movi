@@ -107,7 +107,7 @@ class ComoSacarElExtractoEnLaAppTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Cómo sacar tu extracto de Bancolombia").assertIsDisplayed()
         composeRule.onNodeWithText("Ve a «Tarjetas de crédito» y toca la tarjeta.", substring = true).assertIsDisplayed()
-        composeRule.onNodeWithText("Formato: PDF o Excel.").assertIsDisplayed()
+        composeRule.onNodeWithText("Formato: PDF (recomendado). También sirve el Excel.").assertIsDisplayed()
         // El corte de la tarjeta (3 de enero) es más viejo que el inicio del período: manda ese.
         composeRule.onNodeWithTag(TAG_RANGO_IDEAL_DEL_EXTRACTO, useUnmergedTree = true)
             .assertTextContains("Rango ideal: desde tu último corte, el 3 de enero, hasta hoy.")

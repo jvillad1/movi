@@ -5241,7 +5241,8 @@ pinta (`ui/extractos/ComoSacarElExtracto.kt` → `HojaDeComoSacarElExtracto`).
 - **Pasos numerados, cortos, con los rótulos del banco entre comillas angulares** («Movimientos», «Descargar»):
   el dueño los busca en la pantalla del banco tal cual. Una cuenta y una tarjeta pueden tener pasos distintos
   (`pasosPara(esTarjeta)`).
-- **Lo que hay que elegir va aparte y en concreto**: «Formato: PDF o Excel.» y, si el banco deja elegir fechas,
+- **Lo que hay que elegir va aparte y en concreto**: «Formato: PDF (recomendado). También sirve el Excel.» (el Excel solo si
+  el lector está activo, `EL_LECTOR_DE_EXCEL_ESTA_ACTIVO`) y, si el banco deja elegir fechas,
   el **rango ideal** con la fecha escrita («Rango ideal: desde tu último corte, el 23 de octubre, hasta hoy.»,
   `rangoIdealDelExtracto`: el inicio del período o el corte de la tarjeta, el más viejo). Mientras el perfil no
   llega, el mismo renglón sin la fecha: nada salta.

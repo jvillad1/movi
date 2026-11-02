@@ -35,11 +35,30 @@ import kotlin.math.roundToLong
  */
 fun leerElExcelDeBancolombia(bytes: ByteArray): MovimientosDeBancolombia? {
     val libro = runCatching { WorkbookFactory.create(ByteArrayInputStream(bytes)) }.getOrNull() ?: return null
-    return libro.use { wb ->
-        (0 until wb.numberOfSheets).asSequence()
-            .mapNotNull { i -> leerLaHoja(wb.getSheetAt(i)) }
-            .firstOrNull()
-    }
+    // Revisión: una celda rara (un NaN, una fórmula rota, una hoja corrupta) no tumba la subida: esa hoja
+    // no se lee y el archivo sigue el camino de siempre.
+    return runCatching {
+        libro.use { wb ->
+            (0 until wb.numberOfSheets).asSequence()
+                .mapNotNull { i -> runCatching { leerLaHoja(wb.getSheetAt(i)) }.getOrNull() }
+                .firstOrNull()
+        }
+    }.getOrNull()
+}
+
+/** Revisión de la vuelta 107: el tope de una entrada de un `.xlsx` (un zip) al inflarse. */
+internal const val TOPE_DE_UNA_ENTRADA_DE_EXCEL: Long = 50L * 1024 * 1024
+
+/** Revisión de la vuelta 107: la menor razón comprimido/inflado que se acepta (la de POI por defecto). */
+internal const val RAZON_MINIMA_DE_INFLADO_DE_EXCEL: Double = 0.01
+
+/**
+ * **Los topes de POI contra un Excel bomba** (un zip que se infla a gigas), para todo uso de POI en el
+ * server: el lector de Bancolombia y `StatementParser.extractText`. Se llama una vez al arrancar.
+ */
+fun configurarLosTopesDePoi() {
+    org.apache.poi.openxml4j.util.ZipSecureFile.setMaxEntrySize(TOPE_DE_UNA_ENTRADA_DE_EXCEL)
+    org.apache.poi.openxml4j.util.ZipSecureFile.setMinInflateRatio(RAZON_MINIMA_DE_INFLADO_DE_EXCEL)
 }
 
 /** Los encabezados que se esperan, en orden: los del PDF de «Movimientos: Cuentas». */
@@ -118,9 +137,8 @@ private val VALOR_EN_TEXTO = Regex("""^(-?)\s*\$?\s*(\d{1,3}(?:\.\d{3})*,\d{2}|\
 /** El valor de una celda en centavos, con su signo: un número de Excel o un texto como el del PDF. */
 private fun centavosDe(celda: Cell?): Long? {
     celda ?: return null
-    if (celda.cellType == CellType.NUMERIC) return (celda.numericCellValue * 100).roundToLong()
-    if (celda.cellType == CellType.FORMULA && celda.cachedFormulaResultType == CellType.NUMERIC) {
-        return (celda.numericCellValue * 100).roundToLong()
+    if (celda.cellType == CellType.NUMERIC || (celda.cellType == CellType.FORMULA && celda.cachedFormulaResultType == CellType.NUMERIC)) {
+        return celda.numericCellValue.takeIf { it.isFinite() }?.let { (it * 100).roundToLong() }
     }
     val m = VALOR_EN_TEXTO.matchEntire(textoDe(celda)) ?: return null
     return centavosDelExtracto(m.groupValues[1] + m.groupValues[2])

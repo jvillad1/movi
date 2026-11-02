@@ -19,7 +19,9 @@ class ComoSacarElExtractoTest {
         assertTrue(guia.conRango)
         assertTrue(guia.pasosPara(esTarjeta = false).any { "pestaña «Movimientos»" in it })
         assertTrue(guia.pasosPara(esTarjeta = true).any { "Tarjetas de crédito" in it })
-        assertEquals("Formato: PDF o Excel.", formatoDelExtracto(guia))
+        assertEquals("Formato: PDF (recomendado). También sirve el Excel.", formatoDelExtracto(guia))
+        assertEquals("Formato: PDF.", formatoDelExtracto(guia, lectorDeExcel = false))
+        assertEquals("Formato: PDF.", formatoDelExtracto(GUIA_DE_NU))
         assertEquals("Cómo sacar tu extracto de Bancolombia", tituloDeLaGuiaDelExtracto(guia))
     }
 

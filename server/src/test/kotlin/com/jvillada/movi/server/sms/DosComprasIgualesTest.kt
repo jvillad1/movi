@@ -42,8 +42,9 @@ class DosComprasIgualesTest {
     @Test
     fun `el mismo cobro avisado por SMS y por Google Wallet es uno`() {
         assertEquals(setOf(setOf("s1", "w1")), grupos(delSms("s1", "14:41"), deWallet("w1", "14:41")))
-        // Wallet un poco tarde (hasta 5 min de la hora que escribe el SMS) sigue siendo el mismo.
-        assertEquals(setOf(setOf("s1", "w1")), grupos(delSms("s1", "14:41"), deWallet("w1", "14:45")))
+        // Wallet un poco tarde (hasta 2 min del SMS) sigue siendo el mismo; a 3 ya son dos.
+        assertEquals(setOf(setOf("s1", "w1")), grupos(delSms("s1", "14:41"), deWallet("w1", "14:43")))
+        assertEquals(emptySet(), grupos(delSms("s1", "14:41"), deWallet("w1", "14:44")))
     }
 
     @Test

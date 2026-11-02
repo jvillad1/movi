@@ -46,14 +46,14 @@ internal const val MINUTOS_PARA_EL_MISMO_PAGO_POR_CORREO: Long = 60
  * Vuelta 107 · **cuánto después de la hora que escribe el SMS puede llegar la notificación del mismo
  * cobro.** El SMS de Bancolombia dice cuándo pasó («el 28/10/2026 a las 14:41», o «23:47:16»); la
  * notificación de Google Wallet se fecha al publicarse. Medido el 2-nov con los avisos del dueño: los 7
- * pares SMS + Wallet de una compra quedaron a 0 minutos de la hora escrita. Elegido con margen: 5 minutos
+ * pares SMS + Wallet de una compra quedaron a 0 minutos de la hora escrita. Elegido con margen: 2 minutos
  * después y 2 antes (el minuto truncado de los dos lados). Fuera de eso son dos cobros: dos compras
  * iguales a minutos distintos —una avisada solo por Wallet y otra solo por SMS— eran un pago y se perdía
  * una. El Wallet tardío de 21 min del histórico era contra la app de Glim, que no escribe hora: esa
  * ventana sigue siendo [MINUTOS_PARA_EL_MISMO_PAGO]. Si alguna vez un mismo cobro queda partido, «¿Ya lo
  * anotaste?» encuentra el movimiento del otro aviso («Es este»): una fila de más se ve; una de menos no.
  */
-internal const val MINUTOS_DE_LA_NOTIFICACION_DESPUES_DE_LA_HORA_DEL_SMS: Long = 5
+internal const val MINUTOS_DE_LA_NOTIFICACION_DESPUES_DE_LA_HORA_DEL_SMS: Long = 2
 internal const val MINUTOS_DE_LA_NOTIFICACION_ANTES_DE_LA_HORA_DEL_SMS: Long = 2
 
 /** «el 28/10/2026 a las 14:41», «el 25/10/2026 23:47:16», «el 2026/09/18 10:45:19»: la hora que escribe el SMS. */
@@ -74,7 +74,7 @@ internal fun horaEscritaDelSms(texto: String): Long? {
 
 /**
  * ¿Un SMS que escribe su hora y una notificación pueden ser el mismo cobro? Solo si la notificación llegó
- * entre 2 minutos antes y 5 después del SMS ([horaDelSms]). Ver las constantes de arriba.
+ * entre 2 minutos antes y 2 después del SMS ([horaDelSms]). Ver las constantes de arriba.
  */
 internal fun laNotificacionCaeEnLaHoraDelSms(horaDelSms: Long, momentoDeLaNotificacion: Long): Boolean {
     val diferencia = momentoDeLaNotificacion - horaDelSms

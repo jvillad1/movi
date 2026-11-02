@@ -113,6 +113,26 @@ class ExcelDeBancolombiaTest {
     }
 
     @Test
+    fun `una celda con un NaN no tumba nada - no se lee y sigue el camino de siempre`() {
+        val conNaN = XSSFWorkbook().use { wb ->
+            val hoja = wb.createSheet("Movimientos")
+            hoja.createRow(0).let { f -> listOf("Fecha", "Descripción", "Referencia", "Valor").forEachIndexed { c, t -> f.createCell(c).setCellValue(t) } }
+            hoja.createRow(1).let { f ->
+                f.createCell(0).setCellValue("28/10/2026"); f.createCell(1).setCellValue("COMPRA EN TIENDA"); f.createCell(3).setCellValue(Double.NaN)
+            }
+            ByteArrayOutputStream().also { wb.write(it) }.toByteArray()
+        }
+        assertNull(leerElExcelDeBancolombia(conNaN))
+    }
+
+    @Test
+    fun `los topes de POI contra un Excel bomba quedan puestos`() {
+        configurarLosTopesDePoi()
+        assertEquals(TOPE_DE_UNA_ENTRADA_DE_EXCEL, org.apache.poi.openxml4j.util.ZipSecureFile.getMaxEntrySize())
+        assertEquals(RAZON_MINIMA_DE_INFLADO_DE_EXCEL, org.apache.poi.openxml4j.util.ZipSecureFile.getMinInflateRatio())
+    }
+
+    @Test
     fun `al subirlo, el extracto sale de Bancolombia sin pasar por la IA`() = runBlocking {
         val leido = leerElExtracto("usuario", "Movimientos.xlsx", "application/octet-stream", excel())
         assertEquals("Bancolombia", leido.bankName)

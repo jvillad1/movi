@@ -29,6 +29,8 @@ data class GuiaDelExtracto(
     val pasos: List<String>,
     val pasosDeTarjeta: List<String>? = null,
     val formatos: String,
+    /** El banco también deja bajar Excel y Movi tiene un lector para él (ver [EL_LECTOR_DE_EXCEL_ESTA_ACTIVO]). */
+    val tambienExcel: Boolean = false,
     val limite: String? = null,
     val conRango: Boolean,
     /** Los pasos se comprobaron en el banco. Si no, la hoja lo dice ([NOTA_DE_LA_GUIA_SIN_VERIFICAR]). */
@@ -49,17 +51,18 @@ val GUIA_DE_BANCOLOMBIA: GuiaDelExtracto = GuiaDelExtracto(
         "Entra a la Sucursal Virtual Personas.",
         "En Inicio, toca la cuenta.",
         "Abre la pestaña «Movimientos» y toca «Descargar».",
-        "Elige el formato (PDF o Excel) y las fechas «Desde» y «Hasta».",
+        "Elige el formato PDF y las fechas «Desde» y «Hasta».",
         "Toca «Descargar» y sube el archivo a Movi.",
     ),
     pasosDeTarjeta = listOf(
         "Entra a la Sucursal Virtual Personas.",
         "Ve a «Tarjetas de crédito» y toca la tarjeta.",
         "Abre «Movimientos» y toca «Descargar».",
-        "Elige el formato (PDF o Excel) y las fechas «Desde» y «Hasta».",
+        "Elige el formato PDF y las fechas «Desde» y «Hasta».",
         "Toca «Descargar» y sube el archivo a Movi.",
     ),
-    formatos = "PDF o Excel",
+    formatos = "PDF",
+    tambienExcel = true,
     limite = "Deja bajar los movimientos de este mes y de los últimos 3 meses.",
     conRango = true,
     verificada = true,
@@ -112,10 +115,18 @@ fun rangoIdealDelExtracto(desde: LocalDate, hoy: LocalDate): String =
     if (desde >= hoy) "Rango ideal: hoy." else "Rango ideal: desde tu último corte, el ${diaLegible(desde)}, hasta hoy."
 
 /**
- * «Formato: PDF o Excel.» Sin prometer cómo lo lee: el PDF de Bancolombia se lee sin IA (medido con los
- * reales); el Excel, solo si trae los encabezados esperados (vuelta 107, sin un Excel real todavía).
+ * **¿El server lee el Excel de Bancolombia?** (`leerElExcelDeBancolombia`, vuelta 107). Si se apaga, la guía
+ * deja de ofrecerlo.
  */
-fun formatoDelExtracto(guia: GuiaDelExtracto): String = "Formato: ${guia.formatos}."
+const val EL_LECTOR_DE_EXCEL_ESTA_ACTIVO: Boolean = true
+
+/**
+ * «Formato: PDF (recomendado). También sirve el Excel.» El PDF va primero: es el que se probó con los papeles
+ * reales; el Excel, solo si el lector está activo (y aún sin un Excel real que lo confirme).
+ */
+fun formatoDelExtracto(guia: GuiaDelExtracto, lectorDeExcel: Boolean = EL_LECTOR_DE_EXCEL_ESTA_ACTIVO): String =
+    if (guia.tambienExcel && lectorDeExcel) "Formato: ${guia.formatos} (recomendado). También sirve el Excel."
+    else "Formato: ${guia.formatos}."
 
 /** El título de la hoja: «Cómo sacar tu extracto de Bancolombia». */
 fun tituloDeLaGuiaDelExtracto(guia: GuiaDelExtracto): String = "Cómo sacar tu extracto de ${guia.banco}"

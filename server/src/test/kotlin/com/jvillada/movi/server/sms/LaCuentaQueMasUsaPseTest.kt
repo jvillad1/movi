@@ -68,6 +68,9 @@ class LaCuentaQueMasUsaPseTest {
         assertNull(loQueMoviSabeDelPago(nuevo, cuentas, emptyList(), emptyList(), emptyList(), pagosPorPse = mapOf("b0031" to 1)).cuentaSugeridaId)
         assertNull(loQueMoviSabeDelPago(nuevo, cuentas, emptyList(), emptyList(), emptyList(), pagosPorPse = mapOf("b0031" to 2, "b8133" to 2)).cuentaSugeridaId)
         assertNull(loQueMoviSabeDelPago(nuevo, cuentas, emptyList(), emptyList(), emptyList()).cuentaSugeridaId)
+        // Sin mayoría clara (3 de 6 = 50 %, menos del 60 %): ninguna. Con 3 de 5 (60 %), sí.
+        assertNull(cuentaQueMasUsaPse(mapOf("b8133" to 3, "b0031" to 2, "nu" to 1), setOf("b0031", "b8133", "nu")))
+        assertEquals("b8133", cuentaQueMasUsaPse(mapOf("b8133" to 3, "b0031" to 2), setOf("b0031", "b8133", "nu")))
         // Una tarjeta no paga por PSE: aunque tenga más, no entra.
         assertNull(cuentaQueMasUsaPse(mapOf("tc" to 9), setOf("b0031", "b8133", "nu")))
     }

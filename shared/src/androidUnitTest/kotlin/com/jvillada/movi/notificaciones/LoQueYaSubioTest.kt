@@ -154,7 +154,7 @@ class LoQueYaSubioTest {
 
     // ── Vuelta 107 · dos compras iguales en Google Wallet ───────────────────
 
-    private val wallet = "com.google.android.apps.walletnfcrel"
+    private val wallet = PAQUETE_DE_GOOGLE_WALLET
     private val conWallet = AppsQueAvisan(listOf(bancolombia, wallet))
 
     /** Google Wallet avisa cada compra con la misma llave y el mismo texto; el `when` es el de cada compra. */
@@ -185,5 +185,22 @@ class LoQueYaSubioTest {
         assertTrue(procesarNotificaciones(listOf(deWallet(t0 + 6 * minuto, emitida = 0L)), conWallet, primera.memoria).subidas.isEmpty())
         // Una memoria de antes de esta vuelta (sin `emitida`) tampoco sabe: la ventana manda.
         assertTrue(!esOtroAviso(0L, t0) && esOtroAviso(t0, t0 + minuto) && !esOtroAviso(t0, t0 + 30_000L))
+    }
+
+    @Test
+    fun `una app de banco que rearma su notificacion con un when nuevo sigue siendo un aviso`() {
+        val primera = procesarNotificaciones(listOf(entrante(cuando = t0).copy(emitida = t0)), apps, MemoriaDeLoSubido())
+        assertEquals(1, primera.subidas.size)
+        // Repuesta 4 min después, rearmada: otra hora de publicación y otro `when`. No es Google Wallet.
+        val repuesta = entrante(cuando = t0 + 4 * minuto).copy(emitida = t0 + 4 * minuto)
+        assertTrue(procesarNotificaciones(listOf(repuesta), apps, primera.memoria).subidas.isEmpty())
+    }
+
+    @Test
+    fun `un when de Wallet posterior a su publicacion no cuenta`() {
+        val primera = procesarNotificaciones(listOf(deWallet(t0, emitida = t0)), conWallet, MemoriaDeLoSubido())
+        // El `when` dice 6 min más tarde que la publicación: no es la hora del cobro, y sigue la ventana.
+        val rara = deWallet(t0 + 3 * minuto, emitida = t0 + 9 * minuto)
+        assertTrue(procesarNotificaciones(listOf(rara), conWallet, primera.memoria).subidas.isEmpty())
     }
 }

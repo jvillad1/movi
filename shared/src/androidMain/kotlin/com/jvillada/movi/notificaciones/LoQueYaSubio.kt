@@ -106,6 +106,19 @@ fun anotarSiEsNueva(
 internal fun esOtroAviso(emitidaAntes: Long, emitidaAhora: Long): Boolean =
     emitidaAntes > 0L && emitidaAhora > 0L && abs(emitidaAhora - emitidaAntes) >= OTRO_AVISO_SI_EL_WHEN_DIFIERE_MS
 
+/** El paquete de Google Wallet: el único en que el `when` distingue un cobro nuevo (ver [emitidaQueCuenta]). */
+internal const val PAQUETE_DE_GOOGLE_WALLET = "com.google.android.apps.walletnfcrel"
+
+/**
+ * Revisión de la vuelta 107 · **el `when` que cuenta para [esOtroAviso]**, o `0` (= «no se sabe»). Solo el de
+ * Google Wallet, que avisa cada compra con la misma llave y el mismo texto: una app de banco que rearma su
+ * notificación al reponerla le pone un `when` nuevo, y con esta regla para todos se subiría dos veces. Y solo
+ * si es anterior o igual a la publicación ([NotificacionEntrante.cuando], el `postTime`): un `when` del futuro
+ * no es la hora del cobro.
+ */
+internal fun emitidaQueCuenta(n: NotificacionEntrante): Long =
+    n.emitida.takeIf { n.paquete == PAQUETE_DE_GOOGLE_WALLET && it in 1L..n.cuando } ?: 0L
+
 /**
  * Una notificación que hay que subir: lo que el `SmsSyncWorker` recibe. [paquete] es para el rótulo
  * («Notificación · Bancolombia»), que el servicio resuelve con el `PackageManager`. [silenciosa]: sale
@@ -156,7 +169,7 @@ fun procesarNotificaciones(
         val decision = decidirNotificacion(n, config)
         if (decision !is DecisionDeNotificacion.Subir) return@forEach
         val huella = huellaDeLaNotificacion(n.paquete, n.titulo, n.texto, n.cuando)
-        val vista = VistaPorLlave(n.llave, contenidoDeLaNotificacion(n.paquete, n.titulo, n.texto), n.cuando, n.emitida)
+        val vista = VistaPorLlave(n.llave, contenidoDeLaNotificacion(n.paquete, n.titulo, n.texto), n.cuando, emitidaQueCuenta(n))
         actual = anotarSiEsNueva(actual, huella, vista) ?: return@forEach
         subidas += SubidaDeNotificacion(idDeNotificacion(huella), n.paquete, decision.texto, n.cuando, silenciosa = barridoHecho != null)
     }
