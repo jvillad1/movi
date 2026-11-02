@@ -89,6 +89,8 @@ import kotlinx.coroutines.launch
 import com.jvillada.movi.observabilidad.HojaDeUso
 import com.jvillada.movi.observabilidad.LocalHojaDeUso
 import com.jvillada.movi.observabilidad.ObservarLaHoja
+import com.jvillada.movi.ui.HojaAbierta
+import com.jvillada.movi.ui.LocalPilaDeHojas
 
 /** El ancho máximo de una hoja centrada (mediano y expandido). */
 val ANCHO_DE_HOJA: Dp = 560.dp
@@ -346,6 +348,27 @@ const val FRACCION_PARA_CERRAR_ARRASTRANDO = 1f / 3f
 /** Soltarla bajando más rápido que esto la cierra aunque no haya llegado al umbral. */
 private val VELOCIDAD_PARA_CERRAR_ARRASTRANDO = 1_200.dp
 
+/**
+ * **El atrás del sistema cierra la hoja igual que su X** (vuelta 101): sale animada, anota `ATRAS` en
+ * el uso y respeta `dismissEnabled` (bloqueada, el atrás no hace nada y no se lleva la pantalla de
+ * abajo). Se anota en la [PilaDeHojas] como **de reserva**: solo atiende el atrás si nadie anotó la hoja
+ * con `AtrasCierraEstaHoja`, así las que tienen su atrás propio («¿Descartar?», volver de un sub-editor)
+ * siguen igual. Antes, en una hoja sin anotar, el atrás sacaba la pantalla de abajo (o salía de la app).
+ */
+@Composable
+private fun ElAtrasLaCierraComoLaX(estado: EstadoDeLaHoja) {
+    val pila = LocalPilaDeHojas.current
+    DisposableEffect(pila, estado) {
+        var esta: HojaAbierta? = null
+        val hoja = HojaAbierta(deReserva = true) {
+            if (estado.dismissEnabled) estado.cerrar("ATRAS") else esta?.let(pila::registrar)
+        }
+        esta = hoja
+        pila.registrar(hoja)
+        onDispose { pila.soltar(hoja) }
+    }
+}
+
 @Composable
 private fun rememberEstadoDeLaHoja(onDismiss: () -> Unit, dismissEnabled: Boolean, hojaDeUso: HojaDeUso? = null): EstadoDeLaHoja {
     val reducido = LocalMovimientoReducido.current
@@ -456,6 +479,7 @@ private fun HojaDesdeAbajo(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val estado = rememberEstadoDeLaHoja(onDismiss, dismissEnabled, hojaDeUso)
+    ElAtrasLaCierraComoLaX(estado)
     // Escape, como en la centrada (vuelta de diseño 17): sin [onEscape] propio es el toque afuera.
     // Hasta acá la hoja desde abajo no lo atendía, y en la web angosta solo la X la cerraba.
     val escapeActual by rememberUpdatedState(
@@ -692,6 +716,7 @@ private fun HojaCentrada(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val hoja = rememberEstadoDeLaHoja(onDismiss, dismissEnabled, hojaDeUso)
+    ElAtrasLaCierraComoLaX(hoja)
     // Sin [onEscape] propio, Escape es el toque afuera: sale animada (y respeta `dismissEnabled`).
     val alEscape: () -> Unit = onEscape?.let { propio -> { hojaDeUso?.seCierra("ESCAPE"); propio() } } ?: { hoja.cerrar("ESCAPE") }
     val foco = remember { FocusRequester() }

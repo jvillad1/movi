@@ -68,7 +68,8 @@ import com.jvillada.movi.ui.LocalPilaDeHojas
 import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.ui.AtrasCierraEstaHoja
 import com.jvillada.movi.ui.PilaDeHojas
-import com.jvillada.movi.ui.atras
+import com.jvillada.movi.ui.flechaDeVolver
+import com.jvillada.movi.ui.volver
 import com.jvillada.movi.ui.hayAdondeVolver
 import com.jvillada.movi.ui.NavStack
 import com.jvillada.movi.ui.Screen
@@ -258,7 +259,7 @@ fun App() {
                 // se anota sola con `AtrasCierraEstaHoja`. Antes esta lista conocía DOS hojas
                 // (las que viven en este archivo) y las cuatro de Perfil no existían para el
                 // «atrás»: apretarlo sacaba el tope de la pila y se perdía lo tipeado.
-                atras(pilaDeHojas, backStack)
+                volver(pilaDeHojas, backStack)
             }
             // F22: «volver» real para las flechas ‹ de cada pantalla. Si hay
             // historial, saca el tope de la pila (vuelve a donde de verdad
@@ -270,15 +271,10 @@ fun App() {
             // "nuevo" (aunque haga lo mismo) invalida TODO el subárbol que lo consume, no
             // solo lo que de verdad cambió. `backStack` es estable (viene de un `remember`
             // de arriba), así que la lambda puede vivir una sola vez por toda la composición.
-            val goBackTo: (Screen) -> Unit = remember {
-                { fallback ->
-                    when (val result = NavStack.back(backStack, fallback)) {
-                        NavStack.BackResult.Pop -> backStack.removeLast()
-                        is NavStack.BackResult.Fallback ->
-                            if (backStack.last() != result.screen) backStack[backStack.lastIndex] = result.screen
-                    }
-                }
-            }
+            // Vuelta 101: la flecha y el atrás del sistema son la MISMA función, [volver]. Antes la
+            // flecha hacía `backStack.removeLast()` (que en Android 14 o anterior no existe y tumbaba
+            // la app); ver [volver].
+            val goBackTo: (Screen) -> Unit = remember { flechaDeVolver(pilaDeHojas, backStack) }
 
             // Ola 1 · Movi avisa: tocar un aviso del teléfono abre su pantalla («Por revisar» o
             // Plan). La `MainActivity` lo deja en [DestinoDesdeAfuera] y acá se cumple **solo con
