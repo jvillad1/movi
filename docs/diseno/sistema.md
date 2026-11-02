@@ -577,6 +577,7 @@ CampoDeBusqueda(busqueda, { busqueda = it }, guia = "Buscar o crear categoría",
 | `LasCifrasDelSistemaSeOcultanTest` (Robolectric) | con «Ocultar los saldos», ni un «$» seguido de un dígito en el flujo libre de Plan, Presupuestos, la hoja de anular, los candidatos a pago de tarjeta y, en Hoy, «Tu patrimonio», «Para revisar» (con la evidencia abierta) y «Tu día más justo» |
 | `LoQueNoEsDelSistemaSoloBajaTest` (`core/src/jvmTest/.../quality/`, vuelta de diseño 18) | en `ui/` fuera de `ds/`, seis cosas que solo pueden bajar de su línea base (`lineas-base.txt`): `Button(`/`OutlinedButton(`/`TextButton(` de Material, `Color.White`/`Color.Black` (salvo el velo de `MarcoDeHoja`), `Hairline(`, `MinCard(`, un `Text(` cuyo primer argumento es `formatCOP(`/`formatMoney(` (aproximación por regex) y `fontWeight =` (§24). **Desde la vuelta 21 las cinco primeras se exigen en 0**, aunque alguien suba su línea base (§27) |
 | `ElAmarilloEsDeLaAccionTest` (`core/src/jvmTest/.../quality/`, vuelta 42) | ninguna píldora amarilla (`TonoDePildora.Marca` no existe), ninguna persona en `TonoDeIcono.Marca`, `IconoEnCirculo` y `AvatarDePersona` neutros por defecto, `TonoDeIcono.Marca` fuera de `ds/` solo en las dos propuestas de la maqueta (la tarjeta de avisos de Actividad y «Movi propone hoy»), y las filas que llevan a otra pantalla son `FilaDeNavegacion` |
+| `LosToquesDelSistemaSeRegistranTest` (`core/src/jvmTest/.../quality/`, vuelta 104) | en cero: los tres gestos de `AlPresionar.kt` piden un `ToqueDeUso` sin valor por defecto y llaman a `Uso.toque`; todo uso de ellos en `ds/`, la barra, el rail y el «+» dice `toque =`; todo `BasicTextField` de `ds/` va con `observarLaEscritura`; un componente público de `ds/` con un `on…` pasa por el registro; ningún `pointerInput`/`detectTapGestures`/`combinedClickable` a mano en `ds/` |
 | `UnaSolaCifraHeroePorPantallaTest` (Robolectric) | a lo sumo una `Cifra` `Heroe` en Hoy, Plan (Pagos y Presupuestos), Patrimonio, Créditos, Movimientos y Espacios; exactamente una donde la pantalla tiene su protagonista (Hoy, Patrimonio, Créditos) |
 
 ## 9. Migrar una pantalla
@@ -5154,6 +5155,34 @@ extracto en PDF, `ui/papeles/HojaLeyendoElPapel.kt` → `PedirLaClave`), **no se
 
 **Pruebas**: `CompartirConMoviTest` (`:shared` androidUnitTest) y `PdfConClaveTest` (`:server`).
 
+## Vuelta 104 · Todo componente tocable de `ds/` se registra solo
+
+**Regla:** un componente tocable nuevo de `ds/` toca **solo** a través de `alPresionar`, `alAlternar` o
+`toqueSinRipple` (`ds/AlPresionar.kt`), y los tres piden un `ToqueDeUso` **obligatorio**: qué componente es
+(`"boton"`, `"fila"`, `"pildora-de-filtro"`), el `Modifier` que recibió (de ahí sale el `testTag` de quien lo
+monta), su rótulo y si muestra contenido del usuario. El gesto lo anota en `Uso.toque` antes del `onClick`
+—`toque:<id>`, ACCION, con la ruta y los datos— y la pantalla no hace nada. Sin `ToqueDeUso` no compila, y
+`LosToquesDelSistemaSeRegistranTest` está en cero (un gesto sin `toque =`, un `BasicTextField` sin
+`observarLaEscritura`, un componente con `on…` que no pasa por el registro).
+
+- **El id** (`observabilidad/Toques.kt`): un id fijo armado con constantes (`pestana:plan`, `atras`,
+  `propuesta:pago`), si no el `testTag` de quien lo monta si es un tag del código, si no el **rótulo** si es
+  un literal de la app pasado como rótulo de un componente **tocable** (la tarea `generarRotulosDeUso` los junta
+  de las fuentes de `:shared`, sin los comentarios, ni guías ni ejemplos; nunca uno con cifras, «$», «@» o un
+  nombre propio en medio), si no el tipo de componente. Un tag armado con `$` («categoria:fila:$nombre») deja
+  solo la parte del código: lo del usuario nunca llega al id.
+- **Contenido dinámico** —una fila de un movimiento, una tarjeta de cuenta, una categoría—: el componente se
+  marca `dinamico` (`Fila(entidadDeUso = evento.id)`, `TarjetaDeCuenta` siempre) o queda dentro de
+  `LocalEntidadDeUso` (una tarjeta de aviso de Por revisar): el nombre es el tipo más el tag, y el id de la
+  entidad va a los datos (`movimiento_id`, `cuenta_id`, `aviso_id`). **Nunca el texto.**
+- **Una tarjeta de propuesta** anota cuál de sus acciones (`boton=PRINCIPAL|SECUNDARIA|TERCERA`) y, con
+  `tipoDeUso`, el tipo; **un interruptor o una casilla**, su estado nuevo (`encendido=SI|NO`).
+- **Un campo** anota «empezó a escribir» y «terminó» con su id (tag o rótulo), nunca lo escrito; **una hoja**
+  (`MarcoDeHoja`) anota que se abrió —con el título de su `EncabezadoDeHoja` si es un rótulo— y cómo se cerró
+  (X, velo, arrastre, Escape, atrás o desde adentro); la **flecha ←** del `Encabezado` es `toque:atras` con
+  `como=FLECHA`, y el atrás del sistema, `como=SISTEMA`. El scroll no se mide.
+- Fuera de `ds/`, quien use los tres gestos (la barra, el rail, el avatar del Inicio) también dice qué es.
+
 ## Vuelta 100 · Pantallas de administración con pestañas, y el uso desde los componentes
 
 «Fallos y uso» (`ui/admin/FallosYUsoScreen.kt`, solo admin) es la primera pantalla de **herramienta interna**.
@@ -5168,9 +5197,9 @@ Reglas del patrón, para la próxima:
 - Un recorrido se navega **dentro de la pestaña** (personas → sesiones → línea de tiempo) con la `accion` de
   la `Seccion` para volver un nivel; los filtros son `PildoraDeFiltro` en fila y el buscador `CampoDeBusqueda`.
 
-**El uso**: `Uso.evento` (`observabilidad/Uso.kt`) es el único punto de entrada. Un componente de `ds/` que
-quiera anotar sus toques lo llama con `EventoDeUso.TOQUE` y claves de `ClaveDeUso` (la acción, el componente);
-**nunca** con el texto que muestra si ese texto puede ser del usuario (un monto, un nombre, un comercio).
+**El uso**: `Uso` (`observabilidad/Uso.kt`) es el único punto de entrada. Desde la vuelta 104 los toques de
+`ds/` se anotan solos (ver arriba): ningún componente llama `EventoDeUso.TOQUE` a mano, y **nunca** con el
+texto que muestra si ese texto puede ser del usuario (un monto, un nombre, un comercio).
 
 ## Vuelta 98 · «Editar»: el mismo formulario de crear, lleno
 

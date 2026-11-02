@@ -109,16 +109,11 @@ actual fun createRepository(): WalletRepository {
     // comparten el candado y no empujan la misma fila a la vez.
     // Vuelta 78: lo que sube cambia lo que el server contesta: lo leído hace menos de 30 s ya no es fresco.
     val sincronizador = SyncEngine(db, remote, userId, alSubirAlgo = {
-        // Vuelta 100: en la línea de tiempo del uso, cuándo el teléfono subió lo que tenía guardado.
-        com.jvillada.movi.observabilidad.Uso.evento(
-            com.jvillada.movi.shared.model.EventoDeUso.SINCRONIZACION,
-            mapOf(com.jvillada.movi.shared.model.ClaveDeUso.RESULTADO to "OK"),
-        )
         olvidarLoFresco()
         // Vuelta 82: lo que el héroe del Inicio adelantaba puede haber subido: que vuelva a mirar ya.
         com.jvillada.movi.ui.dashboard.MovimientosDelDueno.despertar()
-    }).also { it.start() }
-    return LocalRepository(db, remote, userId, sincronizador = sincronizador)
+    }, alTerminarLaVuelta = { subidos, codigo -> com.jvillada.movi.observabilidad.anotarLaSincronizacion(subidos, codigo) }).also { it.start() }
+    return LocalRepository(db, remote, userId, sincronizador = sincronizador, alBajar = { cuantos -> com.jvillada.movi.observabilidad.anotarLoQueBajo(cuantos) })
 }
 
 // No-op: no hay overlay HTML que recuperar acá. Compose navega solo al ver

@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.components.ds
 
+import com.jvillada.movi.observabilidad.ToqueDeUso
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
@@ -56,7 +57,7 @@ fun Casilla(
         modifier
             .size(Medida.objetivoTactil)
             .anilloDeFoco(RoundedCornerShape(Radio.s), alrededorDe = Icono.l)
-            .alAlternar(valor = marcada, onCambiar = onCambiar, habilitado = habilitada, rol = Role.Checkbox)
+            .alAlternar(valor = marcada, onCambiar = onCambiar, toque = ToqueDeUso("casilla", modificador = modifier), habilitado = habilitada, rol = Role.Checkbox)
     } else {
         modifier
     }

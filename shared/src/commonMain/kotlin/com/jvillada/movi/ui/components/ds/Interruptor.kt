@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.components.ds
 
+import com.jvillada.movi.observabilidad.ToqueDeUso
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
@@ -96,7 +97,7 @@ fun Interruptor(
         modifier = modifier
             // El anillo va alrededor del riel (52 × 32), no de la caja del toque (52 × 48).
             .anilloDeFoco(forma, alrededorDeLaCaja = DpSize(Medida.anchoDelInterruptor, Medida.altoDelInterruptor))
-            .alAlternar(valor = encendido, onCambiar = onCambio, habilitado = habilitado, rol = Role.Switch, forma = forma)
+            .alAlternar(valor = encendido, onCambiar = onCambio, toque = ToqueDeUso("interruptor", modificador = modifier, rotulo = descripcion), habilitado = habilitado, rol = Role.Switch, forma = forma)
             .semantics {
                 interruptorEncendido = encendido
                 descripcion?.let { contentDescription = it }

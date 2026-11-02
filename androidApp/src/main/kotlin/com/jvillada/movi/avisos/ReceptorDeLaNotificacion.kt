@@ -73,7 +73,10 @@ class ReceptorDeLaNotificacion : BroadcastReceiver() {
  */
 class ConfirmarDesdeLaNotificacionWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
 
-    override suspend fun doWork(): Result {
+    // Vuelta 104: cada corrida, en el uso (nombre, resultado y duración; ver `workers/CorridaDelWorker.kt`).
+    override suspend fun doWork(): Result = com.jvillada.movi.workers.medirLaCorrida("ConfirmarDesdeLaNotificacionWorker") { trabajar() }
+
+    private suspend fun trabajar(): Result {
         val contexto = applicationContext
         val avisoId = inputData.getString(ReceptorDeLaNotificacion.EXTRA_AVISO) ?: return Result.failure()
         val mostro = LoQueSeMostro(
@@ -100,6 +103,23 @@ class ConfirmarDesdeLaNotificacionWorker(context: Context, params: WorkerParamet
                 Log.w(TAG, "no se pudo confirmar el aviso desde la notificación: ${resultado.porQue}")
                 Avisador.EstadoDeLaConfirmacion.NO_SE_PUDO
             }
+        }
+        // Vuelta 104: «Confirmar» desde la notificación, con lo que pasó y el id del aviso (nunca el monto).
+        runCatching {
+            com.jvillada.movi.observabilidad.Uso.eventoDeFondo(
+                com.jvillada.movi.shared.model.EventoDeUso.CONFIRMADO_DESDE_LA_NOTIFICACION,
+                buildMap {
+                    put(
+                        com.jvillada.movi.shared.model.ClaveDeUso.RESULTADO,
+                        when (resultado) {
+                            ResultadoDeConfirmar.Anotado -> "CONFIRMADO"
+                            ResultadoDeConfirmar.YaEstabaAnotado -> "YA_ANOTADO"
+                            is ResultadoDeConfirmar.NoSePudo -> "ERROR"
+                        },
+                    )
+                    putAll(com.jvillada.movi.observabilidad.datosDeLaEntidad(avisoId))
+                },
+            )
         }
         Avisador.mostrarConfirmacion(contexto, avisoId, estado)
         return Result.success()

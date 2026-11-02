@@ -100,7 +100,24 @@ fun Route.debitosAutomaticosRoutes() {
      */
     get("/api/debitos-automaticos") {
         val conEsperados = call.request.queryParameters["conEsperados"] == "1"
-        call.respond(debitosPorConfirmar(call.userId(), AppClock.today(), System.currentTimeMillis(), conEsperados))
+        val uid = call.userId()
+        val ahora = System.currentTimeMillis()
+        val debitos = debitosPorConfirmar(uid, AppClock.today(), ahora, conEsperados)
+        // Vuelta 104: en el recorrido del dueño, cada débito que Movi propuso (una vez por regla y período).
+        debitos.forEach { d ->
+            com.jvillada.movi.server.observabilidad.Observabilidad.registrarSistema(
+                uid,
+                com.jvillada.movi.server.observabilidad.Observabilidad.idEstable("debito", "${d.ruleId}:${d.periodo}"),
+                com.jvillada.movi.shared.model.EventoDeUso.DEBITO_PROPUESTO,
+                buildMap {
+                    if (com.jvillada.movi.shared.model.ClaveDeUso.PERIODO.admite(d.periodo)) put(com.jvillada.movi.shared.model.ClaveDeUso.PERIODO, d.periodo)
+                    if (com.jvillada.movi.shared.model.ClaveDeUso.CUENTA_ID.admite(d.cuentaId)) put(com.jvillada.movi.shared.model.ClaveDeUso.CUENTA_ID, d.cuentaId)
+                    put(com.jvillada.movi.shared.model.ClaveDeUso.CLASE, "DEBITO")
+                },
+                ahora,
+            )
+        }
+        call.respond(debitos)
     }
 
     /**

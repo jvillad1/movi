@@ -40,7 +40,10 @@ const val CLAVE_SILENCIOSA = "silenciosa"
  */
 class SmsSyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
 
-    override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
+    // Vuelta 104: cada corrida, en el uso (nombre, resultado y duración; ver `workers/CorridaDelWorker.kt`).
+    override suspend fun doWork(): Result = com.jvillada.movi.workers.medirLaCorrida("SmsSyncWorker") { trabajar() }
+
+    private suspend fun trabajar(): Result = withContext(Dispatchers.IO) {
         val id = inputData.getString("id") ?: return@withContext Result.failure()
         val sender = inputData.getString("sender").orEmpty()
         val body = inputData.getString("body").orEmpty()
@@ -93,12 +96,9 @@ class SmsSyncWorker(context: Context, params: WorkerParameters) : CoroutineWorke
                 // Vuelta 78: entró un aviso por fuera de la app (mismo proceso que la pantalla): lo
                 // leído hace menos de 30 s ya no es fresco, y el Inicio vuelve a preguntar.
                 com.jvillada.movi.data.olvidarLoFresco()
-                // Vuelta 100: en la línea de tiempo del uso, que el teléfono capturó un aviso (solo el
-                // origen, nunca el texto). Sube ya: el proceso puede morir apenas esto termina.
-                com.jvillada.movi.observabilidad.Uso.evento(
-                    com.jvillada.movi.shared.model.EventoDeUso.AVISO_CAPTURADO,
-                    mapOf(com.jvillada.movi.shared.model.ClaveDeUso.ORIGEN to if (deNotificacion) "NOTIFICACION" else "SMS"),
-                )
+                // Vuelta 104: que llegó un aviso (con su origen y si quedó pendiente o apartado) lo anota
+                // solo el server, que es quien lo decide: acá no se anota otra vez. Sube lo pendiente ya
+                // (la corrida del Worker): el proceso puede morir apenas esto termina.
                 runCatching { com.jvillada.movi.observabilidad.Uso.enviar() }
                 Result.success()
             }

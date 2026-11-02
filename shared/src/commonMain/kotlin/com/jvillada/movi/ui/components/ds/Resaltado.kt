@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.components.ds
 
+import com.jvillada.movi.observabilidad.ToqueDeUso
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Modifier
@@ -34,13 +35,19 @@ val RADIO_DEL_RESALTADO: Dp = Radio.m
  * Row(Modifier.fillMaxWidth().renglonTocable(onClickLabel = "Plegar el día", onClick = ::plegar)) { … }
  * ```
  */
-fun Modifier.renglonTocable(onClickLabel: String? = null, onClick: () -> Unit): Modifier =
+fun Modifier.renglonTocable(
+    onClickLabel: String? = null,
+    /** Vuelta 104: qué se anota al tocarlo; por defecto, `toque:<el tag de quien lo monta o su rótulo>`. */
+    toque: ToqueDeUso? = null,
+    onClick: () -> Unit,
+): Modifier =
     this
         .salirHaciaLosLados(SALIDA_DEL_RESALTADO)
         .anilloDeFoco(RoundedCornerShape(RADIO_DEL_RESALTADO))
         // Vuelta 79: sin ripple; el resaltado es el velo, con su radio, y se hunde apenas.
         .alPresionar(
             onClick = onClick,
+            toque = toque ?: ToqueDeUso("renglon", modificador = this, rotulo = onClickLabel),
             onClickLabel = onClickLabel,
             escala = Movimiento.ESCALA_DE_LA_FILA_AL_PRESIONAR,
             velo = true,

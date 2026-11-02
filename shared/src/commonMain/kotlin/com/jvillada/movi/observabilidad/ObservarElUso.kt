@@ -20,7 +20,7 @@ private const val CADA_CUANTO_SUBE_MS = 60_000L
  * **La navegación central del uso** (vuelta 100): una sola llamada en `App.kt`, no una por pantalla.
  *
  * - Cada vez que cambia la pantalla de arriba, pone la pila como ruta y anota [EventoDeUso.PANTALLA].
- * - Abrir «Agregar» (la hoja encima, que no entra a la pila) es el toque de la acción principal.
+ * - Abrir «Agregar» lo anotan el toque que la abrió y la hoja (vuelta 104), no este efecto.
  * - `ON_START`/`ON_STOP` de la app abren o siguen la sesión y anotan el segundo plano ([Uso]).
  * - Sube lo pendiente cada minuto y al irse a segundo plano.
  */
@@ -34,9 +34,9 @@ fun ObservarElUso(pila: List<Screen>, agregarAbierto: Boolean) {
         val pantalla = arriba ?: return@LaunchedEffect
         Uso.evento(EventoDeUso.PANTALLA, mapOf(ClaveDeUso.PANTALLA to tramoDeRuta(pantalla).substringBefore('(')))
     }
-    LaunchedEffect(agregarAbierto) {
-        if (agregarAbierto) Uso.evento(EventoDeUso.TOQUE, mapOf(ClaveDeUso.ACCION to "AGREGAR"))
-    }
+    // Vuelta 104: abrir «Agregar» ya no se anota acá: el toque lo anota el componente que se tocó (el «+»,
+    // `toque:agregar`; una acción de Inicio, `toque:gasto`) y la hoja, `HOJA_ABIERTA`. [agregarAbierto]
+    // queda en la firma para no tocar `App.kt`.
     val alcance = rememberCoroutineScope()
     val ciclo = LocalLifecycleOwner.current
     DisposableEffect(ciclo) {

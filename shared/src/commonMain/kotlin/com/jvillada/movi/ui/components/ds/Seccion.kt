@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.components.ds
 
+import com.jvillada.movi.observabilidad.ToqueDeUso
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -91,7 +92,7 @@ fun Seccion(
                 modifier = if (onAccion != null) {
                     Modifier
                         .anilloDeFoco(RoundedCornerShape(Radio.s))
-                        .alPresionar(onClick = onAccion, rol = Role.Button)
+                        .alPresionar(onClick = onAccion, toque = ToqueDeUso("seccion", modificador = modifier, rotulo = accion), rol = Role.Button)
                 } else {
                     Modifier
                 },

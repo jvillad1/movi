@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.components
 
+import com.jvillada.movi.observabilidad.ToqueDeUso
+import com.jvillada.movi.observabilidad.Uso
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -72,26 +74,34 @@ fun BotonDeAgregarConAtajos(
     // Vuelta 79: sin ripple. El botón entero se hunde al presionar (ver `alPresionar`).
     val toque = remember { MutableInteractionSource() }
     val gestos = Modifier
-        .let { if (conAtajos) it.abreConClicDerecho { abierto = true } else it }
+        .let { if (conAtajos) it.abreConClicDerecho { Uso.toque(TOQUE_DE_LOS_ATAJOS); abierto = true } else it }
         .combinedClickable(
             interactionSource = toque,
             indication = null,
             onClickLabel = "Agregar",
             onLongClickLabel = if (conAtajos) ROTULO_ATAJOS_DE_AGREGAR else null,
-            onLongClick = if (conAtajos) ({ abierto = true }) else null,
-            onClick = alTocar,
+            onLongClick = if (conAtajos) ({ Uso.toque(TOQUE_DE_LOS_ATAJOS); abierto = true }) else null,
+            // Vuelta 104: el «+» se anota como `toque:agregar` (el mismo id que la pestaña ADD).
+            onClick = { Uso.toque(TOQUE_DE_AGREGAR); alTocar() },
         )
     Box {
         if (conFlecha && conAtajos) {
             Row(modifier = Modifier.hundimientoAlPresionar(toque).then(modifier), verticalAlignment = Alignment.CenterVertically) {
                 Box(modifier = Modifier.weight(1f).then(gestos), contentAlignment = Alignment.CenterStart) { contenido() }
-                FlechaDeAtajos(onClick = { abierto = true })
+                FlechaDeAtajos(onClick = { Uso.toque(TOQUE_DE_LOS_ATAJOS); abierto = true })
             }
         } else {
             Box(modifier = Modifier.hundimientoAlPresionar(toque).then(modifier).then(gestos), contentAlignment = Alignment.Center) { contenido() }
         }
         if (alElegirAtajo != null) {
-            MenuDeAtajosDeAgregar(abierto = abierto, alCerrar = { abierto = false }, alElegir = alElegirAtajo)
+            MenuDeAtajosDeAgregar(
+                abierto = abierto,
+                alCerrar = { abierto = false },
+                alElegir = { atajo ->
+                    Uso.toque(ToqueDeUso("atajo", idFijo = "atajo:${atajo.name.lowercase().replace('_', '-')}"))
+                    alElegirAtajo(atajo)
+                },
+            )
         }
     }
 }
@@ -158,6 +168,9 @@ private fun FlechaDeAtajos(onClick: () -> Unit) {
  * que el `combinedClickable` que va después en la cadena, y se consume: así el clic derecho no cuenta
  * además como un toque que abre «Agregar». Con el dedo no pasa nada (no hay botón secundario).
  */
+/** Vuelta 104: abrir el menú de atajos del «+» (mantenerlo presionado, el clic derecho o la flecha). */
+private val TOQUE_DE_LOS_ATAJOS = ToqueDeUso("agregar", idFijo = "agregar:atajos")
+
 private fun Modifier.abreConClicDerecho(abrir: () -> Unit): Modifier = pointerInput(Unit) {
     awaitPointerEventScope {
         while (true) {

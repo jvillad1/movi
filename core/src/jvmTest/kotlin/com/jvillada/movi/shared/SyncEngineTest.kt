@@ -795,4 +795,23 @@ class SyncEngineTest {
         engine.subirLoPendiente()
         assertTrue(avisos == 1, "sin nada pendiente, no vuelve a avisar ($avisos)")
     }
+
+    /**
+     * Vuelta 104: al final de una vuelta que hizo algo, cuántas filas subió (para el uso: `SINCRONIZACION`
+     * con `subidos`); una vuelta sin nada pendiente no dice nada.
+     */
+    @Test
+    fun subirLoPendiente_cuenta_lo_que_subio() = runBlocking {
+        val db = createDatabase("sync-test.db")
+        val local = LocalRepository(db = db, remote = FailingCreateAccountRepository(), userId = { testUserId })
+        local.createAccount(Account("acc-cuenta", "Efectivo", AccountType.CASH, 10_000L))
+        val vueltas = mutableListOf<Pair<Int, Int?>>()
+        val engine = SyncEngine(
+            db = db, remote = OrderSensitiveRemote(), userId = { testUserId },
+            alTerminarLaVuelta = { subidos, codigo -> vueltas += subidos to codigo },
+        )
+        engine.subirLoPendiente()
+        engine.subirLoPendiente()
+        assertTrue(vueltas.size == 1 && vueltas.single().first >= 1 && vueltas.single().second == null, "una vuelta con lo que subió: $vueltas")
+    }
 }

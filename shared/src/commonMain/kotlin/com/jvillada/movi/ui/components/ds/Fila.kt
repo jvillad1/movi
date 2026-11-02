@@ -1,5 +1,8 @@
 package com.jvillada.movi.ui.components.ds
 
+import com.jvillada.movi.observabilidad.LocalEntidadDeUso
+import com.jvillada.movi.observabilidad.ToqueDeUso
+import com.jvillada.movi.observabilidad.datosDeLaEntidad
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -182,6 +185,12 @@ fun Fila(
      */
     iconoDelSubtitulo: ImageVector? = null,
     descripcionDelIconoDelSubtitulo: String? = null,
+    /**
+     * Vuelta 104 · el id de Movi de lo que muestra la fila (un movimiento `ev_…`, una cuenta `acc_…`, un
+     * aviso `sms_…`). Con él la fila es de **contenido dinámico**: el toque se anota como `toque:fila`
+     * (más el tag de quien la monta) con el id en los datos, y nunca con su título.
+     */
+    entidadDeUso: String? = null,
 ) {
     Row(
         modifier = modifier
@@ -196,6 +205,13 @@ fun Fila(
                         // menos movimiento) a lo ancho de la fila, que la superficie recorta.
                         .alPresionar(
                             onClick = onClick,
+                            toque = ToqueDeUso(
+                                "fila",
+                                modificador = modifier,
+                                rotulo = titulo,
+                                dinamico = entidadDeUso != null || LocalEntidadDeUso.current != null,
+                                datos = datosDeLaEntidad(entidadDeUso),
+                            ),
                             onClickLabel = onClickLabel,
                             escala = Movimiento.ESCALA_DE_LA_FILA_AL_PRESIONAR,
                             velo = true,

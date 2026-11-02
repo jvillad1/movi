@@ -86,6 +86,9 @@ import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.theme.Radio
 import kotlinx.coroutines.launch
+import com.jvillada.movi.observabilidad.HojaDeUso
+import com.jvillada.movi.observabilidad.LocalHojaDeUso
+import com.jvillada.movi.observabilidad.ObservarLaHoja
 
 /** El ancho máximo de una hoja centrada (mediano y expandido). */
 val ANCHO_DE_HOJA: Dp = 560.dp
@@ -184,15 +187,22 @@ fun MarcoDeHoja(
 ) {
     val anfitrion = LocalAnfitrionDeHojas.current
     val compacta = LocalWindowWidthClass.current == WindowWidthClass.Compact
+    // Vuelta 104: que se abrió y cómo se cerró (X, velo, arrastre, Escape, atrás o desde adentro), con
+    // el id del título de la hoja (`EncabezadoDeHoja` lo pone). Ver `observabilidad/HojaDeUso.kt`.
+    val hojaDeUso = ObservarLaHoja()
+    val contenido: @Composable ColumnScope.() -> Unit = {
+        val columna = this
+        CompositionLocalProvider(LocalHojaDeUso provides hojaDeUso) { columna.content() }
+    }
     val hoja: @Composable () -> Unit = if (compacta) {
         {
             HojaDesdeAbajo(
                 onDismiss, dismissEnabled, fraccionDeAltoMaximo, conCierre, relleno, onEscape, onTecla,
-                enLaCascara = anfitrion != null, content = content,
+                enLaCascara = anfitrion != null, hojaDeUso = hojaDeUso, content = contenido,
             )
         }
     } else {
-        { HojaCentrada(onDismiss, dismissEnabled, anchoMaximo, fraccionDeAltoMaximo, conCierre, relleno, onEscape, onTecla, content) }
+        { HojaCentrada(onDismiss, dismissEnabled, anchoMaximo, fraccionDeAltoMaximo, conCierre, relleno, onEscape, onTecla, hojaDeUso, contenido) }
     }
     if (anfitrion == null) {
         hoja()
@@ -249,6 +259,9 @@ private class EstadoDeLaHoja(
 
     var onDismiss: () -> Unit = {}
     var dismissEnabled: Boolean = true
+
+    /** Vuelta 104: a quién decirle cómo se cerró. */
+    var hojaDeUso: HojaDeUso? = null
     var reducido: Boolean = reducido
 
     /** ¿Hay un dedo sobre el panel? Ver el `pointerInput` de la hoja desde abajo. */
@@ -272,9 +285,10 @@ private class EstadoDeLaHoja(
         alcance.launch { presencia.animateTo(1f, Movimiento.alEntrar(reducido)) }
     }
 
-    /** Sale animada y después llama a `onDismiss`, una sola vez. Respeta [dismissEnabled]. */
-    fun cerrar() {
+    /** Sale animada y después llama a `onDismiss`, una sola vez. Respeta [dismissEnabled]. [como] va al uso. */
+    fun cerrar(como: String) {
         if (cerrando || !dismissEnabled) return
+        hojaDeUso?.seCierra(como)
         cerrando = true
         asentando?.cancel()
         alcance.launch {
@@ -307,7 +321,7 @@ private class EstadoDeLaHoja(
         if (cerrando || arrastre <= 0f) return
         val pasoElUmbral = arrastre > altoDelPanel * FRACCION_PARA_CERRAR_ARRASTRANDO || velocidad > umbralDeVelocidad
         if (pasoElUmbral && dismissEnabled) {
-            cerrar()
+            cerrar("ARRASTRE")
         } else {
             asentando?.cancel()
             asentando = alcance.launch {
@@ -333,7 +347,7 @@ const val FRACCION_PARA_CERRAR_ARRASTRANDO = 1f / 3f
 private val VELOCIDAD_PARA_CERRAR_ARRASTRANDO = 1_200.dp
 
 @Composable
-private fun rememberEstadoDeLaHoja(onDismiss: () -> Unit, dismissEnabled: Boolean): EstadoDeLaHoja {
+private fun rememberEstadoDeLaHoja(onDismiss: () -> Unit, dismissEnabled: Boolean, hojaDeUso: HojaDeUso? = null): EstadoDeLaHoja {
     val reducido = LocalMovimientoReducido.current
     val alcance = rememberCoroutineScope()
     val estado = remember { EstadoDeLaHoja(alcance, reducido) }
@@ -341,6 +355,7 @@ private fun rememberEstadoDeLaHoja(onDismiss: () -> Unit, dismissEnabled: Boolea
     estado.onDismiss = onDismiss
     estado.dismissEnabled = dismissEnabled
     estado.reducido = reducido
+    estado.hojaDeUso = hojaDeUso
     LaunchedEffect(estado) { estado.entrar() }
     return estado
 }
@@ -437,12 +452,15 @@ private fun HojaDesdeAbajo(
     onEscape: (() -> Unit)?,
     onTecla: ((KeyEvent) -> Boolean)?,
     enLaCascara: Boolean,
+    hojaDeUso: HojaDeUso?,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val estado = rememberEstadoDeLaHoja(onDismiss, dismissEnabled)
+    val estado = rememberEstadoDeLaHoja(onDismiss, dismissEnabled, hojaDeUso)
     // Escape, como en la centrada (vuelta de diseño 17): sin [onEscape] propio es el toque afuera.
     // Hasta acá la hoja desde abajo no lo atendía, y en la web angosta solo la X la cerraba.
-    val escapeActual by rememberUpdatedState(onEscape ?: estado::cerrar)
+    val escapeActual by rememberUpdatedState(
+        onEscape?.let { propio -> { hojaDeUso?.seCierra("ESCAPE"); propio() } } ?: { estado.cerrar("ESCAPE") },
+    )
     val densidad = LocalDensity.current
     val umbralDeVelocidad = with(densidad) { VELOCIDAD_PARA_CERRAR_ARRASTRANDO.toPx() }
     // **Arrastrarla hacia abajo la cierra**, desde la manija o desde el cuerpo, sin romper el scroll
@@ -579,7 +597,7 @@ private fun HojaDesdeAbajo(
                     .padding(relleno)
                     .testTag(TAG_PANEL_DE_HOJA),
             ) {
-                if (conCierre) SheetHandleWithClose(onClose = estado::cerrar, enabled = dismissEnabled)
+                if (conCierre) SheetHandleWithClose(onClose = { estado.cerrar("X") }, enabled = dismissEnabled)
                 content()
             }
         }
@@ -603,7 +621,7 @@ private fun HojaDesdeAbajo(
             .drawBehind { drawRect(Color.Black.copy(alpha = OPACIDAD_DEL_VELO * estado.fraccionVisible())) }
             // Sin indicación (vuelta 61): el velo contiene al panel, y el estado de hover/foco de su
             // `clickable` —un 8 % de tinta— se pintaba ENCIMA de todo lo de adentro. Ver [veloSinIndicacion].
-            .veloSinIndicacion(enabled = dismissEnabled && !estado.cerrando, onClick = estado::cerrar)
+            .veloSinIndicacion(enabled = dismissEnabled && !estado.cerrando, onClick = { estado.cerrar("VELO") })
             // Con el velo apagado (guardando) los toques tampoco pasan a la barra de abajo.
             .tapaLoDeAbajo()
             // En la cáscara (encima de la barra de pestañas, de borde a borde) la hoja descuenta sola
@@ -670,11 +688,12 @@ private fun HojaCentrada(
     relleno: PaddingValues,
     onEscape: (() -> Unit)?,
     onTecla: ((KeyEvent) -> Boolean)?,
+    hojaDeUso: HojaDeUso?,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val hoja = rememberEstadoDeLaHoja(onDismiss, dismissEnabled)
+    val hoja = rememberEstadoDeLaHoja(onDismiss, dismissEnabled, hojaDeUso)
     // Sin [onEscape] propio, Escape es el toque afuera: sale animada (y respeta `dismissEnabled`).
-    val alEscape = onEscape ?: hoja::cerrar
+    val alEscape: () -> Unit = onEscape?.let { propio -> { hojaDeUso?.seCierra("ESCAPE"); propio() } } ?: { hoja.cerrar("ESCAPE") }
     val foco = remember { FocusRequester() }
     val alcance = rememberCoroutineScope()
     // Ver el mismo reflejo en [HojaDesdeAbajo]: siempre el manejador de la última composición.
@@ -713,7 +732,7 @@ private fun HojaCentrada(
             .focusable()
             // El velo se oscurece a la par de la hoja (ver [EstadoDeLaHoja]).
             .drawBehind { drawRect(Color.Black.copy(alpha = OPACIDAD_DEL_VELO * hoja.fraccionVisible())) }
-            .veloSinIndicacion(enabled = dismissEnabled && !hoja.cerrando, onClick = hoja::cerrar)
+            .veloSinIndicacion(enabled = dismissEnabled && !hoja.cerrando, onClick = { hoja.cerrar("VELO") })
             .tapaLoDeAbajo()
             .testTag(TAG_VELO_DE_HOJA)
             // El velo va de borde a borde; el panel, dentro de lo que dejan las barras del sistema
@@ -747,7 +766,7 @@ private fun HojaCentrada(
                 .padding(relleno)
                 .testTag(TAG_PANEL_DE_HOJA),
         ) {
-            if (conCierre) SheetHandleWithClose(onClose = hoja::cerrar, enabled = dismissEnabled, conManija = false)
+            if (conCierre) SheetHandleWithClose(onClose = { hoja.cerrar("X") }, enabled = dismissEnabled, conManija = false)
             content()
         }
     }
