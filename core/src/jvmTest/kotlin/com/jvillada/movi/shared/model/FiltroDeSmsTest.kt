@@ -100,13 +100,28 @@ class FiltroDeSmsTest {
     }
 
     @Test
+    fun `empieza por el banco tolera un Banco o Banco de inicial`() {
+        assertTrue(atajo(null, "Banco Falabella: Compraste \$120.000 en FALABELLA con tu tarjeta *1234"))
+        assertTrue(atajo(null, "Banco AV Villas informa: retiro por \$200.000 de su cuenta *5678"))
+        assertTrue(atajo(null, "Banco de Bogotá: Transferiste \$50.000 a la cuenta *4321"))
+        assertTrue(atajo(null, "BANCO DAVIVIENDA Descuento en internet, \$64,900"))
+        assertFalse(atajo(null, "Banco: Compraste \$5.000")) // «Banco» solo no es un banco de la lista
+        assertFalse(atajo(null, "Banco del barrio, te debo \$5.000 de Bancolombia"))
+        assertTrue(empiezaPorUnBanco("¡Banco Falabella te informa!", palabras))
+    }
+
+    @Test
     fun `el atajo con remitente`() {
         assertTrue(atajo("85540", conPalabra))
         assertTrue(atajo("85540", sinPalabra)) // el código basta, como en el teléfono
         assertTrue(atajo("87100", "Movimiento en tu cuenta de bancolombia por \$5.000")) // código corto + palabra
         assertFalse(atajo("3001234567", conPalabra)) // un celular: solo se cuenta
         assertFalse(atajo("+57 300 123 4567", conPalabra))
-        assertTrue(atajo("Bancolombia", "Compraste \$5.000 en EXITO. bancolombia.com")) // un remitente que nombra un banco
+        // Un remitente con letras no prueba nada en el iPhone (puede ser un contacto): empieza por el banco + monto.
+        assertFalse(atajo("Bancolombia", "Compraste \$5.000 en EXITO. bancolombia.com"))
+        assertTrue(atajo("Bancolombia", conPalabra))
+        assertFalse(atajo("Asesora Bancolombia", "Hola, soy tu asesora de Bancolombia, llámame"))
+        assertFalse(atajo("Asesora Bancolombia", "Bancolombia: llámame, tengo una oferta para ti"))
         // Un contacto («Mamá»): el iPhone da su nombre, que no dice si es una persona. Se lee como sin remitente.
         assertTrue(atajo("Mamá", "DAVIVIENDA Descuento en internet, \$64,900,Cta de Ahorros *0136"))
         assertFalse(atajo("Mamá", "Ya te pagué por Bancolombia, \$25.000"))

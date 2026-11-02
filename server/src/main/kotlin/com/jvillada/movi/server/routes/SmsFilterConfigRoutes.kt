@@ -132,9 +132,10 @@ private val CURRENT_FILTER = SmsFilterConfig(
  * se guarda: así un atajo sin filtro que reenvía todos los SMS no llena Movi de mensajes personales.
  *
  * Vuelta 113 · la regla vive en `:core` ([seGuardaElSmsDelAtajo]), junto a la del teléfono
- * (`seSubeElSms`): un remitente personal (10 o más dígitos) nunca pasa; un código conocido o un remitente
- * que nombra un banco siguen la regla del teléfono; sin remitente (el atajo firmado no lo manda) o con el
- * nombre de un contacto, solo un texto que **empieza** por una palabra de banco y trae un monto.
+ * (`seSubeElSms`): un remitente personal (10 o más dígitos) nunca pasa; un remitente de solo cifras (un
+ * código corto) sigue la regla del teléfono; sin remitente (el atajo firmado no lo manda) o con un remitente
+ * con letras (en el iPhone puede ser un contacto), solo un texto que **empieza** por una palabra de banco y
+ * trae un monto.
  */
 internal fun pasaElFiltroDeBancos(remitente: String?, texto: String): Boolean =
     seGuardaElSmsDelAtajo(remitente, texto, CURRENT_FILTER.senderCodes, CURRENT_FILTER.bodyKeywords)

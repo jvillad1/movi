@@ -81,36 +81,39 @@ fun traeUnMontoDelAviso(texto: String): Boolean = montoDelAviso.containsMatchIn(
 /**
  * ¿El texto **empieza** por una palabra de banco, como firman los avisos? «Bancolombia: Compraste…»,
  * «DAVIVIENDA Descuento en internet…», «Bancolombia te informa…». Antes de la palabra solo se saltan
- * espacios y signos («¡», «*», «"»), nunca letras ni cifras: «Hola, ya te pagué por Bancolombia» no
- * empieza por el banco.
+ * espacios y signos («¡», «*», «"») y un «Banco » o «Banco de » inicial («Banco Falabella: …», «Banco AV
+ * Villas …»), nunca otras letras ni cifras: «Hola, ya te pagué por Bancolombia» no empieza por el banco.
  */
 fun empiezaPorUnBanco(texto: String, palabras: List<String>): Boolean {
     val desde = texto.indexOfFirst { it.isLetterOrDigit() }
     if (desde < 0) return false
     val inicio = texto.substring(desde).lowercase()
-    return palabras.any { it.isNotBlank() && inicio.startsWith(it.lowercase()) }
+    val comienzos = listOf(inicio, inicio.removePrefix("banco de "), inicio.removePrefix("banco "))
+    return palabras.any { palabra ->
+        palabra.isNotBlank() && comienzos.any { it.startsWith(palabra.lowercase()) }
+    }
 }
 
 /**
  * **¿Se guarda el SMS que mandó un atajo del iPhone?** El remitente es opcional: el atajo firmado
  * («Movi · Avisar un mensaje») manda solo el texto, y uno armado a mano puede mandar el remitente como lo
- * ve el iPhone, que para un número guardado es **el nombre del contacto** («Mamá»).
+ * ve el iPhone, que para un número guardado es **el nombre del contacto** («Mamá», «Asesora Bancolombia»).
  *
  * - Remitente personal → no.
- * - Remitente que es un código (solo cifras, sin ser personal) o que nombra un banco («Bancolombia», o un
- *   contacto que el dueño guardó así) → la regla del teléfono, [seSubeElSms].
- * - **Sin remitente**, o un nombre que no es de un banco (un contacto) → pasa solo si el texto **empieza
- *   por una palabra de banco** ([empiezaPorUnBanco]) **y trae un monto** ([traeUnMontoDelAviso]): así
- *   firman los avisos («Bancolombia: Compraste $46.000,00 en…», «DAVIVIENDA Descuento en internet,
- *   $64,900,…»), y «Hola, ya te pagué por Bancolombia» no entra. Lo que no tiene monto (una clave
+ * - Remitente de **solo cifras** que no es personal (un código corto) → la regla del teléfono, [seSubeElSms].
+ * - **Sin remitente, o con un remitente que tiene letras** → pasa solo si el texto **empieza por una palabra
+ *   de banco** ([empiezaPorUnBanco]) **y trae un monto** ([traeUnMontoDelAviso]). En el iPhone un nombre no
+ *   prueba nada: puede ser un contacto, y uno que se llame «Asesora Bancolombia» no hace de su mensaje un
+ *   aviso. Así firman los avisos («Bancolombia: Compraste $46.000,00 en…», «DAVIVIENDA Descuento en
+ *   internet, $64,900,…»), y «Hola, ya te pagué por Bancolombia» no entra. Lo que no tiene monto (una clave
  *   dinámica, «tu clave fue actualizada») tampoco: no es un movimiento.
+ *
+ * (En el teléfono Android el remitente alfanumérico lo pone la red, no la libreta de contactos: ahí sí
+ * cuenta como remitente, ver [seSubeElSms].)
  */
 fun seGuardaElSmsDelAtajo(remitente: String?, texto: String, codigos: List<String>, palabras: List<String>): Boolean {
     if (esUnRemitentePersonal(remitente)) return false
     val limpio = remitenteLimpio(remitente)
-    val esUnCodigo = limpio.isNotEmpty() && limpio.all { it in '0'..'9' }
-    if (esUnCodigo || (limpio.isNotEmpty() && nombraUnBanco(remitente.orEmpty(), palabras))) {
-        return seSubeElSms(remitente, texto, codigos, palabras)
-    }
+    if (limpio.isNotEmpty() && limpio.all { it in '0'..'9' }) return seSubeElSms(remitente, texto, codigos, palabras)
     return empiezaPorUnBanco(texto, palabras) && traeUnMontoDelAviso(texto)
 }
