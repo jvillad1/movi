@@ -287,7 +287,7 @@ fun datosConElMovimiento(data: DashboardData, evento: FinancialEvent, signo: Int
     if (cuenta.type != AccountType.CREDIT_CARD && !cuenta.esDeTuPlata()) return null
     val periodo = data.periodoActual ?: return null
     val inicio = inicioDelPeriodo(periodo, data.ajustesDePeriodo)
-    val fin = inicioDelPeriodo(periodoSiguiente(periodo), data.ajustesDePeriodo)
+    val fin = inicioDelPeriodo(periodoSiguiente(periodo, data.ajustesDePeriodo), data.ajustesDePeriodo)
     val dia = epochMillisToAppDate(evento.timestamp)
     if (dia < inicio || dia >= fin || dia > hoy) return null
     // Algo que se parece a un pago del período puede ser ese fijo (ya restado): no se sabe sin el server.

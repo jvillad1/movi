@@ -112,6 +112,15 @@ const val CATEGORIAS_DEL_CIERRE: Int = 3
 const val DIAS_DE_LA_TARJETA_DE_CIERRE: Int = 5
 
 /**
+ * Vuelta 105 · lo mismo para una quincena (D4 del diseño): 3 días, porque 5 de 15 ocuparía Hoy un
+ * tercio del período.
+ */
+const val DIAS_DE_LA_TARJETA_DE_CIERRE_QUINCENAL: Int = 3
+
+/** ¿El cierre es de una quincena? Se sabe por el id («2026-10-15»), sin pedir los ajustes. */
+fun esCierreDeQuincena(c: CierreDelPeriodo): Boolean = (periodoDelId(c.periodo)?.dia ?: 0) != 0
+
+/**
  * Hasta qué día del período nuevo se manda el aviso o el correo si no salió el primero (el teléfono
  * apagado, el server reiniciando). Pasado eso, un «cerró tu período» llega tarde para servir.
  */
@@ -215,7 +224,9 @@ fun disponibleAlDia(
 
 /** ¿Se pinta la tarjeta en Hoy? Los primeros [DIAS_DE_LA_TARJETA_DE_CIERRE] días y si no se descartó. */
 fun seMuestraEnHoy(cierre: CierreDelPeriodo): Boolean =
-    !cierre.descartado && cierre.diaDelPeriodoNuevo in 1..DIAS_DE_LA_TARJETA_DE_CIERRE
+    !cierre.descartado && cierre.diaDelPeriodoNuevo in 1..(
+        if (esCierreDeQuincena(cierre)) DIAS_DE_LA_TARJETA_DE_CIERRE_QUINCENAL else DIAS_DE_LA_TARJETA_DE_CIERRE
+        )
 
 /** ¿Todavía es hora de avisar o mandar el correo? Los primeros [DIAS_PARA_AVISAR_EL_CIERRE] días. */
 fun esHoraDeAvisarElCierre(diaDelPeriodoNuevo: Int): Boolean = diaDelPeriodoNuevo in 1..DIAS_PARA_AVISAR_EL_CIERRE
@@ -232,13 +243,23 @@ fun pesosDelCierre(monto: Long): String {
     return (if (monto < 0) "−" else "") + "$" + conPuntos
 }
 
-/** «septiembre», del prefijo; el prefijo tal cual si no se entiende. */
-private fun mesDe(prefijo: String, nombre: String): String =
-    periodoDelPrefijo(prefijo)?.let { tituloDelPeriodo(it).substringBefore(" ").lowercase() }
+/**
+ * «septiembre», del prefijo; el prefijo tal cual si no se entiende. Una quincena (vuelta 105) no tiene
+ * un mes que la nombre: «la quincena del 15 – 30 sep», con el nombre que mandó el server sin el año.
+ */
+private fun mesDe(prefijo: String, nombre: String): String {
+    val periodo = periodoDelId(prefijo)
+    if (periodo != null && periodo.dia != 0) return "la quincena del " + nombre.replace(ANIO_AL_FINAL, "")
+    return periodo?.let { tituloDelPeriodo(it).substringBefore(" ").lowercase() }
         ?: nombre.substringBefore(" ").lowercase()
+}
 
-/** «Cerró tu período de septiembre». */
-fun tituloDelCierre(c: CierreDelPeriodo): String = "Cerró tu período de ${mesDe(c.periodo, c.nombre)}"
+private val ANIO_AL_FINAL = Regex("""\s+\d{4}$""")
+
+/** «Cerró tu período de septiembre»; una quincena: «Cerró tu quincena del 15 – 30 oct». */
+fun tituloDelCierre(c: CierreDelPeriodo): String =
+    if (esCierreDeQuincena(c)) "Cerró tu ${mesDe(c.periodo, c.nombre).removePrefix("la ")}"
+    else "Cerró tu período de ${mesDe(c.periodo, c.nombre)}"
 
 /** «Cerró tu período: entró $22.500.000, salió $18.200.000». La frase de la tarjeta y del aviso. */
 fun fraseDelCierre(c: CierreDelPeriodo): String =

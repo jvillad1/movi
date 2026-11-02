@@ -261,7 +261,9 @@ fun etiquetaDePeriodo(period: String): String? {
  * julio» se lee mejor y no pierde nada.
  */
 private fun etiquetaDePeriodoEnAviso(periodo: PeriodoFinanciero, otro: PeriodoFinanciero): String =
-    if (periodo.year == otro.year) MESES_DEL_ANIO[periodo.month - 1]
+    // Vuelta 105 · una quincena se dice «la quincena del 15 de octubre».
+    if (periodo.dia != 0) com.jvillada.movi.shared.model.nombreDelMesDe(periodo)
+    else if (periodo.year == otro.year) MESES_DEL_ANIO[periodo.month - 1]
     else "${MESES_DEL_ANIO[periodo.month - 1]} de ${periodo.year}"
 
 /**

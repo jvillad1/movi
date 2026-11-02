@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.ai
 
+import com.jvillada.movi.shared.model.limiteDelPeriodo
 import com.jvillada.movi.server.apartados.tuPlataConApartados
 import com.jvillada.movi.server.balance.accountTypesFor
 import com.jvillada.movi.server.balance.hayMovimientosEnOtraMoneda
@@ -253,9 +254,11 @@ internal suspend fun datosDeLasSugeridas(
             diasComparados = anterior?.second,
             disponible = disponible,
             pagos = pagos,
-            pequenos = if (pregunta == PreguntaSugerida.EN_QUE_SE_VA) pequenosDelPeriodo(uid, desde, hasta, movimientos) else emptyList(),
+            pequenos = if (pregunta == PreguntaSugerida.EN_QUE_SE_VA) pequenosDelPeriodo(uid, desde, hasta, movimientos, ajustes) else emptyList(),
             presupuestos = if (revisar) {
-                Budgets.selectAll().where { Budgets.userId eq uid }.map { it[Budgets.category] to it[Budgets.monthlyLimit] }
+                // Vuelta 105 · prorrateado al período (D2): en la quincena, la mitad del mensual.
+                Budgets.selectAll().where { Budgets.userId eq uid }
+                    .map { it[Budgets.category] to limiteDelPeriodo(it[Budgets.monthlyLimit], periodo, ajustes) }
             } else {
                 emptyList()
             },

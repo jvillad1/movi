@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.transactions
 
+import com.jvillada.movi.shared.model.periodoDelId
 import com.jvillada.movi.ui.components.ds.IconoDeMovimiento
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
@@ -97,7 +98,9 @@ fun anuladosDelPeriodo(anulados: List<MovimientoAnulado>, periodo: PeriodoFinanc
 
 /** «1 anulado en octubre», «3 anulados en octubre». Pura. */
 fun textoDeLosAnuladosDelPeriodo(cuantos: Int, periodo: PeriodoFinanciero): String =
-    "$cuantos ${if (cuantos == 1) "anulado" else "anulados"} en ${MESES_DEL_ANIO[periodo.month - 1]}"
+    "$cuantos ${if (cuantos == 1) "anulado" else "anulados"} en " +
+        // Vuelta 105 · una quincena no tiene un mes que la nombre.
+        if (periodo.dia != 0) com.jvillada.movi.shared.model.nombreDelMesDe(periodo) else MESES_DEL_ANIO[periodo.month - 1]
 
 /**
  * **El subtítulo de una fila anulada**: «$180.000 · 12 oct · anulado el 29 oct · Duplicado». El monto
@@ -137,7 +140,7 @@ fun AnuladosScreen(periodo: String?, onNavigate: (Screen) -> Unit) {
     var recarga by remember { mutableStateOf(0) }
     val perfil = rememberLectura(ClaveDeLectura.Perfil, reintento = recarga) { Repositories.wallets.getUserProfile() }
     val cuentas = rememberLectura(ClaveDeLectura.Cuentas, reintento = recarga) { Repositories.wallets.getAccounts() }
-    val delPeriodo = periodo?.let { periodoDelPrefijo(it) }
+    val delPeriodo = periodo?.let { periodoDelId(it) }
     val ajustes = perfil.valor?.ajustesDelPeriodo()
     Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         MinScreenHeader(

@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.plan
 
+import com.jvillada.movi.shared.model.periodoDelId
 import com.jvillada.movi.ui.components.ds.AccionDeEncabezado
 import com.jvillada.movi.ui.components.ds.desplazadoDe
 import androidx.compose.foundation.background
@@ -172,7 +173,7 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS, enL
     // Revisión de la 75: el primer período que el server no tiene (anterior al primer movimiento): ‹ no
     // pasa de ahí.
     var sinHistoria by rememberSaveable { mutableStateOf<String?>(null) }
-    val periodoVisible = prefijoVisible?.let { periodoDelPrefijo(it) } ?: periodoDeHoy
+    val periodoVisible = prefijoVisible?.let { periodoDelId(it) } ?: periodoDeHoy
     val viendoOtroPeriodo = enPagos && periodoVisible != periodoDeHoy
     fun irAlPeriodo(periodo: com.jvillada.movi.shared.model.PeriodoFinanciero) {
         prefijoVisible = periodo.prefijo.takeIf { periodo != periodoDeHoy }
@@ -207,10 +208,10 @@ fun PlanScreen(onNavigate: (Screen) -> Unit, segmento: Int = SEGMENTO_PAGOS, enL
             texto = if (viendoOtroPeriodo) nombreDelPeriodo(periodoVisible, ajustesDelPeriodo) else lineaDelPeriodoDePagos(data),
             reservar = data.periodoActual == null && disponible.cargando,
             habilitado = enPagos && data.periodoActual != null,
-            puedeAdelante = puedeIrAlSiguiente(periodoVisible, periodoDeHoy),
+            puedeAdelante = puedeIrAlSiguiente(periodoVisible, periodoDeHoy, ajustesDelPeriodo),
             puedeAtras = sinHistoria.let { it == null || periodoVisible.prefijo > it },
-            onAnterior = { irAlPeriodo(periodoAnterior(periodoVisible)) },
-            onSiguiente = { irAlPeriodo(periodoSiguiente(periodoVisible)) },
+            onAnterior = { irAlPeriodo(periodoAnterior(periodoVisible, ajustesDelPeriodo)) },
+            onSiguiente = { irAlPeriodo(periodoSiguiente(periodoVisible, ajustesDelPeriodo)) },
         )
     }
     val cuantoPuedesGastar: @Composable () -> Unit = {

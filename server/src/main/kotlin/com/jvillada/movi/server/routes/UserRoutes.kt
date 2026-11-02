@@ -14,6 +14,12 @@ import com.jvillada.movi.shared.model.DIAS_PARA_BANCO_MUDO_POR_DEFECTO
 import com.jvillada.movi.shared.model.MAX_DIAS_PARA_BANCO_MUDO
 import com.jvillada.movi.shared.model.ChangePasswordRequest
 import com.jvillada.movi.shared.model.MAX_INICIOS_PROPIOS
+import com.jvillada.movi.shared.model.FrecuenciaDelPeriodo
+import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.shared.model.esPeriodoDe
+import com.jvillada.movi.shared.model.frecuenciaDelPeriodoDe
+import com.jvillada.movi.shared.model.periodoDelId
+import com.jvillada.movi.shared.model.problemaDeLaQuincena
 import com.jvillada.movi.shared.model.PasswordPolicy
 import com.jvillada.movi.shared.model.SiElCorteCaeEnFinDeSemana
 import com.jvillada.movi.shared.model.siElCorteCaeEnFinDeSemanaDe
@@ -126,19 +132,70 @@ fun Route.userRoutes() {
             // esa regla vive en `inicioDelPeriodo` (:core), que ante un valor imposible vuelve al
             // corte en vez de romper. Duplicarla acá obligaría a mantener dos copias de la misma
             // decisión — y la del cliente ya la respeta.
+            //
+            // Vuelta 105 · **la frecuencia del período** (mes o quincena). Se valida contra lo que
+            // queda guardado después de este PUT, no solo contra lo que viene: un APK viejo que no sabe
+            // de quincenas puede mandar solo `periodCutoffDay`, y ese corte no puede dejar una quincena
+            // imposible (se rechaza con la misma frase que ve la hoja nueva).
+            val frecuenciaPedida = req.periodFrequency?.let { nombre ->
+                FrecuenciaDelPeriodo.entries.firstOrNull { it.name == nombre }
+                    ?: return@put call.respond(HttpStatusCode.BadRequest, "Esa frecuencia del período no existe")
+            }
+            if (req.periodSecondDay != null && req.periodSecondDay !in 1..31) {
+                return@put call.respond(HttpStatusCode.BadRequest, "Los días de la quincena van de 1 a 31")
+            }
+            val guardado = dbQuery { Users.selectAll().where { Users.id eq uid }.firstOrNull() }
+                ?: return@put call.respond(HttpStatusCode.NotFound)
+            val frecuenciaAntes = frecuenciaDelPeriodoDe(guardado[Users.periodFrequency])
+            val frecuencia = frecuenciaPedida ?: frecuenciaAntes
+            val ajustesNuevos = PeriodSettings(
+                cutoffDay = (req.periodCutoffDay ?: guardado[Users.periodCutoffDay] ?: 1).coerceIn(1, 31),
+                frecuencia = frecuencia,
+                segundoDia = req.periodSecondDay ?: guardado[Users.periodSecondDay],
+            )
+            if (frecuencia == FrecuenciaDelPeriodo.QUINCENAL) {
+                problemaDeLaQuincena(ajustesNuevos.cutoffDay, ajustesNuevos.segundoDia)?.let {
+                    return@put call.respond(HttpStatusCode.BadRequest, it)
+                }
+            }
+            // Cambiar de frecuencia vacía las excepciones a mano: sus claves serían de la otra forma
+            // («2026-10» contra «2026-10-15»). Salvo que el mismo PUT traiga las nuevas.
+            val cambiaLaFrecuencia = frecuenciaPedida != null && frecuenciaPedida != frecuenciaAntes
+            // Una clave de quincena bien escrita pero que ya no arranca ninguna quincena (cambiaron los días
+            // A o B) no es un error de quien escribe: es una excepción vieja. Se poda en vez de rechazar
+            // todo el mapa — si no, «Empezar la quincena hoy», que manda el mapa entero, quedaría en 400
+            // para siempre (revisión de la 105).
+            fun esQuincenaVigente(clave: String) =
+                periodoDelId(clave)?.takeIf { it.dia != 0 }?.let { esPeriodoDe(it, ajustesNuevos) } == true
             val periodosMalFormados = req.periodStarts.orEmpty().filterNot { (periodo, inicio) ->
-                PERIODO_VALIDO.matches(periodo) && FECHA_VALIDA.matches(inicio)
+                FECHA_VALIDA.matches(inicio) && if (ajustesNuevos.esQuincenal) {
+                    FECHA_VALIDA.matches(periodo)
+                } else {
+                    PERIODO_VALIDO.matches(periodo)
+                }
             }
             if (periodosMalFormados.isNotEmpty()) {
                 return@put call.respond(
                     HttpStatusCode.BadRequest,
-                    "Un período se escribe «AAAA-MM» y su arranque «AAAA-MM-DD»: " +
-                        periodosMalFormados.keys.joinToString(", "),
+                    (
+                        if (ajustesNuevos.esQuincenal) "Una quincena se escribe con el día en que arranca, «AAAA-MM-DD», y su arranque también: "
+                        else "Un período se escribe «AAAA-MM» y su arranque «AAAA-MM-DD»: "
+                        ) + periodosMalFormados.keys.joinToString(", "),
                 )
             }
             // Un tope, porque esto se guarda entero en una columna y crece solo si alguien lo
             // llena: diez años de excepciones mensuales son 120, y nadie declara más que eso.
-            val iniciosPedidos = req.periodStarts
+            val iniciosPedidos = req.periodStarts?.let { pedidos ->
+                if (ajustesNuevos.esQuincenal) pedidos.filterKeys(::esQuincenaVigente) else pedidos
+            }
+            // Y las guardadas: si este PUT cambia los días de la quincena (también un APK viejo que solo
+            // manda `periodCutoffDay`), las que ya no arrancan ninguna quincena se podan al guardar.
+            val iniciosGuardados = guardado[Users.periodStarts]?.let { leerIniciosPropios(it) } ?: emptyMap()
+            val iniciosPodados = if (ajustesNuevos.esQuincenal && !cambiaLaFrecuencia && iniciosPedidos == null) {
+                iniciosGuardados.filterKeys(::esQuincenaVigente).takeIf { it.size != iniciosGuardados.size }
+            } else {
+                null
+            }
             if (iniciosPedidos != null && iniciosPedidos.size > MAX_INICIOS_PROPIOS) {
                 return@put call.respond(
                     HttpStatusCode.BadRequest,
@@ -171,7 +228,7 @@ fun Route.userRoutes() {
             if (req.name == null && req.avatarColor == null && req.periodCutoffDay == null &&
                 req.reminderLeadDays == null && req.smsAlertMuted == null && req.periodStarts == null &&
                 req.diasParaBancoMudo == null && req.cierrePorCorreo == null && req.periodWeekendRule == null &&
-                req.mandarUso == null &&
+                req.mandarUso == null && req.periodFrequency == null && req.periodSecondDay == null &&
                 tipoDeAhorro == null
             ) {
                 return@put call.respond(HttpStatusCode.BadRequest, "Nada para actualizar")
@@ -183,6 +240,12 @@ fun Route.userRoutes() {
                     req.avatarColor?.let { stmt[Users.avatarColor] = it }
                     req.periodCutoffDay?.let { stmt[Users.periodCutoffDay] = it }
                     req.periodWeekendRule?.let { stmt[Users.periodWeekendRule] = it }
+                    req.periodFrequency?.let { stmt[Users.periodFrequency] = it }
+                    req.periodSecondDay?.let { stmt[Users.periodSecondDay] = it }
+                    if (cambiaLaFrecuencia && iniciosPedidos == null) stmt[Users.periodStarts] = "{}"
+                    iniciosPodados?.let {
+                        stmt[Users.periodStarts] = Json.encodeToString(MapSerializer(String.serializer(), String.serializer()), it)
+                    }
                     // Reemplaza el mapa entero, incluido el vacío: mandar `{}` es cómo se dice
                     // «ninguno arranca distinto». Ver [UpdateProfileRequest.periodStarts].
                     iniciosPedidos?.let {
@@ -348,6 +411,9 @@ private fun ResultRow.toProfile() = UserProfile(
     periodStarts = this[Users.periodStarts]?.let { leerIniciosPropios(it) } ?: emptyMap(),
     // Sin elegir = el corte no se corre en fin de semana, que es como se comportó Movi siempre.
     periodWeekendRule = siElCorteCaeEnFinDeSemanaDe(this[Users.periodWeekendRule]).name,
+    // Vuelta 105 · sin elegir = MENSUAL. Un APK viejo ignora los dos campos y sigue contando por mes.
+    periodFrequency = frecuenciaDelPeriodoDe(this[Users.periodFrequency]).name,
+    periodSecondDay = this[Users.periodSecondDay],
     // Sin elegir = lo que el server tenga configurado, que a su vez cae al default de :core.
     reminderLeadDays = this[Users.reminderLeadDays] ?: ReminderConfig.leadDays(),
     // Sin tocar = no silenciado: el aviso de captura se muestra hasta que alguien pida callarlo.

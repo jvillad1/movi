@@ -670,6 +670,12 @@ internal data class DatosDelUsuario(
     val presupuestos: List<Pair<String, Long>>,
     val cuantosDocumentos: Int,
     val apartados: List<Apartado> = emptyList(),
+    /**
+     * Vuelta 105 · el período es una quincena: el contexto lo dice («Resumen de la quincena en curso»)
+     * y los presupuestos van prorrateados, para que «¿cuánto gasté este mes?» no se confunda con la
+     * quincena. `false` = el mes de siempre, el texto de siempre.
+     */
+    val esQuincena: Boolean = false,
 ) {
     fun paraLosHechos() = DatosParaLosHechos(cuentas, patrimonio, periodo, presupuestos, apartados)
 }
@@ -692,7 +698,8 @@ internal suspend fun cargarDatosDelUsuario(uid: String): DatosDelUsuario {
 
     // Ventana del PERÍODO del usuario (ver PeriodSettings en :core), la misma que usa
     // finance-summary. Con corte 1 —el default— es el mes de calendario de siempre.
-    val (monthStart, monthEnd) = currentPeriodWindow(ajustesDePeriodoDe(uid))
+    val ajustesDelPeriodo = ajustesDePeriodoDe(uid)
+    val (monthStart, monthEnd) = currentPeriodWindow(ajustesDelPeriodo)
 
     // Ingresos y gastos del período: los de `/api/finance-summary` y del héroe de Hoy, con la MISMA
     // función (`monthCashFlow` → `movimientosDeFlujo`). Sin «Por confirmar», sin los movimientos de
@@ -725,12 +732,17 @@ internal suspend fun cargarDatosDelUsuario(uid: String): DatosDelUsuario {
         .conElAhorro(uid)
 
     // Budgets
+    // Vuelta 105 · medidos en el período (D2): en la quincena, la mitad del mensual; en el mes, igual.
+    val periodoEnCurso = com.jvillada.movi.shared.model.periodoDe(monthStart, ajustesDelPeriodo)
     val budgets = dbQuery {
         Budgets.selectAll().where { Budgets.userId eq uid }
-            .map { it[Budgets.category] to it[Budgets.monthlyLimit] }
+            .map { it[Budgets.category] to com.jvillada.movi.shared.model.limiteDelPeriodo(it[Budgets.monthlyLimit], periodoEnCurso, ajustesDelPeriodo) }
     }
 
-    return DatosDelUsuario(cuentas, patrimonio, ingresos, egresos, delPeriodo, budgets, cuantosDocumentos, apartados)
+    return DatosDelUsuario(
+        cuentas, patrimonio, ingresos, egresos, delPeriodo, budgets, cuantosDocumentos, apartados,
+        esQuincena = ajustesDelPeriodo.esQuincenal,
+    )
 }
 
 /** El texto del contexto general: lo que viaja cacheado en el sistema en cada pregunta. */
@@ -740,7 +752,10 @@ internal fun DatosDelUsuario.comoContexto(): String {
     return buildString {
         appendLine("DATOS DEL USUARIO (Colombia)")
         appendLine()
-        appendLine("== Resumen del mes en curso ==")
+        appendLine(
+            if (esQuincena) "== Resumen de la quincena en curso (el período del usuario es la quincena; un mes son dos) =="
+            else "== Resumen del mes en curso ==",
+        )
         appendLine("- Ingresos: \$$ingresos")
         delPeriodo.lineaDeCreditosDesembolsados { "\$$it" }?.let { appendLine(it) }
         appendLine("- Gastos: \$$egresos")

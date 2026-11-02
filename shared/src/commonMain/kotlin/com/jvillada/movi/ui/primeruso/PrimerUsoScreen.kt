@@ -1,5 +1,16 @@
 package com.jvillada.movi.ui.primeruso
 
+import com.jvillada.movi.ui.profile.guardarLaQuincena
+import com.jvillada.movi.ui.profile.losDiasDeLaQuincena
+import com.jvillada.movi.ui.profile.textoDelPeriodoDelPerfil
+import com.jvillada.movi.ui.profile.textoDeLaQuincena
+import com.jvillada.movi.ui.profile.DiasDeLaQuincena
+import com.jvillada.movi.ui.profile.ElegirCadaCuantoTePagan
+import com.jvillada.movi.shared.model.SEGUNDO_DIA_DE_LA_QUINCENA_POR_DEFECTO
+import com.jvillada.movi.shared.model.PRIMER_DIA_DE_LA_QUINCENA_POR_DEFECTO
+import com.jvillada.movi.shared.model.problemaDeLaQuincena
+import com.jvillada.movi.shared.model.frecuenciaDelPeriodoDe
+import com.jvillada.movi.shared.model.FrecuenciaDelPeriodo
 import androidx.compose.runtime.DisposableEffect
 import com.jvillada.movi.observabilidad.Uso
 import com.jvillada.movi.shared.model.ClaveDeUso
@@ -213,6 +224,9 @@ fun PrimerUsoScreen(
     var dia by remember { mutableStateOf<Int?>(null) }
     var regla by remember { mutableStateOf(SiElCorteCaeEnFinDeSemana.DIA_HABIL_ANTERIOR) }
     var periodoGuardado by remember { mutableStateOf<String?>(null) }
+    // Vuelta 105 · «¿Cada cuánto te pagan?»: con quincena, [dia] es el primer pago y este el segundo.
+    var quincena by remember { mutableStateOf(false) }
+    var segundoDia by remember { mutableStateOf(SEGUNDO_DIA_DE_LA_QUINCENA_POR_DEFECTO) }
     // Vuelta 75 · «¿Cuánto te pagan?» del paso del período: el monto y la cuenta a la que llega (`null` =
     // la primera cuenta de dinero que haya al terminar). La regla se crea al terminar ([crearElSalario]).
     var salario by remember { mutableStateOf<Long?>(null) }
@@ -254,6 +268,14 @@ fun PrimerUsoScreen(
                 dia = p.periodCutoffDay
                 regla = propia
             }
+            // Vuelta 105 · una quincena ya elegida arranca elegida, con sus dos días.
+            val segundo = p.periodSecondDay
+            if (frecuenciaDelPeriodoDe(p.periodFrequency) == FrecuenciaDelPeriodo.QUINCENAL && segundo != null) {
+                quincena = true
+                dia = p.periodCutoffDay
+                segundoDia = segundo
+                regla = propia
+            }
         }
         // Lo que ya había. Cada lectura por su cuenta: una que falla deja ese dato en cero, como antes.
         yaHabia = LoQueYaHabia(
@@ -290,7 +312,7 @@ fun PrimerUsoScreen(
     val cuentasDeDinero = (yaHabia.cuentas.map { it.id } + cuentas.filter { it.type in TIPOS_DE_CUENTA_DE_DINERO }.map { it.id }).toSet().size
     val fijos = (yaHabia.fijos + recurrentes.map { it.id }).toSet().size
     val periodoDelPerfil = perfil?.takeIf { periodoElegidoEn(it.ajustesDelPeriodo()) }
-        ?.let { textoDelInicioDelMes(it.periodCutoffDay, siElCorteCaeEnFinDeSemanaDe(it.periodWeekendRule)) }
+        ?.let { textoDelPeriodoDelPerfil(it, siElCorteCaeEnFinDeSemanaDe(it.periodWeekendRule)) }
     // La lista única, con lo que hay ahora: la misma regla que la fila del Inicio.
     val lista = primerosPasos(
         LoQueYaHay(
@@ -383,6 +405,13 @@ fun PrimerUsoScreen(
         // Revisión de la 75: sin una cuenta de dinero no se crea (la guía promete «a la primera cuenta que
         // agregues»; sin ninguna, un salario sin cuenta no llega a ningún lado).
         val cuenta = cuentaDelSalario ?: cuentaPorDefecto() ?: return
+        if (quincena) {
+            // Vuelta 105 · por quincenas, dos reglas: el día A y el B, cada una con el pago de una quincena.
+            val reglas = reglasDelSalarioQuincenal(monto, elDia, segundoDia, regla, cuenta, yaTePagaron, Clock.System.now().toEpochMilliseconds())
+            runCatching { reglas.forEach { Repositories.wallets.createRecurringRule(it) } }
+                .onSuccess { salarioCreado = true }
+            return
+        }
         val arranque = if (yaTePagaron) arranqueDelPeriodoSiguiente(elDia, regla, Clock.System.now().toEpochMilliseconds()) else null
         runCatching { Repositories.wallets.createRecurringRule(reglaDelSalario(monto, elDia, cuenta, arranque)) }
             .onSuccess { salarioCreado = true }
@@ -409,7 +438,7 @@ fun PrimerUsoScreen(
             val datos = leerDatosDelDiaADia(Repositories.wallets.getUserProfile(), ahora)
             val hoy = epochMillisToAppDate(ahora)
             val teQuedan = disponibleDelInicio(datos, hoy)?.periodo?.teQuedan
-            val ultimo = datos.periodoActual?.let { inicioDelPeriodo(periodoSiguiente(it), datos.ajustesDePeriodo).minus(1, DateTimeUnit.DAY) }
+            val ultimo = datos.periodoActual?.let { inicioDelPeriodo(periodoSiguiente(it, datos.ajustesDePeriodo), datos.ajustesDePeriodo).minus(1, DateTimeUnit.DAY) }
             fraseDelFinalDeLaGuia(teQuedan, ultimo, hayCuentas = true)
         }.getOrDefault(YA_PUEDES_EMPEZAR)
     }
@@ -457,12 +486,25 @@ fun PrimerUsoScreen(
             paso == PasoDePrimerUso.LISTO -> salir()
             paso == PasoDePrimerUso.PERIODO && dia != null -> {
                 val elegido = dia ?: return
+                // Vuelta 105 · una quincena imposible no se manda: se dice por qué (la misma frase del server).
+                val problema = if (quincena) problemaDeLaQuincena(elegido, segundoDia) else null
+                if (problema != null) {
+                    error = problema
+                    return
+                }
                 guardando = true
                 error = null
                 alcance.launch {
-                    runCatching { guardarElInicioDelMes(elegido, regla) }
+                    runCatching {
+                        if (quincena) guardarLaQuincena(elegido, segundoDia, regla)
+                        else guardarElInicioDelMes(
+                            elegido,
+                            regla,
+                            veniaDeUnaQuincena = frecuenciaDelPeriodoDe(perfil?.periodFrequency) == FrecuenciaDelPeriodo.QUINCENAL,
+                        )
+                    }
                         .onSuccess {
-                            periodoGuardado = textoDelInicioDelMes(elegido, regla)
+                            periodoGuardado = if (quincena) textoDeLaQuincena(elegido, segundoDia, regla) else textoDelInicioDelMes(elegido, regla)
                             guardando = false
                             (volverAlPaso ?: siguiente)?.let(::irA)
                         }
@@ -602,6 +644,15 @@ fun PrimerUsoScreen(
                         dia = dia,
                         regla = regla,
                         habilitado = !guardando,
+                        quincena = quincena,
+                        onQuincena = { q ->
+                            quincena = q
+                            // «Cada quincena» propone «el 15 y el último día» si no había nada elegido.
+                            if (q && dia == null) dia = PRIMER_DIA_DE_LA_QUINCENA_POR_DEFECTO
+                            error = null
+                        },
+                        segundoDia = segundoDia,
+                        onSegundoDia = { segundoDia = it; error = null },
                         onDia = { dia = it },
                         onRegla = { regla = it },
                         // Vuelta 75: el salario, opcional, si todavía no hay un ingreso fijo anotado.
@@ -866,6 +917,10 @@ private fun PasoPeriodo(
     dia: Int?,
     regla: SiElCorteCaeEnFinDeSemana,
     habilitado: Boolean,
+    quincena: Boolean,
+    onQuincena: (Boolean) -> Unit,
+    segundoDia: Int,
+    onSegundoDia: (Int) -> Unit,
     onDia: (Int) -> Unit,
     onRegla: (SiElCorteCaeEnFinDeSemana) -> Unit,
     preguntaElSalario: Boolean,
@@ -878,14 +933,32 @@ private fun PasoPeriodo(
     onYaTePagaron: (Boolean) -> Unit,
 ) {
     Text(
-        "¿Qué día te pagan o empieza tu mes? Movi cuenta tu mes desde ese día. Si te pagan el 25, toca el 25.",
+        if (quincena) "¿Qué días te pagan? Movi cuenta cada quincena desde el día del pago hasta el siguiente."
+        else "¿Qué día te pagan o empieza tu mes? Movi cuenta tu mes desde ese día. Si te pagan el 25, toca el 25.",
         style = Movi.textos.cuerpo,
         color = Movi.colores.textoMedio,
     )
     Spacer(Modifier.height(Medida.dentroDeSeccion))
+    // Vuelta 105 · «¿Cada cuánto te pagan?», con «Cada mes» elegido por defecto (D12).
+    ElegirCadaCuantoTePagan(
+        frecuencia = if (quincena) FrecuenciaDelPeriodo.QUINCENAL else FrecuenciaDelPeriodo.MENSUAL,
+        onElegir = { onQuincena(it == FrecuenciaDelPeriodo.QUINCENAL) },
+        habilitado = habilitado,
+    )
+    Spacer(Modifier.height(Medida.dentroDeSeccion))
+    if (quincena) {
+        DiasDeLaQuincena(
+            primero = dia ?: PRIMER_DIA_DE_LA_QUINCENA_POR_DEFECTO,
+            segundo = segundoDia,
+            onPrimero = onDia,
+            onSegundo = onSegundoDia,
+            habilitado = habilitado,
+        )
+        Spacer(Modifier.height(Espacio.xs))
+    }
     // Cinco filas de siete, cada día en su parte del ancho: a 360 dp con la letra grande siguen
     // entrando los siete.
-    (1..31).chunked(7).forEach { semana ->
+    if (!quincena) (1..31).chunked(7).forEach { semana ->
         Row(modifier = Modifier.fillMaxWidth()) {
             semana.forEach { d ->
                 Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
@@ -910,7 +983,8 @@ private fun PasoPeriodo(
     }
     // Lo que la fila no alcanza a decir va debajo, como nota alineada con su texto.
     Text(
-        "Si ese día cae en fin de semana o festivo, tu mes empieza el día hábil anterior, que es cuando te pagan.",
+        if (quincena) "Si un día de pago cae en fin de semana o festivo, esa quincena empieza el día hábil anterior, que es cuando te pagan."
+        else "Si ese día cae en fin de semana o festivo, tu mes empieza el día hábil anterior, que es cuando te pagan.",
         style = Movi.textos.apoyo,
         color = Movi.colores.textoMedio,
         modifier = Modifier.padding(start = Medida.margenDePantalla, end = Medida.margenDePantalla, top = Espacio.xs),
@@ -919,14 +993,27 @@ private fun PasoPeriodo(
         // Vuelta 54: **la misma vista previa de la hoja de Tú** («Tu período: del 23 de octubre al 24 de
         // noviembre», con `rangoEntre`). Antes decía «Hoy estarías en noviembre de 2026» el 28 de
         // octubre, y el mes siguiente sin el rango confundía.
-        val settings = remember(dia, regla) { PeriodSettings(cutoffDay = dia, siCaeEnFinDeSemana = regla) }
+        val problema = if (quincena) problemaDeLaQuincena(dia, segundoDia) else null
+        val settings = remember(dia, regla, quincena, segundoDia, problema) {
+            ajustesDeLaGuia(dia, regla, segundoDia.takeIf { quincena && problema == null })
+        }
         val hoy = remember(settings) { periodoDe(Clock.System.now().toEpochMilliseconds(), settings) }
         val ejemplo = remember(settings, hoy) { ejemploCortoDelCorte(hoy, settings) }
         Spacer(Modifier.height(Medida.dentroDeSeccion))
-        VistaPrevia(vistaPreviaDelPeriodo(hoy, settings), detalle = detalleDelInicioDelPeriodo(dia, ejemplo))
+        if (problema != null) {
+            Text(problema, style = Movi.textos.apoyo, color = Movi.colores.sale)
+        } else {
+            VistaPrevia(
+                vistaPreviaDelPeriodo(hoy, settings),
+                detalle = if (quincena) ejemplo else detalleDelInicioDelPeriodo(dia, ejemplo),
+            )
+        }
         if (preguntaElSalario) {
             Spacer(Modifier.height(Medida.entreSecciones))
-            SalarioDelPeriodo(dia, salario, onSalario, cuentas, cuentaDelSalario, onCuentaDelSalario, yaTePagaron, onYaTePagaron, habilitado)
+            SalarioDelPeriodo(
+                dia, salario, onSalario, cuentas, cuentaDelSalario, onCuentaDelSalario, yaTePagaron, onYaTePagaron, habilitado,
+                segundoDia = segundoDia.takeIf { quincena },
+            )
         }
     }
 }
@@ -948,19 +1035,22 @@ private fun SalarioDelPeriodo(
     yaTePagaron: Boolean,
     onYaTePagaron: (Boolean) -> Unit,
     habilitado: Boolean,
+    /** Vuelta 105 · con quincena, el segundo día: el monto es el de cada pago y se crean dos reglas. */
+    segundoDia: Int? = null,
 ) {
     Seccion(PREGUNTA_DEL_SALARIO)
     MoneyField(
         value = salario,
         onValueChange = onSalario,
-        label = "Cuánto te pagan",
+        label = if (segundoDia != null) "Cuánto te pagan cada quincena" else "Cuánto te pagan",
         modifier = Modifier.testTag(TAG_SALARIO_EN_LA_GUIA),
     )
     Spacer(Modifier.height(Espacio.xs))
     val deDinero = cuentas.filter { it.type in CUENTAS_QUE_PAGAN }
     if (deDinero.isEmpty()) {
         Text(
-            "Llega el día $dia a la primera cuenta que agregues en el paso siguiente. Sin una cuenta no se guarda.",
+            (if (segundoDia != null) "Llega ${losDiasDeLaQuincena(dia, segundoDia)}" else "Llega el día $dia") +
+                " a la primera cuenta que agregues en el paso siguiente. Sin una cuenta no se guarda.",
             style = Movi.textos.apoyo,
             color = Movi.colores.textoMedio,
         )

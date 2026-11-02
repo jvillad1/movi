@@ -78,6 +78,10 @@ class SchemaDeArranqueTest {
         "credit_terms" to "interes_real_cuota",
         // «Se debita solo» de una regla recurrente: `toRule()` —o sea toda lectura de recurrentes— la nombra.
         "recurring_rules" to "se_debita_solo",
+        // Vuelta 105 · la frecuencia del período (mes o quincena) y el segundo día de la quincena.
+        // `users` existe en producción y `toProfile()` —todo GET/PUT del perfil— las nombra.
+        "users" to "period_frequency",
+        "users" to "period_second_day",
         // La edad de la versión de una cuenta, que es lo que hace perder al reenvío del teléfono
         // contra un renombre hecho en la web. `accounts` existe en producción con todas las
         // cuentas del dueño adentro, y `toAccount()` —o sea TODA lectura de cuentas— nombra esta

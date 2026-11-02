@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.periodos
 
+import com.jvillada.movi.shared.model.PeriodoFinanciero
+import com.jvillada.movi.shared.model.periodoDelId
 import com.jvillada.movi.theme.Espacio
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -247,7 +249,17 @@ internal fun ListaDePeriodos(
                     )
                 }
                 else -> {
-                    items(piezasDeLosPeriodos(estado.periodos.orEmpty()), key = { it.clave }) { pieza ->
+                    items(conLosMeses(piezasDeLosPeriodos(estado.periodos.orEmpty())), key = { it.clave }) { elemento ->
+                        // Vuelta 105 · el mes que agrupa sus quincenas (D3), con lo que entró y salió.
+                        if (elemento is MesDeLasQuincenas) {
+                            Fila(
+                                titulo = elemento.titulo,
+                                subtitulo = elemento.subtitulo,
+                                modifier = Modifier.testTag(TAG_MES_DE_LAS_QUINCENAS),
+                            )
+                            return@items
+                        }
+                        val pieza = (elemento as LaPieza).pieza
                         when (pieza) {
                             is PiezaDePeriodos.Tarjeta -> FilaDePeriodo(
                                 pieza.resumen,
@@ -361,6 +373,61 @@ internal fun piezasDeLosPeriodos(periodos: List<ResumenDePeriodo>): List<PiezaDe
     return piezas
 }
 
+const val TAG_MES_DE_LAS_QUINCENAS: String = "mes-de-las-quincenas"
+
+/**
+ * Vuelta 105 · **las quincenas, agrupadas bajo su mes** (D3 del diseño): antes de la primera tarjeta de
+ * cada mes va «Octubre 2026 · Entró $X · Salió $Y», con lo de todas sus quincenas de la lista. **El mes
+ * de una quincena es el mes en que TERMINA** (su último día, `hasta`): con el 15 y el último, «15 – 30
+ * oct» va en Octubre y «31 oct – 14 nov» en Noviembre, que es el mes que esa plata paga (revisión de la
+ * 105: por el arranque, la del 31 quedaba en Octubre con casi todo su tiempo en noviembre). Con el 1 y
+ * el 16 da el mes de calendario. Con períodos mensuales devuelve [piezas] tal cual. Pura.
+ */
+internal fun conLosMeses(piezas: List<PiezaDePeriodos>): List<ElementoDeTusPeriodos> {
+    fun mesQueCierra(r: ResumenDePeriodo): Pair<Int, Int>? {
+        val q = periodoDelId(r.id)?.takeIf { it.dia != 0 } ?: return null
+        val ultimo = runCatching { LocalDate.parse(r.hasta) }.getOrNull() ?: return q.year to q.month
+        return ultimo.year to ultimo.monthNumber
+    }
+    val tarjetas = piezas.filterIsInstance<PiezaDePeriodos.Tarjeta>()
+    val quincenas = tarjetas.mapNotNull { t -> mesQueCierra(t.resumen)?.let { t to it } }
+    if (quincenas.isEmpty()) return piezas.map(::LaPieza)
+    val porMes = quincenas.groupBy({ it.second }, { it.first.resumen })
+    val vistos = mutableSetOf<Pair<Int, Int>>()
+    return buildList {
+        for (pieza in piezas) {
+            val mes = (pieza as? PiezaDePeriodos.Tarjeta)?.resumen?.let(::mesQueCierra)
+            if (mes != null && vistos.add(mes)) {
+                val delMes = porMes[mes].orEmpty()
+                add(
+                    MesDeLasQuincenas(
+                        id = "${mes.first}-${mes.second}",
+                        titulo = tituloDelPeriodo(PeriodoFinanciero(mes.first, mes.second)),
+                        subtitulo = "Entró ${formatMoneyCompact(delMes.sumOf { it.entradas })} · " +
+                            "Salió ${formatMoneyCompact(delMes.sumOf { it.salidas })}",
+                    ),
+                )
+            }
+            add(LaPieza(pieza))
+        }
+    }
+}
+
+/** Vuelta 105 · lo que pinta la lista de Tus períodos: una pieza de siempre, o el mes de unas quincenas. */
+internal sealed interface ElementoDeTusPeriodos {
+    val clave: String
+}
+
+/** Una [PiezaDePeriodos] tal cual. */
+internal data class LaPieza(val pieza: PiezaDePeriodos) : ElementoDeTusPeriodos {
+    override val clave: String get() = pieza.clave
+}
+
+/** El encabezado de un mes que agrupa sus quincenas: «Octubre 2026» y su subtotal. */
+internal data class MesDeLasQuincenas(val id: String, val titulo: String, val subtitulo: String) : ElementoDeTusPeriodos {
+    override val clave: String get() = "mes-$id"
+}
+
 /** «Antes de agosto 2026 no hay movimientos»: [primero] es la última tarjeta, el primero con movimientos. */
 internal fun textoDeLosVaciosDelPrincipio(primero: ResumenDePeriodo): String =
     "Antes de ${primero.nombre.replaceFirstChar { it.lowercase() }} no hay movimientos"
@@ -391,7 +458,7 @@ internal fun nombreDelResumen(
 ): String {
     val inicio = runCatching { LocalDate.parse(resumen.desde) }.getOrNull() ?: return resumen.nombre
     val ultimo = runCatching { LocalDate.parse(resumen.hasta) }.getOrNull() ?: return resumen.nombre
-    val anio = periodoDelPrefijo(resumen.id)?.year ?: ultimo.year
+    val anio = periodoDelId(resumen.id)?.year ?: ultimo.year
     return nombreEntre(inicio, ultimo, anio.takeIf { anioDeHoy != null && it != anioDeHoy })
 }
 
@@ -595,7 +662,7 @@ internal fun CifrasDelPeriodoEsqueleto() {
 }
 
 /** [id] es el prefijo del período («2026-09») → «Septiembre 2026»; `null` si no se pudo leer. */
-internal fun nombreDelId(id: String, ajustes: PeriodSettings? = null): String? = periodoDelPrefijo(id)?.let {
+internal fun nombreDelId(id: String, ajustes: PeriodSettings? = null): String? = periodoDelId(id)?.let {
     // Vuelta 75: con los ajustes del dueño, el nombre único del período; sin ellos, el del mes.
     if (ajustes != null) nombreDelPeriodo(it, ajustes) else tituloDelPeriodo(it)
 }

@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.profile
 
+import com.jvillada.movi.shared.model.FrecuenciaDelPeriodo
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -29,9 +30,29 @@ import com.jvillada.movi.ui.components.ds.Superficie
  * **Guardar «Inicio del mes»**: el día de corte y qué hace si cae en fin de semana o festivo. Una
  * sola escritura para Ajustes y para el paso «Tu período» de la guía de primer uso.
  */
-internal suspend fun guardarElInicioDelMes(dia: Int, regla: SiElCorteCaeEnFinDeSemana) =
+internal suspend fun guardarElInicioDelMes(dia: Int, regla: SiElCorteCaeEnFinDeSemana, veniaDeUnaQuincena: Boolean = false) =
     Repositories.wallets.updateUserProfile(
-        UpdateProfileRequest(periodCutoffDay = dia, periodWeekendRule = regla.name),
+        // Vuelta 105 · la frecuencia solo viaja cuando se deja la quincena: para quien siempre fue
+        // mensual el pedido es el mismo de antes.
+        UpdateProfileRequest(
+            periodCutoffDay = dia,
+            periodWeekendRule = regla.name,
+            periodFrequency = if (veniaDeUnaQuincena) FrecuenciaDelPeriodo.MENSUAL.name else null,
+        ),
+    )
+
+/**
+ * Vuelta 105 · **guardar el período por quincenas**: los dos días, la regla del fin de semana y la
+ * frecuencia en un solo pedido (el server valida la quincena con `problemaDeLaQuincena`).
+ */
+internal suspend fun guardarLaQuincena(primerDia: Int, segundoDia: Int, regla: SiElCorteCaeEnFinDeSemana) =
+    Repositories.wallets.updateUserProfile(
+        UpdateProfileRequest(
+            periodCutoffDay = primerDia,
+            periodSecondDay = segundoDia,
+            periodWeekendRule = regla.name,
+            periodFrequency = FrecuenciaDelPeriodo.QUINCENAL.name,
+        ),
     )
 
 /**

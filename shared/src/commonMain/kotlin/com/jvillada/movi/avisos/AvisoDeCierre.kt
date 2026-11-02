@@ -1,5 +1,6 @@
 package com.jvillada.movi.avisos
 
+import com.jvillada.movi.shared.model.periodoDelId
 import com.jvillada.movi.shared.model.CierreDelPeriodo
 import com.jvillada.movi.shared.model.esHoraDeAvisarElCierre
 import com.jvillada.movi.shared.model.fraseDelCierre
@@ -50,5 +51,5 @@ const val PREFIJO_ABRIR_PERIODO: String = "periodo:"
 /** El detalle del período de un `"periodo:2026-09"`, o `null` si no es un período. */
 internal fun detalleDelAviso(valor: String): Screen? =
     valor.removePrefix(PREFIJO_ABRIR_PERIODO)
-        .takeIf { valor.startsWith(PREFIJO_ABRIR_PERIODO) && periodoDelPrefijo(it) != null }
+        .takeIf { valor.startsWith(PREFIJO_ABRIR_PERIODO) && periodoDelId(it) != null }
         ?.let { Screen.DetalleDePeriodo(it) }

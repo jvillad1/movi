@@ -67,6 +67,9 @@ fun seRepiteParaProponer(
     if (como.saldoUnaOcurrencia || yaHayReglaOSuscripcion) return false
     if (evento.transferId != null || evento.amount <= 0L) return false
     val clave = claveDeComercio(evento) ?: return false
+    // Vuelta 105 · un recurrente es mensual: se cuentan meses de referencia, no quincenas (dos cafés en
+    // dos quincenas del mismo mes no son un pago de cada mes). En el mensual, los mismos ajustes.
+    val ajustes = ajustes.mesDeReferencia()
     val suPeriodo = periodoDe(evento.timestamp, ajustes)
     val anteriores = historia
         .filter { esElMismoGasto(evento, clave, it) }

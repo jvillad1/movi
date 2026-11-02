@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.credits
 
+import com.jvillada.movi.shared.model.mesDeReferencia
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -166,7 +167,8 @@ fun rememberDeudaDelDetalle(accountId: String, tipo: AccountType?, reintento: In
     val tarjeta = if (esTarjeta) tarjetas.valor?.firstOrNull { it.account.id == accountId } else null
     // El mes en curso con el período del dueño (ver el KDoc de `ajustesDelPeriodo` en Créditos): sin
     // perfil, el de calendario. Solo nombra el mes de la última cuota.
-    val ajustes = perfil.valor?.ajustesDelPeriodo() ?: PeriodSettings()
+    // Vuelta 105 · las cuotas son mensuales: el mes de referencia (identidad en el mensual).
+    val ajustes = (perfil.valor?.ajustesDelPeriodo() ?: PeriodSettings()).mesDeReferencia()
     val periodoActual = remember(ajustes) { periodoDe(Clock.System.now().toEpochMilliseconds(), ajustes) }
     val plan = remember(prestamo) { prestamo?.let { planDelCredito(it, hoyEnAppZone()) } }
     val abierto = remember(accountId) { LoAbiertoDeLaDeuda() }

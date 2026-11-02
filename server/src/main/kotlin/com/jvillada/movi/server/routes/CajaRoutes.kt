@@ -83,8 +83,9 @@ internal fun Transaction.gastoDelDiaADiaSinSuspender(uid: String, hoy: LocalDate
     val actual = periodoDe(appDateToEpochMillis(hoy), ajustes)
     val cerrados = mutableListOf<GastoVariableDeUnPeriodo>()
     var periodo: PeriodoFinanciero = actual
-    repeat(PERIODOS_HACIA_ATRAS) {
-        periodo = periodoAnterior(periodo)
+    // Vuelta 105 · con quincenas, el doble de períodos: la misma historia (unos tres meses).
+    repeat(if (ajustes.esQuincenal) 2 * PERIODOS_HACIA_ATRAS else PERIODOS_HACIA_ATRAS) {
+        periodo = periodoAnterior(periodo, ajustes)
         val ventana = ventanaDe(periodo, ajustes)
         // Del más reciente al más viejo: el primero que Movi no cubre entero corta la búsqueda, los
         // de antes tampoco los cubre.
@@ -130,7 +131,7 @@ internal suspend fun cajaProyectadaDe(uid: String, hoy: LocalDate = AppClock.tod
     val delPeriodo = checklistDelPeriodo(upcoming = upcoming, ocurrencias = ocurrencias, periodo = periodo, settings = ajustes)
     // Vuelta 70: el período siguiente, sobre las MISMAS respuestas (lo que vence antes del salario).
     val delSiguiente = checklistDelPeriodo(
-        upcoming = upcoming, ocurrencias = ocurrencias, periodo = periodoSiguiente(periodo), settings = ajustes,
+        upcoming = upcoming, ocurrencias = ocurrencias, periodo = periodoSiguiente(periodo, ajustes), settings = ajustes,
         conElSiguienteVencimiento = true,
     )
     // La tasa solo si hace falta, igual que el resumen del Inicio: sin un movimiento en otra moneda

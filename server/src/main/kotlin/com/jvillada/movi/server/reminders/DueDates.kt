@@ -5,6 +5,7 @@ import com.jvillada.movi.server.time.appDateToEpochMillis
 import com.jvillada.movi.server.time.epochMillisToAppDate
 import com.jvillada.movi.shared.model.PaymentStatus
 import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.shared.model.mesDeReferencia
 import com.jvillada.movi.shared.model.periodoDe
 import com.jvillada.movi.shared.model.ventanaDe
 import com.jvillada.movi.shared.model.RecurringRule
@@ -73,6 +74,9 @@ fun diasDelPeriodo(fecha: LocalDate, settings: PeriodSettings, zone: ZoneId = Ap
 
 /** El nombre del período del dueño en que cae [fecha], como `"2026-10"` — para decirlo en pantalla. */
 fun periodoDelDueno(fecha: LocalDate, settings: PeriodSettings, zone: ZoneId = AppClock.zone): String {
+    // Vuelta 105 · con quincenas, una obligación mensual se nombra por el mes de su vencimiento
+    // («la cuota de noviembre»): el id de una quincena («2026-10-31») no es un mes que se pueda decir.
+    if (settings.esQuincenal) return periodOf(fecha)
     val millis = appDateToEpochMillis(fecha, zone) + 12 * 3_600_000L
     return periodoDe(millis, settings).prefijo
 }
@@ -98,6 +102,8 @@ fun primeraOcurrenciaDesde(desde: LocalDate, dayOfMonth: Int): LocalDate {
  * mes) que no alcanza a contener el día de la regla: ese período no tiene ocurrencia que preguntar.
  */
 fun ocurrenciaEnJuego(hoy: LocalDate, dayOfMonth: Int, settings: PeriodSettings, zone: ZoneId = AppClock.zone): LocalDate? {
+    // Vuelta 105 · una obligación mensual se cuenta por el mes de referencia (identidad en el mensual).
+    val settings = settings.mesDeReferencia()
     val dias = diasDelPeriodo(hoy, settings, zone)
     return primeraOcurrenciaDesde(dias.start, dayOfMonth).takeIf { it in dias }
 }
@@ -143,6 +149,8 @@ fun ocurrenciaPorPreguntar(
     graceDays: Int = DEFAULT_GRACE_DAYS,
     zone: ZoneId = AppClock.zone,
 ): LocalDate? {
+    // Vuelta 105 · una obligación mensual se cuenta por el mes de referencia (identidad en el mensual).
+    val settings = settings.mesDeReferencia()
     val enJuego = ocurrenciaEnJuego(hoy, rule.dayOfMonth, settings, zone)
     val enGracia = ocurrenciaEnGracia(hoy, rule.dayOfMonth, graceDays)
     val usarLaDeGracia = enGracia != null &&
@@ -173,6 +181,8 @@ fun ocurrenciaAnteriorQuePisaElPeriodo(
     settings: PeriodSettings,
     zone: ZoneId = AppClock.zone,
 ): LocalDate? {
+    // Vuelta 105 · una obligación mensual se cuenta por el mes de referencia (identidad en el mensual).
+    val settings = settings.mesDeReferencia()
     val inicio = diasDelPeriodo(hoy, settings, zone).start
     val anterior = ultimaOcurrenciaHasta(inicio.minusDays(1), rule.dayOfMonth)
     if (occurrenceWindow(anterior, settings = settings).endInclusive.isBefore(inicio)) return null
@@ -253,6 +263,8 @@ fun dueDateFor(
     occurredPeriods: Set<String> = emptySet(),
     settings: PeriodSettings = PeriodSettings(),
 ): LocalDate {
+    // Vuelta 105 · una obligación mensual se cuenta por el mes de referencia (identidad en el mensual).
+    val settings = settings.mesDeReferencia()
     val natural = if (settings.esMesDeCalendario) {
         occurrenceInMonth(YearMonth.from(today), rule.dayOfMonth)
     } else {
@@ -468,6 +480,8 @@ fun arranqueDeLaRegla(
     settings: PeriodSettings = PeriodSettings(),
     zone: ZoneId = AppClock.zone,
 ): LocalDate? {
+    // Vuelta 105 · una obligación mensual se cuenta por el mes de referencia (identidad en el mensual).
+    val settings = settings.mesDeReferencia()
     val desde = rule.activeFrom ?: return null
     val inicio = runCatching { LocalDate.parse(desde) }.getOrNull() ?: return null
     // Un desembolso no es una ocurrencia: la primera cuota es la primera que cae ESTRICTAMENTE
