@@ -149,6 +149,10 @@ class ElPagoConApplePayTest {
         assertTrue(pasaElFiltroDeBancos("Mamá", "DAVIVIENDA Descuento en internet, \$64,900"))
         assertFalse(pasaElFiltroDeBancos("Mamá", "Te mandé por Nequi lo del almuerzo"))
         assertFalse(pasaElFiltroDeBancos(null, "Tu código de Uber es 1234"))
+        // El remitente se compara exacto: un celular que contiene «85540» no es Bancolombia.
+        assertFalse(pasaElFiltroDeBancos("3008554012", "Hola, ¿nos vemos mañana?"))
+        assertTrue(pasaElFiltroDeBancos("+85540", "Transferiste \$50.000"))
+        assertTrue(pasaElFiltroDeBancos(" 891 333 ", "Transferiste \$50.000"))
     }
 
     @Test
