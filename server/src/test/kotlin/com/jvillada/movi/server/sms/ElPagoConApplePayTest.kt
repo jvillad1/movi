@@ -24,11 +24,28 @@ class ElPagoConApplePayTest {
 
     @Test
     fun `los formatos del iPhone en pesos se leen igual`() {
-        listOf("\$27.500,00", "27,500.00", "COP 27.500", "\$27.500", "27500", "\$ 27 500", "COL\$27.500,00", "27.500 COP").forEach {
+        listOf("\$27.500,00", "COP 27,500.00", "COP 27.500", "\$27.500", "27500", "\$ 27 500", "COL\$27.500,00", "27.500 COP").forEach {
             assertEquals(MontoDelAtajo(27_500.0, "COP"), montoDelAtajo(it), "«$it»")
         }
         assertEquals(MontoDelAtajo(1_500_000.0, "COP"), montoDelAtajo("$1.500.000"))
-        assertEquals(MontoDelAtajo(1_500_000.5, "COP"), montoDelAtajo("1,500,000.50"))
+        assertEquals(MontoDelAtajo(1_500_000.5, "COP"), montoDelAtajo("COP 1,500,000.50"))
+    }
+
+    @Test
+    fun `con signo pesos solo o sin moneda, el formato de otro pais queda sin monto`() {
+        // En Colombia Wallet escribe los dólares «US$»: un «$12.50» o un «$1,234.00» no se sabe qué son.
+        listOf("\$12.50", "\$1,234.00", "27,500.00", "\$27,500", "12.5").forEach {
+            assertNull(montoDelAtajo(it), "«$it» no tiene el formato colombiano ni dice la moneda")
+        }
+        assertEquals(MontoDelAtajo(27.5, "COP"), montoDelAtajo("\$27,5"))
+    }
+
+    @Test
+    fun `un monto negativo queda sin monto, no se vuelve gasto`() {
+        listOf("-\$27.500", "\$-27.500", "−27.500", "COP -27.500", "-US\$12.50").forEach {
+            assertNull(montoDelAtajo(it), "«$it» puede ser un reembolso: lo decide el dueño")
+        }
+        assertEquals("Apple Pay · Rappi · sin monto · Nu", textoDelPagoConApplePay("Rappi", "-\$27.500", "Nu", null))
     }
 
     @Test

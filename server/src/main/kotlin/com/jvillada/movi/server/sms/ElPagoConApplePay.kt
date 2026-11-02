@@ -38,37 +38,52 @@ private val MARCAS_DE_MONEDA = Regex("""(?i)\bUSD\b|\bCOP\b|\bCOL\b|US\s?\$|U[$]
 private val ESPACIO_DE_MILES = Regex("""(?<=\d)[ \u00A0\u202F](?=\d{3}(?:\D|$))""")
 private val SOLO_CIFRAS_Y_SEPARADORES = Regex("""^\d[\d.,]*$""")
 
+private val PESOS_EXPLICITOS = Regex("""(?i)\bCOP\b|\bCOL\b""")
+private val SIGNO_NEGATIVO = Regex("""^[-\u2212]""")
+
 /**
  * **El monto que escribió el iPhone, o `null` si no se puede leer sin adivinar.** Las reglas:
  *
- * - La moneda: «USD», «US$» → dólares; «COP», «$» o nada → pesos. Otra moneda (€, EUR…) → `null`: Movi
- *   no la lleva y convertirla sería inventar.
- * - Con punto **y** coma, el que va de último separa los decimales (1 o 2 cifras) y el otro los miles:
- *   «27.500,00» y «27,500.00» son lo mismo.
+ * - La moneda: «USD», «US$» → dólares; «COP» → pesos. Otra moneda (€, EUR…) → `null`: Movi no la lleva
+ *   y convertirla sería inventar.
+ * - **Con «$» solo o sin moneda, solo el formato colombiano**: punto de miles y coma decimal («$27.500,00»,
+ *   «$27.500», «27500»). Un iPhone en Colombia escribe los dólares «US$»; un «$12.50» o un «$1,234.00» (punto
+ *   decimal o coma de miles) es el formato de otro país, no se sabe si son pesos y queda sin monto. Con
+ *   «COP» explícito vale cualquiera de los dos formatos («COP 27,500.00»).
+ * - Con punto **y** coma, el que va de último separa los decimales (1 o 2 cifras) y el otro los miles.
  * - Con un solo separador que se repite, son miles: «1.500.000».
- * - Con un solo separador una vez: seguido de 3 cifras son miles («27.500», «27,500»: ninguna de las
- *   dos monedas tiene tres decimales); de 1 o 2, decimales («12.50», «27,5»).
+ * - Con un solo separador una vez: seguido de 3 cifras son miles («27.500»: ninguna de las dos monedas
+ *   tiene tres decimales); de 1 o 2, decimales («27,5»).
  * - Los miles tienen que venir de a tres («1.50.000» no se lee), y el monto tiene que ser mayor que cero:
  *   el disparador de Wallet a veces entrega 0 cuando no supo el monto.
+ * - **Con signo negativo, sin monto.** Puede ser un reembolso, pero el atajo no dice qué fue: anotarlo como
+ *   gasto sería al revés, y como ingreso, adivinar. El dueño lo decide en Revisar.
  */
 fun montoDelAtajo(crudo: String?): MontoDelAtajo? {
     val texto = crudo?.trim()?.takeIf { it.isNotEmpty() } ?: return null
     if (MONEDAS_QUE_NO_SE_LEEN.containsMatchIn(texto)) return null
-    val moneda = if (ES_DOLAR.containsMatchIn(texto)) "USD" else "COP"
+    val enDolares = ES_DOLAR.containsMatchIn(texto)
+    val conMonedaDicha = enDolares || PESOS_EXPLICITOS.containsMatchIn(texto)
     val numero = MARCAS_DE_MONEDA.replace(texto, " ")
         .replace(ESPACIO_DE_MILES, "")
         .trim()
-        .removePrefix("-").removePrefix("+").trim()
-    if (!SOLO_CIFRAS_Y_SEPARADORES.matches(numero)) return null
-    val valor = valorSinAdivinar(numero) ?: return null
-    if (valor <= 0.0 || valor >= 1e12) return null
-    return MontoDelAtajo(valor, moneda)
+    if (SIGNO_NEGATIVO.containsMatchIn(numero)) return null
+    val sinSigno = numero.removePrefix("+").trim()
+    if (!SOLO_CIFRAS_Y_SEPARADORES.matches(sinSigno)) return null
+    val lectura = valorSinAdivinar(sinSigno) ?: return null
+    // Sin la moneda dicha, solo el formato de Colombia: punto de miles, coma decimal.
+    if (!conMonedaDicha && (lectura.decimal == '.' || lectura.miles == ',')) return null
+    if (lectura.valor <= 0.0 || lectura.valor >= 1e12) return null
+    return MontoDelAtajo(lectura.valor, if (enDolares) "USD" else "COP")
 }
 
-private fun valorSinAdivinar(numero: String): Double? {
+/** Un número leído y con qué separadores: [decimal] y [miles] en `null` si no los tenía. */
+private data class NumeroLeido(val valor: Double, val decimal: Char?, val miles: Char?)
+
+private fun valorSinAdivinar(numero: String): NumeroLeido? {
     val puntos = numero.count { it == '.' }
     val comas = numero.count { it == ',' }
-    if (puntos == 0 && comas == 0) return numero.toDoubleOrNull()
+    if (puntos == 0 && comas == 0) return numero.toDoubleOrNull()?.let { NumeroLeido(it, null, null) }
     if (numero.last() == '.' || numero.last() == ',') return null
     return if (puntos > 0 && comas > 0) {
         val decimal = if (numero.lastIndexOf('.') > numero.lastIndexOf(',')) '.' else ','
@@ -78,17 +93,17 @@ private fun valorSinAdivinar(numero: String): Double? {
         val fraccion = numero.substringAfter(decimal)
         if (fraccion.length !in 1..2 || miles in fraccion) return null
         val sinMiles = enteroConMiles(entero, miles) ?: return null
-        "$sinMiles.$fraccion".toDoubleOrNull()
+        "$sinMiles.$fraccion".toDoubleOrNull()?.let { NumeroLeido(it, decimal, miles) }
     } else {
         val separador = if (puntos > 0) '.' else ','
         val veces = maxOf(puntos, comas)
         if (veces > 1) {
-            enteroConMiles(numero, separador)?.toDoubleOrNull()
+            enteroConMiles(numero, separador)?.toDoubleOrNull()?.let { NumeroLeido(it, null, separador) }
         } else {
             val fraccion = numero.substringAfter(separador)
             when (fraccion.length) {
-                3 -> enteroConMiles(numero, separador)?.toDoubleOrNull()
-                1, 2 -> "${numero.substringBefore(separador)}.$fraccion".toDoubleOrNull()
+                3 -> enteroConMiles(numero, separador)?.toDoubleOrNull()?.let { NumeroLeido(it, null, separador) }
+                1, 2 -> "${numero.substringBefore(separador)}.$fraccion".toDoubleOrNull()?.let { NumeroLeido(it, separador, null) }
                 else -> null
             }
         }

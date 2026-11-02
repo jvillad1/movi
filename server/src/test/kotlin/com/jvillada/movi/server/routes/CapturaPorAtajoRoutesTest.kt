@@ -298,7 +298,7 @@ class CapturaPorAtajoRoutesTest {
     fun `un pago con Apple Pay se lee con el monto en varios formatos`() = conApp {
         val codigo = client.crearCodigo()
         client.avisar(codigo, pago("Rappi", "\$27.500,00"))
-        client.avisar(codigo, pago("Carulla", "27,500.00"))
+        client.avisar(codigo, pago("Carulla", "COP 27,500.00"))
         client.avisar(codigo, pago("Exito", "COP 27.500"))
         val textos = filas().map { it.second }.sorted()
         assertEquals(
