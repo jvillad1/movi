@@ -124,6 +124,12 @@ object Users : Table("users") {
     val ahorroDelPeriodoTipo = varchar("ahorro_del_periodo_tipo", 16).nullable()
     val ahorroDelPeriodoValor = long("ahorro_del_periodo_valor").nullable()
     /**
+     * Vuelta 108 · **«Gasto de un día normal»** (pesos por día), el que el dueño escribió en Pagos para
+     * reemplazar el estimado de la caja (`gastoDelDiaADia` en :core). `null` = usar el estimado. Columna de
+     * `users`: no va a `TABLAS_DEL_USUARIO`.
+     */
+    val gastoDeUnDiaNormal = long("gasto_de_un_dia_normal").nullable()
+    /**
      * **Cuándo vio el aviso «Qué ve la IA»** (vuelta 95), en milisegundos; `null` = nunca. Es la hoja que
      * se abre la primera vez que algo va a Claude (el chat libre, leer un papel o un extracto con IA) y
      * explica qué se manda y qué no. Por usuario y en el server, para que no vuelva en otro aparato; la

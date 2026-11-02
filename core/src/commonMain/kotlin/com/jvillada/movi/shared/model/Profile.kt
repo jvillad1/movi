@@ -83,6 +83,11 @@ data class UserProfile(
     /** Pesos con `MONTO`, porcentaje entero con `PORCENTAJE`, 0 con `NINGUNO`. */
     val ahorroDelPeriodoValor: Long = 0L,
     /**
+     * Vuelta 108 · **«Gasto de un día normal»**, en pesos, el que el dueño escribió en Pagos; `null` = usar
+     * el que Movi estima (`gastoDelDiaADia`). Reemplaza el supuesto de la caja y de la proyección del héroe.
+     */
+    val gastoDeUnDiaNormal: Long? = null,
+    /**
      * **Cuándo vio el aviso «Qué ve la IA»** (vuelta 95), en milisegundos; `null` = nunca. La hoja se
      * abre la primera vez que algo va a Claude (ver [hayQueAvisarDeLaIa]). Lo escribe
      * `POST /api/users/me/aviso-ia` y vive en el server para que no vuelva en otro aparato.
@@ -179,6 +184,11 @@ data class UpdateProfileRequest(
     val ahorroDelPeriodoTipo: String? = null,
     /** Pesos o porcentaje, según [ahorroDelPeriodoTipo]. Solo se lee junto con él. */
     val ahorroDelPeriodoValor: Long? = null,
+    /**
+     * Vuelta 108 · «Gasto de un día normal» en pesos. `null` = no tocar; **0 = volver al estimado de Movi**;
+     * lo valida [problemaDelGastoDeUnDiaNormal].
+     */
+    val gastoDeUnDiaNormal: Long? = null,
 )
 
 /**

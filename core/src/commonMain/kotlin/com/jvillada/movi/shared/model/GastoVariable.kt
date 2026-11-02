@@ -76,3 +76,67 @@ fun gastoVariablePorDia(
         .filter { (_, monto) -> monto > 0L }
         .groupBy({ diaDe(it.first.timestamp) }, { it.second })
         .mapValues { (_, montos) -> montos.sum() }
+
+// ── Vuelta 108 · el gasto de un día normal ────────────────────────────────────
+
+/**
+ * **Desde cuánto un solo gasto es «de una vez» y no del día a día**: $1.000.000, por movimiento y sobre
+ * su parte variable (lo que no pagó un fijo del checklist). **Elegido, no medido** (vuelta 108): con los
+ * datos del dueño, lo que pasaba de ahí era la obra de la casa (Gardenera, $6,4M + $3,5M + $6,2M + $1M) y
+ * un arreglo de tubería de $1,2M; lo que quedaba por debajo (el contador, $450.000) sí es un gasto que
+ * vuelve. Un umbral fijo en pesos y no un múltiplo del promedio, porque un promedio inflado por la obra
+ * subiría también el umbral. Quien no se reconozca en el estimado escribe el suyo en Pagos («Gasto de un
+ * día normal», `UserProfile.gastoDeUnDiaNormal`), que reemplaza toda esta cuenta.
+ */
+const val UMBRAL_DE_UN_GASTO_DE_UNA_VEZ: Long = 1_000_000L
+
+/**
+ * **Lo que entra al supuesto «gasto de un día normal»** de un período cerrado, y lo que se dejó fuera.
+ *
+ * Es el gasto variable de siempre ([parteVariable], con la misma [parteFija]) **menos dos cosas** que la
+ * caja proyectada no puede repartir como gasto de todos los días:
+ *
+ * 1. **Las compras con tarjeta** ([cuentasDeTarjeta]): la caja dice que esas compras salen de tus cuentas
+ *    cuando se paga la tarjeta —su pago mínimo ya es una fila de la lista—, no el día que se compra
+ *    (`CajaProyectada.kt`, «Lo que NO está y por qué»). Contarlas también en el promedio las restaba dos
+ *    veces.
+ * 2. **Los gastos de una sola vez**: un movimiento cuya parte variable llega a [UMBRAL_DE_UN_GASTO_DE_UNA_VEZ].
+ *    Una obra de $17M no es el gasto de un día cualquiera.
+ *
+ * Puro. Lo usa solo el supuesto ([gastoDelDiaADia]): el Disponible, «Te quedan» y «En qué se va» siguen
+ * contando todo lo que de verdad se gastó.
+ *
+ * @param cuentasDeTarjeta los ids de las cuentas `CREDIT_CARD` del dueño.
+ */
+fun gastoDeUnDiaNormalDelPeriodo(
+    periodo: String,
+    dias: Int,
+    eventos: List<FinancialEvent>,
+    parteFija: Map<String, Long>,
+    cuentasDeTarjeta: Set<String>,
+    diaDe: (Long) -> String,
+): GastoVariableDeUnPeriodo {
+    var total = 0L
+    var conTarjeta = 0L
+    val deUnaVez = mutableListOf<GastoDeUnaVez>()
+    eventos.forEach { evento ->
+        val parte = parteVariable(evento, parteFija)
+        if (parte <= 0L) return@forEach
+        when {
+            evento.accountId in cuentasDeTarjeta -> conTarjeta += parte
+            parte >= UMBRAL_DE_UN_GASTO_DE_UNA_VEZ -> deUnaVez += GastoDeUnaVez(
+                nombre = evento.merchant?.takeIf { it.isNotBlank() } ?: evento.description,
+                monto = parte,
+                fecha = diaDe(evento.timestamp),
+            )
+            else -> total += parte
+        }
+    }
+    return GastoVariableDeUnPeriodo(
+        periodo = periodo,
+        total = total,
+        dias = dias,
+        conTarjeta = conTarjeta,
+        deUnaVez = deUnaVez.sortedByDescending { it.monto },
+    )
+}

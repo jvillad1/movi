@@ -358,6 +358,8 @@ internal fun Transaction.parteFijaDelDisponible(
     hoy: LocalDate,
     periodo: PeriodSettings,
     eventosDelPeriodo: List<FinancialEvent>,
+    /** Vuelta 108: solo el supuesto del gasto de un día normal (ver `parteFijaDelChecklist`). */
+    completarLoSellado: Boolean = false,
 ): Map<String, Long> {
     val sellos = loadOccurrenceRows(uid)
     // Lo que Movi emparejó solo cuenta como un sello con su movimiento, por dos cosas:
@@ -395,6 +397,7 @@ internal fun Transaction.parteFijaDelDisponible(
         } else {
             emptyMap()
         },
+        completarLoSellado = completarLoSellado,
     )
 }
 
