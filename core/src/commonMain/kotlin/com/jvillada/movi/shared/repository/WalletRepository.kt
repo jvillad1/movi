@@ -1024,6 +1024,22 @@ interface WalletRepository {
         throw UnsupportedOperationException("leerPapel")
 
     /**
+     * Vuelta 103 · **el reintento con la clave de un PDF**: el mismo `POST /api/documents/{id}/leer`,
+     * sobre el documento ya guardado (no se vuelve a subir), con la [clave] en el **cuerpo** —nunca en
+     * la URL ni en un header—. Lanza `ApiException` con `PDF_CON_CLAVE`, `CLAVE_INCORRECTA` o
+     * `DEMASIADOS_INTENTOS_DE_CLAVE` (ver `PdfConClave.kt`).
+     */
+    suspend fun abrirPapelConClave(documentoId: String, clave: com.jvillada.movi.shared.model.ClaveDelPdf): LecturaDelPapel =
+        throw UnsupportedOperationException("abrirPapelConClave")
+
+    /** `GET /api/extractos/clave`: si hay una clave recordada y si se puede recordar. Nunca la clave. */
+    suspend fun getEstadoDeLaClaveDeExtractos(): com.jvillada.movi.shared.model.EstadoDeLaClaveDeExtractos =
+        com.jvillada.movi.shared.model.EstadoDeLaClaveDeExtractos()
+
+    /** `DELETE /api/extractos/clave`: «Olvidarla». */
+    suspend fun olvidarLaClaveDeExtractos(): Unit = throw UnsupportedOperationException("olvidarLaClaveDeExtractos")
+
+    /**
      * Confirma la propuesta de un comprobante diciendo **con qué movimiento** —el que se acaba de
      * crear o el que ya estaba—: el server cuelga el papel de la cuenta de ese movimiento. Sin
      * soporte del lado de quien implemente esto, es un `confirmSms` de siempre.

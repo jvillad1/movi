@@ -219,6 +219,8 @@ internal class InvalidaElInicioAlEscribir(
     override suspend fun subirPapel(fileName: String, bytes: ByteArray, mimeType: String): Documento = trasEscribir { delegado.subirPapel(fileName, bytes, mimeType) }
     // Leer un papel puede dejar una propuesta en «Por revisar»: es una escritura.
     override suspend fun leerPapel(documentoId: String, anotarAunqueEsteAnotado: Boolean): com.jvillada.movi.shared.model.LecturaDelPapel = trasEscribir { delegado.leerPapel(documentoId, anotarAunqueEsteAnotado) }
+    override suspend fun olvidarLaClaveDeExtractos() = trasEscribir { delegado.olvidarLaClaveDeExtractos() }
+    override suspend fun abrirPapelConClave(documentoId: String, clave: com.jvillada.movi.shared.model.ClaveDelPdf): com.jvillada.movi.shared.model.LecturaDelPapel = trasEscribir { delegado.abrirPapelConClave(documentoId, clave) }
     override suspend fun confirmarComprobante(smsId: String, eventoId: String): Unit = trasEscribir { delegado.confirmarComprobante(smsId, eventoId) }
     override suspend fun confirmSmsCon(id: String, eventoId: String): Unit = trasEscribir { delegado.confirmSmsCon(id, eventoId) }
     override suspend fun importStatement(decision: ImportDecision): Unit = trasEscribir { delegado.importStatement(decision) }

@@ -56,7 +56,7 @@ class LaCuentaAMedioCrearArrancaTest {
         KnownDestinations, EnlacesCompartidos, LecturasDePapeles, ConversacionesDelAsistente, AccionesPropuestas,
         MemoriaDelAsistente, AnomaliasDescartadas, DestinosDescartados, DebitosDescartados, ReglasDeComercio,
         CierresEnviados, CierresDescartados, Apartados, InicioPersonalizado, Espacios, GastosDelEspacio,
-        LiquidacionesDelEspacio, CorreosDescartados, CierresGuardados, RecurrentesDelHogar,
+        LiquidacionesDelEspacio, CorreosDescartados, CierresGuardados, RecurrentesDelHogar, ClavesDeExtractos, PdfsAbiertos,
     )
 
     /** Lo que piden el Inicio, la guía de primer uso y la hoja «Agregar» al arrancar (logs de prod y del navegador). */

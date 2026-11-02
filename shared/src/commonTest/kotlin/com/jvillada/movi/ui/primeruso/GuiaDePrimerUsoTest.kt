@@ -107,6 +107,18 @@ class GuiaDePrimerUsoTest {
         assertEquals(3, tres.size, "sin captura posible no hay renglón «Pendiente» de captura")
     }
 
+    @Test
+    fun `un extracto que no se pudo leer no se cuenta como hecho ni dice que se esta leyendo`() {
+        // Vuelta 103: la guía decía «Movi está leyendo tu extracto · Listo» aunque la hoja dijera que no.
+        val modo = CapturaDelPrimerUso.SUBIR_UN_EXTRACTO
+        val lista = primerosPasos(LoQueYaHay(false, 1, false, 0), modo)
+        val sinLeer = lineasDelResumen(lista, ResumenDelPrimerUso(null, 1, 0, 0, EstadoDeLaCaptura.EXTRACTO_SIN_LEER, modo))
+        assertEquals("No se pudo leer tu extracto", sinLeer[2].detalle)
+        assertEquals(false, sinLeer[2].hecho)
+        val leido = lineasDelResumen(lista, ResumenDelPrimerUso(null, 1, 0, 0, EstadoDeLaCaptura.EXTRACTO_LEIDO, modo))
+        assertEquals("Movi leyó tu extracto", leido[2].detalle)
+    }
+
     // ── La lista con lo que el Inicio leyó ─────────────────────────────────────────────────────
 
     private val octubre = PeriodoFinanciero(2026, 10)

@@ -5,6 +5,9 @@ import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Documents
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.documentos.Cifrado
+import com.jvillada.movi.server.documentos.FallaDeLaClaveDelPdf
+import com.jvillada.movi.server.documentos.abrirElPapelGuardado
+import com.jvillada.movi.server.documentos.documentoDelPdfYaAbierto
 import com.jvillada.movi.server.documentos.PAPEL_CIFRADO_ILEGIBLE
 import com.jvillada.movi.server.documentos.PapelIlegible
 import com.jvillada.movi.server.plugins.userId
@@ -202,6 +205,17 @@ fun Route.documentRoutes() {
                     ?.toDocumento()
             }
             if (existente != null) return@post call.respond(HttpStatusCode.OK, existente)
+            // Vuelta 103: el mismo PDF con clave, subido otra vez. Lo guardado ya no son estos bytes
+            // —Movi lo abrió y guardó el contenido descifrado—, así que se reconoce por la huella del
+            // original (`pdfs_abiertos`) y se devuelve ese documento, ya abierto. Ver `PdfConClave.kt`.
+            val yaAbierto = dbQuery {
+                documentoDelPdfYaAbierto(uid, bytes)?.let { docId ->
+                    Documents.select(COLUMNAS_SIN_CONTENIDO)
+                        .where { (Documents.id eq docId) and (Documents.userId eq uid) }
+                        .firstOrNull()?.toDocumento()
+                }
+            }
+            if (yaAbierto != null) return@post call.respond(HttpStatusCode.OK, yaAbierto)
         }
 
         val doc = Documento(
@@ -338,8 +352,13 @@ fun Route.documentRoutes() {
                 .firstOrNull()
         } ?: return@post call.respond(HttpStatusCode.NotFound)
 
+        // Vuelta 103: como `/leer`, un PDF con clave se abre acá —con la clave del cuerpo o la
+        // recordada— y lo que se lee es el contenido descifrado. Ver `PdfConClave.kt`.
+        val conClave = call.request.queryParameters["conClave"] == "1"
         val bytes = try {
-            Cifrado.descifrarBytes(fila[Documents.content])
+            abrirElPapelGuardado(uid, id, Cifrado.descifrarBytes(fila[Documents.content]), call.claveDelReintento())
+        } catch (e: FallaDeLaClaveDelPdf) {
+            return@post call.contestarLaFallaDeLaClave(e, conClave, viejo = PAPEL_CON_CLAVE)
         } catch (e: PapelIlegible) {
             call.application.log.error("[documentos] no se pudo abrir $id: ${e.message}")
             return@post call.respond(HttpStatusCode.ServiceUnavailable, PAPEL_CIFRADO_ILEGIBLE)
@@ -446,8 +465,9 @@ internal fun esSuCuenta(uid: String, accountId: String): Boolean =
 /**
  * Guarda la fila con su contenido. Fuera de las rutas para que el importador también la use.
  *
- * **La única puerta de escritura de `documents.content`**: el contenido pasa por
- * [Cifrado.cifrarBytes] (cifrado si hay clave). `size_bytes` sigue siendo el tamaño en claro.
+ * **Una de las dos puertas de escritura de `documents.content`** (la otra es el PDF con clave que
+ * Movi abre, `guardarElPdfAbierto` en `PdfConClave.kt`): las dos pasan por [Cifrado.cifrarBytes]
+ * (cifrado si hay clave). `size_bytes` sigue siendo el tamaño en claro.
  */
 fun guardarDocumento(uid: String, doc: Documento, bytes: ByteArray) {
     Documents.insert {

@@ -5131,3 +5131,25 @@ repartido y abre la propuesta de Movi), en «Repartir este gasto» de Agregar y 
 acto (`AnomaliasDescartadasEnLaSesion`).
 
 **Pruebas**: `SelectorDeRepartoEnPantallaTest` (androidUnitTest) y `RepartoPorGastoEnLaAppTest` (commonTest).
+
+## Vuelta 103 · Pedir un secreto en línea (la clave del PDF)
+
+Cuando una acción se frena porque falta un secreto que solo el usuario sabe (hoy: la clave de apertura de un
+extracto en PDF, `ui/papeles/HojaLeyendoElPapel.kt` → `PedirLaClave`), **no se manda a otra app a resolverlo**
+(«quítale la clave, imprímelo como PDF») ni a otra pantalla: se pide **en la misma fila** que se frenó.
+
+- **La fila dice la verdad primero.** El título va en tono de aviso, con su ícono (`WarningAmber`, o `Lock` si
+  falta el secreto): «Este PDF tiene clave», nunca «Listo». La guía de primer uso lee el mismo resultado
+  (`PapelesCompartidos.resultados`, `filaDelPapelEnLaGuia`): leyendo, listo, con clave, sin IA, no se pudo.
+- **El campo es un `Campo` con `secreto = true`** (puntos y el ojo para mostrarlo), rótulo corto («Clave del
+  PDF») y la pista de **una línea** en `ayuda`, que dice qué suele ser y qué **no** es («Suele ser tu cédula. No
+  es la clave de tu banca en línea»). El error de una clave mala va en el lugar de la ayuda.
+- **«Recordarla…» es una `Casilla` apagada al empezar, siempre.** Solo aparece si el server puede guardarla
+  cifrada (`EstadoDeLaClaveDeExtractos.sePuedeRecordar`); si la pregunta falla, no aparece. Lo recordado tiene
+  su fila en Ajustes («Clave de tus extractos · Guardada» con «Olvidarla») y la fila no existe si no hay nada.
+- **Un solo botón, con el verbo** («Abrir»), `Principal`, apagado mientras el campo está vacío. La tecla Listo
+  del teclado hace lo mismo.
+- **El reintento no repite lo que ya se hizo**: el archivo ya está guardado y no se vuelve a subir. El secreto
+  viaja **solo en el cuerpo** del pedido, nunca en la URL ni en un header, y vive solo en el estado de la fila.
+
+**Pruebas**: `CompartirConMoviTest` (`:shared` androidUnitTest) y `PdfConClaveTest` (`:server`).

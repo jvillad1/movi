@@ -128,6 +128,8 @@ fun Application.configureRouting() {
             statementRoutes()
             documentRoutes()
             papelesRoutes()
+            // Vuelta 103: la clave de los extractos (si hay una recordada, y «Olvidarla»).
+            claveDeExtractosRoutes()
             enlaceCompartidoRoutes()
             exportRoutes()
             borrarLaCuentaRoutes()

@@ -4,6 +4,8 @@ import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import com.jvillada.movi.server.ai.FallasDeLaApiDePrueba
 import com.jvillada.movi.server.db.Accounts
+import com.jvillada.movi.server.db.ClavesDeExtractos
+import com.jvillada.movi.server.db.PdfsAbiertos
 import com.jvillada.movi.server.db.Documents
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.KnownDestinations
@@ -153,8 +155,8 @@ class PapelesRoutesTest {
             driver = "org.h2.Driver",
         )
         transaction {
-            SchemaUtils.drop(LecturasDePapeles, Documents, SmsMessages, VoidEvents, Events, StatementImports, Accounts, Users, KnownDestinations)
-            SchemaUtils.create(Users, Accounts, StatementImports, Events, VoidEvents, SmsMessages, Documents, KnownDestinations, LecturasDePapeles)
+            SchemaUtils.drop(PdfsAbiertos, ClavesDeExtractos, LecturasDePapeles, Documents, SmsMessages, VoidEvents, Events, StatementImports, Accounts, Users, KnownDestinations)
+            SchemaUtils.create(Users, Accounts, StatementImports, Events, VoidEvents, SmsMessages, Documents, KnownDestinations, LecturasDePapeles, ClavesDeExtractos, PdfsAbiertos)
             listOf(duenoId, otroId).forEach { uid ->
                 Users.insert {
                     it[id] = uid
