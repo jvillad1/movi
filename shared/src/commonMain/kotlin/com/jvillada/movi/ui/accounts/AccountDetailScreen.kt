@@ -152,6 +152,8 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
     var showCondicion by remember { mutableStateOf(false) }
     /** Vuelta 98: la hoja «Editar la cuenta» abierta. */
     var showEditar by remember { mutableStateOf(false) }
+    /** Vuelta 107: la guía «Cómo sacar tu extracto de …» abierta. */
+    var guiaDelExtracto by remember { mutableStateOf<com.jvillada.movi.shared.model.GuiaDelExtracto?>(null) }
     /**
      * Los apartados de ESTA cuenta, con lo que le queda a cada uno (el server lo calcula). Solo se
      * leen en una cuenta de tu plata en pesos; si la lectura falla, ninguno: la sección sigue
@@ -366,6 +368,24 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                                     inicio = { IconoEnCirculo(Icons.Rounded.Edit) },
                                     onClick = { showEditar = true },
                                     modifier = Modifier.testTag(TAG_EDITAR_LA_CUENTA),
+                                )
+                            }
+                            Spacer(Modifier.height(Medida.entreSecciones))
+                        }
+                    }
+
+                    // **«Sube el extracto de este mes»** (vuelta 107): en una cuenta o tarjeta de un banco
+                    // con guía (Bancolombia, Nu), la fila abre «Cómo sacar tu extracto de …»: los pasos,
+                    // el formato y el rango ideal. El banco de la tarjeta gana sobre el nombre de la
+                    // cuenta («Master Black 3684» no dice Bancolombia). Sin guía, nada.
+                    val guia = com.jvillada.movi.ui.extractos.guiaDelExtractoDeLaCuenta(acc, deuda?.tarjeta?.terms?.bank)
+                    if (guia != null) {
+                        item(key = "como-sacar-el-extracto") {
+                            Superficie(relleno = RellenoDeSuperficie.Lista) {
+                                com.jvillada.movi.ui.extractos.FilaDeComoSacarElExtracto(
+                                    guia = guia,
+                                    titulo = com.jvillada.movi.shared.model.SUBE_EL_EXTRACTO_DE_ESTE_MES,
+                                    onClick = { guiaDelExtracto = guia },
                                 )
                             }
                             Spacer(Modifier.height(Medida.entreSecciones))
@@ -647,6 +667,14 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                     },
                 )
             }
+        }
+
+        guiaDelExtracto?.let { guia ->
+            com.jvillada.movi.ui.extractos.HojaDeComoSacarElExtracto(
+                guia = guia,
+                esTarjeta = account?.type == AccountType.CREDIT_CARD,
+                onDismiss = { guiaDelExtracto = null },
+            )
         }
 
         hojaDeApartado?.let { hoja ->
