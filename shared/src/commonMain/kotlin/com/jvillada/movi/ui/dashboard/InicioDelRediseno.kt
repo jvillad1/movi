@@ -203,7 +203,7 @@ fun conteoPorRevisarDelInicio(data: DashboardData): ConteoPorRevisar = ConteoPor
 
 /** Vuelta 97 · lo que Movi propone repartir, sin lo que se descartó o repartió en esta sesión. */
 fun propuestasDeRepartirDelInicio(data: DashboardData): List<com.jvillada.movi.shared.model.PropuestaDeRepartir> =
-    com.jvillada.movi.ui.espacios.propuestasDeRepartirVisibles(data.propuestasDeRepartir.orEmpty(), AnomaliasDescartadasEnLaSesion.huellas)
+    com.jvillada.movi.ui.porrevisar.propuestasDeRepartirALaVista(data.propuestasDeRepartir).orEmpty()
 
 /**
  * El número de la insignia de «Revisar avisos»: **todo** lo que espera en Por revisar

@@ -178,7 +178,23 @@ fun cuantosPorRevisar(
     dias: List<EventDay>?,
     candidatos: List<FinancialEvent>?,
     debitos: List<DebitoAutomaticoPorConfirmar>? = null,
-): Int = conteoPorRevisar(mensajes, dias, candidatos, debitos).total
+    propuestasDeSaldar: List<PropuestaDeSaldar>? = null,
+    /** Vuelta 97: lo que Movi propone repartir, ya sin lo descartado ([propuestasDeRepartirALaVista]). */
+    propuestasDeRepartir: List<PropuestaDeRepartir>? = null,
+): Int = conteoPorRevisar(
+    mensajes, dias, candidatos, debitos,
+    propuestasDeSaldar = propuestasDeSaldar, propuestasDeRepartir = propuestasDeRepartir,
+).total
+
+/**
+ * Vuelta 97 · **las propuestas de repartir que cuentan**, sin las descartadas o repartidas en esta
+ * sesión: la misma lista para el Inicio (`propuestasDeRepartirDelInicio`), la bandeja y «N por revisar»
+ * de Movimientos, así los tres dicen el mismo número.
+ */
+fun propuestasDeRepartirALaVista(propuestas: List<PropuestaDeRepartir>?): List<PropuestaDeRepartir>? =
+    propuestas?.let {
+        com.jvillada.movi.ui.espacios.propuestasDeRepartirVisibles(it, com.jvillada.movi.ui.dashboard.AnomaliasDescartadasEnLaSesion.huellas)
+    }
 
 /** Lo que dice el renglón de Movimientos. Sin plural que conjugar: «1 por revisar», «4 por revisar». */
 fun textoDePorRevisar(cuantos: Int): String = "$cuantos por revisar"

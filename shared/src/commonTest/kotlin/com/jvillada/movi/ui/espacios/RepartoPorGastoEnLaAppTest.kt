@@ -108,4 +108,26 @@ class RepartoPorGastoEnLaAppTest {
         assertEquals(listOf("e_2"), propuestasDelInicio(data).filter { it.tipo == TipoDePropuesta.REPARTO }.map { (it.alTocar as AccionDeLaPropuesta.Repartir).propuesta.eventoId })
         assertEquals(1, conteoPorRevisarDelInicio(data).repartir)
     }
+
+    /**
+     * Revisión de la vuelta 97 · **«N por revisar» de Movimientos dice lo mismo que el Inicio y la bandeja**:
+     * los tres cuentan las propuestas de repartir con la misma lista ([propuestasDeRepartirALaVista]), sin lo
+     * descartado en esta sesión.
+     */
+    @Test
+    fun `N por revisar de Movimientos cuenta las propuestas de repartir igual que el Inicio`() {
+        val lista = listOf(propuesta("e_1"), propuesta("e_2", motivo = MotivoDeReparto.COMERCIO))
+        fun deMovimientos() = com.jvillada.movi.ui.porrevisar.cuantosPorRevisar(
+            mensajes = emptyList(), dias = emptyList(), candidatos = emptyList(), debitos = emptyList(),
+            propuestasDeSaldar = emptyList(),
+            propuestasDeRepartir = com.jvillada.movi.ui.porrevisar.propuestasDeRepartirALaVista(lista),
+        )
+        val data = DashboardData(propuestasDeRepartir = lista)
+        assertEquals(2, deMovimientos())
+        assertEquals(conteoPorRevisarDelInicio(data).total, deMovimientos())
+        AnomaliasDescartadasEnLaSesion.descartar(huellaDeNuncaRepartir("comercio:exito"))
+        assertEquals(1, deMovimientos())
+        assertEquals(conteoPorRevisarDelInicio(data).total, deMovimientos())
+        assertFalse(com.jvillada.movi.ui.porrevisar.bandejaAlDia(emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), com.jvillada.movi.ui.porrevisar.propuestasDeRepartirALaVista(lista)))
+    }
 }

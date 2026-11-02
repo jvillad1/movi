@@ -496,10 +496,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
     // el Inicio, en esta sesión) se va en el acto.
     var repartidasAca by remember { mutableStateOf(emptySet<String>()) }
     val propuestasDeRepartir: List<com.jvillada.movi.shared.model.PropuestaDeRepartir> =
-        com.jvillada.movi.ui.espacios.propuestasDeRepartirVisibles(
-            lecturas.propuestasDeRepartir.orEmpty().filterNot { it.eventoId in repartidasAca },
-            com.jvillada.movi.ui.dashboard.AnomaliasDescartadasEnLaSesion.huellas,
-        )
+        propuestasDeRepartirALaVista(lecturas.propuestasDeRepartir).orEmpty().filterNot { it.eventoId in repartidasAca }
     val tiposDeCuentas = remember(cuentas) { cuentas.associate { it.id to it.type } }
 
     // La primera carga: alguna de las tres fuentes todavía no dijo nada. Con lo de antes en

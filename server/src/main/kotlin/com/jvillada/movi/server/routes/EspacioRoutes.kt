@@ -398,6 +398,11 @@ private fun Transaction.conElMovimiento(uid: String, liquidaciones: List<Liquida
  * Reparte un movimiento propio en el espacio. Idempotente: el mismo movimiento en el mismo espacio
  * devuelve el gasto que ya existe. Un movimiento está en un espacio o en ninguno (409 si ya está en
  * otro). Solo un gasto vivo en pesos, que no sea la mitad de un traspaso ni salde un espacio.
+ *
+ * Vuelta 97 · con [CompartirMovimientoRequest.reparto] no nulo sobre un movimiento ya repartido en este
+ * espacio, **edita** el reparto. **`reparto = null` no revierte un reparto propio**: deja el que estaba
+ * (es el reintento de un APK viejo, que no conoce el campo). Para volver a la regla del grupo se manda
+ * explícito `{"forma":"DEL_GRUPO"}`.
  */
 internal fun Transaction.compartirMovimiento(
     uid: String,
