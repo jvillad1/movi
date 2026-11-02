@@ -93,7 +93,7 @@ const val COPIAR_EL_TEXTO_DE_PRUEBA: String = "Copiar el texto de prueba"
 
 /** La línea de privacidad, tal cual la pide el dueño. */
 const val PRIVACIDAD_DE_LOS_ATAJOS: String =
-    "Solo se guardan los mensajes de bancos: los demás que lleguen se descartan sin leerlos."
+    "Solo se guardan los mensajes de bancos: los demás que lleguen se descartan sin guardarlos."
 
 const val INTRO_DESDE_TU_IPHONE: String =
     "Con la app Atajos, tu iPhone le avisa a Movi cada SMS del banco y cada pago con Apple Pay. " +

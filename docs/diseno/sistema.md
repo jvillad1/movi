@@ -5343,7 +5343,7 @@ los atajos del iPhone, `ui/sms/DesdeTuIphone.kt`), la vista lo dice así:
   con las palabras de la otra app entre comillas angulares, tal cual se ven allá («Automatización», «El mensaje
   contiene»). Lo que no se pudo confirmar en una fuente queda marcado como borrador en el código y se revisa con
   el aparato.
-- **La privacidad, en una línea al final**: qué se guarda y qué se descarta sin leerse.
+- **La privacidad, en una línea al final**: qué se guarda y qué se descarta sin guardarlo (el servidor sí lo recibe y lo mira para filtrarlo: no se promete que no se lea).
 
 **Pruebas**: `DesdeTuIphoneTest` (`:shared` androidUnitTest), `CapturaPorAtajoTest` (`:core`) y
 `CapturaPorAtajoRoutesTest` (`:server`).
