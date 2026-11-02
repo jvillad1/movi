@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.periodos
 
+import com.jvillada.movi.shared.model.periodoDelId
 import com.jvillada.movi.ui.components.ds.IconoDeMovimiento
 import com.jvillada.movi.ui.transactions.tituloDelMovimiento
 import com.jvillada.movi.ui.transactions.CifraDelMovimiento
@@ -230,7 +231,7 @@ internal class EstadoDelDetalleDePeriodo internal constructor(
      * para decidir si se ofrece empezar hoy y para guardarlo: nunca se revisa uno y se escribe otro.
      */
     internal val periodoEnCurso: PeriodoFinanciero?
-        get() = detalle?.resumen?.takeIf { it.enCurso }?.let { periodoDelPrefijo(it.id) }
+        get() = detalle?.resumen?.takeIf { it.enCurso }?.let { periodoDelId(it.id) }
 
     /**
      * Los ajustes que quedarían si el período siguiente empezara hoy, o `null` si no se ofrece:
@@ -579,7 +580,7 @@ internal fun fraseDelInicioPropio(resumen: ResumenDePeriodo, ajustes: PeriodSett
     if (!resumen.inicioPropio) return null
     val desde = runCatching { LocalDate.parse(resumen.desde) }.getOrNull() ?: return null
     val base = "Este período empezó el ${diaLegible(desde)}"
-    val periodo = periodoDelPrefijo(resumen.id) ?: return base
+    val periodo = periodoDelId(resumen.id) ?: return base
     val natural = ajustes?.let { inicioDelPeriodo(periodo, it.copy(iniciosPropios = emptyMap())) } ?: return base
     return when {
         desde < natural -> "$base (antes del día ${natural.dayOfMonth})"
@@ -1059,15 +1060,25 @@ private fun mesDe(periodo: PeriodoFinanciero): String = tituloDelPeriodo(periodo
  * «Octubre termina hoy y Noviembre empieza hoy, 20 de octubre. Úsalo cuando…» — lo que la
  * confirmación dice antes de guardar.
  */
-internal fun textoDeEmpezarHoy(periodo: PeriodoFinanciero, hoy: LocalDate): String =
-    "${mesDe(periodo)} termina hoy y ${mesDe(periodoSiguiente(periodo))} empieza hoy, ${diaLegible(hoy)}. " +
-        "Úsalo cuando tu plata del mes nuevo ya llegó (por ejemplo, el sueldo se pagó antes)."
+internal fun textoDeEmpezarHoy(periodo: PeriodoFinanciero, hoy: LocalDate, ajustes: PeriodSettings = PeriodSettings()): String =
+    if (ajustes.esQuincenal) {
+        // Vuelta 105 · una quincena no tiene un mes que la nombre.
+        "Esta quincena termina hoy y la siguiente empieza hoy, ${diaLegible(hoy)}. " +
+            "Úsalo cuando tu pago de la quincena ya llegó (por ejemplo, se pagó antes)."
+    } else {
+        "${mesDe(periodo)} termina hoy y ${mesDe(periodoSiguiente(periodo, ajustes))} empieza hoy, ${diaLegible(hoy)}. " +
+            "Úsalo cuando tu plata del mes nuevo ya llegó (por ejemplo, el sueldo se pagó antes)."
+    }
+
+/** «Empezar noviembre hoy»; en la quincena, «Empezar la quincena hoy». */
+internal fun botonDeEmpezarHoy(periodo: PeriodoFinanciero, ajustes: PeriodSettings = PeriodSettings()): String =
+    if (ajustes.esQuincenal) "Empezar la quincena hoy" else "Empezar ${mesDe(periodoSiguiente(periodo, ajustes))} hoy"
 
 @Composable
 private fun ConfirmarEmpezarHoy(periodo: PeriodoFinanciero, hoy: LocalDate, estado: EstadoDelDetalleDePeriodo) {
     Superficie(modifier = Modifier.fillMaxWidth()) {
         Text(
-            text = textoDeEmpezarHoy(periodo, hoy),
+            text = textoDeEmpezarHoy(periodo, hoy, estado.ajustes ?: PeriodSettings()),
             style = Movi.textos.cuerpoRegular,
             color = Movi.colores.texto,
         )
@@ -1077,7 +1088,7 @@ private fun ConfirmarEmpezarHoy(periodo: PeriodoFinanciero, hoy: LocalDate, esta
         }
         Spacer(Modifier.height(Espacio.s))
         Boton(
-            texto = if (estado.guardando) "Guardando…" else "Empezar ${mesDe(periodoSiguiente(periodo))} hoy",
+            texto = if (estado.guardando) "Guardando…" else botonDeEmpezarHoy(periodo, estado.ajustes ?: PeriodSettings()),
             onClick = { estado.confirmarEmpezarHoy() },
             modifier = Modifier.testTag(TAG_CONFIRMAR_PERIODO_HOY),
             habilitado = !estado.guardando,

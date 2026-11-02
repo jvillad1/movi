@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.ai
 
+import com.jvillada.movi.ui.dashboard.presupuestosDelPeriodo
 import com.jvillada.movi.shared.model.ComoVaLaDeuda
 import com.jvillada.movi.shared.model.PreguntaSugerida
 import com.jvillada.movi.shared.model.estadoDePresupuesto
@@ -236,10 +237,12 @@ val PREGUNTAS_DE_RESPALDO: List<String> = PreguntaSugerida.entries.map { it.text
 /** Destila lo que las reglas miran. Ver [SenalesParaPreguntar]. */
 internal fun senalesDe(data: DashboardData): SenalesParaPreguntar {
     val gastado = data.spentByCategory
-    val pasado = if (data.budgets == null || gastado == null) {
+    // Vuelta 105 · medidos en el período (en la quincena, la mitad del mensual).
+    val presupuestos = data.presupuestosDelPeriodo
+    val pasado = if (presupuestos == null || gastado == null) {
         null
     } else {
-        data.budgets
+        presupuestos
             .map { PresupuestoPasado(it.category, (gastado[it.category] ?: 0L) - it.monthlyLimit) to it }
             .filter { (_, b) -> estadoDePresupuesto(gastado[b.category] ?: 0L, b.monthlyLimit).estaSuperado }
             .maxByOrNull { (p, _) -> p.excedente }

@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.sdui
 
+import com.jvillada.movi.ui.dashboard.presupuestosDelPeriodo
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
@@ -547,7 +548,7 @@ private fun UpcomingPaymentsSection(section: ScreenSection, data: DashboardData,
 @Composable
 private fun AlertsSection(section: ScreenSection, data: DashboardData, onNavigate: (Screen) -> Unit) {
     val alerts = dashboardAlerts(
-        overBudgetCategories(data.budgets, data.spentByCategory), data.cardCandidates, data.pendingSms,
+        overBudgetCategories(data.presupuestosDelPeriodo, data.spentByCategory), data.cardCandidates, data.pendingSms,
         data.captura, data.capturaSilenciada, data.bancosMudos,
     )
     Column(modifier = Modifier.padding(horizontal = Movi.espacios.amplio)) {

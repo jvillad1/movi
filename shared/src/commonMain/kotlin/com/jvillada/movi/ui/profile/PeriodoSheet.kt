@@ -20,7 +20,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import com.jvillada.movi.shared.model.FrecuenciaDelPeriodo
+import com.jvillada.movi.shared.model.PRIMER_DIA_DE_LA_QUINCENA_POR_DEFECTO
 import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.shared.model.SEGUNDO_DIA_DE_LA_QUINCENA_POR_DEFECTO
+import com.jvillada.movi.shared.model.problemaDeLaQuincena
+import com.jvillada.movi.ui.primeruso.ajustesDeLaGuia
 import com.jvillada.movi.shared.model.PeriodoFinanciero
 import com.jvillada.movi.shared.model.SiElCorteCaeEnFinDeSemana
 import com.jvillada.movi.shared.model.diaLegible
@@ -75,6 +80,14 @@ fun PeriodoSheet(
     reglaActual: SiElCorteCaeEnFinDeSemana = SiElCorteCaeEnFinDeSemana.ESE_DIA,
     saving: Boolean = false,
     error: String? = null,
+    /**
+     * Vuelta 105 · la frecuencia guardada y el segundo día de la quincena. Con [onSaveQuincena] la hoja
+     * pregunta primero «¿Cada cuánto te pagan?»; sin él (quien la monta sin saber de quincenas) es la
+     * hoja de siempre, solo con el día del mes.
+     */
+    frecuenciaActual: FrecuenciaDelPeriodo = FrecuenciaDelPeriodo.MENSUAL,
+    segundoDiaActual: Int? = null,
+    onSaveQuincena: ((Int, Int, SiElCorteCaeEnFinDeSemana) -> Unit)? = null,
 ) {
     // `remember(cutoffActual)` y no `remember {}` a secas: una hoja abierta mientras el perfil
     // todavía viajaba se quedaba **para siempre** en el día que tenía al abrirse —el 1 por
@@ -83,7 +96,22 @@ fun PeriodoSheet(
     // el valor que llega manda; es el mismo patrón que ya usa `InicioDelPeriodoSheet`.
     var dia by remember(cutoffActual) { mutableStateOf(cutoffActual.coerceIn(1, 31)) }
     var regla by remember(reglaActual) { mutableStateOf(reglaActual) }
-    val settings = remember(dia, regla) { PeriodSettings(cutoffDay = dia, siCaeEnFinDeSemana = regla) }
+    var frecuencia by remember(frecuenciaActual) {
+        mutableStateOf(if (onSaveQuincena == null) FrecuenciaDelPeriodo.MENSUAL else frecuenciaActual)
+    }
+    val esQuincena = frecuencia == FrecuenciaDelPeriodo.QUINCENAL
+    // La quincena arranca con lo guardado o con «el 15 y el último día» (el caso más común).
+    var primerDia by remember(cutoffActual, frecuenciaActual) {
+        mutableStateOf(if (frecuenciaActual == FrecuenciaDelPeriodo.QUINCENAL) cutoffActual.coerceIn(1, 31) else PRIMER_DIA_DE_LA_QUINCENA_POR_DEFECTO)
+    }
+    var segundoDia by remember(segundoDiaActual) {
+        mutableStateOf(segundoDiaActual?.coerceIn(1, 31) ?: SEGUNDO_DIA_DE_LA_QUINCENA_POR_DEFECTO)
+    }
+    val problema = if (esQuincena) problemaDeLaQuincena(primerDia, segundoDia) else null
+    val settings = remember(dia, regla, esQuincena, primerDia, segundoDia, problema) {
+        if (esQuincena && problema == null) ajustesDeLaGuia(primerDia, regla, segundoDia)
+        else PeriodSettings(cutoffDay = dia, siCaeEnFinDeSemana = regla)
+    }
     val hoy = remember(settings) { periodoDe(Clock.System.now().toEpochMilliseconds(), settings) }
     val ejemplo = remember(settings, hoy) { ejemploCortoDelCorte(hoy, settings) }
 
@@ -98,19 +126,35 @@ fun PeriodoSheet(
         ) {
             // Vuelta 41: una frase, no dos; y el título es lo más grande de la hoja.
             EncabezadoDeHoja(
-                PREGUNTA_DEL_INICIO_DEL_PERIODO,
-                subtitulo = "Movi cuenta tus gastos, ingresos y presupuestos desde ese día.",
+                if (esQuincena) PREGUNTA_DE_LA_QUINCENA else PREGUNTA_DEL_INICIO_DEL_PERIODO,
+                subtitulo = if (esQuincena) "Movi cuenta tus gastos, ingresos y presupuestos de cada pago al siguiente."
+                else "Movi cuenta tus gastos, ingresos y presupuestos desde ese día.",
             )
             Spacer(Modifier.height(Medida.entreSecciones))
 
-            // Cinco filas de siete, no un `LazyVerticalGrid`: el grid tenía un alto fijo de 196 dp
-            // para un contenido de 224 y cortaba el 29, el 30 y el 31 (ver [SelectorDeDiaDelMes]).
-            SelectorDeDiaDelMes(
-                dias = 31,
-                elegido = dia,
-                habilitado = !saving,
-                onElegir = { dia = it },
-            )
+            if (onSaveQuincena != null) {
+                ElegirCadaCuantoTePagan(frecuencia = frecuencia, onElegir = { frecuencia = it }, habilitado = !saving)
+                Spacer(Modifier.height(Medida.entreSecciones))
+            }
+
+            if (esQuincena) {
+                DiasDeLaQuincena(
+                    primero = primerDia,
+                    segundo = segundoDia,
+                    onPrimero = { primerDia = it },
+                    onSegundo = { segundoDia = it },
+                    habilitado = !saving,
+                )
+            } else {
+                // Cinco filas de siete, no un `LazyVerticalGrid`: el grid tenía un alto fijo de 196 dp
+                // para un contenido de 224 y cortaba el 29, el 30 y el 31 (ver [SelectorDeDiaDelMes]).
+                SelectorDeDiaDelMes(
+                    dias = 31,
+                    elegido = dia,
+                    habilitado = !saving,
+                    onElegir = { dia = it },
+                )
+            }
 
             Spacer(Modifier.height(Medida.entreSecciones))
             GrupoDeCampos(SI_CAE_EN_FIN_DE_SEMANA) {
@@ -143,15 +187,21 @@ fun PeriodoSheet(
             // Lo que va a pasar, en dos renglones como mucho: el período de hoy con lo elegido y, si
             // hace falta, la excepción que se ve justo al tocar (un 29-31, o un corte que la regla corre).
             Spacer(Modifier.height(Medida.entreSecciones))
-            VistaPrevia(
-                vistaPreviaDelPeriodo(hoy, settings),
-                detalle = detalleDelInicioDelPeriodo(dia, ejemplo),
-            )
+            if (problema == null) {
+                VistaPrevia(
+                    vistaPreviaDelPeriodo(hoy, settings),
+                    detalle = if (esQuincena) ejemplo else detalleDelInicioDelPeriodo(dia, ejemplo),
+                )
+            }
 
             Spacer(Modifier.height(Espacio.l))
             PieDeHoja(
                 texto = "Guardar",
-                onClick = { onSave(dia, regla) },
+                onClick = {
+                    if (esQuincena) onSaveQuincena?.invoke(primerDia, segundoDia, regla) else onSave(dia, regla)
+                },
+                habilitado = problema == null,
+                razon = problema,
                 cargando = saving,
                 error = error,
             )
@@ -166,7 +216,10 @@ fun PeriodoSheet(
  * octubre»). Pura.
  */
 fun vistaPreviaDelPeriodo(hoy: PeriodoFinanciero, settings: PeriodSettings): String =
-    "Tu período: " + rangoDelPeriodo(hoy, settings).replaceFirstChar { it.lowercase() }
+    (if (settings.esQuincenal) "Tu quincena: " else "Tu período: ") + rangoDelPeriodo(hoy, settings).replaceFirstChar { it.lowercase() }
+
+/** Vuelta 105 · la pregunta de la hoja con la quincena elegida. */
+const val PREGUNTA_DE_LA_QUINCENA: String = "¿Qué días te pagan?"
 
 /**
  * El segundo renglón de la vista previa, si hace falta: un día que no todos los meses tienen, o el
@@ -221,7 +274,7 @@ private fun corteCorrido(desde: PeriodoFinanciero, settings: PeriodSettings): Tr
             val nombreDelDia = porQueNoEsHabil(natural) ?: return null
             return Triple(natural, corrido, nombreDelDia)
         }
-        periodo = periodoSiguiente(periodo)
+        periodo = periodoSiguiente(periodo, settings)
     }
     return null
 }

@@ -168,7 +168,7 @@ fun rotuloDelPeriodoDeCategorias(ajustes: PeriodSettings?, ahoraMillis: Long): S
     if (ajustes == null) return ROTULO_ESTE_PERIODO
     val periodo = periodoActual(ahoraMillis, ajustes)
     val inicio = inicioDelPeriodo(periodo, ajustes)
-    val siguiente = inicioDelPeriodo(periodoSiguiente(periodo), ajustes)
+    val siguiente = inicioDelPeriodo(periodoSiguiente(periodo, ajustes), ajustes)
     val esElMes = inicio.dayOfMonth == 1 && siguiente.dayOfMonth == 1 &&
         inicio.plus(1, DateTimeUnit.MONTH) == siguiente
     return if (esElMes) ROTULO_ESTE_MES else ROTULO_ESTE_PERIODO

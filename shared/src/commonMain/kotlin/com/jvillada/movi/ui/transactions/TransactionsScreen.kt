@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.transactions
 
+import com.jvillada.movi.shared.model.frecuenciaDelPeriodoDe
+import com.jvillada.movi.shared.model.periodoDelId
 import com.jvillada.movi.ui.components.nombreCortoDeCuenta
 import com.jvillada.movi.ui.components.ds.iconoDelMovimiento
 import com.jvillada.movi.ui.components.ds.IconoResuelto
@@ -1235,11 +1237,16 @@ fun TransactionsScreen(
     }
 
     val reglaDelFinDeSemana = perfilVigente?.periodWeekendRule
-    val ajustesDelPeriodo = remember(cutoffDay, iniciosPropios, reglaDelFinDeSemana) {
+    // Vuelta 105 · también la frecuencia (mes o quincena) y el segundo día de la quincena.
+    val frecuencia = perfilVigente?.periodFrequency
+    val segundoDia = perfilVigente?.periodSecondDay
+    val ajustesDelPeriodo = remember(cutoffDay, iniciosPropios, reglaDelFinDeSemana, frecuencia, segundoDia) {
         PeriodSettings(
             cutoffDay = cutoffDay.coerceIn(1, 31),
             iniciosPropios = iniciosPropios,
             siCaeEnFinDeSemana = siElCorteCaeEnFinDeSemanaDe(reglaDelFinDeSemana),
+            frecuencia = frecuenciaDelPeriodoDe(frecuencia),
+            segundoDia = segundoDia?.takeIf { it in 1..31 },
         )
     }
     val periodoDeHoy = remember(ajustesDelPeriodo) {
@@ -1264,7 +1271,7 @@ fun TransactionsScreen(
      * contesta y `periodoDeHoy` cambia.
      */
     var periodoVisible by remember(periodoDeHoy, periodoInicial) {
-        mutableStateOf(periodoInicial?.let { periodoDelPrefijo(it) } ?: periodoDeHoy)
+        mutableStateOf(periodoInicial?.let { periodoDelId(it) } ?: periodoDeHoy)
     }
 
     val visibleDays = remember(activeFilter, allDays, searchQuery, periodoVisible, ajustesDelPeriodo, accountTypes, filtro) {
@@ -1428,7 +1435,7 @@ fun TransactionsScreen(
                 BotonDeIcono(
                     Icons.Rounded.KeyboardArrowLeft,
                     "Período anterior",
-                    onClick = { periodoVisible = periodoAnterior(periodoVisible) },
+                    onClick = { periodoVisible = periodoAnterior(periodoVisible, ajustesDelPeriodo) },
                 )
                 // Tocar el mes abre «¿cuándo empezó este?». Va acá y no en Perfil a propósito: la
                 // pregunta aparece justo cuando el dueño está mirando las cifras de ESE mes y nota
@@ -1466,7 +1473,7 @@ fun TransactionsScreen(
                     BotonDeIcono(
                         Icons.Rounded.KeyboardArrowRight,
                         "Período siguiente",
-                        onClick = { periodoVisible = periodoSiguiente(periodoVisible) },
+                        onClick = { periodoVisible = periodoSiguiente(periodoVisible, ajustesDelPeriodo) },
                     )
                 } else {
                     // El período en curso no tiene siguiente: la flecha queda, apagada, para que el

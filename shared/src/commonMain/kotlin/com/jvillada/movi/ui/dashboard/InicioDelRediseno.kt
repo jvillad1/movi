@@ -642,8 +642,8 @@ private fun propuestaDeCuadre(data: DashboardData): PropuestaDelInicio? {
  */
 private fun propuestaDePresupuesto(data: DashboardData): PropuestaDelInicio? {
     val gastado = data.spentByCategory ?: return null
-    val superados = (data.budgets ?: return null)
-        .filter { it.category in overBudgetCategories(data.budgets, gastado) }
+    val superados = (data.presupuestosDelPeriodo ?: return null)
+        .filter { it.category in overBudgetCategories(data.presupuestosDelPeriodo, gastado) }
         .map { it to (gastado[it.category] ?: 0L) }
     val peor = superados.maxByOrNull { (b, g) -> g - b.monthlyLimit } ?: return null
     val (presupuesto, lo) = peor
@@ -675,7 +675,7 @@ internal fun categoriaDeLaAnomalia(a: com.jvillada.movi.shared.model.Anomalia): 
 private fun propuestaDeAnomalia(data: DashboardData): PropuestaDelInicio? {
     // Vuelta 87: una categoría que ya sale por **presupuesto pasado** (su propia tarjeta) no sale otra vez como
     // «va muy por encima de lo normal»: dos tarjetas, la misma plata.
-    val porPresupuesto = overBudgetCategories(data.budgets, data.spentByCategory).toSet()
+    val porPresupuesto = overBudgetCategories(data.presupuestosDelPeriodo, data.spentByCategory).toSet()
     val anomalias = anomaliasVisiblesDe(data).filter { categoriaDeLaAnomalia(it) !in porPresupuesto }
     // Vuelta 60: un recurrente que cambió de categoría va primero: es lo único que se resuelve con un
     // toque, y mientras siga, otras pantallas cuentan mal (Presupuestos, «En qué se va»).

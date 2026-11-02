@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.dashboard
 
+import com.jvillada.movi.shared.model.presupuestosDelPeriodo
 import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.compositionLocalOf
 import com.jvillada.movi.shared.model.SubStatus
@@ -816,7 +817,7 @@ fun quickLinkFigure(target: String, data: DashboardData): LinkFigure = when (tar
         else LinkFigure(formatCOP(totalDebtCop(data.credits.orEmpty(), data.cards.orEmpty())), plural(count, "crédito", "créditos"))
     }
     "budgets" -> {
-        val budgets = data.budgets
+        val budgets = data.presupuestosDelPeriodo
         val gastado = data.spentByCategory
         // Mismo criterio que «credits» y «accounts»: sin respuesta no se afirma vacío. Y sin el
         // gasto, «$0 de $X» sería una cifra inventada, así que tampoco se pinta.
@@ -1132,7 +1133,7 @@ fun notificationRows(data: DashboardData): List<NotificationRow> = buildList {
     // Lo que no es un pendiente de la cola: el banco que se calló, los presupuestos, la captura. Los
     // pagos de tarjeta y los mensajes del banco ya entraron arriba, como «Por revisar».
     dashboardAlerts(
-        overBudgetCategories(data.budgets, data.spentByCategory), cardCandidates = 0, pendingSms = 0,
+        overBudgetCategories(data.presupuestosDelPeriodo, data.spentByCategory), cardCandidates = 0, pendingSms = 0,
         captura = data.captura, capturaSilenciada = data.capturaSilenciada, bancosMudos = data.bancosMudos,
     ).forEach { alerta ->
         val tipo = alerta.tipo ?: TipoDeNotificacion.MensajesDelBanco
@@ -1278,7 +1279,7 @@ internal fun cosasParaRevisarDe(
     ahora: Long = Clock.System.now().toEpochMilliseconds(),
 ): List<CosaParaRevisar> = cosasParaRevisar(
     checklist = checklistDelPeriodoDe(data),
-    categorias = categoriasDelPeriodo(data.spentByCategory.orEmpty(), data.budgets.orEmpty()),
+    categorias = categoriasDelPeriodo(data.spentByCategory.orEmpty(), data.presupuestosDelPeriodo.orEmpty()),
     // Generación 8: si el hero ya da su veredicto, «Vas gastando más de lo que entró» sería la misma
     // noticia dicha dos veces en la pantalla —arriba con el número, abajo sin él—. Se vio a ojo en la
     // web con los dos a la vista en escritorio. Sin veredicto (sin resumen) la regla ya no se
@@ -1336,7 +1337,7 @@ internal fun disponibleDelInicio(
         checklist = checklistDelPeriodoDe(data),
         gastoVariablePorDia = gasto,
         inicio = inicioDelPeriodo(periodo, data.ajustesDePeriodo),
-        finExclusivo = inicioDelPeriodo(periodoSiguiente(periodo), data.ajustesDePeriodo),
+        finExclusivo = inicioDelPeriodo(periodoSiguiente(periodo, data.ajustesDePeriodo), data.ajustesDePeriodo),
         hoy = hoy,
         plata = data.plataDelDisponible,
     )
@@ -1401,6 +1402,14 @@ internal fun DashboardData.conResumenDelInicio(s: DashboardSummary): DashboardDa
  * período en curso a [ahora] según esos ajustes. Sin esto el Inicio (y Plan) hablarían del mes de
  * calendario, que es justo lo que dejó de hacer el resto de la app.
  */
+/**
+ * Vuelta 105 · **los presupuestos medidos en el período en curso**: el límite mensual de cada uno, en la
+ * quincena la mitad (D2 del diseño). Todo lo que compara un presupuesto con el gasto del período en
+ * Hoy lee esto y no [DashboardData.budgets], que es lo que el dueño escribió (al mes).
+ */
+val DashboardData.presupuestosDelPeriodo: List<Budget>?
+    get() = budgets?.let { presupuestosDelPeriodo(it, periodoActual, ajustesDePeriodo) }
+
 internal fun DashboardData.conElPerfil(perfil: UserProfile, ahora: Long): DashboardData {
     val ajustes = perfil.ajustesDelPeriodo()
     return copy(ajustesDePeriodo = ajustes, periodoActual = periodoDe(ahora, ajustes), primerUsoEn = perfil.primerUsoEn)

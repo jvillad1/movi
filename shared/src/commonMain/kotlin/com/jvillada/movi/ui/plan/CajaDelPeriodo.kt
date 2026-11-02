@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.plan
 
+import com.jvillada.movi.shared.model.nombreDelMesDe
+import com.jvillada.movi.shared.model.periodoDelId
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Medida
 import androidx.compose.foundation.Canvas
@@ -126,8 +128,8 @@ internal fun cajaDelPeriodoDe(
     val ocurrencias = data.ocurrencias ?: return null
     val pagos = checklistDelPeriodoDe(data)
     // Vuelta 70: el período siguiente, sobre las MISMAS respuestas: lo que vence antes del salario.
-    val delSiguiente = checklistDelPeriodo(upcoming, ocurrencias, periodoSiguiente(periodo), data.ajustesDePeriodo, conElSiguienteVencimiento = true)
-    val ultimoDia = inicioDelPeriodo(periodoSiguiente(periodo), data.ajustesDePeriodo).minus(1, DateTimeUnit.DAY)
+    val delSiguiente = checklistDelPeriodo(upcoming, ocurrencias, periodoSiguiente(periodo, data.ajustesDePeriodo), data.ajustesDePeriodo, conElSiguienteVencimiento = true)
+    val ultimoDia = inicioDelPeriodo(periodoSiguiente(periodo, data.ajustesDePeriodo), data.ajustesDePeriodo).minus(1, DateTimeUnit.DAY)
     // El ahorro del período: el mismo que resta «Te quedan» (cero sin elegir nada).
     val ahorro = data.plataDelDisponible?.ahorroDelPeriodo ?: 0L
     // Lo de las cuentas, con lo apartado adentro (un apartado no mueve plata); lo libre resta lo apartado
@@ -349,7 +351,7 @@ internal fun fraseDelSupuesto(gasto: GastoDelDiaADia): String {
 
 /** «2026-09» → «septiembre», o el prefijo tal cual si no se entiende. */
 private fun mesDelPrefijo(prefijo: String): String =
-    periodoDelPrefijo(prefijo)?.let { MESES_DEL_ANIO[it.month - 1] } ?: prefijo
+    periodoDelId(prefijo)?.let { if (it.dia != 0) nombreDelMesDe(it) else MESES_DEL_ANIO[it.month - 1] } ?: prefijo
 
 /** De dónde sale la línea, en renglones cortos. */
 internal fun deDondeSaleLaCaja(caja: CajaProyectada): List<String> = buildList {

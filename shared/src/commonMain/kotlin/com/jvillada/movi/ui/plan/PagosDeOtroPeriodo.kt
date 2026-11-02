@@ -109,11 +109,11 @@ const val NOTA_DEL_PERIODO_SIGUIENTE: String =
 const val NOTA_DE_LO_QUE_VIENE: String = "Es del período siguiente: no suma en «Falta por pagar»."
 
 /** ¿[a] es anterior a [b]? */
-internal fun esAnterior(a: PeriodoFinanciero, b: PeriodoFinanciero): Boolean = a.year * 12 + a.month < b.year * 12 + b.month
+internal fun esAnterior(a: PeriodoFinanciero, b: PeriodoFinanciero): Boolean = a < b
 
 /** ¿Se puede ir al siguiente de [visible]? Solo hasta el siguiente de hoy. */
-internal fun puedeIrAlSiguiente(visible: PeriodoFinanciero, deHoy: PeriodoFinanciero): Boolean =
-    esAnterior(visible, periodoSiguiente(deHoy))
+internal fun puedeIrAlSiguiente(visible: PeriodoFinanciero, deHoy: PeriodoFinanciero, ajustes: PeriodSettings = PeriodSettings()): Boolean =
+    esAnterior(visible, periodoSiguiente(deHoy, ajustes))
 
 /**
  * **La línea del período de Pagos con ‹ y ›.** La línea es la de siempre («Del 25 de octubre al 24 de

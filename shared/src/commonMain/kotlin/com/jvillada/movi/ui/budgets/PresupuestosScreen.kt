@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.budgets
 
+import com.jvillada.movi.shared.model.limiteDelPeriodo
 import com.jvillada.movi.ui.transactions.tituloDelMovimiento
 import com.jvillada.movi.ui.components.ds.TonoDeCifra
 import com.jvillada.movi.ui.components.ds.AccionDeEncabezado
@@ -101,14 +102,22 @@ import com.jvillada.movi.ui.categorias.TamanoDeIconoDeCategoria
 internal data class BudgetProgress(
     val budget: Budget,
     val spent: Long,
+    /**
+     * Vuelta 105 · **el límite medido en el período**: el mensual, salvo en la quincena, que mide la
+     * mitad (D2 del diseño: se escribe al mes, se mide prorrateado). [budget] sigue siendo lo que el
+     * dueño escribió, y es lo que edita la hoja.
+     */
+    val limite: Long = budget.monthlyLimit,
 ) {
-    val remaining: Long get() = budget.monthlyLimit - spent
+    /** ¿El límite del período es una parte del mensual (quincena)? Entonces la fila dice también el mensual. */
+    val esProrrateado: Boolean get() = limite != budget.monthlyLimit
+    val remaining: Long get() = limite - spent
     /**
      * Solo para el ANCHO de la barra, que es lo único que necesita un `Float` (`fillMaxWidth`
      * recibe una fracción). Ni el estado ni el porcentaje ni el orden de la lista salen de acá:
      * con montos de cientos de millones esta división pierde precisión — ver [pct].
      */
-    val pctRaw: Float get() = if (budget.monthlyLimit == 0L) 0f else spent.toFloat() / budget.monthlyLimit.toFloat()
+    val pctRaw: Float get() = if (limite == 0L) 0f else spent.toFloat() / limite.toFloat()
     /**
      * El porcentaje se calcula con enteros, no con el [pctRaw] de arriba.
      *
@@ -125,8 +134,8 @@ internal data class BudgetProgress(
      * sea por un peso— se redondea hacia arriba: 100,87 % → «101%», 116,3 % → «117%». Justo en el
      * límite la división es exacta y sigue diciendo «100%», que es lo que dice «Sin margen».
      */
-    val pct: Int get() = porcentajeDePresupuesto(spent, budget.monthlyLimit)
-    val state: EstadoDePresupuesto get() = estadoDePresupuesto(spent, budget.monthlyLimit)
+    val pct: Int get() = porcentajeDePresupuesto(spent, limite)
+    val state: EstadoDePresupuesto get() = estadoDePresupuesto(spent, limite)
 }
 
 
@@ -164,7 +173,7 @@ internal fun tituloDelGastoDelPeriodo(settings: PeriodSettings, monthName: Strin
     // Vuelta 60 (la revisión): sin «Gastado»: la cifra grande de la tarjeta es solo lo de los
     // presupuestos («En tus N presupuestos»), y «Gastado en octubre» la hacía pasar por todo lo gastado.
     // El título nombra el período; las dos cifras de abajo dicen de qué son.
-    if (settings.esMesDeCalendario) monthName.replaceFirstChar { it.uppercase() } else "Este período"
+    if (settings.esMesDeCalendario) monthName.replaceFirstChar { it.uppercase() } else if (settings.esQuincenal) "Esta quincena" else "Este período"
 
 internal sealed class Sheet {
     data class Edit(val current: Budget) : Sheet()
@@ -387,7 +396,12 @@ class EstadoDePresupuestos internal constructor(private val alcance: CoroutineSc
         // (spentByCategoryForPeriod): solo el período en curso y solo COP. Antes esta pantalla sumaba
         // TODO el historial mientras el encabezado decía «Gastado en agosto» — el Inicio y
         // Presupuestos daban cifras distintas para el mismo presupuesto.
-        budgets.orEmpty().map { b -> BudgetProgress(b, gastoPorCategoria[b.category] ?: 0L) }
+        // Vuelta 105 · el límite del período: en la quincena, la mitad del mensual (`limiteDelPeriodo`).
+        val settings = ajustesDelPeriodo
+        val periodo = periodoDe(kotlinx.datetime.Clock.System.now().toEpochMilliseconds(), settings)
+        budgets.orEmpty().map { b ->
+            BudgetProgress(b, gastoPorCategoria[b.category] ?: 0L, limite = limiteDelPeriodo(b.monthlyLimit, periodo, settings))
+        }
             // Se ordena por el porcentaje ENTERO, no por el `Float`.
             //
             // Era `pctRaw`, o sea exactamente el cálculo que este archivo argumenta que no es de
@@ -861,7 +875,9 @@ private fun FilaDePresupuesto(p: BudgetProgress, onClick: () -> Unit) {
         titulo = p.budget.category,
         // «de» y no «/»: deja explícito que el límite es del período. Sin «este mes»: con corte 25
         // ninguno de los dos montos es «este mes»; el rango está en el título de la tarjeta de arriba.
-        subtitulo = "${formatCOP(p.spent)} de\u00A0${formatCOP(p.budget.monthlyLimit)}",
+        // Vuelta 105 · en la quincena: «$120.000 de $400.000 · $800.000 al mes».
+        subtitulo = "${formatCOP(p.spent)} de\u00A0${formatCOP(p.limite)}" +
+            if (p.esProrrateado) " · ${formatCOP(p.budget.monthlyLimit)} al mes" else "",
         inicio = { IconoDeCategoria(p.budget.category) },
         final = {
             Text(

@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.transactions
 
+import com.jvillada.movi.shared.model.periodoDelId
 import com.jvillada.movi.ui.components.ds.IconoDeMovimiento
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
@@ -137,7 +138,7 @@ fun AnuladosScreen(periodo: String?, onNavigate: (Screen) -> Unit) {
     var recarga by remember { mutableStateOf(0) }
     val perfil = rememberLectura(ClaveDeLectura.Perfil, reintento = recarga) { Repositories.wallets.getUserProfile() }
     val cuentas = rememberLectura(ClaveDeLectura.Cuentas, reintento = recarga) { Repositories.wallets.getAccounts() }
-    val delPeriodo = periodo?.let { periodoDelPrefijo(it) }
+    val delPeriodo = periodo?.let { periodoDelId(it) }
     val ajustes = perfil.valor?.ajustesDelPeriodo()
     Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         MinScreenHeader(
