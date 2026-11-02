@@ -96,6 +96,26 @@ class ElIconoDeMoviTest {
     }
 
     @Test
+    fun `el icono de iPhone es la m de 1024, a sangre y sin alfa, y el proyecto lo usa en el tema claro`() {
+        val carpeta = "iosApp/iosApp/Assets.xcassets/AppIcon.appiconset"
+        assertTrue(""""filename" : "movi-1024.png"""" in archivo("$carpeta/Contents.json"))
+        val img = ImageIO.read(archivoEn("$carpeta/movi-1024.png"))
+        assertEquals(1024, img.width)
+        assertEquals(1024, img.height)
+        // App Store rechaza un ícono con transparencia; iOS le pone las esquinas.
+        assertFalse(img.colorModel.hasAlpha(), "el ícono de iPhone va sin transparencia")
+        assertEquals(COLORES_CLAROS.marca.toArgb() and 0xFFFFFF, img.getRGB(0, 0) and 0xFFFFFF, "a sangre: amarillo en la esquina")
+        assertEquals(COLORES_CLAROS.sobreMarca.toArgb() and 0xFFFFFF, img.getRGB(512, 600) and 0xFFFFFF, "la m en la tinta")
+
+        val proyecto = archivo("iosApp/iosApp.xcodeproj/project.pbxproj")
+        assertEquals(2, Regex("""ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;""").findAll(proyecto).count(), "Debug y Release")
+        assertTrue("Assets.xcassets in Resources" in proyecto, "el catálogo va en los recursos")
+        assertEquals(2, Regex("""INFOPLIST_KEY_UIUserInterfaceStyle = Light;""").findAll(proyecto).count(), "un solo tema, el claro")
+        assertEquals(2, Regex("""INFOPLIST_KEY_CFBundleDisplayName = Movi;""").findAll(proyecto).count(), "bajo el ícono dice Movi")
+        assertFalse(".dark" in archivo("iosApp/iosApp/ContentView.swift"), "nada fuerza el tema oscuro")
+    }
+
+    @Test
     fun `la PWA usa el crema y el icono nuevo`() {
         val manifest = archivo("$web/manifest.json")
         val fondo = hex(COLORES_CLAROS.fondo)

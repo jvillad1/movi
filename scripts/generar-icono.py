@@ -24,6 +24,8 @@ Lo que escribe:
   Android 7.x (API 24-25), que no lee el ícono adaptable.
 - `webApp/src/wasmJsMain/resources/icons/`: los de la PWA (maskable y «any»), el apple-touch-icon,
   el favicon y el badge monocromo del push web.
+- `iosApp/iosApp/Assets.xcassets/AppIcon.appiconset/`: el ícono de la app de iPhone, un PNG de 1024
+  cuadrado y sin alfa (iOS le pone las esquinas).
 - `shared/src/commonMain/kotlin/com/jvillada/movi/theme/LaMDeMovi.kt`: la misma `pathData` como
   `ImageVector`, para la marca dentro de la app (también en iOS, que todavía no tiene las fuentes).
 
@@ -44,6 +46,7 @@ FUENTES = os.path.join(RAIZ, "shared/src/commonMain/composeResources/font")
 TTF = os.path.join(FUENTES, "figtree_extrabold.ttf")
 RES = os.path.join(RAIZ, "androidApp/src/main/res")
 WEB = os.path.join(RAIZ, "webApp/src/wasmJsMain/resources/icons")
+IOS_ICONO = os.path.join(RAIZ, "iosApp/iosApp/Assets.xcassets/AppIcon.appiconset")
 KOTLIN = os.path.join(RAIZ, "shared/src/commonMain/kotlin/com/jvillada/movi/theme/LaMDeMovi.kt")
 
 MARCA = (0xFF, 0xC2, 0x1A)   # Tokens.kt · marca
@@ -300,6 +303,34 @@ def escribir_web():
     _guardar(pintar(96, None, None, BLANCO, por_ancho(20 / 24)), os.path.join(WEB, "movi-badge.png"))
 
 
+def escribir_ios():
+    # Un solo PNG de 1024, como lo acepta Xcode 14+ («Single Size»): iOS lo achica y le pone las esquinas
+    # él mismo, así que va cuadrado, a sangre y sin alfa (App Store rechaza un ícono con transparencia).
+    _guardar(pintar(1024, "cuadrado", MARCA, TINTA, visible(1.0), fondo_lienzo=MARCA), os.path.join(IOS_ICONO, "movi-1024.png"))
+    _escribir(os.path.join(IOS_ICONO, "Contents.json"), """{
+  "images" : [
+    {
+      "filename" : "movi-1024.png",
+      "idiom" : "universal",
+      "platform" : "ios",
+      "size" : "1024x1024"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}
+""")
+    _escribir(os.path.join(os.path.dirname(IOS_ICONO), "Contents.json"), """{
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}
+""")
+
+
 def escribir_kotlin():
     _escribir(KOTLIN, f"""// Generado por scripts/generar-icono.py: no se edita a mano, se corre el script.
 package com.jvillada.movi.theme
@@ -430,6 +461,8 @@ def main():
     escribir_android()
     print("Web:")
     escribir_web()
+    print("iOS:")
+    escribir_ios()
     print("Kotlin:")
     escribir_kotlin()
     if args.capturas:
