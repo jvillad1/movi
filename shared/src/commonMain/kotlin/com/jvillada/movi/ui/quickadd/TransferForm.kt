@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.quickadd
 
+import com.jvillada.movi.shared.model.mesDeReferencia
 import com.jvillada.movi.shared.model.CardSummary
 import com.jvillada.movi.ui.components.ds.PildoraDeAccion
 import com.jvillada.movi.ui.credits.pastillasDelPagoDeLaTarjeta
@@ -1385,7 +1386,11 @@ internal fun TransferBody(
             val mesDeLaPrimera = to?.takeIf { it.type == AccountType.LOAN }
                 ?.let { terminosPorCuenta[it.id]?.mesDeLaPrimeraCuotaDelCredito() }
                 ?.takeIf { primera ->
-                    val deHoy = com.jvillada.movi.shared.model.periodoDe(Clock.System.now().toEpochMilliseconds(), ajustesDelPeriodo ?: com.jvillada.movi.shared.model.PeriodSettings())
+                    // Vuelta 105 · la cuota es mensual: se compara con el mes de referencia.
+                    val deHoy = com.jvillada.movi.shared.model.periodoDe(
+                        Clock.System.now().toEpochMilliseconds(),
+                        (ajustesDelPeriodo ?: com.jvillada.movi.shared.model.PeriodSettings()).mesDeReferencia(),
+                    )
                     primera.prefijo > deHoy.prefijo
                 }
                 ?.let { com.jvillada.movi.shared.model.nombreDelMesDe(it) }

@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.credits
 
+import com.jvillada.movi.shared.model.mesDeReferencia
 import com.jvillada.movi.theme.Espacio
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -112,7 +113,8 @@ fun SalidaDeDeudasScreen(onNavigate: (Screen) -> Unit) {
     var recordando by remember { mutableStateOf(false) }
     val alcance = rememberCoroutineScope()
 
-    val ajustes = perfil.valor?.ajustesDelPeriodo() ?: PeriodSettings()
+    // Vuelta 105 · las cuotas son mensuales: el mes de referencia (identidad en el mensual).
+    val ajustes = (perfil.valor?.ajustesDelPeriodo() ?: PeriodSettings()).mesDeReferencia()
     val periodoActual = remember(ajustes) { periodoDe(Clock.System.now().toEpochMilliseconds(), ajustes) }
     val listas = creditos.valor?.let { c -> tarjetas.valor?.let { t -> c to t } }
     val deudas = remember(listas) { listas?.let { (c, t) -> deudasParaSalir(c, t) } }

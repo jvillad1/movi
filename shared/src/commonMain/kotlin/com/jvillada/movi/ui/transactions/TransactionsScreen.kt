@@ -1445,7 +1445,9 @@ fun TransactionsScreen(
                     modifier = Modifier
                         .weight(1f)
                         .heightIn(min = Medida.objetivoTactil)
-                        .clickable(onClickLabel = "Cambiar el inicio del período") { editandoElInicio = true },
+                                                // Vuelta 105 · la excepción a mano de una quincena (±5 días, cruza de mes) todavía
+                        // no tiene hoja: se mueve con «Empezar la quincena hoy» en Tus períodos.
+                        .clickable(enabled = !ajustesDelPeriodo.esQuincenal, onClickLabel = "Cambiar el inicio del período") { editandoElInicio = true },
                     verticalArrangement = Arrangement.Center,
                 ) {
                     // Vuelta 75 · un solo nombre del período ([nombreDelPeriodo]): «23 oct – 24 nov», o
