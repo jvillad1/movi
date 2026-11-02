@@ -1248,8 +1248,17 @@ data class AiChatResponse(
      * `null` casi siempre. [IA_SIN_CREDITO] o [IA_NO_DISPONIBLE] cuando la API de Anthropic no
      * contestó por la cuenta (sin saldo, clave rechazada, saturada): la app muestra entonces su
      * propia frase en vez de [text]. Un APK viejo lo ignora y muestra [text], que dice lo mismo.
+     * Vuelta 106: [IA_TOPE_DEL_MES] (con un 429) cuando ya hizo sus preguntas libres del mes.
      */
     val codigo: String? = null,
+    /**
+     * Vuelta 106 · cuántas preguntas libres le quedan este mes **después** de esta, solo cuando ya
+     * hay que avisar ([AVISAR_CUANDO_QUEDEN] o menos; `0` con el 429). `null` casi siempre: sin
+     * tope (el admin) o con muchas por delante. La app dice [fraseDeLasQueQuedan].
+     */
+    val preguntasQueQuedan: Int? = null,
+    /** Vuelta 106 · su tope del mes, cuando viaja [preguntasQueQuedan] (para [fraseDelTopeDelMes]). */
+    val topeDelMes: Int? = null,
 )
 
 /**

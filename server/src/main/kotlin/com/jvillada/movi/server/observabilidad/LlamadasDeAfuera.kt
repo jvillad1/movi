@@ -101,6 +101,7 @@ fun fichasDe(m: Message): Fichas = m.usage().let { uso ->
         entrada = uso.inputTokens() + uso.cacheCreationInputTokens().orElse(0L),
         salida = uso.outputTokens(),
         cache = uso.cacheReadInputTokens().orElse(0L),
+        cacheEscrita = uso.cacheCreationInputTokens().orElse(0L),
     )
 }
 

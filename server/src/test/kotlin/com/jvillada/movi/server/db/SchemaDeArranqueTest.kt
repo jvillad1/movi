@@ -145,6 +145,12 @@ class SchemaDeArranqueTest {
         // `loCompartidoDelUsuario`, o sea TODA lectura de movimientos— la nombra: sin el ALTER, la app
         // entera caería con «column does not exist».
         "gastos_del_espacio" to "reparto",
+        // Vuelta 106 — el costo de la IA. `ai_turns` existe en producción y el guardado de cada turno la
+        // escribe; `metricas_de_servicios` e `ia_por_dia` existen desde la vuelta 102 y el volcado de
+        // cada minuto las escribe: sin el ALTER, Movi AI no guardaría y las métricas dejarían de volcar.
+        "ai_turns" to "fichas_cache_escritas",
+        "metricas_de_servicios" to "costo_microdolares",
+        "ia_por_dia" to "costo_microdolares",
     )
 
     /**
@@ -175,6 +181,7 @@ class SchemaDeArranqueTest {
         RecurringOccurrences, OccurrenceRejections, SmsMessages, Credits, Cards, Subscriptions, PushSubscriptions,
         Screens, PasswordResetTokens, CardPaymentDismissals, Goals, CategoryPrefs, Documents,
         StatementImportMatches, KnownDestinations, InicioPersonalizado, Apartados, GastosDelEspacio,
+        AiTurns, MetricasDeServicios, IaPorDia,
     )
 
     @BeforeTest

@@ -138,6 +138,8 @@ fun Application.configureRouting() {
             usoRoutes()
             // Vuelta 102: `/health/detalle` y `/api/admin/servidor/...`, solo para un admin.
             adminServidorRoutes()
+            // Vuelta 106 · Movi AI para el admin: el costo en pesos y el tope de preguntas.
+            adminIaRoutes()
         }
 
         // /api/** que nadie registró → 404 JSON, nunca el index.html de la SPA.

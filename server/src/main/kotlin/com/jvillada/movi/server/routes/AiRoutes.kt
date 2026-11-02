@@ -53,6 +53,9 @@ import io.ktor.server.application.log
 import com.jvillada.movi.server.ai.laPreguntaPideCriterio
 import com.jvillada.movi.server.ai.avisarQueLaIaNoEstaDisponible
 import com.jvillada.movi.server.ai.EstadoDeLaIa
+import com.jvillada.movi.server.ai.ElTopeDelMes
+import com.jvillada.movi.shared.model.IA_TOPE_DEL_MES
+import com.jvillada.movi.shared.model.fraseDelTopeDelMes
 import com.jvillada.movi.shared.model.IA_NO_DISPONIBLE
 import com.jvillada.movi.server.ai.fallaDeLaIa
 import com.jvillada.movi.server.ai.MODELO_DE_RESPALDO
@@ -272,7 +275,10 @@ internal fun Route.aiRoutes(fabricaDePrueba: FabricaDeModelos?) {
         // Vuelta de diseño 30: y si la IA contesta preguntas libres ahora, para que el chat no
         // sugiera una que va a dar el aviso (ver [EstadoDeLaIa]).
         val hayClave = fabricaDePrueba != null || anthropicClient != null
-        call.respond(conversacionGuardada(call.userId()).copy(iaDisponible = EstadoDeLaIa.disponible(hayClave)))
+        // Vuelta 106: quien ya hizo sus preguntas del mes tampoco tiene la IA para preguntas libres;
+        // el chat le ofrece solo las tres sugeridas, que siguen funcionando.
+        val llegoAlTope = ElTopeDelMes.estadoDe(call.userId()).llego
+        call.respond(conversacionGuardada(call.userId()).copy(iaDisponible = EstadoDeLaIa.disponible(hayClave) && !llegoAlTope))
     }
 
     // «Nueva conversación»: no borra nada, mueve el comienzo de la en curso a ahora.
@@ -346,6 +352,19 @@ internal fun Route.aiRoutes(fabricaDePrueba: FabricaDeModelos?) {
             ?.let { PreguntaSugerida.deId(it.preguntaSugerida) ?: PreguntaSugerida.delTexto(it.content) }
         if (sugerida != null) {
             contestarSinModelo(call, sugerida, body.messages.last().content.ifBlank { sugerida.texto })
+            return@post
+        }
+
+        // **El tope del mes** (vuelta 106): solo cuenta lo que va al modelo, por eso va DESPUÉS de las
+        // sugeridas. Un 429 con su código y la frase en el texto, para que un APK que no conoce el
+        // código igual diga algo legible; la app dice la misma frase y ofrece las tres debajo.
+        val tope = ElTopeDelMes.estadoDe(call.userId())
+        if (tope.llego) {
+            val n = tope.tope ?: 0
+            call.respond(
+                HttpStatusCode.TooManyRequests,
+                AiChatResponse(text = fraseDelTopeDelMes(n), codigo = IA_TOPE_DEL_MES, preguntasQueQuedan = 0, topeDelMes = n),
+            )
             return@post
         }
 
@@ -441,7 +460,8 @@ internal fun Route.aiRoutes(fabricaDePrueba: FabricaDeModelos?) {
         call.application.log.info(
             "movi-ai uid=$uid criterio=$pideCriterio hechos=${hechos != null} " +
                 "reintento=${reply.getOrNull()?.huboReintento == true} propuestas=${propuestas.propuestas.size} " +
-                "entrada=${fichas?.fichasDeEntrada ?: 0} cache=${fichas?.fichasLeidasDeCache ?: 0} salida=${fichas?.fichasDeSalida ?: 0}",
+                "entrada=${fichas?.fichasDeEntrada ?: 0} cache=${fichas?.fichasLeidasDeCache ?: 0} " +
+                "escritas=${fichas?.fichasEscritasEnCache ?: 0} salida=${fichas?.fichasDeSalida ?: 0}",
         )
         // Y la conversación queda guardada, que es lo que hace diagnosticable «el asistente no
         // supo»: sin la pregunta, lo que consultó y lo que contestó, del lado del server solo
@@ -456,11 +476,14 @@ internal fun Route.aiRoutes(fabricaDePrueba: FabricaDeModelos?) {
                 // Sin emojis, igual que lo que se le manda: desde la Ola 3 esto se vuelve a pintar.
                 respuesta = stripEmojis(paso.texto),
                 consultas = paso.consultas,
-                modelo = if (pideCriterio) MODELO_PARA_CONSEJOS else MODELO_DE_TODOS_LOS_DIAS,
+                // El que de verdad contestó (el de respaldo, si el primero falló): con su precio se
+                // calcula el costo del turno.
+                modelo = fichas?.modeloQueContesto ?: if (pideCriterio) MODELO_PARA_CONSEJOS else MODELO_DE_TODOS_LOS_DIAS,
                 criterio = pideCriterio,
                 fichasEntrada = fichas?.fichasDeEntrada ?: 0,
                 fichasCache = fichas?.fichasLeidasDeCache ?: 0,
                 fichasSalida = fichas?.fichasDeSalida ?: 0,
+                fichasCacheEscritas = fichas?.fichasEscritasEnCache ?: 0,
                 hayImagen = hayImagen,
                 cifrasSinRespaldo = paso.sinRespaldo,
                 cifrasCorregidas = paso.corregidas,
@@ -474,7 +497,16 @@ internal fun Route.aiRoutes(fabricaDePrueba: FabricaDeModelos?) {
         }
         reply.onSuccess {
             EstadoDeLaIa.anotarRespuesta()
-            call.respond(AiChatResponse(text = stripEmojis(it.texto), propuestas = propuestas.propuestas))
+            // Vuelta 106: si ya le quedan pocas, se lo dice la app («Te quedan 10 preguntas este mes»).
+            val quedan = tope.quedanParaAvisar
+            call.respond(
+                AiChatResponse(
+                    text = stripEmojis(it.texto),
+                    propuestas = propuestas.propuestas,
+                    preguntasQueQuedan = quedan,
+                    topeDelMes = tope.tope?.takeIf { quedan != null },
+                ),
+            )
         }
             .onFailure {
                 // **La cuenta de Anthropic, no la pregunta.** Sin saldo, con la clave rechazada o la
