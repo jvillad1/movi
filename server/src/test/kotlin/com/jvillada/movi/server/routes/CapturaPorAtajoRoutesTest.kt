@@ -341,6 +341,37 @@ class CapturaPorAtajoRoutesTest {
     }
 
     @Test
+    fun `con el balde de fallidos lleno, un pedido con codigo valido entra`() = conApp {
+        val codigo = client.crearCodigo()
+        repeat(MAX_FALLIDOS_POR_MINUTO_POR_IP) {
+            assertEquals(HttpStatusCode.Unauthorized, client.avisar(null, mensaje(smsDeBancolombia)).status)
+        }
+        // Pasado el tope, los que no traen un código válido reciben 429…
+        assertEquals(HttpStatusCode.TooManyRequests, client.avisar(null, mensaje(smsDeBancolombia)).status)
+        assertEquals(
+            HttpStatusCode.TooManyRequests,
+            client.avisar(com.jvillada.movi.server.compartir.TokenDeEnlace.nuevo(), mensaje(smsDeBancolombia)).status,
+        )
+        // …pero el atajo de verdad no comparte ese balde.
+        val r = client.avisar(codigo, mensaje(smsDeBancolombia))
+        assertEquals(HttpStatusCode.Accepted, r.status)
+        assertTrue("\"guardado\":true" in r.bodyAsText())
+    }
+
+    @Test
+    fun `el balde de fallidos es por la direccion que vio el borde, la de mas a la derecha`() = conApp {
+        suspend fun sinCodigoDesde(xff: String) = client.post("/api/captura/atajo") {
+            header("X-Forwarded-For", xff)
+            contentType(ContentType.Application.Json)
+            setBody(mensaje(smsDeBancolombia))
+        }.status
+        repeat(MAX_FALLIDOS_POR_MINUTO_POR_IP) { assertEquals(HttpStatusCode.Unauthorized, sinCodigoDesde("9.9.9.$it, 1.1.1.1")) }
+        // Cambiar lo de la izquierda no saca a nadie del balde: cuenta el valor del borde.
+        assertEquals(HttpStatusCode.TooManyRequests, sinCodigoDesde("8.8.8.8, 1.1.1.1"))
+        assertEquals(HttpStatusCode.Unauthorized, sinCodigoDesde("1.1.1.1, 2.2.2.2"))
+    }
+
+    @Test
     fun `el limite por codigo corta con 429`() = conApp {
         val codigo = client.crearCodigo()
         repeat(MAX_AVISOS_POR_MINUTO_POR_CODIGO) { i ->

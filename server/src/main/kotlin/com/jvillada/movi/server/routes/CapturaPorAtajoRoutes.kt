@@ -77,11 +77,25 @@ internal const val MAX_CUERPO_DEL_ATAJO: Int = 16_000
 internal const val MAX_AVISOS_POR_MINUTO_POR_CODIGO: Int = 30
 
 /**
- * **Cuántos pedidos por minuto desde una misma dirección.** Detrás de Railway el peer TCP es su borde
- * (ver `fallosRoutes`), así que en producción esto es casi un tope global: frena un intento de adivinar
- * códigos antes de tocar la base. Elegido, no medido.
+ * **Cuántos intentos FALLIDOS (sin código, o con uno que no sirve) por minuto desde una misma dirección.**
+ * Revisión de la vuelta 111: un balde por IP que contara todos los pedidos y se revisara antes del código
+ * era, detrás de Railway, un balde global (el peer TCP es el borde): diez pedidos por segundo sin cabecera
+ * dejaban a todos los atajos en 429. Ahora un pedido con un código válido **no gasta de ningún balde
+ * compartido** (su freno es [MAX_AVISOS_POR_MINUTO_POR_CODIGO]); este solo cuenta los fallidos, y pasado el
+ * tope solo frena a los que no traen un código válido. Elegido, no medido.
  */
-internal const val MAX_PEDIDOS_POR_MINUTO_POR_IP: Int = 600
+internal const val MAX_FALLIDOS_POR_MINUTO_POR_IP: Int = 60
+
+/**
+ * **La dirección del que pide, para el balde de los fallidos.** Railway pone delante su borde, que agrega la
+ * dirección real del cliente al final de `X-Forwarded-For`: el valor **más a la derecha** es el que vio el
+ * borde (los de la izquierda los puede escribir cualquiera). Solo para esta ruta, y solo para contar fallidos:
+ * el server no instala `XForwardedHeaders` (ver `AuthRoutes.kt`) y nada más confía en esta cabecera. Sin
+ * ella (las pruebas, un server sin borde), el peer TCP.
+ */
+internal fun ipDelPedido(call: ApplicationCall): String =
+    call.request.headers["X-Forwarded-For"]?.split(',')?.map { it.trim() }?.lastOrNull { it.isNotEmpty() }
+        ?: call.request.origin.remoteHost
 
 private const val VENTANA_DEL_ATAJO_MS = 60_000L
 
@@ -303,9 +317,9 @@ private suspend fun guardarElAvisoDelAtajo(uid: String, texto: String, origen: S
  *
  * | Caso | Código |
  * |---|---|
- * | más de [MAX_PEDIDOS_POR_MINUTO_POR_IP] desde la misma dirección | 429 |
- * | sin `Authorization: Bearer <código>`, o con un código que no existe o fue revocado | 401 |
  * | cuerpo de más de [MAX_CUERPO_DEL_ATAJO] bytes | 413 |
+ * | sin `Authorization: Bearer <código>`, o con un código que no existe o fue revocado | 401 |
+ * | lo de arriba, más de [MAX_FALLIDOS_POR_MINUTO_POR_IP] veces desde la misma dirección ([ipDelPedido]) | 429 |
  * | más de [MAX_AVISOS_POR_MINUTO_POR_CODIGO] con el mismo código | 429 |
  * | no es JSON, o no trae `tipo` (`mensaje` o `transaccion`) | 400 |
  * | un mensaje que no pasa el filtro de bancos, o que llegó vacío | 202, **no se guarda**: solo se cuenta |
@@ -317,21 +331,16 @@ fun Route.capturaPorAtajoRoutes(ahora: () -> Long = System::currentTimeMillis) {
 }
 
 private suspend fun atajoRoute(call: ApplicationCall, ahora: Long) {
-    val ip = call.request.origin.remoteHost
-    if (!RateLimiter.allow("captura-atajo:ip:$ip", MAX_PEDIDOS_POR_MINUTO_POR_IP, VENTANA_DEL_ATAJO_MS)) {
-        return call.respond(HttpStatusCode.TooManyRequests, RespuestaDelAtajo(false, "Demasiados avisos seguidos."))
-    }
-    val codigo = codigoPresentado(call.request.headers[HttpHeaders.Authorization])
-        ?: return call.respond(HttpStatusCode.Unauthorized, RespuestaDelAtajo(false, "Falta el código de Movi."))
     call.request.headers[HttpHeaders.ContentLength]?.toLongOrNull()?.let {
         if (it > MAX_CUERPO_DEL_ATAJO) {
             return call.respond(HttpStatusCode.PayloadTooLarge, RespuestaDelAtajo(false, "El aviso es demasiado grande."))
         }
     }
-    val (codigoId, uid) = duenoDelCodigo(codigo) ?: run {
+    val codigo = codigoPresentado(call.request.headers[HttpHeaders.Authorization])
+    val (codigoId, uid) = codigo?.let { duenoDelCodigo(it) } ?: run {
         // Sin decir nada de lo que llegó: ni el código ni el cuerpo.
-        call.application.log.warn("captura por atajo rechazada: código inexistente o revocado")
-        return call.respond(HttpStatusCode.Unauthorized, RespuestaDelAtajo(false, "Ese código de Movi no sirve. Crea uno nuevo en la app."))
+        if (codigo != null) call.application.log.warn("captura por atajo rechazada: código inexistente o revocado")
+        return rechazarSinCodigo(call, if (codigo == null) "Falta el código de Movi." else "Ese código de Movi no sirve. Crea uno nuevo en la app.")
     }
     if (!RateLimiter.allow("captura-atajo:codigo:$codigoId", MAX_AVISOS_POR_MINUTO_POR_CODIGO, VENTANA_DEL_ATAJO_MS)) {
         return call.respond(HttpStatusCode.TooManyRequests, RespuestaDelAtajo(false, "Demasiados avisos seguidos."))
@@ -354,6 +363,18 @@ private suspend fun atajoRoute(call: ApplicationCall, ahora: Long) {
         else -> HttpStatusCode.BadRequest to RespuestaDelAtajo(false, "El tipo tiene que ser «mensaje» o «transaccion».")
     }
     call.respond(estado, respuesta)
+}
+
+/**
+ * Un pedido sin un código válido: 401, y cuenta en el balde de fallidos de su dirección. Pasado el tope, 429
+ * — solo para estos: un pedido con código válido nunca pasa por acá.
+ */
+private suspend fun rechazarSinCodigo(call: ApplicationCall, motivo: String) {
+    val ip = ipDelPedido(call)
+    if (!RateLimiter.allow("captura-atajo:fallidos:$ip", MAX_FALLIDOS_POR_MINUTO_POR_IP, VENTANA_DEL_ATAJO_MS)) {
+        return call.respond(HttpStatusCode.TooManyRequests, RespuestaDelAtajo(false, "Demasiados intentos sin un código válido."))
+    }
+    call.respond(HttpStatusCode.Unauthorized, RespuestaDelAtajo(false, motivo))
 }
 
 private suspend fun guardarElMensaje(uid: String, aviso: AvisoDelAtajo, ahora: Long): Pair<HttpStatusCode, RespuestaDelAtajo> {
