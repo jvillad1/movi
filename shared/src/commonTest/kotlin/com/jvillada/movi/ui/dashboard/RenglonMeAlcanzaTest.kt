@@ -14,6 +14,7 @@ import com.jvillada.movi.shared.model.UpcomingPayment
 import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -89,15 +90,29 @@ class RenglonMeAlcanzaTest {
             ajustesDePeriodo = ajustes,
             periodoActual = PeriodoFinanciero(2026, 11),
         )
-        // Con todo, la caja llega al arranque del período siguiente (sin salario, vuelta 75).
-        assertEquals(
-            "Te alcanza hasta el fin del período · tu día más justo, el 25 nov",
-            renglonMeAlcanzaDe(data, GastoDelDiaADia(porDia = 20_000L), hoy)?.texto,
-        )
+        // Vuelta 108: el renglón es la proyección de la cifra del héroe; sin ingresos ni resumen no hay cifra
+        // («Te quedan» no se puede afirmar), así que tampoco renglón.
+        assertNull(renglonMeAlcanzaDe(data, GastoDelDiaADia(porDia = 20_000L), hoy), "sin cifra del héroe, nada")
         assertNull(renglonMeAlcanzaDe(data, gasto = null, hoy = hoy), "sin el supuesto del gasto, nada")
         assertNull(renglonMeAlcanzaDe(data.copy(upcoming = null), GastoDelDiaADia(porDia = 20_000L), hoy), "sin la lista")
         assertNull(renglonMeAlcanzaDe(data.copy(accounts = emptyList()), GastoDelDiaADia(porDia = 20_000L), hoy), "sin cuentas")
         assertNull(renglonMeAlcanzaDe(data.copy(periodoActual = null), GastoDelDiaADia(porDia = 20_000L), hoy), "sin período")
+    }
+
+    /** Vuelta 108: el renglón del héroe dice la proyección de su cifra y el supuesto, con «Ajustar». */
+    @Test
+    fun `el renglon del heroe es la proyeccion de su cifra con el supuesto a la vista`() {
+        val proyeccion = com.jvillada.movi.shared.model.ProyeccionHastaQueTePaguen(
+            texto = "Con tu gasto de un día normal, el 24 nov te faltarían unos \$2,6M",
+            supuesto = "Calculado con \$91.000 por día",
+            alFinal = -2_584_055L, ultimoDia = "2026-11-24", dias = 22, porDia = 90_688L, elegido = false, enAlerta = false,
+        )
+        val renglon = assertNotNull(renglonMeAlcanza(teQuedan(23).copy(proyeccion = proyeccion)))
+        assertEquals("Con tu gasto de un día normal, el 24 nov te faltarían unos \$2,6M", renglon.titulo)
+        assertEquals("Calculado con \$91.000 por día · Ajustar", renglon.detalle)
+        assertTrue(!renglon.enRojo, "con «Te faltan» la cifra ya es la alarma")
+        assertTrue(!renglon.noAlcanza, "no calla «Para N días»: es el mismo horizonte")
+        assertNull(renglonMeAlcanza(teQuedan(23)), "sin proyección no hay renglón")
     }
 
     // ── Vuelta 78 · un solo horizonte ────────────────────────────────────────

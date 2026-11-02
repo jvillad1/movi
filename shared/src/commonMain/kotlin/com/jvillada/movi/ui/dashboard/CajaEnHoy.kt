@@ -33,7 +33,12 @@ import kotlinx.datetime.minus
 import kotlinx.datetime.plus
 
 /**
- * # «¿Me alcanza?» en el héroe de Inicio (vuelta 75)
+ * # «¿Me alcanza?» en el héroe de Inicio (vuelta 75; vuelta 108: la proyección de la misma cifra)
+ *
+ * **Vuelta 108**: el renglón ya no es la caja de Pagos (otra base, otro horizonte), sino la proyección de
+ * la cifra del héroe con el gasto de un día normal ([renglonMeAlcanza] sobre [TeQuedanDeHoy.proyeccion]).
+ * Lo de abajo cuenta la historia de la vuelta 75; [renglonMeAlcanza] con una caja queda para la frase
+ * corta de la caja de Pagos.
  *
  * La respuesta a «¿me alcanza hasta que me paguen?» vivía en la caja de Pagos, dos pantallas más abajo, y
  * en Inicio dentro de «Disponible», una sección opcional que el dueño puede esconder (y que la revisión 5
@@ -116,13 +121,29 @@ val CajaProyectada.nadaPendiente: Boolean
     get() = sinContar.isEmpty() && (gastoDiario ?: 0L) == 0L && dias.all { it.movimientos.isEmpty() }
 
 /**
- * El renglón con lo que el Inicio tiene, o `null` si la caja no se puede calcular (sin período, sin la
- * lista, sin cuentas, o sin el supuesto del gasto del día a día): entonces no se pinta. Es la MISMA
- * [cajaDelPeriodoDe] de la caja de Pagos.
+ * **Vuelta 108 · el renglón del héroe es la proyección de la MISMA cifra**, o `null` sin supuesto (o el
+ * último día del período): «Con tu gasto de un día normal, el 24 nov te faltarían unos $2,6M», y debajo
+ * «Calculado con $91.000 por día · Ajustar». Ya no es la caja de Pagos —que parte de otra base, mira más
+ * allá del cierre y decía «−$7M» debajo de «Te pasaste por $588.919»—: es `cifra − días × supuesto`
+ * ([ProyeccionHastaQueTePaguen], de `:core`). En rojo solo si empeora el veredicto (hoy alcanza y con el
+ * gasto de un día normal no): con «Te faltan» la cifra ya es la alarma. No calla «Para N días»: los dos
+ * hablan del mismo horizonte.
+ */
+fun renglonMeAlcanza(teQuedan: TeQuedanDeHoy): RenglonMeAlcanza? {
+    val p = teQuedan.proyeccion ?: return null
+    return RenglonMeAlcanza(titulo = p.texto, detalle = "${p.supuesto} · $AJUSTAR_EL_GASTO_DE_UN_DIA", enRojo = p.enAlerta, noAlcanza = false)
+}
+
+/** Vuelta 108: el enlace del renglón: abre la caja de Pagos, donde se ajusta el gasto de un día normal. */
+const val AJUSTAR_EL_GASTO_DE_UN_DIA: String = "Ajustar"
+
+/**
+ * El renglón con lo que el Inicio tiene, o `null` si no hay disponible que afirmar o no hay supuesto del
+ * gasto de un día normal: entonces no se pinta. Sale de [teQuedanDelInicio], la cifra del héroe.
  */
 fun renglonMeAlcanzaDe(data: DashboardData, gasto: GastoDelDiaADia?, hoy: LocalDate): RenglonMeAlcanza? {
     val supuesto = gasto ?: return null
-    return cajaDelPeriodoDe(data, supuesto, hoy)?.let { renglonMeAlcanza(it, hoy, ultimoDiaDelPeriodoDe(data)) }
+    return teQuedanDelInicio(data, hoy, supuesto)?.let(::renglonMeAlcanza)
 }
 
 /**
@@ -169,19 +190,26 @@ private fun fechaCortaDelRenglon(iso: String): String {
  * gasto del día a día —la misma lectura recordada de Pagos— solo si hay con qué proyectar.
  */
 @Composable
-internal fun rememberRenglonMeAlcanza(data: DashboardData, hoy: LocalDate): RenglonMeAlcanza? {
-    // Sin la lista del período o sin Tu plata, la caja de Pagos tampoco proyecta: no hay renglón (y no se
-    // pide el supuesto, que no serviría para nada).
+internal fun rememberRenglonMeAlcanza(data: DashboardData, hoy: LocalDate): RenglonMeAlcanza? =
+    renglonMeAlcanzaDe(data, rememberGastoDelInicio(data), hoy)
+
+/**
+ * **El supuesto del gasto de un día normal que ve el Inicio**: el que vino con la carga (o su instantánea),
+ * y si no vino, la lectura recordada de siempre. `null` sin la lista del período o sin Tu plata (no se pide:
+ * no serviría para nada) o mientras no llega.
+ */
+@Composable
+internal fun rememberGastoDelInicio(data: DashboardData): GastoDelDiaADia? {
     val sePuedeProyectar = data.periodoActual != null && data.upcoming != null && data.ocurrencias != null &&
         (data.accounts != null || data.patrimonio != null)
     if (!sePuedeProyectar) return null
     // Vuelta 78 (revisión): con el supuesto ya en la carga del Inicio (o en su instantánea), el renglón sale
     // con el resto del héroe; si no vino, se pide como antes.
-    data.gastoDelDiaADia?.let { return renglonMeAlcanzaDe(data, it, hoy) }
+    data.gastoDelDiaADia?.let { return it }
     val gastoLeido = rememberLectura(ClaveDeLectura.GastoDelDiaADia, reintento = 0) {
         Repositories.wallets.getGastoDelDiaADia()
     }
-    return renglonMeAlcanzaDe(data, gastoLeido.valor, hoy)
+    return gastoLeido.valor
 }
 
 /** El renglón suelto, con el hilo de arriba (lo que pinta el héroe, para montarlo solo en una prueba). */
@@ -213,7 +241,19 @@ internal fun FilaMeAlcanza(renglon: RenglonMeAlcanza, onNavigate: (Screen) -> Un
         },
         final = { Chevron() },
         onClick = { onNavigate(Screen.Plan(SEGMENTO_PAGOS, enLaCaja = true)) },
-        // Vuelta 78: sin salario, la caja de Pagos abre con su «Agregar» arriba.
-        onClickLabel = if (renglon.detalle == AGREGAR_SALARIO_EN_EL_RENGLON) "Agregar tu salario en Pagos" else "Ver tu plata día a día en Pagos",
+        // Vuelta 108: en Pagos, la caja dice el supuesto y deja ajustarlo («Gasto de un día normal»).
+        onClickLabel = "Ajustar tu gasto de un día normal en Pagos",
+    )
+}
+
+/**
+ * Vuelta 108 · **la pregunta del héroe, desde el período** (sin la cifra): «Hasta que te paguen el 25 nov».
+ * `null` sin período. La misma regla de `:core` ([com.jvillada.movi.shared.model.preguntaHastaQueTePaguen]).
+ */
+fun preguntaDelInicio(data: DashboardData): String? {
+    val periodo = data.periodoActual ?: return null
+    return com.jvillada.movi.shared.model.preguntaHastaQueTePaguen(
+        inicioDelPeriodo(periodoSiguiente(periodo), data.ajustesDePeriodo),
+        conElPeriodoElegido = !data.ajustesDePeriodo.esMesDeCalendario,
     )
 }

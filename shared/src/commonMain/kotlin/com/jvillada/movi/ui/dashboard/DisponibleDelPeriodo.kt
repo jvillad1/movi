@@ -3,6 +3,7 @@ package com.jvillada.movi.ui.dashboard
 import com.jvillada.movi.shared.model.DashboardSummary
 import com.jvillada.movi.ui.components.formatMoneyCompact
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.plus
 
 /*
  * # «Disponible»: la cuenta vive en `:core`
@@ -86,3 +87,71 @@ internal fun rotuloDeLaSemana(d: DisponibleDelPeriodo): String =
 // período pasado convivían «Te pasaste por $563.456» y «Vas bien» a un renglón de distancia. Ahora
 // hay UNA frase por tarjeta y manda la peor ventana — ver `fraseDelDisponible` en
 // `InicioDeUnVistazo.kt`.
+
+// ── Vuelta 108 · sin margen para el día a día ────────────────────────────────
+
+/**
+ * **«Cuánto puedes gastar» cuando ya no hay margen** (vuelta 108). Antes la tarjeta decía «Semana $0 · ya te
+ * pasaste» y «Meta de hoy $0»: dos ceros que no se distinguían de un «vas bien» (el 2-nov era lunes y no
+ * había gastado nada) y no proponían nada. Ahora dice lo que sirve para decidir: que no hay margen hasta que
+ * te paguen, lo que llevas gastado en el día a día contra lo que era libre, lo que llevas en la semana y hoy
+ * (sin meta), y los tres pagos que más pesan en lo que falta.
+ *
+ * @property titulo «No hay margen para el día a día hasta el 25 nov».
+ * @property diaADia «$1.950.929 · lo libre era $1.362.010».
+ * @property pesan los pagos que más pesan: «Cuota Vehículo 8761 · 17 nov» y su monto.
+ * @property verTodos «Ver los 9 pagos que faltan», o `null` sin pagos.
+ */
+data class SinMargenParaElDiaADia(
+    val titulo: String,
+    val diaADia: String,
+    val semana: String,
+    val hoy: String,
+    val pesan: List<Pair<String, Long>>,
+    val verTodos: String?,
+)
+
+/** El rótulo de la fila del período sin margen. */
+const val DIA_A_DIA_DEL_PERIODO: String = "Día a día del período"
+
+/** El rótulo de los pagos que más pesan. */
+const val LO_QUE_MAS_PESA: String = "Lo que más pesa en lo que falta"
+
+/** Cuántos pagos se nombran sin margen. */
+const val PAGOS_QUE_MAS_PESAN: Int = 3
+
+/**
+ * [SinMargenParaElDiaADia] del disponible y de la lista del período. Solo tiene sentido con
+ * [DisponibleDelPeriodo.yaTePasaste]; puro.
+ *
+ * @param pesos cómo se escriben las cifras (enteras, como el resto de la tarjeta).
+ */
+fun sinMargenParaElDiaADia(
+    d: DisponibleDelPeriodo,
+    checklist: List<PagoDelPeriodo>,
+    hoy: LocalDate,
+    conElPeriodoElegido: Boolean,
+    pesos: (Long) -> String = { com.jvillada.movi.ui.components.formatMoney(it, "COP") },
+): SinMargenParaElDiaADia {
+    val dias = d.diasQueQuedan.coerceAtLeast(1)
+    // El día que te pagan (el arranque del siguiente) si eligió su período; si no, el último día del mes.
+    val hasta = hoy.plus(if (conElPeriodoElegido) dias else dias - 1, kotlinx.datetime.DateTimeUnit.DAY)
+    val faltan = com.jvillada.movi.shared.model.pagosQueFaltanDelPeriodo(checklist)
+    return SinMargenParaElDiaADia(
+        titulo = "No hay margen para el día a día hasta el ${com.jvillada.movi.shared.model.fechaCortaDeLaPregunta(hasta)}",
+        diaADia = pesos(d.periodo.gastado) +
+            if (d.disponible > 0L) " · lo libre era ${pesos(d.disponible)}" else " · no había nada libre",
+        semana = "llevas ${pesos(d.semana.gastado)}",
+        hoy = "llevas ${pesos(d.hoy.gastado)}",
+        pesan = faltan.take(PAGOS_QUE_MAS_PESAN).map { pago ->
+            val cuando = runCatching { LocalDate.parse(pago.vence) }.getOrNull()
+                ?.let { " · ${com.jvillada.movi.shared.model.fechaCortaDeLaPregunta(it)}" }.orEmpty()
+            "${pago.nombre}$cuando" to pago.monto
+        },
+        verTodos = when (faltan.size) {
+            0 -> null
+            1 -> "Ver el pago que falta"
+            else -> "Ver los ${faltan.size} pagos que faltan"
+        },
+    )
+}

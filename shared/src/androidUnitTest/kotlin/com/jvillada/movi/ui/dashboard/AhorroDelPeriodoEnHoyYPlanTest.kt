@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.dashboard
 
+import com.jvillada.movi.shared.model.ROTULO_TE_FALTAN
+
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
@@ -158,8 +160,8 @@ class AhorroDelPeriodoEnHoyYPlanTest {
             fraseDelDisponible(d).texto,
         )
         montar(datos(ahorro = 9_000_000))
-        // El héroe dice lo de siempre sin margen: «Te pasaste por» lo gastado (y Pagos, lo mismo).
-        assertEquals(2, cuantos(ROTULO_TE_PASASTE))
-        assertEquals("\$100.000", cifraDeHoy())
+        // Vuelta 108: sin margen, «Te faltan» lo que faltó (por el ahorro) más lo gastado (y Pagos, lo mismo).
+        assertEquals(2, cuantos(ROTULO_TE_FALTAN))
+        assertEquals("\$2.200.000", cifraDeHoy())
     }
 }

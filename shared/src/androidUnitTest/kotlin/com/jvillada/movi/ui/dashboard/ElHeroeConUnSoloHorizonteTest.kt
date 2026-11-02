@@ -86,7 +86,9 @@ class ElHeroeConUnSoloHorizonteTest {
     @Test
     fun `lejos del cierre y con plata para el periodo, dice para cuantos dias`() {
         montar(LocalDate(2026, 9, 21), gastoPorDia = 20_000)
-        assertTrue(hay("Te alcanza"), "el renglón dice que alcanza")
+        // Vuelta 108: el renglón es la proyección de la misma cifra, con su supuesto a la vista.
+        assertTrue(hay("Con tu gasto de un día normal te alcanza"), "el renglón dice que alcanza")
+        assertTrue(hay("Calculado con \$20.000 por día"))
         assertTrue(hay("Para 4 días"), "a cuatro días del cierre, la línea de los días va")
         assertEquals(1, lineasDeDetalle())
     }
@@ -96,17 +98,19 @@ class ElHeroeConUnSoloHorizonteTest {
         montar(LocalDate(2026, 9, 22), gastoPorDia = 20_000)
         assertTrue(hay("Te quedan"))
         assertTrue(!hay("Para 3 días"))
-        assertTrue(!hay("por día"))
         assertEquals(0, lineasDeDetalle())
     }
 
+    /**
+     * Vuelta 108: si hoy alcanza y con el gasto de un día normal no, el renglón lo dice en alerta; la línea de
+     * los días sigue (los dos hablan del mismo horizonte: lo que da por día contra lo que se gasta en uno normal).
+     */
     @Test
-    fun `si no alcanza, el heroe no dice cuanto por dia`() {
-        montar(LocalDate(2026, 9, 21), gastoPorDia = 2_000_000)
-        assertTrue(hay("No te alcanza"), "el renglón dice que no alcanza")
+    fun `si con el gasto de un dia normal no alcanza, el renglon lo dice y la cifra sigue`() {
+        montar(LocalDate(2026, 9, 21), gastoPorDia = 4_000_000)
+        assertTrue(hay("Hoy te alcanza; con tu gasto de un día normal, el 24 sep te faltarían"), "el renglón dice que no alcanzaría")
         assertTrue(hay("Te quedan"))
-        assertTrue(!hay("por día"), "y la línea de los días se calla")
-        assertEquals(0, lineasDeDetalle())
+        assertTrue(hay("Para 4 días"))
     }
 
     /** Revisión de la 78: la tarjeta «Cuánto puedes gastar» de Pagos calla la misma línea, con la misma regla. */

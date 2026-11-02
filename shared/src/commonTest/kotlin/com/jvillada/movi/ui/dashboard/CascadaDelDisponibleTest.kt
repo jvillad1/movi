@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.dashboard
 
+import com.jvillada.movi.shared.model.ROTULO_TE_FALTAN
 import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -11,7 +12,7 @@ import kotlin.test.assertTrue
  *
  * La cascada no es una cuenta nueva: es [DisponibleDelPeriodo] puesto en renglones. Si un renglón
  * faltara o sobrara, la hoja diría una cosa y el héroe otra, que es justo lo que esta vuelta vino a
- * quitar. Por eso cada caso exige dos igualdades: lo de arriba suma «Disponible del período» (la cifra
+ * quitar. Por eso cada caso exige dos igualdades: lo de arriba suma «Libre para gastar» (la cifra
  * de Plan) y todo junto suma «Te quedan» (la cifra del héroe, [teQuedanDeHoy]).
  */
 class CascadaDelDisponibleTest {
@@ -93,17 +94,18 @@ class CascadaDelDisponibleTest {
         assertTrue(c.deDondeSale.filter { !it.suma && it.rotulo != "Tenías el 25" }.all { it.monto <= 0L })
     }
 
+    /**
+     * Vuelta 108: sin margen ya no se cuenta «desde $0». La cifra del héroe es lo que falta de verdad: lo
+     * que faltó para los fijos más lo gastado, «Te faltan $2.512.500».
+     */
     @Test
-    fun `sin margen, el ajuste a cero hace que la suma de lo que dice el heroe`() {
-        // $1M contra $2,8M de fijos: no hay margen, y el héroe dice «Te pasaste por» lo gastado.
+    fun `sin margen, la cifra suma lo que falto para los fijos y lo gastado`() {
+        // $1M contra $2,8M de fijos: no hay margen.
         val d = disponible(PlataDelDisponible(saldoAlInicio = 1_000_000, entradas = 0, guardado = 0))
         val c = sumaQueCuadra(d)
-        assertEquals(ROTULO_TE_PASASTE, c.rotuloDelTotal)
-        assertEquals(-687_500L, c.total)
-        val ajuste = c.despues.first()
-        assertEquals(ROTULO_SIN_MARGEN, ajuste.rotulo)
-        assertEquals(2_825_000L - 1_000_000L, ajuste.monto)
-        assertTrue(ajuste.apagado)
+        assertEquals(ROTULO_TE_FALTAN, c.rotuloDelTotal)
+        assertEquals(1_000_000L - 2_825_000L - 687_500L, c.total)
+        assertEquals(listOf(ROTULO_GASTASTE_EN_EL_PERIODO), c.despues.map { it.rotulo })
     }
 
     @Test

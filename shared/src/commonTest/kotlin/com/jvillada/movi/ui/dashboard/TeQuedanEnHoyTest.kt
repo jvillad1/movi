@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.dashboard
 
+import com.jvillada.movi.shared.model.ROTULO_TE_FALTAN
 import com.jvillada.movi.shared.model.FinanceSummary
 import com.jvillada.movi.shared.model.OccurrenceState
 import com.jvillada.movi.shared.model.PaymentStatus
@@ -25,7 +26,7 @@ import kotlin.test.assertTrue
  * ya pagado: disponible $6,9M, ritmo fijo $222.580 por día. Desde la vuelta 60 la meta de la semana y
  * la de hoy salen de lo que queda (esta semana, la última, se lleva todo lo que quedaba el lunes).
  *
- * Cada prueba compara la cifra de Hoy contra `disponibleDelInicio(data).periodo.teQuedan`, que es
+ * Cada prueba compara la cifra de Hoy contra `disponibleDelInicio(data).loQueQueda` (vuelta 108), que es
  * exactamente lo que pinta la tarjeta de Plan (`PlanScreen` → `TarjetaDelDisponible`).
  */
 class TeQuedanEnHoyTest {
@@ -64,8 +65,9 @@ class TeQuedanEnHoyTest {
     private fun lasDos(data: DashboardData, dia: LocalDate = hoy): Pair<TeQuedanDeHoy, DisponibleDelPeriodo> {
         val deHoy = assertNotNull(teQuedanDelInicio(data, dia))
         val dePlan = assertNotNull(disponibleDelInicio(data, dia))
-        assertEquals(dePlan.periodo.teQuedan, deHoy.teQuedan, "Hoy y Plan dan dos cifras distintas")
-        assertEquals(dePlan.periodo.nivel == NivelDelGasto.PASADO, deHoy.enRojo, "y dos colores distintos")
+        // Vuelta 108: la cifra es `loQueQueda` (lo libre menos lo gastado), también sin margen.
+        assertEquals(dePlan.loQueQueda, deHoy.teQuedan, "Hoy y Plan dan dos cifras distintas")
+        assertEquals(dePlan.loQueQueda < 0L, deHoy.enRojo, "y dos colores distintos")
         return deHoy to dePlan
     }
 
@@ -81,7 +83,7 @@ class TeQuedanEnHoyTest {
         // no la meta diaria del período entero ($222.580), que se leía como «$222.580 por día».
         assertEquals(222_580, plan.metaPorDia)
         assertEquals(1_700_000, plan.porDiaParaLoQueQueda)
-        assertEquals("para 4 días · \$1,7M por día", cifra.detalle)
+        assertEquals("Para 4 días · \$1,7M por día", cifra.detalle)
         assertFalse("meta diaria" in cifra.detalle)
         assertEquals(NivelDelGasto.BIEN, cifra.nivelDelDetalle)
     }
@@ -92,9 +94,10 @@ class TeQuedanEnHoyTest {
 
         assertEquals(-100_000, cifra.teQuedan)
         assertEquals(100_000, cifra.monto, "el rótulo ya dice de qué lado está: el monto va sin signo")
-        assertEquals(ROTULO_TE_PASASTE, cifra.rotulo)
+        assertEquals(ROTULO_TE_FALTAN, cifra.rotulo)
         assertTrue(cifra.enRojo)
-        assertEquals("del disponible del período · faltan 4 días para el corte", cifra.detalle)
+        // Vuelta 108: sin pagos que falten, lo que explica la cifra es el gasto del día a día.
+        assertEquals("Gastaste \$7M en el día a día y lo libre era \$6,9M", cifra.detalle)
         assertEquals(NivelDelGasto.PASADO, cifra.nivelDelDetalle)
     }
 
@@ -112,7 +115,7 @@ class TeQuedanEnHoyTest {
 
         assertEquals(2_400_000, cifra.teQuedan)
         assertEquals(4_390_904, plan.semana.meta)
-        assertEquals("para 11 días · \$218.181 por día", cifra.detalle)
+        assertEquals("Para 11 días · \$218.181 por día", cifra.detalle)
         assertFalse("meta" in cifra.detalle, "el detalle no repite la alarma de la semana")
         assertFalse(cifra.enRojo, "el período no está pasado: la cifra grande no va en rojo")
         assertEquals(
@@ -139,7 +142,7 @@ class TeQuedanEnHoyTest {
     fun `periodo pasado - la cifra ya lo dice, la alarma es solo que hacer, y una sola barra en alerta`() {
         val (cifra, plan) = lasDos(datos(gasto = mapOf("2026-09-01" to 7_000_000L)))
 
-        assertEquals(ROTULO_TE_PASASTE, cifra.rotulo)
+        assertEquals(ROTULO_TE_FALTAN, cifra.rotulo)
         assertEquals(AlertaDelDisponible(texto = null), alertaDelDisponible(plan))
         assertTrue(barraEnAlerta(plan, delPeriodo = true))
         assertFalse(barraEnAlerta(plan, delPeriodo = false), "la semana y hoy no van en alerta")
@@ -160,21 +163,21 @@ class TeQuedanEnHoyTest {
 
         assertEquals(400_000, cifra.teQuedan)
         assertEquals(267_742, plan.periodo.contraElRitmo)
-        assertEquals("para 4 días · vas \$267.742 por encima de lo previsto a hoy", cifra.detalle)
+        assertEquals("Para 4 días · vas \$267.742 por encima de lo previsto a hoy", cifra.detalle)
         assertEquals(NivelDelGasto.CERCA, cifra.nivelDelDetalle)
         assertFalse(cifra.enRojo)
     }
 
     @Test
-    fun `sin margen - la frase de la tarjeta y lo gastado como te pasaste`() {
+    fun `sin margen - te faltan lo que falto para los fijos y lo gastado`() {
         val (cifra, plan) = lasDos(datos(gasto = mapOf("2026-09-10" to 200_000L), arriendo = 12_000_000))
 
         assertFalse(plan.hayMargen)
-        // Sin margen la meta es cero: la columna «Período» de Plan dice −$200.000 en rojo.
-        assertEquals(-200_000, cifra.teQuedan)
-        assertEquals(ROTULO_TE_PASASTE, cifra.rotulo)
+        // Vuelta 108: ya no se cuenta «desde $0»: faltaron $2M para los fijos y se gastaron $200.000.
+        assertEquals(-2_200_000, cifra.teQuedan)
+        assertEquals(ROTULO_TE_FALTAN, cifra.rotulo)
         assertTrue(cifra.enRojo)
-        assertEquals("Los fijos del período superan tus ingresos por \$2M", cifra.detalle)
+        assertEquals("Tus pagos fijos del período se llevaron más de lo que tenías · gastaste \$200.000 en el día a día", cifra.detalle)
         assertEquals(NivelDelGasto.PASADO, cifra.nivelDelDetalle)
     }
 
@@ -182,7 +185,7 @@ class TeQuedanEnHoyTest {
     fun `el ultimo dia dice para hoy`() {
         val (cifra, _) = lasDos(datos(gasto = emptyMap()), dia = LocalDate(2026, 9, 24))
         assertEquals(6_900_000, cifra.teQuedan)
-        assertEquals("para hoy", cifra.detalle)
+        assertEquals("Para hoy", cifra.detalle)
     }
 
     @Test
@@ -205,7 +208,7 @@ class TeQuedanEnHoyTest {
         }
         val conAviso = assertNotNull(veredictoDelInicio(data, hoy))
         val sinAviso = assertNotNull(veredictoDelInicio(data, hoy, conAvisoDelDisponible = false))
-        assertTrue("te pasaste del disponible" in conAviso.frase)
-        assertFalse("te pasaste del disponible" in sinAviso.frase)
+        assertTrue("de lo libre para gastar" in conAviso.frase)
+        assertFalse("de lo libre para gastar" in sinAviso.frase)
     }
 }

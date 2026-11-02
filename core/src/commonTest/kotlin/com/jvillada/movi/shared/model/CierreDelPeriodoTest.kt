@@ -130,7 +130,7 @@ class CierreDelPeriodoTest {
         )
         val c = cierre(disponible = disponible)
         assertEquals(500_000, c.quedoDelDisponible)
-        assertEquals("Te quedaron \$500.000 del disponible", disponibleDelCierre(c))
+        assertEquals("Te quedaron \$500.000 libres para gastar", disponibleDelCierre(c))
         // Y es la misma cifra que la tarjeta de Hoy decía esa noche.
         val hoyEsaNoche = disponibleDelPeriodo(
             ingresosRecibidos = 10_000_000,
@@ -146,7 +146,7 @@ class CierreDelPeriodoTest {
     @Test
     fun `pasarse del disponible se dice con la cifra en positivo`() {
         assertEquals(
-            "Te pasaste del disponible por \$180.000",
+            "Te pasaste por \$180.000 de lo libre para gastar",
             disponibleDelCierre(cierre().copy(quedoDelDisponible = -180_000)),
         )
         assertNull(disponibleDelCierre(cierre()))
@@ -164,7 +164,7 @@ class CierreDelPeriodoTest {
                 "Lo que más pesó: Cuota de crédito \$12.900.000 · Vivienda \$3.100.000 · Comida \$900.000",
                 "Pagos: cumpliste 2 de 3 · faltó Gimnasio",
                 "Fuera de lo normal: ¿Cobro duplicado en Rappi?",
-                "Te quedaron \$420.000 del disponible",
+                "Te quedaron \$420.000 libres para gastar",
             ),
             lineasDelCierre(c),
         )

@@ -139,7 +139,7 @@ class HoyEnUnaMiradaTest {
             seccionesDelEditor(deMovi).map { it.tipo },
         )
         assertEquals(listOf(true, true, true, false, false), seccionesDelEditor(deMovi).map { it.visible })
-        assertEquals("Disponible", seccionesDelEditor(deMovi).first { it.tipo == "DISPONIBLE_DEL_PERIODO" }.nombre)
+        assertEquals("Libre para gastar", seccionesDelEditor(deMovi).first { it.tipo == "DISPONIBLE_DEL_PERIODO" }.nombre)
 
         val oculta = deMovi.mostrando("CUENTAS", false)
         assertEquals(listOf("CUENTAS"), oculta.ocultas)

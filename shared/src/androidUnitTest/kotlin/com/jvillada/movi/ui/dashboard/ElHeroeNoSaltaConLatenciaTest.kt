@@ -60,7 +60,7 @@ class ElHeroeNoSaltaConLatenciaTest {
             override suspend fun getUserProfile() = UserProfile(id = "u1", email = "juan@ejemplo.com", name = "Juan", avatarColor = "#1D4E9E", periodCutoffDay = 25)
             override suspend fun getAccounts() = listOf(Account("a1", "Ahorros", AccountType.SAVINGS, 2_345_678))
             override suspend fun getFinanceSummary(scope: Scope) = FinanceSummary(Scope.SELF, balance = 2_345_678, ingresos = 10_000_000, egresos = 4_000_000)
-            override suspend fun getDashboardSummary(scope: Scope) = DashboardSummary(pendingSms = 5, porConfirmarSuman = 1_100_200L)
+            override suspend fun getDashboardSummary(scope: Scope) = DashboardSummary(pendingSms = 5, porConfirmarSuman = 1_100_200L, gastoVariablePorDia = emptyMap())
             override suspend fun getUpcomingPayments(): List<UpcomingPayment> = emptyList()
             override suspend fun getOccurrenceStates(): List<OccurrenceState> = emptyList()
             override suspend fun getCredits(): List<CreditSummary> = emptyList()

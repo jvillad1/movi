@@ -90,7 +90,9 @@ data class EstadoDelHeroe(
  * donde no había, sin que cambie nada más, tampoco: entra sin hacer parpadear la cifra. Pura.
  */
 fun esUnCambioDelHeroe(antes: EstadoDelHeroe, despues: EstadoDelHeroe): Boolean {
-    if (antes.renglon == null && antes == despues.copy(renglon = null)) return false
+    // Vuelta 108: la proyección viaja dentro de la cifra; que llegue (con el supuesto) no es un cambio de cifra.
+    fun sinProyeccion(e: EstadoDelHeroe) = e.copy(renglon = null, teQuedan = e.teQuedan?.copy(proyeccion = null))
+    if (antes.renglon == null && sinProyeccion(antes) == sinProyeccion(despues)) return false
     return (antes.teQuedan != null && despues.teQuedan != null) ||
         (antes.teQuedan == null && despues.teQuedan == null && antes.tuPlata != null && despues.tuPlata != null)
 }

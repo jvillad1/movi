@@ -56,8 +56,12 @@ class CajaEnHoyTest {
     private val ajustes = PeriodSettings(cutoffDay = 25)
 
     /** El período de hoy (el héroe usa el reloj de la app): la caja mira desde hoy hasta el siguiente. */
-    private fun datos(saldo: Long) = DashboardData(
+    private fun datos(saldo: Long, gastado: Long = 0L) = DashboardData(
         accounts = listOf(Account("acc-banco", "Bancolombia", AccountType.SAVINGS, saldo, "COP")),
+        // Vuelta 108: el renglón es la proyección de la cifra del héroe, que necesita el resumen del período.
+        summary = com.jvillada.movi.shared.model.FinanceSummary(scope = com.jvillada.movi.shared.model.Scope.SELF, balance = 0, ingresos = 0, egresos = 0),
+        plataDelDisponible = PlataDelDisponible(saldoAlInicio = saldo, entradas = 0L, guardado = 0L),
+        gastoVariablePorDia = mapOf(com.jvillada.movi.shared.time.epochMillisToAppDate(Clock.System.now().toEpochMilliseconds()).toString() to gastado),
         upcoming = emptyList(),
         ocurrencias = emptyList(),
         ajustesDePeriodo = ajustes,
@@ -107,11 +111,12 @@ class CajaEnHoyTest {
 
         puerta.complete(Unit)
         composeRule.waitUntil(5_000) { contarTag(TAG_ME_ALCANZA) == 1 }
-        val textos = composeRule.onAllNodesWithText("Te alcanza hasta el", substring = true, useUnmergedTree = true)
+        // Vuelta 108: la proyección de la cifra del héroe, con el supuesto a la vista.
+        val textos = composeRule.onAllNodesWithText("Con tu gasto de un día normal", substring = true, useUnmergedTree = true)
             .fetchSemanticsNodes()
-        assertEquals(1, textos.size, "el renglón dice hasta cuándo alcanza")
+        assertEquals(1, textos.size, "el renglón dice si alcanza con el gasto de un día normal")
         assertTrue(
-            composeRule.onAllNodesWithText("Tu día más justo, ", substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty(),
+            composeRule.onAllNodesWithText("Calculado con \$20.000 por día", substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty(),
         )
 
         composeRule.onNodeWithTag(TAG_ME_ALCANZA, useUnmergedTree = true).performScrollTo().performClick()
@@ -119,13 +124,14 @@ class CajaEnHoyTest {
     }
 
     @Test
-    fun `si no alcanza lo dice con la cifra del peor dia`() {
-        // Una cuenta en rojo: lo libre ya es negativo hoy.
-        montar(datos(saldo = -500_000L))
+    fun `si ya falta, el heroe dice te faltan y el renglon cuanto faltaria al final`() {
+        // Vuelta 108: $1M al empezar y $1,5M gastados: «Te faltan $500.000», y con $20.000 por día, más.
+        montar(datos(saldo = 1_000_000L, gastado = 1_500_000L))
         puerta.complete(Unit)
         composeRule.waitUntil(5_000) { contarTag(TAG_ME_ALCANZA) == 1 }
+        assertTrue(composeRule.onAllNodesWithText(com.jvillada.movi.shared.model.ROTULO_TE_FALTAN, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
         assertTrue(
-            composeRule.onAllNodesWithText("No te alcanza", substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty(),
+            composeRule.onAllNodesWithText("te faltarían unos", substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty(),
         )
     }
 

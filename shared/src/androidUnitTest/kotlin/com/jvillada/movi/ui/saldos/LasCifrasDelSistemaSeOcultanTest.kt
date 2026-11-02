@@ -292,6 +292,10 @@ class LasCifrasDelSistemaSeOcultanTest {
             ),
         ),
         ocurrencias = emptyList(),
+        // Vuelta 108: el renglón del héroe es la proyección de su cifra, que sale del resumen del período.
+        summary = com.jvillada.movi.shared.model.FinanceSummary(scope = Scope.SELF, balance = 0, ingresos = 0, egresos = 0),
+        plataDelDisponible = com.jvillada.movi.shared.model.PlataDelDisponible(saldoAlInicio = 2_345_678L, entradas = 0L, guardado = 0L),
+        gastoVariablePorDia = emptyMap(),
         anomalias = listOf(duplicado),
         ajustesDePeriodo = PeriodSettings(cutoffDay = 25),
         periodoActual = PeriodoFinanciero(2026, 10),
@@ -308,7 +312,7 @@ class LasCifrasDelSistemaSeOcultanTest {
                 ParaRevisarSection(ScreenSection(type = "ALERTS", title = "Para revisar"), datosDeHoy) {}
             }
         }
-        esperar("Tu día más justo, ")
+        esperar("Con tu gasto de un día normal")
         composeRule.onAllNodesWithText("Ver los movimientos", useUnmergedTree = true)[0].performClick()
         esperar("28 de septiembre · RAPPI COLOMBIA · Bancolombia")
     }

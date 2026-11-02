@@ -306,10 +306,10 @@ class DisponibleDelPeriodoTest {
         )
         assertEquals(NivelDelGasto.PASADO, d.periodo.nivel)
         assertEquals(
-            FraseDelDisponible("Te pasaste del disponible del período por \$920.000", NivelDelGasto.PASADO),
+            FraseDelDisponible("Te pasaste por \$920.000 de lo libre para gastar del período", NivelDelGasto.PASADO),
             fraseDelDisponible(d),
         )
-        assertEquals("te pasaste del disponible por \$920.000", avisoDelDisponible(d), "la misma cifra que la frase")
+        assertEquals("te pasaste por \$920.000 de lo libre para gastar", avisoDelDisponible(d), "la misma cifra que la frase")
         assertNull(d.porDiaParaLoQueQueda)
 
         assertTrue(d.yaTePasaste)

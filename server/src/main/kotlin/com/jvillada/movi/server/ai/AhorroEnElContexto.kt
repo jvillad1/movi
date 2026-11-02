@@ -26,7 +26,8 @@ internal suspend fun ContextoDelPeriodo.conElAhorro(uid: String, hoy: LocalDate 
         ahorro = AhorroParaContexto(
             ajuste = ajuste,
             monto = monto,
-            teQuedan = disponible?.periodo?.teQuedan,
+            // Vuelta 108: la cifra del héroe es `loQueQueda` (también sin margen).
+            teQuedan = disponible?.loQueQueda,
             diasQueQuedan = disponible?.diasQueQuedan ?: diasQueQuedan,
         ),
     )

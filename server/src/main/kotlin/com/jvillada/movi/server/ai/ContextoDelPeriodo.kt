@@ -293,7 +293,7 @@ internal fun AhorroParaContexto.linea(formato: (Long) -> String): String {
     val dias = if (diasQueQuedan == 1) "hoy, el último día" else "los $diasQueQuedan días que faltan"
     val queda = when {
         teQuedan == null -> ""
-        teQuedan < 0L -> "; ya se pasó por ${formato(-teQuedan)} de lo que había para gastar en el período"
+        teQuedan < 0L -> "; le faltan ${formato(-teQuedan)} hasta que le paguen (lo que dice «Te faltan» en Inicio)"
         else -> "; te quedan ${formato(teQuedan)} para gastar en $dias"
     }
     return "- Apartas ${formato(monto)} de ahorro cada período ($como)$queda. Es la misma cifra de «Te quedan» " +

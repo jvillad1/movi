@@ -16,6 +16,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -340,11 +342,20 @@ internal fun fraseDelRojo(caja: CajaProyectada, hoy: LocalDate): String? {
 internal fun fraseDelSupuesto(gasto: GastoDelDiaADia): String {
     val porDia = gasto.porDia
         ?: return "Todavía no hay un período cerrado para estimar tu gasto del día a día: la línea solo resta tus pagos del período."
+    // Vuelta 108: el que eligió el dueño, dicho como suyo.
+    if (gasto.elegido != null) {
+        return "Supone tu gasto de un día normal, el que elegiste: ${formatMoneyAbreviada(porDia)} por día."
+    }
     val deDonde = when (gasto.periodos.size) {
         1 -> "en tu período de ${mesDelPrefijo(gasto.periodos.single().periodo)}"
         else -> "en tus últimos ${gasto.periodos.size} períodos"
     }
-    return "Supone que sigues como siempre: $GASTAS_EN_PROMEDIO ${formatMoneyAbreviada(porDia)} por día ($deDonde)."
+    // Vuelta 108: sin compras con tarjeta ni gastos de una sola vez (ver `gastoDeUnDiaNormalDelPeriodo`).
+    val sin = buildList {
+        if (gasto.conTarjeta > 0L) add("compras con tarjeta")
+        if (gasto.deUnaVez.isNotEmpty()) add("gastos de una sola vez de \$1M o más")
+    }.takeIf { it.isNotEmpty() }?.joinToString(" ni ", prefix = ", sin ")
+    return "Supone que sigues como siempre: $GASTAS_EN_PROMEDIO ${formatMoneyAbreviada(porDia)} por día ($deDonde${sin.orEmpty()})."
 }
 
 /** «2026-09» → «septiembre», o el prefijo tal cual si no se entiende. */
@@ -372,7 +383,8 @@ internal fun deDondeSaleLaCaja(caja: CajaProyectada): List<String> = buildList {
         }.joinToString(" y ")
         add("Lo libre es ese saldo menos $que: siguen en tus cuentas, pero no son para gastar.")
     }
-    add("Tu gasto del día a día se resta desde mañana, como si saliera de tu plata ese mismo día aunque lo pagues con tarjeta.")
+    // Vuelta 108: las compras con tarjeta ya no están en el supuesto: salen cuando pagas la tarjeta (su mínimo).
+    add("Tu gasto del día a día se resta desde mañana. Lo que compras con tarjeta sale el día que pagas la tarjeta.")
 }
 
 /**
@@ -459,8 +471,38 @@ internal fun SeccionCajaProyectada(
         Repositories.wallets.getGastoDelDiaADia()
     }
     var verDeDondeSale by rememberSaveable { mutableStateOf(false) }
+    // Vuelta 108: «Gasto de un día normal», que el dueño puede ajustar aquí.
+    var ajustandoElGasto by rememberSaveable { mutableStateOf(false) }
+    var guardandoElGasto by remember { mutableStateOf(false) }
+    var errorDelGasto by remember { mutableStateOf<String?>(null) }
+    val alcance = rememberCoroutineScope()
     val hoy = remember { epochMillisToAppDate(Clock.System.now().toEpochMilliseconds()) }
     val gasto = gastoLeido.valor
+    if (ajustandoElGasto && gasto != null) {
+        GastoDeUnDiaNormalSheet(
+            actual = gasto,
+            saving = guardandoElGasto,
+            error = errorDelGasto,
+            onDismiss = { ajustandoElGasto = false; errorDelGasto = null },
+            onSave = { valor ->
+                guardandoElGasto = true
+                errorDelGasto = null
+                alcance.launch {
+                    runCatching { guardarElGastoDeUnDiaNormal(valor) }
+                        .onSuccess {
+                            guardandoElGasto = false
+                            ajustandoElGasto = false
+                            // Se vuelve a pedir el supuesto: la caja y el héroe restan el nuevo.
+                            reintento++
+                        }
+                        .onFailure {
+                            guardandoElGasto = false
+                            errorDelGasto = "No pudimos guardar el cambio. Revisa tu conexión e inténtalo de nuevo."
+                        }
+                }
+            },
+        )
+    }
     val caja = gasto?.let { cajaDelPeriodoDe(data, it, hoy) }
     val noSePudo = gastoLeido.valor == null && gastoLeido.terminada && !gastoLeido.actualizando
     // Vuelta 70: con su fuente caída la caja no se pinta, ni con lo de antes: lo que proyectaría ya no se
@@ -491,6 +533,7 @@ internal fun SeccionCajaProyectada(
                 CuerpoDeLaCaja(
                     caja, gasto, hoy, verDeDondeSale, onNavigate, remember(data, hoy) { comparacionConTeQuedan(data, hoy) }, onAgregarSalario,
                     ultimoDiaDelPeriodo = remember(data) { com.jvillada.movi.ui.dashboard.ultimoDiaDelPeriodoDe(data) },
+                    onAjustarElGasto = { ajustandoElGasto = true },
                 )
             }
             noSePudo ->
@@ -521,6 +564,7 @@ private fun CuerpoDeLaCaja(
     comparacion: ComparacionConTeQuedan?,
     onAgregarSalario: (() -> Unit)?,
     ultimoDiaDelPeriodo: LocalDate? = null,
+    onAjustarElGasto: (() -> Unit)? = null,
 ) {
     // Vuelta 75: sin salario, antes de la cifra, lo que la caja supone y cómo cambiarlo.
     val sinSalario = lineaSinSalario(caja)
@@ -591,6 +635,21 @@ private fun CuerpoDeLaCaja(
                 .then(if (dia == null) Modifier.semantics { contentDescription = descripcionDelCierre(caja) } else Modifier),
         )
         Text(fechaCorta(caja.dias.last().fecha), style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
+    }
+    // Vuelta 108: el supuesto a la vista, con «Ajustar» («Gasto de un día normal»).
+    if (onAjustarElGasto != null) {
+        Spacer(Modifier.height(Movi.espacios.corto))
+        Row(
+            modifier = Modifier.fillMaxWidth().testTag(TAG_FILA_DEL_SUPUESTO),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Movi.espacios.corto),
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(GASTO_DE_UN_DIA_NORMAL, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                Text(com.jvillada.movi.ui.components.conCifrasOcultas(textoDelSupuesto(gasto)), style = Movi.textos.apoyo, color = Movi.colores.texto)
+            }
+            Boton(texto = "Ajustar", onClick = onAjustarElGasto, variante = VarianteDeBoton.Fantasma, tamano = TamanoDeBoton.S)
+        }
     }
     fraseDeLoQueFalta(caja)?.let { falta ->
         Spacer(Modifier.height(Movi.espacios.medio))

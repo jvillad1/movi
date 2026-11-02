@@ -8,11 +8,9 @@ import com.jvillada.movi.ui.components.PLATA_OCULTA
 import com.jvillada.movi.ui.components.formatCOPSinOcultar
 import com.jvillada.movi.ui.components.formatMoneyCompactSinOcultar
 import com.jvillada.movi.ui.dashboard.DashboardData
-import com.jvillada.movi.ui.dashboard.ROTULO_TE_PASASTE
 import com.jvillada.movi.ui.dashboard.conElPeriodoDe
 import com.jvillada.movi.ui.dashboard.conteoPorRevisarDelInicio
-import com.jvillada.movi.ui.dashboard.disponibleDelInicio
-import com.jvillada.movi.ui.dashboard.teQuedanDeHoy
+import com.jvillada.movi.ui.dashboard.teQuedanDelInicio
 import com.jvillada.movi.ui.porrevisar.ConteoPorRevisar
 import com.jvillada.movi.ui.transactions.resumenDelDia
 import kotlinx.datetime.DatePeriod
@@ -91,11 +89,12 @@ internal fun fraseDelGastoDeAyer(gasto: Long, ocultos: Boolean): String =
  */
 internal fun fraseDeLoQueQueda(data: DashboardData, ahora: Long, ocultos: Boolean): String? {
     val hoy = epochMillisToAppDate(ahora)
-    val disponible = runCatching { disponibleDelInicio(data.conElPeriodoDe(ahora), hoy) }.getOrNull() ?: return null
-    val t = teQuedanDeHoy(disponible)
+    // Vuelta 108: la MISMA cifra y la misma pregunta del héroe (`teQuedanDelInicio`, sobre
+    // `teAlcanzaHastaQueTePaguen` de :core): «te faltan $588.919 hasta que te paguen el 25 nov».
+    val t = runCatching { teQuedanDelInicio(data.conElPeriodoDe(ahora), hoy) }.getOrNull() ?: return null
     val cifra = if (ocultos) PLATA_OCULTA else formatMoneyCompactSinOcultar(t.monto)
-    if (t.rotulo == ROTULO_TE_PASASTE) return "te pasaste por $cifra"
-    val dias = if (disponible.diasQueQuedan <= 1) "para hoy" else "para ${disponible.diasQueQuedan} días"
+    if (t.enRojo) return "te faltan $cifra" + (t.pregunta?.let { " ${it.replaceFirstChar { c -> c.lowercase() }}" } ?: "")
+    val dias = if (t.diasQueQuedan <= 1) "para hoy" else "para ${t.diasQueQuedan} días"
     return "te quedan $cifra $dias"
 }
 

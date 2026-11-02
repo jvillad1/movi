@@ -35,6 +35,7 @@ import com.jvillada.movi.ui.sdui.TAG_BARRA_DE_VENTANA
 import com.jvillada.movi.ui.sdui.GASTASTE
 import com.jvillada.movi.ui.sdui.ROTULO_DIA_A_DIA_DEL_PERIODO
 import com.jvillada.movi.ui.sdui.YA_TE_PASASTE
+import com.jvillada.movi.ui.sdui.TAG_SIN_MARGEN_PARA_EL_DIA_A_DIA
 import kotlinx.datetime.LocalDate
 import org.junit.Rule
 import org.junit.Test
@@ -159,7 +160,9 @@ class DisponibleEnInicioTest {
         // $10M de ingresos menos $3,1M de arriendo = $6,9M. Hoy se gastaron $150.000.
         montar(datos(ingresos = 10_000_000, arriendo = 3_100_000, gasto = mapOf("2026-09-21" to 150_000L)))
 
-        composeRule.onNodeWithText("Disponible", useUnmergedTree = true).assertIsDisplayed()
+        // Vuelta 108: «Disponible» se llama «Libre para gastar» (aunque la definición guardada diga «Disponible»).
+        composeRule.onNodeWithText("Libre para gastar", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Disponible", useUnmergedTree = true).assertDoesNotExist()
         // Ola R4b: la cifra principal es la `Cifra.Grande` del sistema, entera.
         composeRule.onNodeWithText("\$6.900.000", useUnmergedTree = true).assertIsDisplayed()
         // Ola 3 · Hoy en una mirada: la frase «Te quedan $6,8M para 4 días · $1,7M por día»
@@ -198,26 +201,20 @@ class DisponibleEnInicioTest {
     }
 
     /**
-     * La escena que motivó la entrega B: el período pasado y, en la tarjeta vieja, «Te pasaste» en
-     * rojo con «Vas bien» para la semana un renglón abajo. Ahora hay una frase —la del período— y las
-     * metas de la semana y de hoy siguen a la vista en sus columnas.
+     * La escena que motivó la entrega B, y la vuelta 108: con el período pasado no hay columnas con metas en
+     * «$0 · ya te pasaste» —dos ceros que no se distinguían de un «vas bien»—, sino lo que sirve para decidir.
      */
     @Test
-    fun `con el periodo pasado dice una sola cosa y no vas bien`() {
+    fun `con el periodo pasado dice que no hay margen, lo gastado y lo que llevas, sin metas en cero`() {
         montar(datos(ingresos = 10_000_000, arriendo = 3_100_000, gasto = mapOf("2026-09-01" to 8_000_000L)))
 
-        // La frase la dice el héroe (Ola 3); acá quedan las columnas.
-        composeRule.onNodeWithText("Te pasaste del disponible del período por \$1,1M", useUnmergedTree = true)
-            .assertDoesNotExist()
-        // Te pasaste: vuelta 70, el período dice lo que queda (−$1,1M, la cifra del héroe) en rojo, y abajo
-        // lo gastado de cuánto.
-        assertCifras("−\$1,1M", 1, rojo)
-        assertCifras("\$8M", 1, apagado)
-        composeRule.onNodeWithText("de \$6,9M", useUnmergedTree = true).assertIsDisplayed()
-        // Vuelta 60: ya no queda nada que repartir: la semana y hoy dicen «$0 · ya te pasaste», no una
-        // meta (antes, «$890.320» y «$222.580» al lado del «Te pasaste» del héroe).
-        assertCifras("\$0", 2, normal)
-        assertYaTePasaste("\$0", 2)
+        composeRule.onNodeWithTag(TAG_SIN_MARGEN_PARA_EL_DIA_A_DIA, useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("No hay margen para el día a día hasta el 25 sep", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("\$8.000.000 · lo libre era \$6.900.000", useUnmergedTree = true).assertIsDisplayed()
+        assertEquals(2, nodos("llevas \$0").size, "la semana y hoy: lo que llevas, sin meta")
+        assertEquals(0, nodos(YA_TE_PASASTE).size)
+        composeRule.onNodeWithText("Meta de hoy", useUnmergedTree = true).assertDoesNotExist()
+        assertEquals(0, barras())
         composeRule.onNodeWithText("bien", substring = true, ignoreCase = true, useUnmergedTree = true).assertDoesNotExist()
     }
 
@@ -271,34 +268,22 @@ class DisponibleEnInicioTest {
     fun `sin margen lo dice y no promete un disponible`() {
         montar(datos(ingresos = 2_000_000, arriendo = 3_100_000, gasto = mapOf("2026-09-21" to 90_000L)))
 
-        // «Los fijos del período superan tus ingresos por $1,1M» la dice el héroe (Ola 3).
-        composeRule.onNodeWithText(
-            "Los fijos del período superan tus ingresos por \$1,1M",
-            useUnmergedTree = true,
-        ).assertDoesNotExist()
-        // Sin margen no queda nada que repartir: vuelta 60, la semana y hoy dicen «$0 · ya te pasaste ·
-        // llevas $90.000» (antes «−$90.000»). Lo que se va es la barra: contra cero no hay nada que
-        // medir. El período dice lo gastado en rojo «de $0».
-        composeRule.onNodeWithText("Período", useUnmergedTree = true).assertIsDisplayed()
-        assertCifras("\$0", 2, normal)
-        // Vuelta 70: el período dice lo que queda —menos lo gastado, en rojo— y abajo lo gastado «de $0».
-        assertCifras("−\$90.000", 1, rojo)
-        assertYaTePasaste("\$90.000", 3)
-        composeRule.onNodeWithText("de \$0", useUnmergedTree = true).assertIsDisplayed()
+        // Vuelta 108: ni columnas ni «de $0»: no había nada libre, y lo que llevas en la semana y hoy.
+        composeRule.onNodeWithText("No hay margen para el día a día hasta el 25 sep", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("\$90.000 · no había nada libre", useUnmergedTree = true).assertIsDisplayed()
+        assertEquals(2, nodos("llevas \$90.000").size)
+        composeRule.onNodeWithText("de \$0", useUnmergedTree = true).assertDoesNotExist()
         assertEquals(0, barras(), "sin margen no hay barras")
     }
 
-    /** Sin margen y sin gastar nada: cada columna dice «$0» —no se esconde— y no está en rojo. */
+    /** Sin margen y sin gastar nada: tampoco hay metas en cero; «llevas $0» en la semana y hoy. */
     @Test
-    fun `sin margen y sin gasto cada columna dice cero`() {
+    fun `sin margen y sin gasto no hay metas en cero`() {
         montar(datos(ingresos = 2_000_000, arriendo = 3_100_000, gasto = emptyMap()))
 
-        composeRule.onNodeWithText("Los fijos del período superan tus ingresos por \$1,1M", useUnmergedTree = true)
-            .assertDoesNotExist()
-        assertCifras("\$0", 3, normal)
-        // Los fijos ya se llevaron todo: la semana y hoy no tienen nada que repartir (vuelta 60).
-        assertYaTePasaste("\$0", 3)
-        composeRule.onNodeWithText("de \$0", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("\$0 · no había nada libre", useUnmergedTree = true).assertIsDisplayed()
+        assertEquals(2, nodos("llevas \$0").size)
+        assertEquals(0, nodos(YA_TE_PASASTE).size)
         assertEquals(0, barras())
     }
 }

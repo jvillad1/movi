@@ -70,7 +70,7 @@ class PreferenciasDelInicioTest {
             ),
             tipos(conDisponible),
         )
-        assertEquals("Disponible", conDisponible.sections.first { it.type == "DISPONIBLE_DEL_PERIODO" }.title)
+        assertEquals("Libre para gastar", conDisponible.sections.first { it.type == "DISPONIBLE_DEL_PERIODO" }.title)
         val lasDosArriba = inicioConPreferencias(
             porDefecto,
             PreferenciasDelInicio(

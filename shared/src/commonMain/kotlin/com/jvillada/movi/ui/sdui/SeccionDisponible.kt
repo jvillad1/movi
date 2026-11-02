@@ -71,6 +71,15 @@ import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import com.jvillada.movi.ui.dashboard.rememberProgresoDeEntrada
 import com.jvillada.movi.ui.dashboard.rotuloDeLaSemana
 import com.jvillada.movi.ui.Screen
+import androidx.compose.runtime.remember
+import com.jvillada.movi.shared.model.LIBRE_PARA_GASTAR
+import com.jvillada.movi.ui.components.conCifrasOcultas
+import com.jvillada.movi.ui.dashboard.DIA_A_DIA_DEL_PERIODO
+import com.jvillada.movi.ui.dashboard.LO_QUE_MAS_PESA
+import com.jvillada.movi.ui.dashboard.SinMargenParaElDiaADia
+import com.jvillada.movi.ui.dashboard.checklistDelPeriodoDe
+import com.jvillada.movi.ui.dashboard.sinMargenParaElDiaADia
+import com.jvillada.movi.ui.plan.SEGMENTO_PAGOS
 
 /**
  * # «Disponible»: cuánto queda del período, compacto y con UNA frase
@@ -105,12 +114,23 @@ internal fun DisponibleDelPeriodoSection(
     onNavigate: (Screen) -> Unit = {},
 ) {
     val disponible = disponibleDelInicio(data, hoy) ?: return
+    // Vuelta 108: sin margen, los pagos que más pesan salen de la lista del período.
+    val checklist = remember(data) { checklistDelPeriodoDe(data) }
     Column {
         // Ola 3 · Hoy en una mirada: sin la frase. «Te quedan $X para N días · $Y por día» (o
         // la que mande: te pasaste, sin margen…) ya la dice el héroe de arriba con la MISMA cuenta
         // (`teQuedanDeHoy` sobre el mismo `disponibleDelInicio`), y la sección solo se pinta cuando
         // el héroe la tiene. En Hoy quedan la cifra y las tres columnas; en Plan, la frase sigue.
-        TarjetaDelDisponible(titulo = section.title ?: "Disponible", disponible = disponible, comoEnPagos = false)
+        // Vuelta 108: «Disponible» pasa a «Libre para gastar» (también si la definición guardada aún lo llama así).
+        TarjetaDelDisponible(
+            titulo = section.title?.takeUnless { it.isBlank() || it == "Disponible" } ?: LIBRE_PARA_GASTAR,
+            disponible = disponible,
+            comoEnPagos = false,
+            checklist = checklist,
+            hoy = hoy,
+            conElPeriodoElegido = !data.ajustesDePeriodo.esMesDeCalendario,
+            onVerPagos = { onNavigate(Screen.Plan(SEGMENTO_PAGOS)) },
+        )
         // Vuelta 75: «Tu día más justo» ya no va acá: es el renglón «¿Me alcanza?» del héroe, que se ve
         // aunque esta sección esté oculta (ver `RenglonMeAlcanzaDelHeroe`). Dos veces sería repetirlo.
     }
@@ -186,6 +206,17 @@ internal fun TarjetaDelDisponible(
     renglon: com.jvillada.movi.ui.dashboard.RenglonMeAlcanza? = null,
     /** «Mira en qué se fue ›»: abre «En qué se va». `null` no pinta el enlace. */
     onVerEnQueSeVa: (() -> Unit)? = null,
+    /**
+     * Vuelta 108: la cifra del héroe ya calculada (con la lista y el supuesto), para que Pagos diga lo MISMO
+     * que el Inicio. `null` = desde el disponible solo.
+     */
+    teQuedan: com.jvillada.movi.ui.dashboard.TeQuedanDeHoy? = null,
+    /** Vuelta 108: la lista del período, para «lo que más pesa» sin margen. */
+    checklist: List<com.jvillada.movi.shared.model.PagoDelPeriodo> = emptyList(),
+    hoy: LocalDate = epochMillisToAppDate(Clock.System.now().toEpochMilliseconds()),
+    conElPeriodoElegido: Boolean = false,
+    /** Vuelta 108: «Ver los N pagos que faltan ›» sin margen. `null` no pinta el enlace (en Pagos están abajo). */
+    onVerPagos: (() -> Unit)? = null,
 ) {
     val entrada = rememberProgresoDeEntrada("disponible", listo = disponible != null)
     var verDeDondeSale by rememberSaveable { mutableStateOf(false) }
@@ -204,7 +235,12 @@ internal fun TarjetaDelDisponible(
             if (disponible == null) {
                 CuerpoDelDisponibleEsqueleto()
             } else {
-                CuerpoDelDisponible(disponible, verDeDondeSale, entrada, comoEnPagos, onVerEnQueSeVa, renglon)
+                CuerpoDelDisponible(
+                    disponible, verDeDondeSale, entrada, comoEnPagos, onVerEnQueSeVa, renglon,
+                    teQuedanCalculado = teQuedan,
+                    sinMargen = if (disponible.yaTePasaste) sinMargenParaElDiaADia(disponible, checklist, hoy, conElPeriodoElegido) else null,
+                    onVerPagos = onVerPagos,
+                )
             }
         }
     }
@@ -227,6 +263,9 @@ private fun CuerpoDelDisponible(
     comoEnPagos: Boolean,
     onVerEnQueSeVa: (() -> Unit)?,
     renglon: com.jvillada.movi.ui.dashboard.RenglonMeAlcanza? = null,
+    teQuedanCalculado: com.jvillada.movi.ui.dashboard.TeQuedanDeHoy? = null,
+    sinMargen: SinMargenParaElDiaADia? = null,
+    onVerPagos: (() -> Unit)? = null,
 ) {
     if (comoEnPagos) {
         // Vuelta 45: la protagonista es «Te quedan», la MISMA cifra del héroe del Inicio, con la MISMA
@@ -234,7 +273,7 @@ private fun CuerpoDelDisponible(
         // período ($4.536.800) y dejaba lo que queda en la letra chica de la frase; el dueño leía dos
         // cifras distintas para «¿cuánto me queda?» en Inicio y en Pagos. Entera, en `Grande`: la héroe
         // de Pagos es «Falta por pagar» (una sola héroe por pantalla).
-        val teQuedan = teQuedanDeHoy(disponible)
+        val teQuedan = teQuedanCalculado ?: teQuedanDeHoy(disponible)
         Text(text = teQuedan.rotulo, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
         CifraDelSistema(
             teQuedan.monto,
@@ -263,7 +302,8 @@ private fun CuerpoDelDisponible(
         // Ola R4b: la cifra principal es la `Cifra.Grande` del sistema, entera («$3.240.000», no «$3,2M»)
         // y con «Ocultar los saldos» incluido; el rótulo va arriba, como en el camino 1. En rojo
         // (`Alerta`) solo sin margen: gastar no es una alarma, pasarse sí.
-        Text(text = ROTULO_DISPONIBLE_DEL_PERIODO, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
+        // Vuelta 108: el título ya dice «Libre para gastar»; el rótulo dice de qué ventana es la cifra.
+        Text(text = EN_TODO_EL_PERIODO, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
         CifraDelSistema(
             disponible.disponible,
             VarianteDeCifra.Grande,
@@ -284,6 +324,11 @@ private fun CuerpoDelDisponible(
         }
     }
     Spacer(Modifier.height(Movi.espacios.medio))
+    // Vuelta 108: sin margen, ni columnas ni metas en $0: lo que sirve para decidir.
+    if (sinMargen != null) {
+        SinMargenEnLaTarjeta(sinMargen, onVerPagos)
+        return
+    }
     if (comoEnPagos) {
         VentanasEnRenglones(disponible, entrada)
         return
@@ -295,6 +340,58 @@ private fun CuerpoDelDisponible(
         ColumnaDeVentana("Período", disponible.periodo, disponible, entrada, Modifier.weight(1f), delPeriodo = true)
         ColumnaDeVentana(rotuloDeLaSemana(disponible), disponible.semana, disponible, entrada, Modifier.weight(1f))
         ColumnaDeVentana(ROTULO_META_DE_HOY, disponible.hoy, disponible, entrada, Modifier.weight(1f))
+    }
+}
+
+/** Vuelta 108: el rótulo de la cifra en la sección del Inicio, debajo del título «Libre para gastar». */
+const val EN_TODO_EL_PERIODO: String = "En todo el período"
+
+/** Vuelta 108: el bloque sin margen de «Cuánto puedes gastar». */
+const val TAG_SIN_MARGEN_PARA_EL_DIA_A_DIA: String = "disponible:sin-margen-para-el-dia-a-dia"
+
+/**
+ * **Sin margen para el día a día** (vuelta 108): la frase, lo gastado en el período contra lo que era libre,
+ * lo que llevas en la semana y hoy (sin meta) y los pagos que más pesan, con el enlace a Pagos. Las cifras,
+ * enteras, como el resto de la tarjeta. Ver [sinMargenParaElDiaADia].
+ */
+@Composable
+private fun SinMargenEnLaTarjeta(s: SinMargenParaElDiaADia, onVerPagos: (() -> Unit)?) {
+    Column(
+        modifier = Modifier.fillMaxWidth().testTag(TAG_SIN_MARGEN_PARA_EL_DIA_A_DIA),
+        verticalArrangement = Arrangement.spacedBy(Espacio.xs),
+    ) {
+        Text(s.titulo, style = Movi.textos.cuerpo, color = Movi.colores.texto)
+        RenglonSinMargen(DIA_A_DIA_DEL_PERIODO, s.diaADia)
+        RenglonSinMargen("Esta semana", s.semana)
+        RenglonSinMargen("Hoy", s.hoy)
+        if (s.pesan.isNotEmpty()) {
+            Spacer(Modifier.height(Espacio.xxs))
+            Text(LO_QUE_MAS_PESA, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+            s.pesan.forEach { (nombre, monto) ->
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(nombre, style = Movi.textos.apoyo, color = Movi.colores.texto, modifier = Modifier.weight(1f), maxLines = 2)
+                    CifraDelSistema(monto, VarianteDeCifra.Chica, forma = FormaDeCifra.Entera)
+                }
+            }
+        }
+        val verTodos = s.verTodos
+        if (verTodos != null && onVerPagos != null) {
+            Boton(
+                verTodos,
+                onClick = onVerPagos,
+                variante = VarianteDeBoton.Fantasma,
+                tamano = TamanoDeBoton.S,
+                icono = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+            )
+        }
+    }
+}
+
+@Composable
+private fun RenglonSinMargen(rotulo: String, valor: String) {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.s)) {
+        Text(rotulo, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.weight(1f), maxLines = 1)
+        Text(conCifrasOcultas(valor), style = Movi.textos.apoyo, color = Movi.colores.texto, maxLines = 2)
     }
 }
 

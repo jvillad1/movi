@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.dashboard
 
+import com.jvillada.movi.shared.model.LIBRE_PARA_GASTAR
+
 /*
  * # «¿De dónde sale?»: la cascada de «Te quedan» (vuelta de diseño 28)
  *
@@ -35,8 +37,8 @@ data class RenglonDeLaCascada(
  * **La cascada entera**: de lo que hubo a «Disponible del período» ([deDondeSale] suma [disponible]),
  * y de ahí a «Te quedan» ([despues] suma `total − disponible`).
  *
- * @property rotuloDelTotal el mismo rótulo del héroe: «Te quedan» o «Te pasaste por».
- * @property total la cifra del héroe CON signo: [VentanaDelDisponible.teQuedan] del período.
+ * @property rotuloDelTotal el mismo rótulo del héroe: «Te quedan» o «Te faltan».
+ * @property total la cifra del héroe CON signo: [DisponibleDelPeriodo.loQueQueda] (vuelta 108).
  * @property enRojo el mismo criterio que pinta de rojo el héroe.
  */
 data class CascadaDelDisponible(
@@ -48,8 +50,11 @@ data class CascadaDelDisponible(
     val enRojo: Boolean,
 )
 
-/** El rótulo del subtotal: el mismo nombre que la tarjeta de Plan le da a esa cifra. */
-const val ROTULO_DISPONIBLE_DEL_PERIODO: String = "Disponible del período"
+/**
+ * El rótulo del subtotal: el mismo nombre que la tarjeta de Plan le da a esa cifra. Vuelta 108: «Libre para
+ * gastar» ([LIBRE_PARA_GASTAR]); «Disponible del período» era jerga.
+ */
+const val ROTULO_DISPONIBLE_DEL_PERIODO: String = LIBRE_PARA_GASTAR
 
 /** El rótulo de lo gastado en el período, el último renglón antes del total. */
 const val ROTULO_GASTASTE_EN_EL_PERIODO: String = "Gastaste"
@@ -62,16 +67,6 @@ const val ROTULO_FIJOS_DEL_PERIODO: String = "Fijos del período"
 
 /** La aclaración de los fijos: también los que ya pagaste (lo que pagaste no está en «Gastaste»). */
 const val DETALLE_FIJOS_DEL_PERIODO: String = "Pagados y por pagar"
-
-/**
- * El renglón que aparece solo **sin margen**: cuando los fijos superan lo que hubo, la meta del
- * período es cero (no un negativo) y «Te pasaste por» es solo lo gastado. Sin este renglón, la
- * cascada no daría la cifra del héroe.
- */
-const val ROTULO_SIN_MARGEN: String = "Sin margen, Movi cuenta desde $0"
-
-/** La aclaración del renglón sin margen. */
-const val DETALLE_SIN_MARGEN: String = "Lo que faltó para los fijos no se resta otra vez"
 
 /**
  * **[CascadaDelDisponible] desde el disponible**, pura. Solo nombra lo que no es cero (salvo lo que
@@ -103,13 +98,9 @@ fun cascadaDelDisponible(d: DisponibleDelPeriodo): CascadaDelDisponible {
         }
     }
     val periodo = d.periodo
-    val despues = buildList {
-        // La meta del período nunca es negativa (ver `disponibleDelPeriodo`): sin margen se cuenta desde
-        // cero, y lo que faltó ya lo dice el renglón de arriba.
-        val ajuste = periodo.meta - d.disponible
-        if (ajuste != 0L) add(RenglonDeLaCascada(ROTULO_SIN_MARGEN, ajuste, detalle = DETALLE_SIN_MARGEN, apagado = true))
-        add(RenglonDeLaCascada(ROTULO_GASTASTE_EN_EL_PERIODO, -periodo.gastado, detalle = DETALLE_GASTASTE_EN_EL_PERIODO))
-    }
+    // Vuelta 108: sin margen ya no se cuenta «desde $0» (el renglón «Sin margen, Movi cuenta desde $0» se
+    // fue): la cifra del héroe es `loQueQueda`, y lo que faltó para los fijos también falta.
+    val despues = listOf(RenglonDeLaCascada(ROTULO_GASTASTE_EN_EL_PERIODO, -periodo.gastado, detalle = DETALLE_GASTASTE_EN_EL_PERIODO))
     val heroe = teQuedanDeHoy(d)
     return CascadaDelDisponible(
         deDondeSale = deDondeSale,
@@ -120,3 +111,45 @@ fun cascadaDelDisponible(d: DisponibleDelPeriodo): CascadaDelDisponible {
         enRojo = heroe.enRojo,
     )
 }
+
+// ── Vuelta 108 · la cascada corta: hasta que te paguen ───────────────────────
+
+/** La cascada corta de «¿te alcanza hasta que te paguen?»: lo libre, lo que entra, los pagos y el total. */
+data class CascadaHastaQueTePaguen(
+    val renglones: List<RenglonDeLaCascada>,
+    val rotuloDelTotal: String,
+    val total: Long,
+    val enRojo: Boolean,
+)
+
+/** El primer renglón de la cascada corta. */
+const val ROTULO_TIENES_LIBRE_HOY: String = "Tienes libre hoy"
+
+/** El renglón de los pagos que faltan. */
+const val ROTULO_FALTAN_EN_PAGOS: String = "Faltan en pagos"
+
+/**
+ * **La cascada corta** (vuelta 108, la propuesta A): la historia de la cifra del héroe contada al revés de
+ * la del período —«Tienes libre hoy $9.086.784 → Te entra $640.000 → Faltan en pagos −$10.315.703 (9 pagos)
+ * → Te faltan $588.919»—. Sale entera de [TeQuedanDeHoy]: «libre hoy» es `libres − porRecibir`, así que
+ * los renglones suman la cifra al peso por construcción (lo prueba `CascadaDelDisponibleTest`). La cuenta
+ * del período ([cascadaDelDisponible]) va debajo, para quien la quiera completa.
+ */
+fun cascadaHastaQueTePaguen(t: TeQuedanDeHoy): CascadaHastaQueTePaguen = CascadaHastaQueTePaguen(
+    renglones = buildList {
+        add(
+            RenglonDeLaCascada(
+                ROTULO_TIENES_LIBRE_HOY, t.libres - t.porRecibir,
+                detalle = "En tus cuentas, sin lo apartado, tu ahorro ni lo que debes de compras con tarjeta",
+            ),
+        )
+        if (t.porRecibir > 0L) add(RenglonDeLaCascada("Te entra", t.porRecibir, detalle = "Ingresos del período que faltan", suma = true))
+        if (t.pagosQueFaltan > 0L) {
+            val cuantos = if (t.cuantosPagosFaltan == 1) "1 pago" else "${t.cuantosPagosFaltan} pagos"
+            add(RenglonDeLaCascada(ROTULO_FALTAN_EN_PAGOS, -t.pagosQueFaltan, detalle = cuantos))
+        }
+    },
+    rotuloDelTotal = t.rotulo,
+    total = t.teQuedan,
+    enRojo = t.enRojo,
+)
