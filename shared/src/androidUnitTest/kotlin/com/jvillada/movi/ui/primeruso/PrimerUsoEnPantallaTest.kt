@@ -465,6 +465,18 @@ class PrimerUsoEnPantallaTest {
         assertFalse(seVe(SUBIR_UN_EXTRACTO_EN_LA_GUIA))
     }
 
+    /** Vuelta 109: la versión de Google Play no lee SMS (su manifiesto no los pide). */
+    @Test
+    fun `en Android con la version de Play el paso ofrece las notificaciones y el correo, sin SMS`() {
+        com.jvillada.movi.comoLaVersionDePlay(androidx.test.core.app.ApplicationProvider.getApplicationContext())
+        montar(RepoDeLaGuia(), paso = PasoDePrimerUso.CAPTURA, modo = ModoDeCaptura.PERMISOS_DEL_TELEFONO)
+        assertTrue(seVe(CAPTURA_DEL_TELEFONO_SIN_SMS))
+        assertTrue(seVe("Acceso a notificaciones"))
+        assertFalse(seVe("Permiso de SMS"))
+        assertFalse(seVe("SMS", parcial = true), "algún texto nombra los SMS")
+        composeRule.waitUntil(5_000) { seVe("alertas+abc@movi.resend.app") }
+    }
+
     @Test
     fun `sin la direccion configurada el paso sigue teniendo que hacer y se puede saltar`() {
         val repo = object : RepoDeLaGuia() {

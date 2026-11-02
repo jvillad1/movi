@@ -5310,6 +5310,21 @@ pinta (`ui/extractos/ComoSacarElExtracto.kt` → `HojaDeComoSacarElExtracto`).
 
 **Pruebas**: `ComoSacarElExtractoTest` (`:core`) y `ComoSacarElExtractoEnLaAppTest` (`:shared` androidUnitTest).
 
+## Vuelta 109 · Un enlace dentro de un texto, y lo que una pantalla ofrece según el canal
+
+**Un enlace dentro de una frase** («Al crear tu cuenta aceptas los Términos y la Política de privacidad»,
+`ui/legal/PaginasLegales.kt`): el texto en `apoyo`/`textoMedio` y cada nombre con `LinkAnnotation.Url`
+(lo abre el `LocalUriHandler`, también con el lector de pantalla), en `enlace` y subrayado — sin otro peso
+de letra (`fontWeight =` suelto no sube la línea base) y nunca en el amarillo. No es un `Boton` Fantasma
+porque no es una acción de la pantalla: es una referencia dentro de lo que se lee. Una página que vive en
+el server (privacidad, términos) se abre así o desde una `Fila` con `Chevron` (Tú → Cuenta), nunca dentro
+de la app.
+
+**Lo que una pantalla ofrece según la instalación**: una pantalla de Android no pregunta por el sabor ni
+por un flag de build; pregunta qué puede hacer la instalación (`rememberEsteAparatoLeeSms()`, que lee los
+permisos del manifiesto). Sin SMS, la tarjeta que falta **no se pinta** (no queda «Falta» ni un botón
+apagado) y la siguiente toma su lugar y su amarillo; los textos no nombran lo que esa instalación no hace.
+
 ## Vuelta 111 · Un secreto que se muestra una sola vez (el código de los atajos)
 
 Cuando Movi le entrega al usuario un secreto que solo él va a pegar en otro lado (hoy: el código de captura de

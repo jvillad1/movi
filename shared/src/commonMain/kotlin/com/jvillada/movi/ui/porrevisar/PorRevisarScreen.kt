@@ -839,7 +839,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                 fila(ll, "entraron-solos") {
                     Seccion(titulo = "Entraron solos", conteo = renglones.size)
                     Text(
-                        "Llegaron por SMS, por un extracto o por una foto. Hasta confirmarlos no cuentan en " +
+                        "Llegaron por un aviso del banco, un extracto o una foto. Hasta confirmarlos no cuentan en " +
                             "tus gastos ni ingresos: tócalos para revisar el monto y la categoría.",
                         style = Movi.textos.apoyo,
                         color = Movi.colores.textoMedio,

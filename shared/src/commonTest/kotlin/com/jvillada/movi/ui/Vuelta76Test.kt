@@ -180,8 +180,8 @@ class Vuelta76Test {
 
     @Test
     fun `la fila de correo solo con una direccion del server`() {
-        assertTrue(seVeLaFilaDeCorreo(esAndroid = false, direccion = "alertas+abc@movi.resend.app"))
-        assertFalse(seVeLaFilaDeCorreo(esAndroid = false, direccion = null), "sin reenvío en el server, ninguna fila muerta")
-        assertFalse(seVeLaFilaDeCorreo(esAndroid = true, direccion = "alertas+abc@movi.resend.app"), "en Android se leen los SMS")
+        assertTrue(seVeLaFilaDeCorreo(leeSms = false, direccion = "alertas+abc@movi.resend.app"))
+        assertFalse(seVeLaFilaDeCorreo(leeSms = false, direccion = null), "sin reenvío en el server, ninguna fila muerta")
+        assertFalse(seVeLaFilaDeCorreo(leeSms = true, direccion = "alertas+abc@movi.resend.app"), "donde se leen los SMS (la versión de Drive)")
     }
 }

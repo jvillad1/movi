@@ -193,6 +193,12 @@ val tituloDeCapturaDelBanco: String get() = if (isAndroid) "Captura del banco" e
 @Composable
 fun CapturaDelBancoScreen(onNavigate: (Screen) -> Unit) {
     val coroutine = rememberCoroutineScope()
+    // Vuelta 109 · la versión de Play no lee SMS: el teléfono captura las notificaciones del banco y,
+    // como la web, ofrece reenviar los correos del banco a Movi.
+    val leeSms = rememberEsteAparatoLeeSms()
+    val correoEnElTelefono = isAndroid && !leeSms
+    val direccionDeMovi = if (correoEnElTelefono) com.jvillada.movi.ui.primeruso.rememberDireccionDeMovi() else null
+    var hojaDeCorreo by remember { mutableStateOf(false) }
     /**
      * `null` = la bandeja todavía no contestó (o su lectura falló); lista vacía = contestó y no
      * hay nada. La distinción no era necesaria mientras esta lista solo pintaba filas, y pasó a
@@ -321,7 +327,11 @@ fun CapturaDelBancoScreen(onNavigate: (Screen) -> Unit) {
                     // que la captura corra, así que no se dice nada cuando está dado.
                     if (isAndroid && !rememberSmsCaptureReady()) {
                         Text(
-                            "En este teléfono falta el permiso de mensajes: se otorga en la sección de abajo.",
+                            if (leeSms) {
+                                "En este teléfono falta el permiso de mensajes: se otorga en la sección de abajo."
+                            } else {
+                                FALTA_EL_ACCESO_A_LAS_NOTIFICACIONES
+                            },
                             style = Movi.textos.apoyo,
                             color = Movi.colores.aviso,
                             modifier = Modifier.padding(horizontal = Medida.margenDePantalla, vertical = Espacio.xxs),
@@ -412,6 +422,17 @@ fun CapturaDelBancoScreen(onNavigate: (Screen) -> Unit) {
                 // el inbox SIN el filtro bancario — el historial de la sección sí lo aplica, así
                 // que lo que no matchea nunca sale del teléfono.
                 SmsSensorSetupSection(onSynced = { refreshKey++ })
+                // Vuelta 109 · sin SMS (versión de Play), el correo del banco es la otra captura del
+                // teléfono: la misma fila y la misma hoja de Tú en la web.
+                if (direccionDeMovi != null && com.jvillada.movi.ui.mas.seVeLaFilaDeCorreo(false, direccionDeMovi.direccion)) {
+                    Spacer(Modifier.height(Medida.entreSecciones))
+                    com.jvillada.movi.ui.components.ds.Superficie(
+                        modifier = Modifier.fillMaxWidth(),
+                        relleno = RellenoDeSuperficie.Lista,
+                    ) {
+                        com.jvillada.movi.ui.mas.FilaDeAlertasPorCorreo(direccionDeMovi, onAbrir = { hojaDeCorreo = true })
+                    }
+                }
 
                 // Vuelta 73: los avisos de Movi ya no viven acá (la tarjeta «Avisos de Movi» del
                 // teléfono se mudó): todos sus interruptores están en Tú → Notificaciones. Queda la puerta.
@@ -473,6 +494,9 @@ fun CapturaDelBancoScreen(onNavigate: (Screen) -> Unit) {
                 }
             }
         }
+    }
+    if (hojaDeCorreo && direccionDeMovi != null) {
+        com.jvillada.movi.ui.mas.HojaDeAlertasPorCorreo(direccionDeMovi, onDismiss = { hojaDeCorreo = false })
     }
     movimientoAbierto?.let { evento ->
         com.jvillada.movi.ui.transactions.HojaDelMovimiento(
@@ -1080,7 +1104,7 @@ fun SMSReconcileScreen(
 
     LaunchedEffect(smsId, relecturaDelPago) {
         intentar { Repositories.wallets.getSms(smsId) }.onSuccess { sms = it }
-            .onFailure { error = "No pude cargar el SMS" }
+            .onFailure { error = "No pude cargar el aviso" }
         // Los avisos del mismo pago. Si no se pueden leer, se revisa este solo, como siempre.
         pago = sms?.grupoId?.let { grupoId -> intentar { Repositories.wallets.getAvisosDelMismoPago(grupoId) }.getOrNull() }
         // El otro aviso del mismo pago, para poder decir cuál es. Si no se lee, la línea se dice igual.
@@ -2626,3 +2650,7 @@ internal fun textoDelAvisoYaResuelto(sms: SmsMessage): String = when {
         ?: "Ignoraste este mensaje"
     else -> "Este mensaje ya se resolvió"
 }
+
+/** Vuelta 109 · lo que falta en un teléfono con la versión de Play (sin SMS): el acceso a las notificaciones. */
+const val FALTA_EL_ACCESO_A_LAS_NOTIFICACIONES: String =
+    "En este teléfono falta el acceso a las notificaciones del banco: se da en la sección de abajo."

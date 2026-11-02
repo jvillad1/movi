@@ -46,6 +46,8 @@ object SmsBackfill {
      * es idéntico, incluido el filtro de privacidad y el dedupe del server.
      */
     suspend fun conElPeriodo(context: Context, periodo: PeriodSettings): BackfillOutcome = withContext(Dispatchers.IO) {
+        // Vuelta 109: la versión de Play no pide READ_SMS. Ni se intenta leer el inbox.
+        if (!elAparatoPuedeLeerSms(context)) return@withContext BackfillOutcome.NoPermission
         val token = SessionManager.token
         if (token.isNullOrBlank()) return@withContext BackfillOutcome.NoSession
         val desde = desdeDondeRecuperarSms(System.currentTimeMillis(), periodo)

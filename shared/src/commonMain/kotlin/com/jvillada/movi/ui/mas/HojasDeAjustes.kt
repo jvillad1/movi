@@ -29,12 +29,13 @@ const val RECIBE_TUS_ALERTAS_POR_CORREO: String = "Recibe tus alertas por correo
 const val TAG_HOJA_DE_ALERTAS_POR_CORREO: String = "ajustes:hoja-de-alertas-por-correo"
 
 /**
- * **¿Se pinta la fila de las alertas por correo?** (vuelta 76). Solo donde el aparato no lee SMS y el
+ * **¿Se pinta la fila de las alertas por correo?** (vuelta 76). Solo donde el aparato no lee SMS (la web,
+ * iOS y, desde la vuelta 109, el teléfono con la versión de Play: [leeSms] en `false`) y el
  * server contestó una dirección de reenvío (`GET /api/correo-entrante/direccion`, configurada). Mientras
  * lee, o sin reenvío en el server, no hay fila: antes quedaba «Todavía no está disponible», una fila que
  * no llevaba a ningún lado. Pura.
  */
-fun seVeLaFilaDeCorreo(esAndroid: Boolean, direccion: String?): Boolean = !esAndroid && !direccion.isNullOrBlank()
+fun seVeLaFilaDeCorreo(leeSms: Boolean, direccion: String?): Boolean = !leeSms && !direccion.isNullOrBlank()
 
 /**
  * **«Recibe tus alertas por correo»**, la fila (vuelta 31). Solo donde el aparato no lee SMS (la web,

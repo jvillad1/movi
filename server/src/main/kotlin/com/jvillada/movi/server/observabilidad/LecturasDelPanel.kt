@@ -150,6 +150,8 @@ object LecturasDelPanel {
         "RESEND_WEBHOOK_SECRET", "RESEND_RECEIVING_API_KEY", "INBOUND_EMAIL_SECRET", "INBOUND_EMAIL_ADDRESS",
         "DOCUMENTS_ENCRYPTION_KEY", "ADMIN_USER_IDS", "VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY",
         "ALLOWED_ORIGINS", "APP_TIMEZONE",
+        // Vuelta 109: el responsable y el correo de contacto de /privacidad, /terminos y /borrar-cuenta.
+        "RESPONSABLE_LEGAL", "CORREO_DE_CONTACTO",
     )
 
     /** ¿[nombre] tiene valor? En el entorno o en `server/.env` (desarrollo). Devuelve solo el sí o el no. */

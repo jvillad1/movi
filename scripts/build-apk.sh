@@ -49,10 +49,14 @@ else
   NAME="movi-${BUILD_TYPE}-${VERSION}${DIRTY}.apk"
 fi
 
+# Vuelta 109: con los dos canales (`directa` y `play`), el APK de Drive es el de `directa` —el de
+# siempre, con la captura de SMS y el mismo applicationId— y sigue siendo el de depuración, para no
+# romperle la actualización a quien ya lo tiene instalado. El de Play se arma con
+# `scripts/armar-para-play.sh` y nunca va a Drive.
 echo "Compilando ${NAME}… (commit ${SHA})"
-./gradlew :androidApp:assembleDebug -q
-SRC=androidApp/build/outputs/apk/debug/androidApp-debug.apk
-OUT="androidApp/build/outputs/apk/debug/${NAME}"
+./gradlew :androidApp:assembleDirectaDebug -q
+SRC=androidApp/build/outputs/apk/directa/debug/androidApp-directa-debug.apk
+OUT="androidApp/build/outputs/apk/directa/debug/${NAME}"
 cp "$SRC" "$OUT"
 printf 'listo: %s (%.1f MB)\n' "$OUT" "$(echo "scale=2; $(stat -f%z "$OUT")/1048576" | bc)"
 

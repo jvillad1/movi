@@ -127,6 +127,7 @@ import com.jvillada.movi.ui.profile.guardarElInicioDelMes
 import com.jvillada.movi.ui.profile.textoDelInicioDelMes
 import com.jvillada.movi.ui.sms.SmsSensorSetupSection
 import com.jvillada.movi.ui.sms.rememberSmsCaptureReady
+import com.jvillada.movi.ui.sms.rememberEsteAparatoLeeSms
 import com.jvillada.movi.ui.transicionEntrePantallas
 import androidx.compose.material.icons.rounded.UploadFile
 import androidx.compose.material.icons.rounded.WarningAmber
@@ -1271,18 +1272,50 @@ private fun PasoCaptura(
 ) {
     when (modo) {
         ModoDeCaptura.PERMISOS_DEL_TELEFONO -> {
+            // Vuelta 109: la versión de Play no lee SMS (lo dice su manifiesto). Ahí el paso habla de las
+            // notificaciones del banco y, debajo, del reenvío de correos, como la web.
+            val leeSms = rememberEsteAparatoLeeSms()
             Text(
-                "Movi puede leer los mensajes y las notificaciones de tu banco en este teléfono. " +
-                    "Lo que llegue te espera en «Por revisar» para que lo confirmes. Es opcional.",
+                if (leeSms) {
+                    "Movi puede leer los mensajes y las notificaciones de tu banco en este teléfono. " +
+                        "Lo que llegue te espera en «Por revisar» para que lo confirmes. Es opcional."
+                } else {
+                    CAPTURA_DEL_TELEFONO_SIN_SMS
+                },
                 style = Movi.textos.cuerpo,
                 color = Movi.colores.textoMedio,
             )
             // La misma sección de Ajustes → «Captura del banco»: los permisos se piden en un solo lugar.
             SmsSensorSetupSection(onSynced = {}, conAccionPrincipal = conAccionPrincipal)
+            if (!leeSms) ReenvioDebajoDeLaCaptura(onCopiada)
         }
         ModoDeCaptura.SUBIR_UN_EXTRACTO -> PasoCapturaConUnExtracto(extractoSubido, onExtracto, onCopiada)
         // Sin captura posible el paso no está en la lista (ver `pasosDeLaGuia`): nunca se llega acá.
         ModoDeCaptura.NINGUNA -> Unit
+    }
+}
+
+/** Vuelta 109 · el paso de la captura en un teléfono con la versión de Play (sin SMS). */
+const val CAPTURA_DEL_TELEFONO_SIN_SMS: String =
+    "Movi puede leer las notificaciones de tu banco en este teléfono. Lo que llegue te espera en " +
+        "«Por revisar» para que lo confirmes. Es opcional."
+
+/**
+ * El reenvío de correos debajo de la captura, **solo si el server tiene la dirección**: la misma pieza
+ * de la web (`ReenvioPorCorreo`). Lo usan la web/iOS (debajo del extracto) y el teléfono sin SMS.
+ */
+@Composable
+private fun ReenvioDebajoDeLaCaptura(onCopiada: () -> Unit) {
+    val direccion = rememberDireccionDeMovi()
+    if (direccion.direccion != null) {
+        Spacer(Modifier.height(Medida.entreSecciones))
+        Text(
+            "¿Tu banco te manda un correo con cada compra? También puedes reenviarlo a Movi.",
+            style = Movi.textos.cuerpo,
+            color = Movi.colores.textoMedio,
+        )
+        Spacer(Modifier.height(Medida.dentroDeSeccion))
+        ReenvioPorCorreo(direccion = direccion, onCopiada = onCopiada)
     }
 }
 
@@ -1382,17 +1415,7 @@ private fun PasoCapturaConUnExtracto(extractoSubido: String?, onExtracto: (Strin
         anchoCompleto = true,
         modifier = Modifier.testTag(TAG_SUBIR_EXTRACTO_EN_LA_GUIA),
     )
-    val direccion = rememberDireccionDeMovi()
-    if (direccion.direccion != null) {
-        Spacer(Modifier.height(Medida.entreSecciones))
-        Text(
-            "¿Tu banco te manda un correo con cada compra? También puedes reenviarlo a Movi.",
-            style = Movi.textos.cuerpo,
-            color = Movi.colores.textoMedio,
-        )
-        Spacer(Modifier.height(Medida.dentroDeSeccion))
-        ReenvioPorCorreo(direccion = direccion, onCopiada = onCopiada)
-    }
+    ReenvioDebajoDeLaCaptura(onCopiada)
 }
 
 // ── 5 · Lo que pagas cada mes ──────────────────────────────────────────────────────────────────

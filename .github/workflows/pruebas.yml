@@ -78,6 +78,10 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      # Vuelta 109: también compila `:androidApp` en sus dos canales (`directa`, el APK de Drive, y
+      # `play`, el de Google Play sin SMS). Antes ningún paso compilaba el módulo de la app: un error
+      # ahí (MainActivity, los Workers) se descubría al armar el APK.
+      #
       # `--rerun-tasks` a propósito, aunque la caché lo haga parecer redundante. Este repo ya tuvo
       # una prueba en verde que no se estaba ejecutando; un CI que saltea los tests porque el caché
       # dice «up-to-date» es peor que no tener CI, porque además da confianza.
@@ -88,6 +92,8 @@ jobs:
           :server:test
           :shared:testDebugUnitTest
           :shared:compileKotlinWasmJs
+          :androidApp:compileDirectaDebugKotlin
+          :androidApp:compilePlayDebugKotlin
 
       # **La guarda del despliegue, y el motivo por el que este archivo existe.**
       #
