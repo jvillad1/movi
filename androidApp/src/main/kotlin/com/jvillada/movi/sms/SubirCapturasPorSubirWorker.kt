@@ -35,7 +35,16 @@ class SubirCapturasPorSubirWorker(context: Context, params: WorkerParameters) : 
         val token = SessionManager.token
         val userId = SessionManager.userId
         if (token.isNullOrBlank() || userId.isNullOrBlank()) return@withContext Result.success()
-        val capturas = CapturasPorSubir.deQuien(contexto, userId)
+        // Vuelta 113: lo que un APK anterior guardó con la regla vieja y ya no pasa el filtro vigente se
+        // descarta sin subir (ver `laCapturaPuedeSubir`).
+        val (capturas, fuera) = CapturasPorSubir.separarPorElFiltro(
+            CapturasPorSubir.deQuien(contexto, userId),
+            SmsFilterConfigStore.load(contexto),
+        )
+        if (fuera.isNotEmpty()) {
+            Log.w(TAG, "${fuera.size} capturas guardadas ya no pasan el filtro — descartadas sin subir")
+            CapturasPorSubir.quitarSubidas(contexto, userId, fuera.map { it.id }.toSet())
+        }
         if (capturas.isEmpty()) {
             CapturasPorSubir.quitarSubidas(contexto, userId, emptySet())
             return@withContext Result.success()

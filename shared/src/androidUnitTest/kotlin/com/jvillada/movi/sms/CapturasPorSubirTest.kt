@@ -33,6 +33,28 @@ class CapturasPorSubirTest {
         assertEquals(listOf(captura("a", notificacion = true)), CapturasPorSubir.deQuien(contexto, "usr_1"))
     }
 
+    /**
+     * Vuelta 113 · lo que un APK anterior dejó guardado con la regla vieja (un celular que nombraba al
+     * banco) no sube: vuelve a pasar el filtro vigente. Las notificaciones no pasan por ese filtro.
+     */
+    @Test
+    fun `lo guardado con la regla vieja se descarta antes de subir`() {
+        val delBanco = captura("banco")
+        val deUnCelular = CapturasPorSubir.Captura("cel", "+573001234567", "Ya te pagué por Bancolombia, \$50.000", 1L, false, "usr_1")
+        val sinRemitente = CapturasPorSubir.Captura("vacio", "", "bancolombia le informa", 2L, false, "usr_1")
+        val notificacion = CapturasPorSubir.Captura("nu", "com.nu.production", "Compra aprobada por \$130.200,00", 3L, true, "usr_1")
+        val (suben, fuera) = CapturasPorSubir.separarPorElFiltro(
+            listOf(delBanco, deUnCelular, sinRemitente, notificacion),
+            BankSenderFilter.DEFAULTS,
+        )
+        assertEquals(listOf("banco", "nu"), suben.map { it.id })
+        assertEquals(listOf("cel", "vacio"), fuera.map { it.id })
+        // Lo mismo para la cola de cada SMS (`SmsSyncWorker`).
+        assertTrue(laCapturaPuedeSubir(false, "85540", "Compraste \$27.500", BankSenderFilter.DEFAULTS))
+        assertTrue(!laCapturaPuedeSubir(false, "3001234567", "Bancolombia: Compraste \$27.500", BankSenderFilter.DEFAULTS))
+        assertTrue(laCapturaPuedeSubir(true, "com.nu.production", "Compra aprobada", BankSenderFilter.DEFAULTS))
+    }
+
     @Test
     fun `la misma captura dos veces no se duplica`() {
         CapturasPorSubir.guardar(contexto, captura("a"))

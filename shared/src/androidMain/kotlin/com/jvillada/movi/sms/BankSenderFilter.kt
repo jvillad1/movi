@@ -35,6 +35,16 @@ object BankSenderFilter {
         seSubeElSms(sender, body, config.senderCodes, config.bodyKeywords)
 }
 
+/**
+ * Vuelta 113 · **¿Una captura que ya estaba en cola sigue pudiendo subir?** Un APK anterior dejaba en
+ * WorkManager (el `inputData` de `SmsSyncWorker`) y en [CapturasPorSubir] SMS que pasaron la regla vieja
+ * —un celular que nombraba al banco—; al actualizar, esos se subirían sin volver a mirarlos. Antes de
+ * subir, un SMS vuelve a pasar por [BankSenderFilter.matches] con el filtro vigente y, si no pasa, se
+ * descarta. Las notificaciones no: su filtro es otro (la lista de apps) y ya se aplicó al capturarlas.
+ */
+fun laCapturaPuedeSubir(deNotificacion: Boolean, sender: String?, body: String, config: FilterConfig): Boolean =
+    deNotificacion || BankSenderFilter.matches(sender, body, config)
+
 /** Id estable ante re-entregas del broadcast y reintentos del Worker (dedupe extremo a extremo). */
 fun smsRealtimeId(sender: String?, timestamp: Long, body: String): String {
     val digest = MessageDigest.getInstance("SHA-256")
