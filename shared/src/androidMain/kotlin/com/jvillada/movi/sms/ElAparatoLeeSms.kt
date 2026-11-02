@@ -21,9 +21,17 @@ import android.os.Build
  * inbox no se agenda (y si quedó agendado sale sin leer) y el receiver no existe en el manifiesto.
  *
  * Si el `PackageManager` no contesta se dice `false`: ofrecer un permiso que el manifiesto no pide
- * deja un botón que no hace nada, y eso es peor que no ofrecerlo.
+ * deja un botón que no hace nada, y eso es peor que no ofrecerlo. Para lo que NO se puede deshacer
+ * (borrar el barrido periódico) está [loQuePideElManifiesto], que distingue «no sé» de «no».
  */
-fun elAparatoPuedeLeerSms(context: Context): Boolean = runCatching {
+fun elAparatoPuedeLeerSms(context: Context): Boolean = loQuePideElManifiesto(context) ?: false
+
+/**
+ * Revisión de la vuelta 109 · **«no» y «no sé» no son lo mismo.** `true`/`false` = el manifiesto se leyó
+ * y pide (o no) los dos permisos de SMS; `null` = el `PackageManager` falló y no se sabe. Con un `null`
+ * la versión de Drive no puede tomar la decisión de la de Play (borrar su barrido de 6 h por un tropiezo).
+ */
+fun loQuePideElManifiesto(context: Context): Boolean? = runCatching {
     val pm = context.packageManager
     val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         pm.getPackageInfo(context.packageName, PackageManager.PackageInfoFlags.of(PackageManager.GET_PERMISSIONS.toLong()))
@@ -32,7 +40,26 @@ fun elAparatoPuedeLeerSms(context: Context): Boolean = runCatching {
         pm.getPackageInfo(context.packageName, PackageManager.GET_PERMISSIONS)
     }
     elManifiestoPideSms(info.requestedPermissions?.toList())
-}.getOrDefault(false)
+}.getOrNull()
+
+/** Qué hace el barrido del inbox (`SmsBackfillWorker`) según lo que se sabe del manifiesto. */
+enum class BarridoSegunElManifiesto {
+    /** Pide SMS: el barrido de siempre. */
+    BARRER,
+
+    /** No se pudo leer el manifiesto: esta vez no lee, y el ciclo queda (la próxima corrida vuelve a mirar). */
+    SALTAR_ESTA_VEZ,
+
+    /** El manifiesto se leyó y no pide SMS (la versión de Play): no lee y se borra el ciclo. */
+    SALTAR_Y_BORRAR_EL_CICLO,
+}
+
+/** La regla, pura: solo un «no» seguro borra el ciclo. */
+fun barridoSegunElManifiesto(pideSms: Boolean?): BarridoSegunElManifiesto = when (pideSms) {
+    true -> BarridoSegunElManifiesto.BARRER
+    null -> BarridoSegunElManifiesto.SALTAR_ESTA_VEZ
+    false -> BarridoSegunElManifiesto.SALTAR_Y_BORRAR_EL_CICLO
+}
 
 /**
  * La regla, pura: hacen falta los dos permisos. `RECEIVE_SMS` sin `READ_SMS` no sirve para el barrido

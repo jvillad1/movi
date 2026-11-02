@@ -39,10 +39,16 @@ class SmsBackfillWorker(context: Context, params: WorkerParameters) : CoroutineW
     private suspend fun trabajar(): Result {
         // Vuelta 109 · la versión de Play no pide READ_SMS: si este trabajo quedó agendado (no
         // debería: `MainActivity` no lo agenda sin el permiso en el manifiesto), sale sin leer nada y
-        // se borra el ciclo para no volver a despertar al teléfono por nada.
-        if (!elAparatoPuedeLeerSms(applicationContext)) {
-            WorkManager.getInstance(applicationContext).cancelUniqueWork(UNIQUE_NAME)
-            return Result.success()
+        // se borra el ciclo para no volver a despertar al teléfono por nada. Solo con un «no» seguro:
+        // si el PackageManager tropezó («no sé»), sale sin borrar nada — en la versión de Drive, borrar
+        // el ciclo por un tropiezo dejaría la captura sin su red de 6 h hasta la próxima apertura.
+        when (barridoSegunElManifiesto(loQuePideElManifiesto(applicationContext))) {
+            BarridoSegunElManifiesto.BARRER -> Unit
+            BarridoSegunElManifiesto.SALTAR_ESTA_VEZ -> return Result.success()
+            BarridoSegunElManifiesto.SALTAR_Y_BORRAR_EL_CICLO -> {
+                WorkManager.getInstance(applicationContext).cancelUniqueWork(UNIQUE_NAME)
+                return Result.success()
+            }
         }
         // El período de calendario alcanza y evita pedir el perfil: lee desde el inicio del mes
         // pasado, que cubre cualquier corte. Ver SmsBackfill.conElPeriodo.

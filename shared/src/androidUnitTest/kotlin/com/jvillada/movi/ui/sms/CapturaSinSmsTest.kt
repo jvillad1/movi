@@ -20,6 +20,9 @@ import com.jvillada.movi.sms.BackfillOutcome
 import com.jvillada.movi.sms.SmsBackfill
 import com.jvillada.movi.sms.elAparatoPuedeLeerSms
 import com.jvillada.movi.sms.elManifiestoPideSms
+import com.jvillada.movi.sms.BarridoSegunElManifiesto
+import com.jvillada.movi.sms.barridoSegunElManifiesto
+import com.jvillada.movi.sms.loQuePideElManifiesto
 import com.jvillada.movi.theme.MoviTheme
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -82,6 +85,29 @@ class CapturaSinSmsTest {
     fun `sin SMS en el manifiesto (la version de Play) el aparato no lee SMS`() {
         comoLaVersionDePlay(contexto)
         assertFalse(elAparatoPuedeLeerSms(contexto))
+    }
+
+    // ── «No» y «no sé» (revisión de la vuelta 109) ──────────────────────────────────────────────
+
+    @Test
+    fun `si el PackageManager falla, el manifiesto es no se y el barrido no borra su ciclo`() {
+        val roto = object : android.content.ContextWrapper(contexto) {
+            override fun getPackageManager(): android.content.pm.PackageManager = throw RuntimeException("binder caído")
+        }
+        assertEquals(null, loQuePideElManifiesto(roto))
+        assertFalse("para ofrecer el permiso, «no sé» es «no»", elAparatoPuedeLeerSms(roto))
+        assertEquals(BarridoSegunElManifiesto.SALTAR_ESTA_VEZ, barridoSegunElManifiesto(loQuePideElManifiesto(roto)))
+    }
+
+    @Test
+    fun `solo un no seguro borra el ciclo del barrido`() {
+        assertEquals(BarridoSegunElManifiesto.BARRER, barridoSegunElManifiesto(true))
+        assertEquals(BarridoSegunElManifiesto.SALTAR_ESTA_VEZ, barridoSegunElManifiesto(null))
+        assertEquals(BarridoSegunElManifiesto.SALTAR_Y_BORRAR_EL_CICLO, barridoSegunElManifiesto(false))
+        comoLaVersionDePlay(contexto)
+        assertEquals(BarridoSegunElManifiesto.SALTAR_Y_BORRAR_EL_CICLO, barridoSegunElManifiesto(loQuePideElManifiesto(contexto)))
+        pedirEnElManifiesto(contexto, Manifest.permission.READ_SMS, Manifest.permission.RECEIVE_SMS)
+        assertEquals(BarridoSegunElManifiesto.BARRER, barridoSegunElManifiesto(loQuePideElManifiesto(contexto)))
     }
 
     @Test
