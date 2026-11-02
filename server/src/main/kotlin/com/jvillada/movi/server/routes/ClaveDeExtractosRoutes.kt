@@ -60,6 +60,7 @@ internal suspend fun ApplicationCall.claveDelReintento(): ClaveDelPdf? {
  */
 internal suspend fun ApplicationCall.contestarLaFallaDeLaClave(e: FallaDeLaClaveDelPdf, conClave: Boolean, viejo: String) {
     when {
+        e.frase != null -> respond(e.status, e.frase)
         conClave || e.status == HttpStatusCode.BadRequest -> respond(e.status, e.codigo)
         else -> respond(HttpStatusCode.UnprocessableEntity, viejo)
     }

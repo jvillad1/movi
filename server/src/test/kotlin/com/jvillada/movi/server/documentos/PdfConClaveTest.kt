@@ -27,6 +27,8 @@ import com.jvillada.movi.server.parsing.QueDiceElPapel
 import com.jvillada.movi.server.plugins.configureRouting
 import com.jvillada.movi.server.plugins.configureSerialization
 import com.jvillada.movi.server.routes.PAPEL_CON_CLAVE
+import com.jvillada.movi.server.auth.RateLimiter
+import com.jvillada.movi.shared.model.APERTURAS_DE_PDF_CON_CLAVE_POR_HORA
 import com.jvillada.movi.shared.model.CLAVE_INCORRECTA
 import com.jvillada.movi.shared.model.DEMASIADOS_INTENTOS_DE_CLAVE
 import com.jvillada.movi.shared.model.EstadoDeLaClaveDeExtractos
@@ -123,6 +125,7 @@ class PdfConClaveTest {
     }
 
     private lateinit var lector: LectorFalso
+    private val escribirDeVerdad = PdfConClave.escribir
 
     @BeforeTest
     fun setUp() {
@@ -130,6 +133,7 @@ class PdfConClaveTest {
         Cifrado.usarClaveParaPruebas(Base64.getEncoder().encodeToString(ByteArray(32) { (it * 7 + 3).toByte() }))
         lector = LectorFalso()
         LectorDePapeles.actual = lector
+        RateLimiter.reset()
         log = ListAppender<ILoggingEvent>().also { it.start() }
         raiz.addAppender(log)
         Database.connect(
@@ -158,6 +162,8 @@ class PdfConClaveTest {
     fun limpiar() {
         LectorDePapeles.actual = LectorDePapelesConClaude
         Cifrado.usarLaDeLaConfiguracion()
+        PdfConClave.escribir = escribirDeVerdad
+        RateLimiter.reset()
         raiz.detachAppender(log)
         // La regla de oro: la clave (y sus formas) no salió en ninguna respuesta ni en el log.
         val formas = listOf(cedula, "1.037.585.071", "otra-clave-9")
@@ -256,6 +262,59 @@ class PdfConClaveTest {
         // Otro documento no comparte el tope.
         val otro = subir(pdf(usuario = cedula, texto = "Otro papel"))
         assertEquals(HttpStatusCode.OK, leer(otro, clave = cedula).status)
+    }
+
+    @Test
+    fun `el tope por usuario cuenta cada forma probada en todos sus PDFs`() = testApplication {
+        wireApp()
+        // «otra-clave-9» se prueba en dos formas (tal cual y «9»): 15 PDFs distintos gastan las 30.
+        repeat(APERTURAS_DE_PDF_CON_CLAVE_POR_HORA / 2) { i ->
+            val doc = subir(pdf(usuario = cedula, texto = "Papel $i"))
+            assertEquals(CLAVE_INCORRECTA, leer(doc, clave = "otra-clave-9").cuerpo(), "intento $i")
+        }
+        // Un PDF nuevo (su tope por documento está intacto): ni la clave buena se prueba.
+        val nuevo = subir(pdf(usuario = cedula, texto = "Papel nuevo"))
+        val res = leer(nuevo, clave = cedula)
+        assertEquals(HttpStatusCode.TooManyRequests, res.status)
+        assertEquals(DEMASIADOS_INTENTOS_DE_CLAVE, res.cuerpo())
+        assertEquals(0, filas(PdfsAbiertos))
+        // Otro usuario tiene su propio tope.
+        val ajeno = subir(pdf(usuario = cedula, texto = "Del otro"), uid = otroId)
+        assertEquals(HttpStatusCode.OK, leer(ajeno, clave = cedula, uid = otroId).status)
+    }
+
+    @Test
+    fun `el tope por usuario tambien cubre la clave recordada`() = testApplication {
+        wireApp()
+        val primero = subir(pdf(usuario = cedula, texto = "Primero"))
+        assertEquals(HttpStatusCode.OK, leer(primero, clave = cedula, recordar = true).status) // 1 forma
+        // Cada PDF con otra clave hace que Movi pruebe sola las 3 formas de la recordada
+        // (1037585071, 5071, 585071): subir PDFs no sirve para adivinar más allá del tope.
+        val porPdf = PdfConClave.variantes(cedula).size
+        val alcanzan = (APERTURAS_DE_PDF_CON_CLAVE_POR_HORA - 1) / porPdf
+        repeat(alcanzan) { i ->
+            val doc = subir(pdf(usuario = "otra-clave-9", texto = "Ajeno $i"))
+            assertEquals(PDF_CON_CLAVE, leer(doc).cuerpo(), "intento $i")
+        }
+        val pasado = subir(pdf(usuario = "otra-clave-9", texto = "Uno más"))
+        val res = leer(pasado)
+        assertEquals(HttpStatusCode.TooManyRequests, res.status)
+        assertEquals(DEMASIADOS_INTENTOS_DE_CLAVE, res.cuerpo())
+    }
+
+    @Test
+    fun `si la clave abre pero el PDF no se deja reescribir dice que no se pudo leer`() = testApplication {
+        wireApp()
+        val original = pdf(usuario = cedula)
+        val doc = subir(original)
+        PdfConClave.escribir = { throw java.io.IOException("disco lleno") }
+        val res = leer(doc, clave = cedula, recordar = true)
+        assertEquals(HttpStatusCode.UnprocessableEntity, res.status)
+        assertEquals(PDF_ABIERTO_SIN_GUARDAR, res.cuerpo())
+        assertTrue(contenidoEnClaro(doc).contentEquals(original), "nada se reescribió")
+        assertEquals(0, filas(PdfsAbiertos) + filas(ClavesDeExtractos))
+        // Una app vieja (sin `conClave`) recibe la misma frase: no es un asunto de la clave.
+        assertEquals(PDF_ABIERTO_SIN_GUARDAR, leer(doc, clave = cedula, conClave = false).cuerpo())
     }
 
     @Test

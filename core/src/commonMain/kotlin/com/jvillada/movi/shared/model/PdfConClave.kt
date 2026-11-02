@@ -27,6 +27,13 @@ const val DEMASIADOS_INTENTOS_DE_CLAVE: String = "DEMASIADOS_INTENTOS_DE_CLAVE"
 /** Intentos de clave por documento y hora. Elegido, no medido: de sobra para quien se equivoca al teclear. */
 const val INTENTOS_DE_CLAVE_POR_HORA: Int = 10
 
+/**
+ * Formas de clave probadas por usuario y hora, sumando todos sus PDFs, las que escribe y las que Movi
+ * prueba con la recordada (revisión de seguridad de la vuelta 103): nadie adivina una cédula subiendo
+ * PDFs. Elegido, no medido.
+ */
+const val APERTURAS_DE_PDF_CON_CLAVE_POR_HORA: Int = 30
+
 /** Una clave de apertura más larga que esto no es una clave: se rechaza sin probarla. */
 const val MAX_LARGO_DE_LA_CLAVE_DEL_PDF: Int = 128
 

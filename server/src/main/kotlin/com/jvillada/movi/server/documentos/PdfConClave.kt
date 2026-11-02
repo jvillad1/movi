@@ -5,6 +5,7 @@ import com.jvillada.movi.server.db.ClavesDeExtractos
 import com.jvillada.movi.server.db.Documents
 import com.jvillada.movi.server.db.PdfsAbiertos
 import com.jvillada.movi.server.db.dbQuery
+import com.jvillada.movi.shared.model.APERTURAS_DE_PDF_CON_CLAVE_POR_HORA
 import com.jvillada.movi.shared.model.CLAVE_INCORRECTA
 import com.jvillada.movi.shared.model.ClaveDelPdf
 import com.jvillada.movi.shared.model.DEMASIADOS_INTENTOS_DE_CLAVE
@@ -14,6 +15,12 @@ import com.jvillada.movi.shared.model.PDF_CON_CLAVE
 import io.ktor.http.HttpStatusCode
 import kotlinx.serialization.json.Json
 import org.apache.pdfbox.Loader
+import org.apache.pdfbox.cos.COSArray
+import org.apache.pdfbox.io.RandomAccessReadBuffer
+import org.apache.pdfbox.pdfparser.PDFParser
+import org.apache.pdfbox.pdmodel.PDDocument
+import org.apache.pdfbox.pdmodel.encryption.PDEncryption
+import org.apache.pdfbox.pdmodel.encryption.StandardDecryptionMaterial
 import org.apache.pdfbox.pdmodel.encryption.InvalidPasswordException
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.Transaction
@@ -36,7 +43,8 @@ import java.security.MessageDigest
  *    propietario sola (permisos de imprimir o copiar) se abre sin pedir nada, como siempre: PDFBox lo
  *    carga y el lector de texto lo lee.
  * 2. **Con la clave del cuerpo** (el reintento de la app, `ClaveDelPdf`): se prueba —con un tope de
- *    [INTENTOS_DE_CLAVE_POR_HORA] por documento— y, si abre, el contenido **descifrado** (sin ninguna
+ *    [INTENTOS_DE_CLAVE_POR_HORA] por documento y otro de [APERTURAS_DE_PDF_CON_CLAVE_POR_HORA] formas
+ *    probadas por usuario, que cuenta también las de la clave recordada— y, si abre, el contenido **descifrado** (sin ninguna
  *    protección: `setAllSecurityToBeRemoved`) reemplaza al original en `documents.content`, cifrado en
  *    reposo con la clave de Movi como todo papel ([Cifrado]). Así la descarga, el lector y un
  *    reintento no vuelven a pedir clave.
@@ -69,10 +77,13 @@ import java.security.MessageDigest
 
 private val log = LoggerFactory.getLogger("PdfConClave")
 
-/** Una falla al abrir el PDF, con su status y el código de `:core` (`PDF_CON_CLAVE`…). */
-internal class FallaDeLaClaveDelPdf(val status: HttpStatusCode, val codigo: String) : Exception(codigo)
+/**
+ * Una falla al abrir el PDF, con su status y el código de `:core` (`PDF_CON_CLAVE`…). [frase]: una
+ * falla que no es de la clave (el PDF abrió pero no se pudo reescribir) y se dice igual a toda app.
+ */
+internal class FallaDeLaClaveDelPdf(val status: HttpStatusCode, val codigo: String, val frase: String? = null) : Exception(codigo)
 
-/** La ventana del tope de intentos: una hora. */
+/** La ventana de los topes de intentos: una hora. */
 private const val VENTANA_DE_INTENTOS_MS = 60 * 60_000L
 
 /** Hasta dónde se busca la firma `%PDF-`: la norma tolera basura antes, y los lectores miran 1 KB. */
@@ -81,10 +92,56 @@ private const val MARGEN_DE_LA_FIRMA = 1024
 /** Un cuerpo con la clave no pesa más que esto; lo demás no se lee. */
 internal const val MAX_BYTES_DEL_CUERPO_CON_CLAVE: Int = 4 * 1024
 
+/** La clave abrió el PDF pero no se pudo reescribir sin protección: el archivo sigue como estaba. */
+internal const val PDF_ABIERTO_SIN_GUARDAR: String =
+    "No se pudo leer este PDF. El archivo quedó guardado en Documentos."
+
 private val FIRMA_PDF = "%PDF-".toByteArray(Charsets.US_ASCII)
 private val MARCA_DE_CIFRADO = "/Encrypt".toByteArray(Charsets.US_ASCII)
 
 private val json = Json { ignoreUnknownKeys = true }
+
+/**
+ * **El PDF leído una sola vez** (revisión de seguridad de la vuelta 103): el diccionario de cifrado y
+ * el `/ID` del trailer. Con eso cada clave se comprueba contra el manejador de cifrado de PDFBox
+ * ([abre]) sin volver a cargar el documento; solo la clave que abre lo carga de verdad, una vez, para
+ * reescribirlo sin protección.
+ */
+internal class SondaDelPdf(private val cifrado: PDEncryption, private val id: COSArray?) {
+    private val manejador = cifrado.securityHandler
+
+    /** ¿[clave] abre el PDF (como clave de usuario o de propietario)? Sin cargar nada más. */
+    fun abre(clave: String): Boolean = try {
+        manejador.prepareForDecryption(cifrado, id, StandardDecryptionMaterial(clave))
+        true
+    } catch (e: InvalidPasswordException) {
+        false
+    }
+
+    /** ¿Hace falta la clave de apertura? Uno con clave de propietario sola abre con la clave vacía. */
+    val pideClave: Boolean by lazy { !abre("") }
+}
+
+/** El parser de PDFBox, cortado justo donde descifraría: solo toma el diccionario de cifrado y el `/ID`. */
+private class LectorDelCifrado(bytes: ByteArray) : PDFParser(RandomAccessReadBuffer(bytes), "") {
+    var cifrado: PDEncryption? = null
+    var id: COSArray? = null
+
+    override fun prepareDecryption() {
+        val dic = document.encryptionDictionary ?: return
+        cifrado = PDEncryption(dic)
+        id = document.documentID
+    }
+
+    fun leer() {
+        try {
+            parsePDFHeader()
+            retrieveTrailer()
+        } finally {
+            document.close()
+        }
+    }
+}
 
 internal object PdfConClave {
     /** ¿Son los bytes de un PDF? Por la firma, no por el nombre (que el dueño edita). */
@@ -92,39 +149,51 @@ internal object PdfConClave {
 
     /**
      * ¿Puede estar cifrado? Un PDF cifrado nombra `/Encrypt` en su trailer (o en el diccionario de su
-     * tabla de referencias, que no se comprime). Es el filtro barato: sin la marca no se abre el PDF
-     * una vez de más, y una marca de más solo lleva a la comprobación de verdad ([pideClave]).
+     * tabla de referencias, que no se comprime). Es el filtro barato: sin la marca el PDF no se lee
+     * una vez de más, y una marca de más solo lleva a la comprobación de verdad ([sondear]).
      */
     fun puedeEstarCifrado(bytes: ByteArray): Boolean = esPdf(bytes) && indice(bytes, MARCA_DE_CIFRADO) >= 0
 
     /**
-     * ¿Hace falta la clave de apertura? `false` para un PDF sin cifrar o con clave de propietario sola
-     * (PDFBox lo abre con la clave vacía), y para uno que ni siquiera abre: ese sigue el camino de
+     * Lee el PDF **una vez** y devuelve con qué comprobar claves, o `null` si no está cifrado, si su
+     * cifrado no es el de clave (`/Standard`) o si ni siquiera se deja leer: ese sigue el camino de
      * siempre, que explica que no se pudo leer.
      */
-    fun pideClave(bytes: ByteArray): Boolean {
-        if (!puedeEstarCifrado(bytes)) return false
+    fun sondear(bytes: ByteArray): SondaDelPdf? {
+        if (!puedeEstarCifrado(bytes)) return null
         return try {
-            Loader.loadPDF(bytes).close()
-            false
-        } catch (e: InvalidPasswordException) {
-            true
+            val lector = LectorDelCifrado(bytes)
+            lector.leer()
+            val cifrado = lector.cifrado ?: return null
+            if (cifrado.filter != "Standard") return null
+            SondaDelPdf(cifrado, lector.id)
         } catch (e: Exception) {
-            false
+            null
         }
     }
 
+    /** ¿Hace falta la clave de apertura? Ver [SondaDelPdf.pideClave]. */
+    fun pideClave(bytes: ByteArray): Boolean = sondear(bytes)?.pideClave == true
+
     /**
-     * El PDF abierto con [clave] y sin ninguna protección, o `null` si esa clave no lo abre. Cualquier
-     * otra falla (un PDF roto) se propaga: decir «clave incorrecta» ahí sería mentir.
+     * Cómo se escribe el PDF ya abierto. Una costura para las pruebas: así se prueba que una falla al
+     * reescribir contesta «no se pudo leer» y no un 500.
      */
-    fun abrirCon(bytes: ByteArray, clave: String): ByteArray? = try {
+    internal var escribir: (PDDocument) -> ByteArray = { doc -> ByteArrayOutputStream().also { doc.save(it) }.toByteArray() }
+
+    /**
+     * El PDF abierto con [clave] (que [SondaDelPdf.abre] ya aceptó) y sin ninguna protección: la única
+     * carga completa del documento. Si algo falla acá —la clave sirvió pero el PDF no se deja
+     * reescribir— es [PDF_ABIERTO_SIN_GUARDAR] (422), nunca un 500, y nada se guarda.
+     */
+    fun abrirCon(bytes: ByteArray, clave: String): ByteArray = try {
         Loader.loadPDF(bytes, clave).use { doc ->
             doc.isAllSecurityToBeRemoved = true
-            ByteArrayOutputStream().also { doc.save(it) }.toByteArray()
+            escribir(doc)
         }
-    } catch (e: InvalidPasswordException) {
-        null
+    } catch (e: Exception) {
+        log.warn("[pdf-con-clave] la clave abrió el PDF pero no se pudo reescribir: ${e.javaClass.simpleName}")
+        throw FallaDeLaClaveDelPdf(HttpStatusCode.UnprocessableEntity, PDF_ABIERTO_SIN_GUARDAR, frase = PDF_ABIERTO_SIN_GUARDAR)
     }
 
     /** Las formas de [clave] que se prueban, en orden y sin repetir. Ver el comentario del archivo. */
@@ -138,10 +207,6 @@ internal object PdfConClave {
             digitos.takeIf { it.length > 6 }?.takeLast(6),
         ).filter { it.isNotEmpty() }.distinct()
     }
-
-    /** La primera variante de [clave] que abre el PDF, ya abierto; `null` si ninguna. */
-    fun abrirConAlgunaForma(bytes: ByteArray, clave: String): ByteArray? =
-        variantes(clave).firstNotNullOfOrNull { abrirCon(bytes, it) }
 
     /** ¿Se puede ofrecer «Recordarla»? Solo si Movi cifra: no se guardan claves en claro, jamás. */
     fun sePuedeRecordar(): Boolean = Cifrado.hayClave()
@@ -178,10 +243,26 @@ internal fun claveDelCuerpo(cuerpo: String): ClaveDelPdf? {
 }
 
 /**
+ * La primera forma de [clave] que abre el PDF, o `null`. **Cada forma probada gasta una del tope por
+ * usuario** ([APERTURAS_DE_PDF_CON_CLAVE_POR_HORA]), la escriba el dueño o la pruebe Movi con la
+ * recordada: así nadie adivina una cédula subiendo PDFs. Pasado el tope, 429 sin probar más.
+ */
+private fun formaQueAbre(uid: String, sonda: SondaDelPdf, clave: String): String? {
+    for (forma in PdfConClave.variantes(clave)) {
+        if (!RateLimiter.allow("clave-del-pdf-usuario:$uid", APERTURAS_DE_PDF_CON_CLAVE_POR_HORA, VENTANA_DE_INTENTOS_MS)) {
+            throw FallaDeLaClaveDelPdf(HttpStatusCode.TooManyRequests, DEMASIADOS_INTENTOS_DE_CLAVE)
+        }
+        if (sonda.abre(forma)) return forma
+    }
+    return null
+}
+
+/**
  * **Los bytes que se van a leer** del documento [documentoId], abriéndolo si tiene clave. Ver el
- * comentario del archivo. Lanza [FallaDeLaClaveDelPdf] con `PDF_CON_CLAVE`, `CLAVE_INCORRECTA` o
- * `DEMASIADOS_INTENTOS_DE_CLAVE`. Lo que no es un PDF con clave de apertura sale tal cual, sin tocar
- * la base.
+ * comentario del archivo. Lanza [FallaDeLaClaveDelPdf] con `PDF_CON_CLAVE`, `CLAVE_INCORRECTA`,
+ * `DEMASIADOS_INTENTOS_DE_CLAVE` o [PDF_ABIERTO_SIN_GUARDAR]. Lo que no es un PDF con clave de apertura
+ * sale tal cual, sin tocar la base. El PDF se lee una vez para comprobar las claves ([SondaDelPdf]) y
+ * se carga entero una sola vez más, con la que abrió.
  */
 internal suspend fun abrirElPapelGuardado(
     uid: String,
@@ -189,20 +270,21 @@ internal suspend fun abrirElPapelGuardado(
     bytes: ByteArray,
     pedida: ClaveDelPdf?,
 ): ByteArray {
-    if (!PdfConClave.pideClave(bytes)) return bytes
+    val sonda = PdfConClave.sondear(bytes) ?: return bytes
+    if (!sonda.pideClave) return bytes
 
     if (pedida != null) {
         val clave = pedida.clave
         if (clave.isBlank() || clave.length > MAX_LARGO_DE_LA_CLAVE_DEL_PDF) {
             throw FallaDeLaClaveDelPdf(HttpStatusCode.UnprocessableEntity, CLAVE_INCORRECTA)
         }
-        // El tope cuenta solo las claves que manda el cliente: las que Movi prueba sola son pocas y
-        // no las elige nadie de afuera.
+        // Dos topes: por documento (cada reintento con clave) y por usuario (cada forma probada).
         if (!RateLimiter.allow("clave-del-pdf:$uid:$documentoId", INTENTOS_DE_CLAVE_POR_HORA, VENTANA_DE_INTENTOS_MS)) {
             throw FallaDeLaClaveDelPdf(HttpStatusCode.TooManyRequests, DEMASIADOS_INTENTOS_DE_CLAVE)
         }
-        val abierto = PdfConClave.abrirConAlgunaForma(bytes, clave)
+        val forma = formaQueAbre(uid, sonda, clave)
             ?: throw FallaDeLaClaveDelPdf(HttpStatusCode.UnprocessableEntity, CLAVE_INCORRECTA)
+        val abierto = PdfConClave.abrirCon(bytes, forma)
         dbQuery {
             guardarElPdfAbierto(uid, documentoId, original = bytes, abierto = abierto)
             if (pedida.recordar && PdfConClave.sePuedeRecordar()) recordarLaClave(uid, clave.trim())
@@ -212,8 +294,9 @@ internal suspend fun abrirElPapelGuardado(
 
     val recordada = dbQuery { claveRecordada(uid) }
     if (recordada != null) {
-        val abierto = PdfConClave.abrirConAlgunaForma(bytes, recordada)
-        if (abierto != null) {
+        val forma = formaQueAbre(uid, sonda, recordada)
+        if (forma != null) {
+            val abierto = PdfConClave.abrirCon(bytes, forma)
             dbQuery { guardarElPdfAbierto(uid, documentoId, original = bytes, abierto = abierto) }
             return abierto
         }
