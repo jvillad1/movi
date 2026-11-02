@@ -54,18 +54,26 @@ chmod 700 "$DIR"
 # 32 bytes aleatorios en base64 sin los caracteres que molestan en un .properties.
 CLAVE=$(openssl rand -base64 32 | tr -d '/+=\n')
 
+# La contraseña viaja por el entorno (`-storepass:env`), nunca en la línea de comandos: ahí la vería
+# cualquiera que mire la lista de procesos (`ps`) mientras keytool corre.
+export MOVI_CLAVE_DE_LA_LLAVE="$CLAVE"
 # El nombre del certificado no lleva datos personales: Play no lo muestra y no hace falta.
-keytool -genkeypair \
+# Si keytool falla, se ve por qué (su stderr) y no queda un .jks a medias.
+if ! SALIDA=$(keytool -genkeypair \
   -keystore "$JKS" \
   -storetype PKCS12 \
-  -storepass "$CLAVE" \
-  -keypass "$CLAVE" \
+  -storepass:env MOVI_CLAVE_DE_LA_LLAVE \
+  -keypass:env MOVI_CLAVE_DE_LA_LLAVE \
   -alias "$ALIAS" \
   -keyalg RSA \
   -keysize 4096 \
   -validity 10950 \
-  -dname "CN=Movi, OU=Subida a Google Play, C=CO" \
-  >/dev/null 2>&1
+  -dname "CN=Movi, OU=Subida a Google Play, C=CO" 2>&1); then
+  echo "ERROR: keytool no pudo crear la llave:" >&2
+  echo "$SALIDA" >&2
+  rm -f "$JKS"
+  exit 1
+fi
 chmod 600 "$JKS"
 
 mkdir -p "$(dirname "$PROPS")"
@@ -80,8 +88,9 @@ chmod 600 "$PROPS"
   echo "MOVI_UPLOAD_KEY_PASSWORD=$CLAVE"
 } >> "$PROPS"
 
-SHA=$(keytool -list -v -keystore "$JKS" -storepass "$CLAVE" -alias "$ALIAS" 2>/dev/null \
+SHA=$(keytool -list -v -keystore "$JKS" -storepass:env MOVI_CLAVE_DE_LA_LLAVE -alias "$ALIAS" 2>/dev/null \
   | awk -F': ' '/SHA256:/ {print $2; exit}')
+unset MOVI_CLAVE_DE_LA_LLAVE
 
 cat <<FIN
 
