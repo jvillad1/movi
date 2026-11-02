@@ -69,6 +69,13 @@ import kotlinx.coroutines.launch
  * con el iPhone (ver docs/lanzamiento/atajos-de-iphone.md).
  */
 
+const val ERROR_AL_CREAR_EL_CODIGO: String = "No pudimos crear el código. Revisa tu conexión e inténtalo de nuevo."
+const val ERROR_AL_DESACTIVAR_EL_CODIGO: String =
+    "No pudimos desactivar el código. Revisa tu conexión e inténtalo de nuevo."
+
+/** El tag de la línea de error de crear o desactivar. */
+const val TAG_ERROR_DEL_CODIGO: String = "error-del-codigo-de-captura"
+
 /** El título de la sección. */
 const val TITULO_DESDE_TU_IPHONE: String = "Desde tu iPhone"
 
@@ -207,10 +214,22 @@ fun DesdeTuIphone(
         descartados = intentar { Repositories.wallets.getAtajosDescartados() }.getOrNull()
     }
 
+    /**
+     * Revisión de la vuelta 111: si crear o desactivar falla, se dice (como las demás escrituras de Ajustes:
+     * la línea en rojo con «Revisa tu conexión…») y se vuelve a leer el estado: una respuesta perdida
+     * después de revocar no deja la pantalla diciendo un código que ya no sirve.
+     */
+    var errorDeEscritura by remember { mutableStateOf<String?>(null) }
+
     fun crear() {
         ocupado = true
+        errorDeEscritura = null
         alcance.launch {
             intentar { Repositories.wallets.crearCodigoDeCaptura() }
+                .onFailure {
+                    errorDeEscritura = ERROR_AL_CREAR_EL_CODIGO
+                    lectura++
+                }
                 .onSuccess { nuevo ->
                     enClaro = nuevo.codigo
                     copiado = null
@@ -224,8 +243,13 @@ fun DesdeTuIphone(
 
     fun desactivar() {
         ocupado = true
+        errorDeEscritura = null
         alcance.launch {
             intentar { Repositories.wallets.revocarCodigoDeCaptura() }
+                .onFailure {
+                    errorDeEscritura = ERROR_AL_DESACTIVAR_EL_CODIGO
+                    lectura++
+                }
                 .onSuccess {
                     enClaro = null
                     val antes = (estado as? EstadoDelCodigo.Listo)?.codigo ?: CodigoDeCaptura()
@@ -242,6 +266,10 @@ fun DesdeTuIphone(
         Spacer(Modifier.height(Medida.dentroDeSeccion))
         Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
             PasoDelAtajo(1, "Crea tu código") {
+                errorDeEscritura?.let { error ->
+                    Text(error, style = Movi.textos.apoyo, color = Movi.colores.sale, modifier = Modifier.testTag(TAG_ERROR_DEL_CODIGO))
+                    Spacer(Modifier.height(Espacio.xs))
+                }
                 when (val e = estado) {
                     EstadoDelCodigo.Leyendo -> EsqueletoDeFila()
                     EstadoDelCodigo.NoSePudo -> {

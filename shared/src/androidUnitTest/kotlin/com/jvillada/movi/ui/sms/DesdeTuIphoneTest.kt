@@ -63,7 +63,7 @@ class DesdeTuIphoneTest {
     }
 
     /** Un server de mentira con un código: cuenta cuántos se crearon y cuántos se revocaron. */
-    private class ServerDeCodigos(
+    private open class ServerDeCodigos(
         var actual: CodigoDeCaptura,
         val descartados: ResumenDeAtajosDescartados? = ResumenDeAtajosDescartados(),
     ) : RepositorioDePrueba() {
@@ -187,6 +187,38 @@ class DesdeTuIphoneTest {
         tocar(DESACTIVAR_EL_CODIGO, elUltimo = true)
         assertEquals(1, server.revocados)
         assertTrue(hay(CREAR_TU_CODIGO))
+    }
+
+    @Test
+    fun `si desactivar falla lo dice y vuelve a leer el estado del server`() {
+        // La respuesta se perdió pero el server sí revocó: la pantalla no puede seguir diciendo que hay código.
+        val server = object : ServerDeCodigos(CodigoDeCaptura(vigente = true, creadoEn = CREADO)) {
+            var lecturas = 0
+            override suspend fun getCodigoDeCaptura(): CodigoDeCaptura { lecturas++; return actual }
+            override suspend fun revocarCodigoDeCaptura() {
+                actual = actual.copy(vigente = false, creadoEn = null)
+                error("se cortó la conexión")
+            }
+        }
+        montar(server)
+        val antes = server.lecturas
+        tocar(DESACTIVAR_EL_CODIGO)
+        tocar(DESACTIVAR_EL_CODIGO, elUltimo = true)
+        assertEquals(ERROR_AL_DESACTIVAR_EL_CODIGO, textoDe(TAG_ERROR_DEL_CODIGO))
+        assertTrue(server.lecturas > antes, "vuelve a leer")
+        assertTrue(hay(CREAR_TU_CODIGO), "dice lo que de verdad hay en el server")
+        composeRule.onNodeWithTag(TAG_LINEA_DEL_CODIGO, useUnmergedTree = true).assertDoesNotExist()
+    }
+
+    @Test
+    fun `si crear falla lo dice y no muestra ningun codigo`() {
+        val server = object : ServerDeCodigos(CodigoDeCaptura(vigente = false)) {
+            override suspend fun crearCodigoDeCaptura(): CodigoDeCapturaNuevo = error("sin señal")
+        }
+        montar(server)
+        tocar(CREAR_TU_CODIGO)
+        assertEquals(ERROR_AL_CREAR_EL_CODIGO, textoDe(TAG_ERROR_DEL_CODIGO))
+        composeRule.onNodeWithTag(TAG_CODIGO_DE_CAPTURA, useUnmergedTree = true).assertDoesNotExist()
     }
 
     @Test
