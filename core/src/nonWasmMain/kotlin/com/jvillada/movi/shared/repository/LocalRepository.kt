@@ -226,6 +226,12 @@ class LocalRepository(
      */
     private val sincronizador: com.jvillada.movi.shared.SyncEngine =
         com.jvillada.movi.shared.SyncEngine(db, remote, userId),
+    /**
+     * Vuelta 104: cuántos movimientos **bajaron** del server a este teléfono en una lectura (los que
+     * cambiaron, los que el server ya no tiene y los que volvieron), solo cuando son más de cero. La app
+     * lo anota en el uso como la mitad «bajó N» de la sincronización; nunca lleva qué bajó.
+     */
+    private val alBajar: (cuantos: Int) -> Unit = {},
 ) : WalletRepository {
 
     /**
@@ -940,6 +946,7 @@ class LocalRepository(
                 lapidasQueSobran.forEach { db.voidEventQueries.olvidarFantasma(it) }
                 olvidarLasAnulaciones(restauradas, uid)
             }
+            runCatching { alBajar(cambiados.size + fantasmas.size + lapidasQueSobran.size + restauradas.size) }
         }
         // R3: la foto de lo compartido, para que sin señal se siga contando solo tu parte.
         runCatching { guardarLoCompartido(uid, remotos) }

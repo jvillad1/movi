@@ -40,7 +40,10 @@ const val CLAVE_SILENCIOSA = "silenciosa"
  */
 class SmsSyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
 
-    override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
+    // Vuelta 104: cada corrida, en el uso (nombre, resultado y duración; ver `workers/CorridaDelWorker.kt`).
+    override suspend fun doWork(): Result = com.jvillada.movi.workers.medirLaCorrida("SmsSyncWorker") { trabajar() }
+
+    private suspend fun trabajar(): Result = withContext(Dispatchers.IO) {
         val id = inputData.getString("id") ?: return@withContext Result.failure()
         val sender = inputData.getString("sender").orEmpty()
         val body = inputData.getString("body").orEmpty()
@@ -95,9 +98,14 @@ class SmsSyncWorker(context: Context, params: WorkerParameters) : CoroutineWorke
                 com.jvillada.movi.data.olvidarLoFresco()
                 // Vuelta 100: en la línea de tiempo del uso, que el teléfono capturó un aviso (solo el
                 // origen, nunca el texto). Sube ya: el proceso puede morir apenas esto termina.
-                com.jvillada.movi.observabilidad.Uso.evento(
+                // Vuelta 104: de fondo (sin abrir sesión), y con cuántos subió; si quedó pendiente o
+                // apartado lo anota el server, que es quien lo decide.
+                com.jvillada.movi.observabilidad.Uso.eventoDeFondo(
                     com.jvillada.movi.shared.model.EventoDeUso.AVISO_CAPTURADO,
-                    mapOf(com.jvillada.movi.shared.model.ClaveDeUso.ORIGEN to if (deNotificacion) "NOTIFICACION" else "SMS"),
+                    mapOf(
+                        com.jvillada.movi.shared.model.ClaveDeUso.ORIGEN to if (deNotificacion) "NOTIFICACION" else "SMS",
+                        com.jvillada.movi.shared.model.ClaveDeUso.CUANTOS to result.porRevisar.size.coerceAtMost(999_999).toString(),
+                    ),
                 )
                 runCatching { com.jvillada.movi.observabilidad.Uso.enviar() }
                 Result.success()

@@ -26,7 +26,10 @@ import java.util.concurrent.TimeUnit
  */
 class VigiaDeLaEscuchaWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
 
-    override suspend fun doWork(): Result {
+    // Vuelta 104: cada corrida, en el uso (nombre, resultado y duración; ver `workers/CorridaDelWorker.kt`).
+    override suspend fun doWork(): Result = com.jvillada.movi.workers.medirLaCorrida("VigiaDeLaEscuchaWorker") { trabajar() }
+
+    private suspend fun trabajar(): Result {
         revisar(applicationContext, conAviso = true)
         return Result.success()
     }

@@ -22,7 +22,10 @@ import java.util.concurrent.TimeUnit
  */
 class SmsFilterRefreshWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
 
-    override fun doWork(): Result {
+    // Vuelta 104: cada corrida, en el uso (nombre, resultado y duración; ver `workers/CorridaDelWorker.kt`).
+    override fun doWork(): Result = com.jvillada.movi.workers.medirLaCorridaBloqueante("SmsFilterRefreshWorker") { trabajar() }
+
+    private fun trabajar(): Result {
         // force: el punto es refrescar aunque el TTL parezca fresco tras un restore.
         SmsFilterConfigStore.refreshIfStaleBlocking(applicationContext, force = true)
         // Siempre success: fail-open — la cache vieja o los DEFAULTS compilados siguen

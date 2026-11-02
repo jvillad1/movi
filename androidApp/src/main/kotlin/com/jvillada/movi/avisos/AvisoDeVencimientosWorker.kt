@@ -24,7 +24,10 @@ import java.util.concurrent.TimeUnit
  */
 class AvisoDeVencimientosWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
 
-    override suspend fun doWork(): Result {
+    // Vuelta 104: cada corrida, en el uso (nombre, resultado y duración; ver `workers/CorridaDelWorker.kt`).
+    override suspend fun doWork(): Result = com.jvillada.movi.workers.medirLaCorrida("AvisoDeVencimientosWorker") { trabajar() }
+
+    private suspend fun trabajar(): Result {
         val contexto = applicationContext
         if (!PreferenciasDeAvisos.avisarVencimientos(contexto) || !puedeAvisar(contexto)) return Result.success()
         if (SessionManager.token.isNullOrBlank()) return Result.success()
