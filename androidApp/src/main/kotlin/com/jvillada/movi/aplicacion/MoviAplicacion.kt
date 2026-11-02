@@ -9,6 +9,7 @@ import com.jvillada.movi.fallos.SubirFallosWorker
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.sms.SmsBackfillWorker
 import com.jvillada.movi.sms.SubirCapturasPorSubirWorker
+import com.jvillada.movi.sms.elAparatoPuedeLeerSms
 import com.jvillada.movi.ui.dashboard.InstantaneaDelInicio
 import com.jvillada.movi.widget.WidgetTeQuedan
 
@@ -46,7 +47,7 @@ class MoviAplicacion : Application() {
         SessionManager.alEntrar = {
             Avisador.quitarSesionCerrada(contexto)
             SubirCapturasPorSubirWorker.encolar(contexto)
-            SmsBackfillWorker.barrerAhora(contexto)
+            if (elAparatoPuedeLeerSms(contexto)) SmsBackfillWorker.barrerAhora(contexto)
         }
     }
 

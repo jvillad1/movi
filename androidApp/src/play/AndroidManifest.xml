@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Vuelta 109 · el canal `play`: la misma app SIN SMS.
+
+    Google Play restringe READ_SMS y RECEIVE_SMS a las apps con la excepción aprobada (ver
+    docs/lanzamiento/declaracion-sms.md). La versión de Play sale primero sin ellos: captura por
+    las notificaciones de las apps del banco, por correo y por extractos, que no dependen de esa
+    revisión. Esto los QUITA del manifiesto fusionado, junto con el receiver de SMS; la app lo nota
+    leyendo sus propios permisos (`elAparatoPuedeLeerSms`) y no ofrece nada de SMS.
+
+    El barrido del inbox (SmsBackfillWorker) no es un componente del manifiesto (lo agenda
+    WorkManager): sin READ_SMS no se agenda, y si quedara agendado sale sin leer nada. El refresco
+    del filtro (SmsFilterRefreshWorker) se queda: baja también la lista de apps de banco cuyas
+    notificaciones se leen.
+
+    `verificaElManifiestoDePlay*` (androidApp/build.gradle.kts) falla el APK y el AAB de Play si el
+    manifiesto fusionado vuelve a pedir SMS, MMS o el registro de llamadas.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission
+        android:name="android.permission.READ_SMS"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.RECEIVE_SMS"
+        tools:node="remove" />
+
+    <application>
+        <receiver
+            android:name="com.jvillada.movi.sms.SmsRealtimeReceiver"
+            tools:node="remove" />
+    </application>
+
+</manifest>

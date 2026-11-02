@@ -107,6 +107,11 @@ class AppDePrueba : Application(), TestLifecycleApplication {
         // enchufa su oferta con [AvisosEnHoy.sustitutoDePrueba].
         AvisosEnHoy.sustitutoDePrueba = null
         PreferenciasDeAvisos.cerrarOferta(this)
+        // Vuelta 109 · **las pruebas arrancan como la versión de Drive (`directa`), con SMS.** La app
+        // decide si ofrece SMS por los permisos que pide su manifiesto (`elAparatoPuedeLeerSms`), y el
+        // manifiesto de prueba de `:shared` no pide ninguno: sin esto, toda pantalla de captura se
+        // pintaría como la versión de Play. Las pruebas de Play los quitan con [comoLaVersionDePlay].
+        pedirEnElManifiesto(this, android.Manifest.permission.READ_SMS, android.Manifest.permission.RECEIVE_SMS)
     }
 
     override fun prepareTest(test: Any) = Unit
@@ -143,4 +148,18 @@ internal class SelectorQueCierraMovi(private val original: java.net.ProxySelecto
     override fun connectFailed(uri: java.net.URI?, sa: java.net.SocketAddress?, ioe: java.io.IOException?) {
         if (!esDeMovi(uri?.host)) original?.connectFailed(uri, sa, ioe)
     }
+}
+
+/**
+ * Vuelta 109 · los permisos que «pide el manifiesto» del paquete de prueba, como los ve el
+ * `PackageManager` (`PackageInfo.requestedPermissions`). Es lo que lee `elAparatoPuedeLeerSms`.
+ */
+fun pedirEnElManifiesto(contexto: android.content.Context, vararg permisos: String) {
+    val pm = org.robolectric.Shadows.shadowOf(contexto.packageManager)
+    pm.getInternalMutablePackageInfo(contexto.packageName).requestedPermissions = arrayOf(*permisos)
+}
+
+/** Vuelta 109 · el manifiesto de la versión de Google Play: sin `READ_SMS` ni `RECEIVE_SMS`. */
+fun comoLaVersionDePlay(contexto: android.content.Context) {
+    pedirEnElManifiesto(contexto, android.Manifest.permission.INTERNET, android.Manifest.permission.POST_NOTIFICATIONS)
 }

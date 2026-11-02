@@ -64,6 +64,7 @@ import com.jvillada.movi.sms.SmsBackfill
 import com.jvillada.movi.sms.SmsFilterConfigStore
 import com.jvillada.movi.sms.backfillMessage
 import com.jvillada.movi.sms.captureOutageNotice
+import com.jvillada.movi.sms.elAparatoPuedeLeerSms
 import com.jvillada.movi.sms.isBackfillError
 import com.jvillada.movi.ui.components.MinSectionHeader
 import kotlinx.coroutines.launch
@@ -81,12 +82,16 @@ import com.jvillada.movi.ui.components.ds.Superficie
 actual fun SmsSensorSetupSection(onSynced: () -> Unit, conAccionPrincipal: Boolean) {
     val context = LocalContext.current
     val activity = remember(context) { context.findComponentActivity() }
+    // Vuelta 109 · la versión de Play no pide SMS: sin el permiso en el manifiesto no se ofrece ni el
+    // permiso ni el historial de SMS, y las notificaciones del banco van primero (con el amarillo).
+    val leeSms = remember(context) { elAparatoPuedeLeerSms(context) }
     // Vuelta 88 · un amarillo por vista: lo primero que falta lleva el botón principal (ver el KDoc del
-    // expect). Se relee al volver de los ajustes del sistema, como cada tarjeta.
-    var smsConcedido by remember { mutableStateOf(hasSmsPermissions(context)) }
+    // expect). Se relee al volver de los ajustes del sistema, como cada tarjeta. Sin SMS en el
+    // manifiesto, el permiso de SMS no «falta»: no existe, y no le quita el amarillo a nadie.
+    var smsConcedido by remember { mutableStateOf(!leeSms || hasSmsPermissions(context)) }
     var notificacionesConcedidas by remember { mutableStateOf(tieneAccesoANotificaciones(context)) }
     OnResume(activity) {
-        smsConcedido = hasSmsPermissions(context)
+        smsConcedido = !leeSms || hasSmsPermissions(context)
         notificacionesConcedidas = tieneAccesoANotificaciones(context)
     }
 
@@ -110,21 +115,28 @@ actual fun SmsSensorSetupSection(onSynced: () -> Unit, conAccionPrincipal: Boole
 
     Spacer(Modifier.height(Medida.dentroDeSeccion))
     MinSectionHeader(title = "Captura en este teléfono")
-    SensorPermissionsCard(installSource, principal = conAccionPrincipal && !smsConcedido)
+    if (leeSms) SensorPermissionsCard(installSource, principal = conAccionPrincipal && !smsConcedido)
     // El segundo sensor, y hoy el que más falta hace: el banco dejó de mandar SMS (el más nuevo
     // del teléfono del dueño es del 15-sep) pero sigue publicando una notificación por movimiento.
-    SensorNotificationsCard(installSource, principal = conAccionPrincipal && smsConcedido && !notificacionesConcedidas)
+    // En la versión de Play es el primero (y el único del teléfono).
+    SensorNotificationsCard(
+        installSource,
+        principal = conAccionPrincipal && smsConcedido && !notificacionesConcedidas,
+        conSms = leeSms,
+    )
     // Vuelta 73: los avisos de Movi (el permiso y sus interruptores) se mudaron a Tú → Notificaciones, la
     // casa de todos los avisos (ver `AvisosDeEsteTelefono`). Esta pantalla queda con la captura y un
     // enlace a ellos (en `CapturaDelBancoScreen`).
     // Se dibuja a sí misma solo cuando el aviso aplica; el Spacer va adentro para no
     // dejar un hueco doble cuando la app ya está exenta.
-    SensorHibernationCard(principal = conAccionPrincipal && smsConcedido && notificacionesConcedidas)
+    SensorHibernationCard(principal = conAccionPrincipal && smsConcedido && notificacionesConcedidas, conSms = leeSms)
     // Vuelta 92: el ahorro de batería, que también desenchufa la lectura de notificaciones. Se
     // ofrece con un botón y se dice por qué; nunca se pide solo.
-    SensorBateriaCard(hayCaptura = smsConcedido || notificacionesConcedidas)
-    Spacer(Modifier.height(Medida.dentroDeSeccion))
-    SensorBackfillCard(installSource, outageSince, onSynced)
+    SensorBateriaCard(hayCaptura = (leeSms && smsConcedido) || notificacionesConcedidas)
+    if (leeSms) {
+        Spacer(Modifier.height(Medida.dentroDeSeccion))
+        SensorBackfillCard(installSource, outageSince, onSynced)
+    }
 }
 
 @Composable
@@ -221,7 +233,7 @@ private fun SensorPermissionsCard(installSource: InstallSource, principal: Boole
  * leerlo en esos términos.
  */
 @Composable
-private fun SensorNotificationsCard(installSource: InstallSource, principal: Boolean) {
+private fun SensorNotificationsCard(installSource: InstallSource, principal: Boolean, conSms: Boolean) {
     val context = LocalContext.current
     val activity = remember(context) { context.findComponentActivity() }
     var concedido by remember { mutableStateOf(tieneAccesoANotificaciones(context)) }
@@ -243,7 +255,8 @@ private fun SensorNotificationsCard(installSource: InstallSource, principal: Boo
     }
     val estado = textoDelEstadoDeLaCaptura(concedido, conectada, ultimaDelBanco, System.currentTimeMillis())
 
-    Spacer(Modifier.height(Medida.dentroDeSeccion))
+    // Sin la tarjeta de SMS encima (versión de Play), esta es la primera: sin el espacio de separación.
+    if (conSms) Spacer(Modifier.height(Medida.dentroDeSeccion))
     Superficie(modifier = Modifier.fillMaxWidth()) {
         EstadoDelPermiso("Acceso a notificaciones", concedido)
         if (estado != null) {
@@ -270,9 +283,14 @@ private fun SensorNotificationsCard(installSource: InstallSource, principal: Boo
         }
         Spacer(Modifier.height(Espacio.s))
         Text(
-            "Hay bancos que ya no mandan un SMS por cada movimiento, pero su app sí muestra una " +
-                "notificación. Con este acceso, Movi lee esas notificaciones y las deja en " +
-                "«Por revisar», en Actividad, igual que un SMS: tú decides cuáles se anotan.",
+            if (conSms) {
+                "Hay bancos que ya no mandan un SMS por cada movimiento, pero su app sí muestra una " +
+                    "notificación. Con este acceso, Movi lee esas notificaciones y las deja en " +
+                    "«Por revisar», en Actividad, igual que un SMS: tú decides cuáles se anotan."
+            } else {
+                // Vuelta 109 · la versión de Play no lee SMS: el texto no los nombra.
+                TEXTO_DE_LAS_NOTIFICACIONES_SIN_SMS
+            },
             style = Movi.textos.cuerpo,
             color = Movi.colores.textoMedio,
         )
@@ -342,7 +360,7 @@ private fun SensorNotificationsCard(installSource: InstallSource, principal: Boo
  * pero el listener de notificaciones no siempre.
  */
 @Composable
-private fun SensorHibernationCard(principal: Boolean) {
+private fun SensorHibernationCard(principal: Boolean, conSms: Boolean) {
     val context = LocalContext.current
     val activity = remember(context) { context.findComponentActivity() }
     var exempt by remember { mutableStateOf(isAutoRevokeExempt(context)) }
@@ -362,7 +380,7 @@ private fun SensorHibernationCard(principal: Boolean) {
             // Vuelta 88: en tinta, no en rojo. Es información (el rojo es para errores) y en la guía
             // de primer uso asustaba al papá del dueño antes de que pasara nada.
             "Si no abres esta app durante unos meses, Android le revoca los permisos: " +
-                "la captura de SMS se detiene y no avisa.",
+                if (conSms) "la captura de SMS se detiene y no avisa." else "la captura del banco se detiene y no avisa.",
             style = Movi.textos.cuerpo,
             color = Movi.colores.texto,
             modifier = Modifier.testTag(TAG_AVISO_DE_HIBERNACION),
@@ -601,6 +619,14 @@ private fun EstadoDelPermiso(nombre: String, concedido: Boolean) {
     }
 }
 
+/**
+ * Vuelta 109 · lo que dice la tarjeta del acceso a las notificaciones en la versión que no lee SMS (la
+ * de Google Play): lo mismo, sin compararlo con un SMS que esa versión no captura.
+ */
+const val TEXTO_DE_LAS_NOTIFICACIONES_SIN_SMS: String =
+    "Cuando tu banco te avisa un movimiento con una notificación de su app, Movi la lee y la deja en " +
+        "«Por revisar», en Actividad: tú decides cuáles se anotan."
+
 /** Vuelta 92 · el tag de la frase del estado del listener, y el del aviso del ahorro de batería. */
 const val TAG_ESTADO_DE_LA_ESCUCHA: String = "captura-estado-de-la-escucha"
 const val TAG_AVISO_DE_BATERIA: String = "captura-aviso-de-bateria"
@@ -626,7 +652,18 @@ private fun formatCaptureDate(millis: Long, vacio: String = "nunca"): String =
 actual fun rememberSmsCaptureReady(): Boolean {
     val context = LocalContext.current
     val activity = remember(context) { context.findComponentActivity() }
-    var granted by remember { mutableStateOf(hasSmsPermissions(context)) }
-    OnResume(activity) { granted = hasSmsPermissions(context) }
+    // Vuelta 109 · en la versión de Play (sin SMS en el manifiesto) lo que la captura del teléfono
+    // necesita es el acceso a las notificaciones: ese es el permiso que «falta» o no.
+    val leeSms = remember(context) { elAparatoPuedeLeerSms(context) }
+    fun listo() = if (leeSms) hasSmsPermissions(context) else tieneAccesoANotificaciones(context)
+    var granted by remember { mutableStateOf(listo()) }
+    OnResume(activity) { granted = listo() }
     return granted
+}
+
+/** Vuelta 109 · lo que dice el manifiesto instalado (ver `elAparatoPuedeLeerSms`). */
+@Composable
+actual fun rememberEsteAparatoLeeSms(): Boolean {
+    val context = LocalContext.current
+    return remember(context) { elAparatoPuedeLeerSms(context) }
 }
