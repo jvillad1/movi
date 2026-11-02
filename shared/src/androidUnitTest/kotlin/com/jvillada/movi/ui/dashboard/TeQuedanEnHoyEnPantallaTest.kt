@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.dashboard
 
+import com.jvillada.movi.shared.model.ROTULO_TE_FALTAN
+
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
@@ -185,7 +187,7 @@ class TeQuedanEnHoyEnPantallaTest {
     fun `te pasaste - la misma cifra en Hoy y en Pagos, sin signo, y el mismo rojo`() {
         montar(datos(gasto = mapOf("2026-09-01" to 7_000_000L), cuentas = unaCuenta))
 
-        assertEquals(2, composeRule.onAllNodesWithText(ROTULO_TE_PASASTE, useUnmergedTree = true).fetchSemanticsNodes().size)
+        assertEquals(2, composeRule.onAllNodesWithText(ROTULO_TE_FALTAN, useUnmergedTree = true).fetchSemanticsNodes().size)
         assertEquals("\$100.000", texto(cifraDeHoy()))
         assertEquals("\$100.000", texto(cifraDePagos()))
         assertEquals(rojo, color(cifraDeHoy()))
@@ -193,12 +195,11 @@ class TeQuedanEnHoyEnPantallaTest {
         // La frase vieja se fue: la cifra ya dice «Te pasaste por».
         assertEquals(0, composeRule.onAllNodesWithText("Te pasaste del disponible del período por \$100.000", useUnmergedTree = true)
             .fetchSemanticsNodes().size)
-        // Vuelta 83: el «Período» dice lo gastado ($7.000.000) de su meta, en el rojo de la alerta; ya no
-        // repite lo que queda (la cifra de arriba).
+        // Vuelta 108: sin margen, Pagos no pinta las ventanas con metas en $0: dice lo gastado en el día a día
+        // contra lo que era libre (y no repite lo que queda, la cifra de arriba).
         assertEquals(0, composeRule.onAllNodesWithText("−\$100.000", useUnmergedTree = true).fetchSemanticsNodes().size)
-        val gastadoEnElRenglon = composeRule.onAllNodesWithText("\$7.000.000", useUnmergedTree = true).fetchSemanticsNodes()
-        assertEquals(1, gastadoEnElRenglon.size, "el «Período» dice lo gastado")
-        assertEquals(rojo, color(gastadoEnElRenglon.single()))
+        val gastadoEnElRenglon = composeRule.onAllNodesWithText("\$7.000.000 · lo libre era \$6.900.000", useUnmergedTree = true).fetchSemanticsNodes()
+        assertEquals(1, gastadoEnElRenglon.size, "el día a día del período dice lo gastado")
         // Vuelta 80: lo gastado ($7M) va al desglose de «¿De dónde sale?», apagado.
         composeRule.onNodeWithText("¿De dónde sale?", useUnmergedTree = true).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
         composeRule.waitForIdle()

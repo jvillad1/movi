@@ -26,7 +26,9 @@ import com.jvillada.movi.shared.model.periodoSiguiente
 import com.jvillada.movi.server.balance.accountTypesFor
 import com.jvillada.movi.shared.model.checklistDelPeriodo
 import com.jvillada.movi.shared.model.gastoDelDiaADia
-import com.jvillada.movi.shared.model.gastoVariablePorDia
+import com.jvillada.movi.shared.model.gastoDeUnDiaNormalDelPeriodo
+import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.shared.model.periodoAnterior
 import com.jvillada.movi.shared.model.periodoDe
 import com.jvillada.movi.shared.model.ventanaDe
@@ -66,9 +68,21 @@ fun Route.cajaRoutes() {
  * dueño es anterior a su arranque. Sin esa guarda, el período en el que se registró —con dos semanas
  * anotadas de cuatro— bajaría el promedio y la caja saldría más holgada de lo que es.
  *
- * El gasto variable de cada período es el de la tarjeta «Disponible» ([gastoVariablePorDia], con la
+ * El gasto variable de cada período es el de la tarjeta «Disponible» (`gastoVariablePorDia`, con la
  * parte de cada movimiento que pagó un fijo del checklist afuera), calculado como si «hoy» fuera el
  * último día de ese período.
+ *
+ * **Vuelta 108 · el gasto de un día normal** (diagnóstico del 2-nov: el supuesto daba $471.350 por día y
+ * la caja del 24-nov, −$7M). Del gasto variable de cada período salen tres cosas que no son el gasto de
+ * un día cualquiera:
+ *
+ * 1. **las compras con tarjeta** (la caja las resta cuando se paga la tarjeta: su mínimo ya es una fila);
+ * 2. **los gastos de una sola vez**, un movimiento de [com.jvillada.movi.shared.model.UMBRAL_DE_UN_GASTO_DE_UNA_VEZ]
+ *    o más (la obra de la casa, $17M en dos períodos);
+ * 3. **la otra parte de un fijo pagado en dos**, con una sola sellada (`completarLoSellado`).
+ *
+ * Las tres son reglas del supuesto y nada más: el Disponible y «Te quedan» no cambian. Y si el dueño
+ * escribió su «Gasto de un día normal» (`users.gasto_de_un_dia_normal`), ese manda.
  */
 internal suspend fun gastoDelDiaADiaDe(uid: String, hoy: LocalDate): GastoDelDiaADia {
     val ajustes = ajustesDePeriodoDe(uid)
@@ -76,10 +90,15 @@ internal suspend fun gastoDelDiaADiaDe(uid: String, hoy: LocalDate): GastoDelDia
 }
 
 internal fun Transaction.gastoDelDiaADiaSinSuspender(uid: String, hoy: LocalDate, ajustes: PeriodSettings): GastoDelDiaADia {
+    // Vuelta 108: el que el dueño escribió en Pagos manda; el estimado se sigue calculando, como referencia.
+    val elegido = Users.select(Users.gastoDeUnDiaNormal).where { Users.id eq uid }
+        .firstOrNull()?.get(Users.gastoDeUnDiaNormal)?.takeIf { it > 0L }
     val primerMovimiento: Long = Events.select(Events.timestamp.min())
         .where { Events.userId eq uid }
         .firstOrNull()?.get(Events.timestamp.min())
-        ?: return GastoDelDiaADia()
+        ?: return gastoDelDiaADia(emptyList(), elegido)
+    // Vuelta 108: las compras con tarjeta no entran al supuesto (se pagan cuando se paga la tarjeta).
+    val cuentasDeTarjeta = accountTypesFor(uid).filterValues { it == AccountType.CREDIT_CARD }.keys
     val actual = periodoDe(appDateToEpochMillis(hoy), ajustes)
     val cerrados = mutableListOf<GastoVariableDeUnPeriodo>()
     var periodo: PeriodoFinanciero = actual
@@ -94,14 +113,21 @@ internal fun Transaction.gastoDelDiaADiaSinSuspender(uid: String, hoy: LocalDate
         val finExclusivo = ventana.last + 1
         val eventos = loadEventsBetween(uid, ventana.first, finExclusivo)
         val ultimoDia = epochMillisToAppDate(ventana.last)
-        val parteFija = parteFijaDelDisponible(uid, ultimoDia, ajustes, eventos)
+        // Vuelta 108: la otra parte de un fijo pagado en dos (una sellada) tampoco es día a día.
+        val parteFija = parteFijaDelDisponible(uid, ultimoDia, ajustes, eventos, completarLoSellado = true)
         // R3: tu parte de lo que pagó otro también es gasto del día a día.
         val deOtros = loCompartidoDelUsuario(uid).tuParteDeOtros.filter { it.timestamp >= ventana.first && it.timestamp < finExclusivo }
-        val total = gastoVariablePorDia(eventos + deOtros, parteFija) { epochMillisToAppDateString(it) }.values.sum()
         val dias = ChronoUnit.DAYS.between(epochMillisToAppDate(ventana.first), epochMillisToAppDate(finExclusivo)).toInt()
-        cerrados += GastoVariableDeUnPeriodo(periodo = periodo.prefijo, total = total, dias = dias)
+        // Vuelta 108: sin compras con tarjeta ni gastos de una sola vez (ver `gastoDeUnDiaNormalDelPeriodo`).
+        cerrados += gastoDeUnDiaNormalDelPeriodo(
+            periodo = periodo.prefijo,
+            dias = dias,
+            eventos = eventos + deOtros,
+            parteFija = parteFija,
+            cuentasDeTarjeta = cuentasDeTarjeta,
+        ) { epochMillisToAppDateString(it) }
     }
-    return gastoDelDiaADia(cerrados)
+    return gastoDelDiaADia(cerrados, elegido)
 }
 
 /** Cuántos períodos hacia atrás se miran: los mismos que se promedian como mucho. */

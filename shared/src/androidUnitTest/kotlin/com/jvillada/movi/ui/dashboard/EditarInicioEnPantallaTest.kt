@@ -177,14 +177,14 @@ class EditarInicioEnPantallaTest {
     fun `prender Disponible lo agrega al Inicio`() {
         montar()
         assertTrue(!hayTag(TAG_TARJETA_DEL_DISPONIBLE), "por defecto el Inicio no trae el disponible")
-        composeRule.onNodeWithContentDescription(rotuloDeMostrar("Disponible"), useUnmergedTree = true).assertIsOff()
+        composeRule.onNodeWithContentDescription(rotuloDeMostrar("Libre para gastar"), useUnmergedTree = true).assertIsOff()
 
-        tocar(rotuloDeMostrar("Disponible"))
+        tocar(rotuloDeMostrar("Libre para gastar"))
         composeRule.waitUntil(5_000) { hayTag(TAG_TARJETA_DEL_DISPONIBLE) }
 
         assertEquals(listOf("DISPONIBLE_DEL_PERIODO"), server.guardada.visibles)
         assertEquals(emptyList(), server.guardada.ocultas)
-        composeRule.onNodeWithContentDescription(rotuloDeMostrar("Disponible"), useUnmergedTree = true).assertIsOn()
+        composeRule.onNodeWithContentDescription(rotuloDeMostrar("Libre para gastar"), useUnmergedTree = true).assertIsOn()
         // El Inicio quedó donde lo busca al volver: la memoria y el aparato.
         composeRule.waitUntil(5_000) { ScreenDefCache.dashboard?.sections?.any { it.type == "DISPONIBLE_DEL_PERIODO" } == true }
         assertEquals(ScreenDefCache.dashboard, InstantaneaDelInicio.delAparato.definicion("u1"))

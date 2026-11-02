@@ -500,7 +500,10 @@ class LasPreguntasSugeridasTest {
         // fija con fechas). El 31-oct-2026 esta prueba esperaba uno solo y falló.
         val arriendosEnLaCaja = if (hoy.plusMonths(1) <= hoy.plusDays(30)) 2 else 1
         assertEquals(arriendosEnLaCaja, caja.dias.sumOf { d -> d.movimientos.count { it.nombre == "Arriendo" } })
-        assertEquals(con.patrimonio!!.tuPlata + arriendosEnLaCaja * 1_000_000L, caja.libreHoy)
+        // Vuelta 108: hoy lo libre de la caja trata lo apartado como «Te quedan» (solo cubre el arriendo
+        // de este período); el del mes que viene suelta su $1M el día que sale.
+        assertEquals(con.patrimonio!!.tuPlata + 1_000_000L, caja.libreHoy)
+        assertEquals(4_000_000L, caja.apartado, "lo mismo que resta «Te quedan»")
     }
 
     @Test

@@ -225,8 +225,8 @@ class LasPreguntasSugeridasTextoTest {
         )
         val texto = respuestaSinModelo(PreguntaSugerida.QUE_REVISAR, pasado)
         // $3.327.000 de disponible − $4.000.000 gastados = $673.000 de más.
-        assertTrue(texto.startsWith("Revisa esto:\n1. Te pasaste del disponible del período por \$673.000."), texto)
-        assertTrue(respuestaSinModelo(PreguntaSugerida.COMO_VOY, pasado).startsWith("Te pasaste del disponible del período por \$673.000."))
+        assertTrue(texto.startsWith("Revisa esto:\n1. Te pasaste por \$673.000 de lo libre para gastar del período."), texto)
+        assertTrue(respuestaSinModelo(PreguntaSugerida.COMO_VOY, pasado).startsWith("Te pasaste por \$673.000 de lo libre para gastar del período."))
     }
 
     @Test

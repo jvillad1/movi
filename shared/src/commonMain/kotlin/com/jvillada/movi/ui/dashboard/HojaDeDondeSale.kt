@@ -11,7 +11,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.material3.Text
 import com.jvillada.movi.theme.Espacio
+import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.components.MarcoDeHoja
 import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.ui.components.ds.Cifra
@@ -41,7 +43,7 @@ const val VER_TUS_PERIODOS: String = "Ver tus períodos"
 
 /**
  * **La cascada de «Te quedan», pintada** (vuelta de diseño 28): una [Fila] por renglón con su [Cifra]
- * y su signo, un [Separador] y «Disponible del período» —el nombre que Plan le da a esa cifra—, lo
+ * y su signo, un [Separador] y «Libre para gastar» —el nombre que Plan le da a esa cifra—, lo
  * gastado, otro [Separador] y el total con el rótulo del héroe. Una [Superficie] en la capa 2 con
  * relleno de lista: va dentro de una hoja o de la tarjeta del Disponible, las dos en la capa 1.
  *
@@ -99,11 +101,40 @@ private fun RenglonEnPantalla(renglon: RenglonDeLaCascada) {
  * ([CascadaDelDisponibleEnPantalla]) y, abajo, «Ver tus períodos», que es lo que antes abría el toque.
  * Así la cifra se explica sin salir de la pantalla.
  */
+/**
+ * Vuelta 108 · **la cascada corta**, pintada como la del período: lo libre hoy, lo que te entra, los pagos
+ * que faltan y la cifra del héroe ([cascadaHastaQueTePaguen]).
+ */
+@Composable
+internal fun CascadaHastaQueTePaguenEnPantalla(teQuedan: TeQuedanDeHoy, modifier: Modifier = Modifier) {
+    val cascada = cascadaHastaQueTePaguen(teQuedan)
+    Superficie(
+        modifier = modifier.fillMaxWidth().testTag(TAG_CASCADA_HASTA_QUE_TE_PAGUEN),
+        nivel = NivelDeSuperficie.Capa2,
+        relleno = RellenoDeSuperficie.Lista,
+    ) {
+        cascada.renglones.forEach { RenglonEnPantalla(it) }
+        Separador(SangriaDeSeparador.Margen)
+        Fila(
+            titulo = cascada.rotuloDelTotal,
+            final = { Cifra(abs(cascada.total), tono = if (cascada.enRojo) TonoDeCifra.Alerta else TonoDeCifra.Neutro) },
+        )
+    }
+}
+
+/** Vuelta 108: la cascada corta de la hoja. */
+const val TAG_CASCADA_HASTA_QUE_TE_PAGUEN: String = "cascada-hasta-que-te-paguen"
+
+/** Vuelta 108: el rótulo de la cascada del período, debajo de la corta. */
+const val LA_CUENTA_DEL_PERIODO: String = "La cuenta del período"
+
 @Composable
 internal fun HojaDeDondeSale(
     disponible: DisponibleDelPeriodo,
     onDismiss: () -> Unit,
     onVerTusPeriodos: () -> Unit,
+    /** Vuelta 108: la cifra del héroe, para la cascada corta de arriba. `null` = solo la del período. */
+    teQuedan: TeQuedanDeHoy? = null,
 ) {
     MarcoDeHoja(onDismiss = onDismiss) {
         Column(
@@ -113,9 +144,16 @@ internal fun HojaDeDondeSale(
         ) {
             EncabezadoDeHoja(
                 DE_DONDE_SALE,
-                subtitulo = "Cómo se llega a lo que te queda para gastar hasta el cierre.",
+                subtitulo = teQuedan?.pregunta?.let { "$it: lo libre, lo que te entra y los pagos que faltan." }
+                    ?: "Cómo se llega a lo que te queda para gastar hasta el cierre.",
                 modifier = Modifier.padding(top = Espacio.xxs, bottom = Espacio.m),
             )
+            if (teQuedan != null) {
+                CascadaHastaQueTePaguenEnPantalla(teQuedan)
+                Spacer(Modifier.height(Espacio.m))
+                Text(LA_CUENTA_DEL_PERIODO, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                Spacer(Modifier.height(Espacio.xs))
+            }
             CascadaDelDisponibleEnPantalla(disponible)
             Spacer(Modifier.height(Espacio.s))
             Boton(

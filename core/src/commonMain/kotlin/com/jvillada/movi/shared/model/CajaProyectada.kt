@@ -99,7 +99,10 @@ data class CajaProyectada(
     val sinContar: List<String> = emptyList(),
     /** Vuelta 70 · el ahorro del período (`PlataDelDisponible.ahorroDelPeriodo`): no es libre. */
     val ahorro: Long = 0L,
-    /** Vuelta 70 · lo apartado fuera de los fijos ([apartadoFueraDeLosFijos]): tampoco es libre. */
+    /**
+     * Vuelta 70 · lo apartado fuera de los fijos ([apartadoFueraDeLosFijos]): tampoco es libre. Vuelta 108:
+     * el de HOY, con las filas del período (lo mismo que resta «Te quedan»).
+     */
     val apartado: Long = 0L,
     /** Vuelta 70 · el horizonte termina el día que llega el salario (y no a 30 días, sin él). */
     val hastaElSalario: Boolean = false,
@@ -115,7 +118,11 @@ data class CajaProyectada(
      */
     val hastaElPeriodoSiguiente: Boolean = false,
 ) {
-    /** Lo que de las cuentas no es para gastar: el ahorro y lo apartado. Igual todos los días. */
+    /**
+     * Lo que de las cuentas no es para gastar **hoy**: el ahorro y lo apartado. Vuelta 108: lo apartado
+     * puede bajar el día que vence el pago del período siguiente que lo cubre (ver [cajaHastaQueTePaguen]);
+     * cada día dice el suyo en `saldo − libre`.
+     */
     val reservado: Long get() = ahorro + apartado
 
     /** **Lo libre hoy**, antes de lo que vence hoy: lo de las cuentas menos [reservado]. */
@@ -185,6 +192,8 @@ private fun montoDeLaFila(pago: PagoDelPeriodo): Long? {
  * @param ahorro el ahorro del período, en pesos: se resta de lo libre, no del saldo.
  * @param apartado lo apartado fuera de los fijos: se resta de lo libre, no del saldo.
  * @param salario la fila del ingreso que cierra el horizonte: entra rotulada [LLEGA_TU_SALARIO].
+ * @param apartadoDelDia vuelta 108: lo apartado que se reserva cada día (ISO → pesos), si cambia con los
+ *   días; `null` = [apartado] todos los días. Ver [cajaHastaQueTePaguen].
  */
 fun cajaProyectada(
     tuPlataHoy: Long,
@@ -195,6 +204,7 @@ fun cajaProyectada(
     ahorro: Long = 0L,
     apartado: Long = 0L,
     salario: PagoDelPeriodo? = null,
+    apartadoDelDia: ((String) -> Long)? = null,
 ): CajaProyectada? {
     val desde = runCatching { LocalDate.parse(hoy) }.getOrNull() ?: return null
     val hasta = runCatching { LocalDate.parse(ultimoDia) }.getOrNull() ?: return null
@@ -215,7 +225,8 @@ fun cajaProyectada(
     }
 
     val gasto = gastoDiario?.coerceAtLeast(0L)
-    val reservado = ahorro.coerceAtLeast(0L) + apartado.coerceAtLeast(0L)
+    val delAhorro = ahorro.coerceAtLeast(0L)
+    fun apartadoDe(dia: String): Long = (apartadoDelDia?.invoke(dia) ?: apartado).coerceAtLeast(0L)
     var saldo = tuPlataHoy
     val dias = (0..desde.daysUntil(hasta)).map { i ->
         val dia = desde.plus(i, DateTimeUnit.DAY)
@@ -224,7 +235,7 @@ fun cajaProyectada(
         // El gasto del día a día desde MAÑANA: lo de hoy ya está, en parte, adentro de Tu plata, y
         // restarle un día entero encima lo contaría dos veces.
         if (i > 0 && gasto != null) saldo -= gasto
-        DiaDeLaCaja(fecha = dia.toString(), saldo = saldo, movimientos = movimientos, libre = saldo - reservado)
+        DiaDeLaCaja(fecha = dia.toString(), saldo = saldo, movimientos = movimientos, libre = saldo - delAhorro - apartadoDe(dia.toString()))
     }
     return CajaProyectada(
         tuPlataHoy = tuPlataHoy,
@@ -235,8 +246,8 @@ fun cajaProyectada(
             .filter { pago -> runCatching { LocalDate.parse(pago.vence) }.getOrNull()?.let { it <= hasta } ?: true }
             .mapNotNull { porQueNoEntra(it) }
             .distinct(),
-        ahorro = ahorro.coerceAtLeast(0L),
-        apartado = apartado.coerceAtLeast(0L),
+        ahorro = delAhorro,
+        apartado = apartadoDe(desde.toString()),
         hastaElSalario = salario != null,
     )
 }
@@ -350,6 +361,16 @@ fun cajaHastaQueTePaguen(
 ): CajaProyectada? {
     val horizonte = horizonteDeLaCaja(hoy, ultimoDiaDelPeriodo, delSiguiente, conElPeriodoElegido) ?: return null
     val filas = filasDeLaCaja(delPeriodo, delSiguiente, horizonte.hasta.toString())
+    // Vuelta 108 · lo apartado, con la MISMA base que «Te quedan». Mientras no vence el pago del período
+    // siguiente que lo cubre (el colegio de diciembre, el 25-nov), lo apartado sigue reservado —como lo
+    // resta el Libre para gastar del período, que solo mira las filas del período—; el día que ese pago
+    // sale del saldo, deja de reservarse (si siguiera, se restaría dos veces). Antes la caja lo soltaba
+    // desde hoy: con el colegio de $4M, la caja y «Te faltan» diferían en $4M sin decir por qué.
+    val delSiguienteEnLaCaja = filas.drop(delPeriodo.size)
+    val apartadoPorFecha = mutableMapOf<String, Long>()
+    val apartadoDelDia: (String) -> Long = { dia ->
+        apartadoPorFecha.getOrPut(dia) { apartadoFueraDe(delPeriodo + delSiguienteEnLaCaja.filter { it.vence <= dia }) }
+    }
     return cajaProyectada(
         tuPlataHoy = enLasCuentasHoy,
         pagos = filas,
@@ -359,6 +380,7 @@ fun cajaHastaQueTePaguen(
         ahorro = ahorro,
         apartado = apartadoFueraDe(filas),
         salario = horizonte.salario,
+        apartadoDelDia = apartadoDelDia,
     )?.copy(salarioQueNoCuenta = horizonte.salarioQueNoCuenta, hastaElPeriodoSiguiente = horizonte.alPeriodoSiguiente)
 }
 
@@ -372,21 +394,84 @@ fun cajaHastaQueTePaguen(
 @Serializable
 data class GastoVariableDeUnPeriodo(
     val periodo: String,
+    /** Vuelta 108: el día a día en efectivo, sin [conTarjeta] ni [deUnaVez] (ver [gastoDeUnDiaNormalDelPeriodo]). */
     val total: Long,
     val dias: Int,
+    /** Vuelta 108: las compras con tarjeta del período (sin las de una sola vez). */
+    val conTarjeta: Long = 0L,
+    /** Vuelta 108: los gastos de una sola vez que se dejaron fuera, del más grande al más chico. */
+    val deUnaVez: List<GastoDeUnaVez> = emptyList(),
+    /**
+     * Vuelta 108: los gastos desde [PISO_PARA_COMPARAR_UN_GASTO_GRANDE], para decidir si uno grande de otro
+     * período se repite ([esUnaCostumbre]). Solo lo usa el server al estimar: no viaja.
+     */
+    @kotlinx.serialization.Transient
+    val paraComparar: List<GastoDeUnaVez> = emptyList(),
 )
 
 /**
- * **El supuesto del gasto del día a día**, con lo que lo respalda.
+ * Vuelta 108 · un gasto grande de un período: «Gardenera · $6.420.000 · 29-ago». En [GastoDelDiaADia] quedan
+ * los que no se repiten, los de una sola vez que los supuestos dejaron fuera.
+ */
+@Serializable
+data class GastoDeUnaVez(
+    val nombre: String,
+    val monto: Long,
+    val fecha: String,
+    /** El comercio como clave ([claveDeComercio]), para compararlo con los de otros períodos. */
+    val clave: String? = null,
+    val categoria: String = "",
+    val conTarjeta: Boolean = false,
+)
+
+/**
+ * **Los dos supuestos del gasto de un día normal**, con lo que los respalda (vuelta 108). Son dos porque
+ * miden dos cosas:
  *
- * @property porDia el promedio diario, o `null` si no hay ni un período cerrado con qué estimarlo.
- * @property periodos los períodos con los que se calculó, del más reciente al más viejo.
+ * - **[porDiaConTarjetas], el del héroe del Inicio**: todo lo que se gasta en un día normal, se pague como
+ *   se pague. La cifra del héroe ya resta las compras con tarjeta sin pagar, así que su proyección tiene que
+ *   restar también las que vienen.
+ * - **[porDia], el de la caja de Pagos**: solo lo que sale en efectivo de las cuentas; lo que se compra con
+ *   tarjeta sale cuando se paga la tarjeta (su pago mínimo ya es una fila de la caja). Los APK viejos solo
+ *   leen este, para la caja.
+ *
+ * Los dos sin gastos de una sola vez. Si el dueño escribió su «Gasto de un día normal» ([elegido]) —que es
+ * todo lo que se gasta—, el héroe lo usa tal cual y la caja solo su parte en efectivo
+ * ([proporcionEnEfectivo] del historial; sin historial, todo).
+ *
+ * @property periodos los períodos con los que se estimó, del más reciente al más viejo.
+ * @property estimado el de la caja que estima Movi (en efectivo).
+ * @property estimadoConTarjetas el del héroe que estima Movi (con tarjetas).
+ * @property elegido «Gasto de un día normal» del perfil (`UserProfile.gastoDeUnDiaNormal`); `null` = el estimado.
  */
 @Serializable
 data class GastoDelDiaADia(
     val porDia: Long? = null,
     val periodos: List<GastoVariableDeUnPeriodo> = emptyList(),
-)
+    val estimado: Long? = null,
+    val elegido: Long? = null,
+    val estimadoConTarjetas: Long? = null,
+    val porDiaConTarjetas: Long? = null,
+) {
+    /** Lo que se dejó fuera de la caja por ser compra con tarjeta, en los períodos usados. */
+    val conTarjeta: Long get() = periodos.sumOf { it.conTarjeta }
+
+    /** Los gastos de una sola vez que se dejaron fuera de los dos supuestos, del más grande al más chico. */
+    val deUnaVez: List<GastoDeUnaVez> get() = periodos.flatMap { it.deUnaVez }.sortedByDescending { it.monto }
+
+    /** La parte en efectivo del día a día del historial, de 0 a 1; sin historial, 1 (todo). */
+    val proporcionEnEfectivo: Double get() {
+        val efectivo = periodos.sumOf { it.total.coerceAtLeast(0L) }
+        val todo = efectivo + periodos.sumOf { it.conTarjeta.coerceAtLeast(0L) }
+        return if (todo <= 0L) 1.0 else efectivo.toDouble() / todo
+    }
+
+    /**
+     * **El supuesto del héroe**: [porDiaConTarjetas]; con un server anterior a la vuelta 108, lo elegido o
+     * [porDia] (que entonces contaba las tarjetas).
+     */
+    val delHeroe: Long? get() = porDiaConTarjetas ?: elegido ?: porDia
+}
 
 /** Cuántos períodos cerrados se promedian como mucho: los últimos tres. */
 const val PERIODOS_PARA_EL_GASTO_DIARIO = 3
@@ -399,11 +484,46 @@ const val PERIODOS_PARA_EL_GASTO_DIARIO = 3
  * un período en el que Movi todavía no llevaba las cuentas del dueño, porque su gasto saldría
  * bajísimo sin serlo—, como mucho [PERIODOS_PARA_EL_GASTO_DIARIO], los más recientes primero.
  *
+ * **Vuelta 108 · el gasto de un día normal.** El total de cada período ya llega sin las compras con
+ * tarjeta ni los gastos de una sola vez ([gastoDeUnDiaNormalDelPeriodo]); y si el dueño escribió el suyo
+ * ([elegido], > 0), ese es [GastoDelDiaADia.porDia] y el estimado queda como referencia.
+ *
  * @param cerrados del más reciente al más viejo.
+ * @param elegido «Gasto de un día normal» del perfil; `null` o 0 = usar el estimado.
  */
-fun gastoDelDiaADia(cerrados: List<GastoVariableDeUnPeriodo>): GastoDelDiaADia {
-    val usados = cerrados.filter { it.dias > 0 }.take(PERIODOS_PARA_EL_GASTO_DIARIO)
+fun gastoDelDiaADia(cerrados: List<GastoVariableDeUnPeriodo>, elegido: Long? = null): GastoDelDiaADia {
+    val propio = elegido?.takeIf { it > 0L }
+    val crudos = cerrados.filter { it.dias > 0 }.take(PERIODOS_PARA_EL_GASTO_DIARIO)
+    // Un gasto grande que se repite en los otros períodos es una costumbre: vuelve al día a día.
+    val usados = crudos.mapIndexed { i, periodo ->
+        val otros = crudos.filterIndexed { j, _ -> j != i }
+        val (costumbres, deUnaVez) = periodo.deUnaVez.partition { esUnaCostumbre(it, otros) }
+        periodo.copy(
+            total = periodo.total + costumbres.filter { !it.conTarjeta }.sumOf { it.monto },
+            conTarjeta = periodo.conTarjeta + costumbres.filter { it.conTarjeta }.sumOf { it.monto },
+            deUnaVez = deUnaVez,
+        )
+    }
     val dias = usados.sumOf { it.dias }
-    if (dias <= 0) return GastoDelDiaADia()
-    return GastoDelDiaADia(porDia = usados.sumOf { it.total.coerceAtLeast(0L) } / dias, periodos = usados)
+    val efectivo = usados.sumOf { it.total.coerceAtLeast(0L) }
+    val conTarjetas = efectivo + usados.sumOf { it.conTarjeta.coerceAtLeast(0L) }
+    val estimado = if (dias <= 0) null else efectivo / dias
+    val estimadoConTarjetas = if (dias <= 0) null else conTarjetas / dias
+    val base = GastoDelDiaADia(periodos = usados, estimado = estimado, elegido = propio, estimadoConTarjetas = estimadoConTarjetas)
+    // Lo elegido es todo lo que se gasta: la caja usa solo su parte en efectivo (sin historial, todo).
+    val deLaCaja = propio?.let { (it * base.proporcionEnEfectivo).toLong() } ?: estimado
+    return base.copy(porDia = deLaCaja, porDiaConTarjetas = propio ?: estimadoConTarjetas)
+}
+
+/** Vuelta 108 · el tope de «Gasto de un día normal»: $50.000.000 por día ya no es un día normal. */
+const val MAX_GASTO_DE_UN_DIA_NORMAL: Long = 50_000_000L
+
+/**
+ * Vuelta 108 · qué tiene de malo un «Gasto de un día normal» escrito por el dueño, o `null` si se puede
+ * guardar. 0 es válido: quiere decir «usar el estimado de Movi». La misma regla en la hoja y en el server.
+ */
+fun problemaDelGastoDeUnDiaNormal(valor: Long): String? = when {
+    valor < 0L -> "El gasto de un día no puede ser negativo"
+    valor > MAX_GASTO_DE_UN_DIA_NORMAL -> "Ese gasto por día es demasiado grande"
+    else -> null
 }

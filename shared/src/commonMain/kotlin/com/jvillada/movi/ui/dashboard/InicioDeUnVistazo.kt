@@ -2,6 +2,12 @@ package com.jvillada.movi.ui.dashboard
 
 import androidx.compose.ui.unit.Dp
 import com.jvillada.movi.shared.model.CUOTA_CATEGORY
+import com.jvillada.movi.shared.model.GastoDelDiaADia
+import com.jvillada.movi.shared.model.PagoDelPeriodo
+import com.jvillada.movi.shared.model.ProyeccionHastaQueTePaguen
+import com.jvillada.movi.shared.model.ROTULO_TE_QUEDAN_HASTA_QUE_TE_PAGUEN
+import com.jvillada.movi.shared.model.teAlcanzaHastaQueTePaguen
+import com.jvillada.movi.shared.model.pagosQueFaltanDelPeriodo
 import com.jvillada.movi.shared.model.Patrimonio
 import com.jvillada.movi.shared.model.ScreenSection
 import com.jvillada.movi.shared.model.patrimonioDe
@@ -277,7 +283,7 @@ fun avisoDelDisponible(d: DisponibleDelPeriodo): String? = when {
     } else {
         null
     }
-    d.periodo.teQuedan < 0L -> "te pasaste del disponible por ${formatMoneyCompact(-d.periodo.teQuedan)}"
+    d.periodo.teQuedan < 0L -> "te pasaste por ${formatMoneyCompact(-d.periodo.teQuedan)} de lo libre para gastar"
     else -> null
 }
 
@@ -320,7 +326,7 @@ fun fraseDelDisponible(d: DisponibleDelPeriodo): FraseDelDisponible {
     val periodo = d.periodo
     if (periodo.nivel == NivelDelGasto.PASADO) {
         return FraseDelDisponible(
-            "Te pasaste del disponible del período por ${formatMoneyCompact(-periodo.teQuedan)}",
+            "Te pasaste por ${formatMoneyCompact(-periodo.teQuedan)} de lo libre para gastar del período",
             NivelDelGasto.PASADO,
         )
     }
@@ -339,7 +345,7 @@ fun fraseDelDisponible(d: DisponibleDelPeriodo): FraseDelDisponible {
         )
     }
     if (periodo.teQuedan == 0L) {
-        return FraseDelDisponible("Ya usaste todo el disponible del período", NivelDelGasto.CERCA)
+        return FraseDelDisponible("Ya usaste todo lo libre para gastar del período", NivelDelGasto.CERCA)
     }
     // El último día «por día» sería lo mismo que lo que queda: «para hoy» lo dice solo.
     if (d.diasQueQuedan <= 1) {
@@ -371,27 +377,33 @@ fun fraseDelDisponible(d: DisponibleDelPeriodo): FraseDelDisponible {
 internal fun porDiaQueQueda(d: DisponibleDelPeriodo): String =
     "${formatMoneyCompact(d.porDiaParaLoQueQueda ?: 0L)} por día"
 
-// ── «Te quedan»: la cifra principal de Hoy ───────────────────────────────────
+// ── «Te quedan» / «Te faltan»: la cifra principal de Hoy ─────────────────────
 
 /**
- * **La cifra grande de Hoy**: cuánto te queda por gastar en el período, o cuánto te pasaste.
+ * **La cifra grande de Hoy**: cuánto te queda —o cuánto te falta— hasta que te paguen.
  *
  * Ola 1 · Movi avisa (1-oct). Hoy abría con «Tu plata», el saldo total, que no contesta la pregunta
  * del día: ¿cuánto puedo gastar? El dueño decidió que la cifra principal sea «Te quedan $X».
  *
- * **No es una cuenta nueva: es lo que le queda al período en la tarjeta Disponible de Plan** (su frase)
- * ([DisponibleDelPeriodo.periodo], [VentanaDelDisponible.teQuedan]), leída del MISMO
- * [DisponibleDelPeriodo] que pinta esa tarjeta ([disponibleDelInicio]). Si Hoy y Plan pudieran dar
- * dos números distintos para «¿cuánto me queda?», ninguno de los dos se podría creer. Lo fija
- * `TeQuedanEnHoyTest` (pura) y `TeQuedanEnHoyEnPantallaTest` (las dos pantallas montadas).
+ * **Vuelta 108 · una pregunta, una base** (propuesta A del diagnóstico del 2-nov, aprobada por el dueño):
+ * el héroe contesta «¿te alcanza hasta que te paguen?» con la función de `:core`
+ * [teAlcanzaHastaQueTePaguen]. La cifra es [DisponibleDelPeriodo.loQueQueda] —lo libre para gastar menos
+ * lo gastado en el día a día, que por la identidad del disponible es Tu plata libre + lo que te entra −
+ * los pagos que faltan—: «Te faltan $588.919» con «Faltan $10,3M en pagos y tienes $9,7M libres, contando
+ * lo que te entra», o «Te quedan $X» con «Para N días · $Y por día». Debajo, la proyección con su supuesto
+ * a la vista ([proyeccion]). «Te pasaste por … del disponible del período» ya no existe: no decía que lo
+ * que faltaba eran pagos, no gasto.
  *
- * @property teQuedan la cifra con signo, idéntica a `periodo.teQuedan`.
+ * **No es una cuenta nueva**: sale del MISMO [DisponibleDelPeriodo] que pinta la tarjeta de Pagos
+ * ([disponibleDelInicio]). Lo fijan `TeQuedanEnHoyTest` (pura) y `TeQuedanEnHoyEnPantallaTest`.
+ *
+ * @property teQuedan la cifra con signo, idéntica a `loQueQueda`.
  * @property monto lo que se escribe después del [rotulo]: sin signo, porque el rótulo ya dice de qué
- *   lado está («Te pasaste por $629.882» y no «Te quedan −$629.882»). Hoy lo escribe entero
- *   (`formatCOP`, «$4.963.400»); la frase de Plan, compacto («$5M»): mismo valor, otro ancho.
- * @property enRojo el mismo criterio que pinta de rojo la frase y la columna «Período» en Plan.
- * @property detalle la línea chica de abajo: para cuántos días y cuánto da por día, o qué ventana se
- *   pasó.
+ *   lado está («Te faltan $629.882» y no «Te quedan −$629.882»).
+ * @property enRojo la cifra es negativa: la única alarma en rojo del héroe.
+ * @property detalle la línea de abajo, que explica la cifra ([TeAlcanzaHastaQueTePaguen.explicacion]).
+ * @property pregunta «Hasta que te paguen el 25 nov»: encima del rótulo. `null` = no se dice.
+ * @property proyeccion la cifra menos los días que faltan por el gasto de un día normal, o `null`.
  */
 data class TeQuedanDeHoy(
     val rotulo: String,
@@ -403,63 +415,56 @@ data class TeQuedanDeHoy(
     val diasQueQuedan: Int = Int.MAX_VALUE,
     /**
      * Vuelta 78: [detalle] es solo «para N días · $X por día» (o «para hoy»), sin ningún aviso. Es la
-     * línea que el héroe calla cerca del cierre o si «¿Me alcanza?» dice que no ([detalleDelHeroe]).
+     * línea que el héroe calla cerca del cierre o si la proyección dice que no alcanza ([detalleDelHeroe]).
      */
     val esLaLineaDeLosDias: Boolean = false,
+    val pregunta: String? = null,
+    val proyeccion: ProyeccionHastaQueTePaguen? = null,
+    /** Vuelta 108: los pagos fijos que faltan del período y lo libre contando lo que entra (`libres − pagos = cifra`). */
+    val pagosQueFaltan: Long = 0L,
+    val libres: Long = 0L,
+    /** Vuelta 108: cuántos pagos fijos faltan (los de [pagosQueFaltan]). */
+    val cuantosPagosFaltan: Int = 0,
+    /** Vuelta 108: los ingresos del período que faltan por llegar (están en [libres]). */
+    val porRecibir: Long = 0L,
 ) {
     val monto: Long get() = kotlin.math.abs(teQuedan)
 }
 
 /** El rótulo cuando queda algo (o nada). */
-const val ROTULO_TE_QUEDAN: String = "Te quedan"
-
-/** El rótulo cuando lo que le queda al período está en negativo. */
-const val ROTULO_TE_PASASTE: String = "Te pasaste por"
+const val ROTULO_TE_QUEDAN: String = ROTULO_TE_QUEDAN_HASTA_QUE_TE_PAGUEN
 
 /**
- * [TeQuedanDeHoy] desde la tarjeta del disponible. Puro: lo prueban las pruebas sin pantalla.
+ * [TeQuedanDeHoy] desde el disponible, con la función de `:core` [teAlcanzaHastaQueTePaguen] (la misma que
+ * usan el widget, el resumen de la mañana y «¿Cómo voy?» de Movi AI). Puro.
  *
- * El detalle no repite la cifra grande —ya está arriba— y **la cifra diaria es lo que queda entre los
- * días que faltan** (ver [fraseDelDisponible]): «para 6 días · $1,8M por día». Lo que manda, en orden:
- *
- * 1. sin margen: la frase de la tarjeta ([sinMargen]), porque es la explicación de por qué no queda;
- * 2. el período pasado: cuántos días faltan todavía para el corte;
- * 3. el ritmo por encima de lo previsto: lo dice después de los días;
- * 4. lo demás: para cuántos días y cuánto da por día; el último día, «para hoy».
- *
- * **La semana o el día pasados ya no van acá** (vuelta 45: una sola alarma). «Esta semana te pasaste
- * de la meta por $1,3M» salía en el héroe del Inicio Y en la frase de Pagos, y Pagos además pintaba
- * tres barras rojas. Ahora esa alarma sale una vez, en Pagos, con qué hacer ([alertaDelDisponible]):
- * el detalle dice lo de siempre —para cuántos días y cuánto da por día— en Inicio y en Pagos.
+ * @param checklist la lista del período: de ahí salen los pagos que faltan. Vacía, la línea con faltante
+ *   habla del gasto del día a día (lo único que se sabe).
+ * @param gasto el supuesto del gasto de un día normal; sin él, no hay proyección.
+ * @param conElPeriodoElegido el dueño eligió su período: «Hasta que te paguen el 25 nov».
  */
-fun teQuedanDeHoy(d: DisponibleDelPeriodo): TeQuedanDeHoy {
-    val periodo = d.periodo
-    val enRojo = periodo.nivel == NivelDelGasto.PASADO
-    val rotulo = if (periodo.teQuedan < 0L) ROTULO_TE_PASASTE else ROTULO_TE_QUEDAN
-    val dias = if (d.diasQueQuedan <= 1) "para hoy" else "para ${d.diasQueQuedan} días"
-    val (detalle, nivel) = when {
-        !d.hayMargen -> sinMargen(d) to
-            (if (avisoDelDisponible(d) != null) NivelDelGasto.PASADO else NivelDelGasto.CERCA)
-        periodo.teQuedan < 0L -> (
-            if (d.diasQueQuedan <= 1) "del disponible del período · hoy es el último día"
-            else "del disponible del período · faltan ${d.diasQueQuedan} días para el corte"
-            ) to NivelDelGasto.PASADO
-        periodo.teQuedan == 0L -> "Ya usaste todo el disponible del período" to NivelDelGasto.CERCA
-        periodo.contraElRitmo > 0L ->
-            "$dias · vas ${formatMoneyCompact(periodo.contraElRitmo)} por encima de lo previsto a hoy" to
-                NivelDelGasto.CERCA
-        d.diasQueQuedan <= 1 -> dias to periodo.nivel
-        else -> "$dias · ${porDiaQueQueda(d)}" to periodo.nivel
-    }
-    val soloLosDias = d.hayMargen && periodo.teQuedan > 0L && periodo.contraElRitmo <= 0L
+fun teQuedanDeHoy(
+    d: DisponibleDelPeriodo,
+    checklist: List<PagoDelPeriodo> = emptyList(),
+    gasto: GastoDelDiaADia? = null,
+    hoy: LocalDate = epochMillisToAppDate(Clock.System.now().toEpochMilliseconds()),
+    conElPeriodoElegido: Boolean = false,
+): TeQuedanDeHoy {
+    val t = teAlcanzaHastaQueTePaguen(d, checklist, gasto, hoy, conElPeriodoElegido, pesos = ::formatMoneyCompact)
     return TeQuedanDeHoy(
-        rotulo = rotulo,
-        teQuedan = periodo.teQuedan,
-        enRojo = enRojo,
-        detalle = detalle,
-        nivelDelDetalle = nivel,
+        rotulo = t.rotulo,
+        teQuedan = t.cifra,
+        enRojo = t.enRojo,
+        detalle = t.explicacion,
+        nivelDelDetalle = t.nivel,
         diasQueQuedan = d.diasQueQuedan,
-        esLaLineaDeLosDias = soloLosDias,
+        esLaLineaDeLosDias = t.cifra > 0L && d.periodo.contraElRitmo <= 0L,
+        pregunta = t.pregunta,
+        proyeccion = t.proyeccion,
+        pagosQueFaltan = t.pagosQueFaltan,
+        libres = t.libres,
+        cuantosPagosFaltan = pagosQueFaltanDelPeriodo(checklist).size,
+        porRecibir = d.ingresosPorRecibir,
     )
 }
 
@@ -539,7 +544,11 @@ fun barraEnAlerta(d: DisponibleDelPeriodo, delPeriodo: Boolean): Boolean =
 fun teQuedanDelInicio(
     data: DashboardData,
     hoy: LocalDate = epochMillisToAppDate(Clock.System.now().toEpochMilliseconds()),
-): TeQuedanDeHoy? = disponibleDelInicio(data, hoy)?.let(::teQuedanDeHoy)
+    // Vuelta 108: el supuesto para la proyección. Lo que vino con la carga del Inicio (o su instantánea).
+    gasto: GastoDelDiaADia? = data.gastoDelDiaADia,
+): TeQuedanDeHoy? = disponibleDelInicio(data, hoy)?.let {
+    teQuedanDeHoy(it, checklistDelPeriodoDe(data), gasto, hoy, conElPeriodoElegido = !data.ajustesDePeriodo.esMesDeCalendario)
+}
 
 // ── Tu patrimonio, honesto ───────────────────────────────────────────────────
 

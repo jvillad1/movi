@@ -64,7 +64,7 @@ private val SECTION_TYPE_LABELS = mapOf(
     "CARD_LIST" to "Lista de tarjetas",
     "LINK_LIST" to "Lista de enlaces",
     "BANNER" to "Aviso",
-    "DISPONIBLE_DEL_PERIODO" to "Disponible",
+    "DISPONIBLE_DEL_PERIODO" to "Libre para gastar",
     "CHECKLIST_DEL_PERIODO" to "Falta por pagar",
     "GASTO_POR_CATEGORIA" to "En qué se va",
     "PREGUNTALE_A_MOVI" to "Pregúntale a Movi",

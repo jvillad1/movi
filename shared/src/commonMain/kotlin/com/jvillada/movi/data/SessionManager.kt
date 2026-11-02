@@ -405,6 +405,8 @@ object SessionManager {
         com.jvillada.movi.ui.papeles.PapelesCompartidos.olvidar()
         // Ola 4: y los «Está bien» de esta sesión — son avisos sobre SU plata.
         com.jvillada.movi.ui.dashboard.AnomaliasDescartadasEnLaSesion.olvidar()
+        // Vuelta 108: y el aviso de que ajustó su «Gasto de un día normal» — es de quien se va.
+        com.jvillada.movi.ui.dashboard.GastoDeUnDiaNormalCambiado.olvidar()
         // Y «Ocultar los saldos»: era la preferencia de quien se fue; el siguiente arranca viendo
         // sus cifras, como en una instalación nueva.
         SaldosOcultosStore.clear()

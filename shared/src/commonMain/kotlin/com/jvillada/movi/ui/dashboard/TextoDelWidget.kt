@@ -16,11 +16,11 @@ import kotlinx.datetime.toLocalDateTime
  * el teléfono ya guarda ([InstantaneaDelInicio]): un widget no pide red, y si pidiera tendría que
  * cargar la sesión en un proceso que la app no abrió.
  *
- * **La cifra es la del héroe de Hoy, no otra.** Si el héroe abre con «Te quedan $X» —la columna
- * «Período» de Plan, ver [teQuedanDelInicio]—, el widget dice eso mismo («Te pasaste por» si va en
- * rojo). Si no hay disponible que afirmar (sin ingresos ni plata, o la instantánea es de un período
- * que ya terminó: [conElPeriodoDe] tira sus cifras), el héroe vuelve a «Tu plata», y el widget
- * también. Dos lugares que contestaran distinto a «¿cuánto me queda?» serían dos lugares en los que
+ * **La cifra es la del héroe de Hoy, no otra.** Si el héroe abre con «Te quedan $X» o «Te faltan $X»
+ * —lo libre para gastar menos lo gastado, `loQueQueda`, la misma de «Cuánto puedes gastar» en Pagos;
+ * ver [teQuedanDelInicio], vuelta 108—, el widget dice eso mismo, con el mismo rótulo y en rojo si
+ * falta. Si no hay cifra que afirmar (sin ingresos ni plata, o la instantánea es de un período que ya
+ * terminó: [conElPeriodoDe] tira sus cifras), el héroe vuelve a «Tu plata», y el widget también. Dos lugares que contestaran distinto a «¿cuánto me queda?» serían dos lugares en los que
  * no se puede creer.
  *
  * Sin sesión o sin instantánea: «Abre Movi». Nunca un cero: un «$0» en la pantalla de inicio del
@@ -35,7 +35,7 @@ data class TextoDelWidget(
     val cifra: String?,
     /** «a las 9:40», «ayer a las 21:05», «el 3 de octubre a las 9:40», o qué hacer. */
     val pie: String,
-    /** Con el mismo criterio que el héroe: «Te pasaste por», o «Tu plata» en negativo. */
+    /** Con el mismo criterio que el héroe: «Te faltan», o «Tu plata» en negativo. */
     val enRojo: Boolean = false,
 )
 
@@ -53,8 +53,8 @@ const val WIDGET_PARA_VER_CUANTO_TE_QUEDA: String = "para ver cuánto te queda"
  * @param haySesion sin sesión no se muestra nada aunque quede algo guardado.
  * @param ahora el reloj, para el período vigente y para el «ayer».
  * @param saldosOcultos «Ocultar los saldos» ([SaldosOcultosStore]): la cifra sale como
- *   [PLATA_OCULTA], igual que en el héroe. El rótulo y el pie no cambian; el rojo de «Te pasaste
- *   por» tampoco, porque el rótulo ya lo dice.
+ *   [PLATA_OCULTA], igual que en el héroe. El rótulo y el pie no cambian; el rojo de «Te faltan»
+ *   tampoco, porque el rótulo ya lo dice.
  */
 fun textoDelWidget(
     instantanea: DashboardData?,

@@ -137,7 +137,10 @@ import com.jvillada.movi.ui.dashboard.elHeroePideLaCuenta
 import com.jvillada.movi.ui.dashboard.FilaMeAlcanza
 import com.jvillada.movi.ui.dashboard.TAG_DETALLE_DEL_HEROE
 import com.jvillada.movi.ui.dashboard.detalleDelHeroe
-import com.jvillada.movi.ui.dashboard.rememberRenglonMeAlcanza
+import com.jvillada.movi.ui.dashboard.rememberGastoDelInicio
+import com.jvillada.movi.ui.dashboard.preguntaDelInicio
+import com.jvillada.movi.ui.dashboard.renglonMeAlcanza
+import com.jvillada.movi.ui.dashboard.checklistDelPeriodoDe
 import com.jvillada.movi.ui.dashboard.esUnCambioDelHeroe
 import com.jvillada.movi.ui.dashboard.EstadoQueSeVe
 import kotlinx.datetime.Clock
@@ -195,7 +198,7 @@ internal fun HeroDeUnVistazo(
     data: DashboardData,
     onNavigate: (Screen) -> Unit,
     onShowCreateSheet: () -> Unit = {},
-    hoy: LocalDate = epochMillisToAppDate(Clock.System.now().toEpochMilliseconds()),
+    hoy: LocalDate = com.jvillada.movi.ui.dashboard.LocalHoyDelInicio.current ?: epochMillisToAppDate(Clock.System.now().toEpochMilliseconds()),
 ) {
     // Vuelta 75 · la cifra grande, su línea, «Tu plata» y el renglón «¿Me alcanza?» salen de UN estado
     // y cambian juntos (ver [EstadoDelHeroe]): nunca la cifra vieja junto a la línea nueva. Revisión de
@@ -222,10 +225,17 @@ internal fun HeroDeUnVistazo(
     }
     val datos = optimista ?: data
     val disponible = disponibleDelInicio(datos, hoy)
-    val renglon = rememberRenglonMeAlcanza(datos, hoy)
+    // Vuelta 108 · «¿te alcanza hasta que te paguen?»: la cifra, su línea, la pregunta y la proyección salen
+    // de UNA función de :core (`teAlcanzaHastaQueTePaguen`), con la lista del período y el supuesto del gasto
+    // de un día normal. El renglón de abajo es la proyección de esa misma cifra.
+    val gasto = rememberGastoDelInicio(datos)
+    val teQuedanDelHeroe = remember(datos, hoy, gasto, disponible) {
+        disponible?.let { teQuedanDeHoy(it, checklistDelPeriodoDe(datos), gasto, hoy, !datos.ajustesDePeriodo.esMesDeCalendario) }
+    }
+    val renglon = teQuedanDelHeroe?.let(::renglonMeAlcanza)
     val visto = rememberEstadoQueCambia(
         EstadoDelHeroe(
-            teQuedan = disponible?.let(::teQuedanDeHoy),
+            teQuedan = teQuedanDelHeroe,
             tuPlata = datos.accounts?.let { heroBalance(it, datos.apartados.orEmpty()).tuPlata },
             renglon = renglon,
         ),
@@ -260,7 +270,8 @@ internal fun HeroDeUnVistazo(
                 Text(DETALLE_DEL_HEROE_VACIO, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                 // Con el aire de un renglón más: la tarjeta vacía mide lo que mide cargando (rótulo,
                 // cifra y detalle), y ver que no hay cuentas no la achica (`EsqueletosDelInicioTest`).
-                Spacer(Modifier.height(Espacio.s))
+                // Vuelta 108: y el de la pregunta («Hasta que te paguen…»), que el héroe cargando reserva.
+                Spacer(Modifier.height(Espacio.xl))
                 Boton("Crear mi primera cuenta", onClick = onShowCreateSheet, tamano = TamanoDeBoton.S)
             }
             return@Superficie
@@ -301,6 +312,9 @@ internal fun HeroDeUnVistazo(
     }
 }
 
+/** Vuelta 108: la pregunta del héroe, «Hasta que te paguen el 25 nov». */
+const val TAG_PREGUNTA_DEL_HEROE: String = "inicio-pregunta-del-heroe"
+
 /** Vuelta 78: el esqueleto de «¿Me alcanza?» en el héroe, mientras carga. */
 const val TAG_ESQUELETO_ME_ALCANZA: String = "inicio-esqueleto-me-alcanza"
 
@@ -339,6 +353,7 @@ private fun CuerpoDelHeroe(
     if (verDeDondeSale && disponible != null) {
         HojaDeDondeSale(
             disponible = disponible,
+            teQuedan = teQuedan,
             onDismiss = { verDeDondeSale = false },
             onVerTusPeriodos = {
                 verDeDondeSale = false
@@ -372,6 +387,15 @@ private fun CuerpoDelHeroe(
             .graphicsLayer { alpha = visto.opacidad }
             .testTag(TAG_TARJETA_DEL_HERO),
     ) {
+        // Vuelta 108: la pregunta que contesta la cifra, «Hasta que te paguen el 25 nov». Sale del período,
+        // así que se dice también mientras la carga está en vuelo (aunque lo que se ve sea todavía «Tu plata»):
+        // el héroe no crece un renglón cuando llega la cifra.
+        val pregunta = teQuedan?.pregunta ?: if (modoTeQuedan || hayCargaEnVuelo) preguntaDelInicio(data) else null
+        if (pregunta != null) {
+            Text(pregunta, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.testTag(TAG_PREGUNTA_DEL_HEROE))
+        } else if (modoTeQuedan) {
+            LineaEsqueleto(fraccionDelAncho = 0.5f, estilo = Movi.textos.apoyo)
+        }
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Box(modifier = Modifier.weight(1f)) {
                 when {

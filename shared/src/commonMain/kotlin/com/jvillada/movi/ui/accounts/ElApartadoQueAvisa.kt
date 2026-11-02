@@ -156,7 +156,7 @@ fun fraseAlQuitar(v: TeQuedanConElApartado): String? {
 fun advertenciaDeLaVistaPrevia(v: TeQuedanConElApartado): String? {
     val queda = v.despues
     if (queda != null && (queda >= 0L || queda >= v.antes)) return null
-    if (v.ahorroDelPeriodo <= 0L) return "Te pasarías del disponible del período."
+    if (v.ahorroDelPeriodo <= 0L) return "Te pasarías de lo libre para gastar del período."
     return "Tu ahorro del período (${formatCOP(v.ahorroDelPeriodo)}) se resta aparte. Si esta plata sale " +
         "de ese ahorro, bájalo en Tú → $AHORRO_DE_CADA_PERIODO para no contarla dos veces."
 }

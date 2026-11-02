@@ -328,7 +328,15 @@ class CajaHastaQueTePaguenTest {
                 apartadoFueraDeLosFijos(cuentas, apartados, it)
             },
         )
-        assertEquals(0L, caja.apartado, "los $8M los restan los dos pagos")
+        // Vuelta 108: hasta el 20-nov la otra mitad sigue reservada, como en «Te quedan» (que solo mira las
+        // filas del período); ese día la paga el fijo de noviembre y deja de reservarse.
+        assertEquals(4_000_000L, caja.apartado, "hoy, lo mismo que resta «Te quedan»")
+        assertEquals(apartadoFueraDeLosFijos(cuentas, apartados, l.delPeriodo), caja.apartado)
+        val dia19 = caja.dias.first { it.fecha == "2026-11-19" }
+        val dia20 = caja.dias.first { it.fecha == "2026-11-20" }
+        assertEquals(4_000_000L, dia19.saldo - dia19.libre)
+        assertEquals(0L, dia20.saldo - dia20.libre, "el pago lo resta del saldo: no se reserva dos veces")
+        assertEquals(dia19.libre, dia20.libre, "el día del pago cubierto, lo libre no baja otra vez")
         assertEquals(217_464L, caja.alCierre.libre)
         assertEquals(217_464L, caja.alCierre.saldo)
 
@@ -567,12 +575,15 @@ class CajaHastaQueTePaguenTest {
 
     /**
      * **El apartado el 31 de octubre** (el caso de `LasPreguntasSugeridasTest`): «Arriendo y más», $5M
-     * en Vivienda, con el arriendo de $1M del 31. La caja resta el de hoy y el del 30-nov, así que lo
-     * apartado que cubren los fijos es $2M y lo libre de hoy es Tu plata + $2M (la regla del cruce, sobre
-     * las filas que la caja resta). El 20, con un solo arriendo adentro, es Tu plata + $1M.
+     * en Vivienda, con el arriendo de $1M del 31. La caja resta el de hoy y el del 30-nov.
+     *
+     * Vuelta 108 · **la misma base que «Te quedan»**: hoy lo cubierto es solo lo que cubre la lista del
+     * período (el arriendo de hoy, $1M), y lo libre de hoy es Tu plata + $1M, igual el 31 que el 20. El
+     * 30-nov, el día que sale el arriendo de noviembre, ese $1M deja de reservarse (si siguiera reservado,
+     * se restaría dos veces). Hasta la vuelta 107 la caja lo soltaba desde hoy.
      */
     @Test
-    fun `el 31 el apartado lo cubren los dos arriendos que la caja resta, y el 20 uno`() {
+    fun `el apartado se reserva como en te quedan y se suelta el dia del pago siguiente que lo cubre`() {
         val cuentas = listOf(Account("ba", "Bancolombia", AccountType.SAVINGS, 29_680_000L, "COP"))
         val apartados = listOf(Apartado(id = "ap", accountId = "ba", proposito = "Arriendo y más", monto = 5_000_000L, categoria = "Vivienda"))
         val p = patrimonioDe(cuentas, apartados)
@@ -587,10 +598,23 @@ class CajaHastaQueTePaguenTest {
                     apartadoFueraDeLosFijos(cuentas, apartados, it)
                 },
             )
-            assertEquals(p.tuPlata + cubierto, caja.libreHoy, hoy)
-            assertEquals(5_000_000L - cubierto, caja.apartado, hoy)
+            assertEquals(p.tuPlata + 1_000_000L, caja.libreHoy, hoy)
             // «Te quedan» mira solo la lista del período: el arriendo de hoy cubre $1M cualquier día.
             assertEquals(4_000_000L, apartadoFueraDeLosFijos(cuentas, apartados, l.delPeriodo), hoy)
+            assertEquals(apartadoFueraDeLosFijos(cuentas, apartados, l.delPeriodo), caja.apartado, hoy)
+            // El 31, el arriendo de noviembre (30-nov) cae en la caja: hasta la víspera se reservan $4M, y ese
+            // día, cuando el pago sale del saldo, lo que ese pago cubre ($1M) deja de reservarse. El 20, la caja
+            // (30 días) termina el 19-nov: el arriendo del 20 no entra y lo apartado sigue entero reservado.
+            if (cubierto == 2_000_000L) {
+                val vispera = assertNotNull(caja.dias.firstOrNull { it.fecha == "2026-11-29" }, hoy)
+                val delPago = assertNotNull(caja.dias.firstOrNull { it.fecha == siguiente }, hoy)
+                assertEquals(4_000_000L, vispera.saldo - vispera.libre, hoy)
+                assertEquals(3_000_000L, delPago.saldo - delPago.libre, hoy)
+                assertEquals(vispera.libre, delPago.libre, "el día del pago cubierto lo libre no baja otra vez")
+            } else {
+                assertNull(caja.dias.firstOrNull { it.fecha == siguiente }, "el 20-nov queda fuera de la caja")
+                assertTrue(caja.dias.all { it.saldo - it.libre == 4_000_000L })
+            }
         }
     }
 }

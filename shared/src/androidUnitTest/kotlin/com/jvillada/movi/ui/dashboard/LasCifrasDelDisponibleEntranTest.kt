@@ -85,7 +85,7 @@ class LasCifrasDelDisponibleEntranTest {
     )
 
     @Test
-    fun `sin margen y con seis cifras lo que queda y lo gastado entran en su columna`() {
+    fun `sin margen y con seis cifras lo que llevas y lo gastado entran en su renglon`() {
         composeRule.setContent {
             MoviTheme {
                 val base = LocalDensity.current
@@ -102,16 +102,12 @@ class LasCifrasDelDisponibleEntranTest {
         }
         composeRule.waitForIdle()
 
-        // Vuelta 70: las tres columnas con el mismo patrón —lo que queda en grande, y abajo «gastaste»,
-        // la cifra y «de $X»—. Sin margen y con gasto ya no queda nada, así que la semana y hoy dicen
-        // «$0» y, en el último renglón, «ya te pasaste»; el período dice «−$888.888» y «de $0».
+        // Vuelta 108: sin margen ya no hay columnas con metas en «$0 · ya te pasaste»: renglones con lo que
+        // llevas (la semana y hoy) y lo gastado del período; cada uno entra entero en su renglón.
         listOf(
-            "ya te pasaste" to 2,
-            "gastaste" to 2,
-            "en el día a día" to 1,
-            "\$888.888" to 3,
-            "−\$888.888" to 1,
-            "de \$0" to 1,
+            "ya te pasaste" to 0,
+            "llevas \$888.888" to 2,
+            "\$888.888 · no había nada libre" to 1,
         ).forEach { (texto, cuantas) ->
             val nodos = composeRule.onAllNodesWithText(texto, useUnmergedTree = true).fetchSemanticsNodes()
             assertEquals("«$texto» tendría que estar en $cuantas columnas", cuantas, nodos.size)

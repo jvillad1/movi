@@ -126,7 +126,7 @@ class ElApartadoQueAvisaTest {
         assertNull(advertenciaDeLaVistaPrevia(chico))
 
         val sinAhorro = TeQuedanConElApartado(antes = 1_000_000L, despues = -200_000L, ahorroDelPeriodo = 0L)
-        assertEquals("Te pasarías del disponible del período.", advertenciaDeLaVistaPrevia(sinAhorro))
+        assertEquals("Te pasarías de lo libre para gastar del período.", advertenciaDeLaVistaPrevia(sinAhorro))
     }
 
     @Test

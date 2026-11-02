@@ -25,6 +25,7 @@ import com.jvillada.movi.shared.model.SiElCorteCaeEnFinDeSemana
 import com.jvillada.movi.shared.model.siElCorteCaeEnFinDeSemanaDe
 import com.jvillada.movi.shared.model.TipoDeAhorro
 import com.jvillada.movi.shared.model.problemaDelAhorro
+import com.jvillada.movi.shared.model.problemaDelGastoDeUnDiaNormal
 import com.jvillada.movi.shared.model.tipoDeAhorroDe
 import com.jvillada.movi.shared.model.UpdateProfileRequest
 import com.jvillada.movi.shared.model.UserProfile
@@ -225,10 +226,15 @@ fun Route.userRoutes() {
                     return@put call.respond(HttpStatusCode.BadRequest, it)
                 }
             }
+            // Vuelta 108: «Gasto de un día normal». 0 vuelve al estimado de Movi (se guarda `null`).
+            req.gastoDeUnDiaNormal?.let { valor ->
+                problemaDelGastoDeUnDiaNormal(valor)?.let { return@put call.respond(HttpStatusCode.BadRequest, it) }
+            }
             if (req.name == null && req.avatarColor == null && req.periodCutoffDay == null &&
                 req.reminderLeadDays == null && req.smsAlertMuted == null && req.periodStarts == null &&
                 req.diasParaBancoMudo == null && req.cierrePorCorreo == null && req.periodWeekendRule == null &&
                 req.mandarUso == null && req.periodFrequency == null && req.periodSecondDay == null &&
+                req.gastoDeUnDiaNormal == null &&
                 tipoDeAhorro == null
             ) {
                 return@put call.respond(HttpStatusCode.BadRequest, "Nada para actualizar")
@@ -258,6 +264,7 @@ fun Route.userRoutes() {
                     req.diasParaBancoMudo?.let { stmt[Users.diasParaBancoMudo] = it }
                     req.cierrePorCorreo?.let { stmt[Users.cierrePorCorreo] = it }
                     req.mandarUso?.let { stmt[Users.mandarUso] = it }
+                    req.gastoDeUnDiaNormal?.let { stmt[Users.gastoDeUnDiaNormal] = it.takeIf { v -> v > 0L } }
                     tipoDeAhorro?.let {
                         stmt[Users.ahorroDelPeriodoTipo] = it.name
                         // «No apartar nada» guarda 0: así un valor viejo no reaparece al volver a elegir.
@@ -432,6 +439,8 @@ private fun ResultRow.toProfile() = UserProfile(
     ahorroDelPeriodoTipo = tipoDeAhorroDe(this[Users.ahorroDelPeriodoTipo]).name,
     ahorroDelPeriodoValor = if (tipoDeAhorroDe(this[Users.ahorroDelPeriodoTipo]) == TipoDeAhorro.NINGUNO) 0L
     else this[Users.ahorroDelPeriodoValor] ?: 0L,
+    // Sin elegir = el estimado de Movi.
+    gastoDeUnDiaNormal = this[Users.gastoDeUnDiaNormal]?.takeIf { it > 0L },
 )
 
 /** Un período se escribe «AAAA-MM». */

@@ -125,14 +125,15 @@ class UnaSolaAlarmaTest {
     }
 
     @Test
-    fun `periodo pasado - una sola alarma y a lo sumo una barra en alerta, la del periodo`() {
+    fun `periodo pasado - una sola alarma y ninguna barra contra metas en cero`() {
         montar(datos(gasto = mapOf("2026-09-01" to 7_000_000L)))
 
         assertEquals(1, cuantos(TAG_ALERTA_DEL_DISPONIBLE))
         assertEquals(0, cuantosDicen("pasaste de la meta"))
-        assertEquals(1, cuantos(TAG_BARRA_EN_ALERTA), "solo la del período")
-        // Revisión de la 83: a 4 días del cierre la semana se calla; queda hoy, en tinta.
-        assertEquals(1, cuantos(TAG_BARRA_DE_VENTANA), "hoy, en tinta")
+        // Vuelta 108: sin margen no hay ventanas con barra (ni metas en $0): lo que sirve para decidir.
+        assertEquals(0, cuantos(TAG_BARRA_EN_ALERTA))
+        assertEquals(0, cuantos(TAG_BARRA_DE_VENTANA))
+        assertEquals(1, cuantos(com.jvillada.movi.ui.sdui.TAG_SIN_MARGEN_PARA_EL_DIA_A_DIA))
     }
 
     @Test

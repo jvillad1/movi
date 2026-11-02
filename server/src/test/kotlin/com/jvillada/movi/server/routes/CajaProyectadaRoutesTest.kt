@@ -156,6 +156,71 @@ class CajaProyectadaRoutesTest {
         assertEquals(900_000L, gasto.periodos.single().total)
     }
 
+    /**
+     * Vuelta 108 · **el gasto de un día normal**: las tres fallas del diagnóstico del 2-nov, en un mes
+     * cerrado. Una compra con tarjeta, una obra de $2M y la otra mitad del colegio (pagado en dos partes,
+     * una sellada) quedan fuera; el día a día —mercado y taxi— es lo único que se reparte.
+     */
+    @Test
+    fun `el supuesto no cuenta tarjetas, gastos de una vez ni la otra mitad de un fijo`() = testApplication {
+        application { testModule() }
+        duenoConUnMesCerrado()
+        transaction {
+            Accounts.insert {
+                it[id] = "tc_$duenoId"; it[userId] = duenoId; it[name] = "Master Black"; it[type] = "CREDIT_CARD"; it[balance] = 0L
+            }
+            Events.insert {
+                it[Events.id] = "cena-con-tarjeta"; it[userId] = duenoId; it[accountId] = "tc_$duenoId"; it[type] = "EXPENSE"
+                it[amount] = 500_000L; it[currency] = "COP"; it[category] = "Comida"; it[description] = "Cena"
+                it[timestamp] = appDateToEpochMillis(inicioDelMesPasado.plusDays(6)) + 12 * 3_600_000L
+                it[reconciliationStatus] = "RECONCILED"
+            }
+            RecurringRules.insert {
+                it[id] = "rr_colegio"; it[userId] = duenoId; it[name] = "Colegio Hija"; it[category] = "Hija"
+                it[amount] = 4_000_000L; it[dayOfMonth] = 10; it[type] = "EXPENSE"; it[activeFrom] = inicioDelMesPasado.minusMonths(2).toString()
+            }
+        }
+        anotarConNombre("colegio-a", "Colegio Hija", 3_000_000L, inicioDelMesPasado.plusDays(9), "Hija")
+        anotarConNombre("colegio-b", "Colegio Hija · parte desde Bancolombia", 1_000_000L, inicioDelMesPasado.plusDays(9), "Hija")
+        anotarConNombre("obra", "Gardenera", 2_000_000L, inicioDelMesPasado.plusDays(14), "Casa")
+        transaction {
+            RecurringOccurrences.insert {
+                it[userId] = duenoId; it[ruleId] = "rr_colegio"; it[period] = inicioDelMesPasado.toString().take(7)
+                it[eventId] = "colegio-a"; it[confirmedAt] = 1L
+            }
+        }
+        val gasto = gasto(duenoId)
+        val dias = inicioDelMesPasado.lengthOfMonth()
+        assertEquals(900_000L / dias, gasto.porDia, "la caja: solo el mercado y el taxi")
+        assertEquals(1_400_000L / dias, gasto.porDiaConTarjetas, "el héroe: también la cena con tarjeta")
+        assertEquals(900_000L, gasto.periodos.single().total)
+        assertEquals(500_000L, gasto.conTarjeta)
+        assertEquals(listOf("Gardenera" to 2_000_000L), gasto.deUnaVez.map { it.nombre to it.monto })
+    }
+
+    @Test
+    fun `el gasto de un dia normal que elige el duenio reemplaza el estimado`() = testApplication {
+        application { testModule() }
+        duenoConUnMesCerrado()
+        transaction { Users.update({ Users.id eq duenoId }) { it[gastoDeUnDiaNormal] = 91_000L } }
+        val gasto = gasto(duenoId)
+        // Sin compras con tarjeta en el historial, todo es efectivo: la caja usa lo elegido entero.
+        assertEquals(91_000L, gasto.porDia)
+        assertEquals(91_000L, gasto.porDiaConTarjetas)
+        assertEquals(91_000L, gasto.elegido)
+        assertEquals(900_000L / inicioDelMesPasado.lengthOfMonth(), gasto.estimado)
+        // Y la caja de Movi AI resta ese, no el estimado.
+        assertEquals(91_000L, runBlocking { cajaProyectadaDe(duenoId, hoy) }.caja?.gastoDiario)
+    }
+
+    private fun anotarConNombre(id: String, nombre: String, monto: Long, fecha: LocalDate, categoria: String) = transaction {
+        Events.insert {
+            it[Events.id] = id; it[userId] = duenoId; it[accountId] = "acc_$duenoId"; it[type] = "EXPENSE"; it[amount] = monto
+            it[currency] = "COP"; it[category] = categoria; it[description] = nombre
+            it[timestamp] = appDateToEpochMillis(fecha) + 12 * 3_600_000L; it[reconciliationStatus] = "RECONCILED"
+        }
+    }
+
     @Test
     fun `un mes que Movi no cubrio entero no cuenta`() = testApplication {
         application { testModule() }
@@ -256,7 +321,7 @@ class CajaProyectadaRoutesTest {
         )
         assertTrue("En sus cuentas hoy: 1000000" in texto, texto)
         assertTrue("Libre hoy: 1000000" in texto, texto)
-        assertTrue("SUPUESTO: gasta como siempre, 100000 por día" in texto, texto)
+        assertTrue("SUPUESTO: su gasto de un día normal en efectivo, 100000 por día" in texto, texto)
         assertTrue("2026-09: 3100000 en 31 días" in texto, texto)
         assertTrue("NO ENTRAN" in texto && "AMEX: falta el pago mínimo" in texto, texto)
         assertTrue("PRIMER DÍA EN NEGATIVO: 2026-10-17, lo libre queda en -3201123 (saldo -3201123) por Cuota Vehiculo 8761 (4101123)" in texto, texto)

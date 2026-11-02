@@ -175,11 +175,11 @@ class InicioDeUnVistazoTest {
         )
         val d = assertNotNull(disponibleDelInicio(data, hoy))
         assertEquals(13_800_000, d.disponible)
-        assertEquals("te pasaste del disponible por \$563.456", avisoDelDisponible(d))
+        assertEquals("te pasaste por \$563.456 de lo libre para gastar", avisoDelDisponible(d))
 
         val frase = fraseDelDisponible(d)
         assertEquals(
-            FraseDelDisponible("Te pasaste del disponible del período por \$563.456", NivelDelGasto.PASADO),
+            FraseDelDisponible("Te pasaste por \$563.456 de lo libre para gastar del período", NivelDelGasto.PASADO),
             frase,
         )
         val veredicto = assertNotNull(veredictoDelInicio(data, hoy))

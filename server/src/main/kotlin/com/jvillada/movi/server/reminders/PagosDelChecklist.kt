@@ -160,6 +160,16 @@ fun parteFijaDelChecklist(
     // un destino asociado a la regla absorbe el fijo igual que si dijera su nombre. Ver el KDoc de
     // `RecurringRule.destinoConocidoId`.
     destinos: Map<String, com.jvillada.movi.shared.model.DestinoConocido> = emptyMap(),
+    /**
+     * Vuelta 108 · **solo para el supuesto del gasto de un día normal** (`gastoDelDiaADiaDe`): un ítem
+     * sellado con un movimiento MÁS CHICO que la regla busca el resto en los movimientos que empiezan con su
+     * nombre («Colegio Hija» $3.000.000 sellado + «Colegio Hija · parte desde Bancolombia» $1.000.000, el
+     * colegio de $4.000.000 de agosto). En el Disponible eso no puede pasar —el cliente resta como fijo el
+     * movimiento del sello (`montoPagado`), y el otro quedaría contado en ningún lado: ver el KDoc del
+     * archivo—, pero el supuesto no es una cuenta de pesos, es una estimación de lo que se gasta en un día
+     * normal, y la otra mitad de un fijo no lo es. `false` (todo lo demás): lo de siempre.
+     */
+    completarLoSellado: Boolean = false,
 ): Map<String, Long> {
     val porId = eventos.associateBy { it.id }
     val reglaPorId = reglas.associateBy { it.id }
@@ -201,8 +211,10 @@ fun parteFijaDelChecklist(
             // faltante se busca en otro movimiento. Solo este: el sello de otra ocurrencia de la
             // misma regla no está en los fijos de este período (ver el KDoc del archivo).
             else -> {
-                parte[eventoDelSello] = porId.getValue(eventoDelSello).amount
-                regla.amount
+                val delSello = porId.getValue(eventoDelSello).amount
+                parte[eventoDelSello] = delSello
+                // Vuelta 108: para el supuesto, lo que el sello no cubre se sigue buscando por nombre.
+                if (completarLoSellado) minOf(delSello, regla.amount) else regla.amount
             }
         }
         if (eventoDelSello != null && eventoDelSello in porId) conPagoYaVisto += regla.id

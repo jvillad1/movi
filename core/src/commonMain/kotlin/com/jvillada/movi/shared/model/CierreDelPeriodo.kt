@@ -315,13 +315,16 @@ fun fueraDeLoNormalDelCierre(c: CierreDelPeriodo): String? {
     return "Fuera de lo normal: $primero" + if (resto > 0) " y $resto más" else ""
 }
 
-/** «Te quedaron $420.000 del disponible», «Te pasaste del disponible por $180.000», o `null`. */
+/**
+ * «Te quedaron $420.000 libres para gastar», «Te pasaste por $180.000 de lo libre para gastar», o `null`.
+ * Vuelta 108: «disponible» pasa a «libre para gastar» en toda la app.
+ */
 fun disponibleDelCierre(c: CierreDelPeriodo): String? {
     val quedo = c.quedoDelDisponible ?: return null
     return when {
-        quedo > 0 -> "Te quedaron ${pesosDelCierre(quedo)} del disponible"
-        quedo < 0 -> "Te pasaste del disponible por ${pesosDelCierre(-quedo)}"
-        else -> "Usaste todo el disponible, ni un peso más"
+        quedo > 0 -> "Te quedaron ${pesosDelCierre(quedo)} libres para gastar"
+        quedo < 0 -> "Te pasaste por ${pesosDelCierre(-quedo)} de lo libre para gastar"
+        else -> "Usaste todo lo libre para gastar, ni un peso más"
     }
 }
 

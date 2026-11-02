@@ -62,7 +62,7 @@ val SECCIONES_CONFIGURABLES: Map<String, String> = linkedMapOf(
     "CUENTAS" to "Tus cuentas",
     "CHECKLIST_DEL_PERIODO" to "Falta por pagar",
     "GASTO_POR_CATEGORIA" to "En qué se va",
-    "DISPONIBLE_DEL_PERIODO" to "Disponible",
+    "DISPONIBLE_DEL_PERIODO" to "Libre para gastar",
     "PATRIMONIO" to "Tu patrimonio",
     // «Pregúntale a Movi» y «Para revisar» dejaron de ser configurables con la generación 9: el
     // primero es una acción de la cuadrícula y el segundo es «Movi propone hoy», fijo debajo del

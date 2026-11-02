@@ -5237,6 +5237,54 @@ abre el catálogo con «Busca tu banco» (sin tildes ni mayúsculas: «davi» en
 Davivienda). «Usar «lo escrito»» va debajo de la lista, fuera de ella, siempre que ningún banco se llame
 exactamente así.
 
+## Vuelta 108 · Una pregunta en el héroe: «¿te alcanza hasta que te paguen?»
+
+Viene del diagnóstico del 2-nov (`diagnostico-108`): el Inicio decía «Te pasaste por $588.919 · del disponible del
+período · faltan 23 días para el corte», debajo «No te alcanza · el 24 nov quedarías en −$7M» y la sección
+«Período $1.950.929 de $1.362.010». Tres cifras, tres bases, ninguna decía cuál mandaba. El dueño aprobó la
+propuesta A: **una pregunta, una base, un solo rojo**. Sin tokens ni componentes nuevos.
+
+- **El héroe** (`Superficie(destacada = true)`), de arriba abajo:
+  - la pregunta en `apoyo`/`textoMedio`: «Hasta que te paguen el 25 nov» (con el mes de calendario, «Hasta el
+    30 nov»); mientras carga, su `LineaEsqueleto`;
+  - el rótulo «Te faltan» / «Te quedan» y el enlace «Tu plata $X ›» como siempre;
+  - la `Cifra` `Heroe`, en `Alerta` solo si falta: es **la única alarma en rojo** del héroe;
+  - la línea que la explica, en `apoyo`: «Faltan $10,3M en pagos y tienes $9,7M libres, contando lo que te
+    entra» (las dos cifras restan exactamente la de arriba) o «Para 23 días · $54.870 por día»;
+  - el renglón (`Fila` con `IconoEnCirculo(TrendingDown)` y `Chevron`) con **la proyección de esa misma cifra**:
+    «Con tu gasto de un día normal, el 24 nov te faltarían unos $3,7M», y debajo el supuesto a la vista,
+    «Calculado con $143.000 por día · Ajustar» (el supuesto del héroe: todo lo que se gasta, con tarjeta o
+    en efectivo; la caja de Pagos usa el suyo, solo en efectivo) (lleva a la caja de Pagos). `TonoDeFila.Alerta` solo si empeora
+    el veredicto: «Hoy te alcanza; con tu gasto de un día normal, el 24 nov te faltarían unos $X». Con «Te
+    faltan», el renglón va en tinta.
+- **Una sola función** (`teAlcanzaHastaQueTePaguen`, `:core`) arma la pregunta, la cifra, la línea y la
+  proyección; la usan el héroe, «Cuánto puedes gastar» de Pagos, el widget, el resumen de la mañana y Movi AI.
+  Las cifras de las frases van compactas (`pesosCortos` = `formatMoneyCompact`); el supuesto, redondeado al mil
+  («$143.000», no «$143.154»: es un supuesto); el que eligió el dueño, exacto («con tus $120.000 por día»).
+- **«¿De dónde sale?»** abre primero la cascada corta en `Superficie(Capa2, Lista)`: «Tienes libre hoy → Te
+  entra → Faltan en pagos (N pagos) → Te faltan», y debajo, con el rótulo «La cuenta del período», la cascada
+  del período de siempre. Sin margen ya no hay renglón «Sin margen, Movi cuenta desde $0»: la cifra es lo que
+  falta de verdad.
+- **«Disponible» se llama «Libre para gastar»** en toda la UI: el subtotal de la cascada, el rótulo de la
+  sección opcional del Inicio (también si la definición guardada dice «Disponible»), «Editar inicio», el
+  editor de pantallas, el cierre del período («Te quedaron $420.000 libres para gastar») y las frases que lo
+  nombraban. El «Disponible» del cupo de una tarjeta es otra cosa y no cambia.
+- **Sin margen, «Cuánto puedes gastar» no pinta metas en $0.** En vez de las ventanas (con barra o en
+  columnas): «No hay margen para el día a día hasta el 25 nov» en `cuerpo`; renglones de `apoyo` con
+  «Día a día del período · $1.950.929 · lo libre era $1.362.010», «Esta semana · llevas $0», «Hoy · llevas
+  $0»; «Lo que más pesa en lo que falta» con los 3 pagos pendientes más grandes («Cuota Vehículo 8761 · 17
+  nov» y su `Cifra` `Chica` entera) y, en el Inicio, el `Boton` `Fantasma` «Ver los 9 pagos que faltan ›»
+  (en Pagos están justo abajo). Las ventanas con barra vuelven cuando hay margen.
+- **«Gasto de un día normal»** en la caja de Pagos: un renglón debajo de la gráfica con el rótulo, «$143.000
+  por día · $91.000 en efectivo · lo estima Movi» (o «lo elegiste tú») y el `Boton` `Fantasma` «Ajustar», que
+  abre una hoja con dos `PildoraDeFiltro` («El de Movi» / «El mío»), un `CampoDeMonto` y `PieDeHoja` «Guardar»
+  con su razón. La hoja dice qué es: todo lo que gastas en un día cualquiera, con tarjeta o en efectivo; el
+  Inicio lo resta entero y la caja solo la parte en efectivo de tu historial. Se guarda en el server; «El de
+  Movi» vuelve al estimado; al guardar, el héroe y la tarjeta se recalculan.
+
+Lo vigilan `TeAlcanzaHastaQueTePaguenTest` y `ElGastoDeUnDiaNormalTest` (`:core`, con las cifras del dueño al
+peso), `TeQuedanEnHoyTest`, `CascadaDelDisponibleTest` y `SinMargenParaElDiaADiaTest` (`:shared`).
+
 ## Vuelta 107 · «¿Cómo lo saco?»: la guía de un banco, como dato
 
 Cuando Movi le pide al dueño algo que tiene que sacar de **otro** lugar (hoy: el extracto del banco), le dice

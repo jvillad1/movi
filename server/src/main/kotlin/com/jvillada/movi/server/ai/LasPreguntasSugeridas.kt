@@ -1,5 +1,9 @@
 package com.jvillada.movi.server.ai
 
+import com.jvillada.movi.shared.model.GastoDelDiaADia
+import com.jvillada.movi.shared.model.TeAlcanzaHastaQueTePaguen
+import com.jvillada.movi.shared.model.teAlcanzaHastaQueTePaguen
+import com.jvillada.movi.server.routes.gastoDelDiaADiaDe
 import com.jvillada.movi.shared.model.limiteDelPeriodo
 import com.jvillada.movi.server.apartados.tuPlataConApartados
 import com.jvillada.movi.server.balance.accountTypesFor
@@ -164,8 +168,23 @@ internal data class DatosDeLasSugeridas(
      * una cuota o un fijo sin gasto a esta altura del período pasado no se dice «$X más».
      */
     val fijas: Set<String> = emptySet(),
+    /** Vuelta 108: el supuesto del gasto de un día normal, para la proyección de «¿Cómo voy?». */
+    val gasto: GastoDelDiaADia? = null,
+    /** Vuelta 108: el día de hoy y si el dueño eligió su período, para «Hasta que te paguen el 25 nov». */
+    val hoy: String? = null,
+    val conElPeriodoElegido: Boolean = false,
 ) {
     val salio: Long get() = gastoPorCategoria.values.sum()
+
+    /**
+     * Vuelta 108 · **«¿te alcanza hasta que te paguen?»**, con la MISMA función del héroe del Inicio
+     * ([teAlcanzaHastaQueTePaguen], de `:core`). `null` sin disponible.
+     */
+    val alcanza: TeAlcanzaHastaQueTePaguen? get() {
+        val d = disponible ?: return null
+        val dia = hoy ?: return null
+        return teAlcanzaHastaQueTePaguen(d, pagos, gasto, dia, conElPeriodoElegido)
+    }
 }
 
 // ── Leer ─────────────────────────────────────────────────────────────────────
@@ -207,6 +226,8 @@ internal suspend fun datosDeLasSugeridas(
     // Vuelta 77: lo fijo, de las mismas reglas que lee Inicio (`UpcomingPayment.rule` de `/upcoming`).
     val fijas = if (pregunta == PreguntaSugerida.EN_QUE_SE_VA) categoriasFijas(proximosPagos(uid, hoy).map { it.rule }) else emptySet()
     val debitos = if (revisar) debitosPorConfirmar(uid, hoy, ahora, conEsperados = true) else emptyList()
+    // Vuelta 108: el supuesto del gasto de un día normal, para la proyección de «¿Cómo voy?» (la del héroe).
+    val gasto = if (pregunta == PreguntaSugerida.COMO_VOY) gastoDelDiaADiaDe(uid, hoy) else null
 
     // La tasa solo si hace falta, para el saldo de lo apartado (ver el resumen del Inicio).
     val usdToCop = if (conPagos && dbQuery { hayMovimientosEnOtraMoneda(uid) }) FxRateService.usdToCop() else 0.0
@@ -247,6 +268,9 @@ internal suspend fun datosDeLasSugeridas(
         }
 
         DatosDeLasSugeridas(
+            gasto = gasto,
+            hoy = hoy.toString(),
+            conElPeriodoElegido = !ajustes.esMesDeCalendario,
             rango = rangoLegible(desde, hasta),
             entro = entro,
             gastoPorCategoria = gastoPorCategoria,
@@ -310,6 +334,9 @@ private fun Transaction.cuentasConSusSellos(uid: String, anulados: Set<String>):
 
 // ── Contestar ────────────────────────────────────────────────────────────────
 
+/** Vuelta 108: a dónde mandar a mirar lo que falta. */
+private const val MIRALO_EN_CUANTO_PUEDES_GASTAR: String = "Míralo en «Cuánto puedes gastar», en Pagos."
+
 /** La respuesta a [pregunta] con [d]. Pura: la prueban las pruebas con datos armados a mano. */
 internal fun respuestaSinModelo(pregunta: PreguntaSugerida, d: DatosDeLasSugeridas): String = when (pregunta) {
     PreguntaSugerida.COMO_VOY -> comoVoy(d)
@@ -323,11 +350,24 @@ internal fun respuestaSinModelo(pregunta: PreguntaSugerida, d: DatosDeLasSugerid
  * pasado, y los pagos que faltan con su total.
  */
 internal fun comoVoy(d: DatosDeLasSugeridas): String = buildList {
-    add(fraseDelDisponible(d.disponible))
+    // Vuelta 108: lo mismo que el héroe del Inicio, con la misma función; sin el día (datos armados a mano
+    // en una prueba vieja), la frase de antes.
+    add(d.alcanza?.let(::fraseHastaQueTePaguen) ?: fraseDelDisponible(d.disponible))
     add("Este período (${d.rango}) entró ${pesosDelCierre(d.entro)} y salió ${pesosDelCierre(d.salio)}.")
     contraElPasado(d)?.let(::add)
     add(lineaDeLosPagos(d.pagos))
 }.filterNotNull().joinToString("\n\n")
+
+/**
+ * Vuelta 108 · **lo que dice el héroe del Inicio, en una frase**: la pregunta, la cifra entera, la línea que
+ * la explica y la proyección con su supuesto. «Hasta que te paguen el 25 nov te faltan $588.919. Faltan $10,3M
+ * en pagos y tienes $9,7M libres, contando lo que te entra. Con tu gasto de un día normal, el 24 nov te
+ * faltarían unos $2,6M (calculado con $91.000 por día).»
+ */
+internal fun fraseHastaQueTePaguen(t: TeAlcanzaHastaQueTePaguen): String = buildString {
+    append("${t.pregunta} ${t.rotulo.lowercase()} ${pesosDelCierre(t.monto)}. ${t.explicacion}.")
+    t.proyeccion?.let { p -> append(" ${p.texto} (${p.supuesto.replaceFirstChar { it.lowercase() }}).") }
+}
 
 /**
  * La misma decisión que `fraseDelDisponible` de Hoy —manda la peor ventana—, con la cifra entera.
@@ -340,14 +380,14 @@ private fun fraseDelDisponible(disponible: DisponibleDelPeriodo?): String {
     val periodo = d.periodo
     return when {
         periodo.nivel == NivelDelGasto.PASADO ->
-            "Te pasaste del disponible del período por ${pesosDelCierre(-periodo.teQuedan)}."
+            "Te pasaste por ${pesosDelCierre(-periodo.teQuedan)} de lo libre para gastar del período."
         d.semana.nivel == NivelDelGasto.PASADO ->
             "Esta semana te pasaste de la meta por ${pesosDelCierre(-d.semana.teQuedan)}. " +
                 "Al período le quedan ${pesosDelCierre(periodo.teQuedan)}${paraLosDias(d)}."
         d.hoy.nivel == NivelDelGasto.PASADO ->
             "Hoy te pasaste de la meta del día por ${pesosDelCierre(-d.hoy.teQuedan)}. " +
                 "A la semana le quedan ${pesosDelCierre(d.semana.teQuedan)}."
-        periodo.teQuedan == 0L -> "Ya usaste todo el disponible del período."
+        periodo.teQuedan == 0L -> "Ya usaste todo lo libre para gastar del período."
         // Vuelta de diseño 3: la misma frase que el héroe de Hoy (`teQuedanDeHoy` en `:shared`), con
         // la misma cifra diaria —lo que queda entre los días que faltan, hoy incluido
         // ([DisponibleDelPeriodo.porDiaParaLoQueQueda])—. Hasta acá decía «Tu meta diaria es $Y»
@@ -537,12 +577,25 @@ internal fun queRevisar(d: DatosDeLasSugeridas): String {
                 ),
             )
         }
-        d.disponible?.let { disp ->
-            when {
-                !disp.hayMargen && (disp.disponible < 0L || disp.periodo.gastado > 0L) ->
-                    add(CosaQueRevisar(sinMargen(disp), "Míralo en la tarjeta Disponible de Pagos."))
-                disp.periodo.teQuedan < 0L ->
-                    add(CosaQueRevisar("Te pasaste del disponible del período por ${pesosDelCierre(-disp.periodo.teQuedan)}.", "Míralo en la tarjeta Disponible de Pagos."))
+        // Vuelta 108: con la cifra y la línea del héroe («Te faltan $X: faltan $Y en pagos…»).
+        val alcanza = d.alcanza
+        if (alcanza != null) {
+            if (alcanza.enRojo) {
+                add(
+                    CosaQueRevisar(
+                        "${alcanza.pregunta} ${alcanza.rotulo.lowercase()} ${pesosDelCierre(alcanza.monto)}: ${alcanza.explicacion.replaceFirstChar { it.lowercase() }}.",
+                        MIRALO_EN_CUANTO_PUEDES_GASTAR,
+                    ),
+                )
+            }
+        } else {
+            d.disponible?.let { disp ->
+                when {
+                    !disp.hayMargen && (disp.disponible < 0L || disp.periodo.gastado > 0L) ->
+                        add(CosaQueRevisar(sinMargen(disp), MIRALO_EN_CUANTO_PUEDES_GASTAR))
+                    disp.periodo.teQuedan < 0L ->
+                        add(CosaQueRevisar("Te pasaste por ${pesosDelCierre(-disp.periodo.teQuedan)} de lo libre para gastar del período.", MIRALO_EN_CUANTO_PUEDES_GASTAR))
+                }
             }
         }
         d.presupuestos

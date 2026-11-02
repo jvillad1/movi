@@ -460,12 +460,25 @@ private fun SeccionCuantoPuedesGastar(
     when {
         !disponible.cargando && disponible.fallo -> NoSePudoLeerElDisponible(onReintentar)
         alcanza -> {
-            val cifras = disponibleDelInicio(data)
-            // Vuelta 78 (revisión): el mismo renglón «¿Me alcanza?» del Inicio, para callar «Para N días» con
-            // la misma regla (`detalleDelHeroe`).
-            val renglon = com.jvillada.movi.ui.dashboard.rememberRenglonMeAlcanza(data, com.jvillada.movi.shared.time.epochMillisToAppDate(Clock.System.now().toEpochMilliseconds()))
+            val hoy = com.jvillada.movi.shared.time.epochMillisToAppDate(Clock.System.now().toEpochMilliseconds())
+            val cifras = disponibleDelInicio(data, hoy)
+            // Vuelta 108: la MISMA cifra y la misma línea del héroe del Inicio (`teQuedanDelInicio`, con la lista
+            // del período y el supuesto del gasto de un día normal), y su renglón, para callar «Para N días»
+            // con la misma regla (`detalleDelHeroe`).
+            val gasto = com.jvillada.movi.ui.dashboard.rememberGastoDelInicio(data)
+            val teQuedan = com.jvillada.movi.ui.dashboard.teQuedanDelInicio(data, hoy, gasto)
+            val renglon = teQuedan?.let { com.jvillada.movi.ui.dashboard.renglonMeAlcanza(it) }
             if (cifras != null) {
-                TarjetaDelDisponible(titulo = TITULO_CUANTO_PUEDES_GASTAR, disponible = cifras, onVerEnQueSeVa = onVerEnQueSeVa, renglon = renglon)
+                TarjetaDelDisponible(
+                    titulo = TITULO_CUANTO_PUEDES_GASTAR,
+                    disponible = cifras,
+                    onVerEnQueSeVa = onVerEnQueSeVa,
+                    renglon = renglon,
+                    teQuedan = teQuedan,
+                    checklist = com.jvillada.movi.ui.dashboard.checklistDelPeriodoDe(data),
+                    hoy = hoy,
+                    conElPeriodoElegido = !data.ajustesDePeriodo.esMesDeCalendario,
+                )
             } else {
                 Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla)) {
                     Seccion(titulo = TITULO_CUANTO_PUEDES_GASTAR)

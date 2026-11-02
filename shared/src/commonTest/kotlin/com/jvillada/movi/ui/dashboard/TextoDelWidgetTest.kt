@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.dashboard
 
+import com.jvillada.movi.shared.model.ROTULO_TE_FALTAN
+
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.Apartado
@@ -107,7 +109,7 @@ class TextoDelWidgetTest {
         val gastoDeMas = instantanea.copy(gastoVariablePorDia = mapOf("2026-09-20" to 9_000_000L))
         val texto = textoDelWidget(gastoDeMas, selladaEn = en(hoy, 9, 40), haySesion = true, ahora = ahora)
 
-        assertEquals(ROTULO_TE_PASASTE, texto.rotulo)
+        assertEquals(ROTULO_TE_FALTAN, texto.rotulo)
         assertTrue(texto.enRojo)
         assertEquals(formatCOP(assertNotNull(teQuedanDelInicio(gastoDeMas, hoy)).monto), texto.cifra)
     }

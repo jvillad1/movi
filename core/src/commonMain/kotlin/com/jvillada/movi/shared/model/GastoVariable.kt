@@ -76,3 +76,109 @@ fun gastoVariablePorDia(
         .filter { (_, monto) -> monto > 0L }
         .groupBy({ diaDe(it.first.timestamp) }, { it.second })
         .mapValues { (_, montos) -> montos.sum() }
+
+// ── Vuelta 108 · el gasto de un día normal ────────────────────────────────────
+
+/**
+ * **Desde cuánto un solo gasto es «de una vez» y no del día a día**: $1.000.000, por movimiento y sobre
+ * su parte variable (lo que no pagó un fijo del checklist). **Elegido, no medido** (vuelta 108): con los
+ * datos del dueño, lo que pasaba de ahí era la obra de la casa (Gardenera, $6,4M + $3,5M + $6,2M + $1M) y
+ * un arreglo de tubería de $1,2M; lo que quedaba por debajo (el contador, $450.000) sí es un gasto que
+ * vuelve. Un umbral fijo en pesos y no un múltiplo del promedio, porque un promedio inflado por la obra
+ * subiría también el umbral. **Y solo si no se repite** ([esUnaCostumbre]): un mercado grande de todos los
+ * períodos sigue contando. Quien no se reconozca en el estimado escribe el suyo en Pagos («Gasto de un día
+ * normal», `UserProfile.gastoDeUnDiaNormal`), que reemplaza toda esta cuenta.
+ */
+const val UMBRAL_DE_UN_GASTO_DE_UNA_VEZ: Long = 1_000_000L
+
+/**
+ * Desde cuánto un gasto sirve de comparación para decidir si uno grande se repite: el 75 % del umbral, para
+ * que el mercado de $1,1M de un período encuentre su par de $950.000 en el otro.
+ */
+const val PISO_PARA_COMPARAR_UN_GASTO_GRANDE: Long = UMBRAL_DE_UN_GASTO_DE_UNA_VEZ * 3 / 4
+
+/** Cuánto pueden diferir dos montos para ser «parecidos»: un 25 % del más grande. Elegido. */
+const val PORCENTAJE_DE_MONTO_PARECIDO: Long = 25L
+
+/**
+ * Cuántos **otros** períodos promediados tienen que repetir un gasto grande para que sea una costumbre:
+ * dos (o sea, tres períodos en total). Con uno solo no alcanza: la obra de la casa duró dos períodos, con
+ * pagos parecidos en los dos ($6,4M y $6,2M), y no es el gasto de un día cualquiera. Elegido.
+ */
+const val OTROS_PERIODOS_PARA_UNA_COSTUMBRE: Int = 2
+
+/**
+ * **Lo que entra a los supuestos del gasto de un día normal** de un período cerrado, y lo que se dejó fuera.
+ *
+ * Es el gasto variable de siempre ([parteVariable], con la misma [parteFija]), partido en tres:
+ *
+ * 1. **los gastos grandes** —un movimiento cuya parte variable llega a [UMBRAL_DE_UN_GASTO_DE_UNA_VEZ], con
+ *    tarjeta o sin ella—, que van a [GastoVariableDeUnPeriodo.deUnaVez] como candidatos: [gastoDelDiaADia]
+ *    devuelve al día a día los que se repiten en los otros períodos ([esUnaCostumbre]);
+ * 2. **las compras con tarjeta** ([cuentasDeTarjeta]), aparte en [GastoVariableDeUnPeriodo.conTarjeta]:
+ *    entran al supuesto del héroe (lo que se gasta, se pague como se pague) y no al de la caja, que cuenta
+ *    efectivo (su pago mínimo ya es una fila de la lista);
+ * 3. lo demás, el día a día en efectivo ([GastoVariableDeUnPeriodo.total]).
+ *
+ * Puro. Lo usan solo los supuestos ([gastoDelDiaADia]): el Disponible, «Te quedan» y «En qué se va» siguen
+ * contando todo lo que de verdad se gastó.
+ *
+ * @param cuentasDeTarjeta los ids de las cuentas `CREDIT_CARD` del dueño.
+ */
+fun gastoDeUnDiaNormalDelPeriodo(
+    periodo: String,
+    dias: Int,
+    eventos: List<FinancialEvent>,
+    parteFija: Map<String, Long>,
+    cuentasDeTarjeta: Set<String>,
+    diaDe: (Long) -> String,
+): GastoVariableDeUnPeriodo {
+    var total = 0L
+    var conTarjeta = 0L
+    val deUnaVez = mutableListOf<GastoDeUnaVez>()
+    val paraComparar = mutableListOf<GastoDeUnaVez>()
+    eventos.forEach { evento ->
+        val parte = parteVariable(evento, parteFija)
+        if (parte <= 0L) return@forEach
+        val esConTarjeta = evento.accountId in cuentasDeTarjeta
+        if (parte >= PISO_PARA_COMPARAR_UN_GASTO_GRANDE) {
+            val grande = GastoDeUnaVez(
+                nombre = evento.merchant?.takeIf { it.isNotBlank() } ?: evento.description,
+                monto = parte,
+                fecha = diaDe(evento.timestamp),
+                clave = claveDeComercio(evento),
+                categoria = evento.category,
+                conTarjeta = esConTarjeta,
+            )
+            paraComparar += grande
+            if (parte >= UMBRAL_DE_UN_GASTO_DE_UNA_VEZ) {
+                deUnaVez += grande
+                return@forEach
+            }
+        }
+        if (esConTarjeta) conTarjeta += parte else total += parte
+    }
+    return GastoVariableDeUnPeriodo(
+        periodo = periodo,
+        total = total,
+        dias = dias,
+        conTarjeta = conTarjeta,
+        deUnaVez = deUnaVez.sortedByDescending { it.monto },
+        paraComparar = paraComparar,
+    )
+}
+
+/**
+ * **¿Este gasto grande es una costumbre?** Sí si en cada uno de los [otros] períodos que se promedian hay
+ * uno parecido —el mismo comercio o la misma categoría, con un monto a no más de
+ * [PORCENTAJE_DE_MONTO_PARECIDO] %— y esos otros son al menos [OTROS_PERIODOS_PARA_UNA_COSTUMBRE]. Puro.
+ */
+fun esUnaCostumbre(gasto: GastoDeUnaVez, otros: List<GastoVariableDeUnPeriodo>): Boolean =
+    otros.size >= OTROS_PERIODOS_PARA_UNA_COSTUMBRE &&
+        otros.all { otro -> (otro.paraComparar + otro.deUnaVez).any { sonParecidos(gasto, it) } }
+
+private fun sonParecidos(a: GastoDeUnaVez, b: GastoDeUnaVez): Boolean {
+    val mismo = (a.clave != null && a.clave == b.clave) || (a.categoria.isNotBlank() && a.categoria == b.categoria)
+    val mayor = maxOf(a.monto, b.monto)
+    return mismo && mayor > 0L && kotlin.math.abs(a.monto - b.monto) * 100 <= mayor * PORCENTAJE_DE_MONTO_PARECIDO
+}

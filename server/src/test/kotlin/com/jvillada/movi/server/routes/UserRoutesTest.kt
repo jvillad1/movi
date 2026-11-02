@@ -315,6 +315,24 @@ class UserRoutesTest {
         assertEquals(null, transaction { Users.selectAll().where { Users.id eq userId }.single()[Users.ahorroDelPeriodoTipo] })
     }
 
+    // ── Vuelta 108 · el gasto de un día normal ───────────────────────────────
+
+    @Test
+    fun `PUT guarda el gasto de un dia normal, 0 vuelve al estimado y lo invalido no se guarda`() = testApplication {
+        wireApp()
+        fun enLaBase() = transaction { Users.selectAll().where { Users.id eq userId }.single()[Users.gastoDeUnDiaNormal] }
+        assertEquals(null, campo(getProfile().bodyAsText(), "gastoDeUnDiaNormal"))
+        assertEquals(HttpStatusCode.OK, putProfile("""{"gastoDeUnDiaNormal":91000}""").status)
+        assertEquals("91000", campo(getProfile().bodyAsText(), "gastoDeUnDiaNormal"))
+        assertEquals(91_000L, enLaBase())
+        listOf("""{"gastoDeUnDiaNormal":-1}""", """{"gastoDeUnDiaNormal":50000001}""").forEach { cuerpo ->
+            assertEquals(HttpStatusCode.BadRequest, putProfile(cuerpo).status, cuerpo)
+        }
+        assertEquals(91_000L, enLaBase(), "lo rechazado no toca lo guardado")
+        assertEquals(HttpStatusCode.OK, putProfile("""{"gastoDeUnDiaNormal":0}""").status)
+        assertEquals(null, enLaBase(), "0 es «usar el estimado de Movi»")
+    }
+
     // ── La guía «Primer uso» ─────────────────────────────────────────────────
 
     private suspend fun ApplicationTestBuilder.marcarPrimerUso(tokenDe: String = token) =
