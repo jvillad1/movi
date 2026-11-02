@@ -23,6 +23,8 @@ import com.jvillada.movi.server.db.DebitosDescartados
 import com.jvillada.movi.server.db.DestinosDescartados
 import com.jvillada.movi.server.db.Documents
 import com.jvillada.movi.server.db.EnlacesCompartidos
+import com.jvillada.movi.server.db.CodigosDeCaptura
+import com.jvillada.movi.server.db.AtajosDescartados
 import com.jvillada.movi.server.db.Espacios
 import com.jvillada.movi.server.db.GastosDelEspacio
 import com.jvillada.movi.server.db.LiquidacionesDelEspacio
@@ -145,6 +147,9 @@ internal val TABLAS_DEL_USUARIO: List<TablaDelUsuario> = listOf(
     TablaDelUsuario(PasswordResetTokens, PasswordResetTokens.userId),
     TablaDelUsuario(PushSubscriptions, PushSubscriptions.userId),
     TablaDelUsuario(EnlacesCompartidos, EnlacesCompartidos.userId),
+    // Vuelta 111 · los atajos del iPhone: su código de captura (solo el hash) y el conteo de lo descartado.
+    TablaDelUsuario(CodigosDeCaptura, CodigosDeCaptura.userId),
+    TablaDelUsuario(AtajosDescartados, AtajosDescartados.userId),
     // Vuelta 100 · observabilidad: sus fallos (los que llegaron sin sesión llevan `""` y no se tocan)
     // y su uso de la app.
     TablaDelUsuario(FallosDeLaApp, FallosDeLaApp.userId),

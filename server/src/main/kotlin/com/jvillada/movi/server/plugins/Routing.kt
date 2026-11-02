@@ -68,6 +68,11 @@ fun Application.configureRouting() {
         // sesión; lo protege un secreto compartido y se apaga solo si falta la env var. Ver
         // CorreoEntranteRoutes.kt.
         correoEntranteRoutes()
+        // Vuelta 111 · lo que mandan los atajos del iPhone (un SMS del banco, un pago con Apple Pay).
+        // Pública porque Atajos no tiene sesión de Movi; la protege el código de captura, que viaja en
+        // `Authorization: Bearer`, nunca en la ruta. Ver CapturaPorAtajoRoutes.kt.
+        capturaPorAtajoRoutes()
+        atajosRoutes()                    // public — los atajos firmados, para instalarlos con un toque
         // El CONTENIDO de un documento va fuera del bloque autenticado a propósito: se abre
         // desde el navegador, que no puede mandar `Authorization`. Lo protege un token de
         // descarga aparte —otra audiencia, un solo documento, cinco minutos—. Ver
@@ -125,6 +130,8 @@ fun Application.configureRouting() {
             // Vuelta 67: restaurar un anulado, deshacer una compra dividida y los anulados.
             restaurarYDeshacerRoutes()
             direccionDeCorreoRoutes()
+            // Vuelta 111: el código de captura de los atajos del iPhone (crear, ver, revocar).
+            codigoDeCapturaRoutes()
             filtroDeGmailRoutes()
             aiRoutes()
             // Vuelta 95: «Lo que Movi sabe de ti» de un vistazo (cuatro conteos).

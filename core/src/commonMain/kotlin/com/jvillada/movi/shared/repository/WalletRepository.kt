@@ -1138,6 +1138,24 @@ interface WalletRepository {
      * un admin). `null` = no se sabe (un repositorio que no habla con el server).
      */
     suspend fun getCorreosDescartados(): com.jvillada.movi.shared.model.CorreosDescartados? = null
+
+    /**
+     * Vuelta 111 · `GET /api/captura/codigo`: si hay un código de captura vigente para los atajos del
+     * iPhone, desde cuándo y su último uso (nunca el código). `null` = no se sabe (un repositorio que no
+     * habla con el server).
+     */
+    suspend fun getCodigoDeCaptura(): com.jvillada.movi.shared.model.CodigoDeCaptura? = null
+
+    /** `POST /api/captura/codigo`: crea un código nuevo y revoca el anterior. El código viene en claro, una sola vez. */
+    suspend fun crearCodigoDeCaptura(): com.jvillada.movi.shared.model.CodigoDeCapturaNuevo =
+        throw UnsupportedOperationException("Este repositorio no crea códigos de captura")
+
+    /** `DELETE /api/captura/codigo`: lo revoca. Lo que mande un atajo con él da 401. */
+    suspend fun revocarCodigoDeCaptura(): Unit =
+        throw UnsupportedOperationException("Este repositorio no revoca códigos de captura")
+
+    /** `GET /api/captura/descartados`: lo que mandaron los atajos y no se guardó, contado por motivo. `null` = no se sabe. */
+    suspend fun getAtajosDescartados(): com.jvillada.movi.shared.model.ResumenDeAtajosDescartados? = null
     suspend fun importStatement(decision: ImportDecision)
     suspend fun getStatementImports(): List<StatementImport>
     suspend fun getStatementImportDetail(id: String): StatementImportDetail

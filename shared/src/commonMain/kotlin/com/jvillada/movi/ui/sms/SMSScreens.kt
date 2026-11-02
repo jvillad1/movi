@@ -408,6 +408,14 @@ fun CapturaDelBancoScreen(onNavigate: (Screen) -> Unit) {
                         LineaDeCorreosDescartados(linea)
                     }
                 }
+                // Vuelta 111 · en la web y en iOS: el iPhone le avisa a Movi con Atajos (en Android no:
+                // ahí Movi lee el teléfono). Las palabras de la automatización salen de sus cuentas.
+                if (seVeLaSeccionDesdeTuIphone(isAndroid)) {
+                    Spacer(Modifier.height(Medida.entreSecciones))
+                    DesdeTuIphone(
+                        palabras = com.jvillada.movi.shared.model.palabrasParaLaAutomatizacion(cuentasDelHistorial.valor.orEmpty()),
+                    )
+                }
                 // Solo Android pinta algo acá: la configuración de la captura de SMS (permisos,
                 // hibernación, historial) que antes vivía en la pantalla del APK sensor.
                 // Reemplaza también a la vieja tarjeta "Sincronizar SMS del teléfono", que subía

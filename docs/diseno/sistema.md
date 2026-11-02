@@ -5324,3 +5324,26 @@ de la app.
 por un flag de build; pregunta qué puede hacer la instalación (`rememberEsteAparatoLeeSms()`, que lee los
 permisos del manifiesto). Sin SMS, la tarjeta que falta **no se pinta** (no queda «Falta» ni un botón
 apagado) y la siguiente toma su lugar y su amarillo; los textos no nombran lo que esa instalación no hace.
+
+## Vuelta 111 · Un secreto que se muestra una sola vez (el código de los atajos)
+
+Cuando Movi le entrega al usuario un secreto que solo él va a pegar en otro lado (hoy: el código de captura de
+los atajos del iPhone, `ui/sms/DesdeTuIphone.kt`), la vista lo dice así:
+
+- **Antes de crearlo, qué es y qué no**: «Es una clave solo para tus atajos: no abre tu cuenta, solo deja
+  mandarle avisos a Movi.» y un `Boton` secundario con el verbo («Crear tu código»). Nunca en amarillo: el
+  principal de la vista es otro (en la guía, «Siguiente»).
+- **Recién creado, el secreto en grande y una sola vez**: `cuerpoFuerte` dentro de un `SelectionContainer`, la
+  línea «Cópialo ahora: Movi no lo vuelve a mostrar…» y «Copiar» (que pasa a «Copiado»). Vive solo en el estado
+  de la composición: al salir de la pantalla se olvida, y el server no lo puede volver a dar (guarda el hash).
+- **Después, el hecho y no el secreto**: «Código creado el 2 nov · último aviso hace 2 h» (o «todavía no llega
+  ningún aviso»), con «Crear otro» (secundario) y «Desactivar» (fantasma). **Los dos preguntan antes**
+  (`ConfirmarEnHoja`) y dicen la consecuencia: el código de ahora deja de servir.
+- **Una guía de pasos en otra app** usa la pieza de la vuelta 93 (pasos numerados en una `Superficie` de lista),
+  con las palabras de la otra app entre comillas angulares, tal cual se ven allá («Automatización», «El mensaje
+  contiene»). Lo que no se pudo confirmar en una fuente queda marcado como borrador en el código y se revisa con
+  el aparato.
+- **La privacidad, en una línea al final**: qué se guarda y qué se descarta sin guardarlo (el servidor sí lo recibe y lo mira para filtrarlo: no se promete que no se lea).
+
+**Pruebas**: `DesdeTuIphoneTest` (`:shared` androidUnitTest), `CapturaPorAtajoTest` (`:core`) y
+`CapturaPorAtajoRoutesTest` (`:server`).

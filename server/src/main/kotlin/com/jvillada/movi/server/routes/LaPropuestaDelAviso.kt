@@ -150,7 +150,21 @@ internal fun Transaction.leerElAviso(
     // tarjeta), no un gasto. Ver `ElTraspasoPropio.kt`.
     val propia = conElTraspasoPropio(completa, sms, otrosDelPago, sabe.cuentas)
     // Un ingreso que nombra como origen una cuenta suya es un traspaso (ver `ElTraspasoQueEntra.kt`).
-    return LecturaDelAviso.Leido(conElOrigenPropioDelIngresoDe(uid, propia, sms.text))
+    val conElOrigen = conElOrigenPropioDelIngresoDe(uid, propia, sms.text)
+    // Vuelta 111: un pago con Apple Pay nombra la tarjeta; si una sola cuenta suya calza, se propone esa.
+    return LecturaDelAviso.Leido(conLaTarjetaDeApplePay(conElOrigen, sms.text, sabe.cuentas))
+}
+
+/**
+ * Vuelta 111 · **la cuenta de un pago con Apple Pay**: la de la tarjeta que nombró Wallet, solo si una
+ * sola cuenta del dueño calza ([cuentaDeLaTarjeta]) y nadie propuso otra antes. Si no, la elige él en
+ * Revisar. Solo propone: nada se anota solo.
+ */
+internal fun conLaTarjetaDeApplePay(parsed: ParsedSms, texto: String, cuentas: List<Account>): ParsedSms {
+    if (parsed.cuentaSugeridaId != null) return parsed
+    val pago = com.jvillada.movi.server.sms.leerElPagoConApplePay(texto) ?: return parsed
+    val cuenta = com.jvillada.movi.server.sms.cuentaDeLaTarjeta(pago.tarjeta, cuentas) ?: return parsed
+    return parsed.copy(cuentaSugeridaId = cuenta.id, cuentaSugeridaPor = "La tarjeta que dijo Apple Pay: ${pago.tarjeta}")
 }
 
 /** Cuánto hacia atrás se busca el último envío por el mismo monto: un año y un poco. */
