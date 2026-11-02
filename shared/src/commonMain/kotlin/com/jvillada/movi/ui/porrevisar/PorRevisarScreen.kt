@@ -289,7 +289,6 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
      */
     fun revisarEnReconciliarDesdeLaFila(id: String, aCambiar: Boolean = false) {
         if (!sePuedeTocar()) return
-        tocarEnPorRevisar("REVISAR", id)
         fueAReconciliar = true
         onNavigate(Screen.SMSReconcile(id, abrirCategoria = aCambiar))
     }
@@ -316,7 +315,6 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
     }
     fun confirmarDesdeLaFila(anotacion: AnotacionEntendida) {
         if (confirmarLosAvisos.confirmando) return
-        tocarEnPorRevisar("CONFIRMAR", anotacion.cabezaId)
         var creado: FinancialEvent? = null
         sobreElPago(
             anotacion.cabezaId,
@@ -684,13 +682,15 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                 val avisos = avisosDelPago(sms, mensajes)
                 val ids = avisos.map { it.id }
                 val pendientesDelPago = avisos.filter { it.state == SMS_STATE_PENDING }.map { it.id }
+                // Vuelta 104: los toques de adentro (Revisar, Confirmar, Ignorar) los anota cada componente
+                // solo, con el id del aviso; ya no hay un registro a mano por botón.
+                androidx.compose.runtime.CompositionLocalProvider(com.jvillada.movi.observabilidad.LocalEntidadDeUso provides sms.id) {
                 TarjetaDelMismoPago(
                     modifier = Modifier.padding(bottom = Medida.dentroDeSeccion),
                     avisos = avisos,
                     trabajando = pagoEnCurso == grupoId || confirmarLosAvisos.confirmando,
                     onRevisar = { revisarEnReconciliar(sms.id, entendidos[sms.id] != null) },
                     onIgnorar = {
-                        tocarEnPorRevisar("DESCARTAR", grupoId)
                         sobreElPago(grupoId, { Repositories.wallets.ignorarElMismoPago(grupoId, ids) }) {
                             avisosResueltos = avisosResueltos + pendientesDelPago.associateWith { SMS_STATE_IGNORED }
                         }
@@ -715,18 +715,19 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                     titulo = titulos[sms.id],
                 )
                 }
+                }
             }
             return
         }
         fila(ll, "sms-${sms.id}") {
             Box(Modifier.animateItem(fadeInSpec = null, fadeOutSpec = if (reducido) null else tween(Movimiento.MEDIO_MS))) {
+            androidx.compose.runtime.CompositionLocalProvider(com.jvillada.movi.observabilidad.LocalEntidadDeUso provides sms.id) {
             TarjetaDeMensajeDelBanco(
                 sms,
                 onRevisar = { revisarEnReconciliar(sms.id, entendidos[sms.id] != null) },
                 entendido = entendidos[sms.id]?.linea,
                 onConfirmar = entendidos[sms.id]?.let { anotacion -> { confirmarDesdeLaFila(anotacion) } },
                 onIgnorar = {
-                    tocarEnPorRevisar("DESCARTAR", sms.id)
                     sobreElPago(sms.id, { Repositories.wallets.ignoreSms(sms.id) }) {
                         avisosResueltos = avisosResueltos + (sms.id to SMS_STATE_IGNORED)
                     }
@@ -769,6 +770,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                     },
                 yaAnotado = yaAnotadoDe(sms),
             )
+            }
             }
         }
     }
@@ -1254,15 +1256,3 @@ const val TITULO_DE_SALDAR_EN_LOS_GRUPOS: String = "Para saldar en tus grupos"
 /** Vuelta 97 · el título de lo que Movi propone repartir en la bandeja. */
 const val TITULO_DE_REPARTIR_EN_LOS_GRUPOS: String = "Para repartir en tus grupos"
 
-/**
- * Vuelta 100: un toque de Por revisar en el uso, con el id del aviso (nunca su texto ni su monto). Lo
- * que el server confirmó o descartó lo anota aparte `UsoDelRepositorio`.
- */
-private fun tocarEnPorRevisar(accion: String, avisoId: String) {
-    val datos = buildMap {
-        put(com.jvillada.movi.shared.model.ClaveDeUso.ACCION, accion)
-        put(com.jvillada.movi.shared.model.ClaveDeUso.PANTALLA, "PorRevisar")
-        if (com.jvillada.movi.observabilidad.esIdDeMovi(avisoId)) put(com.jvillada.movi.shared.model.ClaveDeUso.AVISO_ID, avisoId)
-    }
-    com.jvillada.movi.observabilidad.Uso.evento(com.jvillada.movi.shared.model.EventoDeUso.TOQUE, datos)
-}

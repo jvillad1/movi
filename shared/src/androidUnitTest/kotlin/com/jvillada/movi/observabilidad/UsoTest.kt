@@ -155,6 +155,7 @@ class UsoTest {
         ahora += 61_000
         anotarElErrorDeRedParaElUso("POST", url)
         anotarLaRespuestaParaElUso(422, "POST", url)
-        assertEquals(listOf("ESCRITURA_FALLIDA", "ERROR_DE_RED", "ESCRITURA_FALLIDA"), nombres().drop(1))
+        // Vuelta 104: de fondo, sin abrir una sesión (no hay SESION_EMPEZADA adelante).
+        assertEquals(listOf("ESCRITURA_FALLIDA", "ERROR_DE_RED", "ESCRITURA_FALLIDA"), nombres())
     }
 }

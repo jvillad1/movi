@@ -1,5 +1,9 @@
 package com.jvillada.movi.ui.components.ds
 
+import com.jvillada.movi.observabilidad.ToqueDeUso
+import com.jvillada.movi.observabilidad.idDeUsoDe
+import com.jvillada.movi.observabilidad.observarLaEscritura
+import com.jvillada.movi.observabilidad.rememberEscrituraDeUso
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -187,6 +191,8 @@ fun Campo(
     val interaccion = remember { MutableInteractionSource() }
     val enfocado by interaccion.collectIsFocusedAsState()
     var mostrarSecreto by remember { mutableStateOf(false) }
+    // Vuelta 104: que empezó y que terminó de escribir, con el id del campo; nunca lo escrito.
+    val escritura = rememberEscrituraDeUso(idDeUsoDe(tag.takeIf { it != TAG_CAMPO }, rotulo ?: guia, porDefecto = "campo"))
     MarcoDeCampo(
         modifier = modifier,
         rotulo = rotulo,
@@ -208,7 +214,10 @@ fun Campo(
                     )
                 }
                 // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver [esAtajoDeSeleccionarTodo].
-                val campo = rememberCampoConSeleccion(valor, alCambiar)
+                val campo = rememberCampoConSeleccion(valor) { nuevo ->
+                    if (nuevo != valor) escritura.alCambiarElTexto()
+                    alCambiar(nuevo)
+                }
                 BasicTextField(
                     value = campo.valor,
                     onValueChange = campo::alCambiar,
@@ -228,6 +237,7 @@ fun Campo(
                     modifier = Modifier
                         .fillMaxWidth()
                         .then(if (foco != null) Modifier.focusRequester(foco) else Modifier)
+                        .observarLaEscritura(escritura)
                         .testTag(tag)
                         .semantics {
                             if (rotulo != null) contentDescription = rotuloEnFrase(rotulo)
@@ -249,7 +259,7 @@ fun Campo(
                     modifier = Modifier
                         .size(Icono.m)
                         .anilloDeFoco(CircleShape)
-                        .alPresionar(onClick = { mostrarSecreto = !mostrarSecreto }, rol = Role.Button),
+                        .alPresionar(onClick = { mostrarSecreto = !mostrarSecreto }, toque = TOQUE_DEL_OJO_DEL_CAMPO, rol = Role.Button),
                 )
             }
         }
@@ -357,6 +367,8 @@ fun CampoDeMonto(
     LaunchedEffect(digitos) {
         if (campo.text.filter { it.isDigit() } != digitos) campo = moneyFieldFromDigits(digitos)
     }
+    // Vuelta 104: que empezó y que terminó de escribir el monto; nunca el monto.
+    val escritura = rememberEscrituraDeUso(idDeUsoDe(tag.takeIf { it != TAG_CAMPO_DE_MONTO }, rotulo ?: guia, porDefecto = "monto"))
     val interaccion = remember { MutableInteractionSource() }
     val enfocado by interaccion.collectIsFocusedAsState()
     MarcoDeCampo(
@@ -394,6 +406,7 @@ fun CampoDeMonto(
                 BasicTextField(
                     value = campo,
                     onValueChange = { entrante ->
+                        if (entrante.text != campo.text) escritura.alCambiarElTexto()
                         val siguiente = nextMoneyField(entrante, maxDigitos)
                         campo = siguiente
                         // Se avisa lo MISMO que quedó pintado, no lo que entró.
@@ -407,6 +420,7 @@ fun CampoDeMonto(
                     interactionSource = interaccion,
                     modifier = Modifier
                         .fillMaxWidth()
+                        .observarLaEscritura(escritura)
                         .testTag(tag)
                         .semantics {
                             if (rotulo != null) contentDescription = rotuloEnFrase(rotulo)
@@ -621,7 +635,7 @@ fun AyudaDeCampo(
                         modifier = Modifier
                             .testTag(TAG_QUE_ES_ESTO)
                             .anilloDeFoco(RoundedCornerShape(Radio.s))
-                            .alPresionar(onClick = { ayudaAbierta = !ayudaAbierta }, rol = Role.Button),
+                            .alPresionar(onClick = { ayudaAbierta = !ayudaAbierta }, toque = TOQUE_DE_LA_AYUDA_DEL_CAMPO, rol = Role.Button),
                     )
                 }
             }
@@ -677,3 +691,7 @@ private fun MarcoDeCampo(
         AyudaDeCampo(ayuda = ayuda, masAyuda = masAyuda, error = error)
     }
 }
+
+/** Vuelta 104: el ojo de una contraseña y el «¿Qué es esto?» de un campo, para el uso. */
+private val TOQUE_DEL_OJO_DEL_CAMPO = ToqueDeUso("campo", idFijo = "campo:ver-secreto")
+private val TOQUE_DE_LA_AYUDA_DEL_CAMPO = ToqueDeUso("campo", idFijo = "campo:que-es-esto")

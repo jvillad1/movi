@@ -41,9 +41,11 @@ internal val SIN_REPETIR = setOf(EventoDeUso.ESCRITURA_FALLIDA, EventoDeUso.ERRO
 /**
  * # `Uso`: el único punto de entrada del uso de la app (vuelta 100)
  *
- * Todo lo que se mide de cómo se usa Movi entra por [evento]: la navegación central de `App.kt`, la
- * guía de primer uso, Por revisar, Agregar, las lecturas de papeles, los errores de red. La vuelta
- * que agregue la autocaptura de toques en `ui/components/ds/` solo tiene que llamarlo desde ahí.
+ * Todo lo que se mide de cómo se usa Movi entra por acá: [evento] (la navegación central de `App.kt`,
+ * la guía de primer uso, las funciones clave), [toque] (vuelta 104: la autocaptura de todo toque de
+ * `ui/components/ds/`, la barra, el rail y el «+», ver `Toques.kt`), [atrasDelSistema] y
+ * [eventoDeFondo] (vuelta 104: lo que la app hace sola —un Worker, una notificación, la
+ * sincronización— sin abrir una sesión).
  *
  * ## Qué lleva cada evento
  *
@@ -87,6 +89,8 @@ object Uso {
         val ultimos: Map<String, Long> = emptyMap(),
         val pila: List<String> = emptyList(),
         val detalleArriba: String? = null,
+        val atrasDelSistemaEn: Long? = null,
+        val firmas: Map<String, String> = emptyMap(),
     )
 
     private val estado = AtomicReference(Estado())
@@ -160,17 +164,69 @@ object Uso {
      * lista o con otra forma, o uno de [SIN_REPETIR] igual a otro de hace menos de [VENTANA_SIN_REPETIR_MS].
      * Nunca lanza: medir no puede romper la pantalla que mide.
      */
-    fun evento(nombre: EventoDeUso, datos: Map<ClaveDeUso, String> = emptyMap()): Boolean {
+    fun evento(nombre: EventoDeUso, datos: Map<ClaveDeUso, String> = emptyMap()): Boolean =
+        anotar(nombre.name, datos, sinRepetir = nombre in SIN_REPETIR)
+
+    /**
+     * **Lo que la app hace sola, de fondo** (vuelta 104: un Worker que corrió, una notificación que se
+     * mostró, un aviso capturado): como [evento], pero **sin abrir una sesión**. Con la app abierta va a
+     * la sesión en curso (y se ve en su recorrido); con la app cerrada va sin sesión (`sesionId` vacío),
+     * así un Worker de las 9:00 no cuenta como que la persona usó Movi ese día.
+     */
+    fun eventoDeFondo(nombre: EventoDeUso, datos: Map<ClaveDeUso, String> = emptyMap()): Boolean =
+        anotar(nombre.name, datos, sinRepetir = nombre in SIN_REPETIR, abrirSesion = false)
+
+    /**
+     * **Un toque autocapturado** (vuelta 104, ver `Toques.kt`): arma `toque:<id>` y sus datos, y encola.
+     * Lo llaman `alPresionar`, `alAlternar` y `toqueSinRipple` de `ui/components/ds/`; nunca lanza.
+     */
+    fun toque(toque: ToqueDeUso, datosExtra: Map<ClaveDeUso, String> = emptyMap()): Boolean {
+        if (!activo) return false
+        return runCatching {
+            val resuelto = resolverElToque(toque)
+            anotar(resuelto.nombre, resuelto.datos + datosExtra, sinRepetir = false)
+        }.getOrDefault(false)
+    }
+
+    /**
+     * ¿[firma] es distinta de la última anotada bajo [clave] en esta sesión? Si sí, la recuerda y
+     * devuelve `true`: para lo que se arma solo en cada composición (las propuestas del Inicio) y se
+     * anota una vez por cambio. Una sesión nueva olvida las firmas.
+     */
+    internal fun cambio(clave: String, firma: String): Boolean {
+        var distinta = false
+        cambiar { e ->
+            distinta = e.firmas[clave] != firma
+            if (distinta) e.copy(firmas = e.firmas + (clave to firma)) else e
+        }
+        return distinta
+    }
+
+    /** Cuándo fue el último «atrás» del sistema (para que una hoja que se cierra con él lo sepa). */
+    internal val ultimoAtrasDelSistema: Long get() = estado.load().atrasDelSistemaEn ?: 0L
+
+    /**
+     * **El atrás del sistema** (el gesto o el botón de Android), frente a la flecha ← de la barra de
+     * arriba, que anota lo mismo con `como=FLECHA`: `toque:atras` con `como=SISTEMA`.
+     */
+    fun atrasDelSistema() {
+        if (!activo) return
+        val ahora = reloj()
+        cambiar { it.copy(atrasDelSistemaEn = ahora) }
+        toque(ToqueDeUso(componente = "atras", idFijo = "atras", datos = mapOf(ClaveDeUso.COMO to "SISTEMA")))
+    }
+
+    private fun anotar(nombre: String, datos: Map<ClaveDeUso, String>, sinRepetir: Boolean, abrirSesion: Boolean = true): Boolean {
         if (!activo) return false
         val ahora = reloj()
         val crudos = datos.mapKeys { it.key.clave }
-        asegurarLaSesion(ahora)
-        if (problemaDelEvento(nombre.name, crudos, ruta) != null) return false
-        val clave = nombre.name + crudos.entries.sortedBy { it.key }.joinToString()
+        if (abrirSesion) asegurarLaSesion(ahora)
+        if (problemaDelEvento(nombre, crudos, ruta) != null) return false
+        val clave = nombre + crudos.entries.sortedBy { it.key }.joinToString()
         var anotado = false
         cambiar { e ->
             anotado = false
-            if (nombre in SIN_REPETIR) {
+            if (sinRepetir) {
                 val antes = e.ultimos[clave]
                 if (antes != null && ahora - antes < VENTANA_SIN_REPETIR_MS) return@cambiar e
             }
@@ -178,7 +234,7 @@ object Uso {
             val secuencia = e.secuencia + 1
             val nuevo = EventoDeUsoEnviado(
                 id = newId("uso"),
-                nombre = nombre.name,
+                nombre = nombre,
                 propiedades = crudos,
                 ruta = rutaDe(e),
                 sesionId = e.sesionId,
@@ -190,7 +246,7 @@ object Uso {
             e.copy(
                 pendientes = (e.pendientes + nuevo).takeLast(MAX_PENDIENTES),
                 secuencia = secuencia,
-                ultimos = if (nombre in SIN_REPETIR) (e.ultimos + (clave to ahora)).filterValues { ahora - it < VENTANA_SIN_REPETIR_MS } else e.ultimos,
+                ultimos = if (sinRepetir) (e.ultimos + (clave to ahora)).filterValues { ahora - it < VENTANA_SIN_REPETIR_MS } else e.ultimos,
             )
         }
         return anotado
@@ -206,7 +262,7 @@ object Uso {
         var empezo = false
         cambiar { e ->
             empezo = e.sesionId.isEmpty() || origen == "VOLVIO"
-            if (!empezo) e else e.copy(sesionId = newId("ses"), secuencia = 0, aLaVistaDesde = ahora, enSegundoPlanoDesde = null)
+            if (!empezo) e else e.copy(sesionId = newId("ses"), secuencia = 0, aLaVistaDesde = ahora, enSegundoPlanoDesde = null, firmas = emptyMap())
         }
         if (empezo) evento(EventoDeUso.SESION_EMPEZADA, mapOf(ClaveDeUso.ORIGEN to origen))
     }
@@ -280,7 +336,7 @@ object Uso {
     }
 
     /** Cierra la sesión de la app: lo que no subió se tira (no es de quien entre después). La sesión de uso sigue. */
-    fun olvidar() { cambiar { it.copy(pendientes = emptyList(), ultimos = emptyMap()) } }
+    fun olvidar() { cambiar { it.copy(pendientes = emptyList(), ultimos = emptyMap(), firmas = emptyMap()) } }
 
     /** Para las pruebas: todo en cero, también la sesión de uso. */
     internal fun reiniciarParaPruebas() {

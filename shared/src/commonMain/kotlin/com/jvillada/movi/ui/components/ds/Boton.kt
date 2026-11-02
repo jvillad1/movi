@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.components.ds
 
+import com.jvillada.movi.observabilidad.ToqueDeUso
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -161,6 +163,11 @@ fun Boton(
     cargando: Boolean = false,
     habilitado: Boolean = true,
     anchoCompleto: Boolean = false,
+    /**
+     * Vuelta 104 · qué se anota al tocarlo. Sin esto, `toque:<tag de quien lo monta o el rótulo>`
+     * (ver `observabilidad/Toques.kt`); una tarjeta de propuesta o el encabezado pasan el suyo.
+     */
+    toqueDeUso: ToqueDeUso? = null,
 ) {
     val toque = remember { MutableInteractionSource() }
     // Vuelta 79: con el sistema pidiendo menos movimiento no hay escala, y el toque se ve en el fondo
@@ -186,6 +193,7 @@ fun Boton(
             // Vuelta 79: se hunde al 0,97 sin ripple (ver [alPresionar]); el principal se queda en la marca.
             .alPresionar(
                 onClick = onClick,
+                toque = toqueDeUso ?: ToqueDeUso("boton", modificador = modifier, rotulo = texto),
                 habilitado = habilitado && !cargando,
                 rol = Role.Button,
                 escala = Movimiento.ESCALA_DEL_BOTON_AL_PRESIONAR,

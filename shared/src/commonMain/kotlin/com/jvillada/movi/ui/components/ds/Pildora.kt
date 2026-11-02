@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.components.ds
 
+import com.jvillada.movi.observabilidad.ToqueDeUso
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -157,7 +158,7 @@ fun PildoraDeFiltro(
             .heightIn(min = if (alto == AltoDeFiltro.Compacto) Medida.altoChico else Medida.altoDeFiltro)
             .anilloDeFoco(forma)
             // Vuelta 79: se hunde sin ripple; sin elegir, el velo en hover (la elegida es tinta: sin velo).
-            .alPresionar(onClick = onClick, rol = Role.Tab, velo = !seleccionada, forma = forma)
+            .alPresionar(onClick = onClick, toque = ToqueDeUso("pildora-de-filtro", modificador = modifier, rotulo = texto), rol = Role.Tab, velo = !seleccionada, forma = forma)
             .clip(forma)
             .background(fondo)
             .then(if (seleccionada) Modifier else Modifier.border(Medida.trazo, Movi.colores.bordeDePildora, forma))
@@ -228,7 +229,7 @@ fun PildoraDeAccion(
         modifier = modifier
             .heightIn(min = if (compacta) Medida.altoDePildora else Medida.altoChico)
             .anilloDeFoco(forma)
-            .alPresionar(onClick = onClick, habilitado = habilitada, rol = Role.Button, velo = true, forma = forma)
+            .alPresionar(onClick = onClick, toque = ToqueDeUso("pildora-de-accion", modificador = modifier, rotulo = texto), habilitado = habilitada, rol = Role.Button, velo = true, forma = forma)
             .clip(forma)
             .background(Movi.colores.tarjeta)
             .border(Medida.trazo, Movi.colores.bordeDePildora, forma)
