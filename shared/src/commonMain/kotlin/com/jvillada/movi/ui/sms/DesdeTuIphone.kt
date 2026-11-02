@@ -132,9 +132,15 @@ const val DETALLE_CREAR_OTRO: String =
 const val AL_AGREGAR_EL_ATAJO: String =
     "Al agregarlo, Atajos muestra «Configurar este atajo» y te pide el código: pégalo y toca «Agregar atajo»."
 
-/** Vuelta 114 · el camino que sí funcionó en el iPhone de Caro cuando «Agregar atajo» no respondió. */
+/**
+ * Vuelta 114 · el camino que sí funcionó en el iPhone de Caro cuando «Agregar atajo» no respondió.
+ * Vuelta 115 (verificado en ese iPhone con iOS 27 y el atajo de producción): con el código pegado,
+ * «Omitir configuración» agrega el atajo y **conserva** el código (la acción «Texto» queda con él), así
+ * que no hay que pegarlo otra vez; revisar la acción «Texto» queda como segunda opción.
+ */
 const val PLAN_B_DEL_CODIGO: String =
-    "Si «Agregar atajo» no responde, toca «Omitir configuración» y pega el código en la acción «Texto» del atajo."
+    "Pega tu código. Si «Agregar atajo» no responde, toca «Omitir configuración»: el atajo se agrega con el " +
+        "código que pegaste. Si después no avisa, abre el atajo y revisa que el código esté en la acción «Texto»."
 
 /** Vuelta 114 · el código quedó a la vista en fotos: al cambiarlo, hay que ponerlo en el atajo. */
 const val CAMBIAR_EL_CODIGO_DEL_ATAJO: String =

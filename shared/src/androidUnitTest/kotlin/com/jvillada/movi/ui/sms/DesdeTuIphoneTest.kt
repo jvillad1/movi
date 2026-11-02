@@ -361,7 +361,15 @@ class DesdeTuIphoneTest {
         montar(ServerDeCodigos(CodigoDeCaptura(vigente = true, creadoEn = CREADO, atajoDeMensajes = true)))
         assertTrue(hay(AL_AGREGAR_EL_ATAJO))
         assertTrue(hay(PLAN_B_DEL_CODIGO))
-        assertTrue("«Omitir configuración»" in PLAN_B_DEL_CODIGO && "acción «Texto»" in PLAN_B_DEL_CODIGO)
+        // Vuelta 115: «Omitir configuración» agrega el atajo con el código ya pegado; la acción
+        // «Texto» queda como segunda opción, no como el paso del plan B.
+        assertTrue(
+            PLAN_B_DEL_CODIGO.startsWith(
+                "Pega tu código. Si «Agregar atajo» no responde, toca «Omitir configuración»: el atajo se agrega con el código que pegaste.",
+            ),
+            PLAN_B_DEL_CODIGO,
+        )
+        assertTrue("acción «Texto»" in PLAN_B_DEL_CODIGO.substringAfter("código que pegaste."), "la segunda opción")
         assertTrue(hay(CAMBIAR_EL_CODIGO_DEL_ATAJO))
         assertEquals("Si tocas «Crear otro», abre el atajo y cambia el código de la acción «Texto».", CAMBIAR_EL_CODIGO_DEL_ATAJO)
         // Y la pregunta de «Crear otro» lo recuerda.
