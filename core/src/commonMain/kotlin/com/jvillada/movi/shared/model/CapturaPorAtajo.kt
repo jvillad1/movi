@@ -110,24 +110,29 @@ fun lineaDelCodigoDeCaptura(codigo: CodigoDeCaptura, ahora: Long): String? {
 }
 
 /**
- * **La palabra con que cada banco firma sus SMS**, la que la guía sugiere para «El mensaje contiene».
+ * **Las palabras con que cada banco firma sus SMS**, las que la guía sugiere para «El mensaje contiene».
  * Son las mismas del filtro de bancos del server (`PALABRAS_DE_BANCOS`): una palabra que el filtro no
- * conoce haría que el server descartara lo que llega. Nu no está: sus movimientos llegan por la app, no
- * por SMS, y «Nu» suelta dispararía la automatización con casi cualquier mensaje. Los productos de un
- * banco (la AMEX, la Fiducuenta, Nequi) avisan con el SMS de su banco ([grupoDelBanco]).
+ * conoce haría que el server descartara lo que llega. **Con y sin tilde** donde el banco puede escribirla de
+ * las dos formas («Banco de Bogotá» / «Banco de Bogota», «Itaú» / «Itau»): no se sabe si «El mensaje
+ * contiene» de Atajos distingue tildes, y una automatización de más no cuesta nada. Scotiabank Colpatria hoy
+ * firma como **Davibank** (la app y el banco cambiaron de nombre), y Davibank va con su propio nombre,
+ * aunque [grupoDelBanco] lo junte con Davivienda. Nu no está: sus movimientos llegan por la app, no por SMS,
+ * y «Nu» suelta dispararía la automatización con casi cualquier mensaje. Los productos de un banco (la
+ * AMEX, la Fiducuenta) avisan con el SMS de su banco.
  */
-private val PALABRA_DEL_SMS_DE_CADA_BANCO: Map<String, String> = mapOf(
-    "bancolombia" to "Bancolombia",
-    "davivienda" to "Davivienda",
-    "banco_de_bogota" to "Banco de Bogotá",
-    "bbva" to "BBVA",
-    "occidente" to "Banco de Occidente",
-    "av_villas" to "AV Villas",
-    "itau" to "Itaú",
-    "scotiabank" to "Colpatria",
-    "banco_falabella" to "Falabella",
-    "lulo" to "Lulo Bank",
-    "rappipay" to "RappiPay",
+private val PALABRAS_DEL_SMS_DE_CADA_BANCO: Map<String, List<String>> = mapOf(
+    "bancolombia" to listOf("Bancolombia"),
+    "davivienda" to listOf("Davivienda"),
+    "davibank" to listOf("Davibank"),
+    "scotiabank" to listOf("Davibank"),
+    "banco_de_bogota" to listOf("Banco de Bogotá", "Banco de Bogota"),
+    "bbva" to listOf("BBVA"),
+    "occidente" to listOf("Banco de Occidente"),
+    "av_villas" to listOf("AV Villas"),
+    "itau" to listOf("Itaú", "Itau"),
+    "banco_falabella" to listOf("Falabella"),
+    "lulo" to listOf("Lulo Bank"),
+    "rappipay" to listOf("RappiPay"),
 )
 
 private val BILLETERAS_SIN_SMS = setOf("nequi", "daviplata")
@@ -143,7 +148,8 @@ fun palabrasParaLaAutomatizacion(cuentas: List<Account>): List<String> =
         .mapNotNull { marcaDeLaCuenta(it) }
         // Las billeteras avisan por su app, no con el SMS del banco dueño.
         .filter { it.id !in BILLETERAS_SIN_SMS }
-        .mapNotNull { PALABRA_DEL_SMS_DE_CADA_BANCO[grupoDelBanco(it.id)] ?: PALABRA_DEL_SMS_DE_CADA_BANCO[it.id] }
+        .mapNotNull { PALABRAS_DEL_SMS_DE_CADA_BANCO[it.id] ?: PALABRAS_DEL_SMS_DE_CADA_BANCO[grupoDelBanco(it.id)] }
+        .flatten()
         .distinct()
         .toList()
         .ifEmpty { listOf("Bancolombia") }

@@ -267,7 +267,8 @@ class DesdeTuIphoneTest {
             assertFalse(pasos.any { "$url?" in it })
         }
         val mensajes = pasosDeLaAutomatizacionDeMensajes(listOf("Bancolombia"))
-        assertEquals(4, mensajes.size)
+        assertEquals(5, mensajes.size)
+        assertEquals(PROBAR_CON_UN_SMS_REAL, mensajes.last())
         assertTrue(mensajes[1].contains("«El mensaje contiene»") && mensajes[1].contains("«Bancolombia»"))
     }
 }

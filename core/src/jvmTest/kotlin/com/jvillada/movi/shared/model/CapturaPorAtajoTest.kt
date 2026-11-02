@@ -79,6 +79,11 @@ class CapturaPorAtajoTest {
             ),
         )
         assertEquals(listOf("Bancolombia"), palabrasParaLaAutomatizacion(listOf(cuenta("Nu"), cuenta("Efectivo", AccountType.CASH))))
+        // Con y sin tilde donde el banco puede escribirla de las dos formas; Colpatria y Davibank firman «Davibank».
+        assertEquals(
+            listOf("Banco de Bogotá", "Banco de Bogota", "Itaú", "Itau", "Davibank"),
+            palabrasParaLaAutomatizacion(listOf(cuenta("Banco de Bogotá 1234"), cuenta("Itaú"), cuenta("Scotiabank Colpatria"), cuenta("AFC Davibank 9497"))),
+        )
     }
 
     @Test

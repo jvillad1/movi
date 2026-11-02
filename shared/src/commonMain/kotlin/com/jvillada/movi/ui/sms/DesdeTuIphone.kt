@@ -148,8 +148,14 @@ fun pasosDeLaAutomatizacionDeMensajes(palabras: List<String>): List<String> {
             if (otras.isEmpty()) "" else " Haz una automatización más con cada uno: ${otras.joinToString(", ") { "«$it»" }}.",
         "Elige «Ejecutar de inmediato» y toca «Siguiente».",
         "Elige el atajo «$NOMBRE_DEL_ATAJO_DE_MENSAJES».",
+        PROBAR_CON_UN_SMS_REAL,
     )
 }
+
+/** El último paso: la palabra hay que comprobarla con un SMS de verdad, porque cada banco firma distinto. */
+const val PROBAR_CON_UN_SMS_REAL: String =
+    "Cuando te llegue un SMS real del banco, mira que aparezca en «Por revisar». Si no llega, revisa que el " +
+        "SMS diga esa palabra tal cual."
 
 /** Los pasos de la automatización de Apple Pay. */
 val PASOS_DE_LA_AUTOMATIZACION_DE_APPLE_PAY: List<String> = listOf(
