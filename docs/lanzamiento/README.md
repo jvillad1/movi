@@ -88,5 +88,6 @@ de rechazo en las dos tiendas. Usa un correo que vayas a leer (puede ser uno nue
   batería rompe la función central; para Movi es defendible (Android desenchufa la lectura de
   notificaciones del banco), pero si la revisión lo objeta, quitarlo del manifiesto de `play` con
   `tools:node="remove"` y abrir en su lugar `Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS`.
-- **iOS**: ver «Qué falta técnicamente» en `app-store.md` (ícono, `PrivacyInfo.xcprivacy`, equipo de
-  firma, el framework de release, y que la cáscara pide tema oscuro).
+- **iOS**: el proyecto está listo (vueltas 110 y 112: ícono, tema claro, `PrivacyInfo.xcprivacy`,
+  cifrado exento, solo iPhone en vertical y el framework de release). Falta lo del dueño: la cuenta, el
+  equipo y correr `scripts/armar-para-app-store.sh` (ver «Qué falta técnicamente» en `app-store.md`).

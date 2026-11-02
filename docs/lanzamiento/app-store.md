@@ -80,7 +80,7 @@ vinculados a la identidad del usuario** (su cuenta).
 | Tipo (App Store Connect) | Se recopila | Propósitos |
 | --- | --- | --- |
 | Información de contacto → **Nombre** | Sí | Funcionalidad de la app |
-| Información de contacto → **Correo electrónico** | Sí | Funcionalidad de la app; comunicaciones (recordatorios y cierre del período, apagables) |
+| Información de contacto → **Correo electrónico** | Sí | Funcionalidad de la app (incluye los recordatorios y el cierre del período por correo, apagables) |
 | Información financiera → **Otra información financiera** (cuentas, saldos, movimientos, créditos) | Sí | Funcionalidad de la app; Personalización |
 | Información financiera → Información de pago / Solvencia | No | — |
 | Contenido del usuario → **Correos electrónicos o mensajes de texto** (las alertas del banco que reenvía) | Sí | Funcionalidad de la app |
@@ -90,6 +90,11 @@ vinculados a la identidad del usuario** (su cuenta).
 | Uso → **Interacción con el producto** (qué pantallas abre y qué toca; se puede apagar) | Sí | Análisis |
 | Diagnóstico → **Datos de fallos** y **Otros datos de diagnóstico** (modelo y versión del sistema) | Sí | Funcionalidad de la app; Análisis |
 | Ubicación, Salud, Contactos, Historial de navegación, Búsquedas, Compras, Datos sensibles | No | — |
+
+Apple no tiene un propósito «comunicaciones»: los correos de recordatorio y de cierre son parte de lo
+que la app hace (no son publicidad ni marketing), así que van en «Funcionalidad de la app». Esta tabla
+y `iosApp/iosApp/PrivacyInfo.xcprivacy` dicen lo mismo; `ElProyectoDeIphoneTest` lo vigila (si cambias
+una fila, cambia el manifiesto).
 
 ---
 
@@ -106,7 +111,11 @@ Movi is a personal finance app (Colombia, Spanish). It does not move money and d
 Account deletion (guideline 5.1.1(v)): Tú (last tab) > scroll to the end > "Borrar mi cuenta". It asks for the password and the word BORRAR and deletes the account and all its data immediately. Web version: https://movi-project-production.up.railway.app/borrar-cuenta
 
 Movi AI (the assistant) sends the user's question and a summary of their accounts to Anthropic's API (Claude); the app shows an explanation the first time. No data is used for advertising or tracking.
+
+The app does not read messages by itself. Optionally, the user can create a personal automation in Apple's Shortcuts app that sends a bank text message (or an Apple Pay transaction) to their Movi account; the user creates and runs it, and the app only offers the shortcut and the steps.
 ```
+
+(La última línea es por los Atajos de la vuelta 111: `docs/lanzamiento/atajos-de-iphone.md`.)
 
 **Borrar la cuenta (guía 5.1.1(v)):** ya existe — Tú → al final, «Borrar mi cuenta»
 (`ui/profile/BorrarLaCuentaScreen.kt`, `DELETE /api/me`): pide la contraseña y la palabra BORRAR,
@@ -119,66 +128,51 @@ contraseña), sin entrar con Google ni con otra red.
 
 ## 4. Qué falta técnicamente para subir iOS
 
-Lo que hay hoy en `iosApp/` (revisado el 2-nov-2026):
+Lo que hay hoy en `iosApp/` (revisado el 2-nov-2026, vuelta 112):
 
 | Pieza | Estado |
 | --- | --- |
 | Proyecto | `iosApp/iosApp.xcodeproj`, una app SwiftUI (`iOSApp.swift`, `ContentView.swift`) que monta `MainViewController()` del framework `ComposeApp` |
 | Bundle id | `com.jvillada.movi` (el mismo id que Android; en Apple hay que registrarlo como App ID) |
-| Versión | `MARKETING_VERSION = 1.0`, `CURRENT_PROJECT_VERSION = 1` |
-| Firma | `CODE_SIGN_STYLE = Automatic` con `DEVELOPMENT_TEAM = ""`: **falta el equipo** |
-| Info.plist | Generado (`GENERATE_INFOPLIST_FILE = YES`), sin textos de uso (`NS…UsageDescription`) |
-| Ícono | **No hay** `Assets.xcassets` ni `AppIcon` |
-| Dispositivos | iPhone **y** iPad (`TARGETED_DEVICE_FAMILY = "1,2"`), iOS 16.0 o más |
-| Framework | Apunta a `shared/build/XCFrameworks/debug/ComposeApp.xcframework` (el de depuración) |
+| Versión | `MARKETING_VERSION = 1.0`, `CURRENT_PROJECT_VERSION = 1` (súbelo en cada build que mandes) |
+| Firma | `CODE_SIGN_STYLE = Automatic`; el equipo **no** va en el repo: lo pone el script con `MOVI_APPLE_TEAM_ID` |
+| Info.plist | Generado (`GENERATE_INFOPLIST_FILE = YES`), sin textos de uso (`NS…UsageDescription`): ninguno hace falta (los archivos se eligen con la app Archivos, que no pide permiso; no hay cámara, fotos, Face ID, ubicación ni contactos) |
+| Ícono | ✓ `Assets.xcassets/AppIcon.appiconset/movi-1024.png` (vuelta 110), sale de `scripts/generar-icono.py` |
+| Tema | ✓ Claro: `UIUserInterfaceStyle = Light` y `.preferredColorScheme(.light)` (vuelta 110) |
+| Manifiesto de privacidad | ✓ `iosApp/iosApp/PrivacyInfo.xcprivacy`, en Resources: `NSPrivacyTracking = false`, los diez tipos de la §2 y las APIs de razón requerida medidas con `nm -u` sobre el framework: `UserDefaults` (`CA92.1`: la app y `multiplatform-settings`), marcas de archivo (`C617.1`: `stat`/`fstat` de Skia e ICU sobre archivos del propio paquete) y tiempo de arranque (`35F9.1`: `mach_absolute_time` del temporizador del SDK de DNG de Skia). Ni Compose, ni Ktor, ni SQLDelight traen un manifiesto propio dentro del framework (es estático): el de la app cubre todo. Lo vigila `ElProyectoDeIphoneTest` |
+| Cifrado | ✓ `ITSAppUsesNonExemptEncryption = NO`: el cliente solo usa HTTPS del sistema (`NSURLSession`, por Ktor Darwin); no enlaza CommonCrypto ni Security. El cifrado de documentos (AES) vive en el server |
+| Dispositivos | ✓ Solo iPhone (`TARGETED_DEVICE_FAMILY = 1`), **en vertical** (`UIInterfaceOrientationPortrait`), iOS 16.0 o más. Sin iPad no hacen falta capturas de iPad, **pero la revisión igual puede probarla en un iPad** en modo compatibilidad (guía 2.4.1: una app de iPhone tiene que funcionar ahí, en una ventana de iPhone); por eso la hoja de compartir ya cuida el iPad (`HojaDeCompartir.ios.kt`) |
+| Framework | ✓ Por configuración (`MOVI_XCFRAMEWORK_DIR`): Debug toma `shared/build/XCFrameworks/debug`, Release `shared/build/XCFrameworks/release` |
+| Archivar | ✓ `scripts/armar-para-app-store.sh`: arma el XCFramework de release y corre `xcodebuild archive` para «Any iOS Device» con el equipo de `MOVI_APPLE_TEAM_ID` (sin la variable, no hace nada y lo dice) |
 
-**Lo que falta, en orden:**
+**Lo que falta (todo es del dueño):**
 
-1. **El equipo de firma.** Con la cuenta de Apple Developer aprobada (US$99 al año): Xcode →
-   Settings → Accounts → agregar el Apple ID; en el target `iosApp` → Signing & Capabilities → elegir
-   el equipo. Con firma automática, Xcode crea el App ID `com.jvillada.movi` y los certificados.
-2. **El ícono.** Agregar `iosApp/iosApp/Assets.xcassets/AppIcon.appiconset` con una imagen de
-   **1024×1024 sin transparencia** (desde Xcode 14 basta una). Sale de `scripts/generar-icono.py`
-   (la «m» en tinta sobre el amarillo): agregarle la salida de 1024 y conectarla al proyecto
-   (`ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon`). Sin ícono, App Store Connect rechaza el archivo.
-3. **El manifiesto de privacidad** (`PrivacyInfo.xcprivacy`). Apple lo exige desde mayo de 2024 a las
-   apps que usan APIs «de razón requerida». Movi usa `NSUserDefaults` (por `multiplatform-settings`:
-   razón `CA92.1`) y probablemente marcas de fecha de archivos (SQLite: razón `C617.1`). Declarar
-   también lo recolectado (lo de la sección 2) y `NSPrivacyTracking = false`. Revisar el aviso que
-   App Store Connect manda al subir el primer build: dice qué falta.
-4. **Cifrado:** Movi solo usa HTTPS del sistema, que está exento. Agregar
-   `INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO` en los ajustes del target para no contestar la
-   pregunta de exportación en cada build.
-5. **Textos de uso del Info.plist:** **ninguno hace falta hoy.** Los archivos se eligen con
-   `UIDocumentPickerViewController` (la app Archivos), que no pide permiso; no hay cámara, fotos,
-   Face ID, ubicación ni contactos. Si algún día se agrega «Entrar con Face ID» en iOS, hará falta
-   `NSFaceIDUsageDescription`.
-6. **El tema.** `ContentView.swift` pide `.preferredColorScheme(.dark)`, pero Movi tiene un solo tema,
-   claro, desde la vuelta 29: la barra de estado sale con letras claras sobre el fondo crema. Cambiarlo
-   a `.light` (y verlo en el simulador) antes de sacar las capturas.
-7. **iPad: sí o no.** Con `TARGETED_DEVICE_FAMILY = "1,2"`, App Store pide capturas de iPad de 13" y
-   la revisión prueba en iPad. Si no se quiere cuidar eso ahora, dejar solo iPhone (`= 1`).
-8. **El framework de release.** Para archivar, armar `./gradlew :shared:assembleComposeAppReleaseXCFramework`
-   y apuntar el proyecto a `shared/build/XCFrameworks/release/ComposeApp.xcframework` en la
-   configuración Release (hoy las dos apuntan al de depuración, que funciona pero es más lento y
-   pesado). El link optimizado necesita mucha memoria: correrlo sin nada más abierto.
-9. **Archivar y subir desde esta Mac** (Xcode 16 ya está instalado): elegir «Any iOS Device (arm64)» →
-   Product → Archive → Organizer → «Distribute App» → App Store Connect → Upload. La Mac es Intel: el
-   archivo se arma igual (Xcode compila para arm64), solo tarda más.
-10. **TestFlight para invitar:** en App Store Connect → la app → TestFlight. Probadores **internos**
-    (hasta 100 personas con acceso a tu cuenta de App Store Connect) sin revisión; **externos** (hasta
-    10.000, por correo o con un enlace público) después de una revisión de TestFlight, que suele tardar
-    uno o dos días. Para producción no hay un mínimo de probadores ni de días, a diferencia de Play.
+1. **La cuenta de Apple Developer** (US$99 al año, sección 5, paso 1).
+2. **El equipo en Xcode.** Xcode → Settings → Accounts → agregar el Apple ID. El Team ID (10 letras y
+   números) está en developer.apple.com → Account → Membership details. No hace falta tocar el
+   proyecto: el script lo pasa como `DEVELOPMENT_TEAM`, y con firma automática Xcode crea el App ID
+   `com.jvillada.movi` y los certificados.
+3. **Correr el script** con todo lo demás cerrado (el link optimizado de Kotlin/Native usa mucha
+   memoria y tarda en esta Mac Intel):
+   `MOVI_APPLE_TEAM_ID=XXXXXXXXXX ./scripts/armar-para-app-store.sh`. Si la firma falla después del
+   link, reintenta con `--sin-framework` para no volver a armar el framework.
+4. **Subir:** `open build/ios/Movi.xcarchive` → Organizer → «Distribute App» → App Store Connect →
+   Upload. Revisar el correo que App Store Connect manda al procesar el build: si dice que falta algo
+   del manifiesto, se agrega ahí.
+5. **TestFlight para invitar:** en App Store Connect → la app → TestFlight. Probadores **internos**
+   (hasta 100 personas con acceso a tu cuenta de App Store Connect) sin revisión; **externos** (hasta
+   10.000, por correo o con un enlace público) después de una revisión de TestFlight, que suele tardar
+   uno o dos días. Para producción no hay un mínimo de probadores ni de días, a diferencia de Play.
 
 ## 5. El paso a paso
 
 1. Inscribirse en <https://developer.apple.com/programs/enroll/> como **persona** (Apple ID con
    verificación en dos pasos; tu nombre legal queda como vendedor). La aprobación puede tardar de horas
    a un par de días.
-2. Hacer los puntos 1 a 8 de arriba (en una rama, con su commit).
+2. Correr `scripts/armar-para-app-store.sh` con `MOVI_APPLE_TEAM_ID` (sección 4, puntos 2 y 3).
 3. App Store Connect → Mis apps → «+» → Nueva app: plataforma iOS, nombre `Movi: tus finanzas`, idioma
    principal Español (México) o Español (España) —App Store no tiene «Latinoamérica»—, bundle id
    `com.jvillada.movi`, SKU `movi-ios`.
 4. Llenar la ficha (sección 1), la privacidad (sección 2) y las notas para el revisor (sección 3).
-5. Archivar y subir (punto 9), probar con TestFlight interno, invitar externos.
+5. Subir el archivo (sección 4, punto 4), probar con TestFlight interno, invitar externos.
 6. Con las capturas (iPhone 6,9": 1320×2868), mandar a revisión.
