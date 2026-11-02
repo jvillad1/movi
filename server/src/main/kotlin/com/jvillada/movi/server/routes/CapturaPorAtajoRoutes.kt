@@ -6,6 +6,7 @@ import com.jvillada.movi.server.correo.momentoDelCorreo
 import com.jvillada.movi.server.db.AtajosDescartados
 import com.jvillada.movi.server.db.CodigosDeCaptura
 import com.jvillada.movi.server.db.SmsMessages
+import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.observabilidad.Observabilidad
 import com.jvillada.movi.server.plugins.userId
@@ -202,10 +203,14 @@ internal suspend fun codigoDeCapturaDe(uid: String): CodigoDeCaptura {
     )
 }
 
-/** Crea un código nuevo para [uid] y revoca el anterior, en una transacción. Devuelve el código en claro. */
+/** Crea un código nuevo para [uid] y revoca el anterior, en una transacción con su fila de `users` bloqueada. Devuelve el código en claro. */
 internal suspend fun crearCodigoDeCaptura(uid: String, ahora: Long): CodigoDeCapturaNuevo {
     val codigo = TokenDeEnlace.nuevo()
     dbQuery {
+        // Revisión de la vuelta 111: dos «Crear» a la vez dejaban dos códigos vigentes (cada uno revocaba lo
+        // que veía y los dos insertaban). Con la fila del usuario bloqueada, el segundo espera al primero y
+        // revoca el que este acaba de crear.
+        Users.select(Users.id).where { Users.id eq uid }.forUpdate().firstOrNull()
         CodigosDeCaptura.update({ (CodigosDeCaptura.userId eq uid) and CodigosDeCaptura.revocadoEn.isNull() }) {
             it[revocadoEn] = ahora
         }

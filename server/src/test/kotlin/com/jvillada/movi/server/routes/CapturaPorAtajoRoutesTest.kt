@@ -37,7 +37,10 @@ import io.ktor.server.auth.jwt.JWTPrincipal
 import io.ktor.server.auth.jwt.jwt
 import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.serialization.json.Json
+import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.insert
@@ -179,6 +182,20 @@ class CapturaPorAtajoRoutesTest {
         assertEquals(HttpStatusCode.Unauthorized, client.avisar(segundo, mensaje("Bancolombia: Compraste \$2.000,00 en B")).status)
         assertEquals(HttpStatusCode.Accepted, client.avisar(tercero, mensaje("Bancolombia: Compraste \$3.000,00 en C")).status)
         assertEquals(1, transaction { CodigosDeCaptura.selectAll().where { CodigosDeCaptura.revocadoEn.isNull() }.count() })
+    }
+
+    @Test
+    fun `dos Crear a la vez dejan un solo codigo vigente`() {
+        kotlinx.coroutines.runBlocking {
+            (1..8).map {
+                async(kotlinx.coroutines.Dispatchers.IO) { crearCodigoDeCaptura(duena, System.currentTimeMillis()) }
+            }.awaitAll()
+        }
+        val vigentes = transaction {
+            CodigosDeCaptura.selectAll().where { (CodigosDeCaptura.userId eq duena) and CodigosDeCaptura.revocadoEn.isNull() }.count()
+        }
+        assertEquals(1, vigentes)
+        assertEquals(8, transaction { CodigosDeCaptura.selectAll().count() })
     }
 
     @Test
