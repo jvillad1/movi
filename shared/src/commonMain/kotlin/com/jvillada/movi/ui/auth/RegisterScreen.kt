@@ -29,6 +29,7 @@ import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.primeruso.GuiaDePrimerUso
 import kotlinx.coroutines.launch
 import com.jvillada.movi.ui.components.ds.Campo
+import com.jvillada.movi.ui.profile.GUIA_DE_LA_CONTRASENA_NUEVA
 
 @Composable
 fun RegisterScreen(onNavigate: (Screen) -> Unit) {
@@ -118,7 +119,7 @@ fun RegisterScreen(onNavigate: (Screen) -> Unit) {
                 rotulo = "Contraseña",
                 valor = password,
                 alCambiar = { password = it },
-                guia = "•".repeat(PasswordPolicy.MIN_LENGTH),
+                guia = GUIA_DE_LA_CONTRASENA_NUEVA,
                 secreto = true,
                 teclado = KeyboardOptions(
                     keyboardType = KeyboardType.Password,

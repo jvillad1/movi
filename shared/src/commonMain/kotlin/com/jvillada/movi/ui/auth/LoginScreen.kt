@@ -255,7 +255,7 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
                 rotulo = "Contraseña",
                 valor = password,
                 alCambiar = { password = it },
-                guia = "••••••",   // login: no se insinúa longitud, la cuenta puede ser vieja
+                guia = GUIA_DE_LA_CONTRASENA_AL_ENTRAR,
                 secreto = true,
                 teclado = KeyboardOptions(
                     keyboardType = KeyboardType.Password,
@@ -298,6 +298,14 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
         Boton("¿No tienes cuenta? Regístrate", onClick = { onNavigate(Screen.Register) }, variante = VarianteDeBoton.Fantasma)
     }
 }
+
+/**
+ * **La guía del campo de la contraseña al entrar** (vuelta 115). Antes era «••••••»: con el campo
+ * vacío parecía que ya hubiera una contraseña escrita (se vio en el iPhone de Caro). Una guía se
+ * lee; los puntos son de lo escrito. No dice el largo: la cuenta puede ser de antes de la regla de
+ * los 12 caracteres.
+ */
+const val GUIA_DE_LA_CONTRASENA_AL_ENTRAR: String = "Tu contraseña"
 
 internal fun Modifier.noRippleClickable(onClick: () -> Unit) = this.then(
     clickable(
