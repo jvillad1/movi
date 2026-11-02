@@ -477,15 +477,40 @@ class CapturaPorAtajoRoutesTest {
 
     @Test
     fun `el atajo de mensajes firmado se sirve y el de Apple Pay no, y la lectura del codigo lo dice`() = conApp {
-        val r = client.get("/atajos/movi-mensaje.shortcut")
+        val r = client.get(com.jvillada.movi.shared.model.RUTA_DEL_ATAJO_DE_MENSAJES)
         assertEquals(HttpStatusCode.OK, r.status)
         val bytes = r.body<ByteArray>()
         assertEquals("AEA1", String(bytes.copyOfRange(0, 4)), "un atajo firmado empieza con la cabecera AEA1")
-        assertTrue(r.headers[HttpHeaders.ContentDisposition].orEmpty().contains("movi-mensaje.shortcut"))
+        assertEquals(HttpStatusCode.NotFound, client.get(com.jvillada.movi.shared.model.RUTA_DEL_ATAJO_DE_APPLE_PAY).status)
         assertEquals(HttpStatusCode.NotFound, client.get("/atajos/movi-apple-pay.shortcut").status)
         assertEquals(HttpStatusCode.NotFound, client.get("/atajos/..%2Fapplication.conf").status)
+        assertEquals(HttpStatusCode.NotFound, client.get("/atajos/otro.shortcut").status)
         val leido = client.leerCodigo()
         assertTrue(leido.atajoDeMensajes)
         assertFalse(leido.atajoDeApplePay)
+    }
+
+    /**
+     * Vuelta 114 · Atajos instala el atajo con el nombre del archivo: la descarga se llama como el atajo que
+     * dice la guía, por la ruta nueva y por la vieja de la vuelta 111 (que ya se dio en guías y enlaces).
+     */
+    @Test
+    fun `la ruta nueva y la vieja sirven el mismo archivo, con el nombre del atajo`() = conApp {
+        val nombre = com.jvillada.movi.shared.model.NOMBRE_DEL_ATAJO_DE_MENSAJES
+        val nueva = client.get(com.jvillada.movi.shared.model.RUTA_DEL_ATAJO_DE_MENSAJES)
+        val vieja = client.get(com.jvillada.movi.shared.model.RUTA_VIEJA_DEL_ATAJO_DE_MENSAJES)
+        assertEquals(HttpStatusCode.OK, nueva.status)
+        assertEquals(HttpStatusCode.OK, vieja.status)
+        assertTrue(nueva.body<ByteArray>().contentEquals(vieja.body<ByteArray>()), "el mismo firmado")
+        val esperado = "attachment; filename=\"$nombre.shortcut\"; filename*=UTF-8''Movi%20-%20Avisar%20un%20mensaje.shortcut"
+        assertEquals(esperado, nueva.headers[HttpHeaders.ContentDisposition])
+        assertEquals(esperado, vieja.headers[HttpHeaders.ContentDisposition])
+        val parsed = io.ktor.http.ContentDisposition.parse(nueva.headers[HttpHeaders.ContentDisposition]!!)
+        assertEquals("$nombre.shortcut", parsed.parameter(io.ktor.http.ContentDisposition.Parameters.FileName))
+        // La ruta, decodificada, también termina en el nombre del atajo (Safari la usa si falta la cabecera).
+        assertEquals(
+            "$nombre.shortcut",
+            io.ktor.http.decodeURLPart(com.jvillada.movi.shared.model.RUTA_DEL_ATAJO_DE_MENSAJES.substringAfterLast('/')),
+        )
     }
 }

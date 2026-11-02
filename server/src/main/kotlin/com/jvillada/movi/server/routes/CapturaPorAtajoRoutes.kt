@@ -24,8 +24,10 @@ import com.jvillada.movi.shared.model.MotivoDelAtajoDescartado
 import com.jvillada.movi.shared.model.ResumenDeAtajosDescartados
 import com.jvillada.movi.shared.model.ORIGEN_DEL_ATAJO
 import com.jvillada.movi.shared.model.ORIGEN_DE_APPLE_PAY
-import com.jvillada.movi.shared.model.RUTA_DEL_ATAJO_DE_APPLE_PAY
-import com.jvillada.movi.shared.model.RUTA_DEL_ATAJO_DE_MENSAJES
+import com.jvillada.movi.shared.model.RUTA_VIEJA_DEL_ATAJO_DE_APPLE_PAY
+import com.jvillada.movi.shared.model.RUTA_VIEJA_DEL_ATAJO_DE_MENSAJES
+import com.jvillada.movi.shared.model.ARCHIVO_DEL_ATAJO_DE_APPLE_PAY
+import com.jvillada.movi.shared.model.ARCHIVO_DEL_ATAJO_DE_MENSAJES
 import com.jvillada.movi.shared.model.marcaDelRemitente
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
@@ -171,23 +173,34 @@ private fun idDelAtajo(uid: String, texto: String, tiempo: String): String =
         .take(32)
 
 /**
- * Los atajos firmados que el server sabe servir, por su nombre de archivo. Viven en los recursos del JAR
- * (`server/src/main/resources/atajos/`, los escribe `scripts/generar-atajos.py`), no en `static/`: esa
+ * Los atajos firmados que el server sabe servir: el nombre pedido en la ruta → el archivo en los recursos del
+ * JAR (`server/src/main/resources/atajos/`, los escribe `scripts/generar-atajos.py`), no en `static/`: esa
  * carpeta está en `.gitignore` porque ahí copia la web el armado.
+ *
+ * Vuelta 114 · el archivo se llama como el atajo («Movi - Avisar un mensaje.shortcut»), porque Atajos lo
+ * instala con el nombre del archivo. La ruta vieja de la vuelta 111 (`movi-mensaje.shortcut`) sigue sirviendo
+ * el mismo archivo, con el nombre nuevo.
  */
-private val ATAJOS_QUE_SE_SIRVEN = setOf(
-    RUTA_DEL_ATAJO_DE_MENSAJES.substringAfterLast('/'),
-    RUTA_DEL_ATAJO_DE_APPLE_PAY.substringAfterLast('/'),
+private val ATAJOS_QUE_SE_SIRVEN: Map<String, String> = mapOf(
+    ARCHIVO_DEL_ATAJO_DE_MENSAJES to ARCHIVO_DEL_ATAJO_DE_MENSAJES,
+    RUTA_VIEJA_DEL_ATAJO_DE_MENSAJES.substringAfterLast('/') to ARCHIVO_DEL_ATAJO_DE_MENSAJES,
+    ARCHIVO_DEL_ATAJO_DE_APPLE_PAY to ARCHIVO_DEL_ATAJO_DE_APPLE_PAY,
+    RUTA_VIEJA_DEL_ATAJO_DE_APPLE_PAY.substringAfterLast('/') to ARCHIVO_DEL_ATAJO_DE_APPLE_PAY,
 )
 
 private fun bytesDelAtajo(archivo: String): ByteArray? =
-    archivo.takeIf { it in ATAJOS_QUE_SE_SIRVEN }
-        ?.let { CodigoDeCapturaRecursos::class.java.classLoader.getResourceAsStream("atajos/$it") }
-        ?.use { it.readBytes() }
+    CodigoDeCapturaRecursos::class.java.classLoader.getResourceAsStream("atajos/$archivo")?.use { it.readBytes() }
 
-/** ¿Está en el server el atajo firmado de [ruta]? */
-private fun hayAtajoFirmado(ruta: String): Boolean =
-    CodigoDeCapturaRecursos::class.java.classLoader.getResource("atajos/${ruta.substringAfterLast('/')}") != null
+/** ¿Está en el server el atajo firmado [archivo]? */
+private fun hayAtajoFirmado(archivo: String): Boolean =
+    CodigoDeCapturaRecursos::class.java.classLoader.getResource("atajos/$archivo") != null
+
+/**
+ * La cabecera de la descarga: el nombre del atajo como nombre del archivo, en `filename` y en `filename*`
+ * (RFC 6266). Los nombres son ASCII, así que los dos dicen lo mismo.
+ */
+internal fun contentDispositionDelAtajo(archivo: String): String =
+    "attachment; filename=\"$archivo\"; filename*=UTF-8''${archivo.replace(" ", "%20")}"
 
 private object CodigoDeCapturaRecursos
 
@@ -202,8 +215,8 @@ internal suspend fun codigoDeCapturaDe(uid: String): CodigoDeCaptura {
         vigente = fila != null,
         creadoEn = fila?.get(CodigosDeCaptura.creadoEn),
         ultimoUso = fila?.get(CodigosDeCaptura.ultimoUso),
-        atajoDeMensajes = hayAtajoFirmado(RUTA_DEL_ATAJO_DE_MENSAJES),
-        atajoDeApplePay = hayAtajoFirmado(RUTA_DEL_ATAJO_DE_APPLE_PAY),
+        atajoDeMensajes = hayAtajoFirmado(ARCHIVO_DEL_ATAJO_DE_MENSAJES),
+        atajoDeApplePay = hayAtajoFirmado(ARCHIVO_DEL_ATAJO_DE_APPLE_PAY),
     )
 }
 
@@ -445,9 +458,11 @@ private suspend fun guardarElPago(uid: String, aviso: AvisoDelAtajo, ahora: Long
  */
 fun Route.atajosRoutes() {
     get("/atajos/{archivo}") {
-        val archivo = call.parameters["archivo"].orEmpty()
+        // Ktor ya decodifica el segmento: «Movi%20-%20Avisar…» llega con espacios.
+        val archivo = ATAJOS_QUE_SE_SIRVEN[call.parameters["archivo"].orEmpty()]
+            ?: return@get call.respond(HttpStatusCode.NotFound)
         val bytes = bytesDelAtajo(archivo) ?: return@get call.respond(HttpStatusCode.NotFound)
-        call.response.headers.append(HttpHeaders.ContentDisposition, "attachment; filename=\"$archivo\"")
+        call.response.headers.append(HttpHeaders.ContentDisposition, contentDispositionDelAtajo(archivo))
         call.respondBytes(bytes, ContentType.Application.OctetStream)
     }
 }

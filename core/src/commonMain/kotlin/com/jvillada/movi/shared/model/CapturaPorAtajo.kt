@@ -23,17 +23,40 @@ import kotlinx.serialization.Serializable
 /** La ruta pública a la que el atajo manda lo que recibió. */
 const val RUTA_DE_LA_CAPTURA_POR_ATAJO: String = "/api/captura/atajo"
 
-/** Donde el server sirve el atajo de mensajes ya firmado (si la firma salió). */
-const val RUTA_DEL_ATAJO_DE_MENSAJES: String = "/atajos/movi-mensaje.shortcut"
+/**
+ * Vuelta 114 · **el nombre del atajo es el nombre del archivo.** Al abrir un `.shortcut`, Atajos lo instala
+ * con el nombre del archivo sin la extensión: en el iPhone de Caro (iOS 27.0.1, 2-nov-2026) el atajo bajado de
+ * `/atajos/movi-mensaje.shortcut` quedó como «movi-mensaje». El archivo firmado no guarda ningún nombre (por
+ * dentro es un Apple Archive con un solo `Shortcut.wflow`), así que el nombre visible se fija sirviendo el
+ * archivo con ese nombre: en la ruta y en `Content-Disposition`. Va con un guion y no con «·»: un nombre de
+ * archivo con caracteres fuera de ASCII depende de cómo cada navegador decodifique la cabecera.
+ */
+const val NOMBRE_DEL_ATAJO_DE_MENSAJES: String = "Movi - Avisar un mensaje"
+
+/** El nombre del atajo que avisa un pago con Apple Pay (se arma a mano: es el nombre que la guía pide escribir). */
+const val NOMBRE_DEL_ATAJO_DE_APPLE_PAY: String = "Movi - Pago con Apple Pay"
+
+/** El archivo firmado del atajo de mensajes: en los recursos del server y en la descarga. */
+const val ARCHIVO_DEL_ATAJO_DE_MENSAJES: String = "$NOMBRE_DEL_ATAJO_DE_MENSAJES.shortcut"
+
+/** El archivo del atajo de Apple Pay (si algún día se firma). */
+const val ARCHIVO_DEL_ATAJO_DE_APPLE_PAY: String = "$NOMBRE_DEL_ATAJO_DE_APPLE_PAY.shortcut"
+
+/** Donde el server sirve el atajo de mensajes ya firmado (si la firma salió): el archivo, con los espacios como `%20`. */
+const val RUTA_DEL_ATAJO_DE_MENSAJES: String = "/atajos/Movi%20-%20Avisar%20un%20mensaje.shortcut"
 
 /** Donde el server sirve el atajo de Apple Pay ya firmado (si la firma salió). */
-const val RUTA_DEL_ATAJO_DE_APPLE_PAY: String = "/atajos/movi-apple-pay.shortcut"
+const val RUTA_DEL_ATAJO_DE_APPLE_PAY: String = "/atajos/Movi%20-%20Pago%20con%20Apple%20Pay.shortcut"
 
-/** El nombre del atajo que avisa un SMS, tal como queda en la app Atajos. */
-const val NOMBRE_DEL_ATAJO_DE_MENSAJES: String = "Movi · Avisar un mensaje"
+/**
+ * Las rutas de la vuelta 111, que ya se dieron en guías y enlaces: siguen sirviendo el mismo archivo (y con el
+ * nombre nuevo en `Content-Disposition`).
+ */
+const val RUTA_VIEJA_DEL_ATAJO_DE_MENSAJES: String = "/atajos/movi-mensaje.shortcut"
+const val RUTA_VIEJA_DEL_ATAJO_DE_APPLE_PAY: String = "/atajos/movi-apple-pay.shortcut"
 
-/** El nombre del atajo que avisa un pago con Apple Pay. */
-const val NOMBRE_DEL_ATAJO_DE_APPLE_PAY: String = "Movi · Pago con Apple Pay"
+/** La ruta de un archivo de atajo: «/atajos/» y el nombre con cada espacio como `%20` (los nombres son ASCII). */
+fun rutaDelArchivoDeAtajo(archivo: String): String = "/atajos/" + archivo.replace(" ", "%20")
 
 /**
  * **Cómo empieza el rótulo `bank` de lo que llegó por un atajo**: «Atajo · Bancolombia» (un SMS),

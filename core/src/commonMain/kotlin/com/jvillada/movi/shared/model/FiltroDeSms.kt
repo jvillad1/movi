@@ -96,7 +96,7 @@ fun empiezaPorUnBanco(texto: String, palabras: List<String>): Boolean {
 
 /**
  * **¿Se guarda el SMS que mandó un atajo del iPhone?** El remitente es opcional: el atajo firmado
- * («Movi · Avisar un mensaje») manda solo el texto, y uno armado a mano puede mandar el remitente como lo
+ * («Movi - Avisar un mensaje») manda solo el texto, y uno armado a mano puede mandar el remitente como lo
  * ve el iPhone, que para un número guardado es **el nombre del contacto** («Mamá», «Asesora Bancolombia»).
  *
  * - Remitente personal → no.
