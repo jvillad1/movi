@@ -57,7 +57,7 @@ MOVI AI
 
 TUS DATOS SON TUYOS
 • Movi no es un banco y no mueve tu plata: no se conecta a tus cuentas bancarias.
-• Descarga todos tus datos o borra tu cuenta cuando quieras, desde la app.
+• Descarga una copia de tus cuentas, movimientos, créditos y mensajes del banco, o borra tu cuenta cuando quieras, desde la app.
 • Entra con tu huella, y oculta los saldos con un toque.
 
 Funciona también en el navegador (movi-project-production.up.railway.app) con la misma cuenta.

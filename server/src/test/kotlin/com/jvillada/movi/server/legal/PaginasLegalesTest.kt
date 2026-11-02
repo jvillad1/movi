@@ -119,6 +119,19 @@ class PaginasLegalesTest {
             .forEach { assertTrue(it in terminos, "los términos no dicen «$it»") }
     }
 
+    /** «Descargar tus datos» se describe por lo que trae de verdad, no como «todo lo tuyo». */
+    @Test
+    fun `lo que dice la descarga es lo que exporta el server`() {
+        val html = PaginasLegales.privacidad(ResponsableDeMovi.Datos(null, null))
+        assertFalse("todo lo tuyo" in html.substringBefore("Borrar tu cuenta y todo lo tuyo"), "la descarga no trae todo")
+        assertTrue(PaginasLegales.LO_QUE_TRAE_LA_DESCARGA in html)
+        val exportadas = com.jvillada.movi.server.exportar.TABLAS_EXPORTADAS.map { it.nombre }
+        // Lo que la frase dice que NO trae no está en el export; lo que dice que trae, sí.
+        listOf("conversaciones", "espacios", "gastos_del_espacio").forEach { assertFalse(it in exportadas, it) }
+        listOf("cuentas", "movimientos", "creditos", "tarjetas", "mensajes_del_banco", "lo_que_movi_sabe_de_ti", "documentos")
+            .forEach { assertTrue(it in exportadas, "$it ya no se exporta: corrige LO_QUE_TRAE_LA_DESCARGA") }
+    }
+
     /** Como la página compartida: la copia de los colores no se puede quedar vieja. */
     @Test
     fun `los colores son los de Tokens kt`() {

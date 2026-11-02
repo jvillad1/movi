@@ -103,7 +103,7 @@ nav { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--borde); d
                     "Ley 1581 de 2012 de Colombia y su Decreto 1377 de 2013.</p>",
             )
             append("<div class=\"tarjeta\"><p><strong>En corto:</strong> Movi no vende tus datos, no muestra " +
-                "publicidad y no mueve tu plata. Puedes descargar todo lo tuyo y borrar tu cuenta desde la " +
+                "publicidad y no mueve tu plata. Puedes descargar una copia de tus datos y borrar tu cuenta desde la " +
                 "app cuando quieras.</p></div>")
 
             append("<h2>1. Quién es responsable de tus datos</h2>")
@@ -212,8 +212,7 @@ nav { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--borde); d
             append("<p><strong>Cómo ejercerlos:</strong></p>")
             append("<ul>")
             append("<li>Ver y corregir tus datos: en la misma app.</li>")
-            append("<li>Descargar todo lo tuyo: Tú → Tus datos → «Descargar tus datos» (un archivo con tus " +
-                "cuentas, movimientos, créditos y mensajes del banco).</li>")
+            append("<li>Descargar una copia: Tú → Tus datos → «Descargar tus datos». $LO_QUE_TRAE_LA_DESCARGA</li>")
             append("<li>Borrar tu cuenta y todo lo tuyo: Tú → «Borrar mi cuenta». Más detalle en " +
                 "<a href=\"$RUTA_BORRAR_CUENTA\">cómo borrar tu cuenta</a>.</li>")
             append("<li>Cualquier otra consulta o reclamo: ${responsable.correoHtml()}. Las consultas se " +
@@ -271,7 +270,7 @@ nav { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--borde); d
             append("<ul>")
             append("<li>La cuenta es personal. Cuida tu contraseña; si crees que alguien entró, cámbiala y " +
                 "cierra la sesión en todos tus aparatos (Tú → Cuenta).</li>")
-            append("<li>Lo que registras es tuyo. Puedes descargarlo y borrar tu cuenta cuando quieras.</li>")
+            append("<li>Lo que registras es tuyo. Puedes descargar una copia (Tú → Tus datos) y borrar tu cuenta cuando quieras.</li>")
             append("<li>Si compartes un resumen con alguien, tú decides con quién y por cuánto tiempo.</li>")
             append("</ul>")
 
@@ -329,7 +328,8 @@ nav { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--borde); d
                 "compartidos, tus suscripciones a notificaciones, y el uso de la app y los fallos asociados " +
                 "a tu cuenta. Al terminar se cierran tus sesiones en todos los aparatos.</p>")
             append("<p><strong>No se puede deshacer.</strong> Lo borrado no se puede recuperar: si quieres " +
-                "conservar algo, descarga tus datos antes (Tú → Tus datos → «Descargar tus datos»).</p>")
+                "conservar algo, descarga tus datos antes (Tú → Tus datos → «Descargar tus datos»). " +
+                "$LO_QUE_TRAE_LA_DESCARGA</p>")
             append("<p>$LO_QUE_MOVI_NO_CONTROLA</p>")
             append("<p>Lo que esté en tu teléfono (la copia local de la app) se borra al terminar, y " +
                 "desinstalar la app lo borra también.</p>")
@@ -354,6 +354,17 @@ nav { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--borde); d
             "de cada uno: los respaldos de la base de datos y los registros del servidor que guarda el " +
             "proveedor de hosting, los correos recibidos que guarda Resend y lo que Anthropic retiene " +
             "según su política para la API. Movi no les puede pedir que lo borren antes."
+
+    /**
+     * Lo que trae «Descargar tus datos» de verdad (`TABLAS_EXPORTADAS` en `exportar/ExportarDatos.kt`): no
+     * es «todo lo tuyo». Si esa lista cambia, esto cambia con ella (lo vigila `PaginasLegalesTest`).
+     */
+    const val LO_QUE_TRAE_LA_DESCARGA =
+        "Es un archivo ZIP (CSV y JSON) con tu perfil, tus cuentas, movimientos, pagos recurrentes, créditos, " +
+            "tarjetas, suscripciones, presupuestos, categorías, metas, apartados, personas y comercios, los " +
+            "mensajes del banco, los extractos importados, la lista de tus documentos (sin los archivos) y " +
+            "lo que Movi sabe de ti. No trae los archivos de tus papeles, tus conversaciones con Movi AI ni " +
+            "tus grupos."
 
     // ── Piezas ───────────────────────────────────────────────────────────────
 
