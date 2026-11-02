@@ -2,6 +2,9 @@ package com.jvillada.movi.server.observabilidad
 
 import com.jvillada.movi.server.db.FallosDeLaApp
 import com.jvillada.movi.server.db.UsoDeLaApp
+import com.jvillada.movi.server.db.Users
+import org.jetbrains.exposed.sql.SqlExpressionBuilder
+import org.jetbrains.exposed.sql.update
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.shared.model.ActivosDelDia
@@ -25,6 +28,7 @@ import com.jvillada.movi.shared.model.RespuestaDeUso
 import com.jvillada.movi.shared.model.huellaDelFallo
 import com.jvillada.movi.shared.model.limpio
 import com.jvillada.movi.shared.model.problemaDelEvento
+import com.jvillada.movi.shared.model.soloSeguro
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -59,6 +63,13 @@ object Observabilidad {
     /** Lo de más de esto lo borra el barrido diario ([borrarLoViejo]). */
     const val DIAS_DE_RETENCION = 90L
     private const val DIA_MS = 86_400_000L
+    private const val HORA_MS = 3_600_000L
+
+    /** La misma huella, más de esto por hora, solo se cuenta (no agrega filas). */
+    const val FALLOS_POR_HUELLA_POR_HORA = 20
+
+    /** Filas de fallos por día, para todo el server. */
+    const val MAX_FALLOS_POR_DIA = 2_000L
 
     /** Cohortes que se muestran: menos semanas que la retención, para que ninguna esté recortada por el borrado. */
     private const val SEMANAS_DE_COHORTES = 12
@@ -89,9 +100,28 @@ object Observabilidad {
     suspend fun guardarFallo(fallo: FalloDeLaApp, uid: String?, ahora: Long): Boolean {
         val f = fallo.limpio()
         if (f.id.isBlank()) return false
+        val laHuella = huellaDelFallo(f.tipo, f.stack).ifBlank { f.tipo }
         return dbQuery {
             val ya = FallosDeLaApp.selectAll().where { FallosDeLaApp.id eq f.id }.limit(1).any()
             if (ya) return@dbQuery false
+            // **Una inundación no tapa los fallos de verdad.** La misma huella más de
+            // [FALLOS_POR_HUELLA_POR_HORA] veces en una hora ya no agrega filas: suma uno en la más
+            // reciente (`repetidos`), y el grupo la sigue contando.
+            val deEstaHuella = FallosDeLaApp.selectAll()
+                .where { (FallosDeLaApp.huella eq laHuella) and (FallosDeLaApp.recibidoEn greaterEq ahora - HORA_MS) }
+                .orderBy(FallosDeLaApp.recibidoEn, SortOrder.DESC)
+                .limit(FALLOS_POR_HUELLA_POR_HORA)
+                .map { it[FallosDeLaApp.id] }
+            if (deEstaHuella.size >= FALLOS_POR_HUELLA_POR_HORA) {
+                FallosDeLaApp.update({ FallosDeLaApp.id eq deEstaHuella.first() }) {
+                    with(SqlExpressionBuilder) { it.update(repetidos, repetidos + 1) }
+                }
+                return@dbQuery false
+            }
+            // Y un tope de filas por día para todo el server: pasado el tope, el reporte se pierde
+            // (el log del server igual dice que llegó, ver la ruta).
+            val delDia = FallosDeLaApp.selectAll().where { FallosDeLaApp.recibidoEn greaterEq ahora - DIA_MS }.count()
+            if (delDia >= MAX_FALLOS_POR_DIA) return@dbQuery false
             FallosDeLaApp.insert {
                 it[id] = f.id
                 it[userId] = uid.orEmpty().take(50)
@@ -104,7 +134,8 @@ object Observabilidad {
                 it[componente] = f.componente
                 it[modelo] = f.modelo
                 it[sistema] = f.sistema
-                it[huella] = huellaDelFallo(f.tipo, f.stack).ifBlank { f.tipo }
+                it[huella] = laHuella
+                it[repetidos] = 0
                 it[atrapado] = f.atrapado
                 it[ocurridoEn] = horaCreible(f.ocurridoEn, ahora)
                 it[recibidoEn] = ahora
@@ -122,7 +153,7 @@ object Observabilidad {
                 .orderBy(FallosDeLaApp.recibidoEn, SortOrder.DESC)
                 .limit(5_000)
                 .map { r ->
-                    r[FallosDeLaApp.huella] to (r[FallosDeLaApp.userId] to FalloDeLaApp(
+                    Triple(r[FallosDeLaApp.huella], r[FallosDeLaApp.repetidos], r[FallosDeLaApp.userId] to FalloDeLaApp(
                         id = r[FallosDeLaApp.id],
                         plataforma = r[FallosDeLaApp.plataforma],
                         version = r[FallosDeLaApp.version],
@@ -138,14 +169,16 @@ object Observabilidad {
                     ))
                 }
         }
-        val grupos = filas.groupBy({ it.first }, { it.second }).map { (huella, deLaHuella) ->
+        val grupos = filas.groupBy { it.first }.map { (huella, conRepetidos) ->
+            val deLaHuella = conRepetidos.map { it.third }
             val ejemplo = deLaHuella.first().second
             GrupoDeFallos(
                 huella = huella,
                 tipo = ejemplo.tipo,
                 componente = ejemplo.componente,
                 plataformas = deLaHuella.map { it.second.plataforma }.distinct().sorted(),
-                cuantos = deLaHuella.size,
+                // Las filas más lo que solo se contó (la huella que pasó del tope por hora).
+                cuantos = deLaHuella.size + conRepetidos.sumOf { it.second },
                 usuarios = deLaHuella.map { it.first }.filter { it.isNotEmpty() }.distinct().size,
                 versiones = deLaHuella.map { it.second.version }.filter { it.isNotEmpty() }.distinct().sortedDescending(),
                 ultimaVez = deLaHuella.maxOf { it.second.ocurridoEn },
@@ -162,6 +195,8 @@ object Observabilidad {
      * existe o repetido se descarta; el resto entra. Idempotente por `(user_id, id)`.
      */
     suspend fun guardarUso(uid: String, eventos: List<EventoDeUsoEnviado>, ahora: Long): RespuestaDeUso {
+        // Con «Mandar datos de uso» apagado en su perfil no se guarda nada, mande lo que mande el aparato.
+        if (!mandaUso(uid)) return RespuestaDeUso(guardados = 0, descartados = eventos.size)
         val validos = eventos.take(MAX_EVENTOS_POR_LOTE).filter { e ->
             e.id.isNotBlank() && e.id.length <= 80 &&
                 e.plataforma in PLATAFORMAS_DE_USO && e.plataforma != "server" &&
@@ -193,13 +228,13 @@ object Observabilidad {
             this[UsoDeLaApp.tipo] = evento.tipo.name
             this[UsoDeLaApp.nombre] = evento.name
             this[UsoDeLaApp.ruta] = e.ruta
-            this[UsoDeLaApp.sesionId] = e.sesionId.take(80)
+            this[UsoDeLaApp.sesionId] = soloSeguro(e.sesionId, 80)
             this[UsoDeLaApp.secuencia] = e.secuencia.coerceAtLeast(0)
             this[UsoDeLaApp.propiedades] = json.encodeToString(JsonObject.serializer(), JsonObject(e.propiedades.mapValues { JsonPrimitive(it.value) }))
             this[UsoDeLaApp.detalle] = principal?.take(60)
             this[UsoDeLaApp.valor] = if (evento.principal == ClaveDeUso.SEGUNDOS) principal?.toLongOrNull() else null
             this[UsoDeLaApp.plataforma] = e.plataforma
-            this[UsoDeLaApp.version] = e.version.take(30)
+            this[UsoDeLaApp.version] = soloSeguro(e.version, 30)
             this[UsoDeLaApp.ocurridoEn] = hora
             this[UsoDeLaApp.dia] = dia
             this[UsoDeLaApp.semana] = semanaDe(dia)
@@ -216,6 +251,7 @@ object Observabilidad {
     suspend fun registrarCapturaActiva(uid: String, origen: String, ahora: Long) {
         if (uid.isBlank() || !ClaveDeUso.ORIGEN.admite(origen)) return
         runCatching {
+            if (!mandaUso(uid)) return
             val dia = diaDe(ahora)
             val id = "captura:$origen:$dia"
             dbQuery {
@@ -232,6 +268,11 @@ object Observabilidad {
                 )
             }
         }
+    }
+
+    /** ¿Esta cuenta deja guardar su uso? (`users.mandar_uso`; sin tocar, sí). Lo respeta todo lo que escribe uso. */
+    suspend fun mandaUso(uid: String): Boolean = dbQuery {
+        Users.select(Users.mandarUso).where { Users.id eq uid }.firstOrNull()?.get(Users.mandarUso) != false
     }
 
     /** El origen de una captura según su `bank`: «Notificación · Nu» → NOTIFICACION; si no, SMS. */
@@ -400,9 +441,9 @@ object Observabilidad {
     }
 
     /** La línea de tiempo de una sesión, en orden de `secuencia` (y por la hora si dos empatan). */
-    suspend fun eventosDeLaSesion(sesionId: String, limite: Int = 2_000): List<EventoDelRecorrido> = dbQuery {
+    suspend fun eventosDeLaSesion(uid: String, sesionId: String, limite: Int = 2_000): List<EventoDelRecorrido> = dbQuery {
         UsoDeLaApp.selectAll()
-            .where { UsoDeLaApp.sesionId eq sesionId }
+            .where { (UsoDeLaApp.userId eq uid) and (UsoDeLaApp.sesionId eq sesionId) }
             .orderBy(UsoDeLaApp.secuencia to SortOrder.ASC, UsoDeLaApp.ocurridoEn to SortOrder.ASC)
             .limit(limite)
             .map { r ->

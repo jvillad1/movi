@@ -64,6 +64,11 @@ data class UserProfile(
      */
     val cierrePorCorreo: Boolean = true,
     /**
+     * **«Mandar datos de uso para mejorar Movi»** (vuelta 100). Encendido por defecto; con `false` el
+     * server no guarda nada de uso de esta cuenta. Los fallos no dependen de esto.
+     */
+    val mandarUso: Boolean = true,
+    /**
      * **Cuándo terminó (o descartó) la guía «Primer uso»**, en milisegundos; `null` = nunca. Lo
      * escribe `POST /api/users/me/primer-uso` y vive en el server para que la guía no reaparezca
      * en otro aparato. Ver [debeAbrirseLaGuiaDePrimerUso] para quién la ve.
@@ -164,6 +169,8 @@ data class UpdateProfileRequest(
     val diasParaBancoMudo: Int? = null,
     /** Mandar (o no) el resumen de cierre del período por correo. `null` = no tocar. */
     val cierrePorCorreo: Boolean? = null,
+    /** Vuelta 100 · mandar (o no) los datos de uso. `null` = no tocar. */
+    val mandarUso: Boolean? = null,
     /**
      * El ahorro de cada período: el nombre de un [TipoDeAhorro]. `null` = no tocar. Va **junto con**
      * [ahorroDelPeriodoValor] (con `NINGUNO` el valor se ignora y se guarda 0); lo valida

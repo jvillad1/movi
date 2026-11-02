@@ -84,7 +84,7 @@ suspend fun subirLosFallosGuardados() {
                     setBody(fallo)
                 }.status.value
             }.getOrDefault(0)
-            codigo == 0 || codigo == 429 || codigo >= 500
+            codigo == 0 || codigo == 404 || codigo == 429 || codigo >= 500
         }
         escribir(quedan)
     } finally {

@@ -149,7 +149,8 @@ object CapturaDeFallos {
             val codigo = respuesta.status.value
             when {
                 codigo in 200..299 -> Envio.SUBIDO
-                codigo == 429 || codigo >= 500 -> Envio.REINTENTAR
+                // Un 404 es un server que todavía no tiene la ruta (APK nuevo, server viejo): espera.
+                codigo == 404 || codigo == 429 || codigo >= 500 -> Envio.REINTENTAR
                 else -> Envio.RECHAZADO
             }
         } finally {

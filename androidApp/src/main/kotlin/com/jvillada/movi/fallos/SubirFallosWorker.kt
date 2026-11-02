@@ -13,8 +13,9 @@ import java.util.concurrent.TimeUnit
 
 /**
  * **Sube los fallos guardados en disco** (vuelta 100, ver [CapturaDeFallos]) a `POST /api/fallos`, con
- * red. Único (`KEEP`): dos arranques seguidos no lo encolan dos veces, y aunque corriera dos veces el
- * server guarda cada reporte una vez (el id del archivo es el del reporte). Lo que no sube (sin red,
+ * red. Único con `APPEND_OR_REPLACE`: lo que se guarde mientras corre sube en la vuelta que se encola
+ * detrás, y aunque un reporte se mandara dos veces el server lo guarda una (el id del archivo es el del
+ * reporte). Lo que no sube (sin red,
  * un 5xx, el límite) espera al reintento.
  */
 class SubirFallosWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
@@ -34,7 +35,9 @@ class SubirFallosWorker(context: Context, params: WorkerParameters) : CoroutineW
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 1, TimeUnit.MINUTES)
                 .build()
-            WorkManager.getInstance(context).enqueueUniqueWork(UNICO, ExistingWorkPolicy.KEEP, pedido)
+            // APPEND_OR_REPLACE: un fallo guardado mientras otra subida corre encola otra vuelta detrás
+            // (con KEEP se perdía hasta el próximo arranque).
+            WorkManager.getInstance(context).enqueueUniqueWork(UNICO, ExistingWorkPolicy.APPEND_OR_REPLACE, pedido)
         }
     }
 }

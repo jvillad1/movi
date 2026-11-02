@@ -520,6 +520,17 @@ fun MasScreen(
 
         // ── Tus datos ────────────────────────────────────────────────────────────────
         item(key = "tus-datos") {
+            // Vuelta 100: el interruptor del uso vive en el aparato (para no anotar nada) y en el perfil
+            // (para que el server no guarde nada de esta cuenta, tampoco lo que escribe él mismo). Si el
+            // perfil dice apagado, este aparato también se apaga.
+            LaunchedEffect(profile?.mandarUso) { if (profile?.mandarUso == false && Uso.activo) Uso.poner(false) }
+            val alternarUso: (Boolean) -> Unit = { valor ->
+                Uso.poner(valor)
+                alcance.launch {
+                    runCatching { Repositories.wallets.updateUserProfile(UpdateProfileRequest(mandarUso = valor)) }
+                        .onSuccess { profile = it }
+                }
+            }
             Column {
                 Seccion(titulo = "Tus datos")
                 Superficie(relleno = RellenoDeSuperficie.Lista) {
@@ -561,8 +572,8 @@ fun MasScreen(
                         inicio = { IconoDeAjuste(Icons.Rounded.Insights) },
                         subtitulo = NOTA_DE_LOS_DATOS_DE_USO,
                         lineasDelSubtitulo = 4,
-                        final = { Interruptor(Uso.activo, onCambio = { Uso.poner(it) }) },
-                        onClick = { Uso.poner(!Uso.activo) },
+                        final = { Interruptor(Uso.activo, onCambio = { alternarUso(it) }) },
+                        onClick = { alternarUso(!Uso.activo) },
                     )
                 }
                 NotaDeSeccion(

@@ -71,7 +71,7 @@ internal fun falloDeLaWeb(e: ErrorDelCliente, ahora: Long): FalloDeLaApp {
     )
 }
 
-fun Route.erroresDelClienteRoutes() {
+fun Route.erroresDelClienteRoutes(verificador: com.auth0.jwt.interfaces.JWTVerifier? = null) {
     post("/api/errores-del-cliente") {
         val ip = call.request.origin.remoteHost
         if (!RateLimiter.allow("errores-del-cliente:$ip", REPORTES_POR_VENTANA, VENTANA_MS)) {
@@ -85,7 +85,13 @@ fun Route.erroresDelClienteRoutes() {
         log.warn(lineaDelErrorDelCliente(error))
         // Vuelta 100: y entra a la misma tabla que los fallos de Android e iOS, para verlos juntos en
         // «Fallos y uso». Sin base (las pruebas de solo rutas) o con la base caída, el WARN ya quedó.
-        runCatching { Observabilidad.guardarFallo(falloDeLaWeb(error, System.currentTimeMillis()), error.usuario, System.currentTimeMillis()) }
+        // Se atribuye **solo** con el usuario del token (si vino uno válido y existe), nunca con el
+        // `usuario` del cuerpo: ese lo escribe quien quiera.
+        runCatching {
+            val encabezado = call.request.headers[io.ktor.http.HttpHeaders.Authorization]
+            val uid = if (verificador != null) usuarioDelTokenDeMovi(encabezado, verificador) else usuarioDelTokenDeMovi(encabezado)
+            Observabilidad.guardarFallo(falloDeLaWeb(error, System.currentTimeMillis()), uid, System.currentTimeMillis())
+        }
         call.respond(HttpStatusCode.NoContent)
     }
 }

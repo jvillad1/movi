@@ -422,7 +422,7 @@ private fun SesionesDeLaPersona(persona: UsuarioConUso, onVolver: () -> Unit, on
 
 @Composable
 private fun LineaDeTiempo(persona: UsuarioConUso, sesion: SesionDeUso, onVolver: () -> Unit) {
-    val (lectura, reintentar) = rememberLectura(sesion.id) { ObservabilidadParaAdmin.actual.eventos(sesion.id) }
+    val (lectura, reintentar) = rememberLectura(sesion.id) { ObservabilidadParaAdmin.actual.eventos(persona.id, sesion.id) }
     var filtro by remember { mutableStateOf<String?>(null) }
     var busqueda by remember { mutableStateOf("") }
     LazyColumn(contentPadding = rellenoDeLaLista, verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion)) {

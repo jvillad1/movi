@@ -273,8 +273,10 @@ object Uso {
             contentType(ContentType.Application.Json)
             setBody(lote)
         }
-        // Un 4xx que no es de límite no se va a arreglar reintentando: se da por subido (se pierde).
-        return respuesta.status.isSuccess() || (respuesta.status.value in 400..499 && respuesta.status.value != 429)
+        // Un 4xx que no es de límite ni un 404 no se va a arreglar reintentando: se da por subido (se
+        // pierde). Un 404 (un APK nuevo contra un server que todavía no tiene la ruta) o un 5xx esperan.
+        val codigo = respuesta.status.value
+        return respuesta.status.isSuccess() || (codigo in 400..499 && codigo != 429 && codigo != 404)
     }
 
     /** Cierra la sesión de la app: lo que no subió se tira (no es de quien entre después). La sesión de uso sigue. */

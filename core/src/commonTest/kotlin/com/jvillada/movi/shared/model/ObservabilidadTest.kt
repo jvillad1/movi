@@ -29,6 +29,19 @@ class ObservabilidadTest {
         assertTrue("1234" in limpio, "un número de cuatro cifras no es un dato: $limpio")
         assertTrue(limpiarTextoDelFallo("x".repeat(5_000)).length <= MAX_MENSAJE_DEL_FALLO)
         assertFalse('\n' in limpiarTextoDelFallo("uno\ndos"))
+        assertFalse("Rappi" in limpiarTextoDelFallo("Unknown category 'Rappi Colombia' en la fila"))
+    }
+
+    @Test
+    fun `los campos cortos se limpian de largo y de caracteres`() {
+        val f = FalloDeLaApp(
+            id = "f_1<script>", plataforma = "android; DROP", version = "1.90 (beta) \u0000" + "9".repeat(80),
+            tipo = "X", componente = "Smss\nWorker 123 ñ", ocurridoEn = 0,
+        ).limpio()
+        assertEquals("f_1script", f.id)
+        assertEquals("?", f.plataforma)
+        assertTrue(f.version.length <= 30 && f.version.all { it.isLetterOrDigit() || it in "._-" }, f.version)
+        assertEquals("SmssWorker", f.componente)
     }
 
     @Test

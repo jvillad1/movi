@@ -14,6 +14,7 @@ import io.ktor.client.request.get
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.encodeURLPathPart
+import io.ktor.http.encodeURLQueryComponent
 import io.ktor.http.isSuccess
 
 /**
@@ -27,7 +28,7 @@ interface ObservabilidadParaAdmin {
     suspend fun uso(): ResumenDeUso
     suspend fun usuarios(): List<UsuarioConUso>
     suspend fun sesiones(usuarioId: String): List<SesionDeUso>
-    suspend fun eventos(sesionId: String): List<EventoDelRecorrido>
+    suspend fun eventos(usuarioId: String, sesionId: String): List<EventoDelRecorrido>
 
     companion object {
         /** La costura de las pruebas, como `Repositories.sustitutoDePrueba`. */
@@ -49,6 +50,6 @@ class ObservabilidadParaAdminApi(private val client: HttpClient, private val bas
     override suspend fun usuarios(): List<UsuarioConUso> = leer("/api/admin/uso/usuarios")
     override suspend fun sesiones(usuarioId: String): List<SesionDeUso> =
         leer("/api/admin/uso/usuarios/${usuarioId.encodeURLPathPart()}/sesiones")
-    override suspend fun eventos(sesionId: String): List<EventoDelRecorrido> =
-        leer("/api/admin/uso/sesiones/${sesionId.encodeURLPathPart()}/eventos")
+    override suspend fun eventos(usuarioId: String, sesionId: String): List<EventoDelRecorrido> =
+        leer("/api/admin/uso/sesiones/${sesionId.encodeURLPathPart()}/eventos?usuario=${usuarioId.encodeURLQueryComponent()}")
 }

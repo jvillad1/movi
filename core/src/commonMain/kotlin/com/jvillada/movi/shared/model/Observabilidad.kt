@@ -58,7 +58,7 @@ private const val PAQUETE_PROPIO = "com.jvillada.movi."
 
 private val NUMERO_LARGO = Regex("""\d(?:[.,\s]?\d){4,}""")
 private val CORREO = Regex("""[\w.+-]+@[\w-]+(?:\.[\w-]+)+""")
-private val ENTRE_COMILLAS = Regex("\"[^\"\\n]*\"|«[^»\\n]*»")
+private val ENTRE_COMILLAS = Regex("\"[^\"\\n]*\"|«[^»\\n]*»|'[^'\\n]*'")
 // Sin `\p{Cntrl}`: la expresión tiene que valer igual en la JVM, en Kotlin/Native y en wasm (JS).
 private val ESPACIOS = Regex("[\\u0000-\\u001F\\u007F\\s]+")
 
@@ -66,7 +66,8 @@ private val ESPACIOS = Regex("[\\u0000-\\u001F\\u007F\\s]+")
  * **El mensaje de una excepción puede traer datos**: un `NumberFormatException` dice
  * `For input string: "27500000"`, uno de JSON puede citar el cuerpo. Se borra lo que va entre
  * comillas, los correos y todo número de 5+ cifras (con o sin separadores: `27.500.000` también) se
- * vuelve `#`; después se aplana a un renglón y se recorta a [max].
+ * vuelve `#` (y lo que va entre comillas simples o angulares también sale); después se aplana a un
+ * renglón y se recorta a [max].
  */
 fun limpiarTextoDelFallo(texto: String?, max: Int = MAX_MENSAJE_DEL_FALLO): String =
     (texto ?: "")
@@ -127,18 +128,25 @@ fun huellaDelFallo(tipo: String, stack: String): String {
     return "$tipo · $sinNumero".trim().take(MAX_HUELLA_DEL_FALLO)
 }
 
+/** Las plataformas que reportan fallos; otra cosa se guarda como «?». */
+val PLATAFORMAS_DE_FALLOS: Set<String> = setOf("android", "ios", "web")
+
+/** Solo letras y cifras ASCII, punto, guion y guion bajo, con tope: para ids y versiones. */
+fun soloSeguro(texto: String, max: Int): String =
+    texto.filter { (it.isLetterOrDigit() && it.code < 128) || it in "._-" }.take(max)
+
 /** El fallo con su texto limpio y recortado: lo aplica el cliente al armarlo y el server al recibirlo. */
 fun FalloDeLaApp.limpio(): FalloDeLaApp {
     val stackLimpio = stackRecortado(stack)
     return copy(
-        id = id.take(80),
-        plataforma = plataforma.take(20),
-        version = version.take(30),
+        id = soloSeguro(id, 80),
+        plataforma = plataforma.takeIf { it in PLATAFORMAS_DE_FALLOS } ?: "?",
+        version = soloSeguro(version, 30),
         tipo = limpiarTextoDelFallo(tipo, 120),
         mensaje = limpiarTextoDelFallo(mensaje),
         stack = stackLimpio,
         hilo = limpiarTextoDelFallo(hilo, 80),
-        componente = (componente.ifBlank { componenteDelStack(stackLimpio) }).take(120),
+        componente = componente.ifBlank { componenteDelStack(stackLimpio) }.filter { it.isLetter() && it.code < 128 }.take(80),
         modelo = limpiarTextoDelFallo(modelo, 80),
         sistema = limpiarTextoDelFallo(sistema, 60),
     )
@@ -371,7 +379,7 @@ const val MAX_RUTA = 300
 fun rutaBienFormada(ruta: String): Boolean =
     ruta.isEmpty() || (ruta.length <= MAX_RUTA && ruta.split('>').all { TRAMO_DE_RUTA.matches(it) })
 
-const val MAX_EVENTOS_POR_LOTE = 200
+const val MAX_EVENTOS_POR_LOTE = 100
 
 /**
  * **¿Qué tiene de malo este evento?** `null` si nada. Un nombre fuera de la lista, una clave fuera de

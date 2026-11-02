@@ -185,7 +185,7 @@ class ElForkLlegaLimpioTest {
             override suspend fun uso() = com.jvillada.movi.shared.model.ResumenDeUso()
             override suspend fun usuarios() = emptyList<com.jvillada.movi.shared.model.UsuarioConUso>()
             override suspend fun sesiones(usuarioId: String) = emptyList<com.jvillada.movi.shared.model.SesionDeUso>()
-            override suspend fun eventos(sesionId: String) = emptyList<com.jvillada.movi.shared.model.EventoDelRecorrido>()
+            override suspend fun eventos(usuarioId: String, sesionId: String) = emptyList<com.jvillada.movi.shared.model.EventoDelRecorrido>()
         }
 
         // No se afirma «quedó sucio» por prolijidad: si alguno de estos setters dejara de escribir,

@@ -171,6 +171,7 @@ fun Route.userRoutes() {
             if (req.name == null && req.avatarColor == null && req.periodCutoffDay == null &&
                 req.reminderLeadDays == null && req.smsAlertMuted == null && req.periodStarts == null &&
                 req.diasParaBancoMudo == null && req.cierrePorCorreo == null && req.periodWeekendRule == null &&
+                req.mandarUso == null &&
                 tipoDeAhorro == null
             ) {
                 return@put call.respond(HttpStatusCode.BadRequest, "Nada para actualizar")
@@ -193,6 +194,7 @@ fun Route.userRoutes() {
                     req.smsAlertMuted?.let { stmt[Users.smsAlertMuted] = it }
                     req.diasParaBancoMudo?.let { stmt[Users.diasParaBancoMudo] = it }
                     req.cierrePorCorreo?.let { stmt[Users.cierrePorCorreo] = it }
+                    req.mandarUso?.let { stmt[Users.mandarUso] = it }
                     tipoDeAhorro?.let {
                         stmt[Users.ahorroDelPeriodoTipo] = it.name
                         // «No apartar nada» guarda 0: así un valor viejo no reaparece al volver a elegir.
@@ -354,6 +356,8 @@ private fun ResultRow.toProfile() = UserProfile(
     diasParaBancoMudo = this[Users.diasParaBancoMudo] ?: DIAS_PARA_BANCO_MUDO_POR_DEFECTO,
     // Sin tocar = encendido: el resumen de cierre llega hasta que alguien lo apague.
     cierrePorCorreo = this[Users.cierrePorCorreo] ?: true,
+    // Sin tocar = encendido (vuelta 100).
+    mandarUso = this[Users.mandarUso] ?: true,
     // Sin tocar = la guía nunca se terminó ni se descartó.
     primerUsoEn = this[Users.primerUsoEn],
     // Sin ver = la hoja «Qué ve la IA» se abre la primera vez que algo va a Claude.

@@ -98,6 +98,12 @@ object Users : Table("users") {
      */
     val cierrePorCorreo = bool("cierre_por_correo").nullable()
     /**
+     * **«Mandar datos de uso para mejorar Movi»** (vuelta 100), del lado del server: con `false`, el
+     * server no escribe nada de uso de esta persona (ni lo que mande un aparato viejo, ni la captura
+     * activa que escribe él mismo). Nullable y se lee como `true`, por lo mismo que sus vecinas.
+     */
+    val mandarUso = bool("mandar_uso").nullable()
+    /**
      * **Cuándo terminó (o descartó) la guía «Primer uso»**, en milisegundos; `null` = nunca. Por
      * usuario y en el server, para que la guía no reaparezca en otro aparato. La escribe
      * `POST /api/users/me/primer-uso` (la primera vez; después no se mueve).
@@ -1413,6 +1419,8 @@ object FallosDeLaApp : Table("fallos_de_la_app") {
     val modelo     = varchar("modelo", 80)
     val sistema    = varchar("sistema", 60)
     val huella     = varchar("huella", 320)
+    /** Cuántos más de la misma huella llegaron pasado el tope por hora: se cuentan, no se guardan. */
+    val repetidos  = integer("repetidos").default(0)
     val atrapado   = bool("atrapado")
     val ocurridoEn = long("ocurrido_en")
     val recibidoEn = long("recibido_en")

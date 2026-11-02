@@ -57,7 +57,7 @@ class FallosYUsoScreenTest {
             )
             override suspend fun usuarios() = listOf(UsuarioConUso("u1", "papa@movi.test", 2, 30, 1_800_000_000_000L, listOf("android")))
             override suspend fun sesiones(usuarioId: String) = listOf(SesionDeUso("s1", 1_800_000_000_000L, 1_800_000_002_000L, 2, "android", "1.90", 3))
-            override suspend fun eventos(sesionId: String) = eventos
+            override suspend fun eventos(usuarioId: String, sesionId: String) = eventos
         }
         composeRule.setContent { MoviTheme { FallosYUsoScreen(onNavigate = {}) } }
         composeRule.waitForIdle()

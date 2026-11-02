@@ -36,6 +36,8 @@ import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.batchInsert
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
+import org.jetbrains.exposed.sql.update
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.Date
 import kotlin.test.AfterTest
@@ -88,10 +90,6 @@ class ObservabilidadRoutesTest {
     private fun token(uid: String) = JWT.create().withIssuer("movi").withAudience("movi-client")
         .withClaim("userId", uid).withExpiresAt(Date(System.currentTimeMillis() + 60_000)).sign(Algorithm.HMAC256(secreto))
 
-    private fun usuarioDePrueba(encabezado: String?): String? = runCatching {
-        verificador.verify(encabezado!!.removePrefix("Bearer ")).getClaim("userId").asString()
-    }.getOrNull()
-
     private fun Application.modulo() {
         configureSerialization()
         authentication {
@@ -101,8 +99,8 @@ class ObservabilidadRoutesTest {
             }
         }
         routing {
-            fallosRoutes(usuarioDelToken = ::usuarioDePrueba)
-            erroresDelClienteRoutes()
+            fallosRoutes(verificador = verificador)
+            erroresDelClienteRoutes(verificador)
             authenticate("jwt") { usoRoutes() }
         }
     }
@@ -181,14 +179,54 @@ class ObservabilidadRoutesTest {
     }
 
     @Test
-    fun `el Algo fallo de la web entra a la misma tabla`() = testApplication {
+    fun `el Algo fallo de la web entra a la misma tabla y se atribuye solo por el token`() = testApplication {
         app()
-        client.post("/api/errores-del-cliente") { setBody("""{"mensaje":"TypeError: monto 1234567 null","navegador":"Safari","usuario":"$usuario"}""") }
-        val fila = filasDeFallos().single()
+        // El `usuario` del cuerpo lo escribe quien quiera: no atribuye.
+        client.post("/api/errores-del-cliente") { setBody("""{"mensaje":"TypeError: monto 1234567 null","navegador":"Safari","usuario":"$admin"}""") }
+        client.post("/api/errores-del-cliente") {
+            header(HttpHeaders.Authorization, "Bearer ${token(usuario)}")
+            setBody("""{"mensaje":"TypeError: otra","navegador":"Safari","usuario":"$admin"}""")
+        }
+        val filas = filasDeFallos()
+        assertEquals(setOf("", usuario), filas.map { it[FallosDeLaApp.userId] }.toSet())
+        val fila = filas.first { it[FallosDeLaApp.userId] == "" }
         assertEquals("web", fila[FallosDeLaApp.plataforma])
         assertEquals("TypeError", fila[FallosDeLaApp.tipo])
         assertFalse("1234567" in fila[FallosDeLaApp.mensaje])
-        assertEquals(usuario, fila[FallosDeLaApp.userId])
+    }
+
+    @Test
+    fun `un token de un usuario que no existe no atribuye`() = testApplication {
+        app()
+        client.post("/api/fallos") {
+            header(HttpHeaders.Authorization, "Bearer ${token("usr-borrado")}")
+            setBody(json.encodeToString(FalloDeLaApp.serializer(), fallo("f-borrado")))
+        }
+        assertEquals("", filasDeFallos().single()[FallosDeLaApp.userId])
+    }
+
+    @Test
+    fun `una inundacion de la misma huella solo se cuenta`() = testApplication {
+        app()
+        repeat(Observabilidad.FALLOS_POR_HUELLA_POR_HORA + 15) { i ->
+            client.post("/api/fallos") { setBody(json.encodeToString(FalloDeLaApp.serializer(), fallo("inund-$i"))) }
+        }
+        // Otro fallo, distinto, entra igual.
+        client.post("/api/fallos") { setBody(json.encodeToString(FalloDeLaApp.serializer(), fallo("real").copy(tipo = "IllegalStateException"))) }
+        assertEquals(Observabilidad.FALLOS_POR_HUELLA_POR_HORA + 1, filasDeFallos().size)
+        val r = json.decodeFromString<ResumenDeFallos>(client.get("/api/admin/fallos") { header(HttpHeaders.Authorization, "Bearer ${token(admin)}") }.bodyAsText())
+        assertEquals(Observabilidad.FALLOS_POR_HUELLA_POR_HORA + 15, r.grupos.first().cuantos)
+        assertEquals("IllegalStateException", r.grupos.last().tipo)
+    }
+
+    @Test
+    fun `un cuerpo con Content-Length de mas es 413 sin leerlo`() = testApplication {
+        app()
+        val res = client.post("/api/fallos") {
+            header(HttpHeaders.ContentLength, (MAX_CUERPO_DEL_FALLO + 1).toString())
+            setBody("x".repeat(MAX_CUERPO_DEL_FALLO + 1))
+        }
+        assertEquals(HttpStatusCode.PayloadTooLarge, res.status)
     }
 
     // ── /api/uso ─────────────────────────────────────────────────────────────────────────────
@@ -241,7 +279,7 @@ class ObservabilidadRoutesTest {
         app()
         for (ruta in listOf(
             "/api/admin/fallos", "/api/admin/uso", "/api/admin/uso/usuarios",
-            "/api/admin/uso/usuarios/$usuario/sesiones", "/api/admin/uso/sesiones/s1/eventos",
+            "/api/admin/uso/usuarios/$usuario/sesiones", "/api/admin/uso/sesiones/s1/eventos?usuario=$usuario",
         )) {
             assertEquals(HttpStatusCode.Forbidden, client.get(ruta) { header(HttpHeaders.Authorization, "Bearer ${token(usuario)}") }.status, ruta)
             assertEquals(HttpStatusCode.OK, client.get(ruta) { header(HttpHeaders.Authorization, "Bearer ${token(admin)}") }.status, ruta)
@@ -384,12 +422,32 @@ class ObservabilidadRoutesTest {
         assertEquals(3, sesiones.single().eventos)
         assertEquals("android", sesiones.single().plataforma)
         val linea = json.decodeFromString<List<com.jvillada.movi.shared.model.EventoDelRecorrido>>(
-            client.get("/api/admin/uso/sesiones/s1/eventos") { header(HttpHeaders.Authorization, adminHeader) }.bodyAsText(),
+            client.get("/api/admin/uso/sesiones/s1/eventos?usuario=$usuario") { header(HttpHeaders.Authorization, adminHeader) }.bodyAsText(),
         )
         assertEquals(listOf("SESION_EMPEZADA", "PANTALLA", "TOQUE"), linea.map { it.nombre })
         assertEquals(listOf("SISTEMA", "PANTALLA", "ACCION"), linea.map { it.tipo })
         assertEquals(mapOf("accion" to "SIGUIENTE"), linea.last().datos)
         assertEquals("PrimerUso(paso 2)", linea.last().ruta)
+        // La misma sesión pedida con otra persona no da nada: la sesión es de quien la tuvo.
+        val ajena = client.get("/api/admin/uso/sesiones/s1/eventos?usuario=$admin") { header(HttpHeaders.Authorization, adminHeader) }.bodyAsText()
+        assertEquals("[]", ajena)
+        assertEquals(HttpStatusCode.BadRequest, client.get("/api/admin/uso/sesiones/s1/eventos") { header(HttpHeaders.Authorization, adminHeader) }.status)
+    }
+
+    @Test
+    fun `con mandar uso apagado en el perfil el server no guarda nada`() = testApplication {
+        app()
+        transaction { Users.update({ Users.id eq usuario }) { it[Users.mandarUso] = false } }
+        val r = json.decodeFromString<RespuestaDeUso>(mandar(LoteDeUso(listOf(evento("x1", "CUENTA_CREADA")))).bodyAsText())
+        assertEquals(0, r.guardados)
+        runBlocking { Observabilidad.registrarCapturaActiva(usuario, "SMS", System.currentTimeMillis()) }
+        assertTrue(transaction { UsoDeLaApp.selectAll().toList() }.isEmpty())
+        // Los fallos no dependen del interruptor.
+        client.post("/api/fallos") {
+            header(HttpHeaders.Authorization, "Bearer ${token(usuario)}")
+            setBody(json.encodeToString(FalloDeLaApp.serializer(), fallo("f-igual")))
+        }
+        assertEquals(usuario, filasDeFallos().single()[FallosDeLaApp.userId])
     }
 
     /**
