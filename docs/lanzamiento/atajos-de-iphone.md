@@ -58,8 +58,10 @@ Tiene que instalarse como «Movi - Avisar un mensaje».
 ## 2. El atajo de mensajes (firmado)
 
 1. En la misma sección toca **«Agregar el atajo de mensajes»**. Safari descarga `Movi - Avisar un mensaje.shortcut`.
-2. Ábrelo (desde la barra de descargas o Archivos): Atajos muestra **«Configurar este atajo»** con la pregunta
-   «Pega tu código de Movi…».
+2. **Safari no lo abre solo** (verificado el 2-nov en dos iPhone con iOS 27): después de «Descargar», toca el
+   ícono a la izquierda de la barra de direcciones → **Descargas** → «Movi - Avisar un mensaje». Si no lo ves,
+   está en la app **Archivos → Descargas**. Al abrirlo, Atajos muestra **«Configurar este atajo»** con la
+   pregunta «Pega tu código de Movi…». (La app lo dice en el paso 2, `ABRIR_LO_DESCARGADO`.)
 3. Pega el código y toca **«Agregar atajo»**. El atajo queda como **«Movi - Avisar un mensaje»**.
 4. **Plan B** (probado el 2-nov en iOS 27 con el atajo de producción): pega tu código. Si «Agregar atajo» no
    responde (tampoco con el teclado cerrado), toca **«Omitir configuración»**: el atajo se agrega **con el código
@@ -116,6 +118,13 @@ cosa?»; si no, las dos con su rótulo, la de iOS 27 primero. Se recomiendan sie
    filtro se une con «y» y la automatización no correría nunca. `DAVIVIENDA` y las de sus bancos. (La app dice
    lo mismo.)
 
+**Alternativa: todos tus bancos con una sola tarjeta** (vuelta 115, pedido del dueño). En vez de una tarjeta por
+banco, una sola «Mensaje contiene `$`». Atrapa los avisos de todos los bancos, porque todos traen el monto. Los
+mensajes personales con «$» también pasan por Movi, que los descarta sin guardarlos: el server solo guarda lo que
+empieza por un banco y trae un monto (`seGuardaElSmsDelAtajo`; lo demás queda contado por día y motivo en
+`atajos_descartados`, sin texto ni remitente). La recomendada sigue siendo una tarjeta por banco con las palabras
+sugeridas. Ojo: un banco que escriba el monto solo con «COP», sin «$», no entraría por esta tarjeta.
+
 Las imágenes del atajo muestran también «Recibir **Contenido y 20 más** de **Ningún lado** · Si no hay entrada:
 Solicitar Texto».
 
@@ -126,6 +135,9 @@ Solicitar Texto».
    de sus bancos; la app las sugiere).
 3. **«Ejecutar de inmediato»** → **«Siguiente»** → el atajo **«Movi - Avisar un mensaje»**. «Ejecutar de
    inmediato» existe para «Mensaje» desde iOS 17.
+
+**Alternativa: una sola automatización** con «El mensaje contiene» `$` en vez de una por banco, con lo mismo que
+la tarjeta única de iOS 27 (arriba).
 
 ### Antes de iOS 17
 

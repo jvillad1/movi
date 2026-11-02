@@ -128,6 +128,14 @@ const val DETALLE_CREAR_OTRO: String =
     "El código de ahora deja de servir. Después abre el atajo y cambia el código de la acción «Texto» por el " +
         "nuevo (en el de Apple Pay, el de «Encabezados»)."
 
+/**
+ * Vuelta 115 · Safari no abre el atajo solo (verificado en dos iPhone con iOS 27): después de «Descargar»
+ * hay que abrir el archivo desde las descargas. Va antes de [AL_AGREGAR_EL_ATAJO].
+ */
+const val ABRIR_LO_DESCARGADO: String =
+    "Safari solo lo descarga: toca el ícono a la izquierda de la barra de direcciones → Descargas → " +
+        "«$NOMBRE_DEL_ATAJO_DE_MENSAJES». Si no lo ves, está en la app Archivos → Descargas."
+
 /** Vuelta 114 · lo que dice el paso 2 al agregar el atajo: dónde pegar el código. */
 const val AL_AGREGAR_EL_ATAJO: String =
     "Al agregarlo, Atajos muestra «Configurar este atajo» y te pide el código: pégalo y toca «Agregar atajo»."
@@ -218,6 +226,27 @@ fun pasosDeLaAutomatizacionDeMensajes(palabras: List<String>, variante: Variante
         VarianteDeLaAutomatizacion.ANTES_DE_IOS_17 -> listOf(ANTES_DE_IOS_17)
     }
 }
+
+/**
+ * Vuelta 115 · **la alternativa a una tarjeta por banco** (pedido del dueño): una sola condición con «$». La
+ * recomendada sigue siendo una por banco con las palabras sugeridas; esta va debajo de los pasos, como opción.
+ * El server no cambia: lo que no empieza por un banco y no trae monto se descarta sin guardarse
+ * (`seGuardaElSmsDelAtajo`, `atajos_descartados` solo cuenta por día y motivo). `null` antes de iOS 17.
+ */
+fun unaSolaCondicionConPesos(variante: VarianteDeLaAutomatizacion): Pair<String, String>? {
+    val (titulo, una) = when (variante) {
+        VarianteDeLaAutomatizacion.IOS_27_O_MAS ->
+            "Todos tus bancos con una sola tarjeta" to "una sola tarjeta «Mensaje contiene \$» en vez de una por banco"
+        VarianteDeLaAutomatizacion.IOS_17_A_26 ->
+            "Todos tus bancos con una sola automatización" to
+                "una sola automatización con «El mensaje contiene» y «\$» en vez de una por banco"
+        VarianteDeLaAutomatizacion.ANTES_DE_IOS_17 -> return null
+    }
+    return titulo to "Más simple: $una. Atrapa los avisos de todos tus bancos, porque todos traen el monto. " +
+        "Los mensajes personales con «\$» también pasan por Movi, que los descarta sin guardarlos."
+}
+
+const val TAG_UNA_SOLA_CONDICION: String = "automatizacion-una-sola-condicion"
 
 /** El último paso: la palabra hay que comprobarla con un SMS de verdad, porque cada banco firma distinto. */
 const val PROBAR_CON_UN_SMS_REAL: String =
@@ -441,6 +470,8 @@ fun DesdeTuIphone(
             PasoDelAtajo(2, "Agrega los atajos") {
                 val codigo = (estado as? EstadoDelCodigo.Listo)?.codigo
                 val url = apiBaseUrl.trimEnd('/') + RUTA_DE_LA_CAPTURA_POR_ATAJO
+                Text(ABRIR_LO_DESCARGADO, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                Spacer(Modifier.height(Espacio.xxs))
                 Text(AL_AGREGAR_EL_ATAJO, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                 Spacer(Modifier.height(Espacio.xxs))
                 Text(PLAN_B_DEL_CODIGO, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
@@ -580,6 +611,13 @@ private fun VarianteDeLaAutomatizacionDeMensajes(palabras: List<String>, variant
                     )
                 }
                 RecetaDelAtajo(pasosDeLaAutomatizacionDeMensajes(palabras, variante))
+                unaSolaCondicionConPesos(variante)?.let { (titulo, alternativa) ->
+                    Spacer(Modifier.height(Espacio.xs))
+                    Column(modifier = Modifier.testTag(TAG_UNA_SOLA_CONDICION)) {
+                        Text(titulo, style = Movi.textos.apoyo, color = Movi.colores.texto)
+                        Text(alternativa, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                    }
+                }
             }
         }
     }

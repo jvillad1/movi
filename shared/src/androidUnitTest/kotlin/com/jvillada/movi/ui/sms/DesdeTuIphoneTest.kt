@@ -316,6 +316,26 @@ class DesdeTuIphoneTest {
         assertTrue(de17.any { "«$NOMBRE_DEL_ATAJO_DE_MENSAJES»" in it })
         assertTrue(de17.any { "Haz una automatización más con cada uno: «DAVIVIENDA»" in it })
         assertEquals(listOf(ANTES_DE_IOS_17), pasosDeLaAutomatizacionDeMensajes(listOf("Bancolombia"), VarianteDeLaAutomatizacion.ANTES_DE_IOS_17))
+
+        // Vuelta 115: la alternativa a una tarjeta por banco, una sola condición con «$», en las dos variantes.
+        val (titulo27, una27) = unaSolaCondicionConPesos(VarianteDeLaAutomatizacion.IOS_27_O_MAS)!!
+        assertEquals("Todos tus bancos con una sola tarjeta", titulo27)
+        assertTrue(una27.startsWith("Más simple: una sola tarjeta «Mensaje contiene \$» en vez de una por banco."), una27)
+        val (titulo17, una17) = unaSolaCondicionConPesos(VarianteDeLaAutomatizacion.IOS_17_A_26)!!
+        assertEquals("Todos tus bancos con una sola automatización", titulo17)
+        assertTrue("«El mensaje contiene» y «\$»" in una17, una17)
+        for (texto in listOf(una27, una17)) {
+            assertTrue(
+                texto.endsWith(
+                    "Atrapa los avisos de todos tus bancos, porque todos traen el monto. " +
+                        "Los mensajes personales con «\$» también pasan por Movi, que los descarta sin guardarlos.",
+                ),
+                texto,
+            )
+        }
+        assertEquals(null, unaSolaCondicionConPesos(VarianteDeLaAutomatizacion.ANTES_DE_IOS_17))
+        // La recomendada sigue siendo una por banco: los pasos no la cambian.
+        assertTrue(de27.none { "\$" in it } && de17.none { "\$" in it }, "los pasos siguen con las palabras de los bancos")
         assertTrue("notificación" in ANTES_DE_IOS_17 && "correos" in ANTES_DE_IOS_17)
     }
 
@@ -327,6 +347,9 @@ class DesdeTuIphoneTest {
         assertTrue(hay(ROTULO_IOS_27_O_MAS))
         assertTrue(hay(ROTULO_IOS_17_A_26))
         assertFalse(hay(TU_IPHONE_MUESTRA_OTRA_COSA))
+        // La alternativa de «$» va debajo de cada variante, después de sus pasos.
+        assertEquals(2, composeRule.onAllNodes(androidx.compose.ui.test.hasTestTag(TAG_UNA_SOLA_CONDICION), useUnmergedTree = true).fetchSemanticsNodes().size)
+        assertTrue(hay("Todos tus bancos con una sola tarjeta") && hay("Todos tus bancos con una sola automatización"))
     }
 
     @Test
@@ -359,6 +382,13 @@ class DesdeTuIphoneTest {
     @Test
     fun `el paso de agregar el atajo trae el plan B y donde cambiar el codigo`() {
         montar(ServerDeCodigos(CodigoDeCaptura(vigente = true, creadoEn = CREADO, atajoDeMensajes = true)))
+        // Vuelta 115: Safari solo descarga el atajo (verificado en iOS 27); se abre desde las descargas.
+        assertTrue(hay(ABRIR_LO_DESCARGADO))
+        assertEquals(
+            "Safari solo lo descarga: toca el ícono a la izquierda de la barra de direcciones → Descargas → " +
+                "«$NOMBRE_DEL_ATAJO_DE_MENSAJES». Si no lo ves, está en la app Archivos → Descargas.",
+            ABRIR_LO_DESCARGADO,
+        )
         assertTrue(hay(AL_AGREGAR_EL_ATAJO))
         assertTrue(hay(PLAN_B_DEL_CODIGO))
         // Vuelta 115: «Omitir configuración» agrega el atajo con el código ya pegado; la acción
