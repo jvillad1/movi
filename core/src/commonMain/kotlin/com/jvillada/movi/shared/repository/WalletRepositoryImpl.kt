@@ -928,6 +928,22 @@ class WalletRepositoryImpl(
         return response.body()
     }
 
+    // Mismo idioma que renameAccount: los rechazos (400 nombre/saldo, 422 tipo/préstamo/bien) son
+    // texto que la hoja tiene que poder mostrar.
+    override suspend fun editarCuenta(
+        id: String,
+        pedido: com.jvillada.movi.shared.model.EditarCuentaRequest,
+    ): AdjustAccountBalanceResponse {
+        val response = client.put("$baseUrl/api/accounts/$id") {
+            contentType(ContentType.Application.Json)
+            setBody(pedido)
+        }
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
+    }
+
     override suspend fun updateAccountCondition(id: String, condicionadaA: String?): Account {
         val response = client.put("$baseUrl/api/accounts/$id/conditioned-to") {
             contentType(ContentType.Application.Json)

@@ -297,6 +297,20 @@ open class NoOpRepository(
         return renombrada
     }
 
+    /** Como [renameAccount], con el tipo; el saldo no se toca (ese ajuste lo escribe el server). */
+    var edicionesPedidas: MutableList<Pair<String, com.jvillada.movi.shared.model.EditarCuentaRequest>> = mutableListOf()
+    override suspend fun editarCuenta(
+        id: String,
+        pedido: com.jvillada.movi.shared.model.EditarCuentaRequest,
+    ): AdjustAccountBalanceResponse {
+        edicionesPedidas += id to pedido
+        val i = cuentasDelServer.indexOfFirst { it.id == id }
+        val base = if (i >= 0) cuentasDelServer[i] else Account(id, pedido.name, AccountType.SAVINGS, 0L)
+        val editada = base.copy(name = pedido.name, type = pedido.type ?: base.type)
+        if (i >= 0) cuentasDelServer[i] = editada else cuentasDelServer += editada
+        return AdjustAccountBalanceResponse(editada)
+    }
+
     override suspend fun updateAccountCondition(id: String, condicionadaA: String?): Account {
         val i = cuentasDelServer.indexOfFirst { it.id == id }
         // Se normaliza como lo hace el server (mismo helper de :core), para que el test que mira
