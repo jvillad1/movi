@@ -1,5 +1,8 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.shared.model.DIAS_DE_LA_TARJETA_DE_CIERRE_QUINCENAL
+import com.jvillada.movi.shared.model.periodoHomologo
+import com.jvillada.movi.shared.model.periodoDelId
 import com.jvillada.movi.server.db.CierresDescartados
 import com.jvillada.movi.server.db.CierresGuardados
 import com.jvillada.movi.server.db.Events
@@ -67,7 +70,7 @@ fun Route.cierreDelPeriodoRoutes() {
     post("/api/cierre-del-periodo/descartar") {
         val uid = call.userId()
         val periodo = runCatching { call.receive<DescartarCierreRequest>() }.getOrNull()?.periodo?.trim()
-        if (periodo == null || periodoDelPrefijo(periodo) == null) {
+        if (periodo == null || periodoDelId(periodo) == null) {
             return@post call.respond(HttpStatusCode.BadRequest, "Falta el período")
         }
         dbQuery {
@@ -89,7 +92,7 @@ fun Route.cierreDelPeriodoRoutes() {
     post("/api/cierre-del-periodo/actualizar") {
         val uid = call.userId()
         val periodo = runCatching { call.receive<ActualizarCierreRequest>() }.getOrNull()?.periodo?.trim()
-        if (periodo == null || periodoDelPrefijo(periodo) == null) {
+        if (periodo == null || periodoDelId(periodo) == null) {
             return@post call.respond(HttpStatusCode.BadRequest, "Falta el período")
         }
         // Otro período que el último cerrado: 404, y no se toca nada. Si es el último pero ya no queda
@@ -107,7 +110,7 @@ private const val MEDIO_DIA_MS = 12L * 60 * 60 * 1000
 /** El prefijo del último período cerrado a [hoy] (el que `GET /api/cierre-del-periodo` resume). */
 private suspend fun periodoCerradoDe(uid: String, hoy: LocalDate): String {
     val ajustes = ajustesDePeriodoDe(uid)
-    return periodoAnterior(periodoDe(appDateToEpochMillis(hoy) + MEDIO_DIA_MS, ajustes)).prefijo
+    return periodoAnterior(periodoDe(appDateToEpochMillis(hoy) + MEDIO_DIA_MS, ajustes), ajustes).prefijo
 }
 
 /**
@@ -139,7 +142,7 @@ internal suspend fun cierreDelPeriodoDe(
     val ajustes = ajustesDePeriodoDe(uid)
     val ahora = appDateToEpochMillis(hoy) + MEDIO_DIA_MS
     val enCurso = periodoDe(ahora, ajustes)
-    val cerrado = periodoAnterior(enCurso)
+    val cerrado = periodoAnterior(enCurso, ajustes)
     if (soloElPeriodo != null && cerrado.prefijo != soloElPeriodo) return null
     val inicioDelEnCurso = epochMillisToAppDate(ventanaDe(enCurso, ajustes).first)
     val diaDelPeriodoNuevo = ChronoUnit.DAYS.between(inicioDelEnCurso, hoy).toInt() + 1
@@ -148,7 +151,9 @@ internal suspend fun cierreDelPeriodoDe(
             .where { (CierresDescartados.userId eq uid) and (CierresDescartados.periodo eq cerrado.prefijo) }
             .any()
     }
-    if (soloSiSeMuestra && (descartado || diaDelPeriodoNuevo !in 1..DIAS_DE_LA_TARJETA_DE_CIERRE)) return null
+    // Vuelta 105 · una quincena muestra su tarjeta 3 días (D4); la regla vive en `seMuestraEnHoy`.
+    val diasDeLaTarjeta = if (ajustes.esQuincenal) DIAS_DE_LA_TARJETA_DE_CIERRE_QUINCENAL else DIAS_DE_LA_TARJETA_DE_CIERRE
+    if (soloSiSeMuestra && (descartado || diaDelPeriodoNuevo !in 1..diasDeLaTarjeta)) return null
     val fresco = armarElCierre(uid, ahora, ajustes, cerrado, diaDelPeriodoNuevo, descartado)
     return conLaFoto(uid, cerrado.prefijo, fresco, diaDelPeriodoNuevo, descartado, reemplazarLaFoto)
 }
@@ -306,7 +311,8 @@ private fun org.jetbrains.exposed.sql.Transaction.anteriorCubierto(
     ahora: Long,
     ajustes: PeriodSettings,
 ): com.jvillada.movi.shared.model.ResumenDePeriodo? {
-    val anterior = periodoAnterior(cerrado)
+    // Vuelta 105 · contra el homólogo (D6): en la quincena, la misma quincena del mes anterior.
+    val anterior = periodoHomologo(cerrado, ajustes)
     val primero = Events.timestamp.min()
     val primerMovimiento = Events.select(primero).where { Events.userId eq uid }.firstOrNull()?.get(primero) ?: return null
     if (primerMovimiento > ventanaDe(anterior, ajustes).first) return null

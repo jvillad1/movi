@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.shared.model.periodoHomologo
 import com.jvillada.movi.server.espacios.loCompartidoDelUsuario
 import com.jvillada.movi.server.balance.computeBalances
 import com.jvillada.movi.server.balance.loadNonVoidedEventsIn
@@ -138,13 +139,16 @@ internal fun Transaction.loQueSeSaleDeLoNormalDe(
     // Los períodos anteriores cubiertos, del más reciente al más viejo.
     val anteriores = mutableListOf<Pair<PeriodoFinanciero, LongRange>>()
     var p = actual
+    // Vuelta 105 · «lo normal» se promedia sobre los homólogos (D6): en la quincena, la misma quincena
+    // de los meses anteriores. En el mensual el homólogo es el anterior: lo de siempre.
     repeat(PERIODOS_DE_LO_NORMAL) {
-        p = periodoAnterior(p)
+        p = periodoHomologo(p, ajustes)
         val v = ventanaDe(p, ajustes)
         val arranque: Long = v.first
         if (primerMovimiento <= arranque) anteriores += p to v
     }
-    val previo = periodoAnterior(actual)
+    // El cobro anterior de una suscripción mensual cae en el homólogo (la misma quincena del mes pasado).
+    val previo = periodoHomologo(actual, ajustes)
     val ventanaPrevia = ventanaDe(previo, ajustes)
     // Una sola lectura para todo lo de antes: los comercios conocidos (unos cuatro meses), los
     // períodos de «lo normal» y el cobro anterior de cada suscripción.
@@ -287,7 +291,7 @@ private fun cambiosDeCategoria(
 internal fun Transaction.cambiosDeCategoriaDe(uid: String, hoy: LocalDate, ajustes: PeriodSettings): List<CambioDeCategoriaDeUnRecurrente> {
     val actual = periodoDe(appDateToEpochMillis(hoy) + MEDIO_DIA_MS, ajustes)
     val ventana = ventanaDe(actual, ajustes)
-    val previo = periodoAnterior(actual)
+    val previo = periodoHomologo(actual, ajustes)
     val ventanaPrevia = ventanaDe(previo, ajustes)
     val delPeriodo = loadEventsBetween(uid, ventana.first, ventana.last + 1)
     if (delPeriodo.isEmpty()) return emptyList()

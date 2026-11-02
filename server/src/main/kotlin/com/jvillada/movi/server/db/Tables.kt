@@ -42,6 +42,14 @@ object Users : Table("users") {
      */
     val periodWeekendRule = varchar("period_weekend_rule", 32).nullable()
     /**
+     * Vuelta 105 · **cada cuánto arranca el período**: el nombre de un `FrecuenciaDelPeriodo` (:core),
+     * «MENSUAL» o «QUINCENAL». Nullable: NULL es MENSUAL, así que ninguna fila existente cambia y el
+     * ALTER de `createMissingTablesAndColumns` no puede fallar (ver `SchemaDeArranqueTest`).
+     */
+    val periodFrequency = varchar("period_frequency", 16).nullable()
+    /** Vuelta 105 · QUINCENAL: el segundo día de la quincena (el primero es [periodCutoffDay]). Nullable. */
+    val periodSecondDay = integer("period_second_day").nullable()
+    /**
      * Con cuántos días de anticipación avisar un vencimiento.
      *
      * Antes solo existía como variable de entorno del server (`REMINDER_LEAD_DAYS`): global para
@@ -462,9 +470,16 @@ object CardPaymentDismissals : Table("card_payment_dismissals") {
  * ANTES de mandar (la clave primaria es el candado) y se borra si el envío falla, para reintentar en
  * el barrido siguiente. Tabla nueva: entra solo al `SchemaUtils.create` del arranque.
  */
+/**
+ * Vuelta 105 · el largo de la clave de período de las tablas `cierres_*`: «2026-10-15» (una quincena)
+ * tiene 10. Las tablas viejas nacieron con 7 y `Migrations.agrandarLaClaveDeLosCierres` las agranda.
+ */
+const val LARGO_DEL_ID_DEL_PERIODO: Int = 10
+
 object CierresEnviados : Table("cierres_enviados") {
     val userId    = varchar("user_id", 50)
-    val periodo   = varchar("periodo", 7)
+    /** El id del período: «2026-10», o «2026-10-15» para una quincena (vuelta 105: de 7 a 10, ver `Migrations`). */
+    val periodo   = varchar("periodo", LARGO_DEL_ID_DEL_PERIODO)
     val enviadoEn = long("enviado_en")
     override val primaryKey = PrimaryKey(userId, periodo)
 }
@@ -480,7 +495,7 @@ object CierresEnviados : Table("cierres_enviados") {
  */
 object CierresGuardados : Table("cierres_guardados") {
     val userId     = varchar("user_id", 50)
-    val periodo    = varchar("periodo", 7)
+    val periodo    = varchar("periodo", LARGO_DEL_ID_DEL_PERIODO)
     val datos      = text("datos")
     val guardadoEn = long("guardado_en")
     override val primaryKey = PrimaryKey(userId, periodo)
@@ -493,7 +508,7 @@ object CierresGuardados : Table("cierres_guardados") {
  */
 object CierresDescartados : Table("cierres_descartados") {
     val userId       = varchar("user_id", 50)
-    val periodo      = varchar("periodo", 7)
+    val periodo      = varchar("periodo", LARGO_DEL_ID_DEL_PERIODO)
     val descartadoEn = long("descartado_en")
     override val primaryKey = PrimaryKey(userId, periodo)
 }

@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.shared.model.mesDeReferencia
 import com.jvillada.movi.server.reminders.periodoDelDueno
 import com.jvillada.movi.server.reminders.ocurrenciaEnJuego
 import com.jvillada.movi.server.reminders.ocurrenciaPorPreguntar
@@ -981,7 +982,8 @@ private fun org.jetbrains.exposed.sql.Transaction.pagadoAntesDelVencimiento(
     today: java.time.LocalDate,
 ): Boolean {
     if (eventId == null) return false
-    if (vencimiento !in diasDelPeriodo(today, ajustesDelPeriodoSinSuspender(uid))) return false
+    // Vuelta 105 · el período de una obligación es el mes de referencia (identidad en el mensual).
+    if (vencimiento !in diasDelPeriodo(today, ajustesDelPeriodoSinSuspender(uid).mesDeReferencia())) return false
     val fila = Events.selectAll()
         .where { (Events.id eq eventId) and (Events.userId eq uid) }
         .firstOrNull() ?: return false
@@ -1067,7 +1069,9 @@ internal fun org.jetbrains.exposed.sql.Transaction.ocurrenciasReales(
     today: java.time.LocalDate,
     periodo: com.jvillada.movi.shared.model.PeriodSettings,
 ): OcurrenciasReales {
-    val diasDelPeriodoEnCurso = diasDelPeriodo(today, periodo)
+    // Vuelta 105 · las ocurrencias son de obligaciones mensuales: su franja es el mes de referencia, que
+    // en la quincena contiene la quincena en curso (identidad en el mensual).
+    val diasDelPeriodoEnCurso = diasDelPeriodo(today, periodo.mesDeReferencia())
     // Solo reglas REALES. La cuota de un crédito y el pago de una tarjeta son reglas
     // sintéticas derivadas de `credit_terms`/`card_terms`, con su propia pantalla y su
     // propia forma de saldarse (ahí el pago mueve la deuda, que es un hecho más fuerte
@@ -1434,7 +1438,7 @@ internal fun resolverOcurrencias(
         // que la sostiene es un pago hecho HASTA el día de la pausa (lo ya pagado queda; pagar y pausar el
         // mismo día no pierde el pago): solo un concluyente de entonces la empareja; un movimiento
         // posterior nunca se lo lleva una regla pausada. Un período que ya cerró no se toca.
-        pausadaEn(rule, due) && !due.isBefore(diasDelPeriodo(today, periodo).start) -> {
+        pausadaEn(rule, due) && !due.isBefore(diasDelPeriodo(today, periodo.mesDeReferencia()).start) -> {
             val desde = java.time.LocalDate.parse(rule.pausadaDesde!!.trim())
             val antes = lectura.evidenciaPara(rule, due, today)
                 .filter { !epochMillisToAppDate(it.timestamp).isAfter(desde) }

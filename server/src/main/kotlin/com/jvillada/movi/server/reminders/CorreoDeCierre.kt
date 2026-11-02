@@ -74,7 +74,7 @@ private suspend fun mandarElCierreDe(uid: String, correo: String, hoy: LocalDate
     val enCurso = periodoDe(appDateToEpochMillis(hoy) + 12 * 3_600_000L, ajustes)
     val dia = ChronoUnit.DAYS.between(epochMillisToAppDate(ventanaDe(enCurso, ajustes).first), hoy).toInt() + 1
     if (!esHoraDeAvisarElCierre(dia)) return false
-    val periodo = periodoAnterior(enCurso).prefijo
+    val periodo = periodoAnterior(enCurso, ajustes).prefijo
     val yaSalio = dbQuery {
         CierresEnviados.selectAll()
             .where { (CierresEnviados.userId eq uid) and (CierresEnviados.periodo eq periodo) }

@@ -73,7 +73,14 @@ fun Route.financeRoutes() {
         val uid = call.userId()
         val ajustes = ajustesDePeriodoDe(uid)
         val ahora = AppClock.now().toInstant().toEpochMilli()
-        val ventana = ventanaDe(periodoAnterior(periodoDe(ahora, ajustes)), ajustes)
+        val anterior = periodoAnterior(periodoDe(ahora, ajustes), ajustes)
+        // Vuelta 105 · un presupuesto se escribe al mes (D2): con quincenas se propone desde el gasto de
+        // las dos últimas quincenas cerradas, o sea un mes. En el mensual, el período anterior de siempre.
+        val ventana = if (ajustes.esQuincenal) {
+            ventanaDe(periodoAnterior(anterior, ajustes), ajustes).first..ventanaDe(anterior, ajustes).last
+        } else {
+            ventanaDe(anterior, ajustes)
+        }
         val propuestas = dbQuery {
             val voidedIds = VoidEvents.selectAll()
                 .where { VoidEvents.userId eq uid }

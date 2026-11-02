@@ -2,6 +2,7 @@ package com.jvillada.movi.server.reminders
 
 import com.jvillada.movi.shared.model.candidatoFueraDeProporcion
 import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.shared.model.mesDeReferencia
 import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.server.time.epochMillisToAppDate
 import com.jvillada.movi.shared.model.DestinoConocido
@@ -125,6 +126,8 @@ fun occurrenceWindow(
     windowDays: Long = OCCURRENCE_WINDOW_DAYS,
     settings: PeriodSettings = PeriodSettings(),
 ): ClosedRange<LocalDate> {
+    // Vuelta 105 · una obligación mensual se cuenta por el mes de referencia (identidad en el mensual).
+    val settings = settings.mesDeReferencia()
     // El piso nunca cae antes del PERÍODO del vencimiento: ver el KDoc de OCCURRENCE_WINDOW_DAYS.
     // Con corte 1 es el primer día del mes, lo de siempre; con corte 25 un pago del día 1 que se
     // hizo el 27 del mes anterior ya es de ese período, y tiene que poder proponerse.
@@ -560,6 +563,8 @@ private fun candidatosDelAbono(
     zone: ZoneId,
     settings: PeriodSettings,
 ): List<CandidatoPuntuado> {
+    // Vuelta 105 · una obligación mensual se cuenta por el mes de referencia (identidad en el mensual).
+    val settings = settings.mesDeReferencia()
     val periodo = diasDelPeriodo(dueDate, settings, zone)
     return events
         .asSequence()
