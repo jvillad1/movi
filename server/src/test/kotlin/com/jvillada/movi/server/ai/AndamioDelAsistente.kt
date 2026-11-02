@@ -50,6 +50,8 @@ internal class AndamioDelAsistente(
         LecturasDePapeles, ConversacionesDelAsistente, AccionesPropuestas, MemoriaDelAsistente,
         // Las que leen las tres preguntas que Movi contesta sin el modelo (`LasPreguntasSugeridas.kt`).
         AnomaliasDescartadas, DestinosDescartados, DebitosDescartados, ReglasDeComercio,
+        // Vuelta 106 · el tope de preguntas libres por mes.
+        AjustesDeLaIa, TopesDeLaIaPorUsuario,
     )
 
     private val tablas: Array<Table> = tablasDeSiempre + tablasDeMas

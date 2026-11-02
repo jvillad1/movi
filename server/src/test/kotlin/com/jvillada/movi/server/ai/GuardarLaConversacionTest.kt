@@ -142,8 +142,9 @@ class GuardarLaConversacionTest {
 
     @Test
     fun `de cada dueno quedan las ultimas, no todas`() {
+        // Una por día: las más viejas tienen más de un mes (la poda no toca lo del mes, vuelta 106).
         repeat(CUANTAS_CONVERSACIONES_SE_GUARDAN + 5) { i ->
-            guardar(pregunta = "pregunta $i", cuando = 1_000L + i)
+            guardar(pregunta = "pregunta $i", cuando = 1_000L + i * UN_DIA)
         }
 
         val filas = guardadas()
@@ -162,10 +163,32 @@ class GuardarLaConversacionTest {
             }
         }
         guardar(uid = "otro-dueno", pregunta = "la del otro")
-        repeat(CUANTAS_CONVERSACIONES_SE_GUARDAN + 3) { i -> guardar(pregunta = "mía $i", cuando = 2_000L + i) }
+        repeat(CUANTAS_CONVERSACIONES_SE_GUARDAN + 3) { i -> guardar(pregunta = "mía $i", cuando = 2_000L + i * UN_DIA) }
 
         assertEquals(1, guardadas("otro-dueno").size)
         assertEquals("la del otro", guardadas("otro-dueno").single()[AiTurns.pregunta])
+    }
+
+    /**
+     * Vuelta 106 · **lo del mes no se poda**: con esos turnos se cuenta el tope de preguntas y lo que
+     * gastó cada uno. Con una excepción de más de 200 preguntas al mes, podarlos lo dejaría pasar
+     * del tope y el panel mostraría de menos.
+     */
+    @Test
+    fun `lo del mes y de los ultimos 31 dias no se poda aunque pase de las ultimas N`() {
+        val ahora = java.time.LocalDate.of(2026, 11, 28).atStartOfDay(com.jvillada.movi.server.time.AppClock.zone).toInstant().toEpochMilli()
+        // Diez del mes pasado, viejas de verdad (más de 31 días).
+        repeat(10) { i -> guardar(pregunta = "vieja $i", cuando = ahora - 60 * UN_DIA + i) }
+        // Doscientas cincuenta de este mes.
+        repeat(CUANTAS_CONVERSACIONES_SE_GUARDAN + 50) { i -> guardar(pregunta = "del mes $i", cuando = ahora - 20 * UN_DIA + i) }
+
+        val filas = guardadas()
+        assertEquals(CUANTAS_CONVERSACIONES_SE_GUARDAN + 50, filas.size, "las del mes se quedan todas; las viejas se van")
+        assertFalse(filas.any { it[AiTurns.pregunta].startsWith("vieja") })
+    }
+
+    private companion object {
+        const val UN_DIA = 24L * 60 * 60 * 1000
     }
 
     /**

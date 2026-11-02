@@ -906,6 +906,12 @@ antes cortado, para que la prueba mida lo que dice) y «Movi propone hoy» que n
   IA. No van mientras Movi escribe, ni cuando el aviso de «IA no disponible» ya pone las tres debajo.
 - Lo vigilan `TextoConFormatoTest` y `PreguntasParaSeguirTest` (puras) y `MoviAiConversaConFormatoTest`
   (Robolectric: viñetas y no «- », la burbuja con los tokens en los dos temas, las píldoras y su id).
+- **El tope del mes** (vuelta 106). Cuando quedan `AVISAR_CUANDO_QUEDEN` preguntas libres o menos, debajo
+  de la última respuesta va **una línea** en `apoyo` y `textoMedio`, alineada con los globos del asistente
+  (`Espacio.xxl` a la izquierda, `AvisoDelTopeDelMes`): «Te quedan 10 preguntas este mes». No es una
+  tarjeta ni lleva color de alerta: es un dato, no un error. Al llegar, la burbuja dice
+  `fraseDelTopeDelMes` y debajo van las tres sugeridas como en el aviso de «IA no disponible»
+  (`LasQueFuncionanSinLaIa`), porque no cuentan para el tope. Lo vigila `MoviAiTopeDelMesTest`.
 
 ## 19. Vuelta de diseño 13: Agregar, por dentro
 

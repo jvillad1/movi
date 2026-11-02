@@ -99,6 +99,41 @@ class LaIaNoEstaDisponibleTest {
         assertEquals(1, pedidos.size, "con la clave rechazada tampoco")
     }
 
+    /**
+     * Vuelta 106 · **un 400 de parámetros falla visible**: reintentarlo con otro modelo escondería un
+     * error nuestro detrás de una respuesta más cara. Tampoco un 404 (un modelo que no existe).
+     */
+    @Test
+    fun `un 400 de parametros o un 404 no prueban con el respaldo`() = runBlocking {
+        val pedidos = mutableListOf<String>()
+        val falla = pedidoMalArmado()
+        assertSame(falla, assertFailsWith<Exception> { modeloQueFallaCon(falla, pedidos).siguienteVuelta(true) })
+        assertEquals(listOf(MODELO_DE_TODOS_LOS_DIAS), pedidos)
+
+        pedidos.clear()
+        assertFailsWith<Exception> { modeloQueFallaCon(modeloQueNoExiste(), pedidos).siguienteVuelta(true) }
+        assertEquals(1, pedidos.size)
+    }
+
+    /** Un 5xx o la red sí prueban con el respaldo, que es Sonnet 5.5, y queda anotado en la observabilidad. */
+    @Test
+    fun `un 5xx o un timeout prueban con sonnet 5_5 y queda en las metricas`() = runBlocking {
+        assertEquals("claude-sonnet-5-5", MODELO_DE_RESPALDO)
+        com.jvillada.movi.server.observabilidad.Metricas.reiniciar()
+        val pedidos = mutableListOf<String>()
+        assertFailsWith<Exception> { modeloQueFallaCon(errorInterno(), pedidos).siguienteVuelta(true) }
+        assertEquals(listOf(MODELO_DE_TODOS_LOS_DIAS, MODELO_DE_RESPALDO), pedidos)
+        pedidos.clear()
+        assertFailsWith<Exception> { modeloQueFallaCon(java.io.IOException("timeout"), pedidos).siguienteVuelta(true) }
+        assertEquals(listOf(MODELO_DE_TODOS_LOS_DIAS, MODELO_DE_RESPALDO), pedidos)
+
+        val respaldos = com.jvillada.movi.server.observabilidad.Metricas.cerrado(Long.MAX_VALUE).servicios
+            .filterKeys { it.servicio == com.jvillada.movi.server.observabilidad.Servicio.RESPALDO_DE_LA_IA }
+            .keys.map { it.operacion }.toSet()
+        assertEquals(setOf("$MODELO_DE_RESPALDO · servidor", "$MODELO_DE_RESPALDO · red"), respaldos)
+        com.jvillada.movi.server.observabilidad.Metricas.reiniciar()
+    }
+
     @Test
     fun `saturada si prueba con el respaldo`() = runBlocking {
         val pedidos = mutableListOf<String>()

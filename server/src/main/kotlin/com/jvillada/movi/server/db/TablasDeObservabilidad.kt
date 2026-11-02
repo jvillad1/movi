@@ -55,6 +55,12 @@ object MetricasDeServicios : Table("metricas_de_servicios") {
     val p95Ms         = long("p95_ms")
     val maximoMs      = long("maximo_ms")
     val cubetas       = varchar("cubetas", 400)
+    /**
+     * Vuelta 106 · lo que costaron esas llamadas, en **microdólares**, calculado llamada por llamada
+     * con `PreciosDeLaIa` (ahí se sabe el tramo de Haiku 5.5). NULL en las filas de antes, que
+     * no lo tenían, y en los servicios que no son la IA. Nullable: la tabla ya existe en producción.
+     */
+    val costoMicrodolares = long("costo_microdolares").nullable()
     override val primaryKey = PrimaryKey(escala, inicio, servicio, operacion)
 }
 
@@ -73,9 +79,9 @@ object ActividadDelServidor : Table("actividad_del_servidor") {
 }
 
 /**
- * **La IA por día**: llamadas, fichas y cuántos usuarios distintos la usaron. Sin el usuario: la cuenta.
- * Es lo que dice cuánto cuesta la IA por usuario activo. No hay columna de costo en plata: los precios
- * por ficha no están en el código, y escribirlos de memoria sería inventarlos (ver CLAUDE.md).
+ * **La IA por día**: llamadas, fichas, lo que costó y cuántos usuarios distintos la usaron. Sin el
+ * usuario: la cuenta. Es lo que dice cuánto cuesta la IA por usuario activo. Desde la vuelta 106 los
+ * precios están en el código, con su fuente y su fecha (`PreciosDeLaIa`).
  */
 object IaPorDia : Table("ia_por_dia") {
     /** `yyyy-MM-dd`, en la zona de la app. */
@@ -86,6 +92,11 @@ object IaPorDia : Table("ia_por_dia") {
     val fichasSalida  = long("fichas_salida")
     val fichasCache   = long("fichas_cache")
     val usuarios      = integer("usuarios")
+    /**
+     * Vuelta 106 · la suma de `metricas_de_servicios.costo_microdolares` del día, en microdólares.
+     * NULL en los días de antes de que se midiera. Nullable: la tabla ya existe en producción.
+     */
+    val costoMicrodolares = long("costo_microdolares").nullable()
     override val primaryKey = PrimaryKey(dia)
 }
 

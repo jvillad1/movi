@@ -53,6 +53,9 @@ import io.ktor.server.application.log
 import com.jvillada.movi.server.ai.laPreguntaPideCriterio
 import com.jvillada.movi.server.ai.avisarQueLaIaNoEstaDisponible
 import com.jvillada.movi.server.ai.EstadoDeLaIa
+import com.jvillada.movi.server.ai.ElTopeDelMes
+import com.jvillada.movi.shared.model.IA_TOPE_DEL_MES
+import com.jvillada.movi.shared.model.fraseDelTopeDelMes
 import com.jvillada.movi.shared.model.IA_NO_DISPONIBLE
 import com.jvillada.movi.server.ai.fallaDeLaIa
 import com.jvillada.movi.server.ai.MODELO_DE_RESPALDO
@@ -272,7 +275,10 @@ internal fun Route.aiRoutes(fabricaDePrueba: FabricaDeModelos?) {
         // Vuelta de diseño 30: y si la IA contesta preguntas libres ahora, para que el chat no
         // sugiera una que va a dar el aviso (ver [EstadoDeLaIa]).
         val hayClave = fabricaDePrueba != null || anthropicClient != null
-        call.respond(conversacionGuardada(call.userId()).copy(iaDisponible = EstadoDeLaIa.disponible(hayClave)))
+        // Vuelta 106: quien ya hizo sus preguntas del mes tampoco tiene la IA para preguntas libres;
+        // el chat le ofrece solo las tres sugeridas, que siguen funcionando.
+        val llegoAlTope = ElTopeDelMes.estadoDe(call.userId()).llego
+        call.respond(conversacionGuardada(call.userId()).copy(iaDisponible = EstadoDeLaIa.disponible(hayClave) && !llegoAlTope))
     }
 
     // «Nueva conversación»: no borra nada, mueve el comienzo de la en curso a ahora.
@@ -349,151 +355,182 @@ internal fun Route.aiRoutes(fabricaDePrueba: FabricaDeModelos?) {
             return@post
         }
 
-        val fabrica = fabricaDePrueba ?: fabricaDeAnthropic()
-        if (fabrica == null) {
+        // **El tope del mes** (vuelta 106): solo cuenta lo que va al modelo, por eso va DESPUÉS de las
+        // sugeridas. Un 429 con su código y la frase en el texto, para que un APK que no conoce el
+        // código igual diga algo legible; la app dice la misma frase y ofrece las tres debajo.
+        // Revisión de la vuelta 106: mirar y apartar van juntos (`apartar`), así dos preguntas
+        // simultáneas en el borde no pasan las dos; lo apartado se suelta al final, pase lo que pase.
+        val tope = ElTopeDelMes.apartar(call.userId())
+        if (tope.llego) {
+            val n = tope.tope ?: 0
             call.respond(
-                HttpStatusCode.ServiceUnavailable,
-                AiChatResponse(
-                    text = "ANTHROPIC_API_KEY no está configurada en el server. Configúrala y reinicia: export ANTHROPIC_API_KEY=sk-ant-... && ./gradlew :server:run",
-                    // Vuelta de diseño 30: con el código, la app dice su frase («sí funcionan estas
-                    // tres») en vez de la instrucción para quien corre el server.
-                    codigo = IA_NO_DISPONIBLE,
+                HttpStatusCode.TooManyRequests,
+                AiChatResponse(text = fraseDelTopeDelMes(n), codigo = IA_TOPE_DEL_MES, preguntasQueQuedan = 0, topeDelMes = n),
+            )
+            return@post
+        }
+        try {
+            val fabrica = fabricaDePrueba ?: fabricaDeAnthropic()
+            if (fabrica == null) {
+                call.respond(
+                    HttpStatusCode.ServiceUnavailable,
+                    AiChatResponse(
+                        text = "ANTHROPIC_API_KEY no está configurada en el server. Configúrala y reinicia: export ANTHROPIC_API_KEY=sk-ant-... && ./gradlew :server:run",
+                        // Vuelta de diseño 30: con el código, la app dice su frase («sí funcionan estas
+                        // tres») en vez de la instrucción para quien corre el server.
+                        codigo = IA_NO_DISPONIBLE,
+                    ),
+                )
+                return@post
+            }
+
+            val datos = cargarDatosDelUsuario(call.userId())
+            val context = datos.comoContexto()
+            // **Solo el final del hilo.** El teléfono manda la conversación entera en cada pregunta
+            // —y desde la Ola 3 esa conversación sobrevive a salir de la pantalla—, así que sin este
+            // recorte una charla larga se paga completa cada vez. `tramoParaElModelo` corta por
+            // mensajes Y por caracteres, y el `dropWhile` va DESPUÉS del recorte: si al cortar queda un
+            // turno del asistente al principio, la API lo rechaza.
+            val paraElModelo = mensajesParaElModelo(tramoParaElModelo(body.messages))
+            // **Los datos exactos para ESTA pregunta** van pegados a ella, en el último mensaje del
+            // dueño: DESPUÉS de todo lo cacheado (PERSONA, contexto, herramientas), así que cambian con
+            // cada pregunta sin tirar la caché. Ver `hechosParaLaPregunta`.
+            val hechos = paraElModelo.lastOrNull()?.let { hechosParaLaPregunta(it.content, datos.paraLosHechos()) }
+            // **Lo que el dueño hizo con lo que se le propuso** (Ola 3): si dijo «No», el asistente lo
+            // sabe en el turno siguiente. Va pegado a la pregunta, igual que los hechos: después de todo
+            // lo cacheado, así que cambiar de estado una tarjeta no tira la caché.
+            val decisiones = loQueElDuenoDecidio(call.userId(), conversacionEmpezadaEn(call.userId()))
+            val anexo = listOfNotNull(hechos, decisiones).joinToString("\n\n").ifBlank { null }
+            val messageParams = paraElModelo.mapIndexed { i, m ->
+                toMessageParam(m, anexo = anexo.takeIf { i == paraElModelo.lastIndex })
+            }
+            if (messageParams.isEmpty() || messageParams.last().role() != MessageParam.Role.USER) {
+                call.respond(HttpStatusCode.BadRequest, AiChatResponse(text = "Último mensaje debe ser del usuario"))
+                return@post
+            }
+
+            // **Ya no es una llamada, es una conversación.** El asistente puede consultar los
+            // movimientos del dueño antes de contestar (ver `conversarConHerramientas`, que decide
+            // cuándo y cuántas veces, y se prueba sin red). El `uid` sale del token y nunca del texto
+            // que escribe el modelo: las herramientas solo leen, y solo lo de este dueño.
+            val uid = call.userId()
+            // El modelo lo decide la pregunta, no una constante: ver `laPreguntaPideCriterio`. Casi
+            // todo lo que él pregunta es un dato y lo contesta el chico; el grande es para el criterio.
+            val ultima = paraElModelo.last()
+            val pideCriterio = laPreguntaPideCriterio(ultima.content, hayImagen = ultima.imageBase64 != null)
+            // «Lo que Movi sabe de ti» (Ola 3 · 2): lo que el dueño confirmó que se recuerde. Viaja en su
+            // propio bloque cacheado; sin recuerdos no viaja nada.
+            val memoria = memoriaParaElContexto(uid)
+            val elModelo = fabrica(
+                PedidoDelModelo(
+                    modelo = if (pideCriterio) MODELO_PARA_CONSEJOS else MODELO_DE_TODOS_LOS_DIAS,
+                    persona = PERSONA,
+                    contexto = context,
+                    mensajes = messageParams,
+                    piensa = pideCriterio,
+                    memoria = memoria,
                 ),
             )
-            return@post
-        }
-
-        val datos = cargarDatosDelUsuario(call.userId())
-        val context = datos.comoContexto()
-        // **Solo el final del hilo.** El teléfono manda la conversación entera en cada pregunta
-        // —y desde la Ola 3 esa conversación sobrevive a salir de la pantalla—, así que sin este
-        // recorte una charla larga se paga completa cada vez. `tramoParaElModelo` corta por
-        // mensajes Y por caracteres, y el `dropWhile` va DESPUÉS del recorte: si al cortar queda un
-        // turno del asistente al principio, la API lo rechaza.
-        val paraElModelo = mensajesParaElModelo(tramoParaElModelo(body.messages))
-        // **Los datos exactos para ESTA pregunta** van pegados a ella, en el último mensaje del
-        // dueño: DESPUÉS de todo lo cacheado (PERSONA, contexto, herramientas), así que cambian con
-        // cada pregunta sin tirar la caché. Ver `hechosParaLaPregunta`.
-        val hechos = paraElModelo.lastOrNull()?.let { hechosParaLaPregunta(it.content, datos.paraLosHechos()) }
-        // **Lo que el dueño hizo con lo que se le propuso** (Ola 3): si dijo «No», el asistente lo
-        // sabe en el turno siguiente. Va pegado a la pregunta, igual que los hechos: después de todo
-        // lo cacheado, así que cambiar de estado una tarjeta no tira la caché.
-        val decisiones = loQueElDuenoDecidio(call.userId(), conversacionEmpezadaEn(call.userId()))
-        val anexo = listOfNotNull(hechos, decisiones).joinToString("\n\n").ifBlank { null }
-        val messageParams = paraElModelo.mapIndexed { i, m ->
-            toMessageParam(m, anexo = anexo.takeIf { i == paraElModelo.lastIndex })
-        }
-        if (messageParams.isEmpty() || messageParams.last().role() != MessageParam.Role.USER) {
-            call.respond(HttpStatusCode.BadRequest, AiChatResponse(text = "Último mensaje debe ser del usuario"))
-            return@post
-        }
-
-        // **Ya no es una llamada, es una conversación.** El asistente puede consultar los
-        // movimientos del dueño antes de contestar (ver `conversarConHerramientas`, que decide
-        // cuándo y cuántas veces, y se prueba sin red). El `uid` sale del token y nunca del texto
-        // que escribe el modelo: las herramientas solo leen, y solo lo de este dueño.
-        val uid = call.userId()
-        // El modelo lo decide la pregunta, no una constante: ver `laPreguntaPideCriterio`. Casi
-        // todo lo que él pregunta es un dato y lo contesta el chico; el grande es para el criterio.
-        val ultima = paraElModelo.last()
-        val pideCriterio = laPreguntaPideCriterio(ultima.content, hayImagen = ultima.imageBase64 != null)
-        // «Lo que Movi sabe de ti» (Ola 3 · 2): lo que el dueño confirmó que se recuerde. Viaja en su
-        // propio bloque cacheado; sin recuerdos no viaja nada.
-        val memoria = memoriaParaElContexto(uid)
-        val elModelo = fabrica(
-            PedidoDelModelo(
-                modelo = if (pideCriterio) MODELO_PARA_CONSEJOS else MODELO_DE_TODOS_LOS_DIAS,
-                persona = PERSONA,
-                contexto = context,
-                mensajes = messageParams,
-                piensa = pideCriterio,
-                memoria = memoria,
-            ),
-        )
-        val fichas = elModelo as? ElModeloDeAnthropic
-        val hayImagen = ultima.imageBase64 != null
-        // **Lo que el asistente propone en este turno** (Ola 3). Las herramientas que proponen no
-        // escriben nada: validan y arman una tarjeta; esto las junta para la respuesta.
-        val propuestas = PropuestasDelTurno(uid)
-        val reply = runCatching {
-            responderSinInventar(
-                modelo = elModelo,
-                ejecutar = { llamada ->
-                    if (esHerramientaQuePropone(llamada.nombre)) propuestas.ejecutar(llamada)
-                    else ejecutarHerramienta(uid, llamada)
-                },
-                // Si todo lo que pidió fueron propuestas y salieron bien, el turno termina en las
-                // tarjetas: la vuelta siguiente solo diría «te la dejé abajo» y cuesta una llamada.
-                cerrarSinOtraVuelta = { llamadas, texto ->
-                    if (propuestas.cierraElTurno(llamadas)) textoAlCerrarConPropuestas(texto, propuestas.propuestas.size) else null
-                },
-                // Todo lo que el modelo tenía delante en este turno: contra esto se revisa cada
-                // cifra. La conversación entra entera —la pregunta y lo que ya se contestó—, porque
-                // repetir una cifra que el dueño escribió no es inventarla.
-                // La memoria también: «el bono de Glim de $55.500» es una cifra que él dijo.
-                fuentes = listOfNotNull(context, hechos, decisiones, memoria) + paraElModelo.map { it.content },
-                trampas = cifrasTrampa(datos.periodo.creditos),
-                // Con una foto, los montos salen de la imagen y el verificador no la puede leer.
-                verificar = !hayImagen,
-            )
-        }
-        // Lo que costó, en el log. Sin esto el costo se estima; con esto se mira.
-        call.application.log.info(
-            "movi-ai uid=$uid criterio=$pideCriterio hechos=${hechos != null} " +
-                "reintento=${reply.getOrNull()?.huboReintento == true} propuestas=${propuestas.propuestas.size} " +
-                "entrada=${fichas?.fichasDeEntrada ?: 0} cache=${fichas?.fichasLeidasDeCache ?: 0} salida=${fichas?.fichasDeSalida ?: 0}",
-        )
-        // Y la conversación queda guardada, que es lo que hace diagnosticable «el asistente no
-        // supo»: sin la pregunta, lo que consultó y lo que contestó, del lado del server solo
-        // quedaban las fichas. Guardar NUNCA puede romper la respuesta — ver
-        // `guardarLaConversacion`, que no lanza.
-        val turnoId = nuevoIdDeTurno()
-        reply.getOrNull()?.let { paso ->
-            val guardado = guardarLaConversacion(
-                id = turnoId,
-                uid = uid,
-                pregunta = ultima.content,
-                // Sin emojis, igual que lo que se le manda: desde la Ola 3 esto se vuelve a pintar.
-                respuesta = stripEmojis(paso.texto),
-                consultas = paso.consultas,
-                modelo = if (pideCriterio) MODELO_PARA_CONSEJOS else MODELO_DE_TODOS_LOS_DIAS,
-                criterio = pideCriterio,
-                fichasEntrada = fichas?.fichasDeEntrada ?: 0,
-                fichasCache = fichas?.fichasLeidasDeCache ?: 0,
-                fichasSalida = fichas?.fichasDeSalida ?: 0,
-                hayImagen = hayImagen,
-                cifrasSinRespaldo = paso.sinRespaldo,
-                cifrasCorregidas = paso.corregidas,
-            )
-            if (!guardado) call.application.log.warn("movi-ai: no pude guardar la conversación de $uid")
-            // Las tarjetas se guardan con el id del turno que las hizo: así vuelven a su globo al
-            // recargar, y «Hacerlo»/«No» tienen dónde anotarse.
-            if (!guardarPropuestas(uid, turnoId, propuestas.propuestas)) {
-                call.application.log.warn("movi-ai: no pude guardar las propuestas de $uid")
-            }
-        }
-        reply.onSuccess {
-            EstadoDeLaIa.anotarRespuesta()
-            call.respond(AiChatResponse(text = stripEmojis(it.texto), propuestas = propuestas.propuestas))
-        }
-            .onFailure {
-                // **La cuenta de Anthropic, no la pregunta.** Sin saldo, con la clave rechazada o la
-                // API saturada, la burbuja decía «Error llamando a Claude: 400 …credit balance…»:
-                // inglés, crudo, y sin decir que no es algo que el dueño arregle reintentando.
-                val falla = fallaDeLaIa(it)
-                if (falla != null) {
-                    avisarQueLaIaNoEstaDisponible("Movi AI", falla, it)
-                    call.respond(
-                        HttpStatusCode.ServiceUnavailable,
-                        AiChatResponse(text = MOVI_AI_NO_DISPONIBLE, codigo = falla.codigo),
-                    )
-                    return@onFailure
-                }
-                call.respond(
-                    HttpStatusCode.InternalServerError,
-                    AiChatResponse(text = "Error llamando a Claude: ${it.message ?: "desconocido"}"),
+            val fichas = elModelo as? ElModeloDeAnthropic
+            val hayImagen = ultima.imageBase64 != null
+            // **Lo que el asistente propone en este turno** (Ola 3). Las herramientas que proponen no
+            // escriben nada: validan y arman una tarjeta; esto las junta para la respuesta.
+            val propuestas = PropuestasDelTurno(uid)
+            val reply = runCatching {
+                responderSinInventar(
+                    modelo = elModelo,
+                    ejecutar = { llamada ->
+                        if (esHerramientaQuePropone(llamada.nombre)) propuestas.ejecutar(llamada)
+                        else ejecutarHerramienta(uid, llamada)
+                    },
+                    // Si todo lo que pidió fueron propuestas y salieron bien, el turno termina en las
+                    // tarjetas: la vuelta siguiente solo diría «te la dejé abajo» y cuesta una llamada.
+                    cerrarSinOtraVuelta = { llamadas, texto ->
+                        if (propuestas.cierraElTurno(llamadas)) textoAlCerrarConPropuestas(texto, propuestas.propuestas.size) else null
+                    },
+                    // Todo lo que el modelo tenía delante en este turno: contra esto se revisa cada
+                    // cifra. La conversación entra entera —la pregunta y lo que ya se contestó—, porque
+                    // repetir una cifra que el dueño escribió no es inventarla.
+                    // La memoria también: «el bono de Glim de $55.500» es una cifra que él dijo.
+                    fuentes = listOfNotNull(context, hechos, decisiones, memoria) + paraElModelo.map { it.content },
+                    trampas = cifrasTrampa(datos.periodo.creditos),
+                    // Con una foto, los montos salen de la imagen y el verificador no la puede leer.
+                    verificar = !hayImagen,
                 )
             }
+            // Lo que costó, en el log. Sin esto el costo se estima; con esto se mira.
+            call.application.log.info(
+                "movi-ai uid=$uid criterio=$pideCriterio hechos=${hechos != null} " +
+                    "reintento=${reply.getOrNull()?.huboReintento == true} propuestas=${propuestas.propuestas.size} " +
+                    "entrada=${fichas?.fichasDeEntrada ?: 0} cache=${fichas?.fichasLeidasDeCache ?: 0} " +
+                    "escritas=${fichas?.fichasEscritasEnCache ?: 0} salida=${fichas?.fichasDeSalida ?: 0}",
+            )
+            // Y la conversación queda guardada, que es lo que hace diagnosticable «el asistente no
+            // supo»: sin la pregunta, lo que consultó y lo que contestó, del lado del server solo
+            // quedaban las fichas. Guardar NUNCA puede romper la respuesta — ver
+            // `guardarLaConversacion`, que no lanza.
+            val turnoId = nuevoIdDeTurno()
+            reply.getOrNull()?.let { paso ->
+                val guardado = guardarLaConversacion(
+                    id = turnoId,
+                    uid = uid,
+                    pregunta = ultima.content,
+                    // Sin emojis, igual que lo que se le manda: desde la Ola 3 esto se vuelve a pintar.
+                    respuesta = stripEmojis(paso.texto),
+                    consultas = paso.consultas,
+                    // El que de verdad contestó (el de respaldo, si el primero falló): con su precio se
+                    // calcula el costo del turno.
+                    modelo = fichas?.modeloQueContesto ?: if (pideCriterio) MODELO_PARA_CONSEJOS else MODELO_DE_TODOS_LOS_DIAS,
+                    criterio = pideCriterio,
+                    fichasEntrada = fichas?.fichasDeEntrada ?: 0,
+                    fichasCache = fichas?.fichasLeidasDeCache ?: 0,
+                    fichasSalida = fichas?.fichasDeSalida ?: 0,
+                    fichasCacheEscritas = fichas?.fichasEscritasEnCache ?: 0,
+                    hayImagen = hayImagen,
+                    cifrasSinRespaldo = paso.sinRespaldo,
+                    cifrasCorregidas = paso.corregidas,
+                )
+                if (!guardado) call.application.log.warn("movi-ai: no pude guardar la conversación de $uid")
+                // Las tarjetas se guardan con el id del turno que las hizo: así vuelven a su globo al
+                // recargar, y «Hacerlo»/«No» tienen dónde anotarse.
+                if (!guardarPropuestas(uid, turnoId, propuestas.propuestas)) {
+                    call.application.log.warn("movi-ai: no pude guardar las propuestas de $uid")
+                }
+            }
+            reply.onSuccess {
+                EstadoDeLaIa.anotarRespuesta()
+                // Vuelta 106: si ya le quedan pocas, se lo dice la app («Te quedan 10 preguntas este mes»).
+                val quedan = tope.quedanParaAvisar
+                call.respond(
+                    AiChatResponse(
+                        text = stripEmojis(it.texto),
+                        propuestas = propuestas.propuestas,
+                        preguntasQueQuedan = quedan,
+                        topeDelMes = tope.tope?.takeIf { quedan != null },
+                    ),
+                )
+            }
+                .onFailure {
+                    // **La cuenta de Anthropic, no la pregunta.** Sin saldo, con la clave rechazada o la
+                    // API saturada, la burbuja decía «Error llamando a Claude: 400 …credit balance…»:
+                    // inglés, crudo, y sin decir que no es algo que el dueño arregle reintentando.
+                    val falla = fallaDeLaIa(it)
+                    if (falla != null) {
+                        avisarQueLaIaNoEstaDisponible("Movi AI", falla, it)
+                        call.respond(
+                            HttpStatusCode.ServiceUnavailable,
+                            AiChatResponse(text = MOVI_AI_NO_DISPONIBLE, codigo = falla.codigo),
+                        )
+                        return@onFailure
+                    }
+                    call.respond(
+                        HttpStatusCode.InternalServerError,
+                        AiChatResponse(text = "Error llamando a Claude: ${it.message ?: "desconocido"}"),
+                    )
+                }
+        } finally {
+            ElTopeDelMes.soltar(call.userId())
+        }
     }
 }
 
