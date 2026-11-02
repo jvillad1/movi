@@ -28,6 +28,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.sql.insert
@@ -53,13 +54,19 @@ class ElTopeDelMesTest {
 
     private lateinit var a: AndamioDelAsistente
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
-    private var llamadasAlModelo = 0
+    @Volatile private var llamadasAlModelo = 0
+
+    /** Si no es `null`, el modelo espera esto antes de contestar (para tener dos preguntas en vuelo). */
+    private var compuerta: kotlinx.coroutines.CompletableDeferred<Unit>? = null
 
     /** Un modelo que contesta sin cifras (el verificador no tiene nada que revisar). */
     private val fabrica: FabricaDeModelos = {
         llamadasAlModelo++
         object : ElModeloQueSeCorrige {
-            override suspend fun siguienteVuelta(puedeUsarHerramientas: Boolean) = RespuestaDelModelo.Texto("Listo, te cuento.")
+            override suspend fun siguienteVuelta(puedeUsarHerramientas: Boolean): RespuestaDelModelo {
+                compuerta?.await()
+                return RespuestaDelModelo.Texto("Listo, te cuento.")
+            }
             override fun anotarResultados(resultados: List<Pair<String, String>>) = Unit
             override fun anotarCorreccion(correccion: String) = Unit
         }
@@ -70,6 +77,7 @@ class ElTopeDelMesTest {
         a = AndamioDelAsistente("tope_del_mes")
         System.clearProperty("movi.admin.userIds")
         llamadasAlModelo = 0
+        compuerta = null
     }
 
     @AfterTest
@@ -130,6 +138,45 @@ class ElTopeDelMesTest {
         assertEquals("Llegaste a las 3 preguntas de este mes. Se renuevan el 1.º", pasada.cuerpo().text)
         assertEquals(fraseDelTopeDelMes(3), pasada.cuerpo().text)
         assertEquals(antes, llamadasAlModelo, "pasado el tope no se le pregunta al modelo")
+    }
+
+    /**
+     * Revisión de la vuelta 106 · **dos preguntas a la vez en el borde del tope**: una pregunta cuenta en
+     * `ai_turns` recién al guardarse, así que sin la cuenta en memoria de las que van en vuelo pasaban
+     * las dos. Con una sola libre, la que llega mientras la otra espera al modelo da 429.
+     */
+    @Test
+    fun `dos preguntas simultaneas en el borde del tope no pasan las dos`() = testApplication {
+        montar()
+        topeGlobal(2)
+        yaPregunto(1)
+        compuerta = kotlinx.coroutines.CompletableDeferred()
+
+        kotlinx.coroutines.coroutineScope {
+            val primera = async { preguntar() }
+            // La primera ya está en el modelo (apartó la última libre) y todavía no se guardó.
+            while (llamadasAlModelo == 0) kotlinx.coroutines.delay(10)
+            assertEquals(1, ElTopeDelMes.enCursoDe(a.duenoA))
+
+            val segunda = preguntar()
+            assertEquals(HttpStatusCode.TooManyRequests, segunda.status, "la segunda ve la primera en vuelo")
+
+            compuerta!!.complete(Unit)
+            assertEquals(HttpStatusCode.OK, primera.await().status)
+        }
+        assertEquals(1, llamadasAlModelo, "al modelo fue una sola")
+        assertEquals(0, ElTopeDelMes.enCursoDe(a.duenoA), "lo apartado se suelta al terminar")
+        assertEquals(HttpStatusCode.TooManyRequests, preguntar().status, "y ya cuenta en ai_turns")
+    }
+
+    @Test
+    fun `con tope cero la frase dice que no esta para su cuenta`() = testApplication {
+        montar()
+        topeGlobal(0)
+        val r = preguntar()
+        assertEquals(HttpStatusCode.TooManyRequests, r.status)
+        assertEquals("Movi AI no está disponible para tu cuenta este mes", r.cuerpo().text)
+        assertEquals(0, llamadasAlModelo)
     }
 
     @Test

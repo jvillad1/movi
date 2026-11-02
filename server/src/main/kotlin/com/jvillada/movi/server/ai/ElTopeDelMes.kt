@@ -14,7 +14,10 @@ import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.upsert
 import org.slf4j.LoggerFactory
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.time.Instant
+import java.util.concurrent.ConcurrentHashMap
 import java.time.ZoneId
 
 /**
@@ -87,13 +90,47 @@ object ElTopeDelMes {
         return excepcionDe(uid) ?: global()
     }
 
-    /** Cómo está [uid] este mes. Si la base falla, sin tope (ver el KDoc del objeto). */
+    /**
+     * **Las preguntas que están yendo al modelo ahora**, por usuario (revisión de la vuelta 106). Una
+     * pregunta cuenta en `ai_turns` recién cuando se guarda, segundos después; sin esto, dos preguntas
+     * simultáneas en el borde del tope pasaban las dos. En memoria: con un solo proceso alcanza, y un
+     * reinicio solo pierde lo que estaba en vuelo (que igual no se guarda).
+     */
+    private val enCurso = ConcurrentHashMap<String, Int>()
+
+    /** Lo que ya contó y lo que se reserva de un usuario no se lee a medias: un candado por usuario. */
+    private val candados = ConcurrentHashMap<String, Mutex>()
+
+    private fun candadoDe(uid: String) = candados.computeIfAbsent(uid) { Mutex() }
+
+    /** Cuántas preguntas de [uid] van al modelo en este momento. */
+    fun enCursoDe(uid: String): Int = enCurso[uid] ?: 0
+
+    /** Cómo está [uid] este mes, con lo que está en vuelo. Si la base falla, sin tope (ver el KDoc del objeto). */
     suspend fun estadoDe(uid: String, ahora: Long = System.currentTimeMillis()): Estado = runCatching {
         val tope = topeDe(uid) ?: return@runCatching Estado.SIN_TOPE
-        Estado(tope = tope, usadas = usadasEsteMes(uid, ahora))
+        Estado(tope = tope, usadas = usadasEsteMes(uid, ahora) + enCursoDe(uid))
     }.getOrElse {
         log.warn("movi-ai: no pude leer el tope de {}, la pregunta pasa: {}", uid, it.javaClass.simpleName)
         Estado.SIN_TOPE
+    }
+
+    /**
+     * **Mira el tope y, si queda lugar, aparta la pregunta**, todo bajo el candado de [uid]: así dos
+     * preguntas simultáneas no ven las dos el mismo lugar libre. Si [Estado.llego], no apartó nada; si
+     * no, quien llama **tiene** que llamar [soltar] cuando termina (con `finally`), después de guardar
+     * el turno.
+     */
+    suspend fun apartar(uid: String, ahora: Long = System.currentTimeMillis()): Estado = candadoDe(uid).withLock {
+        val estado = estadoDe(uid, ahora)
+        if (!estado.llego) enCurso.merge(uid, 1, Int::plus)
+        estado
+    }
+
+    /** Suelta la pregunta que [apartar] apartó (ya está en `ai_turns`, o falló y no cuenta). */
+    suspend fun soltar(uid: String) = candadoDe(uid).withLock {
+        enCurso.computeIfPresent(uid) { _, n -> (n - 1).takeIf { it > 0 } }
+        Unit
     }
 
     suspend fun guardarGlobal(tope: Int, ahora: Long = System.currentTimeMillis()) = dbQuery {
