@@ -106,7 +106,7 @@ class PaginasLegalesTest {
         // Los SMS solo en la versión que se instala por fuera de la tienda.
         assertTrue("La versión de Google Play no lee SMS" in html)
         // Vuelta 111: el canal de los Atajos de iPhone, con lo que recibe y lo que descarta.
-        assertTrue("Atajos de iPhone" in html && "Apple Pay" in html && "se descarta sin guardar su texto" in html)
+        assertTrue("Atajos de iPhone" in html && "Apple Pay" in html && "sin guardar su texto" in html)
         // El filtro del teléfono (`BankSenderFilter.matches`) deja pasar por el remitente O por el texto:
         // la política no puede decir que solo cuenta el remitente.
         assertTrue("cuyo remitente es un código bancario conocido o cuyo texto nombra un banco" in html)
@@ -114,6 +114,10 @@ class PaginasLegalesTest {
         // Vuelta 113: un número personal nunca sale (`seSubeElSms`), y la política ya no dice que puede salir.
         assertTrue("nunca los que vienen del número de teléfono de una persona" in html)
         assertFalse("por eso un mensaje personal que nombre a tu banco también puede salir" in html)
+        // Revisión de la vuelta 113: el atajo firmado no manda remitente; la política no promete descartar
+        // lo de una persona, sino lo que no empieza por el banco con un monto.
+        assertTrue("se descarta todo mensaje que no empiece por el nombre de un banco" in html)
+        assertFalse("o que viene del número de teléfono de una persona, se descarta" in html)
         val borrar = PaginasLegales.borrarCuenta(ResponsableDeMovi.Datos(null, null))
         // Lo que borrar no alcanza (copias de los proveedores y respaldos), dicho en las dos páginas.
         assertTrue(PaginasLegales.LO_QUE_MOVI_NO_CONTROLA in borrar)
