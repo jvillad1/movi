@@ -142,6 +142,8 @@ class EscuchaDeNotificaciones : NotificationListenerService() {
             esResumenDeGrupo = (contenido.flags and Notification.FLAG_GROUP_SUMMARY) != 0,
             cuando = cuando,
             llave = runCatching { sbn.key }.getOrNull().orEmpty(),
+            // Vuelta 107: la hora que la app le puso a su aviso; distingue un cobro nuevo de una reposición.
+            emitida = contenido.`when`.coerceAtLeast(0L),
         )
     }
 

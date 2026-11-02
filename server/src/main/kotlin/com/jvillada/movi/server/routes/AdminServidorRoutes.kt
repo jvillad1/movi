@@ -52,7 +52,7 @@ fun Route.adminServidorRoutes() {
 }
 
 /** `false` (y ya contestó 403) si quien pide no es admin. */
-private suspend fun RoutingContext.soloAdmin(): Boolean {
+internal suspend fun RoutingContext.soloAdmin(): Boolean {
     if (AdminConfig.isAdmin(call.userId())) return true
     call.respond(HttpStatusCode.Forbidden, mapOf("error" to "Solo para quien administra Movi."))
     return false

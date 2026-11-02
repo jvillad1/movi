@@ -42,6 +42,46 @@ internal const val MINUTOS_PARA_EL_MISMO_PAGO: Long = 30
  */
 internal const val MINUTOS_PARA_EL_MISMO_PAGO_POR_CORREO: Long = 60
 
+/**
+ * Vuelta 107 · **cuánto después de la hora que escribe el SMS puede llegar la notificación del mismo
+ * cobro.** El SMS de Bancolombia dice cuándo pasó («el 28/10/2026 a las 14:41», o «23:47:16»); la
+ * notificación de Google Wallet se fecha al publicarse. Medido el 2-nov con los avisos del dueño: los 7
+ * pares SMS + Wallet de una compra quedaron a 0 minutos de la hora escrita. Elegido con margen: 2 minutos
+ * después y 2 antes (el minuto truncado de los dos lados). Fuera de eso son dos cobros: dos compras
+ * iguales a minutos distintos —una avisada solo por Wallet y otra solo por SMS— eran un pago y se perdía
+ * una. El Wallet tardío de 21 min del histórico era contra la app de Glim, que no escribe hora: esa
+ * ventana sigue siendo [MINUTOS_PARA_EL_MISMO_PAGO]. Si alguna vez un mismo cobro queda partido, «¿Ya lo
+ * anotaste?» encuentra el movimiento del otro aviso («Es este»): una fila de más se ve; una de menos no.
+ */
+internal const val MINUTOS_DE_LA_NOTIFICACION_DESPUES_DE_LA_HORA_DEL_SMS: Long = 2
+internal const val MINUTOS_DE_LA_NOTIFICACION_ANTES_DE_LA_HORA_DEL_SMS: Long = 2
+
+/** «el 28/10/2026 a las 14:41», «el 25/10/2026 23:47:16», «el 2026/09/18 10:45:19»: la hora que escribe el SMS. */
+private val HORA_ESCRITA_DMY = Regex("""\b(\d{1,2})/(\d{1,2})/(\d{4})(?:,)?\s+(?:a\s+las\s+)?(\d{1,2}):(\d{2})""", RegexOption.IGNORE_CASE)
+private val HORA_ESCRITA_YMD = Regex("""\b(\d{4})/(\d{1,2})/(\d{1,2})\s+(\d{1,2}):(\d{2})""")
+
+/**
+ * El momento que escribe el texto de un SMS (en la zona de la app), o `null` si no escribe uno. Decide si
+ * el SMS «escribe su hora» (ver `Leido.cuadraLaHoraCon`).
+ */
+internal fun horaEscritaDelSms(texto: String): Long? {
+    val (anio, mes, dia, hora, minuto) = HORA_ESCRITA_DMY.find(texto)?.groupValues?.let { g -> listOf(g[3], g[2], g[1], g[4], g[5]) }
+        ?: HORA_ESCRITA_YMD.find(texto)?.groupValues?.let { g -> listOf(g[1], g[2], g[3], g[4], g[5]) }
+        ?: return null
+    val clave = "%04d-%02d-%02d %02d:%02d".format(anio.toInt(), mes.toInt(), dia.toInt(), hora.toInt(), minuto.toInt())
+    return momentoDelSms(clave, ahora = Long.MAX_VALUE).takeIf { it != Long.MAX_VALUE }
+}
+
+/**
+ * ¿Un SMS que escribe su hora y una notificación pueden ser el mismo cobro? Solo si la notificación llegó
+ * entre 2 minutos antes y 2 después del SMS ([horaDelSms]). Ver las constantes de arriba.
+ */
+internal fun laNotificacionCaeEnLaHoraDelSms(horaDelSms: Long, momentoDeLaNotificacion: Long): Boolean {
+    val diferencia = momentoDeLaNotificacion - horaDelSms
+    return diferencia >= -MINUTOS_DE_LA_NOTIFICACION_ANTES_DE_LA_HORA_DEL_SMS * 60_000L &&
+        diferencia <= MINUTOS_DE_LA_NOTIFICACION_DESPUES_DE_LA_HORA_DEL_SMS * 60_000L
+}
+
 /** Por dónde llegó un aviso: decide su ventana, de cuál sale la propuesta y cómo se nombra. */
 internal enum class CanalDelAviso { SMS, NOTIFICACION, CORREO, COMPROBANTE }
 
@@ -176,7 +216,9 @@ internal fun gruposDelMismoPago(
         while (j < leidos.size && leidos[j].momento - a.momento <= margenMaximo) {
             val b = leidos[j]
             val distancia = b.momento - a.momento
-            if (a.origen != b.origen && a.seJuntaCon(b) && distancia <= a.ventanaCon(b, ventana(a.sms.bank, b.sms.bank)) * 60_000L) {
+            if (a.origen != b.origen && a.seJuntaCon(b) && distancia <= a.ventanaCon(b, ventana(a.sms.bank, b.sms.bank)) * 60_000L &&
+                a.cuadraLaHoraCon(b)
+            ) {
                 uniones += Union(i, j, distancia)
             }
             j++
@@ -378,4 +420,27 @@ private class Leido(val sms: SmsMessage, leido: ParsedSms, val momento: Long) {
      */
     fun ventanaCon(otro: Leido, porCanal: Long): Long =
         if (llave != otro.llave && esLaOtraMitadDe(otro)) minOf(porCanal, MINUTOS_PARA_EL_MISMO_PAGO) else porCanal
+
+    private val canal: CanalDelAviso = canalDelAviso(sms.bank)
+
+    /**
+     * Vuelta 107: el SMS escribe su hora («a las 14:41»): es el aviso del banco con la hora del cobro, y
+     * su llegada es esa misma hora (medido: 0 min en los 7 pares del dueño). `false` en lo demás.
+     */
+    private val escribeSuHora: Boolean = canal == CanalDelAviso.SMS && horaEscritaDelSms(sms.text) != null
+
+    /**
+     * Vuelta 107 · **un SMS que escribe su hora y una notificación son el mismo cobro solo cerca de esa
+     * hora** ([laNotificacionCaeEnLaHoraDelSms], sobre la llegada del SMS: la hora escrita puede venir en
+     * otra zona si el teléfono viajó, y la llegada de los dos avisos se mide con el mismo reloj). Entre
+     * otros canales, o con un SMS que no escribe su hora, no cambia nada.
+     */
+    fun cuadraLaHoraCon(otro: Leido): Boolean {
+        val (sms, notificacion) = when {
+            escribeSuHora && otro.canal == CanalDelAviso.NOTIFICACION -> this to otro
+            otro.escribeSuHora && canal == CanalDelAviso.NOTIFICACION -> otro to this
+            else -> return true
+        }
+        return laNotificacionCaeEnLaHoraDelSms(sms.momento, notificacion.momento)
+    }
 }

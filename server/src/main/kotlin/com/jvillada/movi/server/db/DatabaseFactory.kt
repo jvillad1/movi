@@ -84,7 +84,7 @@ object DatabaseFactory {
             // EnlacesCompartidos (compartir con un tercero) es tabla NUEVA y entra por acá: su
             // índice único sobre el hash y el de `user_id` se crean junto con ella, sobre una tabla
             // vacía, y en los arranques siguientes `create` la ve existir y no emite nada.
-            SchemaUtils.create(Users, Accounts, StatementImports, Events, VoidEvents, Budgets, RecurringRules, RecurringOccurrences, OccurrenceRejections, SmsMessages, Credits, Cards, Subscriptions, PushSubscriptions, Screens, PasswordResetTokens, CardPaymentDismissals, Goals, CategoryPrefs, Documents, StatementImportMatches, AiTurns, KnownDestinations, EnlacesCompartidos, LecturasDePapeles, ConversacionesDelAsistente, AccionesPropuestas, MemoriaDelAsistente, AnomaliasDescartadas, DestinosDescartados, DebitosDescartados, ReglasDeComercio, CierresEnviados, CierresDescartados, CierresGuardados, Apartados, InicioPersonalizado, Espacios, GastosDelEspacio, LiquidacionesDelEspacio, CorreosDescartados, RecurrentesDelHogar, ClavesDeExtractos, PdfsAbiertos, FallosDeLaApp, UsoDeLaApp)
+            SchemaUtils.create(Users, Accounts, StatementImports, Events, VoidEvents, Budgets, RecurringRules, RecurringOccurrences, OccurrenceRejections, SmsMessages, Credits, Cards, Subscriptions, PushSubscriptions, Screens, PasswordResetTokens, CardPaymentDismissals, Goals, CategoryPrefs, Documents, StatementImportMatches, AiTurns, KnownDestinations, EnlacesCompartidos, LecturasDePapeles, ConversacionesDelAsistente, AccionesPropuestas, MemoriaDelAsistente, AnomaliasDescartadas, DestinosDescartados, DebitosDescartados, ReglasDeComercio, CierresEnviados, CierresDescartados, CierresGuardados, Apartados, InicioPersonalizado, Espacios, GastosDelEspacio, LiquidacionesDelEspacio, CorreosDescartados, RecurrentesDelHogar, ClavesDeExtractos, PdfsAbiertos, FallosDeLaApp, UsoDeLaApp, AjustesDeLaIa, TopesDeLaIaPorUsuario)
             // Vuelta 102 · la observabilidad del servidor: seis tablas NUEVAS, sin `user_id` (ver
             // TablasDeObservabilidad.kt). Entran solo por el `create`, como toda tabla nueva.
             SchemaUtils.create(*TABLAS_DE_OBSERVABILIDAD)
@@ -157,7 +157,12 @@ object DatabaseFactory {
             // NUEVA: entra por el `create` de arriba.
             // ClavesDeExtractos y PdfsAbiertos (vuelta 103, el PDF con clave) son tablas NUEVAS: entran
             // por el `create` de arriba, con su clave primaria adentro del CREATE TABLE.
-            SchemaUtils.createMissingTablesAndColumns(Events, RecurringRules, Screens, Users, Credits, Cards, Accounts, Subscriptions, AiTurns, CategoryPrefs, KnownDestinations, SmsMessages, InicioPersonalizado, Apartados, GastosDelEspacio)
+            // AiTurns: `fichas_cache_escritas` (vuelta 106, el costo de un turno) — NULLABLE, mismo caso que
+            // `cifras_sin_respaldo`. MetricasDeServicios e IaPorDia: `costo_microdolares` (vuelta 106) —
+            // NULLABLE; las dos existen en producción desde la vuelta 102 y su clave primaria viajó dentro
+            // del CREATE TABLE, sin índices sueltos, así que el único DDL es el ADD COLUMN.
+            // AjustesDeLaIa y TopesDeLaIaPorUsuario (vuelta 106) son tablas NUEVAS: entran por el `create` de arriba.
+            SchemaUtils.createMissingTablesAndColumns(Events, RecurringRules, Screens, Users, Credits, Cards, Accounts, Subscriptions, AiTurns, CategoryPrefs, KnownDestinations, SmsMessages, InicioPersonalizado, Apartados, GastosDelEspacio, MetricasDeServicios, IaPorDia)
             // Migraciones de datos (idempotentes), después del schema — ver Migrations.kt.
             with(Migrations) { runAll() }
         }

@@ -336,8 +336,12 @@ Aplicá las reglas del usuario cuando el merchant coincida.
         }
         val params = MessageCreateParams.builder()
             .model(MODELO_DE_TODOS_LOS_DIAS)
-            .maxTokens(MAX_TOKENS_DEL_PAPEL)
-            .temperature(0.0)
+            // Vuelta 106 · Haiku 5.5: piensa aunque no se lo pidan y el pensamiento sale del mismo
+            // techo, así que el techo reserva lugar para pensar además del JSON; con esfuerzo
+            // «bajo» casi no piensa. Y sin `temperature`: Haiku 5.5 da 400 con cualquier valor
+            // que no sea el de fábrica (el JSON lo fija el prompt, no el azar).
+            .maxTokens(MAX_TOKENS_DEL_PAPEL + RESERVA_PARA_PENSAR_EL_PAPEL)
+            .outputConfig(OutputConfig.builder().effort(OutputConfig.Effort.LOW).build())
             .systemOfTextBlockParams(listOf(TextBlockParam.builder().text(promptDelPapel()).build()))
             .addUserMessageOfBlockParams(bloques)
             .build()
@@ -347,6 +351,9 @@ Aplicá las reglas del usuario cuando el merchant coincida.
 
     /** La respuesta de [queEsElPapel] es un objeto chico; 600 fichas sobran con holgura. */
     private const val MAX_TOKENS_DEL_PAPEL = 600L
+
+    /** Lo que se le deja a Haiku 5.5 para pensar antes del JSON (ver [queEsElPapel]). */
+    private const val RESERVA_PARA_PENSAR_EL_PAPEL = 1_500L
 
     /** Un comprobante en PDF tiene una página; más que esto ya es un extracto y lo decide la heurística. */
     private const val MAX_CARACTERES_DEL_PAPEL = 8_000

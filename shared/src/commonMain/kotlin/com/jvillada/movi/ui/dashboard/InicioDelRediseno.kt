@@ -350,6 +350,15 @@ sealed interface AccionDeLaPropuesta {
     data object SubirElExtracto : AccionDeLaPropuesta
 
     /**
+     * Vuelta 107: «¿Cómo lo saco?»: abre la guía del banco del extracto que falta (los pasos, el formato y
+     * el rango ideal desde el [corte] de la tarjeta). Solo se ofrece si el banco tiene guía.
+     */
+    data class VerComoSacarElExtracto(
+        val guia: com.jvillada.movi.shared.model.GuiaDelExtracto,
+        val corte: String,
+    ) : AccionDeLaPropuesta
+
+    /**
      * Vuelta 97: «Repartir»: abre la hoja de repartir llena con el reparto de la última vez. Nunca reparte
      * sola: el dueño confirma en la hoja.
      */
@@ -795,6 +804,7 @@ private fun propuestaDeExtracto(data: DashboardData): PropuestaDelInicio? {
     val extractos = extractosVisiblesDe(data)
     val primero = extractos.firstOrNull() ?: return null
     val otros = extractos.size - 1
+    val guia = com.jvillada.movi.shared.model.guiaDelExtractoParaAlguno(primero.banco, primero.cuentaNombre)
     return PropuestaDelInicio(
         tipo = TipoDePropuesta.EXTRACTO,
         titulo = com.jvillada.movi.shared.model.preguntaDelExtractoPorSubir(primero, extractos),
@@ -807,6 +817,9 @@ private fun propuestaDeExtracto(data: DashboardData): PropuestaDelInicio? {
         alTocar = AccionDeLaPropuesta.SubirElExtracto,
         accionSecundaria = YA_NO,
         alTocarSecundaria = AccionDeLaPropuesta.DescartarAnomalia(primero.huella),
+        // Vuelta 107: si el banco tiene guía, «¿Cómo lo saco?» la abre. Sin guía, nada.
+        accionTerciaria = guia?.let { com.jvillada.movi.shared.model.COMO_LO_SACO },
+        alTocarTerciaria = guia?.let { AccionDeLaPropuesta.VerComoSacarElExtracto(it, primero.corte) },
         rango = 4,
         cuantas = extractos.size,
     )

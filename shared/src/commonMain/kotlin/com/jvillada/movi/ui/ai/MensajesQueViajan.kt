@@ -3,7 +3,10 @@ package com.jvillada.movi.ui.ai
 import com.jvillada.movi.shared.model.AiChatResponse
 import com.jvillada.movi.shared.model.ChatMessage
 import com.jvillada.movi.shared.model.ChatRole
+import com.jvillada.movi.shared.model.IA_TOPE_DEL_MES
 import com.jvillada.movi.shared.model.esCodigoDeIaNoDisponible
+import com.jvillada.movi.shared.model.fraseDeLasQueQuedan
+import com.jvillada.movi.shared.model.fraseDelTopeDelMes
 
 /**
  * # Lo que de verdad se le manda al asistente, y lo que solo se ve en pantalla
@@ -89,6 +92,27 @@ const val MOVI_AI_NO_DISPONIBLE: String =
  */
 internal fun textoDeLaRespuesta(respuesta: AiChatResponse?, falla: Throwable?): String = when {
     respuesta != null && esCodigoDeIaNoDisponible(respuesta.codigo) -> MOVI_AI_NO_DISPONIBLE
+    // Vuelta 106: ya hizo sus preguntas libres del mes. La misma frase que manda el server en el
+    // texto (para un APK viejo), armada acá con el número.
+    respuesta != null && llegoAlTopeDelMes(respuesta) -> respuesta.topeDelMes?.let(::fraseDelTopeDelMes) ?: respuesta.text
     respuesta != null -> respuesta.text
     else -> "No pude conectarme con el AI. ${falla?.message ?: ""}"
 }
+
+/** ¿El server contestó que ya hizo sus preguntas libres del mes (el 429 `IA_TOPE_DEL_MES`)? */
+internal fun llegoAlTopeDelMes(respuesta: AiChatResponse?): Boolean = respuesta?.codigo?.trim() == IA_TOPE_DEL_MES
+
+/**
+ * ¿Debajo de esta respuesta van las tres que Movi contesta sin la IA? Cuando la IA no está (la cuenta
+ * de Anthropic) y, desde la vuelta 106, cuando ya hizo sus preguntas libres del mes: las tres no
+ * cuentan para el tope y siguen funcionando.
+ */
+internal fun seOfrecenLasQueFuncionan(respuesta: AiChatResponse?): Boolean =
+    esCodigoDeIaNoDisponible(respuesta?.codigo) || llegoAlTopeDelMes(respuesta)
+
+/**
+ * Vuelta 106 · el aviso de debajo de una respuesta cuando se acerca el tope («Te quedan 10 preguntas
+ * este mes»), o `null`. No va con el 429: ahí la burbuja ya dice que llegó.
+ */
+internal fun avisoDelTope(respuesta: AiChatResponse?): String? =
+    respuesta?.takeUnless { llegoAlTopeDelMes(it) }?.preguntasQueQuedan?.let(::fraseDeLasQueQuedan)

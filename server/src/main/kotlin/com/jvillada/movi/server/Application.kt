@@ -36,6 +36,8 @@ fun Application.module() {
     // Antes de la base: la migración del arranque cifra los papeles viejos si hay clave, y una
     // clave mal formada tiene que frenar el arranque acá, con su motivo (ver Cifrado).
     Cifrado.avisarAlArrancar(log)
+    // Vuelta 107: los topes de POI contra un Excel bomba, antes de que nadie suba uno.
+    com.jvillada.movi.server.parsing.configurarLosTopesDePoi()
     DatabaseFactory.init()
     configureCORS()
     configureSerialization()

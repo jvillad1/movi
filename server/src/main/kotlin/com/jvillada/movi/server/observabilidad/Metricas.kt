@@ -1,5 +1,7 @@
 package com.jvillada.movi.server.observabilidad
 
+import com.jvillada.movi.server.ai.PreciosDeLaIa
+
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -108,13 +110,15 @@ object Metricas {
         var fichasEntrada: Long = 0
         var fichasSalida: Long = 0
         var fichasCache: Long = 0
+        /** Vuelta 106 · lo que costaron las llamadas, en microdólares (ver `PreciosDeLaIa`). */
+        var costoMicrodolares: Double = 0.0
         var maximoMs: Long = 0
         val cubetas: LongArray = LongArray(Cubetas.CUANTAS)
 
         val errores: Long get() = sinCredito + limite + servidor + otros
 
         @Synchronized
-        fun sumar(ms: Long, error: TipoDeError?, fichas: Fichas?) {
+        fun sumar(ms: Long, error: TipoDeError?, fichas: Fichas?, costo: Double? = null) {
             llamadas++
             when (error) {
                 null -> Unit
@@ -128,6 +132,7 @@ object Metricas {
                 fichasSalida += fichas.salida
                 fichasCache += fichas.cache
             }
+            if (costo != null) costoMicrodolares += costo
             if (ms > maximoMs) maximoMs = ms
             cubetas[Cubetas.indiceDe(ms)]++
         }
@@ -136,7 +141,7 @@ object Metricas {
         fun copia(): AgregadoDeServicio = AgregadoDeServicio().also {
             it.llamadas = llamadas; it.sinCredito = sinCredito; it.limite = limite; it.servidor = servidor
             it.otros = otros; it.fichasEntrada = fichasEntrada; it.fichasSalida = fichasSalida
-            it.fichasCache = fichasCache; it.maximoMs = maximoMs
+            it.fichasCache = fichasCache; it.maximoMs = maximoMs; it.costoMicrodolares = costoMicrodolares
             cubetas.copyInto(it.cubetas)
         }
     }
@@ -145,8 +150,20 @@ object Metricas {
 
     fun registrarServicio(servicio: String, operacion: String, duracionMs: Long, error: TipoDeError?, fichas: Fichas?) {
         val minuto = minutoDe(reloj())
+        // Vuelta 106 · el costo se calcula **por llamada**, que es donde se sabe el tramo de Haiku
+        // 5.5 (más de 100.000 fichas de prompt); sumado por minuto ya no se podría. La operación de
+        // Anthropic es el modelo.
+        val costo = if (servicio == Servicio.ANTHROPIC && fichas != null) {
+            PreciosDeLaIa.costoDeUnaLlamada(
+                modelo = operacion,
+                entrada = (fichas.entrada - fichas.cacheEscrita).coerceAtLeast(0),
+                escritas = fichas.cacheEscrita,
+                leidas = fichas.cache,
+                salida = fichas.salida,
+            )
+        } else null
         servicios.computeIfAbsent(ClaveDeServicio(minuto, servicio, operacion)) { AgregadoDeServicio() }
-            .sumar(duracionMs, error, fichas)
+            .sumar(duracionMs, error, fichas, costo)
     }
 
     // ── Actividad: usuarios distintos, consultas lentas, pool ────────────────
@@ -252,5 +269,9 @@ enum class TipoDeError {
     RED,
 }
 
-/** Las fichas de una llamada a un modelo. */
-data class Fichas(val entrada: Long, val salida: Long, val cache: Long = 0)
+/**
+ * Las fichas de una llamada a un modelo. [entrada] incluye las escritas en la caché (así lo leyó
+ * siempre el panel); [cacheEscrita] dice cuántas de esas fueron escritura, que se cobra a 1,25× la
+ * entrada (vuelta 106), y [cache] son las leídas.
+ */
+data class Fichas(val entrada: Long, val salida: Long, val cache: Long = 0, val cacheEscrita: Long = 0)

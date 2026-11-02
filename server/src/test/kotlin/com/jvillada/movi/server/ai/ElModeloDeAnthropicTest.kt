@@ -5,6 +5,7 @@ import com.anthropic.models.messages.DirectCaller
 import com.anthropic.models.messages.Message
 import com.anthropic.models.messages.MessageParam
 import com.anthropic.models.messages.Model
+import com.anthropic.models.messages.OutputConfig
 import com.anthropic.models.messages.StopReason
 import com.anthropic.models.messages.TextBlock
 import com.anthropic.models.messages.ToolUseBlock
@@ -106,14 +107,21 @@ class ElModeloDeAnthropicTest {
         assertTrue(sinPermiso.toolChoice().orElseThrow().isNone(), "sin permiso, tool_choice: none")
     }
 
-    /** Pensar se cobra como salida: solo se enciende en el camino caro, el de los consejos. */
+    /**
+     * Vuelta 106 · en Haiku 5.5 el pensamiento adaptativo viene prendido, así que la perilla ya no
+     * es pensar o no: es **cuánto**. El camino de datos piensa con esfuerzo «bajo»; el de los
+     * consejos, con «medio». Los dos lo piden explícito (el respaldo, Opus 4.7, sin pedirlo no piensa).
+     */
     @Test
-    fun `no piensa salvo que se lo pidan`() {
+    fun `el camino de datos piensa poco y el de los consejos piensa en medio`() {
         val (barato, _) = modelo(respuestaConTexto("Listo."))
-        assertTrue(barato.armarLlamada(puedeUsarHerramientas = true).thinking().isEmpty)
+        val datos = barato.armarLlamada(puedeUsarHerramientas = true)
+        assertTrue(datos.thinking().orElseThrow().isAdaptive())
+        assertEquals(OutputConfig.Effort.LOW, datos.outputConfig().orElseThrow().effort().orElseThrow())
 
-        val caro = queOpina(respuestaConTexto("Listo."))
-        assertTrue(caro.armarLlamada(puedeUsarHerramientas = true).thinking().isPresent)
+        val caro = queOpina(respuestaConTexto("Listo.")).armarLlamada(puedeUsarHerramientas = true)
+        assertTrue(caro.thinking().orElseThrow().isAdaptive())
+        assertEquals(OutputConfig.Effort.MEDIUM, caro.outputConfig().orElseThrow().effort().orElseThrow())
     }
 
     /**
@@ -140,21 +148,18 @@ class ElModeloDeAnthropicTest {
     }
 
     /**
-     * El techo grande es del camino de los consejos y de nadie más. El dueño pidió que esto salga
-     * barato y «¿cuánto gasté en Comida?» —que es casi todo lo que pregunta— no piensa: tiene que
-     * seguir pagando exactamente lo mismo que antes de este arreglo.
+     * El techo grande es del camino de los consejos. El de datos —casi todo lo que el dueño
+     * pregunta— reserva solo lo poco que Haiku 5.5 piensa con esfuerzo «bajo»: el mismo bug de
+     * septiembre, pero en el camino barato, sería una burbuja vacía en «¿cuánto gasté en Comida?».
      */
     @Test
-    fun `el camino de datos no paga nada del techo del pensar`() {
+    fun `el camino de datos reserva poco para pensar y nunca deja el texto sin lugar`() {
         val (barato, _) = modelo(respuestaConTexto("Listo."))
 
         val llamada = barato.armarLlamada(puedeUsarHerramientas = true)
 
-        assertEquals(MAX_TOKENS_DE_RESPUESTA, llamada.maxTokens())
-        assertTrue(
-            llamada.outputConfig().isEmpty,
-            "`effort` es la perilla del pensar, y además en Haiku da error",
-        )
+        assertEquals(MAX_TOKENS_DE_RESPUESTA + PRESUPUESTO_DE_PENSAMIENTO_DEL_DATO, llamada.maxTokens())
+        assertTrue(PRESUPUESTO_DE_PENSAMIENTO_DEL_DATO < PRESUPUESTO_DE_PENSAMIENTO, "el de datos reserva menos que el de consejos")
     }
 
     /** Las dos partes del sistema se cachean: la PERSONA es lo más estable que hay. */
@@ -198,7 +203,7 @@ class ElModeloDeAnthropicTest {
      * respuesta más cara.
      */
     @Test
-    fun `si el modelo falla, reintenta una vez con el de respaldo`() = runBlocking {
+    fun `si el modelo no contesta por la red o el servidor, reintenta una vez con el de respaldo`() = runBlocking {
         val modelosPedidos = mutableListOf<String>()
         val elModelo = ElModeloDeAnthropic(
             modelo = "modelo-que-no-existe",
@@ -208,7 +213,7 @@ class ElModeloDeAnthropicTest {
             modeloDeRespaldo = MODELO_DE_PRUEBA,
             llamar = { params ->
                 modelosPedidos += params.model().toString()
-                if (modelosPedidos.size == 1) error("404 model not found")
+                if (modelosPedidos.size == 1) throw java.io.IOException("timeout")
                 respuestaConTexto("Listo.")
             },
         )
@@ -346,12 +351,12 @@ class ElModeloDeAnthropicTest {
     // ── Movi AI: un asesor que no inventa ─────────────────────────────────────────────────────
 
     /**
-     * **Temperatura baja en el camino de datos, y SOLO en Haiku.** Sonnet 5 y Opus 4.7 rechazan
-     * `temperature` con un 400: mandársela al camino que piensa rompería los consejos, y
-     * mandársela al respaldo convertiría el reintento en un segundo error seguro.
+     * **Ningún modelo recibe `temperature`** (vuelta 106). Haiku 5.5 da 400 con cualquier valor que
+     * no sea el de fábrica, Sonnet 5.5 y Opus 4.7 también, y desde la versión 2026-10-21 de la API
+     * todos. Las cifras las fijan los datos exactos y el verificador, no el azar.
      */
     @Test
-    fun `haiku lleva temperatura baja y los modelos que la rechazan no la reciben`() {
+    fun `ningun modelo recibe temperatura`() {
         fun llamadaCon(modelo: String, piensa: Boolean = false) = ElModeloDeAnthropic(
             modelo = modelo, persona = "p", contexto = "c",
             mensajesDelDueno = listOf(MessageParam.builder().role(MessageParam.Role.USER).content("hola").build()),
@@ -359,15 +364,33 @@ class ElModeloDeAnthropicTest {
             llamar = { respuestaConTexto("Listo.") },
         ).armarLlamada(puedeUsarHerramientas = true)
 
-        assertEquals(TEMPERATURA_DEL_CAMINO_DE_DATOS, llamadaCon(MODELO_DE_TODOS_LOS_DIAS).temperature().orElseThrow())
-        assertTrue(llamadaCon(MODELO_PARA_CONSEJOS, piensa = true).temperature().isEmpty, "Sonnet 5 da 400 con temperature")
-        assertTrue(llamadaCon(MODELO_DE_RESPALDO).temperature().isEmpty, "Opus 4.7 da 400 con temperature")
+        listOf(MODELO_DE_TODOS_LOS_DIAS, MODELO_PARA_CONSEJOS, MODELO_DE_RESPALDO).forEach { m ->
+            assertTrue(llamadaCon(m).temperature().isEmpty, "$m sin temperature")
+            assertTrue(llamadaCon(m, piensa = true).temperature().isEmpty, "$m sin temperature, pensando")
+        }
     }
 
-    /** El respaldo se arma de nuevo para su modelo: no hereda la temperatura de Haiku. */
+    /** El chat de todos los días es Haiku 5.5 (vuelta 106), con su id exacto y sin fecha. */
     @Test
-    fun `el reintento al respaldo no arrastra la temperatura de haiku`() = runBlocking {
-        val pedidas = mutableListOf<Pair<String, Boolean>>()
+    fun `el chat de todos los dias usa haiku 5_5`() = runBlocking {
+        val pedidas = mutableListOf<String>()
+        val elModelo = ElModeloDeAnthropic(
+            modelo = MODELO_DE_TODOS_LOS_DIAS,
+            persona = "p", contexto = "c",
+            mensajesDelDueno = listOf(MessageParam.builder().role(MessageParam.Role.USER).content("cuanto gaste").build()),
+            llamar = { params -> pedidas += params.model().asString(); respuestaConTexto("Listo.") },
+        )
+
+        elModelo.siguienteVuelta(puedeUsarHerramientas = true)
+
+        assertEquals(listOf("claude-haiku-5-5"), pedidas)
+        assertEquals("claude-haiku-5-5", elModelo.modeloQueContesto)
+    }
+
+    /** El respaldo se arma de nuevo para su modelo, y el turno queda anotado con el que contestó. */
+    @Test
+    fun `el reintento al respaldo se arma para su modelo y queda anotado`() = runBlocking {
+        val pedidas = mutableListOf<String>()
         val elModelo = ElModeloDeAnthropic(
             modelo = MODELO_DE_TODOS_LOS_DIAS,
             persona = "p",
@@ -375,15 +398,76 @@ class ElModeloDeAnthropicTest {
             mensajesDelDueno = listOf(MessageParam.builder().role(MessageParam.Role.USER).content("hola").build()),
             modeloDeRespaldo = MODELO_DE_RESPALDO,
             llamar = { params ->
-                pedidas += params.model().toString() to params.temperature().isPresent
-                if (pedidas.size == 1) error("529 overloaded")
+                pedidas += params.model().asString()
+                if (pedidas.size == 1) throw java.io.IOException("timeout")
                 respuestaConTexto("Listo.")
             },
         )
 
         elModelo.siguienteVuelta(puedeUsarHerramientas = true)
 
-        assertEquals(listOf(MODELO_DE_TODOS_LOS_DIAS to true, MODELO_DE_RESPALDO to false), pedidas)
+        assertEquals(listOf(MODELO_DE_TODOS_LOS_DIAS, MODELO_DE_RESPALDO), pedidas)
+        assertEquals(MODELO_DE_RESPALDO, elModelo.modeloQueContesto, "el costo se calcula con el que contestó")
+    }
+
+    /** Las fichas escritas en la caché se cuentan aparte: se cobran a 1,25× la entrada. */
+    @Test
+    fun `cuenta las fichas escritas en la cache`() = runBlocking {
+        val conEscritura = base()
+            .usage(
+                Usage.builder()
+                    .cacheCreation(null)
+                    .cacheCreationInputTokens(4_000L)
+                    .cacheReadInputTokens(2_000L)
+                    .inferenceGeo(null as String?)
+                    .inputTokens(300)
+                    .outputTokens(120)
+                    .serverToolUse(null)
+                    .serviceTier(null)
+                    .build(),
+            )
+            .addContent(TextBlock.builder().text("Listo.").citations(listOf()).build())
+            .build()
+        val (elModelo, _) = modelo(conEscritura)
+
+        elModelo.siguienteVuelta(puedeUsarHerramientas = true)
+
+        assertEquals(300L, elModelo.fichasDeEntrada)
+        assertEquals(4_000L, elModelo.fichasEscritasEnCache)
+        assertEquals(2_000L, elModelo.fichasLeidasDeCache)
+        assertEquals(120L, elModelo.fichasDeSalida)
+    }
+
+    /**
+     * Sonnet 5.5 da 400 con `thinking: disabled`: si el criterio va ahí, el reintento por techo sigue
+     * adaptativo con esfuerzo «bajo», en vez de convertirse en un segundo error seguro.
+     */
+    @Test
+    fun `en sonnet 5_5 el reintento por techo baja el esfuerzo en vez de apagar el pensamiento`() = runBlocking {
+        val pedidas = mutableListOf<com.anthropic.models.messages.MessageCreateParams>()
+        var i = 0
+        val elModelo = ElModeloDeAnthropic(
+            modelo = "claude-sonnet-5-5",
+            persona = "p", contexto = "c",
+            mensajesDelDueno = listOf(MessageParam.builder().role(MessageParam.Role.USER).content("que me recomiendas").build()),
+            piensa = true,
+            llamar = { params -> pedidas += params; if (i++ == 0) cortadaPorTecho() else respuestaConTexto("Abona al vehículo.") },
+        )
+
+        elModelo.siguienteVuelta(puedeUsarHerramientas = false)
+
+        assertTrue(pedidas[1].thinking().orElseThrow().isAdaptive(), "Sonnet 5.5 no deja apagarlo")
+        assertEquals(OutputConfig.Effort.LOW, pedidas[1].outputConfig().orElseThrow().effort().orElseThrow())
+    }
+
+    /** Una negativa (`stop_reason: refusal`) no es «no alcancé a terminar». */
+    @Test
+    fun `una negativa del modelo dice que no puede, no que no alcanzo`() = runBlocking {
+        val (elModelo, _) = modelo(base().content(emptyList()).stopReason(StopReason.REFUSAL).build())
+
+        val r = elModelo.siguienteVuelta(puedeUsarHerramientas = true)
+
+        assertEquals(NO_PUEDO_CON_ESA, (r as RespuestaDelModelo.Texto).texto)
     }
 
     /**

@@ -123,6 +123,8 @@ fun AIChatScreen(
     // La última respuesta dijo que la IA no está disponible: debajo van las tres que Movi contesta
     // sin ella, para que «sí funcionan» se pueda tocar (ver [MOVI_AI_NO_DISPONIBLE]).
     var ofrecerLasQueFuncionan by remember { mutableStateOf(false) }
+    // Vuelta 106: «Te quedan 10 preguntas este mes», debajo de la última respuesta.
+    var avisoDelTopeDelMes by remember { mutableStateOf<String?>(null) }
     // **La conversación sobrevive** (Ola 3): al abrir se pide la conversación en curso al server.
     // Mientras no llega no se pinta el arranque, para que no parpadee un chat vacío antes de que
     // aparezca lo que ya se habló. Si falla (sin señal) el chat arranca vacío, como antes.
@@ -177,6 +179,7 @@ fun AIChatScreen(
         input = ""
         if (image != null) pendingImage = null
         ofrecerLasQueFuncionan = false
+        avisoDelTopeDelMes = null
         loading = true
         coroutine.launch {
             // Lo que viaja NO es la lista de la pantalla: sin las imágenes de turnos anteriores
@@ -190,10 +193,12 @@ fun AIChatScreen(
                     enviadoEn = Clock.System.now().toEpochMilliseconds(),
                 ),
             )
-            ofrecerLasQueFuncionan = esCodigoDeIaNoDisponible(reply.getOrNull()?.codigo)
+            ofrecerLasQueFuncionan = seOfrecenLasQueFuncionan(reply.getOrNull())
+            avisoDelTopeDelMes = avisoDelTope(reply.getOrNull())
             // Lo que contestó dice si la IA anda: el aviso la apaga; una respuesta del modelo (no una
-            // de las tres sin IA, que contestan igual sin crédito) la prende.
-            if (ofrecerLasQueFuncionan) iaDisponible = false
+            // de las tres sin IA, que contestan igual sin crédito) la prende. Vuelta 106: la última
+            // pregunta libre del mes también la apaga (quedan las tres sugeridas).
+            if (ofrecerLasQueFuncionan || reply.getOrNull()?.preguntasQueQuedan == 0) iaDisponible = false
             else if (reply.isSuccess && sugerida == null) iaDisponible = true
             loading = false
         }
@@ -373,6 +378,10 @@ fun AIChatScreen(
             }
             if (loading) {
                 item { AIMsgAI("…") }
+            }
+            val aviso = avisoDelTopeDelMes
+            if (aviso != null && !loading) {
+                item(key = "aviso-del-tope") { AvisoDelTopeDelMes(aviso) }
             }
             if (ofrecerLasQueFuncionan && !loading) {
                 item {
@@ -690,6 +699,23 @@ internal fun ArranqueDelChat(
         )
     }
 }
+
+/**
+ * Vuelta 106 · **cuántas preguntas libres le quedan este mes**, debajo de la última respuesta, en la
+ * letra de apoyo y alineado con los globos del asistente. Solo cuando ya quedan pocas.
+ */
+@Composable
+internal fun AvisoDelTopeDelMes(texto: String) {
+    Text(
+        text = texto,
+        style = Movi.textos.apoyo,
+        color = Movi.colores.textoMedio,
+        modifier = Modifier.fillMaxWidth().padding(start = Espacio.xxl).testTag(TAG_AVISO_DEL_TOPE),
+    )
+}
+
+/** La marca del aviso del tope, para las pruebas. */
+internal const val TAG_AVISO_DEL_TOPE = "aviso-del-tope-del-mes"
 
 /** Un chip de pregunta: tocarlo la manda. Lo usan el arranque y [LasQueFuncionanSinLaIa]. */
 @Composable

@@ -36,7 +36,14 @@ internal const val VENTANA_DE_LA_MISMA_LLAVE_MS = 10L * 60 * 1000
  * [contenido] es un resumen del paquete, el título y el cuerpo ([contenidoDeLaNotificacion]), no el
  * texto: para comparar alcanza.
  */
-data class VistaPorLlave(val llave: String, val contenido: String, val cuando: Long)
+data class VistaPorLlave(val llave: String, val contenido: String, val cuando: Long, val emitida: Long = 0L)
+
+/**
+ * Vuelta 107 · **desde cuánta diferencia en el `when` de la app es otro aviso**, aunque la llave y el texto
+ * sean los mismos. Elegido: una reposición conserva el `when` (es la misma notificación); un cobro nuevo
+ * lleva el suyo, y dos compras distintas en la caja están separadas por minutos.
+ */
+internal const val OTRO_AVISO_SI_EL_WHEN_DIFIERE_MS = 60L * 1000
 
 /**
  * **La memoria de lo ya subido.** [huellas] es la de siempre (paquete, título, cuerpo y minuto: ver
@@ -79,13 +86,38 @@ fun anotarSiEsNueva(
     if (huella in memoria.huellas) return null
     val actualizada = vista.llave.isNotBlank() && memoria.porLlave.any {
         it.llave == vista.llave && it.contenido == vista.contenido &&
-            abs(vista.cuando - it.cuando) <= VENTANA_DE_LA_MISMA_LLAVE_MS
+            abs(vista.cuando - it.cuando) <= VENTANA_DE_LA_MISMA_LLAVE_MS &&
+            !esOtroAviso(it.emitida, vista.emitida)
     }
     if (actualizada) return null
     val huellas = recordarHuella(memoria.huellas, huella, tope) ?: return null
     val porLlave = if (vista.llave.isBlank()) memoria.porLlave else (memoria.porLlave + vista).takeLast(tope)
     return MemoriaDeLoSubido(huellas, porLlave)
 }
+
+/**
+ * Vuelta 107 · **¿Dos notificaciones con la misma llave y el mismo texto son dos avisos?** Sí, si las dos
+ * traen el `when` de la app ([VistaPorLlave.emitida]) y difieren en [OTRO_AVISO_SI_EL_WHEN_DIFIERE_MS] o
+ * más: Google Wallet avisa cada compra con la misma llave y el mismo texto («TIENDA LIBERTARIO 93: COP8,100
+ * with Debito Mastercard ••4057»), y la regla de la vuelta 92 se comía el segundo cobro idéntico dentro de
+ * los 10 min. Sin el `when` en alguna de las dos (una app que no lo pobla, o la memoria de antes de esta
+ * vuelta), no se sabe: sigue la regla de la ventana.
+ */
+internal fun esOtroAviso(emitidaAntes: Long, emitidaAhora: Long): Boolean =
+    emitidaAntes > 0L && emitidaAhora > 0L && abs(emitidaAhora - emitidaAntes) >= OTRO_AVISO_SI_EL_WHEN_DIFIERE_MS
+
+/** El paquete de Google Wallet: el único en que el `when` distingue un cobro nuevo (ver [emitidaQueCuenta]). */
+internal const val PAQUETE_DE_GOOGLE_WALLET = "com.google.android.apps.walletnfcrel"
+
+/**
+ * Revisión de la vuelta 107 · **el `when` que cuenta para [esOtroAviso]**, o `0` (= «no se sabe»). Solo el de
+ * Google Wallet, que avisa cada compra con la misma llave y el mismo texto: una app de banco que rearma su
+ * notificación al reponerla le pone un `when` nuevo, y con esta regla para todos se subiría dos veces. Y solo
+ * si es anterior o igual a la publicación ([NotificacionEntrante.cuando], el `postTime`): un `when` del futuro
+ * no es la hora del cobro.
+ */
+internal fun emitidaQueCuenta(n: NotificacionEntrante): Long =
+    n.emitida.takeIf { n.paquete == PAQUETE_DE_GOOGLE_WALLET && it in 1L..n.cuando } ?: 0L
 
 /**
  * Una notificación que hay que subir: lo que el `SmsSyncWorker` recibe. [paquete] es para el rótulo
@@ -137,7 +169,7 @@ fun procesarNotificaciones(
         val decision = decidirNotificacion(n, config)
         if (decision !is DecisionDeNotificacion.Subir) return@forEach
         val huella = huellaDeLaNotificacion(n.paquete, n.titulo, n.texto, n.cuando)
-        val vista = VistaPorLlave(n.llave, contenidoDeLaNotificacion(n.paquete, n.titulo, n.texto), n.cuando)
+        val vista = VistaPorLlave(n.llave, contenidoDeLaNotificacion(n.paquete, n.titulo, n.texto), n.cuando, emitidaQueCuenta(n))
         actual = anotarSiEsNueva(actual, huella, vista) ?: return@forEach
         subidas += SubidaDeNotificacion(idDeNotificacion(huella), n.paquete, decision.texto, n.cuando, silenciosa = barridoHecho != null)
     }
