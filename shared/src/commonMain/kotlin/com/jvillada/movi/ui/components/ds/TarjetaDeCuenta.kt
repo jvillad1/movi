@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.components.ds
 
+import com.jvillada.movi.observabilidad.ToqueDeUso
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -107,7 +108,7 @@ fun TarjetaDeCuenta(
                 // Un mínimo, no un alto fijo: con la letra del sistema agrandada la tarjeta crece en vez de cortar.
                 .heightIn(min = Medida.altoDeTarjetaDeCuenta)
                 .anilloDeFoco(RoundedCornerShape(Radio.xl))
-                .alPresionar(onClick = onClick, onClickLabel = "Ver $nombre", forma = RoundedCornerShape(Radio.xl), conBordeAlEncima = true)
+                .alPresionar(onClick = onClick, toque = ToqueDeUso("tarjeta-de-cuenta", modificador = modifier, dinamico = true), onClickLabel = "Ver $nombre", forma = RoundedCornerShape(Radio.xl), conBordeAlEncima = true)
                 .clip(RoundedCornerShape(Radio.xl))
                 .background(colores.tarjeta)
                 .testTag(TAG_TARJETA_DE_CUENTA)

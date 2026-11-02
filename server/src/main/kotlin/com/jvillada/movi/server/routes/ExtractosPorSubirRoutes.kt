@@ -44,7 +44,24 @@ import java.time.LocalDate
  */
 fun Route.extractosPorSubirRoutes() {
     get("/api/extractos-por-subir") {
-        call.respond(extractosPorSubirDe(call.userId(), AppClock.today()))
+        val uid = call.userId()
+        val extractos = extractosPorSubirDe(uid, AppClock.today())
+        // Vuelta 104: en el recorrido del dueño, cada recordatorio de extracto (una vez por tarjeta y corte).
+        val ahora = System.currentTimeMillis()
+        extractos.forEach { e ->
+            com.jvillada.movi.server.observabilidad.Observabilidad.registrarSistema(
+                uid,
+                com.jvillada.movi.server.observabilidad.Observabilidad.idEstable("extracto", "${e.cuentaId}:${e.corte}"),
+                com.jvillada.movi.shared.model.EventoDeUso.RECORDATORIO_DE_EXTRACTO,
+                buildMap {
+                    val periodo = e.corte.take(7)
+                    if (com.jvillada.movi.shared.model.ClaveDeUso.PERIODO.admite(periodo)) put(com.jvillada.movi.shared.model.ClaveDeUso.PERIODO, periodo)
+                    if (com.jvillada.movi.shared.model.ClaveDeUso.CUENTA_ID.admite(e.cuentaId)) put(com.jvillada.movi.shared.model.ClaveDeUso.CUENTA_ID, e.cuentaId)
+                },
+                ahora,
+            )
+        }
+        call.respond(extractos)
     }
 }
 

@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.dashboard
 
+import com.jvillada.movi.observabilidad.ToqueDeUso
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
@@ -119,7 +120,7 @@ fun EncabezadoDelInicio(
                 // Vuelta 55 (revisión): con Tab, el anillo de tinta (entra en los 56 del encabezado: el
                 // círculo mide 44 y el anillo sale 4) y el resaltado redondo, recortado al círculo.
                 .anilloDeFoco(CircleShape)
-                .alPresionar(onClick = onAvatar, rol = Role.Button, onClickLabel = "Abrir Tú", forma = CircleShape)
+                .alPresionar(onClick = onAvatar, toque = ToqueDeUso("avatar", idFijo = "inicio:avatar"), rol = Role.Button, onClickLabel = "Abrir Tú", forma = CircleShape)
                 .clip(CircleShape)
                 // Vuelta 79: con el Inicio desplazado (sobre el crema), el borde lo recorta del fondo.
                 .then(if (desplazado) Modifier.border(Medida.trazo, Movi.colores.borde, CircleShape) else Modifier)
@@ -200,7 +201,7 @@ private fun BotonDeLaBanda(
             .size(Medida.circuloDeLaBanda)
             .anilloDeFoco(CircleShape)
             // Vuelta 79: sin ripple, se hunde al presionar.
-            .alPresionar(onClick = onClick, rol = Role.Button, onClickLabel = descripcion, forma = CircleShape)
+            .alPresionar(onClick = onClick, toque = ToqueDeUso("boton-de-icono", modificador = modifier, rotulo = descripcion), rol = Role.Button, onClickLabel = descripcion, forma = CircleShape)
             .clip(CircleShape)
             .background(fondoDelBotonDeLaBanda(desplazado, Movi.colores), CircleShape)
             .then(if (desplazado) Modifier.border(Medida.trazo, Movi.colores.borde, CircleShape) else Modifier),

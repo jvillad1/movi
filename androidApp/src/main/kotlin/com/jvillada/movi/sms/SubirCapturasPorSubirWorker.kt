@@ -27,7 +27,10 @@ import java.util.concurrent.TimeUnit
  */
 class SubirCapturasPorSubirWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
 
-    override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
+    // Vuelta 104: cada corrida, en el uso (nombre, resultado y duración; ver `workers/CorridaDelWorker.kt`).
+    override suspend fun doWork(): Result = com.jvillada.movi.workers.medirLaCorrida("SubirCapturasPorSubirWorker") { trabajar() }
+
+    private suspend fun trabajar(): Result = withContext(Dispatchers.IO) {
         val contexto = applicationContext
         val token = SessionManager.token
         val userId = SessionManager.userId

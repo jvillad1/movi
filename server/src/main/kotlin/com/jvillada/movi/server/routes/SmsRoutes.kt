@@ -1028,6 +1028,13 @@ fun Route.smsRoutes() {
             count
         }
 
+        // Vuelta 104: en el recorrido del dueño, qué llegó, de dónde y si quedó pendiente o apartado.
+        com.jvillada.movi.server.observabilidad.Observabilidad.registrarAvisosCapturados(
+            uid,
+            inserted.map { com.jvillada.movi.server.observabilidad.Observabilidad.AvisoQueLlego(it.id, it.bank, it.id in apartadosAhora) },
+            System.currentTimeMillis(),
+        )
+
         // Hook de push (spec sms-realtime): SMS nuevos parseables → una push agrupada.
         // Best-effort — jamás falla el sync; los que no parsean quedan en el inbox como siempre.
         //

@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.components
 
+import com.jvillada.movi.observabilidad.ToqueDeUso
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.runtime.remember
@@ -134,6 +135,16 @@ const val TAG_BARRA_DE_PESTANAS: String = "barra-de-pestanas"
 /** El `testTag` de la píldora de una pestaña de la barra (vuelta 79: ahí va lo que se ve del toque). */
 const val TAG_PILDORA_DE_PESTANA: String = "barra-de-pestanas:pildora"
 
+/**
+ * Vuelta 104: el toque de una pestaña de la barra o del rail en el uso: `toque:pestana:hoy`; el «+»,
+ * `toque:agregar`. Sale del enum, nunca de un texto.
+ */
+fun toqueDeLaPestana(tab: NavTab): ToqueDeUso =
+    if (tab == NavTab.ADD) TOQUE_DE_AGREGAR else ToqueDeUso("pestana", idFijo = "pestana:${tab.name.lowercase()}")
+
+/** El «+» (el de la barra, el del rail y el de su menú): `toque:agregar`. */
+val TOQUE_DE_AGREGAR = ToqueDeUso("agregar", idFijo = "agregar")
+
 /** El `testTag` de cada pestaña de la barra del teléfono. */
 fun tagDePestana(tab: NavTab): String = "barra-de-pestanas:${tab.name}"
 
@@ -159,7 +170,7 @@ private fun NavItem(
             // Un lector de pantalla oye el rótulo (el ícono no dice nada) y sabe cuál está elegida.
             // Vuelta 79: la celda entera se toca, pero **sin ripple ni hover propio**: lo que se ve del
             // toque (la escala y el velo) va solo en la píldora, nunca un rectángulo de toda la celda.
-            .alPresionar(onClick = { onTabSelected(tab) }, rol = Role.Tab, escala = 1f, fuente = toque)
+            .alPresionar(onClick = { onTabSelected(tab) }, toque = toqueDeLaPestana(tab), rol = Role.Tab, escala = 1f, fuente = toque)
             .semantics { selected = isActive }
             .testTag(tagDePestana(tab)),
     ) {

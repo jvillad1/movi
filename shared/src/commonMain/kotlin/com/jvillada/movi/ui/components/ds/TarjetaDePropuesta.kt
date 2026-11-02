@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.components.ds
 
+import com.jvillada.movi.observabilidad.ToqueDeUso
+import com.jvillada.movi.shared.model.ClaveDeUso
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -87,6 +89,12 @@ fun TarjetaDePropuesta(
     /** Vuelta 97 · una tercera acción, fantasma como la secundaria. */
     accionTerciaria: String? = null,
     onAccionTerciaria: (() -> Unit)? = null,
+    /**
+     * Vuelta 104 · el tipo de la propuesta para el uso (`PAGO`, `CUADRE`; una constante de la app): con él
+     * cada botón se anota `toque:propuesta:pago` con `propuesta=PAGO`; sin él, con el tag de quien la
+     * monta o el rótulo del botón.
+     */
+    tipoDeUso: String? = null,
 ) {
     Superficie(
         modifier = modifier.fillMaxWidth().testTag(TAG_TARJETA_DE_PROPUESTA),
@@ -113,14 +121,27 @@ fun TarjetaDePropuesta(
                         modifier = Modifier.fillMaxWidth().testTag(TAG_SUBTITULO_DE_PROPUESTA),
                     )
                 }
+                // Vuelta 104: cada botón se anota como la propuesta (el tag de quien la monta, o su rótulo)
+                // con cuál de las tres acciones fue.
+                fun toqueDe(rotulo: String, cual: String) = ToqueDeUso(
+                    "propuesta",
+                    modificador = modifier,
+                    rotulo = rotulo,
+                    idFijo = tipoDeUso?.let { "propuesta:${it.lowercase().replace('_', '-')}" },
+                    datos = buildMap {
+                        put(ClaveDeUso.BOTON, cual)
+                        if (tipoDeUso != null && ClaveDeUso.PROPUESTA.admite(tipoDeUso)) put(ClaveDeUso.PROPUESTA, tipoDeUso)
+                    },
+                )
                 val botones: @Composable () -> Unit = {
-                    Boton(texto = accion, onClick = onAccion, variante = varianteDeLaAccion, tamano = TamanoDeBoton.S)
+                    Boton(texto = accion, onClick = onAccion, variante = varianteDeLaAccion, tamano = TamanoDeBoton.S, toqueDeUso = toqueDe(accion, "PRINCIPAL"))
                     if (accionSecundaria != null && onAccionSecundaria != null) {
                         Boton(
                             texto = accionSecundaria,
                             onClick = onAccionSecundaria,
                             variante = VarianteDeBoton.Fantasma,
                             tamano = TamanoDeBoton.S,
+                            toqueDeUso = toqueDe(accionSecundaria, "SECUNDARIA"),
                         )
                     }
                     if (accionTerciaria != null && onAccionTerciaria != null) {
@@ -129,6 +150,7 @@ fun TarjetaDePropuesta(
                             onClick = onAccionTerciaria,
                             variante = VarianteDeBoton.Fantasma,
                             tamano = TamanoDeBoton.S,
+                            toqueDeUso = toqueDe(accionTerciaria, "TERCERA"),
                         )
                     }
                 }

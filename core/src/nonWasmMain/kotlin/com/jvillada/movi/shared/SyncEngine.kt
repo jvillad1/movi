@@ -29,7 +29,15 @@ class SyncEngine(
      * server contesta (un traspaso que se arma, un aviso que se empareja).
      */
     private val alSubirAlgo: () -> Unit = {},
+    /**
+     * Vuelta 104: al final de una vuelta que hizo algo —subió filas o alguna falló con un código del
+     * server—, cuántas subieron y el primer código de error (`null` si ninguno). La app lo anota en el uso
+     * (`SINCRONIZACION`); nunca lleva qué subió.
+     */
+    private val alTerminarLaVuelta: (subidos: Int, codigoDeError: Int?) -> Unit = { _, _ -> },
 ) {
+    /** El primer código HTTP de error de la vuelta en curso (vuelta 104). Solo se toca con [subiendo] tomado. */
+    private var codigoDeLaVuelta: Int? = null
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
     /** Una subida a la vez: el ciclo de 30 s y la que pide [subirLoPendiente] no se cruzan. */
@@ -55,6 +63,7 @@ class SyncEngine(
      */
     suspend fun subirLoPendiente() {
         subiendo.withLock {
+            codigoDeLaVuelta = null
             val antes = runCatching { pendientes() }.getOrNull()
             // syncAccounts ANTES que syncEvents: una cuenta creada offline (ver
             // LocalRepository.createAccount) tiene que existir en el server antes que sus
@@ -66,6 +75,9 @@ class SyncEngine(
             try { syncVoids() } catch (e: Exception) { logSyncFailure("syncVoids", e) }
             val despues = runCatching { pendientes() }.getOrNull()
             if (antes != null && despues != null && despues < antes) runCatching { alSubirAlgo() }
+            val subidos = if (antes != null && despues != null) (antes - despues).coerceAtLeast(0) else 0
+            val codigo = codigoDeLaVuelta
+            if (subidos > 0 || codigo != null) runCatching { alTerminarLaVuelta(subidos, codigo) }
         }
     }
 
@@ -137,6 +149,7 @@ class SyncEngine(
                 )
                 db.accountQueries.markSynced(Clock.System.now().toEpochMilliseconds(), created.id)
             } catch (e: Exception) {
+                if (e is ApiException && codigoDeLaVuelta == null) codigoDeLaVuelta = e.status
                 logSyncFailure("syncAccounts", e, id = row.id)
             }
         }
@@ -248,6 +261,7 @@ class SyncEngine(
                 // el aviso decía que no pasaba.
                 db.financialEventQueries.limpiarElRastroDeFallos(row.id, row.userId)
             } catch (e: ApiException) {
+                if (codigoDeLaVuelta == null) codigoDeLaVuelta = e.status
                 logSyncFailure("syncEvents", e, id = row.id)
                 // Un rechazo del server (4xx que no es sesión vencida ni «demasiadas peticiones»):
                 // reintentar solo no lo arregla. Se guarda el motivo para que Movimientos lo diga.
@@ -322,6 +336,7 @@ class SyncEngine(
                         Clock.System.now().toEpochMilliseconds(), row.id
                     )
                 } else {
+                    if (codigoDeLaVuelta == null) codigoDeLaVuelta = e.status
                     logSyncFailure("syncVoids", e, id = row.id)
                 }
             } catch (e: Exception) {

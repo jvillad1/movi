@@ -49,6 +49,7 @@ import androidx.compose.material.icons.rounded.Savings
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -281,6 +282,10 @@ internal fun PropuestasDelInicioSection(
 ) {
     val todas = propuestasDelInicio(data, conElPago)
     val aLaVista = propuestasALaVista(todas)
+    // Vuelta 104: lo que «Movi propone hoy» armó, por tipo y cuántas (nunca sus cifras ni sus textos); una
+    // vez por sesión y por cada vez que cambia lo que propone.
+    val porTipo = todas.groupBy { it.tipo }.mapValues { (_, deEse) -> deEse.sumOf { it.cuantas } }
+    LaunchedEffect(porTipo) { com.jvillada.movi.observabilidad.anotarLasPropuestas(porTipo.mapKeys { it.key.name }) }
     val cargando = LocalCargandoElInicio.current
     val atajos = LocalAtajosDeAgregar.current
     // Vuelta 97: la propuesta de repartir cuya hoja está abierta.
@@ -353,6 +358,7 @@ private fun TarjetaDelFeed(propuesta: PropuestaDelInicio, hacer: (AccionDeLaProp
         onAccionSecundaria = secundaria?.let { { hacer(it) } },
         accionTerciaria = propuesta.accionTerciaria,
         onAccionTerciaria = propuesta.alTocarTerciaria?.let { { hacer(it) } },
+        tipoDeUso = propuesta.tipo.name,
     )
 }
 

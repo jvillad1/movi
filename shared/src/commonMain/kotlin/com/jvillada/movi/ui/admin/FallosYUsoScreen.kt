@@ -26,7 +26,23 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Cloud
+import androidx.compose.material.icons.rounded.Layers
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.TouchApp
+import androidx.compose.ui.graphics.vector.ImageVector
+import com.jvillada.movi.platform.hojaDeCompartir
 import com.jvillada.movi.shared.model.EventoDelRecorrido
+import com.jvillada.movi.shared.model.PREFIJO_DE_TOQUE
+import com.jvillada.movi.shared.model.csvDelRecorrido
+import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.IconoEnCirculo
+import com.jvillada.movi.ui.components.ds.TamanoDeBoton
+import com.jvillada.movi.ui.components.ds.TonoDeIcono
+import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import com.jvillada.movi.shared.model.GrupoDeFallos
 import com.jvillada.movi.shared.model.ResumenDeFallos
 import com.jvillada.movi.shared.model.ResumenDeUso
@@ -292,6 +308,37 @@ private fun PestanaDeUso() {
                 }
             }
         }
+        // Vuelta 104 · lo más tocado y los toques sin efecto (7 días).
+        item {
+            Column {
+                Seccion(titulo = TITULO_DE_LO_MAS_TOCADO)
+                Superficie(relleno = RellenoDeSuperficie.Lista) {
+                    if (r.masTocados.isEmpty()) Fila(titulo = "Todavía no hay toques")
+                    r.masTocados.forEachIndexed { i, t ->
+                        if (i > 0) Separador()
+                        Fila(titulo = t.nombre, subtitulo = personas(t.usuarios), final = { Valor("${t.veces}") })
+                    }
+                }
+            }
+        }
+        item {
+            Column {
+                Seccion(titulo = TITULO_DE_LOS_TOQUES_SIN_EFECTO)
+                Text(
+                    "Tres toques o más al mismo botón en menos de 2 s: un botón que no responde, o que tarda.",
+                    style = Movi.textos.apoyo,
+                    color = Movi.colores.textoMedio,
+                    modifier = Modifier.padding(bottom = Espacio.xs),
+                )
+                Superficie(relleno = RellenoDeSuperficie.Lista) {
+                    if (r.toquesSinEfecto.isEmpty()) Fila(titulo = "Ninguno en 7 días")
+                    r.toquesSinEfecto.forEachIndexed { i, t ->
+                        if (i > 0) Separador()
+                        Fila(titulo = t.nombre, subtitulo = personas(t.usuarios), final = { Valor(if (t.veces == 1) "1 vez" else "${t.veces} veces") })
+                    }
+                }
+            }
+        }
         item {
             Column {
                 Seccion(titulo = "Pantallas más abiertas (30 días)")
@@ -339,15 +386,67 @@ private fun Barra(rotulo: String, valor: Int, fraccion: Float) {
 
 // ── Recorridos ───────────────────────────────────────────────────────────────────────────────
 
-/** Los filtros de la línea de tiempo: `null` = todos. */
-internal val FILTROS_DEL_RECORRIDO = listOf<Pair<String, String?>>("Todo" to null, "Pantallas" to "PANTALLA", "Acciones" to "ACCION", "Sistema" to "SISTEMA")
+/** Vuelta 104: «Solo toques», el filtro rápido de los `toque:…`. */
+internal const val FILTRO_SOLO_TOQUES = "TOQUES"
 
-/** La línea de tiempo con el filtro por tipo y el buscador por nombre (sin distinguir mayúsculas). */
+/** Los filtros de la línea de tiempo: `null` = todos. */
+internal val FILTROS_DEL_RECORRIDO = listOf<Pair<String, String?>>(
+    "Todo" to null, "Solo toques" to FILTRO_SOLO_TOQUES, "Pantallas" to "PANTALLA", "Acciones" to "ACCION", "Sistema" to "SISTEMA",
+)
+
+internal const val TITULO_DE_LO_MAS_TOCADO = "Lo más tocado (7 días)"
+internal const val TITULO_DE_LOS_TOQUES_SIN_EFECTO = "Toques sin efecto (7 días)"
+internal const val EXPORTAR_LA_SESION = "Exportar CSV"
+internal const val TAG_EXPORTAR_LA_SESION = "fallos-y-uso:exportar-csv"
+
+/** ¿[e] es un toque autocapturado (`toque:<id>`)? */
+internal fun esToque(e: EventoDelRecorrido): Boolean = e.nombre.startsWith(PREFIJO_DE_TOQUE)
+
+/** La línea de tiempo con el filtro por tipo (o «Solo toques») y el buscador por nombre (sin distinguir mayúsculas). */
 internal fun filtrarElRecorrido(eventos: List<EventoDelRecorrido>, tipo: String?, busqueda: String): List<EventoDelRecorrido> {
     val texto = busqueda.trim().lowercase()
     return eventos.filter { e ->
-        (tipo == null || e.tipo == tipo) && (texto.isEmpty() || texto in e.nombre.lowercase())
+        val delTipo = when (tipo) {
+            null -> true
+            FILTRO_SOLO_TOQUES -> esToque(e)
+            else -> e.tipo == tipo
+        }
+        delTipo && (texto.isEmpty() || texto in e.nombre.lowercase())
     }
+}
+
+/**
+ * **Cómo se ve un evento en la línea de tiempo** (vuelta 104): un toque o una acción, en el azul de
+ * «entre cuentas» con la mano; una pantalla o una hoja, en la tinta con las capas; lo que hizo la app
+ * sola, en el ocre del aviso con el engranaje —y con la nube si lo escribió el server—. Colores de
+ * `Tokens.kt` por el tono del [IconoEnCirculo]. Pura.
+ */
+internal data class EstiloDelEvento(val icono: ImageVector, val tono: TonoDeIcono, val rotulo: String)
+
+internal fun estiloDelEvento(e: EventoDelRecorrido): EstiloDelEvento = when {
+    e.tipo == "PANTALLA" -> EstiloDelEvento(Icons.Rounded.Layers, TonoDeIcono.Neutro, "Pantalla")
+    e.tipo == "SISTEMA" && e.plataforma == "server" -> EstiloDelEvento(Icons.Rounded.Cloud, TonoDeIcono.Propio, "El server")
+    e.tipo == "SISTEMA" -> EstiloDelEvento(Icons.Rounded.Settings, TonoDeIcono.Propio, "La app sola")
+    else -> EstiloDelEvento(Icons.Rounded.TouchApp, TonoDeIcono.Info, if (esToque(e)) "Toque" else "Acción")
+}
+
+/** El título de un evento: «12. guardar» para un toque (sin el prefijo), «12. PANTALLA» para lo demás. */
+internal fun tituloDelEvento(e: EventoDelRecorrido): String =
+    if (e.sinSesion) "· ${e.nombre.removePrefix(PREFIJO_DE_TOQUE)}" else "${e.secuencia}. ${e.nombre.removePrefix(PREFIJO_DE_TOQUE)}"
+
+/**
+ * **Un toque en una línea**: su ruta y sus datos, «Dashboard>PorRevisar · boton=PRINCIPAL, componente=Boton».
+ * Lo demás, con su hora y su tipo ([detalleDelEvento]).
+ */
+internal fun lineaDelToque(e: EventoDelRecorrido): String = listOf(
+    e.ruta.ifEmpty { "sin ruta" },
+    e.datos.entries.sortedBy { it.key }.joinToString(", ") { "${it.key}=${it.value}" },
+).filter { it.isNotEmpty() }.joinToString(" · ")
+
+/** El nombre del CSV de una sesión: «recorrido-2026-11-01-0940.csv». */
+internal fun nombreDelCsv(sesion: SesionDeUso): String {
+    val t = Instant.fromEpochMilliseconds(sesion.inicio).toLocalDateTime(AppTimeZone.zone)
+    return "recorrido-${t.year}-${dos(t.monthNumber)}-${dos(t.dayOfMonth)}-${dos(t.hour)}${dos(t.minute)}.csv"
 }
 
 /** El renglón de un evento: «09:40:12.345 · ACCION · PrimerUso(paso 2) · accion=SIGUIENTE». */
@@ -426,6 +525,7 @@ private fun LineaDeTiempo(persona: UsuarioConUso, sesion: SesionDeUso, onVolver:
     val (lectura, reintentar) = rememberLectura(sesion.id) { ObservabilidadParaAdmin.actual.eventos(persona.id, sesion.id) }
     var filtro by remember { mutableStateOf<String?>(null) }
     var busqueda by remember { mutableStateOf("") }
+    val hoja = hojaDeCompartir()
     LazyColumn(contentPadding = rellenoDeLaLista, verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion)) {
         item {
             Column {
@@ -442,13 +542,39 @@ private fun LineaDeTiempo(persona: UsuarioConUso, sesion: SesionDeUso, onVolver:
         }
         item { CampoDeBusqueda(valor = busqueda, alCambiar = { busqueda = it }, guia = "Buscar por nombre") }
         if (!segunLaLectura(lectura, reintentar)) return@LazyColumn
-        val eventos = filtrarElRecorrido((lectura as Lectura.Llego<List<EventoDelRecorrido>>).valor, filtro, busqueda)
+        val todos = (lectura as Lectura.Llego<List<EventoDelRecorrido>>).valor
+        val eventos = filtrarElRecorrido(todos, filtro, busqueda)
+        // Vuelta 104: la sesión entera (sin el filtro) en CSV: en la web se descarga, en el teléfono se comparte.
+        item {
+            Boton(
+                EXPORTAR_LA_SESION,
+                onClick = {
+                    val csv = csvDelRecorrido(todos)
+                    if (hoja.puedeDescargar) hoja.descargar(nombreDelCsv(sesion), csv, "text/csv") else hoja.compartir(csv)
+                },
+                variante = VarianteDeBoton.Secundario,
+                tamano = TamanoDeBoton.S,
+                modifier = Modifier.testTag(TAG_EXPORTAR_LA_SESION),
+            )
+        }
         item {
             Superficie(relleno = RellenoDeSuperficie.Lista) {
                 if (eventos.isEmpty()) Fila(titulo = "Nada con ese filtro")
                 eventos.forEachIndexed { i, e ->
                     if (i > 0) Separador()
-                    Fila(titulo = "${e.secuencia}. ${e.nombre}", subtitulo = detalleDelEvento(e), lineasDelSubtitulo = 4)
+                    val estilo = estiloDelEvento(e)
+                    Fila(
+                        titulo = tituloDelEvento(e),
+                        subtitulo = if (esToque(e)) lineaDelToque(e) else detalleDelEvento(e),
+                        lineasDelSubtitulo = if (esToque(e)) 1 else 4,
+                        inicio = {
+                            IconoEnCirculo(
+                                estilo.icono,
+                                tono = estilo.tono,
+                                modifier = Modifier.semantics { contentDescription = estilo.rotulo },
+                            )
+                        },
+                    )
                 }
             }
         }

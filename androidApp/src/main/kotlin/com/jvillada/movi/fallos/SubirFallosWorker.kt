@@ -20,7 +20,10 @@ import java.util.concurrent.TimeUnit
  */
 class SubirFallosWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
 
-    override suspend fun doWork(): Result {
+    // Vuelta 104: cada corrida, en el uso (nombre, resultado y duración; ver `workers/CorridaDelWorker.kt`).
+    override suspend fun doWork(): Result = com.jvillada.movi.workers.medirLaCorrida("SubirFallosWorker") { trabajar() }
+
+    private suspend fun trabajar(): Result {
         val quedan = CapturaDeFallos.subirLosFallosGuardados(CapturaDeFallos.carpeta(applicationContext), CapturaDeFallos::enviarAMovi)
         return if (quedan == 0) Result.success() else Result.retry()
     }

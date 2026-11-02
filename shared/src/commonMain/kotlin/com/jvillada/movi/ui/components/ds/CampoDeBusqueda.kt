@@ -1,5 +1,9 @@
 package com.jvillada.movi.ui.components.ds
 
+import com.jvillada.movi.observabilidad.ToqueDeUso
+import com.jvillada.movi.observabilidad.idDeUsoDe
+import com.jvillada.movi.observabilidad.observarLaEscritura
+import com.jvillada.movi.observabilidad.rememberEscrituraDeUso
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -121,7 +125,12 @@ fun CampoDeBusqueda(
                 )
             }
             // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver [esAtajoDeSeleccionarTodo].
-            val campo = rememberCampoConSeleccion(valor, alCambiar)
+            // Vuelta 104: que empezó y que terminó de buscar, con el id del campo; nunca lo buscado.
+            val escritura = rememberEscrituraDeUso(idDeUsoDe(tag.takeIf { it != TAG_CAMPO_DE_BUSQUEDA }, rotulo = null, porDefecto = "busqueda"))
+            val campo = rememberCampoConSeleccion(valor) { nuevo ->
+                if (nuevo != valor) escritura.alCambiarElTexto()
+                alCambiar(nuevo)
+            }
             BasicTextField(
                 value = campo.valor,
                 onValueChange = campo::alCambiar,
@@ -133,6 +142,7 @@ fun CampoDeBusqueda(
                 modifier = Modifier
                     .fillMaxWidth()
                     .focusRequester(focoDeLaCaja)
+                    .observarLaEscritura(escritura)
                     .testTag(tag)
                     .semantics { contentDescription = guia }
                     .onPreviewKeyEvent(campo.atajoDeSeleccionarTodo),
@@ -144,6 +154,7 @@ fun CampoDeBusqueda(
                 BotonDeIcono(
                     Icons.Rounded.Close,
                     DESCRIPCION_DE_BORRAR_LA_BUSQUEDA,
+                    toqueDeUso = ToqueDeUso("boton-de-icono", idFijo = "busqueda:borrar"),
                     onClick = {
                         alCambiar("")
                         runCatching { focoDeLaCaja.requestFocus() }

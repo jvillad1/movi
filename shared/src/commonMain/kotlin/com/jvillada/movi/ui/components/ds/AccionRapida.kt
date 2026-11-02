@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.components.ds
 
+import com.jvillada.movi.observabilidad.ToqueDeUso
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -121,6 +122,8 @@ fun AccionRapida(
     insignia: Int? = null,
     descripcion: String? = null,
     renglones: RenglonesDelRotulo = RenglonesDelRotulo.Uno,
+    /** Vuelta 104: el tipo de componente que se anota al tocarla (la cuadrícula pasa el suyo). */
+    componenteDeUso: String = "accion-rapida",
 ) {
     val toque = remember { MutableInteractionSource() }
     // Vuelta 79: presionada (o con el mouse encima), el círculo pasa a la capa 3 —el de la marca se
@@ -131,7 +134,7 @@ fun AccionRapida(
     Column(
         modifier = modifier
             .anilloDeFoco(RoundedCornerShape(Radio.m))
-            .alPresionar(onClick = onClick, rol = Role.Button, fuente = toque)
+            .alPresionar(onClick = onClick, toque = ToqueDeUso(componenteDeUso, modificador = modifier, rotulo = rotulo), rol = Role.Button, fuente = toque)
             .semantics(mergeDescendants = true) {
                 if (destacada) llevaElAmarillo = true
                 val dicho = descripcion ?: rotulo
@@ -300,6 +303,7 @@ fun CuadriculaDeAcciones(
                         descripcion = accion.descripcion,
                         renglones = renglones,
                         modifier = Modifier.weight(1f),
+                        componenteDeUso = "cuadricula",
                     )
                 }
                 repeat(COLUMNAS_DE_ACCIONES - fila.size) { Spacer(Modifier.weight(1f)) }

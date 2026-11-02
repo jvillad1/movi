@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.components.ds
 
+import com.jvillada.movi.observabilidad.ToqueDeUso
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.runtime.remember
 import androidx.compose.foundation.background
@@ -185,7 +186,7 @@ private fun SuperficieConRellenoLibre(
                 },
             )
             .anilloDeFoco(forma)
-            .then(if (onClick != null) Modifier.toqueSinRipple(toque, onClick = onClick, onClickLabel = onClickLabel) else Modifier)
+            .then(if (onClick != null) Modifier.toqueSinRipple(toque, onClick = onClick, toque = ToqueDeUso("superficie", modificador = modifier, rotulo = onClickLabel), onClickLabel = onClickLabel) else Modifier)
             .clip(forma)
             .background(colorDeLaSuperficie(nivel, Movi.colores))
             .padding(relleno),

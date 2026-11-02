@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.components.ds
 
+import com.jvillada.movi.observabilidad.ToqueDeUso
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
@@ -468,7 +469,7 @@ private fun AccionDeTextoDelSnackbar(accion: AccionDelSnackbar) {
         modifier = Modifier
             .heightIn(min = Medida.objetivoTactil)
             .anilloDeFoco(forma, adentro = true)
-            .alPresionar(onClick = accion.alTocar, habilitado = accion.habilitada, rol = Role.Button, forma = forma)
+            .alPresionar(onClick = accion.alTocar, toque = ToqueDeUso("aviso-de-deshacer", modificador = Modifier.testTag(accion.tag), rotulo = accion.rotulo), habilitado = accion.habilitada, rol = Role.Button, forma = forma)
             .semantics { if (accion.descripcion != accion.rotulo) contentDescription = accion.descripcion }
             .testTag(accion.tag)
             .padding(horizontal = Espacio.s),

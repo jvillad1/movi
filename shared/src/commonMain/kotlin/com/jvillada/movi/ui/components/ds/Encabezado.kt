@@ -1,5 +1,8 @@
 package com.jvillada.movi.ui.components.ds
 
+import com.jvillada.movi.observabilidad.LocalHojaDeUso
+import com.jvillada.movi.observabilidad.ToqueDeUso
+import com.jvillada.movi.observabilidad.idDeUsoDe
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -76,6 +79,8 @@ fun BotonDeIcono(
     modifier: Modifier = Modifier,
     variante: VarianteDeBotonDeIcono = VarianteDeBotonDeIcono.Plano,
     habilitado: Boolean = true,
+    /** Vuelta 104: qué se anota al tocarlo; sin esto, el tag de quien lo monta o su [descripcion]. */
+    toqueDeUso: ToqueDeUso? = null,
 ) {
     val forma = CircleShape
     Box(
@@ -83,7 +88,7 @@ fun BotonDeIcono(
             .size(Medida.objetivoTactil)
             .anilloDeFoco(forma)
             // Vuelta 79: se hunde sin ripple, con el velo redondo en hover.
-            .alPresionar(onClick = onClick, habilitado = habilitado, rol = Role.Button, onClickLabel = descripcion, velo = true, forma = forma)
+            .alPresionar(onClick = onClick, toque = toqueDeUso ?: ToqueDeUso("boton-de-icono", modificador = modifier, rotulo = descripcion), habilitado = habilitado, rol = Role.Button, onClickLabel = descripcion, velo = true, forma = forma)
             .clip(forma)
             .then(
                 if (variante == VarianteDeBotonDeIcono.Secundario) {
@@ -103,6 +108,13 @@ fun BotonDeIcono(
         )
     }
 }
+
+/** Vuelta 104: la flecha ← de la barra de arriba, frente al atrás del sistema (`Uso.atrasDelSistema`). */
+internal val TOQUE_DE_LA_FLECHA = ToqueDeUso(
+    componente = "atras",
+    idFijo = "atras",
+    datos = mapOf(com.jvillada.movi.shared.model.ClaveDeUso.COMO to "FLECHA"),
+)
 
 /** Tag estable de la [AccionDelEncabezado]: la mide la prueba que compara pantallas. */
 const val TAG_ACCION_DEL_ENCABEZADO: String = "ds-accion-del-encabezado"
@@ -130,6 +142,7 @@ internal fun AccionDelEncabezado(accion: AccionDeEncabezado, modifier: Modifier 
     Boton(
         texto = accion.texto,
         onClick = accion.onClick,
+        toqueDeUso = ToqueDeUso("accion-del-encabezado", modificador = modifier, rotulo = accion.texto),
         modifier = modifier.testTag(TAG_ACCION_DEL_ENCABEZADO),
         variante = VarianteDeBoton.Fantasma,
         tamano = TamanoDeBoton.S,
@@ -154,6 +167,7 @@ internal fun AccionDelEncabezadoSoloIcono(accion: AccionDeEncabezado, modifier: 
             .anilloDeFoco(CircleShape)
             .alPresionar(
                 onClick = accion.onClick,
+                toque = ToqueDeUso("accion-del-encabezado", modificador = modifier, rotulo = accion.texto),
                 habilitado = accion.habilitado,
                 rol = Role.Button,
                 onClickLabel = accion.texto,
@@ -265,7 +279,8 @@ fun Encabezado(
         horizontalArrangement = Arrangement.spacedBy(Espacio.s),
     ) {
         when {
-            onVolver != null -> BotonDeIcono(Icons.AutoMirrored.Rounded.ArrowBack, ROTULO_VOLVER, onVolver)
+            // Vuelta 104: la flecha ← anota `toque:atras` con `como=FLECHA` (el atrás del sistema, `como=SISTEMA`).
+            onVolver != null -> BotonDeIcono(Icons.AutoMirrored.Rounded.ArrowBack, ROTULO_VOLVER, onVolver, toqueDeUso = TOQUE_DE_LA_FLECHA)
             inicio != null -> inicio()
         }
         TituloYAcciones(
@@ -462,6 +477,8 @@ fun EncabezadoDeHoja(
     modifier: Modifier = Modifier,
     subtitulo: String? = null,
 ) {
+    // Vuelta 104: la hoja se nombra en el uso por su título, si es un rótulo de la app (ver `HojaDeUso`).
+    LocalHojaDeUso.current?.let { hoja -> if (hoja.id == null) hoja.id = idDeUsoDe(null, titulo, porDefecto = "hoja") }
     Column(modifier = modifier.fillMaxWidth().testTag(TAG_ENCABEZADO_DE_HOJA)) {
         Text(
             titulo,

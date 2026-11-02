@@ -23,6 +23,11 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.semantics.SemanticsPropertyReceiver
 import androidx.compose.ui.semantics.semantics
+import com.jvillada.movi.observabilidad.LocalEntidadDeUso
+import com.jvillada.movi.observabilidad.ToqueDeUso
+import com.jvillada.movi.observabilidad.conLaEntidad
+import com.jvillada.movi.observabilidad.Uso
+import com.jvillada.movi.shared.model.ClaveDeUso
 import com.jvillada.movi.theme.LocalMovimientoReducido
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.theme.Movimiento
@@ -50,6 +55,12 @@ import com.jvillada.movi.theme.Movimiento
  * adentro y el fondo se queda quieto— y después del `anilloDeFoco` (el anillo escucha el foco de lo que
  * tiene debajo). `ElToqueEsDelSistemaTest` vigila que en `ds/`, la barra y el rail no vuelva un
  * `clickable` suelto, un `ripple(` ni un `LocalIndication`.
+ *
+ * **Vuelta 104 · cada toque se registra solo.** Los tres gestos de acá ([alPresionar], [alAlternar] y
+ * [toqueSinRipple]) piden un [ToqueDeUso] **obligatorio** y lo anotan en [Uso.toque] antes de llamar al
+ * `onClick` (el id, la ruta y los datos: ver `observabilidad/Toques.kt`). Un componente tocable nuevo
+ * no compila sin decir qué es, y `LosToquesDelSistemaSeRegistranTest` vigila que en `ds/` no aparezca
+ * otro gesto que se los salte.
  */
 
 /** La escala que [alPresionar] le pone al componente mientras se presiona, en su semántica. */
@@ -108,6 +119,8 @@ fun escalaDelToque(presionado: Boolean, reducido: Boolean, escala: Float): Float
  */
 fun Modifier.alPresionar(
     onClick: () -> Unit,
+    /** Vuelta 104: qué se tocó, para el uso (ver `Toques.kt`). Obligatorio. */
+    toque: ToqueDeUso,
     habilitado: Boolean = true,
     rol: Role? = null,
     onClickLabel: String? = null,
@@ -119,6 +132,7 @@ fun Modifier.alPresionar(
     conBordeAlEncima: Boolean = false,
 ): Modifier = composed {
     val interacciones = fuente ?: remember { MutableInteractionSource() }
+    val entidad = LocalEntidadDeUso.current
     this
         .hundimiento(interacciones, escala, velo, forma, habilitado, conBordeAlEncima)
         .clickable(
@@ -127,7 +141,10 @@ fun Modifier.alPresionar(
             enabled = habilitado,
             onClickLabel = onClickLabel,
             role = rol,
-            onClick = onClick,
+            onClick = {
+                Uso.toque(toque, toque.conLaEntidad(entidad))
+                onClick()
+            },
         )
 }
 
@@ -137,6 +154,8 @@ fun Modifier.alPresionar(
 fun Modifier.alAlternar(
     valor: Boolean,
     onCambiar: (Boolean) -> Unit,
+    /** Vuelta 104: qué se tocó; se anota con su estado nuevo (`encendido`). Obligatorio. */
+    toque: ToqueDeUso,
     habilitado: Boolean = true,
     rol: Role? = null,
     escala: Float = Movimiento.ESCALA_AL_PRESIONAR,
@@ -144,6 +163,7 @@ fun Modifier.alAlternar(
     forma: Shape = RectangleShape,
 ): Modifier = composed {
     val interacciones = remember { MutableInteractionSource() }
+    val entidad = LocalEntidadDeUso.current
     this
         .hundimiento(interacciones, escala, velo, forma, habilitado)
         .toggleable(
@@ -152,7 +172,10 @@ fun Modifier.alAlternar(
             indication = null,
             enabled = habilitado,
             role = rol,
-            onValueChange = onCambiar,
+            onValueChange = { nuevo ->
+                Uso.toque(toque, toque.conLaEntidad(entidad) + (ClaveDeUso.ENCENDIDO to if (nuevo) "SI" else "NO"))
+                onCambiar(nuevo)
+            },
         )
 }
 
@@ -178,17 +201,25 @@ fun Modifier.hundimientoAlPresionar(
 fun Modifier.toqueSinRipple(
     fuente: MutableInteractionSource,
     onClick: () -> Unit,
+    /** Vuelta 104: qué se tocó, para el uso. Obligatorio. */
+    toque: ToqueDeUso,
     habilitado: Boolean = true,
     rol: Role? = null,
     onClickLabel: String? = null,
-): Modifier = clickable(
-    interactionSource = fuente,
-    indication = null,
-    enabled = habilitado,
-    onClickLabel = onClickLabel,
-    role = rol,
-    onClick = onClick,
-)
+): Modifier = composed {
+    val entidad = LocalEntidadDeUso.current
+    clickable(
+        interactionSource = fuente,
+        indication = null,
+        enabled = habilitado,
+        onClickLabel = onClickLabel,
+        role = rol,
+        onClick = {
+            Uso.toque(toque, toque.conLaEntidad(entidad))
+            onClick()
+        },
+    )
+}
 
 private fun Modifier.hundimiento(
     fuente: MutableInteractionSource,

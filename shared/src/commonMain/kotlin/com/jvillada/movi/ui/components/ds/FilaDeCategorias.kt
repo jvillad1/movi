@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.components.ds
 
+import com.jvillada.movi.observabilidad.ToqueDeUso
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -133,6 +134,7 @@ private fun EncabezadoDeLaFilaDeCategorias(
                 .anilloDeFoco(RoundedCornerShape(Radio.s))
                 .alPresionar(
                     onClick = onTodas,
+                    toque = ToqueDeUso("categorias", modificador = Modifier.testTag(tags.todas), rotulo = "Ver todas las categorías"),
                     rol = Role.Button,
                     onClickLabel = "Ver todas las categorías",
                     velo = true,
