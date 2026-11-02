@@ -5116,14 +5116,16 @@ un formulario:
   con `EstadoDelFormularioDeCuenta.cargar`). No hay un segundo formulario parecido: crear y editar se ven
   igual. Título «Editar la cuenta», un `PieDeHoja` con «Guardar» y, si está apagado, su razón («No has
   cambiado nada», «El nombre no puede estar vacío»). **Sin «Cancelar»**: la × y el arrastre cancelan.
-- **Lo que no se puede cambiar no se ofrece como control**: va como texto con el porqué (`tipoFijo`: «Tarjeta
-  de crédito. Una cuenta de plata no se vuelve deuda…»), y el server lo rechaza igual (422).
+- **Lo que no se puede cambiar no se ofrece como control**: va como texto con el porqué (`tipoFijo`: «Efectivo.
+  El efectivo no recibe extractos…»), y el server lo rechaza igual (422). En una cuenta, solo Ahorros y
+  Corriente se ofrecen como píldoras: son lo único que se cambia sin mover plata.
 - **Una cifra derivada no se edita como campo crudo.** «Saldo de hoy» se llena con el saldo que muestra la
   pantalla; si se escribe otro, el `ayuda` del campo dice en una línea qué va a pasar —«Movi anota un ajuste de
   +$250.000 para que cuadre.»— y guardar escribe el **mismo** ajuste que Cuadre de saldos. Vacío es «no lo
   toques», nunca $0. Nunca se reescribe la historia.
 - **Lo que el cambio deja de hacer se dice antes** (`ayuda` del campo): renombrar una cuenta que Movi reconoce
-  por su número o por «Skandia» avisa que dejará de reconocerla sola.
+  por su número o por «Skandia» avisa que dejará de reconocerla sola, y si rompe el emparejamiento con su
+  hermana en otra moneda lo dice con su nombre («La cuenta en USD «…» deja de emparejarse con esta»).
 - **Lo que tiene su propia hoja no se duplica**: un bien se sigue editando en `BienSheet`.
 
 Y los bancos de un toque: **ocho a la vista** (`BANCOS_A_LA_VISTA`) y la píldora «Ver todos los bancos», que
