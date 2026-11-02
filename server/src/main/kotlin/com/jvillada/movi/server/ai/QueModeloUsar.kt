@@ -19,11 +19,27 @@ import com.jvillada.movi.shared.model.normalizarParaBuscar
  * merecía. Ninguno de los dos rompe nada.
  */
 
-/** Lo de todos los días: preguntas de datos, que es casi todo. */
-const val MODELO_DE_TODOS_LOS_DIAS = "claude-haiku-4-5-20251001"
+/**
+ * Lo de todos los días: preguntas de datos, que es casi todo. **Haiku 5.5 desde la vuelta 106**
+ * (antes Haiku 4.5): unas 10 veces más barato por ficha ($0,10 / $0,01 en caché / $0,50 por millón,
+ * contra $1 / $0,10 / $5). Piensa aunque no se lo pidan, así que el camino de datos le pide esfuerzo
+ * «bajo» y le reserva un poco de techo (ver `ElModeloDeAnthropic`). También clasifica los papeles de
+ * «Compartir con Movi» (`ClaudeStatementParser.queEsElPapel`).
+ */
+const val MODELO_DE_TODOS_LOS_DIAS = "claude-haiku-5-5"
 
-/** Cuando le pide criterio. Pensar se enciende solo por este camino. */
-const val MODELO_PARA_CONSEJOS = "claude-sonnet-5"
+/**
+ * Cuando le pide criterio: piensa con esfuerzo «medio». **Sonnet 5.5 desde la vuelta 106** (antes
+ * Sonnet 5): el mismo precio de entrada y salida, y la caché a la mitad ($0,10 contra $0,20).
+ *
+ * **Por qué no Haiku 5.5, que es 20 veces más barato:** el dueño pidió pasarlo a Haiku solo si la
+ * calidad aguantaba, medida con 10 preguntas reales de `ai_turns` contra los dos modelos (el
+ * verificador de cifras y si dicen lo mismo). La comparación no se pudo correr: la clave de
+ * Anthropic del `.env` local está revocada (401 «invalid x-api-key», 2-nov-2026) y la de producción
+ * no se toca. Sin evidencia, el criterio queda en el Sonnet actual. El arnés de la comparación quedó
+ * descrito en el reporte de la vuelta 106: correrlo con una clave válida decide este número.
+ */
+const val MODELO_PARA_CONSEJOS = "claude-sonnet-5-5"
 
 /**
  * El que se sabe que funciona en esta cuenta hoy: es el que contestó todo hasta este cambio. Se usa

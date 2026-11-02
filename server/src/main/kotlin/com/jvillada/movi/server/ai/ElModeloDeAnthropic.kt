@@ -38,13 +38,14 @@ internal class ElModeloDeAnthropic(
     mensajesDelDueno: List<MessageParam>,
     private val maxTokens: Long = MAX_TOKENS_DE_RESPUESTA,
     /**
-     * **Pensar cuesta como salida, que es lo caro.** Para «¿cuánto gasté en Comida?» —donde la
-     * cuenta la hace la consulta y no el modelo— no compra nada. Se enciende solo en el camino
-     * caro, el de los consejos.
+     * **El camino del criterio** (ver `laPreguntaPideCriterio`): piensa con esfuerzo «medio» y el
+     * techo reserva [PRESUPUESTO_DE_PENSAMIENTO] además del texto. Apagado es el camino de datos,
+     * que desde Haiku 5.5 **también piensa** —en los modelos 5.x el pensamiento adaptativo viene
+     * prendido—, pero con esfuerzo «bajo» y la reserva chica de [PRESUPUESTO_DE_PENSAMIENTO_DEL_DATO].
      *
-     * Ojo con lo que esto arrastra: prendido, el techo de la llamada deja de ser [maxTokens] y
-     * pasa a ser [maxTokens] + [PRESUPUESTO_DE_PENSAMIENTO]. La razón está en el KDoc de esa
-     * constante, y es exactamente el error que tuvo rota esta rama entera durante días.
+     * Ojo con lo que esto arrastra: el techo de la llamada nunca es solo [maxTokens]. La razón está
+     * en el KDoc de [PRESUPUESTO_DE_PENSAMIENTO], y es exactamente el error que tuvo rota esta rama
+     * entera durante días.
      */
     private val piensa: Boolean = false,
     /**
@@ -101,6 +102,21 @@ internal class ElModeloDeAnthropic(
         private set
     var fichasLeidasDeCache: Long = 0L
         private set
+    /**
+     * Vuelta 106 · las que **se escribieron** en la caché (`cache_creation_input_tokens`). Se cobran
+     * a 1,25× la entrada y antes no se guardaban en ningún lado: sin ellas el costo de un turno salía
+     * corto justo en la primera pregunta de cada conversación, la que escribe la caché.
+     */
+    var fichasEscritasEnCache: Long = 0L
+        private set
+
+    /**
+     * El modelo que de verdad contestó la última llamada: [modelo], o el de respaldo si el primero
+     * falló. Es lo que se anota en `ai_turns.modelo`, para que el costo del turno se calcule con el
+     * precio del que se usó y no del que se pidió.
+     */
+    var modeloQueContesto: String = modelo
+        private set
 
     override suspend fun siguienteVuelta(puedeUsarHerramientas: Boolean): RespuestaDelModelo {
         var respuesta = pedirle { conModelo -> armarLlamada(puedeUsarHerramientas, modeloDeEstaLlamada = conModelo) }
@@ -110,15 +126,27 @@ internal class ElModeloDeAnthropic(
         // más simple —sin pensamiento, con los mismos ~700 de texto— es peor que la que iba a
         // salir, pero es infinitamente mejor que ninguna.
         //
-        // No duplica el costo del caso normal: para entrar acá tienen que darse las tres cosas a
-        // la vez —que estemos en el camino que piensa, que la API haya cortado por `max_tokens` y
-        // que no haya venido ni un bloque de texto—, y cuando se dan, lo que se «duplica» es una
-        // llamada que ya se pagó entera y no sirvió para nada.
-        var penso = piensa
-        if (piensa && seCortoSinTexto(respuesta)) {
+        // No duplica el costo del caso normal: para entrar acá tienen que darse las dos cosas a
+        // la vez —que la API haya cortado por `max_tokens` y que no haya venido ni un bloque de
+        // texto—, y cuando se dan, lo que se «duplica» es una llamada que ya se pagó entera y no
+        // sirvió para nada.
+        //
+        // Vuelta 106: vale para los dos caminos. Con Haiku 5.5 el de datos también piensa (poco,
+        // pero piensa), así que también puede quedarse sin techo. Donde el modelo no deja apagar
+        // el pensamiento (Sonnet 5.5), el reintento piensa con esfuerzo «bajo».
+        var penso = true
+        if (seCortoSinTexto(respuesta)) {
             avisarQueNoHuboTexto(respuesta, penso, "reintento sin pensar")
             penso = false
             respuesta = pedirle { conModelo -> armarLlamada(puedeUsarHerramientas, pensando = false, modeloDeEstaLlamada = conModelo) }
+        }
+
+        // **Una negativa no es una respuesta vacía.** Los modelos 5.x pueden declinar con
+        // `stop_reason: refusal` (HTTP 200), y Haiku 5.5 no tiene respaldo del lado del servidor. Sin
+        // esto la burbuja diría «no alcancé a terminar», que invita a repetir lo mismo.
+        if (respuesta.stopReason().orElse(null) == StopReason.REFUSAL && respuesta.textoJunto().isBlank()) {
+            log.warn("movi-ai: el modelo declinó la pregunta — modelo={}", respuesta.model())
+            return RespuestaDelModelo.Texto(NO_PUEDO_CON_ESA)
         }
 
         val pedidos = respuesta.content().mapNotNull { it.toolUse().orElse(null) }
@@ -135,11 +163,11 @@ internal class ElModeloDeAnthropic(
      * Una llamada, con su reintento al modelo de respaldo y las fichas ya contadas.
      *
      * Recibe **cómo armar** la llamada y no la llamada armada, porque el respaldo no es solo otro
-     * id: es otro modelo con otras reglas. La temperatura baja del camino de datos va solo a Haiku
-     * —el respaldo, Opus 4.7, contesta 400 si se la mandan—, así que copiar los params cambiando
-     * el modelo convertía el reintento en un segundo error seguro.
+     * id: es otro modelo con otras reglas (qué acepta para apagar el pensamiento, por ejemplo), así
+     * que copiar los params cambiando el modelo convertía el reintento en un segundo error seguro.
      */
     private suspend fun pedirle(armar: (String) -> MessageCreateParams): Message {
+        var usado = modelo
         val respuesta = try {
             llamar(armar(modelo))
         } catch (falla: Exception) {
@@ -147,13 +175,16 @@ internal class ElModeloDeAnthropic(
             // Sin saldo o con la clave rechazada, el respaldo falla igual —es la misma cuenta— y
             // solo duplica la espera. Ver `FallaDeLaIa.sirveOtroModelo`.
             if (fallaDeLaIa(falla)?.sirveOtroModelo == false) throw falla
+            usado = respaldo
             llamar(armar(respaldo))
         }
         ultima = respuesta
+        modeloQueContesto = usado
         respuesta.usage().let { uso ->
             fichasDeEntrada += uso.inputTokens()
             fichasDeSalida += uso.outputTokens()
             fichasLeidasDeCache += uso.cacheReadInputTokens().orElse(0L)
+            fichasEscritasEnCache += uso.cacheCreationInputTokens().orElse(0L)
         }
         return respuesta
     }
@@ -178,7 +209,7 @@ internal class ElModeloDeAnthropic(
             penso,
             respuesta.stopReason().map { it.asString() }.orElse("desconocido"),
             respuesta.usage().outputTokens(),
-            techoPara(penso),
+            techoPara(penso, respuesta.model().asString()),
             queSeHizo,
         )
     }
@@ -191,12 +222,17 @@ internal class ElModeloDeAnthropic(
      * `stop_reason: max_tokens` y volvían cero bloques de texto: el camino de los consejos estuvo
      * roto al 100 % desde que se encendió el pensar.
      *
-     * Y no hay una tercera perilla: en Sonnet 5 el pensamiento es adaptativo y `budget_tokens`
-     * fue removido (mandarlo da un 400), así que el presupuesto de pensamiento no se declara —
-     * **se reserva**, sumándolo al techo. De ahí que esto sea una suma y no dos parámetros.
+     * Y no hay una tercera perilla: en los modelos 5.x el pensamiento es adaptativo y
+     * `budget_tokens` fue removido (mandarlo da un 400), así que el presupuesto de pensamiento no
+     * se declara — **se reserva**, sumándolo al techo. De ahí que esto sea una suma y no dos
+     * parámetros. Vuelta 106: el camino de datos también reserva (menos), porque en Haiku 5.5
+     * también piensa; solo el reintento con el pensamiento apagado se queda con [maxTokens] pelado.
      */
-    private fun techoPara(pensando: Boolean): Long =
-        if (pensando) maxTokens + PRESUPUESTO_DE_PENSAMIENTO else maxTokens
+    private fun techoPara(pensando: Boolean, modeloDeEstaLlamada: String = modelo): Long = when {
+        pensando && piensa -> maxTokens + PRESUPUESTO_DE_PENSAMIENTO
+        pensando || !sePuedeApagarElPensamiento(modeloDeEstaLlamada) -> maxTokens + PRESUPUESTO_DE_PENSAMIENTO_DEL_DATO
+        else -> maxTokens
+    }
 
     /** Lo que el modelo escribió para el dueño, sin los bloques de pensamiento ni de herramienta. */
     private fun Message.textoJunto(): String =
@@ -205,35 +241,36 @@ internal class ElModeloDeAnthropic(
     /** Lo que se le manda a la API en esta vuelta. Aparte para poder mirarlo en una prueba. */
     internal fun armarLlamada(
         puedeUsarHerramientas: Boolean,
-        pensando: Boolean = piensa,
+        /** `false` solo en el reintento por techo (ver [siguienteVuelta]): piensa lo menos posible. */
+        pensando: Boolean = true,
         modeloDeEstaLlamada: String = modelo,
     ): MessageCreateParams =
         MessageCreateParams.builder()
             .model(modeloDeEstaLlamada)
-            .maxTokens(techoPara(pensando))
+            .maxTokens(techoPara(pensando, modeloDeEstaLlamada))
+            // **Sin `temperature`, en ningún modelo** (vuelta 106). Era la perilla de determinismo del
+            // camino de datos en Haiku 4.5, pero Haiku 5.5 da 400 con cualquier valor que no sea el
+            // de fábrica, y desde la versión 2026-10-21 de la API también todos los demás. La
+            // determinación de las cifras nunca vino de ahí: viene de los datos exactos de la
+            // pregunta y del verificador de cifras (ver `responderSinInventar`).
             .apply {
-                // **La temperatura baja es la perilla de determinismo del camino de datos**: misma
-                // pregunta, misma respuesta. Solo en Haiku, y no por gusto: Sonnet 5 y Opus 4.7
-                // rechazan `temperature` con un 400. En el camino de los consejos la determinación
-                // no puede venir de una perilla del modelo; viene de los datos exactos de la
-                // pregunta y del verificador de cifras (ver `responderSinInventar`).
-                if (!pensando && aceptaTemperatura(modeloDeEstaLlamada)) temperature(TEMPERATURA_DEL_CAMINO_DE_DATOS)
-            }
-            .apply {
-                if (pensando) {
+                if (pensando || !sePuedeApagarElPensamiento(modeloDeEstaLlamada)) {
+                    // Explícito aunque en los 5.x sea el default: el respaldo (Opus 4.7) sin esto
+                    // NO piensa, y el mismo pedido tiene que significar lo mismo en los dos.
                     thinking(ThinkingConfigAdaptive.builder().build())
-                    // **El esfuerzo es la perilla de costo del camino que piensa**, y la única que
-                    // queda ahora que `budget_tokens` no existe. En «medio» el modelo piensa lo
-                    // suficiente para un consejo de finanzas del hogar sin llenar el techo que le
-                    // acabamos de reservar. Va SOLO acá a propósito: en Haiku —el de todos los
-                    // días, que es casi todo lo que él pregunta— `effort` da error, y de paso así
-                    // el camino de datos no paga un peso por este arreglo.
-                    outputConfig(OutputConfig.builder().effort(OutputConfig.Effort.MEDIUM).build())
-                } else if (piensa) {
-                    // Solo en el reintento: en Sonnet 5 omitir `thinking` NO lo apaga —el modo
-                    // adaptativo es el default—, así que apagarlo hay que pedirlo.
+                } else {
+                    // Solo en el reintento, y solo donde se puede: Haiku 5.5 lo acepta con
+                    // esfuerzo «alto» o menos; Sonnet 5.5 y Opus 5.5 dan 400 (ahí el reintento
+                    // sigue adaptativo, con esfuerzo «bajo»).
                     thinking(ThinkingConfigDisabled.builder().build())
                 }
+                // **El esfuerzo es la perilla de costo**, y la única que queda ahora que
+                // `budget_tokens` no existe. En «medio» el modelo piensa lo suficiente para un
+                // consejo de finanzas del hogar; en «bajo» —el de datos y el reintento— casi no
+                // piensa, que es lo que la guía de Haiku 5.5 recomienda para el chat. Va explícito:
+                // en Haiku 5.5 el default es «medio», y el camino de datos no lo necesita.
+                val esfuerzo = if (pensando && piensa) OutputConfig.Effort.MEDIUM else OutputConfig.Effort.LOW
+                outputConfig(OutputConfig.builder().effort(esfuerzo).build())
             }
             .systemOfTextBlockParams(
                 listOfNotNull(
@@ -362,18 +399,28 @@ internal const val MAX_TOKENS_DE_RESPUESTA = 700L
 internal const val PRESUPUESTO_DE_PENSAMIENTO = 4_000L
 
 /**
- * **Qué tan al azar escribe Haiku en el camino de datos.** Baja para que la misma pregunta dé la
- * misma respuesta, pero no cero: en cero el modelo tiende a repetir frases hechas palabra por
- * palabra, y lo que se busca fijar son las cifras —que ya no dependen de esto, las ponen los datos
- * exactos y el verificador—, no la redacción.
+ * **Lo que se le reserva al pensamiento en el camino de datos** (vuelta 106). Haiku 5.5 piensa
+ * aunque no se lo pidan; con esfuerzo «bajo» piensa poco o nada en «¿cuánto gasté en Comida?», pero
+ * un techo de solo [MAX_TOKENS_DE_RESPUESTA] repetiría el bug de septiembre en el camino barato. Mil
+ * quinientas alcanzan para mirar una herramienta y decidir; un techo no es un cobro.
  */
-internal const val TEMPERATURA_DEL_CAMINO_DE_DATOS = 0.2
+internal const val PRESUPUESTO_DE_PENSAMIENTO_DEL_DATO = 1_500L
 
 /**
- * ¿Este modelo acepta `temperature`? Solo la familia Haiku de las que usa Movi: Sonnet 5 y Opus
- * 4.7 la rechazan con un 400, y mandársela al respaldo convertiría el reintento en un error seguro.
+ * ¿Este modelo deja apagar el pensamiento con `thinking: {type: "disabled"}`? Haiku 5.5 sí (con
+ * esfuerzo «alto» o menos), Opus 4.7 y los 4.x también. **Sonnet 5.5 y Opus 5.5 no**: dan 400, y en
+ * esos el reintento sigue pensando con esfuerzo «bajo». Ver la guía de migración de cada uno.
  */
-internal fun aceptaTemperatura(modelo: String): Boolean = modelo.startsWith("claude-haiku")
+internal fun sePuedeApagarElPensamiento(modelo: String): Boolean =
+    !modelo.startsWith("claude-sonnet-5-5") && !modelo.startsWith("claude-opus-5-5")
+
+/**
+ * Lo que ve el dueño si el modelo declinó la pregunta (`stop_reason: refusal`). Pasa poco con
+ * preguntas de plata, pero Haiku 5.5 no tiene respaldo del lado del servidor y una burbuja que dice
+ * «no alcancé a terminar» invita a repetir lo mismo.
+ */
+internal const val NO_PUEDO_CON_ESA =
+    "No puedo ayudarte con esa pregunta. Pregúntame algo sobre tu plata y te contesto con tus números."
 
 /**
  * **Lo que ve el dueño cuando la respuesta vino sin texto.** El literal viejo —«(sin respuesta)»—
