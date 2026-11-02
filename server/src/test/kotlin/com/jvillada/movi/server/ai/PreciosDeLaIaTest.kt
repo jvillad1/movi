@@ -60,8 +60,10 @@ class PreciosDeLaIaTest {
         assertTrue(PreciosDeLaIa.precioDe(MODELO_DE_RESPALDO) != null)
         assertTrue(PreciosDeLaIa.precioDe(MODELO_DE_TODOS_LOS_DIAS) != null)
         assertTrue(PreciosDeLaIa.precioDe(MODELO_PARA_CONSEJOS) != null)
-        // Opus 4.7: 1.000 × 5 + 100 × 25 = 7.500.
-        cerca(7_500.0, PreciosDeLaIa.costoDeUnaLlamada(MODELO_DE_RESPALDO, 1_000, 0, 0, 100))
+        // El respaldo es Sonnet 5.5: 1.000 × 2 + 100 × 10 = 3.000. Opus 4.7 (el de antes) sigue con precio
+        // para los turnos viejos: 1.000 × 5 + 100 × 25 = 7.500.
+        cerca(3_000.0, PreciosDeLaIa.costoDeUnaLlamada(MODELO_DE_RESPALDO, 1_000, 0, 0, 100))
+        cerca(7_500.0, PreciosDeLaIa.costoDeUnaLlamada("claude-opus-4-7", 1_000, 0, 0, 100))
     }
 
     @Test
@@ -182,12 +184,18 @@ class ElCostoDeLaIaTest {
         // El mes: lo de hoy (y lo de hace 10 días si es del mismo mes), llevado al mes entero.
         val delMes = (if (hoy.minusDays(10).monthValue == hoy.monthValue) 3.0 else 2.0) * 4_000
         assertEquals(delMes.toLong(), c.pesosDelMes)
-        assertEquals(ElCostoDeLaIa.proyeccionDelMes(c.pesosDelMes, hoy.dayOfMonth, hoy.lengthOfMonth()), c.proyeccionDelMes)
+        // El primer día medido del mes manda: la proyección divide por los días medidos, no por el día del mes.
+        val primero = listOf(hoy, hoy.minusDays(10)).filter { it.monthValue == hoy.monthValue }.minOf { it }
+        val diasMedidos = hoy.dayOfMonth - primero.dayOfMonth + 1
+        assertEquals(diasMedidos, c.diasMedidosDelMes)
+        assertEquals(ElCostoDeLaIa.proyeccionDelMes(c.pesosDelMes, diasMedidos, hoy.lengthOfMonth()), c.proyeccionDelMes)
     }
 
     @Test
     fun `la proyeccion lleva lo que va del mes al mes entero`() {
-        assertEquals(30_000L, ElCostoDeLaIa.proyeccionDelMes(10_000L, dia = 10, diasDelMes = 30))
-        assertEquals(31_000L, ElCostoDeLaIa.proyeccionDelMes(1_000L, dia = 1, diasDelMes = 31))
+        assertEquals(30_000L, ElCostoDeLaIa.proyeccionDelMes(10_000L, diasMedidos = 10, diasDelMes = 30))
+        assertEquals(31_000L, ElCostoDeLaIa.proyeccionDelMes(1_000L, diasMedidos = 1, diasDelMes = 31))
+        // El primer mes, desplegado el 20 de un mes de 30: el día 22 van 3 días medidos, no 22.
+        assertEquals(10_000L, ElCostoDeLaIa.proyeccionDelMes(1_000L, diasMedidos = 3, diasDelMes = 30))
     }
 }

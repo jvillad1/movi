@@ -105,7 +105,8 @@ internal fun lineaPorActivo(c: CostoDeLaIa): String =
 
 /** «Van $1.200 en 2 días · al ritmo de hoy cierra en $18.000». */
 internal fun lineaDelMes(c: CostoDeLaIa): String =
-    "Van ${pesos(c.pesosDelMes)} en ${c.diaDelMes} de ${c.diasDelMes} días · al ritmo de hoy cierra en ${pesos(c.proyeccionDelMes)}"
+    "Van ${pesos(c.pesosDelMes)} en ${c.diasMedidosDelMes} " + (if (c.diasMedidosDelMes == 1) "día medido" else "días medidos") +
+        " de ${c.diasDelMes} · al ritmo de hoy cierra en ${pesos(c.proyeccionDelMes)}"
 
 internal fun lineaDeUnUsuario(u: GastoDeIaDeUnUsuario): String =
     "${conPuntosDeMiles(u.preguntas.toLong())} ${if (u.preguntas == 1) "pregunta" else "preguntas"} · ${dolares(u.dolares)}"

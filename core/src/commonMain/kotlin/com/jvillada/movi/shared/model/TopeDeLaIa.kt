@@ -27,10 +27,15 @@ const val AVISAR_CUANDO_QUEDEN: Int = 10
 /** El techo de lo que se puede elegir: más que esto ya no es un tope. */
 const val TOPE_MAXIMO_DE_PREGUNTAS: Int = 100_000
 
-/** Lo que dice la app (y el texto del 429) cuando se llegó al tope. */
-fun fraseDelTopeDelMes(tope: Int): String =
-    if (tope == 1) "Llegaste a la pregunta de este mes. Se renueva el 1.º"
-    else "Llegaste a las ${conPuntosDeMiles(tope.toLong())} preguntas de este mes. Se renuevan el 1.º"
+/**
+ * Lo que dice la app (y el texto del 429) cuando se llegó al tope. Con tope 0 no «llegó» a nada: el
+ * admin le dejó solo las tres sugeridas.
+ */
+fun fraseDelTopeDelMes(tope: Int): String = when {
+    tope <= 0 -> "Movi AI no está disponible para tu cuenta este mes"
+    tope == 1 -> "Llegaste a la pregunta de este mes. Se renueva el 1.º"
+    else -> "Llegaste a las ${conPuntosDeMiles(tope.toLong())} preguntas de este mes. Se renuevan el 1.º"
+}
 
 /**
  * El aviso de debajo de una respuesta cuando se acerca el tope: `null` si todavía quedan más de
@@ -110,6 +115,11 @@ data class CostoDeLaIa(
     val proyeccionDelMes: Long = 0,
     val diaDelMes: Int = 1,
     val diasDelMes: Int = 30,
+    /**
+     * Los días de este mes con costo medido (hasta hoy): [diaDelMes] salvo el primer mes, que empieza
+     * el día del despliegue. La proyección divide por estos, no por el día del mes.
+     */
+    val diasMedidosDelMes: Int = 1,
     val quienesMasGastan: List<GastoDeIaDeUnUsuario> = emptyList(),
     /** El primer día con costo medido (antes de la vuelta 106 no se guardaba): `null` si ninguno. */
     val medidoDesde: String? = null,

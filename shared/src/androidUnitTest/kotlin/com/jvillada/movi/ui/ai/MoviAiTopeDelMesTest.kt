@@ -103,5 +103,7 @@ class MoviAiTopeDelMesTest {
         assertEquals("Esa fue tu última pregunta libre de este mes. Se renuevan el 1.º", avisoDelTope(cerca.copy(preguntasQueQuedan = 0)))
         assertNull(avisoDelTope(AiChatResponse(text = "Listo.")))
         assertNull(fraseDeLasQueQuedan(11))
+        // Con tope 0 no «llegó»: el admin le dejó solo las tres sugeridas.
+        assertEquals("Movi AI no está disponible para tu cuenta este mes", textoDeLaRespuesta(tope.copy(topeDelMes = 0), null))
     }
 }

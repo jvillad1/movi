@@ -86,6 +86,9 @@ object ElCostoDeLaIa {
             val pesos30 = aPesos(micro30.toDouble(), trm.valor)
             val pesosDelMes = aPesos(microDelMes.toDouble(), trm.valor)
             val diasDelMes = hoy.lengthOfMonth()
+            // El primer mes se mide desde el despliegue: la proyección divide por los días medidos.
+            val primeroMedidoDelMes = dias.map { it.first }.filter { !it.isBefore(inicioDelMes) }.minOrNull()
+            val diasMedidos = primeroMedidoDelMes?.let { hoy.dayOfMonth - it.dayOfMonth + 1 } ?: hoy.dayOfMonth
             CostoDeLaIa(
                 trm = trm.valor,
                 trmEsRespaldo = trm.esRespaldo,
@@ -98,9 +101,10 @@ object ElCostoDeLaIa {
                 preguntas30 = preguntas30,
                 pesosPorPregunta30 = if (preguntas30 == 0) null else microDelChat30 / preguntas30 / 1_000_000.0 * trm.valor,
                 pesosDelMes = pesosDelMes,
-                proyeccionDelMes = proyeccionDelMes(pesosDelMes, hoy.dayOfMonth, diasDelMes),
+                proyeccionDelMes = proyeccionDelMes(pesosDelMes, diasMedidos, diasDelMes),
                 diaDelMes = hoy.dayOfMonth,
                 diasDelMes = diasDelMes,
+                diasMedidosDelMes = diasMedidos,
                 quienesMasGastan = diez.map { (uid, s) ->
                     GastoDeIaDeUnUsuario(
                         usuarioId = uid,
@@ -120,7 +124,7 @@ object ElCostoDeLaIa {
     /** Microdólares a pesos, con la TRM [trm]. */
     fun aPesos(microdolares: Double, trm: Double): Long = (microdolares / 1_000_000.0 * trm).roundToLong()
 
-    /** Lo que va del mes, llevado al mes entero: lo de [dia] días, por [diasDelMes]. */
-    fun proyeccionDelMes(pesosDelMes: Long, dia: Int, diasDelMes: Int): Long =
-        if (dia <= 0) pesosDelMes else (pesosDelMes.toDouble() / dia * diasDelMes).roundToLong()
+    /** Lo que va del mes, llevado al mes entero: lo de [diasMedidos] días, por [diasDelMes]. */
+    fun proyeccionDelMes(pesosDelMes: Long, diasMedidos: Int, diasDelMes: Int): Long =
+        if (diasMedidos <= 0) pesosDelMes else (pesosDelMes.toDouble() / diasMedidos * diasDelMes).roundToLong()
 }
