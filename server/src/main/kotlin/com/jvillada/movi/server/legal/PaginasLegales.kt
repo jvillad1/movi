@@ -196,8 +196,7 @@ nav { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--borde); d
             append("<li>Tu información financiera, tus papeles y tus conversaciones con Movi AI se guardan " +
                 "mientras tengas la cuenta. Al borrarla se eliminan.</li>")
             append("<li>El uso de la app y los reportes de fallos se borran solos a los 90 días.</li>")
-            append("<li>Los registros del servidor y las copias de respaldo del proveedor de hosting se " +
-                "renuevan solos; lo borrado desaparece de ellos cuando se renuevan.</li>")
+            append("<li>Al borrar tu cuenta: $LO_QUE_MOVI_NO_CONTROLA</li>")
             append("</ul>")
 
             append("<h2>7. Tus derechos</h2>")
@@ -331,10 +330,9 @@ nav { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--borde); d
                 "a tu cuenta. Al terminar se cierran tus sesiones en todos los aparatos.</p>")
             append("<p><strong>No se puede deshacer.</strong> Lo borrado no se puede recuperar: si quieres " +
                 "conservar algo, descarga tus datos antes (Tú → Tus datos → «Descargar tus datos»).</p>")
-            append("<p>Los registros del servidor y las copias de respaldo del proveedor de hosting se " +
-                "renuevan solos; lo borrado desaparece de ellos cuando se renuevan. Lo que esté en tu " +
-                "teléfono (la copia local de la app) se borra al terminar, y desinstalar la app lo borra " +
-                "también.</p>")
+            append("<p>$LO_QUE_MOVI_NO_CONTROLA</p>")
+            append("<p>Lo que esté en tu teléfono (la copia local de la app) se borra al terminar, y " +
+                "desinstalar la app lo borra también.</p>")
 
             append("<h2>Si ya no puedes entrar</h2>")
             append("<p>Si olvidaste tu contraseña, recupérala desde la pantalla de entrada («¿Olvidaste tu " +
@@ -345,6 +343,17 @@ nav { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--borde); d
         },
         responsable = responsable,
     )
+
+    /**
+     * Lo que borrar la cuenta NO alcanza (revisión de la vuelta 109): `DELETE /api/me` borra las filas de
+     * Movi en una transacción, pero no las copias de los proveedores. Sin plazos que no se puedan
+     * verificar.
+     */
+    const val LO_QUE_MOVI_NO_CONTROLA =
+        "Movi borra sus propias filas; hay copias que no controla y que se borran o vencen según el ciclo " +
+            "de cada uno: los respaldos de la base de datos y los registros del servidor que guarda el " +
+            "proveedor de hosting, los correos recibidos que guarda Resend y lo que Anthropic retiene " +
+            "según su política para la API. Movi no les puede pedir que lo borren antes."
 
     // ── Piezas ───────────────────────────────────────────────────────────────
 

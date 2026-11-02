@@ -110,6 +110,9 @@ class PaginasLegalesTest {
         assertTrue("cuyo remitente es un código bancario conocido o cuyo texto nombra un banco" in html)
         assertFalse("de remitentes bancarios de una lista cerrada; los demás" in html)
         val borrar = PaginasLegales.borrarCuenta(ResponsableDeMovi.Datos(null, null))
+        // Lo que borrar no alcanza (copias de los proveedores y respaldos), dicho en las dos páginas.
+        assertTrue(PaginasLegales.LO_QUE_MOVI_NO_CONTROLA in borrar)
+        assertTrue("copias que no controla" in html && "Resend" in html)
         assertTrue("«Borrar mi cuenta»" in borrar && "BORRAR" in borrar && "No se puede deshacer" in borrar)
         val terminos = PaginasLegales.terminos(ResponsableDeMovi.Datos(null, null))
         listOf("No es un banco", "no mueve plata", "No es asesoría financiera", "puede equivocarse", "ley de Colombia")
