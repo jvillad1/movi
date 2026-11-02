@@ -1,8 +1,47 @@
-# Atajos de iPhone: cómo probarlos con el iPhone de Caro (vuelta 111)
+# Atajos de iPhone: cómo probarlos con el iPhone de Caro (vuelta 111, corregida en la 114)
 
 Lo que hay que hacer **una vez** en un iPhone real para dejar andando la captura por Atajos, y qué mirar para
 saber que funcionó. Nada de esto se pudo probar en la Mac: los disparadores «Mensaje» y «Transacción» solo
 existen en el iPhone.
+
+## 0. La prueba real del 2-nov-2026 (vuelta 114)
+
+El dueño probó la vuelta 111 en el iPhone de Caro (iPhone18,2, **iOS 27.0.1**).
+
+**Funcionó de punta a punta:**
+- un SMS real de Bancolombia (85540, «Recibiste una transferencia…») entró solo a «Por revisar» como
+  «Atajo · Bancolombia», **con el iPhone bloqueado**;
+- el mismo texto dos veces dio **una** fila (dedupe);
+- «Hola, ya llegué» solo se contó (no se guardó).
+
+**Falló o no coincidía, y qué se cambió en la vuelta 114:**
+1. **El nombre.** El atajo se instaló como «movi-mensaje», el nombre del archivo, y no «Movi · Avisar un
+   mensaje» como decía la guía. Atajos instala un `.shortcut` con el nombre del archivo, y el firmado no lleva
+   nombre por dentro (es un Apple Archive con un solo `Shortcut.wflow`). Ahora el archivo se llama
+   **«Movi - Avisar un mensaje.shortcut»** (en el repo, en la ruta `/atajos/Movi%20-%20Avisar%20un%20mensaje.shortcut`
+   y en `Content-Disposition`), y la guía dice ese nombre. Va con guion y no con «·»: un nombre de archivo con
+   caracteres fuera de ASCII depende de cada navegador. La ruta vieja `/atajos/movi-mensaje.shortcut` sigue
+   sirviendo el mismo archivo, ya con el nombre nuevo.
+2. **«Agregar atajo» no respondió** en «Configurar este atajo» con el código pegado en la pregunta. Con
+   **«Omitir configuración»** y el código pegado a mano en la acción **«Texto»** sí quedó. No se sabe la causa:
+   la pregunta de importación (`WFWorkflowImportQuestions`) se revisó contra atajos exportados por la app y
+   publicados (cliente 4610, «Share Wi-Fi» de huaminghuangtw/Shortcutomation) y contra el compilador Cherri, y
+   coincide en todo (`ActionIndex`, `Category` «Parameter», `ParameterKey` «WFTextActionText», `DefaultValue`
+   vacío, y el texto de la acción vacío como texto plano). No se cambió. La guía trae el plan B.
+3. **En iOS 27 no existe la pestaña «Automatización»** («Tus automatizaciones ahora se guardan como atajos»).
+   La guía tiene ahora dos variantes (abajo, §4).
+4. **El código quedó a la vista en fotos.** La guía recuerda que, al tocar «Crear otro», hay que abrir el atajo
+   y cambiar el código de la acción «Texto».
+5. **La tarjeta de arriba de «Mensajes del banco»** (app de iOS) decía «Este aparato no lee los mensajes del
+   banco» con el atajo funcionando (último aviso hace 24 min). En un iPhone ahora dice «En este iPhone los
+   mensajes llegan por el atajo de Atajos.» si hay un código vigente que ya mandó algo, y «Este iPhone no los
+   lee solo: configúralo en «Desde tu iPhone».» si no.
+6. **Una promoción o una clave del banco** que llega por el atajo se contaba como «no era de un banco». Ahora
+   va aparte (`SIN_FORMA_DE_AVISO`): «N mensajes nombraban un banco pero no tenían la forma de un aviso».
+
+**Para volver a probar** con el archivo de la rama (sin desplegar): bajarlo de
+`https://raw.githubusercontent.com/jvillad1/movi/vuelta-114/server/src/main/resources/atajos/Movi%20-%20Avisar%20un%20mensaje.shortcut`.
+Tiene que instalarse como «Movi - Avisar un mensaje».
 
 **Antes**: esta vuelta tiene que estar desplegada (`./scripts/desplegar.sh`). Sin eso, `/api/captura/codigo` da
 404 y el botón «Agregar el atajo de mensajes» no descarga nada.
@@ -15,9 +54,14 @@ existen en el iPhone.
 
 ## 2. El atajo de mensajes (firmado)
 
-1. En la misma sección toca **«Agregar el atajo de mensajes»**. Safari descarga `movi-mensaje.shortcut`.
-2. Ábrelo (desde la barra de descargas o Archivos): Atajos muestra «Movi · Avisar un mensaje» con sus acciones.
-3. Toca **«Agregar atajo»**. Atajos pregunta «Pega tu código de Movi…»: pega el código y sigue.
+1. En la misma sección toca **«Agregar el atajo de mensajes»**. Safari descarga `Movi - Avisar un mensaje.shortcut`.
+2. Ábrelo (desde la barra de descargas o Archivos): Atajos muestra **«Configurar este atajo»** con la pregunta
+   «Pega tu código de Movi…».
+3. Pega el código y toca **«Agregar atajo»**. El atajo queda como **«Movi - Avisar un mensaje»**.
+4. **Plan B** (probado el 2-nov): si «Agregar atajo» no responde, toca **«Omitir configuración»**, abre el atajo
+   y pega el código en la acción **«Texto»**.
+5. Si después tocas **«Crear otro»** en Movi, el código de antes deja de servir: abre el atajo y cambia el
+   código de la acción «Texto».
 
 **Qué anotar**: si Safari no descarga, si Atajos dice que el atajo no se puede abrir, o si no aparece la pregunta
 del código. En ese caso, arma el atajo a mano con la receta que muestra la app (botón «Agregar el atajo de
@@ -26,7 +70,7 @@ mensajes» cuando el server no tiene el firmado, o los mismos pasos que el de Ap
 
 ## 3. Probarlo a mano
 
-1. En Atajos toca «Movi · Avisar un mensaje». Como corre sin automatización, pide un texto.
+1. En Atajos toca «Movi - Avisar un mensaje». Como corre sin automatización, pide un texto.
 2. Pega el texto de prueba (en la app: «Copiar el texto de prueba»), o este SMS real de Bancolombia de los
    fixtures del repo (`server/src/test/.../sms/AvisosDelMismoPagoTest.kt`):
 
@@ -46,21 +90,54 @@ mensajes» cuando el server no tiene el firmado, o los mismos pasos que el de Ap
 
 ## 4. La automatización «Mensaje»
 
-1. Atajos → **«Automatización»** → **«+»** (o «Nueva automatización»).
-2. **«Mensaje»** → **«El mensaje contiene»** → «Bancolombia» (una automatización por banco de sus cuentas; la
-   app sugiere las palabras).
-3. **«Ejecutar de inmediato»** → **«Siguiente»** → el atajo **«Movi · Avisar un mensaje»**.
-4. Para probarla sin esperar una compra: desde otro teléfono mándale a Caro un SMS que diga
-   `Bancolombia: Compraste $1.000,00 en PRUEBA DE MOVI con tu T.Deb *0000.` y mira «Por revisar».
+La app elige la variante por la versión de iOS (`shared/.../ui/sms/LaVersionDeIos.kt`): en la app de iOS la lee
+del sistema; en la web, del *user agent*, **solo si es seguro** (desde Safari 26 el «CPU iPhone OS» está
+congelado en 18_6/18_7 a propósito —WebKit bug 298260— y «Version/26» o más sigue la versión de Safari, que en
+el iPhone va atada a la del sistema). Si se sabe, muestra esa y deja la otra detrás de «¿Tu iPhone muestra otra
+cosa?»; si no, las dos con su rótulo, la de iOS 27 primero. Se recomiendan siempre dos: **`Bancolombia`** y
+**`DAVIVIENDA`** (como firman su SMS), más las palabras de los bancos de sus cuentas.
 
-**Qué anotar** (son las cosas que no se pudieron verificar):
-- Los nombres exactos de las pantallas en iOS en español: «Automatización», «Mensaje», «El mensaje contiene»,
-  «Ejecutar de inmediato» (en iOS 17 y 18 era la opción frente a «Ejecutar tras confirmación»; en iOS 26
-  puede ser el interruptor «Preguntar antes de ejecutar», que va **apagado**). Si difieren, corregir
+### iOS 27 o más nuevo (verificado a mano el 2-nov en iOS 27.0.1)
+
+1. Abre el atajo **«Movi - Avisar un mensaje»**.
+2. Abajo, **«Buscar»**, y luego la pastilla **«Automatización»**.
+3. En la sección «Comunicación», **«Mensaje»** («Al recibir un mensaje de mi mamá»). Se agrega al atajo una
+   tarjeta: «Al recibir un mensaje en el que **Remitente** es Remitente».
+4. Toca **«Remitente»** y elige **«Mensaje»**, para que quede «Mensaje **contiene** Texto».
+5. Escribe `Bancolombia`.
+6. Toca la flecha (**⌄**) junto a «que»: **«Automatización»** prendido y **«Confirmar antes de ejecutar»**
+   apagado (venía apagado; hay que dejarlo así).
+7. Para cada banco más agrega **otra** tarjeta «Mensaje» (quedan unidas por «o»), **no «+ Agregar filtro»**: un
+   filtro se une con «y» y la automatización no correría nunca. `DAVIVIENDA` y las de sus bancos. (La app dice
+   lo mismo.)
+
+Las imágenes del atajo muestran también «Recibir **Contenido y 20 más** de **Ningún lado** · Si no hay entrada:
+Solicitar Texto».
+
+### iOS 17 a 26
+
+1. Atajos → pestaña **«Automatización»** → **«+»** (o «Nueva automatización»).
+2. **«Mensaje»** → **«El mensaje contiene»** → «Bancolombia» (una automatización por palabra: `DAVIVIENDA` y las
+   de sus bancos; la app las sugiere).
+3. **«Ejecutar de inmediato»** → **«Siguiente»** → el atajo **«Movi - Avisar un mensaje»**. «Ejecutar de
+   inmediato» existe para «Mensaje» desde iOS 17.
+
+### Antes de iOS 17
+
+El iPhone pide tocar una notificación cada vez. La app lo dice en una línea y propone reenviarle a Movi los
+correos del banco.
+
+### Probarla
+
+Para probarla sin esperar una compra: desde otro teléfono mándale a Caro un SMS que diga
+`Bancolombia: Compraste $1.000,00 en PRUEBA DE MOVI con tu T.Deb *0000.` y mira «Por revisar».
+
+**Qué anotar** (lo que falta verificar):
+- En iOS 17 a 26, los nombres exactos de las pantallas en español (en iOS 26 «Ejecutar de inmediato» puede ser
+  el interruptor «Preguntar antes de ejecutar», que va **apagado**). Si difieren, corregir
   `pasosDeLaAutomatizacionDeMensajes` en `shared/.../ui/sms/DesdeTuIphone.kt`.
-- Que la **entrada del atajo**, convertida en texto, sea el **contenido del SMS** (y no otra cosa, como el
-  remitente). Si llega otra cosa, se ve en «Por revisar» o no llega nada (lo descarta el filtro).
-- Que corra **con el iPhone bloqueado** y sin pedir confirmación.
+- Que la **entrada del atajo**, convertida en texto, sea el **contenido del SMS** (en iOS 27, verificado: el
+  SMS real llegó).
 
 ## 5. Apple Pay (a mano)
 
@@ -69,12 +146,15 @@ transacción de Wallet cuyos nombres internos no se pueden comprobar en una Mac 
 `scripts/atajos/movi-apple-pay.plist`). Se arma a mano, con la receta de la app («Agregar el atajo de Apple
 Pay»):
 
-1. Atajos → «+» → nombre «Movi · Pago con Apple Pay».
+1. Atajos → «+» → nombre «Movi - Pago con Apple Pay».
 2. Acción **«Obtener contenido de URL»**, URL `https://movi-project-production.up.railway.app/api/captura/atajo`.
 3. Método **POST**; en **Encabezados**, `Authorization` = `Bearer ` + el código.
 4. **Cuerpo de la solicitud: JSON**, campos de texto: `tipo` = `transaccion`; `comercio`, `monto` y `tarjeta` =
    esas propiedades de la **Entrada del atajo** (toca la variable y elige cada una).
-5. Automatización → «+» → **«Transacción»** → marca las tarjetas → «Ejecutar de inmediato» → «Siguiente» → ese atajo.
+5. **iOS 17 a 26:** pestaña Automatización → «+» → **«Transacción»** → marca las tarjetas → «Ejecutar de
+   inmediato» → «Siguiente» → ese atajo. **iOS 27: por verificar en el iPhone.** La app no adelanta un camino:
+   dice que todavía no se verificó y que, si no está la pestaña, se busque dentro del atajo, como la de mensajes.
+   Al probarlo, anotar dónde quedó «Transacción» para escribir los pasos.
 6. Paga algo chico con Apple Pay. En «Por revisar» tiene que aparecer «Apple Pay · <comercio> · $X · <tarjeta>».
    Si la misma compra también llegó por SMS (otra automatización), los dos avisos van en **una** tarjeta.
 
@@ -93,7 +173,9 @@ SELECT id, creado_en, revocado_en, ultimo_uso FROM codigos_de_captura WHERE user
 SELECT id, time, bank, state, motivo_apartado, left(text, 80) AS texto
 FROM sms_messages WHERE user_id = '<id de Caro>' AND bank LIKE 'Atajo%' ORDER BY time DESC LIMIT 20;
 
--- Lo que se descartó (sin texto): cuántos por día y motivo (NO_ES_DEL_BANCO, VACIO).
+-- Lo que se descartó (sin texto): cuántos por día y motivo (NO_ES_DEL_BANCO, SIN_FORMA_DE_AVISO, VACIO,
+-- DEMASIADOS). Vuelta 114: SIN_FORMA_DE_AVISO es lo que nombra un banco pero no empieza por él o no trae
+-- monto (una promoción o una clave del banco); antes se contaba como NO_ES_DEL_BANCO.
 SELECT dia, motivo, cuantos FROM atajos_descartados WHERE user_id = '<id de Caro>' ORDER BY dia DESC;
 
 -- El tracking del server (estado y clase, nunca el texto).
@@ -116,6 +198,8 @@ curl -s -X POST https://movi-project-production.up.railway.app/api/captura/atajo
 
 ## Regenerar los atajos
 
-`python3 scripts/generar-atajos.py` (en una Mac: firma con `shortcuts sign --mode anyone`). Para apuntarlos a
+`python3 scripts/generar-atajos.py` (en una Mac: firma con `shortcuts sign --mode anyone`). El firmado se llama
+como el atajo (`Movi - Avisar un mensaje.shortcut`): el nombre tiene que ser el de `NOMBRE_DEL_ATAJO_DE_MENSAJES`
+(`LosAtajosDelRepoTest` lo compara con el del script). Para apuntarlos a
 un server de desarrollo sin tocar los del repo:
 `python3 scripts/generar-atajos.py --url http://<ip-de-la-mac>:8080 --salida /tmp/atajos-dev --plist /tmp/atajos-dev`.

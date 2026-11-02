@@ -3,6 +3,7 @@ package com.jvillada.movi.shared.model
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -165,5 +166,35 @@ class FiltroDeSmsTest {
     fun `un codigo o una palabra vacia en la configuracion no abre la puerta`() {
         assertFalse(seSubeElSms("87100", "hola", listOf(""), listOf("")))
         assertFalse(seGuardaElSmsDelAtajo(null, "hola \$5.000", listOf(""), listOf("")))
+    }
+
+    /**
+     * Vuelta 114 · lo que se descarta se cuenta con su motivo: lo que nombra un banco sin la forma de un aviso
+     * (una promoción, una clave dinámica) no es «un mensaje que no era de un banco».
+     */
+    @Test
+    fun `el motivo separa lo que nombra un banco sin forma de aviso de lo que no es de un banco`() {
+        fun motivo(remitente: String?, texto: String) = porQueNoSeGuardaElSmsDelAtajo(remitente, texto, codigos, palabras)
+        // Se guarda: sin motivo.
+        assertNull(motivo(null, "Bancolombia: Compraste \$46.000,00 en TOSTAO CAFE con tu T.Deb *8133"))
+        assertNull(motivo("85540", "Transferiste \$50.000 desde tu cuenta *1234"))
+        // Nombra un banco pero no tiene la forma de un aviso: una promoción sin monto, una clave, o un texto que
+        // no empieza por el banco.
+        assertEquals(MotivoDelAtajoDescartado.SIN_FORMA_DE_AVISO, motivo(null, "Bancolombia te invita a conocer tu nueva tarjeta. Pídela ya"))
+        assertEquals(MotivoDelAtajoDescartado.SIN_FORMA_DE_AVISO, motivo(null, "Bancolombia: tu clave dinámica es 123456"))
+        assertEquals(MotivoDelAtajoDescartado.SIN_FORMA_DE_AVISO, motivo(null, "Hola, ya te pagué por Bancolombia \$50.000"))
+        assertEquals(MotivoDelAtajoDescartado.SIN_FORMA_DE_AVISO, motivo("Asesora Bancolombia", "Recuerda que Bancolombia te regala \$20.000"))
+        // No nombra ningún banco, o lo manda una persona: no era de un banco.
+        assertEquals(MotivoDelAtajoDescartado.NO_ES_DEL_BANCO, motivo(null, "Hola, ya llegué"))
+        assertEquals(MotivoDelAtajoDescartado.NO_ES_DEL_BANCO, motivo("Mamá", "¿Vienes a comer?"))
+        assertEquals(MotivoDelAtajoDescartado.NO_ES_DEL_BANCO, motivo("3001234567", "Bancolombia: Compraste \$5.000 en X"))
+        assertEquals(MotivoDelAtajoDescartado.NO_ES_DEL_BANCO, motivo("12345", "Tu código de Uber es 1234"))
+        // La regla de siempre no cambió: hay motivo exactamente cuando no se guarda.
+        listOf(
+            null to "Bancolombia: Compraste \$1.000,00 en PRUEBA",
+            null to "Bancolombia te invita",
+            "Mamá" to "hola",
+            "891333" to "Transferiste \$5.000",
+        ).forEach { (r, t) -> assertEquals(atajo(r, t), motivo(r, t) == null, t) }
     }
 }

@@ -23,17 +23,40 @@ import kotlinx.serialization.Serializable
 /** La ruta pública a la que el atajo manda lo que recibió. */
 const val RUTA_DE_LA_CAPTURA_POR_ATAJO: String = "/api/captura/atajo"
 
-/** Donde el server sirve el atajo de mensajes ya firmado (si la firma salió). */
-const val RUTA_DEL_ATAJO_DE_MENSAJES: String = "/atajos/movi-mensaje.shortcut"
+/**
+ * Vuelta 114 · **el nombre del atajo es el nombre del archivo.** Al abrir un `.shortcut`, Atajos lo instala
+ * con el nombre del archivo sin la extensión: en el iPhone de Caro (iOS 27.0.1, 2-nov-2026) el atajo bajado de
+ * `/atajos/movi-mensaje.shortcut` quedó como «movi-mensaje». El archivo firmado no guarda ningún nombre (por
+ * dentro es un Apple Archive con un solo `Shortcut.wflow`), así que el nombre visible se fija sirviendo el
+ * archivo con ese nombre: en la ruta y en `Content-Disposition`. Va con un guion y no con «·»: un nombre de
+ * archivo con caracteres fuera de ASCII depende de cómo cada navegador decodifique la cabecera.
+ */
+const val NOMBRE_DEL_ATAJO_DE_MENSAJES: String = "Movi - Avisar un mensaje"
+
+/** El nombre del atajo que avisa un pago con Apple Pay (se arma a mano: es el nombre que la guía pide escribir). */
+const val NOMBRE_DEL_ATAJO_DE_APPLE_PAY: String = "Movi - Pago con Apple Pay"
+
+/** El archivo firmado del atajo de mensajes: en los recursos del server y en la descarga. */
+const val ARCHIVO_DEL_ATAJO_DE_MENSAJES: String = "$NOMBRE_DEL_ATAJO_DE_MENSAJES.shortcut"
+
+/** El archivo del atajo de Apple Pay (si algún día se firma). */
+const val ARCHIVO_DEL_ATAJO_DE_APPLE_PAY: String = "$NOMBRE_DEL_ATAJO_DE_APPLE_PAY.shortcut"
+
+/** Donde el server sirve el atajo de mensajes ya firmado (si la firma salió): el archivo, con los espacios como `%20`. */
+const val RUTA_DEL_ATAJO_DE_MENSAJES: String = "/atajos/Movi%20-%20Avisar%20un%20mensaje.shortcut"
 
 /** Donde el server sirve el atajo de Apple Pay ya firmado (si la firma salió). */
-const val RUTA_DEL_ATAJO_DE_APPLE_PAY: String = "/atajos/movi-apple-pay.shortcut"
+const val RUTA_DEL_ATAJO_DE_APPLE_PAY: String = "/atajos/Movi%20-%20Pago%20con%20Apple%20Pay.shortcut"
 
-/** El nombre del atajo que avisa un SMS, tal como queda en la app Atajos. */
-const val NOMBRE_DEL_ATAJO_DE_MENSAJES: String = "Movi · Avisar un mensaje"
+/**
+ * Las rutas de la vuelta 111, que ya se dieron en guías y enlaces: siguen sirviendo el mismo archivo (y con el
+ * nombre nuevo en `Content-Disposition`).
+ */
+const val RUTA_VIEJA_DEL_ATAJO_DE_MENSAJES: String = "/atajos/movi-mensaje.shortcut"
+const val RUTA_VIEJA_DEL_ATAJO_DE_APPLE_PAY: String = "/atajos/movi-apple-pay.shortcut"
 
-/** El nombre del atajo que avisa un pago con Apple Pay. */
-const val NOMBRE_DEL_ATAJO_DE_APPLE_PAY: String = "Movi · Pago con Apple Pay"
+/** La ruta de un archivo de atajo: «/atajos/» y el nombre con cada espacio como `%20` (los nombres son ASCII). */
+fun rutaDelArchivoDeAtajo(archivo: String): String = "/atajos/" + archivo.replace(" ", "%20")
 
 /**
  * **Cómo empieza el rótulo `bank` de lo que llegó por un atajo**: «Atajo · Bancolombia» (un SMS),
@@ -122,7 +145,8 @@ fun lineaDelCodigoDeCaptura(codigo: CodigoDeCaptura, ahora: Long): String? {
  */
 private val PALABRAS_DEL_SMS_DE_CADA_BANCO: Map<String, List<String>> = mapOf(
     "bancolombia" to listOf("Bancolombia"),
-    "davivienda" to listOf("Davivienda"),
+    // Vuelta 114: como firma su SMS («DAVIVIENDA Descuento en internet, …»).
+    "davivienda" to listOf("DAVIVIENDA"),
     "davibank" to listOf("Davibank"),
     "scotiabank" to listOf("Davibank"),
     "banco_de_bogota" to listOf("Banco de Bogotá", "Banco de Bogota"),
@@ -138,21 +162,27 @@ private val PALABRAS_DEL_SMS_DE_CADA_BANCO: Map<String, List<String>> = mapOf(
 private val BILLETERAS_SIN_SMS = setOf("nequi", "daviplata")
 
 /**
- * **Las palabras que la guía sugiere para «El mensaje contiene»**: la de cada banco de las cuentas del
- * dueño (una automatización por banco), en el orden de sus cuentas y sin repetir. Sin ninguna, Bancolombia,
- * que es el que más SMS manda.
+ * Vuelta 114 · **las dos tarjetas «Mensaje» que la guía recomienda siempre**: los dos bancos cuyos SMS lee
+ * Movi tal como llegan (`Bancolombia: Compraste…`, `DAVIVIENDA Descuento…`), escritas como los firman.
+ */
+val PALABRAS_DE_LAS_AUTOMATIZACIONES_BASE: List<String> = listOf("Bancolombia", "DAVIVIENDA")
+
+/**
+ * **Las palabras que la guía sugiere para «El mensaje contiene»**: una automatización (iOS 17 a 26) o una tarjeta
+ * «Mensaje» (iOS 27) por palabra. Desde la vuelta 114 empiezan siempre por [PALABRAS_DE_LAS_AUTOMATIZACIONES_BASE]
+ * y siguen con la de cada banco de las cuentas del dueño, en el orden de sus cuentas y sin repetir (sin
+ * distinguir mayúsculas: «Davivienda» ya está como «DAVIVIENDA»).
  */
 fun palabrasParaLaAutomatizacion(cuentas: List<Account>): List<String> =
-    cuentas.asSequence()
-        .filter { !it.esBien }
-        .mapNotNull { marcaDeLaCuenta(it) }
-        // Las billeteras avisan por su app, no con el SMS del banco dueño.
-        .filter { it.id !in BILLETERAS_SIN_SMS }
-        .mapNotNull { PALABRAS_DEL_SMS_DE_CADA_BANCO[it.id] ?: PALABRAS_DEL_SMS_DE_CADA_BANCO[grupoDelBanco(it.id)] }
-        .flatten()
-        .distinct()
-        .toList()
-        .ifEmpty { listOf("Bancolombia") }
+    (
+        PALABRAS_DE_LAS_AUTOMATIZACIONES_BASE + cuentas.asSequence()
+            .filter { !it.esBien }
+            .mapNotNull { marcaDeLaCuenta(it) }
+            // Las billeteras avisan por su app, no con el SMS del banco dueño.
+            .filter { it.id !in BILLETERAS_SIN_SMS }
+            .mapNotNull { PALABRAS_DEL_SMS_DE_CADA_BANCO[it.id] ?: PALABRAS_DEL_SMS_DE_CADA_BANCO[grupoDelBanco(it.id)] }
+            .flatten()
+    ).distinctBy { it.lowercase() }
 
 /**
  * **Por qué no se guardó lo que mandó un atajo** (la columna `motivo` de `atajos_descartados`). Nunca se
@@ -161,6 +191,11 @@ fun palabrasParaLaAutomatizacion(cuentas: List<Account>): List<String> =
 enum class MotivoDelAtajoDescartado {
     /** Un mensaje que no pasó el filtro de bancos (un SMS personal). */
     NO_ES_DEL_BANCO,
+    /**
+     * Vuelta 114 · un mensaje sin remitente que nombra un banco pero no tiene la forma de un aviso: no empieza
+     * por el banco o no trae monto (una promoción, una clave dinámica). Ver `porQueNoSeGuardaElSmsDelAtajo`.
+     */
+    SIN_FORMA_DE_AVISO,
     /** Llegó sin texto, o un pago sin ningún dato. */
     VACIO,
     /** Pasó el límite de avisos por minuto de un código (en el server): un atajo en bucle. */
@@ -185,18 +220,29 @@ const val DIAS_DE_ATAJOS_DESCARTADOS: Int = 30
  * **La línea de «Desde tu iPhone»**, como la de los correos descartados, o `null` si no hay nada que decir:
  * «12 mensajes no eran de un banco en los últimos 30 días.» y, si pasó, «3 avisos llegaron demasiado
  * seguidos y no se guardaron.» y «2 avisos llegaron vacíos.».
+ *
+ * Vuelta 114 · lo que nombraba un banco sin la forma de un aviso ([MotivoDelAtajoDescartado.SIN_FORMA_DE_AVISO])
+ * va aparte: «3 mensajes nombraban un banco pero no tenían la forma de un aviso en los últimos 30 días.», o
+ * con los dos, «En los últimos 30 días, 12 mensajes no eran de un banco y 3 nombraban un banco pero no tenían
+ * la forma de un aviso.».
  */
 fun textoDeAtajosDescartados(resumen: ResumenDeAtajosDescartados): String? {
     fun cuantos(motivo: MotivoDelAtajoDescartado) = resumen.grupos.filter { it.motivo == motivo.name }.sumOf { it.cuantos }
     val noDelBanco = cuantos(MotivoDelAtajoDescartado.NO_ES_DEL_BANCO)
+    val sinForma = cuantos(MotivoDelAtajoDescartado.SIN_FORMA_DE_AVISO)
     val demasiados = cuantos(MotivoDelAtajoDescartado.DEMASIADOS)
     val vacios = cuantos(MotivoDelAtajoDescartado.VACIO)
+    val ventana = "en los últimos ${resumen.dias} días"
+    fun noEran(n: Int) = if (n == 1) "1 mensaje no era de un banco" else "$n mensajes no eran de un banco"
+    fun sinFormaDeAviso(n: Int, conMensajes: Boolean = true) =
+        (if (n == 1) "1${if (conMensajes) " mensaje" else ""} nombraba un banco pero no tenía la forma de un aviso"
+        else "$n${if (conMensajes) " mensajes" else ""} nombraban un banco pero no tenían la forma de un aviso")
     val frases = buildList {
-        if (noDelBanco > 0) {
-            add(
-                (if (noDelBanco == 1) "1 mensaje no era de un banco" else "$noDelBanco mensajes no eran de un banco") +
-                    " en los últimos ${resumen.dias} días.",
-            )
+        when {
+            noDelBanco > 0 && sinForma > 0 ->
+                add("${ventana.replaceFirstChar { it.uppercase() }}, ${noEran(noDelBanco)} y ${sinFormaDeAviso(sinForma, conMensajes = false)}.")
+            noDelBanco > 0 -> add("${noEran(noDelBanco)} $ventana.")
+            sinForma > 0 -> add("${sinFormaDeAviso(sinForma)} $ventana.")
         }
         if (demasiados > 0) {
             add(if (demasiados == 1) "1 aviso llegó demasiado seguido y no se guardó." else "$demasiados avisos llegaron demasiado seguidos y no se guardaron.")

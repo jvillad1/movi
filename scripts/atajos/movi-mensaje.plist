@@ -12,7 +12,7 @@
 			<key>WFWorkflowActionParameters</key>
 			<dict>
 				<key>WFCommentActionText</key>
-				<string>Movi · Avisar un mensaje. Manda a Movi el SMS del banco que le pasa la automatización «Mensaje». Movi solo guarda los mensajes de bancos: los demás los descarta sin guardarlos.</string>
+				<string>Movi - Avisar un mensaje. Manda a Movi el SMS del banco que le pasa la automatización «Mensaje». Movi solo guarda los que empiezan como un aviso del banco y traen un monto: los demás los descarta sin guardarlos. Nada se anota sin que lo confirmes.</string>
 			</dict>
 		</dict>
 		<dict>

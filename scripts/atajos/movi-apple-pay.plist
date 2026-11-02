@@ -12,7 +12,7 @@
 			<key>WFWorkflowActionParameters</key>
 			<dict>
 				<key>WFCommentActionText</key>
-				<string>Movi · Pago con Apple Pay. Manda a Movi el comercio, el monto y la tarjeta que le pasa la automatización «Transacción».</string>
+				<string>Movi - Pago con Apple Pay. Manda a Movi el comercio, el monto y la tarjeta que le pasa la automatización «Transacción».</string>
 			</dict>
 		</dict>
 		<dict>

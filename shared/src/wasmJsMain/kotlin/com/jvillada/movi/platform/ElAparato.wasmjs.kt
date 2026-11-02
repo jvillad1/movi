@@ -8,3 +8,7 @@ import kotlinx.browser.window
  */
 internal actual fun esUnIphone(): Boolean =
     runCatching { "iPhone" in window.navigator.userAgent }.getOrDefault(false)
+
+/** Ver el `expect`: por el *user agent*, solo lo que se puede saber con seguridad (`versionDeIosDelUserAgent`). */
+internal actual fun versionDeIos(): Int? =
+    runCatching { com.jvillada.movi.ui.sms.versionDeIosDelUserAgent(window.navigator.userAgent) }.getOrNull()

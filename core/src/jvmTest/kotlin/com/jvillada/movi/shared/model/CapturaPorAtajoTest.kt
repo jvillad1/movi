@@ -65,9 +65,10 @@ class CapturaPorAtajoTest {
 
     @Test
     fun `las palabras de la automatizacion salen de los bancos de sus cuentas`() {
-        assertEquals(listOf("Bancolombia"), palabrasParaLaAutomatizacion(emptyList()))
+        // Vuelta 114: siempre Bancolombia y DAVIVIENDA (como firman su SMS), y después los bancos de sus cuentas.
+        assertEquals(listOf("Bancolombia", "DAVIVIENDA"), palabrasParaLaAutomatizacion(emptyList()))
         assertEquals(
-            listOf("Bancolombia", "Davivienda"),
+            listOf("Bancolombia", "DAVIVIENDA"),
             palabrasParaLaAutomatizacion(
                 listOf(
                     cuenta("Bancolombia Ahorros 8133"),
@@ -78,10 +79,10 @@ class CapturaPorAtajoTest {
                 ),
             ),
         )
-        assertEquals(listOf("Bancolombia"), palabrasParaLaAutomatizacion(listOf(cuenta("Nu"), cuenta("Efectivo", AccountType.CASH))))
+        assertEquals(listOf("Bancolombia", "DAVIVIENDA"), palabrasParaLaAutomatizacion(listOf(cuenta("Nu"), cuenta("Efectivo", AccountType.CASH))))
         // Con y sin tilde donde el banco puede escribirla de las dos formas; Colpatria y Davibank firman «Davibank».
         assertEquals(
-            listOf("Banco de Bogotá", "Banco de Bogota", "Itaú", "Itau", "Davibank"),
+            listOf("Bancolombia", "DAVIVIENDA", "Banco de Bogotá", "Banco de Bogota", "Itaú", "Itau", "Davibank"),
             palabrasParaLaAutomatizacion(listOf(cuenta("Banco de Bogotá 1234"), cuenta("Itaú"), cuenta("Scotiabank Colpatria"), cuenta("AFC Davibank 9497"))),
         )
     }
@@ -113,6 +114,23 @@ class CapturaPorAtajoTest {
             "1 mensaje no era de un banco en los últimos 30 días. 1 aviso llegó vacío.",
             textoDeAtajosDescartados(
                 ResumenDeAtajosDescartados(grupos = listOf(GrupoDeAtajosDescartados("NO_ES_DEL_BANCO", 1), GrupoDeAtajosDescartados("VACIO", 1))),
+            ),
+        )
+        // Vuelta 114 · lo que nombraba un banco sin la forma de un aviso va aparte, en la misma línea.
+        assertEquals(
+            "3 mensajes nombraban un banco pero no tenían la forma de un aviso en los últimos 30 días.",
+            textoDeAtajosDescartados(ResumenDeAtajosDescartados(grupos = listOf(GrupoDeAtajosDescartados("SIN_FORMA_DE_AVISO", 3)))),
+        )
+        assertEquals(
+            "1 mensaje nombraba un banco pero no tenía la forma de un aviso en los últimos 30 días.",
+            textoDeAtajosDescartados(ResumenDeAtajosDescartados(grupos = listOf(GrupoDeAtajosDescartados("SIN_FORMA_DE_AVISO", 1)))),
+        )
+        assertEquals(
+            "En los últimos 30 días, 12 mensajes no eran de un banco y 3 nombraban un banco pero no tenían la forma de un aviso.",
+            textoDeAtajosDescartados(
+                ResumenDeAtajosDescartados(
+                    grupos = listOf(GrupoDeAtajosDescartados("NO_ES_DEL_BANCO", 12), GrupoDeAtajosDescartados("SIN_FORMA_DE_AVISO", 3)),
+                ),
             ),
         )
         // Un motivo de un server más nuevo no rompe nada: no se dice.

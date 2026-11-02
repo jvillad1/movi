@@ -293,6 +293,38 @@ class CapturaPorAtajoRoutesTest {
         assertTrue(json.decodeFromString(com.jvillada.movi.shared.model.ResumenDeAtajosDescartados.serializer(), deOtra.bodyAsText()).grupos.isEmpty())
     }
 
+    /**
+     * Vuelta 114 · una promoción o una clave del banco que llega sin remitente no se guarda, pero no se cuenta
+     * como «no era de un banco»: va con su propio motivo, y `/api/captura/descartados` lo devuelve aparte.
+     */
+    @Test
+    fun `lo que nombra un banco sin la forma de un aviso se cuenta aparte`() = conApp {
+        val codigo = client.crearCodigo()
+        val promo = client.avisar(codigo, mensaje("Bancolombia te invita a conocer tu nueva tarjeta. Pídela ya"))
+        assertEquals(HttpStatusCode.Accepted, promo.status)
+        assertTrue("\"guardado\":false" in promo.bodyAsText())
+        client.avisar(codigo, mensaje("Bancolombia: tu clave dinámica es 123456"))
+        client.avisar(codigo, mensaje("Hola, ya llegué"))
+        assertTrue(filas().isEmpty(), "nada se guarda")
+        val contados = transaction {
+            AtajosDescartados.selectAll().associate { it[AtajosDescartados.motivo] to it[AtajosDescartados.cuantos] }
+        }
+        assertEquals(mapOf("SIN_FORMA_DE_AVISO" to 2, "NO_ES_DEL_BANCO" to 1), contados)
+        val leido = client.get("/api/captura/descartados") { header(HttpHeaders.Authorization, "Bearer ${jwtDe(duena)}") }
+        val resumen = json.decodeFromString(com.jvillada.movi.shared.model.ResumenDeAtajosDescartados.serializer(), leido.bodyAsText())
+        assertEquals(
+            setOf(
+                com.jvillada.movi.shared.model.GrupoDeAtajosDescartados("SIN_FORMA_DE_AVISO", 2),
+                com.jvillada.movi.shared.model.GrupoDeAtajosDescartados("NO_ES_DEL_BANCO", 1),
+            ),
+            resumen.grupos.toSet(),
+        )
+        assertEquals(
+            "En los últimos 30 días, 1 mensaje no era de un banco y 2 nombraban un banco pero no tenían la forma de un aviso.",
+            com.jvillada.movi.shared.model.textoDeAtajosDescartados(resumen),
+        )
+    }
+
     @Test
     fun `un codigo de remitente del banco pasa el filtro aunque el texto no nombre al banco`() = conApp {
         val codigo = client.crearCodigo()
@@ -343,7 +375,12 @@ class CapturaPorAtajoRoutesTest {
             assertTrue("\"guardado\":false" in client.avisar(codigo, mensaje(otro, remitente = celular)).bodyAsText())
         }
         assertEquals(1, filas().size, "un SMS personal llegó a la bandeja")
-        assertEquals(4, transaction { AtajosDescartados.selectAll().single()[AtajosDescartados.cuantos] })
+        // Vuelta 114: el que nombra al banco sin empezar por él va como SIN_FORMA_DE_AVISO; los de un celular,
+        // NO_ES_DEL_BANCO (el remitente personal decide, aunque el texto sea un aviso).
+        assertEquals(
+            mapOf("SIN_FORMA_DE_AVISO" to 1, "NO_ES_DEL_BANCO" to 3),
+            transaction { AtajosDescartados.selectAll().associate { it[AtajosDescartados.motivo] to it[AtajosDescartados.cuantos] } },
+        )
 
         assertTrue("\"guardado\":true" in client.avisar(codigo, mensaje(otro, remitente = "85540")).bodyAsText())
         assertEquals(2, filas().size)
@@ -477,15 +514,40 @@ class CapturaPorAtajoRoutesTest {
 
     @Test
     fun `el atajo de mensajes firmado se sirve y el de Apple Pay no, y la lectura del codigo lo dice`() = conApp {
-        val r = client.get("/atajos/movi-mensaje.shortcut")
+        val r = client.get(com.jvillada.movi.shared.model.RUTA_DEL_ATAJO_DE_MENSAJES)
         assertEquals(HttpStatusCode.OK, r.status)
         val bytes = r.body<ByteArray>()
         assertEquals("AEA1", String(bytes.copyOfRange(0, 4)), "un atajo firmado empieza con la cabecera AEA1")
-        assertTrue(r.headers[HttpHeaders.ContentDisposition].orEmpty().contains("movi-mensaje.shortcut"))
+        assertEquals(HttpStatusCode.NotFound, client.get(com.jvillada.movi.shared.model.RUTA_DEL_ATAJO_DE_APPLE_PAY).status)
         assertEquals(HttpStatusCode.NotFound, client.get("/atajos/movi-apple-pay.shortcut").status)
         assertEquals(HttpStatusCode.NotFound, client.get("/atajos/..%2Fapplication.conf").status)
+        assertEquals(HttpStatusCode.NotFound, client.get("/atajos/otro.shortcut").status)
         val leido = client.leerCodigo()
         assertTrue(leido.atajoDeMensajes)
         assertFalse(leido.atajoDeApplePay)
+    }
+
+    /**
+     * Vuelta 114 · Atajos instala el atajo con el nombre del archivo: la descarga se llama como el atajo que
+     * dice la guía, por la ruta nueva y por la vieja de la vuelta 111 (que ya se dio en guías y enlaces).
+     */
+    @Test
+    fun `la ruta nueva y la vieja sirven el mismo archivo, con el nombre del atajo`() = conApp {
+        val nombre = com.jvillada.movi.shared.model.NOMBRE_DEL_ATAJO_DE_MENSAJES
+        val nueva = client.get(com.jvillada.movi.shared.model.RUTA_DEL_ATAJO_DE_MENSAJES)
+        val vieja = client.get(com.jvillada.movi.shared.model.RUTA_VIEJA_DEL_ATAJO_DE_MENSAJES)
+        assertEquals(HttpStatusCode.OK, nueva.status)
+        assertEquals(HttpStatusCode.OK, vieja.status)
+        assertTrue(nueva.body<ByteArray>().contentEquals(vieja.body<ByteArray>()), "el mismo firmado")
+        val esperado = "attachment; filename=\"$nombre.shortcut\"; filename*=UTF-8''Movi%20-%20Avisar%20un%20mensaje.shortcut"
+        assertEquals(esperado, nueva.headers[HttpHeaders.ContentDisposition])
+        assertEquals(esperado, vieja.headers[HttpHeaders.ContentDisposition])
+        val parsed = io.ktor.http.ContentDisposition.parse(nueva.headers[HttpHeaders.ContentDisposition]!!)
+        assertEquals("$nombre.shortcut", parsed.parameter(io.ktor.http.ContentDisposition.Parameters.FileName))
+        // La ruta, decodificada, también termina en el nombre del atajo (Safari la usa si falta la cabecera).
+        assertEquals(
+            "$nombre.shortcut",
+            java.net.URLDecoder.decode(com.jvillada.movi.shared.model.RUTA_DEL_ATAJO_DE_MENSAJES.substringAfterLast('/'), Charsets.UTF_8),
+        )
     }
 }

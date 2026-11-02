@@ -24,8 +24,10 @@ import com.jvillada.movi.shared.model.MotivoDelAtajoDescartado
 import com.jvillada.movi.shared.model.ResumenDeAtajosDescartados
 import com.jvillada.movi.shared.model.ORIGEN_DEL_ATAJO
 import com.jvillada.movi.shared.model.ORIGEN_DE_APPLE_PAY
-import com.jvillada.movi.shared.model.RUTA_DEL_ATAJO_DE_APPLE_PAY
-import com.jvillada.movi.shared.model.RUTA_DEL_ATAJO_DE_MENSAJES
+import com.jvillada.movi.shared.model.RUTA_VIEJA_DEL_ATAJO_DE_APPLE_PAY
+import com.jvillada.movi.shared.model.RUTA_VIEJA_DEL_ATAJO_DE_MENSAJES
+import com.jvillada.movi.shared.model.ARCHIVO_DEL_ATAJO_DE_APPLE_PAY
+import com.jvillada.movi.shared.model.ARCHIVO_DEL_ATAJO_DE_MENSAJES
 import com.jvillada.movi.shared.model.marcaDelRemitente
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
@@ -171,23 +173,34 @@ private fun idDelAtajo(uid: String, texto: String, tiempo: String): String =
         .take(32)
 
 /**
- * Los atajos firmados que el server sabe servir, por su nombre de archivo. Viven en los recursos del JAR
- * (`server/src/main/resources/atajos/`, los escribe `scripts/generar-atajos.py`), no en `static/`: esa
+ * Los atajos firmados que el server sabe servir: el nombre pedido en la ruta → el archivo en los recursos del
+ * JAR (`server/src/main/resources/atajos/`, los escribe `scripts/generar-atajos.py`), no en `static/`: esa
  * carpeta está en `.gitignore` porque ahí copia la web el armado.
+ *
+ * Vuelta 114 · el archivo se llama como el atajo («Movi - Avisar un mensaje.shortcut»), porque Atajos lo
+ * instala con el nombre del archivo. La ruta vieja de la vuelta 111 (`movi-mensaje.shortcut`) sigue sirviendo
+ * el mismo archivo, con el nombre nuevo.
  */
-private val ATAJOS_QUE_SE_SIRVEN = setOf(
-    RUTA_DEL_ATAJO_DE_MENSAJES.substringAfterLast('/'),
-    RUTA_DEL_ATAJO_DE_APPLE_PAY.substringAfterLast('/'),
+private val ATAJOS_QUE_SE_SIRVEN: Map<String, String> = mapOf(
+    ARCHIVO_DEL_ATAJO_DE_MENSAJES to ARCHIVO_DEL_ATAJO_DE_MENSAJES,
+    RUTA_VIEJA_DEL_ATAJO_DE_MENSAJES.substringAfterLast('/') to ARCHIVO_DEL_ATAJO_DE_MENSAJES,
+    ARCHIVO_DEL_ATAJO_DE_APPLE_PAY to ARCHIVO_DEL_ATAJO_DE_APPLE_PAY,
+    RUTA_VIEJA_DEL_ATAJO_DE_APPLE_PAY.substringAfterLast('/') to ARCHIVO_DEL_ATAJO_DE_APPLE_PAY,
 )
 
 private fun bytesDelAtajo(archivo: String): ByteArray? =
-    archivo.takeIf { it in ATAJOS_QUE_SE_SIRVEN }
-        ?.let { CodigoDeCapturaRecursos::class.java.classLoader.getResourceAsStream("atajos/$it") }
-        ?.use { it.readBytes() }
+    CodigoDeCapturaRecursos::class.java.classLoader.getResourceAsStream("atajos/$archivo")?.use { it.readBytes() }
 
-/** ¿Está en el server el atajo firmado de [ruta]? */
-private fun hayAtajoFirmado(ruta: String): Boolean =
-    CodigoDeCapturaRecursos::class.java.classLoader.getResource("atajos/${ruta.substringAfterLast('/')}") != null
+/** ¿Está en el server el atajo firmado [archivo]? */
+private fun hayAtajoFirmado(archivo: String): Boolean =
+    CodigoDeCapturaRecursos::class.java.classLoader.getResource("atajos/$archivo") != null
+
+/**
+ * La cabecera de la descarga: el nombre del atajo como nombre del archivo, en `filename` y en `filename*`
+ * (RFC 6266). Los nombres son ASCII, así que los dos dicen lo mismo.
+ */
+internal fun contentDispositionDelAtajo(archivo: String): String =
+    "attachment; filename=\"$archivo\"; filename*=UTF-8''${archivo.replace(" ", "%20")}"
 
 private object CodigoDeCapturaRecursos
 
@@ -202,8 +215,8 @@ internal suspend fun codigoDeCapturaDe(uid: String): CodigoDeCaptura {
         vigente = fila != null,
         creadoEn = fila?.get(CodigosDeCaptura.creadoEn),
         ultimoUso = fila?.get(CodigosDeCaptura.ultimoUso),
-        atajoDeMensajes = hayAtajoFirmado(RUTA_DEL_ATAJO_DE_MENSAJES),
-        atajoDeApplePay = hayAtajoFirmado(RUTA_DEL_ATAJO_DE_APPLE_PAY),
+        atajoDeMensajes = hayAtajoFirmado(ARCHIVO_DEL_ATAJO_DE_MENSAJES),
+        atajoDeApplePay = hayAtajoFirmado(ARCHIVO_DEL_ATAJO_DE_APPLE_PAY),
     )
 }
 
@@ -413,11 +426,17 @@ private suspend fun guardarElMensaje(uid: String, aviso: AvisoDelAtajo, ahora: L
         return HttpStatusCode.Accepted to RespuestaDelAtajo(false, "El mensaje llegó vacío.")
     }
     // **La regla del teléfono, en `:core`.** Lo que no es de un banco (o viene de un número personal) no se
-    // guarda ni se lee más: solo se cuenta.
-    if (!pasaElFiltroDeBancos(aviso.remitente, texto)) {
-        contarAtajoDescartado(uid, MotivoDelAtajoDescartado.NO_ES_DEL_BANCO, ahora)
-        registrarLaCaptura(uid, "NO_ES_DEL_BANCO", esPago = false, avisoId = null, ahora)
-        return HttpStatusCode.Accepted to RespuestaDelAtajo(false, "No es un mensaje de un banco: no se guardó.")
+    // guarda ni se lee más: solo se cuenta, con su motivo (vuelta 114: lo que nombra un banco sin la forma de
+    // un aviso, una promoción o una clave, va aparte de lo que no es de un banco).
+    porQueNoPasaElFiltroDeBancos(aviso.remitente, texto)?.let { motivo ->
+        contarAtajoDescartado(uid, motivo, ahora)
+        registrarLaCaptura(uid, motivo.name, esPago = false, avisoId = null, ahora)
+        val porQue = if (motivo == MotivoDelAtajoDescartado.SIN_FORMA_DE_AVISO) {
+            "No tiene la forma de un aviso del banco: no se guardó."
+        } else {
+            "No es un mensaje de un banco: no se guardó."
+        }
+        return HttpStatusCode.Accepted to RespuestaDelAtajo(false, porQue)
     }
     val (id, guardado) = guardarElAvisoDelAtajo(uid, texto, origenDelSmsDelAtajo(aviso.remitente, texto), ahora)
     registrarLaCaptura(uid, if (guardado) "GUARDADO" else "YA_ESTABA", esPago = false, avisoId = id, ahora)
@@ -445,9 +464,11 @@ private suspend fun guardarElPago(uid: String, aviso: AvisoDelAtajo, ahora: Long
  */
 fun Route.atajosRoutes() {
     get("/atajos/{archivo}") {
-        val archivo = call.parameters["archivo"].orEmpty()
+        // Ktor ya decodifica el segmento: «Movi%20-%20Avisar…» llega con espacios.
+        val archivo = ATAJOS_QUE_SE_SIRVEN[call.parameters["archivo"].orEmpty()]
+            ?: return@get call.respond(HttpStatusCode.NotFound)
         val bytes = bytesDelAtajo(archivo) ?: return@get call.respond(HttpStatusCode.NotFound)
-        call.response.headers.append(HttpHeaders.ContentDisposition, "attachment; filename=\"$archivo\"")
+        call.response.headers.append(HttpHeaders.ContentDisposition, contentDispositionDelAtajo(archivo))
         call.respondBytes(bytes, ContentType.Application.OctetStream)
     }
 }

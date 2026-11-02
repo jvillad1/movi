@@ -236,6 +236,12 @@ fun CapturaDelBancoScreen(onNavigate: (Screen) -> Unit) {
         intentar { Repositories.wallets.getOrigenesMudos() }.onSuccess { mudosDelServer = it }
         intentar { Repositories.wallets.getCorreosDescartados() }.onSuccess { correosDescartados = it }
     }
+    // Vuelta 114 · fuera de Android, la línea de arriba dice si los mensajes llegan por un atajo: con un código
+    // de captura vigente que ya se usó. **Una sola lectura del código por pantalla**: la hace «Desde tu iPhone»
+    // (que va en la misma tarjeta) y la avisa con `alCambiarElCodigo`, también cuando crea o desactiva uno.
+    // Vive acá, fuera de la lista, para no olvidarse al desplazarse. `null` hasta que contesta.
+    val enIphone = remember { !isAndroid && com.jvillada.movi.platform.esUnIphone() }
+    var codigoDelAtajo by remember { mutableStateOf<com.jvillada.movi.shared.model.CodigoDeCaptura?>(null) }
     val mensajes = mensajesMasRecientesPrimero(smsItems.orEmpty())
     // Vuelta 67 · el historial: su chip, el mensaje abierto y, para abrir un confirmado, su movimiento.
     var filtroDelHistorial by remember { mutableStateOf(FiltroDelHistorial.TODOS) }
@@ -295,7 +301,14 @@ fun CapturaDelBancoScreen(onNavigate: (Screen) -> Unit) {
                     // (qué llegó y por qué este aparato no lee mensajes) se abren con «¿Qué es
                     // esto?» — se pliegan, no se pierden. Ver `elUltimoMensaje`.
                     captura?.let { c ->
-                        val ultimo = elUltimoMensaje(c, hoyEnAppZone(), enAndroid = isAndroid)
+                        val ultimo = elUltimoMensaje(
+                            c,
+                            hoyEnAppZone(),
+                            enAndroid = isAndroid,
+                            enIphone = enIphone,
+                            codigoDelAtajo = codigoDelAtajo,
+                            ahora = kotlinx.datetime.Clock.System.now().toEpochMilliseconds(),
+                        )
                         Fila(
                             titulo = ultimo.titulo,
                             subtitulo = ultimo.subtitulo,
@@ -414,6 +427,8 @@ fun CapturaDelBancoScreen(onNavigate: (Screen) -> Unit) {
                     Spacer(Modifier.height(Medida.entreSecciones))
                     DesdeTuIphone(
                         palabras = com.jvillada.movi.shared.model.palabrasParaLaAutomatizacion(cuentasDelHistorial.valor.orEmpty()),
+                        reintento = refreshKey,
+                        alCambiarElCodigo = { codigoDelAtajo = it },
                     )
                 }
                 // Solo Android pinta algo acá: la configuración de la captura de SMS (permisos,

@@ -21,9 +21,9 @@ WFHTTPHeaders). Lo que se verifica acá: que `plutil -lint` lo acepte, que lleve
 ahí.
 
 **Qué se firma y qué no:**
-- «Movi · Avisar un mensaje» se firma y se sirve: solo usa la entrada del atajo como texto (el contenido
+- «Movi - Avisar un mensaje» se firma y se sirve: solo usa la entrada del atajo como texto (el contenido
   del mensaje que le pasa la automatización), un texto con el código y «Obtener contenido de URL».
-- «Movi · Pago con Apple Pay» queda **sin firmar** y no se sirve: para mandar el comercio, el monto y la
+- «Movi - Pago con Apple Pay» queda **sin firmar** y no se sirve: para mandar el comercio, el monto y la
   tarjeta tiene que leer propiedades de la transacción de Wallet, cuyos nombres internos no están
   documentados ni se pueden probar en una Mac. La app enseña a armarlo a mano (tres toques en el iPhone).
   Si algún día se verifican los nombres, se cambia FIRMAR_APPLE_PAY y se vuelve a correr.
@@ -45,6 +45,11 @@ SALIDA_FIRMADOS = RAIZ / "server/src/main/resources/atajos"
 SALIDA_PLIST = RAIZ / "scripts/atajos"
 
 FIRMAR_APPLE_PAY = False
+
+# Los nombres de los atajos: son los nombres de los archivos firmados, y Atajos los instala con ese nombre.
+# Iguales a NOMBRE_DEL_ATAJO_DE_MENSAJES y NOMBRE_DEL_ATAJO_DE_APPLE_PAY de core/.../CapturaPorAtajo.kt.
+NOMBRE_DE_MENSAJES = "Movi - Avisar un mensaje"
+NOMBRE_DE_APPLE_PAY = "Movi - Pago con Apple Pay"
 
 # El carácter con que Atajos marca dónde va una variable dentro de un texto.
 OBJ = "￼"
@@ -112,6 +117,14 @@ def comentario(texto):
 
 def accion_del_codigo(uuid_):
     # El texto va vacío: lo llena la pregunta de importación (WFWorkflowImportQuestions).
+    #
+    # Vuelta 114 · revisado contra atajos exportados por la app Atajos y publicados en GitHub (cliente 4610;
+    # huaminghuangtw/Shortcutomation, «Share Wi-Fi»: dos preguntas sobre acciones «Texto»): la pregunta lleva
+    # ActionIndex, Category «Parameter», ParameterKey «WFTextActionText», DefaultValue «» y Text, igual que
+    # acá; y la acción «Texto» con la respuesta vacía guarda WFTextActionText como texto plano vacío (o sin la
+    # clave), no como WFTextTokenString. Cherri (shortcutgen.go/action.go) hace lo mismo: deja el argumento en
+    # «» y omite DefaultValue si está vacío. No hay una diferencia sostenida que corregir; si «Agregar atajo» no
+    # responde, la guía manda a «Omitir configuración» y pegar el código en esta acción (probado el 2-nov).
     return {"WFWorkflowActionIdentifier": "is.workflow.actions.gettext",
             "WFWorkflowActionParameters": {"UUID": uuid_, "CustomOutputName": "Código de Movi", "WFTextActionText": ""}}
 
@@ -168,8 +181,9 @@ def atajo_de_mensajes(base):
     url = base.rstrip("/") + RUTA_DE_LA_CAPTURA
     codigo = str(uuid.uuid5(uuid.NAMESPACE_URL, url + "#codigo-mensaje")).upper()
     acciones = [
-        comentario("Movi · Avisar un mensaje. Manda a Movi el SMS del banco que le pasa la automatización "
-                   "«Mensaje». Movi solo guarda los mensajes de bancos: los demás los descarta sin guardarlos."),
+        comentario(NOMBRE_DE_MENSAJES + ". Manda a Movi el SMS del banco que le pasa la automatización "
+                   "«Mensaje». Movi solo guarda los que empiezan como un aviso del banco y traen un monto: los "
+                   "demás los descarta sin guardarlos. Nada se anota sin que lo confirmes."),
         accion_del_codigo(codigo),
         accion_del_envio(url, codigo, [
             ("tipo", texto_plano("mensaje")),
@@ -185,7 +199,7 @@ def atajo_de_apple_pay(base):
     url = base.rstrip("/") + RUTA_DE_LA_CAPTURA
     codigo = str(uuid.uuid5(uuid.NAMESPACE_URL, url + "#codigo-apple-pay")).upper()
     acciones = [
-        comentario("Movi · Pago con Apple Pay. Manda a Movi el comercio, el monto y la tarjeta que le pasa "
+        comentario(NOMBRE_DE_APPLE_PAY + ". Manda a Movi el comercio, el monto y la tarjeta que le pasa "
                    "la automatización «Transacción»."),
         accion_del_codigo(codigo),
         accion_del_envio(url, codigo, [
@@ -262,27 +276,33 @@ def main():
     url = a.url.rstrip("/") + RUTA_DE_LA_CAPTURA
 
     resultado = 0
-    for nombre, armar, se_firma in [
-        ("movi-mensaje", atajo_de_mensajes, True),
-        ("movi-apple-pay", atajo_de_apple_pay, FIRMAR_APPLE_PAY),
+    for nombre, visible, armar, se_firma in [
+        ("movi-mensaje", NOMBRE_DE_MENSAJES, atajo_de_mensajes, True),
+        ("movi-apple-pay", NOMBRE_DE_APPLE_PAY, atajo_de_apple_pay, FIRMAR_APPLE_PAY),
     ]:
         plist = carpeta_plist / f"{nombre}.plist"
         with open(plist, "wb") as f:
             plistlib.dump(armar(a.url), f, fmt=plistlib.FMT_XML, sort_keys=True)
         verificar_plist(plist, url)
         print(f"{plist.relative_to(RAIZ) if plist.is_relative_to(RAIZ) else plist}: plist válido")
-        firmado = salida / f"{nombre}.shortcut"
+        firmado = salida / f"{visible}.shortcut"
+        # El firmado de la vuelta 111 se llamaba como el plist: ya no se sirve con ese nombre (el server lo
+        # mapea al nuevo), así que no se deja uno viejo al lado.
+        viejo = salida / f"{nombre}.shortcut"
         if a.sin_firmar:
             # Solo los plist: lo firmado que ya había no se toca.
             print(f"  {nombre}: sin firmar (--sin-firmar)")
             continue
         if not se_firma:
             # Un firmado viejo de un atajo que ya no se firma no puede quedar servido.
-            if firmado.exists():
-                firmado.unlink()
+            for archivo in (firmado, viejo):
+                if archivo.exists():
+                    archivo.unlink()
             print(f"  {nombre}: sin firmar (a propósito: ver el docstring)")
             continue
         if firmar(plist, firmado):
+            if viejo.exists():
+                viejo.unlink()
             print(f"  firmado: {firmado}")
         else:
             resultado = 1

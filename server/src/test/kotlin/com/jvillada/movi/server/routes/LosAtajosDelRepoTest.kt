@@ -1,8 +1,17 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.shared.model.ARCHIVO_DEL_ATAJO_DE_APPLE_PAY
+import com.jvillada.movi.shared.model.ARCHIVO_DEL_ATAJO_DE_MENSAJES
+import com.jvillada.movi.shared.model.NOMBRE_DEL_ATAJO_DE_APPLE_PAY
+import com.jvillada.movi.shared.model.NOMBRE_DEL_ATAJO_DE_MENSAJES
+import com.jvillada.movi.shared.model.RUTA_DEL_ATAJO_DE_APPLE_PAY
+import com.jvillada.movi.shared.model.RUTA_DEL_ATAJO_DE_MENSAJES
 import com.jvillada.movi.shared.model.RUTA_DE_LA_CAPTURA_POR_ATAJO
+import com.jvillada.movi.shared.model.rutaDelArchivoDeAtajo
 import java.io.File
 import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -36,10 +45,37 @@ class LosAtajosDelRepoTest {
         assertTrue("<string>transaccion</string>" in plist("movi-apple-pay"))
     }
 
+    private val recursos = listOf(File("src/main/resources/atajos"), File("server/src/main/resources/atajos")).first { it.isDirectory }
+
     @Test
-    fun `el atajo de mensajes firmado esta en los recursos del server`() {
-        val firmado = listOf(File("src/main/resources/atajos/movi-mensaje.shortcut"), File("server/src/main/resources/atajos/movi-mensaje.shortcut"))
-            .first { it.exists() }
+    fun `el atajo de mensajes firmado esta en los recursos del server, con el nombre del atajo`() {
+        val firmado = File(recursos, ARCHIVO_DEL_ATAJO_DE_MENSAJES)
+        assertTrue(firmado.exists(), "el firmado se llama «$ARCHIVO_DEL_ATAJO_DE_MENSAJES»")
         assertTrue(firmado.readBytes().copyOfRange(0, 4).contentEquals("AEA1".toByteArray()))
+        // Ni el de la vuelta 111 con el nombre viejo ni el de Apple Pay (que no se firma).
+        assertFalse(File(recursos, "movi-mensaje.shortcut").exists())
+        assertFalse(File(recursos, ARCHIVO_DEL_ATAJO_DE_APPLE_PAY).exists())
+    }
+
+    /**
+     * Vuelta 114 · Atajos instala el atajo con el nombre del archivo: el nombre que dice la guía de la app
+     * (`NOMBRE_DEL_ATAJO_DE_*`), el del generador y el del archivo firmado tienen que ser el mismo.
+     */
+    @Test
+    fun `el nombre del atajo en la guia es el del archivo y el del generador`() {
+        val script = listOf(File("../scripts/generar-atajos.py"), File("scripts/generar-atajos.py")).first { it.exists() }.readText()
+        fun delScript(constante: String) =
+            Regex("""^$constante = "([^"]+)"$""", RegexOption.MULTILINE).find(script)?.groupValues?.get(1)
+        assertEquals(NOMBRE_DEL_ATAJO_DE_MENSAJES, delScript("NOMBRE_DE_MENSAJES"))
+        assertEquals(NOMBRE_DEL_ATAJO_DE_APPLE_PAY, delScript("NOMBRE_DE_APPLE_PAY"))
+        assertEquals("$NOMBRE_DEL_ATAJO_DE_MENSAJES.shortcut", ARCHIVO_DEL_ATAJO_DE_MENSAJES)
+        assertEquals(rutaDelArchivoDeAtajo(ARCHIVO_DEL_ATAJO_DE_MENSAJES), RUTA_DEL_ATAJO_DE_MENSAJES)
+        assertEquals(rutaDelArchivoDeAtajo(ARCHIVO_DEL_ATAJO_DE_APPLE_PAY), RUTA_DEL_ATAJO_DE_APPLE_PAY)
+        // Un nombre de archivo que sobrevive a cualquier navegador: ASCII, sin «·» ni barras.
+        listOf(NOMBRE_DEL_ATAJO_DE_MENSAJES, NOMBRE_DEL_ATAJO_DE_APPLE_PAY).forEach { nombre ->
+            assertTrue(nombre.all { it.code in 0x20..0x7E } && '/' !in nombre && '"' !in nombre, nombre)
+        }
+        // El comentario del atajo firmado lo nombra igual.
+        assertTrue("<string>$NOMBRE_DEL_ATAJO_DE_MENSAJES. Manda a Movi" in plist("movi-mensaje"))
     }
 }

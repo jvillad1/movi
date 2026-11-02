@@ -1,5 +1,7 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.shared.model.MotivoDelAtajoDescartado
+import com.jvillada.movi.shared.model.porQueNoSeGuardaElSmsDelAtajo
 import com.jvillada.movi.shared.model.seGuardaElSmsDelAtajo
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
@@ -139,6 +141,10 @@ private val CURRENT_FILTER = SmsFilterConfig(
  */
 internal fun pasaElFiltroDeBancos(remitente: String?, texto: String): Boolean =
     seGuardaElSmsDelAtajo(remitente, texto, CURRENT_FILTER.senderCodes, CURRENT_FILTER.bodyKeywords)
+
+/** Vuelta 114 · por qué no pasa (`null` si pasa): la misma regla, con el motivo que se cuenta. */
+internal fun porQueNoPasaElFiltroDeBancos(remitente: String?, texto: String): MotivoDelAtajoDescartado? =
+    porQueNoSeGuardaElSmsDelAtajo(remitente, texto, CURRENT_FILTER.senderCodes, CURRENT_FILTER.bodyKeywords)
 
 fun Route.smsFilterConfigRoutes() {
     get("/api/sms/filter-config") { call.respond(CURRENT_FILTER) }
