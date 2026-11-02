@@ -577,7 +577,7 @@ CampoDeBusqueda(busqueda, { busqueda = it }, guia = "Buscar o crear categoría",
 | `LasCifrasDelSistemaSeOcultanTest` (Robolectric) | con «Ocultar los saldos», ni un «$» seguido de un dígito en el flujo libre de Plan, Presupuestos, la hoja de anular, los candidatos a pago de tarjeta y, en Hoy, «Tu patrimonio», «Para revisar» (con la evidencia abierta) y «Tu día más justo» |
 | `LoQueNoEsDelSistemaSoloBajaTest` (`core/src/jvmTest/.../quality/`, vuelta de diseño 18) | en `ui/` fuera de `ds/`, seis cosas que solo pueden bajar de su línea base (`lineas-base.txt`): `Button(`/`OutlinedButton(`/`TextButton(` de Material, `Color.White`/`Color.Black` (salvo el velo de `MarcoDeHoja`), `Hairline(`, `MinCard(`, un `Text(` cuyo primer argumento es `formatCOP(`/`formatMoney(` (aproximación por regex) y `fontWeight =` (§24). **Desde la vuelta 21 las cinco primeras se exigen en 0**, aunque alguien suba su línea base (§27) |
 | `ElAmarilloEsDeLaAccionTest` (`core/src/jvmTest/.../quality/`, vuelta 42) | ninguna píldora amarilla (`TonoDePildora.Marca` no existe), ninguna persona en `TonoDeIcono.Marca`, `IconoEnCirculo` y `AvatarDePersona` neutros por defecto, `TonoDeIcono.Marca` fuera de `ds/` solo en las dos propuestas de la maqueta (la tarjeta de avisos de Actividad y «Movi propone hoy»), y las filas que llevan a otra pantalla son `FilaDeNavegacion` |
-| `LosToquesDelSistemaSeRegistranTest` (`core/src/jvmTest/.../quality/`, vuelta 104) | en cero: los tres gestos de `AlPresionar.kt` piden un `ToqueDeUso` sin valor por defecto y llaman a `Uso.toque`; todo uso de ellos en `ds/`, la barra, el rail y el «+» dice `toque =`; todo `BasicTextField` de `ds/` va con `observarLaEscritura`; un componente público de `ds/` con un `on…` pasa por el registro |
+| `LosToquesDelSistemaSeRegistranTest` (`core/src/jvmTest/.../quality/`, vuelta 104) | en cero: los tres gestos de `AlPresionar.kt` piden un `ToqueDeUso` sin valor por defecto y llaman a `Uso.toque`; todo uso de ellos en `ds/`, la barra, el rail y el «+» dice `toque =`; todo `BasicTextField` de `ds/` va con `observarLaEscritura`; un componente público de `ds/` con un `on…` pasa por el registro; ningún `pointerInput`/`detectTapGestures`/`combinedClickable` a mano en `ds/` |
 | `UnaSolaCifraHeroePorPantallaTest` (Robolectric) | a lo sumo una `Cifra` `Heroe` en Hoy, Plan (Pagos y Presupuestos), Patrimonio, Créditos, Movimientos y Espacios; exactamente una donde la pantalla tiene su protagonista (Hoy, Patrimonio, Créditos) |
 
 ## 9. Migrar una pantalla
@@ -5167,8 +5167,10 @@ monta), su rótulo y si muestra contenido del usuario. El gesto lo anota en `Uso
 
 - **El id** (`observabilidad/Toques.kt`): un id fijo armado con constantes (`pestana:plan`, `atras`,
   `propuesta:pago`), si no el `testTag` de quien lo monta si es un tag del código, si no el **rótulo** si es
-  un literal de la app pasado como rótulo de un componente (la tarea `generarRotulosDeUso` los junta de las
-  fuentes, sin los comentarios; nunca uno con cifras, «$» o «@»), si no el tipo de componente.
+  un literal de la app pasado como rótulo de un componente **tocable** (la tarea `generarRotulosDeUso` los junta
+  de las fuentes de `:shared`, sin los comentarios, ni guías ni ejemplos; nunca uno con cifras, «$», «@» o un
+  nombre propio en medio), si no el tipo de componente. Un tag armado con `$` («categoria:fila:$nombre») deja
+  solo la parte del código: lo del usuario nunca llega al id.
 - **Contenido dinámico** —una fila de un movimiento, una tarjeta de cuenta, una categoría—: el componente se
   marca `dinamico` (`Fila(entidadDeUso = evento.id)`, `TarjetaDeCuenta` siempre) o queda dentro de
   `LocalEntidadDeUso` (una tarjeta de aviso de Por revisar): el nombre es el tipo más el tag, y el id de la

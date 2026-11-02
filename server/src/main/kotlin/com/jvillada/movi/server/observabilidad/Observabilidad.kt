@@ -30,8 +30,8 @@ import com.jvillada.movi.shared.model.limpio
 import com.jvillada.movi.shared.model.problemaDelEvento
 import com.jvillada.movi.shared.model.MAS_TOCADOS
 import com.jvillada.movi.shared.model.PREFIJO_DE_TOQUE
-import com.jvillada.movi.shared.model.ToqueParaContar
-import com.jvillada.movi.shared.model.rafagasSinEfecto
+import com.jvillada.movi.shared.model.MS_DE_UNA_RAFAGA
+import com.jvillada.movi.shared.model.TOQUES_DE_UNA_RAFAGA
 import com.jvillada.movi.shared.model.tipoDeUsoDe
 import com.jvillada.movi.shared.model.soloSeguro
 import kotlinx.serialization.json.Json
@@ -77,8 +77,32 @@ object Observabilidad {
     /** Filas de fallos por día, para todo el server. */
     const val MAX_FALLOS_POR_DIA = 2_000L
 
-    /** Cuántos toques lee como mucho el cálculo de los toques sin efecto (7 días). */
-    private const val MAX_TOQUES_PARA_RAFAGAS = 200_000
+    /**
+     * **Los toques sin efecto, en SQL** (la misma regla que [rafagasSinEfecto] en `:core`): por persona,
+     * sesión e id de toque, en orden de hora, un toque «cierra una ráfaga» si el de dos antes pasó hace
+     * menos de [MS_DE_UNA_RAFAGA] ms (tres toques en esa ventana); cada tramo seguido de toques que la
+     * cierran es **una** ráfaga (se cuenta donde empieza). Todo lo hace la base con dos `LAG`: a la
+     * memoria del server llegan como mucho [MAS_TOCADOS] filas, y no se pierde a nadie por un tope.
+     */
+    internal fun sqlDeLosToquesSinEfecto(desdeDia: Int): String = """
+        WITH t AS (
+            SELECT user_id, sesion_id, nombre, ocurrido_en,
+                LAG(ocurrido_en, ${TOQUES_DE_UNA_RAFAGA - 1}) OVER (PARTITION BY user_id, sesion_id, nombre ORDER BY ocurrido_en) AS antes
+            FROM uso_de_la_app
+            WHERE nombre LIKE '$PREFIJO_DE_TOQUE%' AND dia > $desdeDia AND sesion_id <> ''
+        ), f AS (
+            SELECT user_id, sesion_id, nombre, ocurrido_en,
+                CASE WHEN antes IS NOT NULL AND ocurrido_en - antes < $MS_DE_UNA_RAFAGA THEN 1 ELSE 0 END AS cierra
+            FROM t
+        ), g AS (
+            SELECT user_id, nombre, cierra,
+                LAG(cierra, 1, 0) OVER (PARTITION BY user_id, sesion_id, nombre ORDER BY ocurrido_en) AS cerraba
+            FROM f
+        )
+        SELECT nombre, COUNT(*), COUNT(DISTINCT user_id) FROM g
+        WHERE cierra = 1 AND cerraba = 0
+        GROUP BY nombre ORDER BY COUNT(*) DESC, nombre LIMIT $MAS_TOCADOS
+    """.trimIndent()
 
     /** Lo que el visor pone en una sesión sin ser de ella: lo de fondo y lo del server, hasta esto antes o después. */
     private const val MARGEN_DE_LA_SESION_MS = 60_000L
@@ -282,9 +306,10 @@ object Observabilidad {
         val crudos = datos.mapKeys { it.key.clave }
         if (problemaDelEvento(evento.name, crudos) != null) return
         val clave = "$uid|$id"
-        if (clave in yaRegistrados) return
         runCatching {
+            // Primero el interruptor, después la memoria: apagado no escribe nada aunque ya se haya visto.
             if (!mandaUso(uid)) return
+            if (clave in yaRegistrados) return
             dbQuery {
                 val ya = UsoDeLaApp.selectAll().where { (UsoDeLaApp.userId eq uid) and (UsoDeLaApp.id eq id) }.limit(1).any()
                 if (!ya) insertarUso(
@@ -464,7 +489,7 @@ object Observabilidad {
             // Las sesiones salen de los eventos: una por `sesion_id`, del primero al último.
             val porSesion = "SELECT user_id, sesion_id, MIN(plataforma) AS plataforma, MIN(version) AS version, " +
                 "(MAX(ocurrido_en) - MIN(ocurrido_en)) / 1000 AS dur FROM uso_de_la_app " +
-                "WHERE dia > ${hoy - 30} AND plataforma <> 'server' AND sesion_id <> '' AND sesion_id <> '' GROUP BY user_id, sesion_id"
+                "WHERE dia > ${hoy - 30} AND plataforma <> 'server' AND sesion_id <> '' GROUP BY user_id, sesion_id"
             var sesiones = 0
             var conSesiones = 0
             var mediana: Long? = null
@@ -489,14 +514,10 @@ object Observabilidad {
                     "GROUP BY nombre ORDER BY COUNT(*) DESC, nombre LIMIT $MAS_TOCADOS",
             ) { masTocados += Conteo(it.getString(1).removePrefix(PREFIJO_DE_TOQUE), it.getInt(2), it.getInt(3)) }
 
-            // Y los toques sin efecto: las ráfagas se cuentan en Kotlin ([rafagasSinEfecto]), sobre los
-            // toques de 7 días en orden (con tope: una semana de mucho uso no puede tumbar el panel).
-            val toques = mutableListOf<ToqueParaContar>()
-            consultar(
-                "SELECT user_id, sesion_id, nombre, ocurrido_en FROM uso_de_la_app " +
-                    "WHERE nombre LIKE '$PREFIJO_DE_TOQUE%' AND dia > ${hoy - 7} AND sesion_id <> '' " +
-                    "ORDER BY user_id, sesion_id, nombre, ocurrido_en LIMIT $MAX_TOQUES_PARA_RAFAGAS",
-            ) { toques += ToqueParaContar(it.getString(1), it.getString(2), it.getString(3), it.getLong(4)) }
+            // Y los toques sin efecto, en SQL (revisión de la vuelta 104: nada de traer los toques de la
+            // semana a la memoria): la regla de [rafagasSinEfecto] con dos ventanas por sesión y por id.
+            val toquesSinEfecto = mutableListOf<Conteo>()
+            consultar(sqlDeLosToquesSinEfecto(hoy - 7)) { toquesSinEfecto += Conteo(it.getString(1).removePrefix(PREFIJO_DE_TOQUE), it.getInt(2), it.getInt(3)) }
 
             ResumenDeUso(
                 activosHoy = activosPorDia[hoy] ?: 0,
@@ -511,7 +532,7 @@ object Observabilidad {
                 duracionMedianaSegundos = mediana,
                 sesionesPorPlataforma = porPlataforma,
                 masTocados = masTocados,
-                toquesSinEfecto = rafagasSinEfecto(toques).take(MAS_TOCADOS),
+                toquesSinEfecto = toquesSinEfecto,
             )
         }
         return resumen.copy(milisegundos = (System.nanoTime() - inicio) / 1_000_000)

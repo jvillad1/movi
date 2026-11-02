@@ -179,8 +179,9 @@ tasks.withType<Test>().configureEach {
 // Un toque en `ui/components/ds/` se nombra con el texto del botón **solo si ese texto es un rótulo de
 // la app**: un literal del código pasado como rótulo de un componente (`Boton("Guardar", …)`,
 // `titulo = "Inicio del mes"`, `texto = TEXTO_DE_GUARDAR`), nunca algo que llegó del usuario o del
-// banco. Esta tarea lee las fuentes de `commonMain` (de `:shared`, y las constantes de `:core`) sin
-// los comentarios, junta esos literales y los `testTag` del código, y genera
+// banco. Esta tarea lee las fuentes de `commonMain` de `:shared` (no las de `:core`) sin
+// los comentarios, junta esos literales —solo los de componentes tocables, sin ejemplos ni nombres
+// propios— y los `testTag` del código, y genera
 // `RotulosDeUsoGenerados.kt`. Siempre al día: corre antes de compilar, y si un rótulo nuevo no
 // estuviera, el toque solo se nombraría por su tag o su tipo de componente (el lado seguro).
 // Ver `observabilidad/Toques.kt`.
@@ -188,10 +189,6 @@ abstract class GenerarRotulosDeUso : DefaultTask() {
     @get:InputFiles
     @get:PathSensitive(PathSensitivity.RELATIVE)
     abstract val fuentes: ConfigurableFileCollection
-
-    @get:InputFiles
-    @get:PathSensitive(PathSensitivity.RELATIVE)
-    abstract val constantes: ConfigurableFileCollection
 
     @get:OutputDirectory
     abstract val salida: DirectoryProperty
@@ -312,22 +309,36 @@ abstract class GenerarRotulosDeUso : DefaultTask() {
 
     @TaskAction
     fun generar() {
-        val parametrosDeRotulo = setOf(
-            "texto", "titulo", "rotulo", "rotuloCorto", "descripcion", "accion", "accionSecundaria", "accionTerciaria",
-            "etiqueta", "label", "labels", "title", "onClickLabel", "contentDescription", "guia", "secundaria", "textoDeLaAccion",
+        // Revisión de privacidad de la vuelta 104: SOLO los rótulos de los componentes tocables, por
+        // componente y por parámetro (nada de `guia`, `descripcion` o `titulo` sueltos de cualquier
+        // llamada: ahí viven los ejemplos con nombres). Componente → (parámetros con nombre, posiciones).
+        val componentes = mapOf(
+            "Boton" to (setOf("texto") to listOf(0)),
+            "Fila" to (setOf("titulo") to listOf(0)),
+            "PildoraDeFiltro" to (setOf("texto") to listOf(0)),
+            "PildoraDeAccion" to (setOf("texto") to listOf(0)),
+            "AccionRapida" to (setOf("rotulo") to listOf(0)),
+            "Accion" to (setOf("rotulo") to listOf(0)),
+            "AccionDeEncabezado" to (setOf("texto") to listOf(0)),
+            "BotonDeIcono" to (setOf("descripcion") to listOf(1)),
+            "TarjetaDePropuesta" to (setOf("accion", "accionSecundaria", "accionTerciaria") to listOf(2)),
+            "Seccion" to (setOf("accion") to emptyList()),
+            "PieDeHoja" to (setOf("texto", "secundaria") to listOf(0)),
+            "Interruptor" to (setOf("descripcion") to emptyList()),
+            "Campo" to (setOf("rotulo") to emptyList()),
+            "CampoDeMonto" to (setOf("rotulo") to emptyList()),
+            "EncabezadoDeHoja" to (setOf("titulo") to listOf(0)),
+            "Superficie" to (setOf("onClickLabel") to emptyList()),
+            "renglonTocable" to (setOf("onClickLabel") to emptyList()),
+            "AccionDelSnackbar" to (setOf("rotulo") to emptyList()),
+            "NewItemButton" to (setOf("label") to emptyList()),
+            "Vacio" to (setOf("accion") to emptyList()),
+            "VacioQueEnsena" to (setOf("accion") to emptyList()),
         )
         val parametrosDeTag = setOf("tag", "tagDeLaGuia")
-        // Componente → las posiciones de sus argumentos que son rótulos cuando van sin nombre.
-        val posicionales = mapOf(
-            "Boton" to listOf(0), "Fila" to listOf(0), "PildoraDeFiltro" to listOf(0), "PildoraDeAccion" to listOf(0),
-            "Pildora" to listOf(0), "AccionRapida" to listOf(0), "Accion" to listOf(0), "AccionDeEncabezado" to listOf(0),
-            "Seccion" to listOf(0), "Encabezado" to listOf(0), "EncabezadoDeHoja" to listOf(0), "BotonDeIcono" to listOf(1),
-            "TarjetaDePropuesta" to listOf(1, 2), "Vacio" to listOf(0), "RotuloDeCampo" to listOf(0), "PieDeHoja" to listOf(0),
-            "MinScreenHeader" to listOf(0), "GrupoDeCampos" to listOf(0), "Text" to emptyList(),
-        )
-        val todos = (fuentes.files + constantes.files).filter { it.isFile && it.extension == "kt" }
+        val todos = fuentes.files.filter { it.isFile && it.extension == "kt" }
         val lexicos = todos.associateWith { lexico(it.readText()) }
-        // 1. Las constantes de texto: `const val X = "…"` y `val X_MAYUSCULAS = "…"`.
+        // 1. Las constantes de texto de `:shared`: `const val X = "…"` y `val X_MAYUSCULAS = "…"`.
         val consts = HashMap<String, MutableSet<String>>()
         val constsConPrefijo = HashMap<String, MutableSet<String>>()
         lexicos.values.forEach { t ->
@@ -378,10 +389,28 @@ abstract class GenerarRotulosDeUso : DefaultTask() {
                 }
             }
         }
+        // Los rótulos de los enums que arman acciones tocables (la cuadrícula del Inicio): el primer
+        // argumento de cada entrada.
+        val enumsDeRotulos = setOf("AccionDelInicio")
+        lexicos.values.forEach { t ->
+            for (i in 0 until t.size - 2) {
+                if (t[i].texto != "enum" || t[i + 1].texto != "class" || t[i + 2].texto !in enumsDeRotulos) continue
+                var k = i + 3
+                while (k < t.size && t[k].texto != "{") k++
+                var prof = 0
+                while (++k < t.size) {
+                    val y = t[k]
+                    if (y.tipo == 'P' && y.texto in setOf("(", "[", "{")) prof++
+                    if (y.tipo == 'P' && y.texto in setOf(")", "]", "}")) { if (prof == 0) break; prof-- }
+                    if (prof == 0 && y.texto == ";") break
+                    if (prof == 0 && y.tipo == 'I' && t.getOrNull(k + 1)?.texto == "(") juntarRotulos(t, k + 2, finDeLaExpresion(t, k + 2))
+                }
+            }
+        }
         // Las constantes TAG_* y lo que devuelve una `fun tag…` son tags.
         consts.forEach { (nombre, valores) -> if (nombre.startsWith("TAG_")) tags += valores }
         constsConPrefijo.forEach { (nombre, valores) -> if (nombre.startsWith("TAG_")) tags += valores }
-        fuentes.files.filter { it.isFile && it.extension == "kt" }.forEach { archivo ->
+        todos.forEach { archivo ->
             val t = lexicos.getValue(archivo)
             var i = 0
             while (i < t.size) {
@@ -391,19 +420,23 @@ abstract class GenerarRotulosDeUso : DefaultTask() {
                     val siguiente = t.getOrNull(i + 1)?.texto
                     val nombrado = siguiente == "=" && t.getOrNull(i + 2)?.texto != "=" && (anterior == "(" || anterior == ",")
                     when {
-                        nombrado && x.texto in parametrosDeRotulo -> juntarRotulos(t, i + 2, finDeLaExpresion(t, i + 2))
                         nombrado && x.texto in parametrosDeTag -> juntarTags(t, i + 2, finDeLaExpresion(t, i + 2))
                         x.texto == "testTag" && siguiente == "(" -> juntarTags(t, i + 2, finDeLaExpresion(t, i + 2))
                         x.texto == "fun" && t.getOrNull(i + 1)?.texto?.startsWith("tag") == true ->
                             (i + 2 until minOf(t.size, i + 40)).firstOrNull { t[it].tipo == 'S' }?.let { juntarTags(t, it, it + 1) }
-                        siguiente == "(" && x.texto in posicionales -> {
-                            val posiciones = posicionales.getValue(x.texto)
+                        siguiente == "(" && x.texto in componentes -> {
+                            val (conNombre, posiciones) = componentes.getValue(x.texto)
                             var desde = i + 2
                             var indice = 0
-                            while (desde < t.size && posiciones.isNotEmpty() && indice <= posiciones.max()) {
+                            while (desde < t.size) {
                                 val fin = finDeLaExpresion(t, desde)
-                                val conNombre = t.getOrNull(desde)?.tipo == 'I' && t.getOrNull(desde + 1)?.texto == "=" && t.getOrNull(desde + 2)?.texto != "="
-                                if (!conNombre && indice in posiciones) juntarRotulos(t, desde, fin)
+                                val nombre = t.getOrNull(desde)?.takeIf {
+                                    it.tipo == 'I' && t.getOrNull(desde + 1)?.texto == "=" && t.getOrNull(desde + 2)?.texto != "="
+                                }?.texto
+                                when {
+                                    nombre != null && nombre in conNombre -> juntarRotulos(t, desde + 2, fin)
+                                    nombre == null && indice in posiciones -> juntarRotulos(t, desde, fin)
+                                }
                                 if (fin >= t.size || t[fin].texto != ",") break
                                 desde = fin + 1
                                 indice++
@@ -415,8 +448,21 @@ abstract class GenerarRotulosDeUso : DefaultTask() {
             }
         }
         // Un rótulo: sin cifras ni «$» (nunca un monto), de un renglón, corto. Un tag: con la forma de un tag.
+        // Y nunca un ejemplo («Ej: Ana, Cancha El Gol») ni un literal con un nombre propio en medio
+        // («Casa con Caro»): una palabra en mayúscula después de la primera solo pasa si es un nombre de
+        // la app (Movi, WhatsApp, las pestañas…). Mejor perder un rótulo que guardar un nombre.
+        val palabrasPropiasDeLaApp = setOf(
+            "Movi", "AI", "IA", "PDF", "CSV", "SMS", "WhatsApp", "Gmail", "Tú", "USD", "COP", "Inicio", "Hoy",
+            "Plan", "Pagos", "Movimientos", "Patrimonio", "Espacios", "Ajustes", "Créditos", "Actividad",
+        )
+        val palabrasDeFamilia = setOf("papá", "mamá", "papa", "mama", "hija", "hijo", "esposa", "esposo", "pareja")
         val rotulosBuenos = rotulos.map { it.trim() }.filter { r ->
-            r.length in 2..60 && r.none { it.isDigit() || it == '$' || it == '\n' || it == '@' } && r.any { it.isLetter() }
+            val palabras = r.split(Regex("[^\\p{L}]+")).filter { it.isNotEmpty() }
+            r.length in 2..60 && r.none { it.isDigit() || it == '$' || it == '\n' || it == '@' || it == '«' || it == '"' } &&
+                r.any { it.isLetter() } &&
+                !Regex("(?i)\\bej[.:]|por ejemplo").containsMatchIn(r) &&
+                palabras.drop(1).none { it.first().isUpperCase() && it !in palabrasPropiasDeLaApp } &&
+                palabras.none { it.lowercase() in palabrasDeFamilia }
         }.toSortedSet()
         val tagsBuenos = tags.map { it.trim() }.filter { it.matches(Regex("[A-Za-z][A-Za-z0-9:_.-]{0,79}")) }.toSortedSet()
         fun comoKotlin(nombre: String, valores: Collection<String>): String {
@@ -451,7 +497,6 @@ abstract class GenerarRotulosDeUso : DefaultTask() {
 
 val generarRotulosDeUso = tasks.register<GenerarRotulosDeUso>("generarRotulosDeUso") {
     fuentes.from(fileTree("src/commonMain/kotlin") { include("**/*.kt") })
-    constantes.from(fileTree(rootProject.file("core/src/commonMain/kotlin")) { include("**/*.kt") })
     salida.set(layout.buildDirectory.dir("generated/rotulosDeUso/kotlin"))
 }
 

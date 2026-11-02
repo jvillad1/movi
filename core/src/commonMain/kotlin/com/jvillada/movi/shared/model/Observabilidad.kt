@@ -618,27 +618,25 @@ data class ToqueParaContar(val usuario: String, val sesion: String, val nombre: 
 /**
  * **Los toques sin efecto**: [TOQUES_DE_UNA_RAFAGA] o más toques al **mismo** id, de la misma persona
  * en la misma sesión, con menos de [MS_DE_UNA_RAFAGA] ms del primero al último —alguien tocando un
- * botón que no responde, o que responde tan despacio que parece que no—. Cada ráfaga cuenta una vez
- * (cuatro toques seguidos son una ráfaga, no dos), y seis toques en 1 s son una sola. Devuelve, por
- * id, cuántas ráfagas y de cuántas personas, la más frecuente primero. Pura.
+ * botón que no responde, o que responde tan despacio que parece que no—. En orden de hora, un toque
+ * «cierra una ráfaga» si el de dos antes pasó hace menos de la ventana; cada tramo seguido de toques
+ * que la cierran es **una** ráfaga (cuatro toques seguidos son una, no dos; seis en 1 s, una). Devuelve,
+ * por id, cuántas ráfagas y de cuántas personas, la más frecuente primero. Pura: es la referencia del
+ * SQL del server (`Observabilidad.sqlDeLosToquesSinEfecto`), que hace lo mismo con dos `LAG`.
  */
 fun rafagasSinEfecto(toques: List<ToqueParaContar>): List<Conteo> {
     val porId = mutableMapOf<String, Pair<Int, MutableSet<String>>>()
     toques.groupBy { Triple(it.usuario, it.sesion, it.nombre) }.forEach { (clave, deEse) ->
         val horas = deEse.map { it.hora }.sorted()
-        var i = 0
-        while (i < horas.size) {
-            // La ráfaga más larga que empieza en i: todos los que caen a menos de la ventana del primero.
-            var j = i
-            while (j + 1 < horas.size && horas[j + 1] - horas[i] < MS_DE_UNA_RAFAGA) j++
-            if (j - i + 1 >= TOQUES_DE_UNA_RAFAGA) {
+        var cerraba = false
+        for (k in horas.indices) {
+            val cierra = k >= TOQUES_DE_UNA_RAFAGA - 1 && horas[k] - horas[k - (TOQUES_DE_UNA_RAFAGA - 1)] < MS_DE_UNA_RAFAGA
+            if (cierra && !cerraba) {
                 val (n, quienes) = porId[clave.third] ?: (0 to mutableSetOf())
                 quienes += clave.first
                 porId[clave.third] = (n + 1) to quienes
-                i = j + 1
-            } else {
-                i++
             }
+            cerraba = cierra
         }
     }
     return porId.map { (nombre, v) -> Conteo(nombre.removePrefix(PREFIJO_DE_TOQUE), v.first, v.second.size) }

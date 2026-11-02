@@ -26,21 +26,28 @@ import com.jvillada.movi.shared.model.idDeToqueBienFormado
  * 1. un **id fijo** que arma el propio componente con constantes de la app (`pestana:hoy`, `atras`);
  * 2. el **`testTag` de quien lo monta** (el del `Modifier` que recibe el componente), si es un tag del
  *    código ([RotulosDeUsoGenerados.tags]): «por-revisar:ignorar-los-antiguos». Si el tag lleva algo
- *    armado con `$` («cuenta:fila:acc_9c1d…»), queda la parte del código; un id de Movi del final va a
- *    los datos (`cuenta_id`), un enum o un número de hasta dos cifras se queda en el id, y lo demás se tira;
+ *    armado con `$` («cuenta:fila:acc_9c1d…», «categoria:fila:$nombre»), queda **solo la parte del
+ *    código**; un id de Movi del final va a los datos (`cuenta_id`), un sufijo de la lista explícita
+ *    [SUFIJOS_DE_TAG_PERMITIDOS] (las pestañas) se queda en el id, y **todo lo demás se tira** —una
+ *    categoría «SOAT» en `categoria:fila:SOAT` queda `categoria:fila`—;
  * 3. el **texto** del componente, recortado ([slugDeUso]: «Guardar y seguir» → `guardar-y-seguir`), **solo
- *    si es un rótulo de la app**: un literal del código pasado como rótulo de un componente
- *    ([RotulosDeUsoGenerados.rotulos], que arma la tarea `generarRotulosDeUso` leyendo las fuentes sin
- *    los comentarios). Nunca un texto con cifras, «$» o «@», y nunca el de un componente con
+ *    si es un rótulo de la app**: un literal del código pasado como el rótulo de un componente
+ *    **tocable** (`texto` de `Boton`/`Pildora…`, `titulo` de `Fila`, `accion` de una propuesta…;
+ *    [RotulosDeUsoGenerados.rotulos], que arma la tarea `generarRotulosDeUso` leyendo solo
+ *    `shared/commonMain` sin los comentarios). Nunca un texto con cifras, «$» o «@», nunca un ejemplo
+ *    («Ej: …») ni un literal con un nombre propio en medio («Casa con Caro»), y nunca el de un componente con
  *    **contenido dinámico** ([ToqueDeUso.dinamico]: una fila de un movimiento, una tarjeta de cuenta, una
  *    píldora de categoría): ahí el nombre es el tipo de componente más el tag, y los datos llevan el id
  *    de la entidad si el componente lo conoce;
  * 4. si nada de eso, el **tipo de componente** (`boton`, `fila`).
  *
  * Un texto que coincide con un rótulo de la app es, por definición, un rótulo de la app: el riesgo que
- * queda es que alguien llame a su cuenta exactamente como un botón, y aun así lo que se anota es el
- * rótulo, no un monto, un comercio ni un nombre propio (la lista no tiene ninguno: los ejemplos de los
- * campos van enteros, «Ej: Ana, Cancha El Gol»).
+ * queda es que alguien nombre algo suyo exactamente como un botón («Guardar»), y aun así lo que se
+ * anota es ese rótulo genérico. Por eso la lista es corta y solo de rótulos de componentes tocables:
+ * no entran guías, descripciones, ejemplos de campos ni constantes de `:core`, y un literal con una
+ * palabra en mayúscula en medio (un nombre propio) se descarta salvo los nombres de la app
+ * (`PALABRAS_PROPIAS_DE_LA_APP` en la tarea). `Fila` y `PildoraDeFiltro`, que suelen mostrar cosas del
+ * usuario, solo se nombran por su texto si está en esa lista; si no, por su tag o su tipo.
  *
  * ## Lo que cuesta
  *
@@ -100,8 +107,14 @@ internal fun esRotuloDeLaApp(texto: String, rotulos: Set<String> = RotulosDeUsoG
     return t.isNotEmpty() && t.none { it.isDigit() || it == '$' || it == '@' } && t in rotulos
 }
 
-private val ENUM = Regex("[A-Z][A-Z_]{1,30}")
-private val NUMERO_CORTO = Regex("[0-9]{1,2}")
+/**
+ * **Los únicos sufijos que pueden seguir a un tag armado con `$`** y quedarse en el id: los nombres de
+ * las pestañas (`barra-de-pestanas:HOY` → `barra-de-pestanas:hoy`). Una lista explícita y no una forma
+ * («cualquier palabra en mayúsculas»): un tag como `categoria:fila:$nombre` lleva el nombre que el
+ * dueño le puso a su categoría, y «SOAT» tiene la forma de un enum.
+ */
+internal val SUFIJOS_DE_TAG_PERMITIDOS: Set<String> =
+    com.jvillada.movi.ui.components.NavTab.entries.map { it.name }.toSet()
 
 /** La clave de los datos para un id de Movi, por su prefijo; `null` si no es de una entidad que se nombre. */
 internal fun claveDeLaEntidad(id: String): ClaveDeUso? = when (id.substringBefore('_')) {
@@ -114,7 +127,8 @@ internal fun claveDeLaEntidad(id: String): ClaveDeUso? = when (id.substringBefor
 
 /**
  * **El `testTag` de quien lo monta, como id** (ver el KDoc del archivo): la parte más larga que es un
- * tag del código, y de lo que sigue un enum o un número corto (al id) o un id de Movi (a los datos).
+ * tag del código, y de lo que sigue un sufijo de [SUFIJOS_DE_TAG_PERMITIDOS] (al id) o un id de Movi (a
+ * los datos); lo demás nunca.
  * `null` si el tag no es del código. Pura.
  */
 internal fun idDelTag(tag: String, tags: Set<String> = RotulosDeUsoGenerados.tags): Pair<String, Map<ClaveDeUso, String>>? {
@@ -132,7 +146,7 @@ internal fun idDelTag(tag: String, tags: Set<String> = RotulosDeUsoGenerados.tag
         for (resto in tramos.drop(k)) {
             when {
                 FormaDeDato.ID.regex!!.matches(resto) -> claveDeLaEntidad(resto)?.let { datos[it] = resto }
-                ENUM.matches(resto) || NUMERO_CORTO.matches(resto) -> cola += resto.lowercase()
+                resto in SUFIJOS_DE_TAG_PERMITIDOS -> cola += resto.lowercase().replace('_', '-')
                 else -> break
             }
         }

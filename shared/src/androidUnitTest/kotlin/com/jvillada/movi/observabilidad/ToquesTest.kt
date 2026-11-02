@@ -84,6 +84,21 @@ class ToquesTest {
     }
 
     @Test
+    fun unaCategoriaEnMayusculasNoLlegaAlNombre() {
+        // `categoria:fila:$nombre` (Categorías): «SOAT» tiene la forma de un enum, pero es del dueño.
+        val tagsDeCategorias = setOf("categoria:fila:", "barra-de-pestanas:")
+        listOf("SOAT", "ARRIENDO_CASA", "12", "Mercado").forEach { categoria ->
+            val n = resolverElToque(ToqueDeUso("fila", dinamico = true), "categoria:fila:$categoria", rotulos, tagsDeCategorias).nombre
+            assertEquals("toque:fila:categoria:fila", n, categoria)
+        }
+        // Con los tags de verdad del código, lo mismo.
+        val real = resolverElToque(ToqueDeUso("fila"), "categoria:fila:SOAT").nombre
+        assertFalse("soat" in real, real)
+        // Las pestañas sí: son de la lista explícita.
+        assertEquals("toque:barra-de-pestanas:movi-ai", nombre(ToqueDeUso("pestana"), tag = "barra-de-pestanas:MOVI_AI"))
+    }
+
+    @Test
     fun elIdFijoGanaSiempre() {
         val atras = resolverElToque(ToqueDeUso("atras", idFijo = "atras", datos = mapOf(ClaveDeUso.COMO to "FLECHA")), "agregar:guardar", rotulos, tags)
         assertEquals("toque:atras", atras.nombre)
@@ -101,7 +116,10 @@ class ToquesTest {
         val generados = RotulosDeUsoGenerados.rotulos
         assertTrue("Guardar" in generados, "un rótulo de un Boton")
         assertTrue("Ahora no" in generados, "una constante pasada como rótulo")
-        assertTrue("Buscar por nombre" in generados, "la guía de un campo")
+        assertTrue("Gasto" in generados, "el rótulo de una acción del Inicio (un enum)")
+        // Revisión de privacidad: ni guías, ni ejemplos, ni nombres propios de ejemplo.
+        assertFalse("Buscar por nombre" in generados, "una guía no es un rótulo de algo que se toca")
+        assertTrue(generados.none { "Caro" in it || "papá" in it || it.startsWith("Ej") }, "un ejemplo con nombres")
         // El ejemplo del KDoc de `Fila` («Rappi · Las Doce») es un comentario: no entra.
         assertFalse("Rappi · Las Doce" in generados)
         assertTrue(generados.none { r -> r.any { it.isDigit() || it == '$' || it == '@' } }, "ningún rótulo con cifras, «$» o «@»")

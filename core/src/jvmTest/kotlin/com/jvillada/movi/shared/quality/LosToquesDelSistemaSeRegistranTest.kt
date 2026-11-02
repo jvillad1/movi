@@ -16,7 +16,8 @@ import kotlin.test.assertTrue
  * 2. cada uso de los tres en `ds/`, la barra de pestañas, el rail y el «+» dice qué se toca (`toque =`);
  * 3. todo `BasicTextField` de `ds/` va con `observarLaEscritura` (empezó y terminó de escribir);
  * 4. un componente público de `ds/` que recibe un `on…` (algo que se toca) pasa por un gesto del
- *    sistema o por otro componente de `ds/` que lo hace.
+ *    sistema o por otro componente de `ds/` que lo hace;
+ * 5. en `ds/` no hay un gesto a mano (`pointerInput`, `detectTapGestures`, `combinedClickable`, `onTap =`).
  *
  * Así un componente tocable nuevo no puede saltarse el registro sin que esto falle.
  */
@@ -93,6 +94,14 @@ class LosToquesDelSistemaSeRegistranTest {
             if (componentesTocables.isNotEmpty() && !conRegistro.containsMatchIn(codigo)) sinRegistro += archivo.substringAfterLast('/')
         }
         assertTrue(sinRegistro.isEmpty(), "Componentes de ds/ que se tocan sin pasar por el registro: $sinRegistro")
+    }
+
+    @Test
+    fun `en ds ningun gesto propio se salta el registro`() {
+        // `ElToqueEsDelSistemaTest` prohíbe el `clickable` suelto; esto cierra los gestos a mano.
+        val gestoPropio = Regex("""\bpointerInput\s*\(|\bdetectTapGestures\b|\bdetectTapAndPress\b|\bcombinedClickable\b|\bonTap\s*=""")
+        val donde = LecturaDelCodigo.dondeAparece(ds().filterKeys { !it.endsWith("/AlPresionar.kt") }, gestoPropio)
+        assertTrue(donde.isEmpty(), "Un gesto en ds/ que no pasa por alPresionar (y no se registra):\n" + donde.joinToString("\n") { "  $it" })
     }
 
     @Test

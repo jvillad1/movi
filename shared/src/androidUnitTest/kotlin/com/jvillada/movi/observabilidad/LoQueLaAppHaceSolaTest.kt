@@ -89,4 +89,23 @@ class LoQueLaAppHaceSolaTest {
         anotarLaSincronizacion(1, null)
         assertTrue(Uso.pendientes.isEmpty())
     }
+
+    @Test
+    fun unWorkerNoSePegaAUnaSesionVieja() {
+        Uso.evento(EventoDeUso.PANTALLA, mapOf(ClaveDeUso.PANTALLA to "Dashboard"))
+        val sesion = Uso.sesionId
+        Uso.alIrASegundoPlano(ahora)
+        // A los 10 min en segundo plano la sesión sigue: lo de fondo va a ella.
+        ahora += 10 * 60_000L
+        Uso.eventoDeFondo(EventoDeUso.WORKER, mapOf(ClaveDeUso.WORKER to "SmsSyncWorker"))
+        assertEquals(sesion, Uso.pendientes.last().sesionId)
+        // A los 31 min ya venció: va sin sesión, y no abre otra.
+        ahora += 21 * 60_000L
+        Uso.eventoDeFondo(EventoDeUso.WORKER, mapOf(ClaveDeUso.WORKER to "AvisoDeCierreWorker"))
+        assertEquals("", Uso.pendientes.last().sesionId)
+        assertEquals(1, Uso.pendientes.count { it.nombre == "SESION_EMPEZADA" })
+        // Al volver, sesión nueva.
+        Uso.alVolverAPrimerPlano(ahora)
+        assertTrue(Uso.sesionId != sesion)
+    }
 }

@@ -192,7 +192,7 @@ fun Campo(
     val enfocado by interaccion.collectIsFocusedAsState()
     var mostrarSecreto by remember { mutableStateOf(false) }
     // Vuelta 104: que empezó y que terminó de escribir, con el id del campo; nunca lo escrito.
-    val escritura = rememberEscrituraDeUso(idDeUsoDe(tag.takeIf { it != TAG_CAMPO }, rotulo ?: guia, porDefecto = "campo"))
+    val escritura = rememberEscrituraDeUso(idDeUsoDe(tag.takeIf { it != TAG_CAMPO }, rotulo, porDefecto = "campo"))
     MarcoDeCampo(
         modifier = modifier,
         rotulo = rotulo,
@@ -368,7 +368,7 @@ fun CampoDeMonto(
         if (campo.text.filter { it.isDigit() } != digitos) campo = moneyFieldFromDigits(digitos)
     }
     // Vuelta 104: que empezó y que terminó de escribir el monto; nunca el monto.
-    val escritura = rememberEscrituraDeUso(idDeUsoDe(tag.takeIf { it != TAG_CAMPO_DE_MONTO }, rotulo ?: guia, porDefecto = "monto"))
+    val escritura = rememberEscrituraDeUso(idDeUsoDe(tag.takeIf { it != TAG_CAMPO_DE_MONTO }, rotulo, porDefecto = "monto"))
     val interaccion = remember { MutableInteractionSource() }
     val enfocado by interaccion.collectIsFocusedAsState()
     MarcoDeCampo(

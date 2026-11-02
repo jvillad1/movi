@@ -170,8 +170,9 @@ object Uso {
     /**
      * **Lo que la app hace sola, de fondo** (vuelta 104: un Worker que corrió, una notificación que se
      * mostró, un aviso capturado): como [evento], pero **sin abrir una sesión**. Con la app abierta va a
-     * la sesión en curso (y se ve en su recorrido); con la app cerrada va sin sesión (`sesionId` vacío),
-     * así un Worker de las 9:00 no cuenta como que la persona usó Movi ese día.
+     * la sesión en curso (y se ve en su recorrido); con la app cerrada —o más de 30 min en segundo plano,
+     * con su sesión ya vencida— va sin sesión (`sesionId` vacío), así un Worker de las 9:00 no cuenta como
+     * que la persona usó Movi ese día ni se pega a una sesión vieja.
      */
     fun eventoDeFondo(nombre: EventoDeUso, datos: Map<ClaveDeUso, String> = emptyMap()): Boolean =
         anotar(nombre.name, datos, sinRepetir = nombre in SIN_REPETIR, abrirSesion = false)
@@ -237,7 +238,9 @@ object Uso {
                 nombre = nombre,
                 propiedades = crudos,
                 ruta = rutaDe(e),
-                sesionId = e.sesionId,
+                // De fondo con la app más de 30 min en segundo plano: esa sesión ya terminó (la próxima vez
+                // que vuelva será otra), así que el Worker no se le pega.
+                sesionId = if (!abrirSesion && sesionVencida(e, ahora)) "" else e.sesionId,
                 secuencia = secuencia,
                 plataforma = plataformaDeUso,
                 version = InfoDeLaApp.version,
@@ -250,6 +253,12 @@ object Uso {
             )
         }
         return anotado
+    }
+
+    /** ¿La app lleva más de [MINUTOS_PARA_SESION_NUEVA] min en segundo plano? Entonces su sesión ya no corre. */
+    private fun sesionVencida(e: Estado, ahora: Long): Boolean {
+        val afuera = e.enSegundoPlanoDesde ?: return false
+        return ahora - afuera > MINUTOS_PARA_SESION_NUEVA * 60_000L
     }
 
     /** Un arranque en frío: el primer evento del proceso abre la sesión. */

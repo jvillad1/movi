@@ -126,7 +126,7 @@ fun CampoDeBusqueda(
             }
             // ⌘A: lo hace esta app porque Compose-wasm no lo hace. Ver [esAtajoDeSeleccionarTodo].
             // Vuelta 104: que empezó y que terminó de buscar, con el id del campo; nunca lo buscado.
-            val escritura = rememberEscrituraDeUso(idDeUsoDe(tag.takeIf { it != TAG_CAMPO_DE_BUSQUEDA }, guia, porDefecto = "busqueda"))
+            val escritura = rememberEscrituraDeUso(idDeUsoDe(tag.takeIf { it != TAG_CAMPO_DE_BUSQUEDA }, rotulo = null, porDefecto = "busqueda"))
             val campo = rememberCampoConSeleccion(valor) { nuevo ->
                 if (nuevo != valor) escritura.alCambiarElTexto()
                 alCambiar(nuevo)
