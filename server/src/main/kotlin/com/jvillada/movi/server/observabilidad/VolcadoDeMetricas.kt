@@ -67,6 +67,7 @@ object VolcadoDeMetricas {
                 it[llamadas] = a.llamadas; it[sinCredito] = a.sinCredito; it[limite] = a.limite
                 it[servidor] = a.servidor; it[otros] = a.otros
                 it[fichasEntrada] = a.fichasEntrada; it[fichasSalida] = a.fichasSalida; it[fichasCache] = a.fichasCache
+                it[costoMicrodolares] = if (clave.servicio == Servicio.ANTHROPIC) Math.round(a.costoMicrodolares) else null
                 it[p95Ms] = Cubetas.percentil(a.cubetas, 0.95, a.maximoMs) ?: 0
                 it[maximoMs] = a.maximoMs; it[cubetas] = Cubetas.aTexto(a.cubetas)
             }
@@ -113,6 +114,7 @@ object VolcadoDeMetricas {
         class SumaS {
             var llamadas = 0L; var sc = 0L; var li = 0L; var se = 0L; var ot = 0L
             var fe = 0L; var fs = 0L; var fc = 0L; var max = 0L; val cub = LongArray(Cubetas.CUANTAS)
+            var costo: Long? = null
         }
         val servicios = HashMap<KS, SumaS>()
         MetricasDeServicios.selectAll()
@@ -122,6 +124,7 @@ object VolcadoDeMetricas {
                 s.llamadas += r[MetricasDeServicios.llamadas]; s.sc += r[MetricasDeServicios.sinCredito]
                 s.li += r[MetricasDeServicios.limite]; s.se += r[MetricasDeServicios.servidor]; s.ot += r[MetricasDeServicios.otros]
                 s.fe += r[MetricasDeServicios.fichasEntrada]; s.fs += r[MetricasDeServicios.fichasSalida]; s.fc += r[MetricasDeServicios.fichasCache]
+                r[MetricasDeServicios.costoMicrodolares]?.let { c -> s.costo = (s.costo ?: 0L) + c }
                 s.max = maxOf(s.max, r[MetricasDeServicios.maximoMs]); Cubetas.sumar(s.cub, Cubetas.deTexto(r[MetricasDeServicios.cubetas]))
             }
         servicios.forEach { (k, s) ->
@@ -129,6 +132,7 @@ object VolcadoDeMetricas {
                 it[escala] = ESCALA_HORA; it[inicio] = hora; it[servicio] = k.servicio; it[operacion] = k.operacion
                 it[llamadas] = s.llamadas; it[sinCredito] = s.sc; it[limite] = s.li; it[servidor] = s.se; it[otros] = s.ot
                 it[fichasEntrada] = s.fe; it[fichasSalida] = s.fs; it[fichasCache] = s.fc
+                it[costoMicrodolares] = s.costo
                 it[p95Ms] = Cubetas.percentil(s.cub, 0.95, s.max) ?: 0
                 it[maximoMs] = s.max; it[cubetas] = Cubetas.aTexto(s.cub)
             }
@@ -165,6 +169,7 @@ object VolcadoDeMetricas {
         val desde = fecha.atStartOfDay(AppClock.zone).toInstant().toEpochMilli()
         val hasta = fecha.plusDays(1).atStartOfDay(AppClock.zone).toInstant().toEpochMilli()
         var llamadas = 0L; var errores = 0L; var fe = 0L; var fs = 0L; var fc = 0L
+        var costo: Long? = null
         MetricasDeServicios.selectAll()
             .where {
                 (MetricasDeServicios.escala eq ESCALA_MINUTO) and (MetricasDeServicios.servicio eq Servicio.ANTHROPIC) and
@@ -174,12 +179,14 @@ object VolcadoDeMetricas {
                 llamadas += r[MetricasDeServicios.llamadas]
                 errores += r[MetricasDeServicios.sinCredito] + r[MetricasDeServicios.limite] + r[MetricasDeServicios.servidor] + r[MetricasDeServicios.otros]
                 fe += r[MetricasDeServicios.fichasEntrada]; fs += r[MetricasDeServicios.fichasSalida]; fc += r[MetricasDeServicios.fichasCache]
+                r[MetricasDeServicios.costoMicrodolares]?.let { c -> costo = (costo ?: 0L) + c }
             }
         val antes = IaPorDia.selectAll().where { IaPorDia.dia eq dia }.firstOrNull()?.get(IaPorDia.usuarios) ?: 0
         IaPorDia.upsert {
             it[IaPorDia.dia] = dia; it[IaPorDia.llamadas] = llamadas; it[IaPorDia.errores] = errores
             it[fichasEntrada] = fe; it[fichasSalida] = fs; it[fichasCache] = fc
             it[usuarios] = maxOf(antes, Metricas.usuariosDeIaEn(dia))
+            it[costoMicrodolares] = costo
         }
     }
 }

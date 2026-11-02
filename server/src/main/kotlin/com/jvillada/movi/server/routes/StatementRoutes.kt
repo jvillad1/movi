@@ -29,6 +29,7 @@ import com.jvillada.movi.server.ai.FallaDeLaIa
 import com.jvillada.movi.server.ai.conLaIa
 import com.jvillada.movi.server.parsing.leerElExtractoDeNu
 import com.jvillada.movi.server.parsing.leerLosMovimientosDeBancolombia
+import com.jvillada.movi.server.parsing.leerElExcelDeBancolombia
 import com.jvillada.movi.server.parsing.ClaudeStatementParser
 import com.jvillada.movi.server.parsing.LectorDePapeles
 import com.jvillada.movi.server.parsing.FamiriosParser
@@ -340,8 +341,22 @@ internal suspend fun leerElExtracto(
         if (falla != null) throw FallaAlProcesarExtracto(HttpStatusCode.UnprocessableEntity, falla)
         parsed = (lectura as? ClaudeStatementParser.Lectura.Ok)?.movimientos.orEmpty()
     } else {
+        val nombreParaLeer = nombreParaExtraerTexto(fileName, mimeType, mimeConfiable)
+        // **Vuelta 107 · los movimientos de Bancolombia en Excel**, sin IA y con las mismas reglas que el
+        // PDF. El detector es estricto (los encabezados exactos): si no calza, sigue el camino de siempre.
+        // Ver `leerElExcelDeBancolombia`.
+        if (nombreParaLeer.substringAfterLast('.', "").lowercase() in setOf("xls", "xlsx")) {
+            leerElExcelDeBancolombia(bytes)?.let { movimientos ->
+                return ExtractoLeido(
+                    bankName = "Bancolombia",
+                    filas = movimientos.filas,
+                    esFamirios = false,
+                    numerosDeCuenta = (listOfNotNull(movimientos.numero) + StatementParser.numerosDeCuenta(fileName)).distinct(),
+                )
+            }
+        }
         val text = try {
-            StatementParser.extractText(bytes, nombreParaExtraerTexto(fileName, mimeType, mimeConfiable))
+            StatementParser.extractText(bytes, nombreParaLeer)
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Throwable) {

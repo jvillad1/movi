@@ -74,7 +74,7 @@ object AlmacenDeNotificaciones {
                 val a = JSONArray(it)
                 (0 until a.length()).map { i ->
                     val o = a.getJSONObject(i)
-                    VistaPorLlave(o.getString("k"), o.getString("c"), o.getLong("t"))
+                    VistaPorLlave(o.getString("k"), o.getString("c"), o.getLong("t"), o.optLong("e", 0L))
                 }
             }.getOrNull()
         }.orEmpty()
@@ -83,7 +83,7 @@ object AlmacenDeNotificaciones {
 
     fun guardarMemoria(context: Context, memoria: MemoriaDeLoSubido) {
         val porLlave = JSONArray().apply {
-            memoria.porLlave.forEach { put(JSONObject().put("k", it.llave).put("c", it.contenido).put("t", it.cuando)) }
+            memoria.porLlave.forEach { put(JSONObject().put("k", it.llave).put("c", it.contenido).put("t", it.cuando).put("e", it.emitida)) }
         }
         prefs(context).edit()
             .putString(KEY_VISTAS, JSONArray(memoria.huellas).toString())

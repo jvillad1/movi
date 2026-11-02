@@ -5,6 +5,7 @@ import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.ClavesDeExtractos
 import com.jvillada.movi.server.db.PdfsAbiertos
 import com.jvillada.movi.server.db.Apartados
+import com.jvillada.movi.server.db.TopesDeLaIaPorUsuario
 import com.jvillada.movi.server.db.AiTurns
 import com.jvillada.movi.server.db.AnomaliasDescartadas
 import com.jvillada.movi.server.db.Budgets
@@ -118,6 +119,8 @@ internal val TABLAS_DEL_USUARIO: List<TablaDelUsuario> = listOf(
     TablaDelUsuario(CierresDescartados, CierresDescartados.userId),
     TablaDelUsuario(CierresGuardados, CierresGuardados.userId),
     TablaDelUsuario(InicioPersonalizado, InicioPersonalizado.userId),
+    // Vuelta 106 · la excepción del tope de preguntas de Movi AI.
+    TablaDelUsuario(TopesDeLaIaPorUsuario, TopesDeLaIaPorUsuario.userId),
     // Personas y comercios
     TablaDelUsuario(KnownDestinations, KnownDestinations.userId),
     TablaDelUsuario(DestinosDescartados, DestinosDescartados.userId),

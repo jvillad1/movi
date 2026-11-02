@@ -906,6 +906,12 @@ antes cortado, para que la prueba mida lo que dice) y «Movi propone hoy» que n
   IA. No van mientras Movi escribe, ni cuando el aviso de «IA no disponible» ya pone las tres debajo.
 - Lo vigilan `TextoConFormatoTest` y `PreguntasParaSeguirTest` (puras) y `MoviAiConversaConFormatoTest`
   (Robolectric: viñetas y no «- », la burbuja con los tokens en los dos temas, las píldoras y su id).
+- **El tope del mes** (vuelta 106). Cuando quedan `AVISAR_CUANDO_QUEDEN` preguntas libres o menos, debajo
+  de la última respuesta va **una línea** en `apoyo` y `textoMedio`, alineada con los globos del asistente
+  (`Espacio.xxl` a la izquierda, `AvisoDelTopeDelMes`): «Te quedan 10 preguntas este mes». No es una
+  tarjeta ni lleva color de alerta: es un dato, no un error. Al llegar, la burbuja dice
+  `fraseDelTopeDelMes` y debajo van las tres sugeridas como en el aviso de «IA no disponible»
+  (`LasQueFuncionanSinLaIa`), porque no cuentan para el tope. Lo vigila `MoviAiTopeDelMesTest`.
 
 ## 19. Vuelta de diseño 13: Agregar, por dentro
 
@@ -5275,3 +5281,28 @@ propuesta A: **una pregunta, una base, un solo rojo**. Sin tokens ni componentes
 
 Lo vigilan `TeAlcanzaHastaQueTePaguenTest` y `ElGastoDeUnDiaNormalTest` (`:core`, con las cifras del dueño al
 peso), `TeQuedanEnHoyTest`, `CascadaDelDisponibleTest` y `SinMargenParaElDiaADiaTest` (`:shared`).
+
+## Vuelta 107 · «¿Cómo lo saco?»: la guía de un banco, como dato
+
+Cuando Movi le pide al dueño algo que tiene que sacar de **otro** lugar (hoy: el extracto del banco), le dice
+**cómo** en el mismo sitio donde se lo pide, en vez de dejarlo buscando. La guía es **dato de `:core`**
+(`ComoSacarElExtracto.kt`: `GuiaDelExtracto`, `GUIAS_DEL_EXTRACTO`, `guiaDelExtractoPara`) y una sola hoja la
+pinta (`ui/extractos/ComoSacarElExtracto.kt` → `HojaDeComoSacarElExtracto`).
+
+- **Pasos numerados, cortos, con los rótulos del banco entre comillas angulares** («Movimientos», «Descargar»):
+  el dueño los busca en la pantalla del banco tal cual. Una cuenta y una tarjeta pueden tener pasos distintos
+  (`pasosPara(esTarjeta)`).
+- **Lo que hay que elegir va aparte y en concreto**: «Formato: PDF (recomendado). También sirve el Excel.» (el Excel solo si
+  el lector está activo, `EL_LECTOR_DE_EXCEL_ESTA_ACTIVO`) y, si el banco deja elegir fechas,
+  el **rango ideal** con la fecha escrita («Rango ideal: desde tu último corte, el 23 de octubre, hasta hoy.»,
+  `rangoIdealDelExtracto`: el inicio del período o el corte de la tarjeta, el más viejo). Mientras el perfil no
+  llega, el mismo renglón sin la fecha: nada salta.
+- **Solo se escribe lo verificado.** Un banco cuyos pasos no se comprobaron lleva una guía genérica («Desde la
+  app de Nu: …») y la hoja lo dice (`NOTA_DE_LA_GUIA_SIN_VERIFICAR`). Un banco sin guía no muestra nada: ni
+  botón, ni fila.
+- **Se abre desde donde se pide**: la tercera acción del recordatorio («¿Cómo lo saco?», `COMO_LO_SACO`), una
+  `Fila` en el detalle de la cuenta o tarjeta («Sube el extracto de este mes · Cómo sacarlo de Bancolombia») y una
+  `Fila` al final de la revisión de un extracto cuyo banco se reconoció («¿Te faltan movimientos?»). Nunca en
+  amarillo: es ayuda, no la acción de la vista.
+
+**Pruebas**: `ComoSacarElExtractoTest` (`:core`) y `ComoSacarElExtractoEnLaAppTest` (`:shared` androidUnitTest).

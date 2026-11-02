@@ -915,6 +915,13 @@ object AiTurns : Table("ai_turns") {
      * modelo inventó, y cuántas el reintento no alcanzó a arreglarlo.
      */
     val cifrasCorregidas = text("cifras_corregidas").nullable()
+    /**
+     * Vuelta 106 · las fichas que el turno **escribió** en la caché (`cache_creation_input_tokens`),
+     * que se cobran a 1,25× la entrada y que [fichasEntrada] no incluye. Con ellas el costo de un
+     * turno sale de sus fichas (ver `PreciosDeLaIa`). NULL en los turnos de antes, que no las
+     * guardaron: cuentan como cero. Nullable por la regla de siempre (la tabla ya existe).
+     */
+    val fichasCacheEscritas = long("fichas_cache_escritas").nullable()
     override val primaryKey = PrimaryKey(id)
     init { index("idx_ai_turns_user", false, userId) }
 }

@@ -437,6 +437,13 @@ private fun resolverSinElNumero(candidatas: List<Account>, banco: String, textoD
     // entran aportes, y por eso `DESTINO_DE_INGRESO` la ofrece. Ofrecerla está bien; elegirla sola
     // no. Si el banco escribe el número de la AFC, o el mensaje viene de ella, los pasos de arriba
     // la encuentran igual (el extracto de Skandia es de Skandia).
+    // **Vuelta 107 · un correo de PSE no nombra la cuenta, y no se le pone una por el abecedario.** El
+    // 25-oct el pago a Coomeva (avisado por el SMS «desde tu producto 8133», que esta app todavía no leía,
+    // y por el correo de PSE) cayó en la primera cuenta de banco del abecedario: la «Bancolombia Ahorros
+    // 0031», que casi no se usa. Ahora el correo de PSE solo toma la cuenta del otro aviso del mismo pago
+    // ([com.jvillada.movi.ui.sms.resolverCuentaDelPago]) o la que propone el server (la de esa deuda, la
+    // de la regla de esa empresa, la última vez o la que más usa PSE: `cuentaSugeridaId`). Si no, la elige él.
+    if (esUnCorreoDePse(textoDelMensaje)) return CuentaDelBanco(null, OrigenDeLaCuentaDelBanco.NINGUNA)
     val libres = candidatas.filter { it.condicionadaA.isNullOrBlank() }
     val deBanco = libres.firstOrNull {
         it.type.group == AccountGroup.DINERO && it.type != AccountType.CASH
@@ -447,6 +454,17 @@ private fun resolverSinElNumero(candidatas: List<Account>, banco: String, textoD
         CuentaDelBanco(null, OrigenDeLaCuentaDelBanco.NINGUNA)
     }
 }
+
+private val EMPRESA_DE_PSE = Regex("""\bEmpresa:""", RegexOption.IGNORE_CASE)
+private val CUS_DE_PSE = Regex("""\bCUS:?\s*\d{4,}""", RegexOption.IGNORE_CASE)
+private val VALOR_DE_PSE = Regex("""\bValor:\s*\$?\s*[0-9]""", RegexOption.IGNORE_CASE)
+
+/**
+ * ¿Es el correo de PSE («Empresa:», el CUS y el «Valor:», las tres juntas: la misma regla que
+ * `esUnCorreoDePse` del server)? No dice desde qué cuenta se pagó.
+ */
+internal fun esUnCorreoDePse(texto: String): Boolean =
+    EMPRESA_DE_PSE.containsMatchIn(texto) && CUS_DE_PSE.containsMatchIn(texto) && VALOR_DE_PSE.containsMatchIn(texto)
 
 /**
  * El renglón chiquito que va al lado de la cuenta cuando el valor no lo puso el dueño.

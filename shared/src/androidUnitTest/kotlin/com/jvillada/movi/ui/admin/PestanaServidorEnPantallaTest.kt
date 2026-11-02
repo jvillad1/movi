@@ -13,6 +13,8 @@ import androidx.compose.ui.test.hasScrollAction
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
 import com.jvillada.movi.shared.model.CorridaDeJob
+import com.jvillada.movi.shared.model.CostoDeLaIa
+import com.jvillada.movi.shared.model.GastoDeIaDeUnUsuario
 import com.jvillada.movi.shared.model.IaDelDia
 import com.jvillada.movi.shared.model.JobsDelServidor
 import com.jvillada.movi.shared.model.PanelDelServidor
@@ -46,6 +48,22 @@ class PestanaServidorEnPantallaTest {
     @After fun limpiar() {
         Repositories.sustitutoDePrueba = null
         ObservabilidadParaAdmin.sustitutoDePrueba = null
+        MoviAiParaAdmin.sustitutoDePrueba = null
+    }
+
+    /** Vuelta 106: lo que cuesta la IA, que la pestaña lee aparte. */
+    private val moviAi = object : MoviAiParaAdmin {
+        override suspend fun costo() = CostoDeLaIa(
+            trm = 4_000.0, dolares7 = 0.5, dolares30 = 1.25, pesos7 = 2_000, pesos30 = 5_000,
+            activos30 = 4, pesosPorActivo30 = 1_250, preguntas30 = 80, pesosPorPregunta30 = 1.58,
+            pesosDelMes = 600, proyeccionDelMes = 9_000, diaDelMes = 2, diasDelMes = 30,
+            quienesMasGastan = listOf(GastoDeIaDeUnUsuario("u-caro", "caro@movi.test", preguntas = 42, dolares = 0.4, pesos = 1_600)),
+            medidoDesde = "2026-11-02",
+        )
+        override suspend fun topes() = error("sin red")
+        override suspend fun guardarGlobal(tope: Int) = error("sin red")
+        override suspend fun guardarExcepcion(usuarioId: String, tope: Int) = error("sin red")
+        override suspend fun quitarExcepcion(usuarioId: String) = error("sin red")
     }
 
     /** Las otras pestañas no tocan la red: la pantalla de la vuelta 100 abre en «Fallos». */
@@ -60,6 +78,7 @@ class PestanaServidorEnPantallaTest {
     private fun montarEnServidor() {
         Repositories.sustitutoDePrueba = repo
         ObservabilidadParaAdmin.sustitutoDePrueba = sinObservabilidad
+        MoviAiParaAdmin.sustitutoDePrueba = moviAi
         composeRule.setContent { MoviTheme { Box(Modifier.fillMaxSize()) { FallosYUsoScreen(onNavigate = {}) } } }
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Servidor").performClick()
@@ -123,6 +142,22 @@ class PestanaServidorEnPantallaTest {
         verQue("48.000 por usuario")
         verQue("IllegalStateException: sin red")
         verQue("Faltan: RESEND_API_KEY")
+    }
+
+    /** Vuelta 106 · el costo de la IA en pesos: 30 días, por usuario activo, la proyección y quién más gasta. */
+    @Test
+    fun `la pestana Servidor dice lo que cuesta la IA en pesos`() {
+        montarEnServidor()
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithText("1.240 pedidos", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        }
+        verQue("Lo que cuesta la IA")
+        verQue("US$ 1,25")
+        verQue("4 usuarios activos en 30 días")
+        verQue("$1,58")
+        verQue("al ritmo de hoy cierra en")
+        verQue("caro@movi.test")
+        verQue("42 preguntas")
     }
 
     @Test

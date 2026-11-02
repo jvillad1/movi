@@ -38,6 +38,7 @@ import kotlinx.coroutines.launch
 import com.jvillada.movi.ui.fecha.fechaEnPalabras
 import com.jvillada.movi.ui.fecha.hoyEnAppZone
 import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
+import com.jvillada.movi.shared.model.guiaDelExtractoPara
 
 
 @Composable
@@ -103,6 +104,9 @@ fun StatementReviewScreen(
         )
     }
     val destinationAccount = destino.cuenta
+    // Vuelta 107: la guía del banco que reconoció la lectura («Bancolombia», «Nu»), si tiene una.
+    val guiaDelExtracto = remember(result.bankName) { guiaDelExtractoPara(result.bankName) }
+    var viendoLaGuia by remember { mutableStateOf(false) }
 
     val cargos = remember(result) { result.cargosDelBanco.associateBy { it.parsedId } }
     val estadosDeLosCargos = remember(cargos, destinationAccount?.id) {
@@ -352,6 +356,23 @@ fun StatementReviewScreen(
                 }
             }
 
+            // Vuelta 107: el banco del extracto se reconoció y tiene guía: cómo bajarlo la próxima vez
+            // (los pasos, el formato y el rango ideal). Sin guía, nada.
+            guiaDelExtracto?.let { guia ->
+                item(key = "como-sacar-el-extracto") {
+                    Superficie(
+                        relleno = RellenoDeSuperficie.Lista,
+                        modifier = Modifier.padding(horizontal = Espacio.m).padding(top = Espacio.s),
+                    ) {
+                        FilaDeComoSacarElExtracto(
+                            guia = guia,
+                            titulo = TE_FALTAN_MOVIMIENTOS,
+                            onClick = { viendoLaGuia = true },
+                        )
+                    }
+                }
+            }
+
             item { Spacer(Modifier.height(Medida.botonFlotante + Medida.entreSecciones)) }
         }
 
@@ -398,7 +419,18 @@ fun StatementReviewScreen(
             )
         }
     }
+    val guia = guiaDelExtracto
+    if (viendoLaGuia && guia != null) {
+        HojaDeComoSacarElExtracto(
+            guia = guia,
+            esTarjeta = destinationAccount?.type == com.jvillada.movi.shared.model.AccountType.CREDIT_CARD,
+            onDismiss = { viendoLaGuia = false },
+        )
+    }
 }
+
+/** Vuelta 107: la fila de la revisión de un extracto que abre la guía de su banco. */
+const val TE_FALTAN_MOVIMIENTOS: String = "¿Te faltan movimientos?"
 
 /**
  * El encabezado del bloque «Cargos y abonos del banco (N)», con su botón para anotar los tildados de
