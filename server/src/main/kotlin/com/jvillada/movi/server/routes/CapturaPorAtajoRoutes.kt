@@ -426,11 +426,17 @@ private suspend fun guardarElMensaje(uid: String, aviso: AvisoDelAtajo, ahora: L
         return HttpStatusCode.Accepted to RespuestaDelAtajo(false, "El mensaje llegó vacío.")
     }
     // **La regla del teléfono, en `:core`.** Lo que no es de un banco (o viene de un número personal) no se
-    // guarda ni se lee más: solo se cuenta.
-    if (!pasaElFiltroDeBancos(aviso.remitente, texto)) {
-        contarAtajoDescartado(uid, MotivoDelAtajoDescartado.NO_ES_DEL_BANCO, ahora)
-        registrarLaCaptura(uid, "NO_ES_DEL_BANCO", esPago = false, avisoId = null, ahora)
-        return HttpStatusCode.Accepted to RespuestaDelAtajo(false, "No es un mensaje de un banco: no se guardó.")
+    // guarda ni se lee más: solo se cuenta, con su motivo (vuelta 114: lo que nombra un banco sin la forma de
+    // un aviso, una promoción o una clave, va aparte de lo que no es de un banco).
+    porQueNoPasaElFiltroDeBancos(aviso.remitente, texto)?.let { motivo ->
+        contarAtajoDescartado(uid, motivo, ahora)
+        registrarLaCaptura(uid, motivo.name, esPago = false, avisoId = null, ahora)
+        val porQue = if (motivo == MotivoDelAtajoDescartado.SIN_FORMA_DE_AVISO) {
+            "No tiene la forma de un aviso del banco: no se guardó."
+        } else {
+            "No es un mensaje de un banco: no se guardó."
+        }
+        return HttpStatusCode.Accepted to RespuestaDelAtajo(false, porQue)
     }
     val (id, guardado) = guardarElAvisoDelAtajo(uid, texto, origenDelSmsDelAtajo(aviso.remitente, texto), ahora)
     registrarLaCaptura(uid, if (guardado) "GUARDADO" else "YA_ESTABA", esPago = false, avisoId = id, ahora)

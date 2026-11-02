@@ -293,6 +293,38 @@ class CapturaPorAtajoRoutesTest {
         assertTrue(json.decodeFromString(com.jvillada.movi.shared.model.ResumenDeAtajosDescartados.serializer(), deOtra.bodyAsText()).grupos.isEmpty())
     }
 
+    /**
+     * Vuelta 114 · una promoción o una clave del banco que llega sin remitente no se guarda, pero no se cuenta
+     * como «no era de un banco»: va con su propio motivo, y `/api/captura/descartados` lo devuelve aparte.
+     */
+    @Test
+    fun `lo que nombra un banco sin la forma de un aviso se cuenta aparte`() = conApp {
+        val codigo = client.crearCodigo()
+        val promo = client.avisar(codigo, mensaje("Bancolombia te invita a conocer tu nueva tarjeta. Pídela ya"))
+        assertEquals(HttpStatusCode.Accepted, promo.status)
+        assertTrue("\"guardado\":false" in promo.bodyAsText())
+        client.avisar(codigo, mensaje("Bancolombia: tu clave dinámica es 123456"))
+        client.avisar(codigo, mensaje("Hola, ya llegué"))
+        assertTrue(filas().isEmpty(), "nada se guarda")
+        val contados = transaction {
+            AtajosDescartados.selectAll().associate { it[AtajosDescartados.motivo] to it[AtajosDescartados.cuantos] }
+        }
+        assertEquals(mapOf("SIN_FORMA_DE_AVISO" to 2, "NO_ES_DEL_BANCO" to 1), contados)
+        val leido = client.get("/api/captura/descartados") { header(HttpHeaders.Authorization, "Bearer ${jwtDe(duena)}") }
+        val resumen = json.decodeFromString(com.jvillada.movi.shared.model.ResumenDeAtajosDescartados.serializer(), leido.bodyAsText())
+        assertEquals(
+            setOf(
+                com.jvillada.movi.shared.model.GrupoDeAtajosDescartados("SIN_FORMA_DE_AVISO", 2),
+                com.jvillada.movi.shared.model.GrupoDeAtajosDescartados("NO_ES_DEL_BANCO", 1),
+            ),
+            resumen.grupos.toSet(),
+        )
+        assertEquals(
+            "En los últimos 30 días, 1 mensaje no era de un banco y 2 nombraban un banco pero no tenían la forma de un aviso.",
+            com.jvillada.movi.shared.model.textoDeAtajosDescartados(resumen),
+        )
+    }
+
     @Test
     fun `un codigo de remitente del banco pasa el filtro aunque el texto no nombre al banco`() = conApp {
         val codigo = client.crearCodigo()

@@ -115,6 +115,23 @@ class CapturaPorAtajoTest {
                 ResumenDeAtajosDescartados(grupos = listOf(GrupoDeAtajosDescartados("NO_ES_DEL_BANCO", 1), GrupoDeAtajosDescartados("VACIO", 1))),
             ),
         )
+        // Vuelta 114 · lo que nombraba un banco sin la forma de un aviso va aparte, en la misma línea.
+        assertEquals(
+            "3 mensajes nombraban un banco pero no tenían la forma de un aviso en los últimos 30 días.",
+            textoDeAtajosDescartados(ResumenDeAtajosDescartados(grupos = listOf(GrupoDeAtajosDescartados("SIN_FORMA_DE_AVISO", 3)))),
+        )
+        assertEquals(
+            "1 mensaje nombraba un banco pero no tenía la forma de un aviso en los últimos 30 días.",
+            textoDeAtajosDescartados(ResumenDeAtajosDescartados(grupos = listOf(GrupoDeAtajosDescartados("SIN_FORMA_DE_AVISO", 1)))),
+        )
+        assertEquals(
+            "En los últimos 30 días, 12 mensajes no eran de un banco y 3 nombraban un banco pero no tenían la forma de un aviso.",
+            textoDeAtajosDescartados(
+                ResumenDeAtajosDescartados(
+                    grupos = listOf(GrupoDeAtajosDescartados("NO_ES_DEL_BANCO", 12), GrupoDeAtajosDescartados("SIN_FORMA_DE_AVISO", 3)),
+                ),
+            ),
+        )
         // Un motivo de un server más nuevo no rompe nada: no se dice.
         assertNull(textoDeAtajosDescartados(ResumenDeAtajosDescartados(grupos = listOf(GrupoDeAtajosDescartados("OTRO", 2)))))
     }

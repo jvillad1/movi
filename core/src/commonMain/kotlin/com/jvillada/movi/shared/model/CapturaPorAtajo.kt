@@ -184,6 +184,11 @@ fun palabrasParaLaAutomatizacion(cuentas: List<Account>): List<String> =
 enum class MotivoDelAtajoDescartado {
     /** Un mensaje que no pasó el filtro de bancos (un SMS personal). */
     NO_ES_DEL_BANCO,
+    /**
+     * Vuelta 114 · un mensaje sin remitente que nombra un banco pero no tiene la forma de un aviso: no empieza
+     * por el banco o no trae monto (una promoción, una clave dinámica). Ver `porQueNoSeGuardaElSmsDelAtajo`.
+     */
+    SIN_FORMA_DE_AVISO,
     /** Llegó sin texto, o un pago sin ningún dato. */
     VACIO,
     /** Pasó el límite de avisos por minuto de un código (en el server): un atajo en bucle. */
@@ -208,18 +213,29 @@ const val DIAS_DE_ATAJOS_DESCARTADOS: Int = 30
  * **La línea de «Desde tu iPhone»**, como la de los correos descartados, o `null` si no hay nada que decir:
  * «12 mensajes no eran de un banco en los últimos 30 días.» y, si pasó, «3 avisos llegaron demasiado
  * seguidos y no se guardaron.» y «2 avisos llegaron vacíos.».
+ *
+ * Vuelta 114 · lo que nombraba un banco sin la forma de un aviso ([MotivoDelAtajoDescartado.SIN_FORMA_DE_AVISO])
+ * va aparte: «3 mensajes nombraban un banco pero no tenían la forma de un aviso en los últimos 30 días.», o
+ * con los dos, «En los últimos 30 días, 12 mensajes no eran de un banco y 3 nombraban un banco pero no tenían
+ * la forma de un aviso.».
  */
 fun textoDeAtajosDescartados(resumen: ResumenDeAtajosDescartados): String? {
     fun cuantos(motivo: MotivoDelAtajoDescartado) = resumen.grupos.filter { it.motivo == motivo.name }.sumOf { it.cuantos }
     val noDelBanco = cuantos(MotivoDelAtajoDescartado.NO_ES_DEL_BANCO)
+    val sinForma = cuantos(MotivoDelAtajoDescartado.SIN_FORMA_DE_AVISO)
     val demasiados = cuantos(MotivoDelAtajoDescartado.DEMASIADOS)
     val vacios = cuantos(MotivoDelAtajoDescartado.VACIO)
+    val ventana = "en los últimos ${resumen.dias} días"
+    fun noEran(n: Int) = if (n == 1) "1 mensaje no era de un banco" else "$n mensajes no eran de un banco"
+    fun sinFormaDeAviso(n: Int, conMensajes: Boolean = true) =
+        (if (n == 1) "1${if (conMensajes) " mensaje" else ""} nombraba un banco pero no tenía la forma de un aviso"
+        else "$n${if (conMensajes) " mensajes" else ""} nombraban un banco pero no tenían la forma de un aviso")
     val frases = buildList {
-        if (noDelBanco > 0) {
-            add(
-                (if (noDelBanco == 1) "1 mensaje no era de un banco" else "$noDelBanco mensajes no eran de un banco") +
-                    " en los últimos ${resumen.dias} días.",
-            )
+        when {
+            noDelBanco > 0 && sinForma > 0 ->
+                add("${ventana.replaceFirstChar { it.uppercase() }}, ${noEran(noDelBanco)} y ${sinFormaDeAviso(sinForma, conMensajes = false)}.")
+            noDelBanco > 0 -> add("${noEran(noDelBanco)} $ventana.")
+            sinForma > 0 -> add("${sinFormaDeAviso(sinForma)} $ventana.")
         }
         if (demasiados > 0) {
             add(if (demasiados == 1) "1 aviso llegó demasiado seguido y no se guardó." else "$demasiados avisos llegaron demasiado seguidos y no se guardaron.")

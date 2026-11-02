@@ -117,3 +117,29 @@ fun seGuardaElSmsDelAtajo(remitente: String?, texto: String, codigos: List<Strin
     if (limpio.isNotEmpty() && limpio.all { it in '0'..'9' }) return seSubeElSms(remitente, texto, codigos, palabras)
     return empiezaPorUnBanco(texto, palabras) && traeUnMontoDelAviso(texto)
 }
+
+/**
+ * Vuelta 114 · **por qué no se guarda** lo que mandó un atajo, o `null` si se guarda ([seGuardaElSmsDelAtajo]).
+ *
+ * - [MotivoDelAtajoDescartado.SIN_FORMA_DE_AVISO]: sin remitente que pruebe nada (el atajo firmado no lo manda,
+ *   o es un nombre con letras), el texto **nombra un banco** pero no empieza por él o no trae monto: una
+ *   promoción, una clave dinámica, «tu clave fue actualizada», o un mensaje personal que nombra al banco.
+ *   Antes se contaba como «no era de un banco», que para una promoción del banco es falso.
+ * - [MotivoDelAtajoDescartado.NO_ES_DEL_BANCO]: todo lo demás (un remitente personal, un código que no es de
+ *   un banco y un texto que no nombra a ninguno).
+ */
+fun porQueNoSeGuardaElSmsDelAtajo(
+    remitente: String?,
+    texto: String,
+    codigos: List<String>,
+    palabras: List<String>,
+): MotivoDelAtajoDescartado? {
+    if (seGuardaElSmsDelAtajo(remitente, texto, codigos, palabras)) return null
+    val limpio = remitenteLimpio(remitente)
+    val elRemitenteDecide = esUnRemitentePersonal(remitente) || (limpio.isNotEmpty() && limpio.all { it in '0'..'9' })
+    return if (!elRemitenteDecide && nombraUnBanco(texto, palabras)) {
+        MotivoDelAtajoDescartado.SIN_FORMA_DE_AVISO
+    } else {
+        MotivoDelAtajoDescartado.NO_ES_DEL_BANCO
+    }
+}
