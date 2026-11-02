@@ -1,12 +1,14 @@
 package com.jvillada.movi.sms
 
+import com.jvillada.movi.shared.model.seSubeElSms
 import java.security.MessageDigest
 
 data class FilterConfig(val senderCodes: List<String>, val bodyKeywords: List<String>)
 
 /**
  * Filtro de privacidad (LOCKED en el spec): SOLO los SMS que matchean aquí salen del
- * teléfono. Remitentes cortos de bancos + keyword en el cuerpo. La config es
+ * teléfono. Remitentes cortos de bancos + keyword en el cuerpo (de un remitente que no es un
+ * número personal, desde la vuelta 113). La config es
  * parametrizable (ver SmsFilterConfigStore) para agregar bancos sin reinstalar el APK;
  * DEFAULTS es el fallback compilado — hoy arranca igual a la fuente del server, pero ya
  * no es un espejo: es el PISO. SmsFilterConfigStore.load() siempre une la config remota
@@ -23,13 +25,25 @@ object BankSenderFilter {
         bodyKeywords = listOf("bancolombia", "nubank", "davivienda"),
     )
 
-    fun matches(sender: String?, body: String, config: FilterConfig = DEFAULTS): Boolean {
-        val s = sender.orEmpty()
-        if (config.senderCodes.any { s.contains(it) }) return true
-        val lower = body.lowercase()
-        return config.bodyKeywords.any { lower.contains(it.lowercase()) }
-    }
+    /**
+     * Vuelta 113 · la regla vive en `:core` ([seSubeElSms]): un remitente que contiene un código conocido
+     * sale; una palabra de banco en el cuerpo solo si hay remitente y **no es un número personal** (10 o
+     * más dígitos). La usan la captura en tiempo real (`SmsRealtimeReceiver`) y el barrido
+     * ([filterBankMessages]).
+     */
+    fun matches(sender: String?, body: String, config: FilterConfig = DEFAULTS): Boolean =
+        seSubeElSms(sender, body, config.senderCodes, config.bodyKeywords)
 }
+
+/**
+ * Vuelta 113 · **¿Una captura que ya estaba en cola sigue pudiendo subir?** Un APK anterior dejaba en
+ * WorkManager (el `inputData` de `SmsSyncWorker`) y en [CapturasPorSubir] SMS que pasaron la regla vieja
+ * —un celular que nombraba al banco—; al actualizar, esos se subirían sin volver a mirarlos. Antes de
+ * subir, un SMS vuelve a pasar por [BankSenderFilter.matches] con el filtro vigente y, si no pasa, se
+ * descarta. Las notificaciones no: su filtro es otro (la lista de apps) y ya se aplicó al capturarlas.
+ */
+fun laCapturaPuedeSubir(deNotificacion: Boolean, sender: String?, body: String, config: FilterConfig): Boolean =
+    deNotificacion || BankSenderFilter.matches(sender, body, config)
 
 /** Id estable ante re-entregas del broadcast y reintentos del Worker (dedupe extremo a extremo). */
 fun smsRealtimeId(sender: String?, timestamp: Long, body: String): String {

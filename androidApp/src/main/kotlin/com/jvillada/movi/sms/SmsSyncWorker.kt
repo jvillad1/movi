@@ -50,6 +50,13 @@ class SmsSyncWorker(context: Context, params: WorkerParameters) : CoroutineWorke
         val ts = inputData.getLong("ts", System.currentTimeMillis())
         val deNotificacion = inputData.getString("origen") == ORIGEN_NOTIFICACION
 
+        // Vuelta 113: un SMS que un APK anterior dejó en cola con la regla vieja vuelve a pasar el filtro
+        // vigente; si no pasa (un celular que nombraba al banco), no sale del teléfono.
+        if (!laCapturaPuedeSubir(deNotificacion, sender, body, SmsFilterConfigStore.load(applicationContext))) {
+            Log.w(TAG, "la captura en cola ya no pasa el filtro — descartada sin subir")
+            return@withContext Result.success()
+        }
+
         fun guardarPara(dueno: String) = CapturasPorSubir.guardar(
             applicationContext,
             CapturasPorSubir.Captura(id, sender, body, ts, deNotificacion, dueno),

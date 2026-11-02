@@ -128,9 +128,12 @@ nav { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--borde); d
                 "cualquier otra app se descartan en tu teléfono sin leerlas.</li>" +
                 "<li>Los <strong>SMS</strong> de tu banco, solo en la versión de Android que se instala por " +
                 "fuera de la tienda y solo con el permiso que tú das. Salen del teléfono solo los mensajes " +
+                // Vuelta 113: la regla es `seSubeElSms` (`:core` `FiltroDeSms.kt`).
                 "cuyo remitente es un código bancario conocido o cuyo texto nombra un banco de una lista " +
-                "cerrada (por eso un mensaje personal que nombre a tu banco también puede salir); los demás " +
-                "nunca salen de él. En el servidor, lo que no parece un movimiento (un código de " +
+                "cerrada, y nunca los que vienen del número de teléfono de una persona (diez dígitos o más), " +
+                "aunque nombren a tu banco; los demás nunca salen de él. (En versiones anteriores de la app, " +
+                "un mensaje de una persona que nombrara a tu banco sí podía salir.) En el servidor, lo que " +
+                "no parece un movimiento (un código de " +
                 "verificación, una promoción) queda apartado, y nada se anota sin que tú lo confirmes. La versión de " +
                 "Google Play no lee SMS.</li>" +
                 "<li>Los <strong>correos de tu banco</strong> que tú decidas reenviar a tu dirección de Movi.</li>" +
@@ -138,8 +141,12 @@ nav { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--borde); d
                 "<li>Desde los <strong>Atajos de iPhone</strong>, si tú los configuras: el texto de los SMS que " +
                 "tu automatización le reenvía a Movi, y de cada pago con Apple Pay el comercio, el monto y el " +
                 "nombre de la tarjeta. Los atajos usan un código que solo sirve para mandar avisos (el servidor " +
-                "guarda solo su huella, no el código, y lo puedes desactivar en la app). Un mensaje que no es de un banco de " +
-                "una lista cerrada se descarta sin guardar su texto: solo se cuenta cuántos llegaron.</li>" +
+                "guarda solo su huella, no el código, y lo puedes desactivar en la app). Como la automatización no le " +
+                // Vuelta 113: la regla es `seGuardaElSmsDelAtajo` (`:core`); el atajo firmado no manda el remitente.
+                "dice a Movi quién mandó el mensaje, Movi solo mira el texto: se descarta todo mensaje que no " +
+                "empiece por el nombre de un banco de una lista cerrada con un monto, o que llegue con el número " +
+                "de una persona, sin guardar su texto: solo se cuenta cuántos llegaron. Un mensaje de una persona " +
+                "que empiece como un aviso del banco sí se guarda, en «Por revisar», sin anotarse.</li>" +
                 "</ul></li>")
             append("<li><strong>Papeles y extractos:</strong> los PDF e imágenes que subes o compartes con " +
                 "Movi y lo que se leyó de ellos. Se guardan cifrados (AES-256). Si pides que Movi recuerde " +

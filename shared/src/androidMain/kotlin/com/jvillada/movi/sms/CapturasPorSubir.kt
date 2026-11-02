@@ -59,6 +59,14 @@ object CapturasPorSubir {
 
     fun cuantas(context: Context): Int = synchronized(candado) { leer(context).size }
 
+    /**
+     * Vuelta 113 · separa las que **pueden subir** de las que ya no pasan el filtro vigente
+     * ([laCapturaPuedeSubir]: un SMS que un APK anterior guardó con la regla vieja). Las segundas se
+     * descartan sin subir.
+     */
+    fun separarPorElFiltro(capturas: List<Captura>, config: FilterConfig): Pair<List<Captura>, List<Captura>> =
+        capturas.partition { laCapturaPuedeSubir(it.deNotificacion, it.sender, it.body, config) }
+
     internal fun agregar(lista: List<Captura>, captura: Captura, maximo: Int = MAXIMO): List<Captura> =
         (lista.filterNot { it.id == captura.id } + captura).takeLast(maximo)
 

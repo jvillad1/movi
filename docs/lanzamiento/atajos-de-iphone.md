@@ -37,7 +37,11 @@ mensajes» cuando el server no tiene el firmado, o los mismos pasos que el de Ap
 3. En Movi, «Por revisar» tiene que mostrarlo en unos segundos, con origen **«Atajo · Bancolombia»**. En
    «Desde tu iPhone» la línea pasa a «último aviso hace un momento».
 4. Corre el atajo otra vez con el **mismo** texto: no tiene que aparecer una segunda fila (dedupe).
-5. Córrelo con un texto personal («Hola, ya llegué»): no tiene que aparecer nada (se descarta y solo se cuenta).
+5. Córrelo con un texto personal («Hola, ya llegué», o «Hola, ya te pagué por Bancolombia $50.000»): no tiene
+   que aparecer nada (se descarta y solo se cuenta). El atajo firmado no manda el remitente, así que el
+   server solo mira el texto: se guarda lo que **empieza** por el nombre de un banco y trae un monto. Por eso
+   un SMS de un amigo que empiece igual («Bancolombia me cobró $50.000 de más, qué rabia») **sí** se guarda:
+   es el límite de la regla (vuelta 113, `seGuardaElSmsDelAtajo`), y queda en «Por revisar» sin anotarse.
 6. Después, ignora los de prueba en «Por revisar».
 
 ## 4. La automatización «Mensaje»
