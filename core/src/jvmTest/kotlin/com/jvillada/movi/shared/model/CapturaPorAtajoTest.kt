@@ -65,9 +65,10 @@ class CapturaPorAtajoTest {
 
     @Test
     fun `las palabras de la automatizacion salen de los bancos de sus cuentas`() {
-        assertEquals(listOf("Bancolombia"), palabrasParaLaAutomatizacion(emptyList()))
+        // Vuelta 114: siempre Bancolombia y DAVIVIENDA (como firman su SMS), y después los bancos de sus cuentas.
+        assertEquals(listOf("Bancolombia", "DAVIVIENDA"), palabrasParaLaAutomatizacion(emptyList()))
         assertEquals(
-            listOf("Bancolombia", "Davivienda"),
+            listOf("Bancolombia", "DAVIVIENDA"),
             palabrasParaLaAutomatizacion(
                 listOf(
                     cuenta("Bancolombia Ahorros 8133"),
@@ -78,10 +79,10 @@ class CapturaPorAtajoTest {
                 ),
             ),
         )
-        assertEquals(listOf("Bancolombia"), palabrasParaLaAutomatizacion(listOf(cuenta("Nu"), cuenta("Efectivo", AccountType.CASH))))
+        assertEquals(listOf("Bancolombia", "DAVIVIENDA"), palabrasParaLaAutomatizacion(listOf(cuenta("Nu"), cuenta("Efectivo", AccountType.CASH))))
         // Con y sin tilde donde el banco puede escribirla de las dos formas; Colpatria y Davibank firman «Davibank».
         assertEquals(
-            listOf("Banco de Bogotá", "Banco de Bogota", "Itaú", "Itau", "Davibank"),
+            listOf("Bancolombia", "DAVIVIENDA", "Banco de Bogotá", "Banco de Bogota", "Itaú", "Itau", "Davibank"),
             palabrasParaLaAutomatizacion(listOf(cuenta("Banco de Bogotá 1234"), cuenta("Itaú"), cuenta("Scotiabank Colpatria"), cuenta("AFC Davibank 9497"))),
         )
     }

@@ -145,7 +145,8 @@ fun lineaDelCodigoDeCaptura(codigo: CodigoDeCaptura, ahora: Long): String? {
  */
 private val PALABRAS_DEL_SMS_DE_CADA_BANCO: Map<String, List<String>> = mapOf(
     "bancolombia" to listOf("Bancolombia"),
-    "davivienda" to listOf("Davivienda"),
+    // Vuelta 114: como firma su SMS («DAVIVIENDA Descuento en internet, …»).
+    "davivienda" to listOf("DAVIVIENDA"),
     "davibank" to listOf("Davibank"),
     "scotiabank" to listOf("Davibank"),
     "banco_de_bogota" to listOf("Banco de Bogotá", "Banco de Bogota"),
@@ -161,21 +162,27 @@ private val PALABRAS_DEL_SMS_DE_CADA_BANCO: Map<String, List<String>> = mapOf(
 private val BILLETERAS_SIN_SMS = setOf("nequi", "daviplata")
 
 /**
- * **Las palabras que la guía sugiere para «El mensaje contiene»**: la de cada banco de las cuentas del
- * dueño (una automatización por banco), en el orden de sus cuentas y sin repetir. Sin ninguna, Bancolombia,
- * que es el que más SMS manda.
+ * Vuelta 114 · **las dos tarjetas «Mensaje» que la guía recomienda siempre**: los dos bancos cuyos SMS lee
+ * Movi tal como llegan (`Bancolombia: Compraste…`, `DAVIVIENDA Descuento…`), escritas como los firman.
+ */
+val PALABRAS_DE_LAS_AUTOMATIZACIONES_BASE: List<String> = listOf("Bancolombia", "DAVIVIENDA")
+
+/**
+ * **Las palabras que la guía sugiere para «El mensaje contiene»**: una automatización (iOS 17 a 26) o una tarjeta
+ * «Mensaje» (iOS 27) por palabra. Desde la vuelta 114 empiezan siempre por [PALABRAS_DE_LAS_AUTOMATIZACIONES_BASE]
+ * y siguen con la de cada banco de las cuentas del dueño, en el orden de sus cuentas y sin repetir (sin
+ * distinguir mayúsculas: «Davivienda» ya está como «DAVIVIENDA»).
  */
 fun palabrasParaLaAutomatizacion(cuentas: List<Account>): List<String> =
-    cuentas.asSequence()
-        .filter { !it.esBien }
-        .mapNotNull { marcaDeLaCuenta(it) }
-        // Las billeteras avisan por su app, no con el SMS del banco dueño.
-        .filter { it.id !in BILLETERAS_SIN_SMS }
-        .mapNotNull { PALABRAS_DEL_SMS_DE_CADA_BANCO[it.id] ?: PALABRAS_DEL_SMS_DE_CADA_BANCO[grupoDelBanco(it.id)] }
-        .flatten()
-        .distinct()
-        .toList()
-        .ifEmpty { listOf("Bancolombia") }
+    (
+        PALABRAS_DE_LAS_AUTOMATIZACIONES_BASE + cuentas.asSequence()
+            .filter { !it.esBien }
+            .mapNotNull { marcaDeLaCuenta(it) }
+            // Las billeteras avisan por su app, no con el SMS del banco dueño.
+            .filter { it.id !in BILLETERAS_SIN_SMS }
+            .mapNotNull { PALABRAS_DEL_SMS_DE_CADA_BANCO[it.id] ?: PALABRAS_DEL_SMS_DE_CADA_BANCO[grupoDelBanco(it.id)] }
+            .flatten()
+    ).distinctBy { it.lowercase() }
 
 /**
  * **Por qué no se guardó lo que mandó un atajo** (la columna `motivo` de `atajos_descartados`). Nunca se

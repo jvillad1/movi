@@ -90,14 +90,14 @@ class DesdeTuIphoneTest {
 
     private var montada by mutableStateOf(true)
 
-    private fun montar(server: ServerDeCodigos, hoja: HojaDePrueba = HojaDePrueba()) {
+    private fun montar(server: ServerDeCodigos, hoja: HojaDePrueba = HojaDePrueba(), versionDeIos: Int? = null) {
         Repositories.sustitutoDePrueba = server
         composeRule.setContent {
             CompositionLocalProvider(LocalHojaDeCompartir provides hoja) {
                 MoviTheme {
                     if (montada) {
                         Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                            DesdeTuIphone(palabras = listOf("Bancolombia", "Davivienda"), ahora = { AHORA })
+                            DesdeTuIphone(palabras = listOf("Bancolombia", "DAVIVIENDA"), ahora = { AHORA }, versionDeIos = versionDeIos)
                         }
                     }
                 }
@@ -234,7 +234,7 @@ class DesdeTuIphoneTest {
     fun `los pasos dicen las palabras de los bancos, el atajo y la linea de privacidad`() {
         montar(ServerDeCodigos(CodigoDeCaptura()))
         assertTrue(hay("«Bancolombia»"))
-        assertTrue(hay("«Davivienda»"))
+        assertTrue(hay("«DAVIVIENDA»"))
         assertTrue(hay("«$NOMBRE_DEL_ATAJO_DE_MENSAJES»"))
         assertTrue(hay(PRIVACIDAD_DE_LOS_ATAJOS))
         assertTrue(hay(TEXTO_DE_PRUEBA_DEL_ATAJO))
@@ -266,9 +266,153 @@ class DesdeTuIphoneTest {
             assertTrue(pasos.any { "Authorization" in it && "Bearer" in it })
             assertFalse(pasos.any { "$url?" in it })
         }
-        val mensajes = pasosDeLaAutomatizacionDeMensajes(listOf("Bancolombia"))
+        val mensajes = pasosDeLaAutomatizacionDeMensajes(listOf("Bancolombia"), VarianteDeLaAutomatizacion.IOS_17_A_26)
         assertEquals(5, mensajes.size)
         assertEquals(PROBAR_CON_UN_SMS_REAL, mensajes.last())
         assertTrue(mensajes[1].contains("«El mensaje contiene»") && mensajes[1].contains("«Bancolombia»"))
+    }
+
+    // ── Vuelta 114 ────────────────────────────────────────────────────────────────────────────
+
+    private fun existe(tag: String) =
+        composeRule.onAllNodes(androidx.compose.ui.test.hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+
+    private fun arribaDe(tag: String) =
+        composeRule.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.top
+
+    @Test
+    fun `los pasos de iOS 27 son los que se vieron en el iPhone, y los de iOS 17 a 26 los de la pestana`() {
+        val de27 = pasosDeLaAutomatizacionDeMensajes(listOf("Bancolombia", "DAVIVIENDA", "BBVA"), VarianteDeLaAutomatizacion.IOS_27_O_MAS)
+        assertEquals("En Atajos abre el atajo «$NOMBRE_DEL_ATAJO_DE_MENSAJES».", de27[0])
+        assertTrue("«Buscar»" in de27[1] && "«Automatización»" in de27[1])
+        assertTrue("«Comunicación»" in de27[2] && "«Al recibir un mensaje en el que Remitente es Remitente»" in de27[2])
+        assertTrue("«Mensaje contiene Texto»" in de27[3] && "«Bancolombia»" in de27[3])
+        assertTrue("prendido «Automatización»" in de27[4] && "apagado «Confirmar antes de ejecutar»" in de27[4])
+        assertTrue("otra tarjeta «Mensaje»" in de27[5] && "«o»" in de27[5] && "«DAVIVIENDA», «BBVA»" in de27[5])
+        assertEquals(PROBAR_CON_UN_SMS_REAL, de27.last())
+        assertTrue(de27.none { "pestaña" in it }, "en iOS 27 no hay pestaña «Automatización»")
+
+        val de17 = pasosDeLaAutomatizacionDeMensajes(listOf("Bancolombia", "DAVIVIENDA"), VarianteDeLaAutomatizacion.IOS_17_A_26)
+        assertTrue("pestaña «Automatización»" in de17[0])
+        assertTrue(de17.any { "«Ejecutar de inmediato»" in it })
+        assertTrue(de17.any { "«$NOMBRE_DEL_ATAJO_DE_MENSAJES»" in it })
+        assertTrue(de17.any { "Haz una automatización más con cada uno: «DAVIVIENDA»" in it })
+        assertEquals(listOf(ANTES_DE_IOS_17), pasosDeLaAutomatizacionDeMensajes(listOf("Bancolombia"), VarianteDeLaAutomatizacion.ANTES_DE_IOS_17))
+        assertTrue("notificación" in ANTES_DE_IOS_17 && "correos" in ANTES_DE_IOS_17)
+    }
+
+    @Test
+    fun `sin saber la version se ven las dos variantes con su rotulo, la de iOS 27 primero, y la linea de antes de iOS 17`() {
+        montar(ServerDeCodigos(CodigoDeCaptura()), versionDeIos = null)
+        assertTrue(existe(TAG_PASOS_IOS_27) && existe(TAG_PASOS_IOS_17_A_26) && existe(TAG_ANTES_DE_IOS_17))
+        assertTrue(arribaDe(TAG_PASOS_IOS_27) < arribaDe(TAG_PASOS_IOS_17_A_26), "la de iOS 27 primero")
+        assertTrue(hay(ROTULO_IOS_27_O_MAS))
+        assertTrue(hay(ROTULO_IOS_17_A_26))
+        assertFalse(hay(TU_IPHONE_MUESTRA_OTRA_COSA))
+    }
+
+    @Test
+    fun `en iOS 27 se ve su variante y la otra queda detras de Tu iPhone muestra otra cosa`() {
+        montar(ServerDeCodigos(CodigoDeCaptura()), versionDeIos = 27)
+        assertTrue(existe(TAG_PASOS_IOS_27))
+        assertFalse(existe(TAG_PASOS_IOS_17_A_26))
+        assertFalse(existe(TAG_ANTES_DE_IOS_17))
+        tocar(TU_IPHONE_MUESTRA_OTRA_COSA)
+        assertTrue(existe(TAG_PASOS_IOS_17_A_26))
+        assertTrue(hay(ROTULO_IOS_17_A_26))
+    }
+
+    @Test
+    fun `en iOS 18 se ve la pestana y la de iOS 27 queda detras`() {
+        montar(ServerDeCodigos(CodigoDeCaptura()), versionDeIos = 18)
+        assertTrue(existe(TAG_PASOS_IOS_17_A_26))
+        assertFalse(existe(TAG_PASOS_IOS_27))
+        tocar(TU_IPHONE_MUESTRA_OTRA_COSA)
+        assertTrue(existe(TAG_PASOS_IOS_27))
+    }
+
+    @Test
+    fun `antes de iOS 17 dice que el iPhone pide tocar una notificacion y propone los correos`() {
+        montar(ServerDeCodigos(CodigoDeCaptura()), versionDeIos = 16)
+        assertTrue(existe(TAG_ANTES_DE_IOS_17))
+        assertTrue(existe(TAG_PASOS_IOS_17_A_26))
+    }
+
+    @Test
+    fun `el paso de agregar el atajo trae el plan B y donde cambiar el codigo`() {
+        montar(ServerDeCodigos(CodigoDeCaptura(vigente = true, creadoEn = CREADO, atajoDeMensajes = true)))
+        assertTrue(hay(AL_AGREGAR_EL_ATAJO))
+        assertTrue(hay(PLAN_B_DEL_CODIGO))
+        assertTrue("«Omitir configuración»" in PLAN_B_DEL_CODIGO && "acción «Texto»" in PLAN_B_DEL_CODIGO)
+        assertTrue(hay(CAMBIAR_EL_CODIGO_DEL_ATAJO))
+        assertEquals("Si tocas «Crear otro», abre el atajo y cambia el código de la acción «Texto».", CAMBIAR_EL_CODIGO_DEL_ATAJO)
+        // Y la pregunta de «Crear otro» lo recuerda.
+        tocar(CREAR_OTRO_CODIGO)
+        assertTrue(hay(DETALLE_CREAR_OTRO))
+        assertTrue("acción «Texto»" in DETALLE_CREAR_OTRO)
+        // Apple Pay en iOS 27 no se inventa: se dice que falta verificarlo.
+        assertTrue(hay(APPLE_PAY_EN_IOS_27))
+    }
+
+    @Test
+    fun `el nombre que dice la guia es el del archivo que baja el boton`() {
+        montar(ServerDeCodigos(CodigoDeCaptura()), versionDeIos = 27)
+        assertTrue(hay("«$NOMBRE_DEL_ATAJO_DE_MENSAJES»"))
+        assertEquals("$NOMBRE_DEL_ATAJO_DE_MENSAJES.shortcut", com.jvillada.movi.shared.model.ARCHIVO_DEL_ATAJO_DE_MENSAJES)
+        // El botón abre RUTA_DEL_ATAJO_DE_MENSAJES: decodificada, termina en el archivo con el nombre del atajo.
+        assertEquals(
+            "/atajos/${com.jvillada.movi.shared.model.ARCHIVO_DEL_ATAJO_DE_MENSAJES}",
+            com.jvillada.movi.shared.model.RUTA_DEL_ATAJO_DE_MENSAJES.replace("%20", " "),
+        )
+        assertFalse(hay("Movi · Avisar"), "el nombre viejo con «·» ya no está")
+    }
+
+    @Test
+    fun `lo que nombraba un banco sin forma de aviso tiene su frase`() {
+        montar(
+            ServerDeCodigos(
+                CodigoDeCaptura(vigente = true, creadoEn = CREADO),
+                ResumenDeAtajosDescartados(grupos = listOf(GrupoDeAtajosDescartados("SIN_FORMA_DE_AVISO", 3))),
+            ),
+        )
+        assertEquals(
+            "3 mensajes nombraban un banco pero no tenían la forma de un aviso en los últimos 30 días.",
+            textoDe(TAG_ATAJOS_DESCARTADOS),
+        )
+    }
+
+    /**
+     * La versión de iOS por el user agent: solo lo seguro. Los de Safari 26 son los de las fuentes (WebKit bug
+     * 298260 y 51Degrees): el sistema congelado en 18_6 y «Version/26.0».
+     */
+    @Test
+    fun `la version de iOS sale del user agent solo cuando es segura`() {
+        fun ua(sistema: String, cola: String) =
+            "Mozilla/5.0 (iPhone; CPU iPhone OS $sistema like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) $cola"
+        // Safari 26 y 27: el sistema congelado, la versión de Safari manda.
+        assertEquals(26, versionDeIosDelUserAgent(ua("18_6", "Version/26.0 Mobile/15E148 Safari/604.1")))
+        assertEquals(27, versionDeIosDelUserAgent(ua("18_7", "Version/27.0.1 Mobile/15E148 Safari/604.1")))
+        // Antes del congelamiento, el sistema es el real.
+        assertEquals(17, versionDeIosDelUserAgent(ua("17_4", "Version/17.4 Mobile/15E148 Safari/604.1")))
+        assertEquals(16, versionDeIosDelUserAgent(ua("16_6", "Version/16.6 Mobile/15E148 Safari/604.1")))
+        assertEquals(18, versionDeIosDelUserAgent(ua("18_5", "Version/18.5 Mobile/15E148 Safari/604.1")))
+        // Chrome en iOS: sin «Version/»; un 26 no puede ser el valor congelado.
+        assertEquals(26, versionDeIosDelUserAgent(ua("26_0", "CriOS/140.0.7339.122 Mobile/15E148 Safari/604.1")))
+        // Un 18 sin la versión de Safari puede ser un iOS 26 o 27 congelado: no se sabe.
+        assertEquals(null, versionDeIosDelUserAgent(ua("18_6", "CriOS/140.0.7339.122 Mobile/15E148 Safari/604.1")))
+        assertEquals(null, versionDeIosDelUserAgent(ua("18_6", "Mobile/15E148 Instagram 300.0")))
+        // Un «Version/» de otro navegador no cuenta.
+        assertEquals(null, versionDeIosDelUserAgent(ua("18_6", "Version/26.0 Mobile/15E148 FxiOS/140.0 Safari/605.1.15")))
+        // Ni un iPad (se presenta como Mac) ni una computadora.
+        assertEquals(null, versionDeIosDelUserAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/26.0 Safari/605.1.15"))
+        assertEquals(null, versionDeIosDelUserAgent("Mozilla/5.0 (Linux; Android 14) Chrome/140 Mobile Safari/537.36"))
+
+        assertEquals(listOf(VarianteDeLaAutomatizacion.IOS_27_O_MAS), variantesDeLaGuia(27).aLaVista)
+        assertEquals(listOf(VarianteDeLaAutomatizacion.IOS_27_O_MAS), variantesDeLaGuia(28).aLaVista)
+        assertEquals(listOf(VarianteDeLaAutomatizacion.IOS_17_A_26), variantesDeLaGuia(26).aLaVista)
+        assertEquals(listOf(VarianteDeLaAutomatizacion.IOS_17_A_26), variantesDeLaGuia(17).aLaVista)
+        assertEquals(VarianteDeLaAutomatizacion.ANTES_DE_IOS_17, variantesDeLaGuia(16).aLaVista.first())
+        assertEquals(VarianteDeLaAutomatizacion.IOS_27_O_MAS, variantesDeLaGuia(null).aLaVista.first())
+        assertTrue(variantesDeLaGuia(null).detras.isEmpty())
     }
 }
