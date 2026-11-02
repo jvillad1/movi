@@ -3,6 +3,7 @@ package com.jvillada.movi.server.plugins
 import com.jvillada.movi.server.db.DatabaseFactory
 import com.jvillada.movi.server.observabilidad.ElPedidoEnCurso
 import com.jvillada.movi.server.observabilidad.Metricas
+import com.jvillada.movi.server.observabilidad.metodoNormalizado
 import io.ktor.server.application.ApplicationCallPipeline
 import io.ktor.server.application.call
 import io.ktor.server.application.createApplicationPlugin
@@ -37,7 +38,8 @@ import kotlinx.coroutines.withContext
  */
 val MetricasPorRuta = createApplicationPlugin("MetricasPorRuta") {
     application.intercept(ApplicationCallPipeline.Setup) {
-        val metodo = call.request.local.method.value
+        // De una lista cerrada: el método lo escribe el cliente (ver `metodoNormalizado`).
+        val metodo = metodoNormalizado(call.request.local.method.value)
         val pedido = ElPedidoEnCurso("$metodo $SIN_RUTA")
         call.attributes.put(LLAVE_DE_LA_MEDICION, Medicion(System.nanoTime(), metodo, pedido))
         withContext(ElPedidoEnCurso.comoContexto(pedido)) { proceed() }

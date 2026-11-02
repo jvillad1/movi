@@ -25,7 +25,6 @@ import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
 import java.time.LocalDate
 import com.jvillada.movi.server.time.AppClock
-import com.jvillada.movi.server.observabilidad.RetencionDeMetricas
 import com.jvillada.movi.server.observabilidad.correrJob
 
 /**
@@ -108,11 +107,6 @@ private suspend fun sweep(apiKey: String?, from: String, leadDays: Int) {
     // `ReprocesoDeCorreos.kt`).
     runCatching { correrJob("reproceso-de-correos") { com.jvillada.movi.server.routes.reprocesarUnaVezAlDia(today) } }.onFailure {
         logger.warn("ReminderScheduler: el reproceso del correo falló: ${it.message}", it)
-    }
-
-    // Vuelta 102 · las métricas del servidor: minutos 30 días, horas 12 meses, corridas 90 días.
-    runCatching { correrJob("retencion-de-metricas") { RetencionDeMetricas.correr() } }.onFailure {
-        logger.warn("ReminderScheduler: la retención de métricas falló: ${it.message}", it)
     }
 }
 

@@ -21,9 +21,9 @@ import org.jetbrains.exposed.sql.deleteWhere
  * - Las **corridas** de los jobs: 90 días.
  * - Los candados de las alertas: un día (después de una hora ya no traban nada).
  *
- * Corre en el scheduler de siempre (`ReminderScheduler`, como el job `retencion-de-metricas`). Antes de
- * borrar minutos rehace las horas de los dos días que están por salir: el volcado ya las armó al
- * cerrarlas, y esto es la red por si alguna quedó a medias. Rehacer es reemplazo, así que no duplica.
+ * Corre en su propio bucle (`startVolcadoDeMetricas`, el job `retencion-de-metricas`), cada 12 horas.
+ * El corte de los minutos va **por horas enteras**. Antes de borrar rehace las horas de los dos días que
+ * están por salir: el volcado ya las armó al cerrarlas, y esto es la red por si alguna quedó a medias.
  */
 object RetencionDeMetricas {
     const val DIAS_DE_MINUTOS = 30L
@@ -34,12 +34,16 @@ object RetencionDeMetricas {
     data class Borrado(val minutos: Int, val horas: Int, val dias: Int, val corridas: Int)
 
     suspend fun correr(ahora: Long = Metricas.reloj()): Borrado = dbQuery {
-        val corteMinutos = ahora - DIAS_DE_MINUTOS * UN_DIA
+        // **Alineado a la hora**: se borran horas enteras de minutos, nunca media. Una hora rehecha
+        // con la mitad de sus minutos ya borrados reemplazaría su resumen por uno a medias.
+        val corteMinutos = Metricas.horaDe(ahora - DIAS_DE_MINUTOS * UN_DIA)
         val corteHoras = ahora - DIAS_DE_HORAS * UN_DIA
         val corteCorridas = ahora - DIAS_DE_CORRIDAS * UN_DIA
 
-        // La red: las horas de los minutos que se van a borrar, rehechas una vez más.
-        var hora = Metricas.horaDe(corteMinutos - 2 * UN_DIA)
+        // La red: las horas de los minutos que se van a borrar, rehechas una vez más. Como el corte
+        // va por horas enteras, una hora de esta ventana tiene todos sus minutos o ninguno, y una sin
+        // minutos no se toca (`resumirLaHora` solo reemplaza lo que encuentra).
+        var hora = corteMinutos - 2 * UN_DIA
         while (hora < corteMinutos) {
             resumirLaHora(hora)
             hora += Metricas.UNA_HORA

@@ -62,10 +62,37 @@ object Metricas {
         val ahora = reloj()
         val minuto = minutoDe(ahora)
         rutas.computeIfAbsent(ClaveDeRuta(minuto, metodo, ruta)) { AgregadoDeRuta() }.sumar(status, duracionMs)
+        if (cuentaParaLaAlerta(ruta, status)) {
+            val v = ventanaDeLaAlerta.computeIfAbsent(minuto) { java.util.concurrent.atomic.AtomicLongArray(2) }
+            v.incrementAndGet(0)
+            if (status >= 500) v.incrementAndGet(1)
+        }
         if (usuario != null) {
             actividad(minuto).sumarUsuario(usuario.hashCode())
             if (usoLaIa) usuariosDeIa.computeIfAbsent(diaDe(ahora)) { ConcurrentHashMap.newKeySet() }.add(usuario.hashCode())
         }
+    }
+
+    // ── La ventana de la alerta de 5xx, en memoria ──────────────────────────
+
+    /**
+     * Pedidos y 5xx por minuto **para la alerta**, aparte de lo que se vuelca: la alerta no puede leer
+     * de la base, que es justo lo que suele estar caído cuando hay 5xx. No cuentan `/health` (Railway lo
+     * pide solo) ni los **503**: en este server un 503 es siempre un estado esperado y dicho a propósito
+     * (`IA_SIN_CREDITO`, el correo entrante sin secreto, un papel cifrado sin clave, `/version` sin commit),
+     * no una caída. Un error nuestro es un 500.
+     */
+    private val ventanaDeLaAlerta = ConcurrentHashMap<Long, java.util.concurrent.atomic.AtomicLongArray>()
+
+    fun cuentaParaLaAlerta(ruta: String, status: Int): Boolean = status != 503 && !ruta.startsWith("/health")
+
+    /** (pedidos, 5xx) de los minutos en `[desde, hasta)`, desde la memoria. Suelta lo de más de 10 minutos. */
+    fun ventanaDe5xx(desde: Long, hasta: Long): Pair<Long, Long> {
+        ventanaDeLaAlerta.keys.removeIf { it < hasta - 10 * UN_MINUTO }
+        var pedidos = 0L
+        var e5xx = 0L
+        ventanaDeLaAlerta.forEach { (minuto, v) -> if (minuto in desde until hasta) { pedidos += v.get(0); e5xx += v.get(1) } }
+        return pedidos to e5xx
     }
 
     // ── Servicios de afuera ──────────────────────────────────────────────────
@@ -200,10 +227,16 @@ object Metricas {
 
     /** Solo pruebas: arranca de cero. */
     fun reiniciar() {
-        rutas.clear(); servicios.clear(); actividades.clear(); usuariosDeIa.clear()
+        rutas.clear(); servicios.clear(); actividades.clear(); usuariosDeIa.clear(); ventanaDeLaAlerta.clear()
         reloj = System::currentTimeMillis
     }
 }
+
+/** Los métodos que se anotan tal cual; cualquier otro (lo manda el cliente) es `OTRO`. */
+val METODOS_CONOCIDOS: Set<String> = setOf("GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS")
+
+/** El método de un pedido, de una lista cerrada: un cliente no puede inventar filas con lo que mande. */
+fun metodoNormalizado(metodo: String): String = metodo.uppercase().takeIf { it in METODOS_CONOCIDOS } ?: "OTRO"
 
 /** Qué clase de error devolvió un servicio de afuera. Sin texto: solo la clase. */
 enum class TipoDeError {

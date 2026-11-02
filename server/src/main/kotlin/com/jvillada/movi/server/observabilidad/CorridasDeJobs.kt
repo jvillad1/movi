@@ -31,8 +31,9 @@ suspend fun <T> correrJob(nombre: String, bloque: suspend () -> T): T {
     val falla = resultado.exceptionOrNull()
     runCatching { anotarLaCorrida(nombre, inicio, ms, falla) }
         .onFailure { log.warn("jobs: no pude anotar la corrida de {}: {}", nombre, it.javaClass.simpleName) }
+    Alertas.anotarCorrida(nombre, bien = falla == null)
     if (falla != null) {
-        runCatching { Alertas.revisarElJob(nombre) }
+        runCatching { Alertas.revisarElJob(nombre, errorRecortado(falla)) }
             .onFailure { log.warn("jobs: la alerta de {} falló: {}", nombre, it.javaClass.simpleName) }
     }
     return resultado.getOrThrow()
@@ -50,17 +51,29 @@ internal suspend fun anotarLaCorrida(nombre: String, inicio: Long, duracionMs: L
 }
 
 /**
- * El error de una corrida, para guardarlo: el tipo y el mensaje, **sin datos**. Un mensaje puede traer
- * un monto, un número de cuenta o un correo (`NumberFormatException: For input string "1843014"`), así
- * que los números de 5 o más cifras pasan a `#`, los correos a `@` y todo se corta a 200 caracteres.
+ * El error de una corrida, para guardarlo: el tipo y el mensaje **sin datos** ([sinDatos]), cortado a
+ * 200 caracteres.
  */
-fun errorRecortado(e: Throwable): String {
-    val crudo = "${e.javaClass.simpleName}: ${e.message.orEmpty()}"
-    return crudo
-        .replace(Regex("""[\w.+-]+@[\w-]+(\.[\w-]+)+"""), "@")
-        .replace(Regex("""\d(?:[.,]?\d){4,}"""), "#")
-        .replace(Regex("""\s+"""), " ")
-        .take(200)
-}
+fun errorRecortado(e: Throwable): String = sinDatos("${e.javaClass.simpleName}: ${e.message.orEmpty()}").take(200)
+
+/**
+ * **Un texto de error sin datos de nadie**, para guardarlo o mandarlo por correo. Un mensaje puede traer
+ * un monto, un número de cuenta, un correo, un id, o el detalle de Postgres con la fila entera
+ * (`Key (user_id, id)=(usr_1, ev-9)`). Se limpian, en este orden:
+ * - el detalle `Key (…)=(…)` de Postgres;
+ * - los correos (`@`), los UUID (`<uuid>`) y los hex largos de 12+ con alguna cifra (`<hex>`);
+ * - los ids de Movi con prefijo y alguna cifra (`usr_…`, `acc-1254`, `ev-9` → `<id>`);
+ * - lo que va entre comillas (`"…"`), que en un error de Postgres o de un parseo es el valor;
+ * - los números de 5 o más cifras, con o sin separadores (`#`).
+ */
+fun sinDatos(texto: String): String = texto
+    .replace(Regex("""Key \([^)]*\)=\([^)]*\)"""), "Key (…)=(…)")
+    .replace(Regex("""[\w.+-]+@[\w-]+(\.[\w-]+)+"""), "@")
+    .replace(Regex("""\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b"""), "<uuid>")
+    .replace(Regex("""\b(?=[0-9a-fA-F]*\d)[0-9a-fA-F]{12,}\b"""), "<hex>")
+    .replace(Regex("""\b[a-z]{2,5}[_-](?=[\w-]*\d)[\w-]+"""), "<id>")
+    .replace(Regex(""""[^"]*"|'[^']*'"""), "\"…\"")
+    .replace(Regex("""\d(?:[.,]?\d){4,}"""), "#")
+    .replace(Regex("""\s+"""), " ")
 
 private val log = LoggerFactory.getLogger("com.jvillada.movi.server.observabilidad.CorridasDeJobs")

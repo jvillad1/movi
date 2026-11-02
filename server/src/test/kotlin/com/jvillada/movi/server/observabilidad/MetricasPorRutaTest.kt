@@ -4,6 +4,8 @@ import com.jvillada.movi.server.plugins.MetricasPorRuta
 import com.jvillada.movi.server.plugins.SIN_RUTA
 import com.jvillada.movi.server.plugins.configureStatusPages
 import io.ktor.client.request.get
+import io.ktor.client.request.request
+import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.plugins.BadRequestException
 import io.ktor.server.application.install
@@ -83,6 +85,20 @@ class MetricasPorRutaTest {
         assertEquals(1L, porRuta.getValue("/api/pedido-malo").errores4xx)
         assertEquals(0L, porRuta.getValue("/api/pedido-malo").errores5xx)
         assertEquals(1L, porRuta.getValue(SIN_RUTA).errores4xx)
+    }
+
+    @Test
+    fun `el metodo va de una lista cerrada, el que invente el cliente es OTRO`() = testApplication {
+        application {
+            install(MetricasPorRuta)
+            routing { get("/api/bien") { call.respondText("ok") } }
+        }
+        client.request("/api/bien") { method = HttpMethod("PROPFIND-con-basura") }
+        client.request("/api/bien") { method = HttpMethod("patch") }
+        client.get("/api/bien")
+        assertEquals(setOf("OTRO", "PATCH", "GET"), rutasAnotadas().keys.map { it.metodo }.toSet())
+        assertEquals("OTRO", metodoNormalizado("x".repeat(500)))
+        assertEquals("OPTIONS", metodoNormalizado("options"))
     }
 
     @Test

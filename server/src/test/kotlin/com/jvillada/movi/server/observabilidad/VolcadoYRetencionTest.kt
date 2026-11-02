@@ -110,6 +110,30 @@ class VolcadoYRetencionTest {
     }
 
     @Test
+    fun `dos corridas seguidas de la retencion no dejan una hora a medias`() = runBlocking {
+        val dia = 86_400_000L
+        // Una hora entera de minutos (60 pedidos), hace un poco más de 30 días.
+        val hora = Metricas.horaDe(diezEnPunto - 30 * dia - 3 * Metricas.UNA_HORA)
+        (0 until 60).forEach { m ->
+            Metricas.reloj = { hora + m * Metricas.UN_MINUTO + 1_000 }
+            Metricas.registrarPedido("GET", "/api/x", 200, 5, usuario = null)
+        }
+        VolcadoDeMetricas.volcar(hora + Metricas.UNA_HORA + 2_000)
+        assertEquals(60L, (filasDeRutas(ESCALA_HORA).single()[2]))
+
+        // La primera corrida con el corte en la mitad de esa hora (sin alinear sería borrar media hora).
+        RetencionDeMetricas.correr(hora + 30 * dia + 30 * Metricas.UN_MINUTO)
+        assertEquals(60, filasDeRutas(ESCALA_MINUTO).size, "con el corte por horas enteras, la hora sigue entera")
+        // La segunda, una hora después: se van los 60 minutos, y la hora sigue diciendo 60.
+        RetencionDeMetricas.correr(hora + 30 * dia + 90 * Metricas.UN_MINUTO)
+        assertTrue(filasDeRutas(ESCALA_MINUTO).isEmpty())
+        assertEquals(60L, filasDeRutas(ESCALA_HORA).single()[2])
+        // Y una tercera, con la hora ya sin minutos en su ventana, no la toca.
+        RetencionDeMetricas.correr(hora + 30 * dia + 150 * Metricas.UN_MINUTO)
+        assertEquals(60L, filasDeRutas(ESCALA_HORA).single()[2])
+    }
+
+    @Test
     fun `la retencion borra minutos de mas de 30 dias, horas de mas de 12 meses y corridas de mas de 90`() = runBlocking {
         val dia = 86_400_000L
         val ahora = diezEnPunto

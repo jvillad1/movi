@@ -20,6 +20,11 @@ import kotlin.coroutines.cancellation.CancellationException
  * operación** (el modelo, «envio», «lectura»…), y cómo leer el desenlace de lo que devolvió. Una
  * excepción se clasifica sola ([tipoDeErrorDe]) y se vuelve a lanzar tal cual: medir no cambia lo que
  * hace la llamada.
+ *
+ * **Los reintentos del SDK de Anthropic no se ven**: el cliente reintenta solo (429, 5xx y caídas de red,
+ * dos veces por defecto) dentro de `messages().create`, así que una llamada que salió bien al segundo
+ * intento cuenta como **un éxito**, con la latencia de los dos. Solo se ve el error que sobrevivió a
+ * todos los reintentos. Resend y la TRM van por `java.net.http`, sin reintentos.
  */
 object Servicio {
     const val ANTHROPIC = "anthropic"

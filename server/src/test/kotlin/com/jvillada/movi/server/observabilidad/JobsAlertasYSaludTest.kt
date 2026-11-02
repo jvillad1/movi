@@ -4,7 +4,6 @@ import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import com.jvillada.movi.server.db.AlertasDelServidor
 import com.jvillada.movi.server.db.CorridasDeJobs
-import com.jvillada.movi.server.db.MetricasDeRutas
 import com.jvillada.movi.server.db.TABLAS_DE_OBSERVABILIDAD
 import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.plugins.configureSerialization
@@ -110,53 +109,96 @@ class JobsAlertasYSaludTest {
     fun `un job que falla dos veces seguidas avisa una sola vez por hora`() = runBlocking {
         var ahora = 1_000_000L * Metricas.UN_MINUTO
         Metricas.reloj = { ahora }
-        runCatching { correrJob("cierres") { error("uno") } }
+        suspend fun fallaYDespacha(mensaje: String) { runCatching { correrJob("cierres") { error(mensaje) } }; Alertas.despachar() }
+        fallaYDespacha("uno")
         assertTrue(correos.isEmpty(), "una falla sola no avisa")
         ahora += 1_000
-        runCatching { correrJob("cierres") { error("dos") } }
+        fallaYDespacha("dos")
         assertEquals(1, correos.size)
         assertEquals(listOf("admin@movi.test"), correos.single().first)
         assertTrue("cierres" in correos.single().second)
 
         // La tercera, dentro de la hora: el candado no deja repetir.
         ahora += 30 * Metricas.UN_MINUTO
-        runCatching { correrJob("cierres") { error("tres") } }
+        fallaYDespacha("tres")
         assertEquals(1, correos.size)
         // Pasada la hora, sí.
         ahora += 31 * Metricas.UN_MINUTO
-        runCatching { correrJob("cierres") { error("cuatro") } }
+        fallaYDespacha("cuatro")
         assertEquals(2, correos.size)
         // Y una buena en el medio corta la racha.
         ahora += 1_000
         correrJob("cierres") { }
         ahora += 2 * Metricas.UNA_HORA
-        runCatching { correrJob("cierres") { error("cinco") } }
+        fallaYDespacha("cinco")
         assertEquals(2, correos.size)
     }
 
-    private fun minutoConErrores(inicio: Long, pedidos: Long, e5xx: Long) = transaction {
-        MetricasDeRutas.insert {
-            it[escala] = ESCALA_MINUTO; it[MetricasDeRutas.inicio] = inicio; it[metodo] = "GET"; it[ruta] = "/api/accounts"
-            it[MetricasDeRutas.pedidos] = pedidos; it[errores4xx] = 0; it[errores5xx] = e5xx
-            it[p50Ms] = 1; it[p95Ms] = 1; it[p99Ms] = 1; it[maximoMs] = 1; it[cubetas] = Cubetas.aTexto(LongArray(Cubetas.CUANTAS))
-        }
+    /** [n] pedidos en el minuto [minuto], [e5xx] de ellos con 500. */
+    private fun pedidosEn(minuto: Long, n: Int, e5xx: Int, ruta: String = "/api/accounts", status5xx: Int = 500) {
+        Metricas.reloj = { minuto + 1_000 }
+        repeat(n) { Metricas.registrarPedido("GET", ruta, if (it < e5xx) status5xx else 200, 5, usuario = null) }
     }
 
     @Test
-    fun `la alerta de 5xx se dispara una vez y el candado de una hora funciona`() = runBlocking {
+    fun `la alerta de 5xx cuenta desde la memoria, se dispara una vez y el candado de una hora funciona`() = runBlocking {
         val minuto = 2_000_000L * Metricas.UN_MINUTO
-        // 30 pedidos en los últimos 5 minutos, 4 con 5xx (13 %): pasa el umbral del 10 %.
-        (1..5).forEach { minutoConErrores(minuto - it * Metricas.UN_MINUTO, 6, if (it <= 2) 2 else 0) }
+        // 30 pedidos en los últimos 5 minutos, 4 con 5xx (13 %): pasa el umbral del 10 %. Nada en la base.
+        (1..5).forEach { pedidosEn(minuto - it * Metricas.UN_MINUTO, 6, if (it <= 2) 2 else 0) }
         assertTrue(Alertas.revisarLosErrores(minuto + 2_000))
+        assertEquals(1, Alertas.despachar())
         assertEquals(1, correos.size)
-        assertTrue(Alertas.revisarLosErrores(minuto + Metricas.UN_MINUTO + 2_000).not(), "el candado no deja repetir")
-        assertEquals(1, correos.size)
+        assertFalse(Alertas.revisarLosErrores(minuto + 2_000), "el candado no deja repetir")
         assertEquals(1L, transaction { AlertasDelServidor.selectAll().count() })
-        // Una hora y un minuto después, con los mismos errores, vuelve a avisar.
+        // Una hora y un minuto después, con errores otra vez, vuelve a avisar.
         val despues = minuto + Metricas.UNA_HORA + Metricas.UN_MINUTO
-        (1..5).forEach { minutoConErrores(despues - it * Metricas.UN_MINUTO, 6, 2) }
+        (1..5).forEach { pedidosEn(despues - it * Metricas.UN_MINUTO, 6, 2) }
         assertTrue(Alertas.revisarLosErrores(despues + 2_000))
+        Alertas.despachar()
         assertEquals(2, correos.size)
+    }
+
+    @Test
+    fun `los 503 esperados y health no cuentan para la alerta`() = runBlocking {
+        val minuto = 3_000_000L * Metricas.UN_MINUTO
+        // 25 pedidos con 503 (IA sin crédito) y 40 a /health con 500: nada de eso es una caída.
+        pedidosEn(minuto - Metricas.UN_MINUTO, 25, 25, ruta = "/api/ai/chat", status5xx = 503)
+        pedidosEn(minuto - 2 * Metricas.UN_MINUTO, 40, 40, ruta = "/health")
+        pedidosEn(minuto - 3 * Metricas.UN_MINUTO, 25, 0)
+        assertFalse(Alertas.revisarLosErrores(minuto + 2_000))
+        assertTrue(Metricas.cerrado(Long.MAX_VALUE).rutas.values.sumOf { it.errores5xx } == 65L, "las métricas sí los cuentan")
+    }
+
+    @Test
+    fun `con la base caida el candado vive en memoria y el correo sale a los admins conocidos`() = runBlocking {
+        // Una primera alerta con la base viva: así se conocen los correos de los admins.
+        assertTrue(Alertas.alertar("prueba-viva", "una", "uno", ahora = 10_000))
+        Alertas.despachar()
+        assertEquals(1, correos.size)
+        // Se cae la base (sus tablas desaparecen): el candado pasa a la memoria.
+        transaction { SchemaUtils.drop(*TABLAS_DE_OBSERVABILIDAD, Users) }
+        assertTrue(Alertas.alertar("errores-5xx", "caida", "se cayó", ahora = 20_000))
+        assertFalse(Alertas.alertar("errores-5xx", "caida", "se cayó", ahora = 20_000 + 30 * Metricas.UN_MINUTO), "una vez por hora por proceso")
+        assertEquals(1, Alertas.despachar())
+        assertEquals(2, correos.size)
+        assertEquals(listOf("admin@movi.test"), correos.last().first)
+        assertTrue(Alertas.alertar("errores-5xx", "caida", "se cayó", ahora = 20_000 + Metricas.UNA_HORA))
+    }
+
+    @Test
+    fun `las alertas de una ventana van en un solo correo, sin datos`() = runBlocking {
+        Metricas.reloj = { 4_000_000L * Metricas.UN_MINUTO }
+        Alertas.anotarCorrida("cierres", bien = false)
+        Alertas.anotarCorrida("cierres", bien = false)
+        assertTrue(Alertas.revisarElJob("cierres", "PSQLException: duplicate key value violates unique constraint Key (user_id, id)=(usr_7, ev-123)"))
+        assertTrue(Alertas.alertar("errores-5xx", "12 % de errores", "en 5 minutos", ahora = Metricas.reloj()))
+        val textos = mutableListOf<String>()
+        Alertas.mandar = { para, asunto, texto -> correos += para to asunto; textos += texto; true }
+        assertEquals(2, Alertas.despachar())
+        assertEquals(1, correos.size, "un solo correo con las dos")
+        assertTrue("2 alertas" in correos.single().second)
+        assertTrue("usr_7" !in textos.single() && "ev-123" !in textos.single() && "Key (…)=(…)" in textos.single(), textos.single())
+        assertEquals(0, Alertas.despachar(), "despachado, no queda nada")
     }
 
     @Test

@@ -12,6 +12,7 @@ import io.ktor.server.application.log
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.Transaction
 import org.jetbrains.exposed.sql.and
@@ -183,10 +184,17 @@ object VolcadoDeMetricas {
     }
 }
 
+/** Cuánto se guarda en memoria si la base no deja volcar: lo de más de una hora se suelta. */
+const val MEMORIA_MAXIMA_SIN_VOLCAR_MS: Long = 60 * Metricas.UN_MINUTO
+
 /**
- * El bucle del volcado: un poco después de cada minuto, vuelca y revisa la alerta de errores. Vive
- * aparte del scheduler de recordatorios —que se apaga sin Resend ni VAPID— porque medir no depende de
- * mandar correos. Al apagarse el server vuelca también el minuto en curso.
+ * El bucle del volcado: un poco después de cada minuto, vuelca, revisa la alerta de errores y despacha
+ * las alertas juntas. Vive aparte del scheduler de recordatorios —que se apaga sin Resend ni VAPID—
+ * porque medir no depende de mandar correos. Si la base no deja volcar, lo de más de 60 minutos se
+ * suelta de la memoria (mejor perder una hora de métricas que crecer sin tope).
+ *
+ * Al apagarse vuelca **solo lo cerrado**, con tope de 5 s: el minuto en curso se pierde (escribirlo
+ * entero y reemplazarlo después dejaría una cifra a medias; sumarlo no sería idempotente).
  */
 fun Application.startVolcadoDeMetricas() {
     launch {
@@ -195,12 +203,27 @@ fun Application.startVolcadoDeMetricas() {
             // Dos segundos pasado el minuto: lo que terminó en el segundo 59 ya se anotó.
             delay(Metricas.UN_MINUTO - Math.floorMod(ahora, Metricas.UN_MINUTO) + 2_000)
             runCatching { VolcadoDeMetricas.volcar() }
-                .onFailure { log.warn("métricas: el volcado falló (queda en memoria para el próximo): ${it.javaClass.simpleName}") }
+                .onFailure {
+                    log.warn("métricas: el volcado falló (queda en memoria hasta una hora): ${it.javaClass.simpleName}")
+                    Metricas.olvidar(Metricas.minutoDe(Metricas.reloj()) - MEMORIA_MAXIMA_SIN_VOLCAR_MS)
+                }
             runCatching { Alertas.revisarLosErrores() }
                 .onFailure { log.warn("métricas: la revisión de errores falló: ${it.javaClass.simpleName}") }
+            runCatching { Alertas.despachar() }
+                .onFailure { log.warn("métricas: el despacho de alertas falló: ${it.javaClass.simpleName}") }
+        }
+    }
+    // La retención en su propio bucle (no colgada de los recordatorios, que se apagan sin Resend ni
+    // VAPID): a los 10 minutos de arrancar y después cada 12 horas.
+    launch {
+        delay(10 * Metricas.UN_MINUTO)
+        while (true) {
+            runCatching { correrJob("retencion-de-metricas") { RetencionDeMetricas.correr() } }
+                .onFailure { log.warn("métricas: la retención falló: ${it.javaClass.simpleName}") }
+            delay(12 * Metricas.UNA_HORA)
         }
     }
     monitor.subscribe(ApplicationStopping) {
-        runCatching { runBlocking { VolcadoDeMetricas.volcar(Metricas.reloj() + Metricas.UN_MINUTO) } }
+        runCatching { runBlocking { withTimeoutOrNull(5_000) { VolcadoDeMetricas.volcar() } } }
     }
 }

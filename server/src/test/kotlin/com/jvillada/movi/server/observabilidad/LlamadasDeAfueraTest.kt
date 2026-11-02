@@ -83,4 +83,14 @@ class LlamadasDeAfueraTest {
         assertTrue("1.843.014" !in recortado && "50009876" !in recortado && "caro@" !in recortado, recortado)
         assertTrue(errorRecortado(IllegalStateException("x".repeat(1_000))).length <= 200)
     }
+
+    @Test
+    fun `sin datos limpia el detalle de Postgres, los uuid, los hex y los ids`() {
+        val texto = "ERROR: duplicate key \"x_pkey\" Detail: Key (user_id, id)=(usr_7, ev-123) already exists. " +
+            "id 3f2b9c1e-8d4a-4b7e-9c2f-1a2b3c4d5e6f hash 9f86d081884c7d659a2feaa0c55ad015 cuenta acc-1254 de usr_7"
+        val limpio = sinDatos(texto)
+        listOf("usr_7", "ev-123", "3f2b9c1e", "9f86d081", "acc-1254").forEach { assertTrue(it !in limpio, "quedó «$it» en: $limpio") }
+        assertTrue("Key (…)=(…)" in limpio && "<uuid>" in limpio && "<hex>" in limpio && "<id>" in limpio, limpio)
+        assertTrue("duplicate key" in limpio, "lo que dice qué pasó se queda")
+    }
 }
