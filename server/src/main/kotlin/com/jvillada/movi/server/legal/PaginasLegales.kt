@@ -127,8 +127,11 @@ nav { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--borde); d
                 "(en Android, con el acceso a las notificaciones que tú das). Las notificaciones de " +
                 "cualquier otra app se descartan en tu teléfono sin leerlas.</li>" +
                 "<li>Los <strong>SMS</strong> de tu banco, solo en la versión de Android que se instala por " +
-                "fuera de la tienda y solo con el permiso que tú das. Solo salen del teléfono los mensajes " +
-                "de remitentes bancarios de una lista cerrada; los demás nunca salen de él. La versión de " +
+                "fuera de la tienda y solo con el permiso que tú das. Salen del teléfono solo los mensajes " +
+                "cuyo remitente es un código bancario conocido o cuyo texto nombra un banco de una lista " +
+                "cerrada (por eso un mensaje personal que nombre a tu banco también puede salir); los demás " +
+                "nunca salen de él. En el servidor, lo que no parece un movimiento (un código de " +
+                "verificación, una promoción) queda apartado, y nada se anota sin que tú lo confirmes. La versión de " +
                 "Google Play no lee SMS.</li>" +
                 "<li>Los <strong>correos de tu banco</strong> que tú decidas reenviar a tu dirección de Movi.</li>" +
                 "</ul></li>")

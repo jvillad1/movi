@@ -99,6 +99,10 @@ class PaginasLegalesTest {
             .forEach { assertTrue(it in html, "la política no menciona «$it»") }
         // Los SMS solo en la versión que se instala por fuera de la tienda.
         assertTrue("La versión de Google Play no lee SMS" in html)
+        // El filtro del teléfono (`BankSenderFilter.matches`) deja pasar por el remitente O por el texto:
+        // la política no puede decir que solo cuenta el remitente.
+        assertTrue("cuyo remitente es un código bancario conocido o cuyo texto nombra un banco" in html)
+        assertFalse("de remitentes bancarios de una lista cerrada; los demás" in html)
         val borrar = PaginasLegales.borrarCuenta(ResponsableDeMovi.Datos(null, null))
         assertTrue("«Borrar mi cuenta»" in borrar && "BORRAR" in borrar && "No se puede deshacer" in borrar)
         val terminos = PaginasLegales.terminos(ResponsableDeMovi.Datos(null, null))
