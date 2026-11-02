@@ -6,6 +6,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithText
 import com.jvillada.movi.shared.model.PasswordPolicy
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.components.ds.TAG_GUIA_DEL_CAMPO
@@ -66,10 +67,12 @@ class LaContrasenaVaciaNoTienePuntosTest {
     }
 
     @Test
-    fun `el registro dice la regla del server en vez de doce puntos`() {
+    fun `el registro guia con palabras y dice la regla del server en vez de doce puntos`() {
         composeRule.setContent { MoviTheme { RegisterScreen(onNavigate = {}) } }
         val guias = guiasSinPuntos()
-        assertTrue(GUIA_DE_LA_CONTRASENA_NUEVA in guias, "la guía de la contraseña nueva: $guias")
+        assertTrue(GUIA_DE_LA_CONTRASENA_AL_CREAR in guias, "la guía de la contraseña nueva: $guias")
+        // La regla va debajo del campo, como ayuda, a la vista aunque ya se haya escrito algo.
+        composeRule.onNodeWithText(GUIA_DE_LA_CONTRASENA_NUEVA).assertExists()
         assertEquals("Al menos ${PasswordPolicy.MIN_LENGTH} caracteres", GUIA_DE_LA_CONTRASENA_NUEVA)
     }
 

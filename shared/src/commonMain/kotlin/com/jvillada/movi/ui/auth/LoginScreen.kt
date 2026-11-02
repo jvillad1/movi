@@ -191,11 +191,8 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
         }
     }
 
-    Column(
-        modifier = Modifier.fillMaxSize().background(Movi.colores.fondo).padding(Espacio.xl),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
+    // Vuelta 115: desplazable y con el error junto al botón (ver [ColumnaDeEntrada]).
+    ColumnaDeEntrada {
         // El logotipo de la entrada: `portada`, el estilo de una pantalla de una sola cosa (era un
         // tamaño suelto de 32; `titular`, 19, lo apagaba y `cifra` es para montos).
         Text("Movi", style = Movi.textos.portada, color = Movi.colores.texto)
@@ -235,7 +232,7 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
                     onNavigate(Screen.Dashboard)
                 },
             )
-            return@Column
+            return@ColumnaDeEntrada
         }
 
         Superficie(modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth()) {
@@ -265,10 +262,6 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
                 foco = passwordFocus,
             )
 
-            error?.let {
-                Spacer(Modifier.height(Espacio.s))
-                Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
-            }
             notice?.let {
                 Spacer(Modifier.height(Espacio.s))
                 Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
@@ -291,7 +284,9 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
             Boton("¿Olvidaste tu contraseña?", onClick = { requestReset() }, variante = VarianteDeBoton.Fantasma, tamano = TamanoDeBoton.S)
 
             Spacer(Modifier.height(Espacio.l))
-            Boton("Entrar", onClick = { submit() }, cargando = loading, anchoCompleto = true)
+            ErrorYBotonDeEntrada(error) {
+                Boton("Entrar", onClick = { submit() }, cargando = loading, anchoCompleto = true)
+            }
         }
 
         Spacer(Modifier.height(Espacio.m))
