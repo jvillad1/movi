@@ -153,6 +153,18 @@ class EditarLaCuentaEnPantallaTest {
         assertNull(saldoParaEditar(Account("e", "Efectivo", AccountType.CASH, -26_500L)))
         assertNull(lineaDelAjusteAlEditar(ahorros, null))
         assertNull(pedidoDeEdicion(ahorros, " Bancolombia Ahorros ", AccountType.SAVINGS, 1_000_000L), "nada cambió")
+        // El tipo: solo Ahorros y Corriente se ofrecen; Efectivo e Inversión van fijos, con su porqué.
+        assertEquals(listOf(AccountType.SAVINGS, AccountType.CHECKING), TIPOS_AL_EDITAR.map { it.second })
+        assertNull(tipoFijoDe(ahorros))
+        assertTrue(tipoFijoDe(Account("e", "Efectivo", AccountType.CASH, 0L))!!.startsWith("Efectivo. "))
+        assertTrue(tipoFijoDe(Account("i", "Fiducuenta", AccountType.INVESTMENT, 0L))!!.startsWith("Inversión. "))
+        // Lo que se dice debajo del nombre: la hermana en dólares que deja de emparejarse.
+        val usd = Account("u", "Bancolombia Ahorros USD", AccountType.SAVINGS, 0L, currency = "USD")
+        assertEquals(
+            "La cuenta en USD «Bancolombia Ahorros USD» deja de emparejarse con esta.",
+            ayudaAlRenombrar(ahorros, "Ahorros del papá", listOf(ahorros, usd)),
+        )
+        assertNull(ayudaAlRenombrar(ahorros, "Ahorros del papá", listOf(ahorros)))
     }
 
     @Test

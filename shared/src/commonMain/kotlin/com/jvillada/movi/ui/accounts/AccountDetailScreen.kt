@@ -223,8 +223,10 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
 
     // La lista de cuentas, recién cuando el dueño toca una fila (ver [cuentas]). Un fallo acá no
     // se cuenta como error de la pantalla: no rompe nada de lo que está mirando.
-    LaunchedEffect(selectedEvent != null) {
-        if (selectedEvent != null && cuentas.isEmpty()) {
+    LaunchedEffect(selectedEvent != null, showEditar) {
+        // Vuelta 98: «Editar la cuenta» también las pide, para avisar si el nombre nuevo desempareja
+        // la hermana en otra moneda. Sin ellas, la hoja guarda igual (solo no avisa eso).
+        if ((selectedEvent != null || showEditar) && cuentas.isEmpty()) {
             cuentas = runCatching { Repositories.wallets.getAccounts() }.getOrDefault(emptyList())
         }
     }
@@ -635,6 +637,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                 EditarCuentaSheet(
                     cuenta = acc,
                     onDismiss = { showEditar = false },
+                    cuentas = cuentas,
                     onGuardada = { actualizada ->
                         // Lo que contestó el server, al instante (el nombre del encabezado y el
                         // saldo), y una relectura para que el ajuste, si lo hubo, salga en la lista.

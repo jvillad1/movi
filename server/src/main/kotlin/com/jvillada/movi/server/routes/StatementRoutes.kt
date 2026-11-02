@@ -1,5 +1,7 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.shared.model.emparejaEnOtraMoneda
+
 import com.jvillada.movi.shared.model.EventSource
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import org.jetbrains.exposed.sql.deleteWhere
@@ -920,12 +922,11 @@ internal data class CuentaParaImportar(val id: String, val name: String, val typ
  */
 internal fun cuentaParaLaFila(moneda: String, elegida: CuentaParaImportar, cuentas: List<CuentaParaImportar>): String {
     if (moneda.equals(elegida.currency, ignoreCase = true)) return elegida.id
-    val digitos = Regex("""(?<!\d)\d{4}(?!\d)""").findAll(elegida.name).lastOrNull()?.value
-    fun sinMoneda(nombre: String) = nombre.replace(Regex("""\s+(USD|COP)$""", RegexOption.IGNORE_CASE), "").trim()
+    // La regla del nombre vive en :core (`emparejaEnOtraMoneda`): la misma que usa «Editar la cuenta»
+    // para avisar que un renombre rompe el emparejamiento (vuelta 98). Una sola, para que no discrepen.
     val hermanas = cuentas.filter {
         it.id != elegida.id && it.type == elegida.type && it.currency.equals(moneda, ignoreCase = true) &&
-            ((digitos != null && Regex("""(?<!\d)$digitos(?!\d)""").containsMatchIn(it.name)) ||
-                sinMoneda(it.name).equals(sinMoneda(elegida.name), ignoreCase = true))
+            emparejaEnOtraMoneda(elegida.name, it.name)
     }
     return hermanas.singleOrNull()?.id ?: elegida.id
 }

@@ -2,6 +2,7 @@ package com.jvillada.movi.server.routes
 
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
+import com.jvillada.movi.server.balance.toAccount
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Apartados
 import com.jvillada.movi.server.db.Budgets
@@ -20,7 +21,9 @@ import com.jvillada.movi.server.plugins.configureSerialization
 import com.jvillada.movi.shared.model.ADJUSTMENT_CATEGORY
 import com.jvillada.movi.shared.model.ExtractoDeSaldoDe
 import com.jvillada.movi.shared.model.ResumenDelExtractoDeSaldo
+import com.jvillada.movi.shared.model.EL_EFECTIVO_NO_CAMBIA_DE_TIPO
 import com.jvillada.movi.shared.model.UNA_DEUDA_NO_CAMBIA_DE_TIPO
+import com.jvillada.movi.shared.model.UNA_INVERSION_NO_CAMBIA_DE_TIPO
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
@@ -275,10 +278,22 @@ class EditarCuentaRoutesTest {
         assertEquals("SAVINGS", leer("acc-ah")["type"]!!.jsonPrimitive.content)
         assertEquals("Master Black 3684", leer("acc-tc")["name"]!!.jsonPrimitive.content, "nada a medias")
 
-        assertEquals(HttpStatusCode.OK, editar("acc-ah", """{"name":"Ahorros","type":"INVESTMENT"}""").status)
-        assertEquals("INVESTMENT", leer("acc-ah")["type"]!!.jsonPrimitive.content)
-        assertEquals(HttpStatusCode.OK, editar("acc-ah", """{"name":"Efectivo","type":"CASH"}""").status)
-        assertEquals("CASH", leer("acc-ah")["type"]!!.jsonPrimitive.content)
+        // Inversión y efectivo tampoco: mueven plata (el disponible, los períodos) o lo que Movi hace.
+        val aInversion = editar("acc-ah", """{"name":"Ahorros","type":"INVESTMENT"}""")
+        assertEquals(HttpStatusCode.UnprocessableEntity, aInversion.status)
+        assertEquals(UNA_INVERSION_NO_CAMBIA_DE_TIPO, aInversion.bodyAsText())
+        val aEfectivo = editar("acc-ah", """{"name":"Ahorros","type":"CASH"}""")
+        assertEquals(HttpStatusCode.UnprocessableEntity, aEfectivo.status)
+        assertEquals(EL_EFECTIVO_NO_CAMBIA_DE_TIPO, aEfectivo.bodyAsText())
+        crear("acc-ef", "Efectivo", tipo = "CASH")
+        assertEquals(HttpStatusCode.UnprocessableEntity, editar("acc-ef", """{"name":"Efectivo","type":"SAVINGS"}""").status)
+        assertEquals("SAVINGS", leer("acc-ah")["type"]!!.jsonPrimitive.content)
+
+        // Entre Ahorros y Corriente sí.
+        assertEquals(HttpStatusCode.OK, editar("acc-ah", """{"name":"Ahorros","type":"CHECKING"}""").status)
+        assertEquals("CHECKING", leer("acc-ah")["type"]!!.jsonPrimitive.content)
+        assertEquals(HttpStatusCode.OK, editar("acc-ah", """{"name":"Ahorros","type":"SAVINGS"}""").status)
+        assertEquals("SAVINGS", leer("acc-ah")["type"]!!.jsonPrimitive.content)
     }
 
     @Test
@@ -308,6 +323,22 @@ class EditarCuentaRoutesTest {
         val elegida = cuentas.first { it.id == "acc-mb" }
         assertEquals("acc-mb-usd", cuentaParaLaFila("USD", elegida, cuentas), "por los cuatro dígitos, que siguen en el nombre")
         assertEquals("acc-mb", cuentaParaLaFila("COP", elegida, cuentas))
+
+        // Y el aviso de la hoja dice lo mismo que la importación: con un nombre sin los cuatro, la
+        // hermana deja de emparejarse en los dos lados.
+        val comoCuentas = transaction {
+            Accounts.selectAll().where { Accounts.userId eq duenoId }.map { it.toAccount() }
+        }
+        val mb = comoCuentas.first { it.id == "acc-mb" }
+        assertEquals(emptyList(), com.jvillada.movi.shared.model.hermanasQueSeDesemparejan(mb, "Mastercard 3684", comoCuentas))
+        assertEquals(listOf("acc-mb-usd"), com.jvillada.movi.shared.model.hermanasQueSeDesemparejan(mb, "Tarjeta negra", comoCuentas).map { it.id })
+        assertEquals(HttpStatusCode.OK, editar("acc-mb", """{"name":"Tarjeta negra"}""").status)
+        val despues = transaction {
+            Accounts.selectAll().where { Accounts.userId eq duenoId }.map {
+                CuentaParaImportar(it[Accounts.id], it[Accounts.name], it[Accounts.type], it[Accounts.currency])
+            }
+        }
+        assertEquals("acc-mb", cuentaParaLaFila("USD", despues.first { it.id == "acc-mb" }, despues), "la importación tampoco la empareja")
     }
 
     @Test

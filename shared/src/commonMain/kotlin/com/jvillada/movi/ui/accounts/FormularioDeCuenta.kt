@@ -218,6 +218,8 @@ fun FormularioDeCuenta(
      * píldoras va su tipo con este porqué. `null` = las píldoras de siempre.
      */
     tipoFijo: String? = null,
+    /** Vuelta 98: los tipos que se ofrecen («Editar la cuenta» ofrece solo Ahorros y Corriente). */
+    tipos: List<Pair<String, AccountType>> = TIPOS_DE_CUENTA,
     /** Vuelta 98: sin «Saldo de hoy» (una deuda: su saldo se cuadra en su ficha). */
     conSaldo: Boolean = true,
     /** Vuelta 98: la línea debajo del nombre (lo que Movi deja de reconocer si se renombra). */
@@ -236,7 +238,7 @@ fun FormularioDeCuenta(
         if (tipoFijo != null) {
             Text(tipoFijo, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.testTag(TAG_TIPO_FIJO))
         } else ChipsEnFilas(Modifier.testTag(TAG_TIPOS_DE_CUENTA)) {
-            TIPOS_DE_CUENTA.forEach { (rotulo, tipo) ->
+            tipos.forEach { (rotulo, tipo) ->
                 PildoraDeFiltro(rotulo, seleccionada = estado.tipo == tipo, onClick = { if (habilitado) estado.elegirTipo(tipo) })
             }
             if (onElegirBien != null) {
