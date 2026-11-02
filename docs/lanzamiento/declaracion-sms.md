@@ -26,23 +26,35 @@ Fuente: «Use of SMS or Call Log permission groups»,
   semanas**, y mientras está pendiente **no se puede publicar ningún cambio de la app** que lleve esos
   permisos; quitar los permisos es la única salida rápida.
 
-## Antes de pedirla: angostar el filtro de la versión de Play
+## El filtro: qué SMS salen del teléfono (vuelta 113)
 
-Hoy el teléfono sube un SMS si **el remitente contiene un código corto de Bancolombia** (85540,
-891333, 87400) **o si el cuerpo contiene el nombre de un banco** de la lista
-(`BankSenderFilter` en `:shared` y `PALABRAS_DE_BANCOS` en `SmsFilterConfigRoutes.kt`: bancolombia,
-nubank, davivienda, davibank, bbva, banco de bogota/bogotá, av villas, banco de occidente, colpatria,
-scotiabank, itau/itaú, falabella, lulo bank, rappipay). La regla del cuerpo existe por los bancos que
-mandan desde códigos que Movi no conoce (el de Davivienda del papá del dueño). Pero significa que **un
-SMS personal que nombre un banco** («te consigno en Bancolombia») **sí sale del teléfono**, aunque el
-server después lo aparte por no ser un movimiento.
+La condición de la política es que **ningún SMS personal salga del teléfono**. Desde la vuelta 113 la
+regla, en **todas** las versiones de Android que leen SMS (la de Drive y, cuando se apruebe, la de Play),
+es una sola función de `:core`, `seSubeElSms` (`FiltroDeSms.kt`), que usan la captura en tiempo real
+(`SmsRealtimeReceiver`) y el barrido del inbox (`SmsBackfillWorker`). Un SMS sale del teléfono solo si:
 
-Eso es exactamente lo que la condición de la política prohíbe. **Antes de pedir la excepción**, la
-recomendación es que en el canal `play` solo pasen los SMS de remitentes que sean **códigos cortos**
-(números de 4 a 6 dígitos, que una persona no puede usar) **y** que traigan un monto, o solo los
-códigos conocidos más la palabra del banco. Es un cambio chico en `BankSenderFilter.matches` (elegido
-por `elAparatoPuedeLeerSms`, o por una propiedad del manifiesto de `play`), con su prueba. No se hizo
-en la vuelta 109 porque Play sale sin SMS y la versión de Drive no debe cambiar de comportamiento.
+- su remitente **no es un número de teléfono de una persona**: quitando espacios, guiones, paréntesis y el
+  «+», no son 10 dígitos o más (un celular `3001234567`, `+57 300 123 4567`, un fijo con indicativo, un
+  número internacional). Los bancos mandan desde **códigos cortos** (4 a 6 dígitos) o desde un **nombre**
+  («Bancolombia», «DAVIVIENDA»), y una persona no puede usar ninguno de los dos; **y**
+- su remitente contiene un código conocido de Bancolombia (85540, 891333, 87400), **o** su texto nombra un
+  banco de una lista cerrada (`PALABRAS_DE_BANCOS` en `SmsFilterConfigRoutes.kt`: bancolombia, nubank,
+  davivienda, davibank, bbva, banco de bogota/bogotá, av villas, banco de occidente, colpatria, scotiabank,
+  itau/itaú, falabella, lulo bank, rappipay). Sin remitente, la palabra no basta.
+
+Lo que esto **sí** deja salir y hay que decir con honestidad: lo que un código corto o un remitente con
+nombre manda nombrando a un banco, aunque no sea un movimiento (una promoción del banco, una clave
+dinámica, la promoción de un comercio que dice «paga con Bancolombia»). No son SMS personales; el server
+los aparta en «Por revisar» (`queEsEsteMensaje`) y nada se anota solo. Lo que **nunca** sale: cualquier SMS
+de un número de teléfono, nombre al banco o no («ya te pagué por Bancolombia»).
+
+Medido en producción el 2-nov-2026 (solo lectura): los 359 SMS capturados venían de 16 remitentes, todos
+códigos cortos de 5 o 6 dígitos; ninguno de un celular. La regla nueva no habría perdido ninguno
+(`FiltroDeSmsTest`, «los 16 remitentes de producción siguen pasando»).
+
+**Un APK anterior a la vuelta 113 sigue con la regla vieja** (código **o** palabra, de cualquier
+remitente): la condición sobre el remitente va compilada, no la sirve el server. La versión que se suba a
+Play para pedir la excepción ya la trae; las instaladas por Drive la tienen cuando se actualicen.
 
 ## Y la divulgación antes del permiso
 
@@ -78,8 +90,8 @@ Movi is a personal finance app for Colombia. Its core function is to keep an acc
 Colombian banks notify each card purchase, transfer and payment by SMS, and most of them do not give individuals any way to share their transactions with a third-party app. The bank SMS is the only automatic, real-time record of a movement that the user receives. Without it, the user must type every movement by hand, which is the main reason people abandon budgeting apps.
 
 How Movi uses the permissions:
-- RECEIVE_SMS: when an SMS arrives, a filter that runs on the device checks whether it comes from a bank (known bank short codes and bank names). Only messages that pass the filter are sent to the user's Movi account; every other SMS is discarded on the device and never leaves it.
-- READ_SMS: when the user opens the app, and every 6 hours, Movi re-reads the inbox from the first day of the previous month with the same filter, to recover bank messages that Android did not deliver to the receiver while the app was in the background. Again, only bank messages leave the device.
+- RECEIVE_SMS: when an SMS arrives, a filter that runs on the device checks whether it comes from a bank. An SMS from a phone number (10 or more digits) never leaves the device, even if it mentions a bank. Otherwise, it leaves the device only if its sender is a short code or alphanumeric sender ID and either the sender is a known bank short code or the text names a bank from a closed list. Only messages that pass the filter are sent to the user's Movi account; every other SMS is discarded on the device and never leaves it.
+- READ_SMS: when the user opens the app, and every 6 hours, Movi re-reads the inbox from the first day of the previous month with the same filter, to recover bank messages that Android did not deliver to the receiver while the app was in the background. Again, only messages that pass the same filter leave the device.
 
 Nothing is recorded automatically: each bank message appears in "Por revisar" (To review), where the user confirms, edits or ignores it. Movi never sends, deletes or modifies SMS, and does not access the call log. SMS data is never shared with third parties, never used for advertising, and the user can delete all of it at any time by deleting the account (in-app and at https://movi-project-production.up.railway.app/borrar-cuenta).
 
@@ -93,14 +105,14 @@ Before asking for the permission, the app shows an in-app explanation of what is
 ```
 1. Sign in with the demo account (credentials in "App access").
 2. Go to Tú (last tab) > Captura del banco > "Captura en este teléfono" and grant "Permiso de SMS".
-3. Send an SMS to the test phone that imitates a bank message, for example from any number: "Bancolombia: Compraste $25.000 en EXITO con tu T.Deb *1234, el 02/11/2026 a las 10:15." (it passes the filter because it names the bank).
-4. Open Actividad > "Por revisar": the message appears as a proposed expense of $25,000 at Éxito. Tap "Confirmar".
-5. Send a personal SMS without a bank name ("Hola, ¿nos vemos mañana?"): it never appears in Movi and is not uploaded.
+3. Open Actividad > "Por revisar": the bank messages already captured on the demo phone appear there as proposed movements (for example, an expense at Éxito). Tap "Confirmar" on one. The video shows a real bank SMS (sent by the bank from its short code) arriving and appearing here.
+4. Send an SMS to the test phone from any personal phone number, even one that names a bank: "Bancolombia: Compraste $25.000 en EXITO con tu T.Deb *1234." It never appears in Movi and is not uploaded: SMS from phone numbers never leave the device. A bank message can only come from the bank's short code, which a reviewer cannot send from.
+5. Send a personal SMS without a bank name ("Hola, ¿nos vemos mañana?"): it is not uploaded either.
 ```
 
-(Si se angosta el filtro como se recomienda arriba, el paso 3 tiene que usar un remitente que sea
-código corto: decirle al revisor que el SMS de prueba se manda desde un número de 5 dígitos, o cambiar
-el ejemplo por una captura del SMS real de un banco en el video.)
+(El paso 3 necesita una cuenta de demostración con avisos del banco ya capturados en un teléfono: un
+SMS de prueba mandado desde un celular ya no pasa el filtro, y el revisor no puede mandar desde el código
+corto de un banco.)
 
 ## El guion del video (30 a 60 segundos)
 
@@ -112,9 +124,9 @@ cuenta completos. Subtítulos o una voz en español o inglés.
 | --- | --- | --- |
 | 0–5 | Movi abre en Inicio: «Te quedan $X para N días». | «Movi lleva tu plata: cuánto te queda hasta que te paguen.» |
 | 5–15 | Tú → Captura del banco → «Captura en este teléfono»: la tarjeta «Permiso de SMS» con su explicación; tocar «Conceder permisos» y aceptar el diálogo del sistema. | «Movi pide leer los SMS de tu banco. Solo los de bancos salen del teléfono; los demás se descartan ahí.» |
-| 15–25 | Llega un SMS de un banco (notificación del sistema con el SMS de prueba). | «Llega el SMS de una compra.» |
+| 15–25 | Llega un SMS **real** de un banco, desde su código corto (una compra pequeña con una tarjeta de prueba o del dueño; se ven solo los últimos cuatro). Un SMS de prueba mandado desde otro celular no sirve: no pasa el filtro. | «Llega el SMS de una compra, desde el código del banco.» |
 | 25–40 | Actividad → «Por revisar»: aparece «Éxito · $25.000» propuesto; tocar «Confirmar»; el movimiento queda en Actividad y «Te quedan» baja. | «Movi lo propone y tú lo confirmas: nada se anota solo.» |
-| 40–50 | Llega un SMS personal («Hola, ¿nos vemos mañana?»); volver a «Por revisar»: no aparece. | «Un SMS personal nunca sale del teléfono.» |
+| 40–50 | Desde otro celular llega «Bancolombia: Compraste $25.000 en EXITO» (y uno personal, «Hola, ¿nos vemos mañana?»); volver a «Por revisar»: no aparece ninguno. | «Un SMS de un número de teléfono nunca sale del teléfono, aunque nombre a tu banco.» |
 | 50–60 | Tú → «Borrar mi cuenta» (sin confirmar). | «Puedes borrar todo cuando quieras.» |
 
 Subirlo a YouTube como **«No listado»** y pegar el enlace en el formulario.
