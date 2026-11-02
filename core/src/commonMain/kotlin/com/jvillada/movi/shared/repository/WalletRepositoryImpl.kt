@@ -1197,7 +1197,7 @@ class WalletRepositoryImpl(
     // el cuerpo («no encontramos movimientos», «falta la clave»), y sin esto se pierde adentro de
     // la excepción de deserialización.
     override suspend fun readStatementFromDocument(id: String): StatementParseResult =
-        client.post("$baseUrl/api/documents/$id/leer-extracto?conCreditos=1&conSaldos=1").exigirExito().body()
+        client.post("$baseUrl/api/documents/$id/leer-extracto?conCreditos=1&conSaldos=1&conClave=1").exigirExito().body()
 
     override suspend fun aceptarElExtractoDelCredito(
         accountId: String,
@@ -1297,8 +1297,24 @@ class WalletRepositoryImpl(
     override suspend fun leerPapel(documentoId: String, anotarAunqueEsteAnotado: Boolean): LecturaDelPapel =
         // `conSaldos=1`: esta app sabe mostrar la propuesta del saldo de un extracto de Skandia o de
         // la AFC; un APK viejo no lo pide y el server le contesta como siempre.
-        client.post("$baseUrl/api/documents/$documentoId/leer?conSaldos=1" + if (anotarAunqueEsteAnotado) "&anotarAunque=true" else "")
+        // `conClave=1` (vuelta 103): esta app sabe pedir la clave de un PDF; el server le contesta
+        // `PDF_CON_CLAVE` en vez de la frase para un APK viejo.
+        client.post("$baseUrl/api/documents/$documentoId/leer?conSaldos=1&conClave=1" + if (anotarAunqueEsteAnotado) "&anotarAunque=true" else "")
             .exigirExito().body()
+
+    // La clave va en el CUERPO: la URL la imprime `CallLogging` y el borde de Railway.
+    override suspend fun abrirPapelConClave(documentoId: String, clave: com.jvillada.movi.shared.model.ClaveDelPdf): LecturaDelPapel =
+        client.post("$baseUrl/api/documents/$documentoId/leer?conSaldos=1&conClave=1") {
+            contentType(ContentType.Application.Json)
+            setBody(clave)
+        }.exigirExito().body()
+
+    override suspend fun getEstadoDeLaClaveDeExtractos(): com.jvillada.movi.shared.model.EstadoDeLaClaveDeExtractos =
+        client.get("$baseUrl/api/extractos/clave").exigirExito().body()
+
+    override suspend fun olvidarLaClaveDeExtractos() {
+        client.delete("$baseUrl/api/extractos/clave").exigirExito()
+    }
 
     override suspend fun confirmarComprobante(smsId: String, eventoId: String) {
         client.post("$baseUrl/api/sms/$smsId/confirm?eventoId=$eventoId").exigirExito()

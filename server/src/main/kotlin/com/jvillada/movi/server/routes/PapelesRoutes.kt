@@ -9,6 +9,8 @@ import com.jvillada.movi.server.db.LecturasDePapeles
 import com.jvillada.movi.server.db.SmsMessages
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.documentos.Cifrado
+import com.jvillada.movi.server.documentos.FallaDeLaClaveDelPdf
+import com.jvillada.movi.server.documentos.abrirElPapelGuardado
 import com.jvillada.movi.server.documentos.PAPEL_CIFRADO_ILEGIBLE
 import com.jvillada.movi.server.documentos.PapelIlegible
 import com.jvillada.movi.server.parsing.ClaudeStatementParser
@@ -84,10 +86,12 @@ const val PAPEL_SIN_LLAVE: String =
     "La lectura automática está apagada: al servidor le falta la clave de Anthropic. Tu archivo quedó " +
         "guardado en Documentos; avísale a quien administra Movi."
 
-/** Un PDF con contraseña de apertura: PDFBox no lo abre y Claude tampoco lo vería. */
+/**
+ * Un PDF con clave de apertura, dicho a una app que no sabe pedirla (sin `?conClave=1`). La que sí
+ * sabe recibe `PDF_CON_CLAVE` y pide la clave en la misma fila (vuelta 103, `PdfConClave.kt`).
+ */
 const val PAPEL_CON_CLAVE: String =
-    "Este PDF tiene contraseña y Movi no puede abrirlo. Quítale la clave (ábrelo y guárdalo o " +
-        "imprímelo como PDF) y vuelve a compartirlo. El archivo quedó guardado en Documentos."
+    "Este PDF tiene clave. Actualiza Movi para escribirla y abrirlo. El archivo quedó guardado en Documentos."
 
 /** Un PDF escaneado: sin texto adentro, y mandarlo entero a Claude costaría como un extracto. */
 const val PAPEL_SIN_TEXTO: String =
@@ -130,22 +134,29 @@ fun Route.papelesRoutes() {
         // La app sabe mostrar la propuesta del saldo de un extracto (Skandia, la AFC): ver
         // `leerElExtracto`. Un APK viejo no lo pide y su camino no cambia.
         val conSaldos = call.request.queryParameters["conSaldos"] == "1"
+        // Vuelta 103: la app sabe pedir la clave de un PDF (`PDF_CON_CLAVE`, `CLAVE_INCORRECTA`). Un
+        // APK viejo no lo pide y recibe la frase de siempre.
+        val conClave = call.request.queryParameters["conClave"] == "1"
         val fila = dbQuery {
             Documents.selectAll()
                 .where { (Documents.id eq id) and (Documents.userId eq uid) }
                 .firstOrNull()
         } ?: return@post call.respond(HttpStatusCode.NotFound)
         try {
+            // La clave del PDF, si es un reintento: en el CUERPO, nunca en la URL (ver `PdfConClave.kt`).
+            val pedida = call.claveDelReintento()
             // En claro: la huella (y con ella «el mismo archivo no va dos veces a Claude») se
-            // calcula sobre esto, nunca sobre los bytes cifrados, que cambian con cada IV.
-            val papel = PapelGuardado(
-                fila[Documents.id], fila[Documents.name], fila[Documents.mimeType], Cifrado.descifrarBytes(fila[Documents.content]),
-            )
+            // calcula sobre esto, nunca sobre los bytes cifrados, que cambian con cada IV. Un PDF con
+            // clave se abre acá y lo que se lee —y se huellea— es el contenido descifrado.
+            val bytes = abrirElPapelGuardado(uid, fila[Documents.id], Cifrado.descifrarBytes(fila[Documents.content]), pedida)
+            val papel = PapelGuardado(fila[Documents.id], fila[Documents.name], fila[Documents.mimeType], bytes)
             call.respond(
                 leerElPapel(uid, papel, anotarAunque, ahora = System.currentTimeMillis(), conSaldos = conSaldos) { msg, t ->
                     call.application.log.warn(msg, t)
                 },
             )
+        } catch (e: FallaDeLaClaveDelPdf) {
+            call.contestarLaFallaDeLaClave(e, conClave, viejo = PAPEL_CON_CLAVE)
         } catch (e: FallaAlLeerElPapel) {
             call.respond(e.status, e.mensaje)
         } catch (e: PapelIlegible) {

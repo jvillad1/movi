@@ -8,6 +8,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.shared.model.esCodigoDeIaNoDisponible
+import com.jvillada.movi.shared.model.esCodigoDeClaveDelPdf
+import com.jvillada.movi.shared.model.fraseDeLaClaveDelPdf
 import com.jvillada.movi.shared.repository.ApiException
 import com.jvillada.movi.ui.components.ds.Separador
 import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
@@ -32,6 +34,10 @@ fun Throwable.toUserMessage(): String {
     // Un 5xx no — el server no tiene StatusPages, así que el cuerpo de un 500 es un stack trace
     // (en developmentMode) o el HTML de error del proxy de Railway, y ninguno de los dos mejora
     // en nada por recortarlo a 200 caracteres frente al usuario.
+    // Vuelta 103: los códigos del PDF con clave (`PDF_CON_CLAVE`…) se dicen con su frase, nunca crudos.
+    if (this is ApiException && esCodigoDeClaveDelPdf(serverMessage)) {
+        return fraseDeLaClaveDelPdf(serverMessage.orEmpty())
+    }
     if (this is ApiException && status in 400..422) {
         serverMessage?.takeIf { it.isNotBlank() && it.length <= 200 }?.let { return it }
     }
