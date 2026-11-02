@@ -57,7 +57,7 @@ class LaCuentaAMedioCrearArrancaTest {
         MemoriaDelAsistente, AnomaliasDescartadas, DestinosDescartados, DebitosDescartados, ReglasDeComercio,
         CierresEnviados, CierresDescartados, Apartados, InicioPersonalizado, Espacios, GastosDelEspacio,
         LiquidacionesDelEspacio, CorreosDescartados, CierresGuardados, RecurrentesDelHogar, ClavesDeExtractos, PdfsAbiertos,
-        FallosDeLaApp, UsoDeLaApp,
+        FallosDeLaApp, UsoDeLaApp, AjustesDeLaIa, TopesDeLaIaPorUsuario,
     )
 
     /** Lo que piden el Inicio, la guía de primer uso y la hoja «Agregar» al arrancar (logs de prod y del navegador). */
@@ -94,6 +94,8 @@ class LaCuentaAMedioCrearArrancaTest {
         "/api/categorias/memoria",
         "/api/extractos-por-subir",
         "/api/asistente/resumen",
+        // Vuelta 106: el chat lee el tope del mes al abrir (una cuenta nueva no tiene ningún turno).
+        "/api/ai/conversacion",
     )
 
     @BeforeTest

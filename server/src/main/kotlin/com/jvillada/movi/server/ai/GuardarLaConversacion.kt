@@ -31,6 +31,10 @@ import java.util.UUID
 /** Cuántas se guardan de cada dueño. Lo que sirve para diagnosticar es lo de ayer, no lo del año pasado. */
 internal const val CUANTAS_CONVERSACIONES_SE_GUARDAN = 200
 
+/** Vuelta 106 · los días hacia atrás que la poda respeta (ver [guardarLaConversacion]). */
+internal const val DIAS_QUE_NO_SE_PODAN = 31L
+private const val UN_DIA = 24L * 60 * 60 * 1000
+
 /** Topes por campo, para que una respuesta larga o una consulta gorda no crezcan la tabla sin límite. */
 private const val TOPE_PREGUNTA = 2_000
 private const val TOPE_RESPUESTA = 8_000
@@ -62,6 +66,8 @@ suspend fun guardarLaConversacion(
     fichasSalida: Long,
     hayImagen: Boolean,
     ahora: Long = System.currentTimeMillis(),
+    /** Vuelta 106 · las escritas en la caché, que se cobran aparte (ver `AiTurns.fichasCacheEscritas`). */
+    fichasCacheEscritas: Long = 0,
     /** Las que llegaron al dueño sin respaldo (ver `responderSinInventar`). Vacío se guarda NULL. */
     cifrasSinRespaldo: List<String> = emptyList(),
     /** Las que dispararon el reintento. Vacío se guarda NULL. */
@@ -94,16 +100,23 @@ suspend fun guardarLaConversacion(
             it[AiTurns.fichasEntrada] = fichasEntrada
             it[AiTurns.fichasCache] = fichasCache
             it[AiTurns.fichasSalida] = fichasSalida
+            it[AiTurns.fichasCacheEscritas] = fichasCacheEscritas
             it[imagen] = hayImagen
             it[AiTurns.cifrasSinRespaldo] = cifrasSinRespaldo.comoColumna()
             it[AiTurns.cifrasCorregidas] = cifrasCorregidas.comoColumna()
         }
         // Y se poda: de cada dueño quedan las últimas N. Se borra por id y no por fecha para que
         // dos turnos del mismo milisegundo no se lleven uno al otro por delante.
+        //
+        // Vuelta 106: **lo del mes y de los últimos 31 días no se poda nunca.** Con esos turnos se
+        // cuenta el tope de preguntas (`ElTopeDelMes`) y se calcula lo que gastó cada uno en 30 días;
+        // con una excepción de más de N preguntas, podarlos dejaría pasar de más y mostraría de menos.
+        val protegidoDesde = minOf(ElTopeDelMes.inicioDelMes(ahora), ahora - DIAS_QUE_NO_SE_PODAN * UN_DIA)
         val sobran = AiTurns.selectAll()
             .where { AiTurns.userId eq uid }
             .orderBy(AiTurns.creadoEn to SortOrder.DESC)
             .drop(CUANTAS_CONVERSACIONES_SE_GUARDAN)
+            .filter { it[AiTurns.creadoEn] < protegidoDesde }
             .map { it[AiTurns.id] }
         if (sobran.isNotEmpty()) {
             AiTurns.deleteWhere { AiTurns.id inList sobran }

@@ -11,6 +11,7 @@ import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
@@ -84,6 +85,38 @@ class VolcadoYRetencionTest {
         assertEquals(1_000L, ia[IaPorDia.fichasEntrada])
         assertEquals(200L, ia[IaPorDia.fichasSalida])
         assertEquals(50L, ia[IaPorDia.fichasCache])
+    }
+
+    /**
+     * Vuelta 106 · **el costo de cada llamada llega a la IA por día.** Se calcula al anotar la llamada
+     * (ahí se sabe el tramo de Haiku 5.5), se suma por minuto, por hora y por día, y volcar dos veces
+     * no lo duplica.
+     */
+    @Test
+    fun `el costo de las llamadas llega a la ia por dia, y volcar dos veces no lo duplica`() = runBlocking {
+        Metricas.reloj = { diezEnPunto + 5_000 }
+        // Haiku 5.5: 300 de entrada + 4.000 escritas (entrada = 4.300) + 6.000 leídas + 100 de salida
+        // = 300 × 0,10 + 4.000 × 0,125 + 6.000 × 0,01 + 100 × 0,50 = 30 + 500 + 60 + 50 = 640 µUSD.
+        Metricas.registrarServicio(Servicio.ANTHROPIC, "claude-haiku-5-5", 900, null, Fichas(entrada = 4_300, salida = 100, cache = 6_000, cacheEscrita = 4_000))
+        Metricas.reloj = { diezEnPunto + Metricas.UN_MINUTO + 5_000 }
+        // Sonnet 5.5: 1.000 × 2 + 200 × 10 = 4.000 µUSD.
+        Metricas.registrarServicio(Servicio.ANTHROPIC, "claude-sonnet-5-5", 900, null, Fichas(entrada = 1_000, salida = 200))
+        // Un modelo sin precio no suma nada (ni inventa un cero que parezca medido de más).
+        Metricas.registrarServicio(Servicio.ANTHROPIC, "claude-desconocido", 900, null, Fichas(entrada = 1_000_000, salida = 1))
+        val ahora = diezEnPunto + 2 * Metricas.UN_MINUTO + 1_000
+        val foto = Metricas.cerrado(Metricas.minutoDe(ahora))
+
+        VolcadoDeMetricas.volcar(ahora)
+        transaction { escribir(foto) }
+
+        val ia = transaction { IaPorDia.selectAll().single() }
+        assertEquals(4_640L, ia[IaPorDia.costoMicrodolares])
+        val horaDeHaiku = transaction {
+            MetricasDeServicios.selectAll()
+                .where { (MetricasDeServicios.escala eq ESCALA_HORA) and (MetricasDeServicios.operacion eq "claude-haiku-5-5") }
+                .single()[MetricasDeServicios.costoMicrodolares]
+        }
+        assertEquals(640L, horaDeHaiku)
     }
 
     @Test

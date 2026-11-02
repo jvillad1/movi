@@ -641,6 +641,15 @@ fun MasScreen(
                             onNavigate,
                             subtitulo = "Qué se cae, quién vuelve y por dónde anda cada uno",
                         )
+                        Separador()
+                        // Vuelta 106: cuántas preguntas libres por mes tiene cada uno en Movi AI.
+                        FilaQueLleva(
+                            com.jvillada.movi.ui.admin.TITULO_DEL_TOPE_DE_MOVI_AI,
+                            Icons.Rounded.AutoAwesome,
+                            Screen.TopeDeMoviAi,
+                            onNavigate,
+                            subtitulo = "Cuántas preguntas libres al mes tiene cada uno",
+                        )
                     }
                 }
             }
