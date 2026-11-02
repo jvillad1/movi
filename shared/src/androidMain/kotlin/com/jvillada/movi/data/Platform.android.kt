@@ -30,7 +30,7 @@ import java.io.IOException
  * producción recibía basura en cada corrida del CI.
  *
  * Con [cerradaPorLasPruebas] en `true` —lo pone `AppDePrueba` antes de cada prueba— todo cliente de
- * [createHttpClient] falla antes de salir, con [LaRedEstaCerradaEnLasPruebas] (una `IOException`: la
+ * [createHttpClient] que no vaya a la máquina misma (`127.0.0.1`) falla antes de salir, con [LaRedEstaCerradaEnLasPruebas] (una `IOException`: la
  * app la trata como «sin conexión», que es lo que esas pantallas ya sabían manejar). Lo que use
  * `HttpURLConnection` directo lo cierra el `ProxySelector` de `AppDePrueba`. La guarda que lo vigila
  * es `LasPruebasNoSalenALaRedTest`.
@@ -47,9 +47,12 @@ object RedDeLaApp {
 class LaRedEstaCerradaEnLasPruebas(url: String) :
     IOException("Una prueba intentó salir a la red ($url). Pon un sustituto: Repositories.sustitutoDePrueba, Uso.enviadorDePrueba…")
 
+private val HOSTS_LOCALES = setOf("127.0.0.1", "localhost", "::1", "[::1]")
+
 private val RedCerradaEnLasPruebas = createClientPlugin("RedCerradaEnLasPruebas") {
     onRequest { request, _ ->
-        if (RedDeLaApp.cerradaPorLasPruebas) {
+        // Lo local (un server de prueba en 127.0.0.1) no es «la red»: esas pruebas lo levantan a propósito.
+        if (RedDeLaApp.cerradaPorLasPruebas && request.url.host !in HOSTS_LOCALES) {
             val url = request.url.buildString()
             RedDeLaApp.frenados += url
             throw LaRedEstaCerradaEnLasPruebas(url)

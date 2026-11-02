@@ -12,6 +12,6 @@ import com.jvillada.movi.ui.components.ds.Vacio
 fun PestanaDelServidor() {
     Vacio(
         titulo = "Todavía no hay datos del servidor",
-        detalle = "Acá van a estar la latencia y los errores de cada ruta, los servicios externos y las tareas programadas.",
+        detalle = "Aquí van a estar la latencia y los errores de cada ruta, los servicios externos y las tareas programadas.",
     )
 }
