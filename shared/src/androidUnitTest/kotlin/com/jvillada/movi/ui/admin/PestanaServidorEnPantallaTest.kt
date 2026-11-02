@@ -63,6 +63,8 @@ class PestanaServidorEnPantallaTest {
         composeRule.setContent { MoviTheme { Box(Modifier.fillMaxSize()) { FallosYUsoScreen(onNavigate = {}) } } }
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Servidor").performClick()
+        // Que la pestaña se componga y su LaunchedEffect pida el panel antes de mirar `pedidos`.
+        composeRule.waitForIdle()
     }
 
     private var pedidos = mutableListOf<Pair<Int, Int>>()
