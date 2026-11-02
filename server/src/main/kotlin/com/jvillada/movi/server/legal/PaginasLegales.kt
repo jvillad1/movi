@@ -168,11 +168,14 @@ nav { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--borde); d
                 "Movi, estos proveedores, y solo para lo que se describe:</p>")
             append("<ul>")
             append("<li><strong>Railway</strong> (hosting): ahí corren el servidor y la base de datos de Movi.</li>")
-            append("<li><strong>Anthropic</strong> (la IA Claude): recibe tu pregunta y el contexto de tus " +
-                "cuentas y movimientos cuando usas Movi AI, y el archivo cuando le pides a Movi que lea un " +
-                "papel o un extracto. Según sus términos comerciales, Anthropic no usa por defecto lo que " +
-                "llega por su API para entrenar sus modelos. La primera vez que algo va a la IA, la app te " +
-                "lo dice antes.</li>")
+            append("<li><strong>Anthropic</strong> (la IA Claude). Cuando le escribes a Movi AI recibe tu " +
+                "mensaje, los mensajes anteriores de esa conversación, un resumen de tus cuentas y " +
+                "movimientos, los recuerdos de «Lo que Movi sabe de ti» y la foto que adjuntes en el chat. " +
+                "Cuando le pides a Movi que lea un papel o un extracto, recibe ese archivo. Nunca recibe tu " +
+                "contraseña ni tu sesión, y las tres preguntas sugeridas de Movi AI no van a la IA. Según " +
+                "sus términos comerciales, Anthropic no usa por defecto lo que llega por su API para " +
+                "entrenar sus modelos. La primera vez que algo va a la IA, la app te lo dice antes " +
+                "(«Qué ve la IA», también en Tú → Movi).</li>")
             append("<li><strong>Resend</strong> (correo): envía los correos de Movi (recordatorios, cierre del " +
                 "período, recuperar la contraseña) y recibe los correos del banco que tú reenvías.</li>")
             append("<li>Los servicios de notificaciones del navegador o del sistema, para entregarte los " +

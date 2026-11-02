@@ -97,6 +97,12 @@ class PaginasLegalesTest {
         )
         listOf("Railway", "Anthropic", "Resend", "no vende", "publicidad", "Borrar mi cuenta", "Descargar tus datos")
             .forEach { assertTrue(it in html, "la política no menciona «$it»") }
+        // Lo que va a Anthropic, como lo dice el aviso «Qué ve la IA» (vuelta 95) de la app.
+        listOf("los mensajes anteriores de esa conversación", "Lo que Movi sabe de ti", "la foto que adjuntes", "ese archivo")
+            .forEach { assertTrue(it in html, "la política no dice que a Anthropic le llega «$it»") }
+        val aviso = File("../shared/src/commonMain/kotlin/com/jvillada/movi/ui/ai/AvisoDeLaIa.kt").readText()
+        listOf("los anteriores de la conversación", "Lo que Movi sabe de ti", "La foto que adjuntes", "el archivo que elegiste")
+            .forEach { assertTrue(it in aviso, "el aviso «Qué ve la IA» ya no dice «$it»: alinea la política") }
         // Los SMS solo en la versión que se instala por fuera de la tienda.
         assertTrue("La versión de Google Play no lee SMS" in html)
         // El filtro del teléfono (`BankSenderFilter.matches`) deja pasar por el remitente O por el texto:
