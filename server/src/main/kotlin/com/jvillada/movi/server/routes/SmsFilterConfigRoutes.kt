@@ -87,6 +87,22 @@ private val CURRENT_FILTER = SmsFilterConfig(
         // alguien lea su paquete en un teléfono: una conjetura equivocada captura las notificaciones
         // de OTRA app.
         "com.todo1.davivienda.mobileapp",
+        // Vuelta 98 · **confirmados en la ficha oficial de Google Play** (1-nov-2026,
+        // `play.google.com/store/apps/details?id=…`: el título de la app y, como desarrollador, el
+        // banco). No se leyeron de un teléfono, pero tampoco son conjeturas: es el paquete que
+        // Play instala con ese nombre y ese desarrollador. Fuera quedaron Itaú (su app de personas,
+        // `com.co.app.unica.latam`, ya no está en Play) y RappiPay (no tiene app propia: vive dentro
+        // de Rappi, `com.grability.rappi`, cuyas notificaciones son de domicilios).
+        "eu.netinfo.colpatria.system", // «DAVIbank Colombia» · Banco Davibank S.A. (la app que era de Scotiabank Colpatria)
+        "com.grupoavaloc1.bancamovil", // «Banco de Occidente Móvil» · BANCO DE OCCIDENTE S. A.
+        "com.grupoavalav1.bancamovil", // «AV Villas App» · Banco Av Villas
+        "co.com.bbva.mb", // «BBVA Colombia | Banca Móvil» · BBVA
+        "com.bancodebogota.bancamovil", // «Banco de Bogotá» · Banco de Bogota
+        "com.grupoavalpo.bancamovil", // «Banco Popular Colombia» · Banco Popular Colombia
+        "co.com.bancofalabella.mobile.omc", // «Banco Falabella Colombia» · Banco Falabella S A
+        "co.com.lulobank.production", // «Lulo - Maneja tus finanzas» · Lulo Bank S.A.
+        "com.nequi.MobileApp", // «Nequi Colombia» · NEQUI S A COMPANIA DE FINANCIAMIENTO
+        "com.davivienda.daviplataapp", // «DaviPlata» · BANCO DAVIVIENDA S.A.
     ),
 )
 

@@ -146,9 +146,34 @@ class SmsFilterConfigTest {
                 "com.nu.production",
                 // Vuelta 92: el paquete de Davivienda, leído del mismo teléfono el 19-sep.
                 "com.todo1.davivienda.mobileapp",
+                // Vuelta 98: confirmados en la ficha oficial de Google Play (título y desarrollador).
+                "eu.netinfo.colpatria.system",
+                "com.grupoavaloc1.bancamovil",
+                "com.grupoavalav1.bancamovil",
+                "co.com.bbva.mb",
+                "com.bancodebogota.bancamovil",
+                "com.grupoavalpo.bancamovil",
+                "co.com.bancofalabella.mobile.omc",
+                "co.com.lulobank.production",
+                "com.nequi.MobileApp",
+                "com.davivienda.daviplataapp",
             ),
             paquetes,
         )
+    }
+
+    /**
+     * Vuelta 98 · **ninguna app que no sea de un banco.** Rappi publica los domicilios: su paquete
+     * acá subiría cada «Tu pedido va en camino» a «Por revisar». RappiPay no tiene app propia, así
+     * que no entra; y un paquete repetido sería un error de copia.
+     */
+    @Test
+    fun `los paquetes no se repiten ni traen la app de domicilios`() = testApplication {
+        wireApp()
+        val paquetes = Json.parseToJsonElement(client.get("/api/sms/filter-config").bodyAsText())
+            .jsonObject["appPackages"]!!.jsonArray.map { it.jsonPrimitive.content }
+        assertEquals(paquetes.size, paquetes.toSet().size, "paquetes repetidos")
+        assertEquals(false, "com.grability.rappi" in paquetes, "Rappi es la app de domicilios, no RappiPay")
     }
 
     /**
