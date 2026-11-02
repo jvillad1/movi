@@ -130,7 +130,12 @@ class CadaEscrituraVaciaLoRecordadoTest {
          * Vuelta 95 · `marcarAvisoDeLaIa` solo sella `users.aviso_ia_visto_en`: ninguna lectura recordada
          * (cuentas, movimientos, el Inicio) depende de esa marca, y la sesión ya la sabe por `AvisoDeLaIa`.
          */
-        val NO_VACIAN_A_PROPOSITO = setOf("subirLoPendienteAhora", "marcarAvisoDeLaIa")
+        /**
+         * Vuelta 111 · `crearCodigoDeCaptura` y `revocarCodigoDeCaptura` solo tocan el código de los atajos
+         * del iPhone: ninguna lectura recordada depende de él (su `GET` no pasa por lo recordado), y vaciar
+         * todo dejaría Mensajes del banco en esqueleto por crear un código.
+         */
+        val NO_VACIAN_A_PROPOSITO = setOf("subirLoPendienteAhora", "marcarAvisoDeLaIa", "crearCodigoDeCaptura", "revocarCodigoDeCaptura")
 
         val CONTINUACION = object : Continuation<Any?> {
             override val context: CoroutineContext = EmptyCoroutineContext
