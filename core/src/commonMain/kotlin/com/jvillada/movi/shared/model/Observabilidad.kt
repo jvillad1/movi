@@ -235,8 +235,17 @@ enum class FormaDeDato(val regex: Regex?) {
     ID(Regex("[a-z]{2,12}(?:_[a-z]{2,12})*_[0-9a-fA-F-]{8,80}")),
     /** Un conteo (0 a 999.999). */
     CONTEO(Regex("[0-9]{1,6}")),
+    /** Un período del dueño («2026-10»). */
+    PERIODO(Regex("[0-9]{4}-[0-9]{2}")),
     /** Una duración en segundos o milisegundos (hasta 9 cifras: un día en ms). */
     DURACION(Regex("[0-9]{1,9}")),
+    /**
+     * Vuelta 104 · **el id de un toque, de una hoja o de un campo** ([idDeToqueBienFormado]): minúsculas
+     * ASCII, cifras, guiones y dos puntos, armado por la app desde sus propios rótulos y `testTag`
+     * («agregar:guardar», «ir-a-inicio»). Nunca lleva espacios, mayúsculas, «$», puntos ni comas: un
+     * texto escrito por alguien o un monto no tienen esa forma, y cuatro cifras seguidas tampoco entran.
+     */
+    TOQUE(Regex("(?![a-z0-9:-]*[0-9]{4})[a-z][a-z0-9]*(?:[-:][a-z0-9]+){0,9}")),
 }
 
 /**
@@ -254,7 +263,11 @@ enum class ClaveDeUso(val clave: String, val forma: FormaDeDato, val valores: Se
     PASO("paso", FormaDeDato.LISTA, setOf("BIENVENIDA", "PERIODO", "CUENTAS", "CAPTURA", "RECURRENTES", "LISTO")),
     RESULTADO(
         "resultado", FormaDeDato.LISTA,
-        setOf("OK", "ERROR", "SIN_CONEXION", "TERMINADA", "ABANDONADA", "CONFIRMADO", "DESCARTADO", "YA_ANOTADO", "NADA", "LLEGO"),
+        setOf(
+            "OK", "ERROR", "SIN_CONEXION", "TERMINADA", "ABANDONADA", "CONFIRMADO", "DESCARTADO", "YA_ANOTADO", "NADA", "LLEGO",
+            // Vuelta 104: lo que devuelve un Worker (`Result.retry()`) y una sincronización que no subió todo.
+            "REINTENTO", "FALLO",
+        ),
     ),
     CLASE(
         "clase", FormaDeDato.LISTA,
@@ -283,6 +296,32 @@ enum class ClaveDeUso(val clave: String, val forma: FormaDeDato, val valores: Se
     CUANTOS("cuantos", FormaDeDato.CONTEO),
     SEGUNDOS("segundos", FormaDeDato.DURACION),
     MS("ms", FormaDeDato.DURACION),
+    // ── Vuelta 104 · la autocaptura de toques y lo que la app hace sola ──
+    /**
+     * Cómo se cerró una hoja o cómo se volvió atrás: la X, el velo, arrastrándola, el atrás del sistema,
+     * Escape, desde adentro (un «Guardar»), o la flecha ← de la barra de arriba.
+     */
+    COMO("como", FormaDeDato.LISTA, setOf("X", "VELO", "ARRASTRE", "ATRAS", "ESCAPE", "ADENTRO", "SISTEMA", "FLECHA")),
+    /** Cuál de las acciones de una tarjeta de propuesta se tocó. */
+    BOTON("boton", FormaDeDato.LISTA, setOf("PRINCIPAL", "SECUNDARIA", "TERCERA")),
+    /** El estado nuevo de un interruptor o una casilla. */
+    ENCENDIDO("encendido", FormaDeDato.LISTA, setOf("SI", "NO")),
+    /** La hoja que se abrió o se cerró ([FormaDeDato.TOQUE]: su título si es un rótulo de la app). */
+    HOJA("hoja", FormaDeDato.TOQUE),
+    /** El campo de texto donde se empezó o se terminó de escribir (nunca lo escrito). */
+    CAMPO("campo", FormaDeDato.TOQUE),
+    /** El Worker del teléfono que corrió (el nombre de su clase). */
+    WORKER("worker", FormaDeDato.NOMBRE),
+    /** Cuántas filas subió una sincronización. */
+    SUBIDOS("subidos", FormaDeDato.CONTEO),
+    /** Cuántas filas bajó una sincronización. */
+    BAJADOS("bajados", FormaDeDato.CONTEO),
+    /** El tipo de una propuesta de «Movi propone hoy» (`PAGO_POR_VENCER`, `CUADRE`…). */
+    PROPUESTA("propuesta", FormaDeDato.ESTADO),
+    /** El canal de una notificación del teléfono (`MOVIMIENTOS`, `EXTRACTO_POR_SUBIR`…). */
+    CANAL("canal", FormaDeDato.ESTADO),
+    /** El período de un cierre o de un débito automático («2026-10»). */
+    PERIODO("periodo", FormaDeDato.PERIODO),
     ;
 
     fun admite(valor: String): Boolean =
@@ -338,12 +377,58 @@ enum class EventoDeUso(val tipo: TipoDeUso, val principal: ClaveDeUso? = null) {
      * día, cuando llega un SMS, una notificación o un correo. No cuenta como uso activo.
      */
     CAPTURA_ACTIVA(TipoDeUso.SISTEMA, ClaveDeUso.ORIGEN),
+
+    // ── Vuelta 104 ──
+    /** Se abrió una hoja ([ClaveDeUso.HOJA]). El toque que la abrió va aparte, como `toque:…`. */
+    HOJA_ABIERTA(TipoDeUso.PANTALLA, ClaveDeUso.HOJA),
+    /** Se cerró una hoja, y cómo ([ClaveDeUso.COMO]: X, velo, arrastre, atrás, Escape o desde adentro). */
+    HOJA_CERRADA(TipoDeUso.ACCION, ClaveDeUso.COMO),
+    /** Empezó a escribir en un campo ([ClaveDeUso.CAMPO]). Nunca lo escrito. */
+    CAMPO_EMPEZADO(TipoDeUso.ACCION, ClaveDeUso.CAMPO),
+    /** Dejó el campo después de escribir ([ClaveDeUso.CAMPO]). Nunca lo escrito. */
+    CAMPO_TERMINADO(TipoDeUso.ACCION, ClaveDeUso.CAMPO),
+    /** El teléfono mostró una notificación ([ClaveDeUso.CANAL], [ClaveDeUso.CUANTOS]). */
+    NOTIFICACION_MOSTRADA(TipoDeUso.SISTEMA, ClaveDeUso.CANAL),
+    /** Tocó «Confirmar» en la notificación de un aviso, con lo que contestó el server. */
+    CONFIRMADO_DESDE_LA_NOTIFICACION(TipoDeUso.ACCION, ClaveDeUso.RESULTADO),
+    /** «Movi propone hoy» armó propuestas: una fila por tipo ([ClaveDeUso.PROPUESTA]) con cuántas. */
+    PROPUESTAS_GENERADAS(TipoDeUso.SISTEMA, ClaveDeUso.PROPUESTA),
+    /** El server propuso «¿Se cobró …?» de un débito automático (una vez por regla y período). */
+    DEBITO_PROPUESTO(TipoDeUso.SISTEMA, ClaveDeUso.PERIODO),
+    /** El server recordó subir un extracto (una vez por cuenta y corte). */
+    RECORDATORIO_DE_EXTRACTO(TipoDeUso.SISTEMA, ClaveDeUso.PERIODO),
+    /** El server armó el cierre de un período ([ClaveDeUso.ORIGEN] CORREO o la app que lo pidió). */
+    CIERRE_GENERADO(TipoDeUso.SISTEMA, ClaveDeUso.PERIODO),
+    /** Corrió un Worker del teléfono ([ClaveDeUso.WORKER]) con su resultado y lo que tardó ([ClaveDeUso.MS]). */
+    WORKER(TipoDeUso.SISTEMA, ClaveDeUso.WORKER),
     ;
 
     companion object {
         fun deNombre(nombre: String): EventoDeUso? = entries.firstOrNull { it.name == nombre }
     }
 }
+
+// ── Vuelta 104 · los toques ──────────────────────────────────────────────────────────────────
+
+/** El prefijo del nombre de un toque autocapturado: `toque:agregar:guardar`. */
+const val PREFIJO_DE_TOQUE = "toque:"
+
+/**
+ * El largo máximo del id de un toque: el nombre entero (`toque:` + id) entra en los 40 caracteres de
+ * `uso_de_la_app.nombre`, sin tocar la columna en producción.
+ */
+const val MAX_ID_DE_TOQUE = 34
+
+/** ¿[id] tiene la forma del id de un toque, una hoja o un campo ([FormaDeDato.TOQUE]) y cabe? */
+fun idDeToqueBienFormado(id: String): Boolean = id.length <= MAX_ID_DE_TOQUE && FormaDeDato.TOQUE.regex!!.matches(id)
+
+/** ¿[nombre] es el de un toque autocapturado (`toque:<id>`)? Fuera de la lista cerrada, pero con forma fija. */
+fun esNombreDeToque(nombre: String): Boolean =
+    nombre.startsWith(PREFIJO_DE_TOQUE) && idDeToqueBienFormado(nombre.removePrefix(PREFIJO_DE_TOQUE))
+
+/** El tipo de un evento por su nombre: el de la lista cerrada, o ACCION para un toque; `null` si no es ninguno. */
+fun tipoDeUsoDe(nombre: String): TipoDeUso? =
+    EventoDeUso.deNombre(nombre)?.tipo ?: if (esNombreDeToque(nombre)) TipoDeUso.ACCION else null
 
 /** Las funciones cuya adopción mide la pantalla de admin (% de los activos de 30 días que la usó). */
 val FUNCIONES_CLAVE: List<EventoDeUso> = listOf(
@@ -359,7 +444,7 @@ val FUNCIONES_CLAVE: List<EventoDeUso> = listOf(
     EventoDeUso.INICIO_EDITADO,
 )
 
-/** Plataformas que escriben eventos; `server` es la de [EventoDeUso.CAPTURA_ACTIVA]. */
+/** Plataformas que escriben eventos; `server` es la de lo que escribe el server ([EventoDeUso.CAPTURA_ACTIVA] y los SISTEMA de la vuelta 104). */
 val PLATAFORMAS_DE_USO: Set<String> = setOf("android", "ios", "web", "server")
 
 /** Una sesión nueva cuando la app vuelve de segundo plano tras más de esto (o en un arranque en frío). */
@@ -387,7 +472,7 @@ const val MAX_EVENTOS_POR_LOTE = 100
  * mejor perder un evento que guardar un monto por descuido.
  */
 fun problemaDelEvento(nombre: String, datos: Map<String, String>, ruta: String = ""): String? {
-    if (EventoDeUso.deNombre(nombre) == null) return "el evento «${nombre.take(40)}» no está en la lista"
+    if (tipoDeUsoDe(nombre) == null) return "el evento «${nombre.take(40)}» no está en la lista"
     for ((clave, valor) in datos) {
         val c = ClaveDeUso.deClave(clave) ?: return "la clave «${clave.take(40)}» no está en la lista"
         if (!c.admite(valor)) return "«$clave» no admite ese valor"
@@ -455,6 +540,13 @@ data class ResumenDeUso(
     val activosPorDia: List<ActivosDelDia> = emptyList(),
     /** Las más abiertas en 30 días. */
     val pantallas: List<Conteo> = emptyList(),
+    /** Vuelta 104 · los ids de toque más tocados en 7 días (los [MAS_TOCADOS] primeros), sin el prefijo `toque:`. */
+    val masTocados: List<Conteo> = emptyList(),
+    /**
+     * Vuelta 104 · **toques sin efecto** en 7 días ([rafagasSinEfecto]): por id, cuántas ráfagas de
+     * [TOQUES_DE_UNA_RAFAGA] o más toques seguidos en menos de [MS_DE_UNA_RAFAGA] ms, y de cuántas personas.
+     */
+    val toquesSinEfecto: List<Conteo> = emptyList(),
     /** Cuántos llegaron a cada paso de la guía (90 días), en el orden de la guía. */
     val embudo: List<Conteo> = emptyList(),
     val adopcion: List<AdopcionDeFuncion> = emptyList(),
@@ -503,4 +595,70 @@ data class EventoDelRecorrido(
     val nombre: String,
     val ruta: String,
     val datos: Map<String, String> = emptyMap(),
+    /** Vuelta 104: `server` para lo que escribió el server; la del aparato si no. */
+    val plataforma: String = "",
+    /** Vuelta 104: pasó sin sesión (lo del server, o lo que el teléfono anotó de fondo) y el visor lo intercala. */
+    val sinSesion: Boolean = false,
 )
+
+// ── Vuelta 104 · lo más tocado y los toques sin efecto ──────────────────────────────────────
+
+/** Cuántos ids muestra «Lo más tocado». */
+const val MAS_TOCADOS = 20
+
+/** Una ráfaga sin efecto: al menos esta cantidad de toques al mismo id… */
+const val TOQUES_DE_UNA_RAFAGA = 3
+
+/** …en menos de esto, del primero al último. Elegido, no medido. */
+const val MS_DE_UNA_RAFAGA = 2_000L
+
+/** Un toque para contar ráfagas: de quién, en qué sesión, a qué id y cuándo. */
+data class ToqueParaContar(val usuario: String, val sesion: String, val nombre: String, val hora: Long)
+
+/**
+ * **Los toques sin efecto**: [TOQUES_DE_UNA_RAFAGA] o más toques al **mismo** id, de la misma persona
+ * en la misma sesión, con menos de [MS_DE_UNA_RAFAGA] ms del primero al último —alguien tocando un
+ * botón que no responde, o que responde tan despacio que parece que no—. Cada ráfaga cuenta una vez
+ * (cuatro toques seguidos son una ráfaga, no dos), y seis toques en 1 s son una sola. Devuelve, por
+ * id, cuántas ráfagas y de cuántas personas, la más frecuente primero. Pura.
+ */
+fun rafagasSinEfecto(toques: List<ToqueParaContar>): List<Conteo> {
+    val porId = mutableMapOf<String, Pair<Int, MutableSet<String>>>()
+    toques.groupBy { Triple(it.usuario, it.sesion, it.nombre) }.forEach { (clave, deEse) ->
+        val horas = deEse.map { it.hora }.sorted()
+        var i = 0
+        while (i < horas.size) {
+            // La ráfaga más larga que empieza en i: todos los que caen a menos de la ventana del primero.
+            var j = i
+            while (j + 1 < horas.size && horas[j + 1] - horas[i] < MS_DE_UNA_RAFAGA) j++
+            if (j - i + 1 >= TOQUES_DE_UNA_RAFAGA) {
+                val (n, quienes) = porId[clave.third] ?: (0 to mutableSetOf())
+                quienes += clave.first
+                porId[clave.third] = (n + 1) to quienes
+                i = j + 1
+            } else {
+                i++
+            }
+        }
+    }
+    return porId.map { (nombre, v) -> Conteo(nombre.removePrefix(PREFIJO_DE_TOQUE), v.first, v.second.size) }
+        .sortedWith(compareByDescending<Conteo> { it.veces }.thenBy { it.nombre })
+}
+
+/**
+ * **Una sesión en CSV** (vuelta 104, el visor de recorridos): una fila por evento, con la hora en
+ * milisegundos, la secuencia, el tipo, el nombre, la ruta, los datos como `clave=valor` separados por
+ * `;` y la plataforma (`server` para lo que escribió el server). Todo lo que va acá ya pasó por la lista cerrada (nada del usuario), pero igual se cita cada
+ * celda: una ruta o un dato con coma no rompe la tabla.
+ */
+fun csvDelRecorrido(eventos: List<EventoDelRecorrido>): String = buildString {
+    append("secuencia,hora_ms,tipo,nombre,ruta,datos,plataforma\n")
+    eventos.forEach { e ->
+        val datos = e.datos.entries.sortedBy { it.key }.joinToString(";") { "${it.key}=${it.value}" }
+        append(listOf(e.secuencia.toString(), e.hora.toString(), e.tipo, e.nombre, e.ruta, datos, e.plataforma).joinToString(",") { celdaDeCsv(it) })
+        append('\n')
+    }
+}
+
+private fun celdaDeCsv(valor: String): String =
+    if (valor.any { it == ',' || it == '"' || it == '\n' }) "\"" + valor.replace("\"", "\"\"") + "\"" else valor
