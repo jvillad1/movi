@@ -379,6 +379,17 @@ abstract class VerificaElManifiestoSinSms : DefaultTask() {
 }
 
 androidComponents {
+    /*
+     * Revisión de la vuelta 109 · **`playDebug` lleva otro id: `com.jvillada.movi.play`.** `playDebug` y
+     * `directaDebug` firman con la MISMA llave de depuración, así que con el mismo id un `adb install -r`
+     * del de Play reemplazaba en silencio la app de Drive del teléfono —con sus datos— y apagaba la
+     * captura de SMS. Con el sufijo conviven. Solo en esa combinación: `playRelease` (lo que va a la
+     * tienda) y las dos de `directa` siguen siendo `com.jvillada.movi`. La app no escribe su id en ningún
+     * lado (usa `context.packageName`), así que nada más cambia.
+     */
+    onVariants(selector().withFlavor("canal" to "play").withBuildType("debug")) { variante ->
+        variante.applicationId.set("com.jvillada.movi.play")
+    }
     onVariants(selector().withFlavor("canal" to "play")) { variante ->
         val nombre = variante.name.replaceFirstChar { it.uppercase() }
         val verifica = tasks.register<VerificaElManifiestoSinSms>("verificaElManifiestoDe$nombre") {

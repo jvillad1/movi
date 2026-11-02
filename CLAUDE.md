@@ -91,7 +91,10 @@ adb logcat -s "movi"
 Play, **sin SMS**: `androidApp/src/play/AndroidManifest.xml` quita `READ_SMS`, `RECEIVE_SMS` y
 `SmsRealtimeReceiver` con `tools:node="remove"`). **El mismo `applicationId`** (`com.jvillada.movi`) en
 los dos: el APK de Drive no se rompe para quien lo tiene, y por eso los dos no conviven en un teléfono
-(firmas distintas). Las tareas llevan el canal: `assembleDirectaDebug`, `compilePlayDebugKotlin`,
+(firmas distintas). **Salvo `playDebug`, que es `com.jvillada.movi.play`** (revisión de la vuelta 109,
+`androidComponents.onVariants` en `androidApp/build.gradle.kts`, con su copia de `shortcuts.xml` en
+`src/playDebug/res/xml/`): firma con la misma llave de depuración que `directaDebug`, y con el mismo id un
+`adb install -r` reemplazaba la app de Drive y apagaba la captura de SMS. Las tareas llevan el canal: `assembleDirectaDebug`, `compilePlayDebugKotlin`,
 `bundlePlayRelease`… (ya no existe `assembleDebug` a secas). **La app no mira un flag de build**: mira su
 manifiesto (`elAparatoPuedeLeerSms(context)` en `:shared` `sms/ElAparatoLeeSms.kt`, sobre
 `PackageInfo.requestedPermissions`; en lo común, `rememberEsteAparatoLeeSms()`). Sin SMS, «Captura en este
