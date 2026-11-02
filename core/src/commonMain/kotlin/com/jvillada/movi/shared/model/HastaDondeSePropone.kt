@@ -29,8 +29,10 @@ import kotlinx.datetime.plus
  */
 fun ultimoDiaParaProponer(vence: LocalDate, settings: PeriodSettings, ventanaDias: Int): LocalDate {
     val finDeLaVentana = vence.plus(ventanaDias, DateTimeUnit.DAY)
+    // Vuelta 105 · el período de una obligación mensual es el mes de referencia (identidad en el mensual).
+    val settings = settings.mesDeReferencia()
     val periodo = periodoDeLaFecha(vence.toString(), settings) ?: return finDeLaVentana
-    val finDelPeriodo = inicioDelPeriodo(periodoSiguiente(periodo), settings).minus(1, DateTimeUnit.DAY)
+    val finDelPeriodo = inicioDelPeriodo(periodoSiguiente(periodo, settings), settings).minus(1, DateTimeUnit.DAY)
     return maxOf(finDeLaVentana, finDelPeriodo)
 }
 

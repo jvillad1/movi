@@ -582,12 +582,12 @@ fun loQueViene(
     settings: PeriodSettings,
 ): LoQueViene? {
     val hoy = hoySegunLosVencimientos(upcoming) ?: return null
-    val ultimoDia = inicioDelPeriodo(periodoSiguiente(periodo), settings).minus(1, DateTimeUnit.DAY)
+    val ultimoDia = inicioDelPeriodo(periodoSiguiente(periodo, settings), settings).minus(1, DateTimeUnit.DAY)
     val quedan = hoy.daysUntil(ultimoDia) + 1
     if (quedan > DIAS_PARA_MOSTRAR_LO_QUE_VIENE) return null
     val hasta = hoy.plus(DIAS_DE_LO_QUE_VIENE, DateTimeUnit.DAY)
     val filas = pagosPendientes(
-        checklistDelPeriodo(upcoming, ocurrencias, periodoSiguiente(periodo), settings, conElSiguienteVencimiento = true),
+        checklistDelPeriodo(upcoming, ocurrencias, periodoSiguiente(periodo, settings), settings, conElSiguienteVencimiento = true),
     ).filter { fila -> fechaDe(fila.vence)?.let { it <= hasta } ?: false }
     if (filas.isEmpty()) return null
     return LoQueViene(filas = filas, total = loQueSaleDe(filas))
