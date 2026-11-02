@@ -387,10 +387,12 @@ object Observabilidad {
         Users.select(Users.mandarUso).where { Users.id eq uid }.firstOrNull()?.get(Users.mandarUso) != false
     }
 
-    /** El origen de una captura según su `bank`: «Notificación · Nu» → NOTIFICACION; si no, SMS. */
+    /** El origen de una captura según su `bank`: «Notificación · Nu» → NOTIFICACION, «Atajo · …» → ATAJO; si no, SMS. */
     fun origenDeLaCaptura(bank: String): String = when {
         bank.startsWith("Notificación") -> "NOTIFICACION"
         bank.startsWith("Correo") -> "CORREO"
+        // Vuelta 111: lo que mandó un atajo del iPhone (un SMS o un pago con Apple Pay).
+        com.jvillada.movi.shared.model.esUnAtajo(bank) -> "ATAJO"
         else -> "SMS"
     }
 

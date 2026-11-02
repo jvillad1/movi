@@ -373,6 +373,16 @@ internal fun montoYMonedaDelTexto(text: String): Pair<Double, String>? {
  *   Solo decide si aplica la regla de Nu ([loDeNuEsUnMovimiento]); sin él se lee como siempre.
  */
 internal fun parseSms(text: String, origen: String? = null): ParsedSms? {
+    // Vuelta 111: el pago con Apple Pay que mandó el atajo del iPhone tiene su forma propia, la que arma
+    // el server («Apple Pay · Rappi · $27.500 · Nu»). Sin monto legible no hay movimiento que proponer.
+    if (com.jvillada.movi.server.sms.esUnPagoConApplePay(text)) {
+        val pago = com.jvillada.movi.server.sms.leerElPagoConApplePay(text) ?: return null
+        val monto = pago.monto ?: return null
+        return ParsedSms(
+            monto.valor, pago.comercio, TransactionType.EXPENSE,
+            categoryFor(text, pago.comercio, TransactionType.EXPENSE, esPagoDeNu = false), monto.moneda,
+        )
+    }
     val minusculas = text.lowercase()
     if (NO_SON_MOVIMIENTOS.any { it in minusculas }) return null
     if (NO_PASARON.any { it in minusculas }) return null

@@ -2735,6 +2735,10 @@ class LocalRepository(
     ) = remote.getAvisosPendientesParecidos(monto, tipo, moneda)
     override suspend fun getOrigenesMudos() = remote.getOrigenesMudos()
     override suspend fun getCorreosDescartados() = remote.getCorreosDescartados()
+    // Vuelta 111: el código de los atajos del iPhone vive solo en el server (no hay nada local que guardar).
+    override suspend fun getCodigoDeCaptura() = remote.getCodigoDeCaptura()
+    override suspend fun crearCodigoDeCaptura() = remote.crearCodigoDeCaptura()
+    override suspend fun revocarCodigoDeCaptura() = remote.revocarCodigoDeCaptura()
     override suspend fun getStatementImports(): List<StatementImport> =
         remote.getStatementImports()
     override suspend fun getStatementImportDetail(id: String): StatementImportDetail =

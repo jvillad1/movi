@@ -275,7 +275,7 @@ enum class ClaveDeUso(val clave: String, val forma: FormaDeDato, val valores: Se
     ),
     ORIGEN(
         "origen", FormaDeDato.LISTA,
-        setOf("LIBRE", "SUGERIDA", "EXTRACTO", "PAPEL", "SMS", "NOTIFICACION", "CORREO", "YO", "OTRO", "FRIO", "VOLVIO"),
+        setOf("LIBRE", "SUGERIDA", "EXTRACTO", "PAPEL", "SMS", "NOTIFICACION", "CORREO", "YO", "OTRO", "FRIO", "VOLVIO", "ATAJO"),
     ),
     ACCION(
         "accion", FormaDeDato.LISTA,
@@ -401,6 +401,14 @@ enum class EventoDeUso(val tipo: TipoDeUso, val principal: ClaveDeUso? = null) {
     CIERRE_GENERADO(TipoDeUso.SISTEMA, ClaveDeUso.PERIODO),
     /** Corrió un Worker del teléfono ([ClaveDeUso.WORKER]) con su resultado y lo que tardó ([ClaveDeUso.MS]). */
     WORKER(TipoDeUso.SISTEMA, ClaveDeUso.WORKER),
+
+    // ── Vuelta 111 ──
+    /**
+     * Llegó algo por un atajo del iPhone (`POST /api/captura/atajo`): [ClaveDeUso.ESTADO] dice qué pasó
+     * (`GUARDADO`, `YA_ESTABA`, `NO_ES_DEL_BANCO`, `VACIO`) y [ClaveDeUso.CLASE] si era un SMS (`AVISO`) o
+     * un pago con Apple Pay (`GASTO`). Nunca el texto, el comercio ni el monto.
+     */
+    CAPTURA_POR_ATAJO(TipoDeUso.SISTEMA, ClaveDeUso.ESTADO),
     ;
 
     companion object {

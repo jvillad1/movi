@@ -119,10 +119,18 @@ fun nombreDelOrigenDeCaptura(origen: String): String? {
     return limpio
 }
 
-/** El canal de un rótulo de origen: «Notificación · …», «Correo · …», y todo lo demás es un SMS. */
+/**
+ * El canal de un rótulo de origen: «Notificación · …», «Correo · …», y todo lo demás es un SMS.
+ *
+ * Vuelta 111 · lo que llega por un atajo del iPhone: «Atajo · Bancolombia» es un SMS (el iPhone lo
+ * reenvió) y cuenta como el mismo origen que los SMS de Bancolombia de un Android; «Atajo · Apple Pay» es
+ * el aviso de la billetera, como la notificación de Google Wallet. Sin un canal nuevo a propósito: un
+ * APK viejo que lee [OrigenMudo.canal] no sabría leer un valor que no conoce.
+ */
 fun canalDeCaptura(origen: String): CanalDeCaptura {
     val limpio = origen.trimStart()
     return when {
+        esElAtajoDeApplePay(limpio) -> CanalDeCaptura.NOTIFICACION
         limpio.startsWith("Notificación", ignoreCase = true) || limpio.startsWith("Notificacion", ignoreCase = true) ->
             CanalDeCaptura.NOTIFICACION
         limpio.startsWith("Correo", ignoreCase = true) -> CanalDeCaptura.CORREO
@@ -211,7 +219,13 @@ internal fun motivoDelSilencio(despues: List<Captura>): String? {
 }
 
 /** «los SMS de Bancolombia», «las notificaciones de Nu», «los correos de Bancolombia». */
-fun queNoLlega(origen: OrigenMudo): String = when (origen.canal) {
+fun queNoLlega(origen: OrigenMudo): String = when {
+    // Vuelta 111: «las notificaciones de Apple Pay» no es lo que el dueño configuró.
+    origen.nombre.equals(APPLE_PAY, ignoreCase = true) -> "los pagos con Apple Pay"
+    else -> queNoLlegaPorCanal(origen)
+}
+
+private fun queNoLlegaPorCanal(origen: OrigenMudo): String = when (origen.canal) {
     CanalDeCaptura.SMS -> "los SMS de ${origen.nombre}"
     CanalDeCaptura.NOTIFICACION -> "las notificaciones de ${origen.nombre}"
     CanalDeCaptura.CORREO -> "los correos de ${origen.nombre}"

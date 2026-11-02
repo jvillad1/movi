@@ -52,6 +52,8 @@ fun queEsEsteMensaje(texto: String, origen: String?): QueEsElMensaje {
     if (origen != null && esUnaNotificacion(origen) && texto.none { it.isDigit() }) {
         return QueEsElMensaje.NoEsMovimiento(MotivoDeApartado.SIN_MONTO)
     }
+    // Vuelta 111: un pago con Apple Pay es un pago, siempre (lo armó el server con lo que dijo Wallet).
+    if (esUnPagoConApplePay(texto)) return QueEsElMensaje.Movimiento
     val t = normalizarParaBuscar(texto)
     if (t.isEmpty()) return QueEsElMensaje.Movimiento
 

@@ -1,0 +1,384 @@
+package com.jvillada.movi.server.routes
+
+import com.jvillada.movi.server.auth.RateLimiter
+import com.jvillada.movi.server.compartir.TokenDeEnlace
+import com.jvillada.movi.server.correo.momentoDelCorreo
+import com.jvillada.movi.server.db.AtajosDescartados
+import com.jvillada.movi.server.db.CodigosDeCaptura
+import com.jvillada.movi.server.db.SmsMessages
+import com.jvillada.movi.server.db.dbQuery
+import com.jvillada.movi.server.observabilidad.Observabilidad
+import com.jvillada.movi.server.plugins.userId
+import com.jvillada.movi.server.sms.SmsDedupeIndex
+import com.jvillada.movi.server.sms.SmsKey
+import com.jvillada.movi.server.sms.textoDelPagoConApplePay
+import com.jvillada.movi.server.time.AppClock
+import com.jvillada.movi.shared.model.ClaveDeUso
+import com.jvillada.movi.shared.model.CodigoDeCaptura
+import com.jvillada.movi.shared.model.CodigoDeCapturaNuevo
+import com.jvillada.movi.shared.model.EventoDeUso
+import com.jvillada.movi.shared.model.ORIGEN_DEL_ATAJO
+import com.jvillada.movi.shared.model.ORIGEN_DE_APPLE_PAY
+import com.jvillada.movi.shared.model.RUTA_DEL_ATAJO_DE_APPLE_PAY
+import com.jvillada.movi.shared.model.RUTA_DEL_ATAJO_DE_MENSAJES
+import com.jvillada.movi.shared.model.marcaDelRemitente
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.ApplicationCall
+import io.ktor.server.application.log
+import io.ktor.server.plugins.origin
+import io.ktor.server.response.respond
+import io.ktor.server.routing.Route
+import io.ktor.server.routing.delete
+import io.ktor.server.routing.get
+import io.ktor.server.routing.post
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.isNull
+import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.selectAll
+import org.jetbrains.exposed.sql.update
+import java.security.MessageDigest
+import java.time.Instant
+import java.util.UUID
+
+/*
+ * # Vuelta 111 · el iPhone le avisa a Movi con Atajos
+ *
+ * Dos partes:
+ *
+ * 1. **El código de captura** (`GET/POST/DELETE /api/captura/codigo`, autenticadas): un token largo y
+ *    aleatorio que el dueño pega en sus atajos. No es la sesión: no lee nada, solo manda avisos, y se
+ *    revoca sin cerrar la sesión. Se guarda solo su SHA-256 ([CodigosDeCaptura]).
+ * 2. **`POST /api/captura/atajo`** (pública, la protege el código): lo que mandó el atajo. Un SMS pasa el
+ *    MISMO filtro de bancos del teléfono ([pasaElFiltroDeBancos]) y sigue el camino de los correos del
+ *    banco —`sms_messages`, `SmsDedupe`, `queEsEsteMensaje`, «Por revisar»—; un pago con Apple Pay se
+ *    guarda como un aviso con su texto legible ([textoDelPagoConApplePay]). Nada se anota solo.
+ *
+ * **El código nunca va en una URL ni en un log**: viaja en `Authorization: Bearer <código>`
+ * (`CallLogging` imprime la ruta y el status, no las cabeceras), y ninguna línea de log de este archivo
+ * nombra el código, el texto, el remitente ni el monto.
+ */
+
+/** El cuerpo más grande que se acepta: un SMS o un pago son unos cientos de bytes. */
+internal const val MAX_CUERPO_DEL_ATAJO: Int = 16_000
+
+/**
+ * **Cuántos avisos por minuto con un mismo código.** Un banco manda unos pocos SMS por hora; 30 por
+ * minuto es holgado para un día de muchas compras y corta en seco a un atajo que se quedó en un bucle.
+ * Elegido, no medido.
+ */
+internal const val MAX_AVISOS_POR_MINUTO_POR_CODIGO: Int = 30
+
+/**
+ * **Cuántos pedidos por minuto desde una misma dirección.** Detrás de Railway el peer TCP es su borde
+ * (ver `fallosRoutes`), así que en producción esto es casi un tope global: frena un intento de adivinar
+ * códigos antes de tocar la base. Elegido, no medido.
+ */
+internal const val MAX_PEDIDOS_POR_MINUTO_POR_IP: Int = 600
+
+private const val VENTANA_DEL_ATAJO_MS = 60_000L
+
+/** El texto que se guarda tiene el mismo tope que el de un correo: es la clave del dedupe. */
+private const val MAX_TEXTO_DEL_AVISO = 1_000
+
+/** Lo que contesta la ruta pública: nunca el texto ni el código. */
+@Serializable
+internal data class RespuestaDelAtajo(
+    val guardado: Boolean,
+    val motivo: String? = null,
+    val id: String? = null,
+)
+
+/** Por qué no se guardó lo que mandó un atajo (la columna `motivo` de `atajos_descartados`). */
+internal enum class MotivoDelAtajoDescartado { NO_ES_DEL_BANCO, VACIO }
+
+private val jsonDelAtajo = Json { ignoreUnknownKeys = true; isLenient = true }
+
+/** El cuerpo del atajo, ya leído: todo texto (el iPhone puede mandar el monto como número). */
+internal data class AvisoDelAtajo(
+    val tipo: String,
+    val texto: String? = null,
+    val remitente: String? = null,
+    val comercio: String? = null,
+    val monto: String? = null,
+    val tarjeta: String? = null,
+)
+
+/** Lee el JSON del atajo; `null` si no es un objeto o no trae `tipo`. Cada campo, como texto. */
+internal fun leerElAvisoDelAtajo(crudo: String): AvisoDelAtajo? {
+    val objeto = runCatching { jsonDelAtajo.parseToJsonElement(crudo) as? JsonObject }.getOrNull() ?: return null
+    fun campo(nombre: String): String? = (objeto[nombre] as? JsonPrimitive)?.content?.trim()?.takeIf { it.isNotEmpty() }
+    val tipo = campo("tipo")?.lowercase() ?: return null
+    return AvisoDelAtajo(
+        tipo = tipo,
+        texto = campo("texto"),
+        remitente = campo("remitente"),
+        comercio = campo("comercio"),
+        monto = campo("monto"),
+        tarjeta = campo("tarjeta"),
+    )
+}
+
+/** El código de `Authorization: Bearer <código>`, o `null` si no viene o no tiene la forma de uno. */
+internal fun codigoPresentado(authorization: String?): String? {
+    val valor = authorization?.trim() ?: return null
+    if (!valor.startsWith("Bearer ", ignoreCase = true)) return null
+    return valor.substring(7).trim().takeIf { TokenDeEnlace.tieneForma(it) }
+}
+
+/**
+ * **El banco de un SMS que mandó un atajo**, para el rótulo «Atajo · Bancolombia»: el que dice el
+ * remitente («85540», «Bancolombia») o el texto («DAVIVIENDA Descuento…»), con las reglas de siempre
+ * ([marcaDelRemitente]). Si no se sabe, «tu banco»: el remitente crudo nunca se guarda (podría ser el
+ * nombre de un contacto).
+ */
+internal fun origenDelSmsDelAtajo(remitente: String?, texto: String): String {
+    val banco = marcaDelRemitente(remitente.orEmpty(), texto)?.nombre ?: "tu banco"
+    return "$ORIGEN_DEL_ATAJO · $banco".take(100)
+}
+
+/** Id del aviso: el texto y el minuto en que llegó, como el dedupe. Prefijo propio (no dispara la push de `sms_rt_`). */
+private fun idDelAtajo(uid: String, texto: String, tiempo: String): String =
+    "atajo_" + MessageDigest.getInstance("SHA-256")
+        .digest("$uid|$texto|$tiempo".toByteArray(Charsets.UTF_8))
+        .joinToString("") { "%02x".format(it) }
+        .take(32)
+
+/** ¿Están en el server los atajos firmados? Se sirven desde `static/` (ver `scripts/generar-atajos.py`). */
+private fun hayAtajoFirmado(ruta: String): Boolean =
+    CodigoDeCapturaRecursos::class.java.classLoader.getResource("static${ruta}") != null
+
+private object CodigoDeCapturaRecursos
+
+/** El código vigente de [uid] (sin el código, que no se guarda). */
+internal suspend fun codigoDeCapturaDe(uid: String): CodigoDeCaptura {
+    val fila = dbQuery {
+        CodigosDeCaptura.selectAll()
+            .where { (CodigosDeCaptura.userId eq uid) and CodigosDeCaptura.revocadoEn.isNull() }
+            .maxByOrNull { it[CodigosDeCaptura.creadoEn] }
+    }
+    return CodigoDeCaptura(
+        vigente = fila != null,
+        creadoEn = fila?.get(CodigosDeCaptura.creadoEn),
+        ultimoUso = fila?.get(CodigosDeCaptura.ultimoUso),
+        atajoDeMensajes = hayAtajoFirmado(RUTA_DEL_ATAJO_DE_MENSAJES),
+        atajoDeApplePay = hayAtajoFirmado(RUTA_DEL_ATAJO_DE_APPLE_PAY),
+    )
+}
+
+/** Crea un código nuevo para [uid] y revoca el anterior, en una transacción. Devuelve el código en claro. */
+internal suspend fun crearCodigoDeCaptura(uid: String, ahora: Long): CodigoDeCapturaNuevo {
+    val codigo = TokenDeEnlace.nuevo()
+    dbQuery {
+        CodigosDeCaptura.update({ (CodigosDeCaptura.userId eq uid) and CodigosDeCaptura.revocadoEn.isNull() }) {
+            it[revocadoEn] = ahora
+        }
+        CodigosDeCaptura.insert {
+            it[id] = UUID.randomUUID().toString()
+            it[userId] = uid
+            it[tokenHash] = TokenDeEnlace.hashDelToken(codigo)
+            it[creadoEn] = ahora
+        }
+    }
+    return CodigoDeCapturaNuevo(codigo = codigo, creadoEn = ahora)
+}
+
+/** Revoca el código vigente de [uid]. Devuelve cuántos revocó (0 o 1). */
+internal suspend fun revocarCodigoDeCaptura(uid: String, ahora: Long): Int = dbQuery {
+    CodigosDeCaptura.update({ (CodigosDeCaptura.userId eq uid) and CodigosDeCaptura.revocadoEn.isNull() }) {
+        it[revocadoEn] = ahora
+    }
+}
+
+/** De quién es [codigo] si está vigente; `null` si no existe o fue revocado. */
+private suspend fun duenoDelCodigo(codigo: String): Pair<String, String>? {
+    val hash = TokenDeEnlace.hashDelToken(codigo)
+    return dbQuery {
+        CodigosDeCaptura.selectAll()
+            .where { (CodigosDeCaptura.tokenHash eq hash) and CodigosDeCaptura.revocadoEn.isNull() }
+            .firstOrNull()
+            ?.takeIf { TokenDeEnlace.esElMismoHash(it[CodigosDeCaptura.tokenHash], hash) }
+            ?.let { it[CodigosDeCaptura.id] to it[CodigosDeCaptura.userId] }
+    }
+}
+
+/**
+ * **Cuenta lo que no se guardó**: una fila por dueño, día y motivo, sin texto. Nunca falla hacia afuera:
+ * contar no puede tumbar la respuesta del atajo.
+ */
+internal suspend fun contarAtajoDescartado(uid: String, motivo: MotivoDelAtajoDescartado, ahora: Long) {
+    runCatching {
+        val dia = Instant.ofEpochMilli(ahora).atZone(AppClock.zone).toLocalDate().toString()
+        dbQuery {
+            val donde = (AtajosDescartados.userId eq uid) and (AtajosDescartados.dia eq dia) and (AtajosDescartados.motivo eq motivo.name)
+            val actual = AtajosDescartados.selectAll().where { donde }.firstOrNull()?.get(AtajosDescartados.cuantos)
+            if (actual == null) {
+                AtajosDescartados.insert {
+                    it[userId] = uid
+                    it[AtajosDescartados.dia] = dia
+                    it[AtajosDescartados.motivo] = motivo.name
+                    it[cuantos] = 1
+                }
+            } else {
+                AtajosDescartados.update({ donde }) { it[cuantos] = actual + 1 }
+            }
+        }
+    }
+}
+
+/** El evento del tracking del server: qué pasó y de qué clase era. Sin el texto. */
+private suspend fun registrarLaCaptura(uid: String, estado: String, esPago: Boolean, avisoId: String?, ahora: Long) {
+    val dia = Instant.ofEpochMilli(ahora).atZone(AppClock.zone).toLocalDate().toString()
+    val id = Observabilidad.idEstable("atajo", avisoId ?: "$estado:$dia")
+    Observabilidad.registrarSistema(
+        uid, id, EventoDeUso.CAPTURA_POR_ATAJO,
+        buildMap {
+            put(ClaveDeUso.ORIGEN, "ATAJO")
+            put(ClaveDeUso.ESTADO, estado)
+            put(ClaveDeUso.CLASE, if (esPago) "GASTO" else "AVISO")
+            if (avisoId != null && ClaveDeUso.AVISO_ID.admite(avisoId)) put(ClaveDeUso.AVISO_ID, avisoId)
+        },
+        ahora,
+    )
+}
+
+/**
+ * **Guarda lo que mandó un atajo** en la bandeja de [uid], por el camino de los correos: el dedupe
+ * (texto + tiempo) y `comoLlega` (lo que no es un movimiento entra apartado). Devuelve el id y si se
+ * guardó (`false` = ya estaba).
+ */
+private suspend fun guardarElAvisoDelAtajo(uid: String, texto: String, origen: String, ahora: Long): Pair<String, Boolean> {
+    val tiempo = momentoDelCorreo(null, ahora = ahora)
+    val id = idDelAtajo(uid, texto, tiempo)
+    val (estado, motivo) = comoLlega(texto, origen)
+    val guardado = dbQuery {
+        val ya = SmsMessages.selectAll().where { (SmsMessages.id eq id) and (SmsMessages.userId eq uid) }.any()
+        if (ya) return@dbQuery false
+        val existentes = SmsMessages.selectAll()
+            .where { SmsMessages.userId eq uid }
+            .map { SmsKey(it[SmsMessages.text], it[SmsMessages.time]) }
+        if (SmsDedupeIndex(existentes).isDuplicate(SmsKey(texto, tiempo))) return@dbQuery false
+        SmsMessages.insert {
+            it[SmsMessages.id] = id
+            it[userId] = uid
+            it[time] = tiempo
+            it[bank] = origen
+            it[text] = texto
+            it[state] = estado
+            it[motivoApartado] = motivo?.name
+            it[det] = ""
+        }
+        true
+    }
+    if (guardado) {
+        Observabilidad.registrarAvisosCapturados(uid, listOf(Observabilidad.AvisoQueLlego(id, origen, apartado = motivo != null)), ahora)
+    }
+    return id to guardado
+}
+
+/**
+ * # `POST /api/captura/atajo`
+ *
+ * | Caso | Código |
+ * |---|---|
+ * | más de [MAX_PEDIDOS_POR_MINUTO_POR_IP] desde la misma dirección | 429 |
+ * | sin `Authorization: Bearer <código>`, o con un código que no existe o fue revocado | 401 |
+ * | cuerpo de más de [MAX_CUERPO_DEL_ATAJO] bytes | 413 |
+ * | más de [MAX_AVISOS_POR_MINUTO_POR_CODIGO] con el mismo código | 429 |
+ * | no es JSON, o no trae `tipo` (`mensaje` o `transaccion`) | 400 |
+ * | un mensaje que no pasa el filtro de bancos, o que llegó vacío | 202, **no se guarda**: solo se cuenta |
+ * | ya estaba (el mismo aviso dos veces) | 202 |
+ * | guardado | 202 |
+ */
+fun Route.capturaPorAtajoRoutes(ahora: () -> Long = System::currentTimeMillis) {
+    post("/api/captura/atajo") { atajoRoute(call, ahora()) }
+}
+
+private suspend fun atajoRoute(call: ApplicationCall, ahora: Long) {
+    val ip = call.request.origin.remoteHost
+    if (!RateLimiter.allow("captura-atajo:ip:$ip", MAX_PEDIDOS_POR_MINUTO_POR_IP, VENTANA_DEL_ATAJO_MS)) {
+        return call.respond(HttpStatusCode.TooManyRequests, RespuestaDelAtajo(false, "Demasiados avisos seguidos."))
+    }
+    val codigo = codigoPresentado(call.request.headers[HttpHeaders.Authorization])
+        ?: return call.respond(HttpStatusCode.Unauthorized, RespuestaDelAtajo(false, "Falta el código de Movi."))
+    call.request.headers[HttpHeaders.ContentLength]?.toLongOrNull()?.let {
+        if (it > MAX_CUERPO_DEL_ATAJO) {
+            return call.respond(HttpStatusCode.PayloadTooLarge, RespuestaDelAtajo(false, "El aviso es demasiado grande."))
+        }
+    }
+    val (codigoId, uid) = duenoDelCodigo(codigo) ?: run {
+        // Sin decir nada de lo que llegó: ni el código ni el cuerpo.
+        call.application.log.warn("captura por atajo rechazada: código inexistente o revocado")
+        return call.respond(HttpStatusCode.Unauthorized, RespuestaDelAtajo(false, "Ese código de Movi no sirve. Crea uno nuevo en la app."))
+    }
+    if (!RateLimiter.allow("captura-atajo:codigo:$codigoId", MAX_AVISOS_POR_MINUTO_POR_CODIGO, VENTANA_DEL_ATAJO_MS)) {
+        return call.respond(HttpStatusCode.TooManyRequests, RespuestaDelAtajo(false, "Demasiados avisos seguidos."))
+    }
+    val crudo = when (val leido = call.leerConTope(MAX_CUERPO_DEL_ATAJO)) {
+        CuerpoLeido.Grande -> return call.respond(HttpStatusCode.PayloadTooLarge, RespuestaDelAtajo(false, "El aviso es demasiado grande."))
+        CuerpoLeido.Ilegible -> return call.respond(HttpStatusCode.BadRequest, RespuestaDelAtajo(false, "No pude leer el aviso."))
+        is CuerpoLeido.Texto -> leido.texto
+    }
+    val aviso = leerElAvisoDelAtajo(crudo)
+        ?: return call.respond(HttpStatusCode.BadRequest, RespuestaDelAtajo(false, "El aviso no es un JSON con «tipo»."))
+
+    // El código sirvió: se anota su último uso (lo dice la app: «último aviso hace 2 h»).
+    runCatching { dbQuery { CodigosDeCaptura.update({ CodigosDeCaptura.id eq codigoId }) { it[ultimoUso] = ahora } } }
+    Observabilidad.registrarCapturaActiva(uid, "ATAJO", ahora)
+
+    val (estado, respuesta) = when (aviso.tipo) {
+        "mensaje", "sms" -> guardarElMensaje(uid, aviso, ahora)
+        "transaccion", "transacción", "pago", "applepay" -> guardarElPago(uid, aviso, ahora)
+        else -> HttpStatusCode.BadRequest to RespuestaDelAtajo(false, "El tipo tiene que ser «mensaje» o «transaccion».")
+    }
+    call.respond(estado, respuesta)
+}
+
+private suspend fun guardarElMensaje(uid: String, aviso: AvisoDelAtajo, ahora: Long): Pair<HttpStatusCode, RespuestaDelAtajo> {
+    val texto = aviso.texto?.take(MAX_TEXTO_DEL_AVISO)
+    if (texto == null) {
+        contarAtajoDescartado(uid, MotivoDelAtajoDescartado.VACIO, ahora)
+        registrarLaCaptura(uid, "VACIO", esPago = false, avisoId = null, ahora)
+        return HttpStatusCode.Accepted to RespuestaDelAtajo(false, "El mensaje llegó vacío.")
+    }
+    // **El mismo filtro del teléfono.** Lo que no es de un banco no se guarda ni se lee más: solo se cuenta.
+    if (!pasaElFiltroDeBancos(aviso.remitente, texto)) {
+        contarAtajoDescartado(uid, MotivoDelAtajoDescartado.NO_ES_DEL_BANCO, ahora)
+        registrarLaCaptura(uid, "NO_ES_DEL_BANCO", esPago = false, avisoId = null, ahora)
+        return HttpStatusCode.Accepted to RespuestaDelAtajo(false, "No es un mensaje de un banco: no se guardó.")
+    }
+    val (id, guardado) = guardarElAvisoDelAtajo(uid, texto, origenDelSmsDelAtajo(aviso.remitente, texto), ahora)
+    registrarLaCaptura(uid, if (guardado) "GUARDADO" else "YA_ESTABA", esPago = false, avisoId = id, ahora)
+    return HttpStatusCode.Accepted to
+        if (guardado) RespuestaDelAtajo(true, id = id) else RespuestaDelAtajo(false, "Ese mensaje ya estaba en la bandeja.")
+}
+
+private suspend fun guardarElPago(uid: String, aviso: AvisoDelAtajo, ahora: Long): Pair<HttpStatusCode, RespuestaDelAtajo> {
+    val texto = textoDelPagoConApplePay(aviso.comercio, aviso.monto, aviso.tarjeta, aviso.texto)
+    if (texto == null) {
+        contarAtajoDescartado(uid, MotivoDelAtajoDescartado.VACIO, ahora)
+        registrarLaCaptura(uid, "VACIO", esPago = true, avisoId = null, ahora)
+        return HttpStatusCode.Accepted to RespuestaDelAtajo(false, "El pago llegó vacío.")
+    }
+    val (id, guardado) = guardarElAvisoDelAtajo(uid, texto, ORIGEN_DE_APPLE_PAY, ahora)
+    registrarLaCaptura(uid, if (guardado) "GUARDADO" else "YA_ESTABA", esPago = true, avisoId = id, ahora)
+    return HttpStatusCode.Accepted to
+        if (guardado) RespuestaDelAtajo(true, id = id) else RespuestaDelAtajo(false, "Ese pago ya estaba en la bandeja.")
+}
+
+/** `GET/POST/DELETE /api/captura/codigo`: autenticadas. El código se ve una sola vez, en el POST. */
+fun Route.codigoDeCapturaRoutes(ahora: () -> Long = System::currentTimeMillis) {
+    get("/api/captura/codigo") { call.respond(codigoDeCapturaDe(call.userId())) }
+    post("/api/captura/codigo") {
+        call.respond(HttpStatusCode.Created, crearCodigoDeCaptura(call.userId(), ahora()))
+    }
+    delete("/api/captura/codigo") {
+        revocarCodigoDeCaptura(call.userId(), ahora())
+        call.respond(HttpStatusCode.NoContent)
+    }
+}

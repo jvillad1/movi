@@ -125,6 +125,20 @@ private val CURRENT_FILTER = SmsFilterConfig(
     ),
 )
 
+/**
+ * Vuelta 111 · **el MISMO filtro del teléfono, del lado del server**: lo que manda un atajo del iPhone
+ * pasa si su remitente contiene un código de [CURRENT_FILTER] o su texto (en minúsculas, por substring,
+ * sin quitar tildes) una palabra de banco — la regla de `BankSenderFilter.matches` de Android, con la
+ * configuración que el server les sirve a los teléfonos (que ya trae el piso compilado). Lo que no pasa
+ * no se guarda: así un atajo sin filtro que reenvía todos los SMS no llena Movi de mensajes personales.
+ */
+internal fun pasaElFiltroDeBancos(remitente: String?, texto: String): Boolean {
+    val quien = remitente.orEmpty()
+    if (CURRENT_FILTER.senderCodes.any { quien.contains(it) }) return true
+    val minusculas = texto.lowercase()
+    return CURRENT_FILTER.bodyKeywords.any { minusculas.contains(it.lowercase()) }
+}
+
 fun Route.smsFilterConfigRoutes() {
     get("/api/sms/filter-config") { call.respond(CURRENT_FILTER) }
 }

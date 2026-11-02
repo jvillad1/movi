@@ -81,10 +81,12 @@ object DatabaseFactory {
             // ReglasDeComercio (las reglas del importador, que vivían en un archivo del
             // contenedor y se perdían en cada despliegue) es tabla NUEVA: su unicidad es la clave
             // primaria compuesta, que viaja dentro del CREATE TABLE.
+            // CodigosDeCaptura y AtajosDescartados (vuelta 111, los atajos del iPhone) son tablas NUEVAS:
+            // sus índices viajan dentro del CREATE TABLE, como los de EnlacesCompartidos.
             // EnlacesCompartidos (compartir con un tercero) es tabla NUEVA y entra por acá: su
             // índice único sobre el hash y el de `user_id` se crean junto con ella, sobre una tabla
             // vacía, y en los arranques siguientes `create` la ve existir y no emite nada.
-            SchemaUtils.create(Users, Accounts, StatementImports, Events, VoidEvents, Budgets, RecurringRules, RecurringOccurrences, OccurrenceRejections, SmsMessages, Credits, Cards, Subscriptions, PushSubscriptions, Screens, PasswordResetTokens, CardPaymentDismissals, Goals, CategoryPrefs, Documents, StatementImportMatches, AiTurns, KnownDestinations, EnlacesCompartidos, LecturasDePapeles, ConversacionesDelAsistente, AccionesPropuestas, MemoriaDelAsistente, AnomaliasDescartadas, DestinosDescartados, DebitosDescartados, ReglasDeComercio, CierresEnviados, CierresDescartados, CierresGuardados, Apartados, InicioPersonalizado, Espacios, GastosDelEspacio, LiquidacionesDelEspacio, CorreosDescartados, RecurrentesDelHogar, ClavesDeExtractos, PdfsAbiertos, FallosDeLaApp, UsoDeLaApp, AjustesDeLaIa, TopesDeLaIaPorUsuario)
+            SchemaUtils.create(Users, Accounts, StatementImports, Events, VoidEvents, Budgets, RecurringRules, RecurringOccurrences, OccurrenceRejections, SmsMessages, Credits, Cards, Subscriptions, PushSubscriptions, Screens, PasswordResetTokens, CardPaymentDismissals, Goals, CategoryPrefs, Documents, StatementImportMatches, AiTurns, KnownDestinations, EnlacesCompartidos, LecturasDePapeles, ConversacionesDelAsistente, AccionesPropuestas, MemoriaDelAsistente, AnomaliasDescartadas, DestinosDescartados, DebitosDescartados, ReglasDeComercio, CierresEnviados, CierresDescartados, CierresGuardados, Apartados, InicioPersonalizado, Espacios, GastosDelEspacio, LiquidacionesDelEspacio, CorreosDescartados, RecurrentesDelHogar, ClavesDeExtractos, PdfsAbiertos, FallosDeLaApp, UsoDeLaApp, AjustesDeLaIa, TopesDeLaIaPorUsuario, CodigosDeCaptura, AtajosDescartados)
             // Vuelta 102 · la observabilidad del servidor: seis tablas NUEVAS, sin `user_id` (ver
             // TablasDeObservabilidad.kt). Entran solo por el `create`, como toda tabla nueva.
             SchemaUtils.create(*TABLAS_DE_OBSERVABILIDAD)

@@ -93,6 +93,10 @@ internal fun canalDelAviso(origen: String): CanalDelAviso {
     return when {
         limpio.startsWith("Notificación", ignoreCase = true) || limpio.startsWith("Notificacion", ignoreCase = true) ->
             CanalDelAviso.NOTIFICACION
+        // Vuelta 111: «Atajo · Apple Pay» es el aviso de la billetera (como la notificación de Google
+        // Wallet) y se junta con el SMS del mismo cobro; «Atajo · Bancolombia» es un SMS que reenvió el
+        // iPhone, y cae abajo con los demás SMS.
+        com.jvillada.movi.shared.model.esElAtajoDeApplePay(limpio) -> CanalDelAviso.NOTIFICACION
         limpio.startsWith("Correo", ignoreCase = true) -> CanalDelAviso.CORREO
         limpio.startsWith("Comprobante", ignoreCase = true) -> CanalDelAviso.COMPROBANTE
         // El código corto del remitente («85540», «85784»), vacío en el barrido, o «SMS».
@@ -335,7 +339,8 @@ internal fun traeLaCuenta(texto: String): Boolean = CUENTA_EN_EL_TEXTO.containsM
 
 private fun ordenDelCanal(origen: String): Int = when (canalDelAviso(origen)) {
     CanalDelAviso.SMS -> 0
-    CanalDelAviso.NOTIFICACION -> if (origen.contains("wallet", ignoreCase = true)) 2 else 1
+    CanalDelAviso.NOTIFICACION ->
+        if (origen.contains("wallet", ignoreCase = true) || origen.contains("apple pay", ignoreCase = true)) 2 else 1
     CanalDelAviso.CORREO -> 3
     CanalDelAviso.COMPROBANTE -> 4
 }

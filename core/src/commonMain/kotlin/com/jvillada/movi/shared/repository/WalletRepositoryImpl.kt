@@ -1426,6 +1426,16 @@ class WalletRepositoryImpl(
     override suspend fun getCorreosDescartados(): com.jvillada.movi.shared.model.CorreosDescartados =
         client.get("$baseUrl/api/correo-entrante/descartados").exigirExito().body()
 
+    override suspend fun getCodigoDeCaptura(): com.jvillada.movi.shared.model.CodigoDeCaptura =
+        client.get("$baseUrl/api/captura/codigo").exigirExito().body()
+
+    override suspend fun crearCodigoDeCaptura(): com.jvillada.movi.shared.model.CodigoDeCapturaNuevo =
+        client.post("$baseUrl/api/captura/codigo").exigirExito().body()
+
+    override suspend fun revocarCodigoDeCaptura() {
+        client.delete("$baseUrl/api/captura/codigo").exigirExito()
+    }
+
     /** La comprobación de status del archivo, extraída para no repetirla cuatro veces. */
     private suspend fun HttpResponse.exigirExito(): HttpResponse {
         if (!status.isSuccess()) {
