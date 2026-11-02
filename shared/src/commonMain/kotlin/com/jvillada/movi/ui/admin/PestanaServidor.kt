@@ -105,6 +105,8 @@ fun PestanaServidor(modifier: Modifier = Modifier) {
                 item(key = "pedidos") { SeccionDePedidos(p, lapso) }
                 item(key = "lentas") { SeccionDeRutas("Las más lentas", p.resumen.masLentas, conErrores = false) }
                 item(key = "errores") { SeccionDeRutas("Con más errores 5xx", p.resumen.conMas5xx, conErrores = true) }
+                // Vuelta 106: lo que cuesta la IA, en pesos (se lee aparte: si falla, el resto sigue).
+                item(key = "costo-ia") { SeccionDelCostoDeLaIa() }
                 item(key = "servicios") { SeccionDeServicios(p.servicios.servicios, p.servicios.iaPorDia) }
                 item(key = "jobs") { SeccionDeJobs(p.jobs.ultimas, p.jobs.fallidas, ahora) }
                 item(key = "salud") { SeccionDeSalud(p.salud) }
@@ -232,7 +234,7 @@ private fun SeccionDeServicios(servicios: List<ServicioMedido>, iaPorDia: List<I
                 }
             }
             Text(
-                "Movi no tiene los precios por ficha en su código: el costo se lee en fichas, no en dólares.",
+                "Lo que cuesta en pesos está arriba, en «$TITULO_DEL_COSTO_DE_LA_IA».",
                 style = Movi.textos.apoyo,
                 color = Movi.colores.textoApagado,
             )

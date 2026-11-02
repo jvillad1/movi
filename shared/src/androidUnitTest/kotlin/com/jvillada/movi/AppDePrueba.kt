@@ -77,6 +77,8 @@ class AppDePrueba : Application(), TestLifecycleApplication {
         // El uso del método anterior (lo pendiente, la sesión de uso, sus costuras) y la de «Fallos y uso».
         com.jvillada.movi.observabilidad.Uso.reiniciarParaPruebas()
         com.jvillada.movi.ui.admin.ObservabilidadParaAdmin.sustitutoDePrueba = null
+        // Vuelta 106: el costo y el tope de Movi AI para el admin.
+        com.jvillada.movi.ui.admin.MoviAiParaAdmin.sustitutoDePrueba = null
         // Vuelta 95: el aviso «Qué ve la IA» ya visto. Sin esto toda prueba que mande algo a la IA
         // (el chat libre, leer un papel) se quedaría esperando la hoja; las que la prueban lo ponen en `null`.
         com.jvillada.movi.ui.ai.AvisoDeLaIa.visto = true
