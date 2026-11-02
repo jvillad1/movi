@@ -28,6 +28,11 @@ import com.jvillada.movi.shared.model.RespuestaDeUso
 import com.jvillada.movi.shared.model.huellaDelFallo
 import com.jvillada.movi.shared.model.limpio
 import com.jvillada.movi.shared.model.problemaDelEvento
+import com.jvillada.movi.shared.model.MAS_TOCADOS
+import com.jvillada.movi.shared.model.PREFIJO_DE_TOQUE
+import com.jvillada.movi.shared.model.ToqueParaContar
+import com.jvillada.movi.shared.model.rafagasSinEfecto
+import com.jvillada.movi.shared.model.tipoDeUsoDe
 import com.jvillada.movi.shared.model.soloSeguro
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -37,6 +42,7 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.greaterEq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.less
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.lessEq
 import org.jetbrains.exposed.sql.Transaction
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.batchInsert
@@ -70,6 +76,12 @@ object Observabilidad {
 
     /** Filas de fallos por día, para todo el server. */
     const val MAX_FALLOS_POR_DIA = 2_000L
+
+    /** Cuántos toques lee como mucho el cálculo de los toques sin efecto (7 días). */
+    private const val MAX_TOQUES_PARA_RAFAGAS = 200_000
+
+    /** Lo que el visor pone en una sesión sin ser de ella: lo de fondo y lo del server, hasta esto antes o después. */
+    private const val MARGEN_DE_LA_SESION_MS = 60_000L
 
     /** Cohortes que se muestran: menos semanas que la retención, para que ninguna esté recortada por el borrado. */
     private const val SEMANAS_DE_COHORTES = 12
@@ -219,20 +231,22 @@ object Observabilidad {
     private fun Transaction.insertarUso(uid: String, eventos: List<EventoDeUsoEnviado>, ahora: Long) {
         if (eventos.isEmpty()) return
         UsoDeLaApp.batchInsert(eventos, shouldReturnGeneratedValues = false) { e ->
-            val evento = EventoDeUso.deNombre(e.nombre)!!
+            // Vuelta 104: un toque (`toque:<id>`) no está en la lista cerrada pero tiene forma fija; su
+            // columna `detalle` es el tipo de componente («Boton»), para contar sin leer el JSON.
+            val evento = EventoDeUso.deNombre(e.nombre)
             val hora = horaCreible(e.ocurridoEn, ahora)
             val dia = diaDe(hora)
-            val principal = evento.principal?.let { e.propiedades[it.clave] }
+            val principal = if (evento != null) evento.principal?.let { e.propiedades[it.clave] } else e.propiedades[ClaveDeUso.COMPONENTE.clave]
             this[UsoDeLaApp.id] = e.id
             this[UsoDeLaApp.userId] = uid
-            this[UsoDeLaApp.tipo] = evento.tipo.name
-            this[UsoDeLaApp.nombre] = evento.name
+            this[UsoDeLaApp.tipo] = tipoDeUsoDe(e.nombre)!!.name
+            this[UsoDeLaApp.nombre] = e.nombre.take(40)
             this[UsoDeLaApp.ruta] = e.ruta
             this[UsoDeLaApp.sesionId] = soloSeguro(e.sesionId, 80)
             this[UsoDeLaApp.secuencia] = e.secuencia.coerceAtLeast(0)
             this[UsoDeLaApp.propiedades] = json.encodeToString(JsonObject.serializer(), JsonObject(e.propiedades.mapValues { JsonPrimitive(it.value) }))
             this[UsoDeLaApp.detalle] = principal?.take(60)
-            this[UsoDeLaApp.valor] = if (evento.principal == ClaveDeUso.SEGUNDOS) principal?.toLongOrNull() else null
+            this[UsoDeLaApp.valor] = if (evento?.principal == ClaveDeUso.SEGUNDOS) principal?.toLongOrNull() else null
             this[UsoDeLaApp.plataforma] = e.plataforma
             this[UsoDeLaApp.version] = soloSeguro(e.version, 30)
             this[UsoDeLaApp.ocurridoEn] = hora
@@ -250,25 +264,98 @@ object Observabilidad {
      */
     suspend fun registrarCapturaActiva(uid: String, origen: String, ahora: Long) {
         if (uid.isBlank() || !ClaveDeUso.ORIGEN.admite(origen)) return
+        registrarSistema(uid, "captura:$origen:${diaDe(ahora)}", EventoDeUso.CAPTURA_ACTIVA, mapOf(ClaveDeUso.ORIGEN to origen), ahora)
+    }
+
+    /**
+     * **Lo que el server hace solo, en el recorrido de [uid]** (vuelta 104): un aviso que llegó, un
+     * débito automático que propuso, un recordatorio de extracto, un cierre. Con plataforma `server` y
+     * sin sesión (el visor lo pone en la sesión que estaba abierta a esa hora). El [id] es
+     * **determinista** (`aviso:<id>`, `debito:<regla>:<período>`): el mismo hecho leído otra vez no
+     * agrega una fila —la tabla es idempotente por `(user_id, id)`—, y lo ya escrito en este proceso ni
+     * siquiera vuelve a preguntar a la base ([yaRegistrados]). Respeta el interruptor de la cuenta
+     * ([mandaUso]): con «Mandar datos de uso» apagado no escribe nada. Un dato que no tiene su forma
+     * descarta el evento ([problemaDelEvento]). **Nunca lanza**: lo que mide no puede tumbar lo medido.
+     */
+    suspend fun registrarSistema(uid: String, id: String, evento: EventoDeUso, datos: Map<ClaveDeUso, String>, ahora: Long) {
+        if (uid.isBlank() || id.isBlank() || id.length > 80) return
+        val crudos = datos.mapKeys { it.key.clave }
+        if (problemaDelEvento(evento.name, crudos) != null) return
+        val clave = "$uid|$id"
+        if (clave in yaRegistrados) return
         runCatching {
             if (!mandaUso(uid)) return
-            val dia = diaDe(ahora)
-            val id = "captura:$origen:$dia"
             dbQuery {
                 val ya = UsoDeLaApp.selectAll().where { (UsoDeLaApp.userId eq uid) and (UsoDeLaApp.id eq id) }.limit(1).any()
                 if (!ya) insertarUso(
                     uid,
-                    listOf(
-                        EventoDeUsoEnviado(
-                            id = id, nombre = EventoDeUso.CAPTURA_ACTIVA.name, propiedades = mapOf("origen" to origen),
-                            plataforma = "server", ocurridoEn = ahora,
-                        ),
-                    ),
+                    listOf(EventoDeUsoEnviado(id = id, nombre = evento.name, propiedades = crudos, plataforma = "server", ocurridoEn = ahora)),
                     ahora,
                 )
             }
+            recordar(clave)
         }
     }
+
+    /**
+     * **Los avisos que llegaron** (vuelta 104): por cada origen (SMS, notificación, correo) y cada
+     * destino (`PENDIENTE` en «Por revisar», o `APARTADO` porque no era un movimiento), un
+     * [EventoDeUso.AVISO_CAPTURADO] con cuántos —y el id del aviso si fue uno solo—. Nunca su texto, su
+     * banco ni su monto. El id del evento sale del primer aviso del grupo: reenviar el mismo lote no duplica.
+     */
+    suspend fun registrarAvisosCapturados(uid: String, avisos: List<AvisoQueLlego>, ahora: Long) {
+        avisos.groupBy { origenDeLaCaptura(it.bank) to it.apartado }.forEach { (clave, delGrupo) ->
+            val (origen, apartado) = clave
+            val estado = if (apartado) "APARTADO" else "PENDIENTE"
+            val primero = delGrupo.first().id
+            val datos = buildMap {
+                put(ClaveDeUso.ORIGEN, origen)
+                put(ClaveDeUso.ESTADO, estado)
+                put(ClaveDeUso.CUANTOS, delGrupo.size.coerceAtMost(999_999).toString())
+                if (delGrupo.size == 1 && ClaveDeUso.AVISO_ID.admite(primero)) put(ClaveDeUso.AVISO_ID, primero)
+            }
+            registrarSistema(uid, idEstable("aviso", "$primero:$estado"), EventoDeUso.AVISO_CAPTURADO, datos, ahora)
+        }
+    }
+
+    /** El cierre de [periodo] que Movi armó: al pedirlo la app ([origen] `null`) o al mandarlo por correo (`CORREO`). */
+    suspend fun registrarCierre(uid: String, periodo: String, origen: String?, ahora: Long) {
+        if (!ClaveDeUso.PERIODO.admite(periodo)) return
+        registrarSistema(
+            uid,
+            idEstable("cierre", if (origen == null) periodo else "$periodo:$origen"),
+            EventoDeUso.CIERRE_GENERADO,
+            buildMap {
+                put(ClaveDeUso.PERIODO, periodo)
+                if (origen != null) put(ClaveDeUso.ORIGEN, origen)
+            },
+            ahora,
+        )
+    }
+
+    /** Un aviso recién guardado, para [registrarAvisosCapturados]. */
+    data class AvisoQueLlego(val id: String, val bank: String, val apartado: Boolean)
+
+    /** `prefijo:resto`, o `prefijo:<huella>` si no entra en los 80 de la clave. */
+    internal fun idEstable(prefijo: String, resto: String): String {
+        val id = "$prefijo:$resto"
+        if (id.length <= 80) return id
+        val huella = java.security.MessageDigest.getInstance("SHA-256").digest(resto.toByteArray())
+            .take(16).joinToString("") { "%02x".format(it) }
+        return "$prefijo:$huella"
+    }
+
+    /** Los ids ya escritos por [registrarSistema] en este proceso (con tope: se vacía al llenarse). */
+    private val yaRegistrados: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+    private const val MAX_YA_REGISTRADOS = 20_000
+
+    private fun recordar(clave: String) {
+        if (yaRegistrados.size >= MAX_YA_REGISTRADOS) yaRegistrados.clear()
+        yaRegistrados += clave
+    }
+
+    /** Para las pruebas: que [registrarSistema] vuelva a mirar la base (el interruptor pudo cambiar). */
+    internal fun olvidarLoRegistrado() = yaRegistrados.clear()
 
     /** ¿Esta cuenta deja guardar su uso? (`users.mandar_uso`; sin tocar, sí). Lo respeta todo lo que escribe uso. */
     suspend fun mandaUso(uid: String): Boolean = dbQuery {
@@ -296,7 +383,9 @@ object Observabilidad {
 
     /**
      * **El uso, contado con SQL sobre `uso_de_la_app`.** Todo con enteros (`dia`, `semana`) para que
-     * valga igual en Postgres y en H2. Los activos no cuentan lo que escribe el server (la captura).
+     * valga igual en Postgres y en H2. Los activos no cuentan lo que escribe el server (la captura) ni,
+     * desde la vuelta 104, lo que el teléfono anotó de fondo sin sesión (un Worker, una notificación):
+     * usar Movi es tener una sesión.
      */
     suspend fun resumenDeUso(ahora: Long): ResumenDeUso {
         val inicio = System.nanoTime()
@@ -306,13 +395,13 @@ object Observabilidad {
             val activosPorDia = mutableMapOf<Int, Int>()
             consultar(
                 "SELECT dia, COUNT(DISTINCT user_id) FROM uso_de_la_app " +
-                    "WHERE dia > ${hoy - 30} AND plataforma <> 'server' GROUP BY dia",
+                    "WHERE dia > ${hoy - 30} AND plataforma <> 'server' AND sesion_id <> '' GROUP BY dia",
             ) { activosPorDia[it.getInt(1)] = it.getInt(2) }
 
             fun activosDesde(dias: Int): Int {
                 var n = 0
                 consultar(
-                    "SELECT COUNT(DISTINCT user_id) FROM uso_de_la_app WHERE dia > ${hoy - dias} AND plataforma <> 'server'",
+                    "SELECT COUNT(DISTINCT user_id) FROM uso_de_la_app WHERE dia > ${hoy - dias} AND plataforma <> 'server' AND sesion_id <> ''",
                 ) { n = it.getInt(1) }
                 return n
             }
@@ -339,7 +428,7 @@ object Observabilidad {
                 "SELECT nombre, COUNT(DISTINCT user_id) FROM uso_de_la_app " +
                     "WHERE dia > ${hoy - 30} AND nombre IN ($nombres) " +
                     "AND (nombre <> 'GUIA_SALIDA' OR detalle = 'TERMINADA') " +
-                    "AND user_id IN (SELECT user_id FROM uso_de_la_app WHERE dia > ${hoy - 30} AND plataforma <> 'server') " +
+                    "AND user_id IN (SELECT user_id FROM uso_de_la_app WHERE dia > ${hoy - 30} AND plataforma <> 'server' AND sesion_id <> '') " +
                     "GROUP BY nombre",
             ) { porFuncion[it.getString(1)] = it.getInt(2) }
             val adopcion = FUNCIONES_CLAVE.map { f ->
@@ -351,9 +440,9 @@ object Observabilidad {
             consultar(
                 """
                 WITH primera AS (
-                    SELECT user_id, MIN(semana) AS s0 FROM uso_de_la_app WHERE plataforma <> 'server' GROUP BY user_id
+                    SELECT user_id, MIN(semana) AS s0 FROM uso_de_la_app WHERE plataforma <> 'server' AND sesion_id <> '' GROUP BY user_id
                 ), activas AS (
-                    SELECT DISTINCT user_id, semana FROM uso_de_la_app WHERE plataforma <> 'server'
+                    SELECT DISTINCT user_id, semana FROM uso_de_la_app WHERE plataforma <> 'server' AND sesion_id <> ''
                 )
                 SELECT p.s0, COUNT(DISTINCT p.user_id),
                     COUNT(DISTINCT CASE WHEN a.semana = p.s0 + 1 THEN a.user_id END),
@@ -375,7 +464,7 @@ object Observabilidad {
             // Las sesiones salen de los eventos: una por `sesion_id`, del primero al último.
             val porSesion = "SELECT user_id, sesion_id, MIN(plataforma) AS plataforma, MIN(version) AS version, " +
                 "(MAX(ocurrido_en) - MIN(ocurrido_en)) / 1000 AS dur FROM uso_de_la_app " +
-                "WHERE dia > ${hoy - 30} AND plataforma <> 'server' AND sesion_id <> '' GROUP BY user_id, sesion_id"
+                "WHERE dia > ${hoy - 30} AND plataforma <> 'server' AND sesion_id <> '' AND sesion_id <> '' GROUP BY user_id, sesion_id"
             var sesiones = 0
             var conSesiones = 0
             var mediana: Long? = null
@@ -392,6 +481,23 @@ object Observabilidad {
                     "GROUP BY plataforma, version ORDER BY COUNT(*) DESC LIMIT 10",
             ) { porPlataforma += Conteo("${it.getString(1)} ${it.getString(2)}".trim(), it.getInt(3), it.getInt(4)) }
 
+            // Vuelta 104 · lo más tocado (7 días): los ids de toque, de las personas con sesión.
+            val masTocados = mutableListOf<Conteo>()
+            consultar(
+                "SELECT nombre, COUNT(*), COUNT(DISTINCT user_id) FROM uso_de_la_app " +
+                    "WHERE nombre LIKE '$PREFIJO_DE_TOQUE%' AND dia > ${hoy - 7} AND sesion_id <> '' " +
+                    "GROUP BY nombre ORDER BY COUNT(*) DESC, nombre LIMIT $MAS_TOCADOS",
+            ) { masTocados += Conteo(it.getString(1).removePrefix(PREFIJO_DE_TOQUE), it.getInt(2), it.getInt(3)) }
+
+            // Y los toques sin efecto: las ráfagas se cuentan en Kotlin ([rafagasSinEfecto]), sobre los
+            // toques de 7 días en orden (con tope: una semana de mucho uso no puede tumbar el panel).
+            val toques = mutableListOf<ToqueParaContar>()
+            consultar(
+                "SELECT user_id, sesion_id, nombre, ocurrido_en FROM uso_de_la_app " +
+                    "WHERE nombre LIKE '$PREFIJO_DE_TOQUE%' AND dia > ${hoy - 7} AND sesion_id <> '' " +
+                    "ORDER BY user_id, sesion_id, nombre, ocurrido_en LIMIT $MAX_TOQUES_PARA_RAFAGAS",
+            ) { toques += ToqueParaContar(it.getString(1), it.getString(2), it.getString(3), it.getLong(4)) }
+
             ResumenDeUso(
                 activosHoy = activosPorDia[hoy] ?: 0,
                 activos7 = activos7,
@@ -404,6 +510,8 @@ object Observabilidad {
                 sesionesPorUsuario = if (conSesiones == 0) 0.0 else (sesiones * 10.0 / conSesiones).roundToInt() / 10.0,
                 duracionMedianaSegundos = mediana,
                 sesionesPorPlataforma = porPlataforma,
+                masTocados = masTocados,
+                toquesSinEfecto = rafagasSinEfecto(toques).take(MAS_TOCADOS),
             )
         }
         return resumen.copy(milisegundos = (System.nanoTime() - inicio) / 1_000_000)
@@ -417,10 +525,10 @@ object Observabilidad {
         consultar(
             "SELECT u.user_id, COALESCE(MAX(us.email), ''), COUNT(DISTINCT u.sesion_id), COUNT(*), MAX(u.ocurrido_en) " +
                 "FROM uso_de_la_app u LEFT JOIN users us ON us.id = u.user_id " +
-                "WHERE u.plataforma <> 'server' GROUP BY u.user_id ORDER BY MAX(u.ocurrido_en) DESC LIMIT $limite",
+                "WHERE u.plataforma <> 'server' AND u.sesion_id <> '' GROUP BY u.user_id ORDER BY MAX(u.ocurrido_en) DESC LIMIT $limite",
         ) { filas += UsuarioConUso(it.getString(1), it.getString(2), it.getInt(3), it.getInt(4), it.getLong(5)) }
         val plataformas = mutableMapOf<String, MutableSet<String>>()
-        consultar("SELECT DISTINCT user_id, plataforma FROM uso_de_la_app WHERE plataforma <> 'server'") {
+        consultar("SELECT DISTINCT user_id, plataforma FROM uso_de_la_app WHERE plataforma <> 'server' AND sesion_id <> ''") {
             plataformas.getOrPut(it.getString(1)) { sortedSetOf() } += it.getString(2)
         }
         filas.map { it.copy(plataformas = plataformas[it.id].orEmpty().toList()) }
@@ -430,7 +538,7 @@ object Observabilidad {
     suspend fun sesionesDe(uid: String, limite: Int = 100): List<SesionDeUso> = dbQuery {
         val filas = mutableListOf<SesionDeUso>()
         val consulta = "SELECT sesion_id, MIN(ocurrido_en), MAX(ocurrido_en), MIN(plataforma), MIN(version), COUNT(*) " +
-            "FROM uso_de_la_app WHERE user_id = ? AND plataforma <> 'server' " +
+            "FROM uso_de_la_app WHERE user_id = ? AND plataforma <> 'server' AND sesion_id <> '' " +
             "GROUP BY sesion_id ORDER BY MIN(ocurrido_en) DESC LIMIT $limite"
         conParametro(consulta, uid) { rs ->
             val inicio = rs.getLong(2)
@@ -440,26 +548,62 @@ object Observabilidad {
         filas
     }
 
-    /** La línea de tiempo de una sesión, en orden de `secuencia` (y por la hora si dos empatan). */
+    /**
+     * La línea de tiempo de una sesión, en orden de `secuencia` (y por la hora si dos empatan).
+     *
+     * Vuelta 104: **con lo que pasó sin sesión mientras tanto** —lo que escribió el server (un aviso que
+     * llegó, un débito propuesto) y lo que el teléfono anotó de fondo (un Worker)—, de la misma persona,
+     * entre el primer evento de la sesión y el último (con [MARGEN_DE_LA_SESION_MS] de cada lado),
+     * intercalado por la hora. Lo de la sesión sigue en su orden de secuencia.
+     */
     suspend fun eventosDeLaSesion(uid: String, sesionId: String, limite: Int = 2_000): List<EventoDelRecorrido> = dbQuery {
-        UsoDeLaApp.selectAll()
+        val deLaSesion = UsoDeLaApp.selectAll()
             .where { (UsoDeLaApp.userId eq uid) and (UsoDeLaApp.sesionId eq sesionId) }
             .orderBy(UsoDeLaApp.secuencia to SortOrder.ASC, UsoDeLaApp.ocurridoEn to SortOrder.ASC)
             .limit(limite)
-            .map { r ->
-                EventoDelRecorrido(
-                    secuencia = r[UsoDeLaApp.secuencia],
-                    hora = r[UsoDeLaApp.ocurridoEn],
-                    tipo = r[UsoDeLaApp.tipo],
-                    nombre = r[UsoDeLaApp.nombre],
-                    ruta = r[UsoDeLaApp.ruta],
-                    datos = runCatching {
-                        json.decodeFromString(JsonObject.serializer(), r[UsoDeLaApp.propiedades])
-                            .mapValues { (it.value as? JsonPrimitive)?.content.orEmpty() }
-                    }.getOrDefault(emptyMap()),
-                )
+            .map { r -> eventoDelRecorrido(r) }
+        if (deLaSesion.isEmpty() || sesionId.isEmpty()) return@dbQuery deLaSesion
+        val desde = deLaSesion.minOf { it.hora } - MARGEN_DE_LA_SESION_MS
+        val hasta = deLaSesion.maxOf { it.hora } + MARGEN_DE_LA_SESION_MS
+        val sinSesion = UsoDeLaApp.selectAll()
+            .where {
+                (UsoDeLaApp.userId eq uid) and (UsoDeLaApp.sesionId eq "") and
+                    (UsoDeLaApp.ocurridoEn greaterEq desde) and (UsoDeLaApp.ocurridoEn lessEq hasta)
             }
+            .orderBy(UsoDeLaApp.ocurridoEn to SortOrder.ASC)
+            .limit(limite)
+            .map { r -> eventoDelRecorrido(r) }
+        intercalarPorLaHora(deLaSesion, sinSesion).take(limite)
     }
+
+    /**
+     * Lo de la sesión en su orden, con lo de afuera metido donde le toca por la hora (un evento de
+     * afuera va antes del primero de la sesión que pasó después). Pura.
+     */
+    internal fun intercalarPorLaHora(deLaSesion: List<EventoDelRecorrido>, deAfuera: List<EventoDelRecorrido>): List<EventoDelRecorrido> {
+        val resultado = ArrayList<EventoDelRecorrido>(deLaSesion.size + deAfuera.size)
+        var j = 0
+        for (e in deLaSesion) {
+            while (j < deAfuera.size && deAfuera[j].hora < e.hora) resultado += deAfuera[j++]
+            resultado += e
+        }
+        while (j < deAfuera.size) resultado += deAfuera[j++]
+        return resultado
+    }
+
+    private fun eventoDelRecorrido(r: org.jetbrains.exposed.sql.ResultRow): EventoDelRecorrido = EventoDelRecorrido(
+        secuencia = r[UsoDeLaApp.secuencia],
+        hora = r[UsoDeLaApp.ocurridoEn],
+        tipo = r[UsoDeLaApp.tipo],
+        nombre = r[UsoDeLaApp.nombre],
+        ruta = r[UsoDeLaApp.ruta],
+        datos = runCatching {
+            json.decodeFromString(JsonObject.serializer(), r[UsoDeLaApp.propiedades])
+                .mapValues { (it.value as? JsonPrimitive)?.content.orEmpty() }
+        }.getOrDefault(emptyMap()),
+        plataforma = r[UsoDeLaApp.plataforma],
+        sinSesion = r[UsoDeLaApp.sesionId].isEmpty(),
+    )
 
     /** Una consulta con un único parámetro de texto, ligado (nunca pegado al SQL). */
     private fun Transaction.conParametro(sql: String, parametro: String, fila: (java.sql.ResultSet) -> Unit) {

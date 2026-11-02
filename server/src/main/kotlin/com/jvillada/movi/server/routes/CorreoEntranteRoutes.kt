@@ -300,6 +300,15 @@ internal suspend fun guardarCorreoEntrante(
         true
     }
 
+    // Vuelta 104: en el recorrido del dueño, que llegó un aviso por correo y si quedó pendiente o apartado.
+    if (guardado) {
+        com.jvillada.movi.server.observabilidad.Observabilidad.registrarAvisosCapturados(
+            uid,
+            listOf(com.jvillada.movi.server.observabilidad.Observabilidad.AvisoQueLlego(id, marca, apartado = comoLlega(texto, marca).second != null)),
+            System.currentTimeMillis(),
+        )
+    }
+
     if (!guardado && idDelProveedor != null && !yaSeVioElCorreo(idDelProveedor)) {
         // Una copia de algo que ya estaba con otro id del proveedor: no se perdió nada, pero el reproceso
         // tiene que saber que este id ya se miró.

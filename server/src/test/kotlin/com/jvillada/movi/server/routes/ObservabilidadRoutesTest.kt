@@ -67,6 +67,8 @@ class ObservabilidadRoutesTest {
     @BeforeTest
     fun setUp() {
         RateLimiter.reset()
+        // Vuelta 104: lo que `registrarSistema` recuerda en memoria es del proceso; cada prueba arranca con su base.
+        Observabilidad.olvidarLoRegistrado()
         System.setProperty("movi.admin.userIds", admin)
         Database.connect(
             url = "jdbc:h2:mem:observabilidad_test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE",
@@ -469,5 +471,133 @@ class ObservabilidadRoutesTest {
         println("ObservabilidadRoutesTest · resumenDeUso sobre ${90 * 600 + 200 * 6} eventos: $ms ms (server: ${r.milisegundos} ms)")
         assertTrue(r.activos30 > 100)
         assertTrue(ms < 20_000, "contar el uso tardó $ms ms")
+    }
+
+    // ── Vuelta 104 · los toques y lo que el server hace solo ─────────────────────────────────
+
+    @Test
+    fun `un toque autocapturado entra como ACCION con su componente`() = testApplication {
+        app()
+        val lote = LoteDeUso(
+            listOf(
+                evento("t1", "toque:guardar", mapOf("componente" to "Boton"), ruta = "Dashboard>QuickAdd"),
+                evento("t2", "toque:propuesta:pago", mapOf("componente" to "Propuesta", "boton" to "PRINCIPAL", "propuesta" to "PAGO"), sec = 2),
+                // Lo que no tiene la forma de un toque se descarta entero.
+                evento("t3", "toque:Pagarle a Caro", sec = 3),
+                evento("t4", "toque:pago-27500000", sec = 4),
+                evento("t5", "toque:guardar", mapOf("monto" to "27500"), sec = 5),
+            ),
+        )
+        assertEquals(RespuestaDeUso(guardados = 2, descartados = 3), json.decodeFromString<RespuestaDeUso>(mandar(lote).bodyAsText()))
+        val filas = transaction { UsoDeLaApp.selectAll().associateBy { it[UsoDeLaApp.id] } }
+        assertEquals("ACCION", filas.getValue("t1")[UsoDeLaApp.tipo])
+        assertEquals("toque:guardar", filas.getValue("t1")[UsoDeLaApp.nombre])
+        assertEquals("Boton", filas.getValue("t1")[UsoDeLaApp.detalle])
+        assertEquals("Dashboard>QuickAdd", filas.getValue("t1")[UsoDeLaApp.ruta])
+    }
+
+    @Test
+    fun `lo que el server hace solo respeta el interruptor y no se repite`(): Unit = runBlocking {
+        val ahora = System.currentTimeMillis()
+        val evento = com.jvillada.movi.shared.model.EventoDeUso.DEBITO_PROPUESTO
+        val datos = mapOf(com.jvillada.movi.shared.model.ClaveDeUso.PERIODO to "2026-10")
+        repeat(3) { Observabilidad.registrarSistema(usuario, "debito:rr_1:2026-10", evento, datos, ahora) }
+        val filas = transaction { UsoDeLaApp.selectAll().toList() }
+        assertEquals(1, filas.size, "el mismo hecho leído tres veces es una fila")
+        assertEquals("server", filas.single()[UsoDeLaApp.plataforma])
+        assertEquals("", filas.single()[UsoDeLaApp.sesionId])
+        assertEquals("SISTEMA", filas.single()[UsoDeLaApp.tipo])
+        assertEquals("2026-10", filas.single()[UsoDeLaApp.detalle])
+        // Un dato sin su forma no se escribe.
+        Observabilidad.registrarSistema(usuario, "debito:rr_2:octubre", evento, mapOf(com.jvillada.movi.shared.model.ClaveDeUso.PERIODO to "octubre"), ahora)
+        assertEquals(1, transaction { UsoDeLaApp.selectAll().count() })
+        // Con «Mandar datos de uso» apagado, nada de lo que hace el server.
+        transaction { Users.update({ Users.id eq admin }) { it[Users.mandarUso] = false } }
+        Observabilidad.registrarSistema(admin, "debito:rr_1:2026-10", evento, datos, ahora)
+        Observabilidad.registrarAvisosCapturados(admin, listOf(Observabilidad.AvisoQueLlego("sms_rt_9c1d2e3f4a5b6c7d", "Bancolombia", apartado = false)), ahora)
+        Observabilidad.registrarCierre(admin, "2026-10", origen = "CORREO", ahora)
+        assertTrue(transaction { UsoDeLaApp.selectAll().where { UsoDeLaApp.userId eq admin }.toList() }.isEmpty())
+    }
+
+    @Test
+    fun `los avisos que llegaron se cuentan por origen y destino sin su texto`(): Unit = runBlocking {
+        val ahora = System.currentTimeMillis()
+        Observabilidad.registrarAvisosCapturados(
+            usuario,
+            listOf(
+                Observabilidad.AvisoQueLlego("sms_rt_9c1d2e3f4a5b6c7d", "Bancolombia", apartado = false),
+                Observabilidad.AvisoQueLlego("sms_rt_aaaabbbbccccdddd", "Bancolombia", apartado = false),
+                Observabilidad.AvisoQueLlego("sms_rt_1111222233334444", "Notificación · Nu", apartado = true),
+            ),
+            ahora,
+        )
+        val filas = transaction { UsoDeLaApp.selectAll().map { json.decodeFromString<Map<String, String>>(it[UsoDeLaApp.propiedades]) } }
+        assertEquals(
+            setOf(
+                mapOf("origen" to "SMS", "estado" to "PENDIENTE", "cuantos" to "2"),
+                mapOf("origen" to "NOTIFICACION", "estado" to "APARTADO", "cuantos" to "1", "aviso_id" to "sms_rt_1111222233334444"),
+            ),
+            filas.toSet(),
+        )
+        assertTrue(filas.none { f -> f.values.any { "Bancolombia" in it || "Nu" == it } })
+    }
+
+    @Test
+    fun `lo mas tocado y los toques sin efecto de la semana`(): Unit = runBlocking {
+        sembrar("A", "toque:guardar", 0, n = 5)
+        sembrar("B", "toque:guardar", 1, n = 2)
+        sembrar("A", "toque:confirmar", 0, n = 3)
+        sembrar("A", "toque:viejo", 10, n = 9)
+        // Sin sesión (de fondo) no cuenta.
+        sembrar("C", "toque:fantasma", 0, n = 9, sesion = "")
+        val r = Observabilidad.resumenDeUso(System.currentTimeMillis())
+        assertEquals(listOf("guardar" to 7, "confirmar" to 3), r.masTocados.map { it.nombre to it.veces })
+        assertEquals(2, r.masTocados.first().usuarios)
+        // `sembrar` pone todos los de un lote en el mismo milisegundo: cinco a «guardar» y tres a «confirmar»
+        // de A son una ráfaga cada uno; los dos de B no llegan a tres.
+        assertEquals(setOf("guardar", "confirmar"), r.toquesSinEfecto.map { it.nombre }.toSet())
+        assertTrue(r.toquesSinEfecto.all { it.veces == 1 && it.usuarios == 1 })
+    }
+
+    @Test
+    fun `lo que pasa sin sesion no hace activo a nadie`(): Unit = runBlocking {
+        sembrar("Fondo", "WORKER", 0, "SmsSyncWorker", sesion = "")
+        sembrar("Activo", "PANTALLA", 0, "Dashboard")
+        val r = Observabilidad.resumenDeUso(System.currentTimeMillis())
+        assertEquals(1, r.activosHoy)
+    }
+
+    @Test
+    fun `la linea de tiempo intercala lo del server y lo de fondo por la hora`() = testApplication {
+        app()
+        val t0 = System.currentTimeMillis() - 10_000
+        mandar(
+            LoteDeUso(
+                listOf(
+                    evento("s-1", "SESION_EMPEZADA", mapOf("origen" to "FRIO"), ruta = "", sec = 1).copy(ocurridoEn = t0),
+                    evento("s-2", "toque:guardar", mapOf("componente" to "Boton"), sec = 2).copy(ocurridoEn = t0 + 4_000),
+                ),
+            ),
+        )
+        runBlocking {
+            Observabilidad.registrarAvisosCapturados(usuario, listOf(Observabilidad.AvisoQueLlego("sms_rt_9c1d2e3f4a5b6c7d", "SMS", false)), t0 + 2_000)
+            // Mucho después de la sesión: no entra.
+            Observabilidad.registrarCierre(usuario, "2026-10", origen = null, t0 + 3_600_000)
+        }
+        val linea = json.decodeFromString<List<com.jvillada.movi.shared.model.EventoDelRecorrido>>(
+            client.get("/api/admin/uso/sesiones/s1/eventos?usuario=$usuario") { header(HttpHeaders.Authorization, "Bearer ${token(admin)}") }.bodyAsText(),
+        )
+        assertEquals(listOf("SESION_EMPEZADA", "AVISO_CAPTURADO", "toque:guardar"), linea.map { it.nombre })
+        assertEquals("server", linea[1].plataforma)
+        assertTrue(linea[1].sinSesion)
+        assertFalse(linea[2].sinSesion)
+    }
+
+    @Test
+    fun `intercalar deja lo de la sesion en su orden`() {
+        fun e(sec: Int, hora: Long, nombre: String) = com.jvillada.movi.shared.model.EventoDelRecorrido(sec, hora, "SISTEMA", nombre, "")
+        val sesion = listOf(e(1, 100, "a"), e(2, 300, "b"), e(3, 200, "c"))
+        val afuera = listOf(e(0, 50, "x"), e(0, 250, "y"), e(0, 900, "z"))
+        assertEquals(listOf("x", "a", "y", "b", "c", "z"), Observabilidad.intercalarPorLaHora(sesion, afuera).map { it.nombre })
     }
 }
