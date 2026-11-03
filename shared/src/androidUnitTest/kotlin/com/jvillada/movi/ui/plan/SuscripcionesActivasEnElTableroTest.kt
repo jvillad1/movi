@@ -337,7 +337,7 @@ class SuscripcionesActivasEnElTableroTest {
         composeRule.onAllNodesWithText("Moneda", useUnmergedTree = true).assertCountEquals(0)
         // Pero «cada cuánto» sí, porque el PUT sí la escribe — y una detectada nace mensual, así
         // que un cobro anual mal clasificado solo se arregla acá.
-        composeRule.onAllNodesWithText("Cada cuánto", useUnmergedTree = true).assertCountEquals(1)
+        composeRule.onAllNodesWithText(com.jvillada.movi.ui.recurrentes.CADA_CUANTO, useUnmergedTree = true).assertCountEquals(1)
     }
 
     /** Toca el clickable que CONTIENE ese texto — el toque sobre el texto suelto no llega. */

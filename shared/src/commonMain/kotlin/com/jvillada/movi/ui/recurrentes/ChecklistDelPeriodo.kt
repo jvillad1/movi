@@ -249,6 +249,11 @@ fun SeccionChecklistDelPeriodo(
     /** Vuelta 72 · tocar una pausada abre su hoja (donde también se reanuda o se elimina). */
     onAbrirPausada: ((RecurringRule) -> Unit)? = null,
     /**
+     * Vuelta 126 · las reglas no mensuales que no vencen en este período ([otrosPagosFijos]), para «Otros pagos
+     * fijos · N» al final, plegada, con su próximo vencimiento. Tocar una abre su hoja.
+     */
+    otrosPagosFijos: List<com.jvillada.movi.shared.model.UpcomingPayment> = emptyList(),
+    /**
      * Vuelta 72 · los nombres de las cuentas, para proponer «¿Usar siempre Nu para Carro?» en una factura
      * pagada cuya regla no tiene cuenta ([cuentaParaGuardarEnLaRegla]). Vacío: no se propone.
      */
@@ -548,6 +553,12 @@ fun SeccionChecklistDelPeriodo(
                     }
                 }
             }
+        }
+        // ── Vuelta 126 · Otros pagos fijos · N: lo que no vence en este período, plegada ──────
+        // Lo que ya tiene fila arriba no se repite (revisión de la 126, M3).
+        val otros = otrosPagosFijos.filter { o -> checklist.none { it.ruleId == o.rule.id } && anteriores.none { it.ruleId == o.rule.id } }
+        if (otros.isNotEmpty() && !cargando && pudoLeer) {
+            SeccionDeOtrosPagosFijos(pagos = otros, onAbrir = onAbrirPausada)
         }
         // ── Vuelta 72 · Pausados · N: al final, plegada ─────────────────────────────
         if (pausadas.isNotEmpty() && !cargando && pudoLeer) {

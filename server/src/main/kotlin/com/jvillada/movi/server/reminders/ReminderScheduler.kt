@@ -1,6 +1,8 @@
 package com.jvillada.movi.server.reminders
 
 import com.jvillada.movi.server.routes.arranqueDeLaFila
+import com.jvillada.movi.server.routes.frecuenciaDeLaFila
+import com.jvillada.movi.server.routes.primerVencimientoDeLaFila
 import com.jvillada.movi.server.time.ajustesDePeriodoDe
 import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.server.db.Cards
@@ -403,6 +405,9 @@ private fun ResultRow.toRulePair(): Pair<RecurringRule, String?> {
         destinoConocidoId = this[RecurringRules.destinoConocidoId],
         // Vuelta 72: una regla pausada no avisa (`selectDueForReminder` la lee). Mismo motivo que arriba.
         pausadaDesde = this[RecurringRules.pausadaDesde],
+        // Vuelta 126: una no mensual solo avisa por lo que vence en su mes (`dueDateFor` la lee).
+        frecuencia = frecuenciaDeLaFila(),
+        primerVencimiento = primerVencimientoDeLaFila(),
     )
     val lastReminded = this[RecurringRules.lastRemindedPeriod]
     return rule to lastReminded

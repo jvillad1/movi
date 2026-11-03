@@ -155,7 +155,13 @@ fun Route.dashboardRoutes() {
         // Los pagos del período, solo si algún apartado puede cruzarse con uno (ver
         // `apartadoFueraDeLosFijos`): el colegio apartado que además es un pago pendiente se resta
         // una vez, como fijo. Fuera del `dbQuery` porque abre los suyos.
+        // Vuelta 126 (revisión, I1): un cliente que no pide `?conFrecuencias=1` (un APK viejo) no tiene fila
+        // para una regla no mensual, así que el server tampoco la cuenta como fijo para él: ni la cruza con
+        // un apartado ni le saca su pago del gasto variable. Así su «Te quedan» resta ese pago una vez, como
+        // un gasto más, en vez de no restarlo en ningún lado.
+        val conFrecuencias = call.pideLasFrecuencias()
         val pagosDelPeriodo = pagosQuePuedenCruzarApartados(uid, epochMillisToAppDate(ahora), periodo)
+            .filter { conFrecuencias || it.frecuencia == com.jvillada.movi.shared.model.FrecuenciaDelPago.MENSUAL }
 
         val summary = dbQuery {
             val accountTypeById = accountTypesFor(uid)
@@ -207,6 +213,7 @@ fun Route.dashboardRoutes() {
                 monthEnd = monthEnd,
                 voidedIds = voidedIds,
                 reglasDeCredito = reglasDeCredito,
+                conFrecuencias = conFrecuencias,
             )
             val plata = disponible.plata
             // Vuelta 44 + 85: lo que dicen los avisos por confirmar, una vez, para la suma y su partición por signo.
@@ -314,6 +321,13 @@ internal fun Transaction.disponibleDelServidor(
     voidedIds: Set<String>,
     reglasDeCredito: List<RecurringRule>,
     apartado: Long = 0L,
+    /**
+     * Vuelta 126 (revisión, I1) · `false` para un cliente que no sabe de frecuencias (sin
+     * `?conFrecuencias=1`): las reglas no mensuales no absorben su pago del gasto variable, porque ese
+     * cliente no las resta como fijo. Lo que el server cuenta por su cuenta (Movi AI, el cierre) va con
+     * `true`: ahí la lista del período sí las tiene.
+     */
+    conFrecuencias: Boolean = true,
 ): DisponibleDelServidor {
     val eventosDelPeriodo = loadEventsBetween(uid, monthStart, monthEnd)
     val cuentas = cuentasDelDisponible(uid)
@@ -322,7 +336,7 @@ internal fun Transaction.disponibleDelServidor(
         eventos = eventosDelPeriodo,
         cuentas = cuentas,
     )
-    val parteFija = parteFijaDelDisponible(uid, hoy, periodo, eventosDelPeriodo)
+    val parteFija = parteFijaDelDisponible(uid, hoy, periodo, eventosDelPeriodo, conFrecuencias = conFrecuencias)
     return DisponibleDelServidor(
         apartado = apartado,
         plata = plata,
@@ -361,6 +375,8 @@ internal fun Transaction.parteFijaDelDisponible(
     eventosDelPeriodo: List<FinancialEvent>,
     /** Vuelta 108: solo el supuesto del gasto de un día normal (ver `parteFijaDelChecklist`). */
     completarLoSellado: Boolean = false,
+    /** Vuelta 126 (revisión, I1): `false` = sin las reglas no mensuales (ver `disponibleDelServidor`). */
+    conFrecuencias: Boolean = true,
 ): Map<String, Long> {
     val sellos = loadOccurrenceRows(uid)
     // Lo que Movi emparejó solo cuenta como un sello con su movimiento, por dos cosas:
@@ -376,6 +392,7 @@ internal fun Transaction.parteFijaDelDisponible(
     val reglas = RecurringRules.selectAll()
         .where { RecurringRules.userId eq uid }
         .map { it.toRule() }
+        .filter { conFrecuencias || it.frecuencia == null }
     return parteFijaDelChecklist(
         reglas = reglas,
         sellos = sellos + emparejadas,

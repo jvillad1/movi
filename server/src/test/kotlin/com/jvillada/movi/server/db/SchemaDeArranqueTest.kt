@@ -128,6 +128,10 @@ class SchemaDeArranqueTest {
         "recurring_rules" to "hacia_deuda",
         // Vuelta 72 — la pausa de una regla. `toRule()` la nombra: sin el ALTER, Pagos entero caería.
         "recurring_rules" to "pausada_desde",
+        // Vuelta 126 — cada cuánto vence una regla y su ancla. `toRule()` las nombra: sin el ALTER, Pagos
+        // entero caería con «column does not exist».
+        "recurring_rules" to "frecuencia",
+        "recurring_rules" to "primer_vencimiento",
         // Vuelta 63 — las cuotas de una compra diferida. `toFinancialEvent()` —o sea TODA lectura de
         // movimientos— la nombra: sin el ALTER, la app no mostraría un solo movimiento.
         "financial_events" to "cuotas",

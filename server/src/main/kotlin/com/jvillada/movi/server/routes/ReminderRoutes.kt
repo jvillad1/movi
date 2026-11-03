@@ -1,6 +1,8 @@
 package com.jvillada.movi.server.routes
 
 import com.jvillada.movi.shared.model.mesDeReferencia
+import com.jvillada.movi.shared.model.problemaDeLaFrecuencia
+import com.jvillada.movi.shared.model.venceEnElMesDe
 import com.jvillada.movi.server.reminders.periodoDelDueno
 import com.jvillada.movi.server.reminders.ocurrenciaEnJuego
 import com.jvillada.movi.server.reminders.ocurrenciaPorPreguntar
@@ -114,7 +116,85 @@ internal fun org.jetbrains.exposed.sql.ResultRow.toRule(conLaCreacion: Boolean =
     haciaDeuda = this[RecurringRules.haciaDeuda],
     // Vuelta 72: desde cuándo está en pausa (ver `RecurringRule.pausadaDesde`).
     pausadaDesde = this[RecurringRules.pausadaDesde],
+    // Vuelta 126: cada cuánto vence y su ancla (ver [frecuenciaDeLaFila]).
+    frecuencia = frecuenciaDeLaFila(),
+    primerVencimiento = primerVencimientoDeLaFila(),
 )
+
+/**
+ * Vuelta 126 · **la frecuencia guardada en esta fila de `recurring_rules`**, o `null` (cada mes). Un valor
+ * que no se entiende —una base tocada a mano— se lee como mensual: avisar de más, nunca perder un pago.
+ * MENSUAL vuelve como `null`, así una mensual viaja igual que antes (sin la clave). Lo leen los tres
+ * mapeadores (este [toRule], `toRulePair` del barrido y el contexto de Movi AI).
+ */
+internal fun org.jetbrains.exposed.sql.ResultRow.frecuenciaDeLaFila(): com.jvillada.movi.shared.model.FrecuenciaDelPago? {
+    val crudo = this[RecurringRules.frecuencia]?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    val f = runCatching { com.jvillada.movi.shared.model.FrecuenciaDelPago.valueOf(crudo) }.getOrNull() ?: return null
+    return f.takeIf { it != com.jvillada.movi.shared.model.FrecuenciaDelPago.MENSUAL }
+}
+
+/** Vuelta 126 · el ancla de esta fila, solo si su frecuencia no es mensual (ver [frecuenciaDeLaFila]). */
+internal fun org.jetbrains.exposed.sql.ResultRow.primerVencimientoDeLaFila(): String? =
+    this[RecurringRules.primerVencimiento]?.takeIf { frecuenciaDeLaFila() != null }
+
+/**
+ * Vuelta 126 · **¿el cliente sabe qué es una regla no mensual?** Solo con `?conFrecuencias=1` las
+ * respuestas que arman Pagos (`/api/recurring-rules`, `/api/payments/upcoming`,
+ * `/api/payments/occurrences`) traen las reglas cada 2, 3 o 6 meses, cada año o de una sola vez. Un APK
+ * anterior la pintaría como mensual (y un valor de [com.jvillada.movi.shared.model.FrecuenciaDelPago] que no
+ * conoce le rompería la lectura entera), así que no las ve. Mismo patrón que [pideLosAbonos]. Lo que el
+ * server calcula por su cuenta (el resumen del Inicio, la caja, Movi AI, los recordatorios) sí las respeta.
+ */
+internal fun io.ktor.server.application.ApplicationCall.pideLasFrecuencias(): Boolean =
+    request.queryParameters["conFrecuencias"] == "1"
+
+/** Los ids de las reglas no mensuales de [uid] (ver [pideLasFrecuencias]). */
+internal suspend fun idsDeLasNoMensuales(uid: String): Set<String> = dbQuery {
+    RecurringRules.selectAll()
+        .where { RecurringRules.userId eq uid }
+        .filter { it.frecuenciaDeLaFila() != null }
+        .mapTo(mutableSetOf()) { it[RecurringRules.id] }
+}
+
+/**
+ * Vuelta 126 · **lo que el server guarda de la frecuencia de un alta o una edición**: `(frecuencia, ancla,
+ * día)` normalizados, o el motivo para rechazarlo (400). La regla de [problemaDeLaFrecuencia] (`:core`, la
+ * misma de la hoja) más dos cosas del server: MENSUAL se guarda como NULL (con su ancla), y el día de una no
+ * mensual es el de su ancla. Un abono a una deuda siempre es mensual.
+ *
+ * [ancla] es la del pedido; [anclaGuardada] la que la fila ya tenía (en un PUT). **Una una-sola-vez nueva o
+ * con la fecha cambiada no puede caer antes del período en curso** ([inicioDelPeriodoEnCurso]): su único
+ * vencimiento quedaría antes del piso de la regla y no existiría nunca — el pago se perdería. Una cada N
+ * meses sí puede tener el ancla atrás: sus vencimientos siguientes existen.
+ */
+internal data class FrecuenciaGuardada(val frecuencia: String?, val ancla: String?, val dia: Int)
+
+internal fun frecuenciaParaGuardar(
+    pedida: com.jvillada.movi.shared.model.FrecuenciaDelPago?,
+    ancla: String?,
+    dia: Int,
+    esAbono: Boolean,
+    inicioDelPeriodoEnCurso: java.time.LocalDate,
+    anclaGuardada: String? = null,
+): Result<FrecuenciaGuardada> {
+    val diaSano = dia.coerceIn(1, 31)
+    if (pedida == null || pedida == com.jvillada.movi.shared.model.FrecuenciaDelPago.MENSUAL || esAbono) {
+        // Un abono que pide otra frecuencia se rechaza (la hoja no la ofrece; un cliente con un bug sí).
+        if (esAbono && pedida != null && pedida != com.jvillada.movi.shared.model.FrecuenciaDelPago.MENSUAL) {
+            return Result.failure(IllegalArgumentException(problemaDeLaFrecuencia(pedida, ancla, esAbono = true)))
+        }
+        return Result.success(FrecuenciaGuardada(null, null, diaSano))
+    }
+    problemaDeLaFrecuencia(pedida, ancla, esAbono = false)?.let { return Result.failure(IllegalArgumentException(it)) }
+    val fecha = java.time.LocalDate.parse(ancla!!.trim())
+    if (pedida == com.jvillada.movi.shared.model.FrecuenciaDelPago.UNA_VEZ &&
+        fecha.toString() != anclaGuardada?.trim() &&
+        fecha.isBefore(inicioDelPeriodoEnCurso)
+    ) {
+        return Result.failure(IllegalArgumentException("Esa fecha ya pasó: elige una de este período o después."))
+    }
+    return Result.success(FrecuenciaGuardada(pedida.name, fecha.toString(), fecha.dayOfMonth))
+}
 
 /**
  * **Vuelta 121 · desde cuándo corre la regla de esta fila**: la columna `active_from` o, si está vacía, el
@@ -274,10 +354,12 @@ fun Route.reminderRoutes() {
     get("/api/recurring-rules") {
         val uid = call.userId()
         val conAbonos = call.pideLosAbonos()
+        // Vuelta 126: una no mensual solo para quien sabe de frecuencias (ver [pideLasFrecuencias]).
+        val conFrecuencias = call.pideLasFrecuencias()
         val rules = dbQuery {
             RecurringRules.selectAll().where { RecurringRules.userId eq uid }.map { it.toRule() }
         }
-        call.respond(rules.filter { conAbonos || !it.esAbonoADeuda })
+        call.respond(rules.filter { (conAbonos || !it.esAbonoADeuda) && (conFrecuencias || it.frecuencia == null) })
     }
 
     post("/api/recurring-rules") {
@@ -289,6 +371,14 @@ fun Route.reminderRoutes() {
         rechazoDelMonto(body.amount)?.let { motivo ->
             return@post call.respond(HttpStatusCode.BadRequest, motivo)
         }
+        // Vuelta 126 · la frecuencia y su ancla (una mensual, sin cambios: NULL y el día pedido).
+        val frecuenciaGuardada = frecuenciaParaGuardar(
+            pedida = body.frecuencia,
+            ancla = body.primerVencimiento,
+            dia = body.dayOfMonth,
+            esAbono = !body.haciaDeuda.isNullOrBlank(),
+            inicioDelPeriodoEnCurso = diasDelPeriodo(AppClock.today(), ajustesDePeriodoDe(uid).mesDeReferencia()).start,
+        ).getOrElse { return@post call.respond(HttpStatusCode.BadRequest, it.message ?: "Frecuencia inválida") }
         val newId = "rr_${UUID.randomUUID()}"
         var storedDestinoId: String? = null
         var storedDeudaId: String? = null
@@ -315,7 +405,10 @@ fun Route.reminderRoutes() {
                 it[name] = body.name
                 it[category] = body.category
                 it[amount] = body.amount
-                it[dayOfMonth] = body.dayOfMonth.coerceIn(1, 31)
+                // Vuelta 126: el día de una no mensual es el de su ancla.
+                it[dayOfMonth] = frecuenciaGuardada.dia
+                it[frecuencia] = frecuenciaGuardada.frecuencia
+                it[primerVencimiento] = frecuenciaGuardada.ancla
                 it[type] = body.type.name
                 // El body de un cliente viejo no trae el campo; el default del modelo lo pone
                 // en true, que es el comportamiento que ese cliente espera.
@@ -345,9 +438,12 @@ fun Route.reminderRoutes() {
                         sePreguntaSiYaPagasteElDeEstePeriodoEl(
                             tipo = body.type,
                             desdeUnMovimiento = !body.eventoDeOrigen.isNullOrBlank(),
-                            dia = body.dayOfMonth.coerceIn(1, 31),
+                            dia = frecuenciaGuardada.dia,
                             hoyIso = hoy,
                             ajustes = ajustes,
+                            // Vuelta 126: una no mensual, solo si vence en este período.
+                            frecuencia = frecuenciaGuardada.frecuencia?.let { com.jvillada.movi.shared.model.FrecuenciaDelPago.valueOf(it) },
+                            primerVencimiento = frecuenciaGuardada.ancla,
                         )
                     if (aplica) arranqueDeLasCuotasSiYaPagasteEl(hoy, ajustes) else null
                 }
@@ -401,6 +497,9 @@ fun Route.reminderRoutes() {
             HttpStatusCode.Created,
             body.copy(
                 id = newId,
+                dayOfMonth = frecuenciaGuardada.dia,
+                frecuencia = frecuenciaGuardada.frecuencia?.let { com.jvillada.movi.shared.model.FrecuenciaDelPago.valueOf(it) },
+                primerVencimiento = frecuenciaGuardada.ancla,
                 accountId = storedAccountId,
                 destinoConocidoId = storedDestinoId,
                 activeFrom = storedActiveFrom,
@@ -429,6 +528,10 @@ fun Route.reminderRoutes() {
         var storedDeudaId: String? = null
         var problemaDelDebito: String? = null
         var storedPausadaDesde: String? = null
+        // Vuelta 126: la frecuencia que quedó (o el motivo para no guardar).
+        var storedFrecuencia: FrecuenciaGuardada? = null
+        var problemaDeLaFrecuenciaPedida: String? = null
+        val inicioDelPeriodo = diasDelPeriodo(AppClock.today(), ajustesDePeriodoDe(uid).mesDeReferencia()).start
         val updated = dbQuery {
             // Ola 9 · D — **un cliente viejo NO puede borrar la cuenta sin querer.**
             //
@@ -509,11 +612,35 @@ fun Route.reminderRoutes() {
             // Vuelta 72: la pausa no se escribe en un PUT (solo `…/pausar` y `…/reanudar`); la respuesta
             // dice la que quedó.
             storedPausadaDesde = filaActual?.get(RecurringRules.pausadaDesde)
+            // Vuelta 126 · **un PUT sin la frecuencia no la toca** (guarda por clave, como `pagoMinimo`): un
+            // APK viejo no manda el campo y no puede volver mensual una trimestral al corregirle el monto. El
+            // cliente nuevo manda siempre la suya (MENSUAL explícito para volver a cada mes). Una copia que
+            // reenvía el ancla guardada (atrás en el tiempo) se acepta tal cual.
+            val frecuenciaActual = filaActual?.frecuenciaDeLaFila()
+            val anclaActual = filaActual?.primerVencimientoDeLaFila()
+            val frecuencia = if (body.frecuencia == null) {
+                FrecuenciaGuardada(frecuenciaActual?.name, anclaActual, if (frecuenciaActual != null) filaActual?.get(RecurringRules.dayOfMonth) ?: body.dayOfMonth else body.dayOfMonth.coerceIn(1, 31))
+            } else {
+                frecuenciaParaGuardar(
+                    pedida = body.frecuencia,
+                    ancla = body.primerVencimiento,
+                    dia = body.dayOfMonth,
+                    esAbono = safeDeudaId != null,
+                    inicioDelPeriodoEnCurso = inicioDelPeriodo,
+                    anclaGuardada = anclaActual,
+                ).getOrElse {
+                    problemaDeLaFrecuenciaPedida = it.message ?: "Frecuencia inválida"
+                    return@dbQuery 0
+                }
+            }
+            storedFrecuencia = frecuencia
             RecurringRules.update({ (RecurringRules.id eq id) and (RecurringRules.userId eq uid) }) {
                 it[name] = body.name
                 it[category] = body.category
                 it[amount] = body.amount
-                it[dayOfMonth] = body.dayOfMonth.coerceIn(1, 31)
+                it[dayOfMonth] = frecuencia.dia
+                it[RecurringRules.frecuencia] = frecuencia.frecuencia
+                it[primerVencimiento] = frecuencia.ancla
                 it[type] = body.type.name
                 it[remindMe] = body.remindMe
                 it[accountId] = safeAccountId
@@ -524,10 +651,14 @@ fun Route.reminderRoutes() {
             }
         }
         problemaDelDebito?.let { return@put call.respond(HttpStatusCode.BadRequest, it) }
+        problemaDeLaFrecuenciaPedida?.let { return@put call.respond(HttpStatusCode.BadRequest, it) }
         if (updated == 0) call.respond(HttpStatusCode.NotFound)
         else call.respond(
             body.copy(
                 id = id,
+                dayOfMonth = storedFrecuencia?.dia ?: body.dayOfMonth,
+                frecuencia = storedFrecuencia?.frecuencia?.let { com.jvillada.movi.shared.model.FrecuenciaDelPago.valueOf(it) },
+                primerVencimiento = storedFrecuencia?.ancla,
                 accountId = storedAccountId,
                 destinoConocidoId = storedDestinoId,
                 activeFrom = storedActiveFrom,
@@ -637,7 +768,11 @@ fun Route.reminderRoutes() {
     get("/api/payments/upcoming") {
         val uid = call.userId()
         val conAbonos = call.pideLosAbonos()
-        call.respond(proximosPagos(uid, AppClock.today()).filter { conAbonos || !it.rule.esAbonoADeuda })
+        val conFrecuencias = call.pideLasFrecuencias()
+        call.respond(
+            proximosPagos(uid, AppClock.today())
+                .filter { (conAbonos || !it.rule.esAbonoADeuda) && (conFrecuencias || it.rule.frecuencia == null) },
+        )
     }
 
     // ── «Esto ya ocurrió» ─────────────────────────────────────────────────────
@@ -658,9 +793,10 @@ fun Route.reminderRoutes() {
     get("/api/payments/occurrences") {
         val uid = call.userId()
         val estados = ocurrenciasDelPeriodo(uid, AppClock.today())
-        if (call.pideLosAbonos()) return@get call.respond(estados)
-        val abonos = idsDeLosAbonos(uid)
-        call.respond(estados.filter { it.ruleId !in abonos })
+        val abonos = if (call.pideLosAbonos()) emptySet() else idsDeLosAbonos(uid)
+        // Vuelta 126: la ocurrencia de una no mensual, solo para quien sabe de frecuencias.
+        val noMensuales = if (call.pideLasFrecuencias()) emptySet() else idsDeLasNoMensuales(uid)
+        call.respond(estados.filter { it.ruleId !in abonos && it.ruleId !in noMensuales })
     }
 
     /**
@@ -973,6 +1109,11 @@ internal fun org.jetbrains.exposed.sql.Transaction.sellarOcurrencia(
     // un aviso que ya se pagó. No es alcanzable desde la pantalla (solo manda el periodo que
     // le dio el GET), pero este archivo ya argumenta, para las cuatro puertas, que la UI
     // ofrece y el endpoint no puede confiar en eso. Vale igual acá.
+    // Vuelta 126 · una regla no mensual solo se sella en un mes en que vence: un pago fuera de su mes no
+    // tilda otro mes (ni salda la trimestral de un mes en que no existe).
+    if (!rule.venceEnElMesDe(period)) {
+        return MarcaResult.Error(HttpStatusCode.BadRequest, "En ese mes no vence este pago.")
+    }
     val vencimientoDelPeriodo = occurrenceInMonth(YearMonth.parse(period), rule.dayOfMonth)
     if (vencimientoDelPeriodo.isAfter(today) && !pagadoAntesDelVencimiento(uid, eventId, vencimientoDelPeriodo, today)) {
         return MarcaResult.Error(

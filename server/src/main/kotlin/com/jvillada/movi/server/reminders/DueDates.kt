@@ -13,6 +13,12 @@ import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.fechaEsperadaDelIngreso
 import com.jvillada.movi.shared.model.pausadaParaElVencimiento
+import com.jvillada.movi.shared.model.FrecuenciaDelPago
+import com.jvillada.movi.shared.model.esMensual
+import com.jvillada.movi.shared.model.frecuenciaEfectiva
+import com.jvillada.movi.shared.model.primerMesQueVenceDesde
+import com.jvillada.movi.shared.model.venceEnElMes
+import com.jvillada.movi.shared.model.vencimientoEnElPeriodoDeLaFecha
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
@@ -56,7 +62,10 @@ fun periodOf(date: LocalDate): String = YearMonth.from(date).toString()
  * [periodOf] del vencimiento por el día de la regla, que no se mueve.
  */
 fun fechaEsperada(rule: RecurringRule, vencimiento: LocalDate, settings: PeriodSettings): LocalDate =
-    LocalDate.parse(fechaEsperadaDelIngreso(rule.type, rule.dayOfMonth, vencimiento.toString(), settings))
+    // Revisión de la 126 (M5): el corrimiento es del salario, que es de cada mes. Un ingreso cada N meses o de
+    // una sola vez se espera el día de su fecha.
+    if (!rule.esMensual) vencimiento
+    else LocalDate.parse(fechaEsperadaDelIngreso(rule.type, rule.dayOfMonth, vencimiento.toString(), settings))
 
 /**
  * Los días del período del dueño que contiene [fecha], con los dos bordes incluidos.
@@ -79,6 +88,63 @@ fun periodoDelDueno(fecha: LocalDate, settings: PeriodSettings, zone: ZoneId = A
     if (settings.esQuincenal) return periodOf(fecha)
     val millis = appDateToEpochMillis(fecha, zone) + 12 * 3_600_000L
     return periodoDe(millis, settings).prefijo
+}
+
+/**
+ * Vuelta 126 · **¿[rule] vence en el mes de [fecha]?** La regla de la frecuencia de `:core`
+ * ([com.jvillada.movi.shared.model.venceEnElMes]) con la fecha de `java.time`. Una mensual: siempre.
+ */
+fun venceEnSuMes(rule: RecurringRule, fecha: LocalDate): Boolean = rule.venceEnElMes(fecha.year, fecha.monthValue)
+
+/**
+ * Vuelta 126 · **la ocurrencia de [rule] en el mes de [fecha] si ahí vence, o la del primer mes siguiente
+ * en que vence** (el día de la regla, recortado). En una mensual devuelve [fecha] tal cual: el motor de
+ * siempre no cambia. `null` solo en una sola vez cuyo ancla quedó antes de ese mes.
+ */
+fun siguienteQueVence(rule: RecurringRule, fecha: LocalDate): LocalDate? {
+    if (rule.esMensual) return fecha
+    val (anio, mes) = rule.primerMesQueVenceDesde(fecha.year, fecha.monthValue) ?: return null
+    val ym = YearMonth.of(anio, mes)
+    return if (ym == YearMonth.from(fecha)) fecha else occurrenceInMonth(ym, rule.dayOfMonth)
+}
+
+/** Vuelta 126 · ¿[rule] es de una sola vez? (con su ancla legible: si no, cuenta como mensual). */
+fun esDeUnaSolaVez(rule: RecurringRule): Boolean = rule.frecuenciaEfectiva == FrecuenciaDelPago.UNA_VEZ
+
+/** Vuelta 126 · el ancla de una regla de una sola vez, en `java.time`. */
+fun anclaDeUnaSolaVez(rule: RecurringRule): LocalDate? =
+    rule.takeIf(::esDeUnaSolaVez)?.primerVencimiento?.let { runCatching { LocalDate.parse(it.trim()) }.getOrNull() }
+
+/**
+ * Vuelta 126 · **¿la regla de una sola vez [rule] ya no tiene nada que pagar?** Su único vencimiento está
+ * sellado ([occurredPeriods]) o quedó antes del piso de la regla (con «¿Ya pagaste el de este período?»
+ * en «Sí», el ancla de este período no existe). Entonces no tiene próximo vencimiento ni avisa. Una regla
+ * que no es de una sola vez: `false`.
+ */
+fun unaSolaVezYaNoDebe(rule: RecurringRule, occurredPeriods: Set<String>, settings: PeriodSettings): Boolean {
+    val ancla = anclaDeUnaSolaVez(rule) ?: return false
+    return periodOf(ancla) in occurredPeriods || !ruleIsActiveOn(rule, ancla, settings)
+}
+
+/**
+ * Vuelta 126 (revisión, C1) · **¿la regla de una sola vez [rule] sale de `/upcoming` en [hoy]?** Sí si ya no
+ * debe nada ([unaSolaVezYaNoDebe]) **y** su fecha no cae en el período en curso. Pagada en su propio período
+ * (antes o después de su fecha) se queda ahí todo ese período: el checklist arma sus filas desde `/upcoming`,
+ * y sin ella la fila pagada desaparecía mientras el server sí sacaba su pago del gasto variable — «Te quedan»
+ * subía el monto entero. Desde el período siguiente, no vuelve. Antes de su piso (con «¿Ya pagaste?» en sí,
+ * o creada después de su fecha) no existe nunca.
+ */
+fun unaSolaVezSaleDeLosProximos(
+    rule: RecurringRule,
+    hoy: LocalDate,
+    occurredPeriods: Set<String>,
+    settings: PeriodSettings,
+    zone: ZoneId = AppClock.zone,
+): Boolean {
+    val ancla = anclaDeUnaSolaVez(rule) ?: return false
+    if (!ruleIsActiveOn(rule, ancla, settings, zone)) return true
+    if (periodOf(ancla) !in occurredPeriods) return false
+    return ancla !in diasDelPeriodo(hoy, settings.mesDeReferencia(), zone)
 }
 
 /** La primera ocurrencia de [dayOfMonth] que cae en [desde] o después. */
@@ -151,8 +217,17 @@ fun ocurrenciaPorPreguntar(
 ): LocalDate? {
     // Vuelta 105 · una obligación mensual se cuenta por el mes de referencia (identidad en el mensual).
     val settings = settings.mesDeReferencia()
-    val enJuego = ocurrenciaEnJuego(hoy, rule.dayOfMonth, settings, zone)
-    val enGracia = ocurrenciaEnGracia(hoy, rule.dayOfMonth, graceDays)
+    // Vuelta 126 · una de una sola vez se pregunta desde el período de su fecha y, mientras no se pague, en
+    // todos los que siguen (vencida: no se pierde). Antes de ese período no existe.
+    anclaDeUnaSolaVez(rule)?.let { ancla ->
+        return ancla.takeIf { !it.isAfter(diasDelPeriodo(hoy, settings, zone).endInclusive) }
+    }
+    // Vuelta 126 · la ocurrencia en juego sale de la regla única de `:core` (`vencimientoEnElPeriodo`): el
+    // primer vencimiento del período en un mes en que la regla vence. En una mensual es exactamente la de
+    // [ocurrenciaEnJuego] (lo prueba `PagoCadaTantosMesesTest` contra el motor de la vuelta 125); en un período
+    // estirado a mano que trae dos meses, una no mensual toma la del mes en que vence, no la primera.
+    val enJuego = vencimientoEnElPeriodoDeLaFecha(rule, hoy.toString(), settings)?.let { LocalDate.parse(it) }
+    val enGracia = ocurrenciaEnGracia(hoy, rule.dayOfMonth, graceDays)?.takeIf { venceEnSuMes(rule, it) }
     val usarLaDeGracia = enGracia != null &&
         ruleIsActiveOn(rule, enGracia, settings, zone) &&
         (enJuego == null || (enGracia.isBefore(enJuego) && enJuego.isAfter(hoy)))
@@ -184,7 +259,12 @@ fun ocurrenciaAnteriorQuePisaElPeriodo(
     // Vuelta 105 · una obligación mensual se cuenta por el mes de referencia (identidad en el mensual).
     val settings = settings.mesDeReferencia()
     val inicio = diasDelPeriodo(hoy, settings, zone).start
+    // Vuelta 126 · una de una sola vez no tiene «la anterior»: su único vencimiento lo sigue preguntando
+    // [ocurrenciaPorPreguntar] mientras no se pague.
+    if (esDeUnaSolaVez(rule)) return null
     val anterior = ultimaOcurrenciaHasta(inicio.minusDays(1), rule.dayOfMonth)
+    // Vuelta 126 · si en ese mes la regla no vence, no hay ocurrencia anterior (una mensual siempre vence).
+    if (!venceEnSuMes(rule, anterior)) return null
     if (occurrenceWindow(anterior, settings = settings).endInclusive.isBefore(inicio)) return null
     return anterior.takeIf { ruleIsActiveOn(rule, it, settings, zone) }
 }
@@ -265,12 +345,18 @@ fun dueDateFor(
 ): LocalDate {
     // Vuelta 105 · una obligación mensual se cuenta por el mes de referencia (identidad en el mensual).
     val settings = settings.mesDeReferencia()
-    val natural = if (settings.esMesDeCalendario) {
+    // Vuelta 126 · una de una sola vez vence en su fecha y no rueda: si no se paga, sigue vencida (no se
+    // pierde). Pagada o antes de su piso no tiene próximo (ver [unaSolaVezYaNoDebe]: quien lista la saca).
+    anclaDeUnaSolaVez(rule)?.let { return it }
+    val natural0 = if (settings.esMesDeCalendario) {
         occurrenceInMonth(YearMonth.from(today), rule.dayOfMonth)
     } else {
         // Un período sin ocurrencia (acortado a mano) arranca por la primera que venga después.
         primeraOcurrenciaDesde(diasDelPeriodo(today, settings).start, rule.dayOfMonth)
     }
+    // Vuelta 126 · cada N meses: si en el mes de la ocurrencia natural la regla no vence, la natural es la
+    // del primer mes siguiente en que sí. En una mensual, la misma fecha (nada cambia).
+    val natural = siguienteQueVence(rule, natural0) ?: natural0
     // **El piso de la regla** (ver [arranqueDeLaRegla]): la primera fecha en la que puede haber
     // un vencimiento. Dónde queda depende de si `activeFrom` es un desembolso —el día siguiente,
     // porque un desembolso no es una ocurrencia— o el movimiento que originó la regla —el arranque
@@ -283,7 +369,7 @@ fun dueDateFor(
     // como UPCOMING, sin «vencido» ni aviso. Si la última que llegó lleva ≤ [graceDays] días y su
     // sello (`periodOf`, el mes del vencimiento, que no cambia) no está puesto, sigue siendo el
     // vencimiento vigente. Sellada, se sigue de largo como siempre.
-    val enGracia = ocurrenciaEnGracia(today, rule.dayOfMonth, graceDays)
+    val enGracia = ocurrenciaEnGracia(today, rule.dayOfMonth, graceDays)?.takeIf { venceEnSuMes(rule, it) }
     if (enGracia != null &&
         enGracia.isBefore(natural) &&
         periodOf(enGracia) !in occurredPeriods &&
@@ -291,8 +377,8 @@ fun dueDateFor(
     ) {
         return enGracia
     }
-    var due =if (ChronoUnit.DAYS.between(natural, today) > graceDays) {
-        occurrenceInMonth(YearMonth.from(natural).plusMonths(1), rule.dayOfMonth)
+    var due = if (ChronoUnit.DAYS.between(natural, today) > graceDays) {
+        mesSiguienteQueVence(rule, natural)
     } else {
         natural
     }
@@ -319,16 +405,25 @@ fun dueDateFor(
     // absurda (un año 2400 mal tecleado) daría un bucle infinito en vez de un dato raro.
     var sinArrancar = 0
     while (piso != null && due.isBefore(piso) && sinArrancar < MAX_OCCURRENCE_ROLLS) {
-        due = occurrenceInMonth(YearMonth.from(due).plusMonths(1), rule.dayOfMonth)
+        due = mesSiguienteQueVence(rule, due)
         sinArrancar++
     }
 
     var rodadas = 0
     while (periodOf(due) in occurredPeriods && rodadas < MAX_OCCURRENCE_ROLLS) {
-        due = occurrenceInMonth(YearMonth.from(due).plusMonths(1), rule.dayOfMonth)
+        due = mesSiguienteQueVence(rule, due)
         rodadas++
     }
     return due
+}
+
+/**
+ * La ocurrencia del mes siguiente al de [due] — o, vuelta 126, la del primer mes después en que la regla
+ * vence. En una mensual, exactamente la del mes siguiente, como siempre.
+ */
+private fun mesSiguienteQueVence(rule: RecurringRule, due: LocalDate): LocalDate {
+    val siguiente = occurrenceInMonth(YearMonth.from(due).plusMonths(1), rule.dayOfMonth)
+    return siguienteQueVence(rule, siguiente) ?: siguiente
 }
 
 /**
@@ -362,6 +457,9 @@ fun upcomingPayments(
 ): List<UpcomingPayment> =
     rules.mapNotNull { rule ->
         val ocurridos = occurredBy[rule.id].orEmpty()
+        // Vuelta 126: una de una sola vez ya pagada (o antes de su piso) no tiene próximo vencimiento, salvo
+        // en su propio período, donde su fila pagada sigue en la lista (ver [unaSolaVezSaleDeLosProximos]).
+        if (unaSolaVezSaleDeLosProximos(rule, today, ocurridos, settings)) return@mapNotNull null
         val vigente = dueDateFor(rule, today, DEFAULT_GRACE_DAYS, ocurridos, settings)
         // Vuelta 72: una regla pausada no tiene próximo vencimiento desde su pausa. Lo ya pagado del
         // período viaja en su ocurrencia (`OccurrenceState.reglaPausada`), no acá.
@@ -392,6 +490,8 @@ fun siguienteVencimiento(
     settings: PeriodSettings,
 ): LocalDate? {
     if (rule.esPagoUnico) return null
+    // Vuelta 126: una de una sola vez tampoco tiene otro.
+    if (esDeUnaSolaVez(rule)) return null
     val siguiente = dueDateFor(rule, today, DEFAULT_GRACE_DAYS, occurredPeriods + periodOf(vigente), settings)
     if (!siguiente.isAfter(vigente)) return null
     // Vuelta 72: el siguiente de una regla pausada no existe.
@@ -436,6 +536,8 @@ fun selectDueForReminder(
             // y en los totales) — lo único que se apaga es el aviso.
             rule.remindMe &&
                 rule.type == TransactionType.EXPENSE &&
+                // Vuelta 126: una de una sola vez ya pagada no avisa.
+                !unaSolaVezYaNoDebe(rule, ocurridos, settings) &&
                 // Vuelta 72: una regla pausada no avisa por lo que vence en su pausa.
                 !pausadaEn(rule, due) &&
                 // Re-revisión: la tarjeta cuyo mínimo del extracto ya está cubierto no avisa por ese pago.

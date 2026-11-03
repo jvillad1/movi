@@ -5434,3 +5434,19 @@ tarjeta de Movi AI necesita el perfil para saber «este período»), el lugar se
 del mismo alto: `EsqueletoDeYaPagaste` mientras se lee (y la acción que depende de la respuesta,
 apagada), `PreguntaDeYaPagaste`, o `RenglonDeLoQueEsperaMovi` («Movi lo espera en este período · Su fecha
 de este período todavía no llega»). Las tres miden al menos el toque de 48 con dos renglones de texto.
+
+## Vuelta 126 · «¿Cada cuánto?»: pastillas que bajan en renglones, una fecha que viene y lo que no toca este período
+
+- **Una elección de entre varias cortas va en `PildoraDeFiltro` dentro de un `FlowRow`** (`SelectorDeCadaCuanto`,
+  `ui/recurrentes/CadaCuanto.kt`): a 360 dp con la letra al 130 % las seis («Cada mes» … «Una sola vez») bajan a
+  un segundo renglón en vez de cortarse. No en `SheetChip` a pesos iguales: con seis, cada una quedaría con un
+  sexto del ancho.
+- **Una fecha futura usa el selector de siempre con `haciaAdelante = true`** (`SelectorDeFecha`): sin «Hoy» /
+  «Ayer», con los días que vienen habilitados (hasta 24 meses) y apagados los anteriores a `desde`. La fila dice
+  la fecha elegida y «Elegir» / «Listo» es un `Boton` `Fantasma` S: no compite con el principal de la hoja.
+- **Lo que existe pero no cuenta en esta vista va plegado al final, con su conteo** («Otros pagos fijos · N»,
+  como «Pausados · N»): cada fila dice por qué no está arriba («Cada 3 meses · el próximo, 15 dic · $450.000») y
+  abre su hoja. No suma en ninguna cifra de la pantalla.
+- **Una restricción que depende de otra elección se dice en una línea debajo, en `aviso`, y apaga el guardar
+  con la misma frase** («En dólares solo puede ser cada mes o cada año.»): no se esconde la opción ni se cambia
+  sola.
