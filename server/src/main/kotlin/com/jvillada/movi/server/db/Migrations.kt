@@ -63,6 +63,8 @@ object Migrations {
         pasarLasReglasDeComercioALaBase()
         cifrarLosPapelesEnClaro()
         agrandarLaClaveDeLosCierres()
+        // Vuelta 117: los turnos de Movi AI de antes de las conversaciones con identidad.
+        com.jvillada.movi.server.ai.agruparLosTurnosSueltos(this, uid = null)
     }
 
     /** Las tablas cuya clave es el id de un período, que con una quincena («2026-10-15») mide 10. */

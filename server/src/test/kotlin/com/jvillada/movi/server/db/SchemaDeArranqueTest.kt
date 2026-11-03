@@ -155,6 +155,10 @@ class SchemaDeArranqueTest {
         "ai_turns" to "fichas_cache_escritas",
         "metricas_de_servicios" to "costo_microdolares",
         "ia_por_dia" to "costo_microdolares",
+        // Vuelta 117 — la conversación de cada turno. `ai_turns` existe en producción y el guardado de
+        // cada turno, la lista y la conversación abierta la nombran: sin el ALTER, Movi AI no guardaría
+        // nada y el chat no recargaría.
+        "ai_turns" to "conversacion_id",
     )
 
     /**

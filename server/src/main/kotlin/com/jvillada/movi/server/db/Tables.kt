@@ -887,14 +887,16 @@ object CorreosDescartados : Table("correos_descartados") {
  *
  * **Es la tabla más sensible de Movi**, y por eso tiene reglas propias, todas a propósito:
  *
- * - **No hay endpoint que la lea.** Se consulta por `psql`, como todo lo demás que es de
- *   diagnóstico. Una tabla con las preguntas de alguien sobre su plata no necesita además una
- *   puerta HTTP que alguien tenga que proteger bien para siempre.
+ * - **Solo la lee su dueño.** Desde la Ola 3 la app recarga la conversación, y desde la vuelta 117
+ *   lista, abre y borra sus conversaciones (`/api/ai/conversaciones`); todas esas lecturas filtran
+ *   por el `user_id` del token. Lo demás (consultas, fichas, modelo) sigue siendo de diagnóstico y
+ *   se mira por `psql`.
  * - **Las imágenes no entran.** Una foto de un recibo es justo lo que no hay que duplicar: en
  *   [imagen] queda que la hubo, no la foto.
  * - **Se recorta y se caduca.** Cada campo tiene tope y de cada dueño se guardan las últimas
- *   [CUANTAS_CONVERSACIONES_SE_GUARDAN]: lo que sirve para diagnosticar es lo de ayer, no lo del
- *   año pasado, y un historial infinito es un riesgo que crece solo.
+ *   `CONVERSACIONES_QUE_SE_GUARDAN` conversaciones (vuelta 117; antes, los últimos 200 turnos, que
+ *   con la lista a la vista le habrían borrado chats en silencio). Borrar una conversación se lleva
+ *   el texto de sus turnos de una vez (ver [CONVERSACION_BORRADA]).
  * - **Guardar nunca puede romper una respuesta.** Ver `guardarLaConversacion`.
  */
 object AiTurns : Table("ai_turns") {
@@ -937,12 +939,56 @@ object AiTurns : Table("ai_turns") {
      * guardaron: cuentan como cero. Nullable por la regla de siempre (la tabla ya existe).
      */
     val fichasCacheEscritas = long("fichas_cache_escritas").nullable()
+    /**
+     * Vuelta 117 · **la conversación del turno** ([ConversacionesConElAsistente]). NULL en los turnos
+     * de antes, que `agruparLosTurnosSueltos` agrupa al arrancar; vacío
+     * ([CONVERSACION_BORRADA]) en lo que queda de un turno borrado dentro de la ventana del tope del
+     * mes: sin texto, solo su fecha, su modelo y sus fichas (ver `borrarLaConversacion`). Nullable por
+     * la regla de siempre (la tabla ya existe), y **sin índice propio**: un `CREATE INDEX` suelto sobre
+     * una tabla con datos puede tumbar el arranque; toda consulta filtra también por `user_id`, que sí
+     * lo tiene.
+     */
+    val conversacionId = varchar("conversacion_id", 50).nullable()
     override val primaryKey = PrimaryKey(id)
     init { index("idx_ai_turns_user", false, userId) }
 }
 
 /**
- * **Desde cuándo corre la conversación en curso con el asistente** (Ola 3). Una fila por dueño:
+ * Lo que queda en [AiTurns.conversacionId] de un turno de una conversación borrada que **no** se
+ * puede borrar todavía: el que fue al modelo dentro de la ventana que cuenta el tope del mes y el
+ * costo (`DIAS_QUE_NO_SE_PODAN`). Se le borra el texto y se suelta de su conversación; lo borra
+ * entero `podarLasConversaciones` —que corre cuando una conversación recibe su primera pregunta— si
+ * ya salió de la ventana: no antes, ni solo. Sin esto, borrar una conversación devolvía preguntas del
+ * tope.
+ */
+const val CONVERSACION_BORRADA = ""
+
+/**
+ * **Las conversaciones del dueño con el asistente** (vuelta 117). Una fila por conversación; sus
+ * turnos están en [AiTurns] con su `conversacion_id`. [titulo] es la primera pregunta recortada
+ * (`tituloDeLaConversacion`), vacío mientras no tiene ninguna: una conversación vacía no se lista y
+ * «Nueva conversación» sobre una vacía no crea otra. [ultimaEn] es la última pregunta: ordena la lista,
+ * decide cuál es la «más reciente» (la que siguen un APK viejo y una pregunta sin id) y cuál se borra
+ * al pasar el tope (`CONVERSACIONES_QUE_SE_GUARDAN`).
+ *
+ * Tabla nueva: entra por `SchemaUtils.create`, con su índice adentro del CREATE TABLE. Reemplaza a
+ * [ConversacionesDelAsistente], que queda solo para agrupar los turnos viejos.
+ */
+object ConversacionesConElAsistente : Table("conversaciones_del_asistente") {
+    val id       = varchar("id", 50)
+    val userId   = varchar("user_id", 50)
+    val titulo   = varchar("titulo", 80)
+    val creadaEn = long("creada_en")
+    val ultimaEn = long("ultima_en")
+    override val primaryKey = PrimaryKey(id)
+    init { index("idx_conversaciones_del_asistente_user", false, userId) }
+}
+
+/**
+ * **Desde cuándo corría la conversación en curso con el asistente** (Ola 3). Desde la vuelta 117 la
+ * reemplaza [ConversacionesConElAsistente]: esta tabla ya no se escribe, y su marca solo sirve para
+ * partir en dos los turnos de antes al agruparlos (`agruparLosTurnosSueltos`).
+ * Lo de abajo es cómo funcionaba. Una fila por dueño:
  * «Nueva conversación» la mueve a ahora, y `GET /api/ai/conversacion` devuelve solo los turnos de
  * [AiTurns] posteriores. No borra nada: los turnos viejos siguen ahí para diagnosticar (y se podan
  * solos, ver `CUANTAS_CONVERSACIONES_SE_GUARDAN`).

@@ -5,6 +5,7 @@ import com.anthropic.models.messages.Tool
 import com.jvillada.movi.server.balance.formatAmount
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.AccionesPropuestas
+import com.jvillada.movi.server.db.AiTurns
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.VoidEvents
@@ -40,6 +41,7 @@ import org.jetbrains.exposed.sql.Transaction
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.batchInsert
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inSubQuery
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
 import java.time.LocalDate
@@ -572,10 +574,15 @@ internal const val PROPUESTAS_QUE_SE_RECUERDAN = 6
  * "No", el asistente lo sabe». Va pegado a la pregunta (después de todo lo cacheado), solo con las
  * últimas de la conversación en curso, y `null` si no hubo ninguna — que es casi siempre.
  */
-internal suspend fun loQueElDuenoDecidio(uid: String, desde: Long): String? {
+internal suspend fun loQueElDuenoDecidio(uid: String, conversacionId: String?): String? {
+    // Vuelta 117: «esta conversación» es la que está abierta, no lo posterior a una marca. Sin
+    // conversación (no se pudo elegir), nada: mejor no recordarle algo de otra charla.
+    if (conversacionId == null) return null
     val recientes = dbQuery {
+        val turnos = AiTurns.select(AiTurns.id)
+            .where { (AiTurns.userId eq uid) and (AiTurns.conversacionId eq conversacionId) }
         AccionesPropuestas.selectAll()
-            .where { (AccionesPropuestas.userId eq uid) and (AccionesPropuestas.creadaEn greater desde) }
+            .where { (AccionesPropuestas.userId eq uid) and (AccionesPropuestas.turnoId inSubQuery turnos) }
             .orderBy(AccionesPropuestas.creadaEn to SortOrder.DESC)
             .limit(PROPUESTAS_QUE_SE_RECUERDAN)
             .mapNotNull { fila ->

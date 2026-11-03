@@ -264,6 +264,11 @@ open class NoOpRepository(
     override suspend fun chatAi(request: AiChatRequest) = error("stub")
     override suspend fun getConversacionDelAsistente(): ConversacionDelAsistente = ConversacionDelAsistente()
     override suspend fun empezarConversacionNueva() {}
+    override suspend fun getConversaciones(): com.jvillada.movi.shared.model.ListaDeConversaciones = com.jvillada.movi.shared.model.ListaDeConversaciones()
+    override suspend fun getConversacion(id: String): ConversacionDelAsistente = ConversacionDelAsistente(id = id)
+    override suspend fun crearConversacion(): com.jvillada.movi.shared.model.ConversacionEnLaLista =
+        com.jvillada.movi.shared.model.ConversacionEnLaLista(id = "cv_noop", titulo = "", creadaEn = 0, ultimaEn = 0, mensajes = 0)
+    override suspend fun borrarConversacion(id: String) {}
     override suspend fun resolverPropuesta(id: String, estado: EstadoDePropuesta) {}
     override suspend fun getMemoriaDelAsistente(): List<RecuerdoDelAsistente> = emptyList()
     override suspend fun guardarRecuerdo(texto: String, origen: OrigenDelRecuerdo, propuestaId: String?): RecuerdoDelAsistente = error("stub")

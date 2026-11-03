@@ -1,8 +1,6 @@
 package com.jvillada.movi.server.ai
 
 import com.jvillada.movi.server.db.AiTurns
-import com.jvillada.movi.server.db.ConversacionesDelAsistente
-import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.shared.model.ChatMessage
 import com.jvillada.movi.shared.model.ChatRole
 import com.jvillada.movi.shared.model.ConversacionDelAsistente
@@ -10,10 +8,9 @@ import com.jvillada.movi.shared.model.PreguntaSugerida
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.sql.SortOrder
+import org.jetbrains.exposed.sql.Transaction
 import org.jetbrains.exposed.sql.and
-import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
-import org.jetbrains.exposed.sql.update
 
 /**
  * # La conversación sobrevive (Ola 3)
@@ -25,9 +22,9 @@ import org.jetbrains.exposed.sql.update
  *
  * Dos decisiones:
  *
- * - **Se devuelve la conversación EN CURSO, no el historial.** «Nueva conversación» no borra nada:
- *   marca desde cuándo corre la actual ([ConversacionesDelAsistente]), y los turnos viejos siguen en
- *   [AiTurns] para diagnosticar, hasta que la poda los saque.
+ * - **Desde la vuelta 117 hay varias conversaciones** (ver `LasConversaciones.kt`): cada turno tiene
+ *   la suya, y la pantalla abre la que el dueño elige. `GET /api/ai/conversacion` sigue devolviendo
+ *   la más reciente, para un APK viejo.
  * - **Lo que se pinta no es lo que viaja al modelo.** El dueño ve los últimos [TURNOS_QUE_SE_VEN];
  *   al modelo se le manda solo el tramo de [tramoParaElModelo], con tope de mensajes y de
  *   caracteres. Ver ahí por qué.
@@ -35,6 +32,13 @@ import org.jetbrains.exposed.sql.update
 
 /** Cuántos turnos (pregunta + respuesta) se le muestran al volver. Veinte son cuarenta globos. */
 internal const val TURNOS_QUE_SE_VEN = 20
+
+/**
+ * Vuelta 117 · cuántos turnos se le muestran al abrir una conversación de la lista. Más que
+ * [TURNOS_QUE_SE_VEN], que es lo que vuelve a un APK viejo: abrir una conversación es querer verla.
+ * Al modelo igual viaja solo el tramo de [tramoParaElModelo].
+ */
+internal const val TURNOS_DE_UNA_CONVERSACION_QUE_SE_VEN = 100
 
 /**
  * **Tope del tramo que viaja al modelo, en caracteres.** El de mensajes ([ULTIMOS_MENSAJES_QUE_VIAJAN])
@@ -63,13 +67,6 @@ fun tramoParaElModelo(mensajes: List<ChatMessage>): List<ChatMessage> {
         usados += largo
     }
     return tramo.toList().dropWhile { it.role != ChatRole.USER }
-}
-
-/** Desde cuándo corre la conversación en curso de [uid]; 0 si nunca empezó una nueva. */
-internal suspend fun conversacionEmpezadaEn(uid: String): Long = dbQuery {
-    ConversacionesDelAsistente.selectAll()
-        .where { ConversacionesDelAsistente.userId eq uid }
-        .firstOrNull()?.get(ConversacionesDelAsistente.empezadaEn) ?: 0L
 }
 
 /** Una fila de [AiTurns] de la conversación en curso, lo justo para pintarla. */
@@ -101,38 +98,37 @@ internal fun preguntaSugeridaDelTurno(modelo: String, consultas: String): String
         ?.takeIf { PreguntaSugerida.deId(it) != null }
 }
 
-/** Los últimos [TURNOS_QUE_SE_VEN] turnos de la conversación en curso de [uid], del más viejo al más nuevo. */
-internal suspend fun turnosDeLaConversacion(uid: String): List<TurnoGuardado> {
-    val desde = conversacionEmpezadaEn(uid)
-    return dbQuery {
-        AiTurns.selectAll()
-            .where { (AiTurns.userId eq uid) and (AiTurns.creadoEn greater desde) }
-            .orderBy(AiTurns.creadoEn to SortOrder.DESC)
-            .limit(TURNOS_QUE_SE_VEN)
-            .map {
-                TurnoGuardado(
-                    id = it[AiTurns.id],
-                    pregunta = it[AiTurns.pregunta],
-                    respuesta = it[AiTurns.respuesta],
-                    teniaImagen = it[AiTurns.imagen],
-                    creadoEn = it[AiTurns.creadoEn],
-                    preguntaSugerida = preguntaSugeridaDelTurno(it[AiTurns.modelo], it[AiTurns.consultas]),
-                )
-            }
-            .reversed()
-    }
-}
+/**
+ * Los últimos [cuantos] turnos de la conversación [conversacionId] de [uid], del más viejo al más
+ * nuevo. Filtra por el dueño además del id: una conversación ajena no devuelve nada.
+ */
+internal fun Transaction.turnosDeLaConversacionEn(uid: String, conversacionId: String, cuantos: Int): List<TurnoGuardado> =
+    AiTurns.selectAll()
+        .where { (AiTurns.userId eq uid) and (AiTurns.conversacionId eq conversacionId) }
+        .orderBy(AiTurns.creadoEn to SortOrder.DESC, AiTurns.id to SortOrder.DESC)
+        .limit(cuantos)
+        .map {
+            TurnoGuardado(
+                id = it[AiTurns.id],
+                pregunta = it[AiTurns.pregunta],
+                respuesta = it[AiTurns.respuesta],
+                teniaImagen = it[AiTurns.imagen],
+                creadoEn = it[AiTurns.creadoEn],
+                preguntaSugerida = preguntaSugeridaDelTurno(it[AiTurns.modelo], it[AiTurns.consultas]),
+            )
+        }
+        .reversed()
 
 /**
- * La conversación en curso, como la pinta la pantalla: por cada turno, la pregunta del dueño y la
- * respuesta del asistente.
+ * Una conversación como la pinta la pantalla: por cada turno, la pregunta del dueño y la respuesta
+ * del asistente, con las tarjetas que propuso cada turno en su estado de HOY (una que el dueño ya
+ * hizo vuelve como hecha, no con «Hacerlo» otra vez).
  */
-suspend fun conversacionGuardada(uid: String): ConversacionDelAsistente {
-    val turnos = turnosDeLaConversacion(uid)
-    // Las tarjetas que propuso cada turno, con su estado de HOY: una que el dueño ya hizo vuelve
-    // como hecha, no con «Hacerlo» otra vez.
+internal suspend fun comoLaPintaLaPantalla(uid: String, id: String, titulo: String, turnos: List<TurnoGuardado>): ConversacionDelAsistente {
     val propuestas = propuestasDeLosTurnos(uid, turnos.map { it.id })
     return ConversacionDelAsistente(
+        id = id,
+        titulo = titulo,
         mensajes = turnos.flatMap { turno ->
             // Vuelta de diseño 30: con su fecha (la del turno, en los dos globos), para que el chat
             // diga de qué día es cada respuesta; y la pregunta sugerida con su id.
@@ -148,19 +144,4 @@ suspend fun conversacionGuardada(uid: String): ConversacionDelAsistente {
             )
         },
     )
-}
-
-/** «Nueva conversación»: la en curso pasa a empezar ahora. Idempotente. */
-suspend fun empezarConversacionNueva(uid: String, ahora: Long = System.currentTimeMillis()) {
-    dbQuery {
-        val actualizadas = ConversacionesDelAsistente.update({ ConversacionesDelAsistente.userId eq uid }) {
-            it[empezadaEn] = ahora
-        }
-        if (actualizadas == 0) {
-            ConversacionesDelAsistente.insert {
-                it[userId] = uid
-                it[empezadaEn] = ahora
-            }
-        }
-    }
 }
