@@ -77,6 +77,7 @@ class DesplazarConElTecladoTest {
     private fun enLaCascara(
         tecladoFisico: Boolean = true,
         reducido: Boolean = false,
+        conNavegacion: Boolean = true,
         contenido: @Composable () -> Unit,
     ) {
         composeRule.setContent {
@@ -86,7 +87,7 @@ class DesplazarConElTecladoTest {
                     EsqueletoDeLaCascara(
                         pantalla = Screen.Accounts,
                         activeTab = NavTab.TU,
-                        conNavegacion = true,
+                        conNavegacion = conNavegacion,
                         onTabSelected = {},
                         relevoDeScroll = remember { RelevoDeScroll() },
                     ) {
@@ -319,6 +320,64 @@ class DesplazarConElTecladoTest {
             teclas { withKeyDown(Key.ShiftLeft) { pressKey(Key.Tab) } }
             assertEquals(1, composeRule.onAllNodes(isFocused()).fetchSemanticsNodes().size, "Shift+Tab número ${vez + 1}")
         }
+    }
+
+    /**
+     * Revisión de la vuelta 118: al dar la vuelta desde el último elemento, Compose suelta el foco un
+     * instante y busca hacia adelante desde la raíz; con la raíz enfocable en ese momento, el Tab se
+     * paraba una vez en ella (invisible). Sin rail (`conNavegacion = false`), «dos» es el último.
+     */
+    @Test
+    fun `Tab desde el ultimo enfocable cae en el primero, no en la raiz`() {
+        val scroll = ScrollState(0)
+        enLaCascara(conNavegacion = false) { PantallaConBotones(scroll) {} }
+        composeRule.onNodeWithTag("dos").performSemanticsAction(SemanticsActions.RequestFocus)
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("dos").assertIsFocused()
+
+        teclas { pressKey(Key.Tab) }
+
+        composeRule.onNodeWithTag("uno").assertIsFocused()
+    }
+
+    /**
+     * Decisión de la vuelta 118: con un detalle abierto al lado de su lista (la ficha de un movimiento
+     * en el panel de Actividad, el detalle de un período), el teclado mueve el detalle; al cerrarlo,
+     * vuelve a la lista.
+     */
+    @Test
+    fun `con un detalle abierto al lado de la lista manda el detalle, y al cerrarlo la lista`() {
+        val lista = ScrollState(0)
+        val detalle = ScrollState(0)
+        var conDetalle by mutableStateOf(false)
+        enLaCascara {
+            CapaDeLaPantalla(arriba = true) {
+                androidx.compose.foundation.layout.Row(Modifier.fillMaxSize()) {
+                    Column(Modifier.weight(1f).fillMaxSize().desplazableConElTeclado(lista)) {
+                        repeat(60) { Text("Movimiento $it", Modifier.height(80.dp)) }
+                    }
+                    if (conDetalle) {
+                        Column(Modifier.weight(1f).fillMaxSize().desplazableConElTeclado(detalle)) {
+                            repeat(40) { Text("Dato $it", Modifier.height(80.dp)) }
+                        }
+                    }
+                }
+            }
+        }
+
+        teclas { pressKey(Key.DirectionDown) }
+        assertEquals(paso.toInt(), lista.value)
+
+        conDetalle = true
+        composeRule.waitForIdle()
+        teclas { pressKey(Key.DirectionDown) }
+        assertEquals(paso.toInt(), detalle.value, "con el detalle abierto se mueve el detalle")
+        assertEquals(paso.toInt(), lista.value, "y la lista se queda donde estaba")
+
+        conDetalle = false
+        composeRule.waitForIdle()
+        teclas { pressKey(Key.DirectionDown) }
+        assertEquals((2 * paso).toInt(), lista.value, "cerrado el detalle, vuelve a mandar la lista")
     }
 
     @Test
