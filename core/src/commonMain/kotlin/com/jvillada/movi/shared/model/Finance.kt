@@ -1270,8 +1270,11 @@ data class AiChatResponse(
     /** Vuelta 106 · su tope del mes, cuando viaja [preguntasQueQuedan] (para [fraseDelTopeDelMes]). */
     val topeDelMes: Int? = null,
     /**
-     * Vuelta 117 · **la conversación donde quedó el turno**: la que pidió la app, o la que eligió el
-     * server sin id. `null` si el turno no se guardó (un error) o de un server anterior.
+     * Vuelta 117 · **la conversación a la que fue la pregunta**: la que pidió la app si es del dueño, o
+     * la que eligió el server (la más reciente, o una nueva si no tenía o la pedida no era suya). Viaja
+     * en una respuesta contestada (del modelo o de las tres sugeridas), aunque guardar el turno haya
+     * fallado. `null` en las respuestas de error (sin crédito, el tope del mes, una falla del modelo),
+     * si la base no dejó elegir la conversación, o de un server anterior.
      */
     val conversacionId: String? = null,
 )
