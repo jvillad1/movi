@@ -1077,6 +1077,7 @@ fun LazyListScope.tableroDeRecurrentes(
             SideEffect { estado.filasDelPeriodo = checklist + anteriores }
             SeccionChecklistDelPeriodo(
                 checklist = checklistConAbonos,
+                claveDelPeriodo = periodoVisible.toString(),
                 anteriores = anteriores,
                 cargando = !estado.recurrentesNoSePudieronLeer && !(estado.vencimientosOk && estado.ocurrenciasOk),
                 pudoLeer = !estado.recurrentesNoSePudieronLeer,

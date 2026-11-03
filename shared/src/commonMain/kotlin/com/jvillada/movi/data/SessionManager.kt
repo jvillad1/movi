@@ -412,6 +412,10 @@ object SessionManager {
         SaldosOcultosStore.clear()
         // Ola 5: y las búsquedas recientes de «Buscar» — «Caro», «colegio», «$27.500» son de quien se va.
         BusquedasRecientesStore.clear()
+        // Vuelta 120: y cómo miraba sus facturas en Pagos («Por categoría») y qué grupos plegó: el siguiente
+        // arranca como en una instalación nueva, «Por fecha».
+        VistaDeFacturasStore.clear()
+        GruposPlegadosDeFacturas.olvidar()
         // Y si la guía de primer uso ya se revisó en esta sesión: el siguiente usuario puede no tener
         // ninguna cuenta y tiene que verla.
         com.jvillada.movi.ui.primeruso.GuiaDePrimerUso.olvidar()

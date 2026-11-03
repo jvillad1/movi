@@ -542,6 +542,29 @@ fun faltaPorPagar(checklist: List<PagoDelPeriodo>): Long =
         checklist.sumOf { if (it.hecho || !it.montoEsSaldo || it.esIngreso) 0L else it.restoDelMinimo ?: it.faltaDelMinimo ?: 0L }
 
 /**
+ * «Ya pagaste»: los pagos (no los ingresos) que tienen un pago en el período. Se mudó de `:shared`
+ * (`ui/dashboard/ResumenDelPeriodo.kt`) en la vuelta 120, con [yaPagadoEnElPeriodo].
+ */
+fun pagosHechos(checklist: List<PagoDelPeriodo>): List<PagoDelPeriodo> =
+    checklist.filter { it.pagado && !it.esIngreso }
+
+/**
+ * **Cuánto ya pagaste en el período**, en pesos: lo que de verdad salió cuando se sabe
+ * ([PagoDelPeriodo.montoPagado]) y si no, lo que dice la regla.
+ *
+ * El saldo de una tarjeta no es un pago: sin el monto del movimiento que la pagó no suma nada, en
+ * vez de sumar la deuda entera como si se hubiera pagado. Y fuera de pesos no se suma: una cifra en
+ * pesos que esconde dólares adentro es la clase de total que este archivo no da.
+ *
+ * Vuelta 120: se mudó de `:shared` sin cambiar una línea, para que [facturasPorCategoria] sume cada
+ * grupo con la misma función que «Llevas $X pagados».
+ */
+fun yaPagadoEnElPeriodo(checklist: List<PagoDelPeriodo>): Long =
+    // Vuelta 63: el abono hecho no es uno de los pagos del período («Llevas $X pagados» de «de $Y»).
+    // Vuelta 72 (revisión): lo pagado en el período entero (dos abonos a la tarjeta), no solo el último.
+    pagosHechos(checklist).filter { it.moneda == "COP" && !it.esAbono }.sumOf { it.pagadoParaMostrar ?: if (it.montoEsSaldo) 0L else it.monto }
+
+/**
  * Lo que falta pagar, en el orden en que sale del checklist. Un ingreso no se paga: no va acá. Un
  * abono planeado tampoco (vuelta 63): no es una deuda que venza, es plata que el dueño decide mover.
  */
