@@ -5374,8 +5374,10 @@ El patrón sirve para cualquier lista que se quiera leer por grupos sin cambiar 
   ocultos (`LocalSaldosOcultos`, lo mismo que lee la `Cifra`) no dice cifras: «Vivienda, falta pagar, cifra
   oculta».
 - **Plegado por defecto lo resuelto**; desplegado lo que pide algo. El defecto **se fija la primera vez que el
-  grupo se ve** en la pantalla: anotar el último pago de un grupo abierto no lo pliega bajo el dedo. Lo que el
-  dueño pliega o despliega se recuerda en la sesión (en memoria, por la clave del grupo), no en el aparato.
+  grupo se ve en el período**, en la sesión (`GruposPlegadosDeFacturas`, por período + grupo): anotar el último
+  pago de un grupo abierto no lo pliega bajo el dedo, y alternar la vista o ir a ver un movimiento no lo
+  recalcula; otro período arranca con su propio defecto. Lo que el dueño pliega o despliega gana, también en la
+  sesión (en memoria, no en el aparato), y cerrar sesión lo borra todo.
 - **Las filas son las de siempre**, separadas por `Separador(ConInicio)` también del encabezado. Ninguna
   acción nueva por fila, y el amarillo sigue siendo uno: el de la factura más urgente de toda la lista.
 - **Las cifras del encabezado salen de las funciones de la vista de siempre**, nunca de una suma a mano: la
