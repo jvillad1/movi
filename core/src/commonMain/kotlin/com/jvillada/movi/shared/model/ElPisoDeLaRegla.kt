@@ -62,9 +62,8 @@ fun arranqueDeLaReglaGuardada(activeFrom: String?, creadaEl: String?, primerSell
  * vencido que esconder. Un ingreso no se pregunta (ver el KDoc de [RecurringRule.yaPagoElDeEstePeriodo]).
  * El server vuelve a comprobarlo antes de aceptar el «Sí».
  *
- * **Conocido y pendiente para otra vuelta:** la guía de primer uso («Lo que pagas cada mes») y la
- * propuesta `proponer_recurrente` de Movi AI crean gastos sin esta pregunta; corren desde el período en
- * que se crean, como con «No». Pura.
+ * **Vuelta 124:** también la usan la guía de primer uso («Lo que pagas cada mes», `BorradorDeRecurrente`)
+ * y la tarjeta de `proponer_recurrente` de Movi AI (`laPropuestaPreguntaSiYaPago`). Pura.
  */
 fun sePreguntaSiYaPagasteElDeEstePeriodo(
     tipo: TransactionType,

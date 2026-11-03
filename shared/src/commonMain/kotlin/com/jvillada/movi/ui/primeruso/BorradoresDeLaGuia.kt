@@ -8,11 +8,17 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.CardTerms
 import com.jvillada.movi.shared.model.CreateCardRequest
+import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.UserProfile
+import com.jvillada.movi.shared.model.ajustesDelPeriodo
+import com.jvillada.movi.shared.model.sePreguntaSiYaPagasteElDeEstePeriodo
 import com.jvillada.movi.ui.accounts.EstadoDelFormularioDeCuenta
 import com.jvillada.movi.ui.accounts.crearCuentaConSaldo
 import com.jvillada.movi.ui.components.toUserMessage
+import com.jvillada.movi.ui.fecha.hoyEnAppZone
+import kotlinx.datetime.LocalDate
 
 /*
  * # Lo que se lleva escrito en un paso de la guía (revisión de la vuelta 54)
@@ -148,23 +154,59 @@ class BorradorDeTarjeta(private val alCrear: (String) -> Unit) : Borrador {
 /**
  * Un pago de cada mes: el de un atajo ([nombreFijo], «Arriendo») o «Agregar otro» (`null`, con nombre a
  * mano). Se guarda con `createRecurringRule` de siempre.
+ *
+ * **Vuelta 124 · «¿Ya pagaste el de este período?»**, como la hoja de un pago fijo nuevo (vuelta 121): si
+ * el vencimiento de este período del día elegido ya pasó o es hoy ([sePreguntaSiYaPagasteElDeEstePeriodo],
+ * la misma regla pura), el formulario lo pregunta con «Sí» por defecto, y el `POST` lleva
+ * [RecurringRule.yaPagoElDeEstePeriodo] (el server lo revalida). [ajustes] son los del período que el
+ * dueño acaba de elegir en la guía, o los de su perfil ([ajustesParaLaPreguntaDeLaGuia]); sin ellos no se
+ * pregunta, como la hoja sin el perfil leído. La respuesta vive en el borrador: sobrevive a «Atrás» y a
+ * cerrar y abrir la fila, como el monto y el día.
  */
 @Stable
 class BorradorDeRecurrente(
     val nombreFijo: String?,
     val categoria: String,
     private val cuenta: () -> String?,
+    private val ajustes: () -> PeriodSettings? = { null },
+    private val hoy: () -> LocalDate = { hoyEnAppZone() },
     private val alCrear: (RecurringRule) -> Unit,
 ) : Borrador {
     var nombre by mutableStateOf(nombreFijo ?: "")
     var monto by mutableStateOf<Long?>(null)
-    var dia by mutableStateOf("")
+    private var diaElegido by mutableStateOf("")
+    /** El día; al cambiarlo, una respuesta a una pregunta que dejó de verse se olvida ([olvidarSiYaNoSePregunta]). */
+    var dia: String
+        get() = diaElegido
+        set(valor) {
+            diaElegido = valor
+            olvidarSiYaNoSePregunta()
+        }
+    /** Vuelta 124 · la respuesta a «¿Ya pagaste el de este período?»; «Sí» por defecto. Solo cuenta si [preguntaSiYaPago]. */
+    var yaPago by mutableStateOf(true)
+
+    /**
+     * Revisión de la 124: **una pregunta que deja de verse vuelve a «Sí»**. Con «No» en el día 1, pasar al 20
+     * (por venir: sin pregunta) y volver al 1 la muestra otra vez como una pregunta nueva, con «Sí». Se llama al
+     * cambiar el día y al cambiar el período elegido en la guía.
+     */
+    fun olvidarSiYaNoSePregunta() {
+        if (!preguntaSiYaPago) yaPago = true
+    }
     var guardando by mutableStateOf(false)
         private set
     override var error: String? by mutableStateOf(null)
         private set
 
     val diaValido: Int? get() = dia.toIntOrNull()?.takeIf { it in 1..31 }
+
+    /** ¿El formulario pregunta «¿Ya pagaste el de este período?»? La regla de la hoja, con el día elegido. */
+    val preguntaSiYaPago: Boolean
+        get() {
+            val elDia = diaValido ?: return false
+            val losAjustes = ajustes() ?: return false
+            return sePreguntaSiYaPagasteElDeEstePeriodo(TransactionType.EXPENSE, desdeUnMovimiento = false, elDia, hoy(), losAjustes)
+        }
 
     override val escrito: Boolean
         get() = monto != null || dia.isNotBlank() || (nombreFijo == null && nombre.isNotBlank())
@@ -191,6 +233,8 @@ class BorradorDeRecurrente(
             dayOfMonth = elDia,
             type = TransactionType.EXPENSE,
             accountId = cuenta(),
+            // Vuelta 124: la respuesta, solo si la pregunta se ve; si no, sin el campo (como la hoja).
+            yaPagoElDeEstePeriodo = if (preguntaSiYaPago) yaPago else null,
         )
         val ok = runCatching { Repositories.wallets.createRecurringRule(regla) }
             .onSuccess { alCrear(it) }
@@ -199,6 +243,18 @@ class BorradorDeRecurrente(
         guardando = false
         return ok
     }
+}
+
+/**
+ * Vuelta 124 · **los ajustes del período con que la guía pregunta «¿Ya pagaste el de este período?»**: los
+ * que el dueño acaba de guardar en «Tu período» ([guardados], el corte y la regla del fin de semana, o la
+ * quincena), con las excepciones a mano de su perfil; si no guardó ninguno en esta guía, los de su perfil
+ * (que es lo que el server usa para revalidar). Sin ninguno de los dos, `null`: no se pregunta. Pura.
+ */
+fun ajustesParaLaPreguntaDeLaGuia(guardados: PeriodSettings?, perfil: UserProfile?): PeriodSettings? {
+    val delPerfil = perfil?.ajustesDelPeriodo()
+    if (guardados == null) return delPerfil
+    return if (delPerfil == null) guardados else guardados.copy(iniciosPropios = delPerfil.iniciosPropios)
 }
 
 /** «el arriendo», «la suscripción»; un pago escrito a mano, «el pago». Pura. */

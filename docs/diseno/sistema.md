@@ -5417,3 +5417,20 @@ Comportamiento, no visual: nada cambia de tamaño ni de color. Con teclado físi
   acto. El Tab y el orden del foco no cambian.
 
 **Pruebas**: `DesplazarConElTecladoTest` (`:shared` androidUnitTest).
+
+## Vuelta 124 · Una pregunta de sí o no dentro de un bloque que ya tiene margen
+
+«¿Ya pagaste el de este período?» (vuelta 121) es una `Fila` con su `Casilla` en la superficie de la hoja
+de un pago fijo. En el formulario de un pago de la guía de primer uso y en la tarjeta de lo que propone
+Movi AI, el bloque ya tiene su margen: una `Fila` sumaría el suyo. Ahí va `PreguntaDeYaPagaste`
+(`ui/recurrentes/`): un renglón sin margen propio con el título (`cuerpo`), debajo qué hace Movi con la
+respuesta (`apoyo`, `textoMedio`) y la `Casilla` al final como el toque (48 × 48, con su estado para el
+lector). Las mismas palabras de la hoja y «Sí» por defecto. La casilla marcada es de tinta: no suma un
+amarillo al paso ni a la tarjeta. **Se toca el renglón entero** (`alAlternar` con rol de casilla y su
+anillo de foco), como la `Fila` de la hoja; la `Casilla` solo dice el estado.
+
+**Un lugar que no salta.** Cuando lo que va en un renglón depende de una lectura que llega después (la
+tarjeta de Movi AI necesita el perfil para saber «este período»), el lugar se reserva con sus tres formas
+del mismo alto: `EsqueletoDeYaPagaste` mientras se lee (y la acción que depende de la respuesta,
+apagada), `PreguntaDeYaPagaste`, o `RenglonDeLoQueEsperaMovi` («Movi lo espera en este período · Su fecha
+de este período todavía no llega»). Las tres miden al menos el toque de 48 con dos renglones de texto.

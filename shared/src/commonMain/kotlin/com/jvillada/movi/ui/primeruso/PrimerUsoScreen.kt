@@ -166,6 +166,9 @@ import com.jvillada.movi.shared.time.epochMillisToAppDate
 import com.jvillada.movi.shared.model.inicioDelPeriodo
 import com.jvillada.movi.shared.model.periodoSiguiente
 import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.LocalDate
+import com.jvillada.movi.ui.fecha.hoyEnAppZone
+import com.jvillada.movi.ui.recurrentes.PreguntaDeYaPagaste
 import kotlinx.datetime.minus
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -212,6 +215,8 @@ fun PrimerUsoScreen(
     pasoInicial: PasoDePrimerUso = PasoDePrimerUso.BIENVENIDA,
     modoDeCaptura: ModoDeCaptura = modoDeCapturaDe(isAndroid),
     desde: PrimerPaso? = null,
+    /** Vuelta 124 · el «hoy» de «¿Ya pagaste el de este período?» en lo que pagas; `null` = hoy de verdad (las pruebas lo fijan). */
+    hoy: LocalDate? = null,
 ) {
     val alcance = rememberCoroutineScope()
     val pasos = remember(modoDeCaptura) { pasosDeLaGuia(modoDeCaptura) }
@@ -225,6 +230,9 @@ fun PrimerUsoScreen(
     var dia by remember { mutableStateOf<Int?>(null) }
     var regla by remember { mutableStateOf(SiElCorteCaeEnFinDeSemana.DIA_HABIL_ANTERIOR) }
     var periodoGuardado by remember { mutableStateOf<String?>(null) }
+    // Vuelta 124: los ajustes del período que se guardó en esta guía (el corte elegido, no el calendario):
+    // con ellos «Lo que pagas cada mes» decide si pregunta «¿Ya pagaste el de este período?».
+    var ajustesGuardados by remember { mutableStateOf<PeriodSettings?>(null) }
     // Vuelta 105 · «¿Cada cuánto te pagan?»: con quincena, [dia] es el primer pago y este el segundo.
     var quincena by remember { mutableStateOf(false) }
     var segundoDia by remember { mutableStateOf(SEGUNDO_DIA_DE_LA_QUINCENA_POR_DEFECTO) }
@@ -354,7 +362,13 @@ fun PrimerUsoScreen(
             return
         }
         if (clave !in borradoresDeRecurrentes) {
-            borradoresDeRecurrentes[clave] = BorradorDeRecurrente(nombreFijo, categoria, cuenta = ::cuentaPorDefecto) { regla ->
+            borradoresDeRecurrentes[clave] = BorradorDeRecurrente(
+                nombreFijo,
+                categoria,
+                cuenta = ::cuentaPorDefecto,
+                ajustes = { ajustesParaLaPreguntaDeLaGuia(ajustesGuardados, perfil) },
+                hoy = { hoy ?: hoyEnAppZone() },
+            ) { regla ->
                 recurrentes += regla
                 borradoresDeRecurrentes.remove(clave)
                 if (recurrenteAbierto == clave) recurrenteAbierto = null
@@ -506,6 +520,9 @@ fun PrimerUsoScreen(
                     }
                         .onSuccess {
                             periodoGuardado = if (quincena) textoDeLaQuincena(elegido, segundoDia, regla) else textoDelInicioDelMes(elegido, regla)
+                            ajustesGuardados = ajustesDeLaGuia(elegido, regla, segundoDia.takeIf { quincena })
+                            // Revisión de la 124: con el período nuevo, la pregunta que dejó de verse vuelve a «Sí».
+                            borradoresDeRecurrentes.values.forEach { it.olvidarSiYaNoSePregunta() }
                             guardando = false
                             (volverAlPaso ?: siguiente)?.let(::irA)
                         }
@@ -1546,6 +1563,9 @@ private fun FilaDelSalario(
     }
 }
 
+/** Vuelta 124 · el tag de la casilla de «¿Ya pagaste el de este período?» en el formulario de un pago. */
+const val TAG_YA_PAGASTE_EN_LA_GUIA: String = "primer-uso-ya-pagaste"
+
 /** La clave del borrador de «Agregar otro». */
 private const val CLAVE_DE_OTRO_PAGO = ""
 
@@ -1575,6 +1595,17 @@ private fun FormularioDeRecurrente(borrador: BorradorDeRecurrente) {
             onElegir = { borrador.dia = it.toString() },
             habilitado = !borrador.guardando,
         )
+        // Vuelta 124 · «¿Ya pagaste el de este período?» (la regla de la hoja de un pago fijo nuevo): solo si
+        // el vencimiento de este período ya pasó o es hoy. Debajo del día, que es lo que la hace aparecer.
+        if (borrador.preguntaSiYaPago) {
+            Spacer(Modifier.height(Medida.dentroDeSeccion))
+            PreguntaDeYaPagaste(
+                marcada = borrador.yaPago,
+                onCambiar = { borrador.yaPago = it },
+                tag = TAG_YA_PAGASTE_EN_LA_GUIA,
+                habilitada = !borrador.guardando,
+            )
+        }
         borrador.error?.let {
             Spacer(Modifier.height(Espacio.xs))
             Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)

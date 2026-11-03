@@ -38,7 +38,18 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.AccionPropuesta
 import com.jvillada.movi.shared.model.EstadoDePropuesta
 import com.jvillada.movi.shared.model.OrigenDelRecuerdo
+import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.TipoDeAccion
+import com.jvillada.movi.shared.model.ajustesDelPeriodo
+import com.jvillada.movi.shared.model.sePreguntaSiYaPagasteElDeEstePeriodo
+import com.jvillada.movi.data.ClaveDeLectura
+import com.jvillada.movi.data.rememberLectura
+import com.jvillada.movi.ui.fecha.hoyEnAppZone
+import com.jvillada.movi.ui.recurrentes.EsqueletoDeYaPagaste
+import com.jvillada.movi.ui.recurrentes.PreguntaDeYaPagaste
+import com.jvillada.movi.ui.recurrentes.RenglonDeLoQueEsperaMovi
+import com.jvillada.movi.shared.model.TransactionType
+import kotlinx.datetime.LocalDate
 import com.jvillada.movi.shared.repository.ApiException
 import com.jvillada.movi.shared.repository.WalletRepository
 import com.jvillada.movi.theme.Movi
@@ -60,8 +71,15 @@ import kotlinx.coroutines.launch
 /**
  * Hace lo que la propuesta dice, **con el método de siempre**, y después le avisa al asistente.
  * Lanza si el endpoint de la acción rechaza: el aviso al asistente solo va si la acción se hizo.
+ *
+ * [yaPagoElDeEstePeriodo] (vuelta 124) es la respuesta a «¿Ya pagaste el de este período?» de la tarjeta
+ * de un recurrente nuevo: `null` si la tarjeta no la preguntó (la regla va tal cual la propuso el server).
  */
-internal suspend fun hacerLaPropuesta(repo: WalletRepository, propuesta: AccionPropuesta) {
+internal suspend fun hacerLaPropuesta(
+    repo: WalletRepository,
+    propuesta: AccionPropuesta,
+    yaPagoElDeEstePeriodo: Boolean? = null,
+) {
     when (propuesta.tipo) {
         TipoDeAccion.ANOTAR_MOVIMIENTO ->
             repo.postEvent(requireNotNull(propuesta.movimiento) { "La propuesta no trae el movimiento" })
@@ -73,8 +91,12 @@ internal suspend fun hacerLaPropuesta(repo: WalletRepository, propuesta: AccionP
             if (ids.size == 1) repo.updateEventCategory(ids.single(), categoria)
             else repo.recategorizarEnLote(ids, categoria)
         }
-        TipoDeAccion.CREAR_RECURRENTE ->
-            repo.createRecurringRule(requireNotNull(propuesta.recurrente) { "La propuesta no trae el recurrente" })
+        TipoDeAccion.CREAR_RECURRENTE -> {
+            val regla = requireNotNull(propuesta.recurrente) { "La propuesta no trae el recurrente" }
+            repo.createRecurringRule(
+                if (yaPagoElDeEstePeriodo == null) regla else regla.copy(yaPagoElDeEstePeriodo = yaPagoElDeEstePeriodo),
+            )
+        }
         TipoDeAccion.MARCAR_PAGO_HECHO -> repo.markOccurrence(
             ruleId = requireNotNull(propuesta.reglaId),
             period = requireNotNull(propuesta.periodo),
@@ -91,6 +113,61 @@ internal suspend fun hacerLaPropuesta(repo: WalletRepository, propuesta: AccionP
     // La acción ya está hecha; si este aviso no llega, lo único que se pierde es que el asistente
     // lo sepa. No vale tumbar la tarjeta por eso.
     runCatching { repo.resolverPropuesta(propuesta.id, EstadoDePropuesta.HECHA) }
+}
+
+/**
+ * Vuelta 124 · **¿la tarjeta de [propuesta] pregunta «¿Ya pagaste el de este período?»?** La regla de la
+ * hoja de un pago fijo nuevo (vuelta 121, [sePreguntaSiYaPagasteElDeEstePeriodo]): un recurrente nuevo que
+ * es un **gasto**, que no nace de un movimiento ya anotado (la regla no trae `activeFrom` ni
+ * `eventoDeOrigen`, el mismo criterio de la hoja) y cuyo vencimiento de este período ya pasó o es hoy.
+ * Sin los ajustes del dueño (el perfil sin leer), no se pregunta. Pura.
+ *
+ * - **La rama «desde un movimiento» es defensiva:** hoy `proponer_recurrente` (`LoQueMoviPropone.kt`) nunca
+ *   pone `activeFrom` ni `eventoDeOrigen`; está para que una propuesta futura que sí los traiga siga el
+ *   criterio de la hoja.
+ * - **Límite conocido (el mismo de la hoja):** si la lectura del perfil falla, no hay pregunta y la regla va
+ *   sin el campo (corre desde el período en que se crea, como con «No»).
+ */
+internal fun laPropuestaPreguntaSiYaPago(propuesta: AccionPropuesta, hoy: LocalDate, ajustes: PeriodSettings?): Boolean {
+    if (propuesta.tipo != TipoDeAccion.CREAR_RECURRENTE || ajustes == null) return false
+    val regla = propuesta.recurrente ?: return false
+    val desdeUnMovimiento = regla.activeFrom != null || regla.eventoDeOrigen != null
+    return sePreguntaSiYaPagasteElDeEstePeriodo(regla.type, desdeUnMovimiento, regla.dayOfMonth, hoy, ajustes)
+}
+
+/** Vuelta 124 · el tag del renglón de «¿Ya pagaste el de este período?» en la tarjeta de una propuesta. */
+internal const val TAG_YA_PAGASTE_EN_LA_PROPUESTA: String = "propuesta-ya-pagaste"
+
+/** Vuelta 124 · el tag del lugar de la pregunta mientras se lee el perfil, y el de «Movi lo espera en este período». */
+internal const val TAG_ESPERANDO_EL_PERFIL_EN_LA_PROPUESTA: String = "propuesta-ya-pagaste-leyendo"
+internal const val TAG_LO_ESPERA_EN_LA_PROPUESTA: String = "propuesta-lo-espera-en-este-periodo"
+
+/**
+ * Revisión de la 124 · **qué va en el lugar de la pregunta** de la tarjeta de un recurrente nuevo. Al llegar
+ * al chat la lectura del perfil (`ClaveDeLectura.Perfil`) suele estar vacía —el Inicio no la usa—: si la
+ * pregunta apareciera al llegar el perfil, la tarjeta crecería y los botones bajarían, y un «Hacerlo» tocado
+ * antes crearía la regla vencida sin el campo. Por eso, en un gasto que no nace de un movimiento, el lugar
+ * está **siempre**, del mismo alto (`ui/recurrentes/PreguntaDeYaPagaste.kt`):
+ * - [LEYENDO]: el perfil no llegó (ni falló): un esqueleto, y «Hacerlo» apagado;
+ * - [PREGUNTA]: la pregunta, «Sí» por defecto;
+ * - [EN_ESTE_PERIODO]: su fecha de este período todavía no llega: «Movi lo espera en este período»;
+ * - [NINGUNO]: no es un gasto recurrente escrito, o la lectura del perfil falló (el límite conocido).
+ */
+internal enum class LugarDeLaPregunta { NINGUNO, LEYENDO, PREGUNTA, EN_ESTE_PERIODO }
+
+/** Ver [LugarDeLaPregunta]. [leyendoElPerfil]: la lectura no contestó ni falló. Pura. */
+internal fun lugarDeLaPregunta(
+    propuesta: AccionPropuesta,
+    hoy: LocalDate,
+    ajustes: PeriodSettings?,
+    leyendoElPerfil: Boolean,
+): LugarDeLaPregunta {
+    if (propuesta.tipo != TipoDeAccion.CREAR_RECURRENTE) return LugarDeLaPregunta.NINGUNO
+    val regla = propuesta.recurrente ?: return LugarDeLaPregunta.NINGUNO
+    val desdeUnMovimiento = regla.activeFrom != null || regla.eventoDeOrigen != null
+    if (regla.type != TransactionType.EXPENSE || desdeUnMovimiento || regla.dayOfMonth !in 1..31) return LugarDeLaPregunta.NINGUNO
+    if (ajustes == null) return if (leyendoElPerfil) LugarDeLaPregunta.LEYENDO else LugarDeLaPregunta.NINGUNO
+    return if (laPropuestaPreguntaSiYaPago(propuesta, hoy, ajustes)) LugarDeLaPregunta.PREGUNTA else LugarDeLaPregunta.EN_ESTE_PERIODO
 }
 
 /** Lo que se le dice al dueño si la acción no se pudo hacer. */
@@ -115,10 +192,28 @@ internal fun PropuestaDelAsistente(
     estado: EstadoDePropuesta,
     onEstado: (EstadoDePropuesta) -> Unit,
     repo: () -> WalletRepository = { Repositories.wallets },
+    /** Vuelta 124 · el «hoy» de «¿Ya pagaste el de este período?»; `null` = hoy de verdad (las pruebas lo fijan). */
+    hoy: LocalDate? = null,
 ) {
     val coroutine = rememberCoroutineScope()
     var trabajando by remember(propuesta.id) { mutableStateOf(false) }
     var error by remember(propuesta.id) { mutableStateOf<String?>(null) }
+
+    // Vuelta 124 · «¿Ya pagaste el de este período?», como la hoja de un pago fijo nuevo: «Sí» por defecto.
+    // El período es el del dueño (con corte 25 no es el mes): sin el perfil leído la pregunta no sale, y el
+    // server vuelve a comprobarlo antes de aceptar el «Sí».
+    val esUnRecurrentePorHacer = propuesta.tipo == TipoDeAccion.CREAR_RECURRENTE && estado == EstadoDePropuesta.PENDIENTE
+    val perfil = rememberLectura(ClaveDeLectura.Perfil, reintento = 0, activa = esUnRecurrentePorHacer) {
+        repo().getUserProfile()
+    }
+    val lugar = if (!esUnRecurrentePorHacer) LugarDeLaPregunta.NINGUNO else lugarDeLaPregunta(
+        propuesta,
+        hoy ?: hoyEnAppZone(),
+        perfil.valor?.ajustesDelPeriodo(),
+        leyendoElPerfil = perfil.valor == null && !perfil.fallo,
+    )
+    val preguntaSiYaPago = lugar == LugarDeLaPregunta.PREGUNTA
+    var yaPago by remember(propuesta.id) { mutableStateOf(true) }
 
     // Ola R4: una propuesta de Movi va en la superficie de propuesta. Vuelta 42: a todo el ancho de
     // la conversación (desde la sangría de la respuesta), como el texto de Movi. Tenía un tope de
@@ -146,6 +241,17 @@ internal fun PropuestaDelAsistente(
             EstadoDePropuesta.RECHAZADA ->
                 Text(DESCARTADA, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
             EstadoDePropuesta.PENDIENTE -> {
+                when (lugar) {
+                    LugarDeLaPregunta.PREGUNTA -> PreguntaDeYaPagaste(
+                        marcada = yaPago,
+                        onCambiar = { yaPago = it },
+                        tag = TAG_YA_PAGASTE_EN_LA_PROPUESTA,
+                        habilitada = !trabajando,
+                    )
+                    LugarDeLaPregunta.LEYENDO -> EsqueletoDeYaPagaste(TAG_ESPERANDO_EL_PERFIL_EN_LA_PROPUESTA)
+                    LugarDeLaPregunta.EN_ESTE_PERIODO -> RenglonDeLoQueEsperaMovi(TAG_LO_ESPERA_EN_LA_PROPUESTA)
+                    LugarDeLaPregunta.NINGUNO -> Unit
+                }
                 error?.let { Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale) }
                 Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
                     Boton(
@@ -154,7 +260,9 @@ internal fun PropuestaDelAsistente(
                             trabajando = true
                             error = null
                             coroutine.launch {
-                                runCatching { hacerLaPropuesta(repo(), propuesta) }
+                                runCatching {
+                                    hacerLaPropuesta(repo(), propuesta, yaPagoElDeEstePeriodo = if (preguntaSiYaPago) yaPago else null)
+                                }
                                     .onSuccess { onEstado(EstadoDePropuesta.HECHA) }
                                     .onFailure { error = motivoDeLaFalla(it) }
                                 trabajando = false
@@ -162,6 +270,8 @@ internal fun PropuestaDelAsistente(
                         },
                         tamano = TamanoDeBoton.S,
                         cargando = trabajando,
+                        // Revisión de la 124: sin saber todavía si se pregunta, «Hacerlo» no crea la regla sin el campo.
+                        habilitado = lugar != LugarDeLaPregunta.LEYENDO,
                     )
                     Boton(
                         NO_HACERLO,
