@@ -20,7 +20,10 @@ import kotlin.test.assertTrue
  */
 class LoQueSeDesplazaSeAnotaParaElTecladoTest {
 
-    /** Listas de adentro, a propósito sin el teclado: no son el desplazamiento principal de su capa. */
+    /**
+     * Listas a propósito sin el teclado: no son el desplazamiento principal de su capa, o están fuera de
+     * la cáscara (donde el teclado no llega).
+     */
     private val LISTAS_DE_ADENTRO = mapOf(
         // El panel lateral del resumen en Actividad ancha: el teclado mueve la lista de movimientos.
         "transactions/ResumenEnElPanel.kt" to 1,
@@ -28,6 +31,8 @@ class LoQueSeDesplazaSeAnotaParaElTecladoTest {
         "categorias/CategoriasScreen.kt" to 1,
         // La columna de la derecha de un grupo en pantalla ancha: el teclado mueve la de la izquierda.
         "espacios/EspaciosScreen.kt" to 1,
+        // La puerta de la huella se dibuja fuera de la cáscara, encima de todo: el teclado no llega ahí.
+        "auth/PuertaAlVolver.kt" to 1,
     )
 
     private val crudo = Regex("""verticalScroll\(rememberScrollState\(\)\)""")

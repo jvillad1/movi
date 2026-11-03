@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -30,6 +29,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Movi
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 const val TAG_COLUMNA_DE_ENTRADA: String = "entrada-columna"
 const val TAG_ERROR_DE_ENTRADA: String = "entrada-error"
@@ -58,7 +58,7 @@ internal fun ColumnaDeEntrada(
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag(TAG_COLUMNA_DE_ENTRADA)
-                .verticalScroll(scroll)
+                .desplazableConElTeclado(scroll)
                 .heightIn(min = maxHeight)
                 .padding(Espacio.xl),
             verticalArrangement = Arrangement.Center,
