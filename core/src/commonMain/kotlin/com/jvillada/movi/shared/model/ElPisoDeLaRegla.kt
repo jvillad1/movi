@@ -34,10 +34,20 @@ import kotlinx.datetime.LocalDate
  *   siempre, como hasta hoy. Es lo conservador: no se sabe cuándo nacieron, y una regla vieja no puede
  *   perder ocurrencias que el dueño ya pagó ni las que debe de verdad.
  *
+ * **Lo pagado nunca desaparece** (revisión de la vuelta 121): con la fecha de creación, el piso es el
+ * **menor** entre ella y [primerSello], el vencimiento de la primera ocurrencia sellada de la regla («Sí,
+ * fue este», «Ya lo pagué»). Así un septiembre que el dueño selló antes de escribir la regla —o el
+ * octubre falso que los probadores tildaron el 2-nov— sigue viéndose «Pagado», y no vencido. Un sello no
+ * baja un [activeFrom] guardado (ese ya dice desde cuándo corre) ni le pone piso a una regla sin fecha.
+ *
  * Una fecha ilegible cuenta como ausente. Pura.
  */
-fun arranqueDeLaReglaGuardada(activeFrom: String?, creadaEl: String?): String? =
-    fechaIsoLegible(activeFrom) ?: fechaIsoLegible(creadaEl)
+fun arranqueDeLaReglaGuardada(activeFrom: String?, creadaEl: String?, primerSello: String? = null): String? {
+    fechaIsoLegible(activeFrom)?.let { return it }
+    val creada = fechaIsoLegible(creadaEl) ?: return null
+    val sello = fechaIsoLegible(primerSello) ?: return creada
+    return minOf(creada, sello)
+}
 
 /**
  * **¿La hoja de un pago fijo nuevo pregunta «¿Ya pagaste el de este período?»?** Solo en un **gasto**
@@ -45,7 +55,11 @@ fun arranqueDeLaReglaGuardada(activeFrom: String?, creadaEl: String?): String? =
  * alta) cuyo vencimiento del día [dia] en el período de [hoy] **ya pasó o es hoy** — la regla de la
  * vuelta 77 para la cuota de un crédito, [laCuotaDeEstePeriodoYaVencio]. Si todavía no vence, no hay nada
  * vencido que esconder. Un ingreso no se pregunta (ver el KDoc de [RecurringRule.yaPagoElDeEstePeriodo]).
- * El server vuelve a comprobarlo antes de aceptar el «Sí». Pura.
+ * El server vuelve a comprobarlo antes de aceptar el «Sí».
+ *
+ * **Conocido y pendiente para otra vuelta:** la guía de primer uso («Lo que pagas cada mes») y la
+ * propuesta `proponer_recurrente` de Movi AI crean gastos sin esta pregunta; corren desde el período en
+ * que se crean, como con «No». Pura.
  */
 fun sePreguntaSiYaPagasteElDeEstePeriodo(
     tipo: TransactionType,

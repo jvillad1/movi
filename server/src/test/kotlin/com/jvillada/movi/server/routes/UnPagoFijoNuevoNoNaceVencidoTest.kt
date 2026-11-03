@@ -362,6 +362,58 @@ class UnPagoFijoNuevoNoNaceVencidoTest {
     }
 
     /**
+     * **Lo pagado nunca desaparece.** Los probadores tocaron «Ya lo pagué» sobre el octubre falso: la regla
+     * creada el 2-nov con un sello de octubre sigue mostrando ese octubre pagado (el primer sello baja el
+     * piso), y nada queda vencido. Lo mismo un septiembre sellado de una regla creada en octubre.
+     */
+    @Test
+    fun `lo sellado antes de la creacion se sigue viendo pagado`() {
+        regla("rr_probador", "Gimnasio", dia = 28, creada = dosDeNoviembre)
+        gasto("ev_gym_oct", 120_000L, LocalDate.of(2026, 10, 28), "Gimnasio")
+        sello("rr_probador", "2026-10", "ev_gym_oct")
+
+        val octubre = ocurrencias(LocalDate.of(2026, 10, 29)).single { it.ruleId == "rr_probador" }
+        assertEquals("2026-10-28", octubre.dueDate)
+        assertEquals(true, octubre.occurred, "pagado, no vencido")
+        assertEquals("ev_gym_oct", octubre.eventId)
+        assertTrue(pagosPendientes(checklist(dosDeNoviembre)).none { it.ruleId == "rr_probador" && it.vencido })
+        assertEquals("2026-11-28", proximos(dosDeNoviembre).single { it.rule.id == "rr_probador" }.dueDate)
+
+        // Varias reglas a la vez (la caché de sellos es por transacción y usuario): cada una con lo suyo.
+        regla("rr_sin_sello", "Internet", dia = 28, creada = dosDeNoviembre)
+        val lista = proximos(dosDeNoviembre)
+        assertEquals("2026-10-28", lista.single { it.rule.id == "rr_probador" }.rule.activeFrom)
+        assertEquals("2026-11-02", lista.single { it.rule.id == "rr_sin_sello" }.rule.activeFrom)
+    }
+
+    /**
+     * El PUT de un cliente que reenvía la regla tal cual la leyó (con el arranque derivado) no lo escribe
+     * en la fila: sigue NULL. Un arranque distinto sí se guarda.
+     */
+    @Test
+    fun `el put no guarda el arranque derivado`() = testApplication {
+        application { testModule() }
+        regla("rr_claudia", "Gimnasio", dia = 28, creada = dosDeNoviembre)
+
+        val igual = enviar(
+            "/api/recurring-rules/rr_claudia",
+            """{"id":"rr_claudia","name":"Gimnasio","category":"Gimnasio","amount":150000,"dayOfMonth":28,"type":"EXPENSE","activeFrom":"2026-11-02"}""",
+            metodo = "PUT",
+        )
+        assertEquals(HttpStatusCode.OK, igual.status, igual.bodyAsText())
+        assertNull(guardada("rr_claudia")[RecurringRules.activeFrom], "el derivado no se escribe")
+        assertEquals("2026-11-02", json.decodeFromString(RecurringRule.serializer(), igual.bodyAsText()).activeFrom)
+
+        val otro = enviar(
+            "/api/recurring-rules/rr_claudia",
+            """{"id":"rr_claudia","name":"Gimnasio","category":"Gimnasio","amount":150000,"dayOfMonth":28,"type":"EXPENSE","activeFrom":"2026-12-01"}""",
+            metodo = "PUT",
+        )
+        assertEquals(HttpStatusCode.OK, otro.status, otro.bodyAsText())
+        assertEquals("2026-12-01", guardada("rr_claudia")[RecurringRules.activeFrom])
+    }
+
+    /**
      * Una regla creada hoy desde un movimiento del período ANTERIOR conserva esa ocurrencia, saldada por ese
      * movimiento: el piso es el período del movimiento, no el de la creación.
      */

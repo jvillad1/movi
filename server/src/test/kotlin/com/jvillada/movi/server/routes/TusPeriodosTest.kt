@@ -578,21 +578,14 @@ class TusPeriodosTest {
      * **La fecha de creación se mira por ocurrencia, no por período.**
      * - Una regla creada el 20-sep que vence el 10: su 10-sep es anterior a ella y nadie lo pagó;
      *   decir «pendiente» sería el «no lo pagaste» falso que este filtro existe para evitar.
-     * - Una regla creada el 2-oct a partir del sueldo de septiembre («Esto se repite», con su arranque en
-     *   ese movimiento): ese sueldo es su ocurrencia de septiembre, LISTO con evidencia, y sale aunque la
-     *   regla haya nacido después.
-     * - Vuelta 121: la misma regla escrita a mano el 2-oct (sin arranque) no tiene septiembre: un pago fijo
-     *   nunca aparece antes del período en que se creó, aunque un movimiento de antes se le parezca.
+     * - Una regla creada el 2-oct a partir del sueldo de septiembre: ese sueldo es su ocurrencia de
+     *   septiembre, LISTO con evidencia, y sale aunque la regla haya nacido después.
      */
     @Test
     fun `en un periodo cerrado la fecha de creacion se mira por ocurrencia`() {
         val ahora = dia(2026, 10, 5)
         regla("rr-creada-el-20", "Gimnasio", dia = 10, monto = 180_000, categoria = "Deporte", creada = dia(2026, 9, 20))
-        regla(
-            "rr-salario", "Salario", dia = 15, monto = 20_000_000, categoria = "Salario", tipo = "INCOME",
-            desde = "2026-09-14", creada = dia(2026, 10, 2),
-        )
-        regla("rr-salario-a-mano", "Salario", dia = 15, monto = 20_000_000, categoria = "Salario", tipo = "INCOME", creada = dia(2026, 10, 2))
+        regla("rr-salario", "Salario", dia = 15, monto = 20_000_000, categoria = "Salario", tipo = "INCOME", creada = dia(2026, 10, 2))
         movimiento("ev-salario", dia(2026, 9, 14), 20_308_659, tipo = "INCOME", categoria = "Salario", descripcion = "Salario Septiembre 2026")
 
         val septiembre = assertNotNull(detalle("2026-09", ahora)).pagosFijos
@@ -602,7 +595,26 @@ class TusPeriodosTest {
             assertEquals(PAGO_FIJO_LISTO, it.estado)
             assertEquals("ev-salario", it.eventId)
         }
-        assertTrue(septiembre.none { it.ruleId == "rr-salario-a-mano" }, "Escrita a mano el 2-oct: no tiene septiembre")
+    }
+
+    /**
+     * **Vuelta 121 · lo pagado nunca desaparece.** Una regla escrita a mano el 3-oct (sin arranque: corre
+     * desde el período de su creación) que el dueño selló en septiembre con «Sí, fue este»: septiembre
+     * sale pagado con su movimiento, y agosto —sin sello ni pago— no sale.
+     */
+    @Test
+    fun `una regla a mano creada en octubre con un sello en septiembre muestra septiembre pagado`() {
+        val ahora = dia(2026, 10, 5)
+        regla("rr-gimnasio", "Gimnasio", dia = 10, monto = 180_000, categoria = "Deporte", creada = dia(2026, 10, 3))
+        movimiento("ev-gimnasio-sep", dia(2026, 9, 10), 180_000, categoria = "Deporte", descripcion = "Smart Fit")
+        sello("rr-gimnasio", "2026-09", "ev-gimnasio-sep")
+
+        val septiembre = assertNotNull(detalle("2026-09", ahora)).pagosFijos
+        septiembre.de("rr-gimnasio").let {
+            assertEquals(PAGO_FIJO_LISTO, it.estado)
+            assertEquals("ev-gimnasio-sep", it.eventId)
+        }
+        assertTrue(detalle("2026-08", ahora)?.pagosFijos.orEmpty().none { it.ruleId == "rr-gimnasio" }, "agosto no existía")
     }
 
     /**

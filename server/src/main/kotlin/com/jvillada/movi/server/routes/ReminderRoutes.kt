@@ -79,6 +79,7 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.put
 import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.min
 import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
@@ -90,7 +91,7 @@ import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.server.time.appDateToEpochMillis
 import com.jvillada.movi.server.reminders.leadDaysOf
 
-internal fun org.jetbrains.exposed.sql.ResultRow.toRule() = RecurringRule(
+internal fun org.jetbrains.exposed.sql.ResultRow.toRule(conLaCreacion: Boolean = true) = RecurringRule(
     id = this[RecurringRules.id],
     name = this[RecurringRules.name],
     category = this[RecurringRules.category],
@@ -102,7 +103,7 @@ internal fun org.jetbrains.exposed.sql.ResultRow.toRule() = RecurringRule(
     // El piso de la regla: los períodos anteriores al de esta fecha no existen (ver
     // `arranqueDeLaRegla`). Sin leerla acá, la regla la guardaría y ninguna pantalla la
     // respetaría. Vuelta 121: sin fecha guardada, la de creación (ver [arranqueDeLaFila]).
-    activeFrom = arranqueDeLaFila(),
+    activeFrom = arranqueDeLaFila(conLaCreacion),
     // Ola V: a qué destino conocido va este traspaso, si el dueño lo asoció. Ver
     // `RecurringRule.destinoConocidoId`.
     destinoConocidoId = this[RecurringRules.destinoConocidoId],
@@ -116,16 +117,53 @@ internal fun org.jetbrains.exposed.sql.ResultRow.toRule() = RecurringRule(
 
 /**
  * **Vuelta 121 · desde cuándo corre la regla de esta fila**: la columna `active_from` o, si está vacía, el
- * día en que se creó (`created_at`, en la fecha de la app). Es el único lugar donde una fila de
- * `recurring_rules` se vuelve [RecurringRule.activeFrom]: lo leen los tres mapeadores (este [toRule],
- * `toRulePair` del barrido de avisos y el contexto de Movi AI), y de ahí `arranqueDeLaRegla` lo vuelve
- * el piso de todo —`/upcoming`, `/occurrences`, el checklist, «Te quedan», la caja, la cola, la campana,
- * los recordatorios, «Tus períodos» y Movi AI—. La regla está en `:core`, [arranqueDeLaReglaGuardada].
+ * día en que se creó (`created_at`, en la fecha de la app) — o, si antes de eso el dueño ya selló una
+ * ocurrencia, el vencimiento de ese primer sello: lo pagado nunca desaparece. Es el único lugar donde una
+ * fila de `recurring_rules` se vuelve [RecurringRule.activeFrom]: lo leen los tres mapeadores (este
+ * [toRule], `toRulePair` del barrido de avisos y el contexto de Movi AI), y de ahí `arranqueDeLaRegla` lo
+ * vuelve el piso de todo —`/upcoming`, `/occurrences`, el checklist, «Te quedan», la caja, la cola, la
+ * campana, los recordatorios, el cierre y Movi AI—. La regla está en `:core`, [arranqueDeLaReglaGuardada].
+ *
+ * [conLaCreacion] en `false` da solo la columna: lo usa «Tus períodos» en un período cerrado, que mira la
+ * creación **por ocurrencia** y deja ver una anterior con evidencia (ver `existiaEnElPeriodo`).
+ *
+ * Los primeros sellos se leen **una vez por transacción y usuario** ([primerSelloDe]), y solo para una fila
+ * sin `active_from` y con `created_at`: una lista de reglas no hace una consulta por regla.
  */
-internal fun org.jetbrains.exposed.sql.ResultRow.arranqueDeLaFila(): String? = arranqueDeLaReglaGuardada(
-    this[RecurringRules.activeFrom],
-    this[RecurringRules.createdAt]?.let { epochMillisToAppDate(it).toString() },
-)
+internal fun org.jetbrains.exposed.sql.ResultRow.arranqueDeLaFila(conLaCreacion: Boolean = true): String? {
+    val guardado = this[RecurringRules.activeFrom]
+    if (!conLaCreacion) return guardado
+    val creada = this[RecurringRules.createdAt] ?: return arranqueDeLaReglaGuardada(guardado, null)
+    if (!guardado.isNullOrBlank()) return arranqueDeLaReglaGuardada(guardado, null)
+    val primerSello = primerSelloDe(this[RecurringRules.userId], this[RecurringRules.id])
+        ?.let { periodo -> runCatching { occurrenceInMonth(YearMonth.parse(periodo), this[RecurringRules.dayOfMonth]) }.getOrNull() }
+    return arranqueDeLaReglaGuardada(null, epochMillisToAppDate(creada).toString(), primerSello?.toString())
+}
+
+/** La clave de la caché de primeros sellos en la transacción en curso (usuario → regla → «AAAA-MM»). */
+private val PRIMEROS_SELLOS = org.jetbrains.exposed.sql.Key<MutableMap<String, Map<String, String>>>()
+
+/**
+ * **El período («AAAA-MM» del vencimiento) del primer sello de [ruleId]**, o `null`. Una sola consulta por
+ * transacción y usuario (`MIN(period)` agrupado por regla), guardada en la transacción. Fuera de una
+ * transacción no hay a quién preguntarle: `null` (el piso queda en la creación).
+ *
+ * Un sello que se escribe en la misma transacción después de la primera lectura no se ve hasta la
+ * siguiente: no pasa en la práctica (solo se sella lo que ya está a la vista, o sea ya dentro del piso).
+ */
+private fun primerSelloDe(uid: String, ruleId: String): String? {
+    val tx = org.jetbrains.exposed.sql.transactions.TransactionManager.currentOrNull() ?: return null
+    val porUsuario = tx.getOrCreate(PRIMEROS_SELLOS) { mutableMapOf() }
+    val delUsuario = porUsuario.getOrPut(uid) {
+        val primero = RecurringOccurrences.period.min()
+        RecurringOccurrences.select(RecurringOccurrences.ruleId, primero)
+            .where { RecurringOccurrences.userId eq uid }
+            .groupBy(RecurringOccurrences.ruleId)
+            .mapNotNull { fila -> fila[primero]?.let { fila[RecurringOccurrences.ruleId] to it } }
+            .toMap()
+    }
+    return delUsuario[ruleId]
+}
 
 /**
  * Vuelta 63: ¿[deudaId] es un crédito o una tarjeta de este usuario? Misma decisión que
@@ -431,14 +469,20 @@ fun Route.reminderRoutes() {
             // desde un movimiento le borraba el piso y la regla volvía a deber los períodos
             // anteriores, reintroducidos por una edición cualquiera.
             val arranqueActual = filaActual?.get(RecurringRules.activeFrom)
-            val arranqueGuardado = fechaIsoValida(body.activeFrom) ?: arranqueActual
-            // Vuelta 121: la respuesta dice el arranque como lo lee todo lo demás (con la fecha de
-            // creación si la fila no tiene uno); la fila guarda lo de siempre y `created_at` no se toca:
-            // editar no mueve el piso.
-            storedActiveFrom = arranqueDeLaReglaGuardada(
-                arranqueGuardado,
-                filaActual?.get(RecurringRules.createdAt)?.let { epochMillisToAppDate(it).toString() },
-            )
+            // Vuelta 121: el GET devuelve el arranque DERIVADO (la creación, o el primer sello) y varios
+            // clientes reenvían la regla tal cual la leyeron (`regla.copy(...)`). Si la fila no tiene
+            // arranque y el PUT trae exactamente ese derivado, no es una decisión del dueño: la fila sigue
+            // en NULL, y el piso se sigue derivando (así un sello posterior todavía puede bajarlo).
+            val derivado = filaActual?.arranqueDeLaFila()
+            val pedido = fechaIsoValida(body.activeFrom)
+            val arranqueGuardado = when {
+                pedido == null -> arranqueActual
+                arranqueActual == null && pedido == derivado -> null
+                else -> pedido
+            }
+            // La respuesta dice el arranque como lo lee todo lo demás; `created_at` no se toca: editar no
+            // mueve el piso.
+            storedActiveFrom = arranqueGuardado ?: derivado
             // «Se debita solo», con los tres estados de `RecurringRule.seDebitaSolo`: un `null` (APK
             // viejo) conserva lo guardado. Si lo conservado ya no se sostiene —la regla cambió a
             // ingreso o se quedó sin cuenta— se apaga en vez de rechazar al cliente que ni lo ve; si
@@ -1301,10 +1345,10 @@ internal fun org.jetbrains.exposed.sql.Transaction.ocurrenciasReales(
  * que empareja, así que un orden que cambiara entre recargas haría que dos reglas se turnaran el
  * mismo movimiento.
  */
-internal fun org.jetbrains.exposed.sql.Transaction.reglasRealesDe(uid: String): List<RecurringRule> =
+internal fun org.jetbrains.exposed.sql.Transaction.reglasRealesDe(uid: String, conLaCreacion: Boolean = true): List<RecurringRule> =
     RecurringRules.selectAll()
         .where { RecurringRules.userId eq uid }
-        .map { it.toRule() }
+        .map { it.toRule(conLaCreacion) }
         .sortedBy { it.id }
 
 /**

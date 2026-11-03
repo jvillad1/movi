@@ -41,6 +41,15 @@ class Vuelta121CoreTest {
         assertEquals("2026-11-02", arranqueDeLaReglaGuardada(activeFrom = "basura", creadaEl = "2026-11-02"))
     }
 
+    @Test
+    fun `lo sellado antes de la creacion baja el piso, nunca lo sube`() {
+        assertEquals("2026-10-28", arranqueDeLaReglaGuardada(null, "2026-11-02", primerSello = "2026-10-28"))
+        assertEquals("2026-11-02", arranqueDeLaReglaGuardada(null, "2026-11-02", primerSello = "2026-12-28"))
+        // Un sello no toca un arranque guardado ni le pone piso a una regla sin fecha.
+        assertEquals("2026-11-02", arranqueDeLaReglaGuardada("2026-11-02", "2026-11-02", primerSello = "2026-09-10"))
+        assertNull(arranqueDeLaReglaGuardada(null, null, primerSello = "2026-09-10"))
+    }
+
     // ── La pregunta ──────────────────────────────────────────────────────────────────────────────
 
     @Test
