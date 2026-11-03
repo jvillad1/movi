@@ -262,26 +262,21 @@ fun ingresosPendientes(checklist: List<PagoDelPeriodo>): List<PagoDelPeriodo> =
 /** Lo ya tildado, pagos e ingresos juntos: la mitad del checklist que prueba el avance. */
 fun yaMarcados(checklist: List<PagoDelPeriodo>): List<PagoDelPeriodo> = checklist.filter { it.pagado }
 
-/** «Ya pagaste»: los pagos (no los ingresos) que tienen un pago en el período. */
+/** «Ya pagaste»: los pagos (no los ingresos) que tienen un pago en el período. Vive en `:core` (vuelta 120). */
 fun pagosHechos(checklist: List<PagoDelPeriodo>): List<PagoDelPeriodo> =
-    checklist.filter { it.pagado && !it.esIngreso }
+    com.jvillada.movi.shared.model.pagosHechos(checklist)
 
 /** «Ya recibiste»: los ingresos que ya llegaron en el período. */
 fun ingresosRecibidos(checklist: List<PagoDelPeriodo>): List<PagoDelPeriodo> =
     checklist.filter { it.pagado && it.esIngreso }
 
 /**
- * **Cuánto ya pagaste en el período**, en pesos: lo que de verdad salió cuando se sabe
- * ([PagoDelPeriodo.montoPagado]) y si no, lo que dice la regla.
- *
- * El saldo de una tarjeta no es un pago: sin el monto del movimiento que la pagó no suma nada, en
- * vez de sumar la deuda entera como si se hubiera pagado. Y fuera de pesos no se suma: una cifra en
- * pesos que esconde dólares adentro es la clase de total que este archivo no da.
+ * **Cuánto ya pagaste en el período**: «Llevas $X pagados». Vive en `:core` desde la vuelta 120 (la vista
+ * «Por categoría» de Pagos suma cada grupo con la misma función, `facturasPorCategoria`); acá se sigue
+ * nombrando igual.
  */
 fun yaPagadoEnElPeriodo(checklist: List<PagoDelPeriodo>): Long =
-    // Vuelta 63: el abono hecho no es uno de los pagos del período («Llevas $X pagados» de «de $Y»).
-    // Vuelta 72 (revisión): lo pagado en el período entero (dos abonos a la tarjeta), no solo el último.
-    pagosHechos(checklist).filter { it.moneda == "COP" && !it.esAbono }.sumOf { it.pagadoParaMostrar ?: if (it.montoEsSaldo) 0L else it.monto }
+    com.jvillada.movi.shared.model.yaPagadoEnElPeriodo(checklist)
 
 /** Lo que falta que llegue: el total de «Por cobrar», con el mismo criterio que [faltaPorPagar]. */
 fun faltaPorCobrar(checklist: List<PagoDelPeriodo>): Long =
