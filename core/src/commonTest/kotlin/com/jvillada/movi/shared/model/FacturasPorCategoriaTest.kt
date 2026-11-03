@@ -196,4 +196,33 @@ class FacturasPorCategoriaTest {
         assertTrue(soloAbono.todoPagado)
         assertTrue(soloAbono.tieneAlgoPendiente)
     }
+
+    @Test
+    fun `un abono a una tarjeta de la lista va a Tarjetas sin esperar la lectura de las tarjetas`() {
+        val grupos = facturasPorCategoria(
+            listOf(
+                fila("${CARD_RULE_PREFIX}acc_nu", "Pago tarjeta Nu", 900_000, montoEsSaldo = true, pagoMinimo = 90_000),
+                fila("r_abono_nu", "Abono a Nu", 200_000, categoria = "Traspaso", haciaDeuda = "acc_nu"),
+                fila("r_abono_veh", "Abono al carro", 500_000, categoria = "Traspaso", haciaDeuda = "acc_veh"),
+            ),
+        ).associateBy { it.nombre }
+        assertEquals(listOf("${CARD_RULE_PREFIX}acc_nu", "r_abono_nu"), grupos.getValue(GRUPO_DE_LAS_TARJETAS).filas.map { it.ruleId })
+        assertEquals(listOf("r_abono_veh"), grupos.getValue(GRUPO_DE_LOS_CREDITOS).filas.map { it.ruleId })
+    }
+
+    @Test
+    fun `las categorias de deuda se comparan normalizadas, y una categoria llamada Creditos o Tarjetas no arma otro grupo`() {
+        val grupos = facturasPorCategoria(
+            listOf(
+                fila("a", "Cuota moto", 300_000, categoria = "cuota de credito "),
+                fila("b", "Tarjeta del papá", 250_000, categoria = "PAGO DE TARJETA"),
+                fila("c", "Seguro de la tarjeta", 20_000, categoria = "tarjetas"),
+                fila("d", "Crédito Icetex", 400_000, categoria = "Créditos"),
+                fila("${CREDIT_RULE_PREFIX}veh", "Cuota Vehículo", 980_000),
+            ),
+        )
+        assertEquals(listOf(GRUPO_DE_LOS_CREDITOS, GRUPO_DE_LAS_TARJETAS), grupos.map { it.nombre })
+        assertEquals(setOf("a", "d", "${CREDIT_RULE_PREFIX}veh"), grupos[0].filas.map { it.ruleId }.toSet())
+        assertEquals(setOf("b", "c"), grupos[1].filas.map { it.ruleId }.toSet())
+    }
 }
