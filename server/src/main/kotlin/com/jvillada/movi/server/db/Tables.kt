@@ -956,8 +956,9 @@ object AiTurns : Table("ai_turns") {
 /**
  * Lo que queda en [AiTurns.conversacionId] de un turno de una conversación borrada que **no** se
  * puede borrar todavía: el que fue al modelo dentro de la ventana que cuenta el tope del mes y el
- * costo (`DIAS_QUE_NO_SE_PODAN`). Se le borra el texto y se suelta de su conversación; la poda lo
- * borra entero cuando sale de la ventana. Sin esto, borrar una conversación devolvía preguntas del
+ * costo (`DIAS_QUE_NO_SE_PODAN`). Se le borra el texto y se suelta de su conversación; lo borra
+ * entero `podarLasConversaciones` —que corre cuando una conversación recibe su primera pregunta— si
+ * ya salió de la ventana: no antes, ni solo. Sin esto, borrar una conversación devolvía preguntas del
  * tope.
  */
 const val CONVERSACION_BORRADA = ""
