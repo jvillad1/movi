@@ -61,7 +61,6 @@ import com.jvillada.movi.ui.components.ds.AyudaDeCampo
 import com.jvillada.movi.ui.components.ds.Fila
 import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
 import com.jvillada.movi.ui.components.ds.Superficie
-import com.jvillada.movi.shared.model.ajustesDelPeriodo
 import com.jvillada.movi.shared.model.sePreguntaSiYaPagasteElDeEstePeriodo
 import kotlinx.datetime.LocalDate
 import com.jvillada.movi.ui.components.desplazableConElTeclado
@@ -348,11 +347,13 @@ fun CreateRecurringRuleSheet(
     // mano (no desde un movimiento, que ya es su ocurrencia) cuyo vencimiento de este período ya pasó o es
     // hoy. Con «Sí» la regla arranca en el período siguiente; con «No» la de este período queda vencida,
     // porque es real. Sin el perfil leído no se sabe cuál es «este período» (con corte 25 no es el mes): la
-    // pregunta no sale hasta tenerlo, y el server vuelve a comprobarlo.
+    // pregunta no sale mientras se lee, y el server vuelve a comprobarlo. Vuelta 125: si la lectura falla,
+    // decide con el mes de calendario ([ajustesParaPreguntarSiYaPagaste]) en vez de no preguntar.
     var yaPagoElDeEstePeriodo by remember { mutableStateOf(true) }
-    val ajustesDelDueno = com.jvillada.movi.data.rememberLectura(
+    val perfilDelDueno = com.jvillada.movi.data.rememberLectura(
         com.jvillada.movi.data.ClaveDeLectura.Perfil, reintento = 0, activa = !isEditMode,
-    ) { Repositories.wallets.getUserProfile() }.valor?.ajustesDelPeriodo()
+    ) { Repositories.wallets.getUserProfile() }
+    val ajustesDelDueno = ajustesParaPreguntarSiYaPagaste(perfilDelDueno.valor, perfilDelDueno.terminada)
     val desdeUnMovimiento = prefill?.activeFrom != null || prefill?.eventId != null
     val preguntaDelPeriodoVisible = !isEditMode && !seGuardaComoSuscripcion && !esAbono &&
         ajustesDelDueno != null &&

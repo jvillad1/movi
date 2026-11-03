@@ -15,6 +15,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import com.jvillada.movi.observabilidad.ToqueDeUso
+import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.shared.model.UserProfile
+import com.jvillada.movi.shared.model.ajustesDelPeriodo
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
@@ -39,6 +42,20 @@ import com.jvillada.movi.ui.components.ds.anilloDeFoco
  * [EsqueletoDeYaPagaste]) miden lo mismo —dos renglones de texto y al menos el toque de 48—: la tarjeta de
  * Movi AI reserva ese alto mientras lee el perfil y no salta al saber cuál va.
  */
+
+/**
+ * Vuelta 125 · **con qué período se decide si se pregunta**, en los tres lugares (la hoja, la tarjeta de
+ * Movi AI y, sin un período guardado en la guía, «Lo que pagas cada mes»): el del perfil del dueño; si la
+ * lectura del perfil **terminó sin él** (falló), el período por defecto —el mes de calendario,
+ * [PeriodSettings] sin argumentos—, el mismo respaldo de las pantallas sin perfil (`periodoVigenteSegun`)
+ * y el corte con que nace toda cuenta; y `null` solo mientras se lee.
+ *
+ * Antes, sin perfil no se preguntaba y la regla nacía vencida sin aviso. Con el respaldo, en el peor caso
+ * (un corte que no es el 1) se pregunta cuando no hacía falta —el server revalida el «Sí» con los ajustes
+ * de verdad y lo ignora si no aplica— o no se pregunta, como antes. Pura.
+ */
+fun ajustesParaPreguntarSiYaPagaste(perfil: UserProfile?, terminoLaLectura: Boolean): PeriodSettings? =
+    perfil?.ajustesDelPeriodo() ?: if (terminoLaLectura) PeriodSettings() else null
 
 /**
  * El renglón de la pregunta: el título y, debajo, qué hace Movi con la respuesta; la [Casilla] al final

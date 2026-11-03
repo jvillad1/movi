@@ -40,8 +40,8 @@ import com.jvillada.movi.shared.model.EstadoDePropuesta
 import com.jvillada.movi.shared.model.OrigenDelRecuerdo
 import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.TipoDeAccion
-import com.jvillada.movi.shared.model.ajustesDelPeriodo
 import com.jvillada.movi.shared.model.sePreguntaSiYaPagasteElDeEstePeriodo
+import com.jvillada.movi.ui.recurrentes.ajustesParaPreguntarSiYaPagaste
 import com.jvillada.movi.data.ClaveDeLectura
 import com.jvillada.movi.data.rememberLectura
 import com.jvillada.movi.ui.fecha.hoyEnAppZone
@@ -120,13 +120,13 @@ internal suspend fun hacerLaPropuesta(
  * hoja de un pago fijo nuevo (vuelta 121, [sePreguntaSiYaPagasteElDeEstePeriodo]): un recurrente nuevo que
  * es un **gasto**, que no nace de un movimiento ya anotado (la regla no trae `activeFrom` ni
  * `eventoDeOrigen`, el mismo criterio de la hoja) y cuyo vencimiento de este período ya pasó o es hoy.
- * Sin los ajustes del dueño (el perfil sin leer), no se pregunta. Pura.
+ * Sin ajustes (el perfil se está leyendo), no se pregunta. Pura.
  *
  * - **La rama «desde un movimiento» es defensiva:** hoy `proponer_recurrente` (`LoQueMoviPropone.kt`) nunca
  *   pone `activeFrom` ni `eventoDeOrigen`; está para que una propuesta futura que sí los traiga siga el
  *   criterio de la hoja.
- * - **Límite conocido (el mismo de la hoja):** si la lectura del perfil falla, no hay pregunta y la regla va
- *   sin el campo (corre desde el período en que se crea, como con «No»).
+ * - **Si la lectura del perfil falla** (vuelta 125), la tarjeta decide con el mes de calendario, como la hoja
+ *   y la guía ([ajustesParaPreguntarSiYaPagaste]).
  */
 internal fun laPropuestaPreguntaSiYaPago(propuesta: AccionPropuesta, hoy: LocalDate, ajustes: PeriodSettings?): Boolean {
     if (propuesta.tipo != TipoDeAccion.CREAR_RECURRENTE || ajustes == null) return false
@@ -151,7 +151,9 @@ internal const val TAG_LO_ESPERA_EN_LA_PROPUESTA: String = "propuesta-lo-espera-
  * - [LEYENDO]: el perfil no llegó (ni falló): un esqueleto, y «Hacerlo» apagado;
  * - [PREGUNTA]: la pregunta, «Sí» por defecto;
  * - [EN_ESTE_PERIODO]: su fecha de este período todavía no llega: «Movi lo espera en este período»;
- * - [NINGUNO]: no es un gasto recurrente escrito, o la lectura del perfil falló (el límite conocido).
+ * - [NINGUNO]: no es un gasto recurrente escrito (o, para quien la llame sin ajustes y sin estar leyendo,
+ *   no se sabe el período; la tarjeta nunca llega ahí: si el perfil falla usa el mes de calendario, ver
+ *   [ajustesParaPreguntarSiYaPagaste]).
  */
 internal enum class LugarDeLaPregunta { NINGUNO, LEYENDO, PREGUNTA, EN_ESTE_PERIODO }
 
@@ -200,8 +202,9 @@ internal fun PropuestaDelAsistente(
     var error by remember(propuesta.id) { mutableStateOf<String?>(null) }
 
     // Vuelta 124 · «¿Ya pagaste el de este período?», como la hoja de un pago fijo nuevo: «Sí» por defecto.
-    // El período es el del dueño (con corte 25 no es el mes): sin el perfil leído la pregunta no sale, y el
-    // server vuelve a comprobarlo antes de aceptar el «Sí».
+    // El período es el del dueño (con corte 25 no es el mes): mientras se lee el perfil la pregunta no sale
+    // (esqueleto), y el server vuelve a comprobarlo antes de aceptar el «Sí». Vuelta 125: si la lectura
+    // falla, el mes de calendario, como la hoja y la guía.
     val esUnRecurrentePorHacer = propuesta.tipo == TipoDeAccion.CREAR_RECURRENTE && estado == EstadoDePropuesta.PENDIENTE
     val perfil = rememberLectura(ClaveDeLectura.Perfil, reintento = 0, activa = esUnRecurrentePorHacer) {
         repo().getUserProfile()
@@ -209,8 +212,8 @@ internal fun PropuestaDelAsistente(
     val lugar = if (!esUnRecurrentePorHacer) LugarDeLaPregunta.NINGUNO else lugarDeLaPregunta(
         propuesta,
         hoy ?: hoyEnAppZone(),
-        perfil.valor?.ajustesDelPeriodo(),
-        leyendoElPerfil = perfil.valor == null && !perfil.fallo,
+        ajustesParaPreguntarSiYaPagaste(perfil.valor, perfil.terminada),
+        leyendoElPerfil = perfil.valor == null && !perfil.terminada,
     )
     val preguntaSiYaPago = lugar == LugarDeLaPregunta.PREGUNTA
     var yaPago by remember(propuesta.id) { mutableStateOf(true) }

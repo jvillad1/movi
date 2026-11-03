@@ -223,6 +223,9 @@ fun PrimerUsoScreen(
     val arranque = desde?.let(::pasoDeLaGuia) ?: pasoInicial
     var paso by rememberSaveable { mutableStateOf(if (arranque in pasos) arranque else PasoDePrimerUso.BIENVENIDA) }
     var perfil by remember { mutableStateOf<UserProfile?>(null) }
+    // Vuelta 125: si la lectura del perfil ya terminó (bien o mal). Sin perfil y terminada, la pregunta de
+    // «¿Ya pagaste…?» decide con el mes de calendario (ver `ajustesParaLaPreguntaDeLaGuia`).
+    var seLeyoElPerfil by remember { mutableStateOf(false) }
     var guardando by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
@@ -269,7 +272,7 @@ fun PrimerUsoScreen(
     LaunchedEffect(Unit) {
         // Llegar acá por cualquier camino la pone «en curso»: la fila «Primeros pasos» no compite.
         GuiaDePrimerUso.abrir()
-        runCatching { Repositories.wallets.getUserProfile() }.onSuccess { p ->
+        runCatching { Repositories.wallets.getUserProfile() }.also { seLeyoElPerfil = true }.onSuccess { p ->
             perfil = p
             // Un período que ya se había elegido (una cuenta vieja sin cuentas) arranca elegido.
             val propia = siElCorteCaeEnFinDeSemanaDe(p.periodWeekendRule)
@@ -366,7 +369,7 @@ fun PrimerUsoScreen(
                 nombreFijo,
                 categoria,
                 cuenta = ::cuentaPorDefecto,
-                ajustes = { ajustesParaLaPreguntaDeLaGuia(ajustesGuardados, perfil) },
+                ajustes = { ajustesParaLaPreguntaDeLaGuia(ajustesGuardados, perfil, seLeyoElPerfil) },
                 hoy = { hoy ?: hoyEnAppZone() },
             ) { regla ->
                 recurrentes += regla

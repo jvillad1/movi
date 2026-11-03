@@ -74,8 +74,14 @@ class LaGuiaPreguntaSiYaPagasteTest {
         val reglas = mutableListOf<RecurringRule>()
         val perfiles = mutableListOf<UpdateProfileRequest>()
         @Volatile var perfilLeido = 0
+        /** Vuelta 125: la lectura del perfil falla. */
+        var perfilFalla = false
 
-        override suspend fun getUserProfile(): UserProfile = perfilNuevo.also { perfilLeido++ }
+        override suspend fun getUserProfile(): UserProfile {
+            perfilLeido++
+            if (perfilFalla) error("sin señal")
+            return perfilNuevo
+        }
         override suspend fun updateUserProfile(request: UpdateProfileRequest): UserProfile {
             perfiles += request
             return perfilNuevo.copy(periodCutoffDay = request.periodCutoffDay ?: 1)
@@ -93,8 +99,8 @@ class LaGuiaPreguntaSiYaPagasteTest {
         Repositories.sustitutoDePrueba = null
     }
 
-    private fun montar(paso: PasoDePrimerUso = PasoDePrimerUso.RECURRENTES, escala: Float = 1.12f): Repo {
-        val repo = Repo()
+    private fun montar(paso: PasoDePrimerUso = PasoDePrimerUso.RECURRENTES, escala: Float = 1.12f, perfilFalla: Boolean = false): Repo {
+        val repo = Repo().also { it.perfilFalla = perfilFalla }
         Repositories.sustitutoDePrueba = repo
         composeRule.setContent {
             ConClaseDeAncho(escala = escala) {
@@ -252,6 +258,15 @@ class LaGuiaPreguntaSiYaPagasteTest {
         assertEquals(true, guardarYSeguir(repo).yaPagoElDeEstePeriodo)
     }
 
+    /** Vuelta 125: sin perfil (la lectura falló) y sin período guardado en la guía, el mes de calendario. */
+    @Test
+    fun `si la lectura del perfil falla pregunta con el mes de calendario`() {
+        val repo = montar(perfilFalla = true)
+        escribirElArriendo(dia = 1)
+        assertTrue(hayPregunta())
+        assertEquals(true, guardarYSeguir(repo).yaPagoElDeEstePeriodo)
+    }
+
     @Test
     fun `con el mes de calendario el mismo dia 28 no pregunta`() {
         montar()
@@ -263,11 +278,15 @@ class LaGuiaPreguntaSiYaPagasteTest {
     fun `los ajustes de la pregunta son los guardados en la guia, o los del perfil`() {
         val guardados = ajustesDeLaGuia(25, SiElCorteCaeEnFinDeSemana.DIA_HABIL_ANTERIOR)
         val conExcepcion = perfilNuevo.copy(periodStarts = mapOf("2026-09" to "2026-09-20"))
-        assertEquals(guardados, ajustesParaLaPreguntaDeLaGuia(guardados, perfilNuevo))
-        assertEquals(mapOf("2026-09" to "2026-09-20"), ajustesParaLaPreguntaDeLaGuia(guardados, conExcepcion)?.iniciosPropios)
-        assertEquals(25, ajustesParaLaPreguntaDeLaGuia(guardados, conExcepcion)?.cutoffDay)
-        assertEquals(PeriodSettings(), ajustesParaLaPreguntaDeLaGuia(null, perfilNuevo))
-        assertNull(ajustesParaLaPreguntaDeLaGuia(null, null))
+        assertEquals(guardados, ajustesParaLaPreguntaDeLaGuia(guardados, perfilNuevo, seLeyoElPerfil = true))
+        assertEquals(mapOf("2026-09" to "2026-09-20"), ajustesParaLaPreguntaDeLaGuia(guardados, conExcepcion, seLeyoElPerfil = true)?.iniciosPropios)
+        assertEquals(25, ajustesParaLaPreguntaDeLaGuia(guardados, conExcepcion, seLeyoElPerfil = true)?.cutoffDay)
+        assertEquals(PeriodSettings(), ajustesParaLaPreguntaDeLaGuia(null, perfilNuevo, seLeyoElPerfil = true))
+        assertNull(ajustesParaLaPreguntaDeLaGuia(null, null, seLeyoElPerfil = false), "mientras se lee el perfil, no se pregunta")
+        // Vuelta 125: la lectura del perfil falló y no guardó período en la guía: el mes de calendario.
+        assertEquals(PeriodSettings(), ajustesParaLaPreguntaDeLaGuia(null, null, seLeyoElPerfil = true))
+        // Con un período guardado en la guía, ese manda aunque el perfil no esté.
+        assertEquals(guardados, ajustesParaLaPreguntaDeLaGuia(guardados, null, seLeyoElPerfil = true))
     }
 
     // ── El borrador la recuerda ────────────────────────────────────────────
