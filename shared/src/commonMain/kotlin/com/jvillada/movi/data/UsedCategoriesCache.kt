@@ -66,6 +66,14 @@ object UsedCategoriesCache {
     var used: Map<String, Set<TransactionType>> by mutableStateOf(emptyMap())
         private set
 
+    /**
+     * Vuelta 119: ¿llegó ya en esta sesión la lista del server ([recordFromServer])? Si no, el caché
+     * solo tiene lo anotado de paso y el selector mostraría casi solo el catálogo; lo usa
+     * [asegurarLasCategoriasDelDueno] para pedirla una vez. Lo baja [clear].
+     */
+    var llegaronDelServer: Boolean = false
+        private set
+
     /** Los nombres, sin el tipo — para quien solo necesita saber cuáles existen. */
     val categories: Set<String> get() = used.keys
 
@@ -204,6 +212,7 @@ object UsedCategoriesCache {
         used = emptyMap()
         prefs = emptyMap()
         usosRecientes = emptyMap()
+        llegaronDelServer = false
     }
 
     /**
@@ -243,6 +252,7 @@ object UsedCategoriesCache {
                 if (nombre.isEmpty()) null else nombre to entry.usosRecientes
             }
             .toMap()
+        llegaronDelServer = true
     }
 
     /**

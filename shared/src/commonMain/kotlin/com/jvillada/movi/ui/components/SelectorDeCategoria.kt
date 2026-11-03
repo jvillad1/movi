@@ -328,6 +328,8 @@ fun SelectorDeCategoria(
      */
     pedidosDeFoco: Int = 0,
 ) {
+    // Vuelta 119: las categorías del dueño, aunque no se haya pasado por el Inicio.
+    com.jvillada.movi.data.AsegurarLasCategoriasDelDueno()
     var busqueda by remember { mutableStateOf("") }
     val focoDeLaBusqueda = remember { FocusRequester() }
     if (pedidosDeFoco > 0) {
