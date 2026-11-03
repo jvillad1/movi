@@ -695,6 +695,10 @@ object RecurringRules : Table("recurring_rules") {
      * Nullable, y por eso es DDL seguro: `createMissingTablesAndColumns` emite `ADD COLUMN
      * created_at BIGINT NULL` y las reglas que ya existían quedan en NULL — no se sabe cuándo
      * nacieron, y «Tus períodos» lo deduce de su evidencia (ver `PeriodosRoutes`).
+     *
+     * **Vuelta 121: también es el piso de una regla sin [activeFrom].** Un pago fijo escrito a mano no
+     * tiene ocurrencias antes del período en que se creó (ver `arranqueDeLaFila` en `ReminderRoutes`):
+     * la columna sale de la lectura como su arranque, sin escribirse en [activeFrom].
      */
     val createdAt          = long("created_at").nullable()
     /**

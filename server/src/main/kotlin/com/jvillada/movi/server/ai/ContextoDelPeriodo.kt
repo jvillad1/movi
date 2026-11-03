@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.ai
 
+import com.jvillada.movi.server.routes.arranqueDeLaFila
 import com.jvillada.movi.shared.model.esAbonoADeuda
 import com.jvillada.movi.server.balance.accountTypesFor
 import com.jvillada.movi.server.db.Accounts
@@ -380,7 +381,8 @@ internal suspend fun contextoDelPeriodoDe(uid: String): ContextoDelPeriodo {
                 amount = fila[RecurringRules.amount],
                 dayOfMonth = fila[RecurringRules.dayOfMonth],
                 type = TransactionType.valueOf(fila[RecurringRules.type]),
-                activeFrom = fila[RecurringRules.activeFrom],
+                // Vuelta 121: con la fecha de creación si la fila no tiene arranque (ver `arranqueDeLaFila`).
+                activeFrom = fila.arranqueDeLaFila(),
                 // Ola V: mismo motivo que en `ReminderScheduler.toRulePair` — este mapeador no
                 // decide ocurrencias (eso ya lo resolvió `estadosDeLasOcurrenciasReales` arriba),
                 // pero que quede completo evita el «campo leído en uno y no en el otro».

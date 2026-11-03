@@ -598,6 +598,29 @@ class TusPeriodosTest {
     }
 
     /**
+     * **Vuelta 121 · lo pagado nunca desaparece.** Una regla escrita a mano el 3-oct (sin arranque: corre
+     * desde el período de su creación) que el dueño selló en septiembre con «Sí, fue este»: septiembre
+     * sale pagado con su movimiento, y agosto —sin sello ni pago— no sale.
+     */
+    @Test
+    fun `una regla a mano creada en octubre con un sello en septiembre muestra septiembre pagado`() {
+        val ahora = dia(2026, 10, 5)
+        regla("rr-gimnasio", "Gimnasio", dia = 10, monto = 180_000, categoria = "Deporte", creada = dia(2026, 10, 3))
+        // Un movimiento de julio para que agosto exista (los períodos arrancan en el del más viejo).
+        movimiento("ev-julio", dia(2026, 7, 20), 10_000)
+        movimiento("ev-gimnasio-sep", dia(2026, 9, 10), 180_000, categoria = "Deporte", descripcion = "Smart Fit")
+        sello("rr-gimnasio", "2026-09", "ev-gimnasio-sep")
+
+        val septiembre = assertNotNull(detalle("2026-09", ahora)).pagosFijos
+        septiembre.de("rr-gimnasio").let {
+            assertEquals(PAGO_FIJO_LISTO, it.estado)
+            assertEquals("ev-gimnasio-sep", it.eventId)
+        }
+        val agosto = assertNotNull(detalle("2026-08", ahora), "agosto tiene que existir para que esto pruebe algo").pagosFijos
+        assertTrue(agosto.none { it.ruleId == "rr-gimnasio" }, "agosto, sin sello ni pago y antes de la creación, no sale: $agosto")
+    }
+
+    /**
      * **«Tu plata» no se afirma antes de que Movi conozca el saldo de todas sus cuentas**, con la
      * forma real de producción: Glim abrió el 13-ago, Bancolombia Ahorros no tiene «Saldo inicial» y
      * su primer movimiento es del 25-ago, Nu abrió el 31-ago (con un gasto anterior traído de un
