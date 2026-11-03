@@ -17,6 +17,7 @@ import com.jvillada.movi.server.db.InicioPersonalizado
 import com.jvillada.movi.server.db.CardPaymentDismissals
 import com.jvillada.movi.server.db.Cards
 import com.jvillada.movi.server.db.CategoryPrefs
+import com.jvillada.movi.server.db.ConversacionesConElAsistente
 import com.jvillada.movi.server.db.ConversacionesDelAsistente
 import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.DebitosDescartados
@@ -141,6 +142,8 @@ internal val TABLAS_DEL_USUARIO: List<TablaDelUsuario> = listOf(
     // Movi AI
     TablaDelUsuario(AiTurns, AiTurns.userId),
     TablaDelUsuario(ConversacionesDelAsistente, ConversacionesDelAsistente.userId),
+    // Vuelta 117 · las conversaciones con identidad (sus turnos ya van en `ai_turns`).
+    TablaDelUsuario(ConversacionesConElAsistente, ConversacionesConElAsistente.userId),
     TablaDelUsuario(MemoriaDelAsistente, MemoriaDelAsistente.userId),
     TablaDelUsuario(AccionesPropuestas, AccionesPropuestas.userId),
     // La cerradura y lo que abre puertas

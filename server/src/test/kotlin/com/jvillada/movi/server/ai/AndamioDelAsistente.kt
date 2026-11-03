@@ -48,6 +48,8 @@ internal class AndamioDelAsistente(
         PushSubscriptions, Screens, PasswordResetTokens, CardPaymentDismissals, Goals, CategoryPrefs,
         Documents, StatementImportMatches, AiTurns, KnownDestinations, EnlacesCompartidos,
         LecturasDePapeles, ConversacionesDelAsistente, AccionesPropuestas, MemoriaDelAsistente,
+        // Vuelta 117 · las conversaciones con identidad.
+        ConversacionesConElAsistente,
         // Las que leen las tres preguntas que Movi contesta sin el modelo (`LasPreguntasSugeridas.kt`).
         AnomaliasDescartadas, DestinosDescartados, DebitosDescartados, ReglasDeComercio,
         // Vuelta 106 · el tope de preguntas libres por mes.

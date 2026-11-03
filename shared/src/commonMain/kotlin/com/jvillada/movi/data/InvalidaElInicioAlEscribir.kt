@@ -116,6 +116,8 @@ internal class InvalidaElInicioAlEscribir(
     // método es una lista que alguien se olvida de mantener. Lo que SÍ mueve plata de una
     // propuesta («Hacerlo») pasa por los métodos de siempre, que ya están envueltos.
     override suspend fun empezarConversacionNueva() = trasEscribir { delegado.empezarConversacionNueva() }
+    override suspend fun crearConversacion() = trasEscribir { delegado.crearConversacion() }
+    override suspend fun borrarConversacion(id: String) = trasEscribir { delegado.borrarConversacion(id) }
     override suspend fun resolverPropuesta(id: String, estado: EstadoDePropuesta) = trasEscribir { delegado.resolverPropuesta(id, estado) }
     // Ola 4: «Está bien» en un aviso de lo que se sale de lo normal: la próxima lectura ya no lo trae.
     override suspend fun descartarAnomalia(huella: String) = trasEscribir { delegado.descartarAnomalia(huella) }
