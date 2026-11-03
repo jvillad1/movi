@@ -89,7 +89,10 @@ class VariasConversacionesEnPantallaTest {
             titulo = vieja.titulo,
         )
 
+        var crearFalla = false
+
         override suspend fun crearConversacion(): ConversacionEnLaLista {
+            if (crearFalla) throw ApiException(503, null)
             creadas++
             return ConversacionEnLaLista("cv_nueva_$creadas", "", ahora, ahora, 0)
         }
@@ -207,6 +210,37 @@ class VariasConversacionesEnPantallaTest {
         assertEquals(listOf("cv_2"), repo.borradas)
         composeRule.waitUntil(5_000) { !hay(vieja.titulo) }
         assertTrue(hay("Vas bien"), "borrar otra no toca la abierta")
+    }
+
+    /**
+     * Revisión de la vuelta 117 · se borra la abierta y no se puede empezar otra (sin red): lo dice, y la
+     * pregunta siguiente no va a otra conversación vieja; con red de nuevo, va a una nueva.
+     */
+    @Test
+    fun `si al borrar la abierta no se puede empezar otra, lo dice y no manda a una vieja`() {
+        repo.crearFalla = true
+        montar()
+        abrirLaHoja()
+        composeRule.onNode(hasClickAction() and hasContentDescription(descripcionDelMenuDeLaConversacion(enCurso.titulo)))
+            .performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        tocar(ELIMINAR_CONVERSACION)
+        esperar(PREGUNTA_DE_ELIMINAR_LA_CONVERSACION)
+        tocar(ELIMINAR_CONVERSACION)
+        composeRule.waitUntil(5_000) { repo.borradas.isNotEmpty() }
+        esperar(NO_PUDE_EMPEZAR_OTRA)
+        assertFalse(hay("Vas bien"), "la borrada ya no se ve")
+
+        composeRule.onNode(hasSetTextAction()).performTextReplacement("¿y ahora?")
+        composeRule.onAllNodes(hasClickAction() and hasAnyChild(hasContentDescription("Enviar")), useUnmergedTree = true)[0]
+            .performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        assertEquals(emptyList(), repo.pedidos, "sin conversación nueva no se manda: iría a otra vieja")
+        assertTrue(hay("¿y ahora?"), "lo escrito vuelve al campo")
+
+        repo.crearFalla = false
+        preguntar("¿y ahora?")
+        assertEquals("cv_nueva_1", repo.pedidos.single().conversacionId)
     }
 
     @Test

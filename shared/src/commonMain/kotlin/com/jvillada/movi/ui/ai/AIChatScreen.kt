@@ -148,6 +148,10 @@ fun AIChatScreen(
     var hojaDeConversaciones by remember { mutableStateOf(false) }
     var porEliminar by remember { mutableStateOf<ConversacionEnLaLista?>(null) }
     var eliminando by remember { mutableStateOf(false) }
+    // Revisión de la vuelta 117: se borró la abierta y no se pudo empezar otra (sin red). Sin id, la
+    // pregunta siguiente iría a la más reciente —otra conversación vieja—: antes de mandarla se vuelve a
+    // intentar crear la nueva, y si tampoco se puede, no se manda.
+    var faltaLaConversacionNueva by remember { mutableStateOf(false) }
 
     // F32: el picker de la Ola 1 (extractos) acepta cualquier archivo — acá se filtra por
     // mime de imagen en el cliente, sin tocar el picker en sí.
@@ -196,6 +200,21 @@ fun AIChatScreen(
         avisoDelTopeDelMes = null
         loading = true
         coroutine.launch {
+            if (faltaLaConversacionNueva) {
+                val nueva = runCatching { Repositories.wallets.crearConversacion() }.getOrNull()
+                if (nueva == null) {
+                    // Sin conversación nueva no se manda: lo escrito vuelve al campo y el aviso lo dice.
+                    messages.removeLastOrNull()
+                    input = text
+                    if (image != null) pendingImage = image
+                    aviso = NO_PUDE_EMPEZAR_OTRA
+                    loading = false
+                    return@launch
+                }
+                conversacionId = nueva.id
+                faltaLaConversacionNueva = false
+                aviso = null
+            }
             // Lo que viaja NO es la lista de la pantalla: sin las imágenes de turnos anteriores
             // (ya se mandaron y se pagaron una vez) y con tope. Ver [mensajesParaEnviar].
             val history = mensajesParaEnviar(messages)
@@ -265,6 +284,10 @@ fun AIChatScreen(
         aviso = null
         ofrecerLasQueFuncionan = false
         avisoDelTopeDelMes = null
+        faltaLaConversacionNueva = false
+        // Revisión de la vuelta 117: «Seguir con esta» era de la que estaba abierta. La que llega puede
+        // ser de otro día y volver a ofrecer empezar otra (abrirla desde la lista lo vuelve a apagar).
+        seguirConLaVieja = false
     }
 
     fun nuevaConversacion() {
@@ -322,7 +345,15 @@ fun AIChatScreen(
                         aviso = null,
                     )
                     if (conversacion.id == conversacionId) {
-                        dejarLaConversacionAbierta(emptyList(), runCatching { Repositories.wallets.crearConversacion() }.getOrNull()?.id)
+                        val nueva = runCatching { Repositories.wallets.crearConversacion() }.getOrNull()
+                        dejarLaConversacionAbierta(emptyList(), nueva?.id)
+                        if (nueva == null) {
+                            // Nada en silencio: lo dice, y la pregunta siguiente lo vuelve a intentar antes
+                            // de mandarse (ver `mandar`), nunca a otra conversación vieja.
+                            faltaLaConversacionNueva = true
+                            aviso = NO_PUDE_EMPEZAR_OTRA
+                            lasConversaciones = lasConversaciones.copy(aviso = NO_PUDE_EMPEZAR_OTRA)
+                        }
                     }
                 }
                 .onFailure { lasConversaciones = lasConversaciones.copy(aviso = NO_PUDE_ELIMINAR_LA_CONVERSACION) }
