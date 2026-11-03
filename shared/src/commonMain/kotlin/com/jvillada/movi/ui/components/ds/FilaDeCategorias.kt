@@ -91,6 +91,9 @@ fun FilaDeCategorias(
     relleno: RellenoDeLaFilaDeCategorias = RellenoDeLaFilaDeCategorias.Lista,
     tags: TagsDeLaFilaDeCategorias = TagsDeLaFilaDeCategorias(),
 ) {
+    // Vuelta 119: quien llama arma [categorias] leyendo `UsedCategoriesCache`; con esto el caché tiene
+    // las del dueño aunque no se haya pasado por el Inicio, y la fila se vuelve a pintar al llegar.
+    com.jvillada.movi.data.AsegurarLasCategoriasDelDueno()
     Column(modifier = modifier.fillMaxWidth()) {
         EncabezadoDeLaFilaDeCategorias(sugerencia, onTodas, relleno, tags)
         PastillasDeLaFilaDeCategorias(categorias, elegida, onElegir, onNueva, relleno, tags)

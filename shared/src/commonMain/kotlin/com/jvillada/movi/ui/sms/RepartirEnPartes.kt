@@ -247,6 +247,8 @@ fun EditorDePartes(
      */
     tipos: List<QueFueLaParte> = TIPOS_DE_PARTE,
 ) {
+    // Vuelta 119: [categorias] sale de `UsedCategoriesCache`; que tenga las del dueño (ver el selector).
+    com.jvillada.movi.data.AsegurarLasCategoriasDelDueno()
     val cuadre = cuadreDeLasPartes(total, partes.map { it.parte.monto })
     // La categoría de un gasto nuevo: la que propone Movi para el aviso, o la primera de las suyas.
     val categoriaPropuesta = categoriaDeGastoOAnada(categoriaDelAviso) ?: categorias.firstOrNull { esCategoriaDeGastoSuelta(it) }

@@ -446,6 +446,11 @@ fun CreateRecurringRuleSheet(
                         runCatching { Repositories.wallets.updateRecurringRule(existing!!.id, rule) }
                     } else {
                         runCatching { Repositories.wallets.createRecurringRule(rule) }
+                    }.onSuccess {
+                        // Vuelta 119: la categoría de la regla —también una que se acaba de crear acá—
+                        // queda en el caché, como hace Agregar al guardar: la próxima hoja ya la
+                        // ofrece. (El server también la devuelve desde ahora con el resumen.)
+                        UsedCategoriesCache.record(rule.category, rule.type)
                     }
                 }
             }

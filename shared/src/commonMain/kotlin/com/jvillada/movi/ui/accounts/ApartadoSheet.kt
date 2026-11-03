@@ -189,7 +189,10 @@ fun ApartadoSheet(
         error = null
         coroutine.launch {
             try {
-                onGuardado(Repositories.wallets.guardarApartado(propuesto()))
+                val guardado = Repositories.wallets.guardarApartado(propuesto())
+                // Vuelta 119: una categoría creada acá queda para el próximo selector, como en Agregar.
+                guardado.categoria?.let { UsedCategoriesCache.record(it, TransactionType.EXPENSE) }
+                onGuardado(guardado)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
