@@ -13,6 +13,7 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
+import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.data.ENFRIAMIENTO_DE_LAS_CATEGORIAS_MS
 import com.jvillada.movi.data.asegurarLasCategoriasDelDueno
@@ -218,12 +219,63 @@ class LasCategoriasDelDuenoEnPagosFijosTest {
     }
 
     @Test
-    fun `cerrar la sesion olvida que llegaron y la falla reciente`() {
+    fun `cerrar la sesion olvida que llegaron`() {
         Repositories.sustitutoDePrueba = Repo(listOf(UsedCategory("Gardenera")))
         runBlocking { asegurarLasCategoriasDelDueno() }
         assertTrue(UsedCategoriesCache.llegaronDelServer)
         UsedCategoriesCache.clear()
         assertFalse(UsedCategoriesCache.llegaronDelServer)
+    }
+
+    /** Vuelta 125: antes la prueba miraba el campo sin haber provocado nunca una falla. */
+    @Test
+    fun `cerrar la sesion olvida la falla reciente`() {
+        Repositories.sustitutoDePrueba = object : Repo(emptyList()) {
+            override suspend fun getDashboardSummary(scope: Scope): DashboardSummary = error("sin señal")
+        }
+        runBlocking { asegurarLasCategoriasDelDueno() }
+        assertNotNull(UsedCategoriesCache.ultimoFalloDeLasCategoriasMs, "la falla quedó anotada")
+        UsedCategoriesCache.clear()
+        assertNull(UsedCategoriesCache.ultimoFalloDeLasCategoriasMs)
+    }
+
+    /**
+     * Vuelta 125: un 401 a la lectura en vuelo cierra la sesión (y `clear()` baja la falla) ANTES de
+     * que la excepción llegue al `catch`. Sin la guarda de la generación, el `catch` la volvía a anotar
+     * y quien entraba en menos de 30 s no cargaba sus categorías.
+     */
+    @Test
+    fun `una falla que vuelve despues de cerrar la sesion no re-arma el enfriamiento`() {
+        Repositories.sustitutoDePrueba = object : Repo(emptyList()) {
+            override suspend fun getDashboardSummary(scope: Scope): DashboardSummary {
+                pedidosDelResumen++
+                SessionManager.clear() // lo que hace el interceptor con un 401
+                error("401")
+            }
+        }
+        runBlocking { asegurarLasCategoriasDelDueno() }
+        assertNull(UsedCategoriesCache.ultimoFalloDeLasCategoriasMs)
+
+        // Quien entra enseguida sí sale a pedir las suyas.
+        Repositories.sustitutoDePrueba = Repo(listOf(UsedCategory("Gardenera")))
+        runBlocking { asegurarLasCategoriasDelDueno() }
+        assertEquals(2, pedidosDelResumen)
+        assertTrue("Gardenera" in UsedCategoriesCache.used)
+    }
+
+    /** Vuelta 125: al revés, lo que contesta bien después del cierre es del usuario que se fue. */
+    @Test
+    fun `una respuesta que vuelve despues de cerrar la sesion no se anota`() {
+        Repositories.sustitutoDePrueba = object : Repo(emptyList()) {
+            override suspend fun getDashboardSummary(scope: Scope): DashboardSummary {
+                pedidosDelResumen++
+                SessionManager.clear()
+                return DashboardSummary(usedCategories = listOf(UsedCategory("Del anterior")))
+            }
+        }
+        runBlocking { asegurarLasCategoriasDelDueno() }
+        assertFalse(UsedCategoriesCache.llegaronDelServer)
+        assertFalse("Del anterior" in UsedCategoriesCache.used)
         assertNull(UsedCategoriesCache.ultimoFalloDeLasCategoriasMs)
     }
 }

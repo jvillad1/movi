@@ -33,14 +33,28 @@ internal suspend fun asegurarLasCategoriasDelDueno(ahora: () -> Long = ::ahoraEn
         if (UsedCategoriesCache.llegaronDelServer) return
         val fallo = UsedCategoriesCache.ultimoFalloDeLasCategoriasMs
         if (fallo != null && ahora() - fallo < ENFRIAMIENTO_DE_LAS_CATEGORIAS_MS) return
+        // La generación al SALIR (vuelta 125): si mientras la lectura viajaba se cerró la sesión
+        // —un 401 de esta misma lectura la cierra antes de que la excepción llegue acá— lo que
+        // vuelve es de la sesión que se fue y no se anota: ni la falla (re-armaría el enfriamiento
+        // que `UsedCategoriesCache.clear()` acaba de bajar, y quien entra no vería sus categorías
+        // por medio minuto) ni las categorías (serían las del usuario anterior). Es el contador que
+        // ya sube `CacheDeLecturas.borrarTodo()` en el cierre de sesión; como también sube con cada
+        // escritura propia, una escritura en vuelo deja la lectura sin anotar y el próximo selector
+        // la vuelve a pedir: de más, nunca de menos.
+        val generacion = CacheDeLecturas.generacion
         val resumen = try {
             Repositories.wallets.getDashboardSummary(Scope.SELF)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
-            UsedCategoriesCache.ultimoFalloDeLasCategoriasMs = ahora()
+            // `Throwable` a propósito (no `Exception`): en la web un fetch caído es un `kotlin.Error`, y
+            // `ExcepcionesDeRedScanTest` no deja atrapar `Exception` a secas en lo que corre ahí.
+            if (CacheDeLecturas.generacion == generacion) {
+                UsedCategoriesCache.ultimoFalloDeLasCategoriasMs = ahora()
+            }
             return
         }
+        if (CacheDeLecturas.generacion != generacion) return
         UsedCategoriesCache.recordFromServer(resumen.usedCategories)
         // La misma respuesta trae la cuenta con la que arranca «Agregar», como en el Inicio.
         CuentaMasUsadaCache.recordFromServer(resumen.cuentaMasUsada)
