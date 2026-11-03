@@ -125,6 +125,10 @@ import com.jvillada.movi.ui.components.AnfitrionDeHojas
 import com.jvillada.movi.ui.components.LocalAnfitrionDeHojas
 import com.jvillada.movi.ui.components.NavTab
 import com.jvillada.movi.ui.components.RelevoDeScroll
+import com.jvillada.movi.ui.components.CapaDeLaPantalla
+import com.jvillada.movi.ui.components.LocalTecladoQueDesplaza
+import com.jvillada.movi.ui.components.TecladoQueDesplaza
+import com.jvillada.movi.ui.components.elTecladoDesplaza
 import com.jvillada.movi.ui.components.WindowWidthClass
 import com.jvillada.movi.ui.components.elRelevoDeScrollAplica
 import com.jvillada.movi.ui.components.recibeElScrollDeLosMargenes
@@ -471,6 +475,9 @@ fun App() {
                 ) { pila ->
                 val pantalla = pila.last()
                 saveableStateHolder.SaveableStateProvider(key = pantalla.toString()) {
+                // Vuelta 118: cada pantalla es una capa del teclado; las flechas, las de página, el
+                // espacio, Inicio y Fin mueven la de arriba (ver [TecladoQueDesplaza]).
+                CapaDeLaPantalla(arriba = pantalla == backStack.lastOrNull()) {
                 CompositionLocalProvider(
                     LocalGoBack provides goBackTo,
                     LocalNavigate provides navigate,
@@ -555,6 +562,7 @@ fun App() {
                 is Screen.DetalleDePeriodo -> PeriodosListaYDetalle(navigate, idPedido = pantalla.id)
                 }
                 } // CompositionLocalProvider(LocalGoBack)
+                } // CapaDeLaPantalla
                 } // SaveableStateProvider
                 } // AnimatedContent
 
@@ -715,11 +723,15 @@ internal fun EsqueletoDeLaCascara(
     // Las hojas centradas (mediano y expandido) se dibujan acá, encima de todo — ver
     // [AnfitrionDeHojas]. Así su velo tapa también el rail y los márgenes.
     val anfitrionDeHojas = remember { AnfitrionDeHojas() }
+    // Vuelta 118: las teclas de desplazar que nadie quiso mueven la pantalla de arriba o la hoja
+    // abierta (ver [TecladoQueDesplaza]). En la raíz, para que les lleguen también las de las hojas.
+    val tecladoQueDesplaza = remember { TecladoQueDesplaza() }
     CompositionLocalProvider(
         LocalAnfitrionDeHojas provides anfitrionDeHojas,
+        LocalTecladoQueDesplaza provides tecladoQueDesplaza,
         com.jvillada.movi.ui.dashboard.LocalBandaDelInicioDesplazada provides bandaDesplazada,
     ) {
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier.fillMaxSize().elTecladoDesplaza(tecladoQueDesplaza)) {
     Row(modifier = Modifier.fillMaxSize()) {
         if (showRail) {
             MinNavRail(
