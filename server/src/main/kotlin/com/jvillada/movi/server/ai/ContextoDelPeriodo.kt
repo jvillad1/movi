@@ -1,6 +1,10 @@
 package com.jvillada.movi.server.ai
 
 import com.jvillada.movi.server.routes.arranqueDeLaFila
+import com.jvillada.movi.server.routes.frecuenciaDeLaFila
+import com.jvillada.movi.server.routes.primerVencimientoDeLaFila
+import com.jvillada.movi.shared.model.esMensual
+import com.jvillada.movi.shared.model.mesDeReferencia
 import com.jvillada.movi.shared.model.esAbonoADeuda
 import com.jvillada.movi.server.balance.accountTypesFor
 import com.jvillada.movi.server.db.Accounts
@@ -91,7 +95,20 @@ internal data class RecurrenteParaContexto(
     val esAbono: Boolean = false,
     /** …y a una tarjeta: pagarle de más no cambia «Te quedan» (lo comprado ya contó). */
     val abonoATarjeta: Boolean = false,
-)
+    /**
+     * Vuelta 126 · la cadencia de una regla no mensual («Cada 3 meses · el próximo, 15 dic»), o `null` en
+     * una de cada mes. El modelo no puede sumarla como si fuera del mes.
+     */
+    val cadencia: String? = null,
+    /**
+     * Vuelta 126 · ¿vence en este período? Una no mensual que no vence acá no es un gasto del período: no
+     * entra a «lo que todavía no ocurrió». Una mensual, siempre `true`.
+     */
+    val venceEnEstePeriodo: Boolean = true,
+) {
+    /** Lo que todavía falta de este período: un gasto que vence acá, sin ocurrir, que no es un abono. */
+    val pendienteEnEstePeriodo: Boolean get() = !esIngreso && !yaOcurrioEnElPeriodo && !esAbono && venceEnEstePeriodo
+}
 
 /**
  * Una suscripción **activa**, ya traída a pesos y al mes.
@@ -389,6 +406,9 @@ internal suspend fun contextoDelPeriodoDe(uid: String): ContextoDelPeriodo {
                 destinoConocidoId = fila[RecurringRules.destinoConocidoId],
                 haciaDeuda = fila[RecurringRules.haciaDeuda],
                 pausadaDesde = fila[RecurringRules.pausadaDesde],
+                // Vuelta 126: cada cuánto vence (ver `frecuenciaDeLaFila`).
+                frecuencia = fila.frecuenciaDeLaFila(),
+                primerVencimiento = fila.primerVencimientoDeLaFila(),
             )
             // `null` = este período no tiene ninguna ocurrencia que preguntar (un período acortado
             // a mano que no alcanza a contener el día de la regla). Ahí no hay sello que mirar.
@@ -400,6 +420,16 @@ internal suspend fun contextoDelPeriodoDe(uid: String): ContextoDelPeriodo {
             // Movi AI no lo cuenta. Lo pagado y lo vencido antes de pausar sí quedan, como en Pagos.
             val enPausa = enJuego?.let { regla.pausadaParaElVencimiento(it.toString()) } ?: regla.estaPausadaEl(hoy.toString())
             if (!yaOcurrio && enPausa) return@mapNotNull null
+            // Vuelta 126 · una no mensual: vence en este período solo si su ocurrencia por preguntar cae acá
+            // (una de una sola vez ya vencida y sin pagar también: sigue debiéndose). Pagada en otro período, o
+            // sin vencimiento en este, no es de este período.
+            val diasDeEste = com.jvillada.movi.server.reminders.diasDelPeriodo(hoy, ajustes.mesDeReferencia())
+            val venceAca = regla.esMensual || (enJuego != null && (enJuego in diasDeEste || (!yaOcurrio && enJuego.isBefore(diasDeEste.start))))
+            val proximo = if (regla.esMensual) null else {
+                val sellados = selladasPorRegla[regla.id].orEmpty()
+                if (com.jvillada.movi.server.reminders.unaSolaVezYaNoDebe(regla, sellados, ajustes)) null
+                else com.jvillada.movi.server.reminders.dueDateFor(regla, hoy, occurredPeriods = sellados, settings = ajustes).toString()
+            }
             RecurrenteParaContexto(
                 nombre = regla.name,
                 categoria = regla.category,
@@ -409,6 +439,8 @@ internal suspend fun contextoDelPeriodoDe(uid: String): ContextoDelPeriodo {
                 yaOcurrioEnElPeriodo = yaOcurrio,
                 esAbono = regla.esAbonoADeuda,
                 abonoATarjeta = regla.esAbonoADeuda && regla.haciaDeuda in tarjetasDelDueno,
+                cadencia = com.jvillada.movi.shared.model.cadenciaDelPago(regla, proximo),
+                venceEnEstePeriodo = venceAca,
             )
         }
 
@@ -542,17 +574,25 @@ internal fun ContextoDelPeriodo.render(): String = buildString {
     } else {
         recurrentes.sortedBy { it.dia }.forEach { r ->
             val que = if (r.esIngreso) "entra" else "sale"
-            val estado = if (r.yaOcurrioEnElPeriodo) "YA ocurrió en este período" else "TODAVÍA no ocurrió en este período"
+            val estado = when {
+                !r.venceEnEstePeriodo -> "NO vence en este período"
+                r.yaOcurrioEnElPeriodo -> "YA ocurrió en este período"
+                else -> "TODAVÍA no ocurrió en este período"
+            }
             val abono = when {
                 r.abonoATarjeta -> " (abono planeado a una tarjeta: NO es un gasto fijo, y pagarle de más a una tarjeta no cambia «Te quedan»: lo comprado ya contó)"
                 r.esAbono -> " (abono planeado a una deuda: NO es un gasto fijo y no resta de «Te quedan» hasta que se hace el traspaso)"
                 else -> ""
             }
-            appendLine("- ${r.nombre} (${r.categoria}): \$${r.monto} $que el día ${r.dia} — $estado$abono")
+            // Vuelta 126: una no mensual dice su cadencia y que no es un gasto de cada mes.
+            val cuando = r.cadencia?.let { "$que ${it.replaceFirstChar { c -> c.lowercase() }} (NO es de cada mes: no lo sumes como gasto mensual)" }
+                ?: "$que el día ${r.dia}"
+            appendLine("- ${r.nombre} (${r.categoria}): \$${r.monto} $cuando — $estado$abono")
         }
         // Sumado acá por lo mismo que el total de suscripciones: «¿me alcanza?» se contesta con este
-        // número, y sumar renglones es justo lo que el modelo hace mal. Sin los abonos planeados.
-        val pendientes = recurrentes.filter { !it.esIngreso && !it.yaOcurrioEnElPeriodo && !it.esAbono }
+        // número, y sumar renglones es justo lo que el modelo hace mal. Sin los abonos planeados, y sin lo que
+        // no vence en este período (vuelta 126).
+        val pendientes = recurrentes.filter { it.pendienteEnEstePeriodo }
         if (pendientes.isNotEmpty()) {
             appendLine("Total de gastos recurrentes que TODAVÍA no ocurrieron en este período: \$${pendientes.sumOf { it.monto }}")
         }

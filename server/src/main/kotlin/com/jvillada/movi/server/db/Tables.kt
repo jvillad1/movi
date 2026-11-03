@@ -726,6 +726,19 @@ object RecurringRules : Table("recurring_rules") {
      * estaba. Solo la escriben `POST …/pausar` y `…/reanudar`. Su caso está en `SchemaDeArranqueTest`.
      */
     val pausadaDesde       = varchar("pausada_desde", 10).nullable()
+    /**
+     * Vuelta 126 · cada cuánto vence (el nombre de [com.jvillada.movi.shared.model.FrecuenciaDelPago]), o
+     * NULL = cada mes. Nullable: `createMissingTablesAndColumns` emite `ADD COLUMN frecuencia VARCHAR(20)
+     * NULL` y toda regla que ya existe sigue mensual, exactamente como estaba. MENSUAL se guarda como NULL.
+     * Un valor que no se entiende se lee como mensual ([frecuenciaDeLaFila]). Su caso está en
+     * `SchemaDeArranqueTest`.
+     */
+    val frecuencia         = varchar("frecuencia", 20).nullable()
+    /**
+     * Vuelta 126 · el ancla: la fecha ISO del primer vencimiento de una regla no mensual (ver
+     * [com.jvillada.movi.shared.model.RecurringRule.primerVencimiento]). Nullable, mismo DDL seguro.
+     */
+    val primerVencimiento  = varchar("primer_vencimiento", 10).nullable()
     override val primaryKey = PrimaryKey(id)
     init { index("idx_recurring_rules_user_id", false, userId) }
 }

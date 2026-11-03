@@ -20,6 +20,7 @@ import com.jvillada.movi.server.reminders.arranqueDeLaRegla
 import com.jvillada.movi.server.reminders.ocurrenciaAnteriorQuePisaElPeriodo
 import com.jvillada.movi.server.reminders.periodOf
 import com.jvillada.movi.server.reminders.primeraOcurrenciaDesde
+import com.jvillada.movi.server.reminders.venceEnSuMes
 import com.jvillada.movi.server.sms.destinosDelDueno
 import com.jvillada.movi.server.time.appDateToEpochMillis
 import com.jvillada.movi.shared.model.AccountType
@@ -435,7 +436,8 @@ private fun ocurrenciasEntre(regla: RecurringRule, dias: ClosedRange<LocalDate>,
     val ocurrencias = mutableListOf<LocalDate>()
     var vencimiento = primeraOcurrenciaDesde(dias.start, regla.dayOfMonth)
     while (vencimiento in dias) {
-        if (ruleIsActiveOn(regla, vencimiento, ajustes)) ocurrencias += vencimiento
+        // Vuelta 126: una no mensual solo tiene ocurrencia en los meses en que vence (una mensual, en todos).
+        if (ruleIsActiveOn(regla, vencimiento, ajustes) && venceEnSuMes(regla, vencimiento)) ocurrencias += vencimiento
         vencimiento = primeraOcurrenciaDesde(vencimiento.plusDays(1), regla.dayOfMonth)
     }
     return ocurrencias
