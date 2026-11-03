@@ -188,6 +188,45 @@ class LaGuiaPreguntaSiYaPagasteTest {
         assertFalse(hayPregunta())
     }
 
+    @Test
+    fun `con No, pasar a un dia por venir y volver la pregunta vuelve a Si`() {
+        val repo = montar()
+        escribirElArriendo(dia = 1)
+        composeRule.onNodeWithTag(TAG_YA_PAGASTE_EN_LA_GUIA).performScrollTo().performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(TAG_YA_PAGASTE_EN_LA_GUIA).assertIsOff()
+
+        composeRule.onNodeWithTag(tagDelDiaDelMes(20)).performScrollTo().performClick()
+        composeRule.waitForIdle()
+        assertFalse(hayPregunta())
+        composeRule.onNodeWithTag(tagDelDiaDelMes(1)).performScrollTo().performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag(TAG_YA_PAGASTE_EN_LA_GUIA).assertIsOn()
+        assertEquals(true, guardarYSeguir(repo).yaPagoElDeEstePeriodo)
+    }
+
+    @Test
+    fun `con No, pasar a otro dia que tambien ya paso la conserva`() {
+        val repo = montar()
+        escribirElArriendo(dia = 1)
+        composeRule.onNodeWithTag(TAG_YA_PAGASTE_EN_LA_GUIA).performScrollTo().performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(tagDelDiaDelMes(2)).performScrollTo().performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(TAG_YA_PAGASTE_EN_LA_GUIA).assertIsOff()
+        assertEquals(false, guardarYSeguir(repo).yaPagoElDeEstePeriodo)
+    }
+
+    @Test
+    fun `se toca el renglon entero, no solo la casilla`() {
+        montar()
+        escribirElArriendo(dia = 1)
+        composeRule.onNodeWithText(YA_PAGASTE_EL_DE_ESTE_PERIODO).performScrollTo().performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(TAG_YA_PAGASTE_EN_LA_GUIA).assertIsOff()
+    }
+
     // ── El período que se acaba de elegir ──────────────────────────────────
 
     @Test

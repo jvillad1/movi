@@ -521,6 +521,8 @@ fun PrimerUsoScreen(
                         .onSuccess {
                             periodoGuardado = if (quincena) textoDeLaQuincena(elegido, segundoDia, regla) else textoDelInicioDelMes(elegido, regla)
                             ajustesGuardados = ajustesDeLaGuia(elegido, regla, segundoDia.takeIf { quincena })
+                            // Revisión de la 124: con el período nuevo, la pregunta que dejó de verse vuelve a «Sí».
+                            borradoresDeRecurrentes.values.forEach { it.olvidarSiYaNoSePregunta() }
                             guardando = false
                             (volverAlPaso ?: siguiente)?.let(::irA)
                         }

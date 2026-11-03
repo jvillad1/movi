@@ -174,9 +174,25 @@ class BorradorDeRecurrente(
 ) : Borrador {
     var nombre by mutableStateOf(nombreFijo ?: "")
     var monto by mutableStateOf<Long?>(null)
-    var dia by mutableStateOf("")
+    private var diaElegido by mutableStateOf("")
+    /** El día; al cambiarlo, una respuesta a una pregunta que dejó de verse se olvida ([olvidarSiYaNoSePregunta]). */
+    var dia: String
+        get() = diaElegido
+        set(valor) {
+            diaElegido = valor
+            olvidarSiYaNoSePregunta()
+        }
     /** Vuelta 124 · la respuesta a «¿Ya pagaste el de este período?»; «Sí» por defecto. Solo cuenta si [preguntaSiYaPago]. */
     var yaPago by mutableStateOf(true)
+
+    /**
+     * Revisión de la 124: **una pregunta que deja de verse vuelve a «Sí»**. Con «No» en el día 1, pasar al 20
+     * (por venir: sin pregunta) y volver al 1 la muestra otra vez como una pregunta nueva, con «Sí». Se llama al
+     * cambiar el día y al cambiar el período elegido en la guía.
+     */
+    fun olvidarSiYaNoSePregunta() {
+        if (!preguntaSiYaPago) yaPago = true
+    }
     var guardando by mutableStateOf(false)
         private set
     override var error: String? by mutableStateOf(null)
