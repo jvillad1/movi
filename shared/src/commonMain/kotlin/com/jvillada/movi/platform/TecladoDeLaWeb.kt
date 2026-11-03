@@ -16,6 +16,10 @@ import androidx.compose.ui.unit.Dp
  * a la ventana (`innerHeight − visualViewport.height − offsetTop`), solo con el zoom en 1 (con los
  * dedos el *visual viewport* también encoge, y eso no es el teclado). La raíz lo suma al `imePadding`.
  * En Android y en iOS, cero: allá manda el inset.
+ *
+ * No cuenta dos veces con el `interactive-widget=resizes-content` del `index.html` (vuelta 115): donde
+ * el navegador lo respeta (Chrome de Android) la ventana misma encoge, `innerHeight` baja con el
+ * teclado y el hueco da cero; donde no (Safari de iOS), el hueco es el teclado.
  */
 @Composable
 expect fun altoDelTecladoDeLaWeb(): Dp
