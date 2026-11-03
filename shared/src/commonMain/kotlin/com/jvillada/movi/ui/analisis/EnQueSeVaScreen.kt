@@ -108,6 +108,7 @@ import com.jvillada.movi.ui.fecha.MESES_DEL_ANIO
 import com.jvillada.movi.ui.fecha.hoyEnAppZone
 import com.jvillada.movi.ui.transactions.CHIP_GASTOS
 import kotlinx.datetime.LocalDate
+import com.jvillada.movi.ui.components.rememberListaConElTeclado
 
 /**
  * # «En qué se va»: el período, día por día (Ola 4 · Ver la plata)
@@ -277,11 +278,11 @@ fun EnQueSeVaScreen(
                         modifier = Modifier.fillMaxSize().padding(horizontal = Medida.margenDePantalla),
                         horizontalArrangement = Arrangement.spacedBy(Medida.entreSecciones),
                     ) {
-                        LazyColumn(modifier = Modifier.weight(1f)) { resumenYGrafico() }
+                        LazyColumn(state = rememberListaConElTeclado(), modifier = Modifier.weight(1f)) { resumenYGrafico() }
                         LazyColumn(modifier = Modifier.weight(1f)) { laLista() }
                     }
                 } else {
-                    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = relleno) {
+                    LazyColumn(state = rememberListaConElTeclado(), modifier = Modifier.fillMaxSize(), contentPadding = relleno) {
                         resumenYGrafico()
                         item { Spacer(Modifier.height(Medida.entreSecciones)) }
                         laLista()

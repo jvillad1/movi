@@ -8,8 +8,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
@@ -40,6 +38,7 @@ import kotlinx.coroutines.launch
 import com.jvillada.movi.ui.components.ds.Campo
 import com.jvillada.movi.ui.components.ds.PieDeHoja
 import com.jvillada.movi.ui.components.ds.VarianteDeBoton
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 /**
  * Confirmar la anulación de un movimiento. Vuelta 67: ya tiene vuelta atrás —«Anulado · Deshacer»
@@ -149,7 +148,7 @@ fun VoidEventSheet(
         // patrón que las hojas de `CategorySheets.kt`, que ya lo tenían.
         Column(
             modifier = Modifier
-                .verticalScroll(rememberScrollState())
+                .desplazableConElTeclado()
                 .weight(1f, fill = false),
         ) {
 

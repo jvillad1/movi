@@ -3,8 +3,6 @@ package com.jvillada.movi.ui.mas
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Email
 import androidx.compose.runtime.Composable
@@ -21,6 +19,7 @@ import com.jvillada.movi.ui.components.ds.TonoDeIcono
 import com.jvillada.movi.ui.primeruso.DireccionDeMovi
 import com.jvillada.movi.ui.primeruso.ReenvioPorCorreo
 import com.jvillada.movi.ui.profile.CARGANDO
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 /** La fila de Ajustes donde no se leen SMS (la web, iOS): reenviar los correos del banco a Movi. */
 const val RECIBE_TUS_ALERTAS_POR_CORREO: String = "Recibe tus alertas por correo"
@@ -63,7 +62,7 @@ internal fun FilaDeAlertasPorCorreo(direccion: DireccionDeMovi, onAbrir: () -> U
 internal fun HojaDeAlertasPorCorreo(direccion: DireccionDeMovi, onDismiss: () -> Unit) {
     MarcoDeHoja(onDismiss = onDismiss) {
         Column(
-            modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false).testTag(TAG_HOJA_DE_ALERTAS_POR_CORREO),
+            modifier = Modifier.desplazableConElTeclado().weight(1f, fill = false).testTag(TAG_HOJA_DE_ALERTAS_POR_CORREO),
         ) {
             EncabezadoDeHoja(
                 RECIBE_TUS_ALERTAS_POR_CORREO,

@@ -94,8 +94,6 @@ import com.jvillada.movi.ui.components.toUserMessage
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import androidx.compose.foundation.border
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import com.jvillada.movi.shared.model.EdicionDeDocumento
@@ -110,6 +108,8 @@ import com.jvillada.movi.ui.components.ds.PieDeHoja
 import com.jvillada.movi.ui.components.ds.RotuloDeCampo
 import com.jvillada.movi.ui.components.ConfirmarEnHoja
 import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
+import com.jvillada.movi.ui.components.desplazableConElTeclado
+import com.jvillada.movi.ui.components.rememberListaConElTeclado
 
 /**
  * **«Documentos»** — los papeles del dueño, guardados en Movi.
@@ -334,7 +334,7 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
                 // la vista hasta el encabezado. El del encabezado sigue estando (es la puerta de
                 // siempre, visible desde el primer cuadro); los dos llaman a la misma función.
                 lista.isEmpty() -> Column(
-                    modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+                    modifier = Modifier.fillMaxSize().desplazableConElTeclado(),
                 ) {
                     Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(top = Espacio.s)) {
                         Vacio(
@@ -355,6 +355,7 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
                 }
 
                 else -> LazyColumn(
+                    state = rememberListaConElTeclado(),
                     modifier = Modifier.fillMaxWidth(),
                     contentPadding = PaddingValues(top = Espacio.s, bottom = Medida.botonFlotante + Medida.entreSecciones),
                 ) {
@@ -881,7 +882,7 @@ private fun HojaDeDocumento(
     MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = cerrarHabilitado) {
         Column(
             modifier = Modifier
-                .verticalScroll(rememberScrollState())
+                .desplazableConElTeclado()
                 .weight(1f, fill = false),
         ) {
             contenido()

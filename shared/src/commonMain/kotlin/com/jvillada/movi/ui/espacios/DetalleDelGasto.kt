@@ -6,8 +6,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Event
 import androidx.compose.material.icons.rounded.PieChart
@@ -54,6 +52,7 @@ import com.jvillada.movi.ui.fecha.hoyEnAppZone
 import com.jvillada.movi.ui.transactions.HojaDelMovimiento
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 /*
  * # Tocar un gasto del espacio (vuelta 31)
@@ -187,7 +186,7 @@ internal fun HojaDelGasto(espacio: Espacio, gasto: GastoDelEspacio, onCerrar: ()
 
     MarcoDeHoja(onDismiss = onCerrar) {
         Column(
-            modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false).testTag(TAG_DETALLE_DEL_GASTO),
+            modifier = Modifier.desplazableConElTeclado().weight(1f, fill = false).testTag(TAG_DETALLE_DEL_GASTO),
         ) {
             EncabezadoDeHoja(tituloDelGasto(gasto), subtitulo = espacio.nombre)
             Spacer(Modifier.height(Medida.dentroDeSeccion))

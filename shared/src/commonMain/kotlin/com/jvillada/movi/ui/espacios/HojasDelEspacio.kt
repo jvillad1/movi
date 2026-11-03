@@ -17,8 +17,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Groups
@@ -82,6 +80,7 @@ import kotlinx.coroutines.launch
 import com.jvillada.movi.ui.components.ds.Campo
 import com.jvillada.movi.ui.components.ds.CampoDeMonto
 import com.jvillada.movi.ui.components.ds.PieDeHoja
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 /** Tags para las pruebas. */
 const val TAG_REPARTIR: String = "espacios:repartir"
@@ -155,7 +154,7 @@ fun HojaSaldar(detalle: DetalleDelEspacio, onDismiss: () -> Unit, onSaldado: () 
     }
 
     MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !trabajando) {
-        Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+        Column(modifier = Modifier.desplazableConElTeclado().weight(1f, fill = false)) {
             TituloDeLaHoja(titulo, "No es ingreso ni gasto: solo salda lo de ${espacio.nombre}.")
             Cifra(monto, VarianteDeCifra.Grande)
             if (detalle.propuestas.isNotEmpty()) {
@@ -260,7 +259,7 @@ fun HojaPagoOtro(
     }
 
     MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !trabajando) {
-        Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+        Column(modifier = Modifier.desplazableConElTeclado().weight(1f, fill = false)) {
             TituloDeLaHoja("Pagó otro", "No toca tus cuentas. Tu parte cuenta en tus gastos de hoy.")
             if (otros.size > 1) {
                 Row(horizontalArrangement = Arrangement.spacedBy(EspacioDeDiseno.xs)) {
@@ -332,7 +331,7 @@ fun HojaPagoOtro(
     }
     if (hojaDeCategorias) {
         MarcoDeHoja(onDismiss = { hojaDeCategorias = false }) {
-            Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+            Column(modifier = Modifier.desplazableConElTeclado().weight(1f, fill = false)) {
                 EncabezadoDeHoja("Categoría")
                 Spacer(Modifier.height(Medida.dentroDeSeccion))
                 SelectorDeCategoria(

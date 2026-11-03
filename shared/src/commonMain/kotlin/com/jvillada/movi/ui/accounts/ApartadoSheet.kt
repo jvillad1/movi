@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -69,6 +68,7 @@ import com.jvillada.movi.ui.quickadd.pastillasDeLaCategoria
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 /** Lo que se dice cuando apartar (o quitar) no llegó al server por falta de red. */
 const val APARTAR_SIN_CONEXION: String = "Para apartar plata necesitas conexión"
@@ -220,7 +220,7 @@ fun ApartadoSheet(
     MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !trabajando) {
         Column(
             modifier = Modifier
-                .verticalScroll(rememberScrollState())
+                .desplazableConElTeclado()
                 .weight(1f, fill = false)
                 .testTag(TAG_HOJA_DE_APARTAR),
         ) {
@@ -370,7 +370,7 @@ fun ApartadoSheet(
 
     if (hojaDeCategorias) {
         MarcoDeHoja(onDismiss = { hojaDeCategorias = false }) {
-            Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+            Column(modifier = Modifier.desplazableConElTeclado().weight(1f, fill = false)) {
                 EncabezadoDeHoja("Categoría")
                 Spacer(Modifier.height(Medida.dentroDeSeccion))
                 SelectorDeCategoria(

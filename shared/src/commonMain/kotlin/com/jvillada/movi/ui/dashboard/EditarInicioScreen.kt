@@ -26,10 +26,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
@@ -73,6 +71,7 @@ import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.MinSectionHeader
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.filterNotNull
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 /**
  * # «Editar inicio» (Ola 3 · Hoy en una mirada, 22-oct-2026)
@@ -225,7 +224,7 @@ fun EditarInicioScreen(onNavigate: (Screen) -> Unit) {
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
+                .desplazableConElTeclado()
                 .padding(horizontal = Movi.espacios.amplio, vertical = Movi.espacios.medio),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {

@@ -5,8 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material3.Text
@@ -44,6 +42,7 @@ import com.jvillada.movi.ui.fecha.hoyEnAppZone
 import kotlinx.coroutines.CancellationException
 import kotlinx.datetime.Clock
 import kotlinx.datetime.LocalDate
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 /** La hoja de la guía. */
 const val TAG_HOJA_DE_COMO_SACAR_EL_EXTRACTO: String = "hoja-de-como-sacar-el-extracto"
@@ -111,7 +110,7 @@ fun HojaDeComoSacarElExtracto(
     MarcoDeHoja(onDismiss = onDismiss) {
         Column(
             modifier = Modifier
-                .verticalScroll(rememberScrollState())
+                .desplazableConElTeclado()
                 .weight(1f, fill = false)
                 .testTag(TAG_HOJA_DE_COMO_SACAR_EL_EXTRACTO),
             verticalArrangement = Arrangement.spacedBy(Espacio.s),

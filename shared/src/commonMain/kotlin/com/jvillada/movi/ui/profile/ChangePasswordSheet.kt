@@ -5,10 +5,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -36,6 +34,7 @@ import kotlinx.coroutines.launch
 import com.jvillada.movi.ui.components.ds.Campo
 import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
 import com.jvillada.movi.ui.components.ds.PieDeHoja
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 /**
  * F42 — cambiar contraseña estando adentro de la app. Distinto del reset por correo de
@@ -130,7 +129,7 @@ fun ChangePasswordSheet(
                 )
             }
         } else {
-            Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+            Column(modifier = Modifier.desplazableConElTeclado().weight(1f, fill = false)) {
                 // Vuelta 41: la hoja abre con su encabezado, como las demás (no tenía título).
                 EncabezadoDeHoja(
                     CAMBIAR_CONTRASENA,

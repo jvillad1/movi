@@ -44,6 +44,7 @@ import com.jvillada.movi.ui.components.ds.Seccion
 import com.jvillada.movi.ui.components.ds.Superficie
 import com.jvillada.movi.ui.components.ds.TonoDePildora
 import kotlinx.datetime.Clock
+import com.jvillada.movi.ui.components.rememberListaConElTeclado
 
 /**
  * # La pestaña «Servidor» de «Fallos y uso» (vuelta 102)
@@ -82,6 +83,7 @@ fun PestanaServidor(modifier: Modifier = Modifier) {
 
     val ahora = Clock.System.now().toEpochMilliseconds()
     LazyColumn(
+        state = rememberListaConElTeclado(),
         modifier = modifier,
         contentPadding = PaddingValues(horizontal = Medida.margenDePantalla, vertical = Medida.dentroDeSeccion),
         verticalArrangement = Arrangement.spacedBy(Medida.entreSecciones),

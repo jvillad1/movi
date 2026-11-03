@@ -9,9 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.Icon
@@ -104,6 +102,7 @@ import com.jvillada.movi.ui.categorias.IconoDeCategoria
 import com.jvillada.movi.ui.categorias.TamanoDeIconoDeCategoria
 import com.jvillada.movi.ui.components.ds.Campo
 import com.jvillada.movi.ui.components.ds.CampoDeMonto
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 /**
  * Mismo armazón visual que [com.jvillada.movi.ui.credits.CreditBalanceSheet]: fondo oscuro
@@ -664,7 +663,7 @@ internal fun ContenidoDelMovimiento(
     // acá se explica en vez de ofrecer una lista que iba a fallar al tocarla.
     if (isTransferLeg(event)) {
         MarcoDelMovimiento(lugar, onDismiss = onDismiss, dismissEnabled = true) {
-            Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+            Column(modifier = Modifier.desplazableConElTeclado().weight(1f, fill = false)) {
                 // El rótulo dice QUÉ es, y no «TRASPASO» para todo: la mitad de una cuota se abre
                 // por esta misma rama —es una pata de un par— y llamarla traspaso contradice al
                 // renglón de Movimientos, que desde esta ola dice «Cuota de crédito».
@@ -775,7 +774,7 @@ internal fun ContenidoDelMovimiento(
     // día) pero sí manda la fila a un día que no es, y no hay otro lugar donde arreglarlo.
     if (isOpeningBalance(event)) {
         MarcoDelMovimiento(lugar, onDismiss = onDismiss, dismissEnabled = true) {
-            Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+            Column(modifier = Modifier.desplazableConElTeclado().weight(1f, fill = false)) {
                 SheetLabel("Saldo inicial")
                 Text(
                     tituloDelMovimiento(event, cuentas.firstOrNull { it.id == event.accountId }?.name),
@@ -815,7 +814,7 @@ internal fun ContenidoDelMovimiento(
             onEventChanged(o.movimiento)
         }
         MarcoDelMovimiento(lugar, onDismiss = terminar, dismissEnabled = !saving) {
-            Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+            Column(modifier = Modifier.desplazableConElTeclado().weight(1f, fill = false)) {
                 SheetLabel("¿Y los parecidos?")
                 Text(
                     tituloDeLaOferta(o),
@@ -977,7 +976,7 @@ internal fun ContenidoDelMovimiento(
             null
         },
     ) {
-        Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+        Column(modifier = Modifier.desplazableConElTeclado().weight(1f, fill = false)) {
             // ── Lo que se lee primero: quién, cuánto, cuándo y en qué categoría. ──
             EncabezadoDelMovimiento(
                 evento = renombradoAca ?: event,
@@ -1402,7 +1401,7 @@ fun CardPaymentCandidatesSheet(
     }
 
     BottomSheetScaffold(onDismiss = onDismiss, dismissEnabled = savingId == null) {
-        Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+        Column(modifier = Modifier.desplazableConElTeclado().weight(1f, fill = false)) {
             SheetLabel("Pagos de tarjeta sin marcar")
             Text(
                 "Marcarlos como «$CARD_PAYMENT_CATEGORY» evita contar esta plata dos veces: " +

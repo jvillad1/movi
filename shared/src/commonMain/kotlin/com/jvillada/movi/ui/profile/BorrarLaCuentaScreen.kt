@@ -21,10 +21,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -57,6 +55,7 @@ import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.MinSectionHeader
 import kotlinx.coroutines.launch
 import com.jvillada.movi.ui.components.ds.Campo
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 /** El título de la pantalla y el rótulo de la fila de Ajustes que la abre: el mismo, como toda ficha. */
 const val BORRAR_MI_CUENTA: String = "Borrar mi cuenta"
@@ -153,7 +152,7 @@ fun BorrarLaCuentaScreen(onNavigate: (Screen) -> Unit) {
         Column(
             modifier = Modifier
                 .weight(1f)
-                .verticalScroll(rememberScrollState())
+                .desplazableConElTeclado()
                 .padding(horizontal = Movi.espacios.amplio),
         ) {
             Text(

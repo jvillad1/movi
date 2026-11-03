@@ -21,8 +21,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
 import com.jvillada.movi.ui.components.ds.PildoraDeAccion
@@ -152,6 +150,8 @@ import com.jvillada.movi.ui.fecha.fechaEnPalabras
 import com.jvillada.movi.ui.fecha.etiquetaDeFecha
 import com.jvillada.movi.ui.fecha.fechaDeEpoch
 import com.jvillada.movi.ui.fecha.hoyEnAppZone
+import com.jvillada.movi.ui.components.desplazableConElTeclado
+import com.jvillada.movi.ui.components.rememberListaConElTeclado
 
 /**
  * **La bandeja, del más nuevo al más viejo.**
@@ -270,6 +270,7 @@ fun CapturaDelBancoScreen(onNavigate: (Screen) -> Unit) {
         )
 
         LazyColumn(
+            state = rememberListaConElTeclado(),
             modifier = Modifier.weight(1f),
             contentPadding = PaddingValues(
                 start = Medida.margenDePantalla,
@@ -1620,6 +1621,7 @@ fun SMSReconcileScreen(
         val unicoYaAnotado = coincidencias?.singleOrNull()?.takeIf { conYaAnotado }
         val densidad = LocalDensity.current
         LazyColumn(
+            state = rememberListaConElTeclado(),
             modifier = Modifier.weight(1f).testTag(TAG_LISTA_DE_REVISAR_AVISO),
             contentPadding = PaddingValues(
                 start = Medida.margenDePantalla,
@@ -2323,7 +2325,7 @@ fun SMSReconcileScreen(
         MarcoDeHoja(onDismiss = { hojaDeCategorias = false }) {
             Column(
                 modifier = Modifier
-                    .verticalScroll(rememberScrollState())
+                    .desplazableConElTeclado()
                     .weight(1f, fill = false)
                     .testTag(TAG_HOJA_DE_CATEGORIAS_DEL_SMS),
             ) {

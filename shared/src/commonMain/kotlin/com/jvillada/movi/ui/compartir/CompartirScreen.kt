@@ -74,6 +74,7 @@ import com.jvillada.movi.ui.components.VacioQueEnsena
 import com.jvillada.movi.ui.components.toUserMessage
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
+import com.jvillada.movi.ui.components.rememberListaConElTeclado
 
 /**
  * # «Compartir» — un enlace de solo lectura para un tercero
@@ -156,6 +157,7 @@ fun CompartirScreen(onNavigate: (Screen) -> Unit) {
             )
 
             LazyColumn(
+                state = rememberListaConElTeclado(),
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
                     start = Medida.margenDePantalla,

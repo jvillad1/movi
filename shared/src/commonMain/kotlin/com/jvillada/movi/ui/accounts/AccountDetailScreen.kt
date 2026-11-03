@@ -93,6 +93,7 @@ import kotlinx.datetime.toLocalDateTime
 import com.jvillada.movi.ui.fecha.fechaDeEpoch
 import com.jvillada.movi.ui.fecha.hoyEnAppZone
 import com.jvillada.movi.ui.transactions.formatDayHeading
+import com.jvillada.movi.ui.components.DesplazarConElTeclado
 
 @Composable
 fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: AccountGroup) {
@@ -303,6 +304,8 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
             // queda escondido arriba (en la web, con la red de por medio, abría así siempre). La
             // primera vez que la cuenta llega, la lista vuelve al principio.
             val lista = rememberLazyListState()
+            // Vuelta 118: la columna de la cuenta es la que mueve el teclado.
+            DesplazarConElTeclado(lista)
             val listaDeMovimientos = rememberLazyListState()
             val cuentaLlego = account != null
             LaunchedEffect(cuentaLlego) {

@@ -96,6 +96,7 @@ import com.jvillada.movi.ui.components.*
 import kotlinx.datetime.Clock
 import com.jvillada.movi.ui.fecha.fechaEnPalabras
 import com.jvillada.movi.ui.fecha.hoyEnAppZone
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 /**
  * F20 — Créditos es «todo lo que debes»: préstamos (cuota, tasa, plazo) y tarjetas de crédito
@@ -806,7 +807,7 @@ internal fun DebtTypeChooserSheet(
         // patrón que las hojas de `CategorySheets.kt`, que ya lo tenían.
         Column(
             modifier = Modifier
-                .verticalScroll(rememberScrollState())
+                .desplazableConElTeclado()
                 .weight(1f, fill = false),
         ) {
             // Vuelta 61: la pregunta ES el título de la hoja (iba en `tituloMedio`, chica).

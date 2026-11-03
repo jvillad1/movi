@@ -6,8 +6,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.Icon
@@ -51,6 +49,7 @@ import com.jvillada.movi.ui.components.ds.Superficie
 import com.jvillada.movi.ui.components.ds.VistaPrevia
 import kotlinx.datetime.Clock
 import kotlinx.datetime.LocalDate
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 /** La fila de Ajustes que abre esta hoja: «período», como en el resto de la app (vuelta 31). */
 const val INICIO_DEL_PERIODO: String = "Inicio del período"
@@ -121,7 +120,7 @@ fun PeriodoSheet(
         // `clip` de la hoja. Mismo patrón que las hojas de `CategorySheets.kt`.
         Column(
             modifier = Modifier
-                .verticalScroll(rememberScrollState())
+                .desplazableConElTeclado()
                 .weight(1f, fill = false),
         ) {
             // Vuelta 41: una frase, no dos; y el título es lo más grande de la hoja.
