@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.minus
+import kotlinx.datetime.plus
 
 /**
  * **El selector de fecha de un movimiento: dos atajos y un calendario.**
@@ -73,6 +74,9 @@ import kotlinx.datetime.minus
  * @param onPick se elige un día. **No cierra nada**: qué hacer después lo decide quien llama —
  *   la hoja de Agregar cierra el sub-picker al toque (elegir ES la acción completa), la de
  *   editar un movimiento ya guardado se queda abierta para mostrar el aviso antes de confirmar.
+ * @param haciaAdelante vuelta 126 · **para una fecha que viene** («¿Cuándo es el próximo?» de un pago
+ *   fijo): sin los atajos «Hoy»/«Ayer», con los días futuros habilitados hasta [MESES_HACIA_ADELANTE]
+ *   meses, y desde [desde] (los anteriores, apagados). `null` = el selector de siempre, de lo que ya pasó.
  */
 @Composable
 fun SelectorDeFecha(
@@ -80,6 +84,8 @@ fun SelectorDeFecha(
     hoy: LocalDate,
     onPick: (LocalDate) -> Unit,
     enabled: Boolean = true,
+    haciaAdelante: Boolean = false,
+    desde: LocalDate? = null,
 ) {
     val ayer = remember(hoy) { hoy.minus(DatePeriod(days = 1)) }
     // El mes que se está mirando arranca en el de la fecha elegida —no en el de hoy—: quien abre
@@ -89,17 +95,19 @@ fun SelectorDeFecha(
     }
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
-        ) {
-            // Vuelta de diseño 20: los `PildoraDeFiltro` del sistema, a medias del ancho. Eran cajas
-            // armadas a mano de 44 dp, con radio 999 y el lavado escrito con `copy(alpha = 0.16f)`.
-            AtajoDeFecha("Hoy", seleccionada == hoy, enabled, Modifier.weight(1f)) { onPick(hoy) }
-            AtajoDeFecha("Ayer", seleccionada == ayer, enabled, Modifier.weight(1f)) { onPick(ayer) }
-        }
+        if (!haciaAdelante) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
+            ) {
+                // Vuelta de diseño 20: los `PildoraDeFiltro` del sistema, a medias del ancho. Eran cajas
+                // armadas a mano de 44 dp, con radio 999 y el lavado escrito con `copy(alpha = 0.16f)`.
+                AtajoDeFecha("Hoy", seleccionada == hoy, enabled, Modifier.weight(1f)) { onPick(hoy) }
+                AtajoDeFecha("Ayer", seleccionada == ayer, enabled, Modifier.weight(1f)) { onPick(ayer) }
+            }
 
-        Spacer(Modifier.height(Espacio.s))
+            Spacer(Modifier.height(Espacio.s))
+        }
 
         // Encabezado del mes. La flecha de avanzar se apaga cuando el mes siguiente es entero
         // futuro (ver [puedeAvanzarMes]) — y se apaga, no desaparece: un control que se va deja
@@ -113,7 +121,8 @@ fun SelectorDeFecha(
                 // Con piso: ver [puedeRetrocederMes]. Sin él la flecha navegaba sin límite hasta
                 // años que el server rechaza, o sea a un lugar donde nada de lo que tocaras iba
                 // a poder guardarse.
-                enabled = enabled && puedeRetrocederMes(mesVisible),
+                enabled = enabled && puedeRetrocederMes(mesVisible) &&
+                    (desde == null || mesAnterior(mesVisible) >= LocalDate(desde.year, desde.monthNumber, 1)),
                 onClick = { mesVisible = mesAnterior(mesVisible) },
             )
             Text(
@@ -125,7 +134,7 @@ fun SelectorDeFecha(
             )
             FlechaDeMes(
                 izquierda = false,
-                enabled = enabled && puedeAvanzarMes(mesVisible, hoy),
+                enabled = enabled && if (haciaAdelante) puedeAvanzarHaciaAdelante(mesVisible, hoy) else puedeAvanzarMes(mesVisible, hoy),
                 onClick = { mesVisible = mesSiguiente(mesVisible) },
             )
         }
@@ -154,7 +163,8 @@ fun SelectorDeFecha(
                         // Un día futuro se dibuja apagado y no responde al toque. Se sigue
                         // dibujando —el mes en curso tiene días de más adelante y borrarlos
                         // rompería la grilla— pero no se puede elegir: ver [esFutura].
-                        habilitado = enabled && dia != null && !esFutura(dia, hoy),
+                        habilitado = enabled && dia != null &&
+                            (if (haciaAdelante) diaHabilitadoHaciaAdelante(dia, hoy, desde) else !esFutura(dia, hoy)),
                         modifier = Modifier.weight(1f),
                         onClick = { if (dia != null) onPick(dia) },
                     )
@@ -238,4 +248,20 @@ private fun CasillaDeDia(
             )
         }
     }
+}
+
+/** Vuelta 126 · hasta cuántos meses adelante mira el selector de una fecha que viene. */
+const val MESES_HACIA_ADELANTE: Int = 24
+
+/** Vuelta 126 · ¿la flecha «mes siguiente» de una fecha que viene sigue? Hasta [MESES_HACIA_ADELANTE] meses. Pura. */
+fun puedeAvanzarHaciaAdelante(mes: LocalDate, hoy: LocalDate): Boolean {
+    val tope = LocalDate(hoy.year, hoy.monthNumber, 1).plus(kotlinx.datetime.DatePeriod(months = MESES_HACIA_ADELANTE))
+    return mesSiguiente(mes) <= tope
+}
+
+/** Vuelta 126 · un día de una fecha que viene: desde [desde] (o hoy) y hasta [MESES_HACIA_ADELANTE] meses. Pura. */
+fun diaHabilitadoHaciaAdelante(dia: LocalDate, hoy: LocalDate, desde: LocalDate?): Boolean {
+    val piso = desde ?: hoy
+    val tope = LocalDate(hoy.year, hoy.monthNumber, 1).plus(kotlinx.datetime.DatePeriod(months = MESES_HACIA_ADELANTE + 1))
+    return dia >= piso && dia < tope
 }

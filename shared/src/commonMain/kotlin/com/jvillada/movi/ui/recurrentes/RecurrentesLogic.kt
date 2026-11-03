@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.recurrentes
 
+import com.jvillada.movi.shared.model.esMensual
 import com.jvillada.movi.shared.model.esAbonoADeuda
 import com.jvillada.movi.shared.model.CARD_RULE_PREFIX
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
@@ -174,7 +175,10 @@ fun reglasSinteticas(upcoming: List<UpcomingPayment>): List<RecurringRule> =
 fun cuentaComoCompromisoMensual(rule: RecurringRule): Boolean =
     // Vuelta 63: el abono planeado a una deuda tampoco: no es un fijo, es plata que el dueño mueve.
     !rule.montoEsSaldo && !rule.esPagoUnico && !rule.id.startsWith(CARD_RULE_PREFIX) &&
-        !rule.esAbonoADeuda
+        !rule.esAbonoADeuda &&
+        // Vuelta 126: un pago cada 2, 3 o 6 meses, cada año o de una sola vez no es «al mes» (no se prorratea:
+        // cuenta entero en el período en que vence, y se ve en «Otros pagos fijos» los demás).
+        rule.esMensual
 
 /**
  * Todo lo que la pantalla necesita mostrar arriba, calculado una sola vez.

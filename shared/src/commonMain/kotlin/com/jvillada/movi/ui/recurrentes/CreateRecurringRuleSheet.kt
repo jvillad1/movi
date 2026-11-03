@@ -29,6 +29,16 @@ import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.CreateSubscriptionRequest
 import com.jvillada.movi.shared.model.DestinoConocido
 import com.jvillada.movi.shared.model.PeriodicidadDeCobro
+import com.jvillada.movi.shared.model.EN_DOLARES_SOLO_MES_O_ANIO
+import com.jvillada.movi.shared.model.FRECUENCIAS_DEL_PAGO
+import com.jvillada.movi.shared.model.FrecuenciaDelPago
+import com.jvillada.movi.shared.model.anclaDelVencimiento
+import com.jvillada.movi.shared.model.esMensual
+import com.jvillada.movi.shared.model.frecuenciaEfectiva
+import com.jvillada.movi.shared.model.frecuenciaSirveEnDolares
+import com.jvillada.movi.shared.model.mesDeReferencia
+import com.jvillada.movi.shared.model.primerVencimientoDesde
+import com.jvillada.movi.shared.model.problemaDeLaFrecuencia
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.Subscription
 import com.jvillada.movi.shared.model.TransactionType
@@ -228,11 +238,24 @@ fun CreateRecurringRuleSheet(
     // armada en «Por revisar» el día que vence. Ver `RecurringRule.seDebitaSolo`.
     var seDebitaSolo by remember { mutableStateOf(existing?.seDebitaSolo == true) }
     var currency by remember { mutableStateOf(existingSub?.currency ?: "COP") }
-    // Ola 16: cada cuánto llega el cobro. Arranca en MENSUAL, que es lo que era todo hasta hoy,
-    // así que quien no toque estos chips crea exactamente lo mismo que creaba antes.
-    var periodicidad by remember {
-        mutableStateOf(existingSub?.periodicidad ?: PeriodicidadDeCobro.MENSUAL)
+    // Vuelta 126: cada cuánto vence. Arranca en MENSUAL, que es lo que era todo hasta hoy, así que quien no
+    // toque las pastillas crea exactamente lo mismo que creaba antes. Una suscripción (en dólares, o la que se
+    // edita) solo sabe de cada mes y cada año ([periodicidad] sale de acá).
+    var frecuencia by remember {
+        mutableStateOf(
+            existing?.frecuenciaEfectiva
+                ?: if (existingSub?.periodicidad == PeriodicidadDeCobro.ANUAL) FrecuenciaDelPago.ANUAL else FrecuenciaDelPago.MENSUAL,
+        )
     }
+    val periodicidad = if (frecuencia == FrecuenciaDelPago.ANUAL) PeriodicidadDeCobro.ANUAL else PeriodicidadDeCobro.MENSUAL
+    // Vuelta 126: la fecha del próximo pago de una no mensual (el día del mes sale de acá). Editando, el próximo
+    // vencimiento desde hoy (o el ancla, si una sola vez ya pasó). [fechaTocada]: si el dueño no la cambió, la
+    // edición manda el ancla guardada tal cual (correrla escondería los vencimientos ya pasados).
+    val hoyDeLaHoja = hoy ?: com.jvillada.movi.ui.fecha.hoyEnAppZone()
+    var proximoPago by remember {
+        mutableStateOf(existing?.takeIf { !it.esMensual }?.let { r -> primerVencimientoDesde(r, hoyDeLaHoja) ?: r.anclaDelVencimiento })
+    }
+    var fechaTocada by remember { mutableStateOf(false) }
     // ¿Mandar esto a la rama de suscripción —por dólares o por anual— le cambió al dueño un
     // «Ingreso» que ya había marcado? (V11: la regla se explica igual, pero si además le pisamos
     // una elección suya, eso se avisa aparte.)
@@ -313,7 +336,6 @@ fun CreateRecurringRuleSheet(
     // el rótulo «MONTO DEL COBRO ANUAL» y sin la nota del prorrateo, que es justo lo que le
     // avisa al dueño que ahí va el cobro del año entero y no la doceava parte.
     val enDolares = puedeSerSuscripcion && currency == "USD"
-    val esAnual = puedeSerSuscripcion && periodicidad == PeriodicidadDeCobro.ANUAL
     /**
      * **La única condición que decide en cuál de los dos modelos se guarda esto.** Existe como
      * un solo valor —y no como `enDolares || esAnual` repetido en cada rama— porque de él
@@ -325,20 +347,32 @@ fun CreateRecurringRuleSheet(
     // Editando una suscripción esto es SIEMPRE true, y no por los chips: la fila ya es una
     // suscripción y ninguna edición la convierte en regla. Sin esta rama, corregirle el monto a
     // un Netflix —pesos, mensual— lo habría guardado como una regla recurrente nueva.
-    val seGuardaComoSuscripcion = editandoSuscripcion || enDolares || esAnual
+    // Vuelta 126: «Cada año» en pesos ya no va a suscripción: es una regla, con su fecha y su recordatorio.
+    // Solo los dólares (y la suscripción que se edita) siguen ese camino.
+    val seGuardaComoSuscripcion = editandoSuscripcion || enDolares
+    val esAnual = seGuardaComoSuscripcion && periodicidad == PeriodicidadDeCobro.ANUAL
+    // Vuelta 126: una regla no mensual pide su fecha en vez del día del mes; en dólares solo cada mes o cada año.
+    val usaFecha = !seGuardaComoSuscripcion && !esAbono && frecuencia != FrecuenciaDelPago.MENSUAL
+    val frecuenciaQueNoSirve = seGuardaComoSuscripcion && !frecuenciaSirveEnDolares(frecuencia)
+    val diaParaGuardar = if (usaFecha) proximoPago?.dayOfMonth else dayOfMonth
+    val problemaDeLaFecha = if (usaFecha) problemaDeLaFrecuencia(frecuencia, proximoPago?.toString(), esAbono = false) else null
     // Solo un gasto de una regla (una suscripción no tiene la columna) se debita solo, y necesita la
     // cuenta de la que sale: sin ella no hay qué proponer (`validarDebitoDeLaRegla`, igual en el server).
     val debitoAplica = !seGuardaComoSuscripcion && selectedType == TransactionType.EXPENSE
     val debitoSinCuenta = debitoAplica && seDebitaSolo && accountId == null
-    val canSave = name.isNotBlank() && (amount ?: 0L) > 0L && (dayOfMonth ?: 0) in 1..31 && !saving && !debitoSinCuenta
+    val canSave = name.isNotBlank() && (amount ?: 0L) > 0L && (diaParaGuardar ?: 0) in 1..31 && !saving && !debitoSinCuenta &&
+        !frecuenciaQueNoSirve && problemaDeLaFecha == null
     // F24: mismo patrón que las demás hojas de crear — la primera cosa que falta, no un botón
     // gris sin explicación.
     val missingFieldMessage = when {
         name.isBlank() -> "Falta el nombre"
         (amount ?: 0L) <= 0L -> "Falta el monto"
+        // Vuelta 126: en dólares solo cada mes o cada año, y una no mensual necesita su fecha.
+        frecuenciaQueNoSirve -> EN_DOLARES_SOLO_MES_O_ANIO
+        problemaDeLaFecha != null -> problemaDeLaFecha
         // Ya no puede decir «entre 1 y 31»: con la cuadrícula, un día fuera de rango no existe.
         // Lo único que puede faltar es que el dueño todavía no haya tocado ninguno.
-        (dayOfMonth ?: 0) !in 1..31 -> "Falta el día del mes"
+        (diaParaGuardar ?: 0) !in 1..31 -> "Falta el día del mes"
         debitoSinCuenta -> DEBITO_DE_REGLA_SIN_CUENTA
         else -> null
     }
@@ -358,15 +392,25 @@ fun CreateRecurringRuleSheet(
     val desdeUnMovimiento = prefill?.activeFrom != null || prefill?.eventId != null
     val preguntaDelPeriodoVisible = !isEditMode && !seGuardaComoSuscripcion && !esAbono &&
         ajustesDelDueno != null &&
-        dayOfMonth?.let { dia ->
+        diaParaGuardar?.let { dia ->
             sePreguntaSiYaPagasteElDeEstePeriodo(
-                selectedType, desdeUnMovimiento, dia, hoy ?: com.jvillada.movi.ui.fecha.hoyEnAppZone(), ajustesDelDueno,
+                selectedType, desdeUnMovimiento, dia, hoyDeLaHoja, ajustesDelDueno,
+                // Vuelta 126: una no mensual, solo si vence en este período (y ya pasó o es hoy).
+                frecuencia = frecuencia.takeIf { usaFecha },
+                primerVencimiento = proximoPago?.takeIf { usaFecha }?.toString(),
             )
         } == true
+    // Vuelta 126: desde cuándo se puede elegir la fecha del próximo pago: el arranque del período en curso (con
+    // el corte del dueño si se leyó; si no —al editar no se lee—, el mes de calendario, que nunca es antes).
+    val desdeDeLaFecha = com.jvillada.movi.shared.model.inicioDelPeriodo(
+        com.jvillada.movi.shared.model.periodoDeLaFecha(hoyDeLaHoja.toString(), (ajustesDelDueno ?: com.jvillada.movi.shared.model.PeriodSettings()).mesDeReferencia())
+            ?: com.jvillada.movi.shared.model.PeriodoFinanciero(hoyDeLaHoja.year, hoyDeLaHoja.monthNumber),
+        (ajustesDelDueno ?: com.jvillada.movi.shared.model.PeriodSettings()).mesDeReferencia(),
+    )
 
     fun save() {
         if (!canSave) return
-        val day = dayOfMonth?.coerceIn(1, 31) ?: return
+        val day = diaParaGuardar?.coerceIn(1, 31) ?: return
         val amt = amount ?: return
         saving = true
         error = null
@@ -473,6 +517,18 @@ fun CreateRecurringRuleSheet(
                         // Vuelta 121: la respuesta, solo si la pregunta se vio; si no, sin el campo (el
                         // server lo lee como «desde el período en que se crea»).
                         yaPagoElDeEstePeriodo = if (preguntaDelPeriodoVisible) yaPagoElDeEstePeriodo else null,
+                        // Vuelta 126: cada cuánto y desde cuándo. Cada mes viaja sin el campo (como siempre),
+                        // salvo al volver a cada mes una que no lo era: en un PUT, sin el campo es «no la toques».
+                        frecuencia = when {
+                            usaFecha -> frecuencia
+                            isEditMode && existing?.esMensual == false -> FrecuenciaDelPago.MENSUAL
+                            else -> null
+                        },
+                        primerVencimiento = if (!usaFecha) null else {
+                            val guardada = existing?.primerVencimiento
+                            if (isEditMode && !fechaTocada && existing?.frecuenciaEfectiva == frecuencia && guardada != null) guardada
+                            else proximoPago?.toString()
+                        },
                     )
                     if (isEditMode) {
                         runCatching { Repositories.wallets.updateRecurringRule(existing!!.id, rule) }
@@ -615,10 +671,9 @@ fun CreateRecurringRuleSheet(
                         selected = currency == "COP",
                         onClick = {
                             currency = "COP"
-                            // Volver a pesos solo deshace el aviso si lo que mandaba a la
-                            // rama de suscripción era la moneda: con ANUAL elegido, esto
-                            // se sigue guardando como suscripción y sigue siendo un cobro.
-                            if (!esAnual) tipoCambiadoPorSerSuscripcion = false
+                            // Vuelta 126: en pesos toda frecuencia es una regla (también «Cada año»), así
+                            // que volver a pesos deshace el aviso de la suscripción.
+                            tipoCambiadoPorSerSuscripcion = false
                         },
                     )
                     SheetChip(
@@ -648,33 +703,19 @@ fun CreateRecurringRuleSheet(
             // Ola 18: al EDITAR una suscripción sí se muestra —el `PUT` sí escribe esta
             // columna—, y hace falta: un cobro que Movi detectó nace mensual, así que un
             // anual mal clasificado solo se puede arreglar acá.
-            if (!isEditMode || editandoSuscripcion) {
-                RotuloDeCampo("Cada cuánto")
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
-                ) {
-                    SheetChip(
-                        label = "Todos los meses",
-                        selected = periodicidad == PeriodicidadDeCobro.MENSUAL,
-                        onClick = {
-                            periodicidad = PeriodicidadDeCobro.MENSUAL
-                            // Simétrico del chip «Pesos»: en dólares el aviso sigue valiendo.
-                            if (!enDolares) tipoCambiadoPorSerSuscripcion = false
-                        },
-                    )
-                    SheetChip(
-                        label = "Una vez al año",
-                        selected = periodicidad == PeriodicidadDeCobro.ANUAL,
-                        onClick = {
-                            periodicidad = PeriodicidadDeCobro.ANUAL
-                            // Mismo motivo exacto que en «Dólares»: esto pasa a guardarse
-                            // como suscripción, y una suscripción es siempre un cobro.
-                            tipoCambiadoPorSerSuscripcion = selectedType == TransactionType.INCOME
-                            selectedType = TransactionType.EXPENSE
-                        },
-                    )
-                }
+            //
+            // Vuelta 126: seis pastillas (Cada mes · Cada 2 meses · Cada 3 meses · Cada 6 meses · Cada año · Una
+            // sola vez), también al editar una regla. «Cada año» en pesos es una regla con su fecha; en dólares
+            // solo cada mes o cada año (la suscripción no modela otra cosa, y la hoja lo dice). Editando una
+            // suscripción, solo esas dos. Un abono a una deuda es de cada mes: no se pregunta.
+            if (!esAbono) {
+                SelectorDeCadaCuanto(
+                    frecuencia = frecuencia,
+                    onElegir = { frecuencia = it },
+                    habilitado = !saving,
+                    opciones = if (editandoSuscripcion) listOf(FrecuenciaDelPago.MENSUAL, FrecuenciaDelPago.ANUAL) else FRECUENCIAS_DEL_PAGO,
+                    soloMesOAnio = seGuardaComoSuscripcion,
+                )
                 Spacer(Modifier.height(Espacio.m))
             }
 
@@ -697,6 +738,22 @@ fun CreateRecurringRuleSheet(
             // En un cobro anual esto es el día, pero Movi no guarda el MES: el modelo de
             // suscripciones tiene `dayOfMonth` y nada más. La consecuencia se dice abajo,
             // en la nota, en vez de dejar que el dueño la deduzca cuando el aviso no llegue.
+            if (usaFecha) {
+                // Vuelta 126: una no mensual pide la fecha de su próximo pago; el día del mes sale de ahí, y el
+                // recorte de los meses cortos lo dice la misma nota.
+                CampoDeLaFechaDelPago(
+                    frecuencia = frecuencia,
+                    fecha = proximoPago,
+                    hoy = hoyDeLaHoja,
+                    desde = desdeDeLaFecha,
+                    onElegir = { proximoPago = it; fechaTocada = true },
+                    habilitado = !saving,
+                )
+                diaCortoHint(proximoPago?.dayOfMonth?.takeIf { frecuencia != FrecuenciaDelPago.UNA_VEZ })?.let { nota ->
+                    Spacer(Modifier.height(Espacio.xs))
+                    Text(text = nota, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                }
+            } else {
             RotuloDeCampo("Día del mes")
             // Vuelta 72: el selector del sistema, el mismo de «Inicio del período» (eran cuadrados acá
             // y círculos allá). La nota de los meses cortos va debajo, solo cuando aplica.
@@ -708,6 +765,7 @@ fun CreateRecurringRuleSheet(
             diaCortoHint(dayOfMonth)?.let { nota ->
                 Spacer(Modifier.height(Espacio.xs))
                 Text(text = nota, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+            }
             }
 
             Spacer(Modifier.height(Espacio.m))

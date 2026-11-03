@@ -202,6 +202,9 @@ fun lineaDelMinimo(pago: PagoDelPeriodo): String? {
 /** El tag de esa línea. */
 const val TAG_FALTA_DEL_MINIMO: String = "pagos:falta-del-minimo"
 
+/** Vuelta 126 · el tag de la cadencia de una factura no mensual («Cada 3 meses»). */
+const val TAG_CADENCIA_DE_LA_FILA: String = "pagos:cadencia-de-la-fila"
+
 private val MESES_CORTOS = listOf("ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic")
 
 /** «25 oct» desde un ISO; `null` si no es una fecha. */
@@ -451,6 +454,10 @@ internal fun FilaDeFactura(
                     val (texto, tono) = pastillaDeVencimiento(pago, conPropuesta)
                     Pildora(texto, tono)
                 }
+            }
+            // Vuelta 126: una factura que no es de cada mes lo dice («Cada 3 meses»): este período la cobra entera.
+            cadenciaDeLaFila(pago)?.let {
+                Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.testTag(TAG_CADENCIA_DE_LA_FILA))
             }
             extracto?.let { e ->
                 alternativaDelMinimo(e)?.let { Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio) }
