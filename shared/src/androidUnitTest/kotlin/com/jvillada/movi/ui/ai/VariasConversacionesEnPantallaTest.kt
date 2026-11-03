@@ -29,6 +29,7 @@ import com.jvillada.movi.shared.repository.ApiException
 import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.components.LocalWindowWidthClass
 import com.jvillada.movi.ui.components.WindowWidthClass
+import androidx.compose.ui.unit.dp
 import kotlinx.datetime.Clock
 import org.junit.After
 import org.junit.Rule
@@ -232,6 +233,16 @@ class VariasConversacionesEnPantallaTest {
         repo.listaFalla = false
         tocar("Reintentar")
         esperar(vieja.titulo)
+    }
+
+    /** En la cáscara: el panel que le queda a Movi AI (sin el rail, con el tope de lista y detalle). */
+    @Test
+    fun `la lista va al lado del chat solo con lugar para las dos`() {
+        val chat = com.jvillada.movi.ui.Screen.AIChat()
+        assertTrue(laListaVaAlLadoDelChat(com.jvillada.movi.ui.components.anchoDelPanelEnLaCascara(1280.dp, chat)), "a 1.280")
+        assertTrue(laListaVaAlLadoDelChat(com.jvillada.movi.ui.components.anchoDelPanelEnLaCascara(1920.dp, chat)), "a 1.920")
+        assertFalse(laListaVaAlLadoDelChat(com.jvillada.movi.ui.components.anchoDelPanelEnLaCascara(1024.dp, chat)), "a 1.024 no cabe")
+        assertFalse(laListaVaAlLadoDelChat(com.jvillada.movi.ui.components.anchoDelPanelEnLaCascara(800.dp, chat)), "en una ventana mediana no cabe")
     }
 
     @Test
