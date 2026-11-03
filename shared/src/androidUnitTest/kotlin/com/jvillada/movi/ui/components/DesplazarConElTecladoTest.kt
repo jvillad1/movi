@@ -1,6 +1,7 @@
 package com.jvillada.movi.ui.components
 
 import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,13 +17,18 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.KeyInjectionScope
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.isFocused
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
@@ -271,6 +277,65 @@ class DesplazarConElTecladoTest {
         assertEquals(paso.toInt(), scroll.value)
         teclas { pressKey(Key.Spacebar) }
         assertTrue(scroll.value > paso)
+    }
+
+    /** Una pantalla larga con dos botones arriba, para el Tab y el Espacio sobre un botón. */
+    @Composable
+    private fun PantallaConBotones(scroll: ScrollState, alTocar: (String) -> Unit) {
+        CapaDeLaPantalla(arriba = true) {
+            Column(Modifier.fillMaxSize()) {
+                // `canFocus = true`: en Robolectric el teléfono está en modo táctil, donde un `clickable`
+                // no se enfoca; en la web (teclado) sí. Así la prueba ve lo mismo que la web.
+                Text("Uno", Modifier.testTag("uno").focusProperties { canFocus = true }.clickable { alTocar("uno") })
+                Text("Dos", Modifier.testTag("dos").focusProperties { canFocus = true }.clickable { alTocar("dos") })
+                Column(Modifier.weight(1f).fillMaxWidth().desplazableConElTeclado(scroll)) {
+                    repeat(60) { Text("Renglón $it", Modifier.height(80.dp)) }
+                }
+            }
+        }
+    }
+
+    /**
+     * La raíz toma el foco sin semántica (un `focusTarget` desnudo): si alguna vez fuera una parada del
+     * Tab, el foco quedaría en ella y ningún nodo con semántica se vería enfocado.
+     */
+    @Test
+    fun `el Tab recorre lo mismo de siempre y la raiz no es una parada`() {
+        val scroll = ScrollState(0)
+        enLaCascara { PantallaConBotones(scroll) {} }
+        composeRule.onAllNodes(isFocused()).assertCountEquals(0)
+
+        teclas { pressKey(Key.Tab) }
+        composeRule.onAllNodes(isFocused()).assertCountEquals(1)
+
+        composeRule.onNodeWithTag("uno").performSemanticsAction(SemanticsActions.RequestFocus)
+        composeRule.waitForIdle()
+        teclas { pressKey(Key.Tab) }
+        composeRule.onNodeWithTag("dos").assertIsFocused()
+        teclas { withKeyDown(Key.ShiftLeft) { pressKey(Key.Tab) } }
+        composeRule.onNodeWithTag("uno").assertIsFocused()
+        // Shift+Tab hacia atrás por el rail y más allá: en ningún paso el foco cae en la raíz invisible.
+        repeat(16) { vez ->
+            teclas { withKeyDown(Key.ShiftLeft) { pressKey(Key.Tab) } }
+            assertEquals(1, composeRule.onAllNodes(isFocused()).fetchSemanticsNodes().size, "Shift+Tab número ${vez + 1}")
+        }
+    }
+
+    @Test
+    fun `con un boton enfocado el Espacio lo toca y no desplaza, y las flechas si desplazan`() {
+        val scroll = ScrollState(0)
+        val tocados = mutableListOf<String>()
+        enLaCascara { PantallaConBotones(scroll) { tocados += it } }
+        composeRule.onNodeWithTag("uno").performSemanticsAction(SemanticsActions.RequestFocus)
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("uno").assertIsFocused()
+
+        teclas { pressKey(Key.Spacebar) }
+        assertEquals(listOf("uno"), tocados)
+        assertEquals(0, scroll.value, "el Espacio sobre un botón es del botón")
+
+        teclas { pressKey(Key.DirectionDown) }
+        assertEquals(paso.toInt(), scroll.value, "un botón no usa las flechas: bajan la pantalla")
     }
 
     @Test
