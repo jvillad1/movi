@@ -90,6 +90,9 @@ suspend fun guardarLaConversacion(
         },
     ).take(TOPE_CONSULTAS)
 
+    // Revisión de la vuelta 117: los turnos sueltos se agrupan antes y en su propia transacción, así un
+    // choque ahí (dos lecturas a la vez durante un despliegue) nunca se lleva este turno.
+    if (conversacionId == null) agruparLosTurnosSueltosSinRomper(uid)
     dbQuery {
         val conversacion = conversacionParaLaPreguntaEn(uid, conversacionId, ahora)
         AiTurns.insert {

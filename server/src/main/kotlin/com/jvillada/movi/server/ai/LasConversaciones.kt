@@ -5,6 +5,7 @@ import com.jvillada.movi.server.db.AiTurns
 import com.jvillada.movi.server.db.CONVERSACION_BORRADA
 import com.jvillada.movi.server.db.ConversacionesConElAsistente
 import com.jvillada.movi.server.db.ConversacionesDelAsistente
+import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.shared.model.CONVERSACIONES_QUE_SE_GUARDAN
 import com.jvillada.movi.shared.model.ConversacionDelAsistente
@@ -94,17 +95,35 @@ private data class TurnoSuelto(val id: String, val dueno: String, val creadoEn: 
 fun agruparLosTurnosSueltos(transaccion: Transaction, uid: String?): Int = transaccion.agruparLosTurnosSueltosEn(uid)
 
 private fun Transaction.agruparLosTurnosSueltosEn(uid: String?): Int {
-    val sueltos = AiTurns.select(AiTurns.id, AiTurns.userId, AiTurns.creadoEn, AiTurns.pregunta, AiTurns.imagen)
+    val duenos = AiTurns.select(AiTurns.userId)
         .where { AiTurns.conversacionId.isNull() and (if (uid != null) AiTurns.userId eq uid else Op.TRUE) }
-        .orderBy(AiTurns.creadoEn to SortOrder.ASC, AiTurns.id to SortOrder.ASC)
-        .map { TurnoSuelto(it[AiTurns.id], it[AiTurns.userId], it[AiTurns.creadoEn], it[AiTurns.pregunta], it[AiTurns.imagen]) }
-    if (sueltos.isEmpty()) return 0
-    val duenos = sueltos.map { it.dueno }.distinct()
+        .withDistinct()
+        .map { it[AiTurns.userId] }
+    if (duenos.isEmpty()) return 0
     val marcas = ConversacionesDelAsistente.selectAll()
         .where { ConversacionesDelAsistente.userId inList duenos }
         .associate { it[ConversacionesDelAsistente.userId] to it[ConversacionesDelAsistente.empezadaEn] }
-    sueltos.groupBy { it.dueno }.forEach { (dueno, turnos) ->
-        val marca = marcas[dueno] ?: 0L
+    var agrupados = 0
+    duenos.forEach { dueno ->
+        // Revisión de la vuelta 117 · **de a un dueño, con su fila bloqueada.** Dos lecturas a la vez
+        // (la lista y una pregunta, durante un despliegue) veían los mismos turnos sueltos y las dos
+        // insertaban la misma conversación: la segunda chocaba en la clave. Con el bloqueo, la que llega
+        // después espera, y al releer ya no encuentra nada suelto.
+        Users.selectAll().where { Users.id eq dueno }.forUpdate().toList()
+        val turnos = AiTurns.select(AiTurns.id, AiTurns.userId, AiTurns.creadoEn, AiTurns.pregunta, AiTurns.imagen)
+            .where { AiTurns.conversacionId.isNull() and (AiTurns.userId eq dueno) }
+            .orderBy(AiTurns.creadoEn to SortOrder.ASC, AiTurns.id to SortOrder.ASC)
+            .map { TurnoSuelto(it[AiTurns.id], it[AiTurns.userId], it[AiTurns.creadoEn], it[AiTurns.pregunta], it[AiTurns.imagen]) }
+        if (turnos.isNotEmpty()) {
+            agruparLosDeUnDueno(dueno, turnos, marcas[dueno] ?: 0L)
+            agrupados += turnos.size
+        }
+    }
+    return agrupados
+}
+
+/** Los turnos sueltos de [dueno] (del más viejo al más nuevo), partidos por su [marca]. */
+private fun Transaction.agruparLosDeUnDueno(dueno: String, turnos: List<TurnoSuelto>, marca: Long) {
         // Lo mismo que leía la Ola 3: la conversación en curso eran los turnos POSTERIORES a la marca.
         val (antes, despues) = turnos.partition { it.creadoEn <= marca }
         listOf(antes, despues).filter { it.isNotEmpty() }.forEach { bloque ->
@@ -141,8 +160,15 @@ private fun Transaction.agruparLosTurnosSueltosEn(uid: String?): Int {
                 }
             }
         }
-    }
-    return sueltos.size
+}
+
+/**
+ * [agruparLosTurnosSueltos] de [uid] **en su propia transacción y sin poder romper nada**: lo llaman la
+ * lista, el chat y «Nueva» antes de lo suyo. Si falla, lo de ellos sigue (el turno del chat se guarda
+ * igual; a lo sumo queda suelto hasta la próxima lectura, que lo vuelve a intentar).
+ */
+internal suspend fun agruparLosTurnosSueltosSinRomper(uid: String) {
+    runCatching { dbQuery { agruparLosTurnosSueltos(this, uid) } }
 }
 
 /** Cuántos turnos tiene cada conversación de [uid] que tiene alguno. */
@@ -169,10 +195,14 @@ private fun Transaction.conversacionesDe(uid: String): List<ResultRow> =
         .toList()
 
 /** `GET /api/ai/conversaciones`: las que tienen alguna pregunta, la más reciente primero. */
-suspend fun listaDeConversaciones(uid: String): ListaDeConversaciones = dbQuery {
-    agruparLosTurnosSueltos(this, uid)
+suspend fun listaDeConversaciones(uid: String): ListaDeConversaciones {
+    agruparLosTurnosSueltosSinRomper(uid)
+    return dbQuery { listaDeConversacionesEn(uid) }
+}
+
+private fun Transaction.listaDeConversacionesEn(uid: String): ListaDeConversaciones {
     val cuantos = turnosPorConversacion(uid)
-    ListaDeConversaciones(
+    return ListaDeConversaciones(
         conversaciones = conversacionesDe(uid).mapNotNull { fila ->
             val id = fila[ConversacionesConElAsistente.id]
             val turnos = cuantos[id] ?: return@mapNotNull null
@@ -202,8 +232,8 @@ suspend fun conversacionAbierta(uid: String, id: String, cuantos: Int = TURNOS_D
  * turnos. Sin ninguna, vacía y sin id.
  */
 suspend fun conversacionMasReciente(uid: String): ConversacionDelAsistente {
+    agruparLosTurnosSueltosSinRomper(uid)
     val reciente = dbQuery {
-        agruparLosTurnosSueltos(this, uid)
         conversacionesDe(uid).firstOrNull()?.let { fila ->
             val id = fila[ConversacionesConElAsistente.id]
             Triple(id, fila[ConversacionesConElAsistente.titulo], turnosDeLaConversacionEn(uid, id, TURNOS_QUE_SE_VEN))
@@ -217,12 +247,12 @@ suspend fun conversacionMasReciente(uid: String): ConversacionDelAsistente {
  * el dueño ya tiene una vacía, es esa —pasa a ser la más reciente— y no se crea otra: tocar «Nueva»
  * dos veces no deja dos vacías. Si no, una nueva, vacía y sin título.
  */
-suspend fun conversacionNueva(uid: String, ahora: Long = System.currentTimeMillis()): ConversacionEnLaLista = dbQuery {
-    conversacionNuevaEn(uid, ahora)
+suspend fun conversacionNueva(uid: String, ahora: Long = System.currentTimeMillis()): ConversacionEnLaLista {
+    agruparLosTurnosSueltosSinRomper(uid)
+    return dbQuery { conversacionNuevaEn(uid, ahora) }
 }
 
 private fun Transaction.conversacionNuevaEn(uid: String, ahora: Long): ConversacionEnLaLista {
-    agruparLosTurnosSueltos(this, uid)
     val conTurnos = turnosPorConversacion(uid).keys
     val vacias = conversacionesDe(uid).filter { it[ConversacionesConElAsistente.id] !in conTurnos }
     val vacia = vacias.firstOrNull()
@@ -259,13 +289,16 @@ internal fun Transaction.conversacionParaLaPreguntaEn(uid: String, pedida: Strin
         if (conversacionDe(uid, pedida) != null) return pedida
         return conversacionNuevaEn(uid, ahora).id
     }
-    agruparLosTurnosSueltos(this, uid)
     return conversacionesDe(uid).firstOrNull()?.get(ConversacionesConElAsistente.id) ?: conversacionNuevaEn(uid, ahora).id
 }
 
-/** [conversacionParaLaPreguntaEn] en su propia transacción: el chat la pide antes de llamar al modelo. */
-suspend fun conversacionParaLaPregunta(uid: String, pedida: String?, ahora: Long = System.currentTimeMillis()): String = dbQuery {
-    conversacionParaLaPreguntaEn(uid, pedida, ahora)
+/**
+ * [conversacionParaLaPreguntaEn] en su propia transacción: el chat la pide antes de llamar al modelo.
+ * Los turnos sueltos se agrupan antes y aparte ([agruparLosTurnosSueltosSinRomper]).
+ */
+suspend fun conversacionParaLaPregunta(uid: String, pedida: String?, ahora: Long = System.currentTimeMillis()): String {
+    agruparLosTurnosSueltosSinRomper(uid)
+    return dbQuery { conversacionParaLaPreguntaEn(uid, pedida, ahora) }
 }
 
 /**

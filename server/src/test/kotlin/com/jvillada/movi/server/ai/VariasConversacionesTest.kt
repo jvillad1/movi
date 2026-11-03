@@ -26,6 +26,8 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.sql.insert
@@ -287,6 +289,29 @@ class VariasConversacionesTest {
 
         // La vieja ruta sigue viendo la que estaba en curso (la posterior a la marca).
         assertEquals(listOf("¿Cómo voy con el carro?", "r"), reciente().mensajes.map { it.content })
+    }
+
+    /**
+     * Revisión de la vuelta 117 · dos lecturas a la vez durante un despliegue (la lista y una pregunta)
+     * agrupan los mismos turnos sueltos: con la fila del dueño bloqueada, las dos terminan bien y queda
+     * una sola conversación.
+     */
+    @Test
+    fun `agrupar a la vez desde dos lados no choca`() {
+        transaction {
+            turnoViejo("ai_v1", a.duenoA, "vieja", 1_000L)
+            turnoViejo("ai_v2", a.duenoA, "otra vieja", 2_000L)
+        }
+        val resultados = runBlocking {
+            (1..4).map {
+                async(Dispatchers.IO) {
+                    runCatching { com.jvillada.movi.server.db.dbQuery { agruparLosTurnosSueltos(this, a.duenoA) } }
+                }
+            }.map { it.await() }
+        }
+        assertTrue(resultados.all { it.isSuccess }, resultados.mapNotNull { it.exceptionOrNull()?.message }.joinToString())
+        assertEquals(2, resultados.sumOf { it.getOrThrow() }, "los dos turnos se agruparon una sola vez")
+        assertEquals(1L, transaction { ConversacionesConElAsistente.selectAll().count() })
     }
 
     @Test
