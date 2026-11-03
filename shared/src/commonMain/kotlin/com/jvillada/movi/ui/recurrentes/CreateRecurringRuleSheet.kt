@@ -60,6 +60,12 @@ import com.jvillada.movi.ui.components.ds.TamanoDeBoton
 import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import com.jvillada.movi.ui.components.ds.RotuloDeCampo
 import com.jvillada.movi.ui.components.ds.AyudaDeCampo
+import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
+import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.shared.model.ajustesDelPeriodo
+import com.jvillada.movi.shared.model.sePreguntaSiYaPagasteElDeEstePeriodo
+import kotlinx.datetime.LocalDate
 
 /**
  * La ÚNICA hoja para anotar algo que se repite (Ola 8; desde la Ola 16, también si se repite una
@@ -150,6 +156,8 @@ fun CreateRecurringRuleSheet(
     vencidoSinPagar: com.jvillada.movi.shared.model.PagoDelPeriodo? = null,
     /** «Ya lo pagué»: después de pausar, abre «Anotar pago» de esa fila. */
     onYaLoPague: ((com.jvillada.movi.shared.model.PagoDelPeriodo) -> Unit)? = null,
+    /** Vuelta 121 · el «hoy» de la pregunta «¿Ya pagaste el de este período?»; `null` = hoy de verdad (las pruebas lo fijan). */
+    hoy: LocalDate? = null,
 ) {
     val coroutine = rememberCoroutineScope()
 
@@ -337,6 +345,24 @@ fun CreateRecurringRuleSheet(
         else -> null
     }
 
+    // Vuelta 121 · «¿Ya pagaste el de este período?» — sí por defecto; solo al crear un gasto escrito a
+    // mano (no desde un movimiento, que ya es su ocurrencia) cuyo vencimiento de este período ya pasó o es
+    // hoy. Con «Sí» la regla arranca en el período siguiente; con «No» la de este período queda vencida,
+    // porque es real. Sin el perfil leído no se sabe cuál es «este período» (con corte 25 no es el mes): la
+    // pregunta no sale hasta tenerlo, y el server vuelve a comprobarlo.
+    var yaPagoElDeEstePeriodo by remember { mutableStateOf(true) }
+    val ajustesDelDueno = com.jvillada.movi.data.rememberLectura(
+        com.jvillada.movi.data.ClaveDeLectura.Perfil, reintento = 0, activa = !isEditMode,
+    ) { Repositories.wallets.getUserProfile() }.valor?.ajustesDelPeriodo()
+    val desdeUnMovimiento = prefill?.activeFrom != null || prefill?.eventId != null
+    val preguntaDelPeriodoVisible = !isEditMode && !seGuardaComoSuscripcion && !esAbono &&
+        ajustesDelDueno != null &&
+        dayOfMonth?.let { dia ->
+            sePreguntaSiYaPagasteElDeEstePeriodo(
+                selectedType, desdeUnMovimiento, dia, hoy ?: com.jvillada.movi.ui.fecha.hoyEnAppZone(), ajustesDelDueno,
+            )
+        } == true
+
     fun save() {
         if (!canSave) return
         val day = dayOfMonth?.coerceIn(1, 31) ?: return
@@ -428,7 +454,8 @@ fun CreateRecurringRuleSheet(
                         // **Desde cuándo corre la regla**: el PERÍODO del movimiento que la
                         // originó es el primero que existe, y los anteriores no (ver
                         // `RecurringRule.activeFrom`). Una regla escrita a mano desde Recurrentes
-                        // no trae ninguna y corre desde siempre, como hasta hoy.
+                        // no trae ninguna: corre desde el período en que se crea (vuelta 121, el server
+                        // lo lee de su fecha de creación), o desde el siguiente con «ya pagué».
                         //
                         // Al EDITAR se manda `null`, que el server lee como «no la toques» y
                         // conserva la que ya tenía: la hoja no ofrece cambiar esta fecha, así que
@@ -442,6 +469,9 @@ fun CreateRecurringRuleSheet(
                         // Explícito siempre (`true`/`false`): `null` es «no lo toques», y esta hoja
                         // sí habla del débito. Un ingreso nunca se debita.
                         seDebitaSolo = debitoAplica && seDebitaSolo,
+                        // Vuelta 121: la respuesta, solo si la pregunta se vio; si no, sin el campo (el
+                        // server lo lee como «desde el período en que se crea»).
+                        yaPagoElDeEstePeriodo = if (preguntaDelPeriodoVisible) yaPagoElDeEstePeriodo else null,
                     )
                     if (isEditMode) {
                         runCatching { Repositories.wallets.updateRecurringRule(existing!!.id, rule) }
@@ -718,6 +748,27 @@ fun CreateRecurringRuleSheet(
 
             Spacer(Modifier.height(Espacio.m))
 
+            // ── Vuelta 121 · «¿Ya pagaste el de este período?» ────────────────────────────────
+            //
+            // Va debajo del tipo (la pregunta depende del día y de que sea un gasto) y no encima: al
+            // cambiar Gasto/Ingreso aparece o se va por debajo de lo que se tocó, sin mover nada de arriba.
+            // La misma fila que el alta de un crédito (vuelta 77).
+            if (preguntaDelPeriodoVisible) {
+                Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
+                    Fila(
+                        titulo = YA_PAGASTE_EL_DE_ESTE_PERIODO,
+                        subtitulo = if (yaPagoElDeEstePeriodo) LO_ESPERA_DESDE_EL_PROXIMO_PERIODO else LO_ESPERA_EN_ESTE_PERIODO,
+                        lineasDelSubtitulo = 2,
+                        final = { Casilla(marcada = yaPagoElDeEstePeriodo) },
+                        onClick = if (!saving) ({ yaPagoElDeEstePeriodo = !yaPagoElDeEstePeriodo }) else null,
+                        modifier = Modifier
+                            .semantics { selected = yaPagoElDeEstePeriodo }
+                            .testTag(TAG_YA_PAGASTE_EL_DE_ESTE_PERIODO),
+                    )
+                }
+                Spacer(Modifier.height(Espacio.m))
+            }
+
             if (seGuardaComoSuscripcion) {
                 // No se ocultan los campos en silencio: esto se guarda como suscripción, y
                 // una suscripción es siempre un cobro, sin categoría y sin recordatorio.
@@ -987,6 +1038,14 @@ fun CreateRecurringRuleSheet(
         Spacer(Modifier.height(Espacio.s))
     }
 }
+
+/** Vuelta 121 · la pregunta del alta de un pago fijo cuya fecha de este período ya pasó, y lo que dice debajo. */
+const val YA_PAGASTE_EL_DE_ESTE_PERIODO: String = "¿Ya pagaste el de este período?"
+const val LO_ESPERA_DESDE_EL_PROXIMO_PERIODO: String = "Movi lo espera desde el próximo período"
+const val LO_ESPERA_EN_ESTE_PERIODO: String = "Movi lo espera en este período"
+
+/** El tag de esa fila (vuelta 121). */
+const val TAG_YA_PAGASTE_EL_DE_ESTE_PERIODO: String = "regla:ya-pagaste-el-de-este-periodo"
 
 /** Vuelta 72 · el título de la hoja al editar una regla. */
 const val TITULO_EDITAR_RECURRENTE: String = "Editar recurrente"
