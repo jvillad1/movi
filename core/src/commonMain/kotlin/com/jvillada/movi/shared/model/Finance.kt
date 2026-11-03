@@ -628,8 +628,11 @@ data class RecurringRule(
      * solo, porque los dos casos son legítimos y opuestos. Por eso hoy son dos, y cuál se usa lo
      * dice [arranqueEsDesembolso].
      *
-     * `null` para las reglas que el dueño escribió a mano (un salario, un gimnasio): esas no
-     * tienen un «antes» que marcar y corren desde siempre.
+     * `null` para las reglas que el dueño escribió a mano (un salario, un gimnasio) **en la fila**;
+     * desde la vuelta 121 el server las lee con la fecha en que se crearon
+     * ([arranqueDeLaReglaGuardada] sobre `recurring_rules.created_at`): un pago fijo nunca tiene
+     * ocurrencias antes del período en que se creó. Solo las reglas de antes de esa columna (25-sep-2026)
+     * siguen sin fecha y corren desde siempre.
      */
     val activeFrom: String? = null,
 
@@ -703,6 +706,23 @@ data class RecurringRule(
      * lo ve (`encodeDefaults` apagado + `ignoreUnknownKeys` en los tres `Platform`).
      */
     val eventoDeOrigen: String? = null,
+
+    /**
+     * **Vuelta 121 · «¿Ya pagaste el de este período?»: `true` = sí.** Solo de ida, como
+     * [eventoDeOrigen]: un campo del `POST /api/recurring-rules` y **no** una columna.
+     *
+     * La hoja de un pago fijo nuevo lo pregunta cuando el vencimiento de este período ya pasó (hoy
+     * incluido; ver [sePreguntaSiYaPagasteElDeEstePeriodo]). Con `true` el server guarda en [activeFrom] el
+     * arranque del período siguiente (la cuenta de la vuelta 77, [arranqueDeLasCuotasSiYaPagaste]): la
+     * ocurrencia de este período no existe en ningún lado. Con `false` o sin el campo (un APK viejo), la
+     * regla corre desde el período en que se creó, y la de este período sale vencida porque es real.
+     *
+     * El server lo ignora si no aplica: un ingreso, una regla desde un movimiento (trae su [activeFrom]),
+     * o un vencimiento de este período que todavía no llega. **Solo para gastos**: el salario cobrado tiene
+     * su pregunta propia en la guía (vuelta 75), y un ingreso que ya llegó lo empareja Movi con su
+     * movimiento o lo pregunta «¿Te llegó…?» (vuelta 90). La respuesta del alta lo devuelve en `null`.
+     */
+    val yaPagoElDeEstePeriodo: Boolean? = null,
 
     /**
      * **El monto de esta regla es un SALDO, no lo que se va a pagar.**
