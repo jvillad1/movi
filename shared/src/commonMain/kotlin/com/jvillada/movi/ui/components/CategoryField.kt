@@ -482,6 +482,9 @@ fun CategoryField(
     label: String? = "Categoría",
     placeholder: String = "Ej: Vivienda, Suscripción, Salud",
 ) {
+    // Vuelta 119: las categorías del dueño, aunque la hoja se abra sin pasar por el Inicio (Pagos
+    // tras recargar la web): sin esto el selector de un pago fijo solo ofrecía el catálogo.
+    com.jvillada.movi.data.AsegurarLasCategoriasDelDueno()
     var abierto by remember { mutableStateOf(false) }
     val forma = RoundedCornerShape(Movi.formas.normal)
 

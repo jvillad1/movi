@@ -249,6 +249,8 @@ fun HojaPagoOtro(
                         reparto = reparto,
                     ),
                 )
+                // Vuelta 119: una categoría creada acá queda para el próximo selector, como en Agregar.
+                UsedCategoriesCache.record(categoria.trim(), TransactionType.EXPENSE)
                 onGuardado()
             } catch (e: CancellationException) {
                 throw e
