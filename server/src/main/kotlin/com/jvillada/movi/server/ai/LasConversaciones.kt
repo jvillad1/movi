@@ -12,6 +12,7 @@ import com.jvillada.movi.shared.model.ConversacionDelAsistente
 import com.jvillada.movi.shared.model.ConversacionEnLaLista
 import com.jvillada.movi.shared.model.ListaDeConversaciones
 import com.jvillada.movi.shared.model.TITULO_SIN_TEXTO
+import com.jvillada.movi.shared.model.TURNOS_QUE_SE_GUARDAN_POR_CONVERSACION
 import com.jvillada.movi.shared.model.tituloDeLaConversacion
 import org.jetbrains.exposed.sql.Op
 import org.jetbrains.exposed.sql.ResultRow
@@ -47,12 +48,14 @@ import java.util.UUID
  * - **Los turnos de antes** (sin conversación) se agrupan al arrancar con la única marca que había,
  *   la de la última «Nueva conversación»: los anteriores a ella son una conversación y los
  *   posteriores otra (ver [agruparLosTurnosSueltos]).
- * - **Retención:** las últimas `CONVERSACIONES_QUE_SE_GUARDAN` (50). La que pasa el tope se borra
- *   entera al empezar la siguiente, y la lista lo dice (`textoDeLaRetencion`).
+ * - **Retención:** las últimas `CONVERSACIONES_QUE_SE_GUARDAN` (50), cada una con sus últimos
+ *   `TURNOS_QUE_SE_GUARDAN_POR_CONVERSACION` (200) turnos. La que pasa el tope se borra entera al
+ *   empezar la siguiente, y la lista lo dice (`textoDeLaRetencion`).
  * - **Borrar es de verdad** ([borrarLasConversacionesEn]): los turnos y sus propuestas se van. La
  *   única excepción no guarda texto: un turno que fue al modelo dentro de la ventana que cuenta el
  *   tope del mes y el costo (`DIAS_QUE_NO_SE_PODAN`) queda como una cifra —fecha, modelo y fichas,
- *   sin pregunta ni respuesta— hasta que la poda lo saque. Si no, borrar una conversación le
+ *   sin pregunta ni respuesta— hasta que lo saque `podarLasConversaciones` (al empezar otra
+ *   conversación, si ya salió de la ventana). Si no, borrar una conversación le
  *   devolvería preguntas del tope.
  *
  * Todo filtra por el `user_id` del token: una conversación ajena no se ve, no se borra y no recibe
@@ -215,6 +218,7 @@ private fun Transaction.listaDeConversacionesEn(uid: String): ListaDeConversacio
             )
         },
         tope = CONVERSACIONES_QUE_SE_GUARDAN,
+        turnosPorConversacion = TURNOS_QUE_SE_GUARDAN_POR_CONVERSACION,
     )
 }
 
@@ -314,6 +318,22 @@ internal fun Transaction.anotarElTurnoEnSuConversacion(uid: String, conversacion
         if (primera) it[titulo] = tituloParaLaColumna(pregunta, hayImagen)
     }
     if (primera) podarLasConversaciones(uid, conservar = conversacionId, ahora = ahora)
+    podarLosTurnosDeLaConversacion(uid, conversacionId, ahora)
+}
+
+/**
+ * Revisión de la vuelta 117 · **el tope por conversación**: de cada una quedan sus últimos
+ * [TURNOS_QUE_SE_GUARDAN_POR_CONVERSACION] turnos (el mismo número que el tope por dueño de antes);
+ * los más viejos se van con la regla de borrar ([borrarLosTurnosEn]). Sin esto, una conversación del
+ * admin (sin tope de preguntas) o de las tres sugeridas (que no cuentan) crecía sin límite.
+ */
+internal fun Transaction.podarLosTurnosDeLaConversacion(uid: String, conversacionId: String, ahora: Long) {
+    val sobran = AiTurns.select(AiTurns.id, AiTurns.modelo, AiTurns.creadoEn)
+        .where { (AiTurns.userId eq uid) and (AiTurns.conversacionId eq conversacionId) }
+        .orderBy(AiTurns.creadoEn to SortOrder.DESC, AiTurns.id to SortOrder.DESC)
+        .drop(TURNOS_QUE_SE_GUARDAN_POR_CONVERSACION)
+        .map { Triple(it[AiTurns.id], it[AiTurns.modelo], it[AiTurns.creadoEn]) }
+    borrarLosTurnosEn(uid, sobran, ahora)
 }
 
 /**
@@ -344,10 +364,20 @@ internal fun Transaction.podarLasConversaciones(uid: String, conservar: String?,
  */
 internal fun Transaction.borrarLasConversacionesEn(uid: String, ids: List<String>, ahora: Long) {
     if (ids.isEmpty()) return
-    val desde = desdeCuandoNoSePoda(ahora)
     val turnos = AiTurns.select(AiTurns.id, AiTurns.modelo, AiTurns.creadoEn)
         .where { (AiTurns.userId eq uid) and (AiTurns.conversacionId inList ids) }
         .map { Triple(it[AiTurns.id], it[AiTurns.modelo], it[AiTurns.creadoEn]) }
+    borrarLosTurnosEn(uid, turnos, ahora)
+    ConversacionesConElAsistente.deleteWhere { (userId eq uid) and (ConversacionesConElAsistente.id inList ids) }
+}
+
+/**
+ * **Borra [turnos] de [uid]** (id, modelo, fecha) con sus propuestas. El que fue al modelo dentro de
+ * la ventana del tope ([desdeCuandoNoSePoda]) queda sin texto y suelto ([CONVERSACION_BORRADA]).
+ */
+internal fun Transaction.borrarLosTurnosEn(uid: String, turnos: List<Triple<String, String, Long>>, ahora: Long) {
+    if (turnos.isEmpty()) return
+    val desde = desdeCuandoNoSePoda(ahora)
     val (quedanComoCifra, seBorran) = turnos.partition { (_, modelo, creadoEn) -> modelo != MODELO_SIN_IA && creadoEn >= desde }
     turnos.map { it.first }.chunked(500).forEach { tanda ->
         AccionesPropuestas.deleteWhere { (AccionesPropuestas.userId eq uid) and (AccionesPropuestas.turnoId inList tanda) }
@@ -366,7 +396,6 @@ internal fun Transaction.borrarLasConversacionesEn(uid: String, ids: List<String
             it[conversacionId] = CONVERSACION_BORRADA
         }
     }
-    ConversacionesConElAsistente.deleteWhere { (userId eq uid) and (ConversacionesConElAsistente.id inList ids) }
 }
 
 /** `DELETE /api/ai/conversaciones/{id}`: `false` si no existe o es de otro (la ruta contesta 404). */

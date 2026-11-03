@@ -43,10 +43,11 @@ class TituloDeLaConversacionTest {
 
     @Test
     fun `la retencion se dice siempre, y avisa cerca del tope`() {
-        assertEquals("Movi guarda tus últimas 50 conversaciones.", textoDeLaRetencion(3))
-        assertEquals("Movi guarda tus últimas 50 conversaciones.", textoDeLaRetencion(AVISAR_DESDE_CONVERSACIONES - 1))
+        val regla = "Movi guarda tus últimas 50 conversaciones. De cada una guarda las últimas 200 preguntas."
+        assertEquals(regla, textoDeLaRetencion(3))
+        assertEquals(regla, textoDeLaRetencion(AVISAR_DESDE_CONVERSACIONES - 1))
         val cerca = textoDeLaRetencion(47)
         assertTrue(cerca.startsWith("Tienes 47 de 50 conversaciones guardadas."), cerca)
-        assertTrue("borra" in cerca, cerca)
+        assertTrue("borra" in cerca && cerca.endsWith("las últimas 200 preguntas."), cerca)
     }
 }

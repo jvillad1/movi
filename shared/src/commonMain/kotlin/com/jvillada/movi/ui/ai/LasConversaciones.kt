@@ -25,6 +25,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import com.jvillada.movi.shared.model.CONVERSACIONES_QUE_SE_GUARDAN
 import com.jvillada.movi.shared.model.ConversacionEnLaLista
+import com.jvillada.movi.shared.model.TURNOS_QUE_SE_GUARDAN_POR_CONVERSACION
 import com.jvillada.movi.shared.model.textoDeLaRetencion
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Medida
@@ -93,6 +94,7 @@ internal fun subtituloDeLaConversacion(conversacion: ConversacionEnLaLista, hoy:
 internal data class EstadoDeLasConversaciones(
     val conversaciones: List<ConversacionEnLaLista>? = null,
     val tope: Int = CONVERSACIONES_QUE_SE_GUARDAN,
+    val turnosPorConversacion: Int = TURNOS_QUE_SE_GUARDAN_POR_CONVERSACION,
     val cargando: Boolean = false,
     val fallo: Boolean = false,
     /** Lo que no se pudo hacer desde la lista (eliminar sin red), dicho debajo de «Nueva conversación». */
@@ -151,7 +153,7 @@ internal fun ListaDeConversaciones(
         }
         if (lista != null) {
             Text(
-                textoDeLaRetencion(lista.size, estado.tope),
+                textoDeLaRetencion(lista.size, estado.tope, estado.turnosPorConversacion),
                 style = Movi.textos.apoyo,
                 color = Movi.colores.textoApagado,
                 modifier = Modifier.fillMaxWidth().testTag(TAG_RETENCION_DE_LAS_CONVERSACIONES),

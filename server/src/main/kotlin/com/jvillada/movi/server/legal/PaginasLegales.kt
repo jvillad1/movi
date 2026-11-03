@@ -155,8 +155,9 @@ nav { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--borde); d
                 "lo que tú le pidas que recuerde (puedes verlo y borrarlo en «Lo que Movi sabe de ti»). " +
                 // Vuelta 117: la retención de las conversaciones (`CONVERSACIONES_QUE_SE_GUARDAN`) y lo que
                 // queda al borrar una (`borrarLasConversacionesEn`).
-                "Se guardan tus últimas 50 conversaciones: al empezar otra después de esas, se borra la que " +
-                "llevas más tiempo sin usar. Las ves y las borras en Movi AI → Conversaciones; al borrar una " +
+                "Se guardan tus últimas 50 conversaciones, cada una con sus últimas 200 preguntas: al empezar otra " +
+                "después de esas 50 se borra la que llevas más tiempo sin usar, y en una conversación las " +
+                "preguntas más viejas se borran al pasar de 200. Las ves y las borras en Movi AI → Conversaciones; al borrar una " +
                 "se borran sus preguntas y sus respuestas; de lo que preguntaste este mes o en los últimos 31 días " +
                 "queda solo cuántas preguntas fueron a la IA (sin su texto), para el límite de preguntas del mes.</li>")
             append("<li><strong>Uso de la app y fallos:</strong> qué pantallas abres y qué tocas (nunca montos " +

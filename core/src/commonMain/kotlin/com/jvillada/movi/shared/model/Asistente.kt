@@ -175,6 +175,8 @@ data class ListaDeConversaciones(
     val conversaciones: List<ConversacionEnLaLista> = emptyList(),
     /** [CONVERSACIONES_QUE_SE_GUARDAN], dicho por el server para que la app no prometa otro número. */
     val tope: Int = CONVERSACIONES_QUE_SE_GUARDAN,
+    /** Revisión de la vuelta 117 · [TURNOS_QUE_SE_GUARDAN_POR_CONVERSACION], dicho por el server. */
+    val turnosPorConversacion: Int = TURNOS_QUE_SE_GUARDAN_POR_CONVERSACION,
 )
 
 /**
@@ -184,6 +186,12 @@ data class ListaDeConversaciones(
  * habría borrado chats sin decirle; ahora la regla se dice en la lista ([textoDeLaRetencion]).
  */
 const val CONVERSACIONES_QUE_SE_GUARDAN: Int = 50
+
+/**
+ * Revisión de la vuelta 117 · **cuántos turnos (pregunta y respuesta) guarda cada conversación**: los
+ * últimos 200, el mismo número que el tope por dueño de antes; los más viejos se van al llegar otro.
+ */
+const val TURNOS_QUE_SE_GUARDAN_POR_CONVERSACION: Int = 200
 
 /** Desde cuántas guardadas la lista avisa que se acerca al tope. */
 const val AVISAR_DESDE_CONVERSACIONES: Int = 45
@@ -216,9 +224,15 @@ fun tituloDeLaConversacion(primeraPregunta: String, teniaImagen: Boolean = false
  * **Lo que la lista dice de la retención**, siempre debajo de las conversaciones: la regla a secas, o,
  * desde [AVISAR_DESDE_CONVERSACIONES], cuántas lleva y qué pasa al pasar el tope.
  */
-fun textoDeLaRetencion(guardadas: Int, tope: Int = CONVERSACIONES_QUE_SE_GUARDAN): String =
-    if (guardadas >= minOf(AVISAR_DESDE_CONVERSACIONES, tope)) {
-        "Tienes $guardadas de $tope conversaciones guardadas. Al empezar otra después de $tope, Movi borra la que llevas más tiempo sin usar."
+fun textoDeLaRetencion(
+    guardadas: Int,
+    tope: Int = CONVERSACIONES_QUE_SE_GUARDAN,
+    preguntasPorConversacion: Int = TURNOS_QUE_SE_GUARDAN_POR_CONVERSACION,
+): String {
+    val porConversacion = "De cada una guarda las últimas $preguntasPorConversacion preguntas."
+    return if (guardadas >= minOf(AVISAR_DESDE_CONVERSACIONES, tope)) {
+        "Tienes $guardadas de $tope conversaciones guardadas. Al empezar otra después de $tope, Movi borra la que llevas más tiempo sin usar. $porConversacion"
     } else {
-        "Movi guarda tus últimas $tope conversaciones."
+        "Movi guarda tus últimas $tope conversaciones. $porConversacion"
     }
+}

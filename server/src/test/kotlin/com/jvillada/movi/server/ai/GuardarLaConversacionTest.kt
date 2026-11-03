@@ -6,6 +6,7 @@ import com.jvillada.movi.server.db.CONVERSACION_BORRADA
 import com.jvillada.movi.server.db.ConversacionesConElAsistente
 import com.jvillada.movi.server.db.ConversacionesDelAsistente
 import com.jvillada.movi.shared.model.CONVERSACIONES_QUE_SE_GUARDAN
+import com.jvillada.movi.shared.model.TURNOS_QUE_SE_GUARDAN_POR_CONVERSACION
 import com.jvillada.movi.server.db.Users
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.sql.Database
@@ -178,6 +179,44 @@ class GuardarLaConversacionTest {
         // Enteras: ninguna queda a medias, y de las borradas no queda ni el texto.
         assertEquals(CONVERSACIONES_QUE_SE_GUARDAN * 2, guardadas().size)
         assertFalse(guardadas().any { it[AiTurns.pregunta].endsWith(" 0") })
+    }
+
+    /**
+     * Revisión de la vuelta 117 · **el tope por conversación**: de cada una quedan sus últimos 200
+     * turnos (el tope por dueño de antes). Los más viejos se van; la conversación sigue.
+     */
+    @Test
+    fun `de cada conversacion quedan sus ultimos 200 turnos`() {
+        val id = conversacionCon("pregunta 0", cuando = 1_000L)
+        (1 until TURNOS_QUE_SE_GUARDAN_POR_CONVERSACION + 5).forEach { i ->
+            guardar(pregunta = "pregunta $i", cuando = 1_000L + i * UN_DIA, conversacion = id)
+        }
+
+        val preguntas = guardadas().map { it[AiTurns.pregunta] }
+        assertEquals(TURNOS_QUE_SE_GUARDAN_POR_CONVERSACION, preguntas.size)
+        assertFalse((0..4).any { "pregunta $it" in preguntas }, "los cinco más viejos se van")
+        assertTrue("pregunta 5" in preguntas && "pregunta ${TURNOS_QUE_SE_GUARDAN_POR_CONVERSACION + 4}" in preguntas)
+        assertEquals(listOf("pregunta 0"), conversaciones(), "la conversación sigue, con su título")
+    }
+
+    /**
+     * Revisión de la vuelta 117 · **agrupar lo viejo nunca se lleva el turno.** Si agrupar los turnos
+     * sueltos falla (acá: falta la tabla de la marca), el turno nuevo se guarda igual.
+     */
+    @Test
+    fun `si agrupar lo viejo falla, el turno del chat se guarda igual`() {
+        transaction {
+            AiTurns.insert {
+                it[id] = "ai_suelto"; it[userId] = dueno; it[creadoEn] = 500L
+                it[pregunta] = "suelta"; it[respuesta] = "r"; it[consultas] = "[]"
+                it[modelo] = MODELO_DE_TODOS_LOS_DIAS; it[criterio] = false; it[vueltas] = 1
+                it[fichasEntrada] = 1; it[fichasCache] = 1; it[fichasSalida] = 1; it[imagen] = false
+            }
+            SchemaUtils.drop(ConversacionesDelAsistente)
+        }
+
+        assertTrue(guardar(pregunta = "la nueva", cuando = 2_000L), "el turno se guardó")
+        assertTrue("la nueva" in guardadas().map { it[AiTurns.pregunta] })
     }
 
     /** Podarle a uno no puede tocar a otro: la poda va por dueño, como todo en Movi. */

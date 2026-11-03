@@ -286,7 +286,7 @@ fun AIChatScreen(
     suspend fun leerLasConversaciones() {
         lasConversaciones = lasConversaciones.copy(cargando = true, fallo = false)
         lasConversaciones = runCatching { Repositories.wallets.getConversaciones() }.fold(
-            onSuccess = { EstadoDeLasConversaciones(conversaciones = it.conversaciones, tope = it.tope) },
+            onSuccess = { EstadoDeLasConversaciones(conversaciones = it.conversaciones, tope = it.tope, turnosPorConversacion = it.turnosPorConversacion) },
             onFailure = { lasConversaciones.copy(cargando = false, fallo = true) },
         )
     }
