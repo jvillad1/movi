@@ -11,6 +11,10 @@ import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import com.jvillada.movi.ui.fecha.hoyEnAppZone
 import kotlinx.datetime.Clock
 import com.jvillada.movi.ui.components.ds.AccionDeEncabezado
+import com.jvillada.movi.ui.components.ds.BotonDeIcono
+import com.jvillada.movi.ui.components.ds.Encabezado
+import com.jvillada.movi.ui.components.ds.TamanoDelTitulo
+import com.jvillada.movi.shared.model.ConversacionEnLaLista
 import com.jvillada.movi.ui.components.ds.Pildora
 import com.jvillada.movi.ui.components.ds.Seccion
 import com.jvillada.movi.ui.components.ds.Superficie
@@ -32,6 +36,7 @@ import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -134,6 +139,15 @@ fun AIChatScreen(
     val estadosDePropuestas = remember { mutableStateMapOf<String, EstadoDePropuesta>() }
     var aviso by remember { mutableStateOf<String?>(null) }
     val nombre = remember { primerNombre(SessionManager.userName) }
+    // Vuelta 117 · **varias conversaciones**: la abierta (su id viaja en cada pregunta; `null` = la más
+    // reciente del dueño, lo de siempre), la lista (en una hoja en el teléfono, en una columna en
+    // pantalla ancha) y la que se está por eliminar.
+    var conversacionId by remember { mutableStateOf<String?>(null) }
+    var lasConversaciones by remember { mutableStateOf(EstadoDeLasConversaciones()) }
+    var versionDeLaLista by remember { mutableStateOf(0) }
+    var hojaDeConversaciones by remember { mutableStateOf(false) }
+    var porEliminar by remember { mutableStateOf<ConversacionEnLaLista?>(null) }
+    var eliminando by remember { mutableStateOf(false) }
 
     // F32: el picker de la Ola 1 (extractos) acepta cualquier archivo — acá se filtra por
     // mime de imagen en el cliente, sin tocar el picker en sí.
@@ -185,7 +199,10 @@ fun AIChatScreen(
             // Lo que viaja NO es la lista de la pantalla: sin las imágenes de turnos anteriores
             // (ya se mandaron y se pagaron una vez) y con tope. Ver [mensajesParaEnviar].
             val history = mensajesParaEnviar(messages)
-            val reply = runCatching { Repositories.wallets.chatAi(AiChatRequest(history)) }
+            val reply = runCatching { Repositories.wallets.chatAi(AiChatRequest(history, conversacionId)) }
+            // Vuelta 117: la conversación donde quedó (la nueva, si no había ninguna); la lista cambia.
+            reply.getOrNull()?.conversacionId?.let { conversacionId = it }
+            versionDeLaLista++
             val replyText = textoDeLaRespuesta(reply.getOrNull(), reply.exceptionOrNull())
             messages.add(
                 ChatMessage(
@@ -228,7 +245,10 @@ fun AIChatScreen(
         // Primero lo que ya se habló, después la pregunta con la que se abrió: así la nueva queda
         // al final de la conversación y no antes de lo que se recarga.
         val guardada = runCatching { Repositories.wallets.getConversacionDelAsistente() }.getOrNull()
-        if (guardada != null && messages.isEmpty()) messages.addAll(guardada.mensajes)
+        if (guardada != null && messages.isEmpty()) {
+            messages.addAll(guardada.mensajes)
+            conversacionId = guardada.id
+        }
         if (guardada != null) iaDisponible = guardada.iaDisponible
         historialCargado = true
         if (!yaSeMandoLaInicial && !preguntaInicial.isNullOrBlank()) {
@@ -237,16 +257,77 @@ fun AIChatScreen(
         }
     }
 
+    /** Lo que se limpia al cambiar de conversación: los avisos de la que estaba abierta. */
+    fun dejarLaConversacionAbierta(mensajes: List<ChatMessage>, id: String?) {
+        messages.clear()
+        messages.addAll(mensajes)
+        conversacionId = id
+        aviso = null
+        ofrecerLasQueFuncionan = false
+        avisoDelTopeDelMes = null
+    }
+
     fun nuevaConversacion() {
         if (loading) return
+        hojaDeConversaciones = false
         coroutine.launch {
-            val hecho = runCatching { Repositories.wallets.empezarConversacionNueva() }.isSuccess
-            if (hecho) {
-                messages.clear()
-                aviso = null
-            } else {
-                aviso = NO_PUDE_EMPEZAR_OTRA
+            // Vuelta 117: con su id, para que lo siguiente vaya a ella y no a la más reciente. Un server
+            // anterior no conoce la ruta: la de siempre hace lo mismo, sin id.
+            val nueva = runCatching { Repositories.wallets.crearConversacion() }.getOrNull()
+            when {
+                nueva != null -> dejarLaConversacionAbierta(emptyList(), nueva.id)
+                runCatching { Repositories.wallets.empezarConversacionNueva() }.isSuccess -> dejarLaConversacionAbierta(emptyList(), null)
+                else -> aviso = NO_PUDE_EMPEZAR_OTRA
             }
+            versionDeLaLista++
+        }
+    }
+
+    suspend fun leerLasConversaciones() {
+        lasConversaciones = lasConversaciones.copy(cargando = true, fallo = false)
+        lasConversaciones = runCatching { Repositories.wallets.getConversaciones() }.fold(
+            onSuccess = { EstadoDeLasConversaciones(conversaciones = it.conversaciones, tope = it.tope) },
+            onFailure = { lasConversaciones.copy(cargando = false, fallo = true) },
+        )
+    }
+
+    /** Tocar una fila: la abre (sus mensajes, del server) y cierra la hoja. */
+    fun abrirConversacion(conversacion: ConversacionEnLaLista) {
+        if (loading) return
+        hojaDeConversaciones = false
+        if (conversacion.id == conversacionId && messages.isNotEmpty()) return
+        coroutine.launch {
+            runCatching { Repositories.wallets.getConversacion(conversacion.id) }
+                .onSuccess { abierta ->
+                    dejarLaConversacionAbierta(abierta.mensajes, abierta.id ?: conversacion.id)
+                    iaDisponible = abierta.iaDisponible
+                    // La eligió él: no se le ofrece empezar otra porque sea de otro día.
+                    seguirConLaVieja = true
+                }
+                .onFailure { aviso = NO_PUDE_ABRIR_LA_CONVERSACION }
+        }
+    }
+
+    /**
+     * «Eliminar», ya confirmado. Pide red: si falla, la lista lo dice y no se quita nada. Si era la
+     * abierta, el chat queda en una nueva (vacía), para que lo siguiente no caiga en otra vieja.
+     */
+    fun eliminarConversacion(conversacion: ConversacionEnLaLista) {
+        eliminando = true
+        coroutine.launch {
+            runCatching { Repositories.wallets.borrarConversacion(conversacion.id) }
+                .onSuccess {
+                    lasConversaciones = lasConversaciones.copy(
+                        conversaciones = lasConversaciones.conversaciones?.filterNot { it.id == conversacion.id },
+                        aviso = null,
+                    )
+                    if (conversacion.id == conversacionId) {
+                        dejarLaConversacionAbierta(emptyList(), runCatching { Repositories.wallets.crearConversacion() }.getOrNull()?.id)
+                    }
+                }
+                .onFailure { lasConversaciones = lasConversaciones.copy(aviso = NO_PUDE_ELIMINAR_LA_CONVERSACION) }
+            eliminando = false
+            porEliminar = null
         }
     }
 
@@ -268,17 +349,60 @@ fun AIChatScreen(
     )
     LaunchedEffect(messages.size, loading) {
         val target = piezas.size + if (loading) 1 else 0
-        if (target > 0) listState.animateScrollToItem(target - 1)
+        if (target > 0) {
+            listState.animateScrollToItem(target - 1)
+            // Vuelta 117: y hasta el borde de abajo, para que una respuesta larga no quede cortada.
+            irAlFinalDeLaLista(listState)
+        }
     }
     // **Y al abrir el teclado también.** La lista encoge por el `imePadding()` de la raíz, así que
     // sin esto lo último que se dijo queda tapado justo cuando el dueño va a escribir la respuesta
     // — el mismo síntoma que el teclado encima del campo, un renglón más arriba.
-    val tecladoALaVista = elTecladoEstaALaVista()
-    LaunchedEffect(tecladoALaVista) {
-        if (tecladoALaVista && piezas.isNotEmpty()) listState.animateScrollToItem(piezas.size - 1)
+    // Vuelta 117: **mientras el teclado sube**, no solo al empezar. El inset crece cuadro a cuadro y la
+    // lista encoge con él; un solo salto al principio dejaba la respuesta larga a medias debajo del
+    // campo. Cada cambio del alto vuelve al final de la lista (ver [irAlFinalDeLaLista]).
+    val altoDelTeclado = altoDelTecladoEnPixeles()
+    val tecladoALaVista = altoDelTeclado > 0
+    LaunchedEffect(altoDelTeclado) {
+        if (tecladoALaVista && piezas.isNotEmpty()) irAlFinalDeLaLista(listState)
+    }
+    // Y lo mismo cuando la lista encoge por cualquier otra cosa estando al final (el teclado de la web,
+    // que llega como `padding`, o un aviso que aparece abajo): lo último que se dijo no se esconde.
+    LaunchedEffect(listState) {
+        var anterior = VistaDeLaLista(alto = 0, alFinal = true)
+        snapshotFlow { VistaDeLaLista(listState.layoutInfo.viewportSize.height, !listState.canScrollForward) }
+            .collect { ahora ->
+                if (ahora.alto in 1 until anterior.alto && anterior.alFinal) irAlFinalDeLaLista(listState)
+                anterior = ahora
+            }
     }
 
-    Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
+    // Vuelta 117: la lista de conversaciones se lee al abrir su hoja (o al montar la columna de la
+    // pantalla ancha), y de nuevo después de cada pregunta, nueva o borrada.
+    if (hojaDeConversaciones) {
+        LaunchedEffect(versionDeLaLista) { leerLasConversaciones() }
+        HojaDeConversaciones(
+            estado = lasConversaciones,
+            abierta = conversacionId,
+            hoy = hoy,
+            habilitado = !loading,
+            onAbrir = ::abrirConversacion,
+            onNueva = ::nuevaConversacion,
+            onEliminar = { porEliminar = it },
+            onReintentar = { versionDeLaLista++ },
+            onCerrar = { hojaDeConversaciones = false },
+        )
+    }
+    porEliminar?.let { conversacion ->
+        ConfirmarEliminarLaConversacion(
+            ocupado = eliminando,
+            onConfirmar = { eliminarConversacion(conversacion) },
+            onCancelar = { porEliminar = null },
+        )
+    }
+
+    val elChat: @Composable (conHistorial: Boolean, modifier: Modifier) -> Unit = { conHistorial, modificador ->
+    Column(modifier = modificador.background(Movi.colores.fondo)) {
         // F60 · F22: encabezado único; Movi AI se abre desde Más — destino de reserva si no
         // hay historial. El «BETA» pasa a la derecha, como marca, no como parte del título.
         // Vuelta de diseño 30: **con fondo opaco y encima de la lista**. Al hacer scroll el texto de
@@ -297,17 +421,36 @@ fun AIChatScreen(
             subtitle = "Conoce tus finanzas",
             // Con conversación, la acción es empezar otra (con la forma de toda acción de encabezado);
             // sin conversación no hay nada que limpiar y queda la marca «Beta», una [Pildora].
-            action = if (messages.isEmpty()) {
-                { Pildora(MARCA_BETA) }
+            // Vuelta 117: el historial, siempre que la lista no esté al lado (en pantalla ancha va en su
+            // columna, con su «Nueva conversación»).
+            action = if (messages.isEmpty() || conHistorial) {
+                {
+                    if (conHistorial) {
+                        BotonDeIcono(
+                            Icons.Rounded.History,
+                            TITULO_DE_LAS_CONVERSACIONES,
+                            onClick = { lasConversaciones = lasConversaciones.copy(aviso = null); hojaDeConversaciones = true },
+                            modifier = Modifier.testTag(TAG_BOTON_DE_CONVERSACIONES),
+                        )
+                    }
+                    if (messages.isEmpty()) Pildora(MARCA_BETA)
+                }
             } else null,
-            accion = if (messages.isNotEmpty()) {
+            accion = if (messages.isNotEmpty() && conHistorial) {
                 AccionDeEncabezado(NUEVA_CONVERSACION, Icons.Rounded.Add, onClick = { nuevaConversacion() }, habilitado = !loading)
             } else null,
         )
         }
 
         // La conversación guardada es de otro día: se ofrece empezar otra, sin borrar nada sola.
-        val tituloDeLaVieja = if (seguirConLaVieja || loading) null else tituloDeLaConversacionVieja(messages, hoy)
+        // Vuelta 117: **no con el teclado arriba.** Si está escribiendo, ya decidió seguir; y en un
+        // teléfono chico con la letra grande la tarjeta se comía el alto que le quedaba al campo.
+        val tituloDeLaVieja = if (seguirConLaVieja || loading || tecladoALaVista) null else tituloDeLaConversacionVieja(messages, hoy)
+        // Vuelta 117 · **el campo se mide primero.** La tarjeta y la lista van juntas en el espacio con
+        // peso, que `Column` reparte DESPUÉS de lo que no pesa (el encabezado, los avisos y la barra de
+        // escribir). Antes la tarjeta se medía antes que la barra: en un teléfono chico, con la letra
+        // grande y el teclado arriba, la barra se quedaba sin alto y el campo desaparecía debajo.
+        Column(modifier = Modifier.weight(1f).fillMaxWidth().clipToBounds()) {
         if (tituloDeLaVieja != null) {
             TarjetaDePropuesta(
                 icono = Icons.Rounded.History,
@@ -400,6 +543,7 @@ fun AIChatScreen(
                 }
             }
         }
+        }
 
         // F32: nombre del adjunto + X para quitarlo, o el aviso de "por ahora solo imágenes"
         // si eligieron otra cosa (p.ej. un PDF) — visible arriba de la barra de escribir.
@@ -468,6 +612,7 @@ fun AIChatScreen(
                     value = campo.valor,
                     onValueChange = campo::alCambiar,
                     enabled = !loading,
+                    maxLines = RENGLONES_DEL_CAMPO_DE_MOVI_AI,
                     cursorBrush = SolidColor(Movi.colores.texto),
                     textStyle = Movi.textos.cuerpo.copy(color = Movi.colores.texto),
                     // Ola 8 · V2: mismo agujero que tenía la nota de Agregar. El `Box(weight)`
@@ -521,7 +666,75 @@ fun AIChatScreen(
             }
         }
     }
+    }
+
+    // Vuelta 117 · **en pantalla ancha, la lista al lado** (`docs/diseno/sistema.md` §79): una columna
+    // de [Medida.anchoDeLaListaDeConversaciones] a la izquierda y el chat a la derecha, en su columna de
+    // lectura. Sin lugar para las dos (o en el teléfono), el chat solo, con el historial en la hoja.
+    if (LocalWindowWidthClass.current == WindowWidthClass.Compact) {
+        elChat(true, Modifier.fillMaxSize())
+    } else {
+        BoxWithConstraints(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
+            if (laListaVaAlLadoDelChat(maxWidth)) {
+                LaunchedEffect(versionDeLaLista) { leerLasConversaciones() }
+                Row(modifier = Modifier.fillMaxSize()) {
+                    Column(
+                        modifier = Modifier
+                            .width(Medida.anchoDeLaListaDeConversaciones)
+                            .fillMaxHeight()
+                            .testTag(TAG_COLUMNA_DE_CONVERSACIONES),
+                    ) {
+                        Encabezado(TITULO_DE_LAS_CONVERSACIONES, tamanoDelTitulo = TamanoDelTitulo.Pantalla)
+                        ListaDeConversaciones(
+                            estado = lasConversaciones,
+                            abierta = conversacionId,
+                            hoy = hoy,
+                            habilitado = !loading,
+                            onAbrir = ::abrirConversacion,
+                            onNueva = ::nuevaConversacion,
+                            onEliminar = { porEliminar = it },
+                            onReintentar = { versionDeLaLista++ },
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = Medida.margenDePantalla)
+                                .padding(bottom = Medida.margenDePantalla),
+                        )
+                    }
+                    Box(modifier = Modifier.width(Medida.trazo).fillMaxHeight().background(Movi.colores.hilo))
+                    Box(modifier = Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.TopCenter) {
+                        elChat(false, Modifier.widthIn(max = Medida.anchoMaximoDeLectura).fillMaxSize())
+                    }
+                }
+            } else {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+                    elChat(true, Modifier.widthIn(max = Medida.anchoMaximoDeLectura).fillMaxSize())
+                }
+            }
+        }
+    }
 }
+
+/**
+ * **Al final de la lista del chat**, del todo: el último ítem con su borde de abajo a la vista. Un
+ * `scrollToItem` al último solo alinea su borde de ARRIBA, y una respuesta larga quedaba con la cola
+ * debajo del campo; el desplazamiento de más lo recorta la propia lista contra su final.
+ */
+internal suspend fun irAlFinalDeLaLista(estado: androidx.compose.foundation.lazy.LazyListState) {
+    val ultimo = estado.layoutInfo.totalItemsCount - 1
+    if (ultimo >= 0) estado.scrollToItem(ultimo, scrollOffset = Int.MAX_VALUE / 2)
+}
+
+/** Lo que se mira de la lista para seguir al final cuando encoge: su alto y si estaba al final. */
+private data class VistaDeLaLista(val alto: Int, val alFinal: Boolean)
+
+/** Tag del botón de historial del encabezado de Movi AI (abre la hoja de las conversaciones). */
+internal const val TAG_BOTON_DE_CONVERSACIONES: String = "ai-boton-de-conversaciones"
+
+/**
+ * Vuelta 117 · **cuántos renglones crece el campo de escribir** antes de desplazarse adentro. Sin tope,
+ * una pregunta larga hacía crecer el campo hasta empujarse a sí mismo debajo del teclado.
+ */
+internal const val RENGLONES_DEL_CAMPO_DE_MOVI_AI: Int = 5
 
 /** Tag del campo de escribir de Movi AI. */
 internal const val TAG_CAMPO_DE_MOVI_AI: String = "ai-campo-de-escribir"

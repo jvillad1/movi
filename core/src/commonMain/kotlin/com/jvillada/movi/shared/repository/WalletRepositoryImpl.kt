@@ -9,6 +9,8 @@ import com.jvillada.movi.shared.model.RecuerdoDelAsistente
 import com.jvillada.movi.shared.model.ResolverPropuestaRequest
 import com.jvillada.movi.shared.model.EstadoDePropuesta
 import com.jvillada.movi.shared.model.ConversacionDelAsistente
+import com.jvillada.movi.shared.model.ConversacionEnLaLista
+import com.jvillada.movi.shared.model.ListaDeConversaciones
 import com.jvillada.movi.shared.model.MovimientoRechazado
 import com.jvillada.movi.shared.model.LecturaDelPapel
 import com.jvillada.movi.shared.model.NOTA_DEL_PAPEL_COMPARTIDO
@@ -899,6 +901,19 @@ class WalletRepositoryImpl(
 
     override suspend fun empezarConversacionNueva() {
         client.post("$baseUrl/api/ai/conversacion/nueva").exigirExito()
+    }
+
+    override suspend fun getConversaciones(): ListaDeConversaciones =
+        client.get("$baseUrl/api/ai/conversaciones").exigirExito().body()
+
+    override suspend fun getConversacion(id: String): ConversacionDelAsistente =
+        client.get("$baseUrl/api/ai/conversaciones/$id").exigirExito().body()
+
+    override suspend fun crearConversacion(): ConversacionEnLaLista =
+        client.post("$baseUrl/api/ai/conversaciones").exigirExito().body()
+
+    override suspend fun borrarConversacion(id: String) {
+        client.delete("$baseUrl/api/ai/conversaciones/$id").exigirExito()
     }
 
     override suspend fun getMemoriaDelAsistente(): List<RecuerdoDelAsistente> =
