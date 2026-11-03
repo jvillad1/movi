@@ -171,6 +171,12 @@ object MovimientosDelDueno {
         /** La base al registrar el primero: lo último que leyó el Inicio. */
         val base: () -> DashboardData? = { DashboardDataCache.data },
         val ahora: () -> Long = { Clock.System.now().toEpochMilliseconds() },
+        /**
+         * Dónde corre la espera de [listo]; `null`, el de la app (`Dispatchers.Default`). Vuelta 116: las
+         * pruebas pasan uno con el reloj de prueba, para no esperar con el reloj de pared un bucle que
+         * corre en otro hilo (y que pierda un [despertar] si llega antes de que el bucle lo mire).
+         */
+        val alcance: CoroutineScope? = null,
     )
 
     /** Ver [Costuras]. `null`: las de la app. */
@@ -204,7 +210,7 @@ object MovimientosDelDueno {
         val c = costuras
         val llamada = c.ahora()
         val evento = _estado.value.movimientos.firstOrNull { it.id == id }?.evento ?: return
-        alcance.launch {
+        (c.alcance ?: alcance).launch {
             var vuelta = 0
             while (true) {
                 val m = _estado.value.movimientos.firstOrNull { it.id == id } ?: return@launch
