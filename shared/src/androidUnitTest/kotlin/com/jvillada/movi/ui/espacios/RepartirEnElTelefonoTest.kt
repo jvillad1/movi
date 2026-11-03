@@ -18,6 +18,7 @@ import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.repository.ApiException
 import com.jvillada.movi.shared.repository.LocalRepository
 import com.jvillada.movi.theme.MoviTheme
+import kotlinx.coroutines.Dispatchers
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -85,9 +86,18 @@ class RepartirEnElTelefonoTest {
 
     private val servidor = Servidor()
 
+    /**
+     * Vuelta 116 · **SQLite en el hilo de la prueba** (`disco = Dispatchers.Unconfined`). Por omisión el
+     * repositorio lleva cada operación a `Dispatchers.IO`, que Compose no espera: la prueba esperaba la
+     * subida con 5 s de reloj de pared y, con la máquina cargada (abrir la base, sus migraciones y el
+     * primer hilo de IO), fallaba con «no llegó … server: []» sin que nada estuviera mal. Con
+     * `Unconfined` el guardado, la subida y el reparto corren dentro del efecto de la hoja, en el reloj de
+     * Compose, y terminan en el primer cuadro. Lo que se prueba es el camino, no el hilo: el hilo de disco
+     * tiene su propia prueba en `:core` («Las lecturas no corren en el hilo del llamador», `LocalRepositoryTest`).
+     */
     private val local: LocalRepository = run {
         DatabaseDriverFactory.init(RuntimeEnvironment.getApplication())
-        LocalRepository(createDatabase("repartir-hoja-${System.nanoTime()}.db"), servidor, { uid })
+        LocalRepository(createDatabase("repartir-hoja-${System.nanoTime()}.db"), servidor, { uid }, disco = Dispatchers.Unconfined)
     }
 
     private var guardados = 0

@@ -76,6 +76,8 @@ import com.jvillada.movi.ui.transactions.EsqueletoDeLaTarjetaDeAvisos
 import com.jvillada.movi.ui.transactions.TAG_ESQUELETO_DE_LA_TARJETA_DE_AVISOS
 import com.jvillada.movi.ui.transactions.TAG_TARJETA_DE_AVISOS
 import com.jvillada.movi.ui.transactions.TarjetaDeAvisosDelBanco
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.datetime.Clock
 import org.junit.After
 import org.junit.Rule
@@ -380,10 +382,17 @@ class Vuelta82EnPantallaTest {
         assertTrue(id > 0)
     }
 
-    private fun esperarHasta(condicion: () -> Boolean) {
-        val hasta = System.currentTimeMillis() + 5_000
-        while (!condicion() && System.currentTimeMillis() < hasta) Thread.sleep(10)
-    }
+    /**
+     * Vuelta 116 · **la espera de `listo` corre en este planificador de prueba**, no en `Dispatchers.Default`
+     * (`Costuras.alcance`). [correr] hace todo lo que hay para hacer **ahora**, sin mover su reloj: la espera
+     * de 30 s entre subidas nunca vence sola. Antes se esperaba con el reloj de pared (hasta 5 s, o 200 ms
+     * a ciegas) un bucle que corría en otro hilo, y un `despertar` que llegara antes de que el bucle mirara
+     * el despertador se perdía: la prueba esperaba 30 s que no tenía.
+     */
+    private val tareas = StandardTestDispatcher()
+    private val alcanceDePrueba = CoroutineScope(tareas)
+
+    private fun correr() = tareas.scheduler.runCurrent()
 
     private fun listoEn(): Long? = MovimientosDelDueno.estado.value.movimientos.firstOrNull()?.listoEn
 
@@ -397,10 +406,11 @@ class Vuelta82EnPantallaTest {
             pedirRecarga = { recargas++ },
             base = { inicio },
             ahora = { 1_000L },
+            alcance = alcanceDePrueba,
         )
         val id = MovimientosDelDueno.registrar(gasto("ah", 12_300), signo = 1)
         MovimientosDelDueno.listo(id)
-        esperarHasta { listoEn() != null && recargas > 0 }
+        correr()
         assertEquals(1, subidas, "pidió una vuelta del SyncEngine")
         assertEquals(12_345L, listoEn(), "listo desde el syncedAt de la fila, no desde cuando lo notó")
         assertEquals(1, recargas, "y la pantalla a la vista recarga para traerlo")
@@ -415,14 +425,15 @@ class Vuelta82EnPantallaTest {
             pedirRecarga = {},
             base = { inicio },
             ahora = { 1_000L },
+            alcance = alcanceDePrueba,
         )
         val id = MovimientosDelDueno.registrar(gasto("ah", 12_300), signo = 1)
         MovimientosDelDueno.listo(id)
-        Thread.sleep(200)
+        correr()
         assertEquals(null, listoEn(), "sin subir, espera")
         subio = true
         MovimientosDelDueno.despertar()
-        esperarHasta { listoEn() != null }
+        correr()
         assertEquals(2_000L, listoEn(), "el SyncEngine subió algo: miró ya")
     }
 
@@ -436,17 +447,18 @@ class Vuelta82EnPantallaTest {
             pedirRecarga = {},
             base = { inicio },
             ahora = { reloj },
+            alcance = alcanceDePrueba,
         )
         val id = MovimientosDelDueno.registrar(gasto("ah", 12_300), signo = 1, ahora = 1_000L)
         MovimientosDelDueno.listo(id)
-        esperarHasta { preguntas >= 2 }
+        correr()
         reloj = 1_000L + com.jvillada.movi.ui.dashboard.VIGENCIA_SIN_SUBIR_MS + 1
         MovimientosDelDueno.despertar()
-        esperarHasta { MovimientosDelDueno.estado.value.movimientos.isEmpty() }
+        correr()
         assertTrue(MovimientosDelDueno.estado.value.movimientos.isEmpty(), "lo vencido salió")
         val antes = preguntas
         MovimientosDelDueno.despertar()
-        Thread.sleep(200)
+        correr()
         assertEquals(antes, preguntas, "y ya nadie vuelve a preguntar")
     }
 
