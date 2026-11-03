@@ -393,14 +393,14 @@ fun SeccionChecklistDelPeriodo(
     }
 
     Column(modifier = modifier) {
+        // Vuelta 120 · «Por fecha | Por categoría», **lo primero de la sección y en todos los estados** —cargando,
+        // sin poder leer, vacía o con facturas—: así está en el mismo lugar antes y después de llegar los datos
+        // (debajo de la tarjeta amarilla bajaba todo su alto al cargar) y nunca aparece para irse. La vista
+        // elegida ya se leyó del aparato antes del primer cuadro.
+        SelectorDeVistaDeFacturas(vista, onElegir = VistaDeFacturasStore::elegir)
+        Spacer(Modifier.height(Medida.dentroDeSeccion))
         when {
-            cargando -> {
-                // Vuelta 120: el selector ya está mientras carga, en su lugar: al llegar las filas no aparece
-                // empujando la lista (y la vista elegida se leyó del aparato antes del primer cuadro).
-                SelectorDeVistaDeFacturas(vista, onElegir = VistaDeFacturasStore::elegir)
-                Spacer(Modifier.height(Medida.dentroDeSeccion))
-                Seccion(titulo = TITULO_TUS_FACTURAS, accion = onAgregar?.let { AGREGAR_UN_PAGO }, onAccion = onAgregar)
-            }
+            cargando -> Seccion(titulo = TITULO_TUS_FACTURAS, accion = onAgregar?.let { AGREGAR_UN_PAGO }, onAccion = onAgregar)
             // Vuelta 68: en Pagos, el aviso único de arriba lo dice (ver [NoSePudoLeerEnLaPantalla]).
             !pudoLeer -> NoSePudoLeerEnLaPantalla(
                 clave = "facturas",
@@ -439,11 +439,6 @@ fun SeccionChecklistDelPeriodo(
                     Spacer(Modifier.height(Medida.entreSecciones))
                 }
                 // ── Tus facturas del período ─────────────────────────────────────────────────
-                // Vuelta 120: «Por fecha | Por categoría», arriba del título. Solo con facturas que agrupar.
-                if (facturas.isNotEmpty()) {
-                    SelectorDeVistaDeFacturas(vista, onElegir = VistaDeFacturasStore::elegir)
-                    Spacer(Modifier.height(Medida.dentroDeSeccion))
-                }
                 // Vuelta 72: «+ Agregar» siempre, no solo en el vacío.
                 Seccion(titulo = TITULO_TUS_FACTURAS, accion = onAgregar?.let { AGREGAR_UN_PAGO }, onAccion = onAgregar)
                 if (cuentasParaGuardar.isNotEmpty()) {

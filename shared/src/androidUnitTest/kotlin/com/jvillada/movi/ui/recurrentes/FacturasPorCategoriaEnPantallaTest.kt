@@ -108,15 +108,19 @@ class FacturasPorCategoriaEnPantallaTest {
     private val anotados = mutableListOf<String>()
     private val quitadas = mutableListOf<String>()
     private var cargando by mutableStateOf(false)
+    private var checklist by mutableStateOf(emptyList<PagoDelPeriodo>())
+    private var ocultos by mutableStateOf(false)
 
-    private fun montar(escala: Float = 1f) {
+    private fun montar(escala: Float = 1f, filas: List<PagoDelPeriodo> = lista) {
+        checklist = filas
         composeRule.setContent {
             val base = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(base.density, base.fontScale * escala)) {
                 MoviTheme {
+                    CompositionLocalProvider(com.jvillada.movi.ui.components.LocalSaldosOcultos provides ocultos) {
                     Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
                         SeccionChecklistDelPeriodo(
-                            checklist = lista,
+                            checklist = checklist,
                             cargando = cargando,
                             pudoLeer = true,
                             marcando = emptySet(),
@@ -129,6 +133,7 @@ class FacturasPorCategoriaEnPantallaTest {
                             onVerMovimiento = {},
                             onCargarMinimo = {},
                         )
+                    }
                     }
                 }
             }
@@ -274,22 +279,89 @@ class FacturasPorCategoriaEnPantallaTest {
         composeRule.onNode(hasTestTag(TAG_NO_SUMA) and hasAnyAncestor(hasTestTag(TAG_GRUPO_DE_FACTURAS)), useUnmergedTree = true).assertExists()
     }
 
-    @Test
-    fun `el selector no salta al llegar los datos ni al cambiar de vista`() {
+    /**
+     * Revisión: el selector iba debajo de la tarjeta amarilla y bajaba todo su alto al llegar los datos (y
+     * cargando con un período vacío aparecía para irse). Ahora es lo primero de la sección: su posición ABSOLUTA
+     * no se mueve más de 8 dp, como el selector de segmentos en `PlanScreenTest`.
+     */
+    private fun noSaltaAlCargar(filas: List<PagoDelPeriodo>) {
         cargando = true
-        montar()
-        val aireCargando = selector().getUnclippedBoundsInRoot().bottom.value.let { tituloDeLasFacturas().getUnclippedBoundsInRoot().top.value - it }
+        montar(filas = filas)
+        val antes = selector().getUnclippedBoundsInRoot().top.value
 
         cargando = false
         composeRule.waitForIdle()
-        val selectorPorFecha = selector().getUnclippedBoundsInRoot()
-        val aireCargado = tituloDeLasFacturas().getUnclippedBoundsInRoot().top.value - selectorPorFecha.bottom.value
-        assertTrue(abs(aireCargado - aireCargando) <= 1f, "del selector al título: $aireCargando cargando, $aireCargado cargado")
+        val despues = selector().getUnclippedBoundsInRoot().top.value
+        assertTrue(abs(despues - antes) <= 8f, "el selector se corrió ${abs(despues - antes)} dp al llegar los datos; el máximo son 8")
+    }
 
+    @Test
+    fun `el selector no salta al llegar los datos`() = noSaltaAlCargar(lista)
+
+    @Test
+    fun `con un periodo vacio el selector tampoco aparece para irse`() = noSaltaAlCargar(emptyList())
+
+    @Test
+    fun `con solo ingresos el selector se queda en su lugar`() = noSaltaAlCargar(listOf(salario))
+
+    @Test
+    fun `cambiar de vista no mueve el selector`() {
+        montar()
+        val porFecha = selector().getUnclippedBoundsInRoot()
         elegir(ROTULO_POR_CATEGORIA)
-        val selectorPorCategoria = selector().getUnclippedBoundsInRoot()
-        assertTrue(abs(selectorPorCategoria.top.value - selectorPorFecha.top.value) <= 1f, "cambiar de vista no mueve el selector")
-        assertTrue(abs((selectorPorCategoria.bottom - selectorPorCategoria.top).value - (selectorPorFecha.bottom - selectorPorFecha.top).value) <= 1f)
+        val porCategoria = selector().getUnclippedBoundsInRoot()
+        assertTrue(abs(porCategoria.top.value - porFecha.top.value) <= 1f, "cambiar de vista no mueve el selector")
+        assertTrue(abs((porCategoria.bottom - porCategoria.top).value - (porFecha.bottom - porFecha.top).value) <= 1f)
+    }
+
+    @Test
+    fun `un grupo con total en cero no dice 0 pesos`() {
+        montar(filas = listOf(arriendo, nu))
+        elegir(ROTULO_POR_CATEGORIA)
+        val tarjetas = composeRule.onNode(
+            hasTestTag(TAG_ENCABEZADO_PLEGABLE) and hasAnyDescendant(hasText(com.jvillada.movi.shared.model.GRUPO_DE_LAS_TARJETAS)),
+            useUnmergedTree = true,
+        )
+        assertTrue(
+            composeRule.onAllNodes(hasText("\$0") and hasAnyAncestor(hasTestTag(TAG_ENCABEZADO_PLEGABLE)), useUnmergedTree = true)
+                .fetchSemanticsNodes().isEmpty(),
+            "ningún encabezado dice «\$0»",
+        )
+        assertEquals("Tarjetas, pendiente, no suma en lo que falta", tarjetas.fetchSemanticsNode().config.getOrNull(SemanticsProperties.ContentDescription)?.single())
+    }
+
+    @Test
+    fun `anotar el ultimo pago de un grupo abierto no lo pliega solo`() {
+        montar()
+        elegir(ROTULO_POR_CATEGORIA)
+        assertTrue(hay("Luz"), "Servicios arranca desplegado (la luz falta)")
+
+        // El dueño anota la luz: Servicios queda todo pagado, pero sigue abierto con la fila a la vista.
+        checklist = lista.map { if (it.ruleId == "rr_luz") it.copy(pagado = true, eventId = "ev_luz", montoPagado = 120_000) else it }
+        composeRule.waitForIdle()
+        assertTrue(hay("Luz"), "la fila sobre la que actuó no desaparece")
+        assertEquals(ESTADO_DESPLEGADO, encabezado("Servicios").fetchSemanticsNode().config.getOrNull(SemanticsProperties.StateDescription))
+        assertTrue(hay(GRUPO_PAGADO))
+    }
+
+    @Test
+    fun `con los saldos ocultos el lector no dice cifras y el encabezado las tapa`() {
+        ocultos = true
+        montar()
+        elegir(ROTULO_POR_CATEGORIA)
+        composeRule.onNode(isHeading() and hasContentDescription("Vivienda, falta pagar, cifra oculta"), useUnmergedTree = true).assertExists()
+        composeRule.onNode(isHeading() and hasContentDescription("Telecomunicaciones, pagado"), useUnmergedTree = true).assertExists()
+        assertTrue(
+            composeRule.onAllNodes(hasText("000", substring = true) and hasAnyAncestor(hasTestTag(TAG_ENCABEZADO_PLEGABLE)), useUnmergedTree = true)
+                .fetchSemanticsNodes().isEmpty(),
+            "ningún encabezado deja ver una cifra",
+        )
+    }
+
+    @Test
+    fun `un grupo sin icono propio lleva el generico, no el de su primera fila`() {
+        val grupo = facturasPorCategoria(listOf(arriendo.copy(categoria = "", nombre = "Gimnasio"))).single()
+        assertEquals(com.jvillada.movi.shared.model.GRUPO_SIN_CATEGORIA, nombreParaElIconoDelGrupo(grupo))
     }
 
     // ── La letra grande a 360 ───────────────────────────────────────────────

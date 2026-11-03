@@ -7,10 +7,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import com.jvillada.movi.data.GruposPlegadosDeFacturas
-import com.jvillada.movi.data.SaldosOcultosStore
 import com.jvillada.movi.data.VistaDeFacturas
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.CUOTA_CATEGORY
@@ -27,7 +28,8 @@ import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
 import com.jvillada.movi.ui.components.ds.Separador
 import com.jvillada.movi.ui.components.ds.Superficie
 import com.jvillada.movi.ui.components.ds.TonoDelDetalle
-import com.jvillada.movi.ui.components.formatCOP
+import com.jvillada.movi.ui.components.LocalSaldosOcultos
+import com.jvillada.movi.ui.components.PLATA_OCULTA
 import com.jvillada.movi.ui.components.formatCOPSinOcultar
 import com.jvillada.movi.ui.dashboard.PagoDelPeriodo
 
@@ -69,38 +71,48 @@ internal fun SelectorDeVistaDeFacturas(vista: VistaDeFacturas, onElegir: (VistaD
 /**
  * **Lo que dice un grupo debajo de su nombre**: «Falta $2.613.714» si falta algo que suma; «Pagado» (con su ✓)
  * si no queda ningún pago por hacer; y si lo que queda no suma (una tarjeta sin su mínimo), «Pendiente · no
- * suma», en aviso, como la fila. Las cifras son las del grupo ([GrupoDeFacturas.falta]). Pura.
+ * suma», en aviso, como la fila. Las cifras son las del grupo ([GrupoDeFacturas.falta]). Con [ocultos] (los
+ * saldos ocultos, `LocalSaldosOcultos`, lo mismo que lee la [Cifra]) la cifra va tapada. Pura.
  */
-fun detalleDelGrupo(grupo: GrupoDeFacturas): Pair<String, TonoDelDetalle> = when {
-    grupo.falta > 0L -> "Falta ${formatCOP(grupo.falta)}" to TonoDelDetalle.Medio
+fun detalleDelGrupo(grupo: GrupoDeFacturas, ocultos: Boolean = false): Pair<String, TonoDelDetalle> = when {
+    grupo.falta > 0L -> "Falta ${if (ocultos) PLATA_OCULTA else formatCOPSinOcultar(grupo.falta)}" to TonoDelDetalle.Medio
     grupo.todoPagado -> GRUPO_PAGADO to TonoDelDetalle.Exito
     else -> GRUPO_PENDIENTE_SIN_SUMAR to TonoDelDetalle.Aviso
 }
 
-/** Una cifra para el lector: «2.613.714 pesos»; con los saldos ocultos, «cifra oculta». Pura. */
-fun cifraParaElLector(monto: Long): String =
-    if (SaldosOcultosStore.ocultos) "cifra oculta" else "${formatCOPSinOcultar(monto).removePrefix("$")} pesos"
+/** Una cifra para el lector: «2.613.714 pesos». Pura. */
+fun cifraParaElLector(monto: Long): String = "${formatCOPSinOcultar(monto).removePrefix("$")} pesos"
 
 /**
  * **La frase del encabezado para el lector, sin el estado**: «Vivienda, falta 2.613.714 pesos de 3.000.000
- * pesos»; «Servicios, pagado, 200.000 pesos»; «Tarjetas, pendiente, no suma en lo que falta». El estado
- * («plegado») lo suma el encabezado. Pura.
+ * pesos»; «Servicios, pagado, 200.000 pesos»; «Tarjetas, pendiente, no suma en lo que falta». Con los saldos
+ * ocultos no dice cifras: «Vivienda, falta pagar, cifra oculta», «Servicios, pagado». Un total en cero no se
+ * dice (no es una cifra real: la de una tarjeta sin mínimo). El estado («plegado») lo suma el encabezado. Pura.
  */
-fun descripcionDelGrupo(grupo: GrupoDeFacturas): String = when {
+fun descripcionDelGrupo(grupo: GrupoDeFacturas, ocultos: Boolean = false): String = when {
+    grupo.falta > 0L && ocultos -> "${grupo.nombre}, falta pagar, cifra oculta"
     grupo.falta > 0L -> "${grupo.nombre}, falta ${cifraParaElLector(grupo.falta)} de ${cifraParaElLector(grupo.total)}"
+    grupo.todoPagado && (ocultos || grupo.total <= 0L) -> "${grupo.nombre}, pagado"
     grupo.todoPagado -> "${grupo.nombre}, pagado, ${cifraParaElLector(grupo.total)}"
     else -> "${grupo.nombre}, pendiente, no suma en lo que falta"
 }
 
-/** Con qué nombre se elige el ícono de un grupo: la categoría, o la de la cuota y la del pago de tarjeta. */
+/**
+ * Con qué nombre se elige el ícono de un grupo: el de la cuota y el del pago de tarjeta en los de deudas, y la
+ * categoría en los demás. Una categoría sin ícono propio («Otros») lleva el genérico, nunca el de una de sus
+ * filas (no es el grupo del gimnasio).
+ */
 internal fun nombreParaElIconoDelGrupo(grupo: GrupoDeFacturas): String = when (grupo.clase) {
     ClaseDeGrupoDeFacturas.CREDITOS -> CUOTA_CATEGORY
     ClaseDeGrupoDeFacturas.TARJETAS -> CARD_PAYMENT_CATEGORY
-    ClaseDeGrupoDeFacturas.CATEGORIA -> nombreParaElIconoDeLaFactura(grupo.nombre, grupo.filas.firstOrNull()?.nombre ?: grupo.nombre)
+    ClaseDeGrupoDeFacturas.CATEGORIA -> grupo.nombre
 }
 
 /** Arranca plegado lo que no pide nada: un grupo sin nada abierto. */
 internal fun plegadoPorDefecto(grupo: GrupoDeFacturas): Boolean = !grupo.tieneAlgoPendiente
+
+/** La cifra del total al final del encabezado: solo si dice algo (un total en cero no es real). */
+internal fun seVeElTotalDelGrupo(grupo: GrupoDeFacturas): Boolean = grupo.total > 0L
 
 /**
  * **Las facturas por categoría**: un grupo por superficie, uno debajo del otro (también a pantalla ancha: en
@@ -116,21 +128,25 @@ internal fun FacturasPorCategoria(
     pie: @Composable (GrupoDeFacturas) -> Unit = {},
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion)) {
-        grupos.forEach { grupo ->
-            val porDefecto = plegadoPorDefecto(grupo)
+        val ocultos = LocalSaldosOcultos.current
+        for (grupo in grupos) key(grupo.clave) {
+            // El plegado por defecto se fija la primera vez que el grupo se ve en esta pantalla: anotar el
+            // último pago de un grupo abierto no lo pliega bajo el dedo (lo pliega el dueño, si quiere). Se
+            // guarda con la pantalla (`rememberSaveable`): ir a ver el movimiento y volver no lo recalcula.
+            val porDefecto = rememberSaveable { plegadoPorDefecto(grupo) }
             val plegado = GruposPlegadosDeFacturas.plegado(grupo.clave, porDefecto)
-            val (detalle, tono) = detalleDelGrupo(grupo)
+            val (detalle, tono) = detalleDelGrupo(grupo, ocultos)
             Superficie(modifier = Modifier.fillMaxWidth().testTag(TAG_GRUPO_DE_FACTURAS), relleno = RellenoDeSuperficie.Lista) {
                 EncabezadoPlegable(
                     titulo = grupo.nombre,
                     plegado = plegado,
                     onAlternar = { GruposPlegadosDeFacturas.alternar(grupo.clave, porDefecto) },
-                    descripcion = descripcionDelGrupo(grupo),
+                    descripcion = descripcionDelGrupo(grupo, ocultos),
                     detalle = detalle,
                     tonoDelDetalle = tono,
                     iconoDelDetalle = if (tono == TonoDelDetalle.Exito) Icons.Rounded.Check else null,
                     inicio = { IconoDeCategoria(nombreParaElIconoDelGrupo(grupo)) },
-                    final = { Cifra(grupo.total) },
+                    final = if (seVeElTotalDelGrupo(grupo)) ({ Cifra(grupo.total) }) else null,
                 )
                 if (!plegado) {
                     grupo.filas.forEach { pago ->
