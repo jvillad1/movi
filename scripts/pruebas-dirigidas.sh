@@ -147,11 +147,20 @@ CANDADO=${MOVI_CANDADO_GRADLE:-$CARPETA_DEL_PROCESO/gradle.lock}
 TENGO_EL_CANDADO=0
 soltar() { [ $TENGO_EL_CANDADO = 1 ] && rmdir "$CANDADO" 2>/dev/null; TENGO_EL_CANDADO=0; }
 trap soltar EXIT
-trap 'soltar; exit 130' INT TERM
+trap 'soltar; exit 130' INT TERM HUP
 if [ -d "$(dirname "$CANDADO")" ]; then
   if ! mkdir "$CANDADO" 2>/dev/null; then
+    # Con tope: un candado que dejó un proceso muerto (SIGKILL no pasa por la trampa) no puede
+    # dejar esperando para siempre a quien llega después.
     echo "── Esperando el candado de Gradle ($CANDADO)…"
-    until mkdir "$CANDADO" 2>/dev/null; do sleep 15; done
+    espera=0
+    until mkdir "$CANDADO" 2>/dev/null; do
+      sleep 15; espera=$((espera + 15))
+      if [ $espera -ge 1800 ]; then
+        echo "── El candado lleva 30 min tomado. Si nadie corre Gradle, bórralo: rmdir $CANDADO" >&2
+        exit 3
+      fi
+    done
   fi
   TENGO_EL_CANDADO=1
 fi
