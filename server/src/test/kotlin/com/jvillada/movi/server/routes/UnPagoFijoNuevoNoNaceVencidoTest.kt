@@ -414,6 +414,30 @@ class UnPagoFijoNuevoNoNaceVencidoTest {
     }
 
     /**
+     * Vuelta 125: una copia leída ANTES de que el dueño sellara octubre trae el derivado de entonces (la
+     * creación). La 121 solo reconocía el eco del derivado de hoy (el sello, 28-oct), así que guardaba el
+     * 2-nov como arranque explícito: el piso subía por encima del sello y el octubre pagado desaparecía.
+     */
+    @Test
+    fun `el put con una copia vieja no congela el piso`() = testApplication {
+        application { testModule() }
+        regla("rr_vieja", "Gimnasio", dia = 28, creada = dosDeNoviembre)
+        gasto("ev_gym_oct_vieja", 120_000L, LocalDate.of(2026, 10, 28), "Gimnasio")
+        sello("rr_vieja", "2026-10", "ev_gym_oct_vieja")
+
+        val res = enviar(
+            "/api/recurring-rules/rr_vieja",
+            """{"id":"rr_vieja","name":"Gimnasio","category":"Gimnasio","amount":150000,"dayOfMonth":28,"type":"EXPENSE","activeFrom":"2026-11-02"}""",
+            metodo = "PUT",
+        )
+        assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
+        assertNull(guardada("rr_vieja")[RecurringRules.activeFrom], "un derivado viejo no se escribe")
+        assertEquals("2026-10-28", json.decodeFromString(RecurringRule.serializer(), res.bodyAsText()).activeFrom)
+        val octubre = ocurrencias(LocalDate.of(2026, 10, 29)).single { it.ruleId == "rr_vieja" }
+        assertEquals(true, octubre.occurred, "lo pagado sigue viéndose")
+    }
+
+    /**
      * Una regla creada hoy desde un movimiento del período ANTERIOR conserva esa ocurrencia, saldada por ese
      * movimiento: el piso es el período del movimiento, no el de la creación.
      */

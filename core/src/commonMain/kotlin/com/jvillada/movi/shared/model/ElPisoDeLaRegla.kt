@@ -41,9 +41,9 @@ import kotlinx.datetime.LocalDate
  * baja un [activeFrom] guardado (ese ya dice desde cuándo corre) ni le pone piso a una regla sin fecha.
  *
  * **Límites conocidos** (re-revisión de la 121, a propósito sin tocar): un sello anterior a la creación baja
- * el piso y revive como vencidos los meses intermedios sin pago (solo pasa sellando a mano un mes viejo);
- * `sellarOcurrencia` acepta períodos anteriores al piso; y un PUT con una copia vieja de la regla puede dejar
- * la fecha de creación guardada como arranque explícito (si el piso derivado cambió desde que se leyó).
+ * el piso y revive como vencidos los meses intermedios sin pago (solo pasa sellando a mano un mes viejo); y
+ * `sellarOcurrencia` acepta períodos anteriores al piso. (El tercero, un PUT con una copia vieja de la regla
+ * que dejaba guardado un piso derivado, lo cierra [arranqueQueGuardaUnPut] en la vuelta 125.)
  *
  * Una fecha ilegible cuenta como ausente. Pura.
  */
@@ -52,6 +52,37 @@ fun arranqueDeLaReglaGuardada(activeFrom: String?, creadaEl: String?, primerSell
     val creada = fechaIsoLegible(creadaEl) ?: return null
     val sello = fechaIsoLegible(primerSello) ?: return creada
     return minOf(creada, sello)
+}
+
+/**
+ * **Vuelta 125 · qué arranque escribe en la fila un PUT de `/api/recurring-rules/{id}`** (la columna
+ * `active_from`, ISO o `null`).
+ *
+ * El GET devuelve el arranque **derivado** ([arranqueDeLaReglaGuardada]: la creación, o el primer sello si
+ * es anterior) y los clientes reenvían la regla tal cual la leyeron (`regla.copy(...)`). Ningún cliente de
+ * hoy edita esta fecha a propósito: la ponen el alta desde un movimiento, «ya pagué» y la guía, todas en el
+ * POST. La vuelta 121 solo reconocía el eco del derivado **de hoy**; una copia leída antes de que el piso
+ * cambiara —el dueño selló un mes anterior a la creación, o le quitó la marca— traía otro derivado, y el PUT
+ * lo guardaba como arranque explícito: la regla dejaba de seguir sus sellos (lo pagado podía volver a verse
+ * vencido, o desaparecer).
+ *
+ * La regla: todo derivado, de hoy o viejo, es **la creación o anterior** (es el menor entre ella y un sello),
+ * así que en una fila sin arranque guardado y con fecha de creación un [pedido] que no pasa de [creadaEl] es
+ * un eco y la fila sigue sin arranque. Uno posterior a la creación no puede ser un derivado: es una decisión
+ * y se guarda (lo que un PUT ya podía hacer).
+ *
+ * - [pedido] ausente o ilegible: lo que había ([guardado]), como siempre (un APK viejo no lo manda).
+ * - Con [guardado]: el [pedido] (el eco de una fila con arranque es ese mismo valor).
+ * - Sin fecha de creación (las reglas de antes del 25-sep-2026): el GET no deriva nada, así que el
+ *   [pedido] no es un eco y se guarda.
+ *
+ * El campo tiene dos estados en el wire (ausente = no lo toques; una fecha), no tres: no hay «quítalo». Pura.
+ */
+fun arranqueQueGuardaUnPut(pedido: String?, guardado: String?, creadaEl: String?): String? {
+    val fecha = fechaIsoLegible(pedido) ?: return guardado
+    if (!guardado.isNullOrBlank()) return fecha
+    val creada = fechaIsoLegible(creadaEl) ?: return fecha
+    return if (fecha <= creada) null else fecha
 }
 
 /**
