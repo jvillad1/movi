@@ -278,8 +278,9 @@ fun EnQueSeVaScreen(
                         modifier = Modifier.fillMaxSize().padding(horizontal = Medida.margenDePantalla),
                         horizontalArrangement = Arrangement.spacedBy(Medida.entreSecciones),
                     ) {
-                        LazyColumn(state = rememberListaConElTeclado(), modifier = Modifier.weight(1f)) { resumenYGrafico() }
-                        LazyColumn(modifier = Modifier.weight(1f)) { laLista() }
+                        LazyColumn(modifier = Modifier.weight(1f)) { resumenYGrafico() }
+                        // Vuelta 118: la lista (la columna larga) es la que mueve el teclado.
+                        LazyColumn(state = rememberListaConElTeclado(), modifier = Modifier.weight(1f)) { laLista() }
                     }
                 } else {
                     LazyColumn(state = rememberListaConElTeclado(), modifier = Modifier.fillMaxSize(), contentPadding = relleno) {

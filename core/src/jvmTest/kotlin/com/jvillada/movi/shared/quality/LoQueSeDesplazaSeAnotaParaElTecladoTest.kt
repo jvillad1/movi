@@ -12,48 +12,94 @@ import kotlin.test.assertTrue
  * o una hoja nueva que se desplace sin anotarse queda sorda al teclado sin que nadie lo note —que es
  * exactamente lo que le pasó a Claudia—. Dos guardas:
  *
- * 1. `verticalScroll(rememberScrollState())` a secas solo queda en las listas de adentro que no
- *    deben mover el teclado ([LISTAS_DE_ADENTRO]); lo demás usa `desplazableConElTeclado()`.
+ * 1. **Lista por lista**: cada `verticalScroll(x)` y cada `LazyColumn(…)` de `ui/` está anotado
+ *    (`desplazableConElTeclado`, `state = rememberListaConElTeclado()`, o su estado pasado a
+ *    `DesplazarConElTeclado(…)` / `ScrollDesdeLosMargenes(…)` en el mismo archivo), salvo las listas
+ *    de [SIN_TECLADO], contadas por archivo y cada una con su porqué.
  * 2. Todo archivo con una hoja (`MarcoDeHoja(`) o una pantalla (`fun …Screen(`) que se desplace anota
- *    algo (`desplazableConElTeclado`, `DesplazarConElTeclado`, `rememberListaConElTeclado` o
- *    `ScrollDesdeLosMargenes`, que también lo anota).
+ *    algo.
  */
 class LoQueSeDesplazaSeAnotaParaElTecladoTest {
 
     /**
-     * Listas a propósito sin el teclado: no son el desplazamiento principal de su capa, o están fuera de
-     * la cáscara (donde el teclado no llega).
+     * Las listas que a propósito no mueve el teclado, por archivo: no son la principal de su capa, o
+     * están fuera de la cáscara (donde el teclado no llega).
      */
-    private val LISTAS_DE_ADENTRO = mapOf(
-        // El panel lateral del resumen en Actividad ancha: el teclado mueve la lista de movimientos.
-        "transactions/ResumenEnElPanel.kt" to 1,
+    private val SIN_TECLADO = mapOf(
+        // Patrimonio ancho: la columna del resumen; manda la de las cuentas.
+        "accounts/AccountsScreen.kt" to 1,
+        // La lista de conversaciones: en la hoja la anota quien la llama; en la columna ancha manda el chat.
+        "ai/LasConversaciones.kt" to 1,
+        // En qué se va ancho: la columna del resumen y la gráfica; manda la de la lista.
+        "analisis/EnQueSeVaScreen.kt" to 1,
+        // La puerta de la huella se dibuja fuera de la cáscara, encima de todo.
+        "auth/PuertaAlVolver.kt" to 1,
         // El buscador de categorías de 260 dp dentro de una hoja: la hoja ya anota su cuerpo.
         "categorias/CategoriasScreen.kt" to 1,
-        // La columna de la derecha de un grupo en pantalla ancha: el teclado mueve la de la izquierda.
+        // Una lista quieta (`userScrollEnabled = false`) dentro de la página de Créditos.
+        "credits/CreditosScreen.kt" to 1,
+        // Un grupo ancho: la columna del saldo; manda la de los gastos.
         "espacios/EspaciosScreen.kt" to 1,
-        // La puerta de la huella se dibuja fuera de la cáscara, encima de todo: el teclado no llega ahí.
-        "auth/PuertaAlVolver.kt" to 1,
+        // Tú ancho: la columna de Ajustes; manda la de «Lo tuyo».
+        "mas/MasScreen.kt" to 1,
+        // Pagos ancho: la columna del Disponible; manda la de las facturas.
+        "plan/PlanScreen.kt" to 1,
+        // Por revisar ancho: la columna de lo demás; manda la de los avisos.
+        "porrevisar/PorRevisarScreen.kt" to 1,
+        // El selector de 360 dp de Agregar: la hoja anota su cuerpo.
+        "quickadd/QuickAddScreen.kt" to 1,
+        // El panel lateral del resumen en Actividad ancha: manda la lista de movimientos.
+        "transactions/ResumenEnElPanel.kt" to 1,
     )
 
-    private val crudo = Regex("""verticalScroll\(rememberScrollState\(\)\)""")
     private val seDesplaza = Regex("""verticalScroll\(|LazyColumn\(|desplazableConElTeclado\(""")
     private val seAnota = Regex("""desplazableConElTeclado\(|DesplazarConElTeclado\(|rememberListaConElTeclado\(|ScrollDesdeLosMargenes\(""")
     private val esCapa = Regex("""MarcoDeHoja\(|fun \w+Screen\(""")
+    private val anotacion = Regex("""\b(?:DesplazarConElTeclado|ScrollDesdeLosMargenes)\(""")
+    private val nombre = Regex("""[A-Za-z_][\w.]*(?:\(\))?""")
+    private val estadoDeLaLista = Regex("""\bstate\s*=\s*([A-Za-z_][\w.]*(?:\(\))?)""")
 
     private fun archivos() = LecturaDelCodigo.archivos(LecturaDelCodigo.UI)
         .mapKeys { (ruta, _) -> ruta.substringAfter("${LecturaDelCodigo.UI}/") }
 
+    /** Lo que va entre el paréntesis que abre en [desde] y el que lo cierra. */
+    private fun argumentos(texto: String, desde: Int): String {
+        var profundidad = 0
+        for (i in desde until texto.length) {
+            when (texto[i]) {
+                '(' -> profundidad++
+                ')' -> if (--profundidad == 0) return texto.substring(desde + 1, i)
+            }
+        }
+        return ""
+    }
+
+    /** Cuántas listas de [texto] no están anotadas para el teclado. */
+    internal fun listasSinAnotar(texto: String): Int {
+        val anotados = anotacion.findAll(texto)
+            .flatMap { nombre.findAll(argumentos(texto, it.range.last)).map { n -> n.value } }
+            .toSet()
+        val columnas = Regex("""\bverticalScroll\(""").findAll(texto)
+            .count { argumentos(texto, it.range.last).trim() !in anotados }
+        val listas = Regex("""\bLazyColumn\(""").findAll(texto).count {
+            val estado = estadoDeLaLista.find(argumentos(texto, it.range.last))?.groupValues?.get(1)
+            estado != "rememberListaConElTeclado()" && estado !in anotados
+        }
+        return columnas + listas
+    }
+
     @Test
-    fun `verticalScroll a secas solo en las listas de adentro`() {
-        val cuantos = archivos()
-            .mapValues { (_, texto) -> crudo.findAll(texto).count() }
+    fun `cada lista esta anotada salvo las de SIN_TECLADO`() {
+        val sinAnotar = archivos()
+            .mapValues { (_, texto) -> listasSinAnotar(texto) }
             .filterValues { it > 0 }
         assertEquals(
-            LISTAS_DE_ADENTRO,
-            cuantos,
-            "Un `verticalScroll(rememberScrollState())` nuevo: si es el cuerpo de una pantalla o de una hoja, " +
-                "usa `Modifier.desplazableConElTeclado()` (ui/components/DesplazarConElTeclado.kt); si es una " +
-                "lista de adentro, agrégala a LISTAS_DE_ADENTRO con el porqué.",
+            SIN_TECLADO,
+            sinAnotar,
+            "Una lista nueva sin el teclado: si es el cuerpo de una pantalla o de una hoja, usa " +
+                "`Modifier.desplazableConElTeclado()` o `state = rememberListaConElTeclado()` " +
+                "(ui/components/DesplazarConElTeclado.kt); si no es la principal de su capa, agrégala a " +
+                "SIN_TECLADO con el porqué.",
         )
     }
 
@@ -71,10 +117,22 @@ class LoQueSeDesplazaSeAnotaParaElTecladoTest {
     }
 
     @Test
-    fun `el detector ve lo crudo y lo anotado`() {
-        assertTrue(crudo.containsMatchIn("Column(Modifier.verticalScroll(rememberScrollState()).weight(1f))"))
-        assertTrue(!crudo.containsMatchIn("Column(Modifier.desplazableConElTeclado().weight(1f))"))
-        assertTrue(seAnota.containsMatchIn("LazyColumn(state = rememberListaConElTeclado()) {"))
+    fun `el detector ve lo crudo, lo nombrado y lo anotado`() {
+        assertEquals(1, listasSinAnotar("Column(Modifier.verticalScroll(rememberScrollState()).weight(1f))"))
+        assertEquals(0, listasSinAnotar("Column(Modifier.desplazableConElTeclado().weight(1f))"))
+        // Un estado con nombre: sin anotar cuenta, anotado no.
+        assertEquals(1, listasSinAnotar("val s = rememberScrollState()\nColumn(Modifier.verticalScroll(s))"))
+        assertEquals(0, listasSinAnotar("val s = rememberScrollState()\nDesplazarConElTeclado(s)\nColumn(Modifier.verticalScroll(s))"))
+        // Dos listas en el mismo archivo: la anotada no tapa a la otra.
+        assertEquals(
+            1,
+            listasSinAnotar(
+                "LazyColumn(state = rememberListaConElTeclado(), modifier = m) { a() }\n" +
+                    "LazyColumn(modifier = m) { b() }",
+            ),
+        )
+        assertEquals(1, listasSinAnotar("LazyColumn(\n    state = otra,\n    modifier = m,\n) { }"))
+        assertEquals(0, listasSinAnotar("ScrollDesdeLosMargenes(if (dos) col else lista)\nLazyColumn(state = lista) { }"))
         assertTrue(esCapa.containsMatchIn("fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {"))
     }
 }

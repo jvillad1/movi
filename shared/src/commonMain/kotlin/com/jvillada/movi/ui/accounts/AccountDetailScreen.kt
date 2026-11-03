@@ -562,6 +562,9 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
 
             val alPie = Medida.botonFlotante + Medida.entreSecciones
             if (dosColumnas) {
+                // Vuelta 118: en dos columnas manda la de los movimientos (la larga); se anota después
+                // de `lista`, así que gana.
+                DesplazarConElTeclado(listaDeMovimientos)
                 // Los rellenos suman los 48 de [RELLENO_DE_DOS_COLUMNAS], como Patrimonio.
                 Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
                     LazyColumn(

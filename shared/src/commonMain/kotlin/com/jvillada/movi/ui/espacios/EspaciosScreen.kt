@@ -400,7 +400,7 @@ internal fun CuerpoDelEspacio(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
-                    .desplazableConElTeclado()
+                    .verticalScroll(rememberScrollState())
                     .padding(start = Medida.margenDePantalla, end = Medida.margenDePantalla / 2, bottom = Medida.entreSecciones)
                     .testTag(TAG_COLUMNA_IZQUIERDA_DEL_ESPACIO),
                 verticalArrangement = Arrangement.spacedBy(Medida.entreSecciones),
@@ -409,7 +409,8 @@ internal fun CuerpoDelEspacio(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
-                    .verticalScroll(rememberScrollState())
+                    // Vuelta 118: la columna de los gastos es la que mueve el teclado.
+                    .desplazableConElTeclado()
                     .padding(start = Medida.margenDePantalla / 2, end = Medida.margenDePantalla, bottom = Medida.entreSecciones)
                     .testTag(TAG_COLUMNA_DERECHA_DEL_ESPACIO),
                 verticalArrangement = Arrangement.spacedBy(Medida.entreSecciones),
