@@ -1,20 +1,52 @@
 # Las cuatro suites del repo, en cada PR — y la guarda del despliegue.
 #
-# **Por qué existe.** Hasta hoy este repo no tenía ninguna verificación automática: los cuatro
-# comandos se corrían a mano, y lo que no se corría no se notaba. El 2026-09-02 eso costó caro —
-# #131 dejó el build de Railway roto (`android.sdkDirectory` se resuelve en configuración y la
-# imagen no tiene SDK), producción se quedó cuatro merges atrás, y nadie se enteró: el build falla,
-# Railway deja sirviendo la versión vieja y la app sigue contestando 200. Un merge acá NO es un
-# despliegue, y el modo de falla es silencioso.
+# **Por qué existe.** Hasta el 2026-09-03 este repo no tenía ninguna verificación automática: los
+# cuatro comandos se corrían a mano, y lo que no se corría no se notaba. Eso costó caro — #131 dejó
+# el build de Railway roto (`android.sdkDirectory` se resuelve en configuración y la imagen no tiene
+# SDK), producción se quedó cuatro merges atrás, y nadie se enteró. Un merge acá NO es un despliegue,
+# y el modo de falla es silencioso. **Nunca `./gradlew build`**: arrastra el APK y los links de iOS.
 #
-# Lo que se corre es exactamente lo que dice CLAUDE.md, ni más ni menos. **Nunca `./gradlew build`**:
-# arrastra el APK y tareas de Android que no hacen falta para saber si algo se rompió.
+# ## Cómo está partido (vuelta 122, medido en `docs/ci/medicion-2026-11.md`)
+#
+# Antes era UN trabajo que compilaba y probaba todo en serie con `--rerun-tasks`: 6 a 10 min, y otra
+# vez entera en el push a master. Ahora:
+#
+# - **`suite`** (matriz, en paralelo, cada uno en su máquina): `:core:jvmTest`, `:server:test`,
+#   `:shared:testDebugUnitTest` en dos trozos (`-Pmovi.trozoDePruebas=i/2`: cada clase cae en
+#   exactamente un trozo por su nombre, ver `build.gradle.kts` de la raíz) y la web
+#   (`:shared:compileKotlinWasmJs` + la guarda del despliegue) con la app de Android
+#   (`:androidApp:compile*Kotlin`). Cada uno cuenta las pruebas que corrió en ESTA corrida y falla
+#   si fueron cero.
+# - **«Las cuatro suites»**: el check obligatorio de master (la protección de la rama exige ESTE
+#   nombre). Espera a toda la matriz y falla si cualquier trozo falló, se canceló o no corrió.
+#   `if: always()` a propósito: un trabajo **saltado** cuenta como verde para un check obligatorio,
+#   así que este nunca se salta en un PR.
+# - **Sin `--rerun-tasks`**: recompilaba todo y no usaba la caché. Las pruebas igual corren siempre,
+#   porque el build lo exige (`Test` nunca al día ni de la caché, `build.gradle.kts` de la raíz); la
+#   compilación sale de la caché de build (`--build-cache`) cuando sus entradas no cambiaron.
+#
+# ## El push a master ya no repite las pruebas
+#
+# Master está protegido con «Las cuatro suites» en verde **y la rama al día con master** (strict, que
+# vale también para admins), y `publicar.sh` mergea con merge commit. Al día = la cabeza del PR ya
+# contiene la punta de master, así que el árbol que queda en master tras el merge es **el mismo
+# árbol** que probó el PR (la ref `pull/N/merge` de ese SHA). Volver a correr las pruebas ahí era
+# correr dos veces lo mismo. Queda un **humo** barato (compila :core, :server y la web, y la guarda
+# del despliegue, sin pruebas) por dos razones: (1) setup-gradle solo ESCRIBE la caché de Gradle
+# desde master —los PR la leen—, y sin una corrida en master los PR perderían la caché de
+# dependencias y de compilación; (2) si algo se colara en master por fuera de un PR, al menos se ve
+# que compila.
+#
+# ## Ramas `ci/…`
+#
+# Un push a una rama `ci/…` corre la matriz completa como un PR, sin abrir PR: sirve para medir el CI
+# o para comprobar que una prueba rota lo pone en rojo. Bórralas al terminar.
 name: Pruebas
 
 on:
   pull_request:
   push:
-    branches: [master]
+    branches: [master, 'ci/**']
 
 # Un PR que recibe tres pushes seguidos no necesita tres corridas: la última manda.
 # Solo lee el repo: ni el checkout ni las cachés necesitan escribir en él.
@@ -26,10 +58,36 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  pruebas:
-    name: Las cuatro suites
+  suite:
+    name: ${{ matrix.nombre }}
+    if: github.event_name == 'pull_request' || startsWith(github.ref, 'refs/heads/ci/')
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
+    strategy:
+      # Que un trozo rojo no cancele los otros: cada uno dice lo suyo.
+      fail-fast: false
+      matrix:
+        include:
+          - nombre: core
+            tareas: ':core:jvmTest'
+            pruebas: true
+          - nombre: server
+            tareas: ':server:test'
+            pruebas: true
+          - nombre: shared (1/2)
+            tareas: ':shared:testDebugUnitTest -Pmovi.trozoDePruebas=1/2'
+            pruebas: true
+            robolectric: true
+          - nombre: shared (2/2)
+            tareas: ':shared:testDebugUnitTest -Pmovi.trozoDePruebas=2/2'
+            pruebas: true
+            robolectric: true
+          # Vuelta 109: `:androidApp` en sus dos canales (`directa`, el APK de Drive, y `play`, el de
+          # Google Play sin SMS). Antes ningún paso compilaba el módulo de la app: un error ahí
+          # (MainActivity, los Workers) se descubría al armar el APK.
+          - nombre: web y app
+            tareas: ':shared:compileKotlinWasmJs :androidApp:compileDirectaDebugKotlin :androidApp:compilePlayDebugKotlin'
+            guarda: true
 
     steps:
       - uses: actions/checkout@v4
@@ -37,30 +95,12 @@ jobs:
       # JetBrains Runtime 21, no un OpenJDK cualquiera: `gradle/gradle-daemon-jvm.properties`
       # pinta `toolchainVendor=jetbrains`, y con otro vendor el daemon no arranca.
       #
-      # ## Por qué esto se intenta dos veces
-      #
-      # Para resolver «la 21 de jetbrains» esta acción le pregunta a la API de GitHub cuál es la
-      # última, y esa consulta **se quedó sin cuota tres veces** (2026-09-09 dos veces, 2026-09-11
-      # una más), siempre con el mismo error:
-      #
-      #     ##[error]API rate limit exceeded for 57.154.7.202.
-      #
-      # El límite es por IP del runner y lo comparten todos los trabajos que caen en esa máquina,
-      # así que no depende de este repo ni se arregla esperando: las tres veces el arreglo fue
-      # `gh run rerun --failed`, o sea una persona mirando. Un CI que hay que reintentar a mano no
-      # es un CI, es un recordatorio.
-      #
-      # El reintento con pausa ataca exactamente eso, que es transitorio por definición: la cuota
-      # se repone sola. No tapa un fallo real — si el JDK de verdad no se puede instalar, el
-      # segundo intento falla igual y el trabajo se cae, que es lo correcto.
-      #
-      # `continue-on-error` va SOLO en el primer intento. En el segundo no: ahí sí tiene que
-      # romper. Sin esa asimetría, un JDK que nunca se instala dejaría pasar el trabajo entero y
-      # los pasos de abajo fallarían con un error que no explica nada.
-      # `token`: para el JDK de JetBrains, setup-java le pregunta a la API de GitHub cuál es la
-      # última versión. Sin token esa pregunta va anónima y comparte el cupo de 60 por hora con
-      # todos los runners de la misma IP: el 26 y el 27-oct-2026 los dos intentos fallaron con
-      # «API rate limit exceeded» y el trabajo se cayó sin correr ninguna prueba.
+      # **Por qué se intenta dos veces.** Para resolver «la 21 de jetbrains» esta acción le pregunta a
+      # la API de GitHub cuál es la última, y esa consulta se quedó sin cuota varias veces
+      # («API rate limit exceeded»; el límite es por IP del runner). El reintento con pausa ataca eso,
+      # que es transitorio; si el JDK de verdad no se puede instalar, el segundo intento falla igual.
+      # `continue-on-error` va SOLO en el primero. `token`: sin él la pregunta va anónima y comparte
+      # el cupo de 60 por hora con todos los runners de la misma IP (26 y 27-oct-2026).
       - id: jdk
         uses: actions/setup-java@v5
         continue-on-error: true
@@ -80,35 +120,31 @@ jobs:
           java-version: '21'
           token: ${{ github.token }}
 
+      # Los PR solo LEEN la caché de Gradle (dependencias + caché de build); la escribe el humo de
+      # master. Es lo que setup-gradle hace por defecto fuera de la rama por defecto.
       - uses: gradle/actions/setup-gradle@v4
 
       # ## Los `android-all` de Robolectric (vuelta 116)
       #
-      # Cada prueba Robolectric corre sobre un `android-all-instrumented` (un jar de 90 a 200 MB por
-      # versión de Android) que Robolectric baja de Maven Central la primera vez que lo necesita y deja
-      # en `~/.m2/repository/org/robolectric`. `setup-gradle` guarda la caché de Gradle, no esa carpeta,
-      # así que **cada corrida los bajaba de nuevo**, y una descarga caída tumba de una vez todas las
-      # pruebas de esa versión: en la vuelta 110 (corrida 41462120406) fueron 64, ninguna relacionada
-      # con el cambio, con `AssertionError at MavenArtifactFetcher.java:129` ← `IOException at
-      # HttpURLConnection`.
+      # Cada prueba Robolectric corre sobre un `android-all-instrumented` (90 a 200 MB por versión de
+      # Android) que Robolectric baja de Maven Central y deja en `~/.m2/repository/org/robolectric`.
+      # `setup-gradle` no guarda esa carpeta, así que cada corrida los bajaba de nuevo, y una descarga
+      # caída tumbaba todas las pruebas de esa versión (vuelta 110, corrida 41462120406: 64 rojas,
+      # `AssertionError at MavenArtifactFetcher.java:129`).
       #
-      # 1. La carpeta se restaura entre corridas. La llave lleva la versión de Robolectric (la de
-      #    `libs.versions.toml`: otra versión pide otros jars) y la lista de jars que había al guardarla,
-      #    y se restaura la más reciente de esa versión: así un juego incompleto (una corrida en que
-      #    algo no bajó) no queda congelado, la corrida que lo completa guarda otra llave.
-      # 2. Antes de las pruebas se baja lo que falte, con reintentos, y se verifica la huella SHA-512
-      #    que publica Maven Central (el mismo chequeo que hace Robolectric). El paso no es obligatorio:
-      #    si falla, o si una versión nueva de Robolectric pide otros jars, Robolectric los baja como
-      #    siempre. Las tres son las que Robolectric 4.14.1 pide para las SDK de la suite (34, la de la
-      #    mayoría; 35, la de las clases sin `sdk`; 24, la mínima): al subir Robolectric, mirar los
-      #    nombres en `~/.m2/repository/org/robolectric/android-all-instrumented` después de una corrida.
-      # 3. Al final se guarda solo si la lista de jars cambió, y aunque las pruebas fallen: Robolectric
-      #    valida el SHA-512 antes de mover un jar a esa carpeta, así que ahí nunca queda uno a medio bajar.
+      # 1. La carpeta se restaura entre corridas. La llave lleva la versión de Robolectric y la lista
+      #    de jars que había al guardarla; se restaura la más reciente de esa versión.
+      # 2. Antes de las pruebas se baja lo que falte, con reintentos y la huella SHA-512 de Maven
+      #    Central. Si falla, Robolectric los baja como siempre. Las tres son las que Robolectric 4.14.1
+      #    pide para las SDK de la suite (34, la mayoría; 35, las clases sin `sdk`; 24, la mínima).
+      # 3. Al final se guarda solo si la lista de jars cambió, y aunque las pruebas fallen.
       - name: La versión de Robolectric
+        if: matrix.robolectric
         id: robolectric
         run: echo "version=$(sed -n 's/^robolectric = "\(.*\)"$/\1/p' gradle/libs.versions.toml)" >> "$GITHUB_OUTPUT"
 
       - name: Restaurar los android-all de Robolectric
+        if: matrix.robolectric
         id: android-all
         uses: actions/cache/restore@v4
         with:
@@ -117,6 +153,7 @@ jobs:
           restore-keys: robolectric-android-all-${{ steps.robolectric.outputs.version }}-
 
       - name: Bajar los android-all que falten, con reintentos
+        if: matrix.robolectric
         continue-on-error: true
         # Una descarga colgada no puede comerse el trabajo: 300 s por archivo y 10 min el paso.
         timeout-minutes: 10
@@ -143,54 +180,65 @@ jobs:
             rm -rf "$tmp"
           done
 
-      # Vuelta 109: también compila `:androidApp` en sus dos canales (`directa`, el APK de Drive, y
-      # `play`, el de Google Play sin SMS). Antes ningún paso compilaba el módulo de la app: un error
-      # ahí (MainActivity, los Workers) se descubría al armar el APK.
-      #
-      # `--rerun-tasks` a propósito, aunque la caché lo haga parecer redundante. Este repo ya tuvo
-      # una prueba en verde que no se estaba ejecutando; un CI que saltea los tests porque el caché
-      # dice «up-to-date» es peor que no tener CI, porque además da confianza.
-      - name: Las cuatro suites
-        run: >
-          ./gradlew --rerun-tasks
-          :core:jvmTest
-          :server:test
-          :shared:testDebugUnitTest
-          :shared:compileKotlinWasmJs
-          :androidApp:compileDirectaDebugKotlin
-          :androidApp:compilePlayDebugKotlin
+      # La marca de tiempo contra la que «Cuántas pruebas corrieron» mira qué resultados son de ESTA
+      # corrida (y no restos de una caché).
+      - name: Marca de inicio
+        run: touch "$RUNNER_TEMP/inicio-de-las-pruebas"
+
+      # `movi.forksDePruebas=2`: dos JVM de prueba a la vez dentro del módulo (la máquina tiene 4
+      # núcleos). `--build-cache`: la compilación sale de la caché si sus entradas no cambiaron; las
+      # pruebas nunca (el build lo impide).
+      - name: ${{ matrix.nombre }}
+        run: ./gradlew --build-cache -Pmovi.forksDePruebas=2 ${{ matrix.tareas }}
 
       # **La guarda del despliegue, y el motivo por el que este archivo existe.**
       #
       # Railway construye el wasm SIN Android SDK. Gradle configura TODOS los módulos aunque solo se
       # le pida esta tarea, así que cualquier cosa que toque el SDK en configuración tumba el
-      # despliegue entero — que es literalmente lo que pasó con #131 y nadie vio.
-      #
-      # `--dry-run` porque lo que rompe es la **configuración**, no la compilación: tarda segundos
-      # en vez de los ~19 minutos del build real, y falla exactamente donde falló Railway.
-      # `ANDROID_SDK_ROOT` también se limpia: el runner define las dos.
-      # `env -u` NO alcanza por sí solo, y se comprobó: `android.sdkDirectory` lee PRIMERO
-      # `local.properties`, así que en una máquina de desarrollo esta guarda pasa en verde con el
-      # mismo archivo que tumbó el despliegue. Medido contra el commit de #131: con
-      # `local.properties` presente da BUILD SUCCESSFUL; sin él, «SDK location not found».
-      #
-      # Hoy el runner no tiene ese archivo, así que la guarda funciona — pero funciona por una
-      # AUSENCIA, no por una decisión. Moverlo la vuelve reproducible en cualquier máquina y evita
-      # que un `local.properties` commiteado por error la convierta en un chequeo que pasa siempre.
-      # Un CI que no puede fallar es peor que no tener CI: además da confianza.
+      # despliegue entero — que es literalmente lo que pasó con #131 y nadie vio. `--dry-run` porque
+      # lo que rompe es la **configuración**: tarda segundos y falla exactamente donde falló Railway.
+      # `env -u` NO alcanza por sí solo: `android.sdkDirectory` lee PRIMERO `local.properties`
+      # (medido contra el commit de #131: con el archivo, BUILD SUCCESSFUL; sin él, «SDK location not
+      # found»), así que se mueve aparte. Un CI que no puede fallar es peor que no tener CI.
       - name: El despliegue no necesita el Android SDK
+        if: matrix.guarda
         run: |
           restaurar() { [ -f local.properties.aparte ] && mv local.properties.aparte local.properties || true; }
           trap restaurar EXIT
           [ -f local.properties ] && mv local.properties local.properties.aparte || true
           env -u ANDROID_HOME -u ANDROID_SDK_ROOT ./gradlew :webApp:wasmJsBrowserDistribution --dry-run
 
-      # Ver «Los android-all de Robolectric» arriba. `!cancelled()`: también cuando una prueba falla, que
-      # es cuando más falta hace no volver a bajarlos, pero no si el trabajo se canceló a medias. Solo si la lista de jars cambió desde lo restaurado
-      # (si no, sería la misma llave). `continue-on-error`: no guardar no es un error de las pruebas.
+      # Cuenta las pruebas de los resultados escritos DESPUÉS de la marca de inicio y lo deja en el
+      # resumen de la corrida. Cero pruebas en un trabajo de pruebas es un error: un filtro o un trozo
+      # mal armado pasaría en verde sin probar nada.
+      - name: Cuántas pruebas corrieron
+        if: ${{ !cancelled() && matrix.pruebas }}
+        run: |
+          set -o pipefail
+          archivos=$(find . -path '*/build/test-results/*' -name 'TEST-*.xml' -newer "$RUNNER_TEMP/inicio-de-las-pruebas" | sort)
+          if [ -z "$archivos" ]; then
+            echo "::error::${{ matrix.nombre }}: no corrió ninguna prueba"; exit 1
+          fi
+          echo "$archivos" | xargs cat | python3 -c '
+          import re, sys
+          t = f = e = s = c = 0
+          for m in re.finditer(r"<testsuite\b[^>]*>", sys.stdin.read()):
+              a = dict(re.findall(r"(\w+)=\"([^\"]*)\"", m.group(0)))
+              t += int(a["tests"]); f += int(a["failures"]); e += int(a["errors"]); s += int(a["skipped"]); c += 1
+          linea = f"{c} clases · {t} pruebas · {f + e} fallidas · {s} saltadas"
+          print(linea)
+          print(f"| ${{ matrix.nombre }} | {c} | {t} | {f + e} | {s} |")
+          sys.exit(1 if t == 0 else 0)
+          ' | tee pruebas.txt
+          { echo "| Trabajo | Clases | Pruebas | Fallidas | Saltadas |"; echo "|---|---|---|---|---|"; tail -1 pruebas.txt; } >> "$GITHUB_STEP_SUMMARY"
+
+      # Ver «Los android-all de Robolectric» arriba. `!cancelled()`: también cuando una prueba falla,
+      # que es cuando más falta hace no volver a bajarlos. Solo si la lista de jars cambió desde lo
+      # restaurado. `continue-on-error`: no guardar no es un error de las pruebas (y los dos trozos
+      # pueden querer guardar la misma llave: el segundo no puede, y está bien).
       - name: Qué android-all quedaron
         id: android-all-al-final
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && matrix.robolectric }}
         env:
           VERSION: ${{ steps.robolectric.outputs.version }}
         run: |
@@ -210,7 +258,7 @@ jobs:
           if [ -n "$jars" ] && $sanos; then echo "hay=true" >> "$GITHUB_OUTPUT"; fi
 
       - name: Guardar los android-all de Robolectric
-        if: ${{ !cancelled() && steps.android-all-al-final.outputs.hay == 'true' && steps.android-all-al-final.outputs.key != steps.android-all.outputs.cache-matched-key }}
+        if: ${{ !cancelled() && matrix.robolectric && steps.android-all-al-final.outputs.hay == 'true' && steps.android-all-al-final.outputs.key != steps.android-all.outputs.cache-matched-key }}
         continue-on-error: true
         uses: actions/cache/save@v4
         with:
@@ -218,12 +266,76 @@ jobs:
           key: ${{ steps.android-all-al-final.outputs.key }}
 
       - name: Reportes de prueba
-        if: failure()
+        if: failure() && matrix.pruebas
         uses: actions/upload-artifact@v4
         with:
-          name: reportes
+          name: reportes-${{ strategy.job-index }}
           path: |
             core/build/reports/tests/
             server/build/reports/tests/
             shared/build/reports/tests/
           retention-days: 7
+
+  # El check obligatorio. NO cambiar el nombre: la protección de master lo pide así.
+  las-cuatro-suites:
+    name: Las cuatro suites
+    needs: suite
+    if: always() && (github.event_name == 'pull_request' || startsWith(github.ref, 'refs/heads/ci/'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Toda la matriz en verde
+        env:
+          RESULTADO: ${{ needs.suite.result }}
+        run: |
+          echo "Resultado de la matriz: $RESULTADO"
+          [ "$RESULTADO" = success ] || { echo "::error::Algún trabajo de la matriz no pasó ($RESULTADO)"; exit 1; }
+
+  # Ver «El push a master ya no repite las pruebas» arriba.
+  humo:
+    name: Humo de master
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: jdk
+        uses: actions/setup-java@v5
+        continue-on-error: true
+        with:
+          distribution: jetbrains
+          java-version: '21'
+          token: ${{ github.token }}
+
+      - name: Reintentar el JDK
+        if: steps.jdk.outcome == 'failure'
+        run: sleep 45
+
+      - if: steps.jdk.outcome == 'failure'
+        uses: actions/setup-java@v5
+        with:
+          distribution: jetbrains
+          java-version: '21'
+          token: ${{ github.token }}
+
+      # En master setup-gradle sí escribe la caché (dependencias y caché de build) que leen los PR.
+      - uses: gradle/actions/setup-gradle@v4
+
+      # Lo que más se repite entre PR y menos cambia: :core (jvm y android), :server y la web. No
+      # compila :shared para Android (cambia en casi todos los PR: su entrada en la caché casi nunca
+      # serviría) ni corre pruebas (ya corrieron en el PR, sobre este mismo árbol).
+      - name: Compilar :core, :server y la web
+        run: >
+          ./gradlew --build-cache
+          :core:compileTestKotlinJvm
+          :core:compileDebugKotlinAndroid
+          :server:compileTestKotlin
+          :shared:compileKotlinWasmJs
+
+      - name: El despliegue no necesita el Android SDK
+        run: |
+          restaurar() { [ -f local.properties.aparte ] && mv local.properties.aparte local.properties || true; }
+          trap restaurar EXIT
+          [ -f local.properties ] && mv local.properties local.properties.aparte || true
+          env -u ANDROID_HOME -u ANDROID_SDK_ROOT ./gradlew :webApp:wasmJsBrowserDistribution --dry-run
