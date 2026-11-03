@@ -5356,20 +5356,26 @@ los atajos del iPhone, `ui/sms/DesdeTuIphone.kt`), la vista lo dice así:
 Pagos tiene una segunda vista de «Tus facturas del período», «Por categoría» (la de siempre es «Por fecha»).
 El patrón sirve para cualquier lista que se quiera leer por grupos sin cambiar sus filas:
 
-- **El selector de la vista** son dos `PildoraDeFiltro` en un renglón (`SelectorDeVistaDeFacturas`), arriba del
-  título de la sección, no un segundo `SelectorSegmentado`: ese es el control principal de la pantalla
-  («Facturas | Presupuestos») y dos iguales apilados competían. Está **también mientras carga**, con la vista ya
-  leída del aparato, así que ni aparece empujando la lista ni cambia de vista al llegar los datos.
+- **El selector de la vista** son dos `PildoraDeFiltro` en un renglón (`SelectorDeVistaDeFacturas`), **lo primero
+  de la sección** —arriba de la tarjeta «Falta por pagar» y del título—, no un segundo `SelectorSegmentado`: ese
+  es el control principal de la pantalla («Facturas | Presupuestos») y dos iguales apilados competían. Está **en
+  todos los estados** (cargando, sin poder leer, vacía, con facturas) y con la vista ya leída del aparato: su
+  posición no cambia al llegar los datos (revisión: debajo de la tarjeta bajaba todo su alto, y con un período
+  vacío aparecía mientras cargaba para irse).
 - **Cada grupo es una `Superficie` de lista** cuyo primer renglón es un **`EncabezadoPlegable`** (`ds/`): el
   ícono de la categoría (`Medida.avatar`), el nombre en `cuerpoFuerte` (hasta dos renglones), debajo el estado
   en `apoyoMedio` —«Falta $2.613.714» en `textoMedio`, «Pagado» con el ícono ✓ en `entra` (Figtree no dibuja
   «✓»), «Pendiente · no suma» en `aviso`—, al final la `Cifra` del total y el chevrón que gira (abajo =
-  plegado). Mide como mínimo `altoDeFilaDoble` y se toca entero por `alPresionar` (velo, sin ripple).
+  plegado). Un total en cero no se pinta (no es una cifra real: la de una tarjeta sin mínimo). Una categoría sin
+  ícono propio lleva el genérico, nunca el de una de sus filas. Mide como mínimo `altoDeFilaDoble` y se toca
+  entero por `alPresionar` (velo, sin ripple).
 - **Accesibilidad**: un solo nodo, `heading()`, con la frase que arma la pantalla («Vivienda, falta 2.613.714
   pesos de 3.000.000 pesos») y el estado en `stateDescription` («plegado» / «desplegado»). Con los saldos
-  ocultos la frase dice «cifra oculta».
-- **Plegado por defecto lo resuelto**; desplegado lo que pide algo. Lo que el dueño pliega o despliega se
-  recuerda en la sesión (en memoria, por la clave del grupo), no en el aparato.
+  ocultos (`LocalSaldosOcultos`, lo mismo que lee la `Cifra`) no dice cifras: «Vivienda, falta pagar, cifra
+  oculta».
+- **Plegado por defecto lo resuelto**; desplegado lo que pide algo. El defecto **se fija la primera vez que el
+  grupo se ve** en la pantalla: anotar el último pago de un grupo abierto no lo pliega bajo el dedo. Lo que el
+  dueño pliega o despliega se recuerda en la sesión (en memoria, por la clave del grupo), no en el aparato.
 - **Las filas son las de siempre**, separadas por `Separador(ConInicio)` también del encabezado. Ninguna
   acción nueva por fila, y el amarillo sigue siendo uno: el de la factura más urgente de toda la lista.
 - **Las cifras del encabezado salen de las funciones de la vista de siempre**, nunca de una suma a mano: la
