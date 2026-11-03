@@ -317,23 +317,18 @@ class DesdeTuIphoneTest {
         assertTrue(de17.any { "Haz una automatización más con cada uno: «DAVIVIENDA»" in it })
         assertEquals(listOf(ANTES_DE_IOS_17), pasosDeLaAutomatizacionDeMensajes(listOf("Bancolombia"), VarianteDeLaAutomatizacion.ANTES_DE_IOS_17))
 
-        // Vuelta 115: la alternativa a una tarjeta por banco, una sola condición con «$», en las dos variantes.
-        val (titulo27, una27) = unaSolaCondicionConPesos(VarianteDeLaAutomatizacion.IOS_27_O_MAS)!!
-        assertEquals("Todos tus bancos con una sola tarjeta", titulo27)
-        assertTrue(una27.startsWith("Más simple: una sola tarjeta «Mensaje contiene \$» en vez de una por banco."), una27)
-        val (titulo17, una17) = unaSolaCondicionConPesos(VarianteDeLaAutomatizacion.IOS_17_A_26)!!
-        assertEquals("Todos tus bancos con una sola automatización", titulo17)
-        assertTrue("«El mensaje contiene» y «\$»" in una17, una17)
-        for (texto in listOf(una27, una17)) {
-            assertTrue(
-                texto.endsWith(
-                    "Atrapa los avisos de todos tus bancos, porque todos traen el monto. " +
-                        "Los mensajes personales con «\$» también pasan por Movi, que los descarta sin guardarlos.",
-                ),
-                texto,
-            )
-        }
-        assertEquals(null, unaSolaCondicionConPesos(VarianteDeLaAutomatizacion.ANTES_DE_IOS_17))
+        // Vuelta 115: la alternativa a una tarjeta por banco, tres condiciones con «$», «COP» y «USD» (Bancolombia
+        // escribe «COP86.900,00» y «USD20,00» en las compras con tarjeta de crédito: con solo «$» se perdían).
+        val comun = "Atrapan los avisos de todos tus bancos, porque todos traen el monto. Los mensajes personales con " +
+            "un monto también pasan por Movi, que los descarta sin guardarlos."
+        val (titulo27, tres27) = condicionesDelMonto(VarianteDeLaAutomatizacion.IOS_27_O_MAS)!!
+        assertEquals("Todos tus bancos con tres tarjetas", titulo27)
+        assertTrue(tres27.startsWith("Más simple: tres tarjetas, con «\$», «COP» y «USD». $comun"), tres27)
+        assertTrue("(quedan unidas por «o»), no «+ Agregar filtro»" in tres27, tres27)
+        val (titulo17, tres17) = condicionesDelMonto(VarianteDeLaAutomatizacion.IOS_17_A_26)!!
+        assertEquals("Todos tus bancos con tres automatizaciones", titulo17)
+        assertTrue(tres17.startsWith("Más simple: tres automatizaciones, con «\$», «COP» y «USD». $comun"), tres17)
+        assertEquals(null, condicionesDelMonto(VarianteDeLaAutomatizacion.ANTES_DE_IOS_17))
         // La recomendada sigue siendo una por banco: los pasos no la cambian.
         assertTrue(de27.none { "\$" in it } && de17.none { "\$" in it }, "los pasos siguen con las palabras de los bancos")
         assertTrue("notificación" in ANTES_DE_IOS_17 && "correos" in ANTES_DE_IOS_17)
@@ -347,9 +342,9 @@ class DesdeTuIphoneTest {
         assertTrue(hay(ROTULO_IOS_27_O_MAS))
         assertTrue(hay(ROTULO_IOS_17_A_26))
         assertFalse(hay(TU_IPHONE_MUESTRA_OTRA_COSA))
-        // La alternativa de «$» va debajo de cada variante, después de sus pasos.
-        assertEquals(2, composeRule.onAllNodes(androidx.compose.ui.test.hasTestTag(TAG_UNA_SOLA_CONDICION), useUnmergedTree = true).fetchSemanticsNodes().size)
-        assertTrue(hay("Todos tus bancos con una sola tarjeta") && hay("Todos tus bancos con una sola automatización"))
+        // La alternativa del monto va debajo de cada variante, después de sus pasos.
+        assertEquals(2, composeRule.onAllNodes(androidx.compose.ui.test.hasTestTag(TAG_CONDICIONES_DEL_MONTO), useUnmergedTree = true).fetchSemanticsNodes().size)
+        assertTrue(hay("Todos tus bancos con tres tarjetas") && hay("Todos tus bancos con tres automatizaciones"))
     }
 
     @Test
@@ -386,7 +381,8 @@ class DesdeTuIphoneTest {
         assertTrue(hay(ABRIR_LO_DESCARGADO))
         assertEquals(
             "Safari solo lo descarga: toca el ícono a la izquierda de la barra de direcciones → Descargas → " +
-                "«$NOMBRE_DEL_ATAJO_DE_MENSAJES». Si no lo ves, está en la app Archivos → Descargas.",
+                "«$NOMBRE_DEL_ATAJO_DE_MENSAJES». Si no lo ves, está en la app Archivos, en Descargas (dentro de " +
+                "«En mi iPhone» o «iCloud Drive»).",
             ABRIR_LO_DESCARGADO,
         )
         assertTrue(hay(AL_AGREGAR_EL_ATAJO))

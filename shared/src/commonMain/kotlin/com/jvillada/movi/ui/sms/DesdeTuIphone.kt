@@ -134,7 +134,8 @@ const val DETALLE_CREAR_OTRO: String =
  */
 const val ABRIR_LO_DESCARGADO: String =
     "Safari solo lo descarga: toca el ícono a la izquierda de la barra de direcciones → Descargas → " +
-        "«$NOMBRE_DEL_ATAJO_DE_MENSAJES». Si no lo ves, está en la app Archivos → Descargas."
+        "«$NOMBRE_DEL_ATAJO_DE_MENSAJES». Si no lo ves, está en la app Archivos, en Descargas (dentro de " +
+        "«En mi iPhone» o «iCloud Drive»)."
 
 /** Vuelta 114 · lo que dice el paso 2 al agregar el atajo: dónde pegar el código. */
 const val AL_AGREGAR_EL_ATAJO: String =
@@ -228,25 +229,34 @@ fun pasosDeLaAutomatizacionDeMensajes(palabras: List<String>, variante: Variante
 }
 
 /**
- * Vuelta 115 · **la alternativa a una tarjeta por banco** (pedido del dueño): una sola condición con «$». La
- * recomendada sigue siendo una por banco con las palabras sugeridas; esta va debajo de los pasos, como opción.
- * El server no cambia: lo que no empieza por un banco y no trae monto se descarta sin guardarse
- * (`seGuardaElSmsDelAtajo`, `atajos_descartados` solo cuenta por día y motivo). `null` antes de iOS 17.
+ * Vuelta 115 · **la alternativa a una tarjeta por banco** (pedido del dueño, que ratificó la decisión de
+ * privacidad): tres condiciones, con «$», «COP» y «USD». Las tres porque Bancolombia escribe así sus montos
+ * (`$132.347,00`, y `COP249.000,00` / `USD20,00` en las compras con tarjeta de crédito, ver `SmsRoutes.kt`):
+ * con solo «$» se perdían esas compras. La recomendada sigue siendo una por banco con las palabras sugeridas;
+ * esta va debajo de los pasos, como opción. El server no cambia: lo que no empieza por un banco y no trae
+ * monto se descarta sin guardarse (`seGuardaElSmsDelAtajo`; `atajos_descartados` solo cuenta por día y
+ * motivo). `null` antes de iOS 17.
  */
-fun unaSolaCondicionConPesos(variante: VarianteDeLaAutomatizacion): Pair<String, String>? {
-    val (titulo, una) = when (variante) {
-        VarianteDeLaAutomatizacion.IOS_27_O_MAS ->
-            "Todos tus bancos con una sola tarjeta" to "una sola tarjeta «Mensaje contiene \$» en vez de una por banco"
-        VarianteDeLaAutomatizacion.IOS_17_A_26 ->
-            "Todos tus bancos con una sola automatización" to
-                "una sola automatización con «El mensaje contiene» y «\$» en vez de una por banco"
+fun condicionesDelMonto(variante: VarianteDeLaAutomatizacion): Pair<String, String>? {
+    val (titulo, tres, comoSeUnen) = when (variante) {
+        VarianteDeLaAutomatizacion.IOS_27_O_MAS -> Triple(
+            "Todos tus bancos con tres tarjetas",
+            "tres tarjetas",
+            " Cada una es otra tarjeta «Mensaje contiene» (quedan unidas por «o»), no «+ Agregar filtro».",
+        )
+        VarianteDeLaAutomatizacion.IOS_17_A_26 -> Triple(
+            "Todos tus bancos con tres automatizaciones",
+            "tres automatizaciones",
+            " Cada una con «El mensaje contiene».",
+        )
         VarianteDeLaAutomatizacion.ANTES_DE_IOS_17 -> return null
     }
-    return titulo to "Más simple: $una. Atrapa los avisos de todos tus bancos, porque todos traen el monto. " +
-        "Los mensajes personales con «\$» también pasan por Movi, que los descarta sin guardarlos."
+    return titulo to "Más simple: $tres, con «\$», «COP» y «USD». Atrapan los avisos de todos tus bancos, porque " +
+        "todos traen el monto. Los mensajes personales con un monto también pasan por Movi, que los descarta sin " +
+        "guardarlos." + comoSeUnen
 }
 
-const val TAG_UNA_SOLA_CONDICION: String = "automatizacion-una-sola-condicion"
+const val TAG_CONDICIONES_DEL_MONTO: String = "automatizacion-condiciones-del-monto"
 
 /** El último paso: la palabra hay que comprobarla con un SMS de verdad, porque cada banco firma distinto. */
 const val PROBAR_CON_UN_SMS_REAL: String =
@@ -611,9 +621,9 @@ private fun VarianteDeLaAutomatizacionDeMensajes(palabras: List<String>, variant
                     )
                 }
                 RecetaDelAtajo(pasosDeLaAutomatizacionDeMensajes(palabras, variante))
-                unaSolaCondicionConPesos(variante)?.let { (titulo, alternativa) ->
+                condicionesDelMonto(variante)?.let { (titulo, alternativa) ->
                     Spacer(Modifier.height(Espacio.xs))
-                    Column(modifier = Modifier.testTag(TAG_UNA_SOLA_CONDICION)) {
+                    Column(modifier = Modifier.testTag(TAG_CONDICIONES_DEL_MONTO)) {
                         Text(titulo, style = Movi.textos.apoyo, color = Movi.colores.texto)
                         Text(alternativa, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                     }
