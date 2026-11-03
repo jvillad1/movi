@@ -145,8 +145,9 @@ sqldelight {
 // usuario), `LosTamanosSueltosSoloBajanTest` (la escala de letra) y
 // `ElTecladoNoTapaLoQueEscribisTest` (la columna raíz). Gradle decide si una prueba está «al día»
 // mirando solo las entradas de ESTE módulo, así que un cambio que tocara únicamente una pantalla
-// dejaba `:core:jvmTest` en verde sin correrla: la guarda existía y no miraba. CI no se entera
-// porque corre con `--rerun-tasks`; quien se entera es el que prueba en su máquina y cree que pasó.
+// dejaba `:core:jvmTest` en verde sin correrla: la guarda existía y no miraba. Desde la vuelta 122 una
+// `Test` nunca está al día (`build.gradle.kts` de la raíz), así que esto ya no decide si corre; se
+// queda como segunda red (si esa regla se quitara) y porque documenta qué lee cada guarda.
 tasks.withType<Test>().configureEach {
     listOf(
         "shared/src/commonMain",
