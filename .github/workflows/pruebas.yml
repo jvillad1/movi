@@ -41,6 +41,19 @@
 #
 # Un push a una rama `ci/…` corre la matriz completa como un PR, sin abrir PR: sirve para medir el CI
 # o para comprobar que una prueba rota lo pone en rojo. Bórralas al terminar.
+#
+# **Con un PR abierto desde esa rama, la corre solo el PR** (vuelta 125). Cada push dispara dos
+# eventos —`push` a `ci/**` y `pull_request`— con refs distintas (la rama y `pull/N/merge`), así que
+# la concurrencia no los junta y la batería corría dos veces. El evento `push` no sabe si hay un PR,
+# y `on:` no puede filtrar `pull_request` por la rama de origen; lo más simple es preguntarlo: el
+# trabajo `hay_pr` (solo en un push a `ci/**`, unos segundos) consulta los PR abiertos de la rama, y
+# si hay uno la matriz y el cierre del push se saltan. Se queda la del PR porque es la que mira la
+# protección de master (y prueba la mezcla con master). Si la consulta falla, corre igual: de más,
+# nunca de menos. El primer push de la rama, si el PR se abre después, todavía corre dos veces.
+#
+# Ojo con el cierre del push saltado: un trabajo saltado es un check en verde, y en esa corrida va
+# sobre el mismo commit que el PR. Por eso ahí se llama distinto (ver su `name`): un «Las cuatro
+# suites» saltado nunca puede pasar por el del PR.
 name: Pruebas
 
 on:
@@ -58,9 +71,38 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Ver «Con un PR abierto desde esa rama, la corre solo el PR» arriba.
+  hay_pr:
+    name: ¿La rama tiene un PR abierto?
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/ci/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      abierto: ${{ steps.pr.outputs.abierto }}
+    steps:
+      - id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RAMA: ${{ github.ref_name }}
+        run: |
+          n=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$RAMA" --state open --json number --jq length 2>/dev/null || true)
+          case "$n" in
+            ''|*[!0-9]*) echo "::warning::No se pudo saber si $RAMA tiene un PR: la matriz corre igual"; n=0 ;;
+          esac
+          echo "PR abiertos desde $RAMA: $n"
+          if [ "$n" -gt 0 ]; then echo "abierto=true" >> "$GITHUB_OUTPUT"; else echo "abierto=false" >> "$GITHUB_OUTPUT"; fi
+
   suite:
     name: ${{ matrix.nombre }}
-    if: github.event_name == 'pull_request' || startsWith(github.ref, 'refs/heads/ci/')
+    needs: hay_pr
+    # `!cancelled()` porque en un PR `hay_pr` se salta, y sin una función de estado un trabajo cuyo
+    # `needs` se saltó también se salta. Con `${{ }}` porque empieza con `!`.
+    if: >-
+      ${{ !cancelled() && (github.event_name == 'pull_request' ||
+      (startsWith(github.ref, 'refs/heads/ci/') && needs.hay_pr.outputs.abierto != 'true')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -280,10 +322,15 @@ jobs:
           retention-days: 7
 
   # El check obligatorio. NO cambiar el nombre: la protección de master lo pide así.
+  #
+  # Vuelta 125: en el push a una rama `ci/…` con un PR abierto se salta, y con otro nombre (ver «Ojo con el
+  # cierre del push saltado» arriba). En un PR y en una rama `ci/…` sin PR se llama como siempre.
   las-cuatro-suites:
-    name: Las cuatro suites
-    needs: suite
-    if: always() && (github.event_name == 'pull_request' || startsWith(github.ref, 'refs/heads/ci/'))
+    name: ${{ (github.event_name == 'push' && needs.hay_pr.outputs.abierto == 'true') && 'Las cuatro suites (la corre el PR)' || 'Las cuatro suites' }}
+    needs: [hay_pr, suite]
+    if: >-
+      always() && (github.event_name == 'pull_request' ||
+      (startsWith(github.ref, 'refs/heads/ci/') && needs.hay_pr.outputs.abierto != 'true'))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

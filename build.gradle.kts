@@ -52,13 +52,24 @@ subprojects {
 // repartir una suite entre varias máquinas de CI. Cada clase cae en UN trozo por su nombre (el
 // `hashCode` del nombre, que no cambia entre corridas), con sus clases internas (`Foo$1`), así que
 // los n trozos juntos son exactamente la suite entera. Sin la propiedad, nada cambia.
-val forksDePruebas = providers.gradleProperty("movi.forksDePruebas").map { it.toInt() }.orElse(1)
+//
+// Vuelta 125: las dos se leen con `toIntOrNull`, así un valor que no es un número («a/2», «dos») dice
+// qué se esperaba en vez de reventar con un `NumberFormatException` sin contexto.
+val forksDePruebas: Int = providers.gradleProperty("movi.forksDePruebas").orNull?.let { valor ->
+    val forks = valor.trim().toIntOrNull()
+    require(forks != null && forks >= 1) {
+        "movi.forksDePruebas tiene que ser un entero ≥ 1, no «$valor»"
+    }
+    forks
+} ?: 1
 val trozoDePruebas = providers.gradleProperty("movi.trozoDePruebas").orNull?.let { valor ->
-    val partes = valor.split("/").map { it.trim().toInt() }
-    require(partes.size == 2 && partes[1] >= 1 && partes[0] in 1..partes[1]) {
+    val partes = valor.split("/").map { it.trim().toIntOrNull() }
+    val trozo = partes.getOrNull(0)
+    val de = partes.getOrNull(1)
+    require(partes.size == 2 && trozo != null && de != null && de >= 1 && trozo in 1..de) {
         "movi.trozoDePruebas tiene que ser i/n con 1 ≤ i ≤ n, no «$valor»"
     }
-    partes[0] to partes[1]
+    trozo to de
 }
 //
 // `movi.soloPrepararLasPruebas=true`: hace todo lo de una prueba MENOS correrla (compila las clases de
@@ -70,7 +81,7 @@ subprojects {
     tasks.withType<Test>().configureEach {
         outputs.upToDateWhen { false }
         outputs.doNotCacheIf("Las pruebas siempre corren (vuelta 122)") { true }
-        maxParallelForks = forksDePruebas.get()
+        maxParallelForks = forksDePruebas
         if (soloPrepararLasPruebas) {
             filter {
                 includeTestsMatching("movi.ninguna.Prueba")

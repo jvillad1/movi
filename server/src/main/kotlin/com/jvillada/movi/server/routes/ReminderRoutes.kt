@@ -64,6 +64,7 @@ import com.jvillada.movi.shared.model.isReservedCategory
 import com.jvillada.movi.shared.model.rechazoDelMonto
 import com.jvillada.movi.shared.model.validarDebitoDeLaRegla
 import com.jvillada.movi.shared.model.arranqueDeLaReglaGuardada
+import com.jvillada.movi.shared.model.arranqueQueGuardaUnPut
 import com.jvillada.movi.shared.model.arranqueDeLasCuotasSiYaPagasteEl
 import com.jvillada.movi.shared.model.sePreguntaSiYaPagasteElDeEstePeriodoEl
 import com.jvillada.movi.shared.model.esAbonoADeuda
@@ -471,15 +472,16 @@ fun Route.reminderRoutes() {
             val arranqueActual = filaActual?.get(RecurringRules.activeFrom)
             // Vuelta 121: el GET devuelve el arranque DERIVADO (la creación, o el primer sello) y varios
             // clientes reenvían la regla tal cual la leyeron (`regla.copy(...)`). Si la fila no tiene
-            // arranque y el PUT trae exactamente ese derivado, no es una decisión del dueño: la fila sigue
-            // en NULL, y el piso se sigue derivando (así un sello posterior todavía puede bajarlo).
+            // arranque y el PUT trae un derivado, no es una decisión del dueño: la fila sigue en NULL, y el
+            // piso se sigue derivando (así un sello posterior todavía puede bajarlo). Vuelta 125: también un
+            // derivado VIEJO (una copia leída antes de que cambiara el primer sello), ver
+            // [arranqueQueGuardaUnPut].
             val derivado = filaActual?.arranqueDeLaFila()
-            val pedido = fechaIsoValida(body.activeFrom)
-            val arranqueGuardado = when {
-                pedido == null -> arranqueActual
-                arranqueActual == null && pedido == derivado -> null
-                else -> pedido
-            }
+            val arranqueGuardado = arranqueQueGuardaUnPut(
+                pedido = fechaIsoValida(body.activeFrom),
+                guardado = arranqueActual,
+                creadaEl = filaActual?.get(RecurringRules.createdAt)?.let { epochMillisToAppDate(it).toString() },
+            )
             // La respuesta dice el arranque como lo lee todo lo demás; `created_at` no se toca: editar no
             // mueve el piso.
             storedActiveFrom = arranqueGuardado ?: derivado

@@ -1,5 +1,8 @@
 package com.jvillada.movi.ui.ai
 
+import com.jvillada.movi.ui.recurrentes.LO_ESPERA_EN_ESTE_PERIODO
+import com.jvillada.movi.ui.recurrentes.LO_ESPERA_DESDE_EL_PROXIMO_PERIODO
+import com.jvillada.movi.ui.recurrentes.SI_YA_VENCIO_DESDE_EL_PROXIMO_PERIODO
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.getValue
@@ -91,10 +94,13 @@ class ElRecurrenteDeMoviAiPreguntaTest {
     @Volatile private var perfilLeido = 0
     /** Revisión de la 124: con esto el perfil se demora hasta que la prueba lo suelta. */
     private var perfilDemorado: CompletableDeferred<Unit>? = null
+    /** Vuelta 125: la lectura del perfil falla. */
+    private var perfilFalla = false
 
     private val repo = object : RepositorioDePrueba() {
         override suspend fun getUserProfile(): UserProfile {
             perfilDemorado?.await()
+            if (perfilFalla) { perfilLeido++; error("sin señal") }
             return UserProfile(id = "u", email = "claudia@movi.test", name = "Claudia", avatarColor = "#FFC21A", periodCutoffDay = 1)
                 .also { perfilLeido++ }
         }
@@ -243,13 +249,51 @@ class ElRecurrenteDeMoviAiPreguntaTest {
         assertEquals(false, hacerlo().yaPagoElDeEstePeriodo)
     }
 
+    /**
+     * Vuelta 125: si la lectura del perfil falla, la tarjeta pregunta con el mes de calendario (antes no
+     * preguntaba y la regla nacía vencida sin aviso). «Hacerlo» manda la respuesta.
+     */
+    @Test
+    fun `si la lectura del perfil falla pregunta con el mes de calendario`() {
+        perfilFalla = true
+        pintar(propuesta(gimnasio(dia = 1)))
+        assertTrue(hayPregunta(), "sin perfil, el período por defecto: el 1 de noviembre ya pasó")
+        // Revisión de la 125: con el respaldo, «Sí» no afirma «desde el próximo período».
+        assertTrue(composeRule.onAllNodesWithText(SI_YA_VENCIO_DESDE_EL_PROXIMO_PERIODO).fetchSemanticsNodes().isNotEmpty())
+        assertTrue(composeRule.onAllNodesWithText(LO_ESPERA_DESDE_EL_PROXIMO_PERIODO).fetchSemanticsNodes().isEmpty())
+        assertEquals(true, hacerlo().yaPagoElDeEstePeriodo)
+    }
+
+    /**
+     * Revisión de la 125: con el período de respaldo la tarjeta no afirma «Movi lo espera en este período»
+     * (con corte 25, el 28-oct ya venció aunque el 28-nov no): el lugar queda vacío y la regla va sin el campo.
+     */
+    @Test
+    fun `si la lectura del perfil falla y la fecha no llega en el mes, no afirma nada`() {
+        perfilFalla = true
+        pintar(propuesta(gimnasio(dia = 28)))
+        assertFalse(hayPregunta())
+        assertTrue(composeRule.onAllNodesWithTag(TAG_LO_ESPERA_EN_LA_PROPUESTA, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+        assertTrue(composeRule.onAllNodesWithText(LO_ESPERA_EN_ESTE_PERIODO).fetchSemanticsNodes().isEmpty())
+        assertNull(hacerlo().yaPagoElDeEstePeriodo)
+    }
+
     @Test
     fun `la regla del lugar de la pregunta`() {
         val calendario = PeriodSettings()
         assertEquals(LugarDeLaPregunta.LEYENDO, lugarDeLaPregunta(propuesta(gimnasio(1)), dosDeNoviembre, null, leyendoElPerfil = true))
-        assertEquals(LugarDeLaPregunta.NINGUNO, lugarDeLaPregunta(propuesta(gimnasio(1)), dosDeNoviembre, null, leyendoElPerfil = false), "el perfil falló: el límite conocido")
+        assertEquals(LugarDeLaPregunta.NINGUNO, lugarDeLaPregunta(propuesta(gimnasio(1)), dosDeNoviembre, null, leyendoElPerfil = false), "sin ajustes y sin estar leyendo: la tarjeta nunca llega acá (vuelta 125)")
         assertEquals(LugarDeLaPregunta.PREGUNTA, lugarDeLaPregunta(propuesta(gimnasio(1)), dosDeNoviembre, calendario, leyendoElPerfil = false))
         assertEquals(LugarDeLaPregunta.EN_ESTE_PERIODO, lugarDeLaPregunta(propuesta(gimnasio(20)), dosDeNoviembre, calendario, leyendoElPerfil = false))
+        // Revisión de la 125: con el período de respaldo pregunta igual, pero no afirma «lo espera».
+        assertEquals(
+            LugarDeLaPregunta.PREGUNTA,
+            lugarDeLaPregunta(propuesta(gimnasio(1)), dosDeNoviembre, calendario, leyendoElPerfil = false, conElPeriodoDeRespaldo = true),
+        )
+        assertEquals(
+            LugarDeLaPregunta.NINGUNO,
+            lugarDeLaPregunta(propuesta(gimnasio(28)), dosDeNoviembre, calendario, leyendoElPerfil = false, conElPeriodoDeRespaldo = true),
+        )
         assertEquals(LugarDeLaPregunta.NINGUNO, lugarDeLaPregunta(propuesta(gimnasio(1, TransactionType.INCOME)), dosDeNoviembre, null, leyendoElPerfil = true))
         assertEquals(
             LugarDeLaPregunta.NINGUNO,

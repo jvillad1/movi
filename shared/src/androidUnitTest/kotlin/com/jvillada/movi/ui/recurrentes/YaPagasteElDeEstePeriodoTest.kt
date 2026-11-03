@@ -67,11 +67,14 @@ class YaPagasteElDeEstePeriodoTest {
     private var editada: RecurringRule? = null
     /** Cuántas veces se leyó el perfil: sin él la pregunta nunca sale, así que un «no sale» lo espera primero. */
     @Volatile private var perfilLeido = 0
+    /** Vuelta 125: la lectura del perfil falla. */
+    private var perfilFalla = false
 
     private inner class Repo : RepositorioDePrueba() {
         override suspend fun getAccounts(): List<Account> = listOf(ahorros)
         override suspend fun getDestinos(): List<DestinoConocido> = emptyList()
         override suspend fun getUserProfile(): UserProfile {
+            if (perfilFalla) { perfilLeido++; error("sin señal") }
             // Sube al DEVOLVER, no al entrar: cuando la prueba lo ve, el perfil ya va camino a la hoja.
             return UserProfile(id = "u", email = "claudia@movi.test", name = "Claudia", avatarColor = "#FFC21A", periodCutoffDay = 1)
                 .also { perfilLeido++ }
@@ -194,6 +197,31 @@ class YaPagasteElDeEstePeriodoTest {
         )
         esperarElPerfil()
         assertFalse(hayPregunta(), "el movimiento ya es la ocurrencia de su período")
+    }
+
+    /**
+     * Vuelta 125: si la lectura del perfil falla, la hoja decide con el mes de calendario (antes no preguntaba
+     * y la regla nacía vencida sin aviso). La guía y la tarjeta de Movi AI usan el mismo criterio.
+     */
+    @Test
+    fun `si la lectura del perfil falla pregunta con el mes de calendario`() {
+        perfilFalla = true
+        montar(dia = 1)
+        esperarLaPregunta()
+        // Revisión de la 125: con el respaldo, «Sí» no afirma «desde el próximo período».
+        assertTrue(composeRule.onAllNodesWithText(SI_YA_VENCIO_DESDE_EL_PROXIMO_PERIODO).fetchSemanticsNodes().isNotEmpty())
+        assertTrue(composeRule.onAllNodesWithText(LO_ESPERA_DESDE_EL_PROXIMO_PERIODO).fetchSemanticsNodes().isEmpty())
+        escribirMonto()
+        crear()
+        assertEquals(true, assertNotNull(creada).yaPagoElDeEstePeriodo)
+    }
+
+    @Test
+    fun `si la lectura del perfil falla y la fecha no llega, no pregunta`() {
+        perfilFalla = true
+        montar(dia = 28)
+        esperarElPerfil()
+        assertFalse(hayPregunta())
     }
 
     // ── Lo que viaja ────────────────────────────────────────────────────────
