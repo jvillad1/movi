@@ -323,6 +323,58 @@ class DashboardRoutesTest {
     }
 
     /**
+     * Vuelta 119 · **una categoría que solo vive en un pago fijo o en un presupuesto también es del
+     * dueño.** La categoría no tiene tabla propia: es texto en `financial_events`, `budgets` y
+     * `recurring_rules`, y `GET /api/categories` mira las tres. El resumen solo miraba los movimientos,
+     * así que «Gardenera», creada en la hoja de un pago fijo que todavía no se pagó, no volvía al
+     * caché del cliente y el selector de la próxima regla no la ofrecía: había que crearla otra vez.
+     */
+    @Test
+    fun `el resumen trae las categorias de los pagos fijos y los presupuestos, con su tipo`() = testApplication {
+        wireApp()
+        regla("rr-gardenera", "Arriendo Gardenera", "Gardenera", 1_800_000L)
+        transaction {
+            RecurringRules.insert {
+                it[RecurringRules.id] = "rr-renta"
+                it[RecurringRules.userId] = this@DashboardRoutesTest.userId
+                it[name] = "Renta del local"
+                it[category] = "Renta local"
+                it[amount] = 900_000L
+                it[dayOfMonth] = 5
+                it[type] = "INCOME"
+            }
+            Budgets.insert {
+                it[Budgets.userId] = this@DashboardRoutesTest.userId
+                it[Budgets.category] = "Mascotas"
+                it[Budgets.monthlyLimit] = 200_000L
+            }
+            RecurringRules.insert {
+                it[RecurringRules.id] = "rr-ajena"
+                it[RecurringRules.userId] = otherUserId
+                it[name] = "Ajena"
+                it[category] = "Categoría ajena"
+                it[amount] = 1_000L
+                it[dayOfMonth] = 5
+                it[type] = "EXPENSE"
+            }
+        }
+        // La misma categoría en un movimiento y en una regla: una sola entrada, con los dos tipos.
+        event("g-1", savings, "INCOME", 10_000L, category = "Gardenera")
+
+        val usadas = summary()["usedCategories"]!!.jsonArray
+            .associate { entry ->
+                val obj = entry.jsonObject
+                obj["name"]!!.jsonPrimitive.content to
+                    (obj["types"]?.jsonArray?.map { it.jsonPrimitive.content }?.toSet() ?: emptySet())
+            }
+
+        assertEquals(setOf("EXPENSE", "INCOME"), usadas["Gardenera"], "la regla y el movimiento suman sus tipos")
+        assertEquals(setOf("INCOME"), usadas["Renta local"], "el tipo de la regla")
+        assertEquals(setOf("EXPENSE"), usadas["Mascotas"], "un presupuesto es de gasto")
+        assertFalse("Categoría ajena" in usadas.keys, "las reglas de otro usuario no se filtran acá")
+    }
+
+    /**
      * `usosRecientes`: **respalda con datos** qué tan viva está una categoría — a diferencia del
      * resto de `usedCategories`, que a propósito no filtra ni por fecha ni por anulados (ver el
      * KDoc de `usedCategories` en DashboardRoutes.kt).

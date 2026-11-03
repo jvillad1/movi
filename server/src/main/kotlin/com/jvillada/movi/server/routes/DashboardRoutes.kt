@@ -30,6 +30,7 @@ import com.jvillada.movi.server.reminders.cuotasDelChecklistPagadas
 import com.jvillada.movi.server.reminders.pagosDeDeudaAlrededorDe
 import com.jvillada.movi.server.reminders.loadCreditRulePairs
 import com.jvillada.movi.server.db.RecurringRules
+import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.time.epochMillisToAppDate
 import com.jvillada.movi.server.time.epochMillisToAppDateString
 import com.jvillada.movi.shared.model.gastoVariablePorDia
@@ -697,6 +698,9 @@ private fun Transaction.desdeCuandoSeConoceTuPlata(
  * reservadas" de arriba.** Ese campo sí mira una ventana (60 días) y sí excluye los anulados: no
  * describe "¿la conozco?" sino "¿la sigue usando?", y ahí un movimiento borrado o de hace un año
  * no cuenta.
+ *
+ * **Vuelta 119 — y las de los pagos fijos y los presupuestos**, como `GET /api/categories`: una
+ * categoría que solo vive en una regla («Gardenera», creada en su hoja) también es del dueño.
  */
 private fun Transaction.usedCategories(uid: String, ahora: Long, voidedIds: Set<String>): List<UsedCategory> {
     // Misma lectura de `category_prefs` que usa `GET /api/categories` (ver
@@ -725,13 +729,32 @@ private fun Transaction.usedCategories(uid: String, ahora: Long, voidedIds: Set<
         .groupingBy { it[Events.category].trim() }
         .eachCount()
 
-    val nombres = porUso.keys + prefs.keys.filter { it.isNotEmpty() }
+    // Vuelta 119: la categoría no tiene tabla propia —es texto en movimientos, presupuestos y pagos
+    // fijos— y `GET /api/categories` (`categoryUsage`) ya mira las tres. Acá solo se miraban los
+    // movimientos, así que una categoría creada en la hoja de un pago fijo que todavía no se pagó
+    // («Gardenera») no volvía nunca al caché del cliente y había que crearla otra vez en la regla
+    // siguiente. Un pago fijo aporta su tipo; un presupuesto es de gasto.
+    val tiposPorNombre = porUso.mapValues { (_, tipos) -> tipos.toMutableSet() }.toMutableMap()
+    fun anotar(nombre: String, tipo: TransactionType?) {
+        if (nombre.isEmpty()) return
+        val tipos = tiposPorNombre.getOrPut(nombre) { mutableSetOf() }
+        if (tipo != null) tipos += tipo
+    }
+    RecurringRules.select(RecurringRules.category, RecurringRules.type)
+        .where { RecurringRules.userId eq uid }
+        .withDistinct()
+        .forEach { anotar(it[RecurringRules.category].trim(), runCatching { TransactionType.valueOf(it[RecurringRules.type]) }.getOrNull()) }
+    Budgets.select(Budgets.category)
+        .where { Budgets.userId eq uid }
+        .forEach { anotar(it[Budgets.category].trim(), TransactionType.EXPENSE) }
+
+    val nombres = tiposPorNombre.keys + prefs.keys.filter { it.isNotEmpty() }
     return nombres
         .map { nombre ->
             val pref = prefs[nombre]
             UsedCategory(
                 name = nombre,
-                types = porUso[nombre].orEmpty(),
+                types = tiposPorNombre[nombre].orEmpty().toList(),
                 hidden = pref?.hidden ?: false,
                 pinnedType = pref?.pinnedType,
                 icono = pref?.icono,
