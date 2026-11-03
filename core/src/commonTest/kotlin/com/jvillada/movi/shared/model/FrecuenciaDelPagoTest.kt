@@ -132,6 +132,20 @@ class FrecuenciaDelPagoTest {
     }
 
     @Test
+    fun `el primer mes que vence desde un mes rueda de a N y la una sola vez se acaba`() {
+        val trimestral = regla(FrecuenciaDelPago.TRIMESTRAL, "2026-12-15")
+        assertEquals(2026 to 12, trimestral.primerMesQueVenceDesde(2026, 1))
+        assertEquals(2026 to 12, trimestral.primerMesQueVenceDesde(2026, 12))
+        assertEquals(2027 to 3, trimestral.primerMesQueVenceDesde(2027, 1))
+        assertEquals(2027 to 3, trimestral.primerMesQueVenceDesde(2027, 3))
+        assertEquals(2027 to 6, trimestral.primerMesQueVenceDesde(2027, 4))
+        assertEquals(2027 to 4, regla(null, null).primerMesQueVenceDesde(2027, 4))
+        val unaVez = regla(FrecuenciaDelPago.UNA_VEZ, "2027-01-20")
+        assertEquals(2027 to 1, unaVez.primerMesQueVenceDesde(2026, 11))
+        assertNull(unaVez.primerMesQueVenceDesde(2027, 2))
+    }
+
+    @Test
     fun `la cadencia se dice en una linea`() {
         assertNull(cadenciaDelPago(regla(null, null), "2026-12-15"))
         assertEquals("Cada 3 meses · el próximo, 15 dic", cadenciaDelPago(regla(FrecuenciaDelPago.TRIMESTRAL, "2026-12-15"), "2026-12-15"))

@@ -108,6 +108,26 @@ fun RecurringRule.venceEnElMes(anio: Int, mes: Int): Boolean {
     return distancia % cada == 0
 }
 
+/**
+ * **El primer mes en que [rule] vence, desde [anio]-[mes] inclusive**, como `(año, mes)`, o `null` si ya
+ * no vence nunca (una sola vez con el ancla antes de ese mes). Una mensual devuelve el mismo mes. Es lo
+ * que usa el server para rodar un vencimiento al siguiente que existe. Pura.
+ */
+fun RecurringRule.primerMesQueVenceDesde(anio: Int, mes: Int): Pair<Int, Int>? {
+    val frecuencia = frecuenciaEfectiva
+    if (frecuencia == FrecuenciaDelPago.MENSUAL) return anio to mes
+    val ancla = anclaDelVencimiento ?: return anio to mes
+    val delAncla = ancla.year * 12 + (ancla.monthNumber - 1)
+    val distancia = anio * 12 + (mes - 1) - delAncla
+    val indice = if (distancia <= 0) {
+        delAncla
+    } else {
+        val cada = frecuencia.meses ?: return null
+        delAncla + ((distancia + cada - 1) / cada) * cada
+    }
+    return indice / 12 to indice % 12 + 1
+}
+
 /** [venceEnElMes] con la fecha de un vencimiento (ISO `"2026-12-15"`, o el sello `"2026-12"`). Ilegible: `true`. */
 fun RecurringRule.venceEnElMesDe(iso: String): Boolean {
     val partes = iso.trim().split('-')
