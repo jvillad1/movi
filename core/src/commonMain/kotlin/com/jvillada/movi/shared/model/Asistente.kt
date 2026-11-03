@@ -11,12 +11,21 @@ import kotlinx.serialization.Serializable
  */
 
 /**
- * `GET /api/ai/conversacion`: los últimos mensajes de la conversación en curso, del más viejo al
- * más nuevo, listos para pintar. Vacía después de «Nueva conversación».
+ * `GET /api/ai/conversacion` (la más reciente, para un APK viejo) y, desde la vuelta 117,
+ * `GET /api/ai/conversaciones/{id}`: los mensajes de una conversación, del más viejo al más nuevo,
+ * listos para pintar. Vacía después de «Nueva conversación».
  */
 @Serializable
 data class ConversacionDelAsistente(
     val mensajes: List<ChatMessage> = emptyList(),
+    /**
+     * Vuelta 117 · el id de esta conversación, para mandar las preguntas siguientes a ella
+     * ([AiChatRequest.conversacionId]). `null` de un server anterior, o si el dueño todavía no tiene
+     * ninguna.
+     */
+    val id: String? = null,
+    /** Vuelta 117 · su título ([tituloDeLaConversacion]); vacío mientras no tiene preguntas. */
+    val titulo: String = "",
     /**
      * **¿Movi AI puede contestar preguntas libres ahora?** (vuelta de diseño 30). `false` cuando el
      * server no tiene clave o la última llamada a Anthropic falló por la cuenta (sin crédito, clave
@@ -136,3 +145,80 @@ data class GuardarRecuerdoRequest(
 
 /** Cuánto puede medir un recuerdo. Una frase, no un diario: lo que no entra en esto no es un dato durable. */
 const val LARGO_MAXIMO_DE_UN_RECUERDO: Int = 300
+
+/**
+ * # Varias conversaciones (vuelta 117)
+ *
+ * Hasta la vuelta 117 el dueño tenía UNA conversación: «Nueva conversación» movía una marca y lo de
+ * antes quedaba en el server sin forma de verlo. Ahora cada turno pertenece a una conversación con
+ * id, título y fechas, y la app las lista, las abre y las borra.
+ *
+ * `GET /api/ai/conversaciones`: una fila de la lista. Solo las que tienen al menos una pregunta: una
+ * conversación vacía no se lista.
+ */
+@Serializable
+data class ConversacionEnLaLista(
+    val id: String,
+    /** La primera pregunta del dueño, recortada ([tituloDeLaConversacion]). */
+    val titulo: String,
+    /** Cuándo empezó (epoch ms). */
+    val creadaEn: Long,
+    /** La última pregunta (epoch ms): la lista va de la más reciente a la más vieja por esto. */
+    val ultimaEn: Long,
+    /** Cuántos mensajes tiene: cada pregunta y su respuesta son dos. */
+    val mensajes: Int,
+)
+
+/** `GET /api/ai/conversaciones`: la lista, la más reciente primero, y cuántas se guardan como mucho. */
+@Serializable
+data class ListaDeConversaciones(
+    val conversaciones: List<ConversacionEnLaLista> = emptyList(),
+    /** [CONVERSACIONES_QUE_SE_GUARDAN], dicho por el server para que la app no prometa otro número. */
+    val tope: Int = CONVERSACIONES_QUE_SE_GUARDAN,
+)
+
+/**
+ * **La retención** (vuelta 117): Movi guarda las últimas 50 conversaciones de cada dueño. Al empezar
+ * la 51 (cuando recibe su primera pregunta), se borra la que lleva más tiempo sin usarse, con sus
+ * turnos y sus propuestas. Antes se podaban turnos sueltos en silencio, que con la lista a la vista le
+ * habría borrado chats sin decirle; ahora la regla se dice en la lista ([textoDeLaRetencion]).
+ */
+const val CONVERSACIONES_QUE_SE_GUARDAN: Int = 50
+
+/** Desde cuántas guardadas la lista avisa que se acerca al tope. */
+const val AVISAR_DESDE_CONVERSACIONES: Int = 45
+
+/** Cuántos caracteres puede medir el título de una conversación (~40, sin cortar una palabra). */
+const val LARGO_DEL_TITULO_DE_UNA_CONVERSACION: Int = 40
+
+/** El título de una conversación cuya primera pregunta fue solo una foto. */
+const val TITULO_DE_UNA_FOTO: String = "Foto adjunta"
+
+/** El título de una conversación sin texto (no debería pasar: una pregunta siempre trae algo). */
+const val TITULO_SIN_TEXTO: String = "Conversación"
+
+/**
+ * **El título de una conversación**: la primera pregunta del dueño, en un renglón y recortada a
+ * [LARGO_DEL_TITULO_DE_UNA_CONVERSACION] caracteres **sin partir una palabra** («¿Cuánto gasté en
+ * restaurantes el mes…»). Sin llamar a la IA: es lo que él escribió. Solo una foto: [TITULO_DE_UNA_FOTO].
+ * Una palabra sola más larga que el tope se corta ahí (no hay dónde más).
+ */
+fun tituloDeLaConversacion(primeraPregunta: String, teniaImagen: Boolean = false): String {
+    val limpia = primeraPregunta.trim().replace(Regex("""\s+"""), " ")
+    if (limpia.isEmpty()) return if (teniaImagen) TITULO_DE_UNA_FOTO else TITULO_SIN_TEXTO
+    if (limpia.length <= LARGO_DEL_TITULO_DE_UNA_CONVERSACION) return limpia
+    val corte = limpia.lastIndexOf(' ', startIndex = LARGO_DEL_TITULO_DE_UNA_CONVERSACION)
+    val cabeza = if (corte > 0) limpia.substring(0, corte) else limpia.substring(0, LARGO_DEL_TITULO_DE_UNA_CONVERSACION)
+    return cabeza.trimEnd(' ', ',', '.', ';', ':', '¿', '¡') + "…"
+}
+
+/**
+ * **Lo que la lista dice de la retención**, siempre debajo de las conversaciones: la regla a secas, o,
+ * desde [AVISAR_DESDE_CONVERSACIONES], cuántas lleva y qué pasa al pasar el tope.
+ */
+fun textoDeLaRetencion(guardadas: Int, tope: Int = CONVERSACIONES_QUE_SE_GUARDAN): String =
+    if (guardadas >= minOf(AVISAR_DESDE_CONVERSACIONES, tope)) {
+        "Tienes $guardadas de $tope conversaciones guardadas. Al empezar otra después de $tope, Movi borra la que llevas más tiempo sin usar."
+    } else {
+        "Movi guarda tus últimas $tope conversaciones."
+    }

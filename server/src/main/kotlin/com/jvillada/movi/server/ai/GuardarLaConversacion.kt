@@ -2,12 +2,7 @@ package com.jvillada.movi.server.ai
 
 import com.jvillada.movi.server.db.AiTurns
 import com.jvillada.movi.server.db.dbQuery
-import org.jetbrains.exposed.sql.SortOrder
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
-import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.selectAll
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.util.UUID
@@ -28,12 +23,17 @@ import java.util.UUID
  * que tumba la función que diagnostica es peor que no tenerla.
  */
 
-/** Cuántas se guardan de cada dueño. Lo que sirve para diagnosticar es lo de ayer, no lo del año pasado. */
-internal const val CUANTAS_CONVERSACIONES_SE_GUARDAN = 200
-
-/** Vuelta 106 · los días hacia atrás que la poda respeta (ver [guardarLaConversacion]). */
+/**
+ * Vuelta 106 · los días hacia atrás que la poda respeta: con esos turnos se cuenta el tope de
+ * preguntas (`ElTopeDelMes`) y lo que gastó cada uno en 30 días. Desde la vuelta 117 lo que se borra
+ * dentro de esta ventana queda como cifra sin texto (ver `borrarLasConversacionesEn`).
+ */
 internal const val DIAS_QUE_NO_SE_PODAN = 31L
 private const val UN_DIA = 24L * 60 * 60 * 1000
+
+/** Desde cuándo un turno que fue al modelo no se puede borrar entero: el mes en curso y los últimos 31 días. */
+internal fun desdeCuandoNoSePoda(ahora: Long): Long =
+    minOf(ElTopeDelMes.inicioDelMes(ahora), ahora - DIAS_QUE_NO_SE_PODAN * UN_DIA)
 
 /** Topes por campo, para que una respuesta larga o una consulta gorda no crezcan la tabla sin límite. */
 private const val TOPE_PREGUNTA = 2_000
@@ -77,6 +77,12 @@ suspend fun guardarLaConversacion(
      * Ola 3 se guardan con el id del turno que las hizo, para volver a pintarlas en su globo—.
      */
     id: String = nuevoIdDeTurno(),
+    /**
+     * Vuelta 117 · la conversación del turno (la que eligió el chat con `conversacionParaLaPregunta`).
+     * `null` = la más reciente del dueño, o una nueva si no tiene: lo de siempre para quien no sabe de
+     * conversaciones.
+     */
+    conversacionId: String? = null,
 ): Boolean = runCatching {
     val comoJson = json.encodeToString(
         consultas.map {
@@ -85,8 +91,10 @@ suspend fun guardarLaConversacion(
     ).take(TOPE_CONSULTAS)
 
     dbQuery {
+        val conversacion = conversacionParaLaPreguntaEn(uid, conversacionId, ahora)
         AiTurns.insert {
             it[AiTurns.id] = id
+            it[AiTurns.conversacionId] = conversacion
             it[userId] = uid
             it[creadoEn] = ahora
             it[AiTurns.pregunta] = pregunta.take(TOPE_PREGUNTA)
@@ -105,22 +113,10 @@ suspend fun guardarLaConversacion(
             it[AiTurns.cifrasSinRespaldo] = cifrasSinRespaldo.comoColumna()
             it[AiTurns.cifrasCorregidas] = cifrasCorregidas.comoColumna()
         }
-        // Y se poda: de cada dueño quedan las últimas N. Se borra por id y no por fecha para que
-        // dos turnos del mismo milisegundo no se lleven uno al otro por delante.
-        //
-        // Vuelta 106: **lo del mes y de los últimos 31 días no se poda nunca.** Con esos turnos se
-        // cuenta el tope de preguntas (`ElTopeDelMes`) y se calcula lo que gastó cada uno en 30 días;
-        // con una excepción de más de N preguntas, podarlos dejaría pasar de más y mostraría de menos.
-        val protegidoDesde = minOf(ElTopeDelMes.inicioDelMes(ahora), ahora - DIAS_QUE_NO_SE_PODAN * UN_DIA)
-        val sobran = AiTurns.selectAll()
-            .where { AiTurns.userId eq uid }
-            .orderBy(AiTurns.creadoEn to SortOrder.DESC)
-            .drop(CUANTAS_CONVERSACIONES_SE_GUARDAN)
-            .filter { it[AiTurns.creadoEn] < protegidoDesde }
-            .map { it[AiTurns.id] }
-        if (sobran.isNotEmpty()) {
-            AiTurns.deleteWhere { AiTurns.id inList sobran }
-        }
+        // Vuelta 117 · la conversación pasa a ser la más reciente; con su primera pregunta toma el
+        // título y se aplica la retención: de cada dueño quedan las últimas 50 conversaciones (antes,
+        // los últimos 200 turnos, que con la lista a la vista le habrían borrado chats en silencio).
+        anotarElTurnoEnSuConversacion(uid, conversacion, pregunta, hayImagen, ahora)
     }
     true
 }.getOrDefault(false)

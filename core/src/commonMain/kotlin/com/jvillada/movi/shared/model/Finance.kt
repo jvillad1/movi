@@ -1234,7 +1234,17 @@ data class ChatMessage(
 )
 
 @Serializable
-data class AiChatRequest(val messages: List<ChatMessage>)
+data class AiChatRequest(
+    val messages: List<ChatMessage>,
+    /**
+     * Vuelta 117 · **a qué conversación va la pregunta** (ver [ConversacionEnLaLista]). La app la manda
+     * con la conversación abierta; `null` —un APK viejo, o la primera pregunta de una nueva— va a la
+     * más reciente del dueño o a una nueva si no tiene. Un id que no es suyo (o que ya borró) empieza
+     * una nueva: nunca escribe en la de otro. El server devuelve en [AiChatResponse.conversacionId]
+     * dónde quedó.
+     */
+    val conversacionId: String? = null,
+)
 
 @Serializable
 data class AiChatResponse(
@@ -1259,6 +1269,11 @@ data class AiChatResponse(
     val preguntasQueQuedan: Int? = null,
     /** Vuelta 106 · su tope del mes, cuando viaja [preguntasQueQuedan] (para [fraseDelTopeDelMes]). */
     val topeDelMes: Int? = null,
+    /**
+     * Vuelta 117 · **la conversación donde quedó el turno**: la que pidió la app, o la que eligió el
+     * server sin id. `null` si el turno no se guardó (un error) o de un server anterior.
+     */
+    val conversacionId: String? = null,
 )
 
 /**

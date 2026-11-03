@@ -152,7 +152,13 @@ nav { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--borde); d
                 "Movi y lo que se leyó de ellos. Se guardan cifrados (AES-256). Si pides que Movi recuerde " +
                 "la clave de tus extractos, también se guarda cifrada y nunca sale del servidor.</li>")
             append("<li><strong>Movi AI:</strong> las preguntas que le haces al asistente, sus respuestas y " +
-                "lo que tú le pidas que recuerde (puedes verlo y borrarlo en «Lo que Movi sabe de ti»).</li>")
+                "lo que tú le pidas que recuerde (puedes verlo y borrarlo en «Lo que Movi sabe de ti»). " +
+                // Vuelta 117: la retención de las conversaciones (`CONVERSACIONES_QUE_SE_GUARDAN`) y lo que
+                // queda al borrar una (`borrarLasConversacionesEn`).
+                "Se guardan tus últimas 50 conversaciones: al empezar otra después de esas, se borra la que " +
+                "llevas más tiempo sin usar. Las ves y las borras en Movi AI → Conversaciones; al borrar una " +
+                "se borran sus preguntas y sus respuestas; de lo que preguntaste este mes o en los últimos 31 días " +
+                "queda solo cuántas preguntas fueron a la IA (sin su texto), para el límite de preguntas del mes.</li>")
             append("<li><strong>Uso de la app y fallos:</strong> qué pantallas abres y qué tocas (nunca montos " +
                 "ni textos que escribes), y los reportes de fallos de la app con el modelo del aparato y la " +
                 "versión del sistema. El uso se puede apagar en Tú → Tus datos.</li>")

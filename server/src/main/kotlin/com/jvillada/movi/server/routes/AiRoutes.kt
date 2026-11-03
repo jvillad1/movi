@@ -61,8 +61,12 @@ import com.jvillada.movi.server.ai.fallaDeLaIa
 import com.jvillada.movi.server.ai.MODELO_DE_RESPALDO
 import com.jvillada.movi.server.ai.MODELO_DE_TODOS_LOS_DIAS
 import com.jvillada.movi.server.ai.MODELO_PARA_CONSEJOS
-import com.jvillada.movi.server.ai.conversacionGuardada
-import com.jvillada.movi.server.ai.conversacionEmpezadaEn
+import com.jvillada.movi.server.ai.borrarLaConversacion
+import com.jvillada.movi.server.ai.conversacionAbierta
+import com.jvillada.movi.server.ai.conversacionMasReciente
+import com.jvillada.movi.server.ai.conversacionNueva
+import com.jvillada.movi.server.ai.conversacionParaLaPregunta
+import com.jvillada.movi.server.ai.listaDeConversaciones
 import com.jvillada.movi.server.ai.ElModeloQueSeCorrige
 import com.jvillada.movi.server.ai.PropuestasDelTurno
 import com.jvillada.movi.server.ai.esHerramientaQuePropone
@@ -73,7 +77,6 @@ import com.jvillada.movi.server.ai.resolverPropuesta
 import com.jvillada.movi.server.ai.textoAlCerrarConPropuestas
 import com.jvillada.movi.shared.model.EstadoDePropuesta
 import com.jvillada.movi.shared.model.ResolverPropuestaRequest
-import com.jvillada.movi.server.ai.empezarConversacionNueva
 import com.jvillada.movi.server.ai.tramoParaElModelo
 import com.jvillada.movi.server.ai.CONSULTA_DE_LA_PREGUNTA_SUGERIDA
 import com.jvillada.movi.server.ai.ConsultaHecha
@@ -271,20 +274,44 @@ fun Route.aiRoutes() = aiRoutes(fabricaDePrueba = null)
 internal fun Route.aiRoutes(fabricaDePrueba: FabricaDeModelos?) {
     // **La conversación en curso** (Ola 3): lo que la pantalla pinta al volver. Solo del dueño —el
     // `uid` sale del token— y sin fotos: `ai_turns` nunca las guardó.
-    get("/api/ai/conversacion") {
-        // Vuelta de diseño 30: y si la IA contesta preguntas libres ahora, para que el chat no
-        // sugiera una que va a dar el aviso (ver [EstadoDeLaIa]).
+    // Vuelta de diseño 30: y si la IA contesta preguntas libres ahora, para que el chat no sugiera una
+    // que va a dar el aviso (ver [EstadoDeLaIa]). Vuelta 106: quien ya hizo sus preguntas del mes
+    // tampoco tiene la IA para preguntas libres; el chat le ofrece solo las tres sugeridas.
+    suspend fun laIaContesta(uid: String): Boolean {
         val hayClave = fabricaDePrueba != null || anthropicClient != null
-        // Vuelta 106: quien ya hizo sus preguntas del mes tampoco tiene la IA para preguntas libres;
-        // el chat le ofrece solo las tres sugeridas, que siguen funcionando.
-        val llegoAlTope = ElTopeDelMes.estadoDe(call.userId()).llego
-        call.respond(conversacionGuardada(call.userId()).copy(iaDisponible = EstadoDeLaIa.disponible(hayClave) && !llegoAlTope))
+        return EstadoDeLaIa.disponible(hayClave) && !ElTopeDelMes.estadoDe(uid).llego
     }
 
-    // «Nueva conversación»: no borra nada, mueve el comienzo de la en curso a ahora.
+    // Desde la vuelta 117, la más reciente (la de la última pregunta): la forma de siempre para un APK
+    // que no sabe de varias conversaciones.
+    get("/api/ai/conversacion") {
+        val uid = call.userId()
+        call.respond(conversacionMasReciente(uid).copy(iaDisponible = laIaContesta(uid)))
+    }
+
+    // «Nueva conversación» de un APK viejo: la misma de `POST /api/ai/conversaciones` (no borra nada, y
+    // sobre una vacía no crea otra). La respuesta sigue siendo 204.
     post("/api/ai/conversacion/nueva") {
-        empezarConversacionNueva(call.userId())
+        conversacionNueva(call.userId())
         call.respond(HttpStatusCode.NoContent)
+    }
+
+    // **Vuelta 117 · varias conversaciones** (ver `LasConversaciones.kt`). Todas del dueño del token: una
+    // ajena contesta 404, igual que una que no existe.
+    route("/api/ai/conversaciones") {
+        get { call.respond(listaDeConversaciones(call.userId())) }
+        post { call.respond(HttpStatusCode.Created, conversacionNueva(call.userId())) }
+        get("/{id}") {
+            val uid = call.userId()
+            val id = call.parameters["id"] ?: return@get call.respond(HttpStatusCode.BadRequest)
+            val conversacion = conversacionAbierta(uid, id) ?: return@get call.respond(HttpStatusCode.NotFound)
+            call.respond(conversacion.copy(iaDisponible = laIaContesta(uid)))
+        }
+        delete("/{id}") {
+            val id = call.parameters["id"] ?: return@delete call.respond(HttpStatusCode.BadRequest)
+            if (borrarLaConversacion(call.userId(), id)) call.respond(HttpStatusCode.NoContent)
+            else call.respond(HttpStatusCode.NotFound)
+        }
     }
 
     // **«Lo que Movi sabe de ti»** (Ola 3 · 2): verla, guardarla, corregirla y borrarla. POST es
@@ -350,8 +377,12 @@ internal fun Route.aiRoutes(fabricaDePrueba: FabricaDeModelos?) {
         val sugerida = body.messages.lastOrNull()
             ?.takeIf { it.role == ChatRole.USER && it.imageBase64 == null }
             ?.let { PreguntaSugerida.deId(it.preguntaSugerida) ?: PreguntaSugerida.delTexto(it.content) }
+        // Vuelta 117 · **a qué conversación va**: la pedida si es del dueño, sin id la más reciente, y si
+        // no, una nueva. Se elige antes de contestar para que las decisiones sobre las propuestas sean
+        // las de ESTA conversación. Si la base falla, `null`: el turno la vuelve a elegir al guardarse.
+        val conversacionId = runCatching { conversacionParaLaPregunta(call.userId(), body.conversacionId) }.getOrNull()
         if (sugerida != null) {
-            contestarSinModelo(call, sugerida, body.messages.last().content.ifBlank { sugerida.texto })
+            contestarSinModelo(call, sugerida, body.messages.last().content.ifBlank { sugerida.texto }, conversacionId)
             return@post
         }
 
@@ -399,7 +430,7 @@ internal fun Route.aiRoutes(fabricaDePrueba: FabricaDeModelos?) {
             // **Lo que el dueño hizo con lo que se le propuso** (Ola 3): si dijo «No», el asistente lo
             // sabe en el turno siguiente. Va pegado a la pregunta, igual que los hechos: después de todo
             // lo cacheado, así que cambiar de estado una tarjeta no tira la caché.
-            val decisiones = loQueElDuenoDecidio(call.userId(), conversacionEmpezadaEn(call.userId()))
+            val decisiones = loQueElDuenoDecidio(call.userId(), conversacionId)
             val anexo = listOfNotNull(hechos, decisiones).joinToString("\n\n").ifBlank { null }
             val messageParams = paraElModelo.mapIndexed { i, m ->
                 toMessageParam(m, anexo = anexo.takeIf { i == paraElModelo.lastIndex })
@@ -489,6 +520,7 @@ internal fun Route.aiRoutes(fabricaDePrueba: FabricaDeModelos?) {
                     hayImagen = hayImagen,
                     cifrasSinRespaldo = paso.sinRespaldo,
                     cifrasCorregidas = paso.corregidas,
+                    conversacionId = conversacionId,
                 )
                 if (!guardado) call.application.log.warn("movi-ai: no pude guardar la conversación de $uid")
                 // Las tarjetas se guardan con el id del turno que las hizo: así vuelven a su globo al
@@ -507,6 +539,7 @@ internal fun Route.aiRoutes(fabricaDePrueba: FabricaDeModelos?) {
                         propuestas = propuestas.propuestas,
                         preguntasQueQuedan = quedan,
                         topeDelMes = tope.tope?.takeIf { quedan != null },
+                        conversacionId = conversacionId,
                     ),
                 )
             }
@@ -539,7 +572,12 @@ internal fun Route.aiRoutes(fabricaDePrueba: FabricaDeModelos?) {
  * guardado como cualquier otro —en `ai_turns` y en la conversación— con `modelo` = [MODELO_SIN_IA] y
  * la pregunta que contestó en `consultas`, para poder contar cuántas se contestaron así.
  */
-private suspend fun contestarSinModelo(call: io.ktor.server.application.ApplicationCall, sugerida: PreguntaSugerida, pregunta: String) {
+private suspend fun contestarSinModelo(
+    call: io.ktor.server.application.ApplicationCall,
+    sugerida: PreguntaSugerida,
+    pregunta: String,
+    conversacionId: String?,
+) {
     val uid = call.userId()
     val texto = runCatching {
         respuestaSinModelo(sugerida, datosDeLasSugeridas(uid, sugerida, AppClock.today()))
@@ -563,9 +601,10 @@ private suspend fun contestarSinModelo(call: io.ktor.server.application.Applicat
         fichasCache = 0,
         fichasSalida = 0,
         hayImagen = false,
+        conversacionId = conversacionId,
     )
     if (!guardado) call.application.log.warn("movi-ai: no pude guardar la conversación de $uid")
-    call.respond(AiChatResponse(text = texto))
+    call.respond(AiChatResponse(text = texto, conversacionId = conversacionId))
 }
 
 /**
