@@ -11,13 +11,15 @@ blind, but `CLAUDE.md` is the one that gets updated first. If the two ever disag
   shared by server and clients), `:shared` (Compose UI library), `:androidApp`, `:webApp` (wasmJs),
   `:server` (Ktor), `:iosApp` (Swift shell).
 - **Build with JetBrains Runtime 21**, not a plain OpenJDK — the Gradle daemon JVM is pinned to it.
-- **Test with exactly this command** (it's what CI runs, nothing more):
+- **Test with exactly this command** (it's what CI runs, split in parallel jobs; on the Mac prefer
+  `scripts/pruebas-dirigidas.sh <classes or files>`):
   ```bash
-  ./gradlew --rerun-tasks :core:jvmTest :server:test :shared:testDebugUnitTest :shared:compileKotlinWasmJs :androidApp:compileDirectaDebugKotlin :androidApp:compilePlayDebugKotlin
+  ./gradlew :core:jvmTest :server:test :shared:testDebugUnitTest :shared:compileKotlinWasmJs :androidApp:compileDirectaDebugKotlin :androidApp:compilePlayDebugKotlin
   ```
 - **Never run `./gradlew build`** — it pulls in iOS release link tasks and takes ~48 minutes.
 - **All user-visible text is neutral Latin American Spanish (tuteo, no voseo)** — enforced by
-  `VoseoScanTest` in `core/src/jvmTest` (run with `--rerun-tasks`, since Gradle's cache can mask it).
+  `VoseoScanTest` in `core/src/jvmTest` (test tasks always run since vuelta 122; on the Mac use
+  `scripts/pruebas-dirigidas.sh`, which also runs the quality guards).
 - **New REST endpoints** go in `server/src/main/kotlin/.../routes/` as extension functions on
   `Route`, registered in `plugins/Routing.kt`. **New shared models** go in
   `core/src/commonMain/.../shared/model/`, `@Serializable`.
