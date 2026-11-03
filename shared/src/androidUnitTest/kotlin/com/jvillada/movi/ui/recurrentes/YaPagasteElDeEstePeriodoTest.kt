@@ -65,12 +65,16 @@ class YaPagasteElDeEstePeriodoTest {
     private val dosDeNoviembre = LocalDate(2026, 11, 2)
     private var creada: RecurringRule? = null
     private var editada: RecurringRule? = null
+    /** Cuántas veces se leyó el perfil: sin él la pregunta nunca sale, así que un «no sale» lo espera primero. */
+    @Volatile private var perfilLeido = 0
 
     private inner class Repo : RepositorioDePrueba() {
         override suspend fun getAccounts(): List<Account> = listOf(ahorros)
         override suspend fun getDestinos(): List<DestinoConocido> = emptyList()
-        override suspend fun getUserProfile(): UserProfile =
-            UserProfile(id = "u", email = "claudia@movi.test", name = "Claudia", avatarColor = "#FFC21A", periodCutoffDay = 1)
+        override suspend fun getUserProfile(): UserProfile {
+            perfilLeido++
+            return UserProfile(id = "u", email = "claudia@movi.test", name = "Claudia", avatarColor = "#FFC21A", periodCutoffDay = 1)
+        }
         override suspend fun createRecurringRule(rule: RecurringRule): RecurringRule {
             creada = rule
             return rule.copy(id = "rr_nueva")
@@ -95,6 +99,7 @@ class YaPagasteElDeEstePeriodoTest {
     ) {
         creada = null
         editada = null
+        perfilLeido = 0
         Repositories.sustitutoDePrueba = Repo()
         composeRule.setContent {
             val base = LocalDensity.current
@@ -114,6 +119,13 @@ class YaPagasteElDeEstePeriodoTest {
 
     private fun hayPregunta(): Boolean = composeRule.onAllNodesWithTag(TAG_YA_PAGASTE_EL_DE_ESTE_PERIODO, useUnmergedTree = true)
         .fetchSemanticsNodes().isNotEmpty()
+
+    /** El perfil ya llegó y la hoja ya se recompuso con él: desde acá, que la pregunta no esté significa algo. */
+    private fun esperarElPerfil() {
+        composeRule.waitUntil(5_000) { perfilLeido > 0 }
+        composeRule.mainClock.advanceTimeBy(500)
+        composeRule.waitForIdle()
+    }
 
     private fun esperarLaPregunta() = composeRule.waitUntil(5_000) { hayPregunta() }
 
@@ -146,9 +158,7 @@ class YaPagasteElDeEstePeriodoTest {
     @Test
     fun `no sale si la fecha de este periodo todavia no llega`() {
         montar(dia = 28)
-        composeRule.waitUntil(5_000) { composeRule.onAllNodesWithText("Crear recurrente").fetchSemanticsNodes().isNotEmpty() }
-        composeRule.mainClock.advanceTimeBy(1_000)
-        composeRule.waitForIdle()
+        esperarElPerfil()
         assertFalse(hayPregunta(), "el 28 de noviembre todavía no vence")
     }
 
@@ -164,8 +174,11 @@ class YaPagasteElDeEstePeriodoTest {
     @Test
     fun `no sale al editar`() {
         montar(existing = regla)
+        // Editando, la hoja no pide el perfil (la lectura está apagada): se fija eso mismo, y que con el
+        // tiempo tampoco aparece la pregunta.
         composeRule.mainClock.advanceTimeBy(1_000)
         composeRule.waitForIdle()
+        assertEquals(0, perfilLeido, "editar no lee el perfil para preguntar")
         assertFalse(hayPregunta(), "editar no pregunta")
     }
 
@@ -177,8 +190,7 @@ class YaPagasteElDeEstePeriodoTest {
                 dayOfMonth = 1, accountId = "acc_ahorros", activeFrom = "2026-11-01", eventId = "ev_gym",
             ),
         )
-        composeRule.mainClock.advanceTimeBy(1_000)
-        composeRule.waitForIdle()
+        esperarElPerfil()
         assertFalse(hayPregunta(), "el movimiento ya es la ocurrencia de su período")
     }
 
@@ -211,7 +223,7 @@ class YaPagasteElDeEstePeriodoTest {
     @Test
     fun `sin la pregunta no viaja el campo`() {
         montar(dia = 28)
-        composeRule.waitForIdle()
+        esperarElPerfil()
         escribirMonto()
         crear()
         assertNull(assertNotNull(creada).yaPagoElDeEstePeriodo)
