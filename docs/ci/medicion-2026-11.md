@@ -74,9 +74,13 @@ Contadas de los XML de resultados de esa corrida de la Mac (commit `734aab9a5`):
    suites» como trabajo final que espera a todos (el nombre del check obligatorio no cambió).
    `shared` se parte en dos con `-Pmovi.trozoDePruebas=i/2` (cada clase cae en un trozo por el hash de
    su nombre). Cada trabajo cuenta las pruebas que corrió y falla con cero.
-3. **El push a master ya no repite las pruebas**: corre «Humo de master» (compila `:core`, `:server` y
-   la web, la guarda del despliegue, sin pruebas), que además es lo que escribe la caché que leen los
-   PR. Por qué es seguro: ver el encabezado de `pruebas.yml`.
+3. **El push a master ya no repite las pruebas**: corre «Humo de master» (compila todo y prepara las
+   tres suites sin correr ninguna prueba, `-Pmovi.soloPrepararLasPruebas=true`, más la guarda del
+   despliegue), que además es lo que escribe la caché que leen los PR. La matriz y el humo comparten
+   la llave de caché de trabajo `pruebas` (`GRADLE_BUILD_ACTION_CACHE_KEY_JOB`), así los PR restauran
+   la del humo —con todas sus dependencias— y no la de `paquete.yml`, que corre justo después de cada
+   merge y no trae nada de Android. Por qué es seguro saltar las pruebas: ver el encabezado de
+   `pruebas.yml`.
 4. **`scripts/pruebas-dirigidas.sh`** para la Mac: solo las clases que tocaste más las guardas de
    `quality/`, con el candado.
 
@@ -89,6 +93,8 @@ Contadas de los XML de resultados de esa corrida de la Mac (commit `734aab9a5`):
 | 41602254970 (`ci/v122-medir`) | fría | **5,3 min** | 20,8 |
 | 41603165008 (`ci/v122-rojo`, solo lectura, como un PR) | fría | 6,4 min | 22,6 |
 | 41603090071 (`ci/v122-medir`, cambio solo en `:shared`) | tibia | **4,0 min** sin el trabajo de prueba «x4» | 15,0 sin «x4» |
+| 41604956936 (`ci/v122-final`, el árbol final de la rama, como un PR) | fría | 6,6 min | 21,3 |
+| 41606223146 (`ci/v122-humo`, con la caché que dejó el humo, cambio solo en `:shared`) | la del humo | **5,0 min** | 15,1 |
 
 Por trabajo (segundos del trabajo entero; entre paréntesis, el paso de Gradle):
 
@@ -112,11 +118,15 @@ real no paga: en un PR la caché es de solo lectura.)
 - **Probado y descartado: un solo trabajo de `shared` con 4 JVM de prueba.** Las pruebas tardaron
   3 min 3 s contra ~55 s de cada trozo con 2: Robolectric no escala con más JVM en una máquina de
   4 núcleos. Partir en dos máquinas sí.
-- **El humo de master** (corrida 41604067390, con la caché que dejaron las anteriores): 221 s el
-  trabajo, 3 min 9 s de Gradle. Nadie lo espera.
+- **El humo de master** (corrida 41605424744 en `ci/v122-humo`, partiendo de la caché vieja de
+  master): 338 s el trabajo, 4 min 45 s de Gradle (99 tareas, 11 de la caché). Nadie lo espera. La
+  corrida siguiente de la matriz en esa rama (41606223146) restauró **en sus cinco trabajos** la
+  entrada que escribió ese humo (`Cache hit for restore-key: gradle-home-v1|Linux-X64|pruebas[…]-616aa67…`).
+- La variación entre corridas es grande (los trozos de `shared` fríos fueron de 214 a 356 s de
+  Gradle en máquinas iguales): las cifras son rangos, no promedios de muchas corridas.
 
-Por cambio mergeado: el PR pasa de ~8 a **~4–6 minutos de espera**; las máquinas, de ~15,6 minutos
-(PR + master) a 15–23 en el PR + ~3,7 del humo. Se gastan más minutos de máquina (el repo es público:
+Por cambio mergeado: el PR pasa de 7–10 a **4–7 minutos de espera** (4–5 con la caché del humo,
+5–7 fría); las máquinas, de ~15,6 minutos (PR + master) a 15–23 en el PR + ~5–6 del humo. Se gastan más minutos de máquina (el repo es público:
 los runners estándar no se cobran) a cambio de la mitad de la espera, que es lo que frena las vueltas.
 
 ### Pruebas que corren (por módulo), iguales
