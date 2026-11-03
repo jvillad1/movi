@@ -5347,3 +5347,26 @@ los atajos del iPhone, `ui/sms/DesdeTuIphone.kt`), la vista lo dice así:
 
 **Pruebas**: `DesdeTuIphoneTest` (`:shared` androidUnitTest), `CapturaPorAtajoTest` (`:core`) y
 `CapturaPorAtajoRoutesTest` (`:server`).
+
+## Vuelta 118 · Bajar con el teclado, como en una página web
+
+Comportamiento, no visual: nada cambia de tamaño ni de color. Con teclado físico (web e iPad):
+
+| Tecla | Efecto |
+|---|---|
+| ↑ / ↓ | un paso, `Medida.pasoDelTeclado` (48 dp) |
+| Av Pág / Re Pág, Espacio / Shift+Espacio | el alto visible menos un paso (el último renglón queda arriba como contexto) |
+| Inicio / Fin | al principio / al final |
+
+- **Se mueve lo de arriba**: la hoja abierta más reciente —aunque no tenga nada que desplazar— o, sin hojas, la
+  pantalla de arriba de la pila. Nunca la pantalla de atrás de una hoja.
+- **El cuerpo de una pantalla o de una hoja se anota**: `Modifier.desplazableConElTeclado()` en vez de
+  `verticalScroll(rememberScrollState())`, `rememberListaConElTeclado()` para una `LazyColumn`. Las listas de
+  adentro (un buscador dentro de una hoja, la columna de la derecha) no se anotan. Lo vigila
+  `LoQueSeDesplazaSeAnotaParaElTecladoTest`.
+- **Quien escribe se queda con sus teclas**: con el cursor en un campo, las flechas, el espacio, Inicio y Fin son
+  del campo. Escape, Enter, ⌘A y los dígitos de «Agregar» no cambian.
+- **El movimiento**: `Movimiento.MEDIO_MS` con la curva estándar; con el sistema pidiendo menos movimiento, en el
+  acto. El Tab y el orden del foco no cambian.
+
+**Pruebas**: `DesplazarConElTecladoTest` (`:shared` androidUnitTest).
