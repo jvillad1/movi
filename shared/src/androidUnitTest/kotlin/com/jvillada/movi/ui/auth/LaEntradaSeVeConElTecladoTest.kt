@@ -15,10 +15,12 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.toSize
 import com.jvillada.movi.data.RepositorioDePrueba
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.AuthResponse
@@ -87,11 +89,18 @@ class LaEntradaSeVeConElTecladoTest {
         composeRule.waitForIdle()
     }
 
-    private fun limites(n: SemanticsNodeInteraction): Rect = n.fetchSemanticsNode().boundsInRoot
+    /**
+     * Dónde está el nodo **sin recortar**: `boundsInRoot` viene recortado por el clip del desplazamiento,
+     * así que un nodo medio afuera daría siempre «adentro». La posición y el tamaño propios, no.
+     */
+    private fun limites(n: SemanticsNodeInteraction): Rect = n.fetchSemanticsNode().let { Rect(it.positionInRoot, it.size.toSize()) }
+
+    /** Lo que se ve de la columna: su caja, que va antes del `verticalScroll` (el viewport). */
+    private fun areaVisible(): Rect = composeRule.onNodeWithTag(TAG_COLUMNA_DE_ENTRADA).fetchSemanticsNode().boundsInRoot
 
     /** El nodo está entero dentro de lo que se ve de la columna (no recortado por el desplazamiento). */
     private fun seVe(n: SemanticsNodeInteraction, que: String) {
-        val visible = limites(composeRule.onNodeWithTag(TAG_COLUMNA_DE_ENTRADA))
+        val visible = areaVisible()
         val nodo = limites(n)
         assertTrue(
             nodo.top >= visible.top - 0.5f && nodo.bottom <= visible.bottom + 0.5f,
@@ -124,6 +133,34 @@ class LaEntradaSeVeConElTecladoTest {
             "el error se anuncia",
         )
         assertEquals(emptyList(), repo.registros, "con la contraseña corta no se manda nada")
+    }
+
+    @Test
+    fun `el mismo error otra vez vuelve a traer el error y el boton a la vista`() {
+        montar { RegisterScreen(onNavigate = {}) }
+        campo(0).performTextReplacement("Andrés")
+        campo(1).performTextReplacement("andres@correo.com")
+        campo(2).performTextReplacement("corta")
+        boton("Crear cuenta").performScrollTo().performClick()
+        composeRule.waitForIdle()
+        seVe(composeRule.onNodeWithTag(TAG_ERROR_DE_ENTRADA, useUnmergedTree = true), "el error, la primera vez")
+
+        // Sube hasta el título y baja solo hasta el campo: el error y el botón quedan abajo, fuera de la vista.
+        composeRule.onNode(hasText("Crear cuenta") and !hasClickAction()).performScrollTo()
+        campo(2).performScrollTo()
+        composeRule.waitForIdle()
+        val visible = areaVisible()
+        assertTrue(
+            limites(boton("Crear cuenta")).bottom > visible.bottom + 0.5f,
+            "la prueba solo vale si el botón quedó fuera de la vista: ${limites(boton("Crear cuenta"))} vs $visible",
+        )
+
+        // «Listo» del teclado con la misma contraseña corta: el mismo error, otro intento.
+        campo(2).performImeAction()
+        composeRule.waitForIdle()
+        seVe(composeRule.onNodeWithTag(TAG_ERROR_DE_ENTRADA, useUnmergedTree = true), "el error, la segunda vez")
+        seVe(boton("Crear cuenta"), "«Crear cuenta», la segunda vez")
+        assertEquals(emptyList(), repo.registros)
     }
 
     @Test

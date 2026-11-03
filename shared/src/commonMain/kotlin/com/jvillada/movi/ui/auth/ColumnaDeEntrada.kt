@@ -20,6 +20,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -68,28 +69,36 @@ internal fun ColumnaDeEntrada(
 }
 
 /**
- * **El error, pegado al botón y a la vista.** Va justo arriba del botón principal; al aparecer (o
- * cambiar) desplaza la columna hasta que se ven el error y el botón, y se anuncia a quien usa un
- * lector de pantalla (`liveRegion`). Sin error no ocupa lugar.
+ * **El error, pegado al botón y a la vista.** Va justo arriba del botón principal; en cada intento
+ * que deja un error desplaza la columna hasta que se ven el error y el botón, y se anuncia a quien
+ * usa un lector de pantalla (`liveRegion`). Sin error no ocupa lugar.
+ *
+ * [intento] lo sube la pantalla cada vez que se toca el botón: el MISMO error dos veces seguidas
+ * (otra vez la contraseña corta) tiene que volver a desplazar y a anunciarse. Por eso la clave del
+ * efecto lleva el intento, y el texto se vuelve a crear con él (`key`): un nodo nuevo con
+ * `liveRegion`, no el mismo texto que el lector ya leyó.
  */
 @Composable
 internal fun ErrorYBotonDeEntrada(
     error: String?,
+    intento: Int,
     boton: @Composable () -> Unit,
 ) {
     val traer = remember { BringIntoViewRequester() }
-    LaunchedEffect(error) { if (error != null) traer.bringIntoView() }
+    LaunchedEffect(error, intento) { if (error != null) traer.bringIntoView() }
     Column(Modifier.fillMaxWidth().bringIntoViewRequester(traer)) {
         if (error != null) {
-            Text(
-                error,
-                style = Movi.textos.apoyo,
-                color = Movi.colores.sale,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag(TAG_ERROR_DE_ENTRADA)
-                    .semantics { liveRegion = LiveRegionMode.Polite },
-            )
+            key(intento) {
+                Text(
+                    error,
+                    style = Movi.textos.apoyo,
+                    color = Movi.colores.sale,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag(TAG_ERROR_DE_ENTRADA)
+                        .semantics { liveRegion = LiveRegionMode.Polite },
+                )
+            }
             Spacer(Modifier.height(Espacio.s))
         }
         boton()

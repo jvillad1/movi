@@ -42,6 +42,8 @@ fun RegisterScreen(onNavigate: (Screen) -> Unit) {
     var password by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    // Vuelta 115: cada toque del botón es un intento; el mismo error dos veces vuelve a mostrarse.
+    var intentos by remember { mutableIntStateOf(0) }
 
     val emailFocus = remember { FocusRequester() }
     val passwordFocus = remember { FocusRequester() }
@@ -49,6 +51,7 @@ fun RegisterScreen(onNavigate: (Screen) -> Unit) {
 
     fun submit() {
         if (loading) return
+        intentos++
         if (name.isBlank() || email.isBlank()) {
             error = "Nombre y correo requeridos"
             return
@@ -132,7 +135,7 @@ fun RegisterScreen(onNavigate: (Screen) -> Unit) {
             )
 
             Spacer(Modifier.height(Espacio.l))
-            ErrorYBotonDeEntrada(error) {
+            ErrorYBotonDeEntrada(error, intentos) {
                 Boton("Crear cuenta", onClick = { submit() }, cargando = loading, anchoCompleto = true)
             }
             // Vuelta 109: lo que se acepta al crear la cuenta, con sus enlaces (sin casilla).

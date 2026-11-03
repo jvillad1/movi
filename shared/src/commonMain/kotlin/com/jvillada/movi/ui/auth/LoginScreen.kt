@@ -61,6 +61,8 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
     var password by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    // Vuelta 115: cada toque del botón es un intento; el mismo error dos veces vuelve a mostrarse.
+    var intentos by remember { mutableIntStateOf(0) }
     // Si llegó acá porque el server rechazó la sesión (y no porque salió), se le dice por qué: con
     // el token muerto del 26-oct la app callaba y el dueño creía estar adentro.
     var notice by remember {
@@ -124,6 +126,7 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
 
     fun submit() {
         if (loading) return
+        intentos++
         loading = true
         error = null
         notice = null
@@ -159,6 +162,7 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
      */
     fun requestReset() {
         if (loading) return
+        intentos++
         val trimmed = email.trim()
         if (trimmed.isBlank()) {
             error = "Escribe tu correo y vuelve a tocar «¿Olvidaste tu contraseña?»"
@@ -284,7 +288,7 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
             Boton("¿Olvidaste tu contraseña?", onClick = { requestReset() }, variante = VarianteDeBoton.Fantasma, tamano = TamanoDeBoton.S)
 
             Spacer(Modifier.height(Espacio.l))
-            ErrorYBotonDeEntrada(error) {
+            ErrorYBotonDeEntrada(error, intentos) {
                 Boton("Entrar", onClick = { submit() }, cargando = loading, anchoCompleto = true)
             }
         }
