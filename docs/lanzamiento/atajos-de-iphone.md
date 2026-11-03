@@ -23,7 +23,10 @@ El dueño probó la vuelta 111 en el iPhone de Caro (iPhone18,2, **iOS 27.0.1**)
    caracteres fuera de ASCII depende de cada navegador. La ruta vieja `/atajos/movi-mensaje.shortcut` sigue
    sirviendo el mismo archivo, ya con el nombre nuevo.
 2. **«Agregar atajo» no respondió** en «Configurar este atajo» con el código pegado en la pregunta. Con
-   **«Omitir configuración»** y el código pegado a mano en la acción **«Texto»** sí quedó. No se sabe la causa:
+   **«Omitir configuración»** y el código pegado a mano en la acción **«Texto»** sí quedó. (Vuelta 115,
+   verificado de nuevo con iOS 27 y el atajo de producción: «Agregar atajo» tampoco responde con el teclado
+   cerrado, pero «Omitir configuración» agrega el atajo y **conserva el código que se pegó** en la pregunta: no
+   hace falta pegarlo a mano.) No se sabe la causa:
    la pregunta de importación (`WFWorkflowImportQuestions`) se revisó contra atajos exportados por la app y
    publicados (cliente 4610, «Share Wi-Fi» de huaminghuangtw/Shortcutomation) y contra el compilador Cherri, y
    coincide en todo (`ActionIndex`, `Category` «Parameter», `ParameterKey` «WFTextActionText», `DefaultValue`
@@ -55,11 +58,16 @@ Tiene que instalarse como «Movi - Avisar un mensaje».
 ## 2. El atajo de mensajes (firmado)
 
 1. En la misma sección toca **«Agregar el atajo de mensajes»**. Safari descarga `Movi - Avisar un mensaje.shortcut`.
-2. Ábrelo (desde la barra de descargas o Archivos): Atajos muestra **«Configurar este atajo»** con la pregunta
-   «Pega tu código de Movi…».
+2. **Safari no lo abre solo** (verificado el 2-nov en dos iPhone con iOS 27): después de «Descargar», toca el
+   ícono a la izquierda de la barra de direcciones → **Descargas** → «Movi - Avisar un mensaje». Si no lo ves,
+   está en la app **Archivos**, en **Descargas** (dentro de «En mi iPhone» o «iCloud Drive»). Al abrirlo,
+   Atajos muestra **«Configurar este atajo»** con la pregunta «Pega tu código de Movi…». (La app lo dice en
+   el paso 2, `ABRIR_LO_DESCARGADO`.)
 3. Pega el código y toca **«Agregar atajo»**. El atajo queda como **«Movi - Avisar un mensaje»**.
-4. **Plan B** (probado el 2-nov): si «Agregar atajo» no responde, toca **«Omitir configuración»**, abre el atajo
-   y pega el código en la acción **«Texto»**.
+4. **Plan B** (probado el 2-nov en iOS 27 con el atajo de producción): pega tu código. Si «Agregar atajo» no
+   responde (tampoco con el teclado cerrado), toca **«Omitir configuración»**: el atajo se agrega **con el código
+   que pegaste** (la acción «Texto» queda con ese valor). Si después el atajo no avisa, ábrelo y revisa que el
+   código esté en la acción **«Texto»**.
 5. Si después tocas **«Crear otro»** en Movi, el código de antes deja de servir: abre el atajo y cambia el
    código de la acción «Texto».
 
@@ -111,6 +119,16 @@ cosa?»; si no, las dos con su rótulo, la de iOS 27 primero. Se recomiendan sie
    filtro se une con «y» y la automatización no correría nunca. `DAVIVIENDA` y las de sus bancos. (La app dice
    lo mismo.)
 
+**Alternativa: todos tus bancos con tres tarjetas** (vuelta 115, pedido del dueño, que ratificó la decisión de
+privacidad). En vez de una tarjeta por banco, tres tarjetas «Mensaje contiene», unidas por «o» (cada una otra
+tarjeta, **nunca «+ Agregar filtro»**): `$`, `COP` y `USD`. Más simple: tres tarjetas, con «$», «COP» y «USD».
+Atrapan los avisos de todos tus bancos, porque todos traen el monto (Bancolombia escribe `$132.347,00`, y
+`COP86.900,00` / `USD20,00` en las compras con tarjeta de crédito: con solo «$» esas se perdían). Los mensajes
+personales con un monto también pasan por Movi, que los descarta sin guardarlos: el server solo guarda lo que
+empieza por un banco y trae un monto (`seGuardaElSmsDelAtajo`; lo demás queda contado por día y motivo en
+`atajos_descartados`, sin texto ni remitente). La recomendada sigue siendo una tarjeta por banco con las palabras
+sugeridas.
+
 Las imágenes del atajo muestran también «Recibir **Contenido y 20 más** de **Ningún lado** · Si no hay entrada:
 Solicitar Texto».
 
@@ -121,6 +139,9 @@ Solicitar Texto».
    de sus bancos; la app las sugiere).
 3. **«Ejecutar de inmediato»** → **«Siguiente»** → el atajo **«Movi - Avisar un mensaje»**. «Ejecutar de
    inmediato» existe para «Mensaje» desde iOS 17.
+
+**Alternativa: tres automatizaciones**, cada una con «El mensaje contiene»: `$`, `COP` y `USD`, en vez de una por
+banco, con lo mismo que las tres tarjetas de iOS 27 (arriba).
 
 ### Antes de iOS 17
 

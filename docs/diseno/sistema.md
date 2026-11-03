@@ -218,9 +218,11 @@ llevan su familia y nunca se separan de ella en tamaño ni interlineado (lo fija
 | `pestana` / `pestanaActiva` | `rotulo` en 500 y en 700 | el rótulo de una pestaña |
 | `enfasis` | `SpanStyle` en 700 | el énfasis dentro de una frase (`withStyle(Movi.textos.enfasis)`) |
 
-**iOS sigue con la letra del sistema** (`laPlataformaTraeLasFuentes = false` en `LetraPropia.ios.kt`),
-con los mismos tamaños, pesos y cifras tabulares. Prenderlo pide abrir la app en un iPhone o el
-simulador y ver que `Font(recurso)` encuentra el archivo en el framework estático; ver §41.
+**iOS también va en Figtree desde la vuelta 115.** El framework es estático y no lleva las fuentes:
+la fase «Copiar las fuentes de Movi» del proyecto de Xcode las pone en
+`iosApp.app/compose-resources/…`, donde Compose las busca, y `laPlataformaTraeLasFuentes` comprueba
+al abrir que estén las cinco (si faltara una, la letra del sistema con los mismos tamaños, pesos y
+cifras tabulares, y un fallo atrapado en el reporte; ver `LetraPropia.ios.kt`).
 
 ## 6. Los componentes (`ui/components/ds/`)
 
@@ -1864,6 +1866,7 @@ y los componentes de `ds/`. La navegación de 4 pestañas y las 8 acciones de Ho
   enlaza, pero el `ComposeApp.framework` no los lleva adentro y el proyecto de Xcode no los copia al
   paquete de la app. Sin ese paso (y sin simulador en esta vuelta para verlo), iOS sigue con la letra
   del sistema (`laPlataformaTraeLasFuentes = false`): mismos tamaños, pesos y cifras tabulares.
+  (La vuelta 115 sumó ese paso: ver §5.)
 - **Lo que queda para las vueltas siguientes**: el héroe de Hoy todavía no es una tarjeta (cuando lo
   sea, `Superficie(destacada = true)`), la franja amarilla y los botones `marcaSuave` del encabezado,
   las 4 pestañas y las 8 acciones (vuelta 30).

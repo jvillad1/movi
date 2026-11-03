@@ -128,13 +128,28 @@ const val DETALLE_CREAR_OTRO: String =
     "El código de ahora deja de servir. Después abre el atajo y cambia el código de la acción «Texto» por el " +
         "nuevo (en el de Apple Pay, el de «Encabezados»)."
 
+/**
+ * Vuelta 115 · Safari no abre el atajo solo (verificado en dos iPhone con iOS 27): después de «Descargar»
+ * hay que abrir el archivo desde las descargas. Va antes de [AL_AGREGAR_EL_ATAJO].
+ */
+const val ABRIR_LO_DESCARGADO: String =
+    "Safari solo lo descarga: toca el ícono a la izquierda de la barra de direcciones → Descargas → " +
+        "«$NOMBRE_DEL_ATAJO_DE_MENSAJES». Si no lo ves, está en la app Archivos, en Descargas (dentro de " +
+        "«En mi iPhone» o «iCloud Drive»)."
+
 /** Vuelta 114 · lo que dice el paso 2 al agregar el atajo: dónde pegar el código. */
 const val AL_AGREGAR_EL_ATAJO: String =
     "Al agregarlo, Atajos muestra «Configurar este atajo» y te pide el código: pégalo y toca «Agregar atajo»."
 
-/** Vuelta 114 · el camino que sí funcionó en el iPhone de Caro cuando «Agregar atajo» no respondió. */
+/**
+ * Vuelta 114 · el camino que sí funcionó en el iPhone de Caro cuando «Agregar atajo» no respondió.
+ * Vuelta 115 (verificado en ese iPhone con iOS 27 y el atajo de producción): con el código pegado,
+ * «Omitir configuración» agrega el atajo y **conserva** el código (la acción «Texto» queda con él), así
+ * que no hay que pegarlo otra vez; revisar la acción «Texto» queda como segunda opción.
+ */
 const val PLAN_B_DEL_CODIGO: String =
-    "Si «Agregar atajo» no responde, toca «Omitir configuración» y pega el código en la acción «Texto» del atajo."
+    "Pega tu código. Si «Agregar atajo» no responde, toca «Omitir configuración»: el atajo se agrega con el " +
+        "código que pegaste. Si después no avisa, abre el atajo y revisa que el código esté en la acción «Texto»."
 
 /** Vuelta 114 · el código quedó a la vista en fotos: al cambiarlo, hay que ponerlo en el atajo. */
 const val CAMBIAR_EL_CODIGO_DEL_ATAJO: String =
@@ -212,6 +227,36 @@ fun pasosDeLaAutomatizacionDeMensajes(palabras: List<String>, variante: Variante
         VarianteDeLaAutomatizacion.ANTES_DE_IOS_17 -> listOf(ANTES_DE_IOS_17)
     }
 }
+
+/**
+ * Vuelta 115 · **la alternativa a una tarjeta por banco** (pedido del dueño, que ratificó la decisión de
+ * privacidad): tres condiciones, con «$», «COP» y «USD». Las tres porque Bancolombia escribe así sus montos
+ * (`$132.347,00`, y `COP249.000,00` / `USD20,00` en las compras con tarjeta de crédito, ver `SmsRoutes.kt`):
+ * con solo «$» se perdían esas compras. La recomendada sigue siendo una por banco con las palabras sugeridas;
+ * esta va debajo de los pasos, como opción. El server no cambia: lo que no empieza por un banco y no trae
+ * monto se descarta sin guardarse (`seGuardaElSmsDelAtajo`; `atajos_descartados` solo cuenta por día y
+ * motivo). `null` antes de iOS 17.
+ */
+fun condicionesDelMonto(variante: VarianteDeLaAutomatizacion): Pair<String, String>? {
+    val (titulo, tres, comoSeUnen) = when (variante) {
+        VarianteDeLaAutomatizacion.IOS_27_O_MAS -> Triple(
+            "Todos tus bancos con tres tarjetas",
+            "tres tarjetas",
+            " Cada una es otra tarjeta «Mensaje contiene» (quedan unidas por «o»), no «+ Agregar filtro».",
+        )
+        VarianteDeLaAutomatizacion.IOS_17_A_26 -> Triple(
+            "Todos tus bancos con tres automatizaciones",
+            "tres automatizaciones",
+            " Cada una con «El mensaje contiene».",
+        )
+        VarianteDeLaAutomatizacion.ANTES_DE_IOS_17 -> return null
+    }
+    return titulo to "Más simple: $tres, con «\$», «COP» y «USD». Atrapan los avisos de todos tus bancos, porque " +
+        "todos traen el monto. Los mensajes personales con un monto también pasan por Movi, que los descarta sin " +
+        "guardarlos." + comoSeUnen
+}
+
+const val TAG_CONDICIONES_DEL_MONTO: String = "automatizacion-condiciones-del-monto"
 
 /** El último paso: la palabra hay que comprobarla con un SMS de verdad, porque cada banco firma distinto. */
 const val PROBAR_CON_UN_SMS_REAL: String =
@@ -435,6 +480,8 @@ fun DesdeTuIphone(
             PasoDelAtajo(2, "Agrega los atajos") {
                 val codigo = (estado as? EstadoDelCodigo.Listo)?.codigo
                 val url = apiBaseUrl.trimEnd('/') + RUTA_DE_LA_CAPTURA_POR_ATAJO
+                Text(ABRIR_LO_DESCARGADO, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                Spacer(Modifier.height(Espacio.xxs))
                 Text(AL_AGREGAR_EL_ATAJO, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                 Spacer(Modifier.height(Espacio.xxs))
                 Text(PLAN_B_DEL_CODIGO, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
@@ -574,6 +621,13 @@ private fun VarianteDeLaAutomatizacionDeMensajes(palabras: List<String>, variant
                     )
                 }
                 RecetaDelAtajo(pasosDeLaAutomatizacionDeMensajes(palabras, variante))
+                condicionesDelMonto(variante)?.let { (titulo, alternativa) ->
+                    Spacer(Modifier.height(Espacio.xs))
+                    Column(modifier = Modifier.testTag(TAG_CONDICIONES_DEL_MONTO)) {
+                        Text(titulo, style = Movi.textos.apoyo, color = Movi.colores.texto)
+                        Text(alternativa, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                    }
+                }
             }
         }
     }
