@@ -354,6 +354,7 @@ fun CreateRecurringRuleSheet(
         com.jvillada.movi.data.ClaveDeLectura.Perfil, reintento = 0, activa = !isEditMode,
     ) { Repositories.wallets.getUserProfile() }
     val ajustesDelDueno = ajustesParaPreguntarSiYaPagaste(perfilDelDueno.valor, perfilDelDueno.terminada)
+    val conElPeriodoDeRespaldo = esElPeriodoDeRespaldo(perfilDelDueno.valor, perfilDelDueno.terminada)
     val desdeUnMovimiento = prefill?.activeFrom != null || prefill?.eventId != null
     val preguntaDelPeriodoVisible = !isEditMode && !seGuardaComoSuscripcion && !esAbono &&
         ajustesDelDueno != null &&
@@ -757,7 +758,7 @@ fun CreateRecurringRuleSheet(
                 Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
                     Fila(
                         titulo = YA_PAGASTE_EL_DE_ESTE_PERIODO,
-                        subtitulo = if (yaPagoElDeEstePeriodo) LO_ESPERA_DESDE_EL_PROXIMO_PERIODO else LO_ESPERA_EN_ESTE_PERIODO,
+                        subtitulo = subtituloDeYaPagaste(yaPagoElDeEstePeriodo, conElPeriodoDeRespaldo),
                         lineasDelSubtitulo = 2,
                         final = { Casilla(marcada = yaPagoElDeEstePeriodo) },
                         onClick = if (!saving) ({ yaPagoElDeEstePeriodo = !yaPagoElDeEstePeriodo }) else null,

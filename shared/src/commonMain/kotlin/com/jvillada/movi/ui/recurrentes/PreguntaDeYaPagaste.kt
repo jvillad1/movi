@@ -58,6 +58,29 @@ fun ajustesParaPreguntarSiYaPagaste(perfil: UserProfile?, terminoLaLectura: Bool
     perfil?.ajustesDelPeriodo() ?: if (terminoLaLectura) PeriodSettings() else null
 
 /**
+ * Revisión de la 125 · **¿los ajustes de [ajustesParaPreguntarSiYaPagaste] son el respaldo?** (la lectura
+ * terminó sin perfil). Con el respaldo Movi **no sabe** cuál es el período del dueño, así que pregunta pero no
+ * afirma nada que dependa de él: ni «Movi lo espera en este período» cuando no pregunta (con corte 25, el
+ * 28-oct puede haber vencido aunque el 28-nov no), ni «desde el próximo período» con «Sí» (el server solo lo
+ * aplica si de verdad ya venció: ver [subtituloDeYaPagaste]). Pura.
+ */
+fun esElPeriodoDeRespaldo(perfil: UserProfile?, terminoLaLectura: Boolean): Boolean = perfil == null && terminoLaLectura
+
+/**
+ * El subtítulo de la pregunta. Con «No», la de este período existe pase lo que pase: «Movi lo espera en este
+ * período». Con «Sí», «desde el próximo período»; con el período de respaldo, condicionado, porque el server
+ * revalida con el período de verdad y si todavía no venció lo ignora. Pura.
+ */
+fun subtituloDeYaPagaste(marcada: Boolean, conElPeriodoDeRespaldo: Boolean): String = when {
+    !marcada -> LO_ESPERA_EN_ESTE_PERIODO
+    conElPeriodoDeRespaldo -> SI_YA_VENCIO_DESDE_EL_PROXIMO_PERIODO
+    else -> LO_ESPERA_DESDE_EL_PROXIMO_PERIODO
+}
+
+/** El subtítulo de «Sí» con el período de respaldo (ver [subtituloDeYaPagaste]). */
+const val SI_YA_VENCIO_DESDE_EL_PROXIMO_PERIODO: String = "Si ya venció, desde el próximo período"
+
+/**
  * El renglón de la pregunta: el título y, debajo, qué hace Movi con la respuesta; la [Casilla] al final
  * dice el estado. **El toque es el renglón entero** (con el estado de casilla para el lector). [tag] va en
  * el renglón.
@@ -69,6 +92,8 @@ fun PreguntaDeYaPagaste(
     tag: String,
     modifier: Modifier = Modifier,
     habilitada: Boolean = true,
+    /** Revisión de la 125: se pregunta con el período de respaldo (ver [esElPeriodoDeRespaldo]). */
+    conElPeriodoDeRespaldo: Boolean = false,
 ) {
     RenglonDeYaPagaste(
         modifier = modifier
@@ -82,7 +107,7 @@ fun PreguntaDeYaPagaste(
             )
             .testTag(tag),
     ) {
-        Textos(YA_PAGASTE_EL_DE_ESTE_PERIODO, if (marcada) LO_ESPERA_DESDE_EL_PROXIMO_PERIODO else LO_ESPERA_EN_ESTE_PERIODO)
+        Textos(YA_PAGASTE_EL_DE_ESTE_PERIODO, subtituloDeYaPagaste(marcada, conElPeriodoDeRespaldo))
         Spacer(Modifier.width(Espacio.xs))
         Casilla(marcada = marcada)
     }

@@ -371,6 +371,7 @@ fun PrimerUsoScreen(
                 cuenta = ::cuentaPorDefecto,
                 ajustes = { ajustesParaLaPreguntaDeLaGuia(ajustesGuardados, perfil, seLeyoElPerfil) },
                 hoy = { hoy ?: hoyEnAppZone() },
+                respaldo = { laGuiaPreguntaConElPeriodoDeRespaldo(ajustesGuardados, perfil, seLeyoElPerfil) },
             ) { regla ->
                 recurrentes += regla
                 borradoresDeRecurrentes.remove(clave)
@@ -1607,6 +1608,7 @@ private fun FormularioDeRecurrente(borrador: BorradorDeRecurrente) {
                 onCambiar = { borrador.yaPago = it },
                 tag = TAG_YA_PAGASTE_EN_LA_GUIA,
                 habilitada = !borrador.guardando,
+                conElPeriodoDeRespaldo = borrador.conElPeriodoDeRespaldo,
             )
         }
         borrador.error?.let {

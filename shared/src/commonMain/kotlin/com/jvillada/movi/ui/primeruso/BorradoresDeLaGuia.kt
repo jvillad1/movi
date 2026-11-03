@@ -19,6 +19,7 @@ import com.jvillada.movi.ui.accounts.crearCuentaConSaldo
 import com.jvillada.movi.ui.components.toUserMessage
 import com.jvillada.movi.ui.fecha.hoyEnAppZone
 import com.jvillada.movi.ui.recurrentes.ajustesParaPreguntarSiYaPagaste
+import com.jvillada.movi.ui.recurrentes.esElPeriodoDeRespaldo
 import kotlinx.datetime.LocalDate
 
 /*
@@ -160,9 +161,10 @@ class BorradorDeTarjeta(private val alCrear: (String) -> Unit) : Borrador {
  * el vencimiento de este período del día elegido ya pasó o es hoy ([sePreguntaSiYaPagasteElDeEstePeriodo],
  * la misma regla pura), el formulario lo pregunta con «Sí» por defecto, y el `POST` lleva
  * [RecurringRule.yaPagoElDeEstePeriodo] (el server lo revalida). [ajustes] son los del período que el
- * dueño acaba de elegir en la guía, o los de su perfil ([ajustesParaLaPreguntaDeLaGuia]); sin ellos no se
- * pregunta, como la hoja sin el perfil leído. La respuesta vive en el borrador: sobrevive a «Atrás» y a
- * cerrar y abrir la fila, como el monto y el día.
+ * dueño acaba de elegir en la guía, o los de su perfil ([ajustesParaLaPreguntaDeLaGuia]); si la lectura del
+ * perfil falló, el mes de calendario (vuelta 125, como la hoja y la tarjeta de Movi AI), y entonces
+ * [conElPeriodoDeRespaldo] condiciona el subtítulo de «Sí». Solo mientras se lee el perfil no se pregunta.
+ * La respuesta vive en el borrador: sobrevive a «Atrás» y a cerrar y abrir la fila, como el monto y el día.
  */
 @Stable
 class BorradorDeRecurrente(
@@ -171,8 +173,12 @@ class BorradorDeRecurrente(
     private val cuenta: () -> String?,
     private val ajustes: () -> PeriodSettings? = { null },
     private val hoy: () -> LocalDate = { hoyEnAppZone() },
+    /** Revisión de la 125: si [ajustes] son el período de respaldo ([laGuiaPreguntaConElPeriodoDeRespaldo]). */
+    private val respaldo: () -> Boolean = { false },
     private val alCrear: (RecurringRule) -> Unit,
 ) : Borrador {
+    /** Ver [esElPeriodoDeRespaldo]: la pregunta sale, pero sin afirmar «desde el próximo período». */
+    val conElPeriodoDeRespaldo: Boolean get() = respaldo()
     var nombre by mutableStateOf(nombreFijo ?: "")
     var monto by mutableStateOf<Long?>(null)
     private var diaElegido by mutableStateOf("")
@@ -261,6 +267,13 @@ fun ajustesParaLaPreguntaDeLaGuia(guardados: PeriodSettings?, perfil: UserProfil
     val delPerfil = perfil?.ajustesDelPeriodo()
     return if (delPerfil == null) guardados else guardados.copy(iniciosPropios = delPerfil.iniciosPropios)
 }
+
+/**
+ * Revisión de la 125 · **¿[ajustesParaLaPreguntaDeLaGuia] dio el período de respaldo?** Solo sin período
+ * guardado en la guía y con la lectura del perfil terminada sin él ([esElPeriodoDeRespaldo]). Pura.
+ */
+fun laGuiaPreguntaConElPeriodoDeRespaldo(guardados: PeriodSettings?, perfil: UserProfile?, seLeyoElPerfil: Boolean): Boolean =
+    guardados == null && esElPeriodoDeRespaldo(perfil, seLeyoElPerfil)
 
 /** «el arriendo», «la suscripción»; un pago escrito a mano, «el pago». Pura. */
 fun articuloDelPago(nombreFijo: String?): String = when (nombreFijo) {

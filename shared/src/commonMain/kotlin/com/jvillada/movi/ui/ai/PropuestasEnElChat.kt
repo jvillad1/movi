@@ -42,6 +42,7 @@ import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.TipoDeAccion
 import com.jvillada.movi.shared.model.sePreguntaSiYaPagasteElDeEstePeriodo
 import com.jvillada.movi.ui.recurrentes.ajustesParaPreguntarSiYaPagaste
+import com.jvillada.movi.ui.recurrentes.esElPeriodoDeRespaldo
 import com.jvillada.movi.data.ClaveDeLectura
 import com.jvillada.movi.data.rememberLectura
 import com.jvillada.movi.ui.fecha.hoyEnAppZone
@@ -151,9 +152,11 @@ internal const val TAG_LO_ESPERA_EN_LA_PROPUESTA: String = "propuesta-lo-espera-
  * - [LEYENDO]: el perfil no llegó (ni falló): un esqueleto, y «Hacerlo» apagado;
  * - [PREGUNTA]: la pregunta, «Sí» por defecto;
  * - [EN_ESTE_PERIODO]: su fecha de este período todavía no llega: «Movi lo espera en este período»;
- * - [NINGUNO]: no es un gasto recurrente escrito (o, para quien la llame sin ajustes y sin estar leyendo,
- *   no se sabe el período; la tarjeta nunca llega ahí: si el perfil falla usa el mes de calendario, ver
- *   [ajustesParaPreguntarSiYaPagaste]).
+ * - [NINGUNO]: no es un gasto recurrente escrito; o no se sabe el período (sin ajustes y sin estar
+ *   leyendo); o, **con el período de respaldo** ([conElPeriodoDeRespaldo], la lectura del perfil falló), la
+ *   fecha no venció en el mes de calendario: ahí no se puede afirmar «Movi lo espera en este período» (con
+ *   corte 25 el 28-oct pudo haber vencido), así que no se dice nada (revisión de la 125). Con el respaldo
+ *   y la fecha vencida, sí se pregunta ([PREGUNTA]).
  */
 internal enum class LugarDeLaPregunta { NINGUNO, LEYENDO, PREGUNTA, EN_ESTE_PERIODO }
 
@@ -163,13 +166,18 @@ internal fun lugarDeLaPregunta(
     hoy: LocalDate,
     ajustes: PeriodSettings?,
     leyendoElPerfil: Boolean,
+    conElPeriodoDeRespaldo: Boolean = false,
 ): LugarDeLaPregunta {
     if (propuesta.tipo != TipoDeAccion.CREAR_RECURRENTE) return LugarDeLaPregunta.NINGUNO
     val regla = propuesta.recurrente ?: return LugarDeLaPregunta.NINGUNO
     val desdeUnMovimiento = regla.activeFrom != null || regla.eventoDeOrigen != null
     if (regla.type != TransactionType.EXPENSE || desdeUnMovimiento || regla.dayOfMonth !in 1..31) return LugarDeLaPregunta.NINGUNO
     if (ajustes == null) return if (leyendoElPerfil) LugarDeLaPregunta.LEYENDO else LugarDeLaPregunta.NINGUNO
-    return if (laPropuestaPreguntaSiYaPago(propuesta, hoy, ajustes)) LugarDeLaPregunta.PREGUNTA else LugarDeLaPregunta.EN_ESTE_PERIODO
+    return when {
+        laPropuestaPreguntaSiYaPago(propuesta, hoy, ajustes) -> LugarDeLaPregunta.PREGUNTA
+        conElPeriodoDeRespaldo -> LugarDeLaPregunta.NINGUNO
+        else -> LugarDeLaPregunta.EN_ESTE_PERIODO
+    }
 }
 
 /** Lo que se le dice al dueño si la acción no se pudo hacer. */
@@ -209,11 +217,13 @@ internal fun PropuestaDelAsistente(
     val perfil = rememberLectura(ClaveDeLectura.Perfil, reintento = 0, activa = esUnRecurrentePorHacer) {
         repo().getUserProfile()
     }
+    val conElPeriodoDeRespaldo = esElPeriodoDeRespaldo(perfil.valor, perfil.terminada)
     val lugar = if (!esUnRecurrentePorHacer) LugarDeLaPregunta.NINGUNO else lugarDeLaPregunta(
         propuesta,
         hoy ?: hoyEnAppZone(),
         ajustesParaPreguntarSiYaPagaste(perfil.valor, perfil.terminada),
         leyendoElPerfil = perfil.valor == null && !perfil.terminada,
+        conElPeriodoDeRespaldo = conElPeriodoDeRespaldo,
     )
     val preguntaSiYaPago = lugar == LugarDeLaPregunta.PREGUNTA
     var yaPago by remember(propuesta.id) { mutableStateOf(true) }
@@ -250,6 +260,7 @@ internal fun PropuestaDelAsistente(
                         onCambiar = { yaPago = it },
                         tag = TAG_YA_PAGASTE_EN_LA_PROPUESTA,
                         habilitada = !trabajando,
+                        conElPeriodoDeRespaldo = conElPeriodoDeRespaldo,
                     )
                     LugarDeLaPregunta.LEYENDO -> EsqueletoDeYaPagaste(TAG_ESPERANDO_EL_PERFIL_EN_LA_PROPUESTA)
                     LugarDeLaPregunta.EN_ESTE_PERIODO -> RenglonDeLoQueEsperaMovi(TAG_LO_ESPERA_EN_LA_PROPUESTA)

@@ -208,6 +208,9 @@ class YaPagasteElDeEstePeriodoTest {
         perfilFalla = true
         montar(dia = 1)
         esperarLaPregunta()
+        // Revisión de la 125: con el respaldo, «Sí» no afirma «desde el próximo período».
+        assertTrue(composeRule.onAllNodesWithText(SI_YA_VENCIO_DESDE_EL_PROXIMO_PERIODO).fetchSemanticsNodes().isNotEmpty())
+        assertTrue(composeRule.onAllNodesWithText(LO_ESPERA_DESDE_EL_PROXIMO_PERIODO).fetchSemanticsNodes().isEmpty())
         escribirMonto()
         crear()
         assertEquals(true, assertNotNull(creada).yaPagoElDeEstePeriodo)

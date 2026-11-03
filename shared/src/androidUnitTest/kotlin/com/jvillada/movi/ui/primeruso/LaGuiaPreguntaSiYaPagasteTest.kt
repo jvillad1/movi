@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.primeruso
 
+import com.jvillada.movi.ui.recurrentes.LO_ESPERA_DESDE_EL_PROXIMO_PERIODO
+import com.jvillada.movi.ui.recurrentes.SI_YA_VENCIO_DESDE_EL_PROXIMO_PERIODO
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
@@ -264,6 +266,9 @@ class LaGuiaPreguntaSiYaPagasteTest {
         val repo = montar(perfilFalla = true)
         escribirElArriendo(dia = 1)
         assertTrue(hayPregunta())
+        // Revisión de la 125: con el respaldo, «Sí» no afirma «desde el próximo período».
+        assertTrue(composeRule.onAllNodesWithText(SI_YA_VENCIO_DESDE_EL_PROXIMO_PERIODO).fetchSemanticsNodes().isNotEmpty())
+        assertTrue(composeRule.onAllNodesWithText(LO_ESPERA_DESDE_EL_PROXIMO_PERIODO).fetchSemanticsNodes().isEmpty())
         assertEquals(true, guardarYSeguir(repo).yaPagoElDeEstePeriodo)
     }
 
@@ -287,6 +292,11 @@ class LaGuiaPreguntaSiYaPagasteTest {
         assertEquals(PeriodSettings(), ajustesParaLaPreguntaDeLaGuia(null, null, seLeyoElPerfil = true))
         // Con un período guardado en la guía, ese manda aunque el perfil no esté.
         assertEquals(guardados, ajustesParaLaPreguntaDeLaGuia(guardados, null, seLeyoElPerfil = true))
+        // Revisión de la 125: cuándo esos ajustes son el respaldo.
+        assertTrue(laGuiaPreguntaConElPeriodoDeRespaldo(null, null, seLeyoElPerfil = true))
+        assertFalse(laGuiaPreguntaConElPeriodoDeRespaldo(null, null, seLeyoElPerfil = false))
+        assertFalse(laGuiaPreguntaConElPeriodoDeRespaldo(guardados, null, seLeyoElPerfil = true))
+        assertFalse(laGuiaPreguntaConElPeriodoDeRespaldo(null, perfilNuevo, seLeyoElPerfil = true))
     }
 
     // ── El borrador la recuerda ────────────────────────────────────────────
