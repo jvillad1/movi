@@ -128,7 +128,7 @@ contraseña), sin entrar con Google ni con otra red.
 
 ## 4. Qué falta técnicamente para subir iOS
 
-Lo que hay hoy en `iosApp/` (revisado el 2-nov-2026, vuelta 112):
+Lo que hay hoy en `iosApp/` (revisado el 2-nov-2026, vueltas 112 y 115):
 
 | Pieza | Estado |
 | --- | --- |
@@ -143,7 +143,8 @@ Lo que hay hoy en `iosApp/` (revisado el 2-nov-2026, vuelta 112):
 | Cifrado | ✓ `ITSAppUsesNonExemptEncryption = NO`: el cliente solo usa HTTPS del sistema (`NSURLSession`, por Ktor Darwin); no enlaza CommonCrypto ni Security. El cifrado de documentos (AES) vive en el server |
 | Dispositivos | ✓ Solo iPhone (`TARGETED_DEVICE_FAMILY = 1`), **en vertical** (`UIInterfaceOrientationPortrait`), iOS 16.0 o más. Sin iPad no hacen falta capturas de iPad, **pero la revisión igual puede probarla en un iPad** en modo compatibilidad (guía 2.4.1: una app de iPhone tiene que funcionar ahí, en una ventana de iPhone); por eso la hoja de compartir ya cuida el iPad (`HojaDeCompartir.ios.kt`) |
 | Framework | ✓ Por configuración (`MOVI_XCFRAMEWORK_DIR`): Debug toma `shared/build/XCFrameworks/debug`, Release `shared/build/XCFrameworks/release` |
-| Archivar | ✓ `scripts/armar-para-app-store.sh`: arma el XCFramework de release y corre `xcodebuild archive` para «Any iOS Device» con el equipo de `MOVI_APPLE_TEAM_ID` (sin la variable, no hace nada y lo dice) |
+| Letra | ✓ **Figtree, como en Android y la web** (vuelta 115): las capturas de la App Store salen con la letra de Movi. El framework es estático y no lleva las fuentes; Gradle las deja junto al XCFramework (`XCFrameworks/<config>/compose-resources`, tarea `:shared:recursosDeComposeParaIphone<Debug\|Release>`, que corre sola después de armar el XCFramework) y la fase «Copiar las fuentes de Movi» del proyecto las copia a `iosApp.app/compose-resources/composeResources/com.jvillada.movi.resources/font/`, donde Compose las busca. Sin ellas el build de Xcode falla; si igual faltara una, la app abre con la letra del sistema y lo anota en sus fallos. El script de archivar comprueba las cinco dentro del `.xcarchive`. Lo vigila `LasFuentesDelIphoneTest` |
+| Archivar | ✓ `scripts/armar-para-app-store.sh`: arma el XCFramework de release (con sus fuentes) y corre `xcodebuild archive` para «Any iOS Device» con el equipo de `MOVI_APPLE_TEAM_ID` (sin la variable, no hace nada y lo dice) |
 
 **Lo que falta (todo es del dueño):**
 

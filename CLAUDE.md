@@ -119,6 +119,11 @@ tiendas (fichas, Seguridad de los datos, prueba cerrada, la excepción de SMS, i
 # Step 1 — build the Kotlin framework (required before every Xcode build)
 ./gradlew :shared:assembleComposeAppDebugXCFramework
 # Output: shared/build/XCFrameworks/debug/ComposeApp.xcframework
+#   and shared/build/XCFrameworks/debug/compose-resources (the Figtree fonts; vuelta 115 — the
+#   XCFramework task is finalizedBy :shared:recursosDeComposeParaIphoneDebug)
+# If you build the framework by hand (e.g. :shared:linkDebugFrameworkIosX64 +
+# `xcodebuild -create-xcframework` on this Intel Mac), also run
+# ./gradlew :shared:recursosDeComposeParaIphoneDebug — the Xcode build fails without it.
 
 # Step 2 — build the iOS app for simulator
 xcodebuild \
@@ -337,7 +342,8 @@ All dependency versions are centralized in `gradle/libs.versions.toml`. Add new 
 - **New REST endpoints** go in `server/src/main/kotlin/.../routes/` as extension functions on `Route`, then registered in `plugins/Routing.kt`.
 - **New shared models** go in `core/src/commonMain/.../shared/model/` and must be annotated with `@Serializable`.
 - **Platform-specific Ktor engine wiring** belongs in each `:shared` source set's dependency block, not in `commonMain`.
-- The iOS Xcode project (`iosApp/iosApp.xcodeproj`) references the `ComposeApp` XCFramework at `shared/build/XCFrameworks/debug/ComposeApp.xcframework`. Always run `./gradlew :shared:assembleComposeAppDebugXCFramework` before building the iOS app — the Xcode build will fail if the framework is missing.
+- The iOS Xcode project (`iosApp/iosApp.xcodeproj`) references the `ComposeApp` XCFramework at `$(MOVI_XCFRAMEWORK_DIR)/ComposeApp.xcframework` (`shared/build/XCFrameworks/debug` in Debug, `…/release` in Release). Always run `./gradlew :shared:assembleComposeAppDebugXCFramework` before building the iOS app — the Xcode build will fail if the framework is missing.
+- **Figtree en el iPhone** (vuelta 115, `theme/LetraPropia.ios.kt`): el framework es **estático** y no lleva los recursos de Compose, que Compose 1.8 busca en `NSBundle.mainBundle.resourcePath + "/compose-resources"` (`ResourceReader.ios.kt`) — en la app, `iosApp.app/compose-resources/composeResources/com.jvillada.movi.resources/font/figtree_*.ttf`. El plugin solo los copia con `embedAndSignAppleFrameworkForXcode`/CocoaPods, así que `:shared:recursosDeComposeParaIphone<Debug|Release>` (un `Sync` de `assembleIosArm64MainResources`, `finalizedBy` de `assembleComposeApp…XCFramework`) los deja en `XCFrameworks/<config>/compose-resources` y la fase «Copiar las fuentes de Movi» del proyecto (después de Resources, `alwaysOutOfDate`, `ENABLE_USER_SCRIPT_SANDBOXING = NO`) los copia de `$(MOVI_XCFRAMEWORK_DIR)/compose-resources` a `$(BUILT_PRODUCTS_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/compose-resources`; sin ellos el build de Xcode **falla** y dice qué correr. Red de seguridad: `laPlataformaTraeLasFuentes` en iOS pregunta antes de componer, con `Res.getUri` (la misma ruta que arma Compose), si están los cinco archivos de `ARCHIVOS_DE_FIGTREE`; si falta uno usa la letra del sistema y lo anota con `reportarAtrapado` (componente `LetraPropia`) — un `Font(recurso)` sin archivo es `MissingResourceException` y la app se caería al abrir. Lo vigila `LasFuentesDelIphoneTest`.
 - **El desembolso de un crédito es plata que ENTRÓ** (decisión del dueño): las dos patas de un par
   que sale de una cuenta LOAN llevan `DESEMBOLSO_CATEGORY` («Desembolso de crédito»), la del dinero
   suma en «Entró»/«Ingresos» y la del crédito no (la excluye el tipo de cuenta). No es reservada
