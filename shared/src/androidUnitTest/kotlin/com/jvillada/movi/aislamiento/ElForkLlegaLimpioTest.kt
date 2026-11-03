@@ -145,6 +145,10 @@ class ElForkLlegaLimpioTest {
         // Ola 5: una búsqueda reciente de otra prueba («Caro» es de la plata de quien buscó).
         com.jvillada.movi.data.BusquedasRecientesStore.almacenDePrueba = mutableMapOf()
         com.jvillada.movi.data.BusquedasRecientesStore.anotar("caro")
+        // Vuelta 120: «Por categoría» elegida y un grupo plegado en otra prueba.
+        com.jvillada.movi.data.VistaDeFacturasStore.almacenDePrueba = mutableMapOf()
+        com.jvillada.movi.data.VistaDeFacturasStore.elegir(com.jvillada.movi.data.VistaDeFacturas.POR_CATEGORIA)
+        com.jvillada.movi.data.GruposPlegadosDeFacturas.alternar("2026-10", "categoria:vivienda", porDefecto = false)
         AvisosEnHoy.sustitutoDePrueba = object : OfertaDeAvisos {
             override fun pedir() = Unit
             override fun descartar() = Unit
@@ -223,6 +227,8 @@ class ElForkLlegaLimpioTest {
         assertNotNull("La forma de Categorías no quedó guardada", FormaRecordada.delAparato.categorias("u1"))
         assertNotNull("La forma de Cuentas no quedó guardada", FormaRecordada.delAparato.cuentas("u1"))
         assertTrue("La búsqueda reciente no quedó anotada", com.jvillada.movi.data.BusquedasRecientesStore.recientes.isNotEmpty())
+        assertEquals("La vista de las facturas no quedó elegida", com.jvillada.movi.data.VistaDeFacturas.POR_CATEGORIA, com.jvillada.movi.data.VistaDeFacturasStore.vista)
+        assertEquals("El grupo no quedó plegado", 1, com.jvillada.movi.data.GruposPlegadosDeFacturas.cuantos)
         assertTrue("La guía de primer uso no quedó abierta", com.jvillada.movi.ui.primeruso.GuiaDePrimerUso.enCurso)
         assertTrue("El uso no quedó esperando subir", com.jvillada.movi.observabilidad.Uso.pendientes.isNotEmpty())
     }
@@ -279,6 +285,9 @@ class ElForkLlegaLimpioTest {
         assertFalse("«Ocultar los saldos» trae la resaca de otra prueba", SaldosOcultosStore.ocultos)
         assertTrue("Las búsquedas recientes traen la resaca de otra prueba", com.jvillada.movi.data.BusquedasRecientesStore.recientes.isEmpty())
         assertNull("El almacén de mentira de las búsquedas recientes sigue enchufado", com.jvillada.movi.data.BusquedasRecientesStore.almacenDePrueba)
+        assertEquals("La vista de las facturas trae la resaca de otra prueba", com.jvillada.movi.data.VistaDeFacturas.POR_FECHA, com.jvillada.movi.data.VistaDeFacturasStore.vista)
+        assertNull("El almacén de mentira de la vista de las facturas sigue enchufado", com.jvillada.movi.data.VistaDeFacturasStore.almacenDePrueba)
+        assertEquals("Los grupos plegados de las facturas traen resaca", 0, com.jvillada.movi.data.GruposPlegadosDeFacturas.cuantos)
         assertFalse("«Ocultar los saldos» de otra prueba sigue guardado en el aparato", SaldosOcultosStore.leerGuardado())
         assertNull("El almacén de mentira de «Ocultar los saldos» sigue enchufado", SaldosOcultosStore.almacenDePrueba)
         assertFalse("La sesión de otra prueba sigue abierta", SessionManager.loggedIn)

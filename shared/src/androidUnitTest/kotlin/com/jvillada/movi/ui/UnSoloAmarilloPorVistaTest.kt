@@ -272,6 +272,47 @@ class UnSoloAmarilloPorVistaTest {
         `en Pagos con una tarjeta sin minimo sigue habiendo un solo amarillo`()
     }
 
+    /**
+     * Vuelta 120 · **«Por categoría» no suma amarillos**: los encabezados de los grupos no son botones de
+     * marca, y «Anotar pago» sigue en amarillo solo en la factura más urgente, aunque quede en otro grupo.
+     */
+    @Test
+    fun `en Pagos por categoria sigue habiendo un solo amarillo`() {
+        com.jvillada.movi.data.VistaDeFacturasStore.almacenDePrueba = mutableMapOf()
+        com.jvillada.movi.data.VistaDeFacturasStore.elegir(com.jvillada.movi.data.VistaDeFacturas.POR_CATEGORIA)
+        val lista = listOf(
+            PagoDelPeriodo(ruleId = "r_carro", nombre = "Carro", monto = 9_000, pagado = false, diasParaVencer = -4, vence = "2026-09-06", categoria = "Transporte"),
+            PagoDelPeriodo(ruleId = "r_arr", nombre = "Arriendo", monto = 1_800_000, pagado = false, diasParaVencer = 2, vence = "2026-09-12", categoria = "Vivienda"),
+            PagoDelPeriodo(ruleId = "r_gym", nombre = "Gimnasio", monto = 139_900, pagado = false, diasParaVencer = 9, vence = "2026-09-19", categoria = "Salud"),
+            PagoDelPeriodo(
+                ruleId = "card_nu", nombre = "Pago tarjeta Tarjeta Nu", monto = 540_000, pagado = false, diasParaVencer = 5,
+                vence = "2026-09-15", montoEsSaldo = true,
+            ),
+        )
+        montar {
+            SeccionChecklistDelPeriodo(
+                checklist = lista,
+                cargando = false,
+                pudoLeer = true,
+                marcando = emptySet(),
+                onConfirmar = { _, _ -> },
+                onNoFueEste = { _, _ -> },
+                onAnotarMovimiento = {},
+                onQuitarLaMarca = {},
+                onReintentar = {},
+                onCargarMinimo = {},
+            )
+        }
+        assertEquals(4, composeRule.onAllNodesWithTag(com.jvillada.movi.ui.recurrentes.TAG_GRUPO_DE_FACTURAS, useUnmergedTree = true).fetchSemanticsNodes().size)
+        assertEquals(1, amarillos(), "un solo amarillo en Pagos por categoría")
+    }
+
+    @Test
+    @Config(qualifiers = "w1280dp-h3200dp-mdpi")
+    fun `a 1280 tambien, por categoria, un solo amarillo`() {
+        `en Pagos por categoria sigue habiendo un solo amarillo`()
+    }
+
     // ── Vuelta 82 · Actividad, Por revisar y Patrimonio ──────────────────────────────────────────
 
     private val hoyTexto = hoyEnAppZone().toString()
