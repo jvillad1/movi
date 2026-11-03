@@ -186,7 +186,31 @@ class FrecuenciaDelPagoTest {
                 TransactionType.EXPENSE, false, 25, hoy, calendario, FrecuenciaDelPago.UNA_VEZ, "2026-11-25",
             ),
         )
+        // Revisión (I3): una sola vez nunca se pregunta, aunque su fecha sea de este período y ya haya pasado:
+        // con «Sí» por defecto nacería sin su único vencimiento.
+        assertFalse(
+            sePreguntaSiYaPagasteElDeEstePeriodo(
+                TransactionType.EXPENSE, false, 10, hoy, calendario, FrecuenciaDelPago.UNA_VEZ, "2026-11-10",
+            ),
+        )
         // Mensual: lo de siempre (el día 10 de este período ya pasó).
         assertTrue(sePreguntaSiYaPagasteElDeEstePeriodo(TransactionType.EXPENSE, false, 10, hoy, calendario))
+    }
+
+    @Test
+    fun `un ingreso no mensual no marca el horizonte de la caja`() {
+        // Revisión (M5): una prima semestral del período siguiente no es «el salario».
+        fun fila(id: String, vence: String, frecuencia: FrecuenciaDelPago) = PagoDelPeriodo(
+            ruleId = id, nombre = id, monto = 3_000_000L, pagado = false, diasParaVencer = 20, vence = vence,
+            esIngreso = true, frecuencia = frecuencia,
+        )
+        val soloLaPrima = horizonteDeLaCaja("2026-11-20", "2026-11-30", listOf(fila("prima", "2026-12-05", FrecuenciaDelPago.SEMESTRAL)))!!
+        assertNull(soloLaPrima.salario)
+        assertFalse(soloLaPrima.salarioQueNoCuenta)
+        val conSalario = horizonteDeLaCaja(
+            "2026-11-20", "2026-11-30",
+            listOf(fila("prima", "2026-12-05", FrecuenciaDelPago.SEMESTRAL), fila("salario", "2026-12-15", FrecuenciaDelPago.MENSUAL)),
+        )!!
+        assertEquals("salario", conSalario.salario?.ruleId)
     }
 }

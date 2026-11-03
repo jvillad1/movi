@@ -298,6 +298,7 @@ private fun hechosDelRecurrente(r: RecurrenteParaContexto): String =
 private fun renglonDelRecurrente(r: RecurrenteParaContexto): String {
     val que = if (r.esIngreso) "entra" else "sale"
     val estado = when {
+        r.vencidaDeAntes -> "VENCIÓ en un período anterior y sigue sin pagarse (no cuenta en este período)"
         !r.venceEnEstePeriodo -> "NO vence en este período"
         r.yaOcurrioEnElPeriodo -> "YA ocurrió en este período"
         else -> "TODAVÍA no ocurrió en este período"

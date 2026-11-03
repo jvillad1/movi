@@ -111,6 +111,10 @@ fun sePreguntaSiYaPagasteElDeEstePeriodo(
     primerVencimiento: String? = null,
 ): Boolean {
     if (tipo != TransactionType.EXPENSE || desdeUnMovimiento || dia !in 1..31) return false
+    // Revisión de la 126 (I3): un pago de una sola vez no es «el de este período»: está pendiente o no. Con
+    // «Sí» por defecto la regla nacería sin su único vencimiento (quedaría antes del piso) y se perdería.
+    // Ni la hoja lo pregunta ni el server lo acepta (usa esta misma función).
+    if (frecuencia == FrecuenciaDelPago.UNA_VEZ) return false
     if (frecuencia == null || frecuencia == FrecuenciaDelPago.MENSUAL) return laCuotaDeEstePeriodoYaVencio(dia, hoy, ajustes)
     val regla = RecurringRule(
         id = "", name = "", category = "", amount = 0L, dayOfMonth = dia, type = tipo,

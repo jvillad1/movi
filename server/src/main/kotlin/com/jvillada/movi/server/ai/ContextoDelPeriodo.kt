@@ -105,6 +105,11 @@ internal data class RecurrenteParaContexto(
      * entra a «lo que todavía no ocurrió». Una mensual, siempre `true`.
      */
     val venceEnEstePeriodo: Boolean = true,
+    /**
+     * Vuelta 126 (revisión) · una de una sola vez que venció en un período anterior y sigue sin pagarse: se
+     * debe, pero no es de este período (no entra al total de lo que falta acá).
+     */
+    val vencidaDeAntes: Boolean = false,
 ) {
     /** Lo que todavía falta de este período: un gasto que vence acá, sin ocurrir, que no es un abono. */
     val pendienteEnEstePeriodo: Boolean get() = !esIngreso && !yaOcurrioEnElPeriodo && !esAbono && venceEnEstePeriodo
@@ -420,11 +425,14 @@ internal suspend fun contextoDelPeriodoDe(uid: String): ContextoDelPeriodo {
             // Movi AI no lo cuenta. Lo pagado y lo vencido antes de pausar sí quedan, como en Pagos.
             val enPausa = enJuego?.let { regla.pausadaParaElVencimiento(it.toString()) } ?: regla.estaPausadaEl(hoy.toString())
             if (!yaOcurrio && enPausa) return@mapNotNull null
-            // Vuelta 126 · una no mensual: vence en este período solo si su ocurrencia por preguntar cae acá
-            // (una de una sola vez ya vencida y sin pagar también: sigue debiéndose). Pagada en otro período, o
-            // sin vencimiento en este, no es de este período.
+            // Vuelta 126 · una no mensual vence en este período solo si su ocurrencia cae acá y la regla ya
+            // corría ese día (el mismo piso que la app: con «¿Ya pagaste?» en sí, la de este período no existe).
+            // Una de una sola vez vencida en un período anterior y sin pagar no es de este período: se dice
+            // aparte ([RecurrenteParaContexto.vencidaDeAntes]) y no entra al total de lo que falta.
             val diasDeEste = com.jvillada.movi.server.reminders.diasDelPeriodo(hoy, ajustes.mesDeReferencia())
-            val venceAca = regla.esMensual || (enJuego != null && (enJuego in diasDeEste || (!yaOcurrio && enJuego.isBefore(diasDeEste.start))))
+            val activaEnSuFecha = enJuego != null && com.jvillada.movi.server.reminders.ruleIsActiveOn(regla, enJuego, ajustes)
+            val venceAca = regla.esMensual || (activaEnSuFecha && enJuego!! in diasDeEste)
+            val vencidaDeAntes = !regla.esMensual && activaEnSuFecha && !yaOcurrio && enJuego!!.isBefore(diasDeEste.start)
             val proximo = if (regla.esMensual) null else {
                 val sellados = selladasPorRegla[regla.id].orEmpty()
                 if (com.jvillada.movi.server.reminders.unaSolaVezYaNoDebe(regla, sellados, ajustes)) null
@@ -441,6 +449,7 @@ internal suspend fun contextoDelPeriodoDe(uid: String): ContextoDelPeriodo {
                 abonoATarjeta = regla.esAbonoADeuda && regla.haciaDeuda in tarjetasDelDueno,
                 cadencia = com.jvillada.movi.shared.model.cadenciaDelPago(regla, proximo),
                 venceEnEstePeriodo = venceAca,
+                vencidaDeAntes = vencidaDeAntes,
             )
         }
 
@@ -575,6 +584,7 @@ internal fun ContextoDelPeriodo.render(): String = buildString {
         recurrentes.sortedBy { it.dia }.forEach { r ->
             val que = if (r.esIngreso) "entra" else "sale"
             val estado = when {
+                r.vencidaDeAntes -> "VENCIÓ en un período anterior y sigue sin pagarse (no cuenta en este período)"
                 !r.venceEnEstePeriodo -> "NO vence en este período"
                 r.yaOcurrioEnElPeriodo -> "YA ocurrió en este período"
                 else -> "TODAVÍA no ocurrió en este período"

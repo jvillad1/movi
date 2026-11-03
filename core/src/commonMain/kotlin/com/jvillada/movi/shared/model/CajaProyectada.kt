@@ -302,7 +302,11 @@ fun horizonteDeLaCaja(
         .filter { (_, fecha) -> fecha > cierre && fecha >= desde }
         .minByOrNull { (_, fecha) -> fecha }
     if (salario != null) return HorizonteDeLaCaja(salario.second, salario.first)
-    val queNoCuenta = delSiguiente.any { it.esIngreso && !it.pagado && !it.esAbono && !esIngresoEsperado(it) }
+    // Revisión de la 126 (M5): un ingreso que no es de cada mes (una prima semestral, un ingreso de una sola
+    // vez) no es «el salario»: ni cierra el horizonte ni cuenta como un salario que no se pudo usar.
+    val queNoCuenta = delSiguiente.any {
+        it.esIngreso && !it.pagado && !it.esAbono && it.frecuencia == FrecuenciaDelPago.MENSUAL && !esIngresoEsperado(it)
+    }
     if (conElPeriodoElegido) {
         return HorizonteDeLaCaja(cierre.plus(1, DateTimeUnit.DAY), null, salarioQueNoCuenta = queNoCuenta, alPeriodoSiguiente = true)
     }
@@ -312,7 +316,9 @@ fun horizonteDeLaCaja(
 
 /** Un ingreso recurrente que todavía no llega, en pesos y con monto: el que puede cerrar el horizonte. */
 private fun esIngresoEsperado(fila: PagoDelPeriodo): Boolean =
-    fila.esIngreso && !fila.pagado && !fila.montoEsSaldo && !fila.esAbono && fila.moneda == "COP" && fila.monto > 0L
+    fila.esIngreso && !fila.pagado && !fila.montoEsSaldo && !fila.esAbono && fila.moneda == "COP" && fila.monto > 0L &&
+        // Revisión de la 126 (M5): solo un ingreso de cada mes es el salario que marca el horizonte.
+        fila.frecuencia == FrecuenciaDelPago.MENSUAL
 
 /**
  * **Las filas que la caja proyecta**: las del período, enteras (la caja de siempre), y las del

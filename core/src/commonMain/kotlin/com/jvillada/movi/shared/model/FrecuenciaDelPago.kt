@@ -160,6 +160,15 @@ fun vencimientoEnElPeriodo(rule: RecurringRule, periodo: PeriodoFinanciero, ajus
 }
 
 /**
+ * [vencimientoEnElPeriodo] del período que contiene [hoyIso], en ISO, para el server (que no ve los tipos de
+ * `kotlinx-datetime`). `null` si en ese período no vence o la fecha no se entiende. Pura.
+ */
+fun vencimientoEnElPeriodoDeLaFecha(rule: RecurringRule, hoyIso: String, ajustes: PeriodSettings): String? {
+    val periodo = periodoDeLaFecha(hoyIso.trim(), ajustes) ?: return null
+    return vencimientoEnElPeriodo(rule, periodo, ajustes)?.toString()
+}
+
+/**
  * **El primer vencimiento de [rule] en [desde] o después**, o `null` si ya no tiene ninguno (una sola vez
  * con el ancla antes de [desde]). Lo que la hoja muestra como «el próximo» al editar. Pura.
  */

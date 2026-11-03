@@ -78,6 +78,7 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.sql.update
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.temporal.ChronoUnit
@@ -141,12 +142,15 @@ class PagoCadaTantosMesesTest {
         monto: Long,
         frecuencia: FrecuenciaDelPago? = null,
         ancla: String? = null,
+        desde: String? = null,
+        tipo: String = "EXPENSE",
     ) = transaction {
         RecurringRules.insert {
             it[RecurringRules.id] = id; it[userId] = duenoId; it[name] = nombre; it[category] = nombre
-            it[amount] = monto; it[dayOfMonth] = dia; it[type] = "EXPENSE"; it[accountId] = ahorros
+            it[amount] = monto; it[dayOfMonth] = dia; it[type] = tipo; it[accountId] = ahorros
             it[RecurringRules.frecuencia] = frecuencia?.name
             it[primerVencimiento] = ancla
+            it[activeFrom] = desde
         }
     }
 
@@ -351,6 +355,155 @@ class PagoCadaTantosMesesTest {
         assertTrue(checklist(LocalDate.of(2028, 1, 25)).isEmpty())
     }
 
+    // ── Revisión: una sola vez pagada en su período (C1) ──────────────────────
+
+    /** El variable que el server resta y los fijos que resta el cliente: lo que mueve «Te quedan». */
+    private fun teQuedanSuma(dia: LocalDate, conFrecuencias: Boolean = true): Pair<Long, Long> {
+        val filas = checklist(dia)
+        val variable = transaction {
+            val dias = diasDelPeriodo(dia, calendario)
+            disponibleDelServidor(
+                uid = duenoId, hoy = dia, periodo = calendario,
+                monthStart = appDateToEpochMillis(dias.start),
+                monthEnd = appDateToEpochMillis(dias.endInclusive.plusDays(1)),
+                voidedIds = emptySet(), reglasDeCredito = emptyList(), conFrecuencias = conFrecuencias,
+            ).gastoVariablePorDia.values.sum()
+        }
+        return fijosDelPeriodo(filas) to variable
+    }
+
+    @Test
+    fun `una sola vez pagada despues de su fecha sigue en su periodo y cuenta una vez`() {
+        regla("rr_matricula", "Matrícula", 20, 2_500_000, FrecuenciaDelPago.UNA_VEZ, "2027-01-20")
+        gasto("ev_matricula", 2_500_000, LocalDate.of(2027, 1, 22), "Matrícula")
+        val hoy = LocalDate.of(2027, 1, 25)
+        val fila = checklist(hoy).single { it.ruleId == "rr_matricula" }
+        assertTrue(fila.pagado, "su fila pagada sigue en enero")
+        // Los fijos la restan y el variable no la repite: el pago cuenta exactamente una vez.
+        assertEquals(2_500_000L to 0L, teQuedanSuma(hoy))
+        // El cierre de enero (la lista del último día) y «Tus períodos» la tienen.
+        assertTrue(checklist(LocalDate.of(2027, 1, 31)).single { it.ruleId == "rr_matricula" }.pagado)
+        assertEquals(listOf("rr_matricula"), transaction {
+            pagosFijosDelPeriodo(duenoId, periodoDeHoy(hoy), hoy, calendario, inicioDeLaHistoria = LocalDate.of(2026, 1, 1))
+        }.map { it.ruleId })
+        // En febrero ya no está en ningún lado.
+        assertTrue(proximos(LocalDate.of(2027, 2, 3)).isEmpty())
+        assertTrue(checklist(LocalDate.of(2027, 2, 3)).isEmpty())
+    }
+
+    @Test
+    fun `una sola vez pagada antes de su fecha, en el mismo periodo, tambien`() {
+        regla("rr_matricula", "Matrícula", 20, 2_500_000, FrecuenciaDelPago.UNA_VEZ, "2027-01-20")
+        // Dentro de la ventana en que Movi empareja sola (10 días antes de la fecha).
+        gasto("ev_matricula", 2_500_000, LocalDate.of(2027, 1, 12), "Matrícula")
+        val hoy = LocalDate.of(2027, 1, 14)
+        val fila = checklist(hoy).single { it.ruleId == "rr_matricula" }
+        assertTrue(fila.pagado)
+        assertEquals(2_500_000L to 0L, teQuedanSuma(hoy))
+        assertTrue(checklist(LocalDate.of(2027, 1, 31)).single { it.ruleId == "rr_matricula" }.pagado)
+    }
+
+    // ── Revisión: un APK viejo y el resumen del Inicio (I1) ───────────────────
+
+    @Test
+    fun `sin frecuencias el resumen no saca del variable el pago de una no mensual`() {
+        regla("rr_admin", "Administración", 15, 450_000, FrecuenciaDelPago.TRIMESTRAL, "2026-12-15")
+        gasto("ev_admin", 450_000, LocalDate.of(2026, 12, 15), "Administración")
+        val hoy = LocalDate.of(2026, 12, 20)
+        // El cliente nuevo: la fila la resta como fijo y el variable no la repite.
+        assertEquals(450_000L to 0L, teQuedanSuma(hoy))
+        // Un APK viejo no tiene la fila: el server la deja en el variable, así se resta una vez.
+        val (_, variableViejo) = teQuedanSuma(hoy, conFrecuencias = false)
+        assertEquals(450_000L, variableViejo)
+    }
+
+    // ── Revisión: Movi AI con una sola vez vencida o antes de su piso (I2) ────
+
+    @Test
+    fun `Movi AI no suma una sola vez vencida de antes ni una que ya pagaste al crearla`() {
+        val hoy = AppClock.today()
+        regla("rr_vieja", "Matrícula", 20, 2_500_000, FrecuenciaDelPago.UNA_VEZ, hoy.minusMonths(2).withDayOfMonth(20).toString())
+        // Creada con «¿Ya pagaste?» en sí: corre desde el período siguiente, así que su fecha de hoy no existe.
+        val inicioDelSiguiente = diasDelPeriodo(hoy, calendario).endInclusive.plusDays(1)
+        regla("rr_pagada", "Cuota inicial", hoy.dayOfMonth, 5_000_000, FrecuenciaDelPago.UNA_VEZ, hoy.toString(), desde = inicioDelSiguiente.toString())
+        regla("rr_arriendo", "Arriendo", 28, 1_800_000)
+        val contexto = runBlocking { com.jvillada.movi.server.ai.contextoDelPeriodoDe(duenoId) }
+        val vieja = contexto.recurrentes.single { it.nombre == "Matrícula" }
+        assertFalse(vieja.venceEnEstePeriodo)
+        assertTrue(vieja.vencidaDeAntes)
+        assertFalse(contexto.recurrentes.single { it.nombre == "Cuota inicial" }.venceEnEstePeriodo)
+        val texto = contexto.render()
+        assertTrue(texto.contains("TODAVÍA no ocurrieron en este período: \$1800000"), texto)
+        assertTrue(texto.contains("VENCIÓ en un período anterior"), texto)
+    }
+
+    // ── Revisión: «¿Ya pagaste?» no aplica a una sola vez (I3) ────────────────
+
+    @Test
+    fun `el server ignora ya pague en una de una sola vez`() = testApplication {
+        application { testModule() }
+        val hoy = AppClock.today()
+        val alta = enviar(
+            "/api/recurring-rules",
+            """{"id":"","name":"Cuota inicial","category":"Carro","amount":5000000,"dayOfMonth":1,"type":"EXPENSE","frecuencia":"UNA_VEZ","primerVencimiento":"$hoy","yaPagoElDeEstePeriodo":true}""",
+        )
+        assertEquals(HttpStatusCode.Created, alta.status, alta.bodyAsText())
+        val id = json.decodeFromString(RecurringRule.serializer(), alta.bodyAsText()).id
+        assertNull(transaction { RecurringRules.selectAll().where { RecurringRules.id eq id }.single()[RecurringRules.activeFrom] })
+        assertEquals(hoy.toString(), proximos(hoy).single { it.rule.id == id }.dueDate, "su único vencimiento existe")
+    }
+
+    // ── Revisión: corte 25 con el día hábil anterior (I4) ─────────────────────
+
+    @Test
+    fun `con el corte 25 y el dia habil anterior la trimestral cuenta en el periodo que contiene su fecha`() {
+        transaction {
+            Users.update({ Users.id eq duenoId }) {
+                it[periodCutoffDay] = 25; it[periodWeekendRule] = SiElCorteCaeEnFinDeSemana.DIA_HABIL_ANTERIOR.name
+            }
+        }
+        val delDueno = PeriodSettings(cutoffDay = 25, siCaeEnFinDeSemana = SiElCorteCaeEnFinDeSemana.DIA_HABIL_ANTERIOR)
+        regla("rr_admin", "Administración", 28, 450_000, FrecuenciaDelPago.TRIMESTRAL, "2026-12-28")
+        fun lista(dia: LocalDate) = checklistDelPeriodo(proximos(dia), ocurrencias(dia), periodoDe(appDateToEpochMillis(dia) + 12 * 3_600_000L, delDueno), delDueno)
+        // El período «diciembre» (25-nov al 23-dic) no la trae; el de «enero» arranca el jueves 24 de
+        // diciembre (el 25 es Navidad) y sí.
+        assertTrue(lista(LocalDate.of(2026, 12, 20)).none { it.ruleId == "rr_admin" })
+        assertEquals("2026-12-28", proximos(LocalDate.of(2026, 12, 20)).single().dueDate)
+        assertEquals(450_000L, fijosDelPeriodo(lista(LocalDate.of(2026, 12, 24))))
+        assertEquals("2026-12-28", ocurrencias(LocalDate.of(2026, 12, 29)).single().dueDate)
+        // Febrero y marzo («febrero» y «marzo» del dueño) no; el 28 de marzo cae en «abril».
+        assertTrue(lista(LocalDate.of(2027, 2, 10)).isEmpty())
+        assertTrue(lista(LocalDate.of(2027, 3, 10)).isEmpty())
+        assertEquals("2027-03-28", lista(LocalDate.of(2027, 3, 26)).single().vence)
+    }
+
+    // ── Revisión: un período estirado a mano (M1) ─────────────────────────────
+
+    @Test
+    fun `en un periodo de mas de un mes la no mensual toma el vencimiento del mes en que vence`() {
+        // Enero estirado hasta el 19 de febrero: trae el 10 de enero (no vence) y el 10 de febrero (sí).
+        val estirado = PeriodSettings(cutoffDay = 1, iniciosPropios = mapOf("2027-02" to "2027-02-20"))
+        val bimestral = RecurringRule(
+            "rr_luz", "Luz", "Luz", 90_000L, 10, TransactionType.EXPENSE,
+            frecuencia = FrecuenciaDelPago.BIMESTRAL, primerVencimiento = "2026-12-10",
+        )
+        // El 18, pasada la gracia del 10: solo la regla única del período lo encuentra.
+        assertEquals(LocalDate.of(2027, 2, 10), ocurrenciaPorPreguntar(LocalDate.of(2027, 2, 18), bimestral, estirado))
+    }
+
+    // ── Revisión: un ingreso no mensual no es el salario (M5) ─────────────────
+
+    @Test
+    fun `un ingreso no mensual del dia del corte se espera en su fecha`() {
+        val delDueno = PeriodSettings(cutoffDay = 25, siCaeEnFinDeSemana = SiElCorteCaeEnFinDeSemana.DIA_HABIL_ANTERIOR)
+        // El 25 de octubre de 2026 es domingo: el salario de cada mes se espera el viernes 23; una prima
+        // semestral del mismo día, el 25.
+        val salario = RecurringRule("rr_sal", "Salario", "Salario", 5_000_000L, 25, TransactionType.INCOME)
+        val prima = salario.copy(id = "rr_prima", name = "Prima", frecuencia = FrecuenciaDelPago.SEMESTRAL, primerVencimiento = "2026-10-25")
+        assertEquals(LocalDate.of(2026, 10, 23), com.jvillada.movi.server.reminders.fechaEsperada(salario, LocalDate.of(2026, 10, 25), delDueno))
+        assertEquals(LocalDate.of(2026, 10, 25), com.jvillada.movi.server.reminders.fechaEsperada(prima, LocalDate.of(2026, 10, 25), delDueno))
+    }
+
     // ── El wire: APKs viejos, alta y edición ──────────────────────────────────
 
     @Test
@@ -451,6 +604,9 @@ class PagoCadaTantosMesesTest {
             calendario,
             PeriodSettings(cutoffDay = 25, siCaeEnFinDeSemana = SiElCorteCaeEnFinDeSemana.DIA_HABIL_ANTERIOR),
             PeriodSettings(cutoffDay = 15, iniciosPropios = mapOf("2027-03" to "2027-02-12")),
+            // Revisión (M1): un período estirado a mano y una quincena (las obligaciones van por el mes de referencia).
+            PeriodSettings(cutoffDay = 1, iniciosPropios = mapOf("2027-02" to "2027-02-20")),
+            PeriodSettings(cutoffDay = 15, segundoDia = 30, frecuencia = com.jvillada.movi.shared.model.FrecuenciaDelPeriodo.QUINCENAL),
         )
         val reglas = (1..31).flatMap { dia ->
             listOf(
