@@ -374,8 +374,8 @@ All dependency versions are centralized in `gradle/libs.versions.toml`. Add new 
   ninguna clase tenga que hacer nada. Si agregas un `object` mutable que una pantalla llene, fíjate
   que `SessionManager.clear()` lo limpie y agrégalo a `ElForkLlegaLimpioTest`.
 - **Una prueba de pantalla no espera con el reloj de pared** (vuelta 116). Lo que la prueba espera
-  tiene que correr en el reloj de Compose: el `UnconfinedTestDispatcher` de `createComposeRule` no
-  despacha, así que un efecto que vuelve de `Dispatchers.IO` **sigue en ese hilo**, en paralelo con los
+  tiene que correr en el reloj de Compose: el `UnconfinedTestDispatcher` de `createComposeRule` (en la versión de compose-ui-test
+  que usamos, 1.8) no despacha, así que un efecto que vuelve de `Dispatchers.IO` **sigue en ese hilo**, en paralelo con los
   demás, y un `waitUntil(5_000)` o un `Thread.sleep` mide la carga de la máquina, no la app. Las costuras:
   `MockEngine` con `dispatcher = Dispatchers.Unconfined` (`ElInicioNoRepitePeticionesTest`: con IO, dos
   `data = data.copy(…)` del Inicio se pisaban), `LocalRepository(…, disco = Dispatchers.Unconfined)`

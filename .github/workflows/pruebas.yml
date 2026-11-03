@@ -17,6 +17,10 @@ on:
     branches: [master]
 
 # Un PR que recibe tres pushes seguidos no necesita tres corridas: la última manda.
+# Solo lee el repo: ni el checkout ni las cachés necesitan escribir en él.
+permissions:
+  contents: read
+
 concurrency:
   group: pruebas-${{ github.ref }}
   cancel-in-progress: true
@@ -114,6 +118,8 @@ jobs:
 
       - name: Bajar los android-all que falten, con reintentos
         continue-on-error: true
+        # Una descarga colgada no puede comerse el trabajo: 300 s por archivo y 10 min el paso.
+        timeout-minutes: 10
         run: |
           base=https://repo1.maven.org/maven2/org/robolectric/android-all-instrumented
           destino="$HOME/.m2/repository/org/robolectric/android-all-instrumented"
@@ -125,7 +131,7 @@ jobs:
             tmp=$(mktemp -d)
             ok=true
             for f in "$jar" "$jar.sha512" "$pom" "$pom.sha512"; do
-              curl -fsSL --retry 5 --retry-all-errors --retry-delay 10 -o "$tmp/$f" "$base/$v/$f" || { ok=false; break; }
+              curl -fsSL --connect-timeout 20 --max-time 300 --retry 5 --retry-all-errors --retry-delay 10 -o "$tmp/$f" "$base/$v/$f" || { ok=false; break; }
             done
             if $ok \
               && [ "$(sha512sum "$tmp/$jar" | cut -c1-128)" = "$(cut -c1-128 "$tmp/$jar.sha512")" ] \
@@ -179,21 +185,32 @@ jobs:
           [ -f local.properties ] && mv local.properties local.properties.aparte || true
           env -u ANDROID_HOME -u ANDROID_SDK_ROOT ./gradlew :webApp:wasmJsBrowserDistribution --dry-run
 
-      # Ver «Los android-all de Robolectric» arriba. `always()`: también cuando una prueba falla, que es
-      # cuando más falta hace no volver a bajarlos. Solo si la lista de jars cambió desde lo restaurado
+      # Ver «Los android-all de Robolectric» arriba. `!cancelled()`: también cuando una prueba falla, que
+      # es cuando más falta hace no volver a bajarlos, pero no si el trabajo se canceló a medias. Solo si la lista de jars cambió desde lo restaurado
       # (si no, sería la misma llave). `continue-on-error`: no guardar no es un error de las pruebas.
       - name: Qué android-all quedaron
         id: android-all-al-final
-        if: always()
+        if: ${{ !cancelled() }}
+        env:
+          VERSION: ${{ steps.robolectric.outputs.version }}
         run: |
-          jars=$(cd "$HOME/.m2/repository/org/robolectric" 2>/dev/null && find . -name '*.jar' | sort || true)
+          raiz="$HOME/.m2/repository/org/robolectric"
+          jars=$(cd "$raiz" 2>/dev/null && find . -name '*.jar' | sort || true)
           echo "android-all al final:"; echo "$jars"
+          # Cada jar contra su huella: uno que no coincida (o sin huella) no se guarda en la caché.
+          sanos=true
+          for j in $jars; do
+            if [ ! -f "$raiz/$j.sha512" ] || [ "$(sha512sum "$raiz/$j" | cut -c1-128)" != "$(cut -c1-128 "$raiz/$j.sha512")" ]; then
+              echo "::warning::$j no coincide con su .sha512: la caché no se guarda"
+              sanos=false
+            fi
+          done
           lista=$(echo "$jars" | sha256sum | cut -c1-16)
-          echo "key=robolectric-android-all-${{ steps.robolectric.outputs.version }}-$lista" >> "$GITHUB_OUTPUT"
-          if [ -n "$jars" ]; then echo "hay=true" >> "$GITHUB_OUTPUT"; fi
+          echo "key=robolectric-android-all-$VERSION-$lista" >> "$GITHUB_OUTPUT"
+          if [ -n "$jars" ] && $sanos; then echo "hay=true" >> "$GITHUB_OUTPUT"; fi
 
       - name: Guardar los android-all de Robolectric
-        if: always() && steps.android-all-al-final.outputs.hay == 'true' && steps.android-all-al-final.outputs.key != steps.android-all.outputs.cache-matched-key
+        if: ${{ !cancelled() && steps.android-all-al-final.outputs.hay == 'true' && steps.android-all-al-final.outputs.key != steps.android-all.outputs.cache-matched-key }}
         continue-on-error: true
         uses: actions/cache/save@v4
         with:
