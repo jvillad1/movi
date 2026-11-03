@@ -74,6 +74,9 @@ object UsedCategoriesCache {
     var llegaronDelServer: Boolean = false
         private set
 
+    /** Cuándo falló la última vez esa lectura (ver [asegurarLasCategoriasDelDueno]); lo baja [clear]. */
+    internal var ultimoFalloDeLasCategoriasMs: Long? = null
+
     /** Los nombres, sin el tipo — para quien solo necesita saber cuáles existen. */
     val categories: Set<String> get() = used.keys
 
@@ -213,6 +216,7 @@ object UsedCategoriesCache {
         prefs = emptyMap()
         usosRecientes = emptyMap()
         llegaronDelServer = false
+        ultimoFalloDeLasCategoriasMs = null
     }
 
     /**

@@ -14,6 +14,16 @@ import androidx.compose.ui.test.performTextInput
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
 import com.jvillada.movi.data.UsedCategoriesCache
+import com.jvillada.movi.data.ENFRIAMIENTO_DE_LAS_CATEGORIAS_MS
+import com.jvillada.movi.data.asegurarLasCategoriasDelDueno
+import com.jvillada.movi.ui.components.ds.TAG_CAMPO_DE_MONTO
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.yield
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.DashboardSummary
@@ -59,12 +69,18 @@ class LasCategoriasDelDuenoEnPagosFijosTest {
     private var pedidosDelResumen = 0
     private var guardada: RecurringRule? = null
 
-    private inner class Repo(private val delServer: List<UsedCategory>) : RepositorioDePrueba() {
+    private var creada: RecurringRule? = null
+
+    private open inner class Repo(private val delServer: List<UsedCategory>) : RepositorioDePrueba() {
         override suspend fun getAccounts(): List<Account> = listOf(ahorros)
         override suspend fun getDestinos(): List<DestinoConocido> = emptyList()
         override suspend fun getDashboardSummary(scope: Scope): DashboardSummary {
             pedidosDelResumen++
             return DashboardSummary(usedCategories = delServer)
+        }
+        override suspend fun createRecurringRule(rule: RecurringRule): RecurringRule {
+            creada = rule
+            return rule.copy(id = "rr_nueva")
         }
         override suspend fun updateRecurringRule(id: String, rule: RecurringRule): RecurringRule {
             guardada = rule
@@ -128,5 +144,86 @@ class LasCategoriasDelDuenoEnPagosFijosTest {
         composeRule.waitForIdle()
         abrirElSelector()
         composeRule.waitUntil(5_000) { hayCelda("Paisajismo") }
+    }
+
+    @Test
+    fun `crear un pago fijo con una categoria nueva la deja para la regla siguiente`() {
+        Repositories.sustitutoDePrueba = Repo(emptyList())
+        var vez by mutableIntStateOf(0)
+        composeRule.setContent {
+            MoviTheme {
+                key(vez) {
+                    CreateRecurringRuleSheet(onDismiss = {}, onSaved = { vez++ }, nombreNuevo = "Jardinero", diaNuevo = 10)
+                }
+            }
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(TAG_CAMPO_DE_MONTO).performTextInput("180000")
+        abrirElSelector()
+        composeRule.onNodeWithTag(TAG_BUSCAR_CATEGORIA).performTextInput("Jardineria")
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(TAG_CREAR_CATEGORIA).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Crear recurrente").performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitUntil(5_000) { vez == 1 }
+        assertEquals("Jardineria", assertNotNull(creada).category)
+
+        composeRule.waitForIdle()
+        abrirElSelector()
+        composeRule.waitUntil(5_000) { hayCelda("Jardineria") }
+    }
+
+    @Test
+    fun `tras una lectura fallida, dos montajes no la piden otra vez hasta que pasa el enfriamiento`() {
+        Repositories.sustitutoDePrueba = object : Repo(emptyList()) {
+            override suspend fun getDashboardSummary(scope: Scope): DashboardSummary {
+                pedidosDelResumen++
+                error("sin señal")
+            }
+        }
+        var vez by mutableIntStateOf(0)
+        composeRule.setContent {
+            MoviTheme { key(vez) { CreateRecurringRuleSheet(onDismiss = {}, onSaved = {}) } }
+        }
+        composeRule.waitForIdle()
+        abrirElSelector()
+        vez++
+        composeRule.waitForIdle()
+        abrirElSelector()
+        assertEquals(1, pedidosDelResumen, "la falla se recuerda: el segundo montaje no sale a pedirla")
+
+        // Pasado el enfriamiento, sí se reintenta.
+        val despues = assertNotNull(UsedCategoriesCache.ultimoFalloDeLasCategoriasMs) + ENFRIAMIENTO_DE_LAS_CATEGORIAS_MS
+        runBlocking { asegurarLasCategoriasDelDueno(ahora = { despues }) }
+        assertEquals(2, pedidosDelResumen)
+    }
+
+    @Test
+    fun `varias lecturas a la vez son un solo pedido`() {
+        val respuesta = CompletableDeferred<DashboardSummary>()
+        Repositories.sustitutoDePrueba = object : Repo(emptyList()) {
+            override suspend fun getDashboardSummary(scope: Scope): DashboardSummary {
+                pedidosDelResumen++
+                return respuesta.await()
+            }
+        }
+        runBlocking {
+            val tres = List(3) { async { asegurarLasCategoriasDelDueno() } }
+            yield()
+            respuesta.complete(DashboardSummary(usedCategories = listOf(UsedCategory("Gardenera"))))
+            tres.awaitAll()
+        }
+        assertEquals(1, pedidosDelResumen)
+        assertTrue("Gardenera" in UsedCategoriesCache.used)
+    }
+
+    @Test
+    fun `cerrar la sesion olvida que llegaron y la falla reciente`() {
+        Repositories.sustitutoDePrueba = Repo(listOf(UsedCategory("Gardenera")))
+        runBlocking { asegurarLasCategoriasDelDueno() }
+        assertTrue(UsedCategoriesCache.llegaronDelServer)
+        UsedCategoriesCache.clear()
+        assertFalse(UsedCategoriesCache.llegaronDelServer)
+        assertNull(UsedCategoriesCache.ultimoFalloDeLasCategoriasMs)
     }
 }
