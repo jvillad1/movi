@@ -72,24 +72,50 @@ object VistaDeFacturasStore {
 }
 
 /**
- * **Los grupos de «Por categoría» que el dueño plegó o desplegó**, por su clave (`GrupoDeFacturas.clave`), en
- * la sesión (vuelta 120). Solo lo que tocó: lo demás sigue la regla de siempre —desplegado lo que tiene algo
- * pendiente, plegado lo ya pagado—. En memoria y no en el aparato: un grupo plegado hoy puede tener una
- * factura nueva el mes que viene. Se olvida al cerrar sesión.
+ * **Los grupos de «Por categoría», plegados o desplegados**, por período y grupo (`GrupoDeFacturas.clave`), en la
+ * sesión (vuelta 120). En memoria y no en el aparato: un grupo plegado hoy puede tener una factura nueva el mes
+ * que viene. Se olvida al cerrar sesión (`SessionManager.clear`).
+ *
+ * Dos capas, con la misma clave (período + grupo):
+ * - **El defecto se fija la primera vez que el grupo se ve** ([plegado]): desplegado lo que tiene algo pendiente,
+ *   plegado lo pagado. Fijo para el resto de la sesión: anotar el último pago de un grupo abierto no lo pliega
+ *   bajo el dedo, ni alternar «Por fecha ↔ Por categoría» o ir a ver un movimiento lo recalcula. Otro período es
+ *   otra clave: arranca con su propio defecto.
+ * - **Lo que el dueño toca** ([alternar]) gana sobre el defecto.
  */
 object GruposPlegadosDeFacturas {
     private val elegidos = mutableStateMapOf<String, Boolean>()
 
-    /** ¿Está plegado el grupo [clave]? Lo que el dueño eligió en la sesión, o [porDefecto]. */
-    fun plegado(clave: String, porDefecto: Boolean): Boolean = elegidos[clave] ?: porDefecto
+    /**
+     * Los defectos fijados. Un mapa común —no de estado— porque se llena DURANTE la composición, y fijar un
+     * defecto no cambia nada a la vista; [version] avisa cuando se vacía.
+     */
+    private val fijados = HashMap<String, Boolean>()
+    private var version by mutableStateOf(0)
 
-    /** Pliega o despliega [clave], partiendo de lo que hoy se ve. */
-    fun alternar(clave: String, porDefecto: Boolean) {
-        elegidos[clave] = !plegado(clave, porDefecto)
+    private fun clave(periodo: String, grupo: String) = "$periodo|$grupo"
+
+    /**
+     * ¿Está plegado el grupo [grupo] del [periodo]? Lo que el dueño eligió en la sesión, o el defecto fijado la
+     * primera vez que se vio (que es [porDefecto] si se ve ahora por primera vez).
+     */
+    fun plegado(periodo: String, grupo: String, porDefecto: Boolean): Boolean {
+        version // se lee: vaciar los defectos repinta a quien pregunta
+        val k = clave(periodo, grupo)
+        return elegidos[k] ?: fijados.getOrPut(k) { porDefecto }
     }
 
-    /** Cuántos grupos tocó el dueño en la sesión (para las pruebas: ¿quedó algo después del logout?). */
-    val cuantos: Int get() = elegidos.size
+    /** Pliega o despliega [grupo] del [periodo], partiendo de lo que hoy se ve. */
+    fun alternar(periodo: String, grupo: String, porDefecto: Boolean) {
+        elegidos[clave(periodo, grupo)] = !plegado(periodo, grupo, porDefecto)
+    }
 
-    fun olvidar() = elegidos.clear()
+    /** Cuántos grupos tienen algo guardado en la sesión, fijado o elegido (para las pruebas del logout). */
+    val cuantos: Int get() = (elegidos.keys + fijados.keys).size
+
+    fun olvidar() {
+        elegidos.clear()
+        fijados.clear()
+        version++
+    }
 }

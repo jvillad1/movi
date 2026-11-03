@@ -269,6 +269,11 @@ fun SeccionChecklistDelPeriodo(
      * ([porQueNoSuma]): abre la edición de los términos de esa tarjeta. `null`: la píldora va sin botón.
      */
     onCargarMinimo: ((PagoDelPeriodo) -> Unit)? = null,
+    /**
+     * Vuelta 120 · el período que se mira, como clave: el plegado por defecto de cada grupo de «Por categoría» se
+     * fija por período (ver `GruposPlegadosDeFacturas`). Otro período arranca con su propio defecto.
+     */
+    claveDelPeriodo: String = "",
 ) {
     // ── El momento de celebrar (Ola 1 · «Que Movi se sienta viva») ──────────────────────────────
     // Cuando el dueño completa la lista —pasa de «falta 1» a «todo pagado» por algo que hizo acá:
@@ -461,6 +466,7 @@ fun SeccionChecklistDelPeriodo(
                     }
                     FacturasPorCategoria(
                         grupos = remember(facturas) { facturasPorCategoria(facturas) },
+                        periodo = claveDelPeriodo,
                         fila = { pago -> FilaDe(pago) },
                         pie = { grupo ->
                             if (grupo.filas.any { !it.pagado && estimacionDeLaFila(it, planesDeCuotas) != null }) {

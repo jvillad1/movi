@@ -8,7 +8,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import com.jvillada.movi.data.GruposPlegadosDeFacturas
@@ -124,23 +123,25 @@ internal fun seVeElTotalDelGrupo(grupo: GrupoDeFacturas): Boolean = grupo.total 
 @Composable
 internal fun FacturasPorCategoria(
     grupos: List<GrupoDeFacturas>,
+    /** El período que se mira: con él se fija el plegado por defecto de cada grupo (ver [GruposPlegadosDeFacturas]). */
+    periodo: String,
     fila: @Composable (PagoDelPeriodo) -> Unit,
     pie: @Composable (GrupoDeFacturas) -> Unit = {},
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion)) {
         val ocultos = LocalSaldosOcultos.current
         for (grupo in grupos) key(grupo.clave) {
-            // El plegado por defecto se fija la primera vez que el grupo se ve en esta pantalla: anotar el
-            // último pago de un grupo abierto no lo pliega bajo el dedo (lo pliega el dueño, si quiere). Se
-            // guarda con la pantalla (`rememberSaveable`): ir a ver el movimiento y volver no lo recalcula.
-            val porDefecto = rememberSaveable { plegadoPorDefecto(grupo) }
-            val plegado = GruposPlegadosDeFacturas.plegado(grupo.clave, porDefecto)
+            // El plegado por defecto se fija la primera vez que el grupo se ve en el período, en la sesión
+            // ([GruposPlegadosDeFacturas]): anotar el último pago de un grupo abierto no lo pliega bajo el dedo, y
+            // alternar la vista o ir a ver un movimiento no lo recalcula. Otro período arranca con el suyo.
+            val porDefecto = plegadoPorDefecto(grupo)
+            val plegado = GruposPlegadosDeFacturas.plegado(periodo, grupo.clave, porDefecto)
             val (detalle, tono) = detalleDelGrupo(grupo, ocultos)
             Superficie(modifier = Modifier.fillMaxWidth().testTag(TAG_GRUPO_DE_FACTURAS), relleno = RellenoDeSuperficie.Lista) {
                 EncabezadoPlegable(
                     titulo = grupo.nombre,
                     plegado = plegado,
-                    onAlternar = { GruposPlegadosDeFacturas.alternar(grupo.clave, porDefecto) },
+                    onAlternar = { GruposPlegadosDeFacturas.alternar(periodo, grupo.clave, porDefecto) },
                     descripcion = descripcionDelGrupo(grupo, ocultos),
                     detalle = detalle,
                     tonoDelDetalle = tono,

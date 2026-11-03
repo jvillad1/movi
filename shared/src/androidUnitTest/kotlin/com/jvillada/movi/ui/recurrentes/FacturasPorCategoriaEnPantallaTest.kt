@@ -110,6 +110,7 @@ class FacturasPorCategoriaEnPantallaTest {
     private var cargando by mutableStateOf(false)
     private var checklist by mutableStateOf(emptyList<PagoDelPeriodo>())
     private var ocultos by mutableStateOf(false)
+    private var periodo by mutableStateOf("2026-10")
 
     private fun montar(escala: Float = 1f, filas: List<PagoDelPeriodo> = lista) {
         checklist = filas
@@ -121,6 +122,7 @@ class FacturasPorCategoriaEnPantallaTest {
                     Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
                         SeccionChecklistDelPeriodo(
                             checklist = checklist,
+                            claveDelPeriodo = periodo,
                             cargando = cargando,
                             pudoLeer = true,
                             marcando = emptySet(),
@@ -162,8 +164,6 @@ class FacturasPorCategoriaEnPantallaTest {
     private fun elegir(rotulo: String) = tocar(pildora(rotulo))
 
     private fun selector() = composeRule.onNode(hasTestTag(TAG_SELECTOR_DE_VISTA_DE_FACTURAS), useUnmergedTree = true)
-
-    private fun tituloDeLasFacturas() = composeRule.onAllNodes(hasText(TITULO_TUS_FACTURAS), useUnmergedTree = true).onFirst()
 
     @Test
     fun `por defecto es Por fecha, y Por categoria se recuerda en el aparato`() {
@@ -219,7 +219,7 @@ class FacturasPorCategoriaEnPantallaTest {
         tocar(encabezado("Vivienda"))
         assertFalse(hay("Arriendo"), "plegado")
         assertTrue(hay("Falta \$1.800.000"), "plegado queda el resumen")
-        assertTrue(GruposPlegadosDeFacturas.plegado("categoria:vivienda", porDefecto = false), "se recuerda en la sesión")
+        assertTrue(GruposPlegadosDeFacturas.plegado(periodo, "categoria:vivienda", porDefecto = false), "se recuerda en la sesión")
 
         tocar(encabezado("Telecomunicaciones"))
         assertTrue(hay("Internet"), "lo pagado también se despliega")
@@ -337,11 +337,66 @@ class FacturasPorCategoriaEnPantallaTest {
         assertTrue(hay("Luz"), "Servicios arranca desplegado (la luz falta)")
 
         // El dueño anota la luz: Servicios queda todo pagado, pero sigue abierto con la fila a la vista.
-        checklist = lista.map { if (it.ruleId == "rr_luz") it.copy(pagado = true, eventId = "ev_luz", montoPagado = 120_000) else it }
+        checklist = conLaLuzPagada()
         composeRule.waitForIdle()
         assertTrue(hay("Luz"), "la fila sobre la que actuó no desaparece")
         assertEquals(ESTADO_DESPLEGADO, encabezado("Servicios").fetchSemanticsNode().config.getOrNull(SemanticsProperties.StateDescription))
         assertTrue(hay(GRUPO_PAGADO))
+    }
+
+    private fun conLaLuzPagada() = lista.map { if (it.ruleId == "rr_luz") it.copy(pagado = true, eventId = "ev_luz", montoPagado = 120_000) else it }
+
+    private fun estadoDe(nombre: String) = encabezado(nombre).fetchSemanticsNode().config.getOrNull(SemanticsProperties.StateDescription)
+
+    /** Segunda revisión (a): el defecto fijado vive en la sesión, no en la composición de la vista. */
+    @Test
+    fun `alternar la vista no cambia el plegado fijado`() {
+        montar()
+        elegir(ROTULO_POR_CATEGORIA)
+        assertEquals(ESTADO_DESPLEGADO, estadoDe("Servicios"))
+
+        elegir(ROTULO_POR_FECHA)
+        checklist = conLaLuzPagada()
+        composeRule.waitForIdle()
+        elegir(ROTULO_POR_CATEGORIA)
+
+        assertEquals(ESTADO_DESPLEGADO, estadoDe("Servicios"), "visto abierto, sigue abierto aunque ya esté pagado")
+        assertTrue(hay("Luz"))
+    }
+
+    /** Segunda revisión (b): otro período es otra clave, con su propio defecto. */
+    @Test
+    fun `en otro periodo un grupo con algo pendiente arranca desplegado aunque en el anterior estuviera plegado`() {
+        montar(filas = conLaLuzPagada())
+        elegir(ROTULO_POR_CATEGORIA)
+        assertEquals(ESTADO_PLEGADO, estadoDe("Servicios"), "en octubre, todo pagado: plegado")
+
+        periodo = "2026-11"
+        checklist = lista
+        composeRule.waitForIdle()
+
+        assertEquals(ESTADO_DESPLEGADO, estadoDe("Servicios"), "en noviembre la luz falta: desplegado")
+        assertTrue(hay("Luz"))
+    }
+
+    /** Segunda revisión (c): cerrar sesión borra lo fijado, y lo que se ve vuelve a la regla de siempre. */
+    @Test
+    fun `olvidar la sesion borra el plegado fijado`() {
+        montar()
+        elegir(ROTULO_POR_CATEGORIA)
+        checklist = conLaLuzPagada()
+        composeRule.waitForIdle()
+        assertEquals(ESTADO_DESPLEGADO, estadoDe("Servicios"), "fijado abierto")
+        assertTrue(GruposPlegadosDeFacturas.cuantos > 0)
+
+        GruposPlegadosDeFacturas.olvidar()
+        composeRule.waitForIdle()
+
+        assertEquals(ESTADO_PLEGADO, estadoDe("Servicios"), "sin lo fijado, lo pagado se pliega")
+        // Y el logout de verdad lo vacía (`ElForkLlegaLimpioTest` lo vigila entre clases).
+        GruposPlegadosDeFacturas.plegado(periodo, "categoria:otra", porDefecto = true)
+        SessionManager.clear()
+        assertEquals(0, GruposPlegadosDeFacturas.cuantos)
     }
 
     @Test

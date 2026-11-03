@@ -148,7 +148,7 @@ class ElForkLlegaLimpioTest {
         // Vuelta 120: «Por categoría» elegida y un grupo plegado en otra prueba.
         com.jvillada.movi.data.VistaDeFacturasStore.almacenDePrueba = mutableMapOf()
         com.jvillada.movi.data.VistaDeFacturasStore.elegir(com.jvillada.movi.data.VistaDeFacturas.POR_CATEGORIA)
-        com.jvillada.movi.data.GruposPlegadosDeFacturas.alternar("categoria:vivienda", porDefecto = false)
+        com.jvillada.movi.data.GruposPlegadosDeFacturas.alternar("2026-10", "categoria:vivienda", porDefecto = false)
         AvisosEnHoy.sustitutoDePrueba = object : OfertaDeAvisos {
             override fun pedir() = Unit
             override fun descartar() = Unit
