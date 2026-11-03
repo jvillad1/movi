@@ -102,8 +102,26 @@ fun sePreguntaSiYaPagasteElDeEstePeriodo(
     dia: Int,
     hoy: LocalDate,
     ajustes: PeriodSettings,
-): Boolean = tipo == TransactionType.EXPENSE && !desdeUnMovimiento && dia in 1..31 &&
-    laCuotaDeEstePeriodoYaVencio(dia, hoy, ajustes)
+    /**
+     * Vuelta 126 · la frecuencia y el ancla del pago: una no mensual se pregunta solo si **vence en este
+     * período** y ese vencimiento ya pasó o es hoy ([vencimientoEnElPeriodo] por regla). Sin ellas (o
+     * mensual), lo de siempre.
+     */
+    frecuencia: FrecuenciaDelPago? = null,
+    primerVencimiento: String? = null,
+): Boolean {
+    if (tipo != TransactionType.EXPENSE || desdeUnMovimiento || dia !in 1..31) return false
+    if (frecuencia == null || frecuencia == FrecuenciaDelPago.MENSUAL) return laCuotaDeEstePeriodoYaVencio(dia, hoy, ajustes)
+    val regla = RecurringRule(
+        id = "", name = "", category = "", amount = 0L, dayOfMonth = dia, type = tipo,
+        frecuencia = frecuencia, primerVencimiento = primerVencimiento,
+    )
+    // Una obligación se cuenta por el mes de referencia (identidad en el mensual), como la cuota.
+    val referencia = ajustes.mesDeReferencia()
+    val periodo = periodoDeLaFecha(hoy.toString(), referencia) ?: return false
+    val vence = vencimientoEnElPeriodo(regla, periodo, referencia) ?: return false
+    return vence <= hoy
+}
 
 /** [sePreguntaSiYaPagasteElDeEstePeriodo] con «hoy» en ISO, para el server. Una fecha ilegible da `false`. */
 fun sePreguntaSiYaPagasteElDeEstePeriodoEl(
@@ -112,8 +130,10 @@ fun sePreguntaSiYaPagasteElDeEstePeriodoEl(
     dia: Int,
     hoyIso: String,
     ajustes: PeriodSettings,
+    frecuencia: FrecuenciaDelPago? = null,
+    primerVencimiento: String? = null,
 ): Boolean = runCatching { LocalDate.parse(hoyIso.trim()) }.getOrNull()
-    ?.let { sePreguntaSiYaPagasteElDeEstePeriodo(tipo, desdeUnMovimiento, dia, it, ajustes) } ?: false
+    ?.let { sePreguntaSiYaPagasteElDeEstePeriodo(tipo, desdeUnMovimiento, dia, it, ajustes, frecuencia, primerVencimiento) } ?: false
 
 private fun fechaIsoLegible(texto: String?): String? {
     val t = texto?.trim()?.takeIf { it.isNotEmpty() } ?: return null

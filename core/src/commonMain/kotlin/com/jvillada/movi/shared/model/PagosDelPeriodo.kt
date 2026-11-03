@@ -186,6 +186,11 @@ data class PagoDelPeriodo(
      * decía «Pago vencido · hace 24 días» de una fila ya pagada—.
      */
     val minimoDelExtractoEnLaRegla: Boolean = false,
+    /**
+     * Vuelta 126 · cada cuánto vence la regla ([RecurringRule.frecuenciaEfectiva]): la fila de una no
+     * mensual lo dice («Cada 3 meses»). [FrecuenciaDelPago.MENSUAL] en todo lo demás.
+     */
+    val frecuencia: FrecuenciaDelPago = FrecuenciaDelPago.MENSUAL,
 ) {
     /**
      * Vuelta 72 · un pago que **sí cuenta como hecho**. Lo de siempre es [pagado]; la fila de la tarjeta
@@ -434,6 +439,7 @@ private fun filaDelPago(
     ruleId = pago.rule.id,
     nombre = pago.rule.name,
     monto = pago.rule.amount,
+    frecuencia = pago.rule.frecuenciaEfectiva,
     pagado = ocurrencia?.occurred == true,
     // Con la fecha de la ocurrencia, el `daysUntil` que mandó el server habla de OTRO
     // vencimiento: se recalcula contra el mismo «hoy» del que salió esa respuesta.

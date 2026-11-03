@@ -952,6 +952,26 @@ data class RecurringRule(
      * pagado desde el corte. Ver `PagoDelPeriodo.restoDelMinimo`.
      */
     val minimoDelExtracto: MinimoDelExtracto? = null,
+    /**
+     * **Vuelta 126 · cada cuánto vence** ([FrecuenciaDelPago]), o `null` = cada mes, como toda regla de
+     * antes de esta vuelta. Columna nueva y nullable, `recurring_rules.frecuencia`; MENSUAL se guarda
+     * como NULL. Lo que cuenta es [frecuenciaEfectiva] (las reglas especiales siguen mensuales).
+     *
+     * **Un APK viejo nunca ve una no mensual**: `GET /api/recurring-rules`, `/api/payments/upcoming` y
+     * `/api/payments/occurrences` solo las traen con `?conFrecuencias=1` (pintaría una trimestral como
+     * mensual, y un valor de enum que no conoce le rompería la lectura entera). **Y en un PUT, `null` es
+     * «no la toques»** (guarda por clave, como `pagoMinimo`): el APK viejo no manda el campo y no puede
+     * borrarla. Para volver a mensual, el cliente nuevo manda `MENSUAL` explícito.
+     */
+    val frecuencia: FrecuenciaDelPago? = null,
+    /**
+     * **Vuelta 126 · el ancla: la fecha del primer vencimiento** (ISO `"2026-12-15"`), obligatoria si
+     * [frecuencia] no es mensual. Una cada N meses vence en los meses `ancla + k·N` (k ≥ 0) el día
+     * [dayOfMonth] —que el server iguala al día del ancla—; una de una sola vez, solo en el ancla. `null`
+     * en una mensual. Columna nueva y nullable, `recurring_rules.primer_vencimiento`, con la misma guarda
+     * de [frecuencia] en un PUT.
+     */
+    val primerVencimiento: String? = null,
 )
 
 /**
