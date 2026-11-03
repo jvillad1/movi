@@ -79,12 +79,17 @@ class CadaCuantoEnLaHojaTest {
     private var creada: RecurringRule? = null
     private var editada: RecurringRule? = null
     private var suscripcion: CreateSubscriptionRequest? = null
+    @Volatile private var perfilLeido = 0
+    private var perfilFalla = false
 
     private inner class Repo : RepositorioDePrueba() {
         override suspend fun getAccounts(): List<Account> = listOf(ahorros)
         override suspend fun getDestinos(): List<DestinoConocido> = emptyList()
-        override suspend fun getUserProfile(): UserProfile =
-            UserProfile(id = "u", email = "papa@movi.test", name = "Papá", avatarColor = "#FFC21A", periodCutoffDay = 1)
+        override suspend fun getUserProfile(): UserProfile {
+            if (perfilFalla) { perfilLeido++; error("sin señal") }
+            return UserProfile(id = "u", email = "papa@movi.test", name = "Papá", avatarColor = "#FFC21A", periodCutoffDay = 1)
+                .also { perfilLeido++ }
+        }
         override suspend fun createRecurringRule(rule: RecurringRule): RecurringRule {
             creada = rule
             return rule.copy(id = "rr_nueva")
@@ -107,6 +112,7 @@ class CadaCuantoEnLaHojaTest {
     private fun montar(existing: RecurringRule? = null, escala: Float? = null) {
         creada = null
         editada = null
+        perfilLeido = 0
         Repositories.sustitutoDePrueba = Repo()
         composeRule.setContent {
             val base = LocalDensity.current
@@ -273,6 +279,53 @@ class CadaCuantoEnLaHojaTest {
         composeRule.waitUntil(5_000) { editada != null }
         assertEquals(FrecuenciaDelPago.MENSUAL, editada?.frecuencia)
         assertNull(editada?.primerVencimiento)
+    }
+
+    // ── Revisión (I3, M2) ─────────────────────────────────────────────────────
+
+    @Test
+    fun `una sola vez no pregunta si ya pagaste aunque su fecha ya paso`() {
+        montar()
+        composeRule.waitUntil(5_000) { perfilLeido > 0 }
+        tocar("Una sola vez")
+        elegirDia(1) // el 1 de noviembre: de este período y ya pasó
+        escribirMonto()
+        assertFalse(hay(YA_PAGASTE_EL_DE_ESTE_PERIODO))
+        crear()
+        assertNull(assertNotNull(creada).yaPagoElDeEstePeriodo, "no viaja el campo")
+        assertEquals("2026-11-01", creada?.primerVencimiento)
+    }
+
+    /** ¿El día [dia] del calendario abierto se puede tocar? */
+    private fun diaHabilitado(dia: Int): Boolean =
+        composeRule.onAllNodes(hasClickAction() and hasText("$dia")).fetchSemanticsNodes()
+            .first().config.getOrNull(SemanticsProperties.Disabled) == null
+
+    @Test
+    fun `la fecha se ofrece desde el arranque del periodo del duenho`() {
+        montar()
+        composeRule.waitUntil(5_000) { perfilLeido > 0 }
+        composeRule.waitForIdle()
+        tocar("Cada 3 meses")
+        // Con su perfil (corte 1), el período arrancó el 1 de noviembre.
+        assertTrue(diaHabilitado(1))
+    }
+
+    @Test
+    fun `sin el perfil la fecha se ofrece desde hoy, nunca antes`() {
+        perfilFalla = true
+        montar()
+        composeRule.waitUntil(5_000) { perfilLeido > 0 }
+        composeRule.waitForIdle()
+        tocar("Una sola vez")
+        assertFalse(diaHabilitado(1), "el 1 de noviembre podría ser de un período que el server ya cerró")
+        assertTrue(diaHabilitado(2))
+    }
+
+    @Test
+    fun `editar una no mensual lee el perfil para saber desde cuando ofrecer la fecha`() {
+        montar(existing = trimestral)
+        composeRule.waitUntil(5_000) { perfilLeido > 0 }
     }
 
     // ── Cómo se ve ──────────────────────────────────────────────────────────

@@ -555,8 +555,10 @@ fun SeccionChecklistDelPeriodo(
             }
         }
         // ── Vuelta 126 · Otros pagos fijos · N: lo que no vence en este período, plegada ──────
-        if (otrosPagosFijos.isNotEmpty() && !cargando && pudoLeer) {
-            SeccionDeOtrosPagosFijos(pagos = otrosPagosFijos, onAbrir = onAbrirPausada)
+        // Lo que ya tiene fila arriba no se repite (revisión de la 126, M3).
+        val otros = otrosPagosFijos.filter { o -> checklist.none { it.ruleId == o.rule.id } && anteriores.none { it.ruleId == o.rule.id } }
+        if (otros.isNotEmpty() && !cargando && pudoLeer) {
+            SeccionDeOtrosPagosFijos(pagos = otros, onAbrir = onAbrirPausada)
         }
         // ── Vuelta 72 · Pausados · N: al final, plegada ─────────────────────────────
         if (pausadas.isNotEmpty() && !cargando && pudoLeer) {

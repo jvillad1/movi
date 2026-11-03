@@ -1136,11 +1136,12 @@ fun LazyListScope.tableroDeRecurrentes(
                 onAbrirPausada = { estado.reglaRecurrenteAEditar = it },
                 // Vuelta 126: las no mensuales que este período no cobra, con su próximo vencimiento. Solo en el
                 // período de hoy: los vencimientos que se leen son los de hoy.
-                otrosPagosFijos = remember(estado.upcomingRecurrentes, periodoVisible, periodoDeHoy, ajustesDelPeriodo) {
+                otrosPagosFijos = remember(estado.upcomingRecurrentes, checklist, anteriores, periodoVisible, periodoDeHoy, ajustesDelPeriodo) {
                     if (periodoVisible != periodoDeHoy) emptyList()
                     else com.jvillada.movi.ui.recurrentes.otrosPagosFijos(
                         estado.upcomingRecurrentes,
                         com.jvillada.movi.shared.model.ventanaDe(periodoVisible, ajustesDelPeriodo).last + 1,
+                        enLaLista = (checklist + anteriores).mapTo(mutableSetOf()) { it.ruleId },
                     )
                 },
                 nombresDeCuentas = estado.nombresDeCuentas,

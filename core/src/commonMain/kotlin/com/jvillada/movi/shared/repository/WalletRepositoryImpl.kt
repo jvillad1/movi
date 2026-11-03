@@ -668,7 +668,7 @@ class WalletRepositoryImpl(
     }
 
     override suspend fun getDashboardSummary(scope: Scope): DashboardSummary =
-        client.get("$baseUrl/api/dashboard/summary?scope=${scope.name}").body()
+        client.get("$baseUrl/api/dashboard/summary?scope=${scope.name}&$CON_FRECUENCIAS").body()
 
     // Mismo chequeo de status que `createBudget`: sin `expectSuccess` en el cliente, un 4xx/5xx no
     // lanza solo — se intentaría deserializar el cuerpo de error como la lista/el detalle y

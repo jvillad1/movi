@@ -185,9 +185,18 @@ const val TAG_FILA_DE_OTRO_PAGO_FIJO: String = "pagos:otro-pago-fijo"
  * sepa que existen. Lo que vence en este período está en la lista; lo de una sola vez vencido y sin pagar,
  * en «Del período de …». Por fecha. Pura.
  */
-fun otrosPagosFijos(upcoming: List<UpcomingPayment>, finDelPeriodo: Long): List<UpcomingPayment> =
+fun otrosPagosFijos(
+    upcoming: List<UpcomingPayment>,
+    finDelPeriodo: Long,
+    /**
+     * Revisión de la 126 (M3) · las reglas que ya tienen fila en las facturas (la del período, pagada o no, y
+     * lo que quedó de antes): una trimestral pagada este período ya rodó su vencimiento al siguiente, pero su
+     * fila pagada está arriba y no se repite acá.
+     */
+    enLaLista: Set<String> = emptySet(),
+): List<UpcomingPayment> =
     upcoming
-        .filter { !it.rule.esMensual && epochDeFecha(it.dueDate) >= finDelPeriodo }
+        .filter { !it.rule.esMensual && epochDeFecha(it.dueDate) >= finDelPeriodo && it.rule.id !in enLaLista }
         .sortedWith(compareBy<UpcomingPayment> { it.dueDate }.thenBy { it.rule.name.lowercase() })
 
 /** El subtítulo de una fila de «Otros pagos fijos»: «Cada 3 meses · el próximo, 15 dic · $450.000». Pura. */

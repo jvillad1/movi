@@ -32,6 +32,7 @@ import com.jvillada.movi.shared.model.PeriodicidadDeCobro
 import com.jvillada.movi.shared.model.EN_DOLARES_SOLO_MES_O_ANIO
 import com.jvillada.movi.shared.model.FRECUENCIAS_DEL_PAGO
 import com.jvillada.movi.shared.model.FrecuenciaDelPago
+import com.jvillada.movi.shared.model.ajustesDelPeriodo
 import com.jvillada.movi.shared.model.anclaDelVencimiento
 import com.jvillada.movi.shared.model.esMensual
 import com.jvillada.movi.shared.model.frecuenciaEfectiva
@@ -385,7 +386,8 @@ fun CreateRecurringRuleSheet(
     // decide con el mes de calendario ([ajustesParaPreguntarSiYaPagaste]) en vez de no preguntar.
     var yaPagoElDeEstePeriodo by remember { mutableStateOf(true) }
     val perfilDelDueno = com.jvillada.movi.data.rememberLectura(
-        com.jvillada.movi.data.ClaveDeLectura.Perfil, reintento = 0, activa = !isEditMode,
+        // Revisión de la 126 (M2): también al editar una no mensual, para saber desde cuándo ofrecer su fecha.
+        com.jvillada.movi.data.ClaveDeLectura.Perfil, reintento = 0, activa = !isEditMode || usaFecha,
     ) { Repositories.wallets.getUserProfile() }
     val ajustesDelDueno = ajustesParaPreguntarSiYaPagaste(perfilDelDueno.valor, perfilDelDueno.terminada)
     val conElPeriodoDeRespaldo = esElPeriodoDeRespaldo(perfilDelDueno.valor, perfilDelDueno.terminada)
@@ -400,13 +402,14 @@ fun CreateRecurringRuleSheet(
                 primerVencimiento = proximoPago?.takeIf { usaFecha }?.toString(),
             )
         } == true
-    // Vuelta 126: desde cuándo se puede elegir la fecha del próximo pago: el arranque del período en curso (con
-    // el corte del dueño si se leyó; si no —al editar no se lee—, el mes de calendario, que nunca es antes).
-    val desdeDeLaFecha = com.jvillada.movi.shared.model.inicioDelPeriodo(
-        com.jvillada.movi.shared.model.periodoDeLaFecha(hoyDeLaHoja.toString(), (ajustesDelDueno ?: com.jvillada.movi.shared.model.PeriodSettings()).mesDeReferencia())
-            ?: com.jvillada.movi.shared.model.PeriodoFinanciero(hoyDeLaHoja.year, hoyDeLaHoja.monthNumber),
-        (ajustesDelDueno ?: com.jvillada.movi.shared.model.PeriodSettings()).mesDeReferencia(),
-    )
+    // Vuelta 126: desde cuándo se puede elegir la fecha del próximo pago: el arranque del período en curso,
+    // con el corte del dueño (el mismo piso con que el server rechaza una de una sola vez anterior). Mientras
+    // el perfil no se lee —o si la lectura falla— desde hoy, que nunca es antes de ese arranque: la hoja no
+    // ofrece una fecha que el server rechace.
+    val desdeDeLaFecha = perfilDelDueno.valor?.ajustesDelPeriodo()?.mesDeReferencia()?.let { ajustes ->
+        com.jvillada.movi.shared.model.periodoDeLaFecha(hoyDeLaHoja.toString(), ajustes)
+            ?.let { com.jvillada.movi.shared.model.inicioDelPeriodo(it, ajustes) }
+    }?.takeIf { it <= hoyDeLaHoja } ?: hoyDeLaHoja
 
     fun save() {
         if (!canSave) return

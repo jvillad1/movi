@@ -83,6 +83,28 @@ class OtrosPagosFijosEnPagosTest {
     }
 
     @Test
+    fun `lo que ya tiene fila en las facturas no se repite`() {
+        // Revisión (M3): la administración ya pagada en noviembre rodó al 15 de febrero, pero su fila pagada
+        // está arriba.
+        val pagada = listOf(proximo(admin, "2027-02-15"), proximo(soat, "2027-03-05"))
+        assertEquals(listOf("rr_admin", "rr_soat"), otrosPagosFijos(pagada, finDeNoviembre).map { it.rule.id })
+        assertEquals(listOf("rr_soat"), otrosPagosFijos(pagada, finDeNoviembre, enLaLista = setOf("rr_admin")).map { it.rule.id })
+    }
+
+    @Test
+    fun `la seccion tampoco repite una fila de la lista`() {
+        val adminPagada = PagoDelPeriodo(
+            "rr_admin", "Administración", 450_000L, true, -5, vence = "2026-11-15", frecuencia = FrecuenciaDelPago.TRIMESTRAL,
+            derivado = true, automatica = true, eventId = "ev_admin",
+        )
+        montar(listOf(adminPagada), listOf(proximo(admin, "2027-02-15"), proximo(soat, "2027-03-05")), mutableListOf())
+        composeRule.onNodeWithText("Ver").performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        assertEquals(1, composeRule.onAllNodesWithTag(TAG_FILA_DE_OTRO_PAGO_FIJO, useUnmergedTree = true).fetchSemanticsNodes().size)
+        assertTrue(hay("Cada año · el próximo, 5 mar"))
+    }
+
+    @Test
     fun `la factura de una no mensual dice su cadencia, y una mensual nada`() {
         val delPeriodo = PagoDelPeriodo("rr_luz", "Luz", 90_000L, false, 5, vence = "2026-11-20", frecuencia = FrecuenciaDelPago.BIMESTRAL)
         assertEquals("Cada 2 meses", cadenciaDeLaFila(delPeriodo))
