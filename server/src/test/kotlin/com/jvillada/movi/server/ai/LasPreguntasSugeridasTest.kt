@@ -33,6 +33,7 @@ import com.jvillada.movi.shared.model.disponibleAlDia
 import com.jvillada.movi.shared.model.faltaPorPagar
 import com.jvillada.movi.shared.model.periodoDe
 import com.jvillada.movi.shared.model.pesosDelCierre
+import com.jvillada.movi.shared.model.pesosCortos
 import com.jvillada.movi.shared.model.plataDelDisponibleDe
 import com.jvillada.movi.shared.model.ventanaDe
 import io.ktor.client.request.get
@@ -266,9 +267,11 @@ class LasPreguntasSugeridasTest {
         assertTrue("Arriendo \$1.000.000 · vence hoy" in texto, texto)
         // El período pasado está cubierto (el saldo inicial es de antes): hay comparación.
         assertTrue("período pasado" in texto, texto)
-        // La cifra diaria del héroe de Hoy (lo que queda entre los días que faltan), no la meta del período.
+        // La cifra diaria del héroe de Hoy (lo que queda entre los días que faltan), no la meta del período,
+        // escrita como la escribe el héroe (`pesosCortos`): desde $1M sale abreviada («$1M por día»), y a
+        // principio de mes la prueba pedía la cifra entera y fallaba según el día.
         if (disponible.diasQueQuedan > 1 && disponible.periodo.contraElRitmo <= 0L) {
-            assertTrue("${pesosDelCierre(disponible.porDiaParaLoQueQueda ?: 0L)} por día" in texto, texto)
+            assertTrue("${pesosCortos(disponible.loQueQueda / disponible.diasQueQuedan)} por día" in texto, texto)
         }
         assertFalse("meta diaria" in texto, texto)
         assertEquals(0, llamadasAlModelo)
