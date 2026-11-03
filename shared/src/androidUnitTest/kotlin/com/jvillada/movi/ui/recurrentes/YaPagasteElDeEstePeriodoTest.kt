@@ -72,8 +72,9 @@ class YaPagasteElDeEstePeriodoTest {
         override suspend fun getAccounts(): List<Account> = listOf(ahorros)
         override suspend fun getDestinos(): List<DestinoConocido> = emptyList()
         override suspend fun getUserProfile(): UserProfile {
-            perfilLeido++
+            // Sube al DEVOLVER, no al entrar: cuando la prueba lo ve, el perfil ya va camino a la hoja.
             return UserProfile(id = "u", email = "claudia@movi.test", name = "Claudia", avatarColor = "#FFC21A", periodCutoffDay = 1)
+                .also { perfilLeido++ }
         }
         override suspend fun createRecurringRule(rule: RecurringRule): RecurringRule {
             creada = rule
@@ -123,6 +124,7 @@ class YaPagasteElDeEstePeriodoTest {
     /** El perfil ya llegó y la hoja ya se recompuso con él: desde acá, que la pregunta no esté significa algo. */
     private fun esperarElPerfil() {
         composeRule.waitUntil(5_000) { perfilLeido > 0 }
+        composeRule.waitForIdle()
         composeRule.mainClock.advanceTimeBy(500)
         composeRule.waitForIdle()
     }

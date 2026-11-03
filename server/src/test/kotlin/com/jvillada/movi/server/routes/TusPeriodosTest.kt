@@ -606,6 +606,8 @@ class TusPeriodosTest {
     fun `una regla a mano creada en octubre con un sello en septiembre muestra septiembre pagado`() {
         val ahora = dia(2026, 10, 5)
         regla("rr-gimnasio", "Gimnasio", dia = 10, monto = 180_000, categoria = "Deporte", creada = dia(2026, 10, 3))
+        // Un movimiento de julio para que agosto exista (los períodos arrancan en el del más viejo).
+        movimiento("ev-julio", dia(2026, 7, 20), 10_000)
         movimiento("ev-gimnasio-sep", dia(2026, 9, 10), 180_000, categoria = "Deporte", descripcion = "Smart Fit")
         sello("rr-gimnasio", "2026-09", "ev-gimnasio-sep")
 
@@ -614,7 +616,8 @@ class TusPeriodosTest {
             assertEquals(PAGO_FIJO_LISTO, it.estado)
             assertEquals("ev-gimnasio-sep", it.eventId)
         }
-        assertTrue(detalle("2026-08", ahora)?.pagosFijos.orEmpty().none { it.ruleId == "rr-gimnasio" }, "agosto no existía")
+        val agosto = assertNotNull(detalle("2026-08", ahora), "agosto tiene que existir para que esto pruebe algo").pagosFijos
+        assertTrue(agosto.none { it.ruleId == "rr-gimnasio" }, "agosto, sin sello ni pago y antes de la creación, no sale: $agosto")
     }
 
     /**
