@@ -37,7 +37,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import com.jvillada.movi.data.VistaDeFacturas
+import com.jvillada.movi.data.VistaDeFacturasStore
+import com.jvillada.movi.shared.model.facturasPorCategoria
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -307,6 +311,8 @@ fun SeccionChecklistDelPeriodo(
     // Vuelta 40: cuántas facturas se ven antes de «Ver los N pagos del período».
     var todasALaVista by rememberSaveable { mutableStateOf(false) }
     val facturas = enOrdenDeFacturas(checklist.filter { !it.esIngreso })
+    // Vuelta 120: cómo se ven («Por fecha» / «Por categoría»), la última que eligió en este aparato.
+    val vista = VistaDeFacturasStore.vista
     val ingresos = enOrdenDeFacturas(checklist.filter { it.esIngreso })
     val urgente = laMasUrgente(facturas)
     @Composable
@@ -388,7 +394,13 @@ fun SeccionChecklistDelPeriodo(
 
     Column(modifier = modifier) {
         when {
-            cargando -> Seccion(titulo = TITULO_TUS_FACTURAS, accion = onAgregar?.let { AGREGAR_UN_PAGO }, onAccion = onAgregar)
+            cargando -> {
+                // Vuelta 120: el selector ya está mientras carga, en su lugar: al llegar las filas no aparece
+                // empujando la lista (y la vista elegida se leyó del aparato antes del primer cuadro).
+                SelectorDeVistaDeFacturas(vista, onElegir = VistaDeFacturasStore::elegir)
+                Spacer(Modifier.height(Medida.dentroDeSeccion))
+                Seccion(titulo = TITULO_TUS_FACTURAS, accion = onAgregar?.let { AGREGAR_UN_PAGO }, onAccion = onAgregar)
+            }
             // Vuelta 68: en Pagos, el aviso único de arriba lo dice (ver [NoSePudoLeerEnLaPantalla]).
             !pudoLeer -> NoSePudoLeerEnLaPantalla(
                 clave = "facturas",
@@ -427,6 +439,11 @@ fun SeccionChecklistDelPeriodo(
                     Spacer(Modifier.height(Medida.entreSecciones))
                 }
                 // ── Tus facturas del período ─────────────────────────────────────────────────
+                // Vuelta 120: «Por fecha | Por categoría», arriba del título. Solo con facturas que agrupar.
+                if (facturas.isNotEmpty()) {
+                    SelectorDeVistaDeFacturas(vista, onElegir = VistaDeFacturasStore::elegir)
+                    Spacer(Modifier.height(Medida.dentroDeSeccion))
+                }
                 // Vuelta 72: «+ Agregar» siempre, no solo en el vacío.
                 Seccion(titulo = TITULO_TUS_FACTURAS, accion = onAgregar?.let { AGREGAR_UN_PAGO }, onAccion = onAgregar)
                 if (cuentasParaGuardar.isNotEmpty()) {
@@ -442,43 +459,64 @@ fun SeccionChecklistDelPeriodo(
                     )
                     Spacer(Modifier.height(Medida.dentroDeSeccion))
                 }
-                Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
+                // Vuelta 120 · «Por categoría»: las MISMAS filas, en grupos plegables con su total y lo que falta.
+                if (vista == VistaDeFacturas.POR_CATEGORIA && facturas.isNotEmpty()) {
                     if (celebrar) {
-                        Box(Modifier.padding(horizontal = Medida.margenDePantalla).padding(top = Espacio.s)) {
-                            MomentoDeCelebracion(FRASE_DEL_CHECKLIST_COMPLETO)
+                        Box(Modifier.padding(bottom = Medida.dentroDeSeccion)) { MomentoDeCelebracion(FRASE_DEL_CHECKLIST_COMPLETO) }
+                    }
+                    FacturasPorCategoria(
+                        grupos = remember(facturas) { facturasPorCategoria(facturas) },
+                        fila = { pago -> FilaDe(pago) },
+                        pie = { grupo ->
+                            if (grupo.filas.any { !it.pagado && estimacionDeLaFila(it, planesDeCuotas) != null }) {
+                                Text(
+                                    text = ESTIMADO_SOBRE_LA_DEUDA_DE_HOY,
+                                    style = Movi.textos.apoyo,
+                                    color = Movi.colores.textoApagado,
+                                    modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(bottom = Espacio.s),
+                                )
+                            }
+                        },
+                    )
+                } else {
+                    Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
+                        if (celebrar) {
+                            Box(Modifier.padding(horizontal = Medida.margenDePantalla).padding(top = Espacio.s)) {
+                                MomentoDeCelebracion(FRASE_DEL_CHECKLIST_COMPLETO)
+                            }
+                        }
+                        val aLaVista = if (todasALaVista) facturas else facturas.take(FACTURAS_A_LA_VISTA)
+                        if (facturas.isEmpty()) {
+                            Text(
+                                text = lineaDeLoQueFalta(checklist) ?: "Este período no tiene pagos anotados",
+                                style = Movi.textos.cuerpo,
+                                color = Movi.colores.textoMedio,
+                                modifier = Modifier.padding(Medida.rellenoDeSuperficie),
+                            )
+                        }
+                        aLaVista.forEachIndexed { i, pago ->
+                            if (i > 0) Separador(SangriaDeSeparador.ConInicio)
+                            FilaDe(pago)
+                        }
+                        // De dónde salen las estimaciones de las cuotas: una vez, si alguna fila la muestra.
+                        if (aLaVista.any { !it.pagado && estimacionDeLaFila(it, planesDeCuotas) != null }) {
+                            Text(
+                                text = ESTIMADO_SOBRE_LA_DEUDA_DE_HOY,
+                                style = Movi.textos.apoyo,
+                                color = Movi.colores.textoApagado,
+                                modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(bottom = Espacio.s),
+                            )
                         }
                     }
-                    val aLaVista = if (todasALaVista) facturas else facturas.take(FACTURAS_A_LA_VISTA)
-                    if (facturas.isEmpty()) {
-                        Text(
-                            text = lineaDeLoQueFalta(checklist) ?: "Este período no tiene pagos anotados",
-                            style = Movi.textos.cuerpo,
-                            color = Movi.colores.textoMedio,
-                            modifier = Modifier.padding(Medida.rellenoDeSuperficie),
+                    if (facturas.size > FACTURAS_A_LA_VISTA) {
+                        Boton(
+                            if (todasALaVista) "Ver menos" else textoDeVerTodas(facturas.size),
+                            onClick = { todasALaVista = !todasALaVista },
+                            modifier = Modifier.align(Alignment.CenterHorizontally).testTag(TAG_VER_TODAS_LAS_FACTURAS),
+                            variante = VarianteDeBoton.Fantasma,
+                            icono = if (todasALaVista) null else Icons.AutoMirrored.Rounded.KeyboardArrowRight,
                         )
                     }
-                    aLaVista.forEachIndexed { i, pago ->
-                        if (i > 0) Separador(SangriaDeSeparador.ConInicio)
-                        FilaDe(pago)
-                    }
-                    // De dónde salen las estimaciones de las cuotas: una vez, si alguna fila la muestra.
-                    if (aLaVista.any { !it.pagado && estimacionDeLaFila(it, planesDeCuotas) != null }) {
-                        Text(
-                            text = ESTIMADO_SOBRE_LA_DEUDA_DE_HOY,
-                            style = Movi.textos.apoyo,
-                            color = Movi.colores.textoApagado,
-                            modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(bottom = Espacio.s),
-                        )
-                    }
-                }
-                if (facturas.size > FACTURAS_A_LA_VISTA) {
-                    Boton(
-                        if (todasALaVista) "Ver menos" else textoDeVerTodas(facturas.size),
-                        onClick = { todasALaVista = !todasALaVista },
-                        modifier = Modifier.align(Alignment.CenterHorizontally).testTag(TAG_VER_TODAS_LAS_FACTURAS),
-                        variante = VarianteDeBoton.Fantasma,
-                        icono = if (todasALaVista) null else Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-                    )
                 }
                 // ── Los ingresos fijos (el sueldo): no se pagan, llegan ───────────────────────
                 if (ingresos.isNotEmpty()) {
