@@ -3,8 +3,6 @@ package com.jvillada.movi.ui.accounts
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -25,6 +23,7 @@ import com.jvillada.movi.ui.components.ds.PieDeHoja
 import com.jvillada.movi.ui.components.toUserMessage
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 /**
  * **Patrimonio → «Nueva cuenta»** (y «+ Crear cuenta» desde Agregar, Hoy, Movimientos, Cuadre de
@@ -102,7 +101,7 @@ fun CreateAccountSheet(
     }
 
     MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !saving) {
-        Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+        Column(modifier = Modifier.desplazableConElTeclado().weight(1f, fill = false)) {
             // Vuelta 61: con su título, como toda hoja (arrancaba en «Banco», sin decir qué se crea).
             EncabezadoDeHoja(TITULO_DE_NUEVA_CUENTA)
             Spacer(Modifier.height(Medida.entreSecciones))

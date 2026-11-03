@@ -68,6 +68,7 @@ import com.jvillada.movi.ui.fecha.hoyEnAppZone
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import kotlinx.datetime.LocalDate
+import com.jvillada.movi.ui.components.rememberListaConElTeclado
 
 /**
  * # «Cuadre de saldos» — lo que dice el banco contra lo que cree Movi
@@ -206,6 +207,7 @@ fun CuadreDeSaldosScreen(
             }
 
             if (!noSeLeyo) LazyColumn(
+                state = rememberListaConElTeclado(),
                 modifier = Modifier.weight(1f),
                 contentPadding = PaddingValues(start = Espacio.m, end = Espacio.m, top = Espacio.s, bottom = Espacio.xl),
             ) {

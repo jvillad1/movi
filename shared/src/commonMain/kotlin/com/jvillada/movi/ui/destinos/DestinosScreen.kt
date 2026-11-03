@@ -103,6 +103,7 @@ import com.jvillada.movi.ui.components.formatMoney
 import com.jvillada.movi.ui.fecha.etiquetaDeFecha
 import com.jvillada.movi.ui.fecha.fechaDeEpoch
 import com.jvillada.movi.ui.fecha.hoyEnAppZone
+import com.jvillada.movi.ui.components.rememberListaConElTeclado
 
 /**
  * # «Personas y comercios»
@@ -294,6 +295,7 @@ fun DestinosScreen(onNavigate: (Screen) -> Unit, abrir: String? = null, conSuger
             }
 
             if (!noSeLeyo) LazyColumn(
+                state = rememberListaConElTeclado(),
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(horizontal = Espacio.m),
             ) {

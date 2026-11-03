@@ -68,6 +68,7 @@ import com.jvillada.movi.ui.components.ds.Superficie
 import com.jvillada.movi.ui.components.ds.Vacio
 import kotlinx.datetime.Instant
 import kotlinx.datetime.toLocalDateTime
+import com.jvillada.movi.ui.components.rememberListaConElTeclado
 
 const val TITULO_DE_FALLOS_Y_USO = "Fallos y uso"
 
@@ -149,7 +150,7 @@ private val rellenoDeLaLista = PaddingValues(horizontal = Medida.margenDePantall
 private fun PestanaDeFallos() {
     val (lectura, reintentar) = rememberLectura(Unit) { ObservabilidadParaAdmin.actual.fallos() }
     var abierto by remember { mutableStateOf<String?>(null) }
-    LazyColumn(contentPadding = rellenoDeLaLista, verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion)) {
+    LazyColumn(state = rememberListaConElTeclado(), contentPadding = rellenoDeLaLista, verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion)) {
         if (!segunLaLectura(lectura, reintentar)) return@LazyColumn
         val resumen = (lectura as Lectura.Llego<ResumenDeFallos>).valor
         if (resumen.grupos.isEmpty()) {
@@ -224,7 +225,7 @@ internal val NOMBRES_DE_LAS_FUNCIONES = mapOf(
 @Composable
 private fun PestanaDeUso() {
     val (lectura, reintentar) = rememberLectura(Unit) { ObservabilidadParaAdmin.actual.uso() }
-    LazyColumn(contentPadding = rellenoDeLaLista, verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion)) {
+    LazyColumn(state = rememberListaConElTeclado(), contentPadding = rellenoDeLaLista, verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion)) {
         if (!segunLaLectura(lectura, reintentar)) return@LazyColumn
         val r = (lectura as Lectura.Llego<ResumenDeUso>).valor
         item {
@@ -473,7 +474,7 @@ private fun PestanaDeRecorridos() {
 @Composable
 private fun ListaDePersonas(onElegir: (UsuarioConUso) -> Unit) {
     val (lectura, reintentar) = rememberLectura(Unit) { ObservabilidadParaAdmin.actual.usuarios() }
-    LazyColumn(contentPadding = rellenoDeLaLista, verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion)) {
+    LazyColumn(state = rememberListaConElTeclado(), contentPadding = rellenoDeLaLista, verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion)) {
         if (!segunLaLectura(lectura, reintentar)) return@LazyColumn
         val personas = (lectura as Lectura.Llego<List<UsuarioConUso>>).valor
         if (personas.isEmpty()) {
@@ -500,7 +501,7 @@ private fun ListaDePersonas(onElegir: (UsuarioConUso) -> Unit) {
 @Composable
 private fun SesionesDeLaPersona(persona: UsuarioConUso, onVolver: () -> Unit, onElegir: (SesionDeUso) -> Unit) {
     val (lectura, reintentar) = rememberLectura(persona.id) { ObservabilidadParaAdmin.actual.sesiones(persona.id) }
-    LazyColumn(contentPadding = rellenoDeLaLista, verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion)) {
+    LazyColumn(state = rememberListaConElTeclado(), contentPadding = rellenoDeLaLista, verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion)) {
         item { Seccion(titulo = persona.correo.ifBlank { persona.id }, accion = "Personas", onAccion = onVolver) }
         if (!segunLaLectura(lectura, reintentar)) return@LazyColumn
         val sesiones = (lectura as Lectura.Llego<List<SesionDeUso>>).valor
@@ -526,7 +527,7 @@ private fun LineaDeTiempo(persona: UsuarioConUso, sesion: SesionDeUso, onVolver:
     var filtro by remember { mutableStateOf<String?>(null) }
     var busqueda by remember { mutableStateOf("") }
     val hoja = hojaDeCompartir()
-    LazyColumn(contentPadding = rellenoDeLaLista, verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion)) {
+    LazyColumn(state = rememberListaConElTeclado(), contentPadding = rellenoDeLaLista, verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion)) {
         item {
             Column {
                 Seccion(titulo = "${fechaYHora(sesion.inicio)} · ${duracion(sesion.segundos)}", accion = "Sesiones", onAccion = onVolver)

@@ -12,9 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -73,6 +71,7 @@ import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.ui.components.ds.Superficie
 import com.jvillada.movi.theme.Radio
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 /** El tag de la hoja, para las pruebas y las capturas. */
 const val TAG_HOJA_LEYENDO_EL_PAPEL: String = "hoja-leyendo-el-papel"
@@ -170,7 +169,7 @@ fun HojaLeyendoElPapel(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f, fill = false)
-                .verticalScroll(rememberScrollState())
+                .desplazableConElTeclado()
                 .padding(bottom = Espacio.xl)
                 .testTag(TAG_HOJA_LEYENDO_EL_PAPEL),
         ) {

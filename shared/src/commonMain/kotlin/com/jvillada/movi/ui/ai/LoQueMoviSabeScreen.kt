@@ -58,6 +58,7 @@ import com.jvillada.movi.ui.components.VacioQueEnsena
 import com.jvillada.movi.ui.fecha.fechaDeEpoch
 import kotlinx.coroutines.launch
 import com.jvillada.movi.ui.components.ds.Campo
+import com.jvillada.movi.ui.components.rememberListaConElTeclado
 
 /**
  * # «Lo que Movi sabe de ti» (Ola 3 · 2)
@@ -167,6 +168,7 @@ fun LoQueMoviSabeScreen(onNavigate: (Screen) -> Unit) {
             else AccionDeEncabezado(AGREGAR, Icons.Rounded.Add, onClick = { agregando = true; aviso = null }, habilitado = !agregando),
         )
         LazyColumn(
+            state = rememberListaConElTeclado(),
             contentPadding = PaddingValues(horizontal = Medida.margenDePantalla, vertical = Medida.dentroDeSeccion),
             verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion),
             modifier = Modifier.weight(1f),

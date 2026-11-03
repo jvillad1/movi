@@ -10,10 +10,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -41,6 +39,7 @@ import kotlinx.coroutines.launch
 import com.jvillada.movi.ui.components.ds.Campo
 import com.jvillada.movi.ui.components.ds.PieDeHoja
 import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 /** El título de la fila del detalle de la cuenta y de esta hoja (vuelta de diseño 5). */
 const val PARA_QUE_ES_ESTA_PLATA: String = "Para qué es esta plata"
@@ -110,7 +109,7 @@ fun CondicionDeCuentaSheet(
     MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !guardando) {
         Column(
             modifier = Modifier
-                .verticalScroll(rememberScrollState())
+                .desplazableConElTeclado()
                 .weight(1f, fill = false),
         ) {
             // Qué hace, dicho con las dos consecuencias que tiene y sin ninguna más: es

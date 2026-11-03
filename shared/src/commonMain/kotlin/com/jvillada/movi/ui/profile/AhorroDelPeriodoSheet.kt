@@ -5,9 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,6 +26,7 @@ import com.jvillada.movi.ui.components.ds.PieDeHoja
 import com.jvillada.movi.ui.components.ds.PildoraDeFiltro
 import com.jvillada.movi.ui.components.ds.GrupoDeCampos
 import com.jvillada.movi.ui.components.formatCOP
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 /*
  * # «Ahorro de cada período», en Ajustes → Tu plata
@@ -91,7 +90,7 @@ fun AhorroDelPeriodoSheet(
     MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !saving) {
         Column(
             modifier = Modifier
-                .verticalScroll(rememberScrollState())
+                .desplazableConElTeclado()
                 .weight(1f, fill = false),
         ) {
             // Vuelta 41: una frase; que no mueve plata lo dice la ayuda de cada campo.

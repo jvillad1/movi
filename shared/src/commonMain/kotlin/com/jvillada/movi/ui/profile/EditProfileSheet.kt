@@ -4,10 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.Icon
@@ -30,6 +28,7 @@ import kotlinx.coroutines.launch
 import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
 import com.jvillada.movi.ui.components.ds.PieDeHoja
 import com.jvillada.movi.ui.components.ds.RotuloDeCampo
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 /**
  * F42 · F46 — editar alias y color de avatar. Se abre desde el "Editar" del encabezado de
@@ -71,7 +70,7 @@ fun EditProfileSheet(
     }
 
     MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !saving) {
-        Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+        Column(modifier = Modifier.desplazableConElTeclado().weight(1f, fill = false)) {
             // Vuelta de diseño 18: la hoja abre con su encabezado, como las demás; «Alias» era un
             // rótulo suelto que hacía de título.
             EncabezadoDeHoja("Tu perfil", subtitulo = "Cómo te llama Movi.")

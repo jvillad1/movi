@@ -7,9 +7,7 @@ import com.jvillada.movi.theme.Radio
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -27,6 +25,7 @@ import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.launch
 import com.jvillada.movi.ui.components.ds.Cifra
 import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 /**
  * Cuadra la deuda de un crédito con el saldo que reporta el banco.
@@ -159,7 +158,7 @@ private fun HojaDeAjustarLaDeuda(
     }
 
     MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !saving) {
-        Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+        Column(modifier = Modifier.desplazableConElTeclado().weight(1f, fill = false)) {
             // Vuelta de diseño 18: el nombre como título y qué es la hoja debajo (era un rótulo chico
             // arriba y el nombre debajo).
             EncabezadoDeHoja(nombre, subtitulo = AJUSTAR_EL_SALDO)

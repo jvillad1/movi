@@ -28,7 +28,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
@@ -145,6 +144,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import kotlinx.datetime.LocalDate
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 /**
  * # El detalle de un período
@@ -397,7 +397,7 @@ private fun CuerpoDelDetalle(
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .verticalScroll(desplazamiento)
+                    .desplazableConElTeclado(desplazamiento)
                     .padding(horizontal = Medida.margenDePantalla)
                     .padding(top = Espacio.xs, bottom = Medida.botonFlotante + Espacio.xl),
                 verticalArrangement = Arrangement.spacedBy(Medida.entreSecciones),

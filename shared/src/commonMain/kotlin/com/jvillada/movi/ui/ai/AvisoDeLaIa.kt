@@ -6,8 +6,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -31,6 +29,7 @@ import com.jvillada.movi.ui.components.ds.TamanoDeBoton
 import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 /**
  * # «Qué ve la IA» (vuelta 95)
@@ -200,7 +199,7 @@ internal fun HojaQueVeLaIa(onEntendido: () -> Unit, onVer: () -> Unit, onCerrar:
         conCierre = true,
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().weight(1f, fill = false).verticalScroll(rememberScrollState()).testTag(TAG_AVISO_DE_LA_IA),
+            modifier = Modifier.fillMaxWidth().weight(1f, fill = false).desplazableConElTeclado().testTag(TAG_AVISO_DE_LA_IA),
         ) {
             EncabezadoDeHoja(TITULO_QUE_VE_LA_IA, subtitulo = SUBTITULO_QUE_VE_LA_IA)
             Spacer(Modifier.height(Medida.dentroDeSeccion))

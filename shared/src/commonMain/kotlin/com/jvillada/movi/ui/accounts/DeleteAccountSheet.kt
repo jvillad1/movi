@@ -2,8 +2,6 @@ package com.jvillada.movi.ui.accounts
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -21,6 +19,7 @@ import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import com.jvillada.movi.ui.components.formatMoney
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 /**
  * F55: confirmación de "Eliminar cuenta" — mismo esqueleto de hoja que [VoidEventSheet], pero
@@ -116,7 +115,7 @@ fun DeleteAccountSheet(
         // patrón que las hojas de `CategorySheets.kt`, que ya lo tenían.
         Column(
             modifier = Modifier
-                .verticalScroll(rememberScrollState())
+                .desplazableConElTeclado()
                 .weight(1f, fill = false),
         ) {
 

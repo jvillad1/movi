@@ -6,8 +6,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.PersonAdd
@@ -61,6 +59,7 @@ import com.jvillada.movi.ui.destinos.DestinoSheet
 import kotlinx.coroutines.CancellationException
 import com.jvillada.movi.ui.components.ConfirmacionEnLinea
 import kotlinx.coroutines.launch
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 /*
  * # Vuelta 66 · los grupos se crean, se nombran, se borran, y llevan su historial
@@ -161,7 +160,7 @@ fun HojaNuevoEspacio(onDismiss: () -> Unit, onCreado: (Espacio) -> Unit, onIrATe
     }
 
     MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !trabajando) {
-        Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+        Column(modifier = Modifier.desplazableConElTeclado().weight(1f, fill = false)) {
             EncabezadoDeHoja(TITULO_NUEVO_GRUPO, subtitulo = "Partes iguales. Solo tu parte cuenta en tus gastos.")
             Spacer(Modifier.height(Medida.dentroDeSeccion))
             Campo(
@@ -301,7 +300,7 @@ fun HojaEditarGrupo(detalle: DetalleDelEspacio, onDismiss: () -> Unit, onGuardad
     // Vuelta 67: mientras se pregunta si borrar, la hoja de editar no queda abierta detrás; «No»
     // vuelve a ella.
     if (!preguntando) MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !trabajando) {
-        Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+        Column(modifier = Modifier.desplazableConElTeclado().weight(1f, fill = false)) {
             EncabezadoDeHoja("Editar grupo", subtitulo = quienesComparten(espacio))
             Spacer(Modifier.height(Medida.dentroDeSeccion))
             Campo(

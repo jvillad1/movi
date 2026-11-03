@@ -9,8 +9,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -54,6 +52,7 @@ import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import com.jvillada.movi.ui.fecha.MESES_DEL_ANIO
 import com.jvillada.movi.ui.fecha.fechaDeEpoch
 import kotlinx.coroutines.launch
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 /*
  * # Vuelta 67 · «Lo anulado», con «Restaurar»
@@ -149,7 +148,7 @@ fun AnuladosScreen(periodo: String?, onNavigate: (Screen) -> Unit) {
             subtitle = delPeriodo?.let { "En ${tituloDelPeriodo(it)}" },
         )
         Column(
-            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+            modifier = Modifier.fillMaxSize().desplazableConElTeclado()
                 .padding(horizontal = Medida.margenDePantalla)
                 .padding(top = Medida.dentroDeSeccion, bottom = Medida.entreSecciones),
         ) {

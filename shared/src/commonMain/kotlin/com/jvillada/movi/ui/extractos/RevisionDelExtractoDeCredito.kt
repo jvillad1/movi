@@ -20,9 +20,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -50,6 +48,7 @@ import com.jvillada.movi.ui.components.HeaderLeading
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.toUserMessage
 import kotlinx.coroutines.launch
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 const val TAG_PROPUESTA_DEL_EXTRACTO_DE_CREDITO: String = "propuesta-del-extracto-de-credito"
 const val ACTUALIZAR_EL_CREDITO: String = "Actualizar el crédito"
@@ -81,7 +80,7 @@ internal fun RevisionDelExtractoDeCredito(propuesta: PropuestaDelExtractoDeCredi
             subtitle = "Extracto de un crédito",
         )
         Column(
-            modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Espacio.m, vertical = Espacio.s),
+            modifier = Modifier.weight(1f).desplazableConElTeclado().padding(horizontal = Espacio.m, vertical = Espacio.s),
         ) {
             Superficie(
                 modifier = Modifier.fillMaxWidth().testTag(TAG_PROPUESTA_DEL_EXTRACTO_DE_CREDITO),

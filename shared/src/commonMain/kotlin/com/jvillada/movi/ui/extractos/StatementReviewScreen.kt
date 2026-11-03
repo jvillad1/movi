@@ -39,6 +39,7 @@ import com.jvillada.movi.ui.fecha.fechaEnPalabras
 import com.jvillada.movi.ui.fecha.hoyEnAppZone
 import com.jvillada.movi.ui.components.ds.RellenoDeSuperficie
 import com.jvillada.movi.shared.model.guiaDelExtractoPara
+import com.jvillada.movi.ui.components.rememberListaConElTeclado
 
 
 @Composable
@@ -275,7 +276,7 @@ fun StatementReviewScreen(
             }
         }
 
-        LazyColumn(modifier = Modifier.weight(1f)) {
+        LazyColumn(state = rememberListaConElTeclado(), modifier = Modifier.weight(1f)) {
             // Matches section
             if (result.matches.isNotEmpty()) {
                 item {

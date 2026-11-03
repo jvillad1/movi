@@ -5,8 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -20,6 +18,7 @@ import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
 import com.jvillada.movi.ui.components.ds.PieDeHoja
 import com.jvillada.movi.ui.components.ds.PildoraDeFiltro
 import com.jvillada.movi.ui.recurrentes.reminderLeadHint
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 /**
  * Con cuántos días de anticipación avisar un vencimiento.
@@ -60,7 +59,7 @@ fun DiasDeAvisoSheet(
         // patrón que las hojas de `CategorySheets.kt`, que ya lo tenían.
         Column(
             modifier = Modifier
-                .verticalScroll(rememberScrollState())
+                .desplazableConElTeclado()
                 .weight(1f, fill = false),
         ) {
 

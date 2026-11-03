@@ -13,9 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -56,6 +54,7 @@ import com.jvillada.movi.ui.components.ds.CampoDeMonto
 import com.jvillada.movi.ui.components.ds.PieDeHoja
 import com.jvillada.movi.ui.components.ds.RotuloDeCampo
 import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 /**
  * # La hoja de un bien: crearlo, y actualizarle el valor cuando llega el avalúo nuevo
@@ -162,7 +161,7 @@ fun BienSheet(
         // Escape (la web) cierra primero el calendario abierto, después la hoja. Ver [MarcoDeHoja].
         onEscape = { if (eligiendoFecha) eligiendoFecha = false else if (!guardando) onDismiss() },
     ) {
-        Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+        Column(modifier = Modifier.desplazableConElTeclado().weight(1f, fill = false)) {
             EncabezadoDeHoja(
                 if (existente == null) "Nuevo bien" else "Actualizar bien",
                 subtitulo = "Suma a tu patrimonio, no a Tu plata: con la casa no se paga el mercado.",

@@ -6,8 +6,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.TrendingUp
 import androidx.compose.material.icons.rounded.AccountBalance
@@ -42,6 +40,7 @@ import com.jvillada.movi.ui.components.ds.TonoDeIcono
 import com.jvillada.movi.ui.components.ds.Vacio
 import com.jvillada.movi.ui.dashboard.NotificationRow
 import com.jvillada.movi.ui.dashboard.TipoDeNotificacion
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 /** El tag de cada aviso de la campana: `TAG:<índice>`. */
 const val TAG_AVISO_DE_LA_CAMPANA: String = "aviso-de-la-campana"
@@ -101,7 +100,7 @@ fun NotificationsPanel(
         // patrón que las hojas de `CategorySheets.kt`, que ya lo tenían.
         Column(
             modifier = Modifier
-                .verticalScroll(rememberScrollState())
+                .desplazableConElTeclado()
                 .weight(1f, fill = false),
         ) {
             Text(

@@ -22,10 +22,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.ui.semantics.Role
@@ -68,6 +66,7 @@ import com.jvillada.movi.ui.recurrentes.ReminderOptInField
 import com.jvillada.movi.ui.components.*
 import kotlinx.coroutines.launch
 import com.jvillada.movi.ui.components.ds.TamanoDeBoton
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 /**
  * Crea o edita los términos de un crédito.
@@ -449,7 +448,7 @@ fun CreditTermsSheet(
         // Escape (la web) retira primero la pregunta de borrar, después la hoja. Ver [MarcoDeHoja].
         onEscape = { if (pidiendoBorrar) pidiendoBorrar = false else if (!saving) onDismiss() },
     ) {
-        Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+        Column(modifier = Modifier.desplazableConElTeclado().weight(1f, fill = false)) {
             if (editing != null) {
                 // Vuelta de diseño 17: el encabezado de las hojas («Vehículo 4083» · «Préstamo»), como
                 // la de la tarjeta. El nombre sigue editable justo debajo: ver [nombreEditado].

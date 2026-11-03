@@ -74,6 +74,7 @@ import com.jvillada.movi.ui.extractos.rememberFilePicker
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlinx.coroutines.launch
+import com.jvillada.movi.ui.components.DesplazarConElTeclado
 
 /** F32: lo que espera a ser enviado — foto de un recibo, extracto u oferta del banco. */
 private data class PendingImage(val fileName: String, val bytes: ByteArray, val mimeType: String)
@@ -112,6 +113,8 @@ fun AIChatScreen(
     var pendingImage by remember { mutableStateOf<PendingImage?>(null) }
     var attachError by remember { mutableStateOf<String?>(null) }
     val listState = rememberLazyListState()
+    // Vuelta 118: la conversación se lee con las flechas y Av Pág (el campo de texto se queda con las suyas).
+    DesplazarConElTeclado(listState)
     // Las sugerencias salen de lo que el Inicio dejó en su caché: el chat no pide nada nuevo para
     // armarlas (ver [preguntasSugeridas], que tampoco llama al modelo). Sin caché —se abrió el chat
     // antes que el Inicio— salen las de respaldo, que valen para cualquiera.

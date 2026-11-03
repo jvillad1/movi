@@ -14,8 +14,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -74,6 +72,7 @@ import com.jvillada.movi.ui.recurrentes.NumeroEnCirculo
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ErrorOutline
 import kotlinx.datetime.Clock
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 const val TAG_SALIDA_DE_DEUDAS = "salida-de-deudas"
 
@@ -145,7 +144,7 @@ fun SalidaDeDeudasScreen(onNavigate: (Screen) -> Unit) {
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
+                    .desplazableConElTeclado()
                     .padding(bottom = Medida.botonFlotante + Espacio.xl),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {

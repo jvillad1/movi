@@ -192,9 +192,13 @@ fun MarcoDeHoja(
     // Vuelta 104: que se abrió y cómo se cerró (X, velo, arrastre, Escape, atrás o desde adentro), con
     // el id del título de la hoja (`EncabezadoDeHoja` lo pone). Ver `observabilidad/HojaDeUso.kt`.
     val hojaDeUso = ObservarLaHoja()
+    // Vuelta 118: la hoja es una capa del teclado. Mientras está abierta, las flechas, las de página, el
+    // espacio, Inicio y Fin mueven lo que su contenido anote, nunca la pantalla de atrás (ver
+    // [TecladoQueDesplaza]).
+    val capaDelTeclado = rememberCapaDeLaHoja()
     val contenido: @Composable ColumnScope.() -> Unit = {
         val columna = this
-        CompositionLocalProvider(LocalHojaDeUso provides hojaDeUso) { columna.content() }
+        CompositionLocalProvider(LocalHojaDeUso provides hojaDeUso, LocalCapaDelTeclado provides capaDelTeclado) { columna.content() }
     }
     val hoja: @Composable () -> Unit = if (compacta) {
         {

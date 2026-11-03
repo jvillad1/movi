@@ -38,7 +38,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.SouthWest
 import androidx.compose.material.icons.rounded.Add
@@ -171,6 +170,7 @@ import kotlinx.datetime.minus
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 /** El botón principal de la guía (Empezar, Siguiente, Ir a Inicio). Para las pruebas. */
 const val TAG_AVANZAR_EN_LA_GUIA = "primer-uso-avanzar"
@@ -622,7 +622,7 @@ fun PrimerUsoScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
+                    .desplazableConElTeclado()
                     .padding(horizontal = Medida.margenDePantalla, vertical = Medida.entreSecciones),
             ) {
                 // La bienvenida lleva su propio título, grande y centrado (ver [PasoBienvenida]).

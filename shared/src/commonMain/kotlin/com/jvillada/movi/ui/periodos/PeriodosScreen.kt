@@ -80,6 +80,7 @@ import com.jvillada.movi.ui.components.leadingFor
 import com.jvillada.movi.ui.dashboard.fraccionQueEntro
 import com.jvillada.movi.ui.sdui.BarraDeDosTramos
 import kotlinx.datetime.LocalDate
+import com.jvillada.movi.ui.components.DesplazarConElTeclado
 
 /**
  * # «Tus períodos»: cómo le fue al dueño en cada ciclo
@@ -205,6 +206,8 @@ internal fun ListaDePeriodos(
         FormaRecordada.delAparato.periodos(SessionManager.userId)?.filas?.takeIf { it > 0 } ?: FILAS_POR_DEFECTO
     }
 
+    // Vuelta 118: la lista de los períodos es la que mueve el teclado.
+    DesplazarConElTeclado(estadoDeLaLista)
     Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         MinScreenHeader(
             title = "Tus períodos",

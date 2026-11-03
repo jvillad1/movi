@@ -5,8 +5,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -28,6 +26,7 @@ import com.jvillada.movi.ui.components.ds.TamanoDeBoton
 import com.jvillada.movi.ui.components.ds.TonoDeCifra
 import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import kotlin.math.abs
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 /** La superficie de la cascada: el mismo tag en la hoja de Hoy y en la tarjeta del Disponible. */
 const val TAG_CASCADA_DEL_DISPONIBLE: String = "cascada-del-disponible"
@@ -139,7 +138,7 @@ internal fun HojaDeDondeSale(
     MarcoDeHoja(onDismiss = onDismiss) {
         Column(
             modifier = Modifier
-                .verticalScroll(rememberScrollState())
+                .desplazableConElTeclado()
                 .weight(1f, fill = false),
         ) {
             EncabezadoDeHoja(

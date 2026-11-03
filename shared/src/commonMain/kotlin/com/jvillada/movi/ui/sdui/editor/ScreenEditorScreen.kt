@@ -50,6 +50,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import com.jvillada.movi.ui.components.ds.Superficie
+import com.jvillada.movi.ui.components.rememberListaConElTeclado
 
 private const val SLUG = "dashboard"
 
@@ -263,6 +264,7 @@ fun ScreenEditorScreen(onNavigate: (Screen) -> Unit) {
         }
 
         LazyColumn(
+            state = rememberListaConElTeclado(),
             modifier = Modifier.weight(1f),
             contentPadding = PaddingValues(horizontal = Espacio.m, vertical = Espacio.xxs),
             verticalArrangement = Arrangement.spacedBy(Espacio.s),
