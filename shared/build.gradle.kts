@@ -156,6 +156,30 @@ compose.resources {
     generateResClass = always
 }
 
+// Vuelta 115 · las fuentes en el iPhone. El `ComposeApp.framework` es ESTÁTICO y no lleva los
+// recursos de Compose adentro; Compose (1.8, `ResourceReader.ios.kt`) los busca en
+// `<la app>.app/compose-resources/composeResources/…`. El plugin solo los copia ahí con
+// `embedAndSignAppleFrameworkForXcode` o CocoaPods (`syncComposeResourcesForIos`, que escribe en
+// `$BUILT_PRODUCTS_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/compose-resources`), y Movi usa un
+// XCFramework. Así que esto deja los recursos ya armados JUNTO al XCFramework de cada configuración
+// (`XCFrameworks/<debug|release>/compose-resources`) y la fase «Copiar las fuentes de Movi» del
+// proyecto de Xcode los copia de `$(MOVI_XCFRAMEWORK_DIR)/compose-resources` a la app. Son los mismos
+// archivos para el simulador y el iPhone (solo hay recursos de commonMain), así que salen de uno.
+// Corre solo después de `assembleComposeApp<Debug|Release>XCFramework`; a mano:
+// `./gradlew :shared:recursosDeComposeParaIphoneDebug`.
+listOf("Debug", "Release").forEach { configuracion ->
+    val recursos = tasks.register<Sync>("recursosDeComposeParaIphone$configuracion") {
+        group = "movi"
+        description = "Deja los recursos de Compose (las fuentes) junto al XCFramework de $configuracion, " +
+            "para que la fase de Xcode los copie a la app."
+        from(tasks.named("assembleIosArm64MainResources"))
+        into(layout.buildDirectory.dir("XCFrameworks/${configuracion.lowercase()}/compose-resources"))
+    }
+    tasks.matching { it.name == "assembleComposeApp${configuracion}XCFramework" }.configureEach {
+        finalizedBy(recursos)
+    }
+}
+
 // `ElIngresoHablaLosTokensTest` lee el index.html del webApp para comparar sus colores con
 // `Tokens.kt`. Sin declararlo como entrada, un cambio que toque SOLO ese archivo dejaba la prueba
 // «al día» y Gradle no la corría: pasaba en verde sin mirar.

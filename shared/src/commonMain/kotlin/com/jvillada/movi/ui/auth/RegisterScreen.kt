@@ -29,6 +29,10 @@ import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.primeruso.GuiaDePrimerUso
 import kotlinx.coroutines.launch
 import com.jvillada.movi.ui.components.ds.Campo
+import com.jvillada.movi.ui.profile.GUIA_DE_LA_CONTRASENA_NUEVA
+
+/** La guía del campo vacío al crear la cuenta; la regla va debajo, como ayuda (vuelta 115). */
+const val GUIA_DE_LA_CONTRASENA_AL_CREAR: String = "Elige una contraseña"
 
 @Composable
 fun RegisterScreen(onNavigate: (Screen) -> Unit) {
@@ -38,6 +42,8 @@ fun RegisterScreen(onNavigate: (Screen) -> Unit) {
     var password by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    // Vuelta 115: cada toque del botón es un intento; el mismo error dos veces vuelve a mostrarse.
+    var intentos by remember { mutableIntStateOf(0) }
 
     val emailFocus = remember { FocusRequester() }
     val passwordFocus = remember { FocusRequester() }
@@ -45,6 +51,7 @@ fun RegisterScreen(onNavigate: (Screen) -> Unit) {
 
     fun submit() {
         if (loading) return
+        intentos++
         if (name.isBlank() || email.isBlank()) {
             error = "Nombre y correo requeridos"
             return
@@ -79,11 +86,8 @@ fun RegisterScreen(onNavigate: (Screen) -> Unit) {
         }
     }
 
-    Column(
-        modifier = Modifier.fillMaxSize().background(Movi.colores.fondo).padding(Espacio.xl),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
+    // Vuelta 115: desplazable y con el error junto al botón (ver [ColumnaDeEntrada]).
+    ColumnaDeEntrada {
         Text("Crear cuenta", style = Movi.textos.titular, color = Movi.colores.texto)
         Text("Ingresa tus datos para empezar", style = Movi.textos.cuerpo, color = Movi.colores.textoMedio)
         Spacer(Modifier.height(Espacio.xxl))
@@ -118,7 +122,9 @@ fun RegisterScreen(onNavigate: (Screen) -> Unit) {
                 rotulo = "Contraseña",
                 valor = password,
                 alCambiar = { password = it },
-                guia = "•".repeat(PasswordPolicy.MIN_LENGTH),
+                guia = GUIA_DE_LA_CONTRASENA_AL_CREAR,
+                // La regla a la vista ANTES de tocar «Crear cuenta», no solo mientras está vacío.
+                ayuda = GUIA_DE_LA_CONTRASENA_NUEVA,
                 secreto = true,
                 teclado = KeyboardOptions(
                     keyboardType = KeyboardType.Password,
@@ -128,13 +134,10 @@ fun RegisterScreen(onNavigate: (Screen) -> Unit) {
                 foco = passwordFocus,
             )
 
-            error?.let {
-                Spacer(Modifier.height(Espacio.s))
-                Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
-            }
-
             Spacer(Modifier.height(Espacio.l))
-            Boton("Crear cuenta", onClick = { submit() }, cargando = loading, anchoCompleto = true)
+            ErrorYBotonDeEntrada(error, intentos) {
+                Boton("Crear cuenta", onClick = { submit() }, cargando = loading, anchoCompleto = true)
+            }
             // Vuelta 109: lo que se acepta al crear la cuenta, con sus enlaces (sin casilla).
             Spacer(Modifier.height(Espacio.s))
             com.jvillada.movi.ui.legal.LineaDeAceptacion(Modifier.fillMaxWidth())
