@@ -40,6 +40,11 @@ import kotlinx.datetime.LocalDate
  * octubre falso que los probadores tildaron el 2-nov— sigue viéndose «Pagado», y no vencido. Un sello no
  * baja un [activeFrom] guardado (ese ya dice desde cuándo corre) ni le pone piso a una regla sin fecha.
  *
+ * **Límites conocidos** (re-revisión de la 121, a propósito sin tocar): un sello anterior a la creación baja
+ * el piso y revive como vencidos los meses intermedios sin pago (solo pasa sellando a mano un mes viejo);
+ * `sellarOcurrencia` acepta períodos anteriores al piso; y un PUT con una copia vieja de la regla puede dejar
+ * la fecha de creación guardada como arranque explícito (si el piso derivado cambió desde que se leyó).
+ *
  * Una fecha ilegible cuenta como ausente. Pura.
  */
 fun arranqueDeLaReglaGuardada(activeFrom: String?, creadaEl: String?, primerSello: String? = null): String? {
