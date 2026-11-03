@@ -288,6 +288,13 @@ object Medida {
     val anchoDeFicha: Dp = 520.dp
 
     /**
+     * **El ancho de la lista de conversaciones de Movi AI en pantalla ancha** (vuelta 117): la columna a
+     * la izquierda del chat. Lo que pide un título de dos renglones («¿Cuánto gasté en restaurantes el
+     * mes…») con su fecha y el «⋯», sin quitarle al chat su columna de lectura.
+     */
+    val anchoDeLaListaDeConversaciones: Dp = 320.dp
+
+    /**
      * **Un paso de flecha** (vuelta 118): cuánto baja o sube una pantalla con ↓ / ↑ del teclado físico,
      * como en una página web (los navegadores dan unos 40 px). Un renglón de lista y poco más. Avanzar
      * una página es el alto visible menos esto, para que el último renglón quede arriba como contexto.

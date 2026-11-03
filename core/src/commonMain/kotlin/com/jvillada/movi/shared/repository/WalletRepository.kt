@@ -9,6 +9,8 @@ import com.jvillada.movi.shared.model.OrigenDelRecuerdo
 import com.jvillada.movi.shared.model.RecuerdoDelAsistente
 import com.jvillada.movi.shared.model.EstadoDePropuesta
 import com.jvillada.movi.shared.model.ConversacionDelAsistente
+import com.jvillada.movi.shared.model.ConversacionEnLaLista
+import com.jvillada.movi.shared.model.ListaDeConversaciones
 import com.jvillada.movi.shared.model.LecturaDelPapel
 import com.jvillada.movi.shared.model.NOTA_DEL_PAPEL_COMPARTIDO
 
@@ -602,6 +604,20 @@ interface WalletRepository {
     suspend fun getConversacionDelAsistente(): ConversacionDelAsistente
     /** `POST /api/ai/conversacion/nueva`: «Nueva conversación». No borra nada del server. */
     suspend fun empezarConversacionNueva()
+    /**
+     * `GET /api/ai/conversaciones` (vuelta 117): las conversaciones con el asistente que tienen alguna
+     * pregunta, la más reciente primero, y cuántas se guardan como mucho.
+     */
+    suspend fun getConversaciones(): ListaDeConversaciones
+    /** `GET /api/ai/conversaciones/{id}` (vuelta 117): una conversación de la lista, para abrirla y seguirla. */
+    suspend fun getConversacion(id: String): ConversacionDelAsistente
+    /**
+     * `POST /api/ai/conversaciones` (vuelta 117): «Nueva conversación». Si ya hay una vacía, es esa: no
+     * crea dos. Las preguntas siguientes van con su id ([AiChatRequest.conversacionId]).
+     */
+    suspend fun crearConversacion(): ConversacionEnLaLista
+    /** `DELETE /api/ai/conversaciones/{id}` (vuelta 117): la borra de verdad, con sus mensajes. Pide red. */
+    suspend fun borrarConversacion(id: String)
     /**
      * `POST /api/ai/propuestas/{id}/estado` (Ola 3): anota que el dueño hizo o descartó una
      * propuesta del asistente. **No hace la acción**: eso lo hace el endpoint de siempre (ver

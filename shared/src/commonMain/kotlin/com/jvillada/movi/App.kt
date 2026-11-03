@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
@@ -783,7 +784,11 @@ internal fun EsqueletoDeLaCascara(
                         .separadoAlDesplazar(bandaDesplazada.value, arriba = Movi.colores.marca, conHilo = false),
                 )
             }
-            Column(modifier = Modifier.widthIn(max = anchoMaximoDeLaPantalla(pantalla, widthClass)).fillMaxSize().statusBarsPadding().then(sinBarraInferior).imePadding()) {
+            // Vuelta 117: en la web del teléfono el teclado no llega como inset (Compose dibuja en un
+            // `<canvas>` del alto de la ventana y el navegador abre el teclado encima): lo descuenta
+            // `altoDelTecladoDeLaWeb`, que en Android y en iOS es cero.
+            val tecladoDeLaWeb = com.jvillada.movi.platform.altoDelTecladoDeLaWeb()
+            Column(modifier = Modifier.widthIn(max = anchoMaximoDeLaPantalla(pantalla, widthClass)).fillMaxSize().statusBarsPadding().then(sinBarraInferior).imePadding().padding(bottom = tecladoDeLaWeb)) {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                     contenido()
                 }

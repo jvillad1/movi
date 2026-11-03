@@ -13,6 +13,8 @@ import com.jvillada.movi.shared.model.OrigenDelRecuerdo
 import com.jvillada.movi.shared.model.RecuerdoDelAsistente
 import com.jvillada.movi.shared.model.EstadoDePropuesta
 import com.jvillada.movi.shared.model.ConversacionDelAsistente
+import com.jvillada.movi.shared.model.ConversacionEnLaLista
+import com.jvillada.movi.shared.model.ListaDeConversaciones
 import com.jvillada.movi.shared.model.MovimientoRechazado
 import com.jvillada.movi.shared.model.Bien
 import com.jvillada.movi.shared.model.normalizarBien
@@ -2564,6 +2566,11 @@ class LocalRepository(
     // asistente, así que no tiene sentido un espejo local.
     override suspend fun getConversacionDelAsistente(): ConversacionDelAsistente = remote.getConversacionDelAsistente()
     override suspend fun empezarConversacionNueva() = remote.empezarConversacionNueva()
+    // Vuelta 117: las conversaciones viven en el server, como el chat: sin red no hay lista.
+    override suspend fun getConversaciones(): ListaDeConversaciones = remote.getConversaciones()
+    override suspend fun getConversacion(id: String): ConversacionDelAsistente = remote.getConversacion(id)
+    override suspend fun crearConversacion(): ConversacionEnLaLista = remote.crearConversacion()
+    override suspend fun borrarConversacion(id: String) = remote.borrarConversacion(id)
     override suspend fun resolverPropuesta(id: String, estado: EstadoDePropuesta) = remote.resolverPropuesta(id, estado)
     // «Lo que Movi sabe de ti» vive en el server: es contexto del asistente, que tampoco anda sin señal.
     override suspend fun getMemoriaDelAsistente(): List<RecuerdoDelAsistente> = remote.getMemoriaDelAsistente()

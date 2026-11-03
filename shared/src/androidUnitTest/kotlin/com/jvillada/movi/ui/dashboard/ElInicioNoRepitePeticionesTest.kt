@@ -24,6 +24,7 @@ import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.primeruso.revisarLaGuiaDePrimerUso
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.MockEngineConfig
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.http.ContentType
@@ -31,6 +32,7 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.Dispatchers
 import kotlinx.serialization.json.Json
 import org.junit.After
 import org.junit.Before
@@ -85,16 +87,30 @@ class ElInicioNoRepitePeticionesTest {
     fun entrar() {
         InstantaneaDelInicio.sustitutoDePrueba = instantaneaEnMemoria(mutableMapOf())
         SessionManager.save(token = "tok", userId = "u1", name = "Juan", email = "juan@ejemplo.com")
-        val motor = MockEngine { pedido ->
-            val ruta = pedido.url.encodedPath
-            pedidos.getOrPut(ruta) { AtomicInteger() }.incrementAndGet()
-            val cuerpo = respuestaDe(ruta)
-            when {
-                ruta == "/api/screens/dashboard" -> respond("", HttpStatusCode.NotModified)
-                ruta == "/api/cierre-del-periodo" -> respond("", HttpStatusCode.NoContent)
-                else -> respond(cuerpo ?: "[]", HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString()))
-            }
-        }
+        val motor = MockEngine(
+            MockEngineConfig().apply {
+                // Vuelta 116 · **el motor contesta en el mismo hilo que pregunta.** Por omisión MockEngine
+                // contesta en `Dispatchers.IO`, y en la prueba el efecto del Inicio corre en el
+                // `UnconfinedTestDispatcher` de Compose, que no despacha: cada `launch` de la carga seguía en
+                // el hilo de IO que le contestó, y varios hacían a la vez `data = data.copy(…)` y
+                // `llegado = llegado.copy(…)`. Una escritura pisaba a la otra: o el Inicio quedaba sin el
+                // resumen (`pendingSms` 0 en vez de 6, corrida 41353746387) o sin cuentas y nunca sellaba
+                // `cargadoEn` (las esperas de 60 s de la vuelta 113). En la app eso no pasa: el efecto
+                // vuelve siempre al hilo principal. Con `Unconfined` todo corre en el hilo de la prueba, en
+                // orden, como en la app, y `waitForIdle` alcanza para saber que la carga terminó.
+                dispatcher = Dispatchers.Unconfined
+                addHandler { pedido ->
+                    val ruta = pedido.url.encodedPath
+                    pedidos.getOrPut(ruta) { AtomicInteger() }.incrementAndGet()
+                    val cuerpo = respuestaDe(ruta)
+                    when {
+                        ruta == "/api/screens/dashboard" -> respond("", HttpStatusCode.NotModified)
+                        ruta == "/api/cierre-del-periodo" -> respond("", HttpStatusCode.NoContent)
+                        else -> respond(cuerpo ?: "[]", HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString()))
+                    }
+                }
+            },
+        )
         val cliente = HttpClient(motor) { install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) } }
         Repositories.sustitutoDePrueba = Repositories.paraLaApp(WalletRepositoryImpl(cliente, "http://movi.test"))
     }
@@ -111,10 +127,11 @@ class ElInicioNoRepitePeticionesTest {
     /**
      * Espera a que el Inicio termine su carga y a que no salga ninguna petición más.
      *
-     * Los topes son de reloj de pared y solo cuentan si algo de verdad no llega: con la máquina cargada
-     * (CI, varias suites a la vez) 10 s no alcanzaban y la prueba fallaba sin que nada estuviera mal.
-     * «Quieto» son tres vueltas seguidas sin pedidos nuevos, no una: bajo carga, un pedido puede tardar
-     * más de 150 ms en salir.
+     * Vuelta 116: con el motor en el hilo de la prueba (ver [entrar]) no hay nada que corra fuera del
+     * reloj de Compose, así que no se espera con el reloj de pared (`Thread.sleep`): la carga termina
+     * dentro de `waitForIdle`. «Quieto» son tres vueltas seguidas de 500 ms **del reloj de prueba** sin
+     * pedidos nuevos: alcanza a lo que el Inicio pida después de un `delay`. El tope de [ESPERA_MS] solo
+     * cuenta si la carga de verdad no termina.
      */
     private fun esperarQueSeQuede() {
         composeRule.waitUntil(ESPERA_MS) { DashboardDataCache.cargadoEn > 0L }
@@ -123,7 +140,6 @@ class ElInicioNoRepitePeticionesTest {
         while (quietas < 3) {
             composeRule.mainClock.advanceTimeBy(500)
             composeRule.waitForIdle()
-            Thread.sleep(150)
             val ahora = total()
             quietas = if (ahora == antes) quietas + 1 else 0
             antes = ahora

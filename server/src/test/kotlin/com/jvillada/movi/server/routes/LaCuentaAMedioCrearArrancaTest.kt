@@ -53,7 +53,7 @@ class LaCuentaAMedioCrearArrancaTest {
         Users, Accounts, StatementImports, Events, VoidEvents, Budgets, RecurringRules, RecurringOccurrences,
         OccurrenceRejections, SmsMessages, Credits, Cards, Subscriptions, PushSubscriptions, Screens,
         PasswordResetTokens, CardPaymentDismissals, Goals, CategoryPrefs, Documents, StatementImportMatches, AiTurns,
-        KnownDestinations, EnlacesCompartidos, LecturasDePapeles, ConversacionesDelAsistente, AccionesPropuestas,
+        KnownDestinations, EnlacesCompartidos, LecturasDePapeles, ConversacionesDelAsistente, ConversacionesConElAsistente, AccionesPropuestas,
         MemoriaDelAsistente, AnomaliasDescartadas, DestinosDescartados, DebitosDescartados, ReglasDeComercio,
         CierresEnviados, CierresDescartados, Apartados, InicioPersonalizado, Espacios, GastosDelEspacio,
         LiquidacionesDelEspacio, CorreosDescartados, CierresGuardados, RecurrentesDelHogar, ClavesDeExtractos, PdfsAbiertos,

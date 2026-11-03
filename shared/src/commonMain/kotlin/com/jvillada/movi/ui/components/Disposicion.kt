@@ -54,6 +54,9 @@ fun disposicionDe(pantalla: Screen): Disposicion = when (pantalla) {
     // Vuelta 42: «Mensajes del banco» a la izquierda y lo demás a la derecha (ver `porRevisarEnDosColumnas`).
     Screen.PorRevisar -> Disposicion.Tablero
     Screen.Periodos, is Screen.DetalleDePeriodo, is Screen.Transactions -> Disposicion.ListaYDetalle
+    // Vuelta 117: las conversaciones a la izquierda y el chat a la derecha, en su columna de lectura
+    // (ver `laListaVaAlLadoDelChat`); sin lugar para las dos, el chat solo sigue en 720.
+    is Screen.AIChat -> Disposicion.ListaYDetalle
     else -> Disposicion.Lectura
 }
 
