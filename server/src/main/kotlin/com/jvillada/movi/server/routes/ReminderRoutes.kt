@@ -63,6 +63,9 @@ import com.jvillada.movi.shared.model.UpcomingPayment
 import com.jvillada.movi.shared.model.isReservedCategory
 import com.jvillada.movi.shared.model.rechazoDelMonto
 import com.jvillada.movi.shared.model.validarDebitoDeLaRegla
+import com.jvillada.movi.shared.model.arranqueDeLaReglaGuardada
+import com.jvillada.movi.shared.model.arranqueDeLasCuotasSiYaPagasteEl
+import com.jvillada.movi.shared.model.sePreguntaSiYaPagasteElDeEstePeriodoEl
 import com.jvillada.movi.shared.model.esAbonoADeuda
 import com.jvillada.movi.shared.model.esElAbonoALaDeuda
 import com.jvillada.movi.shared.model.pagosQueTomaLaTarjeta
@@ -98,8 +101,8 @@ internal fun org.jetbrains.exposed.sql.ResultRow.toRule() = RecurringRule(
     accountId = this[RecurringRules.accountId],
     // El piso de la regla: los períodos anteriores al de esta fecha no existen (ver
     // `arranqueDeLaRegla`). Sin leerla acá, la regla la guardaría y ninguna pantalla la
-    // respetaría.
-    activeFrom = this[RecurringRules.activeFrom],
+    // respetaría. Vuelta 121: sin fecha guardada, la de creación (ver [arranqueDeLaFila]).
+    activeFrom = arranqueDeLaFila(),
     // Ola V: a qué destino conocido va este traspaso, si el dueño lo asoció. Ver
     // `RecurringRule.destinoConocidoId`.
     destinoConocidoId = this[RecurringRules.destinoConocidoId],
@@ -109,6 +112,19 @@ internal fun org.jetbrains.exposed.sql.ResultRow.toRule() = RecurringRule(
     haciaDeuda = this[RecurringRules.haciaDeuda],
     // Vuelta 72: desde cuándo está en pausa (ver `RecurringRule.pausadaDesde`).
     pausadaDesde = this[RecurringRules.pausadaDesde],
+)
+
+/**
+ * **Vuelta 121 · desde cuándo corre la regla de esta fila**: la columna `active_from` o, si está vacía, el
+ * día en que se creó (`created_at`, en la fecha de la app). Es el único lugar donde una fila de
+ * `recurring_rules` se vuelve [RecurringRule.activeFrom]: lo leen los tres mapeadores (este [toRule],
+ * `toRulePair` del barrido de avisos y el contexto de Movi AI), y de ahí `arranqueDeLaRegla` lo vuelve
+ * el piso de todo —`/upcoming`, `/occurrences`, el checklist, «Te quedan», la caja, la cola, la campana,
+ * los recordatorios, «Tus períodos» y Movi AI—. La regla está en `:core`, [arranqueDeLaReglaGuardada].
+ */
+internal fun org.jetbrains.exposed.sql.ResultRow.arranqueDeLaFila(): String? = arranqueDeLaReglaGuardada(
+    this[RecurringRules.activeFrom],
+    this[RecurringRules.createdAt]?.let { epochMillisToAppDate(it).toString() },
 )
 
 /**
@@ -240,6 +256,8 @@ fun Route.reminderRoutes() {
         // «Se debita solo» necesita la cuenta que quedó guardada (una ajena se guarda null), así que
         // se valida adentro, antes de insertar. En un POST `null` es `false`.
         var problemaDelDebito: String? = null
+        var storedActiveFrom: String? = null
+        val creadaEn = System.currentTimeMillis()
         val storedAccountId = dbQuery {
             val safeAccountId = accountIdIfOwned(uid, body.accountId)
             // Vuelta 63: el abono mensual a una deuda (ver `RecurringRule.haciaDeuda`). Un abono no se
@@ -275,10 +293,33 @@ fun Route.reminderRoutes() {
                 // y lo cierra su propio sello (ver `eventoDeOrigen` más abajo). Vacío o mal
                 // formado se guarda como NULL —«desde siempre»—, que es como nacen las reglas
                 // escritas a mano.
-                it[activeFrom] = fechaIsoValida(body.activeFrom)
+                //
+                // Vuelta 121: sin fecha, la regla corre desde el período en que se crea (lo deriva la
+                // lectura de `created_at`, ver [arranqueDeLaFila]). Con «¿Ya pagaste el de este
+                // período?» en «Sí», arranca en el período siguiente: la ocurrencia de este período no
+                // existe. El server lo vuelve a comprobar (solo un gasto escrito a mano cuyo vencimiento
+                // de este período ya pasó); si no aplica, se ignora.
+                val arranque = fechaIsoValida(body.activeFrom) ?: run {
+                    val hoy = AppClock.today().toString()
+                    val ajustes = ajustesDelPeriodoSinSuspender(uid)
+                    val aplica = body.yaPagoElDeEstePeriodo == true && safeDeudaId == null &&
+                        sePreguntaSiYaPagasteElDeEstePeriodoEl(
+                            tipo = body.type,
+                            desdeUnMovimiento = !body.eventoDeOrigen.isNullOrBlank(),
+                            dia = body.dayOfMonth.coerceIn(1, 31),
+                            hoyIso = hoy,
+                            ajustes = ajustes,
+                        )
+                    if (aplica) arranqueDeLasCuotasSiYaPagasteEl(hoy, ajustes) else null
+                }
+                it[activeFrom] = arranque
                 // Solo del server (ver la columna): un PUT no la toca, así que la regla conserva
                 // el día en que nació aunque se le corrija el monto.
-                it[createdAt] = System.currentTimeMillis()
+                it[createdAt] = creadaEn
+                storedActiveFrom = arranqueDeLaReglaGuardada(
+                    arranque,
+                    epochMillisToAppDate(creadaEn).toString(),
+                )
             }
             safeAccountId
         }
@@ -323,8 +364,9 @@ fun Route.reminderRoutes() {
                 id = newId,
                 accountId = storedAccountId,
                 destinoConocidoId = storedDestinoId,
-                activeFrom = fechaIsoValida(body.activeFrom),
+                activeFrom = storedActiveFrom,
                 eventoDeOrigen = null,
+                yaPagoElDeEstePeriodo = null,
                 seDebitaSolo = body.seDebitaSolo == true && storedDeudaId == null,
                 haciaDeuda = storedDeudaId,
                 // Vuelta 72: el alta nunca nace pausada (solo `…/pausar` escribe la pausa).
@@ -390,7 +432,13 @@ fun Route.reminderRoutes() {
             // anteriores, reintroducidos por una edición cualquiera.
             val arranqueActual = filaActual?.get(RecurringRules.activeFrom)
             val arranqueGuardado = fechaIsoValida(body.activeFrom) ?: arranqueActual
-            storedActiveFrom = arranqueGuardado
+            // Vuelta 121: la respuesta dice el arranque como lo lee todo lo demás (con la fecha de
+            // creación si la fila no tiene uno); la fila guarda lo de siempre y `created_at` no se toca:
+            // editar no mueve el piso.
+            storedActiveFrom = arranqueDeLaReglaGuardada(
+                arranqueGuardado,
+                filaActual?.get(RecurringRules.createdAt)?.let { epochMillisToAppDate(it).toString() },
+            )
             // «Se debita solo», con los tres estados de `RecurringRule.seDebitaSolo`: un `null` (APK
             // viejo) conserva lo guardado. Si lo conservado ya no se sostiene —la regla cambió a
             // ingreso o se quedó sin cuenta— se apaga en vez de rechazar al cliente que ni lo ve; si
