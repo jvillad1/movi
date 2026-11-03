@@ -61,6 +61,8 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
     var password by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    // Vuelta 115: cada toque del botón es un intento; el mismo error dos veces vuelve a mostrarse.
+    var intentos by remember { mutableIntStateOf(0) }
     // Si llegó acá porque el server rechazó la sesión (y no porque salió), se le dice por qué: con
     // el token muerto del 26-oct la app callaba y el dueño creía estar adentro.
     var notice by remember {
@@ -124,6 +126,7 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
 
     fun submit() {
         if (loading) return
+        intentos++
         loading = true
         error = null
         notice = null
@@ -159,6 +162,7 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
      */
     fun requestReset() {
         if (loading) return
+        intentos++
         val trimmed = email.trim()
         if (trimmed.isBlank()) {
             error = "Escribe tu correo y vuelve a tocar «¿Olvidaste tu contraseña?»"
@@ -191,11 +195,8 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
         }
     }
 
-    Column(
-        modifier = Modifier.fillMaxSize().background(Movi.colores.fondo).padding(Espacio.xl),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
+    // Vuelta 115: desplazable y con el error junto al botón (ver [ColumnaDeEntrada]).
+    ColumnaDeEntrada {
         // El logotipo de la entrada: `portada`, el estilo de una pantalla de una sola cosa (era un
         // tamaño suelto de 32; `titular`, 19, lo apagaba y `cifra` es para montos).
         Text("Movi", style = Movi.textos.portada, color = Movi.colores.texto)
@@ -235,7 +236,7 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
                     onNavigate(Screen.Dashboard)
                 },
             )
-            return@Column
+            return@ColumnaDeEntrada
         }
 
         Superficie(modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth()) {
@@ -255,7 +256,7 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
                 rotulo = "Contraseña",
                 valor = password,
                 alCambiar = { password = it },
-                guia = "••••••",   // login: no se insinúa longitud, la cuenta puede ser vieja
+                guia = GUIA_DE_LA_CONTRASENA_AL_ENTRAR,
                 secreto = true,
                 teclado = KeyboardOptions(
                     keyboardType = KeyboardType.Password,
@@ -265,10 +266,6 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
                 foco = passwordFocus,
             )
 
-            error?.let {
-                Spacer(Modifier.height(Espacio.s))
-                Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale)
-            }
             notice?.let {
                 Spacer(Modifier.height(Espacio.s))
                 Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
@@ -291,13 +288,23 @@ fun LoginScreen(onNavigate: (Screen) -> Unit) {
             Boton("¿Olvidaste tu contraseña?", onClick = { requestReset() }, variante = VarianteDeBoton.Fantasma, tamano = TamanoDeBoton.S)
 
             Spacer(Modifier.height(Espacio.l))
-            Boton("Entrar", onClick = { submit() }, cargando = loading, anchoCompleto = true)
+            ErrorYBotonDeEntrada(error, intentos) {
+                Boton("Entrar", onClick = { submit() }, cargando = loading, anchoCompleto = true)
+            }
         }
 
         Spacer(Modifier.height(Espacio.m))
         Boton("¿No tienes cuenta? Regístrate", onClick = { onNavigate(Screen.Register) }, variante = VarianteDeBoton.Fantasma)
     }
 }
+
+/**
+ * **La guía del campo de la contraseña al entrar** (vuelta 115). Antes era «••••••»: con el campo
+ * vacío parecía que ya hubiera una contraseña escrita (se vio en el iPhone de Caro). Una guía se
+ * lee; los puntos son de lo escrito. No dice el largo: la cuenta puede ser de antes de la regla de
+ * los 12 caracteres.
+ */
+const val GUIA_DE_LA_CONTRASENA_AL_ENTRAR: String = "Tu contraseña"
 
 internal fun Modifier.noRippleClickable(onClick: () -> Unit) = this.then(
     clickable(

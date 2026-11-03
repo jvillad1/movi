@@ -316,6 +316,21 @@ class DesdeTuIphoneTest {
         assertTrue(de17.any { "«$NOMBRE_DEL_ATAJO_DE_MENSAJES»" in it })
         assertTrue(de17.any { "Haz una automatización más con cada uno: «DAVIVIENDA»" in it })
         assertEquals(listOf(ANTES_DE_IOS_17), pasosDeLaAutomatizacionDeMensajes(listOf("Bancolombia"), VarianteDeLaAutomatizacion.ANTES_DE_IOS_17))
+
+        // Vuelta 115: la alternativa a una tarjeta por banco, tres condiciones con «$», «COP» y «USD» (Bancolombia
+        // escribe «COP86.900,00» y «USD20,00» en las compras con tarjeta de crédito: con solo «$» se perdían).
+        val comun = "Atrapan los avisos de todos tus bancos, porque todos traen el monto. Los mensajes personales con " +
+            "un monto también pasan por Movi, que los descarta sin guardarlos."
+        val (titulo27, tres27) = condicionesDelMonto(VarianteDeLaAutomatizacion.IOS_27_O_MAS)!!
+        assertEquals("Todos tus bancos con tres tarjetas", titulo27)
+        assertTrue(tres27.startsWith("Más simple: tres tarjetas, con «\$», «COP» y «USD». $comun"), tres27)
+        assertTrue("(quedan unidas por «o»), no «+ Agregar filtro»" in tres27, tres27)
+        val (titulo17, tres17) = condicionesDelMonto(VarianteDeLaAutomatizacion.IOS_17_A_26)!!
+        assertEquals("Todos tus bancos con tres automatizaciones", titulo17)
+        assertTrue(tres17.startsWith("Más simple: tres automatizaciones, con «\$», «COP» y «USD». $comun"), tres17)
+        assertEquals(null, condicionesDelMonto(VarianteDeLaAutomatizacion.ANTES_DE_IOS_17))
+        // La recomendada sigue siendo una por banco: los pasos no la cambian.
+        assertTrue(de27.none { "\$" in it } && de17.none { "\$" in it }, "los pasos siguen con las palabras de los bancos")
         assertTrue("notificación" in ANTES_DE_IOS_17 && "correos" in ANTES_DE_IOS_17)
     }
 
@@ -327,6 +342,9 @@ class DesdeTuIphoneTest {
         assertTrue(hay(ROTULO_IOS_27_O_MAS))
         assertTrue(hay(ROTULO_IOS_17_A_26))
         assertFalse(hay(TU_IPHONE_MUESTRA_OTRA_COSA))
+        // La alternativa del monto va debajo de cada variante, después de sus pasos.
+        assertEquals(2, composeRule.onAllNodes(androidx.compose.ui.test.hasTestTag(TAG_CONDICIONES_DEL_MONTO), useUnmergedTree = true).fetchSemanticsNodes().size)
+        assertTrue(hay("Todos tus bancos con tres tarjetas") && hay("Todos tus bancos con tres automatizaciones"))
     }
 
     @Test
@@ -359,9 +377,25 @@ class DesdeTuIphoneTest {
     @Test
     fun `el paso de agregar el atajo trae el plan B y donde cambiar el codigo`() {
         montar(ServerDeCodigos(CodigoDeCaptura(vigente = true, creadoEn = CREADO, atajoDeMensajes = true)))
+        // Vuelta 115: Safari solo descarga el atajo (verificado en iOS 27); se abre desde las descargas.
+        assertTrue(hay(ABRIR_LO_DESCARGADO))
+        assertEquals(
+            "Safari solo lo descarga: toca el ícono a la izquierda de la barra de direcciones → Descargas → " +
+                "«$NOMBRE_DEL_ATAJO_DE_MENSAJES». Si no lo ves, está en la app Archivos, en Descargas (dentro de " +
+                "«En mi iPhone» o «iCloud Drive»).",
+            ABRIR_LO_DESCARGADO,
+        )
         assertTrue(hay(AL_AGREGAR_EL_ATAJO))
         assertTrue(hay(PLAN_B_DEL_CODIGO))
-        assertTrue("«Omitir configuración»" in PLAN_B_DEL_CODIGO && "acción «Texto»" in PLAN_B_DEL_CODIGO)
+        // Vuelta 115: «Omitir configuración» agrega el atajo con el código ya pegado; la acción
+        // «Texto» queda como segunda opción, no como el paso del plan B.
+        assertTrue(
+            PLAN_B_DEL_CODIGO.startsWith(
+                "Pega tu código. Si «Agregar atajo» no responde, toca «Omitir configuración»: el atajo se agrega con el código que pegaste.",
+            ),
+            PLAN_B_DEL_CODIGO,
+        )
+        assertTrue("acción «Texto»" in PLAN_B_DEL_CODIGO.substringAfter("código que pegaste."), "la segunda opción")
         assertTrue(hay(CAMBIAR_EL_CODIGO_DEL_ATAJO))
         assertEquals("Si tocas «Crear otro», abre el atajo y cambia el código de la acción «Texto».", CAMBIAR_EL_CODIGO_DEL_ATAJO)
         // Y la pregunta de «Crear otro» lo recuerda.
