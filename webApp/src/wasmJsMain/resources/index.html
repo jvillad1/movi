@@ -52,6 +52,9 @@
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: var(--fondo); font-family: "Figtree", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif; }
         #ComposeTarget { width: 100vw; height: 100vh; display: block; }
+        /* Vuelta 118: el lienzo recibe el foco al cargar (`enfocarMovi`); el anillo de foco lo dibuja Movi
+           adentro, sobre lo enfocado, no el navegador alrededor de toda la ventana. */
+        #ComposeTarget:focus { outline: none; }
         /* Vuelta 55 (accesibilidad): un texto que solo oye un lector de pantalla. Fuera de la vista
            pero no `display: none` (eso también lo calla para el lector). */
         .solo-lector {
@@ -151,7 +154,9 @@
          El mismo texto está en Ajustes → «Cómo se ve» (`LECTOR_DE_PANTALLA_EN_LA_WEB`, en
          `MasScreen.kt`); `LaWebDiceQueNoTieneLectorTest` vigila que los dos digan lo mismo. -->
     <p id="aviso-lector" class="solo-lector">Movi en la web todavía no funciona con lectores de pantalla. Usa la app de Android.</p>
-    <canvas id="ComposeTarget" role="application" aria-label="Movi" aria-describedby="aviso-lector"></canvas>
+    <!-- Vuelta 118: `tabindex="0"` desde el HTML (Compose lo pone igual al arrancar, pero más tarde) para
+         que `enfocarMovi` pueda darle el foco al lienzo antes de que cargue el wasm. -->
+    <canvas id="ComposeTarget" role="application" aria-label="Movi" aria-describedby="aviso-lector" tabindex="0"></canvas>
 
     <!-- Native login form (hidden by default; shown only when there is no session).
          Vuelta 55: mientras está oculto lleva `inert` y `aria-hidden`, y los pone y los quita SOLO
@@ -297,7 +302,27 @@
             } else {
                 o.setAttribute('inert', '');
                 o.setAttribute('aria-hidden', 'true');
+                // El foco estaba en el formulario que se acaba de volver inerte: pasa a Movi.
+                enfocarMovi();
             }
+        };
+
+        // ── Vuelta 118: las teclas le llegan a Movi sin un clic antes ─────────────────────────
+        // Compose escucha el teclado en el <canvas>, y el navegador solo le manda las teclas a lo
+        // que tiene el foco. Recién cargada la página, el foco está en el <body>: Claudia abría
+        // Movi, apretaba ↓ y no pasaba nada hasta hacer clic. Esto le da el foco al lienzo, sin
+        // desplazar la página (`preventScroll`) y **sin quitárselo a nadie**: solo si el foco está
+        // en el <body>, en nada o en el formulario de ingreso ya escondido. Un lienzo no es un campo
+        // de texto: en el teléfono no abre el teclado en pantalla.
+        window.enfocarMovi = function () {
+            var c = document.getElementById('ComposeTarget');
+            if (!c) return;
+            var o = document.getElementById('login-overlay');
+            var a = document.activeElement;
+            var libre = !a || a === document.body || a === document.documentElement ||
+                (!!o && o.contains(a) && o.classList.contains('hidden'));
+            if (!libre) return;
+            try { c.focus({ preventScroll: true }); } catch (e) { c.focus(); }
         };
     </script>
     <script>
@@ -370,6 +395,9 @@
                     }
                     // focus password if email is already known, else email
                     setTimeout(function () { (remembered ? passEl : emailEl).focus(); }, 50);
+                } else {
+                    // Vuelta 118: con sesión, Movi recibe las teclas desde el primer momento.
+                    enfocarMovi();
                 }
 
                 form.addEventListener('submit', async function (e) {

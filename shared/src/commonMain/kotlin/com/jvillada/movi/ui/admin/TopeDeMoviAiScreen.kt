@@ -39,6 +39,7 @@ import com.jvillada.movi.ui.components.ds.Seccion
 import com.jvillada.movi.ui.components.ds.Superficie
 import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import kotlinx.coroutines.launch
+import com.jvillada.movi.ui.components.rememberListaConElTeclado
 
 /**
  * # «Preguntas de Movi AI», solo admin (vuelta 106)
@@ -86,6 +87,7 @@ fun TopeDeMoviAiScreen(onNavigate: (Screen) -> Unit) {
     Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo).testTag(TAG_TOPE_DE_MOVI_AI)) {
         MinScreenHeader(title = TITULO_DEL_TOPE_DE_MOVI_AI, leading = HeaderLeading.Back(fallback = Screen.Tu))
         LazyColumn(
+            state = rememberListaConElTeclado(),
             modifier = Modifier.weight(1f),
             contentPadding = PaddingValues(horizontal = Medida.margenDePantalla, vertical = Medida.dentroDeSeccion),
             verticalArrangement = Arrangement.spacedBy(Medida.entreSecciones),

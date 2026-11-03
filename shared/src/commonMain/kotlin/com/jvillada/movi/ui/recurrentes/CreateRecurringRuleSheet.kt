@@ -11,8 +11,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -66,6 +64,7 @@ import com.jvillada.movi.ui.components.ds.Superficie
 import com.jvillada.movi.shared.model.ajustesDelPeriodo
 import com.jvillada.movi.shared.model.sePreguntaSiYaPagasteElDeEstePeriodo
 import kotlinx.datetime.LocalDate
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 /**
  * La ÚNICA hoja para anotar algo que se repite (Ola 8; desde la Ola 16, también si se repite una
@@ -544,7 +543,7 @@ fun CreateRecurringRuleSheet(
         Column(
             modifier = Modifier
                 .weight(1f, fill = false)
-                .verticalScroll(rememberScrollState()),
+                .desplazableConElTeclado(),
         ) {
             // Vuelta 72: el encabezado de hoja del sistema (título grande; la X la pone el marco) y
             // «Eliminar» como acción destructiva (`Boton` `Peligro`), igual que la hoja de un tercero.

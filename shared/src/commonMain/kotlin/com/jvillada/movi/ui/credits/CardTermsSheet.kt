@@ -18,9 +18,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -39,6 +37,7 @@ import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.recurrentes.ReminderOptInField
 import kotlinx.coroutines.launch
 import com.jvillada.movi.ui.components.ds.TamanoDeBoton
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 /**
  * Crea una tarjeta de crédito o edita los términos de una existente — la hoja hermana de
@@ -157,7 +156,7 @@ fun CardTermsSheet(
         // Escape (la web) retira primero la pregunta de borrar, después la hoja. Ver [MarcoDeHoja].
         onEscape = { if (pidiendoBorrar) pidiendoBorrar = false else if (!saving) onDismiss() },
     ) {
-        Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+        Column(modifier = Modifier.desplazableConElTeclado().weight(1f, fill = false)) {
             if (editing != null) {
                 // Vuelta de diseño 17: el encabezado de las hojas («Nu» · «Tarjeta»), no «La
                 // tarjeta» como título de grupo con el nombre suelto debajo.

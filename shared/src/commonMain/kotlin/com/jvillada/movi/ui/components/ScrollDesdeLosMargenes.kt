@@ -99,12 +99,15 @@ fun Modifier.recibeElScrollDeLosMargenes(relevo: RelevoDeScroll): Modifier = thi
 )
 
 /**
- * Para la pantalla: «mi lista es esta». Se registra mientras la pantalla esté en composición y se
+ * Para la pantalla: «mi lista es esta» (para la rueda en los márgenes y, desde la vuelta 118, para
+ * el teclado: ver [DesplazarConElTeclado]). Se registra mientras la pantalla esté en composición y se
  * da de baja al salir — solo si sigue siendo la registrada, para que el orden en que Compose
  * desmonta una pantalla y monta la siguiente no borre el registro de la nueva.
  */
 @Composable
 fun ScrollDesdeLosMargenes(state: ScrollableState) {
+    // Vuelta 118: la lista que mueve la rueda en los márgenes es también la que mueve el teclado.
+    DesplazarConElTeclado(state)
     val relevo = LocalRelevoDeScroll.current ?: return
     DisposableEffect(relevo, state) {
         relevo.objetivo = state

@@ -5,8 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -30,6 +28,7 @@ import com.jvillada.movi.ui.components.ds.PieDeHoja
 import com.jvillada.movi.ui.components.ds.PildoraDeFiltro
 import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.ui.components.formatMoneyCompact
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 /*
  * # Vuelta 108 · «Gasto de un día normal», en la caja de Pagos
@@ -86,7 +85,7 @@ fun GastoDeUnDiaNormalSheet(
         else -> problemaDelGastoDeUnDiaNormal(monto!!)
     }
     MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !saving) {
-        Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+        Column(modifier = Modifier.desplazableConElTeclado().weight(1f, fill = false)) {
             EncabezadoDeHoja(
                 GASTO_DE_UN_DIA_NORMAL,
                 subtitulo = "Todo lo que gastas en un día cualquiera, con tarjeta o en efectivo. No mueve plata.",

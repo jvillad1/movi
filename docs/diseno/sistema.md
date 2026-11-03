@@ -5388,3 +5388,32 @@ El patrón sirve para cualquier lista que se quiera leer por grupos sin cambiar 
 Lo vigilan `FacturasPorCategoriaTest` (`:core`), `FacturasPorCategoriaEnPantallaTest` (el selector recordado,
 plegar y desplegar, las acciones de una fila, que nada salta, la letra al 130 % a 360 dp) y
 `UnSoloAmarilloPorVistaTest`.
+
+## Vuelta 118 · Bajar con el teclado, como en una página web
+
+Comportamiento, no visual: nada cambia de tamaño ni de color. Con teclado físico (web e iPad):
+
+| Tecla | Efecto |
+|---|---|
+| ↑ / ↓ | un paso, `Medida.pasoDelTeclado` (48 dp) |
+| Av Pág / Re Pág, Espacio / Shift+Espacio | el alto visible menos un paso (el último renglón queda arriba como contexto) |
+| Inicio / Fin | al principio / al final |
+
+- **Se mueve lo de arriba**: la hoja abierta más reciente —aunque no tenga nada que desplazar— o, sin hojas, la
+  pantalla de arriba de la pila. Nunca la pantalla de atrás de una hoja.
+- **El cuerpo de una pantalla o de una hoja se anota**: `Modifier.desplazableConElTeclado()` en vez de
+  `verticalScroll(rememberScrollState())`, `rememberListaConElTeclado()` para una `LazyColumn`. Las listas de
+  adentro (un buscador dentro de una hoja, un selector) no se anotan. Lo vigila, lista por lista,
+  `LoQueSeDesplazaSeAnotaParaElTecladoTest`.
+- **En dos columnas se anota la principal, la lista larga** (los gastos de un grupo, la lista de En qué se va,
+  los movimientos de una cuenta), no la del resumen.
+- **Con un detalle abierto al lado de su lista, el teclado mueve el detalle** (la ficha de un movimiento en el
+  panel de Actividad, el detalle de un período): es lo que se está leyendo. Al cerrarlo, vuelve a la lista.
+- **El foco del navegador**: el lienzo lo recibe al cargar con sesión y al esconder el ingreso (`enfocarMovi`
+  en `index.html`), sin desplazar la página ni quitárselo a un campo; así ↓ funciona sin un clic antes.
+- **Quien escribe se queda con sus teclas**: con el cursor en un campo, las flechas, el espacio, Inicio y Fin son
+  del campo. Escape, Enter, ⌘A y los dígitos de «Agregar» no cambian.
+- **El movimiento**: `Movimiento.MEDIO_MS` con la curva estándar; con el sistema pidiendo menos movimiento, en el
+  acto. El Tab y el orden del foco no cambian.
+
+**Pruebas**: `DesplazarConElTecladoTest` (`:shared` androidUnitTest).

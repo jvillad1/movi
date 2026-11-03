@@ -3,8 +3,6 @@ package com.jvillada.movi.ui.accounts
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -37,6 +35,7 @@ import com.jvillada.movi.ui.cuadre.hayAjusteQueAnotar
 import com.jvillada.movi.ui.cuadre.montoDelAjuste
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 /** El título de la hoja y de la fila del detalle que la abre (vuelta 98). */
 const val EDITAR_LA_CUENTA: String = "Editar la cuenta"
@@ -186,7 +185,7 @@ fun EditarCuentaSheet(
     MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !guardando) {
         Column(
             modifier = Modifier
-                .verticalScroll(rememberScrollState())
+                .desplazableConElTeclado()
                 .weight(1f, fill = false)
                 .testTag(TAG_HOJA_EDITAR_LA_CUENTA),
         ) {

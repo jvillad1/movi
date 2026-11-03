@@ -13,8 +13,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -58,6 +56,7 @@ import com.jvillada.movi.ui.components.ds.TonoDeCifra
 import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import com.jvillada.movi.ui.components.ds.Separador
 import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 /**
  * # La ficha de una persona o comercio: **para leer**
@@ -159,7 +158,7 @@ fun DetalleDelDestinoSheet(
     MarcoDeHoja(onDismiss = onDismiss) {
         Column(
             modifier = Modifier
-                .verticalScroll(rememberScrollState())
+                .desplazableConElTeclado()
                 .weight(1f, fill = false)
                 .testTag(TAG_FICHA_DEL_TERCERO),
         ) {

@@ -6,8 +6,6 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -55,6 +53,7 @@ import com.jvillada.movi.ui.components.ds.RellenoDeLaFilaDeCategorias
 import com.jvillada.movi.ui.components.ds.TagsDeLaFilaDeCategorias
 import com.jvillada.movi.ui.fecha.SelectorDeFecha
 import kotlinx.datetime.LocalDate
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 /*
  * # «Repartir este gasto» desde Agregar (vuelta de diseño 23)
@@ -299,7 +298,7 @@ fun HojaRepartirEsteGasto(
     MarcoDeHoja(onDismiss = { yaGuardado?.let(onListo) ?: onDismiss() }, dismissEnabled = !trabajando) {
         Column(
             modifier = Modifier
-                .verticalScroll(rememberScrollState())
+                .desplazableConElTeclado()
                 .weight(1f, fill = false)
                 .testTag(TAG_HOJA_REPARTIR_ESTE_GASTO),
         ) {
@@ -412,7 +411,7 @@ fun HojaRepartirEsteGasto(
     // «Todas ›» y «Nueva»: el selector completo, en una hoja encima (como en Agregar y Revisar aviso).
     if (todasLasCategorias && onCategoria != null) {
         MarcoDeHoja(onDismiss = { todasLasCategorias = false }) {
-            Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+            Column(modifier = Modifier.desplazableConElTeclado().weight(1f, fill = false)) {
                 EncabezadoDeHoja("Categoría")
                 Spacer(Modifier.height(Medida.dentroDeSeccion))
                 SelectorDeCategoria(

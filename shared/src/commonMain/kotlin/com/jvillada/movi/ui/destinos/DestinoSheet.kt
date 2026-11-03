@@ -11,9 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -67,6 +65,7 @@ import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import androidx.compose.foundation.layout.width
 import com.jvillada.movi.ui.components.ds.Separador
 import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 /**
  * # Guardar o editar una persona o comercio
@@ -191,7 +190,7 @@ fun DestinoSheet(
     ) {
         Column(
             modifier = Modifier
-                .verticalScroll(rememberScrollState())
+                .desplazableConElTeclado()
                 .weight(1f, fill = false)
                 .testTag(TAG_HOJA_DEL_TERCERO),
         ) {

@@ -11,7 +11,6 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -33,6 +32,7 @@ import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
 import androidx.compose.ui.platform.testTag
 import kotlinx.coroutines.launch
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 /** Vuelta 63 · el tag de «Recordármelo cada mes» en la ficha del crédito. */
 const val TAG_RECORDARMELO_EN_LA_FICHA = "simulador:recordarmelo-cada-mes"
@@ -90,7 +90,7 @@ fun SimuladorDeAbonoSheet(
     }
 
     MarcoDeHoja(onDismiss = onDismiss) {
-        Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+        Column(modifier = Modifier.desplazableConElTeclado().weight(1f, fill = false)) {
             // Vuelta de diseño 18: el nombre del crédito como título y qué es la hoja debajo.
             EncabezadoDeHoja(credit.account.name, subtitulo = TITULO_DEL_SIMULADOR)
             Spacer(Modifier.height(Espacio.m))

@@ -118,6 +118,8 @@ import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import com.jvillada.movi.ui.components.ds.TamanoDeBoton
 import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
+import com.jvillada.movi.ui.components.desplazableConElTeclado
+import com.jvillada.movi.ui.components.rememberListaConElTeclado
 
 /**
  * **«Más → Categorías»** — la pantalla para ver, arreglar y ordenar las categorías.
@@ -376,6 +378,7 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
             // Ola R4: una sola lista de [Fila]s del sistema sobre una [Superficie], en vez de una
             // tarjeta suelta por categoría. Cada fila trae su margen; lo demás, el de la pantalla.
             LazyColumn(
+                state = rememberListaConElTeclado(),
                 modifier = Modifier.weight(1f),
                 contentPadding = PaddingValues(top = Espacio.xs, bottom = Medida.botonFlotante + Medida.entreSecciones),
             ) {
@@ -744,7 +747,7 @@ private fun HojaDeOrden(
     onDismiss: () -> Unit,
 ) {
     HojaBase(onDismiss = onDismiss) {
-        Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+        Column(modifier = Modifier.desplazableConElTeclado().weight(1f, fill = false)) {
             Text(
                 "Ordena tus categorías",
                 style = Movi.textos.tituloMedio,
@@ -958,7 +961,7 @@ private fun HojaDetalle(
     // pueda tocar una fila (ver el pie de la pantalla, que explica por qué son menos de las que
     // tiene el server). Sin una reservada que dibujar, esta hoja no necesita su propia rama.
     HojaBase(onDismiss = onDismiss) {
-        Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+        Column(modifier = Modifier.desplazableConElTeclado().weight(1f, fill = false)) {
             Text(
                 categoria.name,
                 style = Movi.textos.titular,
@@ -1292,7 +1295,7 @@ private fun HojaRenombrar(
     val puedeGuardar = limpio.isNotEmpty() && !sinCambio && !guardando && colision?.reserved != true
 
     HojaBase(onDismiss = onDismiss) {
-        Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+        Column(modifier = Modifier.desplazableConElTeclado().weight(1f, fill = false)) {
             Text(
                 "Renombrar «${categoria.name}»",
                 style = Movi.textos.tituloMedio,

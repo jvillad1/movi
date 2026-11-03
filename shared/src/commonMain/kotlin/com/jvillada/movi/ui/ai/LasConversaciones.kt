@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
@@ -33,6 +35,7 @@ import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.components.ConfirmarEnHoja
 import com.jvillada.movi.ui.components.MarcoDeHoja
 import com.jvillada.movi.ui.components.NoSePudoLeer
+import com.jvillada.movi.ui.components.rememberListaConElTeclado
 import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.ui.components.ds.BotonDeIcono
 import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
@@ -118,6 +121,8 @@ internal fun ListaDeConversaciones(
     onEliminar: (ConversacionEnLaLista) -> Unit,
     onReintentar: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Vuelta 118: en la hoja, la lista que mueve el teclado; en la columna ancha, una suya (el teclado mueve el chat). */
+    estadoDeLaLista: LazyListState = rememberLazyListState(),
 ) {
     Column(modifier = modifier.testTag(TAG_LISTA_DE_CONVERSACIONES), verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion)) {
         Boton(
@@ -137,7 +142,7 @@ internal fun ListaDeConversaciones(
             }
             lista.isEmpty() -> Text(NINGUNA_CONVERSACION_TODAVIA, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
             else -> Superficie(modifier = Modifier.weight(1f, fill = false), relleno = RellenoDeSuperficie.Lista) {
-                LazyColumn {
+                LazyColumn(state = estadoDeLaLista) {
                     items(lista, key = { it.id }) { conversacion ->
                         FilaDeConversacion(
                             conversacion = conversacion,
@@ -230,6 +235,8 @@ internal fun HojaDeConversaciones(
             onEliminar = onEliminar,
             onReintentar = onReintentar,
             modifier = Modifier.fillMaxWidth().padding(top = Medida.dentroDeSeccion, bottom = Espacio.xl),
+            // Vuelta 118: con la hoja abierta, las flechas y Av Pág mueven la lista de conversaciones.
+            estadoDeLaLista = rememberListaConElTeclado(),
         )
     }
 }

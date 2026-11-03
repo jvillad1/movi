@@ -75,6 +75,7 @@ import com.jvillada.movi.ui.transactions.HojaDelMovimiento
 import com.jvillada.movi.ui.transactions.FinalDeLaFila
 import com.jvillada.movi.ui.transactions.debajoDeLaCifra
 import com.jvillada.movi.ui.transactions.montoPrincipalDelMovimiento
+import com.jvillada.movi.ui.components.rememberListaConElTeclado
 
 /** El `testTag` del campo de búsqueda. */
 const val TAG_CAMPO_DE_BUSCAR: String = "buscar-campo"
@@ -206,6 +207,7 @@ fun BuscarScreen(onNavigate: (Screen) -> Unit) {
                 alCambiar = { filtros = it },
             )
             LazyColumn(
+                state = rememberListaConElTeclado(),
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(top = Medida.dentroDeSeccion, bottom = Medida.entreSecciones),
             ) {

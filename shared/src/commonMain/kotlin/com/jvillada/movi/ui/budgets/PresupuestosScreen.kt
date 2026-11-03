@@ -14,8 +14,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
@@ -97,6 +95,8 @@ import com.jvillada.movi.shared.model.FinancialEvent
 import androidx.compose.runtime.rememberCoroutineScope
 import com.jvillada.movi.ui.categorias.IconoDeCategoria
 import com.jvillada.movi.ui.categorias.TamanoDeIconoDeCategoria
+import com.jvillada.movi.ui.components.desplazableConElTeclado
+import com.jvillada.movi.ui.components.rememberListaConElTeclado
 
 /** `internal` y no `private` para poder probar [estadoDelPresupuesto] — ver EstadoDelPresupuestoTest. */
 internal data class BudgetProgress(
@@ -793,6 +793,7 @@ fun PresupuestosScreen(onNavigate: (Screen) -> Unit) {
                 } else null,
             )
             LazyColumn(
+                state = rememberListaConElTeclado(),
                 modifier = Modifier.weight(1f),
                 contentPadding = PaddingValues(bottom = Medida.botonFlotante + Espacio.xl),
             ) {
@@ -960,7 +961,7 @@ private fun BudgetSheet(
         // Ola W1: el desplazamiento era el del panel entero; ahora es el del cuerpo, como en las
         // demás hojas (`weight(1f, fill = false)`), y la X queda fija arriba. Hace falta además
         // para la hoja centrada de la web, que se topa al 90 % del alto.
-        Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+        Column(modifier = Modifier.desplazableConElTeclado().weight(1f, fill = false)) {
             Text(
                 text = title,
                 style = Movi.textos.tituloMedio,

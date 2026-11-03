@@ -8,9 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -46,6 +44,7 @@ import com.jvillada.movi.ui.components.ds.VarianteDeCifra
 import com.jvillada.movi.ui.components.formatCOP
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 /*
  * # El selector de reparto (vuelta 97)
@@ -320,7 +319,7 @@ fun HojaDeRepartirElGasto(
 
     MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !trabajando) {
         Column(
-            modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false).testTag(TAG_HOJA_DE_REPARTIR),
+            modifier = Modifier.desplazableConElTeclado().weight(1f, fill = false).testTag(TAG_HOJA_DE_REPARTIR),
         ) {
             EncabezadoDeHoja("Repartir en ${espacio.nombre}", subtitulo = "En tus gastos cuenta solo tu parte.")
             Spacer(Modifier.height(Medida.dentroDeSeccion))

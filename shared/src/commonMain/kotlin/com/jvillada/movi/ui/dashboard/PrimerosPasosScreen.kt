@@ -11,8 +11,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
@@ -41,6 +39,7 @@ import com.jvillada.movi.ui.primeruso.rememberPrimerosPasos
 import kotlinx.coroutines.coroutineScope
 import kotlinx.datetime.Clock
 import kotlinx.coroutines.launch
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 /**
  * # «Primeros pasos», como pantalla — la puerta de vuelta a la guía
@@ -159,7 +158,7 @@ fun PrimerosPasosScreen(onNavigate: (Screen) -> Unit) {
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .verticalScroll(rememberScrollState()),
+                .desplazableConElTeclado(),
         ) {
             Text(
                 text = "Lo que conviene tener listo para que las cifras de Movi digan la verdad. " +

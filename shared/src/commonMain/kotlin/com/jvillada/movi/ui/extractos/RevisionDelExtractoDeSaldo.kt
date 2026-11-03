@@ -23,10 +23,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -60,6 +58,7 @@ import com.jvillada.movi.ui.components.HeaderLeading
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.toUserMessage
 import kotlinx.coroutines.launch
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 const val TAG_PROPUESTA_DEL_EXTRACTO_DE_SALDO: String = "propuesta-del-extracto-de-saldo"
 const val ACTUALIZAR_EL_SALDO: String = "Actualizar el saldo"
@@ -97,7 +96,7 @@ internal fun RevisionDelExtractoDeSaldo(propuesta: PropuestaDelExtractoDeSaldo, 
             subtitle = "Extracto de saldo",
         )
         Column(
-            modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Espacio.m, vertical = Espacio.s),
+            modifier = Modifier.weight(1f).desplazableConElTeclado().padding(horizontal = Espacio.m, vertical = Espacio.s),
         ) {
             Superficie(
                 modifier = Modifier.fillMaxWidth().testTag(TAG_PROPUESTA_DEL_EXTRACTO_DE_SALDO),

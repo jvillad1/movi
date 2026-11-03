@@ -47,6 +47,7 @@ import kotlinx.datetime.toLocalDateTime
 import com.jvillada.movi.ui.fecha.etiquetaDeFecha
 import com.jvillada.movi.ui.fecha.fechaDeEpoch
 import com.jvillada.movi.ui.fecha.hoyEnAppZone
+import com.jvillada.movi.ui.components.rememberListaConElTeclado
 
 @Composable
 fun ImportDetailScreen(onNavigate: (Screen) -> Unit, importId: String) {
@@ -137,6 +138,7 @@ fun ImportDetailScreen(onNavigate: (Screen) -> Unit, importId: String) {
 private fun ImportDetailContent(detail: StatementImportDetail) {
     val imp = detail.import
     LazyColumn(
+        state = rememberListaConElTeclado(),
         modifier = Modifier.fillMaxSize().padding(horizontal = Espacio.l),
         verticalArrangement = Arrangement.spacedBy(Espacio.s),
     ) {

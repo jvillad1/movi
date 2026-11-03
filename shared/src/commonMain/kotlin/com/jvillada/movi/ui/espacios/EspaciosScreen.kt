@@ -81,6 +81,7 @@ import com.jvillada.movi.ui.components.toUserMessage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 /**
  * El título de la pantalla de los espacios: **«Grupos»** (vuelta 42). Fue «Espacios» y en la vuelta 38
@@ -189,7 +190,7 @@ fun EspaciosScreen(onNavigate: (Screen) -> Unit) {
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .verticalScroll(rememberScrollState())
+                    .desplazableConElTeclado()
                     .padding(horizontal = Medida.margenDePantalla)
                     .padding(bottom = Medida.entreSecciones),
                 verticalArrangement = Arrangement.spacedBy(Medida.entreSecciones),
@@ -281,7 +282,7 @@ fun EspacioScreen(id: String, pagoOtro: Boolean) {
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .verticalScroll(rememberScrollState())
+                    .desplazableConElTeclado()
                     .padding(horizontal = Medida.margenDePantalla)
                     .padding(bottom = Medida.entreSecciones),
                 verticalArrangement = Arrangement.spacedBy(Medida.entreSecciones),
@@ -408,7 +409,8 @@ internal fun CuerpoDelEspacio(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
-                    .verticalScroll(rememberScrollState())
+                    // Vuelta 118: la columna de los gastos es la que mueve el teclado.
+                    .desplazableConElTeclado()
                     .padding(start = Medida.margenDePantalla / 2, end = Medida.margenDePantalla, bottom = Medida.entreSecciones)
                     .testTag(TAG_COLUMNA_DERECHA_DEL_ESPACIO),
                 verticalArrangement = Arrangement.spacedBy(Medida.entreSecciones),

@@ -112,8 +112,6 @@ import com.jvillada.movi.ui.quickadd.categoriasParaLasPastillasDeAgregar
 import com.jvillada.movi.ui.sms.EligeLaCategoria
 import com.jvillada.movi.ui.sms.categoriasDeLaTarjeta
 import com.jvillada.movi.shared.model.SmsMessage
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import com.jvillada.movi.ui.transactions.HojaDeConfirmarLosAvisos
 import com.jvillada.movi.ui.transactions.TarjetaDeAvisosDelBanco
 import com.jvillada.movi.ui.transactions.avisosPorConfirmar
@@ -137,6 +135,8 @@ import com.jvillada.movi.ui.sms.LocalLaTarjetaLlevaElAmarillo
 import com.jvillada.movi.ui.sms.laTarjetaLlevaElAmarillo
 import com.jvillada.movi.ui.espacios.rememberEspaciosParaRepartir
 import com.jvillada.movi.ui.sms.YaAnotadoEnLaFila
+import com.jvillada.movi.ui.components.desplazableConElTeclado
+import com.jvillada.movi.ui.components.DesplazarConElTeclado
 
 /** Revisión de la vuelta 74: cuánto se ignoran los toques de la lista tras resolver una tarjeta. */
 const val PAUSA_TRAS_RESOLVER_MS: Long = 300L
@@ -906,6 +906,8 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
     val alPie = Medida.botonFlotante + Medida.margenDePantalla
     // Vuelta 44: al volver de Revisar aviso, la lista queda donde la dejaste (ver [ListaQueSeConserva]).
     val lista = rememberListaQueSeConserva(conDatos = !cargando)
+    // Vuelta 118: la lista de los avisos es la que mueve el teclado.
+    DesplazarConElTeclado(lista.estado)
     val laDeLaDerecha = rememberListaQueSeConserva(conDatos = !cargando)
 
     // Vuelta 82 · un amarillo por vista: con el lote «Confirmar N» a la vista, o con más de una tarjeta,
@@ -1005,7 +1007,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
     todasLasCategoriasPara?.let { cabezaId ->
         val cabeza = mensajes?.firstOrNull { it.id == cabezaId }
         MarcoDeHoja(onDismiss = { todasLasCategoriasPara = null }) {
-            Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+            Column(modifier = Modifier.desplazableConElTeclado().weight(1f, fill = false)) {
                 EncabezadoDeHoja("Categoría")
                 Spacer(Modifier.height(Medida.dentroDeSeccion))
                 SelectorDeCategoria(

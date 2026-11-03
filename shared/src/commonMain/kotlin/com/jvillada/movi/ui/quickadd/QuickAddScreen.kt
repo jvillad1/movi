@@ -44,7 +44,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
@@ -133,6 +132,7 @@ import com.jvillada.movi.ui.fecha.hoyEnAppZone
 import kotlinx.datetime.Clock
 import kotlinx.datetime.LocalDate
 import com.jvillada.movi.ui.fecha.timestampParaFecha
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 /** La flecha «‹» del encabezado de un sub-editor, que vuelve al formulario. Ver [PickerHeader]. */
 internal const val TAG_VOLVER_DEL_SUB_EDITOR = "quickadd:volver-del-sub-editor"
@@ -1631,7 +1631,7 @@ fun QuickAddScreen(
                     )
                     // AFUERA del scroll: el alto que la hoja ocupa DE VERDAD en pantalla.
                     .onSizeChanged { huecoVisiblePx = it.height }
-                    .verticalScroll(sheetScroll)
+                    .desplazableConElTeclado(sheetScroll)
                     // Vuelta 71, con teclado en pantalla: el cuerpo ocupa al menos el hueco y se apoya
                     // abajo (ver `verticalArrangement`), así el teclado queda donde siempre.
                     .then(

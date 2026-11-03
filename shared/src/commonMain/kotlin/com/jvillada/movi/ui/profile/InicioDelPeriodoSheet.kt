@@ -4,8 +4,6 @@ import com.jvillada.movi.ui.components.ds.SelectorDeDiaDelMes
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -37,6 +35,7 @@ import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.minus
 import kotlinx.datetime.number
+import com.jvillada.movi.ui.components.desplazableConElTeclado
 
 /**
  * **La única escritura de los arranques propios**: vuelve a leer el perfil, le aplica [cambio] a
@@ -123,7 +122,7 @@ fun InicioDelPeriodoSheet(
 
     MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !saving) {
         Column(
-            modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false),
+            modifier = Modifier.desplazableConElTeclado().weight(1f, fill = false),
         ) {
             // Vuelta 41: una frase corta; lo de «el anterior se cierra solo» lo dice la vista previa,
             // con la fecha.
