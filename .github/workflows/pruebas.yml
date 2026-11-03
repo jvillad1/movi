@@ -31,11 +31,11 @@
 # vale también para admins), y `publicar.sh` mergea con merge commit. Al día = la cabeza del PR ya
 # contiene la punta de master, así que el árbol que queda en master tras el merge es **el mismo
 # árbol** que probó el PR (la ref `pull/N/merge` de ese SHA). Volver a correr las pruebas ahí era
-# correr dos veces lo mismo. Queda un **humo** barato (compila :core, :server y la web, y la guarda
-# del despliegue, sin pruebas) por dos razones: (1) setup-gradle solo ESCRIBE la caché de Gradle
+# correr dos veces lo mismo. Queda un **humo** (compila todo, prepara las suites sin correr pruebas
+# y la guarda del despliegue) por dos razones: (1) setup-gradle solo ESCRIBE la caché de Gradle
 # desde master —los PR la leen—, y sin una corrida en master los PR perderían la caché de
 # dependencias y de compilación; (2) si algo se colara en master por fuera de un PR, al menos se ve
-# que compila.
+# que compila. Nadie lo espera: corre después del merge.
 #
 # ## Ramas `ci/…`
 #
@@ -63,6 +63,9 @@ jobs:
     if: github.event_name == 'pull_request' || startsWith(github.ref, 'refs/heads/ci/')
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      # Ver «La caché de Gradle» en el humo, abajo.
+      GRADLE_BUILD_ACTION_CACHE_KEY_JOB: pruebas
     strategy:
       # Que un trozo rojo no cancele los otros: cada uno dice lo suyo.
       fail-fast: false
@@ -297,6 +300,14 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      # **La caché de Gradle.** setup-gradle restaura primero una entrada del MISMO trabajo (por su
+      # id) y recién después la más reciente de cualquier trabajo. Sin esto, los trabajos de la
+      # matriz (`suite`) no tendrían ninguna de master con su id y tomarían la última de cualquiera
+      # —casi siempre la de `paquete.yml`, que corre justo después de cada merge y no trae nada de
+      # Android—, y bajarían de nuevo las dependencias de Android y de las pruebas en cada PR. Con el
+      # mismo id («pruebas», el del trabajo de antes de la vuelta 122) los PR toman la del humo.
+      GRADLE_BUILD_ACTION_CACHE_KEY_JOB: pruebas
     steps:
       - uses: actions/checkout@v4
 
@@ -322,16 +333,20 @@ jobs:
       # En master setup-gradle sí escribe la caché (dependencias y caché de build) que leen los PR.
       - uses: gradle/actions/setup-gradle@v4
 
-      # Lo que más se repite entre PR y menos cambia: :core (jvm y android), :server y la web. No
-      # compila :shared para Android (cambia en casi todos los PR: su entrada en la caché casi nunca
-      # serviría) ni corre pruebas (ya corrieron en el PR, sobre este mismo árbol).
-      - name: Compilar :core, :server y la web
+      # Compila lo mismo que la matriz y prepara las tres suites SIN correr ninguna prueba
+      # (`movi.soloPrepararLasPruebas`: compila las clases de prueba y resuelve el classpath con que
+      # correrían). Así la caché que escribe trae todas las dependencias que usan los PR (también las
+      # que solo se bajan para ejecutar pruebas) y la compilación de lo que no cambió. Las pruebas ya
+      # corrieron en el PR, sobre este mismo árbol.
+      - name: Compilar y preparar las pruebas, sin correrlas
         run: >
-          ./gradlew --build-cache
-          :core:compileTestKotlinJvm
-          :core:compileDebugKotlinAndroid
-          :server:compileTestKotlin
+          ./gradlew --build-cache -Pmovi.soloPrepararLasPruebas=true
+          :core:jvmTest
+          :server:test
+          :shared:testDebugUnitTest
           :shared:compileKotlinWasmJs
+          :androidApp:compileDirectaDebugKotlin
+          :androidApp:compilePlayDebugKotlin
 
       - name: El despliegue no necesita el Android SDK
         run: |

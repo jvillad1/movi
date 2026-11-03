@@ -60,11 +60,23 @@ val trozoDePruebas = providers.gradleProperty("movi.trozoDePruebas").orNull?.let
     }
     partes[0] to partes[1]
 }
+//
+// `movi.soloPrepararLasPruebas=true`: hace todo lo de una prueba MENOS correrla (compila las clases de
+// prueba y resuelve el classpath con que correrían, que es lo que se baja de internet). Lo usa el humo
+// de master en CI: es el trabajo que escribe la caché de Gradle que leen los PR, y sin esto los PR
+// bajarían en cada corrida lo que solo se usa al ejecutar pruebas (Robolectric y compañía).
+val soloPrepararLasPruebas = providers.gradleProperty("movi.soloPrepararLasPruebas").map { it.toBoolean() }.orElse(false).get()
 subprojects {
     tasks.withType<Test>().configureEach {
         outputs.upToDateWhen { false }
         outputs.doNotCacheIf("Las pruebas siempre corren (vuelta 122)") { true }
         maxParallelForks = forksDePruebas.get()
+        if (soloPrepararLasPruebas) {
+            filter {
+                includeTestsMatching("movi.ninguna.Prueba")
+                isFailOnNoMatchingTests = false
+            }
+        }
         trozoDePruebas?.let { (trozo, de) ->
             exclude { archivo ->
                 if (archivo.isDirectory || !archivo.name.endsWith(".class")) return@exclude false
