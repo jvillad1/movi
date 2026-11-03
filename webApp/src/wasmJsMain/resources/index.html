@@ -2,7 +2,11 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Vuelta 115: con «resizes-content», en Chrome de Android el teclado encoge la ventana (no solo la
+         vista): CanvasBasedWindow (Compose 1.8, montado sobre document.documentElement) escucha
+         «resize» y se mide con su clientHeight, así el lienzo queda arriba del teclado y la pantalla
+         se desplaza (registro, entrada, campos de abajo). Safari y el escritorio lo ignoran. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
     <title>Movi</title>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#F4F1EC">
