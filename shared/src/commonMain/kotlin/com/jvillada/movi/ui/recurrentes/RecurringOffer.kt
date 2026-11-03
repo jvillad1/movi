@@ -94,8 +94,8 @@ data class RecurringPrefill(
      * escondía del checklist el período que el dueño estaba mirando, con su pago adentro—: ese
      * período existe y se cierra marcándolo, con [eventId] como evidencia.
      *
-     * `null` = «desde siempre», que es como siguen naciendo las reglas que se escriben a mano en
-     * Recurrentes.
+     * `null` = lo de las reglas que se escriben a mano en Recurrentes: desde el período en que se crean
+     * (vuelta 121, el server lo lee de `created_at`).
      */
     val activeFrom: String?,
     /**

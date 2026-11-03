@@ -376,12 +376,14 @@ internal fun Transaction.pagosFijosDelPeriodo(
     ajustes: PeriodSettings,
     inicioDeLaHistoria: LocalDate,
 ): List<PagoFijoDelPeriodo> {
-    // Vuelta 63: el abono planeado a una deuda no es un pago fijo del período.
-    val reglas = reglasRealesDe(uid).filterNot { it.esAbonoADeuda }
-    if (reglas.isEmpty()) return emptyList()
     val ventana = ventanaDe(periodo, ajustes)
     val dias = epochMillisToAppDate(ventana.first)..epochMillisToAppDate(ventana.last)
     val enCurso = hoy in dias
+    // Vuelta 63: el abono planeado a una deuda no es un pago fijo del período.
+    // Vuelta 121: en un período cerrado, sin el piso de la creación — [existiaEnElPeriodo] la mira por
+    // ocurrencia y deja ver una anterior con evidencia (pagada); en el período en curso, el de siempre.
+    val reglas = reglasRealesDe(uid, conLaCreacion = enCurso).filterNot { it.esAbonoADeuda }
+    if (reglas.isEmpty()) return emptyList()
 
     val delPeriodo = reglas.flatMap { regla -> ocurrenciasEntre(regla, dias, ajustes).map { regla to it } }
     if (delPeriodo.isEmpty()) return emptyList()
@@ -462,6 +464,9 @@ private fun Transaction.leerOcurrenciasDe(
  *   período. Una que vence antes del día en que la regla nació se calla, salvo que deje evidencia
  *   (LISTO o CON DUDAS): la regla creada el 20-sep que vence el 10 no debe el 10-sep, pero la creada
  *   el 2-oct a partir del sueldo de septiembre sí muestra ese sueldo como su septiembre.
+ *   Vuelta 121: para eso las reglas de un período cerrado llegan **sin** el piso de la creación
+ *   (`reglasRealesDe(conLaCreacion = false)`); el resto de Movi sí lo usa, y ahí lo sellado antes de la
+ *   creación también se ve, porque el primer sello baja ese piso (`arranqueDeLaFila`).
  * - Con un arranque declarado (`activeFrom`): ya lo respeta `ruleIsActiveOn`, así que sale.
  * - Sin ninguna de las dos (las reglas de antes de la columna), sale solo con **evidencia de vida**
  *   hasta este período, y si no, se calla — el lado seguro es el silencio, no un hecho falso:

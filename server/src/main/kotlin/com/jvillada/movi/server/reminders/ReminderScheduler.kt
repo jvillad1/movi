@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.reminders
 
+import com.jvillada.movi.server.routes.arranqueDeLaFila
 import com.jvillada.movi.server.time.ajustesDePeriodoDe
 import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.server.db.Cards
@@ -394,7 +395,8 @@ private fun ResultRow.toRulePair(): Pair<RecurringRule, String?> {
         // `RecurringRule` del server (el otro es `toRule` en `ReminderRoutes`). Un campo leído en
         // uno y no en el otro es exactamente cómo «Próximos pagos» y el correo terminan diciendo
         // cosas distintas del mismo pago.
-        activeFrom = this[RecurringRules.activeFrom],
+        // Vuelta 121: con la fecha de creación si la fila no tiene arranque (ver `arranqueDeLaFila`).
+        activeFrom = arranqueDeLaFila(),
         // Ola V: por el mismo motivo que `activeFrom` — este barrido no llama a `candidatosPuntuados`
         // hoy, pero si algún día lo hiciera (para decidir SI avisar), que ya lea la columna evita
         // exactamente la trampa que el comentario de arriba describe.

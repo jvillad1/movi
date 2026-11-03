@@ -8,6 +8,7 @@ import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.Goals
 import com.jvillada.movi.server.db.KnownDestinations
+import com.jvillada.movi.server.db.RecurringOccurrences
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.SmsMessages
 import com.jvillada.movi.server.db.StatementImports
@@ -92,12 +93,15 @@ class DestinoRoutesTest {
         )
         transaction {
             SchemaUtils.drop(
+                RecurringOccurrences,
                 KnownDestinations, Goals, Credits, SmsMessages, RecurringRules, VoidEvents, Events,
                 StatementImports, Budgets, Accounts, Users,
             )
             SchemaUtils.create(
                 Users, Accounts, StatementImports, Events, VoidEvents,
                 Budgets, RecurringRules, SmsMessages, Credits, Goals, KnownDestinations,
+                // Vuelta 121: leer una regla con fecha de creación mira su primer sello.
+                RecurringOccurrences,
             )
             Users.insert {
                 it[id] = userAId; it[email] = userAEmail; it[name] = "User A"; it[passwordHash] = "hash-a"
