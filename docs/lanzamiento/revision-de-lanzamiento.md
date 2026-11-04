@@ -100,14 +100,15 @@ arregló (§2); lo que queda está ordenado en §3.
    `android.suppressUnsupportedCompileSdk=36`). No es motivo de rechazo, pero la app sale sin reducir
    (~17 MB) y la combinación no está soportada. Hacer: subir AGP, prender R8 con reglas para
    kotlinx-serialization, Ktor y SQLDelight, y probar el AAB en un teléfono con `bundletool`.
-6. **Dependencias — POI y logback subidos.** POI 5.4.1 (CVE-2025-31672) y logback 1.5.38. El primer
-   intento rompió `CerrarSesionesTest` y `PeriodoQuincenalEnElPerfilTest` por un problema de las pruebas,
-   no de las versiones: `primerSelloDe` (`routes/ReminderRoutes.kt`) llamaba a
-   `TransactionManager.currentOrNull()` fuera de una transacción, y Exposed dejaba en ese hilo de IO el
-   gestor de la base por defecto de ese momento; la próxima `transaction {}` del hilo —en otra clase de
-   prueba— salía contra esa otra base («Table "users" not found (this database is empty)»). Ahora lo
-   suelta. Además las 136 clases de prueba conectan con `conectarBaseDePrueba` (`server/src/test/.../BaseDePrueba.kt`,
-   que fija la base por defecto) y `LasPruebasFijanSuBaseTest` no deja volver a `Database.connect` directo.
+6. **Dependencias — POI y logback subidos** (POI 5.4.1, CVE-2025-31672; logback 1.5.38), verde en CI. El
+   primer intento rompió `CerrarSesionesTest` y `PeriodoQuincenalEnElPerfilTest` por las pruebas, no por
+   las versiones: Exposed guarda en un `ThreadLocal` el gestor de la base por defecto la primera vez que
+   un hilo pregunta, y ese hilo después sale contra esa base aunque otra clase haya conectado la suya
+   («Table "users" not found (this database is empty)»). Arreglos: `dbQuery` pasa la base explícita
+   (`transaction(TransactionManager.defaultDatabase)`; en producción hay una sola, no cambia nada),
+   `primerSelloDe` suelta el gestor cuando pregunta fuera de una transacción, y las 137 clases de prueba
+   conectan con `conectarBaseDePrueba` (`server/src/test/.../BaseDePrueba.kt`: fija la base y suelta el
+   gestor del hilo de JUnit); `LasPruebasFijanSuBaseTest` no deja volver a `Database.connect` directo.
    Falta Ktor: 3.0.3 tiene CVE-2025-29904 y trae un Netty anterior a 4.1.125 (CVE-2025-58056/55163); subirlo
    a 3.2.x toca el cliente de las cuatro plataformas. Exposed 0.55 está atrasado. Koin está declarado en
    `server/build.gradle.kts` y nadie lo usa.
