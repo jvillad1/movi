@@ -99,7 +99,7 @@ arregló (§2); lo que queda está ordenado en §3.
    `android.suppressUnsupportedCompileSdk=36`). No es motivo de rechazo, pero la app sale sin reducir
    (~17 MB) y la combinación no está soportada. Hacer: subir AGP, prender R8 con reglas para
    kotlinx-serialization, Ktor y SQLDelight, y probar el AAB en un teléfono con `bundletool`.
-6. **Dependencias.** Subir Ktor a 3.2.x o más nueva (trae Netty ≥ 4.1.125: CVE-2025-58056/55163; Ktor
+6. **Dependencias.** **Probado y revertido (4-nov):** con POI 5.4.1 + logback 1.5.38 falla `CerrarSesionesTest` («cerrar sesiones deja afuera a todos los tokens…») de forma repetible; hay que reproducirlo antes de subirlos. Subir Ktor a 3.2.x o más nueva (trae Netty ≥ 4.1.125: CVE-2025-58056/55163; Ktor
    3.0.3 tiene CVE-2025-29904), POI a ≥ 5.4.0 (CVE-2025-31672) y logback a ≥ 1.5.19. Exposed 0.55 está
    atrasado. Koin está declarado en `server/build.gradle.kts` y nadie lo usa.
 7. **El token de la web vive en `localStorage`** y la web no tiene una CSP de scripts (el `index.html`
