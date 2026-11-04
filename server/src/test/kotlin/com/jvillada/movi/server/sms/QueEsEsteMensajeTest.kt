@@ -144,6 +144,27 @@ class QueEsEsteMensajeTest {
         assertEquals(AVISO_DE_SEGURIDAD, motivo("Iniciaste sesión en un nuevo dispositivo el 01/10/2026 a las 10:00.", deNu))
     }
 
+    /** Vuelta 127: un comercio que comprueba la tarjeta de Nu antes de cobrar no es un movimiento. */
+    @Test
+    fun `la tarjeta verificada de Nu se aparta, por el Android y por el atajo`() {
+        val verificada = "Tarjeta verificada: ANTHROPIC verificó tu tarjeta terminada en 1336 para tus pagos."
+        assertEquals(AVISO_DE_SEGURIDAD, motivo(verificada, deNu))
+        assertEquals(AVISO_DE_SEGURIDAD, motivo(verificada, com.jvillada.movi.shared.model.ORIGEN_DE_NU_POR_ATAJO))
+        assertEquals(AVISO_DE_SEGURIDAD, motivo("ANTHROPIC verificó tu tarjeta terminada en 1336 para tus pagos.", deNu))
+        // Una compra aprobada que nombra la tarjeta sigue siendo un movimiento.
+        assertNull(motivo("Compra aprobada por \$27.500,00: Tu compra en RAPPI por \$27.500,00 con tu tarjeta terminada en 1336", deNu))
+    }
+
+    /** Vuelta 127: un rechazo de Nu por el atajo se aparta como el del Android. */
+    @Test
+    fun `el rechazo de Nu por el atajo se aparta como el del Android`() {
+        val rechazo = "¡Uy! Algo salió mal con tu pago: Tu pago por \$45.000,00 no fue aprobado."
+        assertEquals(NO_PASO, motivo(rechazo, deNu))
+        assertEquals(NO_PASO, motivo(rechazo, com.jvillada.movi.shared.model.ORIGEN_DE_NU_POR_ATAJO))
+        // Y una notificación sin un solo número, también como la del Android.
+        assertEquals(motivo("Nu: Tu tarjeta física ya va en camino.", deNu), motivo("Nu: Tu tarjeta física ya va en camino.", com.jvillada.movi.shared.model.ORIGEN_DE_NU_POR_ATAJO))
+    }
+
     @Test
     fun `el extracto disponible se aparta`() {
         assertEquals(EXTRACTO_DISPONIBLE, motivo("Bancolombia: tu extracto de septiembre 2026 ya está disponible en la app.", deCorreo))

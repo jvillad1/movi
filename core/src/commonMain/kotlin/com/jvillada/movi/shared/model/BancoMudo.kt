@@ -110,7 +110,8 @@ private val CODIGOS_DE_BANCOLOMBIA = setOf("85540", "891333", "87400")
  * nombrando distinto el mismo banco.
  */
 fun nombreDelOrigenDeCaptura(origen: String): String? {
-    val limpio = origen.trim()
+    // Vuelta 127: «Atajo · Notificación · Nu» es la notificación de Nu («Nu»).
+    val limpio = origenSinElAtajo(origen.trim())
     if (limpio.isEmpty()) return null
     if ('·' in limpio) return limpio.substringAfter('·').trim().ifBlank { null }
     if (CODIGOS_DE_BANCOLOMBIA.any { it in limpio }) return "Bancolombia"
@@ -125,10 +126,12 @@ fun nombreDelOrigenDeCaptura(origen: String): String? {
  * Vuelta 111 · lo que llega por un atajo del iPhone: «Atajo · Bancolombia» es un SMS (el iPhone lo
  * reenvió) y cuenta como el mismo origen que los SMS de Bancolombia de un Android; «Atajo · Apple Pay» es
  * el aviso de la billetera, como la notificación de Google Wallet. Sin un canal nuevo a propósito: un
- * APK viejo que lee [OrigenMudo.canal] no sabría leer un valor que no conoce.
+ * APK viejo que lee [OrigenMudo.canal] no sabría leer un valor que no conoce. Vuelta 127: «Atajo ·
+ * Notificación · Nu» es la notificación de Nu y cuenta como el mismo origen que la de un Android.
  */
 fun canalDeCaptura(origen: String): CanalDeCaptura {
-    val limpio = origen.trimStart()
+    // Vuelta 127: «Atajo · Notificación · Nu» es una notificación, la de Nu de un Android.
+    val limpio = origenSinElAtajo(origen.trimStart())
     return when {
         esElAtajoDeApplePay(limpio) -> CanalDeCaptura.NOTIFICACION
         limpio.startsWith("Notificación", ignoreCase = true) || limpio.startsWith("Notificacion", ignoreCase = true) ->

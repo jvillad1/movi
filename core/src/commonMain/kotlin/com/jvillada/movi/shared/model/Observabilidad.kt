@@ -271,7 +271,8 @@ enum class ClaveDeUso(val clave: String, val forma: FormaDeDato, val valores: Se
     ),
     CLASE(
         "clase", FormaDeDato.LISTA,
-        setOf("GASTO", "INGRESO", "TRASPASO", "AVISO", "DEBITO", "PAGO_DE_TARJETA", "COMPROBANTE", "EXTRACTO", "PAPEL", "OTRO"),
+        // Vuelta 127: «NOTIFICACION», la de Nu que mandó el atajo del iPhone (`CAPTURA_POR_ATAJO`).
+        setOf("GASTO", "INGRESO", "TRASPASO", "AVISO", "DEBITO", "PAGO_DE_TARJETA", "COMPROBANTE", "EXTRACTO", "PAPEL", "NOTIFICACION", "OTRO"),
     ),
     ORIGEN(
         "origen", FormaDeDato.LISTA,
@@ -405,8 +406,8 @@ enum class EventoDeUso(val tipo: TipoDeUso, val principal: ClaveDeUso? = null) {
     // ── Vuelta 111 ──
     /**
      * Llegó algo por un atajo del iPhone (`POST /api/captura/atajo`): [ClaveDeUso.ESTADO] dice qué pasó
-     * (`GUARDADO`, `YA_ESTABA`, `NO_ES_DEL_BANCO`, `SIN_FORMA_DE_AVISO` —vuelta 114—, `VACIO`) y [ClaveDeUso.CLASE] si era un SMS (`AVISO`) o
-     * un pago con Apple Pay (`GASTO`). Nunca el texto, el comercio ni el monto.
+     * (`GUARDADO`, `YA_ESTABA`, `NO_ES_DEL_BANCO`, `SIN_FORMA_DE_AVISO` —vuelta 114—, `VACIO`) y [ClaveDeUso.CLASE] si era un SMS (`AVISO`),
+     * un pago con Apple Pay (`GASTO`) o —vuelta 127— una notificación de Nu (`NOTIFICACION`). Nunca el texto, el comercio ni el monto.
      */
     CAPTURA_POR_ATAJO(TipoDeUso.SISTEMA, ClaveDeUso.ESTADO),
     ;
