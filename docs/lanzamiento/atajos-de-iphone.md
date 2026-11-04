@@ -168,6 +168,20 @@ al mismo atajo «Movi - Avisar un mensaje» (el atajo firmado no cambia). El 3-n
 las reconoce por su forma (`notificacionDeNuDelAtajo` en `:core`), con o sin el título y con o sin «Nu» delante,
 y las guarda con el texto que sube un Android y `bank` = «Atajo · Notificación · Nu».
 
+Sin «Nu» delante solo se reconoce lo que trae un monto **y** una seña que solo escribe Nu (su título junto a su
+cuerpo, o el cierre del cuerpo: «ha sido APROBADA», «En un rato podrás verlo en tu app», «En unas horas podrás
+revisar la actualización»): el atajo casi nunca manda remitente y lo reconocido se guarda con el texto entero.
+«Tarjeta verificada», la Cajita, los envíos y el pago desde la cuenta se reconocen solo con «Nu» delante.
+
+**El dedupe con el Android depende de dos cosas**, y se confirma con la primera captura real de Caro:
+- **Que el texto sea idéntico** al que sube el Android («título: cuerpo», byte por byte). `SmsDedupe` compara el
+  texto exacto: si Atajos manda el cuerpo con otras palabras, otro corte, otros espacios o sin el título (salvo la
+  compra y el pago de la tarjeta, que lo recuperan), las dos capturas quedan como dos filas (las junta «el mismo
+  pago», que las muestra como un pago avisado dos veces, pero no las borra).
+- **Que lleguen a ±1 minuto** (`SMS_DEDUPE_TOLERANCE`). El atajo se fecha con la hora del **server** al recibirlo
+  (`momentoDelCorreo`), y el Android con la hora de la notificación en el teléfono; si el atajo corre tarde (el
+  iPhone sin red, la automatización demorada) o el reloj del teléfono está corrido, quedan dos filas.
+
 **Qué anotar**: qué manda Atajos de verdad (solo el cuerpo, título y cuerpo, o el nombre de la app delante). Se
 ve en la base sin el texto de nadie más que Caro: `SELECT time, bank, text FROM sms_messages WHERE user_id = '<id
 de Caro>' AND bank = 'Atajo · Notificación · Nu' ORDER BY time DESC LIMIT 5;` (solo lectura). Si llegara solo el
