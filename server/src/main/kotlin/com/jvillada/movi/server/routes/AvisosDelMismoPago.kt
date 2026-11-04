@@ -89,7 +89,8 @@ private fun limpioDeEspacios(origen: String): String =
     origen.replace(' ', ' ').replace(Regex("""\s+"""), " ").trim()
 
 internal fun canalDelAviso(origen: String): CanalDelAviso {
-    val limpio = limpioDeEspacios(origen)
+    // Vuelta 127: «Atajo · Notificación · Nu» es la notificación de Nu, como la de un Android.
+    val limpio = com.jvillada.movi.shared.model.origenSinElAtajo(limpioDeEspacios(origen))
     return when {
         limpio.startsWith("Notificación", ignoreCase = true) || limpio.startsWith("Notificacion", ignoreCase = true) ->
             CanalDelAviso.NOTIFICACION

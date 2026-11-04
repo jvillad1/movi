@@ -160,6 +160,41 @@ Para probarla sin esperar una compra: desde otro teléfono mándale a Caro un SM
 - Que la **entrada del atajo**, convertida en texto, sea el **contenido del SMS** (en iOS 27, verificado: el
   SMS real llegó).
 
+### Las notificaciones de Nu (vuelta 127)
+
+En el iPhone de Caro (iOS 27) hay una automatización «Notificación» de la app Nu que le pasa cada notificación
+al mismo atajo «Movi - Avisar un mensaje» (el atajo firmado no cambia). El 3-nov el server descartó 9 de esas
+(7 `NO_ES_DEL_BANCO`, 2 `SIN_FORMA_DE_AVISO`): el filtro pedía la forma de un SMS. Desde la vuelta 127 el server
+las reconoce por su forma (`notificacionDeNuDelAtajo` en `:core`), con o sin el título y con o sin «Nu» delante,
+y las guarda con el texto que sube un Android y `bank` = «Atajo · Notificación · Nu».
+
+Sin «Nu» delante solo se reconoce lo que trae un monto **y** una seña que solo escribe Nu (su título junto a su
+cuerpo, o el cierre del cuerpo: «ha sido APROBADA», «En un rato podrás verlo en tu app», «En unas horas podrás
+revisar la actualización»): el atajo casi nunca manda remitente y lo reconocido se guarda con el texto entero.
+«Tarjeta verificada», la Cajita, los envíos y el pago desde la cuenta se reconocen solo con «Nu» delante: «Nu» con
+N mayúscula y un separador («Nu:», «Nu -», «Nu ·» o un salto de línea, nunca un espacio solo), y aun así con un
+monto (o la tarjeta, en «Tarjeta verificada»). Las formas sin «Nu» van ancladas al principio del texto (un aviso
+citado en un chat no entra) y piden la cifra como la escribe Nu («$27.500,00», dos decimales con coma).
+
+**Riesgo que queda**: «ha sido aprobada» (el cierre de la compra de Nu) también podría ser como escribe otro banco
+el cuerpo de su notificación; una compra así, con «Tu compra en … por $X,XX con tu tarjeta terminada en NNNN», se
+guardaría como de Nu y se propondría contra la tarjeta Nu (el dueño la ve antes de confirmar).
+
+**El dedupe con el Android depende de dos cosas**, y se confirma con la primera captura real de Caro:
+- **Que el texto sea idéntico** al que sube el Android («título: cuerpo», byte por byte). `SmsDedupe` compara el
+  texto exacto: si Atajos manda el cuerpo con otras palabras, otro corte, otros espacios o sin el título (salvo la
+  compra y el pago de la tarjeta, que lo recuperan), las dos capturas quedan como dos filas (las junta «el mismo
+  pago», que las muestra como un pago avisado dos veces, pero no las borra).
+- **Que lleguen a ±1 minuto** (`SMS_DEDUPE_TOLERANCE`). El atajo se fecha con la hora del **server** al recibirlo
+  (`momentoDelCorreo`), y el Android con la hora de la notificación en el teléfono; si el atajo corre tarde (el
+  iPhone sin red, la automatización demorada) o el reloj del teléfono está corrido, quedan dos filas.
+
+**Qué anotar**: qué manda Atajos de verdad (solo el cuerpo, título y cuerpo, o el nombre de la app delante). Se
+ve en la base sin el texto de nadie más que Caro: `SELECT time, bank, text FROM sms_messages WHERE user_id = '<id
+de Caro>' AND bank = 'Atajo · Notificación · Nu' ORDER BY time DESC LIMIT 5;` (solo lectura). Si llegara solo el
+cuerpo del depósito («¡No te preocupes! En unas horas…», sin monto), no se puede reconocer: habría que pedirle al
+atajo el título.
+
 ## 5. Apple Pay (a mano)
 
 El atajo de Apple Pay **no está firmado**: para mandar comercio, monto y tarjeta hay que leer propiedades de la

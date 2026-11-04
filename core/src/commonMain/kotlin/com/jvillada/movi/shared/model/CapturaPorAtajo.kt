@@ -79,6 +79,28 @@ fun esElAtajoDeApplePay(origen: String): Boolean =
     esUnAtajo(origen) && origen.substringAfter('·', "").trim().equals(APPLE_PAY, ignoreCase = true)
 
 /**
+ * Vuelta 127 · **el rótulo de una notificación de Nu que mandó el atajo** (ver `notificacionDeNuDelAtajo`):
+ * el canal del atajo y, detrás, el mismo rótulo con que el teléfono Android sube la notificación de Nu.
+ * Así se sabe que llegó por el iPhone (`esUnAtajo`, el tracking) y, quitándole el atajo
+ * ([origenSinElAtajo]), es la notificación de Nu de siempre para el parser, el mismo pago y el banco mudo.
+ */
+const val ORIGEN_DE_NU_POR_ATAJO: String = "$ORIGEN_DEL_ATAJO · Notificación · Nu"
+
+/** ¿El rótulo `bank` es el de una notificación que mandó el atajo («Atajo · Notificación · Nu»)? */
+fun esUnaNotificacionPorAtajo(origen: String): Boolean =
+    esUnAtajo(origen) && origen.substringAfter('·', "").trim().let {
+        it.startsWith("Notificación", ignoreCase = true) || it.startsWith("Notificacion", ignoreCase = true)
+    }
+
+/**
+ * **El rótulo sin el atajo delante, si lo que llegó por el atajo es una notificación**: «Atajo ·
+ * Notificación · Nu» → «Notificación · Nu». Cualquier otro rótulo queda como está («Atajo · Bancolombia»
+ * es un SMS y «Atajo · Apple Pay», el aviso de la billetera: cada uno con su regla).
+ */
+fun origenSinElAtajo(origen: String): String =
+    if (esUnaNotificacionPorAtajo(origen)) origen.substringAfter('·').trim() else origen
+
+/**
  * `GET /api/captura/codigo`: si hay un código vigente, desde cuándo y cuándo llegó el último aviso con
  * él. **Nunca el código**: ese se ve una sola vez, en [CodigoDeCapturaNuevo].
  *

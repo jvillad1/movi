@@ -98,7 +98,7 @@ data class NotificacionEntrante(
  * `bigText` de varios párrafos. El movimiento siempre está en las primeras líneas, y el texto es
  * además la clave de dedupe del server: subir kilobytes no compra nada.
  */
-internal const val MAX_TEXTO_DE_NOTIFICACION = 500
+internal const val MAX_TEXTO_DE_NOTIFICACION = com.jvillada.movi.shared.model.MAX_TEXTO_DE_UNA_NOTIFICACION
 
 /** Tope del campo `bank` del wire (la columna `bank` es varchar(100)). */
 internal const val MAX_MARCA_DE_ORIGEN = 100
@@ -251,16 +251,10 @@ private fun comoTextoPlano(valor: Any?): String = when (valor) {
  * «$28.500 en Rappi»). Si el cuerpo ya empieza con el título no se repite: eso solo le daría al
  * dedupe por texto una cadena distinta para el mismo hecho.
  */
-fun textoDeLaNotificacion(titulo: String, texto: String): String {
-    val t = titulo.trim()
-    val c = texto.trim()
-    val junto = when {
-        t.isEmpty() -> c
-        c.startsWith(t, ignoreCase = true) -> c
-        else -> "$t: $c"
-    }
-    return junto.take(MAX_TEXTO_DE_NOTIFICACION)
-}
+fun textoDeLaNotificacion(titulo: String, texto: String): String =
+    // Vuelta 127: la regla vive en `:core` (`textoDeUnaNotificacion`), para que el atajo del iPhone arme la
+    // notificación de Nu con el MISMO texto y el dedupe del server las vea iguales.
+    com.jvillada.movi.shared.model.textoDeUnaNotificacion(titulo, texto)
 
 /**
  * **De dónde vino esta fila de la bandeja.** Va al campo `bank`, que es el rótulo que «Mensajes del

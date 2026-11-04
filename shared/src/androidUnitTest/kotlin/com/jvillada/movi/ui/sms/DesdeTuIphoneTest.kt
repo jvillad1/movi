@@ -247,13 +247,24 @@ class DesdeTuIphoneTest {
         assertTrue(hay(PRIVACIDAD_DE_LOS_ATAJOS))
         // Vuelta 114 · la línea no promete de más: el atajo no sabe quién manda, así que no puede decir
         // «solo los mensajes de bancos»; dice la regla de verdad (empieza como un aviso y trae un monto).
+        // Vuelta 127: y las notificaciones de Nu, que no empiezan por el banco.
         assertEquals(
-            "Solo se guardan los mensajes que empiezan como un aviso del banco y traen un monto; los demás se " +
-                "descartan sin guardarlos. Nada se anota sin que lo confirmes.",
+            "Solo se guardan los mensajes que empiezan como un aviso del banco y traen un monto, y las notificaciones " +
+                "de Nu; los demás se descartan sin guardarlos. Nada se anota sin que lo confirmes.",
             PRIVACIDAD_DE_LOS_ATAJOS,
         )
         assertFalse("mensajes de bancos" in PRIVACIDAD_DE_LOS_ATAJOS)
         assertTrue(hay(TEXTO_DE_PRUEBA_DEL_ATAJO))
+    }
+
+    @Test
+    fun `la guia dice que el atajo de mensajes tambien sirve con las notificaciones de Nu`() {
+        montar(ServerDeCodigos(CodigoDeCaptura()))
+        assertTrue(hay(TAMBIEN_LAS_NOTIFICACIONES_DE_NU))
+        assertEquals(
+            "También sirve con la automatización «Notificación» de la app Nu: elige el atajo «$NOMBRE_DEL_ATAJO_DE_MENSAJES».",
+            TAMBIEN_LAS_NOTIFICACIONES_DE_NU,
+        )
     }
 
     @Test
