@@ -190,6 +190,9 @@ private val SEGURIDAD = listOf(
     "movimiento inusual", "transaccion extra", "nos alegra que",
     "nunca compartas", "nunca des tus", "nunca entregues", "actualizaste tu informacion",
     "activaste tu tarjeta", "ha sido bloquead", "inusual o riesgos",
+    // Vuelta 127: «Tarjeta verificada: ANTHROPIC verificó tu tarjeta terminada en 1336» (Nu) es un comercio
+    // que comprobó la tarjeta antes de cobrar; el cobro, si llega, llega aparte.
+    "tarjeta verificada", "verifico tu tarjeta",
 )
 
 /** La respuesta del banco después de una verificación: no es la compra, ni su rechazo. */

@@ -24,6 +24,9 @@ import com.jvillada.movi.shared.model.MotivoDelAtajoDescartado
 import com.jvillada.movi.shared.model.ResumenDeAtajosDescartados
 import com.jvillada.movi.shared.model.ORIGEN_DEL_ATAJO
 import com.jvillada.movi.shared.model.ORIGEN_DE_APPLE_PAY
+import com.jvillada.movi.shared.model.ORIGEN_DE_NU_POR_ATAJO
+import com.jvillada.movi.shared.model.esUnRemitentePersonal
+import com.jvillada.movi.shared.model.notificacionDeNuDelAtajo
 import com.jvillada.movi.shared.model.RUTA_VIEJA_DEL_ATAJO_DE_APPLE_PAY
 import com.jvillada.movi.shared.model.RUTA_VIEJA_DEL_ATAJO_DE_MENSAJES
 import com.jvillada.movi.shared.model.ARCHIVO_DEL_ATAJO_DE_APPLE_PAY
@@ -68,7 +71,9 @@ import java.util.UUID
  *    filtro de bancos ([pasaElFiltroDeBancos]: desde la vuelta 113, `seGuardaElSmsDelAtajo` de `:core`, la
  *    misma regla del teléfono con el matiz del remitente que falta) y sigue el camino de los correos del
  *    banco —`sms_messages`, `SmsDedupe`, `queEsEsteMensaje`, «Por revisar»—; un pago con Apple Pay se
- *    guarda como un aviso con su texto legible ([textoDelPagoConApplePay]). Nada se anota solo.
+ *    guarda como un aviso con su texto legible ([textoDelPagoConApplePay]). Nada se anota solo. Vuelta 127:
+ *    antes del filtro, una notificación de Nu (la automatización «Notificación» de la app Nu) se reconoce por
+ *    su forma (`notificacionDeNuDelAtajo`) y se guarda como la sube un Android, con «Atajo · Notificación · Nu».
  *
  * **El código nunca va en una URL ni en un log**: viaja en `Authorization: Bearer <código>`
  * (`CallLogging` imprime la ruta y el status, no las cabeceras), y ninguna línea de log de este archivo
@@ -301,8 +306,14 @@ internal suspend fun atajosDescartadosDe(uid: String, ahora: Long): ResumenDeAta
     return ResumenDeAtajosDescartados(grupos = grupos)
 }
 
+/**
+ * De qué clase era lo que mandó el atajo, para el tracking: un SMS (`AVISO`), un pago con Apple Pay
+ * (`GASTO`) o —vuelta 127— una notificación de Nu (`NOTIFICACION`).
+ */
+private enum class ClaseDeLaCaptura { AVISO, GASTO, NOTIFICACION }
+
 /** El evento del tracking del server: qué pasó y de qué clase era. Sin el texto. */
-private suspend fun registrarLaCaptura(uid: String, estado: String, esPago: Boolean, avisoId: String?, ahora: Long) {
+private suspend fun registrarLaCaptura(uid: String, estado: String, clase: ClaseDeLaCaptura, avisoId: String?, ahora: Long) {
     val dia = Instant.ofEpochMilli(ahora).atZone(AppClock.zone).toLocalDate().toString()
     val id = Observabilidad.idEstable("atajo", avisoId ?: "$estado:$dia")
     Observabilidad.registrarSistema(
@@ -310,7 +321,7 @@ private suspend fun registrarLaCaptura(uid: String, estado: String, esPago: Bool
         buildMap {
             put(ClaveDeUso.ORIGEN, "ATAJO")
             put(ClaveDeUso.ESTADO, estado)
-            put(ClaveDeUso.CLASE, if (esPago) "GASTO" else "AVISO")
+            put(ClaveDeUso.CLASE, clase.name)
             if (avisoId != null && ClaveDeUso.AVISO_ID.admite(avisoId)) put(ClaveDeUso.AVISO_ID, avisoId)
         },
         ahora,
@@ -361,6 +372,7 @@ private suspend fun guardarElAvisoDelAtajo(uid: String, texto: String, origen: S
  * | lo de arriba, más de [MAX_FALLIDOS_POR_MINUTO_POR_IP] veces desde la misma dirección ([ipDelPedido]) | 429 |
  * | más de [MAX_AVISOS_POR_MINUTO_POR_CODIGO] con el mismo código | 429 |
  * | no es JSON, o no trae `tipo` (`mensaje` o `transaccion`) | 400 |
+ * | una notificación de Nu (vuelta 127, `notificacionDeNuDelAtajo`) | 202, guardada como «Atajo · Notificación · Nu» |
  * | un mensaje que no pasa el filtro de bancos, o que llegó vacío | 202, **no se guarda**: solo se cuenta |
  * | ya estaba (el mismo aviso dos veces) | 202 |
  * | guardado | 202 |
@@ -422,15 +434,28 @@ private suspend fun guardarElMensaje(uid: String, aviso: AvisoDelAtajo, ahora: L
     val texto = aviso.texto?.take(MAX_TEXTO_DEL_AVISO)
     if (texto == null) {
         contarAtajoDescartado(uid, MotivoDelAtajoDescartado.VACIO, ahora)
-        registrarLaCaptura(uid, "VACIO", esPago = false, avisoId = null, ahora)
+        registrarLaCaptura(uid, "VACIO", ClaseDeLaCaptura.AVISO, avisoId = null, ahora)
         return HttpStatusCode.Accepted to RespuestaDelAtajo(false, "El mensaje llegó vacío.")
+    }
+    // **Vuelta 127 · una notificación de Nu**, antes del filtro de bancos: la automatización «Notificación»
+    // de la app Nu le pasa al atajo lo que publicó Nu, que no empieza por un banco (es la forma de un SMS).
+    // Se reconoce por su forma (`notificacionDeNuDelAtajo`, en `:core`) y se guarda con el texto que sube
+    // un Android y el rótulo «Atajo · Notificación · Nu»: el parser, el mismo pago y el dedupe la leen como
+    // la de un Android. Un remitente personal nunca: una notificación no trae remitente.
+    if (!esUnRemitentePersonal(aviso.remitente)) {
+        notificacionDeNuDelAtajo(texto)?.let { notificacion ->
+            val (id, guardado) = guardarElAvisoDelAtajo(uid, notificacion, ORIGEN_DE_NU_POR_ATAJO, ahora)
+            registrarLaCaptura(uid, if (guardado) "GUARDADO" else "YA_ESTABA", ClaseDeLaCaptura.NOTIFICACION, avisoId = id, ahora)
+            return HttpStatusCode.Accepted to
+                if (guardado) RespuestaDelAtajo(true, id = id) else RespuestaDelAtajo(false, "Esa notificación ya estaba en la bandeja.")
+        }
     }
     // **La regla del teléfono, en `:core`.** Lo que no es de un banco (o viene de un número personal) no se
     // guarda ni se lee más: solo se cuenta, con su motivo (vuelta 114: lo que nombra un banco sin la forma de
     // un aviso, una promoción o una clave, va aparte de lo que no es de un banco).
     porQueNoPasaElFiltroDeBancos(aviso.remitente, texto)?.let { motivo ->
         contarAtajoDescartado(uid, motivo, ahora)
-        registrarLaCaptura(uid, motivo.name, esPago = false, avisoId = null, ahora)
+        registrarLaCaptura(uid, motivo.name, ClaseDeLaCaptura.AVISO, avisoId = null, ahora)
         val porQue = if (motivo == MotivoDelAtajoDescartado.SIN_FORMA_DE_AVISO) {
             "No tiene la forma de un aviso del banco: no se guardó."
         } else {
@@ -439,7 +464,7 @@ private suspend fun guardarElMensaje(uid: String, aviso: AvisoDelAtajo, ahora: L
         return HttpStatusCode.Accepted to RespuestaDelAtajo(false, porQue)
     }
     val (id, guardado) = guardarElAvisoDelAtajo(uid, texto, origenDelSmsDelAtajo(aviso.remitente, texto), ahora)
-    registrarLaCaptura(uid, if (guardado) "GUARDADO" else "YA_ESTABA", esPago = false, avisoId = id, ahora)
+    registrarLaCaptura(uid, if (guardado) "GUARDADO" else "YA_ESTABA", ClaseDeLaCaptura.AVISO, avisoId = id, ahora)
     return HttpStatusCode.Accepted to
         if (guardado) RespuestaDelAtajo(true, id = id) else RespuestaDelAtajo(false, "Ese mensaje ya estaba en la bandeja.")
 }
@@ -448,11 +473,11 @@ private suspend fun guardarElPago(uid: String, aviso: AvisoDelAtajo, ahora: Long
     val texto = textoDelPagoConApplePay(aviso.comercio, aviso.monto, aviso.tarjeta, aviso.texto)
     if (texto == null) {
         contarAtajoDescartado(uid, MotivoDelAtajoDescartado.VACIO, ahora)
-        registrarLaCaptura(uid, "VACIO", esPago = true, avisoId = null, ahora)
+        registrarLaCaptura(uid, "VACIO", ClaseDeLaCaptura.GASTO, avisoId = null, ahora)
         return HttpStatusCode.Accepted to RespuestaDelAtajo(false, "El pago llegó vacío.")
     }
     val (id, guardado) = guardarElAvisoDelAtajo(uid, texto, ORIGEN_DE_APPLE_PAY, ahora)
-    registrarLaCaptura(uid, if (guardado) "GUARDADO" else "YA_ESTABA", esPago = true, avisoId = id, ahora)
+    registrarLaCaptura(uid, if (guardado) "GUARDADO" else "YA_ESTABA", ClaseDeLaCaptura.GASTO, avisoId = id, ahora)
     return HttpStatusCode.Accepted to
         if (guardado) RespuestaDelAtajo(true, id = id) else RespuestaDelAtajo(false, "Ese pago ya estaba en la bandeja.")
 }

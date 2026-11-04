@@ -1143,7 +1143,8 @@ internal fun separarDelMismoPago(uid: String, ids: List<String>): Int {
  * («85540») y los correos con «Correo · …».
  */
 internal fun esUnaNotificacion(origen: String): Boolean =
-    origen.trimStart().startsWith("Notificación", ignoreCase = true)
+    // Vuelta 127: también la de Nu que mandó el atajo del iPhone («Atajo · Notificación · Nu»).
+    com.jvillada.movi.shared.model.origenSinElAtajo(origen.trimStart()).startsWith("Notificación", ignoreCase = true)
 
 internal fun org.jetbrains.exposed.sql.ResultRow.toSmsMessage() = SmsMessage(
     id    = this[SmsMessages.id],
