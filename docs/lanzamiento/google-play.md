@@ -191,12 +191,11 @@ Texto para el campo de la declaración si Play lo pidiera:
 Movi es una app de finanzas personales. Su función central es registrar los movimientos de la plata del usuario. Con el acceso a las notificaciones que el usuario concede a mano, Movi lee SOLO las notificaciones que publican las apps de bancos de una lista cerrada (cada compra, transferencia o pago que el banco avisa) y las deja en «Por revisar», donde el usuario confirma cada una. Las notificaciones de cualquier otra app se descartan en el teléfono sin leerlas y nunca salen de él. Movi no abre, no borra ni responde notificaciones. Antes de pedir el acceso, la app explica qué lee, para qué y qué no.
 ```
 
-**El ahorro de batería:** la versión de Play pide `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` para la
-tarjeta «Quitar el ahorro de batería». Play solo lo permite cuando el ahorro de batería rompe la
-función central ([Doze, casos aceptables](https://developer.android.com/training/monitoring-device-state/doze-standby#exemption-cases)).
-Justificación: Android desenchufa el `NotificationListenerService` con el ahorro de batería y sin él
-Movi deja de enterarse de los movimientos (medido en la vuelta 92). Si la revisión lo objeta, ver
-«Lo pendiente» en `README.md`.
+**El ahorro de batería:** desde la revisión de lanzamiento (nov-2026) la versión de Play **no** pide
+`REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` (`src/play/AndroidManifest.xml` lo quita y
+`verificaElManifiestoDePlay*` falla si vuelve). La tarjeta «Quitar el ahorro de batería» abre la lista
+del sistema (`ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS`), donde el usuario busca Movi: no hay nada que
+declarar.
 
 ---
 

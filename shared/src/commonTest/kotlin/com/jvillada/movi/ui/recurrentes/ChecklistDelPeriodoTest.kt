@@ -308,7 +308,7 @@ class ChecklistDelPeriodoTest {
         )
 
         assertEquals("Te faltan 2 de 3 pagos de este período", lineaDeLoQueFalta(checklist))
-        assertEquals("Ya salió 1. El checklist completo está en «Ver todos».", pieDeLoYaPagado(checklist))
+        assertEquals("Ya salió 1. La lista completa está en «Ver todos».", pieDeLoYaPagado(checklist))
     }
 
     /** El pie en plural: dos o más pagos ya salieron, sin decir que el dueño los marcó. */
@@ -319,7 +319,7 @@ class ChecklistDelPeriodoTest {
             PagoDelPeriodo("r2", "Gimnasio", 139_900, pagado = true, diasParaVencer = -8),
             PagoDelPeriodo("r3", "Arriendo", 1_850_000, pagado = true, diasParaVencer = -15),
         )
-        assertEquals("Ya salieron 2. El checklist completo está en «Ver todos».", pieDeLoYaPagado(checklist))
+        assertEquals("Ya salieron 2. La lista completa está en «Ver todos».", pieDeLoYaPagado(checklist))
     }
 
     /**

@@ -418,30 +418,51 @@ class AuthRoutesTest {
     // ── Rate limit: lo que protege y lo que NO ────────────────────────────────
 
     /**
-     * El hueco que este test documenta —y fija— es de despliegue, no de código: sin
-     * `ForwardedHeaders`/`XForwardedHeaders` instalado, `origin.remoteHost` es el peer TCP, que
-     * detrás del borde de Railway es **una sola dirección para todo internet**. O sea: los
-     * baldes con `$ip` en la clave NO aíslan por origen.
-     *
-     * Se afirma en la dirección incómoda a propósito: cambiar de `X-Forwarded-For` NO alcanza
-     * para volver a pasar. Si algún día se instala forwarded-headers con una frontera de
-     * confianza de verdad, este test se cae y hay que reescribirlo — que es exactamente el
-     * aviso que se quiere.
+     * El balde por **correo** no depende de la dirección: cambiar `X-Forwarded-For` no lo salta. Es el
+     * balde estricto del reset (ver el bloque de rate limit de `AuthRoutes.kt`).
      */
     @Test
-    fun `el rate limit NO aisla por origen — X-Forwarded-For es inerte`() = testApplication {
+    fun `cambiar X-Forwarded-For no salta el balde por correo`() = testApplication {
         wireApp()
         repeat(10) { requestReset("victima@movi.test") }
 
         val desdeOtraIp = client.post("/api/auth/password-reset/request") {
             header(HttpHeaders.ContentType, "application/json")
-            header(HttpHeaders.XForwardedFor, "203.0.113.99")   // otra "IP": nadie la mira
+            header(HttpHeaders.XForwardedFor, "203.0.113.99")
             setBody("""{"email":"victima@movi.test"}""")
         }
+        assertEquals(HttpStatusCode.TooManyRequests, desdeOtraIp.status, "el balde por correo se salteó cambiando de IP")
+    }
+
+    private suspend fun ApplicationTestBuilder.loginDesde(xff: String, email: String) =
+        client.post("/api/auth/login") {
+            header(HttpHeaders.ContentType, "application/json")
+            header(HttpHeaders.XForwardedFor, xff)
+            setBody("""{"email":"$email","password":"$strongPassword"}""")
+        }
+
+    /**
+     * Revisión de lanzamiento (nov-2026): el balde del login es **por dirección**, la que el borde de
+     * Railway agrega al final de `X-Forwarded-For` (`ipDelPedido`). Antes era uno solo para todo
+     * internet y un script con 60 logins malos dejaba a todos sin entrar. Lo de la izquierda lo escribe
+     * quien llama: anteponer otra dirección no da un balde nuevo.
+     */
+    @Test
+    fun `el balde del login es por la direccion que pone el borde`() = testApplication {
+        wireApp()
+        repeat(60) { i -> loginDesde("198.51.100.1", "nadie$i@movi.test") }
+
         assertEquals(
-            HttpStatusCode.TooManyRequests, desdeOtraIp.status,
-            "cambiar X-Forwarded-For evitó el rate limit: alguien instaló forwarded-headers " +
-                "sin frontera de confianza y el limitador ahora se saltea con una cabecera",
+            HttpStatusCode.TooManyRequests, loginDesde("198.51.100.1", "otro@movi.test").status,
+            "la dirección que agotó su balde siguió entrando",
+        )
+        assertEquals(
+            HttpStatusCode.TooManyRequests, loginDesde("203.0.113.99, 198.51.100.1", "otro2@movi.test").status,
+            "anteponer una dirección inventada dio un balde nuevo",
+        )
+        assertNotEquals(
+            HttpStatusCode.TooManyRequests, loginDesde("198.51.100.2", "otro3@movi.test").status,
+            "una dirección agotó el login de otra: volvió a ser un balde global",
         )
     }
 

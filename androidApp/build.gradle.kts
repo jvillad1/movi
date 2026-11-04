@@ -362,7 +362,7 @@ abstract class VerificaElManifiestoSinSms : DefaultTask() {
         }
         val receptorDeSms = texto.contains("android.provider.Telephony.SMS_RECEIVED")
         check(prohibidos.isEmpty() && !receptorDeSms) {
-            "El manifiesto fusionado de $name pide lo que Play no deja sin la excepción de SMS: " +
+            "El manifiesto fusionado de $name pide lo que Play no deja (SMS sin la excepción, o la exención de batería): " +
                 (prohibidos + listOfNotNull("SMS_RECEIVED".takeIf { receptorDeSms })).joinToString() +
                 ". Quítalo en androidApp/src/play/AndroidManifest.xml con tools:node=\"remove\" " +
                 "(si lo trae una dependencia, también). Manifiesto: ${manifiesto.get().asFile}"
@@ -374,6 +374,9 @@ abstract class VerificaElManifiestoSinSms : DefaultTask() {
         val PERMISOS_PROHIBIDOS_EN_PLAY = listOf(
             "READ_SMS", "RECEIVE_SMS", "SEND_SMS", "RECEIVE_MMS", "RECEIVE_WAP_PUSH", "READ_CALL_LOG",
             "WRITE_CALL_LOG", "PROCESS_OUTGOING_CALLS",
+            // Revisión de lanzamiento (nov-2026): Play lo restringe a casos puntuales; el canal `play` lo
+            // quita y abre la lista del sistema en su lugar (`pedirLaExencionDeBateria`).
+            "REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
         )
     }
 }

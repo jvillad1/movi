@@ -6,6 +6,7 @@ import com.jvillada.movi.server.documentos.Cifrado
 import com.jvillada.movi.server.observabilidad.startVolcadoDeMetricas
 import com.jvillada.movi.server.plugins.configureAuth
 import com.jvillada.movi.server.plugins.configureAutoHead
+import com.jvillada.movi.server.plugins.configureCabecerasDeSeguridad
 import com.jvillada.movi.server.plugins.configureCORS
 import com.jvillada.movi.server.plugins.configureCompression
 import com.jvillada.movi.server.plugins.configureConditionalHeaders
@@ -40,6 +41,8 @@ fun Application.module() {
     com.jvillada.movi.server.parsing.configurarLosTopesDePoi()
     DatabaseFactory.init()
     configureCORS()
+    // Revisión de lanzamiento: nosniff, sin iframes ajenos, HSTS (ver CabecerasDeSeguridad.kt).
+    configureCabecerasDeSeguridad()
     configureSerialization()
     // Vuelta 78: el JSON y el texto viajan con gzip si el cliente lo acepta (ver Compresion.kt).
     configureCompression()

@@ -2,6 +2,7 @@ package com.jvillada.movi.sensor
 
 import android.content.ComponentName
 import android.content.Context
+import android.content.pm.PackageManager
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -112,10 +113,29 @@ fun estaExentaDelAhorroDeBateria(context: Context): Boolean {
  */
 fun pedirLaExencionDeBateria(context: Context) {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
+    val lista = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    // Revisión de lanzamiento (nov-2026): el canal `play` ya no pide el permiso (Play lo restringe), y sin
+    // él el diálogo directo se cierra solo sin lanzar nada: el `recoverCatching` no alcanzaría a abrir la
+    // lista. Así que se mira el manifiesto instalado, como `elAparatoPuedeLeerSms`.
+    if (!elManifiestoPideLaExencion(context)) {
+        runCatching { context.startActivity(lista) }
+        return
+    }
     val directo = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
         .setData(Uri.parse("package:${context.packageName}"))
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    val lista = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     runCatching { context.startActivity(directo) }
         .recoverCatching { context.startActivity(lista) }
 }
+
+/** ¿El manifiesto instalado pide `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`? Si no se sabe, `false`: la lista sirve siempre. */
+private fun elManifiestoPideLaExencion(context: Context): Boolean = runCatching {
+    val pm = context.packageManager
+    val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        pm.getPackageInfo(context.packageName, PackageManager.PackageInfoFlags.of(PackageManager.GET_PERMISSIONS.toLong()))
+    } else {
+        @Suppress("DEPRECATION")
+        pm.getPackageInfo(context.packageName, PackageManager.GET_PERMISSIONS)
+    }
+    info.requestedPermissions?.contains(android.Manifest.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS) == true
+}.getOrDefault(false)

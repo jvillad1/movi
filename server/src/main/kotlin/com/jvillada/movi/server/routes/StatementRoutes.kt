@@ -48,7 +48,6 @@ import com.jvillada.movi.shared.model.masRecientePrimero
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.PartData
 import io.ktor.http.content.forEachPart
-import io.ktor.http.content.streamProvider
 import io.ktor.server.application.log
 import io.ktor.server.request.receiveMultipart
 import io.ktor.server.request.receive
@@ -696,13 +695,23 @@ fun Route.statementRoutes() {
         var fileName = "statement"
         var mimeType = ""
         var bytes = ByteArray(0)
+        var demasiadoGrande = false
         multipart.forEachPart { part ->
             if (part is PartData.FileItem) {
                 fileName = part.originalFileName ?: "statement"
                 mimeType = part.contentType?.toString() ?: ""
-                bytes = part.streamProvider().readBytes()
+                // Revisión de lanzamiento (nov-2026): con `readBytes()` el tope de `procesarExtracto`
+                // llegaba tarde, con el archivo entero ya en el heap. El mismo lector con tope de Documentos.
+                val leido = part.leerConTope(MAX_DOCUMENTO_BYTES)
+                if (leido == null) demasiadoGrande = true else bytes = leido
             }
             part.dispose()
+        }
+        if (demasiadoGrande) {
+            return@post call.respond(
+                HttpStatusCode.PayloadTooLarge,
+                "El archivo pesa más de ${MAX_DOCUMENTO_BYTES / (1024 * 1024)} MB",
+            )
         }
 
         try {

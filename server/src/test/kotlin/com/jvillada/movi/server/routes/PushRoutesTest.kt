@@ -42,6 +42,8 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 /**
  * HTTP-level tests for GET /api/push/vapid-key, POST/DELETE /api/push/subscribe
@@ -60,7 +62,7 @@ class PushRoutesTest {
     private val userAEmail = "a@push.test"
     private val userBEmail = "b@push.test"
 
-    private val subBody = """{"endpoint":"https://push.example/ep-1","p256dh":"pk","auth":"as"}"""
+    private val subBody = """{"endpoint":"https://fcm.googleapis.com/fcm/send/ep-1","p256dh":"pk","auth":"as"}"""
 
     // ── DB bootstrap ─────────────────────────────────────────────────────────
 
@@ -158,6 +160,32 @@ class PushRoutesTest {
     // ── Tests ──────────────────────────────────────────────────────────────────
 
     @Test
+    fun `solo se aceptan los servicios de push de los navegadores, por https`() {
+        assertTrue(esEndpointDePush("https://fcm.googleapis.com/fcm/send/abc"))
+        assertTrue(esEndpointDePush("https://updates.push.services.mozilla.com/wpush/v2/abc"))
+        assertTrue(esEndpointDePush("https://web.push.apple.com/abc"))
+        assertTrue(esEndpointDePush("https://wns2-by3p.notify.windows.com/w/?token=abc"))
+        assertFalse(esEndpointDePush("http://fcm.googleapis.com/fcm/send/abc"), "sin https")
+        assertFalse(esEndpointDePush("https://postgres.railway.internal:5432/x"), "la red interna")
+        assertFalse(esEndpointDePush("https://169.254.169.254/latest/meta-data"), "metadatos")
+        assertFalse(esEndpointDePush("https://fcm.googleapis.com.evil.example/x"), "un sufijo no es el host")
+        assertFalse(esEndpointDePush("https://fcm.googleapis.com:8443/x"), "otro puerto")
+        assertFalse(esEndpointDePush("https://u:p@fcm.googleapis.com/x"), "con usuario")
+        assertFalse(esEndpointDePush(""))
+    }
+
+    @Test
+    fun `una suscripcion a otro host se rechaza`() = testApplication {
+        wireApp()
+        val r = client.post("/api/push/subscribe") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody("""{"endpoint":"http://postgres.railway.internal:5432/x","p256dh":"pk","auth":"as"}""")
+        }
+        assertEquals(HttpStatusCode.BadRequest, r.status)
+    }
+
+    @Test
     fun `vapid key is public and returns the configured key`() = testApplication {
         wireApp()
         val res = client.get("/api/push/vapid-key")   // SIN auth
@@ -210,7 +238,7 @@ class PushRoutesTest {
             header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
             header(HttpHeaders.ContentType, "application/json"); setBody(subBody)
         }
-        val delBody = """{"endpoint":"https://push.example/ep-1"}"""
+        val delBody = """{"endpoint":"https://fcm.googleapis.com/fcm/send/ep-1"}"""
         val foreign = client.delete("/api/push/subscribe") {
             header(HttpHeaders.Authorization, "Bearer ${tokenFor(userBId)}")
             header(HttpHeaders.ContentType, "application/json"); setBody(delBody)

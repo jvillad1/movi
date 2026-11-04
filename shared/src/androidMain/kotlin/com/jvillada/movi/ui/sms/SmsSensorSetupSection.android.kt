@@ -296,9 +296,12 @@ private fun SensorNotificationsCard(installSource: InstallSource, principal: Boo
         )
         Spacer(Modifier.height(Espacio.xs))
         Text(
-            "Movi solo lee las notificaciones de las apps de banco que tiene en su lista, y solo " +
-                "esas salen de este teléfono. Las de cualquier otra app —tus chats, tu correo, " +
-                "todo lo demás— se descartan sin leerlas y sin contarlas.",
+            // Revisión de lanzamiento (nov-2026): la «divulgación destacada» de Play pide decir qué se
+            // recoge y ADÓNDE va, antes del botón; «salen de este teléfono» lo dejaba implícito.
+            "Movi solo lee las notificaciones de las apps de banco que tiene en su lista. El texto " +
+                "de esas notificaciones se envía a tu cuenta de Movi, en el servidor de Movi, para " +
+                "mostrártelo en «Por revisar». Las de cualquier otra app —tus chats, tu correo, " +
+                "todo lo demás— se descartan en el teléfono sin leerlas, sin contarlas y sin enviarlas.",
             style = Movi.textos.apoyo,
             color = Movi.colores.textoMedio,
         )

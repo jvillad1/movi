@@ -19,7 +19,7 @@ import com.jvillada.movi.shared.model.PasswordResetRequest
 import com.jvillada.movi.shared.model.RegisterRequest
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.log
-import io.ktor.server.plugins.origin
+import io.ktor.server.application.ApplicationCall
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
@@ -114,7 +114,22 @@ private const val EMAIL_TOO_LONG = "Ese correo es demasiado largo (máximo $MAX_
 //    antes era el mismo DoS pero contra TODAS las cuentas a la vez y con 5 pedidos.
 //  · El balde por correo no enumera: la clave es la cadena que mandaron, exista o no la
 //    cuenta, así que dos correos cualquiera se comportan igual.
+//
+// **Revisión de lanzamiento (nov-2026): ahora sí por dirección.** El argumento de arriba es contra
+// `XForwardedHeaders`, que toma el valor de la IZQUIERDA (el que escribe quien llama). El borde de
+// Railway AGREGA la dirección real al final de `X-Forwarded-For`, así que el valor de la DERECHA no lo
+// elige el cliente: es `ipDelPedido` (CapturaPorAtajoRoutes.kt), que ya usa la captura por atajo. Cada
+// ruta tiene ahora dos baldes: el de la dirección (los límites de antes) y uno de todos, mucho más alto,
+// que solo frena una inundación. Antes, 60 logins malos de un script dejaban a todo internet sin entrar.
 private const val WINDOW_LOGIN_MS = 5 * 60_000L
+
+/**
+ * Los dos baldes de una ruta de autenticación: el de la dirección del cliente ([porDireccion]) y el de
+ * todos ([deTodos]). Si el de la dirección ya no deja, no se gasta del de todos.
+ */
+private fun ApplicationCall.pasaElTope(ruta: String, porDireccion: Int, deTodos: Int, ventanaMs: Long): Boolean =
+    RateLimiter.allow("$ruta:ip:${ipDelPedido(this)}", maxAttempts = porDireccion, windowMs = ventanaMs) &&
+        RateLimiter.allow("$ruta:todos", maxAttempts = deTodos, windowMs = ventanaMs)
 private const val WINDOW_RESET_MS = 15 * 60_000L
 
 /** Respuesta única del pedido de reset. Idéntica exista o no el correo — es el punto. */
@@ -138,12 +153,10 @@ fun Route.authRoutes() {
         post("/register") {
             // Balde propio: antes register y login compartían la clave `$ip` y 10 logins
             // fallidos apagaban también el registro. Ver el bloque de arriba.
-            val ip = call.request.origin.remoteHost
-            // Se queda en 10, no en el techo alto que usan login y pwreset: esos lo pueden
-            // subir porque el balde por email hace el trabajo estricto, y el registro no
-            // puede tener uno — no hay cuenta todavía. Con el registro abierto, este es el
-            // único freno a la creación masiva de cuentas.
-            if (!RateLimiter.allow("register:global:$ip", maxAttempts = 10, windowMs = WINDOW_LOGIN_MS)) {
+            // 10 por dirección (el único freno a la creación masiva de cuentas: no hay correo
+            // todavía) y un techo de todos más alto, para que el día del lanzamiento el tráfico
+            // legítimo no deje a nadie sin poder registrarse.
+            if (!call.pasaElTope("register", porDireccion = 10, deTodos = 200, ventanaMs = WINDOW_LOGIN_MS)) {
                 return@post call.respond(HttpStatusCode.TooManyRequests, "Demasiados intentos, espera unos minutos")
             }
             val req = call.receive<RegisterRequest>()
@@ -202,8 +215,7 @@ fun Route.authRoutes() {
         }
 
         post("/login") {
-            val ip = call.request.origin.remoteHost
-            if (!RateLimiter.allow("login:global:$ip", maxAttempts = 60, windowMs = WINDOW_LOGIN_MS)) {
+            if (!call.pasaElTope("login", porDireccion = 60, deTodos = 1_000, ventanaMs = WINDOW_LOGIN_MS)) {
                 return@post call.respond(HttpStatusCode.TooManyRequests, "Demasiados intentos, espera unos minutos")
             }
             val req = call.receive<LoginRequest>()
@@ -285,8 +297,7 @@ fun Route.authRoutes() {
             // cualquiera dejaban a todo el mundo sin recuperación durante 15 minutos. El techo
             // global sube y el límite estricto se mueve al correo, que es lo que hay que
             // proteger (no inundar la casilla de nadie). Ver el bloque de arriba.
-            val ip = call.request.origin.remoteHost
-            if (!RateLimiter.allow("pwreset-req:global:$ip", maxAttempts = 30, windowMs = WINDOW_RESET_MS)) {
+            if (!call.pasaElTope("pwreset-req", porDireccion = 30, deTodos = 300, ventanaMs = WINDOW_RESET_MS)) {
                 return@post call.respond(HttpStatusCode.TooManyRequests, "Demasiados pedidos, espera unos minutos")
             }
             val req = call.receive<PasswordResetRequest>()
@@ -379,12 +390,11 @@ fun Route.authRoutes() {
         }
 
         post("/password-reset/confirm") {
-            val ip = call.request.origin.remoteHost
             // Sin balde por correo: el confirm no lleva correo, y keyearlo por token sería
             // inútil (cada intento trae un token distinto). Queda solo el techo global, subido
             // por la misma razón que los otros: en producción es un balde para todo el mundo.
             // Lo que de verdad protege este endpoint es la entropía del token, no el limitador.
-            if (!RateLimiter.allow("pwreset-confirm:global:$ip", maxAttempts = 60, windowMs = WINDOW_RESET_MS)) {
+            if (!call.pasaElTope("pwreset-confirm", porDireccion = 60, deTodos = 1_000, ventanaMs = WINDOW_RESET_MS)) {
                 return@post call.respond(HttpStatusCode.TooManyRequests, "Demasiados intentos, espera unos minutos")
             }
             val req = call.receive<PasswordResetConfirmRequest>()
