@@ -62,6 +62,7 @@ arregló (§2); lo que queda está ordenado en §3.
   cualquier URL guardada por un usuario: servía para sondear la red privada de Railway (SSRF).
 - **La subida de extractos lee con tope** (`routes/StatementRoutes.kt`): `readBytes()` metía el archivo
   entero en memoria antes de mirar los 10 MB; usa el mismo `leerConTope` de Documentos.
+- **Tope de lecturas de papeles con IA** (`ai/ElTopeDeLosPapeles.kt`): ver §3, punto 1.
 - **Cabeceras de seguridad en toda respuesta** (`plugins/CabecerasDeSeguridad.kt`): `nosniff`, sin
   iframes ajenos (`X-Frame-Options` + `frame-ancestors`), `Referrer-Policy` y HSTS (sin
   `includeSubDomains`: `up.railway.app` es compartido). Lo que una ruta ya ponía gana.
@@ -72,11 +73,12 @@ arregló (§2); lo que queda está ordenado en §3.
 
 ### Alto (antes de abrir el registro a desconocidos)
 
-1. **El gasto en IA no tiene tope fuera del chat.** `/api/documents/{id}/leer` y `/api/statements/upload`
-   mandan cada PDF distinto a Haiku y a Sonnet sin límite por usuario; el registro es abierto y sin
-   verificar el correo. Un script que crea cuentas y sube PDFs vacía el crédito de Anthropic y la IA se
-   cae para todos (`IA_SIN_CREDITO`). Hacer: tope por usuario y día en esas dos rutas, un tope global
-   de gasto diario sobre `ia_por_dia`, y verificar el correo antes de dar IA.
+1. **El gasto en IA fuera del chat — en parte hecho.** Ya hay un tope de lecturas de papeles con IA
+   (`ai/ElTopeDeLosPapeles.kt`): 15 por usuario y 200 de todos por hora, contado justo antes de cada
+   llamada a Claude (lo leído antes y los lectores sin IA no cuentan); pasado el tope, 429 con «Movi leyó
+   muchos papeles con IA en la última hora…». Falta: un tope **diario de gasto** sobre `ia_por_dia` (el
+   de ahora vive en memoria y se reinicia con el server) y verificar el correo antes de dar IA. Revisar
+   también que la app muestre bien ese 429 en la hoja de «Compartir con Movi».
 2. **Migraciones sin versión.** `DatabaseFactory.init()` hace `SchemaUtils.create` +
    `createMissingTablesAndColumns` (~50 tablas) en cada arranque. No se puede renombrar, borrar ni
    revertir, no queda registro de qué se aplicó, y un ALTER que falla deja el server sin arrancar.

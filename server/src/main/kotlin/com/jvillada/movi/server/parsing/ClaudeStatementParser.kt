@@ -35,6 +35,9 @@ object ClaudeStatementParser {
         runCatching { AnthropicOkHttpClient.builder().apiKey(key).build() }.getOrNull()
     }
 
+    /** ¿El server tiene con qué llamar a Anthropic? Sin clave una lectura no cuesta nada (ver `ElTopeDeLosPapeles`). */
+    internal val tieneLlave: Boolean get() = client != null
+
     private fun resolveApiKey(): String? {
         System.getenv("ANTHROPIC_API_KEY")?.takeIf { it.isNotBlank() && it != "x" }?.let { return it }
         val envFile = File(System.getProperty("user.dir"), "server/.env")

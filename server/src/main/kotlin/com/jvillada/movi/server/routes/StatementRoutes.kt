@@ -30,6 +30,8 @@ import com.jvillada.movi.server.ai.conLaIa
 import com.jvillada.movi.server.parsing.leerElExtractoDeNu
 import com.jvillada.movi.server.parsing.leerLosMovimientosDeBancolombia
 import com.jvillada.movi.server.parsing.leerElExcelDeBancolombia
+import com.jvillada.movi.server.ai.ElTopeDeLosPapeles
+import com.jvillada.movi.server.ai.PAPELES_DEMASIADOS
 import com.jvillada.movi.server.parsing.ClaudeStatementParser
 import com.jvillada.movi.server.parsing.LectorDePapeles
 import com.jvillada.movi.server.parsing.FamiriosParser
@@ -284,6 +286,11 @@ internal data class ExtractoLeido(
 private fun fallaPorLaIa(falla: FallaDeLaIa): Nothing =
     throw FallaAlProcesarExtracto(HttpStatusCode.ServiceUnavailable, falla.codigo)
 
+/** Revisión de lanzamiento: el tope de lo que va a Claude por papeles (ver ElTopeDeLosPapeles). */
+private fun topeDeLosPapeles(uid: String) {
+    if (!ElTopeDeLosPapeles.pasa(uid)) throw FallaAlProcesarExtracto(HttpStatusCode.TooManyRequests, PAPELES_DEMASIADOS)
+}
+
 /** Lee el extracto (Claude o Famirios). Lanza [FallaAlProcesarExtracto]. Ver [ExtractoLeido]. */
 internal suspend fun leerElExtracto(
     uid: String,
@@ -333,6 +340,7 @@ internal suspend fun leerElExtracto(
             )
         bankName = StatementParser.detectBankName(fileName)
         val reglas = Stores.merchantRules.getRules(uid)
+        topeDeLosPapeles(uid)
         val lectura = conLaIa("leer un extracto", ::fallaPorLaIa) {
             LectorDePapeles.actual.leerExtractoDeImagen(bytes, imageMime, reglas)
         }
@@ -447,6 +455,7 @@ internal suspend fun leerElExtracto(
             }
         } else {
             val reglas = Stores.merchantRules.getRules(uid)
+            topeDeLosPapeles(uid)
             val lectura = conLaIa("leer un extracto", ::fallaPorLaIa) {
                 LectorDePapeles.actual.leerExtractoDeTexto(text, reglas)
             }
