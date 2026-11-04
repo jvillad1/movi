@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.ai
 
+import com.jvillada.movi.server.conectarBaseDePrueba
 import com.jvillada.movi.server.db.AiTurns
 import com.jvillada.movi.server.db.IaPorDia
 import com.jvillada.movi.server.db.UsoDeLaApp
@@ -95,7 +96,7 @@ class ElCostoDeLaIaTest {
 
     @BeforeTest
     fun setUp() {
-        Database.connect(
+        conectarBaseDePrueba(
             url = "jdbc:h2:mem:costo_de_la_ia;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE",
             driver = "org.h2.Driver",
         )

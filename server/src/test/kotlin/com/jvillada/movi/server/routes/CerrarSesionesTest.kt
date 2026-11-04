@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.server.conectarBaseDePrueba
 import com.jvillada.movi.server.auth.JwtConfig
 import com.jvillada.movi.server.auth.RateLimiter
 import com.jvillada.movi.server.db.PasswordResetTokens
@@ -22,7 +23,6 @@ import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
-import org.jetbrains.exposed.sql.transactions.TransactionManager
 import org.jetbrains.exposed.sql.transactions.transaction
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
@@ -51,11 +51,7 @@ class CerrarSesionesTest {
     fun setUp() {
         System.setProperty("movi.jwt.secret", secreto)
         RateLimiter.reset()
-        // La base de esta clase se fija como la de por defecto: si otra clase del mismo fork conecta la
-        // suya más tarde (una corrutina que terminó tarde), `transaction {}` iba a esa —vacía— y el
-        // validador del token contestaba 401. Pasó al cambiar de versiones las dependencias, que movió
-        // el orden de las clases en el fork.
-        TransactionManager.defaultDatabase = Database.connect(
+        conectarBaseDePrueba(
             url = "jdbc:h2:mem:cerrar_sesiones_test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE",
             driver = "org.h2.Driver",
         )
@@ -75,7 +71,6 @@ class CerrarSesionesTest {
 
     @AfterTest
     fun tearDown() {
-        TransactionManager.defaultDatabase = null
         System.clearProperty("movi.jwt.secret")
         RateLimiter.reset()
     }

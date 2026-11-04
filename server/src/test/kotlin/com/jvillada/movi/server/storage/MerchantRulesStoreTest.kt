@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.storage
 
+import com.jvillada.movi.server.conectarBaseDePrueba
 import com.jvillada.movi.server.db.Migrations
 import com.jvillada.movi.server.db.ReglasDeComercio
 import com.jvillada.movi.server.db.Users
@@ -34,7 +35,7 @@ class MerchantRulesStoreTest {
 
     @BeforeTest
     fun setUp() {
-        Database.connect(
+        conectarBaseDePrueba(
             url = "jdbc:h2:mem:reglas_de_comercio;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE",
             driver = "org.h2.Driver",
         )

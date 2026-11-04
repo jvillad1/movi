@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.observabilidad
 
+import com.jvillada.movi.server.conectarBaseDePrueba
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import com.jvillada.movi.server.db.AlertasDelServidor
@@ -52,7 +53,7 @@ class JobsAlertasYSaludTest {
         Metricas.reiniciar()
         Alertas.reiniciar()
         Alertas.mandar = { para, asunto, _ -> correos += para to asunto; true }
-        Database.connect(
+        conectarBaseDePrueba(
             url = "jdbc:h2:mem:jobs_alertas_salud;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE",
             driver = "org.h2.Driver",
         )

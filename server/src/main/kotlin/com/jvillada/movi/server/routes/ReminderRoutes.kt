@@ -233,7 +233,13 @@ private val PRIMEROS_SELLOS = org.jetbrains.exposed.sql.Key<MutableMap<String, M
  * siguiente: no pasa en la práctica (solo se sella lo que ya está a la vista, o sea ya dentro del piso).
  */
 private fun primerSelloDe(uid: String, ruleId: String): String? {
-    val tx = org.jetbrains.exposed.sql.transactions.TransactionManager.currentOrNull() ?: return null
+    val tx = org.jetbrains.exposed.sql.transactions.TransactionManager.currentOrNull() ?: run {
+        // Revisión de lanzamiento: fuera de una transacción, `currentOrNull()` deja en el hilo el gestor de
+        // la base por defecto de ESE momento (Exposed lo inicializa y no lo suelta), y la próxima
+        // `transaction {}` de ese hilo —otra prueba, otra base— salía contra esa. Se suelta.
+        org.jetbrains.exposed.sql.transactions.TransactionManager.resetCurrent(null)
+        return null
+    }
     val porUsuario = tx.getOrCreate(PRIMEROS_SELLOS) { mutableMapOf() }
     val delUsuario = porUsuario.getOrPut(uid) {
         val primero = RecurringOccurrences.period.min()

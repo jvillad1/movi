@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.server.conectarBaseDePrueba
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import com.jvillada.movi.server.db.Accounts
@@ -69,7 +70,7 @@ class IsolationTest {
         // "isolation_test" is the in-memory DB name; DB_CLOSE_DELAY=-1 keeps it
         // alive for the entire JVM lifetime so the @BeforeTest wiring persists
         // into the testApplication block.
-        Database.connect(
+        conectarBaseDePrueba(
             url    = "jdbc:h2:mem:isolation_test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE",
             driver = "org.h2.Driver",
         )

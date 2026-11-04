@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.observabilidad
 
+import com.jvillada.movi.server.conectarBaseDePrueba
 import com.jvillada.movi.server.db.ActividadDelServidor
 import com.jvillada.movi.server.db.CorridasDeJobs
 import com.jvillada.movi.server.db.IaPorDia
@@ -30,7 +31,7 @@ class VolcadoYRetencionTest {
     @BeforeTest
     fun conectar() {
         Metricas.reiniciar()
-        Database.connect(
+        conectarBaseDePrueba(
             url = "jdbc:h2:mem:volcado_de_metricas;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE",
             driver = "org.h2.Driver",
         )

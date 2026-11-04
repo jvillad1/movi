@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.db
 
+import com.jvillada.movi.server.conectarBaseDePrueba
 import com.jvillada.movi.server.cuenta.TABLAS_DEL_USUARIO
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.transactions.transaction
@@ -19,7 +20,7 @@ class TablasDeObservabilidadTest {
 
     @BeforeTest
     fun conectar() {
-        Database.connect(
+        conectarBaseDePrueba(
             url = "jdbc:h2:mem:tablas_de_observabilidad;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE",
             driver = "org.h2.Driver",
         )

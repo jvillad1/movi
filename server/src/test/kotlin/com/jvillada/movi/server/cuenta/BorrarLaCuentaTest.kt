@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.cuenta
 
+import com.jvillada.movi.server.conectarBaseDePrueba
 import at.favre.lib.crypto.bcrypt.BCrypt
 import com.jvillada.movi.server.auth.JwtConfig
 import com.jvillada.movi.server.auth.RateLimiter
@@ -78,7 +79,7 @@ class BorrarLaCuentaTest {
     fun setUp() {
         System.setProperty("movi.jwt.secret", "test-secret-for-borrar-la-cuenta-min-32-chars")
         RateLimiter.reset()
-        Database.connect(
+        conectarBaseDePrueba(
             url = "jdbc:h2:mem:borrar_la_cuenta_test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE",
             driver = "org.h2.Driver",
         )

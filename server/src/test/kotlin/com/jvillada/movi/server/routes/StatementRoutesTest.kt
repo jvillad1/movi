@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.server.conectarBaseDePrueba
 import org.jetbrains.exposed.sql.and
 import kotlin.test.assertTrue
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.neq
@@ -72,7 +73,7 @@ class StatementRoutesTest {
 
     @BeforeTest
     fun setUp() {
-        Database.connect(
+        conectarBaseDePrueba(
             url    = "jdbc:h2:mem:statement_routes_test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE",
             driver = "org.h2.Driver",
         )

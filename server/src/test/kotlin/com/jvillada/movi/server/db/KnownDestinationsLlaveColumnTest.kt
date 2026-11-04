@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.db
 
+import com.jvillada.movi.server.conectarBaseDePrueba
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.selectAll
@@ -24,7 +25,7 @@ class KnownDestinationsLlaveColumnTest {
 
     @BeforeTest
     fun setUp() {
-        Database.connect(
+        conectarBaseDePrueba(
             url = "jdbc:h2:mem:known_destinations_llave_test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE",
             driver = "org.h2.Driver",
         )

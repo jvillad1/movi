@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.ai
 
+import com.jvillada.movi.server.conectarBaseDePrueba
 import com.jvillada.movi.server.db.AccionesPropuestas
 import com.jvillada.movi.server.db.AiTurns
 import com.jvillada.movi.server.db.CONVERSACION_BORRADA
@@ -39,7 +40,7 @@ class GuardarLaConversacionTest {
 
     @BeforeTest
     fun setUp() {
-        Database.connect(
+        conectarBaseDePrueba(
             url = "jdbc:h2:mem:guardar_conversacion;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE",
             driver = "org.h2.Driver",
         )

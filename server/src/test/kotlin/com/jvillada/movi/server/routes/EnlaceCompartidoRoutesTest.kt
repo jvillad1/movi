@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.server.conectarBaseDePrueba
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
@@ -86,7 +87,7 @@ class EnlaceCompartidoRoutesTest {
     @BeforeTest
     fun setUp() {
         RateLimiter.reset()
-        Database.connect(
+        conectarBaseDePrueba(
             url = "jdbc:h2:mem:enlaces_compartidos_test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE",
             driver = "org.h2.Driver",
         )
