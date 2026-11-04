@@ -73,12 +73,13 @@ arregló (§2); lo que queda está ordenado en §3.
 
 ### Alto (antes de abrir el registro a desconocidos)
 
-1. **El gasto en IA fuera del chat — en parte hecho.** Ya hay un tope de lecturas de papeles con IA
-   (`ai/ElTopeDeLosPapeles.kt`): 15 por usuario y 200 de todos por hora, contado justo antes de cada
-   llamada a Claude (lo leído antes y los lectores sin IA no cuentan); pasado el tope, 429 con «Movi leyó
-   muchos papeles con IA en la última hora…». Falta: un tope **diario de gasto** sobre `ia_por_dia` (el
-   de ahora vive en memoria y se reinicia con el server) y verificar el correo antes de dar IA. Revisar
-   también que la app muestre bien ese 429 en la hoja de «Compartir con Movi».
+1. **El gasto en IA — hecho, salvo el correo.** Dos topes: las lecturas de papeles por hora
+   (`ai/ElTopeDeLosPapeles.kt`: 15 por usuario y 200 de todos, 429 «Movi leyó muchos papeles…») y el
+   **gasto diario** de toda la IA (`ai/ElGastoDelDia.kt`: `IA_GASTO_MAXIMO_DIARIO_USD`, 25 por defecto, `0`
+   lo apaga; suma el costo de cada llamada con `PreciosDeLaIa`, arranca el día desde `ia_por_dia` y,
+   pasado el tope, `crearMensaje` no llama y todo contesta «sin crédito» hasta el día siguiente; las tres
+   preguntas sugeridas siguen). Falta verificar el correo antes de dar IA, y revisar que la app muestre bien
+   el 429 de los papeles.
 2. **Migraciones sin versión.** `DatabaseFactory.init()` hace `SchemaUtils.create` +
    `createMissingTablesAndColumns` (~50 tablas) en cada arranque. No se puede renombrar, borrar ni
    revertir, no queda registro de qué se aplicó, y un ALTER que falla deja el server sin arrancar.

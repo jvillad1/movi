@@ -42,6 +42,9 @@ private val log = LoggerFactory.getLogger("com.jvillada.movi.server.ai.LaIaNoEst
  * así que para ese caso, y solo para ese, se lee el mensaje: es lo único que la API ofrece.
  */
 fun fallaDeLaIa(e: Throwable): FallaDeLaIa? {
+    // Revisión de lanzamiento: el tope diario de gasto (ElGastoDelDia) es «sin crédito» para todo lo de
+    // afuera: no prueba el respaldo y la app dice lo de siempre.
+    if (generateSequence(e) { it.cause }.take(8).any { it is TopeDiarioDeLaIa }) return FallaDeLaIa.SIN_CREDITO
     val deLaApi = generateSequence(e) { it.cause }.take(8)
         .filterIsInstance<AnthropicServiceException>().firstOrNull() ?: return null
     return when (deLaApi.statusCode()) {

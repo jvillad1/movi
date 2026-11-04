@@ -115,7 +115,10 @@ fun fichasDe(m: Message): Fichas = m.usage().let { uso ->
  * **La llamada a Anthropic, medida.** Todo `client.messages().create(...)` del server pasa por acá: la
  * operación es el modelo que se pidió, y del `Message` salen las fichas.
  */
-fun crearMensaje(client: AnthropicClient, params: MessageCreateParams): Message =
-    medirLlamada(Servicio.ANTHROPIC, params.model().asString(), { m: Message -> Desenlace(fichas = fichasDe(m)) }) {
+fun crearMensaje(client: AnthropicClient, params: MessageCreateParams): Message {
+    // Revisión de lanzamiento: pasado el tope diario de gasto no se llama (ver ElGastoDelDia).
+    com.jvillada.movi.server.ai.ElGastoDelDia.comprobar()
+    return medirLlamada(Servicio.ANTHROPIC, params.model().asString(), { m: Message -> Desenlace(fichas = fichasDe(m)) }) {
         client.messages().create(params)
     }
+}
