@@ -30,15 +30,17 @@ const val MAX_TEXTO_DE_UNA_NOTIFICACION: Int = 500
  * en la vuelta 127 para que el atajo del iPhone arme **el mismo texto** que el Android y el dedupe los
  * vea iguales.
  */
-fun textoDeUnaNotificacion(titulo: String, cuerpo: String): String {
+fun textoDeUnaNotificacion(titulo: String, cuerpo: String): String = juntar(titulo, cuerpo).take(MAX_TEXTO_DE_UNA_NOTIFICACION)
+
+/** [textoDeUnaNotificacion] sin el tope: la forma de Nu se busca en el texto entero y se recorta al final. */
+private fun juntar(titulo: String, cuerpo: String): String {
     val t = titulo.trim()
     val c = cuerpo.trim()
-    val junto = when {
+    return when {
         t.isEmpty() -> c
         c.startsWith(t, ignoreCase = true) -> c
         else -> "$t: $c"
     }
-    return junto.take(MAX_TEXTO_DE_UNA_NOTIFICACION)
 }
 
 /** El nombre de la app delante: «Nu», «Nu:», «Nu -», «Nu ·» o «Nu» y un salto de línea. Nunca «Nubank» ni «Nuevo». */
@@ -65,36 +67,53 @@ private val TITULOS_DE_NU: List<Regex> = listOf(
 ).map { Regex("^(?:$it)(?=$|[\\s:.\\-–—])", RegexOption.IGNORE_CASE) }
 
 /**
- * **Las formas de Nu que bastan solas**, sin el nombre de la app delante: frases que ningún SMS de otro
- * banco escribe así. Sobre el texto ya normalizado ([normalizarParaBuscar]: minúsculas, sin tildes).
+ * **Las formas de Nu que bastan solas**, sin el nombre de la app delante. Revisión de la vuelta 127: el
+ * atajo casi nunca manda remitente, así que lo que entra por acá entra con el texto entero: **cada una
+ * pide un monto Y una seña que solo escribe Nu** (su título junto a su cuerpo, o la frase con que cierra el
+ * cuerpo). Frases sueltas («tu cajita», «compra rechazada», «te llegó dinero de») no bastan: «Te dejé tu
+ * cajita en la portería» es de un amigo. Sobre el texto ya normalizado ([normalizarParaBuscar]: minúsculas,
+ * sin tildes) y armado como lo sube el Android («título: cuerpo»).
  */
-private val FORMAS_DE_NU: List<Regex> = listOf(
-    // La compra: el título, o el cuerpo («Tu compra en RAPPI por $27.500,00 con tu tarjeta terminada en 1336»).
+private val FORMAS_DE_NU_SOLAS: List<List<Regex>> = listOf(
+    // La compra, con su título y su cuerpo: «Compra aprobada por $X: Tu compra en … con tu tarjeta terminada en 1336».
+    listOf("""^compra\s+aprobada\s+por\s+$MONTO:\s+tu\s+compra\s+en\s.+\scon\s+tu\s+tarjeta\s+terminada\s+en\s+\d{4}"""),
+    // …o con el cierre de Nu: «Tu compra en … por $X con tu tarjeta terminada en 1336 ha sido APROBADA».
+    listOf(
+        """\btu\s+compra\s+en\s.+\spor\s+$MONTO""",
+        """\bcon\s+tu\s+tarjeta\s+terminada\s+en\s+\d{4}""",
+        """\bha\s+sido\s+aprobada\b""",
+    ),
+    // El rechazo, con su título y su cuerpo con monto.
+    listOf("""^compra\s+rechazada:\s+tu\s+compra\s+en\s.+\spor\s+$MONTO"""),
+    listOf("""^¡?\s*uy!?\s+algo\s+salio\s+mal\s+con\s+tu\s+pago:\s+tu\s+pago\s+por\s+$MONTO"""),
+    // El pago de la tarjeta: el título nombra a Nu, o el cuerpo cierra como Nu.
+    listOf("""\bpagaste\s+tu\s+tarjeta\s+de\s+credito\s+nu\b""", """\brecibimos\s+tu\s+pago\s+por\s+$MONTO"""),
+    listOf("""\brecibimos\s+tu\s+pago\s+por\s+$MONTO""", """\ben\s+un\s+rato\s+podras\s+verlo\s+en\s+tu\s+app\b"""),
+    // El depósito propio, con su monto y su cierre.
+    listOf("""\brecibimos\s+tu\s+deposito\s+por\s+$MONTO""", """\ben\s+unas\s+horas\s+podras\s+revisar\s+la\s+actualizacion\b"""),
+    // La plata que llega, con su título y su cuerpo.
+    listOf("""^recibiste\s+$MONTO\s+en\s+tu\s+cuenta:\s+te\s+llego\s+dinero\s+de\s"""),
+).map { forma -> forma.map { Regex(it, RegexOption.IGNORE_CASE) } }
+
+/**
+ * **Las formas de Nu que piden el nombre de la app delante** («Nu: …»): son de Nu, pero solas no lo prueban
+ * —sin monto, o algo que otro banco o una persona podría escribir—.
+ */
+private val FORMAS_DE_NU_CON_LA_APP: List<Regex> = listOf(
     """\bcompra\s+aprobada\s+por\s+$MONTO""",
     """\btu\s+compra\s+en\s+.+\s+con\s+tu\s+tarjeta\s+terminada\s+en\s+\d{4}""",
-    // El rechazo: «Compra rechazada», «¡Uy! Algo salió mal con tu pago: Tu pago por $X no fue aprobado».
     """\bcompra\s+rechazada\b""",
     """\balgo\s+salio\s+mal\s+con\s+tu\s+pago\b""",
     """\btu\s+pago\s+por\s+$MONTO\s+no\s+fue\s+aprobado""",
-    // «Tarjeta verificada: ANTHROPIC verificó tu tarjeta terminada en 1336».
     """\btarjeta\s+verificada\b""",
     """\bverifico\s+tu\s+tarjeta\s+terminada\s+en\s+\d{4}""",
-    // El pago de la tarjeta («¡Bravo! Pagaste tu tarjeta de crédito Nu: Recibimos tu pago por $X»).
     """\bpagaste\s+tu\s+tarjeta\s+de\s+credito\s+nu\b""",
     """\brecibimos\s+tu\s+pago\s+por\s+$MONTO""",
-    // La plata que llega: «Recibiste 300.000,00 en tu cuenta: Te llegó dinero de …».
+    """\brecibimos\s+tu\s+deposito\b""",
     """\brecibiste\s+$MONTO\s+en\s+tu\s+cuenta\b""",
     """\bte\s+llego\s+dinero\s+de\b""",
-    // Lo que rinde la Cajita (Movi lo aparta o no lo lee: no es un movimiento).
     """\btu\s+cajita\b""",
     """\brecibiste\s+tu\s+rendimiento\b""",
-).map { Regex(it, RegexOption.IGNORE_CASE) }
-
-/**
- * **Las formas de Nu que piden el nombre de la app delante** («Nu: …»): son de Nu (el pago desde la
- * cuenta, los envíos), pero otro banco podría escribirlas parecido.
- */
-private val FORMAS_DE_NU_CON_LA_APP: List<Regex> = listOf(
     """\bpago\s+aprobado\s+por\s+$MONTO""",
     """\bpagaste\s+en\s+.+\s+con\s+(?:tu\s+)?cuenta\b""",
     """\benviaste\s+$MONTO""",
@@ -111,8 +130,14 @@ private val NO_PASO = Regex("""rechaz|no\s+fue\s+aprobad|no\s+aprobad|declin""",
 /** El cuerpo de la compra, suelto: «Tu compra en RAPPI por $27.500,00 con tu tarjeta…» → el monto, para su título. */
 private val CUERPO_DE_LA_COMPRA = Regex("""^tu\s+compra\s+en\s+.+?\s+por\s+($MONTO)""", RegexOption.IGNORE_CASE)
 
+/** Cómo cierra Nu el cuerpo de una compra aprobada: «… ha sido APROBADA». */
+private val CIERRE_DE_LA_COMPRA = Regex("""\bha\s+sido\s+aprobada\b""", RegexOption.IGNORE_CASE)
+
 /** El cuerpo del pago de la tarjeta, suelto: «Recibimos tu pago por $1.306.937,91. En un rato…». */
 private val CUERPO_DEL_PAGO_DE_LA_TARJETA = Regex("""^recibimos\s+tu\s+pago\s+por\s+$MONTO""", RegexOption.IGNORE_CASE)
+
+/** Cómo cierra Nu el cuerpo del pago de la tarjeta: «En un rato podrás verlo en tu app». */
+private val CIERRE_DEL_PAGO_DE_LA_TARJETA = Regex("""\ben\s+un\s+rato\s+podr[aá]s\s+verlo\s+en\s+tu\s+app\b""", RegexOption.IGNORE_CASE)
 
 /** El título del pago de la tarjeta, el que Nu le pone siempre (`esElPagoDeLaTarjetaNu`). */
 private const val TITULO_DEL_PAGO_DE_LA_TARJETA = "¡Bravo! Pagaste tu tarjeta de crédito Nu"
@@ -123,22 +148,23 @@ private const val TITULO_DEL_PAGO_DE_LA_TARJETA = "¡Bravo! Pagaste tu tarjeta d
  *
  * 1. Se quita el nombre de la app delante («Nu», «Nu:», «Nu -», «Nu» y un salto de línea), si lo trae.
  * 2. Si lo que queda empieza por un título de Nu ([TITULOS_DE_NU]), título y cuerpo se juntan con «: »,
- *    vengan pegados, en dos renglones o ya con los dos puntos. Si no y el atajo mandó el nombre de la
+ *    vengan pegados, en dos renglones o con «:» o «.» de por medio. Si no y el atajo mandó el nombre de la
  *    app, va «Nu: …», como sube el Android las que Nu publica con el nombre de la app de título («Nu:
  *    Acabas de enviar…»). Si no, dos renglones son título y cuerpo, y uno solo queda como está.
- * 3. **Un cuerpo suelto** de las dos formas que tienen un solo título posible recupera el suyo, para que
- *    el texto sea el mismo que sube el Android (el dedupe) y el parser lo lea: la compra («Tu compra en X
- *    por $M…» → «Compra aprobada por $M: …», salvo que diga que no pasó) y el pago de la tarjeta
- *    («Recibimos tu pago por $M…» → «¡Bravo! Pagaste tu tarjeta de crédito Nu: …»). Los demás cuerpos
- *    quedan como llegaron.
- * 4. Tiene que tener una forma de Nu: las de [FORMAS_DE_NU], el pago de la tarjeta
- *    ([esElPagoDeLaTarjetaNu]), el depósito propio ([esUnDepositoPropio]), o —solo con el nombre de la
- *    app delante— las de [FORMAS_DE_NU_CON_LA_APP]. Y **no puede empezar por otro banco**: «Bancolombia:
- *    Recibimos tu pago…» es un SMS de Bancolombia ([marcaDelRemitente]).
+ * 3. **Un cuerpo suelto** de las dos formas que tienen un solo título posible recupera el suyo —para que
+ *    el texto sea el mismo que sube el Android (el dedupe) y el parser lo lea—, **pero solo con una seña
+ *    de Nu**: el nombre de la app delante o el cierre de Nu del cuerpo. La compra («Tu compra en X por $M…
+ *    ha sido APROBADA» → «Compra aprobada por $M: …», salvo que diga que no pasó) y el pago de la tarjeta
+ *    («Recibimos tu pago por $M. En un rato podrás verlo en tu app» → «¡Bravo! Pagaste tu tarjeta de
+ *    crédito Nu: …»). Sin la seña, «Recibimos tu pago por $85.000. Gracias, Claro» no se vuelve el pago de
+ *    la tarjeta Nu.
+ * 4. Tiene que tener una forma de Nu: sin el nombre de la app, una de [FORMAS_DE_NU_SOLAS] (monto **y**
+ *    seña de Nu); con él, también las de [FORMAS_DE_NU_CON_LA_APP]. Y **no puede empezar por otro banco**:
+ *    «Bancolombia: Recibimos tu pago…» es un SMS de Bancolombia ([marcaDelRemitente]).
  *
- * Un rechazo y «Tarjeta verificada» se reconocen (son de Nu) y el server los guarda apartados, como a
- * los del Android (`queEsEsteMensaje`). Una promoción de Nu sin ninguna de estas formas no se reconoce:
- * sigue el filtro de siempre y se descarta sin guardar el texto. Pura.
+ * Un rechazo y «Tarjeta verificada» se reconocen (solo con su forma entera, o con «Nu» delante) y el server
+ * los guarda apartados, como a los del Android (`queEsEsteMensaje`). Lo que no se reconoce sigue el filtro
+ * de siempre y se descarta **sin guardar el texto**. Pura.
  */
 fun notificacionDeNuDelAtajo(texto: String): String? {
     val crudo = texto.replace('\r', '\n').trim()
@@ -158,22 +184,24 @@ fun notificacionDeNuDelAtajo(texto: String): String? {
 /** Título y cuerpo juntos como los sube el Android (los pasos 2 y 3 de [notificacionDeNuDelAtajo]). */
 private fun normalizado(resto: String, conLaApp: Boolean): String? {
     TITULOS_DE_NU.firstNotNullOfOrNull { it.find(resto) }?.let { titulo ->
-        val cuerpo = resto.substring(titulo.range.last + 1).trimStart(' ', '\t', '\n', ':', '-', '–', '—', '·')
-        return textoDeUnaNotificacion(titulo.value, cuerpo)
+        // «Compra aprobada por $27.500,00. Tu compra…»: el punto también separa, y no queda «: . Tu compra».
+        val cuerpo = resto.substring(titulo.range.last + 1).trimStart(' ', '\t', '\n', ':', '.', '-', '–', '—', '·')
+        return juntar(titulo.value, cuerpo)
     }
-    CUERPO_DE_LA_COMPRA.find(resto)?.takeIf { !NO_PASO.containsMatchIn(resto) }?.let { compra ->
-        return textoDeUnaNotificacion("Compra aprobada por ${compra.groupValues[1]}", resto)
+    CUERPO_DE_LA_COMPRA.find(resto)
+        ?.takeIf { (conLaApp || CIERRE_DE_LA_COMPRA.containsMatchIn(resto)) && !NO_PASO.containsMatchIn(resto) }
+        ?.let { compra -> return juntar("Compra aprobada por ${compra.groupValues[1]}", resto) }
+    if (CUERPO_DEL_PAGO_DE_LA_TARJETA.containsMatchIn(resto) && (conLaApp || CIERRE_DEL_PAGO_DE_LA_TARJETA.containsMatchIn(resto))) {
+        return juntar(TITULO_DEL_PAGO_DE_LA_TARJETA, resto)
     }
-    if (CUERPO_DEL_PAGO_DE_LA_TARJETA.containsMatchIn(resto)) return textoDeUnaNotificacion(TITULO_DEL_PAGO_DE_LA_TARJETA, resto)
-    if (conLaApp) return textoDeUnaNotificacion("Nu", resto)
+    if (conLaApp) return juntar("Nu", resto)
     val renglones = resto.lines().map { it.trim() }.filter { it.isNotEmpty() }
-    return if (renglones.size >= 2) textoDeUnaNotificacion(renglones.first(), resto.substringAfter('\n').trim()) else resto
+    return if (renglones.size >= 2) juntar(renglones.first(), resto.substringAfter('\n').trim()) else resto
 }
 
 private fun tieneUnaFormaDeNu(texto: String, conLaApp: Boolean): Boolean {
     val t = normalizarParaBuscar(texto)
-    return FORMAS_DE_NU.any { it.containsMatchIn(t) } ||
-        esElPagoDeLaTarjetaNu("Nu", texto) ||
-        esUnDepositoPropio(texto) ||
-        (conLaApp && FORMAS_DE_NU_CON_LA_APP.any { it.containsMatchIn(t) })
+    if (FORMAS_DE_NU_SOLAS.any { forma -> forma.all { it.containsMatchIn(t) } }) return true
+    // Con «Nu» delante: las demás formas, el pago de la tarjeta y el depósito propio de siempre.
+    return conLaApp && (FORMAS_DE_NU_CON_LA_APP.any { it.containsMatchIn(t) } || esElPagoDeLaTarjetaNu("Nu", texto) || esUnDepositoPropio(texto))
 }

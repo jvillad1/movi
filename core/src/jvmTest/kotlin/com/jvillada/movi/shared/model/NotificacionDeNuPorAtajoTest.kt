@@ -53,20 +53,33 @@ class NotificacionDeNuPorAtajoTest {
         "Te llegó dinero de CAROLINA PRUEBA con tu llave.",
     )
 
-    private val todas = listOf(compra, pagoDeLaTarjeta, deposito, rechazo, verificada, recibiste)
+    /** Las que llevan monto y una seña de Nu: se reconocen también sin «Nu» delante. */
+    private val conMontoYSena = listOf(compra, pagoDeLaTarjeta, deposito, rechazo, recibiste)
+
+    private val todas = conMontoYSena + verificada
 
     @Test
     fun `titulo y cuerpo, vengan como vengan, dan el texto del Android`() {
-        for (forma in todas) {
+        for (forma in conMontoYSena) {
             for (enviado in forma.conTitulo + forma.conLaApp) {
                 assertEquals(forma.delAndroid, notificacionDeNuDelAtajo(enviado), "mandado así: «$enviado»")
             }
         }
+        // «Tarjeta verificada» no trae monto: solo con «Nu» delante.
+        for (enviado in verificada.conLaApp) assertEquals(verificada.delAndroid, notificacionDeNuDelAtajo(enviado), "mandado así: «$enviado»")
+        for (enviado in verificada.conTitulo) assertNull(notificacionDeNuDelAtajo(enviado), "sin monto ni «Nu»: «$enviado»")
     }
 
     @Test
     fun `el texto del Android tal cual tambien es de Nu, y no cambia`() {
-        for (forma in todas) assertEquals(forma.delAndroid, notificacionDeNuDelAtajo(forma.delAndroid))
+        for (forma in conMontoYSena) assertEquals(forma.delAndroid, notificacionDeNuDelAtajo(forma.delAndroid))
+        assertEquals(verificada.delAndroid, notificacionDeNuDelAtajo("Nu: ${verificada.delAndroid}"))
+    }
+
+    @Test
+    fun `un punto entre el titulo y el cuerpo tambien separa`() {
+        assertEquals(compra.delAndroid, notificacionDeNuDelAtajo("${compra.titulo}. ${compra.cuerpo}"))
+        assertEquals(deposito.delAndroid, notificacionDeNuDelAtajo("${deposito.titulo}. ${deposito.cuerpo}"))
     }
 
     @Test
@@ -77,12 +90,52 @@ class NotificacionDeNuPorAtajoTest {
     }
 
     @Test
-    fun `solo el cuerpo del rechazo y de la tarjeta verificada se reconoce como llego`() {
-        assertEquals(rechazo.cuerpo, notificacionDeNuDelAtajo(rechazo.cuerpo))
-        assertEquals(verificada.cuerpo, notificacionDeNuDelAtajo(verificada.cuerpo))
+    fun `solo el cuerpo del rechazo y de la tarjeta verificada se reconoce solo con Nu delante`() {
+        assertNull(notificacionDeNuDelAtajo(rechazo.cuerpo), "«Tu pago por \$X no fue aprobado» no prueba que sea de Nu")
+        assertNull(notificacionDeNuDelAtajo(verificada.cuerpo))
+        assertEquals("Nu: ${rechazo.cuerpo}", notificacionDeNuDelAtajo("Nu\n${rechazo.cuerpo}"))
+        assertEquals("Nu: ${verificada.cuerpo}", notificacionDeNuDelAtajo("Nu: ${verificada.cuerpo}"))
         // Una compra que dice que no pasó no se vuelve «Compra aprobada».
         val rechazada = "Tu compra en RAPPI por \$45.000,00 con tu tarjeta terminada en 1336 fue rechazada."
-        assertEquals(rechazada, notificacionDeNuDelAtajo(rechazada))
+        assertEquals("Nu: $rechazada", notificacionDeNuDelAtajo("Nu $rechazada"))
+        assertNull(notificacionDeNuDelAtajo(rechazada))
+    }
+
+    /**
+     * Revisión de la vuelta 127 · **los falsos positivos**: el atajo casi nunca manda remitente, así que lo
+     * que se reconoce como Nu se guarda con el texto entero. Sin «Nu» delante, una frase de Nu sin monto o
+     * sin una seña que solo escribe Nu no basta.
+     */
+    @Test
+    fun `lo que se parece a Nu sin monto ni sena de Nu no es de Nu`() {
+        listOf(
+            "Te dejé tu cajita en la portería",
+            "Mi compra rechazada otra vez jaja",
+            "Mi mamá dice que te llegó dinero de la tía",
+            "Recibimos tu pago por \$85.000. Gracias, Claro",
+            "Tu compra en EXITO por \$50.000 con tu tarjeta terminada en 1234",
+            "Recibimos tu depósito del arriendo",
+            "Recibimos tu depósito por \$500.000 del arriendo de noviembre",
+            "Algo salió mal con tu pago, inténtalo otra vez",
+            "Tarjeta verificada, ya puedes usarla",
+            "Compra aprobada por \$42.500 en RAPPI el 02/09/2026.",
+        ).forEach { assertNull(notificacionDeNuDelAtajo(it), "«$it» no es una notificación de Nu") }
+    }
+
+    @Test
+    fun `un cuerpo suelto recupera su titulo solo con la sena de Nu`() {
+        // Sin el cierre de Nu, no se le pone «¡Bravo! Pagaste tu tarjeta de crédito Nu» ni «Compra aprobada».
+        assertNull(notificacionDeNuDelAtajo("Recibimos tu pago por \$85.000. Gracias, Claro"))
+        assertNull(notificacionDeNuDelAtajo("Tu compra en EXITO por \$50.000 con tu tarjeta terminada en 1234"))
+        // Con «Nu» delante, sí.
+        assertEquals(
+            "¡Bravo! Pagaste tu tarjeta de crédito Nu: Recibimos tu pago por \$85.000.",
+            notificacionDeNuDelAtajo("Nu: Recibimos tu pago por \$85.000."),
+        )
+        assertEquals(
+            "Compra aprobada por \$50.000: Tu compra en EXITO por \$50.000 con tu tarjeta terminada en 1234",
+            notificacionDeNuDelAtajo("Nu\nTu compra en EXITO por \$50.000 con tu tarjeta terminada en 1234"),
+        )
     }
 
     @Test

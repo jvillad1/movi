@@ -177,7 +177,8 @@ class NotificacionDeNuPorElAtajoTest {
         avisar(codigo, "¡Bravo! Pagaste tu tarjeta de crédito Nu\nRecibimos tu pago por \$1.306.937,91. En un rato podrás verlo en tu app.")
         avisar(codigo, "Recibimos tu depósito por 1.500.000,00\n¡No te preocupes! En unas horas podrás revisar la actualización en tu app.")
         avisar(codigo, "¡Uy! Algo salió mal con tu pago\nTu pago por \$45.000,00 no fue aprobado. Revisa el cupo de tu tarjeta.")
-        avisar(codigo, "Tarjeta verificada\nANTHROPIC verificó tu tarjeta terminada en 1336 para tus pagos.")
+        // «Tarjeta verificada» no trae monto: se reconoce solo con «Nu» delante.
+        avisar(codigo, "Nu\nTarjeta verificada\nANTHROPIC verificó tu tarjeta terminada en 1336 para tus pagos.")
 
         val porTexto = filas().associateBy { it.text.substringBefore(':') }
         assertEquals(4, porTexto.size, "${filas()}")
@@ -226,17 +227,33 @@ class NotificacionDeNuPorElAtajoTest {
 
     // ── Lo de antes, igual ───────────────────────────────────────────────────────────────────────
 
+    /**
+     * Revisión de la vuelta 127 · lo que se parece a una notificación de Nu sin serlo —una frase de Nu sin
+     * monto, o sin una seña que solo escribe Nu— se sigue descartando **sin guardar el texto**: el atajo casi
+     * nunca manda remitente, así que nada más lo protege.
+     */
     @Test
     fun `un texto personal sigue descartado y sin texto guardado`() = conApp {
         val codigo = crearCodigo()
-        for (texto in listOf("Nu: ¿vienes a comer?", "Hola, ya te pagué los \$20.000 del almuerzo", "Algo nuevo de Nu para 2026: mira lo que preparamos para ti.")) {
+        val personales = listOf(
+            "Nu: ¿vienes a comer?",
+            "Hola, ya te pagué los \$20.000 del almuerzo",
+            "Algo nuevo de Nu para 2026: mira lo que preparamos para ti.",
+            "Te dejé tu cajita en la portería",
+            "Mi compra rechazada otra vez jaja",
+            "Mi mamá dice que te llegó dinero de la tía",
+            "Recibimos tu pago por \$85.000. Gracias, Claro",
+            "Tu compra en EXITO por \$50.000 con tu tarjeta terminada en 1234",
+            "Recibimos tu depósito del arriendo",
+        )
+        for (texto in personales) {
             val r = avisar(codigo, texto)
             assertEquals(HttpStatusCode.Accepted, r.status)
             assertTrue("\"guardado\":false" in r.bodyAsText(), "$texto → ${r.bodyAsText()}")
         }
         assertTrue(filas().isEmpty(), "nada se guardó: ${filas()}")
         val contados = transaction { AtajosDescartados.selectAll().sumOf { it[AtajosDescartados.cuantos] } }
-        assertEquals(3, contados)
+        assertEquals(personales.size, contados)
     }
 
     @Test
