@@ -19,4 +19,10 @@ import org.jetbrains.exposed.sql.transactions.TransactionManager
  * no deja volver a `Database.connect` directo.
  */
 fun conectarBaseDePrueba(url: String, driver: String = "org.h2.Driver"): Database =
-    Database.connect(url = url, driver = driver).also { TransactionManager.defaultDatabase = it }
+    Database.connect(url = url, driver = driver).also {
+        TransactionManager.defaultDatabase = it
+        // El hilo que conecta (el de JUnit) puede tener guardado el gestor de la base de otra clase: Exposed
+        // lo cachea en un ThreadLocal la primera vez que el hilo pregunta. Sin soltarlo, el `transaction {}`
+        // del `@BeforeTest` creaba las tablas en esa otra base y la de la prueba quedaba vacía.
+        TransactionManager.resetCurrent(null)
+    }
