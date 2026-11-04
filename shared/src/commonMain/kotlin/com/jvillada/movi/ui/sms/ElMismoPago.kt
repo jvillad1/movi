@@ -56,7 +56,8 @@ import com.jvillada.movi.ui.fecha.hoyEnAppZone
  * «Correo · Bancolombia» → «Bancolombia». Un SMS lleva el código del remitente y se deja como está.
  */
 internal fun origenLegibleDelAviso(bank: String): String =
-    bank.substringAfter('·', bank).trim().ifBlank { bank.trim() }
+    // Vuelta 127: «Atajo · Notificación · Nu» → «Nu», como la notificación de un Android.
+    com.jvillada.movi.shared.model.origenSinElAtajo(bank.trim()).let { it.substringAfter('·', it).trim().ifBlank { it.trim() } }
 
 /**
  * **La línea que avisa que dos avisos parecen el mismo pago**, antes de aprobar el segundo.
@@ -101,7 +102,9 @@ internal fun canalLegibleDelAviso(bank: String): String {
     return when {
         limpio.isEmpty() || limpio.equals("SMS", ignoreCase = true) || limpio.all { it.isDigit() } -> "SMS"
         // Vuelta 111: el SMS que reenvió el atajo del iPhone sigue siendo un SMS; Apple Pay se nombra solo.
-        com.jvillada.movi.shared.model.esUnAtajo(limpio) && !com.jvillada.movi.shared.model.esElAtajoDeApplePay(limpio) -> "SMS"
+        // Vuelta 127: la notificación de Nu que mandó el atajo se nombra como la de un Android («Nu»).
+        com.jvillada.movi.shared.model.esUnAtajo(limpio) && !com.jvillada.movi.shared.model.esElAtajoDeApplePay(limpio) &&
+            !com.jvillada.movi.shared.model.esUnaNotificacionPorAtajo(limpio) -> "SMS"
         limpio.startsWith("Correo", ignoreCase = true) -> "Correo"
         else -> origenLegibleDelAviso(limpio)
     }

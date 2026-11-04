@@ -206,6 +206,19 @@ class LaCabezaDelAvisoTest {
         assertEquals("Google Wallet · SMS · 11:02 a. m.", cabeza.subtitulo)
     }
 
+    /** Vuelta 127: la notificación de Nu que mandó el atajo del iPhone se nombra como la de un Android. */
+    @Test
+    fun `la notificacion de Nu por el atajo se nombra Nu, no SMS`() {
+        val porElAtajo = com.jvillada.movi.shared.model.ORIGEN_DE_NU_POR_ATAJO
+        assertEquals("Nu", bancoDelAviso(porElAtajo))
+        assertEquals("Nu", canalLegibleDelAviso(porElAtajo))
+        assertEquals("Nu", origenLegibleDelAviso(porElAtajo))
+        // Lo de antes, igual: el SMS que reenvió el atajo es un SMS, y Apple Pay se nombra solo.
+        assertEquals("SMS", canalLegibleDelAviso("Atajo · Bancolombia"))
+        assertEquals("Apple Pay", canalLegibleDelAviso(com.jvillada.movi.shared.model.ORIGEN_DE_APPLE_PAY))
+        assertEquals("Nu", canalLegibleDelAviso("Notificación · Nu"))
+    }
+
     /** Vuelta de diseño 4: el título salía tal cual del SMS. La marca se sigue buscando en el crudo. */
     @Test
     fun `el comercio en mayusculas se muestra con su nombre`() {

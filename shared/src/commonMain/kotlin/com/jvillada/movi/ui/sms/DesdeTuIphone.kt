@@ -107,11 +107,12 @@ const val COPIAR_EL_TEXTO_DE_PRUEBA: String = "Copiar el texto de prueba"
 /**
  * La línea de privacidad. Vuelta 114: decía «Solo se guardan los mensajes de bancos», y desde la 113 el atajo
  * no sabe quién manda (`seGuardaElSmsDelAtajo`): se guarda lo que **empieza** como un aviso del banco y trae un
- * monto, aunque lo escriba una persona. Ahora dice eso, y que nada se anota solo.
+ * monto, aunque lo escriba una persona. Ahora dice eso, y que nada se anota solo. Vuelta 127: también se
+ * guardan las notificaciones de Nu (`notificacionDeNuDelAtajo`), que no empiezan por el banco.
  */
 const val PRIVACIDAD_DE_LOS_ATAJOS: String =
-    "Solo se guardan los mensajes que empiezan como un aviso del banco y traen un monto; los demás se " +
-        "descartan sin guardarlos. Nada se anota sin que lo confirmes."
+    "Solo se guardan los mensajes que empiezan como un aviso del banco y traen un monto, y las notificaciones " +
+        "de Nu; los demás se descartan sin guardarlos. Nada se anota sin que lo confirmes."
 
 const val INTRO_DESDE_TU_IPHONE: String =
     "Con la app Atajos, tu iPhone le avisa a Movi cada SMS del banco y cada pago con Apple Pay. " +
@@ -277,6 +278,14 @@ val PASOS_DE_LA_AUTOMATIZACION_DE_APPLE_PAY: List<String> = listOf(
 const val APPLE_PAY_EN_IOS_27: String =
     "En iOS 27 todavía no lo verificamos: si no ves la pestaña «Automatización», búscala dentro del atajo, " +
         "como la de mensajes."
+
+/**
+ * Vuelta 127 · **el mismo atajo sirve para las notificaciones de Nu**: en el iPhone de Caro (iOS 27) una
+ * automatización «Notificación» de la app Nu le pasa cada notificación al atajo de mensajes, y el server la
+ * reconoce (`notificacionDeNuDelAtajo`). Una línea, sin pasos: el atajo firmado no cambia.
+ */
+const val TAMBIEN_LAS_NOTIFICACIONES_DE_NU: String =
+    "También sirve con la automatización «Notificación» de la app Nu: elige el atajo «$NOMBRE_DEL_ATAJO_DE_MENSAJES»."
 
 /**
  * **Cómo armar un atajo a mano**, cuando Movi no tiene el atajo firmado para instalarlo con un toque. Son
@@ -540,6 +549,8 @@ fun DesdeTuIphone(
                         }
                     }
                 }
+                Spacer(Modifier.height(Espacio.xs))
+                Text(TAMBIEN_LAS_NOTIFICACIONES_DE_NU, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                 Spacer(Modifier.height(Espacio.s))
                 Text("Para los pagos con Apple Pay:", style = Movi.textos.apoyo, color = Movi.colores.texto)
                 Spacer(Modifier.height(Espacio.xs))
