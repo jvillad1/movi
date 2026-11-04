@@ -89,10 +89,10 @@ arregló (§2); lo que queda está ordenado en §3.
    barridos corren en cada instancia. Con dos réplicas los topes se multiplican y los recordatorios
    salen dos veces. Hacer: dejarlo escrito en `railway.toml`; si algún día se escala, los topes van a
    Postgres y los jobs con `pg_advisory_lock`.
-4. **PDF que se infla al leerse.** `Loader.loadPDF(bytes)` + `PDFTextStripper` sin tope de memoria ni de
-   tiempo (`parsing/StatementParser.kt`, `documentos/PdfConClave.kt`). Un PDF de 10 MB bien armado puede
-   llenar el heap del único proceso. Hacer: `IOUtils.createTempFileOnlyStreamCache()`, `withTimeout` y
-   un `Semaphore` de lecturas a la vez. (POI ya tiene sus topes.)
+4. **PDF que se infla al leerse — hecho en parte.** `StatementParser.extractPdf` (el único lugar que saca
+   texto de un PDF) guarda los flujos en archivos temporales y no en la memoria, lee como mucho 200 páginas
+   y corta el texto en 5 millones de caracteres (`ElPdfConTopeTest`). Falta un `withTimeout` y un
+   `Semaphore` de lecturas a la vez, y probarlo con un PDF bomba de verdad.
 
 ### Medio
 
