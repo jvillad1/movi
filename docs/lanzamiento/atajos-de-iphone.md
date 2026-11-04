@@ -160,6 +160,20 @@ Para probarla sin esperar una compra: desde otro teléfono mándale a Caro un SM
 - Que la **entrada del atajo**, convertida en texto, sea el **contenido del SMS** (en iOS 27, verificado: el
   SMS real llegó).
 
+### Las notificaciones de Nu (vuelta 127)
+
+En el iPhone de Caro (iOS 27) hay una automatización «Notificación» de la app Nu que le pasa cada notificación
+al mismo atajo «Movi - Avisar un mensaje» (el atajo firmado no cambia). El 3-nov el server descartó 9 de esas
+(7 `NO_ES_DEL_BANCO`, 2 `SIN_FORMA_DE_AVISO`): el filtro pedía la forma de un SMS. Desde la vuelta 127 el server
+las reconoce por su forma (`notificacionDeNuDelAtajo` en `:core`), con o sin el título y con o sin «Nu» delante,
+y las guarda con el texto que sube un Android y `bank` = «Atajo · Notificación · Nu».
+
+**Qué anotar**: qué manda Atajos de verdad (solo el cuerpo, título y cuerpo, o el nombre de la app delante). Se
+ve en la base sin el texto de nadie más que Caro: `SELECT time, bank, text FROM sms_messages WHERE user_id = '<id
+de Caro>' AND bank = 'Atajo · Notificación · Nu' ORDER BY time DESC LIMIT 5;` (solo lectura). Si llegara solo el
+cuerpo del depósito («¡No te preocupes! En unas horas…», sin monto), no se puede reconocer: habría que pedirle al
+atajo el título.
+
 ## 5. Apple Pay (a mano)
 
 El atajo de Apple Pay **no está firmado**: para mandar comercio, monto y tarjeta hay que leer propiedades de la
