@@ -171,7 +171,14 @@ y las guarda con el texto que sube un Android y `bank` = «Atajo · Notificació
 Sin «Nu» delante solo se reconoce lo que trae un monto **y** una seña que solo escribe Nu (su título junto a su
 cuerpo, o el cierre del cuerpo: «ha sido APROBADA», «En un rato podrás verlo en tu app», «En unas horas podrás
 revisar la actualización»): el atajo casi nunca manda remitente y lo reconocido se guarda con el texto entero.
-«Tarjeta verificada», la Cajita, los envíos y el pago desde la cuenta se reconocen solo con «Nu» delante.
+«Tarjeta verificada», la Cajita, los envíos y el pago desde la cuenta se reconocen solo con «Nu» delante: «Nu» con
+N mayúscula y un separador («Nu:», «Nu -», «Nu ·» o un salto de línea, nunca un espacio solo), y aun así con un
+monto (o la tarjeta, en «Tarjeta verificada»). Las formas sin «Nu» van ancladas al principio del texto (un aviso
+citado en un chat no entra) y piden la cifra como la escribe Nu («$27.500,00», dos decimales con coma).
+
+**Riesgo que queda**: «ha sido aprobada» (el cierre de la compra de Nu) también podría ser como escribe otro banco
+el cuerpo de su notificación; una compra así, con «Tu compra en … por $X,XX con tu tarjeta terminada en NNNN», se
+guardaría como de Nu y se propondría contra la tarjeta Nu (el dueño la ve antes de confirmar).
 
 **El dedupe con el Android depende de dos cosas**, y se confirma con la primera captura real de Caro:
 - **Que el texto sea idéntico** al que sube el Android («título: cuerpo», byte por byte). `SmsDedupe` compara el
