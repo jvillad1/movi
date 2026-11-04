@@ -301,7 +301,7 @@ private fun SensorNotificationsCard(installSource: InstallSource, principal: Boo
             "Movi solo lee las notificaciones de las apps de banco que tiene en su lista. El texto " +
                 "de esas notificaciones se envía a tu cuenta de Movi, en el servidor de Movi, para " +
                 "mostrártelo en «Por revisar». Las de cualquier otra app —tus chats, tu correo, " +
-                "todo lo demás— se descartan en el teléfono sin leerlas, sin contarlas y sin enviarlas.",
+                "todo lo demás— se descartan sin leerlas, sin contarlas y sin salir del teléfono.",
             style = Movi.textos.apoyo,
             color = Movi.colores.textoMedio,
         )
