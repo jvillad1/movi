@@ -59,7 +59,6 @@ import com.jvillada.movi.shared.model.cuentasParaElDebito
 import com.jvillada.movi.shared.model.DEBITO_SIN_CUENTA
 import com.jvillada.movi.shared.model.validateCreditDisbursement
 import com.jvillada.movi.shared.model.saldoSegunElPlan
-import com.jvillada.movi.shared.model.ajustesDelPeriodo
 import androidx.compose.ui.semantics.selected
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.recurrentes.ReminderOptInField
@@ -298,11 +297,16 @@ fun CreditTermsSheet(
     // Vuelta 77: «¿Ya pagaste la cuota de este período?» — sí por defecto; solo en un crédito que ya venía
     // y cuya cuota de este período (con el período del dueño) ya venció.
     var yaPagoLaCuota by remember { mutableStateOf(true) }
-    val ajustesDelDueno = com.jvillada.movi.data.rememberLectura(com.jvillada.movi.data.ClaveDeLectura.Perfil, reintento = 0, activa = editing == null) {
+    val perfilDelDueno = com.jvillada.movi.data.rememberLectura(com.jvillada.movi.data.ClaveDeLectura.Perfil, reintento = 0, activa = editing == null) {
         Repositories.wallets.getUserProfile()
-    }.valor?.ajustesDelPeriodo()
+    }
     // Revisión: sin el perfil leído no se sabe cuál es «este período» (con corte 25 no es el mes): la
-    // pregunta no se muestra hasta tenerlo, y el server vuelve a comprobar que la cuota ya venció.
+    // pregunta no se muestra mientras se lee, y el server vuelve a comprobar que la cuota ya venció. Vuelta
+    // 127, el criterio de la 125 ([ajustesParaPreguntarSiYaPagaste]): si la lectura falla, decide con el mes
+    // de calendario —antes no preguntaba y el crédito nacía con la cuota vencida— y no afirma nada del
+    // período con «Sí» ([subtituloDeLaCuota]).
+    val ajustesDelDueno = com.jvillada.movi.ui.recurrentes.ajustesParaPreguntarSiYaPagaste(perfilDelDueno.valor, perfilDelDueno.terminada)
+    val conElPeriodoDeRespaldo = com.jvillada.movi.ui.recurrentes.esElPeriodoDeRespaldo(perfilDelDueno.valor, perfilDelDueno.terminada)
     val preguntaDeLaCuotaVisible = editing == null && newAccountMode && preguntaVisible && recienRecibido == false &&
         ajustesDelDueno != null &&
         dayOfMonth.toIntOrNull()?.takeIf { it in 1..31 }?.let { dia ->
@@ -669,7 +673,7 @@ fun CreditTermsSheet(
                 Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
                     Fila(
                         titulo = YA_PAGASTE_LA_CUOTA_DE_ESTE_PERIODO,
-                        subtitulo = if (yaPagoLaCuota) LA_PRIMERA_CUOTA_ES_LA_DEL_SIGUIENTE else LA_CUOTA_DE_ESTE_PERIODO_QUEDA_POR_PAGAR,
+                        subtitulo = subtituloDeLaCuota(yaPagoLaCuota, conElPeriodoDeRespaldo),
                         lineasDelSubtitulo = 2,
                         final = { Casilla(marcada = yaPagoLaCuota) },
                         onClick = if (!saving) ({ yaPagoLaCuota = !yaPagoLaCuota }) else null,
@@ -1301,6 +1305,18 @@ private fun PropuestaDelSaldoDelPlan(texto: String, onUsar: (() -> Unit)?, habil
 const val YA_PAGASTE_LA_CUOTA_DE_ESTE_PERIODO: String = "¿Ya pagaste la cuota de este período?"
 const val LA_PRIMERA_CUOTA_ES_LA_DEL_SIGUIENTE: String = "Movi la espera desde el próximo período"
 const val LA_CUOTA_DE_ESTE_PERIODO_QUEDA_POR_PAGAR: String = "Movi la espera en este período"
+
+/**
+ * Vuelta 127 · el subtítulo de esa pregunta. Con «No», la cuota de este período queda por pagar pase lo que
+ * pase. Con «Sí», desde el próximo período; con el período de respaldo (no se pudo leer el perfil),
+ * condicionado, como en la hoja de un pago fijo ([com.jvillada.movi.ui.recurrentes.subtituloDeYaPagaste]):
+ * el server revalida con el período de verdad y, si la cuota todavía no venció, lo ignora. Pura.
+ */
+fun subtituloDeLaCuota(marcada: Boolean, conElPeriodoDeRespaldo: Boolean): String = when {
+    !marcada -> LA_CUOTA_DE_ESTE_PERIODO_QUEDA_POR_PAGAR
+    conElPeriodoDeRespaldo -> com.jvillada.movi.ui.recurrentes.SI_YA_VENCIO_DESDE_EL_PROXIMO_PERIODO
+    else -> LA_PRIMERA_CUOTA_ES_LA_DEL_SIGUIENTE
+}
 
 /** El tag de esa fila (vuelta 77). */
 const val TAG_YA_PAGASTE_LA_CUOTA: String = "credito:ya-pagaste-la-cuota"
