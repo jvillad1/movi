@@ -43,11 +43,25 @@ private fun juntar(titulo: String, cuerpo: String): String {
     }
 }
 
-/** El nombre de la app delante: «Nu», «Nu:», «Nu -», «Nu ·» o «Nu» y un salto de línea. Nunca «Nubank» ni «Nuevo». */
-private val PREFIJO_DE_LA_APP = Regex("""^nu(?![\p{L}\p{N}])[ \t]*(?:[:\-–—·][ \t]*)?\s*""", RegexOption.IGNORE_CASE)
+/**
+ * El nombre de la app delante: «Nu:», «Nu -», «Nu ·» o «Nu» y un salto de línea. Segunda revisión de la 127:
+ * **con N mayúscula y con un separador**, nunca un espacio solo: «Nu te llegó dinero de mi mamá?» o «nu, tu
+ * cajita…» son de una persona. Nunca «Nubank» ni «Nuevo».
+ */
+private val PREFIJO_DE_LA_APP = Regex("""^N[uU](?![\p{L}\p{N}])[ \t]*(?:[:\-–—·][ \t]*\s*|\r?\n\s*)""")
 
-/** Una cifra como la escribe Nu: «$27.500,00», «USD12.300,00», «1.500.000,00». */
-private const val MONTO = """(?:\$\s?|(?:cop|usd)\s?)?\d(?:[\d.,]*\d)?"""
+/**
+ * **Una cifra como la escribe Nu**: miles con punto y **dos decimales con coma**, con «$», «COP» o «USD»
+ * delante o sin nada: «$27.500,00», «USD12.300,00», «1.500.000,00». Así «Recibiste 300.000 en tu cuenta» (una
+ * persona) no tiene la forma de Nu.
+ */
+private const val MONTO = """(?:\$\s?|(?:cop|usd)\s?)?\d{1,3}(?:\.\d{3})*,\d{2}(?!\d)"""
+
+/** Cualquier cifra (lo que pide [FORMAS_DE_NU_CON_LA_APP]): con «$», «COP» o «USD», o con decimales. */
+private const val CIFRA = """(?:\$\s?|(?:cop|usd)\s?)\d(?:[\d.,]*\d)?"""
+
+/** ¿El texto trae un monto? Con «Nu» delante se sigue pidiendo (segunda revisión de la 127). */
+private val TRAE_UN_MONTO = Regex("""$CIFRA|$MONTO""", RegexOption.IGNORE_CASE)
 
 /**
  * **Los títulos con que Nu encabeza sus notificaciones**, los que un Android sube antes de «: ». Se leen al
@@ -75,48 +89,55 @@ private val TITULOS_DE_NU: List<Regex> = listOf(
  * sin tildes) y armado como lo sube el Android («título: cuerpo»).
  */
 private val FORMAS_DE_NU_SOLAS: List<List<Regex>> = listOf(
+    // Segunda revisión de la 127: todas **desde el principio** (`^`): un aviso reenviado dentro de un chat
+    // («jaja mira: Tu compra en …») no se guarda con el comentario.
     // La compra, con su título y su cuerpo: «Compra aprobada por $X: Tu compra en … con tu tarjeta terminada en 1336».
     listOf("""^compra\s+aprobada\s+por\s+$MONTO:\s+tu\s+compra\s+en\s.+\scon\s+tu\s+tarjeta\s+terminada\s+en\s+\d{4}"""),
-    // …o con el cierre de Nu: «Tu compra en … por $X con tu tarjeta terminada en 1336 ha sido APROBADA».
+    // …o el cuerpo con el cierre de Nu: «Tu compra en … por $X con tu tarjeta terminada en 1336 ha sido APROBADA»
+    // (o «no ha sido aprobada»: se guarda y queda apartada).
     listOf(
-        """\btu\s+compra\s+en\s.+\spor\s+$MONTO""",
-        """\bcon\s+tu\s+tarjeta\s+terminada\s+en\s+\d{4}""",
-        """\bha\s+sido\s+aprobada\b""",
+        """^tu\s+compra\s+en\s.+\spor\s+$MONTO\s.*\bcon\s+tu\s+tarjeta\s+terminada\s+en\s+\d{4}\s+(?:no\s+)?ha\s+sido\s+aprobada\b""",
     ),
     // El rechazo, con su título y su cuerpo con monto.
     listOf("""^compra\s+rechazada:\s+tu\s+compra\s+en\s.+\spor\s+$MONTO"""),
     listOf("""^¡?\s*uy!?\s+algo\s+salio\s+mal\s+con\s+tu\s+pago:\s+tu\s+pago\s+por\s+$MONTO"""),
-    // El pago de la tarjeta: el título nombra a Nu, o el cuerpo cierra como Nu.
-    listOf("""\bpagaste\s+tu\s+tarjeta\s+de\s+credito\s+nu\b""", """\brecibimos\s+tu\s+pago\s+por\s+$MONTO"""),
-    listOf("""\brecibimos\s+tu\s+pago\s+por\s+$MONTO""", """\ben\s+un\s+rato\s+podras\s+verlo\s+en\s+tu\s+app\b"""),
-    // El depósito propio, con su monto y su cierre.
-    listOf("""\brecibimos\s+tu\s+deposito\s+por\s+$MONTO""", """\ben\s+unas\s+horas\s+podras\s+revisar\s+la\s+actualizacion\b"""),
-    // La plata que llega, con su título y su cuerpo.
+    // El pago de la tarjeta: el título que nombra a Nu y su cuerpo (un cuerpo suelto lo recupera solo con
+    // el cierre de Nu: ver `normalizado`).
+    listOf("""^¡?\s*bravo!?\s+pagaste\s+tu\s+tarjeta\s+de\s+credito\s+nu:\s+recibimos\s+tu\s+pago\s+por\s+$MONTO"""),
+    // El depósito propio, con su título y el cierre de su cuerpo.
+    listOf("""^recibimos\s+tu\s+deposito\s+por\s+$MONTO:\s+""", """\ben\s+unas\s+horas\s+podras\s+revisar\s+la\s+actualizacion\b"""),
+    // La plata que llega, con su título y su cuerpo (el nombre en mayúsculas lo pide [DINERO_DE_ALGUIEN]).
     listOf("""^recibiste\s+$MONTO\s+en\s+tu\s+cuenta:\s+te\s+llego\s+dinero\s+de\s"""),
 ).map { forma -> forma.map { Regex(it, RegexOption.IGNORE_CASE) } }
+
+/**
+ * «Te llegó dinero de CAROLINA RESTREPO SALAZAR con tu llave»: Nu escribe el nombre **en mayúsculas**. Sobre el
+ * texto sin normalizar y sin ignorar mayúsculas: «Te llegó dinero de mi papá» es de una persona.
+ */
+private val DINERO_DE_ALGUIEN = Regex("""[Tt]e\s+lleg[oó]\s+dinero\s+de\s+[A-ZÁÉÍÓÚÑ*]{2,}""")
 
 /**
  * **Las formas de Nu que piden el nombre de la app delante** («Nu: …»): son de Nu, pero solas no lo prueban
  * —sin monto, o algo que otro banco o una persona podría escribir—.
  */
 private val FORMAS_DE_NU_CON_LA_APP: List<Regex> = listOf(
-    """\bcompra\s+aprobada\s+por\s+$MONTO""",
+    """\bcompra\s+aprobada\s+por\s+$CIFRA""",
     """\btu\s+compra\s+en\s+.+\s+con\s+tu\s+tarjeta\s+terminada\s+en\s+\d{4}""",
     """\bcompra\s+rechazada\b""",
     """\balgo\s+salio\s+mal\s+con\s+tu\s+pago\b""",
-    """\btu\s+pago\s+por\s+$MONTO\s+no\s+fue\s+aprobado""",
+    """\btu\s+pago\s+por\s+$CIFRA\s+no\s+fue\s+aprobado""",
     """\btarjeta\s+verificada\b""",
     """\bverifico\s+tu\s+tarjeta\s+terminada\s+en\s+\d{4}""",
     """\bpagaste\s+tu\s+tarjeta\s+de\s+credito\s+nu\b""",
-    """\brecibimos\s+tu\s+pago\s+por\s+$MONTO""",
+    """\brecibimos\s+tu\s+pago\s+por\s+$CIFRA""",
     """\brecibimos\s+tu\s+deposito\b""",
-    """\brecibiste\s+$MONTO\s+en\s+tu\s+cuenta\b""",
+    """\brecibiste\s+(?:$CIFRA|$MONTO)\s+en\s+tu\s+cuenta\b""",
     """\bte\s+llego\s+dinero\s+de\b""",
     """\btu\s+cajita\b""",
     """\brecibiste\s+tu\s+rendimiento\b""",
-    """\bpago\s+aprobado\s+por\s+$MONTO""",
+    """\bpago\s+aprobado\s+por\s+$CIFRA""",
     """\bpagaste\s+en\s+.+\s+con\s+(?:tu\s+)?cuenta\b""",
-    """\benviaste\s+$MONTO""",
+    """\benviaste\s+$CIFRA""",
     """\bacabas\s+de\s+enviar\b""",
     """\b(?:le|se\s+los)\s+enviaste\s+a\s""",
 ).map { Regex(it, RegexOption.IGNORE_CASE) }
@@ -125,16 +146,16 @@ private val FORMAS_DE_NU_CON_LA_APP: List<Regex> = listOf(
  * Lo que dice que una compra **no** pasó: con esto no se le pone el título «Compra aprobada» a un cuerpo
  * suelto (ver [notificacionDeNuDelAtajo]).
  */
-private val NO_PASO = Regex("""rechaz|no\s+fue\s+aprobad|no\s+aprobad|declin""", RegexOption.IGNORE_CASE)
+private val NO_PASO = Regex("""rechaz|no\s+fue\s+aprobad|no\s+ha\s+sido\s+aprobad|no\s+aprobad|declin""", RegexOption.IGNORE_CASE)
 
 /** El cuerpo de la compra, suelto: «Tu compra en RAPPI por $27.500,00 con tu tarjeta…» → el monto, para su título. */
-private val CUERPO_DE_LA_COMPRA = Regex("""^tu\s+compra\s+en\s+.+?\s+por\s+($MONTO)""", RegexOption.IGNORE_CASE)
+private val CUERPO_DE_LA_COMPRA = Regex("""^tu\s+compra\s+en\s+.+?\s+por\s+($CIFRA|$MONTO)""", RegexOption.IGNORE_CASE)
 
 /** Cómo cierra Nu el cuerpo de una compra aprobada: «… ha sido APROBADA». */
 private val CIERRE_DE_LA_COMPRA = Regex("""\bha\s+sido\s+aprobada\b""", RegexOption.IGNORE_CASE)
 
 /** El cuerpo del pago de la tarjeta, suelto: «Recibimos tu pago por $1.306.937,91. En un rato…». */
-private val CUERPO_DEL_PAGO_DE_LA_TARJETA = Regex("""^recibimos\s+tu\s+pago\s+por\s+$MONTO""", RegexOption.IGNORE_CASE)
+private val CUERPO_DEL_PAGO_DE_LA_TARJETA = Regex("""^recibimos\s+tu\s+pago\s+por\s+(?:$CIFRA|$MONTO)""", RegexOption.IGNORE_CASE)
 
 /** Cómo cierra Nu el cuerpo del pago de la tarjeta: «En un rato podrás verlo en tu app». */
 private val CIERRE_DEL_PAGO_DE_LA_TARJETA = Regex("""\ben\s+un\s+rato\s+podr[aá]s\s+verlo\s+en\s+tu\s+app\b""", RegexOption.IGNORE_CASE)
@@ -201,7 +222,17 @@ private fun normalizado(resto: String, conLaApp: Boolean): String? {
 
 private fun tieneUnaFormaDeNu(texto: String, conLaApp: Boolean): Boolean {
     val t = normalizarParaBuscar(texto)
-    if (FORMAS_DE_NU_SOLAS.any { forma -> forma.all { it.containsMatchIn(t) } }) return true
-    // Con «Nu» delante: las demás formas, el pago de la tarjeta y el depósito propio de siempre.
-    return conLaApp && (FORMAS_DE_NU_CON_LA_APP.any { it.containsMatchIn(t) } || esElPagoDeLaTarjetaNu("Nu", texto) || esUnDepositoPropio(texto))
+    val sola = FORMAS_DE_NU_SOLAS.firstOrNull { forma -> forma.all { it.containsMatchIn(t) } }
+    if (sola != null) return sola !== FORMA_DE_LA_PLATA_QUE_LLEGA || DINERO_DE_ALGUIEN.containsMatchIn(texto)
+    if (!conLaApp) return false
+    // Con «Nu» delante: las demás formas, el pago de la tarjeta y el depósito propio de siempre, **con un
+    // monto** (segunda revisión de la 127), salvo la tarjeta verificada, que pide la tarjeta.
+    val deNu = FORMAS_DE_NU_CON_LA_APP.any { it.containsMatchIn(t) } || esElPagoDeLaTarjetaNu("Nu", texto) || esUnDepositoPropio(texto)
+    return deNu && (TRAE_UN_MONTO.containsMatchIn(t) || VERIFICADA_CON_SU_TARJETA.containsMatchIn(t))
 }
+
+/** La forma de la plata que llega: la única que además pide el nombre en mayúsculas ([DINERO_DE_ALGUIEN]). */
+private val FORMA_DE_LA_PLATA_QUE_LLEGA: List<Regex> = FORMAS_DE_NU_SOLAS.last()
+
+/** «Tarjeta verificada: X verificó tu tarjeta terminada en 1336»: no trae monto, pero sí la tarjeta. */
+private val VERIFICADA_CON_SU_TARJETA = Regex("""\btarjeta\s+verificada\b.*\bterminada\s+en\s+\d{4}|\bverifico\s+tu\s+tarjeta\s+terminada\s+en\s+\d{4}""")

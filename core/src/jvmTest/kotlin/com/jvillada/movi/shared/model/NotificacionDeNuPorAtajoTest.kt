@@ -24,7 +24,7 @@ class NotificacionDeNuPorAtajoTest {
 
         /** Con el nombre de la app delante. */
         val conLaApp: List<String> = listOf(
-            "Nu $titulo: $cuerpo", "Nu: $titulo: $cuerpo", "Nu - $titulo\n$cuerpo", "Nu\n$titulo\n$cuerpo", "NU:\n$titulo $cuerpo",
+            "Nu · $titulo: $cuerpo", "Nu: $titulo: $cuerpo", "Nu - $titulo\n$cuerpo", "Nu\n$titulo\n$cuerpo", "NU:\n$titulo $cuerpo",
         )
     }
 
@@ -97,7 +97,7 @@ class NotificacionDeNuPorAtajoTest {
         assertEquals("Nu: ${verificada.cuerpo}", notificacionDeNuDelAtajo("Nu: ${verificada.cuerpo}"))
         // Una compra que dice que no pasó no se vuelve «Compra aprobada».
         val rechazada = "Tu compra en RAPPI por \$45.000,00 con tu tarjeta terminada en 1336 fue rechazada."
-        assertEquals("Nu: $rechazada", notificacionDeNuDelAtajo("Nu $rechazada"))
+        assertEquals("Nu: $rechazada", notificacionDeNuDelAtajo("Nu: $rechazada"))
         assertNull(notificacionDeNuDelAtajo(rechazada))
     }
 
@@ -120,6 +120,60 @@ class NotificacionDeNuPorAtajoTest {
             "Tarjeta verificada, ya puedes usarla",
             "Compra aprobada por \$42.500 en RAPPI el 02/09/2026.",
         ).forEach { assertNull(notificacionDeNuDelAtajo(it), "«$it» no es una notificación de Nu") }
+    }
+
+    /**
+     * Segunda revisión de la 127 · **con «Nu» delante también se pide un monto**, y el «Nu» es el de la app:
+     * con N mayúscula y un separador («Nu:», «Nu -», «Nu ·» o un salto), nunca un espacio solo.
+     */
+    @Test
+    fun `una frase personal con nu delante no es de Nu`() {
+        listOf(
+            "Nu te llegó dinero de mi mamá?",
+            "nu, tu cajita quedó en la portería",
+            "Nu tu compra en EXITO por \$50.000 con tu tarjeta terminada en 1234",
+            "nu: Recibimos tu pago por \$85.000.",
+            // Con el «Nu» de la app pero sin monto: tampoco.
+            "Nu: te llegó dinero de mi mamá?",
+            "Nu: tu cajita quedó en la portería",
+            "Nu: Recibimos tu depósito del arriendo",
+            "Nu: ¡Bravo! Pagaste tu tarjeta de crédito Nu",
+            "Nu: Tarjeta verificada",
+        ).forEach { assertNull(notificacionDeNuDelAtajo(it), "«$it» no es una notificación de Nu") }
+        // Con el «Nu» de la app y un monto (o la tarjeta, en la verificada), sí.
+        assertEquals("Nu: Tu Cajita generó \$1.234,00 hoy.", notificacionDeNuDelAtajo("Nu\nTu Cajita generó \$1.234,00 hoy."))
+        assertEquals("Tarjeta verificada: ANTHROPIC verificó tu tarjeta terminada en 1336", notificacionDeNuDelAtajo("Nu - Tarjeta verificada: ANTHROPIC verificó tu tarjeta terminada en 1336"))
+    }
+
+    /** Segunda revisión de la 127 · un aviso reenviado dentro de un chat no se guarda con el comentario. */
+    @Test
+    fun `un aviso citado en un chat no es de Nu`() {
+        listOf(
+            "jaja mira: ${compra.cuerpo} ¿vienes mañana?",
+            "jaja mira: ${compra.delAndroid}",
+            "Mira lo que me llegó: ${pagoDeLaTarjeta.delAndroid}",
+            "oye ${deposito.delAndroid}",
+            "reenviado: ${recibiste.delAndroid}",
+        ).forEach { assertNull(notificacionDeNuDelAtajo(it), "«$it» no es una notificación de Nu") }
+    }
+
+    /** Segunda revisión de la 127 · «Recibiste … . Te llegó dinero de mi papá» no se vuelve un ingreso de Nu. */
+    @Test
+    fun `un titulo no se inventa con una frase personal despues del punto`() {
+        listOf(
+            "Recibiste 300.000 en tu cuenta. Te llegó dinero de mi papá",
+            "Recibiste 300.000,00 en tu cuenta. Te llegó dinero de mi papá",
+            "Recibiste \$300.000 en tu cuenta: te llegó dinero de mi papá",
+            "Compra aprobada por \$27.500. Tu compra en la tienda con tu tarjeta terminada en 1234, ¿sí?",
+        ).forEach { assertNull(notificacionDeNuDelAtajo(it), "«$it» no es una notificación de Nu") }
+    }
+
+    /** Segunda revisión de la 127 · «no ha sido aprobada» es de Nu (se guarda) pero no recupera «Compra aprobada». */
+    @Test
+    fun `no ha sido aprobada se reconoce sin volverse una compra aprobada`() {
+        val noPaso = "Tu compra en RAPPI por \$45.000,00 con tu tarjeta terminada en 1336 no ha sido aprobada."
+        assertEquals(noPaso, notificacionDeNuDelAtajo(noPaso))
+        assertEquals("Nu: $noPaso", notificacionDeNuDelAtajo("Nu: $noPaso"))
     }
 
     @Test

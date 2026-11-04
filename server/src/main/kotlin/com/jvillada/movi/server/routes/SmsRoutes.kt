@@ -176,6 +176,8 @@ internal val NO_SON_MOVIMIENTOS = listOf("ampliacion de plazo", "ampliación de 
  */
 internal val NO_PASARON = listOf(
     "rechazada", "rechazado",
+    // Vuelta 127: «Tu compra en … no ha sido aprobada» (Nu) no contiene «no aprobada».
+    "no ha sido aprobada", "no ha sido aprobado",
     "declinada", "declinado",
     // Google Wallet, en inglés: «FARMATODO: DECLINED - COP17,150 with Glim ••3037». Se leía como un
     // gasto de $17.150 que nunca salió (el dueño lo tuvo que ignorar a mano, 2-oct-2026).

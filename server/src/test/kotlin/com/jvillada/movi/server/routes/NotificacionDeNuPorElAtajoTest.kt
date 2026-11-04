@@ -225,6 +225,20 @@ class NotificacionDeNuPorElAtajoTest {
         assertNotNull(grupos.single())
     }
 
+    /** Segunda revisión de la 127 · «no ha sido aprobada» se guarda apartada y no se propone como gasto. */
+    @Test
+    fun `una compra de Nu que no ha sido aprobada queda apartada y no se propone`() = conApp {
+        val codigo = crearCodigo()
+        val noPaso = "Tu compra en RAPPI por \$45.000,00 con tu tarjeta terminada en 1336 no ha sido aprobada."
+        avisar(codigo, noPaso)
+        val fila = filas().single()
+        assertEquals(ORIGEN_DE_NU_POR_ATAJO, fila.bank)
+        assertEquals(noPaso, fila.text, "no se le pone «Compra aprobada»")
+        assertEquals(SMS_STATE_IGNORED to MotivoDeApartado.NO_PASO.name, fila.state to fila.motivo)
+        assertEquals(null, parseSms(fila.text, fila.bank), "no se propone como gasto")
+        assertEquals(HttpStatusCode.UnprocessableEntity, parse(fila.id).status)
+    }
+
     // ── Lo de antes, igual ───────────────────────────────────────────────────────────────────────
 
     /**
@@ -245,6 +259,12 @@ class NotificacionDeNuPorElAtajoTest {
             "Recibimos tu pago por \$85.000. Gracias, Claro",
             "Tu compra en EXITO por \$50.000 con tu tarjeta terminada en 1234",
             "Recibimos tu depósito del arriendo",
+            // Segunda revisión: con «nu»/«Nu» delante, citado en un chat, y un título inventado.
+            "Nu te llegó dinero de mi mamá?",
+            "nu, tu cajita quedó en la portería",
+            "Nu: tu cajita quedó en la portería",
+            "jaja mira: $cuerpoDeLaCompra ¿vienes mañana?",
+            "Recibiste 300.000 en tu cuenta. Te llegó dinero de mi papá",
         )
         for (texto in personales) {
             val r = avisar(codigo, texto)
