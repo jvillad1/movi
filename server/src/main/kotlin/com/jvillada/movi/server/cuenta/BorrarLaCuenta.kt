@@ -56,6 +56,9 @@ import org.jetbrains.exposed.sql.Column
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.Table
 import org.jetbrains.exposed.sql.deleteWhere
+import org.jetbrains.exposed.sql.transactions.TransactionManager
+import com.jvillada.movi.server.espacios.desconectarElGrupo
+import com.jvillada.movi.server.espacios.ladosConectadosDe
 import org.jetbrains.exposed.sql.or
 
 /**
@@ -194,6 +197,12 @@ internal val TABLAS_DE_DOS_USUARIOS: List<TablaDeDosUsuarios> = listOf(
  * los datos se fueron.
  */
 internal fun borrarTodoLoDe(uid: String): Int {
+    // Revisión 3 de la vuelta 131 · antes de borrar, se desconecta cada grupo conectado (en esta misma
+    // transacción): el otro lado se queda con sus vínculos convertidos en saldados propios, y su «Salió» y su
+    // saldo no cambian. Sin esto, sus vínculos quedaban huérfanos y su transferencia volvía a contar.
+    TransactionManager.current().run {
+        ladosConectadosDe(uid).forEach { desconectarElGrupo(uid, it.lado.miEspacioId) }
+    }
     var filas = 0
     for (t in TABLAS_DEL_USUARIO) {
         filas += t.tabla.deleteWhere { t.usuario eq uid }

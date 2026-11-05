@@ -863,6 +863,26 @@ class HogarConectadoTest {
         assertEquals(0L, caroDespues.saldo.netoDe(MIEMBRO_YO))
     }
 
+    /** Revisión 3 (A-1): Juan borra su cuenta y la transferencia que Caro vinculó sigue fuera de su «Salió». */
+    @Test
+    fun `A-1 - borrar la cuenta de Juan no le devuelve a Caro su transferencia vinculada a Salio`() = conApp {
+        val deCaro = conectar()
+        val juanEnCaro = deCaro.conexion!!.miembroId
+        evento("e_juan", 200_000, juan)
+        post("/api/espacios/esp_casa/compartir", """{"eventoId":"e_juan"}""", juan)
+        post("/api/espacios/esp_casa/liquidaciones", """{"id":"l_juan","de":"dst_caro","a":"yo","monto":100000}""", juan)
+        evento("e_de_caro", 100_000, caro, categoria = "Transferencia", descripcion = "Transferencia a Juan")
+        assertEquals(HttpStatusCode.OK, post("/api/espacios/${deCaro.id}/liquidaciones/l_juan/vincular", """{"eventoId":"e_de_caro"}""", caro).status)
+        assertEquals(false, runBlocking { loadNonVoidedEvents(caro) }.single { it.id == "e_de_caro" }.countsAsCashFlow)
+
+        transaction { borrarTodoLoDe(juan) }
+
+        assertEquals(false, runBlocking { loadNonVoidedEvents(caro) }.single { it.id == "e_de_caro" }.countsAsCashFlow, "sigue fuera de su «Salió»")
+        val despues = detalle(deCaro.id, caro)
+        assertNull(despues.espacio.conexion)
+        assertEquals("e_de_caro", despues.liquidaciones.single().eventoId, "un saldado propio de Caro, con su transferencia")
+    }
+
     @Test
     fun `quien ya acepto y reintenta recibe su grupo con 200`() = conApp {
         crearLaCasa()
