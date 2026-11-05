@@ -12,7 +12,11 @@ import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.toFinancialEvent
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.espacios.espaciosDe
+import com.jvillada.movi.server.espacios.conexionDelGrupo
 import com.jvillada.movi.server.espacios.gastosDe
+import com.jvillada.movi.server.espacios.gastosPropiosDe
+import com.jvillada.movi.server.espacios.liquidacionesPropiasDe
+import com.jvillada.movi.server.espacios.desconectarElGrupo
 import com.jvillada.movi.server.espacios.liquidacionesDe
 import com.jvillada.movi.server.espacios.loCompartidoDelUsuario
 import com.jvillada.movi.server.espacios.miembrosComoJson
@@ -73,6 +77,8 @@ import org.jetbrains.exposed.sql.upsert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
 import java.util.UUID
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.builtins.ListSerializer
 
 /**
  * # Espacios (R3, 26-oct-2026)
@@ -182,6 +188,10 @@ fun Route.espacioRoutes() {
                         HttpStatusCode.Created
                     }
                     existente[Espacios.userId] != uid -> HttpStatusCode.Conflict
+                    // Vuelta 131: un grupo conectado no cambia de personas (es de dos, y la otra persona
+                    // ya está del otro lado). El nombre y el reparto sí.
+                    conexionDelGrupo(uid, id) != null && miembrosCambian(existente[Espacios.miembros], body) ->
+                        HttpStatusCode.PreconditionFailed
                     else -> {
                         Espacios.update({ (Espacios.id eq id) and (Espacios.userId eq uid) }) {
                             it[Espacios.nombre] = nombre
@@ -195,6 +205,8 @@ fun Route.espacioRoutes() {
             when (resultado) {
                 HttpStatusCode.NotFound -> call.respond(HttpStatusCode.NotFound, "Esa persona no está en tus terceros")
                 HttpStatusCode.Conflict -> call.respond(HttpStatusCode.Conflict, "Ese id ya existe")
+                HttpStatusCode.PreconditionFailed ->
+                    call.respond(HttpStatusCode.Conflict, "Un grupo conectado no cambia de personas: desconéctalo primero")
                 else -> call.respond(resultado, dbQuery { espaciosDe(uid) }.first { it.id == id })
             }
         }
@@ -205,6 +217,9 @@ fun Route.espacioRoutes() {
             val borrados = dbQuery {
                 val n = Espacios.deleteWhere { (Espacios.id eq id) and (Espacios.userId eq uid) }
                 if (n > 0) {
+                    // Vuelta 131: borrar el grupo lo desconecta (lo de la otra persona queda en su Movi) y
+                    // cancela la invitación pendiente.
+                    desconectarElGrupo(uid, id)
                     GastosDelEspacio.deleteWhere { (GastosDelEspacio.espacioId eq id) and (GastosDelEspacio.userId eq uid) }
                     LiquidacionesDelEspacio.deleteWhere {
                         (LiquidacionesDelEspacio.espacioId eq id) and (LiquidacionesDelEspacio.userId eq uid)
@@ -290,8 +305,18 @@ fun Route.espacioRoutes() {
     }
 }
 
+private val jsonDeMiembros = Json { ignoreUnknownKeys = true }
+
+/** ¿[body] trae otras personas que las guardadas en [miembrosGuardados] (el JSON de la fila)? */
+private fun miembrosCambian(miembrosGuardados: String, body: Espacio): Boolean {
+    val guardados = runCatching { jsonDeMiembros.decodeFromString(ListSerializer(com.jvillada.movi.shared.model.MiembroDelEspacio.serializer()), miembrosGuardados) }
+        .getOrDefault(emptyList()).map { it.id }.filter { it != MIEMBRO_YO }.toSet()
+    val pedidos = body.miembros.map { it.id }.filter { it != MIEMBRO_YO }.toSet()
+    return guardados != pedidos
+}
+
 /** Un rechazo con su motivo para el dueño. */
-private class Rechazo(val estado: HttpStatusCode, val motivo: String) : RuntimeException(motivo)
+internal class Rechazo(val estado: HttpStatusCode, val motivo: String) : RuntimeException(motivo)
 
 /** Lo que contesta una escritura: el estado y lo guardado, o el motivo del rechazo. */
 internal class Respuesta<T : Any>(val estado: HttpStatusCode, val valor: T?, val motivo: String = "")
@@ -457,7 +482,7 @@ internal fun Transaction.compartirMovimiento(
             it[createdAt] = System.currentTimeMillis()
         }
     }
-    val gasto = gastosDe(uid, listOf(espacio), espacioId).first { it.eventoId == body.eventoId }
+    val gasto = gastosPropiosDe(uid, listOf(espacio), espacioId).first { it.eventoId == body.eventoId }
     Respuesta(if (yaEsta == null) HttpStatusCode.Created else HttpStatusCode.OK, gasto)
 } catch (r: Rechazo) {
     Respuesta(r.estado, null, r.motivo)
@@ -517,7 +542,7 @@ internal fun Transaction.gastoQuePagoOtro(
             it[GastosDelEspacio.reparto] = repartoComoJson(reparto)
         }
     }
-    val gasto = gastosDe(uid, listOf(espacio), espacioId).first { it.id == id }
+    val gasto = gastosPropiosDe(uid, listOf(espacio), espacioId).first { it.id == id }
     Respuesta(if (existente == null) HttpStatusCode.Created else HttpStatusCode.OK, gasto)
 } catch (r: Rechazo) {
     Respuesta(r.estado, null, r.motivo)
@@ -545,14 +570,14 @@ internal fun Transaction.liquidar(
         // siendo saldar una.
         existente != null && existente[LiquidacionesDelEspacio.eventoId] == null && body.eventoId != null &&
             existente[LiquidacionesDelEspacio.espacioId] == espacioId -> {
-            val guardada = liquidacionesDe(uid, espacioId).first { it.id == id }
+            val guardada = liquidacionesPropiasDe(uid, espacioId).first { it.id == id }
             validarElVinculo(uid, body.eventoId!!, guardada)
             LiquidacionesDelEspacio.update({ (LiquidacionesDelEspacio.id eq id) and (LiquidacionesDelEspacio.userId eq uid) }) {
                 it[eventoId] = body.eventoId
             }
-            Respuesta(HttpStatusCode.OK, liquidacionesDe(uid, espacioId).first { it.id == id })
+            Respuesta(HttpStatusCode.OK, liquidacionesPropiasDe(uid, espacioId).first { it.id == id })
         }
-        existente != null -> Respuesta(HttpStatusCode.OK, liquidacionesDe(uid, espacioId).first { it.id == id })
+        existente != null -> Respuesta(HttpStatusCode.OK, liquidacionesPropiasDe(uid, espacioId).first { it.id == id })
         else -> {
             val miembros = idsDeMiembros(espacio)
             if (body.de !in miembros || body.a !in miembros || body.de == body.a) {
@@ -571,7 +596,7 @@ internal fun Transaction.liquidar(
                 it[eventoId] = body.eventoId
                 it[createdAt] = System.currentTimeMillis()
             }
-            Respuesta(HttpStatusCode.Created, liquidacionesDe(uid, espacioId).first { it.id == id })
+            Respuesta(HttpStatusCode.Created, liquidacionesPropiasDe(uid, espacioId).first { it.id == id })
         }
     }
 } catch (r: Rechazo) {
@@ -613,7 +638,8 @@ internal fun Transaction.propuestasDeRepartirDe(uid: String, ahora: Long): List<
     if (espacios.isEmpty()) return emptyList()
     val anulados = anuladosDe(uid)
     val desdeLaMemoria = ahora - DIAS_DE_MEMORIA_DEL_REPARTO * UN_DIA
-    val gastos = gastosDe(uid, espacios)
+    // Vuelta 131: lo que propone repartir sale solo de lo propio (lo de la otra persona no es un movimiento tuyo).
+    val gastos = gastosPropiosDe(uid, espacios)
         .filterNot { it.eventoId != null && it.eventoId in anulados }
         .filter { it.fecha >= desdeLaMemoria }
     val ids = gastos.mapNotNull { it.eventoId }
