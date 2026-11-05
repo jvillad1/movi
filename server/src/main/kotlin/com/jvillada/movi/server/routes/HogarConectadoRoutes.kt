@@ -1,6 +1,10 @@
 package com.jvillada.movi.server.routes
 
-import com.jvillada.movi.server.correo.sha256Hex
+import com.jvillada.movi.server.auth.JwtConfig
+import com.jvillada.movi.server.db.Users
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import com.jvillada.movi.server.db.Espacios
 import com.jvillada.movi.server.db.EspaciosConectados
 import com.jvillada.movi.server.db.InvitacionesAEspacio
@@ -115,19 +119,33 @@ fun Route.hogarConectadoRoutes() {
         post("/invitaciones/ver") {
             val uid = call.userId()
             val codigo = codigoLimpio(call.receive<CodigoDeInvitacion>().codigo)
-            if (IntentosDeCodigo.agotados(uid)) return@post call.respond(HttpStatusCode.TooManyRequests, DEMASIADOS_INTENTOS)
-            val r = dbQuery { verLaInvitacion(uid, codigo, System.currentTimeMillis()) }
-            if (r.estado == HttpStatusCode.NotFound) IntentosDeCodigo.fallo(uid)
-            if (r.valor != null) call.respond(r.estado, r.valor) else call.respond(r.estado, r.motivo)
+            val intento = IntentosDeCodigo.reservar(clavesDelIntento(uid, ipDelPedido(call)))
+                ?: return@post call.respond(HttpStatusCode.TooManyRequests, DEMASIADOS_INTENTOS)
+            var fallo = false
+            try {
+                val r = dbQuery { verLaInvitacion(uid, codigo, System.currentTimeMillis()) }
+                fallo = r.respuesta.estado == HttpStatusCode.NotFound && r.cuentaComoFallo
+                val v = r.respuesta
+                if (v.valor != null) call.respond(v.estado, v.valor) else call.respond(v.estado, v.motivo)
+            } finally {
+                if (!fallo) IntentosDeCodigo.soltar(intento)
+            }
         }
 
         post("/invitaciones/aceptar") {
             val uid = call.userId()
             val codigo = codigoLimpio(call.receive<CodigoDeInvitacion>().codigo)
-            if (IntentosDeCodigo.agotados(uid)) return@post call.respond(HttpStatusCode.TooManyRequests, DEMASIADOS_INTENTOS)
-            val r = dbQuery { aceptarLaInvitacion(uid, codigo, System.currentTimeMillis()) }
-            if (r.estado == HttpStatusCode.NotFound) IntentosDeCodigo.fallo(uid)
-            if (r.valor != null) call.respond(r.estado, r.valor) else call.respond(r.estado, r.motivo)
+            val intento = IntentosDeCodigo.reservar(clavesDelIntento(uid, ipDelPedido(call)))
+                ?: return@post call.respond(HttpStatusCode.TooManyRequests, DEMASIADOS_INTENTOS)
+            var fallo = false
+            try {
+                val r = dbQuery { aceptarLaInvitacion(uid, codigo, System.currentTimeMillis()) }
+                fallo = r.respuesta.estado == HttpStatusCode.NotFound && r.cuentaComoFallo
+                val v = r.respuesta
+                if (v.valor != null) call.respond(v.estado, v.valor) else call.respond(v.estado, v.motivo)
+            } finally {
+                if (!fallo) IntentosDeCodigo.soltar(intento)
+            }
         }
     }
 }
@@ -140,30 +158,55 @@ internal const val DEMASIADOS_INTENTOS: String = "Probaste muchos códigos. Espe
 private const val UNA_HORA_MS: Long = 60L * 60 * 1000
 private const val UN_DIA_MS: Long = 24L * 60 * 60 * 1000
 
+/** Cuántos códigos fallidos se aceptan por dirección IP en una hora (varias personas pueden compartirla). */
+internal const val INTENTOS_DE_CODIGO_POR_IP_POR_HORA: Int = 30
+
+/** Las dos cuentas de un intento: la de la persona y la de su IP, cada una con su tope. */
+internal fun clavesDelIntento(uid: String, ip: String): Map<String, Int> =
+    mapOf("usuario:$uid" to INTENTOS_DE_CODIGO_POR_HORA, "ip:${ip.take(80)}" to INTENTOS_DE_CODIGO_POR_IP_POR_HORA)
+
 /**
- * **Los códigos fallidos de cada persona en la última hora.** En memoria, como `RateLimiter`: con un solo
- * proceso alcanza, y un reinicio solo regala otra hora a quien adivina (un espacio de 31⁶ ≈ 887 millones de
- * códigos a 10 por hora no se recorre). Solo cuentan los fallos: ver una invitación válida no gasta nada.
+ * **Los códigos fallidos de la última hora, por persona y por IP.** En memoria, como `RateLimiter`: con un
+ * solo proceso alcanza, y un reinicio solo regala otra hora a quien adivina (31⁶ ≈ 887 millones de códigos a
+ * 10 por hora no se recorren). **El conteo es atómico** (revisión de la vuelta 131): cada pedido **reserva**
+ * su intento antes de mirar la base —con las dos cuentas bloqueadas a la vez, en orden— y lo **suelta** si no
+ * resultó un fallo (una invitación válida, el propio código, la carrera de aceptar que se perdió). Así diez
+ * pedidos simultáneos no se cuelan entre la pregunta y la anotación.
  */
 internal object IntentosDeCodigo {
-    private val fallos = ConcurrentHashMap<String, MutableList<Long>>()
+    /** Un intento: se suelta por identidad, no por hora (dos en el mismo milisegundo son dos). */
+    class Intento internal constructor(val en: Long, internal val listas: List<MutableList<Intento>>)
 
-    fun agotados(uid: String, ahora: Long = System.currentTimeMillis()): Boolean {
-        val lista = fallos[uid] ?: return false
-        synchronized(lista) {
-            lista.removeAll { it < ahora - UNA_HORA_MS }
-            return lista.size >= INTENTOS_DE_CODIGO_POR_HORA
+    private val porClave = ConcurrentHashMap<String, MutableList<Intento>>()
+
+    fun reservar(topes: Map<String, Int>, ahora: Long = System.currentTimeMillis()): Intento? {
+        val listas = topes.keys.sorted().map { it to porClave.getOrPut(it) { mutableListOf() } }
+        fun conTodas(i: Int, bloque: () -> Intento?): Intento? =
+            if (i == listas.size) bloque() else synchronized(listas[i].second) { conTodas(i + 1, bloque) }
+        return conTodas(0) {
+            listas.forEach { (_, l) -> l.removeAll { it.en < ahora - UNA_HORA_MS } }
+            if (listas.any { (clave, l) -> l.size >= topes.getValue(clave) }) {
+                null
+            } else {
+                Intento(ahora, listas.map { it.second }).also { intento -> listas.forEach { (_, l) -> l += intento } }
+            }
         }
     }
 
-    fun fallo(uid: String, ahora: Long = System.currentTimeMillis()) {
-        val lista = fallos.getOrPut(uid) { mutableListOf() }
-        synchronized(lista) { lista.add(ahora) }
+    /** El intento no fue un fallo: deja de contar. */
+    fun soltar(intento: Intento) {
+        intento.listas.forEach { l -> synchronized(l) { l.removeAll { it === intento } } }
     }
 
+    /** Cuántos fallos cuenta [clave] ahora (para las pruebas). */
+    fun cuantos(clave: String): Int = porClave[clave]?.let { synchronized(it) { it.size } } ?: 0
+
     /** Para las pruebas. */
-    fun reset() = fallos.clear()
+    fun reset() = porClave.clear()
 }
+
+/** Lo que contesta ver o aceptar, y si cuenta como un código fallido. */
+internal class ConElFallo<T : Any>(val respuesta: Respuesta<T>, val cuentaComoFallo: Boolean)
 
 private val azar = SecureRandom()
 
@@ -171,8 +214,27 @@ private val azar = SecureRandom()
 internal fun codigoNuevo(): String =
     buildString { repeat(LARGO_DEL_CODIGO) { append(ALFABETO_DEL_CODIGO[azar.nextInt(ALFABETO_DEL_CODIGO.length)]) } }
 
-/** Lo único que se guarda de un código. */
-internal fun huellaDelCodigo(codigo: String): String = sha256Hex("invitacion:" + codigoLimpio(codigo))
+/** De dónde salen los códigos; una prueba lo cambia para forzar una colisión. */
+internal var generadorDeCodigos: () -> String = ::codigoNuevo
+
+private val pimientaDeLasInvitaciones: ByteArray by lazy { JwtConfig.pimienta("invitaciones-a-espacio") }
+
+/**
+ * **Lo único que se guarda de un código**: su HMAC-SHA256 con una pimienta del server (revisión de la vuelta
+ * 131; derivada de `JWT_SECRET`, ver `JwtConfig.pimienta`). Un SHA-256 a secas de 31⁶ códigos se recorre
+ * entero en segundos si la tabla se filtra; sin la pimienta, no.
+ */
+internal fun huellaDelCodigo(codigo: String): String =
+    Mac.getInstance("HmacSHA256")
+        .apply { init(SecretKeySpec(pimientaDeLasInvitaciones, "HmacSHA256")) }
+        .doFinal(codigoLimpio(codigo).toByteArray(Charsets.UTF_8))
+        .joinToString("") { "%02x".format(it) }
+
+/** ¿Hay una invitación vigente (sin usar, sin cancelar, sin vencer) con [huella]? */
+private fun Transaction.hayVigenteCon(huella: String, ahora: Long): Boolean =
+    InvitacionesAEspacio.selectAll().where {
+        (InvitacionesAEspacio.codigoHash eq huella) and InvitacionesAEspacio.usadaEn.isNull() and InvitacionesAEspacio.canceladaEn.isNull()
+    }.any { it[InvitacionesAEspacio.venceEn] > ahora }
 
 /** La invitación pendiente del grupo [espacioId] de [uid]: sin usar, sin cancelar y sin vencer. */
 private fun Transaction.pendienteDe(uid: String, espacioId: String, ahora: Long): ResultRow? =
@@ -195,10 +257,16 @@ internal const val POR_AHORA_GRUPOS_DE_DOS: String = "Por ahora se conectan los 
 
 /** `POST /api/espacios/{id}/invitacion`. */
 internal fun Transaction.invitar(uid: String, espacioId: String, ahora: Long): Respuesta<InvitacionCreada> = try {
+    // Revisión de la vuelta 131: el grupo bloqueado mientras se crea, para que dos «Mandar» a la vez dejen
+    // una sola invitación pendiente.
+    Espacios.selectAll().where { (Espacios.id eq espacioId) and (Espacios.userId eq uid) }.forUpdate().firstOrNull()
+        ?: throw Rechazo(HttpStatusCode.NotFound, "Grupo no encontrado")
     val espacio = espaciosSinNombres(uid).firstOrNull { it.id == espacioId } ?: throw Rechazo(HttpStatusCode.NotFound, "Grupo no encontrado")
     porQueNoSeInvita(uid, espacio)?.let { throw it }
     cancelarLaInvitacionPendiente(uid, espacioId, ahora)
-    val codigo = codigoNuevo()
+    // Un código que ya tiene otra invitación vigente se cambia por otro (nunca dos vigentes con el mismo).
+    val codigo = generateSequence { generadorDeCodigos() }.take(20).firstOrNull { !hayVigenteCon(huellaDelCodigo(it), ahora) }
+        ?: throw Rechazo(HttpStatusCode.ServiceUnavailable, "No pudimos crear el código. Vuelve a intentarlo.")
     val vence = ahora + DIAS_QUE_VALE_LA_INVITACION * UN_DIA_MS
     InvitacionesAEspacio.insert {
         it[id] = "inv_${UUID.randomUUID()}"
@@ -239,26 +307,39 @@ private fun Transaction.grupoDeLaInvitacion(fila: ResultRow): Espacio {
     return espacio
 }
 
-/** `POST /api/espacios/invitaciones/ver`. */
-internal fun Transaction.verLaInvitacion(uid: String, codigo: String, ahora: Long): Respuesta<InvitacionVista> = try {
+/** `POST /api/espacios/invitaciones/ver`. Un 404 cuenta como código fallido. */
+internal fun Transaction.verLaInvitacion(uid: String, codigo: String, ahora: Long): ConElFallo<InvitacionVista> = try {
     val fila = invitacionVigente(codigo, ahora, paraUsarla = false) ?: throw Rechazo(HttpStatusCode.NotFound, CODIGO_QUE_NO_SIRVE)
     val quienInvita = fila[InvitacionesAEspacio.userId]
     if (quienInvita == uid) throw Rechazo(HttpStatusCode.BadRequest, "Esa es tu propia invitación: mándasela a la otra persona")
     val espacio = grupoDeLaInvitacion(fila)
-    Respuesta(HttpStatusCode.OK, InvitacionVista(nombreDelGrupo = espacio.nombre, quienInvita = nombreDelPerfil(quienInvita)))
+    ConElFallo(Respuesta(HttpStatusCode.OK, InvitacionVista(nombreDelGrupo = espacio.nombre, quienInvita = nombreDelPerfil(quienInvita))), false)
 } catch (r: Rechazo) {
-    Respuesta(r.estado, null, r.motivo)
+    ConElFallo(Respuesta(r.estado, null, r.motivo), cuentaComoFallo = true)
 }
+
+/** La carrera de aceptar: el código existía y lo acaba de usar otro pedido (hace menos de un minuto). */
+private fun Transaction.seAcabaDeUsar(codigo: String, ahora: Long): Boolean =
+    pareceUnCodigo(codigo) && InvitacionesAEspacio.selectAll()
+        .where { InvitacionesAEspacio.codigoHash eq huellaDelCodigo(codigo) }
+        .any { f -> f[InvitacionesAEspacio.usadaEn]?.let { kotlin.math.abs(ahora - it) <= 60_000L } == true }
 
 /**
  * `POST /api/espacios/invitaciones/aceptar`: todo en una transacción, con la invitación bloqueada. La marca de
  * usada se pone con una condición (`usada_en IS NULL`): de dos aceptaciones a la vez, una la toma y la otra no
  * encuentra nada (404).
  */
-internal fun Transaction.aceptarLaInvitacion(uid: String, codigo: String, ahora: Long): Respuesta<Espacio> = try {
-    val fila = invitacionVigente(codigo, ahora, paraUsarla = true) ?: throw Rechazo(HttpStatusCode.NotFound, CODIGO_QUE_NO_SIRVE)
+internal fun Transaction.aceptarLaInvitacion(uid: String, codigo: String, ahora: Long): ConElFallo<Espacio> = try {
+    val fila = invitacionVigente(codigo, ahora, paraUsarla = true)
+        ?: throw if (seAcabaDeUsar(codigo, ahora)) PerdioLaCarrera() else Rechazo(HttpStatusCode.NotFound, CODIGO_QUE_NO_SIRVE)
     val quienInvita = fila[InvitacionesAEspacio.userId]
     if (quienInvita == uid) throw Rechazo(HttpStatusCode.BadRequest, "Esa es tu propia invitación: mándasela a la otra persona")
+    // Revisión de la vuelta 131 · bajo bloqueo: el grupo de quien invita (si lo borró mientras tanto, 404 y no
+    // queda ninguna conexión colgando) y las dos personas, en orden fijo, para que «un hogar por pareja» no
+    // se cuele con dos aceptaciones de invitaciones distintas a la vez.
+    Espacios.selectAll().where { (Espacios.id eq fila[InvitacionesAEspacio.espacioId]) and (Espacios.userId eq quienInvita) }
+        .forUpdate().firstOrNull() ?: throw Rechazo(HttpStatusCode.NotFound, CODIGO_QUE_NO_SIRVE)
+    Users.selectAll().where { Users.id inList listOf(quienInvita, uid).sorted() }.orderBy(Users.id).forUpdate().toList()
     val suGrupo = grupoDeLaInvitacion(fila)
     // Un hogar por pareja (v1): si ya están conectados en otro grupo, no se conecta otro.
     if (ladosConectadosDe(quienInvita).any { it.otroUid == uid }) {
@@ -268,7 +349,7 @@ internal fun Transaction.aceptarLaInvitacion(uid: String, codigo: String, ahora:
         (InvitacionesAEspacio.id eq fila[InvitacionesAEspacio.id]) and
             InvitacionesAEspacio.usadaEn.isNull() and InvitacionesAEspacio.canceladaEn.isNull()
     }) { it[usadaEn] = ahora }
-    if (tomada == 0) throw Rechazo(HttpStatusCode.NotFound, CODIGO_QUE_NO_SIRVE)
+    if (tomada == 0) throw PerdioLaCarrera()
 
     val tercero = terceroParaQuienInvita(uid, nombreDelPerfil(quienInvita), ahora)
     val nuevoId = "esp_${UUID.randomUUID()}"
@@ -299,10 +380,16 @@ internal fun Transaction.aceptarLaInvitacion(uid: String, codigo: String, ahora:
         it[miembroB] = tercero
         it[desde] = ahora
     }
-    Respuesta(HttpStatusCode.OK, espaciosDe(uid).first { it.id == nuevoId })
+    ConElFallo(Respuesta(HttpStatusCode.OK, espaciosDe(uid).first { it.id == nuevoId }), false)
+} catch (r: PerdioLaCarrera) {
+    // La perdió contra otra aceptación del mismo código: el mismo 404, pero no es adivinar.
+    ConElFallo(Respuesta(HttpStatusCode.NotFound, null, CODIGO_QUE_NO_SIRVE), cuentaComoFallo = false)
 } catch (r: Rechazo) {
-    Respuesta(r.estado, null, r.motivo)
+    ConElFallo(Respuesta(r.estado, null, r.motivo), cuentaComoFallo = true)
 }
+
+/** Otra aceptación del mismo código ganó (ver [aceptarLaInvitacion]). */
+private class PerdioLaCarrera : RuntimeException()
 
 /**
  * El tercero de [uid] que es quien invita: uno suyo con el mismo nombre normalizado ([claveComparableDeNombre];
