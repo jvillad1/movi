@@ -2302,6 +2302,12 @@ class LocalRepository(
     // El resumen de cierre lo arma el server con toda la historia; sin red no hay tarjeta.
     override suspend fun getCierreDelPeriodo(): com.jvillada.movi.shared.model.CierreDelPeriodo? = remote.getCierreDelPeriodo()
     override suspend fun getExtractosPorSubir(): List<com.jvillada.movi.shared.model.ExtractoPorSubir> = remote.getExtractosPorSubir()
+    // Vuelta 132 · «Tus seguros»: la lectura guarda su última respuesta buena (como los créditos y los
+    // apartados) para verse sin señal; las respuestas del dueño y «Me interesa» van al server y piden red.
+    override suspend fun getSeguros(enLaPantalla: Boolean): com.jvillada.movi.shared.model.SegurosQuePagas =
+        leerUnoConCache("seguros") { remote.getSeguros(enLaPantalla) }
+    override suspend fun responderSiEsUnSeguro(clave: String, esUnSeguro: Boolean) = remote.responderSiEsUnSeguro(clave, esUnSeguro)
+    override suspend fun meInteresaLaAyudaConLosSeguros() = remote.meInteresaLaAyudaConLosSeguros()
     override suspend fun descartarCierre(periodo: String) = remote.descartarCierre(periodo)
     override suspend fun actualizarCierre(periodo: String) = remote.actualizarCierre(periodo)
     // El saldo del aviso contra el de Movi: se deriva en el server en cada lectura, sin nada que
