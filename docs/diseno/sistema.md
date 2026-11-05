@@ -5450,3 +5450,29 @@ de este período todavía no llega»). Las tres miden al menos el toque de 48 co
 - **Una restricción que depende de otra elección se dice en una línea debajo, en `aviso`, y apaga el guardar
   con la misma frase** («En dólares solo puede ser cada mes o cada año.»): no se esconde la opción ni se cambia
   sola.
+
+## Vuelta 130 · «Cómo bajar tu extracto», banco por banco
+
+La guía de la vuelta 107 se volvió un **catálogo por banco y producto** (`:core` `ComoSacarElExtracto.kt`,
+`GUIAS_DEL_EXTRACTO`) y una sola hoja lo pinta (`HojaDeComoSacarElExtracto`).
+
+- **La hoja dice, en este orden**: el banco (título), la pastilla de cómo lo lee Movi («Movi lo lee al instante»
+  en `Exito`, «Con IA · puede tardar un poco» en `Neutra`), si el banco tiene guías distintas por producto las
+  `PildoraDeFiltro` para elegirlo (Bancolombia: Cuenta · Tarjeta de crédito · Crédito), dónde se baja, el
+  aviso si lo hay (en `aviso`), **los pasos numerados** (aquí la numeración es un orden real), el rango ideal si
+  el banco deja elegir fechas, y en apartados con título en `cuerpoFuerte`: «Qué archivo subir», «La clave»,
+  «Por correo», la segunda forma (el extracto mensual de Bancolombia) y «Si no lo encuentras». Al final la nota
+  de la fuente y «Otro banco» (`Fantasma` S).
+- **Un solo amarillo**: «Subir el extracto», fuera del desplazamiento, siempre a la vista. Sin a dónde subir
+  (fuera de la cáscara y sin `onSubir`) no hay botón: nunca un amarillo que no hace nada.
+- **Sin banco conocido, la lista**: el patrón de «Ver todos los bancos» (`CampoDeBusqueda` «Busca tu banco» y
+  `Fila`s con el avatar del banco en la capa neutra) y «Mi banco no está», que abre la genérica.
+- **Nunca se inventan pasos.** Sin fuente, `PASOS_GENERICOS`; lo de prensa o blogs (`[secundaria]`) queda en
+  comentarios del catálogo y no se muestra; la clave solo donde la fuente la confirma.
+- **Se abre desde donde hace falta, siempre como enlace** (`EnlaceALaGuiaDelExtracto`, `Fantasma` S, o la
+  tercera acción de la propuesta): «¿Cómo bajo mi extracto?» en la hoja de subida de Documentos, «Cómo bajarlo»
+  en «¿Ya bajaste el extracto…?», «Cómo bajar el archivo que Movi lee mejor» bajo un extracto que no se pudo
+  leer o tiene clave, y la fila fija «Cómo bajar tus extractos» arriba de Documentos.
+
+**Pruebas**: `ComoSacarElExtractoTest` (`:core`, el catálogo y sus textos), `ComoSacarElExtractoEnLaAppTest`
+(`:shared`, la hoja y las entradas) y los casos de la guía en `ElTextoAl130NoSeCortaTest`.
