@@ -50,7 +50,6 @@ import com.jvillada.movi.shared.model.PropuestaDeSaldar
 import com.jvillada.movi.shared.model.newId
 import com.jvillada.movi.shared.model.quienesPuedenPagarDesdeAca
 import com.jvillada.movi.shared.model.saldadoQueYaMarcoElOtro
-import com.jvillada.movi.shared.model.LO_ANOTA_DESDE_SU_MOVI
 import com.jvillada.movi.shared.model.YA_LO_MARCO_LA_OTRA_PERSONA
 import com.jvillada.movi.shared.repository.ApiException
 import com.jvillada.movi.shared.repository.MovimientoSinSubir
@@ -113,10 +112,6 @@ const val TAG_ANOTAR_LO_QUE_PAGO_OTRO: String = "espacios:anotar-lo-que-pago-otr
 
 /** Lo que una escritura falló, dicho para el dueño. */
 internal fun mensajeDelEspacio(e: Throwable): String = when {
-    // Revisión de la vuelta 131: el 409 de un saldado que la otra persona ya marcó.
-    esYaLoMarco(e) -> "La otra persona ya lo marcó como saldado: vincula tu transferencia en su propuesta."
-    e is ApiException && e.status == 422 && e.serverMessage?.contains(LO_ANOTA_DESDE_SU_MOVI) == true ->
-        "La otra persona anota lo que paga desde su Movi."
     e is ApiException -> e.toUserMessage()
     // El movimiento no subió y el server dijo por qué (vuelta de diseño 24): eso, no «sin conexión».
     e is MovimientoSinSubir && e.rechazo != null -> "El servidor no recibió ese movimiento: ${e.rechazo}"
@@ -124,8 +119,12 @@ internal fun mensajeDelEspacio(e: Throwable): String = when {
 }
 
 /** ¿[e] es el 409 de un saldado que la otra persona ya marcó? (revisión de la vuelta 131) */
-internal fun esYaLoMarco(e: Throwable): Boolean =
-    e is ApiException && e.status == 409 && e.serverMessage?.startsWith(YA_LO_MARCO_LA_OTRA_PERSONA) == true
+internal fun esYaLoMarco(e: Throwable): Boolean = idDeYaLoMarco(e) != null
+
+/** El id del saldado que la otra persona ya marcó, del código del 409 (revisión 2: viaja en la cabecera). */
+internal fun idDeYaLoMarco(e: Throwable): String? =
+    (e as? ApiException)?.takeIf { it.status == 409 }?.codigo
+        ?.takeIf { it.startsWith(YA_LO_MARCO_LA_OTRA_PERSONA) }?.removePrefix(YA_LO_MARCO_LA_OTRA_PERSONA)
 
 /**
  * Revisión de la vuelta 131 · **«Caro ya lo marcó como saldado · Vincular tu transferencia»**, en lugar de
@@ -133,16 +132,24 @@ internal fun esYaLoMarco(e: Throwable): Boolean =
  * Movi la propone arriba («¿Esta transferencia de Caro salda…?») si la encuentra.
  */
 @Composable
-private fun AvisoYaLoMarco(espacio: Espacio, onVincular: () -> Unit) {
-    Superficie(modifier = Modifier.fillMaxWidth().testTag(TAG_YA_LO_MARCO)) {
-        Text(yaLoMarcoComoSaldado(espacio), style = Movi.textos.cuerpo, color = Movi.colores.texto)
-        Text(
-            "Vincula la transferencia que te llegó o que mandaste: no marques otro saldado.",
-            style = Movi.textos.apoyo,
-            color = Movi.colores.textoMedio,
-        )
-        Spacer(Modifier.height(EspacioDeDiseno.xs))
-        Boton("Vincular tu transferencia", onClick = onVincular, variante = VarianteDeBoton.Secundario, tamano = TamanoDeBoton.S)
+private fun AvisoYaLoMarco(detalle: DetalleDelEspacio, liquidacionId: String?, onCambio: () -> Unit) {
+    val espacio = detalle.espacio
+    // Revisión 2 (N-7): si Movi ya encontró la transferencia, el aviso lleva a su propuesta; si no, informa.
+    val propuesta = detalle.propuestas.firstOrNull { it.cruzada && it.liquidacionId != null && it.liquidacionId == liquidacionId }
+    Column(modifier = Modifier.fillMaxWidth().testTag(TAG_YA_LO_MARCO), verticalArrangement = Arrangement.spacedBy(EspacioDeDiseno.xs)) {
+        Superficie(modifier = Modifier.fillMaxWidth()) {
+            Text(yaLoMarcoComoSaldado(espacio), style = Movi.textos.cuerpo, color = Movi.colores.texto)
+        }
+        if (propuesta != null) {
+            TarjetaDeSaldar(
+                p = propuesta,
+                espacioId = espacio.id,
+                quien = nombreEnElEspacio(espacio, if (propuesta.a == MIEMBRO_YO) propuesta.de else propuesta.a),
+                nombreDelGrupo = espacio.nombre,
+                conElGrupo = false,
+                onHecho = onCambio,
+            )
+        }
     }
 }
 
@@ -389,10 +396,18 @@ internal fun CuerpoDelEspacio(
     var mensajeCopiado by remember(espacio.id) { mutableStateOf<String?>(null) }
     // Revisión de la vuelta 131: la otra persona ya marcó este mismo saldado: se vincula, no se marca otro.
     var yaLoMarco by remember(espacio.id) { mutableStateOf(false) }
+    var yaLoMarcoId by remember(espacio.id) { mutableStateOf<String?>(null) }
     val reembolsoDelSaldo = fraseDelSaldo(espacio, detalle.saldo).reembolso
     val ahoraDelSaldo = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
-    val loMarcoElOtro = espacio.conexion != null && reembolsoDelSaldo != null &&
-        saldadoQueYaMarcoElOtro(detalle.liquidaciones, reembolsoDelSaldo.de, reembolsoDelSaldo.a, reembolsoDelSaldo.monto, ahoraDelSaldo) != null
+    val elQueMarcoElOtro = if (espacio.conexion != null && reembolsoDelSaldo != null) {
+        saldadoQueYaMarcoElOtro(detalle.liquidaciones, detalle.gastos, reembolsoDelSaldo.de, reembolsoDelSaldo.a, reembolsoDelSaldo.monto, ahoraDelSaldo)
+    } else {
+        null
+    }
+    val loMarcoElOtro = elQueMarcoElOtro != null
+    // Revisión 2 (N-2): saldar lo de antes de conectarse, aparte y solo de este lado.
+    var saldandoLoDeAntes by remember(espacio.id) { mutableStateOf(false) }
+    var trabajandoLoDeAntes by remember(espacio.id) { mutableStateOf(false) }
     val hoja = hojaDeCompartir()
     val uriHandler = LocalUriHandler.current
 
@@ -425,12 +440,12 @@ internal fun CuerpoDelEspacio(
                     mensajeCopiado = if (hoja.mandarMensaje(mensaje) == ComoSalioElMensaje.COPIADO) mensaje else null
                 }
             },
-            onSaldar = { if (loMarcoElOtro) yaLoMarco = true else saldando = true },
+            onSaldar = { if (loMarcoElOtro) { yaLoMarco = true; yaLoMarcoId = elQueMarcoElOtro?.id } else saldando = true },
             // Con transferencias que pueden ser el pago, la hoja de siempre (se elige cuál vincular); sin
             // ninguna, la pregunta antes de dejar el espacio en cero.
             onSaldadoSecundario = {
                 when {
-                    loMarcoElOtro -> yaLoMarco = true
+                    loMarcoElOtro -> { yaLoMarco = true; yaLoMarcoId = elQueMarcoElOtro?.id }
                     paraLaDeuda.isEmpty() -> confirmandoSaldado = true
                     else -> saldando = true
                 }
@@ -438,11 +453,25 @@ internal fun CuerpoDelEspacio(
             mensajeCopiado = mensajeCopiado,
             onAbrirWhatsApp = { mensajeCopiado?.let { runCatching { uriHandler.openUri(enlaceDeWhatsApp(it)) } } },
         )
-        if (yaLoMarco) {
-            AvisoYaLoMarco(espacio, onVincular = {
-                yaLoMarco = false
-                onCambio()
-            })
+        if (yaLoMarco) AvisoYaLoMarco(detalle, yaLoMarcoId, onCambio = onCambio)
+        // Revisión 2 (N-2): lo de antes de conectarse, en su línea y con su propio «Marcar como saldado».
+        lineaDeAntesDeConectarse(detalle)?.let { linea ->
+            Superficie(modifier = Modifier.fillMaxWidth().testTag(TAG_DE_ANTES_DE_CONECTARSE)) {
+                Text(linea, style = Movi.textos.cuerpo, color = Movi.colores.texto)
+                Text(
+                    "${nombreEnElEspacio(espacio, espacio.conexion?.miembroId ?: "")} no lo ve: se salda solo de tu lado.",
+                    style = Movi.textos.apoyo,
+                    color = Movi.colores.textoMedio,
+                )
+                Spacer(Modifier.height(EspacioDeDiseno.xs))
+                Boton(
+                    "Marcar como saldado",
+                    onClick = { saldandoLoDeAntes = true },
+                    variante = VarianteDeBoton.Fantasma,
+                    tamano = TamanoDeBoton.S,
+                    modifier = Modifier.testTag(TAG_SALDAR_LO_DE_ANTES),
+                )
+            }
         }
         // Vuelta 66 · el historial: cada saldado, con su transferencia o «Esperando la transferencia».
         PagosEntreUstedes(detalle, ahora = ahora, onCambio = onCambio)
@@ -545,10 +574,43 @@ internal fun CuerpoDelEspacio(
                         } catch (e: CancellationException) {
                             throw e
                         } catch (e: Throwable) {
-                            if (esYaLoMarco(e)) yaLoMarco = true else errorDePropuesta = mensajeDelEspacio(e)
+                            val idMarcado = idDeYaLoMarco(e)
+                            if (idMarcado != null) { yaLoMarco = true; yaLoMarcoId = idMarcado; onCambio() } else errorDePropuesta = mensajeDelEspacio(e)
                             confirmandoSaldado = false
                         } finally {
                             saldandoSinVincular = false
+                        }
+                    }
+                }
+            },
+        )
+    }
+    val saldadoDeAntes = saldadoDeLoDeAntes(detalle, remember(detalle.deAntesDeConectarse) { newId("liq") }, ahoraDelSaldo)
+    if (saldandoLoDeAntes && saldadoDeAntes != null) {
+        val otro = nombreEnElEspacio(espacio, espacio.conexion?.miembroId ?: "")
+        ConfirmarEnHoja(
+            pregunta = "¿Saldaron lo de antes de conectarse?",
+            detalle = if (saldadoDeAntes.a == MIEMBRO_YO) "$otro te pagó ${formatCOP(saldadoDeAntes.monto)}. Solo se anota de tu lado: $otro no lo ve."
+            else "Le pagaste ${formatCOP(saldadoDeAntes.monto)} a $otro. Solo se anota de tu lado: $otro no lo ve.",
+            textoConfirmar = "Sí, está saldado",
+            ocupado = trabajandoLoDeAntes,
+            varianteConfirmar = VarianteDeBoton.Principal,
+            onCancelar = { if (!trabajandoLoDeAntes) saldandoLoDeAntes = false },
+            onConfirmar = {
+                if (!trabajandoLoDeAntes) {
+                    trabajandoLoDeAntes = true
+                    coroutine.launch {
+                        try {
+                            Repositories.wallets.liquidarEspacio(espacio.id, saldadoDeAntes)
+                            saldandoLoDeAntes = false
+                            onCambio()
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Throwable) {
+                            errorDePropuesta = mensajeDelEspacio(e)
+                            saldandoLoDeAntes = false
+                        } finally {
+                            trabajandoLoDeAntes = false
                         }
                     }
                 }
@@ -680,10 +742,6 @@ private fun SaldoDelEspacioTarjeta(
         frase.apoyo?.let { Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio) }
         // Vuelta 86: de dónde sale el saldo —lo de este período («Quién puso qué», arriba) y lo que venía de
         // antes—, para que las dos cifras se expliquen. El saldo no cambia: es el de `saldoDelEspacio`.
-        // Revisión de la vuelta 131: lo que el dueño anotó antes de conectarse sigue acá y el otro no lo ve.
-        lineaDeAntesDeConectarse(detalle)?.let {
-            Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.testTag(TAG_DE_ANTES_DE_CONECTARSE))
-        }
         if (frase.monto > 0L) {
             desgloseDelSaldo(detalle)?.let { desglose ->
                 Text(

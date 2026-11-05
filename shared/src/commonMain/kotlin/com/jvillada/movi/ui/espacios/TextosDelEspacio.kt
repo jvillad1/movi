@@ -216,9 +216,9 @@ const val GASTOS_EN_EL_MENSAJE: Int = 3
  * antes ya se pagó), del más reciente al más viejo.
  */
 internal fun gastosQueLoComponen(detalle: DetalleDelEspacio, deudor: String): List<GastoDelEspacio> {
-    val desde = detalle.liquidaciones.filter { it.monto > 0L }.maxOfOrNull { it.fecha } ?: Long.MIN_VALUE
+    val desde = detalle.liquidaciones.filter { it.monto > 0L && !it.deAntes }.maxOfOrNull { it.fecha } ?: Long.MIN_VALUE
     return detalle.gastos
-        .filter { it.pagadoPor == MIEMBRO_YO && (it.partes[deudor] ?: 0L) > 0L && it.fecha > desde }
+        .filter { !it.deAntes && it.pagadoPor == MIEMBRO_YO && (it.partes[deudor] ?: 0L) > 0L && it.fecha > desde }
         .sortedByDescending { it.fecha }
 }
 
@@ -263,12 +263,8 @@ fun mensajeParaPedir(
         }
         val mas = gastos.size - GASTOS_EN_EL_MENSAJE
         if (mas > 0) append("\ny ").append(mas).append(" más.")
-        // Revisión de la vuelta 131: en un grupo conectado, el monto es el de siempre (todo lo que se deben) y
-        // el mensaje dice cuánto es de antes de conectarse, que la otra persona no ve en su grupo.
-        if (espacio.conexion != null && detalle.deAntesDeConectarse != 0L) {
-            append("\nIncluye ").append(formatCOPSinOcultar(kotlin.math.abs(detalle.deAntesDeConectarse)))
-                .append(" de antes de conectarnos en Movi, que no ves en tu grupo.")
-        }
+        // Revisión 2 de la vuelta 131: el monto y los gastos son de lo que ven los dos (lo de antes de
+        // conectarse se salda aparte, solo de este lado).
         enlace?.takeIf { it.isNotBlank() }?.let { append("\nEl detalle: ").append(it) }
         append("\n¿Me lo pasas cuando puedas? ¡Gracias!")
     }

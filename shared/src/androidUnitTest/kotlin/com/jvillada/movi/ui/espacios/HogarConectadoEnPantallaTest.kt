@@ -312,11 +312,25 @@ class HogarConectadoEnPantallaTest {
     fun `la marca dice con quien y su nombre en Movi, y el saldo dice lo de antes de conectarse`() {
         val conNombre = conectada.copy(conexion = conectada.conexion!!.copy(nombreEnMovi = "Carolina"))
         val propio = gasto("g1", MIEMBRO_YO, 100_000, "e1")
-        Repositories.sustitutoDePrueba = Repo(detalleDe(conNombre, listOf(propio)).copy(deAntesDeConectarse = 30_000))
+        val repo = object : Repo(detalleDe(conNombre, listOf(propio)).copy(deAntesDeConectarse = 30_000)) {
+            val liquidaciones = mutableListOf<LiquidacionDelEspacio>()
+            override suspend fun liquidarEspacio(espacioId: String, liquidacion: LiquidacionDelEspacio): LiquidacionDelEspacio =
+                liquidacion.also { liquidaciones += it }
+        }
+        Repositories.sustitutoDePrueba = repo
         montarElGrupo()
         esperarTexto("Conectado con Caro · Carolina en Movi")
         esperarTag(TAG_DE_ANTES_DE_CONECTARSE)
-        esperarTexto("Incluye \$30.000 de antes de conectarse: Caro no lo ve.")
+        esperarTexto("Antes de conectarse: Caro te debía \$30.000")
+        // Revisión 2 (N-2): lo de antes se salda aparte, solo de este lado.
+        tocarTag(TAG_SALDAR_LO_DE_ANTES)
+        esperarTexto("¿Saldaron lo de antes de conectarse?")
+        tocarBoton("Sí, está saldado")
+        composeRule.waitUntil(timeoutMillis = 5_000) { repo.liquidaciones.isNotEmpty() }
+        val l = repo.liquidaciones.single()
+        assertEquals(listOf("dst_caro", MIEMBRO_YO), listOf(l.de, l.a))
+        assertEquals(30_000L, l.monto)
+        assertTrue(l.deAntes, "un saldado de lo de antes, que no cruza")
     }
 
     @Test
@@ -349,7 +363,9 @@ class HogarConectadoEnPantallaTest {
         val propio = gasto("g1", MIEMBRO_YO, 100_000, "e1")
         val repo = object : Repo(detalleDe(conectada, listOf(propio))) {
             override suspend fun liquidarEspacio(espacioId: String, liquidacion: LiquidacionDelEspacio): LiquidacionDelEspacio =
-                throw com.jvillada.movi.shared.repository.ApiException(409, com.jvillada.movi.shared.model.YA_LO_MARCO_LA_OTRA_PERSONA + "l_caro")
+                throw com.jvillada.movi.shared.repository.ApiException(
+                    409, "Caro ya lo marcó como saldado", com.jvillada.movi.shared.model.YA_LO_MARCO_LA_OTRA_PERSONA + "l_caro",
+                )
         }
         Repositories.sustitutoDePrueba = repo
         montarElGrupo()
@@ -358,8 +374,35 @@ class HogarConectadoEnPantallaTest {
         esperarTexto("¿Caro ya te pagó")
         tocarBoton("Sí, ya me pagó")
         esperarTag(TAG_YA_LO_MARCO)
-        esperarTexto("Caro ya lo marcó como saldado")
-        esperarTexto("Vincular tu transferencia")
+        esperarTexto("Caro ya lo marcó como saldado. Cuando llegue tu transferencia, Movi te la propone para vincularla.")
+        assertTrue(!hay("Vincular tu transferencia"), "N-7: sin un botón que no hace nada")
+    }
+
+    /** N-1: un saldado de Caro ya vinculado ofrece «Desvincular tu transferencia» en su «⋯». */
+    @Test
+    fun `el saldado de Caro ya vinculado se desvincula desde su menu`() {
+        val vinculado = LiquidacionDelEspacio(
+            id = "l_caro", espacioId = casa.id, de = "dst_caro", a = MIEMBRO_YO, monto = 5_000, fecha = 1_761_100_000_000L,
+            eventoId = "e_mio", anotadoPor = "dst_caro",
+        )
+        val repo = object : Repo(detalleDe(conectada, emptyList(), listOf(vinculado))) {
+            val desvinculados = mutableListOf<String>()
+            override suspend fun desvincularLiquidacion(espacioId: String, liquidacionId: String) { desvinculados += liquidacionId }
+        }
+        Repositories.sustitutoDePrueba = repo
+        montarElGrupo()
+        esperarTag(TAG_MENU_DEL_SALDADO_CRUZADO)
+        composeRule.onNode(androidx.compose.ui.test.hasContentDescription("Más opciones del saldado") and hasClickAction())
+            .performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        composeRule.waitUntil(timeoutMillis = 5_000) { composeRule.onAllNodes(hasText(DESVINCULAR_TU_TRANSFERENCIA)).fetchSemanticsNodes().isNotEmpty() }
+        composeRule.onNode(hasText(DESVINCULAR_TU_TRANSFERENCIA) and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        esperarTexto("¿Desvincular tu transferencia?")
+        assertTrue(repo.desvinculados.isEmpty(), "pregunta antes")
+        tocarBoton("Desvincular")
+        composeRule.waitUntil(timeoutMillis = 5_000) { repo.desvinculados.isNotEmpty() }
+        assertEquals(listOf("l_caro"), repo.desvinculados)
     }
 
     @Test

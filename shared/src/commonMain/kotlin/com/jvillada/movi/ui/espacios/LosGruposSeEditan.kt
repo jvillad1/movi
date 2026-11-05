@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.PersonAdd
 import androidx.compose.material.icons.rounded.SwapHoriz
@@ -468,6 +469,8 @@ fun PagosEntreUstedes(detalle: DetalleDelEspacio, ahora: Long, onCambio: () -> U
     if (pagos.isEmpty()) return
     val coroutine = rememberCoroutineScope()
     var deshaciendo by remember(espacio.id) { mutableStateOf<LiquidacionDelEspacio?>(null) }
+    // Revisión 2: «Desvincular tu transferencia» de un saldado de la otra persona que vinculaste por error.
+    var desvinculando by remember(espacio.id) { mutableStateOf<LiquidacionDelEspacio?>(null) }
     var trabajando by remember(espacio.id) { mutableStateOf(false) }
     var error by remember(espacio.id) { mutableStateOf<String?>(null) }
     Column {
@@ -482,7 +485,9 @@ fun PagosEntreUstedes(detalle: DetalleDelEspacio, ahora: Long, onCambio: () -> U
                     lineasDelSubtitulo = RENGLONES_DEL_DETALLE_DEL_PAGO,
                     inicio = { AvatarDeTercero(nombreEnElEspacio(espacio, if (l.a == MIEMBRO_YO) l.de else l.a)) },
                     // Vuelta 131: lo que anotó la otra persona no se deshace desde acá (es de su Movi).
-                    final = if (loAnotoElOtro(l)) null else { {
+                    final = if (loAnotoElOtro(l)) {
+                        if (l.eventoId != null) { { MenuDelSaldadoCruzado(onDesvincular = { desvinculando = l }) } } else null
+                    } else { {
                         Boton(
                             "Deshacer",
                             onClick = { deshaciendo = l },
@@ -496,6 +501,35 @@ fun PagosEntreUstedes(detalle: DetalleDelEspacio, ahora: Long, onCambio: () -> U
             }
         }
         error?.let { Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale) }
+    }
+    desvinculando?.let { l ->
+        ConfirmarEnHoja(
+            pregunta = "¿Desvincular tu transferencia?",
+            detalle = "${tituloDelPago(espacio, l)}. Tu transferencia vuelve a contar como ingreso o gasto, y Movi te " +
+                "la vuelve a proponer si es la de este saldado.",
+            textoConfirmar = "Desvincular",
+            ocupado = trabajando,
+            onCancelar = { if (!trabajando) desvinculando = null },
+            onConfirmar = {
+                if (!trabajando) {
+                    trabajando = true
+                    error = null
+                    coroutine.launch {
+                        try {
+                            Repositories.wallets.desvincularLiquidacion(espacio.id, l.id)
+                            onCambio()
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Throwable) {
+                            error = mensajeDelEspacio(e)
+                        } finally {
+                            trabajando = false
+                            desvinculando = null
+                        }
+                    }
+                }
+            },
+        )
     }
     deshaciendo?.let { l ->
         ConfirmarEnHoja(
@@ -545,3 +579,22 @@ const val TAG_CORTE_DEL_SALDADO: String = "grupos:corte"
 
 /** El tag de la pregunta que sigue al «No» de una propuesta de saldar (vuelta 67). */
 const val TAG_CONFIRMAR_EL_NO_DE_SALDAR: String = "grupos:confirmar-el-no-de-saldar"
+
+/** Revisión 2 de la vuelta 131 · el «⋯» de un saldado de la otra persona ya vinculado: «Desvincular tu transferencia». */
+@Composable
+private fun MenuDelSaldadoCruzado(onDesvincular: () -> Unit) {
+    androidx.compose.foundation.layout.Box(modifier = Modifier.testTag(TAG_MENU_DEL_SALDADO_CRUZADO)) {
+        var abierto by remember { mutableStateOf(false) }
+        com.jvillada.movi.ui.components.ds.BotonDeIcono(
+            icono = androidx.compose.material.icons.Icons.Rounded.MoreHoriz,
+            descripcion = "Más opciones del saldado",
+            onClick = { abierto = true },
+        )
+        androidx.compose.material3.DropdownMenu(expanded = abierto, onDismissRequest = { abierto = false }, containerColor = Movi.colores.tarjeta) {
+            androidx.compose.material3.DropdownMenuItem(
+                text = { Text(DESVINCULAR_TU_TRANSFERENCIA, style = Movi.textos.cuerpo, color = Movi.colores.texto) },
+                onClick = { abierto = false; onDesvincular() },
+            )
+        }
+    }
+}

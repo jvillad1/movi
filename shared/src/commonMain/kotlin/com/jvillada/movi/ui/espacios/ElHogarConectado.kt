@@ -87,6 +87,9 @@ const val TAG_DESCONECTAR: String = "hogar:desconectar"
 const val TAG_LO_ANOTA_DESDE_SU_MOVI: String = "hogar:lo-anota-desde-su-movi"
 const val TAG_DE_ANTES_DE_CONECTARSE: String = "hogar:de-antes-de-conectarse"
 const val TAG_YA_LO_MARCO: String = "hogar:ya-lo-marco"
+const val TAG_SALDAR_LO_DE_ANTES: String = "hogar:saldar-lo-de-antes"
+const val TAG_MENU_DEL_SALDADO_CRUZADO: String = "hogar:menu-del-saldado-cruzado"
+const val DESVINCULAR_TU_TRANSFERENCIA: String = "Desvincular tu transferencia"
 const val TAG_GRUPOS_DE_DOS: String = "hogar:grupos-de-dos"
 
 /** La fila de un grupo de dos sin conectar: «Invita a Caro a Movi». */
@@ -145,17 +148,36 @@ fun loAnotaDesdeSuMovi(espacio: Espacio): String? = espacio.conexion?.let { c ->
     "${nombreEnElEspacio(espacio, c.miembroId)} anota lo que paga desde su Movi"
 }
 
-/** Revisión · la línea del saldo con lo de antes de conectarse: «Incluye $X de antes de conectarse: Caro no lo ve.» */
+/**
+ * Revisión 2 · **lo de antes de conectarse, aparte**: «Antes de conectarse: Caro te debía $30.000» (o «le
+ * debías $30.000 a Caro»), solo en el lado que tiene esa historia. El saldo de la tarjeta es el de lo que ven
+ * los dos.
+ */
 fun lineaDeAntesDeConectarse(detalle: DetalleDelEspacio): String? {
     val c = detalle.espacio.conexion ?: return null
-    if (detalle.deAntesDeConectarse == 0L) return null
-    return "Incluye ${formatCOP(kotlin.math.abs(detalle.deAntesDeConectarse))} de antes de conectarse: " +
-        "${nombreEnElEspacio(detalle.espacio, c.miembroId)} no lo ve."
+    val neto = detalle.deAntesDeConectarse
+    if (neto == 0L) return null
+    val otro = nombreEnElEspacio(detalle.espacio, c.miembroId)
+    return if (neto > 0L) "Antes de conectarse: $otro te debía ${formatCOP(neto)}"
+    else "Antes de conectarse: le debías ${formatCOP(-neto)} a $otro"
 }
 
-/** Revisión · el aviso cuando la otra persona ya marcó el saldado: «Caro ya lo marcó como saldado». */
+/** El saldado que deja en cero lo de antes de conectarse (solo de este lado: `deAntes`). */
+fun saldadoDeLoDeAntes(detalle: DetalleDelEspacio, id: String, ahora: Long): LiquidacionDelEspacio? {
+    val c = detalle.espacio.conexion ?: return null
+    val neto = detalle.deAntesDeConectarse
+    if (neto == 0L) return null
+    return if (neto > 0L) LiquidacionDelEspacio(id = id, de = c.miembroId, a = MIEMBRO_YO, monto = neto, fecha = ahora, deAntes = true)
+    else LiquidacionDelEspacio(id = id, de = MIEMBRO_YO, a = c.miembroId, monto = -neto, fecha = ahora, deAntes = true)
+}
+
+/**
+ * Revisión 2 (N-7) · el aviso cuando la otra persona ya marcó el saldado: «Caro ya lo marcó como saldado.
+ * Cuando llegue tu transferencia, Movi te la propone para vincularla.»
+ */
 fun yaLoMarcoComoSaldado(espacio: Espacio): String =
-    "${espacio.conexion?.let { nombreEnElEspacio(espacio, it.miembroId) } ?: "La otra persona"} ya lo marcó como saldado"
+    "${espacio.conexion?.let { nombreEnElEspacio(espacio, it.miembroId) } ?: "La otra persona"} ya lo marcó como saldado. " +
+        "Cuando llegue tu transferencia, Movi te la propone para vincularla."
 
 /** Por qué el código todavía no sirve, para el pie de la hoja. */
 fun razonDelCodigo(codigo: String): String? = when {

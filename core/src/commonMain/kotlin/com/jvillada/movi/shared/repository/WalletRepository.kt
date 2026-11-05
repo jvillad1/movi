@@ -268,6 +268,8 @@ interface WalletRepository {
      */
     suspend fun vincularLiquidacion(espacioId: String, liquidacionId: String, eventoId: String): com.jvillada.movi.shared.model.LiquidacionDelEspacio =
         noLoTiene("vincularLiquidacion")
+    /** Revisión 2 · «Desvincular tu transferencia» de un saldado de la otra persona (`DELETE …/vincular`). */
+    suspend fun desvincularLiquidacion(espacioId: String, liquidacionId: String): Unit = noLoTiene("desvincularLiquidacion")
     /** «Desconectar»: cualquiera de los dos; no borra nada de nadie. */
     suspend fun desconectarEspacio(espacioId: String): Unit = noLoTiene("desconectarEspacio")
 

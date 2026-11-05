@@ -76,20 +76,25 @@ class TextosDelHogarConectadoTest {
         )
     }
 
+    /** Revisión 2 (N-2): lo de antes va en su línea, con su dirección; «Pedirle» usa solo lo que ven los dos. */
     @Test
-    fun `lo de antes de conectarse se dice en la tarjeta y en el mensaje, solo con la conexion`() {
+    fun `lo de antes de conectarse va aparte, con su direccion, y el mensaje no lo pide`() {
         val g = GastoDelEspacio(
             id = "g", espacioId = "esp_casa", pagadoPor = MIEMBRO_YO, monto = 100_000, categoria = "Mercado", descripcion = "Mercado",
             fecha = dia(5), partes = com.jvillada.movi.shared.model.partesDelGasto(100_000, casa, MIEMBRO_YO),
         )
+        val viejo = g.copy(id = "v", descripcion = "Mercado viejo", monto = 60_000, partes = com.jvillada.movi.shared.model.partesDelGasto(60_000, casa, MIEMBRO_YO), deAntes = true)
         val saldo = com.jvillada.movi.shared.model.saldoDelEspacio(conectada, listOf(g), emptyList())
-        val detalle = com.jvillada.movi.shared.model.DetalleDelEspacio(conectada, saldo, saldo, listOf(g), deAntesDeConectarse = 30_000)
-        assertEquals("Incluye \$30.000 de antes de conectarse: Caro no lo ve.", lineaDeAntesDeConectarse(detalle))
+        val detalle = com.jvillada.movi.shared.model.DetalleDelEspacio(conectada, saldo, saldo, listOf(g, viejo), deAntesDeConectarse = 30_000)
+        assertEquals("Antes de conectarse: Caro te debía \$30.000", lineaDeAntesDeConectarse(detalle))
+        assertEquals("Antes de conectarse: le debías \$30.000 a Caro", lineaDeAntesDeConectarse(detalle.copy(deAntesDeConectarse = -30_000)))
         assertNull(lineaDeAntesDeConectarse(detalle.copy(deAntesDeConectarse = 0)))
         assertNull(lineaDeAntesDeConectarse(detalle.copy(espacio = casa)))
         val mensaje = mensajeParaPedir(detalle, zona = zona)!!
         assertTrue("Me debes \$50.000" in mensaje, mensaje)
-        assertTrue("Incluye \$30.000 de antes de conectarnos en Movi, que no ves en tu grupo." in mensaje, mensaje)
+        assertTrue("Mercado viejo" !in mensaje && "Incluye" !in mensaje, mensaje)
+        val saldado = saldadoDeLoDeAntes(detalle, "liq_x", dia(6))!!
+        assertEquals(listOf("dst_caro", MIEMBRO_YO, "30000", "true"), listOf(saldado.de, saldado.a, saldado.monto.toString(), saldado.deAntes.toString()))
     }
 
     @Test

@@ -313,7 +313,11 @@ class WalletRepositoryImpl(
 
     private suspend fun <T> conRespuesta(response: io.ktor.client.statement.HttpResponse, leer: suspend (io.ktor.client.statement.HttpResponse) -> T): T {
         if (!response.status.isSuccess()) {
-            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+            throw ApiException(
+                response.status.value,
+                runCatching { response.bodyAsText() }.getOrNull(),
+                response.headers[com.jvillada.movi.shared.model.CABECERA_DEL_CODIGO],
+            )
         }
         return leer(response)
     }
@@ -450,6 +454,10 @@ class WalletRepositoryImpl(
             contentType(ContentType.Application.Json)
             setBody(com.jvillada.movi.shared.model.VincularLiquidacion(eventoId))
         }) { it.body() }
+
+    override suspend fun desvincularLiquidacion(espacioId: String, liquidacionId: String) {
+        conRespuesta(client.delete("$baseUrl/api/espacios/$espacioId/liquidaciones/$liquidacionId/vincular")) { }
+    }
 
     override suspend fun desconectarEspacio(espacioId: String) {
         conRespuesta(client.delete("$baseUrl/api/espacios/$espacioId/conexion")) { }

@@ -171,6 +171,8 @@ internal class InvalidaElInicioAlEscribir(
     // Revisión: vincular la transferencia saca ese movimiento de «Entró»/«Salió».
     override suspend fun vincularLiquidacion(espacioId: String, liquidacionId: String, eventoId: String) =
         trasEscribir { delegado.vincularLiquidacion(espacioId, liquidacionId, eventoId) }
+    override suspend fun desvincularLiquidacion(espacioId: String, liquidacionId: String): Unit =
+        trasEscribir { delegado.desvincularLiquidacion(espacioId, liquidacionId) }
     override suspend fun deleteDestino(id: String): Unit = trasEscribir { delegado.deleteDestino(id) }
     override suspend fun agregarIdentificador(id: String, pedido: com.jvillada.movi.shared.model.AgregarIdentificador) =
         trasEscribir { delegado.agregarIdentificador(id, pedido) }
