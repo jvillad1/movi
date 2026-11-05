@@ -5474,5 +5474,11 @@ La guía de la vuelta 107 se volvió un **catálogo por banco y producto** (`:co
   en «¿Ya bajaste el extracto…?», «Cómo bajar el archivo que Movi lee mejor» bajo un extracto que no se pudo
   leer o tiene clave, y la fila fija «Cómo bajar tus extractos» arriba de Documentos.
 
+- **La pastilla dice lo que pasa, no más**: «Movi lo lee al instante» solo con un lector de movimientos;
+  «Movi toma el saldo al instante» si solo toma el saldo; «Al instante: libre inversión o libranza» si solo
+  algunos; «Todavía no se importa» (en `Aviso`, sin botón amarillo) si no hay lector.
+- **Un error de lectura que se arregla con otro archivo no se va solo**: en Documentos queda un aviso con el
+  motivo, el enlace a la guía y «Cerrar» (el snackbar se iba antes de alcanzar a tocarlo).
+
 **Pruebas**: `ComoSacarElExtractoTest` (`:core`, el catálogo y sus textos), `ComoSacarElExtractoEnLaAppTest`
 (`:shared`, la hoja y las entradas) y los casos de la guía en `ElTextoAl130NoSeCortaTest`.
