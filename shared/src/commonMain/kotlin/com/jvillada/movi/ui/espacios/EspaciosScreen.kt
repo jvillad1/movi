@@ -172,6 +172,13 @@ fun EspaciosScreen(onNavigate: (Screen) -> Unit) {
         val alFinal: @Composable ColumnScope.() -> Unit = {
             val actual = lectura
             if (actual != null && actual.queOtroPaga.isNotEmpty()) LoQuePagaOtraPersona(actual.queOtroPaga)
+            // Vuelta 131: unirse con un código al grupo que otra persona compartió (también sin grupos).
+            if (actual != null) {
+                FilaTengoUnCodigo(onUnido = { nuevo ->
+                    reintento++
+                    onNavigate(Screen.Espacio(nuevo.id))
+                })
+            }
             // Vuelta 73: «Personas y comercios» ya no vive al final de un grupo: es una fila de «Lo
             // tuyo», en Tú (ver `FilaDePersonasYComercios`). Desde acá se llega con «Nuevo grupo».
         }
@@ -369,6 +376,8 @@ internal fun CuerpoDelEspacio(
         errorDePropuesta?.let { Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale) }
 
         EncabezadoDelEspacio(detalle, onEditar = { editando = true })
+        // Vuelta 131: invitar a la otra persona a Movi (solo un grupo de dos sin conectar).
+        FilaDeInvitar(espacio)
         QuienPusoQue(detalle)
         val ahora = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
         SaldoDelEspacioTarjeta(
@@ -529,6 +538,8 @@ private fun EncabezadoDelEspacio(detalle: DetalleDelEspacio, onEditar: () -> Uni
             Column(modifier = Modifier.weight(1f)) {
                 Text(espacio.nombre, style = Movi.textos.titulo, color = Movi.colores.texto, maxLines = 1)
                 Text(quienesComparten(espacio), style = Movi.textos.apoyo, color = Movi.colores.textoMedio, maxLines = 1)
+                // Vuelta 131: «Conectado con Caro», si el grupo está conectado con su Movi.
+                MarcaDeConectado(espacio)
             }
             // Vuelta 66: renombrar y borrar el grupo.
             BotonDeIcono(Icons.Rounded.Edit, "Editar grupo", onClick = onEditar, modifier = Modifier.testTag(TAG_EDITAR_GRUPO))
@@ -722,6 +733,7 @@ private fun GastosDelEspacio(
                         titulo = tituloDelGasto(g),
                         // Vuelta de diseño 32: un renglón; si no cabe, se corta la categoría (va al final).
                         subtitulo = quienPagoElGasto(espacio, g),
+                        lineasDelSubtitulo = renglonesDelSubtituloDelGasto(g),
                         // Vuelta 80: el gasto con el ícono de todo movimiento; quién pagó lo dice el subtítulo.
                         inicio = { IconoDeMovimiento(null, g.descripcion, g.categoria) },
                         final = { MontoYTuParte(g.monto, g.partes[MIEMBRO_YO] ?: 0L) },

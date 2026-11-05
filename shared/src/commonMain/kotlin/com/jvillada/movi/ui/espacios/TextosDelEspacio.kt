@@ -140,6 +140,9 @@ fun rotuloDeTuParte(espacio: Espacio): String =
  */
 fun tituloDelGasto(gasto: GastoDelEspacio): String = enFormaDeTitulo(gasto.descripcion.ifBlank { gasto.categoria })
 
+/** Los renglones del subtítulo de un gasto: dos si lo anotó la otra persona («Anotó Caro» abajo). */
+fun renglonesDelSubtituloDelGasto(gasto: GastoDelEspacio): Int = if (gasto.anotadoPor != null) 2 else 1
+
 /**
  * El subtítulo de un gasto del espacio: «18 oct · Tú · Mercado» o «18 oct · Caro · Mercado». La fecha
  * la pidió la revisión de la vuelta de diseño 26 (sin ella, dos mercados del mismo monto no se
@@ -154,6 +157,12 @@ fun tituloDelGasto(gasto: GastoDelEspacio): String = enFormaDeTitulo(gasto.descr
  */
 fun quienPagoElGasto(espacio: Espacio, gasto: GastoDelEspacio, zona: TimeZone = AppTimeZone.zone): String {
     val quien = nombreEnElEspacio(espacio, gasto.pagadoPor)
+    // Vuelta 131: lo que anotó la otra persona de un grupo conectado dice «Anotó Caro» en un segundo
+    // renglón ([renglonesDelSubtituloDelGasto]), en el lugar de la categoría (que sigue en su hoja): es lo
+    // que hay que leer, porque no se quita desde acá, y en un renglón se cortaba a 360 dp con letra grande.
+    anotoElOtro(espacio, gasto.anotadoPor)?.let { anoto ->
+        return listOfNotNull(fechaDelGasto(gasto, zona), quien).joinToString(" · ") + "\n" + anoto
+    }
     val categoria = gasto.categoria.takeIf { it.isNotBlank() && !elTituloDiceLaCategoria(tituloDelGasto(gasto), it) }
     return listOfNotNull(fechaDelGasto(gasto, zona), quien, categoria).joinToString(" · ")
 }
@@ -363,8 +372,11 @@ fun tituloDelPago(espacio: Espacio, l: LiquidacionDelEspacio): String {
  * pinta con `lineasDelSubtitulo = 2`—: en uno solo, a 390 y a 360 dp se cortaba en «Esperando la
  * transfere…», que es justo lo que había que leer.
  */
-fun detalleDelPago(l: LiquidacionDelEspacio, ahora: Long, zona: TimeZone = AppTimeZone.zone): String {
+fun detalleDelPago(l: LiquidacionDelEspacio, ahora: Long, zona: TimeZone = AppTimeZone.zone, espacio: Espacio? = null): String {
     val como = when {
+        // Vuelta 131: el saldado que anotó la otra persona dice quién lo anotó (su transferencia, si la
+        // vinculó, es de su cuenta: no cruza).
+        l.anotadoPor != null -> espacio?.let { anotoElOtro(it, l.anotadoPor) } ?: "Lo anotó la otra persona"
         l.eventoId != null -> l.movimiento?.trim()?.ifBlank { null }?.let { enFormaDeTitulo(it) } ?: "Transferencia vinculada"
         esperaLaTransferencia(l, ahora) -> ESPERANDO_LA_TRANSFERENCIA
         else -> SIN_TRANSFERENCIA

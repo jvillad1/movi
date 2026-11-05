@@ -263,6 +263,11 @@ fun HojaPagoOtro(
     MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !trabajando) {
         Column(modifier = Modifier.desplazableConElTeclado().weight(1f, fill = false)) {
             TituloDeLaHoja("Pagó otro", "No toca tus cuentas. Tu parte cuenta en tus gastos de hoy.")
+            // Vuelta 131: en un grupo conectado, la otra persona también puede anotarlo.
+            avisoDelPagoOtroConectado(espacio)?.let {
+                Text(it, style = Movi.textos.apoyo, color = Movi.colores.aviso, modifier = Modifier.testTag(TAG_AVISO_PAGO_OTRO_CONECTADO))
+                Spacer(Modifier.height(Medida.dentroDeSeccion))
+            }
             if (otros.size > 1) {
                 Row(horizontalArrangement = Arrangement.spacedBy(EspacioDeDiseno.xs)) {
                     otros.forEach { m -> PildoraDeFiltro(m.nombre, seleccionada = quien == m.id, onClick = { quien = m.id }) }

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Event
+import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.PieChart
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -142,6 +143,8 @@ internal fun HojaDelGasto(espacio: Espacio, gasto: GastoDelEspacio, onCerrar: ()
     var error by remember(gasto.id) { mutableStateOf<String?>(null) }
     val pagoOtro = gasto.pagadoPor != MIEMBRO_YO
     val quien = nombreEnElEspacio(espacio, gasto.pagadoPor)
+    // Vuelta 131: lo que anotó la otra persona de un grupo conectado no se quita desde acá.
+    val anoto = anotoElOtro(espacio, gasto.anotadoPor)
 
     fun quitar() {
         if (quitando) return
@@ -213,6 +216,16 @@ internal fun HojaDelGasto(espacio: Espacio, gasto: GastoDelEspacio, onCerrar: ()
                         inicio = { IconoDeMovimiento(null, gasto.descripcion, gasto.categoria) },
                     )
                 }
+                if (anoto != null) {
+                    Separador()
+                    Fila(
+                        titulo = anoto,
+                        subtitulo = "Desde su Movi. Solo quien lo anotó lo puede quitar.",
+                        lineasDelSubtitulo = 2,
+                        inicio = { IconoEnCirculo(Icons.Rounded.Link, tono = TonoDeIcono.Neutro) },
+                        modifier = Modifier.testTag(TAG_ANOTO_EL_OTRO),
+                    )
+                }
                 if (gasto.fecha > 0L) {
                     val hoy = hoyEnAppZone()
                     Separador()
@@ -224,12 +237,14 @@ internal fun HojaDelGasto(espacio: Espacio, gasto: GastoDelEspacio, onCerrar: ()
                 }
             }
             Spacer(Modifier.height(Medida.entreSecciones))
-            PieDeHoja(
-                QUITAR_DEL_ESPACIO,
-                onClick = { preguntando = true },
-                variante = VarianteDeBoton.Peligro,
-                error = error,
-            )
+            if (anoto == null) {
+                PieDeHoja(
+                    QUITAR_DEL_ESPACIO,
+                    onClick = { preguntando = true },
+                    variante = VarianteDeBoton.Peligro,
+                    error = error,
+                )
+            }
             Spacer(Modifier.height(Medida.entreSecciones))
         }
     }

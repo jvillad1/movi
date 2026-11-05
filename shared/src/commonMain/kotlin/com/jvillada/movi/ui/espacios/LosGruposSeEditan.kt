@@ -33,6 +33,7 @@ import com.jvillada.movi.shared.model.MiembroDelEspacio
 import com.jvillada.movi.shared.model.PropuestaDeSaldar
 import com.jvillada.movi.shared.model.TipoDeTercero
 import com.jvillada.movi.shared.model.huellaDeLaPropuestaDeSaldar
+import com.jvillada.movi.shared.model.loQueSeDejaDeVer
 import com.jvillada.movi.shared.model.newId
 import com.jvillada.movi.shared.model.tipoOPersona
 import com.jvillada.movi.theme.Espacio as EspacioDeDiseno
@@ -249,6 +250,8 @@ fun HojaEditarGrupo(detalle: DetalleDelEspacio, onDismiss: () -> Unit, onGuardad
     var nombre by remember(espacio.id) { mutableStateOf(espacio.nombre) }
     var trabajando by remember { mutableStateOf(false) }
     var preguntando by remember { mutableStateOf(false) }
+    // Vuelta 131: «Desconectar de Caro» pregunta antes, como borrar.
+    var preguntandoDesconectar by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val limpio = nombre.trim()
     // Vuelta 67: renombrar avisa, como crear, si ya hay un grupo con ese nombre y esas personas.
@@ -297,9 +300,28 @@ fun HojaEditarGrupo(detalle: DetalleDelEspacio, onDismiss: () -> Unit, onGuardad
         }
     }
 
+    fun desconectar() {
+        if (trabajando) return
+        trabajando = true
+        error = null
+        coroutine.launch {
+            try {
+                Repositories.wallets.desconectarEspacio(espacio.id)
+                preguntandoDesconectar = false
+                onGuardado()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                error = mensajeDelEspacio(e)
+                preguntandoDesconectar = false
+                trabajando = false
+            }
+        }
+    }
+
     // Vuelta 67: mientras se pregunta si borrar, la hoja de editar no queda abierta detrás; «No»
     // vuelve a ella.
-    if (!preguntando) MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !trabajando) {
+    if (!preguntando && !preguntandoDesconectar) MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !trabajando) {
         Column(modifier = Modifier.desplazableConElTeclado().weight(1f, fill = false)) {
             EncabezadoDeHoja("Editar grupo", subtitulo = quienesComparten(espacio))
             Spacer(Modifier.height(Medida.dentroDeSeccion))
@@ -312,6 +334,10 @@ fun HojaEditarGrupo(detalle: DetalleDelEspacio, onDismiss: () -> Unit, onGuardad
             repetido?.let {
                 Spacer(Modifier.height(EspacioDeDiseno.xs))
                 Text(it, style = Movi.textos.apoyo, color = Movi.colores.aviso, modifier = Modifier.testTag(TAG_AVISO_DE_GRUPO_REPETIDO))
+            }
+            if (espacio.conexion != null) {
+                Spacer(Modifier.height(Medida.dentroDeSeccion))
+                BotonDeDesconectar(detalle, onPreguntar = { preguntandoDesconectar = true }, habilitado = !trabajando)
             }
             Spacer(Modifier.height(Medida.dentroDeSeccion))
             PieDeHoja(
@@ -331,6 +357,17 @@ fun HojaEditarGrupo(detalle: DetalleDelEspacio, onDismiss: () -> Unit, onGuardad
             )
             Spacer(Modifier.height(Medida.entreSecciones))
         }
+    }
+    if (preguntandoDesconectar) {
+        val (pregunta, cuerpo) = confirmacionDeDesconectar(espacio, loQueSeDejaDeVer(detalle))
+        ConfirmarEnHoja(
+            pregunta = pregunta,
+            detalle = cuerpo,
+            textoConfirmar = "Desconectar",
+            ocupado = trabajando,
+            onConfirmar = ::desconectar,
+            onCancelar = { if (!trabajando) preguntandoDesconectar = false },
+        )
     }
     if (preguntando) {
         val (pregunta, cuerpo) = confirmacionDeBorrarElGrupo(detalle)
@@ -434,10 +471,11 @@ fun PagosEntreUstedes(detalle: DetalleDelEspacio, ahora: Long, onCambio: () -> U
                 Fila(
                     titulo = tituloDelPago(espacio, l),
                     // Vuelta 67: la fecha y, abajo, cómo se pagó; en un renglón se cortaba «Esperando la transfere…».
-                    subtitulo = detalleDelPago(l, ahora),
+                    subtitulo = detalleDelPago(l, ahora, espacio = espacio),
                     lineasDelSubtitulo = RENGLONES_DEL_DETALLE_DEL_PAGO,
                     inicio = { AvatarDeTercero(nombreEnElEspacio(espacio, if (l.a == MIEMBRO_YO) l.de else l.a)) },
-                    final = {
+                    // Vuelta 131: lo que anotó la otra persona no se deshace desde acá (es de su Movi).
+                    final = if (loAnotoElOtro(l)) null else { {
                         Boton(
                             "Deshacer",
                             onClick = { deshaciendo = l },
@@ -445,7 +483,7 @@ fun PagosEntreUstedes(detalle: DetalleDelEspacio, ahora: Long, onCambio: () -> U
                             tamano = TamanoDeBoton.S,
                             modifier = Modifier.testTag(TAG_DESHACER_PAGO),
                         )
-                    },
+                    } },
                     modifier = Modifier.testTag(TAG_PAGO_ENTRE_USTEDES),
                 )
             }
