@@ -15,6 +15,10 @@ import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.CardSummary
 import com.jvillada.movi.shared.model.CreateCardRequest
+import com.jvillada.movi.shared.model.AdjustAccountBalanceResponse
+import com.jvillada.movi.shared.model.DeudaDelExtracto
+import androidx.compose.ui.test.onNodeWithTag
+import kotlinx.coroutines.awaitCancellation
 import com.jvillada.movi.shared.model.ImportDecision
 import com.jvillada.movi.shared.model.ParsedTransaction
 import com.jvillada.movi.shared.model.StatementParseResult
@@ -52,7 +56,10 @@ class ElExtractoDeUnaTarjetaVaAUnaTarjetaTest {
 
     private val nuAhorros = Account("a-nu", "Nu Ahorros", AccountType.SAVINGS, 1_200_000)
     private val nuTarjeta = Account("c-nu", "Nu Tarjeta", AccountType.CREDIT_CARD, 0)
-    private val delExtracto = TarjetaDelExtracto(banco = "Nu", ultimosCuatro = "1111", diaDeCorte = 12, diaDePago = 3, cupo = 3_000_000)
+    private val delExtracto = TarjetaDelExtracto(
+        banco = "Nu", ultimosCuatro = "1111", diaDeCorte = 12, diaDePago = 3, cupo = 3_000_000,
+        deudaAlCorte = 411_240, fechaDeCorte = "2026-10-12",
+    )
 
     private val compra = ParsedTransaction(
         id = "f1", date = "2026-10-10", merchant = "Panaderia La Esquina", amount = 50_000,
@@ -67,16 +74,25 @@ class ElExtractoDeUnaTarjetaVaAUnaTarjetaTest {
 
     private val decisiones = mutableListOf<ImportDecision>()
     private val creadas = mutableListOf<CreateCardRequest>()
+    private val cuadres = mutableListOf<Pair<String, DeudaDelExtracto>>()
 
     @After
     fun limpiarLaCostura() {
         Repositories.sustitutoDePrueba = null
     }
 
-    private fun montar(cuentas: List<Account>, result: StatementParseResult) {
-        decisiones.clear(); creadas.clear()
+    private fun montar(
+        cuentas: List<Account>,
+        result: StatementParseResult,
+        leerCuentas: suspend () -> List<Account> = { cuentas },
+    ) {
+        decisiones.clear(); creadas.clear(); cuadres.clear()
         Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
-            override suspend fun getAccounts(): List<Account> = cuentas
+            override suspend fun getAccounts(): List<Account> = leerCuentas()
+            override suspend fun cuadrarLaDeudaConElExtracto(accountId: String, deuda: DeudaDelExtracto): AdjustAccountBalanceResponse {
+                cuadres += accountId to deuda
+                return AdjustAccountBalanceResponse(account = Account(accountId, "Nu Tarjeta 1111", AccountType.CREDIT_CARD, deuda.deuda))
+            }
             override suspend fun importStatement(decision: ImportDecision) { decisiones += decision }
             override suspend fun createCard(request: CreateCardRequest): CardSummary {
                 creadas += request
@@ -133,7 +149,10 @@ class ElExtractoDeUnaTarjetaVaAUnaTarjetaTest {
         ).assertIsDisplayed()
 
         tocar("Crear la tarjeta Nu")
-        // La hoja de siempre, llena con lo que dice el extracto.
+        // La hoja de siempre, llena con lo que dice el extracto. La deuda no se pide: la cuadra el
+        // extracto después de importar (escrita acá, las compras contarían dos veces).
+        composeRule.onNodeWithText("Deuda actual (opcional)").assertDoesNotExist()
+        composeRule.onNodeWithText(com.jvillada.movi.ui.credits.LA_DEUDA_LA_CUADRA_EL_EXTRACTO).assertIsDisplayed()
         composeRule.onNodeWithText("Nu Tarjeta 1111").assertIsDisplayed()
         composeRule.onNodeWithText("12").assertIsDisplayed()
         composeRule.onNodeWithText("3").assertIsDisplayed()
@@ -146,9 +165,41 @@ class ElExtractoDeUnaTarjetaVaAUnaTarjetaTest {
         assertEquals(3, creada.terms.paymentDay)
         assertEquals(3_000_000L, creada.terms.creditLimit)
 
+        assertEquals(0L, creada.initialDebt)
+
         // Creada, es el destino: el importe va a ella.
         tocar("Importar 1 seleccionada")
         assertEquals("c-nueva", decisiones.single().accountId)
+
+        // Y después de importar, la propuesta de cuadrar la deuda con el extracto, que no se hace sola.
+        composeRule.onNodeWithText("Cuadrar la deuda con el extracto: ${'$'}411.240").assertIsDisplayed()
+        assertEquals(emptyList(), cuadres)
+        tocar("Cuadrar")
+        assertEquals(listOf("c-nueva" to DeudaDelExtracto(deuda = 411_240, fechaDeCorte = "2026-10-12")), cuadres)
+    }
+
+    @Test
+    fun sin_la_deuda_en_el_extracto_no_se_propone_cuadrar() {
+        montar(listOf(nuAhorros, nuTarjeta), extracto(tarjeta = delExtracto.copy(deudaAlCorte = null)))
+        tocar("Importar 1 seleccionada")
+        assertEquals(nuTarjeta.id, decisiones.single().accountId)
+        composeRule.onNodeWithTag(TAG_CUADRAR_LA_DEUDA).assertDoesNotExist()
+    }
+
+    // ── Revisión: mientras las cuentas no llegan, nada de «Crear» ──────────────────
+
+    @Test
+    fun mientras_cargan_las_cuentas_no_se_ofrece_crear_la_tarjeta() {
+        montar(emptyList(), extracto(), leerCuentas = { awaitCancellation() })
+        composeRule.onNodeWithText("Crear la tarjeta Nu").assertDoesNotExist()
+        composeRule.onNodeWithTag(TAG_AVISO_DE_LA_TARJETA).assertDoesNotExist()
+    }
+
+    @Test
+    fun si_las_cuentas_no_se_pudieron_leer_tampoco() {
+        montar(emptyList(), extracto(), leerCuentas = { throw IllegalStateException("sin red") })
+        composeRule.onNodeWithText("Crear la tarjeta Nu").assertDoesNotExist()
+        composeRule.onNodeWithTag(TAG_AVISO_DE_LA_TARJETA).assertDoesNotExist()
     }
 
     @Test
@@ -167,9 +218,36 @@ class ElExtractoDeUnaTarjetaVaAUnaTarjetaTest {
         assertEquals(nuTarjeta.id, decisiones.single().accountId)
     }
 
+    /** Revisión: la cuenta del papel es una sugerencia; el contenido (una tarjeta) gana y se dice por qué. */
     @Test
-    fun la_cuenta_de_ahorros_puesta_al_subir_el_papel_se_advierte_y_ofrece_la_tarjeta() {
+    fun la_cuenta_de_ahorros_puesta_al_subir_el_papel_pierde_contra_el_contenido() {
         montar(listOf(nuAhorros, nuTarjeta), extracto(cuentaDelPapel = nuAhorros.id))
+
+        composeRule.onNodeWithText("Nu Tarjeta").assertIsDisplayed()
+        composeRule.onNodeWithText(
+            "Al subir el archivo elegiste Nu Ahorros, pero este extracto es de una tarjeta de crédito.",
+        ).assertIsDisplayed()
+        tocar("Importar 1 seleccionada")
+        assertEquals(nuTarjeta.id, decisiones.single().accountId)
+    }
+
+    @Test
+    fun la_cuenta_de_ahorros_del_papel_sin_tarjeta_en_movi_ofrece_crearla() {
+        montar(listOf(nuAhorros), extracto(cuentaDelPapel = nuAhorros.id))
+
+        composeRule.onNodeWithText(
+            "Al subir el archivo elegiste Nu Ahorros, pero este extracto es de una tarjeta de crédito.",
+        ).assertIsDisplayed()
+        composeRule.onNodeWithText("Crear la tarjeta Nu").assertIsDisplayed()
+        composeRule.onNodeWithText("Importar 1 seleccionada").assertIsNotEnabled()
+    }
+
+    /** Elegida con el dedo en esta pantalla, la cuenta de ahorros manda, pero se advierte. */
+    @Test
+    fun la_cuenta_de_ahorros_elegida_a_mano_se_advierte_y_ofrece_la_tarjeta() {
+        montar(listOf(nuAhorros, nuTarjeta), extracto())
+        tocar("Cambiar")
+        tocar("Nu Ahorros")
 
         composeRule.onNodeWithText("Este extracto es de una tarjeta de crédito, no de Nu Ahorros.").assertIsDisplayed()
         tocar("Usar Nu Tarjeta")
@@ -178,11 +256,47 @@ class ElExtractoDeUnaTarjetaVaAUnaTarjetaTest {
         assertEquals(nuTarjeta.id, decisiones.single().accountId)
     }
 
-    @Test
-    fun la_cuenta_de_ahorros_sin_tarjeta_en_movi_se_advierte_y_ofrece_crearla() {
-        montar(listOf(nuAhorros), extracto(cuentaDelPapel = nuAhorros.id))
+    // ── Revisión: la cuenta del papel en un extracto de cuenta ──────────────────
 
-        composeRule.onNodeWithText("Este extracto es de una tarjeta de crédito, no de Nu Ahorros.").assertIsDisplayed()
-        composeRule.onNodeWithText("Crear la tarjeta Nu").assertIsDisplayed()
+    private val bancolombia = Account("a-bc", "Bancolombia Ahorros", AccountType.SAVINGS, 1)
+    private val bancolombia0756 = Account("a-0756", "Bancolombia Ahorros 0756", AccountType.SAVINGS, 1)
+    private fun deCuenta(numeros: List<String>, papel: String?) = StatementParseResult(
+        statementId = "st_bc", bankName = "Bancolombia", period = "Octubre 2026",
+        newTransactions = listOf(compra), matches = emptyList(), numerosDeCuenta = numeros, cuentaDelPapel = papel,
+    )
+
+    @Test
+    fun la_cuenta_del_papel_se_usa_si_el_contenido_no_la_contradice() {
+        val r = cuentaDelExtracto(listOf(bancolombia, nuAhorros), deCuenta(emptyList(), papel = nuAhorros.id), elegidaAMano = null)
+        assertEquals(nuAhorros, r.cuenta)
+        assertEquals(OrigenDeLaCuentaDelBanco.LA_DEL_PAPEL, r.origen)
+    }
+
+    @Test
+    fun el_numero_del_extracto_gana_a_la_cuenta_del_papel_y_se_dice_por_que() {
+        val cuentas = listOf(bancolombia, bancolombia0756)
+        val result = deCuenta(listOf("0756"), papel = bancolombia.id)
+        val r = cuentaDelExtracto(cuentas, result, elegidaAMano = null)
+        assertEquals(bancolombia0756, r.cuenta)
+        assertEquals(OrigenDeLaCuentaDelBanco.POR_EL_NUMERO, r.origen)
+        assertEquals(
+            "Al subir el archivo elegiste Bancolombia Ahorros, pero el extracto es de Bancolombia Ahorros 0756: lo dice su número.",
+            porQueNoLaDelPapel(cuentas, result, elegidaAMano = null),
+        )
+    }
+
+    @Test
+    fun sin_cuenta_en_el_papel_es_exactamente_lo_de_antes() {
+        val cuentas = listOf(bancolombia, bancolombia0756, nuAhorros)
+        for (numeros in listOf(emptyList(), listOf("0756"))) {
+            val result = deCuenta(numeros, papel = null)
+            assertEquals(
+                com.jvillada.movi.ui.components.resolverCuentaDelBanco(
+                    cuentas, com.jvillada.movi.shared.model.UsoDeCuenta.CUENTA_DEL_EXTRACTO, "Bancolombia", null,
+                    numeros.joinToString(" ") { "*$it" },
+                ),
+                cuentaDelExtracto(cuentas, result, elegidaAMano = null),
+            )
+        }
     }
 }

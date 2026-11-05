@@ -24,31 +24,66 @@ import com.jvillada.movi.ui.components.resolverCuentaDelBanco
  * en dólares la elige el importe fila por fila). Si no tiene ninguna de ese banco, no se elige nada y
  * la revisión ofrece crearla ([LoQueDiceLaTarjeta.FaltaLaTarjeta]).
  *
- * Lo que el dueño eligió con el dedo —o le puso al papel al subirlo— manda, como siempre; si no es
- * una tarjeta, la revisión lo advierte ([LoQueDiceLaTarjeta.NoEsUnaTarjeta]). Nada se bloquea.
+ * Lo que el dueño eligió con el dedo en esta pantalla manda, como siempre; si no es una tarjeta, la
+ * revisión lo advierte ([LoQueDiceLaTarjeta.NoEsUnaTarjeta]). La cuenta que le puso al papel al
+ * subirlo es solo una sugerencia ([OrigenDeLaCuentaDelBanco.LA_DEL_PAPEL]). Nada se bloquea.
  */
 fun cuentaDelExtracto(
     accounts: List<Account>,
     result: StatementParseResult,
     elegidaAMano: String?,
 ): CuentaDelBanco {
-    val numeros = result.numerosDeCuenta.joinToString(" ") { "*$it" }
-    val tarjeta = result.tarjeta
-        ?: return resolverCuentaDelBanco(
-            accounts = accounts,
-            uso = UsoDeCuenta.CUENTA_DEL_EXTRACTO,
-            banco = result.bankName,
-            elegidaAMano = elegidaAMano,
-            textoDelMensaje = numeros,
-        )
+    // Lo que el dueño eligió en esta pantalla manda, como siempre. Sin tarjeta, por la regla de
+    // siempre (que además dice el destino que nombra el extracto).
+    if (result.tarjeta == null && accounts.any { it.id == elegidaAMano }) {
+        return resolverCuentaDelBanco(accounts, UsoDeCuenta.CUENTA_DEL_EXTRACTO, result.bankName, elegidaAMano, numerosDe(result))
+    }
     accounts.firstOrNull { it.id == elegidaAMano }?.let { return CuentaDelBanco(it, OrigenDeLaCuentaDelBanco.A_MANO) }
+    val porElContenido = porElContenido(accounts, result)
+    // Vuelta 129 (revisión): la cuenta que se le puso al papel al subirlo es una **sugerencia**, con su
+    // origen. Si el contenido la contradice —el extracto es de una tarjeta, o nombra el número de
+    // otra cuenta— gana el contenido y la revisión dice por qué ([porQueNoLaDelPapel]). Sin cuenta en
+    // el papel, exactamente lo de antes.
+    val delPapel = accounts.firstOrNull { it.id == result.cuentaDelPapel } ?: return porElContenido
+    if (contradiccion(delPapel, porElContenido, result) != null) return porElContenido
+    return CuentaDelBanco(delPapel, OrigenDeLaCuentaDelBanco.LA_DEL_PAPEL)
+}
+
+/**
+ * **Por qué no se usó la cuenta que se le puso al papel al subirlo**, o `null` si se usó (o no había,
+ * o el dueño eligió otra en esta pantalla). Ver [cuentaDelExtracto].
+ */
+fun porQueNoLaDelPapel(accounts: List<Account>, result: StatementParseResult, elegidaAMano: String?): String? {
+    if (accounts.any { it.id == elegidaAMano }) return null
+    val delPapel = accounts.firstOrNull { it.id == result.cuentaDelPapel } ?: return null
+    return contradiccion(delPapel, porElContenido(accounts, result), result)
+}
+
+private fun numerosDe(result: StatementParseResult): String = result.numerosDeCuenta.joinToString(" ") { "*$it" }
+
+/** La cuenta que dice el contenido del extracto: la regla de siempre, y si es de una tarjeta, entre las tarjetas. */
+private fun porElContenido(accounts: List<Account>, result: StatementParseResult): CuentaDelBanco {
+    val tarjeta = result.tarjeta
+        ?: return resolverCuentaDelBanco(accounts, UsoDeCuenta.CUENTA_DEL_EXTRACTO, result.bankName, null, numerosDe(result))
     return resolverCuentaDelBanco(
         accounts = tarjetasDe(accounts, tarjeta),
         uso = UsoDeCuenta.CUENTA_DEL_EXTRACTO,
         banco = result.bankName,
         // «tarjeta» para que la regla de Nu (`tarjetaDeNu`) sepa que el papel habla de la tarjeta.
-        textoDelMensaje = "tarjeta $numeros",
+        textoDelMensaje = "tarjeta ${numerosDe(result)}",
     )
+}
+
+/** Lo que el contenido dice en contra de [delPapel], en una frase; `null` si no la contradice. */
+private fun contradiccion(delPapel: Account, porElContenido: CuentaDelBanco, result: StatementParseResult): String? {
+    if (result.tarjeta != null && delPapel.type != AccountType.CREDIT_CARD) {
+        return "Al subir el archivo elegiste ${delPapel.name}, pero este extracto es de una tarjeta de crédito."
+    }
+    val nombrada = porElContenido.cuenta
+    if (porElContenido.origen == OrigenDeLaCuentaDelBanco.POR_EL_NUMERO && nombrada != null && nombrada.id != delPapel.id) {
+        return "Al subir el archivo elegiste ${delPapel.name}, pero el extracto es de ${nombrada.name}: lo dice su número."
+    }
+    return null
 }
 
 /** Las tarjetas de crédito del dueño en la moneda del extracto. */
@@ -82,12 +117,17 @@ sealed interface LoQueDiceLaTarjeta {
     ) : LoQueDiceLaTarjeta
 }
 
-/** Ver [LoQueDiceLaTarjeta]. [destino] es la cuenta a la que se importaría hoy. */
+/**
+ * Ver [LoQueDiceLaTarjeta]. [destino] es la cuenta a la que se importaría hoy. [accounts] es `null`
+ * mientras las cuentas no llegaron (o si la lectura falló): sin saber qué tarjetas tiene, no se dice
+ * que falta ninguna ni se ofrece crearla —una tarjeta repetida es peor que esperar—.
+ */
 fun loQueDiceLaTarjeta(
-    accounts: List<Account>,
+    accounts: List<Account>?,
     result: StatementParseResult,
     destino: Account?,
 ): LoQueDiceLaTarjeta {
+    if (accounts == null) return LoQueDiceLaTarjeta.Nada
     val tarjeta = result.tarjeta ?: return LoQueDiceLaTarjeta.Nada
     if (destino?.type == AccountType.CREDIT_CARD) return LoQueDiceLaTarjeta.Nada
     val delBanco = tarjetasDe(accounts, tarjeta).filter { esDelBanco(it, tarjeta) }
@@ -95,7 +135,7 @@ fun loQueDiceLaTarjeta(
         // Sin destino y con tarjetas de ese banco, la regla no supo cuál: la elige él, como siempre.
         return if (delBanco.isEmpty()) LoQueDiceLaTarjeta.FaltaLaTarjeta(tarjeta) else LoQueDiceLaTarjeta.Nada
     }
-    val suTarjeta = cuentaDelExtracto(accounts, result, elegidaAMano = null).cuenta
+    val suTarjeta = porElContenido(accounts, result).cuenta
     return LoQueDiceLaTarjeta.NoEsUnaTarjeta(destino, suTarjeta, tarjeta, puedeCrearla = delBanco.isEmpty())
 }
 

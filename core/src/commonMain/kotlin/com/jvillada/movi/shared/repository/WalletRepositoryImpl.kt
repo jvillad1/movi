@@ -1291,6 +1291,15 @@ class WalletRepositoryImpl(
             setBody(resumen)
         }.exigirExito().body()
 
+    override suspend fun cuadrarLaDeudaConElExtracto(
+        accountId: String,
+        deuda: com.jvillada.movi.shared.model.DeudaDelExtracto,
+    ): AdjustAccountBalanceResponse =
+        client.post("$baseUrl/api/accounts/$accountId/deuda-del-extracto") {
+            contentType(ContentType.Application.Json)
+            setBody(deuda)
+        }.exigirExito().body()
+
     // Los cuatro comprueban el status, como el resto del archivo. Sin esto `deleteDocument`
     // decía «listo» ante un 500 —el documento seguía ahí y la lista se recargaba igual— y un 401
     // al subir salía como «Algo salió mal» en vez de «Tu sesión expiró».
@@ -1379,7 +1388,9 @@ class WalletRepositoryImpl(
 
     // La clave va en el CUERPO: la URL la imprime `CallLogging` y el borde de Railway.
     override suspend fun abrirPapelConClave(documentoId: String, clave: com.jvillada.movi.shared.model.ClaveDelPdf): LecturaDelPapel =
-        client.post("$baseUrl/api/documents/$documentoId/leer?conSaldos=1&conClave=1") {
+        // `conTarjeta=1` (vuelta 129): como `leerPapel`; sin esto, un PDF con clave de la tarjeta Nu
+        // volvía sin `tarjeta` y la revisión lo proponía en «Nu Ahorros».
+        client.post("$baseUrl/api/documents/$documentoId/leer?conSaldos=1&conClave=1&conTarjeta=1") {
             contentType(ContentType.Application.Json)
             setBody(clave)
         }.exigirExito().body()

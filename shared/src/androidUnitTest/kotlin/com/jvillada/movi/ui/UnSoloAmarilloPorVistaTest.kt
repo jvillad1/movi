@@ -49,6 +49,7 @@ import com.jvillada.movi.ui.sdui.TAG_SUPERFICIE_DE_LAS_ACCIONES
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.performSemanticsAction
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
 import com.jvillada.movi.data.RepositorioDePruebaDeMovimientos
@@ -424,11 +425,11 @@ class UnSoloAmarilloPorVistaTest {
     }
 
     /**
-     * Vuelta 129: con el extracto de una tarjeta que no está en Movi, «Crear la tarjeta Nu» va
-     * secundario: el amarillo de la revisión sigue siendo «Importar».
+     * Vuelta 129: con el extracto de una tarjeta y una cuenta de ahorros elegida, «Usar …» y «Crear la
+     * tarjeta» van secundarios: el amarillo de la revisión sigue siendo «Importar».
      */
     @Test
-    fun `en la revision del extracto de una tarjeta que falta, el unico amarillo es Importar`() {
+    fun `en la revision del extracto de una tarjeta, el unico amarillo es Importar`() {
         val nuAhorros = Account("a-nu", "Nu Ahorros", AccountType.SAVINGS, 1_200_000)
         Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
             override suspend fun getAccounts(): List<Account> = listOf(nuAhorros)
@@ -442,13 +443,36 @@ class UnSoloAmarilloPorVistaTest {
                 onNavigate = {},
                 result = com.jvillada.movi.shared.model.StatementParseResult(
                     statementId = "st", bankName = "Nu", period = "Octubre 2026", newTransactions = listOf(compra),
-                    matches = emptyList(), cuentaDelPapel = nuAhorros.id,
+                    matches = emptyList(),
                     tarjeta = com.jvillada.movi.shared.model.TarjetaDelExtracto(banco = "Nu", ultimosCuatro = "1111"),
                 ),
             )
         }
         esperarTexto("Crear la tarjeta Nu")
+        // Sin tarjeta no hay destino: «Importar» está apagado y «Crear la tarjeta Nu» no es amarillo.
+        assertEquals(0, amarillos(), "«Crear la tarjeta Nu» va secundario")
+        // Con la cuenta de ahorros elegida a mano, «Importar» se prende y es el único amarillo.
+        composeRule.onAllNodesWithText("Cambiar")[0].performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        composeRule.onAllNodesWithText("Nu Ahorros")[0].performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        esperarTexto("no de Nu Ahorros")
         assertEquals(1, amarillos(), "solo «Importar»: «Crear la tarjeta Nu» va secundario")
+    }
+
+    /** Vuelta 129: después de importar, «Cuadrar» es el único amarillo de la propuesta de la deuda. */
+    @Test
+    fun `en la propuesta de cuadrar la deuda, el unico amarillo es Cuadrar`() {
+        montar {
+            com.jvillada.movi.ui.extractos.CuadrarLaDeudaConElExtracto(
+                tarjeta = Account("c-nu", "Nu Tarjeta 1111", AccountType.CREDIT_CARD, 0),
+                deuda = com.jvillada.movi.shared.model.DeudaDelExtracto(411_240, "2026-10-12"),
+                ocupado = false,
+                onCuadrar = {},
+                onAhoraNo = {},
+            )
+        }
+        assertEquals(1, amarillos())
     }
 
     /** Vuelta 129: con la cuenta propuesta, el único amarillo de la hoja de subida sigue siendo «Subir». */
@@ -456,7 +480,7 @@ class UnSoloAmarilloPorVistaTest {
     fun `en la hoja de subida con la cuenta propuesta, el unico amarillo es Subir`() {
         montar {
             com.jvillada.movi.ui.documentos.SubirDocumentoSheet(
-                archivo = com.jvillada.movi.ui.documentos.ArchivoElegido("CuentaNu_CRS119_2026-09.pdf", ByteArray(2048), "application/pdf"),
+                archivo = com.jvillada.movi.ui.documentos.ArchivoElegido("Extracto_CuentaNu_2026-09.pdf", ByteArray(2048), "application/pdf"),
                 cuentas = listOf(Account("a-nu", "Nu Ahorros", AccountType.SAVINGS, 1_200_000)),
                 onDismiss = {},
                 onSubir = { _, _ -> },

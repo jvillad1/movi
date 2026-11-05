@@ -275,6 +275,22 @@ open class ElTextoAl130NoSeCortaTest {
             )
         }
         nadaSeCorta("el aviso de la tarjeta", conTag(com.jvillada.movi.ui.extractos.TAG_AVISO_DE_LA_TARJETA))
+        nadaSeCorta("por qué no la cuenta del papel", conTag(com.jvillada.movi.ui.extractos.TAG_POR_QUE_NO_LA_DEL_PAPEL))
+    }
+
+    /** Vuelta 129: la propuesta de cuadrar la deuda de la tarjeta después de importar. */
+    @Test
+    fun `la propuesta de cuadrar la deuda con el extracto`() {
+        montar("Cuadrar la deuda") {
+            com.jvillada.movi.ui.extractos.CuadrarLaDeudaConElExtracto(
+                tarjeta = Account("c-nu", "Nu Tarjeta 1111", AccountType.CREDIT_CARD, 0),
+                deuda = com.jvillada.movi.shared.model.DeudaDelExtracto(411_240, "2026-10-12"),
+                ocupado = false,
+                onCuadrar = {},
+                onAhoraNo = {},
+            )
+        }
+        nadaSeCorta("la propuesta de cuadrar la deuda", conTag(com.jvillada.movi.ui.extractos.TAG_CUADRAR_LA_DEUDA))
     }
 
     /** Vuelta 129: la hoja de subida de Documentos, con la cuenta propuesta y lo que dice de ella. */

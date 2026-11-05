@@ -136,6 +136,9 @@ class HojasDeDocumentoTest {
     @Test
     fun la_hoja_propone_nu_ahorros_para_cuenta_nu() {
         montarSubida(cuentas = listOf(ahorros, nuAhorros), nombre = "CuentaNu_CRS119_2026-09.pdf")
+        // El nombre no dice «extracto»: llega como «Documento», sin cuenta propuesta. Es un extracto.
+        composeRule.onNodeWithText(POR_EL_NOMBRE_DEL_ARCHIVO).assertDoesNotExist()
+        composeRule.onNodeWithText("Extracto").performSemanticsAction(SemanticsActions.OnClick)
 
         composeRule.onNodeWithText(POR_EL_NOMBRE_DEL_ARCHIVO).assertIsDisplayed()
         composeRule.onNodeWithText("Subir").performSemanticsAction(SemanticsActions.OnClick)
@@ -169,9 +172,20 @@ class HojasDeDocumentoTest {
         assertEquals("c-nu", subido?.second)
     }
 
+    /** Revisión: una nómina o un contrato no llegan con cuenta propuesta. */
+    @Test
+    fun una_nomina_no_llega_con_cuenta_propuesta() {
+        montarSubida(cuentas = listOf(ahorros, ahorros0756), nombre = "Desprendible_0756_agosto.pdf")
+
+        composeRule.onNodeWithText(POR_EL_NOMBRE_DEL_ARCHIVO).assertDoesNotExist()
+        composeRule.onNodeWithText("Subir").performSemanticsAction(SemanticsActions.OnClick)
+
+        assertEquals(TipoDeDocumento.NOMINA to null, subido)
+    }
+
     @Test
     fun elegir_otra_con_el_dedo_manda_y_ya_no_dice_de_donde_salio() {
-        montarSubida(cuentas = listOf(ahorros, nuAhorros), nombre = "CuentaNu_CRS119_2026-09.pdf")
+        montarSubida(cuentas = listOf(ahorros, nuAhorros), nombre = "Extracto_CuentaNu_2026-09.pdf")
 
         composeRule.onNodeWithText("Bancolombia Ahorros").performSemanticsAction(SemanticsActions.OnClick)
         composeRule.onNodeWithText(POR_EL_NOMBRE_DEL_ARCHIVO).assertDoesNotExist()

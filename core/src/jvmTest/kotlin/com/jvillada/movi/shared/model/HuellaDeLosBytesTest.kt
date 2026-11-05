@@ -31,4 +31,14 @@ class HuellaDeLosBytesTest {
         val pdf = azar.nextBytes(3 * 1024 * 1024 + 7)
         assertEquals(deJava(pdf), huellaSha256(pdf))
     }
+
+    /** Revisión: la versión que cede el hilo (la de la web) da la misma huella, también en los bordes. */
+    @Test
+    fun `la huella que no traba da lo mismo`() = kotlinx.coroutines.runBlocking {
+        val azar = Random(1291)
+        for (largo in listOf(0, 64, 65, 64 * 4, 64 * 4 + 1, 200_003)) {
+            val bytes = azar.nextBytes(largo)
+            assertEquals(deJava(bytes), huellaSha256SinTrabar(bytes, cadaBloques = 4), "largo $largo")
+        }
+    }
 }

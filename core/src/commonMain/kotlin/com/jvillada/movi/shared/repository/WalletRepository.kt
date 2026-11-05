@@ -128,6 +128,16 @@ interface WalletRepository {
         resumen: com.jvillada.movi.shared.model.ResumenDelExtractoDeSaldo,
     ): com.jvillada.movi.shared.model.AdjustAccountBalanceResponse =
         throw UnsupportedOperationException("actualizarElSaldoConElExtracto")
+    /**
+     * Vuelta 129 · `POST /api/accounts/{id}/deuda-del-extracto`: «Cuadrar la deuda con el extracto» —un
+     * ajuste de la tarjeta al corte, a lo que el extracto dice que se debía—. Ver `DeudaDelExtracto`.
+     * Default que falla para los dobles de prueba que no lo usan.
+     */
+    suspend fun cuadrarLaDeudaConElExtracto(
+        accountId: String,
+        deuda: com.jvillada.movi.shared.model.DeudaDelExtracto,
+    ): com.jvillada.movi.shared.model.AdjustAccountBalanceResponse =
+        throw UnsupportedOperationException("cuadrarLaDeudaConElExtracto")
     // F20 — tarjetas de crédito: mismas reglas que los créditos (se leen siempre del server).
     suspend fun getCards(): List<CardSummary>
     suspend fun createCard(request: CreateCardRequest): CardSummary

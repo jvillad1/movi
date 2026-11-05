@@ -78,7 +78,8 @@ class CuentaPropuestaDelPapelTest {
             lineasDeLaCuentaAlSubir(TipoDeDocumento.EXTRACTO, CuentaPropuesta(null, null), elegidaAMano = false),
         )
         assertEquals(listOf(PARA_QUE_SIRVE_LA_CUENTA), lineasDeLaCuentaAlSubir(TipoDeDocumento.EXTRACTO, propuesta, elegidaAMano = true))
-        assertEquals(listOf(POR_EL_NOMBRE_DEL_ARCHIVO), lineasDeLaCuentaAlSubir(TipoDeDocumento.CONTRATO, propuesta, elegidaAMano = false))
+        // Una nómina o un contrato no llegan con cuenta propuesta: no se dice de dónde salió nada.
+        assertEquals(emptyList(), lineasDeLaCuentaAlSubir(TipoDeDocumento.CONTRATO, propuesta, elegidaAMano = false))
         assertEquals(emptyList(), lineasDeLaCuentaAlSubir(TipoDeDocumento.OTRO, CuentaPropuesta(null, null), elegidaAMano = false))
     }
 }

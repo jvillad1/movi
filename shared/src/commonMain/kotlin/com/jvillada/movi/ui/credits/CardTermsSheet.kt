@@ -137,7 +137,7 @@ fun CardTermsSheet(
                     Repositories.wallets.createCard(
                         CreateCardRequest(
                             name = name.trim(),
-                            initialDebt = initialDebt ?: 0L,
+                            initialDebt = if (delExtracto != null) 0L else initialDebt ?: 0L,
                             currency = currency,
                             terms = terms,
                         )
@@ -191,7 +191,15 @@ fun CardTermsSheet(
                 guia = "Ej: Visa Bancolombia",
             )
                 // Opcional a propósito: una tarjeta recién sacada no debe nada.
-                CampoDeMonto(initialDebt, { initialDebt = it }, rotulo = "Deuda actual (opcional)", moneda = simboloDeLaMoneda(currency))
+                //
+                // Vuelta 129: creada desde la revisión de un extracto, la deuda no se pide. Nace en $0,
+                // el importe le suma las compras del período y la revisión propone después UN ajuste al
+                // corte con la deuda del extracto: escrita acá además, las compras contarían dos veces.
+                if (delExtracto == null) {
+                    CampoDeMonto(initialDebt, { initialDebt = it }, rotulo = "Deuda actual (opcional)", moneda = simboloDeLaMoneda(currency))
+                } else {
+                    Text(LA_DEUDA_LA_CUADRA_EL_EXTRACTO, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                }
                 Column {
                 RotuloDeCampo("Moneda")
                 Row(
@@ -306,6 +314,9 @@ fun CardTermsSheet(
         Spacer(Modifier.height(Espacio.l))
     }
 }
+
+/** Vuelta 129: lo que la hoja dice en vez de «Deuda actual» cuando la tarjeta nace de un extracto. */
+const val LA_DEUDA_LA_CUADRA_EL_EXTRACTO: String = "La deuda la cuadra el extracto después de importar."
 
 /** Chip de moneda, mismo dibujo que el selector de CreateAccountSheet (que es privado allá). */
 @Composable

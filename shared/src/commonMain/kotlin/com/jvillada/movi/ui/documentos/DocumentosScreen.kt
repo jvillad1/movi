@@ -104,7 +104,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.jvillada.movi.shared.model.PistasDelPapel
-import com.jvillada.movi.shared.model.huellaSha256
+import com.jvillada.movi.shared.model.huellaSha256SinTrabar
 import kotlinx.coroutines.launch
 import com.jvillada.movi.ui.fecha.etiquetaDePeriodo
 import com.jvillada.movi.ui.components.ds.Campo
@@ -421,9 +421,10 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
                 onDismiss = { aSubir = null },
                 onSubir = { tipo, cuentaId -> subir(archivo, tipo, cuentaId) },
                 // Vuelta 129: si Movi ya leyó este mismo archivo, lo que dice el contenido propone la
-                // cuenta. La huella se calcula fuera del hilo de la pantalla; sin red, nada.
+                // cuenta. La huella cede el hilo cada 64 KB (en la web todo corre en uno solo); sin
+                // red, nada.
                 loQueSeSabe = { elegido ->
-                    val huella = withContext(Dispatchers.Default) { huellaSha256(elegido.bytes) }
+                    val huella = withContext(Dispatchers.Default) { huellaSha256SinTrabar(elegido.bytes) }
                     Repositories.wallets.getLoQueSeSabeDelPapel(huella)
                 },
             )
@@ -794,7 +795,9 @@ internal fun SubirDocumentoSheet(
     val propuesta = remember(archivo.nombre, cuentas, pistas) { cuentaPropuestaParaElPapel(archivo.nombre, cuentas, pistas) }
     var elegidaAMano by remember { mutableStateOf(false) }
     var elegida by remember { mutableStateOf<String?>(null) }
-    val cuenta = if (elegidaAMano) elegida else propuesta.cuenta?.id
+    // Solo un extracto llega con la cuenta propuesta: una nómina o un contrato no dicen de qué cuenta
+    // son por el nombre, y ahí «Sin cuenta» sigue siendo lo de siempre.
+    val cuenta = if (elegidaAMano) elegida else propuesta.cuenta?.id?.takeIf { tipo == TipoDeDocumento.EXTRACTO }
     val ayudaDeLaCuenta = lineasDeLaCuentaAlSubir(tipo, propuesta, elegidaAMano)
 
     HojaDeDocumento(onDismiss = onDismiss, cerrarHabilitado = true) {
@@ -832,10 +835,9 @@ internal const val TAG_AYUDA_DE_LA_CUENTA: String = "ayuda-de-la-cuenta-del-pape
 internal fun lineasDeLaCuentaAlSubir(tipo: TipoDeDocumento, propuesta: CuentaPropuesta, elegidaAMano: Boolean): List<String> {
     val esExtracto = tipo == TipoDeDocumento.EXTRACTO
     val deDonde = when {
-        elegidaAMano -> null
+        elegidaAMano || !esExtracto -> null
         propuesta.cuenta != null -> propuesta.deDonde?.let(::textoDeDondeSale)
-        esExtracto -> ELIGE_LA_CUENTA
-        else -> null
+        else -> ELIGE_LA_CUENTA
     }
     return listOfNotNull(PARA_QUE_SIRVE_LA_CUENTA.takeIf { esExtracto }, deDonde)
 }

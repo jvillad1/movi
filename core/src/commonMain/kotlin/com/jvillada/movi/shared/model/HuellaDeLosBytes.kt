@@ -11,19 +11,46 @@ package com.jvillada.movi.shared.model
  * `MessageDigest`.
  */
 fun huellaSha256(bytes: ByteArray): String {
-    val h = intArrayOf(
+    val sha = Sha256(bytes)
+    for (bloque in 0 until sha.bloques) sha.procesar(bloque)
+    return sha.hex()
+}
+
+/**
+ * Vuelta 129 · **la misma huella sin trabar la pantalla**: cede el hilo (`yield`) cada [cadaBloques]
+ * bloques de 64 bytes (por defecto, cada 64 KB). En la web todo corre en un solo hilo, y un PDF de
+ * 10 MB calculado de un tirón congelaba la hoja de subida.
+ */
+suspend fun huellaSha256SinTrabar(bytes: ByteArray, cadaBloques: Int = 1024): String {
+    val sha = Sha256(bytes)
+    for (bloque in 0 until sha.bloques) {
+        sha.procesar(bloque)
+        if ((bloque + 1) % cadaBloques == 0) kotlinx.coroutines.yield()
+    }
+    return sha.hex()
+}
+
+/** El estado de una huella SHA-256 (FIPS 180-4), de a un bloque de 64 bytes. */
+private class Sha256(bytes: ByteArray) {
+    private val h = intArrayOf(
         0x6a09e667, -0x4498517b, 0x3c6ef372, -0x5ab00ac6,
         0x510e527f, -0x64fa9774, 0x1f83d9ab, 0x5be0cd19,
     )
-    val largoEnBits = bytes.size.toLong() * 8
-    val relleno = ((56 - (bytes.size + 1) % 64) + 64) % 64
-    val mensaje = ByteArray(bytes.size + 1 + relleno + 8)
-    bytes.copyInto(mensaje)
-    mensaje[bytes.size] = 0x80.toByte()
-    for (i in 0 until 8) mensaje[mensaje.size - 1 - i] = (largoEnBits ushr (8 * i)).toByte()
+    private val mensaje: ByteArray
+    private val w = IntArray(64)
+    val bloques: Int
 
-    val w = IntArray(64)
-    for (bloque in 0 until mensaje.size / 64) {
+    init {
+        val largoEnBits = bytes.size.toLong() * 8
+        val relleno = ((56 - (bytes.size + 1) % 64) + 64) % 64
+        mensaje = ByteArray(bytes.size + 1 + relleno + 8)
+        bytes.copyInto(mensaje)
+        mensaje[bytes.size] = 0x80.toByte()
+        for (i in 0 until 8) mensaje[mensaje.size - 1 - i] = (largoEnBits ushr (8 * i)).toByte()
+        bloques = mensaje.size / 64
+    }
+
+    fun procesar(bloque: Int) {
         val base = bloque * 64
         for (t in 0 until 16) {
             val j = base + t * 4
@@ -50,7 +77,8 @@ fun huellaSha256(bytes: ByteArray): String {
         h[0] += a; h[1] += b; h[2] += c; h[3] += d
         h[4] += e; h[5] += f; h[6] += g; h[7] += hh
     }
-    return buildString(64) {
+
+    fun hex(): String = buildString(64) {
         for (v in h) for (i in 3 downTo 0) {
             val byte = (v ushr (8 * i)) and 0xff
             append(HEX[byte ushr 4]); append(HEX[byte and 0x0f])

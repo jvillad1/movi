@@ -46,6 +46,13 @@ enum class OrigenDeLaCuentaDelBanco {
 
     /** No hay ninguna cuenta que sirva. No se resuelve nada: la elige él. */
     NINGUNA,
+
+    /**
+     * Vuelta 129 · **la que el dueño le puso al papel al subirlo a Documentos**. Una sugerencia, no
+     * una elección en esta pantalla: si el contenido del extracto la contradice, gana el contenido
+     * (ver `cuentaDelExtracto`).
+     */
+    LA_DEL_PAPEL,
 }
 
 /**
@@ -494,6 +501,7 @@ fun avisoDeLaCuentaDelBanco(
     OrigenDeLaCuentaDelBanco.SUGERIDA_POR_MOVI -> "Por lo que Movi sabe de este pago"
     OrigenDeLaCuentaDelBanco.POR_DEFECTO -> "La puso Movi"
     OrigenDeLaCuentaDelBanco.NINGUNA -> "Elígela tú"
+    OrigenDeLaCuentaDelBanco.LA_DEL_PAPEL -> "La elegiste al subir el archivo"
     OrigenDeLaCuentaDelBanco.POR_EL_BANCO, OrigenDeLaCuentaDelBanco.A_MANO -> null
 }
 
