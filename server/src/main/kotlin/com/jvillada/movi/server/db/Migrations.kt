@@ -63,6 +63,7 @@ object Migrations {
         pasarLasReglasDeComercioALaBase()
         cifrarLosPapelesEnClaro()
         agrandarLaClaveDeLosCierres()
+        losPapelesLeidosComoExtractoSonExtractos()
         // Vuelta 117: los turnos de Movi AI de antes de las conversaciones con identidad.
         com.jvillada.movi.server.ai.agruparLosTurnosSueltos(this, uid = null)
     }
@@ -373,5 +374,35 @@ object Migrations {
         }
         if (aApartar.isNotEmpty()) migrationsLog.info("Se apartaron ${aApartar.size} mensajes pendientes que no son movimientos")
         return aApartar.size
+    }
+
+    /**
+     * Vuelta 129 · **los papeles que Movi ya leyó como extracto pasan a «Extractos».** Hasta esta
+     * vuelta, leer como extracto un papel ya guardado no le cambiaba el tipo: los extractos de la
+     * cuenta Nu que una probadora compartió con Movi («CuentaNu_CRS119_2026-09.pdf») se guardaron
+     * como «Otro» —el tipo que adivina el nombre— y ahí se quedaron, aunque dos ya se importaron.
+     *
+     * El vínculo exacto es `lecturas_de_papeles`: la fila con `tipo = 'EXTRACTO'` dice qué documento
+     * se leyó como extracto. `statement_imports` no guarda el documento, así que no sirve para
+     * esto; desde esta vuelta lo leído y lo importado se marca al hacerlo (`marcarComoExtracto`).
+     *
+     * Solo toca lo que está en «Otro»: una nómina o un contrato que alguien clasificó a mano no se
+     * mueven. Idempotente: lo marcado deja de estar en «Otro» y la segunda corrida no lo ve.
+     *
+     * @return documentos que pasaron a extracto
+     */
+    fun Transaction.losPapelesLeidosComoExtractoSonExtractos(): Int {
+        val leidos = LecturasDePapeles
+            .select(LecturasDePapeles.userId, LecturasDePapeles.documentoId)
+            .where { LecturasDePapeles.tipo eq "EXTRACTO" }
+            .map { it[LecturasDePapeles.userId] to it[LecturasDePapeles.documentoId] }
+        var marcados = 0
+        for ((uid, docId) in leidos) {
+            marcados += Documents.update({
+                (Documents.id eq docId) and (Documents.userId eq uid) and (Documents.kind eq "OTRO")
+            }) { it[kind] = "EXTRACTO" }
+        }
+        if (marcados > 0) migrationsLog.info("Pasaron a «Extractos» $marcados papeles que ya se habían leído como extracto")
+        return marcados
     }
 }

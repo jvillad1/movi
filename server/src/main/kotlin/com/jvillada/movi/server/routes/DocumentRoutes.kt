@@ -375,6 +375,8 @@ fun Route.documentRoutes() {
                 mimeConfiable = true,
                 conCreditos = call.request.queryParameters["conCreditos"] == "1",
                 conSaldos = call.request.queryParameters["conSaldos"] == "1",
+                // Vuelta 129: es ESTE documento el que queda como extracto.
+                documentoLeido = id,
             )
             call.respond(resultado)
         } catch (e: FallaAlProcesarExtracto) {

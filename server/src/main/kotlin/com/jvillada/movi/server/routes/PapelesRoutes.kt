@@ -216,7 +216,7 @@ internal suspend fun leerElPapel(
                 LecturaDelPapel(
                     documentoId = papel.id,
                     que = QueEsElPapel.EXTRACTO,
-                    extracto = conciliarYArchivar(uid, papel.nombre, papel.mime, papel.bytes, leido, log),
+                    extracto = conciliarYArchivar(uid, papel.nombre, papel.mime, papel.bytes, leido, log, documentoLeido = papel.id),
                 )
             }
         }
@@ -262,7 +262,7 @@ internal suspend fun leerElPapel(
             LecturaDelPapel(
                 documentoId = papel.id,
                 que = QueEsElPapel.EXTRACTO,
-                extracto = conciliarYArchivar(uid, papel.nombre, papel.mime, papel.bytes, leido, log),
+                extracto = conciliarYArchivar(uid, papel.nombre, papel.mime, papel.bytes, leido, log, documentoLeido = papel.id),
             )
         }
     }
