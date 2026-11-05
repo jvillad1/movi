@@ -74,6 +74,7 @@ import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
+import org.jetbrains.exposed.sql.deleteWhere
 import org.slf4j.LoggerFactory
 import org.slf4j.event.Level
 import java.util.Date
@@ -114,6 +115,9 @@ class HogarConectadoTest {
     @BeforeTest
     fun setUp() {
         IntentosDeCodigo.reset()
+        generadorDeCodigos = ::codigoNuevo
+        // La pimienta de los códigos sale del secreto de las sesiones (ver `JwtConfig.pimienta`).
+        if (System.getProperty("movi.jwt.secret").isNullOrBlank()) System.setProperty("movi.jwt.secret", secreto)
         Database.connect(
             url = "jdbc:h2:mem:hogar_conectado_test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE",
             driver = "org.h2.Driver",
@@ -149,7 +153,10 @@ class HogarConectadoTest {
     }
 
     @AfterTest
-    fun tearDown() = IntentosDeCodigo.reset()
+    fun tearDown() {
+        IntentosDeCodigo.reset()
+        generadorDeCodigos = ::codigoNuevo
+    }
 
     /**
      * Ahora. Lo del otro lado cuenta desde que se conectaron (`desde`), así que lo que se anota en una
@@ -429,41 +436,40 @@ class HogarConectadoTest {
         val juanEnCaro = deCaro.conexion!!.miembroId
         evento("e_caro", 99_999, caro, categoria = "Comida rara")
         post("/api/espacios/${deCaro.id}/compartir", """{"eventoId":"e_caro","gastoId":"g_caro_1"}""", caro)
-        post("/api/espacios/${deCaro.id}/gastos", """{"id":"g_caro_2","pagadoPor":"$juanEnCaro","monto":33333,"categoria":"Mercado","fecha":$hoy}""", caro)
         post("/api/espacios/${deCaro.id}/liquidaciones", """{"id":"l_caro","de":"yo","a":"$juanEnCaro","monto":7777}""", caro)
         evento("e_juan", 12_345, juan)
         post("/api/espacios/esp_casa/compartir", """{"eventoId":"e_juan","gastoId":"g_juan"}""", juan)
 
         val enJuan = detalle("esp_casa", juan)
         val enCaro = detalle(deCaro.id, caro)
-        assertEquals(3, enJuan.gastos.size)
+        assertEquals(2, enJuan.gastos.size)
         assertEquals(1, enJuan.liquidaciones.size)
         assertEquals("dst_caro", enJuan.liquidaciones.single().anotadoPor)
         assertNull(enJuan.liquidaciones.single().eventoId)
         val x = enJuan.saldo.netoDe(MIEMBRO_YO)
         assertTrue(x != 0L)
         assertEquals(-x, enCaro.saldo.netoDe(MIEMBRO_YO), "espejo al peso")
-        assertTrue(enJuan.propuestas.isEmpty(), "lo de Caro no le propone a Juan vincular nada")
+        assertTrue(enJuan.propuestas.isEmpty(), "sin una transferencia de Caro, nada que vincular")
 
         val tuParteJuan: List<FinancialEvent> = json.decodeFromString(get("/api/espacios/tu-parte", juan).bodyAsText())
         assertEquals(49_999L, tuParteJuan.single { it.id == "espacio:g_caro_1" }.amount)
         assertEquals("Otros", tuParteJuan.single { it.id == "espacio:g_caro_1" }.category, "Juan no tiene «Comida rara»")
-        assertTrue(tuParteJuan.none { it.id == "espacio:g_caro_2" }, "lo que Caro anotó que pagó Juan no es «tu parte de otro»")
     }
 
     @Test
-    fun `lo de Caro de antes de conectarse no aparece, y tras desconectar nada del otro lado`() = conApp {
+    fun `lo que Caro reparte despues de conectarse cruza aunque sea de ayer, y tras desconectar nada del otro lado`() = conApp {
         val deCaro = conectar()
-        val juanEnCaro = deCaro.conexion!!.miembroId
         val ayer = System.currentTimeMillis() - 2L * 24 * 60 * 60 * 1000
         evento("e_viejo", 50_000, caro, momento = ayer)
-        evento("e_nuevo", 60_000, caro)
+        evento("e_nuevo", 60_001, caro)
         assertEquals(HttpStatusCode.Created, post("/api/espacios/${deCaro.id}/compartir", """{"eventoId":"e_viejo","gastoId":"g_viejo"}""", caro).status)
         assertEquals(HttpStatusCode.Created, post("/api/espacios/${deCaro.id}/compartir", """{"eventoId":"e_nuevo","gastoId":"g_nuevo"}""", caro).status)
         evento("e_juan", 10_000, juan)
         post("/api/espacios/esp_casa/compartir", """{"eventoId":"e_juan"}""", juan)
-        assertEquals(listOf("g_nuevo"), detalle("esp_casa", juan).gastos.filter { it.anotadoPor != null }.map { it.id })
-        assertTrue(juanEnCaro.isNotBlank())
+        // Revisión: cruza por cuándo se anotó, no por su fecha. El mercado de ayer repartido hoy sí cruza.
+        val enJuan = detalle("esp_casa", juan)
+        assertEquals(setOf("g_viejo", "g_nuevo"), enJuan.gastos.filter { it.anotadoPor != null }.map { it.id }.toSet())
+        assertEquals(-detalle(deCaro.id, caro).saldo.netoDe(MIEMBRO_YO), enJuan.saldo.netoDe(MIEMBRO_YO), "el espejo se mantiene")
 
         assertEquals(HttpStatusCode.NoContent, borrar("/api/espacios/${deCaro.id}/conexion", caro).status, "cualquiera de los dos desconecta")
         val juanDespues = detalle("esp_casa", juan)
@@ -477,14 +483,38 @@ class HogarConectadoTest {
         assertEquals(HttpStatusCode.NotFound, borrar("/api/espacios/esp_casa/conexion", juan).status, "ya no hay conexión")
     }
 
+    /** Lo que Juan anotó antes de conectarse sigue en su saldo, Caro no lo ve, y la tarjeta lo dice solo en su lado. */
+    @Test
+    fun `con historia de antes, el espejo vale para lo de la conexion y lo de antes se dice solo en el lado de Juan`() = conApp {
+        crearLaCasa()
+        evento("e_antes", 80_000, juan)
+        post("/api/espacios/esp_casa/compartir", """{"eventoId":"e_antes","gastoId":"g_antes"}""", juan)
+        // La fila quedó escrita antes de conectarse (un segundo antes, para no depender del reloj).
+        transaction { GastosDelEspacio.update({ GastosDelEspacio.id eq "g_antes" }) { it[createdAt] = System.currentTimeMillis() - 1_000 } }
+        val r = aceptar(invitar().codigo)
+        val deCaro: Espacio = json.decodeFromString(r.bodyAsText())
+        evento("e_despues", 30_001, juan)
+        post("/api/espacios/esp_casa/compartir", """{"eventoId":"e_despues","gastoId":"g_despues"}""", juan)
+
+        val enJuan = detalle("esp_casa", juan)
+        val enCaro = detalle(deCaro.id, caro)
+        assertEquals(listOf("g_despues"), enCaro.gastos.map { it.id }, "Caro no ve lo de antes")
+        assertEquals(40_000L, enJuan.deAntesDeConectarse)
+        assertEquals(0L, enCaro.deAntesDeConectarse, "la línea es solo del lado de Juan")
+        assertEquals(-enCaro.saldo.netoDe(MIEMBRO_YO), enJuan.saldo.netoDe(MIEMBRO_YO) - enJuan.deAntesDeConectarse, "espejo de lo de la conexión")
+    }
+
     // ── Lo ajeno y lo privado ────────────────────────────────────────────────
 
     @Test
     fun `Caro no borra un gasto ni un saldado de Juan, y la fila sigue`() = conApp {
-        val deCaro = conectar()
+        crearLaCasa()
+        // «Pagó otro» de antes de conectarse (después ya no se puede: ver el 422).
+        post("/api/espacios/esp_casa/gastos", """{"id":"g_otro","pagadoPor":"dst_caro","monto":8000,"categoria":"Mercado"}""", juan)
+        transaction { GastosDelEspacio.update({ GastosDelEspacio.id eq "g_otro" }) { it[createdAt] = System.currentTimeMillis() - 1_000 } }
+        val deCaro: Espacio = json.decodeFromString(aceptar(invitar().codigo).bodyAsText())
         evento("e_juan", 40_000, juan)
         post("/api/espacios/esp_casa/compartir", """{"eventoId":"e_juan","gastoId":"g_juan"}""", juan)
-        post("/api/espacios/esp_casa/gastos", """{"id":"g_otro","pagadoPor":"dst_caro","monto":8000,"categoria":"Mercado"}""", juan)
         post("/api/espacios/esp_casa/liquidaciones", """{"id":"l_juan","de":"dst_caro","a":"yo","monto":5000}""", juan)
 
         assertEquals(HttpStatusCode.NotFound, borrar("/api/espacios/${deCaro.id}/gastos/g_otro", caro).status)
@@ -493,7 +523,7 @@ class HogarConectadoTest {
         assertEquals(HttpStatusCode.NotFound, borrar("/api/espacios/${deCaro.id}/liquidaciones/l_juan", caro).status)
         assertEquals(2L, transaction { GastosDelEspacio.selectAll().where { GastosDelEspacio.userId eq juan }.count() })
         assertEquals(1L, transaction { LiquidacionesDelEspacio.selectAll().count() })
-        assertEquals(3, detalle(deCaro.id, caro).gastos.size + detalle(deCaro.id, caro).liquidaciones.size)
+        assertEquals(2, detalle(deCaro.id, caro).gastos.size + detalle(deCaro.id, caro).liquidaciones.size)
     }
 
     @Test
@@ -551,5 +581,180 @@ class HogarConectadoTest {
         assertNull(despues.espacio.conexion)
         assertTrue(despues.gastos.isEmpty())
         assertNotNull(transaction { EspaciosConectados.selectAll().single()[EspaciosConectados.desconectadoEn] })
+    }
+
+    // ── Revisión de la vuelta 131 ────────────────────────────────────────────
+
+    @Test
+    fun `I-1a - con el grupo conectado, Pago otro con la persona conectada es 422`() = conApp {
+        conectar()
+        val r = post("/api/espacios/esp_casa/gastos", """{"id":"g_x","pagadoPor":"dst_caro","monto":8000,"categoria":"Mercado"}""", juan)
+        assertEquals(HttpStatusCode.UnprocessableEntity, r.status)
+        assertEquals(com.jvillada.movi.shared.model.LO_ANOTA_DESDE_SU_MOVI, r.bodyAsText())
+        assertEquals(0L, transaction { GastosDelEspacio.selectAll().count() })
+    }
+
+    /** Caro marca «Caro le pagó a Juan» en su Movi; Juan vincula la transferencia que le llegó, desde su lado. */
+    @Test
+    fun `I-1b - un saldado de Caro se vincula desde el lado de Juan y su transferencia sale de Entro`() = conApp {
+        val deCaro = conectar()
+        val juanEnCaro = deCaro.conexion!!.miembroId
+        evento("e_juan", 200_000, juan)
+        post("/api/espacios/esp_casa/compartir", """{"eventoId":"e_juan"}""", juan)
+        assertEquals(HttpStatusCode.Created, post("/api/espacios/${deCaro.id}/liquidaciones", """{"id":"l_caro","de":"yo","a":"$juanEnCaro","monto":100000}""", caro).status)
+        transaction {
+            Events.insert {
+                it[Events.id] = "e_de_caro"; it[userId] = juan; it[accountId] = "acc-$juan"; it[type] = "INCOME"; it[amount] = 100_000
+                it[currency] = "COP"; it[category] = "Ingreso"; it[description] = "Transferencia de Caro"; it[timestamp] = System.currentTimeMillis()
+                it[eventSource] = "MANUAL"; it[reconciliationStatus] = "RECONCILED"
+            }
+        }
+
+        // La propuesta: el saldado de Caro espera la transferencia de Juan.
+        val enJuan = detalle("esp_casa", juan)
+        val p = enJuan.propuestas.single()
+        assertEquals("l_caro", p.liquidacionId)
+        assertEquals("e_de_caro", p.eventoId)
+        assertTrue(p.cruzada)
+        val todas: List<com.jvillada.movi.shared.model.PropuestaDeSaldar> = json.decodeFromString(get("/api/espacios/propuestas", juan).bodyAsText())
+        assertEquals(listOf("l_caro"), todas.map { it.liquidacionId }, "también en Por revisar y la campana")
+
+        // La dirección se valida: un gasto no es la plata que entró.
+        evento("e_gasto", 100_000, juan)
+        assertEquals(HttpStatusCode.BadRequest, post("/api/espacios/esp_casa/liquidaciones/l_caro/vincular", """{"eventoId":"e_gasto"}""", juan).status)
+        assertEquals(HttpStatusCode.NotFound, post("/api/espacios/esp_casa/liquidaciones/l_caro/vincular", """{"eventoId":"e_de_caro"}""", caro).status, "no es su grupo")
+
+        val r = post("/api/espacios/esp_casa/liquidaciones/l_caro/vincular", """{"eventoId":"e_de_caro"}""", juan)
+        assertEquals(HttpStatusCode.OK, r.status, r.bodyAsText())
+        assertEquals(HttpStatusCode.OK, post("/api/espacios/esp_casa/liquidaciones/l_caro/vincular", """{"eventoId":"e_de_caro"}""", juan).status, "idempotente")
+
+        val eventos = runBlocking { loadNonVoidedEvents(juan) }.associateBy { it.id }
+        assertEquals(false, eventos.getValue("e_de_caro").countsAsCashFlow, "la transferencia de Caro no es ingreso de Juan")
+        val despues = detalle("esp_casa", juan)
+        assertEquals("e_de_caro", despues.liquidaciones.single().eventoId, "su vínculo, de su lado")
+        assertTrue(despues.propuestas.isEmpty())
+        // Del lado de Caro no cruza el movimiento de Juan.
+        assertFalse(get("/api/espacios/${deCaro.id}", caro).bodyAsText().contains("e_de_caro"))
+        // Y ese movimiento ya no se vincula a otro saldado.
+        assertEquals(
+            HttpStatusCode.Conflict,
+            post("/api/espacios/esp_casa/liquidaciones", """{"id":"l_otro","de":"dst_caro","a":"yo","monto":50000,"eventoId":"e_de_caro"}""", juan).status,
+        )
+    }
+
+    @Test
+    fun `I-1c - marcar el saldado que Caro ya marco es 409 con su id`() = conApp {
+        val deCaro = conectar()
+        val juanEnCaro = deCaro.conexion!!.miembroId
+        post("/api/espacios/${deCaro.id}/liquidaciones", """{"id":"l_caro","de":"yo","a":"$juanEnCaro","monto":100000}""", caro)
+
+        val r = post("/api/espacios/esp_casa/liquidaciones", """{"id":"l_juan","de":"dst_caro","a":"yo","monto":100500}""", juan)
+        assertEquals(HttpStatusCode.Conflict, r.status)
+        assertEquals(com.jvillada.movi.shared.model.YA_LO_MARCO_LA_OTRA_PERSONA + "l_caro", r.bodyAsText())
+        assertEquals(1L, transaction { LiquidacionesDelEspacio.selectAll().count() }, "no se saldó dos veces")
+        // Otro monto u otra dirección sí se marca.
+        assertEquals(HttpStatusCode.Created, post("/api/espacios/esp_casa/liquidaciones", """{"id":"l_juan2","de":"yo","a":"dst_caro","monto":100000}""", juan).status)
+    }
+
+    @Test
+    fun `I-3 - quien invita ve quien acepto con su nombre de Movi`() = conApp {
+        conectar()
+        val deJuan: List<Espacio> = json.decodeFromString(get("/api/espacios", juan).bodyAsText())
+        assertEquals("Caro", deJuan.single().conexion!!.nombreEnMovi)
+    }
+
+    @Test
+    fun `I-3 - el codigo se guarda con HMAC y pimienta, no con un SHA-256 a secas`() = conApp {
+        crearLaCasa()
+        val codigo = invitar().codigo
+        val guardado = transaction { InvitacionesAEspacio.selectAll().single()[InvitacionesAEspacio.codigoHash] }
+        assertEquals(huellaDelCodigo(codigo), guardado)
+        assertTrue(guardado != com.jvillada.movi.server.correo.sha256Hex("invitacion:$codigo") && guardado != com.jvillada.movi.server.correo.sha256Hex(codigo))
+    }
+
+    @Test
+    fun `I-3 - un codigo que choca con otro vigente se cambia por otro`() = conApp {
+        crearLaCasa()
+        post("/api/espacios", """{"id":"esp_otro","nombre":"Con mamá","miembros":[{"id":"dst_mama"}]}""", juan)
+        val salidas = ArrayDeque(listOf("K7P3Q9", "K7P3Q9", "M4N5P6"))
+        generadorDeCodigos = { salidas.removeFirst() }
+        assertEquals("K7P3Q9", invitar("esp_casa").codigo)
+        assertEquals("M4N5P6", invitar("esp_otro").codigo, "el segundo K7P3Q9 chocaba con el vigente")
+    }
+
+    @Test
+    fun `I-3 - tambien hay un tope por IP, y la carrera perdida no cuenta como fallo`() = conApp {
+        crearLaCasa()
+        // Por IP: muchas personas desde la misma dirección también se frenan.
+        val ip = "10.0.0.9"
+        val claves = clavesDelIntento("x", ip)
+        repeat(INTENTOS_DE_CODIGO_POR_IP_POR_HORA) { i ->
+            val otraPersona = clavesDelIntento("persona-$i", ip)
+            assertNotNull(IntentosDeCodigo.reservar(otraPersona))
+        }
+        assertNull(IntentosDeCodigo.reservar(claves), "la IP ya gastó sus intentos")
+        IntentosDeCodigo.reset()
+
+        val inv = invitar()
+        coroutineScope { listOf(caro, otra).map { uid -> async { aceptar(inv.codigo, uid).status } }.map { it.await() } }
+        assertEquals(0, IntentosDeCodigo.cuantos("usuario:$caro") + IntentosDeCodigo.cuantos("usuario:$otra"), "quien perdió la carrera no suma un fallo")
+    }
+
+    @Test
+    fun `M-2 - unir a la otra persona con otra ficha la cambia en el grupo, y borrarla conectada es 409`() = conApp {
+        conectar()
+        evento("e_juan", 10_000, juan)
+        post("/api/espacios/esp_casa/compartir", """{"eventoId":"e_juan","gastoId":"g_juan"}""", juan)
+        post("/api/espacios/esp_casa/liquidaciones", """{"id":"l_juan","de":"dst_caro","a":"yo","monto":1000}""", juan)
+        // Una ficha más antigua de Caro: al unir, sobrevive esa.
+        transaction {
+            KnownDestinations.insert { it[id] = "dst_caro_vieja"; it[userId] = juan; it[nombre] = "Carolina"; it[numero] = ""; it[createdAt] = -1L }
+        }
+        assertEquals(HttpStatusCode.Conflict, borrar("/api/destinos/dst_caro", juan).status)
+        assertEquals(HttpStatusCode.OK, post("/api/destinos/dst_caro/unir/dst_caro_vieja", "{}", juan).status)
+
+        val d = detalle("esp_casa", juan)
+        assertEquals(listOf(MIEMBRO_YO, "dst_caro_vieja"), d.espacio.miembros.map { it.id })
+        assertEquals("dst_caro_vieja", d.espacio.conexion!!.miembroId)
+        assertTrue(d.gastos.single { it.id == "g_juan" }.partes.containsKey("dst_caro_vieja"))
+        assertEquals("dst_caro_vieja", d.liquidaciones.single().de)
+        assertEquals(-d.saldo.netoDe(MIEMBRO_YO), d.saldo.netoDe("dst_caro_vieja"))
+    }
+
+    @Test
+    fun `M-6 - aceptar sobre un grupo borrado es 404 sin conexion colgando, y dos invitar dejan una pendiente`() = conApp {
+        crearLaCasa()
+        coroutineScope { (1..2).map { async { post("/api/espacios/esp_casa/invitacion", "{}", juan).status } }.map { it.await() } }
+        assertEquals(1, transaction { InvitacionesAEspacio.selectAll().count { it[InvitacionesAEspacio.canceladaEn] == null } }, "una sola pendiente")
+
+        val inv = invitar()
+        transaction { Espacios.deleteWhere { Espacios.id eq "esp_casa" } }
+        assertEquals(HttpStatusCode.NotFound, aceptar(inv.codigo).status)
+        assertEquals(0L, transaction { EspaciosConectados.selectAll().count() })
+        assertEquals(0L, transaction { Espacios.selectAll().where { Espacios.userId eq caro }.count() })
+    }
+
+    @Test
+    fun `M-7 - escribir con el id de un gasto o saldado ajeno es 404`() = conApp {
+        val deCaro = conectar()
+        val juanEnCaro = deCaro.conexion!!.miembroId
+        evento("e_juan", 10_000, juan)
+        post("/api/espacios/esp_casa/compartir", """{"eventoId":"e_juan","gastoId":"g_juan"}""", juan)
+        post("/api/espacios/esp_casa/liquidaciones", """{"id":"l_juan","de":"dst_caro","a":"yo","monto":1000}""", juan)
+        evento("e_caro", 5_000, caro)
+
+        assertEquals(HttpStatusCode.NotFound, post("/api/espacios/${deCaro.id}/compartir", """{"eventoId":"e_caro","gastoId":"g_juan"}""", caro).status)
+        assertEquals(HttpStatusCode.NotFound, post("/api/espacios/${deCaro.id}/liquidaciones", """{"id":"l_juan","de":"yo","a":"$juanEnCaro","monto":5000}""", caro).status)
+        assertEquals(1L, transaction { LiquidacionesDelEspacio.selectAll().count() })
+    }
+
+    @Test
+    fun `M-8 - la descripcion que cruza no lleva un numero de cuenta entero`() = conApp {
+        val deCaro = conectar()
+        evento("e_juan", 10_000, juan, descripcion = "Transferencia a cuenta 0012345678")
+        post("/api/espacios/esp_casa/compartir", """{"eventoId":"e_juan"}""", juan)
+        val g = detalle(deCaro.id, caro).gastos.single()
+        assertEquals("Transferencia a cuenta ••5678", g.descripcion)
+        assertFalse(get("/api/espacios/tu-parte", caro).bodyAsText().contains("0012345678"))
     }
 }
