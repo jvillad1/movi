@@ -4,6 +4,7 @@ import com.jvillada.movi.server.observabilidad.crearMensaje
 import com.anthropic.client.AnthropicClient
 import com.anthropic.client.okhttp.AnthropicOkHttpClient
 import com.anthropic.core.RequestOptions
+import com.anthropic.errors.AnthropicIoException
 import com.anthropic.errors.AnthropicServiceException
 import com.anthropic.models.messages.Base64ImageSource
 import com.anthropic.models.messages.CacheControlEphemeral
@@ -39,6 +40,8 @@ import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
 import java.io.File
+import java.io.IOException
+import java.io.InterruptedIOException
 import java.time.Duration
 import java.util.UUID
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -61,7 +64,9 @@ object ClaudeStatementParser {
      * Los reintentos de un extracto los hace [conReintentos], que mira el plazo y se deja cancelar.
      */
     private val clienteDeExtractos: AnthropicClient? by lazy {
-        client?.let { c -> runCatching { c.withOptions { it.maxRetries(0) } }.getOrNull() }
+        // Si `withOptions` fallara, el cliente de siempre (con los reintentos del SDK) antes que
+        // decir «falta la clave»: la clave está.
+        client?.let { c -> runCatching { c.withOptions { it.maxRetries(0) } }.getOrElse { c } }
     }
 
     private fun resolveApiKey(): String? {
@@ -495,7 +500,10 @@ Aplicá las reglas del usuario cuando el merchant coincida.
                 .messages(listOf(MessageParam.builder().role(MessageParam.Role.USER).content(cuerpo).build()))
                 .build()
             val response = conReintentos(quedaMs) { queda ->
-                val opciones = RequestOptions.builder().timeout(Duration.ofMillis(queda)).build()
+                // Con holgura: el plazo de afuera ya corta la lectura. Si el `timeout` del pedido
+                // venciera antes —arranca antes y redondea para abajo—, su corte saldría como un
+                // error de red en vez de una lectura incompleta (y la ruta contestaba un 500).
+                val opciones = RequestOptions.builder().timeout(Duration.ofMillis(queda + HOLGURA_DEL_PEDIDO_MS)).build()
                 sinEsperarAlCancelar { crearMensaje(c, params, opciones) }
             }
             RespuestaDelPedazo(
@@ -523,26 +531,85 @@ Aplicá las reglas del usuario cuando el merchant coincida.
     /** Lo que tiene que quedar de plazo, después de la espera, para que valga la pena reintentar. */
     internal const val TIEMPO_PARA_REINTENTAR_MS = 15_000L
 
+    /** Lo que el `timeout` de cada pedido le da de más al plazo de la lectura (ver [leer]). */
+    internal const val HOLGURA_DEL_PEDIDO_MS = 2_000L
+
     /**
-     * **Cuánto esperar antes de reintentar**, o `null` si no se reintenta. Solo un 429 (límite de la
-     * cuenta) o un 5xx (529, sobrecargado, incluido): 2 s y después 4 s, y solo si después de esperar
-     * quedan [TIEMPO_PARA_REINTENTAR_MS] del plazo. Un 401, sin crédito, un 400 o un corte por
-     * tiempo no se reintentan.
+     * Con tan poco plazo, una falla de red es el plazo que se cumplió, no la red: la lectura es
+     * incompleta, no un error.
      */
-    internal fun esperaParaReintentar(status: Int?, vez: Int, quedaMs: Long): Long? {
-        if (status == null || vez >= REINTENTOS_DE_UN_PEDIDO) return null
-        if (status != 429 && status < 500) return null
-        val espera = 2_000L shl vez
+    internal const val PLAZO_YA_CUMPLIDO_MS = 1_000L
+
+    /** Lo que importa de una falla de un pedido para decidir si se reintenta. */
+    internal data class FallaDelPedido(
+        /** El código HTTP, si el servidor contestó. */
+        val status: Int? = null,
+        /** No hubo respuesta: la conexión se cayó, se cortó el flujo o venció el tiempo. */
+        val deRed: Boolean = false,
+        /** Dentro de las de red, el tiempo que venció. */
+        val porTiempo: Boolean = false,
+        /** Lo que el servidor pidió esperar (`retry-after-ms` o `retry-after`), en milisegundos. */
+        val pideEsperarMs: Long? = null,
+    )
+
+    /** La [FallaDelPedido] de una excepción del SDK (o de cualquier otra, que no se reintenta). */
+    internal fun fallaDe(e: Throwable): FallaDelPedido {
+        val causas = generateSequence(e) { it.cause }.take(8).toList()
+        val deLaApi = causas.filterIsInstance<AnthropicServiceException>().firstOrNull()
+        if (deLaApi != null) {
+            val cabecera = { nombre: String -> runCatching { deLaApi.headers().values(nombre).firstOrNull() }.getOrNull() }
+            return FallaDelPedido(
+                status = deLaApi.statusCode(),
+                pideEsperarMs = esperaQuePide(cabecera("retry-after-ms"), cabecera("retry-after")),
+            )
+        }
+        val deRed = causas.any { it is AnthropicIoException || it is IOException }
+        return FallaDelPedido(deRed = deRed, porTiempo = deRed && causas.any { it is InterruptedIOException })
+    }
+
+    /**
+     * La espera que pide un 429, en milisegundos: `retry-after-ms` o, si no, `retry-after` en
+     * segundos. Una fecha HTTP en `retry-after` no se lee (Anthropic manda segundos).
+     */
+    internal fun esperaQuePide(retryAfterMs: String?, retryAfter: String?): Long? =
+        retryAfterMs?.trim()?.toDoubleOrNull()?.takeIf { it >= 0 }?.toLong()
+            ?: retryAfter?.trim()?.toDoubleOrNull()?.takeIf { it >= 0 }?.let { (it * 1_000).toLong() }
+
+    /**
+     * **Cuánto esperar antes de reintentar**, o `null` si no se reintenta. Se reintenta:
+     * - un 429 (límite de la cuenta) o un 5xx (529, sobrecargado, incluido);
+     * - una falla de red que **no** es un corte por tiempo (la conexión que se reinicia, el flujo
+     *   que se acaba antes de tiempo): sin los reintentos del SDK, una caída pasajera tumbaba la
+     *   lectura.
+     *
+     * Hasta [REINTENTOS_DE_UN_PEDIDO] veces, a los 2 s y después a los 4 s —o lo que pida el
+     * servidor con `retry-after`—, y solo si después de esperar quedan [TIEMPO_PARA_REINTENTAR_MS]
+     * del plazo: una espera que no cabe en el plazo no se recorta, no se reintenta. Un 401, sin
+     * crédito, un 400 o un corte por tiempo no se reintentan.
+     */
+    internal fun esperaParaReintentar(falla: FallaDelPedido, vez: Int, quedaMs: Long): Long? {
+        if (vez >= REINTENTOS_DE_UN_PEDIDO) return null
+        val status = falla.status
+        val reintentable = when {
+            status != null -> status == 429 || status >= 500
+            else -> falla.deRed && !falla.porTiempo
+        }
+        if (!reintentable) return null
+        val espera = falla.pideEsperarMs ?: (2_000L shl vez)
         return espera.takeIf { quedaMs - espera >= TIEMPO_PARA_REINTENTAR_MS }
     }
 
     /**
      * Corre [intento] con lo que queda de [quedaMs] y lo reintenta según [esperaParaReintentar]. La
      * espera es un `delay`: se deja cancelar, así que una lectura que ya contestó no reintenta nada.
+     *
+     * **Una falla de red con el plazo ya cumplido** (quedan [PLAZO_YA_CUMPLIDO_MS] o menos) es el
+     * plazo, no la red: sale como lectura incompleta por [MOTIVO_PLAZO], nunca como excepción —que
+     * la ruta contestaría con un 500—.
      */
     internal suspend fun <T> conReintentos(
         quedaMs: Long,
-        statusDe: (Throwable) -> Int? = { (it as? AnthropicServiceException)?.statusCode() },
+        fallaDe: (Throwable) -> FallaDelPedido = ::fallaDe,
         intento: suspend (quedaMs: Long) -> T,
     ): T {
         val limite = System.nanoTime() + quedaMs * 1_000_000
@@ -554,7 +621,9 @@ Aplicá las reglas del usuario cuando el merchant coincida.
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                val espera = esperaParaReintentar(statusDe(e), vez, queda()) ?: throw e
+                val falla = fallaDe(e)
+                if (falla.deRed && queda() <= PLAZO_YA_CUMPLIDO_MS) throw NoCabeEnLaLectura(MOTIVO_PLAZO)
+                val espera = esperaParaReintentar(falla, vez, queda()) ?: throw e
                 vez++
                 delay(espera)
             }

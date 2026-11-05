@@ -1,6 +1,11 @@
 package com.jvillada.movi.server.parsing
 
+import com.anthropic.core.JsonValue
+import com.anthropic.core.http.Headers
+import com.anthropic.errors.AnthropicIoException
+import com.anthropic.errors.RateLimitException
 import com.jvillada.movi.server.parsing.ClaudeStatementParser.DiagnosticoDeLaLectura
+import com.jvillada.movi.server.parsing.ClaudeStatementParser.FallaDelPedido
 import com.jvillada.movi.server.parsing.ClaudeStatementParser.Lectura
 import com.jvillada.movi.server.parsing.ClaudeStatementParser.RespuestaDelPedazo
 import kotlinx.coroutines.Dispatchers
@@ -9,6 +14,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import java.io.InterruptedIOException
+import java.net.SocketException
 import java.util.Collections
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
@@ -561,16 +568,84 @@ class ElExtractoLargoSeParteSoloTest {
         assertTrue((System.nanoTime() - desde) / 1_000_000 < 1_500, "esperó al pedido bloqueado")
     }
 
-    /** Qué se reintenta: un 429 o un 5xx, dos veces, y solo si queda plazo. */
+    private fun espera(falla: FallaDelPedido, vez: Int = 0, quedaMs: Long = 60_000) =
+        ClaudeStatementParser.esperaParaReintentar(falla, vez, quedaMs)
+
+    /** Qué se reintenta: un 429, un 5xx o una caída de red que no es un corte por tiempo; dos veces, y solo si queda plazo. */
     @Test
-    fun solo_se_reintenta_un_429_o_un_5xx_con_plazo() {
-        assertEquals(2_000L, ClaudeStatementParser.esperaParaReintentar(429, vez = 0, quedaMs = 60_000))
-        assertEquals(4_000L, ClaudeStatementParser.esperaParaReintentar(529, vez = 1, quedaMs = 60_000))
-        assertEquals(null, ClaudeStatementParser.esperaParaReintentar(503, vez = 2, quedaMs = 60_000))
-        assertEquals(null, ClaudeStatementParser.esperaParaReintentar(401, vez = 0, quedaMs = 60_000))
-        assertEquals(null, ClaudeStatementParser.esperaParaReintentar(400, vez = 0, quedaMs = 60_000))
-        assertEquals(null, ClaudeStatementParser.esperaParaReintentar(null, vez = 0, quedaMs = 60_000), "un corte por tiempo no")
-        assertEquals(null, ClaudeStatementParser.esperaParaReintentar(429, vez = 0, quedaMs = 10_000), "sin plazo no")
+    fun solo_se_reintenta_un_429_un_5xx_o_una_caida_de_red_con_plazo() {
+        assertEquals(2_000L, espera(FallaDelPedido(status = 429)))
+        assertEquals(4_000L, espera(FallaDelPedido(status = 529), vez = 1))
+        assertEquals(null, espera(FallaDelPedido(status = 503), vez = 2))
+        assertEquals(null, espera(FallaDelPedido(status = 401)))
+        assertEquals(null, espera(FallaDelPedido(status = 400)))
+        assertEquals(2_000L, espera(FallaDelPedido(deRed = true)), "la conexión que se reinicia sí")
+        assertEquals(null, espera(FallaDelPedido(deRed = true, porTiempo = true)), "un corte por tiempo no")
+        assertEquals(null, espera(FallaDelPedido()), "lo que no es de la API ni de la red no")
+        assertEquals(null, espera(FallaDelPedido(status = 429), quedaMs = 10_000), "sin plazo no")
+    }
+
+    /** `retry-after` manda sobre los 2 s; una espera que no cabe en el plazo no se reintenta. */
+    @Test
+    fun un_429_espera_lo_que_pide_el_servidor() {
+        assertEquals(7_000L, espera(FallaDelPedido(status = 429, pideEsperarMs = 7_000)))
+        assertEquals(null, espera(FallaDelPedido(status = 429, pideEsperarMs = 50_000), quedaMs = 60_000))
+        assertEquals(1_500L, ClaudeStatementParser.esperaQuePide("1500", "9"))
+        assertEquals(3_000L, ClaudeStatementParser.esperaQuePide(null, "3"))
+        assertEquals(null, ClaudeStatementParser.esperaQuePide(null, "Wed, 21 Oct 2026 07:28:00 GMT"))
+
+        val limite = RateLimitException.builder()
+            .headers(Headers.builder().put("retry-after", "7").build())
+            .body(JsonValue.from(mapOf("error" to "rate_limit")))
+            .build()
+        assertEquals(FallaDelPedido(status = 429, pideEsperarMs = 7_000), ClaudeStatementParser.fallaDe(limite))
+    }
+
+    /** Las fallas de red del SDK se distinguen: un corte por tiempo contra una conexión que se cae. */
+    @Test
+    fun una_falla_de_red_se_reconoce_y_un_corte_por_tiempo_tambien() {
+        val reinicio = ClaudeStatementParser.fallaDe(AnthropicIoException("reset", SocketException("Connection reset")))
+        assertTrue(reinicio.deRed && !reinicio.porTiempo, "$reinicio")
+        val tiempo = ClaudeStatementParser.fallaDe(AnthropicIoException("timeout", InterruptedIOException("timeout")))
+        assertTrue(tiempo.deRed && tiempo.porTiempo, "$tiempo")
+    }
+
+    /** Una conexión que se reinicia se reintenta (sin los reintentos del SDK, tumbaba la lectura). */
+    @Test
+    fun una_conexion_que_se_reinicia_se_reintenta() = runBlocking {
+        val intentos = AtomicInteger()
+
+        val r = ClaudeStatementParser.conReintentos(60_000) {
+            if (intentos.incrementAndGet() == 1) throw AnthropicIoException("reset", SocketException("Connection reset"))
+            "listo"
+        }
+
+        assertEquals("listo", r)
+        assertEquals(2, intentos.get())
+    }
+
+    /**
+     * **La carrera del plazo.** El `timeout` de un pedido vence justo al cumplirse el plazo, antes
+     * que el plazo de afuera: su falla de red es el plazo. La lectura es incompleta por `plazo`,
+     * nunca una excepción (que la ruta contestaba con un 500 crudo).
+     */
+    @Test
+    fun un_corte_de_red_al_cumplirse_el_plazo_es_una_lectura_incompleta() = runBlocking {
+        var diagnostico: DiagnosticoDeLaLectura? = null
+
+        val lectura = ClaudeStatementParser.leerPorPedazos(
+            extracto(30),
+            plazoMs = 600,
+            anotar = { diagnostico = it },
+        ) { _, quedaMs ->
+            ClaudeStatementParser.conReintentos(quedaMs) { queda ->
+                delay((queda - 150).coerceAtLeast(0))
+                throw AnthropicIoException("Request timed out", InterruptedIOException("timeout"))
+            }
+        }
+
+        assertEquals(Lectura.Incompleta, lectura)
+        assertEquals(ClaudeStatementParser.MOTIVO_PLAZO, diagnostico!!.motivo)
     }
 
     private class ConStatus(val status: Int) : RuntimeException("status $status")
@@ -581,7 +656,7 @@ class ElExtractoLargoSeParteSoloTest {
         val intentos = AtomicInteger()
 
         val r = withTimeoutOrNull(300) {
-            ClaudeStatementParser.conReintentos(60_000, statusDe = { (it as? ConStatus)?.status }) {
+            ClaudeStatementParser.conReintentos(60_000, fallaDe = { FallaDelPedido(status = (it as? ConStatus)?.status) }) {
                 intentos.incrementAndGet()
                 throw ConStatus(429)
             }
@@ -597,7 +672,7 @@ class ElExtractoLargoSeParteSoloTest {
     fun un_429_se_reintenta() = runBlocking {
         val intentos = AtomicInteger()
 
-        val r = ClaudeStatementParser.conReintentos(60_000, statusDe = { (it as? ConStatus)?.status }) {
+        val r = ClaudeStatementParser.conReintentos(60_000, fallaDe = { FallaDelPedido(status = (it as? ConStatus)?.status) }) {
             if (intentos.incrementAndGet() == 1) throw ConStatus(429)
             "listo"
         }
