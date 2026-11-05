@@ -329,6 +329,12 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
                 leading = HeaderLeading.Back(fallback = Screen.Tu),
                 accion = AccionDeEncabezado("Subir archivo", Icons.Rounded.Add, onClick = elegirArchivo),
             )
+            // Vuelta 130: la entrada fija a la guía, banco por banco. Va arriba y **en todos los estados**
+            // (esqueleto, error, vacío y lista), desde el primer cuadro: así la primera fila esqueleto y la
+            // primera real arrancan a la misma altura (`EsqueletosDeListasTest`).
+            Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(top = Espacio.s)) {
+                FilaDeComoBajarTusExtractos(onClick = { guiaPedida = com.jvillada.movi.ui.extractos.GuiaPedida(null) })
+            }
             val lista = documentos
             // Fix round 1: con nada pintado todavía (`lista == null && cargando`) el esqueleto de
             // más abajo ya dice «cargando» con la forma de lo que viene — la barra sería la misma
@@ -373,8 +379,6 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
                     modifier = Modifier.fillMaxSize().desplazableConElTeclado(),
                 ) {
                     Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(top = Espacio.s)) {
-                        FilaDeComoBajarTusExtractos(onClick = { guiaPedida = com.jvillada.movi.ui.extractos.GuiaPedida(null) })
-                        Spacer(Modifier.height(Espacio.m))
                         Vacio(
                             titulo = "Tus papeles, a mano",
                             detalle = "Aquí se guardan tus extractos, nóminas, contratos y cualquier papel que quieras " +
@@ -397,12 +401,6 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
                     modifier = Modifier.fillMaxWidth(),
                     contentPadding = PaddingValues(top = Espacio.s, bottom = Medida.botonFlotante + Medida.entreSecciones),
                 ) {
-                    // Vuelta 130: la entrada fija a la guía, banco por banco.
-                    item(key = "como-bajar-tus-extractos") {
-                        Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(bottom = Espacio.m)) {
-                            FilaDeComoBajarTusExtractos(onClick = { guiaPedida = com.jvillada.movi.ui.extractos.GuiaPedida(null) })
-                        }
-                    }
                     porTipo(lista).forEach { (tipo, delTipo) ->
                         item(key = "encabezado-${tipo.name}") {
                             Column(modifier = Modifier.padding(horizontal = Espacio.m)) {
