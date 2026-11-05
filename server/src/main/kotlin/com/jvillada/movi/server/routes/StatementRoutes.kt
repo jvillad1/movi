@@ -83,11 +83,18 @@ import com.jvillada.movi.server.time.epochMillisToAppDate
  * distingue «no hay clave» de «el extracto se cortó».
  *
  * En español neutro con tuteo, como todo lo que el dueño lee, y cada una termina en lo que él
- * puede hacer: partir el archivo, o avisarle a quien administra Movi.
+ * puede hacer: probar otro archivo, o avisarle a quien administra Movi.
+ *
+ * [EXTRACTO_INCOMPLETO], vuelta 128: antes decía «Divide el archivo en dos… y súbelo por partes», y
+ * nadie parte un PDF en el celular. Ahora el server parte solo el texto que no cabe
+ * (`ClaudeStatementParser.leerPorPedazos`); si aun así no se pudo, repetir la misma lectura se
+ * cortaría igual, así que la frase ofrece el otro papel que el banco da —los movimientos en PDF o
+ * Excel; los de Bancolombia Movi los lee sin IA—. No dice «escríbenos»: la app no tiene ese
+ * canal (ver `PaginasLegales.SIN_CORREO`).
  */
 const val EXTRACTO_INCOMPLETO: String =
-    "El extracto es muy largo y la lectura quedó incompleta, así que no te mostramos una lista a " +
-        "medias. Divide el archivo en dos (por ejemplo, una quincena en cada uno) y súbelo por partes."
+    "No pudimos leer todo el extracto, así que no te mostramos una lista a medias. Si tu banco te " +
+        "deja descargar los movimientos en PDF o Excel desde su app, súbelos así."
 
 const val IMAGEN_INCOMPLETA: String =
     "La imagen tiene demasiados movimientos y la lectura quedó incompleta. Sube el extracto en PDF, " +
