@@ -76,8 +76,13 @@ private fun porElContenido(accounts: List<Account>, result: StatementParseResult
 
 /** Lo que el contenido dice en contra de [delPapel], en una frase; `null` si no la contradice. */
 private fun contradiccion(delPapel: Account, porElContenido: CuentaDelBanco, result: StatementParseResult): String? {
-    if (result.tarjeta != null && delPapel.type != AccountType.CREDIT_CARD) {
+    val tarjeta = result.tarjeta
+    if (tarjeta != null && delPapel.type != AccountType.CREDIT_CARD) {
         return "Al subir el archivo elegiste ${delPapel.name}, pero este extracto es de una tarjeta de crédito."
+    }
+    // Una tarjeta de otro banco: la del papel es de una marca y el extracto de otra.
+    if (tarjeta != null && esDeOtroBanco(delPapel, tarjeta)) {
+        return "Al subir el archivo elegiste ${delPapel.name}, pero este extracto es de una tarjeta ${tarjeta.banco}."
     }
     val nombrada = porElContenido.cuenta
     if (porElContenido.origen == OrigenDeLaCuentaDelBanco.POR_EL_NUMERO && nombrada != null && nombrada.id != delPapel.id) {
@@ -95,6 +100,16 @@ private fun esDelBanco(cuenta: Account, tarjeta: TarjetaDelExtracto): Boolean {
     val marca = marcaDelBanco(tarjeta.banco)
     return if (marca != null) marcaDeLaCuenta(cuenta)?.id == marca.id
     else cuenta.name.contains(tarjeta.banco, ignoreCase = true)
+}
+
+/**
+ * ¿[cuenta] es de otro banco que el de [tarjeta]? Solo si las dos marcas se conocen y difieren: una
+ * tarjeta con un nombre sin marca («Mi tarjeta morada») no contradice nada.
+ */
+private fun esDeOtroBanco(cuenta: Account, tarjeta: TarjetaDelExtracto): Boolean {
+    val delExtracto = marcaDelBanco(tarjeta.banco) ?: return false
+    val deLaCuenta = marcaDeLaCuenta(cuenta) ?: return false
+    return deLaCuenta.id != delExtracto.id
 }
 
 /** Lo que la revisión de un extracto tiene que decir de la tarjeta. */

@@ -166,8 +166,12 @@ fun StatementReviewScreen(
                 imported = true
                 // Vuelta 129: importado en una tarjeta, si el extracto dice cuánto se debía al corte, se
                 // propone cuadrarla (nunca solo). Si no, se vuelve como siempre.
+                // No a una tarjeta que ya se cuadró (o se creó con su saldo) después de ese día: el
+                // ajuste más ese saldo contarían la deuda dos veces. Ni con saldo a favor.
                 val deuda = result.tarjeta?.deudaParaCuadrar()
-                if (acct.type == AccountType.CREDIT_CARD && deuda != null && deuda.moneda == acct.currency) {
+                if (acct.type == AccountType.CREDIT_CARD && deuda != null && deuda.moneda == acct.currency &&
+                    acct.id !in result.tarjetasCuadradasDespues
+                ) {
                     deudaPorCuadrar = acct to deuda
                 } else {
                     // Ola 2 #1: pop, no push — coherente con SMS (evita reimportar el mismo extracto

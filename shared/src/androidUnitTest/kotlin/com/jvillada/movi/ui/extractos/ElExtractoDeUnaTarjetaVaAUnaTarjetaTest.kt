@@ -58,7 +58,7 @@ class ElExtractoDeUnaTarjetaVaAUnaTarjetaTest {
     private val nuTarjeta = Account("c-nu", "Nu Tarjeta", AccountType.CREDIT_CARD, 0)
     private val delExtracto = TarjetaDelExtracto(
         banco = "Nu", ultimosCuatro = "1111", diaDeCorte = 12, diaDePago = 3, cupo = 3_000_000,
-        deudaAlCorte = 411_240, fechaDeCorte = "2026-10-12",
+        deudaAlCorte = 411_240, deudaHasta = "2026-10-11",
     )
 
     private val compra = ParsedTransaction(
@@ -175,7 +175,37 @@ class ElExtractoDeUnaTarjetaVaAUnaTarjetaTest {
         composeRule.onNodeWithText("Cuadrar la deuda con el extracto: ${'$'}411.240").assertIsDisplayed()
         assertEquals(emptyList(), cuadres)
         tocar("Cuadrar")
-        assertEquals(listOf("c-nueva" to DeudaDelExtracto(deuda = 411_240, fechaDeCorte = "2026-10-12")), cuadres)
+        assertEquals(listOf("c-nueva" to DeudaDelExtracto(deuda = 411_240, hasta = "2026-10-11")), cuadres)
+    }
+
+    /** Revisión: una tarjeta que ya se cuadró (o se creó con su saldo) después del corte no se cuadra otra vez. */
+    @Test
+    fun a_una_tarjeta_cuadrada_despues_del_corte_no_se_le_propone_cuadrar() {
+        montar(listOf(nuAhorros, nuTarjeta), extracto().copy(tarjetasCuadradasDespues = listOf(nuTarjeta.id)))
+        tocar("Importar 1 seleccionada")
+        assertEquals(nuTarjeta.id, decisiones.single().accountId)
+        composeRule.onNodeWithTag(TAG_CUADRAR_LA_DEUDA).assertDoesNotExist()
+    }
+
+    /** Revisión: con saldo a favor (deuda negativa) no se ofrece: el server no lo acepta. */
+    @Test
+    fun con_saldo_a_favor_no_se_propone_cuadrar() {
+        montar(listOf(nuAhorros, nuTarjeta), extracto(tarjeta = delExtracto.copy(deudaAlCorte = -12_000)))
+        tocar("Importar 1 seleccionada")
+        composeRule.onNodeWithTag(TAG_CUADRAR_LA_DEUDA).assertDoesNotExist()
+    }
+
+    /** Revisión: la tarjeta de otro banco que se le puso al papel no gana contra el extracto de Nu. */
+    @Test
+    fun la_tarjeta_de_otro_banco_del_papel_pierde_contra_el_extracto() {
+        val amex = Account("c-amex", "AMEX 9208", AccountType.CREDIT_CARD, 0)
+        val cuentas = listOf(amex, nuTarjeta)
+        val result = extracto(cuentaDelPapel = amex.id)
+        assertEquals(nuTarjeta, cuentaDelExtracto(cuentas, result, elegidaAMano = null).cuenta)
+        assertEquals(
+            "Al subir el archivo elegiste AMEX 9208, pero este extracto es de una tarjeta Nu.",
+            porQueNoLaDelPapel(cuentas, result, elegidaAMano = null),
+        )
     }
 
     @Test
