@@ -19,12 +19,20 @@ import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
 import com.jvillada.movi.shared.model.ParsedTransaction
 import com.jvillada.movi.shared.model.TransactionType
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
+import org.slf4j.LoggerFactory
 import java.io.File
 import java.util.UUID
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicInteger
 
 object ClaudeStatementParser {
 
@@ -152,16 +160,67 @@ Aplicá las reglas del usuario cuando el merchant coincida.
     private const val MAX_TOKENS_DE_SALIDA = 16_000L
 
     /**
-     * Cuánto texto de extracto va en cada pedido. No es el límite del modelo —la ventana de entrada
-     * es enorme—: es el límite de lo que su RESPUESTA puede tener sin pasarse de
-     * [MAX_TOKENS_DE_SALIDA]. Un extracto en PDF ronda los 150 caracteres por movimiento y cada
-     * movimiento vuelve como ~90 tokens de JSON, así que con este tope un pedido devuelve unas 80
-     * filas y le sobra la mitad del presupuesto.
+     * Cuánto texto de extracto va, como mucho, en cada pedido. No es el límite del modelo —la
+     * ventana de entrada es enorme—: es el límite de lo que su RESPUESTA puede tener sin pasarse de
+     * [MAX_TOKENS_DE_SALIDA]. Un extracto de tarjeta en PDF ronda los 150 caracteres por movimiento
+     * y cada movimiento vuelve como ~90 tokens de JSON, así que con este tope un pedido devuelve
+     * unas 80 filas y le sobra la mitad del presupuesto.
+     *
+     * Vuelta 128: ese supuesto falla en un extracto de ahorros denso (~60 caracteres por fila: doce
+     * mil caracteres son ~200 filas y más de 16.000 fichas). Por eso el tamaño de arranque lo estima
+     * [tamanoInicialDelPedazo] y, si aun así un pedazo vuelve cortado, se parte en dos
+     * ([leerPorPedazos]).
      */
     internal const val MAX_CARACTERES_POR_PEDAZO = 12_000
 
+    /**
+     * Cuántas filas se le piden, como mucho, a un pedido cuando el tamaño se estima por filas
+     * ([tamanoInicialDelPedazo]). 100 filas son ~9.000 fichas de JSON: queda lugar para pensar
+     * dentro de [MAX_TOKENS_DE_SALIDA]. Elegido, no medido; con 120 caracteres por fila o más
+     * (las tarjetas, Nu) da el mismo [MAX_CARACTERES_POR_PEDAZO] de siempre.
+     */
+    internal const val FILAS_POR_PEDAZO = 100
+
+    /**
+     * Lo más chico que puede quedar una mitad al partir un pedazo cortado: un pedazo de menos del
+     * doble ya no se parte. Junto con [PROFUNDIDAD_MAXIMA] es el tope de la recursión —12.000
+     * caracteres se parten a lo sumo en 8 de 1.500— y lo que pone el piso al costo de un extracto
+     * que nunca va a entrar.
+     */
+    internal const val MINIMO_DE_UN_PEDAZO = 1_500
+
+    /** Cuántas veces, como mucho, se parte en dos un mismo pedazo que vuelve cortado. */
+    internal const val PROFUNDIDAD_MAXIMA = 4
+
+    /**
+     * Cuántos pedidos al modelo van a la vez en una lectura. Tres: un extracto de cinco pedazos
+     * tarda lo que dos y no uno detrás de otro. Más no: los pedidos comparten el límite de fichas
+     * por minuto de la cuenta de Anthropic, y el SDK reintenta solo un 429 (con espera), pero una
+     * lectura que se come el límite la paga el resto de Movi (el chat, los papeles).
+     */
+    internal const val PEDIDOS_A_LA_VEZ = 3
+
     /** Cuántas líneas del principio del documento viajan como contexto en cada pedazo. */
     private const val LINEAS_DE_ENCABEZADO = 15
+
+    private val log = LoggerFactory.getLogger("LecturaDeExtractos")
+
+    /**
+     * **Dónde empieza una fecha de movimiento**, para partir una línea larga sin romper una fila y
+     * para contar filas probables. Reconoce, sin otra letra o cifra pegada antes:
+     * - ISO: `2026-08-01`;
+     * - día y mes con barra: `01/08`, `1/8/26`, `01/08/2026`;
+     * - día y mes en letras, en español: `04 OCT`, `3 ene.`, `12-dic-2026` (sin el «de» de
+     *   «5 de septiembre»: así lo escriben los bancos en la fila).
+     *
+     * El mes va entero o abreviado y no puede seguir otra letra: «1 MARCA» no es una fecha.
+     */
+    private val INICIO_DE_FECHA = Regex(
+        """(?<![\p{L}\p{N}/.\-])(?:\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}(?:/\d{2,4})?|\d{1,2}[ \-]""" +
+            """(?:ene(?:ro)?|feb(?:rero)?|mar(?:zo)?|abr(?:il)?|may(?:o)?|jun(?:io)?|jul(?:io)?|""" +
+            """ago(?:sto)?|sep(?:t(?:iembre)?)?|oct(?:ubre)?|nov(?:iembre)?|dic(?:iembre)?)\.?(?!\p{L}))(?!\p{N})""",
+        RegexOption.IGNORE_CASE,
+    )
 
     /**
      * ¿La respuesta del modelo quedó cortada?
@@ -181,14 +240,15 @@ Aplicá las reglas del usuario cuando el merchant coincida.
      * Parte el texto del extracto en pedidos que quepan en la respuesta, **cortando por líneas**.
      *
      * Por líneas y no por caracteres porque un corte a mitad de fila produce un movimiento
-     * inventado en un pedazo y otro mutilado en el siguiente. Una línea más larga que el tope entra
-     * igual en su propio pedazo: partirla sería exactamente el daño que esta función evita.
+     * inventado en un pedazo y otro mutilado en el siguiente. Una línea más larga que el tope (un PDF
+     * cuyo texto salió en un solo renglón) se parte antes con [partirLineaLarga], que corta antes de
+     * una fecha y nunca a mitad de una palabra.
      */
     internal fun dividirEnPedazos(texto: String, maxCaracteres: Int = MAX_CARACTERES_POR_PEDAZO): List<String> {
         if (texto.length <= maxCaracteres) return listOf(texto)
         val pedazos = mutableListOf<String>()
         val actual = StringBuilder()
-        for (linea in texto.lineSequence()) {
+        for (linea in texto.lineSequence().flatMap { partirLineaLarga(it, maxCaracteres) }) {
             if (actual.isNotEmpty() && actual.length + linea.length + 1 > maxCaracteres) {
                 pedazos += actual.toString()
                 actual.clear()
@@ -201,23 +261,119 @@ Aplicá las reglas del usuario cuando el merchant coincida.
     }
 
     /**
+     * **Una línea más larga que [max], en trozos que no rompen una fila** (vuelta 128).
+     *
+     * La regla, en orden:
+     * 1. se corta **antes de la última fecha** ([INICIO_DE_FECHA]) que deje el trozo dentro del tope:
+     *    en un extracto cada fila empieza por su fecha, así que ahí termina una fila y empieza otra;
+     * 2. si en ese tramo no hay fecha, **antes de la última palabra** que quepa (después de un
+     *    espacio): una fila puede quedar en dos trozos, pero ninguna cifra ni nombre se parte;
+     * 3. si no hay ni fecha ni espacio dentro del tope, el trozo se alarga **hasta la próxima fecha o
+     *    el próximo espacio**: se pasa del tope antes que cortar a mitad de una palabra;
+     * 4. sin ninguno de los dos en el resto, el resto va entero.
+     *
+     * Los trozos son subcadenas seguidas: unidos sin nada en medio dan la línea de nuevo.
+     */
+    internal fun partirLineaLarga(linea: String, max: Int): List<String> {
+        if (linea.length <= max || max <= 0) return listOf(linea)
+        val fechas = INICIO_DE_FECHA.findAll(linea).map { it.range.first }.toList()
+        val trozos = mutableListOf<String>()
+        var inicio = 0
+        while (linea.length - inicio > max) {
+            val limite = inicio + max
+            val corte = fechas.lastOrNull { it in (inicio + 1)..limite }
+                ?: ultimoInicioDePalabra(linea, inicio + 1, limite)
+                ?: fechas.firstOrNull { it > limite }?.let { fecha ->
+                    val palabra = primerInicioDePalabra(linea, limite + 1)
+                    if (palabra != null) minOf(fecha, palabra) else fecha
+                }
+                ?: primerInicioDePalabra(linea, limite + 1)
+                ?: break
+            trozos += linea.substring(inicio, corte)
+            inicio = corte
+        }
+        trozos += linea.substring(inicio)
+        return trozos
+    }
+
+    /** ¿Empieza una palabra en [i]? (un carácter visible justo después de un espacio). */
+    private fun empiezaPalabra(linea: String, i: Int): Boolean =
+        i in 1 until linea.length && linea[i - 1].isWhitespace() && !linea[i].isWhitespace()
+
+    private fun ultimoInicioDePalabra(linea: String, desde: Int, hasta: Int): Int? =
+        (minOf(hasta, linea.length - 1) downTo desde).firstOrNull { empiezaPalabra(linea, it) }
+
+    private fun primerInicioDePalabra(linea: String, desde: Int): Int? =
+        (desde until linea.length).firstOrNull { empiezaPalabra(linea, it) }
+
+    /**
+     * **Un pedazo que volvió cortado, en dos mitades** (vuelta 128), o `null` si ya no se puede
+     * partir. Por líneas, en la línea que deja la primera mitad más cerca de la mitad del texto; si
+     * el pedazo es una sola línea, con [partirLineaLarga] (antes de una fecha, o de una palabra).
+     * Las dos mitades, una detrás de la otra, son el pedazo entero.
+     */
+    internal fun partirEnDos(pedazo: String): Pair<String, String>? {
+        val lineas = pedazo.lines()
+        val (unidades, separador) =
+            if (lineas.size >= 2) lineas to "\n"
+            else partirLineaLarga(pedazo, (pedazo.length + 1) / 2) to ""
+        if (unidades.size < 2) return null
+        val mitad = pedazo.length / 2
+        var acumulado = 0
+        var corte = unidades.size - 1
+        for (i in unidades.indices) {
+            acumulado += unidades[i].length + separador.length
+            if (acumulado >= mitad) {
+                corte = i + 1
+                break
+            }
+        }
+        corte = corte.coerceIn(1, unidades.size - 1)
+        return unidades.subList(0, corte).joinToString(separador) to
+            unidades.subList(corte, unidades.size).joinToString(separador)
+    }
+
+    /**
+     * **De qué tamaño arrancan los pedazos** (vuelta 128): por filas probables, no solo por
+     * caracteres. Cuenta los renglones que empiezan con una fecha ([INICIO_DE_FECHA]), saca cuántos
+     * caracteres ocupa una fila en este documento y deja [FILAS_POR_PEDAZO] filas por pedido, entre
+     * el doble de [MINIMO_DE_UN_PEDAZO] y [MAX_CARACTERES_POR_PEDAZO]. Sin renglones con fecha, el
+     * tope de siempre.
+     *
+     * No es lo que evita la falla —eso es partir el pedazo cortado—: evita el primer pedido perdido
+     * (el de Caro tardó 84 s en volver cortado) en los extractos densos, que son los que se cortan.
+     */
+    internal fun tamanoInicialDelPedazo(texto: String): Int {
+        val filas = texto.lineSequence().count { INICIO_DE_FECHA.find(it.trimStart())?.range?.first == 0 }
+        if (filas == 0) return MAX_CARACTERES_POR_PEDAZO
+        val porFila = (texto.length / filas).coerceAtLeast(1)
+        return (porFila.toLong() * FILAS_POR_PEDAZO)
+            .coerceIn(2L * MINIMO_DE_UN_PEDAZO, MAX_CARACTERES_POR_PEDAZO.toLong())
+            .toInt()
+    }
+
+    /**
      * Las primeras líneas con contenido del documento — el encabezado con el banco, la cuenta y el
      * período.
      *
-     * Viaja pegado a cada pedazo después del primero porque el prompt le pide al modelo que saque
-     * el AÑO de ahí cuando las fechas vienen como «15/04». Sin esto, trocear un extracto le
+     * Viaja pegado a cada pedazo que no arranca el documento porque el prompt le pide al modelo que
+     * saque el AÑO de ahí cuando las fechas vienen como «15/04». Sin esto, trocear un extracto le
      * cambiaba el año a todos los movimientos de la segunda mitad.
      */
     internal fun encabezadoDe(texto: String, lineas: Int = LINEAS_DE_ENCABEZADO): String =
         texto.lineSequence().filter { it.isNotBlank() }.take(lineas).joinToString("\n")
 
-    /** El pedazo [indice] de [total], con el encabezado de contexto si no es el primero. */
-    private fun cuerpoDelPedido(pedazo: String, indice: Int, total: Int, encabezado: String): String =
-        if (indice == 0 || encabezado.isBlank()) pedazo
+    /**
+     * El cuerpo del pedido de un pedazo. El que arranca el documento va tal cual (ya trae el
+     * encabezado); todos los demás —también las mitades de un pedazo partido— llevan el encabezado
+     * de contexto y su [etiqueta] («2 DE 4», «2.1 DE 4»: la parte y, si se partió, cuál mitad).
+     */
+    private fun cuerpoDelPedido(pedazo: String, etiqueta: String, empiezaElDocumento: Boolean, encabezado: String): String =
+        if (empiezaElDocumento || encabezado.isBlank()) pedazo
         // El «de ahí» no es un capricho: el escáner de voseo mira los literales de este módulo, y
         // «de acá» —que es como lo diría el resto del archivo— lo marca como texto rioplatense.
         else "ENCABEZADO DEL DOCUMENTO (contexto: de ahí sale el año, no tiene movimientos):\n" +
-            encabezado + "\n\nPARTE ${indice + 1} DE $total DEL EXTRACTO:\n" + pedazo
+            encabezado + "\n\nPARTE $etiqueta DEL EXTRACTO:\n" + pedazo
 
     /**
      * **Cómo se le pide un extracto al modelo**, igual para texto e imagen.
@@ -248,28 +404,166 @@ Aplicá las reglas del usuario cuando el merchant coincida.
 
     /**
      * Lee un extracto de texto. Si no entra en un pedido se manda por partes y las filas se
-     * concatenan — cada pedazo trae su propio array JSON completo.
-     *
-     * **Un pedazo cortado corta la lectura entera.** Devolver las filas de los pedazos que sí
-     * salieron sería el mismo defecto con otro disfraz: una lista incompleta que se ve completa.
+     * concatenan — cada pedazo trae su propio array JSON completo. Ver [leerPorPedazos].
      */
     suspend fun leer(text: String, rules: List<MerchantRule>): Lectura {
         val c = client ?: return Lectura.SinLlave
-        val pedazos = dividirEnPedazos(text)
-        val encabezado = if (pedazos.size > 1) encabezadoDe(text) else ""
-        val filas = mutableListOf<ParsedTransaction>()
-        pedazos.forEachIndexed { i, pedazo ->
-            val cuerpo = cuerpoDelPedido(pedazo, i, pedazos.size, encabezado)
+        return leerPorPedazos(text) { cuerpo ->
             val params = MessageCreateParams.builder()
                 .conLoDeSiempre(rules)
                 .messages(listOf(MessageParam.builder().role(MessageParam.Role.USER).content(cuerpo).build()))
                 .build()
             val response = withContext(Dispatchers.IO) { crearMensaje(c, params) }
-            val rawText = textoDe(response)
-            if (quedoCortada(rawText, response.stopReason().orElse(null)?.asString())) return Lectura.Incompleta
-            filas += parseJson(rawText)
+            RespuestaDelPedazo(
+                texto = textoDe(response),
+                stopReason = response.stopReason().orElse(null)?.asString(),
+                fichasDeSalida = runCatching { response.usage().outputTokens() }.getOrNull(),
+            )
         }
-        return Lectura.Ok(filas)
+    }
+
+    /** Lo que contestó el modelo a un pedazo: el texto, por qué paró y cuántas fichas escribió. */
+    internal data class RespuestaDelPedazo(
+        val texto: String,
+        val stopReason: String?,
+        val fichasDeSalida: Long? = null,
+    )
+
+    /**
+     * **La lectura de un extracto por pedazos que se parten solos** (vuelta 128).
+     *
+     * 1. El texto se parte con [dividirEnPedazos] en pedazos de [maxCaracteres] (por defecto,
+     *    [tamanoInicialDelPedazo]).
+     * 2. Cada pedazo va al modelo por [pedir], hasta [aLaVez] pedidos al mismo tiempo.
+     * 3. **Si un pedazo vuelve cortado, se parte en dos** ([partirEnDos]) y se lee cada mitad, en
+     *    recursión, hasta [PROFUNDIDAD_MAXIMA] veces y sin mitades de menos de ~[MINIMO_DE_UN_PEDAZO]
+     *    caracteres. Las filas que el modelo devolvió en el pedido cortado se tiran: las vuelven a
+     *    traer sus mitades.
+     * 4. **Solo si un pedazo que ya no se puede partir sigue cortado, la lectura entera es
+     *    [Lectura.Incompleta]** —la regla de oro: nunca una lista a medias— y los pedidos que
+     *    faltan se cancelan.
+     *
+     * Las filas salen en el orden del documento aunque los pedidos terminen en otro, y el
+     * encabezado de contexto ([encabezadoDe]) viaja en todo pedazo que no arranca el documento,
+     * también en las mitades. Al terminar deja una línea de log ([DiagnosticoDeLaLectura]) sin una
+     * sola letra del extracto.
+     */
+    internal suspend fun leerPorPedazos(
+        texto: String,
+        maxCaracteres: Int = tamanoInicialDelPedazo(texto),
+        aLaVez: Int = PEDIDOS_A_LA_VEZ,
+        anotar: (DiagnosticoDeLaLectura) -> Unit = { log.info(it.lineaDelLog()) },
+        pedir: suspend (cuerpo: String) -> RespuestaDelPedazo,
+    ): Lectura {
+        val inicio = System.nanoTime()
+        val pedazos = dividirEnPedazos(texto, maxCaracteres)
+        val lectura = LecturaEnCurso(encabezadoDe(texto), pedazos.size, Semaphore(aLaVez.coerceAtLeast(1)), pedir)
+        var resultado = "falla"
+        var filas: Int? = null
+        try {
+            val leidas = try {
+                coroutineScope {
+                    pedazos.mapIndexed { i, pedazo ->
+                        async { lectura.leerUnPedazo(pedazo, listOf(i + 1), empiezaElDocumento = i == 0) }
+                    }.awaitAll().flatten()
+                }
+            } catch (_: PedazoQueNoCabe) {
+                resultado = "incompleta"
+                return Lectura.Incompleta
+            }
+            resultado = "ok"
+            filas = leidas.size
+            return Lectura.Ok(leidas)
+        } finally {
+            val lineas = texto.lines()
+            anotar(
+                DiagnosticoDeLaLectura(
+                    resultado = resultado,
+                    filas = filas,
+                    caracteres = texto.length,
+                    lineas = lineas.size,
+                    lineaMasLarga = lineas.maxOfOrNull { it.length } ?: 0,
+                    tamanoDelPedazo = maxCaracteres,
+                    pedazosIniciales = pedazos.size,
+                    pedidos = lectura.pedidos.get(),
+                    cortes = lectura.cortes.get(),
+                    fichasPorPedazo = lectura.fichasEnOrden(),
+                    milisegundos = (System.nanoTime() - inicio) / 1_000_000,
+                ),
+            )
+        }
+    }
+
+    /** Un pedazo mínimo que siguió cortado: corta la lectura entera (y cancela lo que falta). */
+    private class PedazoQueNoCabe : RuntimeException("un pedazo mínimo del extracto siguió cortado")
+
+    /** Lo que comparte una lectura entre sus pedidos: el encabezado, el semáforo y las cuentas. */
+    private class LecturaEnCurso(
+        val encabezado: String,
+        val total: Int,
+        val semaforo: Semaphore,
+        val pedir: suspend (String) -> RespuestaDelPedazo,
+    ) {
+        val pedidos = AtomicInteger()
+        val cortes = AtomicInteger()
+        private val fichas = ConcurrentLinkedQueue<Pair<List<Int>, String>>()
+
+        /** Las fichas de salida de cada pedido, en el orden del documento («*» = volvió cortado). */
+        fun fichasEnOrden(): List<String> = fichas.sortedWith { a, b -> compararRutas(a.first, b.first) }.map { it.second }
+
+        suspend fun leerUnPedazo(pedazo: String, ruta: List<Int>, empiezaElDocumento: Boolean, profundidad: Int = 0): List<ParsedTransaction> {
+            val etiqueta = ruta.joinToString(".") + " DE $total"
+            val cuerpo = cuerpoDelPedido(pedazo, etiqueta, empiezaElDocumento, encabezado)
+            val respuesta = semaforo.withPermit { pedir(cuerpo) }
+            pedidos.incrementAndGet()
+            val cortada = quedoCortada(respuesta.texto, respuesta.stopReason)
+            fichas += ruta to ((respuesta.fichasDeSalida?.toString() ?: "?") + if (cortada) "*" else "")
+            if (!cortada) return parseJson(respuesta.texto)
+            cortes.incrementAndGet()
+            val mitades =
+                if (profundidad < PROFUNDIDAD_MAXIMA && pedazo.length >= 2 * MINIMO_DE_UN_PEDAZO) partirEnDos(pedazo)
+                else null
+            mitades ?: throw PedazoQueNoCabe()
+            return coroutineScope {
+                val primera = async { leerUnPedazo(mitades.first, ruta + 1, empiezaElDocumento, profundidad + 1) }
+                val segunda = async { leerUnPedazo(mitades.second, ruta + 2, empiezaElDocumento = false, profundidad + 1) }
+                primera.await() + segunda.await()
+            }
+        }
+    }
+
+    /** Orden del documento entre rutas («1» < «1.1» < «1.2» < «2»). */
+    private fun compararRutas(a: List<Int>, b: List<Int>): Int {
+        for (i in 0 until minOf(a.size, b.size)) {
+            val c = a[i].compareTo(b[i])
+            if (c != 0) return c
+        }
+        return a.size.compareTo(b.size)
+    }
+
+    /**
+     * **Una línea de log por lectura, sin datos** (vuelta 128): cuántos pedazos, cuántos cortes,
+     * de qué tamaño era el texto y cuántas fichas escribió cada pedido. Nunca una letra del
+     * extracto: con esto se diagnostica un «quedó incompleta» sin mirar el papel de nadie.
+     */
+    internal data class DiagnosticoDeLaLectura(
+        val resultado: String,
+        val filas: Int?,
+        val caracteres: Int,
+        val lineas: Int,
+        val lineaMasLarga: Int,
+        val tamanoDelPedazo: Int,
+        val pedazosIniciales: Int,
+        val pedidos: Int,
+        val cortes: Int,
+        val fichasPorPedazo: List<String>,
+        val milisegundos: Long,
+    ) {
+        fun lineaDelLog(): String =
+            "Lectura de extracto: resultado=$resultado filas=${filas ?: "-"} caracteres=$caracteres " +
+                "lineas=$lineas lineaMasLarga=$lineaMasLarga tamanoDelPedazo=$tamanoDelPedazo " +
+                "pedazos=$pedazosIniciales pedidos=$pedidos cortes=$cortes " +
+                "fichasDeSalida=${fichasPorPedazo.joinToString(",", "[", "]")} ms=$milisegundos"
     }
 
     /**
