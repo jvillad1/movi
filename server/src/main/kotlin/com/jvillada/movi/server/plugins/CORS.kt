@@ -22,6 +22,8 @@ fun Application.configureCORS() {
         // UserRoutes.kt). En producción la web es del mismo origen y no hace falta; en desarrollo
         // (:8081 contra :8080) sin esto el navegador lo esconde y la web se desloguea sola.
         exposeHeader("X-Movi-Token")
+        // Vuelta 131: el código de un rechazo (el cuerpo es la frase); sin exponerlo, la web no lo lee.
+        exposeHeader("X-Movi-Codigo")
 
         val raw = System.getenv("ALLOWED_ORIGINS")?.trim().orEmpty()
         if (raw.isBlank()) {
