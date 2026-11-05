@@ -36,6 +36,8 @@ import org.jetbrains.exposed.sql.exists
 import org.jetbrains.exposed.sql.or
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
+import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.deleteWhere
 
 /**
  * # El hogar conectado, del lado del server (vuelta 131)
@@ -117,10 +119,15 @@ internal fun Transaction.anuladosDelUsuario(uid: String): Set<String> =
  * su lado sin sus anulados y traducidos al de [uid]. El más reciente primero.
  */
 internal fun Transaction.gastosDe(uid: String, espacios: List<Espacio>, espacioId: String? = null): List<GastoDelEspacio> {
-    val propios = gastosPropiosDe(uid, espacios, espacioId)
     val lados = ladosConectadosDe(uid).filter { c -> espacioId == null || c.lado.miEspacioId == espacioId }
         .filter { c -> espacios.any { it.id == c.lado.miEspacioId } }
-    if (lados.isEmpty()) return propios
+    if (lados.isEmpty()) return gastosPropiosDe(uid, espacios, espacioId)
+    // Revisión 2: lo propio escrito antes de conectarse es la historia de antes ([GastoDelEspacio.deAntes]).
+    val desdePorGrupo = lados.associate { it.lado.miEspacioId to it.lado.desde }
+    val propios = gastosPropiosConSuEscrituraDe(uid, espacios, espacioId).map { (g, escrito) ->
+        val desde = desdePorGrupo[g.espacioId]
+        if (desde != null && escrito < desde) g.copy(deAntes = true) else g
+    }
     var categoriaMia: ((String) -> String)? = null
     val delOtro = lados.flatMap { c ->
         val suyos = espaciosSinNombres(c.otroUid)
@@ -136,26 +143,18 @@ internal fun Transaction.gastosDe(uid: String, espacios: List<Espacio>, espacioI
     return (propios + delOtro).sortedByDescending { it.fecha }
 }
 
-/**
- * Revisión de la vuelta 131 · **lo que el dueño anotó antes de conectarse**, en su neto (positivo = le
- * deben): sus gastos y saldados de [espacio] escritos antes de `desde`, sin anulados. Siguen en su saldo y la
- * otra persona no los ve; la tarjeta del saldo lo dice. 0 sin conexión.
- */
-internal fun Transaction.deAntesDeConectarseEn(uid: String, espacio: Espacio, anulados: Set<String>): Long {
-    val c = conexionDelGrupo(uid, espacio.id) ?: return 0L
-    val gastos = gastosPropiosConSuEscrituraDe(uid, listOf(espacio), espacio.id)
-        .filter { (g, escrito) -> escrito < c.lado.desde && !(g.eventoId != null && g.eventoId in anulados) }.map { it.first }
-    val liquidaciones = liquidacionesPropiasConSuEscrituraDe(uid, espacio.id)
-        .filter { (l, escrito) -> escrito < c.lado.desde && !(l.eventoId != null && l.eventoId in anulados) }.map { it.first }
-    if (gastos.isEmpty() && liquidaciones.isEmpty()) return 0L
-    return saldoDelEspacio(espacio, gastos, liquidaciones, anulados).netoDe(MIEMBRO_YO)
-}
-
 /** **Las liquidaciones de un grupo, como se leen**: las propias y las del otro lado de un grupo conectado. */
 internal fun Transaction.liquidacionesDe(uid: String, espacioId: String? = null): List<LiquidacionDelEspacio> {
-    val propias = liquidacionesPropiasDe(uid, espacioId)
     val lados = ladosConectadosDe(uid).filter { c -> espacioId == null || c.lado.miEspacioId == espacioId }
-    if (lados.isEmpty()) return propias
+    // Revisión 2: sin conexión no hay «de antes» (un saldado de antes cuenta como cualquiera); con conexión,
+    // es de antes lo marcado así o lo escrito antes de `desde`.
+    if (lados.isEmpty()) return liquidacionesPropiasDe(uid, espacioId).map { if (it.deAntes) it.copy(deAntes = false) else it }
+    val desdePorGrupo = lados.associate { it.lado.miEspacioId to it.lado.desde }
+    val propias = liquidacionesPropiasConSuEscrituraDe(uid, espacioId).map { (l, escrito) ->
+        val desde = desdePorGrupo[l.espacioId]
+        val deAntes = desde != null && (l.deAntes || escrito < desde)
+        if (deAntes != l.deAntes) l.copy(deAntes = deAntes) else l
+    }
     // Revisión: el vínculo **propio** de un saldado cruzado (`vinculos_de_liquidacion`) es su movimiento de
     // este lado; uno anulado no vincula (el saldado de la otra persona sigue contando, sin vínculo).
     val vinculos = vinculosDe(uid)
@@ -177,10 +176,16 @@ internal fun Transaction.vinculosDe(uid: String): Map<String, String> {
         .associate { it[VinculosDeLiquidacion.liquidacionId] to it[VinculosDeLiquidacion.eventoId] }
 }
 
-/** ¿[eventoId] ya está vinculado a un saldado cruzado de [uid]? */
-internal fun Transaction.estaVinculado(uid: String, eventoId: String): Boolean =
-    existenLasTablas(VinculosDeLiquidacion) &&
-        VinculosDeLiquidacion.selectAll().where { (VinculosDeLiquidacion.userId eq uid) and (VinculosDeLiquidacion.eventoId eq eventoId) }.any()
+/**
+ * ¿[eventoId] ya está vinculado a un saldado cruzado **vigente** de [uid]? Revisión 2: un vínculo cuenta
+ * solo si su saldado se sigue viendo en [liquidacionesDe] (la otra persona no lo deshizo, ni borró el grupo
+ * o la cuenta, y el grupo sigue conectado). Si no, el movimiento queda libre.
+ */
+internal fun Transaction.estaVinculado(uid: String, eventoId: String): Boolean {
+    if (!existenLasTablas(VinculosDeLiquidacion)) return false
+    if (VinculosDeLiquidacion.selectAll().where { (VinculosDeLiquidacion.userId eq uid) and (VinculosDeLiquidacion.eventoId eq eventoId) }.none()) return false
+    return liquidacionesDe(uid).any { it.anotadoPor != null && it.eventoId == eventoId }
+}
 
 /**
  * **La categoría con que cuenta mi parte** de un gasto que anotó la otra persona: la mía con el mismo
@@ -237,11 +242,38 @@ internal fun Transaction.conSusConexiones(uid: String, espacios: List<Espacio>):
 internal fun Transaction.desconectarElGrupo(uid: String, espacioId: String, ahora: Long = System.currentTimeMillis()): Boolean {
     cancelarLaInvitacionPendiente(uid, espacioId, ahora)
     val conexion = conexionDelGrupo(uid, espacioId) ?: return false
-    EspaciosConectados.update({ (EspaciosConectados.id eq conexion.conexionId) and EspaciosConectados.desconectadoEn.isNull() }) {
+    // Revisión 2: cada vínculo vigente, de cada lado, pasa a ser un saldado propio de ese lado (misma
+    // dirección, monto, fecha y su movimiento), así el «Entró» y el saldo de cada uno quedan como estaban.
+    // Se arma antes de desconectar (después, el saldado de la otra persona ya no se ve).
+    val propios = vinculosVigentesComoSaldados(uid, espacioId) + vinculosVigentesComoSaldados(conexion.otroUid, conexion.suEspacioId)
+    val desconectada = EspaciosConectados.update({ (EspaciosConectados.id eq conexion.conexionId) and EspaciosConectados.desconectadoEn.isNull() }) {
         it[desconectadoEn] = ahora
+    }
+    // Una sola vez: si otra desconexión ganó, no se escriben (ni se duplican).
+    if (desconectada == 0) return false
+    propios.forEach { (duenoDelVinculo, l) ->
+        val id = "liq_vinc_${l.id}".take(60)
+        if (LiquidacionesDelEspacio.selectAll().where { LiquidacionesDelEspacio.id eq id }.any()) return@forEach
+        LiquidacionesDelEspacio.insert {
+            it[LiquidacionesDelEspacio.id] = id
+            it[userId] = duenoDelVinculo
+            it[LiquidacionesDelEspacio.espacioId] = l.espacioId
+            it[de] = l.de
+            it[a] = l.a
+            it[monto] = l.monto
+            it[fecha] = l.fecha
+            it[eventoId] = l.eventoId
+            it[createdAt] = ahora
+        }
+        VinculosDeLiquidacion.deleteWhere { (VinculosDeLiquidacion.userId eq duenoDelVinculo) and (VinculosDeLiquidacion.liquidacionId eq l.id) }
     }
     return true
 }
+
+/** Los saldados cruzados de [uid] en [espacioId] que [uid] vinculó a un movimiento suyo, como (dueño, saldado). */
+private fun Transaction.vinculosVigentesComoSaldados(uid: String, espacioId: String): List<Pair<String, LiquidacionDelEspacio>> =
+    if (!existenLasTablas(VinculosDeLiquidacion)) emptyList()
+    else liquidacionesDe(uid, espacioId).filter { it.anotadoPor != null && it.eventoId != null }.map { uid to it }
 
 /** Cancela la invitación pendiente del grupo [espacioId] de [uid], si la hay. */
 internal fun Transaction.cancelarLaInvitacionPendiente(uid: String, espacioId: String, ahora: Long = System.currentTimeMillis()): Int {

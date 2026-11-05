@@ -167,11 +167,14 @@ object DatabaseFactory {
             // NULLABLE; las dos existen en producción desde la vuelta 102 y su clave primaria viajó dentro
             // del CREATE TABLE, sin índices sueltos, así que el único DDL es el ADD COLUMN.
             // AjustesDeLaIa y TopesDeLaIaPorUsuario (vuelta 106) son tablas NUEVAS: entran por el `create` de arriba.
+            // LiquidacionesDelEspacio: `de_antes` (revisión 2 de la vuelta 131, el saldado de lo de antes de
+            // conectarse) — NULLABLE. La tabla existe en producción desde R3; su único índice (`user_id`) ya
+            // existe, así que el único DDL es el ADD COLUMN.
             // AiTurns: `conversacion_id` (vuelta 117, varias conversaciones) — NULLABLE y sin índice propio,
             // así que el único DDL es el ADD COLUMN. ConversacionesConElAsistente es tabla NUEVA: entra por
             // el `create` de arriba, con su índice adentro. Los turnos viejos se agrupan después, en
             // `agruparLosTurnosSueltos`.
-            SchemaUtils.createMissingTablesAndColumns(Events, RecurringRules, Screens, Users, Credits, Cards, Accounts, Subscriptions, AiTurns, CategoryPrefs, KnownDestinations, SmsMessages, InicioPersonalizado, Apartados, GastosDelEspacio, MetricasDeServicios, IaPorDia)
+            SchemaUtils.createMissingTablesAndColumns(Events, RecurringRules, Screens, Users, Credits, Cards, Accounts, Subscriptions, AiTurns, CategoryPrefs, KnownDestinations, SmsMessages, InicioPersonalizado, Apartados, GastosDelEspacio, MetricasDeServicios, IaPorDia, LiquidacionesDelEspacio)
             // Migraciones de datos (idempotentes), después del schema — ver Migrations.kt.
             with(Migrations) { runAll() }
         }

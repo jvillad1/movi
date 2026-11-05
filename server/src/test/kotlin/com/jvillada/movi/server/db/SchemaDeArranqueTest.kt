@@ -163,6 +163,8 @@ class SchemaDeArranqueTest {
         // cada turno, la lista y la conversación abierta la nombran: sin el ALTER, Movi AI no guardaría
         // nada y el chat no recargaría.
         "ai_turns" to "conversacion_id",
+        // Revisión 2 de la vuelta 131 · el saldado de lo de antes de conectarse.
+        "liquidaciones_del_espacio" to "de_antes",
     )
 
     /**
@@ -193,7 +195,7 @@ class SchemaDeArranqueTest {
         RecurringOccurrences, OccurrenceRejections, SmsMessages, Credits, Cards, Subscriptions, PushSubscriptions,
         Screens, PasswordResetTokens, CardPaymentDismissals, Goals, CategoryPrefs, Documents,
         StatementImportMatches, KnownDestinations, InicioPersonalizado, Apartados, GastosDelEspacio,
-        AiTurns, MetricasDeServicios, IaPorDia,
+        AiTurns, MetricasDeServicios, IaPorDia, LiquidacionesDelEspacio,
     )
 
     @BeforeTest
@@ -402,7 +404,7 @@ class SchemaDeArranqueTest {
         DatabaseFactory.crearYActualizarSchema()
 
         assertEquals(
-            setOf("id", "user_id", "espacio_id", "miembro_id", "codigo_hash", "creada_en", "vence_en", "usada_en", "cancelada_en"),
+            setOf("id", "user_id", "espacio_id", "miembro_id", "codigo_hash", "creada_en", "vence_en", "usada_en", "usada_por", "cancelada_en"),
             columnasDe("invitaciones_a_espacio"),
         )
         assertEquals(

@@ -1492,6 +1492,11 @@ object LiquidacionesDelEspacio : Table("liquidaciones_del_espacio") {
     val fecha     = long("fecha")
     val eventoId  = varchar("evento_id", 60).nullable()
     val createdAt = long("created_at")
+    /**
+     * Revisión 2 de la vuelta 131 · un saldado de lo de antes de conectarse: nunca cruza al otro lado de un
+     * grupo conectado. NULLABLE (la tabla existe en producción): NULL = no.
+     */
+    val deAntes   = bool("de_antes").nullable()
     override val primaryKey = PrimaryKey(id)
     init { index("idx_liquidaciones_del_espacio_user_id", false, userId) }
 }
@@ -1531,6 +1536,8 @@ object InvitacionesAEspacio : Table("invitaciones_a_espacio") {
     val creadaEn    = long("creada_en")
     val venceEn     = long("vence_en")
     val usadaEn     = long("usada_en").nullable()
+    /** Revisión 2 · quién la aceptó: su reintento contesta 200 con su grupo. */
+    val usadaPor    = varchar("usada_por", 50).nullable()
     val canceladaEn = long("cancelada_en").nullable()
     override val primaryKey = PrimaryKey(id)
     init {

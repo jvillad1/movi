@@ -17,7 +17,12 @@ import com.jvillada.movi.server.espacios.gastosDe
 import com.jvillada.movi.server.espacios.gastosPropiosDe
 import com.jvillada.movi.server.espacios.liquidacionesPropiasDe
 import com.jvillada.movi.server.espacios.desconectarElGrupo
-import com.jvillada.movi.server.espacios.deAntesDeConectarseEn
+import com.jvillada.movi.shared.model.CABECERA_DEL_CODIGO
+import com.jvillada.movi.shared.model.fraseLoAnotaDesdeSuMovi
+import com.jvillada.movi.shared.model.fraseYaLoMarco
+import com.jvillada.movi.shared.model.loQueVenLosDos
+import com.jvillada.movi.shared.model.netoDeAntesDeConectarse
+import com.jvillada.movi.shared.model.saldadosQueVenLosDos
 import com.jvillada.movi.server.espacios.estaVinculado
 import com.jvillada.movi.server.db.VinculosDeLiquidacion
 import com.jvillada.movi.shared.model.LO_ANOTA_DESDE_SU_MOVI
@@ -147,7 +152,7 @@ fun Route.espacioRoutes() {
             val espacioId = call.parameters["id"] ?: return@put call.respond(HttpStatusCode.BadRequest)
             val reglaId = call.parameters["reglaId"] ?: return@put call.respond(HttpStatusCode.BadRequest)
             val r = dbQuery { marcarDelHogar(uid, espacioId, reglaId) }
-            if (r.valor != null) call.respond(r.estado, r.valor) else call.respond(r.estado, r.motivo)
+            call.responder(r)
         }
 
         delete("/{id}/recurrentes/{reglaId}") {
@@ -252,7 +257,7 @@ fun Route.espacioRoutes() {
             val espacioId = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
             val body = call.receive<CompartirMovimientoRequest>()
             val r = dbQuery { compartirMovimiento(uid, espacioId, body) }
-            if (r.valor != null) call.respond(r.estado, r.valor) else call.respond(r.estado, r.motivo)
+            call.responder(r)
         }
 
         delete("/{id}/compartir/{eventoId}") {
@@ -273,7 +278,7 @@ fun Route.espacioRoutes() {
             val espacioId = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
             val body = call.receive<GastoDelEspacio>()
             val r = dbQuery { gastoQuePagoOtro(uid, espacioId, body) }
-            if (r.valor != null) call.respond(r.estado, r.valor) else call.respond(r.estado, r.motivo)
+            call.responder(r)
         }
 
         delete("/{id}/gastos/{gastoId}") {
@@ -294,7 +299,7 @@ fun Route.espacioRoutes() {
             val espacioId = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
             val body = call.receive<LiquidacionDelEspacio>()
             val r = dbQuery { liquidar(uid, espacioId, body) }
-            if (r.valor != null) call.respond(r.estado, r.valor) else call.respond(r.estado, r.motivo)
+            call.responder(r)
         }
 
         // Revisión de la vuelta 131: vincular la transferencia propia a un saldado (también al que anotó la
@@ -305,7 +310,19 @@ fun Route.espacioRoutes() {
             val liquidacionId = call.parameters["liquidacionId"] ?: return@post call.respond(HttpStatusCode.BadRequest)
             val body = call.receive<VincularLiquidacion>()
             val r = dbQuery { vincularLiquidacion(uid, espacioId, liquidacionId, body.eventoId) }
-            if (r.valor != null) call.respond(r.estado, r.valor) else call.respond(r.estado, r.motivo)
+            call.responder(r)
+        }
+
+        // Revisión 2: deshacer un vínculo hecho por error (el saldado de la otra persona vuelve a esperar).
+        delete("/{id}/liquidaciones/{liquidacionId}/vincular") {
+            val uid = call.userId()
+            val espacioId = call.parameters["id"] ?: return@delete call.respond(HttpStatusCode.BadRequest)
+            val liquidacionId = call.parameters["liquidacionId"] ?: return@delete call.respond(HttpStatusCode.BadRequest)
+            val n = dbQuery {
+                if (espacioDelUsuario(uid, espacioId) == null) return@dbQuery 0
+                VinculosDeLiquidacion.deleteWhere { (VinculosDeLiquidacion.userId eq uid) and (VinculosDeLiquidacion.liquidacionId eq liquidacionId) }
+            }
+            call.respond(if (n == 0) HttpStatusCode.NotFound else HttpStatusCode.NoContent)
         }
 
         delete("/{id}/liquidaciones/{liquidacionId}") {
@@ -333,11 +350,25 @@ private fun miembrosCambian(miembrosGuardados: String, body: Espacio): Boolean {
     return guardados != pedidos
 }
 
-/** Un rechazo con su motivo para el dueño. */
-internal class Rechazo(val estado: HttpStatusCode, val motivo: String) : RuntimeException(motivo)
+/** El nombre de [miembroId] en [espacio] (los nombres los resuelve [espaciosDe]), o «La otra persona». */
+private fun nombreDelMiembro(espacio: Espacio, miembroId: String): String =
+    espacio.miembros.firstOrNull { it.id == miembroId }?.nombre?.ifBlank { null } ?: "La otra persona"
 
-/** Lo que contesta una escritura: el estado y lo guardado, o el motivo del rechazo. */
-internal class Respuesta<T : Any>(val estado: HttpStatusCode, val valor: T?, val motivo: String = "")
+/** Un rechazo con su motivo para el dueño. */
+internal class Rechazo(val estado: HttpStatusCode, val motivo: String, val codigo: String? = null) : RuntimeException(motivo)
+
+/**
+ * Lo que contesta una escritura: el estado y lo guardado, o el motivo del rechazo. Revisión 2 de la vuelta
+ * 131: [codigo] es el código para el cliente nuevo, en la cabecera [CABECERA_DEL_CODIGO]; el cuerpo sigue
+ * siendo la frase, que un APK viejo muestra tal cual.
+ */
+internal class Respuesta<T : Any>(val estado: HttpStatusCode, val valor: T?, val motivo: String = "", val codigo: String? = null)
+
+/** Contesta [r]: lo guardado, o el motivo con su código en la cabecera. */
+internal suspend inline fun <reified T : Any> io.ktor.server.application.ApplicationCall.responder(r: Respuesta<T>) {
+    r.codigo?.let { response.headers.append(CABECERA_DEL_CODIGO, it) }
+    if (r.valor != null) respond(r.estado, r.valor) else respond(r.estado, r.motivo)
+}
 
 private fun Transaction.anuladosDe(uid: String): Set<String> =
     VoidEvents.selectAll().where { VoidEvents.userId eq uid }.map { it[VoidEvents.originalEventId] }.toSet()
@@ -355,9 +386,12 @@ internal fun Transaction.detalleDelEspacio(uid: String, espacioId: String, ahora
     val anulados = anuladosDe(uid)
     val gastos = gastosDe(uid, espacios, espacioId).filterNot { it.eventoId != null && it.eventoId in anulados }
     val liquidaciones = conElMovimiento(uid, liquidacionesDe(uid, espacioId).filterNot { it.eventoId != null && it.eventoId in anulados })
-    val saldo = saldoDelEspacio(espacio, gastos, liquidaciones, anulados)
+    // Revisión 2 de la vuelta 131: el saldo, «Quién puso qué» y las propuestas son de lo que ven los dos; lo de
+    // antes de conectarse va aparte ([DetalleDelEspacio.deAntesDeConectarse]). Sin conexión no hay «de antes».
+    val compartidos = loQueVenLosDos(gastos)
+    val saldo = saldoDelEspacio(espacio, compartidos, saldadosQueVenLosDos(liquidaciones), anulados)
     val ventana = ventanaDe(periodoDe(ahora, ajustesDelPeriodoSinSuspender(uid)), ajustesDelPeriodoSinSuspender(uid))
-    val delPeriodo = saldoDelEspacio(espacio, gastos.filter { it.fecha in ventana }, emptyList(), anulados)
+    val delPeriodo = saldoDelEspacio(espacio, compartidos.filter { it.fecha in ventana }, emptyList(), anulados)
     return DetalleDelEspacio(
         espacio = espacio,
         saldo = saldo,
@@ -365,7 +399,7 @@ internal fun Transaction.detalleDelEspacio(uid: String, espacioId: String, ahora
         gastos = gastos,
         liquidaciones = liquidaciones,
         propuestas = propuestasDelEspacio(uid, espacio, saldo, liquidaciones, ahora),
-        deAntesDeConectarse = deAntesDeConectarseEn(uid, espacio, anulados),
+        deAntesDeConectarse = netoDeAntesDeConectarse(espacio, gastos, liquidaciones),
     )
 }
 
@@ -424,7 +458,8 @@ internal fun Transaction.propuestasDeSaldarDe(uid: String, ahora: Long): List<Pr
     val usados = mutableSetOf<String>()
     return espacios.flatMap { espacio ->
         val suyas = liquidaciones.filter { it.espacioId == espacio.id }
-        val saldo = saldoDelEspacio(espacio, gastos.filter { it.espacioId == espacio.id }, suyas, anulados)
+        // Revisión 2: la propuesta de saldar mira lo que ven los dos.
+        val saldo = saldoDelEspacio(espacio, loQueVenLosDos(gastos.filter { it.espacioId == espacio.id }), saldadosQueVenLosDos(suyas), anulados)
         propuestasDelEspacio(uid, espacio, saldo, suyas, ahora).filter { usados.add(it.eventoId) }
     }
 }
@@ -506,7 +541,7 @@ internal fun Transaction.compartirMovimiento(
     val gasto = gastosPropiosDe(uid, listOf(espacio), espacioId).first { it.eventoId == body.eventoId }
     Respuesta(if (yaEsta == null) HttpStatusCode.Created else HttpStatusCode.OK, gasto)
 } catch (r: Rechazo) {
-    Respuesta(r.estado, null, r.motivo)
+    Respuesta(r.estado, null, r.motivo, r.codigo)
 }
 
 /** Un gasto que pagó otro miembro. Upsert por id: reenviarlo no lo duplica. */
@@ -523,7 +558,7 @@ internal fun Transaction.gastoQuePagoOtro(
     // Revisión de la vuelta 131 · con el grupo conectado, la otra persona anota lo que paga desde su Movi:
     // anotarlo también acá lo dejaría dos veces en el saldo de los dos.
     if (conexionDelGrupo(uid, espacioId)?.lado?.miMiembroDelOtro == body.pagadoPor) {
-        throw Rechazo(HttpStatusCode.UnprocessableEntity, LO_ANOTA_DESDE_SU_MOVI)
+        throw Rechazo(HttpStatusCode.UnprocessableEntity, fraseLoAnotaDesdeSuMovi(nombreDelMiembro(espacio, body.pagadoPor)), LO_ANOTA_DESDE_SU_MOVI)
     }
     if (body.monto <= 0L) throw Rechazo(HttpStatusCode.BadRequest, "El monto debe ser mayor que cero")
     val categoria = body.categoria.trim()
@@ -571,7 +606,7 @@ internal fun Transaction.gastoQuePagoOtro(
     val gasto = gastosPropiosDe(uid, listOf(espacio), espacioId).first { it.id == id }
     Respuesta(if (existente == null) HttpStatusCode.Created else HttpStatusCode.OK, gasto)
 } catch (r: Rechazo) {
-    Respuesta(r.estado, null, r.motivo)
+    Respuesta(r.estado, null, r.motivo, r.codigo)
 }
 
 /**
@@ -614,9 +649,17 @@ internal fun Transaction.liquidar(
             if (body.monto <= 0L) throw Rechazo(HttpStatusCode.BadRequest, "El monto debe ser mayor que cero")
             // Revisión de la vuelta 131 · no saldar dos veces: si la otra persona ya marcó este mismo pago en
             // su Movi, lo que toca es vincular la transferencia a ese saldado.
-            if (conexionDelGrupo(uid, espacioId) != null) {
-                saldadoQueYaMarcoElOtro(liquidacionesDe(uid, espacioId), body.de, body.a, body.monto, System.currentTimeMillis())
-                    ?.let { throw Rechazo(HttpStatusCode.Conflict, YA_LO_MARCO_LA_OTRA_PERSONA + it.id) }
+            val conexion = conexionDelGrupo(uid, espacioId)
+            // Revisión 2: un saldado de lo de antes de conectarse no mira lo cruzado (es solo de este lado).
+            if (conexion != null && !body.deAntes) {
+                saldadoQueYaMarcoElOtro(liquidacionesDe(uid, espacioId), gastosDe(uid, listOf(espacio), espacioId), body.de, body.a, body.monto, System.currentTimeMillis())
+                    ?.let {
+                        throw Rechazo(
+                            HttpStatusCode.Conflict,
+                            fraseYaLoMarco(nombreDelMiembro(espacio, conexion.lado.miMiembroDelOtro)),
+                            YA_LO_MARCO_LA_OTRA_PERSONA + it.id,
+                        )
+                    }
             }
             body.eventoId?.let { eventoId -> validarElVinculo(uid, eventoId, body) }
             LiquidacionesDelEspacio.insert {
@@ -629,12 +672,14 @@ internal fun Transaction.liquidar(
                 it[fecha] = if (body.fecha > 0L) body.fecha else System.currentTimeMillis()
                 it[eventoId] = body.eventoId
                 it[createdAt] = System.currentTimeMillis()
+                // Revisión 2: solo con el grupo conectado tiene sentido (sin conexión, todo es «de siempre»).
+                it[deAntes] = if (body.deAntes && conexion != null) true else null
             }
             Respuesta(HttpStatusCode.Created, liquidacionesPropiasDe(uid, espacioId).first { it.id == id })
         }
     }
 } catch (r: Rechazo) {
-    Respuesta(r.estado, null, r.motivo)
+    Respuesta(r.estado, null, r.motivo, r.codigo)
 }
 
 private fun Transaction.validarElVinculo(uid: String, eventoId: String, body: LiquidacionDelEspacio) {
@@ -699,7 +744,7 @@ internal fun Transaction.vincularLiquidacion(
     }
     Respuesta(HttpStatusCode.OK, conElMovimiento(uid, liquidacionesDe(uid, espacioId).filter { it.id == liquidacionId }).first())
 } catch (r: Rechazo) {
-    Respuesta(r.estado, null, r.motivo)
+    Respuesta(r.estado, null, r.motivo, r.codigo)
 }
 
 /**
@@ -758,5 +803,5 @@ internal fun Transaction.marcarDelHogar(uid: String, espacioId: String, reglaId:
     }
     Respuesta(HttpStatusCode.OK, RecurrenteDelHogar(reglaId, espacioId))
 } catch (r: Rechazo) {
-    Respuesta(r.estado, null, r.motivo)
+    Respuesta(r.estado, null, r.motivo, r.codigo)
 }

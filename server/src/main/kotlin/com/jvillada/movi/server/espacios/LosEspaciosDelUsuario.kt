@@ -203,6 +203,8 @@ internal fun Transaction.liquidacionesPropiasConSuEscrituraDe(uid: String, espac
                 monto = it[LiquidacionesDelEspacio.monto],
                 fecha = it[LiquidacionesDelEspacio.fecha],
                 eventoId = it[LiquidacionesDelEspacio.eventoId],
+                // Lo guardado; [liquidacionesDe] lo ajusta a si el grupo está conectado.
+                deAntes = it[LiquidacionesDelEspacio.deAntes] == true,
             ) to it[LiquidacionesDelEspacio.createdAt]
         }
         .sortedByDescending { it.first.fecha }
