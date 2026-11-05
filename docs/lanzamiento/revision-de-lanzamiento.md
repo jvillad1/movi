@@ -109,9 +109,10 @@ arregló (§2); lo que queda está ordenado en §3.
    `primerSelloDe` suelta el gestor cuando pregunta fuera de una transacción, y las 137 clases de prueba
    conectan con `conectarBaseDePrueba` (`server/src/test/.../BaseDePrueba.kt`: fija la base y suelta el
    gestor del hilo de JUnit); `LasPruebasFijanSuBaseTest` no deja volver a `Database.connect` directo.
-   Falta Ktor: 3.0.3 tiene CVE-2025-29904 y trae un Netty anterior a 4.1.125 (CVE-2025-58056/55163); subirlo
-   a 3.2.x toca el cliente de las cuatro plataformas. Exposed 0.55 está atrasado. Koin está declarado en
-   `server/build.gradle.kts` y nadie lo usa.
+   **Ktor también subió**, de 3.0.3 a 3.3.1 (CVE-2025-29904, y trae un Netty sin CVE-2025-58056/55163),
+   verde en CI en las cuatro plataformas; solo cambió una prueba (`PedidoMalFormadoTest`: desde 3.3 el
+   test host contesta 500 en vez de re-lanzar). Quedan: Exposed 0.55 atrasado, y Koin declarado en
+   `server/build.gradle.kts` sin que nadie lo use.
 7. **El token de la web vive en `localStorage`** y la web no tiene una CSP de scripts (el `index.html`
    tiene scripts en línea). Cualquier XSS futuro se lleva una sesión de 30 días. Hacer: sacar los
    scripts a un archivo y poner `script-src 'self' 'wasm-unsafe-eval'`.
