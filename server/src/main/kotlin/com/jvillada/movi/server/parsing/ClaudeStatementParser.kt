@@ -18,13 +18,19 @@ import com.jvillada.movi.shared.model.MerchantRule
 import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
 import com.jvillada.movi.shared.model.ParsedTransaction
 import com.jvillada.movi.shared.model.TransactionType
+import kotlinx.coroutines.CopyableThrowable
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
@@ -33,6 +39,7 @@ import java.io.File
 import java.util.UUID
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.coroutines.cancellation.CancellationException
 
 object ClaudeStatementParser {
 
@@ -183,14 +190,33 @@ Aplicá las reglas del usuario cuando el merchant coincida.
 
     /**
      * Lo más chico que puede quedar una mitad al partir un pedazo cortado: un pedazo de menos del
-     * doble ya no se parte. Junto con [PROFUNDIDAD_MAXIMA] es el tope de la recursión —12.000
-     * caracteres se parten a lo sumo en 8 de 1.500— y lo que pone el piso al costo de un extracto
-     * que nunca va a entrar.
+     * doble ya no se parte. Es lo que pone el tope de la recursión en la práctica: 12.000 caracteres
+     * se parten a lo sumo en 8 de 1.500, o sea **15 pedidos** por pedazo de 12.000 (1 + 2 + 4 + 8)
+     * en el peor caso. Además, toda la lectura tiene su tope de pedidos ([topeDePedidos]) y de
+     * tiempo ([PLAZO_DE_LA_LECTURA_MS]).
      */
     internal const val MINIMO_DE_UN_PEDAZO = 1_500
 
-    /** Cuántas veces, como mucho, se parte en dos un mismo pedazo que vuelve cortado. */
+    /**
+     * Cuántas veces, como mucho, se parte en dos un mismo pedazo que vuelve cortado. Con
+     * [MINIMO_DE_UN_PEDAZO] un pedazo de 12.000 no pasa de 3; esto es la red por si cambia el mínimo.
+     */
     internal const val PROFUNDIDAD_MAXIMA = 4
+
+    /**
+     * **Cuánto puede tardar una lectura entera.** La app del iPhone y la de Android dejan de esperar
+     * a los 120 s (`Platform.ios.kt`, `Platform.android.kt`): una lectura que pasa de ahí la ve el
+     * dueño como un error genérico, y el server sigue gastando en una respuesta que nadie recibe. A
+     * los 100 s la lectura es [Lectura.Incompleta] (con su frase) y no se lanza ningún pedido más.
+     */
+    internal const val PLAZO_DE_LA_LECTURA_MS = 100_000L
+
+    /**
+     * **Cuántos pedidos puede hacer una lectura de [pedazos] pedazos**: cada uno partido una vez
+     * (3 pedidos) y 4 de margen para los que se parten más. Llegar ahí es [Lectura.Incompleta]:
+     * un extracto que pide más que eso no va a entrar a tiempo, y cada pedido cuesta.
+     */
+    internal fun topeDePedidos(pedazos: Int): Int = pedazos * 3 + 4
 
     /**
      * Cuántos pedidos al modelo van a la vez en una lectura. Tres: un extracto de cinco pedazos
@@ -209,18 +235,24 @@ Aplicá las reglas del usuario cuando el merchant coincida.
      * **Dónde empieza una fecha de movimiento**, para partir una línea larga sin romper una fila y
      * para contar filas probables. Reconoce, sin otra letra o cifra pegada antes:
      * - ISO: `2026-08-01`;
-     * - día y mes con barra: `01/08`, `1/8/26`, `01/08/2026`;
+     * - día y mes con barra: `01/08`, `1/8/26`, `01/08/2026`, con día de 1 a 31 y mes de 1 a 12
+     *   («1/36», la cuota 1 de 36, no es una fecha);
      * - día y mes en letras, en español: `04 OCT`, `3 ene.`, `12-dic-2026` (sin el «de» de
      *   «5 de septiembre»: así lo escriben los bancos en la fila).
      *
      * El mes va entero o abreviado y no puede seguir otra letra: «1 MARCA» no es una fecha.
      */
     private val INICIO_DE_FECHA = Regex(
-        """(?<![\p{L}\p{N}/.\-])(?:\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}(?:/\d{2,4})?|\d{1,2}[ \-]""" +
+        """(?<![\p{L}\p{N}/.\-])(?:\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])|""" +
+            """(?:0?[1-9]|[12]\d|3[01])/(?:0?[1-9]|1[0-2])(?:/\d{2,4})?|(?:0?[1-9]|[12]\d|3[01])[ \-]""" +
             """(?:ene(?:ro)?|feb(?:rero)?|mar(?:zo)?|abr(?:il)?|may(?:o)?|jun(?:io)?|jul(?:io)?|""" +
             """ago(?:sto)?|sep(?:t(?:iembre)?)?|oct(?:ubre)?|nov(?:iembre)?|dic(?:iembre)?)\.?(?!\p{L}))(?!\p{N})""",
         RegexOption.IGNORE_CASE,
     )
+
+    /** ¿El renglón empieza con una fecha de movimiento ([INICIO_DE_FECHA])? */
+    internal fun empiezaConFecha(linea: String): Boolean =
+        INICIO_DE_FECHA.find(linea.trimStart())?.range?.first == 0
 
     /**
      * ¿La respuesta del modelo quedó cortada?
@@ -308,29 +340,40 @@ Aplicá las reglas del usuario cuando el merchant coincida.
 
     /**
      * **Un pedazo que volvió cortado, en dos mitades** (vuelta 128), o `null` si ya no se puede
-     * partir. Por líneas, en la línea que deja la primera mitad más cerca de la mitad del texto; si
-     * el pedazo es una sola línea, con [partirLineaLarga] (antes de una fecha, o de una palabra).
-     * Las dos mitades, una detrás de la otra, son el pedazo entero.
+     * partir. Las dos mitades, una detrás de la otra, son el pedazo entero (menos el salto de línea
+     * del corte).
+     *
+     * Dónde se corta, en orden:
+     * 1. **antes de un renglón que empieza con una fecha**, el más cerca de la mitad: así no se parte
+     *    una fila de dos renglones (la descripción en uno y la referencia en el otro);
+     * 2. si no hay, antes del renglón más cerca de la mitad.
+     *
+     * Una línea que ocupa más de medio pedazo (un extracto en un solo renglón) también se puede
+     * cortar por dentro, con los cortes de [partirLineaLarga] (antes de una fecha, que cuenta como
+     * el punto 1, o de una palabra, como el 2): si no, la primera vuelta separaría el encabezado del
+     * renglón gigante y se perdería un nivel.
      */
     internal fun partirEnDos(pedazo: String): Pair<String, String>? {
-        val lineas = pedazo.lines()
-        val (unidades, separador) =
-            if (lineas.size >= 2) lineas to "\n"
-            else partirLineaLarga(pedazo, (pedazo.length + 1) / 2) to ""
-        if (unidades.size < 2) return null
         val mitad = pedazo.length / 2
-        var acumulado = 0
-        var corte = unidades.size - 1
-        for (i in unidades.indices) {
-            acumulado += unidades[i].length + separador.length
-            if (acumulado >= mitad) {
-                corte = i + 1
-                break
+        // Dónde empieza la segunda mitad, si el corte se come un salto de línea y si ahí arranca una fecha.
+        data class Corte(val en: Int, val enUnSalto: Boolean, val antesDeUnaFecha: Boolean)
+        val cortes = mutableListOf<Corte>()
+        var inicio = 0
+        for (linea in pedazo.split('\n')) {
+            if (inicio > 0) cortes += Corte(inicio, enUnSalto = true, antesDeUnaFecha = empiezaConFecha(linea))
+            if (linea.length > mitad) {
+                var en = inicio
+                partirLineaLarga(linea, (linea.length + 1) / 2).dropLast(1).forEach { trozo ->
+                    en += trozo.length
+                    cortes += Corte(en, enUnSalto = false, antesDeUnaFecha = empiezaConFecha(pedazo.substring(en)))
+                }
             }
+            inicio += linea.length + 1
         }
-        corte = corte.coerceIn(1, unidades.size - 1)
-        return unidades.subList(0, corte).joinToString(separador) to
-            unidades.subList(corte, unidades.size).joinToString(separador)
+        val corte = cortes.filter { it.antesDeUnaFecha }.ifEmpty { cortes }
+            .minByOrNull { kotlin.math.abs(it.en - mitad) } ?: return null
+        val finDeLaPrimera = if (corte.enUnSalto) corte.en - 1 else corte.en
+        return pedazo.substring(0, finDeLaPrimera) to pedazo.substring(corte.en)
     }
 
     /**
@@ -344,7 +387,7 @@ Aplicá las reglas del usuario cuando el merchant coincida.
      * (el de Caro tardó 84 s en volver cortado) en los extractos densos, que son los que se cortan.
      */
     internal fun tamanoInicialDelPedazo(texto: String): Int {
-        val filas = texto.lineSequence().count { INICIO_DE_FECHA.find(it.trimStart())?.range?.first == 0 }
+        val filas = texto.lineSequence().count { empiezaConFecha(it) }
         if (filas == 0) return MAX_CARACTERES_POR_PEDAZO
         val porFila = (texto.length / filas).coerceAtLeast(1)
         return (porFila.toLong() * FILAS_POR_PEDAZO)
@@ -359,9 +402,14 @@ Aplicá las reglas del usuario cuando el merchant coincida.
      * Viaja pegado a cada pedazo que no arranca el documento porque el prompt le pide al modelo que
      * saque el AÑO de ahí cuando las fechas vienen como «15/04». Sin esto, trocear un extracto le
      * cambiaba el año a todos los movimientos de la segunda mitad.
+     *
+     * **Termina antes del primer renglón que empieza con una fecha** (vuelta 128): en un extracto
+     * denso las 15 primeras líneas ya son movimientos, y mandarlos como «contexto» en cada pedazo
+     * los dejaba a merced de que el modelo los leyera otra vez.
      */
     internal fun encabezadoDe(texto: String, lineas: Int = LINEAS_DE_ENCABEZADO): String =
-        texto.lineSequence().filter { it.isNotBlank() }.take(lineas).joinToString("\n")
+        texto.lineSequence().filter { it.isNotBlank() }.takeWhile { !empiezaConFecha(it) }.take(lineas)
+            .joinToString("\n")
 
     /**
      * El cuerpo del pedido de un pedazo. El que arranca el documento va tal cual (ya trae el
@@ -437,48 +485,76 @@ Aplicá las reglas del usuario cuando el merchant coincida.
      * 2. Cada pedazo va al modelo por [pedir], hasta [aLaVez] pedidos al mismo tiempo.
      * 3. **Si un pedazo vuelve cortado, se parte en dos** ([partirEnDos]) y se lee cada mitad, en
      *    recursión, hasta [PROFUNDIDAD_MAXIMA] veces y sin mitades de menos de ~[MINIMO_DE_UN_PEDAZO]
-     *    caracteres. Las filas que el modelo devolvió en el pedido cortado se tiran: las vuelven a
-     *    traer sus mitades.
-     * 4. **Solo si un pedazo que ya no se puede partir sigue cortado, la lectura entera es
-     *    [Lectura.Incompleta]** —la regla de oro: nunca una lista a medias— y los pedidos que
-     *    faltan se cancelan.
+     *    caracteres. Las filas que el modelo devolvió en el pedido cortado se tiran —aunque el JSON
+     *    haya cerrado—: las vuelven a traer sus mitades.
+     * 4. **La lectura entera es [Lectura.Incompleta]** —la regla de oro: nunca una lista a medias—
+     *    si un pedazo que ya no se puede partir sigue cortado, si se llega al tope de pedidos
+     *    ([topeDePedidos]) o si se cumple el plazo ([plazoMs], [PLAZO_DE_LA_LECTURA_MS]). Lo que
+     *    falta se cancela y no se lanza ningún pedido más.
+     * 5. **Un error de la API gana**: si un pedido falla con un 401, sin crédito o un 5xx, sale ese
+     *    error (la ruta contesta su 503 de siempre), aunque otro pedazo ya hubiera dado incompleta.
      *
      * Las filas salen en el orden del documento aunque los pedidos terminen en otro, y el
      * encabezado de contexto ([encabezadoDe]) viaja en todo pedazo que no arranca el documento,
      * también en las mitades. Al terminar deja una línea de log ([DiagnosticoDeLaLectura]) sin una
-     * sola letra del extracto.
+     * sola letra del extracto, con lo que la paró si no terminó.
      */
     internal suspend fun leerPorPedazos(
         texto: String,
         maxCaracteres: Int = tamanoInicialDelPedazo(texto),
         aLaVez: Int = PEDIDOS_A_LA_VEZ,
+        plazoMs: Long = PLAZO_DE_LA_LECTURA_MS,
         anotar: (DiagnosticoDeLaLectura) -> Unit = { log.info(it.lineaDelLog()) },
         pedir: suspend (cuerpo: String) -> RespuestaDelPedazo,
     ): Lectura {
         val inicio = System.nanoTime()
         val pedazos = dividirEnPedazos(texto, maxCaracteres)
-        val lectura = LecturaEnCurso(encabezadoDe(texto), pedazos.size, Semaphore(aLaVez.coerceAtLeast(1)), pedir)
+        val lectura = LecturaEnCurso(
+            encabezado = encabezadoDe(texto),
+            total = pedazos.size,
+            semaforo = Semaphore(aLaVez.coerceAtLeast(1)),
+            tope = topeDePedidos(pedazos.size),
+            pedir = pedir,
+        )
+        // La lectura corre aparte y aquí solo se la espera: un pedido en vuelo es una llamada
+        // bloqueante que no se deja cancelar, y esperarla adentro del plazo lo correría hasta que
+        // vuelva. Así, cumplido el plazo, se contesta a tiempo; lo que estaba en vuelo termina solo
+        // y no lanza nada más (la lectura queda cancelada). Hereda el contexto —el pedido en curso
+        // de las métricas— menos el `Job`.
+        val trabajo = CoroutineScope(currentCoroutineContext().minusKey(Job)).async {
+            coroutineScope {
+                pedazos.mapIndexed { i, pedazo ->
+                    async { lectura.leerUnPedazo(pedazo, listOf(i + 1), empiezaElDocumento = i == 0) }
+                }.awaitAll().flatten()
+            }
+        }
         var resultado = "falla"
+        var motivo: String? = null
         var filas: Int? = null
         try {
             val leidas = try {
-                coroutineScope {
-                    pedazos.mapIndexed { i, pedazo ->
-                        async { lectura.leerUnPedazo(pedazo, listOf(i + 1), empiezaElDocumento = i == 0) }
-                    }.awaitAll().flatten()
-                }
-            } catch (_: PedazoQueNoCabe) {
+                withTimeoutOrNull(plazoMs) { trabajo.await() }
+            } catch (e: NoCabeEnLaLectura) {
+                errorDeLaApiEn(e)?.let { throw it }
+                    resultado = "incompleta"
+                motivo = e.motivo
+                return Lectura.Incompleta
+            }
+            if (leidas == null) {
                 resultado = "incompleta"
+                motivo = MOTIVO_PLAZO
                 return Lectura.Incompleta
             }
             resultado = "ok"
             filas = leidas.size
             return Lectura.Ok(leidas)
         } finally {
+            if (!trabajo.isCompleted) trabajo.cancel()
             val lineas = texto.lines()
             anotar(
                 DiagnosticoDeLaLectura(
                     resultado = resultado,
+                    motivo = motivo,
                     filas = filas,
                     caracteres = texto.length,
                     lineas = lineas.size,
@@ -494,16 +570,44 @@ Aplicá las reglas del usuario cuando el merchant coincida.
         }
     }
 
-    /** Un pedazo mínimo que siguió cortado: corta la lectura entera (y cancela lo que falta). */
-    private class PedazoQueNoCabe : RuntimeException("un pedazo mínimo del extracto siguió cortado")
+    /** Lo que paró una lectura incompleta, como lo dice el log. */
+    internal const val MOTIVO_PEDAZO_MINIMO = "pedazo-minimo"
+    internal const val MOTIVO_TOPE = "tope-de-pedidos"
+    internal const val MOTIVO_PLAZO = "plazo"
 
-    /** Lo que comparte una lectura entre sus pedidos: el encabezado, el semáforo y las cuentas. */
+    /**
+     * Lo que corta la lectura entera: un pedazo mínimo que siguió cortado, o el tope de pedidos.
+     * Cancela lo que falta.
+     *
+     * No se deja «recuperar» (`CopyableThrowable` en `null`): la recuperación de la pila de las
+     * corrutinas lo copiaría, y la copia no trae los errores de la API que vienen como suprimidos.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private class NoCabeEnLaLectura(val motivo: String) : RuntimeException(motivo), CopyableThrowable<NoCabeEnLaLectura> {
+        override fun createCopy(): NoCabeEnLaLectura? = null
+    }
+
+    /**
+     * El error de la API que llegó junto con un [NoCabeEnLaLectura], o `null`. Cuando un pedazo da
+     * incompleta, los demás se cancelan, pero un pedido ya en vuelo termina igual: si termina con un
+     * error (401, sin crédito, 5xx), las corrutinas lo guardan como suprimido del primero. Ese gana:
+     * «sin crédito» es un 503 con su frase, no un «extracto incompleto».
+     */
+    private fun errorDeLaApiEn(e: Throwable): Throwable? =
+        generateSequence(e) { it.cause }.take(8)
+            .flatMap { it.suppressed.asSequence() }
+            .firstOrNull { it !is NoCabeEnLaLectura && it !is CancellationException }
+
+    /** Lo que comparte una lectura entre sus pedidos: el encabezado, el semáforo, el tope y las cuentas. */
     private class LecturaEnCurso(
         val encabezado: String,
         val total: Int,
         val semaforo: Semaphore,
+        val tope: Int,
         val pedir: suspend (String) -> RespuestaDelPedazo,
     ) {
+        /** Pedidos que salieron (o están por salir): lo que mide el [tope]. */
+        private val lanzados = AtomicInteger()
         val pedidos = AtomicInteger()
         val cortes = AtomicInteger()
         private val fichas = ConcurrentLinkedQueue<Pair<List<Int>, String>>()
@@ -514,6 +618,7 @@ Aplicá las reglas del usuario cuando el merchant coincida.
         suspend fun leerUnPedazo(pedazo: String, ruta: List<Int>, empiezaElDocumento: Boolean, profundidad: Int = 0): List<ParsedTransaction> {
             val etiqueta = ruta.joinToString(".") + " DE $total"
             val cuerpo = cuerpoDelPedido(pedazo, etiqueta, empiezaElDocumento, encabezado)
+            if (lanzados.incrementAndGet() > tope) throw NoCabeEnLaLectura(MOTIVO_TOPE)
             val respuesta = semaforo.withPermit { pedir(cuerpo) }
             pedidos.incrementAndGet()
             val cortada = quedoCortada(respuesta.texto, respuesta.stopReason)
@@ -523,7 +628,7 @@ Aplicá las reglas del usuario cuando el merchant coincida.
             val mitades =
                 if (profundidad < PROFUNDIDAD_MAXIMA && pedazo.length >= 2 * MINIMO_DE_UN_PEDAZO) partirEnDos(pedazo)
                 else null
-            mitades ?: throw PedazoQueNoCabe()
+            mitades ?: throw NoCabeEnLaLectura(MOTIVO_PEDAZO_MINIMO)
             return coroutineScope {
                 val primera = async { leerUnPedazo(mitades.first, ruta + 1, empiezaElDocumento, profundidad + 1) }
                 val segunda = async { leerUnPedazo(mitades.second, ruta + 2, empiezaElDocumento = false, profundidad + 1) }
@@ -548,6 +653,8 @@ Aplicá las reglas del usuario cuando el merchant coincida.
      */
     internal data class DiagnosticoDeLaLectura(
         val resultado: String,
+        /** Lo que paró una lectura incompleta: [MOTIVO_PEDAZO_MINIMO], [MOTIVO_TOPE] o [MOTIVO_PLAZO]. */
+        val motivo: String? = null,
         val filas: Int?,
         val caracteres: Int,
         val lineas: Int,
@@ -560,7 +667,7 @@ Aplicá las reglas del usuario cuando el merchant coincida.
         val milisegundos: Long,
     ) {
         fun lineaDelLog(): String =
-            "Lectura de extracto: resultado=$resultado filas=${filas ?: "-"} caracteres=$caracteres " +
+            "Lectura de extracto: resultado=$resultado${motivo?.let { "($it)" } ?: ""} filas=${filas ?: "-"} caracteres=$caracteres " +
                 "lineas=$lineas lineaMasLarga=$lineaMasLarga tamanoDelPedazo=$tamanoDelPedazo " +
                 "pedazos=$pedazosIniciales pedidos=$pedidos cortes=$cortes " +
                 "fichasDeSalida=${fichasPorPedazo.joinToString(",", "[", "]")} ms=$milisegundos"
