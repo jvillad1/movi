@@ -8,6 +8,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.Collections
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
@@ -53,20 +54,21 @@ class ElExtractoLargoSeParteSoloTest {
      * El modelo falso: lee **todas** las filas del cuerpo —también las que viajen en el encabezado
      * de contexto: un modelo de verdad puede leerlas, y por eso el encabezado no debe traerlas— y,
      * con más de [capacidad], vuelve cortado. Con [cortadoConFilasValidas], el corte trae un JSON
-     * que sí cerró (todas las filas) pero con `stop_reason = max_tokens`.
+     * que sí cerró —las primeras [capacidad] filas, como un modelo que se quedó sin fichas justo
+     * después de cerrar el array— pero con `stop_reason = max_tokens`.
      */
     private fun modeloFalso(
         capacidad: Int,
         cuerpos: MutableList<String> = Collections.synchronizedList(mutableListOf()),
         cortadoConFilasValidas: Boolean = false,
         antes: suspend (String) -> Unit = {},
-    ): suspend (String) -> RespuestaDelPedazo = { cuerpo ->
+    ): suspend (String, Long) -> RespuestaDelPedazo = { cuerpo, _ ->
         cuerpos += cuerpo
         antes(cuerpo)
         val numeros = FILA.findAll(cuerpo).map { it.groupValues[1] }.toList()
         when {
             numeros.size <= capacidad -> RespuestaDelPedazo(json(numeros), "end_turn", numeros.size * 90L)
-            cortadoConFilasValidas -> RespuestaDelPedazo(json(numeros), "max_tokens", 16_000)
+            cortadoConFilasValidas -> RespuestaDelPedazo(json(numeros.take(capacidad)), "max_tokens", 16_000)
             else -> RespuestaDelPedazo("""[{"date":"2026-10-01","merchant":"MO""", "max_tokens", 16_000)
         }
     }
@@ -135,7 +137,7 @@ class ElExtractoLargoSeParteSoloTest {
             maxCaracteres = ClaudeStatementParser.MAX_CARACTERES_POR_PEDAZO,
             aLaVez = 1,
             anotar = { diagnostico = it },
-            pedir = { pedidos.incrementAndGet(); siempreCortado(it) },
+            pedir = { c, q -> pedidos.incrementAndGet(); siempreCortado(c, q) },
         )
 
         assertEquals(Lectura.Incompleta, lectura)
@@ -154,7 +156,7 @@ class ElExtractoLargoSeParteSoloTest {
         val lectura = ClaudeStatementParser.leerPorPedazos(
             texto,
             anotar = {},
-            pedir = { pedidos.incrementAndGet(); modeloFalso(capacidad = 5)(it) },
+            pedir = { c, q -> pedidos.incrementAndGet(); modeloFalso(capacidad = 5)(c, q) },
         )
 
         assertEquals(Lectura.Incompleta, lectura)
@@ -333,7 +335,7 @@ class ElExtractoLargoSeParteSoloTest {
             aLaVez = 1,
             plazoMs = 300,
             anotar = { diagnostico = it },
-            pedir = {
+            pedir = { _, _ ->
                 pedidos.incrementAndGet()
                 // Como el pedido de verdad: bloqueante, no se deja cancelar.
                 withContext(Dispatchers.IO) { Thread.sleep(1_000) }
@@ -366,7 +368,7 @@ class ElExtractoLargoSeParteSoloTest {
             texto,
             maxCaracteres = ClaudeStatementParser.MAX_CARACTERES_POR_PEDAZO,
             anotar = { diagnostico = it },
-            pedir = { pedidos.incrementAndGet(); modelo(it) },
+            pedir = { c, q -> pedidos.incrementAndGet(); modelo(c, q) },
         )
 
         assertEquals(Lectura.Incompleta, lectura)
@@ -434,7 +436,7 @@ class ElExtractoLargoSeParteSoloTest {
 
         assertFailsWith<ErrorDeLaApi> {
             runBlocking {
-                ClaudeStatementParser.leerPorPedazos(texto, maxCaracteres = 1_200, anotar = {}) { cuerpo ->
+                ClaudeStatementParser.leerPorPedazos(texto, maxCaracteres = 1_200, anotar = {}) { cuerpo, _ ->
                     if (cuerpo.contains("MOV 0001")) {
                         delay(50) // el otro pedido ya está en vuelo
                         RespuestaDelPedazo("[{", "max_tokens", 16_000)
@@ -448,21 +450,159 @@ class ElExtractoLargoSeParteSoloTest {
     }
 
     /**
-     * **Un corte con filas válidas.** El JSON cerró pero `stop_reason` dice `max_tokens`: no se
-     * confía en esas filas, se parte, y cada una sale una sola vez.
+     * **Un corte con filas válidas.** El JSON cerró —con las primeras 100 filas de 300— pero
+     * `stop_reason` dice `max_tokens`: no se confía en esas filas, se parte, y salen las 300, una
+     * vez cada una. Confiar en ellas daría 100 filas (o repetidas) y otro número de pedidos.
      */
     @Test
     fun un_corte_con_filas_validas_se_parte_igual_y_no_repite_filas() = runBlocking {
-        var diagnostico: DiagnosticoDeLaLectura? = null
+        val pedidos = AtomicInteger()
+        val modelo = modeloFalso(capacidad = 100, cortadoConFilasValidas = true)
 
         val lectura = ClaudeStatementParser.leerPorPedazos(
             extracto(300),
             maxCaracteres = ClaudeStatementParser.MAX_CARACTERES_POR_PEDAZO,
-            anotar = { diagnostico = it },
-            pedir = modeloFalso(capacidad = 100, cortadoConFilasValidas = true),
+            aLaVez = 1,
+            anotar = {},
+            pedir = { c, q -> pedidos.incrementAndGet(); modelo(c, q) },
         )
 
         assertEquals((1..300).toList(), numerosDe(lectura))
-        assertTrue(diagnostico!!.cortes >= 1)
+        // 300 → dos de 150 (cortados) → cuatro de 75: 1 + 2 + 4.
+        assertEquals(7, pedidos.get())
+    }
+
+    // ── 8. Última ronda: el año del período, el tiempo de cada pedido y las mitades parejas ──
+
+    /**
+     * **El período con fecha se queda en el encabezado.** Un renglón con fecha y sin monto (el
+     * período, la línea del navegador de un PDF impreso) es contexto; la primera fila —fecha y
+     * monto— ya no.
+     */
+    @Test
+    fun el_periodo_con_fecha_se_queda_en_el_encabezado_y_la_primera_fila_no() {
+        val texto = listOf(
+            "4/11/26, 10:32 Sucursal Virtual Personas",
+            "25/09/2026 - 24/10/2026",
+            "BANCOLOMBIA",
+            fila(1),
+            fila(2),
+        ).joinToString("\n")
+
+        val encabezado = ClaudeStatementParser.encabezadoDe(texto)
+
+        assertEquals("4/11/26, 10:32 Sucursal Virtual Personas\n25/09/2026 - 24/10/2026\nBANCOLOMBIA", encabezado)
+        assertFalse(encabezado.contains("MOV 0001"))
+    }
+
+    /** Una fecha que deja una mitad casi vacía no gana: se corta en el renglón más cerca de la mitad. */
+    @Test
+    fun partir_en_dos_no_deja_una_mitad_casi_vacia_por_una_fecha() {
+        val pedazo = (listOf("ENCABEZADO X", "01/10 MOV 0001 PAGO 12.345") +
+            (1..9).map { "  DETALLE DE LA OPERACION NUMERO $it" }).joinToString("\n")
+
+        val (primera, segunda) = ClaudeStatementParser.partirEnDos(pedazo)!!
+
+        assertEquals(pedazo, primera + "\n" + segunda)
+        assertTrue(primera.length >= pedazo.length / 4 && segunda.length >= pedazo.length / 4, "«$primera» | «$segunda»")
+    }
+
+    /** Cada pedido recibe lo que le queda al plazo de la lectura: es su `timeout`. */
+    @Test
+    fun cada_pedido_lleva_lo_que_le_queda_al_plazo() = runBlocking {
+        val quedan = Collections.synchronizedList(mutableListOf<Long>())
+        val modelo = modeloFalso(capacidad = 1_000)
+
+        ClaudeStatementParser.leerPorPedazos(
+            extracto(300),
+            maxCaracteres = 3_000,
+            aLaVez = 1,
+            plazoMs = 5_000,
+            anotar = {},
+            pedir = { c, q -> quedan += q; delay(20); modelo(c, q) },
+        )
+
+        assertTrue(quedan.size >= 3)
+        assertTrue(quedan.all { it in 1..5_000 }, "$quedan")
+        assertTrue(quedan.zipWithNext().all { (a, b) -> b <= a } && quedan.last() < quedan.first(), "lo que queda baja: $quedan")
+    }
+
+    /** Una llamada bloqueante no retiene a quien la espera: cancelada la espera, contesta en el acto. */
+    @Test
+    fun una_llamada_bloqueante_no_retiene_la_cancelacion() = runBlocking {
+        val desde = System.nanoTime()
+
+        val r = withTimeoutOrNull(100) { ClaudeStatementParser.sinEsperarAlCancelar { Thread.sleep(2_000); "tarde" } }
+
+        assertEquals(null, r)
+        assertTrue((System.nanoTime() - desde) / 1_000_000 < 1_000)
+    }
+
+    /**
+     * **Una incompleta contesta sin esperar el plazo completo**, aunque otro pedido siga bloqueado en
+     * su llamada (como el de verdad: [ClaudeStatementParser.sinEsperarAlCancelar]).
+     */
+    @Test
+    fun una_incompleta_no_espera_al_pedido_bloqueado_en_vuelo() = runBlocking {
+        val texto = extracto(60)
+        val desde = System.nanoTime()
+
+        val lectura = ClaudeStatementParser.leerPorPedazos(texto, maxCaracteres = 1_200, anotar = {}) { cuerpo, _ ->
+            if (cuerpo.contains("MOV 0001")) {
+                delay(50)
+                RespuestaDelPedazo("[{", "max_tokens", 16_000)
+            } else {
+                ClaudeStatementParser.sinEsperarAlCancelar { Thread.sleep(3_000) }
+                RespuestaDelPedazo("[]", "end_turn", 10)
+            }
+        }
+
+        assertEquals(Lectura.Incompleta, lectura)
+        assertTrue((System.nanoTime() - desde) / 1_000_000 < 1_500, "esperó al pedido bloqueado")
+    }
+
+    /** Qué se reintenta: un 429 o un 5xx, dos veces, y solo si queda plazo. */
+    @Test
+    fun solo_se_reintenta_un_429_o_un_5xx_con_plazo() {
+        assertEquals(2_000L, ClaudeStatementParser.esperaParaReintentar(429, vez = 0, quedaMs = 60_000))
+        assertEquals(4_000L, ClaudeStatementParser.esperaParaReintentar(529, vez = 1, quedaMs = 60_000))
+        assertEquals(null, ClaudeStatementParser.esperaParaReintentar(503, vez = 2, quedaMs = 60_000))
+        assertEquals(null, ClaudeStatementParser.esperaParaReintentar(401, vez = 0, quedaMs = 60_000))
+        assertEquals(null, ClaudeStatementParser.esperaParaReintentar(400, vez = 0, quedaMs = 60_000))
+        assertEquals(null, ClaudeStatementParser.esperaParaReintentar(null, vez = 0, quedaMs = 60_000), "un corte por tiempo no")
+        assertEquals(null, ClaudeStatementParser.esperaParaReintentar(429, vez = 0, quedaMs = 10_000), "sin plazo no")
+    }
+
+    private class ConStatus(val status: Int) : RuntimeException("status $status")
+
+    /** Cancelada la lectura durante la espera, no sale ningún reintento más. */
+    @Test
+    fun una_lectura_cancelada_no_reintenta() = runBlocking {
+        val intentos = AtomicInteger()
+
+        val r = withTimeoutOrNull(300) {
+            ClaudeStatementParser.conReintentos(60_000, statusDe = { (it as? ConStatus)?.status }) {
+                intentos.incrementAndGet()
+                throw ConStatus(429)
+            }
+        }
+        delay(2_500)
+
+        assertEquals(null, r)
+        assertEquals(1, intentos.get())
+    }
+
+    /** Y con plazo, un 429 se reintenta hasta salir. */
+    @Test
+    fun un_429_se_reintenta() = runBlocking {
+        val intentos = AtomicInteger()
+
+        val r = ClaudeStatementParser.conReintentos(60_000, statusDe = { (it as? ConStatus)?.status }) {
+            if (intentos.incrementAndGet() == 1) throw ConStatus(429)
+            "listo"
+        }
+
+        assertEquals("listo", r)
+        assertEquals(2, intentos.get())
     }
 }
