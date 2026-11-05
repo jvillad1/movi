@@ -8,6 +8,7 @@ import androidx.compose.ui.test.hasAnyChild
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performSemanticsAction
@@ -162,6 +163,22 @@ class DocumentosScreenTest {
         // devuelve el cuerpo que escribió el server, no un genérico «Algo salió mal».
         esperarTexto(motivo)
         assertTrue(navegado.isEmpty(), "un extracto rechazado no navega a la revisión")
+    }
+
+    /**
+     * Revisión de la vuelta 130: si lo que falló es el archivo (el extracto se cortó), el motivo queda en
+     * un aviso con «Cómo bajar el archivo que Movi lee mejor», que abre la guía. Antes solo había un
+     * snackbar que se iba.
+     */
+    @Test
+    fun `un extracto que no se pudo leer ofrece en el aviso como bajar el archivo que Movi lee mejor`() {
+        montar(listOf(elPdf), falla = ApiException(422, com.jvillada.movi.shared.model.FRASE_EXTRACTO_INCOMPLETO))
+        esperarTexto("Importar movimientos")
+        tocar("Importar movimientos")
+        esperarTexto(com.jvillada.movi.shared.model.COMO_BAJAR_EL_ARCHIVO_QUE_MOVI_LEE_MEJOR)
+        composeRule.onNode(hasTestTag(TAG_AVISO_DE_LA_LECTURA), useUnmergedTree = true).assertExists()
+        tocar(com.jvillada.movi.shared.model.COMO_BAJAR_EL_ARCHIVO_QUE_MOVI_LEE_MEJOR)
+        composeRule.onNode(hasTestTag(com.jvillada.movi.ui.extractos.TAG_HOJA_DE_COMO_SACAR_EL_EXTRACTO), useUnmergedTree = true).assertExists()
     }
 
     // ── «Importaciones»: el error se dice y «Reintentar» no revienta (fix round 2, hallazgo A) ──

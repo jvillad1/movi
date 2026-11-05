@@ -143,7 +143,7 @@ class PdfConClaveTest {
         transaction {
             val tablas = arrayOf(
                 Users, Accounts, StatementImports, Events, VoidEvents, SmsMessages, Documents, KnownDestinations,
-                LecturasDePapeles, ClavesDeExtractos, PdfsAbiertos,
+                LecturasDePapeles, ClavesDeExtractos, PdfsAbiertos, com.jvillada.movi.server.db.UsoDeLaApp,
             )
             SchemaUtils.drop(*tablas.reversedArray())
             SchemaUtils.create(*tablas)
@@ -184,6 +184,16 @@ class PdfConClaveTest {
         assertEquals(HttpStatusCode.UnprocessableEntity, res.status)
         assertEquals(PDF_CON_CLAVE, res.cuerpo())
         assertEquals(0, lector.veces)
+        // Vuelta 130: en el tracking, un EXTRACTO_LEIDO con CON_CLAVE, el banco y el producto del nombre
+        // del archivo («CuentaNu_…»), sin lector (nadie lo leyó) y sin el nombre ni la clave.
+        val usos = transaction {
+            com.jvillada.movi.server.db.UsoDeLaApp.selectAll()
+                .where { com.jvillada.movi.server.db.UsoDeLaApp.nombre eq "EXTRACTO_LEIDO" }
+                .map { it[com.jvillada.movi.server.db.UsoDeLaApp.propiedades] }
+        }
+        val uso = usos.single()
+        assertTrue("\"resultado\":\"CON_CLAVE\"" in uso && "\"banco\":\"NU\"" in uso && "\"producto\":\"CUENTA\"" in uso, uso)
+        assertFalse("lector" in uso || "CuentaNu" in uso || cedula in uso, uso)
         // Una app vieja (sin `conClave=1`) recibe la frase de siempre, que ya no manda a imprimir.
         val vieja = leer(doc, conClave = false)
         assertEquals(PAPEL_CON_CLAVE, vieja.cuerpo())

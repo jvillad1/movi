@@ -94,16 +94,13 @@ const val PAPEL_SIN_LLAVE: String =
  * Un PDF con clave de apertura, dicho a una app que no sabe pedirla (sin `?conClave=1`). La que sí
  * sabe recibe `PDF_CON_CLAVE` y pide la clave en la misma fila (vuelta 103, `PdfConClave.kt`).
  */
-const val PAPEL_CON_CLAVE: String =
-    "Este PDF tiene clave. Actualiza Movi para escribirla y abrirlo. El archivo quedó guardado en Documentos."
+const val PAPEL_CON_CLAVE: String = com.jvillada.movi.shared.model.FRASE_PAPEL_CON_CLAVE
 
 /** Un PDF escaneado: sin texto adentro, y mandarlo entero a Claude costaría como un extracto. */
-const val PAPEL_SIN_TEXTO: String =
-    "Este PDF no tiene texto que Movi pueda leer (parece un escaneo). Compártelo como foto o captura " +
-        "de pantalla. El archivo quedó guardado en Documentos."
+// Revisión de la vuelta 130: el texto vive en `:core`, para que la app ofrezca la guía debajo.
+const val PAPEL_SIN_TEXTO: String = com.jvillada.movi.shared.model.FRASE_PAPEL_SIN_TEXTO
 
-const val PAPEL_SIN_MOVIMIENTO: String =
-    "Este archivo no muestra un movimiento de plata. Quedó guardado en Documentos."
+const val PAPEL_SIN_MOVIMIENTO: String = com.jvillada.movi.shared.model.FRASE_PAPEL_SIN_MOVIMIENTO
 
 const val PAPEL_ILEGIBLE: String =
     "No pudimos entender este archivo. Quedó guardado en Documentos; puedes anotar el movimiento a mano."
@@ -164,6 +161,9 @@ fun Route.papelesRoutes() {
         val conSaldos = call.request.queryParameters["conSaldos"] == "1"
         // Vuelta 129: la app sabe qué hacer con el extracto de una tarjeta (ver `conciliarYArchivar`).
         val conTarjeta = call.request.queryParameters["conTarjeta"] == "1"
+        // Revisión de la vuelta 130: la app sabe mostrar la propuesta del extracto de un crédito (ver
+        // `leerElExtracto`). Sin esto, el de un crédito se rechaza como siempre.
+        val conCreditos = call.request.queryParameters["conCreditos"] == "1"
         // Vuelta 103: la app sabe pedir la clave de un PDF (`PDF_CON_CLAVE`, `CLAVE_INCORRECTA`). Un
         // APK viejo no lo pide y recibe la frase de siempre.
         val conClave = call.request.queryParameters["conClave"] == "1"
@@ -172,6 +172,7 @@ fun Route.papelesRoutes() {
                 .where { (Documents.id eq id) and (Documents.userId eq uid) }
                 .firstOrNull()
         } ?: return@post call.respond(HttpStatusCode.NotFound)
+        val inicio = System.currentTimeMillis()
         try {
             // La clave del PDF, si es un reintento: en el CUERPO, nunca en la URL (ver `PdfConClave.kt`).
             val pedida = call.claveDelReintento()
@@ -181,11 +182,13 @@ fun Route.papelesRoutes() {
             val bytes = abrirElPapelGuardado(uid, fila[Documents.id], Cifrado.descifrarBytes(fila[Documents.content]), pedida)
             val papel = PapelGuardado(fila[Documents.id], fila[Documents.name], fila[Documents.mimeType], bytes)
             call.respond(
-                leerElPapel(uid, papel, anotarAunque, ahora = System.currentTimeMillis(), conSaldos = conSaldos, conTarjeta = conTarjeta) { msg, t ->
+                leerElPapel(uid, papel, anotarAunque, ahora = System.currentTimeMillis(), conSaldos = conSaldos, conTarjeta = conTarjeta, conCreditos = conCreditos) { msg, t ->
                     call.application.log.warn(msg, t)
                 },
             )
         } catch (e: FallaDeLaClaveDelPdf) {
+            // Vuelta 130: en el tracking, por banco (el del nombre del archivo), sin nada más.
+            if (e.codigo == com.jvillada.movi.shared.model.PDF_CON_CLAVE) registrarElExtractoConClave(uid, fila[Documents.name], inicio)
             call.contestarLaFallaDeLaClave(e, conClave, viejo = PAPEL_CON_CLAVE)
         } catch (e: FallaAlLeerElPapel) {
             call.respond(e.status, e.mensaje)
@@ -249,6 +252,8 @@ internal suspend fun leerElPapel(
     conSaldos: Boolean = false,
     /** Vuelta 129: la app sabe qué hacer con el extracto de una tarjeta (ver `conciliarYArchivar`). */
     conTarjeta: Boolean = false,
+    /** Revisión de la vuelta 130: la app sabe mostrar la propuesta del extracto de un crédito. */
+    conCreditos: Boolean = false,
     log: (String, Throwable) -> Unit,
 ): LecturaDelPapel {
     val huella = huellaDelPapel(papel.bytes)
@@ -281,6 +286,10 @@ internal suspend fun leerElPapel(
                 if (leido.resumenDeSaldo != null && !conSaldos) {
                     throw FallaAlLeerElPapel(HttpStatusCode.UnprocessableEntity, PAPEL_SIN_MOVIMIENTO)
                 }
+                // Lo mismo con la de un crédito y quien no la sabe mostrar.
+                if (leido.resumenDeCredito != null && !conCreditos) {
+                    throw FallaAlLeerElPapel(HttpStatusCode.UnprocessableEntity, PAPEL_SIN_MOVIMIENTO)
+                }
                 LecturaDelPapel(
                     documentoId = papel.id,
                     que = QueEsElPapel.EXTRACTO,
@@ -290,14 +299,14 @@ internal suspend fun leerElPapel(
         }
     }
 
-    return when (val clasificado = clasificar(papel, conSaldos)) {
+    return when (val clasificado = clasificar(papel, conSaldos, conCreditos)) {
         is Clasificado.Comprobante -> {
             dbQuery { guardarLectura(uid, huella, papel.id, QueEsElPapel.COMPROBANTE, json.encodeToString(ComprobanteLeido.serializer(), clasificado.leido), MODELO_DE_TODOS_LOS_DIAS) }
             propuestaDelComprobante(uid, papel.id, papel.nombre, clasificado.leido, anotarAunque, ahora)
         }
         Clasificado.Extracto -> {
             val leido = try {
-                leerElExtracto(uid, papel.nombre, papel.mime, papel.bytes, mimeConfiable = true, conSaldos = conSaldos)
+                leerElExtracto(uid, papel.nombre, papel.mime, papel.bytes, mimeConfiable = true, conCreditos = conCreditos, conSaldos = conSaldos)
             } catch (e: FallaAlProcesarExtracto) {
                 // «Extracto sin movimientos» está escrito para quien SUBIÓ un extracto («revisa que
                 // sea el del detalle»). Acá el dueño compartió un papel y fue Movi quien decidió que
@@ -313,7 +322,7 @@ internal suspend fun leerElPapel(
             // `detectDocumentType` ni el clasificador reconocían. `leerElExtracto` ya lo frena hoy
             // (ver `fallaDeLaLectura`); esto es la red por si ese camino cambia, y además no deja
             // guardada una lectura vacía que tape un reintento.
-            if (leido.filas.isEmpty() && !leido.esFamirios && leido.resumenDeSaldo == null) {
+            if (leido.filas.isEmpty() && !leido.esFamirios && leido.resumenDeSaldo == null && leido.resumenDeCredito == null) {
                 throw FallaAlLeerElPapel(HttpStatusCode.UnprocessableEntity, PAPEL_SIN_MOVIMIENTO)
             }
             dbQuery {
@@ -322,7 +331,7 @@ internal suspend fun leerElPapel(
                     when {
                         leido.esFamirios -> "famirios"
                         // Leído con reglas: ningún modelo lo vio.
-                        leido.resumenDeSaldo != null -> "sin-ia"
+                        leido.resumenDeSaldo != null || leido.resumenDeCredito != null -> "sin-ia"
                         else -> MODELO_DE_EXTRACTOS
                     },
                 )
@@ -347,7 +356,8 @@ private suspend fun releerElExtractoDeNu(uid: String, huella: String, papel: Pap
     }.getOrNull() ?: return null
     if (leerElExtractoDeNu(texto) == null) return null
     val nuevo = try {
-        leerElExtracto(uid, papel.nombre, papel.mime, papel.bytes, mimeConfiable = true, conSaldos = conSaldos)
+        // Revisión de la vuelta 130: releer no es una lectura nueva del dueño, no se cuenta otra vez.
+        leerElExtracto(uid, papel.nombre, papel.mime, papel.bytes, mimeConfiable = true, conSaldos = conSaldos, registrar = false)
     } catch (e: FallaAlProcesarExtracto) {
         return null
     }
@@ -398,7 +408,7 @@ private sealed interface Clasificado {
  *   cuenta de Bancolombia (ver `leerLosMovimientosDeBancolombia`) y el extracto de la tarjeta de Nu
  *   (ver `leerElExtractoDeNu`).
  */
-private suspend fun clasificar(papel: PapelGuardado, conSaldos: Boolean = false): Clasificado {
+private suspend fun clasificar(papel: PapelGuardado, conSaldos: Boolean = false, conCreditos: Boolean = false): Clasificado {
     if (esImagenParaExtraer(papel.nombre, papel.mime, mimeEsConfiable = true)) {
         val mime = ClaudeStatementParser.supportedImageMime(papel.mime, papel.nombre)
             ?: throw FallaAlLeerElPapel(HttpStatusCode.UnprocessableEntity, PAPEL_IMAGEN_NO_SOPORTADA)
@@ -424,6 +434,12 @@ private suspend fun clasificar(papel: PapelGuardado, conSaldos: Boolean = false)
     // El extracto de Skandia o de la AFC se reconoce por su texto, sin preguntarle a nadie: no
     // muestra movimientos, y Haiku diría «nada» de un papel que sí dice cuánto hay.
     if (conSaldos && leerUnExtractoDeSaldo(texto) != null) return Clasificado.Extracto
+    // Revisión de la vuelta 130: el extracto de un crédito de Bancolombia (libre inversión, libranza)
+    // también, sin preguntarle a Haiku (que diría «nada»: no muestra movimientos). Solo si la app sabe
+    // mostrar la propuesta; `leerElExtracto` lo lee con el mismo lector.
+    if (conCreditos && StatementParser.detectDocumentType(texto) == com.jvillada.movi.server.parsing.StatementDocumentType.LOAN_SUMMARY &&
+        LectorDePapeles.actual.leerElExtractoDeUnCredito(texto) != null
+    ) return Clasificado.Extracto
     // Los movimientos de una cuenta de Bancolombia también: se leen sin IA (ver
     // `leerLosMovimientosDeBancolombia`), y no hace falta preguntarle a Haiku qué son.
     if (leerLosMovimientosDeBancolombia(texto) != null) return Clasificado.Extracto

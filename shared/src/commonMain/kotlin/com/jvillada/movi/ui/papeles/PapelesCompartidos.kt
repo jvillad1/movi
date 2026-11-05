@@ -265,6 +265,10 @@ fun tituloDelResultado(resultado: ResultadoDelPapel): String = when (resultado) 
     is ResultadoDelPapel.Extracto -> resultado.lectura.extracto?.extractoDeSaldo?.let { saldo ->
         // El extracto de Skandia o de la AFC no trae movimientos: dice cuánto hay al corte.
         "${nombreDelExtractoDeSaldo(saldo.resumen)}: el saldo al ${corteLegible(saldo.resumen)}"
+    } ?: resultado.lectura.extracto?.extractoDeCredito?.let { credito ->
+        // Revisión de la vuelta 130: el extracto de un crédito (libre inversión, libranza) tampoco trae
+        // movimientos: trae la cuota, la tasa y el saldo, y la revisión propone actualizar el crédito.
+        "Extracto de ${credito.cuentaNombre ?: "tu crédito"}: la cuota, la tasa y el saldo"
     } ?: run {
         val nuevos = resultado.lectura.extracto?.newTransactions?.size ?: 0
         val iguales = resultado.lectura.extracto?.matches?.size ?: 0

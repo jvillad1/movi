@@ -355,9 +355,12 @@ fun Route.documentRoutes() {
         // Vuelta 103: como `/leer`, un PDF con clave se abre acá —con la clave del cuerpo o la
         // recordada— y lo que se lee es el contenido descifrado. Ver `PdfConClave.kt`.
         val conClave = call.request.queryParameters["conClave"] == "1"
+        val inicio = System.currentTimeMillis()
         val bytes = try {
             abrirElPapelGuardado(uid, id, Cifrado.descifrarBytes(fila[Documents.content]), call.claveDelReintento())
         } catch (e: FallaDeLaClaveDelPdf) {
+            // Vuelta 130: en el tracking, por banco (el del nombre del archivo), sin nada más.
+            if (e.codigo == com.jvillada.movi.shared.model.PDF_CON_CLAVE) registrarElExtractoConClave(uid, fila[Documents.name], inicio)
             return@post call.contestarLaFallaDeLaClave(e, conClave, viejo = PAPEL_CON_CLAVE)
         } catch (e: PapelIlegible) {
             call.application.log.error("[documentos] no se pudo abrir $id: ${e.message}")
