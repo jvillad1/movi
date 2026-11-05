@@ -267,6 +267,8 @@ enum class ClaveDeUso(val clave: String, val forma: FormaDeDato, val valores: Se
             "OK", "ERROR", "SIN_CONEXION", "TERMINADA", "ABANDONADA", "CONFIRMADO", "DESCARTADO", "YA_ANOTADO", "NADA", "LLEGO",
             // Vuelta 104: lo que devuelve un Worker (`Result.retry()`) y una sincronización que no subió todo.
             "REINTENTO", "FALLO",
+            // Vuelta 130: cómo terminó la lectura de un extracto ([EventoDeUso.EXTRACTO_LEIDO]).
+            "INCOMPLETA", "CON_CLAVE", "SIN_FILAS",
         ),
     ),
     CLASE(
@@ -323,6 +325,25 @@ enum class ClaveDeUso(val clave: String, val forma: FormaDeDato, val valores: Se
     CANAL("canal", FormaDeDato.ESTADO),
     /** El período de un cierre o de un débito automático («2026-10»). */
     PERIODO("periodo", FormaDeDato.PERIODO),
+    // ── Vuelta 130 · lo que se aprende de cada extracto leído ──
+    /**
+     * El banco que Movi reconoció en un extracto, de una lista cerrada ([BANCOS_DEL_USO]): el id de su
+     * marca en mayúsculas, u `OTRO`. Nunca el nombre escrito en el archivo.
+     */
+    BANCO(
+        "banco", FormaDeDato.LISTA,
+        // Escrita acá, a mano: un `enum` no lee otra propiedad de nivel superior (en wasm y en iOS el orden
+        // en que se inicializan no está garantizado). `ElExtractoLeidoTest` vigila que no le falte un banco.
+        setOf(
+            "BANCOLOMBIA", "NU", "DAVIVIENDA", "BBVA", "BANCO_DE_BOGOTA", "NEQUI", "DAVIPLATA", "DAVIBANK",
+            "OCCIDENTE", "AV_VILLAS", "BANCO_POPULAR", "BANCO_FALABELLA", "LULO", "RAPPIPAY", "SKANDIA",
+            "FIDUCUENTA", "FAMIRIOS", "OTRO",
+        ),
+    ),
+    /** El producto del extracto: una cuenta, una tarjeta, un crédito, un fondo, u `OTRO` si no se sabe. */
+    PRODUCTO("producto", FormaDeDato.LISTA, setOf("CUENTA", "TARJETA", "CREDITO", "FONDO", "OTRO")),
+    /** Quién lo leyó: un lector propio de Movi (`SIN_IA`) o la IA (`IA`). */
+    LECTOR("lector", FormaDeDato.LISTA, setOf("SIN_IA", "IA")),
     ;
 
     fun admite(valor: String): Boolean =
@@ -410,11 +431,42 @@ enum class EventoDeUso(val tipo: TipoDeUso, val principal: ClaveDeUso? = null) {
      * un pago con Apple Pay (`GASTO`) o —vuelta 127— una notificación de Nu (`NOTIFICACION`). Nunca el texto, el comercio ni el monto.
      */
     CAPTURA_POR_ATAJO(TipoDeUso.SISTEMA, ClaveDeUso.ESTADO),
+
+    // ── Vuelta 130 ──
+    /**
+     * El server terminó de leer un extracto: [ClaveDeUso.BANCO], [ClaveDeUso.PRODUCTO], [ClaveDeUso.LECTOR],
+     * [ClaveDeUso.RESULTADO] (`OK`, `INCOMPLETA`, `CON_CLAVE`, `SIN_FILAS` o `ERROR`: el archivo no se leyó
+     * como extracto), cuántas filas ([ClaveDeUso.CUANTOS]) y cuánto tardó ([ClaveDeUso.MS]). **Nunca** el
+     * texto, los montos ni el nombre del archivo: con esto se sabe, por banco, qué archivo funciona.
+     */
+    EXTRACTO_LEIDO(TipoDeUso.SISTEMA, ClaveDeUso.RESULTADO),
     ;
 
     companion object {
         fun deNombre(nombre: String): EventoDeUso? = entries.firstOrNull { it.name == nombre }
     }
+}
+
+// ── Vuelta 130 · el banco de un extracto leído ───────────────────────────────────────────────
+
+/**
+ * **Los bancos que puede nombrar [EventoDeUso.EXTRACTO_LEIDO]**: los del catálogo «Cómo bajar tu
+ * extracto» (`GUIAS_DEL_EXTRACTO`), la Fiducuenta, Famirios (la hoja de cálculo del dueño) y `OTRO`.
+ */
+val BANCOS_DEL_USO: Set<String> get() = ClaveDeUso.BANCO.valores
+
+/**
+ * **El banco de un extracto, para el uso**: el que reconoce [nombre] (el `bankName` de la lectura:
+ * «Bancolombia», «Nu», «Famirios»), con la guía que usa (la AMEX es Bancolombia; Scotiabank Colpatria,
+ * Davibank), en mayúsculas si está en [BANCOS_DEL_USO]; si no, `OTRO`. Nunca devuelve lo escrito.
+ */
+fun bancoDelExtractoParaElUso(nombre: String?): String {
+    val texto = nombre?.trim().orEmpty()
+    if (texto.equals("Famirios", ignoreCase = true)) return "FAMIRIOS"
+    val marca = texto.takeIf { it.isNotEmpty() }?.let(::marcaDelBanco)?.takeIf { it.rubro == RubroDeMarca.BANCOS_Y_BILLETERAS }
+        ?: return "OTRO"
+    val id = bancoDeLaGuia(marca.id).uppercase()
+    return id.takeIf { it in BANCOS_DEL_USO } ?: "OTRO"
 }
 
 // ── Vuelta 104 · los toques ──────────────────────────────────────────────────────────────────

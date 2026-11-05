@@ -171,6 +171,7 @@ fun Route.papelesRoutes() {
                 .where { (Documents.id eq id) and (Documents.userId eq uid) }
                 .firstOrNull()
         } ?: return@post call.respond(HttpStatusCode.NotFound)
+        val inicio = System.currentTimeMillis()
         try {
             // La clave del PDF, si es un reintento: en el CUERPO, nunca en la URL (ver `PdfConClave.kt`).
             val pedida = call.claveDelReintento()
@@ -185,6 +186,8 @@ fun Route.papelesRoutes() {
                 },
             )
         } catch (e: FallaDeLaClaveDelPdf) {
+            // Vuelta 130: en el tracking, por banco (el del nombre del archivo), sin nada más.
+            if (e.codigo == com.jvillada.movi.shared.model.PDF_CON_CLAVE) registrarElExtractoConClave(uid, fila[Documents.name], inicio)
             call.contestarLaFallaDeLaClave(e, conClave, viejo = PAPEL_CON_CLAVE)
         } catch (e: FallaAlLeerElPapel) {
             call.respond(e.status, e.mensaje)

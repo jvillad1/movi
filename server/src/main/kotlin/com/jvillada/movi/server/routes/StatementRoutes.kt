@@ -299,8 +299,42 @@ internal data class ExtractoLeido(
 private fun fallaPorLaIa(falla: FallaDeLaIa): Nothing =
     throw FallaAlProcesarExtracto(HttpStatusCode.ServiceUnavailable, falla.codigo)
 
-/** Lee el extracto (Claude o Famirios). Lanza [FallaAlProcesarExtracto]. Ver [ExtractoLeido]. */
+/**
+ * Lee el extracto (Claude o Famirios). Lanza [FallaAlProcesarExtracto]. Ver [ExtractoLeido].
+ *
+ * Vuelta 130: cada lectura —buena o fallida por el archivo— deja en el tracking propio un
+ * `EXTRACTO_LEIDO` con el banco, el producto, el lector, el resultado, las filas y los milisegundos
+ * (ver `ElExtractoLeido.kt`). Nunca el texto, los montos ni el nombre del archivo.
+ */
 internal suspend fun leerElExtracto(
+    uid: String,
+    fileName: String,
+    mimeType: String,
+    bytes: ByteArray,
+    mimeConfiable: Boolean = false,
+    conCreditos: Boolean = false,
+    conSaldos: Boolean = false,
+): ExtractoLeido {
+    val medida = MedidaDeLaLectura()
+    val inicio = System.currentTimeMillis()
+    val leido = try {
+        leerElExtractoMidiendo(medida, uid, fileName, mimeType, bytes, mimeConfiable, conCreditos, conSaldos)
+    } catch (e: FallaAlProcesarExtracto) {
+        resultadoDeLaFallaDelExtracto(e)?.let { resultado ->
+            registrarElExtractoLeido(uid, medida, fileName, nombreDelBanco = null, resultado = resultado, filas = null, inicio = inicio)
+        }
+        throw e
+    }
+    registrarElExtractoLeido(
+        uid, medida, fileName, nombreDelBanco = leido.bankName,
+        resultado = resultadoDelExtractoLeido(leido), filas = leido.filas.size, inicio = inicio,
+    )
+    return leido
+}
+
+/** El cuerpo de [leerElExtracto]: lo que hace, y en [medida] quién lo leyó, qué producto y qué banco. */
+private suspend fun leerElExtractoMidiendo(
+    medida: MedidaDeLaLectura,
     uid: String,
     fileName: String,
     mimeType: String,
@@ -347,6 +381,8 @@ internal suspend fun leerElExtracto(
                 "Formato de imagen no soportado. Sube PNG, JPG, GIF o WEBP (HEIC no se puede leer).",
             )
         bankName = StatementParser.detectBankName(fileName)
+        medida.banco = bankName
+        medida.lector = LECTOR_IA
         val reglas = Stores.merchantRules.getRules(uid)
         val lectura = conLaIa("leer un extracto", ::fallaPorLaIa) {
             LectorDePapeles.actual.leerExtractoDeImagen(bytes, imageMime, reglas)
@@ -361,6 +397,7 @@ internal suspend fun leerElExtracto(
         // Ver `leerElExcelDeBancolombia`.
         if (nombreParaLeer.substringAfterLast('.', "").lowercase() in setOf("xls", "xlsx")) {
             leerElExcelDeBancolombia(bytes)?.let { movimientos ->
+                medida.producto = "CUENTA"
                 return ExtractoLeido(
                     bankName = "Bancolombia",
                     filas = movimientos.filas,
@@ -382,6 +419,7 @@ internal suspend fun leerElExtracto(
         // «estado de fondo de inversión», y antes de cualquier llamada a Claude.
         if (conSaldos) {
             leerUnExtractoDeSaldo(text)?.let { resumen ->
+                medida.producto = if (resumen.de == ExtractoDeSaldoDe.SKANDIA_FONDO_VOLUNTARIO) "FONDO" else "CUENTA"
                 return ExtractoLeido(
                     bankName = when (resumen.de) {
                         ExtractoDeSaldoDe.SKANDIA_FONDO_VOLUNTARIO -> "Skandia"
@@ -399,6 +437,11 @@ internal suspend fun leerElExtracto(
         // lo que ningún banco avisa (4x1000, intereses, comisiones). Lo de después —conciliar y
         // agrupar los cargos del banco— es el camino de siempre. Ver `leerLosMovimientosDeBancolombia`.
         leerLosMovimientosDeBancolombia(text)?.let { movimientos ->
+            medida.producto = when {
+                movimientos.deTarjeta -> "TARJETA"
+                movimientos.deUnFondo -> "FONDO"
+                else -> "CUENTA"
+            }
             return ExtractoLeido(
                 // La lista del fondo no trae número: «Fiducuenta» es como se llama el fondo de la
                 // Sucursal Virtual, y con ese nombre la revisión encuentra la cuenta sola (si el
@@ -416,6 +459,7 @@ internal suspend fun leerElExtracto(
         // del período facturado, los intereses y la comisión por cambio de moneda, solo si todo suma el
         // pago mínimo del extracto. Ver `leerElExtractoDeNu`.
         leerElExtractoDeNu(text)?.let { nu ->
+            medida.producto = "TARJETA"
             return ExtractoLeido(
                 bankName = "Nu",
                 filas = nu.filas,
@@ -440,6 +484,7 @@ internal suspend fun leerElExtracto(
         if (docType == StatementDocumentType.LOAN_SUMMARY && conCreditos) {
             val resumen = LectorDePapeles.actual.leerElExtractoDeUnCredito(text)
             if (resumen != null) {
+                medida.producto = "CREDITO"
                 return ExtractoLeido(
                     bankName = StatementParser.detectBankName(fileName, text),
                     filas = emptyList(),
@@ -462,6 +507,7 @@ internal suspend fun leerElExtracto(
         }
         isFamirios = docType == StatementDocumentType.FAMIRIOS
         bankName = if (isFamirios) "Famirios" else StatementParser.detectBankName(fileName, text)
+        medida.banco = bankName
         parsed = if (isFamirios) {
             try {
                 WorkbookFactory.create(ByteArrayInputStream(bytes)).use { wb ->
@@ -473,6 +519,7 @@ internal suspend fun leerElExtracto(
                 throw FallaAlProcesarExtracto(HttpStatusCode.UnprocessableEntity, LECTURA_FALLO)
             }
         } else {
+            medida.lector = LECTOR_IA
             val reglas = Stores.merchantRules.getRules(uid)
             val lectura = conLaIa("leer un extracto", ::fallaPorLaIa) {
                 LectorDePapeles.actual.leerExtractoDeTexto(text, reglas)
