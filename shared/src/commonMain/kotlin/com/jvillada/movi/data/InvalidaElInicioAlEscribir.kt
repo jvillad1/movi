@@ -163,6 +163,11 @@ internal class InvalidaElInicioAlEscribir(
     override suspend fun borrarEspacio(id: String): Unit = trasEscribir { delegado.borrarEspacio(id) }
     override suspend fun deshacerLiquidacion(espacioId: String, liquidacionId: String): Unit =
         trasEscribir { delegado.deshacerLiquidacion(espacioId, liquidacionId) }
+    // Vuelta 131: aceptar o desconectar cambia lo que cuenta de los grupos (tu parte de lo que pagó el otro).
+    override suspend fun crearInvitacion(espacioId: String) = trasEscribir { delegado.crearInvitacion(espacioId) }
+    override suspend fun cancelarInvitacion(espacioId: String): Unit = trasEscribir { delegado.cancelarInvitacion(espacioId) }
+    override suspend fun aceptarInvitacion(codigo: String) = trasEscribir { delegado.aceptarInvitacion(codigo) }
+    override suspend fun desconectarEspacio(espacioId: String): Unit = trasEscribir { delegado.desconectarEspacio(espacioId) }
     override suspend fun deleteDestino(id: String): Unit = trasEscribir { delegado.deleteDestino(id) }
     override suspend fun agregarIdentificador(id: String, pedido: com.jvillada.movi.shared.model.AgregarIdentificador) =
         trasEscribir { delegado.agregarIdentificador(id, pedido) }

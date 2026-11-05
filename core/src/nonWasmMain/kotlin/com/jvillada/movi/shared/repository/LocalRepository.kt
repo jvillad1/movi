@@ -2193,6 +2193,13 @@ class LocalRepository(
     override suspend fun borrarEspacio(id: String) = remote.borrarEspacio(id)
     override suspend fun deshacerLiquidacion(espacioId: String, liquidacionId: String) =
         remote.deshacerLiquidacion(espacioId, liquidacionId)
+    // Vuelta 131 · el hogar conectado: todo va al server, sin caché (como escribir en un grupo).
+    override suspend fun crearInvitacion(espacioId: String) = remote.crearInvitacion(espacioId)
+    override suspend fun getInvitacionPendiente(espacioId: String) = remote.getInvitacionPendiente(espacioId)
+    override suspend fun cancelarInvitacion(espacioId: String) = remote.cancelarInvitacion(espacioId)
+    override suspend fun getInvitacion(codigo: String) = remote.getInvitacion(codigo)
+    override suspend fun aceptarInvitacion(codigo: String) = remote.aceptarInvitacion(codigo)
+    override suspend fun desconectarEspacio(espacioId: String) = remote.desconectarEspacio(espacioId)
 
     /**
      * **Las cuentas de otros van siempre al server, y sin caché.**
