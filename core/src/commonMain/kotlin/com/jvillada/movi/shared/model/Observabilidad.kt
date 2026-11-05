@@ -344,6 +344,16 @@ enum class ClaveDeUso(val clave: String, val forma: FormaDeDato, val valores: Se
     PRODUCTO("producto", FormaDeDato.LISTA, setOf("CUENTA", "TARJETA", "CREDITO", "FONDO", "OTRO")),
     /** Quién lo leyó: un lector propio de Movi (`SIN_IA`) o la IA (`IA`). */
     LECTOR("lector", FormaDeDato.LISTA, setOf("SIN_IA", "IA")),
+    // ── Vuelta 132 · «Tus seguros» ──
+    /**
+     * El tramo de lo que la persona paga al mes en seguros (`tramoDeLoQuePagasEnSeguros`): nunca el
+     * monto exacto. Escrito acá, a mano, por lo mismo que [BANCO]; `TusSegurosRoutesTest` vigila que
+     * cada tramo que devuelve la función esté en la lista.
+     */
+    TRAMO(
+        "tramo", FormaDeDato.LISTA,
+        setOf("SIN_SEGUROS", "MENOS_DE_50K", "DE_50K_A_150K", "DE_150K_A_300K", "DE_300K_A_600K", "MAS_DE_600K"),
+    ),
     ;
 
     fun admite(valor: String): Boolean =
@@ -440,6 +450,15 @@ enum class EventoDeUso(val tipo: TipoDeUso, val principal: ClaveDeUso? = null) {
      * texto, los montos ni el nombre del archivo: con esto se sabe, por banco, qué archivo funciona.
      */
     EXTRACTO_LEIDO(TipoDeUso.SISTEMA, ClaveDeUso.RESULTADO),
+
+    // ── Vuelta 132 · «Tus seguros» (fase 0: validar sin vender) ──
+    /**
+     * Abrió «Tus seguros» (una vez por día): cuántos seguros detectados ([ClaveDeUso.CUANTOS]) y en qué
+     * tramo de total al mes ([ClaveDeUso.TRAMO]). Nunca montos, comercios ni textos.
+     */
+    SEGUROS_VISTOS(TipoDeUso.PANTALLA, ClaveDeUso.TRAMO),
+    /** Tocó «Me interesa» en «Tus seguros» (una sola vez por persona), con lo mismo que [SEGUROS_VISTOS]. */
+    SEGUROS_ME_INTERESA(TipoDeUso.ACCION, ClaveDeUso.TRAMO),
     ;
 
     companion object {
