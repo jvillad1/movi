@@ -5512,3 +5512,27 @@ filas que anotó la otra persona desde su Movi. El patrón:
   después (`confirmacionDeDesconectar` sobre `loQueSeDejaDeVer`).
 - **Un código se escribe como venga**: el campo limpia minúsculas, espacios y guiones al escribir
   (`codigoLimpio`), y el principal se prende solo con la forma completa (`pareceUnCodigo`).
+
+## Vuelta 132 · «Tus seguros»: mostrar lo que ya pagas, sin vender
+
+Una pantalla de información sobre plata de terceros (`ui/seguros/TusSegurosScreen.kt`, la regla en `:core`
+`LosSegurosQuePagas.kt`). El patrón:
+
+- **Arriba, una sola cifra con su verbo**: «Pagas» (`apoyo`) · la `Cifra` `Heroe` · «al mes en seguros» ·
+  «unos $Y al año» (y «los anuales, repartidos en 12 meses» si hay) · de dónde sale, en `apoyo`. Va en una
+  `Superficie` blanca, sin acción.
+- **La lista, agrupada por tipo** con `Seccion` (`tituloDelTipoDeSeguro`: «Dentro de tus créditos», «De tus
+  tarjetas», «Vehículo»…), una `Superficie` de lista por grupo y una `Fila` por seguro: ícono neutro del tipo,
+  nombre legible en dos renglones, «cuenta · Último cobro: 3 nov» (o «Dejó de cobrarse · último: …») y a la
+  derecha la cifra con «al mes» / «al año» / «cada 6 meses» debajo. La fila es contenido dinámico
+  (`entidadDeUso` = la cuenta): su toque nunca se anota por el nombre del seguro.
+- **Lo que Movi no sabe va aparte y pregunta**: «¿Son seguros?» con su conteo; cada fila lleva debajo «Sí»
+  (`Secundario` S) y «No» (`Fantasma` S). Nada se suma hasta que el dueño contesta.
+- **Tocar una fila abre su prueba** en una hoja (`MarcoDeHoja` + `EncabezadoDeHoja`): los cobros como `Fila`s
+  que abren la hoja de siempre del movimiento, o «Va dentro de la cuota de tu crédito» con «Ver el crédito».
+  «No es un seguro» va al final, `Fantasma`.
+- **La pregunta de interés no empuja**: una `Superficie` con la pregunta, el texto y «Me interesa»
+  `Secundario`; tocado, el botón se cambia por «Gracias, te avisaremos» (texto, sin botón muerto).
+- **Ningún amarillo**: aquí no hay acción principal. El vacío dice cómo lo vería Movi, sin botón.
+- **Lo que no se dice**: precios de seguros ajenos, aseguradoras como oferta, «te conviene». Una línea
+  `apoyo` al final: «Movi no vende seguros ni te asesora para comprarlos.»
