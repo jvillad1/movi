@@ -34,6 +34,11 @@ import io.ktor.server.routing.post
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.Transaction
 import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.JoinType
+import org.jetbrains.exposed.sql.notExists
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.greater
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
+import com.jvillada.movi.server.db.VoidEvents
 import org.jetbrains.exposed.sql.selectAll
 import java.security.MessageDigest
 import java.time.LocalDate
@@ -124,7 +129,8 @@ private fun Transaction.cuadrarLaDeudaConElExtracto(uid: String, accountId: Stri
     if (alCorte.cuadradaDespues) {
         return AjusteDelExtracto.Rechazado(
             HttpStatusCode.Conflict,
-            "Esta tarjeta ya se cuadró, o se le puso su saldo inicial, después del corte del extracto. Sube un extracto más nuevo.",
+            if (alCorte.abiertaDespues) TARJETA_CREADA_DESPUES_DEL_CORTE
+            else "Esta tarjeta ya se cuadró después del corte del extracto. Sube un extracto más nuevo.",
         )
     }
     val id = "ev_deuda_" + MessageDigest.getInstance("SHA-256")
@@ -177,8 +183,17 @@ private fun Transaction.alCorte(uid: String, cuenta: Account, moneda: String, co
         nombre = cuenta.name,
         saldoEnMovi = computeBalances(cuenta.type, movimientos.filter { it.timestamp <= corte })[moneda] ?: 0L,
         cuadradaDespues = movimientos.any { esUnCuadre(it.category) && it.timestamp > corte },
+        abiertaDespues = movimientos.any { it.category == OPENING_CATEGORY && it.timestamp > corte },
     )
 }
+
+/** Vuelta 129 · el 409 de una cuenta que se creó con su saldo después del corte (Skandia, la AFC). */
+const val CUENTA_CREADA_DESPUES_DEL_CORTE: String =
+    "Esta cuenta se creó con su saldo después del corte del extracto: no se cuadra con este extracto."
+
+/** Lo mismo para una tarjeta creada con su deuda después del corte. */
+const val TARJETA_CREADA_DESPUES_DEL_CORTE: String =
+    "Esta tarjeta se creó con su deuda después del corte del extracto: no se cuadra con este extracto."
 
 /**
  * Vuelta 129 (revisión) · **lo que fija un saldo a mano**: un ajuste o un saldo inicial. Uno posterior
@@ -195,11 +210,22 @@ internal fun finDelDia(fecha: String): Long = appDateToEpochMillis(LocalDate.par
  * `StatementParseResult.tarjetasCuadradasDespues`.
  */
 internal fun Transaction.tarjetasCuadradasDespuesDe(uid: String, instante: Long): List<String> =
-    Accounts.selectAll().where { Accounts.userId eq uid }
-        .map { it.toAccount() }
-        .filter { it.type == AccountType.CREDIT_CARD }
-        .filter { cuenta -> loadNonVoidedEventsIn(uid, cuenta.id).any { esUnCuadre(it.category) && it.timestamp > instante } }
-        .map { it.id }
+    // Una sola consulta: los movimientos de cuadre posteriores, de las tarjetas del dueño, sin anulados.
+    Events.join(Accounts, JoinType.INNER, Events.accountId, Accounts.id)
+        .select(Events.accountId)
+        .where {
+            (Events.userId eq uid) and (Accounts.userId eq uid) and
+                (Accounts.type eq AccountType.CREDIT_CARD.name) and
+                (Events.category inList listOf(ADJUSTMENT_CATEGORY, OPENING_CATEGORY)) and
+                (Events.timestamp greater instante) and
+                notExists(
+                    VoidEvents.select(VoidEvents.originalEventId).where {
+                        (VoidEvents.originalEventId eq Events.id) and (VoidEvents.userId eq uid)
+                    },
+                )
+        }
+        .withDistinct()
+        .map { it[Events.accountId] }
 
 /**
  * **La cuenta que nombra el extracto**, sin adivinar: la AFC por los últimos cuatro de su número
@@ -263,7 +289,8 @@ private fun Transaction.ajustarConElExtracto(uid: String, accountId: String, r: 
     if (alCorte.cuadradaDespues) {
         return AjusteDelExtracto.Rechazado(
             HttpStatusCode.Conflict,
-            "Esta cuenta ya se cuadró después del corte del extracto. Sube un extracto más nuevo.",
+            if (alCorte.abiertaDespues) CUENTA_CREADA_DESPUES_DEL_CORTE
+            else "Esta cuenta ya se cuadró después del corte del extracto. Sube un extracto más nuevo.",
         )
     }
     val id = idDelAjusteDelExtracto(uid, cuenta.id, r)

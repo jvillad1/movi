@@ -32,6 +32,8 @@ import com.jvillada.movi.shared.model.deudaParaCuadrar
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.openingEventFor
+import com.jvillada.movi.shared.model.OPENING_CATEGORY
+import com.jvillada.movi.shared.model.ADJUSTMENT_CATEGORY
 import com.jvillada.movi.server.db.insertEventRow
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
@@ -362,6 +364,28 @@ class ElExtractoDeUnaTarjetaLoDiceTest {
         assertEquals(listOf(tarjeta), leido.tarjetasCuadradasDespues)
 
         val res = cuadrar(tarjeta, assertNotNull(leido.tarjeta?.deudaParaCuadrar()))
-        assertEquals(HttpStatusCode.Conflict, res.status, res.bodyAsText())
+        assertEquals(HttpStatusCode.Conflict, res.status)
+        assertEquals(TARJETA_CREADA_DESPUES_DEL_CORTE, res.bodyAsText())
+    }
+
+    /** Revisión: la lista de tarjetas cuadradas sale de una consulta, sin anulados, solo tarjetas, solo del dueño. */
+    @Test
+    fun `las tarjetas cuadradas despues son las del duenio, sin anulados y solo tarjetas`() {
+        val despues = System.currentTimeMillis()
+        transaction {
+            Accounts.insert { it[id] = tarjeta; it[userId] = dueno; it[name] = "Nu Tarjeta 1111"; it[type] = "CREDIT_CARD"; it[currency] = "COP" }
+            Accounts.insert { it[id] = "acc-anulada"; it[userId] = dueno; it[name] = "AMEX 9208"; it[type] = "CREDIT_CARD"; it[currency] = "COP" }
+            fun cuadre(id: String, cuenta: String, categoria: String) = Events.insert {
+                it[Events.id] = id; it[userId] = dueno; it[accountId] = cuenta; it[type] = "EXPENSE"; it[amount] = 1_000
+                it[currency] = "COP"; it[category] = categoria; it[description] = id; it[timestamp] = despues
+            }
+            cuadre("ev-1", tarjeta, OPENING_CATEGORY)
+            cuadre("ev-2", "acc-anulada", ADJUSTMENT_CATEGORY)
+            cuadre("ev-3", ahorros, OPENING_CATEGORY)
+            VoidEvents.insert { it[id] = "v-1"; it[userId] = dueno; it[originalEventId] = "ev-2"; it[timestamp] = despues }
+            assertEquals(listOf(tarjeta), tarjetasCuadradasDespuesDe(dueno, despues - 1))
+            assertEquals(emptyList(), tarjetasCuadradasDespuesDe(dueno, despues))
+            assertEquals(emptyList(), tarjetasCuadradasDespuesDe("otro", despues - 1))
+        }
     }
 }

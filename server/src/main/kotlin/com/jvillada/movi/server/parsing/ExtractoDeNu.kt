@@ -184,14 +184,18 @@ fun leerElExtractoDeNu(texto: String): ExtractoDeNu? {
     }
     if (suma != pagoMinimo) return null
 
+    // **Lo que cuenta el extracto**: del inicio del período hasta el corte; si la deuda total cuadra,
+    // hasta el día que dice («hasta el 11»), el mismo que el ajuste. Una fila del día del corte va con
+    // el extracto siguiente: proponerla acá la contaría dos veces (en este ajuste y en el próximo).
+    val ultimoDia = deudaHasta.takeIf { deudaQueCuadra != null } ?: corte
     val propuestas = mutableListOf<ParsedTransaction>()
     for (f in filas) {
-        if (f.fecha in inicio..corte && (f.cuotaNumero ?: 1) == 1) {
+        if (f.fecha in inicio..ultimoDia && (f.cuotaNumero ?: 1) == 1) {
             movimiento(f.fecha, f.descripcion, f.valor, cuotas = f.cuotasTotales.takeIf { !f.esPago })?.let { propuestas += it }
         }
         // Los cargos «↪» de una compra del período, o de su primera cuota: el de una cuota «2 de 12» ya
         // se cobró (y se propuso) con esa cuota, y volvería con una fecha vieja.
-        if (f.fecha in inicio..corte || f.cuotaNumero == 1) {
+        if (f.fecha in inicio..ultimoDia || f.cuotaNumero == 1) {
             f.cargos.forEach { (rotulo, centavos) -> movimiento(f.fecha, rotulo, centavos)?.let { propuestas += it } }
         }
     }
@@ -199,7 +203,7 @@ fun leerElExtractoDeNu(texto: String): ExtractoDeNu? {
     val mora = filas.sumOf { f -> if (f.conMora) f.intereses.lastOrNull() ?: 0L else 0L }
     // Los intereses del extracto van el último día que cuenta la deuda («hasta el 11»), si se leyó: son
     // parte de esa deuda, y así el ajuste al final de ese día los cuenta. Si no, el día del corte.
-    val diaDeLosIntereses = deudaHasta.takeIf { deudaQueCuadra != null } ?: corte
+    val diaDeLosIntereses = ultimoDia
     movimiento(diaDeLosIntereses, INTERESES_CORRIENTES, corrientes)?.let { propuestas += it }
     movimiento(diaDeLosIntereses, INTERESES_DE_MORA, mora)?.let { propuestas += it }
     if (propuestas.isEmpty()) return null

@@ -23,6 +23,8 @@ class ExtractoDeNuTest {
         sinLaLibreria: Boolean = false,
         abonos: String = "\$0,00",
         deudaTotal: String? = "\$411.240,00",
+        /** Una compra el día del corte (el 12), que es del extracto siguiente. */
+        conUnaDelDiaDelCorte: Boolean = false,
     ): String = """
         Hola, Ana
         Llegó tu extracto de Octubre
@@ -62,7 +64,11 @@ class ExtractoDeNuTest {
         Panaderia La Esquina
         Norte
         ${'$'}50.000,00 1 de 1 ${'$'}50.000,00 2.09%        ${'$'}0,00 ${'$'}50.000,00 ${'$'}0,00
-    """.trimIndent() + "\n" + (if (sinLaLibreria) "" else """
+    """.trimIndent() + "\n" + (if (!conUnaDelDiaDelCorte) "" else """
+        12 OCT
+        2026
+        Kiosco Nuevo ${'$'}10.000,00 1 de 1 ${'$'}10.000,00 2.09%        ${'$'}0,00 ${'$'}10.000,00 ${'$'}0,00
+    """.trimIndent() + "\n") + (if (sinLaLibreria) "" else """
         04 OCT
         2026
         Libreria Central ${'$'}120.000,00 1 de 12 ${'$'}10.000,00 2.09%        ${'$'}0,00 ${'$'}10.000,00 ${'$'}110.000,00
@@ -120,6 +126,18 @@ class ExtractoDeNuTest {
         val leido = assertNotNull(leerElExtractoDeNu(extracto()))
         assertEquals(411_240L, leido.deudaAlCorte)
         assertEquals(LocalDate.of(2026, 10, 11), leido.deudaHasta)
+    }
+
+    /** Revisión: con la deuda cuadrada, una fila del día del corte va con el extracto siguiente. */
+    @Test
+    fun `con la deuda cuadrada, lo del dia del corte no se propone`() {
+        val conElKiosco = extracto(pagoMinimo = "\$111.240,00", deudaTotal = "\$421.240,00", conUnaDelDiaDelCorte = true)
+        val leido = assertNotNull(leerElExtractoDeNu(conElKiosco))
+        assertEquals(421_240L, leido.deudaAlCorte)
+        assertTrue(leido.filas.none { it.description == "Kiosco Nuevo" }, leido.filas.map { it.description }.toString())
+        // Sin el total que cuadre, se queda el período hasta el corte, como antes.
+        val sinTotal = assertNotNull(leerElExtractoDeNu(extracto(pagoMinimo = "\$111.240,00", deudaTotal = null, conUnaDelDiaDelCorte = true)))
+        assertTrue(sinTotal.filas.any { it.description == "Kiosco Nuevo" })
     }
 
     @Test

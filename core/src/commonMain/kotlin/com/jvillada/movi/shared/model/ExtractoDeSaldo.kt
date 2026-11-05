@@ -66,6 +66,12 @@ data class CuentaParaElSaldo(
      * que este extracto, y ajustarla al corte movería ese cuadre. No se ofrece «Actualizar».
      */
     val cuadradaDespues: Boolean = false,
+    /**
+     * Vuelta 129 · la cuenta **se creó con su saldo después del corte** (su saldo inicial es posterior):
+     * el extracto habla de antes de que existiera en Movi, y ajustarla al corte sumaría encima de ese
+     * saldo. También cuenta como [cuadradaDespues]; esto solo cambia la frase.
+     */
+    val abiertaDespues: Boolean = false,
 )
 
 /**

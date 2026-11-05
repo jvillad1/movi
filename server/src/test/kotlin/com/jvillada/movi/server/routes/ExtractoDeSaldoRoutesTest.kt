@@ -20,6 +20,7 @@ import com.jvillada.movi.server.plugins.configureRouting
 import com.jvillada.movi.server.plugins.configureSerialization
 import com.jvillada.movi.server.time.appDateToEpochMillis
 import com.jvillada.movi.shared.model.ADJUSTMENT_CATEGORY
+import com.jvillada.movi.shared.model.OPENING_CATEGORY
 import com.jvillada.movi.shared.model.AdjustAccountBalanceResponse
 import com.jvillada.movi.shared.model.ExtractoDeSaldoDe
 import com.jvillada.movi.shared.model.LecturaDelPapel
@@ -378,6 +379,22 @@ class ExtractoDeSaldoRoutesTest {
 
         assertEquals(HttpStatusCode.Conflict, actualizar(skandia, p.resumen).status)
         assertEquals(1, ajustesDe(skandia).size, "solo el cuadre de septiembre")
+    }
+
+    /** Vuelta 129: creada con su saldo después del corte, 409 con su propia frase (no «ya se cuadró»). */
+    @Test
+    fun `una cuenta creada con su saldo despues del corte no se cuadra, y lo dice`() = testApplication {
+        application { testModule() }
+        transaction { movimiento("ev-apertura", skandia, "INCOME", 90_000_000L, dia(2026, 9, 5), categoria = OPENING_CATEGORY) }
+        val p = propuestaDe(textoDeSkandia)
+        val cuenta = assertNotNull(cuentaNombrada(p))
+        assertTrue(cuenta.cuadradaDespues)
+        assertTrue(cuenta.abiertaDespues)
+
+        val res = actualizar(skandia, p.resumen)
+        assertEquals(HttpStatusCode.Conflict, res.status)
+        assertEquals(CUENTA_CREADA_DESPUES_DEL_CORTE, res.bodyAsText())
+        assertEquals(0, ajustesDe(skandia).size)
     }
 
     @Test
