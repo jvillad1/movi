@@ -43,12 +43,20 @@ class ElExtractoQueNoSeLeyoLoDiceTest {
         assertTrue(msg!!.contains("Tu archivo no tiene nada malo"), msg)
     }
 
+    /**
+     * Vuelta 128: el server ya parte solo lo que no cabe, así que cuando de verdad no se pudo la
+     * frase no le pide a nadie partir un PDF en el celular: le dice qué otra cosa probar.
+     */
     @Test
-    fun una_lectura_cortada_le_pide_partir_el_archivo() {
-        assertEquals(
-            EXTRACTO_INCOMPLETO,
-            fallaDeLaLectura(ClaudeStatementParser.Lectura.Incompleta, esImagen = false),
-        )
+    fun una_lectura_cortada_dice_que_probar_sin_pedir_partir_el_archivo() {
+        val msg = fallaDeLaLectura(ClaudeStatementParser.Lectura.Incompleta, esImagen = false)
+
+        assertEquals(EXTRACTO_INCOMPLETO, msg)
+        val minusculas = msg!!.lowercase()
+        listOf("divide", "parte", "partes", "quincena").forEach { palabra ->
+            assertTrue(Regex("""\b$palabra\b""").find(minusculas) == null, "«$msg» pide partir el archivo ($palabra)")
+        }
+        assertTrue(minusculas.contains("movimientos"), "ofrece el archivo de movimientos del banco: $msg")
     }
 
     /**
