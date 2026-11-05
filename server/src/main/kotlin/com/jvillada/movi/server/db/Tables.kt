@@ -1516,6 +1516,56 @@ object RecurrentesDelHogar : Table("recurrentes_del_hogar") {
 }
 
 /**
+ * **Las invitaciones a un grupo** (vuelta 131, el hogar conectado): el código que el dueño ([userId])
+ * le manda a la persona que es [miembroId] en su grupo [espacioId]. **Solo el SHA-256 del código**: el
+ * código en claro sale una sola vez, en la respuesta de `POST /api/espacios/{id}/invitacion`. Vence a
+ * los 7 días, se usa una vez ([usadaEn]) y generar otro cancela el pendiente ([canceladaEn]). Tiene
+ * `user_id`: se va con la cuenta de quien invita.
+ */
+object InvitacionesAEspacio : Table("invitaciones_a_espacio") {
+    val id          = varchar("id", 60)
+    val userId      = varchar("user_id", 50)
+    val espacioId   = varchar("espacio_id", 60)
+    val miembroId   = varchar("miembro_id", 60)
+    val codigoHash  = varchar("codigo_hash", 64)
+    val creadaEn    = long("creada_en")
+    val venceEn     = long("vence_en")
+    val usadaEn     = long("usada_en").nullable()
+    val canceladaEn = long("cancelada_en").nullable()
+    override val primaryKey = PrimaryKey(id)
+    init {
+        index("idx_invitaciones_a_espacio_user_id", false, userId)
+        index("idx_invitaciones_a_espacio_codigo_hash", false, codigoHash)
+    }
+}
+
+/**
+ * **Los grupos conectados** (vuelta 131): el grupo [espacioA] de [userA] y el [espacioB] de [userB] son
+ * el mismo hogar. [miembroA] es el tercero de A que es B, y [miembroB] el tercero de B que es A: con eso
+ * se traduce lo de un lado al otro al leer (`gastoDelOtroLado`). Nada se copia: cada uno sigue siendo
+ * dueño de sus filas. Desconectar escribe [desconectadoEn] y no borra nada.
+ *
+ * **No tiene `user_id`** (es de los dos): borrar la cuenta de cualquiera de los dos borra la fila a mano
+ * (`TABLAS_DE_DOS_USUARIOS` en `BorrarLaCuenta.kt`).
+ */
+object EspaciosConectados : Table("espacios_conectados") {
+    val id             = varchar("id", 60)
+    val userA          = varchar("user_a", 50)
+    val espacioA       = varchar("espacio_a", 60)
+    val miembroA       = varchar("miembro_a", 60)
+    val userB          = varchar("user_b", 50)
+    val espacioB       = varchar("espacio_b", 60)
+    val miembroB       = varchar("miembro_b", 60)
+    val desde          = long("desde")
+    val desconectadoEn = long("desconectado_en").nullable()
+    override val primaryKey = PrimaryKey(id)
+    init {
+        index("idx_espacios_conectados_user_a", false, userA)
+        index("idx_espacios_conectados_user_b", false, userB)
+    }
+}
+
+/**
  * **Los fallos de la app** (vuelta 100, ver `routes/ObservabilidadRoutes.kt`): lo que tumbó la app
  * en Android o iOS, lo que un Worker atrapó, y el «Algo falló» de la web. Sin datos del usuario: el
  * mensaje y el stack llegan recortados y limpios (`limpiarTextoDelFallo` en `:core`) y el server los

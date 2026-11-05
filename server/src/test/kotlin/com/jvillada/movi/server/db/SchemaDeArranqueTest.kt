@@ -386,4 +386,28 @@ class SchemaDeArranqueTest {
         }
         assertEquals("MENSUAL", periodicidad)
     }
+
+    /**
+     * Vuelta 131 · **las dos tablas del hogar conectado nacen con el arranque** sobre una base vieja que no
+     * las tiene (entran por el `create`, como toda tabla nueva), con las columnas que leen las rutas.
+     */
+    @Test
+    fun `el arranque crea las tablas del hogar conectado sobre una base vieja`() {
+        transaction {
+            exec("DROP ALL OBJECTS")
+            SchemaUtils.create(tables = todasLasTablas)
+        }
+        assertTrue(columnasDe("invitaciones_a_espacio").isEmpty() && columnasDe("espacios_conectados").isEmpty(), "arranca sin ellas")
+
+        DatabaseFactory.crearYActualizarSchema()
+
+        assertEquals(
+            setOf("id", "user_id", "espacio_id", "miembro_id", "codigo_hash", "creada_en", "vence_en", "usada_en", "cancelada_en"),
+            columnasDe("invitaciones_a_espacio"),
+        )
+        assertEquals(
+            setOf("id", "user_a", "espacio_a", "miembro_a", "user_b", "espacio_b", "miembro_b", "desde", "desconectado_en"),
+            columnasDe("espacios_conectados"),
+        )
+    }
 }
