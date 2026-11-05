@@ -57,6 +57,10 @@ class ElExtractoQueNoSeLeyoLoDiceTest {
             assertTrue(Regex("""\b$palabra\b""").find(minusculas) == null, "«$msg» pide partir el archivo ($palabra)")
         }
         assertTrue(minusculas.contains("movimientos"), "ofrece el archivo de movimientos del banco: $msg")
+        // Repetir la misma lectura se cortaría igual: la frase no invita a reintentar.
+        listOf("de nuevo", "otra vez", "en un rato").forEach {
+            assertTrue(!minusculas.contains(it), "«$msg» invita a reintentar ($it)")
+        }
     }
 
     /**

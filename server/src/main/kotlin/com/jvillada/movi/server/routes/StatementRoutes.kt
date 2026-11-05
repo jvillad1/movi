@@ -84,17 +84,17 @@ import com.jvillada.movi.server.time.epochMillisToAppDate
  *
  * En español neutro con tuteo, como todo lo que el dueño lee, y cada una termina en lo que él
  * puede hacer: probar otro archivo, o avisarle a quien administra Movi.
- */
-/**
- * Vuelta 128: antes decía «Divide el archivo en dos… y súbelo por partes», y nadie parte un PDF en
- * el celular. Ahora el server ya parte solo el texto que no cabe ([ClaudeStatementParser.leerPorPedazos]);
- * si aun así no se pudo, lo que queda por hacer es probar otra vez (el modelo no contesta igual dos
- * veces) o subir el otro papel que el banco da —el de movimientos, que Movi lee sin IA—. No dice
- * «escríbenos»: la app no tiene ese canal (ver `PaginasLegales.SIN_CORREO`).
+ *
+ * [EXTRACTO_INCOMPLETO], vuelta 128: antes decía «Divide el archivo en dos… y súbelo por partes», y
+ * nadie parte un PDF en el celular. Ahora el server parte solo el texto que no cabe
+ * (`ClaudeStatementParser.leerPorPedazos`); si aun así no se pudo, repetir la misma lectura se
+ * cortaría igual, así que la frase ofrece el otro papel que el banco da —los movimientos en PDF o
+ * Excel; los de Bancolombia Movi los lee sin IA—. No dice «escríbenos»: la app no tiene ese
+ * canal (ver `PaginasLegales.SIN_CORREO`).
  */
 const val EXTRACTO_INCOMPLETO: String =
-    "No pudimos leer todo el extracto, así que no te mostramos una lista a medias. Prueba de nuevo " +
-        "en un rato o sube el PDF de movimientos que descargas de la app de tu banco."
+    "No pudimos leer todo el extracto, así que no te mostramos una lista a medias. Si tu banco te " +
+        "deja descargar los movimientos en PDF o Excel desde su app, súbelos así."
 
 const val IMAGEN_INCOMPLETA: String =
     "La imagen tiene demasiados movimientos y la lectura quedó incompleta. Sube el extracto en PDF, " +
