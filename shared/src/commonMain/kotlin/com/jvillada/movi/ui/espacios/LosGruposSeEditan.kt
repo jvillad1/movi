@@ -427,7 +427,14 @@ fun TarjetaDeSaldar(
             cifra = p.monto,
             cuerpo = cuerpoDeLaPropuesta(p, conElGrupo),
             accion = "Sí, saldar",
-            onAccion = { hacer { Repositories.wallets.liquidarEspacio(espacioId, liquidacionDe(p)) } },
+            // Revisión de la vuelta 131: el saldado que anotó la otra persona se vincula, no se crea otro.
+            onAccion = {
+                hacer {
+                    val cruzado = p.liquidacionId?.takeIf { p.cruzada }
+                    if (cruzado != null) Repositories.wallets.vincularLiquidacion(espacioId, cruzado, p.eventoId)
+                    else Repositories.wallets.liquidarEspacio(espacioId, liquidacionDe(p))
+                }
+            },
             accionSecundaria = "No",
             // Vuelta 67: «No» dice antes lo que hace: el descarte es por la transferencia, también
             // para un saldo futuro.

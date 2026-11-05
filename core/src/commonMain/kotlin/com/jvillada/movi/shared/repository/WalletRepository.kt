@@ -262,6 +262,12 @@ interface WalletRepository {
     suspend fun getInvitacion(codigo: String): com.jvillada.movi.shared.model.InvitacionVista = noLoTiene("getInvitacion")
     /** «Unirme»: el grupo nuevo de quien acepta. */
     suspend fun aceptarInvitacion(codigo: String): com.jvillada.movi.shared.model.Espacio = noLoTiene("aceptarInvitacion")
+    /**
+     * Revisión de la vuelta 131 · «Sí, saldar» sobre un saldado que anotó la otra persona: vincula la
+     * transferencia propia [eventoId] (`POST …/liquidaciones/{liquidacionId}/vincular`).
+     */
+    suspend fun vincularLiquidacion(espacioId: String, liquidacionId: String, eventoId: String): com.jvillada.movi.shared.model.LiquidacionDelEspacio =
+        noLoTiene("vincularLiquidacion")
     /** «Desconectar»: cualquiera de los dos; no borra nada de nadie. */
     suspend fun desconectarEspacio(espacioId: String): Unit = noLoTiene("desconectarEspacio")
 

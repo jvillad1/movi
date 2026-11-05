@@ -263,6 +263,12 @@ fun mensajeParaPedir(
         }
         val mas = gastos.size - GASTOS_EN_EL_MENSAJE
         if (mas > 0) append("\ny ").append(mas).append(" más.")
+        // Revisión de la vuelta 131: en un grupo conectado, el monto es el de siempre (todo lo que se deben) y
+        // el mensaje dice cuánto es de antes de conectarse, que la otra persona no ve en su grupo.
+        if (espacio.conexion != null && detalle.deAntesDeConectarse != 0L) {
+            append("\nIncluye ").append(formatCOPSinOcultar(kotlin.math.abs(detalle.deAntesDeConectarse)))
+                .append(" de antes de conectarnos en Movi, que no ves en tu grupo.")
+        }
         enlace?.takeIf { it.isNotBlank() }?.let { append("\nEl detalle: ").append(it) }
         append("\n¿Me lo pasas cuando puedas? ¡Gracias!")
     }

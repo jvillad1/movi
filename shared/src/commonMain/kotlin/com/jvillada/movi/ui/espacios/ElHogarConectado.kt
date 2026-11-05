@@ -36,6 +36,7 @@ import com.jvillada.movi.shared.model.MIEMBRO_YO
 import com.jvillada.movi.shared.model.codigoLimpio
 import com.jvillada.movi.shared.model.pareceUnCodigo
 import com.jvillada.movi.shared.model.sePuedeInvitar
+import com.jvillada.movi.shared.model.traeCaracteresQueNoExisten
 import com.jvillada.movi.shared.time.AppTimeZone
 import com.jvillada.movi.theme.Espacio as EspacioDeDiseno
 import com.jvillada.movi.theme.Medida
@@ -83,14 +84,16 @@ const val TAG_CAMPO_DEL_CODIGO: String = "hogar:campo-del-codigo"
 const val TAG_CONECTADO_CON: String = "hogar:conectado-con"
 const val TAG_ANOTO_EL_OTRO: String = "hogar:anoto-el-otro"
 const val TAG_DESCONECTAR: String = "hogar:desconectar"
-const val TAG_AVISO_PAGO_OTRO_CONECTADO: String = "hogar:aviso-pago-otro"
+const val TAG_LO_ANOTA_DESDE_SU_MOVI: String = "hogar:lo-anota-desde-su-movi"
+const val TAG_DE_ANTES_DE_CONECTARSE: String = "hogar:de-antes-de-conectarse"
+const val TAG_YA_LO_MARCO: String = "hogar:ya-lo-marco"
 const val TAG_GRUPOS_DE_DOS: String = "hogar:grupos-de-dos"
 
 /** La fila de un grupo de dos sin conectar: «Invita a Caro a Movi». */
 fun tituloDeInvitar(nombre: String): String = "Invita a $nombre a Movi"
 
 /** Debajo de [tituloDeInvitar]. */
-const val SUBTITULO_DE_INVITAR: String = "Así anota lo que ella paga y los dos ven lo mismo"
+const val SUBTITULO_DE_INVITAR: String = "Así anota lo que paga y los dos ven lo mismo"
 
 /** Qué verá la otra persona, en dos renglones (la hoja de invitar y la de unirse). */
 val LO_QUE_VERAN_LOS_DOS: List<String> = listOf(
@@ -125,16 +128,40 @@ fun teInvita(v: InvitacionVista): String = "${v.quienInvita} te invita a «${v.n
 
 /** La marca bajo el nombre del grupo: «Conectado con Caro». */
 fun conectadoCon(espacio: Espacio): String? = espacio.conexion?.let { c ->
-    "Conectado con ${c.nombre.ifBlank { nombreEnElEspacio(espacio, c.miembroId) }}"
+    val enEsteGrupo = "Conectado con ${c.nombre.ifBlank { nombreEnElEspacio(espacio, c.miembroId) }}"
+    // Revisión: quién está del otro lado, con el nombre de su perfil de Movi.
+    if (c.nombreEnMovi.isBlank()) enEsteGrupo else "$enEsteGrupo · ${c.nombreEnMovi} en Movi"
 }
 
 /** «Anotó Caro», o `null` si lo anotó el dueño. */
 fun anotoElOtro(espacio: Espacio, anotadoPor: String?): String? =
     anotadoPor?.let { "Anotó ${nombreEnElEspacio(espacio, it)}" }
 
-/** El aviso de «Pagó otro» en un grupo conectado: la otra persona puede anotarlo desde su Movi. */
-fun avisoDelPagoOtroConectado(espacio: Espacio): String? = espacio.conexion?.let { c ->
-    "${nombreEnElEspacio(espacio, c.miembroId)} también puede anotarlo desde su Movi: si ya lo hizo, no lo anotes otra vez"
+/**
+ * Revisión de la vuelta 131 · en un grupo conectado, «Pagó otro» ya no se ofrece con la otra persona: ella
+ * anota lo que paga desde su Movi. Esto es lo que se dice en su lugar.
+ */
+fun loAnotaDesdeSuMovi(espacio: Espacio): String? = espacio.conexion?.let { c ->
+    "${nombreEnElEspacio(espacio, c.miembroId)} anota lo que paga desde su Movi"
+}
+
+/** Revisión · la línea del saldo con lo de antes de conectarse: «Incluye $X de antes de conectarse: Caro no lo ve.» */
+fun lineaDeAntesDeConectarse(detalle: DetalleDelEspacio): String? {
+    val c = detalle.espacio.conexion ?: return null
+    if (detalle.deAntesDeConectarse == 0L) return null
+    return "Incluye ${formatCOP(kotlin.math.abs(detalle.deAntesDeConectarse))} de antes de conectarse: " +
+        "${nombreEnElEspacio(detalle.espacio, c.miembroId)} no lo ve."
+}
+
+/** Revisión · el aviso cuando la otra persona ya marcó el saldado: «Caro ya lo marcó como saldado». */
+fun yaLoMarcoComoSaldado(espacio: Espacio): String =
+    "${espacio.conexion?.let { nombreEnElEspacio(espacio, it.miembroId) } ?: "La otra persona"} ya lo marcó como saldado"
+
+/** Por qué el código todavía no sirve, para el pie de la hoja. */
+fun razonDelCodigo(codigo: String): String? = when {
+    traeCaracteresQueNoExisten(codigo) -> "Los códigos de Movi no usan 0, O, 1, I ni L: revisa esa letra"
+    !pareceUnCodigo(codigo) -> "El código tiene $LARGO_DEL_CODIGO letras y números"
+    else -> null
 }
 
 /** El saldo del dueño dicho corto, para «de $X a $Y»: «$70.000 a tu favor», «$20.000 a favor de Caro», «$0». */
@@ -434,7 +461,7 @@ internal fun HojaTengoUnCodigo(onDismiss: () -> Unit, onUnido: (Espacio) -> Unit
                     "Ver la invitación",
                     onClick = { hacer { vista = Repositories.wallets.getInvitacion(codigo) } },
                     habilitado = pareceUnCodigo(codigo) && !trabajando,
-                    razon = if (!pareceUnCodigo(codigo)) "El código tiene $LARGO_DEL_CODIGO letras y números" else null,
+                    razon = razonDelCodigo(codigo),
                     cargando = trabajando,
                     error = error,
                 )

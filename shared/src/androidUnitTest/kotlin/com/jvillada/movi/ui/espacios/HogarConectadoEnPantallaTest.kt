@@ -292,11 +292,83 @@ class HogarConectadoEnPantallaTest {
     }
 
     @Test
-    fun `Pago otro en un grupo conectado avisa que Caro tambien puede anotarlo`() {
+    fun `con el grupo conectado, Pago otro no ofrece a Caro y dice que ella lo anota desde su Movi`() {
+        Repositories.sustitutoDePrueba = Repo(detalleDe(conectada, emptyList()))
+        montarElGrupo()
+        esperarTag(TAG_LO_ANOTA_DESDE_SU_MOVI)
+        esperarTexto("Caro anota lo que paga desde su Movi")
+        assertEquals(0, composeRule.onAllNodesWithTag(TAG_ANOTAR_LO_QUE_PAGO_OTRO, useUnmergedTree = true).fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun `la hoja de Pago otro de un grupo conectado no deja anotar por Caro`() {
         Repositories.sustitutoDePrueba = Repo(detalleDe(conectada, emptyList()))
         composeRule.setContent { MoviTheme { Box(Modifier.fillMaxSize()) { HojaPagoOtro(espacio = conectada, onDismiss = {}, onGuardado = {}) } } }
-        esperarTag(TAG_AVISO_PAGO_OTRO_CONECTADO)
-        esperarTexto("Caro también puede anotarlo desde su Movi: si ya lo hizo, no lo anotes otra vez")
+        esperarTag(TAG_LO_ANOTA_DESDE_SU_MOVI)
+        assertTrue(!hay("Guardar"), "no hay nada que guardar")
+    }
+
+    @Test
+    fun `la marca dice con quien y su nombre en Movi, y el saldo dice lo de antes de conectarse`() {
+        val conNombre = conectada.copy(conexion = conectada.conexion!!.copy(nombreEnMovi = "Carolina"))
+        val propio = gasto("g1", MIEMBRO_YO, 100_000, "e1")
+        Repositories.sustitutoDePrueba = Repo(detalleDe(conNombre, listOf(propio)).copy(deAntesDeConectarse = 30_000))
+        montarElGrupo()
+        esperarTexto("Conectado con Caro · Carolina en Movi")
+        esperarTag(TAG_DE_ANTES_DE_CONECTARSE)
+        esperarTexto("Incluye \$30.000 de antes de conectarse: Caro no lo ve.")
+    }
+
+    @Test
+    fun `Si saldar sobre un saldado de Caro lo vincula y no crea otro`() {
+        val propuesta = com.jvillada.movi.shared.model.PropuestaDeSaldar(
+            eventoId = "e_de_caro", de = "dst_caro", a = MIEMBRO_YO, monto = 50_000, fecha = 1_761_100_000_000L,
+            descripcion = "Transferencia de Caro", liquidacionId = "l_caro", espacioId = casa.id, cruzada = true,
+        )
+        val repo = object : Repo(detalleDe(conectada, emptyList()).copy(propuestas = listOf(propuesta))) {
+            val vinculados = mutableListOf<Triple<String, String, String>>()
+            val liquidaciones = mutableListOf<LiquidacionDelEspacio>()
+            override suspend fun vincularLiquidacion(espacioId: String, liquidacionId: String, eventoId: String): LiquidacionDelEspacio {
+                vinculados += Triple(espacioId, liquidacionId, eventoId)
+                return LiquidacionDelEspacio(id = liquidacionId, de = "dst_caro", a = MIEMBRO_YO, monto = 50_000, eventoId = eventoId)
+            }
+            override suspend fun liquidarEspacio(espacioId: String, liquidacion: LiquidacionDelEspacio): LiquidacionDelEspacio =
+                liquidacion.also { liquidaciones += it }
+        }
+        Repositories.sustitutoDePrueba = repo
+        montarElGrupo()
+        esperarTexto("Sí, saldar")
+        tocarBoton("Sí, saldar")
+        composeRule.waitUntil(timeoutMillis = 5_000) { repo.vinculados.isNotEmpty() }
+        assertEquals(listOf(Triple("esp_casa", "l_caro", "e_de_caro")), repo.vinculados)
+        assertTrue(repo.liquidaciones.isEmpty(), "no se marcó otro saldado")
+    }
+
+    @Test
+    fun `si Caro ya lo marco como saldado, se ofrece vincular la transferencia en vez de marcar otro`() {
+        val propio = gasto("g1", MIEMBRO_YO, 100_000, "e1")
+        val repo = object : Repo(detalleDe(conectada, listOf(propio))) {
+            override suspend fun liquidarEspacio(espacioId: String, liquidacion: LiquidacionDelEspacio): LiquidacionDelEspacio =
+                throw com.jvillada.movi.shared.repository.ApiException(409, com.jvillada.movi.shared.model.YA_LO_MARCO_LA_OTRA_PERSONA + "l_caro")
+        }
+        Repositories.sustitutoDePrueba = repo
+        montarElGrupo()
+        esperarTexto("Marcar como saldado")
+        tocarBoton("Marcar como saldado")
+        esperarTexto("¿Caro ya te pagó")
+        tocarBoton("Sí, ya me pagó")
+        esperarTag(TAG_YA_LO_MARCO)
+        esperarTexto("Caro ya lo marcó como saldado")
+        esperarTexto("Vincular tu transferencia")
+    }
+
+    @Test
+    fun `el campo del codigo dice que letras no existen`() {
+        Repositories.sustitutoDePrueba = Repo(detalleDe(casa, emptyList()))
+        composeRule.setContent { MoviTheme { Box(Modifier.fillMaxSize()) { HojaTengoUnCodigo(onDismiss = {}, onUnido = {}) } } }
+        esperarTag(TAG_CAMPO_DEL_CODIGO)
+        composeRule.onNodeWithTag(TAG_CAMPO_DEL_CODIGO, useUnmergedTree = true).performTextInput("k7p3o9")
+        esperarTexto("Los códigos de Movi no usan 0, O, 1, I ni L")
     }
 
     @Test

@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import com.jvillada.movi.data.intentar
 import com.jvillada.movi.shared.model.Espacio
+import com.jvillada.movi.shared.model.quienesPuedenPagarDesdeAca
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.GastoDelEspacio
 import com.jvillada.movi.shared.model.MIEMBRO_YO
@@ -263,7 +264,8 @@ fun HojaRepartirEsteGasto(
     val espacio = espacios.firstOrNull { it.id == espacioId } ?: primero
     var quien by remember { mutableStateOf(MIEMBRO_YO) }
     // Si cambió el espacio y quien pagó no es de este, vuelve a «Yo».
-    val pagador = quien.takeIf { q -> q == MIEMBRO_YO || espacio.miembros.any { it.id == q } } ?: MIEMBRO_YO
+    // Revisión de la vuelta 131: la persona conectada no se ofrece (anota lo que paga desde su Movi).
+    val pagador = quien.takeIf { q -> q == MIEMBRO_YO || quienesPuedenPagarDesdeAca(espacio).any { it.id == q } } ?: MIEMBRO_YO
     var trabajando by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var yaGuardado by remember { mutableStateOf<FinancialEvent?>(null) }
@@ -360,13 +362,17 @@ fun HojaRepartirEsteGasto(
                 verticalArrangement = Arrangement.spacedBy(EspacioDeDiseno.xs),
             ) {
                 PildoraDeFiltro("Yo", seleccionada = pagador == MIEMBRO_YO, onClick = { if (!bloqueado) quien = MIEMBRO_YO })
-                espacio.miembros.filter { it.id != MIEMBRO_YO }.forEach { m ->
+                quienesPuedenPagarDesdeAca(espacio).forEach { m ->
                     PildoraDeFiltro(
                         nombreEnElEspacio(espacio, m.id),
                         seleccionada = pagador == m.id,
                         onClick = { if (!bloqueado) quien = m.id },
                     )
                 }
+            }
+            loAnotaDesdeSuMovi(espacio)?.let {
+                Spacer(Modifier.height(EspacioDeDiseno.xxs))
+                Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.testTag(TAG_LO_ANOTA_DESDE_SU_MOVI))
             }
             Spacer(Modifier.height(EspacioDeDiseno.xxs))
             Text(

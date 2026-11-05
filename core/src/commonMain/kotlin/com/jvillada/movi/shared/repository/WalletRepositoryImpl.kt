@@ -445,6 +445,12 @@ class WalletRepositoryImpl(
             setBody(com.jvillada.movi.shared.model.CodigoDeInvitacion(codigo))
         }) { it.body() }
 
+    override suspend fun vincularLiquidacion(espacioId: String, liquidacionId: String, eventoId: String): com.jvillada.movi.shared.model.LiquidacionDelEspacio =
+        conRespuesta(client.post("$baseUrl/api/espacios/$espacioId/liquidaciones/$liquidacionId/vincular") {
+            contentType(ContentType.Application.Json)
+            setBody(com.jvillada.movi.shared.model.VincularLiquidacion(eventoId))
+        }) { it.body() }
+
     override suspend fun desconectarEspacio(espacioId: String) {
         conRespuesta(client.delete("$baseUrl/api/espacios/$espacioId/conexion")) { }
     }

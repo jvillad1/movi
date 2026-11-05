@@ -2200,6 +2200,8 @@ class LocalRepository(
     override suspend fun getInvitacion(codigo: String) = remote.getInvitacion(codigo)
     override suspend fun aceptarInvitacion(codigo: String) = remote.aceptarInvitacion(codigo)
     override suspend fun desconectarEspacio(espacioId: String) = remote.desconectarEspacio(espacioId)
+    override suspend fun vincularLiquidacion(espacioId: String, liquidacionId: String, eventoId: String) =
+        remote.vincularLiquidacion(espacioId, liquidacionId, eventoId)
 
     /**
      * **Las cuentas de otros van siempre al server, y sin caché.**

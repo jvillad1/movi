@@ -15,6 +15,7 @@ import kotlinx.datetime.toInstant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /** # Lo que dice la pantalla del hogar conectado (vuelta 131), en funciones puras. */
 class TextosDelHogarConectadoTest {
@@ -41,9 +42,14 @@ class TextosDelHogarConectadoTest {
     @Test
     fun `la marca, el anoto y el aviso solo en un grupo conectado`() {
         assertEquals("Conectado con Caro", conectadoCon(conectada))
+        assertEquals(
+            "Conectado con Caro · Carolina en Movi",
+            conectadoCon(casa.copy(conexion = ConexionDelEspacio("dst_caro", "Caro", 1L, nombreEnMovi = "Carolina"))),
+        )
         assertNull(conectadoCon(casa))
-        assertEquals("Caro también puede anotarlo desde su Movi: si ya lo hizo, no lo anotes otra vez", avisoDelPagoOtroConectado(conectada))
-        assertNull(avisoDelPagoOtroConectado(casa))
+        assertEquals("Caro anota lo que paga desde su Movi", loAnotaDesdeSuMovi(conectada))
+        assertNull(loAnotaDesdeSuMovi(casa))
+        assertEquals("Así anota lo que paga y los dos ven lo mismo", SUBTITULO_DE_INVITAR, "sin género")
         assertEquals("Anotó Caro", anotoElOtro(conectada, "dst_caro"))
         assertNull(anotoElOtro(conectada, null))
     }
@@ -68,5 +74,28 @@ class TextosDelHogarConectadoTest {
             "No hay gastos de Caro en este grupo. El saldo no cambia. Nada se borra: cada uno sigue con lo que anotó.",
             confirmacionDeDesconectar(conectada, LoQueSeDejaDeVer(0, 0, 10, 10)).second,
         )
+    }
+
+    @Test
+    fun `lo de antes de conectarse se dice en la tarjeta y en el mensaje, solo con la conexion`() {
+        val g = GastoDelEspacio(
+            id = "g", espacioId = "esp_casa", pagadoPor = MIEMBRO_YO, monto = 100_000, categoria = "Mercado", descripcion = "Mercado",
+            fecha = dia(5), partes = com.jvillada.movi.shared.model.partesDelGasto(100_000, casa, MIEMBRO_YO),
+        )
+        val saldo = com.jvillada.movi.shared.model.saldoDelEspacio(conectada, listOf(g), emptyList())
+        val detalle = com.jvillada.movi.shared.model.DetalleDelEspacio(conectada, saldo, saldo, listOf(g), deAntesDeConectarse = 30_000)
+        assertEquals("Incluye \$30.000 de antes de conectarse: Caro no lo ve.", lineaDeAntesDeConectarse(detalle))
+        assertNull(lineaDeAntesDeConectarse(detalle.copy(deAntesDeConectarse = 0)))
+        assertNull(lineaDeAntesDeConectarse(detalle.copy(espacio = casa)))
+        val mensaje = mensajeParaPedir(detalle, zona = zona)!!
+        assertTrue("Me debes \$50.000" in mensaje, mensaje)
+        assertTrue("Incluye \$30.000 de antes de conectarnos en Movi, que no ves en tu grupo." in mensaje, mensaje)
+    }
+
+    @Test
+    fun `el codigo dice que caracteres no existen`() {
+        assertEquals("Los códigos de Movi no usan 0, O, 1, I ni L: revisa esa letra", razonDelCodigo("K7P3O9"))
+        assertEquals("El código tiene 6 letras y números", razonDelCodigo("K7P"))
+        assertNull(razonDelCodigo("K7P3Q9"))
     }
 }
