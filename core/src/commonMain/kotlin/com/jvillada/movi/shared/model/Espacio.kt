@@ -78,6 +78,12 @@ data class Espacio(
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val reparto: RepartoDelEspacio = RepartoDelEspacio.PARTES_IGUALES,
     val creadoEn: Long = 0L,
+    /**
+     * Vuelta 131 · **el hogar conectado**: con quién está conectado este grupo (la otra persona también
+     * usa Movi y los dos ven lo repartido en él), o `null`. Derivado: lo pone el server al leer; lo que
+     * mande un cliente se ignora. Opcional en el wire: un APK viejo no lo lee.
+     */
+    val conexion: ConexionDelEspacio? = null,
 )
 
 /**
@@ -104,6 +110,11 @@ data class GastoDelEspacio(
     val eventoId: String? = null,
     val partes: Map<String, Long> = emptyMap(),
     val reparto: RepartoDelGasto? = null,
+    /**
+     * Vuelta 131 · quién lo anotó: `null` = el dueño; si no, el id del miembro que lo anotó desde su
+     * propio Movi (un grupo conectado, ver [gastoDelOtroLado]). Derivado al leer; opcional en el wire.
+     */
+    val anotadoPor: String? = null,
 )
 
 /** Lo que le toca al dueño de [g]. */
@@ -131,6 +142,8 @@ data class LiquidacionDelEspacio(
      * «Pagos entre ustedes». Derivado: lo pone el server al leer; lo que mande un cliente se ignora.
      */
     val movimiento: String? = null,
+    /** Vuelta 131 · quién lo anotó, como [GastoDelEspacio.anotadoPor]. Derivado al leer; opcional en el wire. */
+    val anotadoPor: String? = null,
 )
 
 /**
@@ -141,7 +154,9 @@ data class LiquidacionDelEspacio(
  * entiende que fue en efectivo (o por fuera de tus cuentas) y deja de esperar.
  */
 fun esperaLaTransferencia(l: LiquidacionDelEspacio, ahora: Long): Boolean =
-    l.eventoId == null && (l.a == MIEMBRO_YO || l.de == MIEMBRO_YO) && l.de != l.a && l.monto > 0L &&
+    // Vuelta 131: lo que anotó el otro lado de un grupo conectado nunca espera una transferencia del
+    // dueño (la plata, si la hubo, la vincula quien lo anotó, en su Movi).
+    l.anotadoPor == null && l.eventoId == null && (l.a == MIEMBRO_YO || l.de == MIEMBRO_YO) && l.de != l.a && l.monto > 0L &&
         l.fecha >= ahora - DIAS_PARA_PROPONER_SALDAR * UN_DIA_EN_MS
 
 private const val UN_DIA_EN_MS: Long = 24L * 60 * 60 * 1000
