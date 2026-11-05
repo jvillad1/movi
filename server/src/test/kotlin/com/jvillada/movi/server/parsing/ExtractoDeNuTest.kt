@@ -92,6 +92,22 @@ class ExtractoDeNuTest {
     """.trimIndent()
 
     @Test
+    fun `lee la fecha limite de pago y el cupo, para crear la tarjeta si no esta en Movi`() {
+        // Vuelta 129.
+        val leido = assertNotNull(leerElExtractoDeNu(extracto()))
+        assertEquals(LocalDate.of(2026, 11, 3), leido.fechaLimite)
+        assertEquals(3_000_000L, leido.cupo)
+        // Sin esos renglones, la lectura sigue igual y lo que no dice va en null.
+        val sinDatos = extracto().lines()
+            .filterNot { it.startsWith("Tu cupo definido") || it == "Fecha límite de pago" || it == "03 NOV 2026" }
+            .joinToString("\n")
+        val sinLaTarjeta = assertNotNull(leerElExtractoDeNu(sinDatos))
+        assertNull(sinLaTarjeta.fechaLimite)
+        assertNull(sinLaTarjeta.cupo)
+        assertEquals(leido.filas.size, sinLaTarjeta.filas.size)
+    }
+
+    @Test
     fun `lee las compras y los pagos del periodo, con su fecha, su valor entero y sus cuotas`() {
         val leido = assertNotNull(leerElExtractoDeNu(extracto()))
         assertEquals(LocalDate.of(2026, 10, 12), leido.corte)

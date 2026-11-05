@@ -422,4 +422,32 @@ class UnSoloAmarilloPorVistaTest {
         assertTrue(avatares.isNotEmpty())
         avatares.forEach { assertEquals(TonoDeIcono.Neutro, it.config.getOrNull(TonoDeIconoKey), "la «B» en la capa 3 con la tinta") }
     }
+
+    /**
+     * Vuelta 129: con el extracto de una tarjeta que no está en Movi, «Crear la tarjeta Nu» va
+     * secundario: el amarillo de la revisión sigue siendo «Importar».
+     */
+    @Test
+    fun `en la revision del extracto de una tarjeta que falta, el unico amarillo es Importar`() {
+        val nuAhorros = Account("a-nu", "Nu Ahorros", AccountType.SAVINGS, 1_200_000)
+        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+            override suspend fun getAccounts(): List<Account> = listOf(nuAhorros)
+        }
+        val compra = com.jvillada.movi.shared.model.ParsedTransaction(
+            id = "f1", date = "2026-10-10", merchant = "Panaderia", amount = 50_000,
+            type = TransactionType.EXPENSE, category = "Comida", description = "Panaderia", rawText = "",
+        )
+        montar {
+            com.jvillada.movi.ui.extractos.StatementReviewScreen(
+                onNavigate = {},
+                result = com.jvillada.movi.shared.model.StatementParseResult(
+                    statementId = "st", bankName = "Nu", period = "Octubre 2026", newTransactions = listOf(compra),
+                    matches = emptyList(), cuentaDelPapel = nuAhorros.id,
+                    tarjeta = com.jvillada.movi.shared.model.TarjetaDelExtracto(banco = "Nu", ultimosCuatro = "1111"),
+                ),
+            )
+        }
+        esperarTexto("Crear la tarjeta Nu")
+        assertEquals(1, amarillos(), "solo «Importar»: «Crear la tarjeta Nu» va secundario")
+    }
 }

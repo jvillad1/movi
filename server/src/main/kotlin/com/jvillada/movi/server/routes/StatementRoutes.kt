@@ -254,11 +254,14 @@ internal suspend fun procesarExtracto(
     conSaldos: Boolean = false,
     /** Ver [conciliarYArchivar]: el documento que se está leyendo, si ya está guardado. */
     documentoLeido: String? = null,
+    /** Ver [conciliarYArchivar]: el cliente sabe qué hacer con el extracto de una tarjeta. */
+    conTarjeta: Boolean = false,
 ): StatementParseResult =
     conciliarYArchivar(
         uid, fileName, mimeType, bytes,
         leerElExtracto(uid, fileName, mimeType, bytes, mimeConfiable, conCreditos, conSaldos), log,
         documentoLeido = documentoLeido,
+        conTarjeta = conTarjeta,
     )
 
 /**
@@ -286,6 +289,12 @@ internal data class ExtractoLeido(
      * `ResumenDelExtractoDeSaldo`). Con default, como [resumenDeCredito].
      */
     val resumenDeSaldo: ResumenDelExtractoDeSaldo? = null,
+    /**
+     * Vuelta 129 · el extracto es de una tarjeta de crédito y esto es lo que dice de ella (ver
+     * `TarjetaDelExtracto`). Lo llenan los lectores sin IA que lo saben (Nu, los movimientos de la
+     * tarjeta de Bancolombia). Con default, como [resumenDeCredito].
+     */
+    val tarjeta: TarjetaDelExtracto? = null,
 )
 
 /**
@@ -404,6 +413,8 @@ internal suspend fun leerElExtracto(
                 esFamirios = false,
                 numerosDeCuenta = (listOfNotNull(movimientos.numero) +
                     StatementParser.numerosDeCuenta(fileName, text)).distinct(),
+                // Vuelta 129: «Movimientos: Tarjetas de Crédito» es de una tarjeta. No trae corte ni pago.
+                tarjeta = if (movimientos.deTarjeta) TarjetaDelExtracto(banco = "Bancolombia", ultimosCuatro = movimientos.numero) else null,
             )
         }
         // **El extracto de la tarjeta de Nu** (vuelta 94) también se lee sin IA: las compras y los pagos
@@ -415,6 +426,14 @@ internal suspend fun leerElExtracto(
                 filas = nu.filas,
                 esFamirios = false,
                 numerosDeCuenta = (nu.numeros + StatementParser.numerosDeCuenta(fileName, text)).distinct(),
+                // Vuelta 129: es el de la tarjeta, con lo que dice de ella (para crearla si no está).
+                tarjeta = TarjetaDelExtracto(
+                    banco = "Nu",
+                    ultimosCuatro = nu.numeros.firstOrNull(),
+                    diaDeCorte = nu.corte.dayOfMonth,
+                    diaDePago = nu.fechaLimite?.dayOfMonth,
+                    cupo = nu.cupo,
+                ),
             )
         }
         val docType = StatementParser.detectDocumentType(text)
@@ -498,6 +517,11 @@ internal suspend fun conciliarYArchivar(
      * llame igual y pese lo mismo: un PDF con clave se lee abierto y pesa distinto que el guardado.
      */
     documentoLeido: String? = null,
+    /**
+     * Vuelta 129 · **el cliente sabe qué hacer con el extracto de una tarjeta** (`?conTarjeta=1`): a
+     * él se le manda [StatementParseResult.tarjeta]. A un APK viejo no, como `?conSaldos=1`.
+     */
+    conTarjeta: Boolean = false,
 ): StatementParseResult {
     val parsed = leido.filas
     val bankName = leido.bankName
@@ -640,6 +664,8 @@ internal suspend fun conciliarYArchivar(
         numerosDeCuenta = leido.numerosDeCuenta,
         documentoId = documentoId,
         cargosDelBanco = cargosDelBanco,
+        tarjeta = leido.tarjeta.takeIf { conTarjeta },
+        cuentaDelPapel = documentoId?.let { cuentaDelPapel(uid, it) },
     )
 }
 
@@ -721,6 +747,21 @@ private suspend fun archivarElExtracto(
 }
 
 /**
+ * Vuelta 129 · **la cuenta que el dueño le puso al papel [docId]**, o `null` (sin cuenta, o una que ya
+ * no existe). Ver [StatementParseResult.cuentaDelPapel].
+ */
+private suspend fun cuentaDelPapel(uid: String, docId: String): String? = runCatching {
+    dbQuery {
+        val cuenta = Documents.select(listOf(Documents.accountId))
+            .where { (Documents.id eq docId) and (Documents.userId eq uid) }
+            .firstOrNull()?.get(Documents.accountId)
+        cuenta?.takeIf { id ->
+            Accounts.selectAll().where { (Accounts.id eq id) and (Accounts.userId eq uid) }.any()
+        }
+    }
+}.getOrNull()
+
+/**
  * Vuelta 129 · **el documento [docId] es un extracto**: pasa a [TipoDeDocumento.EXTRACTO], con
  * [cuenta] si se sabe (la del importe) y con [periodo] si no tenía uno. Filtra por dueño: un id
  * ajeno no toca nada. Lo usan la lectura ([archivarElExtracto]) y el importe ([escribirElImporte]).
@@ -761,6 +802,7 @@ fun Route.statementRoutes() {
                 log = { msg, t -> call.application.log.warn(msg, t) },
                 conCreditos = call.request.queryParameters["conCreditos"] == "1",
                 conSaldos = call.request.queryParameters["conSaldos"] == "1",
+                conTarjeta = call.request.queryParameters["conTarjeta"] == "1",
             )
             call.respond(resultado)
         } catch (e: FallaAlProcesarExtracto) {

@@ -80,6 +80,13 @@ fun leerElExtractoDeNu(texto: String): ExtractoDeNu? {
     val pagoMinimo = lineas.firstNotNullOfOrNull { PAGO_MINIMO.find(sinTildes(it))?.groupValues?.get(1) }
         ?.let(::centavosDelExtracto) ?: return null
     val numeros = TARJETA.findAll(texto).map { it.groupValues[1] }.distinct().toList()
+    // Vuelta 129: lo que el extracto dice de la tarjeta, para crearla si no está en Movi. Opcional: si
+    // no está o no se entiende, va en `null` y la lectura sigue igual.
+    val fechaLimite = lineas.indexOfFirst { sinTildes(it) == "fecha limite de pago" }
+        .takeIf { it >= 0 }?.let { lineas.getOrNull(it + 1) }
+        ?.let { FECHA_COMPLETA.matchEntire(it) }?.let(::fechaDe)
+    val cupo = lineas.firstNotNullOfOrNull { CUPO.find(sinTildes(it))?.groupValues?.get(1) }
+        ?.let(::centavosDelExtracto)?.takeIf { it > 0 }?.let { it / 100 }
 
     val encabezado = lineas.indexOfFirst { sinTildes(it).startsWith("fecha descripcion valor") }
     if (encabezado < 0) return null
@@ -171,7 +178,7 @@ fun leerElExtractoDeNu(texto: String): ExtractoDeNu? {
     movimiento(corte, INTERESES_CORRIENTES, corrientes)?.let { propuestas += it }
     movimiento(corte, INTERESES_DE_MORA, mora)?.let { propuestas += it }
     if (propuestas.isEmpty()) return null
-    return ExtractoDeNu(numeros = numeros, corte = corte, inicio = inicio, filas = propuestas)
+    return ExtractoDeNu(numeros = numeros, corte = corte, inicio = inicio, filas = propuestas, fechaLimite = fechaLimite, cupo = cupo)
 }
 
 /**
@@ -183,6 +190,10 @@ data class ExtractoDeNu(
     val corte: LocalDate,
     val inicio: LocalDate,
     val filas: List<ParsedTransaction>,
+    /** Vuelta 129: la «Fecha límite de pago», si se leyó. */
+    val fechaLimite: LocalDate? = null,
+    /** Vuelta 129: «Tu cupo definido», en pesos, si se leyó. */
+    val cupo: Long? = null,
 )
 
 /** El rótulo con que se proponen los intereses del extracto (los reconoce `cargoDelBanco`). */
@@ -298,6 +309,9 @@ private val FECHA_COMPLETA = Regex("""^(\d{1,2})\s+([A-Za-zÁÉÍÓÚáéíóú]
 private val INICIO_DEL_PERIODO = Regex("""^(\d{1,2})\s+([A-Za-zÁÉÍÓÚáéíóú]{3,10})\.?\s+(\d{4})\s*-""")
 
 /** «PAGO MÍNIMO $1.998,96», ya sin tildes y en minúsculas. */
+/** «Tu cupo definido $3.000.000,00», ya sin tildes ni mayúsculas. */
+private val CUPO = Regex("""^tu cupo definido\s+(\$\s?\d{1,3}(?:\.\d{3})*,\d{2})""")
+
 private val PAGO_MINIMO = Regex("""^pago minimo\s+(-?\$\s?\d{1,3}(?:\.\d{3})*,\d{2})$""")
 
 /** «05 SEP»: la fecha de una fila, con el año en el renglón siguiente. */

@@ -377,6 +377,7 @@ fun Route.documentRoutes() {
                 conSaldos = call.request.queryParameters["conSaldos"] == "1",
                 // Vuelta 129: es ESTE documento el que queda como extracto.
                 documentoLeido = id,
+                conTarjeta = call.request.queryParameters["conTarjeta"] == "1",
             )
             call.respond(resultado)
         } catch (e: FallaAlProcesarExtracto) {

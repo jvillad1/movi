@@ -256,6 +256,26 @@ open class ElTextoAl130NoSeCortaTest {
         montar(ahorros.name) { QuickAddScreen(onDismiss = {}) }
         nadaSeCorta("Agregar", listOf(composeRule.onRoot(useUnmergedTree = true).fetchSemanticsNode()))
     }
+
+    /** Vuelta 129: el aviso de la revisión cuando el extracto es de una tarjeta y la cuenta no lo es. */
+    @Test
+    fun `la revision de un extracto de tarjeta, con su aviso`() {
+        val compra = com.jvillada.movi.shared.model.ParsedTransaction(
+            id = "f1", date = "2026-10-10", merchant = "Panaderia", amount = 50_000,
+            type = TransactionType.EXPENSE, category = "Comida", description = "Panaderia", rawText = "",
+        )
+        montar("Crear la tarjeta") {
+            com.jvillada.movi.ui.extractos.StatementReviewScreen(
+                onNavigate = {},
+                result = com.jvillada.movi.shared.model.StatementParseResult(
+                    statementId = "st", bankName = "Nu", period = "Octubre 2026", newTransactions = listOf(compra),
+                    matches = emptyList(), cuentaDelPapel = ahorros.id,
+                    tarjeta = com.jvillada.movi.shared.model.TarjetaDelExtracto(banco = "Nu", ultimosCuatro = "1111"),
+                ),
+            )
+        }
+        nadaSeCorta("el aviso de la tarjeta", conTag(com.jvillada.movi.ui.extractos.TAG_AVISO_DE_LA_TARJETA))
+    }
 }
 
 /**

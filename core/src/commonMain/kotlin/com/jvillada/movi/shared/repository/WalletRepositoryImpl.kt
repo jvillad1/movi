@@ -1246,8 +1246,9 @@ class WalletRepositoryImpl(
     // `conCreditos=1`: esta app sabe mostrar la propuesta del extracto de un crédito (ver
     // `StatementParseResult.extractoDeCredito`); sin el parámetro el server lo rechaza como siempre.
     // `conSaldos=1`: y la del saldo de un extracto de Skandia o de la AFC (`extractoDeSaldo`).
+    // `conTarjeta=1` (vuelta 129): y qué hacer con el extracto de una tarjeta (`tarjeta`).
     override suspend fun uploadStatement(fileName: String, bytes: ByteArray, mimeType: String): StatementParseResult =
-        client.post("$baseUrl/api/statements/upload?conCreditos=1&conSaldos=1") {
+        client.post("$baseUrl/api/statements/upload?conCreditos=1&conSaldos=1&conTarjeta=1") {
             setBody(MultiPartFormDataContent(formData {
                 append("file", bytes, Headers.build {
                     append(HttpHeaders.ContentDisposition, "filename=\"$fileName\"")
@@ -1260,7 +1261,7 @@ class WalletRepositoryImpl(
     // el cuerpo («no encontramos movimientos», «falta la clave»), y sin esto se pierde adentro de
     // la excepción de deserialización.
     override suspend fun readStatementFromDocument(id: String): StatementParseResult =
-        client.post("$baseUrl/api/documents/$id/leer-extracto?conCreditos=1&conSaldos=1&conClave=1").exigirExito().body()
+        client.post("$baseUrl/api/documents/$id/leer-extracto?conCreditos=1&conSaldos=1&conClave=1&conTarjeta=1").exigirExito().body()
 
     override suspend fun aceptarElExtractoDelCredito(
         accountId: String,
@@ -1362,7 +1363,8 @@ class WalletRepositoryImpl(
         // la AFC; un APK viejo no lo pide y el server le contesta como siempre.
         // `conClave=1` (vuelta 103): esta app sabe pedir la clave de un PDF; el server le contesta
         // `PDF_CON_CLAVE` en vez de la frase para un APK viejo.
-        client.post("$baseUrl/api/documents/$documentoId/leer?conSaldos=1&conClave=1" + if (anotarAunqueEsteAnotado) "&anotarAunque=true" else "")
+        // `conTarjeta=1` (vuelta 129): esta app sabe qué hacer con el extracto de una tarjeta.
+        client.post("$baseUrl/api/documents/$documentoId/leer?conSaldos=1&conClave=1&conTarjeta=1" + if (anotarAunqueEsteAnotado) "&anotarAunque=true" else "")
             .exigirExito().body()
 
     // La clave va en el CUERPO: la URL la imprime `CallLogging` y el borde de Railway.

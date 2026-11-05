@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.platform.testTag
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.*
 import com.jvillada.movi.theme.*
@@ -71,7 +72,11 @@ fun StatementReviewScreen(
     var working by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     // La cuenta que el dueño eligió con el dedo, si la eligió. Manda sobre lo que resuelva Movi.
-    var cuentaElegida by remember { mutableStateOf<String?>(null) }
+    // Vuelta 129: de entrada, la que le puso al papel al subirlo («Los movimientos del extracto se
+    // anotan en esta cuenta», dice la hoja de subida).
+    var cuentaElegida by remember { mutableStateOf(result.cuentaDelPapel) }
+    // Vuelta 129: la hoja para crear la tarjeta del extracto, ya llena.
+    var creandoLaTarjeta by remember { mutableStateOf<TarjetaDelExtracto?>(null) }
     var eligiendoCuenta by remember { mutableStateOf(false) }
     // Ola 2 #1: red de seguridad — si la pila de navegación vuelve a esta pantalla ya
     // importada (mismo defecto que el de SMS), no se puede reimportar el mismo extracto.
@@ -93,18 +98,13 @@ fun StatementReviewScreen(
     // [UsoDeCuenta.CUENTA_DEL_EXTRACTO] y no el del gasto: un extracto trae las compras del mes y
     // también la nómina que entró, así que la pregunta no es de qué lado se mueve la plata sino
     // quién manda extractos.
-    val destino = remember(accounts, result.bankName, cuentaElegida) {
-        resolverCuentaDelBanco(
-            accounts = accounts,
-            uso = UsoDeCuenta.CUENTA_DEL_EXTRACTO,
-            banco = result.bankName,
-            elegidaAMano = cuentaElegida,
-            // El número de la tarjeta o cuenta que nombra el extracto, con la misma regla que un SMS:
-            // un extracto de la Master Black ya no cae por defecto en «Bancolombia Ahorros».
-            textoDelMensaje = result.numerosDeCuenta.joinToString(" ") { "*$it" },
-        )
-    }
+    //
+    // El número de la tarjeta o cuenta que nombra el extracto va con la misma regla que un SMS: un
+    // extracto de la Master Black ya no cae por defecto en «Bancolombia Ahorros». Vuelta 129: y el
+    // de una tarjeta se busca solo entre las tarjetas (ver [cuentaDelExtracto]).
+    val destino = remember(accounts, result, cuentaElegida) { cuentaDelExtracto(accounts, result, cuentaElegida) }
     val destinationAccount = destino.cuenta
+    val loDeLaTarjeta = remember(accounts, result, destinationAccount) { loQueDiceLaTarjeta(accounts, result, destinationAccount) }
     // Vuelta 107: la guía del banco que reconoció la lectura («Bancolombia», «Nu»), si tiene una.
     val guiaDelExtracto = remember(result.bankName) { guiaDelExtractoPara(result.bankName) }
     var viendoLaGuia by remember { mutableStateOf(false) }
@@ -247,6 +247,14 @@ fun StatementReviewScreen(
             avisoDeLaCuentaDelBanco(destino.origen, queLoDijo = "el extracto")?.let { aviso ->
                 Text(aviso, style = Movi.textos.apoyo, color = Movi.colores.textoApagado, modifier = Modifier.padding(top = Espacio.xxs))
             }
+            // Vuelta 129: el extracto es de una tarjeta que no está en Movi, o se eligió una cuenta que
+            // no es una tarjeta. Se dice antes de importar, con la salida a la mano.
+            AvisoDeLaTarjeta(
+                lo = loDeLaTarjeta,
+                onUsar = { cuentaElegida = it.id; eligiendoCuenta = false },
+                onCrear = { creandoLaTarjeta = it },
+                modifier = Modifier.padding(top = Espacio.xs),
+            )
         }
         if (eligiendoCuenta) {
             Superficie(
@@ -420,6 +428,19 @@ fun StatementReviewScreen(
             )
         }
     }
+    creandoLaTarjeta?.let { tarjeta ->
+        com.jvillada.movi.ui.credits.CardTermsSheet(
+            editing = null,
+            prellenado = tarjeta,
+            onDismiss = { creandoLaTarjeta = null },
+            onSaved = { creandoLaTarjeta = null },
+            // Creada, es el destino: el importe va a ella (la de siempre, `createCard`).
+            onCreada = { nueva ->
+                accounts = accounts.filterNot { it.id == nueva.account.id } + nueva.account
+                cuentaElegida = nueva.account.id
+            },
+        )
+    }
     val guia = guiaDelExtracto
     if (viendoLaGuia && guia != null) {
         HojaDeComoSacarElExtracto(
@@ -427,6 +448,57 @@ fun StatementReviewScreen(
             esTarjeta = destinationAccount?.type == com.jvillada.movi.shared.model.AccountType.CREDIT_CARD,
             onDismiss = { viendoLaGuia = false },
         )
+    }
+}
+
+/** El tag del aviso de la tarjeta, para las pruebas. */
+internal const val TAG_AVISO_DE_LA_TARJETA: String = "aviso-de-la-tarjeta-del-extracto"
+
+/**
+ * Vuelta 129 · **lo que la revisión dice de la tarjeta** (ver [LoQueDiceLaTarjeta]): la frase en el
+ * tono de aviso y, debajo, la salida —«Usar Nu Tarjeta» o «Crear la tarjeta Nu»—, en botones
+ * secundarios: el amarillo de la vista sigue siendo «Importar».
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AvisoDeLaTarjeta(
+    lo: LoQueDiceLaTarjeta,
+    onUsar: (Account) -> Unit,
+    onCrear: (TarjetaDelExtracto) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val frase = fraseDeLaTarjeta(lo) ?: return
+    val suTarjeta = (lo as? LoQueDiceLaTarjeta.NoEsUnaTarjeta)?.suTarjeta
+    val paraCrear = when (lo) {
+        is LoQueDiceLaTarjeta.FaltaLaTarjeta -> lo.tarjeta
+        is LoQueDiceLaTarjeta.NoEsUnaTarjeta -> lo.tarjeta.takeIf { lo.puedeCrearla }
+        LoQueDiceLaTarjeta.Nada -> null
+    }
+    Column(modifier = modifier.fillMaxWidth().testTag(TAG_AVISO_DE_LA_TARJETA)) {
+        Text(frase, style = Movi.textos.apoyo, color = Movi.colores.aviso)
+        // Que bajen de renglón antes que cortarse (letra grande, 360 dp).
+        FlowRow(
+            modifier = Modifier.fillMaxWidth().padding(top = Espacio.xs),
+            horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
+            verticalArrangement = Arrangement.spacedBy(Espacio.xs),
+        ) {
+            suTarjeta?.let { cuenta ->
+                Boton(
+                    "Usar ${cuenta.name}",
+                    onClick = { onUsar(cuenta) },
+                    variante = VarianteDeBoton.Secundario,
+                    tamano = TamanoDeBoton.S,
+                )
+            }
+            paraCrear?.let { tarjeta ->
+                Boton(
+                    textoDeCrearLaTarjeta(tarjeta),
+                    onClick = { onCrear(tarjeta) },
+                    variante = VarianteDeBoton.Secundario,
+                    tamano = TamanoDeBoton.S,
+                )
+            }
+        }
     }
 }
 

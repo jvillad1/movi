@@ -134,6 +134,8 @@ fun Route.papelesRoutes() {
         // La app sabe mostrar la propuesta del saldo de un extracto (Skandia, la AFC): ver
         // `leerElExtracto`. Un APK viejo no lo pide y su camino no cambia.
         val conSaldos = call.request.queryParameters["conSaldos"] == "1"
+        // Vuelta 129: la app sabe qué hacer con el extracto de una tarjeta (ver `conciliarYArchivar`).
+        val conTarjeta = call.request.queryParameters["conTarjeta"] == "1"
         // Vuelta 103: la app sabe pedir la clave de un PDF (`PDF_CON_CLAVE`, `CLAVE_INCORRECTA`). Un
         // APK viejo no lo pide y recibe la frase de siempre.
         val conClave = call.request.queryParameters["conClave"] == "1"
@@ -151,7 +153,7 @@ fun Route.papelesRoutes() {
             val bytes = abrirElPapelGuardado(uid, fila[Documents.id], Cifrado.descifrarBytes(fila[Documents.content]), pedida)
             val papel = PapelGuardado(fila[Documents.id], fila[Documents.name], fila[Documents.mimeType], bytes)
             call.respond(
-                leerElPapel(uid, papel, anotarAunque, ahora = System.currentTimeMillis(), conSaldos = conSaldos) { msg, t ->
+                leerElPapel(uid, papel, anotarAunque, ahora = System.currentTimeMillis(), conSaldos = conSaldos, conTarjeta = conTarjeta) { msg, t ->
                     call.application.log.warn(msg, t)
                 },
             )
@@ -187,6 +189,8 @@ internal suspend fun leerElPapel(
     ahora: Long,
     /** La app sabe mostrar la propuesta del saldo de un extracto (ver `leerElExtracto`). */
     conSaldos: Boolean = false,
+    /** Vuelta 129: la app sabe qué hacer con el extracto de una tarjeta (ver `conciliarYArchivar`). */
+    conTarjeta: Boolean = false,
     log: (String, Throwable) -> Unit,
 ): LecturaDelPapel {
     val huella = huellaDelPapel(papel.bytes)
@@ -216,7 +220,7 @@ internal suspend fun leerElPapel(
                 LecturaDelPapel(
                     documentoId = papel.id,
                     que = QueEsElPapel.EXTRACTO,
-                    extracto = conciliarYArchivar(uid, papel.nombre, papel.mime, papel.bytes, leido, log, documentoLeido = papel.id),
+                    extracto = conciliarYArchivar(uid, papel.nombre, papel.mime, papel.bytes, leido, log, documentoLeido = papel.id, conTarjeta = conTarjeta),
                 )
             }
         }
@@ -262,7 +266,7 @@ internal suspend fun leerElPapel(
             LecturaDelPapel(
                 documentoId = papel.id,
                 que = QueEsElPapel.EXTRACTO,
-                extracto = conciliarYArchivar(uid, papel.nombre, papel.mime, papel.bytes, leido, log, documentoLeido = papel.id),
+                extracto = conciliarYArchivar(uid, papel.nombre, papel.mime, papel.bytes, leido, log, documentoLeido = papel.id, conTarjeta = conTarjeta),
             )
         }
     }
