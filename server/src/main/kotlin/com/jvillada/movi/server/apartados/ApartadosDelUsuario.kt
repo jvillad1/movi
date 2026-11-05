@@ -4,7 +4,7 @@ import com.jvillada.movi.server.balance.cuentasConSaldo
 import com.jvillada.movi.server.db.Apartados
 import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.dbQuery
-import com.jvillada.movi.server.espacios.loCompartidoDelUsuario
+import com.jvillada.movi.server.espacios.indiceCompartidoDe
 import com.jvillada.movi.server.routes.ocurrenciasDelPeriodo
 import com.jvillada.movi.server.routes.proximosPagos
 import com.jvillada.movi.server.time.appDateToEpochMillis
@@ -42,7 +42,7 @@ fun Transaction.apartadosDelUsuario(uid: String, voidedIds: Set<String>): List<A
     val total = Events.amount.sum()
     // R3 · un gasto repartido consume solo TU parte (la regla de `montoContado`): a la suma en SQL
     // se le descuenta la parte ajena de los movimientos repartidos que entran en ese apartado.
-    val partesAjenas = loCompartidoDelUsuario(uid).indice.parteAjenaPorEvento
+    val partesAjenas = indiceCompartidoDe(uid).parteAjenaPorEvento
     return Apartados.selectAll()
         .where { Apartados.userId eq uid }
         .orderBy(Apartados.createdAt)

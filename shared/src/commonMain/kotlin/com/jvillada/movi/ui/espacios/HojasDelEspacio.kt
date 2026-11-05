@@ -45,6 +45,7 @@ import com.jvillada.movi.shared.model.MIEMBRO_YO
 import com.jvillada.movi.shared.model.MiembroDelEspacio
 import com.jvillada.movi.shared.model.RepartoDelGasto
 import com.jvillada.movi.shared.model.problemaDelReparto
+import com.jvillada.movi.shared.model.quienesPuedenPagarDesdeAca
 import com.jvillada.movi.shared.model.TipoDeTercero
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.montoContado
@@ -212,7 +213,8 @@ fun HojaPagoOtro(
 ) {
     val coroutine = rememberCoroutineScope()
     val id = remember { newId("gde") }
-    val otros = espacio.miembros.filter { it.id != MIEMBRO_YO }
+    // Revisión de la vuelta 131: sin la persona conectada (anota lo que paga desde su Movi).
+    val otros = quienesPuedenPagarDesdeAca(espacio)
     var quien by remember { mutableStateOf(otros.firstOrNull()?.id) }
     var monto by remember { mutableStateOf<Long?>(null) }
     var categoria by remember { mutableStateOf(categoriaInicial) }
@@ -260,6 +262,23 @@ fun HojaPagoOtro(
         }
     }
 
+    // Revisión de la vuelta 131: con el grupo conectado, la otra persona anota lo que paga desde su Movi;
+    // sin nadie más a quien anotar, la hoja lo dice y no ofrece guardar.
+    if (otros.isEmpty()) {
+        MarcoDeHoja(onDismiss = onDismiss) {
+            Column(modifier = Modifier.desplazableConElTeclado().weight(1f, fill = false)) {
+                TituloDeLaHoja("Pagó otro", null)
+                Text(
+                    loAnotaDesdeSuMovi(espacio) ?: "Este grupo no tiene a nadie más",
+                    style = Movi.textos.cuerpo,
+                    color = Movi.colores.texto,
+                    modifier = Modifier.testTag(TAG_LO_ANOTA_DESDE_SU_MOVI),
+                )
+                Spacer(Modifier.height(Medida.entreSecciones))
+            }
+        }
+        return
+    }
     MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !trabajando) {
         Column(modifier = Modifier.desplazableConElTeclado().weight(1f, fill = false)) {
             TituloDeLaHoja("Pagó otro", "No toca tus cuentas. Tu parte cuenta en tus gastos de hoy.")

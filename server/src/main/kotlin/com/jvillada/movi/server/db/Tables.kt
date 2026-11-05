@@ -1492,6 +1492,11 @@ object LiquidacionesDelEspacio : Table("liquidaciones_del_espacio") {
     val fecha     = long("fecha")
     val eventoId  = varchar("evento_id", 60).nullable()
     val createdAt = long("created_at")
+    /**
+     * Revisión 2 de la vuelta 131 · un saldado de lo de antes de conectarse: nunca cruza al otro lado de un
+     * grupo conectado. NULLABLE (la tabla existe en producción): NULL = no.
+     */
+    val deAntes   = bool("de_antes").nullable()
     override val primaryKey = PrimaryKey(id)
     init { index("idx_liquidaciones_del_espacio_user_id", false, userId) }
 }
@@ -1513,6 +1518,73 @@ object RecurrentesDelHogar : Table("recurrentes_del_hogar") {
     val espacioId = varchar("espacio_id", 60)
     val createdAt = long("created_at")
     override val primaryKey = PrimaryKey(userId, reglaId)
+}
+
+/**
+ * **Las invitaciones a un grupo** (vuelta 131, el hogar conectado): el código que el dueño ([userId])
+ * le manda a la persona que es [miembroId] en su grupo [espacioId]. **Solo el SHA-256 del código**: el
+ * código en claro sale una sola vez, en la respuesta de `POST /api/espacios/{id}/invitacion`. Vence a
+ * los 7 días, se usa una vez ([usadaEn]) y generar otro cancela el pendiente ([canceladaEn]). Tiene
+ * `user_id`: se va con la cuenta de quien invita.
+ */
+object InvitacionesAEspacio : Table("invitaciones_a_espacio") {
+    val id          = varchar("id", 60)
+    val userId      = varchar("user_id", 50)
+    val espacioId   = varchar("espacio_id", 60)
+    val miembroId   = varchar("miembro_id", 60)
+    val codigoHash  = varchar("codigo_hash", 64)
+    val creadaEn    = long("creada_en")
+    val venceEn     = long("vence_en")
+    val usadaEn     = long("usada_en").nullable()
+    /** Revisión 2 · quién la aceptó: su reintento contesta 200 con su grupo. */
+    val usadaPor    = varchar("usada_por", 50).nullable()
+    val canceladaEn = long("cancelada_en").nullable()
+    override val primaryKey = PrimaryKey(id)
+    init {
+        index("idx_invitaciones_a_espacio_user_id", false, userId)
+        index("idx_invitaciones_a_espacio_codigo_hash", false, codigoHash)
+    }
+}
+
+/**
+ * **Los vínculos de un saldado cruzado** (revisión de la vuelta 131): Caro marcó «Caro le pagó a Juan» en su
+ * Movi y Juan vincula la transferencia que le llegó. El saldado es de Caro (su fila, su `user_id`); el
+ * vínculo es de Juan: [liquidacionId] → [eventoId], **su** movimiento, que desde ahí no cuenta en
+ * «Entró»/«Salió». Un saldado se vincula una vez por persona (la clave) y un movimiento salda una sola cosa
+ * (lo valida la ruta). Tiene `user_id`: se va con la cuenta de quien vinculó.
+ */
+object VinculosDeLiquidacion : Table("vinculos_de_liquidacion") {
+    val userId        = varchar("user_id", 50)
+    val liquidacionId = varchar("liquidacion_id", 60)
+    val eventoId      = varchar("evento_id", 60)
+    val createdAt     = long("created_at")
+    override val primaryKey = PrimaryKey(userId, liquidacionId)
+}
+
+/**
+ * **Los grupos conectados** (vuelta 131): el grupo [espacioA] de [userA] y el [espacioB] de [userB] son
+ * el mismo hogar. [miembroA] es el tercero de A que es B, y [miembroB] el tercero de B que es A: con eso
+ * se traduce lo de un lado al otro al leer (`gastoDelOtroLado`). Nada se copia: cada uno sigue siendo
+ * dueño de sus filas. Desconectar escribe [desconectadoEn] y no borra nada.
+ *
+ * **No tiene `user_id`** (es de los dos): borrar la cuenta de cualquiera de los dos borra la fila a mano
+ * (`TABLAS_DE_DOS_USUARIOS` en `BorrarLaCuenta.kt`).
+ */
+object EspaciosConectados : Table("espacios_conectados") {
+    val id             = varchar("id", 60)
+    val userA          = varchar("user_a", 50)
+    val espacioA       = varchar("espacio_a", 60)
+    val miembroA       = varchar("miembro_a", 60)
+    val userB          = varchar("user_b", 50)
+    val espacioB       = varchar("espacio_b", 60)
+    val miembroB       = varchar("miembro_b", 60)
+    val desde          = long("desde")
+    val desconectadoEn = long("desconectado_en").nullable()
+    override val primaryKey = PrimaryKey(id)
+    init {
+        index("idx_espacios_conectados_user_a", false, userA)
+        index("idx_espacios_conectados_user_b", false, userB)
+    }
 }
 
 /**

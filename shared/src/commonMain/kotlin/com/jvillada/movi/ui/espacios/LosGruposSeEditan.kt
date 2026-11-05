@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.PersonAdd
 import androidx.compose.material.icons.rounded.SwapHoriz
@@ -33,6 +34,7 @@ import com.jvillada.movi.shared.model.MiembroDelEspacio
 import com.jvillada.movi.shared.model.PropuestaDeSaldar
 import com.jvillada.movi.shared.model.TipoDeTercero
 import com.jvillada.movi.shared.model.huellaDeLaPropuestaDeSaldar
+import com.jvillada.movi.shared.model.loQueSeDejaDeVer
 import com.jvillada.movi.shared.model.newId
 import com.jvillada.movi.shared.model.tipoOPersona
 import com.jvillada.movi.theme.Espacio as EspacioDeDiseno
@@ -249,6 +251,8 @@ fun HojaEditarGrupo(detalle: DetalleDelEspacio, onDismiss: () -> Unit, onGuardad
     var nombre by remember(espacio.id) { mutableStateOf(espacio.nombre) }
     var trabajando by remember { mutableStateOf(false) }
     var preguntando by remember { mutableStateOf(false) }
+    // Vuelta 131: «Desconectar de Caro» pregunta antes, como borrar.
+    var preguntandoDesconectar by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val limpio = nombre.trim()
     // Vuelta 67: renombrar avisa, como crear, si ya hay un grupo con ese nombre y esas personas.
@@ -297,9 +301,28 @@ fun HojaEditarGrupo(detalle: DetalleDelEspacio, onDismiss: () -> Unit, onGuardad
         }
     }
 
+    fun desconectar() {
+        if (trabajando) return
+        trabajando = true
+        error = null
+        coroutine.launch {
+            try {
+                Repositories.wallets.desconectarEspacio(espacio.id)
+                preguntandoDesconectar = false
+                onGuardado()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                error = mensajeDelEspacio(e)
+                preguntandoDesconectar = false
+                trabajando = false
+            }
+        }
+    }
+
     // Vuelta 67: mientras se pregunta si borrar, la hoja de editar no queda abierta detrás; «No»
     // vuelve a ella.
-    if (!preguntando) MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !trabajando) {
+    if (!preguntando && !preguntandoDesconectar) MarcoDeHoja(onDismiss = onDismiss, dismissEnabled = !trabajando) {
         Column(modifier = Modifier.desplazableConElTeclado().weight(1f, fill = false)) {
             EncabezadoDeHoja("Editar grupo", subtitulo = quienesComparten(espacio))
             Spacer(Modifier.height(Medida.dentroDeSeccion))
@@ -312,6 +335,10 @@ fun HojaEditarGrupo(detalle: DetalleDelEspacio, onDismiss: () -> Unit, onGuardad
             repetido?.let {
                 Spacer(Modifier.height(EspacioDeDiseno.xs))
                 Text(it, style = Movi.textos.apoyo, color = Movi.colores.aviso, modifier = Modifier.testTag(TAG_AVISO_DE_GRUPO_REPETIDO))
+            }
+            if (espacio.conexion != null) {
+                Spacer(Modifier.height(Medida.dentroDeSeccion))
+                BotonDeDesconectar(detalle, onPreguntar = { preguntandoDesconectar = true }, habilitado = !trabajando)
             }
             Spacer(Modifier.height(Medida.dentroDeSeccion))
             PieDeHoja(
@@ -331,6 +358,17 @@ fun HojaEditarGrupo(detalle: DetalleDelEspacio, onDismiss: () -> Unit, onGuardad
             )
             Spacer(Modifier.height(Medida.entreSecciones))
         }
+    }
+    if (preguntandoDesconectar) {
+        val (pregunta, cuerpo) = confirmacionDeDesconectar(espacio, loQueSeDejaDeVer(detalle))
+        ConfirmarEnHoja(
+            pregunta = pregunta,
+            detalle = cuerpo,
+            textoConfirmar = "Desconectar",
+            ocupado = trabajando,
+            onConfirmar = ::desconectar,
+            onCancelar = { if (!trabajando) preguntandoDesconectar = false },
+        )
     }
     if (preguntando) {
         val (pregunta, cuerpo) = confirmacionDeBorrarElGrupo(detalle)
@@ -390,7 +428,14 @@ fun TarjetaDeSaldar(
             cifra = p.monto,
             cuerpo = cuerpoDeLaPropuesta(p, conElGrupo),
             accion = "Sí, saldar",
-            onAccion = { hacer { Repositories.wallets.liquidarEspacio(espacioId, liquidacionDe(p)) } },
+            // Revisión de la vuelta 131: el saldado que anotó la otra persona se vincula, no se crea otro.
+            onAccion = {
+                hacer {
+                    val cruzado = p.liquidacionId?.takeIf { p.cruzada }
+                    if (cruzado != null) Repositories.wallets.vincularLiquidacion(espacioId, cruzado, p.eventoId)
+                    else Repositories.wallets.liquidarEspacio(espacioId, liquidacionDe(p))
+                }
+            },
             accionSecundaria = "No",
             // Vuelta 67: «No» dice antes lo que hace: el descarte es por la transferencia, también
             // para un saldo futuro.
@@ -424,6 +469,8 @@ fun PagosEntreUstedes(detalle: DetalleDelEspacio, ahora: Long, onCambio: () -> U
     if (pagos.isEmpty()) return
     val coroutine = rememberCoroutineScope()
     var deshaciendo by remember(espacio.id) { mutableStateOf<LiquidacionDelEspacio?>(null) }
+    // Revisión 2: «Desvincular tu transferencia» de un saldado de la otra persona que vinculaste por error.
+    var desvinculando by remember(espacio.id) { mutableStateOf<LiquidacionDelEspacio?>(null) }
     var trabajando by remember(espacio.id) { mutableStateOf(false) }
     var error by remember(espacio.id) { mutableStateOf<String?>(null) }
     Column {
@@ -434,10 +481,13 @@ fun PagosEntreUstedes(detalle: DetalleDelEspacio, ahora: Long, onCambio: () -> U
                 Fila(
                     titulo = tituloDelPago(espacio, l),
                     // Vuelta 67: la fecha y, abajo, cómo se pagó; en un renglón se cortaba «Esperando la transfere…».
-                    subtitulo = detalleDelPago(l, ahora),
+                    subtitulo = detalleDelPago(l, ahora, espacio = espacio),
                     lineasDelSubtitulo = RENGLONES_DEL_DETALLE_DEL_PAGO,
                     inicio = { AvatarDeTercero(nombreEnElEspacio(espacio, if (l.a == MIEMBRO_YO) l.de else l.a)) },
-                    final = {
+                    // Vuelta 131: lo que anotó la otra persona no se deshace desde acá (es de su Movi).
+                    final = if (loAnotoElOtro(l)) {
+                        if (l.eventoId != null) { { MenuDelSaldadoCruzado(onDesvincular = { desvinculando = l }) } } else null
+                    } else { {
                         Boton(
                             "Deshacer",
                             onClick = { deshaciendo = l },
@@ -445,12 +495,41 @@ fun PagosEntreUstedes(detalle: DetalleDelEspacio, ahora: Long, onCambio: () -> U
                             tamano = TamanoDeBoton.S,
                             modifier = Modifier.testTag(TAG_DESHACER_PAGO),
                         )
-                    },
+                    } },
                     modifier = Modifier.testTag(TAG_PAGO_ENTRE_USTEDES),
                 )
             }
         }
         error?.let { Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale) }
+    }
+    desvinculando?.let { l ->
+        ConfirmarEnHoja(
+            pregunta = "¿Desvincular tu transferencia?",
+            detalle = "${tituloDelPago(espacio, l)}. Tu transferencia vuelve a contar como ingreso o gasto, y Movi te " +
+                "la vuelve a proponer si es la de este saldado.",
+            textoConfirmar = "Desvincular",
+            ocupado = trabajando,
+            onCancelar = { if (!trabajando) desvinculando = null },
+            onConfirmar = {
+                if (!trabajando) {
+                    trabajando = true
+                    error = null
+                    coroutine.launch {
+                        try {
+                            Repositories.wallets.desvincularLiquidacion(espacio.id, l.id)
+                            onCambio()
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Throwable) {
+                            error = mensajeDelEspacio(e)
+                        } finally {
+                            trabajando = false
+                            desvinculando = null
+                        }
+                    }
+                }
+            },
+        )
     }
     deshaciendo?.let { l ->
         ConfirmarEnHoja(
@@ -500,3 +579,22 @@ const val TAG_CORTE_DEL_SALDADO: String = "grupos:corte"
 
 /** El tag de la pregunta que sigue al «No» de una propuesta de saldar (vuelta 67). */
 const val TAG_CONFIRMAR_EL_NO_DE_SALDAR: String = "grupos:confirmar-el-no-de-saldar"
+
+/** Revisión 2 de la vuelta 131 · el «⋯» de un saldado de la otra persona ya vinculado: «Desvincular tu transferencia». */
+@Composable
+private fun MenuDelSaldadoCruzado(onDesvincular: () -> Unit) {
+    androidx.compose.foundation.layout.Box(modifier = Modifier.testTag(TAG_MENU_DEL_SALDADO_CRUZADO)) {
+        var abierto by remember { mutableStateOf(false) }
+        com.jvillada.movi.ui.components.ds.BotonDeIcono(
+            icono = androidx.compose.material.icons.Icons.Rounded.MoreHoriz,
+            descripcion = "Más opciones del saldado",
+            onClick = { abierto = true },
+        )
+        androidx.compose.material3.DropdownMenu(expanded = abierto, onDismissRequest = { abierto = false }, containerColor = Movi.colores.tarjeta) {
+            androidx.compose.material3.DropdownMenuItem(
+                text = { Text(DESVINCULAR_TU_TRANSFERENCIA, style = Movi.textos.cuerpo, color = Movi.colores.texto) },
+                onClick = { abierto = false; onDesvincular() },
+            )
+        }
+    }
+}

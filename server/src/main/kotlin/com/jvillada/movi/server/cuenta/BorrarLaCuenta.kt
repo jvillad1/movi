@@ -27,6 +27,9 @@ import com.jvillada.movi.server.db.EnlacesCompartidos
 import com.jvillada.movi.server.db.CodigosDeCaptura
 import com.jvillada.movi.server.db.AtajosDescartados
 import com.jvillada.movi.server.db.Espacios
+import com.jvillada.movi.server.db.EspaciosConectados
+import com.jvillada.movi.server.db.InvitacionesAEspacio
+import com.jvillada.movi.server.db.VinculosDeLiquidacion
 import com.jvillada.movi.server.db.GastosDelEspacio
 import com.jvillada.movi.server.db.LiquidacionesDelEspacio
 import com.jvillada.movi.server.db.RecurrentesDelHogar
@@ -53,6 +56,10 @@ import org.jetbrains.exposed.sql.Column
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.Table
 import org.jetbrains.exposed.sql.deleteWhere
+import org.jetbrains.exposed.sql.transactions.TransactionManager
+import com.jvillada.movi.server.espacios.desconectarElGrupo
+import com.jvillada.movi.server.espacios.ladosConectadosDe
+import org.jetbrains.exposed.sql.or
 
 /**
  * # Borrar la cuenta: todo lo de una persona, de todas las tablas
@@ -115,6 +122,10 @@ internal val TABLAS_DEL_USUARIO: List<TablaDelUsuario> = listOf(
     TablaDelUsuario(GastosDelEspacio, GastosDelEspacio.userId),
     TablaDelUsuario(LiquidacionesDelEspacio, LiquidacionesDelEspacio.userId),
     TablaDelUsuario(RecurrentesDelHogar, RecurrentesDelHogar.userId),
+    // Vuelta 131 · las invitaciones a un grupo que mandó (solo el hash del código).
+    TablaDelUsuario(InvitacionesAEspacio, InvitacionesAEspacio.userId),
+    // Revisión de la vuelta 131 · los vínculos de sus transferencias con saldados de la otra persona.
+    TablaDelUsuario(VinculosDeLiquidacion, VinculosDeLiquidacion.userId),
     TablaDelUsuario(CategoryPrefs, CategoryPrefs.userId),
     TablaDelUsuario(AnomaliasDescartadas, AnomaliasDescartadas.userId),
     TablaDelUsuario(DebitosDescartados, DebitosDescartados.userId),
@@ -160,7 +171,25 @@ internal val TABLAS_DEL_USUARIO: List<TablaDelUsuario> = listOf(
 )
 
 /**
- * Borra todo lo de [uid]: cada tabla de [TABLAS_DEL_USUARIO] y al final su fila de `users`. Devuelve
+ * Una tabla que es **de dos personas a la vez** (vuelta 131): no tiene `user_id` sino una columna por
+ * persona (`user_a`, `user_b`). Borrar la cuenta de cualquiera de las dos borra la fila entera.
+ */
+internal data class TablaDeDosUsuarios(val tabla: Table, val usuarios: List<Column<String>>)
+
+/**
+ * Las tablas de dos personas. `BorrarLaCuentaTest` falla si una tabla con una columna `user_<algo>`
+ * (que no sea `user_id`) no está acá con todas esas columnas.
+ *
+ * - `espacios_conectados`: el hogar conectado. Borrar la cuenta de Juan desconecta y borra la fila; el
+ *   grupo de Caro queda, con lo suyo y sin lo de Juan (las filas de Juan se van con su cuenta).
+ */
+internal val TABLAS_DE_DOS_USUARIOS: List<TablaDeDosUsuarios> = listOf(
+    TablaDeDosUsuarios(EspaciosConectados, listOf(EspaciosConectados.userA, EspaciosConectados.userB)),
+)
+
+/**
+ * Borra todo lo de [uid]: cada tabla de [TABLAS_DEL_USUARIO], las filas de [TABLAS_DE_DOS_USUARIOS]
+ * donde está, y al final su fila de `users`. Devuelve
  * cuántas filas se fueron, para el log.
  *
  * **Corre DENTRO de la transacción de quien llama**: o se va todo, o no se va nada. Un borrado a
@@ -168,9 +197,18 @@ internal val TABLAS_DEL_USUARIO: List<TablaDelUsuario> = listOf(
  * los datos se fueron.
  */
 internal fun borrarTodoLoDe(uid: String): Int {
+    // Revisión 3 de la vuelta 131 · antes de borrar, se desconecta cada grupo conectado (en esta misma
+    // transacción): el otro lado se queda con sus vínculos convertidos en saldados propios, y su «Salió» y su
+    // saldo no cambian. Sin esto, sus vínculos quedaban huérfanos y su transferencia volvía a contar.
+    TransactionManager.current().run {
+        ladosConectadosDe(uid).forEach { desconectarElGrupo(uid, it.lado.miEspacioId) }
+    }
     var filas = 0
     for (t in TABLAS_DEL_USUARIO) {
         filas += t.tabla.deleteWhere { t.usuario eq uid }
+    }
+    for (t in TABLAS_DE_DOS_USUARIOS) {
+        filas += t.tabla.deleteWhere { t.usuarios.map { it eq uid }.reduce { a, b -> a or b } }
     }
     filas += Users.deleteWhere { Users.id eq uid }
     return filas

@@ -249,6 +249,30 @@ interface WalletRepository {
     /** Vuelta 66 · «Deshacer» un saldado (`DELETE /api/espacios/{id}/liquidaciones/{liquidacionId}`). */
     suspend fun deshacerLiquidacion(espacioId: String, liquidacionId: String): Unit = noLoTiene("deshacerLiquidacion")
 
+    // ── Vuelta 131 · el hogar conectado: la invitación por código ──────────────
+    // Todo pide red, como el resto de los grupos.
+
+    /** «Mandar la invitación»: un código nuevo (cancela el pendiente). El código en claro solo llega acá. */
+    suspend fun crearInvitacion(espacioId: String): com.jvillada.movi.shared.model.InvitacionCreada = noLoTiene("crearInvitacion")
+    /** La invitación pendiente del grupo, o `null` (204). */
+    suspend fun getInvitacionPendiente(espacioId: String): com.jvillada.movi.shared.model.InvitacionPendiente? = null
+    /** «Cancelar» la invitación pendiente. */
+    suspend fun cancelarInvitacion(espacioId: String): Unit = noLoTiene("cancelarInvitacion")
+    /** «Tengo un código»: a qué grupo invita y quién (`POST …/invitaciones/ver`; no escribe nada). */
+    suspend fun getInvitacion(codigo: String): com.jvillada.movi.shared.model.InvitacionVista = noLoTiene("getInvitacion")
+    /** «Unirme»: el grupo nuevo de quien acepta. */
+    suspend fun aceptarInvitacion(codigo: String): com.jvillada.movi.shared.model.Espacio = noLoTiene("aceptarInvitacion")
+    /**
+     * Revisión de la vuelta 131 · «Sí, saldar» sobre un saldado que anotó la otra persona: vincula la
+     * transferencia propia [eventoId] (`POST …/liquidaciones/{liquidacionId}/vincular`).
+     */
+    suspend fun vincularLiquidacion(espacioId: String, liquidacionId: String, eventoId: String): com.jvillada.movi.shared.model.LiquidacionDelEspacio =
+        noLoTiene("vincularLiquidacion")
+    /** Revisión 2 · «Desvincular tu transferencia» de un saldado de la otra persona (`DELETE …/vincular`). */
+    suspend fun desvincularLiquidacion(espacioId: String, liquidacionId: String): Unit = noLoTiene("desvincularLiquidacion")
+    /** «Desconectar»: cualquiera de los dos; no borra nada de nadie. */
+    suspend fun desconectarEspacio(espacioId: String): Unit = noLoTiene("desconectarEspacio")
+
     // ── Cuentas de otros (destinos conocidos) ─────────────────────────────────
 
     /**

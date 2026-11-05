@@ -74,6 +74,15 @@ class BorrarLaCuentaTest {
     /** Las que tienen columna de usuario. `users` aparte: su usuario es el `id`. */
     private val conUsuario: List<Table> by lazy { todas.filter { t -> t.columns.any { it.name == "user_id" } } }
 
+    /**
+     * Vuelta 131 · las que son de **dos** personas: alguna columna `user_<algo>` que no es `user_id`
+     * (`espacios_conectados`: `user_a`, `user_b`). Descubiertas igual que las de arriba.
+     */
+    private val conDosUsuarios: List<Table> by lazy { todas.filter { t -> columnasDePersonas(t).isNotEmpty() } }
+
+    private fun columnasDePersonas(t: Table): List<Column<*>> =
+        t.columns.filter { it.name.startsWith("user_") && it.name != "user_id" }
+
     @BeforeTest
     fun setUp() {
         System.setProperty("movi.jwt.secret", "test-secret-for-borrar-la-cuenta-min-32-chars")
@@ -92,6 +101,7 @@ class BorrarLaCuentaTest {
                     it[tokenVersion] = 0
                 }
                 conUsuario.forEach { insertarFilaDePrueba(it, uid, semilla) }
+                conDosUsuarios.forEach { insertarFilaDePrueba(it, uid, semilla) }
             }
         }
     }
@@ -126,6 +136,51 @@ class BorrarLaCuentaTest {
         assertEquals(TABLAS_DEL_USUARIO.size, cubiertas.size, "una tabla repetida en la lista")
     }
 
+    /**
+     * Vuelta 131 · **toda tabla de dos personas está en el borrado, con todas sus columnas de persona.**
+     * Una tabla sin `user_id` no la ve la prueba de arriba: esta cierra ese hueco.
+     */
+    @Test
+    fun `toda tabla de dos personas esta cubierta por el borrado con todas sus columnas`() {
+        assertTrue("espacios_conectados" in conDosUsuarios.map { it.tableName }, "el recorrido encontró ${conDosUsuarios.map { it.tableName }}")
+        val porTabla = TABLAS_DE_DOS_USUARIOS.associate { it.tabla.tableName to it.usuarios.map { c -> c.name }.toSet() }
+        conDosUsuarios.forEach { t ->
+            assertEquals(
+                columnasDePersonas(t).map { it.name }.toSet(), porTabla[t.tableName],
+                "${t.tableName} guarda personas en esas columnas y borrar la cuenta no las mira todas",
+            )
+        }
+        TABLAS_DE_DOS_USUARIOS.forEach { t -> t.usuarios.forEach { assertEquals(t.tabla, it.table, "${t.tabla.tableName}: columna de otra tabla") } }
+    }
+
+    /** Una fila de A **con** B (el hogar conectado) se va con la cuenta de A; lo demás de B queda. */
+    @Test
+    fun `la fila que A comparte con B se va con A y B sigue entero`() = testApplication {
+        armar()
+        transaction {
+            conDosUsuarios.forEach { t ->
+                t.insert { fila ->
+                    for (columna in t.columns) {
+                        @Suppress("UNCHECKED_CAST")
+                        val c = columna as Column<Any?>
+                        fila[c] = when (columna.name) {
+                            "user_a" -> a
+                            "user_b" -> b
+                            else -> valorDePrueba(columna, "ab", 3)
+                        }
+                    }
+                }
+            }
+        }
+        conDosUsuarios.forEach { assertEquals(2, filasDe(it, a), "el andamio de ${it.tableName}") }
+
+        assertEquals(HttpStatusCode.NoContent, borrar(token(a), claveDeA).status)
+
+        conDosUsuarios.forEach { assertEquals(0, filasDe(it, a), "quedó una fila con A en ${it.tableName}") }
+        conDosUsuarios.forEach { assertEquals(1, filasDe(it, b), "se fue la fila de B sola en ${it.tableName}") }
+        conUsuario.forEach { assertEquals(1, filasDe(it, b), "se borró algo de B en ${it.tableName}") }
+    }
+
     // ── El borrado ────────────────────────────────────────────────────────────────────────
 
     @Test
@@ -139,9 +194,11 @@ class BorrarLaCuentaTest {
 
         assertEquals(0, filasDe(Users, a), "la fila de users")
         conUsuario.forEach { assertEquals(0, filasDe(it, a), "quedó algo de A en ${it.tableName}") }
+        conDosUsuarios.forEach { assertEquals(0, filasDe(it, a), "quedó algo de A en ${it.tableName}") }
         // Aislamiento: B, entero.
         assertEquals(1, filasDe(Users, b))
         conUsuario.forEach { assertEquals(1, filasDe(it, b), "se borró algo de B en ${it.tableName}") }
+        conDosUsuarios.forEach { assertEquals(1, filasDe(it, b), "se borró algo de B en ${it.tableName}") }
         // Y lo que no es de nadie sigue ahí (la tabla existe y no se tocó).
         assertEquals(0, transaction { Screens.selectAll().count() }.toInt())
     }
@@ -228,6 +285,10 @@ class BorrarLaCuentaTest {
         client.get("/api/users/me") { header(HttpHeaders.Authorization, "Bearer $token") }
 
     private fun filasDe(tabla: Table, uid: String): Int = transaction {
+        if (tabla in conDosUsuarios) {
+            @Suppress("UNCHECKED_CAST")
+            return@transaction tabla.selectAll().count { fila -> columnasDePersonas(tabla).any { fila[it as Column<String>] == uid } }
+        }
         val columna = if (tabla == Users) Users.id else tabla.columns.single { it.name == "user_id" }
         @Suppress("UNCHECKED_CAST")
         tabla.selectAll().where { (columna as Column<String>) eq uid }.count().toInt()
@@ -244,7 +305,8 @@ class BorrarLaCuentaTest {
             for (columna in tabla.columns) {
                 @Suppress("UNCHECKED_CAST")
                 val c = columna as Column<Any?>
-                val esUsuario = columna.name == "user_id" || (tabla == Users && columna.name == "id")
+                val esUsuario = columna.name == "user_id" || (tabla == Users && columna.name == "id") ||
+                    (columna.name.startsWith("user_") && tabla in conDosUsuarios)
                 fila[c] = if (esUsuario) uid else valorDePrueba(columna, uid, semilla)
             }
         }

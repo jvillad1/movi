@@ -10,6 +10,12 @@ package com.jvillada.movi.shared.repository
 class ApiException(
     val status: Int,
     val serverMessage: String? = null,
+    /**
+     * Revisión 2 de la vuelta 131 · el código del rechazo, de la cabecera `X-Movi-Codigo`
+     * ([com.jvillada.movi.shared.model.CABECERA_DEL_CODIGO]): el cuerpo es la frase para cualquier cliente
+     * y el código es lo que lee el cliente nuevo. `null` si el server no lo mandó.
+     */
+    val codigo: String? = null,
 ) : Exception(
     buildString {
         append("HTTP ")

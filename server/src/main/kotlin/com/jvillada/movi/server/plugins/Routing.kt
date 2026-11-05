@@ -116,6 +116,8 @@ fun Application.configureRouting() {
             goalRoutes()
             apartadoRoutes()
             espacioRoutes()
+            // Vuelta 131 · el hogar conectado: la invitación por código y desconectar.
+            hogarConectadoRoutes()
             destinoRoutes()
             screenRoutes()
             inicioRoutes()

@@ -78,6 +78,12 @@ data class Espacio(
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val reparto: RepartoDelEspacio = RepartoDelEspacio.PARTES_IGUALES,
     val creadoEn: Long = 0L,
+    /**
+     * Vuelta 131 · **el hogar conectado**: con quién está conectado este grupo (la otra persona también
+     * usa Movi y los dos ven lo repartido en él), o `null`. Derivado: lo pone el server al leer; lo que
+     * mande un cliente se ignora. Opcional en el wire: un APK viejo no lo lee.
+     */
+    val conexion: ConexionDelEspacio? = null,
 )
 
 /**
@@ -104,6 +110,17 @@ data class GastoDelEspacio(
     val eventoId: String? = null,
     val partes: Map<String, Long> = emptyMap(),
     val reparto: RepartoDelGasto? = null,
+    /**
+     * Vuelta 131 · quién lo anotó: `null` = el dueño; si no, el id del miembro que lo anotó desde su
+     * propio Movi (un grupo conectado, ver [gastoDelOtroLado]). Derivado al leer; opcional en el wire.
+     */
+    val anotadoPor: String? = null,
+    /**
+     * Revisión 2 de la vuelta 131 · en un grupo conectado, este gasto es **de antes de conectarse** (lo anotó
+     * el dueño antes de `desde`): cuenta solo en su historia de antes, nunca en el saldo que ven los dos.
+     * Derivado al leer (falso sin conexión); opcional en el wire.
+     */
+    val deAntes: Boolean = false,
 )
 
 /** Lo que le toca al dueño de [g]. */
@@ -131,6 +148,15 @@ data class LiquidacionDelEspacio(
      * «Pagos entre ustedes». Derivado: lo pone el server al leer; lo que mande un cliente se ignora.
      */
     val movimiento: String? = null,
+    /** Vuelta 131 · quién lo anotó, como [GastoDelEspacio.anotadoPor]. Derivado al leer; opcional en el wire. */
+    val anotadoPor: String? = null,
+    /**
+     * Revisión 2 de la vuelta 131 · **un saldado de lo de antes de conectarse**: lo de antes no se salda por
+     * el canal compartido. Al leer (con conexión) también marca los saldados propios escritos antes de
+     * `desde`. Al crearlo, el cliente lo pide con `true` y el server lo guarda (`de_antes`): **nunca cruza**
+     * al otro lado y cuenta solo contra la historia de antes.
+     */
+    val deAntes: Boolean = false,
 )
 
 /**
@@ -141,6 +167,9 @@ data class LiquidacionDelEspacio(
  * entiende que fue en efectivo (o por fuera de tus cuentas) y deja de esperar.
  */
 fun esperaLaTransferencia(l: LiquidacionDelEspacio, ahora: Long): Boolean =
+    // Vuelta 131 (revisión): un saldado que anotó la otra persona de un grupo conectado también espera
+    // la transferencia del dueño, si el dueño paga o cobra: su [LiquidacionDelEspacio.eventoId], de
+    // este lado, es el vínculo **propio** (`vinculos_de_liquidacion`), nunca el movimiento del otro.
     l.eventoId == null && (l.a == MIEMBRO_YO || l.de == MIEMBRO_YO) && l.de != l.a && l.monto > 0L &&
         l.fecha >= ahora - DIAS_PARA_PROPONER_SALDAR * UN_DIA_EN_MS
 
@@ -463,6 +492,11 @@ data class PropuestaDeSaldar(
     val nombreDelEspacio: String = "",
     /** El nombre de la otra persona («Caro»), para decirlo fuera del grupo. Lo pone el server. */
     val quien: String = "",
+    /**
+     * Vuelta 131 · el saldado que espera ([liquidacionId]) lo anotó la otra persona de un grupo conectado:
+     * «Sí, saldar» lo vincula con `POST …/liquidaciones/{liquidacionId}/vincular`, no con un saldado propio.
+     */
+    val cruzada: Boolean = false,
 )
 
 /** Cuántos días atrás se mira para proponer una transferencia que salda. */
@@ -539,7 +573,10 @@ fun transferenciasQueEsperan(
             }
             .minByOrNull { it.timestamp } ?: return@mapNotNull null
         yaPropuestos += e.id
-        PropuestaDeSaldar(e.id, l.de, l.a, e.amount, e.timestamp, e.description, liquidacionId = l.id, espacioId = l.espacioId)
+        PropuestaDeSaldar(
+            e.id, l.de, l.a, e.amount, e.timestamp, e.description,
+            liquidacionId = l.id, espacioId = l.espacioId, cruzada = l.anotadoPor != null,
+        )
     }
 }
 
@@ -558,4 +595,10 @@ data class DetalleDelEspacio(
     val gastos: List<GastoDelEspacio>,
     val liquidaciones: List<LiquidacionDelEspacio> = emptyList(),
     val propuestas: List<PropuestaDeSaldar> = emptyList(),
+    /**
+     * Vuelta 131 · en un grupo conectado, el neto del dueño (positivo = le deben) de lo que **él** anotó
+     * antes de conectarse: sigue en su saldo y la otra persona no lo ve. 0 sin conexión o sin nada de
+     * antes. Opcional en el wire.
+     */
+    val deAntesDeConectarse: Long = 0L,
 )

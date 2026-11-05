@@ -56,6 +56,17 @@ object JwtConfig {
      */
     val huellaDelSecreto: String by lazy { huellaDe(secret) }
 
+    /**
+     * Revisión de la vuelta 131 · **una pimienta derivada del secreto**, para guardar con HMAC lo que no se
+     * guarda en claro (el código de una invitación a un grupo). Sale de `JWT_SECRET` —no hay una variable de
+     * entorno más que configurar—, separada por [proposito] para que la misma clave no sirva para dos cosas.
+     * Rotar `JWT_SECRET` invalida las invitaciones pendientes (además de las sesiones): vencen a los 7 días.
+     */
+    internal fun pimienta(proposito: String): ByteArray =
+        javax.crypto.Mac.getInstance("HmacSHA256")
+            .apply { init(javax.crypto.spec.SecretKeySpec(secret.toByteArray(Charsets.UTF_8), "HmacSHA256")) }
+            .doFinal("movi:pimienta:$proposito".toByteArray(Charsets.UTF_8))
+
     internal fun huellaDe(valor: String): String =
         java.security.MessageDigest.getInstance("SHA-256")
             .digest(valor.encodeToByteArray())

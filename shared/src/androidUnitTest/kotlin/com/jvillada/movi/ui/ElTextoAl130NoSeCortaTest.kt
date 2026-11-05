@@ -349,6 +349,79 @@ open class ElTextoAl130NoSeCortaTest {
         }
         nadaSeCorta("el enlace a la guía", conTag(com.jvillada.movi.ui.extractos.TAG_ENLACE_A_LA_GUIA))
     }
+
+    // ── Vuelta 131 · el hogar conectado ─────────────────────────────────────────────────────────
+
+    private val casa = com.jvillada.movi.shared.model.Espacio(
+        id = "esp_casa", nombre = "Casa con Caro",
+        miembros = listOf(
+            com.jvillada.movi.shared.model.MiembroDelEspacio(com.jvillada.movi.shared.model.MIEMBRO_YO, "Juan"),
+            com.jvillada.movi.shared.model.MiembroDelEspacio("dst_caro", "Caro"),
+        ),
+    )
+
+    private fun detalleDeLaCasa(
+        espacio: com.jvillada.movi.shared.model.Espacio,
+        gastos: List<com.jvillada.movi.shared.model.GastoDelEspacio> = emptyList(),
+    ) = com.jvillada.movi.shared.model.DetalleDelEspacio(
+        espacio = espacio,
+        saldo = com.jvillada.movi.shared.model.saldoDelEspacio(espacio, gastos, emptyList()),
+        delPeriodo = com.jvillada.movi.shared.model.saldoDelEspacio(espacio, gastos, emptyList()),
+        gastos = gastos,
+    )
+
+    private fun conLaCasa(detalle: com.jvillada.movi.shared.model.DetalleDelEspacio, pendiente: com.jvillada.movi.shared.model.InvitacionPendiente? = null) {
+        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+            override suspend fun getEspacios() = listOf(detalle.espacio)
+            override suspend fun getDetalleDelEspacio(id: String) = detalle
+            override suspend fun getInvitacionPendiente(espacioId: String) = pendiente
+        }
+    }
+
+    /** La fila de invitar, y con una pendiente, «Invitación enviada · vence el …» con sus dos botones. */
+    @Test
+    fun `la fila de invitar y la invitacion pendiente del hogar conectado`() {
+        conLaCasa(detalleDeLaCasa(casa))
+        montar(esperar = com.jvillada.movi.ui.espacios.SUBTITULO_DE_INVITAR) {
+            com.jvillada.movi.ui.espacios.EspacioScreen(id = "esp_casa", pagoOtro = false)
+        }
+        nadaSeCorta("la fila de invitar", conTag(com.jvillada.movi.ui.espacios.TAG_INVITAR))
+    }
+
+    @Test
+    fun `la invitacion pendiente con Mandar de nuevo y Cancelar`() {
+        conLaCasa(detalleDeLaCasa(casa), com.jvillada.movi.shared.model.InvitacionPendiente(1_762_966_800_000L))
+        montar(esperar = "Invitación enviada") {
+            com.jvillada.movi.ui.espacios.EspacioScreen(id = "esp_casa", pagoOtro = false)
+        }
+        nadaSeCorta("la invitación pendiente", conTag(com.jvillada.movi.ui.espacios.TAG_INVITACION_PENDIENTE))
+    }
+
+    @Test
+    fun `la hoja de invitar con lo que veran los dos`() {
+        conLaCasa(detalleDeLaCasa(casa))
+        montar(esperar = "Mandar la invitación") {
+            com.jvillada.movi.ui.espacios.HojaDeInvitar(espacio = casa, nombre = "Caro", onDismiss = {})
+        }
+        nadaSeCorta("la hoja de invitar", conTag(com.jvillada.movi.ui.espacios.TAG_HOJA_DE_INVITAR))
+    }
+
+    /** El grupo conectado: «Conectado con Caro» y un gasto que dice «Anotó Caro». */
+    @Test
+    fun `el grupo conectado con un gasto que anoto Caro`() {
+        val conectada = casa.copy(conexion = com.jvillada.movi.shared.model.ConexionDelEspacio("dst_caro", "Caro", 1L))
+        val deCaro = com.jvillada.movi.shared.model.GastoDelEspacio(
+            id = "g_caro", espacioId = "esp_casa", pagadoPor = "dst_caro", monto = 1_320_000, categoria = "Mercado",
+            descripcion = "Mercado del sábado", fecha = hoyMs,
+            partes = com.jvillada.movi.shared.model.partesDelGasto(1_320_000, conectada, "dst_caro"), anotadoPor = "dst_caro",
+        )
+        conLaCasa(detalleDeLaCasa(conectada, listOf(deCaro)))
+        montar(esperar = "Anotó Caro") {
+            com.jvillada.movi.ui.espacios.EspacioScreen(id = "esp_casa", pagoOtro = false)
+        }
+        nadaSeCorta("la marca de conectado", conTag(com.jvillada.movi.ui.espacios.TAG_CONECTADO_CON))
+        nadaSeCorta("el gasto que anotó Caro", conTag(com.jvillada.movi.ui.espacios.TAG_GASTO_DEL_ESPACIO))
+    }
 }
 
 /**

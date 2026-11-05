@@ -83,10 +83,13 @@ object DatabaseFactory {
             // primaria compuesta, que viaja dentro del CREATE TABLE.
             // CodigosDeCaptura y AtajosDescartados (vuelta 111, los atajos del iPhone) son tablas NUEVAS:
             // sus índices viajan dentro del CREATE TABLE, como los de EnlacesCompartidos.
+            // InvitacionesAEspacio y EspaciosConectados (vuelta 131, el hogar conectado) son tablas NUEVAS:
+            // sus índices viajan dentro del CREATE TABLE. VinculosDeLiquidacion (la revisión) también: su clave
+            // primaria compuesta viaja dentro del CREATE TABLE.
             // EnlacesCompartidos (compartir con un tercero) es tabla NUEVA y entra por acá: su
             // índice único sobre el hash y el de `user_id` se crean junto con ella, sobre una tabla
             // vacía, y en los arranques siguientes `create` la ve existir y no emite nada.
-            SchemaUtils.create(Users, Accounts, StatementImports, Events, VoidEvents, Budgets, RecurringRules, RecurringOccurrences, OccurrenceRejections, SmsMessages, Credits, Cards, Subscriptions, PushSubscriptions, Screens, PasswordResetTokens, CardPaymentDismissals, Goals, CategoryPrefs, Documents, StatementImportMatches, AiTurns, KnownDestinations, EnlacesCompartidos, LecturasDePapeles, ConversacionesDelAsistente, AccionesPropuestas, MemoriaDelAsistente, AnomaliasDescartadas, DestinosDescartados, DebitosDescartados, ReglasDeComercio, CierresEnviados, CierresDescartados, CierresGuardados, Apartados, InicioPersonalizado, Espacios, GastosDelEspacio, LiquidacionesDelEspacio, CorreosDescartados, RecurrentesDelHogar, ClavesDeExtractos, PdfsAbiertos, FallosDeLaApp, UsoDeLaApp, AjustesDeLaIa, TopesDeLaIaPorUsuario, CodigosDeCaptura, AtajosDescartados, ConversacionesConElAsistente, MigracionesHechas)
+            SchemaUtils.create(Users, Accounts, StatementImports, Events, VoidEvents, Budgets, RecurringRules, RecurringOccurrences, OccurrenceRejections, SmsMessages, Credits, Cards, Subscriptions, PushSubscriptions, Screens, PasswordResetTokens, CardPaymentDismissals, Goals, CategoryPrefs, Documents, StatementImportMatches, AiTurns, KnownDestinations, EnlacesCompartidos, LecturasDePapeles, ConversacionesDelAsistente, AccionesPropuestas, MemoriaDelAsistente, AnomaliasDescartadas, DestinosDescartados, DebitosDescartados, ReglasDeComercio, CierresEnviados, CierresDescartados, CierresGuardados, Apartados, InicioPersonalizado, Espacios, GastosDelEspacio, LiquidacionesDelEspacio, CorreosDescartados, RecurrentesDelHogar, ClavesDeExtractos, PdfsAbiertos, FallosDeLaApp, UsoDeLaApp, AjustesDeLaIa, TopesDeLaIaPorUsuario, CodigosDeCaptura, AtajosDescartados, ConversacionesConElAsistente, MigracionesHechas, InvitacionesAEspacio, EspaciosConectados, VinculosDeLiquidacion)
             // Vuelta 102 · la observabilidad del servidor: seis tablas NUEVAS, sin `user_id` (ver
             // TablasDeObservabilidad.kt). Entran solo por el `create`, como toda tabla nueva.
             SchemaUtils.create(*TABLAS_DE_OBSERVABILIDAD)
@@ -164,11 +167,14 @@ object DatabaseFactory {
             // NULLABLE; las dos existen en producción desde la vuelta 102 y su clave primaria viajó dentro
             // del CREATE TABLE, sin índices sueltos, así que el único DDL es el ADD COLUMN.
             // AjustesDeLaIa y TopesDeLaIaPorUsuario (vuelta 106) son tablas NUEVAS: entran por el `create` de arriba.
+            // LiquidacionesDelEspacio: `de_antes` (revisión 2 de la vuelta 131, el saldado de lo de antes de
+            // conectarse) — NULLABLE. La tabla existe en producción desde R3; su único índice (`user_id`) ya
+            // existe, así que el único DDL es el ADD COLUMN.
             // AiTurns: `conversacion_id` (vuelta 117, varias conversaciones) — NULLABLE y sin índice propio,
             // así que el único DDL es el ADD COLUMN. ConversacionesConElAsistente es tabla NUEVA: entra por
             // el `create` de arriba, con su índice adentro. Los turnos viejos se agrupan después, en
             // `agruparLosTurnosSueltos`.
-            SchemaUtils.createMissingTablesAndColumns(Events, RecurringRules, Screens, Users, Credits, Cards, Accounts, Subscriptions, AiTurns, CategoryPrefs, KnownDestinations, SmsMessages, InicioPersonalizado, Apartados, GastosDelEspacio, MetricasDeServicios, IaPorDia)
+            SchemaUtils.createMissingTablesAndColumns(Events, RecurringRules, Screens, Users, Credits, Cards, Accounts, Subscriptions, AiTurns, CategoryPrefs, KnownDestinations, SmsMessages, InicioPersonalizado, Apartados, GastosDelEspacio, MetricasDeServicios, IaPorDia, LiquidacionesDelEspacio)
             // Migraciones de datos (idempotentes), después del schema — ver Migrations.kt.
             with(Migrations) { runAll() }
         }

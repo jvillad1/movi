@@ -44,6 +44,8 @@ import com.jvillada.movi.shared.model.conIdentificadores
 import com.jvillada.movi.shared.model.conLoQueSeLeMando
 import com.jvillada.movi.shared.model.conTipoInferido
 import com.jvillada.movi.shared.model.unirTerceros
+import com.jvillada.movi.server.espacios.cambiarElMiembroEnLosGrupos
+import com.jvillada.movi.server.espacios.esUnTerceroConectado
 import com.jvillada.movi.shared.model.destinosSugeridos
 import com.jvillada.movi.shared.model.mismoIdentificador
 import com.jvillada.movi.shared.model.movimientosDesdeElDestino
@@ -114,6 +116,9 @@ import kotlin.math.roundToLong
  * Todo con `call.userId()`, como el resto del server: quien pide el destino de otro recibe «no
  * existe», no «no puedes».
  */
+/** El 409 de borrar a la otra persona de un grupo conectado. */
+internal const val PRIMERO_DESCONECTA_EL_GRUPO: String = "Primero desconecta el grupo"
+
 fun Route.destinoRoutes() {
     route("/api/destinos") {
         get {
@@ -218,6 +223,11 @@ fun Route.destinoRoutes() {
         delete("/{id}") {
             val uid = call.userId()
             val id = call.parameters["id"] ?: return@delete call.respond(HttpStatusCode.BadRequest, "Falta el id")
+            // Revisión de la vuelta 131: la otra persona de un grupo conectado no se borra mientras siga conectada
+            // (lo de ella se leería a nombre de nadie).
+            if (dbQuery { esUnTerceroConectado(uid, id) }) {
+                return@delete call.respond(HttpStatusCode.Conflict, PRIMERO_DESCONECTA_EL_GRUPO)
+            }
             val borradas = dbQuery {
                 // Ola V — las reglas recurrentes que apuntaban acá NO se borran con el destino: se
                 // sueltan, mismo criterio que ya usa `AccountRoutes` con `RecurringRule.accountId`
@@ -358,6 +368,8 @@ fun Route.destinoRoutes() {
                     (RecurringRules.userId eq uid) and (RecurringRules.destinoConocidoId eq seBorra)
                 }) { it[RecurringRules.destinoConocidoId] = sobrevive }
                 Credits.update({ (Credits.userId eq uid) and (Credits.destinoConocidoId eq seBorra) }) { it[Credits.destinoConocidoId] = sobrevive }
+                // Revisión de la vuelta 131: en los grupos también (miembros, gastos, saldados, la conexión).
+                cambiarElMiembroEnLosGrupos(uid, seBorra, sobrevive)
                 KnownDestinations.deleteWhere { (KnownDestinations.id eq seBorra) and (KnownDestinations.userId eq uid) }
                 guardarDestino(uid, resultado)
                 resultado.copy(renombrados = ponerleSuNombre(uid, sobrevive))

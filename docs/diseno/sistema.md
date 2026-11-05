@@ -5482,3 +5482,33 @@ La guía de la vuelta 107 se volvió un **catálogo por banco y producto** (`:co
 
 **Pruebas**: `ComoSacarElExtractoTest` (`:core`, el catálogo y sus textos), `ComoSacarElExtractoEnLaAppTest`
 (`:shared`, la hoja y las entradas) y los casos de la guía en `ElTextoAl130NoSeCortaTest`.
+
+## Vuelta 131 · Lo que anotó la otra persona: se ve, no se toca
+
+En un grupo conectado (el hogar conectado, `ui/espacios/ElHogarConectado.kt`) conviven filas propias y
+filas que anotó la otra persona desde su Movi. El patrón:
+
+- **La marca va en palabras, no en color.** «Anotó Caro» en el segundo renglón del subtítulo del gasto
+  (`quienPagoElGasto` + `renglonesDelSubtituloDelGasto` = 2), y en el del saldado (`detalleDelPago`); en la
+  hoja del gasto, una `Fila` «Anotó Caro · Desde su Movi…». Bajo el nombre del grupo, «Conectado con Caro»
+  en `enlace`.
+- **Lo que el otro anota no se anota dos veces**: con el grupo conectado, «Pagó otro» con esa persona no se
+  ofrece y en su lugar se dice «Caro anota lo que paga desde su Movi» (texto `apoyo`, sin botón); si ella ya
+  marcó el saldado, «Caro ya lo marcó como saldado. Cuando llegue tu transferencia, Movi te la propone para
+  vincularla.»: sin botón; si la propuesta ya existe, va debajo (`TarjetaDeSaldar`). Nunca un botón que no
+  hace nada.
+- **Lo que solo ve un lado se dice y se salda en ese lado**: «Antes de conectarse: Caro te debía $30.000» en
+  su propia superficie, con «Marcar como saldado» `Fantasma` (pregunta antes). La tarjeta del saldo es la
+  del espejo.
+- **Deshacer lo hecho por error va en el «⋯» de la fila** («Desvincular tu transferencia»), con su pregunta.
+- **Lo ajeno no ofrece acciones que no puede hacer**: sin «Quitar del grupo», sin «Deshacer», sin «Ver
+  movimiento». Nada apagado a la vista: la acción no se pinta.
+- **Invitar no compite con el saldo.** La fila de invitar es una `Fila` con su ícono en tono `Info`; la
+  invitación pendiente usa `ParDeBotones` con «Mandar de nuevo» (`Secundario`) y «Cancelar» (`Fantasma`):
+  el amarillo de la vista sigue siendo el de la tarjeta del saldo. El principal amarillo vive en las hojas
+  («Mandar la invitación», «Unirme»).
+- **Romper algo de dos pregunta antes, con cifras**: «Desconectar de Caro» va en «Editar grupo» como
+  `Boton` `Fantasma` y abre `ConfirmarEnHoja` con cuántos gastos dejan de verse y el saldo de antes y
+  después (`confirmacionDeDesconectar` sobre `loQueSeDejaDeVer`).
+- **Un código se escribe como venga**: el campo limpia minúsculas, espacios y guiones al escribir
+  (`codigoLimpio`), y el principal se prende solo con la forma completa (`pareceUnCodigo`).

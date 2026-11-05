@@ -313,7 +313,11 @@ class WalletRepositoryImpl(
 
     private suspend fun <T> conRespuesta(response: io.ktor.client.statement.HttpResponse, leer: suspend (io.ktor.client.statement.HttpResponse) -> T): T {
         if (!response.status.isSuccess()) {
-            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+            throw ApiException(
+                response.status.value,
+                runCatching { response.bodyAsText() }.getOrNull(),
+                response.headers[com.jvillada.movi.shared.model.CABECERA_DEL_CODIGO],
+            )
         }
         return leer(response)
     }
@@ -417,6 +421,46 @@ class WalletRepositoryImpl(
 
     override suspend fun deshacerLiquidacion(espacioId: String, liquidacionId: String) {
         conRespuesta(client.delete("$baseUrl/api/espacios/$espacioId/liquidaciones/$liquidacionId")) { }
+    }
+
+    // Vuelta 131 · el hogar conectado. El código viaja en el cuerpo, nunca en la URL.
+    override suspend fun crearInvitacion(espacioId: String): com.jvillada.movi.shared.model.InvitacionCreada =
+        conRespuesta(client.post("$baseUrl/api/espacios/$espacioId/invitacion")) { it.body() }
+
+    override suspend fun getInvitacionPendiente(espacioId: String): com.jvillada.movi.shared.model.InvitacionPendiente? {
+        val respuesta = client.get("$baseUrl/api/espacios/$espacioId/invitacion")
+        if (respuesta.status == HttpStatusCode.NoContent) return null
+        return conRespuesta(respuesta) { it.body() }
+    }
+
+    override suspend fun cancelarInvitacion(espacioId: String) {
+        conRespuesta(client.delete("$baseUrl/api/espacios/$espacioId/invitacion")) { }
+    }
+
+    override suspend fun getInvitacion(codigo: String): com.jvillada.movi.shared.model.InvitacionVista =
+        conRespuesta(client.post("$baseUrl/api/espacios/invitaciones/ver") {
+            contentType(ContentType.Application.Json)
+            setBody(com.jvillada.movi.shared.model.CodigoDeInvitacion(codigo))
+        }) { it.body() }
+
+    override suspend fun aceptarInvitacion(codigo: String): com.jvillada.movi.shared.model.Espacio =
+        conRespuesta(client.post("$baseUrl/api/espacios/invitaciones/aceptar") {
+            contentType(ContentType.Application.Json)
+            setBody(com.jvillada.movi.shared.model.CodigoDeInvitacion(codigo))
+        }) { it.body() }
+
+    override suspend fun vincularLiquidacion(espacioId: String, liquidacionId: String, eventoId: String): com.jvillada.movi.shared.model.LiquidacionDelEspacio =
+        conRespuesta(client.post("$baseUrl/api/espacios/$espacioId/liquidaciones/$liquidacionId/vincular") {
+            contentType(ContentType.Application.Json)
+            setBody(com.jvillada.movi.shared.model.VincularLiquidacion(eventoId))
+        }) { it.body() }
+
+    override suspend fun desvincularLiquidacion(espacioId: String, liquidacionId: String) {
+        conRespuesta(client.delete("$baseUrl/api/espacios/$espacioId/liquidaciones/$liquidacionId/vincular")) { }
+    }
+
+    override suspend fun desconectarEspacio(espacioId: String) {
+        conRespuesta(client.delete("$baseUrl/api/espacios/$espacioId/conexion")) { }
     }
 
     override suspend fun getDestinos(): List<DestinoConocido> =

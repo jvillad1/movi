@@ -257,7 +257,13 @@ internal fun Transaction.gruposConSuSaldoDe(uid: String): List<GrupoConSuSaldo> 
         val suyas = liquidaciones.filter { it.espacioId == espacio.id }
         GrupoConSuSaldo(
             espacio,
-            saldoDelEspacio(espacio, gastos.filter { it.espacioId == espacio.id }, suyas, anulados),
+            // Revisión 2 de la vuelta 131: lo que ven los dos de un grupo conectado (lo de antes va aparte).
+            saldoDelEspacio(
+                espacio,
+                com.jvillada.movi.shared.model.loQueVenLosDos(gastos.filter { it.espacioId == espacio.id }),
+                com.jvillada.movi.shared.model.saldadosQueVenLosDos(suyas),
+                anulados,
+            ),
             // Vuelta 85 (revisión): el «saldado» que espera su transferencia también la reconoce.
             liquidaciones = suyas,
         )

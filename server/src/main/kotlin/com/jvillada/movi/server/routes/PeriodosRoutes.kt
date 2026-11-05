@@ -4,7 +4,7 @@ import com.jvillada.movi.shared.model.limiteDelPeriodo
 import com.jvillada.movi.shared.model.periodoDelId
 import com.jvillada.movi.server.reminders.pausadaEn
 import com.jvillada.movi.shared.model.esAbonoADeuda
-import com.jvillada.movi.server.espacios.loCompartidoDelUsuario
+import com.jvillada.movi.server.espacios.indiceCompartidoDe
 import com.jvillada.movi.shared.model.conLoCompartido
 import com.jvillada.movi.server.balance.accountTypesFor
 import com.jvillada.movi.server.balance.withCashFlowFlag
@@ -650,7 +650,7 @@ private fun Transaction.losMasGrandes(
         .take(MAX_MAS_GRANDES)
         .map { it.id }
     if (ids.isEmpty()) return emptyList()
-    val compartido = loCompartidoDelUsuario(uid).indice
+    val compartido = indiceCompartidoDe(uid)
     val porId = Events.selectAll()
         .where { (Events.userId eq uid) and (Events.id inList ids) }
         .associate { it[Events.id] to it.toFinancialEvent().withCashFlowFlag(tipos).conLoCompartido(compartido) }
