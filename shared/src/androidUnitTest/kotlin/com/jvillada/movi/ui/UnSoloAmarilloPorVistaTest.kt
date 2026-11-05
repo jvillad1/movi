@@ -450,4 +450,19 @@ class UnSoloAmarilloPorVistaTest {
         esperarTexto("Crear la tarjeta Nu")
         assertEquals(1, amarillos(), "solo «Importar»: «Crear la tarjeta Nu» va secundario")
     }
+
+    /** Vuelta 129: con la cuenta propuesta, el único amarillo de la hoja de subida sigue siendo «Subir». */
+    @Test
+    fun `en la hoja de subida con la cuenta propuesta, el unico amarillo es Subir`() {
+        montar {
+            com.jvillada.movi.ui.documentos.SubirDocumentoSheet(
+                archivo = com.jvillada.movi.ui.documentos.ArchivoElegido("CuentaNu_CRS119_2026-09.pdf", ByteArray(2048), "application/pdf"),
+                cuentas = listOf(Account("a-nu", "Nu Ahorros", AccountType.SAVINGS, 1_200_000)),
+                onDismiss = {},
+                onSubir = { _, _ -> },
+            )
+        }
+        esperarTexto(com.jvillada.movi.ui.documentos.POR_EL_NOMBRE_DEL_ARCHIVO)
+        assertEquals(1, amarillos(), "solo «Subir»")
+    }
 }

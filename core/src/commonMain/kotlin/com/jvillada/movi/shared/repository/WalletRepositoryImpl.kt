@@ -1260,6 +1260,16 @@ class WalletRepositoryImpl(
     // `exigirExito()` por el mismo motivo que `uploadStatement`: el server explica el rechazo en
     // el cuerpo («no encontramos movimientos», «falta la clave»), y sin esto se pierde adentro de
     // la excepción de deserialización.
+    override suspend fun getLoQueSeSabeDelPapel(huella: String): com.jvillada.movi.shared.model.PistasDelPapel? {
+        // La huella en el cuerpo: la URL la imprime `CallLogging`. 204 = Movi no leyó ese archivo.
+        val respuesta = client.post("$baseUrl/api/documents/lo-que-se-sabe") {
+            contentType(ContentType.Application.Json)
+            setBody(com.jvillada.movi.shared.model.PedidoDeLoQueSeSabe(huella))
+        }
+        if (respuesta.status == HttpStatusCode.NoContent) return null
+        return respuesta.exigirExito().body()
+    }
+
     override suspend fun readStatementFromDocument(id: String): StatementParseResult =
         client.post("$baseUrl/api/documents/$id/leer-extracto?conCreditos=1&conSaldos=1&conClave=1&conTarjeta=1").exigirExito().body()
 

@@ -2611,6 +2611,10 @@ class LocalRepository(
     // Igual que uploadStatement: sin espejo local, siempre a la red.
     override suspend fun readStatementFromDocument(id: String): StatementParseResult =
         remote.readStatementFromDocument(id)
+
+    // Vuelta 129: lo sabe el server (sus lecturas guardadas), sin copia local; sin red, `null`.
+    override suspend fun getLoQueSeSabeDelPapel(huella: String): com.jvillada.movi.shared.model.PistasDelPapel? =
+        remote.getLoQueSeSabeDelPapel(huella)
     override suspend fun importStatement(decision: ImportDecision) =
         remote.importStatement(decision)
 

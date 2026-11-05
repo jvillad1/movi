@@ -996,6 +996,16 @@ interface WalletRepository {
      */
     suspend fun readStatementFromDocument(id: String): StatementParseResult
 
+    /**
+     * Vuelta 129 · `POST /api/documents/lo-que-se-sabe`: **lo que Movi ya sabe del archivo con esta
+     * huella** (SHA-256, ver `huellaSha256`), si ya lo leyó; `null` si no. La hoja de subida de
+     * Documentos lo usa para proponer la cuenta. Es una lectura: no escribe nada.
+     *
+     * Con cuerpo por defecto (`null`) para los repositorios de prueba; la app y el teléfono lo
+     * sobrescriben.
+     */
+    suspend fun getLoQueSeSabeDelPapel(huella: String): com.jvillada.movi.shared.model.PistasDelPapel? = null
+
     // ── Documentos ─────────────────────────────────────────────────────────────
 
     /** Los papeles guardados, lo más reciente primero. **Metadatos, nunca bytes** — ver [Documento]. */

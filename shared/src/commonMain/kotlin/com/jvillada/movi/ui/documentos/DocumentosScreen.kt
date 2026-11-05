@@ -101,6 +101,10 @@ import com.jvillada.movi.shared.model.TipoDeDocumento
 import com.jvillada.movi.ui.components.ListaDeCuentasElegibles
 import com.jvillada.movi.ui.components.rememberCampoConSeleccion
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import com.jvillada.movi.shared.model.PistasDelPapel
+import com.jvillada.movi.shared.model.huellaSha256
 import kotlinx.coroutines.launch
 import com.jvillada.movi.ui.fecha.etiquetaDePeriodo
 import com.jvillada.movi.ui.components.ds.Campo
@@ -416,6 +420,12 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
                 cuentas = cuentas,
                 onDismiss = { aSubir = null },
                 onSubir = { tipo, cuentaId -> subir(archivo, tipo, cuentaId) },
+                // Vuelta 129: si Movi ya leyó este mismo archivo, lo que dice el contenido propone la
+                // cuenta. La huella se calcula fuera del hilo de la pantalla; sin red, nada.
+                loQueSeSabe = { elegido ->
+                    val huella = withContext(Dispatchers.Default) { huellaSha256(elegido.bytes) }
+                    Repositories.wallets.getLoQueSeSabeDelPapel(huella)
+                },
             )
         }
 
@@ -761,9 +771,31 @@ internal fun SubirDocumentoSheet(
     cuentas: List<Account>,
     onDismiss: () -> Unit,
     onSubir: (TipoDeDocumento, String?) -> Unit,
+    /**
+     * Vuelta 129 · **lo que Movi ya sabe del contenido de este archivo**, si ya lo leyó (ver
+     * [cuentaPropuestaParaElPapel]). Por defecto nada: la hoja propone solo con el nombre.
+     */
+    loQueSeSabe: suspend (ArchivoElegido) -> PistasDelPapel? = { null },
 ) {
     var tipo by remember { mutableStateOf(tipoSugeridoPara(archivo.nombre)) }
-    var cuenta by remember { mutableStateOf<String?>(null) }
+    // Vuelta 129: la cuenta llega propuesta (ver [cuentaPropuestaParaElPapel]) hasta que el dueño elige
+    // otra con el dedo; desde ahí manda lo suyo, aunque lleguen después las pistas del server.
+    var pistas by remember(archivo) { mutableStateOf<PistasDelPapel?>(null) }
+    LaunchedEffect(archivo) {
+        pistas = try {
+            loQueSeSabe(archivo)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            // Sin red o sin respuesta, la hoja se queda con lo que dice el nombre del archivo.
+            null
+        }
+    }
+    val propuesta = remember(archivo.nombre, cuentas, pistas) { cuentaPropuestaParaElPapel(archivo.nombre, cuentas, pistas) }
+    var elegidaAMano by remember { mutableStateOf(false) }
+    var elegida by remember { mutableStateOf<String?>(null) }
+    val cuenta = if (elegidaAMano) elegida else propuesta.cuenta?.id
+    val ayudaDeLaCuenta = lineasDeLaCuentaAlSubir(tipo, propuesta, elegidaAMano)
 
     HojaDeDocumento(onDismiss = onDismiss, cerrarHabilitado = true) {
         // El nombre y el peso, de solo lectura: acá no se renombra —eso es «Editar»— pero sí hace
@@ -780,12 +812,32 @@ internal fun SubirDocumentoSheet(
         SelectorDeTipo(tipo, enabled = true) { tipo = it }
 
         Spacer(Modifier.height(Espacio.s))
-        SelectorDeCuenta(cuentas, cuenta, enabled = true) { cuenta = it }
+        SelectorDeCuenta(cuentas, cuenta, enabled = true, ayuda = ayudaDeLaCuenta) { elegida = it; elegidaAMano = true }
 
         Spacer(Modifier.height(Espacio.l))
         PieDeHoja(texto = "Subir", onClick = { onSubir(tipo, cuenta) })
         Spacer(Modifier.height(Espacio.l))
     }
+}
+
+/** El tag de cada renglón de ayuda de la cuenta, para las pruebas. */
+internal const val TAG_AYUDA_DE_LA_CUENTA: String = "ayuda-de-la-cuenta-del-papel"
+
+/**
+ * Vuelta 129 · **lo que la hoja de subida dice de la cuenta**, en el orden en que se lee: para qué
+ * sirve si es un extracto ([PARA_QUE_SIRVE_LA_CUENTA]) y de dónde salió la propuesta («Por el nombre
+ * del archivo»); sin propuesta, en un extracto, «Elige la cuenta». Cuando el dueño ya eligió con el
+ * dedo, ya no se dice de dónde salió.
+ */
+internal fun lineasDeLaCuentaAlSubir(tipo: TipoDeDocumento, propuesta: CuentaPropuesta, elegidaAMano: Boolean): List<String> {
+    val esExtracto = tipo == TipoDeDocumento.EXTRACTO
+    val deDonde = when {
+        elegidaAMano -> null
+        propuesta.cuenta != null -> propuesta.deDonde?.let(::textoDeDondeSale)
+        esExtracto -> ELIGE_LA_CUENTA
+        else -> null
+    }
+    return listOfNotNull(PARA_QUE_SIRVE_LA_CUENTA.takeIf { esExtracto }, deDonde)
 }
 
 /** Las cuatro opciones de tipo, una por fila. Compartidas por las dos hojas. */
@@ -816,9 +868,19 @@ private fun SelectorDeCuenta(
     cuentas: List<Account>,
     elegida: String?,
     enabled: Boolean,
+    /** Vuelta 129: los renglones debajo del rótulo (para qué sirve, de dónde salió). */
+    ayuda: List<String> = emptyList(),
     onElegir: (String?) -> Unit,
 ) {
     RotuloDeCampo("Cuenta")
+    ayuda.forEach { renglon ->
+        Text(
+            renglon,
+            style = Movi.textos.apoyo,
+            color = Movi.colores.textoMedio,
+            modifier = Modifier.padding(horizontal = Espacio.xs).padding(bottom = Espacio.xxs).testTag(TAG_AYUDA_DE_LA_CUENTA),
+        )
+    }
     FilaElegible("Sin cuenta", elegida = elegida == null, enabled = enabled) { onElegir(null) }
     ListaDeCuentasElegibles(
         // `conservar` sostiene la cuenta ya puesta aunque hoy no se ofreciera —el papel puede ser

@@ -24,6 +24,11 @@ import com.jvillada.movi.shared.model.LecturaDelPapel
 import com.jvillada.movi.shared.model.MerchantRule
 import com.jvillada.movi.shared.model.StatementParseResult
 import com.jvillada.movi.shared.model.TarjetaDelExtracto
+import com.jvillada.movi.shared.model.PistasDelPapel
+import com.jvillada.movi.shared.model.ProductoDelPapel
+import com.jvillada.movi.shared.model.huellaSha256
+import io.ktor.http.ContentType
+import io.ktor.http.contentType
 import io.ktor.client.request.forms.MultiPartFormDataContent
 import io.ktor.client.request.forms.formData
 import io.ktor.client.request.header
@@ -191,5 +196,43 @@ class ElExtractoDeUnaTarjetaLoDiceTest {
         val lectura = json.decodeFromString(LecturaDelPapel.serializer(), compartido.bodyAsText())
         assertEquals(ahorros, lectura.extracto?.cuentaDelPapel)
         assertEquals("Nu", lectura.extracto?.tarjeta?.banco)
+    }
+
+    // ── Vuelta 129 · lo que Movi ya sabe de un archivo, por su huella ──────────────
+
+    private suspend fun ApplicationTestBuilder.loQueSeSabe(cuerpo: String) = client.post("/api/documents/lo-que-se-sabe") {
+        header(HttpHeaders.Authorization, "Bearer ${token()}")
+        contentType(ContentType.Application.Json)
+        setBody(cuerpo)
+    }
+
+    @Test
+    fun `lo que se sabe de un archivo ya leido, por su huella`() = testApplication {
+        wireApp()
+        val huella = huellaSha256(EXTRACTO_DE_LA_TARJETA_NU.toByteArray())
+        // Antes de leerlo, Movi no sabe nada.
+        assertEquals(HttpStatusCode.NoContent, loQueSeSabe("""{"huella":"$huella"}""").status)
+
+        val subida = client.post("/api/documents") {
+            header(HttpHeaders.Authorization, "Bearer ${token()}")
+            setBody(archivo(mapOf("tipo" to "OTRO")))
+        }
+        val id = Regex("\"id\"\\s*:\\s*\"([^\"]+)\"").find(subida.bodyAsText())!!.groupValues[1]
+        // «Compartir con Movi» lo lee y guarda la lectura (con la huella del server).
+        assertEquals(HttpStatusCode.OK, client.post("/api/documents/$id/leer") { header(HttpHeaders.Authorization, "Bearer ${token()}") }.status)
+
+        val res = loQueSeSabe("""{"huella":"$huella"}""")
+        assertEquals(HttpStatusCode.OK, res.status)
+        assertEquals(
+            PistasDelPapel(banco = "Nu", numerosDeCuenta = listOf("1111", "2222"), producto = ProductoDelPapel.TARJETA),
+            json.decodeFromString(PistasDelPapel.serializer(), res.bodyAsText()),
+        )
+    }
+
+    @Test
+    fun `sin una huella valida, 400`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.BadRequest, loQueSeSabe("""{"huella":"no-es-una-huella"}""").status)
+        assertEquals(HttpStatusCode.BadRequest, loQueSeSabe("{}").status)
     }
 }

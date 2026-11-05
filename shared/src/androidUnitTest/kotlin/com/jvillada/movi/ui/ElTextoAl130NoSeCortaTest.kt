@@ -276,6 +276,22 @@ open class ElTextoAl130NoSeCortaTest {
         }
         nadaSeCorta("el aviso de la tarjeta", conTag(com.jvillada.movi.ui.extractos.TAG_AVISO_DE_LA_TARJETA))
     }
+
+    /** Vuelta 129: la hoja de subida de Documentos, con la cuenta propuesta y lo que dice de ella. */
+    @Test
+    fun `la hoja de subida, con la cuenta propuesta`() {
+        montar(com.jvillada.movi.ui.documentos.POR_EL_NOMBRE_DEL_ARCHIVO) {
+            com.jvillada.movi.ui.documentos.SubirDocumentoSheet(
+                archivo = com.jvillada.movi.ui.documentos.ArchivoElegido(
+                    "Extracto_Bancolombia_Ahorros_septiembre_2026.pdf", ByteArray(2048), "application/pdf",
+                ),
+                cuentas = listOf(ahorros),
+                onDismiss = {},
+                onSubir = { _, _ -> },
+            )
+        }
+        nadaSeCorta("la ayuda de la cuenta", conTag(com.jvillada.movi.ui.documentos.TAG_AYUDA_DE_LA_CUENTA))
+    }
 }
 
 /**
