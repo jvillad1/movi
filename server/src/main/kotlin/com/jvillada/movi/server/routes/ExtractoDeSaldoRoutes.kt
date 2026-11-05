@@ -14,6 +14,7 @@ import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.server.time.appDateToEpochMillis
 import com.jvillada.movi.shared.model.ADJUSTMENT_CATEGORY
+import com.jvillada.movi.shared.model.OPENING_CATEGORY
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountGroup
 import com.jvillada.movi.shared.model.AccountType
@@ -91,7 +92,7 @@ fun Route.extractoDeSaldoRoutes() {
         val accountId = call.parameters["accountId"] ?: return@post call.respond(HttpStatusCode.BadRequest)
         val deuda = runCatching { call.receive<DeudaDelExtracto>() }.getOrNull()
             ?: return@post call.respond(HttpStatusCode.BadRequest, "Falta lo que dijo el extracto")
-        val corte = runCatching { LocalDate.parse(deuda.fechaDeCorte) }.getOrNull()
+        val corte = runCatching { LocalDate.parse(deuda.hasta) }.getOrNull()
         val motivo = when {
             deuda.deuda < 0L || deuda.deuda > MAX_ACCOUNT_BALANCE_COP -> "Deuda fuera de rango — revisa el monto"
             corte == null -> "Fecha de corte inválida"
@@ -118,16 +119,16 @@ private fun Transaction.cuadrarLaDeudaConElExtracto(uid: String, accountId: Stri
             "La deuda de este extracto se cuadra en una tarjeta de crédito en ${d.moneda}",
         )
     }
-    val corte = appDateToEpochMillis(LocalDate.parse(d.fechaDeCorte).plusDays(1)) - 1
+    val corte = finDelDia(d.hasta)
     val alCorte = alCorte(uid, cuenta, d.moneda, corte)
     if (alCorte.cuadradaDespues) {
         return AjusteDelExtracto.Rechazado(
             HttpStatusCode.Conflict,
-            "Esta tarjeta ya se cuadró después del corte del extracto. Sube un extracto más nuevo.",
+            "Esta tarjeta ya se cuadró, o se le puso su saldo inicial, después del corte del extracto. Sube un extracto más nuevo.",
         )
     }
     val id = "ev_deuda_" + MessageDigest.getInstance("SHA-256")
-        .digest("$uid|${cuenta.id}|${d.fechaDeCorte}|${d.deuda}|${d.moneda}".toByteArray())
+        .digest("$uid|${cuenta.id}|${d.hasta}|${d.deuda}|${d.moneda}".toByteArray())
         .joinToString("") { "%02x".format(it) }.take(32)
     val yaEstaba = Events.selectAll().where { Events.id eq id }.any()
     val ajuste = if (yaEstaba) null else
@@ -175,9 +176,30 @@ private fun Transaction.alCorte(uid: String, cuenta: Account, moneda: String, co
         id = cuenta.id,
         nombre = cuenta.name,
         saldoEnMovi = computeBalances(cuenta.type, movimientos.filter { it.timestamp <= corte })[moneda] ?: 0L,
-        cuadradaDespues = movimientos.any { it.category == ADJUSTMENT_CATEGORY && it.timestamp > corte },
+        cuadradaDespues = movimientos.any { esUnCuadre(it.category) && it.timestamp > corte },
     )
 }
+
+/**
+ * Vuelta 129 (revisión) · **lo que fija un saldo a mano**: un ajuste o un saldo inicial. Uno posterior
+ * al corte de un extracto ya dice cuánto había después, así que ajustar al corte sumaría encima: una
+ * tarjeta creada después del corte con su «Deuda actual» quedaba debiendo dos veces.
+ */
+internal fun esUnCuadre(categoria: String): Boolean = categoria == ADJUSTMENT_CATEGORY || categoria == OPENING_CATEGORY
+
+/** El último instante del día [fecha] (`YYYY-MM-DD`), en la hora de Bogotá. */
+internal fun finDelDia(fecha: String): Long = appDateToEpochMillis(LocalDate.parse(fecha).plusDays(1)) - 1
+
+/**
+ * Las tarjetas de [uid] con un ajuste o un saldo inicial (sin anulados) después de [instante]. Ver
+ * `StatementParseResult.tarjetasCuadradasDespues`.
+ */
+internal fun Transaction.tarjetasCuadradasDespuesDe(uid: String, instante: Long): List<String> =
+    Accounts.selectAll().where { Accounts.userId eq uid }
+        .map { it.toAccount() }
+        .filter { it.type == AccountType.CREDIT_CARD }
+        .filter { cuenta -> loadNonVoidedEventsIn(uid, cuenta.id).any { esUnCuadre(it.category) && it.timestamp > instante } }
+        .map { it.id }
 
 /**
  * **La cuenta que nombra el extracto**, sin adivinar: la AFC por los últimos cuatro de su número

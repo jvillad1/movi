@@ -21,7 +21,9 @@ internal val EXTRACTO_DE_LA_TARJETA_NU: String = """
     Comisiones por servicio + ${'$'}0,00
     Cargos por conversión + ${'$'}540,00
     PAGO MÍNIMO ${'$'}101.240,00
+    Abonos - ${'$'}0,00
     Deuda restante + ${'$'}310.000,00
+    ${'$'}411.240,00 DEUDA TOTAL HASTA EL 11 OCTUBRE
     Fecha límite de pago
     03 NOV 2026
     Fecha de corte

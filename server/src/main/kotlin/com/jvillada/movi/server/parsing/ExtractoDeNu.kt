@@ -87,10 +87,28 @@ fun leerElExtractoDeNu(texto: String): ExtractoDeNu? {
         ?.let { FECHA_COMPLETA.matchEntire(it) }?.let(::fechaDe)
     val cupo = lineas.firstNotNullOfOrNull { CUPO.find(sinTildes(it))?.groupValues?.get(1) }
         ?.let(::centavosDelExtracto)?.takeIf { it > 0 }?.let { it / 100 }
-    // **La deuda al corte**: lo que hay que pagar este mes (el pago mínimo, que ya se comprobó contra
-    // las filas) más la «Deuda restante». Sin ese renglón, `null`: no se propone cuadrar nada.
+    // **La deuda al corte** es la que el extracto escribe («$1.915.751,78 DEUDA TOTAL HASTA EL 11
+    // OCTUBRE»), y solo se cree si cuadra al centavo con sus partes: el pago mínimo (que ya se comprobó
+    // contra las filas) menos los «Abonos» más la «Deuda restante». Es la regla del lector: lo que no
+    // cuadra no se propone. Sin esos renglones, o si no cuadran, `null`: no se propone cuadrar nada.
     val restante = lineas.firstNotNullOfOrNull { DEUDA_RESTANTE.find(sinTildes(it))?.groupValues?.get(1) }
         ?.let(::centavosDelExtracto)
+    val abonos = lineas.firstNotNullOfOrNull { ABONOS.find(sinTildes(it))?.groupValues?.get(1) }
+        ?.let(::centavosDelExtracto) ?: 0L
+    val total = lineas.firstNotNullOfOrNull { l ->
+        val plano = sinTildes(l)
+        DEUDA_TOTAL.find(plano)?.let { Triple(it.groupValues[1], it.groupValues[2], it.groupValues[3]) }
+            ?: DEUDA_TOTAL_DESPUES.find(plano)?.let { Triple(it.groupValues[3], it.groupValues[1], it.groupValues[2]) }
+    }
+    val deudaTotal = total?.first?.let(::centavosDelExtracto)
+    // «Hasta el 11 octubre»: el último día que cuenta el extracto (sin año: el del corte, o el anterior).
+    val deudaHasta = total?.let { (_, dia, mes) ->
+        val m = mesDelExtracto(mes) ?: return@let null
+        val d = dia.toInt()
+        runCatching { LocalDate.of(corte.year, m, d) }.getOrNull()
+            ?.let { if (it.isAfter(corte)) runCatching { LocalDate.of(corte.year - 1, m, d) }.getOrNull() else it }
+    }
+    val deudaQueCuadra = deudaTotal?.takeIf { restante != null && deudaHasta != null && it == pagoMinimo - abonos + restante }
 
     val encabezado = lineas.indexOfFirst { sinTildes(it).startsWith("fecha descripcion valor") }
     if (encabezado < 0) return null
@@ -179,12 +197,17 @@ fun leerElExtractoDeNu(texto: String): ExtractoDeNu? {
     }
     val corrientes = filas.sumOf { f -> if (f.conMora) f.intereses.dropLast(1).sum() else f.intereses.sum() }
     val mora = filas.sumOf { f -> if (f.conMora) f.intereses.lastOrNull() ?: 0L else 0L }
-    movimiento(corte, INTERESES_CORRIENTES, corrientes)?.let { propuestas += it }
-    movimiento(corte, INTERESES_DE_MORA, mora)?.let { propuestas += it }
+    // Los intereses del extracto van el último día que cuenta la deuda («hasta el 11»), si se leyó: son
+    // parte de esa deuda, y así el ajuste al final de ese día los cuenta. Si no, el día del corte.
+    val diaDeLosIntereses = deudaHasta.takeIf { deudaQueCuadra != null } ?: corte
+    movimiento(diaDeLosIntereses, INTERESES_CORRIENTES, corrientes)?.let { propuestas += it }
+    movimiento(diaDeLosIntereses, INTERESES_DE_MORA, mora)?.let { propuestas += it }
     if (propuestas.isEmpty()) return null
     return ExtractoDeNu(
         numeros = numeros, corte = corte, inicio = inicio, filas = propuestas, fechaLimite = fechaLimite, cupo = cupo,
-        deudaAlCorte = restante?.let { (pagoMinimo + it) / 100 },
+        // Al peso más cercano (no truncado): $1.915.751,78 → $1.915.752.
+        deudaAlCorte = deudaQueCuadra?.let(::pesosDe),
+        deudaHasta = deudaHasta.takeIf { deudaQueCuadra != null },
     )
 }
 
@@ -201,8 +224,13 @@ data class ExtractoDeNu(
     val fechaLimite: LocalDate? = null,
     /** Vuelta 129: «Tu cupo definido», en pesos, si se leyó. */
     val cupo: Long? = null,
-    /** Vuelta 129: lo que se debía al corte (pago mínimo + «Deuda restante»), en pesos, si se leyó. */
+    /**
+     * Vuelta 129: la «DEUDA TOTAL HASTA EL …» en pesos (al peso más cercano), solo si cuadra al centavo
+     * con el pago mínimo − los abonos + la deuda restante.
+     */
     val deudaAlCorte: Long? = null,
+    /** Vuelta 129: el día «hasta el» que cuenta esa deuda (el anterior al corte, en Nu). */
+    val deudaHasta: LocalDate? = null,
 )
 
 /** El rótulo con que se proponen los intereses del extracto (los reconoce `cargoDelBanco`). */
@@ -319,6 +347,17 @@ private val INICIO_DEL_PERIODO = Regex("""^(\d{1,2})\s+([A-Za-zÁÉÍÓÚáéí�
 
 /** «Tu cupo definido $3.000.000,00», ya sin tildes ni mayúsculas. */
 private val CUPO = Regex("""^tu cupo definido\s+(\$\s?\d{1,3}(?:\.\d{3})*,\d{2})""")
+
+/** «Abonos - $159,72» (el renglón entre el pago mínimo y la deuda restante), ya sin tildes ni mayúsculas. */
+private val ABONOS = Regex("""^abonos\s*-\s*(\$\s?\d{1,3}(?:\.\d{3})*,\d{2})""")
+
+/** «$1.915.751,78 DEUDA TOTAL HASTA EL 11 OCTUBRE», ya sin tildes ni mayúsculas. */
+private val DEUDA_TOTAL =
+    Regex("""(\$\s?\d{1,3}(?:\.\d{3})*,\d{2})\s*deuda total hasta el\s+(\d{1,2})\s+([a-z]{3,10})""")
+
+/** Lo mismo con la cifra después del rótulo, por si el PDF los saca en otro orden. */
+private val DEUDA_TOTAL_DESPUES =
+    Regex("""deuda total hasta el\s+(\d{1,2})\s+([a-z]{3,10})\s*(\$\s?\d{1,3}(?:\.\d{3})*,\d{2})""")
 
 /** «Deuda restante + $310.000,00», ya sin tildes ni mayúsculas: lo que queda por pagar después del mes. */
 private val DEUDA_RESTANTE = Regex("""^deuda restante\s*\+?\s*(\$\s?\d{1,3}(?:\.\d{3})*,\d{2})""")

@@ -18,7 +18,12 @@ import kotlin.test.assertTrue
  */
 class ExtractoDeNuTest {
 
-    private fun extracto(pagoMinimo: String = "\$101.240,00", sinLaLibreria: Boolean = false): String = """
+    private fun extracto(
+        pagoMinimo: String = "\$101.240,00",
+        sinLaLibreria: Boolean = false,
+        abonos: String = "\$0,00",
+        deudaTotal: String? = "\$411.240,00",
+    ): String = """
         Hola, Ana
         Llegó tu extracto de Octubre
         Ana Ejemplo Tus tarjetas
@@ -33,7 +38,9 @@ class ExtractoDeNuTest {
         Comisiones por servicio + ${'$'}0,00
         Cargos por conversión + ${'$'}540,00
         PAGO MÍNIMO $pagoMinimo
+        Abonos - $abonos
         Deuda restante + ${'$'}310.000,00
+        ${deudaTotal?.let { "$it DEUDA TOTAL HASTA EL 11 OCTUBRE" } ?: "Sin total"}
         Fecha límite de pago
         03 NOV 2026
         Fecha de corte
@@ -107,6 +114,34 @@ class ExtractoDeNuTest {
         assertEquals(leido.filas.size, sinLaTarjeta.filas.size)
     }
 
+    /** Revisión de la vuelta 129: la deuda es la que el extracto escribe, y solo si cuadra con sus partes. */
+    @Test
+    fun `la deuda total hasta el dia, si cuadra al centavo con el minimo menos los abonos mas la restante`() {
+        val leido = assertNotNull(leerElExtractoDeNu(extracto()))
+        assertEquals(411_240L, leido.deudaAlCorte)
+        assertEquals(LocalDate.of(2026, 10, 11), leido.deudaHasta)
+    }
+
+    @Test
+    fun `con abonos, la deuda los descuenta y se redondea al peso mas cercano`() {
+        // $101.240,00 − $159,22 + $310.000,00 = $411.080,78 → $411.081 (truncada daría $411.080).
+        val leido = assertNotNull(leerElExtractoDeNu(extracto(abonos = "\$159,22", deudaTotal = "\$411.080,78")))
+        assertEquals(411_081L, leido.deudaAlCorte)
+    }
+
+    @Test
+    fun `si la deuda total no cuadra con sus partes, no hay deuda que proponer`() {
+        // El caso del extracto real de noviembre: mínimo + restante sin restar los abonos no da el total.
+        val noCuadra = assertNotNull(leerElExtractoDeNu(extracto(abonos = "\$159,72", deudaTotal = "\$411.240,00")))
+        assertNull(noCuadra.deudaAlCorte)
+        assertNull(noCuadra.deudaHasta)
+        // Las filas se leen igual, y los intereses vuelven al día del corte.
+        assertEquals(assertNotNull(leerElExtractoDeNu(extracto())).filas.size, noCuadra.filas.size)
+        assertEquals("2026-10-12", noCuadra.filas.single { it.description == INTERESES_CORRIENTES }.date)
+        // Sin el renglón del total, tampoco.
+        assertNull(assertNotNull(leerElExtractoDeNu(extracto(deudaTotal = null))).deudaAlCorte)
+    }
+
     @Test
     fun `lee las compras y los pagos del periodo, con su fecha, su valor entero y sus cuotas`() {
         val leido = assertNotNull(leerElExtractoDeNu(extracto()))
@@ -154,10 +189,10 @@ class ExtractoDeNuTest {
     fun `los cargos del extracto salen como movimientos que reconoce cargoDelBanco`() {
         val porNombre = assertNotNull(leerElExtractoDeNu(extracto())).filas.associateBy { it.description }
 
-        // Los intereses de las filas, sumados, con la fecha de corte.
+        // Los intereses de las filas, sumados, el último día de la deuda del extracto («hasta el 11»).
         val corrientes = assertNotNull(porNombre[INTERESES_CORRIENTES])
         assertEquals(5_300L, corrientes.amount)
-        assertEquals("2026-10-12", corrientes.date)
+        assertEquals("2026-10-11", corrientes.date)
         assertEquals(TransactionType.EXPENSE, corrientes.type)
         val mora = assertNotNull(porNombre[INTERESES_DE_MORA])
         assertEquals(100L, mora.amount)

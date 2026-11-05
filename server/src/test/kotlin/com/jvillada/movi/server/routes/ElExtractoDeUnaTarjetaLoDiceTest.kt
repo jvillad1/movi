@@ -29,6 +29,10 @@ import com.jvillada.movi.shared.model.AdjustAccountBalanceResponse
 import com.jvillada.movi.shared.model.DeudaDelExtracto
 import com.jvillada.movi.shared.model.ImportDecision
 import com.jvillada.movi.shared.model.deudaParaCuadrar
+import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.openingEventFor
+import com.jvillada.movi.server.db.insertEventRow
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import com.jvillada.movi.shared.model.PistasDelPapel
@@ -169,8 +173,8 @@ class ElExtractoDeUnaTarjetaLoDiceTest {
         assertEquals(
             TarjetaDelExtracto(
                 banco = "Nu", ultimosCuatro = "1111", diaDeCorte = 12, diaDePago = 3, cupo = 3_000_000,
-                // Lo que se debía al corte: el pago mínimo ($101.240) más la deuda restante ($310.000).
-                deudaAlCorte = 411_240, fechaDeCorte = "2026-10-12",
+                // La «DEUDA TOTAL HASTA EL 11 OCTUBRE», que cuadra: mínimo − abonos + restante.
+                deudaAlCorte = 411_240, deudaHasta = "2026-10-11",
             ),
             leido.tarjeta,
         )
@@ -290,7 +294,8 @@ class ElExtractoDeUnaTarjetaLoDiceTest {
         assertEquals(HttpStatusCode.OK, primera.status, primera.bodyAsText())
         val respuesta = json.decodeFromString(AdjustAccountBalanceResponse.serializer(), primera.bodyAsText())
         assertEquals(411_240L, respuesta.account.balance, "la deuda del extracto, no la del extracto más las compras")
-        assertNotNull(respuesta.adjustmentEvent)
+        // Al final del día que dice el extracto («hasta el 11 octubre»), no del día del corte (el 12).
+        assertEquals(finDelDia("2026-10-11"), assertNotNull(respuesta.adjustmentEvent).timestamp)
 
         val segunda = json.decodeFromString(AdjustAccountBalanceResponse.serializer(), cuadrar(tarjeta, deuda).bodyAsText())
         assertNull(segunda.adjustmentEvent, "cuadrar dos veces no escribe dos ajustes")
@@ -302,7 +307,7 @@ class ElExtractoDeUnaTarjetaLoDiceTest {
         wireApp()
         assertEquals(
             HttpStatusCode.UnprocessableEntity,
-            cuadrar(ahorros, DeudaDelExtracto(deuda = 411_240, fechaDeCorte = "2026-10-12")).status,
+            cuadrar(ahorros, DeudaDelExtracto(deuda = 411_240, hasta = "2026-10-11")).status,
         )
     }
 
@@ -336,4 +341,27 @@ class ElExtractoDeUnaTarjetaLoDiceTest {
         assertNotNull(json.decodeFromString(ExtractoLeido.serializer(), guardada).tarjeta, "la lectura nueva queda guardada")
     }
 
+
+    /**
+     * Revisión: una tarjeta que ya existía, creada **después** del corte con su «Deuda actual», tiene
+     * su saldo inicial después del día de la deuda del extracto. El ajuste a ese día más ese saldo
+     * contarían la deuda dos veces: la lectura la nombra (la app no ofrece cuadrar) y la ruta da 409.
+     */
+    @Test
+    fun `una tarjeta creada despues del corte con su deuda no se cuadra con el extracto`() = testApplication {
+        wireApp()
+        val creada = Account(tarjeta, "Nu Tarjeta 1111", AccountType.CREDIT_CARD, 600_000)
+        transaction {
+            Accounts.insert {
+                it[id] = tarjeta; it[userId] = dueno; it[name] = creada.name; it[type] = "CREDIT_CARD"; it[currency] = "COP"
+            }
+            insertEventRow(dueno, assertNotNull(openingEventFor(creada, now = System.currentTimeMillis())))
+        }
+
+        val leido = subirAlImportador("?conTarjeta=1")
+        assertEquals(listOf(tarjeta), leido.tarjetasCuadradasDespues)
+
+        val res = cuadrar(tarjeta, assertNotNull(leido.tarjeta?.deudaParaCuadrar()))
+        assertEquals(HttpStatusCode.Conflict, res.status, res.bodyAsText())
+    }
 }

@@ -434,7 +434,7 @@ internal suspend fun leerElExtracto(
                     diaDePago = nu.fechaLimite?.dayOfMonth,
                     cupo = nu.cupo,
                     deudaAlCorte = nu.deudaAlCorte,
-                    fechaDeCorte = nu.corte.toString(),
+                    deudaHasta = nu.deudaHasta?.toString(),
                 ),
             )
         }
@@ -668,6 +668,8 @@ internal suspend fun conciliarYArchivar(
         cargosDelBanco = cargosDelBanco,
         tarjeta = leido.tarjeta.takeIf { conTarjeta },
         cuentaDelPapel = documentoId?.let { cuentaDelPapel(uid, it) },
+        tarjetasCuadradasDespues = leido.tarjeta?.deudaParaCuadrar()?.takeIf { conTarjeta }
+            ?.let { d -> dbQuery { tarjetasCuadradasDespuesDe(uid, finDelDia(d.hasta)) } }.orEmpty(),
     )
 }
 

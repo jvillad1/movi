@@ -95,6 +95,13 @@ data class StatementParseResult(
      * en esta cuenta», y esto es lo que lo hace cierto.
      */
     val cuentaDelPapel: String? = null,
+    /**
+     * Vuelta 129 (revisión) · **las tarjetas del dueño que ya se cuadraron después del día de la deuda
+     * del extracto** (un ajuste de saldo o un saldo inicial posterior, sin anulados). A esas no se les
+     * propone «Cuadrar la deuda con el extracto»: el ajuste a esa fecha más ese saldo inicial contarían la
+     * deuda dos veces (y el server contesta 409). Solo con `?conTarjeta=1` y si el extracto dice su deuda.
+     */
+    val tarjetasCuadradasDespues: List<String> = emptyList(),
 )
 
 /**
@@ -113,32 +120,41 @@ data class TarjetaDelExtracto(
     val cupo: Long? = null,
     val moneda: String = "COP",
     /**
-     * **Lo que se debía al corte**, según el extracto (en Nu: el pago mínimo más la «Deuda restante»).
-     * Con esto, después de importar, la revisión propone UN ajuste de la tarjeta a esa cifra al corte
-     * ([DeudaDelExtracto]). `null` si el extracto no lo dice: no se propone nada.
+     * **Lo que se debía**, según el extracto, al final de [deudaHasta] (en Nu: la «DEUDA TOTAL HASTA EL
+     * …», solo si cuadra al centavo con el pago mínimo − los abonos + la deuda restante; al peso más
+     * cercano). Con esto, después de importar, la revisión propone UN ajuste de la tarjeta a esa cifra
+     * ([DeudaDelExtracto]). `null` si el extracto no lo dice o no cuadra: no se propone nada. Puede ser
+     * negativa (saldo a favor): ahí tampoco se propone.
      */
     val deudaAlCorte: Long? = null,
-    /** El día del corte, `YYYY-MM-DD`, cuando se sabe. Sin él tampoco se propone cuadrar. */
-    val fechaDeCorte: String? = null,
+    /**
+     * El último día que cuenta esa deuda, `YYYY-MM-DD` («hasta el 11 octubre»; en Nu, el día antes del
+     * corte: lo del día del corte es del extracto siguiente). Sin él tampoco se propone cuadrar.
+     */
+    val deudaHasta: String? = null,
 )
 
 /**
  * Vuelta 129 · `POST /api/accounts/{id}/deuda-del-extracto`: **cuadrar la deuda de una tarjeta con
- * su extracto**, con un solo ajuste de saldo al final del día del corte (el de siempre,
+ * su extracto**, con un solo ajuste de saldo al final del día [hasta] (el de siempre,
  * `balanceAdjustmentEventFor`). Nunca automático: lo pide el dueño desde la revisión.
  */
 @Serializable
 data class DeudaDelExtracto(
     val deuda: Long,
-    val fechaDeCorte: String,
+    /** El último día que cuenta la deuda del extracto, `YYYY-MM-DD` («hasta el 11 octubre»). */
+    val hasta: String,
     val moneda: String = "COP",
 )
 
-/** La deuda para cuadrar de [this], si el extracto la dice con su fecha de corte. */
+/**
+ * La deuda para cuadrar de [this], si el extracto la dice con su día y no es un saldo a favor (una
+ * deuda negativa no se ofrece: el server no la acepta).
+ */
 fun TarjetaDelExtracto.deudaParaCuadrar(): DeudaDelExtracto? {
-    val deuda = deudaAlCorte ?: return null
-    val corte = fechaDeCorte ?: return null
-    return DeudaDelExtracto(deuda = deuda, fechaDeCorte = corte, moneda = moneda)
+    val deuda = deudaAlCorte?.takeIf { it >= 0 } ?: return null
+    val hasta = deudaHasta ?: return null
+    return DeudaDelExtracto(deuda = deuda, hasta = hasta, moneda = moneda)
 }
 
 /**
