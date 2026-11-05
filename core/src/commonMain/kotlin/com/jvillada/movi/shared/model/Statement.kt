@@ -112,7 +112,34 @@ data class TarjetaDelExtracto(
     /** El cupo total, en pesos (o en [moneda]). */
     val cupo: Long? = null,
     val moneda: String = "COP",
+    /**
+     * **Lo que se debía al corte**, según el extracto (en Nu: el pago mínimo más la «Deuda restante»).
+     * Con esto, después de importar, la revisión propone UN ajuste de la tarjeta a esa cifra al corte
+     * ([DeudaDelExtracto]). `null` si el extracto no lo dice: no se propone nada.
+     */
+    val deudaAlCorte: Long? = null,
+    /** El día del corte, `YYYY-MM-DD`, cuando se sabe. Sin él tampoco se propone cuadrar. */
+    val fechaDeCorte: String? = null,
 )
+
+/**
+ * Vuelta 129 · `POST /api/accounts/{id}/deuda-del-extracto`: **cuadrar la deuda de una tarjeta con
+ * su extracto**, con un solo ajuste de saldo al final del día del corte (el de siempre,
+ * `balanceAdjustmentEventFor`). Nunca automático: lo pide el dueño desde la revisión.
+ */
+@Serializable
+data class DeudaDelExtracto(
+    val deuda: Long,
+    val fechaDeCorte: String,
+    val moneda: String = "COP",
+)
+
+/** La deuda para cuadrar de [this], si el extracto la dice con su fecha de corte. */
+fun TarjetaDelExtracto.deudaParaCuadrar(): DeudaDelExtracto? {
+    val deuda = deudaAlCorte ?: return null
+    val corte = fechaDeCorte ?: return null
+    return DeudaDelExtracto(deuda = deuda, fechaDeCorte = corte, moneda = moneda)
+}
 
 /**
  * El nombre con que se propone crear la tarjeta de [t]: el banco, «Tarjeta» y los últimos cuatro si

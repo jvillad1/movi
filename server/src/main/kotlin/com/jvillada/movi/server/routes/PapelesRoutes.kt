@@ -269,7 +269,13 @@ internal suspend fun leerElPapel(
                 json.decodeFromString(ComprobanteLeido.serializer(), guardada.datos), anotarAunque, ahora,
             )
             else -> {
-                val leido = json.decodeFromString(ExtractoLeido.serializer(), guardada.datos)
+                val guardado = json.decodeFromString(ExtractoLeido.serializer(), guardada.datos)
+                // Vuelta 129: una lectura de Nu guardada antes de que el lector dijera la tarjeta no
+                // la trae. Se relee sin IA (es barato) y se guarda la nueva; si no es el extracto de
+                // la tarjeta de Nu, queda la de siempre.
+                val leido = if (guardado.tarjeta == null && guardado.bankName == "Nu" && !guardado.esFamirios) {
+                    releerElExtractoDeNu(uid, huella, papel, conSaldos) ?: guardado
+                } else guardado
                 // La lectura guardada es de un saldo y quien pregunta no lo sabe mostrar: lo de
                 // antes, un papel sin movimientos (y no una revisión vacía).
                 if (leido.resumenDeSaldo != null && !conSaldos) {
@@ -328,6 +334,32 @@ internal suspend fun leerElPapel(
             )
         }
     }
+}
+
+/**
+ * Vuelta 129 · **relee sin IA** el extracto de la tarjeta de Nu de [papel] y reemplaza la lectura
+ * guardada con [huella]. `null` si el papel no es ese extracto (o no se pudo leer): nunca llama a
+ * Claude, porque solo sigue si `leerElExtractoDeNu` lo reconoce, y ese lector va antes que la IA.
+ */
+private suspend fun releerElExtractoDeNu(uid: String, huella: String, papel: PapelGuardado, conSaldos: Boolean): ExtractoLeido? {
+    val texto = runCatching {
+        StatementParser.extractText(papel.bytes, nombreParaExtraerTexto(papel.nombre, papel.mime, mimeEsConfiable = true))
+    }.getOrNull() ?: return null
+    if (leerElExtractoDeNu(texto) == null) return null
+    val nuevo = try {
+        leerElExtracto(uid, papel.nombre, papel.mime, papel.bytes, mimeConfiable = true, conSaldos = conSaldos)
+    } catch (e: FallaAlProcesarExtracto) {
+        return null
+    }
+    if (nuevo.tarjeta == null) return null
+    dbQuery {
+        LecturasDePapeles.update({ (LecturasDePapeles.userId eq uid) and (LecturasDePapeles.huella eq huella) }) {
+            it[datos] = Cifrado.cifrarTexto(json.encodeToString(ExtractoLeido.serializer(), nuevo))
+            it[modelo] = "sin-ia"
+            it[leidoEn] = System.currentTimeMillis()
+        }
+    }
+    return nuevo
 }
 
 private fun Transaction.guardarLectura(uid: String, huella: String, documentoId: String, tipo: QueEsElPapel, datos: String, modelo: String) {

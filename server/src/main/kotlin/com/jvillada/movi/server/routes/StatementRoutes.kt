@@ -433,6 +433,8 @@ internal suspend fun leerElExtracto(
                     diaDeCorte = nu.corte.dayOfMonth,
                     diaDePago = nu.fechaLimite?.dayOfMonth,
                     cupo = nu.cupo,
+                    deudaAlCorte = nu.deudaAlCorte,
+                    fechaDeCorte = nu.corte.toString(),
                 ),
             )
         }
@@ -762,18 +764,28 @@ private suspend fun cuentaDelPapel(uid: String, docId: String): String? = runCat
 }.getOrNull()
 
 /**
- * Vuelta 129 · **el documento [docId] es un extracto**: pasa a [TipoDeDocumento.EXTRACTO], con
- * [cuenta] si se sabe (la del importe) y con [periodo] si no tenía uno. Filtra por dueño: un id
- * ajeno no toca nada. Lo usan la lectura ([archivarElExtracto]) y el importe ([escribirElImporte]).
+ * Vuelta 129 · **el documento [docId] es un extracto**: si estaba en «Otro» pasa a
+ * [TipoDeDocumento.EXTRACTO] y, siendo extracto, toma [periodo] si no tenía uno. Lo que el dueño
+ * clasificó como nómina o contrato no se reclasifica. [cuenta] (la del importe) se cuelga siempre,
+ * como antes de esta vuelta. Filtra por dueño: un id ajeno no toca nada. Lo usan la lectura
+ * ([archivarElExtracto]) y el importe ([escribirElImporte]).
  */
 internal fun Transaction.marcarComoExtracto(uid: String, docId: String, cuenta: String? = null, periodo: String = "") {
-    val sinPeriodo = Documents.select(listOf(Documents.period))
+    val fila = Documents.select(listOf(Documents.kind, Documents.period))
         .where { (Documents.id eq docId) and (Documents.userId eq uid) }
-        .firstOrNull()?.get(Documents.period).isNullOrBlank()
+        .firstOrNull() ?: return
+    val tipo = fila[Documents.kind]
+    val esExtracto = tipo == TipoDeDocumento.OTRO.name || tipo == TipoDeDocumento.EXTRACTO.name
+    val sinPeriodo = fila[Documents.period].isNullOrBlank()
+    val cambiaElTipo = tipo == TipoDeDocumento.OTRO.name
+    val ponePeriodo = esExtracto && sinPeriodo && periodo.isNotBlank()
+    // Sin nada que cambiar no se emite el UPDATE: uno sin columnas falla, y el archivado (que corre
+    // en un `runCatching`) perdía el id del papel.
+    if (!cambiaElTipo && cuenta == null && !ponePeriodo) return
     Documents.update({ (Documents.id eq docId) and (Documents.userId eq uid) }) {
-        it[kind] = TipoDeDocumento.EXTRACTO.name
+        if (cambiaElTipo) it[kind] = TipoDeDocumento.EXTRACTO.name
         if (cuenta != null) it[accountId] = cuenta
-        if (sinPeriodo && periodo.isNotBlank()) it[Documents.period] = periodo.take(50)
+        if (ponePeriodo) it[Documents.period] = periodo.take(50)
     }
 }
 

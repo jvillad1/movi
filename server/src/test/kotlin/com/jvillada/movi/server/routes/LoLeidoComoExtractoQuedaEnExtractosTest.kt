@@ -9,6 +9,7 @@ import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.server.db.KnownDestinations
 import com.jvillada.movi.server.db.LecturasDePapeles
 import com.jvillada.movi.server.db.Migrations
+import com.jvillada.movi.server.db.MigracionesHechas
 import com.jvillada.movi.server.db.PdfsAbiertos
 import com.jvillada.movi.server.db.SmsMessages
 import com.jvillada.movi.server.db.StatementImportMatches
@@ -51,6 +52,7 @@ import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
+import org.jetbrains.exposed.sql.update
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.Date
 import kotlin.test.AfterTest
@@ -98,12 +100,12 @@ class LoLeidoComoExtractoQuedaEnExtractosTest {
         )
         transaction {
             SchemaUtils.drop(
-                PdfsAbiertos, ClavesDeExtractos, LecturasDePapeles, Documents, SmsMessages, VoidEvents, Events,
+                MigracionesHechas, PdfsAbiertos, ClavesDeExtractos, LecturasDePapeles, Documents, SmsMessages, VoidEvents, Events,
                 StatementImportMatches, StatementImports, Accounts, Users, KnownDestinations,
             )
             SchemaUtils.create(
                 Users, Accounts, StatementImports, StatementImportMatches, Events, VoidEvents, SmsMessages, Documents,
-                KnownDestinations, LecturasDePapeles, ClavesDeExtractos, PdfsAbiertos,
+                KnownDestinations, LecturasDePapeles, ClavesDeExtractos, PdfsAbiertos, MigracionesHechas,
             )
             listOf(dueno, otro).forEach { uid ->
                 Users.insert {
@@ -142,13 +144,13 @@ class LoLeidoComoExtractoQuedaEnExtractosTest {
     private fun ApplicationTestBuilder.wireApp() = application { testModule() }
 
     /** Lo guarda como lo guarda «Compartir con Movi» con un nombre que no dice «extracto»: «Otro». */
-    private suspend fun ApplicationTestBuilder.subirComoOtro(nombre: String = "CuentaNu_CRS119_2026-10.csv"): String {
+    private suspend fun ApplicationTestBuilder.subirComoOtro(nombre: String = "CuentaNu_CRS119_2026-10.csv", tipo: String = "OTRO"): String {
         val res = client.post("/api/documents") {
             header(HttpHeaders.Authorization, "Bearer ${token(dueno)}")
             setBody(
                 MultiPartFormDataContent(
                     formData {
-                        append("tipo", "OTRO")
+                        append("tipo", tipo)
                         append("file", EXTRACTO_DE_LA_TARJETA_NU.toByteArray(), Headers.build {
                             append(HttpHeaders.ContentDisposition, "filename=\"$nombre\"")
                             append(HttpHeaders.ContentType, "text/csv")
@@ -214,6 +216,27 @@ class LoLeidoComoExtractoQuedaEnExtractosTest {
         assertEquals("Octubre 2026", doc.periodo)
     }
 
+    /** Revisión: lo que el dueño clasificó como nómina o contrato no se reclasifica al leerlo ni al importarlo. */
+    @Test
+    fun `una nomina leida e importada como extracto sigue siendo nomina`() = testApplication {
+        wireApp()
+        val id = subirComoOtro(tipo = "NOMINA")
+        assertEquals(HttpStatusCode.OK, client.post("/api/documents/$id/leer-extracto") { header(HttpHeaders.Authorization, "Bearer ${token(dueno)}") }.status)
+        val decision = ImportDecision(
+            statementId = "st-129n", accountId = ahorros, bankName = "Nu", period = "Octubre 2026",
+            imports = emptyList(), reconciliations = emptyList(), skipped = emptyList(), documentoId = id,
+        )
+        client.post("/api/statements/import") {
+            header(HttpHeaders.Authorization, "Bearer ${token(dueno)}")
+            contentType(ContentType.Application.Json)
+            setBody(Json.encodeToString(ImportDecision.serializer(), decision))
+        }
+        val doc = documentos().single()
+        assertEquals(TipoDeDocumento.NOMINA, doc.tipo)
+        assertEquals(null, doc.periodo, "a una nómina no se le pone el mes del extracto")
+        assertEquals(ahorros, doc.accountId, "la cuenta del importe sí, como antes")
+    }
+
     @Test
     fun `la migracion pasa a Extractos lo que ya se leyo como extracto, y nada mas`() {
         transaction {
@@ -238,8 +261,10 @@ class LoLeidoComoExtractoQuedaEnExtractosTest {
             assertEquals("OTRO", tipos["doc-comprobante"])
             assertEquals("NOMINA", tipos["doc-nomina"])
             assertEquals("OTRO", tipos["doc-ajeno"])
-            // Idempotente.
+            // Corre una sola vez: lo que el dueño pase a «Otro» después se queda ahí.
+            Documents.update({ Documents.id eq "doc-extracto" }) { it[kind] = "OTRO" }
             assertEquals(0, with(Migrations) { losPapelesLeidosComoExtractoSonExtractos() })
+            assertEquals("OTRO", Documents.selectAll().where { Documents.id eq "doc-extracto" }.single()[Documents.kind])
         }
     }
 }

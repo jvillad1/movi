@@ -17,6 +17,7 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.notLike
 import org.jetbrains.exposed.sql.Transaction
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.isNull
 import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.exists
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
 import org.slf4j.LoggerFactory
@@ -377,32 +378,49 @@ object Migrations {
     }
 
     /**
-     * Vuelta 129 · **los papeles que Movi ya leyó como extracto pasan a «Extractos».** Hasta esta
-     * vuelta, leer como extracto un papel ya guardado no le cambiaba el tipo: los extractos de la
-     * cuenta Nu que una probadora compartió con Movi («CuentaNu_CRS119_2026-09.pdf») se guardaron
+     * Vuelta 129 · **los papeles que Movi ya leyó como extracto pasan a «Extractos», una sola vez.**
+     * Hasta esta vuelta, leer como extracto un papel ya guardado no le cambiaba el tipo: los extractos
+     * de la cuenta Nu que una probadora compartió con Movi («CuentaNu_CRS119_2026-09.pdf») se guardaron
      * como «Otro» —el tipo que adivina el nombre— y ahí se quedaron, aunque dos ya se importaron.
      *
      * El vínculo exacto es `lecturas_de_papeles`: la fila con `tipo = 'EXTRACTO'` dice qué documento
-     * se leyó como extracto. `statement_imports` no guarda el documento, así que no sirve para
-     * esto; desde esta vuelta lo leído y lo importado se marca al hacerlo (`marcarComoExtracto`).
+     * se leyó como extracto. `statement_imports` no guarda el documento, así que no sirve para esto;
+     * desde esta vuelta lo leído y lo importado se marca al hacerlo (`marcarComoExtracto`).
      *
-     * Solo toca lo que está en «Otro»: una nómina o un contrato que alguien clasificó a mano no se
-     * mueven. Idempotente: lo marcado deja de estar en «Otro» y la segunda corrida no lo ve.
+     * **Un solo UPDATE y una sola vez** ([MigracionesHechas]): si después el dueño pasa un papel a
+     * «Otro», el próximo arranque no se lo devuelve a «Extractos». Solo toca lo que está en «Otro»: una
+     * nómina o un contrato clasificados a mano no se mueven.
      *
-     * @return documentos que pasaron a extracto
+     * @return documentos que pasaron a extracto (0 si ya había corrido)
      */
     fun Transaction.losPapelesLeidosComoExtractoSonExtractos(): Int {
-        val leidos = LecturasDePapeles
-            .select(LecturasDePapeles.userId, LecturasDePapeles.documentoId)
-            .where { LecturasDePapeles.tipo eq "EXTRACTO" }
-            .map { it[LecturasDePapeles.userId] to it[LecturasDePapeles.documentoId] }
-        var marcados = 0
-        for ((uid, docId) in leidos) {
-            marcados += Documents.update({
-                (Documents.id eq docId) and (Documents.userId eq uid) and (Documents.kind eq "OTRO")
-            }) { it[kind] = "EXTRACTO" }
-        }
+        if (yaCorrio(PAPELES_LEIDOS_COMO_EXTRACTO)) return 0
+        val marcados = Documents.update({
+            (Documents.kind eq "OTRO") and exists(
+                LecturasDePapeles.select(LecturasDePapeles.documentoId).where {
+                    (LecturasDePapeles.documentoId eq Documents.id) and
+                        (LecturasDePapeles.userId eq Documents.userId) and
+                        (LecturasDePapeles.tipo eq "EXTRACTO")
+                },
+            )
+        }) { it[kind] = "EXTRACTO" }
+        anotarQueCorrio(PAPELES_LEIDOS_COMO_EXTRACTO)
         if (marcados > 0) migrationsLog.info("Pasaron a «Extractos» $marcados papeles que ya se habían leído como extracto")
         return marcados
+    }
+
+    /** El nombre de [losPapelesLeidosComoExtractoSonExtractos] en [MigracionesHechas]. */
+    const val PAPELES_LEIDOS_COMO_EXTRACTO = "v129-papeles-leidos-como-extracto"
+
+    /** ¿La migración de datos [nombre] ya corrió? Ver [MigracionesHechas]. */
+    fun Transaction.yaCorrio(nombre: String): Boolean =
+        MigracionesHechas.selectAll().where { MigracionesHechas.nombre eq nombre }.any()
+
+    /** Anota que [nombre] corrió (si dos arranques compiten, el segundo no duplica: `insertIgnore`). */
+    fun Transaction.anotarQueCorrio(nombre: String) {
+        MigracionesHechas.insertIgnore {
+            it[MigracionesHechas.nombre] = nombre
+            it[corridaEn] = System.currentTimeMillis()
+        }
     }
 }

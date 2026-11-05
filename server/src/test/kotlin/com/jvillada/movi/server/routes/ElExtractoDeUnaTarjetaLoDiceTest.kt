@@ -11,6 +11,7 @@ import com.jvillada.movi.server.db.LecturasDePapeles
 import com.jvillada.movi.server.db.PdfsAbiertos
 import com.jvillada.movi.server.db.SmsMessages
 import com.jvillada.movi.server.db.StatementImports
+import com.jvillada.movi.server.db.StatementImportMatches
 import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.parsing.ClaudeStatementParser
@@ -24,6 +25,12 @@ import com.jvillada.movi.shared.model.LecturaDelPapel
 import com.jvillada.movi.shared.model.MerchantRule
 import com.jvillada.movi.shared.model.StatementParseResult
 import com.jvillada.movi.shared.model.TarjetaDelExtracto
+import com.jvillada.movi.shared.model.AdjustAccountBalanceResponse
+import com.jvillada.movi.shared.model.DeudaDelExtracto
+import com.jvillada.movi.shared.model.ImportDecision
+import com.jvillada.movi.shared.model.deudaParaCuadrar
+import org.jetbrains.exposed.sql.selectAll
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import com.jvillada.movi.shared.model.PistasDelPapel
 import com.jvillada.movi.shared.model.ProductoDelPapel
 import com.jvillada.movi.shared.model.huellaSha256
@@ -97,10 +104,10 @@ class ElExtractoDeUnaTarjetaLoDiceTest {
         transaction {
             SchemaUtils.drop(
                 PdfsAbiertos, ClavesDeExtractos, LecturasDePapeles, Documents, SmsMessages, VoidEvents, Events,
-                StatementImports, Accounts, Users, KnownDestinations,
+                StatementImportMatches, StatementImports, Accounts, Users, KnownDestinations,
             )
             SchemaUtils.create(
-                Users, Accounts, StatementImports, Events, VoidEvents, SmsMessages, Documents, KnownDestinations,
+                Users, Accounts, StatementImports, StatementImportMatches, Events, VoidEvents, SmsMessages, Documents, KnownDestinations,
                 LecturasDePapeles, ClavesDeExtractos, PdfsAbiertos,
             )
             Users.insert { it[id] = dueno; it[email] = "$dueno@test"; it[name] = dueno; it[passwordHash] = "hash" }
@@ -160,7 +167,11 @@ class ElExtractoDeUnaTarjetaLoDiceTest {
         wireApp()
         val leido = subirAlImportador("?conTarjeta=1")
         assertEquals(
-            TarjetaDelExtracto(banco = "Nu", ultimosCuatro = "1111", diaDeCorte = 12, diaDePago = 3, cupo = 3_000_000),
+            TarjetaDelExtracto(
+                banco = "Nu", ultimosCuatro = "1111", diaDeCorte = 12, diaDePago = 3, cupo = 3_000_000,
+                // Lo que se debía al corte: el pago mínimo ($101.240) más la deuda restante ($310.000).
+                deudaAlCorte = 411_240, fechaDeCorte = "2026-10-12",
+            ),
             leido.tarjeta,
         )
     }
@@ -235,4 +246,94 @@ class ElExtractoDeUnaTarjetaLoDiceTest {
         assertEquals(HttpStatusCode.BadRequest, loQueSeSabe("""{"huella":"no-es-una-huella"}""").status)
         assertEquals(HttpStatusCode.BadRequest, loQueSeSabe("{}").status)
     }
+
+    // ── Revisión · cuadrar la deuda de la tarjeta con el extracto ─────────────────
+
+    private val tarjeta = "acc-nu-tarjeta"
+
+    private fun crearLaTarjeta() = transaction {
+        Accounts.insert {
+            it[id] = tarjeta; it[userId] = dueno; it[name] = "Nu Tarjeta 1111"; it[type] = "CREDIT_CARD"; it[currency] = "COP"
+        }
+    }
+
+    private suspend fun ApplicationTestBuilder.cuadrar(cuenta: String, deuda: DeudaDelExtracto) =
+        client.post("/api/accounts/$cuenta/deuda-del-extracto") {
+            header(HttpHeaders.Authorization, "Bearer ${token()}")
+            contentType(ContentType.Application.Json)
+            setBody(json.encodeToString(DeudaDelExtracto.serializer(), deuda))
+        }
+
+    /**
+     * La tarjeta recién creada nace en $0, el importe le suma las compras del período y el ajuste la
+     * deja debiendo exactamente lo del extracto al corte: nada cuenta dos veces. El segundo «Cuadrar»
+     * no escribe otro ajuste.
+     */
+    @Test
+    fun `cuadrar la deuda deja la tarjeta en lo que dice el extracto, sin contar dos veces`() = testApplication {
+        wireApp()
+        crearLaTarjeta()
+        val leido = subirAlImportador("?conTarjeta=1")
+        val decision = ImportDecision(
+            statementId = leido.statementId, accountId = tarjeta, bankName = leido.bankName, period = leido.period,
+            imports = leido.newTransactions, reconciliations = emptyList(), skipped = emptyList(),
+        )
+        val importe = client.post("/api/statements/import") {
+            header(HttpHeaders.Authorization, "Bearer ${token()}")
+            contentType(ContentType.Application.Json)
+            setBody(json.encodeToString(ImportDecision.serializer(), decision))
+        }
+        assertEquals(HttpStatusCode.OK, importe.status, importe.bodyAsText())
+
+        val deuda = assertNotNull(leido.tarjeta?.deudaParaCuadrar())
+        val primera = cuadrar(tarjeta, deuda)
+        assertEquals(HttpStatusCode.OK, primera.status, primera.bodyAsText())
+        val respuesta = json.decodeFromString(AdjustAccountBalanceResponse.serializer(), primera.bodyAsText())
+        assertEquals(411_240L, respuesta.account.balance, "la deuda del extracto, no la del extracto más las compras")
+        assertNotNull(respuesta.adjustmentEvent)
+
+        val segunda = json.decodeFromString(AdjustAccountBalanceResponse.serializer(), cuadrar(tarjeta, deuda).bodyAsText())
+        assertNull(segunda.adjustmentEvent, "cuadrar dos veces no escribe dos ajustes")
+        assertEquals(411_240L, segunda.account.balance)
+    }
+
+    @Test
+    fun `la deuda de un extracto no se cuadra en una cuenta de ahorros`() = testApplication {
+        wireApp()
+        assertEquals(
+            HttpStatusCode.UnprocessableEntity,
+            cuadrar(ahorros, DeudaDelExtracto(deuda = 411_240, fechaDeCorte = "2026-10-12")).status,
+        )
+    }
+
+    // ── Revisión · una lectura vieja de Nu se relee sin IA ──────────────────────────
+
+    @Test
+    fun `una lectura de Nu guardada sin la tarjeta se relee sin IA y se guarda la nueva`() = testApplication {
+        wireApp()
+        val subida = client.post("/api/documents") {
+            header(HttpHeaders.Authorization, "Bearer ${token()}")
+            setBody(archivo(mapOf("tipo" to "OTRO")))
+        }
+        val id = Regex("\"id\"\\s*:\\s*\"([^\"]+)\"").find(subida.bodyAsText())!!.groupValues[1]
+        val huella = huellaSha256(EXTRACTO_DE_LA_TARJETA_NU.toByteArray())
+        // La lectura de antes de esta vuelta: el lector de Nu ya leía las filas, pero no decía la tarjeta.
+        val vieja = ExtractoLeido(bankName = "Nu", filas = emptyList(), esFamirios = false, numerosDeCuenta = listOf("1111"))
+        transaction {
+            LecturasDePapeles.insert {
+                it[userId] = dueno; it[LecturasDePapeles.huella] = huella; it[documentoId] = id; it[tipo] = "EXTRACTO"
+                it[datos] = json.encodeToString(ExtractoLeido.serializer(), vieja); it[modelo] = "x"; it[leidoEn] = 1L
+            }
+        }
+
+        val res = client.post("/api/documents/$id/leer?conTarjeta=1") { header(HttpHeaders.Authorization, "Bearer ${token()}") }
+        val lectura = json.decodeFromString(LecturaDelPapel.serializer(), res.bodyAsText())
+        assertEquals("Nu", lectura.extracto?.tarjeta?.banco)
+
+        val guardada = transaction {
+            LecturasDePapeles.selectAll().where { LecturasDePapeles.huella eq huella }.single()[LecturasDePapeles.datos]
+        }
+        assertNotNull(json.decodeFromString(ExtractoLeido.serializer(), guardada).tarjeta, "la lectura nueva queda guardada")
+    }
+
 }

@@ -16,6 +16,8 @@ import com.jvillada.movi.server.time.appDateToEpochMillis
 import com.jvillada.movi.shared.model.ADJUSTMENT_CATEGORY
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountGroup
+import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.DeudaDelExtracto
 import com.jvillada.movi.shared.model.AdjustAccountBalanceResponse
 import com.jvillada.movi.shared.model.CuentaParaElSaldo
 import com.jvillada.movi.shared.model.ExtractoDeSaldoDe
@@ -72,6 +74,71 @@ fun Route.extractoDeSaldoRoutes() {
             is AjusteDelExtracto.Rechazado -> call.respond(hecho.estado, hecho.motivo)
         }
     }
+
+    /**
+     * Vuelta 129 · **«Cuadrar la deuda con el extracto»**: la tarjeta recién creada desde la revisión
+     * de su extracto nace en $0 y el importe le suma solo las compras del período; la deuda que venía
+     * de antes (cuotas de compras viejas, lo que quedó sin pagar) falta. Esto escribe **un** ajuste
+     * para que la tarjeta deba, al final del día del corte, lo que dice el extracto
+     * ([DeudaDelExtracto]): el ajuste de siempre ([balanceAdjustmentEventFor]), contra lo que Movi
+     * tiene al corte —con lo recién importado adentro, así que nada cuenta dos veces—.
+     *
+     * Mismas reglas que el saldo del extracto: nunca solo, idempotente (recalcula con la cuenta
+     * bloqueada y el id sale del extracto), y 409 si la tarjeta ya se cuadró después del corte.
+     */
+    post("/api/accounts/{accountId}/deuda-del-extracto") {
+        val uid = call.userId()
+        val accountId = call.parameters["accountId"] ?: return@post call.respond(HttpStatusCode.BadRequest)
+        val deuda = runCatching { call.receive<DeudaDelExtracto>() }.getOrNull()
+            ?: return@post call.respond(HttpStatusCode.BadRequest, "Falta lo que dijo el extracto")
+        val corte = runCatching { LocalDate.parse(deuda.fechaDeCorte) }.getOrNull()
+        val motivo = when {
+            deuda.deuda < 0L || deuda.deuda > MAX_ACCOUNT_BALANCE_COP -> "Deuda fuera de rango — revisa el monto"
+            corte == null -> "Fecha de corte inválida"
+            corte.isAfter(AppClock.today()) -> "La fecha de corte del extracto todavía no llega"
+            else -> null
+        }
+        motivo?.let { return@post call.respond(HttpStatusCode.BadRequest, it) }
+        when (val hecho = dbQuery { cuadrarLaDeudaConElExtracto(uid, accountId, deuda) }) {
+            is AjusteDelExtracto.Hecho -> call.respond(hecho.respuesta)
+            is AjusteDelExtracto.Rechazado -> call.respond(hecho.estado, hecho.motivo)
+        }
+    }
+}
+
+private fun Transaction.cuadrarLaDeudaConElExtracto(uid: String, accountId: String, d: DeudaDelExtracto): AjusteDelExtracto {
+    val cuenta = Accounts.selectAll()
+        .where { (Accounts.id eq accountId) and (Accounts.userId eq uid) }
+        .forUpdate()
+        .firstOrNull()?.toAccount()
+        ?: return AjusteDelExtracto.Rechazado(HttpStatusCode.NotFound, "No existe esa cuenta")
+    if (cuenta.type != AccountType.CREDIT_CARD || cuenta.currency != d.moneda) {
+        return AjusteDelExtracto.Rechazado(
+            HttpStatusCode.UnprocessableEntity,
+            "La deuda de este extracto se cuadra en una tarjeta de crédito en ${d.moneda}",
+        )
+    }
+    val corte = appDateToEpochMillis(LocalDate.parse(d.fechaDeCorte).plusDays(1)) - 1
+    val alCorte = alCorte(uid, cuenta, d.moneda, corte)
+    if (alCorte.cuadradaDespues) {
+        return AjusteDelExtracto.Rechazado(
+            HttpStatusCode.Conflict,
+            "Esta tarjeta ya se cuadró después del corte del extracto. Sube un extracto más nuevo.",
+        )
+    }
+    val id = "ev_deuda_" + MessageDigest.getInstance("SHA-256")
+        .digest("$uid|${cuenta.id}|${d.fechaDeCorte}|${d.deuda}|${d.moneda}".toByteArray())
+        .joinToString("") { "%02x".format(it) }.take(32)
+    val yaEstaba = Events.selectAll().where { Events.id eq id }.any()
+    val ajuste = if (yaEstaba) null else
+        balanceAdjustmentEventFor(cuenta, alCorte.saldoEnMovi, d.deuda, now = corte)?.copy(id = id)
+    ajuste?.let { insertEventRow(uid, it) }
+    return AjusteDelExtracto.Hecho(
+        AdjustAccountBalanceResponse(
+            account = enrichWith(cuenta, loadNonVoidedEventsIn(uid, cuenta.id), rate = 0.0),
+            adjustmentEvent = ajuste,
+        ),
+    )
 }
 
 private sealed interface AjusteDelExtracto {
