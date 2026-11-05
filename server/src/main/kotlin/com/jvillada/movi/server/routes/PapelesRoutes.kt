@@ -356,7 +356,8 @@ private suspend fun releerElExtractoDeNu(uid: String, huella: String, papel: Pap
     }.getOrNull() ?: return null
     if (leerElExtractoDeNu(texto) == null) return null
     val nuevo = try {
-        leerElExtracto(uid, papel.nombre, papel.mime, papel.bytes, mimeConfiable = true, conSaldos = conSaldos)
+        // Revisión de la vuelta 130: releer no es una lectura nueva del dueño, no se cuenta otra vez.
+        leerElExtracto(uid, papel.nombre, papel.mime, papel.bytes, mimeConfiable = true, conSaldos = conSaldos, registrar = false)
     } catch (e: FallaAlProcesarExtracto) {
         return null
     }

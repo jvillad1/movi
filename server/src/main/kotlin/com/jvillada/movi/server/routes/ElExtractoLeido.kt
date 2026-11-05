@@ -30,7 +30,13 @@ internal const val LECTOR_IA: String = "IA"
 
 /** Lo que [leerElExtracto] va sabiendo mientras lee: quién lo leyó, qué producto y qué banco. */
 internal class MedidaDeLaLectura {
-    var lector: String = LECTOR_SIN_IA
+    /**
+     * Quién lo leyó, cuando alguien lo leyó: un lector propio ([LECTOR_SIN_IA]) o la IA ([LECTOR_IA]).
+     * `null` si no se llegó a leer (PDFBox no lo abrió): el evento va sin esa clave.
+     */
+    var lector: String? = null
+    /** PDFBox no lo abrió porque tiene clave (revisión de la vuelta 130). */
+    var conClave: Boolean = false
     /** Lo que dijo un lector sin IA (`CUENTA`, `TARJETA`, `CREDITO`, `FONDO`); con IA, `null`. */
     var producto: String? = null
     /** El `bankName` que se detectó antes de leer (lo que se sabe si la lectura falla). */
@@ -45,7 +51,8 @@ internal fun resultadoDelExtractoLeido(leido: ExtractoLeido): String =
  * El resultado de una lectura que falló, o `null` si la falla no es del archivo (la IA no estaba, pesa
  * de más, no llegó nada): eso no dice nada de qué archivo funciona en un banco, y no se cuenta.
  */
-internal fun resultadoDeLaFallaDelExtracto(falla: FallaAlProcesarExtracto): String? = when {
+internal fun resultadoDeLaFallaDelExtracto(falla: FallaAlProcesarExtracto, medida: MedidaDeLaLectura? = null): String? = when {
+    medida?.conClave == true -> "CON_CLAVE"
     falla.mensaje == EXTRACTO_INCOMPLETO || falla.mensaje == IMAGEN_INCOMPLETA -> "INCOMPLETA"
     falla.mensaje == EXTRACTO_SIN_MOVIMIENTOS || falla.mensaje.startsWith("El archivo parece un Famirios") -> "SIN_FILAS"
     falla.status == HttpStatusCode.UnprocessableEntity -> "ERROR"
@@ -120,3 +127,7 @@ internal suspend fun registrarElExtractoConClave(uid: String, fileName: String, 
         ahora,
     )
 }
+
+/** ¿PDFBox no lo abrió por su clave? Lanza `InvalidPasswordException` (en la causa, a veces). */
+internal fun esUnPdfConClave(e: Throwable): Boolean =
+    generateSequence(e) { it.cause }.take(5).any { it is org.apache.pdfbox.pdmodel.encryption.InvalidPasswordException }

@@ -135,7 +135,8 @@ class ElExtractoLeidoTest {
         }
         assertEquals("BANCOLOMBIA", bancoDelExtractoParaElUso("American Express"))
         assertEquals("DAVIBANK", bancoDelExtractoParaElUso("Scotiabank Colpatria"))
-        assertEquals("FIDUCUENTA", bancoDelExtractoParaElUso("Fiducuenta"))
+        // Revisión de la vuelta 130: la Fiducuenta es el fondo de Bancolombia (usa su guía).
+        assertEquals("BANCOLOMBIA", bancoDelExtractoParaElUso("Fiducuenta"))
         assertEquals("FAMIRIOS", bancoDelExtractoParaElUso("Famirios"))
         assertEquals("OTRO", bancoDelExtractoParaElUso("Extracto"))
     }
@@ -188,5 +189,45 @@ class ElExtractoLeidoTest {
         lector.lectura = ClaudeStatementParser.Lectura.Ok(listOf(fila))
         leerElExtracto(duena, "Nu.csv", "text/csv", "a,b\n".toByteArray())
         assertTrue(eventos().isEmpty())
+    }
+
+    // ── Revisión de la vuelta 130 ────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `una relectura que no es del duenio no se cuenta`() = runBlocking {
+        lector.lectura = ClaudeStatementParser.Lectura.Ok(listOf(fila))
+        leerElExtracto(duena, "Nu.csv", "text/csv", "a,b\n".toByteArray(), registrar = false)
+        assertTrue(eventos().isEmpty())
+    }
+
+    @Test
+    fun `si PDFBox no lo abre nadie lo leyo y el evento va sin lector`() = runBlocking {
+        assertFailsWith<FallaAlProcesarExtracto> {
+            leerElExtracto(duena, "Davivienda_10.pdf", "application/pdf", "esto no es un PDF".toByteArray())
+        }
+        val e = eventos().single()
+        assertEquals("ERROR", e["resultado"])
+        assertNull(e["lector"], "$e")
+    }
+
+    @Test
+    fun `un PDF con clave subido por el importador se cuenta como CON_CLAVE`() = runBlocking {
+        val out = java.io.ByteArrayOutputStream()
+        org.apache.pdfbox.pdmodel.PDDocument().use { doc ->
+            doc.addPage(org.apache.pdfbox.pdmodel.PDPage())
+            val politica = org.apache.pdfbox.pdmodel.encryption.StandardProtectionPolicy(
+                "propietario", "1037585071", org.apache.pdfbox.pdmodel.encryption.AccessPermission(),
+            )
+            politica.encryptionKeyLength = 128
+            doc.protect(politica)
+            doc.save(out)
+        }
+        assertFailsWith<FallaAlProcesarExtracto> {
+            leerElExtracto(duena, "Bancolombia_Ahorros_09.pdf", "application/pdf", out.toByteArray())
+        }
+        val e = eventos().single()
+        assertEquals("CON_CLAVE", e["resultado"])
+        assertEquals("BANCOLOMBIA", e["banco"])
+        assertNull(e["lector"])
     }
 }

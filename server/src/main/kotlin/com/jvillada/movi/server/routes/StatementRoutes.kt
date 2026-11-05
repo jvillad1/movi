@@ -314,18 +314,20 @@ internal suspend fun leerElExtracto(
     mimeConfiable: Boolean = false,
     conCreditos: Boolean = false,
     conSaldos: Boolean = false,
+    /** Revisión de la vuelta 130: `false` para una relectura que no es del dueño (la de Nu): no se cuenta. */
+    registrar: Boolean = true,
 ): ExtractoLeido {
     val medida = MedidaDeLaLectura()
     val inicio = System.currentTimeMillis()
     val leido = try {
         leerElExtractoMidiendo(medida, uid, fileName, mimeType, bytes, mimeConfiable, conCreditos, conSaldos)
     } catch (e: FallaAlProcesarExtracto) {
-        resultadoDeLaFallaDelExtracto(e)?.let { resultado ->
+        if (registrar) resultadoDeLaFallaDelExtracto(e, medida)?.let { resultado ->
             registrarElExtractoLeido(uid, medida, fileName, nombreDelBanco = null, resultado = resultado, filas = null, inicio = inicio)
         }
         throw e
     }
-    registrarElExtractoLeido(
+    if (registrar) registrarElExtractoLeido(
         uid, medida, fileName, nombreDelBanco = leido.bankName,
         resultado = resultadoDelExtractoLeido(leido), filas = leido.filas.size, inicio = inicio,
     )
@@ -398,6 +400,7 @@ private suspend fun leerElExtractoMidiendo(
         if (nombreParaLeer.substringAfterLast('.', "").lowercase() in setOf("xls", "xlsx")) {
             leerElExcelDeBancolombia(bytes)?.let { movimientos ->
                 medida.producto = "CUENTA"
+                medida.lector = LECTOR_SIN_IA
                 return ExtractoLeido(
                     bankName = "Bancolombia",
                     filas = movimientos.filas,
@@ -411,6 +414,8 @@ private suspend fun leerElExtractoMidiendo(
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Throwable) {
+            // Revisión de la vuelta 130: un PDF con clave subido por aquí se cuenta como `CON_CLAVE`.
+            medida.conClave = esUnPdfConClave(e)
             throw FallaAlProcesarExtracto(HttpStatusCode.UnprocessableEntity, LECTURA_FALLO)
         }
         textoDelExtracto = text
@@ -420,6 +425,7 @@ private suspend fun leerElExtractoMidiendo(
         if (conSaldos) {
             leerUnExtractoDeSaldo(text)?.let { resumen ->
                 medida.producto = if (resumen.de == ExtractoDeSaldoDe.SKANDIA_FONDO_VOLUNTARIO) "FONDO" else "CUENTA"
+                medida.lector = LECTOR_SIN_IA
                 return ExtractoLeido(
                     bankName = when (resumen.de) {
                         ExtractoDeSaldoDe.SKANDIA_FONDO_VOLUNTARIO -> "Skandia"
@@ -442,6 +448,7 @@ private suspend fun leerElExtractoMidiendo(
                 movimientos.deUnFondo -> "FONDO"
                 else -> "CUENTA"
             }
+            medida.lector = LECTOR_SIN_IA
             return ExtractoLeido(
                 // La lista del fondo no trae número: «Fiducuenta» es como se llama el fondo de la
                 // Sucursal Virtual, y con ese nombre la revisión encuentra la cuenta sola (si el
@@ -460,6 +467,7 @@ private suspend fun leerElExtractoMidiendo(
         // pago mínimo del extracto. Ver `leerElExtractoDeNu`.
         leerElExtractoDeNu(text)?.let { nu ->
             medida.producto = "TARJETA"
+            medida.lector = LECTOR_SIN_IA
             return ExtractoLeido(
                 bankName = "Nu",
                 filas = nu.filas,
@@ -485,6 +493,7 @@ private suspend fun leerElExtractoMidiendo(
             val resumen = LectorDePapeles.actual.leerElExtractoDeUnCredito(text)
             if (resumen != null) {
                 medida.producto = "CREDITO"
+                medida.lector = LECTOR_SIN_IA
                 return ExtractoLeido(
                     bankName = StatementParser.detectBankName(fileName, text),
                     filas = emptyList(),
@@ -509,6 +518,7 @@ private suspend fun leerElExtractoMidiendo(
         bankName = if (isFamirios) "Famirios" else StatementParser.detectBankName(fileName, text)
         medida.banco = bankName
         parsed = if (isFamirios) {
+            medida.lector = LECTOR_SIN_IA
             try {
                 WorkbookFactory.create(ByteArrayInputStream(bytes)).use { wb ->
                     FamiriosParser.parse(wb, AppClock.today())
