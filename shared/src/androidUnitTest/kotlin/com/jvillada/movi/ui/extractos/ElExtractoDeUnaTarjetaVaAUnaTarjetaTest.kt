@@ -208,6 +208,20 @@ class ElExtractoDeUnaTarjetaVaAUnaTarjetaTest {
         )
     }
 
+    /** Revisión: la AMEX es de Bancolombia; con el extracto de Bancolombia no es «de otro banco». */
+    @Test
+    fun la_amex_del_papel_con_un_extracto_de_bancolombia_no_se_contradice() {
+        val amex = Account("c-amex", "AMEX 9208", AccountType.CREDIT_CARD, 0)
+        val master = Account("c-master", "Master Black 3684", AccountType.CREDIT_CARD, 0)
+        val result = extracto(cuentaDelPapel = amex.id, tarjeta = TarjetaDelExtracto(banco = "Bancolombia"))
+            .copy(bankName = "Bancolombia", numerosDeCuenta = emptyList())
+        assertEquals(false, esDeOtroBanco(amex, TarjetaDelExtracto(banco = "Bancolombia")))
+        assertNull(porQueNoLaDelPapel(listOf(amex, master), result, elegidaAMano = null))
+        val r = cuentaDelExtracto(listOf(amex, master), result, elegidaAMano = null)
+        assertEquals(amex, r.cuenta)
+        assertEquals(OrigenDeLaCuentaDelBanco.LA_DEL_PAPEL, r.origen)
+    }
+
     @Test
     fun sin_la_deuda_en_el_extracto_no_se_propone_cuadrar() {
         montar(listOf(nuAhorros, nuTarjeta), extracto(tarjeta = delExtracto.copy(deudaAlCorte = null)))

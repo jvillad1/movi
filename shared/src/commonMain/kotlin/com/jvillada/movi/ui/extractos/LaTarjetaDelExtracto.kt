@@ -5,6 +5,7 @@ import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.StatementParseResult
 import com.jvillada.movi.shared.model.TarjetaDelExtracto
 import com.jvillada.movi.shared.model.UsoDeCuenta
+import com.jvillada.movi.shared.model.grupoDelBanco
 import com.jvillada.movi.shared.model.marcaDeLaCuenta
 import com.jvillada.movi.shared.model.marcaDelBanco
 import com.jvillada.movi.ui.components.CuentaDelBanco
@@ -103,13 +104,14 @@ private fun esDelBanco(cuenta: Account, tarjeta: TarjetaDelExtracto): Boolean {
 }
 
 /**
- * ¿[cuenta] es de otro banco que el de [tarjeta]? Solo si las dos marcas se conocen y difieren: una
- * tarjeta con un nombre sin marca («Mi tarjeta morada») no contradice nada.
+ * ¿[cuenta] es de otro banco que el de [tarjeta]? Solo si las dos marcas se conocen y sus bancos
+ * ([grupoDelBanco]) difieren: la AMEX es de Bancolombia, así que con el extracto de Bancolombia no se
+ * contradice; una tarjeta con un nombre sin marca («Mi tarjeta morada») tampoco.
  */
-private fun esDeOtroBanco(cuenta: Account, tarjeta: TarjetaDelExtracto): Boolean {
+internal fun esDeOtroBanco(cuenta: Account, tarjeta: TarjetaDelExtracto): Boolean {
     val delExtracto = marcaDelBanco(tarjeta.banco) ?: return false
     val deLaCuenta = marcaDeLaCuenta(cuenta) ?: return false
-    return deLaCuenta.id != delExtracto.id
+    return grupoDelBanco(deLaCuenta.id) != grupoDelBanco(delExtracto.id)
 }
 
 /** Lo que la revisión de un extracto tiene que decir de la tarjeta. */
