@@ -377,11 +377,11 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
                         }
                     }
 
-                    // **«Sube el extracto de este mes»** (vuelta 107): en una cuenta o tarjeta de un banco
-                    // con guía (Bancolombia, Nu), la fila abre «Cómo sacar tu extracto de …»: los pasos,
-                    // el formato y el rango ideal. El banco de la tarjeta gana sobre el nombre de la
-                    // cuenta («Master Black 3684» no dice Bancolombia). Sin guía, nada.
-                    val guia = com.jvillada.movi.ui.extractos.guiaDelExtractoDeLaCuenta(acc, deuda?.tarjeta?.terms?.bank)
+                    // **«Sube el extracto de este mes»** (vuelta 107): en una cuenta de un banco que Movi
+                    // conoce, la fila abre «Cómo bajar tu extracto de …» con la guía de ese banco y de ese
+                    // producto (vuelta 130: banco por banco). El banco de la tarjeta gana sobre el nombre
+                    // de la cuenta («Master Black 3684» no dice Bancolombia). Sin banco ni extracto, nada.
+                    val guia = com.jvillada.movi.shared.model.guiaDelExtractoDeLaCuenta(acc, deuda?.tarjeta?.terms?.bank)
                     if (guia != null) {
                         item(key = "como-sacar-el-extracto") {
                             Superficie(relleno = RellenoDeSuperficie.Lista) {
@@ -677,8 +677,7 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
 
         guiaDelExtracto?.let { guia ->
             com.jvillada.movi.ui.extractos.HojaDeComoSacarElExtracto(
-                guia = guia,
-                esTarjeta = account?.type == AccountType.CREDIT_CARD,
+                inicial = guia,
                 onDismiss = { guiaDelExtracto = null },
             )
         }

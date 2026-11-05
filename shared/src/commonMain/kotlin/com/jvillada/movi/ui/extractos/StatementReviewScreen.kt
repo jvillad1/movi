@@ -114,7 +114,10 @@ fun StatementReviewScreen(
     }
     val porQueNoLaDelPapel = remember(accounts, result, cuentaElegida) { porQueNoLaDelPapel(accounts, result, cuentaElegida) }
     // Vuelta 107: la guía del banco que reconoció la lectura («Bancolombia», «Nu»), si tiene una.
-    val guiaDelExtracto = remember(result.bankName) { guiaDelExtractoPara(result.bankName) }
+    // Vuelta 130: con el producto, si el extracto dice que es de una tarjeta (la de Nu, la de Bancolombia).
+    val guiaDelExtracto = remember(result.bankName, result.tarjeta) {
+        guiaDelExtractoPara(result.bankName, com.jvillada.movi.shared.model.ProductoDelExtracto.TARJETA.takeIf { result.tarjeta != null })
+    }
     var viendoLaGuia by remember { mutableStateOf(false) }
 
     val cargos = remember(result) { result.cargosDelBanco.associateBy { it.parsedId } }
@@ -393,8 +396,8 @@ fun StatementReviewScreen(
                 }
             }
 
-            // Vuelta 107: el banco del extracto se reconoció y tiene guía: cómo bajarlo la próxima vez
-            // (los pasos, el formato y el rango ideal). Sin guía, nada.
+            // Vuelta 107: el banco del extracto se reconoció: cómo bajarlo la próxima vez (vuelta 130: la
+            // guía de ese banco, con el archivo que Movi lee mejor). Sin banco reconocido, nada.
             guiaDelExtracto?.let { guia ->
                 item(key = "como-sacar-el-extracto") {
                     Superficie(
@@ -490,8 +493,7 @@ fun StatementReviewScreen(
     val guia = guiaDelExtracto
     if (viendoLaGuia && guia != null) {
         HojaDeComoSacarElExtracto(
-            guia = guia,
-            esTarjeta = destinationAccount?.type == com.jvillada.movi.shared.model.AccountType.CREDIT_CARD,
+            inicial = guia,
             onDismiss = { viendoLaGuia = false },
         )
     }

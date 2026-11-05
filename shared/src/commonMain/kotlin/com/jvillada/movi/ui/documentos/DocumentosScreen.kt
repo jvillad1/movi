@@ -42,7 +42,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -156,6 +159,10 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
     var aEditar by remember { mutableStateOf<Documento?>(null) }
     // El archivo elegido, todavía sin subir: la hoja de subida pregunta qué es y de qué cuenta.
     var aSubir by remember { mutableStateOf<ArchivoElegido?>(null) }
+    // Vuelta 130: «Cómo bajar tus extractos», abierta (en un banco, o en la lista de bancos).
+    var guiaPedida by remember { mutableStateOf<com.jvillada.movi.ui.extractos.GuiaPedida?>(null) }
+    // Vuelta 130: la guía que ofrece el aviso de un extracto que no se pudo leer («Cómo bajarlo»).
+    var guiaDelError by remember { mutableStateOf<com.jvillada.movi.ui.extractos.GuiaPedida?>(null) }
     // Las cuentas, para los dos selectores. Si la lectura falla la pantalla sigue andando: sin
     // cuentas el selector dice «No tienes cuentas todavía» y el papel se sube sin cuenta, que es
     // exactamente lo que pasaba antes de que esto existiera.
@@ -265,6 +272,12 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
                         )
                     } else {
                         val motivo = codigo?.let { com.jvillada.movi.shared.model.fraseDeLaClaveDelPdf(it) } ?: e.toUserMessage()
+                        // Vuelta 130: si lo que falló es el archivo, el aviso ofrece la guía de su banco.
+                        guiaDelError = if (com.jvillada.movi.shared.model.laFallaPideLaGuia(motivo)) {
+                            com.jvillada.movi.ui.extractos.GuiaPedida(
+                                com.jvillada.movi.ui.extractos.guiaDelPapelQueNoSeLeyo(doc.nombre, cuentas.firstOrNull { it.id == doc.accountId }),
+                            )
+                        } else null
                         error = "No pude procesar el extracto: $motivo"
                     }
                 }
@@ -291,7 +304,14 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
 
     LaunchedEffect(error) {
         val msg = error ?: return@LaunchedEffect
-        snackbarHostState.showSnackbar(msg)
+        val conGuia = guiaDelError
+        guiaDelError = null
+        val resultado = snackbarHostState.showSnackbar(
+            msg,
+            actionLabel = conGuia?.let { com.jvillada.movi.shared.model.COMO_BAJARLO },
+            duration = if (conGuia != null) SnackbarDuration.Long else SnackbarDuration.Short,
+        )
+        if (resultado == SnackbarResult.ActionPerformed && conGuia != null) guiaPedida = conGuia
         error = null
     }
 
@@ -341,6 +361,8 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
                     modifier = Modifier.fillMaxSize().desplazableConElTeclado(),
                 ) {
                     Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(top = Espacio.s)) {
+                        FilaDeComoBajarTusExtractos(onClick = { guiaPedida = com.jvillada.movi.ui.extractos.GuiaPedida(null) })
+                        Spacer(Modifier.height(Espacio.m))
                         Vacio(
                             titulo = "Tus papeles, a mano",
                             detalle = "Aquí se guardan tus extractos, nóminas, contratos y cualquier papel que quieras " +
@@ -363,6 +385,12 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
                     modifier = Modifier.fillMaxWidth(),
                     contentPadding = PaddingValues(top = Espacio.s, bottom = Medida.botonFlotante + Medida.entreSecciones),
                 ) {
+                    // Vuelta 130: la entrada fija a la guía, banco por banco.
+                    item(key = "como-bajar-tus-extractos") {
+                        Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(bottom = Espacio.m)) {
+                            FilaDeComoBajarTusExtractos(onClick = { guiaPedida = com.jvillada.movi.ui.extractos.GuiaPedida(null) })
+                        }
+                    }
                     porTipo(lista).forEach { (tipo, delTipo) ->
                         item(key = "encabezado-${tipo.name}") {
                             Column(modifier = Modifier.padding(horizontal = Espacio.m)) {
@@ -420,6 +448,8 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
                 cuentas = cuentas,
                 onDismiss = { aSubir = null },
                 onSubir = { tipo, cuentaId -> subir(archivo, tipo, cuentaId) },
+                // Vuelta 130: «¿Cómo bajo mi extracto?» abre la guía del banco de la cuenta, o la lista.
+                onComoBajarlo = { guia -> guiaPedida = com.jvillada.movi.ui.extractos.GuiaPedida(guia) },
                 // Vuelta 129: si Movi ya leyó este mismo archivo, lo que dice el contenido propone la
                 // cuenta. La huella cede el hilo cada 64 KB (en la web todo corre en uno solo); sin
                 // red, nada.
@@ -427,6 +457,15 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
                     val huella = withContext(Dispatchers.Default) { huellaSha256SinTrabar(elegido.bytes) }
                     Repositories.wallets.getLoQueSeSabeDelPapel(huella)
                 },
+            )
+        }
+
+        guiaPedida?.let { pedida ->
+            // «Subir el extracto» elige otro archivo: el que Movi lee mejor, recién bajado.
+            com.jvillada.movi.ui.extractos.HojaDeComoSacarElExtracto(
+                inicial = pedida.inicial,
+                onDismiss = { guiaPedida = null },
+                onSubir = elegirArchivo,
             )
         }
 
@@ -777,6 +816,11 @@ internal fun SubirDocumentoSheet(
      * [cuentaPropuestaParaElPapel]). Por defecto nada: la hoja propone solo con el nombre.
      */
     loQueSeSabe: suspend (ArchivoElegido) -> PistasDelPapel? = { null },
+    /**
+     * Vuelta 130 · «¿Cómo bajo mi extracto?»: abre la guía del banco de la cuenta propuesta o elegida
+     * ([guiaParaLaHojaDeSubida]), o `null` para la lista de bancos. Sin esto, el enlace no se ofrece.
+     */
+    onComoBajarlo: ((com.jvillada.movi.shared.model.GuiaDelExtracto?) -> Unit)? = null,
 ) {
     var tipo by remember { mutableStateOf(tipoSugeridoPara(archivo.nombre)) }
     // Vuelta 129: la cuenta llega propuesta (ver [cuentaPropuestaParaElPapel]) hasta que el dueño elige
@@ -817,9 +861,34 @@ internal fun SubirDocumentoSheet(
         Spacer(Modifier.height(Espacio.s))
         SelectorDeCuenta(cuentas, cuenta, enabled = true, ayuda = ayudaDeLaCuenta) { elegida = it; elegidaAMano = true }
 
+        if (onComoBajarlo != null && tipo == TipoDeDocumento.EXTRACTO) {
+            Spacer(Modifier.height(Espacio.xs))
+            com.jvillada.movi.ui.extractos.EnlaceALaGuiaDelExtracto(
+                com.jvillada.movi.shared.model.COMO_BAJO_MI_EXTRACTO,
+                onClick = { onComoBajarlo(com.jvillada.movi.ui.extractos.guiaParaLaHojaDeSubida(cuenta, cuentas)) },
+            )
+        }
+
         Spacer(Modifier.height(Espacio.l))
         PieDeHoja(texto = "Subir", onClick = { onSubir(tipo, cuenta) })
         Spacer(Modifier.height(Espacio.l))
+    }
+}
+
+/** El tag de la fila fija «Cómo bajar tus extractos». */
+internal const val TAG_FILA_COMO_BAJAR_TUS_EXTRACTOS: String = "fila-como-bajar-tus-extractos"
+
+/** Vuelta 130 · **la entrada fija a la guía**, arriba de los documentos: banco por banco. */
+@Composable
+private fun FilaDeComoBajarTusExtractos(onClick: () -> Unit) {
+    Superficie(relleno = RellenoDeSuperficie.Lista) {
+        Fila(
+            titulo = com.jvillada.movi.shared.model.COMO_BAJAR_TUS_EXTRACTOS,
+            subtitulo = "Banco por banco, el archivo que Movi lee mejor",
+            inicio = { IconoEnCirculo(Icons.Rounded.Download, tono = TonoDeIcono.Neutro) },
+            onClick = onClick,
+            modifier = Modifier.testTag(TAG_FILA_COMO_BAJAR_TUS_EXTRACTOS),
+        )
     }
 }
 

@@ -308,6 +308,47 @@ open class ElTextoAl130NoSeCortaTest {
         }
         nadaSeCorta("la ayuda de la cuenta", conTag(com.jvillada.movi.ui.documentos.TAG_AYUDA_DE_LA_CUENTA))
     }
+
+    /** Vuelta 130: la guía de Bancolombia (la más larga: pasos, clave, correo, aviso y el mensual). */
+    @Test
+    fun `la guia para bajar el extracto, con su boton`() {
+        montar(esperar = "Cómo bajar tu extracto de Bancolombia") {
+            com.jvillada.movi.ui.extractos.HojaDeComoSacarElExtracto(
+                inicial = com.jvillada.movi.shared.model.GUIA_DE_BANCOLOMBIA, onDismiss = {}, onSubir = {},
+            )
+        }
+        nadaSeCorta(
+            "la guía del extracto",
+            conTag(com.jvillada.movi.ui.extractos.TAG_HOJA_DE_COMO_SACAR_EL_EXTRACTO) +
+                conTag(com.jvillada.movi.ui.extractos.TAG_SUBIR_DESDE_LA_GUIA),
+        )
+    }
+
+    /** Vuelta 130: la lista de bancos de la guía. */
+    @Test
+    fun `la lista de bancos de la guia`() {
+        montar(esperar = com.jvillada.movi.ui.extractos.ELIGE_TU_BANCO) {
+            com.jvillada.movi.ui.extractos.HojaDeComoSacarElExtracto(inicial = null, onDismiss = {})
+        }
+        nadaSeCorta("la lista de bancos", conTag(com.jvillada.movi.ui.extractos.TAG_HOJA_DE_COMO_SACAR_EL_EXTRACTO))
+    }
+
+    /** Vuelta 130: el enlace «¿Cómo bajo mi extracto?» de la hoja de subida. */
+    @Test
+    fun `el enlace a la guia en la hoja de subida`() {
+        montar(esperar = com.jvillada.movi.shared.model.COMO_BAJO_MI_EXTRACTO) {
+            com.jvillada.movi.ui.documentos.SubirDocumentoSheet(
+                archivo = com.jvillada.movi.ui.documentos.ArchivoElegido(
+                    "Extracto_Bancolombia_Ahorros_septiembre_2026.pdf", ByteArray(2048), "application/pdf",
+                ),
+                cuentas = listOf(ahorros),
+                onDismiss = {},
+                onSubir = { _, _ -> },
+                onComoBajarlo = {},
+            )
+        }
+        nadaSeCorta("el enlace a la guía", conTag(com.jvillada.movi.ui.extractos.TAG_ENLACE_A_LA_GUIA))
+    }
 }
 
 /**

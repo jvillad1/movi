@@ -44,6 +44,7 @@ class UnSoloIconoYUnSoloAvatarTest {
         "sms/LaCabezaDelAviso.kt", // el banco, cuando el título del aviso es el banco
         "transactions/CategorySheets.kt", // la marca junto a un nombre, en una línea
         "accounts/FormularioDeCuenta.kt", // el banco que se elige al crear una cuenta
+        "extractos/ComoSacarElExtracto.kt", // vuelta 130: el banco que se elige en «Cómo bajar tu extracto»
     )
 
     @Test

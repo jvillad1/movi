@@ -92,21 +92,17 @@ import com.jvillada.movi.server.time.epochMillisToAppDate
  * Excel; los de Bancolombia Movi los lee sin IA—. No dice «escríbenos»: la app no tiene ese
  * canal (ver `PaginasLegales.SIN_CORREO`).
  */
-const val EXTRACTO_INCOMPLETO: String =
-    "No pudimos leer todo el extracto, así que no te mostramos una lista a medias. Si tu banco te " +
-        "deja descargar los movimientos en PDF o Excel desde su app, súbelos así."
+// Vuelta 130: el texto vive en `:core` (`ComoSacarElExtracto.kt`), para que la app lo reconozca y
+// ofrezca debajo «Cómo bajar el archivo que Movi lee mejor».
+const val EXTRACTO_INCOMPLETO: String = com.jvillada.movi.shared.model.FRASE_EXTRACTO_INCOMPLETO
 
-const val IMAGEN_INCOMPLETA: String =
-    "La imagen tiene demasiados movimientos y la lectura quedó incompleta. Sube el extracto en PDF, " +
-        "o toma varias capturas con menos movimientos cada una."
+const val IMAGEN_INCOMPLETA: String = com.jvillada.movi.shared.model.FRASE_IMAGEN_INCOMPLETA
 
 const val LECTURA_SIN_LLAVE: String =
     "La lectura automática de extractos está apagada: al servidor le falta la clave de Anthropic. " +
         "Tu archivo no tiene nada malo — avísale a quien administra Movi."
 
-const val EXTRACTO_SIN_MOVIMIENTOS: String =
-    "No encontramos movimientos en este archivo. Revisa que sea el extracto con el detalle de " +
-        "movimientos y no un resumen o un certificado."
+const val EXTRACTO_SIN_MOVIMIENTOS: String = com.jvillada.movi.shared.model.FRASE_EXTRACTO_SIN_MOVIMIENTOS
 
 /**
  * Fix round 3, hallazgo 1: `StatementParser.extractText` y `WorkbookFactory.create` (Famirios)
@@ -116,8 +112,7 @@ const val EXTRACTO_SIN_MOVIMIENTOS: String =
  * de `procesarExtracto` sin pasar por [FallaAlProcesarExtracto] y las dos rutas la devolvían como
  * un 500 crudo — sin explicación, y peor, un 500 es lo que un cliente reintenta a ciegas.
  */
-const val LECTURA_FALLO: String =
-    "No pude leer este archivo como extracto. Revisa que sea el PDF o la hoja de cálculo del banco."
+const val LECTURA_FALLO: String = com.jvillada.movi.shared.model.FRASE_LECTURA_FALLO
 
 /**
  * **Por qué esta lectura no se puede importar**, o `null` si sí se puede.

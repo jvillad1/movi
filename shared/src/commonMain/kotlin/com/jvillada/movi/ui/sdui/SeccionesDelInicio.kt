@@ -291,7 +291,7 @@ internal fun PropuestasDelInicioSection(
     val atajos = LocalAtajosDeAgregar.current
     // Vuelta 97: la propuesta de repartir cuya hoja está abierta.
     var repartiendo by remember { mutableStateOf<com.jvillada.movi.shared.model.PropuestaDeRepartir?>(null) }
-    // Vuelta 107: la guía «¿Cómo lo saco?» del extracto que falta, abierta.
+    // Vuelta 107: la guía del extracto que falta, abierta (vuelta 130: «Cómo bajarlo», de todo banco).
     var guiaDelExtracto by remember { mutableStateOf<AccionDeLaPropuesta.VerComoSacarElExtracto?>(null) }
     val hacer: (AccionDeLaPropuesta) -> Unit = { accion ->
         when (accion) {
@@ -341,9 +341,8 @@ internal fun PropuestasDelInicioSection(
     }
     guiaDelExtracto?.let { g ->
         com.jvillada.movi.ui.extractos.HojaDeComoSacarElExtracto(
-            guia = g.guia,
-            // El extracto que falta es siempre el de una tarjeta (`extractoPorSubir`).
-            esTarjeta = true,
+            // El extracto que falta es siempre el de una tarjeta (`extractoPorSubir`): la guía ya es de una.
+            inicial = g.guia,
             corteDeLaTarjeta = runCatching { kotlinx.datetime.LocalDate.parse(g.corte) }.getOrNull(),
             onDismiss = { guiaDelExtracto = null },
         )

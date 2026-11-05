@@ -94,8 +94,7 @@ const val PAPEL_SIN_LLAVE: String =
  * Un PDF con clave de apertura, dicho a una app que no sabe pedirla (sin `?conClave=1`). La que sí
  * sabe recibe `PDF_CON_CLAVE` y pide la clave en la misma fila (vuelta 103, `PdfConClave.kt`).
  */
-const val PAPEL_CON_CLAVE: String =
-    "Este PDF tiene clave. Actualiza Movi para escribirla y abrirlo. El archivo quedó guardado en Documentos."
+const val PAPEL_CON_CLAVE: String = com.jvillada.movi.shared.model.FRASE_PAPEL_CON_CLAVE
 
 /** Un PDF escaneado: sin texto adentro, y mandarlo entero a Claude costaría como un extracto. */
 const val PAPEL_SIN_TEXTO: String =

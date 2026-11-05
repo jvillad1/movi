@@ -163,6 +163,9 @@ fun HojaLeyendoElPapel(
         onNavigate(destino)
     }
 
+    // Vuelta 130: «Cómo bajar el archivo que Movi lee mejor», abierta sobre esta hoja.
+    var guiaPedida by remember { mutableStateOf<com.jvillada.movi.ui.extractos.GuiaPedida?>(null) }
+
     AtrasCierraEstaHoja(onCerrar)
     MarcoDeHoja(onDismiss = onCerrar) {
         Column(
@@ -190,10 +193,29 @@ fun HojaLeyendoElPapel(
                     sePuedeRecordar = sePuedeRecordar,
                     onAbrir = { clave, recordar -> if (resultado is ResultadoDelPapel.ConClave) abrir(i, resultado, clave, recordar) },
                     onReintentar = { if (resultado is ResultadoDelPapel.NoSePudo) reintentar(i, resultado) },
+                    onComoBajarlo = {
+                        guiaPedida = com.jvillada.movi.ui.extractos.GuiaPedida(
+                            com.jvillada.movi.ui.extractos.guiaDelPapelQueNoSeLeyo(resultado.nombre),
+                        )
+                    },
                 )
             }
         }
     }
+    guiaPedida?.let { pedida ->
+        com.jvillada.movi.ui.extractos.HojaDeComoSacarElExtracto(inicial = pedida.inicial, onDismiss = { guiaPedida = null })
+    }
+}
+
+/**
+ * Vuelta 130 · **¿esta fila ofrece la guía?** Un PDF con clave, o un papel que no se pudo leer por el
+ * archivo (el extracto se cortó, no traía movimientos, no se leyó como extracto): ahí bajar el archivo que
+ * Movi lee mejor lo arregla. La IA caída o la red no. Pura.
+ */
+fun ofreceLaGuiaDelExtracto(resultado: ResultadoDelPapel): Boolean = when (resultado) {
+    is ResultadoDelPapel.ConClave -> true
+    is ResultadoDelPapel.NoSePudo -> com.jvillada.movi.shared.model.laFallaPideLaGuia(resultado.motivo)
+    else -> false
 }
 
 @Composable
@@ -206,6 +228,7 @@ private fun TarjetaDelResultado(
     sePuedeRecordar: Boolean,
     onAbrir: (clave: String, recordar: Boolean) -> Unit,
     onReintentar: () -> Unit,
+    onComoBajarlo: () -> Unit = {},
 ) {
     Superficie(modifier = Modifier.fillMaxWidth()) {
         Text(
@@ -286,6 +309,13 @@ private fun TarjetaDelResultado(
                 }
             }
             is ResultadoDelPapel.ConClave -> PedirLaClave(resultado, sePuedeRecordar, onAbrir)
+        }
+        if (ofreceLaGuiaDelExtracto(resultado)) {
+            Spacer(Modifier.height(Espacio.xs))
+            com.jvillada.movi.ui.extractos.EnlaceALaGuiaDelExtracto(
+                com.jvillada.movi.shared.model.COMO_BAJAR_EL_ARCHIVO_QUE_MOVI_LEE_MEJOR,
+                onClick = onComoBajarlo,
+            )
         }
     }
 }

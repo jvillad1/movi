@@ -350,8 +350,9 @@ sealed interface AccionDeLaPropuesta {
     data object SubirElExtracto : AccionDeLaPropuesta
 
     /**
-     * Vuelta 107: «¿Cómo lo saco?»: abre la guía del banco del extracto que falta (los pasos, el formato y
-     * el rango ideal desde el [corte] de la tarjeta). Solo se ofrece si el banco tiene guía.
+     * Vuelta 107: abre la guía del banco del extracto que falta (los pasos, qué archivo subir y el rango
+     * ideal desde el [corte] de la tarjeta). Vuelta 130: «Cómo bajarlo», siempre, con la guía de la
+     * tarjeta de ese banco o la genérica.
      */
     data class VerComoSacarElExtracto(
         val guia: com.jvillada.movi.shared.model.GuiaDelExtracto,
@@ -804,7 +805,7 @@ private fun propuestaDeExtracto(data: DashboardData): PropuestaDelInicio? {
     val extractos = extractosVisiblesDe(data)
     val primero = extractos.firstOrNull() ?: return null
     val otros = extractos.size - 1
-    val guia = com.jvillada.movi.shared.model.guiaDelExtractoParaAlguno(primero.banco, primero.cuentaNombre)
+    val guia = guiaDeLaPropuestaDelExtracto(primero)
     return PropuestaDelInicio(
         tipo = TipoDePropuesta.EXTRACTO,
         titulo = com.jvillada.movi.shared.model.preguntaDelExtractoPorSubir(primero, extractos),
@@ -817,12 +818,24 @@ private fun propuestaDeExtracto(data: DashboardData): PropuestaDelInicio? {
         alTocar = AccionDeLaPropuesta.SubirElExtracto,
         accionSecundaria = YA_NO,
         alTocarSecundaria = AccionDeLaPropuesta.DescartarAnomalia(primero.huella),
-        // Vuelta 107: si el banco tiene guía, «¿Cómo lo saco?» la abre. Sin guía, nada.
-        accionTerciaria = guia?.let { com.jvillada.movi.shared.model.COMO_LO_SACO },
-        alTocarTerciaria = guia?.let { AccionDeLaPropuesta.VerComoSacarElExtracto(it, primero.corte) },
+        // Vuelta 130: «Cómo bajarlo», un enlace (el amarillo sigue siendo «Subir el extracto»): la guía de
+        // la tarjeta de ese banco, o la genérica con su nombre.
+        accionTerciaria = com.jvillada.movi.shared.model.COMO_BAJARLO,
+        alTocarTerciaria = AccionDeLaPropuesta.VerComoSacarElExtracto(guia, primero.corte),
         rango = 4,
         cuantas = extractos.size,
     )
+}
+
+/**
+ * Vuelta 130 · **la guía del extracto que falta**: la de la tarjeta (`extractoPorSubir` solo propone
+ * tarjetas) del banco de sus condiciones o del nombre de la cuenta; si Movi no conoce ese banco, la
+ * genérica con el nombre que escribió el dueño. Nunca `null`: siempre hay algo que decir.
+ */
+internal fun guiaDeLaPropuestaDelExtracto(extracto: com.jvillada.movi.shared.model.ExtractoPorSubir): com.jvillada.movi.shared.model.GuiaDelExtracto {
+    val tarjeta = com.jvillada.movi.shared.model.ProductoDelExtracto.TARJETA
+    return com.jvillada.movi.shared.model.guiaDelExtractoParaAlguno(extracto.banco, extracto.cuentaNombre, producto = tarjeta)
+        ?: com.jvillada.movi.shared.model.guiaGenerica(null, extracto.banco.trim().takeIf { it.isNotEmpty() }, tarjeta)
 }
 
 // ── Últimos movimientos ──────────────────────────────────────────────────────
