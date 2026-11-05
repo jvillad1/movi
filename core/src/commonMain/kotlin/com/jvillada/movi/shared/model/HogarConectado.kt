@@ -91,7 +91,7 @@ fun gastoDelOtroLado(
     escritoEn: Long,
     categoriaMia: (String) -> String = { it },
 ): GastoDelEspacio? {
-    if (escritoEn < lado.desde) return null
+    if (escritoEn < lado.desde || g.deAntes) return null
     val pagadoPor = miembroDelOtroLado(g.pagadoPor, lado) ?: return null
     val partes = clavesDelOtroLado(g.partes, lado) ?: return null
     return g.copy(
@@ -107,7 +107,8 @@ fun gastoDelOtroLado(
 
 /** **Un saldado que anotó la otra persona, en mi lado**: como [gastoDelOtroLado], sin su movimiento. */
 fun liquidacionDelOtroLado(l: LiquidacionDelEspacio, lado: LadoDelOtro, escritoEn: Long): LiquidacionDelEspacio? {
-    if (escritoEn < lado.desde) return null
+    // Revisión 2: un saldado de lo de antes de conectarse es solo de su lado.
+    if (escritoEn < lado.desde || l.deAntes) return null
     val de = miembroDelOtroLado(l.de, lado) ?: return null
     val a = miembroDelOtroLado(l.a, lado) ?: return null
     return l.copy(espacioId = lado.miEspacioId, de = de, a = a, eventoId = null, movimiento = null, anotadoPor = lado.miMiembroDelOtro)
@@ -213,14 +214,48 @@ fun quienesPuedenPagarDesdeAca(espacio: Espacio): List<MiembroDelEspacio> =
  * ([LiquidacionDelEspacio.anotadoPor]), la misma dirección ([de] → [a]), el monto ± 1 % ([montoParecido]) y
  * de los últimos [DIAS_ANTES_DEL_SALDADO] días. Con uno así, marcar otro sería saldar dos veces: lo que
  * toca es vincular la transferencia a ese.
+ *
+ * Revisión 2: no cuenta uno que el dueño ya vinculó (su [LiquidacionDelEspacio.eventoId], de este lado, es
+ * su vínculo: ese ya está) ni uno anterior al último gasto del grupo ([gastos]): saldó una deuda que ya no
+ * es la de ahora.
  */
 fun saldadoQueYaMarcoElOtro(
     liquidaciones: List<LiquidacionDelEspacio>,
+    gastos: List<GastoDelEspacio>,
     de: String,
     a: String,
     monto: Long,
     ahora: Long,
-): LiquidacionDelEspacio? = liquidaciones
-    .filter { it.anotadoPor != null && it.de == de && it.a == a && montoParecido(it.monto, monto) }
-    .filter { it.fecha >= ahora - DIAS_ANTES_DEL_SALDADO * 24L * 60 * 60 * 1000 }
-    .maxByOrNull { it.fecha }
+): LiquidacionDelEspacio? {
+    val ultimoGasto = gastos.filterNot { it.deAntes }.maxOfOrNull { it.fecha } ?: Long.MIN_VALUE
+    return liquidaciones
+        .filter { it.anotadoPor != null && it.eventoId == null && it.de == de && it.a == a && montoParecido(it.monto, monto) }
+        .filter { it.fecha >= ahora - DIAS_ANTES_DEL_SALDADO * 24L * 60 * 60 * 1000 && it.fecha >= ultimoGasto }
+        .maxByOrNull { it.fecha }
+}
+
+/** Lo que ven los dos de un grupo conectado: sin lo de antes de conectarse ([GastoDelEspacio.deAntes]). */
+fun loQueVenLosDos(gastos: List<GastoDelEspacio>): List<GastoDelEspacio> = gastos.filterNot { it.deAntes }
+
+/** Los saldados que ven los dos (ver [loQueVenLosDos]). */
+fun saldadosQueVenLosDos(liquidaciones: List<LiquidacionDelEspacio>): List<LiquidacionDelEspacio> = liquidaciones.filterNot { it.deAntes }
+
+/**
+ * Revisión 2 · **el saldo de lo de antes de conectarse** (solo del lado que tiene esa historia): sus gastos y
+ * saldados de antes ([GastoDelEspacio.deAntes]); el neto del dueño (positivo = le deben).
+ */
+fun netoDeAntesDeConectarse(espacio: Espacio, gastos: List<GastoDelEspacio>, liquidaciones: List<LiquidacionDelEspacio>): Long {
+    val g = gastos.filter { it.deAntes }
+    val l = liquidaciones.filter { it.deAntes }
+    if (g.isEmpty() && l.isEmpty()) return 0L
+    return saldoDelEspacio(espacio, g, l).netoDe(MIEMBRO_YO)
+}
+
+/** El código, en la cabecera de la respuesta, que lee el cliente nuevo (el cuerpo es la frase para todos). */
+const val CABECERA_DEL_CODIGO: String = "X-Movi-Codigo"
+
+/** «Caro anota lo que paga desde su Movi»: el cuerpo del 422 de «Pagó otro» (lo lee bien un APK viejo). */
+fun fraseLoAnotaDesdeSuMovi(nombre: String): String = "$nombre anota lo que paga desde su Movi"
+
+/** «Caro ya lo marcó como saldado»: el cuerpo del 409 de un saldado repetido. */
+fun fraseYaLoMarco(nombre: String): String = "$nombre ya lo marcó como saldado"

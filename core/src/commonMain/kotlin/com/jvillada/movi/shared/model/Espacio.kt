@@ -115,6 +115,12 @@ data class GastoDelEspacio(
      * propio Movi (un grupo conectado, ver [gastoDelOtroLado]). Derivado al leer; opcional en el wire.
      */
     val anotadoPor: String? = null,
+    /**
+     * Revisión 2 de la vuelta 131 · en un grupo conectado, este gasto es **de antes de conectarse** (lo anotó
+     * el dueño antes de `desde`): cuenta solo en su historia de antes, nunca en el saldo que ven los dos.
+     * Derivado al leer (falso sin conexión); opcional en el wire.
+     */
+    val deAntes: Boolean = false,
 )
 
 /** Lo que le toca al dueño de [g]. */
@@ -144,6 +150,13 @@ data class LiquidacionDelEspacio(
     val movimiento: String? = null,
     /** Vuelta 131 · quién lo anotó, como [GastoDelEspacio.anotadoPor]. Derivado al leer; opcional en el wire. */
     val anotadoPor: String? = null,
+    /**
+     * Revisión 2 de la vuelta 131 · **un saldado de lo de antes de conectarse**: lo de antes no se salda por
+     * el canal compartido. Al leer (con conexión) también marca los saldados propios escritos antes de
+     * `desde`. Al crearlo, el cliente lo pide con `true` y el server lo guarda (`de_antes`): **nunca cruza**
+     * al otro lado y cuenta solo contra la historia de antes.
+     */
+    val deAntes: Boolean = false,
 )
 
 /**

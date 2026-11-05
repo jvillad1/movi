@@ -164,11 +164,11 @@ class HogarConectadoTest {
         val ahora = 100L * dia
         val deCaro = LiquidacionDelEspacio(id = "lc", de = "dst_caro", a = MIEMBRO_YO, monto = 100_000, fecha = ahora - dia, anotadoPor = "dst_caro")
         val propia = deCaro.copy(id = "lj", anotadoPor = null)
-        assertEquals("lc", saldadoQueYaMarcoElOtro(listOf(propia, deCaro), "dst_caro", MIEMBRO_YO, 100_500, ahora)?.id)
-        assertNull(saldadoQueYaMarcoElOtro(listOf(propia), "dst_caro", MIEMBRO_YO, 100_000, ahora), "lo propio no cuenta")
-        assertNull(saldadoQueYaMarcoElOtro(listOf(deCaro), MIEMBRO_YO, "dst_caro", 100_000, ahora), "otra dirección")
-        assertNull(saldadoQueYaMarcoElOtro(listOf(deCaro), "dst_caro", MIEMBRO_YO, 120_000, ahora), "otro monto")
-        assertNull(saldadoQueYaMarcoElOtro(listOf(deCaro.copy(fecha = ahora - 8 * dia)), "dst_caro", MIEMBRO_YO, 100_000, ahora), "de hace más de 7 días")
+        assertEquals("lc", saldadoQueYaMarcoElOtro(listOf(propia, deCaro), emptyList(), "dst_caro", MIEMBRO_YO, 100_500, ahora)?.id)
+        assertNull(saldadoQueYaMarcoElOtro(listOf(propia), emptyList(), "dst_caro", MIEMBRO_YO, 100_000, ahora), "lo propio no cuenta")
+        assertNull(saldadoQueYaMarcoElOtro(listOf(deCaro), emptyList(), MIEMBRO_YO, "dst_caro", 100_000, ahora), "otra dirección")
+        assertNull(saldadoQueYaMarcoElOtro(listOf(deCaro), emptyList(), "dst_caro", MIEMBRO_YO, 120_000, ahora), "otro monto")
+        assertNull(saldadoQueYaMarcoElOtro(listOf(deCaro.copy(fecha = ahora - 8 * dia)), emptyList(), "dst_caro", MIEMBRO_YO, 100_000, ahora), "de hace más de 7 días")
     }
 
     @Test
@@ -182,5 +182,30 @@ class HogarConectadoTest {
         assertTrue(traeCaracteresQueNoExisten("K7P3O9"))
         assertTrue(traeCaracteresQueNoExisten("K7P319"))
         assertFalse(traeCaracteresQueNoExisten("K7P3Q9"))
+    }
+
+    /** Revisión 2 (N-3): ni el que ya vinculé ni el anterior al último gasto del grupo. */
+    @Test
+    fun `ya lo marco no cuenta el que ya vincule ni el de antes del ultimo gasto`() {
+        val dia = 24L * 60 * 60 * 1000
+        val ahora = 100L * dia
+        val deCaro = LiquidacionDelEspacio(id = "lc", de = "dst_caro", a = MIEMBRO_YO, monto = 100_000, fecha = ahora - 3 * dia, anotadoPor = "dst_caro")
+        assertEquals("lc", saldadoQueYaMarcoElOtro(listOf(deCaro), emptyList(), "dst_caro", MIEMBRO_YO, 100_000, ahora)?.id)
+        assertNull(saldadoQueYaMarcoElOtro(listOf(deCaro.copy(eventoId = "ev_mio")), emptyList(), "dst_caro", MIEMBRO_YO, 100_000, ahora), "ya vinculado")
+        val gastoDespues = gasto("g", casaDeJuan, MIEMBRO_YO, 50_000, fecha = ahora - dia)
+        assertNull(saldadoQueYaMarcoElOtro(listOf(deCaro), listOf(gastoDespues), "dst_caro", MIEMBRO_YO, 100_000, ahora), "es de antes del último gasto")
+    }
+
+    /** Revisión 2 (N-2): lo de antes de conectarse no cruza y se cuenta aparte. */
+    @Test
+    fun `lo de antes de conectarse no cruza y su saldo va aparte`() {
+        val antes = gasto("a", casaDeJuan, MIEMBRO_YO, 60_000, eventoId = "ev").copy(deAntes = true)
+        val despues = gasto("d", casaDeJuan, MIEMBRO_YO, 100_000, eventoId = "ev2")
+        assertNull(gastoDelOtroLado(antes, enCaro, escritoEn = desde + 1), "un gasto de antes nunca cruza")
+        assertNull(liquidacionDelOtroLado(LiquidacionDelEspacio(de = "dst_caro", a = MIEMBRO_YO, monto = 1, fecha = desde + 1, deAntes = true), enCaro, escritoEn = desde + 1))
+        assertEquals(30_000, netoDeAntesDeConectarse(casaDeJuan, listOf(antes, despues), emptyList()))
+        assertEquals(listOf("d"), loQueVenLosDos(listOf(antes, despues)).map { it.id })
+        val saldadoDeAntes = LiquidacionDelEspacio(de = "dst_caro", a = MIEMBRO_YO, monto = 30_000, fecha = desde + 5, deAntes = true)
+        assertEquals(0, netoDeAntesDeConectarse(casaDeJuan, listOf(antes, despues), listOf(saldadoDeAntes)))
     }
 }
