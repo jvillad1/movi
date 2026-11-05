@@ -32,6 +32,8 @@ import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.CardSummary
 import com.jvillada.movi.shared.model.CardTerms
 import com.jvillada.movi.shared.model.CreateCardRequest
+import com.jvillada.movi.shared.model.TarjetaDelExtracto
+import com.jvillada.movi.shared.model.nombreDeLaTarjetaNueva
 import com.jvillada.movi.theme.*
 import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.recurrentes.ReminderOptInField
@@ -55,26 +57,37 @@ fun CardTermsSheet(
     editing: CardSummary?,
     onDismiss: () -> Unit,
     onSaved: () -> Unit,
+    /**
+     * Vuelta 129 · **lo que dice el extracto de la tarjeta**, para crearla ya llena desde la revisión de
+     * un extracto: el nombre («Nu Tarjeta 5237»), el banco, el cupo, el corte y el día de pago, cuando
+     * los trae. Solo al crear ([editing] `null`); todo se puede cambiar antes de guardar.
+     */
+    prellenado: TarjetaDelExtracto? = null,
+    /** Vuelta 129: la tarjeta recién creada (solo al crear), antes de [onSaved]. */
+    onCreada: (CardSummary) -> Unit = {},
 ) {
     val coroutine = rememberCoroutineScope()
     val existingTerms = editing?.terms
+    val delExtracto = prellenado.takeIf { editing == null }
 
-    var name by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf(delExtracto?.let(::nombreDeLaTarjetaNueva) ?: "") }
     var initialDebt by remember { mutableStateOf<Long?>(null) }
-    var currency by remember { mutableStateOf(editing?.account?.currency ?: "COP") }
+    var currency by remember { mutableStateOf(editing?.account?.currency ?: delExtracto?.moneda ?: "COP") }
     // Vuelta 31: si el nombre ya dice el banco («Nu»), el campo llega lleno ([bancoSugeridoPara]). Lo
     // que el dueño escribe a mano manda: escribir el nombre después ya no lo pisa.
-    var bank by remember { mutableStateOf(existingTerms?.bank ?: editing?.account?.name?.let(::bancoSugeridoPara) ?: "") }
-    var bancoAMano by remember { mutableStateOf(existingTerms != null) }
-    var creditLimit by remember { mutableStateOf(existingTerms?.creditLimit) }
-    var cutoffDay by remember { mutableStateOf(existingTerms?.cutoffDay?.toString() ?: "") }
+    var bank by remember {
+        mutableStateOf(existingTerms?.bank ?: editing?.account?.name?.let(::bancoSugeridoPara) ?: delExtracto?.banco ?: "")
+    }
+    var bancoAMano by remember { mutableStateOf(existingTerms != null || delExtracto != null) }
+    var creditLimit by remember { mutableStateOf(existingTerms?.creditLimit ?: delExtracto?.cupo) }
+    var cutoffDay by remember { mutableStateOf(existingTerms?.cutoffDay?.toString() ?: delExtracto?.diaDeCorte?.toString() ?: "") }
     // El pago mínimo del extracto. Nullable y sin default: null significa «no lo cargué», no 0.
     // Ver [CardTerms.pagoMinimo].
     var pagoMinimo by remember { mutableStateOf(existingTerms?.pagoMinimo) }
     // Ola 4: la tasa E.A., opcional. Texto y no número por lo mismo que en [CreditTermsSheet]: el
     // filtro deja solo dígitos y una coma o punto. Vacío = «no la sé», y se guarda null.
     var tasaEa by remember { mutableStateOf(existingTerms?.tasaEa?.toString()?.replace('.', ',') ?: "") }
-    var paymentDay by remember { mutableStateOf(existingTerms?.paymentDay?.toString() ?: "") }
+    var paymentDay by remember { mutableStateOf(existingTerms?.paymentDay?.toString() ?: delExtracto?.diaDePago?.toString() ?: "") }
     // Mismo campo y mismo tratamiento que en [CreditTermsSheet]: vacío se guarda como null.
     // Sin esta línea la hoja armaba el `CardTerms` sin `notes`, y como el PUT escribe todas las
     // columnas, cada «Guardar tarjeta» le borraba la nota a la tarjeta sin decir nada.
@@ -124,7 +137,7 @@ fun CardTermsSheet(
                     Repositories.wallets.createCard(
                         CreateCardRequest(
                             name = name.trim(),
-                            initialDebt = initialDebt ?: 0L,
+                            initialDebt = if (delExtracto != null) 0L else initialDebt ?: 0L,
                             currency = currency,
                             terms = terms,
                         )
@@ -134,7 +147,8 @@ fun CardTermsSheet(
                 }
             }
             saving = false
-            result.onSuccess { onSaved() }.onFailure { error = it.toUserMessage() }
+            result.onSuccess { tarjeta -> if (editing == null) onCreada(tarjeta); onSaved() }
+                .onFailure { error = it.toUserMessage() }
         }
     }
 
@@ -177,7 +191,15 @@ fun CardTermsSheet(
                 guia = "Ej: Visa Bancolombia",
             )
                 // Opcional a propósito: una tarjeta recién sacada no debe nada.
-                CampoDeMonto(initialDebt, { initialDebt = it }, rotulo = "Deuda actual (opcional)", moneda = simboloDeLaMoneda(currency))
+                //
+                // Vuelta 129: creada desde la revisión de un extracto, la deuda no se pide. Nace en $0,
+                // el importe le suma las compras del período y la revisión propone después UN ajuste al
+                // corte con la deuda del extracto: escrita acá además, las compras contarían dos veces.
+                if (delExtracto == null) {
+                    CampoDeMonto(initialDebt, { initialDebt = it }, rotulo = "Deuda actual (opcional)", moneda = simboloDeLaMoneda(currency))
+                } else {
+                    Text(LA_DEUDA_LA_CUADRA_EL_EXTRACTO, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                }
                 Column {
                 RotuloDeCampo("Moneda")
                 Row(
@@ -292,6 +314,9 @@ fun CardTermsSheet(
         Spacer(Modifier.height(Espacio.l))
     }
 }
+
+/** Vuelta 129: lo que la hoja dice en vez de «Deuda actual» cuando la tarjeta nace de un extracto. */
+const val LA_DEUDA_LA_CUADRA_EL_EXTRACTO: String = "La deuda la cuadra el extracto después de importar."
 
 /** Chip de moneda, mismo dibujo que el selector de CreateAccountSheet (que es privado allá). */
 @Composable

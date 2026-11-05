@@ -256,6 +256,58 @@ open class ElTextoAl130NoSeCortaTest {
         montar(ahorros.name) { QuickAddScreen(onDismiss = {}) }
         nadaSeCorta("Agregar", listOf(composeRule.onRoot(useUnmergedTree = true).fetchSemanticsNode()))
     }
+
+    /** Vuelta 129: el aviso de la revisión cuando el extracto es de una tarjeta y la cuenta no lo es. */
+    @Test
+    fun `la revision de un extracto de tarjeta, con su aviso`() {
+        val compra = com.jvillada.movi.shared.model.ParsedTransaction(
+            id = "f1", date = "2026-10-10", merchant = "Panaderia", amount = 50_000,
+            type = TransactionType.EXPENSE, category = "Comida", description = "Panaderia", rawText = "",
+        )
+        montar("Crear la tarjeta") {
+            com.jvillada.movi.ui.extractos.StatementReviewScreen(
+                onNavigate = {},
+                result = com.jvillada.movi.shared.model.StatementParseResult(
+                    statementId = "st", bankName = "Nu", period = "Octubre 2026", newTransactions = listOf(compra),
+                    matches = emptyList(), cuentaDelPapel = ahorros.id,
+                    tarjeta = com.jvillada.movi.shared.model.TarjetaDelExtracto(banco = "Nu", ultimosCuatro = "1111"),
+                ),
+            )
+        }
+        nadaSeCorta("el aviso de la tarjeta", conTag(com.jvillada.movi.ui.extractos.TAG_AVISO_DE_LA_TARJETA))
+        nadaSeCorta("por qué no la cuenta del papel", conTag(com.jvillada.movi.ui.extractos.TAG_POR_QUE_NO_LA_DEL_PAPEL))
+    }
+
+    /** Vuelta 129: la propuesta de cuadrar la deuda de la tarjeta después de importar. */
+    @Test
+    fun `la propuesta de cuadrar la deuda con el extracto`() {
+        montar("Cuadrar la deuda") {
+            com.jvillada.movi.ui.extractos.CuadrarLaDeudaConElExtracto(
+                tarjeta = Account("c-nu", "Nu Tarjeta 1111", AccountType.CREDIT_CARD, 0),
+                deuda = com.jvillada.movi.shared.model.DeudaDelExtracto(411_240, "2026-10-12"),
+                ocupado = false,
+                onCuadrar = {},
+                onAhoraNo = {},
+            )
+        }
+        nadaSeCorta("la propuesta de cuadrar la deuda", conTag(com.jvillada.movi.ui.extractos.TAG_CUADRAR_LA_DEUDA))
+    }
+
+    /** Vuelta 129: la hoja de subida de Documentos, con la cuenta propuesta y lo que dice de ella. */
+    @Test
+    fun `la hoja de subida, con la cuenta propuesta`() {
+        montar(com.jvillada.movi.ui.documentos.POR_EL_NOMBRE_DEL_ARCHIVO) {
+            com.jvillada.movi.ui.documentos.SubirDocumentoSheet(
+                archivo = com.jvillada.movi.ui.documentos.ArchivoElegido(
+                    "Extracto_Bancolombia_Ahorros_septiembre_2026.pdf", ByteArray(2048), "application/pdf",
+                ),
+                cuentas = listOf(ahorros),
+                onDismiss = {},
+                onSubir = { _, _ -> },
+            )
+        }
+        nadaSeCorta("la ayuda de la cuenta", conTag(com.jvillada.movi.ui.documentos.TAG_AYUDA_DE_LA_CUENTA))
+    }
 }
 
 /**

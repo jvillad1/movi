@@ -62,6 +62,10 @@ internal class InvalidaElInicioAlEscribir(
         trasEscribir { delegado.aceptarElExtractoDelCredito(accountId, resumen) }
     override suspend fun actualizarElSaldoConElExtracto(accountId: String, resumen: ResumenDelExtractoDeSaldo): AdjustAccountBalanceResponse =
         trasEscribir { delegado.actualizarElSaldoConElExtracto(accountId, resumen) }
+    override suspend fun cuadrarLaDeudaConElExtracto(
+        accountId: String,
+        deuda: com.jvillada.movi.shared.model.DeudaDelExtracto,
+    ): AdjustAccountBalanceResponse = trasEscribir { delegado.cuadrarLaDeudaConElExtracto(accountId, deuda) }
     override suspend fun adjustAccountBalance(accountId: String, targetBalance: Long): AdjustAccountBalanceResponse = trasEscribir { delegado.adjustAccountBalance(accountId, targetBalance) }
     override suspend fun createCard(request: CreateCardRequest): CardSummary = trasEscribir { delegado.createCard(request) }
     override suspend fun putCardTerms(terms: CardTerms): CardSummary = trasEscribir { delegado.putCardTerms(terms) }

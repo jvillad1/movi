@@ -128,9 +128,10 @@ class ClaudeStatementParserTest {
     }
 
     /**
-     * Una línea sola más larga que el tope entra igual, en su propio pedazo. Partirla sería
-     * exactamente el daño que el troceo por líneas evita — y un extracto en PDF donde el texto
-     * salió todo en un renglón es un archivo raro, no un archivo que haya que cortar mal.
+     * Una línea sola más larga que el tope y **sin un lugar seguro para cortarla** (ni una fecha ni
+     * un espacio) entra igual, en su propio pedazo: cortarla a mitad de una palabra sería exactamente
+     * el daño que el troceo por líneas evita. Desde la vuelta 128 una línea larga CON fechas o
+     * espacios sí se parte (`ElExtractoLargoSeParteSoloTest`).
      */
     @Test
     fun `una linea mas larga que el tope entra entera`() {

@@ -885,6 +885,9 @@ class DocumentRoutesTest {
         val despues = client.get("/api/documents") {
             header(HttpHeaders.Authorization, "Bearer ${tokenDeSesion(duenoId)}")
         }.bodyAsText()
-        assertEquals(antes, despues, "leer el extracto no puede archivar una segunda copia")
+        // Los mismos documentos, por id: desde la vuelta 129 leerlo le pone el mes al papel que no
+        // lo tenía (ver `marcarComoExtracto`), así que la lista entera ya no es idéntica byte a byte.
+        val ids = { cuerpoDeLaLista: String -> Regex("\"id\"\\s*:\\s*\"([^\"]+)\"").findAll(cuerpoDeLaLista).map { it.groupValues[1] }.toList() }
+        assertEquals(ids(antes), ids(despues), "leer el extracto no puede archivar una segunda copia")
     }
 }
