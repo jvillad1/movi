@@ -5492,6 +5492,11 @@ filas que anotó la otra persona desde su Movi. El patrón:
   (`quienPagoElGasto` + `renglonesDelSubtituloDelGasto` = 2), y en el del saldado (`detalleDelPago`); en la
   hoja del gasto, una `Fila` «Anotó Caro · Desde su Movi…». Bajo el nombre del grupo, «Conectado con Caro»
   en `enlace`.
+- **Lo que el otro anota no se anota dos veces**: con el grupo conectado, «Pagó otro» con esa persona no se
+  ofrece y en su lugar se dice «Caro anota lo que paga desde su Movi» (texto `apoyo`, sin botón); si ella ya
+  marcó el saldado, «Caro ya lo marcó como saldado» con «Vincular tu transferencia» (`Secundario`).
+- **Lo que solo ve un lado se dice en ese lado**: «Incluye $X de antes de conectarse: Caro no lo ve.» bajo
+  el saldo.
 - **Lo ajeno no ofrece acciones que no puede hacer**: sin «Quitar del grupo», sin «Deshacer», sin «Ver
   movimiento». Nada apagado a la vista: la acción no se pinta.
 - **Invitar no compite con el saldo.** La fila de invitar es una `Fila` con su ícono en tono `Info`; la
