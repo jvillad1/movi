@@ -154,9 +154,10 @@ data class LiquidacionDelEspacio(
  * entiende que fue en efectivo (o por fuera de tus cuentas) y deja de esperar.
  */
 fun esperaLaTransferencia(l: LiquidacionDelEspacio, ahora: Long): Boolean =
-    // Vuelta 131: lo que anotó el otro lado de un grupo conectado nunca espera una transferencia del
-    // dueño (la plata, si la hubo, la vincula quien lo anotó, en su Movi).
-    l.anotadoPor == null && l.eventoId == null && (l.a == MIEMBRO_YO || l.de == MIEMBRO_YO) && l.de != l.a && l.monto > 0L &&
+    // Vuelta 131 (revisión): un saldado que anotó la otra persona de un grupo conectado también espera
+    // la transferencia del dueño, si el dueño paga o cobra: su [LiquidacionDelEspacio.eventoId], de
+    // este lado, es el vínculo **propio** (`vinculos_de_liquidacion`), nunca el movimiento del otro.
+    l.eventoId == null && (l.a == MIEMBRO_YO || l.de == MIEMBRO_YO) && l.de != l.a && l.monto > 0L &&
         l.fecha >= ahora - DIAS_PARA_PROPONER_SALDAR * UN_DIA_EN_MS
 
 private const val UN_DIA_EN_MS: Long = 24L * 60 * 60 * 1000
@@ -478,6 +479,11 @@ data class PropuestaDeSaldar(
     val nombreDelEspacio: String = "",
     /** El nombre de la otra persona («Caro»), para decirlo fuera del grupo. Lo pone el server. */
     val quien: String = "",
+    /**
+     * Vuelta 131 · el saldado que espera ([liquidacionId]) lo anotó la otra persona de un grupo conectado:
+     * «Sí, saldar» lo vincula con `POST …/liquidaciones/{liquidacionId}/vincular`, no con un saldado propio.
+     */
+    val cruzada: Boolean = false,
 )
 
 /** Cuántos días atrás se mira para proponer una transferencia que salda. */
@@ -554,7 +560,10 @@ fun transferenciasQueEsperan(
             }
             .minByOrNull { it.timestamp } ?: return@mapNotNull null
         yaPropuestos += e.id
-        PropuestaDeSaldar(e.id, l.de, l.a, e.amount, e.timestamp, e.description, liquidacionId = l.id, espacioId = l.espacioId)
+        PropuestaDeSaldar(
+            e.id, l.de, l.a, e.amount, e.timestamp, e.description,
+            liquidacionId = l.id, espacioId = l.espacioId, cruzada = l.anotadoPor != null,
+        )
     }
 }
 
@@ -573,4 +582,10 @@ data class DetalleDelEspacio(
     val gastos: List<GastoDelEspacio>,
     val liquidaciones: List<LiquidacionDelEspacio> = emptyList(),
     val propuestas: List<PropuestaDeSaldar> = emptyList(),
+    /**
+     * Vuelta 131 · en un grupo conectado, el neto del dueño (positivo = le deben) de lo que **él** anotó
+     * antes de conectarse: sigue en su saldo y la otra persona no lo ve. 0 sin conexión o sin nada de
+     * antes. Opcional en el wire.
+     */
+    val deAntesDeConectarse: Long = 0L,
 )

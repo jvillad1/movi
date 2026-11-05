@@ -40,7 +40,7 @@ class HogarConectadoTest {
         val deCaro = gasto("g1", casaDeCaro, MIEMBRO_YO, 240_001, eventoId = "ev_de_caro")
             .copy(reparto = RepartoDelGasto(forma = FormaDeRepartir.MONTOS, montos = mapOf(MIEMBRO_YO to 140_001, "dst_juan" to 100_000)))
 
-        val enLadoDeJuan = gastoDelOtroLado(deCaro, enJuan) { if (it == "Mercado") "Mercado" else "Otros" }!!
+        val enLadoDeJuan = gastoDelOtroLado(deCaro, enJuan, escritoEn = desde) { if (it == "Mercado") "Mercado" else "Otros" }!!
 
         assertEquals("esp_juan", enLadoDeJuan.espacioId)
         assertEquals("dst_caro", enLadoDeJuan.pagadoPor, "el «yo» de Caro es el tercero Caro de Juan")
@@ -56,7 +56,7 @@ class HogarConectadoTest {
     fun `lo que Caro anoto que pago Juan llega a Juan como pagado por el, y la categoria se resuelve en su lado`() {
         val pagoJuan = gasto("g2", casaDeCaro, "dst_juan", 50_000).copy(categoria = "Hogar raro")
 
-        val enLadoDeJuan = gastoDelOtroLado(pagoJuan, enJuan) { "Otros" }!!
+        val enLadoDeJuan = gastoDelOtroLado(pagoJuan, enJuan, escritoEn = desde) { "Otros" }!!
 
         assertEquals(MIEMBRO_YO, enLadoDeJuan.pagadoPor)
         assertEquals("Otros", enLadoDeJuan.categoria)
@@ -69,7 +69,7 @@ class HogarConectadoTest {
             eventoId = "ev_transferencia_de_caro", movimiento = "Transferencia a Juan",
         )
 
-        val enLadoDeJuan = liquidacionDelOtroLado(l, enJuan)!!
+        val enLadoDeJuan = liquidacionDelOtroLado(l, enJuan, escritoEn = desde)!!
 
         assertEquals("dst_caro", enLadoDeJuan.de)
         assertEquals(MIEMBRO_YO, enLadoDeJuan.a)
@@ -77,17 +77,21 @@ class HogarConectadoTest {
         assertNull(enLadoDeJuan.movimiento)
         assertEquals("dst_caro", enLadoDeJuan.anotadoPor)
         assertEquals("esp_juan", enLadoDeJuan.espacioId)
-        // Sin la marca, un saldado de Caro a Juan sin movimiento «esperaría» la transferencia en Juan.
-        assertFalse(esperaLaTransferencia(enLadoDeJuan, ahora = 3_000L))
-        assertTrue(esperaLaTransferencia(enLadoDeJuan.copy(anotadoPor = null), ahora = 3_000L))
+        // Revisión: el saldado de Caro espera la transferencia de Juan hasta que Juan la vincule (su
+        // `eventoId`, de este lado, es el vínculo propio de Juan).
+        assertTrue(esperaLaTransferencia(enLadoDeJuan, ahora = 3_000L))
+        assertFalse(esperaLaTransferencia(enLadoDeJuan.copy(eventoId = "ev_de_juan"), ahora = 3_000L))
     }
 
     @Test
-    fun `lo de antes de la conexion y lo que nombra a un tercero ajeno no cruza`() {
-        assertNull(gastoDelOtroLado(gasto("viejo", casaDeCaro, MIEMBRO_YO, 10_000, fecha = desde - 1), enJuan))
+    fun `cruza lo escrito desde la conexion, aunque su fecha sea de antes, y no lo que nombra a un tercero ajeno`() {
+        val deAyer = gasto("ayer", casaDeCaro, MIEMBRO_YO, 10_000, fecha = desde - 86_400_000L)
+        assertNull(gastoDelOtroLado(deAyer, enJuan, escritoEn = desde - 1), "escrito antes de conectarse: no cruza")
+        assertEquals("ayer", gastoDelOtroLado(deAyer, enJuan, escritoEn = desde)?.id, "el mercado de ayer repartido hoy sí cruza")
         val conOtro = gasto("raro", casaDeCaro, MIEMBRO_YO, 10_000).copy(partes = mapOf(MIEMBRO_YO to 5_000L, "dst_mama" to 5_000L))
-        assertNull(gastoDelOtroLado(conOtro, enJuan))
-        assertNull(liquidacionDelOtroLado(LiquidacionDelEspacio(de = "dst_mama", a = MIEMBRO_YO, monto = 1, fecha = 2_000L), enJuan))
+        assertNull(gastoDelOtroLado(conOtro, enJuan, escritoEn = desde))
+        assertNull(liquidacionDelOtroLado(LiquidacionDelEspacio(de = "dst_mama", a = MIEMBRO_YO, monto = 1, fecha = 2_000L), enJuan, escritoEn = desde))
+        assertNull(liquidacionDelOtroLado(LiquidacionDelEspacio(de = MIEMBRO_YO, a = "dst_juan", monto = 1, fecha = 9_000L), enJuan, escritoEn = desde - 1))
     }
 
     /** El saldo que ve Juan es el espejo del que ve Caro, al peso, con montos impares. */
@@ -107,13 +111,13 @@ class HogarConectadoTest {
 
         val saldoJuan = saldoDelEspacio(
             casaDeJuan,
-            deJuan + deCaro.mapNotNull { gastoDelOtroLado(it, enJuan) },
-            liqDeJuan + liqDeCaro.mapNotNull { liquidacionDelOtroLado(it, enJuan) },
+            deJuan + deCaro.mapNotNull { gastoDelOtroLado(it, enJuan, escritoEn = desde) },
+            liqDeJuan + liqDeCaro.mapNotNull { liquidacionDelOtroLado(it, enJuan, escritoEn = desde) },
         )
         val saldoCaro = saldoDelEspacio(
             casaDeCaro,
-            deCaro + deJuan.mapNotNull { gastoDelOtroLado(it, enCaro) },
-            liqDeCaro + liqDeJuan.mapNotNull { liquidacionDelOtroLado(it, enCaro) },
+            deCaro + deJuan.mapNotNull { gastoDelOtroLado(it, enCaro, escritoEn = desde) },
+            liqDeCaro + liqDeJuan.mapNotNull { liquidacionDelOtroLado(it, enCaro, escritoEn = desde) },
         )
 
         val x = saldoJuan.netoDe(MIEMBRO_YO)
@@ -136,7 +140,7 @@ class HogarConectadoTest {
     @Test
     fun `desconectar dice cuantos gastos de Caro dejan de verse y como queda el saldo`() {
         val propio = gasto("j1", casaDeJuan, MIEMBRO_YO, 100_000, eventoId = "ev1")
-        val deCaro = gastoDelOtroLado(gasto("c1", casaDeCaro, MIEMBRO_YO, 60_000), enJuan)!!
+        val deCaro = gastoDelOtroLado(gasto("c1", casaDeCaro, MIEMBRO_YO, 60_000), enJuan, escritoEn = desde)!!
         val saldo = saldoDelEspacio(casaDeJuan, listOf(propio, deCaro), emptyList())
         val detalle = DetalleDelEspacio(casaDeJuan, saldo, saldo, listOf(propio, deCaro))
 
@@ -152,5 +156,31 @@ class HogarConectadoTest {
         assertTrue(sePuedeInvitar(casaDeJuan))
         assertFalse(sePuedeInvitar(casaDeJuan.copy(conexion = ConexionDelEspacio("dst_caro", "Caro", 1L))))
         assertFalse(sePuedeInvitar(casaDeJuan.copy(miembros = casaDeJuan.miembros + MiembroDelEspacio("dst_mama", "Mamá"))))
+    }
+
+    @Test
+    fun `el saldado que Caro ya marco se reconoce por direccion, monto parecido y fecha reciente`() {
+        val dia = 24L * 60 * 60 * 1000
+        val ahora = 100L * dia
+        val deCaro = LiquidacionDelEspacio(id = "lc", de = "dst_caro", a = MIEMBRO_YO, monto = 100_000, fecha = ahora - dia, anotadoPor = "dst_caro")
+        val propia = deCaro.copy(id = "lj", anotadoPor = null)
+        assertEquals("lc", saldadoQueYaMarcoElOtro(listOf(propia, deCaro), "dst_caro", MIEMBRO_YO, 100_500, ahora)?.id)
+        assertNull(saldadoQueYaMarcoElOtro(listOf(propia), "dst_caro", MIEMBRO_YO, 100_000, ahora), "lo propio no cuenta")
+        assertNull(saldadoQueYaMarcoElOtro(listOf(deCaro), MIEMBRO_YO, "dst_caro", 100_000, ahora), "otra dirección")
+        assertNull(saldadoQueYaMarcoElOtro(listOf(deCaro), "dst_caro", MIEMBRO_YO, 120_000, ahora), "otro monto")
+        assertNull(saldadoQueYaMarcoElOtro(listOf(deCaro.copy(fecha = ahora - 8 * dia)), "dst_caro", MIEMBRO_YO, 100_000, ahora), "de hace más de 7 días")
+    }
+
+    @Test
+    fun `con la conexion, Pago otro no ofrece a la persona conectada`() {
+        assertEquals(listOf("dst_caro"), quienesPuedenPagarDesdeAca(casaDeJuan).map { it.id })
+        assertTrue(quienesPuedenPagarDesdeAca(casaDeJuan.copy(conexion = ConexionDelEspacio("dst_caro", "Caro", 1L))).isEmpty())
+    }
+
+    @Test
+    fun `el codigo dice si trae un caracter que no existe`() {
+        assertTrue(traeCaracteresQueNoExisten("K7P3O9"))
+        assertTrue(traeCaracteresQueNoExisten("K7P319"))
+        assertFalse(traeCaracteresQueNoExisten("K7P3Q9"))
     }
 }

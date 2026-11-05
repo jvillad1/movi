@@ -17,12 +17,14 @@ import kotlinx.serialization.Serializable
  *   Juan pasa a ser [MIEMBRO_YO]. Lo mismo en las partes, en `de`/`a` y en el reparto propio.
  * - **Lo que no cruza**: el id de un movimiento de la otra cuenta (`eventoId` llega nulo, también el de
  *   una liquidación) ni el concepto del movimiento vinculado.
- * - **Solo lo de la conexión vigente**: lo del otro lado cuenta si su fecha es ≥ [LadoDelOtro.desde];
- *   desconectado, nada.
+ * - **Solo lo de la conexión vigente**: lo del otro lado cuenta si **se escribió** desde
+ *   [LadoDelOtro.desde] (revisión de la vuelta 131: por cuándo se anotó la fila, no por su `fecha`; el
+ *   mercado de ayer repartido hoy sí cruza); desconectado, nada.
  *
  * Con eso el saldo es **espejo**: lo que Juan dice que Caro le debe es lo que Caro dice que le debe a
  * Juan, al peso (las partes, con el redondeo de [partesDelGasto], las guarda quien anotó el gasto y cruzan
- * tal cual). Lo que cada uno anotó antes de `desde` sigue siendo solo suyo.
+ * tal cual). Lo que cada uno anotó antes de `desde` sigue siendo solo suyo
+ * ([DetalleDelEspacio.deAntesDeConectarse] lo dice).
  */
 
 /**
@@ -34,6 +36,8 @@ data class ConexionDelEspacio(
     val miembroId: String,
     val nombre: String = "",
     val desde: Long = 0L,
+    /** Revisión de la vuelta 131 · el nombre del perfil de Movi de la otra persona («Carolina»). */
+    val nombreEnMovi: String = "",
 )
 
 /**
@@ -75,14 +79,19 @@ private fun repartoDelOtroLado(r: RepartoDelGasto?, lado: LadoDelOtro): RepartoD
 /**
  * **Un gasto que anotó la otra persona, en mi lado** (la unión al leer). [g] viene ya resuelto en su
  * lado, con sus reglas de siempre (monto, descripción, fecha y categoría del movimiento, recálculo de
- * las partes, sin sus anulados). Devuelve `null` si no cuenta: antes de [LadoDelOtro.desde], o si nombra
- * a alguien que no es ninguno de los dos.
+ * las partes, sin sus anulados). Devuelve `null` si no cuenta: se escribió ([escritoEn], el `created_at`
+ * de su fila) antes de [LadoDelOtro.desde], o nombra a alguien que no es ninguno de los dos.
  *
  * @param categoriaMia la categoría con que cuenta mi parte en mis totales (la mía con el mismo nombre
  *   normalizado o, sin ella, la de lo que no tiene categoría). La resuelve el server.
  */
-fun gastoDelOtroLado(g: GastoDelEspacio, lado: LadoDelOtro, categoriaMia: (String) -> String = { it }): GastoDelEspacio? {
-    if (g.fecha < lado.desde) return null
+fun gastoDelOtroLado(
+    g: GastoDelEspacio,
+    lado: LadoDelOtro,
+    escritoEn: Long,
+    categoriaMia: (String) -> String = { it },
+): GastoDelEspacio? {
+    if (escritoEn < lado.desde) return null
     val pagadoPor = miembroDelOtroLado(g.pagadoPor, lado) ?: return null
     val partes = clavesDelOtroLado(g.partes, lado) ?: return null
     return g.copy(
@@ -97,8 +106,8 @@ fun gastoDelOtroLado(g: GastoDelEspacio, lado: LadoDelOtro, categoriaMia: (Strin
 }
 
 /** **Un saldado que anotó la otra persona, en mi lado**: como [gastoDelOtroLado], sin su movimiento. */
-fun liquidacionDelOtroLado(l: LiquidacionDelEspacio, lado: LadoDelOtro): LiquidacionDelEspacio? {
-    if (l.fecha < lado.desde) return null
+fun liquidacionDelOtroLado(l: LiquidacionDelEspacio, lado: LadoDelOtro, escritoEn: Long): LiquidacionDelEspacio? {
+    if (escritoEn < lado.desde) return null
     val de = miembroDelOtroLado(l.de, lado) ?: return null
     val a = miembroDelOtroLado(l.a, lado) ?: return null
     return l.copy(espacioId = lado.miEspacioId, de = de, a = a, eventoId = null, movimiento = null, anotadoPor = lado.miMiembroDelOtro)
@@ -126,6 +135,12 @@ const val INTENTOS_DE_CODIGO_POR_HORA: Int = 10
  */
 fun codigoLimpio(escrito: String): String =
     escrito.uppercase().filter { it.isLetterOrDigit() }
+
+/** Lo que un código de Movi nunca trae (se confunde al leerlo o dictarlo). */
+const val CARACTERES_QUE_NO_TRAE_EL_CODIGO: String = "0O1IL"
+
+/** ¿[codigo] (ya limpio) trae alguno de [CARACTERES_QUE_NO_TRAE_EL_CODIGO]? */
+fun traeCaracteresQueNoExisten(codigo: String): Boolean = codigo.any { it in CARACTERES_QUE_NO_TRAE_EL_CODIGO }
 
 /** ¿[codigo] (ya limpio) tiene la forma de un código de Movi? */
 fun pareceUnCodigo(codigo: String): Boolean =
@@ -168,3 +183,44 @@ fun loQueSeDejaDeVer(detalle: DetalleDelEspacio): LoQueSeDejaDeVer {
         netoDespues = despues.netoDe(MIEMBRO_YO),
     )
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Revisión de la vuelta 131: lo saldado entre los dos lados
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * El motivo del 422 de «Pagó otro» con la persona conectada: cada uno anota lo que pagó él, desde su Movi
+ * (si no, el mismo mercado quedaba dos veces: el que Juan anotó por Caro y el que Caro repartió).
+ */
+const val LO_ANOTA_DESDE_SU_MOVI: String = "LO_ANOTA_DESDE_SU_MOVI"
+
+/** El prefijo del 409 de un saldado que la otra persona ya marcó; sigue el id de ese saldado. */
+const val YA_LO_MARCO_LA_OTRA_PERSONA: String = "YA_LO_MARCO_LA_OTRA_PERSONA:"
+
+/** Cuerpo de `POST /api/espacios/{id}/liquidaciones/{liquidacionId}/vincular`. */
+@Serializable
+data class VincularLiquidacion(val eventoId: String)
+
+/**
+ * **Los miembros que el dueño puede anotar como «Pagó otro» desde acá**: todos menos la persona con
+ * la que el grupo está conectado (ella anota lo que paga desde su Movi).
+ */
+fun quienesPuedenPagarDesdeAca(espacio: Espacio): List<MiembroDelEspacio> =
+    espacio.miembros.filter { it.id != MIEMBRO_YO && it.id != espacio.conexion?.miembroId }
+
+/**
+ * **El saldado que la otra persona ya marcó** para lo mismo que el dueño va a marcar: anotado por ella
+ * ([LiquidacionDelEspacio.anotadoPor]), la misma dirección ([de] → [a]), el monto ± 1 % ([montoParecido]) y
+ * de los últimos [DIAS_ANTES_DEL_SALDADO] días. Con uno así, marcar otro sería saldar dos veces: lo que
+ * toca es vincular la transferencia a ese.
+ */
+fun saldadoQueYaMarcoElOtro(
+    liquidaciones: List<LiquidacionDelEspacio>,
+    de: String,
+    a: String,
+    monto: Long,
+    ahora: Long,
+): LiquidacionDelEspacio? = liquidaciones
+    .filter { it.anotadoPor != null && it.de == de && it.a == a && montoParecido(it.monto, monto) }
+    .filter { it.fecha >= ahora - DIAS_ANTES_DEL_SALDADO * 24L * 60 * 60 * 1000 }
+    .maxByOrNull { it.fecha }
