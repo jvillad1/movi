@@ -1540,6 +1540,21 @@ object InvitacionesAEspacio : Table("invitaciones_a_espacio") {
 }
 
 /**
+ * **Los vínculos de un saldado cruzado** (revisión de la vuelta 131): Caro marcó «Caro le pagó a Juan» en su
+ * Movi y Juan vincula la transferencia que le llegó. El saldado es de Caro (su fila, su `user_id`); el
+ * vínculo es de Juan: [liquidacionId] → [eventoId], **su** movimiento, que desde ahí no cuenta en
+ * «Entró»/«Salió». Un saldado se vincula una vez por persona (la clave) y un movimiento salda una sola cosa
+ * (lo valida la ruta). Tiene `user_id`: se va con la cuenta de quien vinculó.
+ */
+object VinculosDeLiquidacion : Table("vinculos_de_liquidacion") {
+    val userId        = varchar("user_id", 50)
+    val liquidacionId = varchar("liquidacion_id", 60)
+    val eventoId      = varchar("evento_id", 60)
+    val createdAt     = long("created_at")
+    override val primaryKey = PrimaryKey(userId, liquidacionId)
+}
+
+/**
  * **Los grupos conectados** (vuelta 131): el grupo [espacioA] de [userA] y el [espacioB] de [userB] son
  * el mismo hogar. [miembroA] es el tercero de A que es B, y [miembroB] el tercero de B que es A: con eso
  * se traduce lo de un lado al otro al leer (`gastoDelOtroLado`). Nada se copia: cada uno sigue siendo

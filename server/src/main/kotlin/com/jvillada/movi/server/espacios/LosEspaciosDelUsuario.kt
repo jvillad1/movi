@@ -49,7 +49,7 @@ internal fun miembrosComoJson(miembros: List<MiembroDelEspacio>, reparto: Repart
             .map { it.copy(nombre = "", porcentaje = if (reparto == RepartoDelEspacio.PORCENTAJES) it.porcentaje else null) },
     )
 
-private fun miembrosDeLaFila(json: String): List<MiembroDelEspacio> =
+internal fun miembrosDeLaFila(json: String): List<MiembroDelEspacio> =
     runCatching { jsonDeEspacios.decodeFromString(serializadorDeMiembros, json) }.getOrDefault(emptyList())
 
 internal fun partesComoJson(partes: Map<String, Long>): String = jsonDeEspacios.encodeToString(serializadorDePartes, partes)
@@ -65,7 +65,7 @@ internal fun repartoDeLaFila(json: String?): RepartoDelGasto? =
     json?.let { runCatching { jsonDeEspacios.decodeFromString(RepartoDelGasto.serializer(), it) }.getOrNull() }
         ?.takeIf { !esDelGrupo(it) }
 
-private fun partesDeLaFila(json: String): Map<String, Long> =
+internal fun partesDeLaFila(json: String): Map<String, Long> =
     runCatching { jsonDeEspacios.decodeFromString(serializadorDePartes, json) }.getOrDefault(emptyMap())
 
 /**
@@ -74,8 +74,7 @@ private fun partesDeLaFila(json: String): Map<String, Long> =
  * lectura de movimientos —que ahora pregunta por lo compartido— se caería en una base sin espacios.
  * `exists()` lee una lista de tablas que el dialecto guarda en caché.
  */
-internal fun Transaction.hayEspacios(): Boolean =
-    runCatching { GastosDelEspacio.exists() && LiquidacionesDelEspacio.exists() && Espacios.exists() }.getOrDefault(false)
+internal fun Transaction.hayEspacios(): Boolean = existenLasTablas(GastosDelEspacio, LiquidacionesDelEspacio, Espacios)
 
 /** El nombre de cada miembro posible: el dueño por su nombre de usuario, los demás por su tercero. */
 private fun Transaction.nombresDeMiembros(uid: String): Map<String, String> {
@@ -126,7 +125,18 @@ internal fun Transaction.espaciosDe(uid: String): List<Espacio> {
  * porcentajes, sus montos en proporción o su «Solo de …»; sin reparto propio, la regla del grupo), y
  * la parte ajena nunca queda vieja.
  */
-internal fun Transaction.gastosPropiosDe(uid: String, espacios: List<Espacio>, espacioId: String? = null): List<GastoDelEspacio> {
+internal fun Transaction.gastosPropiosDe(uid: String, espacios: List<Espacio>, espacioId: String? = null): List<GastoDelEspacio> =
+    gastosPropiosConSuEscrituraDe(uid, espacios, espacioId).map { it.first }
+
+/**
+ * [gastosPropiosDe] con el momento en que **se escribió** cada fila (`created_at`): la revisión de la
+ * vuelta 131 decide qué cruza a un grupo conectado por eso, no por la fecha del gasto.
+ */
+internal fun Transaction.gastosPropiosConSuEscrituraDe(
+    uid: String,
+    espacios: List<Espacio>,
+    espacioId: String? = null,
+): List<Pair<GastoDelEspacio, Long>> {
     if (!hayEspacios()) return emptyList()
     val filas = GastosDelEspacio.selectAll()
         .where {
@@ -152,7 +162,8 @@ internal fun Transaction.gastosPropiosDe(uid: String, espacios: List<Espacio>, e
             partes = partesDeLaFila(fila[GastosDelEspacio.partes]),
             reparto = repartoDeLaFila(fila[GastosDelEspacio.reparto]),
         )
-        val evento = guardado.eventoId?.let { eventos[it] } ?: return@map guardado
+        val escrito = fila[GastosDelEspacio.createdAt]
+        val evento = guardado.eventoId?.let { eventos[it] } ?: return@map guardado to escrito
         val espacio = porEspacio[guardado.espacioId]
         guardado.copy(
             monto = evento.amount,
@@ -164,15 +175,19 @@ internal fun Transaction.gastosPropiosDe(uid: String, espacios: List<Espacio>, e
             } else {
                 guardado.partes
             },
-        )
-    }.sortedByDescending { it.fecha }
+        ) to escrito
+    }.sortedByDescending { it.first.fecha }
 }
 
 /**
  * Las liquidaciones que anotó [uid] (todos sus espacios o uno), la más reciente primero. Solo las suyas:
  * para leer un grupo, [liquidacionesDe] (que suma lo del otro lado de un grupo conectado).
  */
-internal fun Transaction.liquidacionesPropiasDe(uid: String, espacioId: String? = null): List<LiquidacionDelEspacio> {
+internal fun Transaction.liquidacionesPropiasDe(uid: String, espacioId: String? = null): List<LiquidacionDelEspacio> =
+    liquidacionesPropiasConSuEscrituraDe(uid, espacioId).map { it.first }
+
+/** [liquidacionesPropiasDe] con el `created_at` de cada fila (ver [gastosPropiosConSuEscrituraDe]). */
+internal fun Transaction.liquidacionesPropiasConSuEscrituraDe(uid: String, espacioId: String? = null): List<Pair<LiquidacionDelEspacio, Long>> {
     if (!hayEspacios()) return emptyList()
     return LiquidacionesDelEspacio.selectAll()
         .where {
@@ -188,9 +203,9 @@ internal fun Transaction.liquidacionesPropiasDe(uid: String, espacioId: String? 
                 monto = it[LiquidacionesDelEspacio.monto],
                 fecha = it[LiquidacionesDelEspacio.fecha],
                 eventoId = it[LiquidacionesDelEspacio.eventoId],
-            )
+            ) to it[LiquidacionesDelEspacio.createdAt]
         }
-        .sortedByDescending { it.fecha }
+        .sortedByDescending { it.first.fecha }
 }
 
 /**
@@ -213,6 +228,22 @@ internal class CompartidoDelUsuario(
  * 131: [gastosDe] trae también lo que anotó la otra persona de un grupo conectado, así que tu parte de
  * lo que pagó Caro cuenta como gasto tuyo el día del gasto, aunque lo haya anotado ella.
  */
+/**
+ * Revisión de la vuelta 131 · **solo el índice** de [loCompartidoDelUsuario], para quien no usa la parte de
+ * lo que pagaron otros (la lectura de movimientos, los apartados, los períodos, las ocurrencias). No lee
+ * los gastos del otro lado (su resolución es la parte cara): el índice solo mira movimientos propios, y de
+ * las liquidaciones cruzadas, las que el dueño vinculó a un movimiento suyo ([liquidacionesDe]).
+ */
+internal fun Transaction.indiceCompartidoDe(uid: String): LoCompartido {
+    if (!hayEspacios()) return LoCompartido.NADA
+    val espacios = espaciosSinNombres(uid)
+    if (espacios.isEmpty()) return LoCompartido.NADA
+    val gastos = gastosPropiosDe(uid, espacios)
+    val liquidaciones = liquidacionesDe(uid)
+    if (gastos.isEmpty() && liquidaciones.isEmpty()) return LoCompartido.NADA
+    return loCompartidoDe(gastos, liquidaciones)
+}
+
 internal fun Transaction.loCompartidoDelUsuario(uid: String): CompartidoDelUsuario {
     if (!hayEspacios()) return CompartidoDelUsuario.NADA
     val espacios = espaciosSinNombres(uid)
@@ -228,7 +259,7 @@ internal fun Transaction.loCompartidoDelUsuario(uid: String): CompartidoDelUsuar
  * Vacío si la tabla no existe (las bases de prueba de `:server` que no la crean).
  */
 internal fun Transaction.recurrentesDelHogarDe(uid: String): Map<String, String> {
-    if (!runCatching { RecurrentesDelHogar.exists() }.getOrDefault(false)) return emptyMap()
+    if (!existenLasTablas(RecurrentesDelHogar)) return emptyMap()
     return RecurrentesDelHogar.selectAll().where { RecurrentesDelHogar.userId eq uid }
         .associate { it[RecurrentesDelHogar.reglaId] to it[RecurrentesDelHogar.espacioId] }
 }

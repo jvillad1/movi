@@ -29,6 +29,7 @@ import com.jvillada.movi.server.db.AtajosDescartados
 import com.jvillada.movi.server.db.Espacios
 import com.jvillada.movi.server.db.EspaciosConectados
 import com.jvillada.movi.server.db.InvitacionesAEspacio
+import com.jvillada.movi.server.db.VinculosDeLiquidacion
 import com.jvillada.movi.server.db.GastosDelEspacio
 import com.jvillada.movi.server.db.LiquidacionesDelEspacio
 import com.jvillada.movi.server.db.RecurrentesDelHogar
@@ -120,6 +121,8 @@ internal val TABLAS_DEL_USUARIO: List<TablaDelUsuario> = listOf(
     TablaDelUsuario(RecurrentesDelHogar, RecurrentesDelHogar.userId),
     // Vuelta 131 · las invitaciones a un grupo que mandó (solo el hash del código).
     TablaDelUsuario(InvitacionesAEspacio, InvitacionesAEspacio.userId),
+    // Revisión de la vuelta 131 · los vínculos de sus transferencias con saldados de la otra persona.
+    TablaDelUsuario(VinculosDeLiquidacion, VinculosDeLiquidacion.userId),
     TablaDelUsuario(CategoryPrefs, CategoryPrefs.userId),
     TablaDelUsuario(AnomaliasDescartadas, AnomaliasDescartadas.userId),
     TablaDelUsuario(DebitosDescartados, DebitosDescartados.userId),

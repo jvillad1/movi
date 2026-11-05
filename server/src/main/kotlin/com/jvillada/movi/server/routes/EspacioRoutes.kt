@@ -17,6 +17,13 @@ import com.jvillada.movi.server.espacios.gastosDe
 import com.jvillada.movi.server.espacios.gastosPropiosDe
 import com.jvillada.movi.server.espacios.liquidacionesPropiasDe
 import com.jvillada.movi.server.espacios.desconectarElGrupo
+import com.jvillada.movi.server.espacios.deAntesDeConectarseEn
+import com.jvillada.movi.server.espacios.estaVinculado
+import com.jvillada.movi.server.db.VinculosDeLiquidacion
+import com.jvillada.movi.shared.model.LO_ANOTA_DESDE_SU_MOVI
+import com.jvillada.movi.shared.model.VincularLiquidacion
+import com.jvillada.movi.shared.model.YA_LO_MARCO_LA_OTRA_PERSONA
+import com.jvillada.movi.shared.model.saldadoQueYaMarcoElOtro
 import com.jvillada.movi.server.espacios.liquidacionesDe
 import com.jvillada.movi.server.espacios.loCompartidoDelUsuario
 import com.jvillada.movi.server.espacios.miembrosComoJson
@@ -290,6 +297,17 @@ fun Route.espacioRoutes() {
             if (r.valor != null) call.respond(r.estado, r.valor) else call.respond(r.estado, r.motivo)
         }
 
+        // Revisión de la vuelta 131: vincular la transferencia propia a un saldado (también al que anotó la
+        // otra persona de un grupo conectado).
+        post("/{id}/liquidaciones/{liquidacionId}/vincular") {
+            val uid = call.userId()
+            val espacioId = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
+            val liquidacionId = call.parameters["liquidacionId"] ?: return@post call.respond(HttpStatusCode.BadRequest)
+            val body = call.receive<VincularLiquidacion>()
+            val r = dbQuery { vincularLiquidacion(uid, espacioId, liquidacionId, body.eventoId) }
+            if (r.valor != null) call.respond(r.estado, r.valor) else call.respond(r.estado, r.motivo)
+        }
+
         delete("/{id}/liquidaciones/{liquidacionId}") {
             val uid = call.userId()
             val espacioId = call.parameters["id"] ?: return@delete call.respond(HttpStatusCode.BadRequest)
@@ -347,6 +365,7 @@ internal fun Transaction.detalleDelEspacio(uid: String, espacioId: String, ahora
         gastos = gastos,
         liquidaciones = liquidaciones,
         propuestas = propuestasDelEspacio(uid, espacio, saldo, liquidaciones, ahora),
+        deAntesDeConectarse = deAntesDeConectarseEn(uid, espacio, anulados),
     )
 }
 
@@ -443,7 +462,7 @@ internal fun Transaction.compartirMovimiento(
     if (fila[Events.transferId] != null) throw Rechazo(HttpStatusCode.BadRequest, "Un traspaso entre tus cuentas no se reparte")
     val salda = LiquidacionesDelEspacio.selectAll()
         .where { (LiquidacionesDelEspacio.userId eq uid) and (LiquidacionesDelEspacio.eventoId eq body.eventoId) }
-        .any()
+        .any() || estaVinculado(uid, body.eventoId)
     if (salda) throw Rechazo(HttpStatusCode.Conflict, "Ese movimiento ya salda un grupo")
     val yaEsta = GastosDelEspacio.selectAll()
         .where { (GastosDelEspacio.userId eq uid) and (GastosDelEspacio.eventoId eq body.eventoId) }
@@ -466,6 +485,8 @@ internal fun Transaction.compartirMovimiento(
     if (yaEsta == null) {
         val id = body.gastoId.trim().ifBlank { "gde_${UUID.randomUUID()}" }
         val ajeno = GastosDelEspacio.selectAll().where { GastosDelEspacio.id eq id }.firstOrNull()
+        // Revisión de la vuelta 131 · el id de un gasto ajeno es 404, como todo lo ajeno (no se dice que existe).
+        if (ajeno != null && ajeno[GastosDelEspacio.userId] != uid) throw Rechazo(HttpStatusCode.NotFound, "Gasto no encontrado")
         if (ajeno != null) throw Rechazo(HttpStatusCode.Conflict, "Ese id ya existe")
         GastosDelEspacio.insert {
             it[GastosDelEspacio.id] = id
@@ -499,12 +520,17 @@ internal fun Transaction.gastoQuePagoOtro(
     if (body.pagadoPor == MIEMBRO_YO || body.pagadoPor !in idsDeMiembros(espacio)) {
         throw Rechazo(HttpStatusCode.BadRequest, "Elige quién lo pagó")
     }
+    // Revisión de la vuelta 131 · con el grupo conectado, la otra persona anota lo que paga desde su Movi:
+    // anotarlo también acá lo dejaría dos veces en el saldo de los dos.
+    if (conexionDelGrupo(uid, espacioId)?.lado?.miMiembroDelOtro == body.pagadoPor) {
+        throw Rechazo(HttpStatusCode.UnprocessableEntity, LO_ANOTA_DESDE_SU_MOVI)
+    }
     if (body.monto <= 0L) throw Rechazo(HttpStatusCode.BadRequest, "El monto debe ser mayor que cero")
     val categoria = body.categoria.trim()
     if (categoria.isBlank()) throw Rechazo(HttpStatusCode.BadRequest, "Falta la categoría")
     val id = body.id.trim().ifBlank { "gde_${UUID.randomUUID()}" }
     val existente = GastosDelEspacio.selectAll().where { GastosDelEspacio.id eq id }.firstOrNull()
-    if (existente != null && existente[GastosDelEspacio.userId] != uid) throw Rechazo(HttpStatusCode.Conflict, "Ese id ya existe")
+    if (existente != null && existente[GastosDelEspacio.userId] != uid) throw Rechazo(HttpStatusCode.NotFound, "Gasto no encontrado")
     val fecha = if (body.fecha > 0L) body.fecha else System.currentTimeMillis()
     val descripcion = body.descripcion.trim().ifBlank { categoria }.take(200)
     // Vuelta 97: sin reparto en el cuerpo, uno que ya estaba se conserva (el reenvío de un APK viejo no
@@ -563,8 +589,10 @@ internal fun Transaction.liquidar(
     val id = body.id.trim().ifBlank { "liq_${UUID.randomUUID()}" }
     val existente = LiquidacionesDelEspacio.selectAll().where { LiquidacionesDelEspacio.id eq id }.firstOrNull()
     when {
+        // Revisión de la vuelta 131 · el id de un saldado ajeno es 404 (también el de la otra persona de un
+        // grupo conectado: ese se vincula con `…/vincular`, no se reescribe).
         existente != null && existente[LiquidacionesDelEspacio.userId] != uid ->
-            throw Rechazo(HttpStatusCode.Conflict, "Ese id ya existe")
+            throw Rechazo(HttpStatusCode.NotFound, "Saldado no encontrado")
         // Vuelta 66 · un saldado que espera su transferencia y ahora llega con ella: se vincula (la
         // misma validación de siempre). Lo demás de la liquidación no cambia: saldar dos veces sigue
         // siendo saldar una.
@@ -584,6 +612,12 @@ internal fun Transaction.liquidar(
                 throw Rechazo(HttpStatusCode.BadRequest, "Elige quién le pagó a quién")
             }
             if (body.monto <= 0L) throw Rechazo(HttpStatusCode.BadRequest, "El monto debe ser mayor que cero")
+            // Revisión de la vuelta 131 · no saldar dos veces: si la otra persona ya marcó este mismo pago en
+            // su Movi, lo que toca es vincular la transferencia a ese saldado.
+            if (conexionDelGrupo(uid, espacioId) != null) {
+                saldadoQueYaMarcoElOtro(liquidacionesDe(uid, espacioId), body.de, body.a, body.monto, System.currentTimeMillis())
+                    ?.let { throw Rechazo(HttpStatusCode.Conflict, YA_LO_MARCO_LA_OTRA_PERSONA + it.id) }
+            }
             body.eventoId?.let { eventoId -> validarElVinculo(uid, eventoId, body) }
             LiquidacionesDelEspacio.insert {
                 it[LiquidacionesDelEspacio.id] = id
@@ -624,7 +658,48 @@ private fun Transaction.validarElVinculo(uid: String, eventoId: String, body: Li
     val repartido = GastosDelEspacio.selectAll()
         .where { (GastosDelEspacio.userId eq uid) and (GastosDelEspacio.eventoId eq eventoId) }
         .any()
-    if (yaSalda || repartido) throw Rechazo(HttpStatusCode.Conflict, "Ese movimiento ya está en un grupo")
+    if (yaSalda || repartido || estaVinculado(uid, eventoId)) throw Rechazo(HttpStatusCode.Conflict, "Ese movimiento ya está en un grupo")
+}
+
+/**
+ * Revisión de la vuelta 131 · **«Sí, saldar» sobre un saldado que anotó la otra persona**
+ * (`POST /api/espacios/{id}/liquidaciones/{liquidacionId}/vincular`): escribe el vínculo **propio**
+ * (`vinculos_de_liquidacion`) entre ese saldado y [eventoId], un movimiento del dueño, con la validación de
+ * siempre (suyo, vivo, en la dirección que corresponde y sin estar en otro grupo). Desde ahí ese movimiento
+ * no cuenta en «Entró»/«Salió». Idempotente con el mismo movimiento; con otro, 409. Un saldado propio se
+ * vincula como siempre (su `evento_id`). Lo que no es de este grupo, 404.
+ */
+internal fun Transaction.vincularLiquidacion(
+    uid: String,
+    espacioId: String,
+    liquidacionId: String,
+    eventoId: String,
+): Respuesta<LiquidacionDelEspacio> = try {
+    espacioDelUsuario(uid, espacioId) ?: throw Rechazo(HttpStatusCode.NotFound, "Grupo no encontrado")
+    val l = liquidacionesDe(uid, espacioId).firstOrNull { it.id == liquidacionId }
+        ?: throw Rechazo(HttpStatusCode.NotFound, "Saldado no encontrado")
+    when {
+        l.eventoId == eventoId -> Unit
+        l.eventoId != null -> throw Rechazo(HttpStatusCode.Conflict, "Ese saldado ya tiene su transferencia")
+        else -> {
+            validarElVinculo(uid, eventoId, l)
+            if (l.anotadoPor == null) {
+                LiquidacionesDelEspacio.update({ (LiquidacionesDelEspacio.id eq liquidacionId) and (LiquidacionesDelEspacio.userId eq uid) }) {
+                    it[LiquidacionesDelEspacio.eventoId] = eventoId
+                }
+            } else {
+                VinculosDeLiquidacion.upsert {
+                    it[userId] = uid
+                    it[VinculosDeLiquidacion.liquidacionId] = liquidacionId
+                    it[VinculosDeLiquidacion.eventoId] = eventoId
+                    it[createdAt] = System.currentTimeMillis()
+                }
+            }
+        }
+    }
+    Respuesta(HttpStatusCode.OK, conElMovimiento(uid, liquidacionesDe(uid, espacioId).filter { it.id == liquidacionId }).first())
+} catch (r: Rechazo) {
+    Respuesta(r.estado, null, r.motivo)
 }
 
 /**
