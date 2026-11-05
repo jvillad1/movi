@@ -49,8 +49,13 @@ enum class ProductoDelExtracto(val rotulo: String) {
     FONDO("Fondo"),
 }
 
-/** Cómo lo lee Movi: con un lector propio, al instante, o con IA (puede tardar). */
-enum class LecturaDelExtracto { AL_INSTANTE, CON_IA }
+/**
+ * Cómo lo lee Movi: con un lector propio, al instante; o con IA (puede tardar). Revisión de la vuelta 130:
+ * [SOLO_EL_SALDO] para los extractos de los que Movi solo toma el saldo (Skandia, Davibank), sin prometer
+ * movimientos; [SOLO_ALGUNOS_CREDITOS] para el crédito de Bancolombia (solo la libre inversión y la
+ * libranza tienen lector); [NO_SE_IMPORTA] para un crédito que Movi todavía no importa.
+ */
+enum class LecturaDelExtracto { AL_INSTANTE, CON_IA, SOLO_EL_SALDO, SOLO_ALGUNOS_CREDITOS, NO_SE_IMPORTA }
 
 /** De dónde salen los pasos de una guía. */
 enum class FuenteDeLaGuia {
@@ -74,6 +79,8 @@ data class OtraFormaDeSacarlo(
     val queSubir: String,
     val lectura: LecturaDelExtracto,
     val limite: String? = null,
+    /** La clave de ESTE archivo, si la fuente la confirma (el extracto mensual de Bancolombia). */
+    val clave: String? = null,
 )
 
 /**
@@ -101,6 +108,8 @@ data class GuiaDelExtracto(
     val fuente: FuenteDeLaGuia,
     val clave: String? = null,
     val porCorreo: String? = null,
+    /** Si el banco lo manda por SMS (Falabella). */
+    val porSms: String? = null,
     val aviso: String? = null,
     val limite: String? = null,
     val conRango: Boolean = false,
@@ -136,7 +145,8 @@ const val TU_BANCO: String = "tu banco"
  * **La guía genérica**: para un banco del que no hay nada confirmado, o para un producto que su guía no
  * cubre (la tarjeta de BBVA). Con el nombre del banco si se sabe ([banco]); si no, «tu banco».
  */
-fun guiaGenerica(bancoId: String?, banco: String?, producto: ProductoDelExtracto?): GuiaDelExtracto = GuiaDelExtracto(
+fun guiaGenerica(bancoId: String?, banco: String?, producto: ProductoDelExtracto?): GuiaDelExtracto =
+    if (producto == ProductoDelExtracto.CREDITO) creditoQueNoSeImporta(bancoId, banco) else GuiaDelExtracto(
     bancoId = bancoId ?: "",
     banco = banco ?: TU_BANCO,
     productos = listOf(producto ?: ProductoDelExtracto.CUENTA),
@@ -144,6 +154,27 @@ fun guiaGenerica(bancoId: String?, banco: String?, producto: ProductoDelExtracto
     pasos = PASOS_GENERICOS,
     queSubir = QUE_SUBIR_GENERICO,
     lectura = LecturaDelExtracto.CON_IA,
+    siNoLoEncuentras = SI_NO_LO_ENCUENTRAS_GENERICO,
+    fuente = FuenteDeLaGuia.SIN_PASOS_DEL_BANCO,
+)
+
+/**
+ * Revisión de la vuelta 130 · **el extracto de un crédito que Movi no lee**. El de un crédito no trae
+ * movimientos, y la lectura con IA lo descarta («un crédito sin lista de movimientos es NADA»): solo la
+ * libre inversión y la libranza de Bancolombia tienen lector. Así que no se promete nada ni se ofrece
+ * «Subir el extracto»: se dice que todavía no se importa y qué hacer.
+ */
+const val CREDITO_QUE_NO_SE_IMPORTA: String =
+    "Movi todavía no importa el extracto de este crédito. Puedes cuadrar su saldo a mano desde el crédito."
+
+private fun creditoQueNoSeImporta(bancoId: String?, banco: String?) = GuiaDelExtracto(
+    bancoId = bancoId ?: "",
+    banco = banco ?: TU_BANCO,
+    productos = listOf(ProductoDelExtracto.CREDITO),
+    donde = DONDE_GENERICO,
+    pasos = PASOS_GENERICOS,
+    queSubir = CREDITO_QUE_NO_SE_IMPORTA,
+    lectura = LecturaDelExtracto.NO_SE_IMPORTA,
     siNoLoEncuentras = SI_NO_LO_ENCUENTRAS_GENERICO,
     fuente = FuenteDeLaGuia.SIN_PASOS_DEL_BANCO,
 )
@@ -164,6 +195,9 @@ private val EXTRACTO_MENSUAL_DE_BANCOLOMBIA = OtraFormaDeSacarlo(
     queSubir = "El extracto en PDF o XLS. Movi lo lee con IA y puede tardar un poco.",
     lectura = LecturaDelExtracto.CON_IA,
     limite = "Deja bajar extractos de hasta 2 años atrás.",
+    // [oficial] la misma página: «si el archivo pide una clave, es tu número de documento de identidad».
+    // Es la de esta descarga; de los «Movimientos» la fuente no dice nada.
+    clave = CLAVE_ES_LA_CEDULA,
 )
 
 /** La línea de Bancolombia cuando no aparece: la página pública de la web (oficial, sin fecha visible). */
@@ -192,14 +226,15 @@ val GUIA_DE_BANCOLOMBIA: GuiaDelExtracto = GuiaDelExtracto(
         "Entra a la Sucursal Virtual Personas.",
         "En Inicio, toca la cuenta.",
         "Abre la pestaña «Movimientos» y toca «Descargar».",
-        "Elige PDF o Excel y las fechas «Desde» y «Hasta».",
+        "Elige PDF y las fechas «Desde» y «Hasta».",
         "Toca «Descargar» y sube el archivo a Movi.",
     ),
-    queSubir = "Los «Movimientos» en PDF o Excel: Movi los lee al instante.",
+    // El PDF primero: es el que se probó con los papeles reales. El Excel tiene lector (vuelta 107) pero
+    // nadie ha subido uno real: va de segundo y sin prometer «al instante» (ver [queSubirDe]).
+    queSubir = "Los «Movimientos» en PDF: Movi los lee al instante. El Excel también sirve, pero Movi todavía no lo ha probado con uno real.",
     lectura = LecturaDelExtracto.AL_INSTANTE,
     siNoLoEncuentras = SI_NO_LO_ENCUENTRAS_EN_BANCOLOMBIA,
     fuente = FuenteDeLaGuia.PROBADA_EN_EL_BANCO,
-    clave = CLAVE_ES_LA_CEDULA,
     porCorreo = BANCOLOMBIA_POR_CORREO,
     aviso = AVISO_DEL_PORTAL_DE_BANCOLOMBIA,
     limite = "Los «Movimientos» se bajan de este mes y de los últimos 3 meses.",
@@ -225,19 +260,43 @@ val GUIA_DE_BANCOLOMBIA_TARJETA: GuiaDelExtracto = GUIA_DE_BANCOLOMBIA.copy(
 )
 
 /**
- * Bancolombia, crédito de consumo o hipotecario: la pantalla de Extractos los cubre ([oficial], la misma
- * página del 16-jul-2026). El extracto de un crédito se lee sin IA (`ExtractoDeCreditoBancolombia.kt`) y
- * propone actualizar la cuota, la tasa y el saldo; no trae movimientos.
+ * Bancolombia, crédito: la pantalla de Extractos cubre el de consumo y el hipotecario ([oficial], la misma
+ * página del 16-jul-2026), pero Movi **solo lee sin IA la libre inversión y la libranza**
+ * (`ExtractoDeCreditoBancolombia.kt` detrás de `detectDocumentType` = LOAN_SUMMARY, que pide «LÍNEA DE
+ * CRÉDITO» / «CREDIÁGIL» / «CREDITO PREAPROBADO» y «ABONO A CAPITAL»): un hipotecario o un vehículo va a la
+ * IA, que lo descarta. La guía lo dice así. Los pasos son los de la página, no se probaron en el portal.
  */
 val GUIA_DE_BANCOLOMBIA_CREDITO: GuiaDelExtracto = GUIA_DE_BANCOLOMBIA.copy(
     productos = listOf(ProductoDelExtracto.CREDITO),
     donde = "En la Sucursal Virtual Personas, la página web.",
     pasos = EXTRACTO_MENSUAL_DE_BANCOLOMBIA.pasos.take(2) +
         "En el crédito, toca los tres puntos y elige «Descargar en PDF».",
-    queSubir = "El extracto del crédito en PDF: Movi lee al instante la cuota, la tasa y el saldo, y te propone actualizar el crédito.",
+    queSubir = "Libre inversión o libranza: Movi lo lee al instante (la cuota, la tasa y el saldo). Otros créditos: todavía no se importan.",
+    lectura = LecturaDelExtracto.SOLO_ALGUNOS_CREDITOS,
+    fuente = FuenteDeLaGuia.AYUDA_DEL_BANCO,
+    clave = CLAVE_ES_LA_CEDULA,
+    aviso = null,
     limite = "Deja bajar extractos de hasta 2 años atrás.",
     conRango = false,
     otraForma = null,
+)
+
+/**
+ * Revisión de la vuelta 130 · **la Fiducuenta** (el fondo de inversión de Bancolombia): «Movimientos:
+ * Inversiones» se lee sin IA (`MovimientosDeBancolombia.kt`, probado con el real del 1-sep al 26-oct).
+ * Cómo se baja en el portal no se probó: pasos genéricos. El extracto mensual del fondo no sirve (el
+ * server lo rechaza como «estado de fondo de inversión»).
+ */
+val GUIA_DE_BANCOLOMBIA_FONDO: GuiaDelExtracto = GuiaDelExtracto(
+    bancoId = "bancolombia",
+    banco = "Bancolombia",
+    productos = listOf(ProductoDelExtracto.FONDO),
+    donde = "En la Sucursal Virtual Personas, la página web: en el fondo, busca sus «Movimientos».",
+    pasos = PASOS_GENERICOS,
+    queSubir = "Los «Movimientos» del fondo en PDF: Movi los lee al instante. El extracto mensual del fondo no trae movimientos que se puedan importar.",
+    lectura = LecturaDelExtracto.AL_INSTANTE,
+    siNoLoEncuentras = SI_NO_LO_ENCUENTRAS_GENERICO,
+    fuente = FuenteDeLaGuia.SIN_PASOS_DEL_BANCO,
 )
 
 /**
@@ -356,18 +415,18 @@ private val GUIA_DE_NEQUI = GuiaDelExtracto(
     bancoId = "nequi",
     banco = "Nequi",
     productos = listOf(ProductoDelExtracto.CUENTA),
-    donde = "Empieza en la app de Nequi, pero el extracto se genera en la página web de Nequi.",
+    donde = "En la app de Nequi o en su página web.",
+    // Revisión de la vuelta 130: el paso a paso completo (Certificados → «Ir a web de Nequi» → Extractos →
+    // «Generar») sale de [secundaria] Infobae; de la ayuda oficial solo se vio el resumen. Va lo que no
+    // depende de Infobae: desde el perfil, «Documentos y certificados».
     pasos = listOf(
-        "En la app, toca tu perfil → «Documentos y certificados» → «Certificados».",
-        "Toca «Ir a web de Nequi» y entra con tu celular, tu clave y la clave dinámica.",
-        "Abre «Extractos» y elige el mes y el año.",
-        "Toca «Generar» para bajar el PDF, o «Enviar al correo».",
+        "En la app, entra desde tu perfil a «Documentos y certificados».",
+        PASOS_GENERICOS.last(),
     ),
     queSubir = "El extracto en PDF. Movi lo lee con IA y puede tardar un poco.",
     lectura = LecturaDelExtracto.CON_IA,
-    siNoLoEncuentras = "Si pediste que te llegara al correo y no aparece, revisa las carpetas de spam y promociones.",
+    siNoLoEncuentras = SI_NO_LO_ENCUENTRAS_GENERICO,
     fuente = FuenteDeLaGuia.AYUDA_DEL_BANCO,
-    porCorreo = "Sí: «Enviar al correo» lo manda a tu correo registrado.",
     limite = "Cada extracto está listo 3 días después de que cierra el mes.",
 )
 
@@ -406,7 +465,7 @@ private val GUIA_DE_DAVIBANK = GuiaDelExtracto(
     donde = "En la app de Davibank o en la Banca Virtual de Personas, en «Extractos y certificaciones».",
     pasos = PASOS_GENERICOS,
     queSubir = "El extracto de la cuenta en PDF: Movi toma el saldo al instante (los movimientos no).",
-    lectura = LecturaDelExtracto.AL_INSTANTE,
+    lectura = LecturaDelExtracto.SOLO_EL_SALDO,
     siNoLoEncuentras = SI_NO_LO_ENCUENTRAS_GENERICO,
     fuente = FuenteDeLaGuia.SIN_PASOS_DEL_BANCO,
 )
@@ -496,7 +555,8 @@ private val GUIA_DE_BANCO_FALABELLA = GuiaDelExtracto(
     lectura = LecturaDelExtracto.CON_IA,
     siNoLoEncuentras = SI_NO_LO_ENCUENTRAS_GENERICO,
     fuente = FuenteDeLaGuia.AYUDA_DEL_BANCO,
-    porCorreo = "Por correo no. Si marcas «Deseo recibir extractos vía SMS», te llega por SMS cada mes.",
+    // Por correo: [no encontré]. Solo lo del SMS está en la página.
+    porSms = "Si marcas «Deseo recibir extractos vía SMS», te llega por SMS cada mes.",
 )
 
 /**
@@ -519,16 +579,10 @@ private val GUIA_DE_LULO = GuiaDelExtracto(
     clave = CLAVE_ES_LA_CEDULA,
 )
 
-/** Lulo Bank, crédito de libre inversión: [oficial, resumen del buscador] ayuda.lulobank.com/…/4405901773716. */
-private val GUIA_DE_LULO_CREDITO = GUIA_DE_LULO.copy(
-    productos = listOf(ProductoDelExtracto.CREDITO),
-    pasos = listOf(
-        "Abre «Explora» → «Crédito» → «Crédito de libre inversión».",
-        "Toca la rueda y entra a «Documentos».",
-    ),
-    siNoLoEncuentras = "El extracto aparece 10 días antes de la fecha de pago. Si falla, escríbele al chat de la app.",
-    porCorreo = "Sí: el extracto del crédito también llega a tu correo registrado.",
-)
+// Revisión de la vuelta 130: el crédito de libre inversión de Lulo no tiene guía. Su extracto no trae
+// movimientos y la lectura con IA lo descarta: abre la de un crédito que todavía no se importa
+// ([creditoQueNoSeImporta]). [oficial, resumen del buscador] ayuda.lulobank.com/…/4405901773716: Explora →
+// Crédito → Crédito de libre inversión → rueda → Documentos; aparece 10 días antes del pago y va al correo.
 
 /**
  * RappiPay, la RappiCard: [oficial, visto en el resumen del buscador] help.rappipay.co/…/cmo-puedo-ver-y-
@@ -563,8 +617,8 @@ private val GUIA_DE_SKANDIA = GuiaDelExtracto(
     productos = listOf(ProductoDelExtracto.FONDO),
     donde = "En el portal de clientes de Skandia, la página web, con tu clave de siempre. Los extractos están en «Certificados».",
     pasos = PASOS_GENERICOS,
-    queSubir = "El extracto del fondo voluntario en PDF: Movi toma el saldo al instante.",
-    lectura = LecturaDelExtracto.AL_INSTANTE,
+    queSubir = "El extracto del fondo voluntario en PDF: Movi toma el saldo al instante (los movimientos no).",
+    lectura = LecturaDelExtracto.SOLO_EL_SALDO,
     siNoLoEncuentras = "Búscalo en tu correo: el fondo voluntario manda un extracto cada mes.",
     fuente = FuenteDeLaGuia.SIN_PASOS_DEL_BANCO,
     porCorreo = "Sí: el fondo voluntario te manda el extracto cada mes.",
@@ -575,7 +629,7 @@ private val GUIA_DE_SKANDIA = GuiaDelExtracto(
  * hoja. Un banco que no está acá tiene la guía genérica ([guiaGenerica]).
  */
 val GUIAS_DEL_EXTRACTO: List<GuiaDelExtracto> = listOf(
-    GUIA_DE_BANCOLOMBIA, GUIA_DE_BANCOLOMBIA_TARJETA, GUIA_DE_BANCOLOMBIA_CREDITO,
+    GUIA_DE_BANCOLOMBIA, GUIA_DE_BANCOLOMBIA_TARJETA, GUIA_DE_BANCOLOMBIA_CREDITO, GUIA_DE_BANCOLOMBIA_FONDO,
     GUIA_DE_NU, GUIA_DE_NU_CUENTA,
     GUIA_DE_DAVIVIENDA,
     GUIA_DE_BBVA,
@@ -587,7 +641,7 @@ val GUIAS_DEL_EXTRACTO: List<GuiaDelExtracto> = listOf(
     GUIA_DE_AV_VILLAS,
     GUIA_DE_BANCO_POPULAR,
     GUIA_DE_BANCO_FALABELLA,
-    GUIA_DE_LULO, GUIA_DE_LULO_CREDITO,
+    GUIA_DE_LULO,
     GUIA_DE_RAPPIPAY,
     GUIA_DE_SKANDIA,
 )
@@ -597,7 +651,12 @@ val GUIAS_DEL_EXTRACTO: List<GuiaDelExtracto> = listOf(
  * `grupoDelBanco`), y Scotiabank Colpatria hoy es Davibank (la investigación, §8). No se usa
  * `grupoDelBanco` entero: ahí Davibank es de Davivienda, pero su app y su extracto son otros.
  */
-val ALIAS_DE_LA_GUIA: Map<String, String> = mapOf("amex" to "bancolombia", "scotiabank" to "davibank")
+val ALIAS_DE_LA_GUIA: Map<String, String> =
+    mapOf("amex" to "bancolombia", "fiducuenta" to "bancolombia", "scotiabank" to "davibank")
+
+/** La marca que ya dice el producto: la AMEX es una tarjeta; la Fiducuenta, un fondo. */
+private val PRODUCTO_DE_LA_MARCA: Map<String, ProductoDelExtracto> =
+    mapOf("amex" to ProductoDelExtracto.TARJETA, "fiducuenta" to ProductoDelExtracto.FONDO)
 
 /** Las redes de tarjeta: nombran la tarjeta, no el banco que la emite. */
 private val REDES_DE_TARJETA: Set<String> = setOf("visa", "mastercard")
@@ -619,7 +678,7 @@ fun guiasDelBanco(bancoId: String): List<GuiaDelExtracto> {
  */
 fun guiaDelExtracto(bancoId: String?, producto: ProductoDelExtracto?, nombre: String? = null): GuiaDelExtracto {
     val delBanco = bancoId?.let(::guiasDelBanco).orEmpty()
-    val productoReal = if (bancoId == "amex") ProductoDelExtracto.TARJETA else producto
+    val productoReal = PRODUCTO_DE_LA_MARCA[bancoId] ?: producto
     val exacta = if (productoReal == null) delBanco.firstOrNull() else delBanco.firstOrNull { it.esDe(productoReal) }
     return exacta ?: guiaGenerica(bancoId, delBanco.firstOrNull()?.banco ?: nombre, productoReal)
 }
@@ -675,7 +734,17 @@ fun guiaDelExtractoDeLaCuenta(cuenta: Account, bancoDeLaTarjeta: String? = null)
 fun textoDeLaLectura(lectura: LecturaDelExtracto): String = when (lectura) {
     LecturaDelExtracto.AL_INSTANTE -> MOVI_LO_LEE_AL_INSTANTE
     LecturaDelExtracto.CON_IA -> CON_IA_PUEDE_TARDAR
+    LecturaDelExtracto.SOLO_EL_SALDO -> MOVI_TOMA_EL_SALDO_AL_INSTANTE
+    LecturaDelExtracto.SOLO_ALGUNOS_CREDITOS -> SOLO_LIBRE_INVERSION_O_LIBRANZA
+    LecturaDelExtracto.NO_SE_IMPORTA -> TODAVIA_NO_SE_IMPORTA
 }
+
+/** ¿Hay qué subir? Un crédito que Movi no importa no ofrece «Subir el extracto». */
+fun seOfreceSubir(guia: GuiaDelExtracto): Boolean = guia.lectura != LecturaDelExtracto.NO_SE_IMPORTA
+
+const val MOVI_TOMA_EL_SALDO_AL_INSTANTE: String = "Movi toma el saldo al instante"
+const val SOLO_LIBRE_INVERSION_O_LIBRANZA: String = "Al instante: libre inversión o libranza"
+const val TODAVIA_NO_SE_IMPORTA: String = "Todavía no se importa"
 
 const val MOVI_LO_LEE_AL_INSTANTE: String = "Movi lo lee al instante"
 const val CON_IA_PUEDE_TARDAR: String = "Con IA · puede tardar un poco"
@@ -719,7 +788,7 @@ const val EL_LECTOR_DE_EXCEL_ESTA_ACTIVO: Boolean = true
 
 /** «Qué archivo subir», con el Excel solo si su lector está activo. */
 fun queSubirDe(guia: GuiaDelExtracto, lectorDeExcel: Boolean = EL_LECTOR_DE_EXCEL_ESTA_ACTIVO): String =
-    if (!lectorDeExcel && guia === GUIA_DE_BANCOLOMBIA) "Los «Movimientos» en PDF: Movi los lee al instante." else guia.queSubir
+    if (!lectorDeExcel && guia == GUIA_DE_BANCOLOMBIA) "Los «Movimientos» en PDF: Movi los lee al instante." else guia.queSubir
 
 /** El enlace de la propuesta del extracto que falta, y de la hoja de subida. */
 const val COMO_BAJARLO: String = "Cómo bajarlo"
@@ -755,6 +824,15 @@ const val FRASE_EXTRACTO_SIN_MOVIMIENTOS: String =
 const val FRASE_LECTURA_FALLO: String =
     "No pude leer este archivo como extracto. Revisa que sea el PDF o la hoja de cálculo del banco."
 
+/** «Compartir con Movi»: Movi (Haiku) decidió que el papel no muestra un movimiento. */
+const val FRASE_PAPEL_SIN_MOVIMIENTO: String =
+    "Este archivo no muestra un movimiento de plata. Quedó guardado en Documentos."
+
+/** «Compartir con Movi»: un PDF escaneado, sin texto. */
+const val FRASE_PAPEL_SIN_TEXTO: String =
+    "Este PDF no tiene texto que Movi pueda leer (parece un escaneo). Compártelo como foto o captura " +
+        "de pantalla. El archivo quedó guardado en Documentos."
+
 /** La frase vieja de un PDF con clave (la que recibe un APK que no sabe pedirla). */
 const val FRASE_PAPEL_CON_CLAVE: String =
     "Este PDF tiene clave. Actualiza Movi para escribirla y abrirlo. El archivo quedó guardado en Documentos."
@@ -771,6 +849,7 @@ fun laFallaPideLaGuia(motivo: String?): Boolean {
     return listOf(
         FRASE_EXTRACTO_INCOMPLETO, FRASE_IMAGEN_INCOMPLETA, FRASE_EXTRACTO_SIN_MOVIMIENTOS, FRASE_LECTURA_FALLO,
         FRASE_PAPEL_CON_CLAVE, EL_PDF_TIENE_CLAVE, LA_CLAVE_NO_ABRE_EL_PDF,
+        FRASE_PAPEL_SIN_MOVIMIENTO, FRASE_PAPEL_SIN_TEXTO,
     ).any { m.startsWith(it) } || m == PDF_CON_CLAVE || m == CLAVE_INCORRECTA
 }
 

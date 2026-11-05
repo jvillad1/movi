@@ -42,9 +42,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarResult
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Icon
@@ -161,8 +159,11 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
     var aSubir by remember { mutableStateOf<ArchivoElegido?>(null) }
     // Vuelta 130: «Cómo bajar tus extractos», abierta (en un banco, o en la lista de bancos).
     var guiaPedida by remember { mutableStateOf<com.jvillada.movi.ui.extractos.GuiaPedida?>(null) }
-    // Vuelta 130: la guía que ofrece el aviso de un extracto que no se pudo leer («Cómo bajarlo»).
-    var guiaDelError by remember { mutableStateOf<com.jvillada.movi.ui.extractos.GuiaPedida?>(null) }
+    // Vuelta 130: un extracto que no se pudo leer por el archivo: el motivo y la guía de su banco, en un
+    // aviso que se queda (el snackbar se iba antes de que alcanzara a tocarse el enlace).
+    var errorDeLectura by remember { mutableStateOf<ErrorDeLectura?>(null) }
+    // El banco de cada tarjeta (`CardTerms.bank`), para la guía de una tarjeta que no lo dice en el nombre.
+    var bancosDeLasTarjetas by remember { mutableStateOf(emptyMap<String, String>()) }
     // Las cuentas, para los dos selectores. Si la lectura falla la pantalla sigue andando: sin
     // cuentas el selector dice «No tienes cuentas todavía» y el papel se sube sin cuenta, que es
     // exactamente lo que pasaba antes de que esto existiera.
@@ -193,6 +194,11 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
 
     LaunchedEffect(Unit) {
         runCatching { Repositories.wallets.getAccounts() }.onSuccess { cuentas = it }
+    }
+    LaunchedEffect(Unit) {
+        // Sin las tarjetas, la guía se elige solo por el nombre de la cuenta: lo de siempre.
+        runCatching { Repositories.wallets.getCards() }
+            .onSuccess { tarjetas -> bancosDeLasTarjetas = bancosDeLasTarjetasDe(tarjetas) }
     }
 
     LaunchedEffect(refreshKey) {
@@ -272,13 +278,18 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
                         )
                     } else {
                         val motivo = codigo?.let { com.jvillada.movi.shared.model.fraseDeLaClaveDelPdf(it) } ?: e.toUserMessage()
-                        // Vuelta 130: si lo que falló es el archivo, el aviso ofrece la guía de su banco.
-                        guiaDelError = if (com.jvillada.movi.shared.model.laFallaPideLaGuia(motivo)) {
-                            com.jvillada.movi.ui.extractos.GuiaPedida(
-                                com.jvillada.movi.ui.extractos.guiaDelPapelQueNoSeLeyo(doc.nombre, cuentas.firstOrNull { it.id == doc.accountId }),
+                        // Vuelta 130: si lo que falló es el archivo, un aviso que se queda con la guía de su
+                        // banco; si no (la IA, la red), el snackbar de siempre.
+                        if (com.jvillada.movi.shared.model.laFallaPideLaGuia(motivo)) {
+                            errorDeLectura = ErrorDeLectura(
+                                "No pude procesar el extracto: $motivo",
+                                com.jvillada.movi.ui.extractos.guiaDelPapelQueNoSeLeyo(
+                                    doc.nombre, cuentas.firstOrNull { it.id == doc.accountId }, doc.accountId?.let { bancosDeLasTarjetas[it] },
+                                ),
                             )
-                        } else null
-                        error = "No pude procesar el extracto: $motivo"
+                        } else {
+                            error = "No pude procesar el extracto: $motivo"
+                        }
                     }
                 }
             importando = null
@@ -304,14 +315,7 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
 
     LaunchedEffect(error) {
         val msg = error ?: return@LaunchedEffect
-        val conGuia = guiaDelError
-        guiaDelError = null
-        val resultado = snackbarHostState.showSnackbar(
-            msg,
-            actionLabel = conGuia?.let { com.jvillada.movi.shared.model.COMO_BAJARLO },
-            duration = if (conGuia != null) SnackbarDuration.Long else SnackbarDuration.Short,
-        )
-        if (resultado == SnackbarResult.ActionPerformed && conGuia != null) guiaPedida = conGuia
+        snackbarHostState.showSnackbar(msg)
         error = null
     }
 
@@ -333,6 +337,14 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
             // barra queda para una recarga con algo ya en pantalla (reintentar, subir un archivo).
             if ((cargando && lista != null) || subiendo || importando != null) {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
+            errorDeLectura?.let { e ->
+                AvisoDeLaLectura(
+                    e,
+                    onComoBajarlo = { guiaPedida = com.jvillada.movi.ui.extractos.GuiaPedida(e.guia) },
+                    onCerrar = { errorDeLectura = null },
+                    modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(top = Espacio.s),
+                )
             }
             when {
                 // «Todavía no guardaste nada» es una afirmación sobre lo que el dueño tiene, y no
@@ -450,6 +462,7 @@ fun DocumentosScreen(onNavigate: (Screen) -> Unit) {
                 onSubir = { tipo, cuentaId -> subir(archivo, tipo, cuentaId) },
                 // Vuelta 130: «¿Cómo bajo mi extracto?» abre la guía del banco de la cuenta, o la lista.
                 onComoBajarlo = { guia -> guiaPedida = com.jvillada.movi.ui.extractos.GuiaPedida(guia) },
+                bancosDeLasTarjetas = bancosDeLasTarjetas,
                 // Vuelta 129: si Movi ya leyó este mismo archivo, lo que dice el contenido propone la
                 // cuenta. La huella cede el hilo cada 64 KB (en la web todo corre en uno solo); sin
                 // red, nada.
@@ -821,6 +834,8 @@ internal fun SubirDocumentoSheet(
      * ([guiaParaLaHojaDeSubida]), o `null` para la lista de bancos. Sin esto, el enlace no se ofrece.
      */
     onComoBajarlo: ((com.jvillada.movi.shared.model.GuiaDelExtracto?) -> Unit)? = null,
+    /** El banco de cada tarjeta por su cuenta, para la guía (ver [guiaParaLaHojaDeSubida]). */
+    bancosDeLasTarjetas: Map<String, String> = emptyMap(),
 ) {
     var tipo by remember { mutableStateOf(tipoSugeridoPara(archivo.nombre)) }
     // Vuelta 129: la cuenta llega propuesta (ver [cuentaPropuestaParaElPapel]) hasta que el dueño elige
@@ -865,13 +880,39 @@ internal fun SubirDocumentoSheet(
             Spacer(Modifier.height(Espacio.xs))
             com.jvillada.movi.ui.extractos.EnlaceALaGuiaDelExtracto(
                 com.jvillada.movi.shared.model.COMO_BAJO_MI_EXTRACTO,
-                onClick = { onComoBajarlo(com.jvillada.movi.ui.extractos.guiaParaLaHojaDeSubida(cuenta, cuentas)) },
+                onClick = { onComoBajarlo(com.jvillada.movi.ui.extractos.guiaParaLaHojaDeSubida(cuenta, cuentas, bancosDeLasTarjetas)) },
             )
         }
 
         Spacer(Modifier.height(Espacio.l))
         PieDeHoja(texto = "Subir", onClick = { onSubir(tipo, cuenta) })
         Spacer(Modifier.height(Espacio.l))
+    }
+}
+
+/** Un extracto que no se pudo leer por el archivo: lo que dijo el server y la guía de su banco. */
+internal class ErrorDeLectura(val motivo: String, val guia: com.jvillada.movi.shared.model.GuiaDelExtracto?)
+
+/** El banco de cada tarjeta por el id de su cuenta (`CardTerms.bank`), sin las que no lo dicen. Pura. */
+internal fun bancosDeLasTarjetasDe(tarjetas: List<com.jvillada.movi.shared.model.CardSummary>): Map<String, String> =
+    tarjetas.mapNotNull { t -> t.terms?.bank?.takeIf { it.isNotBlank() }?.let { t.account.id to it } }.toMap()
+
+internal const val TAG_AVISO_DE_LA_LECTURA: String = "documentos-aviso-de-la-lectura"
+
+/**
+ * Revisión de la vuelta 130 · **el aviso de un extracto que no se pudo leer**: el motivo, «Cómo bajar el
+ * archivo que Movi lee mejor» (la guía de su banco) y «Cerrar». Se queda hasta que se cierra.
+ */
+@Composable
+private fun AvisoDeLaLectura(e: ErrorDeLectura, onComoBajarlo: () -> Unit, onCerrar: () -> Unit, modifier: Modifier = Modifier) {
+    Superficie(modifier = modifier.fillMaxWidth().testTag(TAG_AVISO_DE_LA_LECTURA)) {
+        Text(e.motivo, style = Movi.textos.cuerpo, color = Movi.colores.texto)
+        Spacer(Modifier.height(Espacio.xs))
+        com.jvillada.movi.ui.extractos.EnlaceALaGuiaDelExtracto(
+            com.jvillada.movi.shared.model.COMO_BAJAR_EL_ARCHIVO_QUE_MOVI_LEE_MEJOR,
+            onClick = onComoBajarlo,
+        )
+        Boton("Cerrar", onClick = onCerrar, variante = VarianteDeBoton.Fantasma, tamano = TamanoDeBoton.S)
     }
 }
 

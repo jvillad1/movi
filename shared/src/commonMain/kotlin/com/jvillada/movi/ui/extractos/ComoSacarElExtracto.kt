@@ -160,7 +160,9 @@ fun HojaDeComoSacarElExtracto(
             }
             Spacer(Modifier.height(Espacio.xs))
         }
-        if (guia != null && subir != null) {
+        // Un crédito que Movi todavía no importa no ofrece subir nada (revisión de la vuelta 130).
+        val conQueSubir = guia?.let { com.jvillada.movi.shared.model.seOfreceSubir(it) } == true
+        if (conQueSubir && subir != null) {
             Spacer(Modifier.height(Espacio.s))
             Boton(
                 SUBIR_EL_EXTRACTO_DE_LA_GUIA,
@@ -228,7 +230,11 @@ private fun CuerpoDeLaGuia(
     EncabezadoDeHoja(tituloDeLaGuiaDelExtracto(guia))
     Pildora(
         textoDeLaLectura(guia.lectura),
-        tono = if (guia.lectura == LecturaDelExtracto.AL_INSTANTE) TonoDePildora.Exito else TonoDePildora.Neutra,
+        tono = when (guia.lectura) {
+            LecturaDelExtracto.AL_INSTANTE, LecturaDelExtracto.SOLO_EL_SALDO -> TonoDePildora.Exito
+            LecturaDelExtracto.NO_SE_IMPORTA -> TonoDePildora.Aviso
+            LecturaDelExtracto.CON_IA, LecturaDelExtracto.SOLO_ALGUNOS_CREDITOS -> TonoDePildora.Neutra
+        },
         modifier = Modifier.testTag(TAG_LECTURA_DE_LA_GUIA),
     )
     // El producto, si el banco tiene guías distintas (la cuenta y la tarjeta de Bancolombia).
@@ -260,10 +266,12 @@ private fun CuerpoDeLaGuia(
     Apartado(QUE_ARCHIVO_SUBIR, queSubirDe(guia))
     guia.clave?.let { Apartado(LA_CLAVE, it) }
     guia.porCorreo?.let { Apartado(POR_CORREO, it) }
+    guia.porSms?.let { Apartado(POR_SMS, it) }
     guia.otraForma?.let { otra ->
         Titulito(otra.titulo)
         Pasos(otra.pasos)
         Texto(otra.queSubir)
+        otra.clave?.let { Texto(it) }
         otra.limite?.let { Texto(it, apagado = true) }
     }
     Apartado(SI_NO_LO_ENCUENTRAS, guia.siNoLoEncuentras)
@@ -280,6 +288,7 @@ private fun CuerpoDeLaGuia(
 const val QUE_ARCHIVO_SUBIR: String = "Qué archivo subir"
 const val LA_CLAVE: String = "La clave"
 const val POR_CORREO: String = "Por correo"
+const val POR_SMS: String = "Por SMS"
 const val SI_NO_LO_ENCUENTRAS: String = "Si no lo encuentras"
 
 @Composable
@@ -364,15 +373,27 @@ class GuiaPedida(val inicial: GuiaDelExtracto?)
  * propuesta o elegida, si su nombre dice el banco («Nu Ahorros» → Nu · cuenta; una tarjeta Nu → Nu ·
  * tarjeta). Sin cuenta, o con una que no dice el banco, `null`: la hoja abre la lista de bancos. Pura.
  */
-fun guiaParaLaHojaDeSubida(cuentaId: String?, cuentas: List<com.jvillada.movi.shared.model.Account>): GuiaDelExtracto? =
+fun guiaParaLaHojaDeSubida(
+    cuentaId: String?,
+    cuentas: List<com.jvillada.movi.shared.model.Account>,
+    /**
+     * Revisión de la vuelta 130: el banco de cada tarjeta por su cuenta (`CardTerms.bank`): «Master Black
+     * 3684» no dice que es de Bancolombia; sus condiciones, sí.
+     */
+    bancosDeLasTarjetas: Map<String, String> = emptyMap(),
+): GuiaDelExtracto? =
     cuentaId?.let { id -> cuentas.firstOrNull { it.id == id } }
-        ?.let { com.jvillada.movi.shared.model.guiaDelExtractoDeLaCuenta(it) }
+        ?.let { com.jvillada.movi.shared.model.guiaDelExtractoDeLaCuenta(it, bancosDeLasTarjetas[it.id]) }
 
 /**
  * Vuelta 130 · **la guía de un extracto que no se pudo leer**: la de su cuenta, si se sabe; si no, la que
  * nombra el archivo ([com.jvillada.movi.shared.model.guiaDelExtractoDelArchivo]); si tampoco, `null` (la
  * lista). Pura.
  */
-fun guiaDelPapelQueNoSeLeyo(nombre: String, cuenta: com.jvillada.movi.shared.model.Account? = null): GuiaDelExtracto? =
-    cuenta?.let { com.jvillada.movi.shared.model.guiaDelExtractoDeLaCuenta(it) }
+fun guiaDelPapelQueNoSeLeyo(
+    nombre: String,
+    cuenta: com.jvillada.movi.shared.model.Account? = null,
+    bancoDeLaTarjeta: String? = null,
+): GuiaDelExtracto? =
+    cuenta?.let { com.jvillada.movi.shared.model.guiaDelExtractoDeLaCuenta(it, bancoDeLaTarjeta) }
         ?: com.jvillada.movi.shared.model.guiaDelExtractoDelArchivo(nombre)

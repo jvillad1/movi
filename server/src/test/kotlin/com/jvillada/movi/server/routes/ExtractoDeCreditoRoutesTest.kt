@@ -120,12 +120,16 @@ class ExtractoDeCreditoRoutesTest {
         )
         transaction {
             SchemaUtils.drop(
+                com.jvillada.movi.server.db.LecturasDePapeles, com.jvillada.movi.server.db.ClavesDeExtractos,
+                com.jvillada.movi.server.db.PdfsAbiertos, com.jvillada.movi.server.db.KnownDestinations,
                 Documents, Goals, Subscriptions, CardPaymentDismissals, Cards, Credits, SmsMessages,
                 RecurringRules, VoidEvents, Events, StatementImports, Budgets, Accounts, Users, CategoryPrefs,
             )
             SchemaUtils.create(
                 Users, Accounts, StatementImports, Events, VoidEvents, Budgets, RecurringRules,
                 SmsMessages, Credits, Cards, CardPaymentDismissals, Subscriptions, Goals, CategoryPrefs, Documents,
+                com.jvillada.movi.server.db.LecturasDePapeles, com.jvillada.movi.server.db.ClavesDeExtractos,
+                com.jvillada.movi.server.db.PdfsAbiertos, com.jvillada.movi.server.db.KnownDestinations,
             )
             listOf(duenoId, otroId).forEach { uid ->
                 Users.insert { it[id] = uid; it[email] = "$uid@extracto.test"; it[name] = uid; it[passwordHash] = "hash" }
@@ -337,5 +341,104 @@ class ExtractoDeCreditoRoutesTest {
         assertEquals(HttpStatusCode.BadRequest, aceptar(ResumenDelExtractoDeCredito()).status)
         assertEquals(HttpStatusCode.BadRequest, aceptar(ResumenDelExtractoDeCredito(tasaEa = 250.0)).status)
         assertEquals(HttpStatusCode.BadRequest, aceptar(ResumenDelExtractoDeCredito(saldoCapital = -5L)).status)
+    }
+
+    // ── Revisión de la vuelta 130: por «Compartir con Movi» (`/leer`) también ─────────────────────
+
+    /** El texto en un PDF de verdad: `/leer` solo lee PDF, fotos y hojas de cálculo. */
+    private fun pdfDe(texto: String): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        org.apache.pdfbox.pdmodel.PDDocument().use { doc ->
+            val pagina = org.apache.pdfbox.pdmodel.PDPage()
+            doc.addPage(pagina)
+            org.apache.pdfbox.pdmodel.PDPageContentStream(doc, pagina).use { cs ->
+                cs.beginText()
+                cs.setFont(
+                    org.apache.pdfbox.pdmodel.font.PDType1Font(org.apache.pdfbox.pdmodel.font.Standard14Fonts.FontName.HELVETICA),
+                    10f,
+                )
+                cs.newLineAtOffset(40f, 750f)
+                texto.lines().forEach { linea ->
+                    cs.showText(linea.trim())
+                    cs.newLineAtOffset(0f, -14f)
+                }
+                cs.endText()
+            }
+            doc.save(out)
+        }
+        return out.toByteArray()
+    }
+
+    private fun guardarElPdf(id: String, texto: String = textoDelExtracto) = transaction {
+        val bytes = pdfDe(texto)
+        Documents.insert {
+            it[Documents.id] = id; it[userId] = duenoId; it[name] = "Bancolombia_credito_9695.pdf"; it[kind] = "OTRO"
+            it[mimeType] = "application/pdf"; it[sizeBytes] = bytes.size.toLong(); it[uploadedAt] = 0L; it[content] = bytes
+        }
+    }
+
+    private suspend fun ApplicationTestBuilder.leer(id: String, conCreditos: Boolean): HttpResponse =
+        client.post("/api/documents/$id/leer?conSaldos=1&conClave=1&conTarjeta=1" + if (conCreditos) "&conCreditos=1" else "") {
+            header(HttpHeaders.Authorization, "Bearer ${token(duenoId)}")
+        }
+
+    /**
+     * El botón «Subir el extracto» de la guía de un crédito sube por «Compartir con Movi» (`/leer`), que
+     * antes no pedía `conCreditos`: una libre inversión de Bancolombia volvía 422. Ahora se lee sin IA
+     * (Haiku ni se pregunta: el lector falso falla si lo llaman) y vuelve la propuesta del crédito.
+     */
+    @Test
+    fun `compartir el extracto de una libre inversion con conCreditos propone actualizar el credito`() = testApplication {
+        application { testModule() }
+        LectorDePapeles.actual = object : LectorDePapeles {
+            override suspend fun queEs(contenido: ContenidoDelPapel): QueDiceElPapel = fail("no se le pregunta a Haiku")
+            override suspend fun leerExtractoDeTexto(texto: String, reglas: List<MerchantRule>): ClaudeStatementParser.Lectura = fail("sin IA")
+            override suspend fun leerExtractoDeImagen(bytes: ByteArray, mime: String, reglas: List<MerchantRule>): ClaudeStatementParser.Lectura = fail("sin IA")
+        }
+        guardarElPdf("doc-credito")
+        val res = leer("doc-credito", conCreditos = true)
+        assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
+        val lectura = json.decodeFromString(com.jvillada.movi.shared.model.LecturaDelPapel.serializer(), res.bodyAsText())
+        val r = assertNotNull(lectura.extracto?.extractoDeCredito).resumen
+        assertEquals(40_710_555L, r.saldoCapital)
+        assertEquals(11.27, r.tasaEa)
+        // La segunda vez sale de la lectura guardada; a quien no lo pide, lo de siempre (no una revisión vacía).
+        assertEquals(HttpStatusCode.OK, leer("doc-credito", conCreditos = true).status)
+        assertEquals(HttpStatusCode.UnprocessableEntity, leer("doc-credito", conCreditos = false).status)
+    }
+
+    @Test
+    fun `sin conCreditos, compartir el extracto de un credito sigue rechazandose`() = testApplication {
+        application { testModule() }
+        LectorDePapeles.actual = object : LectorDePapeles {
+            override suspend fun queEs(contenido: ContenidoDelPapel): QueDiceElPapel = QueDiceElPapel.Extracto
+            override suspend fun leerExtractoDeTexto(texto: String, reglas: List<MerchantRule>): ClaudeStatementParser.Lectura = fail("sin IA")
+            override suspend fun leerExtractoDeImagen(bytes: ByteArray, mime: String, reglas: List<MerchantRule>): ClaudeStatementParser.Lectura = fail("sin IA")
+        }
+        guardarElPdf("doc-credito-viejo")
+        assertEquals(HttpStatusCode.UnprocessableEntity, leer("doc-credito-viejo", conCreditos = false).status)
+    }
+
+    /**
+     * **Lo que la guía promete, contra lo que el lector reconoce.** El extracto de un hipotecario de
+     * Bancolombia no es un LOAN_SUMMARY (le falta «LÍNEA DE CRÉDITO»): va a la IA, que lo descarta. Así
+     * que la guía del crédito de Bancolombia no puede decir «Movi lo lee al instante» a secas.
+     */
+    @Test
+    fun `la guia del credito de Bancolombia promete solo lo que el lector lee`() {
+        assertEquals(
+            com.jvillada.movi.server.parsing.StatementDocumentType.LOAN_SUMMARY,
+            com.jvillada.movi.server.parsing.StatementParser.detectDocumentType(textoDelExtracto),
+        )
+        assertNotNull(com.jvillada.movi.server.parsing.leerElExtractoDeCreditoDeBancolombia(textoDelExtracto))
+        val hipotecario = textoDelExtracto.replace("LÍNEA DE CRÉDITO PREAPROBADO LIBRE INVERSION", "CRÉDITO HIPOTECARIO VIVIENDA")
+        val loLee = com.jvillada.movi.server.parsing.StatementParser.detectDocumentType(hipotecario) ==
+            com.jvillada.movi.server.parsing.StatementDocumentType.LOAN_SUMMARY
+        val guia = com.jvillada.movi.shared.model.guiaDelExtracto("bancolombia", com.jvillada.movi.shared.model.ProductoDelExtracto.CREDITO)
+        if (!loLee) {
+            assertTrue(guia.lectura != com.jvillada.movi.shared.model.LecturaDelExtracto.AL_INSTANTE, "promete leer al instante un hipotecario")
+            assertTrue("Otros créditos: todavía no se importan" in guia.queSubir, guia.queSubir)
+        }
+        assertEquals(com.jvillada.movi.shared.model.FuenteDeLaGuia.AYUDA_DEL_BANCO, guia.fuente)
     }
 }

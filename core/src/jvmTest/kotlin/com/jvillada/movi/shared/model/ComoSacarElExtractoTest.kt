@@ -5,6 +5,7 @@ import java.awt.Font
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertSame
@@ -61,11 +62,17 @@ class ComoSacarElExtractoTest {
         GUIAS_DEL_EXTRACTO.forEach { g ->
             assertEquals(g.fuente == FuenteDeLaGuia.SIN_PASOS_DEL_BANCO, g.conPasosGenericos, "${g.banco} · ${g.producto}")
         }
-        // Solo los «Movimientos» de Bancolombia se probaron en el banco.
+        // Solo los «Movimientos» de la cuenta y de la tarjeta de Bancolombia se probaron en el portal (vuelta
+        // 107). Revisión de la vuelta 130: el crédito los heredaba con `copy`; por producto, no por banco.
         assertEquals(
-            setOf("bancolombia"),
-            GUIAS_DEL_EXTRACTO.filter { it.fuente == FuenteDeLaGuia.PROBADA_EN_EL_BANCO }.map { it.bancoId }.toSet(),
+            setOf("bancolombia" to ProductoDelExtracto.CUENTA, "bancolombia" to ProductoDelExtracto.TARJETA),
+            GUIAS_DEL_EXTRACTO.filter { it.fuente == FuenteDeLaGuia.PROBADA_EN_EL_BANCO }
+                .flatMap { g -> g.productos.map { g.bancoId to it } }.toSet(),
         )
+        // Nequi: el paso a paso completo es de Infobae (secundaria); solo va lo del perfil.
+        val nequi = guiaDelExtracto("nequi", ProductoDelExtracto.CUENTA)
+        assertTrue(nequi.pasos.none { "Ir a web de Nequi" in it || "Generar" in it }, "${nequi.pasos}")
+        assertTrue(nequi.pasos.first().contains("«Documentos y certificados»"))
         // Un banco que no está en el catálogo, o un producto que su guía no cubre: lo genérico.
         val tarjetaBbva = guiaDelExtracto("bbva", ProductoDelExtracto.TARJETA)
         assertEquals(PASOS_GENERICOS, tarjetaBbva.pasos)
@@ -80,10 +87,21 @@ class ComoSacarElExtractoTest {
     @Test
     fun `la clave solo donde la fuente la confirma`() {
         assertEquals(
-            setOf("bancolombia", "lulo"),
-            GUIAS_DEL_EXTRACTO.filter { it.clave != null }.map { it.bancoId }.toSet(),
+            setOf("bancolombia" to ProductoDelExtracto.CREDITO, "lulo" to ProductoDelExtracto.CUENTA),
+            GUIAS_DEL_EXTRACTO.filter { it.clave != null }.flatMap { g -> g.productos.map { g.bancoId to it } }.toSet(),
         )
-        assertTrue(GUIA_DE_BANCOLOMBIA.clave!!.contains("cédula"))
+        // La de Bancolombia es la del extracto mensual, no la del PDF de «Movimientos».
+        assertNull(GUIA_DE_BANCOLOMBIA.clave)
+        assertNull(GUIA_DE_BANCOLOMBIA_TARJETA.clave)
+        assertTrue(GUIA_DE_BANCOLOMBIA.otraForma!!.clave!!.contains("cédula"))
+    }
+
+    @Test
+    fun `Falabella no dice nada del correo, solo del SMS`() {
+        val f = guiaDelExtracto("banco_falabella", null)
+        assertNull(f.porCorreo)
+        assertTrue(f.porSms!!.contains("SMS"))
+        assertTrue(textosDelCatalogo().none { "Por correo no" in it })
     }
 
     @Test
@@ -92,6 +110,10 @@ class ComoSacarElExtractoTest {
         assertSame(GUIA_DE_BANCOLOMBIA, g)
         assertEquals(LecturaDelExtracto.AL_INSTANTE, g.lectura)
         assertTrue("«Movimientos»" in g.queSubir && "Excel" in g.queSubir, g.queSubir)
+        // El PDF primero; el Excel de segundo y sin «al instante» (nadie subió uno real).
+        assertTrue(g.queSubir.indexOf("PDF") < g.queSubir.indexOf("Excel"), g.queSubir)
+        assertTrue("al instante" !in g.queSubir.substring(g.queSubir.indexOf("Excel")), g.queSubir)
+        assertTrue(g.pasos.none { "Excel" in it }, "${g.pasos}")
         assertTrue(g.pasos.any { "pestaña «Movimientos»" in it })
         // El mensual va después, como segunda opción, y con IA.
         val mensual = assertNotNull(g.otraForma)
@@ -113,19 +135,53 @@ class ComoSacarElExtractoTest {
 
     @Test
     fun `lo que Movi lee al instante es lo que leen los lectores sin IA del server`() {
+        fun con(l: LecturaDelExtracto) = GUIAS_DEL_EXTRACTO.filter { it.lectura == l }
+            .flatMap { g -> g.productos.map { g.bancoId to it } }.toSet()
+        // Los movimientos: `MovimientosDeBancolombia.kt` (cuenta, tarjeta, fondo) y `ExtractoDeNu.kt`.
         assertEquals(
             setOf(
                 "bancolombia" to ProductoDelExtracto.CUENTA,
                 "bancolombia" to ProductoDelExtracto.TARJETA,
-                "bancolombia" to ProductoDelExtracto.CREDITO,
+                "bancolombia" to ProductoDelExtracto.FONDO,
                 "nu" to ProductoDelExtracto.TARJETA,
-                "davibank" to ProductoDelExtracto.CUENTA,
-                "skandia" to ProductoDelExtracto.FONDO,
             ),
-            GUIAS_DEL_EXTRACTO.filter { it.lectura == LecturaDelExtracto.AL_INSTANTE }
-                .flatMap { g -> g.productos.map { g.bancoId to it } }.toSet(),
+            con(LecturaDelExtracto.AL_INSTANTE),
         )
+        // Solo el saldo, sin movimientos: `ExtractoAfcDavibank.kt` y `ExtractoDeSkandia.kt`.
+        assertEquals(setOf("davibank" to ProductoDelExtracto.CUENTA, "skandia" to ProductoDelExtracto.FONDO), con(LecturaDelExtracto.SOLO_EL_SALDO))
+        assertEquals("Movi toma el saldo al instante", textoDeLaLectura(LecturaDelExtracto.SOLO_EL_SALDO))
+        // El crédito de Bancolombia: solo la libre inversión y la libranza (el server lo vigila con el lector,
+        // `ExtractoDeCreditoRoutesTest`).
+        assertEquals(setOf("bancolombia" to ProductoDelExtracto.CREDITO), con(LecturaDelExtracto.SOLO_ALGUNOS_CREDITOS))
         assertEquals(LecturaDelExtracto.CON_IA, guiaDelExtracto("nu", ProductoDelExtracto.CUENTA).lectura)
+    }
+
+    @Test
+    fun `un credito sin lector no promete nada ni ofrece subir`() {
+        // Lulo: su guía de crédito se fue (la IA descarta un extracto sin movimientos).
+        listOf("lulo", "bbva", "davivienda").forEach { banco ->
+            val g = guiaDelExtracto(banco, ProductoDelExtracto.CREDITO)
+            assertEquals(LecturaDelExtracto.NO_SE_IMPORTA, g.lectura, banco)
+            assertEquals(CREDITO_QUE_NO_SE_IMPORTA, g.queSubir)
+            assertFalse(seOfreceSubir(g))
+        }
+        assertTrue(seOfreceSubir(GUIA_DE_BANCOLOMBIA_CREDITO))
+        assertTrue(GUIAS_DEL_EXTRACTO.none { it.bancoId == "lulo" && it.esDe(ProductoDelExtracto.CREDITO) })
+    }
+
+    @Test
+    fun `la Fiducuenta abre el fondo de Bancolombia`() {
+        assertSame(GUIA_DE_BANCOLOMBIA_FONDO, guiaDelExtractoDeLaCuenta(cuenta("Fiducuenta Bancolombia", AccountType.INVESTMENT)))
+        assertSame(GUIA_DE_BANCOLOMBIA_FONDO, guiaDelExtractoPara("Fiducuenta"))
+    }
+
+    @Test
+    fun `los papeles que no se leyeron por el archivo piden la guia, y la IA caida no`() {
+        listOf(
+            FRASE_EXTRACTO_INCOMPLETO, FRASE_EXTRACTO_SIN_MOVIMIENTOS, FRASE_LECTURA_FALLO + " El archivo quedó guardado en Documentos.",
+            FRASE_PAPEL_SIN_MOVIMIENTO, FRASE_PAPEL_SIN_TEXTO, EL_PDF_TIENE_CLAVE, PDF_CON_CLAVE,
+        ).forEach { assertTrue(laFallaPideLaGuia(it), it) }
+        listOf("La lectura con IA no está disponible ahora. Inténtalo más tarde.", "", null).forEach { assertFalse(laFallaPideLaGuia(it)) }
     }
 
     // ── Elegir la guía ───────────────────────────────────────────────────────────────────────────
@@ -168,7 +224,7 @@ class ComoSacarElExtractoTest {
         assertEquals("Cuenta", rotuloDelProducto(GUIA_DE_BANCOLOMBIA))
         assertEquals("Tarjeta de crédito", rotuloDelProducto(GUIA_DE_NU))
         assertEquals("Cuenta o tarjeta de crédito", rotuloDelProducto(guiaDelExtracto("davivienda", null)))
-        assertEquals(3, guiasDelBanco("bancolombia").size)
+        assertEquals(4, guiasDelBanco("bancolombia").size)
         assertEquals(guiasDelBanco("bancolombia"), guiasDelBanco("amex"))
     }
 
@@ -197,10 +253,10 @@ class ComoSacarElExtractoTest {
 
     private fun textosDelCatalogo(): List<String> =
         (GUIAS_DEL_EXTRACTO + guiaGenerica(null, null, null)).flatMap { g ->
-            listOf(g.banco, g.donde, g.queSubir, g.siNoLoEncuentras, tituloDeLaGuiaDelExtracto(g), rotuloDelProducto(g)) +
-                g.pasos + listOfNotNull(g.clave, g.porCorreo, g.aviso, g.limite, notaDeLaFuente(g)) +
-                g.otraForma?.let { listOf(it.titulo, it.queSubir) + it.pasos + listOfNotNull(it.limite) }.orEmpty()
-        } + listOf(
+            listOf(g.banco, g.donde, g.queSubir, g.siNoLoEncuentras, tituloDeLaGuiaDelExtracto(g), rotuloDelProducto(g), textoDeLaLectura(g.lectura)) +
+                g.pasos + listOfNotNull(g.clave, g.porCorreo, g.porSms, g.aviso, g.limite, notaDeLaFuente(g)) +
+                g.otraForma?.let { listOf(it.titulo, it.queSubir) + it.pasos + listOfNotNull(it.limite, it.clave) }.orEmpty()
+        } + LecturaDelExtracto.entries.map(::textoDeLaLectura) + guiaGenerica(null, null, ProductoDelExtracto.CREDITO).queSubir + listOf(
             MOVI_LO_LEE_AL_INSTANTE, CON_IA_PUEDE_TARDAR, COMO_BAJARLO, COMO_BAJO_MI_EXTRACTO,
             COMO_BAJAR_TUS_EXTRACTOS, COMO_BAJAR_EL_ARCHIVO_QUE_MOVI_LEE_MEJOR, SUBIR_EL_EXTRACTO_DE_LA_GUIA,
         )

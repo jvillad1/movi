@@ -16,6 +16,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -155,6 +156,10 @@ class ComoSacarElExtractoEnLaAppTest {
         assertSame(GUIA_DE_NU, guiaParaLaHojaDeSubida("n2", cuentas))
         assertSame(GUIA_DE_BANCOLOMBIA, guiaParaLaHojaDeSubida("b1", cuentas))
         assertNull(guiaParaLaHojaDeSubida(null, cuentas))
+        // Revisión de la vuelta 130: una tarjeta que no dice el banco en el nombre, por sus condiciones.
+        val master = Account("mb", "Master Black 3684", AccountType.CREDIT_CARD, 0)
+        assertNull(guiaParaLaHojaDeSubida("mb", cuentas + master))
+        assertSame(GUIA_DE_BANCOLOMBIA_TARJETA, guiaParaLaHojaDeSubida("mb", cuentas + master, mapOf("mb" to "Bancolombia")))
         assertNull(guiaParaLaHojaDeSubida("no-existe", cuentas))
         // Un papel que no se leyó: su cuenta; si no, lo que dice el nombre del archivo; si no, la lista.
         assertSame(GUIA_DE_NU_CUENTA, guiaDelPapelQueNoSeLeyo("CuentaNu_CRS119_2026-09.pdf"))
@@ -186,7 +191,8 @@ class ComoSacarElExtractoEnLaAppTest {
         composeRule.onNodeWithText("Ve a «Tarjetas de crédito» y toca la tarjeta.").assertExists()
         composeRule.onNodeWithText(QUE_ARCHIVO_SUBIR).assertExists()
         composeRule.onNodeWithText(GUIA_DE_BANCOLOMBIA_TARJETA.queSubir).assertExists()
-        composeRule.onNodeWithText(LA_CLAVE).assertExists()
+        // La clave es la del extracto mensual (la segunda forma), no la del PDF de «Movimientos».
+        composeRule.onNodeWithText(GUIA_DE_BANCOLOMBIA_TARJETA.otraForma!!.clave!!).assertExists()
         composeRule.onNodeWithText(SI_NO_LO_ENCUENTRAS).assertExists()
         // El corte de la tarjeta (3 de enero) es más viejo que el inicio del período: manda ese.
         composeRule.onNodeWithTag(TAG_RANGO_IDEAL_DEL_EXTRACTO, useUnmergedTree = true)
@@ -316,6 +322,9 @@ class ComoSacarElExtractoEnLaAppTest {
         assertTrue(ofreceLaGuiaDelExtracto(ResultadoDelPapel.NoSePudo("x.pdf", FRASE_EXTRACTO_INCOMPLETO, guardado = true)))
         assertTrue(ofreceLaGuiaDelExtracto(ResultadoDelPapel.ConClave("x.pdf", "doc_1")))
         assertFalse(ofreceLaGuiaDelExtracto(ResultadoDelPapel.NoSePudo("x.pdf", com.jvillada.movi.ui.papeles.LECTURA_CON_IA_NO_DISPONIBLE, guardado = true)))
+        // Revisión de la vuelta 130: «Compartir con Movi» sin movimiento o sin texto también la ofrece.
+        assertTrue(ofreceLaGuiaDelExtracto(ResultadoDelPapel.NoSePudo("x.pdf", com.jvillada.movi.shared.model.FRASE_PAPEL_SIN_MOVIMIENTO, guardado = true)))
+        assertTrue(ofreceLaGuiaDelExtracto(ResultadoDelPapel.NoSePudo("x.pdf", com.jvillada.movi.shared.model.FRASE_PAPEL_SIN_TEXTO, guardado = true)))
         assertFalse(ofreceLaGuiaDelExtracto(ResultadoDelPapel.NoSePudo("x.pdf", "No pudimos guardarlo: sin conexión", guardado = false)))
     }
 
@@ -421,5 +430,47 @@ class ComoSacarElExtractoEnLaAppTest {
         assertEquals("Davivienda", g!!.banco)
         assertSame(GUIA_DE_BANCOLOMBIA_TARJETA, com.jvillada.movi.shared.model.guiaDelExtractoDeLaCuenta(Account("t", "Master Black 3684", AccountType.CREDIT_CARD, 0), "Bancolombia"))
         assertNull(com.jvillada.movi.shared.model.guiaDelExtractoDeLaCuenta(Account("e", "Efectivo", AccountType.CASH, 0)))
+    }
+
+    /** Revisión de la vuelta 130: un crédito que Movi no importa no ofrece «Subir el extracto». */
+    @Test
+    fun la_guia_de_un_credito_que_no_se_importa_no_ofrece_subir() {
+        composeRule.setContent {
+            MoviTheme {
+                HojaDeComoSacarElExtracto(
+                    inicial = com.jvillada.movi.shared.model.guiaDelExtracto("lulo", com.jvillada.movi.shared.model.ProductoDelExtracto.CREDITO),
+                    onDismiss = {}, onSubir = {},
+                )
+            }
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText(com.jvillada.movi.shared.model.TODAVIA_NO_SE_IMPORTA).assertExists()
+        composeRule.onNodeWithText(com.jvillada.movi.shared.model.CREDITO_QUE_NO_SE_IMPORTA).assertExists()
+        composeRule.onAllNodesWithTag(TAG_SUBIR_DESDE_LA_GUIA, useUnmergedTree = true).fetchSemanticsNodes().let { assertTrue(it.isEmpty()) }
+        assertTrue(amarillos().isEmpty())
+    }
+
+    /** Revisión de la vuelta 130: la clave de Bancolombia va con el extracto mensual, y Davibank dice «saldo». */
+    @Test
+    fun la_clave_de_bancolombia_va_con_el_mensual_y_davibank_promete_solo_el_saldo() {
+        composeRule.setContent { MoviTheme { HojaDeComoSacarElExtracto(inicial = GUIA_DE_BANCOLOMBIA, onDismiss = {}) } }
+        composeRule.waitForIdle()
+        composeRule.onAllNodesWithText(LA_CLAVE, useUnmergedTree = true).fetchSemanticsNodes().let { assertTrue(it.isEmpty()) }
+        composeRule.onNodeWithText(GUIA_DE_BANCOLOMBIA.otraForma!!.clave!!).assertExists()
+    }
+
+    @Test
+    fun davibank_dice_que_toma_el_saldo() {
+        composeRule.setContent {
+            MoviTheme {
+                HojaDeComoSacarElExtracto(
+                    inicial = com.jvillada.movi.shared.model.guiaDelExtracto("davibank", com.jvillada.movi.shared.model.ProductoDelExtracto.CUENTA),
+                    onDismiss = {},
+                )
+            }
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText(com.jvillada.movi.shared.model.MOVI_TOMA_EL_SALDO_AL_INSTANTE).assertExists()
+        composeRule.onAllNodesWithText(MOVI_LO_LEE_AL_INSTANTE, useUnmergedTree = true).fetchSemanticsNodes().let { assertTrue(it.isEmpty()) }
     }
 }

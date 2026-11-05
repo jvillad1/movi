@@ -1383,14 +1383,16 @@ class WalletRepositoryImpl(
         // `conClave=1` (vuelta 103): esta app sabe pedir la clave de un PDF; el server le contesta
         // `PDF_CON_CLAVE` en vez de la frase para un APK viejo.
         // `conTarjeta=1` (vuelta 129): esta app sabe qué hacer con el extracto de una tarjeta.
-        client.post("$baseUrl/api/documents/$documentoId/leer?conSaldos=1&conClave=1&conTarjeta=1" + if (anotarAunqueEsteAnotado) "&anotarAunque=true" else "")
+        // `conCreditos=1` (revisión de la vuelta 130): y con el de un crédito de Bancolombia (la libre
+        // inversión y la libranza se leen sin IA y la revisión propone actualizar el crédito).
+        client.post("$baseUrl/api/documents/$documentoId/leer?conSaldos=1&conClave=1&conTarjeta=1&conCreditos=1" + if (anotarAunqueEsteAnotado) "&anotarAunque=true" else "")
             .exigirExito().body()
 
     // La clave va en el CUERPO: la URL la imprime `CallLogging` y el borde de Railway.
     override suspend fun abrirPapelConClave(documentoId: String, clave: com.jvillada.movi.shared.model.ClaveDelPdf): LecturaDelPapel =
         // `conTarjeta=1` (vuelta 129): como `leerPapel`; sin esto, un PDF con clave de la tarjeta Nu
         // volvía sin `tarjeta` y la revisión lo proponía en «Nu Ahorros».
-        client.post("$baseUrl/api/documents/$documentoId/leer?conSaldos=1&conClave=1&conTarjeta=1") {
+        client.post("$baseUrl/api/documents/$documentoId/leer?conSaldos=1&conClave=1&conTarjeta=1&conCreditos=1") {
             contentType(ContentType.Application.Json)
             setBody(clave)
         }.exigirExito().body()
