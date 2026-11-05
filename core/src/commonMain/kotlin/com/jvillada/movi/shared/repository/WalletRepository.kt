@@ -128,6 +128,16 @@ interface WalletRepository {
         resumen: com.jvillada.movi.shared.model.ResumenDelExtractoDeSaldo,
     ): com.jvillada.movi.shared.model.AdjustAccountBalanceResponse =
         throw UnsupportedOperationException("actualizarElSaldoConElExtracto")
+    /**
+     * Vuelta 129 · `POST /api/accounts/{id}/deuda-del-extracto`: «Cuadrar la deuda con el extracto» —un
+     * ajuste de la tarjeta al corte, a lo que el extracto dice que se debía—. Ver `DeudaDelExtracto`.
+     * Default que falla para los dobles de prueba que no lo usan.
+     */
+    suspend fun cuadrarLaDeudaConElExtracto(
+        accountId: String,
+        deuda: com.jvillada.movi.shared.model.DeudaDelExtracto,
+    ): com.jvillada.movi.shared.model.AdjustAccountBalanceResponse =
+        throw UnsupportedOperationException("cuadrarLaDeudaConElExtracto")
     // F20 — tarjetas de crédito: mismas reglas que los créditos (se leen siempre del server).
     suspend fun getCards(): List<CardSummary>
     suspend fun createCard(request: CreateCardRequest): CardSummary
@@ -995,6 +1005,16 @@ interface WalletRepository {
      * y los mismos mensajes de error que [uploadStatement]: el server corre el mismo camino.
      */
     suspend fun readStatementFromDocument(id: String): StatementParseResult
+
+    /**
+     * Vuelta 129 · `POST /api/documents/lo-que-se-sabe`: **lo que Movi ya sabe del archivo con esta
+     * huella** (SHA-256, ver `huellaSha256`), si ya lo leyó; `null` si no. La hoja de subida de
+     * Documentos lo usa para proponer la cuenta. Es una lectura: no escribe nada.
+     *
+     * Con cuerpo por defecto (`null`) para los repositorios de prueba; la app y el teléfono lo
+     * sobrescriben.
+     */
+    suspend fun getLoQueSeSabeDelPapel(huella: String): com.jvillada.movi.shared.model.PistasDelPapel? = null
 
     // ── Documentos ─────────────────────────────────────────────────────────────
 

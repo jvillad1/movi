@@ -1589,3 +1589,17 @@ object UsoDeLaApp : Table("uso_de_la_app") {
         index("idx_uso_de_la_app_recibido_en", false, recibidoEn)
     }
 }
+
+/**
+ * Vuelta 129 · **las migraciones de datos que corren una sola vez**: una fila por migración ya hecha.
+ * Casi todas las de `Migrations.kt` son idempotentes por construcción y pueden correr en cada
+ * arranque; las que reclasifican algo que el dueño puede volver a cambiar a mano no: correrlas otra
+ * vez le desharía su elección. Esas preguntan acá antes y se anotan al terminar.
+ *
+ * Tabla NUEVA y sin `user_id` (no es de nadie): entra solo por `SchemaUtils.create`.
+ */
+object MigracionesHechas : Table("migraciones_hechas") {
+    val nombre = varchar("nombre", 100)
+    val corridaEn = long("corrida_en")
+    override val primaryKey = PrimaryKey(nombre)
+}

@@ -79,7 +79,91 @@ data class StatementParseResult(
      * APK viejo abriría una revisión vacía, que se lee como «este mes ya estaba conciliado».
      */
     val extractoDeSaldo: PropuestaDelExtractoDeSaldo? = null,
+    /**
+     * Vuelta 129 · **el extracto es de una tarjeta de crédito** y esto es lo que dice de ella (ver
+     * [TarjetaDelExtracto]). `null` si el lector no lo sabe: no quiere decir «no es una tarjeta».
+     *
+     * Con esto la revisión busca la cuenta solo entre las tarjetas —un extracto de la tarjeta de Nu ya
+     * no cae en «Nu Ahorros» por llamarse igual—, ofrece crear la tarjeta si no está en Movi y advierte
+     * si se eligió una cuenta que no es una tarjeta. Solo lo manda el server a quien lo pide
+     * (`?conTarjeta=1`), como [extractoDeSaldo].
+     */
+    val tarjeta: TarjetaDelExtracto? = null,
+    /**
+     * Vuelta 129 · **la cuenta que el dueño le puso al papel** al subirlo a Documentos, o `null`. La
+     * revisión la usa como la elegida: la hoja de subida dice «Los movimientos del extracto se anotan
+     * en esta cuenta», y esto es lo que lo hace cierto.
+     */
+    val cuentaDelPapel: String? = null,
+    /**
+     * Vuelta 129 (revisión) · **las tarjetas del dueño que ya se cuadraron después del día de la deuda
+     * del extracto** (un ajuste de saldo o un saldo inicial posterior, sin anulados). A esas no se les
+     * propone «Cuadrar la deuda con el extracto»: el ajuste a esa fecha más ese saldo inicial contarían la
+     * deuda dos veces (y el server contesta 409). Solo con `?conTarjeta=1` y si el extracto dice su deuda.
+     */
+    val tarjetasCuadradasDespues: List<String> = emptyList(),
 )
+
+/**
+ * Vuelta 129 · **lo que el extracto de una tarjeta de crédito dice de la tarjeta**: el banco, los
+ * últimos cuatro, el día de corte, el día de pago y el cupo, cuando los trae. Sirve para crear la
+ * tarjeta ya llena si no está en Movi. Nada se inventa: lo que el extracto no dice va en `null`.
+ */
+@Serializable
+data class TarjetaDelExtracto(
+    /** El banco, como lo nombra la lectura («Nu», «Bancolombia»). */
+    val banco: String,
+    val ultimosCuatro: String? = null,
+    val diaDeCorte: Int? = null,
+    val diaDePago: Int? = null,
+    /** El cupo total, en pesos (o en [moneda]). */
+    val cupo: Long? = null,
+    val moneda: String = "COP",
+    /**
+     * **Lo que se debía**, según el extracto, al final de [deudaHasta] (en Nu: la «DEUDA TOTAL HASTA EL
+     * …», solo si cuadra al centavo con el pago mínimo − los abonos + la deuda restante; al peso más
+     * cercano). Con esto, después de importar, la revisión propone UN ajuste de la tarjeta a esa cifra
+     * ([DeudaDelExtracto]). `null` si el extracto no lo dice o no cuadra: no se propone nada. Puede ser
+     * negativa (saldo a favor): ahí tampoco se propone.
+     */
+    val deudaAlCorte: Long? = null,
+    /**
+     * El último día que cuenta esa deuda, `YYYY-MM-DD` («hasta el 11 octubre»; en Nu, el día antes del
+     * corte: lo del día del corte es del extracto siguiente). Sin él tampoco se propone cuadrar.
+     */
+    val deudaHasta: String? = null,
+)
+
+/**
+ * Vuelta 129 · `POST /api/accounts/{id}/deuda-del-extracto`: **cuadrar la deuda de una tarjeta con
+ * su extracto**, con un solo ajuste de saldo al final del día [hasta] (el de siempre,
+ * `balanceAdjustmentEventFor`). Nunca automático: lo pide el dueño desde la revisión.
+ */
+@Serializable
+data class DeudaDelExtracto(
+    val deuda: Long,
+    /** El último día que cuenta la deuda del extracto, `YYYY-MM-DD` («hasta el 11 octubre»). */
+    val hasta: String,
+    val moneda: String = "COP",
+)
+
+/**
+ * La deuda para cuadrar de [this], si el extracto la dice con su día y no es un saldo a favor (una
+ * deuda negativa no se ofrece: el server no la acepta).
+ */
+fun TarjetaDelExtracto.deudaParaCuadrar(): DeudaDelExtracto? {
+    val deuda = deudaAlCorte?.takeIf { it >= 0 } ?: return null
+    val hasta = deudaHasta ?: return null
+    return DeudaDelExtracto(deuda = deuda, hasta = hasta, moneda = moneda)
+}
+
+/**
+ * El nombre con que se propone crear la tarjeta de [t]: el banco, «Tarjeta» y los últimos cuatro si
+ * se saben («Nu Tarjeta 5237»). Los cuatro dígitos en el nombre son los que le permiten a Movi
+ * reconocerla sola en el próximo aviso o extracto (los avisos se emparejan por el número del nombre).
+ */
+fun nombreDeLaTarjetaNueva(t: TarjetaDelExtracto): String =
+    listOfNotNull(t.banco.trim().ifBlank { null }, "Tarjeta", t.ultimosCuatro).joinToString(" ")
 
 @Serializable
 data class ReconciliationDecision(

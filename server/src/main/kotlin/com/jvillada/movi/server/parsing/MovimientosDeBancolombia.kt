@@ -123,7 +123,7 @@ fun leerLosMovimientosDeBancolombia(texto: String): MovimientosDeBancolombia? {
         fecha = null
     }
     if (fecha != null || filas.isEmpty()) return null
-    return MovimientosDeBancolombia(numero = numero, filas = filas, deUnFondo = deUnFondo)
+    return MovimientosDeBancolombia(numero = numero, filas = filas, deUnFondo = deUnFondo, deTarjeta = deTarjeta)
 }
 
 /**
@@ -134,6 +134,8 @@ data class MovimientosDeBancolombia(
     val numero: String?,
     val filas: List<ParsedTransaction>,
     val deUnFondo: Boolean = false,
+    /** Vuelta 129: es «Movimientos: Tarjetas de Crédito», la lista de una tarjeta. */
+    val deTarjeta: Boolean = false,
 )
 
 /**

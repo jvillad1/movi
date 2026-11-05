@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.platform.testTag
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.*
 import com.jvillada.movi.theme.*
@@ -71,7 +72,16 @@ fun StatementReviewScreen(
     var working by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     // La cuenta que el dueño eligió con el dedo, si la eligió. Manda sobre lo que resuelva Movi.
+    // (La que le puso al papel al subirlo es una sugerencia aparte: ver [cuentaDelExtracto].)
     var cuentaElegida by remember { mutableStateOf<String?>(null) }
+    // Vuelta 129: si las cuentas ya llegaron. Antes de eso —o si la lectura falló— no se sabe qué
+    // tarjetas tiene, y no se ofrece crear una (ver [loQueDiceLaTarjeta]).
+    var cuentasLeidas by remember { mutableStateOf(false) }
+    // Vuelta 129: después de importar en una tarjeta, la deuda que dice el extracto para cuadrarla.
+    var deudaPorCuadrar by remember { mutableStateOf<Pair<Account, DeudaDelExtracto>?>(null) }
+    var cuadrando by remember { mutableStateOf(false) }
+    // Vuelta 129: la hoja para crear la tarjeta del extracto, ya llena.
+    var creandoLaTarjeta by remember { mutableStateOf<TarjetaDelExtracto?>(null) }
     var eligiendoCuenta by remember { mutableStateOf(false) }
     // Ola 2 #1: red de seguridad — si la pila de navegación vuelve a esta pantalla ya
     // importada (mismo defecto que el de SMS), no se puede reimportar el mismo extracto.
@@ -80,7 +90,7 @@ fun StatementReviewScreen(
     // Load accounts to determine destination
     LaunchedEffect(Unit) {
         runCatching { Repositories.wallets.getAccounts() }
-            .onSuccess { accounts = it }
+            .onSuccess { accounts = it; cuentasLeidas = true }
             .onFailure { error = it.toUserMessage() }
     }
 
@@ -93,18 +103,16 @@ fun StatementReviewScreen(
     // [UsoDeCuenta.CUENTA_DEL_EXTRACTO] y no el del gasto: un extracto trae las compras del mes y
     // también la nómina que entró, así que la pregunta no es de qué lado se mueve la plata sino
     // quién manda extractos.
-    val destino = remember(accounts, result.bankName, cuentaElegida) {
-        resolverCuentaDelBanco(
-            accounts = accounts,
-            uso = UsoDeCuenta.CUENTA_DEL_EXTRACTO,
-            banco = result.bankName,
-            elegidaAMano = cuentaElegida,
-            // El número de la tarjeta o cuenta que nombra el extracto, con la misma regla que un SMS:
-            // un extracto de la Master Black ya no cae por defecto en «Bancolombia Ahorros».
-            textoDelMensaje = result.numerosDeCuenta.joinToString(" ") { "*$it" },
-        )
-    }
+    //
+    // El número de la tarjeta o cuenta que nombra el extracto va con la misma regla que un SMS: un
+    // extracto de la Master Black ya no cae por defecto en «Bancolombia Ahorros». Vuelta 129: y el
+    // de una tarjeta se busca solo entre las tarjetas (ver [cuentaDelExtracto]).
+    val destino = remember(accounts, result, cuentaElegida) { cuentaDelExtracto(accounts, result, cuentaElegida) }
     val destinationAccount = destino.cuenta
+    val loDeLaTarjeta = remember(accounts, cuentasLeidas, result, destinationAccount) {
+        loQueDiceLaTarjeta(accounts.takeIf { cuentasLeidas }, result, destinationAccount)
+    }
+    val porQueNoLaDelPapel = remember(accounts, result, cuentaElegida) { porQueNoLaDelPapel(accounts, result, cuentaElegida) }
     // Vuelta 107: la guía del banco que reconoció la lectura («Bancolombia», «Nu»), si tiene una.
     val guiaDelExtracto = remember(result.bankName) { guiaDelExtractoPara(result.bankName) }
     var viendoLaGuia by remember { mutableStateOf(false) }
@@ -156,9 +164,20 @@ fun StatementReviewScreen(
             }.onSuccess {
                 working = false
                 imported = true
-                // Ola 2 #1: pop, no push — coherente con SMS (evita reimportar el mismo extracto
-                // si la ‹ de Transacciones vuelve acá).
-                goBack(Screen.Transactions())
+                // Vuelta 129: importado en una tarjeta, si el extracto dice cuánto se debía al corte, se
+                // propone cuadrarla (nunca solo). Si no, se vuelve como siempre.
+                // No a una tarjeta que ya se cuadró (o se creó con su saldo) después de ese día: el
+                // ajuste más ese saldo contarían la deuda dos veces. Ni con saldo a favor.
+                val deuda = result.tarjeta?.deudaParaCuadrar()
+                if (acct.type == AccountType.CREDIT_CARD && deuda != null && deuda.moneda == acct.currency &&
+                    acct.id !in result.tarjetasCuadradasDespues
+                ) {
+                    deudaPorCuadrar = acct to deuda
+                } else {
+                    // Ola 2 #1: pop, no push — coherente con SMS (evita reimportar el mismo extracto
+                    // si la ‹ de Transacciones vuelve acá).
+                    goBack(Screen.Transactions())
+                }
             }.onFailure {
                 working = false
                 error = it.toUserMessage()
@@ -247,6 +266,23 @@ fun StatementReviewScreen(
             avisoDeLaCuentaDelBanco(destino.origen, queLoDijo = "el extracto")?.let { aviso ->
                 Text(aviso, style = Movi.textos.apoyo, color = Movi.colores.textoApagado, modifier = Modifier.padding(top = Espacio.xxs))
             }
+            // Vuelta 129: el extracto es de una tarjeta que no está en Movi, o se eligió una cuenta que
+            // no es una tarjeta. Se dice antes de importar, con la salida a la mano.
+            // Vuelta 129 (revisión): la cuenta del papel se descartó porque el contenido la contradice.
+            porQueNoLaDelPapel?.let { motivo ->
+                Text(
+                    motivo,
+                    style = Movi.textos.apoyo,
+                    color = Movi.colores.aviso,
+                    modifier = Modifier.padding(top = Espacio.xxs).testTag(TAG_POR_QUE_NO_LA_DEL_PAPEL),
+                )
+            }
+            AvisoDeLaTarjeta(
+                lo = loDeLaTarjeta,
+                onUsar = { cuentaElegida = it.id; eligiendoCuenta = false },
+                onCrear = { creandoLaTarjeta = it },
+                modifier = Modifier.padding(top = Espacio.xs),
+            )
         }
         if (eligiendoCuenta) {
             Superficie(
@@ -411,14 +447,45 @@ fun StatementReviewScreen(
             // Vuelta de diseño 20: el `Boton` principal del sistema. Era un `Button` de Material con el
             // texto y la ruedita en `Color.White`, que en el tema oscuro (la marca es lavanda) no se
             // leía; el `Boton` pone encima `sobreMarca`, y la ruedita no le cambia el ancho.
-            Boton(
-                "Importar $importCount seleccionada${if (importCount != 1) "s" else ""}",
-                onClick = ::import,
-                habilitado = canImport,
-                cargando = working,
-                anchoCompleto = true,
-            )
+            val porCuadrar = deudaPorCuadrar
+            if (porCuadrar != null) {
+                CuadrarLaDeudaConElExtracto(
+                    tarjeta = porCuadrar.first,
+                    deuda = porCuadrar.second,
+                    ocupado = cuadrando,
+                    onCuadrar = {
+                        cuadrando = true; error = null
+                        coroutine.launch {
+                            runCatching { Repositories.wallets.cuadrarLaDeudaConElExtracto(porCuadrar.first.id, porCuadrar.second) }
+                                .onSuccess { cuadrando = false; goBack(Screen.Transactions()) }
+                                .onFailure { cuadrando = false; error = it.toUserMessage() }
+                        }
+                    },
+                    onAhoraNo = { goBack(Screen.Transactions()) },
+                )
+            } else {
+                Boton(
+                    "Importar $importCount seleccionada${if (importCount != 1) "s" else ""}",
+                    onClick = ::import,
+                    habilitado = canImport,
+                    cargando = working,
+                    anchoCompleto = true,
+                )
+            }
         }
+    }
+    creandoLaTarjeta?.let { tarjeta ->
+        com.jvillada.movi.ui.credits.CardTermsSheet(
+            editing = null,
+            prellenado = tarjeta,
+            onDismiss = { creandoLaTarjeta = null },
+            onSaved = { creandoLaTarjeta = null },
+            // Creada, es el destino: el importe va a ella (la de siempre, `createCard`).
+            onCreada = { nueva ->
+                accounts = accounts.filterNot { it.id == nueva.account.id } + nueva.account
+                cuentaElegida = nueva.account.id
+            },
+        )
     }
     val guia = guiaDelExtracto
     if (viendoLaGuia && guia != null) {
@@ -427,6 +494,96 @@ fun StatementReviewScreen(
             esTarjeta = destinationAccount?.type == com.jvillada.movi.shared.model.AccountType.CREDIT_CARD,
             onDismiss = { viendoLaGuia = false },
         )
+    }
+}
+
+/** El tag de por qué no se usó la cuenta del papel, para las pruebas. */
+internal const val TAG_POR_QUE_NO_LA_DEL_PAPEL: String = "por-que-no-la-cuenta-del-papel"
+
+/** El tag de la propuesta de cuadrar la deuda, para las pruebas. */
+internal const val TAG_CUADRAR_LA_DEUDA: String = "cuadrar-la-deuda-con-el-extracto"
+
+/** «Cuadrar la deuda con el extracto: $411.240». */
+fun textoDeCuadrarLaDeuda(deuda: DeudaDelExtracto): String =
+    "Cuadrar la deuda con el extracto: ${formatMoney(deuda.deuda, deuda.moneda)}"
+
+/**
+ * Vuelta 129 · **después de importar en una tarjeta, la propuesta de cuadrar su deuda** con lo que dice
+ * el extracto al corte: un ajuste, el de siempre, que el dueño pide con «Cuadrar». La tarjeta recién
+ * creada nace en $0 y el importe le suma solo las compras del período; sin esto le faltaría lo que
+ * venía de antes. Ocupa el lugar del botón de importar (un solo amarillo).
+ */
+@Composable
+internal fun CuadrarLaDeudaConElExtracto(
+    tarjeta: Account,
+    deuda: DeudaDelExtracto,
+    ocupado: Boolean,
+    onCuadrar: () -> Unit,
+    onAhoraNo: () -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth().testTag(TAG_CUADRAR_LA_DEUDA)) {
+        Text(textoDeCuadrarLaDeuda(deuda), style = Movi.textos.cuerpo, color = Movi.colores.texto)
+        Text(
+            "Movi anota un ajuste en ${tarjeta.name} al día del corte para que deba lo que dice el extracto.",
+            style = Movi.textos.apoyo,
+            color = Movi.colores.textoMedio,
+            modifier = Modifier.padding(top = Espacio.xxs, bottom = Espacio.s),
+        )
+        com.jvillada.movi.ui.components.ds.ParDeBotones(
+            principal = { Boton("Cuadrar", onClick = onCuadrar, cargando = ocupado) },
+            secundario = { Boton("Ahora no", onClick = onAhoraNo, variante = VarianteDeBoton.Secundario, habilitado = !ocupado) },
+        )
+    }
+}
+
+/** El tag del aviso de la tarjeta, para las pruebas. */
+internal const val TAG_AVISO_DE_LA_TARJETA: String = "aviso-de-la-tarjeta-del-extracto"
+
+/**
+ * Vuelta 129 · **lo que la revisión dice de la tarjeta** (ver [LoQueDiceLaTarjeta]): la frase en el
+ * tono de aviso y, debajo, la salida —«Usar Nu Tarjeta» o «Crear la tarjeta Nu»—, en botones
+ * secundarios: el amarillo de la vista sigue siendo «Importar».
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AvisoDeLaTarjeta(
+    lo: LoQueDiceLaTarjeta,
+    onUsar: (Account) -> Unit,
+    onCrear: (TarjetaDelExtracto) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val frase = fraseDeLaTarjeta(lo) ?: return
+    val suTarjeta = (lo as? LoQueDiceLaTarjeta.NoEsUnaTarjeta)?.suTarjeta
+    val paraCrear = when (lo) {
+        is LoQueDiceLaTarjeta.FaltaLaTarjeta -> lo.tarjeta
+        is LoQueDiceLaTarjeta.NoEsUnaTarjeta -> lo.tarjeta.takeIf { lo.puedeCrearla }
+        LoQueDiceLaTarjeta.Nada -> null
+    }
+    Column(modifier = modifier.fillMaxWidth().testTag(TAG_AVISO_DE_LA_TARJETA)) {
+        Text(frase, style = Movi.textos.apoyo, color = Movi.colores.aviso)
+        // Que bajen de renglón antes que cortarse (letra grande, 360 dp).
+        FlowRow(
+            modifier = Modifier.fillMaxWidth().padding(top = Espacio.xs),
+            horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
+            verticalArrangement = Arrangement.spacedBy(Espacio.xs),
+        ) {
+            suTarjeta?.let { cuenta ->
+                Boton(
+                    "Usar ${cuenta.name}",
+                    onClick = { onUsar(cuenta) },
+                    variante = VarianteDeBoton.Secundario,
+                    tamano = TamanoDeBoton.S,
+                )
+            }
+            paraCrear?.let { tarjeta ->
+                Boton(
+                    textoDeCrearLaTarjeta(tarjeta),
+                    onClick = { onCrear(tarjeta) },
+                    variante = VarianteDeBoton.Secundario,
+                    tamano = TamanoDeBoton.S,
+                )
+            }
+        }
     }
 }
 

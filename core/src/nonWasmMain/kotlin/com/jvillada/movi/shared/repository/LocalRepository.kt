@@ -2608,9 +2608,26 @@ class LocalRepository(
         }
         return@enDisco respuesta
     }
+    // Vuelta 129: como [actualizarElSaldoConElExtracto], pero la deuda de una tarjeta.
+    override suspend fun cuadrarLaDeudaConElExtracto(
+        accountId: String,
+        deuda: com.jvillada.movi.shared.model.DeudaDelExtracto,
+    ): AdjustAccountBalanceResponse = enDisco {
+        val respuesta = remote.cuadrarLaDeudaConElExtracto(accountId, deuda)
+        val uid = userId()
+        db.transaction {
+            respuesta.adjustmentEvent?.let { mirrorEventLocally(it, uid) }
+            mirrorAccountLocally(respuesta.account)
+        }
+        return@enDisco respuesta
+    }
     // Igual que uploadStatement: sin espejo local, siempre a la red.
     override suspend fun readStatementFromDocument(id: String): StatementParseResult =
         remote.readStatementFromDocument(id)
+
+    // Vuelta 129: lo sabe el server (sus lecturas guardadas), sin copia local; sin red, `null`.
+    override suspend fun getLoQueSeSabeDelPapel(huella: String): com.jvillada.movi.shared.model.PistasDelPapel? =
+        remote.getLoQueSeSabeDelPapel(huella)
     override suspend fun importStatement(decision: ImportDecision) =
         remote.importStatement(decision)
 

@@ -1246,8 +1246,9 @@ class WalletRepositoryImpl(
     // `conCreditos=1`: esta app sabe mostrar la propuesta del extracto de un crédito (ver
     // `StatementParseResult.extractoDeCredito`); sin el parámetro el server lo rechaza como siempre.
     // `conSaldos=1`: y la del saldo de un extracto de Skandia o de la AFC (`extractoDeSaldo`).
+    // `conTarjeta=1` (vuelta 129): y qué hacer con el extracto de una tarjeta (`tarjeta`).
     override suspend fun uploadStatement(fileName: String, bytes: ByteArray, mimeType: String): StatementParseResult =
-        client.post("$baseUrl/api/statements/upload?conCreditos=1&conSaldos=1") {
+        client.post("$baseUrl/api/statements/upload?conCreditos=1&conSaldos=1&conTarjeta=1") {
             setBody(MultiPartFormDataContent(formData {
                 append("file", bytes, Headers.build {
                     append(HttpHeaders.ContentDisposition, "filename=\"$fileName\"")
@@ -1259,8 +1260,18 @@ class WalletRepositoryImpl(
     // `exigirExito()` por el mismo motivo que `uploadStatement`: el server explica el rechazo en
     // el cuerpo («no encontramos movimientos», «falta la clave»), y sin esto se pierde adentro de
     // la excepción de deserialización.
+    override suspend fun getLoQueSeSabeDelPapel(huella: String): com.jvillada.movi.shared.model.PistasDelPapel? {
+        // La huella en el cuerpo: la URL la imprime `CallLogging`. 204 = Movi no leyó ese archivo.
+        val respuesta = client.post("$baseUrl/api/documents/lo-que-se-sabe") {
+            contentType(ContentType.Application.Json)
+            setBody(com.jvillada.movi.shared.model.PedidoDeLoQueSeSabe(huella))
+        }
+        if (respuesta.status == HttpStatusCode.NoContent) return null
+        return respuesta.exigirExito().body()
+    }
+
     override suspend fun readStatementFromDocument(id: String): StatementParseResult =
-        client.post("$baseUrl/api/documents/$id/leer-extracto?conCreditos=1&conSaldos=1&conClave=1").exigirExito().body()
+        client.post("$baseUrl/api/documents/$id/leer-extracto?conCreditos=1&conSaldos=1&conClave=1&conTarjeta=1").exigirExito().body()
 
     override suspend fun aceptarElExtractoDelCredito(
         accountId: String,
@@ -1278,6 +1289,15 @@ class WalletRepositoryImpl(
         client.post("$baseUrl/api/accounts/$accountId/saldo-del-extracto") {
             contentType(ContentType.Application.Json)
             setBody(resumen)
+        }.exigirExito().body()
+
+    override suspend fun cuadrarLaDeudaConElExtracto(
+        accountId: String,
+        deuda: com.jvillada.movi.shared.model.DeudaDelExtracto,
+    ): AdjustAccountBalanceResponse =
+        client.post("$baseUrl/api/accounts/$accountId/deuda-del-extracto") {
+            contentType(ContentType.Application.Json)
+            setBody(deuda)
         }.exigirExito().body()
 
     // Los cuatro comprueban el status, como el resto del archivo. Sin esto `deleteDocument`
@@ -1362,12 +1382,15 @@ class WalletRepositoryImpl(
         // la AFC; un APK viejo no lo pide y el server le contesta como siempre.
         // `conClave=1` (vuelta 103): esta app sabe pedir la clave de un PDF; el server le contesta
         // `PDF_CON_CLAVE` en vez de la frase para un APK viejo.
-        client.post("$baseUrl/api/documents/$documentoId/leer?conSaldos=1&conClave=1" + if (anotarAunqueEsteAnotado) "&anotarAunque=true" else "")
+        // `conTarjeta=1` (vuelta 129): esta app sabe qué hacer con el extracto de una tarjeta.
+        client.post("$baseUrl/api/documents/$documentoId/leer?conSaldos=1&conClave=1&conTarjeta=1" + if (anotarAunqueEsteAnotado) "&anotarAunque=true" else "")
             .exigirExito().body()
 
     // La clave va en el CUERPO: la URL la imprime `CallLogging` y el borde de Railway.
     override suspend fun abrirPapelConClave(documentoId: String, clave: com.jvillada.movi.shared.model.ClaveDelPdf): LecturaDelPapel =
-        client.post("$baseUrl/api/documents/$documentoId/leer?conSaldos=1&conClave=1") {
+        // `conTarjeta=1` (vuelta 129): como `leerPapel`; sin esto, un PDF con clave de la tarjeta Nu
+        // volvía sin `tarjeta` y la revisión lo proponía en «Nu Ahorros».
+        client.post("$baseUrl/api/documents/$documentoId/leer?conSaldos=1&conClave=1&conTarjeta=1") {
             contentType(ContentType.Application.Json)
             setBody(clave)
         }.exigirExito().body()

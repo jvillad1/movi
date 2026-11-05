@@ -30,6 +30,10 @@ import com.jvillada.movi.server.sms.memoriaDe
 import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.shared.model.CARD_PAYMENT_CATEGORY
 import com.jvillada.movi.shared.model.LecturaDelPapel
+import com.jvillada.movi.shared.model.PedidoDeLoQueSeSabe
+import com.jvillada.movi.shared.model.PistasDelPapel
+import com.jvillada.movi.shared.model.ProductoDelPapel
+import io.ktor.server.request.receive
 import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
 import com.jvillada.movi.shared.model.ParsedSms
 import com.jvillada.movi.shared.model.QueEsElPapel
@@ -120,6 +124,30 @@ internal class PapelGuardado(val id: String, val nombre: String, val mime: Strin
 
 fun Route.papelesRoutes() {
     /**
+     * Vuelta 129 · **lo que Movi ya sabe de un archivo, por su huella**, antes de subirlo: la hoja de
+     * subida de Documentos calcula la SHA-256 del archivo elegido y pregunta; si Movi ya lo leyó (una
+     * fila de `lecturas_de_papeles` del dueño con esa huella), contesta el banco, los números y el
+     * producto ([PistasDelPapel]) para proponer la cuenta. Si no, 204: la hoja se queda con lo que
+     * dice el nombre del archivo.
+     *
+     * La huella va en el cuerpo (la URL la imprime `CallLogging`). Solo lee lo del dueño: la huella
+     * de un archivo de otro no dice nada.
+     */
+    post("/api/documents/lo-que-se-sabe") {
+        val uid = call.userId()
+        val huella = runCatching { call.receive<PedidoDeLoQueSeSabe>() }.getOrNull()?.huella?.lowercase()
+            ?.takeIf { HUELLA.matches(it) }
+            ?: return@post call.respond(HttpStatusCode.BadRequest, "Falta la huella del archivo")
+        val pistas = dbQuery {
+            LecturasDePapeles.selectAll()
+                .where { (LecturasDePapeles.userId eq uid) and (LecturasDePapeles.huella eq huella) }
+                .firstOrNull()
+                ?.let { runCatching { pistasDeLaLectura(it[LecturasDePapeles.tipo], Cifrado.descifrarTexto(it[LecturasDePapeles.datos])) }.getOrNull() }
+        }
+        if (pistas == null) call.respond(HttpStatusCode.NoContent) else call.respond(pistas)
+    }
+
+    /**
      * Lee el documento `{id}`. `?anotarAunque=true` crea la propuesta aunque el movimiento parezca
      * ya anotado (el «Anotarlo de todas formas» de la hoja); la lectura guardada se reusa, así que
      * pedirlo no vuelve a llamar a Claude.
@@ -134,6 +162,8 @@ fun Route.papelesRoutes() {
         // La app sabe mostrar la propuesta del saldo de un extracto (Skandia, la AFC): ver
         // `leerElExtracto`. Un APK viejo no lo pide y su camino no cambia.
         val conSaldos = call.request.queryParameters["conSaldos"] == "1"
+        // Vuelta 129: la app sabe qué hacer con el extracto de una tarjeta (ver `conciliarYArchivar`).
+        val conTarjeta = call.request.queryParameters["conTarjeta"] == "1"
         // Vuelta 103: la app sabe pedir la clave de un PDF (`PDF_CON_CLAVE`, `CLAVE_INCORRECTA`). Un
         // APK viejo no lo pide y recibe la frase de siempre.
         val conClave = call.request.queryParameters["conClave"] == "1"
@@ -151,7 +181,7 @@ fun Route.papelesRoutes() {
             val bytes = abrirElPapelGuardado(uid, fila[Documents.id], Cifrado.descifrarBytes(fila[Documents.content]), pedida)
             val papel = PapelGuardado(fila[Documents.id], fila[Documents.name], fila[Documents.mimeType], bytes)
             call.respond(
-                leerElPapel(uid, papel, anotarAunque, ahora = System.currentTimeMillis(), conSaldos = conSaldos) { msg, t ->
+                leerElPapel(uid, papel, anotarAunque, ahora = System.currentTimeMillis(), conSaldos = conSaldos, conTarjeta = conTarjeta) { msg, t ->
                     call.application.log.warn(msg, t)
                 },
             )
@@ -177,6 +207,36 @@ private val papelesLog = org.slf4j.LoggerFactory.getLogger("Papeles")
 internal fun huellaDelPapel(bytes: ByteArray): String =
     MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
 
+/** Una huella SHA-256 en hexadecimal. */
+private val HUELLA = Regex("^[0-9a-f]{64}$")
+
+/**
+ * Vuelta 129 · **lo que dice una lectura guardada**, como pistas para proponer la cuenta (ver
+ * `POST /api/documents/lo-que-se-sabe`). Un extracto dice su banco, sus números y, si se sabe, qué
+ * producto es; un comprobante, su banco y la cuenta propia que nombra.
+ */
+internal fun pistasDeLaLectura(tipo: String, datos: String): PistasDelPapel? = when (tipo) {
+    QueEsElPapel.EXTRACTO.name -> json.decodeFromString(ExtractoLeido.serializer(), datos).let { leido ->
+        PistasDelPapel(
+            banco = leido.bankName,
+            numerosDeCuenta = leido.numerosDeCuenta,
+            producto = when {
+                leido.tarjeta != null -> ProductoDelPapel.TARJETA
+                leido.resumenDeCredito != null -> ProductoDelPapel.CREDITO
+                leido.resumenDeSaldo != null -> ProductoDelPapel.CUENTA
+                else -> null
+            },
+        )
+    }
+    QueEsElPapel.COMPROBANTE.name -> json.decodeFromString(ComprobanteLeido.serializer(), datos).let { leido ->
+        PistasDelPapel(
+            banco = leido.banco.orEmpty(),
+            numerosDeCuenta = listOfNotNull(leido.cuentaPropia?.filter { it.isDigit() }?.takeIf { it.length >= 4 }?.takeLast(4)),
+        )
+    }
+    else -> null
+}
+
 private class LecturaGuardada(val documentoId: String, val tipo: String, val datos: String)
 
 /** Ver el comentario del archivo. Lanza [FallaAlLeerElPapel]. */
@@ -187,6 +247,8 @@ internal suspend fun leerElPapel(
     ahora: Long,
     /** La app sabe mostrar la propuesta del saldo de un extracto (ver `leerElExtracto`). */
     conSaldos: Boolean = false,
+    /** Vuelta 129: la app sabe qué hacer con el extracto de una tarjeta (ver `conciliarYArchivar`). */
+    conTarjeta: Boolean = false,
     log: (String, Throwable) -> Unit,
 ): LecturaDelPapel {
     val huella = huellaDelPapel(papel.bytes)
@@ -207,7 +269,13 @@ internal suspend fun leerElPapel(
                 json.decodeFromString(ComprobanteLeido.serializer(), guardada.datos), anotarAunque, ahora,
             )
             else -> {
-                val leido = json.decodeFromString(ExtractoLeido.serializer(), guardada.datos)
+                val guardado = json.decodeFromString(ExtractoLeido.serializer(), guardada.datos)
+                // Vuelta 129: una lectura de Nu guardada antes de que el lector dijera la tarjeta no
+                // la trae. Se relee sin IA (es barato) y se guarda la nueva; si no es el extracto de
+                // la tarjeta de Nu, queda la de siempre.
+                val leido = if (guardado.tarjeta == null && guardado.bankName == "Nu" && !guardado.esFamirios) {
+                    releerElExtractoDeNu(uid, huella, papel, conSaldos) ?: guardado
+                } else guardado
                 // La lectura guardada es de un saldo y quien pregunta no lo sabe mostrar: lo de
                 // antes, un papel sin movimientos (y no una revisión vacía).
                 if (leido.resumenDeSaldo != null && !conSaldos) {
@@ -216,7 +284,7 @@ internal suspend fun leerElPapel(
                 LecturaDelPapel(
                     documentoId = papel.id,
                     que = QueEsElPapel.EXTRACTO,
-                    extracto = conciliarYArchivar(uid, papel.nombre, papel.mime, papel.bytes, leido, log),
+                    extracto = conciliarYArchivar(uid, papel.nombre, papel.mime, papel.bytes, leido, log, documentoLeido = papel.id, conTarjeta = conTarjeta),
                 )
             }
         }
@@ -262,10 +330,36 @@ internal suspend fun leerElPapel(
             LecturaDelPapel(
                 documentoId = papel.id,
                 que = QueEsElPapel.EXTRACTO,
-                extracto = conciliarYArchivar(uid, papel.nombre, papel.mime, papel.bytes, leido, log),
+                extracto = conciliarYArchivar(uid, papel.nombre, papel.mime, papel.bytes, leido, log, documentoLeido = papel.id, conTarjeta = conTarjeta),
             )
         }
     }
+}
+
+/**
+ * Vuelta 129 · **relee sin IA** el extracto de la tarjeta de Nu de [papel] y reemplaza la lectura
+ * guardada con [huella]. `null` si el papel no es ese extracto (o no se pudo leer): nunca llama a
+ * Claude, porque solo sigue si `leerElExtractoDeNu` lo reconoce, y ese lector va antes que la IA.
+ */
+private suspend fun releerElExtractoDeNu(uid: String, huella: String, papel: PapelGuardado, conSaldos: Boolean): ExtractoLeido? {
+    val texto = runCatching {
+        StatementParser.extractText(papel.bytes, nombreParaExtraerTexto(papel.nombre, papel.mime, mimeEsConfiable = true))
+    }.getOrNull() ?: return null
+    if (leerElExtractoDeNu(texto) == null) return null
+    val nuevo = try {
+        leerElExtracto(uid, papel.nombre, papel.mime, papel.bytes, mimeConfiable = true, conSaldos = conSaldos)
+    } catch (e: FallaAlProcesarExtracto) {
+        return null
+    }
+    if (nuevo.tarjeta == null) return null
+    dbQuery {
+        LecturasDePapeles.update({ (LecturasDePapeles.userId eq uid) and (LecturasDePapeles.huella eq huella) }) {
+            it[datos] = Cifrado.cifrarTexto(json.encodeToString(ExtractoLeido.serializer(), nuevo))
+            it[modelo] = "sin-ia"
+            it[leidoEn] = System.currentTimeMillis()
+        }
+    }
+    return nuevo
 }
 
 private fun Transaction.guardarLectura(uid: String, huella: String, documentoId: String, tipo: QueEsElPapel, datos: String, modelo: String) {

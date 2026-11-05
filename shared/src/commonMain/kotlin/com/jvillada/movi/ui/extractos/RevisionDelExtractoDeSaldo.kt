@@ -151,6 +151,9 @@ internal fun RevisionDelExtractoDeSaldo(propuesta: PropuestaDelExtractoDeSaldo, 
                                 "subir el extracto."
                         hecho -> "Listo: la cuenta quedó con el saldo del extracto."
                         elegida == null -> "Elige la cuenta de este extracto."
+                        // Vuelta 129: creada con su saldo después del corte, el extracto habla de antes.
+                        elegida.abiertaDespues ->
+                            "Esta cuenta se creó con su saldo después del corte del extracto: no se cuadra con este extracto."
                         elegida.cuadradaDespues ->
                             "Esta cuenta ya se cuadró después del corte del extracto. Para actualizarla, sube un extracto más nuevo."
                         !hayQueActualizarElSaldo(resumen, elegida) -> "Movi ya tiene ese saldo: no hay nada que actualizar."

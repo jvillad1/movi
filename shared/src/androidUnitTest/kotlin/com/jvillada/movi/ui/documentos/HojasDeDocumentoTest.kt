@@ -11,6 +11,8 @@ import androidx.compose.ui.test.performSemanticsAction
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.Documento
+import com.jvillada.movi.shared.model.PistasDelPapel
+import com.jvillada.movi.shared.model.ProductoDelPapel
 import com.jvillada.movi.shared.model.TipoDeDocumento
 import com.jvillada.movi.theme.MoviTheme
 import kotlin.test.assertEquals
@@ -48,7 +50,11 @@ class HojasDeDocumentoTest {
 
     private var subido: Pair<TipoDeDocumento, String?>? = null
 
-    private fun montarSubida(cuentas: List<Account> = todas, nombre: String = "Extracto_2334_08_2026.pdf") {
+    private fun montarSubida(
+        cuentas: List<Account> = todas,
+        nombre: String = "Extracto_2334_08_2026.pdf",
+        loQueSeSabe: PistasDelPapel? = null,
+    ) {
         subido = null
         composeRule.setContent {
             MoviTheme {
@@ -58,6 +64,7 @@ class HojasDeDocumentoTest {
                         cuentas = cuentas,
                         onDismiss = {},
                         onSubir = { tipo, cuenta -> subido = tipo to cuenta },
+                        loQueSeSabe = { loQueSeSabe },
                     )
                 }
             }
@@ -107,6 +114,84 @@ class HojasDeDocumentoTest {
         composeRule.onNodeWithText("Subir").performSemanticsAction(SemanticsActions.OnClick)
 
         assertEquals("e1", subido?.second)
+    }
+
+    // ── Vuelta 129 · la cuenta llega propuesta ─────────────────────────────────
+
+    private val nuAhorros = Account("a-nu", "Nu Ahorros", AccountType.SAVINGS, 1_200_000)
+    private val nuTarjeta = Account("c-nu", "Nu Tarjeta", AccountType.CREDIT_CARD, 0)
+    private val ahorros0756 = Account("a-0756", "Bancolombia Ahorros 0756", AccountType.SAVINGS, 1)
+
+    @Test
+    fun la_hoja_propone_la_cuenta_de_los_ultimos_cuatro_y_dice_de_donde_salio() {
+        montarSubida(cuentas = listOf(ahorros, ahorros0756, nuAhorros), nombre = "Extracto_0756_09_2026.pdf")
+
+        composeRule.onNodeWithText(PARA_QUE_SIRVE_LA_CUENTA).assertIsDisplayed()
+        composeRule.onNodeWithText(POR_EL_NOMBRE_DEL_ARCHIVO).assertIsDisplayed()
+        composeRule.onNodeWithText("Subir").performSemanticsAction(SemanticsActions.OnClick)
+
+        assertEquals(TipoDeDocumento.EXTRACTO to "a-0756", subido)
+    }
+
+    @Test
+    fun la_hoja_propone_nu_ahorros_para_cuenta_nu() {
+        montarSubida(cuentas = listOf(ahorros, nuAhorros), nombre = "CuentaNu_CRS119_2026-09.pdf")
+        // El nombre no dice «extracto»: llega como «Documento», sin cuenta propuesta. Es un extracto.
+        composeRule.onNodeWithText(POR_EL_NOMBRE_DEL_ARCHIVO).assertDoesNotExist()
+        composeRule.onNodeWithText("Extracto").performSemanticsAction(SemanticsActions.OnClick)
+
+        composeRule.onNodeWithText(POR_EL_NOMBRE_DEL_ARCHIVO).assertIsDisplayed()
+        composeRule.onNodeWithText("Subir").performSemanticsAction(SemanticsActions.OnClick)
+
+        assertEquals("a-nu", subido?.second)
+    }
+
+    /** «Nu» solo no dice si es la tarjeta o la cuenta: no se adivina. */
+    @Test
+    fun con_nu_a_secas_no_adivina_y_pide_elegir() {
+        montarSubida(cuentas = listOf(ahorros, nuAhorros), nombre = "Extracto_Nu_2026-09-17.pdf")
+
+        composeRule.onNodeWithText(ELIGE_LA_CUENTA).assertIsDisplayed()
+        composeRule.onNodeWithText(POR_EL_NOMBRE_DEL_ARCHIVO).assertDoesNotExist()
+        composeRule.onNodeWithText("Subir").performSemanticsAction(SemanticsActions.OnClick)
+
+        assertEquals(TipoDeDocumento.EXTRACTO to null, subido)
+    }
+
+    @Test
+    fun lo_que_movi_ya_leyo_del_archivo_propone_la_tarjeta() {
+        montarSubida(
+            cuentas = listOf(nuAhorros, nuTarjeta),
+            nombre = "Extracto_Nu_2026-09-17.pdf",
+            loQueSeSabe = PistasDelPapel(banco = "Nu", numerosDeCuenta = listOf("1111"), producto = ProductoDelPapel.TARJETA),
+        )
+
+        composeRule.onNodeWithText(POR_LO_QUE_MOVI_LEYO).assertIsDisplayed()
+        composeRule.onNodeWithText("Subir").performSemanticsAction(SemanticsActions.OnClick)
+
+        assertEquals("c-nu", subido?.second)
+    }
+
+    /** Revisión: una nómina o un contrato no llegan con cuenta propuesta. */
+    @Test
+    fun una_nomina_no_llega_con_cuenta_propuesta() {
+        montarSubida(cuentas = listOf(ahorros, ahorros0756), nombre = "Desprendible_0756_agosto.pdf")
+
+        composeRule.onNodeWithText(POR_EL_NOMBRE_DEL_ARCHIVO).assertDoesNotExist()
+        composeRule.onNodeWithText("Subir").performSemanticsAction(SemanticsActions.OnClick)
+
+        assertEquals(TipoDeDocumento.NOMINA to null, subido)
+    }
+
+    @Test
+    fun elegir_otra_con_el_dedo_manda_y_ya_no_dice_de_donde_salio() {
+        montarSubida(cuentas = listOf(ahorros, nuAhorros), nombre = "Extracto_CuentaNu_2026-09.pdf")
+
+        composeRule.onNodeWithText("Bancolombia Ahorros").performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.onNodeWithText(POR_EL_NOMBRE_DEL_ARCHIVO).assertDoesNotExist()
+        composeRule.onNodeWithText("Subir").performSemanticsAction(SemanticsActions.OnClick)
+
+        assertEquals("a1", subido?.second)
     }
 
     @Test

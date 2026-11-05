@@ -252,10 +252,16 @@ internal suspend fun procesarExtracto(
     conCreditos: Boolean = false,
     /** Ver [leerElExtracto]: el cliente sabe mostrar la propuesta del saldo de un extracto. */
     conSaldos: Boolean = false,
+    /** Ver [conciliarYArchivar]: el documento que se está leyendo, si ya está guardado. */
+    documentoLeido: String? = null,
+    /** Ver [conciliarYArchivar]: el cliente sabe qué hacer con el extracto de una tarjeta. */
+    conTarjeta: Boolean = false,
 ): StatementParseResult =
     conciliarYArchivar(
         uid, fileName, mimeType, bytes,
         leerElExtracto(uid, fileName, mimeType, bytes, mimeConfiable, conCreditos, conSaldos), log,
+        documentoLeido = documentoLeido,
+        conTarjeta = conTarjeta,
     )
 
 /**
@@ -283,6 +289,12 @@ internal data class ExtractoLeido(
      * `ResumenDelExtractoDeSaldo`). Con default, como [resumenDeCredito].
      */
     val resumenDeSaldo: ResumenDelExtractoDeSaldo? = null,
+    /**
+     * Vuelta 129 · el extracto es de una tarjeta de crédito y esto es lo que dice de ella (ver
+     * `TarjetaDelExtracto`). Lo llenan los lectores sin IA que lo saben (Nu, los movimientos de la
+     * tarjeta de Bancolombia). Con default, como [resumenDeCredito].
+     */
+    val tarjeta: TarjetaDelExtracto? = null,
 )
 
 /**
@@ -401,6 +413,8 @@ internal suspend fun leerElExtracto(
                 esFamirios = false,
                 numerosDeCuenta = (listOfNotNull(movimientos.numero) +
                     StatementParser.numerosDeCuenta(fileName, text)).distinct(),
+                // Vuelta 129: «Movimientos: Tarjetas de Crédito» es de una tarjeta. No trae corte ni pago.
+                tarjeta = if (movimientos.deTarjeta) TarjetaDelExtracto(banco = "Bancolombia", ultimosCuatro = movimientos.numero) else null,
             )
         }
         // **El extracto de la tarjeta de Nu** (vuelta 94) también se lee sin IA: las compras y los pagos
@@ -412,6 +426,16 @@ internal suspend fun leerElExtracto(
                 filas = nu.filas,
                 esFamirios = false,
                 numerosDeCuenta = (nu.numeros + StatementParser.numerosDeCuenta(fileName, text)).distinct(),
+                // Vuelta 129: es el de la tarjeta, con lo que dice de ella (para crearla si no está).
+                tarjeta = TarjetaDelExtracto(
+                    banco = "Nu",
+                    ultimosCuatro = nu.numeros.firstOrNull(),
+                    diaDeCorte = nu.corte.dayOfMonth,
+                    diaDePago = nu.fechaLimite?.dayOfMonth,
+                    cupo = nu.cupo,
+                    deudaAlCorte = nu.deudaAlCorte,
+                    deudaHasta = nu.deudaHasta?.toString(),
+                ),
             )
         }
         val docType = StatementParser.detectDocumentType(text)
@@ -489,6 +513,17 @@ internal suspend fun conciliarYArchivar(
     bytes: ByteArray,
     leido: ExtractoLeido,
     log: (String, Throwable) -> Unit,
+    /**
+     * Vuelta 129 · **el documento que se está leyendo**, cuando ya está guardado (`leer-extracto` y
+     * `/leer` de «Compartir con Movi»). Es ESE el que queda como extracto, no el primero que se
+     * llame igual y pese lo mismo: un PDF con clave se lee abierto y pesa distinto que el guardado.
+     */
+    documentoLeido: String? = null,
+    /**
+     * Vuelta 129 · **el cliente sabe qué hacer con el extracto de una tarjeta** (`?conTarjeta=1`): a
+     * él se le manda [StatementParseResult.tarjeta]. A un APK viejo no, como `?conSaldos=1`.
+     */
+    conTarjeta: Boolean = false,
 ): StatementParseResult {
     val parsed = leido.filas
     val bankName = leido.bankName
@@ -504,7 +539,7 @@ internal suspend fun conciliarYArchivar(
             newTransactions = emptyList(),
             matches = emptyList(),
             numerosDeCuenta = leido.numerosDeCuenta,
-            documentoId = archivarElExtracto(uid, fileName, mimeType, bytes, periodo, bankName, log),
+            documentoId = archivarElExtracto(uid, fileName, mimeType, bytes, periodo, bankName, log, documentoLeido),
             extractoDeCredito = dbQuery { propuestaDelExtractoDeCredito(uid, resumen, leido.numerosDeCuenta) },
         )
     }
@@ -519,7 +554,7 @@ internal suspend fun conciliarYArchivar(
             newTransactions = emptyList(),
             matches = emptyList(),
             numerosDeCuenta = leido.numerosDeCuenta,
-            documentoId = archivarElExtracto(uid, fileName, mimeType, bytes, periodo, bankName, log),
+            documentoId = archivarElExtracto(uid, fileName, mimeType, bytes, periodo, bankName, log, documentoLeido),
             extractoDeSaldo = dbQuery { propuestaDelExtractoDeSaldo(uid, resumen) },
         )
     }
@@ -620,7 +655,7 @@ internal suspend fun conciliarYArchivar(
     // archivado falla, la importación NO se cae: el dueño vino a importar movimientos, y
     // perder eso por no poder guardar una copia sería cambiar un problema chico por uno
     // grande. Falla en silencio en el log, que es donde se mira.
-    val documentoId: String? = archivarElExtracto(uid, fileName, mimeType, bytes, period, bankName, log)
+    val documentoId: String? = archivarElExtracto(uid, fileName, mimeType, bytes, period, bankName, log, documentoLeido)
 
     return StatementParseResult(
         statementId = UUID.randomUUID().toString(),
@@ -631,12 +666,22 @@ internal suspend fun conciliarYArchivar(
         numerosDeCuenta = leido.numerosDeCuenta,
         documentoId = documentoId,
         cargosDelBanco = cargosDelBanco,
+        tarjeta = leido.tarjeta.takeIf { conTarjeta },
+        cuentaDelPapel = documentoId?.let { cuentaDelPapel(uid, it) },
+        tarjetasCuadradasDespues = leido.tarjeta?.deudaParaCuadrar()?.takeIf { conTarjeta }
+            ?.let { d -> dbQuery { tarjetasCuadradasDespuesDe(uid, finDelDia(d.hasta)) } }.orEmpty(),
     )
 }
 
 /**
  * **Archiva el papel en Documentos** y devuelve su id (el que ya estaba, si es el mismo archivo), o
  * `null` si no se pudo: la lectura sigue igual. Ver el comentario de [conciliarYArchivar].
+ *
+ * Vuelta 129 · **lo que se leyó como extracto queda como extracto.** El papel que ya estaba
+ * guardado —subido desde Documentos con otro tipo, o compartido con Movi, que lo guarda con el tipo
+ * que adivina el nombre («CuentaNu_CRS119_2026-09.pdf» → «Otro»)— se quedaba en «Otros» aunque se
+ * acabara de leer como extracto. Ahora pasa a [TipoDeDocumento.EXTRACTO] y, si no tenía período, se
+ * le pone el del extracto: así la lista de Documentos lo muestra en «Extractos» con su mes.
  */
 private suspend fun archivarElExtracto(
     uid: String,
@@ -646,6 +691,7 @@ private suspend fun archivarElExtracto(
     period: String,
     bankName: String,
     log: (String, Throwable) -> Unit,
+    documentoLeido: String? = null,
 ): String? {
     return runCatching {
         dbQuery {
@@ -661,7 +707,13 @@ private suspend fun archivarElExtracto(
             // este mismo archivo aunque esta subida no haya escrito nada. Es también lo que
             // hace idempotente a `/api/documents/{id}/leer-extracto`: leer el extracto de un
             // documento ya guardado encuentra ACÁ ese mismo documento y no archiva uno nuevo.
-            val yaEstaba = Documents
+            // Vuelta 129: si quien lee ya sabe qué documento es, gana ese (filtrado por dueño).
+            val conocido = documentoLeido?.let { id ->
+                Documents.select(listOf(Documents.id))
+                    .where { (Documents.id eq id) and (Documents.userId eq uid) }
+                    .firstOrNull()?.get(Documents.id)
+            }
+            val yaEstaba = conocido ?: Documents
                 .select(listOf(Documents.id))
                 .where {
                     (Documents.userId eq uid) and
@@ -670,7 +722,10 @@ private suspend fun archivarElExtracto(
                 }
                 .firstOrNull()
                 ?.get(Documents.id)
-            if (yaEstaba != null) yaEstaba else {
+            if (yaEstaba != null) {
+                marcarComoExtracto(uid, yaEstaba, periodo = period)
+                yaEstaba
+            } else {
                 val nuevo = Documento(
                     id = "doc_${UUID.randomUUID()}",
                     // Recortado como en la ruta de documentos: la columna es varchar(255) y un
@@ -693,6 +748,47 @@ private suspend fun archivarElExtracto(
         // sin cuenta. Perder la importación por no poder colgar una etiqueta sería cambiar un
         // problema chico por uno grande, que es la misma regla del archivado entero.
         .getOrNull()
+}
+
+/**
+ * Vuelta 129 · **la cuenta que el dueño le puso al papel [docId]**, o `null` (sin cuenta, o una que ya
+ * no existe). Ver [StatementParseResult.cuentaDelPapel].
+ */
+private suspend fun cuentaDelPapel(uid: String, docId: String): String? = runCatching {
+    dbQuery {
+        val cuenta = Documents.select(listOf(Documents.accountId))
+            .where { (Documents.id eq docId) and (Documents.userId eq uid) }
+            .firstOrNull()?.get(Documents.accountId)
+        cuenta?.takeIf { id ->
+            Accounts.selectAll().where { (Accounts.id eq id) and (Accounts.userId eq uid) }.any()
+        }
+    }
+}.getOrNull()
+
+/**
+ * Vuelta 129 · **el documento [docId] es un extracto**: si estaba en «Otro» pasa a
+ * [TipoDeDocumento.EXTRACTO] y, siendo extracto, toma [periodo] si no tenía uno. Lo que el dueño
+ * clasificó como nómina o contrato no se reclasifica. [cuenta] (la del importe) se cuelga siempre,
+ * como antes de esta vuelta. Filtra por dueño: un id ajeno no toca nada. Lo usan la lectura
+ * ([archivarElExtracto]) y el importe ([escribirElImporte]).
+ */
+internal fun Transaction.marcarComoExtracto(uid: String, docId: String, cuenta: String? = null, periodo: String = "") {
+    val fila = Documents.select(listOf(Documents.kind, Documents.period))
+        .where { (Documents.id eq docId) and (Documents.userId eq uid) }
+        .firstOrNull() ?: return
+    val tipo = fila[Documents.kind]
+    val esExtracto = tipo == TipoDeDocumento.OTRO.name || tipo == TipoDeDocumento.EXTRACTO.name
+    val sinPeriodo = fila[Documents.period].isNullOrBlank()
+    val cambiaElTipo = tipo == TipoDeDocumento.OTRO.name
+    val ponePeriodo = esExtracto && sinPeriodo && periodo.isNotBlank()
+    // Sin nada que cambiar no se emite el UPDATE: uno sin columnas falla, y el archivado (que corre
+    // en un `runCatching`) perdía el id del papel.
+    if (!cambiaElTipo && cuenta == null && !ponePeriodo) return
+    Documents.update({ (Documents.id eq docId) and (Documents.userId eq uid) }) {
+        if (cambiaElTipo) it[kind] = TipoDeDocumento.EXTRACTO.name
+        if (cuenta != null) it[accountId] = cuenta
+        if (ponePeriodo) it[Documents.period] = periodo.take(50)
+    }
 }
 
 fun Route.statementRoutes() {
@@ -720,6 +816,7 @@ fun Route.statementRoutes() {
                 log = { msg, t -> call.application.log.warn(msg, t) },
                 conCreditos = call.request.queryParameters["conCreditos"] == "1",
                 conSaldos = call.request.queryParameters["conSaldos"] == "1",
+                conTarjeta = call.request.queryParameters["conTarjeta"] == "1",
             )
             call.respond(resultado)
         } catch (e: FallaAlProcesarExtracto) {
@@ -1134,10 +1231,9 @@ private fun Transaction.escribirElImporte(
     // Se escribe SIEMPRE, no solo si estaba vacía: reimportar el mismo archivo contra otra cuenta
     // es justamente la forma de corregir el papel, y reimportarlo contra la misma escribe el mismo
     // valor. El `where` filtra por dueño, así que un `documentoId` ajeno no toca nada.
+    // Vuelta 129: y queda como EXTRACTO, aunque se hubiera guardado como «Otro» (ver [marcarComoExtracto]).
     decision.documentoId?.let { docId ->
-        Documents.update({ (Documents.id eq docId) and (Documents.userId eq uid) }) {
-            it[Documents.accountId] = decision.accountId
-        }
+        marcarComoExtracto(uid, docId, cuenta = decision.accountId, periodo = decision.period)
     }
 
     return ResultadoDelImporte(
