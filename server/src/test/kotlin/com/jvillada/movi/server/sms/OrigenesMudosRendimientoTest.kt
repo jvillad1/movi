@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.sms
 
+import com.jvillada.movi.server.conectarBaseDePrueba
 import com.jvillada.movi.server.db.SmsMessages
 import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.shared.model.SMS_STATE_CONFIRMED
@@ -39,7 +40,7 @@ class OrigenesMudosRendimientoTest {
 
     @BeforeTest
     fun setUp() {
-        Database.connect(
+        conectarBaseDePrueba(
             url = "jdbc:h2:mem:origenes_mudos_rendimiento;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE",
             driver = "org.h2.Driver",
         )

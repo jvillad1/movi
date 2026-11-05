@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.reminders
 
+import com.jvillada.movi.server.conectarBaseDePrueba
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Cards
 import com.jvillada.movi.server.db.Events
@@ -31,7 +32,7 @@ class ElMinimoDelExtractoEnLaReglaTest {
 
     @BeforeTest
     fun setUp() {
-        Database.connect(
+        conectarBaseDePrueba(
             url = "jdbc:h2:mem:minimo_extracto_test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE",
             driver = "org.h2.Driver",
         )

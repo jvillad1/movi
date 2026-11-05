@@ -90,7 +90,11 @@ internal const val NO_ENTRENA =
 internal const val LAS_SUGERIDAS_NO_VAN =
     "Las tres preguntas sugeridas de Movi AI las contesta Movi con sus números, sin la IA."
 
-internal const val ENTENDIDO = "Entendido"
+// Revisión de lanzamiento (nov-2026): la guía 5.1.2(i) de Apple pide un permiso EXPLÍCITO antes de mandar
+// datos personales a una IA de terceros; «Entendido» se leía como un acuse de recibo. El nombre de la
+// constante se queda para no tocar las pruebas.
+internal const val ENTENDIDO = "Aceptar y continuar"
+internal const val AHORA_NO = "Ahora no"
 internal const val VER_QUE_SABE_MOVI = "Ver qué sabe Movi"
 
 /** El tag de la hoja, para las pruebas y las capturas. */
@@ -98,7 +102,7 @@ const val TAG_AVISO_DE_LA_IA: String = "aviso-de-la-ia"
 
 /**
  * **La puerta de lo que va a Claude.** [pasar] corre [luego] ya si el usuario vio el aviso; si no, abre la
- * hoja y lo corre cuando toque «Entendido». Se arma con [rememberPuertaDeLaIa], que además dibuja la hoja
+ * hoja y lo corre cuando toque «Aceptar y continuar». Se arma con [rememberPuertaDeLaIa], que además dibuja la hoja
  * ([Hoja]). Cada pantalla que manda algo a la IA tiene la suya; lo visto es global ([AvisoDeLaIa]).
  */
 class PuertaDeLaIa internal constructor(
@@ -214,6 +218,14 @@ internal fun HojaQueVeLaIa(onEntendido: () -> Unit, onVer: () -> Unit, onCerrar:
                 Boton(
                     VER_QUE_SABE_MOVI,
                     onClick = onVer,
+                    variante = VarianteDeBoton.Fantasma,
+                    tamano = TamanoDeBoton.M,
+                    anchoCompleto = true,
+                )
+                // Decir que no a la vista, no solo con la X: no manda nada ni marca nada (`cerrar`).
+                Boton(
+                    AHORA_NO,
+                    onClick = onCerrar,
                     variante = VarianteDeBoton.Fantasma,
                     tamano = TamanoDeBoton.M,
                     anchoCompleto = true,

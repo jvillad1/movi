@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.server.conectarBaseDePrueba
 import at.favre.lib.crypto.bcrypt.BCrypt
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
@@ -67,7 +68,7 @@ class UserRoutesTest {
         // escotilla que `AuthRoutesTest` y `DocumentRoutesTest`.
         System.setProperty("movi.jwt.secret", "test-secret-for-user-routes-jwtconfig-min-32")
         RateLimiter.reset()
-        Database.connect(
+        conectarBaseDePrueba(
             url    = "jdbc:h2:mem:user_routes_test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE",
             driver = "org.h2.Driver",
         )

@@ -86,6 +86,11 @@ class AccesoANotificacionesEnLaSeccionTest {
             "Falta decir qué pasa con las notificaciones de las demás apps",
             cuantos("se descartan sin leerlas") > 0,
         )
+        // Revisión de lanzamiento: la divulgación destacada de Play pide decir adónde va lo que se lee.
+        assertTrue(
+            "Falta decir que el texto de esas notificaciones se envía al servidor de Movi",
+            cuantos("se envía a tu cuenta de Movi") > 0,
+        )
     }
 
     @Test

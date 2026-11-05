@@ -51,6 +51,7 @@ class RespaldoDeAndroidTest {
     private val obligatorias: Set<Pair<String, String>> get() = setOf(
         "sharedpref" to "movi_sms_filter.xml",
         "sharedpref" to "${paquete}_preferences.xml",
+        "sharedpref" to "movi_capturas_por_subir.xml",
         "database" to base,
         "database" to "$base-journal",
         "database" to "$base-wal",

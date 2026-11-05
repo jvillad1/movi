@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.ai
 
+import com.jvillada.movi.server.conectarBaseDePrueba
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Apartados
 import com.jvillada.movi.server.db.Budgets
@@ -44,7 +45,7 @@ class DocumentosEnElContextoDeMoviAiTest {
 
     @BeforeTest
     fun setUp() {
-        Database.connect(
+        conectarBaseDePrueba(
             url = "jdbc:h2:mem:docs_en_contexto_ai;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE",
             driver = "org.h2.Driver",
         )

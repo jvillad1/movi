@@ -120,7 +120,10 @@ fun crearMensaje(
     client: AnthropicClient,
     params: MessageCreateParams,
     opciones: RequestOptions = RequestOptions.none(),
-): Message =
-    medirLlamada(Servicio.ANTHROPIC, params.model().asString(), { m: Message -> Desenlace(fichas = fichasDe(m)) }) {
+): Message {
+    // Revisión de lanzamiento: pasado el tope diario de gasto no se llama (ver ElGastoDelDia).
+    com.jvillada.movi.server.ai.ElGastoDelDia.comprobar()
+    return medirLlamada(Servicio.ANTHROPIC, params.model().asString(), { m: Message -> Desenlace(fichas = fichasDe(m)) }) {
         client.messages().create(params, opciones)
     }
+}

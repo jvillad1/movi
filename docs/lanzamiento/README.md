@@ -8,6 +8,7 @@ Mañana es crear las cuentas, pegar los textos de estos archivos y subir.
 | [`google-play.md`](google-play.md) | Ficha, Seguridad de los datos, clasificación, acceso para revisores, prueba cerrada y el paso a paso de Play Console |
 | [`declaracion-sms.md`](declaracion-sms.md) | Para DESPUÉS: el texto y el guion del video para pedir la excepción «SMS-based money management» |
 | [`app-store.md`](app-store.md) | Ficha, etiquetas de privacidad, notas para el revisor y lo que falta técnicamente para subir iOS |
+| [`revision-de-lanzamiento.md`](revision-de-lanzamiento.md) | La revisión de seguridad, arquitectura y tiendas del 4-nov-2026: lo que bloquea, lo arreglado y lo pendiente |
 
 > **Los textos legales (`/privacidad`, `/terminos`, `/borrar-cuenta`) son un borrador cuidadoso, no
 > asesoría legal.** Están escritos a partir de lo que Movi hace de verdad (el código y `CLAUDE.md`) y
@@ -83,11 +84,9 @@ de rechazo en las dos tiendas. Usa un correo que vayas a leer (puede ser uno nue
   capturas de teléfono; Apple, al menos una de 6,9" (y de iPad si la app se publica para iPad).
 - **La excepción de SMS en Play** (`declaracion-sms.md`): se pide después de que la app esté en
   producción sin SMS. Antes de pedirla, conviene angostar el filtro de la variante de Play (ver ahí).
-- **El ahorro de batería en Play.** La versión de Play conserva `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`
-  (la tarjeta «Quitar el ahorro de batería» de Captura del banco). Play lo permite solo si el ahorro de
-  batería rompe la función central; para Movi es defendible (Android desenchufa la lectura de
-  notificaciones del banco), pero si la revisión lo objeta, quitarlo del manifiesto de `play` con
-  `tools:node="remove"` y abrir en su lugar `Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS`.
+- ~~**El ahorro de batería en Play.**~~ Hecho en la revisión de lanzamiento (nov-2026): el canal `play`
+  ya no pide `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` y abre la lista del sistema en su lugar. Ver
+  [`revision-de-lanzamiento.md`](revision-de-lanzamiento.md).
 - **iOS**: el proyecto está listo (vueltas 110 y 112: ícono, tema claro, `PrivacyInfo.xcprivacy`,
   cifrado exento, solo iPhone en vertical y el framework de release). Falta lo del dueño: la cuenta, el
   equipo y correr `scripts/armar-para-app-store.sh` (ver «Qué falta técnicamente» en `app-store.md`).

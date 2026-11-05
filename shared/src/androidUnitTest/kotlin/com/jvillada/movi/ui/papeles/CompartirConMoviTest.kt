@@ -15,6 +15,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.jvillada.movi.compartir.MAX_ARCHIVOS_COMPARTIDOS
 import com.jvillada.movi.compartir.esCompartirConMovi
 import com.jvillada.movi.compartir.leerLoCompartido
+import com.jvillada.movi.compartir.sePuedeLeerLoCompartido
 import com.jvillada.movi.compartir.urisCompartidos
 import com.jvillada.movi.data.RepositorioDePrueba
 import com.jvillada.movi.data.Repositories
@@ -353,6 +354,25 @@ class CompartirConMoviTest {
         assertFalse(esCompartirConMovi(Intent.ACTION_SEND, "text/plain"))
         assertFalse(esCompartirConMovi(Intent.ACTION_MAIN, "image/png"))
         assertFalse(esCompartirConMovi(Intent.ACTION_SEND, null))
+    }
+
+    @Test
+    fun solo_se_lee_lo_compartido_por_otra_app() {
+        val movi = "com.jvillada.movi"
+        assertTrue(sePuedeLeerLoCompartido(Uri.parse("content://fotos/compartida/recibo.jpg"), movi))
+        assertFalse(sePuedeLeerLoCompartido(Uri.parse("file:///data/data/com.jvillada.movi/shared_prefs/x.xml"), movi))
+        assertFalse(sePuedeLeerLoCompartido(Uri.parse("content://com.jvillada.movi.provider/x"), movi))
+        assertFalse(sePuedeLeerLoCompartido(Uri.parse("content://com.jvillada.movi/x"), movi))
+        assertTrue(sePuedeLeerLoCompartido(Uri.parse("content://com.jvillada.movida/x"), movi))
+
+        val mezclado = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+            type = "image/*"
+            putParcelableArrayListExtra(
+                Intent.EXTRA_STREAM,
+                arrayListOf(Uri.parse("content://fotos/a.jpg"), Uri.parse("file:///sdcard/b.jpg")),
+            )
+        }
+        assertEquals(listOf(Uri.parse("content://fotos/a.jpg")), urisCompartidos(mezclado, movi))
     }
 
     @Test

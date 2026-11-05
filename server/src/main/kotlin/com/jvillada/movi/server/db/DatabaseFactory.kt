@@ -8,6 +8,7 @@ import kotlinx.coroutines.withContext
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.Transaction
+import org.jetbrains.exposed.sql.transactions.TransactionManager
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.io.File
 
@@ -204,5 +205,12 @@ object DatabaseFactory {
     }
 }
 
+/**
+ * Revisión de lanzamiento (nov-2026): la base se pasa **explícita** (la de por defecto). Con `transaction {}`
+ * a secas Exposed usa el gestor guardado en el `ThreadLocal` del hilo, que se queda con la base que era la
+ * de por defecto la primera vez que ese hilo preguntó; en un hilo de IO reusado podía ser otra (en las
+ * pruebas, la de otra clase: «Table "users" not found»). Con la base explícita, Exposed fija el gestor
+ * correcto antes de cada transacción. En producción hay una sola base: no cambia nada.
+ */
 suspend fun <T> dbQuery(block: Transaction.() -> T): T =
-    withContext(Dispatchers.IO) { transaction { block() } }
+    withContext(Dispatchers.IO) { transaction(TransactionManager.defaultDatabase) { block() } }

@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.db
 
+import com.jvillada.movi.server.conectarBaseDePrueba
 import com.jvillada.movi.server.db.Migrations.createUniqueTransferLegIndex
 import com.jvillada.movi.server.db.Migrations.duplicateTransferLegs
 import com.jvillada.movi.server.db.Migrations.renameLegacyNewSmsStateToPending
@@ -34,7 +35,7 @@ class MigrationsTest {
 
     @BeforeTest
     fun setUp() {
-        Database.connect(
+        conectarBaseDePrueba(
             url    = "jdbc:h2:mem:migrations_test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE",
             driver = "org.h2.Driver",
         )

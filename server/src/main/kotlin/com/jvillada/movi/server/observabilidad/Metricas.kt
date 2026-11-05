@@ -164,6 +164,8 @@ object Metricas {
         } else null
         servicios.computeIfAbsent(ClaveDeServicio(minuto, servicio, operacion)) { AgregadoDeServicio() }
             .sumar(duracionMs, error, fichas, costo)
+        // Revisión de lanzamiento: el mismo costo alimenta el tope diario de gasto.
+        if (costo != null) com.jvillada.movi.server.ai.ElGastoDelDia.sumar(costo)
     }
 
     // ── Actividad: usuarios distintos, consultas lentas, pool ────────────────

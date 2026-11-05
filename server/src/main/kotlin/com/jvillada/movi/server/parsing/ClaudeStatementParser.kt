@@ -57,6 +57,9 @@ object ClaudeStatementParser {
         runCatching { AnthropicOkHttpClient.builder().apiKey(key).build() }.getOrNull()
     }
 
+    /** ¿El server tiene con qué llamar a Anthropic? Sin clave una lectura no cuesta nada (ver `ElTopeDeLosPapeles`). */
+    internal val tieneLlave: Boolean get() = client != null
+
     /**
      * **El cliente de los extractos, sin reintentos del SDK** (vuelta 128). El SDK reintenta solo
      * un 429, un 5xx y también un corte por tiempo, en el hilo bloqueado y fuera de nuestro alcance:

@@ -497,7 +497,7 @@ fun guardarDocumento(uid: String, doc: Documento, bytes: ByteArray) {
  *
  * Se usa `provider()` y no `streamProvider()`, que además está deprecado en Ktor 3.
  */
-private suspend fun PartData.FileItem.leerConTope(tope: Long): ByteArray? {
+internal suspend fun PartData.FileItem.leerConTope(tope: Long): ByteArray? {
     // Se piden `tope + 1` bytes: si vuelven más de `tope`, el archivo se pasa y no hizo falta
     // leerlo entero para saberlo. El canal se descarta y el resto del cuerpo nunca se materializa.
     val leidos = provider().readRemaining(tope + 1).readByteArray()

@@ -81,6 +81,14 @@ subprojects {
     tasks.withType<Test>().configureEach {
         outputs.upToDateWhen { false }
         outputs.doNotCacheIf("Las pruebas siempre corren (vuelta 122)") { true }
+        // Revisión de lanzamiento (nov-2026): el log de CI decía solo «AssertionError at Assert.java:89»;
+        // el mensaje y la causa de la prueba que falla tienen que verse sin bajar el reporte.
+        testLogging {
+            events(org.gradle.api.tasks.testing.logging.TestLogEvent.FAILED)
+            exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+            showCauses = true
+            showStackTraces = true
+        }
         maxParallelForks = forksDePruebas
         if (soloPrepararLasPruebas) {
             filter {

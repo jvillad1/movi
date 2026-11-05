@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.server.conectarBaseDePrueba
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import org.jetbrains.exposed.sql.update
 import com.auth0.jwt.JWT
@@ -84,7 +85,7 @@ class EventRoutesTest {
 
     @BeforeTest
     fun setUp() {
-        Database.connect(
+        conectarBaseDePrueba(
             url    = "jdbc:h2:mem:event_routes_test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE",
             driver = "org.h2.Driver",
         )

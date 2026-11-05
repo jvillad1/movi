@@ -30,15 +30,29 @@ fun esCompartirConMovi(accion: String?, tipo: String?): Boolean {
     return t.startsWith("image/") || t == "application/pdf"
 }
 
-/** Los `content://` que trae el `Intent`, como mucho [MAX_ARCHIVOS_COMPARTIDOS]. */
-fun urisCompartidos(intent: Intent): List<Uri> {
+/**
+ * Revisión de lanzamiento (nov-2026): `MainActivity` está exportada, así que cualquier app puede
+ * mandarle un `EXTRA_STREAM`. Solo se aceptan `content://` de **otra** app: un `file://` (o un
+ * proveedor de Movi, cuyo dueño es [paqueteDeMovi]) le haría leer a Movi sus propios archivos —la base,
+ * las preferencias con el token— y subirlos como un «papel». Es el patrón que marca el análisis de
+ * seguridad de Play.
+ */
+fun sePuedeLeerLoCompartido(uri: Uri, paqueteDeMovi: String?): Boolean {
+    if (!uri.scheme.equals("content", ignoreCase = true)) return false
+    val autoridad = uri.authority?.lowercase() ?: return false
+    val propio = paqueteDeMovi?.lowercase() ?: return true
+    return autoridad != propio && !autoridad.startsWith("$propio.")
+}
+
+/** Los `content://` de otras apps que trae el `Intent`, como mucho [MAX_ARCHIVOS_COMPARTIDOS]. */
+fun urisCompartidos(intent: Intent, paqueteDeMovi: String? = null): List<Uri> {
     val uris = when (intent.action) {
         Intent.ACTION_SEND -> listOfNotNull(IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java))
         Intent.ACTION_SEND_MULTIPLE ->
             IntentCompat.getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM, Uri::class.java).orEmpty()
         else -> emptyList()
     }
-    return uris.take(MAX_ARCHIVOS_COMPARTIDOS)
+    return uris.filter { sePuedeLeerLoCompartido(it, paqueteDeMovi) }.take(MAX_ARCHIVOS_COMPARTIDOS)
 }
 
 /**

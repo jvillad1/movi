@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.db
 
+import com.jvillada.movi.server.conectarBaseDePrueba
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.selectAll
@@ -26,7 +27,7 @@ class CuentaLastEditedAtColumnTest {
 
     @BeforeTest
     fun setUp() {
-        Database.connect(
+        conectarBaseDePrueba(
             url = "jdbc:h2:mem:cuenta_last_edited_at_column_test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE",
             driver = "org.h2.Driver",
         )

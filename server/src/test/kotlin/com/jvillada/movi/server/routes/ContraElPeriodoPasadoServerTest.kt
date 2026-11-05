@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.server.conectarBaseDePrueba
 import com.jvillada.movi.server.balance.accountTypesFor
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Events
@@ -36,7 +37,7 @@ class ContraElPeriodoPasadoServerTest {
 
     @BeforeTest
     fun setUp() {
-        Database.connect(
+        conectarBaseDePrueba(
             url = "jdbc:h2:mem:contra_el_pasado;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE",
             driver = "org.h2.Driver",
         )

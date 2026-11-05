@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.server.conectarBaseDePrueba
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Apartados
 import com.jvillada.movi.server.db.Budgets
@@ -54,7 +55,7 @@ class FuentesQueNoSonIngresoTest {
 
     @BeforeTest
     fun setUp() {
-        Database.connect(
+        conectarBaseDePrueba(
             url = "jdbc:h2:mem:fuentes_no_ingreso_test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE",
             driver = "org.h2.Driver",
         )

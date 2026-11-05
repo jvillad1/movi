@@ -13,6 +13,8 @@ import com.jvillada.movi.server.documentos.FallaDeLaClaveDelPdf
 import com.jvillada.movi.server.documentos.abrirElPapelGuardado
 import com.jvillada.movi.server.documentos.PAPEL_CIFRADO_ILEGIBLE
 import com.jvillada.movi.server.documentos.PapelIlegible
+import com.jvillada.movi.server.ai.ElTopeDeLosPapeles
+import com.jvillada.movi.server.ai.PAPELES_DEMASIADOS
 import com.jvillada.movi.server.parsing.ClaudeStatementParser
 import com.jvillada.movi.server.parsing.ComprobanteLeido
 import com.jvillada.movi.server.parsing.ContenidoDelPapel
@@ -290,7 +292,7 @@ internal suspend fun leerElPapel(
         }
     }
 
-    return when (val clasificado = clasificar(papel, conSaldos)) {
+    return when (val clasificado = clasificar(uid, papel, conSaldos)) {
         is Clasificado.Comprobante -> {
             dbQuery { guardarLectura(uid, huella, papel.id, QueEsElPapel.COMPROBANTE, json.encodeToString(ComprobanteLeido.serializer(), clasificado.leido), MODELO_DE_TODOS_LOS_DIAS) }
             propuestaDelComprobante(uid, papel.id, papel.nombre, clasificado.leido, anotarAunque, ahora)
@@ -398,11 +400,11 @@ private sealed interface Clasificado {
  *   cuenta de Bancolombia (ver `leerLosMovimientosDeBancolombia`) y el extracto de la tarjeta de Nu
  *   (ver `leerElExtractoDeNu`).
  */
-private suspend fun clasificar(papel: PapelGuardado, conSaldos: Boolean = false): Clasificado {
+private suspend fun clasificar(uid: String, papel: PapelGuardado, conSaldos: Boolean = false): Clasificado {
     if (esImagenParaExtraer(papel.nombre, papel.mime, mimeEsConfiable = true)) {
         val mime = ClaudeStatementParser.supportedImageMime(papel.mime, papel.nombre)
             ?: throw FallaAlLeerElPapel(HttpStatusCode.UnprocessableEntity, PAPEL_IMAGEN_NO_SOPORTADA)
-        return deLoQueDijo(preguntarQueEs(ContenidoDelPapel.Imagen(papel.bytes, mime)))
+        return deLoQueDijo(preguntarQueEs(uid, ContenidoDelPapel.Imagen(papel.bytes, mime)))
     }
     val paraExtraer = nombreParaExtraerTexto(papel.nombre, papel.mime, mimeEsConfiable = true)
     when (paraExtraer.substringAfterLast('.', "").lowercase()) {
@@ -430,7 +432,7 @@ private suspend fun clasificar(papel: PapelGuardado, conSaldos: Boolean = false)
     // Vuelta 94: el extracto de la tarjeta de Nu, igual (ver `leerElExtractoDeNu`).
     if (leerElExtractoDeNu(texto) != null) return Clasificado.Extracto
     if (pareceUnExtracto(texto)) return Clasificado.Extracto
-    return deLoQueDijo(preguntarQueEs(ContenidoDelPapel.Texto(texto)))
+    return deLoQueDijo(preguntarQueEs(uid, ContenidoDelPapel.Texto(texto)))
 }
 
 /**
@@ -438,10 +440,13 @@ private suspend fun clasificar(papel: PapelGuardado, conSaldos: Boolean = false)
  * (`IA_SIN_CREDITO` / `IA_NO_DISPONIBLE`), que la app traduce a «La lectura con IA no está
  * disponible ahora…». El documento ya quedó guardado antes de esto, y no se guarda ninguna lectura.
  */
-private suspend fun preguntarQueEs(contenido: ContenidoDelPapel): QueDiceElPapel =
-    conLaIa("clasificar un papel", { throw FallaAlLeerElPapel(HttpStatusCode.ServiceUnavailable, it.codigo) }) {
+private suspend fun preguntarQueEs(uid: String, contenido: ContenidoDelPapel): QueDiceElPapel {
+    // Revisión de lanzamiento: el tope de lo que va a Claude por papeles (ver ElTopeDeLosPapeles).
+    if (!ElTopeDeLosPapeles.pasa(uid)) throw FallaAlLeerElPapel(HttpStatusCode.TooManyRequests, PAPELES_DEMASIADOS)
+    return conLaIa("clasificar un papel", { throw FallaAlLeerElPapel(HttpStatusCode.ServiceUnavailable, it.codigo) }) {
         LectorDePapeles.actual.queEs(contenido)
     }
+}
 
 /** ¿La falla al abrir el PDF es su contraseña? PDFBox lanza [InvalidPasswordException]. */
 private fun tieneContrasena(e: Throwable): Boolean =

@@ -119,7 +119,7 @@ class MainActivity : FragmentActivity() {
      */
     private fun recibirCompartido(intent: Intent?) {
         if (intent == null || !esCompartirConMovi(intent.action, intent.type)) return
-        val uris = urisCompartidos(intent)
+        val uris = urisCompartidos(intent, packageName)
         val tipo = intent.type
         // Una sola vez: el mismo Intent no se vuelve a leer si la actividad recibe otro onNewIntent.
         intent.action = null

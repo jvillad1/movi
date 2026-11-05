@@ -17,6 +17,10 @@
     una sesión de 30 días que sale del teléfono; la instantánea es plata. Se excluye entero: lo
     único que se pierde al restaurar es el tema elegido y el correo recordado del login.
 
+    `movi_capturas_por_subir` (CapturasPorSubir) guarda el TEXTO de los avisos del banco (SMS y
+    notificaciones) que todavía no subieron, con el id de la cuenta: es plata y no debe ir a la nube.
+    Se suben al volver a entrar; restaurados en otro teléfono no le sirven a nadie.
+
     `movi.db` es el espejo local de SQLite (`createDatabase("movi.db")`, Platform.android.kt):
     cuentas, movimientos y el caché de lecturas. Se excluyen también sus archivos de diario, que
     llevan las mismas filas. Al restaurar, el teléfono vuelve a bajar todo del server.
@@ -24,6 +28,7 @@
 <full-backup-content>
     <exclude domain="sharedpref" path="movi_sms_filter.xml" />
     <exclude domain="sharedpref" path="com.jvillada.movi_preferences.xml" />
+        <exclude domain="sharedpref" path="movi_capturas_por_subir.xml" />
     <exclude domain="database" path="movi.db" />
     <exclude domain="database" path="movi.db-journal" />
     <exclude domain="database" path="movi.db-wal" />

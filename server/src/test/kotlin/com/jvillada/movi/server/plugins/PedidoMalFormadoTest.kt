@@ -17,7 +17,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 
 /**
  * Lo que un pedido roto devuelve, medido con el mismo `configureSerialization` +
@@ -68,16 +68,22 @@ class PedidoMalFormadoTest {
     }
 
     /**
-     * Un bug nuestro NO se disfraza de 400: el plugin no lo atrapa. (El test host de Ktor re-lanza
-     * la excepción que ningún handler tomó en vez de contestar 500, así que eso es lo que se mide.)
+     * Un bug nuestro NO se disfraza de 400: el plugin no lo atrapa. Hasta Ktor 3.0 el test host re-lanzaba
+     * la excepción que ningún handler tomó; desde 3.3 contesta 500, como el server de verdad. Vale
+     * cualquiera de las dos; un 400 no.
      */
     @Test
     fun `un error nuestro no se disfraza de pedido mal formado`() {
-        assertFailsWith<IllegalStateException> {
+        var estado: HttpStatusCode? = null
+        val falla = runCatching {
             testApplication {
                 montar()
-                mandar("/bug", "{}")
+                estado = mandar("/bug", "{}").status
             }
-        }
+        }.exceptionOrNull()
+        assertTrue(
+            falla is IllegalStateException || estado == HttpStatusCode.InternalServerError,
+            "el bug salió como ${estado ?: falla} y no como un 500",
+        )
     }
 }

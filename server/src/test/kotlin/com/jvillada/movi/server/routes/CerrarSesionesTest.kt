@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.server.conectarBaseDePrueba
 import com.jvillada.movi.server.auth.JwtConfig
 import com.jvillada.movi.server.auth.RateLimiter
 import com.jvillada.movi.server.db.PasswordResetTokens
@@ -50,7 +51,7 @@ class CerrarSesionesTest {
     fun setUp() {
         System.setProperty("movi.jwt.secret", secreto)
         RateLimiter.reset()
-        Database.connect(
+        conectarBaseDePrueba(
             url = "jdbc:h2:mem:cerrar_sesiones_test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE",
             driver = "org.h2.Driver",
         )

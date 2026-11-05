@@ -60,6 +60,8 @@ object WebPushSender {
         val service = PushService(VapidConfig.publicKey(), VapidConfig.privateKey(), VapidConfig.subject())
         var anyDelivered = false
         for ((endpoint, p256dh, auth) in subs) {
+            // Una suscripción guardada antes de exigir un servicio de push real no se usa (SSRF).
+            if (!com.jvillada.movi.server.routes.esEndpointDePush(endpoint)) continue
             val status = withContext(Dispatchers.IO) {
                 runCatching {
                     // aes128gcm explícito (RFC 8291): el default de la lib es el draft legacy aesgcm,

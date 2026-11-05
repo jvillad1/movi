@@ -27,6 +27,25 @@ private data class PushUnsubscribeRequest(val endpoint: String)
 private data class VapidKeyResponse(val key: String)
 
 /** Pública — el cliente necesita la clave ANTES de autenticar el subscribe. */
+/**
+ * Revisión de lanzamiento (nov-2026): el server le hace un POST a la URL que guarde el usuario. Sin
+ * esto, un usuario cualquiera podía registrar `http://postgres.railway.internal:5432/…` o la IP de
+ * metadatos y usar los avisos para sondear la red privada de Railway (SSRF). Solo `https://` y los
+ * servicios de push de los navegadores: Chrome/Edge-Chromium (FCM), Firefox (Mozilla), Edge (WNS) y
+ * Safari (Apple).
+ */
+internal fun esEndpointDePush(endpoint: String): Boolean {
+    val uri = runCatching { java.net.URI(endpoint) }.getOrNull() ?: return false
+    if (!uri.scheme.equals("https", ignoreCase = true) || uri.userInfo != null) return false
+    if (uri.port != -1 && uri.port != 443) return false
+    val host = uri.host?.lowercase() ?: return false
+    return host == "fcm.googleapis.com" ||
+        host == "web.push.apple.com" ||
+        host.endsWith(".push.apple.com") ||
+        host.endsWith(".push.services.mozilla.com") ||
+        host.endsWith(".notify.windows.com")
+}
+
 fun Route.pushPublicRoutes() {
     get("/api/push/vapid-key") {
         val key = VapidConfig.publicKey()
@@ -42,7 +61,7 @@ fun Route.pushRoutes() {
     post("/api/push/subscribe") {
         val uid = call.userId()
         val body = call.receive<PushSubscribeRequest>()
-        if (body.endpoint.isBlank() || body.endpoint.length > 500) {
+        if (body.endpoint.length > 500 || !esEndpointDePush(body.endpoint)) {
             return@post call.respond(HttpStatusCode.BadRequest, "Endpoint inválido")
         }
         dbQuery {

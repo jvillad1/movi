@@ -1,6 +1,7 @@
 package com.jvillada.movi.server.parsing
 
 import org.apache.pdfbox.Loader
+import org.apache.pdfbox.io.IOUtils
 import org.apache.pdfbox.text.PDFTextStripper
 import org.apache.poi.ss.usermodel.WorkbookFactory
 import java.io.ByteArrayInputStream
@@ -65,8 +66,21 @@ object StatementParser {
         return StatementDocumentType.TRANSACTION_STATEMENT
     }
 
+    /**
+     * Revisión de lanzamiento (nov-2026): un PDF de 10 MB puede inflarse al leerse (flujos comprimidos
+     * con una razón enorme, miles de páginas) y llenar el heap del único proceso. Tres límites: los flujos
+     * se guardan en archivos temporales y no en la memoria (`createTempFileOnlyStreamCache`), se leen como
+     * mucho [MAX_PAGINAS_DEL_PDF] páginas y el texto se corta en [MAX_TEXTO_DEL_PDF] caracteres: pasado,
+     * [PdfDemasiadoGrande], que quien llama trata como un PDF que no se pudo leer. Un extracto real tiene
+     * unas pocas páginas y unas decenas de miles de caracteres. Umbrales **elegidos, no medidos**.
+     */
     private fun extractPdf(bytes: ByteArray): String =
-        Loader.loadPDF(bytes).use { doc -> PDFTextStripper().getText(doc) }
+        Loader.loadPDF(bytes, "", null, null, IOUtils.createTempFileOnlyStreamCache()).use { doc ->
+            val stripper = PDFTextStripper().apply { endPage = minOf(doc.numberOfPages, MAX_PAGINAS_DEL_PDF) }
+            val texto = TextoConTope(MAX_TEXTO_DEL_PDF)
+            stripper.writeText(doc, texto)
+            texto.toString()
+        }
 
     private fun extractSpreadsheet(bytes: ByteArray): String {
         val wb = WorkbookFactory.create(ByteArrayInputStream(bytes))
@@ -83,4 +97,25 @@ object StatementParser {
             }
         }
     }
+}
+
+/** Cuántas páginas de un PDF se leen como mucho (ver `extractPdf`). */
+internal const val MAX_PAGINAS_DEL_PDF: Int = 200
+
+/** Cuántos caracteres de texto se sacan de un PDF como mucho (ver `extractPdf`). */
+internal const val MAX_TEXTO_DEL_PDF: Int = 5_000_000
+
+/** El PDF da más texto del que Movi lee: se trata como uno que no se pudo leer. */
+class PdfDemasiadoGrande : RuntimeException("El PDF tiene más texto del que Movi lee")
+
+/** Un `Writer` que junta texto y lanza [PdfDemasiadoGrande] al pasar de [tope] caracteres. */
+internal class TextoConTope(private val tope: Int) : java.io.Writer() {
+    private val sb = StringBuilder()
+    override fun write(cbuf: CharArray, off: Int, len: Int) {
+        if (sb.length + len > tope) throw PdfDemasiadoGrande()
+        sb.append(cbuf, off, len)
+    }
+    override fun flush() = Unit
+    override fun close() = Unit
+    override fun toString(): String = sb.toString()
 }

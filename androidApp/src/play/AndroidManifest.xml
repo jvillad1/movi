@@ -26,6 +26,13 @@
         android:name="android.permission.RECEIVE_SMS"
         tools:node="remove" />
 
+    <!-- Revisión de lanzamiento (nov-2026): Play solo acepta este permiso en casos puntuales y era el
+         riesgo más alto de rechazo. Sin él, «Quitar el ahorro de batería» abre la lista del sistema
+         (ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS), que no pide permiso: `pedirLaExencionDeBateria`. -->
+    <uses-permission
+        android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
+        tools:node="remove" />
+
     <application>
         <receiver
             android:name="com.jvillada.movi.sms.SmsRealtimeReceiver"

@@ -30,6 +30,8 @@ import com.jvillada.movi.server.ai.conLaIa
 import com.jvillada.movi.server.parsing.leerElExtractoDeNu
 import com.jvillada.movi.server.parsing.leerLosMovimientosDeBancolombia
 import com.jvillada.movi.server.parsing.leerElExcelDeBancolombia
+import com.jvillada.movi.server.ai.ElTopeDeLosPapeles
+import com.jvillada.movi.server.ai.PAPELES_DEMASIADOS
 import com.jvillada.movi.server.parsing.ClaudeStatementParser
 import com.jvillada.movi.server.parsing.LectorDePapeles
 import com.jvillada.movi.server.parsing.FamiriosParser
@@ -48,7 +50,6 @@ import com.jvillada.movi.shared.model.masRecientePrimero
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.PartData
 import io.ktor.http.content.forEachPart
-import io.ktor.http.content.streamProvider
 import io.ktor.server.application.log
 import io.ktor.server.request.receiveMultipart
 import io.ktor.server.request.receive
@@ -304,6 +305,11 @@ internal data class ExtractoLeido(
 private fun fallaPorLaIa(falla: FallaDeLaIa): Nothing =
     throw FallaAlProcesarExtracto(HttpStatusCode.ServiceUnavailable, falla.codigo)
 
+/** Revisión de lanzamiento: el tope de lo que va a Claude por papeles (ver ElTopeDeLosPapeles). */
+private fun topeDeLosPapeles(uid: String) {
+    if (!ElTopeDeLosPapeles.pasa(uid)) throw FallaAlProcesarExtracto(HttpStatusCode.TooManyRequests, PAPELES_DEMASIADOS)
+}
+
 /** Lee el extracto (Claude o Famirios). Lanza [FallaAlProcesarExtracto]. Ver [ExtractoLeido]. */
 internal suspend fun leerElExtracto(
     uid: String,
@@ -353,6 +359,7 @@ internal suspend fun leerElExtracto(
             )
         bankName = StatementParser.detectBankName(fileName)
         val reglas = Stores.merchantRules.getRules(uid)
+        topeDeLosPapeles(uid)
         val lectura = conLaIa("leer un extracto", ::fallaPorLaIa) {
             LectorDePapeles.actual.leerExtractoDeImagen(bytes, imageMime, reglas)
         }
@@ -479,6 +486,7 @@ internal suspend fun leerElExtracto(
             }
         } else {
             val reglas = Stores.merchantRules.getRules(uid)
+            topeDeLosPapeles(uid)
             val lectura = conLaIa("leer un extracto", ::fallaPorLaIa) {
                 LectorDePapeles.actual.leerExtractoDeTexto(text, reglas)
             }
@@ -799,13 +807,23 @@ fun Route.statementRoutes() {
         var fileName = "statement"
         var mimeType = ""
         var bytes = ByteArray(0)
+        var demasiadoGrande = false
         multipart.forEachPart { part ->
             if (part is PartData.FileItem) {
                 fileName = part.originalFileName ?: "statement"
                 mimeType = part.contentType?.toString() ?: ""
-                bytes = part.streamProvider().readBytes()
+                // Revisión de lanzamiento (nov-2026): con `readBytes()` el tope de `procesarExtracto`
+                // llegaba tarde, con el archivo entero ya en el heap. El mismo lector con tope de Documentos.
+                val leido = part.leerConTope(MAX_DOCUMENTO_BYTES)
+                if (leido == null) demasiadoGrande = true else bytes = leido
             }
             part.dispose()
+        }
+        if (demasiadoGrande) {
+            return@post call.respond(
+                HttpStatusCode.PayloadTooLarge,
+                "El archivo pesa más de ${MAX_DOCUMENTO_BYTES / (1024 * 1024)} MB",
+            )
         }
 
         try {

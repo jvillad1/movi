@@ -342,8 +342,8 @@ fun lineaDeLoQueFalta(checklist: List<PagoDelPeriodo>): String {
 fun pieDeLoYaPagado(checklist: List<PagoDelPeriodo>): String? {
     val (pagados, total) = avanceDelChecklist(checklist)
     if (pagados == 0 || pagados == total) return null
-    return if (pagados == 1) "Ya salió 1. El checklist completo está en «Ver todos»."
-    else "Ya salieron $pagados. El checklist completo está en «Ver todos»."
+    return if (pagados == 1) "Ya salió 1. La lista completa está en «Ver todos»."
+    else "Ya salieron $pagados. La lista completa está en «Ver todos»."
 }
 
 // ── Qué debería revisar ──────────────────────────────────────────────────────

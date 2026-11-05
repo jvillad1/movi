@@ -10,6 +10,7 @@
     <cloud-backup>
         <exclude domain="sharedpref" path="movi_sms_filter.xml" />
         <exclude domain="sharedpref" path="com.jvillada.movi_preferences.xml" />
+        <exclude domain="sharedpref" path="movi_capturas_por_subir.xml" />
         <exclude domain="database" path="movi.db" />
         <exclude domain="database" path="movi.db-journal" />
         <exclude domain="database" path="movi.db-wal" />
@@ -18,6 +19,7 @@
     <device-transfer>
         <exclude domain="sharedpref" path="movi_sms_filter.xml" />
         <exclude domain="sharedpref" path="com.jvillada.movi_preferences.xml" />
+        <exclude domain="sharedpref" path="movi_capturas_por_subir.xml" />
         <exclude domain="database" path="movi.db" />
         <exclude domain="database" path="movi.db-journal" />
         <exclude domain="database" path="movi.db-wal" />
