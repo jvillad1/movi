@@ -63,7 +63,7 @@ class LosBotonesDeLaPropuestaCabenTest {
     }
 
     @Test
-    fun `No fue este se lee entero dentro de la fila a 360`() {
+    fun `No fue este se lee entero dentro de la hoja a 360`() {
         composeRule.setContent {
             val base = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(base.density, base.fontScale * 1.12f)) {
@@ -84,6 +84,9 @@ class LosBotonesDeLaPropuestaCabenTest {
                 }
             }
         }
+        composeRule.waitForIdle()
+        // Vuelta 136: los botones de la propuesta viven en la hoja de la factura.
+        composeRule.abrirLaFactura("Carro")
         composeRule.waitForIdle()
 
         entero(ETIQUETA_SI_FUE_ESTE)

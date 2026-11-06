@@ -1,5 +1,8 @@
 package com.jvillada.movi.ui.recurrentes
 
+import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -115,12 +118,17 @@ class AnotarAntesDelVencimientoTest {
         }
         composeRule.waitForIdle()
 
-        val nodos = botones().fetchSemanticsNodes()
-        assertEquals(2, nodos.size, "la cuota y el pago fijo ofrecen anotar, cada uno el suyo")
-        assertTrue(!hay(TEXTO_SIN_MOVIMIENTO), "antes de vencer, Movi no tenía por qué encontrarlo")
-
-        nodos.indices.forEach { i -> botones()[i].performSemanticsAction(SemanticsActions.OnClick) }
-        composeRule.waitForIdle()
+        // Vuelta 136: cada fila abre su hoja, y la hoja de cada una ofrece anotar el suyo.
+        for (pago in listOf(cuota, arriendo)) {
+            composeRule.abrirLaFactura(pago.nombre)
+            composeRule.waitForIdle()
+            assertTrue(!hay(TEXTO_SIN_MOVIMIENTO), "antes de vencer, Movi no tenía por qué encontrarlo")
+            composeRule.onAllNodes(
+                hasAnyDescendant(hasText(ETIQUETA_ANOTAR)) and hasClickAction() and hasAnyAncestor(hasTestTag(TAG_HOJA_DE_LA_FACTURA)),
+                useUnmergedTree = true,
+            ).onFirst().performSemanticsAction(SemanticsActions.OnClick)
+            composeRule.waitForIdle()
+        }
         assertEquals(setOf("credit_l9695", "rr_arriendo"), anotadas.toSet())
     }
 

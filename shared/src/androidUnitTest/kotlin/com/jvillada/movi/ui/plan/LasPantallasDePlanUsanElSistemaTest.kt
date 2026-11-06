@@ -202,13 +202,13 @@ class LasPantallasDePlanUsanElSistemaTest {
         composeRule.onAllNodesWithText(texto, substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
 
     @Test
-    fun `Plan usa el sistema, y los pagos del periodo llevan su pildora`() {
+    fun `Plan usa el sistema, y los pagos del periodo dicen su estado`() {
         montar { PlanScreen(onNavigate = {}) }
         composeRule.waitUntil(timeoutMillis = 5_000) { hay("Arriendo del apartamento") }
         usaElSistema("Plan", minimoDeSecciones = 2)
-        // La fila del pago vence hoy: lo dice su píldora, no solo un color.
-        // Vuelta 40: la pastilla de vencimiento dice «Vence hoy».
-        assertTrue(nodos(TAG_PILDORA).any { "Vence hoy" in textosDentro(it) }, "el pago de hoy lleva la píldora «Vence hoy»")
+        // La fila del pago vence hoy: lo dice en palabras, no solo un color.
+        // Vuelta 136: en el renglón de estado de la fila (era una pastilla, vuelta 40).
+        assertTrue(nodos(TAG_FILA).any { "Vence hoy" in textosDentro(it) }, "el pago de hoy dice «Vence hoy» en su renglón de estado")
         assertTrue(!hay(TITULO_RECORDATORIOS_SIN_CANAL), "sin recordatorios pedidos, no hay propuesta")
     }
 

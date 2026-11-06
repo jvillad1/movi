@@ -325,71 +325,51 @@ fun SeccionChecklistDelPeriodo(
     val vista = VistaDeFacturasStore.vista
     val ingresos = enOrdenDeFacturas(checklist.filter { it.esIngreso })
     val urgente = laMasUrgente(facturas)
+    // Vuelta 136: lo que cada fila sabe de sí, lo mismo para la fila, su hoja y la tarjeta de arriba.
+    fun loDe(pago: PagoDelPeriodo, enElTotal: Boolean): LoDeLaFactura = loDeLaFactura(
+        pago = pago,
+        descartadas = descartadas,
+        enVuelo = pago.ruleId in marcando,
+        planesDeCuotas = planesDeCuotas,
+        cuotasQueSeParecen = if (onEsLaCuota != null) cuotasQueSeParecen else emptyMap(),
+        extractosDeTarjetas = extractosDeTarjetas,
+        enElTotal = enElTotal,
+    )
+    // Vuelta 136: la factura cuya hoja está abierta (regla + vencimiento), o `null`.
+    var facturaAbierta by rememberSaveable { mutableStateOf<String?>(null) }
     @Composable
-    fun FilaDe(pago: PagoDelPeriodo, conAnotar: Boolean = true, enElTotal: Boolean = true) {
-        val propuesta = propuestaDeLaFila(pago, descartadas)
-        // Vuelta 51: una propuesta muy distinta del monto no es «Por confirmar»: la fila ofrece «Anotar pago».
-        val conPropuesta = pago.estado == EstadoDeLaFila.CON_DUDAS && propuesta != null && !esPropuestaLejana(pago, propuesta)
-        val enVuelo = pago.ruleId in marcando
-        val estimacion = estimacionDeLaFila(pago, planesDeCuotas)?.takeIf { !enVuelo && !pago.pagado }
-        // Vuelta 57: la cuota pendiente ofrece el gasto que se le parece, como el detalle de ese gasto.
-        val parecido = gastoParecidoDeLaFila(pago, cuotasQueSeParecen)?.takeIf { onEsLaCuota != null }
+    fun FilaDe(pago: PagoDelPeriodo, enElTotal: Boolean = true) {
+        val lo = loDe(pago, enElTotal)
+        // Vuelta 136: una sola anatomía; todo lo que no cabe en la fila vive en su hoja.
         FilaDeFactura(
             pago = pago,
-            // Vuelta 58: con un gasto parecido, la acción principal es «¿Es el de $X?», no «Anotar pago».
-            principal = accionPrincipalDeLaFila(pago == urgente, conPropuesta, parecido != null) == AccionPrincipalDeLaFila.ANOTAR,
-            enVuelo = enVuelo,
-            conPropuesta = conPropuesta,
-            onAnotar = if (conAnotar) ({ acciones.onAnotarMovimiento(pago) }) else null,
-            onVerMovimiento = onVerMovimiento,
-            onAbrir = onAbrir?.let { abrir -> { abrir(pago) } },
-            etiquetaDeAbrir = etiquetaDeAbrir(pago.ruleId),
-            evidencia = evidenciaDeLaFila(pago),
-            extracto = extractoDeLaFila(pago, extractosDeTarjetas),
-            // Vuelta 86: solo las filas del período (las de «Falta por pagar»); lo de antes no suma en nada.
-            noSuma = if (enElTotal) porQueNoSuma(pago) else null,
-            onCargarMinimo = onCargarMinimo?.let { cargar -> { cargar(pago) } },
-            // Vuelta 48: lo de una fila pagada va en su «⋯»; tocarla abre el movimiento.
-            accionesDelMenu = accionesDelMenuDeLaFilaPagada(pago).mapNotNull { accion ->
-                when (accion) {
-                    AccionDeLaFilaPagada.NO_FUE_ESTE -> ETIQUETA_NO_FUE_ESTE to { pago.eventId?.let { acciones.onNoFueEste(pago, it) }; Unit }
-                    AccionDeLaFilaPagada.QUITAR_LA_MARCA -> ETIQUETA_QUITAR_LA_MARCA to { acciones.onQuitarLaMarca(pago) }
-                    // Vuelta 51: solo en la cuota de un crédito (que no se desmarca), y solo si hay dónde verlo.
-                    AccionDeLaFilaPagada.VER_MOVIMIENTO -> onVerMovimiento?.let { ver ->
-                        ETIQUETA_VER_MOVIMIENTO to { pago.eventId?.let { ver(it) }; Unit }
-                    }
-                }
-            },
-            // Re-revisión: no en la fila vencida de una regla YA pausada (pisaría su fecha).
-            accionesDelMenuPendiente = if (onPausar != null && !pago.hecho && !pago.pausada && !pago.esAbono && deudaDeLaRegla(pago.ruleId) == null) {
-                listOf(ETIQUETA_PAUSAR to { onPausar(pago) })
-            } else {
-                emptyList()
-            },
-            debajo = if (!pago.pagado && (estimacion != null || parecido != null || pago.esAbono || ofreceAlgoDebajo(pago, conPropuesta))) {
-                {
-                    if (estimacion != null) Text(text = estimacion, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                    // Vuelta 63: el abono planeado dice que no es un fijo (antes de vencer; después lo
-                    // dice la fila sin movimiento, con el mismo texto).
-                    if (pago.esAbono && pago.estado == EstadoDeLaFila.AUN_NO_VENCE) {
-                        Text(text = com.jvillada.movi.ui.quickadd.textoDelAbonoPendiente(pago), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                    }
-                    LoQueOfreceLaFila(pago, propuesta, enVuelo, acciones, conBotonDeAnotar = false, esLaMasUrgente = pago == urgente)
-                    if (parecido != null) {
-                        LaCuotaQueSeParece(
-                            pago = pago,
-                            parecido = parecido,
-                            enVuelo = enVuelo,
-                            onEsLaCuota = { onEsLaCuota?.invoke(pago, parecido) },
-                            onNoEs = { onNoEsLaCuota?.invoke(pago, parecido) },
-                            principal = pago == urgente,
-                        )
-                    }
-                }
-            } else null,
+            estado = lo.estado,
+            extracto = lo.extracto,
+            onAbrir = { facturaAbierta = claveDeLaFactura(pago) },
         )
         // Vuelta 80: la propuesta «¿Usar siempre Nu para Carro?» ya no cuelga de la fila: va arriba de
         // la lista, como una propuesta de Movi ([PropuestasDeLaCuentaDeLaRegla]).
+    }
+    // Vuelta 136 · el «Anotar pago» del más urgente vive en la tarjeta «Falta por pagar» (las filas son iguales).
+    val loMasUrgente: LoMasUrgente? = urgente?.let { pago ->
+        val lo = loDe(pago, enElTotal = true)
+        when (accionPrincipalDeLaFila(esLaMasUrgente = true, conPropuesta = lo.conPropuesta, hayGastoParecido = lo.parecido != null)) {
+            AccionPrincipalDeLaFila.ANOTAR -> LoMasUrgente(
+                nombre = pago.nombre,
+                boton = etiquetaDeAnotar(pago.esIngreso),
+                principal = true,
+                habilitado = !lo.enVuelo,
+                onClick = { acciones.onAnotarMovimiento(pago) },
+            )
+            // Con un candidato, la acción es mirarlo: abre la hoja con «Sí, fue este» (o «Sí, es la cuota»).
+            AccionPrincipalDeLaFila.EL_CANDIDATO, AccionPrincipalDeLaFila.NINGUNA -> LoMasUrgente(
+                nombre = pago.nombre,
+                boton = lo.candidato?.let(::enlaceDeLaPropuestaLejana) ?: etiquetaDeAnotar(pago.esIngreso),
+                principal = lo.parecido != null && !lo.conPropuesta,
+                habilitado = !lo.enVuelo,
+                onClick = { facturaAbierta = claveDeLaFactura(pago) },
+            )
+        }
     }
 
     // Vuelta 72: la factura pagada desde una cuenta, cuya regla no tiene ninguna, propone guardarla.
@@ -436,7 +416,7 @@ fun SeccionChecklistDelPeriodo(
             else -> {
                 // ── La tarjeta amarilla: cuánto falta, de cuánto, y cuánto llevas ──────────────
                 if (facturas.isNotEmpty()) {
-                    TarjetaFaltaPorPagar(resumenDeFacturas(checklist))
+                    TarjetaFaltaPorPagar(resumenDeFacturas(checklist), loMasUrgente = loMasUrgente)
                     Spacer(Modifier.height(Medida.entreSecciones))
                 }
                 // «Tus recordatorios no llegan» (vuelta de diseño 28): un aviso propio, compacto y en
@@ -473,16 +453,7 @@ fun SeccionChecklistDelPeriodo(
                         grupos = remember(facturas) { facturasPorCategoria(facturas) },
                         periodo = claveDelPeriodo,
                         fila = { pago -> FilaDe(pago) },
-                        pie = { grupo ->
-                            if (grupo.filas.any { !it.pagado && estimacionDeLaFila(it, planesDeCuotas) != null }) {
-                                Text(
-                                    text = ESTIMADO_SOBRE_LA_DEUDA_DE_HOY,
-                                    style = Movi.textos.apoyo,
-                                    color = Movi.colores.textoApagado,
-                                    modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(bottom = Espacio.s),
-                                )
-                            }
-                        },
+                        // Vuelta 136: sin pie; la estimación de una cuota y de dónde sale viven en la hoja.
                     )
                 } else {
                     Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
@@ -504,15 +475,7 @@ fun SeccionChecklistDelPeriodo(
                             if (i > 0) Separador(SangriaDeSeparador.ConInicio)
                             FilaDe(pago)
                         }
-                        // De dónde salen las estimaciones de las cuotas: una vez, si alguna fila la muestra.
-                        if (aLaVista.any { !it.pagado && estimacionDeLaFila(it, planesDeCuotas) != null }) {
-                            Text(
-                                text = ESTIMADO_SOBRE_LA_DEUDA_DE_HOY,
-                                style = Movi.textos.apoyo,
-                                color = Movi.colores.textoApagado,
-                                modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(bottom = Espacio.s),
-                            )
-                        }
+                        // Vuelta 136: la estimación de una cuota (y de dónde sale) la dice la hoja de la factura.
                     }
                     if (facturas.size > FACTURAS_A_LA_VISTA) {
                         Boton(
@@ -569,6 +532,35 @@ fun SeccionChecklistDelPeriodo(
                 onAbrir = onAbrirPausada,
             )
         }
+    }
+
+    // ── Vuelta 136 · la hoja de la factura: todo lo que no cabe en la fila ──────────────────────────
+    val abierta: Pair<PagoDelPeriodo, Boolean>? = facturaAbierta?.let { clave ->
+        checklist.firstOrNull { claveDeLaFactura(it) == clave }?.let { it to true }
+            ?: anteriores.firstOrNull { claveDeLaFactura(it) == clave }?.let { it to false }
+    }
+    // Si la factura ya no está (otro período, se pausó), la hoja no queda pendiente de reabrirse sola.
+    LaunchedEffect(abierta == null, cargando) { if (abierta == null && !cargando) facturaAbierta = null }
+    if (abierta != null) {
+        val (pago, enElTotal) = abierta
+        val lo = loDe(pago, enElTotal)
+        HojaDeLaFactura(
+            lo = lo,
+            onCerrar = { facturaAbierta = null },
+            onAnotar = { acciones.onAnotarMovimiento(pago) },
+            onConfirmar = { id -> acciones.onConfirmar(pago, id) },
+            onNoFueEste = { id -> acciones.onNoFueEste(pago, id) },
+            onEsLaCuota = lo.parecido?.let { parecido -> onEsLaCuota?.let { { it(pago, parecido) } } },
+            onNoEsLaCuota = lo.parecido?.let { parecido -> onNoEsLaCuota?.let { { it(pago, parecido) } } },
+            onVerMovimiento = onVerMovimiento,
+            onQuitarLaMarca = { acciones.onQuitarLaMarca(pago) },
+            // Re-revisión de la 72: no en la fila vencida de una regla YA pausada (pisaría su fecha).
+            onPausar = onPausar?.takeIf { !pago.hecho && !pago.pausada && !pago.esAbono && deudaDeLaRegla(pago.ruleId) == null }
+                ?.let { pausar -> { pausar(pago) } },
+            onAbrirLaRegla = onAbrir?.let { abrir -> { abrir(pago) } },
+            etiquetaDeAbrir = etiquetaDeAbrir(pago.ruleId),
+            onCargarMinimo = onCargarMinimo?.let { cargar -> { cargar(pago) } },
+        )
     }
 }
 
@@ -905,180 +897,6 @@ internal fun etiquetaDeAbrir(ruleId: String): String =
     else "Editar el pago fijo"
 
 /**
- * Si la fila tiene algo que ofrecer debajo. Una fila sin nada no deja ni un hueco: la mayoría son
- * cuotas que el movimiento ya probó.
- */
-private fun hayQueOfrecer(pago: PagoDelPeriodo): Boolean = when (pago.estado) {
-    // Una fila que todavía no vence SÍ ofrece algo: anotar el pago. Ver [LoQueOfreceLaFila].
-    EstadoDeLaFila.AUN_NO_VENCE -> true
-    // La cuota de un crédito y el pago de una tarjeta no discuten: ahí el movimiento MOVIÓ la
-    // deuda, y lo único que revierte eso es borrarlo.
-    //
-    // **`automatica` va primero**: lo que Movi empareja solo viaja también con `derivado = true`
-    // (no hay sello que borrar), así que mirar solo `derivado` le quitaba el «No fue este» justo
-    // a la fila que Movi dedujo y puede haber deducido mal. Y un sello del dueño con movimiento
-    // (`eventId`, no derivado) también lo ofrece: es el «Deshacer» de lo que era «Ya
-    // ocurrieron», que además guarda el rechazo para que no se vuelva a proponer.
-    EstadoDeLaFila.LISTO -> pago.automatica || (pago.eventId != null && !pago.derivado)
-    else -> true
-}
-
-/**
- * **Lo único que esta fila puede ofrecer**, según lo que la evidencia diga de ella. Sangrado para
- * que se lea como algo que cuelga de la fila y no como una fila más.
- */
-@Composable
-private fun LoQueOfreceLaFila(
-    pago: PagoDelPeriodo,
-    propuesta: FinancialEvent?,
-    enVuelo: Boolean,
-    acciones: AccionesDelChecklist,
-    /**
-     * Vuelta 40: en una [FilaDeFactura] «Anotar pago» ya está a la derecha de la fila; debajo no se
-     * repite (ni «Movi no encontró…»: la pastilla ya dice que venció).
-     */
-    conBotonDeAnotar: Boolean = true,
-    /** Vuelta 58: «Sí, fue este» es amarillo solo en la fila más urgente (un solo amarillo en Pagos). */
-    esLaMasUrgente: Boolean = true,
-) {
-    if (!hayQueOfrecer(pago)) return
-    if (!conBotonDeAnotar && pago.estado == EstadoDeLaFila.AUN_NO_VENCE) return
-    // Vuelta 51: el candidato que se aleja más de la mitad del monto va de enlace, no de pregunta.
-    if (pago.estado == EstadoDeLaFila.CON_DUDAS && propuesta != null && esPropuestaLejana(pago, propuesta)) {
-        PropuestaLejana(pago, propuesta, enVuelo, acciones, conBotonDeAnotar)
-        return
-    }
-    if (!conBotonDeAnotar && (pago.estado == EstadoDeLaFila.SIN_MOVIMIENTO || (pago.estado == EstadoDeLaFila.CON_DUDAS && propuesta == null))) {
-        // Movi buscó y no encontró: se dice (el botón ya está a la derecha de la fila).
-        Text(
-            text = textoSinMovimiento(pago),
-            style = Movi.textos.apoyo,
-            color = Movi.colores.textoMedio,
-        )
-        return
-    }
-    Column(modifier = Modifier.fillMaxWidth()) {
-        when (pago.estado) {
-            // Vuelta 45: lo que ofrece depende de quién la dio por pagada (ver [accionesDeLaFilaPagada]).
-            EstadoDeLaFila.LISTO -> AccionesDeLaFila(
-                acciones = accionesDeLaFilaPagada(pago).mapNotNull { accion ->
-                    when (accion) {
-                        AccionDeLaFilaPagada.NO_FUE_ESTE -> AccionDeOcurrencia(ETIQUETA_NO_FUE_ESTE, primary = false) {
-                            pago.eventId?.let { acciones.onNoFueEste(pago, it) }
-                        }
-                        AccionDeLaFilaPagada.VER_MOVIMIENTO -> {
-                            val ver = acciones.onVerMovimiento
-                            val id = pago.eventId
-                            if (ver != null && id != null) AccionDeOcurrencia(ETIQUETA_VER_MOVIMIENTO, primary = false) { ver(id) } else null
-                        }
-                        AccionDeLaFilaPagada.QUITAR_LA_MARCA -> AccionDeOcurrencia(ETIQUETA_QUITAR_LA_MARCA, primary = false) {
-                            acciones.onQuitarLaMarca(pago)
-                        }
-                    }
-                },
-                enVuelo = enVuelo,
-            )
-            EstadoDeLaFila.MARCADA_A_MANO -> AccionesDeLaFila(
-                acciones = listOf(
-                    AccionDeOcurrencia(ETIQUETA_QUITAR_LA_MARCA, primary = false) {
-                        acciones.onQuitarLaMarca(pago)
-                    },
-                ),
-                enVuelo = enVuelo,
-            )
-            // Con candidatos se pregunta; sin ninguno (o con todos rechazados en esta sesión) la
-            // fila cae a la misma salida que una que nunca tuvo: anotar el movimiento que falta.
-            // La pregunta es una propuesta de Movi: va en la superficie de las propuestas (la de
-            // «Movi propone hoy» del Inicio), con su píldora y sus dos botones del sistema.
-            EstadoDeLaFila.CON_DUDAS -> if (propuesta != null) {
-                // Vuelta 40 (revisión): dentro de la lista de facturas, un bloque plano en la capa 2
-                // —sin sombra—: una tarjeta con sombra metida en una lista es tarjeta dentro de tarjeta.
-                Superficie(
-                    modifier = Modifier.fillMaxWidth(),
-                    nivel = if (conBotonDeAnotar) NivelDeSuperficie.Propuesta else NivelDeSuperficie.Capa2,
-                ) {
-                    Text(text = preguntaDeLaFila(pago), style = Movi.textos.titulo, color = Movi.colores.texto)
-                    Spacer(Modifier.height(Espacio.xs))
-                    PropuestaDeMovimiento(
-                        propuesta = propuesta,
-                        // Se mudó de «Próximos» con la propuesta: sin él, un movimiento de otro monto
-                        // se confirmaba a ciegas. En una tarjeta (saldo) o en otra moneda no se compara.
-                        aviso = avisoDeMontoDistinto(pago.monto, pago.montoEsSaldo, propuesta),
-                        enVuelo = enVuelo,
-                        onConfirmar = { acciones.onConfirmar(pago, propuesta.id) },
-                        onDescartar = { acciones.onNoFueEste(pago, propuesta.id) },
-                        // Vuelta 72: «Sí, fue este» nunca es el amarillo; tildar es decisión del dueño.
-                        confirmarEsPrincipal = false,
-                    )
-                }
-            } else {
-                SinMovimiento(pago, enVuelo, acciones)
-            }
-            EstadoDeLaFila.SIN_MOVIMIENTO -> SinMovimiento(pago, enVuelo, acciones)
-            // **El dueño paga ANTES del vencimiento** (Master Black vence el 2 y la pagó el 27):
-            // sin esta salida, «Anotar este pago» —que abre Agregar ya lleno, en «Cuota» si es una
-            // deuda— solo aparecía cuando el pago ya estaba vencido, o sea casi nunca. Va como
-            // acción secundaria y sin el «Movi no encontró…»: todavía no tenía por qué encontrarlo.
-            // Solo el botón, para que la fila crezca lo mínimo.
-            EstadoDeLaFila.AUN_NO_VENCE -> AccionesDeLaFila(
-                acciones = listOf(
-                    AccionDeOcurrencia(etiquetaDeAnotar(pago.esIngreso), primary = false) {
-                        acciones.onAnotarMovimiento(pago)
-                    },
-                ),
-                enVuelo = enVuelo,
-            )
-        }
-    }
-}
-
-/**
- * **La propuesta lejana** (vuelta 51): «Anotar pago» sigue siendo la acción —a la derecha de la fila, o
- * acá si la fila no lo tiene ([conBotonDeAnotar])— y el candidato queda como enlace, «¿Es el de
- * $260.000?». Tocarlo abre la pregunta de siempre («Sí, fue este» / «No fue este»): el
- * dueño decide; nada se tilda solo.
- */
-@Composable
-internal fun PropuestaLejana(
-    pago: PagoDelPeriodo,
-    propuesta: FinancialEvent,
-    enVuelo: Boolean,
-    acciones: AccionesDelChecklist,
-    conBotonDeAnotar: Boolean,
-) {
-    var abierta by rememberSaveable(pago.ruleId, propuesta.id) { mutableStateOf(false) }
-    Column(modifier = Modifier.fillMaxWidth()) {
-        if (conBotonDeAnotar) {
-            AccionesDeLaFila(
-                acciones = listOf(
-                    AccionDeOcurrencia(etiquetaDeAnotar(pago.esIngreso), primary = true) { acciones.onAnotarMovimiento(pago) },
-                ),
-                enVuelo = enVuelo,
-            )
-        }
-        Boton(
-            enlaceDeLaPropuestaLejana(propuesta),
-            onClick = { abierta = !abierta },
-            variante = VarianteDeBoton.Fantasma,
-            tamano = TamanoDeBoton.S,
-            habilitado = !enVuelo,
-            modifier = Modifier.testTag(TAG_PROPUESTA_LEJANA),
-        )
-        if (abierta) {
-            Superficie(modifier = Modifier.fillMaxWidth(), nivel = NivelDeSuperficie.Capa2) {
-                PropuestaDeMovimiento(
-                    propuesta = propuesta,
-                    aviso = avisoDeMontoDistinto(pago.monto, pago.montoEsSaldo, propuesta),
-                    enVuelo = enVuelo,
-                    onConfirmar = { acciones.onConfirmar(pago, propuesta.id) },
-                    onDescartar = { acciones.onNoFueEste(pago, propuesta.id) },
-                )
-            }
-        }
-    }
-}
-
-/**
  * **El gasto que se parece a la cuota de esta fila** (vuelta 57), o `null`: solo en la cuota de un crédito
  * todavía sin pagar, y solo si Movi no está ya proponiendo un candidato del server para ella.
  */
@@ -1118,66 +936,6 @@ internal fun accionPrincipalDeLaFila(
 
 /** El tag del enlace «¿Es el de $980.000?» de la cuota que se parece, en Pagos. */
 const val TAG_CUOTA_QUE_SE_PARECE_EN_PAGOS: String = "checklist:cuota-que-se-parece"
-
-/**
- * **«¿Es el de $980.000?» · «Sí, es la cuota»** (vuelta 57): al tocarlo pregunta «¿Es la cuota de Vehículo 4083?» con el gasto, y «Sí, es la
- * cuota» hace lo mismo que la sugerencia del detalle. «No fue este» deja de ofrecerlo. Nunca se tilda solo.
- */
-@Composable
-internal fun LaCuotaQueSeParece(
-    pago: PagoDelPeriodo,
-    parecido: GastoParecidoALaCuota,
-    enVuelo: Boolean,
-    onEsLaCuota: () -> Unit,
-    onNoEs: () -> Unit,
-    /** Amarillo solo en la fila más urgente ([accionPrincipalDeLaFila]); en las demás, con borde. */
-    principal: Boolean = true,
-) {
-    var abierta by rememberSaveable(pago.ruleId, parecido.gasto.id) { mutableStateOf(false) }
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Boton(
-            enlaceDeLaPropuestaLejana(parecido.gasto),
-            onClick = { abierta = !abierta },
-            // Vuelta 58: es la acción principal de la fila más urgente; «Anotar pago» duplicaría el gasto parecido.
-            variante = if (principal) VarianteDeBoton.Principal else VarianteDeBoton.Secundario,
-            tamano = TamanoDeBoton.S,
-            habilitado = !enVuelo,
-            modifier = Modifier.testTag(TAG_CUOTA_QUE_SE_PARECE_EN_PAGOS),
-        )
-        if (abierta) {
-            Superficie(modifier = Modifier.fillMaxWidth(), nivel = NivelDeSuperficie.Capa2) {
-                Text(preguntaDeLaCuotaQueSeParece(parecido.cuota), style = Movi.textos.titulo, color = Movi.colores.texto)
-                Spacer(Modifier.height(Espacio.xs))
-                PropuestaDeMovimiento(
-                    propuesta = parecido.gasto,
-                    aviso = null,
-                    enVuelo = enVuelo,
-                    onConfirmar = onEsLaCuota,
-                    onDescartar = onNoEs,
-                    textoConfirmar = SI_ES_LA_CUOTA,
-                    confirmarEsPrincipal = true,
-                )
-            }
-        }
-    }
-}
-
-/** Lo dice y ofrece la única salida honesta: que el movimiento exista. */
-@Composable
-private fun SinMovimiento(pago: PagoDelPeriodo, enVuelo: Boolean, acciones: AccionesDelChecklist) {
-    Text(
-        text = textoSinMovimiento(pago),
-        style = Movi.textos.apoyo,
-        color = Movi.colores.textoMedio,
-    )
-    Spacer(Modifier.height(Espacio.xs))
-    AccionesDeLaFila(
-        acciones = listOf(
-            AccionDeOcurrencia(etiquetaDeAnotar(pago.esIngreso), primary = true) { acciones.onAnotarMovimiento(pago) },
-        ),
-        enVuelo = enVuelo,
-    )
-}
 
 /**
  * Lo que dice una fila abierta a la que Movi no le encontró **nada**.

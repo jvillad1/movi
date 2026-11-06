@@ -1,5 +1,9 @@
 package com.jvillada.movi.ui.plan
 
+import com.jvillada.movi.ui.recurrentes.abrirLaFactura
+import com.jvillada.movi.ui.recurrentes.TAG_HOJA_DE_LA_FACTURA
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
 import com.jvillada.movi.ui.components.NO_PUDIMOS_CARGAR
 import com.jvillada.movi.ui.components.TAG_AVISO_DE_LA_PANTALLA
 import androidx.compose.ui.test.hasAnyAncestor
@@ -305,18 +309,20 @@ class PlanScreenTest {
         puerta.complete(Unit)
         montar()
 
-        composeRule.waitUntil(timeoutMillis = 5_000) { hay("¿Ya pagaste", substring = true) }
+        // Vuelta 136: la fila dice «¿Es el de $1.800.000?»; tocarla abre su hoja, con la pregunta.
+        composeRule.waitUntil(timeoutMillis = 5_000) { hay("¿Es el de", substring = true) }
         assertEquals(0, contarTag(TAG_ESQUELETO_DEL_TABLERO))
-        assertTrue(composeRule.onAllNodesWithContentDescription("Pagado", useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+        assertTrue(!hay("Pagado", substring = true))
+        composeRule.abrirLaFactura("Arriendo")
+        composeRule.waitForIdle()
+        composeRule.waitUntil(timeoutMillis = 5_000) { hay("¿Ya pagaste", substring = true) }
 
-        composeRule.onAllNodes(hasClickAction() and hasAnyDescendant(hasText("Sí, fue este")), useUnmergedTree = true)
+        composeRule.onAllNodes(hasClickAction() and hasAnyDescendant(hasText("Sí, fue este")) and hasAnyAncestor(hasTestTag(TAG_HOJA_DE_LA_FACTURA)), useUnmergedTree = true)
             .onFirst().performSemanticsAction(SemanticsActions.OnClick)
 
         composeRule.waitUntil(timeoutMillis = 5_000) { sellos.isNotEmpty() }
         assertEquals<List<Triple<String, String, String?>>>(listOf(Triple("rr_arriendo", hoy.toString().take(7), "ev_arriendo")), sellos)
-        composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithContentDescription("Pagado", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
-        }
+        composeRule.waitUntil(timeoutMillis = 5_000) { hay("Pagado", substring = true) }
         assertTrue(!hay("¿Ya pagaste", substring = true), "la pregunta se fue: ya está sellado")
     }
 

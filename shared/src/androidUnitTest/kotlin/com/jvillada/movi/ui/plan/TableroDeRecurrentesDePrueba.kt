@@ -47,6 +47,10 @@ fun TableroDeRecurrentesDePrueba(
         periodoFijo ?: periodoActual(Clock.System.now().toEpochMilliseconds(), ajustesDelPeriodo)
     }
 
+    // Vuelta 136: como la cáscara de la app (`EsqueletoDeLaCascara`), con el anfitrión de las hojas: la hoja
+    // de una factura se abre desde una fila de la lista perezosa y se dibuja encima de todo, no en su item.
+    val anfitrion = remember { com.jvillada.movi.ui.components.AnfitrionDeHojas() }
+    androidx.compose.runtime.CompositionLocalProvider(com.jvillada.movi.ui.components.LocalAnfitrionDeHojas provides anfitrion) {
     Box(modifier = modifier) {
         LazyColumn(
             state = rememberLazyListState(),
@@ -82,5 +86,7 @@ fun TableroDeRecurrentesDePrueba(
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),
         )
         HojasDelTableroDeRecurrentes(solo.estado)
+        anfitrion.Hojas()
+    }
     }
 }

@@ -61,25 +61,12 @@ class ElEnlaceDelCandidatoCabeTest {
             CompositionLocalProvider(LocalDensity provides Density(base.density, base.fontScale * 1.12f)) {
                 MoviTheme {
                     Box(Modifier.fillMaxWidth()) {
+                        // Vuelta 136: el candidato lo dice el renglón de estado de la fila; tocarla abre la hoja.
                         FilaDeFactura(
                             pago = carro,
-                            principal = true,
-                            enVuelo = false,
-                            conPropuesta = false,
-                            onAnotar = {},
-                            onVerMovimiento = null,
+                            estado = estadoDeLaFactura(carro, candidato = tanqueo),
+                            extracto = null,
                             onAbrir = {},
-                            etiquetaDeAbrir = null,
-                            evidencia = null,
-                            debajo = {
-                                PropuestaLejana(
-                                    pago = carro,
-                                    propuesta = tanqueo,
-                                    enVuelo = false,
-                                    acciones = AccionesDelChecklist({ _, _ -> }, { _, _ -> }, {}, {}),
-                                    conBotonDeAnotar = false,
-                                )
-                            },
                         )
                     }
                 }

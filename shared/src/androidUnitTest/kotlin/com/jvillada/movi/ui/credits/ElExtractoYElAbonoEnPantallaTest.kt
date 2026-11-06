@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.credits
 
+import com.jvillada.movi.ui.recurrentes.abrirLaFactura
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -146,6 +147,9 @@ class ElExtractoYElAbonoEnPantallaTest {
 
         assertTrue(hay("\$1.292.700"), "lo facturado, no el saldo")
         assertTrue(hay(ROTULO_DEL_EXTRACTO))
+        // Vuelta 136: la alternativa del mínimo la dice la hoja de la factura.
+        composeRule.abrirLaFactura("Pago tarjeta Nu")
+        composeRule.waitForIdle()
         assertTrue(hay("o lo que falta del mínimo, \$80.000"))
         assertFalse(hay("saldo"), "ya no pide el saldo entero")
         assertFalse(hay("\$1.583.000"))
@@ -374,6 +378,9 @@ class ElExtractoYElAbonoEnPantallaTest {
                 }
             }
         }
+        composeRule.waitForIdle()
+        // Vuelta 136: la fila dice «Pagado»; lo que falta del extracto, su hoja.
+        composeRule.abrirLaFactura("Pago tarjeta Nu")
         composeRule.waitForIdle()
         assertTrue(hay("Abonaste \$100.000 · faltan \$1.292.700 del extracto (mínimo: faltan \$80.000)"))
     }

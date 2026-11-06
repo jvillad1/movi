@@ -1,5 +1,8 @@
 package com.jvillada.movi.ui
 
+import com.jvillada.movi.ui.recurrentes.abrirLaFactura
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -156,6 +159,11 @@ class Vuelta86EnPantallaTest {
 
     private fun montarPagos() {
         composeRule.setContent { MoviTheme { Box(Modifier.fillMaxSize()) { PlanScreen(onNavigate = {}) } } }
+        // Vuelta 136: la fila dice «No suma: falta el mínimo» en su renglón de estado; la píldora y «Cargar
+        // mínimo» van en su hoja.
+        composeRule.waitUntil(timeoutMillis = 5_000) { hay("No suma: falta el mínimo") }
+        composeRule.abrirLaFactura("Pago tarjeta Tarjeta Nu")
+        composeRule.waitForIdle()
         esperarTag(TAG_NO_SUMA)
     }
 
@@ -186,7 +194,7 @@ class Vuelta86EnPantallaTest {
     @Test
     fun `Cargar minimo abre los terminos de esa tarjeta`() {
         montarPagos()
-        composeRule.onNodeWithTag(TAG_CARGAR_MINIMO, useUnmergedTree = true).performClick()
+        composeRule.onNodeWithTag(TAG_CARGAR_MINIMO, useUnmergedTree = true).performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitUntil(timeoutMillis = 5_000) { hay("Pago mínimo del extracto (opcional)") }
         assertTrue(hay("Tarjeta Nu", substring = true))
     }

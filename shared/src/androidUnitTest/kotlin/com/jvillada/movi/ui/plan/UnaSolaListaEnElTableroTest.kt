@@ -1,5 +1,13 @@
 package com.jvillada.movi.ui.plan
 
+import com.jvillada.movi.ui.recurrentes.abrirLaFactura
+import com.jvillada.movi.ui.recurrentes.TAG_HOJA_DE_LA_FACTURA
+import com.jvillada.movi.ui.recurrentes.TAG_FILA_DE_FACTURA
+import com.jvillada.movi.ui.recurrentes.ETIQUETA_VER_MOVIMIENTO
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onLast
 import com.jvillada.movi.ui.recurrentes.TITULO_TUS_FACTURAS
 import com.jvillada.movi.ui.recurrentes.TAG_VER_TODAS_LAS_FACTURAS
 import com.jvillada.movi.ui.recurrentes.ETIQUETA_ANOTAR
@@ -155,10 +163,19 @@ class UnaSolaListaEnElTableroTest {
      * Toca el botón [etiqueta] de la fila de [nombre]. Por la acción semántica: la lista es más
      * larga que la pantalla de prueba y un toque por coordenadas no llega.
      */
-    /** Vuelta 48: abre el «⋯» de la fila pagada de [nombre]. */
+    /** Vuelta 136 (era el «⋯» de la fila pagada, vuelta 48): abre la hoja de la factura de [nombre]. */
     private fun abrirElMenuDe(nombre: String) {
         verTodas()
-        composeRule.onNodeWithContentDescription("Más opciones de $nombre").performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.abrirLaFactura(nombre)
+        composeRule.waitForIdle()
+    }
+
+    /** Vuelta 136: toca el botón [etiqueta] de la hoja de la factura abierta. */
+    private fun tocarEnLaHoja(etiqueta: String) {
+        composeRule.onAllNodes(
+            hasClickAction() and hasAnyDescendant(hasText(etiqueta)) and hasAnyAncestor(hasTestTag(TAG_HOJA_DE_LA_FACTURA)),
+            useUnmergedTree = true,
+        ).onFirst().performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
     }
 
@@ -184,8 +201,9 @@ class UnaSolaListaEnElTableroTest {
 
         // Las dos de octubre dicen cuándo vencen (la pastilla), no que ya se pagaron.
         assertEquals(2, nodos("Vence el 22 oct").size)
-        // Crediágil: compacta (vuelta 48), «Pagado ✓ · $1.204.064 · 27 sep»; tocarla abre el movimiento.
-        assertEquals(1, nodos(" · \$1.204.064 · 27 sep").size)
+        // Crediágil (vuelta 136): la misma fila, «Pagado · 27 sep» en su renglón y la cifra a la derecha.
+        assertEquals(1, nodos("Pagado · 27 sep").size)
+        assertTrue(nodos("\$1.204.064").isNotEmpty())
     }
 
     /**
@@ -236,7 +254,7 @@ class UnaSolaListaEnElTableroTest {
 
         // Vuelta 48: «No fue este» vive en el «⋯» de la fila pagada que Movi emparejó sola.
         abrirElMenuDe("Mercado")
-        tocarEnLaFila("No fue este")
+        tocarEnLaHoja("No fue este")
 
         composeRule.waitUntil(timeoutMillis = 5_000) { rechazados.isNotEmpty() }
         assertEquals(listOf("rr_mercado" to "ev_mercado"), rechazados)
@@ -248,7 +266,7 @@ class UnaSolaListaEnElTableroTest {
         montar()
 
         abrirElMenuDe("Internet")
-        tocarEnLaFila("Quitar la marca")
+        tocarEnLaHoja("Quitar la marca")
 
         composeRule.waitUntil(timeoutMillis = 5_000) { desmarcadas.isNotEmpty() }
         assertEquals(listOf("rr_internet" to "2026-09"), desmarcadas)
@@ -266,7 +284,10 @@ class UnaSolaListaEnElTableroTest {
         montar()
         verTodas()
 
+        // Vuelta 136: la fila abre su hoja; «Ver en Créditos» lleva allá.
         tocarEnLaFila("Crediágil")
+        composeRule.waitForIdle()
+        tocarEnLaHoja("Ver en Créditos")
 
         assertEquals(Screen.Credits, navegoA)
         assertTrue(marcadas.isEmpty(), "abrir no sella nada")
@@ -286,9 +307,14 @@ class UnaSolaListaEnElTableroTest {
         esperarTexto("Del período de septiembre")
 
         assertTrue(arriba("Del período de septiembre") > arriba("Mercado"), "va al final, después de lo pagado")
+        // Vuelta 136: la de septiembre es la última fila de Coomeva; su hoja pregunta.
+        composeRule.onAllNodes(
+            hasClickAction() and hasText("Coomeva", substring = true) and hasAnyAncestor(hasTestTag(TAG_FILA_DE_FACTURA)),
+        ).onLast().performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
         assertEquals(1, nodos("¿Ya pagaste el de septiembre?").size)
 
-        tocarEnLaFila("Sí, fue este")
+        tocarEnLaHoja("Sí, fue este")
 
         composeRule.waitUntil(timeoutMillis = 5_000) { marcadas.isNotEmpty() }
         assertEquals(listOf<Triple<String, String, String?>>(Triple("rr_coomeva", "2026-09", "ev_coomeva")), marcadas.toList())
@@ -311,7 +337,10 @@ class UnaSolaListaEnElTableroTest {
         montar()
         verTodas()
 
-        tocarEnLaFila(" · \$1.204.064 · 27 sep")
+        // Vuelta 136: la fila abre su hoja; «Ver movimiento» abre el movimiento que la pagó.
+        tocarEnLaFila("Pagado · 27 sep")
+        composeRule.waitForIdle()
+        tocarEnLaHoja(ETIQUETA_VER_MOVIMIENTO)
         esperarTexto("Pago cuota Crediágil")
         assertTrue(marcadas.isEmpty(), "abrir el movimiento no sella nada")
     }

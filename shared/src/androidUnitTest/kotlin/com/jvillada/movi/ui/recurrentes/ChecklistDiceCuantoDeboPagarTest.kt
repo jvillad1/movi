@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.recurrentes
 
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.getValue
@@ -110,6 +112,13 @@ class ChecklistDiceCuantoDeboPagarTest {
         }
     }
 
+    /** Vuelta 136: abre la hoja de la factura [nombre]. */
+    private fun abrirLaHoja(nombre: String) {
+        composeRule.waitForIdle()
+        composeRule.abrirLaFactura(nombre)
+        composeRule.waitForIdle()
+    }
+
     private fun hay(texto: String) =
         composeRule.onAllNodesWithText(texto, substring = true, useUnmergedTree = true)
             .fetchSemanticsNodes().isNotEmpty()
@@ -120,9 +129,12 @@ class ChecklistDiceCuantoDeboPagarTest {
 
         assertTrue(hay("Cuota Vehículo 8761"), "la fila de la cuota sigue estando")
         assertTrue(hay("\$4.101.123"), "el monto de la cuota registrada sigue estando")
+        // Vuelta 136: la estimación vive en la hoja de la factura.
+        assertTrue(!hay(ETIQUETA_ESTIMADO), "la fila no lleva la estimación")
+        abrirLaHoja("Cuota Vehículo 8761")
         assertTrue(
             hay("Movi estima: \$2.479.256 de interés · \$89.100 el seguro · \$1.532.767 a capital"),
-            "la estimación del período tiene que estar en la fila",
+            "la estimación del período tiene que estar en la hoja",
         )
         // Y el pie que dice que es una estimación sobre la deuda de hoy, una sola vez.
         assertEquals(
@@ -137,12 +149,10 @@ class ChecklistDiceCuantoDeboPagarTest {
         montar(conCreditos = true)
 
         assertTrue(hay("Cuota Crédito Techo Gardenera"), "la fila sin tasa sigue estando")
-        // Solo una fila estima, así que solo hay un «Movi estima» en pantalla.
-        assertEquals(
-            1,
-            composeRule.onAllNodesWithText(ETIQUETA_ESTIMADO, substring = true, useUnmergedTree = true)
-                .fetchSemanticsNodes().size,
-        )
+        // Vuelta 136: la hoja de la cuota sin tasa no estima nada.
+        abrirLaHoja("Cuota Crédito Techo Gardenera")
+        assertTrue(hay(ETIQUETA_ANOTAR), "la hoja está abierta")
+        assertTrue(!hay(ETIQUETA_ESTIMADO), "sin tasa no se estima")
     }
 
     @Test
@@ -216,22 +226,17 @@ class ChecklistDiceCuantoDeboPagarTest {
     fun la_fila_no_se_tilda_y_ofrece_anotar_el_movimiento() {
         montar(conCreditos = true)
 
-        val filas = composeRule.onAllNodes(
-            hasText("Cuota Vehículo 8761", substring = true) and hasClickAction(),
-        )
-        assertEquals(
-            0,
-            filas.fetchSemanticsNodes().size,
-            "la fila es de solo lectura: su estado lo decide el movimiento, no el dedo",
-        )
+        // Vuelta 136: tocar la fila abre su hoja; no tilda nada ni anota nada.
+        abrirLaHoja("Cuota Vehículo 8761")
+        assertTrue(aAnotar.isEmpty(), "la fila es de solo lectura: su estado lo decide el movimiento, no el dedo")
 
         // Y se toca por la acción semántica y no con un clic real: el checklist es más alto que la
         // pantalla de prueba.
         val botones = composeRule.onAllNodes(
-            hasAnyDescendant(hasText(ETIQUETA_ANOTAR)) and hasClickAction(),
+            hasAnyDescendant(hasText(ETIQUETA_ANOTAR)) and hasClickAction() and hasAnyAncestor(hasTestTag(TAG_HOJA_DE_LA_FACTURA)),
             useUnmergedTree = true,
         )
-        assertTrue(botones.fetchSemanticsNodes().isNotEmpty(), "sin movimiento, la fila ofrece anotarlo")
+        assertTrue(botones.fetchSemanticsNodes().isNotEmpty(), "sin movimiento, la hoja ofrece anotarlo")
         botones[0].performSemanticsAction(SemanticsActions.OnClick)
 
         assertEquals(listOf("credit_acc_8761"), aAnotar)
@@ -268,6 +273,8 @@ class ChecklistDiceCuantoDeboPagarTest {
 
         // Vuelta 40: los ingresos van en su propia lista, «Tus ingresos del período».
         assertTrue(hay(TITULO_TUS_INGRESOS), "el ingreso está en su lista")
+        // Vuelta 136: lo que ofrece está en su hoja.
+        abrirLaHoja("Sueldo")
         assertTrue(hay(TEXTO_SIN_MOVIMIENTO_DE_INGRESO))
         assertTrue(hay(ETIQUETA_ANOTAR_INGRESO))
         assertTrue(!hay(TEXTO_SIN_MOVIMIENTO), "un ingreso no dice «de este pago»")

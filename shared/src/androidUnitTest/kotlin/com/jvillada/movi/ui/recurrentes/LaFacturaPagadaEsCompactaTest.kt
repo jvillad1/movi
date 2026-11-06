@@ -15,7 +15,6 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
-import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performSemanticsAction
 import com.jvillada.movi.shared.model.PagoDelPeriodo
 import com.jvillada.movi.theme.MoviTheme
@@ -29,7 +28,10 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * # Vuelta 48 · una factura pagada no ocupa lugar
+ * # Vuelta 48 · una factura pagada no ocupa lugar (y desde la vuelta 136, el mismo que una pendiente)
+ *
+ * Vuelta 136: toda factura tiene la misma anatomía y el mismo alto; tocarla abre su hoja, donde están «Ver
+ * movimiento», «Quitar la marca» y «No fue este» (antes en el «⋯» de la pagada).
  *
  * La revisión de la 45 (r45-03): una factura pagada medía más que una pendiente, con «Ver movimiento» y
  * «Quitar la marca» como dos botones con borde apilados; la lista se llenaba de botones de cosas
@@ -93,60 +95,70 @@ class LaFacturaPagadaEsCompactaTest {
         composeRule.onNode(hasTestTag(TAG_FILA_DE_FACTURA) and hasAnyDescendant(hasText(nombre)), useUnmergedTree = true)
 
     private fun tocar(texto: String) {
-        composeRule.onAllNodes(hasClickAction() and hasAnyDescendant(hasText(texto)), useUnmergedTree = true)
+        composeRule.onAllNodes(hasClickAction() and hasAnyDescendant(hasText(texto)) and hasAnyAncestor(hasTestTag(TAG_HOJA_DE_LA_FACTURA)), useUnmergedTree = true)
             .onFirst().performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
     }
 
+    /** Vuelta 136: la hoja de la factura está abierta. */
+    private fun hojaAbierta() =
+        composeRule.onAllNodes(hasTestTag(TAG_HOJA_DE_LA_FACTURA), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+
     @Test
-    fun `la pagada es un renglon, sin botones, y no mide mas que una pendiente`() {
+    fun `la pagada es un renglon, sin botones, y mide lo mismo que una pendiente`() {
         montar()
 
-        assertTrue(hay(" · \$1.800.000 · 27 oct"), "«Pagado ✓ · \$1.800.000 · 27 oct»")
         assertEquals(
             2,
-            composeRule.onAllNodes(hasText("Pagado") and hasAnyAncestor(hasTestTag(TAG_FILA_PAGADA)), useUnmergedTree = true)
+            composeRule.onAllNodes(hasText("Pagado", substring = true) and hasAnyAncestor(hasTestTag(TAG_FILA_PAGADA)), useUnmergedTree = true)
                 .fetchSemanticsNodes().size,
-            "las dos pagadas dicen «Pagado ✓» en su renglón",
+            "las dos pagadas dicen «Pagado» en su renglón de estado",
         )
+        assertTrue(hay("Pagado · 27 oct"), "«Pagado · 27 oct»")
         for (boton in listOf(ETIQUETA_VER_MOVIMIENTO, ETIQUETA_QUITAR_LA_MARCA, ETIQUETA_NO_FUE_ESTE)) {
-            assertTrue(!hay(boton), "«$boton» ya no es un botón de la fila")
+            assertTrue(!hay(boton), "«$boton» no es un botón de la fila: vive en la hoja")
         }
 
+        // Vuelta 136: la misma anatomía, el mismo alto (antes la pagada medía menos que la pendiente).
         val altoPendiente = fila("Internet").getUnclippedBoundsInRoot().let { it.bottom - it.top }
         val altoPagada = fila("Arriendo").getUnclippedBoundsInRoot().let { it.bottom - it.top }
-        assertTrue(altoPagada <= altoPendiente, "la pagada ($altoPagada) no mide más que la pendiente ($altoPendiente)")
+        assertEquals(altoPendiente.value, altoPagada.value, 0.5f, "la pagada ($altoPagada) mide lo mismo que la pendiente ($altoPendiente)")
     }
 
     @Test
-    fun `tocar la pagada abre su movimiento`() {
+    fun `tocar la pagada abre su hoja, y Ver movimiento abre el movimiento`() {
         montar()
 
-        tocar(" · \$1.800.000 · 27 oct")
+        composeRule.abrirLaFactura("Arriendo")
+        composeRule.waitForIdle()
+        assertTrue(hojaAbierta())
+        assertTrue(vistos.isEmpty(), "abrir la hoja no abre el movimiento")
+        tocar(ETIQUETA_VER_MOVIMIENTO)
 
         assertEquals(listOf("ev_pago"), vistos)
+        assertTrue(!hojaAbierta(), "la hoja se cierra")
     }
 
     @Test
-    fun `quitar la marca esta en el menu de la fila`() {
+    fun `quitar la marca esta en la hoja`() {
         montar()
 
-        composeRule.onNodeWithContentDescription(descripcionDelMenuDeLaFila("Arriendo")).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.abrirLaFactura("Arriendo")
         composeRule.waitForIdle()
         assertTrue(!hay(ETIQUETA_NO_FUE_ESTE), "lo que selló el dueño no se discute")
         tocar(ETIQUETA_QUITAR_LA_MARCA)
 
         assertEquals(listOf("rr_arriendo"), quitadas)
-        assertTrue(vistos.isEmpty(), "abrir el menú no abre el movimiento")
+        assertTrue(vistos.isEmpty())
     }
 
     @Test
-    fun `no fue este, solo en lo que Movi emparejo sola, tambien en el menu`() {
+    fun `no fue este, solo en lo que Movi emparejo sola, tambien en la hoja`() {
         montar()
 
-        composeRule.onNodeWithContentDescription(descripcionDelMenuDeLaFila("Mercado")).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.abrirLaFactura("Mercado")
         composeRule.waitForIdle()
-        assertTrue(hay("Movi lo emparejó"), "el menú dice de dónde salió el «Pagado»")
+        assertTrue(hay("Movi lo emparejó"), "la hoja dice de dónde salió el «Pagado»")
         assertTrue(!hay(ETIQUETA_QUITAR_LA_MARCA))
         tocar(ETIQUETA_NO_FUE_ESTE)
 

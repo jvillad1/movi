@@ -49,22 +49,18 @@ class LaPastillaCabeEnteraTest {
     }
 
     @Test
-    fun `Vencio hace 23 dias se lee entera al lado de Anotar pago`() {
+    fun `Vencio hace 23 dias se lee entera en el renglon de estado`() {
         composeRule.setContent {
             val base = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(base.density, base.fontScale * 1.12f)) {
                 MoviTheme {
                     Box(Modifier.fillMaxWidth()) {
+                        // Vuelta 136: la fila de una sola anatomía; el estado va en su renglón.
                         FilaDeFactura(
                             pago = vencido,
-                            principal = true,
-                            enVuelo = false,
-                            conPropuesta = false,
-                            onAnotar = {},
-                            onVerMovimiento = null,
+                            estado = estadoDeLaFactura(vencido, candidato = null),
+                            extracto = null,
                             onAbrir = {},
-                            etiquetaDeAbrir = null,
-                            evidencia = null,
                         )
                     }
                 }
@@ -72,7 +68,8 @@ class LaPastillaCabeEnteraTest {
         }
         composeRule.waitForIdle()
 
-        assertEquals(1, composeRule.onAllNodesWithText(ETIQUETA_ANOTAR, useUnmergedTree = true).fetchSemanticsNodes().size)
+        // Vuelta 136: «Anotar pago» vive en la hoja de la factura (y en «Falta por pagar»), no en la fila.
+        assertEquals(0, composeRule.onAllNodesWithText(ETIQUETA_ANOTAR, useUnmergedTree = true).fetchSemanticsNodes().size)
         val (pastilla, derecha, ancho) = disposicion("Venció hace 23 días")
         assertEquals(1, pastilla.lineCount, "en un renglón")
         // (No se mira `hasVisualOverflow`: ver `ElDiaPlegadoNoCortaLaFechaTest`.)
