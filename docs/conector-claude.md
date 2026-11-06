@@ -75,8 +75,8 @@ preguntó ni lo que se contestó.
   `https://claude.ai/oauth/claude-code-client-metadata`— o uno de `CONECTOR_CIMD_PERMITIDOS`. Se baja por https,
   con un tope de 5 s para toda la lectura y 16 KB, en cuatro hilos propios (nunca los de la base), una lectura a la
   vez. Un documento bueno se vuelve a pedir a los 10 minutos y, si en ese momento claude.ai no contesta, se sigue
-  usando el último bueno; también si contesta un 404 o una página HTML (con un WARN). Solo sin un documento bueno se
-  recuerda la falla, 5 minutos. Los dos se
+  usando el último bueno; también si contesta un 404 o una página HTML (con un WARN). El último bueno sirve así como
+  mucho 7 días desde que se leyó; después, una falla es falla. Sin un documento bueno se recuerda la falla, 5 minutos. Los dos se
   comprobaron el 6-nov-2026 con el `HttpClient` de Java: contestan su JSON, sin desafío de Cloudflare (desde la
   Mac del dueño; falta verlo desde Railway).
 - **DCR idempotente**: el `client_id` sale de los retornos declarados, así que registrar lo mismo da el mismo
@@ -97,10 +97,14 @@ preguntó ni lo que se contestó.
   Claude (la pantalla «Movi en Claude» lo dice). Sin uso, se acaba sola a los 30 días (vence el refresco). El barrido
   diario borra las conexiones con 90 días sin uso o revocadas hace 90 días, y las llamadas de más de 90 días.
 - **Límites**: 60 llamadas por minuto por conexión en `/mcp` (429 con `Retry-After: 60`), y 60 respuestas 401 por
-  minuto por IP (las IP de Anthropic, 1.200): pasado eso, `/mcp` contesta 429 a esa IP sin ir a la base. En
+  minuto por IP: pasado eso, `/mcp` contesta 429 a esa IP sin ir a la base. **A una IP de Anthropic no se la corta
+  nunca en `/mcp`**: por ahí pasan todos los usuarios de Claude, y cualquiera con una cuenta de la API puede mandar
+  tokens falsos desde ahí. Sus 401 solo se cuentan y, pasados 1.200 por minuto, dejan un WARN (uno por minuto por
+  rango, con el conteo de lo omitido); un token válido siempre pasa. En
   `/oauth/token` y `/oauth/revoke`, primero la forma del `client_id` (si no es un CIMD de Claude ni un id de DCR,
   `invalid_client`), después 120 por minuto por IP (el `/64` en IPv6; 1.200 para el rango de salida de Anthropic,
-  `160.79.104.0/21`, más `CONECTOR_RANGOS_DE_ANTHROPIC`, con un WARN si alguna recibe un 429), y 20 por conexión
+  `160.79.104.0/21` y `153.61.208.0/20`, los dos rangos de salida de platform.claude.com/docs/en/api/ip-addresses, más
+  `CONECTOR_RANGOS_DE_ANTHROPIC`, con un WARN con tope si alguna recibe un 429), y 20 por conexión
   **solo** para pedidos con una credencial vigente de ese cliente (sin usar o sin rotar, sin revocar, sin vencer). No
   hay balde por cliente: con CIMD el `client_id` es el mismo para todos los usuarios de Claude, y un balde así lo
   llenaba cualquiera con su propia cuenta. `/oauth/authorize` 60 por minuto por IP, el login 30 por
@@ -162,6 +166,20 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST $B/oauth/revoke -d token=$ACCES
 Al terminar, para el server por su puerto: `lsof -ti :8080 | xargs kill`.
 
 ## Fuera de esta vuelta
+
+- **El balde de 401 de `/mcp` puede pasarse un poco de su tope** con pedidos simultáneos: entre mirar si está lleno y
+  anotar hay una consulta a la base, así que crece hasta tantos como pedidos en curso. Se vacía en un minuto y la
+  memoria sigue acotada por la concurrencia; se dejó así.
+- **Una IPv4 mapeada en IPv6** (`::ffff:160.79.104.20`) se reconoce como de Anthropic, pero cae en otro balde que la
+  misma IPv4 escrita normal. No importa hoy: la IP la pone el borde de Railway, no el cliente, y una conexión IPv6 de
+  verdad no tiene un origen `::ffff:0:0/96`. Si algún día `ipDelPedido` leyera otra cabecera, habría que normalizar
+  con `InetAddress` antes de armar la clave.
+- **Pendiente: confirmar que la IP que ve Railway es la del cliente y no una compartida del borde.** La revisión
+  comprobó en producción que `X-Forwarded-For` no se puede falsificar (el borde pone su valor al final), pero desde un
+  solo origen no se distingue si ese valor es la IP de cada cliente o una del borde para todos. Si fuera compartida,
+  todos los baldes «por IP» serían globales (los del conector y los del atajo del iPhone). Prueba de una vez: llenar
+  el balde del atajo (`POST /api/captura/atajo` sin código, 60 veces) desde la Mac y, en ese mismo minuto, mandar un
+  pedido desde el teléfono con datos móviles: si da 401 y no 429, la clave es por cliente.
 
 - El `RateLimiter` de la app (el del login por correo, `login:email:`, que el conector comparte con `/api/auth/login`)
   no tiene tope de claves. Un atacante con muchos `/64` de IPv6 podría crear millones por hora. Ya pasaba con
