@@ -89,6 +89,9 @@ fun Application.configureRouting() {
         // abre el navegador, que no manda `Authorization`. La protege un permiso de dos minutos
         // con su propia audiencia y la versión de sesiones. Ver ExportRoutes.kt.
         exportDescargaRoutes()
+        // Vuelta 135 · el conector de Movi para Claude: el OAuth (discovery, autorizar, token, registro).
+        // Público porque Claude no tiene sesión de Movi. Ver ConectorOAuthRoutes.kt.
+        conectorOAuthRoutes()
 
         authenticate("jwt") {
             userRoutes()
@@ -148,6 +151,8 @@ fun Application.configureRouting() {
             enlaceCompartidoRoutes()
             exportRoutes()
             borrarLaCuentaRoutes()
+            // Vuelta 135 · «Movi en Claude»: la dirección del conector, las conexiones y «Desconectar».
+            conectorDeLaAppRoutes()
             // Vuelta 100: el uso de la app en lotes, y lo que ve la pantalla de admin «Fallos y uso».
             usoRoutes()
             // Vuelta 102: `/health/detalle` y `/api/admin/servidor/...`, solo para un admin.
