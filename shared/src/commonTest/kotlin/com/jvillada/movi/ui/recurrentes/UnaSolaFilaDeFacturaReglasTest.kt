@@ -134,6 +134,11 @@ class UnaSolaFilaDeFacturaReglasTest {
         // La lejana: «Anotar pago» sigue siendo lo principal.
         assertEquals(PrincipalDeLaHoja.ANOTAR, principalDeLaHoja(lo(vencida, tanqueo, conPropuesta = false)))
         assertEquals(PrincipalDeLaHoja.NINGUNA, principalDeLaHoja(lo(pagada)))
+        // Revisión de la 136 (duda 1): cerca pero de otro monto, «Sí, fue este» va con borde: ningún amarillo.
+        val otroMonto = tanqueo.copy(amount = 3_000_000L)
+        assertTrue(lo(vencida.copy(monto = 4_000_000), otroMonto, conPropuesta = true).candidatoConOtroMonto)
+        assertEquals(PrincipalDeLaHoja.NINGUNA, principalDeLaHoja(lo(vencida.copy(monto = 4_000_000), otroMonto, conPropuesta = true)))
+        assertEquals(PrincipalDeLaHoja.EL_CANDIDATO, principalDeLaHoja(lo(vencida.copy(monto = 4_000_000), tanqueo, conPropuesta = true)))
         assertEquals(ANOTAR_ESTE_ABONO, etiquetaDeAnotarLaFactura(porVencer.copy(haciaDeuda = "acc_carro")))
         assertEquals(ETIQUETA_ANOTAR, etiquetaDeAnotarLaFactura(porVencer))
     }

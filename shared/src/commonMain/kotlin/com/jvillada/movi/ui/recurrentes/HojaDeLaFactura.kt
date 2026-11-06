@@ -89,6 +89,13 @@ internal data class LoDeLaFactura(
     val noSuma: PorQueNoSuma?,
     val evidencia: String?,
 ) {
+    /**
+     * Revisión de la 136 (duda 1): la propuesta no es el monto de la factura ([avisoDeMontoDistinto]). Entonces
+     * «Sí, fue este» va con borde: hay que revisarlo antes de confirmar.
+     */
+    val candidatoConOtroMonto: Boolean
+        get() = propuesta != null && avisoDeMontoDistinto(pago.monto, pago.montoEsSaldo, propuesta) != null
+
     /** El movimiento por el que Movi pregunta, si hay uno. */
     val candidato: FinancialEvent? get() = propuesta ?: parecido?.gasto
 
@@ -166,11 +173,15 @@ internal enum class PrincipalDeLaHoja { ANOTAR, EL_CANDIDATO, NINGUNA }
 
 /**
  * **El único amarillo de la hoja** (vuelta 136): ninguno si está pagada; «Sí, fue este» con una propuesta
- * cerca del monto o «Sí, es la cuota» con un gasto que se le parece; si no, «Anotar pago». Pura.
+ * cerca del monto o «Sí, es la cuota» con un gasto que se le parece; si no, «Anotar pago». Revisión (duda 1):
+ * con una propuesta de otro monto ([LoDeLaFactura.candidatoConOtroMonto]), ninguno: «Sí, fue este» con borde, y
+ * «Anotar pago» no se ofrece (duplicaría el gasto). La regla de la vuelta 72 («Sí, fue este» nunca amarillo)
+ * queda para la lista. Pura.
  */
 internal fun principalDeLaHoja(lo: LoDeLaFactura): PrincipalDeLaHoja = when {
     lo.pago.hecho -> PrincipalDeLaHoja.NINGUNA
-    lo.conPropuesta || lo.parecido != null -> PrincipalDeLaHoja.EL_CANDIDATO
+    lo.parecido != null -> PrincipalDeLaHoja.EL_CANDIDATO
+    lo.conPropuesta -> if (lo.candidatoConOtroMonto) PrincipalDeLaHoja.NINGUNA else PrincipalDeLaHoja.EL_CANDIDATO
     else -> PrincipalDeLaHoja.ANOTAR
 }
 
@@ -374,7 +385,7 @@ private fun CandidatoEnLaHoja(
                 enVuelo = lo.enVuelo,
                 onConfirmar = { onConfirmar(propuesta.id) },
                 onDescartar = { onNoFueEste(propuesta.id) },
-                confirmarEsPrincipal = lo.conPropuesta,
+                confirmarEsPrincipal = principalDeLaHoja(lo) == PrincipalDeLaHoja.EL_CANDIDATO,
             )
         }
         parecido != null && onEsLaCuota != null -> BloqueDelCandidato(

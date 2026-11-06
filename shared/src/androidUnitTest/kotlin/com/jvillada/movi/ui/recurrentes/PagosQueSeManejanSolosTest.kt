@@ -174,7 +174,7 @@ class PagosQueSeManejanSolosTest {
      * factura —donde se decide— «Sí, fue este» es el único amarillo (pedido de la vuelta).
      */
     @Test
-    fun `Si fue este no es amarillo en la lista, y es el unico de su hoja`() {
+    fun `Si fue este no es amarillo en la lista, y en la hoja va con borde si el monto difiere`() {
         val candidato = FinancialEvent(
             id = "ev_arr", accountId = "acc", type = TransactionType.EXPENSE, amount = 1_790_000L, category = "Vivienda",
             description = "Transferencia", timestamp = 1_793_000_000_000L,
@@ -185,8 +185,11 @@ class PagosQueSeManejanSolosTest {
         assertEquals(0, amarillos().size)
         composeRule.abrirLaFactura("Arriendo")
         composeRule.waitForIdle()
-        assertEquals(VarianteDeBoton.Principal, variante(ETIQUETA_SI_FUE_ESTE))
-        assertEquals(1, amarillos().size)
+        // Revisión de la 136 (duda 1): el candidato ($1.790.000) no es el monto de la factura ($1.800.000):
+        // «Sí, fue este» va con borde, para revisarlo antes de confirmar. Con el mismo monto es el amarillo
+        // (`UnaSolaFilaDeFacturaTest`, «con un candidato, la hoja pregunta…»).
+        assertEquals(VarianteDeBoton.Secundario, variante(ETIQUETA_SI_FUE_ESTE))
+        assertEquals(0, amarillos().size)
     }
 
     // ── «¿Usar siempre Nu para Carro?» ────────────────────────────────────────
