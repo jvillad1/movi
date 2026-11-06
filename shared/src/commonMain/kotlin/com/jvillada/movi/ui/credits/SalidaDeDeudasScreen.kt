@@ -432,6 +432,11 @@ private fun ContenidoDelPlan(
     )
     if (verSupuestos) {
         Text(SUPUESTOS_DEL_PLAN_DE_SALIDA, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+        // Vuelta 133: con una cuota que cambia, cómo la cuenta el plan.
+        supuestoDeLasCuotasQueCambian(plan.enElCalculo.map { it.deuda })?.let {
+            Spacer(Modifier.height(Espacio.xs))
+            Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+        }
         Spacer(Modifier.height(Espacio.xs))
     }
     Text(

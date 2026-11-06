@@ -202,6 +202,24 @@ fun lineaDelMinimo(pago: PagoDelPeriodo): String? {
 /** El tag de esa línea. */
 const val TAG_FALTA_DEL_MINIMO: String = "pagos:falta-del-minimo"
 
+/** Vuelta 133 · lo que va antes del monto de una cuota que cambia: es una estimación. */
+const val ROTULO_DE_LA_CUOTA_ESTIMADA: String = "unos"
+
+/** Vuelta 133 · el tag de «La de octubre fue $Y» en la fila. */
+const val TAG_CUOTA_ANTERIOR_DE_LA_FILA: String = "pagos:cuota-anterior"
+
+/**
+ * Vuelta 133 · **«La de octubre fue $1.262.300»** debajo de la cuota de un crédito que cambia, sin pagar;
+ * `null` en lo demás (y sin una anterior). Con «unos» delante del monto, la fila dice lo que
+ * [com.jvillada.movi.shared.model.textoDeLaCuotaQueCambia]: «unos $X (la de octubre fue $Y)». Pura.
+ */
+fun lineaDeLaCuotaAnterior(pago: PagoDelPeriodo): String? {
+    if (pago.hecho) return null
+    val anterior = pago.cuotaQueCambia?.anterior?.takeIf { it.monto > 0L } ?: return null
+    val mes = com.jvillada.movi.shared.model.mesDeLaCuotaPagada(anterior.periodo) ?: return null
+    return "La de $mes fue ${formatCOP(anterior.monto)}"
+}
+
 /** Vuelta 126 · el tag de la cadencia de una factura no mensual («Cada 3 meses»). */
 const val TAG_CADENCIA_DE_LA_FILA: String = "pagos:cadencia-de-la-fila"
 
@@ -390,6 +408,10 @@ internal fun FilaDeFactura(
                             // Vuelta 62: lo que pide el extracto, no el saldo entero.
                             MontoDeFila(montoDelExtracto(extracto.facturado, extracto.moneda), color = Movi.colores.texto)
                             Text(ROTULO_DEL_EXTRACTO, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                        } else if (pago.cuotaQueCambia != null) {
+                            // Vuelta 133: la cuota que cambia es una estimación, y se dice («unos $X»).
+                            Text(ROTULO_DE_LA_CUOTA_ESTIMADA, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                            MontoDeFila(textoDelMontoDelChecklist(pago), color = Movi.colores.texto)
                         } else {
                             MontoDeFila(textoDelMontoDelChecklist(pago), color = Movi.colores.texto)
                             // Una tarjeta se paga con su mínimo o su saldo: el monto dice de cuál se habla.
@@ -397,6 +419,16 @@ internal fun FilaDeFactura(
                                 Text("saldo", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                             }
                         }
+                    }
+                    lineaDeLaCuotaAnterior(pago)?.let { anterior ->
+                        Text(
+                            anterior,
+                            style = Movi.textos.apoyo,
+                            color = Movi.colores.textoMedio,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.testTag(TAG_CUOTA_ANTERIOR_DE_LA_FILA),
+                        )
                     }
                 }
             }

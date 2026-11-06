@@ -222,3 +222,21 @@ fun textoDeLaComparacion(c: ComparacionDeEstrategias?): String? {
         else -> LOS_DOS_ORDENES_DAN_IGUAL
     }
 }
+
+
+/**
+ * Vuelta 133 · **cómo cuenta el plan las cuotas que cambian**, o `null` si todas son fijas: una cuota de
+ * tasa variable o en UVR, con la de este mes (la última pagada) todos los meses, sin pronosticar el IBR
+ * ni la inflación; un abono constante, con su capital fijo (la cuota baja sola). Pura.
+ */
+fun supuestoDeLasCuotasQueCambian(deudas: List<com.jvillada.movi.shared.model.DeudaParaSalir>): String? {
+    val tipos = deudas.mapNotNull { it.tipoDeCuota }.toSet()
+    if (tipos.isEmpty()) return null
+    val partes = buildList {
+        if (com.jvillada.movi.shared.model.TipoDeCuota.TASA_VARIABLE in tipos || com.jvillada.movi.shared.model.TipoDeCuota.UVR in tipos) {
+            add("una cuota que cambia (tasa variable o UVR) se cuenta con la de este mes, sin adivinar el IBR ni la inflación")
+        }
+        if (com.jvillada.movi.shared.model.TipoDeCuota.ABONO_CONSTANTE in tipos) add("un abono constante abona su capital fijo y la cuota baja sola")
+    }
+    return "En este plan, " + partes.joinToString("; ") + "."
+}
