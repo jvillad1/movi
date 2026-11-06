@@ -189,25 +189,40 @@ internal val NOMBRES_DE_LAS_HERRAMIENTAS: Set<String> = HERRAMIENTAS_DEL_CONECTO
 internal val jsonDelConector = Json { encodeDefaults = true; explicitNulls = false }
 
 /**
- * **Los números completos fuera, los montos y las fechas no** (M5 de la revisión). Es la regla de la página
- * compartida (`sinNumerosCompletos`: toda secuencia de 5+ dígitos a sus últimos 4), con dos excepciones que esa
- * página no necesita y Claude sí: un **monto** —con «$» delante, o con separadores de miles («1.500.000»,
- * «27,500.00»)— y una **fecha** («2026-10-01», «01/10/2026») salen tal cual. Una variante para el conector y no un
- * cambio a la función compartida: la página compartida no muestra textos libres con montos, y su prueba fija lo
- * que hace hoy. Un número de cuenta escrito con puntos de a tres («123.456.789») queda como un monto: es el precio.
+ * **Los números completos fuera, los montos y las fechas no** (M5 de la revisión, con la regla de N4 de la
+ * re-revisión). Todo número de 5+ dígitos —con o sin puntos, comas, espacios, guiones o barras— sale reducido a
+ * sus últimos cuatro, salvo:
+ *
+ * - **un monto con marca de moneda** («$», «COP», «USD», «US$») y forma estricta: grupos de miles de a tres
+ *   («$1.500.000», «COP 27.500», «USD 1,234.56») o hasta 7 dígitos seguidos («$27500»), con hasta 2 decimales;
+ * - **un monto sin marca** solo con grupos de miles exactos y **hasta 7 dígitos enteros** («1.500.000», «25,000»): una
+ *   cédula o una cuenta con puntos (8 o más dígitos) se recorta;
+ * - **una fecha** con mes y día válidos («2026-10-01», «01/10/2026», «1/10/26»).
+ *
+ * Una variante para el conector y no un cambio a `sinNumerosCompletos`: la página compartida no muestra textos
+ * libres con montos, y su prueba fija lo que hace hoy. El monto de cada movimiento ya viaja aparte, en su campo.
  */
 internal fun sinNumerosCompletosSalvoMontosYFechas(texto: String): String =
     NUMEROS_MONTOS_Y_FECHAS.replace(texto) { m ->
         when {
-            m.groups["fecha"] != null || m.groups["monto"] != null -> m.value
-            else -> sinNumerosCompletos(m.value)
+            m.groups["fecha"] != null || m.groups["monto"] != null || m.groups["montoSinMarca"] != null -> m.value
+            else -> {
+                val digitos = m.value.filter(Char::isDigit)
+                if (digitos.length >= 5) "••" + digitos.takeLast(4) else m.value
+            }
         }
     }
 
+/** Detrás de un número no puede seguir otro dígito ni un separador con un dígito («1.500.000.» sí termina). */
+private const val FIN_DEL_NUMERO = """(?!\d|[.,]\d)"""
+
 private val NUMEROS_MONTOS_Y_FECHAS = Regex(
-    """(?<fecha>\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}/\d{1,2}/\d{2,4}\b)""" +
-        """|(?<monto>\$\s?\d[\d.,]*|(?<![\d.,])\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?(?![\d.,]))""" +
-        """|\d(?:[\d .\-]*\d)?""",
+    """(?<fecha>(?<![\d/.,-])(?:(?:19|20)\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])|(?:0?[1-9]|[12]\d|3[01])/(?:0?[1-9]|1[0-2])/(?:(?:19|20)\d{2}|\d{2}))(?![\d/.,-]))""" +
+        """|(?<monto>(?:US\$|\$|COP|USD)\s?(?:\d{1,3}(?:[.,]\d{3})+|\d{1,7})(?:[.,]\d{1,2})?""" + FIN_DEL_NUMERO + ")" +
+        """|(?<montoSinMarca>(?<![\d.,])(?:\d[.,]\d{3}[.,]\d{3}|\d{1,3}[.,]\d{3})(?:[.,]\d{1,2})?""" + FIN_DEL_NUMERO + ")" +
+        // Lo demás: dígitos con a lo sumo un separador entre cada uno («1.020.304.050», «4513 2200 1234 5678»,
+        // «12/34/5678»); «Cuotas 1, 2, 3, 4, 5» no se junta en un número.
+        """|\d(?:[ .,/\-]?\d)*""",
 )
 
 /** **Un texto de afuera, listo para salir**: sin control, una línea, corto y sin números completos. */
