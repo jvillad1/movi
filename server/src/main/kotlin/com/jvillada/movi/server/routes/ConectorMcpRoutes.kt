@@ -7,7 +7,8 @@ import com.jvillada.movi.server.conector.accesoDelToken
 import com.jvillada.movi.server.conector.anotarUso
 import com.jvillada.movi.server.conector.limitadorDelConector
 import com.jvillada.movi.server.conector.claveDeIp
-import com.jvillada.movi.server.conector.esIpDeAnthropic
+import com.jvillada.movi.server.conector.avisosDelConector
+import com.jvillada.movi.server.conector.rangoDeAnthropic
 import com.jvillada.movi.server.conector.ejecutarHerramientaDelConector
 import com.jvillada.movi.server.db.LlamadasDelConector
 import com.jvillada.movi.server.db.dbQuery
@@ -75,7 +76,8 @@ private fun tokenDelEncabezado(valor: String?): String? {
 /**
  * M-a de la tercera revisión: cuántos 401 por minuto puede recibir una IP (o `/64`) antes de que `/mcp` deje de mirar la
  * base por ella. Cuenta **solo los 401**: el tráfico bueno de Claude, que sale de unas pocas IP, no lo toca. Las IP de
- * Anthropic tienen un tope más alto (un 401 es lo que dispara cada refresco de cada usuario de Claude).
+ * Anthropic **nunca se cortan** (H1 de la cuarta revisión): sus 401 se cuentan contra [MAX_401_POR_MINUTO_DE_ANTHROPIC]
+ * solo para dejar un WARN con tope al pasarse.
  */
 internal const val MAX_401_POR_MINUTO_POR_IP = 60
 internal const val MAX_401_POR_MINUTO_DE_ANTHROPIC = 1_200
@@ -83,8 +85,11 @@ internal const val MAX_401_POR_MINUTO_DE_ANTHROPIC = 1_200
 private suspend fun ApplicationCall.atenderMcp(ahora: Long) {
     val ip = ipDelPedido(this)
     val balde401 = "mcp401:ip:${claveDeIp(ip)}"
-    val tope401 = if (esIpDeAnthropic(ip)) MAX_401_POR_MINUTO_DE_ANTHROPIC else MAX_401_POR_MINUTO_POR_IP
-    if (limitadorDelConector.lleno(balde401, tope401, 60_000L, ahora)) {
+    // H1 de la cuarta revisión: por una IP de Anthropic pasa `/mcp` de TODOS los usuarios de Claude, y cualquiera con
+    // una cuenta de la API manda tokens falsos desde ahí (el conector MCP de la API de mensajes). A esas IP no se las
+    // corta nunca antes de la base: un token válido siempre pasa, y sus 401 solo se cuentan y dejan un WARN con tope.
+    val rango = rangoDeAnthropic(ip)
+    if (rango == null && limitadorDelConector.lleno(balde401, MAX_401_POR_MINUTO_POR_IP, 60_000L, ahora)) {
         response.header(HttpHeaders.RetryAfter, "60")
         return respondText(
             ServidorMcp.error(JsonNull, -32000, "Demasiados pedidos sin un token válido desde esta dirección. Espera un minuto y vuelve a conectar.").toString(),
@@ -92,10 +97,19 @@ private suspend fun ApplicationCall.atenderMcp(ahora: Long) {
             HttpStatusCode.TooManyRequests,
         )
     }
+    fun anotar401() {
+        if (rango == null) {
+            limitadorDelConector.anotar(balde401, ahora)
+        } else if (!limitadorDelConector.permitir(balde401, MAX_401_POR_MINUTO_DE_ANTHROPIC, 60_000L, ahora)) {
+            avisosDelConector.avisar("mcp401:$rango", ahora) {
+                "Conector: /mcp recibe más de $MAX_401_POR_MINUTO_DE_ANTHROPIC respuestas 401 por minuto desde una IP de Anthropic ($rango); se siguen contestando 401, sin cortar"
+            }
+        }
+    }
     val token = tokenDelEncabezado(request.headers[HttpHeaders.Authorization])
-        ?: return limitadorDelConector.anotar(balde401, ahora).let { pedirToken(conToken = false) }
+        ?: return anotar401().let { pedirToken(conToken = false) }
     val acceso: AccesoDelConector = dbQuery { accesoDelToken(token, ahora) }
-        ?: return limitadorDelConector.anotar(balde401, ahora).let { pedirToken(conToken = true) }
+        ?: return anotar401().let { pedirToken(conToken = true) }
 
     if (!limitadorDelConector.permitir("mcp:${acceso.concesionId}", ConfigDelConector.LLAMADAS_POR_MINUTO, 60_000L)) {
         response.header(HttpHeaders.RetryAfter, "60")

@@ -96,6 +96,19 @@ class LasReglasDelConectorTest {
     }
 
     @Test
+    fun `un aviso con tope escribe uno por minuto y dice cuantos omitio`() {
+        val escritos = mutableListOf<String>()
+        val aviso = AvisoConTope(60_000L) { escritos += it }
+        repeat(100) { aviso.avisar("rango", 1_000L + it) { "lleno" } }
+        assertEquals(listOf("lleno"), escritos)
+        aviso.avisar("rango", 61_001L) { "lleno" }
+        assertEquals(2, escritos.size)
+        assertTrue("99 avisos iguales omitidos" in escritos[1], escritos[1])
+        aviso.avisar("otro", 61_002L) { "otro" }
+        assertEquals("otro", escritos.last(), "cada clave lleva su tope")
+    }
+
+    @Test
     fun `el limitador del conector nunca guarda mas de su tope de claves`() {
         val l = LimitadorAcotado(1_000)
         repeat(50_000) { l.permitir("cliente-inventado-$it", 10, 60_000L) }

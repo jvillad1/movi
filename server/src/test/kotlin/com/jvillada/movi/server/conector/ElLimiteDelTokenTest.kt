@@ -146,4 +146,20 @@ class ElLimiteDelTokenTest {
         assertEquals(HttpStatusCode.TooManyRequests, mcpDesde("203.0.113.50", "mvc_a_" + "z".repeat(43)).status)
         assertEquals(HttpStatusCode.OK, mcpDesde("203.0.113.51", acceso).status)
     }
+
+    @Test
+    fun `a una IP de Anthropic no se la corta nunca en mcp, y un token valido siempre pasa`() = testApplication {
+        with(c) { montar() }
+        val (acceso, _) = with(c) { conectar() }
+        suspend fun mcpDesde(ip: String, token: String) = client.post("/mcp") {
+            header("X-Forwarded-For", ip)
+            header(io.ktor.http.HttpHeaders.Authorization, "Bearer $token")
+            contentType(ContentType.Application.Json)
+            setBody("""{"jsonrpc":"2.0","id":1,"method":"ping"}""")
+        }
+        repeat(1_300) { i ->
+            assertEquals(HttpStatusCode.Unauthorized, mcpDesde("160.79.104.20", "mvc_a_" + "f".repeat(42) + (i % 10)).status, "pedido $i")
+        }
+        assertEquals(HttpStatusCode.OK, mcpDesde("160.79.104.20", acceso).status)
+    }
 }

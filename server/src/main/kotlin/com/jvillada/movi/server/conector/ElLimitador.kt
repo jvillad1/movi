@@ -81,12 +81,14 @@ internal val RANGOS_DE_ANTHROPIC: List<String> = listOf("160.79.104.0/21")
 internal const val LIMITE_DE_TOKEN_DE_ANTHROPIC = 1_200
 internal const val LIMITE_DE_REGISTRO_DE_ANTHROPIC = 300
 
-private val rangosDeAnthropic: List<Pair<ByteArray, Int>> by lazy {
+private data class Rango(val cidr: String, val red: ByteArray, val bits: Int)
+
+private val rangosDeAnthropic: List<Rango> by lazy {
     (RANGOS_DE_ANTHROPIC + System.getenv("CONECTOR_RANGOS_DE_ANTHROPIC").orEmpty().split(',').map { it.trim() })
         .mapNotNull { cidr ->
             val red = ipLiteral(cidr.substringBefore('/')) ?: return@mapNotNull null
             val bits = cidr.substringAfter('/', "").toIntOrNull()?.takeIf { it in 0..red.size * 8 } ?: return@mapNotNull null
-            red to bits
+            Rango(cidr, red, bits)
         }
 }
 
@@ -98,13 +100,48 @@ private fun ipLiteral(ip: String): ByteArray? {
     return runCatching { java.net.InetAddress.getByName(limpia).address }.getOrNull()
 }
 
-/** ¿[ip] está en uno de los rangos de Anthropic? */
-internal fun esIpDeAnthropic(ip: String): Boolean {
-    val b = ipLiteral(ip) ?: return false
-    return rangosDeAnthropic.any { (red, bits) ->
-        red.size == b.size && (0 until bits).all { i ->
+/** El rango de Anthropic (su CIDR) en el que está [ip], o `null`. */
+internal fun rangoDeAnthropic(ip: String): String? {
+    val b = ipLiteral(ip) ?: return null
+    return rangosDeAnthropic.firstOrNull { r ->
+        r.red.size == b.size && (0 until r.bits).all { i ->
             val mascara = 0x80 ushr (i % 8)
-            (red[i / 8].toInt() and mascara) == (b[i / 8].toInt() and mascara)
+            (r.red[i / 8].toInt() and mascara) == (b[i / 8].toInt() and mascara)
         }
+    }?.cidr
+}
+
+/** ¿[ip] está en uno de los rangos de Anthropic? */
+internal fun esIpDeAnthropic(ip: String): Boolean = rangoDeAnthropic(ip) != null
+
+/**
+ * **Un WARN que no inunda el log** (H1 de la cuarta revisión): como mucho uno por [ventanaMs] por clave, y el que sale
+ * dice cuántos se omitieron desde el anterior. Las claves son pocas (una por rango y por ruta). [escribir] es
+ * inyectable para las pruebas.
+ */
+internal class AvisoConTope(
+    private val ventanaMs: Long = 60_000L,
+    private val escribir: (String) -> Unit = { org.slf4j.LoggerFactory.getLogger("ConectorDeClaude").warn(it) },
+) {
+    private data class Estado(val ultimo: Long, val omitidos: Int)
+    private val estados = java.util.concurrent.ConcurrentHashMap<String, Estado>()
+
+    /** `true` si se escribió. */
+    fun avisar(clave: String, ahora: Long = System.currentTimeMillis(), mensaje: () -> String): Boolean {
+        var escribio = false
+        var omitidos = 0
+        estados.compute(clave) { _, e ->
+            if (e == null || ahora - e.ultimo >= ventanaMs) {
+                escribio = true
+                omitidos = e?.omitidos ?: 0
+                Estado(ahora, 0)
+            } else {
+                e.copy(omitidos = e.omitidos + 1)
+            }
+        }
+        if (escribio) escribir(mensaje() + if (omitidos > 0) " (y $omitidos avisos iguales omitidos desde el anterior)" else "")
+        return escribio
     }
 }
+
+internal val avisosDelConector = AvisoConTope()
