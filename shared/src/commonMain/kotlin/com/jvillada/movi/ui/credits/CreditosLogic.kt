@@ -1182,6 +1182,12 @@ fun pantallaDePagarLaCuota(credit: CreditSummary, cuota: LaCuotaEnLaFicha): com.
 
 // ── Vuelta 133 · la cuota que cambia, en la ficha ─────────────────────────────────────────────────
 
+/**
+ * Vuelta 134 (M-7) · **unos puntos como se escriben en Colombia**: «8,5», no «8.5»; «8» sin «,0». La ficha y
+ * la hoja (al editar) los muestran así; la hoja los lee con coma o con punto. Pura.
+ */
+fun puntosConComa(puntos: Double): String = puntos.toString().removeSuffix(".0").replace('.', ',')
+
 /** El tag de las líneas de la cuota que cambia en la ficha del préstamo. */
 const val TAG_CUOTA_QUE_CAMBIA: String = "credito:cuota-que-cambia"
 
@@ -1207,9 +1213,10 @@ fun lineasDeLaCuotaQueCambia(
 ): List<String> {
     val tipo = t.tipoDeCuota?.takeIf { t.cuotaCambia() } ?: return emptyList()
     val monto = com.jvillada.movi.shared.model.cuotaDeEsteMes(t, ultima)
-    val porQue = com.jvillada.movi.shared.model.porQueCambiaLaCuota(tipo)
+    // Vuelta 134 (M-7): sobre otro índice no dice «IBR».
+    val porQue = com.jvillada.movi.shared.model.porQueCambiaLaCuotaDe(t)
     val tasaVariable = if (tipo == com.jvillada.movi.shared.model.TipoDeCuota.TASA_VARIABLE) listOfNotNull(
-        t.puntosSobreElIndice?.let { "IBR + ${it.toString().removeSuffix(".0").replace('.', ',')}" },
+        t.puntosSobreElIndice?.let { "${com.jvillada.movi.shared.model.rotuloDelIndice(t.indiceDeLaTasa)} + ${puntosConComa(it)}" },
         t.alCambiarLaTasa?.let { com.jvillada.movi.shared.model.rotuloDeAlCambiarLaTasa(it).lowercase() + " cuando se reajusta" },
     ) else emptyList()
     return listOfNotNull(

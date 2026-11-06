@@ -164,6 +164,25 @@ fun porQueCambiaLaCuota(tipo: TipoDeCuota): String? = when (tipo) {
     TipoDeCuota.ABONO_CONSTANTE -> "Baja cada mes (abono constante a capital)"
 }
 
+/**
+ * Vuelta 134 (M-7) · el nombre del índice de una tasa variable: «IBR» u «Otro índice». La hoja lo ofrece
+ * (con «Otro índice» un crédito guardado así ya no se reescribe a IBR al editar) y la ficha lo dice.
+ */
+fun rotuloDelIndice(indice: IndiceDeLaTasa?): String = when (indice) {
+    IndiceDeLaTasa.OTRO -> "Otro índice"
+    IndiceDeLaTasa.IBR, null -> "IBR"
+}
+
+/**
+ * Vuelta 134 (M-7) · [porQueCambiaLaCuota] de un crédito en particular: con tasa variable sobre otro índice,
+ * «La tasa es variable (índice + puntos)», no «IBR + puntos».
+ */
+fun porQueCambiaLaCuotaDe(terms: CreditTerms): String? {
+    val tipo = terms.tipoDeCuota ?: return null
+    return if (tipo == TipoDeCuota.TASA_VARIABLE && terms.indiceDeLaTasa == IndiceDeLaTasa.OTRO) "La tasa es variable (índice + puntos)"
+    else porQueCambiaLaCuota(tipo)
+}
+
 /** El rótulo corto de cada respuesta a «Cuando cambia la tasa, ¿cambia la cuota o el plazo?». */
 fun rotuloDeAlCambiarLaTasa(que: AlCambiarLaTasa): String = when (que) {
     AlCambiarLaTasa.CAMBIA_LA_CUOTA -> "Cambia la cuota"
